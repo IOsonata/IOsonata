@@ -11,9 +11,9 @@ allocator and controller ISO capability masks; the application does not assign
 USB topology.
 
 The host test is Python/usb_iso_loopback.py. ISO OUT DMA lands directly in the
-buffer registered by UsbIntrf. UsbIsoIntrf publishes the completed frame to the
-callback, and the callback echoes it through the single ISO TX slot. There is
-no CFifo and no obsolete function-level endpoint completion callback.
+RX FIFO slot reserved by UsbIntrf. Its DeviceIntrf event callback pulls each
+completed frame with RxData and queues the echo with TxData. Each direction
+uses the two-frame FIFO storage required by UsbIsoIntrf.
 
 A vendor/interface IN request (bRequest 0x5A) returns loopback-only diagnostic
 counters. It is intentionally outside UsbIsoIntrf so the reusable ISO layer does
@@ -106,8 +106,8 @@ static_assert(sizeof(IsoDiag_t) == 48U, "ISO diagnostic wire format changed");
 
 static UsbIsoIntrf_t s_Iso;
 static UsbDevIntrf_t s_IsoData;
-alignas(4) static uint8_t s_IsoRxBuffer[USB_INTRF_PKT_BLKSIZE(ISO_MAX_MPS)];
-alignas(4) static uint8_t s_IsoTxBuffer[USB_INTRF_PKT_BLKSIZE(ISO_MAX_MPS)];
+alignas(4) static uint8_t s_IsoRxFifoMem[USB_ISO_INTRF_FIFO_MEMSIZE(ISO_MAX_MPS)];
+alignas(4) static uint8_t s_IsoTxFifoMem[USB_ISO_INTRF_FIFO_MEMSIZE(ISO_MAX_MPS)];
 static bool s_Configured;
 static uint8_t s_Alt;
 static uint8_t s_InterfaceNo;
@@ -181,47 +181,45 @@ static void IsoBuildDiag(void)
 	}
 }
 
-static void IsoRxFrame(UsbIsoIntrf_t *pIntrf, const uint8_t *pData,
-					   uint16_t Length, UsbCtrlrXferResult_t Result,
-					   void *pContext)
+// Use the same FIFO-backed DeviceIntrf event flow as the combo example.
+static int IsoEvent(DevIntrf_t * const pDev, DEVINTRF_EVT Event,
+	uint8_t *, int Length)
 {
-	(void)pIntrf;
-	(void)pContext;
+	switch (Event)
+	{
+		case DEVINTRF_EVT_RX_DATA:
+		{
+			uint8_t frame[ISO_MAX_MPS];
+			int total = 0;
+			int len;
+			while ((len = DeviceIntrfRxData(pDev, frame, sizeof(frame))) > 0)
+			{
+				s_RxCnt++;
+				s_LastRxLength = (uint16_t)len;
+				if (DeviceIntrfTxData(pDev, frame, len) == len)
+					s_TxSubmitCnt++;
+				else
+					s_LoopbackDropCnt++;
+				total += len;
+			}
+			return total;
+		}
 
-	if (Result != USB_CTRLR_XFER_SUCCESS)
-	{
-		return;
-	}
+		case DEVINTRF_EVT_TX_READY:
+		case DEVINTRF_EVT_TX_FIFO_EMPTY:
+			s_LastTxLength = (uint16_t)Length;
+			s_TxDoneCnt++;
+			break;
 
-	s_RxCnt++;
-	s_LastRxLength = Length;
+		case DEVINTRF_EVT_TX_TIMEOUT:
+			s_LastTxLength = (uint16_t)Length;
+			s_TxFailCnt++;
+			break;
 
-	// The callback owns the current RX frame only for this call. SendFrame
-	// copies it into the independent ISO TX slot before returning.
-	if (UsbIsoIntrfSendFrame(&s_Iso, pData, Length))
-	{
-		s_TxSubmitCnt++;
+		default:
+			break;
 	}
-	else
-	{
-		// ISO is deadline driven. A busy TX slot means this service
-		// opportunity is missed; never queue stale data for a later frame.
-		s_LoopbackDropCnt++;
-	}
-}
-
-static void IsoTxFrame(UsbIsoIntrf_t *, uint16_t Length,
-					   UsbCtrlrXferResult_t Result, void *)
-{
-	s_LastTxLength = Length;
-	if (Result == USB_CTRLR_XFER_SUCCESS)
-	{
-		s_TxDoneCnt++;
-	}
-	else
-	{
-		s_TxFailCnt++;
-	}
+	return 0;
 }
 
 static bool IsoControl(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
@@ -482,10 +480,9 @@ int main()
 	isoCfg.DevNo = USB_DEVNO;
 	isoCfg.EpNo = s_EpNo;
 	isoCfg.BufferSize = ISO_MAX_MPS;
-	isoCfg.pRxBuffer = s_IsoRxBuffer;
-	isoCfg.pTxBuffer = s_IsoTxBuffer;
-	isoCfg.RxHandler = IsoRxFrame;
-	isoCfg.TxHandler = IsoTxFrame;
+	isoCfg.pRxFifoMem = s_IsoRxFifoMem;
+	isoCfg.pTxFifoMem = s_IsoTxFifoMem;
+	isoCfg.EvtCB = IsoEvent;
 	if (!UsbIsoIntrfInit(&s_Iso, &s_IsoData, &isoCfg))
 	{
 		return -1;
@@ -499,3 +496,4 @@ int main()
 
 	return 0;
 }
+

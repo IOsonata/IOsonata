@@ -137,6 +137,7 @@ INT_SOURCES := \
 # Physical hardware validation. The Python runner uses python-libusb1 so it
 # still submits real asynchronous isochronous transfers through libusb.
 ISO_HW_SCRIPT := $(ROOT)/Python/usb_iso_loopback.py
+ISO_HW_FIRMWARE := $(ROOT)/exemples/usb/usb_iso_loopback.cpp
 ISO_HW_ARGS ?= --manual-suspend-wake
 
 # Physical interrupt-transfer validation. The IOcomposer firmware project is
@@ -168,6 +169,11 @@ HID_3D_MOUSE_BOARD := $(ROOT)/ARM/Nordic/nRF52/nRF52840/exemples/UsbHid3dMouse/s
 HID_3D_MOUSE_PROJECT := $(ROOT)/ARM/Nordic/nRF52/nRF52840/exemples/UsbHid3dMouse/ioc/.project
 HID_DEMO_CPPFLAGS := $(CPPFLAGS) -Idemo_hostport -I$(ROOT)/Linux/include \
 	-I$(ROOT)/ARM/Nordic/nRF52/include
+
+# Compile every generic IOsonata USB example against the current public API.
+# The two board-specific HID demos are checked by hid-demo-build.
+USB_EXAMPLE_SOURCES := $(filter-out $(HID_KEYBOARD_FIRMWARE) $(HID_3D_MOUSE_FIRMWARE),\
+	$(wildcard $(ROOT)/exemples/usb/*.cpp))
 
 # Throughput measurement, not a regression test. Built and run on demand.
 # Sanitizers are left off so the numbers are not distorted.
@@ -204,11 +210,11 @@ TARGETS += $(MSC_TARGET) $(MULTICONFIG_TARGET)
 .PHONY: all test test-combo-shutdown test-c-header test-gcc test-clang test-matrix test-nrf-out-appevt test-nrf-appevt \
 	test-nrf-control-event test-nrf-suspend-policy test-nrf-iso-policy test-nrf-dma-policy test-nrf-iso-dma test-nrf-lifecycle test-nrf54-data \
 	iso-hw-build iso-hw int-hw-build int-hw hid-hw-build hid-hw \
-	msc-hw-build msc-hw hid-demo-build probe clean
+	msc-hw-build msc-hw hid-demo-build examples-build probe clean
 
 all: test
 
-test: $(TARGETS)
+test: $(TARGETS) examples-build
 	$(MAKE) test-combo-shutdown
 	$(MAKE) test-c-header
 	$(MAKE) test-nrf-suspend-policy
@@ -269,8 +275,9 @@ test-nrf54-data:
 test-nrf-dma-policy:
 	python3 ./nrf_usb_dma_policy_test.py
 
-iso-hw-build: $(ISO_HW_SCRIPT)
+iso-hw-build: $(ISO_HW_SCRIPT) $(ISO_HW_FIRMWARE)
 	python3 -c "compile(open('$(ISO_HW_SCRIPT)', encoding='utf-8').read(), '$(ISO_HW_SCRIPT)', 'exec')"
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -x c++ -fsyntax-only $(ISO_HW_FIRMWARE)
 
 iso-hw: iso-hw-build
 	python3 $(ISO_HW_SCRIPT) $(ISO_HW_ARGS)
@@ -307,6 +314,12 @@ hid-demo-build: $(HID_KEYBOARD_FIRMWARE) $(HID_KEYBOARD_BOARD) \
 	$(CXX) $(HID_DEMO_CPPFLAGS) $(CXXFLAGS) \
 		-I$(dir $(HID_3D_MOUSE_BOARD)) -x c++ -fsyntax-only \
 		$(HID_3D_MOUSE_FIRMWARE)
+
+examples-build: hid-demo-build $(USB_EXAMPLE_SOURCES) $(HEADERS)
+	@set -e; for source in $(USB_EXAMPLE_SOURCES); do \
+		echo "Checking $$source"; \
+		$(CXX) $(CPPFLAGS) $(CXXFLAGS) -x c++ -fsyntax-only "$$source"; \
+	done
 
 probe: $(PROBE_TARGET)
 	./$(PROBE_TARGET) $(SOF_TICKS)
