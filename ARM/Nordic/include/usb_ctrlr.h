@@ -223,8 +223,27 @@ extern "C" {
 bool UsbCtrlrInit(int DevNo, const UsbCtrlrCfg_t *pCfg);
 bool UsbCtrlrStart(int DevNo);
 void UsbCtrlrStop(int DevNo);
+#if defined(USBD_PRESENT)
+void AppEvtHandlerExec(void);
+
+// Deferred endpoint work runs from the application event queue. DMA
+// retirement and immediate handoff stay in USBD_IRQHandler().
+static inline void UsbCtrlrProcess(int DevNo)
+{
+	(void)DevNo;
+	AppEvtHandlerExec();
+}
+
+static inline bool UsbCtrlrVbusDetected(int DevNo)
+{
+	(void)DevNo;
+	return (NRF_POWER->USBREGSTATUS &
+		POWER_USBREGSTATUS_VBUSDETECT_Msk) != 0;
+}
+#else
 void UsbCtrlrProcess(int DevNo);
 bool UsbCtrlrVbusDetected(int DevNo);
+#endif
 #if defined(USBD_PRESENT)
 // This controller is full-speed only; expose that fact to USB callers.
 static inline bool UsbCtrlrHighSpeed(int DevNo)
@@ -238,10 +257,36 @@ bool UsbCtrlrHighSpeed(int DevNo);
 #if defined(USBD_PRESENT)
 bool UsbCtrlrIsoInit(int DevNo);
 #endif
+#if defined(USBD_PRESENT)
+static inline void UsbCtrlrIntEnable(int DevNo)
+{
+	(void)DevNo;
+	NVIC_EnableIRQ(USBD_IRQn);
+}
+
+static inline void UsbCtrlrIntDisable(int DevNo)
+{
+	(void)DevNo;
+	NVIC_DisableIRQ(USBD_IRQn);
+}
+
+static inline void UsbCtrlrConnect(int DevNo)
+{
+	(void)DevNo;
+	NRF_USBD->USBPULLUP = 1;
+}
+
+static inline void UsbCtrlrDisconnect(int DevNo)
+{
+	(void)DevNo;
+	NRF_USBD->USBPULLUP = 0;
+}
+#else
 void UsbCtrlrIntEnable(int DevNo);
 void UsbCtrlrIntDisable(int DevNo);
 void UsbCtrlrConnect(int DevNo);
 void UsbCtrlrDisconnect(int DevNo);
+#endif
 void UsbCtrlrRemoteWakeup(int DevNo);
 void UsbCtrlrSofEnable(int DevNo, bool Enable);
 #if defined(USBD_PRESENT)

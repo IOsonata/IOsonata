@@ -86,7 +86,7 @@ names = [
     ('nRFUsbdHandleSof', None), ('USBD_IRQHandler', None),
     ('nRFUsbdAcquireDma', None), ('nRFUsbdProcessQueuedEvent', None),
     ('nRFUsbdInvalidateEvents', None),
-    ('nRFUsbdResetState', None), ('UsbCtrlrProcess', None),
+    ('nRFUsbdResetState', None),
     ('nRFUsbdEpDisable', None),
     ('nRFIsoHwEnable', None),
     ('nRFUsbdIsoStart', None), ('UsbCtrlrIsoSend', None),
@@ -134,6 +134,8 @@ constexpr uint32_t NRFX_USBD_EASYDMA_BUSY_REG_BUSY=0x82, NRFX_USBD_EASYDMA_BUSY_
 #define NRFX_USBD_ERRATA_166_REG_A 0
 #define NRFX_USBD_ERRATA_166_REG_B 0
 
+// UsbCtrlrProcess is inline in the nRF52 usb_ctrlr.h: it runs the AppEvt queue.
+void UsbCtrlrProcess(int){AppEvtHandlerExec();}
 uint32_t dmaBusy=0;
 unsigned dmaLocks=0,dmaUnlocks=0;
 struct BusyRegister {

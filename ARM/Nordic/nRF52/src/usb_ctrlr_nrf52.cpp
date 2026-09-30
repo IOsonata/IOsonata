@@ -1267,21 +1267,6 @@ void UsbCtrlrStop(int DevNo)
 	UsbdXtalRelease();
 }
 
-// Deferred endpoint/application work. DMA retirement and immediate handoff
-// stay in USBD_IRQHandler().
-void UsbCtrlrProcess(int DevNo)
-{
-	(void)DevNo;
-	AppEvtHandlerExec();
-}
-
-bool UsbCtrlrVbusDetected(int DevNo)
-{
-	(void)DevNo;
-	return (NRF_POWER->USBREGSTATUS &
-		POWER_USBREGSTATUS_VBUSDETECT_Msk) != 0;
-}
-
 size_t UsbCtrlrGetSerial(int DevNo, char *pBuff, size_t BuffLen)
 {
 	(void)DevNo;
@@ -1297,30 +1282,6 @@ size_t UsbCtrlrGetSerial(int DevNo, char *pBuff, size_t BuffLen)
 	}
 	pBuff[16] = '\0';
 	return 16U;
-}
-
-void UsbCtrlrIntEnable(int DevNo)
-{
-	(void)DevNo;
-	NVIC_EnableIRQ(USBD_IRQn);
-}
-
-void UsbCtrlrIntDisable(int DevNo)
-{
-	(void)DevNo;
-	NVIC_DisableIRQ(USBD_IRQn);
-}
-
-void UsbCtrlrConnect(int DevNo)
-{
-	(void)DevNo;
-	NRF_USBD->USBPULLUP = 1;
-}
-
-void UsbCtrlrDisconnect(int DevNo)
-{
-	(void)DevNo;
-	NRF_USBD->USBPULLUP = 0;
 }
 
 void UsbCtrlrRemoteWakeup(int DevNo)

@@ -92,7 +92,10 @@ void init(){
 }
 '''
 code += '\n'.join(function(n) for n in ['nRFUsbGetEpReg', 'UsbCtrlrEpBind',
-                                        'UsbCtrlrStart', 'UsbCtrlrStop', 'UsbCtrlrProcess'])
+                                        'UsbCtrlrStart', 'UsbCtrlrStop'])
+# UsbCtrlrProcess is inline in the nRF52 usb_ctrlr.h: it runs the AppEvt queue.
+assert 'AppEvtHandlerExec();' in (ROOT / 'ARM/Nordic/include/usb_ctrlr.h').read_text()
+code += '\nvoid UsbCtrlrProcess(int){AppEvtHandlerExec();}\n'
 code += r'''
 namespace startup {
 constexpr uint32_t USBD_EVENTCAUSE_READY_Msk=1,POWER_USBREGSTATUS_OUTPUTRDY_Msk=2;
