@@ -808,6 +808,20 @@ int main(int argc,char **argv){
  init();frame(0);
  assert(!dmaBusy && isoStarts[0]==0 && s_Usbd.IsoDataFlag==0 && dmaLocks==dmaUnlocks);
  puts("PASS: an empty, zero-length or oversize OUT frame starts no DMA and holds no channel");
+ // OUT accepts both ends of the configured range, but not MPS + 1.
+ for(uint16_t length:{1,511,512,513}){
+  init();s_Usbd.IsoMaxPacketSize[0]=512;drdyGives=true;frame(length);
+  if(length<=512){
+   assert(activeBit==24 && regs.ISOOUT.MAXCNT==length);
+   finish();
+   assert(callbacks[0]==1 && lengths[0]==length && !memcmp(lastOut,hostOut,length));
+  }else{
+   assert(drdyCnt==0 && isoStarts[0]==0 && callbacks[0]==0);
+  }
+  assert(!dmaBusy && s_Usbd.IsoDataFlag==0 && dmaLocks==dmaUnlocks);
+ }
+ puts("PASS: ISO OUT length boundaries preserve payload and channel release");
+
 
  // IN: an offered frame is moved at SOF, IN before OUT, one DMA at a time.
  for(uint16_t length:{0,9,63,512}){

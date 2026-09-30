@@ -197,7 +197,8 @@ void nRFIsoHwEnable(bool In, bool Enable)
 
 	(&NRF_USBD->EVENTS_USBRESET)[endBit] = 0U;
 	(&NRF_USBD->INTENSET)[!Enable] = 1UL << endBit;
-	*pEnable = Enable ? *pEnable | msk : *pEnable & ~msk;
+	*pEnable = (*pEnable & ~msk) |
+		((uint32_t)Enable << NRFX_USBD_ISO_EP_NO);
 }
 
 // The shared scheduler owns the channel lock and has pending ISO work.
@@ -232,7 +233,8 @@ bool nRFUsbdIsoStart(void)
 	const uint16_t len = (size & USBD_SIZE_ISOOUT_ZERO_Msk) != 0U ?
 		0U : (uint16_t)size;
 
-	if (len != 0U && len <= s_Usbd.IsoMaxPacketSize[0])
+	// Unsigned subtraction rejects zero and lengths above the endpoint MPS.
+	if ((uint32_t)len - 1U < s_Usbd.IsoMaxPacketSize[0])
 	{
 		// Ask the owner to submit this frame's destination through EpReceive.
 		// Completion releases the destination before the next interval.
