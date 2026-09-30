@@ -134,6 +134,7 @@ static struct
 	uint8_t ConfigDesc[USB_CONFIG_DESC_MAXLEN];
 	uint8_t StringDesc[USB_CORE_STRING_DESC_MAXLEN];
 	UsbCfg_t DevCfg;				//!< Copy of the UsbInit configuration
+	uint8_t ConfigIndex;			//!< Selected descriptor index, zero when unconfigured
 	char Serial[USB_SERIAL_MAXLEN];	//!< Serial from the controller unique id
 } s_Core;
 
@@ -436,7 +437,7 @@ static uint8_t UsbCoreConfigurationCount(void)
 }
 
 static const uint8_t *UsbCoreGetConfigByValue(uint8_t Value,
-										uint16_t *pLength)
+										uint8_t *pIndex)
 {
 	const uint8_t count = UsbCoreConfigurationCount();
 
@@ -447,7 +448,7 @@ static const uint8_t *UsbCoreGetConfigByValue(uint8_t Value,
 
 		if (pDesc != nullptr && pDesc[5] == Value)
 		{
-			*pLength = len;
+			*pIndex = i;
 			return pDesc;
 		}
 	}
@@ -455,14 +456,10 @@ static const uint8_t *UsbCoreGetConfigByValue(uint8_t Value,
 	return nullptr;
 }
 
+// Retain the index, not a pointer: descriptor providers may reuse a buffer.
 static const uint8_t *UsbCoreActiveConfig(uint16_t *pLength)
 {
-	if (s_Core.Configuration != 0)
-	{
-		return UsbCoreGetConfigByValue(s_Core.Configuration, pLength);
-	}
-
-	return UsbCoreGetConfigByIndex(0, pLength);
+	return UsbCoreGetConfigByIndex(s_Core.ConfigIndex, pLength);
 }
 
 // Step through one descriptor of the active configuration. *pOfs advances
@@ -873,13 +870,13 @@ static void UsbCoreUnconfigureClasses(void)
 
 static bool UsbCoreApplyConfiguration(uint8_t Configuration)
 {
-	uint16_t descLen = 0;
+	uint8_t index = 0;
 	const uint8_t *pConfigDesc = nullptr;
 
 	if (Configuration != 0)
 	{
-		pConfigDesc = UsbCoreGetConfigByValue(Configuration, &descLen);
-		if (pConfigDesc == nullptr || descLen < USBD_CORE_CONFIG_DESC_LEN)
+		pConfigDesc = UsbCoreGetConfigByValue(Configuration, &index);
+		if (pConfigDesc == nullptr)
 		{
 			return false;
 		}
@@ -888,6 +885,7 @@ static bool UsbCoreApplyConfiguration(uint8_t Configuration)
 	UsbCoreUnconfigureClasses();
 	UsbCtrlrEpCloseAll(s_Core.DevNo);
 	s_Core.Configuration = 0;
+	s_Core.ConfigIndex = 0;
 	s_Core.NumInterfaces = 0;
 	UsbCoreClearEndpointState();
 	UsbCoreUpdateSof();
@@ -910,6 +908,7 @@ static bool UsbCoreApplyConfiguration(uint8_t Configuration)
 		}
 	}
 
+	s_Core.ConfigIndex = index;
 	s_Core.Configuration = Configuration;
 	s_Core.NumInterfaces = pConfigDesc[4];
 	UsbCoreUpdateSof();
@@ -1407,6 +1406,7 @@ static void UsbCoreResetDeviceState(bool NotifyClasses)
 
 	s_Core.Address = 0;
 	s_Core.Configuration = 0;
+	s_Core.ConfigIndex = 0;
 	s_Core.NumInterfaces = 0;
 	s_Core.Suspended = false;
 	UsbCoreClearEndpointState();
@@ -2020,3 +2020,4 @@ uint8_t UsbGetAlternate(int DevNo, uint8_t InterfaceNo)
 {
 	return DevNo == s_Core.DevNo ? UsbCoreAlternate(InterfaceNo) : 0;
 }
+

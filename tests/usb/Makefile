@@ -36,6 +36,9 @@ CORE_SOURCES := \
 	$(ROOT)/src/app_evt_handler.cpp \
 	$(ROOT)/src/cfifo.c
 
+MULTICONFIG_TARGET := $(BUILD_DIR)/usb_multiconfig_test
+MULTICONFIG_SOURCES := usb_multiconfig_test.cpp $(filter-out usb_core_test.cpp,$(CORE_SOURCES))
+
 LINK_TARGET := $(BUILD_DIR)/usb_stack_link_test
 LINK_SOURCES := \
 	usb_stack_link_test.cpp \
@@ -192,7 +195,7 @@ TARGETS := $(CORE_TARGET) $(INTRF_TARGET) $(RX_EVENT_TARGET) \
 	$(DIRECT_TARGET) $(ISO_TARGET) $(ISO_DUPLEX_TARGET) $(INT_TARGET) \
 	$(BULK_TARGET) $(HID_TARGET) $(LINK_TARGET)
 
-TARGETS += $(MSC_TARGET)
+TARGETS += $(MSC_TARGET) $(MULTICONFIG_TARGET)
 
 .PHONY: all test test-combo-shutdown test-c-header test-gcc test-clang test-matrix test-nrf-out-appevt test-nrf-appevt \
 	test-nrf-control-event test-nrf-suspend-policy test-nrf-iso-policy test-nrf-dma-policy test-nrf-iso-dma test-nrf-lifecycle test-nrf54-data \
@@ -213,6 +216,7 @@ test: $(TARGETS)
 	$(MAKE) test-nrf-lifecycle
 	$(MAKE) test-nrf54-data
 	$(TEST_ENV) ./$(CORE_TARGET)
+	$(TEST_ENV) ./$(MULTICONFIG_TARGET)
 	$(TEST_ENV) ./$(INTRF_TARGET)
 	$(TEST_ENV) ./$(RX_EVENT_TARGET)
 	$(TEST_ENV) ./$(DIRECT_TARGET)
@@ -375,3 +379,9 @@ $(PROBE_TARGET): $(PROBE_SOURCES) $(HEADERS)
 
 clean:
 	rm -rf $(BUILD_DIR)
+
+
+$(MULTICONFIG_TARGET): $(MULTICONFIG_SOURCES) usb_core_test.cpp $(HEADERS)
+	@mkdir -p $(BUILD_DIR)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) \
+		$(MULTICONFIG_SOURCES) -o $@ $(LDFLAGS) $(SANITIZERS)
