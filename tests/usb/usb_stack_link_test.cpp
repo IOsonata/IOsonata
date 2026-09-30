@@ -67,6 +67,19 @@ static void *s_EpContext[16];
 static unsigned s_EpSendCount[8];
 static uint8_t s_LastEp0Addr;
 static uint16_t s_LastEp0Length;
+static unsigned s_PortEvents;
+static int s_LastPortState = -1;
+
+static int PortEvent(DevIntrf_t *, DEVINTRF_EVT event, uint8_t *buffer, int length)
+{
+	if (event == DEVINTRF_EVT_STATECHG)
+	{
+		if (buffer != nullptr) return -1;
+		s_PortEvents++;
+		s_LastPortState = length;
+	}
+	return 0;
+}
 
 bool UsbCtrlrInit(int, const UsbCtrlrCfg_t *pCfg)
 {
@@ -344,21 +357,33 @@ int main(void)
 		return 18;
 	}
 
+	pCdc0->pData->DevIntrf.EvtCB = PortEvent;
 	SetControlLineState(pCdc0->CtrlIfNo, USB_CDC_CTRL_LINE_STATE_DTR);
 	if (s_Ep0EventCount != 3 || s_LastEp0Addr != USB_ENDPADDR_DIRIN(0) ||
-		s_LastEp0Length != 0U || s_Cdc0.IsPortOpen())
+		s_LastEp0Length != 0U || s_Cdc0.IsPortOpen() || s_PortEvents != 0U)
 	{
 		printf("C++ CDC Control setup was not dispatched\n");
 		return 12;
 	}
 	CompleteEp0In();
-	if (!s_Cdc0.IsPortOpen())
+	if (!s_Cdc0.IsPortOpen() || s_PortEvents != 1U || s_LastPortState != 1)
 	{
 		printf("C++ CDC Control completion was not dispatched\n");
 		return 13;
 	}
 
+	SetControlLineState(pCdc0->CtrlIfNo, 0U);
+	if (!s_Cdc0.IsPortOpen() || s_PortEvents != 1U) return 19;
+	CompleteEp0In();
+	if (s_Cdc0.IsPortOpen() || s_PortEvents != 2U || s_LastPortState != 0)
+		return 20;
+	// Repeating the closed state must not notify again.
+	SetControlLineState(pCdc0->CtrlIfNo, 0U);
+	CompleteEp0In();
+	if (s_PortEvents != 2U) return 21;
+
 	UsbProcess(0);
 	printf("UsbInit, dual UsbdCdc Init, UsbEnable, UsbProcess all completed\n");
 	return UsbConfigured(0) ? 0 : 4;
 }
+

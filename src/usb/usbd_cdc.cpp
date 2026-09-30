@@ -89,16 +89,6 @@ bool UsbdCdcPortIsOpen(const UsbdCdcDev_t * const pCdc)
 		   (pCdc->ControlLineState & USB_CDC_CTRL_LINE_STATE_DTR) != 0U;
 }
 
-static void UsbdCdcNotifyPortState(UsbdCdcDev_t *pCdc, bool Open)
-{
-	if (pCdc->pData->DevIntrf.EvtCB != nullptr)
-	{
-		pCdc->pData->DevIntrf.EvtCB(&pCdc->pData->DevIntrf,
-								 DEVINTRF_EVT_STATECHG,
-								 nullptr, Open ? 1 : 0);
-	}
-}
-
 static void UsbdCdcNotifKick(UsbdCdcDev_t *pCdc)
 {
 	if (pCdc == nullptr || pCdc->pData->Mps == 0U ||
@@ -159,7 +149,7 @@ static void UsbdCdcClosePort(UsbdCdcDev_t *pCdc)
 	UsbdCdcCancelBusState(pCdc);
 	if (wasOpen)
 	{
-		UsbdCdcNotifyPortState(pCdc, false);
+		UsbIntrfNotify(pCdc->pData, DEVINTRF_EVT_STATECHG, 0);
 	}
 }
 
@@ -292,7 +282,7 @@ static bool UsbdCdcRequest(const UsbSetupData_t *pSetup,
 				const bool open = UsbdCdcPortIsOpen(pCdc);
 				if (open != wasOpen)
 				{
-					UsbdCdcNotifyPortState(pCdc, open);
+					UsbIntrfNotify(pCdc->pData, DEVINTRF_EVT_STATECHG, open ? 1 : 0);
 				}
 				return true;
 			}
@@ -477,3 +467,4 @@ void UsbdCdc::SetSerialState(uint16_t SerialState)
 {
 	UsbdCdcSetSerialState(&vUsbdCdc, SerialState);
 }
+
