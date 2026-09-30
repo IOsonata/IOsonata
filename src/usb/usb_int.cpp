@@ -41,6 +41,8 @@ static bool UsbIntIntrfEpSupported(int DevNo, uint8_t EpNo)
 		USB_INT_INTRF_MAX_MPS > 0U;
 }
 
+// Share endpoint-open argument setup between the IN and OUT calls.
+__attribute__((noinline))
 static bool UsbIntIntrfOpenEndpoint(UsbIntIntrf_t *pIntrf, bool bIn)
 {
 	return UsbCtrlrEpOpenData(pIntrf->pData->DevNo, pIntrf->pData->EpNo, bIn,
