@@ -314,8 +314,8 @@ static bool UsbdHidInitInternal(UsbdHidDev_t *pHid,
 		(pCfg->SubClass == USB_HID_SUBCLASS_NONE &&
 		 pCfg->Protocol != USB_HID_PROT_NONE) ||
 		(pCfg->SubClass == USB_HID_SUBCLASS_BOOT &&
-		 pCfg->Protocol != USB_HID_PROT_KEYBOARD &&
-		 pCfg->Protocol != USB_HID_PROT_MOUSE))
+		 (uint32_t)pCfg->Protocol - USB_HID_PROT_KEYBOARD >
+		 USB_HID_PROT_MOUSE - USB_HID_PROT_KEYBOARD))
 	{
 		return false;
 	}
@@ -360,7 +360,8 @@ static bool UsbdHidInitInternal(UsbdHidDev_t *pHid,
 	req.InterfaceCount = 1U;
 	req.BidirectionalCount = 1U;
 
-	UsbdEpAllocRes_t alloc = {};
+	// The allocator fills each requested result before returning success.
+	UsbdEpAllocRes_t alloc;
 	if (!UsbdEpAlloc(pHid->DevNo, &req, pClass, &alloc))
 	{
 		return false;

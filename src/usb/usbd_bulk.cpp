@@ -198,7 +198,8 @@ static bool UsbdBulkInitInternal(UsbdBulkDev_t * const pBulk,
 	req.InterfaceCount = 1U;
 	req.BidirectionalCount = 1U;
 
-	UsbdEpAllocRes_t alloc = {};
+	// The allocator fills each requested result before returning success.
+	UsbdEpAllocRes_t alloc;
 	if (!UsbdEpAlloc(pBulk->DevNo, &req, pClass, &alloc))
 	{
 		return false;

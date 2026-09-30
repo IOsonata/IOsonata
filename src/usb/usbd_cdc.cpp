@@ -356,7 +356,8 @@ static bool UsbdCdcInitInternal(UsbdCdcDev_t * const pCdc,
 	req.BidirectionalCount = 1U;
 	req.InCount = 1U;
 
-	UsbdEpAllocRes_t alloc = {};
+	// The allocator fills each requested result before returning success.
+	UsbdEpAllocRes_t alloc;
 	if (!UsbdEpAlloc(pCdc->DevNo, &req, pClass, &alloc))
 	{
 		return false;
