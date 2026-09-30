@@ -352,7 +352,6 @@ bool UsbCtrlrIsoInit(int DevNo)
 bool UsbCtrlrIsoOpen(int DevNo, uint8_t EpNo, bool bIn,
 	uint16_t MaxPacketSize)
 {
-	(void)DevNo;
 	(void)EpNo;
 	if (MaxPacketSize > NRFX_USBD_ISO_MAX_PACKET_SIZE)
 		return false;
@@ -366,6 +365,11 @@ bool UsbCtrlrIsoOpen(int DevNo, uint8_t EpNo, bool bIn,
 
 	s_Usbd.IsoOpen =
 		s_Usbd.IsoMaxPacketSize[!bIn] != 0U;
+	if (s_Usbd.IsoOpen)
+	{
+		// The service interval runs from SOF.
+		UsbCtrlrSofEnable(DevNo, true);
+	}
 
 	__DSB();
 	return true;

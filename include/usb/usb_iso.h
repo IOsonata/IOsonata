@@ -5,10 +5,10 @@
 
 UsbIsoIntrf is the isochronous specialization of UsbIntrf and follows the
 DeviceIntrf model the other USB classes use. UsbIntrf owns the endpoint pair
-data path: packet mode with FIFOs of two frames per direction (the TX FIFO
-blocking, since the controller reads its head in place; the RX FIFO dropping
-its oldest frame, since an isochronous endpoint cannot hold the host off),
-the OUT endpoint, the RX FIFO and DeviceIntrf itself. The application owns the
+data path: packet mode with blocking FIFOs of two frames per direction (the
+controller reads the TX head in place; a full RX FIFO leaves the next OUT
+frame without a destination, so the newest frame is dropped, since an
+isochronous endpoint cannot hold the host off), the OUT endpoint, the RX FIFO and DeviceIntrf itself. The application owns the
 event callback (EvtCB in the configuration) and pulls received frames with
 RxData, one frame per call, when UsbIntrf raises DEVINTRF_EVT_RX_DATA. It
 queues frames to send with TxData, one frame per call up to the packet size.

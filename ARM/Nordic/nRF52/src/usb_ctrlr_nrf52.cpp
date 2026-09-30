@@ -848,6 +848,14 @@ static void nRFUsbdTryRemoteWake(void)
 	NRF_USBD->INTENSET = USBD_INTENSET_SOF_Msk;
 }
 
+// Back from suspend: SOF stays on only while the ISO pair is open, then the
+// core is told.
+static __attribute__((noinline)) void nRFUsbdResumed(void)
+{
+	UsbCtrlrSofEnable(0, s_Usbd.IsoOpen);
+	nRFUsbdEmitSimple(USB_CTRLR_EVT_RESUME);
+}
+
 // Called only from the USB ISR. Foreground remote-wake updates already
 // exclude interrupts, so this transition needs no nested critical section.
 static void nRFUsbdHostResume(void)
@@ -863,7 +871,7 @@ static void nRFUsbdHostResume(void)
 	if ((flags & USBD_FLAG_MAC_AWAKE) != 0U && UsbdIsForceNormal())
 	{
 		s_Usbd.Flags = flags & (uint8_t)~USBD_FLAG_SUSPENDED;
-		nRFUsbdEmitSimple(USB_CTRLR_EVT_RESUME);
+		nRFUsbdResumed();
 		return;
 	}
 
@@ -882,7 +890,7 @@ static void nRFUsbdWakeAllowed(void)
 		(flags & USBD_FLAG_REMOTE_WAKE) == 0U)
 	{
 		s_Usbd.Flags &= (uint8_t)~USBD_FLAG_SUSPENDED;
-		nRFUsbdEmitSimple(USB_CTRLR_EVT_RESUME);
+		nRFUsbdResumed();
 	}
 }
 
@@ -1367,6 +1375,7 @@ void UsbCtrlrEpClose(int DevNo, uint8_t EpNo, bool bIn)
 	if (EpNo == NRFX_USBD_ISO_EP_NO)
 	{
 		s_Usbd.IsoOpen = false;
+		UsbCtrlrSofEnable(DevNo, false);
 		nRFUsbdDmaWait(0x01000100UL);
 	}
 	else
@@ -1394,6 +1403,7 @@ void UsbCtrlrEpCloseAll(int DevNo)
 	(void)DevNo;
 	const uint32_t state = DisableInterrupt();
 	s_Usbd.IsoOpen = false;
+	UsbCtrlrSofEnable(DevNo, false);
 	nRFUsbdInvalidateEvents();
 	nRFUsbdDmaWait(0x01FE01FEUL);
 	CFifoFlush(s_Usbd.hQue);

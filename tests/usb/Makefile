@@ -88,6 +88,7 @@ INTRF_SOURCES := \
 	usb_intrf_test.cpp \
 	$(ROOT)/src/usb/usb_intrf.cpp \
 	$(ROOT)/src/app_evt_handler.cpp \
+	$(ROOT)/src/device_intrf.cpp \
 	$(ROOT)/src/cfifo.c
 
 RX_EVENT_TARGET := $(BUILD_DIR)/usb_rx_event_test
@@ -95,6 +96,7 @@ RX_EVENT_SOURCES := \
 	usb_rx_event_test.cpp \
 	$(ROOT)/src/usb/usb_intrf.cpp \
 	$(ROOT)/src/app_evt_handler.cpp \
+	$(ROOT)/src/device_intrf.cpp \
 	$(ROOT)/src/cfifo.c
 
 DIRECT_TARGET := $(BUILD_DIR)/usb_direct_intrf_test
@@ -102,6 +104,7 @@ DIRECT_SOURCES := \
 	usb_direct_intrf_test.cpp \
 	$(ROOT)/src/usb/usb_intrf.cpp \
 	$(ROOT)/src/app_evt_handler.cpp \
+	$(ROOT)/src/device_intrf.cpp \
 	$(ROOT)/src/cfifo.c
 
 ISO_TARGET := $(BUILD_DIR)/usb_iso_intrf_test
@@ -119,6 +122,7 @@ ISO_DUPLEX_SOURCES := \
 	$(ROOT)/src/usb/usb_iso.cpp \
 	$(ROOT)/src/usb/usb_intrf.cpp \
 	$(ROOT)/src/app_evt_handler.cpp \
+	$(ROOT)/src/device_intrf.cpp \
 	$(ROOT)/src/cfifo.c
 
 INT_TARGET := $(BUILD_DIR)/usb_int_intrf_test

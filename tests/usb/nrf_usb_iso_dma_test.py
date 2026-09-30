@@ -81,6 +81,7 @@ names = [
     ('nRFUsbdDmaUnlock', None), ('nRFUsbdDmaStartLocked', None),
     ('nRFUsbdDmaAllowed', None), ('nRFUsbdEpHwEnable', None),
     ('nRFUsbdEndEvent', None), ('nRFUsbdDmaWait', None),
+    ('nRFUsbdSofAcquire', None), ('UsbCtrlrSofEnable', None),
     ('nRFUsbdEp0InStart', None), ('nRFUsbdStartDmaNow', None),
     ('nRFUsbdStartQueuedDma', None), ('nRFUsbdResumeQueuedDmaLocked', None),
     ('nRFUsbdHandleSof', None), ('USBD_IRQHandler', None),
@@ -117,7 +118,7 @@ using namespace std;
 
 // Register model ----------------------------------------------------------
 constexpr uint32_t USBD_SIZE_ISOOUT_ZERO_Msk=1UL<<16;
-constexpr uint32_t USBD_INTENCLR_SOF_Msk=1, USBD_INTEN_SOF_Msk=1;
+constexpr uint32_t USBD_INTENCLR_SOF_Msk=1, USBD_INTEN_SOF_Msk=1, USBD_INTENSET_SOF_Msk=1;
 constexpr uint32_t USBD_INTEN_ENDISOIN_Msk=1U<<11, USBD_INTEN_ENDISOOUT_Msk=1U<<20;
 constexpr uint32_t USBD_INTEN_ENDEPIN0_Msk=1U<<2, USBD_INTEN_ENDEPOUT0_Msk=1U<<12;
 constexpr unsigned USBD_INTEN_ENDEPIN0_Pos=2, USBD_INTEN_ENDEPOUT0_Pos=12;

@@ -290,6 +290,11 @@ void UsbCtrlrDisconnect(int DevNo);
 void UsbCtrlrRemoteWakeup(int DevNo);
 void UsbCtrlrSofEnable(int DevNo, bool Enable);
 #if defined(USBD_PRESENT)
+// SOF only serves the ISO endpoint pair here: the controller enables it while
+// that pair is open, so the core does not derive it from the descriptors.
+#define USB_CTRLR_SOF_BY_ISO_OPEN	1
+#endif
+#if defined(USBD_PRESENT)
 // USBD applies SET_ADDRESS in hardware.
 static inline void UsbCtrlrSetAddress(int DevNo, uint8_t Address)
 {

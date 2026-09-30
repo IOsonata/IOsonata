@@ -93,7 +93,14 @@ void UsbdForceNormal() { ++forces; }
 void nRFUsbdEmitSimple(UsbCtrlrEvtType_t event) {
  assert(event == USB_CTRLR_EVT_RESUME); ++resumes;
 }
+// Production nRFUsbdResumed restores the SOF state for the ISO pair, then
+// reports the resume; only the report matters to this harness.
+void nRFUsbdResumed() { nRFUsbdEmitSimple(USB_CTRLR_EVT_RESUME); }
 '''
+resumed = source[source.index('void nRFUsbdResumed(void)'):]
+resumed = resumed[:resumed.index('\n}\n')]
+assert 'UsbCtrlrSofEnable(0, s_Usbd.IsoOpen);' in resumed
+assert resumed.index('UsbCtrlrSofEnable(') < resumed.index('nRFUsbdEmitSimple(USB_CTRLR_EVT_RESUME);')
 code += function('nRFUsbdHostResume')
 code += r'''
 void check() {

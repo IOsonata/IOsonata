@@ -333,27 +333,14 @@ extern "C" {
  *
  * @param	pDev	: Pointer to an instance of the Device Interface
  */
-static inline void DeviceIntrfDisable(DevIntrf_t * const pDev) {
-//	if (atomic_exchange(&pDev->EnCnt, pDev->EnCnt - 1) < 1)	{
-	// atomic_fetch_sub returns the count before the subtract, so the last
-	// release (count was 1, becomes 0) must be detected with <= 1, not < 1.
-	if (atomic_fetch_sub(&pDev->EnCnt, 1) <= 1) {
-    	pDev->Disable(pDev);
-    	atomic_store(&pDev->EnCnt, 0);
-	}
-}
+void DeviceIntrfDisable(DevIntrf_t * const pDev);
 
 /**
  * @brief	Wake up the interface.
  *
  * @param	pDev	: Pointer to an instance of the Device Interface
  */
-static inline void DeviceIntrfEnable(DevIntrf_t * const pDev) {
-//	if (atomic_exchange(&pDev->EnCnt, pDev->EnCnt + 1) == 1)	{
-	if (atomic_fetch_add(&pDev->EnCnt, 1) == 0) {
-    	pDev->Enable(pDev);
-    }
-}
+void DeviceIntrfEnable(DevIntrf_t * const pDev);
 
 /**
  * @brief	Get data rate of the interface in Hertz.  This is not a clock frequency
@@ -473,20 +460,7 @@ int DeviceIntrfWrite(DevIntrf_t * const pDev, uint32_t DevAddr, const uint8_t *p
  * @return 	true - Success\n
  * 			false - failed.
  */
-static inline bool DeviceIntrfStartRx(DevIntrf_t * const pDev, uint32_t DevAddr) {
-	if (atomic_flag_test_and_set(&pDev->bBusy))
-		return false;
-
-    bool retval = pDev->StartRx(pDev, DevAddr);
-
-    // In case of returned false, app would not call Stop to release busy flag
-    // so we need to do that here before returning
-    if (retval == false) {
-    	atomic_flag_clear(&pDev->bBusy);
-    }
-
-    return retval;
-}
+bool DeviceIntrfStartRx(DevIntrf_t * const pDev, uint32_t DevAddr);
 
 /**
  * @brief	Receive data into pBuff passed in parameter.
@@ -515,10 +489,7 @@ static inline int DeviceIntrfRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int
  *
  * @param	pDev : Pointer to an instance of the Device Interface
  */
-static inline void DeviceIntrfStopRx(DevIntrf_t * const pDev) {
-    pDev->StopRx(pDev);
-	atomic_flag_clear(&pDev->bBusy);
-}
+void DeviceIntrfStopRx(DevIntrf_t * const pDev);
 
 // Initiate receive
 // WARNING this function must be used in pair with StopTx
@@ -539,20 +510,7 @@ static inline void DeviceIntrfStopRx(DevIntrf_t * const pDev) {
  * @return 	true - Success\n
  * 			false - failed
  */
-static inline bool DeviceIntrfStartTx(DevIntrf_t * const pDev, uint32_t DevAddr) {
-    if (atomic_flag_test_and_set(&pDev->bBusy))
-        return false;
-
-    bool retval =  pDev->StartTx(pDev, DevAddr);
-
-    // In case of returned false, app would not call Stop to release busy flag
-    // so we need to do that here before returning
-    if (retval == false) {
-    	atomic_flag_clear(&pDev->bBusy);
-    }
-
-    return retval;
-}
+bool DeviceIntrfStartTx(DevIntrf_t * const pDev, uint32_t DevAddr);
 
 /**
  * @brief	Transfer data from pData passed in parameter.  Assuming StartTx was
@@ -577,10 +535,7 @@ static inline int DeviceIntrfTxData(DevIntrf_t * const pDev, const uint8_t *pDat
  *
  * @param	pDev : Pointer to an instance of the Device Interface
  */
-static inline void DeviceIntrfStopTx(DevIntrf_t * const pDev) {
-    pDev->StopTx(pDev);
-	atomic_flag_clear(&pDev->bBusy);
-}
+void DeviceIntrfStopTx(DevIntrf_t * const pDev);
 
 /**
  * @brief	This function perform a reset of interface.

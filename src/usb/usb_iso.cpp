@@ -123,10 +123,9 @@ static int UsbIsoIntrfRxData(DevIntrf_t * const pDev, uint8_t *pBuffer,
 		return 0;
 	}
 
-	// The RX FIFO drops its oldest frame when the application falls behind
-	// (there is no back-pressure on an isochronous endpoint), so the copy
-	// runs under interrupt exclusion or a completion could reclaim the frame
-	// being read. A frame is at most the packet size.
+	// The copy runs under interrupt exclusion so a close or bus reset in the
+	// interrupt cannot empty the FIFO under the frame being read. A frame is
+	// at most the packet size.
 	int count = 0;
 	const uint32_t state = DisableInterrupt();
 	UsbPkt_t *pkt;
@@ -293,7 +292,9 @@ bool UsbIsoIntrfInit(UsbIsoIntrf_t *pIntrf, UsbDevIntrf_t *pData,
 	cfg.EpNo = pCfg->EpNo;
 	// Blocking: the controller reads the TX head in place (peek at the
 	// service interval, get at completion), so a put must never reclaim it;
-	// a full TX queue refuses the frame at SendFrame.
+	// a full TX queue refuses the frame at SendFrame. A full RX FIFO has no
+	// destination for the next OUT frame, which is then dropped: an
+	// isochronous endpoint cannot hold the host off.
 	cfg.bBlocking = true;
 	cfg.Mode = USB_INTRF_MODE_PACKET;
 	cfg.BufferSize = pCfg->BufferSize;
@@ -306,19 +307,6 @@ bool UsbIsoIntrfInit(UsbIsoIntrf_t *pIntrf, UsbDevIntrf_t *pData,
 	cfg.EvtCB = pCfg->EvtCB;
 
 	if (!UsbIntrfInit(pIntrf->pData, &cfg))
-	{
-		return false;
-	}
-
-	// An isochronous OUT endpoint cannot hold the host off, so the RX FIFO
-	// must drop its oldest frame when full rather than refuse the completion
-	// the way the blocking bulk path does through DRDY. The TX FIFO stays
-	// blocking. Reuse the same memory and geometry with the dropping policy.
-	// The OUT callback reserves a destination when the controller sends DRDY.
-	pIntrf->pData->hRxFifo = CFifoInit(pCfg->pRxFifoMem,
-		(uint32_t)cfg.RxFifoMemSize, USB_INTRF_PKT_BLKSIZE(pCfg->BufferSize),
-		false);
-	if (pIntrf->pData->hRxFifo == nullptr)
 	{
 		return false;
 	}

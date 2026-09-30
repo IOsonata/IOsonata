@@ -556,6 +556,12 @@ static const uint8_t *UsbCoreNextActiveEndpoint(UsbCoreWalk_t *pWalk)
 	return nullptr;
 }
 
+#if defined(USB_CTRLR_SOF_BY_ISO_OPEN)
+// The controller enables SOF itself while its ISO endpoint pair is open.
+static inline void UsbCoreUpdateSof(void)
+{
+}
+#else
 static bool UsbCoreIsoActive(void)
 {
 	if (s_Core.Configuration == 0U)
@@ -586,6 +592,7 @@ static void UsbCoreUpdateSof(void)
 		UsbCtrlrSofEnable(s_Core.DevNo,
 			!s_Core.Suspended && UsbCoreIsoActive());
 }
+#endif
 
 // Clear halt tracking for both the old and new alternate in one descriptor walk.
 static void UsbCoreClearInterfaceHalt(uint8_t InterfaceNo,
