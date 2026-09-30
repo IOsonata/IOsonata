@@ -121,8 +121,6 @@ static void UsbdCdcNotifKick(UsbdCdcDev_t *pCdc)
 	}
 }
 
-// Share endpoint-open argument setup between this class's endpoints.
-__attribute__((noinline))
 static bool UsbdCdcOpenEndpoint(UsbdCdcDev_t *pCdc, uint8_t EpNo,
 								bool bIn, uint8_t Type, uint16_t MaxPacketSize)
 {
