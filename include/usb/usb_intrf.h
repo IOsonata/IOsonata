@@ -144,7 +144,6 @@ typedef struct __Usb_Interf_Config {
 #pragma pack(pop)
 
 typedef struct __Usb_Dev_Interf		UsbDevIntrf_t;
-typedef int (*EpSendFct_t)(UsbDevIntrf_t *pIntrf);
 
 struct __Usb_Dev_Interf {
 	// Endpoint state ahead of the DevIntrf block so the transfer paths
@@ -162,7 +161,6 @@ struct __Usb_Dev_Interf {
 	uint8_t *pRxBuffer;		//!< Direct mode: Data of the RX slot
 	UsbPkt_t *pRxDirectBuffer;
 	UsbPkt_t *pTxDirectBuffer;
-	EpSendFct_t EpSend;
 	void *pClassContext;
 	DevIntrf_t DevIntrf;
 };
@@ -240,3 +238,4 @@ protected:
 /** @} End of group USBD */
 
 #endif	// __USB_INTRF_H__
+

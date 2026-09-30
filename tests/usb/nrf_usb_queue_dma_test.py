@@ -224,8 +224,8 @@ code += re.search(r'static constexpr uint16_t USB_INTRF_RX_DRDY[^;]+;', intrf_so
 code += '\nvoid UsbIntrfCtrlrOutEvent(UsbCtrlrEvtType_t,uint16_t,void*);\n'
 code += '\n'.join(function(name, intrf_source) for name in [
     'UsbIntrfSetTxIdle', 'UsbIntrfTakeTx', 'UsbIntrfDirectClear',
-    'UsbIntrfTxFailure', 'UsbIntrfEpSendPktMode', 'UsbIntrfTxPackets',
-    'UsbIntrfEpSendByteMode', 'UsbIntrfTxBytes',
+    'UsbIntrfTxFailure', 'UsbIntrfEpSendQueued', 'UsbIntrfTxPackets',
+    'UsbIntrfTxBytes',
     'UsbIntrfCtrlrInEvent', 'UsbIntrfDirectReady', 'UsbIntrfDirectRxComplete',
     'UsbIntrfRegisterRx', 'UsbIntrfReleaseRx', 'UsbIntrfCompleteRx', 'UsbIntrfRetryRx',
     'UsbIntrfCtrlrOutEvent', 'UsbIntrfRxData', 'UsbIntrfRxDirect', 'UsbIntrfUnconfigure'])
@@ -1262,7 +1262,6 @@ int main(int argc,char **argv){
   intrf.DevIntrf.pDevData=&intrf;
   intrf.hTxFifo=CFifoInit(packetMem,CFIFO_TOTAL_MEMSIZE(3,block),block,blocking);
   intrf.Mps=mps;intrf.EpNo=1;intrf.Mode=USB_INTRF_MODE_PACKET;
-  intrf.EpSend=UsbIntrfEpSendPktMode;
   UsbIntrfSetTxIdle(&intrf);
   auto &reg=s_Usbd.EpReg[0][1];
   reg={};reg.Handler=UsbIntrfCtrlrInEvent;reg.pContext=&intrf;
@@ -1409,3 +1408,4 @@ with tempfile.TemporaryDirectory(prefix='iosonata-queue-') as temp:
         '-x', 'c++', str(path), str(ROOT/'src/cfifo.c'),
         str(ROOT/'src/app_evt_handler.cpp'), '-o', str(binary)], check=True)
     subprocess.run([str(binary), *sys.argv[1:]], check=True)
+
