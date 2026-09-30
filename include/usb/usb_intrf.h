@@ -210,6 +210,46 @@ public:
 		return DeviceIntrfGetRate(&vUsbDevIntrf.DevIntrf);
 	}
 
+	// The USB implementation owns this DevIntrf directly. Avoid the generic
+	// C++ wrappers converting through the virtual operator again.
+	void Disable(void) override {
+		DeviceIntrfDisable(&vUsbDevIntrf.DevIntrf);
+	}
+
+	void Enable(void) override {
+		DeviceIntrfEnable(&vUsbDevIntrf.DevIntrf);
+	}
+
+	int Read(uint32_t DevAddr, const uint8_t *pAdCmd, int AdCmdLen,
+			 uint8_t *pBuff, int BuffLen) override {
+		return DeviceIntrfRead(&vUsbDevIntrf.DevIntrf, DevAddr,
+			pAdCmd, AdCmdLen, pBuff, BuffLen);
+	}
+
+	int Write(uint32_t DevAddr, const uint8_t *pAdCmd, int AdCmdLen,
+			  const uint8_t *pData, int DataLen) override {
+		return DeviceIntrfWrite(&vUsbDevIntrf.DevIntrf, DevAddr,
+			pAdCmd, AdCmdLen, pData, DataLen);
+	}
+
+	// UsbIntrfInit installs no-op Start/Stop hooks. Preserve the DeviceIntrf
+	// busy-lock contract directly instead of calling those hooks indirectly.
+	bool StartRx(uint32_t) override {
+		return !atomic_flag_test_and_set(&vUsbDevIntrf.DevIntrf.bBusy);
+	}
+
+	void StopRx(void) override {
+		atomic_flag_clear(&vUsbDevIntrf.DevIntrf.bBusy);
+	}
+
+	bool StartTx(uint32_t) override {
+		return !atomic_flag_test_and_set(&vUsbDevIntrf.DevIntrf.bBusy);
+	}
+
+	void StopTx(void) override {
+		atomic_flag_clear(&vUsbDevIntrf.DevIntrf.bBusy);
+	}
+
 	// Use the owned data directly without a virtual conversion on each call.
 	__attribute__((always_inline))
 	int Tx(uint32_t DevAddr, const uint8_t *pData, int DataLen) override {
