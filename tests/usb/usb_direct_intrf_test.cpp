@@ -146,7 +146,7 @@ static void TestValidation(void)
 	cfg.pRxBuffer = reinterpret_cast<uint8_t *>(rx);
 	cfg.pTxBuffer = reinterpret_cast<uint8_t *>(tx);
 	CHECK(UsbIntrfInit(&intrf, &cfg));
-	CHECK(intrf.hRxFifo == nullptr && intrf.hTxFifo == nullptr);
+	CHECK(intrf.Mode == USB_INTRF_MODE_DIRECT);
 	CHECK(intrf.pRxDirectBuffer != nullptr && intrf.pTxDirectBuffer != nullptr);
 	CHECK(!UsbIntrfConfigure(&intrf, 0U));
 	CHECK(!UsbIntrfConfigure(&intrf, 17U));

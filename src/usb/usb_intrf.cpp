@@ -46,9 +46,9 @@ static void UsbIntrfCtrlrOutEvent(UsbCtrlrEvtType_t, uint16_t, void *);
 // The block stays unpublished until the DMA completion callback.
 static void UsbIntrfEpReceive(UsbDevIntrf_t *pIntrf)
 {
-	UsbPkt_t *packet = pIntrf->pRxDirectBuffer;
-	if (pIntrf->Mode != USB_INTRF_MODE_DIRECT)
-		packet = reinterpret_cast<UsbPkt_t *>(CFifoResv(pIntrf->hRxFifo));
+	UsbPkt_t *packet = pIntrf->Mode == USB_INTRF_MODE_DIRECT ?
+		pIntrf->pRxDirectBuffer :
+		reinterpret_cast<UsbPkt_t *>(CFifoResv(pIntrf->hRxFifo));
 	uint8_t *buffer = packet != nullptr ? packet->Data : nullptr;
 	pIntrf->RxPending = buffer == nullptr ||
 		!UsbCtrlrEpReceive(pIntrf->DevNo, pIntrf->EpNo, buffer,

@@ -189,8 +189,9 @@ static void TestLifecycleAndValidation(void)
 	auto cfg = MakeCfg();
 	CHECK(UsbIntIntrfInit(&intrf, &intrfData, &cfg));
 	CHECK(intrf.pData->Mode == USB_INTRF_MODE_DIRECT);
-	CHECK(intrf.pData->hRxFifo == nullptr);
-	CHECK(intrf.pData->hTxFifo == nullptr);
+	CHECK(intrf.pData->Mode == USB_INTRF_MODE_DIRECT);
+	CHECK(intrf.pData->pRxDirectBuffer == reinterpret_cast<UsbPkt_t *>(intrf.RxBuffer));
+	CHECK(intrf.pData->pTxDirectBuffer == reinterpret_cast<UsbPkt_t *>(intrf.TxBuffer));
 	CHECK(s_OutBlocking);
 	CHECK(!UsbIntIntrfOpen(&intrf, 0U, 1U));
 	CHECK(!UsbIntIntrfOpen(&intrf, 65U, 1U));

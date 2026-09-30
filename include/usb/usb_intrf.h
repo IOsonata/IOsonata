@@ -155,11 +155,16 @@ struct __Usb_Dev_Interf {
 	uint8_t EpNo : 7;
 	bool bBlocking : 1;
 	UsbIntrfMode_t Mode;
-	hCFifo_t hTxFifo;
-	hCFifo_t hRxFifo;
+	// Mode selects FIFO storage or a direct packet slot for each direction.
+	union {
+		hCFifo_t hTxFifo;
+		UsbPkt_t *pTxDirectBuffer;
+	};
+	union {
+		hCFifo_t hRxFifo;
+		UsbPkt_t *pRxDirectBuffer;
+	};
 	uint32_t RxDropCnt;
-	UsbPkt_t *pRxDirectBuffer;
-	UsbPkt_t *pTxDirectBuffer;
 	void *pClassContext;
 	DevIntrf_t DevIntrf;
 };
