@@ -384,11 +384,11 @@ static bool UsbdHidInitInternal(UsbdHidDev_t *pHid,
 	pHid->pContext = pCfg->pContext;
 	pHid->ActiveProtocol = USBD_HID_PROTOCOL_REPORT;
 
-	if (pHid->FsMps == 0U || pHid->FsMps > USB_INT_INTRF_FS_MPS ||
-		pHid->FsMps > USB_INT_INTRF_MAX_MPS || pHid->FsInterval == 0U ||
+	// Zero MPS and interval values were replaced by the defaults above.
+	if (pHid->FsMps > USB_INT_INTRF_FS_MPS ||
+		pHid->FsMps > USB_INT_INTRF_MAX_MPS ||
 		(USB_HIGHSPEED_CAPABLE(pHid->DevNo) &&
-		 (pHid->HsMps == 0U || pHid->HsMps > USB_INT_INTRF_MAX_MPS ||
-		  pHid->HsInterval == 0U || pHid->HsInterval > 16U)))
+		 (pHid->HsMps > USB_INT_INTRF_MAX_MPS || pHid->HsInterval > 16U)))
 	{
 		return false;
 	}

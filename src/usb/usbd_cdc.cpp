@@ -230,8 +230,12 @@ static bool UsbdCdcRequest(const UsbSetupData_t *pSetup,
 	switch (pSetup->bRequest)
 	{
 		case USB_CDC_REQ_SET_LINE_CODING:
-			if ((pSetup->bmRequestType & USB_REQTYPE_MASK_DIR) !=
-					USB_REQTYPE_DIRDEV ||
+		case USB_CDC_REQ_GET_LINE_CODING:
+		{
+			// SET is host to device into the pending copy, GET is device to
+			// host from the current one; both carry exactly one line coding.
+			const bool get = pSetup->bRequest == USB_CDC_REQ_GET_LINE_CODING;
+			if (((pSetup->bmRequestType & USB_REQTYPE_MASK_DIR) != 0U) != get ||
 				pSetup->wValue != 0U ||
 				pSetup->wLength != sizeof(UsbCdcLineCoding_t))
 			{
@@ -244,9 +248,14 @@ static bool UsbdCdcRequest(const UsbSetupData_t *pSetup,
 				{
 					return false;
 				}
-				*ppData =
-					reinterpret_cast<uint8_t *>(&pCdc->PendingLineCoding);
-				*pLength = sizeof(pCdc->PendingLineCoding);
+				*ppData = reinterpret_cast<uint8_t *>(get ?
+					&pCdc->LineCoding : &pCdc->PendingLineCoding);
+				*pLength = sizeof(UsbCdcLineCoding_t);
+				return true;
+			}
+
+			if (get)
+			{
 				return true;
 			}
 
@@ -261,26 +270,7 @@ static bool UsbdCdcRequest(const UsbSetupData_t *pSetup,
 				return true;
 			}
 			return false;
-
-		case USB_CDC_REQ_GET_LINE_CODING:
-			if ((pSetup->bmRequestType & USB_REQTYPE_MASK_DIR) !=
-					USB_REQTYPE_DIRHOST ||
-				pSetup->wValue != 0U ||
-				pSetup->wLength != sizeof(UsbCdcLineCoding_t))
-			{
-				return false;
-			}
-
-			if (Stage == USB_CTRL_SETUP)
-			{
-				if (ppData == nullptr)
-				{
-					return false;
-				}
-				*ppData = reinterpret_cast<uint8_t *>(&pCdc->LineCoding);
-				*pLength = sizeof(pCdc->LineCoding);
-			}
-			return true;
+		}
 
 		case USB_CDC_REQ_SET_CTRL_LINE_STATE:
 			if ((pSetup->bmRequestType & USB_REQTYPE_MASK_DIR) !=

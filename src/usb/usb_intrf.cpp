@@ -593,9 +593,9 @@ bool UsbIntrfInit(UsbDevIntrf_t *pIntrf, const UsbIntrfCfg_t *pCfg)
 	}
 	else
 	{
-		if (pCfg->pRxFifoMem == nullptr || pCfg->RxFifoMemSize <= 0 ||
-			pCfg->pTxFifoMem == nullptr || pCfg->TxFifoMemSize <= 0 ||
-			pCfg->TxFifoBlkSize == 0U ||
+		// CFifoInit refuses a null block, a zero block size and memory too
+		// small for one block; sign and word alignment are checked here.
+		if (pCfg->RxFifoMemSize <= 0 || pCfg->TxFifoMemSize <= 0 ||
 			(((uintptr_t)pCfg->pRxFifoMem & 3U) != 0U) ||
 			(((uintptr_t)pCfg->pTxFifoMem & 3U) != 0U))
 		{
