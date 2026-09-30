@@ -161,8 +161,7 @@ static bool UsbdHidClassRequest(UsbdHidDev_t *pHid,
 			return false;
 
 		case USB_HID_REQ_GET_IDLE:
-			if (!dirIn || pSetup->wLength != 1U ||
-				(pSetup->wValue & 0xFF00U) != 0U)
+			if ((pSetup->wValue & 0xFF00U) != 0U)
 			{
 				return false;
 			}
@@ -170,18 +169,14 @@ static bool UsbdHidClassRequest(UsbdHidDev_t *pHid,
 			break;
 
 		case USB_HID_REQ_SET_IDLE:
-			if (dirIn || pSetup->wLength != 0U)
-			{
-				return false;
-			}
 			pActive = &pHid->Idle;
 			pPending = &pHid->PendingIdle;
 			value = (uint8_t)(pSetup->wValue >> 8);
 			break;
 
 		case USB_HID_REQ_GET_PROTOCOL:
-			if (!dirIn || pHid->SubClass != USB_HID_SUBCLASS_BOOT ||
-				pSetup->wValue != 0U || pSetup->wLength != 1U)
+			if (pHid->SubClass != USB_HID_SUBCLASS_BOOT ||
+				pSetup->wValue != 0U)
 			{
 				return false;
 			}
@@ -189,9 +184,8 @@ static bool UsbdHidClassRequest(UsbdHidDev_t *pHid,
 			break;
 
 		case USB_HID_REQ_SET_PROTOCOL:
-			if (dirIn || pHid->SubClass != USB_HID_SUBCLASS_BOOT ||
-				pSetup->wValue > USBD_HID_PROTOCOL_REPORT ||
-				pSetup->wLength != 0U)
+			if (pHid->SubClass != USB_HID_SUBCLASS_BOOT ||
+				pSetup->wValue > USBD_HID_PROTOCOL_REPORT)
 			{
 				return false;
 			}
@@ -206,6 +200,8 @@ static bool UsbdHidClassRequest(UsbdHidDev_t *pHid,
 
 	if (pPending == nullptr)
 	{
+		if (!dirIn || pSetup->wLength != 1U)
+			return false;
 		if (Stage == USB_CTRL_SETUP)
 		{
 			if (ppData == nullptr)
@@ -219,6 +215,8 @@ static bool UsbdHidClassRequest(UsbdHidDev_t *pHid,
 		return true;
 	}
 
+	if (dirIn || pSetup->wLength != 0U)
+		return false;
 	if (Stage == USB_CTRL_SETUP)
 	{
 		*pPending = value;

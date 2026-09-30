@@ -395,6 +395,40 @@ static void TestDataAndLifecycle(void)
 	CHECK(hid.Tx(0, tx, sizeof(tx)) == 0);
 }
 
+static void TestClassRequestDirectionAndLength(void)
+{
+	const uint8_t requests[] = {USB_HID_REQ_GET_IDLE, USB_HID_REQ_GET_PROTOCOL,
+		USB_HID_REQ_SET_IDLE, USB_HID_REQ_SET_PROTOCOL};
+	const UsbCtrlStage_t stages[] = {USB_CTRL_SETUP, USB_CTRL_DATA,
+		USB_CTRL_COMPLETE, USB_CTRL_ABORT};
+	for (unsigned request = 0U; request < 4U; request++)
+	{
+		for (unsigned direction = 0U; direction < 2U; direction++)
+		{
+			for (unsigned count = 0U; count < 3U; count++)
+			{
+				ResetFake();
+				TestHid hid;
+				CHECK(hid.Init(MakeCfg()));
+				UsbSetupData_t setup = {};
+				setup.bmRequestType = USB_REQTYPE_CLASS | USB_REQTYPE_INTERFACE |
+					(direction ? USB_REQTYPE_DIRHOST : USB_REQTYPE_DIRDEV);
+				setup.bRequest = requests[request];
+				setup.wIndex = ITF_NO;
+				setup.wLength = count;
+				const bool get = request < 2U;
+				const bool valid = (direction != 0U) == get && count == (get ? 1U : 0U);
+				for (UsbCtrlStage_t stage : stages)
+				{
+					uint8_t *data = nullptr;
+					uint16_t length = 0U;
+					CHECK(Control(hid, &setup, stage, &data, &length) == valid);
+				}
+			}
+		}
+	}
+}
+
 static void TestControlRequests(void)
 {
 	ResetFake();
@@ -501,9 +535,11 @@ int main(void)
 {
 	TestDescriptorAndPlacement();
 	TestDataAndLifecycle();
+	TestClassRequestDirectionAndLength();
 	TestControlRequests();
 	TestValidation();
 	printf("%s\n", s_Fail == 0 ? "usbd_hid_test: PASS" :
 		"usbd_hid_test: FAIL");
 	return s_Fail == 0 ? 0 : 1;
 }
+
