@@ -210,18 +210,15 @@ static void UsbIsoIntrfTxComplete(UsbIsoIntrf_t *pIntrf,
 	atomic_store_explicit(&pIntrf->pData->DevIntrf.bTxReady, empty,
 		memory_order_release);
 
+	DEVINTRF_EVT event = empty ? DEVINTRF_EVT_TX_FIFO_EMPTY : DEVINTRF_EVT_TX_READY;
 	if (Result != USB_CTRLR_XFER_SUCCESS)
 	{
 		pIntrf->TxMissCnt++;
-		UsbIntrfNotify(pIntrf->pData, DEVINTRF_EVT_TX_TIMEOUT, length);
-		return;
+		event = DEVINTRF_EVT_TX_TIMEOUT;
 	}
-	if (length == 0U)
-	{
+	else if (length == 0U)
 		pIntrf->TxEmptyCnt++;
-	}
-	UsbIntrfNotify(pIntrf->pData, empty ?
-		DEVINTRF_EVT_TX_FIFO_EMPTY : DEVINTRF_EVT_TX_READY, length);
+	UsbIntrfNotify(pIntrf->pData, event, length);
 }
 
 // Controller callback for the ISO IN endpoint. The interval and the IN
@@ -240,11 +237,9 @@ static void UsbIsoIntrfCtrlrInEvent(UsbCtrlrEvtType_t Event,
 			return;
 
 		case USB_CTRLR_EVT_XFER_CMPL:
-			UsbIsoIntrfTxComplete(pIntrf, USB_CTRLR_XFER_SUCCESS);
-			return;
-
 		case USB_CTRLR_EVT_XFER_FAILED:
-			UsbIsoIntrfTxComplete(pIntrf, USB_CTRLR_XFER_FAILED);
+			UsbIsoIntrfTxComplete(pIntrf, Event == USB_CTRLR_EVT_XFER_CMPL ?
+				USB_CTRLR_XFER_SUCCESS : USB_CTRLR_XFER_FAILED);
 			return;
 
 		default:
@@ -421,4 +416,5 @@ bool UsbIsoIntrfSendFrame(UsbIsoIntrf_t *pIntrf, const uint8_t *pData,
 	EnableInterrupt(state);
 	return true;
 }
+
 
