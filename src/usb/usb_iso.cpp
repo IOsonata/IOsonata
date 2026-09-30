@@ -60,14 +60,6 @@ static void UsbIsoIntrfRelease(UsbIsoIntrf_t *pIntrf, bool bCloseEp)
 	UsbIntrfUnconfigure(pIntrf->pData);
 }
 
-// Share the ISO endpoint-open setup between the two directions.
-static __attribute__((noinline)) bool UsbIsoIntrfOpenEndpoint(
-	UsbIsoIntrf_t *pIntrf, bool in)
-{
-	return UsbCtrlrIsoOpen(pIntrf->pData->DevNo, pIntrf->EpNo, in,
-		pIntrf->Mps);
-}
-
 static bool UsbIsoIntrfActivate(UsbIsoIntrf_t *pIntrf)
 {
 	if (pIntrf->Opened)
@@ -78,8 +70,10 @@ static bool UsbIsoIntrfActivate(UsbIsoIntrf_t *pIntrf)
 	{
 		return false;
 	}
-	if (!UsbIsoIntrfOpenEndpoint(pIntrf, true) ||
-		!UsbIsoIntrfOpenEndpoint(pIntrf, false))
+	if (!UsbCtrlrIsoOpen(pIntrf->pData->DevNo, pIntrf->EpNo, true,
+			pIntrf->Mps) ||
+		!UsbCtrlrIsoOpen(pIntrf->pData->DevNo, pIntrf->EpNo, false,
+			pIntrf->Mps))
 	{
 		UsbIsoIntrfRelease(pIntrf, true);
 		return false;
