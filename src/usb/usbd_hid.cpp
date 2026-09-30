@@ -341,8 +341,7 @@ static bool UsbdHidInitInternal(UsbdHidDev_t *pHid,
 								const UsbdHidCfg_t *pCfg,
 								UsbDeviceClass *pClass)
 {
-	if (pHid == nullptr || pCfg == nullptr || pClass == nullptr ||
-		UsbGetCfg(pCfg->DevNo) == nullptr || pCfg->pReportDesc == nullptr ||
+	if (UsbGetCfg(pCfg->DevNo) == nullptr || pCfg->pReportDesc == nullptr ||
 		pCfg->ReportDescLength == 0U ||
 		pCfg->SubClass > USB_HID_SUBCLASS_BOOT ||
 		(pCfg->SubClass == USB_HID_SUBCLASS_NONE &&
@@ -442,3 +441,4 @@ void UsbdHid::Reset(void)
 {
 	UsbdHidReset(&vUsbdHid);
 }
+

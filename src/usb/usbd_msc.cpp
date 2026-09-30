@@ -107,22 +107,15 @@ static bool UsbdMscMediumReady(UsbdMscDev_t *pMsc)
 static void UsbdMscCopyInquiry(char *pDest, size_t Length,
 							const char *pSource, const char *pDefault)
 {
-	memset(pDest, ' ', Length);
 	if (pSource == nullptr)
-	{
 		pSource = pDefault;
-		if (pSource == nullptr)
-		{
-			return;
-		}
-	}
-
-	size_t length = 0U;
-	while (length < Length && pSource[length] != '\0')
+	for (size_t i = 0U; i < Length; i++)
 	{
-		length++;
+		const char value = *pSource;
+		pDest[i] = value != '\0' ? value : ' ';
+		if (value != '\0')
+			pSource++;
 	}
-	memcpy(pDest, pSource, length);
 }
 
 static bool UsbdMscOpenEndpoint(UsbdMscDev_t *pMsc, bool bIn,
@@ -975,8 +968,7 @@ static bool UsbdMscInitInternal(UsbdMscDev_t *pMsc,
 								const UsbdMscCfg_t *pCfg,
 								UsbDeviceClass *pClass)
 {
-	if (pMsc == nullptr || pCfg == nullptr || pClass == nullptr ||
-		UsbGetCfg(pCfg->DevNo) == nullptr || pCfg->pDisk == nullptr ||
+	if (UsbGetCfg(pCfg->DevNo) == nullptr || pCfg->pDisk == nullptr ||
 		pCfg->pSectorBuffer == nullptr || pCfg->SectorBufferSize == 0U)
 	{
 		return false;
@@ -1069,8 +1061,7 @@ bool UsbdMsc::Control(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
 					  uint8_t **ppData, uint16_t *pLength)
 {
 	if (pSetup == nullptr || Stage == USB_CTRL_ABORT ||
-		(uint8_t)pSetup->wIndex != (uint8_t)vUsbdMsc.ItfNo ||
-		(pSetup->wIndex & 0xFF00U) != 0U)
+		pSetup->wIndex != (uint8_t)vUsbdMsc.ItfNo)
 	{
 		return false;
 	}
@@ -1163,3 +1154,4 @@ void UsbdMsc::Process(void)
 {
 	UsbdMscProcessInternal(&vUsbdMsc);
 }
+

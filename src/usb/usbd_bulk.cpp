@@ -170,8 +170,7 @@ static bool UsbdBulkInitInternal(UsbdBulkDev_t * const pBulk,
 								 const UsbdBulkCfg_t *pCfg,
 								 UsbDeviceClass *pClass)
 {
-	if (pBulk == nullptr || pCfg == nullptr || pClass == nullptr ||
-		UsbGetCfg(pCfg->DevNo) == nullptr ||
+	if (UsbGetCfg(pCfg->DevNo) == nullptr ||
 		pCfg->pRxFifoMem == nullptr || pCfg->RxFifoMemSize <= 0 ||
 		pCfg->pTxFifoMem == nullptr || pCfg->TxFifoMemSize <= 0 ||
 		pCfg->Mode > USBD_BULK_MODE_PACKET)
@@ -255,3 +254,4 @@ void UsbdBulk::Reset(void)
 {
 	UsbdBulkReset(&vUsbdBulk);
 }
+

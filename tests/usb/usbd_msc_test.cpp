@@ -410,11 +410,60 @@ static void TestInitDescriptorAndControl(void)
 	uint16_t length = 0U;
 	CHECK(msc.Control(&setup, USB_CTRL_SETUP, &pData, &length));
 	CHECK(pData != nullptr && *pData == 0U && length == 1U);
+	setup.wIndex = ITF_NO | 0x100U;
+	CHECK(!msc.Control(&setup, USB_CTRL_SETUP, &pData, &length));
+	setup.wIndex = ITF_NO + 1U;
+	CHECK(!msc.Control(&setup, USB_CTRL_SETUP, &pData, &length));
+	setup.wIndex = ITF_NO;
 	setup.wLength = 2U;
 	CHECK(!msc.Control(&setup, USB_CTRL_SETUP, &pData, &length));
 	CHECK(msc.SelectConfig(0U));
 	CHECK(s_CloseCount == 2);
 	CHECK(msc.Rate() == 0U);
+}
+
+static void TestInquiryStrings(void)
+{
+	// Exact-width inputs deliberately have no terminator.
+	const char vendor[8] = {'1','2','3','4','5','6','7','8'};
+	const char product[16] = {'0','1','2','3','4','5','6','7',
+		'8','9','A','B','C','D','E','F'};
+	const char revision[4] = {'1','2','3','4'};
+	const char *inputs[][3] = {
+		{nullptr, nullptr, nullptr}, {"", "", ""},
+		{vendor, product, revision},
+		{"123456789", "0123456789ABCDEFG", "12345"}
+	};
+	const char *expected[][3] = {
+		{"I-SYST  ", "IOsonata MSC     ", "1.00"},
+		{"        ", "                ", "    "},
+		{"12345678", "0123456789ABCDEF", "1234"},
+		{"12345678", "0123456789ABCDEF", "1234"}
+	};
+	for (unsigned i = 0; i < 4U; i++)
+	{
+		ResetFake();
+		RamDisk disk;
+		disk.Fill();
+		alignas(4) uint8_t sector[SECTOR_SIZE];
+		UsbdMscCfg_t cfg = MakeCfg(disk, sector);
+		cfg.pVendor = inputs[i][0];
+		cfg.pProduct = inputs[i][1];
+		cfg.pRevision = inputs[i][2];
+		UsbdMsc msc;
+		CHECK(msc.Init(cfg));
+		CHECK(msc.SelectConfig(1U));
+		UsbMscCmdBlkWrapper_t cbw = MakeCbw(1U, 36U, true,
+			USB_MSC_SCSI_INQUIRY, 6U);
+		cbw.CBWCB[4] = 36U;
+		RunInCommand(msc, cbw);
+		CHECK(s_CaptureLength == 36U + sizeof(UsbMscCmdStatusWrapper_t));
+		CHECK(memcmp(&s_Capture[8], expected[i][0], 8U) == 0);
+		CHECK(memcmp(&s_Capture[16], expected[i][1], 16U) == 0);
+		CHECK(memcmp(&s_Capture[32], expected[i][2], 4U) == 0);
+		CheckPassedCsw(1U);
+		CHECK(msc.SelectConfig(0U));
+	}
 }
 
 static void TestReadOnlyCommands(void)
@@ -888,6 +937,7 @@ static void TestSectorBufferBounds(void)
 int main(void)
 {
 	TestInitDescriptorAndControl();
+	TestInquiryStrings();
 	TestReadOnlyCommands();
 	TestReadWriteAndRepeatedCommands();
 	TestFailuresSenseResidueAndPhase();
@@ -906,3 +956,4 @@ int main(void)
 	printf("all pass\n");
 	return 0;
 }
+
