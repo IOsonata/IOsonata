@@ -78,15 +78,10 @@ static bool UsbdHidConfig(UsbdHidDev_t *pHid, uint8_t Configuration)
 	}
 
 	const bool highSpeed = UsbCtrlrHighSpeed(pHid->DevNo);
-	if (!UsbIntIntrfOpen(pHid->pIntIntrf,
-			highSpeed ? pHid->HsMps : pHid->FsMps,
-			highSpeed ? pHid->HsInterval : pHid->FsInterval))
-	{
-		return false;
-	}
-
-	pHid->Configured = true;
-	return true;
+	pHid->Configured = UsbIntIntrfOpen(pHid->pIntIntrf,
+		highSpeed ? pHid->HsMps : pHid->FsMps,
+		highSpeed ? pHid->HsInterval : pHid->FsInterval);
+	return pHid->Configured;
 }
 
 static void UsbdHidReset(UsbdHidDev_t *pHid)
@@ -118,19 +113,23 @@ static bool UsbdHidGetDescriptor(UsbdHidDev_t *pHid,
 	}
 
 	const uint8_t type = (uint8_t)(pSetup->wValue >> 8);
+	uint8_t *data;
+	uint16_t length;
 	if (type == USB_DESCTYPE_HID)
 	{
-		*ppData = reinterpret_cast<uint8_t *>(&pHid->HidDesc);
-		*pLength = sizeof(pHid->HidDesc);
-		return true;
+		data = reinterpret_cast<uint8_t *>(&pHid->HidDesc);
+		length = sizeof(pHid->HidDesc);
 	}
-	if (type == USB_DESCTYPE_HID_REPORT)
+	else if (type == USB_DESCTYPE_HID_REPORT)
 	{
-		*ppData = const_cast<uint8_t *>(pHid->pReportDesc);
-		*pLength = pHid->ReportDescLength;
-		return true;
+		data = const_cast<uint8_t *>(pHid->pReportDesc);
+		length = pHid->ReportDescLength;
 	}
-	return false;
+	else
+		return false;
+	*ppData = data;
+	*pLength = length;
+	return true;
 }
 
 static bool UsbdHidClassRequest(UsbdHidDev_t *pHid,
@@ -432,4 +431,5 @@ void UsbdHid::Reset(void)
 {
 	UsbdHidReset(&vUsbdHid);
 }
+
 

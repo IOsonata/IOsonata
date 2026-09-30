@@ -69,18 +69,14 @@ static bool UsbIntIntrfActivate(UsbIntIntrf_t *pIntrf)
 	{
 		return false;
 	}
-	if (!UsbIntIntrfOpenEndpoint(pIntrf, true))
+	if (UsbIntIntrfOpenEndpoint(pIntrf, true))
 	{
-		UsbIntrfUnconfigure(pIntrf->pData);
-		return false;
-	}
-	if (!UsbIntIntrfOpenEndpoint(pIntrf, false))
-	{
+		if (UsbIntIntrfOpenEndpoint(pIntrf, false))
+			return true;
 		UsbCtrlrEpClose(pIntrf->pData->DevNo, pIntrf->pData->EpNo, true);
-		UsbIntrfUnconfigure(pIntrf->pData);
-		return false;
 	}
-	return true;
+	UsbIntrfUnconfigure(pIntrf->pData);
+	return false;
 }
 
 static void UsbIntIntrfDisable(DevIntrf_t * const pDev)
@@ -109,8 +105,15 @@ static int UsbIntIntrfDataEvent(DevIntrf_t * const pDev, DEVINTRF_EVT Event,
 	UsbIntIntrf_t *pIntrf =
 		static_cast<UsbIntIntrf_t *>(pData->pClassContext);
 
+	UsbCtrlrXferResult_t result = USB_CTRLR_XFER_SUCCESS;
 	switch (Event)
 	{
+		case DEVINTRF_EVT_RX_TIMEOUT:
+			pIntrf->RxErrorCnt++;
+			pBuffer = pData->pRxDirectBuffer->Data;
+			result = USB_CTRLR_XFER_FAILED;
+			goto rx_complete;
+
 		case DEVINTRF_EVT_RX_DATA:
 			if (Length > (int)pIntrf->Mps)
 			{
@@ -118,53 +121,32 @@ static int UsbIntIntrfDataEvent(DevIntrf_t * const pDev, DEVINTRF_EVT Event,
 				return 0;
 			}
 			if (Length == 0)
-			{
 				pIntrf->RxEmptyCnt++;
-			}
+		rx_complete:
 			if (pIntrf->RxHandler == nullptr)
-			{
 				return 0;
-			}
 			pIntrf->RxHandler(pIntrf, pBuffer, (uint16_t)Length,
-				USB_CTRLR_XFER_SUCCESS, pIntrf->pContext);
-			return Length;
-
-		case DEVINTRF_EVT_RX_TIMEOUT:
-			pIntrf->RxErrorCnt++;
-			if (pIntrf->RxHandler != nullptr)
-			{
-				pIntrf->RxHandler(pIntrf, pData->pRxDirectBuffer->Data,
-					(uint16_t)Length,
-					USB_CTRLR_XFER_FAILED, pIntrf->pContext);
-			}
-			return 0;
-
-		case DEVINTRF_EVT_TX_FIFO_EMPTY:
-			if (Length == 0)
-			{
-				pIntrf->TxEmptyCnt++;
-			}
-			if (pIntrf->TxHandler != nullptr)
-			{
-				pIntrf->TxHandler(pIntrf,
-					(uint16_t)Length,
-					USB_CTRLR_XFER_SUCCESS, pIntrf->pContext);
-			}
-			return Length;
+				result, pIntrf->pContext);
+			break;
 
 		case DEVINTRF_EVT_TX_TIMEOUT:
 			pIntrf->TxErrorCnt++;
+			result = USB_CTRLR_XFER_FAILED;
+			goto tx_complete;
+
+		case DEVINTRF_EVT_TX_FIFO_EMPTY:
+			if (Length == 0)
+				pIntrf->TxEmptyCnt++;
+		tx_complete:
 			if (pIntrf->TxHandler != nullptr)
-			{
-				pIntrf->TxHandler(pIntrf,
-					(uint16_t)Length,
-					USB_CTRLR_XFER_FAILED, pIntrf->pContext);
-			}
-			return 0;
+				pIntrf->TxHandler(pIntrf, (uint16_t)Length,
+					result, pIntrf->pContext);
+			break;
 
 		default:
 			return 0;
 	}
+	return result == USB_CTRLR_XFER_SUCCESS ? Length : 0;
 }
 
 bool UsbIntIntrfInit(UsbIntIntrf_t *pIntrf, UsbDevIntrf_t *pData,
@@ -256,4 +238,5 @@ void UsbIntIntrfReset(UsbIntIntrf_t *pIntrf)
 	pIntrf->RxEmptyCnt = 0U;
 	pIntrf->TxEmptyCnt = 0U;
 }
+
 
