@@ -126,8 +126,8 @@ static int HidEvent(DevIntrf_t *, DEVINTRF_EVT event,
 	// Only RX_DATA uses the return value: returning Length frees the slot.
 	if (event == DEVINTRF_EVT_RX_DATA)
 	{
-		if (Length <= (int)sizeof(s_HidPending) &&
-			g_Hid.Tx(0, pData, Length) != Length)
+		// UsbIntIntrfDataEvent already rejects reports larger than the MPS.
+		if (g_Hid.Tx(0, pData, Length) != Length)
 		{
 			memcpy(s_HidPending, pData, Length);
 			s_HidPendingLength = Length;
