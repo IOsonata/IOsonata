@@ -169,24 +169,30 @@ static int s_ReportStageCount;
 static UsbCtrlStage_t s_ReportStage[4];
 static uint8_t s_ControlReport[8];
 
-static void HidRx(UsbdHidDev_t *, const uint8_t *pData, uint16_t Length,
-				  UsbCtrlrXferResult_t Result, void *)
+static int HidEvent(DevIntrf_t *pDev, DEVINTRF_EVT event,
+	uint8_t *pData, int Length)
 {
-	CHECK(Result == USB_CTRLR_XFER_SUCCESS);
-	s_RxCount++;
-	s_LastRxLength = Length;
-	if (Length != 0U)
+	CHECK(UsbdHidGetDevHandle(pDev)->pContext == &s_Fail);
+	const UsbCtrlrXferResult_t result =
+		(event == DEVINTRF_EVT_RX_TIMEOUT || event == DEVINTRF_EVT_TX_TIMEOUT) ?
+		USB_CTRLR_XFER_FAILED : USB_CTRLR_XFER_SUCCESS;
+	if (event == DEVINTRF_EVT_RX_DATA || event == DEVINTRF_EVT_RX_TIMEOUT)
 	{
-		memcpy(s_LastRx, pData, Length);
+		CHECK(result == USB_CTRLR_XFER_SUCCESS);
+		s_RxCount++;
+		s_LastRxLength = Length;
+		if (Length != 0U)
+		{
+			memcpy(s_LastRx, pData, Length);
+		}
 	}
-}
-
-static void HidTx(UsbdHidDev_t *, uint16_t Length,
-				  UsbCtrlrXferResult_t Result, void *)
-{
-	CHECK(Result == USB_CTRLR_XFER_SUCCESS);
-	s_TxCount++;
-	s_LastTxLength = Length;
+	else if (event == DEVINTRF_EVT_TX_FIFO_EMPTY || event == DEVINTRF_EVT_TX_TIMEOUT)
+	{
+		CHECK(result == USB_CTRLR_XFER_SUCCESS);
+		s_TxCount++;
+		s_LastTxLength = Length;
+	}
+	return result == USB_CTRLR_XFER_SUCCESS ? Length : 0;
 }
 
 static bool ReportRequest(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
@@ -239,8 +245,8 @@ static UsbdHidCfg_t MakeCfg(void)
 	cfg.Protocol = USB_HID_PROT_KEYBOARD;
 	cfg.CountryCode = 33U;
 	cfg.InterfaceString = 4U;
-	cfg.RxHandler = HidRx;
-	cfg.TxHandler = HidTx;
+	cfg.EvtCB = HidEvent;
+	cfg.pContext = &s_Fail;
 	return cfg;
 }
 

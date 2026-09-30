@@ -120,32 +120,37 @@ public:
 
 static HidLoopback g_Hid;
 
-static void HidRx(UsbdHidDev_t *, const uint8_t *pData, uint16_t Length,
-	UsbCtrlrXferResult_t Result, void *)
+static int HidEvent(DevIntrf_t *, DEVINTRF_EVT event,
+	uint8_t *pData, int Length)
 {
-	if (Result != USB_CTRLR_XFER_SUCCESS || Length > sizeof(s_HidPending))
+	const UsbCtrlrXferResult_t result =
+		(event == DEVINTRF_EVT_RX_TIMEOUT || event == DEVINTRF_EVT_TX_TIMEOUT) ?
+		USB_CTRLR_XFER_FAILED : USB_CTRLR_XFER_SUCCESS;
+	if (event == DEVINTRF_EVT_RX_DATA || event == DEVINTRF_EVT_RX_TIMEOUT)
 	{
-		return;
-	}
-	if (g_Hid.Tx(0, pData, Length) != (int)Length)
-	{
-		memcpy(s_HidPending, pData, Length);
-		s_HidPendingLength = Length;
-	}
-}
-
-static void HidTx(UsbdHidDev_t *, uint16_t, UsbCtrlrXferResult_t Result,
-	void *)
-{
-	if (Result == USB_CTRLR_XFER_SUCCESS && s_HidPendingLength != 0U)
-	{
-		const uint16_t length = s_HidPendingLength;
-		s_HidPendingLength = 0U;
-		if (g_Hid.Tx(0, s_HidPending, length) != (int)length)
+		if (result != USB_CTRLR_XFER_SUCCESS || Length > sizeof(s_HidPending))
 		{
-			s_HidPendingLength = length;
+			return result == USB_CTRLR_XFER_SUCCESS ? Length : 0;
+		}
+		if (g_Hid.Tx(0, pData, Length) != (int)Length)
+		{
+			memcpy(s_HidPending, pData, Length);
+			s_HidPendingLength = Length;
 		}
 	}
+	else if (event == DEVINTRF_EVT_TX_FIFO_EMPTY || event == DEVINTRF_EVT_TX_TIMEOUT)
+	{
+		if (result == USB_CTRLR_XFER_SUCCESS && s_HidPendingLength != 0U)
+		{
+			const uint16_t length = s_HidPendingLength;
+			s_HidPendingLength = 0U;
+			if (g_Hid.Tx(0, s_HidPending, length) != (int)length)
+			{
+				s_HidPendingLength = length;
+			}
+		}
+	}
+	return result == USB_CTRLR_XFER_SUCCESS ? Length : 0;
 }
 
 static bool HidReportRequest(const UsbSetupData_t *pSetup,
@@ -186,8 +191,7 @@ static const UsbdHidCfg_t s_HidCfg = {
 	.Protocol = USB_HID_PROT_NONE,
 	.CountryCode = 0U,
 	.InterfaceString = COMBO_STR_INTERFACE,
-	.RxHandler = HidRx,
-	.TxHandler = HidTx,
+	.EvtCB = HidEvent,
 	.pContext = nullptr,
 };
 
@@ -224,14 +228,22 @@ static struct {
 	uint32_t IsoLoopbackDropCnt;
 } s_Fn;
 
-static void IntRxPacket(UsbIntIntrf_t *, const uint8_t *pData,
-	uint16_t Length, UsbCtrlrXferResult_t Result, void *)
+static int IntEvent(DevIntrf_t *, DEVINTRF_EVT event,
+	uint8_t *pData, int Length)
 {
-	if (Result == USB_CTRLR_XFER_SUCCESS)
+	const UsbCtrlrXferResult_t result =
+		(event == DEVINTRF_EVT_RX_TIMEOUT || event == DEVINTRF_EVT_TX_TIMEOUT) ?
+		USB_CTRLR_XFER_FAILED : USB_CTRLR_XFER_SUCCESS;
+	if (event == DEVINTRF_EVT_RX_DATA || event == DEVINTRF_EVT_RX_TIMEOUT)
 	{
-		(void)DeviceIntrfTx(&s_IntData.DevIntrf, 0, pData, Length);
+		if (result == USB_CTRLR_XFER_SUCCESS)
+		{
+			(void)DeviceIntrfTx(&s_IntData.DevIntrf, 0, pData, Length);
+		}
 	}
+	return result == USB_CTRLR_XFER_SUCCESS ? Length : 0;
 }
+
 
 static bool IntSelectConfig(uint8_t Configuration)
 {
@@ -351,7 +363,7 @@ static bool IntInit(void)
 	UsbIntIntrfCfg_t cfg = {};
 	cfg.DevNo = USB_DEVNO;
 	cfg.EpNo = s_Fn.IntEpNo;
-	cfg.RxHandler = IntRxPacket;
+	cfg.EvtCB = IntEvent;
 	if (!UsbIntIntrfInit(&s_Int, &s_IntData, &cfg))
 	{
 		return false;

@@ -182,38 +182,43 @@ static bool IntSend(const uint8_t *pData, uint16_t Length)
 	return accepted;
 }
 
-static void IntRxPacket(UsbIntIntrf_t *, const uint8_t *pData,
-						uint16_t Length, UsbCtrlrXferResult_t Result, void *)
+static int IntEvent(DevIntrf_t *, DEVINTRF_EVT event,
+	uint8_t *pData, int Length)
 {
-	if (Result != USB_CTRLR_XFER_SUCCESS)
+	const UsbCtrlrXferResult_t result =
+		(event == DEVINTRF_EVT_RX_TIMEOUT || event == DEVINTRF_EVT_TX_TIMEOUT) ?
+		USB_CTRLR_XFER_FAILED : USB_CTRLR_XFER_SUCCESS;
+	if (event == DEVINTRF_EVT_RX_DATA || event == DEVINTRF_EVT_RX_TIMEOUT)
 	{
-		return;
-	}
+		if (result != USB_CTRLR_XFER_SUCCESS)
+		{
+			return result == USB_CTRLR_XFER_SUCCESS ? Length : 0;
+		}
 
-	s_RxCnt++;
-	s_LastRxLength = Length;
-	if (IntSend(pData, Length))
-	{
-		s_TxSubmitCnt++;
+		s_RxCnt++;
+		s_LastRxLength = Length;
+		if (IntSend(pData, Length))
+		{
+			s_TxSubmitCnt++;
+		}
+		else
+		{
+			s_LoopbackDropCnt++;
+		}
 	}
-	else
+	else if (event == DEVINTRF_EVT_TX_FIFO_EMPTY || event == DEVINTRF_EVT_TX_TIMEOUT)
 	{
-		s_LoopbackDropCnt++;
+		s_LastTxLength = Length;
+		if (result == USB_CTRLR_XFER_SUCCESS)
+		{
+			s_TxDoneCnt++;
+		}
+		else
+		{
+			s_TxFailCnt++;
+		}
 	}
-}
-
-static void IntTxPacket(UsbIntIntrf_t *, uint16_t Length,
-						UsbCtrlrXferResult_t Result, void *)
-{
-	s_LastTxLength = Length;
-	if (Result == USB_CTRLR_XFER_SUCCESS)
-	{
-		s_TxDoneCnt++;
-	}
-	else
-	{
-		s_TxFailCnt++;
-	}
+	return result == USB_CTRLR_XFER_SUCCESS ? Length : 0;
 }
 
 static bool IntControl(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
@@ -400,8 +405,7 @@ int main()
 	UsbIntIntrfCfg_t intCfg = {};
 	intCfg.DevNo = USB_DEVNO;
 	intCfg.EpNo = s_EpNo;
-	intCfg.RxHandler = IntRxPacket;
-	intCfg.TxHandler = IntTxPacket;
+	intCfg.EvtCB = IntEvent;
 	if (!UsbIntIntrfInit(&s_Int, &s_IntData, &intCfg))
 	{
 		return -1;

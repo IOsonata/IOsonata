@@ -36,27 +36,6 @@ SOFTWARE.
 #include "usb/usbd_epalloc.h"
 #include "usb/usbd_hid.h"
 
-static void UsbdHidRx(UsbIntIntrf_t *, const uint8_t *pData,
-					  uint16_t Length, UsbCtrlrXferResult_t Result,
-					  void *pContext)
-{
-	UsbdHidDev_t *pHid = static_cast<UsbdHidDev_t *>(pContext);
-	if (pHid->RxHandler != nullptr)
-	{
-		pHid->RxHandler(pHid, pData, Length, Result, pHid->pContext);
-	}
-}
-
-static void UsbdHidTx(UsbIntIntrf_t *, uint16_t Length,
-					  UsbCtrlrXferResult_t Result, void *pContext)
-{
-	UsbdHidDev_t *pHid = static_cast<UsbdHidDev_t *>(pContext);
-	if (pHid->TxHandler != nullptr)
-	{
-		pHid->TxHandler(pHid, Length, Result, pHid->pContext);
-	}
-}
-
 static void UsbdHidUnconfigure(UsbdHidDev_t *pHid)
 {
 	UsbIntIntrfClose(pHid->pIntIntrf);
@@ -357,8 +336,6 @@ static bool UsbdHidInitInternal(UsbdHidDev_t *pHid,
 	pHid->Protocol = pCfg->Protocol;
 	pHid->CountryCode = pCfg->CountryCode;
 	pHid->InterfaceString = pCfg->InterfaceString;
-	pHid->RxHandler = pCfg->RxHandler;
-	pHid->TxHandler = pCfg->TxHandler;
 	pHid->pContext = pCfg->pContext;
 	pHid->ActiveProtocol = USBD_HID_PROTOCOL_REPORT;
 
@@ -394,8 +371,7 @@ static bool UsbdHidInitInternal(UsbdHidDev_t *pHid,
 	UsbIntIntrfCfg_t intCfg = {};
 	intCfg.DevNo = pHid->DevNo;
 	intCfg.EpNo = pHid->EpNo;
-	intCfg.RxHandler = UsbdHidRx;
-	intCfg.TxHandler = UsbdHidTx;
+	intCfg.EvtCB = pCfg->EvtCB;
 	intCfg.pContext = pHid;
 	if (!UsbIntIntrfInit(pHid->pIntIntrf, pData, &intCfg))
 	{

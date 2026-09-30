@@ -170,15 +170,23 @@ static void KeyboardLedApply(uint8_t Report)
 	}
 }
 
-static void HidRx(UsbdHidDev_t *, const uint8_t *pData, uint16_t Length,
-				  UsbCtrlrXferResult_t Result, void *)
+static int HidEvent(DevIntrf_t *, DEVINTRF_EVT event,
+	uint8_t *pData, int Length)
 {
-	if (Result == USB_CTRLR_XFER_SUCCESS && pData != nullptr && Length == 1U)
+	const UsbCtrlrXferResult_t result =
+		(event == DEVINTRF_EVT_RX_TIMEOUT || event == DEVINTRF_EVT_TX_TIMEOUT) ?
+		USB_CTRLR_XFER_FAILED : USB_CTRLR_XFER_SUCCESS;
+	if (event == DEVINTRF_EVT_RX_DATA || event == DEVINTRF_EVT_RX_TIMEOUT)
 	{
-		s_LedReport = pData[0];
-		KeyboardLedApply(s_LedReport);
+		if (result == USB_CTRLR_XFER_SUCCESS && pData != nullptr && Length == 1U)
+		{
+			s_LedReport = pData[0];
+			KeyboardLedApply(s_LedReport);
+		}
 	}
+	return result == USB_CTRLR_XFER_SUCCESS ? Length : 0;
 }
+
 
 static bool HidReportRequest(const UsbSetupData_t *pSetup,
 							 UsbCtrlStage_t Stage, uint8_t **ppData,
@@ -236,8 +244,7 @@ static const UsbdHidCfg_t s_HidCfg = {
 	.Protocol = USB_HID_PROT_KEYBOARD,
 	.CountryCode = 0U,
 	.InterfaceString = HID_STR_INTERFACE,
-	.RxHandler = HidRx,
-	.TxHandler = nullptr,
+	.EvtCB = HidEvent,
 	.pContext = nullptr,
 };
 

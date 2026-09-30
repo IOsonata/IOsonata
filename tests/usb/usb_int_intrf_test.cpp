@@ -102,25 +102,30 @@ static UsbCtrlrXferResult_t s_LastRxResult;
 static UsbCtrlrXferResult_t s_LastTxResult;
 static uint8_t s_LastRx[USB_INT_INTRF_MAX_MPS];
 
-static void RxPacket(UsbIntIntrf_t *, const uint8_t *pData, uint16_t Length,
-					 UsbCtrlrXferResult_t Result, void *)
+static int PacketEvent(DevIntrf_t *, DEVINTRF_EVT event,
+	uint8_t *pData, int Length)
 {
-	s_RxCount++;
-	s_LastRxPointer = pData;
-	s_LastRxLength = Length;
-	s_LastRxResult = Result;
-	if (Result == USB_CTRLR_XFER_SUCCESS && Length > 0U)
+	const UsbCtrlrXferResult_t result =
+		(event == DEVINTRF_EVT_RX_TIMEOUT || event == DEVINTRF_EVT_TX_TIMEOUT) ?
+		USB_CTRLR_XFER_FAILED : USB_CTRLR_XFER_SUCCESS;
+	if (event == DEVINTRF_EVT_RX_DATA || event == DEVINTRF_EVT_RX_TIMEOUT)
 	{
-		memcpy(s_LastRx, pData, Length);
+		s_RxCount++;
+		s_LastRxPointer = pData;
+		s_LastRxLength = Length;
+		s_LastRxResult = result;
+		if (result == USB_CTRLR_XFER_SUCCESS && Length > 0U)
+		{
+			memcpy(s_LastRx, pData, Length);
+		}
 	}
-}
-
-static void TxPacket(UsbIntIntrf_t *, uint16_t Length,
-					 UsbCtrlrXferResult_t Result, void *)
-{
-	s_TxCount++;
-	s_LastTxLength = Length;
-	s_LastTxResult = Result;
+	else if (event == DEVINTRF_EVT_TX_FIFO_EMPTY || event == DEVINTRF_EVT_TX_TIMEOUT)
+	{
+		s_TxCount++;
+		s_LastTxLength = Length;
+		s_LastTxResult = result;
+	}
+	return result == USB_CTRLR_XFER_SUCCESS ? Length : 0;
 }
 
 static void ResetFake(void)
@@ -154,8 +159,7 @@ static UsbIntIntrfCfg_t MakeCfg(void)
 	UsbIntIntrfCfg_t cfg = {};
 	cfg.DevNo = 0;
 	cfg.EpNo = 3U;
-	cfg.RxHandler = RxPacket;
-	cfg.TxHandler = TxPacket;
+	cfg.EvtCB = PacketEvent;
 	return cfg;
 }
 
@@ -287,7 +291,7 @@ static void TestPolledRxOwnership(void)
 	UsbIntIntrf_t intrf = {};
 	UsbDevIntrf_t intrfData = {};
 	auto cfg = MakeCfg();
-	cfg.RxHandler = nullptr;
+	cfg.EvtCB = nullptr;
 	CHECK(UsbIntIntrfInit(&intrf, &intrfData, &cfg));
 	CHECK(UsbIntIntrfOpen(&intrf, 8U, 1U));
 	const uint8_t first[] = {1U, 2U};
@@ -313,7 +317,7 @@ static void TestSharedTransport(void)
 	ResetFake();
 	UsbIntIntrf intrf;
 	auto cfg = MakeCfg();
-	cfg.RxHandler = nullptr;
+	cfg.EvtCB = nullptr;
 	CHECK(intrf.Init(cfg));
 	UsbIntIntrf_t *pState = intrf;
 	UsbIntrf *pTransport = &intrf;
@@ -374,8 +378,7 @@ static void TestEventDelivery(void)
 		auto cfg = MakeCfg();
 		if (handlers == 0U)
 		{
-			cfg.RxHandler = nullptr;
-			cfg.TxHandler = nullptr;
+			cfg.EvtCB = nullptr;
 		}
 		CHECK(UsbIntIntrfInit(&intrf, &data, &cfg));
 		CHECK(UsbIntIntrfOpen(&intrf, 8U, 1U));
@@ -385,7 +388,7 @@ static void TestEventDelivery(void)
 		const bool failed = (event & 1U) != 0U;
 		const bool oversize = event == 0U && length > 8;
 		const bool delivered = handlers != 0U && !oversize;
-		CHECK(consumed == ((!failed && !oversize && (!rx || handlers)) ? length : 0));
+		CHECK(consumed == ((!failed && !oversize && handlers) ? length : 0));
 		CHECK(s_RxCount == (int)(rx && delivered));
 		CHECK(s_TxCount == (int)(!rx && delivered));
 		CHECK(intrf.RxErrorCnt == (unsigned)(rx && (failed || oversize)));
@@ -403,8 +406,35 @@ static void TestEventDelivery(void)
 	}
 }
 
+static int RetainRx(DevIntrf_t *pDev, DEVINTRF_EVT event,
+	uint8_t *, int length)
+{
+	CHECK(UsbIntIntrfGetDevHandle(pDev)->pContext == &s_Fail);
+	return event == DEVINTRF_EVT_RX_DATA ? length - 1 : 0;
+}
+
+static void TestCallbackRetainsRx(void)
+{
+	ResetFake();
+	UsbIntIntrf_t intrf = {};
+	UsbDevIntrf_t data = {};
+	auto cfg = MakeCfg();
+	cfg.EvtCB = RetainRx;
+	cfg.pContext = &s_Fail;
+	CHECK(UsbIntIntrfInit(&intrf, &data, &cfg));
+	CHECK(UsbIntIntrfOpen(&intrf, 8U, 1U));
+	const uint8_t packet[] = {2, 4, 6};
+	Receive(packet, sizeof(packet));
+	CHECK((data.pRxDirectBuffer->Hdr.Flags & USB_INTRF_SLOT_READY) != 0U);
+	uint8_t received[3] = {};
+	CHECK(DeviceIntrfRx(&data.DevIntrf, 0, received, sizeof(received)) == 3);
+	CHECK(memcmp(packet, received, sizeof(packet)) == 0);
+	CHECK((data.pRxDirectBuffer->Hdr.Flags & USB_INTRF_SLOT_READY) == 0U);
+}
+
 int main(void)
 {
+	TestCallbackRetainsRx();
 	TestOpenRollback();
 	TestEventDelivery();
 	TestSharedTransport();

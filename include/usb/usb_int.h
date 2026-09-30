@@ -56,22 +56,12 @@ SOFTWARE.
 
 typedef struct __Usb_Int_Interf UsbIntIntrf_t;
 
-typedef void (*UsbIntIntrfRxHandler_t)(UsbIntIntrf_t *pIntrf,
-									 const uint8_t *pData, uint16_t Length,
-									 UsbCtrlrXferResult_t Result,
-									 void *pContext);
-typedef void (*UsbIntIntrfTxHandler_t)(UsbIntIntrf_t *pIntrf,
-									 uint16_t Length,
-									 UsbCtrlrXferResult_t Result,
-									 void *pContext);
-
 #pragma pack(push, 4)
 
 typedef struct __Usb_Int_Interf_Config {
 	int DevNo;
 	uint8_t EpNo;
-	UsbIntIntrfRxHandler_t RxHandler;
-	UsbIntIntrfTxHandler_t TxHandler;
+	DevIntrfEvtHandler_t EvtCB;	//!< Common DeviceIntrf event callback
 	void *pContext;
 } UsbIntIntrfCfg_t;
 
@@ -82,8 +72,7 @@ struct __Usb_Int_Interf {
 	uint16_t Mps;
 	uint8_t Interval;
 	void *pContext;
-	UsbIntIntrfRxHandler_t RxHandler;
-	UsbIntIntrfTxHandler_t TxHandler;
+	DevIntrfEvtHandler_t EvtCB;
 	uint32_t RxErrorCnt;
 	uint32_t TxErrorCnt;
 	uint32_t RxEmptyCnt;
@@ -95,6 +84,13 @@ struct __Usb_Int_Interf {
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+// Return Length for RX_DATA to consume the direct RX slot. Return less to
+// retain it for RxData. RX_TIMEOUT and TX_TIMEOUT identify failed transfers.
+static inline UsbIntIntrf_t *UsbIntIntrfGetDevHandle(DevIntrf_t *pDev)
+{
+	return (UsbIntIntrf_t *)((UsbDevIntrf_t *)pDev->pDevData)->pClassContext;
+}
 
 bool UsbIntIntrfInit(UsbIntIntrf_t *pIntrf, UsbDevIntrf_t *pData,
 					 const UsbIntIntrfCfg_t *pCfg);
