@@ -375,21 +375,16 @@ static bool UsbCoreValidateConfigDescriptor(const uint8_t *pDesc,
 		return false;
 	}
 
-	uint16_t ofs = 0;
-	while (ofs < totalLength)
+	uint16_t remaining = totalLength;
+	while (remaining != 0U)
 	{
-		if ((uint16_t)(ofs + 2U) > totalLength)
-		{
+		if (remaining < 2U)
 			return false;
-		}
-
-		const uint8_t dlen = pDesc[ofs];
-		if (dlen < 2U || (uint16_t)(ofs + dlen) > totalLength)
-		{
+		const uint8_t dlen = *pDesc;
+		if (dlen < 2U || dlen > remaining)
 			return false;
-		}
-
-		ofs = (uint16_t)(ofs + dlen);
+		remaining -= dlen;
+		pDesc += dlen;
 	}
 
 	*pLength = totalLength;
@@ -1832,24 +1827,19 @@ bool UsbDescRegister(int DevNo, UsbDeviceClass *pClass,
 		return false;
 	}
 
-	bool registered = false;
+	if (pClass->vDescLength != 0U)
+		return false;
 	for (int i = 0; i < s_Core.ObjectCnt; i++)
 	{
 		if (s_Core.Object[i] == pClass)
 		{
-			registered = true;
-			break;
+			pClass->vDescLength = Length;
+			pClass->vDescTemplate = static_cast<const uint8_t *>(pTemplate);
+			pClass->vDescBuild = Build;
+			return true;
 		}
 	}
-	if (!registered || pClass->vDescLength != 0U)
-	{
-		return false;
-	}
-
-	pClass->vDescLength = Length;
-	pClass->vDescTemplate = static_cast<const uint8_t *>(pTemplate);
-	pClass->vDescBuild = Build;
-	return true;
+	return false;
 }
 
 // Weak so a flash-constrained application can supply a strong replacement

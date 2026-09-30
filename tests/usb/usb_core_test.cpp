@@ -910,6 +910,32 @@ static bool TestEndpointAllocatorExhaustion(void)
 	return true;
 }
 
+static bool TestEndpointAllocatorBacktracking(void)
+{
+	UsbCfg_t cfg = {};
+	cfg.Vid = 0x1209U;
+	cfg.Pid = 1U;
+	CHECK(UsbInit(&cfg));
+	TestUsbDeviceClass reserved, device;
+	CHECK(UsbClassRegister(TEST_DEVNO, &reserved, 0U, 1U, 1U << 1, 1U << 2));
+	UsbdEpAllocReq_t req = {};
+	req.InterfaceCount = 1U;
+	req.InCount = 1U;
+	req.BidirectionalCount = 1U;
+	req.OutCount = 1U;
+	req.FixedInMask = 1U << 8;
+	req.FixedOutMask = 1U << 8;
+	UsbdEpAllocRes_t alloc = {};
+	CHECK(UsbdEpAlloc(TEST_DEVNO, &req, &device, &alloc));
+	CHECK(alloc.FirstInterface == 1U);
+	CHECK(alloc.In[0] == 2U);
+	CHECK(alloc.Bidirectional[0] == 3U);
+	CHECK(alloc.Out[0] == 1U);
+	CHECK(device.EpInMask() == ((1U << 2) | (1U << 3) | (1U << 8)));
+	CHECK(device.EpOutMask() == ((1U << 1) | (1U << 3) | (1U << 8)));
+	return true;
+}
+
 static bool TestCommonClassBase(void)
 {
 	TestUsbDeviceClass device;
@@ -1219,6 +1245,7 @@ int main(void)
 		{ "SET_INTERFACE requires handler", TestInterfaceRequiresHandler },
 		{ "class control lifecycle", TestClassControl },
 		{ "endpoint allocator exhaustion", TestEndpointAllocatorExhaustion },
+		{ "endpoint allocator backtracking", TestEndpointAllocatorBacktracking },
 		{ "common class base", TestCommonClassBase },
 		{ "class object registry", TestClassObjectRegistry },
 		{ "class object configuration rollback", TestClassObjectConfigRollback },
