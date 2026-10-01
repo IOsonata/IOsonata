@@ -232,24 +232,6 @@ public:
 			pAdCmd, AdCmdLen, pData, DataLen);
 	}
 
-	// UsbIntrfInit installs no-op Start/Stop hooks. Preserve the DeviceIntrf
-	// busy-lock contract directly instead of calling those hooks indirectly.
-	bool StartRx(uint32_t) override {
-		return !atomic_flag_test_and_set(&vUsbDevIntrf.DevIntrf.bBusy);
-	}
-
-	void StopRx(void) override {
-		atomic_flag_clear(&vUsbDevIntrf.DevIntrf.bBusy);
-	}
-
-	bool StartTx(uint32_t) override {
-		return !atomic_flag_test_and_set(&vUsbDevIntrf.DevIntrf.bBusy);
-	}
-
-	void StopTx(void) override {
-		atomic_flag_clear(&vUsbDevIntrf.DevIntrf.bBusy);
-	}
-
 	// Use the owned data directly without a virtual conversion on each call.
 	__attribute__((always_inline))
 	int Tx(uint32_t DevAddr, const uint8_t *pData, int DataLen) override {
