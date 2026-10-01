@@ -291,6 +291,12 @@ BtDevice_t *BtPeerFindByHdl(uint16_t Hdl)
 	return Hdl == kConnHdl ? &s_Peer : nullptr;
 }
 
+// Connection support of the port, started by the first service add.
+bool BtAppConnInit(void)
+{
+	return true;
+}
+
 uint16_t BtPeerCount(void)
 {
 	return 1;

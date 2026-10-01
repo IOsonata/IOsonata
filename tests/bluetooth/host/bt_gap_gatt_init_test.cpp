@@ -221,6 +221,12 @@ uint32_t BtHciSendAcl(BtHciDevice_t * const, BtHciACLDataPacket_t * const)
 	return 0;
 }
 
+// Connection support of the port, started by the first service add.
+extern "C" bool BtAppConnInit(void)
+{
+	return true;
+}
+
 uint16_t BtPeerCount(void)
 {
 	return 0;

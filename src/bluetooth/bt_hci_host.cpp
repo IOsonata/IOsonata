@@ -89,7 +89,10 @@ typedef struct __Bt_Hci_Reassembly {
 	uint8_t  Buf[BT_HCI_BUFFER_MAX_SIZE];	//!< Accumulated L2CAP PDU
 } BtHciReasm_t;
 
-static BtHciReasm_t s_BtHciReasm[BT_L2CAP_REASSEMBLY_COUNT];
+// Reassembly slots. Reached through s_pBtHciReasm, which only the ACL data
+// path sets, so that a build without it does not link the slot memory.
+static BtHciReasm_t s_BtHciReasmMem[BT_L2CAP_REASSEMBLY_COUNT];
+static BtHciReasm_t *s_pBtHciReasm = nullptr;
 
 // SMP entry points, registered by BtSmpInit. NULL when the application does
 // not use security: the host then holds no reference to the SMP module.
@@ -712,11 +715,17 @@ void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtP
 }
 static BtHciReasm_t *BtHciReasmFind(uint16_t ConnHdl)
 {
+	if (s_pBtHciReasm == nullptr)
+	{
+		// No ACL data received yet, nothing is being reassembled
+		return nullptr;
+	}
+
 	for (int i = 0; i < BT_L2CAP_REASSEMBLY_COUNT; i++)
 	{
-		if (s_BtHciReasm[i].Active && s_BtHciReasm[i].ConnHdl == ConnHdl)
+		if (s_pBtHciReasm[i].Active && s_pBtHciReasm[i].ConnHdl == ConnHdl)
 		{
-			return &s_BtHciReasm[i];
+			return &s_pBtHciReasm[i];
 		}
 	}
 
@@ -732,11 +741,13 @@ static BtHciReasm_t *BtHciReasmAlloc(uint16_t ConnHdl)
 		return p;
 	}
 
+	s_pBtHciReasm = s_BtHciReasmMem;
+
 	for (int i = 0; i < BT_L2CAP_REASSEMBLY_COUNT; i++)
 	{
-		if (s_BtHciReasm[i].Active == false)
+		if (s_pBtHciReasm[i].Active == false)
 		{
-			return &s_BtHciReasm[i];
+			return &s_pBtHciReasm[i];
 		}
 	}
 

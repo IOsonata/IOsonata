@@ -114,9 +114,7 @@ static BtHciDevice_t s_BtHciDev = {
 	.SendData = BtAppSendData,
 	.Command = BtHciCmdSdc,
 	.EvtHandler = BtAppEvtHandler,
-	.Connected = BtAppConnected,
-	.Disconnected = BtAppDisconnected,
-	.SendCompleted = BtAppSendCompleted,
+	// Connected, Disconnected and SendCompleted are set by BtAppConnInit
 	.ScanReport = BtAppScanReport,
 	.AdvTimeout = BtAppAdvTimeoutHandler,
 	//.DiscoverDevice = BtAppDiscoverDevice,
@@ -125,6 +123,21 @@ static BtHciDevice_t s_BtHciDev = {
 // SDC controller instance. The HCI pump and transport live in
 // bt_hci_ctlr_sdc; this app wires the receive handler to the host.
 static BtHciCtlrDev_t s_BtHciCtlr;
+
+// Connection support. What a link needs (peer table, attribute database, GAP
+// and GATT services, ACL data path, GATT timeout) is reached only through
+// this table. BtAppConnInit installs it. An application that only advertises
+// or scans never reaches BtAppConnInit, so none of it is linked.
+typedef struct {
+	void (*AclData)(BtHciDevice_t * const pDev, BtHciACLDataPacket_t * const pPkt);
+	void (*Tick)(void);
+	bool (*SrvcDone)(const BtAppCfg_t *pCfg);
+} BtAppSdcConn_t;
+
+static const BtAppSdcConn_t *s_pBtAppSdcConn = nullptr;
+
+// Configuration given to BtAppInit, used by BtAppConnInit
+static const BtAppCfg_t *s_pBtAppCfg = nullptr;
 
 
 // BtAppData_t now declared in bluetooth/bt_app.h, accessed via g_BtAppData.
@@ -178,9 +191,9 @@ static void BtAppSdcCtlrRx(BtHciCtlrDev_t * const pDev, bool bIsEvent, uint8_t *
 	{
 		BtHciProcessEvent(&s_BtHciDev, (BtHciEvtPacket_t*)pPacket);
 	}
-	else
+	else if (s_pBtAppSdcConn != nullptr)
 	{
-		BtHciProcessData(&s_BtHciDev, (BtHciACLDataPacket_t*)pPacket);
+		s_pBtAppSdcConn->AclData(&s_BtHciDev, (BtHciACLDataPacket_t*)pPacket);
 	}
 }
 
@@ -228,7 +241,10 @@ static void BtAppSdcTimerHandler(TimerDev_t *pTimer, uint32_t Evt)
     {
         // Drive the generic indication transaction timeout (Core Vol 3
         // Part F 3.3.3). Cheap no-op when nothing is pending.
-        BtGattIndicationTimeoutCheck();
+		if (s_pBtAppSdcConn != nullptr)
+		{
+			s_pBtAppSdcConn->Tick();
+		}
 
         // Wake the main loop once per period. The pairing timeout (Core
         // Vol 3 Part H 3.4) is checked there by the security module, as an
@@ -422,8 +438,6 @@ void BleAppGapDeviceNameSet(const char* pDeviceName)
 
 bool BtAppStackInit(const BtAppCfg_t *pCfg)
 {
-	BtAttSetMtu(pCfg->MaxMtu);
-
 	BtHciCtlrCfg_t ctlrcfg = { };
 	ctlrcfg.RxHandler = BtAppSdcCtlrRx;
 	ctlrcfg.OnWake = BtAppEvtNotify;
@@ -451,9 +465,128 @@ bool BtAppStackInit(const BtAppCfg_t *pCfg)
 	// s_SdcAclTxPktAvail counter.
 	BtHciSetLeAclBuffer(&s_BtHciDev, ctlrcfg.MaxDataLen, ctlrcfg.TxPktCount);
 
+	return true;
+}
+
+// Last step of the service setup of a peripheral, after the application has
+// added its services: Device Information Service, appearance and preferred
+// connection parameters.
+static bool BtAppSdcSrvcDone(const BtAppCfg_t *pCfg)
+{
+	// Register Device Information Service when the app supplies device
+	// info. Generic bt_dis adds it to the same ATT DB as user services.
+	if (pCfg->pDevInfo != NULL && !BtDisInit(pCfg))
+	{
+		return false;
+	}
+
+	BtGapSetAppearance(pCfg->Appearance);
+
+	BtGattPreferedConnParams_t connparm = {
+		MSEC_TO_1_25(pCfg->ConnIntervalMin), MSEC_TO_1_25(pCfg->ConnIntervalMax),
+		0, 400};
+	BtGapSetPreferedConnParam(&connparm);
+
+	return true;
+}
+
+static const BtAppSdcConn_t s_BtAppSdcConn = {
+	.AclData = BtHciProcessData,
+	.Tick = BtGattIndicationTimeoutCheck,
+	.SrvcDone = BtAppSdcSrvcDone,
+};
+
+static bool BtAppSdcConnStart(const BtAppCfg_t *pCfg)
+{
+	// Initialize the peer/connection table (and its long-write pool) before
+	// the stack can produce any connection or data event.
+	if (!BtPeerInit(pCfg->pPeerPoolMem, pCfg->PeerPoolMemSize))
+	{
+		return false;
+	}
+
+	if (pCfg->PeriphDevMax + pCfg->CentralDevMax > (int)BtPeerCount())
+	{
+		// Peer pool holds fewer slots than the number of links requested.
+		// Provide a larger pool, see g_BtPeerPoolCfg in bt_peer.h
+		return false;
+	}
+	BtPeerLongWrInit(pCfg->pLongWrPoolMem, pCfg->LongWrPoolMemSize);
+
+	BtAttSetMtu(pCfg->MaxMtu);
+
 	if (pCfg->AttDBMemSize > 0)
 	{
 		BtAttDBInit(pCfg->AttDBMemSize);
+	}
+
+	s_BtHciDev.Connected = BtAppConnected;
+	s_BtHciDev.Disconnected = BtAppDisconnected;
+	s_BtHciDev.SendCompleted = BtAppSendCompleted;
+
+	if (pCfg->Role & BTAPP_ROLE_PERIPHERAL)
+	{
+		// Has to be asked before the controller is enabled
+		BtHciCtlrPeripheralSupport();
+	}
+
+	BtGapCfg_t gapcfg = {
+		.Role = pCfg->Role,
+		.SecType = pCfg->SecType,
+		.AdvInterval = pCfg->AdvInterval,
+		.AdvTimeout = pCfg->AdvTimeout,
+		.ConnIntervalMin = pCfg->ConnIntervalMin,
+		.ConnIntervalMax = pCfg->ConnIntervalMax,
+		.SlaveLatency = 0,
+		.SupTimeout = 400
+	};
+
+	DEBUG_PRINTF("BtGapInit\r\n");
+
+	// The GAP and GATT services are the table a client reads first.
+	if (BtGapInit(&gapcfg) == false)
+	{
+		return false;
+	}
+
+	BtGapSetDevName(pCfg->pDevName);
+
+	return true;
+}
+
+/**
+ * @brief	Start connection support.
+ *
+ * The call is what links the connection part of the stack. The stack calls
+ * it when the first GATT service is added and when a connection is
+ * initiated, so an application only calls it itself when it is connectable
+ * without any service of its own.
+ *
+ * @return	true - connection support started
+ */
+bool BtAppConnInit(void)
+{
+	if (s_pBtAppSdcConn != nullptr)
+	{
+		// Already started
+		return true;
+	}
+
+	if (s_pBtAppCfg == nullptr)
+	{
+		// BtAppInit has not been called yet
+		return false;
+	}
+
+	// Set first: BtGapInit adds the GAP and GATT services, which comes back
+	// to this function.
+	s_pBtAppSdcConn = &s_BtAppSdcConn;
+
+	if (BtAppSdcConnStart(s_pBtAppCfg) == false)
+	{
+		s_pBtAppSdcConn = nullptr;
+
+		return false;
 	}
 
 	return true;
@@ -473,21 +606,9 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 
 	int32_t res = 0;
 
-	// Initialize the peer/connection table (and its long-write pool) before
-	// the stack can produce any connection or data event. Matches the
-	// nRF52/BM ordering and avoids an event-before-peer-table window.
-	if (!BtPeerInit(pCfg->pPeerPoolMem, pCfg->PeerPoolMemSize))
-	{
-		return false;
-	}
-
-	if (pCfg->PeriphDevMax + pCfg->CentralDevMax > (int)BtPeerCount())
-	{
-		// Peer pool holds fewer slots than the number of links requested.
-		// Provide a larger pool, see g_BtPeerPoolCfg in bt_peer.h
-		return false;
-	}
-	BtPeerLongWrInit(pCfg->pLongWrPoolMem, pCfg->LongWrPoolMemSize);
+	// The peer table, the attribute database and the GAP services are set
+	// up by BtAppConnInit, see the service setup below.
+	s_pBtAppCfg = pCfg;
 #if 0
 	mpsl_clock_lfclk_cfg_t lfclk = {MPSL_CLOCK_LF_SRC_RC, 0,};
 	OscDesc_t const *lfosc = GetLowFreqOscDesc();
@@ -588,6 +709,29 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 
    // g_BleAppData.Role = pBleAppCfg->Role;
 
+	// Service setup. It runs before the controller is enabled because the
+	// controller has to know by then whether links are used. Adding the first
+	// service starts connection support (BtAppConnInit), which also installs
+	// the GAP and GATT services ahead of the application ones.
+	if (pCfg->Role & BTAPP_ROLE_PERIPHERAL)
+	{
+		BtAppInitUserServices();
+
+		if (s_pBtAppSdcConn == nullptr)
+		{
+			// Peripheral role without any service. The application has to
+			// call BtAppConnInit in BtAppInitUserServices to be connectable,
+			// or use BTAPP_ROLE_BROADCASTER.
+			STORE_PRINTF("BtAppInit FAIL: peripheral role but connection support was not started\r\n");
+			return false;
+		}
+
+		if (s_pBtAppSdcConn->SrvcDone(pCfg) == false)
+		{
+			return false;
+		}
+	}
+
     if (BtAppStackInit(pCfg) == false)
     {
     	DEBUG_PRINTF("BtAppStackInit failed\r\n");
@@ -666,26 +810,6 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 		return false;
 	}
 
-	BtGapCfg_t gapcfg = {
-		.Role = pCfg->Role,
-		.SecType = pCfg->SecType,
-		.AdvInterval = pCfg->AdvInterval,
-		.AdvTimeout = pCfg->AdvTimeout,
-		.ConnIntervalMin = pCfg->ConnIntervalMin,
-		.ConnIntervalMax = pCfg->ConnIntervalMax,
-		.SlaveLatency = 0,
-		.SupTimeout = 400
-	};
-
-	DEBUG_PRINTF("BtGapInit\r\n");
-
-	// The GAP and GATT services are the table a client reads first. Without
-	// them there is nothing to advertise, so this stops here.
-	if (BtGapInit(&gapcfg) == false)
-	{
-		return false;
-	}
-
 	// Encrypted Advertising Data draws on the same AES engine and the same
 	// hardware RNG. Binding them here rather than leaving it to the
 	// application means an application that installs key material with
@@ -695,25 +819,6 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 	if (BtEadInit(BtCryptoCtlrSdcInit(), CryptoRngNrfInstance()) == false)
 	{
 		DEBUG_PRINTF("BtAppInit: EAD engines unavailable\r\n");
-	}
-
-	if (pCfg->Role & BTAPP_ROLE_PERIPHERAL)
-	{
-		BtAppInitUserServices();
-
-		// Register Device Information Service when the app supplies device
-		// info. Generic bt_dis adds it to the same ATT DB as user services.
-		if (pCfg->pDevInfo != NULL && !BtDisInit(pCfg))
-		{
-			return false;
-		}
-
-		BtGapSetAppearance(pCfg->Appearance);
-
-		BtGattPreferedConnParams_t connparm = {
-			MSEC_TO_1_25(pCfg->ConnIntervalMin), MSEC_TO_1_25(pCfg->ConnIntervalMax),
-			0, 400};
-		BtGapSetPreferedConnParam(&connparm);
 	}
 
 	BtAppInitUserData();
@@ -774,8 +879,6 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 #endif
     }
 */
-	BtGapSetDevName(pCfg->pDevName);
-
     //BleAppGapDeviceNameSet(pBleAppCfg->pDevName);
 #if !defined(NRF54L15_XXAA) && !defined(NRF54LM20A_XXAA) && !defined(NRF54LM20B_XXAA)
 #if (__FPU_USED == 1)

@@ -477,6 +477,25 @@ void BtHciCtlrPeriodicAdvSupport(void)
 	sdc_support_le_periodic_adv_with_rsp();
 }
 
+// Peripheral link features of the controller. Reached only through the
+// pointer below, which BtHciCtlrPeripheralSupport sets, so that a build that
+// never has a link does not reference this part of the controller library.
+static void BtHciCtlrSdcPeripheralSupport(void)
+{
+	sdc_support_peripheral();
+	sdc_support_dle_peripheral();
+	sdc_support_phy_update_peripheral();
+	sdc_support_le_power_control_peripheral();
+	sdc_support_le_conn_cte_rsp_peripheral();
+}
+
+static void (*s_pBtHciCtlrSdcPeripheral)(void) = nullptr;
+
+void BtHciCtlrPeripheralSupport(void)
+{
+	s_pBtHciCtlrSdcPeripheral = BtHciCtlrSdcPeripheralSupport;
+}
+
 // Enable the scan, periodic sync and central features of the controller.
 // Has to run before the controller is configured. Kept out of
 // BtHciCtlrEnable so that only a build with the scan module references this
@@ -622,11 +641,19 @@ bool BtHciCtlrStart(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 		{
 			g_pBtHciCtlrPeriodicAdvSupport();
 		}
-		sdc_support_peripheral();
-		sdc_support_dle_peripheral();
-		sdc_support_phy_update_peripheral();
-		sdc_support_le_power_control_peripheral();
-		sdc_support_le_conn_cte_rsp_peripheral();
+		if (pCfg->Role & BT_GAP_ROLE_PERIPHERAL)
+		{
+			// Link features are enabled only when connection support asked
+			// for them with BtHciCtlrPeripheralSupport before this point.
+			if (s_pBtHciCtlrSdcPeripheral == nullptr)
+			{
+				BtHciCtlrErrorSet(BT_HCI_CTLR_ERROR_PERIPHERAL_SUPPORT, (int32_t)pCfg->Role);
+				DEBUG_PRINTF("peripheral role asked but BtHciCtlrPeripheralSupport was not called\r\n");
+
+				return false;
+			}
+			s_pBtHciCtlrSdcPeripheral();
+		}
 	}
 	if (pCfg->Role & (BT_GAP_ROLE_CENTRAL | BT_GAP_ROLE_OBSERVER))
 	{

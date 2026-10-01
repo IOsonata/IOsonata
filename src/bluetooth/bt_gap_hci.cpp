@@ -325,6 +325,13 @@ bool BtGapConnect(BtGapPeerAddr_t * const pPeerAddr, BtGapConnParams_t * const p
 		return false;
 	}
 
+	// Initiating a connection starts connection support, which is linked
+	// through this reference. A device that only scans does not link it.
+	if (BtAppConnInit() == false)
+	{
+		return false;
+	}
+
 	uint16_t connIntervalMin = mSecTo1_25(pConnParam->IntervalMin);
 	uint16_t connIntervalMax = mSecTo1_25(pConnParam->IntervalMax);
 	uint16_t supTimeout      = (uint16_t)(pConnParam->Timeout / 10);

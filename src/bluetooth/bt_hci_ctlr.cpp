@@ -105,6 +105,46 @@ static int BtHciCtlrIntrfTxData(DevIntrf_t * const pDev, const uint8_t *pData, i
 static void BtHciCtlrIntrfStopTx(DevIntrf_t * const) {}
 static void BtHciCtlrIntrfPowerOff(DevIntrf_t * const) {}
 
+// Create the RX fifo in the given memory and bind the receive entry to it.
+static bool BtHciCtlrRxFifoSet(BtHciCtlrDev_t * const pDev, uint8_t *pMem, uint32_t MemSize)
+{
+	// CFifo stores its header directly in the supplied block and therefore
+	// requires word-aligned memory. It also accepts a block too small for one
+	// element by returning a FIFO with MaxIdxCnt == 0, so enforce one complete
+	// controller packet here before initialization.
+	if (((uintptr_t)pMem & (alignof(CFifo_t) - 1U)) != 0 ||
+		MemSize < CFIFO_TOTAL_MEMSIZE(1, pDev->PacketSize))
+	{
+		return false;
+	}
+
+	pDev->hRxFifo = CFifoInit(pMem, MemSize, (uint32_t)pDev->PacketSize, true);
+	if (pDev->hRxFifo == nullptr)
+	{
+		return false;
+	}
+
+	pDev->Receive = BtHciCtlrReceive;
+
+	return true;
+}
+
+bool BtHciCtlrRxFifoInit(BtHciCtlrDev_t * const pDev)
+{
+	if (pDev == nullptr)
+	{
+		return false;
+	}
+
+	if (pDev->hRxFifo != nullptr)
+	{
+		// Created by BtHciCtlrInit from the configuration memory
+		return true;
+	}
+
+	return BtHciCtlrRxFifoSet(pDev, s_BtHciCtlrRxFifoMem, BTHCICTLR_FIFO_MEM_SIZE);
+}
+
 bool BtHciCtlrInit(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 {
 	if (pDev == nullptr || pCfg == nullptr)
@@ -125,38 +165,21 @@ bool BtHciCtlrInit(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 		pDev->PacketSize = pCfg->PacketSize + BTHCICTLR_PKTHDR_LEN;
 	}
 
-	uint8_t *pRxFifoMem = pCfg->pRxFifoMem;
-	uint32_t rxFifoMemSize;
+	// The RX fifo is created here only from memory the configuration
+	// supplies. Without it the default one is created by BtHciCtlrRxFifoInit,
+	// called by a port that queues received packets. A port that hands
+	// packets straight to RxHandler does not call it, and the default fifo
+	// memory is then not linked.
+	pDev->hRxFifo = nullptr;
+	pDev->Receive = nullptr;
 
-	if (pRxFifoMem == nullptr)
+	if (pCfg->pRxFifoMem != nullptr)
 	{
-		pRxFifoMem = s_BtHciCtlrRxFifoMem;
-		rxFifoMemSize = BTHCICTLR_FIFO_MEM_SIZE;
-	}
-	else
-	{
-		if (pCfg->RxFifoMemSize <= 0)
+		if (pCfg->RxFifoMemSize <= 0 ||
+			BtHciCtlrRxFifoSet(pDev, pCfg->pRxFifoMem, (uint32_t)pCfg->RxFifoMemSize) == false)
 		{
 			return false;
 		}
-		rxFifoMemSize = (uint32_t)pCfg->RxFifoMemSize;
-	}
-
-	// CFifo stores its header directly in the supplied block and therefore
-	// requires word-aligned memory. It also accepts a block too small for one
-	// element by returning a FIFO with MaxIdxCnt == 0, so enforce one complete
-	// controller packet here before initialization.
-	if (((uintptr_t)pRxFifoMem & (alignof(CFifo_t) - 1U)) != 0 ||
-		rxFifoMemSize < CFIFO_TOTAL_MEMSIZE(1, pDev->PacketSize))
-	{
-		return false;
-	}
-
-	pDev->hRxFifo = CFifoInit(pRxFifoMem, rxFifoMemSize,
-							  (uint32_t)pDev->PacketSize, true);
-	if (pDev->hRxFifo == nullptr)
-	{
-		return false;
 	}
 
 	pDev->DevIntrf.Type = DEVINTRF_TYPE_BT;
@@ -175,7 +198,6 @@ bool BtHciCtlrInit(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 	pDev->DevIntrf.PowerOff = BtHciCtlrIntrfPowerOff;
 	pDev->DevIntrf.EnCnt = 1;
 	pDev->DevIntrf.EvtCB = pCfg->EvtHandler;
-	pDev->Receive = BtHciCtlrReceive;
 	pDev->Send = nullptr;			// bound by the target controller Enable
 	pDev->SendCommand = nullptr;	// bound by the target controller Enable
 	pDev->RxHandler = pCfg->RxHandler;
@@ -214,16 +236,16 @@ size_t BtHciCtlrSendCommand(BtHciCtlrDev_t * const pDev, uint16_t OpCode, const 
 	return pDev->SendCommand(pDev, buf, BTHCICTLR_CMD_HDR_LEN + ParamLen);
 }
 
-// Target controller bring-up. The weak default succeeds, which is right for a
-// port whose controller needs nothing beyond the generic wiring: a plain HCI
-// transport over UART or USB has no vendor stack to start.
+// Target controller bring-up. The weak default is for a port whose controller
+// needs nothing beyond the generic wiring: a plain HCI transport over UART or
+// USB has no vendor stack to start. Such a transport queues what it receives,
+// so the RX fifo is made sure of here.
 __attribute__((weak)) bool BtHciCtlrStart(BtHciCtlrDev_t * const pDev,
 										  const BtHciCtlrCfg_t *pCfg)
 {
-	(void)pDev;
 	(void)pCfg;
 
-	return true;
+	return BtHciCtlrRxFifoInit(pDev);
 }
 
 // One bring-up sequence for every port. The ordering is the point: generic

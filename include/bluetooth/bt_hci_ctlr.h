@@ -133,7 +133,35 @@ extern "C" {
  * @return
  */
 bool BtHciCtlrInit(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg);
+
+/**
+ * @brief	Create the default RX fifo.
+ *
+ * BtHciCtlrInit creates the RX fifo only when the configuration supplies its
+ * memory (pRxFifoMem). A port that queues received packets through
+ * pDev->Receive calls this function from its BtHciCtlrStart to get the
+ * default one. The default fifo memory is linked only when this function is
+ * referenced, so a port that delivers packets straight to RxHandler does not
+ * pay for it. Does nothing when the fifo already exists.
+ *
+ * @param	pDev	Controller device, after BtHciCtlrInit.
+ *
+ * @return	true on success.
+ */
+bool BtHciCtlrRxFifoInit(BtHciCtlrDev_t * const pDev);
+
 size_t BtHciCtlrSdcSend(void *pData, size_t Len);
+
+/**
+ * @brief	Ask for the peripheral link features of the controller.
+ *
+ * Called by connection support (BtAppConnInit) before the controller is
+ * enabled. Implemented by the controller port. The link features of the
+ * controller are linked only when this function is referenced. Enabling a
+ * controller in peripheral role without it fails with
+ * BT_HCI_CTLR_ERROR_PERIPHERAL_SUPPORT.
+ */
+void BtHciCtlrPeripheralSupport(void);
 
 /**
  * @brief	Enable the central and observer features of the controller.
@@ -231,6 +259,7 @@ typedef enum __Bt_Hci_Ctlr_Error {
 	BT_HCI_CTLR_ERROR_MEM_POOL,		//!< Pool too small, Value is the size asked for in bytes
 	BT_HCI_CTLR_ERROR_ARBITER,		//!< Memory arbiter refused, Value is its code
 	BT_HCI_CTLR_ERROR_CTLR_ENABLE,	//!< Target controller enable refused, Value is its code
+	BT_HCI_CTLR_ERROR_PERIPHERAL_SUPPORT,	//!< Peripheral role asked but BtHciCtlrPeripheralSupport was not called, Value is the role
 	BT_HCI_CTLR_ERROR_CENTRAL_SUPPORT,	//!< Central or observer role asked but the scan module is not linked (BtAppScanInit never referenced), Value is the role
 } BtHciCtlrError_t;
 

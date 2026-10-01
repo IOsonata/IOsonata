@@ -180,7 +180,8 @@ BtHciCtlrCfg_t MakeCfg(uint16_t Role)
 	return cfg;
 }
 
-bool Start(BtHciCtlrCfg_t *pCfg)
+// Bring up without connection support having asked for the link features.
+bool StartNoConn(BtHciCtlrCfg_t *pCfg)
 {
 	BtHciCtlrDev_t dev = {};
 
@@ -190,6 +191,50 @@ bool Start(BtHciCtlrCfg_t *pCfg)
 	}
 
 	return BtHciCtlrStart(&dev, pCfg);
+}
+
+// Bring up the way an application with links does: connection support asks
+// for the peripheral link features before the controller is enabled.
+bool Start(BtHciCtlrCfg_t *pCfg)
+{
+	if (pCfg != nullptr && (pCfg->Role & BT_GAP_ROLE_PERIPHERAL))
+	{
+		BtHciCtlrPeripheralSupport();
+	}
+
+	return StartNoConn(pCfg);
+}
+
+// An application without connection support never asks for the peripheral
+// link features. A broadcaster comes up without them and a peripheral role
+// stops the bring up. Runs first: once asked, the request stays.
+void TestPeripheralSupportIsOnRequest(void)
+{
+	Reset();
+
+	BtHciCtlrCfg_t cfg = MakeCfg(BT_GAP_ROLE_BROADCASTER);
+	CHECK(StartNoConn(&cfg));
+	CHECK(Supported("adv"));
+	CHECK(Supported("ext_adv"));
+	CHECK(Supported("peripheral") == false);
+	CHECK(s_EnableCalls == 1);
+
+	Reset();
+	cfg = MakeCfg(BT_GAP_ROLE_PERIPHERAL);
+	CHECK(StartNoConn(&cfg) == false);
+	CHECK(BtHciCtlrErrorGet() == BT_HCI_CTLR_ERROR_PERIPHERAL_SUPPORT);
+	CHECK(Supported("peripheral") == false);
+	CHECK(s_EnableCalls == 0);
+
+	Reset();
+	CHECK(Start(&cfg));
+	CHECK(Supported("peripheral"));
+
+	// Asked for, a broadcaster still does not enable them
+	Reset();
+	cfg = MakeCfg(BT_GAP_ROLE_BROADCASTER);
+	CHECK(Start(&cfg));
+	CHECK(Supported("peripheral") == false);
 }
 
 // --- the checks -------------------------------------------------------------
@@ -788,6 +833,8 @@ CryptoRngNrf *CryptoRngNrfInstance(void)
 
 int main(void)
 {
+	TestPeripheralSupportIsOnRequest();
+
 #ifdef SDC_TEST_NO_FEATURE_MODULES
 	TestFeatureModulesNotLinked();
 

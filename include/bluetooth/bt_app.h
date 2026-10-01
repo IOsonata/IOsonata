@@ -229,6 +229,26 @@ void BtAppInitUserData(void);
 void BtAppInitUserServices(void);
 
 /**
+ * @brief	Start connection support.
+ *
+ * Connection support (peer table, attribute database, GAP and GATT services,
+ * data path) is linked only when it is referenced. The stack calls this
+ * function when the first GATT service is added (BtGattSrvcAdd) and when a
+ * connection is initiated (BtGapConnect), so an application that has services
+ * or connects to a device needs no call of its own. An application that
+ * only advertises or scans never reaches it and does not link connection
+ * support. A peripheral without any service calls it from
+ * BtAppInitUserServices to be connectable.
+ *
+ * The configuration given to BtAppInit is used and has to stay valid.
+ *
+ * NOTE: Implemented by the ports that use the generic host.
+ *
+ * @return	true - connection support started
+ */
+bool BtAppConnInit(void);
+
+/**
  * @brief	Start the security module (pairing, bonding, secure connection).
  *
  * Security is linked only when the application references it. An

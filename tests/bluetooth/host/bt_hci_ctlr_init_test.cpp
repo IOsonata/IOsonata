@@ -28,14 +28,29 @@ void TestDefaultFifo()
 	BtHciCtlrDev_t dev = {};
 	BtHciCtlrCfg_t cfg = {};
 
+	// Init alone creates no fifo when the configuration supplies no memory
 	CHECK(BtHciCtlrInit(&dev, &cfg));
+	CHECK(dev.hRxFifo == nullptr);
+	CHECK(dev.Receive == nullptr);
+
+	// A port that queues asks for the default one
+	CHECK(BtHciCtlrRxFifoInit(&dev));
 	CHECK(dev.hRxFifo != nullptr);
+	CHECK(dev.Receive != nullptr);
 	if (dev.hRxFifo != nullptr)
 	{
 		CHECK(CFifoBlockSize(dev.hRxFifo) ==
 			  BT_HCI_CTLR_MTU_MAX + BTHCICTLR_PKTHDR_LEN);
 		CHECK(CFifoAvail(dev.hRxFifo) == 4);
 	}
+
+	// The default bring-up of a plain transport gets it as well
+	BtHciCtlrDev_t dev2 = {};
+	CHECK(BtHciCtlrEnable(&dev2, &cfg));
+	CHECK(dev2.hRxFifo != nullptr);
+	CHECK(dev2.Receive != nullptr);
+
+	CHECK(BtHciCtlrRxFifoInit(nullptr) == false);
 }
 
 void TestCustomFifo()

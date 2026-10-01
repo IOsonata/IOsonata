@@ -170,6 +170,13 @@ bool BtAppSecInit(void)
 		return false;
 	}
 
+	// Security works on a link. Start connection support first so that the
+	// connection callback hooked below is the one of the port.
+	if (BtAppConnInit() == false)
+	{
+		return false;
+	}
+
 	// The SDC path owns its SMP crypto: P-256 ECDH and the BLE controller
 	// (HCI LE Encrypt) for AES. These are internal to this path - the
 	// application does not supply or see them; it only requests security via
