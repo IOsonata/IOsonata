@@ -99,26 +99,7 @@ static const uint8_t s_HidReportDesc[] = {
 
 static uint8_t s_HidPending[HID_REPORT_SIZE];
 static uint16_t s_HidPendingLength;
-static uint8_t s_HidControlReport[HID_REPORT_SIZE];
-
-static bool HidReportRequest(const UsbSetupData_t *pSetup,
-	UsbCtrlStage_t Stage, uint8_t **ppData, uint16_t *pLength);
-
-class HidLoopback final : public UsbdHid {
-public:
-	bool Control(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
-				 uint8_t **ppData, uint16_t *pLength) override {
-		if ((pSetup->bmRequestType & USB_REQTYPE_MASK_TYPE) == USB_REQTYPE_CLASS &&
-			(pSetup->bRequest == USB_HID_REQ_GET_REPORT ||
-			 pSetup->bRequest == USB_HID_REQ_SET_REPORT))
-		{
-			return HidReportRequest(pSetup, Stage, ppData, pLength);
-		}
-		return UsbdHid::Control(pSetup, Stage, ppData, pLength);
-	}
-};
-
-static HidLoopback g_Hid;
+static UsbdHid g_Hid;
 
 static int HidEvent(DevIntrf_t *, DEVINTRF_EVT event,
 	uint8_t *pData, int Length)
@@ -143,31 +124,6 @@ static int HidEvent(DevIntrf_t *, DEVINTRF_EVT event,
 		}
 	}
 	return Length;
-}
-
-static bool HidReportRequest(const UsbSetupData_t *pSetup,
-	UsbCtrlStage_t Stage, uint8_t **ppData, uint16_t *pLength)
-{
-	if (Stage == USB_CTRL_ABORT)
-	{
-		return true;
-	}
-	if (Stage == USB_CTRL_SETUP)
-	{
-		if (pSetup->wLength > sizeof(s_HidControlReport))
-		{
-			return false;
-		}
-		*ppData = s_HidControlReport;
-		*pLength = sizeof(s_HidControlReport);
-		return true;
-	}
-	if (Stage == USB_CTRL_COMPLETE &&
-		pSetup->bRequest == USB_HID_REQ_SET_REPORT)
-	{
-		return g_Hid.Tx(0, s_HidControlReport, *pLength) == (int)*pLength;
-	}
-	return true;
 }
 
 static const UsbdHidCfg_t s_HidCfg = {
