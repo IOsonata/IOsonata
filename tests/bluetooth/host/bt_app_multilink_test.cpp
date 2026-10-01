@@ -334,6 +334,42 @@ void TestDisconnectAllCoversEveryLink()
 
 } // namespace
 
+// The discovery cache is attached on demand and is released when the owner
+// record is cleared, which is what the peer manager does on link down.
+void TestDiscoveryCacheAttach()
+{
+	static BtDevice_t devA;
+	static BtDevice_t devB;
+	std::memset(&devA, 0, sizeof(devA));
+	std::memset(&devB, 0, sizeof(devB));
+
+	CHECK(BT_DEV_SRVC_CACHE_DEFAULT_COUNT == 1);
+	CHECK(BtDeviceFindService(&devA, 0x180A) == -1);
+	CHECK(!BtDeviceSrvcCacheAttach(nullptr));
+
+	CHECK(BtDeviceSrvcCacheAttach(&devA));
+	CHECK(devA.pServices != nullptr);
+	BtGattDBSrvc_t *first = devA.pServices;
+
+	// Same device again keeps its cache.
+	CHECK(BtDeviceSrvcCacheAttach(&devA));
+	CHECK(devA.pServices == first);
+
+	// The default pool holds one cache, a second device is refused.
+	CHECK(!BtDeviceSrvcCacheAttach(&devB));
+	CHECK(devB.pServices == nullptr);
+
+	devA.NbSrvc = 1;
+	devA.pServices[0].srv_uuid.Uuid = 0x180A;
+	CHECK(BtDeviceFindService(&devA, 0x180A) == 0);
+	CHECK(BtDeviceFindService(&devA, 0x180F) == -1);
+
+	// Owner record cleared (link down): the cache is free for the next device.
+	std::memset(&devA, 0, sizeof(devA));
+	CHECK(BtDeviceSrvcCacheAttach(&devB));
+	CHECK(devB.pServices == first);
+}
+
 int main()
 {
 	std::memset(&s_Char, 0, sizeof(s_Char));
@@ -349,6 +385,7 @@ int main()
 	TestNotifyAllWalksEveryLink();
 	TestAllFormsWithNoLinks();
 	TestDisconnectAllCoversEveryLink();
+	TestDiscoveryCacheAttach();
 
 	if (s_Failures != 0)
 	{

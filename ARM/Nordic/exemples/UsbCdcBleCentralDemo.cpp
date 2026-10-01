@@ -608,17 +608,17 @@ void BleDevDiscovered(BtDevice_t *pDev)
     for (int i = 0; i < pDev->NbSrvc; i++)
     {
 //    	l = sprintf(s, "Service_ID %d: 0x%x,  Num_Characteristic : %d\r\n",
-//    			i, g_ConnectedDev.Services[i].srv_uuid.uuid, g_ConnectedDev.Services[i].char_count);
+//    			i, g_ConnectedDev.pServices[i].srv_uuid.uuid, g_ConnectedDev.pServices[i].char_count);
 //    	PRINT_DEBUG(s,l)
     	g_Uart.printf("Service_ID %d: 0x%x,  Num_Characteristic : %d\r\n",
-    			i, g_ConnectedDev.Services[i].srv_uuid.uuid, g_ConnectedDev.Services[i].char_count);
-    	for (int j = 0; j < g_ConnectedDev.Services[i].char_count; j++)
+    			i, g_ConnectedDev.pServices[i].srv_uuid.uuid, g_ConnectedDev.pServices[i].char_count);
+    	for (int j = 0; j < g_ConnectedDev.pServices[i].char_count; j++)
     	{
 //    		l = sprintf(s, "Char_ID %d: 0x%x\r\n",
-//    				j, g_ConnectedDev.Services[i].characteristics[j].characteristic.uuid.uuid);
+//    				j, g_ConnectedDev.pServices[i].characteristics[j].characteristic.uuid.uuid);
 //    		PRINT_DEBUG(s,l)
     		g_Uart.printf("Char_ID %d: 0x%x\r\n",
-    				j, g_ConnectedDev.Services[i].characteristics[j].characteristic.uuid.uuid);
+    				j, g_ConnectedDev.pServices[i].characteristics[j].characteristic.uuid.uuid);
     	}
     }
 
@@ -634,11 +634,11 @@ void BleDevDiscovered(BtDevice_t *pDev)
     	int dcharidx = BtDeviceFindCharacteristic(pDev, idx, BLUEIO_UUID_UART_RX_CHAR);
     	l = snprintf(s, sizeof(s), "Find UART_RX_CHAR idx = 0x%x (%d)...", idx, idx);
     	PRINT_DEBUG(s,l);
-    	if (dcharidx >= 0 && pDev->Services[idx].characteristics[dcharidx].characteristic.char_props.notify)
+    	if (dcharidx >= 0 && pDev->pServices[idx].characteristics[dcharidx].characteristic.char_props.notify)
     	{
     		// Enable Notify
-        	BtAppEnableNotify(pDev->Conn.Hdl, pDev->Services[idx].characteristics[dcharidx].cccd_handle);
-        	g_BleRxCharHdl = pDev->Services[idx].characteristics[dcharidx].characteristic.handle_value;
+        	BtAppEnableNotify(pDev->Conn.Hdl, pDev->pServices[idx].characteristics[dcharidx].cccd_handle);
+        	g_BleRxCharHdl = pDev->pServices[idx].characteristics[dcharidx].characteristic.handle_value;
         	l = snprintf(s, sizeof(s), "Found!\r\n");
         	PRINT_DEBUG(s,l);
     	}
@@ -654,7 +654,7 @@ void BleDevDiscovered(BtDevice_t *pDev)
     	PRINT_DEBUG(s,l);
     	if (dcharidx >= 0)
     	{
-    		g_BleTxCharHdl = pDev->Services[idx].characteristics[dcharidx].characteristic.handle_value;
+    		g_BleTxCharHdl = pDev->pServices[idx].characteristics[dcharidx].characteristic.handle_value;
     		l = snprintf(s, sizeof(s), "Found!\r\n");
     		PRINT_DEBUG(s,l);
     	}

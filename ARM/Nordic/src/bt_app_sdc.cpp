@@ -349,7 +349,12 @@ bool BtAppDiscoverDevice(BtDevice_t * const pDev)
 
 	// Reset counter and Service list
 	pDev->NbSrvc = 0;
-	memset(pDev->Services, 0, sizeof(BtGattDBSrvc_t) * BT_DEV_SERVICE_MAXCNT);
+	if (BtDeviceSrvcCacheAttach(pDev) == false)
+	{
+		// No free discovery cache, see g_BtDevSrvcCacheCfg
+		return false;
+	}
+	memset(pDev->pServices, 0, sizeof(BtGattDBSrvc_t) * BT_DEV_SERVICE_MAXCNT);
 
 	// Start the discover process by discovering the Primary services
 	BtUuid_t Uuid = {
@@ -515,6 +520,13 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 	// nRF52/BM ordering and avoids an event-before-peer-table window.
 	if (!BtPeerInit(pCfg->pPeerPoolMem, pCfg->PeerPoolMemSize))
 	{
+		return false;
+	}
+
+	if (pCfg->PeriphDevMax + pCfg->CentralDevMax > (int)BtPeerCount())
+	{
+		// Peer pool holds fewer slots than the number of links requested.
+		// Provide a larger pool, see g_BtPeerPoolCfg in bt_peer.h
 		return false;
 	}
 	BtPeerLongWrInit(pCfg->pLongWrPoolMem, pCfg->LongWrPoolMemSize);

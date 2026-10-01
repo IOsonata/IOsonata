@@ -191,7 +191,8 @@ static bool BtAttRspValid(BtDevice_t *pPeer, const BtAttReqRsp_t *pRspAtt,
 
 static bool BtAttDiscoveryServiceValid(const BtDevice_t *pPeer)
 {
-	return pPeer != nullptr && pPeer->NbSrvc > 0 &&
+	return pPeer != nullptr && pPeer->pServices != nullptr &&
+		   pPeer->NbSrvc > 0 &&
 		   pPeer->Discovery.SrvIdx < pPeer->NbSrvc &&
 		   pPeer->Discovery.SrvIdx < BT_DEV_SERVICE_MAXCNT;
 }
@@ -203,7 +204,7 @@ static bool BtAttDiscoveryReadByType(BtDevice_t *pPeer)
 		return false;
 	}
 
-	BtGattDBSrvc_t *pSrvc = &pPeer->Services[pPeer->Discovery.SrvIdx];
+	BtGattDBSrvc_t *pSrvc = &pPeer->pServices[pPeer->Discovery.SrvIdx];
 	pPeer->Discovery.Hdl = pSrvc->handle_range.StartHdl;
 	return BtAttReadByTypeRequest((BtHciDevice_t *)pPeer->pHciDev,
 								pPeer->Conn.Hdl,
@@ -315,7 +316,7 @@ static void BtAttProcessReadByTypeRsp(BtDevice_t *pPeer,
 		return;
 	}
 
-	BtGattDBSrvc_t *pSrvc = &pPeer->Services[pPeer->Discovery.SrvIdx];
+	BtGattDBSrvc_t *pSrvc = &pPeer->pServices[pPeer->Discovery.SrvIdx];
 	uint16_t lastHdl = 0;
 
 	switch (pPeer->Discovery.UuidType.Uuid16)
@@ -437,6 +438,13 @@ static void BtAttProcessReadByGroupRsp(BtDevice_t *pPeer,
 	int payloadLen = RspLen - 2;
 	uint16_t lastEndHdl = 0;
 
+	if (pPeer->pServices == nullptr)
+	{
+		// No discovery cache: discovery was not started by
+		// BtAppDiscoverDevice on this link.
+		return;
+	}
+
 	for (int off = 0; off < payloadLen; off += elemLen)
 	{
 		if (pPeer->NbSrvc >= BT_DEV_SERVICE_MAXCNT)
@@ -453,7 +461,7 @@ static void BtAttProcessReadByGroupRsp(BtDevice_t *pPeer,
 			return;
 		}
 
-		BtGattDBSrvc_t *pSrvc = &pPeer->Services[pPeer->NbSrvc];
+		BtGattDBSrvc_t *pSrvc = &pPeer->pServices[pPeer->NbSrvc];
 		memset(pSrvc, 0, sizeof(*pSrvc));
 		pSrvc->handle_range.StartHdl = startHdl;
 		pSrvc->handle_range.EndHdl = endHdl;
@@ -558,14 +566,14 @@ void BtAttProcessRsp(uint16_t ConnHdl, BtAttReqRsp_t * const pRspAtt, int RspLen
 			if (BtAttDiscoveryServiceValid(pPeer))
 			{
 				BtGattDBSrvc_t *pSrvc =
-						&pPeer->Services[pPeer->Discovery.SrvIdx];
+						&pPeer->pServices[pPeer->Discovery.SrvIdx];
 				pPeer->Discovery.Hdl++;
 				if (pPeer->Discovery.Hdl > pSrvc->handle_range.EndHdl)
 				{
 					if (pPeer->Discovery.SrvIdx + 1 < pPeer->NbSrvc)
 					{
 						pPeer->Discovery.SrvIdx++;
-						pSrvc = &pPeer->Services[pPeer->Discovery.SrvIdx];
+						pSrvc = &pPeer->pServices[pPeer->Discovery.SrvIdx];
 						pPeer->Discovery.Hdl =
 								(uint16_t)(pSrvc->handle_range.StartHdl + 1U);
 						(void)BtAttReadRequest((BtHciDevice_t *)pPeer->pHciDev,

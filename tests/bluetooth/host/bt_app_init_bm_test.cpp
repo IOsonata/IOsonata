@@ -143,6 +143,12 @@ bool BtPeerInit(uint8_t *, size_t)
 	return s_FailPoint != FAIL_PEER_POOL;
 }
 
+// BtAppInit checks the requested link count against the pool slot count.
+uint16_t BtPeerCount(void)
+{
+	return 1;
+}
+
 void BtPeerLongWrInit(uint8_t *, size_t)
 {
 	Record(CALL_LONG_WRITE);

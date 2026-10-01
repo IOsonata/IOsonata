@@ -450,15 +450,15 @@ void BtDeviceDiscovered(BtDevice_t *pDev)
 		return;
 	}
 
-	g_BleRxCharHdl = pDev->Services[sidx].characteristics[rxidx].characteristic.handle_value;
-	g_BleTxCharHdl = pDev->Services[sidx].characteristics[txidx].characteristic.handle_value;
+	g_BleRxCharHdl = pDev->pServices[sidx].characteristics[rxidx].characteristic.handle_value;
+	g_BleTxCharHdl = pDev->pServices[sidx].characteristics[txidx].characteristic.handle_value;
 
 	g_Uart.printf("UART service discovered: RX=0x%04X TX=0x%04X\r\n", g_BleRxCharHdl, g_BleTxCharHdl);
 
 	// Enable notify on the RX characteristic (peripheral -> central stream).
 	// Notifications are turned on by writing to the CCCD, not the value handle.
 	// The descriptor discovery phase fills cccd_handle.
-	uint16_t rxCccd = pDev->Services[sidx].characteristics[rxidx].cccd_handle;
+	uint16_t rxCccd = pDev->pServices[sidx].characteristics[rxidx].cccd_handle;
 	if (rxCccd == BT_ATT_HANDLE_INVALID)
 	{
 		g_Uart.printf("RX CCCD not found\r\n");
