@@ -53,7 +53,6 @@
 #include "app_error.h"
 #include "ble_srv_common.h"
 #include "ble_gap.h"
-#include "peer_manager.h"
 
 #include "bluetooth/bt_gap.h"
 #include "bluetooth/bt_peer.h"
@@ -217,58 +216,6 @@ void BtGapScanStop()
 	sd_ble_gap_scan_stop();
 }
 
-// Strong override of the weak generic BtGapConnSecGet. On nRF52 the SoftDevice
-// and Peer Manager own link security, so map their live status into BtConnSec_t.
-// Level and flags come from pm_conn_sec_status_get; KeySize is the negotiated
-// encryption key size captured at BLE_GAP_EVT_CONN_SEC_UPDATE.
-bool BtGapConnSecGet(uint16_t ConnHdl, BtConnSec_t *pSec)
-{
-	if (pSec == nullptr)
-	{
-		return false;
-	}
-
-	BtDevice_t *p = BtPeerFindByHdl(ConnHdl);
-	if (p == nullptr)
-	{
-		return false;
-	}
-
-	pm_conn_sec_status_t st;
-	if (pm_conn_sec_status_get(ConnHdl, &st) != NRF_SUCCESS)
-	{
-		return false;
-	}
-
-	pSec->Level = BT_GAP_SEC_LEVEL_NONE;
-	pSec->KeySize = 0;
-	pSec->Flags = 0;
-
-	if (st.encrypted)
-	{
-		if (st.mitm_protected)
-		{
-			pSec->Level = st.lesc ? BT_GAP_SEC_LEVEL_LESC_AUTH : BT_GAP_SEC_LEVEL_ENC_AUTH;
-		}
-		else
-		{
-			pSec->Level = BT_GAP_SEC_LEVEL_ENC_UNAUTH;
-		}
-
-		// Real negotiated size. 0 here only if the update event has not run,
-		// which keeps the key-size gate on the safe (reject) side.
-		pSec->KeySize = p->Conn.Sec.KeySize;
-	}
-
-	if (st.bonded)
-	{
-		pSec->Flags |= BT_GAP_SEC_FLAG_BONDED;
-	}
-
-	if (st.lesc)
-	{
-		pSec->Flags |= BT_GAP_SEC_FLAG_SC;
-	}
-
-	return true;
-}
+// BtGapConnSecGet for this port is in bt_sec_nrf52.cpp. It reads the Peer
+// Manager, which is linked only when the application uses security. Without
+// it the generic default in bt_gap.cpp reports the link as not secured.

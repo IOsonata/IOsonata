@@ -11,6 +11,8 @@
 #include "bluetooth/bt_gatt.h"
 #include "bluetooth/bt_intrf.h"
 #include "app_evt_handler.h"
+
+#ifdef INVN
 #include "Devices/Drivers/Icm20948/Icm20948.h"
 #include "Devices/Drivers/Icm20948/Icm20948Defs.h"
 #include "Devices/Drivers/Icm20948/Icm20948Dmp3Driver.h"
@@ -20,6 +22,7 @@
 #include "Devices/Drivers/Icm20948/Icm20948MPUFifoControl.h"
 #include "Devices/Drivers/Icm20948/Icm20948Setup.h"
 #include "Devices/SensorTypes.h"
+#endif
 
 #include "bluetooth/bt_app.h"
 //#include "ble_app_nrf5.h"

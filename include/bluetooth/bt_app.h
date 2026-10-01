@@ -192,9 +192,11 @@ typedef struct __Bt_App_Data {
 	int             PeriphDevCnt;   //!< Peripheral connection count when in central role
 	BTAPP_COEXMODE  CoexMode;       //!< CoEx mode in effect
 	BTGAP_SECTYPE   SecType;        //!< Configured application security mode
+	uint8_t         SecExchg;       //!< Configured security key exchange capability
 	bool            bExtAdv;        //!< Extended advertising enabled
 	bool            bScan;          //!< Scan currently enabled
 	bool            bInitialized;   //!< BtAppInit completed
+	bool            bSecInit;       //!< Security module started by BtAppSecInit
 	BtDevice_t      AppDevice;      //!< Local device identity (bIsLocal = true). Holds Role,
 	                                //!< Appearance, VendorId, ProductId, ProductVer, MaxMtu,
 	                                //!< bSecure, Name, Addr, Services, etc.
@@ -225,6 +227,22 @@ void BtAppInitUserData(void);
  * 	This is called before initializing advertisement
  */
 void BtAppInitUserServices(void);
+
+/**
+ * @brief	Start the security module (pairing, bonding, secure connection).
+ *
+ * Security is linked only when the application references it. An
+ * application that uses security calls this function from BtAppInitUserData.
+ * It uses the SecType and SecExchg given in BtAppCfg_t. An application that
+ * never calls it does not link the security module, and BtAppInit fails when
+ * its SecType is other than BTGAP_SECTYPE_NONE.
+ *
+ * NOTE: Implemented by the port. Ports that still start security inside
+ * BtAppInit do not provide it yet.
+ *
+ * @return	true - security started
+ */
+bool BtAppSecInit(void);
 void BtAppEvtConnected(uint16_t ConnHdl);
 void BtAppEvtDisconnected(uint16_t ConnHdl);
 // Called once the link is encrypted (freshly paired or re-encrypted from a
