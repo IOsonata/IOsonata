@@ -232,6 +232,24 @@ public:
 			pAdCmd, AdCmdLen, pData, DataLen);
 	}
 
+	// Preserve the generic busy/hook contract while avoiding the base
+	// class virtual handle conversion for this owned DevIntrf instance.
+	bool StartRx(uint32_t DevAddr) override {
+		return DeviceIntrfStartRx(&vUsbDevIntrf.DevIntrf, DevAddr);
+	}
+
+	void StopRx(void) override {
+		DeviceIntrfStopRx(&vUsbDevIntrf.DevIntrf);
+	}
+
+	bool StartTx(uint32_t DevAddr) override {
+		return DeviceIntrfStartTx(&vUsbDevIntrf.DevIntrf, DevAddr);
+	}
+
+	void StopTx(void) override {
+		DeviceIntrfStopTx(&vUsbDevIntrf.DevIntrf);
+	}
+
 	// Use the owned data directly without a virtual conversion on each call.
 	__attribute__((always_inline))
 	int Tx(uint32_t DevAddr, const uint8_t *pData, int DataLen) override {
