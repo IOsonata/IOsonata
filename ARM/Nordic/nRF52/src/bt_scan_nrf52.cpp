@@ -26,6 +26,7 @@ Copyright (c) 2016, I-SYST inc., all rights reserved
 #include "nrf_error.h"
 #include "ble.h"
 #include "ble_gap.h"
+#include "ble_conn_state.h"
 #include "nrf_ble_scan.h"
 #include "nrf_sdh.h"
 #include "nrf_sdh_ble.h"
@@ -34,6 +35,11 @@ Copyright (c) 2016, I-SYST inc., all rights reserved
 #include "istddef.h"
 #include "bluetooth/bt_app.h"
 #include "bluetooth/bt_gap.h"
+
+// Run before the application observer (priority 1). The scan is continued or
+// stopped before the application's central event callback sees the report,
+// same order as when these events were handled in the application dispatcher.
+#define BT_SCAN_NRF52_OBSERVER_PRIO    0
 
 // --- Scan buffer and SoftDevice scan-report data ---
 
@@ -97,3 +103,54 @@ bool BtAppScanInit(BtGapScanCfg_t *pCfg)
 //	return err_code == NRF_SUCCESS;
     return BtGapScanStart(g_BleScanReportData.p_data, g_BleScanReportData.len);
 }
+
+// Scan events live here, not in the application dispatcher, so that this
+// object is linked only when the application calls a BtAppScan* function.
+static void BtScanNrf52EvtHandler(ble_evt_t const *pEvt, void *pContext)
+{
+	(void)pContext;
+
+	uint16_t role = ble_conn_state_role(pEvt->evt.gap_evt.conn_handle);
+
+	if ((role != BLE_GAP_ROLE_CENTRAL) &&
+		(g_BtAppData.AppDevice.Conn.Role & (BTAPP_ROLE_CENTRAL | BTAPP_ROLE_OBSERVER)) == 0)
+	{
+		return;
+	}
+
+	switch (pEvt->header.evt_id)
+	{
+		case BLE_GAP_EVT_ADV_REPORT:
+			{
+				// Scan data report
+				const ble_gap_evt_adv_report_t *pReport = &pEvt->evt.gap_evt.params.adv_report;
+
+				bool res = BtAppScanReport(pReport->rssi, pReport->peer_addr.addr_type,
+						(uint8_t*)pReport->peer_addr.addr, pReport->data.len, pReport->data.p_data);
+				// Continue scan
+				if (res == true)
+				{
+					BtAppScan();
+				}
+				else
+				{
+					BtAppScanStop();
+				}
+			}
+			break;
+
+		case BLE_GAP_EVT_TIMEOUT:
+			if (pEvt->evt.gap_evt.params.timeout.src == BLE_GAP_TIMEOUT_SRC_SCAN)
+			{
+				g_BtAppData.bScan = false;
+				BtAppScanTimeoutHandler();
+			}
+			break;
+
+		default:
+			break;
+	}
+}
+
+NRF_SDH_BLE_OBSERVER(s_BtScanObserver, BT_SCAN_NRF52_OBSERVER_PRIO,
+	BtScanNrf52EvtHandler, NULL);

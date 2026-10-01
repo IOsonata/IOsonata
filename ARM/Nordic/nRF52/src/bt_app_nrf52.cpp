@@ -1079,38 +1079,10 @@ static void ble_evt_dispatch(ble_evt_t const * p_ble_evt, void *p_context)
     {
     	switch (p_ble_evt->header.evt_id)
         {
-    		case BLE_GAP_EVT_ADV_REPORT:
-				{
-					// Scan data report
-					ble_gap_evt_adv_report_t * p_adv_report = (ble_gap_evt_adv_report_t*)&p_gap_evt->params.adv_report;
-
-					bool res = BtAppScanReport(p_adv_report->rssi, p_adv_report->peer_addr.addr_type,
-							p_adv_report->peer_addr.addr, p_adv_report->data.len, p_adv_report->data.p_data);
-					// Continue scan
-					if (res == true)
-					{
-						BtAppScan();
-					}
-					else
-					{
-						BtAppScanStop();
-					}
-				}
-    			break;
-            case BLE_GAP_EVT_TIMEOUT:
-				{
-					const ble_gap_evt_t * p_gap_evt = &p_ble_evt->evt.gap_evt;
-
-					ble_gap_evt_timeout_t const * p_timeout = &p_gap_evt->params.timeout;
-
-					if (p_timeout->src == BLE_GAP_TIMEOUT_SRC_SCAN)
-					{
-						g_BtAppData.bScan = false;
-						BtAppScanTimeoutHandler();
-					}
-				}
-            break;
-
+    		// BLE_GAP_EVT_ADV_REPORT and the scan timeout are handled by the
+    		// scan observer in bt_scan_nrf52.cpp. Keeping them out of this
+    		// dispatcher lets a build that never scans leave the scan module
+    		// and its report buffer out of the link.
             case BLE_GATTC_EVT_PRIM_SRVC_DISC_RSP:
                 BtAppDiscPrimSrvcRsp(&p_ble_evt->evt.gattc_evt);
                 break;
