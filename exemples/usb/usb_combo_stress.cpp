@@ -51,7 +51,6 @@ Copyright (c) 2026, I-SYST inc., all rights reserved
 #define ISO_ALT_COUNT			6U
 #define ISO_MAX_MPS			63U
 #define ISO_REQ_GET_DIAG		0x5AU
-#define ISO_REQ_GET_TRACE		0x5CU
 
 alignas(4) static uint8_t s_LoopbackRxFifoMem[CDC_RXFIFO_MEMSIZE];
 alignas(4) static uint8_t s_LoopbackTxFifoMem[LOOPBACK_TXFIFO_MEMSIZE];
@@ -386,25 +385,6 @@ static bool IsoControl(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
 		pSetup->wIndex != s_Fn.IsoInterfaceNo)
 	{
 		return false;
-	}
-
-	if (pSetup->bRequest == ISO_REQ_GET_TRACE)
-	{
-		// Controller per-frame ISO trace for the bench. The snapshot is
-		// taken at SETUP so the frames keep running while it is read.
-		if (Stage != USB_CTRL_SETUP)
-		{
-			return true;
-		}
-		uint8_t *pTrace = nullptr;
-		const uint16_t len = UsbCtrlrIsoTraceSnapshot(USB_DEVNO, &pTrace);
-		if (len == 0U || pTrace == nullptr)
-		{
-			return false;
-		}
-		*ppData = pTrace;
-		*pLength = len < pSetup->wLength ? len : pSetup->wLength;
-		return true;
 	}
 
 	if (pSetup->bRequest != ISO_REQ_GET_DIAG ||
