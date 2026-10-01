@@ -23,6 +23,20 @@ Copyright (c) 2022, I-SYST inc., all rights reserved.
 #include "istddef.h"
 #include "bluetooth/bt_app.h"
 #include "bluetooth/bt_gap.h"
+#include "bluetooth/bt_hci.h"
+#include "bluetooth/bt_hci_ctlr.h"
+
+// Default for a controller port with nothing to switch on for the central
+// and observer roles. A port that has, defines it.
+__attribute__((weak)) void BtHciCtlrCentralSupport(void)
+{
+}
+
+// Link-time reference the controller port looks for. This object is linked
+// when the application calls BtAppScanInit, BtAppScan or BtAppScanStop, which
+// is what tells the controller port that the central or observer role is in
+// use. Nothing else in the library defines it.
+extern "C" void (* const g_pBtHciCtlrCentralSupport)(void) = BtHciCtlrCentralSupport;
 
 void BtAppScan()
 {
@@ -47,6 +61,10 @@ bool BtAppScanInit(BtGapScanCfg_t *pCfg)
 	{
 		return false;
 	}
+
+	// The HCI host parses advertising reports only once this is called, so
+	// the report parsing and its reassembly memory are linked with scanning.
+	BtHciScanReportEnable();
 
 	// Existing application configurations predate the Phy field and leave it
 	// zero through aggregate initialization. Preserve that source-compatible

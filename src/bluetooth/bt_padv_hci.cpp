@@ -49,6 +49,7 @@ SOFTWARE.
 #include "bluetooth/bt_hci.h"
 #include "bluetooth/bt_padv.h"
 #include "bluetooth/bt_psync.h"
+#include "bluetooth/bt_hci_ctlr.h"
 
 /******** For DEBUG Trace ************/
 // Define DEBUG_ENABLE to turn on trace for this file. Output goes to the
@@ -166,6 +167,17 @@ static bool BtPadvEnabledOn(uint8_t AdvHdl)
 {
 	return s_PadvEnabled && AdvHdl == s_PadvHdl;
 }
+
+// Default for a controller port with nothing to switch on for periodic
+// advertising. A port that has, defines it.
+__attribute__((weak)) void BtHciCtlrPeriodicAdvSupport(void)
+{
+}
+
+// Link-time reference the controller port looks for. This object is linked
+// when the application calls BtPadvInit, which is what tells the controller
+// port that periodic advertising is in use.
+extern "C" void (* const g_pBtHciCtlrPeriodicAdvSupport)(void) = BtHciCtlrPeriodicAdvSupport;
 
 bool BtPadvInit(const BtPadvCfg_t * const pCfg)
 {

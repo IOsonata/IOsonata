@@ -455,6 +455,54 @@ int32_t BtHciCtlrMemPoolSizeNeeded(void)
 	return s_BtStackSdcMemNeeded;
 }
 
+// Link-time reference to the scan module. Declared weak here so that it does
+// not pull the module in: it is defined when the application calls
+// BtAppScanInit, BtAppScan or BtAppScanStop, and unresolved otherwise.
+extern "C" __attribute__((weak)) void (* const g_pBtHciCtlrCentralSupport)(void);
+
+// Same link-time reference for the periodic advertising module, defined when
+// the application calls BtPadvInit.
+extern "C" __attribute__((weak)) void (* const g_pBtHciCtlrPeriodicAdvSupport)(void);
+
+// Enable periodic advertising in the controller. Has to run before the
+// controller is configured and after sdc_support_ext_adv.
+void BtHciCtlrPeriodicAdvSupport(void)
+{
+	// Periodic advertising in the Advertising state.
+	sdc_support_le_periodic_adv();
+	// Periodic advertising with responses, the advertiser half. Separate
+	// from the line above: enabling plain periodic advertising leaves the
+	// four PAwR commands refused, which is what made a train run while a
+	// subevent could never be configured.
+	sdc_support_le_periodic_adv_with_rsp();
+}
+
+// Enable the scan, periodic sync and central features of the controller.
+// Has to run before the controller is configured. Kept out of
+// BtHciCtlrEnable so that only a build with the scan module references this
+// part of the controller library.
+void BtHciCtlrCentralSupport(void)
+{
+	sdc_support_scan();
+	sdc_support_ext_scan();
+	// Periodic advertising in the Synchronization state, which is the
+	// receiving side: an observer syncs to a train, an advertiser
+	// transmits one. This was in the peripheral branch above, where the
+	// prerequisite sdc.h states for it, sdc_support_ext_scan(), is never
+	// called, so an observer build did not enable it at all and Create
+	// Sync would have been refused by the controller.
+	sdc_support_le_periodic_sync();
+	// The responder half of PAwR, which is what lets a synchronized device
+	// answer a subevent rather than only receive it.
+	sdc_support_le_periodic_sync_with_rsp();
+	sdc_support_central();
+	sdc_support_ext_central();
+	sdc_support_dle_central();
+	sdc_support_phy_update_central();
+	sdc_support_le_power_control_central();
+	sdc_support_le_conn_cte_rsp_central();
+}
+
 static void BtStackSdcAssert(const char * file, const uint32_t line)
 {
 	// Both are read by the trace, which a build without DEBUG_ENABLE compiles
@@ -564,14 +612,16 @@ bool BtHciCtlrStart(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 		// Config for peripheral role
 		sdc_support_adv();
 		sdc_support_ext_adv();
-		// Periodic advertising in the Advertising state. sdc.h requires
-		// sdc_support_ext_adv() first, which is the line above.
-		sdc_support_le_periodic_adv();
-		// Periodic advertising with responses, the advertiser half. Separate
-		// from the line above: enabling plain periodic advertising leaves the
-		// four PAwR commands refused, which is what made a train run while a
-		// subevent could never be configured.
-		sdc_support_le_periodic_adv_with_rsp();
+		// Periodic advertising is enabled by BtHciCtlrPeriodicAdvSupport,
+		// reached only through the pointer the periodic advertising module
+		// defines. An application that advertises periodically calls
+		// BtPadvInit, which links that module. Without it the reference stays
+		// unresolved and the controller code for it is not linked. sdc.h
+		// requires sdc_support_ext_adv() first, which is the line above.
+		if (&g_pBtHciCtlrPeriodicAdvSupport != nullptr)
+		{
+			g_pBtHciCtlrPeriodicAdvSupport();
+		}
 		sdc_support_peripheral();
 		sdc_support_dle_peripheral();
 		sdc_support_phy_update_peripheral();
@@ -580,25 +630,21 @@ bool BtHciCtlrStart(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 	}
 	if (pCfg->Role & (BT_GAP_ROLE_CENTRAL | BT_GAP_ROLE_OBSERVER))
 	{
-		// Config for central role
-		sdc_support_scan();
-		sdc_support_ext_scan();
-		// Periodic advertising in the Synchronization state, which is the
-		// receiving side: an observer syncs to a train, an advertiser
-		// transmits one. This was in the peripheral branch above, where the
-		// prerequisite sdc.h states for it, sdc_support_ext_scan(), is never
-		// called, so an observer build did not enable it at all and Create
-		// Sync would have been refused by the controller.
-		sdc_support_le_periodic_sync();
-		// The responder half of PAwR, which is what lets a synchronized device
-		// answer a subevent rather than only receive it.
-		sdc_support_le_periodic_sync_with_rsp();
-		sdc_support_central();
-		sdc_support_ext_central();
-		sdc_support_dle_central();
-		sdc_support_phy_update_central();
-		sdc_support_le_power_control_central();
-		sdc_support_le_conn_cte_rsp_central();
+		// Config for central role.
+		// The scan, sync and central features of the controller are enabled
+		// by BtHciCtlrCentralSupport, reached only through the pointer the
+		// scan module defines. A central or observer application calls
+		// BtAppScanInit, which links that module. Without it this is a weak
+		// reference that stays unresolved, and the controller code for these
+		// features is not linked at all.
+		if (&g_pBtHciCtlrCentralSupport == nullptr)
+		{
+			BtHciCtlrErrorSet(BT_HCI_CTLR_ERROR_CENTRAL_SUPPORT, (int32_t)pCfg->Role);
+			DEBUG_PRINTF("central/observer role asked but the scan module is not linked\r\n");
+
+			return false;
+		}
+		g_pBtHciCtlrCentralSupport();
 	}
 
     int32_t ram = 0;

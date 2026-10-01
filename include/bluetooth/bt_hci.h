@@ -755,6 +755,16 @@ static inline uint16_t mSecTo1_25(float Val) {
 
 void BtHciProcessData(BtHciDevice_t * const pDev, BtHciACLDataPacket_t * const pPkt);
 
+/**
+ * @brief	Enable the processing of advertising reports in the HCI host.
+ *
+ * Called by BtAppScanInit. The legacy and extended advertising report
+ * parsing and the report reassembly memory are reached only through this
+ * call, so a build that never scans does not link them. Reports that arrive
+ * before it are dropped.
+ */
+void BtHciScanReportEnable(void);
+
 // Transmit a fully built ACL data packet to the controller. Fragments the L2CAP
 // PDU to the controller's ACL data length and gates on available ACL credits
 // when BtHciSetLeAclBuffer has configured them; otherwise sends a single packet

@@ -891,6 +891,9 @@ void TestNoSmpHandler()
 int main()
 {
 	BtHciSmpHandlerSet(&s_TestSmpHandler);
+	// Advertising reports are parsed only once scanning is in use, which is
+	// what BtAppScanInit tells the host.
+	BtHciScanReportEnable();
 
 	TestCommandFraming();
 	TestAclFragmentationAndCredits();

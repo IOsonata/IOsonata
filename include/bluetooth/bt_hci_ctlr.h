@@ -135,6 +135,36 @@ extern "C" {
 bool BtHciCtlrInit(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg);
 size_t BtHciCtlrSdcSend(void *pData, size_t Len);
 
+/**
+ * @brief	Enable the central and observer features of the controller.
+ *
+ * Implemented by the controller port when the controller has features to
+ * switch on for scanning, periodic sync and the central role. It is reached
+ * only through g_pBtHciCtlrCentralSupport, which the scan module defines, so
+ * these features are linked only when the application uses scanning
+ * (BtAppScanInit).
+ */
+void BtHciCtlrCentralSupport(void);
+
+/// Defined by the scan module (bt_scan_hci.cpp). The controller port refers
+/// to it through a weak reference: present when the application uses
+/// scanning, unresolved otherwise.
+extern void (* const g_pBtHciCtlrCentralSupport)(void);
+
+/**
+ * @brief	Enable periodic advertising in the controller.
+ *
+ * Implemented by the controller port when the controller has a feature to
+ * switch on for it. It is reached only through
+ * g_pBtHciCtlrPeriodicAdvSupport, which the periodic advertising module
+ * defines, so it is linked only when the application calls BtPadvInit.
+ */
+void BtHciCtlrPeriodicAdvSupport(void);
+
+/// Defined by the periodic advertising module (bt_padv_hci.cpp). The
+/// controller port refers to it through a weak reference.
+extern void (* const g_pBtHciCtlrPeriodicAdvSupport)(void);
+
 /// Size in bytes of the library default controller memory pool
 #define BT_HCI_CTLR_MEMPOOL_DEFAULT_SIZE		10000
 
@@ -201,6 +231,7 @@ typedef enum __Bt_Hci_Ctlr_Error {
 	BT_HCI_CTLR_ERROR_MEM_POOL,		//!< Pool too small, Value is the size asked for in bytes
 	BT_HCI_CTLR_ERROR_ARBITER,		//!< Memory arbiter refused, Value is its code
 	BT_HCI_CTLR_ERROR_CTLR_ENABLE,	//!< Target controller enable refused, Value is its code
+	BT_HCI_CTLR_ERROR_CENTRAL_SUPPORT,	//!< Central or observer role asked but the scan module is not linked (BtAppScanInit never referenced), Value is the role
 } BtHciCtlrError_t;
 
 /**

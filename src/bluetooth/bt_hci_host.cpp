@@ -227,6 +227,187 @@ static BtExtAdvReasm_t *BtExtAdvReasmAlloc(uint8_t AddrType, const uint8_t Addr[
 	return nullptr;
 }
 
+// LE Advertising Report event. evtEnd is the end of the received event
+// payload; the parser must not read past it.
+static void BtHciLeAdvReport(BtHciDevice_t * const pDev,
+							 BtHciLeEvtPacket_t *pLeEvtPkt, const uint8_t *evtEnd)
+{
+	BtHciLeEvtAdvReport_t *report = (BtHciLeEvtAdvReport_t*)pLeEvtPkt->Data;
+
+	// The dispatcher proved the subevent byte exists, not the count
+	// byte after it. Reading NbReport before checking is an
+	// out-of-bounds read on a truncated event.
+	if ((const uint8_t*)pLeEvtPkt->Data + 1 > evtEnd)
+	{
+		return;
+	}
+
+	// Each BtAdvReport_t is variable-length: 9-byte fixed header
+	// (EvtType, AddrType, Addr[6], DataLen) + Data[DataLen] +
+	// 1 byte trailing RSSI. Walk by stride, do not index as
+	// fixed-size array.
+	uint8_t *cur = (uint8_t*)report->Report;
+
+	for (int i = 0; i < report->NbReport; i++)
+	{
+		BtAdvReport_t *r = (BtAdvReport_t*)cur;
+		// Bound every access against the received event length:
+		// the 9-byte fixed header, the DataLen payload, and the
+		// trailing RSSI byte. A malformed/hostile controller event
+		// with a bad NbReport/DataLen would otherwise read OOB.
+		if (cur + 9 > evtEnd)
+		{
+			break;
+		}
+		if (cur + 9 + r->DataLen + 1 > evtEnd)
+		{
+			break;
+		}
+		int8_t rssi = (int8_t)r->Data[r->DataLen];
+		if (pDev->ScanReport)
+		{
+			pDev->ScanReport(rssi, r->AddrType, r->Addr, r->DataLen, r->Data);
+		}
+		cur += 9 + r->DataLen + 1;
+	}
+}
+
+// LE Extended Advertising Report event, with reassembly of a report the
+// controller delivers in fragments.
+static void BtHciLeExtAdvReport(BtHciDevice_t * const pDev,
+								BtHciLeEvtPacket_t *pLeEvtPkt, const uint8_t *evtEnd)
+{
+	BtHciLeEvtExtAdvReport_t *report = (BtHciLeEvtExtAdvReport_t*)pLeEvtPkt->Data;
+
+	// Same as the legacy report: prove the count byte is inside the
+	// event before reading it.
+	if ((const uint8_t*)pLeEvtPkt->Data + 1 > evtEnd)
+	{
+		return;
+	}
+
+	// Each BtExtAdvReport_t is variable-length: 24-byte fixed
+	// header + Data[DataLen]. Walk by stride.
+	uint8_t *cur = (uint8_t*)report->Report;
+
+	for (int i = 0; i < report->NbReport; i++)
+	{
+		BtExtAdvReport_t *r = (BtExtAdvReport_t*)cur;
+		// Bound the 24-byte fixed header and DataLen payload against
+		// the received event length before dereferencing.
+		if (cur + 24 > evtEnd)
+		{
+			break;
+		}
+		if (cur + 24 + r->DataLen > evtEnd)
+		{
+			break;
+		}
+
+		// Data_Status is bits 5-6 of the Event_Type field: 0 =
+		// complete, 1 = incomplete with more data to come, 2 =
+		// incomplete and truncated (no more data), 3 = reserved.
+		uint8_t dataStatus = (uint8_t)((r->Type >> 5) & 0x03);
+		BtExtAdvReasm_t *ctx =
+			BtExtAdvReasmFind(r->AddrType, r->Addr, r->AdvSid);
+
+		if (dataStatus == 1)
+		{
+			// More data to come: buffer this fragment.
+			if (ctx == nullptr &&
+				BtExtAdvDroppedFind(r->AddrType, r->Addr, r->AdvSid) == nullptr)
+			{
+				ctx = BtExtAdvReasmAlloc(r->AddrType, r->Addr, r->AdvSid);
+			}
+			if (ctx != nullptr)
+			{
+				if ((uint32_t)ctx->Len + r->DataLen <= BT_EXT_ADV_REASSEMBLY_MAX)
+				{
+					memcpy(ctx->Buf + ctx->Len, r->Data, r->DataLen);
+					ctx->Len = (uint16_t)(ctx->Len + r->DataLen);
+				}
+				else
+				{
+					// Reassembly buffer would overflow: drop the
+					// partial report rather than deliver a truncation.
+					ctx->Active = false;
+					BtExtAdvDroppedMark(r->AddrType, r->Addr, r->AdvSid);
+				}
+			}
+			else
+			{
+				// No context free, or this advertiser is already
+				// abandoned. Either way the report cannot be
+				// reassembled and its tail must not be delivered.
+				BtExtAdvDroppedMark(r->AddrType, r->Addr, r->AdvSid);
+			}
+		}
+		else if (dataStatus == 0)
+		{
+			// Complete. Deliver the reassembled AD if this terminates
+			// a multi-fragment report, otherwise deliver directly.
+			if (ctx != nullptr)
+			{
+				if ((uint32_t)ctx->Len + r->DataLen <= BT_EXT_ADV_REASSEMBLY_MAX)
+				{
+					memcpy(ctx->Buf + ctx->Len, r->Data, r->DataLen);
+					ctx->Len = (uint16_t)(ctx->Len + r->DataLen);
+					if (pDev->ScanReport)
+					{
+						pDev->ScanReport(r->Rssi, r->AddrType, r->Addr, ctx->Len, ctx->Buf);
+					}
+				}
+				ctx->Active = false;
+			}
+			else
+			{
+				// No context. Either this is a standalone complete
+				// report, or it is the tail of a reassembly that was
+				// abandoned, which looks identical on the wire.
+				// Delivering the second case hands the application a
+				// truncated suffix as whole advertising data.
+				BtExtAdvDropped_t *d =
+					BtExtAdvDroppedFind(r->AddrType, r->Addr, r->AdvSid);
+
+				if (d != nullptr)
+				{
+					d->Active = false;
+				}
+				else if (pDev->ScanReport)
+				{
+					pDev->ScanReport(r->Rssi, r->AddrType, r->Addr, r->DataLen, r->Data);
+				}
+			}
+		}
+		else
+		{
+			// Truncated (2) or reserved (3): no more data is coming
+			// and the report is incomplete. Drop any partial state
+			// and do not deliver a partial report as if complete.
+			if (ctx != nullptr)
+			{
+				ctx->Active = false;
+			}
+		}
+
+		cur += 24 + r->DataLen;
+	}
+}
+
+// Scan report parsers, set by BtHciScanReportEnable. NULL when the
+// application does not scan: the two functions above and the reassembly
+// memory are then not linked.
+static void (*s_BtHciAdvReport)(BtHciDevice_t * const pDev,
+								BtHciLeEvtPacket_t *pLeEvtPkt, const uint8_t *evtEnd) = nullptr;
+static void (*s_BtHciExtAdvReport)(BtHciDevice_t * const pDev,
+								   BtHciLeEvtPacket_t *pLeEvtPkt, const uint8_t *evtEnd) = nullptr;
+
+void BtHciScanReportEnable(void)
+{
+	s_BtHciAdvReport = BtHciLeAdvReport;
+	s_BtHciExtAdvReport = BtHciLeExtAdvReport;
+}
+
 void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtPkt, int EvtLen)
 {
 	// End of the received event payload; report parsers must not read past it.
@@ -257,46 +438,13 @@ void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtP
 				}
 			}
 			break;
+		// Advertising reports are parsed by the scan report functions above,
+		// reached through pointers BtHciScanReportEnable sets. A build that
+		// never scans links neither them nor the report reassembly memory.
 		case BT_HCI_EVT_LE_ADV_REPORT:
+			if (s_BtHciAdvReport != nullptr)
 			{
-				BtHciLeEvtAdvReport_t *report = (BtHciLeEvtAdvReport_t*)pLeEvtPkt->Data;
-
-				// The dispatcher proved the subevent byte exists, not the count
-				// byte after it. Reading NbReport before checking is an
-				// out-of-bounds read on a truncated event.
-				if ((const uint8_t*)pLeEvtPkt->Data + 1 > evtEnd)
-				{
-					break;
-				}
-
-				// Each BtAdvReport_t is variable-length: 9-byte fixed header
-				// (EvtType, AddrType, Addr[6], DataLen) + Data[DataLen] +
-				// 1 byte trailing RSSI. Walk by stride, do not index as
-				// fixed-size array.
-				uint8_t *cur = (uint8_t*)report->Report;
-
-				for (int i = 0; i < report->NbReport; i++)
-				{
-					BtAdvReport_t *r = (BtAdvReport_t*)cur;
-					// Bound every access against the received event length:
-					// the 9-byte fixed header, the DataLen payload, and the
-					// trailing RSSI byte. A malformed/hostile controller event
-					// with a bad NbReport/DataLen would otherwise read OOB.
-					if (cur + 9 > evtEnd)
-					{
-						break;
-					}
-					if (cur + 9 + r->DataLen + 1 > evtEnd)
-					{
-						break;
-					}
-					int8_t rssi = (int8_t)r->Data[r->DataLen];
-					if (pDev->ScanReport)
-					{
-						pDev->ScanReport(rssi, r->AddrType, r->Addr, r->DataLen, r->Data);
-					}
-					cur += 9 + r->DataLen + 1;
-				}
+				s_BtHciAdvReport(pDev, pLeEvtPkt, evtEnd);
 			}
 			break;
 		case BT_HCI_EVT_LE_CONN_UPDATE_COMPLETE:
@@ -433,122 +581,9 @@ void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtP
 		}
 			break;
 		case BT_HCI_EVT_LE_EXT_ADV_REPORT:
+			if (s_BtHciExtAdvReport != nullptr)
 			{
-				BtHciLeEvtExtAdvReport_t *report = (BtHciLeEvtExtAdvReport_t*)pLeEvtPkt->Data;
-
-				// Same as the legacy report: prove the count byte is inside the
-				// event before reading it.
-				if ((const uint8_t*)pLeEvtPkt->Data + 1 > evtEnd)
-				{
-					break;
-				}
-
-				// Each BtExtAdvReport_t is variable-length: 24-byte fixed
-				// header + Data[DataLen]. Walk by stride.
-				uint8_t *cur = (uint8_t*)report->Report;
-
-				for (int i = 0; i < report->NbReport; i++)
-				{
-					BtExtAdvReport_t *r = (BtExtAdvReport_t*)cur;
-					// Bound the 24-byte fixed header and DataLen payload against
-					// the received event length before dereferencing.
-					if (cur + 24 > evtEnd)
-					{
-						break;
-					}
-					if (cur + 24 + r->DataLen > evtEnd)
-					{
-						break;
-					}
-
-					// Data_Status is bits 5-6 of the Event_Type field: 0 =
-					// complete, 1 = incomplete with more data to come, 2 =
-					// incomplete and truncated (no more data), 3 = reserved.
-					uint8_t dataStatus = (uint8_t)((r->Type >> 5) & 0x03);
-					BtExtAdvReasm_t *ctx =
-						BtExtAdvReasmFind(r->AddrType, r->Addr, r->AdvSid);
-
-					if (dataStatus == 1)
-					{
-						// More data to come: buffer this fragment.
-						if (ctx == nullptr &&
-							BtExtAdvDroppedFind(r->AddrType, r->Addr, r->AdvSid) == nullptr)
-						{
-							ctx = BtExtAdvReasmAlloc(r->AddrType, r->Addr, r->AdvSid);
-						}
-						if (ctx != nullptr)
-						{
-							if ((uint32_t)ctx->Len + r->DataLen <= BT_EXT_ADV_REASSEMBLY_MAX)
-							{
-								memcpy(ctx->Buf + ctx->Len, r->Data, r->DataLen);
-								ctx->Len = (uint16_t)(ctx->Len + r->DataLen);
-							}
-							else
-							{
-								// Reassembly buffer would overflow: drop the
-								// partial report rather than deliver a truncation.
-								ctx->Active = false;
-								BtExtAdvDroppedMark(r->AddrType, r->Addr, r->AdvSid);
-							}
-						}
-						else
-						{
-							// No context free, or this advertiser is already
-							// abandoned. Either way the report cannot be
-							// reassembled and its tail must not be delivered.
-							BtExtAdvDroppedMark(r->AddrType, r->Addr, r->AdvSid);
-						}
-					}
-					else if (dataStatus == 0)
-					{
-						// Complete. Deliver the reassembled AD if this terminates
-						// a multi-fragment report, otherwise deliver directly.
-						if (ctx != nullptr)
-						{
-							if ((uint32_t)ctx->Len + r->DataLen <= BT_EXT_ADV_REASSEMBLY_MAX)
-							{
-								memcpy(ctx->Buf + ctx->Len, r->Data, r->DataLen);
-								ctx->Len = (uint16_t)(ctx->Len + r->DataLen);
-								if (pDev->ScanReport)
-								{
-									pDev->ScanReport(r->Rssi, r->AddrType, r->Addr, ctx->Len, ctx->Buf);
-								}
-							}
-							ctx->Active = false;
-						}
-						else
-						{
-							// No context. Either this is a standalone complete
-							// report, or it is the tail of a reassembly that was
-							// abandoned, which looks identical on the wire.
-							// Delivering the second case hands the application a
-							// truncated suffix as whole advertising data.
-							BtExtAdvDropped_t *d =
-								BtExtAdvDroppedFind(r->AddrType, r->Addr, r->AdvSid);
-
-							if (d != nullptr)
-							{
-								d->Active = false;
-							}
-							else if (pDev->ScanReport)
-							{
-								pDev->ScanReport(r->Rssi, r->AddrType, r->Addr, r->DataLen, r->Data);
-							}
-						}
-					}
-					else
-					{
-						// Truncated (2) or reserved (3): no more data is coming
-						// and the report is incomplete. Drop any partial state
-						// and do not deliver a partial report as if complete.
-						if (ctx != nullptr)
-						{
-							ctx->Active = false;
-						}
-					}
-
-					cur += 24 + r->DataLen;
-				}
+				s_BtHciExtAdvReport(pDev, pLeEvtPkt, evtEnd);
 			}
 			break;
 		// Periodic advertising sync. The parsing, the report reassembly and

@@ -292,6 +292,9 @@ static const BtHciSmpHandler_t s_TestSmpHandler = {
 int main()
 {
 	BtHciSmpHandlerSet(&s_TestSmpHandler);
+	// Advertising reports are parsed only once scanning is in use, which is
+	// what BtAppScanInit tells the host.
+	BtHciScanReportEnable();
 
 	s_Test.Run("completed-packet count boundary",
 			   TestCompletedEventNeedsCountByte);
