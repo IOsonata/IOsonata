@@ -435,7 +435,25 @@ uint8_t BtHciCmdSdc(BtHciDevice_t * const pDev, uint16_t OpCode, const void *pPa
 // advertising grows what sdc_cfg_set asks for, and the check below reports the
 // number it wants when this is too small, so a device that turns the feature on
 // finds out here rather than on air.
-alignas(8) static uint8_t s_BtStackSdcMemPool[10000];
+//
+// What the controller needs depends on the role and the link counts: a
+// broadcaster needs about a tenth of this default, a central with several
+// links needs more. The application sizes it by defining its own
+// g_BtHciCtlrMemPool, in which case this default is not linked.
+// BtHciCtlrMemPoolSizeNeeded reports the size the configuration asked for.
+alignas(8) static uint8_t s_BtStackSdcMemPool[BT_HCI_CTLR_MEMPOOL_DEFAULT_SIZE];
+
+extern "C" __attribute__((weak)) const BtHciCtlrMemPool_t g_BtHciCtlrMemPool = {
+	s_BtStackSdcMemPool, sizeof(s_BtStackSdcMemPool)
+};
+
+// Pool size the last controller configuration asked for
+static int32_t s_BtStackSdcMemNeeded = 0;
+
+int32_t BtHciCtlrMemPoolSizeNeeded(void)
+{
+	return s_BtStackSdcMemNeeded;
+}
 
 static void BtStackSdcAssert(const char * file, const uint32_t line)
 {
@@ -635,7 +653,10 @@ bool BtHciCtlrStart(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 	if (pCfg->Role & (BT_GAP_ROLE_PERIPHERAL | BT_GAP_ROLE_BROADCASTER))
 	{
 		// Config for peripheral role
-		cfg.peripheral_count.count = pCfg->CentralDevMax;
+		// A broadcaster that is not also a peripheral never has a link, so
+		// no link memory is reserved for it.
+		cfg.peripheral_count.count = (pCfg->Role & BT_GAP_ROLE_PERIPHERAL) ?
+									 pCfg->CentralDevMax : 0;
 
 		ram = sdc_cfg_set(SDC_DEFAULT_RESOURCE_CFG_TAG,
 					       	  SDC_CFG_TYPE_PERIPHERAL_COUNT,
@@ -812,11 +833,16 @@ bool BtHciCtlrStart(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 	// sdc_cfg_set. It is non-negative here because every call was checked, but
 	// compare as a signed value so a negative one cannot convert to a huge
 	// unsigned and pass.
-	if ((int32_t)sizeof(s_BtStackSdcMemPool) < ram)
+	s_BtStackSdcMemNeeded = ram;
+
+	if (g_BtHciCtlrMemPool.pMem == nullptr ||
+		((uintptr_t)g_BtHciCtlrMemPool.pMem & 7U) != 0 ||
+		(int32_t)g_BtHciCtlrMemPool.Size < ram)
 	{
+		// Missing, not aligned on 8 bytes, or too small
 		BtHciCtlrErrorSet(BT_HCI_CTLR_ERROR_MEM_POOL, ram);
 		DEBUG_PRINTF("sdc mem pool too small: have %d need %d\r\n",
-					 (int)sizeof(s_BtStackSdcMemPool), (int)ram);
+					 (int)g_BtHciCtlrMemPool.Size, (int)ram);
 
 		return false;
 	}
@@ -837,7 +863,7 @@ bool BtHciCtlrStart(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 
 	DEBUG_PRINTF("sdc_enable\r\n");
 
-	res = sdc_enable(BtStackSdcCB, s_BtStackSdcMemPool);
+	res = sdc_enable(BtStackSdcCB, g_BtHciCtlrMemPool.pMem);
 	if (res != 0)
 	{
 		BtHciCtlrErrorSet(BT_HCI_CTLR_ERROR_CTLR_ENABLE, (int32_t)res);

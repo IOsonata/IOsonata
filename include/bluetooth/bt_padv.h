@@ -180,7 +180,7 @@ bool BtPadvDataRefresh(uint8_t AdvHdl);
  * @brief	Start the periodic advertising train
  *
  * The train does not reach the air until the advertising set itself is
- * enabled, which is what BtAppAdvStart does.
+ * enabled, which is what BtAdvStart does.
  *
  * @param	AdvHdl	: Advertising set the train is on
  *

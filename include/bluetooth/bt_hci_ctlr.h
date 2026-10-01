@@ -134,6 +134,37 @@ extern "C" {
  */
 bool BtHciCtlrInit(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg);
 size_t BtHciCtlrSdcSend(void *pData, size_t Len);
+
+/// Size in bytes of the library default controller memory pool
+#define BT_HCI_CTLR_MEMPOOL_DEFAULT_SIZE		10000
+
+/// Controller memory pool descriptor
+typedef struct __Bt_Hci_Ctlr_Mem_Pool {
+	uint8_t *pMem;			//!< Pool storage, aligned on 8 bytes
+	size_t Size;			//!< Total pMem length in bytes
+} BtHciCtlrMemPool_t;
+
+/// Memory pool the controller carves its configuration out of. The library
+/// defines a weak default of BT_HCI_CTLR_MEMPOOL_DEFAULT_SIZE bytes. What a
+/// controller needs depends on the role and the number of links, so an
+/// application sizes it by defining its own
+///
+///   alignas(8) static uint8_t s_CtlrMem[MY_SIZE];
+///   const BtHciCtlrMemPool_t g_BtHciCtlrMemPool = { s_CtlrMem, sizeof(s_CtlrMem) };
+///
+/// in which case the library default pool is not linked. BtAppInit fails when
+/// the pool is too small. BtHciCtlrMemPoolSizeNeeded gives the size to use.
+extern const BtHciCtlrMemPool_t g_BtHciCtlrMemPool;
+
+/**
+ * @brief	Pool size the controller configuration asked for.
+ *
+ * Valid once the controller has been configured (BtAppInit), whether or not
+ * the pool was large enough.
+ *
+ * @return	Size in bytes, 0 before configuration
+ */
+int32_t BtHciCtlrMemPoolSizeNeeded(void);
 uint8_t BtHciCmdSdc(BtHciDevice_t * const pDev, uint16_t OpCode, const void *pParam, uint8_t ParamLen, void *pRet, uint8_t RetLen);
 
 /**

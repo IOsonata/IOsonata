@@ -48,6 +48,7 @@ SOFTWARE.
 #include "bluetooth/bt_app.h"
 #include "bluetooth/bt_hci.h"
 #include "bluetooth/bt_padv.h"
+#include "bluetooth/bt_psync.h"
 
 /******** For DEBUG Trace ************/
 // Define DEBUG_ENABLE to turn on trace for this file. Output goes to the
@@ -172,6 +173,14 @@ bool BtPadvInit(const BtPadvCfg_t * const pCfg)
 	{
 		return false;
 	}
+
+	// The HCI host delivers the subevent data request and the response report
+	// through this table only, so they are linked with periodic advertising.
+	static const BtHciPadvRspHandler_t s_PadvRspHciHandler = {
+		.DataRequest = BtPsyncEvtDataRequest,
+		.ResponseReport = BtPsyncEvtResponseReport,
+	};
+	BtHciPadvRspHandlerSet(&s_PadvRspHciHandler);
 
 	// Vol 4 Part E 7.8.61 gives both intervals a range of 0x0006 to 0xFFFF and
 	// requires min to be at most max. A controller answers a violation with

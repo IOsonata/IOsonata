@@ -91,6 +91,31 @@ typedef struct __Bt_Hci_Reassembly {
 
 static BtHciReasm_t s_BtHciReasm[BT_L2CAP_REASSEMBLY_COUNT];
 
+// SMP entry points, registered by BtSmpInit. NULL when the application does
+// not use security: the host then holds no reference to the SMP module.
+static const BtHciSmpHandler_t *s_pBtHciSmp = nullptr;
+
+void BtHciSmpHandlerSet(const BtHciSmpHandler_t *pHandler)
+{
+	s_pBtHciSmp = pHandler;
+}
+
+// Periodic sync entry points, registered by BtPsyncCreate, and periodic
+// advertising response entry points, registered by BtPadvInit. NULL when the
+// application uses neither.
+static const BtHciPsyncHandler_t *s_pBtHciPsync = nullptr;
+static const BtHciPadvRspHandler_t *s_pBtHciPadvRsp = nullptr;
+
+void BtHciPsyncHandlerSet(const BtHciPsyncHandler_t *pHandler)
+{
+	s_pBtHciPsync = pHandler;
+}
+
+void BtHciPadvRspHandlerSet(const BtHciPadvRspHandler_t *pHandler)
+{
+	s_pBtHciPadvRsp = pHandler;
+}
+
 // --- Extended advertising report reassembly ----------------------------------
 // A single advertising event can be split across several LE Extended Advertising
 // Report subevents (Data_Status = "incomplete, more data to come"). One context
@@ -298,7 +323,20 @@ void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtP
 					break;
 				}
 				BtHciLeEvtLongtermKeyReq_t *p = (BtHciLeEvtLongtermKeyReq_t*)pLeEvtPkt->Data;
-				BtSmpProcessLtkRequest(pDev, p->ConnHdl, p->RandNumber, p->EncryptDivers);
+				if (s_pBtHciSmp != nullptr)
+				{
+					s_pBtHciSmp->LtkRequest(pDev, p->ConnHdl, p->RandNumber, p->EncryptDivers);
+				}
+				else
+				{
+					// No SMP, no key. The controller waits for an answer,
+					// so the request has to be refused here.
+					uint8_t param[2];
+					param[0] = (uint8_t)(p->ConnHdl & 0xFF);
+					param[1] = (uint8_t)(p->ConnHdl >> 8);
+					BtHciCommand(pDev, BT_HCI_CMD_CTLR_LONGTERM_KEY_REQUEST_NEG_REPLY,
+								 param, sizeof(param), NULL, 0);
+				}
 			}
 			break;
 		case BT_HCI_EVT_LE_REMOTE_CONN_PARAM_RQST:
@@ -333,7 +371,10 @@ void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtP
 				}
 				BtHciLeEvtReadLocalP256PubKeyComplete_t *p =
 						(BtHciLeEvtReadLocalP256PubKeyComplete_t*)pLeEvtPkt->Data;
-				BtSmpLocalPubKeyReady(pDev, p->Status, p->KeyXCoord, p->KeyYCoord);
+				if (s_pBtHciSmp != nullptr)
+				{
+					s_pBtHciSmp->LocalPubKeyReady(pDev, p->Status, p->KeyXCoord, p->KeyYCoord);
+				}
 			}
 			break;
 		case BT_HCI_EVT_LE_GENERATE_DHKEY_COMPLETE:
@@ -344,7 +385,10 @@ void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtP
 				}
 				BtHciLeEvtGenerateDHKeyComplete_t *p =
 						(BtHciLeEvtGenerateDHKeyComplete_t*)pLeEvtPkt->Data;
-				BtSmpDhKeyReady(pDev, p->Status, p->DHKey);
+				if (s_pBtHciSmp != nullptr)
+				{
+					s_pBtHciSmp->DhKeyReady(pDev, p->Status, p->DHKey);
+				}
 			}
 			break;
 		case BT_HCI_EVT_LE_ENHANCED_CONN_COMPLETE_V1:
@@ -513,21 +557,32 @@ void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtP
 		// which version of the event arrived. The V2 forms carry extra fields
 		// and, for the report, carry them in the middle rather than at the
 		// end, so the version cannot be inferred from the length.
+		// They are reached through the table BtPsyncCreate registers: these
+		// events only exist once the application has created a sync.
 		case BT_HCI_EVT_LE_PERIODIC_ADV_SYNC_ESTABLISHED_V1:
 		case BT_HCI_EVT_LE_PERIODIC_ADV_SYNC_ESTABLISHED_V2:
-			BtPsyncEvtEstablished(pLeEvtPkt->Data,
-				(int)(evtEnd - (const uint8_t*)pLeEvtPkt->Data),
-				pLeEvtPkt->Evt == BT_HCI_EVT_LE_PERIODIC_ADV_SYNC_ESTABLISHED_V2);
+			if (s_pBtHciPsync != nullptr)
+			{
+				s_pBtHciPsync->Established(pLeEvtPkt->Data,
+					(int)(evtEnd - (const uint8_t*)pLeEvtPkt->Data),
+					pLeEvtPkt->Evt == BT_HCI_EVT_LE_PERIODIC_ADV_SYNC_ESTABLISHED_V2);
+			}
 			break;
 		case BT_HCI_EVT_LE_PERIODIC_ADV_REPORT_V1:
 		case BT_HCI_EVT_LE_PERIODIC_ADV_REPORT_V2:
-			BtPsyncEvtReport(pLeEvtPkt->Data,
-				(int)(evtEnd - (const uint8_t*)pLeEvtPkt->Data),
-				pLeEvtPkt->Evt == BT_HCI_EVT_LE_PERIODIC_ADV_REPORT_V2);
+			if (s_pBtHciPsync != nullptr)
+			{
+				s_pBtHciPsync->Report(pLeEvtPkt->Data,
+					(int)(evtEnd - (const uint8_t*)pLeEvtPkt->Data),
+					pLeEvtPkt->Evt == BT_HCI_EVT_LE_PERIODIC_ADV_REPORT_V2);
+			}
 			break;
 		case BT_HCI_EVT_LE_PERIODIC_ADV_SYNC_LOST:
-			BtPsyncEvtLost(pLeEvtPkt->Data,
-				(int)(evtEnd - (const uint8_t*)pLeEvtPkt->Data));
+			if (s_pBtHciPsync != nullptr)
+			{
+				s_pBtHciPsync->Lost(pLeEvtPkt->Data,
+					(int)(evtEnd - (const uint8_t*)pLeEvtPkt->Data));
+			}
 			break;
 		case BT_HCI_EVT_LE_SCAN_TIMEOUT:
 			break;
@@ -603,13 +658,20 @@ void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtP
 		// Periodic Advertising with Responses. The data request goes to the
 		// advertiser and the response report to the device that advertised
 		// the subevent, so both belong to a train this device transmits.
+		// Reached through the table BtPadvInit registers.
 		case BT_HCI_EVT_LE_PERIODIC_ADV_DATA_REQ:
-			BtPsyncEvtDataRequest(pLeEvtPkt->Data,
-				(int)(evtEnd - (const uint8_t*)pLeEvtPkt->Data));
+			if (s_pBtHciPadvRsp != nullptr)
+			{
+				s_pBtHciPadvRsp->DataRequest(pLeEvtPkt->Data,
+					(int)(evtEnd - (const uint8_t*)pLeEvtPkt->Data));
+			}
 			break;
 		case BT_HCI_EVT_LE_PERIODIC_ADV_RESP_REPORT:
-			BtPsyncEvtResponseReport(pLeEvtPkt->Data,
-				(int)(evtEnd - (const uint8_t*)pLeEvtPkt->Data));
+			if (s_pBtHciPadvRsp != nullptr)
+			{
+				s_pBtHciPadvRsp->ResponseReport(pLeEvtPkt->Data,
+					(int)(evtEnd - (const uint8_t*)pLeEvtPkt->Data));
+			}
 			break;
 	}
 }
@@ -881,7 +943,10 @@ void BtHciProcessEvent(BtHciDevice_t *pDev, BtHciEvtPacket_t *pEvtPkt)
 				// as connection handles change, and stale pairing/lockout state
 				// and crypto-engine ownership survive the disconnect. Idempotent
 				// - a port whose callback already called it sees a no-op.
-				BtSmpDisconnected(p->ConnHdl);
+				if (s_pBtHciSmp != nullptr)
+				{
+					s_pBtHciSmp->Disconnected(p->ConnHdl);
+				}
 
 				BtHciReasmReset(p->ConnHdl);
 			}
@@ -902,7 +967,10 @@ void BtHciProcessEvent(BtHciDevice_t *pDev, BtHciEvtPacket_t *pEvtPkt)
 				uint8_t  status  = pEvtPkt->Data[0];
 				uint16_t connHdl = pEvtPkt->Data[1] | (pEvtPkt->Data[2] << 8);
 				uint8_t  enabled = pEvtPkt->Data[3];
-				BtSmpEncryptionChanged(pDev, connHdl, status, enabled);
+				if (s_pBtHciSmp != nullptr)
+				{
+					s_pBtHciSmp->EncryptionChanged(pDev, connHdl, status, enabled);
+				}
 			}
 			break;
 		case BT_HCI_EVT_CHANGE_CONN_LINK_KEY_COMPLETE:
@@ -1373,7 +1441,31 @@ void BtHciProcessData(BtHciDevice_t * const pDev, BtHciACLDataPacket_t * const p
 		}
 			break;
 		case BT_L2CAP_CID_SEC_MNGR:
-			BtProcessSmpData(pDev, pPkt->Hdr.ConnHdl, &l2rcv->Smp, l2rcv->Hdr.Len);
+			if (s_pBtHciSmp != nullptr)
+			{
+				s_pBtHciSmp->Data(pDev, pPkt->Hdr.ConnHdl, &l2rcv->Smp, l2rcv->Hdr.Len);
+			}
+			else if (l2rcv->Hdr.Len >= 1 &&
+					 (l2rcv->Smp.Code == BT_SMP_CODE_PAIRING_REQ ||
+					  l2rcv->Smp.Code == BT_SMP_CODE_PAIRING_SECURITY_REQ))
+			{
+				// SMP is not part of this build. Refuse the pairing now, the
+				// peer would otherwise wait for the SMP timeout. Only a
+				// request is answered, never a Pairing Failed.
+				uint8_t buf[sizeof(BtHciACLDataPacketHdr_t) + sizeof(BtL2CapHdr_t) + 2];
+				BtHciACLDataPacket_t *acl = (BtHciACLDataPacket_t*)buf;
+				BtL2CapPdu_t *l2pdu = (BtL2CapPdu_t*)acl->Data;
+
+				acl->Hdr.ConnHdl = pPkt->Hdr.ConnHdl;
+				acl->Hdr.PBFlag = BT_HCI_PBFLAG_START_NONFLUSHABLE;
+				acl->Hdr.BCFlag = 0;
+				l2pdu->Hdr.Cid = BT_L2CAP_CID_SEC_MNGR;
+				l2pdu->Hdr.Len = 2;
+				l2pdu->Smp.Code = BT_SMP_CODE_PAIRING_FAILED;
+				l2pdu->Smp.Data[0] = BT_SMP_ERR_PAIRING_NOT_SUPPORTED;
+				acl->Hdr.Len = (uint16_t)(2 + sizeof(BtL2CapHdr_t));
+				BtHciSendAcl(pDev, acl);
+			}
 			break;
 	}
 //	DEBUG_PRINTF("-----\r\n");

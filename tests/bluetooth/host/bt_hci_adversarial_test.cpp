@@ -278,8 +278,21 @@ int SysLogPrintf(SysLog_t * const, const char *, ...)
 
 } // extern "C"
 
+// The host reaches SMP only through the table BtSmpInit registers. This
+// test stands in for SMP, so it registers its own entry points.
+static const BtHciSmpHandler_t s_TestSmpHandler = {
+	.Data = BtProcessSmpData,
+	.LtkRequest = BtSmpProcessLtkRequest,
+	.LocalPubKeyReady = BtSmpLocalPubKeyReady,
+	.DhKeyReady = BtSmpDhKeyReady,
+	.EncryptionChanged = BtSmpEncryptionChanged,
+	.Disconnected = BtSmpDisconnected,
+};
+
 int main()
 {
+	BtHciSmpHandlerSet(&s_TestSmpHandler);
+
 	s_Test.Run("completed-packet count boundary",
 			   TestCompletedEventNeedsCountByte);
 	s_Test.Run("legacy advertising count boundary",

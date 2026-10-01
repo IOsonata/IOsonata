@@ -56,14 +56,7 @@ SOFTWARE.
 #include "bluetooth/bt_adv.h"		// BtAdvOwnAddrGet for the connection stamp
 #include "bluetooth/bt_ead.h"		// Encrypted Advertising Data engines
 
-#include "crypto/crypto_uecc.h"
 #include "crypto_rng_nrf.h"
-#if defined(NRF54L15_XXAA) || defined(NRF54H20_XXAA)
-#include "cracen_intrf.h"
-#include "crypto/ba414ep.h"
-#elif defined(NRF52840_XXAA)
-#include "crypto_cc3xx.h"
-#endif
 #include "bluetooth/bt_hci.h"
 #include "bluetooth/bt_hcievt.h"
 #include "bluetooth/bt_l2cap.h"
@@ -72,7 +65,6 @@ SOFTWARE.
 #include "bluetooth/services/bt_dis.h"
 #include "bluetooth/bt_appearance.h"
 #include "bluetooth/bt_hci_ctlr.h"
-#include "bluetooth/bt_pds.h"		// BtSmpBondNvmInit (bond persistence on an Nvm)
 #include "nrf_mpsl.h"
 #include "iopinctrl.h"
 #include "app_evt_handler.h"
@@ -179,20 +171,6 @@ void BtSmpLocalAddrGet(uint8_t *pType, uint8_t pAddr[6])
 	memcpy(pAddr, s_BtSmpLocalAddr, 6);
 }
 
-// Surface a secured link (fresh pairing or bonded reconnect) to the application.
-// The generic SMP engine calls this on every successful encryption; translate it
-// to the port-neutral BtAppEvtSecured hook the example gates discovery on.
-// Declared in bt_smp.h, so no linkage specifier is needed here.
-void BtSmpPairingComplete(uint16_t ConnHdl, bool Success,
-						  const BtSmpKeys_t *pKeys)
-{
-	(void)pKeys;
-	if (Success)
-	{
-		BtAppEvtSecured(ConnHdl);
-	}
-}
-
 // Route each HCI packet the controller drains to the host process entry.
 static void BtAppSdcCtlrRx(BtHciCtlrDev_t * const pDev, bool bIsEvent, uint8_t *pPacket)
 {
@@ -248,10 +226,14 @@ static void BtAppSdcTimerHandler(TimerDev_t *pTimer, uint32_t Evt)
 {
     if (Evt & TIMER_EVT_TRIGGER(0))
     {
-        // Drive the generic transaction timeouts (Core Vol 3 Part H 3.4,
-        // Part F 3.3.3). Both are cheap no-ops when nothing is pending.
-        BtSmpTimeoutCheck();
+        // Drive the generic indication transaction timeout (Core Vol 3
+        // Part F 3.3.3). Cheap no-op when nothing is pending.
         BtGattIndicationTimeoutCheck();
+
+        // Wake the main loop once per period. The pairing timeout (Core
+        // Vol 3 Part H 3.4) is checked there by the security module, as an
+        // idle handler, when the application uses security.
+        BtAppEvtNotify();
     }
 }
 
@@ -312,33 +294,9 @@ void BtAppConnected(uint16_t ConnHdl, uint8_t Role, uint8_t PeerAddrType, uint8_
 		//BtAppDiscoverDevice(&s_BtHciDev, ConnHdl);
 	}
 
-	// If a secure SecType was configured, secure the link. As the central we
-	// initiate pairing (or re-encrypt from a bond); as the peripheral we send a
-	// Security Request. Host-driven SMP, internal so the application stays
-	// SDK-neutral - it does not call any stack-specific function.
-	// Which procedure to run is decided by this link's role, not by the
-	// device's configured role bitmask: a device built for both roles has
-	// both bits set, so the bitmask cannot say what this connection is. The
-	// central starts pairing; the peripheral asks the central to secure the
-	// link with a Security Request (Vol 3 Part H 2.4.6, 3.5.1).
-	if (g_BtAppData.AppDevice.bSecure)
-	{
-		switch (Role)
-		{
-			case BT_CONN_ROLE_CENTRAL:
-				BtSmpStartPairing(ConnHdl);
-				break;
-
-			case BT_CONN_ROLE_PERIPHERAL:
-				BtSmpRequestSecurity(ConnHdl);
-				break;
-
-			default:
-				// Role not reported: starting the wrong procedure would be
-				// rejected by the peer, so start neither.
-				break;
-		}
-	}
+	// If a secure SecType was configured, the link is secured by the security
+	// module (bt_sec_sdc.cpp), which hooks the connection callback when the
+	// application starts it with BtAppSecInit.
 
 	BtAppEvtConnected(ConnHdl);
 }
@@ -392,7 +350,7 @@ void BtAppDisconnected(uint16_t ConnHdl, uint8_t Reason)
 	if (bConnected == false &&
 		(g_BtAppData.AppDevice.Conn.Role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER)))
 	{
-		BtAppAdvStart();
+		BtAdvStart();
 	}
 }
 
@@ -603,6 +561,11 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 
 	g_BtAppData.AppDevice.Conn.Role = pCfg->Role;
 	g_BtAppData.AppDevice.pHciDev = &s_BtHciDev;		// host used by the HCI operation layer (bt_adv_hci etc.)
+	// Kept for BtAppSecInit, which the application calls from
+	// BtAppInitUserData when it uses security.
+	g_BtAppData.SecType = pCfg->SecType;
+	g_BtAppData.SecExchg = pCfg->SecExchg;
+	g_BtAppData.bSecInit = false;
 	DEBUG_PRINTF("g_BtAppData.AppDevice.Conn.Role = %d\r\n", g_BtAppData.AppDevice.Conn.Role);
 
 	g_BtAppData.bScan = false;
@@ -723,153 +686,15 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 		return false;
 	}
 
-	// The SDC path owns its SMP crypto: P-256 ECDH and the BLE controller
-	// (HCI LE Encrypt) for AES. These are internal to this path - the
-	// application does not supply or see them; it only requests security via
-	// SecType. Randomness comes from the Nordic hardware RNG.
-	//
-	// The SDC runs on several families with different P-256 hardware, selected
-	// at compile time:
-	//   nRF54L15 / nRF54H20 : CRACEN            -> Ba414ep (hardware)
-	//   nRF52840            : CryptoCell CC310  -> CryptoCc3xx (hardware)
-	//   nRF52832            : no accelerator    -> CryptoUecc (software)
-	//   nRF5340 (net core)  : CC312 is on the app core secure domain, not
-	//                         reachable from the network core -> CryptoUecc
-	// The controller supplies AES-128 ECB through the HCI LE Encrypt path
-	// (CryptoCtlrSdc). SMP composes the ECDH engine and the AES engine.
-	KeyAgreeEngine *pEcdh = nullptr;
-#if defined(NRF54L15_XXAA) || defined(NRF54H20_XXAA)
-	static Ba414ep s_Ecdh;								// CRACEN engine object
-	if (s_Ecdh.Init(CracenIntrfInstance(), CryptoRngNrfInstance()))
-	{
-		pEcdh = &s_Ecdh;
-		DEBUG_PRINTF("Crypto ECDH engine: Ba414ep (CRACEN hardware P-256)\r\n");
-	}
-#elif defined(NRF52840_XXAA)
-	alignas(CryptoCc3xx) static uint8_t s_CryptoEcdhMem[CRYPTO_CC3XX_MEMSIZE];
-	pEcdh = CryptoCc3xxCreate(s_CryptoEcdhMem, sizeof(s_CryptoEcdhMem),
-							 CryptoRngNrfInstance());
-	if (pEcdh != nullptr)
-	{
-		DEBUG_PRINTF("Crypto ECDH engine: CryptoCc3xx (CC310 hardware P-256)\r\n");
-	}
-#else
-	alignas(uint64_t) static uint8_t s_CryptoEcdhMem[CRYPTO_UECC_MEMSIZE];
-	pEcdh = CryptoUeccCreate(s_CryptoEcdhMem, sizeof(s_CryptoEcdhMem),
-							 CryptoRngNrfInstance());
-	if (pEcdh != nullptr)
-	{
-		DEBUG_PRINTF("Crypto ECDH engine: CryptoUecc (software P-256)\r\n");
-	}
-#endif
-	if (pEcdh == nullptr)
-	{
-		// No P-256 engine came up. LE Secure Connections pairing cannot run:
-		// SmpLocalKeyGen fails and SMP answers every pairing with
-		// BT_SMP_ERR_UNSPECIFIED. Say so here rather than at the first pairing.
-		DEBUG_PRINTF("Crypto ECDH engine MISSING, LESC pairing will fail\r\n");
-	}
-
-	CipherEngine *pAes = BtCryptoCtlrSdcInit();
-	if (!BtSmpInit(pEcdh, pAes, CryptoRngNrfInstance()))
-	{
-		// A mandatory crypto provider (ECDH, AES or secure RNG) is missing or
-		// unsuitable. Secure Connections pairing cannot run; fail init here
-		// rather than at the first pairing attempt.
-		DEBUG_PRINTF("BtAppInit: BtSmpInit rejected a crypto provider\r\n");
-		return false;
-	}
-
-	// Verify the SMP crypto toolbox against the specification sample data
-	// before any pairing can run. These exercise the AES-CMAC based SC
-	// functions (f4) and the legacy c1/s1 confirm functions, plus the RPA and
-	// signing helpers, catching a byte-order or AES engine fault at startup
-	// rather than as a confirm mismatch against a peer. A failure here means
-	// the composed AES engine is wrong; refuse to continue.
-	if (BtSmpF4SelfTest() != 0 || BtSmpC1S1SelfTest() != 0 ||
-		BtSmpRpaSelfTest() != 0 || BtSmpSignSelfTest() != 0)
-	{
-		DEBUG_PRINTF("BtAppInit: SMP crypto self-test FAILED\r\n");
-		return false;
-	}
-
 	// Encrypted Advertising Data draws on the same AES engine and the same
 	// hardware RNG. Binding them here rather than leaving it to the
 	// application means an application that installs key material with
 	// BtAdvEadKeySet advertises encrypted, instead of having every packet
 	// refused for a missing engine at the point it is about to go on air.
 	// Nothing is encrypted until key material is installed.
-	if (BtEadInit(pAes, CryptoRngNrfInstance()) == false)
+	if (BtEadInit(BtCryptoCtlrSdcInit(), CryptoRngNrfInstance()) == false)
 	{
 		DEBUG_PRINTF("BtAppInit: EAD engines unavailable\r\n");
-	}
-
-	// Translate the application security configuration into the SMP IO
-	// capability, authentication requirements and association-model callbacks.
-	// SecExchg selects the IO capability; SecType selects bonding and MITM. The
-	// Secure Connections bit is forced inside BtSmpAuthConfig.
-	uint8_t smpIoCaps;
-	if ((pCfg->SecExchg & BTAPP_SECEXCHG_KEYBOARD) &&
-		(pCfg->SecExchg & BTAPP_SECEXCHG_DISPLAY))
-	{
-		smpIoCaps = BT_SMP_IOCAPS_KEYBOARD_DISPLAY;
-	}
-	else if ((pCfg->SecExchg & BTAPP_SECEXCHG_DISPLAY) &&
-			 (pCfg->SecExchg & BTAPP_SECEXCHG_YESNO))
-	{
-		smpIoCaps = BT_SMP_IOCAPS_DISPLAY_YESNO;
-	}
-	else if (pCfg->SecExchg & BTAPP_SECEXCHG_KEYBOARD)
-	{
-		smpIoCaps = BT_SMP_IOCAPS_KEYBOARD_ONLY;
-	}
-	else if (pCfg->SecExchg & BTAPP_SECEXCHG_DISPLAY)
-	{
-		smpIoCaps = BT_SMP_IOCAPS_DISPLAY_ONLY;
-	}
-	else
-	{
-		smpIoCaps = BT_SMP_IOCAPS_NO_INPUT_NO_OUTPUT;
-	}
-
-	uint8_t smpAuthReq = 0;
-	if (pCfg->SecType != BTGAP_SECTYPE_NONE)
-	{
-		smpAuthReq |= BT_SMP_AUTHREQ_BONDING_FLAG_BONDING;
-	}
-	if (pCfg->SecType == BTGAP_SECTYPE_STATICKEY_MITM ||
-		pCfg->SecType == BTGAP_SECTYPE_LESC_MITM ||
-		pCfg->SecType == BTGAP_SECTYPE_SIGNED_MITM)
-	{
-		smpAuthReq |= BT_SMP_AUTHREQ_MITM;
-	}
-
-	BtSmpAuthConfig(smpIoCaps, smpAuthReq);
-
-	// Record whether security was requested, so the connected handler can
-	// initiate it. Internal to this path - mirrors the SoftDevice implementation.
-	g_BtAppData.AppDevice.bSecure = (pCfg->SecType != BTGAP_SECTYPE_NONE);
-
-	// Bring up flash-backed bond persistence when security is enabled. This is
-	// internal to this path: it loads any stored bonds into the SMP bond table and
-	// links the strong BtSmpBondSave/Load/Erase overrides. The application does
-	// not call it - persistence follows from the configured SecType.
-	if (g_BtAppData.AppDevice.bSecure)
-	{
-		// This path stores bonds through bt_pds on Nvm, not through the nRF5
-		// SDK peer_manager and fstorage. Printed so a persistence problem is
-		// not chased in the wrong layer.
-		STORE_PRINTF("STORE: bt_pds -> Nvm (SDC, no fstorage)\r\n");
-		int storeRes = BtSmpBondNvmInit();
-		if (storeRes < 0)
-		{
-			STORE_PRINTF("STORE: bt_pds init failed: %d\r\n", storeRes);
-			return false;
-		}
-	}
-	else
-	{
-		STORE_PRINTF("STORE: none, bSecure is 0 so bonds stay in RAM\r\n");
 	}
 
 	if (pCfg->Role & BTAPP_ROLE_PERIPHERAL)
@@ -892,6 +717,21 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 	}
 
 	BtAppInitUserData();
+
+	// The security module (SMP, its ECDH engine and the bond store) is linked
+	// and started only when the application calls BtAppSecInit, normally from
+	// BtAppInitUserData above. A configuration that asks for security without
+	// starting it must not run unprotected.
+	if (pCfg->SecType != BTGAP_SECTYPE_NONE && g_BtAppData.bSecInit == false)
+	{
+		STORE_PRINTF("BtAppInit FAIL: SecType=%d but BtAppSecInit was not called\r\n",
+					 (int)pCfg->SecType);
+		return false;
+	}
+
+	// Record whether security was requested. The security module secures
+	// each new link when this is set.
+	g_BtAppData.AppDevice.bSecure = (pCfg->SecType != BTGAP_SECTYPE_NONE);
 
     if (pCfg->Role & (BTAPP_ROLE_BROADCASTER | BTAPP_ROLE_PERIPHERAL))
     {
@@ -975,7 +815,7 @@ void BtAppRun()
 
 	if (g_BtAppData.AppDevice.Conn.Role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER))
 	{
-		BtAppAdvStart();
+		BtAdvStart();
 	}
 
 DEBUG_PRINTF("Loop\r\n");

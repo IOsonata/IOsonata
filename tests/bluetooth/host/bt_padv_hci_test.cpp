@@ -13,6 +13,25 @@
 #include "bluetooth/bt_app.h"
 #include "bluetooth/bt_hci.h"
 #include "bluetooth/bt_padv.h"
+#include "bluetooth/bt_psync.h"
+
+// The HCI host and bt_psync.cpp are not part of this test. BtPadvInit
+// registers the response entry points with the host, so the registration and
+// the two entry points land here.
+static const BtHciPadvRspHandler_t *s_pPadvRspHandler = nullptr;
+
+void BtHciPadvRspHandlerSet(const BtHciPadvRspHandler_t *pHandler)
+{
+	s_pPadvRspHandler = pHandler;
+}
+
+void BtPsyncEvtDataRequest(const uint8_t *, int)
+{
+}
+
+void BtPsyncEvtResponseReport(const uint8_t *, int)
+{
+}
 
 // bt_app.cpp is not linked here. It brings the whole application state machine
 // in for one field, the HCI device the command helper reaches the controller
@@ -216,6 +235,14 @@ void TestIntervalRangeRefusedBeforeTheCommand(void)
 	cfg.IntervalMax = BTPADV_INTERVAL_MAX;
 	CHECK(BtPadvInit(&cfg));
 	CHECK(CountCmd(BT_HCI_CMD_CTLR_SET_PERIODIC_ADV_PARAM) == 1);
+
+	// BtPadvInit hands the response entry points to the host.
+	CHECK(s_pPadvRspHandler != nullptr);
+	if (s_pPadvRspHandler != nullptr)
+	{
+		CHECK(s_pPadvRspHandler->DataRequest == BtPsyncEvtDataRequest);
+		CHECK(s_pPadvRspHandler->ResponseReport == BtPsyncEvtResponseReport);
+	}
 }
 
 // A refused command is reported as a failure. What the controller does with

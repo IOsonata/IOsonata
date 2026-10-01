@@ -266,6 +266,23 @@ void BtPsyncEvtEstablished(const uint8_t *pData, int Len, bool bV2);
 void BtPsyncEvtReport(const uint8_t *pData, int Len, bool bV2);
 void BtPsyncEvtLost(const uint8_t *pData, int Len);
 
+/// Periodic sync entry points the HCI host calls. The host reaches them only
+/// through this table, which BtPsyncCreate registers. A build that never
+/// creates a sync does not link the sync event handling and its report
+/// reassembly memory.
+typedef struct __Bt_Hci_Psync_Handler {
+	void (*Established)(const uint8_t *pData, int Len, bool bV2);	//!< LE Periodic Advertising Sync Established event
+	void (*Report)(const uint8_t *pData, int Len, bool bV2);		//!< LE Periodic Advertising Report event
+	void (*Lost)(const uint8_t *pData, int Len);					//!< LE Periodic Advertising Sync Lost event
+} BtHciPsyncHandler_t;
+
+/**
+ * @brief	Register the periodic sync entry points with the HCI host
+ *
+ * @param	pHandler	: Pointer to the handler table, NULL to remove it
+ */
+void BtHciPsyncHandlerSet(const BtHciPsyncHandler_t *pHandler);
+
 /**
  * @brief	Drop any partial report held for a train
  *
@@ -400,6 +417,22 @@ void BtPsyncEvtDataRequest(const uint8_t *pData, int Len);
  * @param	Len		: Payload length
  */
 void BtPsyncEvtResponseReport(const uint8_t *pData, int Len);
+
+/// Periodic advertising with responses entry points the HCI host calls, for
+/// a train this device transmits. Registered by BtPadvInit, so a build that
+/// does not advertise periodically does not link them.
+typedef struct __Bt_Hci_Padv_Rsp_Handler {
+	void (*DataRequest)(const uint8_t *pData, int Len);		//!< LE Periodic Advertising Subevent Data Request event
+	void (*ResponseReport)(const uint8_t *pData, int Len);	//!< LE Periodic Advertising Response Report event
+} BtHciPadvRspHandler_t;
+
+/**
+ * @brief	Register the periodic advertising response entry points with the
+ *			HCI host
+ *
+ * @param	pHandler	: Pointer to the handler table, NULL to remove it
+ */
+void BtHciPadvRspHandlerSet(const BtHciPadvRspHandler_t *pHandler);
 
 #ifdef __cplusplus
 }
