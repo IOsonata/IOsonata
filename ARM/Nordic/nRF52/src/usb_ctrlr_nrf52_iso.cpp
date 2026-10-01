@@ -46,7 +46,9 @@ SOFTWARE.
 #include "usb_ctrlr.h"
 
 static_assert(offsetof(USBD_ISOOUT_Type, MAXCNT) ==
-	offsetof(USBD_ISOIN_Type, MAXCNT), "ISO register layout");
+	offsetof(USBD_ISOIN_Type, MAXCNT) &&
+	offsetof(USBD_ISOOUT_Type, AMOUNT) ==
+	offsetof(USBD_ISOIN_Type, AMOUNT), "ISO register layout");
 
 // Enable explicitly in the library build for bench diagnostics.
 #ifndef NRFUSBD_ISO_TRACE
@@ -172,32 +174,34 @@ uint16_t UsbCtrlrIsoTraceSnapshot(int DevNo, uint8_t **ppData)
 }
 #endif
 
+// END events sit at their INTEN bit position from USBRESET; INTENCLR follows
+// INTENSET and EPOUTEN follows EPINEN.
+static_assert(offsetof(NRF_USBD_Type, EVENTS_ENDISOIN) -
+	offsetof(NRF_USBD_Type, EVENTS_USBRESET) ==
+	USBD_INTEN_ENDISOIN_Pos * sizeof(uint32_t) &&
+	offsetof(NRF_USBD_Type, EVENTS_ENDISOOUT) -
+	offsetof(NRF_USBD_Type, EVENTS_USBRESET) ==
+	USBD_INTEN_ENDISOOUT_Pos * sizeof(uint32_t) &&
+	offsetof(NRF_USBD_Type, INTENCLR) ==
+	offsetof(NRF_USBD_Type, INTENSET) + sizeof(uint32_t) &&
+	offsetof(NRF_USBD_Type, EPOUTEN) ==
+	offsetof(NRF_USBD_Type, EPINEN) + sizeof(uint32_t), "USBD ISO layout");
+
 static __attribute__((noinline))
 void nRFIsoHwEnable(bool In, bool Enable)
 {
-	volatile uint32_t *pEnd = In ?
-		&NRF_USBD->EVENTS_ENDISOIN : &NRF_USBD->EVENTS_ENDISOOUT;
-	volatile uint32_t *pEnable = In ? &NRF_USBD->EPINEN : &NRF_USBD->EPOUTEN;
+	const uint32_t endBit = In ?
+		USBD_INTEN_ENDISOIN_Pos : USBD_INTEN_ENDISOOUT_Pos;
+	volatile uint32_t *pEnable = &NRF_USBD->EPINEN + !In;
 	const uint32_t msk = 1UL << NRFX_USBD_ISO_EP_NO;
-	const uint32_t endMsk = In ?
-		USBD_INTEN_ENDISOIN_Msk : USBD_INTEN_ENDISOOUT_Msk;
 
-	*pEnd = 0U;
-	if (Enable)
-	{
-		NRF_USBD->INTENSET = endMsk;
-		*pEnable |= msk;
-	}
-	else
-	{
-		NRF_USBD->INTENCLR = endMsk;
-		*pEnable &= ~msk;
-	}
+	(&NRF_USBD->EVENTS_USBRESET)[endBit] = 0U;
+	(&NRF_USBD->INTENSET)[!Enable] = 1UL << endBit;
+	*pEnable = (*pEnable & ~msk) |
+		((uint32_t)Enable << NRFX_USBD_ISO_EP_NO);
 }
 
-
-
-// The shared scheduler already owns the channel lock.
+// The shared scheduler owns the channel lock and has pending ISO work.
 //
 // IN goes first whenever it is ready. The host schedules its periodic
 // transactions at the start of the frame, and the ISOIN buffer answers the
@@ -210,8 +214,6 @@ void nRFIsoHwEnable(bool In, bool Enable)
 bool nRFUsbdIsoStart(void)
 {
 	const uint8_t dataFlag = s_Usbd.IsoDataFlag;
-	if (dataFlag == 0U)
-		return false;
 
 	if ((dataFlag & NRFUSBD_ISO_IN_READY) != 0U)
 	{
@@ -231,7 +233,8 @@ bool nRFUsbdIsoStart(void)
 	const uint16_t len = (size & USBD_SIZE_ISOOUT_ZERO_Msk) != 0U ?
 		0U : (uint16_t)size;
 
-	if (len != 0U && len <= s_Usbd.IsoMaxPacketSize[0])
+	// Unsigned subtraction rejects zero and lengths above the endpoint MPS.
+	if ((uint32_t)len - 1U < s_Usbd.IsoMaxPacketSize[0])
 	{
 		// Ask the owner to submit this frame's destination through EpReceive.
 		// Completion releases the destination before the next interval.
@@ -308,8 +311,10 @@ void nRFUsbdIsoComplete(uint8_t In)
 {
 	const uint8_t flag = In ?
 		NRFUSBD_ISO_IN_READY : NRFUSBD_ISO_OUT_READY;
-	const uint16_t amount = (uint16_t)(In ?
-		NRF_USBD->ISOIN.AMOUNT : NRF_USBD->ISOOUT.AMOUNT);
+	// In is 0 or 1 from the ISR endpoint cases; both banks share the layout.
+	const uintptr_t amountreg = (uintptr_t)&NRF_USBD->ISOOUT.AMOUNT -
+		In * (offsetof(NRF_USBD_Type, ISOOUT) - offsetof(NRF_USBD_Type, ISOIN));
+	const uint16_t amount = (uint16_t)*(volatile uint32_t *)amountreg;
 
 	s_Usbd.IsoDataFlag &= (uint8_t)~flag;
 	if (!In)
@@ -349,7 +354,6 @@ bool UsbCtrlrIsoInit(int DevNo)
 bool UsbCtrlrIsoOpen(int DevNo, uint8_t EpNo, bool bIn,
 	uint16_t MaxPacketSize)
 {
-	(void)DevNo;
 	(void)EpNo;
 	if (MaxPacketSize > NRFX_USBD_ISO_MAX_PACKET_SIZE)
 		return false;
@@ -363,6 +367,11 @@ bool UsbCtrlrIsoOpen(int DevNo, uint8_t EpNo, bool bIn,
 
 	s_Usbd.IsoOpen =
 		s_Usbd.IsoMaxPacketSize[!bIn] != 0U;
+	if (s_Usbd.IsoOpen)
+	{
+		// The service interval runs from SOF.
+		UsbCtrlrSofEnable(DevNo, true);
+	}
 
 	__DSB();
 	return true;

@@ -59,14 +59,6 @@ SOFTWARE.
 
 typedef struct __Usbd_Hid_Dev UsbdHidDev_t;
 
-typedef void (*UsbdHidRxHandler_t)(UsbdHidDev_t *pHid,
-								 const uint8_t *pData, uint16_t Length,
-								 UsbCtrlrXferResult_t Result,
-								 void *pContext);
-typedef void (*UsbdHidTxHandler_t)(UsbdHidDev_t *pHid, uint16_t Length,
-								 UsbCtrlrXferResult_t Result,
-								 void *pContext);
-
 #pragma pack(push, 1)
 
 /// Descriptor fragment for one HID interface and its Interrupt endpoint pair.
@@ -94,8 +86,7 @@ typedef struct __Usbd_Hid_Config {
 	uint8_t Protocol;
 	uint8_t CountryCode;
 	uint8_t InterfaceString;
-	UsbdHidRxHandler_t RxHandler;
-	UsbdHidTxHandler_t TxHandler;
+	DevIntrfEvtHandler_t EvtCB;	//!< Return RX length to consume; less retains the report
 	void *pContext;
 } UsbdHidCfg_t;
 
@@ -124,8 +115,6 @@ struct __Usbd_Hid_Dev {
 	uint8_t CtrlReply;
 	bool Configured;
 	const uint8_t *pReportDesc;
-	UsbdHidRxHandler_t RxHandler;
-	UsbdHidTxHandler_t TxHandler;
 	void *pContext;
 	UsbHidDesc_t HidDesc;
 };
@@ -133,6 +122,13 @@ struct __Usbd_Hid_Dev {
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+// The application callback is registered with the INT transport directly.
+// Recover HID state and the application pContext through this handle.
+static inline UsbdHidDev_t *UsbdHidGetDevHandle(DevIntrf_t *pDev)
+{
+	return (UsbdHidDev_t *)UsbIntIntrfGetDevHandle(pDev)->pContext;
+}
 
 // Builds the HID configuration fragment at run time. Weak: an application
 // building fully static descriptors may define a strong replacement, which the

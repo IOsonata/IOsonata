@@ -36,6 +36,9 @@ CORE_SOURCES := \
 	$(ROOT)/src/app_evt_handler.cpp \
 	$(ROOT)/src/cfifo.c
 
+MULTICONFIG_TARGET := $(BUILD_DIR)/usb_multiconfig_test
+MULTICONFIG_SOURCES := usb_multiconfig_test.cpp $(filter-out usb_core_test.cpp,$(CORE_SOURCES))
+
 LINK_TARGET := $(BUILD_DIR)/usb_stack_link_test
 LINK_SOURCES := \
 	usb_stack_link_test.cpp \
@@ -85,6 +88,7 @@ INTRF_SOURCES := \
 	usb_intrf_test.cpp \
 	$(ROOT)/src/usb/usb_intrf.cpp \
 	$(ROOT)/src/app_evt_handler.cpp \
+	$(ROOT)/src/device_intrf.cpp \
 	$(ROOT)/src/cfifo.c
 
 RX_EVENT_TARGET := $(BUILD_DIR)/usb_rx_event_test
@@ -92,6 +96,7 @@ RX_EVENT_SOURCES := \
 	usb_rx_event_test.cpp \
 	$(ROOT)/src/usb/usb_intrf.cpp \
 	$(ROOT)/src/app_evt_handler.cpp \
+	$(ROOT)/src/device_intrf.cpp \
 	$(ROOT)/src/cfifo.c
 
 DIRECT_TARGET := $(BUILD_DIR)/usb_direct_intrf_test
@@ -99,6 +104,7 @@ DIRECT_SOURCES := \
 	usb_direct_intrf_test.cpp \
 	$(ROOT)/src/usb/usb_intrf.cpp \
 	$(ROOT)/src/app_evt_handler.cpp \
+	$(ROOT)/src/device_intrf.cpp \
 	$(ROOT)/src/cfifo.c
 
 ISO_TARGET := $(BUILD_DIR)/usb_iso_intrf_test
@@ -116,6 +122,7 @@ ISO_DUPLEX_SOURCES := \
 	$(ROOT)/src/usb/usb_iso.cpp \
 	$(ROOT)/src/usb/usb_intrf.cpp \
 	$(ROOT)/src/app_evt_handler.cpp \
+	$(ROOT)/src/device_intrf.cpp \
 	$(ROOT)/src/cfifo.c
 
 INT_TARGET := $(BUILD_DIR)/usb_int_intrf_test
@@ -130,6 +137,7 @@ INT_SOURCES := \
 # Physical hardware validation. The Python runner uses python-libusb1 so it
 # still submits real asynchronous isochronous transfers through libusb.
 ISO_HW_SCRIPT := $(ROOT)/Python/usb_iso_loopback.py
+ISO_HW_FIRMWARE := $(ROOT)/exemples/usb/usb_iso_loopback.cpp
 ISO_HW_ARGS ?= --manual-suspend-wake
 
 # Physical interrupt-transfer validation. The IOcomposer firmware project is
@@ -162,6 +170,11 @@ HID_3D_MOUSE_PROJECT := $(ROOT)/ARM/Nordic/nRF52/nRF52840/exemples/UsbHid3dMouse
 HID_DEMO_CPPFLAGS := $(CPPFLAGS) -Idemo_hostport -I$(ROOT)/Linux/include \
 	-I$(ROOT)/ARM/Nordic/nRF52/include
 
+# Compile every generic IOsonata USB example against the current public API.
+# The two board-specific HID demos are checked by hid-demo-build.
+USB_EXAMPLE_SOURCES := $(filter-out $(HID_KEYBOARD_FIRMWARE) $(HID_3D_MOUSE_FIRMWARE),\
+	$(wildcard $(ROOT)/exemples/usb/*.cpp))
+
 # Throughput measurement, not a regression test. Built and run on demand.
 # Sanitizers are left off so the numbers are not distorted.
 PROBE_TARGET := $(BUILD_DIR)/tx_rate_probe
@@ -192,16 +205,16 @@ TARGETS := $(CORE_TARGET) $(INTRF_TARGET) $(RX_EVENT_TARGET) \
 	$(DIRECT_TARGET) $(ISO_TARGET) $(ISO_DUPLEX_TARGET) $(INT_TARGET) \
 	$(BULK_TARGET) $(HID_TARGET) $(LINK_TARGET)
 
-TARGETS += $(MSC_TARGET)
+TARGETS += $(MSC_TARGET) $(MULTICONFIG_TARGET)
 
 .PHONY: all test test-combo-shutdown test-c-header test-gcc test-clang test-matrix test-nrf-out-appevt test-nrf-appevt \
 	test-nrf-control-event test-nrf-suspend-policy test-nrf-iso-policy test-nrf-dma-policy test-nrf-iso-dma test-nrf-lifecycle test-nrf54-data \
 	iso-hw-build iso-hw int-hw-build int-hw hid-hw-build hid-hw \
-	msc-hw-build msc-hw hid-demo-build probe clean
+	msc-hw-build msc-hw hid-demo-build examples-build probe clean
 
 all: test
 
-test: $(TARGETS)
+test: $(TARGETS) examples-build
 	$(MAKE) test-combo-shutdown
 	$(MAKE) test-c-header
 	$(MAKE) test-nrf-suspend-policy
@@ -213,6 +226,7 @@ test: $(TARGETS)
 	$(MAKE) test-nrf-lifecycle
 	$(MAKE) test-nrf54-data
 	$(TEST_ENV) ./$(CORE_TARGET)
+	$(TEST_ENV) ./$(MULTICONFIG_TARGET)
 	$(TEST_ENV) ./$(INTRF_TARGET)
 	$(TEST_ENV) ./$(RX_EVENT_TARGET)
 	$(TEST_ENV) ./$(DIRECT_TARGET)
@@ -261,8 +275,9 @@ test-nrf54-data:
 test-nrf-dma-policy:
 	python3 ./nrf_usb_dma_policy_test.py
 
-iso-hw-build: $(ISO_HW_SCRIPT)
+iso-hw-build: $(ISO_HW_SCRIPT) $(ISO_HW_FIRMWARE)
 	python3 -c "compile(open('$(ISO_HW_SCRIPT)', encoding='utf-8').read(), '$(ISO_HW_SCRIPT)', 'exec')"
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -x c++ -fsyntax-only $(ISO_HW_FIRMWARE)
 
 iso-hw: iso-hw-build
 	python3 $(ISO_HW_SCRIPT) $(ISO_HW_ARGS)
@@ -299,6 +314,12 @@ hid-demo-build: $(HID_KEYBOARD_FIRMWARE) $(HID_KEYBOARD_BOARD) \
 	$(CXX) $(HID_DEMO_CPPFLAGS) $(CXXFLAGS) \
 		-I$(dir $(HID_3D_MOUSE_BOARD)) -x c++ -fsyntax-only \
 		$(HID_3D_MOUSE_FIRMWARE)
+
+examples-build: hid-demo-build $(USB_EXAMPLE_SOURCES) $(HEADERS)
+	@set -e; for source in $(USB_EXAMPLE_SOURCES); do \
+		echo "Checking $$source"; \
+		$(CXX) $(CPPFLAGS) $(CXXFLAGS) -x c++ -fsyntax-only "$$source"; \
+	done
 
 probe: $(PROBE_TARGET)
 	./$(PROBE_TARGET) $(SOF_TICKS)
@@ -375,3 +396,9 @@ $(PROBE_TARGET): $(PROBE_SOURCES) $(HEADERS)
 
 clean:
 	rm -rf $(BUILD_DIR)
+
+
+$(MULTICONFIG_TARGET): $(MULTICONFIG_SOURCES) usb_core_test.cpp $(HEADERS)
+	@mkdir -p $(BUILD_DIR)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) \
+		$(MULTICONFIG_SOURCES) -o $@ $(LDFLAGS) $(SANITIZERS)

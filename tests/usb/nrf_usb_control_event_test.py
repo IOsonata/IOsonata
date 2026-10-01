@@ -88,12 +88,19 @@ unsigned irqMask, disables, resumes, forces;
 bool normal;
 uint32_t DisableInterrupt() { ++disables; auto old = irqMask; irqMask = 1; return old; }
 void EnableInterrupt(uint32_t old) { irqMask = old; }
-bool UsbdIsForceNormal() { assert(irqMask); return normal; }
+bool UsbdIsForceNormal() { return normal; }
 void UsbdForceNormal() { ++forces; }
 void nRFUsbdEmitSimple(UsbCtrlrEvtType_t event) {
  assert(event == USB_CTRLR_EVT_RESUME); ++resumes;
 }
+// Production nRFUsbdResumed restores the SOF state for the ISO pair, then
+// reports the resume; only the report matters to this harness.
+void nRFUsbdResumed() { nRFUsbdEmitSimple(USB_CTRLR_EVT_RESUME); }
 '''
+resumed = source[source.index('void nRFUsbdResumed(void)'):]
+resumed = resumed[:resumed.index('\n}\n')]
+assert 'UsbCtrlrSofEnable(0, s_Usbd.IsoOpen);' in resumed
+assert resumed.index('UsbCtrlrSofEnable(') < resumed.index('nRFUsbdEmitSimple(USB_CTRLR_EVT_RESUME);')
 code += function('nRFUsbdHostResume')
 code += r'''
 void check() {
@@ -108,10 +115,11 @@ void check() {
   const unsigned expected = suspended ?
    (flags & ~USBD_FLAG_REMOTE_WAKE & (ready ? ~USBD_FLAG_SUSPENDED : ~0U)) : flags;
   assert(s_Usbd.Flags == expected && irqMask == masked);
-  assert(disables == unsigned(suspended) && resumes == unsigned(ready));
+  // ISR only: the transition takes no interrupt exclusion of its own.
+  assert(disables == 0 && resumes == unsigned(ready));
   assert(forces == unsigned(suspended && !ready));
  }
- puts("PASS: awake SOF avoids masking; suspended resume preserves wake state and caller IRQ mask");
+ puts("PASS: host resume updates wake state without masking and preserves caller IRQ mask");
 }
 }
 int main() { setup::check(); resume::check(); }

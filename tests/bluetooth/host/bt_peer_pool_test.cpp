@@ -227,7 +227,7 @@ void TestConnectionLifecycleHooks()
 void TestConnectedFieldsAndDefaultPool()
 {
 	CHECK(BtPeerInit(nullptr, 0));
-	CHECK(BtPeerCount() == BT_DEV_CONN_MAX);
+	CHECK(BtPeerCount() == BT_PEER_POOL_DEFAULT_COUNT);
 
 	const uint8_t peerAddr[6] = { 1, 2, 3, 4, 5, 6 };
 	const uint8_t ownAddr[6] = { 6, 5, 4, 3, 2, 1 };

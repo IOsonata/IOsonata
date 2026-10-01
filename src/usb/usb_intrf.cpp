@@ -38,8 +38,7 @@ SOFTWARE.
 #include "coredev/interrupt.h"
 #include "usb/usb_intrf.h"
 
-static int UsbIntrfEpSendByteMode(UsbDevIntrf_t *pIntrf);
-static int UsbIntrfEpSendPktMode(UsbDevIntrf_t *pIntrf);
+static int UsbIntrfEpSendQueued(UsbDevIntrf_t *pIntrf);
 
 static void UsbIntrfCtrlrOutEvent(UsbCtrlrEvtType_t, uint16_t, void *);
 
@@ -47,14 +46,12 @@ static void UsbIntrfCtrlrOutEvent(UsbCtrlrEvtType_t, uint16_t, void *);
 // The block stays unpublished until the DMA completion callback.
 static void UsbIntrfEpReceive(UsbDevIntrf_t *pIntrf)
 {
-	uint8_t *pBuffer = pIntrf->pRxBuffer;
-	if (pIntrf->Mode != USB_INTRF_MODE_DIRECT)
-	{
-		UsbPkt_t *pkt = reinterpret_cast<UsbPkt_t *>(CFifoResv(pIntrf->hRxFifo));
-		pBuffer = pkt != nullptr ? pkt->Data : nullptr;
-	}
-	pIntrf->RxPending = pBuffer == nullptr ||
-		!UsbCtrlrEpReceive(pIntrf->DevNo, pIntrf->EpNo, pBuffer,
+	UsbPkt_t *packet = pIntrf->Mode == USB_INTRF_MODE_DIRECT ?
+		pIntrf->pRxDirectBuffer :
+		reinterpret_cast<UsbPkt_t *>(CFifoResv(pIntrf->hRxFifo));
+	uint8_t *buffer = packet != nullptr ? packet->Data : nullptr;
+	pIntrf->RxPending = buffer == nullptr ||
+		!UsbCtrlrEpReceive(pIntrf->DevNo, pIntrf->EpNo, buffer,
 			pIntrf->BufferSize);
 }
 
@@ -86,7 +83,7 @@ void UsbIntrfDirectClear(UsbPkt_t *pPacket)
 }
 
 // Buffer-less event notification shared by every status callback site.
-static void UsbIntrfNotify(UsbDevIntrf_t *pIntrf, DEVINTRF_EVT Event,
+void UsbIntrfNotify(UsbDevIntrf_t *pIntrf, DEVINTRF_EVT Event,
 						   int Length)
 {
 	if (pIntrf->DevIntrf.EvtCB != nullptr)
@@ -100,34 +97,26 @@ static void UsbIntrfTxFailure(UsbDevIntrf_t *pIntrf, uint16_t Length)
 	UsbIntrfNotify(pIntrf, DEVINTRF_EVT_TX_TIMEOUT, Length);
 }
 
-static int UsbIntrfEpSendByteMode(UsbDevIntrf_t *pIntrf)
+static int UsbIntrfEpSendQueued(UsbDevIntrf_t *pIntrf)
 {
-	int cnt = (int)pIntrf->Mps;
-	uint8_t *pData = CFifoPeekMultiple(pIntrf->hTxFifo, &cnt);
-	if (pData == nullptr)
+	int count = pIntrf->Mps;
+	uint8_t *data;
+	if (pIntrf->Mode == USB_INTRF_MODE_BYTE)
+		data = CFifoPeekMultiple(pIntrf->hTxFifo, &count);
+	else
+	{
+		UsbPkt_t *packet = reinterpret_cast<UsbPkt_t *>(CFifoPeek(pIntrf->hTxFifo));
+		data = packet == nullptr ? nullptr : packet->Data;
+		if (packet != nullptr)
+			count = packet->Hdr.Length;
+	}
+	if (data == nullptr)
 	{
 		UsbIntrfSetTxIdle(pIntrf);
 		return -1;
 	}
-
-	(void)UsbCtrlrEpSend(pIntrf->DevNo, pIntrf->EpNo, pData,
-		(uint16_t)cnt);
-	return cnt;
-}
-
-static int UsbIntrfEpSendPktMode(UsbDevIntrf_t *pIntrf)
-{
-	UsbPkt_t *pkt = reinterpret_cast<UsbPkt_t *>(CFifoPeek(pIntrf->hTxFifo));
-	if (pkt == nullptr)
-	{
-		UsbIntrfSetTxIdle(pIntrf);
-		return -1;
-	}
-
-	const int cnt = pkt->Hdr.Length;
-	(void)UsbCtrlrEpSend(pIntrf->DevNo, pIntrf->EpNo, pkt->Data,
-		(uint16_t)cnt);
-	return cnt;
+	(void)UsbCtrlrEpSend(pIntrf->DevNo, pIntrf->EpNo, data, (uint16_t)count);
+	return count;
 }
 
 static void UsbIntrfNoop(DevIntrf_t * const)
@@ -282,7 +271,7 @@ static int UsbIntrfTxPackets(DevIntrf_t * const pDevIntrf,
 
 	if (UsbIntrfTakeTx(pIntrf))
 	{
-		UsbIntrfEpSendPktMode(pIntrf);
+		UsbIntrfEpSendQueued(pIntrf);
 	}
 
 	return cnt;
@@ -323,7 +312,7 @@ static int UsbIntrfTxBytes(DevIntrf_t * const pDevIntrf,
 
 	if (UsbIntrfTakeTx(pIntrf))
 	{
-		(void)UsbIntrfEpSendByteMode(pIntrf);
+		(void)UsbIntrfEpSendQueued(pIntrf);
 	}
 
 	return cnt;
@@ -543,7 +532,7 @@ static void UsbIntrfCtrlrInEvent(UsbCtrlrEvtType_t Event,
 		return;
 	}
 
-	if (pIntrf->EpSend(pIntrf) >= 0)
+	if (UsbIntrfEpSendQueued(pIntrf) >= 0)
 	{
 		return;
 	}
@@ -579,8 +568,7 @@ bool UsbIntrfInit(UsbDevIntrf_t *pIntrf, const UsbIntrfCfg_t *pCfg)
 	}
 
 	// Every zeroed field in one clear; only the nonzero fields are
-	// assigned below. The atomic members are re-initialized with their
-	// proper atomic stores at the end of this function.
+	// assigned below.
 	memset(static_cast<void *>(pIntrf), 0, sizeof(*pIntrf));
 
 	if (mode == USB_INTRF_MODE_DIRECT)
@@ -589,13 +577,12 @@ bool UsbIntrfInit(UsbDevIntrf_t *pIntrf, const UsbIntrfCfg_t *pCfg)
 		pIntrf->pTxDirectBuffer = reinterpret_cast<UsbPkt_t *>(pCfg->pTxBuffer);
 		UsbIntrfDirectClear(pIntrf->pRxDirectBuffer);
 		UsbIntrfDirectClear(pIntrf->pTxDirectBuffer);
-		pIntrf->pRxBuffer = pIntrf->pRxDirectBuffer->Data;
 	}
 	else
 	{
-		if (pCfg->pRxFifoMem == nullptr || pCfg->RxFifoMemSize <= 0 ||
-			pCfg->pTxFifoMem == nullptr || pCfg->TxFifoMemSize <= 0 ||
-			pCfg->TxFifoBlkSize == 0U ||
+		// CFifoInit refuses a null block, a zero block size and memory too
+		// small for one block; sign and word alignment are checked here.
+		if (pCfg->RxFifoMemSize <= 0 || pCfg->TxFifoMemSize <= 0 ||
 			(((uintptr_t)pCfg->pRxFifoMem & 3U) != 0U) ||
 			(((uintptr_t)pCfg->pTxFifoMem & 3U) != 0U))
 		{
@@ -642,12 +629,10 @@ bool UsbIntrfInit(UsbDevIntrf_t *pIntrf, const UsbIntrfCfg_t *pCfg)
 	switch (mode)
 	{
 		case USB_INTRF_MODE_BYTE:
-			pIntrf->EpSend = UsbIntrfEpSendByteMode;
 			break;
 
 		case USB_INTRF_MODE_PACKET:
 			pIntrf->DevIntrf.TxData = UsbIntrfTxPackets;
-			pIntrf->EpSend = UsbIntrfEpSendPktMode;
 			break;
 
 		case USB_INTRF_MODE_DIRECT:
@@ -661,10 +646,10 @@ bool UsbIntrfInit(UsbDevIntrf_t *pIntrf, const UsbIntrfCfg_t *pCfg)
 
 	pIntrf->DevIntrf.TxSrData = pIntrf->DevIntrf.TxData;
 
-	atomic_flag_clear(&pIntrf->DevIntrf.bBusy);
-	atomic_store(&pIntrf->DevIntrf.EnCnt, 0);
-	atomic_store(&pIntrf->DevIntrf.bTxReady, true);
-	atomic_store(&pIntrf->DevIntrf.bNoStop, false);
+	// Endpoint callbacks are not bound yet: no other context can observe
+	// this, so plain ordering is enough. bBusy, EnCnt and bNoStop are clear
+	// from the memset above.
+	atomic_store_explicit(&pIntrf->DevIntrf.bTxReady, true, memory_order_relaxed);
 
 	if (pIntrf->EpNo != 0U)
 	{
@@ -718,3 +703,4 @@ int UsbIntrfTxUsed(UsbDevIntrf_t *pIntrf)
 	}
 	return pIntrf->hTxFifo != nullptr ? CFifoUsed(pIntrf->hTxFifo) : 0;
 }
+

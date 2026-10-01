@@ -80,12 +80,15 @@ names = [
     ('nRFUsbdDmaActive', None), ('nRFUsbdDmaLock', None),
     ('nRFUsbdDmaUnlock', None), ('nRFUsbdDmaStartLocked', None),
     ('nRFUsbdDmaAllowed', None), ('nRFUsbdEpHwEnable', None),
-    ('nRFUsbdDmaWait', None),
+    ('nRFUsbdEndEvent', None), ('nRFUsbdDmaWait', None),
+    ('nRFUsbdSofAcquire', None), ('UsbCtrlrSofEnable', None),
     ('nRFUsbdEp0InStart', None), ('nRFUsbdStartDmaNow', None),
     ('nRFUsbdStartQueuedDma', None), ('nRFUsbdResumeQueuedDmaLocked', None),
     ('nRFUsbdHandleSof', None), ('USBD_IRQHandler', None),
-    ('nRFUsbdProcessEpEvent', None),
-    ('nRFUsbdResetState', None), ('UsbCtrlrProcess', None),
+    ('nRFUsbdAcquireDma', None), ('nRFUsbdProcessQueuedEvent', None),
+    ('nRFUsbdInvalidateEvents', None),
+    ('nRFUsbdResetState', None),
+    ('nRFUsbdEpDisable', None),
     ('nRFIsoHwEnable', None),
     ('nRFUsbdIsoStart', None), ('UsbCtrlrIsoSend', None),
     ('nRFUsbdIsoComplete', None), ('nRFUsbdIsoEpClose', None),
@@ -115,10 +118,11 @@ using namespace std;
 
 // Register model ----------------------------------------------------------
 constexpr uint32_t USBD_SIZE_ISOOUT_ZERO_Msk=1UL<<16;
-constexpr uint32_t USBD_INTENCLR_SOF_Msk=1, USBD_INTEN_SOF_Msk=1;
+constexpr uint32_t USBD_INTENCLR_SOF_Msk=1, USBD_INTEN_SOF_Msk=1, USBD_INTENSET_SOF_Msk=1;
 constexpr uint32_t USBD_INTEN_ENDISOIN_Msk=1U<<11, USBD_INTEN_ENDISOOUT_Msk=1U<<20;
 constexpr uint32_t USBD_INTEN_ENDEPIN0_Msk=1U<<2, USBD_INTEN_ENDEPOUT0_Msk=1U<<12;
 constexpr unsigned USBD_INTEN_ENDEPIN0_Pos=2, USBD_INTEN_ENDEPOUT0_Pos=12;
+constexpr unsigned USBD_INTEN_ENDISOIN_Pos=11, USBD_INTEN_ENDISOOUT_Pos=20;
 constexpr uint32_t USBD_SHORTS_EP0DATADONE_EP0STATUS_Msk=1;
 constexpr unsigned USBD_EPSTALL_STALL_UnStall=0, USBD_EPSTALL_STALL_Pos=8;
 constexpr unsigned USBD_DTOGGLE_VALUE_Data0=1, USBD_DTOGGLE_VALUE_Pos=8;
@@ -131,6 +135,8 @@ constexpr uint32_t NRFX_USBD_EASYDMA_BUSY_REG_BUSY=0x82, NRFX_USBD_EASYDMA_BUSY_
 #define NRFX_USBD_ERRATA_166_REG_A 0
 #define NRFX_USBD_ERRATA_166_REG_B 0
 
+// UsbCtrlrProcess is inline in the nRF52 usb_ctrlr.h: it runs the AppEvt queue.
+void UsbCtrlrProcess(int){AppEvtHandlerExec();}
 uint32_t dmaBusy=0;
 unsigned dmaLocks=0,dmaUnlocks=0;
 struct BusyRegister {
@@ -149,7 +155,9 @@ typedef USBD_EPIN_Type USBD_EPOUT_Type;
 typedef USBD_EPIN_Type USBD_ISOIN_Type;
 typedef USBD_EPIN_Type USBD_ISOOUT_Type;
 struct Registers {
- uint32_t EVENTS_USBRESET=0,EVENTS_ENDEPIN[8]={},EVENTS_EP0DATADONE=0,EVENTS_ENDISOIN=0;
+ // Event order and spacing as in the USBD block: END events are addressed
+ // by their INTEN bit position from USBRESET.
+ uint32_t EVENTS_USBRESET=0,EVENTS_STARTED=0,EVENTS_ENDEPIN[8]={},EVENTS_EP0DATADONE=0,EVENTS_ENDISOIN=0;
  uint32_t EVENTS_ENDEPOUT[8]={},EVENTS_ENDISOOUT=0,EVENTS_SOF=0,EVENTS_USBEVENT=0;
  uint32_t TASKS_STARTEPIN[8]={},TASKS_STARTISOIN=0,TASKS_STARTEPOUT[8]={},TASKS_STARTISOOUT=0;
  USBD_EPIN_Type EPIN[8];USBD_ISOIN_Type ISOIN;USBD_EPOUT_Type EPOUT[8];USBD_ISOOUT_Type ISOOUT;
@@ -203,6 +211,7 @@ void __DSB(){
 }
 void __ISB(){}
 static inline uint32_t __CLZ(uint32_t v){return v?__builtin_clz(v):32;}
+static inline uint32_t __ROR(uint32_t v,uint32_t n){n&=31U;return n?(v>>n)|(v<<(32U-n)):v;}
 unsigned irqMask=0;
 bool inIsr=false;
 uint32_t DisableInterrupt(){auto old=irqMask;irqMask=1;return old;}
@@ -239,7 +248,11 @@ void nRFUsbdBusReset(){assert(!"unexpected bus reset in DMA test");}
 void nRFUsbdProcessEP0Setup(){assert(!"unexpected setup in DMA test");}
 void nRFUsbdEmitSimple(UsbCtrlrEvtType_t){assert(!"unexpected bus event");}
 void nRFUsbdIsoSofMark(){}
-void nRFUsbdHandleBusEvent(uint32_t){++busEventCalls;}
+bool resumeOnBusEvent=false;
+void nRFUsbdHandleBusEvent(uint32_t){
+ ++busEventCalls;
+ if(resumeOnBusEvent)s_Usbd.Flags&=(uint8_t)~USBD_FLAG_SUSPENDED;
+}
 void nRFUsbdTryRemoteWake(){}
 void nRFUsbdTryEnterLowPower(){++tailVisits;}
 
@@ -270,6 +283,7 @@ void init(){
  regs={};memset(&s_Usbd,0,sizeof(s_Usbd));
  regs.BMREQUESTTYPE=USB_REQTYPE_MASK_DIR;
  ep0Callbacks[0]=ep0Callbacks[1]=busEventCalls=tailVisits=0;
+ resumeOnBusEvent=false;
  ep0Lengths[0]=ep0Lengths[1]=0;regularCompletions=0;regularLength=0;
  s_Usbd.hQue=CFifoInit(s_QueMem,sizeof(s_QueMem),sizeof(nRFUsbdQue_t),true);
  s_Usbd.hEp0Que=CFifoInit(s_Ep0QueMem,sizeof(s_Ep0QueMem),sizeof(nRFEPPkt_t),true);
@@ -642,42 +656,40 @@ int main(int argc,char **argv){
   assert(!callbacks[0] && !callbacks[1] && !regularCompletions);
   assert(!ep0Callbacks[0] && !ep0Callbacks[1] && tailVisits==1);
   *end=1;
-  if(bit==0){
-   regs.EVENTS_EP0DATADONE=0;
-   interrupt();assert(regs.EPSTATUS.bits==1 && *end==1 && CFifoUsed(s_Usbd.hEp0Que)==1);
-   regs.EVENTS_EP0DATADONE=1;
-  }
   interrupt();
   assert(*end==0 && !regs.EPSTATUS.bits && !dmaBusy);
   assert(!CFifoUsed(s_Usbd.hQue) && !CFifoUsed(s_Usbd.hEp0Que));
   assert(callbacks[!out]==unsigned(ep==8));
   assert(ep0Callbacks[!out]==unsigned(ep==0));
   assert(!regularCompletions);
+  // Regular OUT completion is queued at END; regular IN waits for EPDATA.
   if(ep>0 && ep<8)AppEvtHandlerDispatch();
-  assert(regularCompletions==unsigned(ep>0 && ep<8));
+  assert(regularCompletions==unsigned(ep>0 && ep<8 && out));
   if(ep>0 && ep<8 && !out){
    regs.EPDATASTATUS.bits=1U<<ep;
-   interrupt();assert(!regs.EPDATASTATUS.bits && regularCompletions==1);
+   interrupt();assert(!regs.EPDATASTATUS.bits && !regularCompletions);
    AppEvtHandlerDispatch();assert(regularCompletions==1);
   }
  }
- puts("PASS: all 18 DMA directions retire only on their own END; EP0 IN also waits for its handshake");
- // A pending EP0 handshake must not skip EPDATA, bus events, or the ISR
- // tail. IN completion still reaches the owner through AppEvt.
+ puts("PASS: all 18 DMA directions retire only on their own END");
+ // A bus event is handled on its own; unless it completes a resume the
+ // ISR returns and the latched END and EPDATA work run on the next pass.
  init();dmaBusy=0x82;regs.EPSTATUS.bits=1;regs.EVENTS_ENDEPIN[0]=1;
  assert(CFifoPut(s_Usbd.hEp0Que));
  regs.EVENTS_USBEVENT=1;
  s_Usbd.EpReg[1][1]={regularCallback,outSlot};
  regs.EPIN[2].AMOUNT=11;regs.EPDATASTATUS.bits=1U<<2;
  interrupt();
- assert(regs.EPSTATUS.bits==1 && regs.EVENTS_ENDEPIN[0]==1 && dmaBusy);
- assert(!regs.EPDATASTATUS.bits && busEventCalls==1 && tailVisits==1);
- assert(CFifoUsed(s_Usbd.hEp0Que)==1 && !ep0Callbacks[1] && !regularCompletions);
+ assert(busEventCalls==1 && !tailVisits && regs.EPSTATUS.bits==1 && dmaBusy);
+ assert(regs.EPDATASTATUS.bits==(1U<<2) && !ep0Callbacks[1]);
+ interrupt();
+ assert(!regs.EPSTATUS.bits && !dmaBusy && ep0Callbacks[1]==1 && tailVisits==1);
+ assert(!regs.EPDATASTATUS.bits && !CFifoUsed(s_Usbd.hEp0Que) && !regularCompletions);
  AppEvtHandlerDispatch();assert(regularCompletions==1 && regularLength==11);
  // Hardware status without software ownership is not retired.
  init();regs.EPSTATUS.bits=1U<<2;regs.EVENTS_ENDEPIN[2]=1;
  interrupt();assert(regs.EPSTATUS.bits==(1U<<2) && regs.EVENTS_ENDEPIN[2]==1);
- puts("PASS: pending completion still services EPDATA/bus events; retirement requires software DMA ownership");
+ puts("PASS: a bus event defers END/EPDATA to the next pass; retirement requires software DMA ownership");
 
  // EP0 IN chains its next packet under the same ownership and reports only
  // after the last packet's host handshake.
@@ -732,11 +744,11 @@ int main(int argc,char **argv){
  // Pending EP0 IN keeps the handshake until its matching END arrives.
  init();dmaBusy=0x82;regs.EPSTATUS.bits=1;regs.EVENTS_EP0DATADONE=1;
  interrupt();assert(regs.EVENTS_EP0DATADONE==1 && regs.EPSTATUS.bits==1 && dmaBusy);
- // A suspend holds an OUT-ready packet; the existing bus-event retry
- // starts it when the suspend gate has been lifted.
+ // A suspend holds an OUT-ready packet. The bus event that completes the
+ // resume falls through to the scheduler and starts it in the same pass.
  init();regs.BMREQUESTTYPE=0;regs.EVENTS_EP0DATADONE=1;s_Usbd.Flags|=USBD_FLAG_SUSPENDED;
  interrupt();assert(!dmaBusy && !ep0OutStarts && regs.EVENTS_EP0DATADONE==1);
- s_Usbd.Flags&=(uint8_t)~USBD_FLAG_SUSPENDED;regs.EVENTS_USBEVENT=1;
+ resumeOnBusEvent=true;regs.EVENTS_USBEVENT=1;
  interrupt();assert(activeBit==16 && ep0OutStarts==1 && busEventCalls==1);
  puts("PASS: EP0 IN status clears independently; pending IN and suspended OUT retain their handshake");
 
@@ -749,12 +761,16 @@ int main(int argc,char **argv){
   if(ep==8){if(out)regs.EVENTS_ENDISOOUT=1;else regs.EVENTS_ENDISOIN=1;}
   else{if(out)regs.EVENTS_ENDEPOUT[ep]=1;else regs.EVENTS_ENDEPIN[ep]=1;}
   regs.EVENTS_EP0DATADONE=0;
-  nRFUsbdDmaWait();
+  const uint32_t bit=1U<<(ep+out*16);
+  // A wait for another direction leaves this DMA running.
+  nRFUsbdDmaWait(~bit);
+  assert(dmaBusy && regs.EPSTATUS.bits==bit && CFifoUsed(s_Usbd.hQue)==1);
+  nRFUsbdDmaWait(bit);
   assert(!dmaBusy && !regs.EPSTATUS.bits && irqMask==masked);
   assert(CFifoUsed(s_Usbd.hQue)==(ep>0 && ep<8?0:1));
   assert(!regularStarts && !ep0InStarts && !isoStarts[0] && !isoStarts[1]);
  }
- puts("PASS: close retires all 18 DMA directions without waiting for EP0 protocol completion or starting another DMA");
+ puts("PASS: close wait retires only the selected DMA direction, for all 18, without starting another DMA");
  // OUT: the SOF offer starts a DMA into the controller's own buffer, sized
  // by the received packet; its END completes it with the byte count.
  init();frame(17);
@@ -792,6 +808,20 @@ int main(int argc,char **argv){
  init();frame(0);
  assert(!dmaBusy && isoStarts[0]==0 && s_Usbd.IsoDataFlag==0 && dmaLocks==dmaUnlocks);
  puts("PASS: an empty, zero-length or oversize OUT frame starts no DMA and holds no channel");
+ // OUT accepts both ends of the configured range, but not MPS + 1.
+ for(uint16_t length:{1,511,512,513}){
+  init();s_Usbd.IsoMaxPacketSize[0]=512;drdyGives=true;frame(length);
+  if(length<=512){
+   assert(activeBit==24 && regs.ISOOUT.MAXCNT==length);
+   finish();
+   assert(callbacks[0]==1 && lengths[0]==length && !memcmp(lastOut,hostOut,length));
+  }else{
+   assert(drdyCnt==0 && isoStarts[0]==0 && callbacks[0]==0);
+  }
+  assert(!dmaBusy && s_Usbd.IsoDataFlag==0 && dmaLocks==dmaUnlocks);
+ }
+ puts("PASS: ISO OUT length boundaries preserve payload and channel release");
+
 
  // IN: an offered frame is moved at SOF, IN before OUT, one DMA at a time.
  for(uint16_t length:{0,9,63,512}){
@@ -840,15 +870,14 @@ int main(int argc,char **argv){
  assert(activeBit==8);
  interrupt();assert(regs.EPSTATUS.bits==(1U<<8) && dmaBusy && !callbacks[1]);
  finish();assert(callbacks[1]==1);
- // EP0 IN retires only once the host took the packet as well.
+ // EP0 IN retires at its own END and reports the drained queue.
  init();dmaBusy=0x82;pkt=(nRFEPPkt_t*)CFifoPut(s_Usbd.hEp0Que);pkt->Len=8;
  nRFUsbdEp0InStart(pkt);assert(activeBit==0);
- regs.EVENTS_ENDEPIN[0]=1;
  interrupt();assert(regs.EPSTATUS.bits==1 && dmaBusy && !ep0Callbacks[1]);
- regs.EVENTS_EP0DATADONE=1;
+ regs.EVENTS_ENDEPIN[0]=1;
  interrupt();assert(regs.EPSTATUS.bits==0 && !dmaBusy && ep0Callbacks[1]==1);
  assert(CFifoUsed(s_Usbd.hEp0Que)==0);
- puts("PASS: a DMA retires only at its END event, EP0 IN also at EP0DATADONE");
+ puts("PASS: a DMA retires only at its END event, EP0 IN included");
 
  // Suspended: offers are recorded, nothing starts until the flag clears.
  init();s_Usbd.Flags|=USBD_FLAG_SUSPENDED;
@@ -863,7 +892,7 @@ int main(int argc,char **argv){
  // the flags drop, the channel is free, and a reopened pair works.
  init();frame(17);assert(activeBit==24);
  regs.ISOOUT.AMOUNT=17;regs.EVENTS_ENDISOOUT=1;
- nRFUsbdIsoEpClose(false);
+ productionEpClose(0,8,false);
  assert(callbacks[0]==0 && !dmaBusy && s_Usbd.IsoDataFlag==0 && !s_Usbd.IsoOpen);
  assert(productionIsoOpen(0,8,false,9) && s_Usbd.IsoOpen);
  activeBit=-1;frame(9);finish();
@@ -875,9 +904,10 @@ int main(int argc,char **argv){
  assert(regs.ISOSPLIT==USBD_ISOSPLIT_SPLIT_HalfIN && regs.ISOINCONFIG==USBD_ISOINCONFIG_RESPONSE_ZeroData);
  puts("PASS: ISO open is bounded by the 512-byte half buffer");
 
- // Receive captures a pointer in the shared queue, consumes readiness once,
- // and preserves another endpoint's status. A blocked channel retains the
- // buffer until DMA actually runs; completion reports the actual byte count.
+ // Receive captures a pointer in the shared queue. Readiness belongs to the
+ // ISR, which consumed it when it queued DRDY, so EPDATASTATUS is left alone.
+ // A blocked channel retains the buffer until DMA actually runs; completion
+ // reports the actual byte count.
  for(unsigned masked=0;masked<2;++masked)for(uint8_t ep=1;ep<8;++ep)
  for(uint16_t length:{0U,1U,17U,64U}){
   init();irqMask=masked;s_Usbd.Flags|=USBD_FLAG_SUSPENDED;
@@ -887,13 +917,10 @@ int main(int argc,char **argv){
   regularCompletions=0;regularLength=999;
   assert(productionEpReceive(0,ep,outSlot,64));
   assert(irqMask==masked && CFifoUsed(s_Usbd.hQue)==1 && !dmaBusy);
-  assert(!(regs.EPDATASTATUS.bits&bit));
-  if(ep!=7)assert(regs.EPDATASTATUS.bits&otherBit);
+  assert(regs.EPDATASTATUS.bits==(bit|otherBit));
   auto *entry=(nRFUsbdQue_t*)CFifoPeek(s_Usbd.hQue);
   assert(entry->EpNum==ep && entry->Dir==NRFX_USBD_QUE_OUT);
   assert(entry->pBuffer==outSlot && entry->Len==64);
-  assert(!productionEpReceive(0,ep,inBuffer,64));
-  assert(CFifoUsed(s_Usbd.hQue)==1 && entry->pBuffer==outSlot);
   assert(s_Usbd.EpReg[ep-1][0].Handler==regularCallback);
   assert(s_Usbd.EpReg[ep-1][0].pContext==outSlot);
   s_Usbd.Flags&=(uint8_t)~USBD_FLAG_SUSPENDED;
@@ -903,13 +930,14 @@ int main(int argc,char **argv){
   AppEvtHandlerDispatch();assert(regularCompletions==1 && regularLength==length);
   assert(!memcmp(outSlot,hostOut,length));
  }
- // Failed queue admission retains readiness so the same packet can retry.
- init();s_Usbd.Flags|=USBD_FLAG_SUSPENDED;regs.EPDATASTATUS.bits=1U<<17;
+ // A full request queue refuses the destination; the owner can submit it
+ // again once a slot frees.
+ init();s_Usbd.Flags|=USBD_FLAG_SUSPENDED;
  while(CFifoPut(s_Usbd.hQue)!=nullptr){}
- assert(!productionEpReceive(0,1,outSlot,64) && (regs.EPDATASTATUS.bits&(1U<<17)));
+ assert(!productionEpReceive(0,1,outSlot,64));
  (void)CFifoGet(s_Usbd.hQue);
- assert(productionEpReceive(0,1,outSlot,64) && !(regs.EPDATASTATUS.bits&(1U<<17)));
- puts("PASS: OUT queues one destination, preserves pending packets and completes after DMA");
+ assert(productionEpReceive(0,1,outSlot,64));
+ puts("PASS: OUT queues one destination, leaves readiness to the ISR and completes after DMA");
 
  // Regular IN keeps word-aligned sources and repairs a misaligned head
  // through the scratch word, under interrupt exclusion.

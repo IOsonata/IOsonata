@@ -144,7 +144,6 @@ typedef struct __Usb_Interf_Config {
 #pragma pack(pop)
 
 typedef struct __Usb_Dev_Interf		UsbDevIntrf_t;
-typedef int (*EpSendFct_t)(UsbDevIntrf_t *pIntrf);
 
 struct __Usb_Dev_Interf {
 	// Endpoint state ahead of the DevIntrf block so the transfer paths
@@ -156,13 +155,16 @@ struct __Usb_Dev_Interf {
 	uint8_t EpNo : 7;
 	bool bBlocking : 1;
 	UsbIntrfMode_t Mode;
-	hCFifo_t hTxFifo;
-	hCFifo_t hRxFifo;
+	// Mode selects FIFO storage or a direct packet slot for each direction.
+	union {
+		hCFifo_t hTxFifo;
+		UsbPkt_t *pTxDirectBuffer;
+	};
+	union {
+		hCFifo_t hRxFifo;
+		UsbPkt_t *pRxDirectBuffer;
+	};
 	uint32_t RxDropCnt;
-	uint8_t *pRxBuffer;		//!< Direct mode: Data of the RX slot
-	UsbPkt_t *pRxDirectBuffer;
-	UsbPkt_t *pTxDirectBuffer;
-	EpSendFct_t EpSend;
 	void *pClassContext;
 	DevIntrf_t DevIntrf;
 };
@@ -174,6 +176,9 @@ extern "C" {
 bool UsbIntrfInit(UsbDevIntrf_t *pIntrf, const UsbIntrfCfg_t *pCfg);
 bool UsbIntrfConfigure(UsbDevIntrf_t *pIntrf, uint16_t Mps);
 void UsbIntrfUnconfigure(UsbDevIntrf_t *pIntrf);
+
+// Internal buffer-less status notification shared by USB specializations.
+void UsbIntrfNotify(UsbDevIntrf_t *pIntrf, DEVINTRF_EVT Event, int Length);
 
 #ifdef __cplusplus
 }
@@ -203,6 +208,46 @@ public:
 
 	uint32_t Rate(void) override {
 		return DeviceIntrfGetRate(&vUsbDevIntrf.DevIntrf);
+	}
+
+	// The USB implementation owns this DevIntrf directly. Avoid the generic
+	// C++ wrappers converting through the virtual operator again.
+	void Disable(void) override {
+		DeviceIntrfDisable(&vUsbDevIntrf.DevIntrf);
+	}
+
+	void Enable(void) override {
+		DeviceIntrfEnable(&vUsbDevIntrf.DevIntrf);
+	}
+
+	int Read(uint32_t DevAddr, const uint8_t *pAdCmd, int AdCmdLen,
+			 uint8_t *pBuff, int BuffLen) override {
+		return DeviceIntrfRead(&vUsbDevIntrf.DevIntrf, DevAddr,
+			pAdCmd, AdCmdLen, pBuff, BuffLen);
+	}
+
+	int Write(uint32_t DevAddr, const uint8_t *pAdCmd, int AdCmdLen,
+			  const uint8_t *pData, int DataLen) override {
+		return DeviceIntrfWrite(&vUsbDevIntrf.DevIntrf, DevAddr,
+			pAdCmd, AdCmdLen, pData, DataLen);
+	}
+
+	// Preserve the generic busy/hook contract while avoiding the base
+	// class virtual handle conversion for this owned DevIntrf instance.
+	bool StartRx(uint32_t DevAddr) override {
+		return DeviceIntrfStartRx(&vUsbDevIntrf.DevIntrf, DevAddr);
+	}
+
+	void StopRx(void) override {
+		DeviceIntrfStopRx(&vUsbDevIntrf.DevIntrf);
+	}
+
+	bool StartTx(uint32_t DevAddr) override {
+		return DeviceIntrfStartTx(&vUsbDevIntrf.DevIntrf, DevAddr);
+	}
+
+	void StopTx(void) override {
+		DeviceIntrfStopTx(&vUsbDevIntrf.DevIntrf);
 	}
 
 	// Use the owned data directly without a virtual conversion on each call.
@@ -240,3 +285,4 @@ protected:
 /** @} End of group USBD */
 
 #endif	// __USB_INTRF_H__
+

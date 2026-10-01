@@ -41,6 +41,8 @@ static bool UsbIntIntrfEpSupported(int DevNo, uint8_t EpNo)
 		USB_INT_INTRF_MAX_MPS > 0U;
 }
 
+// Share endpoint-open argument setup between the IN and OUT calls.
+__attribute__((noinline))
 static bool UsbIntIntrfOpenEndpoint(UsbIntIntrf_t *pIntrf, bool bIn)
 {
 	return UsbCtrlrEpOpenData(pIntrf->pData->DevNo, pIntrf->pData->EpNo, bIn,
@@ -67,18 +69,14 @@ static bool UsbIntIntrfActivate(UsbIntIntrf_t *pIntrf)
 	{
 		return false;
 	}
-	if (!UsbIntIntrfOpenEndpoint(pIntrf, true))
+	if (UsbIntIntrfOpenEndpoint(pIntrf, true))
 	{
-		UsbIntrfUnconfigure(pIntrf->pData);
-		return false;
-	}
-	if (!UsbIntIntrfOpenEndpoint(pIntrf, false))
-	{
+		if (UsbIntIntrfOpenEndpoint(pIntrf, false))
+			return true;
 		UsbCtrlrEpClose(pIntrf->pData->DevNo, pIntrf->pData->EpNo, true);
-		UsbIntrfUnconfigure(pIntrf->pData);
-		return false;
 	}
-	return true;
+	UsbIntrfUnconfigure(pIntrf->pData);
+	return false;
 }
 
 static void UsbIntIntrfDisable(DevIntrf_t * const pDev)
@@ -109,6 +107,11 @@ static int UsbIntIntrfDataEvent(DevIntrf_t * const pDev, DEVINTRF_EVT Event,
 
 	switch (Event)
 	{
+		case DEVINTRF_EVT_RX_TIMEOUT:
+			pIntrf->RxErrorCnt++;
+			pBuffer = pData->pRxDirectBuffer->Data;
+			break;
+
 		case DEVINTRF_EVT_RX_DATA:
 			if (Length > (int)pIntrf->Mps)
 			{
@@ -116,53 +119,23 @@ static int UsbIntIntrfDataEvent(DevIntrf_t * const pDev, DEVINTRF_EVT Event,
 				return 0;
 			}
 			if (Length == 0)
-			{
 				pIntrf->RxEmptyCnt++;
-			}
-			if (pIntrf->RxHandler == nullptr)
-			{
-				return 0;
-			}
-			pIntrf->RxHandler(pIntrf, pBuffer, (uint16_t)Length,
-				USB_CTRLR_XFER_SUCCESS, pIntrf->pContext);
-			return Length;
-
-		case DEVINTRF_EVT_RX_TIMEOUT:
-			pIntrf->RxErrorCnt++;
-			if (pIntrf->RxHandler != nullptr)
-			{
-				pIntrf->RxHandler(pIntrf, pData->pRxBuffer,
-					(uint16_t)Length,
-					USB_CTRLR_XFER_FAILED, pIntrf->pContext);
-			}
-			return 0;
-
-		case DEVINTRF_EVT_TX_FIFO_EMPTY:
-			if (Length == 0)
-			{
-				pIntrf->TxEmptyCnt++;
-			}
-			if (pIntrf->TxHandler != nullptr)
-			{
-				pIntrf->TxHandler(pIntrf,
-					(uint16_t)Length,
-					USB_CTRLR_XFER_SUCCESS, pIntrf->pContext);
-			}
-			return Length;
+			break;
 
 		case DEVINTRF_EVT_TX_TIMEOUT:
 			pIntrf->TxErrorCnt++;
-			if (pIntrf->TxHandler != nullptr)
-			{
-				pIntrf->TxHandler(pIntrf,
-					(uint16_t)Length,
-					USB_CTRLR_XFER_FAILED, pIntrf->pContext);
-			}
-			return 0;
+			break;
+
+		case DEVINTRF_EVT_TX_FIFO_EMPTY:
+			if (Length == 0)
+				pIntrf->TxEmptyCnt++;
+			break;
 
 		default:
 			return 0;
 	}
+	return pIntrf->EvtCB != nullptr ?
+		pIntrf->EvtCB(pDev, Event, pBuffer, Length) : 0;
 }
 
 bool UsbIntIntrfInit(UsbIntIntrf_t *pIntrf, UsbDevIntrf_t *pData,
@@ -177,8 +150,7 @@ bool UsbIntIntrfInit(UsbIntIntrf_t *pIntrf, UsbDevIntrf_t *pData,
 	memset(pIntrf, 0, sizeof(*pIntrf));
 	pIntrf->pData = pData;
 	pIntrf->pContext = pCfg->pContext;
-	pIntrf->RxHandler = pCfg->RxHandler;
-	pIntrf->TxHandler = pCfg->TxHandler;
+	pIntrf->EvtCB = pCfg->EvtCB;
 
 	UsbIntrfCfg_t cfg = {};
 	cfg.DevNo = pCfg->DevNo;
@@ -254,3 +226,5 @@ void UsbIntIntrfReset(UsbIntIntrf_t *pIntrf)
 	pIntrf->RxEmptyCnt = 0U;
 	pIntrf->TxEmptyCnt = 0U;
 }
+
+

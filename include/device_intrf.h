@@ -60,6 +60,13 @@ SOFTWARE.
 #include <stdatomic.h>
 #endif
 
+// Start and stop are on the transfer path: keep them inlined in every caller.
+#if defined(__GNUC__)
+#define DEVINTRF_INLINE		static inline __attribute__((always_inline))
+#else
+#define DEVINTRF_INLINE		static inline
+#endif
+
 /** @addtogroup device_intrf	Device Interface
   * @{
   */
@@ -333,27 +340,14 @@ extern "C" {
  *
  * @param	pDev	: Pointer to an instance of the Device Interface
  */
-static inline void DeviceIntrfDisable(DevIntrf_t * const pDev) {
-//	if (atomic_exchange(&pDev->EnCnt, pDev->EnCnt - 1) < 1)	{
-	// atomic_fetch_sub returns the count before the subtract, so the last
-	// release (count was 1, becomes 0) must be detected with <= 1, not < 1.
-	if (atomic_fetch_sub(&pDev->EnCnt, 1) <= 1) {
-    	pDev->Disable(pDev);
-    	atomic_store(&pDev->EnCnt, 0);
-	}
-}
+void DeviceIntrfDisable(DevIntrf_t * const pDev);
 
 /**
  * @brief	Wake up the interface.
  *
  * @param	pDev	: Pointer to an instance of the Device Interface
  */
-static inline void DeviceIntrfEnable(DevIntrf_t * const pDev) {
-//	if (atomic_exchange(&pDev->EnCnt, pDev->EnCnt + 1) == 1)	{
-	if (atomic_fetch_add(&pDev->EnCnt, 1) == 0) {
-    	pDev->Enable(pDev);
-    }
-}
+void DeviceIntrfEnable(DevIntrf_t * const pDev);
 
 /**
  * @brief	Get data rate of the interface in Hertz.  This is not a clock frequency
@@ -473,7 +467,7 @@ int DeviceIntrfWrite(DevIntrf_t * const pDev, uint32_t DevAddr, const uint8_t *p
  * @return 	true - Success\n
  * 			false - failed.
  */
-static inline bool DeviceIntrfStartRx(DevIntrf_t * const pDev, uint32_t DevAddr) {
+DEVINTRF_INLINE bool DeviceIntrfStartRx(DevIntrf_t * const pDev, uint32_t DevAddr) {
 	if (atomic_flag_test_and_set(&pDev->bBusy))
 		return false;
 
@@ -515,7 +509,7 @@ static inline int DeviceIntrfRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int
  *
  * @param	pDev : Pointer to an instance of the Device Interface
  */
-static inline void DeviceIntrfStopRx(DevIntrf_t * const pDev) {
+DEVINTRF_INLINE void DeviceIntrfStopRx(DevIntrf_t * const pDev) {
     pDev->StopRx(pDev);
 	atomic_flag_clear(&pDev->bBusy);
 }
@@ -539,7 +533,7 @@ static inline void DeviceIntrfStopRx(DevIntrf_t * const pDev) {
  * @return 	true - Success\n
  * 			false - failed
  */
-static inline bool DeviceIntrfStartTx(DevIntrf_t * const pDev, uint32_t DevAddr) {
+DEVINTRF_INLINE bool DeviceIntrfStartTx(DevIntrf_t * const pDev, uint32_t DevAddr) {
     if (atomic_flag_test_and_set(&pDev->bBusy))
         return false;
 
@@ -577,7 +571,7 @@ static inline int DeviceIntrfTxData(DevIntrf_t * const pDev, const uint8_t *pDat
  *
  * @param	pDev : Pointer to an instance of the Device Interface
  */
-static inline void DeviceIntrfStopTx(DevIntrf_t * const pDev) {
+DEVINTRF_INLINE void DeviceIntrfStopTx(DevIntrf_t * const pDev) {
     pDev->StopTx(pDev);
 	atomic_flag_clear(&pDev->bBusy);
 }

@@ -169,24 +169,30 @@ static int s_ReportStageCount;
 static UsbCtrlStage_t s_ReportStage[4];
 static uint8_t s_ControlReport[8];
 
-static void HidRx(UsbdHidDev_t *, const uint8_t *pData, uint16_t Length,
-				  UsbCtrlrXferResult_t Result, void *)
+static int HidEvent(DevIntrf_t *pDev, DEVINTRF_EVT event,
+	uint8_t *pData, int Length)
 {
-	CHECK(Result == USB_CTRLR_XFER_SUCCESS);
-	s_RxCount++;
-	s_LastRxLength = Length;
-	if (Length != 0U)
+	CHECK(UsbdHidGetDevHandle(pDev)->pContext == &s_Fail);
+	const UsbCtrlrXferResult_t result =
+		(event == DEVINTRF_EVT_RX_TIMEOUT || event == DEVINTRF_EVT_TX_TIMEOUT) ?
+		USB_CTRLR_XFER_FAILED : USB_CTRLR_XFER_SUCCESS;
+	if (event == DEVINTRF_EVT_RX_DATA || event == DEVINTRF_EVT_RX_TIMEOUT)
 	{
-		memcpy(s_LastRx, pData, Length);
+		CHECK(result == USB_CTRLR_XFER_SUCCESS);
+		s_RxCount++;
+		s_LastRxLength = Length;
+		if (Length != 0U)
+		{
+			memcpy(s_LastRx, pData, Length);
+		}
 	}
-}
-
-static void HidTx(UsbdHidDev_t *, uint16_t Length,
-				  UsbCtrlrXferResult_t Result, void *)
-{
-	CHECK(Result == USB_CTRLR_XFER_SUCCESS);
-	s_TxCount++;
-	s_LastTxLength = Length;
+	else if (event == DEVINTRF_EVT_TX_FIFO_EMPTY || event == DEVINTRF_EVT_TX_TIMEOUT)
+	{
+		CHECK(result == USB_CTRLR_XFER_SUCCESS);
+		s_TxCount++;
+		s_LastTxLength = Length;
+	}
+	return result == USB_CTRLR_XFER_SUCCESS ? Length : 0;
 }
 
 static bool ReportRequest(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
@@ -239,8 +245,8 @@ static UsbdHidCfg_t MakeCfg(void)
 	cfg.Protocol = USB_HID_PROT_KEYBOARD;
 	cfg.CountryCode = 33U;
 	cfg.InterfaceString = 4U;
-	cfg.RxHandler = HidRx;
-	cfg.TxHandler = HidTx;
+	cfg.EvtCB = HidEvent;
+	cfg.pContext = &s_Fail;
 	return cfg;
 }
 
@@ -395,6 +401,65 @@ static void TestDataAndLifecycle(void)
 	CHECK(hid.Tx(0, tx, sizeof(tx)) == 0);
 }
 
+static void TestClassRequestDirectionAndLength(void)
+{
+	const uint8_t requests[] = {USB_HID_REQ_GET_IDLE, USB_HID_REQ_GET_PROTOCOL,
+		USB_HID_REQ_SET_IDLE, USB_HID_REQ_SET_PROTOCOL};
+	const UsbCtrlStage_t stages[] = {USB_CTRL_SETUP, USB_CTRL_DATA,
+		USB_CTRL_COMPLETE, USB_CTRL_ABORT};
+	for (unsigned request = 0U; request < 4U; request++)
+	{
+		for (unsigned direction = 0U; direction < 2U; direction++)
+		{
+			for (unsigned count = 0U; count < 3U; count++)
+			{
+				ResetFake();
+				TestHid hid;
+				CHECK(hid.Init(MakeCfg()));
+				UsbSetupData_t setup = {};
+				setup.bmRequestType = USB_REQTYPE_CLASS | USB_REQTYPE_INTERFACE |
+					(direction ? USB_REQTYPE_DIRHOST : USB_REQTYPE_DIRDEV);
+				setup.bRequest = requests[request];
+				setup.wIndex = ITF_NO;
+				setup.wLength = count;
+				const bool get = request < 2U;
+				const bool valid = (direction != 0U) == get && count == (get ? 1U : 0U);
+				for (UsbCtrlStage_t stage : stages)
+				{
+					uint8_t *data = nullptr;
+					uint16_t length = 0U;
+					CHECK(Control(hid, &setup, stage, &data, &length) == valid);
+				}
+			}
+		}
+	}
+}
+
+static void TestRequestRecipientAndType(void)
+{
+	ResetFake();
+	UsbdHid hid;
+	CHECK(hid.Init(MakeCfg()));
+	for (unsigned requestType = 0U; requestType <= 255U; requestType++)
+	{
+		UsbSetupData_t setup = {};
+		setup.bmRequestType = requestType;
+		setup.wIndex = ITF_NO;
+		setup.wLength = 1U;
+		uint8_t *data = nullptr;
+		uint16_t length = 0U;
+		setup.bRequest = USB_HID_REQ_GET_IDLE;
+		CHECK(hid.Control(&setup, USB_CTRL_SETUP, &data, &length) ==
+			(requestType == (USB_REQTYPE_DIRHOST | USB_REQTYPE_CLASS |
+			 USB_REQTYPE_INTERFACE)));
+		setup.bRequest = USB_REQ_GET_DESCRIPTOR;
+		setup.wValue = USB_DESCTYPE_HID_REPORT << 8;
+		CHECK(hid.Control(&setup, USB_CTRL_SETUP, &data, &length) ==
+			(requestType == (USB_REQTYPE_DIRHOST | USB_REQTYPE_STANDARD |
+			 USB_REQTYPE_INTERFACE)));
+	}
+}
+
 static void TestControlRequests(void)
 {
 	ResetFake();
@@ -497,13 +562,103 @@ static void TestValidation(void)
 	CHECK(!hid.Init(cfg));
 }
 
+static void TestSubclassProtocolValidation(void)
+{
+	// Only non-boot/none and boot/keyboard or boot/mouse are supported.
+	for (unsigned subclass = 0; subclass <= 255; subclass++)
+	for (unsigned protocol = 0; protocol <= 255; protocol++)
+	{
+		ResetFake();
+		TestHid hid;
+		auto cfg = MakeCfg();
+		cfg.SubClass = subclass;
+		cfg.Protocol = protocol;
+		const bool valid = (subclass == 0 && protocol == 0) ||
+			(subclass == 1 && (protocol == 1 || protocol == 2));
+		CHECK(hid.Init(cfg) == valid);
+	}
+}
+
+static void TestPendingControlLifetime(void)
+{
+	ResetFake();
+	UsbdHid hid;
+	CHECK(hid.Init(MakeCfg()));
+	UsbdHidDev_t *state = hid;
+	UsbSetupData_t setup = {};
+	setup.bmRequestType = USB_REQTYPE_DIRDEV | USB_REQTYPE_CLASS |
+		USB_REQTYPE_INTERFACE;
+	setup.bRequest = USB_HID_REQ_SET_IDLE;
+	setup.wValue = 7U << 8;
+	uint8_t *data = nullptr;
+	uint16_t length = 0U;
+	CHECK(hid.Control(&setup, USB_CTRL_SETUP, &data, &length));
+	CHECK(state->Idle == 0U && state->PendingIdle == 7U);
+	CHECK(hid.Control(&setup, USB_CTRL_DATA, &data, &length));
+	CHECK(state->Idle == 0U && state->PendingRequest == USB_HID_REQ_SET_IDLE);
+	CHECK(hid.Control(&setup, USB_CTRL_ABORT, &data, &length));
+	CHECK(state->Idle == 0U && state->PendingRequest == 0U);
+	CHECK(hid.Control(&setup, USB_CTRL_COMPLETE, &data, &length));
+	CHECK(state->Idle == 0U);
+
+	setup.bRequest = USB_HID_REQ_SET_PROTOCOL;
+	setup.wValue = USBD_HID_PROTOCOL_BOOT;
+	CHECK(hid.Control(&setup, USB_CTRL_SETUP, &data, &length));
+	setup.bRequest = USB_HID_REQ_SET_IDLE;
+	CHECK(hid.Control(&setup, USB_CTRL_COMPLETE, &data, &length));
+	CHECK(state->PendingRequest == USB_HID_REQ_SET_PROTOCOL);
+	CHECK(state->Idle == 0U && state->ActiveProtocol == USBD_HID_PROTOCOL_REPORT);
+	setup.bRequest = USB_HID_REQ_SET_PROTOCOL;
+	CHECK(hid.Control(&setup, USB_CTRL_COMPLETE, &data, &length));
+	CHECK(state->ActiveProtocol == USBD_HID_PROTOCOL_BOOT && state->PendingRequest == 0U);
+}
+
+static void TestProtocolValues(void)
+{
+	for (unsigned boot = 0; boot < 2; boot++)
+	{
+		ResetFake();
+		UsbdHid hid;
+		auto cfg = MakeCfg();
+		cfg.SubClass = boot ? USB_HID_SUBCLASS_BOOT : USB_HID_SUBCLASS_NONE;
+		cfg.Protocol = boot ? USB_HID_PROT_KEYBOARD : USB_HID_PROT_NONE;
+		CHECK(hid.Init(cfg));
+		UsbSetupData_t setup = {};
+		uint8_t *data = nullptr;
+		uint16_t length = 0U;
+		for (unsigned value = 0; value <= 65535; value++)
+		{
+			setup.wValue = value;
+			setup.bmRequestType = USB_REQTYPE_DIRHOST | USB_REQTYPE_CLASS |
+				USB_REQTYPE_INTERFACE;
+			setup.bRequest = USB_HID_REQ_GET_PROTOCOL;
+			setup.wLength = 1U;
+			CHECK(hid.Control(&setup, USB_CTRL_SETUP, &data, &length) ==
+				(boot != 0 && value == 0));
+			setup.bmRequestType = USB_REQTYPE_DIRDEV | USB_REQTYPE_CLASS |
+				USB_REQTYPE_INTERFACE;
+			setup.bRequest = USB_HID_REQ_SET_PROTOCOL;
+			setup.wLength = 0U;
+			CHECK(hid.Control(&setup, USB_CTRL_SETUP, &data, &length) ==
+				(boot != 0 && value <= USBD_HID_PROTOCOL_REPORT));
+		}
+	}
+}
+
 int main(void)
 {
+	TestProtocolValues();
+	TestSubclassProtocolValidation();
+	TestPendingControlLifetime();
 	TestDescriptorAndPlacement();
 	TestDataAndLifecycle();
+	TestClassRequestDirectionAndLength();
+	TestRequestRecipientAndType();
 	TestControlRequests();
 	TestValidation();
 	printf("%s\n", s_Fail == 0 ? "usbd_hid_test: PASS" :
 		"usbd_hid_test: FAIL");
 	return s_Fail == 0 ? 0 : 1;
 }
+
+

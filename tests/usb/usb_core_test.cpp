@@ -416,6 +416,32 @@ static bool TestDescriptors(void)
 	return true;
 }
 
+static bool TestStringDescriptorBounds(void)
+{
+	// Reuse the descriptor buffer with both growing and shrinking strings.
+	for (unsigned count : {0U, 1U, 31U, 32U, 33U, 64U, 1U, 0U})
+	{
+		char text[65];
+		memset(text, 'A', count);
+		text[count] = '\0';
+		UsbCfg_t cfg = {};
+		cfg.Vid = 0x1209U;
+		cfg.Pid = 1U;
+		cfg.pManufacturer = text;
+		CHECK(UsbInit(&cfg));
+
+		uint16_t len = 0U;
+		const uint8_t *desc = UsbGetDescriptor(TEST_DEVNO,
+			USB_DESCTYPE_STRING, 1U, 0x0409U, USB_SPEED_FULL, &len);
+		const unsigned used = count < 32U ? count : 32U;
+		CHECK(desc != nullptr && len == 2U + used * 2U);
+		CHECK(desc[0] == len && desc[1] == USB_DESCTYPE_STRING);
+		for (unsigned i = 0; i < used; ++i)
+			CHECK(desc[2U + i * 2U] == 'A' && desc[3U + i * 2U] == 0U);
+	}
+	return true;
+}
+
 static bool TestDescriptorValidation(void)
 {
 	CHECK(Fixture());
@@ -582,6 +608,40 @@ static bool TestConfiguration(void)
 	int stalls = s_Ctrlr.StallCnt;
 	Setup(STD_DEV_OUT, USB_REQ_SET_CONFIGURATION, 2, 0, 0);
 	CHECK(s_Ctrlr.StallCnt == stalls + 1 && UsbGetConfiguration(TEST_DEVNO) == 0);
+	return true;
+}
+
+static bool TestStandardRequestTypes(void)
+{
+	const struct {
+		uint8_t request;
+		uint8_t type;
+		uint16_t value;
+		uint16_t length;
+	} requests[] = {
+		{ USB_REQ_GET_DESCRIPTOR, STD_DEV_IN, USB_DESCTYPE_DEVICE << 8, 18 },
+		{ USB_REQ_SET_ADDRESS, STD_DEV_OUT, 5, 0 },
+		{ USB_REQ_GET_CONFIGURATION, STD_DEV_IN, 0, 1 },
+		{ USB_REQ_SET_CONFIGURATION, STD_DEV_OUT, 1, 0 },
+		{ USB_REQ_GET_INTERFACE, STD_IF_IN, 0, 1 },
+		{ USB_REQ_SET_INTERFACE, STD_IF_OUT, 0, 0 },
+	};
+
+	for (const auto &request : requests)
+	{
+		for (unsigned type = 0; type < 256U; ++type)
+		{
+			if ((type & USB_REQTYPE_MASK_TYPE) != USB_REQTYPE_STANDARD)
+				continue;
+			CHECK(Fixture());
+			CHECK(SetAddress(3));
+			if (request.request != USB_REQ_SET_ADDRESS)
+				CHECK(SetConfig(1));
+			ClearCtrlrLog();
+			Setup((uint8_t)type, request.request, request.value, 0, request.length);
+			CHECK(s_Ctrlr.StallCnt == (type == request.type ? 0 : 1));
+		}
+	}
 	return true;
 }
 
@@ -847,6 +907,32 @@ static bool TestEndpointAllocatorExhaustion(void)
 	req = {};
 	req.InterfaceCount = 1U;
 	CHECK(!UsbdEpAlloc(TEST_DEVNO, &req, &device[8], &alloc));
+	return true;
+}
+
+static bool TestEndpointAllocatorBacktracking(void)
+{
+	UsbCfg_t cfg = {};
+	cfg.Vid = 0x1209U;
+	cfg.Pid = 1U;
+	CHECK(UsbInit(&cfg));
+	TestUsbDeviceClass reserved, device;
+	CHECK(UsbClassRegister(TEST_DEVNO, &reserved, 0U, 1U, 1U << 1, 1U << 2));
+	UsbdEpAllocReq_t req = {};
+	req.InterfaceCount = 1U;
+	req.InCount = 1U;
+	req.BidirectionalCount = 1U;
+	req.OutCount = 1U;
+	req.FixedInMask = 1U << 8;
+	req.FixedOutMask = 1U << 8;
+	UsbdEpAllocRes_t alloc = {};
+	CHECK(UsbdEpAlloc(TEST_DEVNO, &req, &device, &alloc));
+	CHECK(alloc.FirstInterface == 1U);
+	CHECK(alloc.In[0] == 2U);
+	CHECK(alloc.Bidirectional[0] == 3U);
+	CHECK(alloc.Out[0] == 1U);
+	CHECK(device.EpInMask() == ((1U << 2) | (1U << 3) | (1U << 8)));
+	CHECK(device.EpOutMask() == ((1U << 1) | (1U << 3) | (1U << 8)));
 	return true;
 }
 
@@ -1148,15 +1234,18 @@ int main(void)
 		{ "USB AppEvt queue holds 16 events", TestAppEvtQueue },
 		{ "enable requires descriptor", TestEnableRequiresDescriptor },
 		{ "descriptors", TestDescriptors },
+		{ "string descriptor bounds", TestStringDescriptorBounds },
 		{ "descriptor validation", TestDescriptorValidation },
 		{ "control terminating ZLP", TestControlZlp },
 		{ "control chunks and direct OUT data", TestControlChunks },
 		{ "SET_ADDRESS", TestAddress },
 		{ "configuration", TestConfiguration },
 		{ "alternate interface and halt", TestInterfaceAndHalt },
+		{ "standard request directions and recipients", TestStandardRequestTypes },
 		{ "SET_INTERFACE requires handler", TestInterfaceRequiresHandler },
 		{ "class control lifecycle", TestClassControl },
 		{ "endpoint allocator exhaustion", TestEndpointAllocatorExhaustion },
+		{ "endpoint allocator backtracking", TestEndpointAllocatorBacktracking },
 		{ "common class base", TestCommonClassBase },
 		{ "class object registry", TestClassObjectRegistry },
 		{ "class object configuration rollback", TestClassObjectConfigRollback },

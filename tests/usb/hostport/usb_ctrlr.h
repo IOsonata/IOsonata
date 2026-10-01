@@ -209,6 +209,9 @@ void UsbCtrlrEpProcessEvent(int DevNo, uint8_t EpNo, bool bIn,
 // pBuffer supplies the DMA source and remains owned until the completion callback.
 // It may be NULL only for a zero-length transfer.
 bool UsbCtrlrEpSend(int DevNo, uint8_t EpNum, uint8_t *pBuffer, uint16_t Length);
+// Optional bench diagnostics used by the nRF52 combo example.
+uint16_t UsbCtrlrIsoTraceSnapshot(int DevNo, uint8_t **ppData);
+
 bool UsbCtrlrIsoSend(int DevNo, uint8_t EpNum, uint8_t *pBuffer,
 					 uint16_t Length);
 // IN returns bytes copied into the queue; completion notifies that it drained.
@@ -224,3 +227,4 @@ size_t UsbCtrlrGetSerial(int DevNo, char *pBuff, size_t BuffLen);
 #endif
 
 #endif
+

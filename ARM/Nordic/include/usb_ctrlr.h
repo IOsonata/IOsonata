@@ -66,6 +66,10 @@ SOFTWARE.
 #include "cfifo.h"
 #endif
 
+#ifndef NRFUSBD_ISO_TRACE
+#define NRFUSBD_ISO_TRACE			0
+#endif
+
 /** @addtogroup USB
   * @{
   */
@@ -219,19 +223,87 @@ extern "C" {
 bool UsbCtrlrInit(int DevNo, const UsbCtrlrCfg_t *pCfg);
 bool UsbCtrlrStart(int DevNo);
 void UsbCtrlrStop(int DevNo);
+#if defined(USBD_PRESENT)
+void AppEvtHandlerExec(void);
+
+// Deferred endpoint work runs from the application event queue. DMA
+// retirement and immediate handoff stay in USBD_IRQHandler().
+static inline void UsbCtrlrProcess(int DevNo)
+{
+	(void)DevNo;
+	AppEvtHandlerExec();
+}
+
+static inline bool UsbCtrlrVbusDetected(int DevNo)
+{
+	(void)DevNo;
+	return (NRF_POWER->USBREGSTATUS &
+		POWER_USBREGSTATUS_VBUSDETECT_Msk) != 0;
+}
+#else
 void UsbCtrlrProcess(int DevNo);
 bool UsbCtrlrVbusDetected(int DevNo);
+#endif
+#if defined(USBD_PRESENT)
+// This controller is full-speed only; expose that fact to USB callers.
+static inline bool UsbCtrlrHighSpeed(int DevNo)
+{
+	(void)DevNo;
+	return false;
+}
+#else
 bool UsbCtrlrHighSpeed(int DevNo);
+#endif
 #if defined(USBD_PRESENT)
 bool UsbCtrlrIsoInit(int DevNo);
 #endif
+#if defined(USBD_PRESENT)
+static inline void UsbCtrlrIntEnable(int DevNo)
+{
+	(void)DevNo;
+	NVIC_EnableIRQ(USBD_IRQn);
+}
+
+static inline void UsbCtrlrIntDisable(int DevNo)
+{
+	(void)DevNo;
+	NVIC_DisableIRQ(USBD_IRQn);
+}
+
+static inline void UsbCtrlrConnect(int DevNo)
+{
+	(void)DevNo;
+	NRF_USBD->USBPULLUP = 1;
+}
+
+static inline void UsbCtrlrDisconnect(int DevNo)
+{
+	(void)DevNo;
+	NRF_USBD->USBPULLUP = 0;
+}
+#else
 void UsbCtrlrIntEnable(int DevNo);
 void UsbCtrlrIntDisable(int DevNo);
 void UsbCtrlrConnect(int DevNo);
 void UsbCtrlrDisconnect(int DevNo);
+#endif
 void UsbCtrlrRemoteWakeup(int DevNo);
 void UsbCtrlrSofEnable(int DevNo, bool Enable);
+#if defined(USBD_PRESENT)
+// SOF only serves the ISO endpoint pair here: the controller enables it while
+// that pair is open, so the core does not derive it from the descriptors.
+#define USB_CTRLR_SOF_BY_ISO_OPEN	1
+#endif
+#if defined(USBD_PRESENT)
+// USBD applies SET_ADDRESS in hardware.
+static inline void UsbCtrlrSetAddress(int DevNo, uint8_t Address)
+{
+	(void)DevNo;
+	(void)Address;
+}
+#else
 void UsbCtrlrSetAddress(int DevNo, uint8_t Address);
+#endif
 bool UsbCtrlrEpOpen(int DevNo, const UsbEndPointDesc_t *pDesc);
 bool UsbCtrlrIsoOpen(int DevNo, uint8_t EpNo, bool bIn, uint16_t MaxPacketSize);
 bool UsbCtrlrEpOpenData(int DevNo, uint8_t EpNo, bool bIn, uint8_t Type,
@@ -249,8 +321,10 @@ void UsbCtrlrEpBind(int DevNo, uint8_t EpNo, bool bIn, bool bBlocking,
 // Regular OUT shares the transfer queue with IN; ISO retains interval scheduling.
 bool UsbCtrlrEpReceive(int DevNo, uint8_t EpNo, uint8_t *pBuffer,
 						  uint16_t Capacity);
+#if !defined(USBD_PRESENT)
 void UsbCtrlrEpProcessEvent(int DevNo, uint8_t EpNo, bool bIn,
 						 UsbCtrlrEvtType_t Event, uint16_t Value);
+#endif
 // EpNum is an endpoint number: device IN, host OUT. The controller schedules RX.
 // pBuffer supplies the DMA source and remains owned until the completion callback.
 // It may be NULL only for a zero-length transfer.
@@ -334,6 +408,13 @@ extern nRFUsbdState_t s_Usbd;
 
 void nRFUsbEpRegisteredEvent(uint8_t EpNum, uint8_t Dir,
 							 UsbCtrlrEvtType_t Event, uint16_t Length);
+// Deliver an event to a bound endpoint; used by the core for ISO SOF.
+static inline void UsbCtrlrEpProcessEvent(int DevNo, uint8_t EpNo, bool bIn,
+						 UsbCtrlrEvtType_t Event, uint16_t Value)
+{
+	(void)DevNo;
+	nRFUsbEpRegisteredEvent(EpNo, bIn, Event, Value);
+}
 void nRFUsbdDmaUnlock(void);
 void nRFUsbdResumeQueuedDmaLocked(void);
 void nRFUsbdIsoComplete(uint8_t In);

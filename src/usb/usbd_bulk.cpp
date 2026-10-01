@@ -41,6 +41,8 @@ static uint16_t UsbdBulkMps(const UsbdBulkDev_t *pBulk)
 	return UsbCtrlrHighSpeed(pBulk->DevNo) ? pBulk->HsMps : pBulk->FsMps;
 }
 
+// Share endpoint-open argument setup between this class's endpoints.
+__attribute__((noinline))
 static bool UsbdBulkOpenEndpoint(UsbdBulkDev_t *pBulk, bool bIn,
 								 uint16_t MaxPacketSize)
 {
@@ -170,8 +172,7 @@ static bool UsbdBulkInitInternal(UsbdBulkDev_t * const pBulk,
 								 const UsbdBulkCfg_t *pCfg,
 								 UsbDeviceClass *pClass)
 {
-	if (pBulk == nullptr || pCfg == nullptr || pClass == nullptr ||
-		UsbGetCfg(pCfg->DevNo) == nullptr ||
+	if (UsbGetCfg(pCfg->DevNo) == nullptr ||
 		pCfg->pRxFifoMem == nullptr || pCfg->RxFifoMemSize <= 0 ||
 		pCfg->pTxFifoMem == nullptr || pCfg->TxFifoMemSize <= 0 ||
 		pCfg->Mode > USBD_BULK_MODE_PACKET)
@@ -197,7 +198,8 @@ static bool UsbdBulkInitInternal(UsbdBulkDev_t * const pBulk,
 	req.InterfaceCount = 1U;
 	req.BidirectionalCount = 1U;
 
-	UsbdEpAllocRes_t alloc = {};
+	// The allocator fills each requested result before returning success.
+	UsbdEpAllocRes_t alloc;
 	if (!UsbdEpAlloc(pBulk->DevNo, &req, pClass, &alloc))
 	{
 		return false;
@@ -255,3 +257,4 @@ void UsbdBulk::Reset(void)
 {
 	UsbdBulkReset(&vUsbdBulk);
 }
+

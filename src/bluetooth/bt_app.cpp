@@ -84,7 +84,7 @@ BtAppData_t g_BtAppData = {
 		.bSecure    = false,
 		.pHciDev    = NULL,
 		.NbSrvc     = 0,
-		.Services   = {},
+		.pServices  = NULL,
 		.Discovery  = {},
 		.pIndChar = NULL,
 		.bAttReqPending = false,
@@ -271,9 +271,14 @@ int BtDeviceFindService(BtDevice_t * const pDev, uint16_t Uuid)
 		return -1;
 	}
 
+	if (pDev->pServices == NULL)
+	{
+		return -1;
+	}
+
 	for (int i = 0; i < pDev->NbSrvc; i++)
 	{
-		if (pDev->Services[i].srv_uuid.Uuid == Uuid)
+		if (pDev->pServices[i].srv_uuid.Uuid == Uuid)
 		{
 			return i;
 		}
@@ -283,12 +288,12 @@ int BtDeviceFindService(BtDevice_t * const pDev, uint16_t Uuid)
 
 int BtDeviceFindCharacteristic(BtDevice_t * const pDev, int SrvcIdx, uint16_t Uuid)
 {
-	if (pDev == NULL || SrvcIdx < 0 || SrvcIdx >= pDev->NbSrvc)
+	if (pDev == NULL || pDev->pServices == NULL || SrvcIdx < 0 || SrvcIdx >= pDev->NbSrvc)
 	{
 		return -1;
 	}
 
-	BtGattDBSrvc_t *pSrvc = &pDev->Services[SrvcIdx];
+	BtGattDBSrvc_t *pSrvc = &pDev->pServices[SrvcIdx];
 	for (int i = 0; i < pSrvc->char_count; i++)
 	{
 		if (pSrvc->characteristics[i].characteristic.uuid.Uuid == Uuid)
@@ -297,6 +302,53 @@ int BtDeviceFindCharacteristic(BtDevice_t * const pDev, int SrvcIdx, uint16_t Uu
 		}
 	}
 	return -1;
+}
+
+// Default discovery cache pool. Only BtDeviceSrvcCacheAttach references it and
+// only a port's BtAppDiscoverDevice calls that, so a build that never starts
+// a discovery (peripheral only) links neither. An application overrides
+// g_BtDevSrvcCacheCfg to size the pool for the number of peers it discovers.
+static BtDevSrvcCache_t s_DefaultSrvcCache[BT_DEV_SRVC_CACHE_DEFAULT_COUNT];
+
+extern "C" __attribute__((weak)) const BtDevSrvcCacheCfg_t g_BtDevSrvcCacheCfg = {
+	s_DefaultSrvcCache, BT_DEV_SRVC_CACHE_DEFAULT_COUNT
+};
+
+bool BtDeviceSrvcCacheAttach(BtDevice_t * const pDev)
+{
+	if (pDev == NULL)
+	{
+		return false;
+	}
+
+	BtDevSrvcCache_t *pFree = NULL;
+
+	for (uint16_t i = 0; i < g_BtDevSrvcCacheCfg.Count; i++)
+	{
+		BtDevSrvcCache_t *p = &g_BtDevSrvcCacheCfg.pCache[i];
+
+		if (p->pOwner == pDev && pDev->pServices == p->Srvc)
+		{
+			// Already attached, new discovery on the same device
+			return true;
+		}
+		if (pFree == NULL && (p->pOwner == NULL || p->pOwner->pServices != p->Srvc))
+		{
+			// Never used, or the owner record was cleared since (link down)
+			pFree = p;
+		}
+	}
+
+	if (pFree == NULL)
+	{
+		pDev->pServices = NULL;
+		return false;
+	}
+
+	pFree->pOwner = pDev;
+	pDev->pServices = pFree->Srvc;
+
+	return true;
 }
 
 // Weak default for the discovery-complete callback. App overrides.

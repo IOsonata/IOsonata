@@ -57,6 +57,7 @@ SOFTWARE.
 
 #define BT_DEV_NAME_MAXLEN			30
 #define BT_DEV_SERVICE_MAXCNT		10
+#define BT_DEV_SRVC_CACHE_DEFAULT_COUNT	1	//!< Number of discovery caches in the library default pool
 #define BT_DEV_TXPEND_MAX			16		//!< Depth of the per-link ordered ACL TX-complete ring
 
 //!< Hard ceiling on simultaneous connections (peer pool slots). The application
@@ -76,7 +77,7 @@ SOFTWARE.
 /// Hdl is uint16_t because ATT handles are 16-bit; the prior CurParseInf_t
 /// typedef stored it as uint8_t and silently truncated peer handles >= 256.
 typedef struct __Bt_Dev_Disc_State {
-	uint8_t			SrvIdx;			//!< Index into Services[] currently being parsed
+	uint8_t			SrvIdx;			//!< Index into pServices[] currently being parsed
 	uint8_t			CharIdx;		//!< Index into the current service's char array
 	uint8_t			Phase;			//!< Port-defined discovery phase, 0 = idle
 	uint16_t		Hdl;			//!< Current ATT handle being read/queried
@@ -90,12 +91,15 @@ typedef struct __Bt_Dev_Disc_State {
 ///
 /// Field occupancy by role:
 ///   local  : Name = own GAP name, Conn.PeerAddr = own BD_ADDR, Conn.Role =
-///            bitmask of GAP roles this stack takes, Services = exposed GATT
-///            DB, Conn.Hdl = unused, pHciDev = the controller in use.
+///            bitmask of GAP roles this stack takes, pServices = NULL (the
+///            local GATT DB is the registered service list, not this cache),
+///            Conn.Hdl = unused, pHciDev = the controller in use.
 ///   remote : Name = peer's reported name, Conn.PeerAddr = peer's BD_ADDR,
 ///            Conn.Role = LOCAL device's LL role on the active link
 ///            (BT_CONN_ROLE_* HCI encoding: 0 central, 1 peripheral),
-///            Services = discovered GATT DB, Conn.Hdl = active link handle,
+///            pServices = discovered GATT DB, attached by BtAppDiscoverDevice
+///            and NULL on a link that was never discovered (any link where
+///            this device is the peripheral), Conn.Hdl = active link handle,
 ///            pHciDev = the local controller managing this link.
 typedef struct __Bt_Device {
 	BtGapConnection_t Conn;						//!< Per-link state (base). bt_dev owns it; &Conn is passed down to GATT/GAP. Holds Hdl/Role/PeerAddr/MaxMtu/long-write.
@@ -107,8 +111,8 @@ typedef struct __Bt_Device {
 	bool			bIsLocal;					//!< true for the local stack instance, false for tracked remotes
 	bool			bSecure;					//!< true if link is encrypted or device is bonded
 	BtHciDevice_t	*pHciDev;					//!< Associated HCI device
-	int				NbSrvc;						//!< Number of services in the Services array
-	BtGattDBSrvc_t	Services[BT_DEV_SERVICE_MAXCNT];	//!< Services: exposed if local, discovered if remote
+	int				NbSrvc;						//!< Number of services in the pServices array
+	BtGattDBSrvc_t	*pServices;					//!< Discovered services, BT_DEV_SERVICE_MAXCNT entries. NULL until BtAppDiscoverDevice attaches a cache (central role only)
 	BtDevDiscState_t Discovery;					//!< Per-peer discovery cursor (remote role only)
 	void			*pIndChar;					//!< Vendor-host indication owner completed by HVC, null on raw HCI
 	bool			bAttReqPending;				//!< One ATT client request may be outstanding per bearer
@@ -131,14 +135,53 @@ typedef struct __Bt_Device {
 	uint8_t			TxPendCount;				//!< Ring occupancy in entries
 } BtDevice_t;
 
+/// Storage for the GATT DB discovered on one peer. Service discovery is a
+/// central role operation, so this memory is kept out of BtDevice_t: a
+/// peripheral only build never references it and the linker leaves it out.
+typedef struct __Bt_Dev_Srvc_Cache {
+	BtDevice_t		*pOwner;					//!< Device this cache is attached to. Free when pOwner->pServices no longer points at Srvc
+	BtGattDBSrvc_t	Srvc[BT_DEV_SERVICE_MAXCNT];	//!< Discovered services
+} BtDevSrvcCache_t;
+
+/// Discovery cache pool descriptor.
+typedef struct __Bt_Dev_Srvc_Cache_Cfg {
+	BtDevSrvcCache_t *pCache;					//!< Array of caches
+	uint16_t		Count;						//!< Number of caches in the array = max number of peers holding a discovered DB at the same time
+} BtDevSrvcCacheCfg_t;
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+/// Discovery cache pool. The library defines a weak default holding
+/// BT_DEV_SRVC_CACHE_DEFAULT_COUNT cache. A central application that
+/// discovers more peers at the same time overrides it by defining its own
+///
+///   static BtDevSrvcCache_t s_SrvcCache[MY_CENTRAL_LINK_COUNT];
+///   const BtDevSrvcCacheCfg_t g_BtDevSrvcCacheCfg = { s_SrvcCache, MY_CENTRAL_LINK_COUNT };
+///
+/// in which case the library default is not linked.
+extern const BtDevSrvcCacheCfg_t g_BtDevSrvcCacheCfg;
+
+/**
+ * @brief	Attach a discovery cache to a device.
+ *
+ * Called by each port's BtAppDiscoverDevice before it starts the discovery.
+ * A device that already owns a cache keeps it. A cache is released without
+ * any call: the peer manager zeroes the peer record when the link goes down
+ * or the slot is reused, which clears pServices.
+ *
+ * @param	pDev	Pointer to the BtDevice_t to be discovered.
+ *
+ * @return	true  - pDev->pServices is valid
+ *			false - no free cache, pDev->pServices is NULL
+ */
+bool BtDeviceSrvcCacheAttach(BtDevice_t * const pDev);
+
 /**
  * @brief	Weak callback invoked when GATT discovery on a peer completes.
  *
- * The discovery flow populates pDev->Services with the discovered
+ * The discovery flow populates pDev->pServices with the discovered
  * GATT DB and then calls this. Applications override to handle the
  * completion (typically by calling BtDeviceFindService and
  * BtDeviceFindCharacteristic to navigate the result).
@@ -151,15 +194,15 @@ extern "C" {
 void BtDeviceDiscovered(BtDevice_t *pDev);
 
 /**
- * @brief	Find a service in a device's Services array by 16 bit UUID.
+ * @brief	Find a service in a device's discovered services by 16 bit UUID.
  *
- * Works on any BtDevice_t (the Services array may be locally exposed
- * or remotely discovered, the walk is the same).
+ * Works on any BtDevice_t. A device that was never discovered has no
+ * service and returns -1.
  *
  * @param	pDev	Pointer to the BtDevice_t.
  * @param	Uuid	16 bit service UUID.
  *
- * @return	Index of the matching service in pDev->Services,
+ * @return	Index of the matching service in pDev->pServices,
  *			or -1 if not found.
  */
 int BtDeviceFindService(BtDevice_t * const pDev, uint16_t Uuid);
@@ -168,7 +211,7 @@ int BtDeviceFindService(BtDevice_t * const pDev, uint16_t Uuid);
  * @brief	Find a characteristic within a service by 16 bit UUID.
  *
  * @param	pDev		Pointer to the BtDevice_t.
- * @param	SrvcIdx		Service index in pDev->Services (from BtDeviceFindService).
+ * @param	SrvcIdx		Service index in pDev->pServices (from BtDeviceFindService).
  * @param	Uuid		16 bit characteristic UUID.
  *
  * @return	Index of the matching characteristic, or -1 if not found.

@@ -48,9 +48,15 @@ SOFTWARE.
 #include "bluetooth/bt_gatt.h"
 #include "bluetooth/bt_uuid.h"
 
-// Default pool when the app passes {NULL, 0}: sized to the hard maximum so a
-// default build already supports up to BT_DEV_CONN_MAX simultaneous links.
-alignas(BtDevice_t) static uint8_t s_DefaultPeerPoolMem[BT_PEER_POOL_MEMSIZE(BT_DEV_CONN_MAX)];
+// Default pool when the app passes {NULL, 0} and does not override
+// g_BtPeerPoolCfg. BT_DEV_CONN_MAX is the ceiling for a central handling many
+// links, it does not size anything here. The application's g_BtPeerPoolCfg
+// replaces this one at link time and this storage is then left out.
+alignas(BtDevice_t) static uint8_t s_DefaultPeerPoolMem[BT_PEER_POOL_MEMSIZE(BT_PEER_POOL_DEFAULT_COUNT)];
+
+extern "C" __attribute__((weak)) const BtPeerPoolCfg_t g_BtPeerPoolCfg = {
+	s_DefaultPeerPoolMem, sizeof(s_DefaultPeerPoolMem)
+};
 static BtPeerPoolHdr_t *s_pPeerPool = nullptr;
 static BtDevice_t *s_pPeerSlots = nullptr;
 
@@ -85,13 +91,18 @@ bool BtPeerInit(uint8_t *pMem, size_t MemSize)
 
 	if (pMem == nullptr || MemSize == 0)
 	{
-		mem  = s_DefaultPeerPoolMem;
-		size = sizeof(s_DefaultPeerPoolMem);
+		mem  = g_BtPeerPoolCfg.pMem;
+		size = g_BtPeerPoolCfg.Size;
 	}
 	else
 	{
 		mem  = pMem;
 		size = MemSize;
+	}
+
+	if (mem == nullptr)
+	{
+		return false;
 	}
 
 	const size_t slotAlign = alignof(BtDevice_t);

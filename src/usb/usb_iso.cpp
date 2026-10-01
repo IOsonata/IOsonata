@@ -98,16 +98,6 @@ static void UsbIsoIntrfResetDev(DevIntrf_t * const pDev)
 	UsbIsoIntrfReset(UsbIsoIntrfFromDev(pDev));
 }
 
-static void UsbIsoIntrfNotify(UsbIsoIntrf_t *pIntrf, DEVINTRF_EVT Event,
-							  int Length)
-{
-	DevIntrf_t *pDev = &pIntrf->pData->DevIntrf;
-	if (pDev->EvtCB != nullptr)
-	{
-		pDev->EvtCB(pDev, Event, nullptr, Length);
-	}
-}
-
 // One frame per call from the RX FIFO. A frame larger than the caller's
 // buffer stays queued; zero-length frames are counted and skipped, as the
 // packet RxData in UsbIntrf does.
@@ -123,10 +113,9 @@ static int UsbIsoIntrfRxData(DevIntrf_t * const pDev, uint8_t *pBuffer,
 		return 0;
 	}
 
-	// The RX FIFO drops its oldest frame when the application falls behind
-	// (there is no back-pressure on an isochronous endpoint), so the copy
-	// runs under interrupt exclusion or a completion could reclaim the frame
-	// being read. A frame is at most the packet size.
+	// The copy runs under interrupt exclusion so a close or bus reset in the
+	// interrupt cannot empty the FIFO under the frame being read. A frame is
+	// at most the packet size.
 	int count = 0;
 	const uint32_t state = DisableInterrupt();
 	UsbPkt_t *pkt;
@@ -200,39 +189,32 @@ static void UsbIsoIntrfProcessEvent(UsbIsoIntrf_t *pIntrf, uint16_t FrameNo)
 }
 
 // IN completion: the head of the TX FIFO is the frame whose DMA has ended.
-// Pop it and tell the application, with the frame length: TX_READY while
+// Release it and report the captured DMA length: TX_READY while
 // more frames wait, TX_FIFO_EMPTY when the queue drained, TX_TIMEOUT when
 // the controller failed the frame. Nothing is started here; the next frame
 // leaves at its own service interval.
 static void UsbIsoIntrfTxComplete(UsbIsoIntrf_t *pIntrf,
-								  UsbCtrlrXferResult_t Result)
+								  UsbCtrlrXferResult_t Result, uint16_t length)
 {
 	hCFifo_t hTx = pIntrf->pData->hTxFifo;
-	const UsbPkt_t *pPacket =
-		reinterpret_cast<const UsbPkt_t *>(CFifoPeek(hTx));
-	if (pPacket == nullptr)
+	if (CFifoGet(hTx) == nullptr)
 	{
 		return;
 	}
 
-	const uint16_t length = pPacket->Hdr.Length;
-	(void)CFifoGet(hTx);
 	const bool empty = CFifoUsed(hTx) == 0;
 	atomic_store_explicit(&pIntrf->pData->DevIntrf.bTxReady, empty,
 		memory_order_release);
 
+	DEVINTRF_EVT event = empty ? DEVINTRF_EVT_TX_FIFO_EMPTY : DEVINTRF_EVT_TX_READY;
 	if (Result != USB_CTRLR_XFER_SUCCESS)
 	{
 		pIntrf->TxMissCnt++;
-		UsbIsoIntrfNotify(pIntrf, DEVINTRF_EVT_TX_TIMEOUT, length);
-		return;
+		event = DEVINTRF_EVT_TX_TIMEOUT;
 	}
-	if (length == 0U)
-	{
+	else if (length == 0U)
 		pIntrf->TxEmptyCnt++;
-	}
-	UsbIsoIntrfNotify(pIntrf, empty ?
-		DEVINTRF_EVT_TX_FIFO_EMPTY : DEVINTRF_EVT_TX_READY, length);
+	UsbIntrfNotify(pIntrf->pData, event, length);
 }
 
 // Controller callback for the ISO IN endpoint. The interval and the IN
@@ -251,11 +233,9 @@ static void UsbIsoIntrfCtrlrInEvent(UsbCtrlrEvtType_t Event,
 			return;
 
 		case USB_CTRLR_EVT_XFER_CMPL:
-			UsbIsoIntrfTxComplete(pIntrf, USB_CTRLR_XFER_SUCCESS);
-			return;
-
 		case USB_CTRLR_EVT_XFER_FAILED:
-			UsbIsoIntrfTxComplete(pIntrf, USB_CTRLR_XFER_FAILED);
+			UsbIsoIntrfTxComplete(pIntrf, Event == USB_CTRLR_EVT_XFER_CMPL ?
+				USB_CTRLR_XFER_SUCCESS : USB_CTRLR_XFER_FAILED, Length);
 			return;
 
 		default:
@@ -293,7 +273,9 @@ bool UsbIsoIntrfInit(UsbIsoIntrf_t *pIntrf, UsbDevIntrf_t *pData,
 	cfg.EpNo = pCfg->EpNo;
 	// Blocking: the controller reads the TX head in place (peek at the
 	// service interval, get at completion), so a put must never reclaim it;
-	// a full TX queue refuses the frame at SendFrame.
+	// a full TX queue refuses the frame at SendFrame. A full RX FIFO has no
+	// destination for the next OUT frame, which is then dropped: an
+	// isochronous endpoint cannot hold the host off.
 	cfg.bBlocking = true;
 	cfg.Mode = USB_INTRF_MODE_PACKET;
 	cfg.BufferSize = pCfg->BufferSize;
@@ -306,19 +288,6 @@ bool UsbIsoIntrfInit(UsbIsoIntrf_t *pIntrf, UsbDevIntrf_t *pData,
 	cfg.EvtCB = pCfg->EvtCB;
 
 	if (!UsbIntrfInit(pIntrf->pData, &cfg))
-	{
-		return false;
-	}
-
-	// An isochronous OUT endpoint cannot hold the host off, so the RX FIFO
-	// must drop its oldest frame when full rather than refuse the completion
-	// the way the blocking bulk path does through DRDY. The TX FIFO stays
-	// blocking. Reuse the same memory and geometry with the dropping policy.
-	// The OUT callback reserves a destination when the controller sends DRDY.
-	pIntrf->pData->hRxFifo = CFifoInit(pCfg->pRxFifoMem,
-		(uint32_t)cfg.RxFifoMemSize, USB_INTRF_PKT_BLKSIZE(pCfg->BufferSize),
-		false);
-	if (pIntrf->pData->hRxFifo == nullptr)
 	{
 		return false;
 	}
@@ -443,3 +412,5 @@ bool UsbIsoIntrfSendFrame(UsbIsoIntrf_t *pIntrf, const uint8_t *pData,
 	EnableInterrupt(state);
 	return true;
 }
+
+

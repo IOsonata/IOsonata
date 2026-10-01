@@ -223,8 +223,7 @@ static const UsbdHidCfg_t s_HidCfg = {
 	.Protocol = USB_HID_PROT_NONE,
 	.CountryCode = 0U,
 	.InterfaceString = HID_STR_INTERFACE,
-	.RxHandler = nullptr,
-	.TxHandler = nullptr,
+	.EvtCB = nullptr,
 	.pContext = nullptr,
 };
 

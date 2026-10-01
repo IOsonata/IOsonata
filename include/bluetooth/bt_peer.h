@@ -83,16 +83,42 @@ typedef struct __Bt_Peer_Pool_Hdr {
 								 BT_PEER_POOL_ALIGNMENT - 1U + \
 								 (N) * sizeof(BtDevice_t))
 
-// Typical use:
+// Number of peer slots in the library default pool. Enough for a peripheral
+// and for a small central. A central handling more links, up to
+// BT_DEV_CONN_MAX, provides its own pool.
+#define BT_PEER_POOL_DEFAULT_COUNT	4
+
+// Peer pool descriptor.
+typedef struct __Bt_Peer_Pool_Cfg {
+	uint8_t *pMem;			//!< Pool storage, sized with BT_PEER_POOL_MEMSIZE(N)
+	size_t Size;			//!< Total pMem length in bytes
+} BtPeerPoolCfg_t;
+
+// Peer pool used when BtAppCfg_t.pPeerPoolMem is NULL. The library defines a
+// weak default of BT_PEER_POOL_DEFAULT_COUNT slots. An application that needs
+// a different number of links overrides it by defining its own
 //
 //   #define MY_PEER_COUNT  8
 //   static uint8_t s_PeerPoolMem[BT_PEER_POOL_MEMSIZE(MY_PEER_COUNT)];
+//   const BtPeerPoolCfg_t g_BtPeerPoolCfg = { s_PeerPoolMem, sizeof(s_PeerPoolMem) };
+//
+// in which case the library default pool is not linked.
+//
+// The pool can also be passed in the application config, this takes
+// precedence over g_BtPeerPoolCfg:
 //
 //   const BtAppCfg_t s_BleAppCfg = {
 //       ...
 //       .pPeerPoolMem    = s_PeerPoolMem,
 //       .PeerPoolMemSize = sizeof(s_PeerPoolMem),
 //   };
+#ifdef __cplusplus
+extern "C" {
+#endif
+extern const BtPeerPoolCfg_t g_BtPeerPoolCfg;
+#ifdef __cplusplus
+}
+#endif
 
 // Legacy: CFG_BT_PEER_MAX used to size a fixed library array. The array
 // is gone; the macro is harmless but no longer controls peer count. Emit
@@ -108,8 +134,9 @@ extern "C" {
 #endif
 
 // Subsystem init. Called by each port's BtAppInit early, with the cfg's
-// pool fields forwarded straight in. Passing {NULL, 0} selects the library
-// default pool (BT_DEV_CONN_MAX slots). A caller-provided pool is honored up
+// pool fields forwarded straight in. Passing {NULL, 0} selects g_BtPeerPoolCfg
+// (library default of BT_PEER_POOL_DEFAULT_COUNT slots unless the application
+// overrides it). A pool is honored up
 // to BT_DEV_CONN_MAX slots; anything beyond that ceiling is capped. Returns
 // false if the buffer cannot hold at least one correctly aligned BtDevice_t.
 bool         BtPeerInit(uint8_t *pMem, size_t MemSize);

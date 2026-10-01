@@ -107,24 +107,19 @@ static bool UsbdMscMediumReady(UsbdMscDev_t *pMsc)
 static void UsbdMscCopyInquiry(char *pDest, size_t Length,
 							const char *pSource, const char *pDefault)
 {
-	memset(pDest, ' ', Length);
 	if (pSource == nullptr)
-	{
 		pSource = pDefault;
-		if (pSource == nullptr)
-		{
-			return;
-		}
-	}
-
-	size_t length = 0U;
-	while (length < Length && pSource[length] != '\0')
+	for (size_t i = 0U; i < Length; i++)
 	{
-		length++;
+		const char value = *pSource;
+		pDest[i] = value != '\0' ? value : ' ';
+		if (value != '\0')
+			pSource++;
 	}
-	memcpy(pDest, pSource, length);
 }
 
+// Share endpoint-open argument setup between this class's endpoints.
+__attribute__((noinline))
 static bool UsbdMscOpenEndpoint(UsbdMscDev_t *pMsc, bool bIn,
 								uint16_t MaxPacketSize)
 {
@@ -359,7 +354,8 @@ static bool UsbdMscQueuePacket(UsbdMscDev_t *pMsc, const uint8_t *pData,
 	}
 
 	UsbPkt_t *pPacket = UsbdMscTxPacket(pMsc);
-	memset(pPacket, 0, USBD_MSC_PKT_BLKSIZE);
+	// Only the header and Length payload bytes are consumed by UsbIntrf.
+	pPacket->Hdr.Reserved = 0U;
 	pPacket->Hdr.Length = Length;
 	if (Length > 0U)
 	{
@@ -975,8 +971,7 @@ static bool UsbdMscInitInternal(UsbdMscDev_t *pMsc,
 								const UsbdMscCfg_t *pCfg,
 								UsbDeviceClass *pClass)
 {
-	if (pMsc == nullptr || pCfg == nullptr || pClass == nullptr ||
-		UsbGetCfg(pCfg->DevNo) == nullptr || pCfg->pDisk == nullptr ||
+	if (UsbGetCfg(pCfg->DevNo) == nullptr || pCfg->pDisk == nullptr ||
 		pCfg->pSectorBuffer == nullptr || pCfg->SectorBufferSize == 0U)
 	{
 		return false;
@@ -1069,8 +1064,7 @@ bool UsbdMsc::Control(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
 					  uint8_t **ppData, uint16_t *pLength)
 {
 	if (pSetup == nullptr || Stage == USB_CTRL_ABORT ||
-		(uint8_t)pSetup->wIndex != (uint8_t)vUsbdMsc.ItfNo ||
-		(pSetup->wIndex & 0xFF00U) != 0U)
+		pSetup->wIndex != (uint8_t)vUsbdMsc.ItfNo)
 	{
 		return false;
 	}
@@ -1163,3 +1157,4 @@ void UsbdMsc::Process(void)
 {
 	UsbdMscProcessInternal(&vUsbdMsc);
 }
+

@@ -16,6 +16,7 @@ static void *s_InContext;
 static bool s_OutBlocking;
 static UsbEndPointDesc_t s_Open[4];
 static int s_OpenCount;
+static int s_OpenLimit = 4;
 static int s_CloseCount;
 static int s_OutXferCount;
 static bool s_XferOk = true;
@@ -67,7 +68,7 @@ bool UsbCtrlrEpReceive(int, uint8_t, uint8_t *pBuffer, uint16_t Capacity)
 
 bool UsbCtrlrEpOpen(int, const UsbEndPointDesc_t *pDesc)
 {
-	if (pDesc == nullptr || s_OpenCount >= 4)
+	if (pDesc == nullptr || s_OpenCount >= s_OpenLimit)
 	{
 		return false;
 	}
@@ -94,30 +95,37 @@ static int s_Fail;
 
 static int s_RxCount;
 static int s_TxCount;
+static const uint8_t *s_LastRxPointer;
 static uint16_t s_LastRxLength;
 static uint16_t s_LastTxLength;
 static UsbCtrlrXferResult_t s_LastRxResult;
 static UsbCtrlrXferResult_t s_LastTxResult;
 static uint8_t s_LastRx[USB_INT_INTRF_MAX_MPS];
 
-static void RxPacket(UsbIntIntrf_t *, const uint8_t *pData, uint16_t Length,
-					 UsbCtrlrXferResult_t Result, void *)
+static int PacketEvent(DevIntrf_t *, DEVINTRF_EVT event,
+	uint8_t *pData, int Length)
 {
-	s_RxCount++;
-	s_LastRxLength = Length;
-	s_LastRxResult = Result;
-	if (Result == USB_CTRLR_XFER_SUCCESS && Length > 0U)
+	const UsbCtrlrXferResult_t result =
+		(event == DEVINTRF_EVT_RX_TIMEOUT || event == DEVINTRF_EVT_TX_TIMEOUT) ?
+		USB_CTRLR_XFER_FAILED : USB_CTRLR_XFER_SUCCESS;
+	if (event == DEVINTRF_EVT_RX_DATA || event == DEVINTRF_EVT_RX_TIMEOUT)
 	{
-		memcpy(s_LastRx, pData, Length);
+		s_RxCount++;
+		s_LastRxPointer = pData;
+		s_LastRxLength = Length;
+		s_LastRxResult = result;
+		if (result == USB_CTRLR_XFER_SUCCESS && Length > 0U)
+		{
+			memcpy(s_LastRx, pData, Length);
+		}
 	}
-}
-
-static void TxPacket(UsbIntIntrf_t *, uint16_t Length,
-					 UsbCtrlrXferResult_t Result, void *)
-{
-	s_TxCount++;
-	s_LastTxLength = Length;
-	s_LastTxResult = Result;
+	else if (event == DEVINTRF_EVT_TX_FIFO_EMPTY || event == DEVINTRF_EVT_TX_TIMEOUT)
+	{
+		s_TxCount++;
+		s_LastTxLength = Length;
+		s_LastTxResult = result;
+	}
+	return result == USB_CTRLR_XFER_SUCCESS ? Length : 0;
 }
 
 static void ResetFake(void)
@@ -132,6 +140,7 @@ static void ResetFake(void)
 	memset(s_Open, 0, sizeof(s_Open));
 	memset(s_LastRx, 0, sizeof(s_LastRx));
 	s_OpenCount = 0;
+	s_OpenLimit = 4;
 	s_CloseCount = 0;
 	s_OutXferCount = 0;
 	s_XferOk = true;
@@ -150,8 +159,7 @@ static UsbIntIntrfCfg_t MakeCfg(void)
 	UsbIntIntrfCfg_t cfg = {};
 	cfg.DevNo = 0;
 	cfg.EpNo = 3U;
-	cfg.RxHandler = RxPacket;
-	cfg.TxHandler = TxPacket;
+	cfg.EvtCB = PacketEvent;
 	return cfg;
 }
 
@@ -189,8 +197,9 @@ static void TestLifecycleAndValidation(void)
 	auto cfg = MakeCfg();
 	CHECK(UsbIntIntrfInit(&intrf, &intrfData, &cfg));
 	CHECK(intrf.pData->Mode == USB_INTRF_MODE_DIRECT);
-	CHECK(intrf.pData->hRxFifo == nullptr);
-	CHECK(intrf.pData->hTxFifo == nullptr);
+	CHECK(intrf.pData->Mode == USB_INTRF_MODE_DIRECT);
+	CHECK(intrf.pData->pRxDirectBuffer == reinterpret_cast<UsbPkt_t *>(intrf.RxBuffer));
+	CHECK(intrf.pData->pTxDirectBuffer == reinterpret_cast<UsbPkt_t *>(intrf.TxBuffer));
 	CHECK(s_OutBlocking);
 	CHECK(!UsbIntIntrfOpen(&intrf, 0U, 1U));
 	CHECK(!UsbIntIntrfOpen(&intrf, 65U, 1U));
@@ -282,7 +291,7 @@ static void TestPolledRxOwnership(void)
 	UsbIntIntrf_t intrf = {};
 	UsbDevIntrf_t intrfData = {};
 	auto cfg = MakeCfg();
-	cfg.RxHandler = nullptr;
+	cfg.EvtCB = nullptr;
 	CHECK(UsbIntIntrfInit(&intrf, &intrfData, &cfg));
 	CHECK(UsbIntIntrfOpen(&intrf, 8U, 1U));
 	const uint8_t first[] = {1U, 2U};
@@ -297,7 +306,7 @@ static void TestPolledRxOwnership(void)
 	CHECK(DeviceIntrfRx(&intrf.pData->DevIntrf, 0, out, sizeof(out)) == 2);
 	CHECK(memcmp(out, first, sizeof(first)) == 0);
 	// Reading the slot frees it, so the pending receive is submitted at once.
-	CHECK(s_OutBuffer == intrf.pData->pRxBuffer);
+	CHECK(s_OutBuffer == intrf.pData->pRxDirectBuffer->Data);
 	Receive(second, sizeof(second));
 	CHECK(DeviceIntrfRx(&intrf.pData->DevIntrf, 0, out, sizeof(out)) == 3);
 	CHECK(memcmp(out, second, sizeof(second)) == 0);
@@ -308,7 +317,7 @@ static void TestSharedTransport(void)
 	ResetFake();
 	UsbIntIntrf intrf;
 	auto cfg = MakeCfg();
-	cfg.RxHandler = nullptr;
+	cfg.EvtCB = nullptr;
 	CHECK(intrf.Init(cfg));
 	UsbIntIntrf_t *pState = intrf;
 	UsbIntrf *pTransport = &intrf;
@@ -330,8 +339,104 @@ static void TestSharedTransport(void)
 	CHECK(s_CloseCount == 2);
 }
 
+// Both failure positions must leave the shared transport unconfigured.
+static void TestOpenRollback(void)
+{
+	for (int limit = 0; limit < 2; limit++)
+	{
+		ResetFake();
+		UsbIntIntrf_t intrf = {};
+		UsbDevIntrf_t data = {};
+		auto cfg = MakeCfg();
+		CHECK(UsbIntIntrfInit(&intrf, &data, &cfg));
+		s_OpenLimit = limit;
+		CHECK(!UsbIntIntrfOpen(&intrf, 8U, 1U));
+		CHECK(s_OpenCount == limit && s_CloseCount == limit);
+		CHECK(data.Mps == 0U && intrf.Mps == 0U && intrf.Interval == 0U);
+		s_OpenLimit = 4;
+		CHECK(UsbIntIntrfOpen(&intrf, 8U, 1U));
+		CHECK(data.Mps == 8U);
+	}
+}
+
+// The callback return controls RX slot ownership. Failed transfers still
+// report their captured length, but must return zero and not count as ZLPs.
+static void TestEventDelivery(void)
+{
+	const DEVINTRF_EVT events[] = {DEVINTRF_EVT_RX_DATA,
+		DEVINTRF_EVT_RX_TIMEOUT, DEVINTRF_EVT_TX_FIFO_EMPTY,
+		DEVINTRF_EVT_TX_TIMEOUT};
+	const int lengths[] = {0, 3, 8, 9};
+	uint8_t buffer[9] = {};
+	for (unsigned event = 0; event < 4; event++)
+	for (int length : lengths)
+	for (unsigned handlers = 0; handlers < 2; handlers++)
+	{
+		ResetFake();
+		UsbIntIntrf_t intrf = {};
+		UsbDevIntrf_t data = {};
+		auto cfg = MakeCfg();
+		if (handlers == 0U)
+		{
+			cfg.EvtCB = nullptr;
+		}
+		CHECK(UsbIntIntrfInit(&intrf, &data, &cfg));
+		CHECK(UsbIntIntrfOpen(&intrf, 8U, 1U));
+		const int consumed = data.DevIntrf.EvtCB(&data.DevIntrf,
+			events[event], buffer, length);
+		const bool rx = event < 2U;
+		const bool failed = (event & 1U) != 0U;
+		const bool oversize = event == 0U && length > 8;
+		const bool delivered = handlers != 0U && !oversize;
+		CHECK(consumed == ((!failed && !oversize && handlers) ? length : 0));
+		CHECK(s_RxCount == (int)(rx && delivered));
+		CHECK(s_TxCount == (int)(!rx && delivered));
+		CHECK(intrf.RxErrorCnt == (unsigned)(rx && (failed || oversize)));
+		CHECK(intrf.TxErrorCnt == (unsigned)(!rx && failed));
+		CHECK(intrf.RxEmptyCnt == (unsigned)(rx && !failed && length == 0));
+		CHECK(intrf.TxEmptyCnt == (unsigned)(!rx && !failed && length == 0));
+		if (delivered)
+		{
+			CHECK((rx ? s_LastRxLength : s_LastTxLength) == length);
+			CHECK((rx ? s_LastRxResult : s_LastTxResult) ==
+				(failed ? USB_CTRLR_XFER_FAILED : USB_CTRLR_XFER_SUCCESS));
+			if (rx)
+				CHECK(s_LastRxPointer == (failed ? data.pRxDirectBuffer->Data : buffer));
+		}
+	}
+}
+
+static int RetainRx(DevIntrf_t *pDev, DEVINTRF_EVT event,
+	uint8_t *, int length)
+{
+	CHECK(UsbIntIntrfGetDevHandle(pDev)->pContext == &s_Fail);
+	return event == DEVINTRF_EVT_RX_DATA ? length - 1 : 0;
+}
+
+static void TestCallbackRetainsRx(void)
+{
+	ResetFake();
+	UsbIntIntrf_t intrf = {};
+	UsbDevIntrf_t data = {};
+	auto cfg = MakeCfg();
+	cfg.EvtCB = RetainRx;
+	cfg.pContext = &s_Fail;
+	CHECK(UsbIntIntrfInit(&intrf, &data, &cfg));
+	CHECK(UsbIntIntrfOpen(&intrf, 8U, 1U));
+	const uint8_t packet[] = {2, 4, 6};
+	Receive(packet, sizeof(packet));
+	CHECK((data.pRxDirectBuffer->Hdr.Flags & USB_INTRF_SLOT_READY) != 0U);
+	uint8_t received[3] = {};
+	CHECK(DeviceIntrfRx(&data.DevIntrf, 0, received, sizeof(received)) == 3);
+	CHECK(memcmp(packet, received, sizeof(packet)) == 0);
+	CHECK((data.pRxDirectBuffer->Hdr.Flags & USB_INTRF_SLOT_READY) == 0U);
+}
+
 int main(void)
 {
+	TestCallbackRetainsRx();
+	TestOpenRollback();
+	TestEventDelivery();
 	TestSharedTransport();
 	TestLifecycleAndValidation();
 	TestDuplexAndZeroLength();
@@ -341,3 +446,5 @@ int main(void)
 		"usb_int_intrf_test: FAIL");
 	return s_Fail == 0 ? 0 : 1;
 }
+
+

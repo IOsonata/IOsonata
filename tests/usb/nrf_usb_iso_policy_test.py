@@ -55,7 +55,7 @@ iso_open = function_body(iso, "bool UsbCtrlrIsoOpen(")
 iso_close = function_body(iso, "void nRFUsbdIsoEpClose(")
 interrupt = function_body(base, 'extern "C" void USBD_IRQHandler(void)')
 handle_sof = function_body(base, "static void nRFUsbdHandleSof(void)")
-queued = function_body(base, "void nRFUsbdStartQueuedDma(void)")
+queued = function_body(base, "void nRFUsbdStartQueuedDma(bool ep0out)")
 completed = function_body(interrupt, "switch (epno)")
 process = function_body(core, "void UsbDevProcessEvent(")
 update_sof = function_body(core, "static void UsbCoreUpdateSof(void)")
@@ -89,7 +89,7 @@ assert "IsoBufState" not in header + base + iso
 assert "ISOOUT.PTR = (uint32_t)(uintptr_t)s_Usbd.pIsoBuffer[0]" in start_iso
 assert start_iso.index("USB_CTRLR_EVT_DRDY") < start_iso.index("TASKS_STARTISOOUT")
 assert "TASKS_STARTISOOUT" in function_body(start_iso, "if (s_Usbd.pIsoBuffer[0] != NULL)")
-assert "len != 0U && len <= s_Usbd.IsoMaxPacketSize[0]" in start_iso
+assert "(uint32_t)len - 1U < s_Usbd.IsoMaxPacketSize[0]" in start_iso
 assert "MaxPacketSize > NRFX_USBD_ISO_MAX_PACKET_SIZE" in iso_open
 assert "USBD_ISOSPLIT_SPLIT_HalfIN" in iso_open
 assert "USBD_ISOINCONFIG_RESPONSE_ZeroData" in iso_open
@@ -134,7 +134,8 @@ sof = interrupt.index("if (NRF_USBD->EVENTS_SOF != 0U)")
 done = interrupt.index("switch (epno)")
 assert reset < setup < sof < done
 assert interrupt.count("nRFUsbdHandleSof();") == 1
-assert "nRFUsbdIsoComplete(epno == 8U);" in interrupt
+assert "nRFUsbdIsoComplete(true);" in completed
+assert "nRFUsbdIsoComplete(false);" in completed
 
 # Completion recognizes both ISO directions by their EPSTATUS bit.
 assert "case 8U:" in completed and "NRF_USBD->EVENTS_ENDISOIN" in completed
@@ -142,7 +143,7 @@ assert "case 24U:" in completed and "NRF_USBD->EVENTS_ENDISOOUT" in completed
 
 # Scheduler: ISO first, then EP0 OUT data, EP0 IN, the regular queue.
 iso_pos = queued.index("nRFUsbdIsoStart()")
-assert iso_pos < queued.index("EVENTS_EP0DATADONE")
+assert iso_pos < queued.index("if (ep0out)")
 assert iso_pos < queued.index("CFifoPeek(s_Usbd.hEp0Que)")
 assert iso_pos < queued.index("CFifoPeek(s_Usbd.hQue)")
 

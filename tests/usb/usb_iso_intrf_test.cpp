@@ -277,10 +277,10 @@ static void TestLifecycle(void)
 	CHECK(UsbIsoIntrfInit(&iso, &isoData, &cfg));
 	CHECK(iso.pData->Mode == USB_INTRF_MODE_PACKET);
 	CHECK(iso.pData->hRxFifo != nullptr && iso.pData->hTxFifo != nullptr);
-	// TX blocks (the controller reads its head in place); RX drops the
-	// oldest frame (no back-pressure on an isochronous endpoint).
+	// Both FIFOs block: the controller reads the TX head in place, and a
+	// full RX FIFO leaves the next OUT frame without a destination.
 	CHECK(CFifoIsBlocking(iso.pData->hTxFifo));
-	CHECK(!CFifoIsBlocking(iso.pData->hRxFifo));
+	CHECK(CFifoIsBlocking(iso.pData->hRxFifo));
 	CHECK(CFifoAvail(iso.pData->hTxFifo) == (int)USB_ISO_INTRF_FIFO_PKTCNT);
 	CHECK(CFifoAvail(iso.pData->hRxFifo) == (int)USB_ISO_INTRF_FIFO_PKTCNT);
 	// The application's callback is the DeviceIntrf callback, untouched.
@@ -468,22 +468,24 @@ static void TestRx(void)
 	CHECK(s_RxTimeoutCount == 1);
 	CHECK(iso.pData->RxDropCnt == 1U);
 
-	// Frames the application leaves in the FIFO: the newest two survive,
-	// the oldest is dropped, and RxData returns one frame per call.
+	// Frames the application leaves in the FIFO: the oldest two stay queued,
+	// the newest finds no destination and is dropped, and RxData returns one
+	// frame per call.
 	s_Drain = false;
-	const uint8_t f1[] = {0x11}, f2[] = {0x22, 0x22}, f3[] = {0x33, 0x33, 0x33};
+	const uint8_t f1[] = {0x11, 0x11, 0x11}, f2[] = {0x22, 0x22},
+		f3[] = {0x33};
 	Receive(f1, sizeof(f1));
 	Receive(f2, sizeof(f2));
 	Receive(f3, sizeof(f3));
 	CHECK(CFifoUsed(iso.pData->hRxFifo) == 2);
 	uint8_t out[USB_ISO_INTRF_MAX_MPS];
-	CHECK(DeviceIntrfRxData(&iso.pData->DevIntrf, out, sizeof(out)) == 2);
-	CHECK(out[0] == 0x22 && out[1] == 0x22);
 	// Too small a buffer leaves the frame queued.
 	CHECK(DeviceIntrfRxData(&iso.pData->DevIntrf, out, 2) == 0);
-	CHECK(CFifoUsed(iso.pData->hRxFifo) == 1);
+	CHECK(CFifoUsed(iso.pData->hRxFifo) == 2);
 	CHECK(DeviceIntrfRxData(&iso.pData->DevIntrf, out, sizeof(out)) == 3);
-	CHECK(out[2] == 0x33);
+	CHECK(out[0] == 0x11 && out[2] == 0x11);
+	CHECK(DeviceIntrfRxData(&iso.pData->DevIntrf, out, sizeof(out)) == 2);
+	CHECK(out[0] == 0x22 && out[1] == 0x22);
 	CHECK(DeviceIntrfRxData(&iso.pData->DevIntrf, out, sizeof(out)) == 0);
 	s_Drain = true;
 }
@@ -661,8 +663,35 @@ static void TestSharedTransport(void)
 	CHECK(s_CloseCount == 2);
 }
 
+static void TestCapturedTxLength(void)
+{
+	ResetFake();
+	UsbIsoIntrf_t iso = {};
+	UsbDevIntrf_t data = {};
+	auto cfg = MakeCfg();
+	CHECK(UsbIsoIntrfInit(&iso, &data, &cfg));
+	CHECK(UsbIsoIntrfOpen(&iso, 9U, 1U));
+	const uint8_t first[] = {1U, 2U, 3U, 4U};
+	const uint8_t next[] = {5U, 6U, 7U};
+	CHECK(UsbIsoIntrfSendFrame(&iso, first, sizeof(first)));
+	CHECK(UsbIsoIntrfSendFrame(&iso, next, sizeof(next)));
+	Sof();
+	// The callback length is the captured amount, not the queued request.
+	s_InLength = 2U;
+	CompleteIn();
+	CHECK(s_LastTxLength == 2U && s_TxCount == 1);
+	CHECK(CFifoUsed(data.hTxFifo) == 1);
+	Sof(1U);
+	CHECK(s_InLength == sizeof(next));
+	CHECK(memcmp(s_InBuffer, next, sizeof(next)) == 0);
+	CompleteIn();
+	CHECK(s_LastTxLength == sizeof(next) && s_TxCount == 2);
+	CHECK(CFifoUsed(data.hTxFifo) == 0);
+}
+
 int main(void)
 {
+	TestCapturedTxLength();
 	TestSharedTransport();
 	TestLifecycle();
 	TestDeviceReset();

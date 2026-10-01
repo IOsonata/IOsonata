@@ -224,8 +224,8 @@ code += re.search(r'static constexpr uint16_t USB_INTRF_RX_DRDY[^;]+;', intrf_so
 code += '\nvoid UsbIntrfCtrlrOutEvent(UsbCtrlrEvtType_t,uint16_t,void*);\n'
 code += '\n'.join(function(name, intrf_source) for name in [
     'UsbIntrfSetTxIdle', 'UsbIntrfTakeTx', 'UsbIntrfDirectClear',
-    'UsbIntrfTxFailure', 'UsbIntrfEpSendPktMode', 'UsbIntrfTxPackets',
-    'UsbIntrfEpSendByteMode', 'UsbIntrfTxBytes',
+    'UsbIntrfTxFailure', 'UsbIntrfEpSendQueued', 'UsbIntrfTxPackets',
+    'UsbIntrfTxBytes',
     'UsbIntrfCtrlrInEvent', 'UsbIntrfDirectReady', 'UsbIntrfDirectRxComplete',
     'UsbIntrfRegisterRx', 'UsbIntrfReleaseRx', 'UsbIntrfCompleteRx', 'UsbIntrfRetryRx',
     'UsbIntrfCtrlrOutEvent', 'UsbIntrfRxData', 'UsbIntrfRxDirect', 'UsbIntrfUnconfigure'])
@@ -919,9 +919,8 @@ int main(int argc,char **argv){
   intrf.DevIntrf.pDevData=&intrf;intrf.Mode=mode;intrf.EpNo=ep;intrf.Mps=64;
   intrf.bBlocking=blocking;
   intrf.hRxFifo=CFifoInit(rxMem,sizeof(rxMem),USB_INTRF_PKT_BLKSIZE(64),blocking);
-  intrf.pRxBuffer=direct->Data;
   if(mode==USB_INTRF_MODE_DIRECT)intrf.pRxDirectBuffer=direct;
-  UsbCtrlrEpAlloc(0,ep,false,intrf.pRxBuffer,blocking,outComplete,&intrf);
+  UsbCtrlrEpAlloc(0,ep,false,direct->Data,blocking,outComplete,&intrf);
   s_Usbd.EpReg[ep-1][0].MaxPacketSize=64;
   const unsigned received[]={0,1,9,63,64};
   auto receive=[&](unsigned len,unsigned value){
@@ -933,8 +932,8 @@ int main(int argc,char **argv){
    regs.EPSTATUS.bits=1U<<7;regs.EVENTS_ENDEPIN[7]=1;interrupt();
    auto *q=(nRFUsbdQue_t*)CFifoPeek(s_Usbd.hQue);
    assert(q && q->EpNum==ep && q->Dir==NRFX_USBD_QUE_OUT && q->Len==64);
-   assert(q->pBuffer==intrf.pRxBuffer);
-   assert(regs.EPOUT[ep].PTR==uint32_t(uintptr_t(intrf.pRxBuffer)));
+   assert(q->pBuffer==direct->Data);
+   assert(regs.EPOUT[ep].PTR==uint32_t(uintptr_t(direct->Data)));
    assert(regs.EPOUT[ep].MAXCNT==len && dmaBusy==0x82);
    memset(q->pBuffer,value,len); // Simulated host payload through EasyDMA.
    regs.EPOUT[ep].AMOUNT=len;regs.EPSTATUS.bits=1U<<(ep+16);
@@ -994,7 +993,7 @@ int main(int argc,char **argv){
   alignas(4) uint8_t rx[64]={},other[64]={};
   UsbDevIntrf_t intrf={};
   intrf.DevIntrf.pDevData=&intrf;intrf.EpNo=ep;intrf.Mps=64;
-  intrf.Mode=mode;intrf.bBlocking=true;intrf.pRxBuffer=rx;
+  intrf.Mode=mode;intrf.bBlocking=true;
   intrf.hRxFifo=CFifoInit(rxMem,sizeof(rxMem),USB_INTRF_PKT_BLKSIZE(64),true);
   UsbCtrlrEpAlloc(0,ep,false,rx,true,outComplete,&intrf);
   s_Usbd.EpReg[ep-1][0].MaxPacketSize=64;
@@ -1115,7 +1114,7 @@ int main(int argc,char **argv){
   alignas(4) uint8_t rx[64]={};
   UsbDevIntrf_t intrf={};
   intrf.DevIntrf.pDevData=&intrf;intrf.EpNo=1;intrf.Mps=64;
-  intrf.Mode=USB_INTRF_MODE_BYTE;intrf.bBlocking=true;intrf.pRxBuffer=rx;
+  intrf.Mode=USB_INTRF_MODE_BYTE;intrf.bBlocking=true;
   intrf.hRxFifo=CFifoInit(rxMem,sizeof(rxMem),USB_INTRF_PKT_BLKSIZE(64),true);
   UsbCtrlrEpAlloc(0,1,false,rx,true,outComplete,&intrf);
   s_Usbd.EpReg[0][0].MaxPacketSize=64;
@@ -1262,7 +1261,6 @@ int main(int argc,char **argv){
   intrf.DevIntrf.pDevData=&intrf;
   intrf.hTxFifo=CFifoInit(packetMem,CFIFO_TOTAL_MEMSIZE(3,block),block,blocking);
   intrf.Mps=mps;intrf.EpNo=1;intrf.Mode=USB_INTRF_MODE_PACKET;
-  intrf.EpSend=UsbIntrfEpSendPktMode;
   UsbIntrfSetTxIdle(&intrf);
   auto &reg=s_Usbd.EpReg[0][1];
   reg={};reg.Handler=UsbIntrfCtrlrInEvent;reg.pContext=&intrf;
@@ -1409,3 +1407,5 @@ with tempfile.TemporaryDirectory(prefix='iosonata-queue-') as temp:
         '-x', 'c++', str(path), str(ROOT/'src/cfifo.c'),
         str(ROOT/'src/app_evt_handler.cpp'), '-o', str(binary)], check=True)
     subprocess.run([str(binary), *sys.argv[1:]], check=True)
+
+

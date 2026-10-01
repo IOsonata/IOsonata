@@ -26,7 +26,6 @@ Copyright (c) 2026, I-SYST inc., all rights reserved
 
 #include "cfifo.h"
 #include "prbs.h"
-#include <stdio.h>
 #include "usb/usb.h"
 #include "usb/usb_int.h"
 #include "usb/usb_iso.h"
@@ -52,7 +51,6 @@ Copyright (c) 2026, I-SYST inc., all rights reserved
 #define ISO_ALT_COUNT			6U
 #define ISO_MAX_MPS			63U
 #define ISO_REQ_GET_DIAG		0x5AU
-#define ISO_REQ_GET_TRACE		0x5CU
 
 alignas(4) static uint8_t s_LoopbackRxFifoMem[CDC_RXFIFO_MEMSIZE];
 alignas(4) static uint8_t s_LoopbackTxFifoMem[LOOPBACK_TXFIFO_MEMSIZE];
@@ -62,43 +60,6 @@ alignas(4) static uint8_t s_PrbsTxFifoMem[PRBS_TXFIFO_MEMSIZE];
 UsbdCdc g_LoopbackCdc;
 UsbdCdc g_PrbsCdc;
 
-// DTR is a modem control line the host may toggle at any time; it is not
-// a reset of the data stream. A DTR open only marks that the host may (or
-// may not) have restarted its generator, so the checker allows exactly one
-// uncounted resynchronisation after it. Every other discontinuity counts.
-static atomic_bool s_LoopbackSessionStart = true;
-static volatile uint32_t s_LoopbackOpenCnt;
-
-static int LoopbackEvtHandler(DevIntrf_t * const, DEVINTRF_EVT EvtId,
-							  uint8_t *, int Len)
-{
-	if (EvtId == DEVINTRF_EVT_STATECHG && Len)
-	{
-		static const char msg[] = "\r\nIOsonata USB Combo Stress\r\n";
-		s_LoopbackOpenCnt++;
-		atomic_store(&s_LoopbackSessionStart, true);
-		g_LoopbackCdc.Tx(0, reinterpret_cast<const uint8_t *>(msg),
-			(int)sizeof(msg) - 1);
-	}
-	return 0;
-}
-
-// Distance in PRBS8 steps from Expected to Received: how far the stream
-// jumped at a mismatch. 64 means one full packet was skipped; a negative
-// value is the same distance backwards (bytes repeated); -128 means the
-// received value is not on the sequence at all (a corrupted byte).
-static int LoopbackPrbsStep(uint8_t Expected, uint8_t Received)
-{
-	uint8_t v = Expected;
-	for (int i = 0; i < 127; i++)
-	{
-		if (v == Received)
-			return i < 64 ? i : i - 127;
-		v = Prbs8(v);
-	}
-	return -128;
-}
-
 static const UsbdCdcCfg_t s_LoopbackCfg = {
 	.DevNo = USB_DEVNO,
 	.bBlocking = true,
@@ -106,7 +67,7 @@ static const UsbdCdcCfg_t s_LoopbackCfg = {
 	.pRxFifoMem = s_LoopbackRxFifoMem,
 	.TxFifoMemSize = LOOPBACK_TXFIFO_MEMSIZE,
 	.pTxFifoMem = s_LoopbackTxFifoMem,
-	.EvtCB = LoopbackEvtHandler,
+	.EvtCB = nullptr,
 };
 
 static const UsbdCdcCfg_t s_PrbsCfg = {
@@ -137,46 +98,22 @@ static const uint8_t s_HidReportDesc[] = {
 
 static uint8_t s_HidPending[HID_REPORT_SIZE];
 static uint16_t s_HidPendingLength;
-static uint8_t s_HidControlReport[HID_REPORT_SIZE];
+static UsbdHid g_Hid;
 
-static bool HidReportRequest(const UsbSetupData_t *pSetup,
-	UsbCtrlStage_t Stage, uint8_t **ppData, uint16_t *pLength);
-
-class HidLoopback final : public UsbdHid {
-public:
-	bool Control(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
-				 uint8_t **ppData, uint16_t *pLength) override {
-		if (pSetup != nullptr &&
-			(pSetup->bmRequestType & USB_REQTYPE_MASK_TYPE) == USB_REQTYPE_CLASS &&
-			(pSetup->bRequest == USB_HID_REQ_GET_REPORT ||
-			 pSetup->bRequest == USB_HID_REQ_SET_REPORT))
+static int HidEvent(DevIntrf_t *, DEVINTRF_EVT event,
+	uint8_t *pData, int Length)
+{
+	// Only RX_DATA uses the return value: returning Length frees the slot.
+	if (event == DEVINTRF_EVT_RX_DATA)
+	{
+		// UsbIntIntrfDataEvent already rejects reports larger than the MPS.
+		if (g_Hid.Tx(0, pData, Length) != Length)
 		{
-			return HidReportRequest(pSetup, Stage, ppData, pLength);
+			memcpy(s_HidPending, pData, Length);
+			s_HidPendingLength = Length;
 		}
-		return UsbdHid::Control(pSetup, Stage, ppData, pLength);
 	}
-};
-
-static HidLoopback g_Hid;
-
-static void HidRx(UsbdHidDev_t *, const uint8_t *pData, uint16_t Length,
-	UsbCtrlrXferResult_t Result, void *)
-{
-	if (Result != USB_CTRLR_XFER_SUCCESS || Length > sizeof(s_HidPending))
-	{
-		return;
-	}
-	if (g_Hid.Tx(0, pData, Length) != (int)Length)
-	{
-		memcpy(s_HidPending, pData, Length);
-		s_HidPendingLength = Length;
-	}
-}
-
-static void HidTx(UsbdHidDev_t *, uint16_t, UsbCtrlrXferResult_t Result,
-	void *)
-{
-	if (Result == USB_CTRLR_XFER_SUCCESS && s_HidPendingLength != 0U)
+	else if (event == DEVINTRF_EVT_TX_FIFO_EMPTY && s_HidPendingLength != 0U)
 	{
 		const uint16_t length = s_HidPendingLength;
 		s_HidPendingLength = 0U;
@@ -185,35 +122,7 @@ static void HidTx(UsbdHidDev_t *, uint16_t, UsbCtrlrXferResult_t Result,
 			s_HidPendingLength = length;
 		}
 	}
-}
-
-static bool HidReportRequest(const UsbSetupData_t *pSetup,
-	UsbCtrlStage_t Stage, uint8_t **ppData, uint16_t *pLength)
-{
-	if (pSetup == nullptr || pLength == nullptr)
-	{
-		return false;
-	}
-	if (Stage == USB_CTRL_ABORT)
-	{
-		return true;
-	}
-	if (Stage == USB_CTRL_SETUP)
-	{
-		if (ppData == nullptr || pSetup->wLength > sizeof(s_HidControlReport))
-		{
-			return false;
-		}
-		*ppData = s_HidControlReport;
-		*pLength = sizeof(s_HidControlReport);
-		return true;
-	}
-	if (Stage == USB_CTRL_COMPLETE &&
-		pSetup->bRequest == USB_HID_REQ_SET_REPORT)
-	{
-		return g_Hid.Tx(0, s_HidControlReport, *pLength) == (int)*pLength;
-	}
-	return true;
+	return Length;
 }
 
 static const UsbdHidCfg_t s_HidCfg = {
@@ -229,8 +138,7 @@ static const UsbdHidCfg_t s_HidCfg = {
 	.Protocol = USB_HID_PROT_NONE,
 	.CountryCode = 0U,
 	.InterfaceString = COMBO_STR_INTERFACE,
-	.RxHandler = HidRx,
-	.TxHandler = HidTx,
+	.EvtCB = HidEvent,
 	.pContext = nullptr,
 };
 
@@ -253,25 +161,35 @@ typedef struct __Combo_Int_Function_Descriptor {
 
 static UsbIntIntrf_t s_Int;
 static UsbDevIntrf_t s_IntData;
-static bool s_IntConfigured;
-static uint8_t s_IntAlt;
-static uint8_t s_IntInterfaceNo;
-static uint8_t s_IntEpNo;
+// Small INT and ISO function state in one block: one address literal serves
+// every access.
+static struct {
+	bool IntConfigured;
+	uint8_t IntAlt;
+	uint8_t IntInterfaceNo;
+	uint8_t IntEpNo;
+	bool IsoConfigured;
+	uint8_t IsoAlt;
+	uint8_t IsoInterfaceNo;
+	uint8_t IsoEpNo;
+	uint32_t IsoLoopbackDropCnt;
+} s_Fn;
 
-static void IntRxPacket(UsbIntIntrf_t *, const uint8_t *pData,
-	uint16_t Length, UsbCtrlrXferResult_t Result, void *)
+static int IntEvent(DevIntrf_t *, DEVINTRF_EVT event,
+	uint8_t *pData, int Length)
 {
-	if (Result == USB_CTRLR_XFER_SUCCESS)
+	if (event == DEVINTRF_EVT_RX_DATA)
 	{
 		(void)DeviceIntrfTx(&s_IntData.DevIntrf, 0, pData, Length);
 	}
+	return Length;
 }
 
 static bool IntSelectConfig(uint8_t Configuration)
 {
 	UsbIntIntrfClose(&s_Int);
-	s_IntConfigured = false;
-	s_IntAlt = 0U;
+	s_Fn.IntConfigured = false;
+	s_Fn.IntAlt = 0U;
 	if (Configuration == 0U)
 	{
 		return true;
@@ -280,20 +198,20 @@ static bool IntSelectConfig(uint8_t Configuration)
 	{
 		return false;
 	}
-	s_IntConfigured = true;
+	s_Fn.IntConfigured = true;
 	return true;
 }
 
 static bool IntSelectInterface(uint8_t InterfaceNo, uint8_t Alt)
 {
-	if (!s_IntConfigured || InterfaceNo != s_IntInterfaceNo ||
+	if (!s_Fn.IntConfigured || InterfaceNo != s_Fn.IntInterfaceNo ||
 		Alt > INT_ALT_COUNT)
 	{
 		return false;
 	}
 
 	UsbIntIntrfClose(&s_Int);
-	s_IntAlt = 0U;
+	s_Fn.IntAlt = 0U;
 	if (Alt == 0U)
 	{
 		return true;
@@ -302,14 +220,14 @@ static bool IntSelectInterface(uint8_t InterfaceNo, uint8_t Alt)
 	{
 		return false;
 	}
-	s_IntAlt = Alt;
+	s_Fn.IntAlt = Alt;
 	return true;
 }
 
 static void IntReset(void)
 {
-	s_IntConfigured = false;
-	s_IntAlt = 0U;
+	s_Fn.IntConfigured = false;
+	s_Fn.IntAlt = 0U;
 	UsbIntIntrfReset(&s_Int);
 }
 
@@ -345,13 +263,13 @@ static void IntPatchFunctionDesc(const UsbDeviceClass *, uint8_t *pData,
 {
 	ComboIntFunctionDesc_t *pDesc =
 		reinterpret_cast<ComboIntFunctionDesc_t *>(pData);
-	pDesc->Alt0.bInterfaceNumber = s_IntInterfaceNo;
+	pDesc->Alt0.bInterfaceNumber = s_Fn.IntInterfaceNo;
 	for (unsigned i = 0U; i < INT_ALT_COUNT; i++)
 	{
 		ComboIntAltDesc_t &alt = pDesc->Alt[i];
-		alt.Interface.bInterfaceNumber = s_IntInterfaceNo;
-		alt.Out.bEndpointAddress = USB_ENDPADDR_DIROUT(s_IntEpNo);
-		alt.In.bEndpointAddress = USB_ENDPADDR_DIRIN(s_IntEpNo);
+		alt.Interface.bInterfaceNumber = s_Fn.IntInterfaceNo;
+		alt.Out.bEndpointAddress = USB_ENDPADDR_DIROUT(s_Fn.IntEpNo);
+		alt.In.bEndpointAddress = USB_ENDPADDR_DIRIN(s_Fn.IntEpNo);
 	}
 }
 
@@ -379,13 +297,13 @@ static bool IntInit(void)
 		return false;
 	}
 
-	s_IntInterfaceNo = alloc.FirstInterface;
-	s_IntEpNo = alloc.Bidirectional[0];
+	s_Fn.IntInterfaceNo = alloc.FirstInterface;
+	s_Fn.IntEpNo = alloc.Bidirectional[0];
 
 	UsbIntIntrfCfg_t cfg = {};
 	cfg.DevNo = USB_DEVNO;
-	cfg.EpNo = s_IntEpNo;
-	cfg.RxHandler = IntRxPacket;
+	cfg.EpNo = s_Fn.IntEpNo;
+	cfg.EvtCB = IntEvent;
 	if (!UsbIntIntrfInit(&s_Int, &s_IntData, &cfg))
 	{
 		return false;
@@ -418,11 +336,6 @@ static UsbIsoIntrf_t s_Iso;
 static UsbDevIntrf_t s_IsoData;
 alignas(4) static uint8_t s_IsoRxFifoMem[USB_ISO_INTRF_FIFO_MEMSIZE(ISO_MAX_MPS)];
 alignas(4) static uint8_t s_IsoTxFifoMem[USB_ISO_INTRF_FIFO_MEMSIZE(ISO_MAX_MPS)];
-static bool s_IsoConfigured;
-static uint8_t s_IsoAlt;
-static uint8_t s_IsoInterfaceNo;
-static uint8_t s_IsoEpNo;
-static uint32_t s_IsoLoopbackDropCnt;
 
 #pragma pack(push, 1)
 typedef struct __Combo_Iso_Diag {
@@ -435,18 +348,6 @@ typedef struct __Combo_Iso_Diag {
 #pragma pack(pop)
 
 static ComboIsoDiag_t s_IsoDiag;
-
-static uint8_t IsoFirstEndpoint(uint16_t Mask)
-{
-	for (uint8_t ep = 1U; ep < 16U; ep++)
-	{
-		if ((Mask & (uint16_t)(1U << ep)) != 0U)
-		{
-			return ep;
-		}
-	}
-	return 0U;
-}
 
 // ISO loopback: every received frame goes back out on the next interval.
 // Frames are pulled from the RX FIFO with RxData and queued with TxData,
@@ -466,7 +367,7 @@ static int IsoEvent(DevIntrf_t * const pDev, DEVINTRF_EVT Event,
 	{
 		if (DeviceIntrfTxData(pDev, frame, len) != len)
 		{
-			s_IsoLoopbackDropCnt++;
+			s_Fn.IsoLoopbackDropCnt++;
 		}
 		total += len;
 	}
@@ -477,36 +378,13 @@ static int IsoEvent(DevIntrf_t * const pDev, DEVINTRF_EVT Event,
 static bool IsoControl(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
 	uint8_t **ppData, uint16_t *pLength)
 {
-	if (pSetup == nullptr ||
-		pSetup->bmRequestType !=
+	// The core supplies the setup copy, data pointer and length.
+	if (pSetup->bmRequestType !=
 			(USB_REQTYPE_DIRHOST | USB_REQTYPE_VEND | USB_REQTYPE_INTERFACE) ||
 		pSetup->wValue != 0U ||
-		pSetup->wIndex != s_IsoInterfaceNo)
+		pSetup->wIndex != s_Fn.IsoInterfaceNo)
 	{
 		return false;
-	}
-
-	if (pSetup->bRequest == ISO_REQ_GET_TRACE)
-	{
-		// Controller per-frame ISO trace for the bench. The snapshot is
-		// taken at SETUP so the frames keep running while it is read.
-		if (Stage != USB_CTRL_SETUP)
-		{
-			return true;
-		}
-		if (ppData == nullptr || pLength == nullptr)
-		{
-			return false;
-		}
-		uint8_t *pTrace = nullptr;
-		const uint16_t len = UsbCtrlrIsoTraceSnapshot(USB_DEVNO, &pTrace);
-		if (len == 0U || pTrace == nullptr)
-		{
-			return false;
-		}
-		*ppData = pTrace;
-		*pLength = len < pSetup->wLength ? len : pSetup->wLength;
-		return true;
 	}
 
 	if (pSetup->bRequest != ISO_REQ_GET_DIAG ||
@@ -518,14 +396,9 @@ static bool IsoControl(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
 	{
 		return true;
 	}
-	if (ppData == nullptr || pLength == nullptr)
-	{
-		return false;
-	}
-
 	s_IsoDiag.RxMissCnt = s_Iso.RxMissCnt;
 	s_IsoDiag.TxMissCnt = s_Iso.TxMissCnt;
-	s_IsoDiag.LoopbackDropCnt = s_IsoLoopbackDropCnt;
+	s_IsoDiag.LoopbackDropCnt = s_Fn.IsoLoopbackDropCnt;
 	s_IsoDiag.RxEmptyCnt = s_Iso.RxEmptyCnt;
 	s_IsoDiag.TxEmptyCnt = s_Iso.TxEmptyCnt;
 	*ppData = reinterpret_cast<uint8_t *>(&s_IsoDiag);
@@ -536,8 +409,8 @@ static bool IsoControl(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
 static bool IsoSelectConfig(uint8_t Configuration)
 {
 	UsbIsoIntrfClose(&s_Iso);
-	s_IsoConfigured = false;
-	s_IsoAlt = 0U;
+	s_Fn.IsoConfigured = false;
+	s_Fn.IsoAlt = 0U;
 	if (Configuration == 0U)
 	{
 		return true;
@@ -546,26 +419,26 @@ static bool IsoSelectConfig(uint8_t Configuration)
 	{
 		return false;
 	}
-	s_IsoConfigured = true;
+	s_Fn.IsoConfigured = true;
 	return true;
 }
 
 static bool IsoSelectInterface(uint8_t InterfaceNo, uint8_t Alt)
 {
-	if (!s_IsoConfigured || InterfaceNo != s_IsoInterfaceNo ||
+	if (!s_Fn.IsoConfigured || InterfaceNo != s_Fn.IsoInterfaceNo ||
 		Alt > ISO_ALT_COUNT)
 	{
 		return false;
 	}
 
 	UsbIsoIntrfClose(&s_Iso);
-	s_IsoAlt = 0U;
+	s_Fn.IsoAlt = 0U;
 	if (Alt == 0U)
 	{
 		return true;
 	}
 
-	s_IsoLoopbackDropCnt = 0U;
+	s_Fn.IsoLoopbackDropCnt = 0U;
 	s_Iso.RxMissCnt = 0U;
 	s_Iso.TxMissCnt = 0U;
 	s_Iso.RxEmptyCnt = 0U;
@@ -575,20 +448,20 @@ static bool IsoSelectInterface(uint8_t InterfaceNo, uint8_t Alt)
 	{
 		return false;
 	}
-	s_IsoAlt = Alt;
+	s_Fn.IsoAlt = Alt;
 	return true;
 }
 
 static void IsoReset(void)
 {
-	s_IsoConfigured = false;
-	s_IsoAlt = 0U;
+	s_Fn.IsoConfigured = false;
+	s_Fn.IsoAlt = 0U;
 	UsbIsoIntrfReset(&s_Iso);
 }
 
 static void IsoProcess(void)
 {
-	if (!s_IsoConfigured || s_IsoAlt == 0U)
+	if (!s_Fn.IsoConfigured || s_Fn.IsoAlt == 0U)
 	{
 		return;
 	}
@@ -651,19 +524,19 @@ static void IsoBuildFunctionDesc(const UsbDeviceClass *, uint8_t *pData,
 	ComboIsoFunctionDesc_t *pDesc =
 		reinterpret_cast<ComboIsoFunctionDesc_t *>(pData);
 	pDesc->Alt0 = s_IsoAlt0Desc;
-	pDesc->Alt0.bInterfaceNumber = s_IsoInterfaceNo;
+	pDesc->Alt0.bInterfaceNumber = s_Fn.IsoInterfaceNo;
 
 	const uint8_t interval = Speed == USB_SPEED_HIGH ? 4U : 1U;
 	for (unsigned i = 0U; i < ISO_ALT_COUNT; i++)
 	{
 		ComboIsoAltDesc_t &alt = pDesc->Alt[i];
 		alt = s_IsoAltDesc;
-		alt.Interface.bInterfaceNumber = s_IsoInterfaceNo;
+		alt.Interface.bInterfaceNumber = s_Fn.IsoInterfaceNo;
 		alt.Interface.bAlternateSetting = (uint8_t)(i + 1U);
-		alt.Out.bEndpointAddress = USB_ENDPADDR_DIROUT(s_IsoEpNo);
+		alt.Out.bEndpointAddress = USB_ENDPADDR_DIROUT(s_Fn.IsoEpNo);
 		alt.Out.wMaxPacketSize = s_IsoMps[i];
 		alt.Out.bInterval = interval;
-		alt.In.bEndpointAddress = USB_ENDPADDR_DIRIN(s_IsoEpNo);
+		alt.In.bEndpointAddress = USB_ENDPADDR_DIRIN(s_Fn.IsoEpNo);
 		alt.In.wMaxPacketSize = s_IsoMps[i];
 		alt.In.bInterval = interval;
 	}
@@ -696,7 +569,8 @@ static bool IsoInit(void)
 
 	const uint16_t isoMask = (uint16_t)(
 		USB_ISO_EPIN_MASK(USB_DEVNO) & USB_ISO_EPOUT_MASK(USB_DEVNO));
-	const uint8_t epNo = IsoFirstEndpoint(isoMask);
+	// Lowest controller ISO endpoint; the mask excludes endpoint 0.
+	const uint8_t epNo = isoMask != 0U ? (uint8_t)__builtin_ctz(isoMask) : 0U;
 	if (epNo == 0U)
 	{
 		return false;
@@ -712,12 +586,12 @@ static bool IsoInit(void)
 		return false;
 	}
 
-	s_IsoInterfaceNo = alloc.FirstInterface;
-	s_IsoEpNo = epNo;
+	s_Fn.IsoInterfaceNo = alloc.FirstInterface;
+	s_Fn.IsoEpNo = epNo;
 
 	UsbIsoIntrfCfg_t cfg = {};
 	cfg.DevNo = USB_DEVNO;
-	cfg.EpNo = s_IsoEpNo;
+	cfg.EpNo = s_Fn.IsoEpNo;
 	cfg.BufferSize = ISO_MAX_MPS;
 	cfg.pRxFifoMem = s_IsoRxFifoMem;
 	cfg.pTxFifoMem = s_IsoTxFifoMem;
@@ -756,14 +630,15 @@ static const UsbCfg_t s_UsbCfg = {
 
 int main()
 {
+	// Same loopback and PRBS logic as exemples/usb/tinyusb_combo_stress, so
+	// both builds do the same work per byte.
 	uint8_t loopbackBuffer[CDC_BUFFER_SIZE];
 	uint8_t loopbackExpected = Prbs8(0xff);
-	uint8_t loopbackGrace = 0;
 	uint8_t prbs = 0xff;
 	uint32_t loopbackRxErrorNotify = 0;
-	uint32_t loopbackRxErrorTotal = 0;
 	int loopbackPending = 0;
 	int loopbackOffset = 0;
+	bool loopbackConnected = false;
 
 	if (!UsbInit(&s_UsbCfg) ||
 		!g_LoopbackCdc.Init(s_LoopbackCfg) ||
@@ -779,54 +654,54 @@ int main()
 	while (1)
 	{
 		UsbProcess(USB_DEVNO);
-		if (loopbackPending > 0)
+
+		// A port open restarts the host generator: restart the checker and
+		// drop any echo still pending from the previous session.
+		const bool connected = g_LoopbackCdc.IsPortOpen();
+		if (connected != loopbackConnected)
 		{
-			const int length = g_LoopbackCdc.Tx(
-				0, &loopbackBuffer[loopbackOffset], loopbackPending);
-			if (length > 0)
+			loopbackConnected = connected;
+			loopbackPending = 0;
+			loopbackOffset = 0;
+
+			if (connected)
 			{
-				loopbackOffset += length;
-				loopbackPending -= length;
+				static const char msg[] = "\r\nIOsonata USB Combo Stress\r\n";
+				loopbackExpected = Prbs8(0xff);
+				g_LoopbackCdc.Tx(0, reinterpret_cast<const uint8_t *>(msg),
+					(int)sizeof(msg) - 1);
 			}
 		}
-		else
+
+		if (loopbackConnected)
 		{
-			const int length = g_LoopbackCdc.Rx(
-				0, loopbackBuffer, sizeof(loopbackBuffer));
-			if (length > 0)
+			if (loopbackPending > 0)
 			{
-				if (atomic_exchange(&s_LoopbackSessionStart, false))
+				const int length = g_LoopbackCdc.Tx(
+					0, &loopbackBuffer[loopbackOffset], loopbackPending);
+				if (length > 0)
 				{
-					loopbackGrace = 1U;
+					loopbackOffset += length;
+					loopbackPending -= length;
 				}
-				for (int i = 0; i < length; i++)
+			}
+			else
+			{
+				const int length = g_LoopbackCdc.Rx(
+					0, loopbackBuffer, sizeof(loopbackBuffer));
+				if (length > 0)
 				{
-					if (loopbackBuffer[i] != loopbackExpected)
+					for (int i = 0; i < length; i++)
 					{
-						if (loopbackGrace != 0U)
-						{
-							loopbackGrace = 0U;
-						}
-						else
+						if (loopbackBuffer[i] != loopbackExpected)
 						{
 							loopbackRxErrorNotify++;
-							loopbackRxErrorTotal++;
-							// Bench report: what kind of break, where in
-							// the chunk, and whether DTR moved recently.
-							printf("loop rx mismatch %lu: exp %02x got %02x"
-								" step %d at %d/%d opens %lu\r\n",
-								(unsigned long)loopbackRxErrorTotal,
-								loopbackExpected, loopbackBuffer[i],
-								LoopbackPrbsStep(loopbackExpected,
-									loopbackBuffer[i]),
-								i, length,
-								(unsigned long)s_LoopbackOpenCnt);
 						}
+						loopbackExpected = Prbs8(loopbackBuffer[i]);
 					}
-					loopbackExpected = Prbs8(loopbackBuffer[i]);
+					loopbackPending = length;
+					loopbackOffset = 0;
 				}
-				loopbackPending = length;
-				loopbackOffset = 0;
 			}
 		}
 

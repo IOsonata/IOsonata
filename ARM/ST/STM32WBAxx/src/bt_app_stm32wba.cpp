@@ -1028,6 +1028,13 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 		return false;
 	}
 
+	if (pCfg->PeriphDevMax + pCfg->CentralDevMax > (int)BtPeerCount())
+	{
+		// Peer pool holds fewer slots than the number of links requested.
+		// Provide a larger pool, see g_BtPeerPoolCfg in bt_peer.h
+		return false;
+	}
+
 	// Connection pool removed: the peer manager (BtPeerInit above) owns
 	// the single connection table now.
 	// Populate generic app data from cfg.
@@ -1353,8 +1360,9 @@ static uint16_t WbaUuid16(const uint8_t *pUuid, uint8_t Len)
 static void WbaDiscSrvc(const aci_att_read_by_group_type_resp_event_rp0 *p)
 {
 	BtDevice_t *pDev = BtPeerFindByHdl(p->Connection_Handle);
-	if (pDev == nullptr)
+	if (pDev == nullptr || pDev->pServices == nullptr)
 	{
+		// Unknown link, or discovery not started by BtAppDiscoverDevice
 		return;
 	}
 
@@ -1373,7 +1381,7 @@ static void WbaDiscSrvc(const aci_att_read_by_group_type_resp_event_rp0 *p)
 			break;
 		}
 		const uint8_t *e = &p->Attribute_Data_List[off];
-		BtGattDBSrvc_t *pSrvc = &pDev->Services[pDev->NbSrvc];
+		BtGattDBSrvc_t *pSrvc = &pDev->pServices[pDev->NbSrvc];
 		pSrvc->srv_uuid.BaseIdx = 0;
 		pSrvc->srv_uuid.Type    = BT_UUID_TYPE_16;
 		pSrvc->srv_uuid.Uuid    = WbaUuid16(&e[4], uuidLen);
@@ -1394,7 +1402,7 @@ static void WbaDiscChar(const aci_att_read_by_type_resp_event_rp0 *p)
 	{
 		return;
 	}
-	BtGattDBSrvc_t *pSrvc = &pDev->Services[pDev->Discovery.SrvIdx];
+	BtGattDBSrvc_t *pSrvc = &pDev->pServices[pDev->Discovery.SrvIdx];
 
 	uint8_t entryLen = p->Handle_Value_Pair_Length;
 	uint8_t total    = p->Data_Length;
@@ -1450,7 +1458,7 @@ static void WbaDiscDesc(const aci_att_find_info_resp_event_rp0 *p)
 	{
 		return;
 	}
-	BtGattDBSrvc_t *pSrvc = &pDev->Services[pDev->Discovery.SrvIdx];
+	BtGattDBSrvc_t *pSrvc = &pDev->pServices[pDev->Discovery.SrvIdx];
 	if (pDev->Discovery.CharIdx >= pSrvc->char_count)
 	{
 		return;
@@ -1492,7 +1500,7 @@ static void BtAppDiscStartChar(BtDevice_t *pDev)
 {
 	while (pDev->Discovery.SrvIdx < pDev->NbSrvc)
 	{
-		BtGattDBSrvc_t *pSrvc = &pDev->Services[pDev->Discovery.SrvIdx];
+		BtGattDBSrvc_t *pSrvc = &pDev->pServices[pDev->Discovery.SrvIdx];
 		uint16_t start = (uint16_t)(pSrvc->handle_range.StartHdl + 1); // skip decl
 		uint16_t end   = pSrvc->handle_range.EndHdl;
 
@@ -1520,7 +1528,7 @@ static void BtAppDiscStartDesc(BtDevice_t *pDev)
 {
 	while (pDev->Discovery.SrvIdx < pDev->NbSrvc)
 	{
-		BtGattDBSrvc_t *pSrvc = &pDev->Services[pDev->Discovery.SrvIdx];
+		BtGattDBSrvc_t *pSrvc = &pDev->pServices[pDev->Discovery.SrvIdx];
 
 		while (pDev->Discovery.CharIdx < pSrvc->char_count)
 		{
@@ -1604,7 +1612,12 @@ bool BtAppDiscoverDevice(BtDevice_t * const pDev)
 	pDev->Discovery.Phase   = DISC_SERVICES;
 
 	pDev->NbSrvc = 0;
-	memset(pDev->Services, 0, sizeof(BtGattDBSrvc_t) * BT_DEV_SERVICE_MAXCNT);
+	if (BtDeviceSrvcCacheAttach(pDev) == false)
+	{
+		// No free discovery cache, see g_BtDevSrvcCacheCfg
+		return false;
+	}
+	memset(pDev->pServices, 0, sizeof(BtGattDBSrvc_t) * BT_DEV_SERVICE_MAXCNT);
 
 	return aci_gatt_disc_all_primary_services(pDev->Conn.Hdl) == BLE_STATUS_SUCCESS;
 }

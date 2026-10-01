@@ -146,7 +146,7 @@ static void TestValidation(void)
 	cfg.pRxBuffer = reinterpret_cast<uint8_t *>(rx);
 	cfg.pTxBuffer = reinterpret_cast<uint8_t *>(tx);
 	CHECK(UsbIntrfInit(&intrf, &cfg));
-	CHECK(intrf.hRxFifo == nullptr && intrf.hTxFifo == nullptr);
+	CHECK(intrf.Mode == USB_INTRF_MODE_DIRECT);
 	CHECK(intrf.pRxDirectBuffer != nullptr && intrf.pTxDirectBuffer != nullptr);
 	CHECK(!UsbIntrfConfigure(&intrf, 0U));
 	CHECK(!UsbIntrfConfigure(&intrf, 17U));
@@ -207,10 +207,10 @@ static void TestDrdyPolicy(void)
 		CHECK(memcmp(output, packet, sizeof(packet)) == 0);
 		// Reading the slot submits the pending receive; later controller
 		// polls do not submit the same destination again.
-		CHECK(!intrf.RxPending && s_OutBuffer == intrf.pRxBuffer);
+		CHECK(!intrf.RxPending && s_OutBuffer == intrf.pRxDirectBuffer->Data);
 		CHECK(s_OutXferCount == submits);
 		UsbCtrlrProcess(0);
-		CHECK(!intrf.RxPending && s_OutBuffer == intrf.pRxBuffer);
+		CHECK(!intrf.RxPending && s_OutBuffer == intrf.pRxDirectBuffer->Data);
 		CHECK(s_OutXferCount == submits);
 		UsbCtrlrProcess(0);
 		CHECK(s_OutXferCount == submits);
@@ -258,3 +258,4 @@ int main(void)
 		"usb_direct_intrf_test: FAIL");
 	return s_Fail == 0 ? 0 : 1;
 }
+

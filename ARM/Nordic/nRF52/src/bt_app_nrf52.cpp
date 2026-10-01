@@ -219,7 +219,12 @@ bool BtAppDiscoverDevice(BtDevice_t * const pDev)
 	pDev->Discovery.CharIdx = 0;
 
 	pDev->NbSrvc = 0;
-	memset(pDev->Services, 0, sizeof(BtGattDBSrvc_t) * BT_DEV_SERVICE_MAXCNT);
+	if (BtDeviceSrvcCacheAttach(pDev) == false)
+	{
+		// No free discovery cache, see g_BtDevSrvcCacheCfg
+		return false;
+	}
+	memset(pDev->pServices, 0, sizeof(BtGattDBSrvc_t) * BT_DEV_SERVICE_MAXCNT);
 
 	// NULL uuid filter discovers every primary service from handle 1.
 	return sd_ble_gattc_primary_services_discover(pDev->Conn.Hdl, 0x0001, NULL) == NRF_SUCCESS;
@@ -229,7 +234,7 @@ static void BtAppDiscStartChar(BtDevice_t *pDev)
 {
 	while (pDev->Discovery.SrvIdx < pDev->NbSrvc)
 	{
-		BtGattDBSrvc_t *pSrvc = &pDev->Services[pDev->Discovery.SrvIdx];
+		BtGattDBSrvc_t *pSrvc = &pDev->pServices[pDev->Discovery.SrvIdx];
 		ble_gattc_handle_range_t range;
 
 		range.start_handle = pSrvc->handle_range.StartHdl + 1;  // skip service declaration
@@ -253,7 +258,7 @@ static void BtAppDiscStartDesc(BtDevice_t *pDev)
 {
 	while (pDev->Discovery.SrvIdx < pDev->NbSrvc)
 	{
-		BtGattDBSrvc_t *pSrvc = &pDev->Services[pDev->Discovery.SrvIdx];
+		BtGattDBSrvc_t *pSrvc = &pDev->pServices[pDev->Discovery.SrvIdx];
 
 		while (pDev->Discovery.CharIdx < pSrvc->char_count)
 		{
@@ -294,8 +299,9 @@ static void BtAppDiscStartDesc(BtDevice_t *pDev)
 static void BtAppDiscPrimSrvcRsp(const ble_gattc_evt_t *pEvt)
 {
 	BtDevice_t *pDev = BtPeerFindByHdl(pEvt->conn_handle);
-	if (pDev == NULL)
+	if (pDev == NULL || pDev->pServices == NULL)
 	{
+		// Unknown link, or discovery not started by BtAppDiscoverDevice
 		return;
 	}
 
@@ -311,7 +317,7 @@ static void BtAppDiscPrimSrvcRsp(const ble_gattc_evt_t *pEvt)
 				break;
 			}
 
-			BtGattDBSrvc_t *pSrvc = &pDev->Services[pDev->NbSrvc];
+			BtGattDBSrvc_t *pSrvc = &pDev->pServices[pDev->NbSrvc];
 			pSrvc->srv_uuid.BaseIdx = 0;
 			pSrvc->srv_uuid.Type    = BT_UUID_TYPE_16;
 			pSrvc->srv_uuid.Uuid    = p->services[i].uuid.uuid;
@@ -343,7 +349,7 @@ static void BtAppDiscCharRsp(const ble_gattc_evt_t *pEvt)
 		return;
 	}
 
-	BtGattDBSrvc_t *pSrvc = &pDev->Services[pDev->Discovery.SrvIdx];
+	BtGattDBSrvc_t *pSrvc = &pDev->pServices[pDev->Discovery.SrvIdx];
 
 	if (pEvt->gatt_status == BLE_GATT_STATUS_SUCCESS)
 	{
@@ -413,10 +419,10 @@ static void BtAppDiscDescRsp(const ble_gattc_evt_t *pEvt)
 	}
 
 	if (pEvt->gatt_status == BLE_GATT_STATUS_SUCCESS &&
-		pDev->Discovery.CharIdx < pDev->Services[pDev->Discovery.SrvIdx].char_count)
+		pDev->Discovery.CharIdx < pDev->pServices[pDev->Discovery.SrvIdx].char_count)
 	{
 		const ble_gattc_evt_desc_disc_rsp_t *p = &pEvt->params.desc_disc_rsp;
-		BtGattDBSrvc_t *pSrvc = &pDev->Services[pDev->Discovery.SrvIdx];
+		BtGattDBSrvc_t *pSrvc = &pDev->pServices[pDev->Discovery.SrvIdx];
 		BtGattDBChar_t *pCh   = &pSrvc->characteristics[pDev->Discovery.CharIdx];
 
 		for (uint16_t i = 0; i < p->count; i++)
@@ -1079,38 +1085,10 @@ static void ble_evt_dispatch(ble_evt_t const * p_ble_evt, void *p_context)
     {
     	switch (p_ble_evt->header.evt_id)
         {
-    		case BLE_GAP_EVT_ADV_REPORT:
-				{
-					// Scan data report
-					ble_gap_evt_adv_report_t * p_adv_report = (ble_gap_evt_adv_report_t*)&p_gap_evt->params.adv_report;
-
-					bool res = BtAppScanReport(p_adv_report->rssi, p_adv_report->peer_addr.addr_type,
-							p_adv_report->peer_addr.addr, p_adv_report->data.len, p_adv_report->data.p_data);
-					// Continue scan
-					if (res == true)
-					{
-						BtAppScan();
-					}
-					else
-					{
-						BtAppScanStop();
-					}
-				}
-    			break;
-            case BLE_GAP_EVT_TIMEOUT:
-				{
-					const ble_gap_evt_t * p_gap_evt = &p_ble_evt->evt.gap_evt;
-
-					ble_gap_evt_timeout_t const * p_timeout = &p_gap_evt->params.timeout;
-
-					if (p_timeout->src == BLE_GAP_TIMEOUT_SRC_SCAN)
-					{
-						g_BtAppData.bScan = false;
-						BtAppScanTimeoutHandler();
-					}
-				}
-            break;
-
+    		// BLE_GAP_EVT_ADV_REPORT and the scan timeout are handled by the
+    		// scan observer in bt_scan_nrf52.cpp. Keeping them out of this
+    		// dispatcher lets a build that never scans leave the scan module
+    		// and its report buffer out of the link.
             case BLE_GATTC_EVT_PRIM_SRVC_DISC_RSP:
                 BtAppDiscPrimSrvcRsp(&p_ble_evt->evt.gattc_evt);
                 break;
@@ -1700,6 +1678,15 @@ bool BtAppInit(const BtAppCfg_t *pCfg)//, bool bEraseBond)
 	{
 		DEBUG_PRINTF("BtAppInit FAIL: BtPeerInit (pool mem=%p size=%d)\r\n",
 			(void*)pCfg->pPeerPoolMem, (int)pCfg->PeerPoolMemSize);
+		return false;
+	}
+
+	if (pCfg->PeriphDevMax + pCfg->CentralDevMax > (int)BtPeerCount())
+	{
+		// Peer pool holds fewer slots than the number of links requested.
+		// Provide a larger pool, see g_BtPeerPoolCfg in bt_peer.h
+		DEBUG_PRINTF("BtAppInit FAIL: peer pool %d slots < %d links\r\n",
+			(int)BtPeerCount(), pCfg->PeriphDevMax + pCfg->CentralDevMax);
 		return false;
 	}
 
