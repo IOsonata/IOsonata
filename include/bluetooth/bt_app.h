@@ -242,7 +242,8 @@ void BtAppInitUserServices(void);
  *
  * The configuration given to BtAppInit is used and has to stay valid.
  *
- * NOTE: Implemented by the ports that use the generic host.
+ * NOTE: Implemented by the port. Ports that still set up connection support
+ * inside BtAppInit do not provide it yet.
  *
  * @return	true - connection support started
  */

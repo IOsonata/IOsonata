@@ -46,6 +46,7 @@ SOFTWARE.
 #include "bluetooth/bt_gatt.h"
 #include "bluetooth/bt_dev.h"
 #include "bluetooth/bt_peer.h"
+#include "bluetooth/bt_app.h"
 
 #pragma pack(push, 1)
 typedef enum {
@@ -511,6 +512,13 @@ static uint32_t BtGattCharAdd(BtGattSrvc_t *pSrvc, BtGattChar_t *pChar,
 bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)
 {
 	if (pSrvc == nullptr || pSrvc->pCharArray == nullptr || pSrvc->NbChar <= 0)
+	{
+		return false;
+	}
+
+	// A service is of use only on a link. The first one starts connection
+	// support, which is linked through this reference.
+	if (BtAppConnInit() == false)
 	{
 		return false;
 	}

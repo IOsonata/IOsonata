@@ -56,6 +56,7 @@
 
 #include "bluetooth/bt_gap.h"
 #include "bluetooth/bt_peer.h"
+#include "bluetooth/bt_app.h"
 
 #define BT_GAP_CONN_CFG_TAG            1     /**< A tag identifying the SoftDevice BLE configuration. */
 
@@ -144,6 +145,13 @@ void BtGapSetDevName(const char* pDeviceName)
 
 bool BtGapConnect(BtGapPeerAddr_t * const pPeerAddr, BtGapConnParams_t * const pConnParam)
 {
+	// Initiating a connection starts connection support, which is linked
+	// through this reference. A device that only scans does not link it.
+	if (BtAppConnInit() == false)
+	{
+		return false;
+	}
+
 	ble_gap_conn_params_t cparam;
 	ble_gap_addr_t addr = { .addr_id_peer = 0, .addr_type = pPeerAddr->Type, };
 

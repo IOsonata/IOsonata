@@ -558,6 +558,12 @@ bool BtAppSecInit(void)
     	return true;
     }
 
+    // Security works on a link, start connection support first
+    if (BtAppConnInit() == false)
+    {
+    	return false;
+    }
+
     // Select the ECDH engine and inject it before pm_init: the IOsonata
     // security manager (bt_sec_sd) calls BtLescInit() during init, so the
     // engine must already be in place or init fails. The nRF52840 has the

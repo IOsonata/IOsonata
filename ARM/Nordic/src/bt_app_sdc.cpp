@@ -132,12 +132,17 @@ typedef struct {
 	void (*AclData)(BtHciDevice_t * const pDev, BtHciACLDataPacket_t * const pPkt);
 	void (*Tick)(void);
 	bool (*SrvcDone)(const BtAppCfg_t *pCfg);
+	void (*TimerStart)(void);
 } BtAppSdcConn_t;
 
 static const BtAppSdcConn_t *s_pBtAppSdcConn = nullptr;
 
 // Configuration given to BtAppInit, used by BtAppConnInit
 static const BtAppCfg_t *s_pBtAppCfg = nullptr;
+
+// Set at the end of BtAppInit. Connection support started after that point
+// starts the timer itself.
+static bool s_bBtAppInitDone = false;
 
 
 // BtAppData_t now declared in bluetooth/bt_app.h, accessed via g_BtAppData.
@@ -170,7 +175,16 @@ const static TimerCfg_t s_BtAppSdcTimerCfg = {
 	.EvtHandler = BtAppSdcTimerHandler
 };
 
-static Timer g_BtAppSdcTimer;
+// Application timer: millisecond clock of the SMP and GATT transaction
+// timeouts and their 1 s check. Only a link uses it. It is a function static
+// so that the object is constructed, and the timer driver linked, only with
+// connection support.
+static Timer &BtAppSdcTimer(void)
+{
+	static Timer s_Timer;
+
+	return s_Timer;
+}
 
 static inline uint32_t BtAppSendData(void *pData, uint32_t Len) {
 	return (uint32_t)BtHciCtlrSdcSend(pData, Len);
@@ -200,15 +214,15 @@ static void BtAppSdcCtlrRx(BtHciCtlrDev_t * const pDev, bool bIsEvent, uint8_t *
 // Millisecond clock for the generic SMP/GATT transaction timeouts. These
 // override the weak BtSmpMsTick/BtGattMsTick defaults (which return 0, leaving
 // the timeouts inert). Both are declared in bt_smp.h / bt_gatt.h, so no
-// linkage specifier is needed here. g_BtAppSdcTimer is started in BtAppInit.
+// linkage specifier is needed here. The timer is started with connection support.
 uint32_t BtSmpMsTick(void)
 {
-	return g_BtAppSdcTimer.mSecond();
+	return BtAppSdcTimer().mSecond();
 }
 
 uint32_t BtGattMsTick(void)
 {
-	return g_BtAppSdcTimer.mSecond();
+	return BtAppSdcTimer().mSecond();
 }
 
 // Spec-strict indication transaction timeout: Core Vol 3 Part F 3.3.3 requires
@@ -490,11 +504,30 @@ static bool BtAppSdcSrvcDone(const BtAppCfg_t *pCfg)
 	return true;
 }
 
+// Start the app timer with a 1 s continuous trigger. It sources the SMP/GATT
+// millisecond clock (BtSmp/GattMsTick above) and its handler drives the
+// 30 s transaction-timeout checks. 1 s cadence is ample for a 30 s deadline.
+static void BtAppSdcTimerStart(void)
+{
+	BtAppSdcTimer().Init(s_BtAppSdcTimerCfg);
+	BtAppSdcTimer().EnableTimerTrigger(0, 1000UL, TIMER_TRIG_TYPE_CONTINUOUS, nullptr);
+}
+
 static const BtAppSdcConn_t s_BtAppSdcConn = {
 	.AclData = BtHciProcessData,
 	.Tick = BtGattIndicationTimeoutCheck,
 	.SrvcDone = BtAppSdcSrvcDone,
+	.TimerStart = BtAppSdcTimerStart,
 };
+
+// Engines of Encrypted Advertising Data: the AES engine of the controller
+// and the hardware RNG. Called by the EAD module the first time it needs an
+// engine, so they are linked only when the application uses EAD
+// (BtAdvEadKeySet, BtAdvDecrypt). Declared in bt_ead.h.
+bool BtEadEngineInit(void)
+{
+	return BtEadInit(BtCryptoCtlrSdcInit(), CryptoRngNrfInstance());
+}
 
 static bool BtAppSdcConnStart(const BtAppCfg_t *pCfg)
 {
@@ -589,6 +622,12 @@ bool BtAppConnInit(void)
 		return false;
 	}
 
+	if (s_bBtAppInitDone)
+	{
+		// Started after BtAppInit, as a central does at its first connect
+		BtAppSdcTimerStart();
+	}
+
 	return true;
 }
 
@@ -609,6 +648,7 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 	// The peer table, the attribute database and the GAP services are set
 	// up by BtAppConnInit, see the service setup below.
 	s_pBtAppCfg = pCfg;
+	s_bBtAppInitDone = false;
 #if 0
 	mpsl_clock_lfclk_cfg_t lfclk = {MPSL_CLOCK_LF_SRC_RC, 0,};
 	OscDesc_t const *lfosc = GetLowFreqOscDesc();
@@ -810,16 +850,8 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 		return false;
 	}
 
-	// Encrypted Advertising Data draws on the same AES engine and the same
-	// hardware RNG. Binding them here rather than leaving it to the
-	// application means an application that installs key material with
-	// BtAdvEadKeySet advertises encrypted, instead of having every packet
-	// refused for a missing engine at the point it is about to go on air.
-	// Nothing is encrypted until key material is installed.
-	if (BtEadInit(BtCryptoCtlrSdcInit(), CryptoRngNrfInstance()) == false)
-	{
-		DEBUG_PRINTF("BtAppInit: EAD engines unavailable\r\n");
-	}
+	// The engines of Encrypted Advertising Data are bound by BtEadEngineInit
+	// above, when the EAD module first needs them.
 
 	BtAppInitUserData();
 
@@ -897,11 +929,13 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 	// Connection pool removed: the peer manager (BtPeerInit above) owns
 	// the single connection table now.
 
-	// Start the app timer with a 1 s continuous trigger. It sources the SMP/GATT
-	// millisecond clock (BtSmp/GattMsTick above) and its handler drives the
-	// 30 s transaction-timeout checks. 1 s cadence is ample for a 30 s deadline.
-	g_BtAppSdcTimer.Init(s_BtAppSdcTimerCfg);
-	g_BtAppSdcTimer.EnableTimerTrigger(0, 1000UL, TIMER_TRIG_TYPE_CONTINUOUS, nullptr);
+	// The app timer serves the SMP and GATT timeouts of a link, so it is
+	// started only with connection support.
+	if (s_pBtAppSdcConn != nullptr)
+	{
+		s_pBtAppSdcConn->TimerStart();
+	}
+	s_bBtAppInitDone = true;
 
     g_BtAppData.State = BTAPP_STATE_INITIALIZED;
 

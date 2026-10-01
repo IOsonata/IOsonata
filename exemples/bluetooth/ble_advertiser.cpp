@@ -41,6 +41,7 @@ SOFTWARE.
 #include "coredev/timer.h"
 
 #include "bluetooth/bt_app.h"
+#include "bluetooth/bt_hci_ctlr.h"
 //#ifndef NRFXLIB_SDC
 //#include "ble_app_nrf5.h"
 //#endif
@@ -106,6 +107,15 @@ UART g_Uart;
 
 uint32_t g_AdvCnt = 0;
 uint8_t g_AdvLong[] = "1234567890abcdefghijklmnopqrstuvwxyz`!@#$%^&*()_+";
+
+// Controller memory pool. A broadcaster has no link, so it needs far less
+// than the library default, which is sized for several links. Used by the
+// ports that run the controller in the application (SDC), not linked
+// otherwise. BtHciCtlrMemPoolSizeNeeded gives the size the configuration
+// asked for.
+alignas(8) static uint8_t s_BtCtlrMemPool[1024];
+
+const BtHciCtlrMemPool_t g_BtHciCtlrMemPool = { s_BtCtlrMemPool, sizeof(s_BtCtlrMemPool) };
 
 const BtAppCfg_t s_BtAppCfg = {
 	.Role = BTAPP_ROLE_BROADCASTER,

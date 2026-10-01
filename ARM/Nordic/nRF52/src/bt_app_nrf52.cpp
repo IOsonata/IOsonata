@@ -164,7 +164,31 @@ static const int8_t s_TxPowerdBm[] = {
 static const int s_NbTxPowerdBm = sizeof(s_TxPowerdBm) / sizeof(int8_t);
 #endif
 
-NRF_BLE_GATT_DEF(s_Gatt);
+// GATT module instance. It is not registered as a SoftDevice observer of its
+// own (NRF_BLE_GATT_DEF): an observer is always kept by the linker. The
+// connection event handler passes it the events, so the module is linked
+// only with connection support.
+static nrf_ble_gatt_t s_Gatt;
+
+// Connection support. What a link needs (peer table, GAP setup, connection
+// parameters, GATT module, Device Information Service, connection events,
+// GATT timeout) is reached only through this table. BtAppConnInit installs
+// it. An application that only advertises or scans never reaches
+// BtAppConnInit, so none of it is linked.
+typedef struct {
+	void (*Evt)(ble_evt_t const * p_ble_evt, void *p_context);
+	void (*Tick)(void);
+	void (*SrvcDone)(const BtAppCfg_t *pCfg);
+} BtAppNrf52Conn_t;
+
+static const BtAppNrf52Conn_t *s_pBtAppNrf52Conn = nullptr;
+
+// Configuration given to BtAppInit, used by BtAppConnInit
+static const BtAppCfg_t *s_pBtAppCfg = nullptr;
+
+// Set when BtAppInit is past the service setup. Connection support started
+// after that point finishes the service setup itself.
+static bool s_bBtAppSrvcDone = false;
 
 // g_BtAppData definition and helpers (isConnected, BtConnected, BtInitialized,
 // BtAppConnLedOff/On) moved to src/bluetooth/bt_app.cpp.
@@ -579,9 +603,13 @@ static void conn_params_init(void)
  *
  * @param[in] p_ble_evt  SoftDevice event.
  */
-static void ble_evt_dispatch(ble_evt_t const * p_ble_evt, void *p_context)
+static void BtAppNrf52ConnEvt(ble_evt_t const * p_ble_evt, void *p_context)
 {
     uint32_t err_code;
+
+	// GATT module first, as when it was an observer of its own
+	nrf_ble_gatt_on_ble_evt(p_ble_evt, &s_Gatt);
+
 	ble_gap_evt_t const * p_gap_evt = &p_ble_evt->evt.gap_evt;
 	uint16_t role = ble_conn_state_role(p_ble_evt->evt.gap_evt.conn_handle);
 
@@ -853,6 +881,29 @@ static void ble_evt_dispatch(ble_evt_t const * p_ble_evt, void *p_context)
 }
 
 
+
+// BLE event observer of the port. With connection support the events go to
+// the connection event handler above. Without it there is no link, and only
+// the events of advertising and scanning are of interest.
+static void ble_evt_dispatch(ble_evt_t const * p_ble_evt, void *p_context)
+{
+	if (s_pBtAppNrf52Conn != nullptr)
+	{
+		s_pBtAppNrf52Conn->Evt(p_ble_evt, p_context);
+
+		return;
+	}
+
+	if (p_ble_evt->header.evt_id == BLE_GAP_EVT_ADV_SET_TERMINATED)
+	{
+		BtAppAdvTimeoutHandler();
+	}
+
+	if (g_BtAppData.AppDevice.Conn.Role & (BTAPP_ROLE_CENTRAL | BTAPP_ROLE_OBSERVER))
+	{
+		BtAppCentralEvtHandler(p_ble_evt->header.evt_id, (void*)p_ble_evt);
+	}
+}
 
 /**@brief Function for handling events from the GATT library. */
 void BtGattEvtHandler(nrf_ble_gatt_t * p_gatt, const nrf_ble_gatt_evt_t * p_evt)
@@ -1210,6 +1261,119 @@ void BtGattIndicationTimeout(uint16_t ConnHdl)
 	sd_ble_gap_disconnect(ConnHdl, BLE_HCI_REMOTE_USER_TERMINATED_CONNECTION);
 }
 
+// Last step of the service setup, after the application has added its
+// services: Device Information Service and the GATT module.
+static void BtAppNrf52SrvcDone(const BtAppCfg_t *pCfg)
+{
+	if (pCfg->pDevInfo != NULL)
+	{
+		BtDisInit(pCfg);
+	}
+
+	BtGattInit();
+}
+
+static const BtAppNrf52Conn_t s_BtAppNrf52Conn = {
+	.Evt = BtAppNrf52ConnEvt,
+	.Tick = BtGattIndicationTimeoutCheck,
+	.SrvcDone = BtAppNrf52SrvcDone,
+};
+
+static bool BtAppNrf52ConnStart(const BtAppCfg_t *pCfg)
+{
+	if (!BtPeerInit(pCfg->pPeerPoolMem, pCfg->PeerPoolMemSize))
+	{
+		DEBUG_PRINTF("BtAppConnInit FAIL: BtPeerInit (pool mem=%p size=%d)\r\n",
+			(void*)pCfg->pPeerPoolMem, (int)pCfg->PeerPoolMemSize);
+		return false;
+	}
+
+	if (pCfg->PeriphDevMax + pCfg->CentralDevMax > (int)BtPeerCount())
+	{
+		// Peer pool holds fewer slots than the number of links requested.
+		// Provide a larger pool, see g_BtPeerPoolCfg in bt_peer.h
+		DEBUG_PRINTF("BtAppConnInit FAIL: peer pool %d slots < %d links\r\n",
+			(int)BtPeerCount(), pCfg->PeriphDevMax + pCfg->CentralDevMax);
+		return false;
+	}
+
+	// Split the long-write reassembly pool across the peer slots so each
+	// link gets its own buffer (per Conn.pLongWrBuff).
+	BtPeerLongWrInit(pCfg->pLongWrPoolMem, pCfg->LongWrPoolMemSize);
+
+	BtGapCfg_t gapcfg = {
+		.Role = pCfg->Role,
+		.SecType = pCfg->SecType,
+		.AdvInterval = pCfg->AdvInterval,
+		.AdvTimeout = pCfg->AdvTimeout,
+		.ConnIntervalMin = pCfg->ConnIntervalMin,
+		.ConnIntervalMax = pCfg->ConnIntervalMax,
+		.SlaveLatency = BT_GAP_CONN_SLAVE_LATENCY,
+		.SupTimeout = BT_GAP_CONN_SUP_TIMEOUT
+	};
+
+	// The GAP and GATT services are the table a client reads first.
+	if (BtGapInit(&gapcfg) == false)
+	{
+		DEBUG_PRINTF("BtAppConnInit FAIL: BtGapInit (GAP/GATT base services)\r\n");
+		return false;
+	}
+
+	if (pCfg->pDevName != NULL)
+	{
+		BtGapSetDevName(pCfg->pDevName);
+	}
+
+	conn_params_init();
+
+	return true;
+}
+
+/**
+ * @brief	Start connection support.
+ *
+ * The call is what links the connection part of the port. The stack calls
+ * it when the first GATT service is added, when a connection is initiated
+ * and when security is started, so an application only calls it itself when
+ * it is connectable without any service of its own. It needs the SoftDevice
+ * enabled, which is the case from BtAppInitUserServices on.
+ *
+ * @return	true - connection support started
+ */
+bool BtAppConnInit(void)
+{
+	if (s_pBtAppNrf52Conn != nullptr)
+	{
+		// Already started
+		return true;
+	}
+
+	if (s_pBtAppCfg == nullptr)
+	{
+		// BtAppInit has not been called yet
+		return false;
+	}
+
+	// Set first: BtGapInit adds the GAP and GATT services, which comes back
+	// to this function.
+	s_pBtAppNrf52Conn = &s_BtAppNrf52Conn;
+
+	if (BtAppNrf52ConnStart(s_pBtAppCfg) == false)
+	{
+		s_pBtAppNrf52Conn = nullptr;
+
+		return false;
+	}
+
+	if (s_bBtAppSrvcDone)
+	{
+		// Started after BtAppInit, as a central does at its first connect
+		BtAppNrf52SrvcDone(s_pBtAppCfg);
+	}
+
+	return true;
+}
+
 bool BtAppInit(const BtAppCfg_t *pCfg)//, bool bEraseBond)
 {
 	ret_code_t err_code;
@@ -1226,28 +1390,12 @@ bool BtAppInit(const BtAppCfg_t *pCfg)//, bool bEraseBond)
 	g_BtAppData.SecExchg = pCfg->SecExchg;
 	g_BtAppData.bSecInit = false;
 	g_BtAppData.AdvHdl = BLE_GAP_ADV_SET_HANDLE_NOT_SET;
-	if (!BtPeerInit(pCfg->pPeerPoolMem, pCfg->PeerPoolMemSize))
-	{
-		DEBUG_PRINTF("BtAppInit FAIL: BtPeerInit (pool mem=%p size=%d)\r\n",
-			(void*)pCfg->pPeerPoolMem, (int)pCfg->PeerPoolMemSize);
-		return false;
-	}
 
-	if (pCfg->PeriphDevMax + pCfg->CentralDevMax > (int)BtPeerCount())
-	{
-		// Peer pool holds fewer slots than the number of links requested.
-		// Provide a larger pool, see g_BtPeerPoolCfg in bt_peer.h
-		DEBUG_PRINTF("BtAppInit FAIL: peer pool %d slots < %d links\r\n",
-			(int)BtPeerCount(), pCfg->PeriphDevMax + pCfg->CentralDevMax);
-		return false;
-	}
-
-	// Split the long-write reassembly pool across the peer slots so each
-	// link gets its own buffer (per Conn.pLongWrBuff).
-	BtPeerLongWrInit(pCfg->pLongWrPoolMem, pCfg->LongWrPoolMemSize);
-
-	// Connection pool removed: the peer manager (BtPeerInit above) owns
-	// the single connection table now.
+	// The peer table, the GAP setup, the connection parameters module and
+	// the GATT module are set up by BtAppConnInit, see the service setup
+	// below.
+	s_pBtAppCfg = pCfg;
+	s_bBtAppSrvcDone = false;
 	g_BtAppData.ConnLedPort = pCfg->ConnLedPort;
 	g_BtAppData.ConnLedPin = pCfg->ConnLedPin;
 	g_BtAppData.ConnLedActLevel = pCfg->ConnLedActLevel;
@@ -1340,43 +1488,28 @@ bool BtAppInit(const BtAppCfg_t *pCfg)//, bool bEraseBond)
 
     //BtDevInit(pCfg);
 
-    BtGapCfg_t gapcfg = {
-    	.Role = pCfg->Role,
-		.SecType = pCfg->SecType,
-		.AdvInterval = pCfg->AdvInterval,
-		.AdvTimeout = pCfg->AdvTimeout,
-		.ConnIntervalMin = pCfg->ConnIntervalMin,
-		.ConnIntervalMax = pCfg->ConnIntervalMax,
-		.SlaveLatency = BT_GAP_CONN_SLAVE_LATENCY,
-		.SupTimeout = BT_GAP_CONN_SUP_TIMEOUT
-    };
-
-	// The GAP and GATT services are the table a client reads first. Without
-	// them there is nothing to advertise, so this stops here.
-	if (BtGapInit(&gapcfg) == false)
-	{
-		DEBUG_PRINTF("BtAppInit FAIL: BtGapInit (GAP/GATT base services)\r\n");
-		return false;
-	}
-
-	if (pCfg->pDevName != NULL)
-	{
-		BtGapSetDevName(pCfg->pDevName);
-	}
-
-	conn_params_init();
-
+	// Service setup. Adding the first service starts connection support
+	// (BtAppConnInit), which sets up GAP and the connection parameters module
+	// ahead of the application services.
 	if (pCfg->Role & BTAPP_ROLE_PERIPHERAL)
 	{
 		BtAppInitUserServices();
+
+		if (s_pBtAppNrf52Conn == nullptr)
+		{
+			// Peripheral role without any service. The application has to
+			// call BtAppConnInit in BtAppInitUserServices to be connectable,
+			// or use BTAPP_ROLE_BROADCASTER.
+			DEBUG_PRINTF("BtAppInit FAIL: peripheral role but connection support was not started\r\n");
+			return false;
+		}
 	}
 
-	if (pCfg->pDevInfo != NULL)
+	if (s_pBtAppNrf52Conn != nullptr)
 	{
-		BtDisInit(pCfg);
+		s_pBtAppNrf52Conn->SrvcDone(pCfg);
 	}
-
-    BtGattInit();
+	s_bBtAppSrvcDone = true;
 
     BtAppInitUserData();
 
@@ -1459,7 +1592,10 @@ void BtAppRun()
 		// SoftDevice runs SMP and its timer on this port. The generic SMP link
 		// table is never populated, so BtSmpTimeoutCheck had nothing to check
 		// and only kept that table and the SMP toolbox in the image.
-		BtGattIndicationTimeoutCheck();
+		if (s_pBtAppNrf52Conn != nullptr)
+		{
+			s_pBtAppNrf52Conn->Tick();
+		}
 
 		BtAppEvtWait();
     }
