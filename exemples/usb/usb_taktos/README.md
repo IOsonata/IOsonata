@@ -27,7 +27,9 @@ scheduler tick or override those handlers. Keep the IOsonata C++ startup.
 - That thread alone calls `UsbProcess()`, `Rx()` and `Tx()`. On nRF52840,
   `UsbProcess()` also dispatches the shared AppEvt queue. Do not dispatch that
   queue concurrently from another thread.
-- CDC is nonblocking. The thread retains a partly accepted packet and retries
+- CDC FIFOs use `bBlocking = true` to preserve queued data and apply
+  backpressure when full. This flag does not put the calling thread to sleep.
+  The thread retains a partly accepted packet and retries
   the unsent suffix after servicing USB again. A full TX FIFO must not stall
   the thread responsible for dispatching completions.
 - Each service burst has at most 32 passes, followed by a one-tick sleep.
@@ -84,7 +86,10 @@ equal- or higher-priority ready threads, so this continuously active stress
 example does not give CPU time to lower-priority threads or the idle thread.
 Do not copy that policy into a low-power product unchanged.
 
-Each CDC data path has one application owner. CDC calls are nonblocking.
+Each CDC data path has one application owner. Both CDC instances keep the
+bare-metal `bBlocking = true` FIFO policy: full RX applies backpressure and
+full TX returns the accepted byte count without overwriting queued data.
+`false` allows drops and is unsuitable for this integrity test.
 The loopback thread publishes a cumulative error count through a lock-free
 32-bit atomic; the PRBS thread sends the same zero-byte target-error markers
 as the bare-metal version. Thread memory is static and sized with

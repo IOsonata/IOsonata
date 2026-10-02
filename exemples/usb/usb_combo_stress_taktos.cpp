@@ -147,12 +147,8 @@ static void HeartbeatThread(void *pArg)
 int main()
 {
 	// Initialization completes before any traffic thread can access a class.
-	UsbdCdcCfg_t loopCfg = s_LoopbackCfg;
-	UsbdCdcCfg_t prbsCfg = s_PrbsCfg;
-	loopCfg.bBlocking = false;
-	prbsCfg.bBlocking = false;
 	if (!UsbInit(&s_UsbCfg) ||
-		!g_LoopbackCdc.Init(loopCfg) || !g_PrbsCdc.Init(prbsCfg) ||
+		!g_LoopbackCdc.Init(s_LoopbackCfg) || !g_PrbsCdc.Init(s_PrbsCfg) ||
 		!g_Hid.Init(s_HidCfg) || !IntInit() || !IsoInit())
 	{
 		return -1;

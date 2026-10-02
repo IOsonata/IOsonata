@@ -64,7 +64,7 @@ alignas(4) static uint8_t s_CdcTxFifoMem[CDC_TXFIFO_MEMSIZE];
 // USB CDC configuration
 static const UsbdCdcCfg_t s_CdcCfg = {
 	.DevNo = USB_DEVNO,
-	.bBlocking = false,
+	.bBlocking = true,
 	.RxFifoMemSize = CDC_RXFIFO_MEMSIZE,
 	.pRxFifoMem = s_CdcRxFifoMem,
 	.TxFifoMemSize = CDC_TXFIFO_MEMSIZE,
