@@ -603,6 +603,31 @@ struct __Bt_Service {
 extern "C" {
 #endif
 
+/// Attribute database memory descriptor
+typedef struct __Bt_Att_DB_Mem_Cfg {
+	uint8_t *pMem;			//!< Database memory, aligned for BtAttDBEntry_t
+	size_t Size;			//!< Total pMem length in bytes
+} BtAttDBMemCfg_t;
+
+/// Memory the attribute database is built in. The library defines a weak
+/// default. An application whose services need more, or less, defines its
+/// own
+///
+///   alignas(BtAttDBEntry_t) static uint8_t s_AttDBMem[MY_SIZE];
+///   const BtAttDBMemCfg_t g_BtAttDBMemCfg = { s_AttDBMem, sizeof(s_AttDBMem) };
+///
+/// in which case the library default memory is not linked. Each attribute
+/// takes sizeof(BtAttDBEntry_t) plus its data, rounded up to the alignment
+/// of the entry, and one more entry is kept for the end of the database.
+/// Adding a service fails when the memory is full.
+extern const BtAttDBMemCfg_t g_BtAttDBMemCfg;
+
+/**
+ * @brief	Reset the attribute database.
+ *
+ * @param	MemSize	: How much of the g_BtAttDBMemCfg memory to use. A value
+ * 					  larger than the descriptor size is clamped to it.
+ */
 void BtAttDBInit(size_t MemSize);
 BtAttDBEntry_t *BtAttDBAddEntry(BtUuid16_t *pUuid, int MaxDataLen);//, void *pData, int DataLen);
 // Record the allocator position, and return to a recorded one. Adding a

@@ -122,11 +122,14 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define APP_ADV_TIMEOUT_IN_SECONDS      0                                         /**< The advertising timeout (in units of seconds). */
 #endif
 
-#define BT_ATT_DB_MEMSIZE				(3200)
+// Attribute database memory for the ports that keep the database in the
+// application (generic host). The four Thingy services with the GAP and GATT
+// services take about 3300 bytes. Not linked on the SoftDevice ports.
+#define BT_ATT_DB_MEMSIZE				(3600)
 
-// A strong override of the weak pool in bt_att.cpp must carry at least the
-// alignment of the entry type the allocator places in it.
-alignas(BtAttDBEntry_t) uint8_t s_BtAttDBMem[BT_ATT_DB_MEMSIZE];
+alignas(BtAttDBEntry_t) static uint8_t s_BtAttDBMem[BT_ATT_DB_MEMSIZE];
+
+const BtAttDBMemCfg_t g_BtAttDBMemCfg = { s_BtAttDBMem, sizeof(s_BtAttDBMem) };
 
 uint8_t g_AdvDataBuff[10] = {
 	BT_ADV_MANDATA_TYPE_TPH,
