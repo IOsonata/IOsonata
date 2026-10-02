@@ -268,10 +268,8 @@ void BtPeriphEvtHandler(uint32_t Evt, void *pCtx)
 
 void BtAppInitUserServices()
 {
-    uint32_t       err_code;
-
-    err_code = BtGattSrvcAdd(&g_BlePdmSrvc);
-    assert(err_code == 0);
+    bool res = BtGattSrvcAdd(&g_BlePdmSrvc);
+    assert(res == true);
 }
 
 void PdmHandler(PdmDev_t *pDev, DEVINTRF_EVT Evt)

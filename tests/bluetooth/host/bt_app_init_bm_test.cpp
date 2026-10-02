@@ -49,6 +49,7 @@ enum CallId {
 };
 
 static FailPoint s_FailPoint;
+static bool s_bSecStart = true;
 static int s_FailDisValue;
 static CallId s_Calls[64];
 static int s_CallCount;
@@ -67,6 +68,7 @@ static void Record(CallId Id)
 static void ResetHarness()
 {
 	s_FailPoint = FAIL_NONE;
+	s_bSecStart = true;
 	s_FailDisValue = -1;
 	s_CallCount = 0;
 	s_DisValueCount = 0;
@@ -193,6 +195,12 @@ void BtAppInitUserServices(void)
 void BtAppInitUserData(void)
 {
 	Record(CALL_USER_DATA);
+
+	// An application that uses security starts it from here
+	if (s_bSecStart)
+	{
+		(void)BtAppSecInit();
+	}
 }
 
 bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)
@@ -281,10 +289,22 @@ int main()
 
 	ctx.Run("open initialization skips security", [&]() {
 		ResetHarness();
+		// An open application does not start security
+		s_bSecStart = false;
 		BtAppCfg_t cfg = MakeCfg(false, true);
 		BT_CHECK(ctx, BtAppInit(&cfg));
 		BT_CHECK(ctx, !CallSeen(CALL_SECURITY));
 		BT_CHECK(ctx, CallSeen(CALL_ADVERTISING));
+	});
+
+	ctx.Run("secure configuration without BtAppSecInit fails", [&]() {
+		ResetHarness();
+		s_bSecStart = false;
+		BtAppCfg_t cfg = MakeCfg();
+		BT_CHECK(ctx, !BtAppInit(&cfg));
+		BT_CHECK(ctx, CallSeen(CALL_USER_DATA));
+		BT_CHECK(ctx, !CallSeen(CALL_SECURITY));
+		BT_CHECK(ctx, !CallSeen(CALL_ADVERTISING));
 	});
 
 	ctx.Run("fail fast before stack", [&]() {

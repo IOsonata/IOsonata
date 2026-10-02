@@ -130,6 +130,230 @@ size_t BtHciCtlrSdcSend(void *pData, size_t Len)
 	return s_pBtHciCtlrSdc->Send(s_pBtHciCtlrSdc, pData, Len);
 }
 
+// The commands are in groups. The group of a feature is reached only through
+// a pointer that the support function of that feature sets, so that an
+// application without links, scanning or periodic advertising does not
+// link the controller code behind those commands. A command of a group
+// that is not installed is answered as an unknown command.
+#define BT_HCI_CMD_SDC_NOT_FOUND		INT32_MIN
+
+typedef int32_t (*BtHciCmdSdcGroup_t)(uint16_t OpCode, const void *pParam, void *pRet, uint8_t RetLen);
+
+static BtHciCmdSdcGroup_t s_pBtHciCmdSdcLink = nullptr;
+static BtHciCmdSdcGroup_t s_pBtHciCmdSdcScan = nullptr;
+static BtHciCmdSdcGroup_t s_pBtHciCmdSdcPadv = nullptr;
+
+// Commands of a link, installed by BtHciCtlrLinkSupport
+static int32_t BtHciCmdSdcLink(uint16_t OpCode, const void *pParam, void *pRet, uint8_t RetLen)
+{
+	int32_t res;
+
+	switch (OpCode)
+	{
+		case BT_HCI_CMD_CTLR_ENABLE_ENCRYPTION:
+			res = sdc_hci_cmd_le_enable_encryption((const sdc_hci_cmd_le_enable_encryption_t*)pParam);
+			break;
+
+		case BT_HCI_CMD_CTLR_LONGTERM_KEY_REQUEST_REPLY:
+			{
+				sdc_hci_cmd_le_long_term_key_request_reply_return_t r;
+				res = sdc_hci_cmd_le_long_term_key_request_reply((const sdc_hci_cmd_le_long_term_key_request_reply_t*)pParam, &r);
+			}
+			break;
+
+		case BT_HCI_CMD_CTLR_LONGTERM_KEY_REQUEST_NEG_REPLY:
+			{
+				sdc_hci_cmd_le_long_term_key_request_negative_reply_return_t r;
+				res = sdc_hci_cmd_le_long_term_key_request_negative_reply((const sdc_hci_cmd_le_long_term_key_request_negative_reply_t*)pParam, &r);
+			}
+			break;
+
+		// Link procedures bt_gap_hci runs on an established connection.
+		case BT_HCI_CMD_CTLR_READ_PHY:
+			{
+				sdc_hci_cmd_le_read_phy_return_t r;
+				res = sdc_hci_cmd_le_read_phy((const sdc_hci_cmd_le_read_phy_t*)pParam, &r);
+				if (pRet != nullptr && RetLen > 0)
+				{
+					memcpy(pRet, &r, RetLen < sizeof(r) ? RetLen : sizeof(r));
+				}
+			}
+			break;
+
+		case BT_HCI_CMD_CTLR_SET_PHY:
+			res = sdc_hci_cmd_le_set_phy((const sdc_hci_cmd_le_set_phy_t*)pParam);
+			break;
+
+		case BT_HCI_CMD_CTLR_SET_DATA_LEN:
+			{
+				sdc_hci_cmd_le_set_data_length_return_t r;
+				res = sdc_hci_cmd_le_set_data_length((const sdc_hci_cmd_le_set_data_length_t*)pParam, &r);
+				if (pRet != nullptr && RetLen > 0)
+				{
+					memcpy(pRet, &r, RetLen < sizeof(r) ? RetLen : sizeof(r));
+				}
+			}
+			break;
+
+		case BT_HCI_CMD_LINKCTRL_DISCONNECT:
+			res = sdc_hci_cmd_lc_disconnect((const sdc_hci_cmd_lc_disconnect_t*)pParam);
+			break;
+
+		default:
+			return BT_HCI_CMD_SDC_NOT_FOUND;
+	}
+
+	return res;
+}
+
+// Commands of scanning, connection initiation and periodic sync, installed
+// by BtHciCtlrCentralSupport
+static int32_t BtHciCmdSdcScan(uint16_t OpCode, const void *pParam, void *pRet, uint8_t RetLen)
+{
+	int32_t res;
+
+	switch (OpCode)
+	{
+		// Periodic advertising, receiving side. Create Sync is answered with
+		// Command Status rather than Command Complete, which changes nothing
+		// here: the SDC entry point returns the status either way.
+		case BT_HCI_CMD_CTLR_PERIODIC_ADV_CREATE_SYNC:
+			res = sdc_hci_cmd_le_periodic_adv_create_sync((const sdc_hci_cmd_le_periodic_adv_create_sync_t*)pParam);
+			break;
+
+		case BT_HCI_CMD_CTLR_PERIODIC_ADV_CREATE_SYNC_CANCEL:
+			res = sdc_hci_cmd_le_periodic_adv_create_sync_cancel();
+			break;
+
+		case BT_HCI_CMD_CTLR_PERIODIC_ADV_TERMINATE_SYNC:
+			res = sdc_hci_cmd_le_periodic_adv_terminate_sync((const sdc_hci_cmd_le_periodic_adv_terminate_sync_t*)pParam);
+			break;
+
+		case BT_HCI_CMD_CTLR_PERIODIC_ADV_LIST_ADD_DEV:
+			res = sdc_hci_cmd_le_add_device_to_periodic_adv_list((const sdc_hci_cmd_le_add_device_to_periodic_adv_list_t*)pParam);
+			break;
+
+		case BT_HCI_CMD_CTLR_PERIODIC_ADV_LIST_REMOVE_DEV:
+			res = sdc_hci_cmd_le_remove_device_from_periodic_adv_list((const sdc_hci_cmd_le_remove_device_from_periodic_adv_list_t*)pParam);
+			break;
+
+		case BT_HCI_CMD_CTLR_PERIODIC_ADV_LIST_CLEAR:
+			res = sdc_hci_cmd_le_clear_periodic_adv_list();
+			break;
+
+		case BT_HCI_CMD_CTLR_PERIODIC_ADV_LIST_READ_SIZE:
+			{
+				sdc_hci_cmd_le_read_periodic_adv_list_size_return_t r;
+				res = sdc_hci_cmd_le_read_periodic_adv_list_size(&r);
+				if (pRet != nullptr && RetLen > 0)
+				{
+					memcpy(pRet, &r, RetLen < sizeof(r) ? RetLen : sizeof(r));
+				}
+			}
+			break;
+
+		case BT_HCI_CMD_CTLR_SET_PERIODIC_ADV_RECEIVE_ENABLE:
+			res = sdc_hci_cmd_le_set_periodic_adv_receive_enable((const sdc_hci_cmd_le_set_periodic_adv_receive_enable_t*)pParam);
+			break;
+
+		case BT_HCI_CMD_CTLR_SET_PERIODIC_ADV_RESPONSE_DATA:
+			{
+				sdc_hci_cmd_le_set_periodic_adv_response_data_return_t r;
+				res = sdc_hci_cmd_le_set_periodic_adv_response_data((const sdc_hci_cmd_le_set_periodic_adv_response_data_t*)pParam, &r);
+				if (pRet != nullptr && RetLen > 0)
+				{
+					memcpy(pRet, &r, RetLen < sizeof(r) ? RetLen : sizeof(r));
+				}
+			}
+			break;
+
+		case BT_HCI_CMD_CTLR_SET_PERIODIC_SYNC_SUBEVENT:
+			{
+				sdc_hci_cmd_le_set_periodic_sync_subevent_return_t r;
+				res = sdc_hci_cmd_le_set_periodic_sync_subevent((const sdc_hci_cmd_le_set_periodic_sync_subevent_t*)pParam, &r);
+				if (pRet != nullptr && RetLen > 0)
+				{
+					memcpy(pRet, &r, RetLen < sizeof(r) ? RetLen : sizeof(r));
+				}
+			}
+			break;
+
+		case BT_HCI_CMD_CTLR_SET_EXT_SCAN_PARAM:
+			res = sdc_hci_cmd_le_set_ext_scan_params((const sdc_hci_cmd_le_set_ext_scan_params_t*)pParam);
+			break;
+
+		case BT_HCI_CMD_CTLR_SET_EXT_SCAN_ENABLE:
+			res = sdc_hci_cmd_le_set_ext_scan_enable((const sdc_hci_cmd_le_set_ext_scan_enable_t*)pParam);
+			break;
+
+		case BT_HCI_CMD_CTLR_CREATE_CONN:
+			res = sdc_hci_cmd_le_create_conn((const sdc_hci_cmd_le_create_conn_t*)pParam);
+			break;
+
+		default:
+			return BT_HCI_CMD_SDC_NOT_FOUND;
+	}
+
+	return res;
+}
+
+// Commands of periodic advertising, installed by BtHciCtlrPeriodicAdvSupport
+static int32_t BtHciCmdSdcPadv(uint16_t OpCode, const void *pParam, void *pRet, uint8_t RetLen)
+{
+	int32_t res;
+
+	switch (OpCode)
+	{
+		// Periodic advertising, advertiser side. bt_padv_hci.cpp builds these
+		// three in the wire layout of Vol 4 Part E 7.8.61 to 7.8.63, which is
+		// what the SDC parameter types are, so the buffer casts across the
+		// same way the extended advertising commands above do. Without these
+		// cases the opcodes reach the default and the whole feature answers
+		// 0xFF on this controller.
+		case BT_HCI_CMD_CTLR_SET_PERIODIC_ADV_PARAM:
+			res = sdc_hci_cmd_le_set_periodic_adv_params((const sdc_hci_cmd_le_set_periodic_adv_params_t*)pParam);
+			break;
+
+		case BT_HCI_CMD_CTLR_SET_PERIODIC_ADV_DATA:
+			res = sdc_hci_cmd_le_set_periodic_adv_data((const sdc_hci_cmd_le_set_periodic_adv_data_t*)pParam);
+			break;
+
+		case BT_HCI_CMD_CTLR_SET_PERIODIC_ADV_ENABLE:
+			res = sdc_hci_cmd_le_set_periodic_adv_enable((const sdc_hci_cmd_le_set_periodic_adv_enable_t*)pParam);
+			break;
+
+		// Periodic Advertising with Responses. All four return the handle
+		// they were given alongside the status, which the callers do not read
+		// back since it is the one they asked for.
+		case BT_HCI_CMD_CTLR_SET_PERIODIC_ADV_PARAM_V2:
+			{
+				sdc_hci_cmd_le_set_periodic_adv_params_v2_return_t r;
+				res = sdc_hci_cmd_le_set_periodic_adv_params_v2((const sdc_hci_cmd_le_set_periodic_adv_params_v2_t*)pParam, &r);
+				if (pRet != nullptr && RetLen > 0)
+				{
+					memcpy(pRet, &r, RetLen < sizeof(r) ? RetLen : sizeof(r));
+				}
+			}
+			break;
+
+		case BT_HCI_CMD_CTLR_SET_PERIODIC_ADV_SUBEVENT_DATA:
+			{
+				sdc_hci_cmd_le_set_periodic_adv_subevent_data_return_t r;
+				res = sdc_hci_cmd_le_set_periodic_adv_subevent_data((const sdc_hci_cmd_le_set_periodic_adv_subevent_data_t*)pParam, &r);
+				if (pRet != nullptr && RetLen > 0)
+				{
+					memcpy(pRet, &r, RetLen < sizeof(r) ? RetLen : sizeof(r));
+				}
+			}
+			break;
+
+		default:
+			return BT_HCI_CMD_SDC_NOT_FOUND;
+	}
+
+	return res;
+}
+
 // SDC command executor. Sends the command, then pumps the controller until the
 // matching Command Complete or Command Status sets CmdDone, and returns the HCI
 // status. Command credit and opcode match are the generic fields filled by
@@ -196,143 +420,6 @@ uint8_t BtHciCmdSdc(BtHciDevice_t * const pDev, uint16_t OpCode, const void *pPa
 			res = sdc_hci_cmd_le_set_adv_set_random_address((const sdc_hci_cmd_le_set_adv_set_random_address_t*)pParam);
 			break;
 
-		// Periodic advertising, advertiser side. bt_padv_hci.cpp builds these
-		// three in the wire layout of Vol 4 Part E 7.8.61 to 7.8.63, which is
-		// what the SDC parameter types are, so the buffer casts across the
-		// same way the extended advertising commands above do. Without these
-		// cases the opcodes reach the default and the whole feature answers
-		// 0xFF on this controller.
-		case BT_HCI_CMD_CTLR_SET_PERIODIC_ADV_PARAM:
-			res = sdc_hci_cmd_le_set_periodic_adv_params((const sdc_hci_cmd_le_set_periodic_adv_params_t*)pParam);
-			break;
-
-		case BT_HCI_CMD_CTLR_SET_PERIODIC_ADV_DATA:
-			res = sdc_hci_cmd_le_set_periodic_adv_data((const sdc_hci_cmd_le_set_periodic_adv_data_t*)pParam);
-			break;
-
-		case BT_HCI_CMD_CTLR_SET_PERIODIC_ADV_ENABLE:
-			res = sdc_hci_cmd_le_set_periodic_adv_enable((const sdc_hci_cmd_le_set_periodic_adv_enable_t*)pParam);
-			break;
-
-		// Periodic advertising, receiving side. Create Sync is answered with
-		// Command Status rather than Command Complete, which changes nothing
-		// here: the SDC entry point returns the status either way.
-		case BT_HCI_CMD_CTLR_PERIODIC_ADV_CREATE_SYNC:
-			res = sdc_hci_cmd_le_periodic_adv_create_sync((const sdc_hci_cmd_le_periodic_adv_create_sync_t*)pParam);
-			break;
-
-		case BT_HCI_CMD_CTLR_PERIODIC_ADV_CREATE_SYNC_CANCEL:
-			res = sdc_hci_cmd_le_periodic_adv_create_sync_cancel();
-			break;
-
-		case BT_HCI_CMD_CTLR_PERIODIC_ADV_TERMINATE_SYNC:
-			res = sdc_hci_cmd_le_periodic_adv_terminate_sync((const sdc_hci_cmd_le_periodic_adv_terminate_sync_t*)pParam);
-			break;
-
-		case BT_HCI_CMD_CTLR_PERIODIC_ADV_LIST_ADD_DEV:
-			res = sdc_hci_cmd_le_add_device_to_periodic_adv_list((const sdc_hci_cmd_le_add_device_to_periodic_adv_list_t*)pParam);
-			break;
-
-		case BT_HCI_CMD_CTLR_PERIODIC_ADV_LIST_REMOVE_DEV:
-			res = sdc_hci_cmd_le_remove_device_from_periodic_adv_list((const sdc_hci_cmd_le_remove_device_from_periodic_adv_list_t*)pParam);
-			break;
-
-		case BT_HCI_CMD_CTLR_PERIODIC_ADV_LIST_CLEAR:
-			res = sdc_hci_cmd_le_clear_periodic_adv_list();
-			break;
-
-		case BT_HCI_CMD_CTLR_PERIODIC_ADV_LIST_READ_SIZE:
-			{
-				sdc_hci_cmd_le_read_periodic_adv_list_size_return_t r;
-				res = sdc_hci_cmd_le_read_periodic_adv_list_size(&r);
-				if (pRet != nullptr && RetLen > 0)
-				{
-					memcpy(pRet, &r, RetLen < sizeof(r) ? RetLen : sizeof(r));
-				}
-			}
-			break;
-
-		case BT_HCI_CMD_CTLR_SET_PERIODIC_ADV_RECEIVE_ENABLE:
-			res = sdc_hci_cmd_le_set_periodic_adv_receive_enable((const sdc_hci_cmd_le_set_periodic_adv_receive_enable_t*)pParam);
-			break;
-
-		// Periodic Advertising with Responses. All four return the handle
-		// they were given alongside the status, which the callers do not read
-		// back since it is the one they asked for.
-		case BT_HCI_CMD_CTLR_SET_PERIODIC_ADV_PARAM_V2:
-			{
-				sdc_hci_cmd_le_set_periodic_adv_params_v2_return_t r;
-				res = sdc_hci_cmd_le_set_periodic_adv_params_v2((const sdc_hci_cmd_le_set_periodic_adv_params_v2_t*)pParam, &r);
-				if (pRet != nullptr && RetLen > 0)
-				{
-					memcpy(pRet, &r, RetLen < sizeof(r) ? RetLen : sizeof(r));
-				}
-			}
-			break;
-
-		case BT_HCI_CMD_CTLR_SET_PERIODIC_ADV_SUBEVENT_DATA:
-			{
-				sdc_hci_cmd_le_set_periodic_adv_subevent_data_return_t r;
-				res = sdc_hci_cmd_le_set_periodic_adv_subevent_data((const sdc_hci_cmd_le_set_periodic_adv_subevent_data_t*)pParam, &r);
-				if (pRet != nullptr && RetLen > 0)
-				{
-					memcpy(pRet, &r, RetLen < sizeof(r) ? RetLen : sizeof(r));
-				}
-			}
-			break;
-
-		case BT_HCI_CMD_CTLR_SET_PERIODIC_ADV_RESPONSE_DATA:
-			{
-				sdc_hci_cmd_le_set_periodic_adv_response_data_return_t r;
-				res = sdc_hci_cmd_le_set_periodic_adv_response_data((const sdc_hci_cmd_le_set_periodic_adv_response_data_t*)pParam, &r);
-				if (pRet != nullptr && RetLen > 0)
-				{
-					memcpy(pRet, &r, RetLen < sizeof(r) ? RetLen : sizeof(r));
-				}
-			}
-			break;
-
-		case BT_HCI_CMD_CTLR_SET_PERIODIC_SYNC_SUBEVENT:
-			{
-				sdc_hci_cmd_le_set_periodic_sync_subevent_return_t r;
-				res = sdc_hci_cmd_le_set_periodic_sync_subevent((const sdc_hci_cmd_le_set_periodic_sync_subevent_t*)pParam, &r);
-				if (pRet != nullptr && RetLen > 0)
-				{
-					memcpy(pRet, &r, RetLen < sizeof(r) ? RetLen : sizeof(r));
-				}
-			}
-			break;
-
-		case BT_HCI_CMD_CTLR_SET_EXT_SCAN_PARAM:
-			res = sdc_hci_cmd_le_set_ext_scan_params((const sdc_hci_cmd_le_set_ext_scan_params_t*)pParam);
-			break;
-
-		case BT_HCI_CMD_CTLR_SET_EXT_SCAN_ENABLE:
-			res = sdc_hci_cmd_le_set_ext_scan_enable((const sdc_hci_cmd_le_set_ext_scan_enable_t*)pParam);
-			break;
-
-		case BT_HCI_CMD_CTLR_CREATE_CONN:
-			res = sdc_hci_cmd_le_create_conn((const sdc_hci_cmd_le_create_conn_t*)pParam);
-			break;
-
-		case BT_HCI_CMD_CTLR_ENABLE_ENCRYPTION:
-			res = sdc_hci_cmd_le_enable_encryption((const sdc_hci_cmd_le_enable_encryption_t*)pParam);
-			break;
-
-		case BT_HCI_CMD_CTLR_LONGTERM_KEY_REQUEST_REPLY:
-			{
-				sdc_hci_cmd_le_long_term_key_request_reply_return_t r;
-				res = sdc_hci_cmd_le_long_term_key_request_reply((const sdc_hci_cmd_le_long_term_key_request_reply_t*)pParam, &r);
-			}
-			break;
-
-		case BT_HCI_CMD_CTLR_LONGTERM_KEY_REQUEST_NEG_REPLY:
-			{
-				sdc_hci_cmd_le_long_term_key_request_negative_reply_return_t r;
-				res = sdc_hci_cmd_le_long_term_key_request_negative_reply((const sdc_hci_cmd_le_long_term_key_request_negative_reply_t*)pParam, &r);
-			}
-			break;
-
 		case BT_HCI_CMD_CTLR_SET_RANDOM_ADDR:
 			res = sdc_hci_cmd_le_set_random_address((const sdc_hci_cmd_le_set_random_address_t*)pParam);
 			break;
@@ -341,33 +428,6 @@ uint8_t BtHciCmdSdc(BtHciDevice_t * const pDev, uint16_t OpCode, const void *pPa
 			{
 				sdc_hci_cmd_le_read_max_data_length_return_t r;
 				res = sdc_hci_cmd_le_read_max_data_length(&r);
-				if (pRet != nullptr && RetLen > 0)
-				{
-					memcpy(pRet, &r, RetLen < sizeof(r) ? RetLen : sizeof(r));
-				}
-			}
-			break;
-
-		// Link procedures bt_gap_hci runs on an established connection.
-		case BT_HCI_CMD_CTLR_READ_PHY:
-			{
-				sdc_hci_cmd_le_read_phy_return_t r;
-				res = sdc_hci_cmd_le_read_phy((const sdc_hci_cmd_le_read_phy_t*)pParam, &r);
-				if (pRet != nullptr && RetLen > 0)
-				{
-					memcpy(pRet, &r, RetLen < sizeof(r) ? RetLen : sizeof(r));
-				}
-			}
-			break;
-
-		case BT_HCI_CMD_CTLR_SET_PHY:
-			res = sdc_hci_cmd_le_set_phy((const sdc_hci_cmd_le_set_phy_t*)pParam);
-			break;
-
-		case BT_HCI_CMD_CTLR_SET_DATA_LEN:
-			{
-				sdc_hci_cmd_le_set_data_length_return_t r;
-				res = sdc_hci_cmd_le_set_data_length((const sdc_hci_cmd_le_set_data_length_t*)pParam, &r);
 				if (pRet != nullptr && RetLen > 0)
 				{
 					memcpy(pRet, &r, RetLen < sizeof(r) ? RetLen : sizeof(r));
@@ -402,12 +462,26 @@ uint8_t BtHciCmdSdc(BtHciDevice_t * const pDev, uint16_t OpCode, const void *pPa
 			}
 			break;
 
-		case BT_HCI_CMD_LINKCTRL_DISCONNECT:
-			res = sdc_hci_cmd_lc_disconnect((const sdc_hci_cmd_lc_disconnect_t*)pParam);
-			break;
-
 		default:
-			return 0xFF;
+			// Not a command of the base set, try the installed groups
+			res = BT_HCI_CMD_SDC_NOT_FOUND;
+			if (s_pBtHciCmdSdcLink != nullptr)
+			{
+				res = s_pBtHciCmdSdcLink(OpCode, pParam, pRet, RetLen);
+			}
+			if (res == BT_HCI_CMD_SDC_NOT_FOUND && s_pBtHciCmdSdcScan != nullptr)
+			{
+				res = s_pBtHciCmdSdcScan(OpCode, pParam, pRet, RetLen);
+			}
+			if (res == BT_HCI_CMD_SDC_NOT_FOUND && s_pBtHciCmdSdcPadv != nullptr)
+			{
+				res = s_pBtHciCmdSdcPadv(OpCode, pParam, pRet, RetLen);
+			}
+			if (res == BT_HCI_CMD_SDC_NOT_FOUND)
+			{
+				return 0xFF;
+			}
+			break;
 	}
 
 	// Propagate the controller status byte. The sdc_hci_cmd_* wrappers return
@@ -435,7 +509,101 @@ uint8_t BtHciCmdSdc(BtHciDevice_t * const pDev, uint16_t OpCode, const void *pPa
 // advertising grows what sdc_cfg_set asks for, and the check below reports the
 // number it wants when this is too small, so a device that turns the feature on
 // finds out here rather than on air.
-alignas(8) static uint8_t s_BtStackSdcMemPool[10000];
+//
+// What the controller needs depends on the role and the link counts: a
+// broadcaster needs about a tenth of this default, a central with several
+// links needs more. The application sizes it by defining its own
+// g_BtHciCtlrMemPool, in which case this default is not linked.
+// BtHciCtlrMemPoolSizeNeeded reports the size the configuration asked for.
+alignas(8) static uint8_t s_BtStackSdcMemPool[BT_HCI_CTLR_MEMPOOL_DEFAULT_SIZE];
+
+extern "C" __attribute__((weak)) const BtHciCtlrMemPool_t g_BtHciCtlrMemPool = {
+	s_BtStackSdcMemPool, sizeof(s_BtStackSdcMemPool)
+};
+
+// Pool size the last controller configuration asked for
+static int32_t s_BtStackSdcMemNeeded = 0;
+
+int32_t BtHciCtlrMemPoolSizeNeeded(void)
+{
+	return s_BtStackSdcMemNeeded;
+}
+
+// Link-time reference to the scan module. Declared weak here so that it does
+// not pull the module in: it is defined when the application calls
+// BtAppScanInit, BtAppScan or BtAppScanStop, and unresolved otherwise.
+extern "C" __attribute__((weak)) void (* const g_pBtHciCtlrCentralSupport)(void);
+
+// Same link-time reference for the periodic advertising module, defined when
+// the application calls BtPadvInit.
+extern "C" __attribute__((weak)) void (* const g_pBtHciCtlrPeriodicAdvSupport)(void);
+
+// Enable periodic advertising in the controller. Has to run before the
+// controller is configured and after sdc_support_ext_adv.
+void BtHciCtlrPeriodicAdvSupport(void)
+{
+	s_pBtHciCmdSdcPadv = BtHciCmdSdcPadv;
+
+	// Periodic advertising in the Advertising state.
+	sdc_support_le_periodic_adv();
+	// Periodic advertising with responses, the advertiser half. Separate
+	// from the line above: enabling plain periodic advertising leaves the
+	// four PAwR commands refused, which is what made a train run while a
+	// subevent could never be configured.
+	sdc_support_le_periodic_adv_with_rsp();
+}
+
+// Peripheral link features of the controller. Reached only through the
+// pointer below, which BtHciCtlrPeripheralSupport sets, so that a build that
+// never has a link does not reference this part of the controller library.
+static void BtHciCtlrSdcPeripheralSupport(void)
+{
+	sdc_support_peripheral();
+	sdc_support_dle_peripheral();
+	sdc_support_phy_update_peripheral();
+	sdc_support_le_power_control_peripheral();
+	sdc_support_le_conn_cte_rsp_peripheral();
+}
+
+static void (*s_pBtHciCtlrSdcPeripheral)(void) = nullptr;
+
+void BtHciCtlrPeripheralSupport(void)
+{
+	s_pBtHciCtlrSdcPeripheral = BtHciCtlrSdcPeripheralSupport;
+}
+
+void BtHciCtlrLinkSupport(void)
+{
+	s_pBtHciCmdSdcLink = BtHciCmdSdcLink;
+}
+
+// Enable the scan, periodic sync and central features of the controller.
+// Has to run before the controller is configured. Kept out of
+// BtHciCtlrEnable so that only a build with the scan module references this
+// part of the controller library.
+void BtHciCtlrCentralSupport(void)
+{
+	s_pBtHciCmdSdcScan = BtHciCmdSdcScan;
+
+	sdc_support_scan();
+	sdc_support_ext_scan();
+	// Periodic advertising in the Synchronization state, which is the
+	// receiving side: an observer syncs to a train, an advertiser
+	// transmits one. This was in the peripheral branch above, where the
+	// prerequisite sdc.h states for it, sdc_support_ext_scan(), is never
+	// called, so an observer build did not enable it at all and Create
+	// Sync would have been refused by the controller.
+	sdc_support_le_periodic_sync();
+	// The responder half of PAwR, which is what lets a synchronized device
+	// answer a subevent rather than only receive it.
+	sdc_support_le_periodic_sync_with_rsp();
+	sdc_support_central();
+	sdc_support_ext_central();
+	sdc_support_dle_central();
+	sdc_support_phy_update_central();
+	sdc_support_le_power_control_central();
+	sdc_support_le_conn_cte_rsp_central();
+}
 
 static void BtStackSdcAssert(const char * file, const uint32_t line)
 {
@@ -546,41 +714,47 @@ bool BtHciCtlrStart(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 		// Config for peripheral role
 		sdc_support_adv();
 		sdc_support_ext_adv();
-		// Periodic advertising in the Advertising state. sdc.h requires
-		// sdc_support_ext_adv() first, which is the line above.
-		sdc_support_le_periodic_adv();
-		// Periodic advertising with responses, the advertiser half. Separate
-		// from the line above: enabling plain periodic advertising leaves the
-		// four PAwR commands refused, which is what made a train run while a
-		// subevent could never be configured.
-		sdc_support_le_periodic_adv_with_rsp();
-		sdc_support_peripheral();
-		sdc_support_dle_peripheral();
-		sdc_support_phy_update_peripheral();
-		sdc_support_le_power_control_peripheral();
-		sdc_support_le_conn_cte_rsp_peripheral();
+		// Periodic advertising is enabled by BtHciCtlrPeriodicAdvSupport,
+		// reached only through the pointer the periodic advertising module
+		// defines. An application that advertises periodically calls
+		// BtPadvInit, which links that module. Without it the reference stays
+		// unresolved and the controller code for it is not linked. sdc.h
+		// requires sdc_support_ext_adv() first, which is the line above.
+		if (&g_pBtHciCtlrPeriodicAdvSupport != nullptr)
+		{
+			g_pBtHciCtlrPeriodicAdvSupport();
+		}
+		if (pCfg->Role & BT_GAP_ROLE_PERIPHERAL)
+		{
+			// Link features are enabled only when connection support asked
+			// for them with BtHciCtlrPeripheralSupport before this point.
+			if (s_pBtHciCtlrSdcPeripheral == nullptr)
+			{
+				BtHciCtlrErrorSet(BT_HCI_CTLR_ERROR_PERIPHERAL_SUPPORT, (int32_t)pCfg->Role);
+				DEBUG_PRINTF("peripheral role asked but BtHciCtlrPeripheralSupport was not called\r\n");
+
+				return false;
+			}
+			s_pBtHciCtlrSdcPeripheral();
+		}
 	}
 	if (pCfg->Role & (BT_GAP_ROLE_CENTRAL | BT_GAP_ROLE_OBSERVER))
 	{
-		// Config for central role
-		sdc_support_scan();
-		sdc_support_ext_scan();
-		// Periodic advertising in the Synchronization state, which is the
-		// receiving side: an observer syncs to a train, an advertiser
-		// transmits one. This was in the peripheral branch above, where the
-		// prerequisite sdc.h states for it, sdc_support_ext_scan(), is never
-		// called, so an observer build did not enable it at all and Create
-		// Sync would have been refused by the controller.
-		sdc_support_le_periodic_sync();
-		// The responder half of PAwR, which is what lets a synchronized device
-		// answer a subevent rather than only receive it.
-		sdc_support_le_periodic_sync_with_rsp();
-		sdc_support_central();
-		sdc_support_ext_central();
-		sdc_support_dle_central();
-		sdc_support_phy_update_central();
-		sdc_support_le_power_control_central();
-		sdc_support_le_conn_cte_rsp_central();
+		// Config for central role.
+		// The scan, sync and central features of the controller are enabled
+		// by BtHciCtlrCentralSupport, reached only through the pointer the
+		// scan module defines. A central or observer application calls
+		// BtAppScanInit, which links that module. Without it this is a weak
+		// reference that stays unresolved, and the controller code for these
+		// features is not linked at all.
+		if (&g_pBtHciCtlrCentralSupport == nullptr)
+		{
+			BtHciCtlrErrorSet(BT_HCI_CTLR_ERROR_CENTRAL_SUPPORT, (int32_t)pCfg->Role);
+			DEBUG_PRINTF("central/observer role asked but the scan module is not linked\r\n");
+
+			return false;
+		}
+		g_pBtHciCtlrCentralSupport();
 	}
 
     int32_t ram = 0;
@@ -635,7 +809,10 @@ bool BtHciCtlrStart(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 	if (pCfg->Role & (BT_GAP_ROLE_PERIPHERAL | BT_GAP_ROLE_BROADCASTER))
 	{
 		// Config for peripheral role
-		cfg.peripheral_count.count = pCfg->CentralDevMax;
+		// A broadcaster that is not also a peripheral never has a link, so
+		// no link memory is reserved for it.
+		cfg.peripheral_count.count = (pCfg->Role & BT_GAP_ROLE_PERIPHERAL) ?
+									 pCfg->CentralDevMax : 0;
 
 		ram = sdc_cfg_set(SDC_DEFAULT_RESOURCE_CFG_TAG,
 					       	  SDC_CFG_TYPE_PERIPHERAL_COUNT,
@@ -812,11 +989,16 @@ bool BtHciCtlrStart(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 	// sdc_cfg_set. It is non-negative here because every call was checked, but
 	// compare as a signed value so a negative one cannot convert to a huge
 	// unsigned and pass.
-	if ((int32_t)sizeof(s_BtStackSdcMemPool) < ram)
+	s_BtStackSdcMemNeeded = ram;
+
+	if (g_BtHciCtlrMemPool.pMem == nullptr ||
+		((uintptr_t)g_BtHciCtlrMemPool.pMem & 7U) != 0 ||
+		(int32_t)g_BtHciCtlrMemPool.Size < ram)
 	{
+		// Missing, not aligned on 8 bytes, or too small
 		BtHciCtlrErrorSet(BT_HCI_CTLR_ERROR_MEM_POOL, ram);
 		DEBUG_PRINTF("sdc mem pool too small: have %d need %d\r\n",
-					 (int)sizeof(s_BtStackSdcMemPool), (int)ram);
+					 (int)g_BtHciCtlrMemPool.Size, (int)ram);
 
 		return false;
 	}
@@ -837,7 +1019,7 @@ bool BtHciCtlrStart(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 
 	DEBUG_PRINTF("sdc_enable\r\n");
 
-	res = sdc_enable(BtStackSdcCB, s_BtStackSdcMemPool);
+	res = sdc_enable(BtStackSdcCB, g_BtHciCtlrMemPool.pMem);
 	if (res != 0)
 	{
 		BtHciCtlrErrorSet(BT_HCI_CTLR_ERROR_CTLR_ENABLE, (int32_t)res);

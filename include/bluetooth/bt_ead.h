@@ -119,6 +119,19 @@ extern "C" {
 bool BtEadInit(CipherEngine *pAes, RngEngine *pRng);
 
 /**
+ * @brief	Bind the engines of the port
+ *
+ * Implemented by a port that has an AES engine and a random source of its
+ * own. It calls BtEadInit with them. The EAD module calls it the first time
+ * it needs an engine and none is bound, so the engines of the port are
+ * linked only when the application uses Encrypted Advertising Data. A port
+ * without it leaves the binding to the application (BtEadInit).
+ *
+ * @return	true when the AES engine was accepted
+ */
+bool BtEadEngineInit(void);
+
+/**
  * @brief	Draw a randomizer
  *
  * Refuses an engine reporting IsSecure() false rather than producing a

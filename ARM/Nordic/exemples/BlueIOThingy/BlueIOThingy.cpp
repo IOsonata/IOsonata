@@ -57,6 +57,8 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "bluetooth/bt_app.h"
 //#include "ble_app_nrf5.h"
 #include "bluetooth/bt_gatt.h"
+#include "bluetooth/bt_peer.h"
+#include "bluetooth/bt_hci_ctlr.h"
 #include "coredev/uart.h"
 #include "coredev/i2c.h"
 #include "coredev/spi.h"
@@ -120,11 +122,14 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define APP_ADV_TIMEOUT_IN_SECONDS      0                                         /**< The advertising timeout (in units of seconds). */
 #endif
 
-#define BT_ATT_DB_MEMSIZE				(3200)
+// Attribute database memory for the ports that keep the database in the
+// application (generic host). The four Thingy services with the GAP and GATT
+// services take about 3300 bytes. Not linked on the SoftDevice ports.
+#define BT_ATT_DB_MEMSIZE				(3600)
 
-// A strong override of the weak pool in bt_att.cpp must carry at least the
-// alignment of the entry type the allocator places in it.
-alignas(BtAttDBEntry_t) uint8_t s_BtAttDBMem[BT_ATT_DB_MEMSIZE];
+alignas(BtAttDBEntry_t) static uint8_t s_BtAttDBMem[BT_ATT_DB_MEMSIZE];
+
+const BtAttDBMemCfg_t g_BtAttDBMemCfg = { s_BtAttDBMem, sizeof(s_BtAttDBMem) };
 
 uint8_t g_AdvDataBuff[10] = {
 	BT_ADV_MANDATA_TYPE_TPH,
@@ -157,6 +162,25 @@ BtUuidArr_t s_AdvUuids = {
 	.Count = 1,
 	.Uuid16 = {BLE_UUID_TCS_SERVICE,},
 };
+
+// This device serves one central. The library pools are sized for several
+// links by default, so both are defined here for one link.
+
+// Peer table, one slot
+alignas(8) static uint8_t s_BtPeerPoolMem[BT_PEER_POOL_MEMSIZE(1)];
+
+const BtPeerPoolCfg_t g_BtPeerPoolCfg = { s_BtPeerPoolMem, sizeof(s_BtPeerPoolMem) };
+
+// Events are posted with AppEvtHandlerQue, nothing goes to the vendor event
+// scheduler some ports run, so its queue is left out.
+const BtAppSchedCfg_t g_BtAppSchedCfg = { NULL, 0, 0, 0 };
+
+// Controller memory pool, used by the ports that run the controller in the
+// application (SDC) and not linked otherwise. BtHciCtlrMemPoolSizeNeeded
+// gives the size the configuration asked for.
+alignas(8) static uint8_t s_BtCtlrMemPool[4800];
+
+const BtHciCtlrMemPool_t g_BtHciCtlrMemPool = { s_BtCtlrMemPool, sizeof(s_BtCtlrMemPool) };
 
 const BtAppCfg_t s_BleAppCfg = {
 	.Role = BTAPP_ROLE_PERIPHERAL,
@@ -565,62 +589,62 @@ void FlashTest()
 	}
 
 
-	printf("Erasing... Please wait\r\n");
+	g_Uart.printf("Erasing... Please wait\r\n");
 
 	// Ease could take a few minutes
 	g_FlashDiskIO.Erase();
 
-	printf("Writing 2KB data...\r\n");
+	g_Uart.printf("Writing 2KB data...\r\n");
 
 	g_FlashDiskIO.SectWrite(0, buff);
 	g_FlashDiskIO.SectWrite(2, buff);
 	g_FlashDiskIO.SectWrite(4, buff);
 	g_FlashDiskIO.SectWrite(8, buff);
 
-	printf("Validate readback...\r\n");
+	g_Uart.printf("Validate readback...\r\n");
 
 	g_FlashDiskIO.SectRead(0, tmp);
 
 	if (memcmp(buff, tmp, 512) != 0)
 	{
-		printf("Sector 0 verify failed\r\n");
+		g_Uart.printf("Sector 0 verify failed\r\n");
 	}
 	else
 	{
-		printf("Sector 0 verify success\r\n");
+		g_Uart.printf("Sector 0 verify success\r\n");
 	}
 
 	memset(tmp, 0, 512);
 	g_FlashDiskIO.SectRead(2, tmp);
 	if (memcmp(buff, tmp, 512) != 0)
 	{
-		printf("Sector 2 verify failed\r\n");
+		g_Uart.printf("Sector 2 verify failed\r\n");
 	}
 	else
 	{
-		printf("Sector 2 verify success\r\n");
+		g_Uart.printf("Sector 2 verify success\r\n");
 	}
 
 	memset(tmp, 0, 512);
 	g_FlashDiskIO.SectRead(4, tmp);
 	if (memcmp(buff, tmp, 512) != 0)
 	{
-		printf("Sector 4 verify failed\r\n");
+		g_Uart.printf("Sector 4 verify failed\r\n");
 	}
 	else
 	{
-		printf("Sector 4 verify success\r\n");
+		g_Uart.printf("Sector 4 verify success\r\n");
 	}
 
 	memset(tmp, 0, 512);
 	g_FlashDiskIO.SectRead(8, tmp);
 	if (memcmp(buff, tmp, 512) != 0)
 	{
-		printf("Sector 8 verify failed\r\n");
+		g_Uart.printf("Sector 8 verify failed\r\n");
 	}
 	else
 	{
-		printf("Sector 8 verify success\r\n");
+		g_Uart.printf("Sector 8 verify success\r\n");
 	}
 }
 
@@ -698,7 +722,7 @@ void HardwareInit()
 
 	if (bsec_status != BSEC_OK)
 	{
-		printf("BSEC init failed\r\n");
+		g_Uart.printf("BSEC init failed\r\n");
 
 		return;
 	}

@@ -35,6 +35,11 @@ void BtGattSrvcEvtHandler(BtGattSrvc_t * const, uint32_t, void * const) {}
 uint32_t BtHciSendAcl(BtHciDevice_t * const, BtHciACLDataPacket_t * const) { return 0; }
 void BtGattClientNotified(uint16_t, uint16_t, uint8_t *, uint16_t) {}
 
+// Connection support of the port, which the first service add starts.
+static bool s_ConnInitResult = true;
+static int s_ConnInitCalls = 0;
+bool BtAppConnInit(void) { s_ConnInitCalls++; return s_ConnInitResult; }
+
 } // extern "C"
 
 namespace {
@@ -121,6 +126,37 @@ void TestSrvcAddSucceeds()
 	uint16_t hdl = srvc.Hdl;
 	CHECK(BtGattSrvcAdd(&srvc));
 	CHECK(srvc.Hdl == hdl);
+}
+
+// ---- adding a service starts connection support ---------------------------
+
+void TestSrvcAddStartsConnSupport()
+{
+	static BtGattSrvc_t srvc;
+	static BtGattChar_t chars[1];
+
+	BtAttDBInit(2048);
+	BuildSrvc(&srvc, chars, 1, 16);
+
+	// Connection support refused: the service is not added and the
+	// database is left as it was.
+	BtAttDBMark_t before;
+	BtAttDBMark(&before);
+	s_ConnInitResult = false;
+	int calls = s_ConnInitCalls;
+	CHECK(BtGattSrvcAdd(&srvc) == false);
+	CHECK(s_ConnInitCalls == calls + 1);
+	BtAttDBMark_t after;
+	BtAttDBMark(&after);
+	CHECK(after.MemUsed == before.MemUsed);
+
+	s_ConnInitResult = true;
+	CHECK(BtGattSrvcAdd(&srvc));
+	CHECK(s_ConnInitCalls == calls + 2);
+
+	// Bad arguments are refused before connection support is asked for
+	CHECK(BtGattSrvcAdd(nullptr) == false);
+	CHECK(s_ConnInitCalls == calls + 2);
 }
 
 // ---- a service that does not fit leaves nothing behind --------------------
@@ -316,6 +352,7 @@ int main()
 	TestSrvcAddSucceeds();
 	TestSrvcAddRollsBackOnFailure();
 	TestCharOwnBase();
+	TestSrvcAddStartsConnSupport();
 
 	if (s_Failures != 0)
 	{

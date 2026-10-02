@@ -334,6 +334,51 @@ static inline bool TimerEnableExtTrigger(TimerDev_t * const pTimerDev, int TrigD
 }
 
 /**
+ * @brief	Convert a tick count to time.
+ *
+ * The conversion is done from the tick frequency, so it is exact for any
+ * frequency. nsPeriod is not used for it: a tick period is rarely a whole
+ * number of nanoseconds (62.5 ns at 16 MHz, 30517.58 ns at 32768 Hz) and the
+ * rounding would add up with the count.
+ *
+ * @param   pTimerDev	: Pointer to Timer device private data (timer handle)
+ * @param   Count		: Timer tick count value
+ * @param	UnitPerSec	: Number of result units in one second, 1000 for msec,
+ * 						  1000000 for usec, 1000000000 for nsec
+ *
+ * @return  Converted count, rounded down
+ */
+static inline uint64_t TimerTickToTime(TimerDev_t * const pTimerDev, uint64_t Count, uint32_t UnitPerSec) {
+	uint64_t f = pTimerDev->Freq;
+
+	if (f == 0)
+	{
+		// Timer not initialized
+		return 0;
+	}
+
+	// Whole seconds and the rest apart, the product would overflow otherwise
+	return (Count / f) * UnitPerSec + (Count % f) * UnitPerSec / f;
+}
+
+/**
+ * @brief	Convert a time in nanosecond to tick count.
+ *
+ * Exact for any tick frequency, see TimerTickToTime.
+ *
+ * @param   pTimerDev	: Pointer to Timer device private data (timer handle)
+ * @param   nsTime		: Time in nsec
+ *
+ * @return  Tick count, rounded to the nearest tick
+ */
+static inline uint64_t TimerNanosecondToTick(TimerDev_t * const pTimerDev, uint64_t nsTime) {
+	uint64_t f = pTimerDev->Freq;
+
+	// Whole seconds and the rest apart, the product would overflow otherwise
+	return (nsTime / 1000000000ULL) * f + ((nsTime % 1000000000ULL) * f + 500000000ULL) / 1000000000ULL;
+}
+
+/**
  * @brief   Get current timer counter in millisecond.
  *
  * This function return the current timer in msec since last reset.
@@ -342,7 +387,7 @@ static inline bool TimerEnableExtTrigger(TimerDev_t * const pTimerDev, int TrigD
  * @return  Counter in millisecond
  */
 static inline uint32_t TimerGetMilisecond(TimerDev_t * const pTimerDev) {
-	return (uint32_t)(pTimerDev->GetTickCount(pTimerDev) * pTimerDev->nsPeriod / 1000000ULL);
+	return (uint32_t)TimerTickToTime(pTimerDev, pTimerDev->GetTickCount(pTimerDev), 1000UL);
 }
 
 /**
@@ -354,7 +399,7 @@ static inline uint32_t TimerGetMilisecond(TimerDev_t * const pTimerDev) {
  * @return  Converted count in millisecond
  */
 static inline uint32_t TimerTickToMilisecond(TimerDev_t * const pTimerDev, uint64_t Count) {
-	return Count * pTimerDev->nsPeriod / 1000000ULL;
+	return (uint32_t)TimerTickToTime(pTimerDev, Count, 1000UL);
 }
 
 /**
@@ -367,7 +412,7 @@ static inline uint32_t TimerTickToMilisecond(TimerDev_t * const pTimerDev, uint6
  * @return  Counter in microsecond
  */
 static inline uint32_t TimerGetMicrosecond(TimerDev_t * const pTimerDev) {
-	return pTimerDev->GetTickCount(pTimerDev) * pTimerDev->nsPeriod / 1000ULL;
+	return (uint32_t)TimerTickToTime(pTimerDev, pTimerDev->GetTickCount(pTimerDev), 1000000UL);
 }
 
 /**
@@ -380,7 +425,7 @@ static inline uint32_t TimerGetMicrosecond(TimerDev_t * const pTimerDev) {
  * @return  Converted count in microsecond
  */
 static inline uint32_t TimerTickToMicrosecond(TimerDev_t * const pTimerDev, uint64_t Count) {
-	return Count * pTimerDev->nsPeriod / 1000ULL;
+	return (uint32_t)TimerTickToTime(pTimerDev, Count, 1000000UL);
 }
 
 /**
@@ -393,7 +438,7 @@ static inline uint32_t TimerTickToMicrosecond(TimerDev_t * const pTimerDev, uint
  * @return  Counter in nanosecond
  */
 static inline uint64_t TimerGetNanosecond(TimerDev_t * const pTimerDev) {
-	return pTimerDev->GetTickCount(pTimerDev) * pTimerDev->nsPeriod;
+	return TimerTickToTime(pTimerDev, pTimerDev->GetTickCount(pTimerDev), 1000000000UL);
 }
 
 /**
@@ -405,7 +450,7 @@ static inline uint64_t TimerGetNanosecond(TimerDev_t * const pTimerDev) {
  * @return  Converted count in nanosecond
  */
 static inline uint64_t TimerTickToNanosecond(TimerDev_t * const pTimerDev, uint64_t Count) {
-	return Count * pTimerDev->nsPeriod;
+	return TimerTickToTime(pTimerDev, Count, 1000000000UL);
 }
 
 #ifdef __cplusplus
@@ -585,7 +630,7 @@ public:
      *
      * @return  Counter in millisecond
      */
-	virtual uint32_t mSecond() { return vTimer.GetTickCount(&vTimer) * vTimer.nsPeriod / 1000000ULL; }
+	virtual uint32_t mSecond() { return TimerGetMilisecond(&vTimer); }
 
 	/**
 	 * @brief   Convert tick count to millisecond.
@@ -594,7 +639,7 @@ public:
 	 *
 	 * @return  Converted count in millisecond
 	 */
-	virtual uint32_t mSecond(uint64_t Count) { return Count * vTimer.nsPeriod / 1000000ULL; }
+	virtual uint32_t mSecond(uint64_t Count) { return TimerTickToMilisecond(&vTimer, Count); }
 
 	/**
      * @brief   Get current timer counter in microsecond.
@@ -603,7 +648,7 @@ public:
      *
      * @return  Counter in microsecond
      */
-	virtual uint32_t uSecond() { return vTimer.GetTickCount(&vTimer) * vTimer.nsPeriod / 1000ULL; }
+	virtual uint32_t uSecond() { return TimerGetMicrosecond(&vTimer); }
 
 	/**
 	 * @brief   Convert tick count to microsecond.
@@ -612,7 +657,7 @@ public:
 	 *
 	 * @return  Converted count in microsecond
 	 */
-	virtual uint32_t uSecond(uint64_t Count) { return Count * vTimer.nsPeriod / 1000ULL; }
+	virtual uint32_t uSecond(uint64_t Count) { return TimerTickToMicrosecond(&vTimer, Count); }
 
 	/**
      * @brief   Get current timer counter in nanosecond.
@@ -621,7 +666,7 @@ public:
      *
      * @return  Counter in nanosecond
      */
-	virtual uint64_t nSecond() { return vTimer.GetTickCount(&vTimer) * vTimer.nsPeriod; }
+	virtual uint64_t nSecond() { return TimerGetNanosecond(&vTimer); }
 
 	/**
      * @brief   Convert tick count to nanosecond
@@ -630,7 +675,7 @@ public:
      *
      * @return  Converted count in nanosecond
      */
-	virtual uint64_t nSecond(uint64_t Count) { return Count * vTimer.nsPeriod; }
+	virtual uint64_t nSecond(uint64_t Count) { return TimerTickToNanosecond(&vTimer, Count); }
 
 	/**
 	 * @brief	Get first available timer trigger index.

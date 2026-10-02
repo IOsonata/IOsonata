@@ -39,6 +39,10 @@ SOFTWARE.
 #include "usb/usbd_epalloc.h"
 #include "usb/usbd_cdc.h"
 
+// Out of line so static instances use zero-filled storage instead of a
+// flash initializer containing the entire object and its vtable pointers.
+UsbdCdc::UsbdCdc() = default;
+
 extern const UsbdCdcDesc_t g_UsbdCdcDescTemplate;
 void UsbdCdcPatchDesc(UsbdCdcDesc_t *pDesc, const UsbdCdcDev_t *pCdc,
 					 UsbSpeed_t Speed, bool HasFunctionString);
@@ -198,11 +202,13 @@ static bool UsbdCdcConfig(UsbdCdcDev_t *pCdc, uint8_t Configuration)
 	return true;
 }
 
-static bool UsbdCdcRequest(const UsbSetupData_t *pSetup,
+// Out of line, with state first, for the same short offsets and tail-call
+// wrapper used by UsbdCdcConfig.
+__attribute__((noinline))
+static bool UsbdCdcRequest(UsbdCdcDev_t *pCdc, const UsbSetupData_t *pSetup,
 						   UsbCtrlStage_t Stage,
 						   uint8_t **ppData,
-						   uint16_t *pLength,
-						   UsbdCdcDev_t *pCdc)
+						   uint16_t *pLength)
 {
 	// The core passes its own setup copy and length; pCdc is the class member.
 	if (pCdc->pData->Mps == 0U ||
@@ -367,7 +373,11 @@ static bool UsbdCdcInitInternal(UsbdCdcDev_t * const pCdc,
 	pCdc->NotifyEpNo = alloc.In[0];
 	pCdc->DataEpNo = alloc.Bidirectional[0];
 
-	UsbIntrfCfg_t dataCfg = {};
+	// Assign every member directly; a blanket clear would be overwritten.
+	UsbIntrfCfg_t dataCfg;
+	dataCfg.Mode = USB_INTRF_MODE_AUTO;
+	dataCfg.pRxBuffer = nullptr;
+	dataCfg.pTxBuffer = nullptr;
 	dataCfg.bBlocking = pCfg->bBlocking;
 	dataCfg.RxFifoMemSize = pCfg->RxFifoMemSize;
 	dataCfg.pRxFifoMem = pCfg->pRxFifoMem;
@@ -423,7 +433,7 @@ void UsbdCdc::Process(void)
 bool UsbdCdc::Control(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
 					  uint8_t **ppData, uint16_t *pLength)
 {
-	return UsbdCdcRequest(pSetup, Stage, ppData, pLength, &vUsbdCdc);
+	return UsbdCdcRequest(&vUsbdCdc, pSetup, Stage, ppData, pLength);
 }
 
 bool UsbdCdc::SelectConfig(uint8_t ConfigValue)

@@ -36,6 +36,10 @@ SOFTWARE.
 #include "usb/usbd_epalloc.h"
 #include "usb/usbd_hid.h"
 
+// Out of line so static instances use zero-filled storage instead of a
+// flash initializer containing the entire object and its vtable pointers.
+UsbdHid::UsbdHid() = default;
+
 static void UsbdHidUnconfigure(UsbdHidDev_t *pHid)
 {
 	UsbIntIntrfClose(pHid->pIntIntrf);
@@ -203,9 +207,12 @@ static bool UsbdHidClassRequest(UsbdHidDev_t *pHid,
 	return true;
 }
 
-static bool UsbdHidRequest(const UsbSetupData_t *pSetup,
+// Out of line, with state first, for the same short offsets and tail-call
+// wrapper used by UsbdHidConfig.
+__attribute__((noinline))
+static bool UsbdHidRequest(UsbdHidDev_t *pHid, const UsbSetupData_t *pSetup,
 						   UsbCtrlStage_t Stage, uint8_t **ppData,
-						   uint16_t *pLength, UsbdHidDev_t *pHid)
+						   uint16_t *pLength)
 {
 	// The core passes its own setup copy and length; pHid is the class member.
 	if (pSetup->wIndex != (uint8_t)pHid->ItfNo)
@@ -310,6 +317,8 @@ static bool UsbdHidInitInternal(UsbdHidDev_t *pHid,
 {
 	if (UsbGetCfg(pCfg->DevNo) == nullptr || pCfg->pReportDesc == nullptr ||
 		pCfg->ReportDescLength == 0U ||
+		pCfg->pRxBuffer == nullptr || pCfg->pTxBuffer == nullptr ||
+		(((uintptr_t)pCfg->pRxBuffer | (uintptr_t)pCfg->pTxBuffer) & 3U) != 0U ||
 		pCfg->SubClass > USB_HID_SUBCLASS_BOOT ||
 		(pCfg->SubClass == USB_HID_SUBCLASS_NONE &&
 		 pCfg->Protocol != USB_HID_PROT_NONE) ||
@@ -369,11 +378,14 @@ static bool UsbdHidInitInternal(UsbdHidDev_t *pHid,
 	pHid->ItfNo = alloc.FirstInterface;
 	pHid->EpNo = alloc.Bidirectional[0];
 
-	UsbIntIntrfCfg_t intCfg = {};
+	// Every configuration member is assigned below.
+	UsbIntIntrfCfg_t intCfg;
 	intCfg.DevNo = pHid->DevNo;
 	intCfg.EpNo = pHid->EpNo;
 	intCfg.EvtCB = pCfg->EvtCB;
 	intCfg.pContext = pHid;
+	intCfg.pRxBuffer = pCfg->pRxBuffer;
+	intCfg.pTxBuffer = pCfg->pTxBuffer;
 	if (!UsbIntIntrfInit(pHid->pIntIntrf, pData, &intCfg))
 	{
 		return false;
@@ -393,7 +405,7 @@ bool UsbdHid::Init(const UsbdHidCfg_t &Cfg)
 bool UsbdHid::Control(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
 					   uint8_t **ppData, uint16_t *pLength)
 {
-	return UsbdHidRequest(pSetup, Stage, ppData, pLength, &vUsbdHid);
+	return UsbdHidRequest(&vUsbdHid, pSetup, Stage, ppData, pLength);
 }
 
 bool UsbdHid::SelectConfig(uint8_t ConfigValue)

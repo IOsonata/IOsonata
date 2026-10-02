@@ -813,8 +813,88 @@ int SysLogPrintf(SysLog_t * const, const char *, ...)
 
 } // extern "C"
 
+// The host reaches SMP only through the table BtSmpInit registers. This
+// test stands in for SMP, so it registers its own entry points.
+static const BtHciSmpHandler_t s_TestSmpHandler = {
+	.Data = BtProcessSmpData,
+	.LtkRequest = BtSmpProcessLtkRequest,
+	.LocalPubKeyReady = BtSmpLocalPubKeyReady,
+	.DhKeyReady = BtSmpDhKeyReady,
+	.EncryptionChanged = BtSmpEncryptionChanged,
+	.Disconnected = BtSmpDisconnected,
+};
+
+// A build that never starts SMP has no handler registered. The host then
+// refuses a pairing as not supported and answers an LTK request with the
+// negative reply, so the peer and the controller are not left waiting.
+void TestNoSmpHandler()
+{
+	BtHciSmpHandlerSet(nullptr);
+
+	BtHciDevice_t dev = {};
+	dev.SendData = CaptureAcl;
+	dev.Command = CaptureDevCommand;
+	ResetAclCapture();
+	ResetSmpCapture();
+
+	// Pairing Request: answered with Pairing Failed, Pairing Not Supported.
+	uint8_t pdu[32] = {};
+	const uint8_t req[] = { 0x03, 0x00, 0x09, 0x10, 0x03, 0x03 };
+	size_t pduLen = BuildSmpPdu(pdu, BT_SMP_CODE_PAIRING_REQ, req, sizeof(req));
+	FeedAclFragment(&dev, 0x201, BT_HCI_PBFLAG_START_NONFLUSHABLE, pdu,
+					static_cast<uint16_t>(pduLen));
+
+	CHECK(s_SmpPacketCount == 0);
+	CHECK(s_AclPacketCount == 1);
+	if (s_AclPacketCount == 1)
+	{
+		const BtHciACLDataPacket_t *p =
+			reinterpret_cast<const BtHciACLDataPacket_t *>(s_AclPackets[0].Data.data());
+		CHECK(p->Hdr.ConnHdl == 0x201);
+		CHECK(p->Hdr.Len == 6);
+		const uint8_t expect[] = { 0x02, 0x00, 0x06, 0x00,
+								   BT_SMP_CODE_PAIRING_FAILED,
+								   BT_SMP_ERR_PAIRING_NOT_SUPPORTED };
+		CHECK(std::memcmp(p->Data, expect, sizeof(expect)) == 0);
+	}
+
+	// A Pairing Failed from the peer is never answered.
+	ResetAclCapture();
+	const uint8_t reason[] = { BT_SMP_ERR_UNSPECIFIED };
+	pduLen = BuildSmpPdu(pdu, BT_SMP_CODE_PAIRING_FAILED, reason, sizeof(reason));
+	FeedAclFragment(&dev, 0x201, BT_HCI_PBFLAG_START_NONFLUSHABLE, pdu,
+					static_cast<uint16_t>(pduLen));
+	CHECK(s_AclPacketCount == 0);
+
+	// LE Long Term Key Request: refused with the negative reply.
+	ResetAclCapture();
+	alignas(4) uint8_t raw[sizeof(BtHciEvtPacketHdr_t) + 13] = {};
+	BtHciEvtPacket_t *pEvt = reinterpret_cast<BtHciEvtPacket_t *>(raw);
+	pEvt->Hdr.Evt = BT_HCI_EVT_LE;
+	pEvt->Hdr.Len = 13;
+	BtHciLeEvtPacket_t *pLe = reinterpret_cast<BtHciLeEvtPacket_t *>(pEvt->Data);
+	pLe->Evt = BT_HCI_EVT_LE_LONGTERM_KEY_RQST;
+	BtHciLeEvtLongtermKeyReq_t *pReq =
+		reinterpret_cast<BtHciLeEvtLongtermKeyReq_t *>(pLe->Data);
+	pReq->ConnHdl = 0x0042;
+	s_LtkRequestCount = 0;
+	BtHciProcessEvent(&dev, pEvt);
+	CHECK(s_LtkRequestCount == 0);
+	CHECK(s_DevCmdCount == 1);
+	CHECK(s_DevCmdOpCode == BT_HCI_CMD_CTLR_LONGTERM_KEY_REQUEST_NEG_REPLY);
+	CHECK(s_DevCmdParamLen == 2);
+	CHECK(s_DevCmdParam[0] == 0x42 && s_DevCmdParam[1] == 0x00);
+
+	BtHciSmpHandlerSet(&s_TestSmpHandler);
+}
+
 int main()
 {
+	BtHciSmpHandlerSet(&s_TestSmpHandler);
+	// Advertising reports are parsed only once scanning is in use, which is
+	// what BtAppScanInit tells the host.
+	BtHciScanReportEnable();
+
 	TestCommandFraming();
 	TestAclFragmentationAndCredits();
 	TestAclFragmentSendFailure();
@@ -829,6 +909,7 @@ int main()
 	TestShortFixedEventsDropped();
 	TestExtAdvReassembly();
 	TestDisconnectFreesSmp();
+	TestNoSmpHandler();
 
 	if (s_Failures != 0)
 	{

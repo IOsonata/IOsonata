@@ -570,7 +570,19 @@ void TestLinkProceduresWithoutDevice()
 
 extern "C" {
 
+static void TestConnectStartsConnSupport(void);
+
 BtAppData_t g_BtAppData;
+
+// Connection support of the port, which initiating a connection starts.
+static bool s_ConnInitResult = true;
+static int s_ConnInitCalls = 0;
+
+bool BtAppConnInit(void)
+{
+	s_ConnInitCalls++;
+	return s_ConnInitResult;
+}
 
 void BtSmpLocalAddrGet(uint8_t *pType, uint8_t pAddr[6])
 {
@@ -578,10 +590,37 @@ void BtSmpLocalAddrGet(uint8_t *pType, uint8_t pAddr[6])
 	std::memcpy(pAddr, s_LocalAddr, 6);
 }
 
+// Initiating a connection asks the port for connection support first and
+// sends nothing when it is refused.
+static void TestConnectStartsConnSupport(void)
+{
+	uint8_t addr[6] = {};
+	Setup(BTADDR_TYPE_PUBLIC, addr);
+
+	BtGapPeerAddr_t peer = {};
+	BtGapConnParams_t params = MakeConnParams();
+
+	// Bad arguments are refused before connection support is asked for
+	int calls = s_ConnInitCalls;
+	CHECK(BtGapConnect(nullptr, &params) == false);
+	CHECK(s_ConnInitCalls == calls);
+
+	s_ConnInitResult = false;
+	CHECK(BtGapConnect(&peer, &params) == false);
+	CHECK(s_ConnInitCalls == calls + 1);
+	CHECK(s_CmdCount == 0);
+
+	s_ConnInitResult = true;
+	BtGapConnect(&peer, &params);
+	CHECK(s_ConnInitCalls == calls + 2);
+	CHECK(s_CmdCount > 0);
+}
+
 } // extern "C"
 
 int main()
 {
+	TestConnectStartsConnSupport();
 	TestInvalidArguments();
 	TestScanPhyValidation();
 	TestScanPublicIdentity();

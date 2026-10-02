@@ -37,6 +37,13 @@ bool BtSmpInit(KeyAgreeEngine *pEcdh, CipherEngine *pAes, RngEngine *pRng)
 	return BtSmpInitReal(pEcdh, &s_Aes, pRng);
 }
 
+// This harness delivers SMP PDUs and controller events directly to SMP;
+// it does not link the HCI host that normally owns this registration.
+void BtHciSmpHandlerSet(const BtHciSmpHandler_t *pHandler)
+{
+	(void)pHandler;
+}
+
 void BtGattCccdRestoreBonded(uint16_t ConnHdl)
 {
 	(void)ConnHdl;

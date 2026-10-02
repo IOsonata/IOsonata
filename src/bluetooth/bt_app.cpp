@@ -53,6 +53,7 @@ BtAppData_t g_BtAppData = {
 	.bExtAdv         = false,
 	.bScan           = false,
 	.bInitialized    = false,
+	.bSecInit        = false,
 	.AppDevice = {
 		// Local device identity. Filled in by BtAppInit from BtAppCfg_t.
 		// Every member is listed. The omitted ones would be zeroed anyway, but

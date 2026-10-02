@@ -93,6 +93,29 @@ bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg);
 #endif
 bool nRFxTimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg);
 
+/**
+ * @brief	Initialize a low frequency timer.
+ *
+ * For code that knows its timer is a low frequency one. TimerInit selects
+ * the driver from the device number at run time, which links both the low
+ * and the high frequency timer drivers. This call links only the low
+ * frequency one.
+ *
+ * @param	pTimer	: Pointer to the timer device
+ * @param	pCfg	: Pointer to the timer configuration, DevNo in the low
+ * 					  frequency range (0 to TIMER_NRFX_RTC_MAX - 1)
+ *
+ * @return	true - success
+ */
+static inline bool nRFxLFTimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
+{
+#if defined(NRF54L_SERIES)
+	return nRFxGrtcInit(pTimer, pCfg);
+#else
+	return nRFxRtcInit(pTimer, pCfg);
+#endif
+}
+
 #ifdef __cplusplus
 }
 #endif

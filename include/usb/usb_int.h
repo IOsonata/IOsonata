@@ -63,6 +63,10 @@ typedef struct __Usb_Int_Interf_Config {
 	uint8_t EpNo;
 	DevIntrfEvtHandler_t EvtCB;	//!< Common DeviceIntrf event callback
 	void *pContext;
+	// Separate caller-owned, 4-byte aligned slots, each at least
+	// USB_INT_INTRF_PKT_BLKSIZE bytes; valid for the interface lifetime.
+	uint8_t *pRxBuffer;
+	uint8_t *pTxBuffer;
 } UsbIntIntrfCfg_t;
 
 #pragma pack(pop)
@@ -77,8 +81,6 @@ struct __Usb_Int_Interf {
 	uint32_t TxErrorCnt;
 	uint32_t RxEmptyCnt;
 	uint32_t TxEmptyCnt;
-	uint32_t RxBuffer[USB_INT_INTRF_PACKET_WORDS];
-	uint32_t TxBuffer[USB_INT_INTRF_PACKET_WORDS];
 };
 
 #ifdef __cplusplus
@@ -129,3 +131,4 @@ protected:
 /** @} End of group USBD */
 
 #endif	// __USB_INT_H__
+

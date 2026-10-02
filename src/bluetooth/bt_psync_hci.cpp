@@ -124,6 +124,15 @@ bool BtPsyncCreate(const BtPsyncCfg_t * const pCfg)
 		return false;
 	}
 
+	// The HCI host delivers the sync events through this table only. Creating
+	// a sync is what links the event handling and its reassembly memory.
+	static const BtHciPsyncHandler_t s_PsyncHciHandler = {
+		.Established = BtPsyncEvtEstablished,
+		.Report = BtPsyncEvtReport,
+		.Lost = BtPsyncEvtLost,
+	};
+	BtHciPsyncHandlerSet(&s_PsyncHciHandler);
+
 	if ((pCfg->Options & ~BTPSYNC_OPT_ALL) != 0)
 	{
 		DEBUG_PRINTF("PSYNC reserved option bit set, 0x%02x\r\n",

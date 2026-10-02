@@ -335,6 +335,34 @@ extern "C" {
 void BtProcessSmpData(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 					  BtL2CapSmp_t * const pSmp, size_t Len);
 
+/// SMP entry points the HCI host calls. The host reaches SMP only through
+/// this table, which BtSmpInit registers. A build that never calls BtSmpInit
+/// has no reference from the host to the SMP module and does not link it.
+typedef struct __Bt_Hci_Smp_Handler {
+	void (*Data)(BtHciDevice_t * const pDev, uint16_t ConnHdl,
+				 BtL2CapSmp_t * const pSmp, size_t Len);		//!< SMP PDU received on the Security Manager channel
+	void (*LtkRequest)(BtHciDevice_t * const pDev, uint16_t ConnHdl,
+					   uint64_t Rand, uint16_t Ediv);			//!< LE Long Term Key Request event
+	void (*LocalPubKeyReady)(BtHciDevice_t * const pDev, uint8_t Status,
+							 const uint8_t *pKeyX, const uint8_t *pKeyY);	//!< LE Read Local P-256 Public Key Complete event
+	void (*DhKeyReady)(BtHciDevice_t * const pDev, uint8_t Status,
+					   const uint8_t *pDhKey);					//!< LE Generate DHKey Complete event
+	void (*EncryptionChanged)(BtHciDevice_t * const pDev, uint16_t ConnHdl,
+							  uint8_t Status, uint8_t Enabled);	//!< Encryption Change event
+	void (*Disconnected)(uint16_t ConnHdl);					//!< Link down, release the SMP link state
+} BtHciSmpHandler_t;
+
+/**
+ * @brief	Register the SMP entry points with the HCI host.
+ *
+ * Called by BtSmpInit. Without a registered handler the host refuses a
+ * pairing as not supported and answers an LTK request with the negative
+ * reply.
+ *
+ * @param	pHandler	Pointer to the handler table, NULL to remove it.
+ */
+void BtHciSmpHandlerSet(const BtHciSmpHandler_t *pHandler);
+
 /**
  * @brief	Controller LE Long Term Key Request handler.
  *

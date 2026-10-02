@@ -103,8 +103,15 @@ typedef struct __Bt_Smp_Sign_State {
 	std::atomic<bool> Ready;			//!< At least one durably reserved counter remains
 } BtSmpSignState_t;
 
-static BtSmpBond_t s_BtSmpBondTable[BT_SMP_BOND_MAX];
-static BtSmpSignState_t s_BtSmpSignState[BT_SMP_BOND_MAX];
+// Bond table storage. It is reached only through the two pointers below,
+// which BtSmpBondTableAttach sets. The functions that can put a bond in the
+// table (BtSmpBondAdd, BtSmpBondRestore) are the only callers, so a build
+// that never stores a bond does not link the storage. The lookups called by
+// the generic GATT, GAP and ATT layers find no bond while it is not attached.
+static BtSmpBond_t s_BtSmpBondMem[BT_SMP_BOND_MAX];
+static BtSmpSignState_t s_BtSmpSignMem[BT_SMP_BOND_MAX];
+static BtSmpBond_t *s_pBtSmpBondTable = nullptr;
+static BtSmpSignState_t *s_pBtSmpSignState = nullptr;
 
 #if !defined(__arm__)
 static std::atomic_flag s_BtSmpBondTableLock = ATOMIC_FLAG_INIT;
@@ -188,17 +195,26 @@ static bool BtSmpBondHasIrk(const BtSmpBond_t *pBond)
 	return nz != 0;
 }
 
+static void BtSmpBondOpsAttach(void);
+
+static void BtSmpBondTableAttach(void)
+{
+	s_pBtSmpSignState = s_BtSmpSignMem;
+	s_pBtSmpBondTable = s_BtSmpBondMem;
+	BtSmpBondOpsAttach();
+}
+
 static void BtSmpSignStateReset(int Slot, uint32_t Next, uint32_t DurableHigh)
 {
-	if (Slot < 0 || Slot >= BT_SMP_BOND_MAX)
+	if (Slot < 0 || Slot >= BT_SMP_BOND_MAX || s_pBtSmpSignState == nullptr)
 	{
 		return;
 	}
 
-	s_BtSmpSignState[Slot].Next.store(Next);
-	s_BtSmpSignState[Slot].DurableHigh.store(DurableHigh);
-	s_BtSmpSignState[Slot].PendingHigh.store(0U);
-	s_BtSmpSignState[Slot].Ready.store(false);
+	s_pBtSmpSignState[Slot].Next.store(Next);
+	s_pBtSmpSignState[Slot].DurableHigh.store(DurableHigh);
+	s_pBtSmpSignState[Slot].PendingHigh.store(0U);
+	s_pBtSmpSignState[Slot].Ready.store(false);
 }
 
 static uint32_t BtSmpSignNextHigh(uint32_t High)
@@ -242,7 +258,7 @@ size_t BtSmpBondRecordSize(void)
 size_t BtSmpBondSerialize(int Slot, void *pBuff, size_t BuffLen)
 {
 	if (Slot < 0 || Slot >= BT_SMP_BOND_MAX || pBuff == nullptr ||
-		BuffLen < sizeof(BtSmpBondRecord_t))
+		BuffLen < sizeof(BtSmpBondRecord_t) || s_pBtSmpBondTable == nullptr)
 	{
 		return 0;
 	}
@@ -254,9 +270,9 @@ size_t BtSmpBondSerialize(int Slot, void *pBuff, size_t BuffLen)
 	record.Length = (uint16_t)sizeof(record);
 
 	uint32_t state = BtSmpBondTableEnter();
-	memcpy(&record.Bond, &s_BtSmpBondTable[Slot], sizeof(record.Bond));
-	uint32_t durable = s_BtSmpSignState[Slot].DurableHigh.load();
-	uint32_t pending = s_BtSmpSignState[Slot].PendingHigh.load();
+	memcpy(&record.Bond, &s_pBtSmpBondTable[Slot], sizeof(record.Bond));
+	uint32_t durable = s_pBtSmpSignState[Slot].DurableHigh.load();
+	uint32_t pending = s_pBtSmpSignState[Slot].PendingHigh.load();
 	record.Bond.SignCounter = pending > durable ? pending : durable;
 	BtSmpBondTableExit(state);
 
@@ -283,13 +299,13 @@ static void BtSmpBondPersist(int Slot)
 
 static bool BtSmpSignCounterPrepare(int Slot)
 {
-	if (Slot < 0 || Slot >= BT_SMP_BOND_MAX ||
-		!BtSmpBondHasCsrk(&s_BtSmpBondTable[Slot]))
+	if (Slot < 0 || Slot >= BT_SMP_BOND_MAX || s_pBtSmpBondTable == nullptr ||
+		!BtSmpBondHasCsrk(&s_pBtSmpBondTable[Slot]))
 	{
 		return false;
 	}
 
-	BtSmpSignState_t &state = s_BtSmpSignState[Slot];
+	BtSmpSignState_t &state = s_pBtSmpSignState[Slot];
 	uint32_t durable = state.DurableHigh.load();
 	uint32_t pending = state.PendingHigh.load();
 	uint32_t next = state.Next.load();
@@ -319,7 +335,7 @@ extern "C" void BtSmpBondPersistComplete(int Slot, const void *pBond,
 											 size_t Len, bool Success)
 {
 	if (!Success || Slot < 0 || Slot >= BT_SMP_BOND_MAX || pBond == nullptr ||
-		Len != sizeof(BtSmpBondRecord_t))
+		Len != sizeof(BtSmpBondRecord_t) || s_pBtSmpBondTable == nullptr)
 	{
 		return;
 	}
@@ -335,7 +351,7 @@ extern "C" void BtSmpBondPersistComplete(int Slot, const void *pBond,
 		savedCrc == BtSmpBondCrc32(&record, sizeof(record));
 
 	uint32_t state = BtSmpBondTableEnter();
-	BtSmpBond_t *pLive = &s_BtSmpBondTable[Slot];
+	BtSmpBond_t *pLive = &s_pBtSmpBondTable[Slot];
 	if (valid)
 	{
 		valid = pLive->bValid &&
@@ -346,7 +362,7 @@ extern "C" void BtSmpBondPersistComplete(int Slot, const void *pBond,
 
 	if (valid)
 	{
-		BtSmpSignState_t &signState = s_BtSmpSignState[Slot];
+		BtSmpSignState_t &signState = s_pBtSmpSignState[Slot];
 		uint32_t committed = record.Bond.SignCounter;
 		uint32_t durable = signState.DurableHigh.load();
 
@@ -388,6 +404,8 @@ void BtSmpBondRestore(int Slot, const void *pBond, size_t Len)
 		return;
 	}
 
+	BtSmpBondTableAttach();
+
 	BtSmpBondRecord_t record;
 	memcpy(&record, pBond, sizeof(record));
 	uint32_t savedCrc = record.Crc;
@@ -402,22 +420,22 @@ void BtSmpBondRestore(int Slot, const void *pBond, size_t Len)
 	bool persist = false;
 
 	uint32_t state = BtSmpBondTableEnter();
-	memset(&s_BtSmpBondTable[Slot], 0, sizeof(s_BtSmpBondTable[Slot]));
+	memset(&s_pBtSmpBondTable[Slot], 0, sizeof(s_pBtSmpBondTable[Slot]));
 	BtSmpSignStateReset(Slot, 0U, 0U);
 
 	if (valid)
 	{
-		memcpy(&s_BtSmpBondTable[Slot], &record.Bond, sizeof(record.Bond));
+		memcpy(&s_pBtSmpBondTable[Slot], &record.Bond, sizeof(record.Bond));
 
 		if (migrate)
 		{
-			CryptoSecureWipe(s_BtSmpBondTable[Slot].Keys.Csrk, 16);
-			s_BtSmpBondTable[Slot].SignCounter = 0U;
+			CryptoSecureWipe(s_pBtSmpBondTable[Slot].Keys.Csrk, 16);
+			s_pBtSmpBondTable[Slot].SignCounter = 0U;
 			persist = true;
 		}
 		else
 		{
-			uint32_t high = s_BtSmpBondTable[Slot].SignCounter;
+			uint32_t high = s_pBtSmpBondTable[Slot].SignCounter;
 			BtSmpSignStateReset(Slot, high, high);
 			persist = BtSmpSignCounterPrepare(Slot);
 		}
@@ -477,11 +495,17 @@ static bool BtSmpAddrIdentityType(uint8_t AddrType, const uint8_t Addr[6],
 
 static int BtSmpBondFindByAddr(uint8_t AddrType, const uint8_t Addr[6])
 {
+	if (s_pBtSmpBondTable == nullptr)
+	{
+		// No bond was ever added or restored
+		return -1;
+	}
+
 	for (int i = 0; i < BT_SMP_BOND_MAX; i++)
 	{
-		if (s_BtSmpBondTable[i].bValid &&
-			s_BtSmpBondTable[i].PeerAddrType == AddrType &&
-			memcmp(s_BtSmpBondTable[i].PeerAddr, Addr, 6) == 0)
+		if (s_pBtSmpBondTable[i].bValid &&
+			s_pBtSmpBondTable[i].PeerAddrType == AddrType &&
+			memcmp(s_pBtSmpBondTable[i].PeerAddr, Addr, 6) == 0)
 		{
 			return i;
 		}
@@ -492,7 +516,7 @@ static int BtSmpBondFindByAddr(uint8_t AddrType, const uint8_t Addr[6])
 	{
 		for (int i = 0; i < BT_SMP_BOND_MAX; i++)
 		{
-			BtSmpBond_t *pBond = &s_BtSmpBondTable[i];
+			BtSmpBond_t *pBond = &s_pBtSmpBondTable[i];
 			if (!pBond->bValid)
 			{
 				continue;
@@ -520,8 +544,8 @@ static int BtSmpBondFindByAddr(uint8_t AddrType, const uint8_t Addr[6])
 	{
 		for (int i = 0; i < BT_SMP_BOND_MAX; i++)
 		{
-			if (s_BtSmpBondTable[i].bValid &&
-				BtSmpRpaResolve(s_BtSmpBondTable[i].Keys.Irk, Addr))
+			if (s_pBtSmpBondTable[i].bValid &&
+				BtSmpRpaResolve(s_pBtSmpBondTable[i].Keys.Irk, Addr))
 			{
 				return i;
 			}
@@ -532,14 +556,20 @@ static int BtSmpBondFindByAddr(uint8_t AddrType, const uint8_t Addr[6])
 
 static int BtSmpBondFind(uint16_t ConnHdl, uint64_t Rand, uint16_t Ediv)
 {
+	if (s_pBtSmpBondTable == nullptr)
+	{
+		// No bond was ever added or restored
+		return -1;
+	}
+
 	if (Ediv != 0U || Rand != 0U)
 	{
 		for (int i = 0; i < BT_SMP_BOND_MAX; i++)
 		{
-			if (s_BtSmpBondTable[i].bValid &&
-				!s_BtSmpBondTable[i].Keys.bSc &&
-				s_BtSmpBondTable[i].Keys.Ediv == Ediv &&
-				s_BtSmpBondTable[i].Keys.Rand == Rand)
+			if (s_pBtSmpBondTable[i].bValid &&
+				!s_pBtSmpBondTable[i].Keys.bSc &&
+				s_pBtSmpBondTable[i].Keys.Ediv == Ediv &&
+				s_pBtSmpBondTable[i].Keys.Rand == Rand)
 			{
 				return i;
 			}
@@ -556,7 +586,7 @@ static int BtSmpBondAllocSlot(void)
 {
 	for (int i = 0; i < BT_SMP_BOND_MAX; i++)
 	{
-		if (!s_BtSmpBondTable[i].bValid)
+		if (!s_pBtSmpBondTable[i].bValid)
 		{
 			return i;
 		}
@@ -581,6 +611,8 @@ bool BtSmpBondAdd(uint16_t ConnHdl, const BtSmpKeys_t *pKeys)
 	uint8_t addr[6];
 	memcpy(addr, pPeer->Conn.PeerAddr, sizeof(addr));
 
+	BtSmpBondTableAttach();
+
 	int slot = BtSmpBondFindByAddr(addrType, addr);
 	const bool freshSlot = slot < 0;
 	if (freshSlot)
@@ -596,30 +628,30 @@ bool BtSmpBondAdd(uint16_t ConnHdl, const BtSmpKeys_t *pKeys)
 	}
 
 	uint32_t state = BtSmpBondTableEnter();
-	bool sameCsrk = !freshSlot && s_BtSmpBondTable[slot].bValid &&
-		memcmp(s_BtSmpBondTable[slot].Keys.Csrk, pKeys->Csrk, 16) == 0;
+	bool sameCsrk = !freshSlot && s_pBtSmpBondTable[slot].bValid &&
+		memcmp(s_pBtSmpBondTable[slot].Keys.Csrk, pKeys->Csrk, 16) == 0;
 
 	uint32_t keepHigh = sameCsrk ?
-		s_BtSmpSignState[slot].DurableHigh.load() : 0U;
+		s_pBtSmpSignState[slot].DurableHigh.load() : 0U;
 	uint32_t keepNext = sameCsrk ?
-		s_BtSmpSignState[slot].Next.load() : 0U;
+		s_pBtSmpSignState[slot].Next.load() : 0U;
 	uint32_t keepPending = sameCsrk ?
-		s_BtSmpSignState[slot].PendingHigh.load() : 0U;
-	bool keepReady = sameCsrk && s_BtSmpSignState[slot].Ready.load();
+		s_pBtSmpSignState[slot].PendingHigh.load() : 0U;
+	bool keepReady = sameCsrk && s_pBtSmpSignState[slot].Ready.load();
 
-	memset(&s_BtSmpBondTable[slot], 0, sizeof(s_BtSmpBondTable[slot]));
-	s_BtSmpBondTable[slot].SignCounter = keepHigh;
-	s_BtSmpBondTable[slot].bValid = true;
-	s_BtSmpBondTable[slot].PeerAddrType = addrType;
-	memcpy(s_BtSmpBondTable[slot].PeerAddr, addr, sizeof(addr));
-	memcpy(&s_BtSmpBondTable[slot].Keys, pKeys, sizeof(BtSmpKeys_t));
+	memset(&s_pBtSmpBondTable[slot], 0, sizeof(s_pBtSmpBondTable[slot]));
+	s_pBtSmpBondTable[slot].SignCounter = keepHigh;
+	s_pBtSmpBondTable[slot].bValid = true;
+	s_pBtSmpBondTable[slot].PeerAddrType = addrType;
+	memcpy(s_pBtSmpBondTable[slot].PeerAddr, addr, sizeof(addr));
+	memcpy(&s_pBtSmpBondTable[slot].Keys, pKeys, sizeof(BtSmpKeys_t));
 
 	if (sameCsrk)
 	{
-		s_BtSmpSignState[slot].Next.store(keepNext);
-		s_BtSmpSignState[slot].DurableHigh.store(keepHigh);
-		s_BtSmpSignState[slot].PendingHigh.store(keepPending);
-		s_BtSmpSignState[slot].Ready.store(keepReady);
+		s_pBtSmpSignState[slot].Next.store(keepNext);
+		s_pBtSmpSignState[slot].DurableHigh.store(keepHigh);
+		s_pBtSmpSignState[slot].PendingHigh.store(keepPending);
+		s_pBtSmpSignState[slot].Ready.store(keepReady);
 	}
 	else
 	{
@@ -633,9 +665,9 @@ bool BtSmpBondAdd(uint16_t ConnHdl, const BtSmpKeys_t *pKeys)
 	}
 	for (uint8_t i = 0; i < nc; i++)
 	{
-		s_BtSmpBondTable[slot].Cccd[i] = pPeer->Conn.Cccd[i];
+		s_pBtSmpBondTable[slot].Cccd[i] = pPeer->Conn.Cccd[i];
 	}
-	s_BtSmpBondTable[slot].NbCccd = nc;
+	s_pBtSmpBondTable[slot].NbCccd = nc;
 
 	(void)BtSmpSignCounterPrepare(slot);
 	BtSmpBondTableExit(state);
@@ -644,7 +676,7 @@ bool BtSmpBondAdd(uint16_t ConnHdl, const BtSmpKeys_t *pKeys)
 	return true;
 }
 
-void BtSmpBondCccdSave(uint16_t ConnHdl, uint16_t CccdHdl, uint16_t Value)
+static void BtSmpBondCccdSaveImpl(uint16_t ConnHdl, uint16_t CccdHdl, uint16_t Value)
 {
 	BtDevice_t *pPeer = BtPeerFindByHdl(ConnHdl);
 	if (pPeer == nullptr)
@@ -661,7 +693,7 @@ void BtSmpBondCccdSave(uint16_t ConnHdl, uint16_t CccdHdl, uint16_t Value)
 
 	bool changed = false;
 	uint32_t state = BtSmpBondTableEnter();
-	BtSmpBond_t *p = &s_BtSmpBondTable[slot];
+	BtSmpBond_t *p = &s_pBtSmpBondTable[slot];
 	int idx = -1;
 	for (uint8_t i = 0; i < p->NbCccd; i++)
 	{
@@ -704,7 +736,7 @@ void BtSmpBondCccdSave(uint16_t ConnHdl, uint16_t CccdHdl, uint16_t Value)
 	}
 }
 
-uint8_t BtSmpBondCccdGet(uint16_t ConnHdl, uint16_t *pHdl,
+static uint8_t BtSmpBondCccdGetImpl(uint16_t ConnHdl, uint16_t *pHdl,
 		uint16_t *pValue, uint8_t Max)
 {
 	BtDevice_t *pPeer = BtPeerFindByHdl(ConnHdl);
@@ -720,7 +752,7 @@ uint8_t BtSmpBondCccdGet(uint16_t ConnHdl, uint16_t *pHdl,
 		return 0;
 	}
 
-	BtSmpBond_t *p = &s_BtSmpBondTable[slot];
+	BtSmpBond_t *p = &s_pBtSmpBondTable[slot];
 	uint8_t n = p->NbCccd;
 	if (n > Max)
 	{
@@ -734,7 +766,7 @@ uint8_t BtSmpBondCccdGet(uint16_t ConnHdl, uint16_t *pHdl,
 	return n;
 }
 
-bool BtSmpBondKeysLookup(uint16_t ConnHdl, uint64_t Rand, uint16_t Ediv,
+static bool BtSmpBondKeysLookupImpl(uint16_t ConnHdl, uint64_t Rand, uint16_t Ediv,
 							BtSmpKeys_t *pKeys)
 {
 	if (pKeys == nullptr)
@@ -747,7 +779,7 @@ bool BtSmpBondKeysLookup(uint16_t ConnHdl, uint64_t Rand, uint16_t Ediv,
 	{
 		return false;
 	}
-	memcpy(pKeys, &s_BtSmpBondTable[slot].Keys, sizeof(*pKeys));
+	memcpy(pKeys, &s_pBtSmpBondTable[slot].Keys, sizeof(*pKeys));
 	return pKeys->bValid;
 }
 
@@ -772,12 +804,12 @@ bool BtSmpBondLtkLookup(uint16_t ConnHdl, uint64_t Rand,
 	return found;
 }
 
-bool BtSmpBonded(uint16_t ConnHdl)
+static bool BtSmpBondedImpl(uint16_t ConnHdl)
 {
 	return BtSmpBondFind(ConnHdl, 0U, 0U) >= 0;
 }
 
-bool BtSmpSignVerify(uint16_t ConnHdl, const uint8_t *pMsg, size_t MsgLen,
+static bool BtSmpSignVerifyImpl(uint16_t ConnHdl, const uint8_t *pMsg, size_t MsgLen,
 					 const uint8_t *pSig)
 {
 	if (pSig == nullptr || (pMsg == nullptr && MsgLen > 0U))
@@ -798,8 +830,8 @@ bool BtSmpSignVerify(uint16_t ConnHdl, const uint8_t *pMsg, size_t MsgLen,
 		return false;
 	}
 
-	BtSmpBond_t *pBond = &s_BtSmpBondTable[slot];
-	BtSmpSignState_t &state = s_BtSmpSignState[slot];
+	BtSmpBond_t *pBond = &s_pBtSmpBondTable[slot];
+	BtSmpSignState_t &state = s_pBtSmpSignState[slot];
 	if (!BtSmpBondHasCsrk(pBond) || !state.Ready.load())
 	{
 		return false;
@@ -843,11 +875,102 @@ bool BtSmpSignVerify(uint16_t ConnHdl, const uint8_t *pMsg, size_t MsgLen,
 void BtSmpBondClearAll(void)
 {
 	uint32_t state = BtSmpBondTableEnter();
-	CryptoSecureWipe(s_BtSmpBondTable, sizeof(s_BtSmpBondTable));
+	if (s_pBtSmpBondTable != nullptr)
+	{
+		CryptoSecureWipe(s_pBtSmpBondTable, sizeof(BtSmpBond_t) * BT_SMP_BOND_MAX);
+	}
 	for (int i = 0; i < BT_SMP_BOND_MAX; i++)
 	{
 		BtSmpSignStateReset(i, 0U, 0U);
 	}
 	BtSmpBondTableExit(state);
 	BtSmpBondErase();
+}
+
+// Bond lookups called by the generic GATT, GAP and ATT layers on every link,
+// secure or not. They reach the bond table code only through this table,
+// which is installed when the bond table is attached, that is when a bond is
+// added or restored. An application without security never does either, so
+// the lookups below find nothing and the code behind them is not linked.
+typedef struct {
+	void (*CccdSave)(uint16_t ConnHdl, uint16_t CccdHdl, uint16_t Value);
+	uint8_t (*CccdGet)(uint16_t ConnHdl, uint16_t *pHdl, uint16_t *pValue, uint8_t Max);
+	bool (*KeysLookup)(uint16_t ConnHdl, uint64_t Rand, uint16_t Ediv, BtSmpKeys_t *pKeys);
+	bool (*Bonded)(uint16_t ConnHdl);
+	bool (*SignVerify)(uint16_t ConnHdl, const uint8_t *pMsg, size_t MsgLen, const uint8_t *pSig);
+} BtSmpBondOps_t;
+
+static const BtSmpBondOps_t s_BtSmpBondOps = {
+	.CccdSave = BtSmpBondCccdSaveImpl,
+	.CccdGet = BtSmpBondCccdGetImpl,
+	.KeysLookup = BtSmpBondKeysLookupImpl,
+	.Bonded = BtSmpBondedImpl,
+	.SignVerify = BtSmpSignVerifyImpl,
+};
+
+static const BtSmpBondOps_t *s_pBtSmpBondOps = nullptr;
+
+static void BtSmpBondOpsAttach(void)
+{
+	s_pBtSmpBondOps = &s_BtSmpBondOps;
+}
+
+void BtSmpBondCccdSave(uint16_t ConnHdl, uint16_t CccdHdl, uint16_t Value)
+{
+	if (s_pBtSmpBondOps != nullptr)
+	{
+		s_pBtSmpBondOps->CccdSave(ConnHdl, CccdHdl, Value);
+	}
+}
+
+uint8_t BtSmpBondCccdGet(uint16_t ConnHdl, uint16_t *pHdl,
+		uint16_t *pValue, uint8_t Max)
+{
+	if (s_pBtSmpBondOps == nullptr)
+	{
+		// No bond exists
+		return 0;
+	}
+
+	return s_pBtSmpBondOps->CccdGet(ConnHdl, pHdl, pValue, Max);
+}
+
+bool BtSmpBondKeysLookup(uint16_t ConnHdl, uint64_t Rand, uint16_t Ediv,
+							BtSmpKeys_t *pKeys)
+{
+	if (s_pBtSmpBondOps == nullptr)
+	{
+		// No bond exists. The caller still gets a cleared key set.
+		if (pKeys != nullptr)
+		{
+			CryptoSecureWipe(pKeys, sizeof(*pKeys));
+		}
+
+		return false;
+	}
+
+	return s_pBtSmpBondOps->KeysLookup(ConnHdl, Rand, Ediv, pKeys);
+}
+
+bool BtSmpBonded(uint16_t ConnHdl)
+{
+	if (s_pBtSmpBondOps == nullptr)
+	{
+		// No bond exists
+		return false;
+	}
+
+	return s_pBtSmpBondOps->Bonded(ConnHdl);
+}
+
+bool BtSmpSignVerify(uint16_t ConnHdl, const uint8_t *pMsg, size_t MsgLen,
+					 const uint8_t *pSig)
+{
+	if (s_pBtSmpBondOps == nullptr)
+	{
+		// No bond exists, so there is no key to verify a signature with
+		return false;
+	}
+
+	return s_pBtSmpBondOps->SignVerify(ConnHdl, pMsg, MsgLen, pSig);
 }

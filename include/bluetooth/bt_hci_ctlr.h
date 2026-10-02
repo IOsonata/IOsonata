@@ -133,7 +133,106 @@ extern "C" {
  * @return
  */
 bool BtHciCtlrInit(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg);
+
+/**
+ * @brief	Create the default RX fifo.
+ *
+ * BtHciCtlrInit creates the RX fifo only when the configuration supplies its
+ * memory (pRxFifoMem). A port that queues received packets through
+ * pDev->Receive calls this function from its BtHciCtlrStart to get the
+ * default one. The default fifo memory is linked only when this function is
+ * referenced, so a port that delivers packets straight to RxHandler does not
+ * pay for it. Does nothing when the fifo already exists.
+ *
+ * @param	pDev	Controller device, after BtHciCtlrInit.
+ *
+ * @return	true on success.
+ */
+bool BtHciCtlrRxFifoInit(BtHciCtlrDev_t * const pDev);
+
 size_t BtHciCtlrSdcSend(void *pData, size_t Len);
+
+/**
+ * @brief	Ask for the peripheral link features of the controller.
+ *
+ * Called by connection support (BtAppConnInit) before the controller is
+ * enabled. Implemented by the controller port. The link features of the
+ * controller are linked only when this function is referenced. Enabling a
+ * controller in peripheral role without it fails with
+ * BT_HCI_CTLR_ERROR_PERIPHERAL_SUPPORT.
+ */
+void BtHciCtlrPeripheralSupport(void);
+
+/**
+ * @brief	Ask for the link commands of the controller.
+ *
+ * Called by connection support (BtAppConnInit), for a link in either role.
+ * Implemented by the controller port. The commands that act on a link
+ * (disconnect, PHY, data length, encryption) are linked only when this
+ * function is referenced, and are answered as unknown commands without it.
+ */
+void BtHciCtlrLinkSupport(void);
+
+/**
+ * @brief	Enable the central and observer features of the controller.
+ *
+ * Implemented by the controller port when the controller has features to
+ * switch on for scanning, periodic sync and the central role. It is reached
+ * only through g_pBtHciCtlrCentralSupport, which the scan module defines, so
+ * these features are linked only when the application uses scanning
+ * (BtAppScanInit).
+ */
+void BtHciCtlrCentralSupport(void);
+
+/// Defined by the scan module (bt_scan_hci.cpp). The controller port refers
+/// to it through a weak reference: present when the application uses
+/// scanning, unresolved otherwise.
+extern void (* const g_pBtHciCtlrCentralSupport)(void);
+
+/**
+ * @brief	Enable periodic advertising in the controller.
+ *
+ * Implemented by the controller port when the controller has a feature to
+ * switch on for it. It is reached only through
+ * g_pBtHciCtlrPeriodicAdvSupport, which the periodic advertising module
+ * defines, so it is linked only when the application calls BtPadvInit.
+ */
+void BtHciCtlrPeriodicAdvSupport(void);
+
+/// Defined by the periodic advertising module (bt_padv_hci.cpp). The
+/// controller port refers to it through a weak reference.
+extern void (* const g_pBtHciCtlrPeriodicAdvSupport)(void);
+
+/// Size in bytes of the library default controller memory pool
+#define BT_HCI_CTLR_MEMPOOL_DEFAULT_SIZE		10000
+
+/// Controller memory pool descriptor
+typedef struct __Bt_Hci_Ctlr_Mem_Pool {
+	uint8_t *pMem;			//!< Pool storage, aligned on 8 bytes
+	size_t Size;			//!< Total pMem length in bytes
+} BtHciCtlrMemPool_t;
+
+/// Memory pool the controller carves its configuration out of. The library
+/// defines a weak default of BT_HCI_CTLR_MEMPOOL_DEFAULT_SIZE bytes. What a
+/// controller needs depends on the role and the number of links, so an
+/// application sizes it by defining its own
+///
+///   alignas(8) static uint8_t s_CtlrMem[MY_SIZE];
+///   const BtHciCtlrMemPool_t g_BtHciCtlrMemPool = { s_CtlrMem, sizeof(s_CtlrMem) };
+///
+/// in which case the library default pool is not linked. BtAppInit fails when
+/// the pool is too small. BtHciCtlrMemPoolSizeNeeded gives the size to use.
+extern const BtHciCtlrMemPool_t g_BtHciCtlrMemPool;
+
+/**
+ * @brief	Pool size the controller configuration asked for.
+ *
+ * Valid once the controller has been configured (BtAppInit), whether or not
+ * the pool was large enough.
+ *
+ * @return	Size in bytes, 0 before configuration
+ */
+int32_t BtHciCtlrMemPoolSizeNeeded(void);
 uint8_t BtHciCmdSdc(BtHciDevice_t * const pDev, uint16_t OpCode, const void *pParam, uint8_t ParamLen, void *pRet, uint8_t RetLen);
 
 /**
@@ -170,6 +269,8 @@ typedef enum __Bt_Hci_Ctlr_Error {
 	BT_HCI_CTLR_ERROR_MEM_POOL,		//!< Pool too small, Value is the size asked for in bytes
 	BT_HCI_CTLR_ERROR_ARBITER,		//!< Memory arbiter refused, Value is its code
 	BT_HCI_CTLR_ERROR_CTLR_ENABLE,	//!< Target controller enable refused, Value is its code
+	BT_HCI_CTLR_ERROR_PERIPHERAL_SUPPORT,	//!< Peripheral role asked but BtHciCtlrPeripheralSupport was not called, Value is the role
+	BT_HCI_CTLR_ERROR_CENTRAL_SUPPORT,	//!< Central or observer role asked but the scan module is not linked (BtAppScanInit never referenced), Value is the role
 } BtHciCtlrError_t;
 
 /**

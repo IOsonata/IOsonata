@@ -398,7 +398,7 @@ static int BtAppAdvDisable(void)
 	return BtHciCommand(pDev, BT_HCI_CMD_CTLR_SET_EXT_ADV_ENABLE, &x, sizeof(x), NULL, 0);
 }
 
-void BtAppAdvStart()
+void BtAdvStart()
 {
 	if (g_BtAppData.State == BTAPP_STATE_ADVERTISING)
 		return;
@@ -419,11 +419,11 @@ void BtAppAdvStart()
 				 (unsigned)res);
 }
 
-void BtAppAdvStop()
+void BtAdvStop()
 {
 	// Only report idle once the controller has accepted the disable. If the
 	// command failed the set is still on air, and moving to IDLE would make a
-	// later BtAppAdvStart look like a no-op while the device keeps
+	// later BtAdvStart look like a no-op while the device keeps
 	// advertising with whatever data it had.
 	if (BtAppAdvDisable() != 0)
 	{

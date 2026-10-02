@@ -56,25 +56,44 @@ typedef struct {
 	uint32_t MaxFreq;
     NRF_RTC_Type *pReg;
     int MaxNbTrigEvt;		//!< Number of trigger is not the same for all timers.
-    uint32_t CC[TIMER_NRFX_RTC_MAX_TRIGGER_EVT];
-    TimerTrig_t Trigger[TIMER_NRFX_RTC_MAX_TRIGGER_EVT];
-    TimerDev_t *pTimer;
+    uint32_t *pCC;			//!< Compare value of each trigger, MaxNbTrigEvt entries
+    TimerTrig_t *pTrigger;	//!< State of each trigger, MaxNbTrigEvt entries
 } nRFRtcData_t;
 #pragma pack(pop)
 
-alignas(4) static nRFRtcData_t s_nRfxRtcData[TIMER_NRFX_RTC_MAX] = {
+// Trigger state of each timer, sized by the number of compare registers of
+// that timer.
+static uint32_t s_nRfxRtc0CC[RTC0_CC_NUM];
+static TimerTrig_t s_nRfxRtc0Trig[RTC0_CC_NUM];
+static uint32_t s_nRfxRtc1CC[RTC1_CC_NUM];
+static TimerTrig_t s_nRfxRtc1Trig[RTC1_CC_NUM];
+#if TIMER_NRFX_RTC_MAX > 2
+static uint32_t s_nRfxRtc2CC[RTC2_CC_NUM];
+static TimerTrig_t s_nRfxRtc2Trig[RTC2_CC_NUM];
+#endif
+
+// Timer device of each timer, set by nRFxRtcInit
+static TimerDev_t *s_pnRfxRtcDev[TIMER_NRFX_RTC_MAX];
+
+// What does not change is constant, so it stays in flash. Only the trigger
+// state above and the device pointers are in RAM.
+alignas(4) static const nRFRtcData_t s_nRfxRtcData[TIMER_NRFX_RTC_MAX] = {
 	// RTC LF timer first
 	{
 		.DevNo = 0,
 		.MaxFreq = TIMER_NRFX_RTC_BASE_FREQ,
 		.pReg = NRF_RTC0,
 		.MaxNbTrigEvt = RTC0_CC_NUM,
+		.pCC = s_nRfxRtc0CC,
+		.pTrigger = s_nRfxRtc0Trig,
 	},
 	{
 		.DevNo = 1,
 		.MaxFreq = TIMER_NRFX_RTC_BASE_FREQ,
 		.pReg = NRF_RTC1,
 		.MaxNbTrigEvt = RTC1_CC_NUM,
+		.pCC = s_nRfxRtc1CC,
+		.pTrigger = s_nRfxRtc1Trig,
 	},
 #if TIMER_NRFX_RTC_MAX > 2
 	{
@@ -82,16 +101,30 @@ alignas(4) static nRFRtcData_t s_nRfxRtcData[TIMER_NRFX_RTC_MAX] = {
 		.MaxFreq = TIMER_NRFX_RTC_BASE_FREQ,
 		.pReg = NRF_RTC2,
 		.MaxNbTrigEvt = RTC2_CC_NUM,
+		.pCC = s_nRfxRtc2CC,
+		.pTrigger = s_nRfxRtc2Trig,
 	},
 #endif
 };
 
 static std::atomic<int> s_nRfxLFClockSem(0);
 
+// Set by nRFxRtcInit. The interrupt handlers below are kept by the linker as soon as
+// this file is part of a build, used or not. They reach the timer data
+// through this pointer, so that the data is linked only when a timer is
+// initialized.
+static const nRFRtcData_t *s_pnRfxRtcData = nullptr;
+
 static void RtcIRQHandler(int DevNo)
 {
-	NRF_RTC_Type *reg = s_nRfxRtcData[DevNo].pReg;
-	TimerDev_t *timer = s_nRfxRtcData[DevNo].pTimer;
+	if (s_pnRfxRtcData == nullptr)
+	{
+		// No timer of this kind was initialized
+		return;
+	}
+
+	NRF_RTC_Type *reg = s_pnRfxRtcData[DevNo].pReg;
+	TimerDev_t *timer = s_pnRfxRtcDev[DevNo];
     uint32_t evt = 0;
     uint32_t count = reg->COUNTER;
 
@@ -110,19 +143,19 @@ static void RtcIRQHandler(int DevNo)
 
     timer->LastCount = count;
 
-    for (int i = 0; i < s_nRfxRtcData[DevNo].MaxNbTrigEvt; i++)
+    for (int i = 0; i < s_pnRfxRtcData[DevNo].MaxNbTrigEvt; i++)
     {
         if (reg->EVENTS_COMPARE[i])
         {
             evt |= TIMER_EVT_TRIGGER(i);
             reg->EVENTS_COMPARE[i] = 0;
-            if (s_nRfxRtcData[DevNo].Trigger[i].Type == TIMER_TRIG_TYPE_CONTINUOUS)
+            if (s_pnRfxRtcData[DevNo].pTrigger[i].Type == TIMER_TRIG_TYPE_CONTINUOUS)
             {
-            	reg->CC[i] = (count + s_nRfxRtcData[DevNo].CC[i]) & 0xffffff;
+            	reg->CC[i] = (count + s_pnRfxRtcData[DevNo].pCC[i]) & 0xffffff;
             }
-            if (s_nRfxRtcData[DevNo].Trigger[i].Handler)
+            if (s_pnRfxRtcData[DevNo].pTrigger[i].Handler)
             {
-            	s_nRfxRtcData[DevNo].Trigger[i].Handler(timer, i, s_nRfxRtcData[DevNo].Trigger[i].pContext);
+            	s_pnRfxRtcData[DevNo].pTrigger[i].Handler(timer, i, s_pnRfxRtcData[DevNo].pTrigger[i].pContext);
             }
         }
     }
@@ -239,7 +272,9 @@ static uint32_t nRFxRtcSetFrequency(TimerDev_t * const pTimer, uint32_t Freq)
 
     pTimer->Freq = TIMER_NRFX_RTC_BASE_FREQ / prescaler;
 
-    // Pre-calculate periods for faster timer counter to time conversion use later
+    // Tick period rounded down to a nanosecond, 30517 for the 30517.58 ns of
+    // 32768 Hz. Not precise enough to convert a count or a trigger period,
+    // those are computed from Freq, see TimerTickToTime.
     pTimer->nsPeriod = 1000000000ULL / (uint64_t)pTimer->Freq;     // Period in nsec
 
     s_nRfxRtcData[pTimer->DevNo].pReg->TASKS_START = 1;
@@ -260,56 +295,56 @@ static int nRFxRtcGetMaxTrigger(TimerDev_t * const pTimer)
 static uint64_t nRFxRtcEnableTrigger(TimerDev_t * const pTimer, int TrigNo, uint64_t nsPeriod, TIMER_TRIG_TYPE Type,
                               	  	 TimerTrigEvtHandler_t Handler, void *pContext)
 {
-	nRFRtcData_t &rtc = s_nRfxRtcData[pTimer->DevNo];
+	const nRFRtcData_t &rtc = s_nRfxRtcData[pTimer->DevNo];
 
     if (TrigNo < 0 || TrigNo >= rtc.MaxNbTrigEvt)
         return 0;
 
-    uint32_t cc = (nsPeriod + (pTimer->nsPeriod >> 1)) / pTimer->nsPeriod;
+    uint32_t cc = TimerNanosecondToTick(pTimer, nsPeriod);
 
     if (cc <= 0)
     {
         return 0;
     }
 
-    rtc.Trigger[TrigNo].Type = Type;
-    rtc.CC[TrigNo] = cc;
+    rtc.pTrigger[TrigNo].Type = Type;
+    rtc.pCC[TrigNo] = cc;
     rtc.pReg->EVTENSET = RTC_EVTEN_COMPARE0_Msk << TrigNo;
 
     rtc.pReg->INTENSET = RTC_INTENSET_COMPARE0_Msk << TrigNo;
 
-    rtc.pReg->CC[TrigNo] =rtc.CC[TrigNo] + rtc.pReg->COUNTER;
+    rtc.pReg->CC[TrigNo] =rtc.pCC[TrigNo] + rtc.pReg->COUNTER;
 
-    rtc.Trigger[TrigNo].nsPeriod = pTimer->nsPeriod * (uint64_t)cc;
-    rtc.Trigger[TrigNo].Handler = Handler;
-    rtc.Trigger[TrigNo].pContext = pContext;
+    rtc.pTrigger[TrigNo].nsPeriod = TimerTickToNanosecond(pTimer, cc);
+    rtc.pTrigger[TrigNo].Handler = Handler;
+    rtc.pTrigger[TrigNo].pContext = pContext;
 
-    return pTimer->nsPeriod * (uint64_t)cc; // Return real period in nsec
+    return rtc.pTrigger[TrigNo].nsPeriod; // Return real period in nsec
 }
 
 static void nRFxRtcDisableTrigger(TimerDev_t * const pTimer, int TrigNo)
 {
-	nRFRtcData_t &rtc = s_nRfxRtcData[pTimer->DevNo];
+	const nRFRtcData_t &rtc = s_nRfxRtcData[pTimer->DevNo];
 
 	if (TrigNo < 0 || TrigNo >= rtc.MaxNbTrigEvt)
         return;
 
-    rtc.CC[TrigNo] = 0;
+    rtc.pCC[TrigNo] = 0;
     rtc.pReg->CC[TrigNo] = 0;
     rtc.pReg->EVTENCLR = RTC_EVTEN_COMPARE0_Msk << TrigNo;
     rtc.pReg->INTENCLR = RTC_INTENCLR_COMPARE0_Msk << TrigNo;
 
-    rtc.Trigger[TrigNo].Type = TIMER_TRIG_TYPE_SINGLE;
-    rtc.Trigger[TrigNo].Handler = NULL;
-    rtc.Trigger[TrigNo].pContext = NULL;
-    rtc.Trigger[TrigNo].nsPeriod = 0;
+    rtc.pTrigger[TrigNo].Type = TIMER_TRIG_TYPE_SINGLE;
+    rtc.pTrigger[TrigNo].Handler = NULL;
+    rtc.pTrigger[TrigNo].pContext = NULL;
+    rtc.pTrigger[TrigNo].nsPeriod = 0;
 }
 
 static int nRFxRtcFindAvailTrigger(TimerDev_t * const pTimer)
 {
 	for (int i = 0; i < s_nRfxRtcData[pTimer->DevNo].MaxNbTrigEvt; i++)
 	{
-		if (s_nRfxRtcData[pTimer->DevNo].Trigger[i].nsPeriod == 0)
+		if (s_nRfxRtcData[pTimer->DevNo].pTrigger[i].nsPeriod == 0)
 			return i;
 	}
 
@@ -348,12 +383,14 @@ bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 
     pTimer->DevNo = pCfg->DevNo;
     pTimer->EvtHandler = pCfg->EvtHandler;
-	nRFRtcData_t &rtc = s_nRfxRtcData[pTimer->DevNo];
+	s_pnRfxRtcData = s_nRfxRtcData;
+
+	const nRFRtcData_t &rtc = s_nRfxRtcData[pTimer->DevNo];
 	NRF_RTC_Type *reg = s_nRfxRtcData[pTimer->DevNo].pReg;
 
-    rtc.pTimer = pTimer;
+    s_pnRfxRtcDev[pTimer->DevNo] = pTimer;
 
-    memset(rtc.Trigger, 0, sizeof(rtc.Trigger));
+    memset(rtc.pTrigger, 0, rtc.MaxNbTrigEvt * sizeof(TimerTrig_t));
 
 
     pTimer->Disable = nRFxRtcDisable;

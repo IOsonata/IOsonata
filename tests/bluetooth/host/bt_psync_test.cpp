@@ -16,6 +16,15 @@
 #include "bluetooth/bt_padv.h"
 #include "bluetooth/bt_psync.h"
 
+// The HCI host is not part of this test. BtPsyncCreate registers the sync
+// event entry points with it, so the registration lands here.
+static const BtHciPsyncHandler_t *s_pPsyncHandler = nullptr;
+
+void BtHciPsyncHandlerSet(const BtHciPsyncHandler_t *pHandler)
+{
+	s_pPsyncHandler = pHandler;
+}
+
 // bt_app.cpp is not linked here. It brings the whole application state machine
 // in for one field, the HCI device the command helper reaches the controller
 // through, so the definition lives here instead.
@@ -166,6 +175,15 @@ void TestCreateSyncLayout(void)
 
 	BtPsyncCfg_t cfg = MakeCfg();
 	CHECK(BtPsyncCreate(&cfg));
+
+	// Creating a sync is what hands the event entry points to the host.
+	CHECK(s_pPsyncHandler != nullptr);
+	if (s_pPsyncHandler != nullptr)
+	{
+		CHECK(s_pPsyncHandler->Established == BtPsyncEvtEstablished);
+		CHECK(s_pPsyncHandler->Report == BtPsyncEvtReport);
+		CHECK(s_pPsyncHandler->Lost == BtPsyncEvtLost);
+	}
 
 	const CapturedCmd *c = FindCmd(BT_HCI_CMD_CTLR_PERIODIC_ADV_CREATE_SYNC);
 	CHECK(c != nullptr);

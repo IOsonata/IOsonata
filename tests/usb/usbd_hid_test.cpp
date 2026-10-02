@@ -235,10 +235,15 @@ public:
 	}
 };
 
+alignas(4) static uint8_t s_RxSlot[USB_INT_INTRF_PKT_BLKSIZE];
+alignas(4) static uint8_t s_TxSlot[USB_INT_INTRF_PKT_BLKSIZE];
+
 static UsbdHidCfg_t MakeCfg(void)
 {
 	UsbdHidCfg_t cfg = {};
 	cfg.DevNo = 0;
+	cfg.pRxBuffer = s_RxSlot;
+	cfg.pTxBuffer = s_TxSlot;
 	cfg.pReportDesc = s_ReportDesc;
 	cfg.ReportDescLength = sizeof(s_ReportDesc);
 	cfg.SubClass = USB_HID_SUBCLASS_BOOT;
@@ -548,6 +553,14 @@ static void TestValidation(void)
 	ResetFake();
 	TestHid hid;
 	UsbdHidCfg_t cfg = MakeCfg();
+	cfg.pRxBuffer = nullptr;
+	CHECK(!hid.Init(cfg));
+	CHECK(!s_Registered);
+	cfg = MakeCfg();
+	cfg.pTxBuffer = s_TxSlot + 1;
+	CHECK(!hid.Init(cfg));
+	CHECK(!s_Registered);
+	cfg = MakeCfg();
 	cfg.pReportDesc = nullptr;
 	CHECK(!hid.Init(cfg));
 	cfg = MakeCfg();
@@ -660,5 +673,4 @@ int main(void)
 		"usbd_hid_test: FAIL");
 	return s_Fail == 0 ? 0 : 1;
 }
-
 

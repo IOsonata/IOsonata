@@ -51,19 +51,13 @@ SOFTWARE.
 #include "coredev/iopincfg.h"
 #include "coredev/system_core_clock.h"
 #include "coredev/timer.h"
+#include "timer_nrfx.h"
 #include "bluetooth/bt_app.h"
 #include "bluetooth/bt_smp.h"		// BtSmpLocalAddrGet override
 #include "bluetooth/bt_adv.h"		// BtAdvOwnAddrGet for the connection stamp
 #include "bluetooth/bt_ead.h"		// Encrypted Advertising Data engines
 
-#include "crypto/crypto_uecc.h"
 #include "crypto_rng_nrf.h"
-#if defined(NRF54L15_XXAA) || defined(NRF54H20_XXAA)
-#include "cracen_intrf.h"
-#include "crypto/ba414ep.h"
-#elif defined(NRF52840_XXAA)
-#include "crypto_cc3xx.h"
-#endif
 #include "bluetooth/bt_hci.h"
 #include "bluetooth/bt_hcievt.h"
 #include "bluetooth/bt_l2cap.h"
@@ -72,7 +66,6 @@ SOFTWARE.
 #include "bluetooth/services/bt_dis.h"
 #include "bluetooth/bt_appearance.h"
 #include "bluetooth/bt_hci_ctlr.h"
-#include "bluetooth/bt_pds.h"		// BtSmpBondNvmInit (bond persistence on an Nvm)
 #include "nrf_mpsl.h"
 #include "iopinctrl.h"
 #include "app_evt_handler.h"
@@ -122,9 +115,7 @@ static BtHciDevice_t s_BtHciDev = {
 	.SendData = BtAppSendData,
 	.Command = BtHciCmdSdc,
 	.EvtHandler = BtAppEvtHandler,
-	.Connected = BtAppConnected,
-	.Disconnected = BtAppDisconnected,
-	.SendCompleted = BtAppSendCompleted,
+	// Connected, Disconnected and SendCompleted are set by BtAppConnInit
 	.ScanReport = BtAppScanReport,
 	.AdvTimeout = BtAppAdvTimeoutHandler,
 	//.DiscoverDevice = BtAppDiscoverDevice,
@@ -133,6 +124,26 @@ static BtHciDevice_t s_BtHciDev = {
 // SDC controller instance. The HCI pump and transport live in
 // bt_hci_ctlr_sdc; this app wires the receive handler to the host.
 static BtHciCtlrDev_t s_BtHciCtlr;
+
+// Connection support. What a link needs (peer table, attribute database, GAP
+// and GATT services, ACL data path, GATT timeout) is reached only through
+// this table. BtAppConnInit installs it. An application that only advertises
+// or scans never reaches BtAppConnInit, so none of it is linked.
+typedef struct {
+	void (*AclData)(BtHciDevice_t * const pDev, BtHciACLDataPacket_t * const pPkt);
+	void (*Tick)(void);
+	bool (*SrvcDone)(const BtAppCfg_t *pCfg);
+	void (*TimerStart)(void);
+} BtAppSdcConn_t;
+
+static const BtAppSdcConn_t *s_pBtAppSdcConn = nullptr;
+
+// Configuration given to BtAppInit, used by BtAppConnInit
+static const BtAppCfg_t *s_pBtAppCfg = nullptr;
+
+// Set at the end of BtAppInit. Connection support started after that point
+// starts the timer itself.
+static bool s_bBtAppInitDone = false;
 
 
 // BtAppData_t now declared in bluetooth/bt_app.h, accessed via g_BtAppData.
@@ -165,7 +176,11 @@ const static TimerCfg_t s_BtAppSdcTimerCfg = {
 	.EvtHandler = BtAppSdcTimerHandler
 };
 
-static Timer g_BtAppSdcTimer;
+// Application timer: millisecond clock of the SMP and GATT transaction
+// timeouts and their 1 s check. Only a link uses it. It is the timer device
+// and not the Timer class: the class initializes through TimerInit, which
+// links the high frequency timer driver along with the low frequency one.
+static TimerDev_t s_BtAppSdcTimer;
 
 static inline uint32_t BtAppSendData(void *pData, uint32_t Len) {
 	return (uint32_t)BtHciCtlrSdcSend(pData, Len);
@@ -179,20 +194,6 @@ void BtSmpLocalAddrGet(uint8_t *pType, uint8_t pAddr[6])
 	memcpy(pAddr, s_BtSmpLocalAddr, 6);
 }
 
-// Surface a secured link (fresh pairing or bonded reconnect) to the application.
-// The generic SMP engine calls this on every successful encryption; translate it
-// to the port-neutral BtAppEvtSecured hook the example gates discovery on.
-// Declared in bt_smp.h, so no linkage specifier is needed here.
-void BtSmpPairingComplete(uint16_t ConnHdl, bool Success,
-						  const BtSmpKeys_t *pKeys)
-{
-	(void)pKeys;
-	if (Success)
-	{
-		BtAppEvtSecured(ConnHdl);
-	}
-}
-
 // Route each HCI packet the controller drains to the host process entry.
 static void BtAppSdcCtlrRx(BtHciCtlrDev_t * const pDev, bool bIsEvent, uint8_t *pPacket)
 {
@@ -200,24 +201,30 @@ static void BtAppSdcCtlrRx(BtHciCtlrDev_t * const pDev, bool bIsEvent, uint8_t *
 	{
 		BtHciProcessEvent(&s_BtHciDev, (BtHciEvtPacket_t*)pPacket);
 	}
-	else
+	else if (s_pBtAppSdcConn != nullptr)
 	{
-		BtHciProcessData(&s_BtHciDev, (BtHciACLDataPacket_t*)pPacket);
+		s_pBtAppSdcConn->AclData(&s_BtHciDev, (BtHciACLDataPacket_t*)pPacket);
 	}
 }
 
 // Millisecond clock for the generic SMP/GATT transaction timeouts. These
 // override the weak BtSmpMsTick/BtGattMsTick defaults (which return 0, leaving
 // the timeouts inert). Both are declared in bt_smp.h / bt_gatt.h, so no
-// linkage specifier is needed here. g_BtAppSdcTimer is started in BtAppInit.
+// linkage specifier is needed here. The timer is started with connection support.
 uint32_t BtSmpMsTick(void)
 {
-	return g_BtAppSdcTimer.mSecond();
+	if (s_BtAppSdcTimer.GetTickCount == nullptr)
+	{
+		// Timer not started
+		return 0;
+	}
+
+	return TimerGetMilisecond(&s_BtAppSdcTimer);
 }
 
 uint32_t BtGattMsTick(void)
 {
-	return g_BtAppSdcTimer.mSecond();
+	return BtSmpMsTick();
 }
 
 // Spec-strict indication transaction timeout: Core Vol 3 Part F 3.3.3 requires
@@ -248,10 +255,17 @@ static void BtAppSdcTimerHandler(TimerDev_t *pTimer, uint32_t Evt)
 {
     if (Evt & TIMER_EVT_TRIGGER(0))
     {
-        // Drive the generic transaction timeouts (Core Vol 3 Part H 3.4,
-        // Part F 3.3.3). Both are cheap no-ops when nothing is pending.
-        BtSmpTimeoutCheck();
-        BtGattIndicationTimeoutCheck();
+        // Drive the generic indication transaction timeout (Core Vol 3
+        // Part F 3.3.3). Cheap no-op when nothing is pending.
+		if (s_pBtAppSdcConn != nullptr)
+		{
+			s_pBtAppSdcConn->Tick();
+		}
+
+        // Wake the main loop once per period. The pairing timeout (Core
+        // Vol 3 Part H 3.4) is checked there by the security module, as an
+        // idle handler, when the application uses security.
+        BtAppEvtNotify();
     }
 }
 
@@ -312,33 +326,9 @@ void BtAppConnected(uint16_t ConnHdl, uint8_t Role, uint8_t PeerAddrType, uint8_
 		//BtAppDiscoverDevice(&s_BtHciDev, ConnHdl);
 	}
 
-	// If a secure SecType was configured, secure the link. As the central we
-	// initiate pairing (or re-encrypt from a bond); as the peripheral we send a
-	// Security Request. Host-driven SMP, internal so the application stays
-	// SDK-neutral - it does not call any stack-specific function.
-	// Which procedure to run is decided by this link's role, not by the
-	// device's configured role bitmask: a device built for both roles has
-	// both bits set, so the bitmask cannot say what this connection is. The
-	// central starts pairing; the peripheral asks the central to secure the
-	// link with a Security Request (Vol 3 Part H 2.4.6, 3.5.1).
-	if (g_BtAppData.AppDevice.bSecure)
-	{
-		switch (Role)
-		{
-			case BT_CONN_ROLE_CENTRAL:
-				BtSmpStartPairing(ConnHdl);
-				break;
-
-			case BT_CONN_ROLE_PERIPHERAL:
-				BtSmpRequestSecurity(ConnHdl);
-				break;
-
-			default:
-				// Role not reported: starting the wrong procedure would be
-				// rejected by the peer, so start neither.
-				break;
-		}
-	}
+	// If a secure SecType was configured, the link is secured by the security
+	// module (bt_sec_sdc.cpp), which hooks the connection callback when the
+	// application starts it with BtAppSecInit.
 
 	BtAppEvtConnected(ConnHdl);
 }
@@ -392,7 +382,7 @@ void BtAppDisconnected(uint16_t ConnHdl, uint8_t Reason)
 	if (bConnected == false &&
 		(g_BtAppData.AppDevice.Conn.Role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER)))
 	{
-		BtAppAdvStart();
+		BtAdvStart();
 	}
 }
 
@@ -464,8 +454,6 @@ void BleAppGapDeviceNameSet(const char* pDeviceName)
 
 bool BtAppStackInit(const BtAppCfg_t *pCfg)
 {
-	BtAttSetMtu(pCfg->MaxMtu);
-
 	BtHciCtlrCfg_t ctlrcfg = { };
 	ctlrcfg.RxHandler = BtAppSdcCtlrRx;
 	ctlrcfg.OnWake = BtAppEvtNotify;
@@ -493,9 +481,159 @@ bool BtAppStackInit(const BtAppCfg_t *pCfg)
 	// s_SdcAclTxPktAvail counter.
 	BtHciSetLeAclBuffer(&s_BtHciDev, ctlrcfg.MaxDataLen, ctlrcfg.TxPktCount);
 
+	return true;
+}
+
+// Last step of the service setup of a peripheral, after the application has
+// added its services: Device Information Service, appearance and preferred
+// connection parameters.
+static bool BtAppSdcSrvcDone(const BtAppCfg_t *pCfg)
+{
+	// Register Device Information Service when the app supplies device
+	// info. Generic bt_dis adds it to the same ATT DB as user services.
+	if (pCfg->pDevInfo != NULL && !BtDisInit(pCfg))
+	{
+		return false;
+	}
+
+	BtGapSetAppearance(pCfg->Appearance);
+
+	BtGattPreferedConnParams_t connparm = {
+		MSEC_TO_1_25(pCfg->ConnIntervalMin), MSEC_TO_1_25(pCfg->ConnIntervalMax),
+		0, 400};
+	BtGapSetPreferedConnParam(&connparm);
+
+	return true;
+}
+
+// Start the app timer with a 1 s continuous trigger. It sources the SMP/GATT
+// millisecond clock (BtSmp/GattMsTick above) and its handler drives the
+// 30 s transaction-timeout checks. 1 s cadence is ample for a 30 s deadline.
+static void BtAppSdcTimerStart(void)
+{
+	if (nRFxLFTimerInit(&s_BtAppSdcTimer, &s_BtAppSdcTimerCfg))
+	{
+		s_BtAppSdcTimer.EnableTrigger(&s_BtAppSdcTimer, 0, 1000000000ULL,
+									  TIMER_TRIG_TYPE_CONTINUOUS, nullptr, nullptr);
+	}
+}
+
+static const BtAppSdcConn_t s_BtAppSdcConn = {
+	.AclData = BtHciProcessData,
+	.Tick = BtGattIndicationTimeoutCheck,
+	.SrvcDone = BtAppSdcSrvcDone,
+	.TimerStart = BtAppSdcTimerStart,
+};
+
+// Engines of Encrypted Advertising Data: the AES engine of the controller
+// and the hardware RNG. Called by the EAD module the first time it needs an
+// engine, so they are linked only when the application uses EAD
+// (BtAdvEadKeySet, BtAdvDecrypt). Declared in bt_ead.h.
+bool BtEadEngineInit(void)
+{
+	return BtEadInit(BtCryptoCtlrSdcInit(), CryptoRngNrfInstance());
+}
+
+static bool BtAppSdcConnStart(const BtAppCfg_t *pCfg)
+{
+	// Initialize the peer/connection table (and its long-write pool) before
+	// the stack can produce any connection or data event.
+	if (!BtPeerInit(pCfg->pPeerPoolMem, pCfg->PeerPoolMemSize))
+	{
+		return false;
+	}
+
+	if (pCfg->PeriphDevMax + pCfg->CentralDevMax > (int)BtPeerCount())
+	{
+		// Peer pool holds fewer slots than the number of links requested.
+		// Provide a larger pool, see g_BtPeerPoolCfg in bt_peer.h
+		return false;
+	}
+	BtPeerLongWrInit(pCfg->pLongWrPoolMem, pCfg->LongWrPoolMemSize);
+
+	BtAttSetMtu(pCfg->MaxMtu);
+
 	if (pCfg->AttDBMemSize > 0)
 	{
 		BtAttDBInit(pCfg->AttDBMemSize);
+	}
+
+	s_BtHciDev.Connected = BtAppConnected;
+	s_BtHciDev.Disconnected = BtAppDisconnected;
+	s_BtHciDev.SendCompleted = BtAppSendCompleted;
+
+	// Commands that act on a link, in either role
+	BtHciCtlrLinkSupport();
+
+	if (pCfg->Role & BTAPP_ROLE_PERIPHERAL)
+	{
+		// Has to be asked before the controller is enabled
+		BtHciCtlrPeripheralSupport();
+	}
+
+	BtGapCfg_t gapcfg = {
+		.Role = pCfg->Role,
+		.SecType = pCfg->SecType,
+		.AdvInterval = pCfg->AdvInterval,
+		.AdvTimeout = pCfg->AdvTimeout,
+		.ConnIntervalMin = pCfg->ConnIntervalMin,
+		.ConnIntervalMax = pCfg->ConnIntervalMax,
+		.SlaveLatency = 0,
+		.SupTimeout = 400
+	};
+
+	DEBUG_PRINTF("BtGapInit\r\n");
+
+	// The GAP and GATT services are the table a client reads first.
+	if (BtGapInit(&gapcfg) == false)
+	{
+		return false;
+	}
+
+	BtGapSetDevName(pCfg->pDevName);
+
+	return true;
+}
+
+/**
+ * @brief	Start connection support.
+ *
+ * The call is what links the connection part of the stack. The stack calls
+ * it when the first GATT service is added and when a connection is
+ * initiated, so an application only calls it itself when it is connectable
+ * without any service of its own.
+ *
+ * @return	true - connection support started
+ */
+bool BtAppConnInit(void)
+{
+	if (s_pBtAppSdcConn != nullptr)
+	{
+		// Already started
+		return true;
+	}
+
+	if (s_pBtAppCfg == nullptr)
+	{
+		// BtAppInit has not been called yet
+		return false;
+	}
+
+	// Set first: BtGapInit adds the GAP and GATT services, which comes back
+	// to this function.
+	s_pBtAppSdcConn = &s_BtAppSdcConn;
+
+	if (BtAppSdcConnStart(s_pBtAppCfg) == false)
+	{
+		s_pBtAppSdcConn = nullptr;
+
+		return false;
+	}
+
+	if (s_bBtAppInitDone)
+	{
+		// Started after BtAppInit, as a central does at its first connect
+		BtAppSdcTimerStart();
 	}
 
 	return true;
@@ -515,21 +653,10 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 
 	int32_t res = 0;
 
-	// Initialize the peer/connection table (and its long-write pool) before
-	// the stack can produce any connection or data event. Matches the
-	// nRF52/BM ordering and avoids an event-before-peer-table window.
-	if (!BtPeerInit(pCfg->pPeerPoolMem, pCfg->PeerPoolMemSize))
-	{
-		return false;
-	}
-
-	if (pCfg->PeriphDevMax + pCfg->CentralDevMax > (int)BtPeerCount())
-	{
-		// Peer pool holds fewer slots than the number of links requested.
-		// Provide a larger pool, see g_BtPeerPoolCfg in bt_peer.h
-		return false;
-	}
-	BtPeerLongWrInit(pCfg->pLongWrPoolMem, pCfg->LongWrPoolMemSize);
+	// The peer table, the attribute database and the GAP services are set
+	// up by BtAppConnInit, see the service setup below.
+	s_pBtAppCfg = pCfg;
+	s_bBtAppInitDone = false;
 #if 0
 	mpsl_clock_lfclk_cfg_t lfclk = {MPSL_CLOCK_LF_SRC_RC, 0,};
 	OscDesc_t const *lfosc = GetLowFreqOscDesc();
@@ -603,6 +730,11 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 
 	g_BtAppData.AppDevice.Conn.Role = pCfg->Role;
 	g_BtAppData.AppDevice.pHciDev = &s_BtHciDev;		// host used by the HCI operation layer (bt_adv_hci etc.)
+	// Kept for BtAppSecInit, which the application calls from
+	// BtAppInitUserData when it uses security.
+	g_BtAppData.SecType = pCfg->SecType;
+	g_BtAppData.SecExchg = pCfg->SecExchg;
+	g_BtAppData.bSecInit = false;
 	DEBUG_PRINTF("g_BtAppData.AppDevice.Conn.Role = %d\r\n", g_BtAppData.AppDevice.Conn.Role);
 
 	g_BtAppData.bScan = false;
@@ -624,6 +756,29 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
     }
 
    // g_BleAppData.Role = pBleAppCfg->Role;
+
+	// Service setup. It runs before the controller is enabled because the
+	// controller has to know by then whether links are used. Adding the first
+	// service starts connection support (BtAppConnInit), which also installs
+	// the GAP and GATT services ahead of the application ones.
+	if (pCfg->Role & BTAPP_ROLE_PERIPHERAL)
+	{
+		BtAppInitUserServices();
+
+		if (s_pBtAppSdcConn == nullptr)
+		{
+			// Peripheral role without any service. The application has to
+			// call BtAppConnInit in BtAppInitUserServices to be connectable,
+			// or use BTAPP_ROLE_BROADCASTER.
+			STORE_PRINTF("BtAppInit FAIL: peripheral role but connection support was not started\r\n");
+			return false;
+		}
+
+		if (s_pBtAppSdcConn->SrvcDone(pCfg) == false)
+		{
+			return false;
+		}
+	}
 
     if (BtAppStackInit(pCfg) == false)
     {
@@ -703,195 +858,25 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 		return false;
 	}
 
-	BtGapCfg_t gapcfg = {
-		.Role = pCfg->Role,
-		.SecType = pCfg->SecType,
-		.AdvInterval = pCfg->AdvInterval,
-		.AdvTimeout = pCfg->AdvTimeout,
-		.ConnIntervalMin = pCfg->ConnIntervalMin,
-		.ConnIntervalMax = pCfg->ConnIntervalMax,
-		.SlaveLatency = 0,
-		.SupTimeout = 400
-	};
-
-	DEBUG_PRINTF("BtGapInit\r\n");
-
-	// The GAP and GATT services are the table a client reads first. Without
-	// them there is nothing to advertise, so this stops here.
-	if (BtGapInit(&gapcfg) == false)
-	{
-		return false;
-	}
-
-	// The SDC path owns its SMP crypto: P-256 ECDH and the BLE controller
-	// (HCI LE Encrypt) for AES. These are internal to this path - the
-	// application does not supply or see them; it only requests security via
-	// SecType. Randomness comes from the Nordic hardware RNG.
-	//
-	// The SDC runs on several families with different P-256 hardware, selected
-	// at compile time:
-	//   nRF54L15 / nRF54H20 : CRACEN            -> Ba414ep (hardware)
-	//   nRF52840            : CryptoCell CC310  -> CryptoCc3xx (hardware)
-	//   nRF52832            : no accelerator    -> CryptoUecc (software)
-	//   nRF5340 (net core)  : CC312 is on the app core secure domain, not
-	//                         reachable from the network core -> CryptoUecc
-	// The controller supplies AES-128 ECB through the HCI LE Encrypt path
-	// (CryptoCtlrSdc). SMP composes the ECDH engine and the AES engine.
-	KeyAgreeEngine *pEcdh = nullptr;
-#if defined(NRF54L15_XXAA) || defined(NRF54H20_XXAA)
-	static Ba414ep s_Ecdh;								// CRACEN engine object
-	if (s_Ecdh.Init(CracenIntrfInstance(), CryptoRngNrfInstance()))
-	{
-		pEcdh = &s_Ecdh;
-		DEBUG_PRINTF("Crypto ECDH engine: Ba414ep (CRACEN hardware P-256)\r\n");
-	}
-#elif defined(NRF52840_XXAA)
-	alignas(CryptoCc3xx) static uint8_t s_CryptoEcdhMem[CRYPTO_CC3XX_MEMSIZE];
-	pEcdh = CryptoCc3xxCreate(s_CryptoEcdhMem, sizeof(s_CryptoEcdhMem),
-							 CryptoRngNrfInstance());
-	if (pEcdh != nullptr)
-	{
-		DEBUG_PRINTF("Crypto ECDH engine: CryptoCc3xx (CC310 hardware P-256)\r\n");
-	}
-#else
-	alignas(uint64_t) static uint8_t s_CryptoEcdhMem[CRYPTO_UECC_MEMSIZE];
-	pEcdh = CryptoUeccCreate(s_CryptoEcdhMem, sizeof(s_CryptoEcdhMem),
-							 CryptoRngNrfInstance());
-	if (pEcdh != nullptr)
-	{
-		DEBUG_PRINTF("Crypto ECDH engine: CryptoUecc (software P-256)\r\n");
-	}
-#endif
-	if (pEcdh == nullptr)
-	{
-		// No P-256 engine came up. LE Secure Connections pairing cannot run:
-		// SmpLocalKeyGen fails and SMP answers every pairing with
-		// BT_SMP_ERR_UNSPECIFIED. Say so here rather than at the first pairing.
-		DEBUG_PRINTF("Crypto ECDH engine MISSING, LESC pairing will fail\r\n");
-	}
-
-	CipherEngine *pAes = BtCryptoCtlrSdcInit();
-	if (!BtSmpInit(pEcdh, pAes, CryptoRngNrfInstance()))
-	{
-		// A mandatory crypto provider (ECDH, AES or secure RNG) is missing or
-		// unsuitable. Secure Connections pairing cannot run; fail init here
-		// rather than at the first pairing attempt.
-		DEBUG_PRINTF("BtAppInit: BtSmpInit rejected a crypto provider\r\n");
-		return false;
-	}
-
-	// Verify the SMP crypto toolbox against the specification sample data
-	// before any pairing can run. These exercise the AES-CMAC based SC
-	// functions (f4) and the legacy c1/s1 confirm functions, plus the RPA and
-	// signing helpers, catching a byte-order or AES engine fault at startup
-	// rather than as a confirm mismatch against a peer. A failure here means
-	// the composed AES engine is wrong; refuse to continue.
-	if (BtSmpF4SelfTest() != 0 || BtSmpC1S1SelfTest() != 0 ||
-		BtSmpRpaSelfTest() != 0 || BtSmpSignSelfTest() != 0)
-	{
-		DEBUG_PRINTF("BtAppInit: SMP crypto self-test FAILED\r\n");
-		return false;
-	}
-
-	// Encrypted Advertising Data draws on the same AES engine and the same
-	// hardware RNG. Binding them here rather than leaving it to the
-	// application means an application that installs key material with
-	// BtAdvEadKeySet advertises encrypted, instead of having every packet
-	// refused for a missing engine at the point it is about to go on air.
-	// Nothing is encrypted until key material is installed.
-	if (BtEadInit(pAes, CryptoRngNrfInstance()) == false)
-	{
-		DEBUG_PRINTF("BtAppInit: EAD engines unavailable\r\n");
-	}
-
-	// Translate the application security configuration into the SMP IO
-	// capability, authentication requirements and association-model callbacks.
-	// SecExchg selects the IO capability; SecType selects bonding and MITM. The
-	// Secure Connections bit is forced inside BtSmpAuthConfig.
-	uint8_t smpIoCaps;
-	if ((pCfg->SecExchg & BTAPP_SECEXCHG_KEYBOARD) &&
-		(pCfg->SecExchg & BTAPP_SECEXCHG_DISPLAY))
-	{
-		smpIoCaps = BT_SMP_IOCAPS_KEYBOARD_DISPLAY;
-	}
-	else if ((pCfg->SecExchg & BTAPP_SECEXCHG_DISPLAY) &&
-			 (pCfg->SecExchg & BTAPP_SECEXCHG_YESNO))
-	{
-		smpIoCaps = BT_SMP_IOCAPS_DISPLAY_YESNO;
-	}
-	else if (pCfg->SecExchg & BTAPP_SECEXCHG_KEYBOARD)
-	{
-		smpIoCaps = BT_SMP_IOCAPS_KEYBOARD_ONLY;
-	}
-	else if (pCfg->SecExchg & BTAPP_SECEXCHG_DISPLAY)
-	{
-		smpIoCaps = BT_SMP_IOCAPS_DISPLAY_ONLY;
-	}
-	else
-	{
-		smpIoCaps = BT_SMP_IOCAPS_NO_INPUT_NO_OUTPUT;
-	}
-
-	uint8_t smpAuthReq = 0;
-	if (pCfg->SecType != BTGAP_SECTYPE_NONE)
-	{
-		smpAuthReq |= BT_SMP_AUTHREQ_BONDING_FLAG_BONDING;
-	}
-	if (pCfg->SecType == BTGAP_SECTYPE_STATICKEY_MITM ||
-		pCfg->SecType == BTGAP_SECTYPE_LESC_MITM ||
-		pCfg->SecType == BTGAP_SECTYPE_SIGNED_MITM)
-	{
-		smpAuthReq |= BT_SMP_AUTHREQ_MITM;
-	}
-
-	BtSmpAuthConfig(smpIoCaps, smpAuthReq);
-
-	// Record whether security was requested, so the connected handler can
-	// initiate it. Internal to this path - mirrors the SoftDevice implementation.
-	g_BtAppData.AppDevice.bSecure = (pCfg->SecType != BTGAP_SECTYPE_NONE);
-
-	// Bring up flash-backed bond persistence when security is enabled. This is
-	// internal to this path: it loads any stored bonds into the SMP bond table and
-	// links the strong BtSmpBondSave/Load/Erase overrides. The application does
-	// not call it - persistence follows from the configured SecType.
-	if (g_BtAppData.AppDevice.bSecure)
-	{
-		// This path stores bonds through bt_pds on Nvm, not through the nRF5
-		// SDK peer_manager and fstorage. Printed so a persistence problem is
-		// not chased in the wrong layer.
-		STORE_PRINTF("STORE: bt_pds -> Nvm (SDC, no fstorage)\r\n");
-		int storeRes = BtSmpBondNvmInit();
-		if (storeRes < 0)
-		{
-			STORE_PRINTF("STORE: bt_pds init failed: %d\r\n", storeRes);
-			return false;
-		}
-	}
-	else
-	{
-		STORE_PRINTF("STORE: none, bSecure is 0 so bonds stay in RAM\r\n");
-	}
-
-	if (pCfg->Role & BTAPP_ROLE_PERIPHERAL)
-	{
-		BtAppInitUserServices();
-
-		// Register Device Information Service when the app supplies device
-		// info. Generic bt_dis adds it to the same ATT DB as user services.
-		if (pCfg->pDevInfo != NULL && !BtDisInit(pCfg))
-		{
-			return false;
-		}
-
-		BtGapSetAppearance(pCfg->Appearance);
-
-		BtGattPreferedConnParams_t connparm = {
-			MSEC_TO_1_25(pCfg->ConnIntervalMin), MSEC_TO_1_25(pCfg->ConnIntervalMax),
-			0, 400};
-		BtGapSetPreferedConnParam(&connparm);
-	}
+	// The engines of Encrypted Advertising Data are bound by BtEadEngineInit
+	// above, when the EAD module first needs them.
 
 	BtAppInitUserData();
+
+	// The security module (SMP, its ECDH engine and the bond store) is linked
+	// and started only when the application calls BtAppSecInit, normally from
+	// BtAppInitUserData above. A configuration that asks for security without
+	// starting it must not run unprotected.
+	if (pCfg->SecType != BTGAP_SECTYPE_NONE && g_BtAppData.bSecInit == false)
+	{
+		STORE_PRINTF("BtAppInit FAIL: SecType=%d but BtAppSecInit was not called\r\n",
+					 (int)pCfg->SecType);
+		return false;
+	}
+
+	// Record whether security was requested. The security module secures
+	// each new link when this is set.
+	g_BtAppData.AppDevice.bSecure = (pCfg->SecType != BTGAP_SECTYPE_NONE);
 
     if (pCfg->Role & (BTAPP_ROLE_BROADCASTER | BTAPP_ROLE_PERIPHERAL))
     {
@@ -934,8 +919,6 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 #endif
     }
 */
-	BtGapSetDevName(pCfg->pDevName);
-
     //BleAppGapDeviceNameSet(pBleAppCfg->pDevName);
 #if !defined(NRF54L15_XXAA) && !defined(NRF54LM20A_XXAA) && !defined(NRF54LM20B_XXAA)
 #if (__FPU_USED == 1)
@@ -954,11 +937,13 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 	// Connection pool removed: the peer manager (BtPeerInit above) owns
 	// the single connection table now.
 
-	// Start the app timer with a 1 s continuous trigger. It sources the SMP/GATT
-	// millisecond clock (BtSmp/GattMsTick above) and its handler drives the
-	// 30 s transaction-timeout checks. 1 s cadence is ample for a 30 s deadline.
-	g_BtAppSdcTimer.Init(s_BtAppSdcTimerCfg);
-	g_BtAppSdcTimer.EnableTimerTrigger(0, 1000UL, TIMER_TRIG_TYPE_CONTINUOUS, nullptr);
+	// The app timer serves the SMP and GATT timeouts of a link, so it is
+	// started only with connection support.
+	if (s_pBtAppSdcConn != nullptr)
+	{
+		s_pBtAppSdcConn->TimerStart();
+	}
+	s_bBtAppInitDone = true;
 
     g_BtAppData.State = BTAPP_STATE_INITIALIZED;
 
@@ -975,7 +960,7 @@ void BtAppRun()
 
 	if (g_BtAppData.AppDevice.Conn.Role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER))
 	{
-		BtAppAdvStart();
+		BtAdvStart();
 	}
 
 DEBUG_PRINTF("Loop\r\n");

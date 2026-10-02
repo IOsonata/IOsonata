@@ -104,6 +104,13 @@ def main() -> int:
 			r"^bool\s+BtAppInit\s*\(const\s+BtAppCfg_t\s*\*\s*pCfg\s*\)",
 		)
 		function = host_compat(function)
+		# BtAppInit refuses a secure configuration unless the application
+		# started security, so the function that starts it is taken from the
+		# port as well.
+		sec_init = extract_function(
+			source,
+			r"^bool\s+BtAppSecInit\s*\(\s*void\s*\)",
+		)
 	except (OSError, ValueError) as exc:
 		print(f"extract_bt_app_init.py: {exc}", file=sys.stderr)
 		return 1
@@ -111,7 +118,7 @@ def main() -> int:
 	args.output.parent.mkdir(parents=True, exist_ok=True)
 	args.output.write_text(
 		"// Generated from the production nRF54 BM port. Do not edit.\n" +
-		function + "\n",
+		sec_init + "\n\n" + function + "\n",
 		encoding="utf-8",
 	)
 	return 0

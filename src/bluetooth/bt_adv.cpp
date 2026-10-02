@@ -543,6 +543,11 @@ static uint8_t BtAdvFlagsValue(const BtAppCfg_t *pCfg)
 static BtEadKey_t s_BtAdvEadKey;
 static bool s_BtAdvEadArmed = false;
 
+// Set by BtAdvEadKeySet. The encoder reaches the encryption only through
+// this pointer, so that an application that never installs key material
+// does not link it.
+static bool (*s_pBtAdvEadEncrypt)(BtAdvPacket_t *pPkt) = nullptr;
+
 bool BtAdvEadKeySet(const BtEadKey_t * const pKey)
 {
 	if (pKey == nullptr)
@@ -553,6 +558,7 @@ bool BtAdvEadKeySet(const BtEadKey_t * const pKey)
 	}
 
 	memcpy(&s_BtAdvEadKey, pKey, sizeof(s_BtAdvEadKey));
+	s_pBtAdvEadEncrypt = BtAdvEncrypt;
 	s_BtAdvEadArmed = true;
 
 	return true;
@@ -911,7 +917,7 @@ bool BtAdvEncode(const BtAppCfg_t *pCfg, BtAdvPacket_t *pAdvPkt, BtAdvPacket_t *
 		return false;
 	}
 
-	if (BtAdvEadIsArmed() == false)
+	if (BtAdvEadIsArmed() == false || s_pBtAdvEadEncrypt == nullptr)
 	{
 		return true;
 	}
@@ -921,13 +927,13 @@ bool BtAdvEncode(const BtAppCfg_t *pCfg, BtAdvPacket_t *pAdvPkt, BtAdvPacket_t *
 	// Encrypted Data structure holding nothing tells a scanner this device
 	// uses the feature and nothing else, which is information for free.
 	if (pAdvPkt != nullptr && pAdvPkt->Len > 0 &&
-		BtAdvEncrypt(pAdvPkt) == false)
+		s_pBtAdvEadEncrypt(pAdvPkt) == false)
 	{
 		return false;
 	}
 
 	if (pSrPkt != nullptr && pSrPkt->Len > 0 &&
-		BtAdvEncrypt(pSrPkt) == false)
+		s_pBtAdvEadEncrypt(pSrPkt) == false)
 	{
 		return false;
 	}

@@ -192,9 +192,11 @@ typedef struct __Bt_App_Data {
 	int             PeriphDevCnt;   //!< Peripheral connection count when in central role
 	BTAPP_COEXMODE  CoexMode;       //!< CoEx mode in effect
 	BTGAP_SECTYPE   SecType;        //!< Configured application security mode
+	uint8_t         SecExchg;       //!< Configured security key exchange capability
 	bool            bExtAdv;        //!< Extended advertising enabled
 	bool            bScan;          //!< Scan currently enabled
 	bool            bInitialized;   //!< BtAppInit completed
+	bool            bSecInit;       //!< Security module started by BtAppSecInit
 	BtDevice_t      AppDevice;      //!< Local device identity (bIsLocal = true). Holds Role,
 	                                //!< Appearance, VendorId, ProductId, ProductVer, MaxMtu,
 	                                //!< bSecure, Name, Addr, Services, etc.
@@ -225,6 +227,65 @@ void BtAppInitUserData(void);
  * 	This is called before initializing advertisement
  */
 void BtAppInitUserServices(void);
+
+/**
+ * @brief	Start connection support.
+ *
+ * Connection support (peer table, attribute database, GAP and GATT services,
+ * data path) is linked only when it is referenced. The stack calls this
+ * function when the first GATT service is added (BtGattSrvcAdd) and when a
+ * connection is initiated (BtGapConnect), so an application that has services
+ * or connects to a device needs no call of its own. An application that
+ * only advertises or scans never reaches it and does not link connection
+ * support. A peripheral without any service calls it from
+ * BtAppInitUserServices to be connectable.
+ *
+ * The configuration given to BtAppInit is used and has to stay valid.
+ *
+ * NOTE: Implemented by the port. Ports that still set up connection support
+ * inside BtAppInit do not provide it yet.
+ *
+ * @return	true - connection support started
+ */
+bool BtAppConnInit(void);
+
+/**
+ * @brief	Start the security module (pairing, bonding, secure connection).
+ *
+ * Security is linked only when the application references it. An
+ * application that uses security calls this function from BtAppInitUserData.
+ * It uses the SecType and SecExchg given in BtAppCfg_t. An application that
+ * never calls it does not link the security module, and BtAppInit fails when
+ * its SecType is other than BTGAP_SECTYPE_NONE.
+ *
+ * NOTE: Implemented by the port.
+ *
+ * @return	true - security started
+ */
+bool BtAppSecInit(void);
+
+/// Queue of the event scheduler of a port that runs a vendor event scheduler
+/// next to the application event queue (AppEvtHandlerQue).
+typedef struct __Bt_App_Sched_Cfg {
+	void *pMem;				//!< Queue memory, aligned on 4 bytes. NULL : scheduler not used
+	size_t MemSize;			//!< Total pMem length in bytes
+	uint16_t EvtSize;		//!< Maximum size of the data of one event
+	uint16_t QueSize;		//!< Maximum number of events in the queue
+} BtAppSchedCfg_t;
+
+/// Scheduler queue of the port. A port that runs a vendor event scheduler
+/// defines a weak default, so that applications posting events to that
+/// scheduler work without anything to set up. The library itself posts
+/// nothing to it. An application that does not use the vendor scheduler
+/// leaves the queue out with
+///
+///   const BtAppSchedCfg_t g_BtAppSchedCfg = { NULL, 0, 0, 0 };
+///
+/// and one that needs another depth defines its own memory and sizes.
+/// BtAppInit fails when the memory is too small for the sizes given.
+/// Ports without such a scheduler do not use it.
+extern const BtAppSchedCfg_t g_BtAppSchedCfg;
+
 void BtAppEvtConnected(uint16_t ConnHdl);
 void BtAppEvtDisconnected(uint16_t ConnHdl);
 // Called once the link is encrypted (freshly paired or re-encrypted from a

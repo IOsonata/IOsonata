@@ -3718,6 +3718,19 @@ bool BtSmpInit(KeyAgreeEngine *pEcdh, CipherEngine *pAes, RngEngine *pRng)
 		s_pCryptoEcdh->SetCompleteHandler(SmpCryptoComplete, &s_CryptoInflight);
 	}
 
+	// The HCI host calls SMP through this table only. Registering it here is
+	// what makes SMP part of the image: a build that never calls BtSmpInit
+	// does not link it.
+	static const BtHciSmpHandler_t s_SmpHciHandler = {
+		.Data = BtProcessSmpData,
+		.LtkRequest = BtSmpProcessLtkRequest,
+		.LocalPubKeyReady = BtSmpLocalPubKeyReady,
+		.DhKeyReady = BtSmpDhKeyReady,
+		.EncryptionChanged = BtSmpEncryptionChanged,
+		.Disconnected = BtSmpDisconnected,
+	};
+	BtHciSmpHandlerSet(&s_SmpHciHandler);
+
 	// Repopulate the RAM bond table from non-volatile storage. The default
 	// BtSmpBondLoad is a weak no-op (RAM-only); a flash-backed platform
 	// overrides it and calls BtSmpBondRestore for each persisted slot.

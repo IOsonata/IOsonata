@@ -202,8 +202,8 @@ void TestAdvDegenerateRandomIdentity()
 
 // ---- F11: the advertising state follows the controller -------------------
 
-// BtAppAdvStop used to report idle whatever the controller answered. If the
-// disable is rejected the set is still on air, and a later BtAppAdvStart would
+// BtAdvStop used to report idle whatever the controller answered. If the
+// disable is rejected the set is still on air, and a later BtAdvStart would
 // see IDLE, send an enable and treat the device as freshly advertising when it
 // never stopped.
 void TestAdvStopKeepsStateOnFailure()
@@ -214,18 +214,18 @@ void TestAdvStopKeepsStateOnFailure()
 	BtAppCfg_t cfg = MakePeripheralCfg();
 	CHECK(BtAppAdvInit(&cfg) == true);
 
-	BtAppAdvStart();
+	BtAdvStart();
 	CHECK(g_BtAppData.State == BTAPP_STATE_ADVERTISING);
 
 	// The controller rejects the disable: the device is still advertising.
 	s_FailOpCode = BT_HCI_CMD_CTLR_SET_EXT_ADV_ENABLE;
 	s_FailEnable = 0;
-	BtAppAdvStop();
+	BtAdvStop();
 	CHECK(g_BtAppData.State == BTAPP_STATE_ADVERTISING);
 
 	// Once the disable is accepted the state follows.
 	s_FailOpCode = 0;
-	BtAppAdvStop();
+	BtAdvStop();
 	CHECK(g_BtAppData.State == BTAPP_STATE_IDLE);
 }
 
@@ -240,7 +240,7 @@ void TestAdvManDataSetReportsRestartFailure()
 	BtAppCfg_t cfg = MakePeripheralCfg();
 	CHECK(BtAppAdvInit(&cfg) == true);
 
-	BtAppAdvStart();
+	BtAdvStart();
 	CHECK(g_BtAppData.State == BTAPP_STATE_ADVERTISING);
 
 	uint8_t data[4] = { 1, 2, 3, 4 };

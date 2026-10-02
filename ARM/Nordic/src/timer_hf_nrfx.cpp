@@ -75,19 +75,46 @@ typedef struct {
 	NRF_TIMER_Type *pReg;
 	int MaxNbTrigEvt;		//!< Number of trigger is not the same for all timers.
 	int CountCC;			//!< Index of last CC register to use for counter reading
-	uint32_t CC[TIMER_NRFX_HF_MAX_TRIGGER_EVT];
-	TimerTrig_t Trigger[TIMER_NRFX_HF_MAX_TRIGGER_EVT];
-	TimerDev_t *pTimer;
+	uint32_t *pCC;			//!< Compare value of each trigger, MaxNbTrigEvt entries
+	TimerTrig_t *pTrigger;	//!< State of each trigger, MaxNbTrigEvt entries
 } nRFTimerData_t;
 #pragma pack(pop)
 
-alignas(4) static nRFTimerData_t s_nRFxTimerData[TIMER_NRFX_HF_MAX] = {
+// Trigger state of each timer, sized by the number of compare registers of
+// that timer less the one reserved for reading the counter.
+static uint32_t s_nRFxTimer0CC[TIMER0_CC_NUM - 1];
+static TimerTrig_t s_nRFxTimer0Trig[TIMER0_CC_NUM - 1];
+static uint32_t s_nRFxTimer1CC[TIMER1_CC_NUM - 1];
+static TimerTrig_t s_nRFxTimer1Trig[TIMER1_CC_NUM - 1];
+static uint32_t s_nRFxTimer2CC[TIMER2_CC_NUM - 1];
+static TimerTrig_t s_nRFxTimer2Trig[TIMER2_CC_NUM - 1];
+#if TIMER_NRFX_HF_MAX > 3
+static uint32_t s_nRFxTimer3CC[TIMER3_CC_NUM - 1];
+static TimerTrig_t s_nRFxTimer3Trig[TIMER3_CC_NUM - 1];
+static uint32_t s_nRFxTimer4CC[TIMER4_CC_NUM - 1];
+static TimerTrig_t s_nRFxTimer4Trig[TIMER4_CC_NUM - 1];
+#endif
+#if TIMER_NRFX_HF_MAX > 5
+static uint32_t s_nRFxTimer5CC[TIMER5_CC_NUM - 1];
+static TimerTrig_t s_nRFxTimer5Trig[TIMER5_CC_NUM - 1];
+static uint32_t s_nRFxTimer6CC[TIMER6_CC_NUM - 1];
+static TimerTrig_t s_nRFxTimer6Trig[TIMER6_CC_NUM - 1];
+#endif
+
+// Timer device of each timer, set by nRFxTimerInit
+static TimerDev_t *s_pnRFxTimerDev[TIMER_NRFX_HF_MAX];
+
+// What does not change is constant, so it stays in flash. Only the trigger
+// state above and the device pointers are in RAM.
+alignas(4) static const nRFTimerData_t s_nRFxTimerData[TIMER_NRFX_HF_MAX] = {
 	{
 		.DevNo = TIMER_NRFX_RTC_MAX,
 		.MaxFreq = TIMER_NRFX_HF_BASE_FREQ,
 		.pReg = NRF_TIMER0,
 		.MaxNbTrigEvt = TIMER0_CC_NUM - 1, // Reserve last CC for reading counter
 		.CountCC = TIMER0_CC_NUM - 1,
+		.pCC = s_nRFxTimer0CC,
+		.pTrigger = s_nRFxTimer0Trig,
 	},
 	{
 		.DevNo = TIMER_NRFX_RTC_MAX + 1,
@@ -95,6 +122,8 @@ alignas(4) static nRFTimerData_t s_nRFxTimerData[TIMER_NRFX_HF_MAX] = {
 		.pReg = NRF_TIMER1,
 		.MaxNbTrigEvt = TIMER1_CC_NUM - 1, // Reserve last CC for reading counter
 		.CountCC = TIMER1_CC_NUM - 1,
+		.pCC = s_nRFxTimer1CC,
+		.pTrigger = s_nRFxTimer1Trig,
 	},
 	{
 		.DevNo = TIMER_NRFX_RTC_MAX + 2,
@@ -102,6 +131,8 @@ alignas(4) static nRFTimerData_t s_nRFxTimerData[TIMER_NRFX_HF_MAX] = {
 		.pReg = NRF_TIMER2,
 		.MaxNbTrigEvt = TIMER2_CC_NUM - 1, // Reserve last CC for reading counter
 		.CountCC = TIMER2_CC_NUM - 1,
+		.pCC = s_nRFxTimer2CC,
+		.pTrigger = s_nRFxTimer2Trig,
 	},
 #if TIMER_NRFX_HF_MAX > 3
 	{
@@ -110,6 +141,8 @@ alignas(4) static nRFTimerData_t s_nRFxTimerData[TIMER_NRFX_HF_MAX] = {
 		.pReg = NRF_TIMER3,
 		.MaxNbTrigEvt = TIMER3_CC_NUM - 1, // Reserve last CC for reading counter
 		.CountCC = TIMER3_CC_NUM - 1,
+		.pCC = s_nRFxTimer3CC,
+		.pTrigger = s_nRFxTimer3Trig,
 	},
 	{
 		.DevNo = TIMER_NRFX_RTC_MAX + 4,
@@ -117,6 +150,8 @@ alignas(4) static nRFTimerData_t s_nRFxTimerData[TIMER_NRFX_HF_MAX] = {
 		.pReg = NRF_TIMER4,
 		.MaxNbTrigEvt = TIMER4_CC_NUM - 1, // Reserve last CC for reading counter
 		.CountCC = TIMER4_CC_NUM - 1,
+		.pCC = s_nRFxTimer4CC,
+		.pTrigger = s_nRFxTimer4Trig,
 	},
 #endif
 #if TIMER_NRFX_HF_MAX > 5
@@ -126,6 +161,8 @@ alignas(4) static nRFTimerData_t s_nRFxTimerData[TIMER_NRFX_HF_MAX] = {
 		.pReg = NRF_TIMER5,
 		.MaxNbTrigEvt = TIMER5_CC_NUM - 1, // Reserve last CC for reading counter
 		.CountCC = TIMER5_CC_NUM - 1,
+		.pCC = s_nRFxTimer5CC,
+		.pTrigger = s_nRFxTimer5Trig,
 	},
 	{
 		.DevNo = TIMER_NRFX_RTC_MAX + 6,
@@ -133,17 +170,31 @@ alignas(4) static nRFTimerData_t s_nRFxTimerData[TIMER_NRFX_HF_MAX] = {
 		.pReg = NRF_TIMER6,
 		.MaxNbTrigEvt = TIMER6_CC_NUM - 1, // Reserve last CC for reading counter
 		.CountCC = TIMER6_CC_NUM - 1,
+		.pCC = s_nRFxTimer6CC,
+		.pTrigger = s_nRFxTimer6Trig,
 	},
 #endif
 };
 
 static std::atomic<int> s_nRfxHFClockSem(0);
 
+// Set by nRFxTimerInit. The interrupt handlers below are kept by the linker as soon as
+// this file is part of a build, used or not. They reach the timer data
+// through this pointer, so that the data is linked only when a timer is
+// initialized.
+static const nRFTimerData_t *s_pnRFxTimerData = nullptr;
+
 static void TimerIRQHandler(int DevNo)
 {
-	NRF_TIMER_Type *reg = s_nRFxTimerData[DevNo].pReg;
-	nRFTimerData_t &tdata = s_nRFxTimerData[DevNo];
-	TimerDev_t *timer = s_nRFxTimerData[DevNo].pTimer;
+	if (s_pnRFxTimerData == nullptr)
+	{
+		// No timer of this kind was initialized
+		return;
+	}
+
+	NRF_TIMER_Type *reg = s_pnRFxTimerData[DevNo].pReg;
+	const nRFTimerData_t &tdata = s_pnRFxTimerData[DevNo];
+	TimerDev_t *timer = s_pnRFxTimerDev[DevNo];
     uint32_t evt = 0;
 	uint32_t t = reg->CC[tdata.CountCC];	// Preserve comparator
 
@@ -169,13 +220,13 @@ static void TimerIRQHandler(int DevNo)
         {
             evt |= TIMER_EVT_TRIGGER(i);
             reg->EVENTS_COMPARE[i] = 0;
-            if (tdata.Trigger[i].Type == TIMER_TRIG_TYPE_CONTINUOUS)
+            if (tdata.pTrigger[i].Type == TIMER_TRIG_TYPE_CONTINUOUS)
             {
-            	reg->CC[i] = count + tdata.CC[i];;
+            	reg->CC[i] = count + tdata.pCC[i];;
             }
-            if (tdata.Trigger[i].Handler)
+            if (tdata.pTrigger[i].Handler)
             {
-            	tdata.Trigger[i].Handler(timer, i, tdata.Trigger[i].pContext);
+            	tdata.pTrigger[i].Handler(timer, i, tdata.pTrigger[i].pContext);
             }
         }
 
@@ -476,8 +527,9 @@ static uint32_t nRFxTimerSetFrequency(TimerDev_t * const pTimer, uint32_t Freq)
 
     pTimer->Freq = TIMER_NRFX_HF_BASE_FREQ / (1 << prescaler);
 
-    // Pre-calculate periods for faster timer counter to time conversion use later
-    // for precision this value is x10 (in 100 psec)
+    // Tick period rounded down to a nanosecond, 62 for the 62.5 ns of 16 MHz.
+    // Not precise enough to convert a count or a trigger period, those are
+    // computed from Freq, see TimerTickToTime.
     pTimer->nsPeriod = 1000000000ULL / pTimer->Freq;
 
     reg->TASKS_START = 1;
@@ -489,7 +541,7 @@ static uint64_t nRFxTimerGetTickCount(TimerDev_t * const pTimer)
 {
 	int devno = pTimer->DevNo - TIMER_NRFX_RTC_MAX;
 	NRF_TIMER_Type *reg = s_nRFxTimerData[devno].pReg;
-	nRFTimerData_t &tdata = s_nRFxTimerData[devno];
+	const nRFTimerData_t &tdata = s_nRFxTimerData[devno];
 
 	uint32_t t = reg->CC[tdata.CountCC];	// Preserve comparator
 
@@ -515,7 +567,7 @@ static uint64_t nRFxTimerEnableTrigger(TimerDev_t * const pTimer, int TrigNo, ui
                                        TimerTrigEvtHandler_t const Handler, void * const pContext)
 {
 	int devno = pTimer->DevNo - TIMER_NRFX_RTC_MAX;
-	nRFTimerData_t &tdata = s_nRFxTimerData[devno];
+	const nRFTimerData_t &tdata = s_nRFxTimerData[devno];
 	NRF_TIMER_Type *reg = tdata.pReg;
 
 	if (TrigNo < 0 || TrigNo >= tdata.MaxNbTrigEvt)
@@ -523,16 +575,15 @@ static uint64_t nRFxTimerEnableTrigger(TimerDev_t * const pTimer, int TrigNo, ui
 		return 0;
 	}
 
-    // vnsPerios is x10 nsec (100 psec) => nsPeriod * 10ULL
-    uint32_t cc = (nsPeriod + (pTimer->nsPeriod >> 1)) / pTimer->nsPeriod;
+    uint32_t cc = TimerNanosecondToTick(pTimer, nsPeriod);
 
     if (cc <= 0)
     {
         return 0;
     }
 
-    tdata.Trigger[TrigNo].Type = Type;
-    tdata.CC[TrigNo] = cc;
+    tdata.pTrigger[TrigNo].Type = Type;
+    tdata.pCC[TrigNo] = cc;
     reg->TASKS_CAPTURE[TrigNo] = 1;
 
     uint32_t count = reg->CC[TrigNo];
@@ -549,40 +600,40 @@ static uint64_t nRFxTimerEnableTrigger(TimerDev_t * const pTimer, int TrigNo, ui
 
     pTimer->LastCount = count;
 
-    tdata.Trigger[TrigNo].nsPeriod = pTimer->nsPeriod * (uint64_t)cc;
-    tdata.Trigger[TrigNo].Handler = Handler;
-    tdata.Trigger[TrigNo].pContext = pContext;
+    tdata.pTrigger[TrigNo].nsPeriod = TimerTickToNanosecond(pTimer, cc);
+    tdata.pTrigger[TrigNo].Handler = Handler;
+    tdata.pTrigger[TrigNo].pContext = pContext;
 
-    return pTimer->nsPeriod * (uint64_t)cc; // Return real period in nsec
+    return tdata.pTrigger[TrigNo].nsPeriod; // Return real period in nsec
 }
 
 static void nRFxTimerDisableTrigger(TimerDev_t * const pTimer, int TrigNo)
 {
 	int devno = pTimer->DevNo - TIMER_NRFX_RTC_MAX;
-	nRFTimerData_t &tdata = s_nRFxTimerData[devno];
+	const nRFTimerData_t &tdata = s_nRFxTimerData[devno];
 	NRF_TIMER_Type *reg = tdata.pReg;
 
 	if (TrigNo < 0 || TrigNo >= tdata.MaxNbTrigEvt)
         return;
 
-    tdata.CC[TrigNo] = 0;
+    tdata.pCC[TrigNo] = 0;
     reg->CC[TrigNo] = 0;
     reg->INTENCLR = TIMER_INTENSET_COMPARE0_Msk << TrigNo;
 
-    tdata.Trigger[TrigNo].Type = TIMER_TRIG_TYPE_SINGLE;
-    tdata.Trigger[TrigNo].Handler = NULL;
-    tdata.Trigger[TrigNo].pContext = NULL;
-    tdata.Trigger[TrigNo].nsPeriod = 0;
+    tdata.pTrigger[TrigNo].Type = TIMER_TRIG_TYPE_SINGLE;
+    tdata.pTrigger[TrigNo].Handler = NULL;
+    tdata.pTrigger[TrigNo].pContext = NULL;
+    tdata.pTrigger[TrigNo].nsPeriod = 0;
 }
 
 static int nRFxTimerFindAvailTrigger(TimerDev_t * const pTimer)
 {
 	int devno = pTimer->DevNo - TIMER_NRFX_RTC_MAX;
-	nRFTimerData_t &tdata = s_nRFxTimerData[devno];
+	const nRFTimerData_t &tdata = s_nRFxTimerData[devno];
 
 	for (int i = 0; i < tdata.MaxNbTrigEvt; i++)
 	{
-		if (tdata.Trigger[i].nsPeriod == 0)
+		if (tdata.pTrigger[i].nsPeriod == 0)
 			return i;
 	}
 
@@ -629,12 +680,14 @@ bool nRFxTimerInit(TimerDev_t *const pTimer, const TimerCfg_t *const pCfg)
 	int devno = pCfg->DevNo - TIMER_NRFX_RTC_MAX;
 	pTimer->DevNo = pCfg->DevNo;
 	pTimer->EvtHandler = pCfg->EvtHandler;
-	nRFTimerData_t &tdata = s_nRFxTimerData[devno];
+	s_pnRFxTimerData = s_nRFxTimerData;
+
+	const nRFTimerData_t &tdata = s_nRFxTimerData[devno];
 	NRF_TIMER_Type *reg = s_nRFxTimerData[devno].pReg;
 
-	tdata.pTimer = pTimer;
+	s_pnRFxTimerDev[devno] = pTimer;
 
-	memset(tdata.Trigger, 0, sizeof(tdata.Trigger));
+	memset(tdata.pTrigger, 0, tdata.MaxNbTrigEvt * sizeof(TimerTrig_t));
 
 	pTimer->Disable = nRFxTimerDisable;
 	pTimer->Enable = nRFxTimerEnable;

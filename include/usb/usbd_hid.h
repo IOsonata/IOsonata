@@ -88,6 +88,10 @@ typedef struct __Usbd_Hid_Config {
 	uint8_t InterfaceString;
 	DevIntrfEvtHandler_t EvtCB;	//!< Return RX length to consume; less retains the report
 	void *pContext;
+	// Separate caller-owned, 4-byte aligned slots, each at least
+	// USB_INT_INTRF_PKT_BLKSIZE bytes; valid for the interface lifetime.
+	uint8_t *pRxBuffer;
+	uint8_t *pTxBuffer;
 } UsbdHidCfg_t;
 
 #pragma pack(pop)
@@ -100,6 +104,9 @@ struct __Usbd_Hid_Dev {
 	uint16_t BcdHid;
 	uint16_t FsMps;
 	uint16_t HsMps;
+	// Keep the descriptor word-aligned; its trailing byte shares the
+	// following byte-field group instead of adding end padding.
+	UsbHidDesc_t HidDesc;
 	uint8_t EpNo;				//!< Internal allocation
 	uint8_t FsInterval;
 	uint8_t HsInterval;
@@ -116,7 +123,6 @@ struct __Usbd_Hid_Dev {
 	bool Configured;
 	const uint8_t *pReportDesc;
 	void *pContext;
-	UsbHidDesc_t HidDesc;
 };
 
 #ifdef __cplusplus
@@ -142,7 +148,7 @@ bool UsbdHidMakeDesc(UsbdHidDesc_t *pDesc, const UsbdHidDev_t *pHid,
 
 class UsbdHid : public UsbDeviceClass, public UsbIntIntrf {
 public:
-	UsbdHid() = default;
+	UsbdHid();
 	UsbdHid(const UsbdHid &) = delete;
 	UsbdHid &operator = (const UsbdHid &) = delete;
 
@@ -164,3 +170,4 @@ private:
 /** @} End of group USBD */
 
 #endif	// __USBD_HID_H__
+

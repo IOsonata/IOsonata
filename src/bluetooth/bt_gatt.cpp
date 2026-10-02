@@ -43,6 +43,7 @@ SOFTWARE.
 #include "bluetooth/bt_dev.h"
 #include "bluetooth/bt_peer.h"
 #include "bluetooth/bt_smp.h"
+#include "bluetooth/bt_app.h"
 
 static BtGattSrvc_t *s_pBtGattSrvcList = nullptr;
 
@@ -855,6 +856,13 @@ __attribute__((weak)) bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)
 	uint8_t baseidx = 0;
 	if (pSrvc == nullptr || pSrvc->pCharArray == nullptr ||
 		pSrvc->NbChar <= 0)
+	{
+		return false;
+	}
+
+	// A service is of use only on a link. The first one starts connection
+	// support, which is linked through this reference.
+	if (BtAppConnInit() == false)
 	{
 		return false;
 	}

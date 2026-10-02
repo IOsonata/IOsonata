@@ -447,7 +447,7 @@ bool MagMpu9250::Init(const MagSensorCfg_t &CfgData, DeviceIntrf *pIntrf, Timer 
 	vMagSenAdj[1] = (int16_t)d[1] - 128;
 	vMagSenAdj[2] = (int16_t)d[2] - 128;
 
-	printf("Adj %x %x %x\r\n", d[0], d[1], d[2]);
+	//printf("Adj %x %x %x\r\n", d[0], d[1], d[2]);
 
 	//msDelay(10);
 
@@ -584,7 +584,7 @@ bool AgmMpu9250::Enable()
 
 	if (vbSensorEnabled[MPU9250_MAG_IDX] == true)
 	{
-		printf("Mag Enabled\r\n");
+		//printf("Mag Enabled\r\n");
 
 		MagMpu9250::Enable();
 		// Enable Mag

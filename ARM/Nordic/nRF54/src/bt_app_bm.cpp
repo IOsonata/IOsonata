@@ -76,6 +76,7 @@ SOFTWARE.
 #include "coredev/system_core_clock.h"
 #include "coredev/interrupt.h"
 #include "coredev/iopincfg.h"
+#include "timer_nrfx.h"
 #include "iopinctrl.h"
 #include "bluetooth/bt_uuid.h"
 #include "bluetooth/bt_app.h"
@@ -162,7 +163,10 @@ const static TimerCfg_t s_BtAppSdTimerCfg = {
 	.bTickInt = false,
 };
 
-static Timer s_BtAppSdGrtc3;
+// The timer device and not the Timer class: the class initializes through
+// TimerInit, which links the high frequency timer driver along with the low
+// frequency one.
+static TimerDev_t s_BtAppSdGrtc3;
 static volatile uint16_t s_SecurePendingHdl[CONFIG_NRF_SDH_BLE_TOTAL_LINK_COUNT];
 
 static void SecurePendingReset()
@@ -338,6 +342,8 @@ typedef struct __Bt_Smp_Bm_Auth_Cfg {
 
 static BtSmpBmAuthCfg_t s_BtSmpAuthCfg;
 
+static uint32_t BtAppSecParamsSet(BTGAP_SECTYPE SecType, uint8_t SecKeyExchg);
+
 void BtSmpAuthConfig(uint8_t IoCaps, uint8_t AuthReq)
 {
 	if (IoCaps > BT_SMP_IOCAPS_KEYBOARD_DISPLAY)
@@ -347,6 +353,12 @@ void BtSmpAuthConfig(uint8_t IoCaps, uint8_t AuthReq)
 	s_BtSmpAuthCfg.IoCaps = IoCaps;
 	s_BtSmpAuthCfg.AuthReq = (uint8_t)(AuthReq | BT_SMP_AUTHREQ_SC);
 	s_BtSmpAuthCfg.bSet = true;
+
+	if (g_BtAppData.bSecInit)
+	{
+		// Security is already started, apply to the next pairing
+		(void)BtAppSecParamsSet(g_BtAppData.SecType, g_BtAppData.SecExchg);
+	}
 }
 
 static void BtSmpOobDataClearInternal()
@@ -979,7 +991,7 @@ bool BtAppStackInit(const BtAppCfg_t *pCfg)
 	memset((void *)0x20000000, 0, ramstart - 0x20000000);
 
 	// GRTC3 must be enabled with interrupt disbled before calling nrf_sdh_enable_request
-	s_BtAppSdGrtc3.Init(s_BtAppSdTimerCfg);
+	nRFxLFTimerInit(&s_BtAppSdGrtc3, &s_BtAppSdTimerCfg);
 
 	// Enable SoftDevice
 	err = nrf_sdh_enable_request();
@@ -1108,12 +1120,10 @@ static void BtAppPmEvtHandler(const struct pm_evt *p_evt)
 	}
 }
 
-// Initialize peer_manager and LESC. Maps the app SecType / key-exchange config
-// onto ble_gap_sec_params_t exactly as the nRF52 port does (the BTAPP_SECTYPE_*
-// values alias the same BT_GAP_SECTYPE_* the nRF52 BLEAPP_SECTYPE_* use).
+// Initialize peer_manager and LESC. The pairing parameters are set by
+// BtAppSecParamsSet below.
 static uint32_t BtAppPeerMngrInit(BTGAP_SECTYPE SecType, uint8_t SecKeyExchg, bool bEraseBond)
 {
-	ble_gap_sec_params_t sec_param;
 	uint32_t err_code;
 
 	// Provide the LESC layer its ECDH engine BEFORE pm_init. pm_init ->
@@ -1151,6 +1161,38 @@ static uint32_t BtAppPeerMngrInit(BTGAP_SECTYPE SecType, uint8_t SecKeyExchg, bo
 	{
 		(void)pm_peers_delete();
 	}
+
+	err_code = BtAppSecParamsSet(SecType, SecKeyExchg);
+	if (err_code != NRF_SUCCESS)
+	{
+		return err_code;
+	}
+
+	err_code = pm_register(BtAppPmEvtHandler);
+	if (err_code != NRF_SUCCESS)
+	{
+		DEBUG_PRINTF("pm_register failed: 0x%x\r\n", err_code);
+		return err_code;
+	}
+
+	// LESC is initialized by the IOsonata security manager (bt_sec_bm.cpp)
+	// inside pm_init -> sm_init, which owns the BtLesc key pair and injected
+	// crypto engine. Only the staged peer OOB data routing is set up here, so
+	// the SoftDevice receives it when it asks (LESC OOB association model).
+	BtLescOobPeerHandlerSet(BtAppOobPeerDataHandler);
+
+	return NRF_SUCCESS;
+}
+
+// Set the pairing parameters of the Peer Manager. Maps the app SecType /
+// key-exchange config onto ble_gap_sec_params_t exactly as the nRF52 port does
+// (the BTAPP_SECTYPE_* values alias the same BT_GAP_SECTYPE_* the nRF52
+// BLEAPP_SECTYPE_* use). A configuration given to BtSmpAuthConfig replaces the
+// values derived from them.
+static uint32_t BtAppSecParamsSet(BTGAP_SECTYPE SecType, uint8_t SecKeyExchg)
+{
+	ble_gap_sec_params_t sec_param;
+	uint32_t err_code;
 
 	memset(&sec_param, 0, sizeof(sec_param));
 
@@ -1246,23 +1288,40 @@ static uint32_t BtAppPeerMngrInit(BTGAP_SECTYPE SecType, uint8_t SecKeyExchg, bo
 	if (err_code != NRF_SUCCESS)
 	{
 		DEBUG_PRINTF("pm_sec_params_set failed: 0x%x\r\n", err_code);
-		return err_code;
 	}
 
-	err_code = pm_register(BtAppPmEvtHandler);
-	if (err_code != NRF_SUCCESS)
+	return err_code;
+}
+
+/**
+ * @brief	Start the security module.
+ *
+ * Called by the application, normally from BtAppInitUserData. Uses the
+ * SecType and SecExchg given to BtAppInit. A pairing configuration set with
+ * BtSmpAuthConfig after this call replaces the one derived from them.
+ *
+ * @return	true - security started
+ */
+bool BtAppSecInit(void)
+{
+	if (g_BtAppData.bSecInit)
 	{
-		DEBUG_PRINTF("pm_register failed: 0x%x\r\n", err_code);
-		return err_code;
+		// Already started
+		return true;
 	}
 
-	// LESC is initialized by the IOsonata security manager (bt_sec_bm.cpp)
-	// inside pm_init -> sm_init, which owns the BtLesc key pair and injected
-	// crypto engine. Only the staged peer OOB data routing is set up here, so
-	// the SoftDevice receives it when it asks (LESC OOB association model).
-	BtLescOobPeerHandlerSet(BtAppOobPeerDataHandler);
+	// No erase-bond flag in BtAppCfg_t; bonds are preserved across init.
+	// A dedicated clear (pm_peers_delete / BtSmpBondClearAll) can be added
+	// as a separate API if forced re-bonding is needed.
+	if (BtAppPeerMngrInit(g_BtAppData.SecType, g_BtAppData.SecExchg, false) != NRF_SUCCESS)
+	{
+		DEBUG_PRINTF("BtAppPeerMngrInit failed\r\n");
+		return false;
+	}
 
-	return NRF_SUCCESS;
+	g_BtAppData.bSecInit = true;
+
+	return true;
 }
 
 /**
@@ -1287,6 +1346,11 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 	// Populate internal app data from config
 	g_BtAppData.AppDevice.Conn.Role = pCfg->Role;
 	g_BtAppData.AdvHdl = BLE_GAP_ADV_SET_HANDLE_NOT_SET;
+	// Kept for BtAppSecInit, which the application calls from
+	// BtAppInitUserData when it uses security.
+	g_BtAppData.SecType = pCfg->SecType;
+	g_BtAppData.SecExchg = pCfg->SecExchg;
+	g_BtAppData.bSecInit = false;
 	if (!BtPeerInit(pCfg->pPeerPoolMem, pCfg->PeerPoolMemSize))
 	{
 		return false;
@@ -1387,21 +1451,17 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 	// Initialize user data
 	BtAppInitUserData();
 
-	g_BtAppData.AppDevice.bSecure = pCfg->SecType != BTGAP_SECTYPE_NONE;
-
-	// Initialize Secure Connections (peer_manager + LESC) when the app
-	// requests security. Bonds persist through the IOsonata bt_pds store.
-	if (g_BtAppData.AppDevice.bSecure)
+	// Security is started only when the application calls BtAppSecInit,
+	// normally from BtAppInitUserData above. A configuration that asks for
+	// security without starting it must not run unprotected.
+	if (pCfg->SecType != BTGAP_SECTYPE_NONE && g_BtAppData.bSecInit == false)
 	{
-		// No erase-bond flag in BtAppCfg_t; bonds are preserved across init.
-		// A dedicated clear (pm_peers_delete / BtSmpBondClearAll) can be added
-		// as a separate API if forced re-bonding is needed.
-		if (BtAppPeerMngrInit(pCfg->SecType, pCfg->SecExchg, false) != NRF_SUCCESS)
-		{
-			DEBUG_PRINTF("BtAppPeerMngrInit failed\r\n");
-			return false;
-		}
+		DEBUG_PRINTF("BtAppInit FAIL: SecType=%d but BtAppSecInit was not called\r\n",
+					 (int)pCfg->SecType);
+		return false;
 	}
+
+	g_BtAppData.AppDevice.bSecure = pCfg->SecType != BTGAP_SECTYPE_NONE;
 
 	// Initialize advertising
 	if (g_BtAppData.AppDevice.Conn.Role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER))
@@ -1449,12 +1509,19 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 // needed here.
 uint32_t BtSmpMsTick(void)
 {
-	return s_BtAppSdGrtc3.mSecond();
+	if (s_BtAppSdGrtc3.GetTickCount == nullptr)
+	{
+		// Timer not started
+		return 0;
+	}
+
+	return (uint32_t)(s_BtAppSdGrtc3.GetTickCount(&s_BtAppSdGrtc3) *
+					  s_BtAppSdGrtc3.nsPeriod / 1000000ULL);
 }
 
 uint32_t BtGattMsTick(void)
 {
-	return s_BtAppSdGrtc3.mSecond();
+	return BtSmpMsTick();
 }
 
 // Spec-strict indication transaction timeout: Core Vol 3 Part F 3.3.3 requires

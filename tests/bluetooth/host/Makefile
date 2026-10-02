@@ -50,9 +50,11 @@ TEST_NAMES := \
 	bt_hci_smp_tx_test \
 	bt_hci_ctlr_init_test \
 	bt_hci_ctlr_sdc_test \
+	bt_hci_ctlr_sdc_nomod_test \
 	bt_hci_usb_test \
 	bt_l2cap_signal_test \
 	bt_att_db_test \
+	bt_att_db_cfg_test \
 	bt_att_req_test \
 	bt_att_client_transaction_test \
 	bt_peer_pool_test \
@@ -153,6 +155,10 @@ bt_l2cap_signal_test_SOURCES := \
 
 bt_att_db_test_SOURCES := \
 	bt_att_db_test.cpp \
+	$(ROOT)/src/bluetooth/bt_att.cpp
+
+bt_att_db_cfg_test_SOURCES := \
+	bt_att_db_cfg_test.cpp \
 	$(ROOT)/src/bluetooth/bt_att.cpp
 
 bt_att_req_test_SOURCES := \
@@ -261,6 +267,22 @@ bt_hci_ctlr_sdc_test_SOURCES := \
 	$(ROOT)/src/device_intrf.cpp \
 	$(BUILD_DIR)/cfifo.o
 bt_hci_ctlr_sdc_test_DEPS := \
+	$(wildcard nordic_stub/sdc/*.h) \
+	$(ROOT)/ARM/Nordic/include/nrf_mpsl.h \
+	$(ROOT)/ARM/Nordic/include/crypto_rng_nrf.h
+
+# Same sources, built as an application that links neither the scan module nor
+# the periodic advertising module.
+bt_hci_ctlr_sdc_nomod_test_CPPFLAGS := -DSDC_TEST_NO_FEATURE_MODULES -Inordic_stub/sdc -I$(ROOT)/ARM/Nordic/include
+bt_hci_ctlr_sdc_nomod_test_SOURCES := \
+	bt_hci_ctlr_sdc_test.cpp \
+	nordic_stub/sdc/sdc_hci_cmd_stub.cpp \
+	$(ROOT)/ARM/Nordic/src/bt_hci_ctlr_sdc.cpp \
+	$(ROOT)/src/bluetooth/bt_hci_ctlr.cpp \
+	$(ROOT)/src/device.cpp \
+	$(ROOT)/src/device_intrf.cpp \
+	$(BUILD_DIR)/cfifo.o
+bt_hci_ctlr_sdc_nomod_test_DEPS := \
 	$(wildcard nordic_stub/sdc/*.h) \
 	$(ROOT)/ARM/Nordic/include/nrf_mpsl.h \
 	$(ROOT)/ARM/Nordic/include/crypto_rng_nrf.h

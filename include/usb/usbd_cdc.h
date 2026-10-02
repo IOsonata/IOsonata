@@ -174,7 +174,7 @@ static inline UsbdCdcDev_t *UsbdCdcGetDevHandle(DevIntrf_t * const pDevIntrf) {
 
 class UsbdCdc : public UsbDeviceClass, public UsbIntrf {
 public:
-	UsbdCdc() = default;
+	UsbdCdc();
 	UsbdCdc(const UsbdCdc &) = delete;
 	UsbdCdc &operator = (const UsbdCdc &) = delete;
 

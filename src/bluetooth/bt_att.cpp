@@ -67,15 +67,60 @@ SOFTWARE.
 
 static uint16_t s_AttMtu = BT_ATT_MTU_MIN;
 
-// The pool must hold BtAttDBEntry_t objects at rounded offsets; align it to
-// the entry type so that holds on any pointer width (a strong override of
-// this array must be aligned at least as strictly).
-alignas(BtAttDBEntry_t) __attribute__((weak)) uint8_t s_BtAttDBMem[BT_ATT_DB_MEMSIZE];
-static size_t s_BtAttDBMemSize = sizeof(s_BtAttDBMem);
+// Default database memory. The pool must hold BtAttDBEntry_t objects at
+// rounded offsets, so it is aligned to the entry type. An application that
+// needs another size defines its own g_BtAttDBMemCfg, see bt_att.h, and this
+// storage is then left out of the link.
+alignas(BtAttDBEntry_t) static uint8_t s_DefaultAttDBMem[BT_ATT_DB_MEMSIZE];
+
+extern "C" __attribute__((weak)) const BtAttDBMemCfg_t g_BtAttDBMemCfg = {
+	s_DefaultAttDBMem, sizeof(s_DefaultAttDBMem)
+};
+
+// Database memory in use, taken from g_BtAttDBMemCfg the first time the
+// database is touched. Null when the descriptor memory cannot be used.
+static uint8_t *s_pBtAttDBMem = nullptr;
+static size_t s_BtAttDBMemSize = 0;
 static size_t s_BtAttDBMemUsed = 0;
-static BtAttDBEntry_t * const s_pBtAttDbEntryFirst = (BtAttDBEntry_t *)s_BtAttDBMem;
-static BtAttDBEntry_t *s_pBtAttDbEntryEnd = (BtAttDBEntry_t*)s_BtAttDBMem;
+static BtAttDBEntry_t *s_pBtAttDbEntryEnd = nullptr;
 static uint16_t s_LastHdl = 0;
+
+// Take the database memory from the descriptor. The memory has to be aligned
+// for BtAttDBEntry_t and hold at least the tail entry. Static memory starts
+// zeroed, which is an empty database.
+static bool BtAttDBBind(void)
+{
+	uint8_t *mem = g_BtAttDBMemCfg.pMem;
+	size_t size = g_BtAttDBMemCfg.Size;
+
+	if (mem == nullptr || size < sizeof(BtAttDBEntry_t) ||
+		((uintptr_t)mem & (alignof(BtAttDBEntry_t) - 1U)) != 0)
+	{
+		s_pBtAttDBMem = nullptr;
+		s_BtAttDBMemSize = 0;
+		s_pBtAttDbEntryEnd = nullptr;
+
+		return false;
+	}
+
+	s_pBtAttDBMem = mem;
+	s_BtAttDBMemSize = size;
+	s_BtAttDBMemUsed = 0;
+	s_pBtAttDbEntryEnd = (BtAttDBEntry_t*)mem;
+
+	return true;
+}
+
+// Start of the database, null when there is no usable memory
+static uint8_t *BtAttDBMem(void)
+{
+	if (s_pBtAttDBMem == nullptr)
+	{
+		BtAttDBBind();
+	}
+
+	return s_pBtAttDBMem;
+}
 
 // Set the negotiated ATT MTU from a peer's offered Rx MTU. The negotiated
 // value is min(peer_offered, BT_ATT_MTU_MAX). Offers below BT_ATT_MTU_MIN
@@ -128,22 +173,26 @@ void BtAttSetHandler(AttReadValFct_t ReadFct, AttWriteValFct_t WriteFct)
 */
 void BtAttDBInit(size_t MemSize)
 {
-	// The database lives in s_BtAttDBMem, a weak array of BT_ATT_DB_MEMSIZE
-	// bytes. MemSize is the caller's claim about how much of it to use, and
-	// this file cannot prove a claim larger than the array it was compiled
-	// against, so clamp to that: a larger value would run the memset below
-	// off the end of the pool. A bigger database comes from raising
-	// BT_ATT_DB_MEMSIZE for the whole build, which resizes the array and this
-	// sizeof together, not from defining a different sized array elsewhere,
-	// which the sizeof here would not see.
-	if (MemSize > sizeof(s_BtAttDBMem))
+	// The database lives in the memory g_BtAttDBMemCfg describes: the
+	// library default, or the one the application defines. MemSize is how
+	// much of it to use. It is clamped to the size the descriptor gives,
+	// because a larger value would run the memset below off the end of the
+	// memory. A bigger database comes from an application g_BtAttDBMemCfg.
+	s_LastHdl = 0;
+
+	if (BtAttDBBind() == false)
 	{
-		MemSize = sizeof(s_BtAttDBMem);
+		// No usable memory: the database stays empty and refuses entries
+		return;
+	}
+
+	if (MemSize > s_BtAttDBMemSize)
+	{
+		MemSize = s_BtAttDBMemSize;
 	}
 
 	// The tail sentinel is written immediately below, so the pool has to hold
-	// at least one entry. The clamp above already bounded MemSize by the
-	// array, which is far larger than one entry.
+	// at least one entry. BtAttDBBind made sure the memory does.
 	if (MemSize < sizeof(BtAttDBEntry_t))
 	{
 		MemSize = sizeof(BtAttDBEntry_t);
@@ -151,10 +200,9 @@ void BtAttDBInit(size_t MemSize)
 
 	s_BtAttDBMemSize = MemSize;
 	s_BtAttDBMemUsed = 0;
-	memset(s_BtAttDBMem, 0, s_BtAttDBMemSize);
+	memset(s_pBtAttDBMem, 0, s_BtAttDBMemSize);
 
-	s_pBtAttDbEntryEnd = (BtAttDBEntry_t*)s_BtAttDBMem;
-	s_LastHdl = 0;
+	s_pBtAttDbEntryEnd = (BtAttDBEntry_t*)s_pBtAttDBMem;
 	s_pBtAttDbEntryEnd->pNext = nullptr;
 	s_pBtAttDbEntryEnd->pPrev = nullptr;
 }
@@ -162,6 +210,11 @@ void BtAttDBInit(size_t MemSize)
 BtAttDBEntry_t *BtAttDBAddEntry(BtUuid16_t *pUuid, int MaxDataLen)//, void *pData, int DataLen)
 {
 	if (pUuid == nullptr || MaxDataLen < 0 || MaxDataLen > 0xFFFF)
+	{
+		return nullptr;
+	}
+
+	if (BtAttDBMem() == nullptr)
 	{
 		return nullptr;
 	}
@@ -188,7 +241,7 @@ BtAttDBEntry_t *BtAttDBAddEntry(BtUuid16_t *pUuid, int MaxDataLen)//, void *pDat
 	}
 
 	BtAttDBEntry_t *entry =
-		(BtAttDBEntry_t*)(s_BtAttDBMem + s_BtAttDBMemUsed);
+		(BtAttDBEntry_t*)(s_pBtAttDBMem + s_BtAttDBMemUsed);
 
 	entry->TypeUuid = *pUuid;
 	entry->Hdl = ++s_LastHdl;
@@ -197,7 +250,7 @@ BtAttDBEntry_t *BtAttDBAddEntry(BtUuid16_t *pUuid, int MaxDataLen)//, void *pDat
 	s_BtAttDBMemUsed += entrySize;
 
 	s_pBtAttDbEntryEnd =
-		(BtAttDBEntry_t*)(s_BtAttDBMem + s_BtAttDBMemUsed);
+		(BtAttDBEntry_t*)(s_pBtAttDBMem + s_BtAttDBMemUsed);
 	s_pBtAttDbEntryEnd->pNext = nullptr;
 	s_pBtAttDbEntryEnd->pPrev = entry;
 	entry->pNext = s_pBtAttDbEntryEnd;
@@ -222,7 +275,7 @@ void BtAttDBUnwind(const BtAttDBMark_t *pMark)
 	// reinitialised, or one recorded after the current position, would move
 	// the allocator forward over memory no entry owns.
 	if (pMark == nullptr || pMark->MemUsed > s_BtAttDBMemUsed ||
-		pMark->LastHdl > s_LastHdl)
+		pMark->LastHdl > s_LastHdl || s_pBtAttDBMem == nullptr)
 	{
 		return;
 	}
@@ -235,7 +288,7 @@ void BtAttDBUnwind(const BtAttDBMark_t *pMark)
 	// slot is seeded as the sentinel, never when it is turned into an entry,
 	// so the link back is the one this position had before the dropped
 	// entries were added.
-	s_pBtAttDbEntryEnd = (BtAttDBEntry_t*)(s_BtAttDBMem + s_BtAttDBMemUsed);
+	s_pBtAttDbEntryEnd = (BtAttDBEntry_t*)(s_pBtAttDBMem + s_BtAttDBMemUsed);
 	s_pBtAttDbEntryEnd->pNext = nullptr;
 }
 
@@ -253,7 +306,7 @@ BtAttDBEntry_t *BtAttDBFindHandle(uint16_t Hdl)
 	// Walk to the tail sentinel, guarding against null: on an empty database
 	// the first entry is the sentinel and its pNext is null, so a do/while
 	// that only tests the sentinel dereferences null on the second pass.
-	for (BtAttDBEntry_t *p = (BtAttDBEntry_t *)s_pBtAttDbEntryFirst;
+	for (BtAttDBEntry_t *p = (BtAttDBEntry_t *)BtAttDBMem();
 		 p != nullptr && p != s_pBtAttDbEntryEnd; p = p->pNext)
 	{
 		if (p->Hdl == Hdl)
@@ -296,7 +349,7 @@ BtAttDBEntry_t *BtAttDBFindUuid(BtAttDBEntry_t *pStart, BtUuid16_t *pUuid)
 	BtAttDBEntry_t *p = pStart;
 	if (p == nullptr)
 	{
-		p = (BtAttDBEntry_t*)s_BtAttDBMem;
+		p = (BtAttDBEntry_t*)BtAttDBMem();
 	}
 	// Stop at the tail sentinel and also guard against null: pStart can be the
 	// sentinel itself (a caller passing lastEntry->pNext), and the sentinel's
@@ -320,7 +373,7 @@ BtAttDBEntry_t *BtAttDBFindUuidRange(BtUuid16_t *pUuid, uint16_t HdlStart, uint1
 	// Same guard as BtAttDBFindUuid: stop at the tail sentinel and at null.
 	// On an empty database the first entry is the sentinel and its pNext is
 	// null, so a do/while that only tests the sentinel walks off the end.
-	for (BtAttDBEntry_t *p = s_pBtAttDbEntryFirst;
+	for (BtAttDBEntry_t *p = (BtAttDBEntry_t *)BtAttDBMem();
 		 p != nullptr && p != s_pBtAttDbEntryEnd; p = p->pNext)
 	{
 		if (memcmp(&p->TypeUuid, pUuid, sizeof(BtUuid16_t)) == 0)

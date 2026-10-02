@@ -27,6 +27,11 @@
 #include "crypto_rng_nrf.h"
 #include "nrf_mpsl.h"
 
+#ifdef SDC_TEST_NO_FEATURE_MODULES
+// This build runs one test only, see main. The others stay compiled.
+#pragma GCC diagnostic ignored "-Wunused-function"
+#endif
+
 namespace {
 
 int s_Failures = 0;
@@ -175,7 +180,8 @@ BtHciCtlrCfg_t MakeCfg(uint16_t Role)
 	return cfg;
 }
 
-bool Start(BtHciCtlrCfg_t *pCfg)
+// Bring up without connection support having asked for the link features.
+bool StartNoConn(BtHciCtlrCfg_t *pCfg)
 {
 	BtHciCtlrDev_t dev = {};
 
@@ -185,6 +191,50 @@ bool Start(BtHciCtlrCfg_t *pCfg)
 	}
 
 	return BtHciCtlrStart(&dev, pCfg);
+}
+
+// Bring up the way an application with links does: connection support asks
+// for the peripheral link features before the controller is enabled.
+bool Start(BtHciCtlrCfg_t *pCfg)
+{
+	if (pCfg != nullptr && (pCfg->Role & BT_GAP_ROLE_PERIPHERAL))
+	{
+		BtHciCtlrPeripheralSupport();
+	}
+
+	return StartNoConn(pCfg);
+}
+
+// An application without connection support never asks for the peripheral
+// link features. A broadcaster comes up without them and a peripheral role
+// stops the bring up. Runs first: once asked, the request stays.
+void TestPeripheralSupportIsOnRequest(void)
+{
+	Reset();
+
+	BtHciCtlrCfg_t cfg = MakeCfg(BT_GAP_ROLE_BROADCASTER);
+	CHECK(StartNoConn(&cfg));
+	CHECK(Supported("adv"));
+	CHECK(Supported("ext_adv"));
+	CHECK(Supported("peripheral") == false);
+	CHECK(s_EnableCalls == 1);
+
+	Reset();
+	cfg = MakeCfg(BT_GAP_ROLE_PERIPHERAL);
+	CHECK(StartNoConn(&cfg) == false);
+	CHECK(BtHciCtlrErrorGet() == BT_HCI_CTLR_ERROR_PERIPHERAL_SUPPORT);
+	CHECK(Supported("peripheral") == false);
+	CHECK(s_EnableCalls == 0);
+
+	Reset();
+	CHECK(Start(&cfg));
+	CHECK(Supported("peripheral"));
+
+	// Asked for, a broadcaster still does not enable them
+	Reset();
+	cfg = MakeCfg(BT_GAP_ROLE_BROADCASTER);
+	CHECK(Start(&cfg));
+	CHECK(Supported("peripheral") == false);
 }
 
 // --- the checks -------------------------------------------------------------
@@ -575,7 +625,52 @@ void TestNullArgumentsAreRefused(void)
 	CHECK(s_InitCalls == 0);
 }
 
+#ifdef SDC_TEST_NO_FEATURE_MODULES
+// The same setup in an application that links neither the scan module nor the
+// periodic advertising module. The controller port finds no reference to
+// them, so it must not enable those controller features, and a role that
+// needs scanning must stop the bring up instead of running without it.
+void TestFeatureModulesNotLinked(void)
+{
+	Reset();
+
+	BtHciCtlrCfg_t cfg = MakeCfg(BT_GAP_ROLE_PERIPHERAL);
+	CHECK(Start(&cfg));
+
+	CHECK(Supported("adv"));
+	CHECK(Supported("ext_adv"));
+	CHECK(Supported("peripheral"));
+	CHECK(Supported("le_periodic_adv") == false);
+	CHECK(Supported("le_periodic_adv_with_rsp") == false);
+	CHECK(Supported("scan") == false);
+	CHECK(Supported("central") == false);
+
+	Reset();
+	cfg = MakeCfg(BT_GAP_ROLE_OBSERVER);
+	CHECK(Start(&cfg) == false);
+	CHECK(BtHciCtlrErrorGet() == BT_HCI_CTLR_ERROR_CENTRAL_SUPPORT);
+	CHECK(Supported("scan") == false);
+	CHECK(s_EnableCalls == 0);
+
+	Reset();
+	cfg = MakeCfg(BT_GAP_ROLE_PERIPHERAL | BT_GAP_ROLE_CENTRAL);
+	CHECK(Start(&cfg) == false);
+	CHECK(BtHciCtlrErrorGet() == BT_HCI_CTLR_ERROR_CENTRAL_SUPPORT);
+	CHECK(s_EnableCalls == 0);
+}
+#endif
+
 }	// namespace
+
+#ifndef SDC_TEST_NO_FEATURE_MODULES
+// The controller port enables the scan side and periodic advertising only in
+// an application that links the scan module (BtAppScanInit) and the periodic
+// advertising module (BtPadvInit). Each module defines one of these
+// references. This test stands in for an application that uses both. The
+// build with SDC_TEST_NO_FEATURE_MODULES is the application that uses neither.
+extern "C" void (* const g_pBtHciCtlrCentralSupport)(void) = BtHciCtlrCentralSupport;
+extern "C" void (* const g_pBtHciCtlrPeriodicAdvSupport)(void) = BtHciCtlrPeriodicAdvSupport;
+#endif
 
 // --- the vendor entry points ------------------------------------------------
 
@@ -738,6 +833,22 @@ CryptoRngNrf *CryptoRngNrfInstance(void)
 
 int main(void)
 {
+	TestPeripheralSupportIsOnRequest();
+
+#ifdef SDC_TEST_NO_FEATURE_MODULES
+	TestFeatureModulesNotLinked();
+
+	if (s_Failures != 0)
+	{
+		std::printf("SDC controller setup without feature modules: %d failure(s), %d checks\n",
+					s_Failures, s_Checks);
+		return 1;
+	}
+
+	std::printf("SDC controller setup without feature modules: PASS (%d checks)\n", s_Checks);
+
+	return 0;
+#else
 	TestSupportCallsFollowTheRole();
 	TestSupportOrderMeetsThePrerequisites();
 	TestPeriodicResourcesAreReservedOnRequest();
@@ -759,4 +870,5 @@ int main(void)
 	std::printf("SDC controller setup tests: PASS (%d checks)\n", s_Checks);
 
 	return 0;
+#endif
 }

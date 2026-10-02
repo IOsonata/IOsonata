@@ -256,6 +256,13 @@ extern "C" bool BtSmpBondLtkLookup(uint16_t ConnHdl, uint64_t Rand,
 // App hooks
 //-----------------------------------------------------------------------------
 
+void BtAppInitUserData()
+{
+	// Start the security module. This call is what links it; BtAppInit
+	// fails when SecType asks for security and it was not started.
+	BtAppSecInit();
+}
+
 void BtAppInitUserServices()
 {
 	BtGattSrvcAdd(&g_SmpSrvc);
@@ -344,6 +351,18 @@ void BtSmpPairingComplete(uint16_t ConnHdl, bool Success, const BtSmpKeys_t *pKe
 // Main
 //-----------------------------------------------------------------------------
 
+// SysLog store. With the UART attached at init, each record goes out as it
+// is logged. 16 records of 128 bytes, non blocking, so a burst the UART
+// cannot keep up with drops the oldest lines rather than the newest.
+alignas(4) static uint8_t s_SysLogMem[SYSLOG_MEMSIZE(16, 128)];
+
+static const SysLogCfg_t s_SysLogCfg = {
+	.pMem      = s_SysLogMem,
+	.MemSize   = sizeof(s_SysLogMem),
+	.RecordLen = 128,
+	.bBlocking = false
+};
+
 void HardwareInit()
 {
 	g_Uart.Init(s_UartCfg);
@@ -357,18 +376,6 @@ void HardwareInit()
 	// up by the BLE app layer during BtAppInit; the application does not set it
 	// up here.
 }
-
-// SysLog store. With the UART attached at init, each record goes out as it
-// is logged. 16 records of 128 bytes, non blocking, so a burst the UART
-// cannot keep up with drops the oldest lines rather than the newest.
-alignas(4) static uint8_t s_SysLogMem[SYSLOG_MEMSIZE(16, 128)];
-
-static const SysLogCfg_t s_SysLogCfg = {
-	.pMem      = s_SysLogMem,
-	.MemSize   = sizeof(s_SysLogMem),
-	.RecordLen = 128,
-	.bBlocking = false
-};
 
 int main()
 {

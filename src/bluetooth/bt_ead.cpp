@@ -83,6 +83,21 @@ bool BtEadInit(CipherEngine *pAes, RngEngine *pRng)
 	return pAes != nullptr;
 }
 
+// Engine binding of the port, see bt_ead.h. A weak reference: a port or an
+// application that binds the engines itself with BtEadInit does not have to
+// provide it.
+__attribute__((weak)) bool BtEadEngineInit(void);
+
+// Bind the engines the first time one is needed. The reference to the
+// engines of the port is here, in code that is linked only when EAD is used.
+static void BtEadEngineBind(void)
+{
+	if (s_pEadAes == nullptr && BtEadEngineInit != nullptr)
+	{
+		BtEadEngineInit();
+	}
+}
+
 bool BtEadRandGen(uint8_t Rand[BTEAD_RANDOMIZER_LEN])
 {
 	if (Rand == nullptr)
@@ -93,6 +108,8 @@ bool BtEadRandGen(uint8_t Rand[BTEAD_RANDOMIZER_LEN])
 	// A randomizer that is not unpredictable gives back exactly the tracking
 	// the feature exists to prevent, so a deterministic engine is refused
 	// rather than used (CSS Part A 1.23.4, Vol 2 Part H 2).
+	BtEadEngineBind();
+
 	if (s_pEadRng == nullptr || !s_pEadRng->IsSecure() ||
 		s_pEadRng->Random(Rand, BTEAD_RANDOMIZER_LEN) != CRYPTO_STATUS_OK)
 	{
@@ -111,6 +128,8 @@ static bool BtEadAesBlock(const uint8_t Key[BTEAD_KEY_LEN],
 						  const uint8_t In[BTEAD_BLOCK_LEN],
 						  uint8_t Out[BTEAD_BLOCK_LEN])
 {
+	BtEadEngineBind();
+
 	if (s_pEadAes == nullptr)
 	{
 		return false;

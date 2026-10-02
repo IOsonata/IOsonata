@@ -287,6 +287,14 @@ completion forwarding path.
 uses the same DIRECT storage policy as `UsbIsoIntrf`, but opens its endpoint
 pair with `USB_ENDPATT_TRANS_INT` and owns the interrupt polling interval.
 
+Interrupt slots are caller-owned. `UsbIntIntrfCfg_t` and `UsbdHidCfg_t`
+require separate `pRxBuffer` and `pTxBuffer` pointers. Each slot must be
+4-byte aligned, contain at least `USB_INT_INTRF_PKT_BLKSIZE` bytes (packet
+header plus the target's maximum interrupt payload), and remain alive for
+the interface lifetime. Define static slots outside the C++ object so their
+zero-initialized storage can reside in BSS. Rebuild the MCU library and its
+applications together after this configuration and object-layout change.
+
 ```text
 USB class
         |
