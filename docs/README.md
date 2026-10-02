@@ -54,6 +54,19 @@ Documents the C-level interface state, wrapper ownership, transfer sequencing, r
 
 Documents behavioural inheritance, shared virtual `Device` state, multi-function devices, independent devices in one package, configuration-driven variation and object composition.
 
+## Bluetooth
+
+### [Bluetooth User Guide](bluetooth-user-guide.md)
+
+Covers stack selection, initialization, advertising, scanning, connections,
+GATT, BtIntrf, pairing, bond persistence, periodic advertising, static memory,
+HCI transports, RTOS integration and testing.
+
+### [Bluetooth architecture](architecture/bluetooth.md)
+
+Explains application, host, controller and vendor-port boundaries, per-link
+state, optional feature linking, storage ownership and event dispatch.
+
 ## USB
 
 ### [USB architecture](architecture/usb.md)
