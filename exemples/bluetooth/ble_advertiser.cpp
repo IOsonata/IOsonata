@@ -113,7 +113,7 @@ uint8_t g_AdvLong[] = "1234567890abcdefghijklmnopqrstuvwxyz`!@#$%^&*()_+";
 // ports that run the controller in the application (SDC), not linked
 // otherwise. BtHciCtlrMemPoolSizeNeeded gives the size the configuration
 // asked for.
-alignas(8) static uint8_t s_BtCtlrMemPool[1024];
+alignas(8) static uint8_t s_BtCtlrMemPool[2400];
 
 const BtHciCtlrMemPool_t g_BtHciCtlrMemPool = { s_BtCtlrMemPool, sizeof(s_BtCtlrMemPool) };
 

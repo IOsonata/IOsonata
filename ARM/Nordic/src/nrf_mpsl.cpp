@@ -290,10 +290,23 @@ static int NvmArbiterRun(NvmIntrfOp_t *pOp)
 	return result;
 }
 
+// Weak reference to the NVM interface. It is declared here on top of the
+// declaration in nvm_intrf.h so that this file does not pull the NVM driver
+// into the link: an application that does not use the driver has nothing to
+// arbitrate, and the driver and its data then stay out.
+__attribute__((weak)) void NvmIntrfSetArbiter(NvmIntrfArb_t pArb);
+
 int MpslNvmArbiterStart(void)
 {
 	if (s_bNvmSessionOpen)
 	{
+		return 0;
+	}
+
+	if (&NvmIntrfSetArbiter == nullptr)
+	{
+		// The NVM driver is not part of this application. No session is
+		// opened, nothing writes the memory behind the radio.
 		return 0;
 	}
 
