@@ -104,6 +104,9 @@ struct __Usbd_Hid_Dev {
 	uint16_t BcdHid;
 	uint16_t FsMps;
 	uint16_t HsMps;
+	// Keep the descriptor word-aligned; its trailing byte shares the
+	// following byte-field group instead of adding end padding.
+	UsbHidDesc_t HidDesc;
 	uint8_t EpNo;				//!< Internal allocation
 	uint8_t FsInterval;
 	uint8_t HsInterval;
@@ -120,7 +123,6 @@ struct __Usbd_Hid_Dev {
 	bool Configured;
 	const uint8_t *pReportDesc;
 	void *pContext;
-	UsbHidDesc_t HidDesc;
 };
 
 #ifdef __cplusplus
