@@ -641,6 +641,9 @@ int SysLogPrintf(SysLog_t * const, const char *, ...)
 
 int main()
 {
+	// Match BtAppScanInit: these tests exercise the optional scan parsers.
+	BtHciScanReportEnable();
+
 	Context ctx("Bluetooth HCI compliance foundation");
 	TestVirtualTime(ctx);
 	TestCommandBoundaryAndTiming(ctx);
