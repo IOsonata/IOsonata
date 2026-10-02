@@ -298,7 +298,8 @@ static bool IntInit(void)
 	UsbdEpAllocReq_t req = {};
 	req.InterfaceCount = 1U;
 	req.BidirectionalCount = 1U;
-	UsbdEpAllocRes_t alloc = {};
+	// The allocator fills each requested result before returning success.
+	UsbdEpAllocRes_t alloc;
 	if (!UsbdEpAlloc(USB_DEVNO, &req, &s_IntClass, &alloc))
 	{
 		return false;
@@ -307,10 +308,11 @@ static bool IntInit(void)
 	s_Fn.IntInterfaceNo = alloc.FirstInterface;
 	s_Fn.IntEpNo = alloc.Bidirectional[0];
 
-	UsbIntIntrfCfg_t cfg = {};
+	UsbIntIntrfCfg_t cfg;
 	cfg.DevNo = USB_DEVNO;
 	cfg.EpNo = s_Fn.IntEpNo;
 	cfg.EvtCB = IntEvent;
+	cfg.pContext = nullptr;
 	cfg.pRxBuffer = s_IntRxBuffer;
 	cfg.pTxBuffer = s_IntTxBuffer;
 	if (!UsbIntIntrfInit(&s_Int, &s_IntData, &cfg))
@@ -564,7 +566,8 @@ static bool IsoInit(void)
 	req.InterfaceCount = 1U;
 	req.FixedInMask = (uint16_t)(1U << epNo);
 	req.FixedOutMask = (uint16_t)(1U << epNo);
-	UsbdEpAllocRes_t alloc = {};
+	// The allocator fills each requested result before returning success.
+	UsbdEpAllocRes_t alloc;
 	if (!UsbdEpAlloc(USB_DEVNO, &req, &s_IsoClass, &alloc))
 	{
 		return false;
@@ -573,13 +576,14 @@ static bool IsoInit(void)
 	s_Fn.IsoInterfaceNo = alloc.FirstInterface;
 	s_Fn.IsoEpNo = epNo;
 
-	UsbIsoIntrfCfg_t cfg = {};
+	UsbIsoIntrfCfg_t cfg;
 	cfg.DevNo = USB_DEVNO;
 	cfg.EpNo = s_Fn.IsoEpNo;
 	cfg.BufferSize = ISO_MAX_MPS;
 	cfg.pRxFifoMem = s_IsoRxFifoMem;
 	cfg.pTxFifoMem = s_IsoTxFifoMem;
 	cfg.EvtCB = IsoEvent;
+	cfg.pContext = nullptr;
 	if (!UsbIsoIntrfInit(&s_Iso, &s_IsoData, &cfg))
 	{
 		return false;
