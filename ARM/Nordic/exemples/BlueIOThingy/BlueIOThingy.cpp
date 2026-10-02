@@ -71,6 +71,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "sensors/agm_mpu9250.h"
 #include "sensors/accel_adxl362.h"
 #include "coredev/timer.h"
+#include "timer_nrfx.h"
 #include "idelay.h"
 #include "storage/seep.h"
 #include "storage/diskio_flash.h"
@@ -152,6 +153,10 @@ const static TimerCfg_t s_TimerCfg = {
 };
 
 Timer g_Timer;
+
+// Only low frequency timers are used, so the high frequency timer driver is
+// left out of the link
+const nRFxTimerDrv_t g_nRFxTimerDrv = NRFX_TIMER_DRV_LF;
 
 //static const ble_uuid_t  s_AdvUuids[] = {
 //    {BLE_UUID_TCS_SERVICE, BLE_UUID_TYPE_VENDOR_BEGIN}

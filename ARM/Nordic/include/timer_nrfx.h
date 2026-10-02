@@ -93,6 +93,34 @@ bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg);
 #endif
 bool nRFxTimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg);
 
+#if defined(NRF54L_SERIES)
+#define NRFX_TIMER_LF_INIT		nRFxGrtcInit	//!< Low frequency timer driver of the target
+#else
+#define NRFX_TIMER_LF_INIT		nRFxRtcInit		//!< Low frequency timer driver of the target
+#endif
+#define NRFX_TIMER_HF_INIT		nRFxTimerInit	//!< High frequency timer driver of the target
+
+/// Timer drivers TimerInit selects from. A member left NULL is a driver the
+/// application does not use: its code and data are not linked, apart from
+/// its interrupt handlers, and TimerInit fails for a device number of its
+/// range.
+typedef struct __nRFx_Timer_Drv {
+	bool (*LFInit)(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg);	//!< Low frequency timers, device 0 to TIMER_NRFX_RTC_MAX - 1
+	bool (*HFInit)(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg);	//!< High frequency timers, device TIMER_NRFX_RTC_MAX and up
+} nRFxTimerDrv_t;
+
+#define NRFX_TIMER_DRV_LF		{ NRFX_TIMER_LF_INIT, NULL }				//!< Low frequency timers only
+#define NRFX_TIMER_DRV_HF		{ NULL, NRFX_TIMER_HF_INIT }				//!< High frequency timers only
+#define NRFX_TIMER_DRV_ALL		{ NRFX_TIMER_LF_INIT, NRFX_TIMER_HF_INIT }	//!< Both
+
+/// The drivers TimerInit selects from. The library defines a weak default
+/// with both, so any device number works and both drivers are linked. An
+/// application that uses only one kind of timer defines it to link only
+/// that driver, for instance
+///
+///		const nRFxTimerDrv_t g_nRFxTimerDrv = NRFX_TIMER_DRV_LF;
+extern const nRFxTimerDrv_t g_nRFxTimerDrv;
+
 /**
  * @brief	Initialize a low frequency timer.
  *
@@ -109,11 +137,7 @@ bool nRFxTimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg);
  */
 static inline bool nRFxLFTimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 {
-#if defined(NRF54L_SERIES)
-	return nRFxGrtcInit(pTimer, pCfg);
-#else
-	return nRFxRtcInit(pTimer, pCfg);
-#endif
+	return NRFX_TIMER_LF_INIT(pTimer, pCfg);
 }
 
 #ifdef __cplusplus
