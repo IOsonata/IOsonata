@@ -253,7 +253,7 @@ extern "C" {
 
 class BtHciUsb : public UsbDeviceClass, public UsbIntrf {
 public:
-	BtHciUsb() = default;
+	BtHciUsb();
 	BtHciUsb(const BtHciUsb &) = delete;
 	BtHciUsb &operator = (const BtHciUsb &) = delete;
 

@@ -37,6 +37,10 @@ SOFTWARE.
 #include "usb/usbd_epalloc.h"
 #include "bluetooth/bt_hci_usb.h"
 
+// Out of line, like CDC/HID, so static instances use zero-filled storage
+// instead of a flash initializer containing the object and its packet buffers.
+BtHciUsb::BtHciUsb() = default;
+
 #ifndef USB_ISO_EPIN_MASK
 #define USB_ISO_EPIN_MASK(CtrlrNo) \
 	((uint16_t)(((1UL << USB_EPIN_CNT(CtrlrNo)) - 1UL) & ~1UL))
