@@ -506,9 +506,10 @@ static void IsoBuildFunctionDesc(const UsbDeviceClass *, uint8_t *pData,
 	pDesc->Alt0.bInterfaceNumber = s_Fn.IsoInterfaceNo;
 
 	const uint8_t interval = Speed == USB_SPEED_HIGH ? 4U : 1U;
-	for (unsigned i = 0U; i < ISO_ALT_COUNT; i++)
+	ComboIsoAltDesc_t *pAlt = pDesc->Alt;
+	for (unsigned i = 0U; i < ISO_ALT_COUNT; i++, pAlt++)
 	{
-		ComboIsoAltDesc_t &alt = pDesc->Alt[i];
+		ComboIsoAltDesc_t &alt = *pAlt;
 		// Build from the small components instead of copying a complete
 		// alternate template and overwriting its variable fields.
 		alt.Interface = pDesc->Alt0;
