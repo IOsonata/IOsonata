@@ -207,9 +207,12 @@ static bool UsbdHidClassRequest(UsbdHidDev_t *pHid,
 	return true;
 }
 
-static bool UsbdHidRequest(const UsbSetupData_t *pSetup,
+// Out of line, with state first, for the same short offsets and tail-call
+// wrapper used by UsbdHidConfig.
+__attribute__((noinline))
+static bool UsbdHidRequest(UsbdHidDev_t *pHid, const UsbSetupData_t *pSetup,
 						   UsbCtrlStage_t Stage, uint8_t **ppData,
-						   uint16_t *pLength, UsbdHidDev_t *pHid)
+						   uint16_t *pLength)
 {
 	// The core passes its own setup copy and length; pHid is the class member.
 	if (pSetup->wIndex != (uint8_t)pHid->ItfNo)
@@ -401,7 +404,7 @@ bool UsbdHid::Init(const UsbdHidCfg_t &Cfg)
 bool UsbdHid::Control(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
 					   uint8_t **ppData, uint16_t *pLength)
 {
-	return UsbdHidRequest(pSetup, Stage, ppData, pLength, &vUsbdHid);
+	return UsbdHidRequest(&vUsbdHid, pSetup, Stage, ppData, pLength);
 }
 
 bool UsbdHid::SelectConfig(uint8_t ConfigValue)

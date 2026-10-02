@@ -202,11 +202,13 @@ static bool UsbdCdcConfig(UsbdCdcDev_t *pCdc, uint8_t Configuration)
 	return true;
 }
 
-static bool UsbdCdcRequest(const UsbSetupData_t *pSetup,
+// Out of line, with state first, for the same short offsets and tail-call
+// wrapper used by UsbdCdcConfig.
+__attribute__((noinline))
+static bool UsbdCdcRequest(UsbdCdcDev_t *pCdc, const UsbSetupData_t *pSetup,
 						   UsbCtrlStage_t Stage,
 						   uint8_t **ppData,
-						   uint16_t *pLength,
-						   UsbdCdcDev_t *pCdc)
+						   uint16_t *pLength)
 {
 	// The core passes its own setup copy and length; pCdc is the class member.
 	if (pCdc->pData->Mps == 0U ||
@@ -427,7 +429,7 @@ void UsbdCdc::Process(void)
 bool UsbdCdc::Control(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
 					  uint8_t **ppData, uint16_t *pLength)
 {
-	return UsbdCdcRequest(pSetup, Stage, ppData, pLength, &vUsbdCdc);
+	return UsbdCdcRequest(&vUsbdCdc, pSetup, Stage, ppData, pLength);
 }
 
 bool UsbdCdc::SelectConfig(uint8_t ConfigValue)
