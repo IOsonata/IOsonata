@@ -654,6 +654,7 @@ static bool NvmDemoSetup(void)
 				  NVM_DEMO_ASYNC ? "interrupt, IsBusy drives the operation"
 								 : "polling, the call finishes the operation");
 
+#if NVM_DEMO_MEDIUM == 0
 	// What the linker script set aside, if anything. The demo carves its own
 	// scratch out of the top of the application area, so it does not use this,
 	// but a store that does needs to see the numbers arrive.
@@ -672,6 +673,8 @@ static bool NvmDemoSetup(void)
 						  (unsigned long)ra, (unsigned long)rs);
 		}
 	}
+
+#endif
 
 	uint64_t below = (uint64_t)unit * (NVM_DEMO_TOP_RESERVE_PAGES
 									   + NVM_DEMO_REGION_PAGES);
@@ -897,6 +900,7 @@ static void NvmCyclePump(uint32_t Evt, void *pCtx)
 		// one is counted above and reported with the cycle instead.
 		if ((s_StallRq % NVM_DEMO_STALL_STUCK) == 0)
 		{
+#if NVM_DEMO_MEDIUM == 0
 			NvmIntrfStat_t st;
 
 			NvmIntrfGetStat(&st);
@@ -913,6 +917,10 @@ static void NvmCyclePump(uint32_t Evt, void *pCtx)
 						  (unsigned long)st.RepNoWant,
 						  (unsigned long)st.RepNoPend,
 						  (unsigned long)s_Pending);
+#else
+			g_Uart.printf("stuck   : rq %lu pend %lu\r\n",
+						  (unsigned long)s_StallRq, (unsigned long)s_Pending);
+#endif
 		}
 
 		(void)NvmCycleRequeue();

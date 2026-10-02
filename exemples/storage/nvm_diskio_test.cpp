@@ -13,8 +13,10 @@
 Build and run on the host:
 
   g++ -std=gnu++23 -O1 -I include -I include/storage -I Linux/include \
+	  -I tests/dfu/hostport \
 	  exemples/storage/nvm_diskio_test.cpp src/storage/diskio_nvm.cpp \
-	  src/storage/diskio_impl.cpp src/device.cpp src/device_intrf.cpp \
+	  src/storage/diskio_impl.cpp src/storage/nvm.cpp \
+	  src/device.cpp src/device_intrf.cpp \
 	  -o nvm_diskio_test
   ./nvm_diskio_test
 
@@ -51,6 +53,7 @@ SOFTWARE.
 #include <cstring>
 
 #include "storage/diskio_nvm.h"
+#include "coredev/spi.h"
 
 
 // The pin driver is per architecture; the driver only toggles a protect pin.
@@ -58,6 +61,12 @@ extern "C" {
 void IOPinConfig(int, int, int, IOPINDIR, IOPINRES, IOPINTYPE) {}
 void IOPinSet(int, int) {}
 void IOPinClear(int, int) {}
+
+// The in-memory media below never use QSPI. Satisfy the generic Nvm
+// driver's target hooks and reject any accidental hardware command.
+void QuadSPISetMemSize(SPIDev_t * const, uint32_t) {}
+bool QuadSPISendCmd(SPIDev_t * const, uint8_t, uint32_t,
+				   uint8_t, uint32_t, uint8_t) { return false; }
 }
 
 #define DISK_SIZE		(64u * 1024u)

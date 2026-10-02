@@ -37,10 +37,13 @@ TinyUSB source: https://github.com/hathach/tinyusb
 
 The projects link the selected `IOsonata_nRF52840` platform library and use
 the IOsonata linker script and CMSIS headers. TinyUSB supplies the device core,
-class sources and Nordic DCD. The composite example additionally uses an
-application ISO class driver for EP8 alternate settings and TinyUSB's Vendor
-class for raw Interrupt traffic; it is not an unmodified upstream composite
-demo.
+class sources and the base Nordic DCD. The composite project instead links
+[this repository's modified Nordic DCD](../tinyusb_combo_stress/dcd_nrf5x.c),
+which changes ISO EasyDMA scheduling and adds scheduling diagnostics. It also
+uses an application ISO class driver for EP8 alternate settings and TinyUSB's
+Vendor class for raw Interrupt traffic. Record both the IOsonata revision
+(which identifies the modified DCD) and the external TinyUSB revision with
+comparison results; this is not a stock upstream TinyUSB composite benchmark.
 
 Do not compile the IOsonata USB controller source separately into these
 applications. Their USB interrupt handler belongs to TinyUSB.
