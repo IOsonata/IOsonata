@@ -527,8 +527,9 @@ static uint32_t nRFxTimerSetFrequency(TimerDev_t * const pTimer, uint32_t Freq)
 
     pTimer->Freq = TIMER_NRFX_HF_BASE_FREQ / (1 << prescaler);
 
-    // Pre-calculate periods for faster timer counter to time conversion use later
-    // for precision this value is x10 (in 100 psec)
+    // Tick period rounded down to a nanosecond, 62 for the 62.5 ns of 16 MHz.
+    // Not precise enough to convert a count or a trigger period, those are
+    // computed from Freq, see TimerTickToTime.
     pTimer->nsPeriod = 1000000000ULL / pTimer->Freq;
 
     reg->TASKS_START = 1;
@@ -574,8 +575,7 @@ static uint64_t nRFxTimerEnableTrigger(TimerDev_t * const pTimer, int TrigNo, ui
 		return 0;
 	}
 
-    // vnsPerios is x10 nsec (100 psec) => nsPeriod * 10ULL
-    uint32_t cc = (nsPeriod + (pTimer->nsPeriod >> 1)) / pTimer->nsPeriod;
+    uint32_t cc = TimerNanosecondToTick(pTimer, nsPeriod);
 
     if (cc <= 0)
     {
@@ -600,11 +600,11 @@ static uint64_t nRFxTimerEnableTrigger(TimerDev_t * const pTimer, int TrigNo, ui
 
     pTimer->LastCount = count;
 
-    tdata.pTrigger[TrigNo].nsPeriod = pTimer->nsPeriod * (uint64_t)cc;
+    tdata.pTrigger[TrigNo].nsPeriod = TimerTickToNanosecond(pTimer, cc);
     tdata.pTrigger[TrigNo].Handler = Handler;
     tdata.pTrigger[TrigNo].pContext = pContext;
 
-    return pTimer->nsPeriod * (uint64_t)cc; // Return real period in nsec
+    return tdata.pTrigger[TrigNo].nsPeriod; // Return real period in nsec
 }
 
 static void nRFxTimerDisableTrigger(TimerDev_t * const pTimer, int TrigNo)

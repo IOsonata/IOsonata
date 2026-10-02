@@ -1388,7 +1388,7 @@ uint32_t BtSmpMsTick(void)
 		return 0;
 	}
 
-	return (uint32_t)(s_BtAppNrf52Timer.GetTickCount(&s_BtAppNrf52Timer) * s_BtAppNrf52Timer.nsPeriod / 1000000ULL);
+	return TimerGetMilisecond(&s_BtAppNrf52Timer);
 }
 
 uint32_t BtGattMsTick(void)

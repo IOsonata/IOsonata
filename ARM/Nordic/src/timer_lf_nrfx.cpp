@@ -272,7 +272,9 @@ static uint32_t nRFxRtcSetFrequency(TimerDev_t * const pTimer, uint32_t Freq)
 
     pTimer->Freq = TIMER_NRFX_RTC_BASE_FREQ / prescaler;
 
-    // Pre-calculate periods for faster timer counter to time conversion use later
+    // Tick period rounded down to a nanosecond, 30517 for the 30517.58 ns of
+    // 32768 Hz. Not precise enough to convert a count or a trigger period,
+    // those are computed from Freq, see TimerTickToTime.
     pTimer->nsPeriod = 1000000000ULL / (uint64_t)pTimer->Freq;     // Period in nsec
 
     s_nRfxRtcData[pTimer->DevNo].pReg->TASKS_START = 1;
@@ -298,7 +300,7 @@ static uint64_t nRFxRtcEnableTrigger(TimerDev_t * const pTimer, int TrigNo, uint
     if (TrigNo < 0 || TrigNo >= rtc.MaxNbTrigEvt)
         return 0;
 
-    uint32_t cc = (nsPeriod + (pTimer->nsPeriod >> 1)) / pTimer->nsPeriod;
+    uint32_t cc = TimerNanosecondToTick(pTimer, nsPeriod);
 
     if (cc <= 0)
     {
@@ -313,11 +315,11 @@ static uint64_t nRFxRtcEnableTrigger(TimerDev_t * const pTimer, int TrigNo, uint
 
     rtc.pReg->CC[TrigNo] =rtc.pCC[TrigNo] + rtc.pReg->COUNTER;
 
-    rtc.pTrigger[TrigNo].nsPeriod = pTimer->nsPeriod * (uint64_t)cc;
+    rtc.pTrigger[TrigNo].nsPeriod = TimerTickToNanosecond(pTimer, cc);
     rtc.pTrigger[TrigNo].Handler = Handler;
     rtc.pTrigger[TrigNo].pContext = pContext;
 
-    return pTimer->nsPeriod * (uint64_t)cc; // Return real period in nsec
+    return rtc.pTrigger[TrigNo].nsPeriod; // Return real period in nsec
 }
 
 static void nRFxRtcDisableTrigger(TimerDev_t * const pTimer, int TrigNo)

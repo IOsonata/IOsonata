@@ -219,7 +219,7 @@ uint32_t BtSmpMsTick(void)
 		return 0;
 	}
 
-	return (uint32_t)(s_BtAppSdcTimer.GetTickCount(&s_BtAppSdcTimer) * s_BtAppSdcTimer.nsPeriod / 1000000ULL);
+	return TimerGetMilisecond(&s_BtAppSdcTimer);
 }
 
 uint32_t BtGattMsTick(void)
