@@ -1002,6 +1002,94 @@ bool BtAppStackInit(const BtAppCfg_t *pCfg)
 	return true;
 }
 
+/**
+ * @brief	Start the security module.
+ *
+ * Called by the application, normally from BtAppInitUserData. Uses the
+ * SecType and SecExchg given to BtAppInit. A pairing configuration set with
+ * BtSmpAuthConfig after this call replaces the one derived from them.
+ *
+ * @return	true - security started
+ */
+bool BtAppSecInit(void)
+{
+	if (g_BtAppData.bSecInit)
+	{
+		// Already started
+		return true;
+	}
+
+	if (s_WbaData.bStackInited == false)
+	{
+		// BtAppInit has not brought up the stack yet
+		return false;
+	}
+
+	// SMP / pairing config. Map BtGap SecType to ST auth requirement.
+	uint8_t authReq      = 0;	// bonding NO, MITM NO by default
+	uint8_t scSupport    = 0;	// LE Secure Connections off by default
+	switch (g_BtAppData.SecType)
+	{
+		case BTGAP_SECTYPE_STATICKEY_MITM:
+		case BTGAP_SECTYPE_SIGNED_MITM:
+			authReq = 0x05;	// bonding + MITM
+			break;
+		case BTGAP_SECTYPE_LESC_MITM:
+			authReq   = 0x05;
+			scSupport = 2;	// SC-only, no legacy fallback
+			break;
+		case BTGAP_SECTYPE_STATICKEY_NO_MITM:
+		case BTGAP_SECTYPE_SIGNED_NO_MITM:
+			authReq = 0x01;	// bonding, no MITM (encryption without authentication)
+			break;
+		case BTGAP_SECTYPE_NONE:
+		default:
+			authReq = 0;
+			break;
+	}
+	s_WbaData.AuthRequirement = authReq;
+
+	aci_gap_set_authentication_requirement(authReq & 0x01,	// bonding
+	                                       (authReq >> 2) & 0x01,	// MITM
+	                                       scSupport,
+	                                       0,	// keypress not supported
+	                                       SEC_PARAM_MIN_KEY_SIZE,
+	                                       SEC_PARAM_MAX_KEY_SIZE,
+	                                       0,	// use fixed pin = no
+	                                       0,	// fixed pin value
+	                                       0);	// identity address type
+
+	// Map the application key-exchange capability to the ST IO capability so the
+	// MITM models (Numeric Comparison, Passkey Entry) can be selected. With no
+	// exchange bits the configured default (No Input No Output) stays.
+	uint8_t ioExchg = g_BtAppData.SecExchg &
+			(BTAPP_SECEXCHG_KEYBOARD | BTAPP_SECEXCHG_DISPLAY | BTAPP_SECEXCHG_YESNO);
+	switch (ioExchg)
+	{
+		case BTAPP_SECEXCHG_KEYBOARD:
+			s_WbaData.IoCapability = IO_CAP_KEYBOARD_ONLY;
+			break;
+		case BTAPP_SECEXCHG_DISPLAY:
+			s_WbaData.IoCapability = IO_CAP_DISPLAY_ONLY;
+			break;
+		case (BTAPP_SECEXCHG_DISPLAY | BTAPP_SECEXCHG_YESNO):
+			s_WbaData.IoCapability = IO_CAP_DISPLAY_YES_NO;
+			break;
+		case (BTAPP_SECEXCHG_KEYBOARD | BTAPP_SECEXCHG_DISPLAY):
+		case (BTAPP_SECEXCHG_KEYBOARD | BTAPP_SECEXCHG_DISPLAY | BTAPP_SECEXCHG_YESNO):
+			s_WbaData.IoCapability = IO_CAP_KEYBOARD_DISPLAY;
+			break;
+		default:
+			break;
+	}
+
+	aci_gap_set_io_capability(s_WbaData.IoCapability);
+
+	g_BtAppData.bSecInit = true;
+
+	return true;
+}
+
 bool BtAppInit(const BtAppCfg_t *pCfg)
 {
 	if (pCfg == NULL)
@@ -1117,65 +1205,10 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 	// permissions before user services are registered.
 	g_BtAppData.SecType = pCfg->SecType;
 
-	// SMP / pairing config. Map BtGap SecType to ST auth requirement.
-	uint8_t authReq      = 0;	// bonding NO, MITM NO by default
-	uint8_t scSupport    = 0;	// LE Secure Connections off by default
-	switch (pCfg->SecType)
-	{
-		case BTGAP_SECTYPE_STATICKEY_MITM:
-		case BTGAP_SECTYPE_SIGNED_MITM:
-			authReq = 0x05;	// bonding + MITM
-			break;
-		case BTGAP_SECTYPE_LESC_MITM:
-			authReq   = 0x05;
-			scSupport = 2;	// SC-only, no legacy fallback
-			break;
-		case BTGAP_SECTYPE_STATICKEY_NO_MITM:
-		case BTGAP_SECTYPE_SIGNED_NO_MITM:
-			authReq = 0x01;	// bonding, no MITM (encryption without authentication)
-			break;
-		case BTGAP_SECTYPE_NONE:
-		default:
-			authReq = 0;
-			break;
-	}
-	s_WbaData.AuthRequirement = authReq;
-
-	aci_gap_set_authentication_requirement(authReq & 0x01,	// bonding
-	                                       (authReq >> 2) & 0x01,	// MITM
-	                                       scSupport,
-	                                       0,	// keypress not supported
-	                                       SEC_PARAM_MIN_KEY_SIZE,
-	                                       SEC_PARAM_MAX_KEY_SIZE,
-	                                       0,	// use fixed pin = no
-	                                       0,	// fixed pin value
-	                                       0);	// identity address type
-
-	// Map the application key-exchange capability to the ST IO capability so the
-	// MITM models (Numeric Comparison, Passkey Entry) can be selected. With no
-	// exchange bits the configured default (No Input No Output) stays.
-	uint8_t ioExchg = pCfg->SecExchg &
-			(BTAPP_SECEXCHG_KEYBOARD | BTAPP_SECEXCHG_DISPLAY | BTAPP_SECEXCHG_YESNO);
-	switch (ioExchg)
-	{
-		case BTAPP_SECEXCHG_KEYBOARD:
-			s_WbaData.IoCapability = IO_CAP_KEYBOARD_ONLY;
-			break;
-		case BTAPP_SECEXCHG_DISPLAY:
-			s_WbaData.IoCapability = IO_CAP_DISPLAY_ONLY;
-			break;
-		case (BTAPP_SECEXCHG_DISPLAY | BTAPP_SECEXCHG_YESNO):
-			s_WbaData.IoCapability = IO_CAP_DISPLAY_YES_NO;
-			break;
-		case (BTAPP_SECEXCHG_KEYBOARD | BTAPP_SECEXCHG_DISPLAY):
-		case (BTAPP_SECEXCHG_KEYBOARD | BTAPP_SECEXCHG_DISPLAY | BTAPP_SECEXCHG_YESNO):
-			s_WbaData.IoCapability = IO_CAP_KEYBOARD_DISPLAY;
-			break;
-		default:
-			break;
-	}
-
-	aci_gap_set_io_capability(s_WbaData.IoCapability);
+	// The pairing configuration is set by BtAppSecInit, which the application
+	// calls from BtAppInitUserData when it uses security.
+	g_BtAppData.SecExchg = pCfg->SecExchg;
+	g_BtAppData.bSecInit = false;
 
 	// Generic GAP init - sets up the generic-layer GAP/GATT service mirror.
 	BtGapCfg_t gapcfg = {
@@ -1212,6 +1245,16 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 	}
 
 	BtAppInitUserData();
+
+	// Security is started only when the application calls BtAppSecInit,
+	// normally from BtAppInitUserData above. A configuration that asks for
+	// security without starting it must not run unprotected.
+	if (pCfg->SecType != BTGAP_SECTYPE_NONE && g_BtAppData.bSecInit == false)
+	{
+		DEBUG_PRINTF("BtAppInit FAIL: SecType=%d but BtAppSecInit was not called\r\n",
+					 (int)pCfg->SecType);
+		return false;
+	}
 
 	g_BtAppData.AppDevice.bSecure = (pCfg->SecType != BTGAP_SECTYPE_NONE);
 

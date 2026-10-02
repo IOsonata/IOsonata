@@ -258,8 +258,7 @@ bool BtAppConnInit(void);
  * never calls it does not link the security module, and BtAppInit fails when
  * its SecType is other than BTGAP_SECTYPE_NONE.
  *
- * NOTE: Implemented by the port. Ports that still start security inside
- * BtAppInit do not provide it yet.
+ * NOTE: Implemented by the port.
  *
  * @return	true - security started
  */
