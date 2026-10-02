@@ -45,11 +45,9 @@ SOFTWARE.
 #include "ble_advdata.h"
 #include "ble_srv_common.h"
 #include "ble_advertising.h"
-#include "ble_conn_params.h"
 #include "ble_conn_state.h"
 #include "ble_dis.h"
 #include "nrf_ble_gatt.h"
-#include "app_timer.h"
 #include "app_util_platform.h"
 #include "app_scheduler.h"
 #include "fds.h"
@@ -66,6 +64,7 @@ SOFTWARE.
 #include "istddef.h"
 #include "coredev/system_core_clock.h"
 #include "coredev/uart.h"
+#include "coredev/timer.h"
 #include "custom_board.h"
 #include "coredev/iopincfg.h"
 #include "iopinctrl.h"
@@ -118,8 +117,6 @@ extern "C" ret_code_t nrf_sdh_enable(nrf_clock_lf_cfg_t *clock_lf_cfg);
 #define BLEAPP_OBSERVER_PRIO           1                                           /**< Application's BLE observer priority. You shouldn't need to modify this value. */
 //#define BLEAPP_CONN_CFG_TAG            1                                           /**< A tag identifying the SoftDevice BLE configuration. */
 
-#define APP_TIMER_OP_QUEUE_SIZE         10                                           /**< Size of timer operation queues. */
-
 #define SCHED_MAX_EVENT_DATA_SIZE 		20 /**< Maximum size of scheduler events. Note that scheduler BLE stack events do not contain any data, as the events are being pulled from the stack in the event handler. */
 #ifdef SVCALL_AS_NORMAL_FUNCTION
 #define SCHED_QUEUE_SIZE                20                                         /**< Maximum number of events in the scheduler queue. More is needed in case of Serialization. */
@@ -130,8 +127,8 @@ extern "C" ret_code_t nrf_sdh_enable(nrf_clock_lf_cfg_t *clock_lf_cfg);
 //#define SLAVE_LATENCY                   0                                           /**< Slave latency. */
 //#define CONN_SUP_TIMEOUT                MSEC_TO_UNITS(4000, UNIT_10_MS)             /**< Connection supervisory timeout (4 seconds), Supervision Timeout uses 10 ms units. */
 
-#define FIRST_CONN_PARAMS_UPDATE_DELAY  APP_TIMER_TICKS(5000)  /**< Time from initiating event (connect or start of notification) to first time sd_ble_gap_conn_param_update is called (5 seconds). */
-#define NEXT_CONN_PARAMS_UPDATE_DELAY   APP_TIMER_TICKS(30000) /**< Time between each call to sd_ble_gap_conn_param_update after the first call (30 seconds). */
+#define FIRST_CONN_PARAMS_UPDATE_DELAY  5		// Seconds from connect to the first connection parameter update request
+#define NEXT_CONN_PARAMS_UPDATE_DELAY   30		// Seconds between the following requests
 
 #define MAX_CONN_PARAMS_UPDATE_COUNT    3                                           /**< Number of attempts before giving up the connection parameter negotiation. */
 
@@ -534,61 +531,183 @@ void BtAppGapDeviceNameSet(const char* pDeviceName)
 }
 #endif
 
-/**@brief Function for handling an event from the Connection Parameters Module.
- *
- * @details This function will be called for all events in the Connection Parameters Module
- *          which are passed to the application.
- *
- * @note All this function does is to disconnect. This could have been done by simply setting
- *       the disconnect_on_fail config parameter, but instead we use the event handler
- *       mechanism to demonstrate its use.
- *
- * @param[in] p_evt  Event received from the Connection Parameters Module.
- */
-static void on_conn_params_evt(ble_conn_params_evt_t * p_evt)
-{
-    uint32_t err_code;
+// Connection parameter negotiation of a peripheral link. When the parameters
+// set by the central are outside the preferred ones (PPCP), an update is
+// requested FIRST_CONN_PARAMS_UPDATE_DELAY after the connection, then every
+// NEXT_CONN_PARAMS_UPDATE_DELAY, MAX_CONN_PARAMS_UPDATE_COUNT times at most.
+// The link is dropped when the central still does not follow. The delays
+// are counted by the 1 s trigger of the port timer.
+#if NRF_SDH_BLE_PERIPHERAL_LINK_COUNT > 0
+#define BTAPP_CONNPARAM_MAX		NRF_SDH_BLE_PERIPHERAL_LINK_COUNT
+#else
+#define BTAPP_CONNPARAM_MAX		1
+#endif
 
-    if (p_evt->evt_type == BLE_CONN_PARAMS_EVT_FAILED)
-    {
-        // The event names the link whose negotiation failed. Reading the active
-        // handle instead dropped whichever link happened to be current.
-        err_code = sd_ble_gap_disconnect(p_evt->conn_handle, BLE_HCI_CONN_INTERVAL_UNACCEPTABLE);
-        //APP_ERROR_CHECK(err_code);
-    }
+typedef struct {
+	uint16_t ConnHdl;		// BLE_CONN_HANDLE_INVALID when the slot is free
+	uint8_t Delay;			// Seconds left before the next request, 0 when not counting
+	uint8_t Count;			// Number of requests sent
+} BtAppConnParam_t;
+
+static BtAppConnParam_t s_BtAppConnParam[BTAPP_CONNPARAM_MAX];
+
+static BtAppConnParam_t *BtAppConnParamFind(uint16_t ConnHdl)
+{
+	for (int i = 0; i < BTAPP_CONNPARAM_MAX; i++)
+	{
+		if (s_BtAppConnParam[i].ConnHdl == ConnHdl)
+		{
+			return &s_BtAppConnParam[i];
+		}
+	}
+
+	return nullptr;
 }
 
-
-/**@brief Function for handling errors from the Connection Parameters module.
- *
- * @param[in] nrf_error  Error code containing information about what went wrong.
- */
-static void conn_params_error_handler(uint32_t nrf_error)
+// Compare the parameters of the link to the preferred ones
+static bool BtAppConnParamOk(const ble_gap_conn_params_t *pParam)
 {
-    APP_ERROR_HANDLER(nrf_error);
+	ble_gap_conn_params_t pref;
+
+	if (sd_ble_gap_ppcp_get(&pref) != NRF_SUCCESS)
+	{
+		// Nothing to compare to
+		return true;
+	}
+
+	// max_conn_interval of the event is the interval set by the central
+	if (pParam->max_conn_interval < pref.min_conn_interval ||
+		pParam->max_conn_interval > pref.max_conn_interval)
+	{
+		return false;
+	}
+
+	uint32_t dev = NRF_BLE_CONN_PARAMS_MAX_SLAVE_LATENCY_DEVIATION;
+	uint32_t hi = pref.slave_latency + dev;
+	uint32_t lo = pref.slave_latency - min(dev, (uint32_t)pref.slave_latency);
+
+	if (pParam->slave_latency < lo || pParam->slave_latency > hi)
+	{
+		return false;
+	}
+
+	dev = NRF_BLE_CONN_PARAMS_MAX_SUPERVISION_TIMEOUT_DEVIATION;
+	hi = pref.conn_sup_timeout + dev;
+	lo = pref.conn_sup_timeout - min(dev, (uint32_t)pref.conn_sup_timeout);
+
+	if (pParam->conn_sup_timeout < lo || pParam->conn_sup_timeout > hi)
+	{
+		return false;
+	}
+
+	return true;
 }
 
-
-/**@brief Function for initializing the Connection Parameters module.
- */
-static void conn_params_init(void)
+// Start or end the negotiation according to the parameters of the link
+static void BtAppConnParamCheck(BtAppConnParam_t *pSlot, const ble_gap_conn_params_t *pParam)
 {
-    uint32_t               err_code;
-    ble_conn_params_init_t cp_init;
+	if (BtAppConnParamOk(pParam))
+	{
+		pSlot->Delay = 0;
+		pSlot->Count = 0;
 
-    memset(&cp_init, 0, sizeof(cp_init));
+		return;
+	}
 
-    cp_init.p_conn_params                  = NULL;
-    cp_init.first_conn_params_update_delay = FIRST_CONN_PARAMS_UPDATE_DELAY;
-    cp_init.next_conn_params_update_delay  = NEXT_CONN_PARAMS_UPDATE_DELAY;
-    cp_init.max_conn_params_update_count   = MAX_CONN_PARAMS_UPDATE_COUNT;
-    cp_init.start_on_notify_cccd_handle    = BLE_GATT_HANDLE_INVALID;
-    cp_init.disconnect_on_fail             = false;
-    cp_init.evt_handler                    = on_conn_params_evt;
-    cp_init.error_handler                  = conn_params_error_handler;
+	pSlot->Delay = pSlot->Count == 0 ? FIRST_CONN_PARAMS_UPDATE_DELAY :
+									   NEXT_CONN_PARAMS_UPDATE_DELAY;
+}
 
-    err_code = ble_conn_params_init(&cp_init);
-    APP_ERROR_CHECK(err_code);
+static void BtAppConnParamEvt(ble_evt_t const *pEvt)
+{
+	ble_gap_evt_t const *pGapEvt = &pEvt->evt.gap_evt;
+	BtAppConnParam_t *pSlot;
+
+	switch (pEvt->header.evt_id)
+	{
+		case BLE_GAP_EVT_CONNECTED:
+			if (pGapEvt->params.connected.role != BLE_GAP_ROLE_PERIPH)
+			{
+				break;
+			}
+			pSlot = BtAppConnParamFind(BLE_CONN_HANDLE_INVALID);
+			if (pSlot != nullptr)
+			{
+				pSlot->ConnHdl = pGapEvt->conn_handle;
+				pSlot->Count = 0;
+				BtAppConnParamCheck(pSlot, &pGapEvt->params.connected.conn_params);
+			}
+			break;
+
+		case BLE_GAP_EVT_DISCONNECTED:
+			pSlot = BtAppConnParamFind(pGapEvt->conn_handle);
+			if (pSlot != nullptr)
+			{
+				pSlot->Delay = 0;
+				pSlot->ConnHdl = BLE_CONN_HANDLE_INVALID;
+			}
+			break;
+
+		case BLE_GAP_EVT_CONN_PARAM_UPDATE:
+			pSlot = BtAppConnParamFind(pGapEvt->conn_handle);
+			if (pSlot != nullptr)
+			{
+				BtAppConnParamCheck(pSlot, &pGapEvt->params.conn_param_update.conn_params);
+			}
+			break;
+
+		default:
+			break;
+	}
+}
+
+// Called every second by the port timer
+static void BtAppConnParamTick(void)
+{
+	for (int i = 0; i < BTAPP_CONNPARAM_MAX; i++)
+	{
+		BtAppConnParam_t *pSlot = &s_BtAppConnParam[i];
+
+		if (pSlot->ConnHdl == BLE_CONN_HANDLE_INVALID || pSlot->Delay == 0)
+		{
+			continue;
+		}
+
+		pSlot->Delay--;
+		if (pSlot->Delay > 0)
+		{
+			continue;
+		}
+
+		if (pSlot->Count < MAX_CONN_PARAMS_UPDATE_COUNT)
+		{
+			ble_gap_conn_params_t pref;
+
+			// The answer comes as BLE_GAP_EVT_CONN_PARAM_UPDATE, which
+			// checks the new parameters and counts the next delay.
+			if (sd_ble_gap_ppcp_get(&pref) == NRF_SUCCESS &&
+				sd_ble_gap_conn_param_update(pSlot->ConnHdl, &pref) == NRF_SUCCESS)
+			{
+				pSlot->Count++;
+			}
+		}
+		else
+		{
+			// The central did not follow, drop the link
+			pSlot->Count = 0;
+			(void)sd_ble_gap_disconnect(pSlot->ConnHdl, BLE_HCI_CONN_INTERVAL_UNACCEPTABLE);
+		}
+	}
+}
+
+static void BtAppConnParamInit(void)
+{
+	for (int i = 0; i < BTAPP_CONNPARAM_MAX; i++)
+	{
+		s_BtAppConnParam[i].ConnHdl = BLE_CONN_HANDLE_INVALID;
+		s_BtAppConnParam[i].Delay = 0;
+		s_BtAppConnParam[i].Count = 0;
+	}
 }
 
 // Peer Manager event handling, the SMP user interaction bridge and the LESC
@@ -609,6 +728,8 @@ static void BtAppNrf52ConnEvt(ble_evt_t const * p_ble_evt, void *p_context)
 
 	// GATT module first, as when it was an observer of its own
 	nrf_ble_gatt_on_ble_evt(p_ble_evt, &s_Gatt);
+
+	BtAppConnParamEvt(p_ble_evt);
 
 	ble_gap_evt_t const * p_gap_evt = &p_ble_evt->evt.gap_evt;
 	uint16_t role = ble_conn_state_role(p_ble_evt->evt.gap_evt.conn_handle);
@@ -1216,36 +1337,52 @@ uint32_t GetLFAccuracy(uint32_t AccPpm)
  */
 static void BtAppSDDispatch(void);
 
-APP_TIMER_DEF(s_BtAppPeriodicTimerId);
+static void BtAppNrf52TimerHandler(TimerDev_t * const pTimer, uint32_t Evt);
 
-static void BtAppPeriodicTimerHandler(void *p_context)
+const static TimerCfg_t s_BtAppNrf52TimerCfg = {
+	.DevNo = 1,
+	.ClkSrc = TIMER_CLKSRC_DEFAULT,
+	.Freq = 0,			// 0 => Default frequency
+	.IntPrio = 6,
+	.EvtHandler = BtAppNrf52TimerHandler
+};
+
+// Port timer: millisecond clock of the GATT transaction timeout, 1 s count of
+// the connection parameter negotiation and 1 s wakeup of the main loop. Only
+// a link uses it. It is a function static so that the object is constructed,
+// and the timer driver linked, only with connection support.
+static Timer &BtAppNrf52Timer(void)
 {
-	(void)p_context;
-	// Wakeup only. The main loop runs the timeout checks after the wait returns.
+	static Timer s_Timer;
+
+	return s_Timer;
+}
+
+static void BtAppNrf52TimerHandler(TimerDev_t * const pTimer, uint32_t Evt)
+{
+	(void)pTimer;
+
+	// The interrupt is also the wakeup of the main loop, which runs the
+	// timeout checks after the wait returns, so that a fully silent link
+	// still reaches them.
+	if (Evt & TIMER_EVT_TRIGGER(0))
+	{
+		BtAppConnParamTick();
+	}
+}
+
+static void BtAppNrf52TimerStart(void)
+{
+	BtAppNrf52Timer().Init(s_BtAppNrf52TimerCfg);
+	BtAppNrf52Timer().EnableTimerTrigger(0, 1000UL, TIMER_TRIG_TYPE_CONTINUOUS, nullptr);
 }
 
 // Millisecond clock for the generic SMP/GATT transaction timeouts, overriding
-// the weak BtSmpMsTick/BtGattMsTick defaults. Sourced from the SDK app_timer
-// running count (the RTC is initialised and driven by the SDK/SoftDevice), so
-// this port does not own a timer. app_timer_cnt_get() returns 24-bit RTC ticks
-// at APP_TIMER_CLOCK_FREQ / (APP_TIMER_CONFIG_RTC_FREQUENCY + 1) Hz. Declared in
-// bt_smp.h / bt_gatt.h, so no linkage specifier is needed here.
+// the weak BtSmpMsTick/BtGattMsTick defaults. Declared in bt_smp.h /
+// bt_gatt.h, so no linkage specifier is needed here.
 uint32_t BtSmpMsTick(void)
 {
-	// app_timer_cnt_get() is a 24-bit RTC count that wraps about every 512 s.
-	// The generic timeout arithmetic assumes a full 32-bit millisecond wrap, so
-	// extend the counter in software: accumulate wrap-aware 24-bit deltas into
-	// a 64-bit tick total. Correct as long as this is called at least once per
-	// 512 s, which the 1 s periodic wakeup timer guarantees while the loop runs.
-	static uint32_t lastCnt = 0;
-	static uint64_t totalTicks = 0;
-
-	uint32_t cnt = app_timer_cnt_get();
-	totalTicks += (cnt - lastCnt) & 0xFFFFFF;
-	lastCnt = cnt;
-
-	return (uint32_t)((totalTicks *
-					   (APP_TIMER_CONFIG_RTC_FREQUENCY + 1) * 1000) / APP_TIMER_CLOCK_FREQ);
+	return BtAppNrf52Timer().mSecond();
 }
 
 uint32_t BtGattMsTick(void)
@@ -1324,7 +1461,11 @@ static bool BtAppNrf52ConnStart(const BtAppCfg_t *pCfg)
 		BtGapSetDevName(pCfg->pDevName);
 	}
 
-	conn_params_init();
+	BtAppConnParamInit();
+
+	// The timer is started here, with the SoftDevice enabled, so that the
+	// low frequency clock is the one the SoftDevice started.
+	BtAppNrf52TimerStart();
 
 	return true;
 }
@@ -1432,19 +1573,6 @@ bool BtAppInit(const BtAppCfg_t *pCfg)//, bool bEraseBond)
     	g_BtAppData.AppDevice.Conn.MaxMtu = pCfg->MaxMtu;
     else
     	g_BtAppData.AppDevice.Conn.MaxMtu = NRF_BLE_MAX_MTU_SIZE;
-
-    app_timer_init();
-
-	// 1 s repeating wakeup so a fully silent link still reaches the SMP/GATT
-	// transaction timeout checks in the main loop (sd_app_evt_wait needs an
-	// event to return). The handler body is empty: the RTC interrupt itself
-	// is the wakeup. This also gives BtSmpMsTick the call cadence its 24-bit
-	// counter extension needs.
-	err_code = app_timer_create(&s_BtAppPeriodicTimerId, APP_TIMER_MODE_REPEATED,
-								BtAppPeriodicTimerHandler);
-	APP_ERROR_CHECK(err_code);
-	err_code = app_timer_start(s_BtAppPeriodicTimerId, APP_TIMER_TICKS(1000), NULL);
-	APP_ERROR_CHECK(err_code);
 
 	// SDK scheduler, for applications that post events to it. The queue is
 	// described by g_BtAppSchedCfg. An application that does not use the
@@ -1615,9 +1743,9 @@ void BtAppRun()
 		AppEvtHandlerExec();
 
 		// Drive the generic indication transaction timeout (Core Vol 3 Part F
-		// 3.3.3). Cheap no-op when nothing is pending. NOTE: this loop wakes on
-		// events, so a link that goes fully silent needs a periodic wake to also
-		// call it - hook it into an existing SDK app_timer handler if required.
+		// 3.3.3). Cheap no-op when nothing is pending. This loop wakes on
+		// events, the 1 s trigger of the port timer is the wakeup of a link
+		// that goes fully silent.
 		// The pairing timeout (Core Vol 3 Part H 3.4) is not driven here: the
 		// SoftDevice runs SMP and its timer on this port. The generic SMP link
 		// table is never populated, so BtSmpTimeoutCheck had nothing to check
