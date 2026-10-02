@@ -88,6 +88,10 @@ typedef struct __Usbd_Hid_Config {
 	uint8_t InterfaceString;
 	DevIntrfEvtHandler_t EvtCB;	//!< Return RX length to consume; less retains the report
 	void *pContext;
+	// Separate caller-owned, 4-byte aligned slots, each at least
+	// USB_INT_INTRF_PKT_BLKSIZE bytes; valid for the interface lifetime.
+	uint8_t *pRxBuffer;
+	uint8_t *pTxBuffer;
 } UsbdHidCfg_t;
 
 #pragma pack(pop)
@@ -164,3 +168,4 @@ private:
 /** @} End of group USBD */
 
 #endif	// __USBD_HID_H__
+

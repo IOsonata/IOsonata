@@ -97,6 +97,8 @@ typedef struct __Int_Diag {
 static_assert(sizeof(IntDiag_t) == 50U,
 	"interrupt diagnostic wire format changed");
 
+alignas(4) static uint8_t s_IntRxBuffer[USB_INT_INTRF_PKT_BLKSIZE];
+alignas(4) static uint8_t s_IntTxBuffer[USB_INT_INTRF_PKT_BLKSIZE];
 static UsbIntIntrf_t s_Int;
 static UsbDevIntrf_t s_IntData;
 static bool s_Configured;
@@ -406,6 +408,8 @@ int main()
 	intCfg.DevNo = USB_DEVNO;
 	intCfg.EpNo = s_EpNo;
 	intCfg.EvtCB = IntEvent;
+	intCfg.pRxBuffer = s_IntRxBuffer;
+	intCfg.pTxBuffer = s_IntTxBuffer;
 	if (!UsbIntIntrfInit(&s_Int, &s_IntData, &intCfg))
 	{
 		return -1;
@@ -419,3 +423,4 @@ int main()
 
 	return 0;
 }
+

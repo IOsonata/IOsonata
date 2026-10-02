@@ -158,8 +158,8 @@ bool UsbIntIntrfInit(UsbIntIntrf_t *pIntrf, UsbDevIntrf_t *pData,
 	cfg.bBlocking = true;
 	cfg.Mode = USB_INTRF_MODE_DIRECT;
 	cfg.BufferSize = USB_INT_INTRF_MAX_MPS;
-	cfg.pRxBuffer = reinterpret_cast<uint8_t *>(pIntrf->RxBuffer);
-	cfg.pTxBuffer = reinterpret_cast<uint8_t *>(pIntrf->TxBuffer);
+	cfg.pRxBuffer = pCfg->pRxBuffer;
+	cfg.pTxBuffer = pCfg->pTxBuffer;
 	cfg.EvtCB = UsbIntIntrfDataEvent;
 
 	if (!UsbIntrfInit(pIntrf->pData, &cfg))
@@ -226,5 +226,6 @@ void UsbIntIntrfReset(UsbIntIntrf_t *pIntrf)
 	pIntrf->RxEmptyCnt = 0U;
 	pIntrf->TxEmptyCnt = 0U;
 }
+
 
 

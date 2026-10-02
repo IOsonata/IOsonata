@@ -154,10 +154,15 @@ static void ResetFake(void)
 	s_LastTxResult = USB_CTRLR_XFER_SUCCESS;
 }
 
+alignas(4) static uint8_t s_RxSlot[USB_INT_INTRF_PKT_BLKSIZE];
+alignas(4) static uint8_t s_TxSlot[USB_INT_INTRF_PKT_BLKSIZE];
+
 static UsbIntIntrfCfg_t MakeCfg(void)
 {
 	UsbIntIntrfCfg_t cfg = {};
 	cfg.DevNo = 0;
+	cfg.pRxBuffer = s_RxSlot;
+	cfg.pTxBuffer = s_TxSlot;
 	cfg.EpNo = 3U;
 	cfg.EvtCB = PacketEvent;
 	return cfg;
@@ -198,8 +203,8 @@ static void TestLifecycleAndValidation(void)
 	CHECK(UsbIntIntrfInit(&intrf, &intrfData, &cfg));
 	CHECK(intrf.pData->Mode == USB_INTRF_MODE_DIRECT);
 	CHECK(intrf.pData->Mode == USB_INTRF_MODE_DIRECT);
-	CHECK(intrf.pData->pRxDirectBuffer == reinterpret_cast<UsbPkt_t *>(intrf.RxBuffer));
-	CHECK(intrf.pData->pTxDirectBuffer == reinterpret_cast<UsbPkt_t *>(intrf.TxBuffer));
+	CHECK(intrf.pData->pRxDirectBuffer == reinterpret_cast<UsbPkt_t *>(cfg.pRxBuffer));
+	CHECK(intrf.pData->pTxDirectBuffer == reinterpret_cast<UsbPkt_t *>(cfg.pTxBuffer));
 	CHECK(s_OutBlocking);
 	CHECK(!UsbIntIntrfOpen(&intrf, 0U, 1U));
 	CHECK(!UsbIntIntrfOpen(&intrf, 65U, 1U));
@@ -432,8 +437,56 @@ static void TestCallbackRetainsRx(void)
 	CHECK((data.pRxDirectBuffer->Hdr.Flags & USB_INTRF_SLOT_READY) == 0U);
 }
 
+// Caller slots can contain old data; Init must clear ownership, and full
+// packets must stay within the separately allocated storage.
+static void TestCallerStorage(void)
+{
+	ResetFake();
+	struct Slots {
+		uint32_t Before;
+		uint32_t Rx[USB_INT_INTRF_PACKET_WORDS];
+		uint32_t Between;
+		uint32_t Tx[USB_INT_INTRF_PACKET_WORDS];
+		uint32_t After;
+	} slots;
+	memset(&slots, 0xA5, sizeof(slots));
+	UsbIntIntrf_t intrf = {};
+	UsbDevIntrf_t data = {};
+	auto cfg = MakeCfg();
+	cfg.pRxBuffer = reinterpret_cast<uint8_t *>(slots.Rx);
+	cfg.pTxBuffer = reinterpret_cast<uint8_t *>(slots.Tx);
+	CHECK(UsbIntIntrfInit(&intrf, &data, &cfg));
+	CHECK(data.pRxDirectBuffer->Hdr.Flags == 0U);
+	CHECK(data.pTxDirectBuffer->Hdr.Flags == 0U);
+	CHECK(UsbIntIntrfOpen(&intrf, USB_INT_INTRF_FS_MPS, 1U));
+	uint8_t packet[USB_INT_INTRF_FS_MPS];
+	memset(packet, 0x3C, sizeof(packet));
+	CHECK(DeviceIntrfTx(&data.DevIntrf, 0, packet, sizeof(packet)) == (int)sizeof(packet));
+	CHECK(s_InBuffer == data.pTxDirectBuffer->Data);
+	CHECK(memcmp(s_InBuffer, packet, sizeof(packet)) == 0);
+	Receive(packet, sizeof(packet));
+	CHECK(s_LastRxPointer == data.pRxDirectBuffer->Data);
+	CHECK(memcmp(s_LastRx, packet, sizeof(packet)) == 0);
+	CompleteIn();
+	UsbIntIntrfReset(&intrf);
+	CHECK(slots.Before == 0xA5A5A5A5U);
+	CHECK(slots.Between == 0xA5A5A5A5U);
+	CHECK(slots.After == 0xA5A5A5A5U);
+
+	cfg.pRxBuffer = nullptr;
+	CHECK(!UsbIntIntrfInit(&intrf, &data, &cfg));
+	cfg.pRxBuffer = reinterpret_cast<uint8_t *>(slots.Rx) + 1;
+	CHECK(!UsbIntIntrfInit(&intrf, &data, &cfg));
+	cfg.pRxBuffer = reinterpret_cast<uint8_t *>(slots.Rx);
+	cfg.pTxBuffer = nullptr;
+	CHECK(!UsbIntIntrfInit(&intrf, &data, &cfg));
+	cfg.pTxBuffer = reinterpret_cast<uint8_t *>(slots.Tx) + 1;
+	CHECK(!UsbIntIntrfInit(&intrf, &data, &cfg));
+}
+
 int main(void)
 {
+	TestCallerStorage();
 	TestCallbackRetainsRx();
 	TestOpenRollback();
 	TestEventDelivery();

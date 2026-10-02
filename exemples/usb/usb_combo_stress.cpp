@@ -125,6 +125,9 @@ static int HidEvent(DevIntrf_t *, DEVINTRF_EVT event,
 	return Length;
 }
 
+alignas(4) static uint8_t s_HidRxBuffer[USB_INT_INTRF_PKT_BLKSIZE];
+alignas(4) static uint8_t s_HidTxBuffer[USB_INT_INTRF_PKT_BLKSIZE];
+
 static const UsbdHidCfg_t s_HidCfg = {
 	.DevNo = USB_DEVNO,
 	.pReportDesc = s_HidReportDesc,
@@ -140,6 +143,8 @@ static const UsbdHidCfg_t s_HidCfg = {
 	.InterfaceString = COMBO_STR_INTERFACE,
 	.EvtCB = HidEvent,
 	.pContext = nullptr,
+	.pRxBuffer = s_HidRxBuffer,
+	.pTxBuffer = s_HidTxBuffer,
 };
 
 /* Raw interrupt ----------------------------------------------------------- */
@@ -159,6 +164,8 @@ typedef struct __Combo_Int_Function_Descriptor {
 } ComboIntFunctionDesc_t;
 #pragma pack(pop)
 
+alignas(4) static uint8_t s_IntRxBuffer[USB_INT_INTRF_PKT_BLKSIZE];
+alignas(4) static uint8_t s_IntTxBuffer[USB_INT_INTRF_PKT_BLKSIZE];
 static UsbIntIntrf_t s_Int;
 static UsbDevIntrf_t s_IntData;
 // Small INT and ISO function state in one block: one address literal serves
@@ -304,6 +311,8 @@ static bool IntInit(void)
 	cfg.DevNo = USB_DEVNO;
 	cfg.EpNo = s_Fn.IntEpNo;
 	cfg.EvtCB = IntEvent;
+	cfg.pRxBuffer = s_IntRxBuffer;
+	cfg.pTxBuffer = s_IntTxBuffer;
 	if (!UsbIntIntrfInit(&s_Int, &s_IntData, &cfg))
 	{
 		return false;
@@ -721,3 +730,4 @@ int main()
 
 	return 0;
 }
+

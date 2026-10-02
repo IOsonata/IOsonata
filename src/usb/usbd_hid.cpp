@@ -310,6 +310,8 @@ static bool UsbdHidInitInternal(UsbdHidDev_t *pHid,
 {
 	if (UsbGetCfg(pCfg->DevNo) == nullptr || pCfg->pReportDesc == nullptr ||
 		pCfg->ReportDescLength == 0U ||
+		pCfg->pRxBuffer == nullptr || pCfg->pTxBuffer == nullptr ||
+		(((uintptr_t)pCfg->pRxBuffer | (uintptr_t)pCfg->pTxBuffer) & 3U) != 0U ||
 		pCfg->SubClass > USB_HID_SUBCLASS_BOOT ||
 		(pCfg->SubClass == USB_HID_SUBCLASS_NONE &&
 		 pCfg->Protocol != USB_HID_PROT_NONE) ||
@@ -374,6 +376,8 @@ static bool UsbdHidInitInternal(UsbdHidDev_t *pHid,
 	intCfg.EpNo = pHid->EpNo;
 	intCfg.EvtCB = pCfg->EvtCB;
 	intCfg.pContext = pHid;
+	intCfg.pRxBuffer = pCfg->pRxBuffer;
+	intCfg.pTxBuffer = pCfg->pTxBuffer;
 	if (!UsbIntIntrfInit(pHid->pIntIntrf, pData, &intCfg))
 	{
 		return false;

@@ -147,6 +147,9 @@ static bool HidReportRequest(const UsbSetupData_t *pSetup,
 	return true;
 }
 
+alignas(4) static uint8_t s_HidRxBuffer[USB_INT_INTRF_PKT_BLKSIZE];
+alignas(4) static uint8_t s_HidTxBuffer[USB_INT_INTRF_PKT_BLKSIZE];
+
 static const UsbdHidCfg_t s_HidCfg = {
 	.DevNo = USB_DEVNO,
 	.pReportDesc = s_ReportDesc,
@@ -162,6 +165,8 @@ static const UsbdHidCfg_t s_HidCfg = {
 	.InterfaceString = HID_STR_INTERFACE,
 	.EvtCB = HidEvent,
 	.pContext = nullptr,
+	.pRxBuffer = s_HidRxBuffer,
+	.pTxBuffer = s_HidTxBuffer,
 };
 
 static const UsbCfg_t s_UsbCfg = {
@@ -198,3 +203,4 @@ int main()
 	}
 	return 0;
 }
+
