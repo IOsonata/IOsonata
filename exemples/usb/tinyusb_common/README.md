@@ -1,55 +1,29 @@
-# TinyUSB CDC performance comparison
+# TinyUSB performance comparison
 
-These examples provide a native TinyUSB baseline for the existing IOsonata USB
-CDC benchmarks on nRF52840.
+These nRF52840 examples use TinyUSB for USB and the same IOsonata MCU
+platform library as the corresponding IOsonata examples.
 
-The comparison intentionally keeps the hardware and application shape close to
-the IOsonata examples:
+| Benchmark | IOsonata source | TinyUSB source | Target project |
+|---|---|---|---|
+| PRBS TX | `usb_cdc_prbs_tx.cpp` | `tinyusb_cdc_prbs_tx/main.cpp` | TinyUsbCdcPrbsTx/ioc |
+| Loopback | `usb_cdc_loopback.cpp` | `tinyusb_cdc_loopback/main.cpp` | TinyUsbCdcLoopback/ioc |
+| Dual CDC | `usb_dual_cdc_stress.cpp` | `tinyusb_dual_cdc_stress/main.cpp` | TinyUsbDualCdcStress/ioc |
+| Composite | `usb_combo_stress.cpp` | `tinyusb_combo_stress/main.cpp` | TinyUsbComboStress/ioc |
 
-| Benchmark | IOsonata example | TinyUSB example |
-| --- | --- | --- |
-| PRBS TX | `usb_cdc_prbs_tx.cpp` | `tinyusb_cdc_prbs_tx/main.cpp` |
-| Loopback | `usb_cdc_loopback.cpp` | `tinyusb_cdc_loopback/main.cpp` |
+Sources are relative to [exemples/usb](../).
+Target projects are below
+[ARM/Nordic/nRF52/nRF52840/exemples](../../../ARM/Nordic/nRF52/nRF52840/exemples).
 
-Both implementations use:
+## Build in IOcomposer
 
-- nRF52840 full-speed USB;
-- CDC notification endpoint 1 IN;
-- CDC data endpoint 2 OUT/IN;
-- 64-byte bulk maximum packet size;
-- USB interrupt priority 6;
-- VID `0x1209`;
-- the same PID as the matching IOsonata benchmark.
+Open the chosen `ioc/` project in IOcomposer and select the same build
+configuration used for the IOsonata comparison image. Dual CDC and composite
+projects use the managed builder. The single-CDC projects also contain
+Makefiles with `release` and `debug` targets; do not assume every example
+has a checked-in Makefile.
 
-The FIFO payload capacities are matched to the IOsonata examples:
-
-| Benchmark | RX FIFO | TX FIFO |
-| --- | ---: | ---: |
-| PRBS TX | 256 bytes | 2048 bytes |
-| Loopback | 256 bytes | 1024 bytes |
-
-`CFIFO_MEMSIZE(n)` includes the CFifo header in addition to `n` bytes of byte-mode
-payload storage, so these values compare payload queue capacity rather than raw
-allocation size.
-
-## Eclipse projects
-
-Import these project directories into Eclipse Embedded CDT:
-
-```text
-ARM/Nordic/nRF52/nRF52840/exemples/TinyUsbCdcPrbsTx/ioc
-ARM/Nordic/nRF52/nRF52840/exemples/TinyUsbCdcLoopback/ioc
-```
-
-Each directory contains `.project`, `.cproject`, `Makefile` and `.gitignore`.
-The Eclipse project links the benchmark source and the required TinyUSB source
-files into its `src` folder. The default Eclipse build target is `release`.
-`debug` is also available as a Make Target.
-
-## TinyUSB version
-
-Use TinyUSB 0.21.0 for a reproducible comparison. Place it in the external
-dependency directory beside IOsonata:
+Use TinyUSB tag `0.21.0` for the documented baseline, and record the actual
+revision if using a different checkout. Place dependencies beside IOsonata:
 
 ```text
 <workspace>/
@@ -59,46 +33,87 @@ dependency directory beside IOsonata:
         nrfx/
 ```
 
-TinyUSB repository:
+TinyUSB source: https://github.com/hathach/tinyusb
 
-```text
-https://github.com/hathach/tinyusb.git
-```
+The projects link the selected `IOsonata_nRF52840` platform library and use
+the IOsonata linker script and CMSIS headers. TinyUSB supplies the device core,
+class sources and Nordic DCD. The composite example additionally uses an
+application ISO class driver for EP8 alternate settings and TinyUSB's Vendor
+class for raw Interrupt traffic; it is not an unmodified upstream composite
+demo.
 
-Checkout tag `0.21.0`.
+Do not compile the IOsonata USB controller source separately into these
+applications. Their USB interrupt handler belongs to TinyUSB.
 
-Each benchmark project compiles the example `main.cpp` plus:
+## Workload and storage
 
-```text
-external/tinyusb/src/tusb.c
-external/tinyusb/src/common/tusb_fifo.c
-external/tinyusb/src/device/usbd.c
-external/tinyusb/src/device/usbd_control.c
-external/tinyusb/src/class/cdc/cdc_device.c
-external/tinyusb/src/portable/nordic/nrf5x/dcd_nrf5x.c
-```
+Both sides use nRF52840 full-speed USB and 64-byte CDC bulk packets. The
+matching examples use the same VID/PID and host workload. The composite
+firmware deliberately shares the IOsonata product identity so the same host
+runner can select it without changed filters.
 
-The Makefile adds the TinyUSB and nrfx include directories and reuses the
-IOsonata nRF52840 linker script, CMSIS headers and `IOsonata_nRF52840` library.
-Do not compile the IOsonata USB controller source separately into the TinyUSB
-benchmark application. The application provides a strong `USBD_IRQHandler()`
-that forwards the interrupt to TinyUSB.
+The single-port comparisons have matched CDC payload queue capacities:
 
-## Running the comparison
+| Benchmark | RX payload queue | TX payload queue |
+|---|---:|---:|
+| PRBS TX | 256 bytes | 2048 bytes |
+| Loopback | 256 bytes | 1024 bytes |
 
-PRBS TX uses the same host PRBS receiver as the IOsonata benchmark. Run the
-same receiver, port and reporting setup for both firmware images.
+In the dual-CDC and composite examples, TinyUSB's `CFG_TUD_CDC_TX_BUFSIZE`
+is 2048 bytes for each CDC instance. IOsonata uses 1024 bytes for loopback TX
+and 2048 bytes for PRBS TX. Both use 256-byte CDC RX payload capacities.
+This difference must accompany memory comparisons; the composite queues are
+not byte-for-byte matched.
 
-Loopback uses:
+`CFIFO_MEMSIZE(n)` adds CFifo metadata to the payload capacity. IOsonata's
+packet RX storage also includes packet headers. Compare capacities separately
+from raw allocation sizes.
 
-```sh
+Both composite configuration descriptors are 398 bytes. TinyUSB keeps its
+fixed descriptor in const storage; IOsonata builds the selected composition
+in a 768-byte nRF52840 configuration buffer. That buffer supports runtime
+composition and is not the whole USB stack. Device, string and HID report
+descriptors have separate storage.
+
+## Run the same host test
+
+Install the dependencies listed in the
+[USB User Guide](../../../docs/usb-user-guide.md). Rediscover serial paths
+after flashing each image.
+
+Single CDC loopback:
+
+```bash
 python3 Python/usb_cdc_loopback.py --port /dev/cu.usbmodemXXXX --duration 60
 ```
 
-The current host script may warn that the IOsonata loopback banner was not
-seen when TinyUSB firmware is loaded. The warning does not stop the throughput
-or integrity test.
+Dual CDC:
 
-Measure Release against Release, using the same board, cable, host port and
-host command. Do not compare a Debug TinyUSB build against a Release IOsonata
-build.
+```bash
+python3 Python/usb_dual_cdc_stress.py \
+  --loop-port /dev/cu.usbmodemXXXX01 \
+  --prbs-port /dev/cu.usbmodemXXXX03 --duration 2000
+```
+
+Composite:
+
+```bash
+python3 Python/usb_combo_stress.py \
+  --loop-port /dev/cu.usbmodemXXXX01 \
+  --prbs-port /dev/cu.usbmodemXXXX03 --duration 2000
+```
+
+PRBS-only firmware uses the same PRBS receiver as the IOsonata version.
+A missing IOsonata banner warning from the single-CDC loopback runner does
+not by itself indicate a data-integrity failure.
+
+Keep the board, cable, host USB port, host software, duration and command
+options fixed. Use the same compiler, optimization and selected IOsonata
+platform library. Record firmware and TinyUSB revisions, clean-build sizes,
+complete results and any host scheduling diagnostics. Do not compare Debug
+against Release.
+
+For memory, report flash as `text + data` and static RAM as `data + bss`.
+Report whole-image costs, queue capacities and application buffers; ELF size
+alone does not isolate a USB-stack cost. Repeat hardware runs before drawing
+a performance conclusion from a single throughput result.

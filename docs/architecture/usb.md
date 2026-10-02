@@ -346,7 +346,7 @@ test procedure.
 
 `UsbdHid` follows the same device-class pattern as `UsbdBulk` and
 `BtHciUsb`: it registers its class instance, receives allocated interface and
-endpoint numbers, builds and registers its static descriptor fragments, and
+endpoint numbers, registers its descriptor template and builder, and
 opens its endpoints when configuration 1 becomes active.
 
 ```text
@@ -609,6 +609,18 @@ completion releases that data. The nRF52 regular DMA queue holds its entry until
 ENDEP, including any inline alignment scratch. Controller DMA completion and
 TX FIFO completion remain separate ownership events.
 
+The default configuration buffer is 768 bytes on nRF52840 and 1024 bytes in
+the generic fallback. It stores the assembled configuration, including
+alternate settings, independently of device, string and HID report bodies.
+Override `USB_CONFIG_DESC_MAXLEN` in the MCU-library build when a custom
+composition needs more storage; an application-only define does not resize it.
+
+CDC, HID, MSC and HCI USB classes use out-of-line constructors so global
+objects can reside in BSS and be initialized during normal C++ startup.
+Moving bytes from initialized data to BSS reduces the flash initialization
+image; it does not by itself reduce total static RAM. Preserve C++ constructor
+execution in custom startup code.
+
 ## Current device lifecycle
 
 The application view is:
@@ -633,8 +645,8 @@ Internally:
 3. Data classes initialize their inherited `UsbIntrf` with the allocated
    endpoint number, static buffers and CFifos.
 4. `UsbIntrfInit()` registers the endpoint buffers and callback.
-5. Each class builds and registers its static full/high-speed configuration
-   descriptor fragments with the generic layer.
+5. Each class registers a configuration fragment or speed-aware builder with
+   the generic layer.
 6. `UsbEnable()` assembles and validates the complete configuration descriptor
    before it connects the controller.
 7. Configuration or alternate-setting selection opens the endpoint descriptors.

@@ -23,6 +23,11 @@ The book remains useful for the object-design model and historical background, b
 6. [Supported Targets](supported-targets.md) — current hardware-validation baselines and target-status rules.
 7. [Dependencies](dependencies.md) — tool, SDK and optional-library boundaries.
 
+## Release preparation
+
+[0.13 changes and migration notes](releases/0.13.md) record the release scope,
+API migration requirements and maintainer-provided validation results.
+
 ## Architecture
 
 ### [Architecture overview](architecture/README.md)
@@ -58,7 +63,7 @@ Documents the USB core, `UsbIntrf`, class/function allocation, FIFO and DMA owne
 ### [USB User Guide](usb-user-guide.md)
 
 Shows how to build, configure and test CDC ACM, custom Bulk, HID, Mass Storage,
-Interrupt and Isochronous examples. It includes the common initialization
+Interrupt, Isochronous and composite stress examples, with HCI transport guidance. It includes the common initialization
 lifecycle, static-storage rules, host-runner commands, reconnect behavior and
 troubleshooting.
 

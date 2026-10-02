@@ -14,6 +14,7 @@ composition, endpoint dispatch and controller-port rules.
 | Function | Application class or interface | Shared example | nRF52840 project | Host runner |
 |---|---|---|---|---|
 | CDC ACM | `UsbdCdc` | `exemples/usb/usb_cdc_loopback.cpp` | `UsbCdcLoopback/ioc` | `Python/usb_cdc_loopback.py` |
+| Composite stress | two CDC ports, HID, Interrupt and Isochronous | `exemples/usb/usb_combo_stress.cpp` | `UsbComboStress/ioc` | `Python/usb_combo_stress.py` |
 | Dual CDC ACM | two `UsbdCdc` objects | `exemples/usb/usb_dual_cdc_stress.cpp` | `UsbDualCdcStress/ioc` | `Python/usb_dual_cdc_stress.py` |
 | Custom Bulk | `UsbdBulk` | `exemples/usb/usb_custom_bulk_loopback.cpp` | `UsbCustomBulkLoopback/ioc` | `Python/usb_custom_bulk_loopback.py` |
 | HID | `UsbdHid` | `exemples/usb/usb_hid_loopback.cpp` | `UsbHidLoopback/ioc` | `Python/usb_hid_loopback.py` |
@@ -39,8 +40,9 @@ controller applications.
 The Python runners require only the host packages used by their transport:
 
 - CDC runners use `pyserial`;
-- raw USB Bulk, Interrupt, Isochronous and MSC runners use `pyusb` with a
-  libusb backend;
+- raw USB Bulk, Interrupt and MSC runners use `pyusb` with a libusb backend;
+- Isochronous runners use `libusb1` (the Python `usb1` module);
+- composite stress uses `pyserial`, `hidapi` and `libusb1` together;
 - the HID runner uses `hidapi` and the operating system HID driver.
 
 Linux raw-USB access normally requires an appropriate udev rule or root
@@ -79,7 +81,7 @@ Initialization order is significant:
 
 1. `UsbInit()` records device identity and initializes the controller.
 2. Each class `Init()` allocates its topology, initializes its data path and
-   registers its full-speed and high-speed descriptor fragments.
+   registers its descriptor fragment or speed-aware descriptor builder.
 3. `UsbEnable()` prepares and validates the complete configuration descriptor
    before connecting the controller.
 4. `UsbProcess()` runs deferred class work and handles VBUS reconnects.
@@ -173,10 +175,26 @@ Use `--serial` when several matching devices are connected.
 
 ## HID
 
-`UsbdHid` embeds `UsbIntIntrf` and owns HID descriptors and standard HID class
+`UsbdHid` inherits `UsbIntIntrf` and owns HID descriptors and standard HID class
 requests. The application supplies the report descriptor and report meaning.
 Subclass `UsbdHid` only when application-specific control reports are needed,
 and delegate unhandled requests to `UsbdHid::Control()`.
+
+Supply separate caller-owned RX and TX slots in `UsbdHidCfg_t::pRxBuffer`
+and `pTxBuffer`. Both must remain alive for the interface lifetime, be
+4-byte aligned and contain at least `USB_INT_INTRF_PKT_BLKSIZE` bytes.
+This size includes the transport packet header; a 64-byte report array alone
+is not sufficient.
+
+```cpp
+alignas(4) static uint8_t s_HidRxBuffer[USB_INT_INTRF_PKT_BLKSIZE];
+alignas(4) static uint8_t s_HidTxBuffer[USB_INT_INTRF_PKT_BLKSIZE];
+```
+
+Use these arrays in the matching configuration fields, as shown in
+[usb_hid_loopback.cpp](../exemples/usb/usb_hid_loopback.cpp).
+`UsbIntIntrfCfg_t` has the same slot requirements. Rebuild the MCU library
+and application together when migrating from the earlier embedded-buffer API.
 
 The generic loopback is exercised through the native HID driver:
 
@@ -259,6 +277,18 @@ restoring VBUS reloads the configured removable medium. A host can remount it
 with Disk Utility or `diskutil mountDisk /dev/diskN`; the BSD disk number can
 change after reconnect.
 
+## Bluetooth HCI over USB
+
+`BtHciUsb` supplies the USB device transport for a Bluetooth controller.
+It combines HCI class requests and the HCI data path with an optional SCO
+Isochronous endpoint pair. This is separate from the IOsonata Bluetooth
+host stack and its pairing/security configuration.
+
+Use [bt_hci_usb.h](../include/bluetooth/bt_hci_usb.h) for the transport
+configuration. The maintainer validated the HCI/MSC storage optimization
+with HciController for HCI and UsbMscRamDisk for MSC. HciController is not
+included as a target project in this repository.
+
 ## Interrupt and Isochronous transports
 
 `UsbIntIntrf` and `UsbIsoIntrf` are role-neutral endpoint-pair transports used
@@ -278,13 +308,53 @@ runner checks scheduled packet flow and diagnostic counters. Use
 ## Composite devices
 
 Initialize every class object after `UsbInit()` and before `UsbEnable()`. Each
-successful class registration contributes its interfaces, endpoints and static
-descriptor fragment to the same configuration. The allocator prevents fixed
-endpoint assumptions from leaking into reusable application code.
+successful class registration contributes its interfaces, endpoints and
+descriptor fragment or builder to the same configuration. The allocator prevents
+fixed endpoint assumptions from leaking into reusable application code.
 
-Class initialization is atomic: do not continue to `UsbEnable()` after a class
-`Init()` failure. The controller is connected only after the complete
-configuration descriptor is prepared and validated.
+Stop startup on any class `Init()` failure; do not continue to `UsbEnable()`.
+The controller is connected only after the complete configuration descriptor
+is prepared and validated.
+
+### Configuration descriptor storage
+
+The nRF52840 library defaults to `USB_CONFIG_DESC_MAXLEN = 768` bytes.
+The generic fallback for other targets is 1024 bytes; these are storage
+capacities, not the descriptor length reported to the host. UsbComboStress
+uses 398 bytes, including the configuration header and all alternate settings.
+
+Device, string, qualifier and HID report descriptor bodies are separate from
+this configuration buffer. The 768-byte nRF52840 default covers the existing
+class layouts considered in the endpoint-capacity review, including HCI and
+MSC; custom descriptors or extra alternate settings can require more.
+
+To change the capacity, define `USB_CONFIG_DESC_MAXLEN` when building the MCU
+library, then clean and rebuild the application against matching headers and
+library. An application-only definition cannot resize storage in a precompiled
+library.
+
+### Composite stress runner
+
+UsbComboStress runs CDC loopback, CDC PRBS TX, HID, raw Interrupt and
+bidirectional Isochronous traffic concurrently. Install the host dependencies:
+
+```bash
+python3 -m venv .venv
+./.venv/bin/python3 -m pip install pyserial hidapi libusb1
+./.venv/bin/python3 Python/usb_combo_stress.py \
+  --loop-port /dev/cu.usbmodemXXXX01 \
+  --prbs-port /dev/cu.usbmodemXXXX03 \
+  --duration 2000
+```
+
+The host also needs the native libusb library. Replace both serial paths with
+the ports assigned to the current firmware. Save the full result, including
+pending loopback bytes, ISO diagnostics and any failure text, rather than only
+the throughput line. A runner PASS can coexist with nonzero ISO host misses
+or skews; it does not mean all diagnostic counters were zero.
+
+See the [USB example index](../exemples/usb/README.md) and
+[TinyUSB comparison procedure](../exemples/usb/tinyusb_common/README.md).
 
 ## Suspend, reset and reconnect
 
