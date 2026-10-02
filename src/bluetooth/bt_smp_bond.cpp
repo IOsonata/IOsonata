@@ -195,10 +195,13 @@ static bool BtSmpBondHasIrk(const BtSmpBond_t *pBond)
 	return nz != 0;
 }
 
+static void BtSmpBondOpsAttach(void);
+
 static void BtSmpBondTableAttach(void)
 {
 	s_pBtSmpSignState = s_BtSmpSignMem;
 	s_pBtSmpBondTable = s_BtSmpBondMem;
+	BtSmpBondOpsAttach();
 }
 
 static void BtSmpSignStateReset(int Slot, uint32_t Next, uint32_t DurableHigh)
@@ -673,7 +676,7 @@ bool BtSmpBondAdd(uint16_t ConnHdl, const BtSmpKeys_t *pKeys)
 	return true;
 }
 
-void BtSmpBondCccdSave(uint16_t ConnHdl, uint16_t CccdHdl, uint16_t Value)
+static void BtSmpBondCccdSaveImpl(uint16_t ConnHdl, uint16_t CccdHdl, uint16_t Value)
 {
 	BtDevice_t *pPeer = BtPeerFindByHdl(ConnHdl);
 	if (pPeer == nullptr)
@@ -733,7 +736,7 @@ void BtSmpBondCccdSave(uint16_t ConnHdl, uint16_t CccdHdl, uint16_t Value)
 	}
 }
 
-uint8_t BtSmpBondCccdGet(uint16_t ConnHdl, uint16_t *pHdl,
+static uint8_t BtSmpBondCccdGetImpl(uint16_t ConnHdl, uint16_t *pHdl,
 		uint16_t *pValue, uint8_t Max)
 {
 	BtDevice_t *pPeer = BtPeerFindByHdl(ConnHdl);
@@ -763,7 +766,7 @@ uint8_t BtSmpBondCccdGet(uint16_t ConnHdl, uint16_t *pHdl,
 	return n;
 }
 
-bool BtSmpBondKeysLookup(uint16_t ConnHdl, uint64_t Rand, uint16_t Ediv,
+static bool BtSmpBondKeysLookupImpl(uint16_t ConnHdl, uint64_t Rand, uint16_t Ediv,
 							BtSmpKeys_t *pKeys)
 {
 	if (pKeys == nullptr)
@@ -801,12 +804,12 @@ bool BtSmpBondLtkLookup(uint16_t ConnHdl, uint64_t Rand,
 	return found;
 }
 
-bool BtSmpBonded(uint16_t ConnHdl)
+static bool BtSmpBondedImpl(uint16_t ConnHdl)
 {
 	return BtSmpBondFind(ConnHdl, 0U, 0U) >= 0;
 }
 
-bool BtSmpSignVerify(uint16_t ConnHdl, const uint8_t *pMsg, size_t MsgLen,
+static bool BtSmpSignVerifyImpl(uint16_t ConnHdl, const uint8_t *pMsg, size_t MsgLen,
 					 const uint8_t *pSig)
 {
 	if (pSig == nullptr || (pMsg == nullptr && MsgLen > 0U))
@@ -882,4 +885,92 @@ void BtSmpBondClearAll(void)
 	}
 	BtSmpBondTableExit(state);
 	BtSmpBondErase();
+}
+
+// Bond lookups called by the generic GATT, GAP and ATT layers on every link,
+// secure or not. They reach the bond table code only through this table,
+// which is installed when the bond table is attached, that is when a bond is
+// added or restored. An application without security never does either, so
+// the lookups below find nothing and the code behind them is not linked.
+typedef struct {
+	void (*CccdSave)(uint16_t ConnHdl, uint16_t CccdHdl, uint16_t Value);
+	uint8_t (*CccdGet)(uint16_t ConnHdl, uint16_t *pHdl, uint16_t *pValue, uint8_t Max);
+	bool (*KeysLookup)(uint16_t ConnHdl, uint64_t Rand, uint16_t Ediv, BtSmpKeys_t *pKeys);
+	bool (*Bonded)(uint16_t ConnHdl);
+	bool (*SignVerify)(uint16_t ConnHdl, const uint8_t *pMsg, size_t MsgLen, const uint8_t *pSig);
+} BtSmpBondOps_t;
+
+static const BtSmpBondOps_t s_BtSmpBondOps = {
+	.CccdSave = BtSmpBondCccdSaveImpl,
+	.CccdGet = BtSmpBondCccdGetImpl,
+	.KeysLookup = BtSmpBondKeysLookupImpl,
+	.Bonded = BtSmpBondedImpl,
+	.SignVerify = BtSmpSignVerifyImpl,
+};
+
+static const BtSmpBondOps_t *s_pBtSmpBondOps = nullptr;
+
+static void BtSmpBondOpsAttach(void)
+{
+	s_pBtSmpBondOps = &s_BtSmpBondOps;
+}
+
+void BtSmpBondCccdSave(uint16_t ConnHdl, uint16_t CccdHdl, uint16_t Value)
+{
+	if (s_pBtSmpBondOps != nullptr)
+	{
+		s_pBtSmpBondOps->CccdSave(ConnHdl, CccdHdl, Value);
+	}
+}
+
+uint8_t BtSmpBondCccdGet(uint16_t ConnHdl, uint16_t *pHdl,
+		uint16_t *pValue, uint8_t Max)
+{
+	if (s_pBtSmpBondOps == nullptr)
+	{
+		// No bond exists
+		return 0;
+	}
+
+	return s_pBtSmpBondOps->CccdGet(ConnHdl, pHdl, pValue, Max);
+}
+
+bool BtSmpBondKeysLookup(uint16_t ConnHdl, uint64_t Rand, uint16_t Ediv,
+							BtSmpKeys_t *pKeys)
+{
+	if (s_pBtSmpBondOps == nullptr)
+	{
+		// No bond exists. The caller still gets a cleared key set.
+		if (pKeys != nullptr)
+		{
+			CryptoSecureWipe(pKeys, sizeof(*pKeys));
+		}
+
+		return false;
+	}
+
+	return s_pBtSmpBondOps->KeysLookup(ConnHdl, Rand, Ediv, pKeys);
+}
+
+bool BtSmpBonded(uint16_t ConnHdl)
+{
+	if (s_pBtSmpBondOps == nullptr)
+	{
+		// No bond exists
+		return false;
+	}
+
+	return s_pBtSmpBondOps->Bonded(ConnHdl);
+}
+
+bool BtSmpSignVerify(uint16_t ConnHdl, const uint8_t *pMsg, size_t MsgLen,
+					 const uint8_t *pSig)
+{
+	if (s_pBtSmpBondOps == nullptr)
+	{
+		// No bond exists, so there is no key to verify a signature with
+		return false;
+	}
+
+	return s_pBtSmpBondOps->SignVerify(ConnHdl, pMsg, MsgLen, pSig);
 }
