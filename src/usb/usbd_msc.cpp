@@ -10,6 +10,10 @@
 #include "usb/usbd_epalloc.h"
 #include "usb/usbd_msc.h"
 
+// Out of line, like CDC/HID, so static instances use zero-filled storage
+// instead of a flash initializer containing the object and its packet buffers.
+UsbdMsc::UsbdMsc() = default;
+
 typedef enum __Usbd_Msc_Data_Direction {
 	USBD_MSC_DATA_NONE,
 	USBD_MSC_DATA_IN,

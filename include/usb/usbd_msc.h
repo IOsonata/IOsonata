@@ -151,7 +151,7 @@ bool UsbdMscMakeDesc(UsbdMscDesc_t *pDesc, const UsbdMscDev_t *pMsc,
 
 class UsbdMsc : public UsbDeviceClass, public UsbIntrf {
 public:
-	UsbdMsc() = default;
+	UsbdMsc();
 	UsbdMsc(const UsbdMsc &) = delete;
 	UsbdMsc &operator = (const UsbdMsc &) = delete;
 
