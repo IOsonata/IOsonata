@@ -57,6 +57,8 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "bluetooth/bt_app.h"
 //#include "ble_app_nrf5.h"
 #include "bluetooth/bt_gatt.h"
+#include "bluetooth/bt_peer.h"
+#include "bluetooth/bt_hci_ctlr.h"
 #include "coredev/uart.h"
 #include "coredev/i2c.h"
 #include "coredev/spi.h"
@@ -157,6 +159,21 @@ BtUuidArr_t s_AdvUuids = {
 	.Count = 1,
 	.Uuid16 = {BLE_UUID_TCS_SERVICE,},
 };
+
+// This device serves one central. The library pools are sized for several
+// links by default, so both are defined here for one link.
+
+// Peer table, one slot
+alignas(8) static uint8_t s_BtPeerPoolMem[BT_PEER_POOL_MEMSIZE(1)];
+
+const BtPeerPoolCfg_t g_BtPeerPoolCfg = { s_BtPeerPoolMem, sizeof(s_BtPeerPoolMem) };
+
+// Controller memory pool, used by the ports that run the controller in the
+// application (SDC) and not linked otherwise. BtHciCtlrMemPoolSizeNeeded
+// gives the size the configuration asked for.
+alignas(8) static uint8_t s_BtCtlrMemPool[3400];
+
+const BtHciCtlrMemPool_t g_BtHciCtlrMemPool = { s_BtCtlrMemPool, sizeof(s_BtCtlrMemPool) };
 
 const BtAppCfg_t s_BleAppCfg = {
 	.Role = BTAPP_ROLE_PERIPHERAL,
