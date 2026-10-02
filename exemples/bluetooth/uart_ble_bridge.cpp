@@ -429,7 +429,11 @@ void BtAppInitUserServices()
 
 void BtAppInitUserData()
 {
-
+#if BLE_SC_METHOD != BLE_SC_NONE
+	// Start the security module. This call is what links it; BtAppInit
+	// fails when SecType asks for security and it was not started.
+	BtAppSecInit();
+#endif
 }
 
 //void UartRxChedHandler(void * p_event_data, uint16_t event_size)
@@ -466,7 +470,7 @@ void UartRxChedHandler(uint32_t Evt, void *pCtx)
 
 		for (int i = 0; i < bufflen; i++)
 		{
-			if (d != Prbs8(buff[i]) & d != 0)
+			if (d != Prbs8(buff[i]) && d != 0)
 			{
 				drop++;
 			}

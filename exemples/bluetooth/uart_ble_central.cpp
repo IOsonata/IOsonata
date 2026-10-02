@@ -1043,6 +1043,15 @@ void HardwareInit()
 // Adjust it for other toolchains.
 //
 
+void BtAppInitUserData()
+{
+#if BLE_SC_METHOD != BLE_SC_NONE
+	// Start the security module. This call is what links it; BtAppInit
+	// fails when SecType asks for security and it was not started.
+	BtAppSecInit();
+#endif
+}
+
 int main()
 {
 	HardwareInit();

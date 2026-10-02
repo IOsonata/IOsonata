@@ -1800,6 +1800,10 @@ static int DutBleIntrfEvtHandler(DevIntrf_t *pDev, DEVINTRF_EVT EvtId,
 
 void BtAppInitUserData(void)
 {
+	// Start the security module. This call is what links it; BtAppInit
+	// fails when SecType asks for security and it was not started.
+	BtAppSecInit();
+
 	BtSmpAuthConfig(BT_SMP_IOCAPS_DISPLAY_YESNO,
 		BT_SMP_AUTHREQ_BONDING_FLAG_BONDING | BT_SMP_AUTHREQ_MITM);
 }

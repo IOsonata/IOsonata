@@ -886,6 +886,10 @@ void HardwareInit()
 void BtAppInitUserData()
 {
 #if BLE_SC_METHOD != BLE_SC_NONE
+	// Start the security module. This call is what links it; BtAppInit
+	// fails when SecType asks for security and it was not started.
+	BtAppSecInit();
+
 	// Boot default from BLE_SC_METHOD, then the console "sec" command can move
 	// to any other model without a rebuild. The console fills whatever role the
 	// selected IO capability implies.
