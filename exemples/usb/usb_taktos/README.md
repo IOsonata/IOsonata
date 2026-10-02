@@ -62,3 +62,55 @@ continuation of an old serial session.
 
 Host syntax and project-structure checks do not validate scheduling or IRQ
 integration on the board. A clean ARM build and hardware run are still required.
+
+## Multithreaded composite stress
+
+[usb_combo_stress_taktos.cpp](../usb_combo_stress_taktos.cpp) uses the same
+device composition as the bare-metal combo example, from
+[usb_combo_stress_device.h](../usb_combo_stress_device.h). Build the
+[UsbComboStressTaktOS/ioc](../../../ARM/Nordic/nRF52/nRF52840/exemples/UsbComboStressTaktOS/ioc)
+project with the same library configurations listed above.
+
+| Thread | Work | Stack budget, excluding kernel overhead |
+|---|---|---:|
+| Service | `UsbProcess()`, sole AppEvt dispatcher | 2048 bytes |
+| Loopback | CDC0 RX checking and echo, including partial TX | 1024 bytes |
+| PRBS | CDC1 PRBS TX and target-error markers | 1024 bytes |
+| Heartbeat | Increment `g_UsbComboTaktOSHeartbeat` every second | 512 bytes |
+
+All four use normal priority. The three active threads yield after each
+service pass; the heartbeat sleeps between increments. Yield only schedules
+equal- or higher-priority ready threads, so this continuously active stress
+example does not give CPU time to lower-priority threads or the idle thread.
+Do not copy that policy into a low-power product unchanged.
+
+Each CDC data path has one application owner. CDC calls are nonblocking.
+The loopback thread publishes a cumulative error count through a lock-free
+32-bit atomic; the PRBS thread sends the same zero-byte target-error markers
+as the bare-metal version. Thread memory is static and sized with
+`TAKTOS_THREAD_MEM_SIZE`.
+
+HID, raw INT and ISO keep their existing callback execution paths. They are
+not separate threads, and ISO frames are not delayed until a scheduler tick.
+USB class initialization completes before starting the scheduler. No traffic
+thread reinitializes a class or dispatches AppEvt.
+
+The VID/PID, banner, descriptor layout, alternate settings, packet formats,
+FIFO capacities and ISO diagnostic request match the bare-metal composite.
+Additional thread stacks and scheduler storage must be included in memory
+comparisons. Thread scheduling changes the traffic mix, so compare measured
+results rather than assuming identical throughput.
+
+Run the existing composite host test:
+
+```bash
+python3 Python/usb_combo_stress.py \
+  --loop-port /dev/cu.usbmodemXXXX01 \
+  --prbs-port /dev/cu.usbmodemXXXX03 --duration 2000
+```
+
+Confirm the heartbeat advances while all five functions carry traffic.
+Record the complete result, firmware revision, TaktOS revision and clean-build
+size. Repeat cable-absent startup and reconnect tests. This new integration
+still requires an ARM build and hardware validation; the bare-metal PASS does
+not validate TaktOS context switching under composite traffic.

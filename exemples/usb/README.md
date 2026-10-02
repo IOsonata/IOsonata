@@ -13,6 +13,7 @@ with matching Debug or Release settings.
 | [usb_cdc_prbs_tx.cpp](usb_cdc_prbs_tx.cpp) | UsbCdcPrbsTx/ioc | CDC PRBS transmitter |
 | [usb_dual_cdc_stress.cpp](usb_dual_cdc_stress.cpp) | UsbDualCdcStress/ioc | CDC loopback and PRBS concurrently |
 | [usb_combo_stress.cpp](usb_combo_stress.cpp) | UsbComboStress/ioc | Dual CDC, HID, raw INT and bidirectional ISO |
+| [usb_combo_stress_taktos.cpp](usb_combo_stress_taktos.cpp) | UsbComboStressTaktOS/ioc | Composite stress with separate USB service, CDC loopback and PRBS threads |
 | [usb_custom_bulk_loopback.cpp](usb_custom_bulk_loopback.cpp) | UsbCustomBulkLoopback/ioc | Vendor Bulk interface |
 | [usb_hid_loopback.cpp](usb_hid_loopback.cpp) | UsbHidLoopback/ioc | Vendor HID reports |
 | [usb_hid_keyboard.cpp](usb_hid_keyboard.cpp) | UsbHidKeyboard/ioc | Button-driven boot keyboard |

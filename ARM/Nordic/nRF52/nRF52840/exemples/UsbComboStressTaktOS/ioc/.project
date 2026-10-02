@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <projectDescription>
-	<name>UsbComboStress</name>
+	<name>UsbComboStressTaktOS</name>
 	<comment></comment>
 	<projects>
 	</projects>
@@ -31,9 +31,9 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>src/usb_combo_stress.cpp</name>
+			<name>src/usb_combo_stress_taktos.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/exemples/usb/usb_combo_stress.cpp</locationURI>
+			<locationURI>PARENT-7-PROJECT_LOC/exemples/usb/usb_combo_stress_taktos.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/usb_ctrlr_nrf52.cpp</name>

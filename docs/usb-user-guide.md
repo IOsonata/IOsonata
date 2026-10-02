@@ -364,6 +364,11 @@ loopback; a lower-priority periodic thread demonstrates scheduler progress.
 The USB thread is also the sole AppEvt dispatcher on nRF52840. Follow its
 partial-write handling and bounded service passes when adapting it.
 
+`UsbComboStressTaktOS` adds separate CDC loopback and PRBS threads alongside
+one USB service thread and a heartbeat. Its device composition and host runner
+match `UsbComboStress`; HID/INT/ISO retain their callback paths. The integration
+guide explains thread priorities, AppEvt ownership and the hardware checks.
+
 ## Suspend, reset and reconnect
 
 Call `UsbProcess()` continuously. It observes VBUS changes, runs class work and
