@@ -557,6 +557,9 @@ static bool BtAppSdcConnStart(const BtAppCfg_t *pCfg)
 	s_BtHciDev.Disconnected = BtAppDisconnected;
 	s_BtHciDev.SendCompleted = BtAppSendCompleted;
 
+	// Commands that act on a link, in either role
+	BtHciCtlrLinkSupport();
+
 	if (pCfg->Role & BTAPP_ROLE_PERIPHERAL)
 	{
 		// Has to be asked before the controller is enabled

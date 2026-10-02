@@ -164,6 +164,16 @@ size_t BtHciCtlrSdcSend(void *pData, size_t Len);
 void BtHciCtlrPeripheralSupport(void);
 
 /**
+ * @brief	Ask for the link commands of the controller.
+ *
+ * Called by connection support (BtAppConnInit), for a link in either role.
+ * Implemented by the controller port. The commands that act on a link
+ * (disconnect, PHY, data length, encryption) are linked only when this
+ * function is referenced, and are answered as unknown commands without it.
+ */
+void BtHciCtlrLinkSupport(void);
+
+/**
  * @brief	Enable the central and observer features of the controller.
  *
  * Implemented by the controller port when the controller has features to
