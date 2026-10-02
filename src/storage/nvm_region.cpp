@@ -21,8 +21,16 @@ A project declares one like this, in its own linker script:
 		RAM   (rwx): ORIGIN = 0x20000000, LENGTH = 0x00010000
 	}
 
-	PROVIDE(__nvm0_start__ = ORIGIN(NVM0));
-	PROVIDE(__nvm0_size__  = LENGTH(NVM0));
+	SECTIONS
+	{
+		nvm0 (NOLOAD) :
+		{
+			__start_nvm0 = .;
+			KEEP(*(nvm0))
+			. = ORIGIN(NVM0) + LENGTH(NVM0);
+			__stop_nvm0 = .;
+		} > NVM0
+	}
 
 The symbols are weak here, so a project that declares no region resolves
 them to null and NvmRegion reports a size of 0. Nothing guesses an address.

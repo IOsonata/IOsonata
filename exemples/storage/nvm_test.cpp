@@ -17,7 +17,7 @@
 
 Build and run on the host:
 
-  g++ -std=gnu++23 -O1 -I include -I include/storage -I Linux/include \
+  g++ -std=gnu++23 -O1 -I include -I include/storage -I Linux/include -I tests/dfu/hostport \
 	  exemples/storage/nvm_test.cpp src/storage/nvm.cpp \
 	  src/device.cpp src/device_intrf.cpp -o nvm_test
   ./nvm_test

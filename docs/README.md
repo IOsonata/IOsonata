@@ -54,6 +54,13 @@ Documents the C-level interface state, wrapper ownership, transfer sequencing, r
 
 Documents behavioural inheritance, shared virtual `Device` state, multi-function devices, independent devices in one package, configuration-driven variation and object composition.
 
+## NVM and storage
+
+- [NVM User Guide](nvm-user-guide.md): geometry, linker regions, internal and
+  external memory, deferred operations, block/filesystem integration and tests.
+- [NVM architecture](architecture/nvm.md): device/transport ownership,
+  completion state, controller ports and sector adaptation.
+
 ## Bluetooth
 
 ### [Bluetooth User Guide](bluetooth-user-guide.md)
