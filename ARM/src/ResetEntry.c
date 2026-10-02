@@ -184,6 +184,47 @@ __attribute__((weak)) void _exit(int Status)
 	while(1);
 }
 
+// Firmware does not return to an operating system: when main returns, the
+// only thing left to do is to stop in _exit. The C library versions of the
+// functions below keep a table of exit handlers and bring in the stdio file
+// table and the code that walks both, in every image, for an exit that
+// never runs them. These replace them. Nothing is registered and nothing is
+// run at exit, which includes the destructors of static objects.
+// They are weak so that an application that does need exit handling can
+// provide its own.
+__attribute__((weak)) void exit(int Status)
+{
+	_exit(Status);
+	while(1);
+}
+
+__attribute__((weak)) int atexit(void (*pFunc)(void))
+{
+	(void)pFunc;
+
+	return 0;
+}
+
+// Registration of the destructor of a static C++ object
+__attribute__((weak)) int __cxa_atexit(void (*pFunc)(void *), void *pArg, void *pDso)
+{
+	(void)pFunc;
+	(void)pArg;
+	(void)pDso;
+
+	return 0;
+}
+
+// Same, the ARM EABI entry the compiler calls
+__attribute__((weak)) int __aeabi_atexit(void *pArg, void (*pFunc)(void *), void *pDso)
+{
+	(void)pArg;
+	(void)pFunc;
+	(void)pDso;
+
+	return 0;
+}
+
 __attribute__((weak)) caddr_t _sbrk(int incr)
 {
 	static uint32_t top = (uint32_t)&__heap_start__;
