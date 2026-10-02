@@ -51,6 +51,7 @@ SOFTWARE.
 #include "coredev/iopincfg.h"
 #include "coredev/system_core_clock.h"
 #include "coredev/timer.h"
+#include "timer_nrfx.h"
 #include "bluetooth/bt_app.h"
 #include "bluetooth/bt_smp.h"		// BtSmpLocalAddrGet override
 #include "bluetooth/bt_adv.h"		// BtAdvOwnAddrGet for the connection stamp
@@ -176,15 +177,10 @@ const static TimerCfg_t s_BtAppSdcTimerCfg = {
 };
 
 // Application timer: millisecond clock of the SMP and GATT transaction
-// timeouts and their 1 s check. Only a link uses it. It is a function static
-// so that the object is constructed, and the timer driver linked, only with
-// connection support.
-static Timer &BtAppSdcTimer(void)
-{
-	static Timer s_Timer;
-
-	return s_Timer;
-}
+// timeouts and their 1 s check. Only a link uses it. It is the timer device
+// and not the Timer class: the class initializes through TimerInit, which
+// links the high frequency timer driver along with the low frequency one.
+static TimerDev_t s_BtAppSdcTimer;
 
 static inline uint32_t BtAppSendData(void *pData, uint32_t Len) {
 	return (uint32_t)BtHciCtlrSdcSend(pData, Len);
@@ -217,12 +213,18 @@ static void BtAppSdcCtlrRx(BtHciCtlrDev_t * const pDev, bool bIsEvent, uint8_t *
 // linkage specifier is needed here. The timer is started with connection support.
 uint32_t BtSmpMsTick(void)
 {
-	return BtAppSdcTimer().mSecond();
+	if (s_BtAppSdcTimer.GetTickCount == nullptr)
+	{
+		// Timer not started
+		return 0;
+	}
+
+	return (uint32_t)(s_BtAppSdcTimer.GetTickCount(&s_BtAppSdcTimer) * s_BtAppSdcTimer.nsPeriod / 1000000ULL);
 }
 
 uint32_t BtGattMsTick(void)
 {
-	return BtAppSdcTimer().mSecond();
+	return BtSmpMsTick();
 }
 
 // Spec-strict indication transaction timeout: Core Vol 3 Part F 3.3.3 requires
@@ -509,8 +511,11 @@ static bool BtAppSdcSrvcDone(const BtAppCfg_t *pCfg)
 // 30 s transaction-timeout checks. 1 s cadence is ample for a 30 s deadline.
 static void BtAppSdcTimerStart(void)
 {
-	BtAppSdcTimer().Init(s_BtAppSdcTimerCfg);
-	BtAppSdcTimer().EnableTimerTrigger(0, 1000UL, TIMER_TRIG_TYPE_CONTINUOUS, nullptr);
+	if (nRFxLFTimerInit(&s_BtAppSdcTimer, &s_BtAppSdcTimerCfg))
+	{
+		s_BtAppSdcTimer.EnableTrigger(&s_BtAppSdcTimer, 0, 1000000000ULL,
+									  TIMER_TRIG_TYPE_CONTINUOUS, nullptr, nullptr);
+	}
 }
 
 static const BtAppSdcConn_t s_BtAppSdcConn = {

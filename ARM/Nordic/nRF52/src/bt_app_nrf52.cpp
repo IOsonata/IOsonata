@@ -65,6 +65,7 @@ SOFTWARE.
 #include "coredev/system_core_clock.h"
 #include "coredev/uart.h"
 #include "coredev/timer.h"
+#include "timer_nrfx.h"
 #include "custom_board.h"
 #include "coredev/iopincfg.h"
 #include "iopinctrl.h"
@@ -1349,14 +1350,10 @@ const static TimerCfg_t s_BtAppNrf52TimerCfg = {
 
 // Port timer: millisecond clock of the GATT transaction timeout, 1 s count of
 // the connection parameter negotiation and 1 s wakeup of the main loop. Only
-// a link uses it. It is a function static so that the object is constructed,
-// and the timer driver linked, only with connection support.
-static Timer &BtAppNrf52Timer(void)
-{
-	static Timer s_Timer;
-
-	return s_Timer;
-}
+// a link uses it. It is the timer device and not the Timer class: the class
+// initializes through TimerInit, which links the high frequency timer driver
+// along with the low frequency one.
+static TimerDev_t s_BtAppNrf52Timer;
 
 static void BtAppNrf52TimerHandler(TimerDev_t * const pTimer, uint32_t Evt)
 {
@@ -1373,8 +1370,11 @@ static void BtAppNrf52TimerHandler(TimerDev_t * const pTimer, uint32_t Evt)
 
 static void BtAppNrf52TimerStart(void)
 {
-	BtAppNrf52Timer().Init(s_BtAppNrf52TimerCfg);
-	BtAppNrf52Timer().EnableTimerTrigger(0, 1000UL, TIMER_TRIG_TYPE_CONTINUOUS, nullptr);
+	if (nRFxLFTimerInit(&s_BtAppNrf52Timer, &s_BtAppNrf52TimerCfg))
+	{
+		s_BtAppNrf52Timer.EnableTrigger(&s_BtAppNrf52Timer, 0, 1000000000ULL,
+										TIMER_TRIG_TYPE_CONTINUOUS, nullptr, nullptr);
+	}
 }
 
 // Millisecond clock for the generic SMP/GATT transaction timeouts, overriding
@@ -1382,7 +1382,13 @@ static void BtAppNrf52TimerStart(void)
 // bt_gatt.h, so no linkage specifier is needed here.
 uint32_t BtSmpMsTick(void)
 {
-	return BtAppNrf52Timer().mSecond();
+	if (s_BtAppNrf52Timer.GetTickCount == nullptr)
+	{
+		// Timer not started
+		return 0;
+	}
+
+	return (uint32_t)(s_BtAppNrf52Timer.GetTickCount(&s_BtAppNrf52Timer) * s_BtAppNrf52Timer.nsPeriod / 1000000ULL);
 }
 
 uint32_t BtGattMsTick(void)
