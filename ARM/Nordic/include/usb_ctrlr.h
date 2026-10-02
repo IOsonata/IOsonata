@@ -66,6 +66,12 @@ SOFTWARE.
 #include "cfifo.h"
 #endif
 
+#if defined(NRF52840_XXAA) && !defined(USB_CONFIG_DESC_MAXLEN)
+// Existing class layouts need at most 702 bytes on this controller.
+// Larger custom composites may override this when building the library.
+#define USB_CONFIG_DESC_MAXLEN		768U
+#endif
+
 #ifndef NRFUSBD_ISO_TRACE
 #define NRFUSBD_ISO_TRACE			0
 #endif
