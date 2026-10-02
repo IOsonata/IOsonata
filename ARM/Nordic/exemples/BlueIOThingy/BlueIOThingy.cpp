@@ -171,7 +171,7 @@ const BtPeerPoolCfg_t g_BtPeerPoolCfg = { s_BtPeerPoolMem, sizeof(s_BtPeerPoolMe
 // Controller memory pool, used by the ports that run the controller in the
 // application (SDC) and not linked otherwise. BtHciCtlrMemPoolSizeNeeded
 // gives the size the configuration asked for.
-alignas(8) static uint8_t s_BtCtlrMemPool[3400];
+alignas(8) static uint8_t s_BtCtlrMemPool[4800];
 
 const BtHciCtlrMemPool_t g_BtHciCtlrMemPool = { s_BtCtlrMemPool, sizeof(s_BtCtlrMemPool) };
 
