@@ -70,6 +70,12 @@ typedef struct {
 
 __ALIGN(4) static PinSenseEvtHook_t s_GpIOSenseEvt[IOPIN_MAX_INT + 1] = { {0, NULL}, };
 
+// Set by IOPinEnableInterrupt. The interrupt handlers at the end of this file
+// are kept by the linker in every application, pin interrupt used or not.
+// They reach the table above through this pointer, so that the table is
+// linked only when a pin interrupt is set up.
+static PinSenseEvtHook_t *s_pGpIOSenseEvt = NULL;
+
 NRF_GPIO_Type *nRFGpioGetReg(int PortNo)
 {
 	NRF_GPIO_Type *reg = NULL;
@@ -430,6 +436,8 @@ void IOPinDisableInterrupt(int IntNo)
  */
 bool IOPinEnableInterrupt(int IntNo, int IntPrio, uint32_t PortNo, uint32_t PinNo, IOPINSENSE Sense, IOPinEvtHandler_t pEvtCB, void *pCtx)
 {
+	s_pGpIOSenseEvt = s_GpIOSenseEvt;
+
     if (IntNo >= IOPIN_MAX_INT)
 		return false;
 
@@ -653,7 +661,7 @@ static int IOPinFindAvailInterrupt(void)
 {
 	for (int i = 0; i < IOPIN_MAX_INT; i++)
 	{
-		if (s_GpIOSenseEvt[i].SensEvtCB == NULL)
+		if (s_pGpIOSenseEvt[i].SensEvtCB == NULL)
 		{
 			return i;
 		}
@@ -767,19 +775,25 @@ void IOPinSetStrength(int PortNo, int PinNo, IOPINSTRENGTH Strength)
 #ifdef NRF5340_XXAA_NETWORK
 void __WEAK GPIOTE_IRQHandler(void)
 {
+	if (s_pGpIOSenseEvt == NULL)
+	{
+		// No pin interrupt was set up
+		return;
+	}
+
 	for (int i = 0; i < IOPIN_MAX_INT; i++)
 	{
 		if (NRF_GPIOTE_NS->EVENTS_IN[i])
 		{
-			if (s_GpIOSenseEvt[i].SensEvtCB)
-				s_GpIOSenseEvt[i].SensEvtCB(i, s_GpIOSenseEvt[i].pCtx);
+			if (s_pGpIOSenseEvt[i].SensEvtCB)
+				s_pGpIOSenseEvt[i].SensEvtCB(i, s_pGpIOSenseEvt[i].pCtx);
 			NRF_GPIOTE_NS->EVENTS_IN[i] = 0;
 		}
 	}
 	if (NRF_GPIOTE_NS->EVENTS_PORT)
 	{
-        if (s_GpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB)
-            s_GpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB(-1, s_GpIOSenseEvt[IOPIN_MAX_INT].pCtx);
+        if (s_pGpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB)
+            s_pGpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB(-1, s_pGpIOSenseEvt[IOPIN_MAX_INT].pCtx);
 	    NRF_GPIOTE_NS->EVENTS_PORT = 0;
 	    //NRF_GPIO->LATCH = 0xFFFFFFFF;	// Clear detect latch
 	}
@@ -789,19 +803,25 @@ void __WEAK GPIOTE_IRQHandler(void)
 #elif defined(NRF91_SERIES) || defined(NRF53_SERIES)
 void __WEAK GPIOTE0_IRQHandler(void)
 {
+	if (s_pGpIOSenseEvt == NULL)
+	{
+		// No pin interrupt was set up
+		return;
+	}
+
 	for (int i = 0; i < IOPIN_MAX_INT; i++)
 	{
 		if (NRF_GPIOTE0_S->EVENTS_IN[i])
 		{
-			if (s_GpIOSenseEvt[i].SensEvtCB)
-				s_GpIOSenseEvt[i].SensEvtCB(i, s_GpIOSenseEvt[i].pCtx);
+			if (s_pGpIOSenseEvt[i].SensEvtCB)
+				s_pGpIOSenseEvt[i].SensEvtCB(i, s_pGpIOSenseEvt[i].pCtx);
 			NRF_GPIOTE0_S->EVENTS_IN[i] = 0;
 		}
 	}
 	if (NRF_GPIOTE0_S->EVENTS_PORT)
 	{
-        if (s_GpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB)
-            s_GpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB(-1, s_GpIOSenseEvt[IOPIN_MAX_INT].pCtx);
+        if (s_pGpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB)
+            s_pGpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB(-1, s_pGpIOSenseEvt[IOPIN_MAX_INT].pCtx);
 	    NRF_GPIOTE0_S->EVENTS_PORT = 0;
 	    //NRF_GPIO->LATCH = 0xFFFFFFFF;	// Clear detect latch
 	}
@@ -811,19 +831,25 @@ void __WEAK GPIOTE0_IRQHandler(void)
 
 void __WEAK GPIOTE1_IRQHandler(void)
 {
+	if (s_pGpIOSenseEvt == NULL)
+	{
+		// No pin interrupt was set up
+		return;
+	}
+
 	for (int i = 0; i < IOPIN_MAX_INT; i++)
 	{
 		if (NRF_GPIOTE1_NS->EVENTS_IN[i])
 		{
-			if (s_GpIOSenseEvt[i].SensEvtCB)
-				s_GpIOSenseEvt[i].SensEvtCB(i, s_GpIOSenseEvt[i].pCtx);
+			if (s_pGpIOSenseEvt[i].SensEvtCB)
+				s_pGpIOSenseEvt[i].SensEvtCB(i, s_pGpIOSenseEvt[i].pCtx);
 			NRF_GPIOTE1_NS->EVENTS_IN[i] = 0;
 		}
 	}
 	if (NRF_GPIOTE1_NS->EVENTS_PORT)
 	{
-        if (s_GpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB)
-            s_GpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB(-1, s_GpIOSenseEvt[IOPIN_MAX_INT].pCtx);
+        if (s_pGpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB)
+            s_pGpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB(-1, s_pGpIOSenseEvt[IOPIN_MAX_INT].pCtx);
 	    NRF_GPIOTE1_NS->EVENTS_PORT = 0;
 	    //NRF_GPIO->LATCH = 0xFFFFFFFF;	// Clear detect latch
 	}
@@ -835,20 +861,26 @@ void __WEAK GPIOTE1_IRQHandler(void)
 // Unsecure
 void __WEAK GPIOTE20_0_IRQHandler(void)
 {
+	if (s_pGpIOSenseEvt == NULL)
+	{
+		// No pin interrupt was set up
+		return;
+	}
+
 	for (int i = 0; i < GPIOTE20_GPIOTE_NCHANNELS_SIZE; i++)
 	{
 		if (NRF_GPIOTE20_NS->EVENTS_IN[i])
 		{
-			if (s_GpIOSenseEvt[i + 4].SensEvtCB)
-				s_GpIOSenseEvt[i + 4].SensEvtCB(i + 4, s_GpIOSenseEvt[i + 4].pCtx);
+			if (s_pGpIOSenseEvt[i + 4].SensEvtCB)
+				s_pGpIOSenseEvt[i + 4].SensEvtCB(i + 4, s_pGpIOSenseEvt[i + 4].pCtx);
 			NRF_GPIOTE20_NS->EVENTS_IN[i] = 0;
 		}
 	}
 
 	if (NRF_GPIOTE20_NS->EVENTS_PORT[0].NONSECURE)
 	{
-        if (s_GpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB)
-            s_GpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB(-1, s_GpIOSenseEvt[IOPIN_MAX_INT].pCtx);
+        if (s_pGpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB)
+            s_pGpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB(-1, s_pGpIOSenseEvt[IOPIN_MAX_INT].pCtx);
 
         NRF_GPIOTE20_NS->EVENTS_PORT[0].NONSECURE = 0;
 		NRF_P1_NS->LATCH = 0xFFFFFFFF;
@@ -860,21 +892,27 @@ void __WEAK GPIOTE20_0_IRQHandler(void)
 // Secure
 void __WEAK GPIOTE20_1_IRQHandler(void)
 {
+	if (s_pGpIOSenseEvt == NULL)
+	{
+		// No pin interrupt was set up
+		return;
+	}
+
 
 	for (int i = 0; i < GPIOTE20_GPIOTE_NCHANNELS_SIZE; i++)
 	{
 		if (NRF_GPIOTE20_S->EVENTS_IN[i])
 		{
-			if (s_GpIOSenseEvt[i + 4].SensEvtCB)
-				s_GpIOSenseEvt[i + 4].SensEvtCB(i + 4, s_GpIOSenseEvt[i + 4].pCtx);
+			if (s_pGpIOSenseEvt[i + 4].SensEvtCB)
+				s_pGpIOSenseEvt[i + 4].SensEvtCB(i + 4, s_pGpIOSenseEvt[i + 4].pCtx);
 			NRF_GPIOTE20_S->EVENTS_IN[i] = 0;
 		}
 	}
 
 	if (NRF_GPIOTE20_S->EVENTS_PORT[0].SECURE)
 	{
-        if (s_GpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB)
-            s_GpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB(-1, s_GpIOSenseEvt[IOPIN_MAX_INT].pCtx);
+        if (s_pGpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB)
+            s_pGpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB(-1, s_pGpIOSenseEvt[IOPIN_MAX_INT].pCtx);
 
         NRF_GPIOTE20_S->EVENTS_PORT[0].SECURE = 0;
 		NRF_P1_S->LATCH = 0xFFFFFFFF;
@@ -884,20 +922,26 @@ void __WEAK GPIOTE20_1_IRQHandler(void)
 
 void __WEAK GPIOTE30_0_IRQHandler(void)
 {
+	if (s_pGpIOSenseEvt == NULL)
+	{
+		// No pin interrupt was set up
+		return;
+	}
+
 	for (int i = 0; i < GPIOTE30_GPIOTE_NCHANNELS_SIZE; i++)
 	{
 		if (NRF_GPIOTE30_NS->EVENTS_IN[i])
 		{
-			if (s_GpIOSenseEvt[i].SensEvtCB)
-				s_GpIOSenseEvt[i].SensEvtCB(i, s_GpIOSenseEvt[i].pCtx);
+			if (s_pGpIOSenseEvt[i].SensEvtCB)
+				s_pGpIOSenseEvt[i].SensEvtCB(i, s_pGpIOSenseEvt[i].pCtx);
 			NRF_GPIOTE30_NS->EVENTS_IN[i] = 0;
 		}
 	}
 
 	if (NRF_GPIOTE30_NS->EVENTS_PORT[0].NONSECURE)
 	{
-        if (s_GpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB)
-            s_GpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB(-1, s_GpIOSenseEvt[IOPIN_MAX_INT].pCtx);
+        if (s_pGpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB)
+            s_pGpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB(-1, s_pGpIOSenseEvt[IOPIN_MAX_INT].pCtx);
 
         NRF_GPIOTE30_NS->EVENTS_PORT[0].NONSECURE = 0;
 		NRF_P0_NS->LATCH = 0xFFFFFFFF;
@@ -907,20 +951,26 @@ void __WEAK GPIOTE30_0_IRQHandler(void)
 
 void __WEAK GPIOTE30_1_IRQHandler(void)
 {
+	if (s_pGpIOSenseEvt == NULL)
+	{
+		// No pin interrupt was set up
+		return;
+	}
+
 	for (int i = 0; i < GPIOTE30_GPIOTE_NCHANNELS_SIZE; i++)
 	{
 		if (NRF_GPIOTE30_S->EVENTS_IN[i])
 		{
-			if (s_GpIOSenseEvt[i].SensEvtCB)
-				s_GpIOSenseEvt[i].SensEvtCB(i, s_GpIOSenseEvt[i].pCtx);
+			if (s_pGpIOSenseEvt[i].SensEvtCB)
+				s_pGpIOSenseEvt[i].SensEvtCB(i, s_pGpIOSenseEvt[i].pCtx);
 			NRF_GPIOTE30_S->EVENTS_IN[i] = 0;
 		}
 	}
 
 	if (NRF_GPIOTE30_S->EVENTS_PORT[0].SECURE)
 	{
-        if (s_GpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB)
-            s_GpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB(-1, s_GpIOSenseEvt[IOPIN_MAX_INT].pCtx);
+        if (s_pGpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB)
+            s_pGpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB(-1, s_pGpIOSenseEvt[IOPIN_MAX_INT].pCtx);
 
         NRF_GPIOTE30_S->EVENTS_PORT[0].SECURE = 0;
 		NRF_P0_S->LATCH = 0xFFFFFFFF;
@@ -930,19 +980,25 @@ void __WEAK GPIOTE30_1_IRQHandler(void)
 #else
 void __WEAK GPIOTE_IRQHandler(void)
 {
+	if (s_pGpIOSenseEvt == NULL)
+	{
+		// No pin interrupt was set up
+		return;
+	}
+
 	for (int i = 0; i < IOPIN_MAX_INT; i++)
 	{
 		if (NRF_GPIOTE->EVENTS_IN[i])
 		{
-			if (s_GpIOSenseEvt[i].SensEvtCB)
-				s_GpIOSenseEvt[i].SensEvtCB(i, s_GpIOSenseEvt[i].pCtx);
+			if (s_pGpIOSenseEvt[i].SensEvtCB)
+				s_pGpIOSenseEvt[i].SensEvtCB(i, s_pGpIOSenseEvt[i].pCtx);
 			NRF_GPIOTE->EVENTS_IN[i] = 0;
 		}
 	}
 	if (NRF_GPIOTE->EVENTS_PORT)
 	{
-        if (s_GpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB)
-            s_GpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB(-1, s_GpIOSenseEvt[IOPIN_MAX_INT].pCtx);
+        if (s_pGpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB)
+            s_pGpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB(-1, s_pGpIOSenseEvt[IOPIN_MAX_INT].pCtx);
 	    NRF_GPIOTE->EVENTS_PORT = 0;
 #ifdef NRF52_SERIES
 	    NRF_GPIO->LATCH = 0xFFFFFFFF;	// Clear detect latch
