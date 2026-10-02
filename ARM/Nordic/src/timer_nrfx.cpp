@@ -55,10 +55,6 @@ SOFTWARE.
 
 #include "timer_nrfx.h"
 
-// Default selection, both drivers, for an application that does not define
-// its own. See g_nRFxTimerDrv in timer_nrfx.h.
-extern "C" __attribute__((weak)) const nRFxTimerDrv_t g_nRFxTimerDrv = NRFX_TIMER_DRV_ALL;
-
 bool TimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 {
 	if (pTimer == NULL || pCfg == NULL)
@@ -68,22 +64,14 @@ bool TimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 
 	if (pCfg->DevNo < TIMER_NRFX_RTC_MAX)
 	{
-		if (g_nRFxTimerDrv.LFInit == NULL)
-		{
-			// Low frequency timer driver not linked, see g_nRFxTimerDrv
-			return false;
-		}
-
-		return g_nRFxTimerDrv.LFInit(pTimer, pCfg);
+#if defined(NRF54L_SERIES)
+		return nRFxGrtcInit(pTimer, pCfg);
+#else
+		return nRFxRtcInit(pTimer, pCfg);
+#endif
 	}
 
-	if (g_nRFxTimerDrv.HFInit == NULL)
-	{
-		// High frequency timer driver not linked, see g_nRFxTimerDrv
-		return false;
-	}
-
-	return g_nRFxTimerDrv.HFInit(pTimer, pCfg);
+	return nRFxTimerInit(pTimer, pCfg);
 }
 
 int TimerGetLowFreqDevCount()
