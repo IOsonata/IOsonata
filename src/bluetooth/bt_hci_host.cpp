@@ -1500,15 +1500,16 @@ void BtHciProcessData(BtHciDevice_t * const pDev, BtHciACLDataPacket_t * const p
 				// request is answered, never a Pairing Failed.
 				uint8_t buf[sizeof(BtHciACLDataPacketHdr_t) + sizeof(BtL2CapHdr_t) + 2];
 				BtHciACLDataPacket_t *acl = (BtHciACLDataPacket_t*)buf;
-				BtL2CapPdu_t *l2pdu = (BtL2CapPdu_t*)acl->Data;
+				BtL2CapHdr_t *l2hdr = (BtL2CapHdr_t*)acl->Data;
 
 				acl->Hdr.ConnHdl = pPkt->Hdr.ConnHdl;
 				acl->Hdr.PBFlag = BT_HCI_PBFLAG_START_NONFLUSHABLE;
 				acl->Hdr.BCFlag = 0;
-				l2pdu->Hdr.Cid = BT_L2CAP_CID_SEC_MNGR;
-				l2pdu->Hdr.Len = 2;
-				l2pdu->Smp.Code = BT_SMP_CODE_PAIRING_FAILED;
-				l2pdu->Smp.Data[0] = BT_SMP_ERR_PAIRING_NOT_SUPPORTED;
+				l2hdr->Cid = BT_L2CAP_CID_SEC_MNGR;
+				l2hdr->Len = 2;
+				// This short reply does not contain a full BtL2CapPdu_t union.
+				acl->Data[sizeof(BtL2CapHdr_t)] = BT_SMP_CODE_PAIRING_FAILED;
+				acl->Data[sizeof(BtL2CapHdr_t) + 1U] = BT_SMP_ERR_PAIRING_NOT_SUPPORTED;
 				acl->Hdr.Len = (uint16_t)(2 + sizeof(BtL2CapHdr_t));
 				BtHciSendAcl(pDev, acl);
 			}
