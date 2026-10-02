@@ -356,6 +356,14 @@ or skews; it does not mean all diagnostic counters were zero.
 See the [USB example index](../exemples/usb/README.md) and
 [TinyUSB comparison procedure](../exemples/usb/tinyusb_common/README.md).
 
+## TaktOS integration
+
+The [USB + TaktOS example](../exemples/usb/usb_taktos/README.md) includes an
+nRF52840 IOcomposer project. One thread services USB and nonblocking CDC
+loopback; a lower-priority periodic thread demonstrates scheduler progress.
+The USB thread is also the sole AppEvt dispatcher on nRF52840. Follow its
+partial-write handling and bounded service passes when adapting it.
+
 ## Suspend, reset and reconnect
 
 Call `UsbProcess()` continuously. It observes VBUS changes, runs class work and

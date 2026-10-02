@@ -9,6 +9,7 @@ with matching Debug or Release settings.
 | Example source | Target project | Purpose |
 |---|---|---|
 | [usb_cdc_loopback.cpp](usb_cdc_loopback.cpp) | UsbCdcLoopback/ioc | One CDC loopback port |
+| [usb_cdc_loopback_taktos.cpp](usb_cdc_loopback_taktos.cpp) | UsbCdcLoopbackTaktOS/ioc | CDC loopback and periodic task under TaktOS |
 | [usb_cdc_prbs_tx.cpp](usb_cdc_prbs_tx.cpp) | UsbCdcPrbsTx/ioc | CDC PRBS transmitter |
 | [usb_dual_cdc_stress.cpp](usb_dual_cdc_stress.cpp) | UsbDualCdcStress/ioc | CDC loopback and PRBS concurrently |
 | [usb_combo_stress.cpp](usb_combo_stress.cpp) | UsbComboStress/ioc | Dual CDC, HID, raw INT and bidirectional ISO |
@@ -32,6 +33,9 @@ an example; the HID report length does not include the transport header.
 USB HCI is implemented by `BtHciUsb`. The maintainer's HciController test
 application is not included here; do not substitute a generic USB loopback
 for HCI protocol validation.
+
+See [USB with TaktOS](usb_taktos/README.md) for the RTOS build, single-thread
+USB ownership, nonblocking transfers and hardware validation procedure.
 
 ## Comparing implementations
 
