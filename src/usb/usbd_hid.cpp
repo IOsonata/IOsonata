@@ -378,7 +378,8 @@ static bool UsbdHidInitInternal(UsbdHidDev_t *pHid,
 	pHid->ItfNo = alloc.FirstInterface;
 	pHid->EpNo = alloc.Bidirectional[0];
 
-	UsbIntIntrfCfg_t intCfg = {};
+	// Every configuration member is assigned below.
+	UsbIntIntrfCfg_t intCfg;
 	intCfg.DevNo = pHid->DevNo;
 	intCfg.EpNo = pHid->EpNo;
 	intCfg.EvtCB = pCfg->EvtCB;

@@ -373,7 +373,11 @@ static bool UsbdCdcInitInternal(UsbdCdcDev_t * const pCdc,
 	pCdc->NotifyEpNo = alloc.In[0];
 	pCdc->DataEpNo = alloc.Bidirectional[0];
 
-	UsbIntrfCfg_t dataCfg = {};
+	// Assign every member directly; a blanket clear would be overwritten.
+	UsbIntrfCfg_t dataCfg;
+	dataCfg.Mode = USB_INTRF_MODE_AUTO;
+	dataCfg.pRxBuffer = nullptr;
+	dataCfg.pTxBuffer = nullptr;
 	dataCfg.bBlocking = pCfg->bBlocking;
 	dataCfg.RxFifoMemSize = pCfg->RxFifoMemSize;
 	dataCfg.pRxFifoMem = pCfg->pRxFifoMem;
