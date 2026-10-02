@@ -69,11 +69,10 @@ typedef struct {
 #define BT_GATT_LONG_WRITE_RECORD_MAX	32
 #endif
 
-#ifndef BT_GATT_LONG_WRITE_SCRATCH_MAX
-#define BT_GATT_LONG_WRITE_SCRATCH_MAX	1024
-#endif
+// Handle of a record that holds no value. It takes the place of the header
+// of a fragment that was joined to the one before it.
+#define BT_GATT_LONG_WRITE_FILL_HDL		0xFFFF
 
-alignas(4) static uint8_t s_LongWrScratch[BT_GATT_LONG_WRITE_SCRATCH_MAX];
 static uint8_t s_EmptyValue;
 
 static bool BtGattNrf52ValueLenValid(const BtDevice_t *pConn, size_t Len)
@@ -187,12 +186,40 @@ void BtGattSrvcDisconnected(BtGattSrvc_t *pSrvc)
 	(void)pSrvc;
 }
 
-static bool GatherLongWrBuff(const uint8_t *pBuff, uint16_t BuffSize,
-							 uint16_t Handle, uint8_t *pOut,
-							 uint16_t OutSize, uint16_t *pOffset,
-							 uint16_t *pLen)
+static void LongWrReverse(uint8_t *pBuff, uint16_t From, uint16_t To)
 {
-	if (pBuff == nullptr || pOut == nullptr || pOffset == nullptr ||
+	while (From + 1 < To)
+	{
+		To--;
+		uint8_t t = pBuff[From];
+		pBuff[From] = pBuff[To];
+		pBuff[To] = t;
+		From++;
+	}
+}
+
+// Join the fragments of one attribute inside the prepared write queue.
+//
+// The queue is a list of records, each a GATLWRHDR followed by its data. The
+// fragments of Handle are brought next to each other and their data made
+// contiguous, in the queue itself, so no other buffer is needed. The queue
+// stays a valid list: the first record of Handle then holds the whole value
+// and each joined fragment leaves a record without data in its place. The
+// records of the other attributes keep their content and order.
+//
+// @param	pBuff	: The queue
+// @param	BuffSize: Size of the queue in bytes
+// @param	Handle	: Attribute to gather
+// @param	ppData	: Returns the pointer to the value, inside the queue
+// @param	pOffset	: Returns the offset of the value in the attribute
+// @param	pLen	: Returns the length of the value
+//
+// @return	true - a value for Handle was found
+static bool GatherLongWrBuff(uint8_t *pBuff, uint16_t BuffSize,
+							 uint16_t Handle, uint8_t **ppData,
+							 uint16_t *pOffset, uint16_t *pLen)
+{
+	if (pBuff == nullptr || ppData == nullptr || pOffset == nullptr ||
 		pLen == nullptr || BuffSize < sizeof(GATLWRHDR))
 	{
 		return false;
@@ -228,7 +255,10 @@ static bool GatherLongWrBuff(const uint8_t *pBuff, uint16_t BuffSize,
 		return false;
 	}
 
+	// The fragments must follow each other in the attribute. Checked before
+	// anything is moved.
 	bool found = false;
+	uint16_t first = 0;
 	uint16_t firstOffset = 0;
 	uint16_t total = 0;
 	uint16_t cur = 0;
@@ -242,14 +272,10 @@ static bool GatherLongWrBuff(const uint8_t *pBuff, uint16_t BuffSize,
 			if (!found)
 			{
 				found = true;
+				first = cur;
 				firstOffset = hdr.Offset;
 			}
 			else if ((uint32_t)firstOffset + total != hdr.Offset)
-			{
-				return false;
-			}
-
-			if ((uint32_t)total + hdr.Len > OutSize)
 			{
 				return false;
 			}
@@ -263,20 +289,45 @@ static bool GatherLongWrBuff(const uint8_t *pBuff, uint16_t BuffSize,
 		return false;
 	}
 
-	cur = 0;
-	uint16_t dst = 0;
+	GATLWRHDR hdr;
+	memcpy(&hdr, pBuff + first, sizeof(hdr));
+
+	// End of the joined value
+	uint16_t end = (uint16_t)(first + sizeof(GATLWRHDR) + hdr.Len);
+
+	cur = end;
 	while (cur < used)
 	{
-		GATLWRHDR hdr;
 		memcpy(&hdr, pBuff + cur, sizeof(hdr));
-		if (hdr.Handle == Handle && hdr.Len > 0)
+		uint16_t next = (uint16_t)(cur + sizeof(GATLWRHDR) + hdr.Len);
+
+		if (hdr.Handle == Handle)
 		{
-			memcpy(pOut + dst, pBuff + cur + sizeof(GATLWRHDR), hdr.Len);
-			dst = (uint16_t)(dst + hdr.Len);
+			if (cur != end)
+			{
+				// Bring the fragment right after the joined value. The
+				// records in between move up as they are.
+				LongWrReverse(pBuff, end, cur);
+				LongWrReverse(pBuff, cur, next);
+				LongWrReverse(pBuff, end, next);
+			}
+
+			// Data over its own header, then a record without data in the
+			// room the header took
+			memmove(pBuff + end, pBuff + end + sizeof(GATLWRHDR), hdr.Len);
+			end = (uint16_t)(end + hdr.Len);
+
+			GATLWRHDR fill = { BT_GATT_LONG_WRITE_FILL_HDL, 0, 0 };
+			memcpy(pBuff + end, &fill, sizeof(fill));
 		}
-		cur = (uint16_t)(cur + sizeof(GATLWRHDR) + hdr.Len);
+		cur = next;
 	}
 
+	memcpy(&hdr, pBuff + first, sizeof(hdr));
+	hdr.Len = total;
+	memcpy(pBuff + first, &hdr, sizeof(hdr));
+
+	*ppData = pBuff + first + sizeof(GATLWRHDR);
 	*pOffset = firstOffset;
 	*pLen = total;
 	return true;
@@ -307,7 +358,7 @@ void BtGattSrvcEvtHandler(BtGattSrvc_t * const pSrvc, uint32_t Evt,
 			if (pWrite->op == BLE_GATTS_OP_EXEC_WRITE_REQ_NOW)
 			{
 				BtDevice_t *pConn = BtPeerFindByHdl(connHdl);
-				const uint8_t *pQueue = pConn != nullptr ?
+				uint8_t *pQueue = pConn != nullptr ?
 					pConn->Conn.pLongWrBuff : nullptr;
 				uint16_t queueSize = pConn != nullptr ?
 					pConn->Conn.LongWrBuffSize : 0;
@@ -320,13 +371,13 @@ void BtGattSrvcEvtHandler(BtGattSrvc_t * const pSrvc, uint32_t Evt,
 						continue;
 					}
 
+					uint8_t *pData = nullptr;
 					uint16_t offset = 0;
 					uint16_t len = 0;
 					if (GatherLongWrBuff(pQueue, queueSize, pChar->ValHdl,
-							s_LongWrScratch, sizeof(s_LongWrScratch),
-							&offset, &len))
+							&pData, &offset, &len))
 					{
-						pChar->WrCB(pChar, s_LongWrScratch, offset, len);
+						pChar->WrCB(pChar, pData, offset, len);
 					}
 				}
 				break;
