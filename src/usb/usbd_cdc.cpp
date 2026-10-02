@@ -39,6 +39,10 @@ SOFTWARE.
 #include "usb/usbd_epalloc.h"
 #include "usb/usbd_cdc.h"
 
+// Out of line so static instances use zero-filled storage instead of a
+// flash initializer containing the entire object and its vtable pointers.
+UsbdCdc::UsbdCdc() = default;
+
 extern const UsbdCdcDesc_t g_UsbdCdcDescTemplate;
 void UsbdCdcPatchDesc(UsbdCdcDesc_t *pDesc, const UsbdCdcDev_t *pCdc,
 					 UsbSpeed_t Speed, bool HasFunctionString);

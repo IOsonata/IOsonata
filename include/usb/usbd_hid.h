@@ -148,7 +148,7 @@ bool UsbdHidMakeDesc(UsbdHidDesc_t *pDesc, const UsbdHidDev_t *pHid,
 
 class UsbdHid : public UsbDeviceClass, public UsbIntIntrf {
 public:
-	UsbdHid() = default;
+	UsbdHid();
 	UsbdHid(const UsbdHid &) = delete;
 	UsbdHid &operator = (const UsbdHid &) = delete;
 

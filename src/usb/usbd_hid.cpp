@@ -36,6 +36,10 @@ SOFTWARE.
 #include "usb/usbd_epalloc.h"
 #include "usb/usbd_hid.h"
 
+// Out of line so static instances use zero-filled storage instead of a
+// flash initializer containing the entire object and its vtable pointers.
+UsbdHid::UsbdHid() = default;
+
 static void UsbdHidUnconfigure(UsbdHidDev_t *pHid)
 {
 	UsbIntIntrfClose(pHid->pIntIntrf);
