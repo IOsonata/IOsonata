@@ -38,6 +38,10 @@ static_assert(std::atomic<uint32_t>::is_always_lock_free);
 static std::atomic<uint32_t> s_LoopErrors{0};
 volatile uint32_t g_UsbComboTaktOSHeartbeat = 0;
 
+// Bound traffic work between yields while keeping the bare-metal per-byte
+// PRBS Tx calls and loopback receive/transmit steps.
+#define CDC_PASSES_PER_TURN 4U
+
 static void ServiceThread(void *pArg)
 {
 	(void)pArg;
@@ -61,48 +65,51 @@ static void LoopThread(void *pArg)
 	bool wasOpen = false;
 	while (true)
 	{
-		const bool open = g_LoopbackCdc.IsPortOpen();
-		if (open != wasOpen)
+		for (unsigned pass = 0; pass < CDC_PASSES_PER_TURN; pass++)
 		{
-			wasOpen = open;
-			pending = 0;
-			offset = 0;
-			if (open)
+			const bool open = g_LoopbackCdc.IsPortOpen();
+			if (open != wasOpen)
 			{
-				static const char banner[] = "\r\nIOsonata USB Combo Stress\r\n";
-				static_assert(sizeof(banner) - 1 <= sizeof(buffer));
-				memcpy(buffer, banner, sizeof(banner) - 1);
-				pending = sizeof(banner) - 1;
-				expected = Prbs8(0xff);
-			}
-		}
-		if (open)
-		{
-			if (pending > 0)
-			{
-				const int n = g_LoopbackCdc.Tx(0, buffer + offset, pending);
-				if (n > 0)
+				wasOpen = open;
+				pending = 0;
+				offset = 0;
+				if (open)
 				{
-					offset += n;
-					pending -= n;
+					static const char banner[] = "\r\nIOsonata USB Combo Stress\r\n";
+					static_assert(sizeof(banner) - 1 <= sizeof(buffer));
+					memcpy(buffer, banner, sizeof(banner) - 1);
+					pending = sizeof(banner) - 1;
+					expected = Prbs8(0xff);
 				}
 			}
-			else
+			if (open)
 			{
-				const int n = g_LoopbackCdc.Rx(0, buffer, sizeof(buffer));
-				if (n > 0)
+				if (pending > 0)
 				{
-					for (int i = 0; i < n; i++)
+					const int n = g_LoopbackCdc.Tx(0, buffer + offset, pending);
+					if (n > 0)
 					{
-						if (buffer[i] != expected)
-						{
-							errors++;
-						}
-						expected = Prbs8(buffer[i]);
+						offset += n;
+						pending -= n;
 					}
-					s_LoopErrors.store(errors, std::memory_order_relaxed);
-					pending = n;
-					offset = 0;
+				}
+				else
+				{
+					const int n = g_LoopbackCdc.Rx(0, buffer, sizeof(buffer));
+					if (n > 0)
+					{
+						for (int i = 0; i < n; i++)
+						{
+							if (buffer[i] != expected)
+							{
+								errors++;
+							}
+							expected = Prbs8(buffer[i]);
+						}
+						s_LoopErrors.store(errors, std::memory_order_relaxed);
+						pending = n;
+						offset = 0;
+					}
 				}
 			}
 		}
@@ -117,17 +124,20 @@ static void PrbsThread(void *pArg)
 	uint32_t reported = 0;
 	while (true)
 	{
-		const bool error = reported != s_LoopErrors.load(std::memory_order_relaxed);
-		const uint8_t byte = error ? 0U : prbs;
-		if (g_PrbsCdc.IsPortOpen() && g_PrbsCdc.Tx(0, &byte, 1) > 0)
+		for (unsigned pass = 0; pass < CDC_PASSES_PER_TURN; pass++)
 		{
-			if (error)
+			const bool error = reported != s_LoopErrors.load(std::memory_order_relaxed);
+			const uint8_t byte = error ? 0U : prbs;
+			if (g_PrbsCdc.IsPortOpen() && g_PrbsCdc.Tx(0, &byte, 1) > 0)
 			{
-				reported++;
-			}
-			else
-			{
-				prbs = Prbs8(prbs);
+				if (error)
+				{
+					reported++;
+				}
+				else
+				{
+					prbs = Prbs8(prbs);
+				}
 			}
 		}
 		TaktOSThreadYield();
