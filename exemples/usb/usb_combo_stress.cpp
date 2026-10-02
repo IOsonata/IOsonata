@@ -152,15 +152,15 @@ static const UsbdHidCfg_t s_HidCfg = {
 static constexpr uint8_t s_IntIntervals[INT_ALT_COUNT] = { 1U, 4U, 16U };
 
 #pragma pack(push, 1)
-typedef struct __Combo_Int_Alt_Descriptor {
+typedef struct __Combo_Alt_Descriptor {
 	UsbIntrfDesc_t Interface;
 	UsbEndPointDesc_t Out;
 	UsbEndPointDesc_t In;
-} ComboIntAltDesc_t;
+} ComboAltDesc_t;
 
 typedef struct __Combo_Int_Function_Descriptor {
 	UsbIntrfDesc_t Alt0;
-	ComboIntAltDesc_t Alt[INT_ALT_COUNT];
+	ComboAltDesc_t Alt[INT_ALT_COUNT];
 } ComboIntFunctionDesc_t;
 #pragma pack(pop)
 
@@ -238,47 +238,9 @@ static void IntReset(void)
 	UsbIntIntrfReset(&s_Int);
 }
 
-static constexpr ComboIntFunctionDesc_t IntFunctionDescTemplate(void)
-{
-	ComboIntFunctionDesc_t desc = {};
-	desc.Alt0.bLength = sizeof(desc.Alt0);
-	desc.Alt0.bDescriptorType = USB_DESCTYPE_INTERFACE;
-	desc.Alt0.bInterfaceClass = USB_INTRFCLASS_VENDOR;
-	desc.Alt0.iInterface = COMBO_STR_INTERFACE;
-
-	for (unsigned i = 0U; i < INT_ALT_COUNT; i++)
-	{
-		ComboIntAltDesc_t &alt = desc.Alt[i];
-		alt.Interface = desc.Alt0;
-		alt.Interface.bAlternateSetting = (uint8_t)(i + 1U);
-		alt.Interface.bNumEndpoints = 2U;
-		alt.Out.bLength = sizeof(alt.Out);
-		alt.Out.bDescriptorType = USB_DESCTYPE_ENDPOINT;
-		alt.Out.bmAttributes = USB_ENDPATT_TRANS_INT;
-		alt.Out.wMaxPacketSize = INT_MPS;
-		alt.Out.bInterval = s_IntIntervals[i];
-		alt.In = alt.Out;
-	}
-	return desc;
-}
-
-static constexpr ComboIntFunctionDesc_t s_IntFunctionDesc =
-	IntFunctionDescTemplate();
-
-static void IntPatchFunctionDesc(const UsbDeviceClass *, uint8_t *pData,
-	UsbSpeed_t)
-{
-	ComboIntFunctionDesc_t *pDesc =
-		reinterpret_cast<ComboIntFunctionDesc_t *>(pData);
-	pDesc->Alt0.bInterfaceNumber = s_Fn.IntInterfaceNo;
-	for (unsigned i = 0U; i < INT_ALT_COUNT; i++)
-	{
-		ComboIntAltDesc_t &alt = pDesc->Alt[i];
-		alt.Interface.bInterfaceNumber = s_Fn.IntInterfaceNo;
-		alt.Out.bEndpointAddress = USB_ENDPADDR_DIROUT(s_Fn.IntEpNo);
-		alt.In.bEndpointAddress = USB_ENDPADDR_DIRIN(s_Fn.IntEpNo);
-	}
-}
+// INT and ISO use the same interface/OUT/IN descriptor layout.
+static void ComboBuildFunctionDesc(const UsbDeviceClass *pClass, uint8_t *pData,
+	UsbSpeed_t Speed);
 
 class IntLoopbackClass final : public UsbDeviceClass {
 public:
@@ -321,7 +283,7 @@ static bool IntInit(void)
 	}
 
 	return UsbDescRegister(USB_DEVNO, &s_IntClass,
-		&s_IntFunctionDesc, sizeof(s_IntFunctionDesc), IntPatchFunctionDesc);
+		nullptr, sizeof(ComboIntFunctionDesc_t), ComboBuildFunctionDesc);
 }
 
 /* ISO --------------------------------------------------------------------- */
@@ -331,15 +293,9 @@ static constexpr uint16_t s_IsoMps[ISO_ALT_COUNT] = {
 };
 
 #pragma pack(push, 1)
-typedef struct __Combo_Iso_Alt_Descriptor {
-	UsbIntrfDesc_t Interface;
-	UsbEndPointDesc_t Out;
-	UsbEndPointDesc_t In;
-} ComboIsoAltDesc_t;
-
 typedef struct __Combo_Iso_Function_Descriptor {
 	UsbIntrfDesc_t Alt0;
-	ComboIsoAltDesc_t Alt[ISO_ALT_COUNT];
+	ComboAltDesc_t Alt[ISO_ALT_COUNT];
 } ComboIsoFunctionDesc_t;
 #pragma pack(pop)
 
@@ -487,7 +443,7 @@ static void IsoProcess(void)
 	}
 }
 
-static constexpr UsbIntrfDesc_t s_IsoAlt0Desc = {
+static constexpr UsbIntrfDesc_t s_ComboAlt0Desc = {
 	.bLength = sizeof(UsbIntrfDesc_t),
 	.bDescriptorType = USB_DESCTYPE_INTERFACE,
 	.bInterfaceNumber = 0U,
@@ -499,32 +455,33 @@ static constexpr UsbIntrfDesc_t s_IsoAlt0Desc = {
 	.iInterface = COMBO_STR_INTERFACE,
 };
 
-static void IsoBuildFunctionDesc(const UsbDeviceClass *, uint8_t *pData,
+static void ComboBuildFunctionDesc(const UsbDeviceClass *pClass, uint8_t *pData,
 	UsbSpeed_t Speed)
 {
-	ComboIsoFunctionDesc_t *pDesc =
-		reinterpret_cast<ComboIsoFunctionDesc_t *>(pData);
-	pDesc->Alt0 = s_IsoAlt0Desc;
-	pDesc->Alt0.bInterfaceNumber = s_Fn.IsoInterfaceNo;
+	const bool isInt = pClass == &s_IntClass;
+	const uint8_t interfaceNo = isInt ? s_Fn.IntInterfaceNo : s_Fn.IsoInterfaceNo;
+	const uint8_t epNo = isInt ? s_Fn.IntEpNo : s_Fn.IsoEpNo;
+	const unsigned altCount = isInt ? INT_ALT_COUNT : ISO_ALT_COUNT;
+	const uint8_t attributes = isInt ? USB_ENDPATT_TRANS_INT : USB_ENDPATT_TRANS_ISO;
+	const uint8_t isoInterval = Speed == USB_SPEED_HIGH ? 4U : 1U;
 
-	const uint8_t interval = Speed == USB_SPEED_HIGH ? 4U : 1U;
-	ComboIsoAltDesc_t *pAlt = pDesc->Alt;
-	for (unsigned i = 0U; i < ISO_ALT_COUNT; i++, pAlt++)
+	UsbIntrfDesc_t *pAlt0 = reinterpret_cast<UsbIntrfDesc_t *>(pData);
+	*pAlt0 = s_ComboAlt0Desc;
+	pAlt0->bInterfaceNumber = interfaceNo;
+	ComboAltDesc_t *pAlt = reinterpret_cast<ComboAltDesc_t *>(pAlt0 + 1);
+	for (unsigned i = 0U; i < altCount; i++, pAlt++)
 	{
-		ComboIsoAltDesc_t &alt = *pAlt;
-		// Build from the small components instead of copying a complete
-		// alternate template and overwriting its variable fields.
-		alt.Interface = pDesc->Alt0;
-		alt.Interface.bAlternateSetting = (uint8_t)(i + 1U);
-		alt.Interface.bNumEndpoints = 2U;
-		alt.Out.bLength = sizeof(alt.Out);
-		alt.Out.bDescriptorType = USB_DESCTYPE_ENDPOINT;
-		alt.Out.bEndpointAddress = USB_ENDPADDR_DIROUT(s_Fn.IsoEpNo);
-		alt.Out.bmAttributes = USB_ENDPATT_TRANS_ISO;
-		alt.Out.wMaxPacketSize = s_IsoMps[i];
-		alt.Out.bInterval = interval;
-		alt.In = alt.Out;
-		alt.In.bEndpointAddress = USB_ENDPADDR_DIRIN(s_Fn.IsoEpNo);
+		pAlt->Interface = *pAlt0;
+		pAlt->Interface.bAlternateSetting = (uint8_t)(i + 1U);
+		pAlt->Interface.bNumEndpoints = 2U;
+		pAlt->Out.bLength = sizeof(pAlt->Out);
+		pAlt->Out.bDescriptorType = USB_DESCTYPE_ENDPOINT;
+		pAlt->Out.bEndpointAddress = USB_ENDPADDR_DIROUT(epNo);
+		pAlt->Out.bmAttributes = attributes;
+		pAlt->Out.wMaxPacketSize = isInt ? INT_MPS : s_IsoMps[i];
+		pAlt->Out.bInterval = isInt ? s_IntIntervals[i] : isoInterval;
+		pAlt->In = pAlt->Out;
+		pAlt->In.bEndpointAddress = USB_ENDPADDR_DIRIN(epNo);
 	}
 }
 
@@ -590,7 +547,7 @@ static bool IsoInit(void)
 	}
 
 	return UsbDescRegister(USB_DEVNO, &s_IsoClass,
-		nullptr, sizeof(ComboIsoFunctionDesc_t), IsoBuildFunctionDesc);
+		nullptr, sizeof(ComboIsoFunctionDesc_t), ComboBuildFunctionDesc);
 }
 
 /* Device ------------------------------------------------------------------ */
