@@ -139,11 +139,23 @@ alignas(4) static nRFTimerData_t s_nRFxTimerData[TIMER_NRFX_HF_MAX] = {
 
 static std::atomic<int> s_nRfxHFClockSem(0);
 
+// Set by nRFxTimerInit. The interrupt handlers below are kept by the linker as soon as
+// this file is part of a build, used or not. They reach the timer data
+// through this pointer, so that the data is linked only when a timer is
+// initialized.
+static nRFTimerData_t *s_pnRFxTimerData = nullptr;
+
 static void TimerIRQHandler(int DevNo)
 {
-	NRF_TIMER_Type *reg = s_nRFxTimerData[DevNo].pReg;
-	nRFTimerData_t &tdata = s_nRFxTimerData[DevNo];
-	TimerDev_t *timer = s_nRFxTimerData[DevNo].pTimer;
+	if (s_pnRFxTimerData == nullptr)
+	{
+		// No timer of this kind was initialized
+		return;
+	}
+
+	NRF_TIMER_Type *reg = s_pnRFxTimerData[DevNo].pReg;
+	nRFTimerData_t &tdata = s_pnRFxTimerData[DevNo];
+	TimerDev_t *timer = s_pnRFxTimerData[DevNo].pTimer;
     uint32_t evt = 0;
 	uint32_t t = reg->CC[tdata.CountCC];	// Preserve comparator
 
@@ -629,6 +641,8 @@ bool nRFxTimerInit(TimerDev_t *const pTimer, const TimerCfg_t *const pCfg)
 	int devno = pCfg->DevNo - TIMER_NRFX_RTC_MAX;
 	pTimer->DevNo = pCfg->DevNo;
 	pTimer->EvtHandler = pCfg->EvtHandler;
+	s_pnRFxTimerData = s_nRFxTimerData;
+
 	nRFTimerData_t &tdata = s_nRFxTimerData[devno];
 	NRF_TIMER_Type *reg = s_nRFxTimerData[devno].pReg;
 

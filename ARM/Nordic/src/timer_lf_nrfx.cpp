@@ -88,10 +88,22 @@ alignas(4) static nRFRtcData_t s_nRfxRtcData[TIMER_NRFX_RTC_MAX] = {
 
 static std::atomic<int> s_nRfxLFClockSem(0);
 
+// Set by nRFxRtcInit. The interrupt handlers below are kept by the linker as soon as
+// this file is part of a build, used or not. They reach the timer data
+// through this pointer, so that the data is linked only when a timer is
+// initialized.
+static nRFRtcData_t *s_pnRfxRtcData = nullptr;
+
 static void RtcIRQHandler(int DevNo)
 {
-	NRF_RTC_Type *reg = s_nRfxRtcData[DevNo].pReg;
-	TimerDev_t *timer = s_nRfxRtcData[DevNo].pTimer;
+	if (s_pnRfxRtcData == nullptr)
+	{
+		// No timer of this kind was initialized
+		return;
+	}
+
+	NRF_RTC_Type *reg = s_pnRfxRtcData[DevNo].pReg;
+	TimerDev_t *timer = s_pnRfxRtcData[DevNo].pTimer;
     uint32_t evt = 0;
     uint32_t count = reg->COUNTER;
 
@@ -110,19 +122,19 @@ static void RtcIRQHandler(int DevNo)
 
     timer->LastCount = count;
 
-    for (int i = 0; i < s_nRfxRtcData[DevNo].MaxNbTrigEvt; i++)
+    for (int i = 0; i < s_pnRfxRtcData[DevNo].MaxNbTrigEvt; i++)
     {
         if (reg->EVENTS_COMPARE[i])
         {
             evt |= TIMER_EVT_TRIGGER(i);
             reg->EVENTS_COMPARE[i] = 0;
-            if (s_nRfxRtcData[DevNo].Trigger[i].Type == TIMER_TRIG_TYPE_CONTINUOUS)
+            if (s_pnRfxRtcData[DevNo].Trigger[i].Type == TIMER_TRIG_TYPE_CONTINUOUS)
             {
-            	reg->CC[i] = (count + s_nRfxRtcData[DevNo].CC[i]) & 0xffffff;
+            	reg->CC[i] = (count + s_pnRfxRtcData[DevNo].CC[i]) & 0xffffff;
             }
-            if (s_nRfxRtcData[DevNo].Trigger[i].Handler)
+            if (s_pnRfxRtcData[DevNo].Trigger[i].Handler)
             {
-            	s_nRfxRtcData[DevNo].Trigger[i].Handler(timer, i, s_nRfxRtcData[DevNo].Trigger[i].pContext);
+            	s_pnRfxRtcData[DevNo].Trigger[i].Handler(timer, i, s_pnRfxRtcData[DevNo].Trigger[i].pContext);
             }
         }
     }
@@ -348,6 +360,8 @@ bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 
     pTimer->DevNo = pCfg->DevNo;
     pTimer->EvtHandler = pCfg->EvtHandler;
+	s_pnRfxRtcData = s_nRfxRtcData;
+
 	nRFRtcData_t &rtc = s_nRfxRtcData[pTimer->DevNo];
 	NRF_RTC_Type *reg = s_nRfxRtcData[pTimer->DevNo].pReg;
 
