@@ -76,6 +76,7 @@ SOFTWARE.
 #include "coredev/system_core_clock.h"
 #include "coredev/interrupt.h"
 #include "coredev/iopincfg.h"
+#include "timer_nrfx.h"
 #include "iopinctrl.h"
 #include "bluetooth/bt_uuid.h"
 #include "bluetooth/bt_app.h"
@@ -162,7 +163,10 @@ const static TimerCfg_t s_BtAppSdTimerCfg = {
 	.bTickInt = false,
 };
 
-static Timer s_BtAppSdGrtc3;
+// The timer device and not the Timer class: the class initializes through
+// TimerInit, which links the high frequency timer driver along with the low
+// frequency one.
+static TimerDev_t s_BtAppSdGrtc3;
 static volatile uint16_t s_SecurePendingHdl[CONFIG_NRF_SDH_BLE_TOTAL_LINK_COUNT];
 
 static void SecurePendingReset()
@@ -987,7 +991,7 @@ bool BtAppStackInit(const BtAppCfg_t *pCfg)
 	memset((void *)0x20000000, 0, ramstart - 0x20000000);
 
 	// GRTC3 must be enabled with interrupt disbled before calling nrf_sdh_enable_request
-	s_BtAppSdGrtc3.Init(s_BtAppSdTimerCfg);
+	nRFxLFTimerInit(&s_BtAppSdGrtc3, &s_BtAppSdTimerCfg);
 
 	// Enable SoftDevice
 	err = nrf_sdh_enable_request();
@@ -1505,12 +1509,19 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 // needed here.
 uint32_t BtSmpMsTick(void)
 {
-	return s_BtAppSdGrtc3.mSecond();
+	if (s_BtAppSdGrtc3.GetTickCount == nullptr)
+	{
+		// Timer not started
+		return 0;
+	}
+
+	return (uint32_t)(s_BtAppSdGrtc3.GetTickCount(&s_BtAppSdGrtc3) *
+					  s_BtAppSdGrtc3.nsPeriod / 1000000ULL);
 }
 
 uint32_t BtGattMsTick(void)
 {
-	return s_BtAppSdGrtc3.mSecond();
+	return BtSmpMsTick();
 }
 
 // Spec-strict indication transaction timeout: Core Vol 3 Part F 3.3.3 requires
