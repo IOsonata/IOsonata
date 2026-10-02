@@ -264,6 +264,29 @@ bool BtAppConnInit(void);
  * @return	true - security started
  */
 bool BtAppSecInit(void);
+
+/// Queue of the event scheduler of a port that runs a vendor event scheduler
+/// next to the application event queue (AppEvtHandlerQue).
+typedef struct __Bt_App_Sched_Cfg {
+	void *pMem;				//!< Queue memory, aligned on 4 bytes. NULL : scheduler not used
+	size_t MemSize;			//!< Total pMem length in bytes
+	uint16_t EvtSize;		//!< Maximum size of the data of one event
+	uint16_t QueSize;		//!< Maximum number of events in the queue
+} BtAppSchedCfg_t;
+
+/// Scheduler queue of the port. A port that runs a vendor event scheduler
+/// defines a weak default, so that applications posting events to that
+/// scheduler work without anything to set up. The library itself posts
+/// nothing to it. An application that does not use the vendor scheduler
+/// leaves the queue out with
+///
+///   const BtAppSchedCfg_t g_BtAppSchedCfg = { NULL, 0, 0, 0 };
+///
+/// and one that needs another depth defines its own memory and sizes.
+/// BtAppInit fails when the memory is too small for the sizes given.
+/// Ports without such a scheduler do not use it.
+extern const BtAppSchedCfg_t g_BtAppSchedCfg;
+
 void BtAppEvtConnected(uint16_t ConnHdl);
 void BtAppEvtDisconnected(uint16_t ConnHdl);
 // Called once the link is encrypted (freshly paired or re-encrypted from a

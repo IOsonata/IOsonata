@@ -1374,6 +1374,15 @@ bool BtAppConnInit(void)
 	return true;
 }
 
+// Default queue of the SDK scheduler. An application defines its own
+// g_BtAppSchedCfg to size it, or to leave the scheduler out, see bt_app.h.
+static uint32_t s_BtAppSchedMem[CEIL_DIV(APP_SCHED_BUF_SIZE(SCHED_MAX_EVENT_DATA_SIZE, SCHED_QUEUE_SIZE),
+										 sizeof(uint32_t))];
+
+extern "C" __attribute__((weak)) const BtAppSchedCfg_t g_BtAppSchedCfg = {
+	s_BtAppSchedMem, sizeof(s_BtAppSchedMem), SCHED_MAX_EVENT_DATA_SIZE, SCHED_QUEUE_SIZE
+};
+
 bool BtAppInit(const BtAppCfg_t *pCfg)//, bool bEraseBond)
 {
 	ret_code_t err_code;
@@ -1436,7 +1445,25 @@ bool BtAppInit(const BtAppCfg_t *pCfg)//, bool bEraseBond)
 	APP_ERROR_CHECK(err_code);
 	err_code = app_timer_start(s_BtAppPeriodicTimerId, APP_TIMER_TICKS(1000), NULL);
 	APP_ERROR_CHECK(err_code);
-	APP_SCHED_INIT(SCHED_MAX_EVENT_DATA_SIZE, SCHED_QUEUE_SIZE);
+
+	// SDK scheduler, for applications that post events to it. The queue is
+	// described by g_BtAppSchedCfg. An application that does not use the
+	// scheduler defines the descriptor without memory and the default queue
+	// is then not linked.
+	if (g_BtAppSchedCfg.pMem != nullptr)
+	{
+		if (((uintptr_t)g_BtAppSchedCfg.pMem & 3U) != 0 ||
+			g_BtAppSchedCfg.MemSize < APP_SCHED_BUF_SIZE(g_BtAppSchedCfg.EvtSize, g_BtAppSchedCfg.QueSize))
+		{
+			DEBUG_PRINTF("BtAppInit FAIL: scheduler queue memory (mem=%p size=%d)\r\n",
+				g_BtAppSchedCfg.pMem, (int)g_BtAppSchedCfg.MemSize);
+			return false;
+		}
+
+		err_code = app_sched_init(g_BtAppSchedCfg.EvtSize, g_BtAppSchedCfg.QueSize,
+								  g_BtAppSchedCfg.pMem);
+		APP_ERROR_CHECK(err_code);
+	}
 
     if (AppEvtHandlerInit(pCfg->pEvtHandlerQueMem, pCfg->EvtHandlerQueMemSize) == false)
     {
@@ -1579,7 +1606,10 @@ void BtAppRun()
 
 	while (1)
     {
-		app_sched_execute();
+		if (g_BtAppSchedCfg.pMem != nullptr)
+		{
+			app_sched_execute();
+		}
 		// The LESC request pump runs from here as an idle handler, registered
 		// by BtAppSecInit when the application uses security.
 		AppEvtHandlerExec();

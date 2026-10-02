@@ -171,6 +171,10 @@ alignas(8) static uint8_t s_BtPeerPoolMem[BT_PEER_POOL_MEMSIZE(1)];
 
 const BtPeerPoolCfg_t g_BtPeerPoolCfg = { s_BtPeerPoolMem, sizeof(s_BtPeerPoolMem) };
 
+// Events are posted with AppEvtHandlerQue, nothing goes to the vendor event
+// scheduler some ports run, so its queue is left out.
+const BtAppSchedCfg_t g_BtAppSchedCfg = { NULL, 0, 0, 0 };
+
 // Controller memory pool, used by the ports that run the controller in the
 // application (SDC) and not linked otherwise. BtHciCtlrMemPoolSizeNeeded
 // gives the size the configuration asked for.
@@ -585,62 +589,62 @@ void FlashTest()
 	}
 
 
-	printf("Erasing... Please wait\r\n");
+	g_Uart.printf("Erasing... Please wait\r\n");
 
 	// Ease could take a few minutes
 	g_FlashDiskIO.Erase();
 
-	printf("Writing 2KB data...\r\n");
+	g_Uart.printf("Writing 2KB data...\r\n");
 
 	g_FlashDiskIO.SectWrite(0, buff);
 	g_FlashDiskIO.SectWrite(2, buff);
 	g_FlashDiskIO.SectWrite(4, buff);
 	g_FlashDiskIO.SectWrite(8, buff);
 
-	printf("Validate readback...\r\n");
+	g_Uart.printf("Validate readback...\r\n");
 
 	g_FlashDiskIO.SectRead(0, tmp);
 
 	if (memcmp(buff, tmp, 512) != 0)
 	{
-		printf("Sector 0 verify failed\r\n");
+		g_Uart.printf("Sector 0 verify failed\r\n");
 	}
 	else
 	{
-		printf("Sector 0 verify success\r\n");
+		g_Uart.printf("Sector 0 verify success\r\n");
 	}
 
 	memset(tmp, 0, 512);
 	g_FlashDiskIO.SectRead(2, tmp);
 	if (memcmp(buff, tmp, 512) != 0)
 	{
-		printf("Sector 2 verify failed\r\n");
+		g_Uart.printf("Sector 2 verify failed\r\n");
 	}
 	else
 	{
-		printf("Sector 2 verify success\r\n");
+		g_Uart.printf("Sector 2 verify success\r\n");
 	}
 
 	memset(tmp, 0, 512);
 	g_FlashDiskIO.SectRead(4, tmp);
 	if (memcmp(buff, tmp, 512) != 0)
 	{
-		printf("Sector 4 verify failed\r\n");
+		g_Uart.printf("Sector 4 verify failed\r\n");
 	}
 	else
 	{
-		printf("Sector 4 verify success\r\n");
+		g_Uart.printf("Sector 4 verify success\r\n");
 	}
 
 	memset(tmp, 0, 512);
 	g_FlashDiskIO.SectRead(8, tmp);
 	if (memcmp(buff, tmp, 512) != 0)
 	{
-		printf("Sector 8 verify failed\r\n");
+		g_Uart.printf("Sector 8 verify failed\r\n");
 	}
 	else
 	{
-		printf("Sector 8 verify success\r\n");
+		g_Uart.printf("Sector 8 verify success\r\n");
 	}
 }
 
@@ -718,7 +722,7 @@ void HardwareInit()
 
 	if (bsec_status != BSEC_OK)
 	{
-		printf("BSEC init failed\r\n");
+		g_Uart.printf("BSEC init failed\r\n");
 
 		return;
 	}

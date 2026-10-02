@@ -117,6 +117,10 @@ alignas(8) static uint8_t s_BtCtlrMemPool[1024];
 
 const BtHciCtlrMemPool_t g_BtHciCtlrMemPool = { s_BtCtlrMemPool, sizeof(s_BtCtlrMemPool) };
 
+// This example posts nothing to the vendor event scheduler some ports run,
+// so its queue is left out.
+const BtAppSchedCfg_t g_BtAppSchedCfg = { NULL, 0, 0, 0 };
+
 const BtAppCfg_t s_BtAppCfg = {
 	.Role = BTAPP_ROLE_BROADCASTER,
 	.PeriphDevMax = 0,						// Max peripheral devices we connect to as central
