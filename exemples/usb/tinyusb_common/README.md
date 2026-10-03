@@ -39,7 +39,10 @@ The projects link the selected `IOsonata_nRF52840` platform library and use
 the IOsonata linker script and CMSIS headers. TinyUSB supplies the device core,
 class sources and the base Nordic DCD. The composite project instead links
 [this repository's modified Nordic DCD](../tinyusb_combo_stress/dcd_nrf5x.c),
-which changes ISO EasyDMA scheduling and adds scheduling diagnostics. It also
+which changes ISO EasyDMA scheduling. Its scheduling diagnostics (vendor
+request 0x5B) are built only with `TINYUSB_COMBO_ISO_DIAG` set to 1 in
+[tusb_config.h](../tinyusb_combo_stress/tusb_config.h); keep it 0 for size
+and performance comparisons. It also
 uses an application ISO class driver for EP8 alternate settings and TinyUSB's
 Vendor class for raw Interrupt traffic. Record both the IOsonata revision
 (which identifies the modified DCD) and the external TinyUSB revision with

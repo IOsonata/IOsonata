@@ -43,4 +43,11 @@
 #define CFG_TUD_VENDOR_EP_ISO_OUT	0
 #define CFG_TUD_VENDOR_EP_ISO_IN	0
 
+// ISO scheduling counters and latency figures in dcd_nrf5x.c, read through
+// vendor request 0x5B. Bench diagnostics: keep 0 for size and performance
+// comparisons, set to 1 (here or with -D) when chasing a lost ISO frame.
+#ifndef TINYUSB_COMBO_ISO_DIAG
+#define TINYUSB_COMBO_ISO_DIAG		0
+#endif
+
 #endif	// TUSB_CONFIG_H_

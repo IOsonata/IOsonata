@@ -110,6 +110,15 @@ enum {
   ISO_DMA_REQ_IN  = 1u << 1,
 };
 
+// ISO scheduling counters and latency figures are bench diagnostics. They
+// are left out of the build unless TINYUSB_COMBO_ISO_DIAG is set to 1, so
+// size and timing comparisons do not include them. The ISO scheduling itself
+// and the pre-SOF CBI guard do not depend on this setting.
+#ifndef TINYUSB_COMBO_ISO_DIAG
+#define TINYUSB_COMBO_ISO_DIAG 0
+#endif
+
+#if TINYUSB_COMBO_ISO_DIAG
 // ISO scheduling counters read back by the application through
 // dcd_nrf5x_iso_diag_get(). They tell a lost frame apart by cause: a frame
 // the class never staged, an IN start delayed past the SOF interrupt, a
@@ -129,6 +138,11 @@ enum {
   ISO_DIAG_COUNT
 };
 
+#define ISO_DIAG_INC(_idx) (_dcd.iso_diag[_idx]++)
+#else
+#define ISO_DIAG_INC(_idx) ((void) 0)
+#endif
+
 // A CBI EasyDMA transfer of one 64-byte packet runs for tens of
 // microseconds on this controller. One started just before SOF still holds
 // the channel when the ISO IN payload must be moved, and the payload then
@@ -146,7 +160,8 @@ enum {
 #define ISO_DMA_SPIN_LIMIT 200u
 #define ISO_IN_END_SLOW_US 25u
 
-// DWT cycle counter for the ISO latency figures (64 MHz core clock).
+// DWT cycle counter for the pre-SOF guard and the ISO latency figures
+// (64 MHz core clock).
 #define CYC_TO_US(_cyc) ((_cyc) / 64u)
 
 // Data for managing dcd
@@ -161,13 +176,16 @@ static struct {
   // Pending ISO_DMA_REQ_* bits, owned by the interrupt handler.
   volatile uint8_t iso_dma_req;
 
+  // DWT cycle count at the last SOF, used by the pre-SOF CBI guard.
+  uint32_t iso_sof_cyc;
+
+#if TINYUSB_COMBO_ISO_DIAG
   // ISO scheduling counters, see dcd_nrf5x_iso_diag_get().
   uint32_t iso_diag[ISO_DIAG_COUNT];
 
-  // DWT cycle count at the SOF that raised the current ISO IN request, and
-  // whether that request is still to be timed.
-  uint32_t iso_sof_cyc;
+  // Whether the current ISO IN request is still to be timed.
   bool iso_in_timed;
+#endif
 
   // Track whether sof has been manually enabled
   bool sof_enabled;
@@ -232,7 +250,7 @@ static bool cbi_dma_hold(void) {
   if (us < USB_FRAME_US - ISO_SOF_GUARD_US || us >= USB_FRAME_US + ISO_SOF_GUARD_SLACK_US) {
     return false;
   }
-  _dcd.iso_diag[ISO_DIAG_CBI_HELD]++;
+  ISO_DIAG_INC(ISO_DIAG_CBI_HELD);
   return true;
 }
 
@@ -350,10 +368,12 @@ static void iso_dma_service(void) {
         NRF_USBD->ISOIN.MAXCNT = xact_len;
         start_dma(&NRF_USBD->TASKS_STARTISOIN);
 
+#if TINYUSB_COMBO_ISO_DIAG
         if (_dcd.iso_in_timed) {
           uint32_t const us = CYC_TO_US(DWT->CYCCNT - _dcd.iso_sof_cyc);
           if (us > _dcd.iso_diag[ISO_DIAG_IN_START_MAX]) _dcd.iso_diag[ISO_DIAG_IN_START_MAX] = us;
         }
+#endif
         return;
       }
 
@@ -373,7 +393,7 @@ static void iso_dma_service(void) {
       _dcd.iso_dma_req &= (uint8_t) ~ISO_DMA_REQ_OUT;
 
       if (xact_len == 0 || !xfer->started) {
-        _dcd.iso_diag[xact_len == 0 ? ISO_DIAG_OUT_IDLE : ISO_DIAG_OUT_UNARMED]++;
+        ISO_DIAG_INC(xact_len == 0 ? ISO_DIAG_OUT_IDLE : ISO_DIAG_OUT_UNARMED);
         atomic_flag_clear(&_dcd.dma_running);
         continue;
       }
@@ -394,6 +414,7 @@ static void iso_dma_service(void) {
   }
 }
 
+#if TINYUSB_COMBO_ISO_DIAG
 // Copy the ISO scheduling counters for the application diag request.
 void dcd_nrf5x_iso_diag_get(uint32_t counts[ISO_DIAG_COUNT]) {
   NVIC_DisableIRQ(USBD_IRQn);
@@ -402,6 +423,7 @@ void dcd_nrf5x_iso_diag_get(uint32_t counts[ISO_DIAG_COUNT]) {
   }
   NVIC_EnableIRQ(USBD_IRQn);
 }
+#endif
 
 //--------------------------------------------------------------------+
 // Controller API
@@ -411,7 +433,7 @@ bool dcd_init(uint8_t rhport, const tusb_rhport_init_t* rh_init) {
   (void) rh_init;
   TU_LOG2("dcd init\r\n");
 
-  // Free-running cycle counter for the ISO latency figures.
+  // Free-running cycle counter for the pre-SOF guard and ISO latency figures.
   CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
   DWT->CYCCNT = 0;
   DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
@@ -825,12 +847,14 @@ void dcd_int_handler(uint8_t rhport) {
       xfer->iso_in_transfer_ready = false;
       xfer->started = false;
 
+#if TINYUSB_COMBO_ISO_DIAG
       if (_dcd.iso_in_timed) {
         uint32_t const us = CYC_TO_US(DWT->CYCCNT - _dcd.iso_sof_cyc);
         _dcd.iso_in_timed = false;
         if (us > _dcd.iso_diag[ISO_DIAG_IN_END_MAX]) _dcd.iso_diag[ISO_DIAG_IN_END_MAX] = us;
         if (us > ISO_IN_END_SLOW_US) _dcd.iso_diag[ISO_DIAG_IN_END_SLOW]++;
       }
+#endif
 
       dcd_event_xfer_complete(0, EP_ISO_NUM | TUSB_DIR_IN_MASK,
                               xfer->actual_len, XFER_RESULT_SUCCESS, true);
@@ -855,8 +879,8 @@ void dcd_int_handler(uint8_t rhport) {
 
       // A request left over from the previous frame means that frame was
       // not serviced in time: count it, the new request supersedes it.
-      if (_dcd.iso_dma_req & ISO_DMA_REQ_IN)  _dcd.iso_diag[ISO_DIAG_IN_CARRY]++;
-      if (_dcd.iso_dma_req & ISO_DMA_REQ_OUT) _dcd.iso_diag[ISO_DIAG_OUT_CARRY]++;
+      if (_dcd.iso_dma_req & ISO_DMA_REQ_IN)  ISO_DIAG_INC(ISO_DIAG_IN_CARRY);
+      if (_dcd.iso_dma_req & ISO_DMA_REQ_OUT) ISO_DIAG_INC(ISO_DIAG_OUT_CARRY);
 
       // ISOIN gets first claim on the single EasyDMA channel at each service
       // interval. A staged payload was provided by the class before this SOF.
@@ -867,7 +891,7 @@ void dcd_int_handler(uint8_t rhport) {
         if (xfer->started && !xfer->iso_in_transfer_ready) {
           iso_req |= ISO_DMA_REQ_IN;
         } else if (!xfer->started) {
-          _dcd.iso_diag[ISO_DIAG_IN_IDLE]++;
+          ISO_DIAG_INC(ISO_DIAG_IN_IDLE);
         }
       }
 
@@ -882,7 +906,9 @@ void dcd_int_handler(uint8_t rhport) {
       }
 
       _dcd.iso_dma_req |= iso_req;
+#if TINYUSB_COMBO_ISO_DIAG
       _dcd.iso_in_timed = (iso_req & ISO_DMA_REQ_IN) != 0;
+#endif
 
       // Start the IN transfer now; OUT follows at its ENDISOIN.
       iso_dma_service();
@@ -894,11 +920,11 @@ void dcd_int_handler(uint8_t rhport) {
         // below (or the next interrupt for an ISO END), which releases the
         // channel and starts the request.
         unsigned n = 0;
-        _dcd.iso_diag[ISO_DIAG_IN_WAIT]++;
+        ISO_DIAG_INC(ISO_DIAG_IN_WAIT);
         while ((_dcd.iso_dma_req & ISO_DMA_REQ_IN) && !dma_end_pending() &&
                NRF_USBD->EVENTS_USBRESET == 0) {
           if (++n >= ISO_DMA_SPIN_LIMIT) {
-            _dcd.iso_diag[ISO_DIAG_IN_SPIN_OUT]++;
+            ISO_DIAG_INC(ISO_DIAG_IN_SPIN_OUT);
             break;
           }
           // The channel may also be released without an END event (EP0

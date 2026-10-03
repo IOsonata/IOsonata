@@ -40,11 +40,15 @@ Copyright (c) 2026, I-SYST inc., all rights reserved
 #define ISO_ALT_COUNT				6U
 #define ISO_QUEUE_DEPTH				8U
 #define ISO_REQ_GET_DIAG			0x5AU
+
+// ISO scheduling counters of the modified nRF52 port (dcd_nrf5x.c). Bench
+// diagnostics, built only when TINYUSB_COMBO_ISO_DIAG is 1 (tusb_config.h).
+#if TINYUSB_COMBO_ISO_DIAG
 #define ISO_REQ_GET_DCD_DIAG		0x5BU
 #define ISO_DCD_DIAG_COUNT			11U
 
-// ISO scheduling counters of the modified nRF52 port (dcd_nrf5x.c).
 extern "C" void dcd_nrf5x_iso_diag_get(uint32_t Counts[ISO_DCD_DIAG_COUNT]);
+#endif
 
 #define CDC0_NOTIFY_EP				0x81U
 #define CDC0_OUT_EP				0x02U
@@ -349,7 +353,9 @@ typedef struct __IsoState {
 	uint8_t Get;
 	uint8_t Count;
 	TinyUsbIsoDiag_t Diag;
+#if TINYUSB_COMBO_ISO_DIAG
 	uint32_t DcdDiag[ISO_DCD_DIAG_COUNT];
+#endif
 } IsoState_t;
 
 static IsoState_t s_Iso;
@@ -563,6 +569,7 @@ static bool IsoDriverControl(uint8_t RhPort, uint8_t Stage,
 			return tud_control_xfer(RhPort, pRequest,
 				&s_Iso.Diag, sizeof(s_Iso.Diag));
 		}
+#if TINYUSB_COMBO_ISO_DIAG
 		if (pRequest->bRequest == ISO_REQ_GET_DCD_DIAG &&
 			pRequest->wLength == sizeof(s_Iso.DcdDiag))
 		{
@@ -570,6 +577,7 @@ static bool IsoDriverControl(uint8_t RhPort, uint8_t Stage,
 			return tud_control_xfer(RhPort, pRequest,
 				s_Iso.DcdDiag, sizeof(s_Iso.DcdDiag));
 		}
+#endif
 	}
 
 	return false;
