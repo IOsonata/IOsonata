@@ -1,24 +1,35 @@
 /**-------------------------------------------------------------------------
-@example UsbCdcBleCentralDemo.cpp
+@example	UsbCdcBleCentralDemo.cpp
 
-@brief UsbCcBleCentral demo
+@brief	USB CDC to BLE central bridge
 
-This firmware scans for BLE-clients (via their names or MAC address), 
-communicates with them, and bridges them with the host computer via USB interface.
+The board enumerates as a USB CDC serial port and scans for a BLE peripheral
+running the BlueIO UART service (uart_ble.cpp, advertising as "UARTDemo").
+Once connected, bytes written by the host to the serial port go to the peer
+UART Tx characteristic, and notifications from the peer UART Rx characteristic
+go back to the host on the same serial port. Status lines go to the board
+UART, which is the debug console.
 
-NOTE: For compatible with C++ compiler, this C++ project must include 2 header files:
-	"app_usbd_cdc_acm_internal.h"
-	"app_usbd_cdc_acm.h"
-	These 2 files are modified versions of the ones in:
-	..\nRF5_SDK\components\libraries\usbd\class\cdc\acm
+USB and Bluetooth share the one application event queue, run by AppRun. Each
+side does what needs immediate service in its interrupt and queues the rest:
 
+	USB OUT data  -> UsbToBleEvt -> BtAppWrite, 20 bytes at a time
+	BLE notify    -> s_BleRxFifo -> BleToUsbEvt -> CDC Tx
 
-@author: Thinh Tran
-@date: June 30, 2022
+Each queued event is queued at most once at a time (pending flag), so a burst
+of interrupts cannot fill the queue.
+
+The link is open (no pairing). Build the peer with BLE_SC_METHOD set to
+BLE_SC_NONE: a peer asking for security disconnects this central.
+
+@author	Thinh Tran
+@date	June 30, 2022
+@author	Hoang Nguyen Hoan
+@date	Oct. 3, 2026
 
 @license
 
-Copyright (c) 2017-2022, I-SYST inc., all rights reserved
+Copyright (c) 2017-2026, I-SYST inc., all rights reserved
 
 Permission to use, copy, modify, and distribute this software for any purpose
 with or without fee is hereby granted, provided that the above copyright
@@ -40,547 +51,173 @@ ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
- ----------------------------------------------------------------------------*/
-#ifndef NRFXLIB_SDC
-#include "app_util_platform.h"
-#include "app_scheduler.h"
-#include "ble_gap.h"
-#include "ble_advdata.h"
-#include "nrf_ble_scan.h"
-#include "ble_gatt_db.h"
-#include "ble_gattc.h"
-#include "app_scheduler.h"
-#include "ble_gatt_db.h"
-#endif
+----------------------------------------------------------------------------*/
+#include <stdint.h>
+#include <string.h>
 
-#if 0
-#include "nrf.h"
-#include "nrf_drv_usbd.h"
-#include "nrf_drv_power.h"
-
-#include "app_error.h"
-#include "app_util.h"
-#include "app_usbd_core.h"
-#include "app_usbd_string_desc.h"
-#endif
-
-#include "nrf_drv_clock.h"
-#include "app_usbd.h"
-#include "app_usbd_cdc_acm.h"
-#include "app_usbd_serial_num.h"
-
-// IOsonata's UART, PinCfg
+#include "istddef.h"
+#include "idelay.h"
+#include "cfifo.h"
+#include "app_evt_handler.h"
 #include "blueio_board.h"
 #include "coredev/iopincfg.h"
 #include "coredev/uart.h"
 #include "iopinctrl.h"
-#include "idelay.h"
-
-#include "istddef.h"
-#include "stddev.h"
-#include "idelay.h"
-
-// BLE
-#include "app_evt_handler.h"
+#include "usb/usb.h"
+#include "usb/usbd_cdc.h"
 #include "bluetooth/bt_app.h"
-#include "bluetooth/blueio_blesrvc.h"
+#include "bluetooth/bt_gatt.h"
 #include "bluetooth/bt_dev.h"
-
-#include "cfifo.h"
+#include "bluetooth/blueio_blesrvc.h"
 
 #include "board.h"
 
-#define DEVICE_NAME     "BleCentral"				/**< Name of device. Will be included in the advertising data. */
-#define MODEL_NAME      "Blyst840"               	/**< Model number. Will be passed to Device Information Service. */
+#define DEVICE_NAME				"UsbBleCentral"
 
+// Peripheral to connect to, by its advertised name
+#define TARGET_DEV_NAME			"UARTDemo"
 
-#define MANUFACTURER_NAME               "I-SYST inc."                       /**< Manufacturer. Will be passed to Device Information Service. */
-#define MANUFACTURER_ID                 ISYST_BLUETOOTH_ID                  /**< Manufacturer ID, part of System ID. Will be passed to Device Information Service. */
-#define ORG_UNIQUE_ID                   ISYST_BLUETOOTH_ID                  /**< Organizational Unique ID, part of System ID. Will be passed to Device Information Service. */
+#define MIN_CONN_INTERVAL		7.5		// msec
+#define MAX_CONN_INTERVAL		40		// msec
 
-#define APP_ADV_INTERVAL                MSEC_TO_UNITS(64, UNIT_0_625_MS)	/**< The advertising interval (in units of 0.625 ms. This value corresponds to 40 ms). */
+#define SCAN_INTERVAL			1000	// msec
+#define SCAN_WINDOW				100		// msec
+#define SCAN_TIMEOUT			0		// 0 : no timeout
 
-#define APP_ADV_TIMEOUT					MSEC_TO_UNITS(0, UNIT_10_MS)		/**< The advertising timeout (in units of 10ms seconds). */
+#define BLE_MTU_SIZE			247
 
-#define MIN_CONN_INTERVAL               MSEC_TO_UNITS(10, UNIT_1_25_MS)     /**< Minimum acceptable connection interval (20 ms), Connection interval uses 1.25 ms units. */
-#define MAX_CONN_INTERVAL               MSEC_TO_UNITS(40, UNIT_1_25_MS)     /**< Maximum acceptable connection interval (75 ms), Connection interval uses 1.25 ms units. */
+// The peer UART characteristics hold 20 octets (PACKET_SIZE in uart_ble.cpp).
+// A longer write is refused, not truncated.
+#define BLE_WRITE_MAX			20
 
-/// BlueIO device UUIDs
-#define BLE_UART_UUID_BASE			BLUEIO_UUID_BASE				// Base UUID of the device
-#define BLE_UART_UUID_SERVICE			BLUEIO_UUID_UART_SERVICE		// BlueIO UART service
+#define USB_DEVNO				0
 
-#define BLE_UART_UUID_TX_CHAR			BLUEIO_UUID_UART_TX_CHAR		// UART Tx characteristic
-#define BLE_UART_UUID_TX_CHAR_PROP		(BLESVC_CHAR_PROP_WRITE | BLESVC_CHAR_PROP_WRAUTH | BLESVC_CHAR_PROP_WRITEWORESP | BLESVC_CHAR_PROP_VARLEN) // Property of Tx characteristic
+// One full speed bulk packet
+#define USB_PKT_SIZE			USB_CTRLR_PKT_LEN_MAX(USB_DEVNO, BULK)
 
-#define BLE_UART_UUID_RX_CHAR			BLUEIO_UUID_UART_RX_CHAR		// UART Rx characteristic
-#define BLE_UART_UUID_RX_CHAR_PROP		(BLESVC_CHAR_PROP_READ | BLESVC_CHAR_PROP_NOTIFY | BLESVC_CHAR_PROP_VARLEN) // Property of Tx characteristic
+// Application event queue memory, replaces the 4 event library default. USB
+// endpoint events, Bluetooth work and the bridge events all queue here.
+alignas(4) uint8_t g_AppEvtHandlerQueMem[APPEVT_HANDLER_QUE_MEMSIZE(16)];
 
-#define BLE_UART_UUID_CONFIG_CHAR		BLUEIO_UUID_UART_CONFIG_CHAR 							// UART configuration characteristic
-#define BLE_UART_UUID_CONFIG_CHAR_PROP	(BLESVC_CHAR_PROP_WRITE | BLESVC_CHAR_PROP_WRAUTH | BLESVC_CHAR_PROP_WRITEWORESP | BLESVC_CHAR_PROP_VARLEN | \
-											BLESVC_CHAR_PROP_READ | BLESVC_CHAR_PROP_NOTIFY ) // Property of UART confg. char.
+//
+// USB CDC
+//
 
-/// Re-use the UART Rx characteristic for the Configuration ACK
+#define CDC_RXFIFO_PKTCNT		4
+#define CDC_RXFIFO_MEMSIZE		USB_INTRF_RXMEM_SIZE(CDC_RXFIFO_PKTCNT, USB_PKT_SIZE)
+#define CDC_TXFIFO_MEMSIZE		CFIFO_MEMSIZE(1024)
 
-// BLE I2C Service
-#define BLE_I2C_UUID_BASE			BLUEIO_UUID_BASE				// Base UUID of the device
-#define BLE_I2C_UUID_SERVICE			BLUEIO_UUID_I2C_SERVICE			// BlueIO I2C service
+alignas(4) static uint8_t s_CdcRxFifoMem[CDC_RXFIFO_MEMSIZE];
+alignas(4) static uint8_t s_CdcTxFifoMem[CDC_TXFIFO_MEMSIZE];
 
-#define BLE_I2C_UUID_TX_CHAR			BLUEIO_UUID_I2C_TX_CHAR			// I2C Tx characteristic
-#define BLE_I2C_UUID_TX_CHAR_PROP		(BLESVC_CHAR_PROP_WRITE | \
-											BLESVC_CHAR_PROP_WRITEWORESP | BLESVC_CHAR_PROP_VARLEN) // Property of Tx characteristic
+static int CdcEvtHandler(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId,
+						 uint8_t *pBuffer, int Len);
 
-#define BLE_I2C_UUID_RX_CHAR			BLUEIO_UUID_I2C_RX_CHAR			// I2C Rx characteristic
-#define BLE_I2C_UUID_RX_CHAR_PROP		(BLESVC_CHAR_PROP_READ | \
-											BLESVC_CHAR_PROP_NOTIFY | BLESVC_CHAR_PROP_VARLEN) // Property of Tx characteristic
-
-#define BLE_I2C_UUID_CONFIG_CHAR		BLUEIO_UUID_I2C_CONFIG_CHAR 	// I2C configuration characteristic
-#define BLE_I2C_UUID_CONFIG_CHAR_PROP	(BLESVC_CHAR_PROP_WRITE | \
-											BLESVC_CHAR_PROP_WRITEWORESP | BLESVC_CHAR_PROP_VARLEN) // Property of I2C config. char.
-
-// BLE SPI Service
-#define BLE_SPI_UUID_BASE				BLUEIO_UUID_BASE				// Base UUID of the device
-#define BLE_SPI_UUID_SERVICE			BLUEIO_UUID_SPI_SERVICE			// BlueIO SPI service
-
-#define BLE_SPI_UUID_TX_CHAR			BLUEIO_UUID_SPI_TX_CHAR			// SPI Tx characteristic
-#define BLE_SPI_UUID_TX_CHAR_PROP		(BLESVC_CHAR_PROP_WRITE | \
-											BLESVC_CHAR_PROP_WRITEWORESP | BLESVC_CHAR_PROP_VARLEN) // Property of Tx characteristic
-
-#define BLE_SPI_UUID_RX_CHAR			BLUEIO_UUID_SPI_RX_CHAR			// SPI Rx characteristic
-#define BLE_SPI_UUID_RX_CHAR_PROP		(BLESVC_CHAR_PROP_READ | \
-											BLESVC_CHAR_PROP_NOTIFY | BLESVC_CHAR_PROP_VARLEN) // Property of Tx characteristic
-
-#define BLE_SPI_UUID_CONFIG_CHAR		BLUEIO_UUID_SPI_CONFIG_CHAR 	// SPI configuration characteristic
-#define BLE_SPI_UUID_CONFIG_CHAR_PROP	(BLESVC_CHAR_PROP_WRITE | \
-											BLESVC_CHAR_PROP_WRITEWORESP | BLESVC_CHAR_PROP_VARLEN) // Property of SPI config. char.
-
-//#define BLE_SPI_UUID_CONFIG_CHAR			BLUEIO_UUID_SPI_CONFIG_CHAR		// SPI Configuration characteristic
-//#define BLE_SPI_UUID_CONFIG_CHAR_PROP	(BLESVC_CHAR_PROP_WRITE | \
-//											BLESVC_CHAR_PROP_WRITEWORESP | BLESVC_CHAR_PROP_VARLEN) // Property of SPI config. char.
-
-// I/O Control Service (GPIO ??)
-#define BLE_CTRL_UUID_BASE 				BLUEIO_UUID_BASE
-#define BLE_CTRL_UUID_SERVICE			BLUEIO_UUID_CTRL_SERVICE
-#define BLE_CTRL_UUID_DATA_CHAR			BLUEIO_UUID_CTRL_DATACHAR
-#define BLE_CTRL_UUID_DATA_CHAR_PROP 	(BLESVC_CHAR_PROP_READ | BLESVC_CHAR_PROP_NOTIFY | BLESVC_CHAR_PROP_VARLEN)
-#define BLE_CTRL_UUID_CMD_CHAR			BLUEIO_UUID_CTRL_CMDCHAR
-#define BLE_CTRL_UUID_CMD_CHAR_PROP		(BLESVC_CHAR_PROP_WRITE | BLESVC_CHAR_PROP_WRITEWORESP | BLESVC_CHAR_PROP_VARLEN)
-
-#define MAX_COUNT 	5
-
-#define BLE_MTU_SIZE			256//byte
-#define PACKET_SIZE				128
-
-// UART
-#define UART_MAX_DATA_LEN  		(PACKET_SIZE)
-#define UARTFIFOSIZE			CFIFO_MEMSIZE(UART_MAX_DATA_LEN*4)
-
-// I2C
-#define I2C_MAX_DATA_LEN		(PACKET_SIZE)
-#define I2CFIFOSIZE				CFIFO_MEMSIZE(I2C_MAX_DATA_LEN * 4)
-#define I2C_SLAVE_ADDR			0x22
-
-// SPI
-#define SPI_MAX_DATA_LEN		(PACKET_SIZE)
-#define SPIFIFOSIZE 			CFIFO_MEMSIZE(SPI_MAX_DATA_LEN * 4)
-
-// BLE Interface buffer
-#define BLEINTRF_PKTSIZE		(BLE_MTU_SIZE)
-#define BLEINTRF_FIFOSIZE		BLEINTRF_CFIFO_TOTAL_MEMSIZE(15, BLEINTRF_PKTSIZE)//(NbPkt, PktSize)
-
-#define BLESRV_READ_CHAR_IDX		0
-#define BLESRV_WRITE_CHAR_IDX		1
-#define BLESRV_CONFIG_CHAR_IDX		2
-
-// USB
-#define USBFIFOSIZE				CFIFO_MEMSIZE(PACKET_SIZE*5)
-
-/**
- * @brief CLI interface over UART
- */
-//NRF_CLI_UART_DEF(m_cli_uart_transport, 0, 64, 16);
-//NRF_CLI_DEF(m_cli_uart,
-//            "uart_cli:~$ ",
-//            &m_cli_uart_transport.transport,
-//            '\r',
-//            4);
-
-/**@file
- * @defgroup usbd_cdc_acm_example main.c
- * @{
- * @ingroup usbd_cdc_acm_example
- * @brief USBD CDC ACM example
- *
- */
-
-#define DEBUG_PRINT	//printf data for debug via UART
-#define FIND_CLIENT_BY_NAME
-
-#ifdef DEBUG_PRINT
-#define DEBUG_ENABLE	true
-#else
-#define DEBUG_ENABLE 	false
-#endif
-
-
-
-#define SCAN_INTERVAL           MSEC_TO_UNITS(1000, UNIT_0_625_MS)		/**< Determines scan interval in units of 0.625 millisecond. */
-#define SCAN_WINDOW             MSEC_TO_UNITS(100, UNIT_0_625_MS)       /**< Determines scan window in units of 0.625 millisecond. */
-#define SCAN_TIMEOUT            0                                 		/**< Timout when scanning. 0x0000 disables timeout. */
-
-
-#ifdef FIND_CLIENT_BY_NAME
-// BLE clients
-#define BLE_CLIENT_NAME			"UARTBridge"
-
-#else
-#define BLE_CLIENT_ID_01		{0xEF, 0x58, 0x1A, 0xFC, 0x50, 0xAE}
-#define BLE_CLIENT_ID_02		{0xD2, 0x12, 0x36, 0xA1, 0x99, 0x9C}
-#define BLE_CLIENT_ID_03		{0xEF, 0x58, 0x1A, 0xFC, 0x50, 0xAE}
-
-#define BLE_CLIENT_ID_04 		{0xD9, 0xC7, 0xEE, 0x21, 0xB0, 0xE1}
-#define BLE_CLIENT_ID_05		{0xE3, 0x9C, 0xC8, 0xD8, 0xF2, 0x89}
-#define BLE_CLIENT_ID_06		{0xF7, 0xD6, 0xE0, 0xCE, 0xCA, 0xD8}
-#define BLE_CLIENT_ID_07		{0xEF, 0x58, 0x1A, 0xFC, 0x50, 0xAE}
-#define BLE_CLIENT_ID_08		{0xD3, 0xDE, 0x73, 0x53, 0xF6, 0x1B}
-
-#define BLE_CLIENT_ID_T1		{0xC1, 0x10, 0x89, 0xE7, 0xD6, 0xB5} // BlueIO832 for testing
-#define BLE_CLIENT_ID_T2		{0xE4, 0x68, 0xE7, 0x6A, 0xB1, 0x12} // BlueIO832 for testing
-
-#define BLE_CLIENT_ID_T3		{0xD9, 0xC7, 0xEE, 0x21, 0xB0, 0xE1} // Client IBK board
-#define BLE_CLIENT_ID_T4		{0xCA, 0x23, 0x83, 0x8B, 0xE5, 0x09} // Client IBK board
-
-#define BLUEPYRO_M3225_01		{0xC7, 0x63, 0x06, 0x6F, 0x8C, 0x93} // board #01
-
-uint8_t g_clientMacAddr[6] = BLE_CLIENT_ID_T2;
-#endif
-
-uint8_t g_searchCnt = 0;
-
-/* Enable power USB detection
- * Configure if example supports USB port connection */
-#ifndef USBD_POWER_DETECTION
-#define USBD_POWER_DETECTION true
-#endif
-
-#define READ_SIZE (PACKET_SIZE / 2)//1
-
-#define PRINT_DEBUG_UART(text)		\
-	if (DEBUG_ENABLE)				\
-		g_Uart.printf(text);			\
-
-#define PRINT_DEBUG_USB(s, len)								\
-	if (DEBUG_ENABLE)										\
-	{														\
-		app_usbd_cdc_acm_write(&m_app_cdc_acm, s, len);		\
-	}														\
-
-#define PRINT_DEBUG(s,len)				\
-	PRINT_DEBUG_UART(s)					\
-	PRINT_DEBUG_USB(s,len)				\
-
-
-///////////////////////////////////////////////////
-
-static void cdc_acm_user_ev_handler(app_usbd_class_inst_t const * p_inst, app_usbd_cdc_acm_user_event_t event);
-static void usbd_user_ev_handler(app_usbd_event_type_t event);
-
-void HardwareInit();
-int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);
-void UartRxSchedHandler(void * p_event_data, uint16_t event_size);
-
-void BleTxSchedHandler(void * p_event_data, uint16_t event_size);
-
-void UsbInit();
-void UsbRxSchedHandler(void * p_event_data, uint16_t event_size);
-void UsbTxSchedHandler(void * p_event_data, uint16_t event_size);
-
-
-/************************************************************
- * USBD CDC ACM section
- ************************************************************/
-#define CDC_ACM_COMM_INTERFACE  0
-#define CDC_ACM_COMM_EPIN       NRF_DRV_USBD_EPIN2
-
-#define CDC_ACM_DATA_INTERFACE  1
-#define CDC_ACM_DATA_EPIN       NRF_DRV_USBD_EPIN1
-#define CDC_ACM_DATA_EPOUT      NRF_DRV_USBD_EPOUT1
-
-#define INTERFACE_CONFIGS APP_USBD_CDC_ACM_CONFIG(CDC_ACM_COMM_INTERFACE, CDC_ACM_COMM_EPIN, CDC_ACM_DATA_INTERFACE, CDC_ACM_DATA_EPIN, CDC_ACM_DATA_EPOUT)
-
-#define CLASS_CONFIG_PART (APP_USBD_CDC_ACM_INST_CONFIG(cdc_acm_user_ev_handler, \
-        					CDC_ACM_COMM_INTERFACE,                       \
-							CDC_ACM_COMM_EPIN,                            \
-							CDC_ACM_DATA_INTERFACE,                       \
-							CDC_ACM_DATA_EPIN,                            \
-							CDC_ACM_DATA_EPOUT,                           \
-							APP_USBD_CDC_COMM_PROTOCOL_AT_V250,           \
-							&m_app_cdc_acm_ep))
-
-
-alignas(4) uint8_t g_UsbRxBuff[PACKET_SIZE];
-volatile int g_UsbRxBuffLen = 0;
-
-
-alignas(4) uint8_t g_UsbTxBuff[PACKET_SIZE];//NRF_DRV_USBD_EPSIZE
-volatile uint32_t g_UsbTxBuffLen = 0;
-
-alignas(4) uint8_t g_UsbRxFifoMem[USBFIFOSIZE];
-hCFifo_t g_UsbRxFifo;
-
-alignas(4) uint8_t g_UsbTxFifoMem[USBFIFOSIZE];
-hCFifo_t g_UsbTxFifo;
-
-uint8_t g_extern_usbd_serial_number[12 + 1] = { "23062022"};
-uint8_t g_extern_usbd_product_string[12 + 1] = { "BLE Central" };
-
-volatile int g_frameCnt = 0;
-
-//std::atomic<int> g_UsbRxBuffLen(0);
-std::atomic<int> g_Usb2ExtBuffLen(0);
-
-volatile int g_dropCnt = 0;
-volatile bool g_UsbTxDone = true;// true: USB's internal buffer is available. false: otherwise
-
-alignas(4) uint8_t g_BleRxBuff[PACKET_SIZE];
-
-
-volatile uint32_t g_BleRxBuffLen = 0;
-
-volatile bool g_TxSuccess = true;
-
-/*
- * app_usbd_cdc_acm_data_t
- * APP_USBD_CLASS_DATA_TYPEDEF(type_name, class_data_dec);
-/*
-typedef struct                                             			\
-{                                                          			\
-	app_usbd_class_data_t base;                            			\
-	app_usbd_cdc_acm_ctx_t ctx;	//class_data_dec = APP_USBD_CDC_ACM_DATA_SPECIFIC_DEC;
-} app_usbd_cdc_acm_data_t;		//APP_USBD_CLASS_DATA_TYPE(type_name)
-*/
-
-/*
- * app_usbd_cdc_acm_t
- * APP_USBD_CLASS_INSTANCE_TYPEDEF(type_name, interface_configs, class_config_dec)
- */
-/*typedef union app_usbd_cdc_acm_u                                    \
-{                                                                   \
-	app_usbd_class_inst_t base;                                     \
-	struct                                                          \
-	{                                                               \
-		app_usbd_cdc_acm_data_t * p_data;                           \
-		app_usbd_class_methods_t const * p_class_methods;           \
-		struct                                                      \
-		{                                                           \
-			uint8_t cnt;                                            \
-			app_usbd_class_iface_conf_t								\
-				config[NUM_VA_ARGS(BRACKET_EXTRACT(INTERFACE_CONFIGS))];    				\
-			app_usbd_class_ep_conf_t								\
-				ep[APP_USBD_CLASS_CONF_TOTAL_EP_COUNT(INTERFACE_CONFIGS)];  	\
-		} iface;                                                    \
-		app_usbd_cdc_acm_inst_t inst; //class_config_dec = APP_USBD_CDC_ACM_INSTANCE_SPECIFIC_DEC                              \
-	} specific;                                                                          \
-} app_usbd_cdc_acm_t;
-*/
-
-
-/**
- * @brief CDC_ACM class instance
- * */
-//APP_USBD_CDC_ACM_GLOBAL_DEF(m_app_cdc_acm,
-//		cdc_acm_user_ev_handler,
-//		CDC_ACM_COMM_INTERFACE,
-//		CDC_ACM_DATA_INTERFACE,
-//		CDC_ACM_COMM_EPIN,
-//		CDC_ACM_DATA_EPIN,
-//		CDC_ACM_DATA_EPOUT,
-//		APP_USBD_CDC_COMM_PROTOCOL_AT_V250
-//);
-
-extern const app_usbd_class_methods_t app_usbd_cdc_acm_class_methods;
-
-static uint8_t m_app_cdc_acm_ep = { (APP_USBD_EXTRACT_INTERVAL_FLAG(CDC_ACM_COMM_EPIN) ?
-		APP_USBD_EXTRACT_INTERVAL_VALUE(CDC_ACM_COMM_EPIN) : APP_USBD_CDC_ACM_DEFAULT_INTERVAL)};
-
-//static APP_USBD_CLASS_DATA_TYPE(type_name) CONCAT_2(instance_name, _data);
-static app_usbd_cdc_acm_data_t	m_app_cdc_acm_data;
-
-// Define a USB instance
-static const app_usbd_cdc_acm_inst_t s_usb_inst =
-{
-		.comm_interface = CDC_ACM_COMM_INTERFACE,
-		.comm_epin = CDC_ACM_COMM_EPIN,
-		.data_interface = CDC_ACM_DATA_INTERFACE,
-		.data_epout = CDC_ACM_DATA_EPOUT,
-		.data_epin = CDC_ACM_DATA_EPIN,
-		.protocol = APP_USBD_CDC_COMM_PROTOCOL_AT_V250,
-		.user_ev_handler = cdc_acm_user_ev_handler,
-		.p_ep_interval = &m_app_cdc_acm_ep,
+static const UsbdCdcCfg_t s_CdcCfg = {
+	.DevNo = USB_DEVNO,
+	.bBlocking = true,
+	.RxFifoMemSize = CDC_RXFIFO_MEMSIZE,
+	.pRxFifoMem = s_CdcRxFifoMem,
+	.TxFifoMemSize = CDC_TXFIFO_MEMSIZE,
+	.pTxFifoMem = s_CdcTxFifoMem,
+	.EvtCB = CdcEvtHandler,
 };
 
-const app_usbd_cdc_acm_t m_app_cdc_acm =
-{
-		//.base = 0,
-		.specific =
-		{
-				.p_data = &m_app_cdc_acm_data,
-				.p_class_methods = &app_usbd_cdc_acm_class_methods,
-				.iface =
-				{
-						.cnt = NUM_VA_ARGS(BRACKET_EXTRACT(INTERFACE_CONFIGS)),
-						.config = { APP_USBD_CLASS_IFACES_CONFIG_EXTRACT(INTERFACE_CONFIGS) },
-						.ep = { APP_USBD_CLASS_IFACES_EP_EXTRACT(INTERFACE_CONFIGS) },
-				},
-				.inst = s_usb_inst,//BRACKET_EXTRACT(CLASS_CONFIG_PART),
-		},
+// 0x1209 is the pid.codes vendor id, which exists for open hardware. Put your
+// own vendor and product id here before shipping anything.
+static const UsbCfg_t s_UsbCfg = {
+	.DevNo = USB_DEVNO,
+	.Mode = USB_MODE_DEVICE,
+	.Vid = 0x1209,
+	.Pid = 0x0009,
+	.DevVer = 0x0100,
+	.pManufacturer = "I-SYST",
+	.pProduct = "IOsonata USB BLE Central",
+	.pSerial = nullptr,			// Taken from the MCU unique id
+	.pFuncName = "IOsonata CDC",
+	.IntPrio = 6,				// Allowed with the SoftDevice (it keeps 0, 1, 4)
+	.DeviceClass = USB_DEVCLASS_MISC,
+	.DeviceSubClass = 2U,
+	.DeviceProtocol = 1U,
+	.bSelfPowered = false,
+	.bRemoteWakeup = false,
+	.bLowPowerSuspend = false,
+	.MaxPower = 100,
+	.EvtHandler = nullptr,
 };
 
-// USBD config
-static const app_usbd_config_t usbd_config =
-{
-	.ev_state_proc = usbd_user_ev_handler
-};
+UsbdCdc g_Cdc;
 
+//
+// Debug console UART
+//
 
-// LED pin config
-static const IOPinCfg_t s_Leds[] = LED_PIN_MAP;
-static const int s_NbLeds = sizeof(s_Leds) / sizeof(IOPinCfg_t);
+static const IOPinCfg_t s_UartPins[] = UART_PIN_MAP;
 
-// Button pin config
-static const IOPinCfg_t s_ButPins[] = BUTTON_PIN_MAP;
-static const int s_NbButPins = sizeof(s_ButPins) / sizeof(IOPinCfg_t);
+#define UARTFIFOSIZE			CFIFO_MEMSIZE(256)
 
+alignas(4) static uint8_t s_UartRxFifo[UARTFIFOSIZE];
+alignas(4) static uint8_t s_UartTxFifo[UARTFIFOSIZE];
 
-/************************************************************
- * UART section
- ************************************************************/
-// Uart pin config
-IOPinCfg_t s_UartPins[] = UART_PIN_MAP;
-static int s_NbUartPins = sizeof(s_UartPins) / sizeof(IOPinCfg_t);
-
-// UART operation mode config
-alignas(4) uint8_t s_UartRxFifo[UARTFIFOSIZE];
-alignas(4) uint8_t s_UartTxFifo[UARTFIFOSIZE];
-
-UARTCfg_t g_UartCfg = {
-	.DevNo = 0,									// Device number zero based
-	.pIOPinMap = s_UartPins,					// UART assigned pins
-	.NbIOPins = sizeof(s_UartPins) / sizeof(IOPinCfg_t),					// Total number of UART pins used
-	.Rate = 115200,								// Baudrate
-	.DataBits = 8,								// Data bits
-	.Parity = UART_PARITY_NONE,			// Parity
-	.StopBits = 1,								// Stop bit
-	.FlowControl = UART_FLWCTRL_NONE,	// Flow control
-	.bIntMode = true,							// Interrupt mode
-	.IntPrio = APP_IRQ_PRIORITY_LOW,			// Interrupt priority
-	.EvtCallback = nRFUartEvthandler,			// UART event handler
-	.bFifoBlocking = true,						// Blocking FIFO
+static const UARTCfg_t s_UartCfg = {
+	.DevNo = 0,
+	.pIOPinMap = s_UartPins,
+	.NbIOPins = sizeof(s_UartPins) / sizeof(IOPinCfg_t),
+	.Rate = 115200,
+	.DataBits = 8,
+	.Parity = UART_PARITY_NONE,
+	.StopBits = 1,
+	.FlowControl = UART_FLWCTRL_NONE,
+	.bIntMode = true,
+	.IntPrio = 6,
+	.EvtCallback = nullptr,
+	.bFifoBlocking = true,
 	.RxMemSize = UARTFIFOSIZE,
 	.pRxMem = s_UartRxFifo,
 	.TxMemSize = UARTFIFOSIZE,
 	.pTxMem = s_UartTxFifo,
-	.bDMAMode = true,
 };
 
-// UART object instance
 UART g_Uart;
 
-/************************************************************
- * BLE section
- ************************************************************/
+static const IOPinCfg_t s_Leds[] = LED_PIN_MAP;
+static const int s_NbLeds = sizeof(s_Leds) / sizeof(IOPinCfg_t);
+
+//
+// Bluetooth central
+//
 
 const BtAppCfg_t s_BleAppCfg = {
-    .Role = BTAPP_ROLE_CENTRAL,
-    .PeriphDevMax = 1,					// Max peripheral devices we connect to as central
-    .PeriphLinkCount = 0,				// Max central devices we serve as peripheral
-    .pDevName = DEVICE_NAME,			// Device name
-    .VendorId = ISYST_BLUETOOTH_ID,		// PnP Bluetooth/USB vendor id
-    .ProductId = 1,						// PnP Product ID
-    .ProductVer = 0,					// Pnp prod version
-
-    // Optional device descriptor (leave NULL)
-    .pDevDesc = NULL,
-
-    // Device Information Service (DIS)
-    .bEnDevInfoService = false,
-
-    // Manufacturer specific advertising data
-    .pAdvManData = NULL,
-    .AdvManDataLen = 0,
-
-    // Optional raw advertising data
-    .pAdvData = NULL,
-    .AdvDataLen = 0,
-
-    .SecType = BTGAP_SECTYPE_NONE,		// Secure connection type
-    .SecExchg = BTAPP_SECEXCHG_NONE,	// Security key exchange
-
-    // Advertised service UUID list (not used for central role here)
-    .pAdvUuid = NULL,
-    .AdvUuidCnt = 0,
-
-    .AdvInterval = 0,					// Advertising interval in msec
-    .AdvTimeout = 0,					// Advertising timeout in sec
-    .AdvSlowInterval = 0,				// Slow advertising interval
-
-    .ConnIntervalMin = MIN_CONN_INTERVAL,
-    .ConnIntervalMax = MAX_CONN_INTERVAL,
-
-    .LedPort = LED_BLUE_PORT,
-    .LedPin = LED_BLUE_PIN,
-
-    // Optional button
-    .ButPort = 0,
-    .ButPin = 0,
-
-    .TxPower = 0,
-    .pSDEvtHandler = NULL,				// RTOS Softdevice handler
-    .Mtu = BLE_MTU_SIZE,				// BLE MTU packet size
+	.Role = BTAPP_ROLE_CENTRAL,
+	.PeriphDevMax = 1,					// Max peripheral devices we connect to as central
+	.CentralDevMax = 0,					// Max central devices we serve as peripheral
+	.pDevName = DEVICE_NAME,
+	.VendorId = ISYST_BLUETOOTH_ID,
+	.ProductId = 1,
+	.ProductVer = 0,
+	.Appearance = 0,
+	.pDevInfo = NULL,
+	.pAdvManData = NULL,
+	.AdvManDataLen = 0,
+	.pSrManData = NULL,
+	.SrManDataLen = 0,
+	.SecType = BTGAP_SECTYPE_NONE,
+	.SecExchg = BTAPP_SECEXCHG_NONE,
+	.bCompleteUuidList = false,
+	.pAdvUuid = NULL,
+	.AdvInterval = 0,
+	.AdvTimeout = 0,
+	.AdvSlowInterval = 0,
+	.ConnIntervalMin = MIN_CONN_INTERVAL,
+	.ConnIntervalMax = MAX_CONN_INTERVAL,
+	.ConnLedPort = LED_BLUE_PORT,
+	.ConnLedPin = LED_BLUE_PIN,
+	.ConnLedActLevel = 0,
+	.TxPower = 0,
+	.MaxMtu = BLE_MTU_SIZE,
 };
 
-/** @brief Parameters used when scanning. */
-static ble_gap_scan_params_t const g_ScanParams =
-{
-#if (NRF_SD_BLE_API_VERSION >= 6)
-	0,
-	0,
-#endif
-    1,		// Active scan
-#if (NRF_SD_BLE_API_VERSION <= 2)
-	0,	// .selective
-	NULL,	// .p_whitelist
-#endif
-#if (NRF_SD_BLE_API_VERSION >= 3)
-	0,				// Use whitelist
-	0, 				// Report directed advertisement
-#endif
-	SCAN_INTERVAL,	// Scan interval
-	SCAN_WINDOW,	// Scan window
-	SCAN_TIMEOUT,	// Scan timeout
-};
-
-uint8_t g_ScanBuff[BLE_GAP_SCAN_BUFFER_EXTENDED_MAX];
-
-ble_data_t g_AdvScanReportData = {
-	.p_data = g_ScanBuff,
-	.len = BLE_GAP_SCAN_BUFFER_EXTENDED_MAX
-};
-
-static BtGapConnParams_t s_ConnParams = {
-	.IntervalMin = 7.5,//NRF_BLE_SCAN_MIN_CONNECTION_INTERVAL,
-	.IntervalMax = 40,//NRF_BLE_SCAN_MAX_CONNECTION_INTERVAL,
-	.Latency = NRF_BLE_SCAN_SLAVE_LATENCY,
-	.Timeout = NRF_BLE_SCAN_SUPERVISION_TIMEOUT,
-};
-
-
-//BLE_UUID_TYPE_BLE
-const ble_uuid_t s_UartBleSrvAdvUuid = {
-	.uuid = BLUEIO_UUID_UART_SERVICE,
-	.type = BLE_UUID_TYPE_BLE,
-};
-
-static const BtGapScanCfg_t s_bleScanInitCfg = {
+static const BtGapScanCfg_t s_ScanCfg = {
 	.Type = BTSCAN_TYPE_ACTIVE,
 	.Param = {
 		.OwnAddrType = BTADDR_TYPE_RAND,
@@ -592,619 +229,372 @@ static const BtGapScanCfg_t s_bleScanInitCfg = {
 	.ServUid = BLUEIO_UUID_UART_SERVICE,
 };
 
-BtDevice_t g_ConnectedDev = {
-	.Conn = { .Hdl = BT_CONN_HDL_INVALID },
+static BtGapConnParams_t s_ConnParams = {
+	.IntervalMin = MIN_CONN_INTERVAL,
+	.IntervalMax = MAX_CONN_INTERVAL,
+	.Latency = 0,
+	.Timeout = 4000,
 };
 
-uint16_t g_BleTxCharHdl = BLE_CONN_HANDLE_INVALID;
-uint16_t g_BleRxCharHdl = BLE_CONN_HANDLE_INVALID;
+static volatile uint16_t s_ConnHdl = BT_CONN_HDL_INVALID;
+static volatile uint16_t s_BleTxCharHdl = BT_ATT_HANDLE_INVALID;	// write target on the peer
+static volatile uint16_t s_BleRxCharHdl = BT_ATT_HANDLE_INVALID;	// notify source on the peer
 
-void BleDevDiscovered(BtDevice_t *pDev)
+//
+// Bridge
+//
+
+// BLE to USB. Notifications arrive in the stack interrupt, which is the only
+// producer of this FIFO. BleToUsbEvt is the only consumer.
+#define BLE_RXFIFO_MEMSIZE		CFIFO_MEMSIZE(1024)
+
+alignas(4) static uint8_t s_BleRxFifoMem[BLE_RXFIFO_MEMSIZE];
+static hCFifo_t s_hBleRxFifo;
+static volatile uint32_t s_BleRxDropCnt = 0;
+
+// Data taken from s_BleRxFifo, not yet accepted by the CDC Tx FIFO
+static uint8_t s_UsbTxBuf[64];
+static int s_UsbTxLen = 0;
+static int s_UsbTxOff = 0;
+
+// USB to BLE. Data read from the CDC, not yet written to the peer.
+static uint8_t s_BleTxBuf[USB_PKT_SIZE];
+static int s_BleTxLen = 0;
+static int s_BleTxOff = 0;
+
+static volatile bool s_bUsbToBleQueued = false;
+static volatile bool s_bBleToUsbQueued = false;
+
+static void UsbToBleEvt(uint32_t Evt, void *pCtx);
+static void BleToUsbEvt(uint32_t Evt, void *pCtx);
+
+static void UsbToBleQue(void)
 {
-	char s[256];
-	int l;
-//	l = sprintf(s, "Number service discovered: %d\r\n", g_ConnectedDev.NbSrvc);
-//	PRINT_DEBUG(s,l)
-	g_Uart.printf("Number service discovered: %d\r\n", g_ConnectedDev.NbSrvc);
-    for (int i = 0; i < pDev->NbSrvc; i++)
-    {
-//    	l = sprintf(s, "Service_ID %d: 0x%x,  Num_Characteristic : %d\r\n",
-//    			i, g_ConnectedDev.pServices[i].srv_uuid.uuid, g_ConnectedDev.pServices[i].char_count);
-//    	PRINT_DEBUG(s,l)
-    	g_Uart.printf("Service_ID %d: 0x%x,  Num_Characteristic : %d\r\n",
-    			i, g_ConnectedDev.pServices[i].srv_uuid.uuid, g_ConnectedDev.pServices[i].char_count);
-    	for (int j = 0; j < g_ConnectedDev.pServices[i].char_count; j++)
-    	{
-//    		l = sprintf(s, "Char_ID %d: 0x%x\r\n",
-//    				j, g_ConnectedDev.pServices[i].characteristics[j].characteristic.uuid.uuid);
-//    		PRINT_DEBUG(s,l)
-    		g_Uart.printf("Char_ID %d: 0x%x\r\n",
-    				j, g_ConnectedDev.pServices[i].characteristics[j].characteristic.uuid.uuid);
-    	}
-    }
-
-    // Find the desired UART-BLE Service
-    l = snprintf(s, sizeof(s), "Looking for UART Service with UUID = 0x%x ...", BLUEIO_UUID_UART_SERVICE);
-    PRINT_DEBUG(s,l)
-    int idx = BtDeviceFindService(pDev, BLUEIO_UUID_UART_SERVICE);
-    if (idx != -1)
-    {
-    	l = snprintf(s, sizeof(s), "Found!\r\n");
-    	PRINT_DEBUG(s,l);
-    	// Rx characteristic
-    	int dcharidx = BtDeviceFindCharacteristic(pDev, idx, BLUEIO_UUID_UART_RX_CHAR);
-    	l = snprintf(s, sizeof(s), "Find UART_RX_CHAR idx = 0x%x (%d)...", idx, idx);
-    	PRINT_DEBUG(s,l);
-    	if (dcharidx >= 0 && pDev->pServices[idx].characteristics[dcharidx].characteristic.char_props.notify)
-    	{
-    		// Enable Notify
-        	BtAppEnableNotify(pDev->Conn.Hdl, pDev->pServices[idx].characteristics[dcharidx].cccd_handle);
-        	g_BleRxCharHdl = pDev->pServices[idx].characteristics[dcharidx].characteristic.handle_value;
-        	l = snprintf(s, sizeof(s), "Found!\r\n");
-        	PRINT_DEBUG(s,l);
-    	}
-    	else
+	if (s_bUsbToBleQueued == false)
+	{
+		s_bUsbToBleQueued = true;
+		if (AppEvtHandlerQue(0, nullptr, UsbToBleEvt) == false)
 		{
-    		l = snprintf(s, sizeof(s), "Not Found!\r\n");
-    		PRINT_DEBUG(s,l);
+			s_bUsbToBleQueued = false;
+		}
+	}
+}
+
+static void BleToUsbQue(void)
+{
+	if (s_bBleToUsbQueued == false)
+	{
+		s_bBleToUsbQueued = true;
+		if (AppEvtHandlerQue(0, nullptr, BleToUsbEvt) == false)
+		{
+			s_bBleToUsbQueued = false;
+		}
+	}
+}
+
+static bool BridgeReady(void)
+{
+	return s_ConnHdl != BT_CONN_HDL_INVALID && s_BleTxCharHdl != BT_ATT_HANDLE_INVALID;
+}
+
+// Host to peer. Data stays in the CDC Rx FIFO while there is no peer, so the
+// host is held back by the USB flow control instead of losing bytes.
+static void UsbToBleEvt(uint32_t Evt, void *pCtx)
+{
+	(void)Evt;
+	(void)pCtx;
+
+	s_bUsbToBleQueued = false;
+
+	while (BridgeReady())
+	{
+		if (s_BleTxOff >= s_BleTxLen)
+		{
+			s_BleTxOff = 0;
+			s_BleTxLen = g_Cdc.Rx(0, s_BleTxBuf, sizeof(s_BleTxBuf));
+			if (s_BleTxLen <= 0)
+			{
+				s_BleTxLen = 0;
+				return;
+			}
 		}
 
-    	// Tx characteristic
-    	dcharidx = BtDeviceFindCharacteristic(pDev, idx, BLUEIO_UUID_UART_TX_CHAR);
-    	l = snprintf(s, sizeof(s), "Find UART_TX_CHAR idx = 0x%x (%d) ...", idx, idx);
-    	PRINT_DEBUG(s,l);
-    	if (dcharidx >= 0)
-    	{
-    		g_BleTxCharHdl = pDev->pServices[idx].characteristics[dcharidx].characteristic.handle_value;
-    		l = snprintf(s, sizeof(s), "Found!\r\n");
-    		PRINT_DEBUG(s,l);
-    	}
-    	else
-    	{
-    		l = snprintf(s, sizeof(s), "Not Found!\r\n");
-    		PRINT_DEBUG(s,l);
-    	}
-    }
-    else
-    {
-    	l = snprintf(s, sizeof(s), "Not Found!\r\n");
-    	PRINT_DEBUG(s,l);
-    }
+		int l = s_BleTxLen - s_BleTxOff;
+		if (l > BLE_WRITE_MAX)
+		{
+			l = BLE_WRITE_MAX;
+		}
 
+		if (BtAppWrite(s_ConnHdl, s_BleTxCharHdl, &s_BleTxBuf[s_BleTxOff], (uint16_t)l) == false)
+		{
+			// Stack Tx queue full. The port has no generic write done event,
+			// so try again from the back of the event queue.
+			UsbToBleQue();
+			return;
+		}
+
+		s_BleTxOff += l;
+	}
+}
+
+// Peer to host. Nothing is kept while the port is closed.
+static void BleToUsbEvt(uint32_t Evt, void *pCtx)
+{
+	(void)Evt;
+	(void)pCtx;
+
+	s_bBleToUsbQueued = false;
+
+	while (true)
+	{
+		if (s_UsbTxOff >= s_UsbTxLen)
+		{
+			s_UsbTxOff = 0;
+			s_UsbTxLen = sizeof(s_UsbTxBuf);
+			uint8_t *p = CFifoGetMultiple(s_hBleRxFifo, &s_UsbTxLen);
+			if (p == nullptr)
+			{
+				s_UsbTxLen = 0;
+				return;
+			}
+			memcpy(s_UsbTxBuf, p, s_UsbTxLen);
+		}
+
+		if (g_Cdc.IsPortOpen() == false)
+		{
+			s_UsbTxLen = 0;
+			continue;
+		}
+
+		int n = g_Cdc.Tx(0, &s_UsbTxBuf[s_UsbTxOff], s_UsbTxLen - s_UsbTxOff);
+		if (n <= 0)
+		{
+			// CDC Tx FIFO full, TX_FIFO_EMPTY queues this again
+			return;
+		}
+		s_UsbTxOff += n;
+	}
+}
+
+static int CdcEvtHandler(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId,
+						 uint8_t *pBuffer, int Len)
+{
+	(void)pDev;
+	(void)pBuffer;
+
+	switch (EvtId)
+	{
+		case DEVINTRF_EVT_RX_DATA:
+		case DEVINTRF_EVT_RX_FIFO_FULL:
+			UsbToBleQue();
+			break;
+
+		case DEVINTRF_EVT_TX_FIFO_EMPTY:
+			if (s_UsbTxOff < s_UsbTxLen || CFifoUsed(s_hBleRxFifo) > 0)
+			{
+				BleToUsbQue();
+			}
+			break;
+
+		case DEVINTRF_EVT_STATECHG:
+			g_Uart.printf("USB port %s\r\n", Len ? "opened" : "closed");
+			break;
+
+		default:
+			break;
+	}
+
+	return 0;
+}
+
+//
+// Bluetooth events
+//
+
+void BtAppEvtConnected(uint16_t ConnHdl)
+{
+	s_ConnHdl = ConnHdl;
+	g_Uart.printf("Connected, ConnHdl %d\r\n", ConnHdl);
+
+	// Open link: the peer GATT server can be read now
+	BtDevice_t *pPeer = BtPeerFindByHdl(ConnHdl);
+	if (pPeer == nullptr || BtAppDiscoverDevice(pPeer) == false)
+	{
+		g_Uart.printf("Discovery not started\r\n");
+	}
+}
+
+void BtAppEvtDisconnected(uint16_t ConnHdl)
+{
+	g_Uart.printf("Disconnected, ConnHdl %d\r\n", ConnHdl);
+
+	s_ConnHdl = BT_CONN_HDL_INVALID;
+	s_BleTxCharHdl = BT_ATT_HANDLE_INVALID;
+	s_BleRxCharHdl = BT_ATT_HANDLE_INVALID;
+
+	// Scanning stopped when the target was found. Look for it again.
+	BtAppScan();
+}
+
+bool BtAppScanReport(int8_t Rssi, uint8_t AddrType, uint8_t Addr[6], size_t AdvLen, uint8_t *pAdvData)
+{
+	char name[32];
+	size_t l = BtAdvDataGetDevName(pAdvData, AdvLen, name, sizeof(name) - 1);
+
+	if (l == 0)
+	{
+		return true;	// keep scanning
+	}
+	if (l >= sizeof(name))
+	{
+		l = sizeof(name) - 1;
+	}
+	name[l] = 0;
+
+	if (strcmp(name, TARGET_DEV_NAME) != 0)
+	{
+		return true;
+	}
+
+	g_Uart.printf("Found %s, RSSI %d\r\n", name, Rssi);
+	BtGapScanStop();
+
+	BtGapPeerAddr_t addr = { .Type = AddrType };
+	memcpy(addr.Addr, Addr, 6);
+	BtGapConnect(&addr, &s_ConnParams);
+
+	return false;		// stop scan reporting
+}
+
+void BtDeviceDiscovered(BtDevice_t *pDev)
+{
+	if (pDev == nullptr)
+	{
+		return;
+	}
+
+	int sidx = BtDeviceFindService(pDev, BLUEIO_UUID_UART_SERVICE);
+	if (sidx < 0)
+	{
+		g_Uart.printf("UART service not found\r\n");
+		return;
+	}
+
+	int rxidx = BtDeviceFindCharacteristic(pDev, sidx, BLUEIO_UUID_UART_RX_CHAR);
+	int txidx = BtDeviceFindCharacteristic(pDev, sidx, BLUEIO_UUID_UART_TX_CHAR);
+	if (rxidx < 0 || txidx < 0)
+	{
+		g_Uart.printf("UART characteristics not found (rx %d, tx %d)\r\n", rxidx, txidx);
+		return;
+	}
+
+	uint16_t cccd = pDev->pServices[sidx].characteristics[rxidx].cccd_handle;
+	if (cccd == BT_ATT_HANDLE_INVALID || BtAppEnableNotify(pDev->Conn.Hdl, cccd) == false)
+	{
+		g_Uart.printf("Notify not enabled\r\n");
+		return;
+	}
+
+	s_BleRxCharHdl = pDev->pServices[sidx].characteristics[rxidx].characteristic.handle_value;
+	s_BleTxCharHdl = pDev->pServices[sidx].characteristics[txidx].characteristic.handle_value;
+
+	g_Uart.printf("Bridge ready, Rx 0x%04X, Tx 0x%04X\r\n", s_BleRxCharHdl, s_BleTxCharHdl);
+
+	// Host data may have been waiting for the peer
+	UsbToBleQue();
+}
+
+// Stack interrupt context. Copy and hand over to the queue.
+void BtGattClientNotified(uint16_t ConnHdl, uint16_t ValHdl, uint8_t *pData, uint16_t Len)
+{
+	(void)ConnHdl;
+
+	if (ValHdl != s_BleRxCharHdl || pData == nullptr || Len == 0)
+	{
+		return;
+	}
+
+	int l = Len;
+	uint8_t *p = CFifoPutMultiple(s_hBleRxFifo, &l);
+	if (p != nullptr)
+	{
+		memcpy(p, pData, l);
+	}
+	if (l < Len)
+	{
+		s_BleRxDropCnt += Len - l;
+	}
+
+	BleToUsbQue();
+}
+
+void BtAppInitUserServices(void)
+{
+	// A central with no local service
+}
+
+void BtAppPeriphEvtHandler(uint32_t Evt, void *pCtx)
+{
+	(void)Evt;
+	(void)pCtx;
 }
 
 void BtAppCentralEvtHandler(uint32_t Evt, void *pCtx)
 {
-    ret_code_t err_code;
-	ble_evt_t * p_ble_evt = (ble_evt_t*)pCtx;
-    const ble_gap_evt_t * p_gap_evt = &p_ble_evt->evt.gap_evt;
-    const ble_common_evt_t *p_common_evt = &p_ble_evt->evt.common_evt;
-    const ble_gattc_evt_t *p_gattc_evt = &p_ble_evt->evt.gattc_evt;
-    uint8_t mac[6];
-    char s[256];
-    uint8_t len;
-
-    switch (p_ble_evt->header.evt_id)
-    {
-    	case BLE_GAP_EVT_CONNECTED:
-    		{
-				g_ConnectedDev.Conn.Hdl = p_gap_evt->conn_handle;
-				err_code = BtAppDiscoverDevice(&g_ConnectedDev);
-    		}
-    		break;
-        case BLE_GAP_EVT_ADV_REPORT:
-			{
-				// Scan data report
-				const ble_gap_evt_adv_report_t * p_adv_report = &p_gap_evt->params.adv_report;
-
-				//inverse the macAddr array
-				for (int i=0; i<6; i++)
-				{
-					mac[i] = p_adv_report->peer_addr.addr[5-i];
-				}
-
-#ifdef FIND_CLIENT_BY_NAME
-				bool res = ble_advdata_name_find(p_adv_report->data.p_data, p_adv_report->data.len, BLE_CLIENT_NAME);
-				if (res == false)
-				{
-					res = ble_advdata_short_name_find(p_adv_report->data.p_data, p_adv_report->data.len, BLE_CLIENT_NAME, strlen(BLE_CLIENT_NAME));
-				}
-				if (res == true)
-#else
-				if (memcmp(g_clientMacAddr, mac, 6) == 0)// Find device by MAC address
-#endif
-				{
-					len = snprintf(s, sizeof(s), "Target client device FOUND!\r\n");
-					PRINT_DEBUG(s,len);
-					BtGapPeerAddr_t addr = {.Type = p_adv_report->peer_addr.addr_type,};
-					memcpy(addr.Addr, p_adv_report->peer_addr.addr, 6);
-
-					res = BtAppConnect(&addr, &s_ConnParams);
-					len = snprintf(s, sizeof(s), "res = %x\r\n", res);
-					PRINT_DEBUG(s,len);
-
-					msDelay(10);
-				}
-				else
-				{
-					g_searchCnt++;
-					len = snprintf(s, sizeof(s), "Keep searching #%d\r\n", g_searchCnt);
-					PRINT_DEBUG(s,len)
-					BtAppScan();
-				}
-			}
-			break;
-        case BLE_GAP_EVT_TIMEOUT:
-        	{
-        	    ble_gap_evt_timeout_t const * p_timeout = &p_gap_evt->params.timeout;
-        	    if (p_timeout->src == BLE_GAP_TIMEOUT_SRC_SCAN)
-        	    {
-        	    	len = snprintf(s, sizeof(s), "Scan time out\r\n");
-        	    	PRINT_DEBUG(s,len)
-        	    }
-        	}
-        	break;
-        case BLE_GAP_EVT_SCAN_REQ_REPORT:
-        	{
-        	    ble_gap_evt_scan_req_report_t const * p_req_report = &p_gap_evt->params.scan_req_report;
-        	}
-        	break;
-        case BLE_GATTC_EVT_HVX:
-        	IOPinToggle(LED_GREEN_PORT, LED_GREEN_PIN);
-        	if (p_ble_evt->evt.gattc_evt.params.hvx.handle == g_BleRxCharHdl)
-        	{
-        		int l = p_ble_evt->evt.gattc_evt.params.hvx.len;
-        		int fifoAvai = l;
-        		int idx = 0;
-        		uint8_t *p = NULL;
-
-        		while (l > 0)
-        		{
-        			fifoAvai = l;
-        			p = CFifoPutMultiple(g_UsbTxFifo, &fifoAvai);
-        			if (p != NULL)
-        			{
-						memcpy(p, &p_ble_evt->evt.gattc_evt.params.hvx.data[idx], fifoAvai);
-						l -= fifoAvai;
-						idx = fifoAvai;
-//						if (l > 0)
-//							g_Uart.printf("Still have %d byte data \r\n", l);
-        			}
-        			else
-        			{
-
-//        				g_Uart.printf("Fifo buffer full!\r\n");
-        				break;
-        			}
-        		}
-				app_sched_event_put(NULL, 0, UsbTxSchedHandler);
-        	}
-        	IOPinToggle(LED_GREEN_PORT, LED_GREEN_PIN);
-        	break;
-  }
+	(void)Evt;
+	(void)pCtx;
 }
 
+//
+// Main
+//
 
-/********************************************************************************/
-/**
- * @brief User event handler @ref app_usbd_cdc_acm_user_ev_handler_t (headphones)
- * */
-static void cdc_acm_user_ev_handler(app_usbd_class_inst_t const * p_inst,
-                                    app_usbd_cdc_acm_user_event_t event)
+static void HardwareInit(void)
 {
-	static uint8_t usbRxBuff[PACKET_SIZE];
-	static int usbReadLen;
-	ret_code_t ret;
-    app_usbd_cdc_acm_t const * p_cdc_acm = app_usbd_cdc_acm_class_get(p_inst);
-    //static uint16_t dataLen;
+	g_Uart.Init(s_UartCfg);
 
-    switch (event)
-    {
-        case APP_USBD_CDC_ACM_USER_EVT_PORT_OPEN:
-        {
-            /*!!! Always need to setup first transfer*/
-        	ret = app_usbd_cdc_acm_read_any(&m_app_cdc_acm, usbRxBuff, PACKET_SIZE);
-//        	g_Uart.printf("USB port open! Setup first USB transfer\r\n");
-        	PRINT_DEBUG_UART("USB port open! Setup first USB transfer\r\n");
-            break;
-        }
-        case APP_USBD_CDC_ACM_USER_EVT_PORT_CLOSE:
-        	IOPinClear(LED_GREEN_PORT, LED_GREEN_PIN);
-            break;
-        case APP_USBD_CDC_ACM_USER_EVT_TX_DONE:
-        	g_UsbTxDone = true;
-            break;
-		case APP_USBD_CDC_ACM_USER_EVT_RX_DONE:
-		//app_sched_event_put(NULL, 0, UsbRxSchedHandler);
-		{
-			IOPinToggle(LED_GREEN_PORT, LED_GREEN_PIN);
-			usbReadLen = app_usbd_cdc_acm_rx_size(&m_app_cdc_acm);
-			uint8_t *p = NULL;
-			int fifoAvai = usbReadLen;
-			int idx = 0;
-			// Put data to CFifo
-			while (usbReadLen > 0)
-			{
-				fifoAvai = usbReadLen;
-				p = CFifoPutMultiple(g_UsbRxFifo, &fifoAvai);
-//				g_Uart.printf("usbReadLen = %d | fifoAvai = %d\r\n", usbReadLen, fifoAvai);
-				if (p != NULL)
-				{
-					memcpy(p, &usbRxBuff[idx], fifoAvai);
-					usbReadLen -= fifoAvai;
-					idx = fifoAvai;
-				}
-				else
-				{
-					PRINT_DEBUG_UART("Fifo buffer full!\r\n")
-					break;
-				}
-			}
-			app_sched_event_put(NULL, 0, BleTxSchedHandler);
-			app_usbd_cdc_acm_read_any(&m_app_cdc_acm, usbRxBuff, PACKET_SIZE);
-			IOPinToggle(LED_GREEN_PORT, LED_GREEN_PIN);
-			break;
-		}
-        default:
-            break;
-    }
-}
-
-/* Send data from Ble -> USB */
-void UsbTxSchedHandler(void * p_event_data, uint16_t event_size)
-{
-	int l = 64;// internal buffer of USB is max 64 bytes
-
-	if (CFifoUsed(g_UsbTxFifo) > 0)
-	{
-		if (g_UsbTxDone)
-		{
-			uint8_t *p = CFifoGetMultiple(g_UsbTxFifo, &l);
-			//g_Uart.printf("nByteRead = %d\r\n", l);
-			if (p != NULL)
-			{
-				g_UsbTxDone = false;
-				app_usbd_cdc_acm_write(&m_app_cdc_acm, p, l);
-			}
-		}
-		app_sched_event_put(NULL, 0, UsbTxSchedHandler);
-	}
-}
-
-
-/* Send data from USB -> Ble */
-void UsbRxSchedHandler(void * p_event_data, uint16_t event_size)
-{
-#if 0
-	IOPinToggle(LED_GREEN_PORT, LED_GREEN_PIN);
-	int usbReadLen = app_usbd_cdc_acm_rx_size(&m_app_cdc_acm);
-	uint8_t usbRxBuff[PACKET_SIZE];
-	uint8_t *p = NULL;
-	int fifoAvai = usbReadLen;
-	int idx = 0;
-
-	// Put data to CFifo
-	while (usbReadLen > 0)
-	{
-		fifoAvai = usbReadLen;
-		p = CFifoPutMultiple(g_UsbRxFifo, &fifoAvai);
-		//				g_Uart.printf("usbReadLen = %d | fifoAvai = %d\r\n", usbReadLen, fifoAvai);
-		if (p != NULL)
-		{
-			memcpy(p, &usbRxBuff[idx], fifoAvai);
-			usbReadLen -= fifoAvai;
-			idx = fifoAvai;
-		}
-		else
-		{
-			PRINT_DEBUG_UART("Fifo buffer full!\r\n")
-			break;
-		}
-	}
-	app_sched_event_put(NULL, 0, BleTxSchedHandler);
-	ret_code_t ret = app_usbd_cdc_acm_read_any(&m_app_cdc_acm, usbRxBuff, PACKET_SIZE);
-	IOPinToggle(LED_GREEN_PORT, LED_GREEN_PIN);
-#endif
-}
-
-
-/* Send data from Fifo buffer to Ble interface */
-void BleTxSchedHandler(void * p_event_data, uint16_t event_size)
-{
-	IOPinToggle(LED_GREEN_PORT, LED_GREEN_PIN);
-	int len = PACKET_SIZE;
-	uint8_t *p = NULL;
-	bool flush = false;
-
-	// Transfer data from Fifo buffer to global buffer
-	if (g_TxSuccess)
-	{
-		p = CFifoGetMultiple(g_UsbRxFifo, &len);
-		if (p != NULL)
-		{
-			memcpy(g_UsbRxBuff, p, len);
-			g_UsbRxBuffLen = len;
-			flush = true;
-			//g_Uart.printf("Flush 1: Get %d byte NEW data from CFifo\r\n", g_UsbRxBuffLen);
-		}
-		else
-		{
-			g_UsbRxBuffLen = 0;
-			//g_Uart.printf("Empty Cfifo buffer\r\n");
-		}
-	}
-	else
-	{
-		flush = true;
-//		g_Uart.printf("g_TxSuccess = %d\r\n", g_TxSuccess);
-//		g_Uart.printf("Flush 2: Send data from Global buffer\r\n");
-	}
-
-	// Transfer data from global buffer to Ble interface
-	if (flush)
-	{
-		if (g_ConnectedDev.Conn.Hdl != BLE_CONN_HANDLE_INVALID && g_BleTxCharHdl != BLE_CONN_HANDLE_INVALID)
-		{
-			g_TxSuccess = BtAppWrite(g_ConnectedDev.Conn.Hdl, g_BleTxCharHdl, g_UsbRxBuff, g_UsbRxBuffLen);
-		}
-	}
-
-	if (g_UsbRxBuffLen > 0)
-	{
-		app_sched_event_put(NULL, 0, BleTxSchedHandler);
-	}
-	IOPinToggle(LED_GREEN_PORT, LED_GREEN_PIN);
-}
-
-#if 0
-void UsbRxSchedHandler(void * p_event_data, uint16_t event_size)
-{
-	IOPinToggle(LED_GREEN_PORT, LED_GREEN_PIN);
-	ret_code_t ret;
-	int len = PACKET_SIZE;
-
-	g_UsbRxBuffLen = app_usbd_cdc_acm_rx_size(&m_app_cdc_acm);
-	ret = app_usbd_cdc_acm_read_any(&m_app_cdc_acm, g_UsbRxBuff, PACKET_SIZE);
-	uint8_t *p = CFifoPutMultiple(g_UsbRxFifo, &len);
-
-	// Send to BLE interface
-	if (g_UsbRxBuffLen > 0)
-	{
-		if (g_ConnectedDev.Conn.Hdl != BLE_CONN_HANDLE_INVALID && g_BleTxCharHdl != BLE_CONN_HANDLE_INVALID)
-		{
-			BleAppWrite(g_ConnectedDev.Conn.Hdl, g_BleTxCharHdl, g_UsbRxBuff, g_UsbRxBuffLen);
-		}
-	}
-	IOPinToggle(LED_GREEN_PORT, LED_GREEN_PIN);
-}
-
-void BleTxSchedHandler(void * p_event_data, uint16_t event_size)
-{
-	IOPinToggle(LED_GREEN_PORT, LED_GREEN_PIN);
-
-	int len = PACKET_SIZE;
-	uint8_t *p = CFifoGetMultiple(g_UsbRxFifo, &len);
-
-	if (p !=NULL)
-	{
-		if (g_ConnectedDev.Conn.Hdl != BLE_CONN_HANDLE_INVALID && g_BleTxCharHdl != BLE_CONN_HANDLE_INVALID)
-		{
-			BleAppWrite(g_ConnectedDev.Conn.Hdl, g_BleTxCharHdl, p, len);
-		}
-
-		app_sched_event_put(NULL, 0, BleTxSchedHandler);
-	}
-
-	IOPinToggle(LED_GREEN_PORT, LED_GREEN_PIN);
-}
-#endif
-
-static void usbd_user_ev_handler(app_usbd_event_type_t event)
-{
-    switch (event)
-    {
-        case APP_USBD_EVT_DRV_SUSPEND:
-            break;
-        case APP_USBD_EVT_DRV_RESUME:
-            break;
-        case APP_USBD_EVT_STARTED:
-            break;
-        case APP_USBD_EVT_STOPPED:
-            app_usbd_disable();
-            IOPinClear(LED_GREEN_PORT, LED_GREEN_PIN);
-            break;
-        case APP_USBD_EVT_POWER_DETECTED:
-        	//g_Uart.printf("APP_USBD_EVT_POWER_DETECTED\r\n");
-            if (!nrf_drv_usbd_is_enabled())
-            {
-            	for (int i = 0; i < 4; i++)
-				{
-					IOPinToggle(LED_RED_PORT, LED_RED_PIN);
-					msDelay(125);
-				}
-                app_usbd_enable();
-            }
-            break;
-        case APP_USBD_EVT_POWER_REMOVED:
-        	//g_Uart.printf("APP_USBD_EVT_POWER_REMOVED\r\n");
-            app_usbd_stop();
-            IOPinClear(LED_RED_PORT, LED_RED_PIN);
-            break;
-		case APP_USBD_EVT_POWER_READY:
-			//g_Uart.printf("APP_USBD_EVT_POWER_READY\r\n");
-			app_usbd_start();
-#ifdef UDG
-            IOPinSet(LED_GREEN_PORT, LED_GREEN_PIN);
-#else
-            IOPinSet(LED_RED_PORT, LED_RED_PIN);
-#endif
-            break;
-        default:
-            break;
-    }
-}
-
-
-void HardwareInit()
-{
-    /* TODO: Hardware init
-     * LEDs
-     * UART
-     * Timer
-     */
-
-	// Clock
-	ret_code_t ret;
-	int len;
-	char s[256];
-	ret = nrf_drv_clock_init();
-
-	// Uart
-	g_Uart.Init(g_UartCfg);
-	len = snprintf(s, sizeof(s), "System clock init...%s\r\n", (ret ? "Failed!" : "Done!"));
-	PRINT_DEBUG(s,len)
-	len = snprintf(s, sizeof(s), "UART Configuration: %d, %d, %d\r\n",
-			g_UartCfg.Rate, g_UartCfg.FlowControl, g_UartCfg.Parity);
-	PRINT_DEBUG(s,len)
-	msDelay(100);
-
-	// LEDs
 	IOPinCfg(s_Leds, s_NbLeds);
-	IOPinSet(LED_BLUE_PORT, LED_BLUE_PIN);
-	IOPinClear(LED_RED_PORT, LED_RED_PIN);
-	IOPinClear(LED_GREEN_PORT, LED_GREEN_PIN);
-
-	//CFifoInit(pMemBlk, TotalMemSize, BlkSize, bBlocking)
-	g_UsbRxFifo = CFifoInit(g_UsbRxFifoMem, USBFIFOSIZE, 1, true);
-	g_UsbTxFifo = CFifoInit(g_UsbTxFifoMem, USBFIFOSIZE, 1, true);
-
-	// USB module
-	UsbInit();// !!! Must be executed before BLE initialization
-	msDelay(500);
-	len = snprintf(s, sizeof(s), "USB-BLE is on\r\n");
-	PRINT_DEBUG(s,len)
-}
-
-void UsbInit()
-{
-	ret_code_t ret;
-
-	// Init USB
-#ifdef DEBUG_PRINT
-	g_Uart.printf("Init USB...");
-#endif
-	ret = app_usbd_init(&usbd_config);
-#ifdef DEBUG_PRINT
-	g_Uart.printf("%s\r\n", (ret ? "Failed" : "Done!"));
-#endif
-
-	//USBD serial number generator
-	app_usbd_serial_num_generate();
-
-	// Append USB class instance
-	const app_usbd_class_inst_t *class_cdc_acm = app_usbd_cdc_acm_class_inst_get(&m_app_cdc_acm);
-	ret = app_usbd_class_append(class_cdc_acm);
-	//APP_ERROR_CHECK(ret);
-#ifdef DEBUG_PRINT
-	g_Uart.printf("%s\r\n", (ret ? "Failed" : "Done!"));
-#endif
-
-	// Check power
-	if (USBD_POWER_DETECTION)
+	for (int i = 0; i < s_NbLeds; i++)
 	{
-#ifdef DEBUG_PRINT
-		g_Uart.printf("USB power detection...");
-#endif
-		ret = app_usbd_power_events_enable();
-#ifdef DEBUG_PRINT
-		g_Uart.printf("%s\r\n", (ret ? "Failed" : "Done!"));
-#endif
-	}
-	else
-	{
-#ifdef DEBUG_PRINT
-		g_Uart.printf("No USB power detection enabled\r\nStarting USB now");
-#endif
-		app_usbd_enable();
-		app_usbd_start();
-	}
-}
-
-void BleAppInitUserData()
-{
-	// TODO: Add passkey pairing
-/*	ble_opt_t opt;
-	opt.gap_opt.passkey.p_passkey = (uint8_t*)"123456";
-	uint32_t err_code =  sd_ble_opt_set(BLE_GAP_OPT_PASSKEY, &opt);
-	APP_ERROR_CHECK(err_code);*/
-}
-
-void UartRxSchedHandler(void * p_event_data, uint16_t event_size)
-{
-	uint8_t buff[PACKET_SIZE];
-
-	int l = g_Uart.Rx(buff, PACKET_SIZE);
-	if (l > 0)
-	{
-		if (g_ConnectedDev.Conn.Hdl != BLE_CONN_HANDLE_INVALID && g_BleTxCharHdl != BLE_CONN_HANDLE_INVALID)
-		{
-//			BleAppWrite(g_ConnectedDev.Conn.Hdl, g_BleTxCharHdl, buff, l);
-		}
-	}
-}
-
-int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen)
-{
-	int cnt = 0;
-//	uint8_t buff[20];
-
-	switch (EvtId)
-	{
-		case UART_EVT_RXTIMEOUT:
-		case UART_EVT_RXDATA:
-			app_sched_event_put(NULL, 0, UartRxSchedHandler);
-			break;
-		case UART_EVT_TXREADY:
-			break;
-		case UART_EVT_LINESTATE:
-			break;
+		IOPinSet(s_Leds[i].PortNo, s_Leds[i].PinNo);
 	}
 
-	return cnt;
+	s_hBleRxFifo = CFifoInit(s_BleRxFifoMem, sizeof(s_BleRxFifoMem), 1, true);
+
+	g_Uart.printf("USB CDC BLE Central Demo, target %s\r\n", TARGET_DEV_NAME);
 }
 
-
-int main(void)
+int main()
 {
-	char s[256];
-	uint8_t len;
-	ret_code_t ret;
+	// The queue exists before any interrupt can queue an event
+	AppEvtHandlerInit(g_AppEvtHandlerQueMem, sizeof(g_AppEvtHandlerQueMem));
 
 	HardwareInit();
 
-    // BLE init
-    ret = BtAppInit(&s_BleAppCfg);
-    msDelay(250);
-    len = snprintf(s, sizeof(s), "Bluetooth init...Done!\r\n");
-    PRINT_DEBUG(s,len)
-
-    // BLE run
-#ifdef FIND_CLIENT_BY_NAME
-    len = snprintf(s, sizeof(s), "Searching for client with Name = %s", BLE_CLIENT_NAME);
-    PRINT_DEBUG(s,len);
-#else
-    len = snprintf(s, sizeof(s), "Searching for client with MAC addr = ");
-    PRINT_DEBUG(s,len);
-    len = 0;
-	for (int i=0; i<6; i++)
+	if (UsbInit(&s_UsbCfg) == false || g_Cdc.Init(s_CdcCfg) == false)
 	{
-		len += snprintf(s + len, sizeof(s) - len, "%02X%s", g_clientMacAddr[i], i<5 ? ":" : "\r\n");
+		g_Uart.printf("USB init failed\r\n");
+		while (true)
+		{
+			__WFE();
+		}
 	}
-	PRINT_DEBUG(s,len)
-#endif
 
-	BtAppScanInit((BtGapScanCfg_t*)&s_bleScanInitCfg);// Register the non-GATT BLE services and their characteristics
+	if (BtAppInit(&s_BleAppCfg) == false)
+	{
+		g_Uart.printf("BtAppInit failed\r\n");
+		while (true)
+		{
+			__WFE();
+		}
+	}
+
+	BtAppScanInit((BtGapScanCfg_t *)&s_ScanCfg);
 	BtAppScan();
+
+	// Without a cable this does nothing; the cable interrupt comes back to it
+	UsbEnable(USB_DEVNO);
+
 	AppRun();
 
 	return 0;
