@@ -22,7 +22,6 @@ Copyright (c) 2026, I-SYST inc., all rights reserved
 ----------------------------------------------------------------------------*/
 
 #include <atomic>
-#include "app_evt_handler.h"
 #include "usb_combo_stress_device.h"
 #include "coredev/system_core_clock.h"
 #include "TaktOS.h"
@@ -44,14 +43,51 @@ volatile uint32_t g_UsbComboTaktOSHeartbeat = 0;
 // PRBS Tx calls. Loopback may receive and echo in the same pass.
 #define CDC_PASSES_PER_TURN 4U
 #define USB_SERVICE_PASSES_PER_TURN 4U
+#define USB_WORK_QUE_SIZE 16U
+#define USB_WORK_PER_PASS 30U
 
+// Deferred USB work: queued by the controller interrupt, run by ServiceThread.
+typedef struct {
+	uint32_t EvtId;
+	void *pCtx;
+	UsbEvtQueHandler_t Handler;
+} UsbWork_t;
+
+alignas(4) static uint8_t s_UsbWorkMem[
+	CFIFO_TOTAL_MEMSIZE(USB_WORK_QUE_SIZE, sizeof(UsbWork_t))];
+static hCFifo_t s_hUsbWork;
 static TaktOSSem_t s_ServiceWake;
 
-// Link-time override. All RTOS notification policy belongs to this application.
-void AppEvtHandlerNotify(void)
+// Link-time override of the library default, see usb.h. USB work goes to the
+// queue of the thread serving USB instead of the application event queue.
+// Interrupt context: ServiceThread cannot run before the entry is complete.
+bool UsbEvtQue(uint32_t EvtId, void *pCtx, UsbEvtQueHandler_t Handler)
 {
+	UsbWork_t *p = (UsbWork_t *)CFifoPut(s_hUsbWork);
+	if (p == nullptr)
+	{
+		return false;
+	}
+	p->EvtId = EvtId;
+	p->pCtx = pCtx;
+	p->Handler = Handler;
 	// A full binary semaphore already records a wake for this consumer.
 	(void)TaktOSSemGive(&s_ServiceWake, false);
+	return true;
+}
+
+// Copy the head before releasing it: the interrupt can reuse the slot as soon
+// as CFifoGet returns.
+static bool UsbWorkGet(UsbWork_t *pWork)
+{
+	const UsbWork_t *p = (const UsbWork_t *)CFifoPeek(s_hUsbWork);
+	if (p == nullptr)
+	{
+		return false;
+	}
+	*pWork = *p;
+	(void)CFifoGet(s_hUsbWork);
+	return true;
 }
 
 static void ServiceThread(void *pArg)
@@ -62,9 +98,16 @@ static void ServiceThread(void *pArg)
 	{
 		// Service completion bursts before paying for another scheduler round.
 		// IRQs stay enabled; newly completed DMA can post work between passes.
-		// This remains the sole AppEvt consumer.
+		// This thread is the only consumer of the USB work queue.
 		for (unsigned pass = 0; pass < USB_SERVICE_PASSES_PER_TURN; pass++)
 		{
+			UsbWork_t work;
+			for (unsigned cnt = USB_WORK_PER_PASS;
+				 cnt > 0U && UsbWorkGet(&work); cnt--)
+			{
+				work.Handler(work.EvtId, work.pCtx);
+			}
+			// Cable and class housekeeping.
 			UsbProcess(USB_DEVNO);
 		}
 		TaktOSThreadYield();
@@ -185,9 +228,14 @@ static void HeartbeatThread(void *pArg)
 
 int main()
 {
-	// Initialize the hook's resource before USB can post its first event.
-	if (TaktOSSemInit(&s_ServiceWake, 0U, 1U) != TAKTOS_OK)
+	// The work queue and its wake exist before USB can queue its first event.
+	s_hUsbWork = CFifoInit(s_UsbWorkMem, sizeof(s_UsbWorkMem),
+						   sizeof(UsbWork_t), true);
+	if (s_hUsbWork == nullptr ||
+		TaktOSSemInit(&s_ServiceWake, 0U, 1U) != TAKTOS_OK)
+	{
 		return -1;
+	}
 	// Initialization completes before any traffic thread can access a class.
 	if (!UsbInit(&s_UsbCfg) ||
 		!g_LoopbackCdc.Init(s_LoopbackCfg) || !g_PrbsCdc.Init(s_PrbsCfg) ||

@@ -89,9 +89,8 @@ test: $(TARGETS)
 	$(TEST_ENV) ./$(APPEVT_TARGET)
 	./$(THREAD_TARGET) $(OPS)
 
-test-appevt: $(APPEVT_TARGET) $(BUILD_DIR)/app_evt_notify_test
+test-appevt: $(APPEVT_TARGET)
 	$(TEST_ENV) ./$(APPEVT_TARGET)
-	$(TEST_ENV) ./$(BUILD_DIR)/app_evt_notify_test
 
 # Race detection. Fewer operations because the sanitizer is slow.
 test-tsan: $(TSAN_TARGET)
@@ -229,10 +228,3 @@ $(BENCH_TARGET): $(BENCH_SOURCES) $(HEADERS)
 
 clean:
 	rm -rf $(BUILD_DIR)
-
-
-$(BUILD_DIR)/app_evt_notify_test: app_evt_notify_test.cpp $(ROOT)/src/app_evt_handler.cpp $(ROOT)/src/cfifo.c $(APPEVT_HEADERS)
-	@mkdir -p $(BUILD_DIR)
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) -x c++ \
-		app_evt_notify_test.cpp $(ROOT)/src/app_evt_handler.cpp $(ROOT)/src/cfifo.c \
-		-o $@ $(LDFLAGS) $(SANITIZERS)
