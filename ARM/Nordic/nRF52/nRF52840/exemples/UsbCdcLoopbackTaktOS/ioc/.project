@@ -35,10 +35,5 @@
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/exemples/usb/usb_cdc_loopback_taktos.cpp</locationURI>
 		</link>
-		<link>
-			<name>src/usb_ctrlr_nrf52.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/usb_ctrlr_nrf52.cpp</locationURI>
-		</link>
 	</linkedResources>
 </projectDescription>
