@@ -180,7 +180,10 @@ static void BondSaveSchedule(void)
 	}
 }
 
-static void BondSavePump(void)
+// Declared in bt_pds.h. Called by the security module of the port from its
+// main loop. A save that could not be queued is scheduled again on the next
+// call; a storage failure waits BT_SMP_BOND_RETRY_IDLE_CYCLES calls first.
+void BtSmpBondNvmPoll(void)
 {
 	uint8_t delay = s_RetryIdleCycles.load(std::memory_order_acquire);
 	if (delay != 0)
@@ -190,9 +193,6 @@ static void BondSavePump(void)
 		return;
 	}
 
-	// AppEvtHandlerExec calls this after queued callbacks have released their
-	// FIFO slots. Queue-full scheduling failures retry on the next idle pass;
-	// actual storage failures set a bounded delay above.
 	BondSaveSchedule();
 }
 
@@ -398,12 +398,6 @@ int BtSmpBondNvmInit(void)
 		BOND_PRINTF("PDS: %d bond slots, only %d can be marked, refusing\r\n",
 					BtSmpBondSlotCount(), BT_SMP_BOND_PEND_MAX);
 		return -ENOTSUP;
-	}
-
-	if (!AppEvtHandlerIdleRegister(BondSavePump))
-	{
-		BOND_PRINTF("PDS: no application idle-pump slot\r\n");
-		return -ENOMEM;
 	}
 
 	s_PdsArmed = true;

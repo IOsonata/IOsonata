@@ -40,6 +40,7 @@ void BtGapWbaConnParamsDisconnected(uint16_t ConnHdl);
 void BtGapWbaConnParamsUpdateComplete(uint16_t ConnHdl, uint8_t Status,
 		uint16_t Interval, uint16_t Latency, uint16_t Timeout);
 void BtGapWbaConnParamsL2capResponse(uint16_t ConnHdl, uint16_t Result);
+void BtGapWbaConnParamProcess(void);
 
 void BtGapWbaNativeHandlesSet(uint8_t Role, uint8_t DeviceNameMaxLen,
 		uint16_t GapSrvcHdl, uint16_t DevNameCharHdl,

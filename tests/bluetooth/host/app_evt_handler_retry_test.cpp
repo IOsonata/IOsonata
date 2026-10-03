@@ -9,9 +9,6 @@ namespace {
 bttest::Context s_Test("Application event retry tests");
 int s_NormalCount;
 int s_DeferredCount;
-int s_IdleCount;
-bool s_DeferredPending;
-bool s_DeferredQueued;
 
 void NormalHandler(uint32_t, void *)
 {
@@ -20,37 +17,17 @@ void NormalHandler(uint32_t, void *)
 
 void DeferredHandler(uint32_t, void *)
 {
-	s_DeferredQueued = false;
-	s_DeferredPending = false;
 	s_DeferredCount++;
 }
 
-void IdlePump()
-{
-	s_IdleCount++;
-	if (!s_DeferredPending || s_DeferredQueued)
-	{
-		return;
-	}
-
-	if (AppEvtHandlerQue(0, nullptr, DeferredHandler))
-	{
-		s_DeferredQueued = true;
-	}
-}
-
+// A full queue refuses the event. The caller keeps its work marked and
+// queues it again after the main loop has run the queue.
 void TestFullQueueRetriesAfterDrain()
 {
 	BT_CHECK(s_Test, AppEvtHandlerInit(nullptr, 0));
-	BT_CHECK(s_Test, AppEvtHandlerIdleRegister(IdlePump));
-	BT_CHECK(s_Test, AppEvtHandlerIdleRegister(IdlePump));
-	BT_CHECK(s_Test, !AppEvtHandlerIdleRegister(nullptr));
 
 	s_NormalCount = 0;
 	s_DeferredCount = 0;
-	s_IdleCount = 0;
-	s_DeferredPending = true;
-	s_DeferredQueued = false;
 
 	int queued = 0;
 	while (AppEvtHandlerQue((uint32_t)queued, nullptr, NormalHandler))
@@ -64,14 +41,15 @@ void TestFullQueueRetriesAfterDrain()
 	AppEvtHandlerExec();
 	BT_CHECK(s_Test, s_NormalCount == queued);
 	BT_CHECK(s_Test, s_DeferredCount == 0);
-	BT_CHECK(s_Test, s_DeferredQueued);
-	BT_CHECK(s_Test, s_IdleCount == 1);
 
+	BT_CHECK(s_Test, AppEvtHandlerQue(0, nullptr, DeferredHandler));
 	AppEvtHandlerExec();
 	BT_CHECK(s_Test, s_DeferredCount == 1);
-	BT_CHECK(s_Test, !s_DeferredPending);
-	BT_CHECK(s_Test, !s_DeferredQueued);
-	BT_CHECK(s_Test, s_IdleCount == 2);
+
+	// Nothing queued: nothing runs.
+	AppEvtHandlerExec();
+	BT_CHECK(s_Test, s_NormalCount == queued);
+	BT_CHECK(s_Test, s_DeferredCount == 1);
 }
 
 } // namespace

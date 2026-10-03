@@ -57,7 +57,6 @@ SOFTWARE.
 #elif defined(NRF52840_XXAA)
 #include "crypto_cc3xx.h"
 #endif
-#include "app_evt_handler.h"
 
 /******** For DEBUG Trace ************/
 // Define DEBUG_ENABLE to turn on trace for this file. A release build
@@ -83,6 +82,26 @@ SOFTWARE.
 #define DEBUG_PRINTF(...)
 #endif
 /*******************************/
+
+// Defined in bt_app_sdc.cpp: gives BtAppRun the main loop work of this module.
+void BtAppSdcSecPollSet(void (*Poll)(void));
+
+// Set when the bond store is in use, see BtAppSecInit.
+static bool s_bBtSecSdcBondStore = false;
+
+// Main loop work of the security module, called from BtAppRun after the
+// queued events. The port timer wakes the loop once per second.
+static void BtSecSdcPoll(void)
+{
+	// Pairing timeout (Core Vol 3 Part H 3.4) and crypto engine retry.
+	// Cheap no-op when no pairing is in progress.
+	BtSmpTimeoutCheck();
+
+	if (s_bBtSecSdcBondStore)
+	{
+		BtSmpBondNvmPoll();
+	}
+}
 
 // Connection callback of the port (BtAppConnected), saved when BtAppSecInit
 // hooks the HCI device connection callback.
@@ -305,20 +324,15 @@ bool BtAppSecInit(void)
 			STORE_PRINTF("STORE: bt_pds init failed: %d\r\n", storeRes);
 			return false;
 		}
+		s_bBtSecSdcBondStore = true;
 	}
 	else
 	{
 		STORE_PRINTF("STORE: none, bSecure is 0 so bonds stay in RAM\r\n");
 	}
 
-	// Pairing timeout (Core Vol 3 Part H 3.4), checked from the main loop.
-	// The port timer wakes the loop once per second. Cheap no-op when no
-	// pairing is in progress.
-	if (AppEvtHandlerIdleRegister(BtSmpTimeoutCheck) == false)
-	{
-		STORE_PRINTF("SEC: no idle handler slot for the pairing timeout check\r\n");
-		return false;
-	}
+	// Pairing timeout and bond save retry are driven from the main loop.
+	BtAppSdcSecPollSet(BtSecSdcPoll);
 
 	// Secure each new link: take the connection callback, the port one is
 	// called first.

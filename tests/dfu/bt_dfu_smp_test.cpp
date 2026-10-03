@@ -70,25 +70,6 @@ static void RunQue(void)
 	}
 }
 
-static AppEvtHandlerIdle_t s_Idle = nullptr;
-
-extern "C" bool AppEvtHandlerIdleRegister(AppEvtHandlerIdle_t Handler)
-{
-	s_Idle = Handler;
-	return true;
-}
-
-// The main loop: the queue, then the idle pump, as AppEvtHandlerExec does.
-static void Loop(void)
-{
-	RunQue();
-	if (s_Idle != nullptr)
-	{
-		s_Idle();
-	}
-	RunQue();
-}
-
 extern "C" bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)
 {
 	s_pSrvc = pSrvc;
@@ -154,6 +135,13 @@ static int s_Resets = 0;
 static void ResetCB(void *)
 {
 	s_Resets++;
+}
+
+static int s_TxDone = 0;
+
+static void TxDoneCB(void)
+{
+	s_TxDone++;
 }
 
 static BtGattChar_t *Char(void)
@@ -304,16 +292,22 @@ static void TestTransport(void)
 	Drain();
 	CHECK(TakeRsp(rsp) && EchoOk(rsp, "found"));
 
+	int txDone = s_TxDone;
+
 	// Refused while another characteristic filled the stack queue: no
-	// completion of ours ever comes, the main loop goes on with it.
-	s_NotifyRefuse = 3;
+	// completion of ours ever comes. The response waits, and goes out ahead
+	// of the answer to the next request of the host.
+	s_Peer.Conn.MaxMtu = 65;
+	s_NotifyRefuse = 1;
 	Write(Echo(big.c_str()), 65);
-	for (int i = 0; i < 10 && (BtDfuSmpTxBusy() || s_Que.size()); i++)
-	{
-		Loop();
-	}
+	RunQue();
+	CHECK(BtDfuSmpTxBusy() && s_Que.empty() && s_Rx.empty());
+	Write(Echo("retry"), 65);
+	RunQue();
 	CHECK(TakeRsp(rsp) && EchoOk(rsp, big.c_str()));
-	CHECK(BtDfuSmpTxBusy() == false);
+	CHECK(TakeRsp(rsp) && EchoOk(rsp, "retry"));
+	CHECK(BtDfuSmpTxBusy() == false && s_Rx.empty());
+	CHECK(s_TxDone == txDone + 2);
 
 	// Notifications turned off part way through a response: the rest is
 	// dropped, the next request is answered.
@@ -324,8 +318,11 @@ static void TestTransport(void)
 	CHECK(BtDfuSmpTxBusy());
 	s_bNotifyOn = false;
 	s_NotifyRefuse = 0;
-	Loop();
+	txDone = s_TxDone;
+	Char()->SetNotifCB(Char(), false, s_Peer.Conn.Hdl);
+	RunQue();
 	CHECK(BtDfuSmpTxBusy() == false);
+	CHECK(s_TxDone == txDone);		// dropped, not sent
 	s_bNotifyOn = true;
 	s_Rx.clear();
 	Write(Echo("again"), 23);
@@ -480,6 +477,7 @@ int main(int argc, char **argv)
 		.pTxBuf = s_SmpTx,
 		.TxBufSize = sizeof(s_SmpTx),
 		.SecType = BT_GAP_SECTYPE_NONE,
+		.TxDoneCB = TxDoneCB,
 	};
 	CHECK(BtDfuSmpInit(cfg));
 	CHECK(s_pSrvc == BtDfuSmpSrvc() && s_pSrvc->bCustom);

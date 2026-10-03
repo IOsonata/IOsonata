@@ -47,7 +47,6 @@ struct pds_pending {
 
 static struct pds_pending pds_que[PDS_QUE_DEPTH];
 static bool del_peer_running;
-static bool del_peer_queue_retry;
 
 LOG_MODULE_DECLARE(peer_manager, CONFIG_PEER_MANAGER_LOG_LEVEL);
 
@@ -257,16 +256,6 @@ static void pds_work_handler(uint32_t evt, void *ctx);
 static struct pds_pending *pds_pending_claim(void);
 static void peer_delete_kick(void);
 
-static void pds_idle_pump(void)
-{
-	if (!del_peer_queue_retry) {
-		return;
-	}
-
-	del_peer_queue_retry = false;
-	peer_delete_kick();
-}
-
 uint32_t pds_init(void)
 {
 	int err;
@@ -276,11 +265,6 @@ uint32_t pds_init(void)
 	err = BtPdsBmInit();
 	if (err) {
 		LOG_ERR("Could not initialize NVM storage. BtPdsBmInit() returned %d.", err);
-		return NRF_ERROR_RESOURCES;
-	}
-
-	if (!AppEvtHandlerIdleRegister(pds_idle_pump)) {
-		LOG_ERR("Could not register PDS application idle pump.");
 		return NRF_ERROR_RESOURCES;
 	}
 
@@ -377,13 +361,14 @@ static void peer_delete_kick(void)
 	p->length = 0;
 
 	if (!AppEvtHandlerQue(0, p, pds_work_handler)) {
+		// Event queue full. The peer stays marked deleted and the delete
+		// starts again from the next peer_delete_kick(), which every
+		// completed storage operation and every pds_peer_id_free() calls.
 		p->del_peer = false;
 		p->busy = false;
-		del_peer_queue_retry = true;
 		return;
 	}
 
-	del_peer_queue_retry = false;
 	del_peer_running = true;
 }
 
@@ -402,7 +387,6 @@ static void pds_work_handler(uint32_t evt, void *ctx)
 			if (AppEvtHandlerQue(0, p, pds_work_handler)) {
 				return;
 			}
-			del_peer_queue_retry = true;
 		}
 
 		del_peer_running = false;

@@ -1314,6 +1314,9 @@ void BtAppRun(void)
 		// Run any user-queued events first - matches BM/nRF52 ordering.
 		AppEvtHandlerExec();
 
+		// Connection parameter update requests that have come due.
+		BtGapWbaConnParamProcess();
+
 		// Pump the sequencer. UTIL_SEQ_Run dispatches whichever task the
 		// notification hooks scheduled (HCI evt drain, BLE host work).
 		UTIL_SEQ_Run(UTIL_SEQ_DEFAULT);

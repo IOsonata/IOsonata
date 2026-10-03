@@ -138,6 +138,11 @@ typedef struct {
 
 static const BtAppSdcConn_t *s_pBtAppSdcConn = nullptr;
 
+// Security work of the main loop: pairing timeout, crypto retry and bond
+// save retry. Set by BtAppSecInit through BtAppSdcSecPollSet. An application
+// that does not use security never sets it, so none of it is linked.
+static void (*s_pBtAppSdcSecPoll)(void) = nullptr;
+
 // Configuration given to BtAppInit, used by BtAppConnInit
 static const BtAppCfg_t *s_pBtAppCfg = nullptr;
 
@@ -263,8 +268,8 @@ static void BtAppSdcTimerHandler(TimerDev_t *pTimer, uint32_t Evt)
 		}
 
         // Wake the main loop once per period. The pairing timeout (Core
-        // Vol 3 Part H 3.4) is checked there by the security module, as an
-        // idle handler, when the application uses security.
+        // Vol 3 Part H 3.4) is checked there by the security module, through
+        // s_pBtAppSdcSecPoll, when the application uses security.
         BtAppEvtNotify();
     }
 }
@@ -970,8 +975,20 @@ DEBUG_PRINTF("Loop\r\n");
 		BtAppEvtWait();
 		AppEvtHandlerExec();
 
+		if (s_pBtAppSdcSecPoll != nullptr)
+		{
+			s_pBtAppSdcSecPoll();
+		}
+
 		BtHciCtlrProcess(&s_BtHciCtlr);
 	}
+}
+
+// Called by BtAppSecInit of the security module (bt_sec_sdc.cpp) to have its
+// main loop work called from BtAppRun.
+void BtAppSdcSecPollSet(void (*Poll)(void))
+{
+	s_pBtAppSdcSecPoll = Poll;
 }
 
 // Port-level weak default for BtAppEvtWait. Bare-metal apps fall through to

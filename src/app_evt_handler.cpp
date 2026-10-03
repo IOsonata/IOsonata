@@ -50,8 +50,6 @@ alignas(4) static uint8_t s_AppEvtHandlerFifoMem[
 	APPEVT_HANDLER_QUE_CFIFO_DEFAULT_MEMSIZE];
 
 static hCFifo_t s_hAppEvtHandlerFifo;
-static AppEvtHandlerIdle_t s_IdleHandler[APPEVT_HANDLER_IDLE_MAX_COUNT];
-static uint8_t s_IdleHandlerCount;
 
 bool AppEvtHandlerInit(uint8_t *pFifoMem, size_t Size)
 {
@@ -109,30 +107,6 @@ static bool AppEvtHandlerGet(AppEvtHandlerQue_t *pEvt)
 	return p != nullptr;
 }
 
-bool AppEvtHandlerIdleRegister(AppEvtHandlerIdle_t Handler)
-{
-	if (Handler == nullptr)
-	{
-		return false;
-	}
-
-	for (uint8_t i = 0; i < s_IdleHandlerCount; i++)
-	{
-		if (s_IdleHandler[i] == Handler)
-		{
-			return true;
-		}
-	}
-
-	if (s_IdleHandlerCount >= APPEVT_HANDLER_IDLE_MAX_COUNT)
-	{
-		return false;
-	}
-
-	s_IdleHandler[s_IdleHandlerCount++] = Handler;
-	return true;
-}
-
 void AppEvtHandlerDispatch(void)
 {
 	if (s_hAppEvtHandlerFifo == nullptr)
@@ -166,12 +140,5 @@ void AppEvtHandlerExec(void)
 				evt.Handler(evt.EvtId, evt.pCtx);
 			}
 		}
-	}
-
-	// Queued handlers have released their FIFO slots. Deferred subsystems get
-	// one chance to enqueue work that previously lost a race with a full queue.
-	for (uint8_t i = 0; i < s_IdleHandlerCount; i++)
-	{
-		s_IdleHandler[i]();
 	}
 }

@@ -90,6 +90,9 @@ typedef struct __Bt_DfuSmp_Cfg {
 	uint16_t TxBufSize;			//!< Its size, 512 covers every response
 	uint8_t SecType;			//!< BT_GAP_SECTYPE_ the link must have to
 								//!< use the service, NONE for an open link
+	void (*TxDoneCB)(void);		//!< Called from the main loop when a response
+								//!< has been handed to the stack in full.
+								//!< Null when not used
 } BtDfuSmpCfg_t;
 
 /**
@@ -111,7 +114,7 @@ BtGattSrvc_t *BtDfuSmpSrvc(void);
 void BtDfuSmpReset(void);
 
 /// True while a response is still going out. An application that resets on
-/// request waits for this to clear first.
+/// request waits for this to clear first, or resets from TxDoneCB.
 bool BtDfuSmpTxBusy(void);
 
 #endif

@@ -64,7 +64,6 @@ SOFTWARE.
 #include "bluetooth/bt_app.h"
 #include "bluetooth/bt_gatt.h"
 #include "bluetooth/bt_dfu_smp.h"
-#include "app_evt_handler.h"
 #include "storage/nvm.h"
 #include "storage/nvm_intrf.h"
 #include "dfu/dfu_smp.h"
@@ -178,11 +177,11 @@ static void DfuSmpResetCB(void *pCtx)
 	s_bResetReq = true;
 }
 
-// Main loop pump: once the reset response has gone to the stack, give it time
-// on air, then restart into the boot.
-static void OtaIdle(void)
+// Main loop, called by the SMP service when a response has gone to the stack:
+// after the reset response, give it time on air, then restart into the boot.
+static void OtaSmpTxDone(void)
 {
-	if (s_bResetReq && BtDfuSmpTxBusy() == false)
+	if (s_bResetReq)
 	{
 		msDelay(RESET_DELAY_MS);
 		DfuTgtReset();
@@ -284,13 +283,10 @@ static bool OtaInit(void)
 		.pTxBuf = s_SmpTx,
 		.TxBufSize = sizeof(s_SmpTx),
 		.SecType = BT_GAP_SECTYPE_NONE,
+		.TxDoneCB = OtaSmpTxDone,
 	};
-	if (BtDfuSmpInit(bcfg) == false)
-	{
-		return false;
-	}
 
-	return AppEvtHandlerIdleRegister(OtaIdle);
+	return BtDfuSmpInit(bcfg);
 }
 
 void BtAppInitUserServices(void)

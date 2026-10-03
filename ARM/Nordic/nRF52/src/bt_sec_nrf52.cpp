@@ -67,7 +67,6 @@ SOFTWARE.
 #include "bluetooth/bt_gap.h"
 #include "bluetooth/bt_smp.h"
 #include "bluetooth/bt_dev.h"
-#include "app_evt_handler.h"
 
 /******** For DEBUG ************/
 #define DEBUG_ENABLE
@@ -530,7 +529,11 @@ bool BtGapConnSecGet(uint16_t ConnHdl, BtConnSec_t *pSec)
 	return true;
 }
 
-// Main loop pump of the LESC module: key pair generation and DHKey replies.
+// Defined in bt_app_nrf52.cpp: gives BtAppRun the main loop work of this
+// module.
+void BtAppNrf52SecPollSet(void (*Poll)(void));
+
+// Main loop work of the LESC module: key pair generation and DHKey replies.
 static void BtSecNrf52Poll(void)
 {
 	(void)BtLescRequestHandler();
@@ -703,12 +706,8 @@ bool BtAppSecInit(void)
 	BtLescOobPeerHandlerSet(BtAppOobPeerDataHandler);
 
 	// The module owns the LESC key pair and the DHKey computation. Both are
-	// pumped from the main loop, after the queued event handlers.
-	if (AppEvtHandlerIdleRegister(BtSecNrf52Poll) == false)
-	{
-		DEBUG_PRINTF("SEC: no idle handler slot for the LESC request pump\r\n");
-		return false;
-	}
+	// run from the main loop, after the queued event handlers.
+	BtAppNrf52SecPollSet(BtSecNrf52Poll);
 
 	g_BtAppData.bSecInit = true;
 

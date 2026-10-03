@@ -181,6 +181,11 @@ typedef struct {
 
 static const BtAppNrf52Conn_t *s_pBtAppNrf52Conn = nullptr;
 
+// Security work of the main loop: the LESC request handler. Set by
+// BtAppSecInit through BtAppNrf52SecPollSet. An application that does not use
+// security never sets it, so none of it is linked.
+static void (*s_pBtAppNrf52SecPoll)(void) = nullptr;
+
 // Configuration given to BtAppInit, used by BtAppConnInit
 static const BtAppCfg_t *s_pBtAppCfg = nullptr;
 
@@ -1723,6 +1728,13 @@ bool BtAppInit(const BtAppCfg_t *pCfg)//, bool bEraseBond)
     return true;
 }
 
+// Called by BtAppSecInit of the security module (bt_sec_nrf52.cpp) to have
+// its main loop work called from BtAppRun.
+void BtAppNrf52SecPollSet(void (*Poll)(void))
+{
+	s_pBtAppNrf52SecPoll = Poll;
+}
+
 void BtAppRun()
 {
 	if (g_BtAppData.State != BTAPP_STATE_INITIALIZED)
@@ -1744,9 +1756,14 @@ void BtAppRun()
 		{
 			app_sched_execute();
 		}
-		// The LESC request pump runs from here as an idle handler, registered
-		// by BtAppSecInit when the application uses security.
 		AppEvtHandlerExec();
+
+		// LESC request handling of the security module, when the application
+		// uses security.
+		if (s_pBtAppNrf52SecPoll != nullptr)
+		{
+			s_pBtAppNrf52SecPoll();
+		}
 
 		// Drive the generic indication transaction timeout (Core Vol 3 Part F
 		// 3.3.3). Cheap no-op when nothing is pending. This loop wakes on
