@@ -101,6 +101,15 @@ extern uint8_t g_AppEvtHandlerQueMem[];
  * @return	true - success
  */
 bool AppEvtHandlerInit(uint8_t *pFifoMem, size_t Size);
+/**
+ * @brief	Queue an event handler call, first in first out.
+ *
+ * Safe from interrupts and from the application at the same time: the entry
+ * is reserved and filled with the interrupts masked.
+ *
+ * @return	true - queued
+ * 			false - queue full
+ */
 bool AppEvtHandlerQue(uint32_t EvtId, void *pCtx, AppEvtHandler_t Handler);
 void AppEvtHandlerDispatch(void);
 

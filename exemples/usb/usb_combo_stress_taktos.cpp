@@ -24,6 +24,7 @@ Copyright (c) 2026, I-SYST inc., all rights reserved
 #include <atomic>
 #include "usb_combo_stress_device.h"
 #include "coredev/system_core_clock.h"
+#include "coredev/interrupt.h"
 #include "TaktOS.h"
 #include "TaktOSThread.h"
 #include "TaktOSSem.h"
@@ -60,17 +61,23 @@ static TaktOSSem_t s_ServiceWake;
 
 // Link-time override of the library default, see usb.h. USB work goes to the
 // queue of the thread serving USB instead of the application event queue.
-// Interrupt context: ServiceThread cannot run before the entry is complete.
 bool UsbEvtQue(uint32_t EvtId, void *pCtx, UsbEvtQueHandler_t Handler)
 {
+	// The controller interrupt and the USB thread both queue here, and
+	// CFifoPut takes one producer at a time.
+	uint32_t state = DisableInterrupt();
 	UsbWork_t *p = (UsbWork_t *)CFifoPut(s_hUsbWork);
+	if (p != nullptr)
+	{
+		p->EvtId = EvtId;
+		p->pCtx = pCtx;
+		p->Handler = Handler;
+	}
+	EnableInterrupt(state);
 	if (p == nullptr)
 	{
 		return false;
 	}
-	p->EvtId = EvtId;
-	p->pCtx = pCtx;
-	p->Handler = Handler;
 	// A full binary semaphore already records a wake for this consumer.
 	(void)TaktOSSemGive(&s_ServiceWake, false);
 	return true;

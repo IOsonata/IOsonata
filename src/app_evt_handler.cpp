@@ -105,8 +105,14 @@ bool AppEvtHandlerQue(uint32_t EvtId, void *pCtx, AppEvtHandler_t Handler)
 		return false;
 	}
 
-	AppEvtHandlerQue_t *p =
-		(AppEvtHandlerQue_t *)CFifoPut(AppEvtHandlerFifo());
+	hCFifo_t hFifo = AppEvtHandlerFifo();
+
+	// Interrupts and the application both queue here, and CFifoPut takes one
+	// producer at a time. The entry is also filled before anything else can
+	// run, so the application never takes a slot that is not filled yet.
+	uint32_t state = DisableInterrupt();
+
+	AppEvtHandlerQue_t *p = (AppEvtHandlerQue_t *)CFifoPut(hFifo);
 
 	if (p != nullptr)
 	{
@@ -114,6 +120,8 @@ bool AppEvtHandlerQue(uint32_t EvtId, void *pCtx, AppEvtHandler_t Handler)
 		p->pCtx = pCtx;
 		p->Handler = Handler;
 	}
+
+	EnableInterrupt(state);
 
 	return p != nullptr;
 }

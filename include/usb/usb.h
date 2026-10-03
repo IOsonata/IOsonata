@@ -192,8 +192,10 @@ typedef void (*UsbEvtQueHandler_t)(uint32_t EvtId, void *pCtx);
 /**
  * @brief	Queue deferred USB work for execution outside the interrupt.
  *
- * Called by the controller port from interrupt context. The library has a
- * weak default for an application without an OS: it puts the work in the
+ * Called by the controller port from interrupt context, and by the USB stack
+ * from the thread running its work, so two callers can be in it at once: an
+ * override must take that (an ISR safe RTOS send, or a CFifoPut with the
+ * interrupts masked). The library has a weak default for an application without an OS: it puts the work in the
  * application event queue (AppEvtHandlerQue), which the main loop runs.
  *
  * An application using an RTOS defines its own UsbEvtQue. It stores the three

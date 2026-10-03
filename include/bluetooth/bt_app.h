@@ -310,8 +310,11 @@ typedef void (*BtEvtQueHandler_t)(uint32_t EvtId, void *pCtx);
  *
  * The one way the Bluetooth subsystem signals work: called by the stack,
  * often from interrupt context, for everything that must run outside the
- * interrupt (advertising start, security requests, timeout checks, ...). Work
- * that needs immediate service is done in the interrupt instead.
+ * interrupt (security requests, timeout checks, ...). Work that needs
+ * immediate service is done in the interrupt instead. It is also called from
+ * the thread running the work, so two callers can be in it at once: an
+ * override must take that (an ISR safe RTOS send, or a CFifoPut with the
+ * interrupts masked).
  *
  * The library has a weak default for an application without an OS: it puts
  * the work in the application event queue (AppEvtHandlerQue), which the

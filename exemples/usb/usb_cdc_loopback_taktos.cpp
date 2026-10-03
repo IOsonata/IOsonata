@@ -41,6 +41,7 @@ SOFTWARE.
 
 #include <stdint.h>
 #include "cfifo.h"
+#include "coredev/interrupt.h"
 #include "usb/usb.h"
 #include "usb/usbd_cdc.h"
 #include "coredev/system_core_clock.h"
@@ -117,17 +118,23 @@ static hCFifo_t s_hUsbWork;
 
 // Link-time override of the library default, see usb.h. USB work goes to the
 // queue of the thread serving USB, the application event queue is not used.
-// Interrupt context: UsbThread cannot run before the entry is complete.
 bool UsbEvtQue(uint32_t EvtId, void *pCtx, UsbEvtQueHandler_t Handler)
 {
+	// The controller interrupt and the USB thread both queue here, and
+	// CFifoPut takes one producer at a time.
+	uint32_t state = DisableInterrupt();
 	UsbWork_t *p = (UsbWork_t *)CFifoPut(s_hUsbWork);
+	if (p != nullptr)
+	{
+		p->EvtId = EvtId;
+		p->pCtx = pCtx;
+		p->Handler = Handler;
+	}
+	EnableInterrupt(state);
 	if (p == nullptr)
 	{
 		return false;
 	}
-	p->EvtId = EvtId;
-	p->pCtx = pCtx;
-	p->Handler = Handler;
 	return true;
 }
 
