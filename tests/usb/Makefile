@@ -167,7 +167,14 @@ HID_KEYBOARD_PROJECT := $(ROOT)/ARM/Nordic/nRF52/nRF52840/exemples/UsbHidKeyboar
 HID_3D_MOUSE_FIRMWARE := $(ROOT)/exemples/usb/usb_hid_3d_mouse.cpp
 HID_3D_MOUSE_BOARD := $(ROOT)/ARM/Nordic/nRF52/nRF52840/exemples/UsbHid3dMouse/src/board.h
 HID_3D_MOUSE_PROJECT := $(ROOT)/ARM/Nordic/nRF52/nRF52840/exemples/UsbHid3dMouse/ioc/.project
-HID_DEMO_CPPFLAGS := $(CPPFLAGS) -Idemo_hostport -I$(ROOT)/Linux/include \
+# Host idelay.h: macOS has its own, the Linux one uses clock_nanosleep which
+# macOS does not have.
+ifeq ($(UNAME_S),Darwin)
+HOST_INC := $(ROOT)/OSX/include
+else
+HOST_INC := $(ROOT)/Linux/include
+endif
+HID_DEMO_CPPFLAGS := $(CPPFLAGS) -Idemo_hostport -I$(HOST_INC) \
 	-I$(ROOT)/ARM/Nordic/nRF52/include
 
 # Compile every generic IOsonata USB example against the current public API.
