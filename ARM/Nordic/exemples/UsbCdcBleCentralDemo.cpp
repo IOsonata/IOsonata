@@ -53,6 +53,8 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ----------------------------------------------------------------------------*/
 #include <stdint.h>
+#include <stdio.h>
+#include <stdarg.h>
 #include <string.h>
 
 #include "istddef.h"
@@ -61,6 +63,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "app_evt_handler.h"
 #include "blueio_board.h"
 #include "coredev/iopincfg.h"
+#include "coredev/interrupt.h"
 #include "coredev/uart.h"
 #include "iopinctrl.h"
 #include "usb/usb.h"
@@ -244,8 +247,9 @@ static volatile uint16_t s_BleRxCharHdl = BT_ATT_HANDLE_INVALID;	// notify sourc
 // Bridge
 //
 
-// BLE to USB. Notifications arrive in the stack interrupt, which is the only
-// producer of this FIFO. BleToUsbEvt is the only consumer.
+// To the host: peer notifications (stack interrupt) and status lines (stack
+// interrupt and main), put with the interrupts masked. BleToUsbEvt is the
+// only consumer. Kept while the port is closed, up to the FIFO size.
 #define BLE_RXFIFO_MEMSIZE		CFIFO_MEMSIZE(1024)
 
 alignas(4) static uint8_t s_BleRxFifoMem[BLE_RXFIFO_MEMSIZE];
@@ -290,6 +294,58 @@ static void BleToUsbQue(void)
 			s_bBleToUsbQueued = false;
 		}
 	}
+}
+
+// Copy to the host FIFO, from any context
+static void ToHostPut(const uint8_t *pData, int Len)
+{
+	uint32_t state = DisableInterrupt();
+
+	// Two passes when the data wraps the end of the FIFO memory
+	for (int i = 0; i < 2 && Len > 0; i++)
+	{
+		int l = Len;
+		uint8_t *p = CFifoPutMultiple(s_hBleRxFifo, &l);
+		if (p == nullptr)
+		{
+			break;
+		}
+		memcpy(p, pData, l);
+		pData += l;
+		Len -= l;
+	}
+
+	EnableInterrupt(state);
+
+	if (Len > 0)
+	{
+		s_BleRxDropCnt += Len;
+	}
+
+	BleToUsbQue();
+}
+
+// Status line to the USB port and the debug UART
+static void Status(const char *pFormat, ...)
+{
+	char line[96];
+	va_list args;
+
+	va_start(args, pFormat);
+	int l = vsnprintf(line, sizeof(line), pFormat, args);
+	va_end(args);
+
+	if (l <= 0)
+	{
+		return;
+	}
+	if (l >= (int)sizeof(line))
+	{
+		l = sizeof(line) - 1;
+	}
+
+	ToHostPut((const uint8_t *)line, l);
+	g_Uart.Tx((uint8_t *)line, l);
 }
 
 static bool BridgeReady(void)
@@ -337,7 +393,7 @@ static void UsbToBleEvt(uint32_t Evt, void *pCtx)
 	}
 }
 
-// Peer to host. Nothing is kept while the port is closed.
+// Peer and status to host
 static void BleToUsbEvt(uint32_t Evt, void *pCtx)
 {
 	(void)Evt;
@@ -362,8 +418,8 @@ static void BleToUsbEvt(uint32_t Evt, void *pCtx)
 
 		if (g_Cdc.IsPortOpen() == false)
 		{
-			s_UsbTxLen = 0;
-			continue;
+			// Kept for the port open, which queues this again
+			return;
 		}
 
 		int n = g_Cdc.Tx(0, &s_UsbTxBuf[s_UsbTxOff], s_UsbTxLen - s_UsbTxOff);
@@ -397,7 +453,12 @@ static int CdcEvtHandler(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId,
 			break;
 
 		case DEVINTRF_EVT_STATECHG:
-			g_Uart.printf("USB port %s\r\n", Len ? "opened" : "closed");
+			if (Len)
+			{
+				Status("\r\nIOsonata USB BLE Central, target %s, %s\r\n",
+					   TARGET_DEV_NAME, BridgeReady() ? "bridge ready" :
+					   s_ConnHdl != BT_CONN_HDL_INVALID ? "connected" : "scanning");
+			}
 			break;
 
 		default:
@@ -414,19 +475,19 @@ static int CdcEvtHandler(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId,
 void BtAppEvtConnected(uint16_t ConnHdl)
 {
 	s_ConnHdl = ConnHdl;
-	g_Uart.printf("Connected, ConnHdl %d\r\n", ConnHdl);
+	Status("Connected, ConnHdl %d\r\n", ConnHdl);
 
 	// Open link: the peer GATT server can be read now
 	BtDevice_t *pPeer = BtPeerFindByHdl(ConnHdl);
 	if (pPeer == nullptr || BtAppDiscoverDevice(pPeer) == false)
 	{
-		g_Uart.printf("Discovery not started\r\n");
+		Status("Discovery not started\r\n");
 	}
 }
 
 void BtAppEvtDisconnected(uint16_t ConnHdl)
 {
-	g_Uart.printf("Disconnected, ConnHdl %d\r\n", ConnHdl);
+	Status("Disconnected, ConnHdl %d\r\n", ConnHdl);
 
 	s_ConnHdl = BT_CONN_HDL_INVALID;
 	s_BleTxCharHdl = BT_ATT_HANDLE_INVALID;
@@ -453,10 +514,11 @@ bool BtAppScanReport(int8_t Rssi, uint8_t AddrType, uint8_t Addr[6], size_t AdvL
 
 	if (strcmp(name, TARGET_DEV_NAME) != 0)
 	{
+		Status("Seen %s, RSSI %d\r\n", name, Rssi);
 		return true;
 	}
 
-	g_Uart.printf("Found %s, RSSI %d\r\n", name, Rssi);
+	Status("Found %s, RSSI %d\r\n", name, Rssi);
 	BtGapScanStop();
 
 	BtGapPeerAddr_t addr = { .Type = AddrType };
@@ -476,7 +538,7 @@ void BtDeviceDiscovered(BtDevice_t *pDev)
 	int sidx = BtDeviceFindService(pDev, BLUEIO_UUID_UART_SERVICE);
 	if (sidx < 0)
 	{
-		g_Uart.printf("UART service not found\r\n");
+		Status("UART service not found\r\n");
 		return;
 	}
 
@@ -484,21 +546,21 @@ void BtDeviceDiscovered(BtDevice_t *pDev)
 	int txidx = BtDeviceFindCharacteristic(pDev, sidx, BLUEIO_UUID_UART_TX_CHAR);
 	if (rxidx < 0 || txidx < 0)
 	{
-		g_Uart.printf("UART characteristics not found (rx %d, tx %d)\r\n", rxidx, txidx);
+		Status("UART characteristics not found (rx %d, tx %d)\r\n", rxidx, txidx);
 		return;
 	}
 
 	uint16_t cccd = pDev->pServices[sidx].characteristics[rxidx].cccd_handle;
 	if (cccd == BT_ATT_HANDLE_INVALID || BtAppEnableNotify(pDev->Conn.Hdl, cccd) == false)
 	{
-		g_Uart.printf("Notify not enabled\r\n");
+		Status("Notify not enabled\r\n");
 		return;
 	}
 
 	s_BleRxCharHdl = pDev->pServices[sidx].characteristics[rxidx].characteristic.handle_value;
 	s_BleTxCharHdl = pDev->pServices[sidx].characteristics[txidx].characteristic.handle_value;
 
-	g_Uart.printf("Bridge ready, Rx 0x%04X, Tx 0x%04X\r\n", s_BleRxCharHdl, s_BleTxCharHdl);
+	Status("Bridge ready, Rx 0x%04X, Tx 0x%04X\r\n", s_BleRxCharHdl, s_BleTxCharHdl);
 
 	// Host data may have been waiting for the peer
 	UsbToBleQue();
@@ -514,18 +576,7 @@ void BtGattClientNotified(uint16_t ConnHdl, uint16_t ValHdl, uint8_t *pData, uin
 		return;
 	}
 
-	int l = Len;
-	uint8_t *p = CFifoPutMultiple(s_hBleRxFifo, &l);
-	if (p != nullptr)
-	{
-		memcpy(p, pData, l);
-	}
-	if (l < Len)
-	{
-		s_BleRxDropCnt += Len - l;
-	}
-
-	BleToUsbQue();
+	ToHostPut(pData, Len);
 }
 
 void BtAppInitUserServices(void)
@@ -589,7 +640,10 @@ int main()
 		}
 	}
 
-	BtAppScanInit((BtGapScanCfg_t *)&s_ScanCfg);
+	if (BtAppScanInit((BtGapScanCfg_t *)&s_ScanCfg) == false)
+	{
+		Status("Scan start failed\r\n");
+	}
 	BtAppScan();
 
 	// Without a cable this does nothing; the cable interrupt comes back to it

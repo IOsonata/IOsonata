@@ -127,15 +127,36 @@ static void nRFUsbdSdEnable(void)
 	(void)sd_power_usbremoved_enable(1);
 }
 
-// A SoftDevice enabled after USB init takes POWER over: ask it for the cable
-// events then.
+static void nRFUsbdVbusPowerIntEnable(void);
+
+// A SoftDevice enabled after USB init takes POWER over. sd_softdevice_enable
+// refuses to start (NRF_ERROR_SDM_INCORRECT_INTERRUPT_CONFIGURATION) while the
+// POWER_CLOCK interrupt is enabled, so it is released before, and the cable
+// events are asked from the SoftDevice once it runs. Taken back when the
+// SoftDevice is disabled.
 static void nRFUsbdSdState(nrf_sdh_state_evt_t State, void *pCtx)
 {
 	(void)pCtx;
 
-	if (State == NRF_SDH_EVT_STATE_ENABLED)
+	switch (State)
 	{
-		nRFUsbdSdEnable();
+		case NRF_SDH_EVT_STATE_ENABLE_PREPARE:
+			NRF_POWER->INTENCLR = POWER_INTENCLR_USBDETECTED_Msk |
+								  POWER_INTENCLR_USBREMOVED_Msk;
+			NVIC_DisableIRQ(POWER_CLOCK_IRQn);
+			NVIC_ClearPendingIRQ(POWER_CLOCK_IRQn);
+			break;
+
+		case NRF_SDH_EVT_STATE_ENABLED:
+			nRFUsbdSdEnable();
+			break;
+
+		case NRF_SDH_EVT_STATE_DISABLED:
+			nRFUsbdVbusPowerIntEnable();
+			break;
+
+		default:
+			break;
 	}
 }
 
@@ -145,9 +166,24 @@ NRF_SDH_STATE_OBSERVER(s_nRFUsbdSdStateObserver, 0) = {
 };
 #endif
 
+// USB interrupt priority, kept for taking POWER back from a SoftDevice
+static uint32_t s_nRFUsbdVbusPrio;
+
+// POWER cable events on the shared POWER_CLOCK vector
+static void nRFUsbdVbusPowerIntEnable(void)
+{
+	NRF_POWER->EVENTS_USBDETECTED = 0U;
+	NRF_POWER->EVENTS_USBREMOVED = 0U;
+	NRF_POWER->INTENSET = POWER_INTENSET_USBDETECTED_Msk |
+						  POWER_INTENSET_USBREMOVED_Msk;
+	nRFPowerClockIrqEnable(s_nRFUsbdVbusPrio);
+}
+
 // Called by UsbCtrlrInit
 void nRFUsbdVbusIntInit(uint32_t Prio)
 {
+	s_nRFUsbdVbusPrio = Prio;
+
 #ifdef SOFTDEVICE_PRESENT
 	if (nRFUsbdVbusSdRunning())
 	{
@@ -156,9 +192,5 @@ void nRFUsbdVbusIntInit(uint32_t Prio)
 	}
 #endif
 
-	NRF_POWER->EVENTS_USBDETECTED = 0U;
-	NRF_POWER->EVENTS_USBREMOVED = 0U;
-	NRF_POWER->INTENSET = POWER_INTENSET_USBDETECTED_Msk |
-						  POWER_INTENSET_USBREMOVED_Msk;
-	nRFPowerClockIrqEnable(Prio);
+	nRFUsbdVbusPowerIntEnable();
 }
