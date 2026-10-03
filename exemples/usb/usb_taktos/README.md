@@ -81,10 +81,13 @@ project with the same library configurations listed above.
 | Heartbeat | Increment `g_UsbComboTaktOSHeartbeat` every second | 512 bytes |
 
 All four use normal priority. The service thread yields after each USB pass.
-Each CDC thread runs four of its original work iterations before yielding;
-the heartbeat sleeps between increments. PRBS still generates and transmits
-one byte per call, matching the bare-metal workload. This amortizes scheduling
-without introducing packet-sized PRBS writes or changing FIFO capacities. Yield only schedules
+Loopback receives and echoes in the same pass, up to four packets per turn.
+It yields early on empty RX, closed port, or partial/full TX backpressure,
+retaining any unsent suffix. PRBS still generates and transmits one byte per
+call, up to four accepted bytes per turn, and yields early when the port is
+closed or TX cannot accept a byte. The heartbeat sleeps between increments.
+FIFO capacities and one-byte PRBS calls match the bare-metal workload.
+Yield only schedules
 equal- or higher-priority ready threads, so this continuously active stress
 example does not give CPU time to lower-priority threads or the idle thread.
 Do not copy that policy into a low-power product unchanged.

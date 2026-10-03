@@ -39,7 +39,7 @@ static std::atomic<uint32_t> s_LoopErrors{0};
 volatile uint32_t g_UsbComboTaktOSHeartbeat = 0;
 
 // Bound traffic work between yields while keeping the bare-metal per-byte
-// PRBS Tx calls and loopback receive/transmit steps.
+// PRBS Tx calls. Loopback may receive and echo in the same pass.
 #define CDC_PASSES_PER_TURN 4U
 
 static void ServiceThread(void *pArg)
@@ -82,35 +82,43 @@ static void LoopThread(void *pArg)
 					expected = Prbs8(0xff);
 				}
 			}
-			if (open)
+			if (!open)
 			{
-				if (pending > 0)
+				break;
+			}
+			if (pending == 0)
+			{
+				const int n = g_LoopbackCdc.Rx(0, buffer, sizeof(buffer));
+				if (n <= 0)
 				{
-					const int n = g_LoopbackCdc.Tx(0, buffer + offset, pending);
-					if (n > 0)
-					{
-						offset += n;
-						pending -= n;
-					}
+					break;
 				}
-				else
+				for (int i = 0; i < n; i++)
 				{
-					const int n = g_LoopbackCdc.Rx(0, buffer, sizeof(buffer));
-					if (n > 0)
+					if (buffer[i] != expected)
 					{
-						for (int i = 0; i < n; i++)
-						{
-							if (buffer[i] != expected)
-							{
-								errors++;
-							}
-							expected = Prbs8(buffer[i]);
-						}
-						s_LoopErrors.store(errors, std::memory_order_relaxed);
-						pending = n;
-						offset = 0;
+						errors++;
 					}
+					expected = Prbs8(buffer[i]);
 				}
+				s_LoopErrors.store(errors, std::memory_order_relaxed);
+				pending = n;
+				offset = 0;
+			}
+
+			// Echo the packet just read in this turn. Waiting for another
+			// pass halves the number of packets the turn can service.
+			const int n = g_LoopbackCdc.Tx(0, buffer + offset, pending);
+			if (n <= 0)
+			{
+				break;
+			}
+			offset += n;
+			pending -= n;
+			if (pending != 0)
+			{
+				// The TX FIFO filled: let the service thread retire work.
+				break;
 			}
 		}
 		TaktOSThreadYield();
@@ -128,16 +136,17 @@ static void PrbsThread(void *pArg)
 		{
 			const bool error = reported != s_LoopErrors.load(std::memory_order_relaxed);
 			const uint8_t byte = error ? 0U : prbs;
-			if (g_PrbsCdc.IsPortOpen() && g_PrbsCdc.Tx(0, &byte, 1) > 0)
+			if (!g_PrbsCdc.IsPortOpen() || g_PrbsCdc.Tx(0, &byte, 1) <= 0)
 			{
-				if (error)
-				{
-					reported++;
-				}
-				else
-				{
-					prbs = Prbs8(prbs);
-				}
+				break;
+			}
+			if (error)
+			{
+				reported++;
+			}
+			else
+			{
+				prbs = Prbs8(prbs);
 			}
 		}
 		TaktOSThreadYield();
