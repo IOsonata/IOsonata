@@ -41,6 +41,7 @@ volatile uint32_t g_UsbComboTaktOSHeartbeat = 0;
 // Bound traffic work between yields while keeping the bare-metal per-byte
 // PRBS Tx calls. Loopback may receive and echo in the same pass.
 #define CDC_PASSES_PER_TURN 4U
+#define USB_SERVICE_PASSES_PER_TURN 4U
 
 static void ServiceThread(void *pArg)
 {
@@ -48,8 +49,13 @@ static void ServiceThread(void *pArg)
 	(void)UsbEnable(USB_DEVNO);
 	while (true)
 	{
-		// Sole AppEvt consumer. HID/INT/ISO retain the shared callback paths.
-		UsbProcess(USB_DEVNO);
+		// Service completion bursts before paying for another scheduler round.
+		// IRQs stay enabled; newly completed DMA can post work between passes.
+		// This remains the sole AppEvt consumer.
+		for (unsigned pass = 0; pass < USB_SERVICE_PASSES_PER_TURN; pass++)
+		{
+			UsbProcess(USB_DEVNO);
+		}
 		TaktOSThreadYield();
 	}
 }

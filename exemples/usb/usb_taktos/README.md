@@ -80,7 +80,9 @@ project with the same library configurations listed above.
 | PRBS | CDC1 PRBS TX and target-error markers | 1024 bytes |
 | Heartbeat | Increment `g_UsbComboTaktOSHeartbeat` every second | 512 bytes |
 
-All four use normal priority. The service thread yields after each USB pass.
+All four use normal priority. The service thread runs four USB passes before
+yielding, allowing follow-on DMA completions to be serviced within one turn.
+Interrupts remain enabled during this bounded burst.
 Loopback receives and echoes in the same pass, up to four packets per turn.
 It yields early on empty RX, closed port, or partial/full TX backpressure,
 retaining any unsent suffix. PRBS still generates and transmits one byte per
