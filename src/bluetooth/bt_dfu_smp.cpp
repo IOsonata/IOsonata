@@ -37,7 +37,7 @@ SOFTWARE.
 ----------------------------------------------------------------------------*/
 #include <string.h>
 
-#include "app_evt_handler.h"
+#include "bluetooth/bt_app.h"
 #include "coredev/interrupt.h"
 #include "bluetooth/bt_dfu_smp.h"
 #include "bluetooth/bt_peer.h"
@@ -148,7 +148,7 @@ static void BtDfuSmpWrCB(BtGattChar_t *pChar, uint8_t *pData, int Offset,
 	}
 
 	s_bBtDfuSmpRxReady = true;
-	if (AppEvtHandlerQue(0, nullptr, BtDfuSmpProcess) == false)
+	if (BtEvtQue(0, nullptr, BtDfuSmpProcess) == false)
 	{
 		s_bBtDfuSmpRxReady = false;
 		s_BtDfuSmpRxLen = 0;
@@ -163,7 +163,7 @@ static void BtDfuSmpTxDoneCB(BtGattChar_t *pChar, int CharIdx)
 
 	if (s_BtDfuSmpTxLen != 0)
 	{
-		(void)AppEvtHandlerQue(0, nullptr, BtDfuSmpSend);
+		(void)BtEvtQue(0, nullptr, BtDfuSmpSend);
 	}
 }
 
@@ -179,7 +179,7 @@ static void BtDfuSmpNotifCB(BtGattChar_t *pChar, bool bEnable,
 
 	if (s_BtDfuSmpTxLen != 0)
 	{
-		(void)AppEvtHandlerQue(0, nullptr, BtDfuSmpSend);
+		(void)BtEvtQue(0, nullptr, BtDfuSmpSend);
 	}
 }
 
@@ -244,7 +244,7 @@ static void BtDfuSmpSend(uint32_t Evt, void *pCtx)
 	// A request that came in while this response was going out.
 	if (s_bBtDfuSmpRxReady)
 	{
-		(void)AppEvtHandlerQue(0, nullptr, BtDfuSmpProcess);
+		(void)BtEvtQue(0, nullptr, BtDfuSmpProcess);
 	}
 }
 

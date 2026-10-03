@@ -47,6 +47,8 @@ SOFTWARE.
 #include <stdbool.h>
 #endif
 
+#include "cfifo.h"
+
 #ifndef APPEVT_HANDLER_QUE_DEFAULT_SIZE
 #define APPEVT_HANDLER_QUE_DEFAULT_SIZE	4
 #endif
@@ -69,22 +71,38 @@ typedef struct __App_Event_Handler_Que {
 
 #pragma pack(pop)
 
+/// Queue memory descriptor
+typedef struct __App_Event_Handler_Que_Cfg {
+	uint8_t *pMem;			//!< Queue memory, 4 bytes aligned
+	size_t Size;			//!< Total pMem length in bytes
+} AppEvtHandlerQueCfg_t;
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/**
- * @brief Called after each successfully queued event is fully published.
- *
- * The default weak implementation does nothing. An application may link a
- * strong override to notify its RTOS consumer. The override must be nonblocking
- * and callable from interrupt or thread context. Initialize its resources
- * before enabling producers. Notification coalescing, waiting and scheduling
- * belong to the application; Dispatch and Exec remain nonblocking and do not
- * notify. Use one coordinated consumer and account for Exec's bounded drain.
- */
-void AppEvtHandlerNotify(void);
+/// Memory of the queue. The library defines a weak default holding
+/// APPEVT_HANDLER_QUE_DEFAULT_SIZE events. An application that needs more
+/// defines its own
+///
+///   alignas(4) static uint8_t s_QueMem[APPEVT_HANDLER_QUE_MEMSIZE(MY_COUNT)];
+///   const AppEvtHandlerQueCfg_t g_AppEvtHandlerQueCfg = { s_QueMem, sizeof(s_QueMem) };
+///
+/// in which case the library default memory is not linked. The queue takes
+/// this memory the first time it is used, no init call is required.
+extern const AppEvtHandlerQueCfg_t g_AppEvtHandlerQueCfg;
 
+/**
+ * @brief	Initialize the queue on the given memory.
+ *
+ * Optional. Without this call the queue uses g_AppEvtHandlerQueCfg. Events
+ * already queued are dropped.
+ *
+ * @param	pFifoMem : Queue memory, NULL to use g_AppEvtHandlerQueCfg
+ * @param	Size	 : Total pFifoMem length in bytes
+ *
+ * @return	true - success
+ */
 bool AppEvtHandlerInit(uint8_t *pFifoMem, size_t Size);
 bool AppEvtHandlerQue(uint32_t EvtId, void *pCtx, AppEvtHandler_t Handler);
 void AppEvtHandlerDispatch(void);
@@ -95,4 +113,3 @@ void AppEvtHandlerExec(void);
 #endif
 
 #endif // __APP_EVT_HANDLER_H__
-

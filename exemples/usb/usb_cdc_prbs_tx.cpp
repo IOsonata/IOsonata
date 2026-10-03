@@ -53,6 +53,7 @@ SOFTWARE.
 
 #include "cfifo.h"
 #include "prbs.h"
+#include "app_evt_handler.h"
 #include "usb/usb.h"
 #include "usb/usbd_cdc.h"
 
@@ -94,6 +95,13 @@ static const UsbdCdcCfg_t s_CdcCfg = {
 //
 // 0x1209 is the pid.codes vendor id, which exists for open hardware. Put your
 // own vendor and product id here before shipping anything.
+// Application event queue memory. The USB controller port queues its deferred
+// endpoint events there; the library default holds 4.
+alignas(4) static uint8_t s_AppEvtQueMem[APPEVT_HANDLER_QUE_MEMSIZE(16)];
+const AppEvtHandlerQueCfg_t g_AppEvtHandlerQueCfg = {
+	s_AppEvtQueMem, sizeof(s_AppEvtQueMem)
+};
+
 static const UsbCfg_t s_UsbCfg = {
 	.DevNo = USB_DEVNO,
 	.Mode = USB_MODE_DEVICE,

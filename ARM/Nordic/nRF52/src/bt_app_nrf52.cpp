@@ -1604,7 +1604,10 @@ bool BtAppInit(const BtAppCfg_t *pCfg)//, bool bEraseBond)
 		APP_ERROR_CHECK(err_code);
 	}
 
-    if (AppEvtHandlerInit(pCfg->pEvtHandlerQueMem, pCfg->EvtHandlerQueMemSize) == false)
+    // The event queue uses its default memory (g_AppEvtHandlerQueCfg) unless
+    // the application gives its own here.
+    if (pCfg->pEvtHandlerQueMem != nullptr &&
+    	AppEvtHandlerInit(pCfg->pEvtHandlerQueMem, pCfg->EvtHandlerQueMemSize) == false)
     {
     	DEBUG_PRINTF("BtAppInit FAIL: AppEvtHandlerInit (mem=%p size=%d)\r\n",
     		(void*)pCfg->pEvtHandlerQueMem, (int)pCfg->EvtHandlerQueMemSize);

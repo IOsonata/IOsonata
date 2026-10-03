@@ -50,7 +50,7 @@ struct QEvt {
 static std::deque<QEvt> s_Que;
 static size_t s_QueMax = 8;
 
-extern "C" bool AppEvtHandlerQue(uint32_t EvtId, void *pCtx, AppEvtHandler_t Handler)
+extern "C" bool BtEvtQue(uint32_t EvtId, void *pCtx, AppEvtHandler_t Handler)
 {
 	if (s_Que.size() >= s_QueMax)
 	{

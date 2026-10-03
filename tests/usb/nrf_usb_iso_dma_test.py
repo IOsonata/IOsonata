@@ -115,6 +115,10 @@ preamble = r'''
 #include "app_evt_handler.h"
 #include "cfifo.h"
 using namespace std;
+// Library default from src/usb/usb.cpp: USB work goes to the application event queue.
+bool UsbEvtQue(uint32_t EvtId, void *pCtx, void (*Handler)(uint32_t, void *)){
+ return AppEvtHandlerQue(EvtId, pCtx, Handler);
+}
 
 // Register model ----------------------------------------------------------
 constexpr uint32_t USBD_SIZE_ISOOUT_ZERO_Msk=1UL<<16;

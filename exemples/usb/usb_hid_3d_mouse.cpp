@@ -42,6 +42,7 @@ SOFTWARE.
 #include "coredev/spi.h"
 #include "coredev/timer.h"
 #include "sensors/ag_bmi323.h"
+#include "app_evt_handler.h"
 #include "usb/usb.h"
 #include "usb/usbd_hid.h"
 
@@ -230,6 +231,13 @@ static const UsbdHidCfg_t s_HidCfg = {
 	.pContext = nullptr,
 	.pRxBuffer = s_HidRxBuffer,
 	.pTxBuffer = s_HidTxBuffer,
+};
+
+// Application event queue memory. The USB controller port queues its deferred
+// endpoint events there; the library default holds 4.
+alignas(4) static uint8_t s_AppEvtQueMem[APPEVT_HANDLER_QUE_MEMSIZE(16)];
+const AppEvtHandlerQueCfg_t g_AppEvtHandlerQueCfg = {
+	s_AppEvtQueMem, sizeof(s_AppEvtQueMem)
 };
 
 static const UsbCfg_t s_UsbCfg = {

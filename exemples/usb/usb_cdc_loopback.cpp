@@ -50,6 +50,7 @@ SOFTWARE.
 #include <string.h>
 
 #include "cfifo.h"
+#include "app_evt_handler.h"
 #include "usb/usb.h"
 #include "usb/usbd_cdc.h"
 
@@ -87,6 +88,13 @@ static const UsbdCdcCfg_t s_CdcCfg = {
 // what the other USB demo in this tree uses. Put your own vendor and product
 // id here before shipping anything : a duplicate pair makes the host reuse a
 // driver and a saved COM port from somebody else's board.
+// Application event queue memory. The USB controller port queues its deferred
+// endpoint events there; the library default holds 4.
+alignas(4) static uint8_t s_AppEvtQueMem[APPEVT_HANDLER_QUE_MEMSIZE(16)];
+const AppEvtHandlerQueCfg_t g_AppEvtHandlerQueCfg = {
+	s_AppEvtQueMem, sizeof(s_AppEvtQueMem)
+};
+
 static const UsbCfg_t s_UsbCfg = {
 	.DevNo = USB_DEVNO,
 	.Mode = USB_MODE_DEVICE,

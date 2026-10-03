@@ -171,9 +171,10 @@ HID_DEMO_CPPFLAGS := $(CPPFLAGS) -Idemo_hostport -I$(ROOT)/Linux/include \
 	-I$(ROOT)/ARM/Nordic/nRF52/include
 
 # Compile every generic IOsonata USB example against the current public API.
-# The two board-specific HID demos are checked by hid-demo-build.
-USB_EXAMPLE_SOURCES := $(filter-out $(HID_KEYBOARD_FIRMWARE) $(HID_3D_MOUSE_FIRMWARE),\
-	$(wildcard $(ROOT)/exemples/usb/*.cpp))
+# The two board-specific HID demos are checked by hid-demo-build. The TaktOS
+# examples need the TaktOS sources and are built by their own projects.
+USB_EXAMPLE_SOURCES := $(filter-out $(HID_KEYBOARD_FIRMWARE) $(HID_3D_MOUSE_FIRMWARE) \
+	%_taktos.cpp, $(wildcard $(ROOT)/exemples/usb/*.cpp))
 
 # Throughput measurement, not a regression test. Built and run on demand.
 # Sanitizers are left off so the numbers are not distorted.

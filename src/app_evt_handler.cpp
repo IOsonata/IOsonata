@@ -6,8 +6,8 @@
 This is an implementation of event handler queuing to schedule event handler
 in firmware application main loop.
 
-AppEvtHandlerInit must be called first to initialize the queue before any other
-function can be used
+The queue takes its memory from g_AppEvtHandlerQueCfg the first time an event
+is queued. AppEvtHandlerInit is only needed to give it other memory.
 
 @author	Hoang Nguyen Hoan
 @date	Oct. 17, 2022
@@ -46,21 +46,42 @@ SOFTWARE.
 #define APPEVT_HANDLER_QUE_CFIFO_DEFAULT_MEMSIZE \
 	CFIFO_TOTAL_MEMSIZE(APPEVT_HANDLER_QUE_DEFAULT_SIZE, sizeof(AppEvtHandlerQue_t))
 
+// Default queue memory. An application that needs another size defines its
+// own g_AppEvtHandlerQueCfg, see app_evt_handler.h, and this storage is then
+// left out of the link.
 alignas(4) static uint8_t s_AppEvtHandlerFifoMem[
 	APPEVT_HANDLER_QUE_CFIFO_DEFAULT_MEMSIZE];
 
+extern "C" __attribute__((weak)) const AppEvtHandlerQueCfg_t g_AppEvtHandlerQueCfg = {
+	s_AppEvtHandlerFifoMem, sizeof(s_AppEvtHandlerFifoMem)
+};
+
 static hCFifo_t s_hAppEvtHandlerFifo;
 
-__attribute__((weak)) void AppEvtHandlerNotify(void)
+// The queue takes the g_AppEvtHandlerQueCfg memory the first time it is
+// used. That can be from an interrupt, so the check and the init are one
+// critical section.
+static hCFifo_t AppEvtHandlerFifo(void)
 {
+	if (s_hAppEvtHandlerFifo == nullptr)
+	{
+		uint32_t state = DisableInterrupt();
+		if (s_hAppEvtHandlerFifo == nullptr)
+		{
+			(void)AppEvtHandlerInit(nullptr, 0);
+		}
+		EnableInterrupt(state);
+	}
+
+	return s_hAppEvtHandlerFifo;
 }
 
 bool AppEvtHandlerInit(uint8_t *pFifoMem, size_t Size)
 {
 	if (pFifoMem == nullptr)
 	{
-		s_hAppEvtHandlerFifo = CFifoInit(s_AppEvtHandlerFifoMem,
-				APPEVT_HANDLER_QUE_CFIFO_DEFAULT_MEMSIZE,
+		s_hAppEvtHandlerFifo = CFifoInit(g_AppEvtHandlerQueCfg.pMem,
+				g_AppEvtHandlerQueCfg.Size,
 				sizeof(AppEvtHandlerQue_t), true);
 	}
 	else if (Size < APPEVT_HANDLER_QUE_CFIFO_DEFAULT_MEMSIZE)
@@ -78,15 +99,13 @@ bool AppEvtHandlerInit(uint8_t *pFifoMem, size_t Size)
 
 bool AppEvtHandlerQue(uint32_t EvtId, void *pCtx, AppEvtHandler_t Handler)
 {
-	if (s_hAppEvtHandlerFifo == nullptr || Handler == nullptr)
+	if (Handler == nullptr)
 	{
 		return false;
 	}
 
-	// Do not let a preemptive consumer see a partially initialized event.
-	const auto state = DisableInterrupt();
 	AppEvtHandlerQue_t *p =
-		(AppEvtHandlerQue_t *)CFifoPut(s_hAppEvtHandlerFifo);
+		(AppEvtHandlerQue_t *)CFifoPut(AppEvtHandlerFifo());
 
 	if (p != nullptr)
 	{
@@ -94,10 +113,6 @@ bool AppEvtHandlerQue(uint32_t EvtId, void *pCtx, AppEvtHandler_t Handler)
 		p->pCtx = pCtx;
 		p->Handler = Handler;
 	}
-
-	EnableInterrupt(state);
-	if (p != nullptr)
-		AppEvtHandlerNotify();
 
 	return p != nullptr;
 }
@@ -152,4 +167,3 @@ void AppEvtHandlerExec(void)
 		}
 	}
 }
-

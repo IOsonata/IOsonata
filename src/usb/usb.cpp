@@ -1784,12 +1784,6 @@ bool UsbInit(const UsbCfg_t *pCfg)
 		return false;
 	}
 
-	alignas(4) static uint8_t s_AppEvtQueMem[APPEVT_HANDLER_QUE_MEMSIZE(16)];
-	if (!AppEvtHandlerInit(s_AppEvtQueMem, sizeof(s_AppEvtQueMem)))
-	{
-		return false;
-	}
-
 	s_Core.DevNo = pCfg->DevNo;
 	s_Core.VbusLast = false;
 
@@ -1890,6 +1884,13 @@ void UsbDisable(int DevNo)
 	{
 		UsbDevDisable();
 	}
+}
+
+// Default for an application without an OS, see usb.h. Interrupt context.
+__attribute__((weak)) bool UsbEvtQue(uint32_t EvtId, void *pCtx,
+									  UsbEvtQueHandler_t Handler)
+{
+	return AppEvtHandlerQue(EvtId, pCtx, Handler);
 }
 
 void UsbProcess(int DevNo)

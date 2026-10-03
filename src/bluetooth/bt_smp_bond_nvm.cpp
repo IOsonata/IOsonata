@@ -24,7 +24,7 @@
 #include "storage/nvm.h"
 #include "storage/nvm_intrf.h"
 #include "storage/nvm_region.h"
-#include "app_evt_handler.h"
+#include "bluetooth/bt_app.h"
 
 extern "C" void BtSmpBondPersistComplete(int Slot, const void *pBond,
 											 size_t Len, bool Success);
@@ -174,7 +174,7 @@ static void BondSaveSchedule(void)
 		return;
 	}
 
-	if (!AppEvtHandlerQue(0, nullptr, BondSaveHandler))
+	if (!BtEvtQue(0, nullptr, BondSaveHandler))
 	{
 		s_SaveHandlerQueued.store(false, std::memory_order_release);
 	}

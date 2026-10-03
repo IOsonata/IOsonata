@@ -149,7 +149,7 @@ typedef struct __Bt_App_Cfg {
 	uint16_t MaxMtu;				//!< Max MTU size or 0 for default
 	BTAPP_COEXMODE CoexMode;		//!< Enable support for CoEx
 	int PeriphDevCnt;				//!< Max number of peripheral connection
-	uint8_t *pEvtHandlerQueMem;		//!< Memory reserved for AppEvtHandler
+	uint8_t *pEvtHandlerQueMem;		//!< Memory reserved for AppEvtHandler; NULL -> g_AppEvtHandlerQueCfg
 	size_t EvtHandlerQueMemSize;	//!< Total pEvtHandlerQueMem length in bytes
 	uint8_t *pPeerPoolMem;			//!< Peer pool storage; NULL -> library default. Size with BT_PEER_POOL_MEMSIZE(N).
 	size_t PeerPoolMemSize;			//!< Total pPeerPoolMem length in bytes
@@ -310,6 +310,30 @@ bool BtAppScanReport(int8_t Rssi, uint8_t AddrType, uint8_t Addr[6], size_t AdvL
 void BtAppEvtWait(void);
 void BtAppEvtNotify(void);
 void BtAppEvtDispatch();
+
+/// Deferred Bluetooth work: runs outside the caller with the values it was
+/// queued with. Same signature as AppEvtHandler_t.
+typedef void (*BtEvtQueHandler_t)(uint32_t EvtId, void *pCtx);
+
+/**
+ * @brief	Queue deferred Bluetooth work.
+ *
+ * Called by the Bluetooth stack, possibly from interrupt context. The library
+ * has a weak default for an application without an OS: it puts the work in
+ * the application event queue (AppEvtHandlerQue), which BtAppRun executes.
+ *
+ * An application using an RTOS defines its own BtEvtQue. It stores the three
+ * values in the queue of the thread that serves Bluetooth, and that thread
+ * calls Handler(EvtId, pCtx) for each one.
+ *
+ * @param	EvtId	: Value to pass to Handler
+ * @param	pCtx	: Value to pass to Handler
+ * @param	Handler	: Function to call
+ *
+ * @return	true - queued
+ * 			false - queue full
+ */
+bool BtEvtQue(uint32_t EvtId, void *pCtx, BtEvtQueHandler_t Handler);
 
 /**
  * @brief	BLE main App initialization

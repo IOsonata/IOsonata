@@ -171,6 +171,31 @@ void UsbDisable(int DevNo);
 /** @brief Cable and housekeeping pass. Call from the application loop. */
 void UsbProcess(int DevNo);
 
+/// Deferred USB work: runs outside the interrupt with the values it was
+/// queued with. Same signature as AppEvtHandler_t.
+typedef void (*UsbEvtQueHandler_t)(uint32_t EvtId, void *pCtx);
+
+/**
+ * @brief	Queue deferred USB work for execution outside the interrupt.
+ *
+ * Called by the controller port from interrupt context. The library has a
+ * weak default for an application without an OS: it puts the work in the
+ * application event queue (AppEvtHandlerQue), which the main loop runs.
+ *
+ * An application using an RTOS defines its own UsbEvtQue. It stores the three
+ * values in the queue of the thread that serves USB, and that thread calls
+ * Handler(EvtId, pCtx) for each one. The default and the application event
+ * queue are then not used by USB.
+ *
+ * @param	EvtId	: Value to pass to Handler
+ * @param	pCtx	: Value to pass to Handler
+ * @param	Handler	: Function to call outside the interrupt
+ *
+ * @return	true - queued
+ * 			false - queue full, the caller retries or drops
+ */
+bool UsbEvtQue(uint32_t EvtId, void *pCtx, UsbEvtQueHandler_t Handler);
+
 /** @brief Speed enumeration settled on, valid once configured. */
 UsbSpeed_t UsbGetSpeed(int DevNo);
 

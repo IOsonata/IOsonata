@@ -107,11 +107,11 @@ assert ep0.index("nRFUsbdEp0InStart(pep0);") < ep0.index("reuseDma = false;")
 # Regular IN pops its request; completion is reported later from EPDATA.
 reg_in = completed[completed.index("case 1U:"):completed.index("case 17U:")]
 assert "(void)CFifoGet(s_Usbd.hQue);" in reg_in
-assert "AppEvtHandlerQue" not in reg_in
+assert "UsbEvtQue" not in reg_in
 
 # Regular OUT pops its request and queues its completion at END.
 reg_out = completed[completed.index("case 17U:"):]
-assert reg_out.index("(void)CFifoGet(s_Usbd.hQue);") < reg_out.index("AppEvtHandlerQue(evt,")
+assert reg_out.index("(void)CFifoGet(s_Usbd.hQue);") < reg_out.index("UsbEvtQue(evt,")
 assert "nRFUsbdProcessQueuedEvent" in reg_out
 assert "USB_CTRLR_EVT_XFER_CMPL" not in completed
 assert "nRFUsbdStartQueuedDma" not in completed
@@ -140,8 +140,8 @@ assert "evt = (NRF_USBD->EPIN[epnum].AMOUNT << 8U) | epnum | (1UL << 16U);" in e
 assert "uint32_t evt = epnum | (1UL << 17U);" in epdata
 # OUT readiness waits while its DMA is captured, and is consumed only when
 # the enqueue succeeds; a full queue stops the pass with the bit latched.
-assert epdata.index("(NRF_USBD->EPSTATUS & bit) != 0U") < epdata.index("AppEvtHandlerQue(evt,")
-assert epdata.index("AppEvtHandlerQue(evt,") < epdata.index("servicedstatus |= bit;")
+assert epdata.index("(NRF_USBD->EPSTATUS & bit) != 0U") < epdata.index("UsbEvtQue(evt,")
+assert epdata.index("UsbEvtQue(evt,") < epdata.index("servicedstatus |= bit;")
 assert "break;" in epdata
 assert "CFifoPut" not in epdata
 

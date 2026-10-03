@@ -332,10 +332,23 @@ static void QueueTestEvent(uint32_t Event, void *pContext)
 	*static_cast<uint32_t *>(pContext) |= 1UL << Event;
 }
 
+// The application gives the queue its memory. UsbInit does not own it.
+alignas(4) static uint8_t s_AppEvtQueMem[APPEVT_HANDLER_QUE_MEMSIZE(16)];
+const AppEvtHandlerQueCfg_t g_AppEvtHandlerQueCfg = {
+	s_AppEvtQueMem, sizeof(s_AppEvtQueMem)
+};
+
 static bool TestAppEvtQueue(void)
 {
 	CHECK(Fixture());
 	uint32_t events = 0U;
+	// Work queued before UsbInit stays queued, and the default UsbEvtQue
+	// puts USB work in the same queue.
+	CHECK(UsbEvtQue(0U, &events, QueueTestEvent));
+	CHECK(Fixture());
+	AppEvtHandlerExec();
+	CHECK(events == 1U);
+	events = 0U;
 	for (uint32_t i = 0U; i < 16U; i++)
 	{
 		CHECK(AppEvtHandlerQue(i, &events, QueueTestEvent));
@@ -1231,7 +1244,7 @@ typedef struct { const char *pName; TestHandler_t Handler; } TestCase_t;
 int main(void)
 {
 	static const TestCase_t tests[] = {
-		{ "USB AppEvt queue holds 16 events", TestAppEvtQueue },
+		{ "USB uses the application event queue, 16 events from the application", TestAppEvtQueue },
 		{ "enable requires descriptor", TestEnableRequiresDescriptor },
 		{ "descriptors", TestDescriptors },
 		{ "string descriptor bounds", TestStringDescriptorBounds },

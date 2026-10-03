@@ -45,6 +45,7 @@ SOFTWARE.
 #include <string.h>
 
 #include "cfifo.h"
+#include "app_evt_handler.h"
 #include "usb/usb.h"
 #include "usb/usbd_bulk.h"
 
@@ -81,6 +82,13 @@ static const UsbdBulkCfg_t s_BulkCfg = {
 
 // These VID/PID values are for the example. Use IDs assigned to your product
 // before shipping a device.
+// Application event queue memory. The USB controller port queues its deferred
+// endpoint events there; the library default holds 4.
+alignas(4) static uint8_t s_AppEvtQueMem[APPEVT_HANDLER_QUE_MEMSIZE(16)];
+const AppEvtHandlerQueCfg_t g_AppEvtHandlerQueCfg = {
+	s_AppEvtQueMem, sizeof(s_AppEvtQueMem)
+};
+
 static const UsbCfg_t s_UsbCfg = {
 	.DevNo = USB_DEVNO,
 	.Mode = USB_MODE_DEVICE,

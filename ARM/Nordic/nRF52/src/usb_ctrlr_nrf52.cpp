@@ -50,7 +50,6 @@ SOFTWARE.
 #include "hal/nrf_ficr.h"
 
 #include "istddef.h"
-#include "app_evt_handler.h"
 #include "cfifo.h"
 #include "coredev/interrupt.h"
 
@@ -922,7 +921,7 @@ static void nRFUsbdBusReset(void)
 }
 
 // The queued generation identifies the endpoint lifetime, including events
-// already copied out of AppEvt when an ISR closes or resets the endpoint.
+// already copied out of the queue when an ISR closes or resets the endpoint.
 static void nRFUsbdProcessQueuedEvent(uint32_t Evt, void *pContext)
 {
 	const uint8_t epnum = (uint8_t)Evt;
@@ -1150,7 +1149,7 @@ extern "C" void USBD_IRQHandler(void){
 				(void)CFifoGet(s_Usbd.hQue);
 				const uint32_t evt =
 					(NRF_USBD->EPOUT[epnum].AMOUNT << 8U) | epnum;
-				AppEvtHandlerQue(evt,
+				UsbEvtQue(evt,
 					(void *)(uintptr_t)nRFUsbGetEpReg(epnum, 0U)->Generation,
 					nRFUsbdProcessQueuedEvent);
 				break;
@@ -1182,7 +1181,7 @@ extern "C" void USBD_IRQHandler(void){
 	uint32_t servicedstatus = 0U;
 
 	// IN host consumption (bits 1-7) and OUT readiness (bits 17-23) both go
-	// to AppEvt in one pass. Rotating the halves keeps the original order:
+	// to UsbEvtQue in one pass. Rotating the halves keeps the original order:
 	// IN highest endpoint first, then OUT highest endpoint first. A bit stays
 	// set when it cannot be queued and the next IRQ retries it. OUT readiness
 	// waits while its DMA is captured.
@@ -1201,7 +1200,7 @@ extern "C" void USBD_IRQHandler(void){
 			evt = (NRF_USBD->EPIN[epnum].AMOUNT << 8U) | epnum | (1UL << 16U);
 		else if ((NRF_USBD->EPSTATUS & bit) != 0U || preg->Handler == NULL)
 			continue;
-		if (!AppEvtHandlerQue(evt, (void *)(uintptr_t)preg->Generation,
+		if (!UsbEvtQue(evt, (void *)(uintptr_t)preg->Generation,
 			nRFUsbdProcessQueuedEvent))
 			break;
 		servicedstatus |= bit;
