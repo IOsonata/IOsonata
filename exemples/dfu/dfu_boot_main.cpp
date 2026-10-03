@@ -245,12 +245,9 @@ static const UsbdCdcCfg_t s_CdcCfg = {
 #define DFU_BOOT_USB_PID	0x0001
 #endif
 
-// Application event queue memory. The USB controller port queues its deferred
-// endpoint events there; the library default holds 4.
-alignas(4) static uint8_t s_AppEvtQueMem[APPEVT_HANDLER_QUE_MEMSIZE(16)];
-const AppEvtHandlerQueCfg_t g_AppEvtHandlerQueCfg = {
-	s_AppEvtQueMem, sizeof(s_AppEvtQueMem)
-};
+// Application event queue memory, replaces the 4 event library default. The
+// USB controller port queues its deferred endpoint events there.
+alignas(4) uint8_t g_AppEvtHandlerQueMem[APPEVT_HANDLER_QUE_MEMSIZE(16)];
 
 static const UsbCfg_t s_UsbCfg = {
 	.DevNo = USB_DEVNO,
@@ -277,7 +274,8 @@ static UsbdCdc s_Link;
 
 static bool DfuBootLinkInit(void)
 {
-	if (UsbInit(&s_UsbCfg) == false || s_Link.Init(s_CdcCfg) == false)
+	if (AppEvtHandlerInit(g_AppEvtHandlerQueMem, sizeof(g_AppEvtHandlerQueMem)) == false ||
+		UsbInit(&s_UsbCfg) == false || s_Link.Init(s_CdcCfg) == false)
 	{
 		return false;
 	}

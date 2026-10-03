@@ -333,13 +333,11 @@ static void QueueTestEvent(uint32_t Event, void *pContext)
 }
 
 // The application gives the queue its memory. UsbInit does not own it.
-alignas(4) static uint8_t s_AppEvtQueMem[APPEVT_HANDLER_QUE_MEMSIZE(16)];
-const AppEvtHandlerQueCfg_t g_AppEvtHandlerQueCfg = {
-	s_AppEvtQueMem, sizeof(s_AppEvtQueMem)
-};
+alignas(4) uint8_t g_AppEvtHandlerQueMem[APPEVT_HANDLER_QUE_MEMSIZE(16)];
 
 static bool TestAppEvtQueue(void)
 {
+	CHECK(AppEvtHandlerInit(g_AppEvtHandlerQueMem, sizeof(g_AppEvtHandlerQueMem)));
 	CHECK(Fixture());
 	uint32_t events = 0U;
 	// Work queued before UsbInit stays queued, and the default UsbEvtQue

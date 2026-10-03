@@ -95,12 +95,9 @@ static const UsbdCdcCfg_t s_CdcCfg = {
 //
 // 0x1209 is the pid.codes vendor id, which exists for open hardware. Put your
 // own vendor and product id here before shipping anything.
-// Application event queue memory. The USB controller port queues its deferred
-// endpoint events there; the library default holds 4.
-alignas(4) static uint8_t s_AppEvtQueMem[APPEVT_HANDLER_QUE_MEMSIZE(16)];
-const AppEvtHandlerQueCfg_t g_AppEvtHandlerQueCfg = {
-	s_AppEvtQueMem, sizeof(s_AppEvtQueMem)
-};
+// Application event queue memory, replaces the 4 event library default. The
+// USB controller port queues its deferred endpoint events there.
+alignas(4) uint8_t g_AppEvtHandlerQueMem[APPEVT_HANDLER_QUE_MEMSIZE(16)];
 
 static const UsbCfg_t s_UsbCfg = {
 	.DevNo = USB_DEVNO,
@@ -134,7 +131,8 @@ int main()
 	uint8_t buff[TEST_BUFSIZE];
 #endif
 
-	if (UsbInit(&s_UsbCfg) == false)
+	if (AppEvtHandlerInit(g_AppEvtHandlerQueMem, sizeof(g_AppEvtHandlerQueMem)) == false ||
+		UsbInit(&s_UsbCfg) == false)
 	{
 		return -1;
 	}

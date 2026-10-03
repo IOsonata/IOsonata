@@ -90,12 +90,9 @@ static const UsbdCdcCfg_t s_PrbsCfg = {
 	.EvtCB = nullptr,
 };
 
-// Application event queue memory. The USB controller port queues its deferred
-// endpoint events there; the library default holds 4.
-alignas(4) static uint8_t s_AppEvtQueMem[APPEVT_HANDLER_QUE_MEMSIZE(16)];
-const AppEvtHandlerQueCfg_t g_AppEvtHandlerQueCfg = {
-	s_AppEvtQueMem, sizeof(s_AppEvtQueMem)
-};
+// Application event queue memory, replaces the 4 event library default. The
+// USB controller port queues its deferred endpoint events there.
+alignas(4) uint8_t g_AppEvtHandlerQueMem[APPEVT_HANDLER_QUE_MEMSIZE(16)];
 
 static const UsbCfg_t s_UsbCfg = {
 	.DevNo = USB_DEVNO,
@@ -149,7 +146,8 @@ int main()
 	int loopbackPending = 0;
 	int loopbackOffset = 0;
 
-	if (!UsbInit(&s_UsbCfg) ||
+	if (!AppEvtHandlerInit(g_AppEvtHandlerQueMem, sizeof(g_AppEvtHandlerQueMem)) ||
+		!UsbInit(&s_UsbCfg) ||
 		!g_LoopbackCdc.Init(s_LoopbackCfg) ||
 		!g_PrbsCdc.Init(s_PrbsCfg))
 	{

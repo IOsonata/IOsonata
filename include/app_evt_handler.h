@@ -71,34 +71,31 @@ typedef struct __App_Event_Handler_Que {
 
 #pragma pack(pop)
 
-/// Queue memory descriptor
-typedef struct __App_Event_Handler_Que_Cfg {
-	uint8_t *pMem;			//!< Queue memory, 4 bytes aligned
-	size_t Size;			//!< Total pMem length in bytes
-} AppEvtHandlerQueCfg_t;
-
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/// Memory of the queue. The library defines a weak default holding
+/// Queue memory. The library has a weak definition holding
 /// APPEVT_HANDLER_QUE_DEFAULT_SIZE events. An application that needs more
-/// defines its own
+/// defines its own, which replaces the library one at link time, and passes
+/// its size to AppEvtHandlerInit before enabling any event source:
 ///
-///   alignas(4) static uint8_t s_QueMem[APPEVT_HANDLER_QUE_MEMSIZE(MY_COUNT)];
-///   const AppEvtHandlerQueCfg_t g_AppEvtHandlerQueCfg = { s_QueMem, sizeof(s_QueMem) };
+///   alignas(4) uint8_t g_AppEvtHandlerQueMem[APPEVT_HANDLER_QUE_MEMSIZE(MY_COUNT)];
+///   AppEvtHandlerInit(g_AppEvtHandlerQueMem, sizeof(g_AppEvtHandlerQueMem));
 ///
-/// in which case the library default memory is not linked. The queue takes
-/// this memory the first time it is used, no init call is required.
-extern const AppEvtHandlerQueCfg_t g_AppEvtHandlerQueCfg;
+/// The library cannot see the size of the application array. Without the
+/// AppEvtHandlerInit call it uses only the default size of it.
+extern uint8_t g_AppEvtHandlerQueMem[];
 
 /**
  * @brief	Initialize the queue on the given memory.
  *
- * Optional. Without this call the queue uses g_AppEvtHandlerQueCfg. Events
- * already queued are dropped.
+ * Optional. Without this call the queue takes g_AppEvtHandlerQueMem with the
+ * library default size the first time it is used. Events already queued are
+ * dropped.
  *
- * @param	pFifoMem : Queue memory, NULL to use g_AppEvtHandlerQueCfg
+ * @param	pFifoMem : Queue memory, NULL for g_AppEvtHandlerQueMem with the
+ * 					   library default size
  * @param	Size	 : Total pFifoMem length in bytes
  *
  * @return	true - success

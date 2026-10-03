@@ -6,8 +6,11 @@
 This is an implementation of event handler queuing to schedule event handler
 in firmware application main loop.
 
-The queue takes its memory from g_AppEvtHandlerQueCfg the first time an event
-is queued. AppEvtHandlerInit is only needed to give it other memory.
+Without an AppEvtHandlerInit call, the queue takes g_AppEvtHandlerQueMem, the
+library default holding APPEVT_HANDLER_QUE_DEFAULT_SIZE events, the first time
+an event is queued. An application that needs more defines its own
+g_AppEvtHandlerQueMem and passes its size to AppEvtHandlerInit before any event
+source is enabled.
 
 @author	Hoang Nguyen Hoan
 @date	Oct. 17, 2022
@@ -46,21 +49,17 @@ SOFTWARE.
 #define APPEVT_HANDLER_QUE_CFIFO_DEFAULT_MEMSIZE \
 	CFIFO_TOTAL_MEMSIZE(APPEVT_HANDLER_QUE_DEFAULT_SIZE, sizeof(AppEvtHandlerQue_t))
 
-// Default queue memory. An application that needs another size defines its
-// own g_AppEvtHandlerQueCfg, see app_evt_handler.h, and this storage is then
-// left out of the link.
-alignas(4) static uint8_t s_AppEvtHandlerFifoMem[
+// Default queue memory, APPEVT_HANDLER_QUE_DEFAULT_SIZE events. An application
+// that defines its own g_AppEvtHandlerQueMem replaces it at link time, see
+// app_evt_handler.h.
+alignas(4) __attribute__((weak)) uint8_t g_AppEvtHandlerQueMem[
 	APPEVT_HANDLER_QUE_CFIFO_DEFAULT_MEMSIZE];
-
-extern "C" __attribute__((weak)) const AppEvtHandlerQueCfg_t g_AppEvtHandlerQueCfg = {
-	s_AppEvtHandlerFifoMem, sizeof(s_AppEvtHandlerFifoMem)
-};
 
 static hCFifo_t s_hAppEvtHandlerFifo;
 
-// The queue takes the g_AppEvtHandlerQueCfg memory the first time it is
-// used. That can be from an interrupt, so the check and the init are one
-// critical section.
+// Without an AppEvtHandlerInit call, the queue takes the default memory the
+// first time it is used. That can be from an interrupt, so the check and the
+// init are one critical section.
 static hCFifo_t AppEvtHandlerFifo(void)
 {
 	if (s_hAppEvtHandlerFifo == nullptr)
@@ -80,8 +79,10 @@ bool AppEvtHandlerInit(uint8_t *pFifoMem, size_t Size)
 {
 	if (pFifoMem == nullptr)
 	{
-		s_hAppEvtHandlerFifo = CFifoInit(g_AppEvtHandlerQueCfg.pMem,
-				g_AppEvtHandlerQueCfg.Size,
+		// This size is the library default even when the application
+		// replaced the array: sizeof is fixed when the library is built.
+		s_hAppEvtHandlerFifo = CFifoInit(g_AppEvtHandlerQueMem,
+				sizeof(g_AppEvtHandlerQueMem),
 				sizeof(AppEvtHandlerQue_t), true);
 	}
 	else if (Size < APPEVT_HANDLER_QUE_CFIFO_DEFAULT_MEMSIZE)

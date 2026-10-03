@@ -1103,8 +1103,8 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 		pCfg->SecType == BTGAP_SECTYPE_LESC_MITM &&
 		(pCfg->SecExchg & BTAPP_SECEXCHG_OOB) != 0;
 
-	// The event queue uses its default memory (g_AppEvtHandlerQueCfg) unless
-	// the application gives its own here.
+	// The event queue keeps the memory it has (library default or the
+	// application AppEvtHandlerInit call) unless BtAppCfg gives one.
 	if (pCfg->pEvtHandlerQueMem != nullptr &&
 		AppEvtHandlerInit(pCfg->pEvtHandlerQueMem,
 						  pCfg->EvtHandlerQueMemSize) == false)

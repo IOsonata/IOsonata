@@ -21,7 +21,12 @@ MIT License
 Copyright (c) 2026, I-SYST inc., all rights reserved
 ----------------------------------------------------------------------------*/
 
+#include "app_evt_handler.h"
 #include "usb_combo_stress_device.h"
+
+// Application event queue memory, replaces the 4 event library default. The
+// USB controller port queues its deferred endpoint events there.
+alignas(4) uint8_t g_AppEvtHandlerQueMem[APPEVT_HANDLER_QUE_MEMSIZE(16)];
 
 int main()
 {
@@ -35,7 +40,8 @@ int main()
 	int loopbackOffset = 0;
 	bool loopbackConnected = false;
 
-	if (!UsbInit(&s_UsbCfg) ||
+	if (!AppEvtHandlerInit(g_AppEvtHandlerQueMem, sizeof(g_AppEvtHandlerQueMem)) ||
+		!UsbInit(&s_UsbCfg) ||
 		!g_LoopbackCdc.Init(s_LoopbackCfg) ||
 		!g_PrbsCdc.Init(s_PrbsCfg) ||
 		!g_Hid.Init(s_HidCfg) ||

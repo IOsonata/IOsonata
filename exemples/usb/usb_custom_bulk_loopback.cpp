@@ -82,12 +82,9 @@ static const UsbdBulkCfg_t s_BulkCfg = {
 
 // These VID/PID values are for the example. Use IDs assigned to your product
 // before shipping a device.
-// Application event queue memory. The USB controller port queues its deferred
-// endpoint events there; the library default holds 4.
-alignas(4) static uint8_t s_AppEvtQueMem[APPEVT_HANDLER_QUE_MEMSIZE(16)];
-const AppEvtHandlerQueCfg_t g_AppEvtHandlerQueCfg = {
-	s_AppEvtQueMem, sizeof(s_AppEvtQueMem)
-};
+// Application event queue memory, replaces the 4 event library default. The
+// USB controller port queues its deferred endpoint events there.
+alignas(4) uint8_t g_AppEvtHandlerQueMem[APPEVT_HANDLER_QUE_MEMSIZE(16)];
 
 static const UsbCfg_t s_UsbCfg = {
 	.DevNo = USB_DEVNO,
@@ -114,7 +111,8 @@ int main()
 {
 	uint8_t buffer[LOOPBACK_BUFFER_SIZE];
 
-	if (!UsbInit(&s_UsbCfg))
+	if (!AppEvtHandlerInit(g_AppEvtHandlerQueMem, sizeof(g_AppEvtHandlerQueMem)) ||
+		!UsbInit(&s_UsbCfg))
 	{
 		return -1;
 	}

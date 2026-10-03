@@ -377,12 +377,9 @@ static bool IntRegisterFunction(void)
 		&s_IntFunctionDesc, sizeof(s_IntFunctionDesc), IntPatchFunctionDesc);
 }
 
-// Application event queue memory. The USB controller port queues its deferred
-// endpoint events there; the library default holds 4.
-alignas(4) static uint8_t s_AppEvtQueMem[APPEVT_HANDLER_QUE_MEMSIZE(16)];
-const AppEvtHandlerQueCfg_t g_AppEvtHandlerQueCfg = {
-	s_AppEvtQueMem, sizeof(s_AppEvtQueMem)
-};
+// Application event queue memory, replaces the 4 event library default. The
+// USB controller port queues its deferred endpoint events there.
+alignas(4) uint8_t g_AppEvtHandlerQueMem[APPEVT_HANDLER_QUE_MEMSIZE(16)];
 
 static const UsbCfg_t s_UsbCfg = {
 	.DevNo = USB_DEVNO,
@@ -407,7 +404,8 @@ static const UsbCfg_t s_UsbCfg = {
 
 int main()
 {
-	if (!UsbInit(&s_UsbCfg) || !IntRegisterFunction())
+	if (!AppEvtHandlerInit(g_AppEvtHandlerQueMem, sizeof(g_AppEvtHandlerQueMem)) ||
+		!UsbInit(&s_UsbCfg) || !IntRegisterFunction())
 	{
 		return -1;
 	}

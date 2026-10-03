@@ -93,12 +93,9 @@ static MscRamDisk s_RamDisk;
 static UsbdMsc s_Msc;
 alignas(4) static uint8_t s_SectorBuffer[MSC_SECTOR_SIZE];
 
-// Application event queue memory. The USB controller port queues its deferred
-// endpoint events there; the library default holds 4.
-alignas(4) static uint8_t s_AppEvtQueMem[APPEVT_HANDLER_QUE_MEMSIZE(16)];
-const AppEvtHandlerQueCfg_t g_AppEvtHandlerQueCfg = {
-	s_AppEvtQueMem, sizeof(s_AppEvtQueMem)
-};
+// Application event queue memory, replaces the 4 event library default. The
+// USB controller port queues its deferred endpoint events there.
+alignas(4) uint8_t g_AppEvtHandlerQueMem[APPEVT_HANDLER_QUE_MEMSIZE(16)];
 
 static const UsbCfg_t s_UsbCfg = {
 	.DevNo = USB_DEVNO,
@@ -139,7 +136,8 @@ static const UsbdMscCfg_t s_MscCfg = {
 int main(void)
 {
 	s_RamDisk.Init();
-	if (!UsbInit(&s_UsbCfg) || !s_Msc.Init(s_MscCfg))
+	if (!AppEvtHandlerInit(g_AppEvtHandlerQueMem, sizeof(g_AppEvtHandlerQueMem)) ||
+		!UsbInit(&s_UsbCfg) || !s_Msc.Init(s_MscCfg))
 	{
 		return -1;
 	}
