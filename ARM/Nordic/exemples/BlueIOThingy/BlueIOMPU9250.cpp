@@ -156,8 +156,28 @@ void ImuRawDataSend(AccelSensorData_t &AccData, GyroSensorData_t GyroData, MagSe
 void ImuQuatDataSend(long Quat[4]);
 
 //static void ImuDataChedHandler(void * p_event_data, uint16_t event_size)
+// Set while ImuDataChedHandler is in the event queue. The sensor interrupt
+// fires faster than the queue may be run, so the read is queued once.
+static volatile bool s_bImuDataQueued = false;
+
+static void ImuDataChedHandler(uint32_t Evt, void *pCtx);
+
+static void ImuDataQue(void)
+{
+	if (s_bImuDataQueued == false)
+	{
+		s_bImuDataQueued = true;
+		if (AppEvtHandlerQue(0, 0, ImuDataChedHandler) == false)
+		{
+			s_bImuDataQueued = false;
+		}
+	}
+}
+
 static void ImuDataChedHandler(uint32_t Evt, void *pCtx)
 {
+	s_bImuDataQueued = false;
+
 	AccelSensorData_t accdata;
 	GyroSensorData_t gyrodata;
 	MagSensorData_t magdata;
@@ -191,7 +211,7 @@ static void ImuEvtHandler(Device * const pDev, DEV_EVT Evt)
 	switch (Evt)
 	{
 		case DEV_EVT_DATA_RDY:
-			AppEvtHandlerQue(0, 0, ImuDataChedHandler);
+			ImuDataQue();
 			//app_sched_event_put(NULL, 0, ImuDataChedHandler);
 			//ImuDataChedHandler(NULL, 0);
 			//g_MotSensor.Read(accdata);
@@ -207,7 +227,7 @@ void MPU9250IntHandler(int IntNo, void *pCtx)
 	// loop. The on-chip DMP is not used here.
 	g_Mpu9250.UpdateData();
 	s_Imu.UpdateData();
-	AppEvtHandlerQue(0, 0, ImuDataChedHandler);
+	ImuDataQue();
 	return;
 #else
 	s_Imu.IntHandler();

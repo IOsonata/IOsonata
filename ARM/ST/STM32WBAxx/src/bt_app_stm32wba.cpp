@@ -1109,20 +1109,6 @@ bool BtAppSecInit(void)
 
 static bool BtAppTickStart(void);
 
-// First event of the Bluetooth subsystem, queued by BtAppInit: starts
-// advertising once the application runs the queue.
-static void BtAppStartEvt(uint32_t Evt, void *pCtx)
-{
-	(void)Evt;
-	(void)pCtx;
-
-	if (g_BtAppData.State == BTAPP_STATE_INITIALIZED &&
-		(g_BtAppData.AppDevice.Conn.Role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER)))
-	{
-		BtAdvStart();
-	}
-}
-
 bool BtAppInit(const BtAppCfg_t *pCfg)
 {
 	if (pCfg == NULL)
@@ -1311,11 +1297,11 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 		return false;
 	}
 
-	// Advertising starts from the queue, once the application has finished its
-	// own setup after BtAppInit and runs the queue.
-	if (BtEvtQue(0, nullptr, BtAppStartEvt) == false)
+	// Advertising starts here and not from the event queue: an application
+	// interrupt can fill the queue before the application runs it.
+	if (g_BtAppData.AppDevice.Conn.Role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER))
 	{
-		return false;
+		BtAdvStart();
 	}
 
 	DEBUG_PRINTF("BtAppInit: success\r\n");

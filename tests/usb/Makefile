@@ -216,7 +216,7 @@ TARGETS := $(CORE_TARGET) $(INTRF_TARGET) $(RX_EVENT_TARGET) \
 TARGETS += $(MSC_TARGET) $(MULTICONFIG_TARGET)
 
 .PHONY: all test test-combo-shutdown test-c-header test-gcc test-clang test-matrix test-nrf-out-appevt test-nrf-appevt \
-	test-nrf-control-event test-nrf-suspend-policy test-nrf-iso-policy test-nrf-dma-policy test-nrf-iso-dma test-nrf-lifecycle test-nrf54-data \
+	test-nrf-control-event test-nrf-suspend-policy test-nrf-iso-policy test-nrf-dma-policy test-nrf-iso-dma test-nrf-lifecycle test-nrf-vbus test-nrf54-data \
 	iso-hw-build iso-hw int-hw-build int-hw hid-hw-build hid-hw \
 	msc-hw-build msc-hw hid-demo-build examples-build probe clean
 
@@ -232,6 +232,7 @@ test: $(TARGETS) examples-build
 	$(MAKE) test-nrf-iso-dma
 	$(MAKE) test-nrf-dma-policy
 	$(MAKE) test-nrf-lifecycle
+	$(MAKE) test-nrf-vbus
 	$(MAKE) test-nrf54-data
 	$(TEST_ENV) ./$(CORE_TARGET)
 	$(TEST_ENV) ./$(MULTICONFIG_TARGET)
@@ -276,6 +277,9 @@ test-nrf-control-event:
 
 test-nrf-lifecycle:
 	CXX=$(CXX) python3 ./nrf_usb_lifecycle_test.py
+
+test-nrf-vbus:
+	CXX=$(CXX) python3 ./nrf_usb_vbus_test.py
 
 test-nrf54-data:
 	CXX=$(CXX) python3 ./nrf54_usb_data_test.py

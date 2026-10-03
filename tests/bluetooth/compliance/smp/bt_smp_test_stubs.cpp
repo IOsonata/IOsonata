@@ -1,6 +1,7 @@
 #include <signal.h>
 #include <stdint.h>
 
+#include "bluetooth/bt_app.h"
 #include "bluetooth/bt_gatt.h"
 #include "bluetooth/bt_smp.h"
 #include "crypto/crypto_softaes.h"
@@ -47,6 +48,15 @@ void BtHciSmpHandlerSet(const BtHciSmpHandler_t *pHandler)
 void BtGattCccdRestoreBonded(uint16_t ConnHdl)
 {
 	(void)ConnHdl;
+}
+
+// The deterministic engines never report BUSY, so SMP has no retry to queue.
+bool BtEvtQue(uint32_t EvtId, void *pCtx, BtEvtQueHandler_t Handler)
+{
+	(void)EvtId;
+	(void)pCtx;
+	(void)Handler;
+	return false;
 }
 
 SysLog_t *SysLogGet(void)

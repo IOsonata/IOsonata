@@ -501,3 +501,6 @@ int main(void)
 }
 
 
+
+// The process event of the USB core is not part of this test.
+void UsbProcessQue(int) {}

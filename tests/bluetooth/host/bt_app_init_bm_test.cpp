@@ -46,6 +46,7 @@ enum CallId {
 	CALL_SECURITY,
 	CALL_ADVERTISING,
 	CALL_TX_POWER,
+	CALL_ADV_START,
 };
 
 static FailPoint s_FailPoint;
@@ -257,6 +258,17 @@ int8_t GetValidTxPower(int Value)
 	return (int8_t)Value;
 }
 
+// BtAppInit starts advertising as its last step
+void BtAdvStart(void)
+{
+	Record(CALL_ADV_START);
+}
+
+bool BtEvtQue(uint32_t, void *, BtEvtQueHandler_t)
+{
+	return true;
+}
+
 } // extern "C"
 
 static void on_conn_params_evt(const struct ble_conn_params_evt *) {}
@@ -285,6 +297,7 @@ int main()
 		BT_CHECK(ctx, CallSeen(CALL_SECURITY));
 		BT_CHECK(ctx, CallSeen(CALL_ADVERTISING));
 		BT_CHECK(ctx, CallSeen(CALL_TX_POWER));
+		BT_CHECK(ctx, CallSeen(CALL_ADV_START));
 	});
 
 	ctx.Run("open initialization skips security", [&]() {
@@ -305,6 +318,7 @@ int main()
 		BT_CHECK(ctx, CallSeen(CALL_USER_DATA));
 		BT_CHECK(ctx, !CallSeen(CALL_SECURITY));
 		BT_CHECK(ctx, !CallSeen(CALL_ADVERTISING));
+		BT_CHECK(ctx, !CallSeen(CALL_ADV_START));
 	});
 
 	ctx.Run("fail fast before stack", [&]() {

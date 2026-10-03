@@ -957,3 +957,6 @@ int main(void)
 	return 0;
 }
 
+
+// The process event of the USB core is not part of this test.
+void UsbProcessQue(int) {}

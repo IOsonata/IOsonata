@@ -93,9 +93,13 @@ void init(){
 '''
 code += '\n'.join(function(n) for n in ['nRFUsbGetEpReg', 'UsbCtrlrEpBind',
                                         'UsbCtrlrStart', 'UsbCtrlrStop'])
-# UsbCtrlrProcess is inline in the nRF52 usb_ctrlr.h: it runs the AppEvt queue.
-assert 'AppEvtHandlerExec();' in (ROOT / 'ARM/Nordic/include/usb_ctrlr.h').read_text()
-code += '\nvoid UsbCtrlrProcess(int){AppEvtHandlerExec();}\n'
+# UsbCtrlrProcess is inline in the nRF52 usb_ctrlr.h. It does not run the
+# application event queue: the application owns that queue.
+_hdr = (ROOT / 'ARM/Nordic/include/usb_ctrlr.h').read_text()
+_proc = _hdr[_hdr.index('static inline void UsbCtrlrProcess'):]
+_proc = _proc[:_proc.index('}') + 1]
+assert 'AppEvtHandler' not in _proc
+code += '\n' + _proc.replace('static inline ', '') + '\n'
 code += r'''
 namespace startup {
 constexpr uint32_t USBD_EVENTCAUSE_READY_Msk=1,POWER_USBREGSTATUS_OUTPUTRDY_Msk=2;
@@ -222,10 +226,10 @@ int main(){
  for(unsigned low=0;low<2;++low){
   init();regs.LOWPOWER=low;
   UsbCtrlrProcess(0);
-  assert(dispatches==1 && regs.LOWPOWER==low && requests==0 && releases==0);
+  assert(dispatches==0 && regs.LOWPOWER==low && requests==0 && releases==0);
  }
  puts("PASS: lifecycle balances clock ownership on success/failure and repeated start/stop");
- puts("PASS: foreground processing dispatches AppEvt without a second peripheral power owner");
+ puts("PASS: foreground processing leaves the application event queue to the application and owns no peripheral power");
 }
 '''
 with tempfile.TemporaryDirectory() as directory:

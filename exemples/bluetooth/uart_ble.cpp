@@ -1075,6 +1075,18 @@ uint32_t BleSrvcCharNotify(BtGattSrvc_t *pSrvc, int Idx, uint8_t *pData, uint16_
 }
 #endif
 
+// SysLog sends a record when it is logged. A record the UART had no room for
+// waits in the store, so the UART ready event queues one flush to send it.
+static volatile bool s_SysLogFlushQueued = false;
+
+static void SysLogFlushEvt(uint32_t Evt, void *pCtx)
+{
+	(void)Evt;
+	(void)pCtx;
+	s_SysLogFlushQueued = false;
+	(void)SysLogFlush(SysLogGet());
+}
+
 int UartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen)
 {
 	int cnt = 0;
@@ -1088,6 +1100,15 @@ int UartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int Buffer
 			AppEvtHandlerQue(0, 0, UartRxChedHandler);
 			break;
 		case UART_EVT_TXREADY:
+			if (s_SysLogFlushQueued == false &&
+				CFifoPeek(SysLogGet()->hFifo) != nullptr)
+			{
+				s_SysLogFlushQueued = true;
+				if (AppEvtHandlerQue(0, nullptr, SysLogFlushEvt) == false)
+				{
+					s_SysLogFlushQueued = false;
+				}
+			}
 			break;
 		case UART_EVT_LINESTATE:
 			break;

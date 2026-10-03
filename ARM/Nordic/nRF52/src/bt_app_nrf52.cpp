@@ -1559,20 +1559,6 @@ extern "C" __attribute__((weak)) const BtAppSchedCfg_t g_BtAppSchedCfg = {
 	s_BtAppSchedMem, sizeof(s_BtAppSchedMem), SCHED_MAX_EVENT_DATA_SIZE, SCHED_QUEUE_SIZE
 };
 
-// First event of the Bluetooth subsystem, queued by BtAppInit: starts
-// advertising once the application runs the queue.
-static void BtAppStartEvt(uint32_t Evt, void *pCtx)
-{
-	(void)Evt;
-	(void)pCtx;
-
-	if (g_BtAppData.State == BTAPP_STATE_INITIALIZED &&
-		(g_BtAppData.AppDevice.Conn.Role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER)))
-	{
-		BtAdvStart();
-	}
-}
-
 bool BtAppInit(const BtAppCfg_t *pCfg)//, bool bEraseBond)
 {
 	ret_code_t err_code;
@@ -1766,12 +1752,11 @@ bool BtAppInit(const BtAppCfg_t *pCfg)//, bool bEraseBond)
 
     g_BtAppData.State = BTAPP_STATE_INITIALIZED;
 
-    // Advertising starts from the queue, once the application has finished its
-    // own setup after BtAppInit and runs the queue.
-    if (BtEvtQue(0, nullptr, BtAppStartEvt) == false)
+    // Advertising starts here and not from the event queue: an application
+    // interrupt can fill the queue before the application runs it.
+    if (g_BtAppData.AppDevice.Conn.Role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER))
     {
-    	DEBUG_PRINTF("BtAppInit FAIL: BtEvtQue\r\n");
-    	return false;
+    	BtAdvStart();
     }
 
     return true;

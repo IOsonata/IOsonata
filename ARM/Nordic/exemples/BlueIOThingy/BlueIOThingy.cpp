@@ -519,17 +519,25 @@ void ReadPTHData()
 	gascnt++;
 }
 
+// Set while SchedAdvData is in the event queue, so that it is queued once
+static volatile bool s_bAdvDataQueued = false;
+
 //void SchedAdvData(void * p_event_data, uint16_t event_size)
 static void SchedAdvData(uint32_t Evt, void *pCtx)
 {
+	s_bAdvDataQueued = false;
 	ReadPTHData();
 }
 
 void AppTimerHandler(TimerDev_t * const pTimer, int TrigNo, void *pContext)
 {
-	if (TrigNo == 0)
+	if (TrigNo == 0 && s_bAdvDataQueued == false)
 	{
-		AppEvtHandlerQue(0, pContext, SchedAdvData);
+		s_bAdvDataQueued = true;
+		if (AppEvtHandlerQue(0, pContext, SchedAdvData) == false)
+		{
+			s_bAdvDataQueued = false;
+		}
 //		app_sched_event_put(pContext, sizeof(uint32_t), SchedAdvData);
 	}
 }
@@ -778,11 +786,25 @@ void HardwareInit()
 //
 // Adjust it for other toolchains.
 //
+// Application event queue memory, replaces the 4 event library default. The
+// sensor interrupts, the update timer and the Bluetooth stack all queue here.
+alignas(4) uint8_t g_AppEvtHandlerQueMem[APPEVT_HANDLER_QUE_MEMSIZE(16)];
+
 int main()
 {
+	// The queue exists before any interrupt can queue an event
+	AppEvtHandlerInit(g_AppEvtHandlerQueMem, sizeof(g_AppEvtHandlerQueMem));
+
     HardwareInit();
 
-    BtAppInit(&s_BleAppCfg);//, true);
+    if (BtAppInit(&s_BleAppCfg) == false)
+    {
+    	// Stop here so that the debugger shows where it failed
+    	while (1)
+    	{
+    		__WFE();
+    	}
+    }
 
 	uint32_t period = g_Timer.EnableTimerTrigger(0, 500UL, TIMER_TRIG_TYPE_CONTINUOUS, AppTimerHandler);
 

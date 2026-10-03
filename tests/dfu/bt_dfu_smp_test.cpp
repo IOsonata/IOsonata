@@ -5,7 +5,7 @@
 //
 // The stack is stubbed at the calls bt_dfu_smp.cpp makes: service add,
 // notify, notification enabled, the peer table and the application event
-// queue, which the test runs by hand the way BtAppRun does.
+// queue, which the test runs by hand the way AppRun does.
 
 #include <stdio.h>
 #include <stdlib.h>

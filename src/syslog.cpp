@@ -42,7 +42,7 @@ SOFTWARE.
 
 #if defined(__arm__) || defined(__ICCARM__) || (defined(__riscv) && defined(__riscv_zicsr))
 #include "coredev/interrupt.h"
-#define SYSSTATUS_STACK_USE_IRQ_LOCK    1
+#define SYSLOG_USE_IRQ_LOCK    1
 #endif
 
 //
@@ -121,18 +121,18 @@ static int SysLogAppend(char *pLine, int LineSize, int Pos,
 	return Pos + n;
 }
 
-static uintptr_t SysStatusStackLock(void)
+static uintptr_t SysIrqLock(void)
 {
-#if defined(SYSSTATUS_STACK_USE_IRQ_LOCK)
+#if defined(SYSLOG_USE_IRQ_LOCK)
 	return (uintptr_t)DisableInterrupt();
 #else
 	return 0;
 #endif
 }
 
-static void SysStatusStackUnlock(uintptr_t State)
+static void SysIrqUnlock(uintptr_t State)
 {
-#if defined(SYSSTATUS_STACK_USE_IRQ_LOCK)
+#if defined(SYSLOG_USE_IRQ_LOCK)
 #if defined(__arm__) || defined(__ICCARM__)
 	EnableInterrupt((uint32_t)State);
 #else
@@ -182,6 +182,9 @@ bool SysLogInit(SysLog_t * const pLog, const SysLogCfg_t * const pCfg,
 	pLog->pTimer = pTimer;
 	pLog->MinType = MinType & SYSSTATUS_TYPE_MASK;
 	pLog->hFifo = hFifo;
+	pLog->HeadIdx = hFifo->GetIdx;
+	pLog->HeadSent = 0U;
+	pLog->bFlushing = false;
 	pLog->Marker = SYSLOG_INIT_MARKER;
 
 	return true;
@@ -195,8 +198,78 @@ void SysLogSetSink(SysLog_t * const pLog, DevIntrf_t * const pSink,
 		return;
 	}
 
+	// A different sink has none of the head record, so it gets all of it.
+	if (pSink != pLog->pSink || SinkAddr != pLog->SinkAddr)
+	{
+		pLog->HeadSent = 0U;
+	}
 	pLog->pSink = pSink;
 	pLog->SinkAddr = SinkAddr;
+}
+
+// Send records until the store is empty or the sink stops taking bytes.
+// HeadSent counts the bytes of the head record already sent, so a sink that
+// takes part of a record gets only the rest of it on the next call. HeadIdx
+// is the store index of that record: when a full non-blocking store evicts
+// it, the index moves and the new head starts from its first byte.
+// Returns true when the sink stopped before the store was empty.
+static bool SysLogDrain(SysLog_t * const pLog, int *pTotal, int *pErr)
+{
+	const uint32_t recordLen = CFifoBlockSize(pLog->hFifo);
+
+	while (true)
+	{
+		uint32_t head = __atomic_load_n(&pLog->hFifo->GetIdx, __ATOMIC_ACQUIRE);
+		uint8_t *pBlock = CFifoPeek(pLog->hFifo);
+		if (pBlock == 0)
+		{
+			return false;
+		}
+		if (__atomic_load_n(&pLog->hFifo->GetIdx, __ATOMIC_ACQUIRE) != head)
+		{
+			// Evicted while it was being looked up, take the new head.
+			continue;
+		}
+		if (head != pLog->HeadIdx)
+		{
+			pLog->HeadIdx = head;
+			pLog->HeadSent = 0U;
+		}
+
+		uint32_t len = 0U;
+		while (len < recordLen && pBlock[len] != 0U)
+		{
+			len++;
+		}
+
+		uint32_t sent = pLog->HeadSent;
+		if (sent < len)
+		{
+			int count = DeviceIntrfTx(pLog->pSink, pLog->SinkAddr,
+								   pBlock + sent, (int)(len - sent));
+			if (count > 0)
+			{
+				*pTotal += count;
+				sent += (uint32_t)count;
+			}
+			if (sent < len)
+			{
+				// Keep the record and what went out of it. A negative result
+				// with nothing sent in this call is reported as it came back.
+				pLog->HeadSent = sent;
+				if (count < 0 && *pTotal == 0)
+				{
+					*pErr = count;
+				}
+				return true;
+			}
+		}
+
+		// Sent in full, or an empty record that a failed format left behind.
+		pLog->HeadSent = 0U;
+		pLog->HeadIdx = head + 1U;
+		(void)CFifoGet(pLog->hFifo);
+	}
 }
 
 int SysLogFlush(SysLog_t * const pLog)
@@ -206,50 +279,32 @@ int SysLogFlush(SysLog_t * const pLog)
 		return 0;
 	}
 
-	const uint32_t recordLen = CFifoBlockSize(pLog->hFifo);
-	int total = 0;
-	uint8_t *pBlock;
-
-	while ((pBlock = CFifoPeek(pLog->hFifo)) != 0)
+	// One flush at a time. A record stored by an interrupt while another
+	// context is sending is left to that flush, which looks at the store again
+	// before it lets go, so the record is not stranded.
+	uintptr_t state = SysIrqLock();
+	if (pLog->bFlushing)
 	{
-		uint32_t len = 0U;
-		while (len < recordLen && pBlock[len] != 0U)
-		{
-			len++;
-		}
-
-		if (len == 0U)
-		{
-			// Remove an empty record so one failed format cannot block the
-			// store, and carry on with the next one.
-			(void)CFifoGet(pLog->hFifo);
-			continue;
-		}
-
-		int count = DeviceIntrfTx(pLog->pSink, pLog->SinkAddr,
-							   pBlock, (int)len);
-		if (count > 0)
-		{
-			total += count;
-		}
-
-		if (count != (int)len)
-		{
-			// The sink did not take the whole record. Leave it queued and
-			// stop; a later call offers it again. A negative result with
-			// nothing sent is reported as it came back.
-			if (count < 0 && total == 0)
-			{
-				return count;
-			}
-
-			break;
-		}
-
-		(void)CFifoGet(pLog->hFifo);
+		SysIrqUnlock(state);
+		return 0;
 	}
+	pLog->bFlushing = true;
+	SysIrqUnlock(state);
 
-	return total;
+	int total = 0;
+	int err = 0;
+	bool more;
+
+	do {
+		bool stopped = SysLogDrain(pLog, &total, &err);
+
+		state = SysIrqLock();
+		more = stopped == false && CFifoPeek(pLog->hFifo) != 0;
+		pLog->bFlushing = more;
+		SysIrqUnlock(state);
+	} while (more);
+
+	return err < 0 ? err : total;
 }
 
 int SysLogStatus(SysLog_t * const pLog, SysStatus_t Status, const char *pDetail)
@@ -401,12 +456,12 @@ void SysStatusStackReset(SysStatusStack_t * const pStack)
 		return;
 	}
 
-	uintptr_t state = SysStatusStackLock();
+	uintptr_t state = SysIrqLock();
 
 	pStack->Count = 0;
 	pStack->PoppedSincePush = false;
 
-	SysStatusStackUnlock(state);
+	SysIrqUnlock(state);
 }
 
 bool SysStatusStackPush(SysStatusStack_t * const pStack, SysStatus_t Status)
@@ -418,7 +473,7 @@ bool SysStatusStackPush(SysStatusStack_t * const pStack, SysStatus_t Status)
 		return false;
 	}
 
-	uintptr_t state = SysStatusStackLock();
+	uintptr_t state = SysIrqLock();
 
 	// Start a new chain if a read cycle has begun.
 	if (pStack->PoppedSincePush)
@@ -435,7 +490,7 @@ bool SysStatusStackPush(SysStatusStack_t * const pStack, SysStatus_t Status)
 		retval = true;
 	}
 
-	SysStatusStackUnlock(state);
+	SysIrqUnlock(state);
 
 	return retval;
 }
@@ -449,7 +504,7 @@ SysStatus_t SysStatusStackPop(SysStatusStack_t * const pStack)
 		return SYSSTATUS_OK;
 	}
 
-	uintptr_t state = SysStatusStackLock();
+	uintptr_t state = SysIrqLock();
 
 	if (pStack->Count > 0)
 	{
@@ -458,7 +513,7 @@ SysStatus_t SysStatusStackPop(SysStatusStack_t * const pStack)
 		retval = pStack->Entry[pStack->Count];
 	}
 
-	SysStatusStackUnlock(state);
+	SysIrqUnlock(state);
 
 	return retval;
 }
@@ -472,14 +527,14 @@ SysStatus_t SysStatusStackPeek(SysStatusStack_t * const pStack)
 		return SYSSTATUS_OK;
 	}
 
-	uintptr_t state = SysStatusStackLock();
+	uintptr_t state = SysIrqLock();
 
 	if (pStack->Count > 0)
 	{
 		retval = pStack->Entry[pStack->Count - 1];
 	}
 
-	SysStatusStackUnlock(state);
+	SysIrqUnlock(state);
 
 	return retval;
 }
@@ -493,11 +548,11 @@ int SysStatusStackCount(SysStatusStack_t * const pStack)
 		return 0;
 	}
 
-	uintptr_t state = SysStatusStackLock();
+	uintptr_t state = SysIrqLock();
 
 	retval = pStack->Count;
 
-	SysStatusStackUnlock(state);
+	SysIrqUnlock(state);
 
 	return retval;
 }

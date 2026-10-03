@@ -357,6 +357,29 @@ static bool TestAppEvtQueue(void)
 	return true;
 }
 
+// The application does not call UsbProcess: controller events and UsbEnable
+// queue one process event through UsbEvtQue, which the application event
+// queue runs, however many events arrive before it runs.
+static bool TestProcessEvent(void)
+{
+	CHECK(Fixture());
+	AppEvtHandlerExec();
+	const int before = s_Class.ProcessCnt;
+
+	Sof(1U);
+	Sof(2U);
+	UsbProcessQue(TEST_DEVNO);
+	CHECK(s_Class.ProcessCnt == before);
+	CHECK(AppEvtHandlerExec() == false);
+	CHECK(s_Class.ProcessCnt == before + 1);
+
+	// Queued again once it has run
+	Sof(3U);
+	AppEvtHandlerExec();
+	CHECK(s_Class.ProcessCnt == before + 2);
+	return true;
+}
+
 static bool SetAddress(uint8_t Address)
 {
 	int base = s_Ctrlr.XferCnt;
@@ -1243,6 +1266,7 @@ int main(void)
 {
 	static const TestCase_t tests[] = {
 		{ "USB uses the application event queue, 16 events from the application", TestAppEvtQueue },
+		{ "controller events queue one process event", TestProcessEvent },
 		{ "enable requires descriptor", TestEnableRequiresDescriptor },
 		{ "descriptors", TestDescriptors },
 		{ "string descriptor bounds", TestStringDescriptorBounds },

@@ -139,7 +139,7 @@ Vendor-host persistence follows the selected port's backend.
 
 Interrupt-facing code does what needs immediate service in the interrupt
 and hands everything else to `BtEvtQue()`, the one way the Bluetooth
-subsystem signals work: advertising start, security requests, the stack pump
+subsystem signals work: security requests, the stack pump
 of STM32WBA, timeout checks. Each kind of work is queued at most once. The
 library default of `BtEvtQue()` puts the work in the application event
 queue, which the application runs, first in first out, with `AppRun()` or

@@ -163,9 +163,9 @@ void TestBufferedFlushRetriesNotReadyRecord()
 	CHECK(std::memcmp(s_Captured, "record\n", 7) == 0);
 }
 
-// Partial acceptance is transport-specific. SysLog reports it and keeps the
-// record queued, but does not retry the remainder or the whole record.
-void TestBufferedFlushLeavesPartialRecordQueued()
+// A sink that takes part of a record has sent those bytes. The record stays
+// queued and the next flush sends only the rest, so no byte goes out twice.
+void TestBufferedFlushResumesPartialRecord()
 {
 	alignas(4) uint8_t fifoMem[SYSLOG_MEMSIZE(2, kLineLen)];
 
@@ -184,9 +184,65 @@ void TestBufferedFlushLeavesPartialRecordQueued()
 	CHECK(s_CapturedLen == 3);
 	CHECK(std::memcmp(s_Captured, "rec", 3) == 0);
 
-	// Still queued, so a sink that can take it whole gets the whole record.
 	s_ChunkLimit = 512;
+	CHECK(SysLogFlush(&log) == 4);
+	CHECK(SysLogFlush(&log) == 0);
+	CHECK(s_CapturedLen == 7);
+	CHECK(std::memcmp(s_Captured, "record\n", 7) == 0);
+}
+
+// The record that was partly sent is evicted by a full non-blocking store.
+// The next record starts from its first byte, not from the old position.
+void TestPartialRecordEvicted()
+{
+	alignas(4) uint8_t fifoMem[SYSLOG_MEMSIZE(2, kLineLen)];
+
+	SysLog_t log;
+	std::memset(&log, 0, sizeof(log));
+	SysLogCfg_t cfg = MakeCfg(fifoMem, sizeof(fifoMem), kLineLen, false);
+	CHECK(SysLogInit(&log, &cfg, nullptr, 0, nullptr, 0));
+	CHECK(SysLogPrintf(&log, "one\n") == 4);
+
+	DevIntrf_t intrf{};
+	MakeIntrf(&intrf);
+	SysLogSetSink(&log, &intrf, 0);
+	ResetCapture(2);
+	CHECK(SysLogFlush(&log) == 2);
+
+	// The sink is stalled: these stay queued and the second one evicts "one".
+	ResetCapture(0);
+	CHECK(SysLogPrintf(&log, "two\n") == 4);
+	CHECK(SysLogPrintf(&log, "three\n") == 6);
+
+	ResetCapture();
+	CHECK(SysLogFlush(&log) == 10);
+	CHECK(s_CapturedLen == 10);
+	CHECK(std::memcmp(s_Captured, "two\nthree\n", 10) == 0);
+}
+
+// A sink attached after a partial send gets the whole head record.
+void TestNewSinkGetsWholeRecord()
+{
+	alignas(4) uint8_t fifoMem[SYSLOG_MEMSIZE(2, kLineLen)];
+
+	SysLog_t log;
+	std::memset(&log, 0, sizeof(log));
+	SysLogCfg_t cfg = MakeCfg(fifoMem, sizeof(fifoMem), kLineLen, false);
+	CHECK(SysLogInit(&log, &cfg, nullptr, 0, nullptr, 0));
+	CHECK(SysLogPrintf(&log, "record\n") == 7);
+
+	DevIntrf_t first{};
+	MakeIntrf(&first);
+	SysLogSetSink(&log, &first, 0);
+	ResetCapture(3);
+	CHECK(SysLogFlush(&log) == 3);
+
+	DevIntrf_t second{};
+	MakeIntrf(&second);
+	SysLogSetSink(&log, &second, 0);
+	ResetCapture();
 	CHECK(SysLogFlush(&log) == 7);
+	CHECK(std::memcmp(s_Captured, "record\n", 7) == 0);
 }
 
 // A negative result is the DeviceIntrf asynchronous path. It leaves the
@@ -559,7 +615,9 @@ int main()
 	TestBufferedBeforeSink();
 	TestRecordTruncatedToLineMax();
 	TestBufferedFlushRetriesNotReadyRecord();
-	TestBufferedFlushLeavesPartialRecordQueued();
+	TestBufferedFlushResumesPartialRecord();
+	TestPartialRecordEvicted();
+	TestNewSinkGetsWholeRecord();
 	TestBufferedFlushLeavesAsyncRecordQueued();
 	TestBufferedFlushDropsEmptyRecord();
 	TestBufferedDropIsRecordBased();

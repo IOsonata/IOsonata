@@ -297,7 +297,8 @@ every piece of work that must run outside the interrupt; send the three
 values as a message to the Bluetooth task with an ISR-safe send, and have the
 task run `Handler(EvtId, pCtx)` for each message. The port timers keep
 queuing the timeout checks, so a silent link is still serviced. Create the
-message queue before `BtAppInit()`, which queues the advertising start.
+message queue before `BtAppInit()`: the stack can queue work as soon as it is
+enabled.
 
 Follow `uart_ble_taktos.cpp` (TaktOS queue) or `UartBleFreeRTOS.cpp`
 (FreeRTOS queue) for the bridge pattern.

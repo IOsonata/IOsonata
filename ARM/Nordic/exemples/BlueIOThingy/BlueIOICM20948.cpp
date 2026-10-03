@@ -126,8 +126,28 @@ FusionAhrsSettings ahrs_settings =  {
 
 //void ImuDataChedHandler(void * p_event_data, uint16_t event_size)
 
+// Set while ImuDataChedHandler is in the event queue. The sensor interrupt
+// fires faster than the queue may be run, so the read is queued once.
+static volatile bool s_bImuDataQueued = false;
+
+void ImuDataChedHandler(uint32_t Evt, void *pCtx);
+
+static void ImuDataQue(void)
+{
+	if (s_bImuDataQueued == false)
+	{
+		s_bImuDataQueued = true;
+		if (AppEvtHandlerQue(0, 0, ImuDataChedHandler) == false)
+		{
+			s_bImuDataQueued = false;
+		}
+	}
+}
+
 void ImuDataChedHandler(uint32_t Evt, void *pCtx)
 {
+	s_bImuDataQueued = false;
+
 	AccelSensorData_t accdata;
 	GyroSensorData_t gyrodata;
 	MagSensorData_t magdata;
@@ -181,7 +201,7 @@ static void ImuEvtHandler(Device * const pDev, DEV_EVT Evt)
 			// Defer the read and BLE send to the main loop. The FIFO drain
 			// runs in the GPIOTE ISR; doing the send here too races vQuat
 			// against the next sample and ties up the connection interval.
-			AppEvtHandlerQue(0, 0, ImuDataChedHandler);
+			ImuDataQue();
 			break;
 	}
 }
@@ -218,7 +238,7 @@ void ICM20948IntHandler(int IntNo, void *pCtx)
 		// send to the main loop. The on-chip DMP is not used here.
 		s_MotSensor.UpdateData();
 		s_Imu.UpdateData();
-		AppEvtHandlerQue(0, 0, ImuDataChedHandler);
+		ImuDataQue();
 		return;
 #elif 1
 		s_Imu.IntHandler();	// Drives ImuEvtHandler -> ImuDataChedHandler once
