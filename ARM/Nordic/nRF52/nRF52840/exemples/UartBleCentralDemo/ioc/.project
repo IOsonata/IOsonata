@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <projectDescription>
-	<name>UsbCdcBleCentralDemo</name>
+	<name>UartBleCentralDemo</name>
 	<comment></comment>
 	<projects>
 	</projects>
@@ -31,14 +31,14 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>src/usb_cdc_ble_central.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/exemples/bluetooth/usb_cdc_ble_central.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/board.h</name>
 			<type>1</type>
 			<locationURI>PARENT-1-PROJECT_LOC/src/board.h</locationURI>
+		</link>
+		<link>
+			<name>src/uart_ble_central.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/exemples/bluetooth/uart_ble_central.cpp</locationURI>
 		</link>
 	</linkedResources>
 </projectDescription>
