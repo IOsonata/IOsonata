@@ -91,7 +91,6 @@ SOFTWARE.
 #include "bluetooth/bt_smp.h"
 #include "bluetooth/bt_dev.h"
 #include "bluetooth/bt_att.h"
-#include "app_evt_handler.h"
 #include "bt_wba_event_router.h"
 
 /******** For DEBUG ************/
@@ -1121,15 +1120,6 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 	s_WbaData.bOobEnabled =
 		pCfg->SecType == BTGAP_SECTYPE_LESC_MITM &&
 		(pCfg->SecExchg & BTAPP_SECEXCHG_OOB) != 0;
-
-	// The event queue keeps the memory it has (library default or the
-	// application AppEvtHandlerInit call) unless BtAppCfg gives one.
-	if (pCfg->pEvtHandlerQueMem != nullptr &&
-		AppEvtHandlerInit(pCfg->pEvtHandlerQueMem,
-						  pCfg->EvtHandlerQueMemSize) == false)
-	{
-		return false;
-	}
 
 	// Initialize peer manager.
 	if (!BtPeerInit(pCfg->pPeerPoolMem, pCfg->PeerPoolMemSize))

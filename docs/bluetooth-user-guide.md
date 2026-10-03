@@ -258,7 +258,7 @@ configuration macro as proof that precompiled storage changed.
 | Generic ATT database | `g_BtAttDBMemCfg` | Align for `BtAttDBEntry_t`; registration fails when full |
 | Discovery caches | `g_BtDevSrvcCacheCfg` | Reserve for peers whose discovered databases coexist |
 | SDC controller pool | `g_BtHciCtlrMemPool` | 8-byte alignment; depends on role, links and periodic resources |
-| Application event queue | `pEvtHandlerQueMem`, `EvtHandlerQueMemSize` | Keep storage alive while events can be queued |
+| Application event queue | `g_AppEvtHandlerQueMem`, `AppEvtHandlerInit()` | Owned by the application, not by `BtAppCfg_t`; not linked when `BtEvtQue()` is overridden |
 | Vendor scheduler queue | `g_BtAppSchedCfg` | Separate from AppEvt; relevant only on ports using that scheduler |
 
 These controls apply where the selected port consumes them; vendor-host

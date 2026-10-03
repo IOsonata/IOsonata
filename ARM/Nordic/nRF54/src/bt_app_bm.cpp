@@ -85,7 +85,6 @@ SOFTWARE.
 #include "bluetooth/bt_gap.h"
 #include "bluetooth/bt_smp.h"
 #include "bluetooth/bt_dev.h"
-#include "app_evt_handler.h"
 
 extern "C" bool sdh_state_evt_observer_notify(enum nrf_sdh_state_evt state);
 
@@ -1383,14 +1382,6 @@ bool BtAppSecInit(void)
 bool BtAppInit(const BtAppCfg_t *pCfg)
 {
 	uint32_t err_code;
-
-	// The event queue keeps the memory it has (library default or the
-	// application AppEvtHandlerInit call) unless BtAppCfg gives one.
-	if (pCfg->pEvtHandlerQueMem != nullptr &&
-		AppEvtHandlerInit(pCfg->pEvtHandlerQueMem, pCfg->EvtHandlerQueMemSize) == false)
-	{
-		return false;
-	}
 
 	SecurePendingReset();
 	BtSmpOobDataClearInternal();

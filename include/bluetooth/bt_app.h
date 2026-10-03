@@ -149,8 +149,6 @@ typedef struct __Bt_App_Cfg {
 	uint16_t MaxMtu;				//!< Max MTU size or 0 for default
 	BTAPP_COEXMODE CoexMode;		//!< Enable support for CoEx
 	int PeriphDevCnt;				//!< Max number of peripheral connection
-	uint8_t *pEvtHandlerQueMem;		//!< Memory reserved for AppEvtHandler; NULL -> queue memory left as is
-	size_t EvtHandlerQueMemSize;	//!< Total pEvtHandlerQueMem length in bytes
 	uint8_t *pPeerPoolMem;			//!< Peer pool storage; NULL -> library default. Size with BT_PEER_POOL_MEMSIZE(N).
 	size_t PeerPoolMemSize;			//!< Total pPeerPoolMem length in bytes
 	uint8_t *pLongWrPoolMem;		//!< Long-write reassembly pool; library splits evenly across peer slots. NULL = no long-write support.

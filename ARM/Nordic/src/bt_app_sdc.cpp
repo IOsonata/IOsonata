@@ -68,7 +68,6 @@ SOFTWARE.
 #include "bluetooth/bt_hci_ctlr.h"
 #include "nrf_mpsl.h"
 #include "iopinctrl.h"
-#include "app_evt_handler.h"
 
 
 #define BT_SDC_RX_MAX_PACKET_COUNT			2
@@ -957,14 +956,6 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
     NVIC_EnableIRQ(FPU_IRQn);
 #endif
 #endif
-
-    // The event queue keeps the memory it has (library default or the
-    // application AppEvtHandlerInit call) unless BtAppCfg gives one.
-    if (pCfg->pEvtHandlerQueMem != nullptr &&
-    	AppEvtHandlerInit(pCfg->pEvtHandlerQueMem, pCfg->EvtHandlerQueMemSize) == false)
-    {
-    	return false;
-    }
 
 	// Connection pool removed: the peer manager (BtPeerInit above) owns
 	// the single connection table now.

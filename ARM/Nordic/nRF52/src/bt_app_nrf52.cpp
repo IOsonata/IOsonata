@@ -77,7 +77,6 @@ SOFTWARE.
 #include "bluetooth/bt_smp.h"
 //#include "ble_app_nrf5.h"
 #include "bluetooth/bt_dev.h"
-#include "app_evt_handler.h"
 #include "sd_dispatch.h"
 
 /******** For DEBUG ************/
@@ -1627,16 +1626,6 @@ bool BtAppInit(const BtAppCfg_t *pCfg)//, bool bEraseBond)
 								  g_BtAppSchedCfg.pMem);
 		APP_ERROR_CHECK(err_code);
 	}
-
-    // The event queue keeps the memory it has (library default or the
-    // application AppEvtHandlerInit call) unless BtAppCfg gives one.
-    if (pCfg->pEvtHandlerQueMem != nullptr &&
-    	AppEvtHandlerInit(pCfg->pEvtHandlerQueMem, pCfg->EvtHandlerQueMemSize) == false)
-    {
-    	DEBUG_PRINTF("BtAppInit FAIL: AppEvtHandlerInit (mem=%p size=%d)\r\n",
-    		(void*)pCfg->pEvtHandlerQueMem, (int)pCfg->EvtHandlerQueMemSize);
-    	return false;
-    }
 
     nrf_clock_lf_cfg_t lfclk = {
     	0

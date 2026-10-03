@@ -744,9 +744,7 @@ static bool NvmDemoSetup(void)
 // The library default is 4 slots. The async cycle puts the pump back on the
 // queue on every visit, thousands of times a cycle, alongside whatever the
 // stack posts, so 4 is not enough and a refusal costs a whole cycle.
-#define APP_EVT_QUE_MEMSIZE			APPEVT_HANDLER_QUE_MEMSIZE(16)
-
-alignas(4) static uint8_t s_AppEvtQueMem[APP_EVT_QUE_MEMSIZE];
+alignas(4) uint8_t g_AppEvtHandlerQueMem[APPEVT_HANDLER_QUE_MEMSIZE(16)];
 
 static uint32_t g_AdvCnt = 0;
 static bool s_Ready = false;
@@ -807,8 +805,6 @@ const BtAppCfg_t s_BtAppCfg = {
 	.AdvInterval = APP_ADV_INTERVAL_MSEC,
 	.AdvTimeout = APP_ADV_TIMEOUT_MSEC,
 	.TxPower = 0,
-	.pEvtHandlerQueMem = s_AppEvtQueMem,
-	.EvtHandlerQueMemSize = APP_EVT_QUE_MEMSIZE,
 };
 
 static void NvmCycleHandler(uint32_t Evt, void *pCtx);
@@ -1141,6 +1137,9 @@ void BtAppAdvTimeoutHandler()
 
 int main()
 {
+	// The queue exists before any interrupt can queue an event
+	AppEvtHandlerInit(g_AppEvtHandlerQueMem, sizeof(g_AppEvtHandlerQueMem));
+
 	g_Uart.Init(s_UartCfg);
 
 	g_Uart.printf("\r\nNvm demo on the %s, with a stack up\r\n", s_MediumName);

@@ -20,7 +20,6 @@ namespace {
 
 enum FailPoint {
 	FAIL_NONE,
-	FAIL_EVENT_QUEUE,
 	FAIL_PEER_POOL,
 	FAIL_STACK,
 	FAIL_GAP_INIT,
@@ -31,7 +30,6 @@ enum FailPoint {
 };
 
 enum CallId {
-	CALL_EVENT_QUEUE,
 	CALL_PEER_POOL,
 	CALL_LONG_WRITE,
 	CALL_STACK,
@@ -87,7 +85,6 @@ static BtAppCfg_t MakeCfg(bool Secure = true, bool DeviceInfo = true)
 	static const BtAppDevInfo_t devInfo = {
 		"Model-54", "I-SYST", "SN-54", "1.0.0", "A1"
 	};
-	static uint8_t evtMem[64];
 	static uint8_t peerMem[256];
 	static uint8_t longWriteMem[256];
 
@@ -107,8 +104,6 @@ static BtAppCfg_t MakeCfg(bool Secure = true, bool DeviceInfo = true)
 	cfg.ConnLedPort = -1;
 	cfg.ConnLedPin = -1;
 	cfg.MaxMtu = 247;
-	cfg.pEvtHandlerQueMem = evtMem;
-	cfg.EvtHandlerQueMemSize = sizeof(evtMem);
 	cfg.pPeerPoolMem = peerMem;
 	cfg.PeerPoolMemSize = sizeof(peerMem);
 	cfg.pLongWrPoolMem = longWriteMem;
@@ -133,12 +128,6 @@ static bool CallSeen(CallId Id)
 BtAppData_t g_BtAppData = {};
 
 extern "C" {
-
-bool AppEvtHandlerInit(uint8_t *, size_t)
-{
-	Record(CALL_EVENT_QUEUE);
-	return s_FailPoint != FAIL_EVENT_QUEUE;
-}
 
 bool BtPeerInit(uint8_t *, size_t)
 {
@@ -323,15 +312,10 @@ int main()
 
 	ctx.Run("fail fast before stack", [&]() {
 		ResetHarness();
-		s_FailPoint = FAIL_EVENT_QUEUE;
+		s_FailPoint = FAIL_PEER_POOL;
 		BtAppCfg_t cfg = MakeCfg();
 		BT_CHECK(ctx, !BtAppInit(&cfg));
 		BT_CHECK(ctx, s_CallCount == 1);
-
-		ResetHarness();
-		s_FailPoint = FAIL_PEER_POOL;
-		BT_CHECK(ctx, !BtAppInit(&cfg));
-		BT_CHECK(ctx, CallSeen(CALL_EVENT_QUEUE));
 		BT_CHECK(ctx, CallSeen(CALL_PEER_POOL));
 		BT_CHECK(ctx, !CallSeen(CALL_STACK));
 	});
