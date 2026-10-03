@@ -22,10 +22,12 @@ Copyright (c) 2026, I-SYST inc., all rights reserved
 ----------------------------------------------------------------------------*/
 
 #include <atomic>
+#include "app_evt_handler.h"
 #include "usb_combo_stress_device.h"
 #include "coredev/system_core_clock.h"
 #include "TaktOS.h"
 #include "TaktOSThread.h"
+#include "TaktOSSem.h"
 
 alignas(8) static uint8_t s_ServiceMem[TAKTOS_THREAD_MEM_SIZE(2048)];
 alignas(8) static uint8_t s_LoopMem[TAKTOS_THREAD_MEM_SIZE(1024)];
@@ -43,6 +45,15 @@ volatile uint32_t g_UsbComboTaktOSHeartbeat = 0;
 #define CDC_PASSES_PER_TURN 4U
 #define USB_SERVICE_PASSES_PER_TURN 4U
 
+static TaktOSSem_t s_ServiceWake;
+
+// Link-time override. All RTOS notification policy belongs to this application.
+void AppEvtHandlerNotify(void)
+{
+	// A full binary semaphore already records a wake for this consumer.
+	(void)TaktOSSemGive(&s_ServiceWake, false);
+}
+
 static void ServiceThread(void *pArg)
 {
 	(void)pArg;
@@ -57,6 +68,9 @@ static void ServiceThread(void *pArg)
 			UsbProcess(USB_DEVNO);
 		}
 		TaktOSThreadYield();
+		// Retain notifications arriving during processing. One tick bounds the
+		// wait for polled cable/class work and any work left by a bounded drain.
+		(void)TaktOSSemTake(&s_ServiceWake, true, 1U);
 	}
 }
 
@@ -171,6 +185,9 @@ static void HeartbeatThread(void *pArg)
 
 int main()
 {
+	// Initialize the hook's resource before USB can post its first event.
+	if (TaktOSSemInit(&s_ServiceWake, 0U, 1U) != TAKTOS_OK)
+		return -1;
 	// Initialization completes before any traffic thread can access a class.
 	if (!UsbInit(&s_UsbCfg) ||
 		!g_LoopbackCdc.Init(s_LoopbackCfg) || !g_PrbsCdc.Init(s_PrbsCfg) ||
@@ -198,3 +215,4 @@ int main()
 	TaktOSStart();
 	while (true) {}
 }
+

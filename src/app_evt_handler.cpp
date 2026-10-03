@@ -51,6 +51,10 @@ alignas(4) static uint8_t s_AppEvtHandlerFifoMem[
 
 static hCFifo_t s_hAppEvtHandlerFifo;
 
+__attribute__((weak)) void AppEvtHandlerNotify(void)
+{
+}
+
 bool AppEvtHandlerInit(uint8_t *pFifoMem, size_t Size)
 {
 	if (pFifoMem == nullptr)
@@ -79,6 +83,8 @@ bool AppEvtHandlerQue(uint32_t EvtId, void *pCtx, AppEvtHandler_t Handler)
 		return false;
 	}
 
+	// Do not let a preemptive consumer see a partially initialized event.
+	const auto state = DisableInterrupt();
 	AppEvtHandlerQue_t *p =
 		(AppEvtHandlerQue_t *)CFifoPut(s_hAppEvtHandlerFifo);
 
@@ -88,6 +94,10 @@ bool AppEvtHandlerQue(uint32_t EvtId, void *pCtx, AppEvtHandler_t Handler)
 		p->pCtx = pCtx;
 		p->Handler = Handler;
 	}
+
+	EnableInterrupt(state);
+	if (p != nullptr)
+		AppEvtHandlerNotify();
 
 	return p != nullptr;
 }
@@ -142,3 +152,4 @@ void AppEvtHandlerExec(void)
 		}
 	}
 }
+

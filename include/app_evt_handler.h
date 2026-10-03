@@ -73,6 +73,18 @@ typedef struct __App_Event_Handler_Que {
 extern "C" {
 #endif
 
+/**
+ * @brief Called after each successfully queued event is fully published.
+ *
+ * The default weak implementation does nothing. An application may link a
+ * strong override to notify its RTOS consumer. The override must be nonblocking
+ * and callable from interrupt or thread context. Initialize its resources
+ * before enabling producers. Notification coalescing, waiting and scheduling
+ * belong to the application; Dispatch and Exec remain nonblocking and do not
+ * notify. Use one coordinated consumer and account for Exec's bounded drain.
+ */
+void AppEvtHandlerNotify(void);
+
 bool AppEvtHandlerInit(uint8_t *pFifoMem, size_t Size);
 bool AppEvtHandlerQue(uint32_t EvtId, void *pCtx, AppEvtHandler_t Handler);
 void AppEvtHandlerDispatch(void);
@@ -83,3 +95,4 @@ void AppEvtHandlerExec(void);
 #endif
 
 #endif // __APP_EVT_HANDLER_H__
+
