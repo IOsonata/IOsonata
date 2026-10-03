@@ -1128,11 +1128,11 @@ int main()
     }
 
     UartBleOobInit();
-    BtAppRun();
+    AppRun();
 
-    // BtAppRun is not expected to return. Keep embedded startup from falling
-    // through newlib exit if a target implementation does return.
-    g_Uart.printf("BtAppRun returned\r\n");
+    // AppRun is not expected to return. Keep embedded startup from falling
+    // through newlib exit if it ever does.
+    g_Uart.printf("AppRun returned\r\n");
     while (true)
     {
         __NOP();

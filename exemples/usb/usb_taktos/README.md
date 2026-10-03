@@ -24,9 +24,10 @@ scheduler tick or override those handlers. Keep the IOsonata C++ startup.
 ## Execution and ownership
 
 - The USB thread initializes the core and CDC class, then enables USB.
-- That thread alone calls `UsbProcess()`, `Rx()` and `Tx()`. On nRF52840,
-  `UsbProcess()` also dispatches the shared AppEvt queue. Do not dispatch that
-  queue concurrently from another thread.
+- That thread alone runs the USB work and calls `Rx()` and `Tx()`. The
+  example overrides `UsbEvtQue()`: the USB stack puts its deferred endpoint
+  events and its process event in a queue owned by this thread, which runs
+  them. The application event queue is not used or linked.
 - CDC FIFOs use `bBlocking = true` to preserve queued data and apply
   backpressure when full. This flag does not put the calling thread to sleep.
   The thread retains a partly accepted packet and retries
@@ -75,7 +76,7 @@ project with the same library configurations listed above.
 
 | Thread | Work | Stack budget, excluding kernel overhead |
 |---|---|---:|
-| Service | `UsbProcess()`, sole AppEvt dispatcher | 2048 bytes |
+| Service | USB work queue (`UsbEvtQue()` override) | 2048 bytes |
 | Loopback | CDC0 RX checking and echo, including partial TX | 1024 bytes |
 | PRBS | CDC1 PRBS TX and target-error markers | 1024 bytes |
 | Heartbeat | Increment `g_UsbComboTaktOSHeartbeat` every second | 512 bytes |
@@ -106,7 +107,7 @@ as the bare-metal version. Thread memory is static and sized with
 HID, raw INT and ISO keep their existing callback execution paths. They are
 not separate threads, and ISO frames are not delayed until a scheduler tick.
 USB class initialization completes before starting the scheduler. No traffic
-thread reinitializes a class or dispatches AppEvt.
+thread reinitializes a class or runs the USB work queue.
 
 The VID/PID, banner, descriptor layout, alternate settings, packet formats,
 FIFO capacities and ISO diagnostic request match the bare-metal composite.

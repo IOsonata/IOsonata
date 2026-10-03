@@ -377,7 +377,8 @@ static void BtGapWbaConnParamIssue(BtGapWbaConnParamLink_t *pLink)
 	}
 }
 
-// Declared in bt_wba_event_router.h. Called from the BtAppRun main loop.
+// Declared in bt_wba_event_router.h. Called once per second from the timer
+// event of bt_app_stm32wba.cpp.
 void BtGapWbaConnParamProcess(void)
 {
 	if (!s_GapWba.bConnParamsValid)

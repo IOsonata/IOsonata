@@ -2027,7 +2027,7 @@ int main(void)
 	DutOut("DUT READY");
 	DutOutEnd();
 
-	BtAppRun();
+	AppRun();
 
 	DutOut("DUT ERROR bt_run_returned");
 	DutOutEnd();

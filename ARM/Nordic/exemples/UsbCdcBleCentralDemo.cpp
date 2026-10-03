@@ -81,6 +81,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "idelay.h"
 
 // BLE
+#include "app_evt_handler.h"
 #include "bluetooth/bt_app.h"
 #include "bluetooth/blueio_blesrvc.h"
 #include "bluetooth/bt_dev.h"
@@ -1204,7 +1205,7 @@ int main(void)
 
 	BtAppScanInit((BtGapScanCfg_t*)&s_bleScanInitCfg);// Register the non-GATT BLE services and their characteristics
 	BtAppScan();
-	BtAppRun();
+	AppRun();
 
 	return 0;
 }

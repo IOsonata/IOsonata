@@ -145,7 +145,7 @@ int main(void)
 
 	while (1)
 	{
-		UsbProcess(USB_DEVNO);
+		AppEvtHandlerExec();
 	}
 	return 0;
 }

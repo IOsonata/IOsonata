@@ -4,7 +4,8 @@
 @brief	LE Secure Connections ECDH over an injected KeyAgreeEngine.
 
 		The SoftDevice owns the SMP state machine and delegates P-256 work to this
-		module. Peer requests are deferred from the stack callback to the main loop.
+		module. Peer requests are deferred from the stack callback to an event queued
+		with BtEvtQue.
 		A local key pair is assigned to at most one pairing procedure. Concurrent
 		pairing attempts fail closed instead of sharing private-key material, and a
 		fresh key pair is generated after every completed or aborted procedure.
@@ -44,6 +45,7 @@ SOFTWARE.
 
 #include "crypto/icrypto.h"
 #include "bt_lesc.h"
+#include "bluetooth/bt_app.h"
 #include "bluetooth/bt_smp.h"
 
 /******** For DEBUG Trace ************/
@@ -86,6 +88,8 @@ static ble_gap_lesc_oob_data_t s_OobPeer;
 static uint16_t s_OobConnHdl = BLE_CONN_HANDLE_INVALID;
 static BtLescOobPeerHandler_t s_OobPeerHandler;
 static KeyAgreeEngine *s_pLescCrypto;
+// Set while the request handler is in the queue, so that it is queued once
+static volatile bool s_bLescWorkQueued;
 alignas(CRYPTO_KEYCTX_ALIGN_MAX) static uint8_t s_LescEcdhKeyCtx[LESC_KEYCTX_SIZE];
 
 static void ByteOrderInvert(const uint8_t *pIn, uint8_t *pOut)
@@ -162,6 +166,8 @@ static bool KeyInUse(void)
 	return false;
 }
 
+static void LescWorkQue(void);
+
 static void SlotRelease(int Index)
 {
 	if (Index < 0 || Index >= LinkCount() || !s_PeerKeys[Index].bAssigned)
@@ -170,6 +176,7 @@ static void SlotRelease(int Index)
 	}
 	CryptoSecureWipe(&s_PeerKeys[Index], sizeof(s_PeerKeys[Index]));
 	s_bRegenPending = true;
+	LescWorkQue();
 }
 
 static void OobRelease(uint16_t ConnHdl)
@@ -291,6 +298,7 @@ bool BtLescInit(void)
 	// key accessor returns null, so pairing fails closed rather than using an
 	// uninitialized key.
 	s_bRegenPending = true;
+	LescWorkQue();
 	DEBUG_PRINTF("LESC initial keypair deferred st=%d\r\n", (int)status);
 	return true;
 }
@@ -298,7 +306,7 @@ bool BtLescInit(void)
 ble_gap_lesc_p256_pk_t *BtLescPubKeyGet(void)
 {
 	// Do not hand the same public/private key pair to another link. After a
-	// pairing releases its slot, regeneration is deferred to the main loop;
+	// pairing releases its slot, regeneration is deferred to the queued event;
 	// until that completes the old public key must remain unavailable.
 	if (!s_bKeyPairGen || KeyInUse() || s_bRegenPending)
 	{
@@ -417,11 +425,12 @@ static CRYPTO_STATUS ComputeAndReply(BtLescPeerKey_t *pPeer)
 bool BtLescRequestHandler(void)
 {
 	bool result = true;
+	bool busy = false;
 
 	// Startup and post-pairing regeneration are attempted before DHKey work.
-	// On the first BtAppRun iteration this gives the SoftDevice RNG another
-	// chance after its initial pool has been seeded, before a connection can
-	// request the local public key.
+	// A deferred initial generation is queued at init, which gives the
+	// SoftDevice RNG another chance after its initial pool has been seeded,
+	// before a connection can request the local public key.
 	if (s_bRegenPending && !KeyInUse())
 	{
 		CRYPTO_STATUS status = BtLescKeyPairGenStatus();
@@ -429,7 +438,11 @@ bool BtLescRequestHandler(void)
 		{
 			s_bRegenPending = false;
 		}
-		else if (status != CRYPTO_STATUS_BUSY)
+		else if (status == CRYPTO_STATUS_BUSY)
+		{
+			busy = true;
+		}
+		else
 		{
 			DEBUG_PRINTF("LESC keypair regenerate failed st=%d\r\n", (int)status);
 			result = false;
@@ -445,6 +458,7 @@ bool BtLescRequestHandler(void)
 		CRYPTO_STATUS status = ComputeAndReply(&s_PeerKeys[i]);
 		if (status == CRYPTO_STATUS_BUSY)
 		{
+			busy = true;
 			continue;
 		}
 
@@ -459,7 +473,36 @@ bool BtLescRequestHandler(void)
 		}
 	}
 
+	// The crypto was busy: try again from the queue
+	if (busy)
+	{
+		LescWorkQue();
+	}
+
 	return result;
+}
+
+// Key pair generation and DHKey replies run outside the SoftDevice event
+// interrupt, from the Bluetooth event queue.
+static void LescWorkEvt(uint32_t Evt, void *pCtx)
+{
+	(void)Evt;
+	(void)pCtx;
+
+	s_bLescWorkQueued = false;
+	(void)BtLescRequestHandler();
+}
+
+static void LescWorkQue(void)
+{
+	if (s_bLescWorkQueued == false)
+	{
+		s_bLescWorkQueued = true;
+		if (BtEvtQue(0, nullptr, LescWorkEvt) == false)
+		{
+			s_bLescWorkQueued = false;
+		}
+	}
 }
 
 static void OnDhKeyRequest(uint16_t ConnHdl,
@@ -483,6 +526,7 @@ static void OnDhKeyRequest(uint16_t ConnHdl,
 		memcpy(pPeer->Value, pReq->p_pk_peer->pk,
 			BLE_GAP_LESC_P256_PK_LEN);
 	}
+	LescWorkQue();
 }
 
 static uint32_t OobDataSet(uint16_t ConnHdl)

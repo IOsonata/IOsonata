@@ -13,9 +13,9 @@ its cable detect are behind UsbdInit and friends, and one port file answers
 them per MCU family, so the same source builds for every target that has a
 USB device controller.
 
-USB RX/TX packet progress is interrupt driven. UsbProcess handles device
-attach/detach and class housekeeping and should still be called regularly from
-the main loop or a thread.
+USB RX/TX packet progress is interrupt driven. Deferred endpoint work, attach,
+detach and class housekeeping are queued by the USB stack in the application
+event queue, which the main loop runs with AppEvtHandlerExec.
 
 @author	Hoang Nguyen Hoan
 @date	Aug. 28, 2026
@@ -175,7 +175,7 @@ int main()
 
 	while (1)
 	{
-	    UsbProcess(USB_DEVNO);
+	    AppEvtHandlerExec();
 
 	    if (pending > 0)
 	    {

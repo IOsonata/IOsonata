@@ -424,7 +424,7 @@ int main()
 	(void)UsbEnable(USB_DEVNO);
 	while (1)
 	{
-		UsbProcess(USB_DEVNO);
+		AppEvtHandlerExec();
 	}
 
 	return 0;

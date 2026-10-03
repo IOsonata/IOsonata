@@ -1390,11 +1390,13 @@ static void UsbCoreResetDeviceState(bool NotifyClasses)
 
 void UsbDevProcessEvent(int DevNo, const UsbCtrlrEvt_t *pEvt)
 {
-	(void)DevNo;
 	if (pEvt == nullptr)
 	{
 		return;
 	}
+
+	// Class work that follows this event runs from the process event
+	UsbProcessQue(DevNo);
 
 	switch (pEvt->Type)
 	{
@@ -1875,7 +1877,16 @@ const uint8_t *UsbGetDescriptor(int DevNo, uint8_t Type, uint8_t Index,
 
 bool UsbEnable(int DevNo)
 {
-	return DevNo == s_Core.DevNo && UsbDevEnable();
+	if (DevNo != s_Core.DevNo)
+	{
+		return false;
+	}
+
+	// First pass of the process event: reports the cable level and retries the
+	// connection of a board that started without a cable.
+	UsbProcessQue(DevNo);
+
+	return UsbDevEnable();
 }
 
 void UsbDisable(int DevNo)
@@ -1891,6 +1902,31 @@ __attribute__((weak)) bool UsbEvtQue(uint32_t EvtId, void *pCtx,
 									  UsbEvtQueHandler_t Handler)
 {
 	return AppEvtHandlerQue(EvtId, pCtx, Handler);
+}
+
+// Set while the process event is in the queue, so that it is queued once
+static volatile bool s_bUsbProcessQueued = false;
+
+static void UsbProcessEvt(uint32_t Evt, void *pCtx)
+{
+	(void)pCtx;
+
+	s_bUsbProcessQueued = false;
+	UsbProcess((int)Evt);
+}
+
+void UsbProcessQue(int DevNo)
+{
+	if (DevNo != s_Core.DevNo || s_bUsbProcessQueued)
+	{
+		return;
+	}
+
+	s_bUsbProcessQueued = true;
+	if (UsbEvtQue((uint32_t)DevNo, nullptr, UsbProcessEvt) == false)
+	{
+		s_bUsbProcessQueued = false;
+	}
 }
 
 void UsbProcess(int DevNo)

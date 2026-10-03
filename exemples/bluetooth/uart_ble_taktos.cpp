@@ -42,6 +42,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "TaktOS.h"
 #include "TaktOSThread.h"
 #include "TaktOSSem.h"
+#include "TaktOSQueue.h"
 
 #include "bluetooth/bt_app.h"
 #include "bluetooth/bt_gatt.h"
@@ -86,8 +87,19 @@ void UartTxSrvcCallback(BtGattChar_t *pChar, uint8_t *pData, int Offset, int Len
 static hTaktOSThread_t g_BleTask = NULL;
 static hTaktOSThread_t g_RxTask = NULL;
 
-static TaktOSSem_t g_BleEvtSem;
 static TaktOSSem_t g_RxEvtSem;
+
+// Bluetooth work: one message per BtEvtQue call, run by the BLE task
+typedef struct {
+	uint32_t EvtId;
+	void *pCtx;
+	BtEvtQueHandler_t Handler;
+} BleWork_t;
+
+#define BLE_WORK_QUE_SIZE				16u
+
+static uint8_t g_BleWorkQueMem[BLE_WORK_QUE_SIZE * sizeof(BleWork_t)] TAKT_ALIGNED(4);
+static TaktOSQueue_t g_BleWorkQue;
 
 static uint8_t g_BleTaskMem[TAKTOS_THREAD_MEM_SIZE(BLE_TAKTOS_THREAD_STACK)] TAKT_ALIGNED(4);
 static uint8_t g_RxTaskMem[TAKTOS_THREAD_MEM_SIZE(BLE_TAKTOS_THREAD_STACK)] TAKT_ALIGNED(4);
@@ -131,8 +143,6 @@ const BtAppDevInfo_t s_UartBleDevDesc {
 	"0.0",                  // Firmware version string
 	"0.0",                  // Hardware version string
 };
-
-void BtAppEvtNotify(void);
 
 const BtAppCfg_t s_BleAppCfg = {
 	.Role = BTAPP_ROLE_PERIPHERAL,
@@ -292,22 +302,15 @@ int UartEvtHandler(UARTDEV *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLe
 	return cnt;
 }
 
-// RTOS bridge: TaktOS-specific implementations of the generic event hooks
-// declared in bluetooth/bt_app.h. The BLE stack's IRQ glue calls
-// BtAppEvtNotify() from interrupt context; the BLE task blocks in
-// BtAppEvtWait() until the semaphore is signalled, then drains pending
-// events via BtAppEvtDispatch(). Both functions are strong overrides of
-// the weak defaults shipped with the stack and port.
-
-void BtAppEvtNotify(void)
+// RTOS bridge: link-time override of BtEvtQue, see bluetooth/bt_app.h. The
+// Bluetooth stack calls it, often from interrupt context, for every piece of
+// work that must run outside the interrupt. Each one becomes a message to the
+// BLE task, which runs it. The application event queue is not used.
+bool BtEvtQue(uint32_t EvtId, void *pCtx, BtEvtQueHandler_t Handler)
 {
-	(void)TaktOSSemGive(&g_BleEvtSem, false);
-}
+	const BleWork_t work = { EvtId, pCtx, Handler };
 
-void BtAppEvtWait(void)
-{
-	(void)TaktOSSemTake(&g_BleEvtSem, true, TAKTOS_WAIT_FOREVER);
-	BtAppEvtDispatch();
+	return TaktOSQueueSend(&g_BleWorkQue, &work, false, 0) == TAKTOS_OK;
 }
 
 static void RxTask(void * pvParameter)
@@ -332,11 +335,20 @@ void BtAppInitUserData()
 }
 
 
-// BLE task: runs the stack's main loop. BtAppRun() blocks on BtAppEvtWait()
-// until events arrive, then dispatches them; loops forever.
+// BLE task: runs the Bluetooth work as its messages arrive, forever.
 static void BleTask(void * pvParameter)
 {
-    BtAppRun();
+    (void)pvParameter;
+
+    while (1)
+    {
+        BleWork_t work;
+
+        if (TaktOSQueueReceive(&g_BleWorkQue, &work, true, TAKTOS_WAIT_FOREVER) == TAKTOS_OK)
+        {
+            work.Handler(work.EvtId, work.pCtx);
+        }
+    }
 }
 
 
@@ -346,11 +358,6 @@ static void BleTask(void * pvParameter)
 
 void TaktOSAppInit()
 {
-    if (TaktOSSemInit(&g_BleEvtSem, 0u, 1u) != TAKTOS_OK)
-    {
-        AppFatalError(APP_ERR_INVALID_PARAM);
-    }
-
     if (TaktOSSemInit(&g_RxEvtSem, 0u, 1u) != TAKTOS_OK)
     {
         AppFatalError(APP_ERR_INVALID_PARAM);
@@ -403,6 +410,13 @@ void TaktOSAppInit()
 int main()
 {
     HardwareInit();
+
+    // The Bluetooth work queue exists before BtAppInit queues its first work
+    if (TaktOSQueueInit(&g_BleWorkQue, g_BleWorkQueMem, sizeof(BleWork_t),
+                        BLE_WORK_QUE_SIZE) != TAKTOS_OK)
+    {
+        AppFatalError(APP_ERR_INVALID_PARAM);
+    }
 
     BtAppInit(&s_BleAppCfg);//, true);
 

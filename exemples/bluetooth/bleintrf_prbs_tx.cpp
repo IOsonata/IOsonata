@@ -368,7 +368,7 @@ int main()
     g_BtIntrf.Init(s_BleInrfCfg);
 
     //AppEvtHandlerQue(0, 0, PrbsChedHandler);
-    BtAppRun();
+    AppRun();
 
 	return 0;
 }

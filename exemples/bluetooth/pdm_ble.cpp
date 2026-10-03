@@ -39,6 +39,7 @@ SOFTWARE.
 
 #include "istddef.h"
 #include "convutil.h"
+#include "app_evt_handler.h"
 #include "bluetooth/bt_app.h"
 #include "bluetooth/bt_intrf.h"
 #include "bluetooth/bt_gap.h"
@@ -404,7 +405,7 @@ int main()
 
     g_BleIntrf.Init(s_BleInrfCfg);
 
-    BtAppRun();
+    AppRun();
 
 	return 0;
 }

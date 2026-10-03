@@ -168,8 +168,22 @@ bool UsbEnable(int DevNo);
 /** @brief Disconnect, disable the interrupt and clear state. */
 void UsbDisable(int DevNo);
 
-/** @brief Cable and housekeeping pass. Call from the application loop. */
+/**
+ * @brief	Cable and class work pass: cable level, connection retry, class
+ * 			Process.
+ *
+ * Runs from the process event the USB stack queues itself with UsbEvtQue,
+ * after each controller and endpoint event. An application does not call it.
+ */
 void UsbProcess(int DevNo);
+
+/**
+ * @brief	Queue the process event, once, through UsbEvtQue.
+ *
+ * Called by the USB stack after controller and endpoint events, and by the
+ * source of a cable level change. Interrupt safe.
+ */
+void UsbProcessQue(int DevNo);
 
 /// Deferred USB work: runs outside the interrupt with the values it was
 /// queued with. Same signature as AppEvtHandler_t.

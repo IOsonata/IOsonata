@@ -181,11 +181,6 @@ typedef struct {
 
 static const BtAppNrf52Conn_t *s_pBtAppNrf52Conn = nullptr;
 
-// Security work of the main loop: the LESC request handler. Set by
-// BtAppSecInit through BtAppNrf52SecPollSet. An application that does not use
-// security never sets it, so none of it is linked.
-static void (*s_pBtAppNrf52SecPoll)(void) = nullptr;
-
 // Configuration given to BtAppInit, used by BtAppConnInit
 static const BtAppCfg_t *s_pBtAppCfg = nullptr;
 
@@ -1360,16 +1355,45 @@ const static TimerCfg_t s_BtAppNrf52TimerCfg = {
 // along with the low frequency one.
 static TimerDev_t s_BtAppNrf52Timer;
 
+// Set while the timeout check is in the queue, so that it is queued once
+static volatile bool s_bBtAppNrf52TickQueued = false;
+
+// Timeout check of the connection support, queued once per second
+static void BtAppNrf52TickEvt(uint32_t Evt, void *pCtx)
+{
+	(void)Evt;
+	(void)pCtx;
+
+	s_bBtAppNrf52TickQueued = false;
+
+	// Generic indication transaction timeout (Core Vol 3 Part F 3.3.3). Cheap
+	// no-op when nothing is pending.
+	// The pairing timeout (Core Vol 3 Part H 3.4) is not driven here: the
+	// SoftDevice runs SMP and its timer on this port.
+	if (s_pBtAppNrf52Conn != nullptr)
+	{
+		s_pBtAppNrf52Conn->Tick();
+	}
+}
+
 static void BtAppNrf52TimerHandler(TimerDev_t * const pTimer, uint32_t Evt)
 {
 	(void)pTimer;
 
-	// The interrupt is also the wakeup of the main loop, which runs the
-	// timeout checks after the wait returns, so that a fully silent link
-	// still reaches them.
 	if (Evt & TIMER_EVT_TRIGGER(0))
 	{
 		BtAppConnParamTick();
+
+		// The timeout check runs outside the interrupt, so that a fully silent
+		// link still reaches it.
+		if (s_bBtAppNrf52TickQueued == false)
+		{
+			s_bBtAppNrf52TickQueued = true;
+			if (BtEvtQue(0, nullptr, BtAppNrf52TickEvt) == false)
+			{
+				s_bBtAppNrf52TickQueued = false;
+			}
+		}
 	}
 }
 
@@ -1534,6 +1558,20 @@ static uint32_t s_BtAppSchedMem[CEIL_DIV(APP_SCHED_BUF_SIZE(SCHED_MAX_EVENT_DATA
 extern "C" __attribute__((weak)) const BtAppSchedCfg_t g_BtAppSchedCfg = {
 	s_BtAppSchedMem, sizeof(s_BtAppSchedMem), SCHED_MAX_EVENT_DATA_SIZE, SCHED_QUEUE_SIZE
 };
+
+// First event of the Bluetooth subsystem, queued by BtAppInit: starts
+// advertising once the application runs the queue.
+static void BtAppStartEvt(uint32_t Evt, void *pCtx)
+{
+	(void)Evt;
+	(void)pCtx;
+
+	if (g_BtAppData.State == BTAPP_STATE_INITIALIZED &&
+		(g_BtAppData.AppDevice.Conn.Role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER)))
+	{
+		BtAdvStart();
+	}
+}
 
 bool BtAppInit(const BtAppCfg_t *pCfg)//, bool bEraseBond)
 {
@@ -1728,78 +1766,17 @@ bool BtAppInit(const BtAppCfg_t *pCfg)//, bool bEraseBond)
 
     g_BtAppData.State = BTAPP_STATE_INITIALIZED;
 
+    // Advertising starts from the queue, once the application has finished its
+    // own setup after BtAppInit and runs the queue.
+    if (BtEvtQue(0, nullptr, BtAppStartEvt) == false)
+    {
+    	DEBUG_PRINTF("BtAppInit FAIL: BtEvtQue\r\n");
+    	return false;
+    }
+
     return true;
 }
 
-// Called by BtAppSecInit of the security module (bt_sec_nrf52.cpp) to have
-// its main loop work called from BtAppRun.
-void BtAppNrf52SecPollSet(void (*Poll)(void))
-{
-	s_pBtAppNrf52SecPoll = Poll;
-}
-
-void BtAppRun()
-{
-	if (g_BtAppData.State != BTAPP_STATE_INITIALIZED)
-	{
-		return;
-	}
-
-	//g_BleAppData.bAdvertising = false;
-	//g_BleAppData.State = BLEAPP_STATE_IDLE;
-
-	if (g_BtAppData.AppDevice.Conn.Role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER))// != BLEAPP_ROLE_CENTRAL)
-	{
-		BtAdvStart();//BLEAPP_ADVMODE_FAST);
-	}
-
-	while (1)
-    {
-		if (g_BtAppSchedCfg.pMem != nullptr)
-		{
-			app_sched_execute();
-		}
-		AppEvtHandlerExec();
-
-		// LESC request handling of the security module, when the application
-		// uses security.
-		if (s_pBtAppNrf52SecPoll != nullptr)
-		{
-			s_pBtAppNrf52SecPoll();
-		}
-
-		// Drive the generic indication transaction timeout (Core Vol 3 Part F
-		// 3.3.3). Cheap no-op when nothing is pending. This loop wakes on
-		// events, the 1 s trigger of the port timer is the wakeup of a link
-		// that goes fully silent.
-		// The pairing timeout (Core Vol 3 Part H 3.4) is not driven here: the
-		// SoftDevice runs SMP and its timer on this port. The generic SMP link
-		// table is never populated, so BtSmpTimeoutCheck had nothing to check
-		// and only kept that table and the SMP toolbox in the image.
-		if (s_pBtAppNrf52Conn != nullptr)
-		{
-			s_pBtAppNrf52Conn->Tick();
-		}
-
-		BtAppEvtWait();
-    }
-
-	/*	if (g_BleAppData.AppMode == BLEAPP_MODE_NOCONNECT)
-		{
-			uint32_t err_code = sd_ble_gap_adv_start(g_AdvInstance.adv_handle, BLEAPP_CONN_CFG_TAG);
-			//uint32_t err_code = ble_advertising_start(&g_AdvInstance, BLE_ADV_MODE_FAST);
-			APP_ERROR_CHECK(err_code);
-		}
-		else
-		{
-			if (g_BleAppData.AppRole & BLEAPP_ROLE_PERIPHERAL)
-			{
-				uint32_t err_code = ble_advertising_start(&g_AdvInstance, BLE_ADV_MODE_FAST);
-				APP_ERROR_CHECK(err_code);
-			}
-		}
-	*/
-}
 
 
 
@@ -1866,24 +1843,25 @@ bool BtAppEnableNotify(uint16_t ConnHandle, uint16_t CharHandle)//ble_uuid_t * c
 }
 
 
-void BtAppEvtDispatch()
+// Wait of AppRun while the SoftDevice is enabled: the SoftDevice must be the
+// one putting the core to sleep. Overrides the weak WFE default, and is linked
+// only by an application that uses Bluetooth.
+void AppWait(void)
 {
-    nrf_sdh_evts_poll();                    /* let the handlers run first, incase the EVENT occured before creating this task */
-}
+	if (nrf_sdh_is_enabled() == false)
+	{
+		__WFE();
+		return;
+	}
 
-// Port-level weak default for BtAppEvtWait. Bare-metal polling apps use this.
-// RTOS apps provide a strong override (e.g. ulTaskNotifyTake / TaktOSSemTake)
-// in their bridge code, which beats this weak.
-__attribute__((weak)) void BtAppEvtWait(void)
-{
 	sd_app_evt_wait();
 }
 
-// Trampoline called from sd_dispatch.cpp's SD_EVT_IRQHandler.
-// Notifies any RTOS waiter then drains SoftDevice events so NRF_SDH observers run.
+// Trampoline called from sd_dispatch.cpp's SD_EVT_IRQHandler. SoftDevice
+// events are handled in the interrupt; what must run outside of it is queued
+// with BtEvtQue by the handlers.
 static void BtAppSDDispatch(void)
 {
-	BtAppEvtNotify();
 	nrf_sdh_evts_poll();
 }
 

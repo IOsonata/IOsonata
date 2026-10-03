@@ -107,12 +107,10 @@ static void ServiceThread(void *pArg)
 			{
 				work.Handler(work.EvtId, work.pCtx);
 			}
-			// Cable and class housekeeping.
-			UsbProcess(USB_DEVNO);
 		}
 		TaktOSThreadYield();
 		// Retain notifications arriving during processing. One tick bounds the
-		// wait for polled cable/class work and any work left by a bounded drain.
+		// wait for any work left by a bounded drain.
 		(void)TaktOSSemTake(&s_ServiceWake, true, 1U);
 	}
 }

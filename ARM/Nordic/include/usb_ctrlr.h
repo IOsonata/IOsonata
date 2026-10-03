@@ -230,14 +230,12 @@ bool UsbCtrlrInit(int DevNo, const UsbCtrlrCfg_t *pCfg);
 bool UsbCtrlrStart(int DevNo);
 void UsbCtrlrStop(int DevNo);
 #if defined(USBD_PRESENT)
-void AppEvtHandlerExec(void);
-
-// Deferred endpoint work runs from the application event queue. DMA
+// Deferred endpoint work is queued with UsbEvtQue and run by whoever owns
+// that queue, the application main loop or the thread serving USB. DMA
 // retirement and immediate handoff stay in USBD_IRQHandler().
 static inline void UsbCtrlrProcess(int DevNo)
 {
 	(void)DevNo;
-	AppEvtHandlerExec();
 }
 
 static inline bool UsbCtrlrVbusDetected(int DevNo)

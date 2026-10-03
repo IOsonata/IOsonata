@@ -84,7 +84,16 @@ void UartTxSrvcCallback(BtGattChar_t *pChar, uint8_t *pData, int Offset, int Len
 
 static TaskHandle_t g_BleTask;  //!< Reference to SoftDevice FreeRTOS task.
 static TaskHandle_t g_RxTask;
-QueueHandle_t g_QueHandle = NULL;
+// Bluetooth work: one message per BtEvtQue call, run by the BLE task
+typedef struct {
+	uint32_t EvtId;
+	void *pCtx;
+	BtEvtQueHandler_t Handler;
+} BleWork_t;
+
+#define BLE_WORK_QUE_SIZE		16
+
+static QueueHandle_t g_BleWorkQue = NULL;
 
 //static const ble_uuid_t s_AdvUuids[] = {
 //	{BLUEIO_UUID_UART_SERVICE, BLE_UUID_TYPE_VENDOR_BEGIN}
@@ -124,7 +133,6 @@ const BtAppDevInfo_t s_UartBleDevDesc {
 	"0.0",                  // Hardware version string
 };
 
-void BtAppEvtNotify(void);
 
 const BtAppCfg_t s_BleAppCfg = {
 	.Role = BTAPP_ROLE_PERIPHERAL,
@@ -135,7 +143,6 @@ const BtAppCfg_t s_BleAppCfg = {
 	.ProductId = 1,						// PnP Product ID
 	.ProductVer = 0,					// Pnp prod version
 	.pDevInfo = &s_UartBleDevDesc,
-	.bExtAdv = false,
 	.pAdvManData = g_ManData,			// Manufacture specific data to advertise
 	.AdvManDataLen = sizeof(g_ManData),	// Length of manufacture specific data
 	.pSrManData = NULL,
@@ -292,39 +299,25 @@ int nRFUartEvthandler(UARTDEV *pDev, UART_EVT EvtId, uint8_t *pBuffer, int Buffe
 	return cnt;
 }
 
-void BtAppEvtNotify(void)
+// RTOS bridge: link-time override of BtEvtQue, see bluetooth/bt_app.h. The
+// Bluetooth stack calls it, often from the SoftDevice event interrupt, for
+// every piece of work that must run outside the interrupt. Each one becomes a
+// message to the BLE task, which runs it. The application event queue is not
+// used.
+bool BtEvtQue(uint32_t EvtId, void *pCtx, BtEvtQueHandler_t Handler)
 {
-    BaseType_t yield_req = pdFALSE;
+	const BleWork_t work = { EvtId, pCtx, Handler };
 
-#ifdef RTOS_QUEUE
-    uint32_t item;
-    BaseType_t lError = xQueueSendToBackFromISR( g_QueHandle, &item, &yield_req );
-#else
-    vTaskNotifyGiveFromISR(g_BleTask, &yield_req);
-#endif
-    if (yield_req == pdTRUE)
-    {
-    	//taskYIELD();
-        portYIELD_FROM_ISR(yield_req);
-    }
+	if (__get_IPSR() == 0)
+	{
+		return xQueueSendToBack(g_BleWorkQue, &work, 0) == pdPASS;
+	}
 
-   // return 0;
-}
+	BaseType_t yield_req = pdFALSE;
+	const BaseType_t res = xQueueSendToBackFromISR(g_BleWorkQue, &work, &yield_req);
+	portYIELD_FROM_ISR(yield_req);
 
-
-void BtAppEvtWait(void)
-{
-
-    nrf_sdh_evts_poll();                    /* let the handlers run first, incase the EVENT occured before creating this task */
-#ifdef RTOS_QUEUE
-    uint32_t item;
-    BaseType_t lError = xQueueReceive( g_QueHandle, &item, -1 );
-#else
-
-    ulTaskNotifyTake(pdFALSE,         /* Clear the notification value before exiting (equivalent to the binary semaphore). */
-                     portMAX_DELAY); /* Block indefinitely (INCLUDE_vTaskSuspend has to be enabled).*/
-#endif
-
+	return res == pdPASS;
 }
 
 static void RxTask(void * pvParameter)
@@ -344,21 +337,25 @@ static void RxTask(void * pvParameter)
     }
 }
 
-/* This function gets events from the SoftDevice and processes them. */
+/* Runs the Bluetooth work as its messages arrive, forever. */
 static void BleTask(void * pvParameter)
 {
-	//g_Uart.printf("UART over BLE with FreeRTOS\r\n");
+    (void)pvParameter;
 
-    BtAppRun();
+    while (1)
+    {
+        BleWork_t work;
+
+        if (xQueueReceive(g_BleWorkQue, &work, portMAX_DELAY) == pdPASS)
+        {
+            work.Handler(work.EvtId, work.pCtx);
+        }
+    }
 }
 
 
 void FreeRTOSInit()
 {
-#ifdef RTOS_QUEUE
-    g_QueHandle = xQueueCreate( 2, 4 );
-#endif
-
     BaseType_t xReturned = xTaskCreate(BleTask,
                                        "BLE",
                                        NRF_BLE_FREERTOS_SDH_TASK_STACK,
@@ -393,6 +390,13 @@ void FreeRTOSInit()
 int main()
 {
     HardwareInit();
+
+    // The Bluetooth work queue exists before BtAppInit queues its first work
+    g_BleWorkQue = xQueueCreate(BLE_WORK_QUE_SIZE, sizeof(BleWork_t));
+    if (g_BleWorkQue == NULL)
+    {
+        APP_ERROR_HANDLER(NRF_ERROR_NO_MEM);
+    }
 
     BtAppInit(&s_BleAppCfg);//, true);
 

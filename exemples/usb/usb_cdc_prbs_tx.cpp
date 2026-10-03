@@ -17,8 +17,9 @@ USB device controller.
 Tx follows the same model as UART: the application only fills the Tx CFifo.
 The first write that finds Tx idle starts the endpoint with whatever data is
 available, and every completion interrupt sends whatever has accumulated
-since, until the FIFO comes up empty. UsbProcess is needed while waiting for
-USB attach and port open, not between transmitted bytes.
+since, until the FIFO comes up empty. The deferred USB work runs from the
+application event queue, so the loop runs it while it waits for attach, port
+open or FIFO space.
 
 @author	Hoang Nguyen Hoan
 @date	Aug. 28, 2026
@@ -151,7 +152,7 @@ int main()
 	{
 		if (g_Cdc.IsPortOpen() == false)
 		{
-			UsbProcess(USB_DEVNO);
+			AppEvtHandlerExec();
 			continue;
 		}
 
@@ -165,12 +166,12 @@ int main()
 		}
 		else
 		{
-			UsbProcess(USB_DEVNO);
+			AppEvtHandlerExec();
 		}
 #else
 		// Preserve the existing buffered-mode event-processing behavior for a
 		// separate measurement.
-		UsbProcess(USB_DEVNO);
+		AppEvtHandlerExec();
 
 		// Demo transfer buffer
 		for (int i = 0; i < TEST_BUFSIZE; i++)
@@ -193,7 +194,7 @@ int main()
 			}
 			else
 			{
-				UsbProcess(USB_DEVNO);
+				AppEvtHandlerExec();
 			}
 
 			if (g_Cdc.IsPortOpen() == false)

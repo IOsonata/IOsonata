@@ -54,7 +54,7 @@ int main()
 	(void)UsbEnable(USB_DEVNO);
 	while (1)
 	{
-		UsbProcess(USB_DEVNO);
+		AppEvtHandlerExec();
 
 		// A port open restarts the host generator: restart the checker and
 		// drop any echo still pending from the previous session.

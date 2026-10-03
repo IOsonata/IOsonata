@@ -65,6 +65,7 @@ SOFTWARE.
 #ifdef SOFTDEVICE_PRESENT
 #include "nrf_soc.h"
 #include "nrf_sdm.h"
+#include "nrf_mbr.h"
 #include "nrf_error.h"
 #endif
 
@@ -167,6 +168,9 @@ nRFUsbdState_t s_Usbd;
 
 extern bool nRFUsbdIsoStart(void) __attribute__((weak));
 
+// usb_ctrlr_nrf52_vbus.cpp: cable attach and removal interrupt
+void nRFUsbdVbusIntInit(uint32_t Prio);
+
 static inline __attribute__((always_inline)) bool nRFUsbdDmaActive(void);
 static void nRFUsbdHostResume(void);
 
@@ -213,15 +217,17 @@ void nRFUsbEpRegisteredEvent(uint8_t EpNum, uint8_t Dir,
  * sd_softdevice_is_enabled is an SVC. On a part with no SoftDevice in flash
  * nothing implements that vector, so the call lands in the default handler
  * and stops there. The image has to be found before it may be asked
- * anything. Same test as SdPresent in nvm_nrfx.cpp.
+ * anything.
  */
 static bool UsbdSdPresent(void)
 {
-#if defined(SD_MAGIC_NUMBER) && defined(MBR_SIZE)
-	return SD_MAGIC_NUMBER_GET(MBR_SIZE) == SD_MAGIC_NUMBER;
-#else
-	return false;
-#endif
+	// SD_MAGIC_NUMBER is only in the bootloader header, which is not part of
+	// this build: an #if on it was always false and the SoftDevice was never
+	// asked for the clock. The magic number follows the MBR.
+	const volatile uint32_t *pMagic = (const volatile uint32_t *)(
+		MBR_SIZE + SOFTDEVICE_INFO_STRUCT_OFFSET + 4U);
+
+	return *pMagic == 0x51B1E5DBUL;
 }
 
 static bool UsbdSdRunning(void)
@@ -1232,6 +1238,10 @@ bool UsbCtrlrInit(int DevNo, const UsbCtrlrCfg_t *pCfg)
 						  sizeof(nRFEPPkt_t), true);
 
 	nRFUsbdResetState();
+
+	// The cable edges queue the process event, which connects or disconnects
+	nRFUsbdVbusIntInit(s_Usbd.IntPrio);
+
 	return true;
 }
 
@@ -1239,7 +1249,7 @@ bool UsbCtrlrStart(int DevNo)
 {
 	if (UsbCtrlrVbusDetected(DevNo) == false)
 	{
-		// No cable. Not a failure: the poll in UsbdProcess reports the attach
+		// No cable. Not a failure: the cable interrupt queues the attach
 		// and the caller comes back.
 		return false;
 	}

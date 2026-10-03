@@ -46,6 +46,7 @@
 #include "nrf_soc.h"
 #include "nrf_nvic.h"
 #include "nrf_assert.h"
+#include "app_evt_handler.h"
 //#include "app_util_platform.h"
 
 /**@brief Structure for holding a scheduled event header. */
@@ -67,6 +68,31 @@ static uint16_t         m_queue_size;           /**< Number of queue entries. */
 #if APP_SCHEDULER_WITH_PROFILER
 static uint16_t m_max_queue_utilization;    /**< Maximum observed queue utilization. */
 #endif
+
+// Set while app_sched_execute is in the application event queue, so that it
+// is queued once however many events are put.
+static volatile bool m_execute_queued;
+
+static void app_sched_execute_evt(uint32_t Evt, void *pCtx)
+{
+    (void)Evt;
+    (void)pCtx;
+
+    m_execute_queued = false;
+    app_sched_execute();
+}
+
+static void app_sched_execute_que(void)
+{
+    if (m_execute_queued == false)
+    {
+        m_execute_queued = true;
+        if (AppEvtHandlerQue(0, NULL, app_sched_execute_evt) == false)
+        {
+            m_execute_queued = false;
+        }
+    }
+}
 
 #if APP_SCHEDULER_WITH_PAUSE
 static uint32_t m_scheduler_paused_counter = 0; /**< Counter storing the difference between pausing
@@ -210,6 +236,9 @@ uint32_t app_sched_event_put(void const              * p_event_data,
             }
 
             err_code = NRF_SUCCESS;
+
+            // The scheduler queue is run from the application event queue
+            app_sched_execute_que();
         }
         else
         {
@@ -254,6 +283,12 @@ void app_sched_resume(void)
     }
 //    CRITICAL_REGION_EXIT();
     (void) sd_nvic_critical_region_exit(__CR_NESTED);
+
+    // Events put while paused are still waiting
+    if (!APP_SCHED_QUEUE_EMPTY())
+    {
+        app_sched_execute_que();
+    }
 }
 #endif //APP_SCHEDULER_WITH_PAUSE
 

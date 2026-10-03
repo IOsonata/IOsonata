@@ -48,6 +48,9 @@ SOFTWARE.
 #endif
 
 #include "nrf_mpsl.h"
+#ifdef NRF52_SERIES
+#include "power_clock_irq_nrf52.h"
+#endif
 #include "mpsl_fem_init.h"
 #include "nrfx_power.h"
 
@@ -436,6 +439,12 @@ bool MpslInit(void)
 		return false;
 	}
 
+#ifdef NRF52_SERIES
+	// The shared POWER_CLOCK vector calls nRFClockIrqHandler. A priority
+	// already set by mpsl_init is kept.
+	nRFPowerClockIrqEnable(MPSL_HIGH_IRQ_PRIORITY + 4);
+#endif
+
 #if 0
 	static uint8_t timeslot_context = 0;
 	res = mpsl_timeslot_session_count_set((void *) timeslot_context,
@@ -486,6 +495,10 @@ void RADIO_IRQHandler(void)
 
 #ifdef NRF54L_SERIES
 void CLOCK_POWER_IRQHandler(void)
+#elif defined(NRF52_SERIES)
+// The nRF52 vector is shared with the USB cable events, see
+// power_clock_irq_nrf52.h. This is the clock part.
+void nRFClockIrqHandler(void)
 #else
 void POWER_CLOCK_IRQHandler()
 #endif

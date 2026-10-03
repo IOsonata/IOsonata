@@ -34,7 +34,6 @@ SOFTWARE.
 #include <string.h>
 
 #include "istddef.h"
-#include "app_evt_handler.h"
 #include "coredev/interrupt.h"
 #include "usb/usb_intrf.h"
 
@@ -419,6 +418,9 @@ static void UsbIntrfCtrlrOutEvent(UsbCtrlrEvtType_t Event,
 {
 	UsbDevIntrf_t *pIntrf = static_cast<UsbDevIntrf_t *>(pContext);
 
+	// Class work that follows this event runs from the process event
+	UsbProcessQue(pIntrf->DevNo);
+
 	switch (Event)
 	{
 		case USB_CTRLR_EVT_DRDY:
@@ -484,6 +486,9 @@ static void UsbIntrfCtrlrInEvent(UsbCtrlrEvtType_t Event,
 								 uint16_t Length, void *pContext)
 {
 	UsbDevIntrf_t *pIntrf = static_cast<UsbDevIntrf_t *>(pContext);
+
+	// Class work that follows this event runs from the process event
+	UsbProcessQue(pIntrf->DevNo);
 
 	if (Event == USB_CTRLR_EVT_CANCEL)
 	{

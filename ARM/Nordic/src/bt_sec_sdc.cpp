@@ -83,18 +83,20 @@ SOFTWARE.
 #endif
 /*******************************/
 
-// Defined in bt_app_sdc.cpp: gives BtAppRun the main loop work of this module.
+// Defined in bt_app_sdc.cpp: gives the port timer event the periodic work of
+// this module.
 void BtAppSdcSecPollSet(void (*Poll)(void));
 
 // Set when the bond store is in use, see BtAppSecInit.
 static bool s_bBtSecSdcBondStore = false;
 
-// Main loop work of the security module, called from BtAppRun after the
-// queued events. The port timer wakes the loop once per second.
+// Periodic work of the security module, called once per second from the
+// timer event of the port.
 static void BtSecSdcPoll(void)
 {
-	// Pairing timeout (Core Vol 3 Part H 3.4) and crypto engine retry.
-	// Cheap no-op when no pairing is in progress.
+	// Pairing timeout (Core Vol 3 Part H 3.4). A busy crypto engine is
+	// retried from its own queued event. Cheap no-op when no pairing is in
+	// progress.
 	BtSmpTimeoutCheck();
 
 	if (s_bBtSecSdcBondStore)
@@ -331,7 +333,7 @@ bool BtAppSecInit(void)
 		STORE_PRINTF("STORE: none, bSecure is 0 so bonds stay in RAM\r\n");
 	}
 
-	// Pairing timeout and bond save retry are driven from the main loop.
+	// Pairing timeout and bond save retry are driven from the port timer.
 	BtAppSdcSecPollSet(BtSecSdcPoll);
 
 	// Secure each new link: take the connection callback, the port one is

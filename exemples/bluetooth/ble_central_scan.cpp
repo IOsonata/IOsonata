@@ -35,6 +35,7 @@ SOFTWARE.
 ----------------------------------------------------------------------------*/
 
 #include "istddef.h"
+#include "app_evt_handler.h"
 #include "bluetooth/bt_app.h"
 #include "bluetooth/blueio_blesrvc.h"
 #include "blueio_board.h"
@@ -254,7 +255,7 @@ int main()
 
     BtAppScan();
 
-    BtAppRun();
+    AppRun();
 
 	return 0;
 }

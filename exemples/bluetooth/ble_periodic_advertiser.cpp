@@ -66,6 +66,7 @@ SOFTWARE.
 #include "iopinctrl.h"
 #include "syslog.h"
 
+#include "app_evt_handler.h"
 #include "bluetooth/bt_app.h"
 #include "bluetooth/bt_appearance.h"
 #include "bluetooth/bt_padv.h"
@@ -381,7 +382,8 @@ int main()
 #endif
 
 	// Build the advertising set. This configures an extended, non-connectable
-	// set on handle 0 and leaves it disabled; BtAppRun enables it.
+	// set on handle 0 and leaves it disabled; the first queued Bluetooth event
+	// enables it once AppRun runs.
 	if (BtAppInit(&s_BtAppCfg) == false)
 	{
 #ifdef UART_PINS
@@ -397,7 +399,7 @@ int main()
 
 	// Attach the periodic train to the set. The set exists now, so the
 	// parameters and data commands are accepted; the train reaches the air
-	// once BtAppRun enables the set.
+	// once the set is enabled from AppRun.
 	if (PeriodicTrainInit() == false)
 	{
 #ifdef UART_PINS
@@ -415,7 +417,7 @@ int main()
 	g_Timer.EnableTimerTrigger(0, 1000UL, TIMER_TRIG_TYPE_CONTINUOUS,
 		BtAppTimerHandler);
 
-	BtAppRun();
+	AppRun();
 
 	return 0;
 }

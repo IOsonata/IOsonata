@@ -786,7 +786,7 @@ int main()
 
 	uint32_t period = g_Timer.EnableTimerTrigger(0, 500UL, TIMER_TRIG_TYPE_CONTINUOUS, AppTimerHandler);
 
-    BtAppRun();
+    AppRun();
 
 	return 0;
 }

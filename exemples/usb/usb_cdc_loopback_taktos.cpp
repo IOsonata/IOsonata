@@ -41,7 +41,6 @@ SOFTWARE.
 
 #include <stdint.h>
 #include "cfifo.h"
-#include "app_evt_handler.h"
 #include "usb/usb.h"
 #include "usb/usbd_cdc.h"
 #include "coredev/system_core_clock.h"
@@ -79,10 +78,6 @@ static const UsbdCdcCfg_t s_CdcCfg = {
 // what the other USB demo in this tree uses. Put your own vendor and product
 // id here before shipping anything : a duplicate pair makes the host reuse a
 // driver and a saved COM port from somebody else's board.
-// Application event queue memory, replaces the 4 event library default. The
-// USB controller port queues its deferred endpoint events there.
-alignas(4) uint8_t g_AppEvtHandlerQueMem[APPEVT_HANDLER_QUE_MEMSIZE(16)];
-
 static const UsbCfg_t s_UsbCfg = {
 	.DevNo = USB_DEVNO,
 	.Mode = USB_MODE_DEVICE,
@@ -105,6 +100,53 @@ static const UsbCfg_t s_UsbCfg = {
 };
 
 static UsbdCdc s_Cdc;
+
+#define USB_WORK_QUE_SIZE		16U
+#define USB_WORK_PER_PASS		30U
+
+// Deferred USB work: queued by the controller interrupt, run by UsbThread.
+typedef struct {
+	uint32_t EvtId;
+	void *pCtx;
+	UsbEvtQueHandler_t Handler;
+} UsbWork_t;
+
+alignas(4) static uint8_t s_UsbWorkMem[
+	CFIFO_TOTAL_MEMSIZE(USB_WORK_QUE_SIZE, sizeof(UsbWork_t))];
+static hCFifo_t s_hUsbWork;
+
+// Link-time override of the library default, see usb.h. USB work goes to the
+// queue of the thread serving USB, the application event queue is not used.
+// Interrupt context: UsbThread cannot run before the entry is complete.
+bool UsbEvtQue(uint32_t EvtId, void *pCtx, UsbEvtQueHandler_t Handler)
+{
+	UsbWork_t *p = (UsbWork_t *)CFifoPut(s_hUsbWork);
+	if (p == nullptr)
+	{
+		return false;
+	}
+	p->EvtId = EvtId;
+	p->pCtx = pCtx;
+	p->Handler = Handler;
+	return true;
+}
+
+// Run queued USB work. The head is copied before it is released: the
+// interrupt can reuse the slot as soon as CFifoGet returns.
+static void UsbWorkExec(void)
+{
+	for (unsigned cnt = USB_WORK_PER_PASS; cnt > 0U; cnt--)
+	{
+		const UsbWork_t *p = (const UsbWork_t *)CFifoPeek(s_hUsbWork);
+		if (p == nullptr)
+		{
+			break;
+		}
+		const UsbWork_t work = *p;
+		(void)CFifoGet(s_hUsbWork);
+		work.Handler(work.EvtId, work.pCtx);
+	}
+}
 
 alignas(8) static uint8_t s_UsbThreadMem[TAKTOS_THREAD_MEM_SIZE(2048)];
 alignas(8) static uint8_t s_HeartbeatThreadMem[TAKTOS_THREAD_MEM_SIZE(512)];
@@ -129,9 +171,11 @@ static void UsbThread(void *pArg)
 	int pending = 0;
 	int offset = 0;
 
-	// Initialize USB after the scheduler starts.
-	if (!AppEvtHandlerInit(g_AppEvtHandlerQueMem, sizeof(g_AppEvtHandlerQueMem)) ||
-		!UsbInit(&s_UsbCfg) || !s_Cdc.Init(s_CdcCfg))
+	// Initialize USB after the scheduler starts. The work queue exists before
+	// USB can queue its first event.
+	s_hUsbWork = CFifoInit(s_UsbWorkMem, sizeof(s_UsbWorkMem),
+						   sizeof(UsbWork_t), true);
+	if (s_hUsbWork == nullptr || !UsbInit(&s_UsbCfg) || !s_Cdc.Init(s_CdcCfg))
 	{
 		(void)TaktOSThreadSuspend(TaktOSCurrentThread());
 		return;
@@ -143,9 +187,9 @@ static void UsbThread(void *pArg)
 		// Bound each burst so lower-priority work runs under sustained traffic.
 		for (unsigned i = 0; i < 32; i++)
 		{
-			// nRF52840 also drains deferred completions here. No second
-			// AppEvtHandlerExec consumer may run in another thread.
-			UsbProcess(USB_DEVNO);
+			// This thread is the only consumer of the USB work queue, which
+			// also holds the process event of the USB stack.
+			UsbWorkExec();
 			if (!UsbConfigured(USB_DEVNO))
 			{
 				pending = 0;

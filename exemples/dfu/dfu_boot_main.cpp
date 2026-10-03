@@ -288,7 +288,7 @@ static bool DfuBootLinkInit(void)
 
 static void DfuBootLinkRun(void)
 {
-	UsbProcess(USB_DEVNO);
+	AppEvtHandlerExec();
 }
 
 #else

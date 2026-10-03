@@ -135,8 +135,8 @@ int BtSmpBondNvmInit(void);
 /**
  * @brief Retry a bond save that is still marked.
  *
- * Called by the security module of the port from its main loop, after
- * BtSmpBondNvmInit. Schedules the save again when an earlier attempt could
+ * Called by the security module of the port once per second, from its timer
+ * event, after BtSmpBondNvmInit. Schedules the save again when an earlier attempt could
  * not be queued or the store reported a failure. Returns at once when
  * nothing is marked.
  */

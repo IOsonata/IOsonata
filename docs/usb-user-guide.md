@@ -66,14 +66,12 @@ int main(void)
         return -1;
     }
 
-    // A board can start without VBUS. UsbProcess() reconnects when it appears.
+    // A board can start without VBUS. The stack connects when it appears.
     (void)UsbEnable(s_UsbCfg.DevNo);
 
-    while (1)
-    {
-        UsbProcess(s_UsbCfg.DevNo);
-        // Application work.
-    }
+    // Runs the queued USB work and waits for the next interrupt. An
+    // application with its own loop calls AppEvtHandlerExec() in it instead.
+    AppRun();
 }
 ```
 
@@ -84,7 +82,30 @@ Initialization order is significant:
    registers its descriptor fragment or speed-aware descriptor builder.
 3. `UsbEnable()` prepares and validates the complete configuration descriptor
    before connecting the controller.
-4. `UsbProcess()` runs deferred class work and handles VBUS reconnects.
+4. `AppRun()`, or `AppEvtHandlerExec()` in the application loop, runs what
+   the USB stack queued.
+
+The USB stack hands everything that must run outside the interrupt to
+`UsbEvtQue()`, the one way it signals work: deferred endpoint events, and one
+process event after controller and endpoint events, which runs the class
+work (`UsbDeviceClass::Process()`), reports cable changes and retries the
+connection. Its library default puts the work in the application event
+queue, first in first out. The USB stack never runs the queue itself, so USB
+and Bluetooth share it in one loop, and the application does not call
+`UsbProcess()`. The default queue holds 4 events. A USB application normally needs more: define
+`g_AppEvtHandlerQueMem` and pass its size to `AppEvtHandlerInit()` before
+`UsbInit()`, as the USB examples do:
+
+```cpp
+alignas(4) uint8_t g_AppEvtHandlerQueMem[APPEVT_HANDLER_QUE_MEMSIZE(16)];
+
+AppEvtHandlerInit(g_AppEvtHandlerQueMem, sizeof(g_AppEvtHandlerQueMem));
+```
+
+With an RTOS, the thread serving USB owns the deferred work instead: the
+application overrides `UsbEvtQue()` to put it in that thread's queue as a
+message, and the thread runs each one. The application event queue is then
+not linked for USB.
 
 Do not assign interface or endpoint numbers in application configuration.
 Adding or removing a class can change the assigned topology without changing
@@ -248,7 +269,7 @@ static const UsbdMscCfg_t s_MscCfg = {
 The sector buffer must be at least `DiskIO::GetSectSize()` bytes. Initialization
 rejects an invalid or oversized sector configuration rather than assuming that
 every backend sector fits. Disk reads, writes and SCSI command work run from
-`UsbProcess()`, outside the USB interrupt.
+the queued process event, outside the USB interrupt.
 
 The initial SCSI command set includes INQUIRY, TEST UNIT READY, REQUEST SENSE,
 READ CAPACITY (10), MODE SENSE (6), START STOP UNIT, READ (10), WRITE (10),
@@ -361,18 +382,24 @@ See the [USB example index](../exemples/usb/README.md) and
 The [USB + TaktOS example](../exemples/usb/usb_taktos/README.md) includes an
 nRF52840 IOcomposer project. One thread services USB and nonblocking CDC
 loopback; a lower-priority periodic thread demonstrates scheduler progress.
-The USB thread is also the sole AppEvt dispatcher on nRF52840. Follow its
-partial-write handling and bounded service passes when adapting it.
+The example overrides `UsbEvtQue()` so the USB thread runs the deferred
+endpoint work from its own queue; the application event queue is not used.
+Follow its partial-write handling and bounded service passes when adapting it.
 
 `UsbComboStressTaktOS` adds separate CDC loopback and PRBS threads alongside
 one USB service thread and a heartbeat. Its device composition and host runner
 match `UsbComboStress`; HID/INT/ISO retain their callback paths. The integration
-guide explains thread priorities, AppEvt ownership and the hardware checks.
+guide explains thread priorities, USB work ownership and the hardware checks.
 
 ## Suspend, reset and reconnect
 
-Call `UsbProcess()` continuously. It observes VBUS changes, runs class work and
-retries device connection when a board started without a cable. On VBUS
+Keep the queue running (`AppRun()`, the application loop or the USB thread).
+The USB port owns its cable interrupt: VREGUSB on the nRF54LM20, the POWER
+USBDETECTED and USBREMOVED events on the nRF52 (through the SoftDevice SoC
+events when a SoftDevice is enabled, otherwise on the POWER_CLOCK vector it
+shares with the clock). A cable edge queues the process event, which reports
+the change, runs class work and retries device connection when a board
+started without a cable. On VBUS
 removal, the core calls each device class `Detach()` before reporting the cable
 event. Bus reset and unconfiguration call each class `Reset()` and close active
 non-control endpoints.
@@ -415,7 +442,7 @@ detach the kernel mass-storage driver.
 
 ### A device does not reappear after reconnect
 
-Keep `UsbProcess()` running and rediscover the host device path. Serial ports
+Keep the queue running and rediscover the host device path. Serial ports
 and BSD disk numbers are host-assigned and can change. For MSC, removal of VBUS
 reloads a removable medium; a logical eject without VBUS removal intentionally
 keeps it not-ready until the host sends a load request.

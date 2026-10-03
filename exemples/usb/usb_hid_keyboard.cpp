@@ -308,7 +308,7 @@ int main()
 
 	while (1)
 	{
-		UsbProcess(USB_DEVNO);
+		AppEvtHandlerExec();
 		const bool nowSuspended = UsbSuspended(USB_DEVNO);
 		suspended = nowSuspended;
 

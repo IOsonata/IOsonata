@@ -1077,7 +1077,7 @@ int main()
 
 	BtAppScan();
 
-	BtAppRun();
+	AppRun();
 
 	return 0;
 }

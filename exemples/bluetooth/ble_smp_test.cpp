@@ -62,6 +62,7 @@ SOFTWARE.
 #include "iopinctrl.h"
 #include "syslog.h"
 
+#include "app_evt_handler.h"
 #include "bluetooth/bt_app.h"
 #include "bluetooth/bt_gatt.h"
 #include "bluetooth/bt_smp.h"			// BtSmpPairingComplete hook + BtSmpKeys_t, BtSmpCrypto* helpers
@@ -434,7 +435,7 @@ int main()
 
 	g_Uart.printf("advertising - connect from nRF Connect and tap Bond\r\n");
 
-	BtAppRun();
+	AppRun();
 
 	return 0;
 }

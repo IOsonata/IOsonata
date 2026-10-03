@@ -103,7 +103,39 @@ extern uint8_t g_AppEvtHandlerQueMem[];
 bool AppEvtHandlerInit(uint8_t *pFifoMem, size_t Size);
 bool AppEvtHandlerQue(uint32_t EvtId, void *pCtx, AppEvtHandler_t Handler);
 void AppEvtHandlerDispatch(void);
-void AppEvtHandlerExec(void);
+
+/**
+ * @brief	Run queued events, first in first out, at most
+ * 			APPEVT_HANDLER_EXEC_MAX_COUNT of them.
+ *
+ * Called by the application only, from its main loop or AppRun. A subsystem
+ * never calls it: the queue is shared by every subsystem of the application.
+ *
+ * @return	true - events are still waiting
+ */
+bool AppEvtHandlerExec(void);
+
+/**
+ * @brief	Bare metal main loop. Never returns.
+ *
+ * Runs the queued events and waits for the next interrupt when the queue is
+ * empty. Every subsystem (Bluetooth, USB, ...) hands its deferred work to the
+ * queue through its <Sub>EvtQue, so this loop serves all of them. Work that
+ * needs immediate service is done in the interrupt, not queued. An
+ * application with its own loop calls AppEvtHandlerExec and its own wait
+ * instead.
+ */
+void AppRun(void);
+
+/**
+ * @brief	Wait for the next interrupt, called by AppRun when the queue is
+ * 			empty.
+ *
+ * The library has a weak default (WFE). A port that must sleep through its
+ * own call, such as the nRF52 SoftDevice, overrides it. An application can
+ * override it for its own low power policy. It must return on any interrupt.
+ */
+void AppWait(void);
 
 #ifdef __cplusplus
 }

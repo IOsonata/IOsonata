@@ -11,9 +11,11 @@
                                set TX power and BD address.
             - BtAppInit:       populate g_BtAppData, init GAP/GATT, register
                                user services, init DIS, init advertising.
-            - BtAppRun:        start adv (if peripheral) + main loop.
-            - BtAppEvtWait:    weak default uses WFE. RTOS apps override.
-            - BtAppEvtDispatch: drains HCI/ACI events to user handlers.
+            - Stack callbacks (hci_notify_asynch_evt, BLE_RESUME_FLOW):
+                               queue the HCI event drain and the host work
+                               with BtEvtQue. A 1 s timer queues the
+                               timeout checks. Advertising starts from the
+                               first queued event.
             - on_conn_params_evt: callback for the connection-update
                                    procedure handled in bt_cp_stm32wba.cpp.
             - BtAppNotify, BtAppDisconnect, BtAppGapDeviceNameSet,
@@ -75,7 +77,7 @@ SOFTWARE.
 #include "ll_sys_if.h"
 #include "bpka.h"
 #include "scm.h"
-#include "stm32_seq.h"
+#include "stm32_timer.h"
 
 #include "istddef.h"
 #include "idelay.h"
@@ -116,11 +118,8 @@ extern UART g_Uart;
 #define GATT_MTU_SIZE_DEFAULT			23
 #endif
 
-// Stack-event scheduler task id. STM32CubeWBA convention is to use the
-// sequencer (UTIL_SEQ) to fan HCI/ACI events out from the interrupt
-// context to the main thread. The id is local to this port.
-#define BT_APP_TASK_HCI_USER_EVT		0
-#define BT_APP_TASK_BLE_HOST			1
+// Period of the timeout check event, in ms
+#define BT_APP_TICK_PERIOD_MS			1000U
 
 // Connection-parameter update timing knobs - same intent as the BM port.
 #define BT_APP_CONN_PARAMS_FIRST_DELAY_MS	5000
@@ -174,35 +173,61 @@ static BtAppWbaData_t s_WbaData = {
 	.bStackInited     = false,
 };
 
+// Set while the HCI event drain is in the queue, so that it is queued once
+static volatile bool s_bHciUserEvtQueued = false;
+// Set while the host work is in the queue, so that it is queued once
+static volatile bool s_bBleHostQueued = false;
+
+// Drain queued HCI events to registered callbacks. ST exposes
+// hci_user_evt_proc() which walks the event queue and invokes the user
+// callback per event.
+static void HciUserEvt(uint32_t Evt, void *pCtx)
+{
+	(void)Evt;
+	(void)pCtx;
+
+	s_bHciUserEvtQueued = false;
+	hci_user_evt_proc();
+}
+
+// Let the BLE host stack process its pending work. Drives the internal state
+// machines that issue ACI commands and forward events.
+static void BleHostEvt(uint32_t Evt, void *pCtx)
+{
+	(void)Evt;
+	(void)pCtx;
+
+	s_bBleHostQueued = false;
+	BleStack_Process();
+}
+
 // HCI user-event indication. ST's BLE stack calls this from IRQ context
-// when an event is queued; we just schedule the user-evt processing task.
+// when an event is queued.
 extern "C" void hci_notify_asynch_evt(void *pdata)
 {
 	(void)pdata;
-	UTIL_SEQ_SetTask(1U << BT_APP_TASK_HCI_USER_EVT, CFG_SCH_PRIO_0);
-	BtAppEvtNotify();
+
+	if (s_bHciUserEvtQueued == false)
+	{
+		s_bHciUserEvtQueued = true;
+		if (BtEvtQue(0, nullptr, HciUserEvt) == false)
+		{
+			s_bHciUserEvtQueued = false;
+		}
+	}
 }
 
 // BLE host scheduler hook - the stack calls this when the host needs CPU.
 extern "C" void BLE_RESUME_FLOW_PROCESS_Callback(void)
 {
-	UTIL_SEQ_SetTask(1U << BT_APP_TASK_BLE_HOST, CFG_SCH_PRIO_0);
-	BtAppEvtNotify();
-}
-
-// Task body: drain queued HCI events to registered callbacks. ST exposes
-// hci_user_evt_proc() which walks the event queue and invokes the user
-// callback per event.
-static void HciUserEvtProcessTask(void)
-{
-	hci_user_evt_proc();
-}
-
-// Task body: let the BLE host stack process its pending work. Drives the
-// internal state machines that issue ACI commands and forward events.
-static void BleHostTask(void)
-{
-	BleStack_Process();
+	if (s_bBleHostQueued == false)
+	{
+		s_bBleHostQueued = true;
+		if (BtEvtQue(0, nullptr, BleHostEvt) == false)
+		{
+			s_bBleHostQueued = false;
+		}
+	}
 }
 
 // --- GATT client discovery (central role) ---
@@ -554,8 +579,7 @@ static void BtAppOobPeerDataPush(uint16_t ConnHdl, uint8_t AddrType,
 }
 
 // The rejecting defaults for BtSmpNumericComparison, BtSmpPasskeyDisplay and
-// BtSmpPasskeyRequest are weak in bt_smp.cpp, which this port links for
-// BtSmpTimeoutCheck at the end of this file. A second weak definition here
+// BtSmpPasskeyRequest are weak in bt_smp.cpp. A second weak definition here
 // left the choice to link order. Both reach this port through the strong
 // BtSmpNumericComparisonReply and BtSmpPasskeyReply above, and the display
 // default that called WbaPasskeyReject arrives at the same place, since
@@ -984,13 +1008,6 @@ bool BtAppStackInit(const BtAppCfg_t *pCfg)
 	// Register the central HCI event handler with the SVCCTL dispatcher.
 	BtWbaEventRouterRegister(BtAppHciEvtHandler);
 
-	// Sequencer tasks for HCI-evt drain + BLE host work. These match the
-	// notification hooks above (hci_notify_asynch_evt, BLE_RESUME_FLOW).
-	UTIL_SEQ_RegTask(1U << BT_APP_TASK_HCI_USER_EVT, UTIL_SEQ_RFU,
-	                 HciUserEvtProcessTask);
-	UTIL_SEQ_RegTask(1U << BT_APP_TASK_BLE_HOST,     UTIL_SEQ_RFU,
-	                 BleHostTask);
-
 	// Set TX power if requested. ACI value is -128..+127 dBm (signed
 	// int8), but the stack rounds to the closest supported level.
 	if (pCfg->TxPower != 0)
@@ -1088,6 +1105,22 @@ bool BtAppSecInit(void)
 	g_BtAppData.bSecInit = true;
 
 	return true;
+}
+
+static bool BtAppTickStart(void);
+
+// First event of the Bluetooth subsystem, queued by BtAppInit: starts
+// advertising once the application runs the queue.
+static void BtAppStartEvt(uint32_t Evt, void *pCtx)
+{
+	(void)Evt;
+	(void)pCtx;
+
+	if (g_BtAppData.State == BTAPP_STATE_INITIALIZED &&
+		(g_BtAppData.AppDevice.Conn.Role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER)))
+	{
+		BtAdvStart();
+	}
 }
 
 bool BtAppInit(const BtAppCfg_t *pCfg)
@@ -1271,6 +1304,20 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 	}
 
 	g_BtAppData.State = BTAPP_STATE_INITIALIZED;
+
+	if (BtAppTickStart() == false)
+	{
+		DEBUG_PRINTF("BtAppInit: timeout check timer failed\r\n");
+		return false;
+	}
+
+	// Advertising starts from the queue, once the application has finished its
+	// own setup after BtAppInit and runs the queue.
+	if (BtEvtQue(0, nullptr, BtAppStartEvt) == false)
+	{
+		return false;
+	}
+
 	DEBUG_PRINTF("BtAppInit: success\r\n");
 	return true;
 }
@@ -1297,60 +1344,51 @@ void BtGattIndicationTimeout(uint16_t ConnHdl)
 	aci_gap_terminate(ConnHdl, 0x13);	// remote user terminated connection
 }
 
-void BtAppRun(void)
+// Set while the timeout check is in the queue, so that it is queued once
+static volatile bool s_bBtAppTickQueued = false;
+static UTIL_TIMER_Object_t s_BtAppTickTimer;
+
+// Checks that need time to pass, queued once per second by the timer:
+// connection parameter requests that have come due and the indication
+// transaction timeout (Core Vol 3 Part F 3.3.3). The ST host runs SMP and its
+// pairing timeout, so there is no generic SMP check here.
+static void BtAppTickEvt(uint32_t Evt, void *pCtx)
 {
-	if (g_BtAppData.State != BTAPP_STATE_INITIALIZED)
+	(void)Evt;
+	(void)pCtx;
+
+	s_bBtAppTickQueued = false;
+	BtGapWbaConnParamProcess();
+	BtGattIndicationTimeoutCheck();
+}
+
+// Timer server callback, interrupt context
+static void BtAppTickTimerHandler(void *pCtx)
+{
+	(void)pCtx;
+
+	if (s_bBtAppTickQueued == false)
 	{
-		return;
-	}
-
-	if (g_BtAppData.AppDevice.Conn.Role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER))
-	{
-		BtAdvStart();
-	}
-
-	DEBUG_PRINTF("BtAppRun: entering main loop\r\n");
-
-	while (1)
-	{
-		// Run any user-queued events first - matches BM/nRF52 ordering.
-		AppEvtHandlerExec();
-
-		// Connection parameter update requests that have come due.
-		BtGapWbaConnParamProcess();
-
-		// Pump the sequencer. UTIL_SEQ_Run dispatches whichever task the
-		// notification hooks scheduled (HCI evt drain, BLE host work).
-		UTIL_SEQ_Run(UTIL_SEQ_DEFAULT);
-
-		// Drive the generic transaction timeouts (Core Vol 3 Part H 3.4, Part F
-		// 3.3.3). Cheap no-ops when nothing is pending. NOTE: this loop wakes on
-		// events, so a link that goes fully silent needs a periodic tick to also
-		// call these - schedule a repeating UTIL_TIMER/HW_TS task if required.
-		BtSmpTimeoutCheck();
-		BtGattIndicationTimeoutCheck();
-
-		BtAppEvtWait();
+		s_bBtAppTickQueued = true;
+		if (BtEvtQue(0, nullptr, BtAppTickEvt) == false)
+		{
+			s_bBtAppTickQueued = false;
+		}
 	}
 }
 
-// Generic-layer BtAppEvtDispatch override - drains queued stack work
-// without waiting. Called by RTOS bridge code after BtAppEvtNotify.
-__attribute__((weak)) void BtAppEvtDispatch(void)
+// Start the periodic timeout check. Uses the STM32 timer server, which the
+// application initializes (UTIL_TIMER_Init), as in the STM32CubeWBA templates.
+static bool BtAppTickStart(void)
 {
-	UTIL_SEQ_Run(UTIL_SEQ_DEFAULT);
-}
+	if (UTIL_TIMER_Create(&s_BtAppTickTimer, BT_APP_TICK_PERIOD_MS,
+						  UTIL_TIMER_PERIODIC, BtAppTickTimerHandler,
+						  nullptr) != UTIL_TIMER_OK)
+	{
+		return false;
+	}
 
-// Bare-metal default: wait for any event. RTOS apps override with a
-// semaphore-take in the bridge code (same pattern as BM/nRF52 ports).
-// In the default HAL configuration the SysTick interrupt (1 ms, required by
-// HAL_GetTick) ends this wait, so the loop reaches the SMP/GATT transaction
-// timeout checks even on a fully silent link. A low power build that stops
-// SysTick must provide another periodic wakeup (LPTIM or RTC) for the 30 s
-// timeouts to fire.
-__attribute__((weak)) void BtAppEvtWait(void)
-{
-	__WFE();
+	return UTIL_TIMER_Start(&s_BtAppTickTimer) == UTIL_TIMER_OK;
 }
 
 // BtAppNotify/BtAppIndicate, their Conn and All forms are the shared weak

@@ -51,6 +51,7 @@ SOFTWARE.
 #include <string.h>
 
 #include "istddef.h"
+#include "app_evt_handler.h"
 #include "bluetooth/bt_app.h"
 //#ifndef NRFXLIB_SDC
 //#include "app_util_platform.h"
@@ -581,7 +582,7 @@ int main()
 
 	//uint64_t period = g_Timer.EnableTimerTrigger(0, 500UL, TIMER_TRIG_TYPE_CONTINUOUS, AppTimerHandler);
 
-    BtAppRun();
+    AppRun();
 
 	return 0;
 }

@@ -61,6 +61,7 @@ SOFTWARE.
 
 #include "istddef.h"
 #include "idelay.h"
+#include "app_evt_handler.h"
 #include "bluetooth/bt_app.h"
 #include "bluetooth/bt_gatt.h"
 #include "bluetooth/bt_dfu_smp.h"
@@ -317,7 +318,7 @@ int main()
 		}
 	}
 
-	BtAppRun();
+	AppRun();
 
 	while (true)
 	{

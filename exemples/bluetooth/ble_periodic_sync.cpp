@@ -57,6 +57,7 @@ SOFTWARE.
 #include "iopinctrl.h"
 #include "syslog.h"
 
+#include "app_evt_handler.h"
 #include "bluetooth/bt_app.h"
 #include "bluetooth/bt_adv.h"
 #include "bluetooth/bt_gap.h"
@@ -333,7 +334,7 @@ int main()
 
 	OUT("Scanning for %s ...\r\n", TARGET_NAME);
 
-	BtAppRun();
+	AppRun();
 
 	return 0;
 }

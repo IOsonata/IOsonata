@@ -301,16 +301,6 @@ bool BtAppScanReport(int8_t Rssi, uint8_t AddrType, uint8_t Addr[6], size_t AdvL
 
 //void BleDevServiceDiscovered(uint16_t ConnHdl, uint16_t Count, ble_gattc_service_t * const pServices);
 
-//*** RTOS integration hooks.
-// BtAppEvtNotify is called from port IRQ handlers. Weak default is empty.
-// Apps using an RTOS provide strong overrides:
-//   BtAppEvtWait    - block until BtAppEvtNotify signals (typically a semaphore take)
-//   BtAppEvtNotify  - signal from IRQ (typically semaphore give from ISR)
-// Bare-metal polling apps don't override; the port's BtAppRun handles polling.
-void BtAppEvtWait(void);
-void BtAppEvtNotify(void);
-void BtAppEvtDispatch();
-
 /// Deferred Bluetooth work: runs outside the caller with the values it was
 /// queued with. Same signature as AppEvtHandler_t.
 typedef void (*BtEvtQueHandler_t)(uint32_t EvtId, void *pCtx);
@@ -318,12 +308,17 @@ typedef void (*BtEvtQueHandler_t)(uint32_t EvtId, void *pCtx);
 /**
  * @brief	Queue deferred Bluetooth work.
  *
- * Called by the Bluetooth stack, possibly from interrupt context. The library
- * has a weak default for an application without an OS: it puts the work in
- * the application event queue (AppEvtHandlerQue), which BtAppRun executes.
+ * The one way the Bluetooth subsystem signals work: called by the stack,
+ * often from interrupt context, for everything that must run outside the
+ * interrupt (advertising start, security requests, timeout checks, ...). Work
+ * that needs immediate service is done in the interrupt instead.
  *
- * An application using an RTOS defines its own BtEvtQue. It stores the three
- * values in the queue of the thread that serves Bluetooth, and that thread
+ * The library has a weak default for an application without an OS: it puts
+ * the work in the application event queue (AppEvtHandlerQue), which the
+ * application runs with AppRun or its own loop, first in first out.
+ *
+ * An application using an RTOS defines its own BtEvtQue. It sends the three
+ * values as a message to the thread that serves Bluetooth, and that thread
  * calls Handler(EvtId, pCtx) for each one.
  *
  * @param	EvtId	: Value to pass to Handler
@@ -338,14 +333,16 @@ bool BtEvtQue(uint32_t EvtId, void *pCtx, BtEvtQueHandler_t Handler);
 /**
  * @brief	BLE main App initialization
  *
+ * Advertising, for a peripheral or broadcaster, starts from the first queued
+ * Bluetooth event, once the application runs the queue (AppRun, its own loop
+ * or its Bluetooth thread).
+ *
  * @param	pBleAppCfg : Pointer to app configuration data
- * @param	bEraseBond : true to force erase all bonding info
  *
  * @return	true - success
  */
 bool BtAppInit(const BtAppCfg_t * const pCfg);
 void BtAppEnterDfu(void);
-void BtAppRun(void);
 void BtAppGapDeviceNameSet(const char* ppDeviceName);
 
 void BtAppSetDevName(const char *pName);

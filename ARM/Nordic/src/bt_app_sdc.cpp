@@ -138,9 +138,10 @@ typedef struct {
 
 static const BtAppSdcConn_t *s_pBtAppSdcConn = nullptr;
 
-// Security work of the main loop: pairing timeout, crypto retry and bond
-// save retry. Set by BtAppSecInit through BtAppSdcSecPollSet. An application
-// that does not use security never sets it, so none of it is linked.
+// Periodic security work: pairing timeout and bond save retry, run once per
+// second from the timer event. Set by BtAppSecInit through BtAppSdcSecPollSet.
+// An application that does not use security never sets it, so none of it is
+// linked.
 static void (*s_pBtAppSdcSecPoll)(void) = nullptr;
 
 // Configuration given to BtAppInit, used by BtAppConnInit
@@ -256,22 +257,44 @@ static void BtStackMpslAssert(const char * const file, const uint32_t line)
 
 
 
+// Set while the timeout check is in the queue, so that it is queued once
+static volatile bool s_bBtAppSdcTickQueued = false;
+
+// Timeout checks, queued once per second by the timer
+static void BtAppSdcTickEvt(uint32_t Evt, void *pCtx)
+{
+	(void)Evt;
+	(void)pCtx;
+
+	s_bBtAppSdcTickQueued = false;
+
+	// Generic indication transaction timeout (Core Vol 3 Part F 3.3.3). Cheap
+	// no-op when nothing is pending.
+	if (s_pBtAppSdcConn != nullptr)
+	{
+		s_pBtAppSdcConn->Tick();
+	}
+
+	// Pairing timeout (Core Vol 3 Part H 3.4) and bond save retry, when the
+	// application uses security.
+	if (s_pBtAppSdcSecPoll != nullptr)
+	{
+		s_pBtAppSdcSecPoll();
+	}
+}
+
 static void BtAppSdcTimerHandler(TimerDev_t *pTimer, uint32_t Evt)
 {
-    if (Evt & TIMER_EVT_TRIGGER(0))
-    {
-        // Drive the generic indication transaction timeout (Core Vol 3
-        // Part F 3.3.3). Cheap no-op when nothing is pending.
-		if (s_pBtAppSdcConn != nullptr)
-		{
-			s_pBtAppSdcConn->Tick();
-		}
+	(void)pTimer;
 
-        // Wake the main loop once per period. The pairing timeout (Core
-        // Vol 3 Part H 3.4) is checked there by the security module, through
-        // s_pBtAppSdcSecPoll, when the application uses security.
-        BtAppEvtNotify();
-    }
+	if ((Evt & TIMER_EVT_TRIGGER(0)) && s_bBtAppSdcTickQueued == false)
+	{
+		s_bBtAppSdcTickQueued = true;
+		if (BtEvtQue(0, nullptr, BtAppSdcTickEvt) == false)
+		{
+			s_bBtAppSdcTickQueued = false;
+		}
+	}
 }
 
 void BtAppSetDevName(const char *pName)
@@ -461,7 +484,8 @@ bool BtAppStackInit(const BtAppCfg_t *pCfg)
 {
 	BtHciCtlrCfg_t ctlrcfg = { };
 	ctlrcfg.RxHandler = BtAppSdcCtlrRx;
-	ctlrcfg.OnWake = BtAppEvtNotify;
+	// No wake callback: the controller callback processes the received HCI
+	// packets in its interrupt, and the host queues what must run outside it.
 	ctlrcfg.Role = pCfg->Role;
 	ctlrcfg.CentralDevMax = pCfg->CentralDevMax;
 	ctlrcfg.PeriphDevMax = pCfg->PeriphDevMax;
@@ -649,6 +673,20 @@ bool BtAppConnInit(void)
  *
  * @details This function initializes the SoftDevice and the BLE event interrupt.
  */
+// First event of the Bluetooth subsystem, queued by BtAppInit: starts
+// advertising once the application runs the queue.
+static void BtAppStartEvt(uint32_t Evt, void *pCtx)
+{
+	(void)Evt;
+	(void)pCtx;
+
+	if (g_BtAppData.State == BTAPP_STATE_INITIALIZED &&
+		(g_BtAppData.AppDevice.Conn.Role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER)))
+	{
+		BtAdvStart();
+	}
+}
+
 bool BtAppInit(const BtAppCfg_t *pCfg)
 {
 	if (pCfg == nullptr)
@@ -955,50 +993,21 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 
     g_BtAppData.State = BTAPP_STATE_INITIALIZED;
 
+    // Advertising starts from the queue, once the application has finished its
+    // own setup after BtAppInit and runs the queue.
+    if (BtEvtQue(0, nullptr, BtAppStartEvt) == false)
+    {
+    	return false;
+    }
 
 	return true;
 }
 
-void BtAppRun()
-{
-	if (g_BtAppData.State != BTAPP_STATE_INITIALIZED)
-	{
-		return;
-	}
-
-	if (g_BtAppData.AppDevice.Conn.Role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER))
-	{
-		BtAdvStart();
-	}
-
-DEBUG_PRINTF("Loop\r\n");
-
-	while (1)
-	{
-		BtAppEvtWait();
-		AppEvtHandlerExec();
-
-		if (s_pBtAppSdcSecPoll != nullptr)
-		{
-			s_pBtAppSdcSecPoll();
-		}
-
-		BtHciCtlrProcess(&s_BtHciCtlr);
-	}
-}
-
 // Called by BtAppSecInit of the security module (bt_sec_sdc.cpp) to have its
-// main loop work called from BtAppRun.
+// periodic work called once per second from the timer event.
 void BtAppSdcSecPollSet(void (*Poll)(void))
 {
 	s_pBtAppSdcSecPoll = Poll;
-}
-
-// Port-level weak default for BtAppEvtWait. Bare-metal apps fall through to
-// __WFE; RTOS apps provide a strong override that does a semaphore take.
-__attribute__((weak)) void BtAppEvtWait(void)
-{
-	__WFE();
 }
 
 #if 0

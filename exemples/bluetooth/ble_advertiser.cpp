@@ -40,6 +40,7 @@ SOFTWARE.
 #include "istddef.h"
 #include "coredev/timer.h"
 
+#include "app_evt_handler.h"
 #include "bluetooth/bt_app.h"
 #include "bluetooth/bt_hci_ctlr.h"
 //#ifndef NRFXLIB_SDC
@@ -232,7 +233,7 @@ int main()
 
 	IOPinSet(s_Leds[1].PortNo, s_Leds[1].PinNo);
 
-	BtAppRun();
+	AppRun();
 
 	return 0;
 }

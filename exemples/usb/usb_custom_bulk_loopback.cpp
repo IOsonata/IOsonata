@@ -133,7 +133,7 @@ int main()
 
 	while (1)
 	{
-		UsbProcess(USB_DEVNO);
+		AppEvtHandlerExec();
 
 		if (pending > 0)
 		{

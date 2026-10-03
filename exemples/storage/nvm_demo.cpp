@@ -1004,7 +1004,7 @@ static const SysLogCfg_t s_SysLogCfg = {
 	.bBlocking = false
 };
 
-// Runs from the BtAppRun loop, so blocking here is safe while advertising
+// Runs from AppRun, outside any interrupt, so blocking here is safe while advertising
 // continues.
 static void NvmCycleHandler(uint32_t Evt, void *pCtx)
 {
@@ -1150,7 +1150,7 @@ int main()
 
 	BtAppInit(&s_BtAppCfg);
 
-	BtAppRun();
+	AppRun();
 
 	return 0;
 }

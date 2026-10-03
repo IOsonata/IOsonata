@@ -147,24 +147,29 @@ void AppEvtHandlerDispatch(void)
 	}
 }
 
-void AppEvtHandlerExec(void)
+bool AppEvtHandlerExec(void)
 {
-	if (s_hAppEvtHandlerFifo != nullptr)
+	if (s_hAppEvtHandlerFifo == nullptr)
 	{
-		int cnt = APPEVT_HANDLER_EXEC_MAX_COUNT;
+		return false;
+	}
 
-		while (cnt-- > 0)
+	int cnt = APPEVT_HANDLER_EXEC_MAX_COUNT;
+
+	while (cnt-- > 0)
+	{
+		AppEvtHandlerQue_t evt;
+		if (!AppEvtHandlerGet(&evt))
 		{
-			AppEvtHandlerQue_t evt;
-			if (!AppEvtHandlerGet(&evt))
-			{
-				break;
-			}
+			return false;
+		}
 
-			if (evt.Handler != nullptr)
-			{
-				evt.Handler(evt.EvtId, evt.pCtx);
-			}
+		if (evt.Handler != nullptr)
+		{
+			evt.Handler(evt.EvtId, evt.pCtx);
 		}
 	}
+
+	// Bounded drain: tell the caller whether events are still waiting.
+	return CFifoPeek(s_hAppEvtHandlerFifo) != nullptr;
 }

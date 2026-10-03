@@ -131,21 +131,28 @@ compiled into the MCU library. Rebuild both sides after ABI/layout changes.
 
 Bond persistence is separate from successful pairing. The generic bond layer
 has serialization and save/load hooks; the optional PDS adapter defers writes
-through the application event/idle mechanism and retries failures. Continue
+through `BtEvtQue()` and retries failures from the port timer. Continue
 processing deferred work before expecting a saved bond to survive reset.
 Vendor-host persistence follows the selected port's backend.
 
 ## Events and scheduling
 
-Interrupt-facing code signals pending work. The port's `BtAppRun()` loop
-executes the required stack and application processing, then waits according
-to that port. The exact dispatch sequence differs between SDC, SoftDevice
-and ST's sequencer.
+Interrupt-facing code does what needs immediate service in the interrupt
+and hands everything else to `BtEvtQue()`, the one way the Bluetooth
+subsystem signals work: advertising start, security requests, the stack pump
+of STM32WBA, timeout checks. Each kind of work is queued at most once. The
+library default of `BtEvtQue()` puts the work in the application event
+queue, which the application runs, first in first out, with `AppRun()` or
+its own loop. No subsystem runs that queue itself, so USB and Bluetooth share
+it in one loop.
 
-RTOS bridges override the existing wait/notify hooks and retain the port's
-dispatch and timeout behavior. Timer progress must remain available when a
-connected peer becomes silent. Do not move substantial storage or protocol
-work into interrupt context merely to avoid the foreground loop.
+A port whose timeouts need time to pass queues them from a 1 s timer: the
+port timer on nRF52 SoftDevice and SDC, the STM32 timer server on STM32WBA.
+The nRF54 SoftDevice reports the GATT timeouts itself and needs none.
+
+An RTOS application overrides `BtEvtQue()` to send each piece of work as a
+message to its Bluetooth task, which runs it. Do not move substantial
+storage or protocol work into interrupt context to avoid the queue.
 
 ## Periodic advertising
 

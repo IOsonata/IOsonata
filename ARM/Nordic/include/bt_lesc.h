@@ -109,10 +109,11 @@ ble_gap_lesc_oob_data_t *BtLescOobLocalGet(void);
 void BtLescOobPeerHandlerSet(BtLescOobPeerHandler_t Handler);
 
 /**
- * @brief	Run any deferred DHKey computation. Call from the main loop.
+ * @brief	Run any deferred key pair generation and DHKey computation.
  *
- * The ECDH is deferred out of the event handler so it does not run in the
- * stack callback context. BUSY operations remain queued for the next call.
+ * The module queues this itself with BtEvtQue when work is pending, so the
+ * ECDH does not run in the stack callback context. A BUSY operation queues it
+ * again.
  *
  * @return	true when processing may continue; false on a permanent local error.
  */

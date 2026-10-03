@@ -317,6 +317,8 @@ static void UsbdCdcNotifCtrlrEvent(UsbCtrlrEvtType_t Event,
 	{
 		pCdc->SerialStateActive = false;
 		pCdc->SerialStatePending = true;
+		// Sent again from the process event
+		UsbProcessQue(pCdc->DevNo);
 	}
 	else if (Event == USB_CTRLR_EVT_CANCEL)
 	{

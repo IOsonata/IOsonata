@@ -17,7 +17,7 @@
 		wired where the stock module called the lesc layer: init in sm_init,
 		the public key at the params reply, event delivery at the end of
 		sm_ble_evt_handler. DHKey computation stays deferred to
-		BtLescRequestHandler in the application main loop.
+		BtLescRequestHandler, which the lesc module queues with BtEvtQue.
 
 		The keyset handed to sd_ble_gap_sec_params_reply points into the
 		pm_peer_data_bonding inside the peer_database write buffer, so the
@@ -1449,8 +1449,8 @@ void sm_ble_evt_handler(const ble_evt_t *ble_evt)
 	}
 
 	// LESC key handling: single delivery point into the lesc module. DHKey
-	// computation stays deferred to BtLescRequestHandler in the
-	// application main loop.
+	// computation stays deferred to BtLescRequestHandler, queued by the lesc
+	// module with BtEvtQue.
 	BtLescOnBleEvt(ble_evt);
 
 	PendingPumpsRun();

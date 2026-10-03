@@ -332,9 +332,8 @@ __attribute__((weak)) void UsbdXtalRelease(void)
 
 /**
  * Consume the VBUS edges the regulator has recorded and answer the level they
- * leave behind. Polled rather than taken as an interrupt for the same reason
- * as the nRF52 side, and the events hold until they are cleared, so nothing
- * is lost between passes.
+ * leave behind. Called from the VREGUSB interrupt and from the process event.
+ * The events hold until they are cleared, so nothing is lost between calls.
  */
 static bool UsbdVbusPoll(void)
 {
@@ -472,11 +471,27 @@ static bool nRFUsbPowerInit(const UsbCtrlrCfg_t *pCfg)
 								NRFX_USBD_VREGUSB_STATUS_OFS) &
 		 NRFX_USBD_VREGUSB_STATUS_VBUSDET) != 0;
 
+	// The cable edges are an interrupt of the regulator, owned by this port.
+	// The handler queues the process event, which reports the edge and
+	// connects or disconnects.
+	nrf_vregusb_int_enable(NRF_VREGUSB, NRF_VREGUSB_INT_VBUS_DETECTED_MASK |
+										NRF_VREGUSB_INT_VBUS_REMOVED_MASK);
+	NVIC_ClearPendingIRQ(VREGUSB_IRQn);
+	NVIC_SetPriority(VREGUSB_IRQn, s_UsbdIntPrio);
+	NVIC_EnableIRQ(VREGUSB_IRQn);
+
 	s_UsbdInitialized = true;
 	s_UsbdStarted = false;
 	s_UsbdVbusLast = nRFUsbVbusDetected();
 
 	return true;
+}
+
+// Cable attach and removal. Records the level and queues the process event.
+extern "C" void VREGUSB_IRQHandler(void)
+{
+	(void)UsbdVbusPoll();
+	UsbProcessQue(0);
 }
 
 static bool nRFUsbPowerStart(void)
@@ -493,7 +508,7 @@ static bool nRFUsbPowerStart(void)
 
 	if (nRFUsbVbusDetected() == false)
 	{
-		// No cable. Not a failure: the poll in UsbdProcess reports the attach
+		// No cable. Not a failure: the cable interrupt queues the attach
 		// and the caller comes back.
 		return false;
 	}
@@ -542,7 +557,7 @@ static void nRFUsbPowerStop(void)
 }
 
 /**
- * Called from the application main loop through UsbCtrlrProcess. It must cost
+ * Called from the process event through UsbCtrlrProcess. It must cost
  * nothing when there is nothing to do: a pending low power exit to retire, or
  * a VBUS edge. Neither waits.
  */
@@ -1691,7 +1706,6 @@ void UsbCtrlrProcess(int DevNo)
 	if (nRFUsbValidDevNo(DevNo))
 	{
 		nRFUsbPowerProcess();
-		AppEvtHandlerExec();
 		if (!s_Ctrlr.Started)
 		{
 			return;

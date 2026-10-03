@@ -135,8 +135,10 @@ static int PdsEnsureReady(void)
 }
 
 #define BT_SMP_BOND_PEND_MAX		32
+// Storage failure backoff, in BtSmpBondNvmPoll calls. The ports call it once
+// per second from their timer event.
 #ifndef BT_SMP_BOND_RETRY_IDLE_CYCLES
-#define BT_SMP_BOND_RETRY_IDLE_CYCLES	32
+#define BT_SMP_BOND_RETRY_IDLE_CYCLES	2
 #endif
 
 static std::atomic<uint32_t> s_PendMask;
@@ -180,9 +182,9 @@ static void BondSaveSchedule(void)
 	}
 }
 
-// Declared in bt_pds.h. Called by the security module of the port from its
-// main loop. A save that could not be queued is scheduled again on the next
-// call; a storage failure waits BT_SMP_BOND_RETRY_IDLE_CYCLES calls first.
+// Declared in bt_pds.h. Called by the security module of the port once per
+// second. A save that could not be queued is scheduled again on the next call;
+// a storage failure waits BT_SMP_BOND_RETRY_IDLE_CYCLES calls first.
 void BtSmpBondNvmPoll(void)
 {
 	uint8_t delay = s_RetryIdleCycles.load(std::memory_order_acquire);

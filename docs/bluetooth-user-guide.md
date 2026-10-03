@@ -56,6 +56,7 @@ processing. With a complete static `s_BtAppCfg` from the selected example,
 the bare-metal entry sequence is:
 
 ```cpp
+#include "app_evt_handler.h"
 #include "bluetooth/bt_app.h"
 
 // After board initialization and with s_BtAppCfg defined:
@@ -65,16 +66,18 @@ static int RunBluetooth()
 	{
 		return -1;
 	}
-	BtAppRun();
+	AppRun();
 	return 0;
 }
 ```
 
-`BtAppRun()` is the long-running event loop on the documented ports, not a
-one-iteration polling function like `UsbProcess()`. It starts advertising
-for broadcaster/peripheral roles and services the port's deferred work.
-Put ongoing work in the existing callbacks, timers or application events, or
-run the Bluetooth loop in its RTOS task.
+`AppRun()` is the bare-metal main loop of the application, shared by every
+subsystem. It runs the application event queue, first in first out, and
+waits for the next interrupt when it is empty. The Bluetooth stack queues its
+deferred work there through `BtEvtQue()`; its first queued event starts
+advertising for broadcaster/peripheral roles. Put ongoing work in the
+existing callbacks, timers or application events (`AppEvtHandlerQue()`). An
+application with its own loop calls `AppEvtHandlerExec()` in it instead.
 
 Use `BtAppInitUserServices()` to add services and `BtAppInitUserData()` for
 application initialization, including explicit security initialization.
@@ -230,8 +233,8 @@ Zero reserves no resources. A controller can reject unsupported reservations.
 
 The advertiser first configures an extended, non-connectable,
 non-scannable set. After `BtAppInit()`, it calls `BtPadvInit()`,
-`BtPadvDataSet()` and `BtPadvStart()`; `BtAppRun()` enables the
-underlying advertising set. Follow the example's ordering.
+`BtPadvDataSet()` and `BtPadvStart()`; the first queued Bluetooth event
+enables the underlying advertising set once `AppRun()` runs. Follow the example's ordering.
 
 The synchronizer scans extended reports, selects the address and SID, calls
 `BtPsyncCreate()`, and handles `BtPsyncEstablished()`, `BtPsyncReport()`
@@ -289,15 +292,15 @@ is not supplied as a target project in this repository.
 
 ## RTOS integration
 
-Use the existing `BtAppEvtNotify()` and `BtAppEvtWait()` hooks.
-The notify hook runs from interrupt context; use an ISR-safe signal operation.
-The wait hook blocks the Bluetooth task and dispatches pending port events
-where required through `BtAppEvtDispatch()`.
+Override `BtEvtQue()`. The stack calls it, often from interrupt context, for
+every piece of work that must run outside the interrupt; send the three
+values as a message to the Bluetooth task with an ISR-safe send, and have the
+task run `Handler(EvtId, pCtx)` for each message. The port timers keep
+queuing the timeout checks, so a silent link is still serviced. Create the
+message queue before `BtAppInit()`, which queues the advertising start.
 
-Follow `uart_ble_taktos.cpp` for the bridge pattern. Ensure the chosen
-wait/timer arrangement still services transaction timeouts on a silent link.
-Do not replace the stack loop with a task that waits forever without the
-port's required wakeups.
+Follow `uart_ble_taktos.cpp` (TaktOS queue) or `UartBleFreeRTOS.cpp`
+(FreeRTOS queue) for the bridge pattern.
 
 ## Test and troubleshoot
 

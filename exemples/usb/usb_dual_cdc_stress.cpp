@@ -160,7 +160,7 @@ int main()
 
 	while (1)
 	{
-		UsbProcess(USB_DEVNO);
+		AppEvtHandlerExec();
 
 		// Service at most one loopback operation per pass so the PRBS producer
 		// below always gets a chance to queue data as well.

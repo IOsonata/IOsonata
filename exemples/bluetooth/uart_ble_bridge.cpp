@@ -546,7 +546,7 @@ int main()
 
     g_BtIntrf.Init(s_BleInrfCfg);
 
-    BtAppRun();
+    AppRun();
 
 	return 0;
 }
