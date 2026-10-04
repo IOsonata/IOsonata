@@ -119,6 +119,9 @@ void BtLescOobPeerHandlerSet(BtLescOobPeerHandler_t Handler);
  */
 bool BtLescRequestHandler(void);
 
+/// Retry work refused by BtEvtQue, from the Bluetooth queue's owner.
+void BtLescCheckStatus(void);
+
 /**
  * @brief	Feed a BLE event to the module.
  *

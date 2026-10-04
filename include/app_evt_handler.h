@@ -113,6 +113,9 @@ bool AppEvtHandlerInit(uint8_t *pFifoMem, size_t Size);
 bool AppEvtHandlerQue(uint32_t EvtId, void *pCtx, AppEvtHandler_t Handler);
 void AppEvtHandlerDispatch(void);
 
+/// True while an event is queued. Does not dispatch any callback.
+bool AppEvtHandlerPending(void);
+
 /**
  * @brief	Run queued events, first in first out, at most
  * 			APPEVT_HANDLER_EXEC_MAX_COUNT of them.
@@ -125,14 +128,33 @@ void AppEvtHandlerDispatch(void);
 bool AppEvtHandlerExec(void);
 
 /**
+ * @brief	Check subsystem status and retry work refused by a full queue.
+ *
+ * Call from the application when its event queue is empty. The weak default
+ * checks linked USB and Bluetooth subsystems. An application may override
+ * it to select its checks or add others and report whether its system is
+ * idle. Checks may queue work; AppRun also checks AppEvtHandlerPending before
+ * waiting. This function does not drain events.
+ *
+ * An RTOS calls each subsystem's status check from its owning worker after
+ * draining work and before blocking on that worker's empty queue.
+ *
+ * @return	true - system idle, may sleep if no event is queued
+ * 			false - work remains, continue running
+ */
+bool AppCheckStatus(void);
+
+/**
  * @brief	Bare metal main loop. Never returns.
  *
  * Runs the queued events and waits for the next interrupt when the queue is
- * empty. Every subsystem (Bluetooth, USB, ...) hands its deferred work to the
- * queue through its <Sub>EvtQue, so this loop serves all of them. Work that
- * needs immediate service is done in the interrupt, not queued. An
- * application with its own loop calls AppEvtHandlerExec and its own wait
- * instead.
+ * empty and AppCheckStatus reports idle. Every subsystem (Bluetooth, USB,
+ * ...) hands its deferred work to the queue through its <Sub>EvtQue, so this
+ * loop serves all of them. Work that needs immediate service is done in the
+ * interrupt, not queued. An
+ * application with its own loop calls AppEvtHandlerExec, AppCheckStatus,
+ * and its own wait only when AppCheckStatus returns true and
+ * AppEvtHandlerPending is false.
  */
 void AppRun(void);
 

@@ -145,7 +145,10 @@ int main(void)
 
 	while (1)
 	{
-		AppEvtHandlerExec();
+		if (AppEvtHandlerExec() == false)
+		{
+			AppCheckStatus();
+		}
 	}
 	return 0;
 }

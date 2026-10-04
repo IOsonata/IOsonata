@@ -133,7 +133,10 @@ int main()
 
 	while (1)
 	{
-		AppEvtHandlerExec();
+		if (AppEvtHandlerExec() == false)
+		{
+			AppCheckStatus();
+		}
 
 		if (pending > 0)
 		{

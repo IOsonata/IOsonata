@@ -185,6 +185,10 @@ void UsbProcess(int DevNo);
  */
 void UsbProcessQue(int DevNo);
 
+/// Retry a process event refused by the USB work queue. Called by the
+/// application's status check, or by the USB worker when it owns that queue.
+void UsbCheckStatus(void);
+
 /// Deferred USB work: runs outside the interrupt with the values it was
 /// queued with. Same signature as AppEvtHandler_t.
 typedef void (*UsbEvtQueHandler_t)(uint32_t EvtId, void *pCtx);

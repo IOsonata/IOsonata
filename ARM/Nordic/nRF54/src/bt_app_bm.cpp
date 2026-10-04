@@ -276,6 +276,22 @@ static void SecurePendingQue(void)
 	}
 }
 
+void BtAppCheckStatus(void)
+{
+	BtLescCheckStatus();
+	if (g_BtAppData.State != BTAPP_STATE_UNKNOWN)
+	{
+		for (int i = 0; i < CONFIG_NRF_SDH_BLE_TOTAL_LINK_COUNT; i++)
+		{
+			if (s_SecurePendingHdl[i] != BLE_CONN_HANDLE_INVALID)
+			{
+				SecurePendingQue();
+				break;
+			}
+		}
+	}
+}
+
 // --- Helper functions ---
 
 int8_t GetValidTxPower(int TxPwr)

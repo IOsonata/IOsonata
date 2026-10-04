@@ -361,7 +361,10 @@ int main()
 	bool suspended = false;
 	while (1)
 	{
-		AppEvtHandlerExec();
+		if (AppEvtHandlerExec() == false)
+		{
+			AppCheckStatus();
+		}
 		const bool nowSuspended = UsbSuspended(USB_DEVNO);
 		suspended = nowSuspended;
 		if (!suspended && HidReportUpdate())

@@ -90,8 +90,8 @@ static BtLescOobPeerHandler_t s_OobPeerHandler;
 static KeyAgreeEngine *s_pLescCrypto;
 // Set while the request handler is in the queue, so that it is queued once
 static volatile bool s_bLescWorkQueued;
-// Set when the queue refused the request handler. The next BLE event queues
-// it again.
+// Set when the queue refused the request handler. The application status
+// check or a later BLE event queues it again.
 static volatile bool s_bLescWorkOwed;
 alignas(CRYPTO_KEYCTX_ALIGN_MAX) static uint8_t s_LescEcdhKeyCtx[LESC_KEYCTX_SIZE];
 
@@ -509,6 +509,14 @@ static void LescWorkQue(void)
 	}
 }
 
+void BtLescCheckStatus(void)
+{
+	if (s_bLescWorkOwed)
+	{
+		LescWorkQue();
+	}
+}
+
 static void OnDhKeyRequest(uint16_t ConnHdl,
 						   const ble_gap_evt_lesc_dhkey_request_t *pReq,
 						   bool bForceFail)
@@ -577,10 +585,7 @@ void BtLescOnBleEvt(const ble_evt_t *pEvt)
 		return;
 	}
 
-	if (s_bLescWorkOwed)
-	{
-		LescWorkQue();
-	}
+	BtLescCheckStatus();
 
 	uint16_t connHdl = pEvt->evt.gap_evt.conn_handle;
 	switch (pEvt->header.evt_id)

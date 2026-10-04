@@ -104,6 +104,11 @@ bool BtInitialized(void)
 	return g_BtAppData.State != BTAPP_STATE_UNKNOWN;
 }
 
+// Ports with work retained after an enqueue failure override this check.
+__attribute__((weak)) void BtAppCheckStatus(void)
+{
+}
+
 bool BtConnected(void)
 {
 	return BtPeerGetActive() != NULL;

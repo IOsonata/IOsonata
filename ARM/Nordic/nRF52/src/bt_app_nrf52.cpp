@@ -1818,6 +1818,11 @@ bool BtAppEnableNotify(uint16_t ConnHandle, uint16_t CharHandle)//ble_uuid_t * c
 }
 
 
+void BtAppCheckStatus(void)
+{
+	BtLescCheckStatus();
+}
+
 // Wait of AppRun while the SoftDevice is enabled: the SoftDevice must be the
 // one putting the core to sleep. Overrides the weak WFE default, and is linked
 // only by an application that uses Bluetooth. C linkage, as declared in

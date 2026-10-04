@@ -3,9 +3,9 @@
 
 @brief	Bare metal main loop
 
-AppRun runs the application event queue and waits for the next interrupt when
-the queue is empty. Every subsystem hands its deferred work to that queue, so
-one loop serves all of them, first in first out.
+AppRun runs the application event queue, checks subsystem status, and waits
+for the next interrupt when no event remains. Every subsystem hands its
+deferred work to that queue, so one loop serves all of them, first in first out.
 
 @author	Hoang Nguyen Hoan
 @date	Oct. 3, 2026
@@ -37,13 +37,37 @@ SOFTWARE.
 ----------------------------------------------------------------------------*/
 #include "app_evt_handler.h"
 
+// Optional subsystem checks. Weak references do not pull an unused stack
+// into an application that only needs the event queue.
+extern "C" void UsbCheckStatus(void) __attribute__((weak));
+extern "C" void BtAppCheckStatus(void) __attribute__((weak));
+
+__attribute__((weak)) bool AppCheckStatus(void)
+{
+	if (UsbCheckStatus != nullptr)
+	{
+		UsbCheckStatus();
+	}
+	if (BtAppCheckStatus != nullptr)
+	{
+		BtAppCheckStatus();
+	}
+	return AppEvtHandlerPending() == false;
+}
+
 void AppRun(void)
 {
 	while (1)
 	{
+		if (AppEvtHandlerExec())
+		{
+			continue;
+		}
+		const bool idle = AppCheckStatus();
+
 		// AppWait returns on any interrupt, including one that queued an event
 		// after the queue was found empty.
-		if (AppEvtHandlerExec() == false)
+		if (idle && AppEvtHandlerPending() == false)
 		{
 			AppWait();
 		}

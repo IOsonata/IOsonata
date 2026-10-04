@@ -334,7 +334,7 @@ int main()
 		BT_CHECK(ctx, s_LastDhStatus == BLE_GAP_SEC_STATUS_SUCCESS);
 	});
 
-	ctx.Run("refused reply work is queued again by the next BLE event", [&]() {
+	ctx.Run("status check retries refused work without another BLE event", [&]() {
 		engine.Script(CRYPTO_STATUS_OK, CRYPTO_STATUS_OK);
 		BtLescSetCryptoEngine(&engine);
 		BT_CHECK(ctx, BtLescInit());
@@ -360,10 +360,13 @@ int main()
 		BT_CHECK(ctx, s_QueCount == 2);
 		BT_CHECK(ctx, s_pQueHandler == nullptr);
 
+		// The application status check recovers without another BLE event.
 		s_bQueFull = false;
-		BtLescOnBleEvt(&other);
+		BtLescCheckStatus();
 		BT_CHECK(ctx, s_QueCount == 3);
 		BT_CHECK(ctx, s_pQueHandler != nullptr);
+		BtLescCheckStatus();
+		BT_CHECK(ctx, s_QueCount == 3);
 		if (s_pQueHandler != nullptr)
 		{
 			s_pQueHandler(0, nullptr);
@@ -371,9 +374,9 @@ int main()
 		BT_CHECK(ctx, s_DhReplyCount == 1);
 		BT_CHECK(ctx, s_LastDhStatus == BLE_GAP_SEC_STATUS_SUCCESS);
 
-		// Once queued, the next event queues nothing more
+		// Completed work is not queued again by the status check.
 		s_pQueHandler = nullptr;
-		BtLescOnBleEvt(&other);
+		BtLescCheckStatus();
 		BT_CHECK(ctx, s_QueCount == 3);
 	});
 

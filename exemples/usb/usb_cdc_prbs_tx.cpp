@@ -152,7 +152,10 @@ int main()
 	{
 		if (g_Cdc.IsPortOpen() == false)
 		{
-			AppEvtHandlerExec();
+			if (AppEvtHandlerExec() == false)
+			{
+				AppCheckStatus();
+			}
 			continue;
 		}
 
@@ -166,12 +169,18 @@ int main()
 		}
 		else
 		{
-			AppEvtHandlerExec();
+			if (AppEvtHandlerExec() == false)
+			{
+				AppCheckStatus();
+			}
 		}
 #else
 		// Preserve the existing buffered-mode event-processing behavior for a
 		// separate measurement.
-		AppEvtHandlerExec();
+		if (AppEvtHandlerExec() == false)
+		{
+			AppCheckStatus();
+		}
 
 		// Demo transfer buffer
 		for (int i = 0; i < TEST_BUFSIZE; i++)
@@ -194,7 +203,10 @@ int main()
 			}
 			else
 			{
-				AppEvtHandlerExec();
+				if (AppEvtHandlerExec() == false)
+				{
+					AppCheckStatus();
+				}
 			}
 
 			if (g_Cdc.IsPortOpen() == false)

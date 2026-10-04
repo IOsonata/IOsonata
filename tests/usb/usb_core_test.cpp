@@ -377,6 +377,26 @@ static bool TestProcessEvent(void)
 	Sof(3U);
 	AppEvtHandlerExec();
 	CHECK(s_Class.ProcessCnt == before + 2);
+
+	// All queued callbacks belong to the application. The USB process event
+	// is refused, then recovered by the status check after normal dispatch.
+	uint32_t events = 0U;
+	for (uint32_t i = 0U; i < 16U; i++)
+	{
+		CHECK(AppEvtHandlerQue(i, &events, QueueTestEvent));
+	}
+	UsbProcessQue(TEST_DEVNO);
+	UsbCheckStatus(); // Still full: keep the request owed.
+	AppEvtHandlerExec();
+	CHECK(events == 0xFFFFU);
+	CHECK(s_Class.ProcessCnt == before + 2);
+	UsbCheckStatus();
+	UsbCheckStatus(); // Already queued: no duplicate callback.
+	CHECK(AppEvtHandlerPending());
+	AppEvtHandlerExec();
+	CHECK(s_Class.ProcessCnt == before + 3);
+	UsbCheckStatus();
+	CHECK(!AppEvtHandlerPending());
 	return true;
 }
 

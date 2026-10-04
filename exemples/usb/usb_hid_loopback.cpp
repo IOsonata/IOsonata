@@ -205,7 +205,10 @@ int main()
 	(void)UsbEnable(USB_DEVNO);
 	while (1)
 	{
-		AppEvtHandlerExec();
+		if (AppEvtHandlerExec() == false)
+		{
+			AppCheckStatus();
+		}
 	}
 	return 0;
 }

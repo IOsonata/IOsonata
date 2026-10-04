@@ -331,6 +331,10 @@ typedef void (*BtEvtQueHandler_t)(uint32_t EvtId, void *pCtx);
  */
 bool BtEvtQue(uint32_t EvtId, void *pCtx, BtEvtQueHandler_t Handler);
 
+/// Retry work refused by the Bluetooth work queue. Called by the
+/// application's status check, or by the Bluetooth worker owning that queue.
+void BtAppCheckStatus(void);
+
 /**
  * @brief	BLE main App initialization
  *

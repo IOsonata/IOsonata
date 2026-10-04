@@ -964,6 +964,7 @@ static void nRFUsbdRetryOutCmpl(void)
 		if (!nRFUsbdQueOutCmpl(epnum))
 		{
 			s_Usbd.bQueRefused = true;
+			UsbProcessQue(0);
 			return;
 		}
 		s_Usbd.OutCmplOwed &= (uint8_t)~(1U << epnum);
@@ -1210,6 +1211,7 @@ extern "C" void USBD_IRQHandler(void){
 				{
 					s_Usbd.OutCmplOwed |= (uint8_t)(1U << epnum);
 					s_Usbd.bQueRefused = true;
+					UsbProcessQue(0);
 				}
 				break;
 			}
@@ -1265,6 +1267,7 @@ extern "C" void USBD_IRQHandler(void){
 			nRFUsbdProcessQueuedEvent))
 		{
 			s_Usbd.bQueRefused = true;
+			UsbProcessQue(0);
 			break;
 		}
 		servicedstatus |= bit;

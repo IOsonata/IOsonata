@@ -146,12 +146,27 @@ queue, which the application runs, first in first out, with `AppRun()` or
 its own loop. No subsystem runs that queue itself, so USB and Bluetooth share
 it in one loop.
 
+When the event queue is empty, `AppRun()` calls `AppCheckStatus()`. Its weak default
+checks the linked USB and Bluetooth subsystems. `BtAppCheckStatus()` retries
+retained LESC work and port work refused by a full queue. Recovery queues the
+original callback; it does not execute security or stack work in the interrupt.
+Periodic timeout checks continue to use their timers.
+
+A custom bare-metal loop drains `AppEvtHandlerExec()` until it returns false,
+then calls `AppCheckStatus()`, and waits only if it returns true (idle) and
+`AppEvtHandlerPending()` is false.
+This last check includes work queued by the status check. An application may
+override `AppCheckStatus()` to check its own system status and return false
+while its system has work to do, even if no event is queued.
+
 A port whose timeouts need time to pass queues them from a 1 s timer: the
 port timer on nRF52 SoftDevice and SDC, the STM32 timer server on STM32WBA.
 The nRF54 SoftDevice reports the GATT timeouts itself and needs none.
 
 An RTOS application overrides `BtEvtQue()` to send each piece of work as a
-message to its Bluetooth task, which runs it. Do not move substantial
+message to its Bluetooth task, which runs it and calls `BtAppCheckStatus()`
+before blocking for more work. The USB task similarly calls `UsbCheckStatus()`;
+each check runs in the worker owning its subsystem. Do not move substantial
 storage or protocol work into interrupt context to avoid the queue.
 
 ## Periodic advertising

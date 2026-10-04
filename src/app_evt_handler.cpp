@@ -141,6 +141,12 @@ static bool AppEvtHandlerGet(AppEvtHandlerQue_t *pEvt)
 	return p != nullptr;
 }
 
+bool AppEvtHandlerPending(void)
+{
+	return s_hAppEvtHandlerFifo != nullptr &&
+		CFifoPeek(s_hAppEvtHandlerFifo) != nullptr;
+}
+
 void AppEvtHandlerDispatch(void)
 {
 	if (s_hAppEvtHandlerFifo == nullptr)
@@ -179,5 +185,5 @@ bool AppEvtHandlerExec(void)
 	}
 
 	// Bounded drain: tell the caller whether events are still waiting.
-	return CFifoPeek(s_hAppEvtHandlerFifo) != nullptr;
+	return AppEvtHandlerPending();
 }

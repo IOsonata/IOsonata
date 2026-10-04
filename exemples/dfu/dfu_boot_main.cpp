@@ -288,7 +288,10 @@ static bool DfuBootLinkInit(void)
 
 static void DfuBootLinkRun(void)
 {
-	AppEvtHandlerExec();
+	if (AppEvtHandlerExec() == false)
+	{
+		AppCheckStatus();
+	}
 }
 
 #else

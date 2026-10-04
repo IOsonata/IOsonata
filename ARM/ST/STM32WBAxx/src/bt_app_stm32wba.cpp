@@ -174,8 +174,10 @@ static BtAppWbaData_t s_WbaData = {
 
 // Set while the HCI event drain is in the queue, so that it is queued once
 static volatile bool s_bHciUserEvtQueued = false;
+static volatile bool s_bHciUserEvtOwed = false;
 // Set while the host work is in the queue, so that it is queued once
 static volatile bool s_bBleHostQueued = false;
+static volatile bool s_bBleHostOwed = false;
 
 // Drain queued HCI events to registered callbacks. ST exposes
 // hci_user_evt_proc() which walks the event queue and invokes the user
@@ -209,7 +211,8 @@ extern "C" void hci_notify_asynch_evt(void *pdata)
 	if (s_bHciUserEvtQueued == false)
 	{
 		s_bHciUserEvtQueued = true;
-		if (BtEvtQue(0, nullptr, HciUserEvt) == false)
+		s_bHciUserEvtOwed = BtEvtQue(0, nullptr, HciUserEvt) == false;
+		if (s_bHciUserEvtOwed)
 		{
 			s_bHciUserEvtQueued = false;
 		}
@@ -222,10 +225,23 @@ extern "C" void BLE_RESUME_FLOW_PROCESS_Callback(void)
 	if (s_bBleHostQueued == false)
 	{
 		s_bBleHostQueued = true;
-		if (BtEvtQue(0, nullptr, BleHostEvt) == false)
+		s_bBleHostOwed = BtEvtQue(0, nullptr, BleHostEvt) == false;
+		if (s_bBleHostOwed)
 		{
 			s_bBleHostQueued = false;
 		}
+	}
+}
+
+void BtAppCheckStatus(void)
+{
+	if (s_bHciUserEvtOwed)
+	{
+		hci_notify_asynch_evt(nullptr);
+	}
+	if (s_bBleHostOwed)
+	{
+		BLE_RESUME_FLOW_PROCESS_Callback();
 	}
 }
 

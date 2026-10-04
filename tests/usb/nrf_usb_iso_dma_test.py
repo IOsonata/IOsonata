@@ -87,6 +87,7 @@ names = [
     ('nRFUsbdHandleSof', None), ('USBD_IRQHandler', None),
     ('nRFUsbdAcquireDma', None), ('nRFUsbdProcessQueuedEvent', None),
     ('nRFUsbdQueOutCmpl', None), ('nRFUsbdRetryOutCmpl', None),
+    ('UsbCtrlrProcess', None),
     ('nRFUsbdInvalidateEvents', None),
     ('nRFUsbdResetState', None),
     ('nRFUsbdEpDisable', None),
@@ -140,8 +141,13 @@ constexpr uint32_t NRFX_USBD_EASYDMA_BUSY_REG_BUSY=0x82, NRFX_USBD_EASYDMA_BUSY_
 #define NRFX_USBD_ERRATA_166_REG_A 0
 #define NRFX_USBD_ERRATA_166_REG_B 0
 
-// UsbCtrlrProcess is inline in the nRF52 usb_ctrlr.h: it runs the AppEvt queue.
-void UsbCtrlrProcess(int){AppEvtHandlerExec();}
+// The core retains a refused process request; its real queue behavior is
+// covered by usb_core_test. This controller fixture records the request.
+bool processRequested=false;
+unsigned irqPends=0;
+constexpr int USBD_IRQn=7;
+void UsbProcessQue(int dev){assert(dev==0);processRequested=true;}
+void NVIC_SetPendingIRQ(int irq){assert(irq==USBD_IRQn);++irqPends;}
 uint32_t dmaBusy=0;
 unsigned dmaLocks=0,dmaUnlocks=0;
 struct BusyRegister {
@@ -286,6 +292,7 @@ uint8_t inBuffer[512],inBuffer2[512];
 void init(){
  if(!dmaBufferCnt){dmaBuffer(outSlot);dmaBuffer(inBuffer);dmaBuffer(inBuffer2);}
  regs={};memset(&s_Usbd,0,sizeof(s_Usbd));
+ processRequested=false;irqPends=0;
  regs.BMREQUESTTYPE=USB_REQTYPE_MASK_DIR;
  ep0Callbacks[0]=ep0Callbacks[1]=busEventCalls=tailVisits=0;
  resumeOnBusEvent=false;
@@ -480,7 +487,7 @@ void testDeferredOut(){
  for(unsigned i=0;i<16;++i)assert(AppEvtHandlerQue(0,nullptr,dummyEvent));
  regs.SIZE.EPOUT[1]=9;regs.EPDATASTATUS.bits=1U<<17;interrupt();
  assert(regs.EPDATASTATUS.bits==(1U<<17) && !dmaBusy && !receivers[0].drdy);
- UsbCtrlrProcess(0);assert(dummyCalls==16 && !receivers[0].drdy);
+ AppEvtHandlerExec();UsbCtrlrProcess(0);assert(dummyCalls==16 && !receivers[0].drdy);
  interrupt();assert(!regs.EPDATASTATUS.bits);AppEvtHandlerDispatch();
  assert(receivers[0].drdy==1 && activeBit==17);
  finish();AppEvtHandlerDispatch();checkPacket(1,9);
@@ -492,8 +499,9 @@ void testDeferredOut(){
  for(unsigned i=0;i<16;++i)assert(AppEvtHandlerQue(0,nullptr,dummyEvent));
  regs.SIZE.EPOUT[1]=23;regs.EPDATASTATUS.bits|=1U<<17;finish();
  assert(s_Usbd.OutCmplOwed==(1U<<1) && s_Usbd.bQueRefused && !dmaBusy);
+ assert(processRequested);
  assert(regs.EPDATASTATUS.bits==(1U<<17) && !receivers[0].completions);
- UsbCtrlrProcess(0);assert(dummyCalls==16 && !receivers[0].completions);
+ AppEvtHandlerExec();UsbCtrlrProcess(0);assert(dummyCalls==16 && !receivers[0].completions);
  interrupt();assert(!s_Usbd.OutCmplOwed && !regs.EPDATASTATUS.bits);
  AppEvtHandlerDispatch();assert(receivers[0].completions==1 && receivers[0].drdy==1);
  checkPacket(1,17);
@@ -504,7 +512,7 @@ void testDeferredOut(){
  for(unsigned i=0;i<16;++i)assert(AppEvtHandlerQue(0,nullptr,dummyEvent));
  finish();assert(s_Usbd.OutCmplOwed==(1U<<1));
  productionEpClose(0,1,false);assert(!s_Usbd.OutCmplOwed);
- UsbCtrlrProcess(0);interrupt();AppEvtHandlerExec();
+ AppEvtHandlerExec();UsbCtrlrProcess(0);interrupt();AppEvtHandlerExec();
  assert(!receivers[0].completions);
  puts("PASS: full AppEvt queue keeps an OUT completion owed and sends it before the next DRDY");
 
@@ -582,7 +590,7 @@ void testDeferredIn(){
  // data or submit another packet to the same IN endpoint.
  txInit();uint8_t first[64];memcpy(first,wireIn,64);
  finish();assert(!dmaBusy && !txCompletions && !CFifoUsed(s_Usbd.hQue));
- for(unsigned i=0;i<3;++i){interrupt();UsbCtrlrProcess(0);}
+ for(unsigned i=0;i<3;++i){interrupt();AppEvtHandlerExec();UsbCtrlrProcess(0);}
  assert(!txCompletions && CFifoUsed(txFifo)==128 && regularStarts==1);
  assert(!memcmp(first,wireIn,64));
  ackIn(1);assert(!dmaBusy && !txCompletions);
@@ -633,7 +641,7 @@ void testDeferredIn(){
  finish();ackIn(1);
  assert(!dmaBusy && !txCompletions && CFifoUsed(txFifo)==128);
  assert(regs.EPDATASTATUS.bits==(1U<<1));
- UsbCtrlrProcess(0);assert(dummyCalls==16 && !txCompletions);
+ AppEvtHandlerExec();UsbCtrlrProcess(0);assert(dummyCalls==16 && !txCompletions);
  interrupt();assert(!regs.EPDATASTATUS.bits);
  AppEvtHandlerDispatch();assert(txCompletions==1 && activeBit==1);
  finish();ackIn(1);AppEvtHandlerExec();assert(txCompletions==2);

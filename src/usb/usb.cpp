@@ -1906,6 +1906,7 @@ __attribute__((weak)) bool UsbEvtQue(uint32_t EvtId, void *pCtx,
 
 // Set while the process event is in the queue, so that it is queued once
 static volatile bool s_bUsbProcessQueued = false;
+static volatile bool s_bUsbProcessOwed = false;
 
 static void UsbProcessEvt(uint32_t Evt, void *pCtx)
 {
@@ -1923,9 +1924,19 @@ void UsbProcessQue(int DevNo)
 	}
 
 	s_bUsbProcessQueued = true;
-	if (UsbEvtQue((uint32_t)DevNo, nullptr, UsbProcessEvt) == false)
+	s_bUsbProcessOwed =
+		UsbEvtQue((uint32_t)DevNo, nullptr, UsbProcessEvt) == false;
+	if (s_bUsbProcessOwed)
 	{
 		s_bUsbProcessQueued = false;
+	}
+}
+
+void UsbCheckStatus(void)
+{
+	if (s_bUsbProcessOwed)
+	{
+		UsbProcessQue(s_Core.DevNo);
 	}
 }
 

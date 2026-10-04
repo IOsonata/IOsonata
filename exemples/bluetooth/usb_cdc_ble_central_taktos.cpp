@@ -151,11 +151,22 @@ static void WorkThread(void *pArg)
 	while (true)
 	{
 		Work_t work;
-
-		if (TaktOSQueueReceive(pQue, &work, true, TAKTOS_WAIT_FOREVER) == TAKTOS_OK)
+		if (TaktOSQueueReceive(pQue, &work, false, 0) != TAKTOS_OK)
 		{
-			work.Handler(work.EvtId, work.pCtx);
+			if (pQue == &s_UsbWorkQue)
+			{
+				UsbCheckStatus();
+			}
+			else
+			{
+				BtAppCheckStatus();
+			}
+			if (TaktOSQueueReceive(pQue, &work, true, TAKTOS_WAIT_FOREVER) != TAKTOS_OK)
+			{
+				continue;
+			}
 		}
+		work.Handler(work.EvtId, work.pCtx);
 	}
 }
 

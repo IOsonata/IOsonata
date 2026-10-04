@@ -34,6 +34,19 @@ usbh_*           future USB host class/driver layer
 ```
 
 The current stack implements USB device mode. Host support does not exist yet.
+
+The application owns deferred dispatch. `AppRun()` drains AppEvent, calls
+`AppCheckStatus()`, and waits only when the hook returns true (idle) and
+`AppEvtHandlerPending()` is false.
+The default status hook calls `UsbCheckStatus()` when USB is linked, retrying
+a process event refused by a full queue. The nRF52 controller requests that
+process event when an endpoint event is refused, so its retained completion
+can resume after unrelated application events have drained.
+
+Custom loops drain `AppEvtHandlerExec()` until it returns false, then call
+`AppCheckStatus()` on the empty queue.
+An RTOS USB worker calls `UsbCheckStatus()` before blocking on its own queue.
+
 The architectural requirement is that `UsbIntrf`, `UsbIsoIntrf` and
 `UsbIntIntrf` stay free of device-only class/enumeration policy so they can be
 reused when a host layer is added.
