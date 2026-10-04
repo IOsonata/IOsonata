@@ -346,10 +346,16 @@ static void BleTask(void * pvParameter)
     {
         BleWork_t work;
 
-        if (xQueueReceive(g_BleWorkQue, &work, portMAX_DELAY) == pdPASS)
+        if (xQueueReceive(g_BleWorkQue, &work, 0) != pdPASS)
         {
-            work.Handler(work.EvtId, work.pCtx);
+            // Queue empty: queue again the work it refused, then wait
+            BtAppCheckStatus();
+            if (xQueueReceive(g_BleWorkQue, &work, portMAX_DELAY) != pdPASS)
+            {
+                continue;
+            }
         }
+        work.Handler(work.EvtId, work.pCtx);
     }
 }
 

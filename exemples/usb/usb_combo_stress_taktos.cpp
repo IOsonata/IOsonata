@@ -115,6 +115,11 @@ static void ServiceThread(void *pArg)
 				work.Handler(work.EvtId, work.pCtx);
 			}
 		}
+		// Work refused by a full queue is queued again once the queue is empty
+		if (CFifoPeek(s_hUsbWork) == nullptr)
+		{
+			UsbCheckStatus();
+		}
 		TaktOSThreadYield();
 		// Retain notifications arriving during processing. One tick bounds the
 		// wait for any work left by a bounded drain.

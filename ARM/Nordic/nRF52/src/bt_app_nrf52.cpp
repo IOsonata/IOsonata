@@ -78,7 +78,6 @@ SOFTWARE.
 //#include "ble_app_nrf5.h"
 #include "bluetooth/bt_dev.h"
 #include "app_evt_handler.h"		// AppWait, overridden here
-#include "bt_lesc.h"
 #include "sd_dispatch.h"
 
 /******** For DEBUG ************/
@@ -1819,9 +1818,16 @@ bool BtAppEnableNotify(uint16_t ConnHandle, uint16_t CharHandle)//ble_uuid_t * c
 }
 
 
+// The LESC module is linked only by an application that calls BtAppSecInit.
+// A weak reference does not pull it in.
+extern "C" void BtLescCheckStatus(void) __attribute__((weak));
+
 void BtAppCheckStatus(void)
 {
-	BtLescCheckStatus();
+	if (BtLescCheckStatus != nullptr)
+	{
+		BtLescCheckStatus();
+	}
 }
 
 // Wait of AppRun while the SoftDevice is enabled: the SoftDevice must be the

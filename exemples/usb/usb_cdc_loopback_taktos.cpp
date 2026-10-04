@@ -222,6 +222,12 @@ static void UsbThread(void *pArg)
 			pending -= n;
 		}
 
+		// Work refused by a full queue is queued again once the queue is empty
+		if (CFifoPeek(s_hUsbWork) == nullptr)
+		{
+			UsbCheckStatus();
+		}
+
 		// Nonblocking TX preserves partial writes across service passes.
 		// Sleep also lets lower-priority threads run; yield alone would not.
 		(void)TaktOSThreadSleepTicks(TaktOSCurrentThread(), 1);

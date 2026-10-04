@@ -344,10 +344,16 @@ static void BleTask(void * pvParameter)
     {
         BleWork_t work;
 
-        if (TaktOSQueueReceive(&g_BleWorkQue, &work, true, TAKTOS_WAIT_FOREVER) == TAKTOS_OK)
+        if (TaktOSQueueReceive(&g_BleWorkQue, &work, false, 0) != TAKTOS_OK)
         {
-            work.Handler(work.EvtId, work.pCtx);
+            // Queue empty: queue again the work it refused, then wait
+            BtAppCheckStatus();
+            if (TaktOSQueueReceive(&g_BleWorkQue, &work, true, TAKTOS_WAIT_FOREVER) != TAKTOS_OK)
+            {
+                continue;
+            }
         }
+        work.Handler(work.EvtId, work.pCtx);
     }
 }
 
