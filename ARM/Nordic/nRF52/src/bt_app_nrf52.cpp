@@ -78,6 +78,7 @@ SOFTWARE.
 //#include "ble_app_nrf5.h"
 #include "bluetooth/bt_dev.h"
 #include "app_evt_handler.h"		// AppWait, overridden here
+#include "bt_lesc.h"
 #include "sd_dispatch.h"
 
 /******** For DEBUG ************/
