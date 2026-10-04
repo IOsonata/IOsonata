@@ -861,51 +861,55 @@ static void UsbdMscProcessDataIn(UsbdMscDev_t *pMsc)
 static void UsbdMscProcessDataOut(UsbdMscDev_t *pMsc)
 {
 	uint8_t *pPacket = UsbdMscRxPacket(pMsc);
-	const int received = DeviceIntrfRx(&pMsc->pData->DevIntrf, 0,
-		pPacket, pMsc->pData->Mps);
-	if (received <= 0)
+	// Process events coalesce; drain the packets already buffered by UsbIntrf.
+	while (pMsc->State == USBD_MSC_BOT_DATA_OUT)
 	{
-		return;
-	}
-
-	uint32_t use = (uint32_t)received;
-	const uint32_t remaining = pMsc->TransferLimit - pMsc->Transferred;
-	if (use > remaining)
-	{
-		use = remaining;
-	}
-
-	uint32_t offset = 0U;
-	while (offset < use)
-	{
-		uint32_t length = pMsc->SectorSize - pMsc->SectorOffset;
-		if (length > use - offset)
+		const int received = DeviceIntrfRx(&pMsc->pData->DevIntrf, 0,
+			pPacket, pMsc->pData->Mps);
+		if (received <= 0)
 		{
-			length = use - offset;
+			return;
 		}
-		memcpy(&pMsc->pSectorBuffer[pMsc->SectorOffset],
-			&pPacket[offset], length);
-		pMsc->SectorOffset = (uint16_t)(pMsc->SectorOffset + length);
-		pMsc->Transferred += length;
-		offset += length;
 
-		if (pMsc->SectorOffset == pMsc->SectorSize)
+		uint32_t use = (uint32_t)received;
+		const uint32_t remaining = pMsc->TransferLimit - pMsc->Transferred;
+		if (use > remaining)
 		{
-			if (!pMsc->pDisk->SectWrite(pMsc->Lba, pMsc->pSectorBuffer))
+			use = remaining;
+		}
+
+		uint32_t offset = 0U;
+		while (offset < use)
+		{
+			uint32_t length = pMsc->SectorSize - pMsc->SectorOffset;
+			if (length > use - offset)
 			{
-				UsbdMscFail(pMsc, USB_MSC_SENSE_MEDIUM_ERROR,
-					USB_MSC_ASC_WRITE_ERROR);
-				pMsc->bStallAfterData = true;
-				UsbdMscFinishCommand(pMsc);
-				return;
+				length = use - offset;
 			}
-			UsbdMscNextSector(pMsc);
-		}
-	}
+			memcpy(&pMsc->pSectorBuffer[pMsc->SectorOffset],
+				&pPacket[offset], length);
+			pMsc->SectorOffset = (uint16_t)(pMsc->SectorOffset + length);
+			pMsc->Transferred += length;
+			offset += length;
 
-	if (pMsc->Transferred >= pMsc->TransferLimit)
-	{
-		UsbdMscFinishCommand(pMsc);
+			if (pMsc->SectorOffset == pMsc->SectorSize)
+			{
+				if (!pMsc->pDisk->SectWrite(pMsc->Lba, pMsc->pSectorBuffer))
+				{
+					UsbdMscFail(pMsc, USB_MSC_SENSE_MEDIUM_ERROR,
+						USB_MSC_ASC_WRITE_ERROR);
+					pMsc->bStallAfterData = true;
+					UsbdMscFinishCommand(pMsc);
+					return;
+				}
+				UsbdMscNextSector(pMsc);
+			}
+		}
+
+		if (pMsc->Transferred >= pMsc->TransferLimit)
+		{
+			UsbdMscFinishCommand(pMsc);
+		}
 	}
 }
 

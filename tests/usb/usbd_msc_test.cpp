@@ -573,6 +573,51 @@ static void TestReadWriteAndRepeatedCommands(void)
 	CheckPassedCsw(12U);
 }
 
+static void TestBufferedWrite(void)
+{
+	ResetFake();
+	RamDisk disk;
+	disk.Fill();
+	alignas(4) uint8_t sector[SECTOR_SIZE];
+	UsbdMsc msc;
+	CHECK(msc.Init(MakeCfg(disk, sector)));
+	CHECK(msc.SelectConfig(1U));
+
+	uint8_t writeData[SECTOR_SIZE * 2U];
+	for (size_t n = 0; n < sizeof(writeData); n++)
+		writeData[n] = (uint8_t)(0x5AU ^ n);
+	UsbMscCmdBlkWrapper_t cbw = MakeCbw(13U, sizeof(writeData), false,
+		USB_MSC_SCSI_WRITE_10, 10U);
+	PutBe32(&cbw.CBWCB[2], 6U);
+	PutBe16(&cbw.CBWCB[7], 2U);
+	SendCbw(msc, cbw);
+
+	// Endpoint callbacks can fill both RX slots before the coalesced USB
+	// process event runs. One Process() must consume each available batch.
+	UsbDevIntrf_t *pIntrf = static_cast<UsbDevIntrf_t *>(s_OutContext);
+	for (size_t offset = 0; offset < sizeof(writeData); offset += SECTOR_SIZE)
+	{
+		DeliverOut(&writeData[offset], USBD_MSC_FS_MPS);
+		DeliverOut(&writeData[offset + USBD_MSC_FS_MPS], USBD_MSC_FS_MPS);
+		CHECK(CFifoUsed(pIntrf->hRxFifo) == 2);
+		msc.Process();
+		CHECK(CFifoUsed(pIntrf->hRxFifo) == 0);
+		CHECK(memcmp(disk.Data[6U + offset / SECTOR_SIZE],
+			&writeData[offset], SECTOR_SIZE) == 0);
+		if (offset == 0U)
+		{
+			CHECK(msc.BotState() == USBD_MSC_BOT_DATA_OUT);
+			CHECK(!s_InBusy);
+		}
+	}
+	CHECK(msc.BotState() == USBD_MSC_BOT_SEND_CSW);
+	CHECK(s_InBusy);
+	CompleteIn();
+	msc.Process();
+	CHECK(msc.BotState() == USBD_MSC_BOT_WAIT_CBW);
+	CheckPassedCsw(13U);
+}
+
 static void TestFailuresSenseResidueAndPhase(void)
 {
 	ResetFake();
@@ -676,7 +721,6 @@ static void TestWriteFailure(void)
 	s_CaptureLength = 0U;
 	SendCbw(msc, cbw);
 	DeliverOut(data, USBD_MSC_FS_MPS);
-	msc.Process();
 	DeliverOut(&data[USBD_MSC_FS_MPS], USBD_MSC_FS_MPS);
 	msc.Process();
 	CHECK(s_HaltOut);
@@ -1004,6 +1048,7 @@ int main(void)
 	TestInquiryStrings();
 	TestReadOnlyCommands();
 	TestReadWriteAndRepeatedCommands();
+	TestBufferedWrite();
 	TestFailuresSenseResidueAndPhase();
 	TestReadOnlyAndStorageFailure();
 	TestWriteFailure();
