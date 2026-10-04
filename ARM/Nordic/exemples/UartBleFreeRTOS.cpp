@@ -38,7 +38,6 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ----------------------------------------------------------------------------*/
 
 #include "app_util_platform.h"
-#include "app_scheduler.h"
 #include "nrf_sdh.h"
 #include "nrf_sdh_freertos.h"
 #include "FreeRTOS.h"

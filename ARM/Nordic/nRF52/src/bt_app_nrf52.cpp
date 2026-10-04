@@ -49,7 +49,6 @@ SOFTWARE.
 #include "ble_dis.h"
 #include "nrf_ble_gatt.h"
 #include "app_util_platform.h"
-#include "app_scheduler.h"
 #include "fds.h"
 #include "nrf_fstorage.h"
 #include "nrf_sdh.h"
@@ -117,13 +116,6 @@ extern "C" ret_code_t nrf_sdh_enable(nrf_clock_lf_cfg_t *clock_lf_cfg);
 
 #define BLEAPP_OBSERVER_PRIO           1                                           /**< Application's BLE observer priority. You shouldn't need to modify this value. */
 //#define BLEAPP_CONN_CFG_TAG            1                                           /**< A tag identifying the SoftDevice BLE configuration. */
-
-#define SCHED_MAX_EVENT_DATA_SIZE 		20 /**< Maximum size of scheduler events. Note that scheduler BLE stack events do not contain any data, as the events are being pulled from the stack in the event handler. */
-#ifdef SVCALL_AS_NORMAL_FUNCTION
-#define SCHED_QUEUE_SIZE                20                                         /**< Maximum number of events in the scheduler queue. More is needed in case of Serialization. */
-#else
-#define SCHED_QUEUE_SIZE          		40                        /**< Maximum number of events in the scheduler queue. */
-#endif
 
 //#define SLAVE_LATENCY                   0                                           /**< Slave latency. */
 //#define CONN_SUP_TIMEOUT                MSEC_TO_UNITS(4000, UNIT_10_MS)             /**< Connection supervisory timeout (4 seconds), Supervision Timeout uses 10 ms units. */
@@ -1550,15 +1542,6 @@ bool BtAppConnInit(void)
 	return true;
 }
 
-// Default queue of the SDK scheduler. An application defines its own
-// g_BtAppSchedCfg to size it, or to leave the scheduler out, see bt_app.h.
-static uint32_t s_BtAppSchedMem[CEIL_DIV(APP_SCHED_BUF_SIZE(SCHED_MAX_EVENT_DATA_SIZE, SCHED_QUEUE_SIZE),
-										 sizeof(uint32_t))];
-
-extern "C" __attribute__((weak)) const BtAppSchedCfg_t g_BtAppSchedCfg = {
-	s_BtAppSchedMem, sizeof(s_BtAppSchedMem), SCHED_MAX_EVENT_DATA_SIZE, SCHED_QUEUE_SIZE
-};
-
 bool BtAppInit(const BtAppCfg_t *pCfg)//, bool bEraseBond)
 {
 	ret_code_t err_code;
@@ -1608,25 +1591,6 @@ bool BtAppInit(const BtAppCfg_t *pCfg)//, bool bEraseBond)
     	g_BtAppData.AppDevice.Conn.MaxMtu = pCfg->MaxMtu;
     else
     	g_BtAppData.AppDevice.Conn.MaxMtu = NRF_BLE_MAX_MTU_SIZE;
-
-	// SDK scheduler, for applications that post events to it. The queue is
-	// described by g_BtAppSchedCfg. An application that does not use the
-	// scheduler defines the descriptor without memory and the default queue
-	// is then not linked.
-	if (g_BtAppSchedCfg.pMem != nullptr)
-	{
-		if (((uintptr_t)g_BtAppSchedCfg.pMem & 3U) != 0 ||
-			g_BtAppSchedCfg.MemSize < APP_SCHED_BUF_SIZE(g_BtAppSchedCfg.EvtSize, g_BtAppSchedCfg.QueSize))
-		{
-			DEBUG_PRINTF("BtAppInit FAIL: scheduler queue memory (mem=%p size=%d)\r\n",
-				g_BtAppSchedCfg.pMem, (int)g_BtAppSchedCfg.MemSize);
-			return false;
-		}
-
-		err_code = app_sched_init(g_BtAppSchedCfg.EvtSize, g_BtAppSchedCfg.QueSize,
-								  g_BtAppSchedCfg.pMem);
-		APP_ERROR_CHECK(err_code);
-	}
 
     nrf_clock_lf_cfg_t lfclk = {
     	0

@@ -171,10 +171,6 @@ alignas(8) static uint8_t s_BtPeerPoolMem[BT_PEER_POOL_MEMSIZE(1)];
 
 const BtPeerPoolCfg_t g_BtPeerPoolCfg = { s_BtPeerPoolMem, sizeof(s_BtPeerPoolMem) };
 
-// Events are posted with AppEvtHandlerQue, nothing goes to the vendor event
-// scheduler some ports run, so its queue is left out.
-const BtAppSchedCfg_t g_BtAppSchedCfg = { NULL, 0, 0, 0 };
-
 // Controller memory pool, used by the ports that run the controller in the
 // application (SDC) and not linked otherwise. BtHciCtlrMemPoolSizeNeeded
 // gives the size the configuration asked for.

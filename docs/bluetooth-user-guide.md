@@ -259,10 +259,15 @@ configuration macro as proof that precompiled storage changed.
 | Discovery caches | `g_BtDevSrvcCacheCfg` | Reserve for peers whose discovered databases coexist |
 | SDC controller pool | `g_BtHciCtlrMemPool` | 8-byte alignment; depends on role, links and periodic resources |
 | Application event queue | `g_AppEvtHandlerQueMem`, `AppEvtHandlerInit()` | Owned by the application, not by `BtAppCfg_t`; not linked when `BtEvtQue()` is overridden |
-| Vendor scheduler queue | `g_BtAppSchedCfg` | Separate from AppEvt; relevant only on ports using that scheduler |
 
 These controls apply where the selected port consumes them; vendor-host
 memory can have additional SDK-specific requirements.
+
+The nRF52 application path uses AppEvt as its only deferred-work queue.
+`BtAppInit()` does not initialize `app_scheduler`. The nRF52832/840 library
+configurations retain interrupt dispatch for SDK SoftDevice, timer and
+power-management callbacks. The SDK scheduler remains available to SDK-only
+examples that initialize and run it themselves; it does not queue AppEvt work.
 
 An application can override the public weak pool descriptors to replace their
 default storage. Include the declaring header and define the descriptor once.

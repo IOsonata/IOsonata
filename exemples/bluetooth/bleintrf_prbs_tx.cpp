@@ -47,12 +47,6 @@ SOFTWARE.
 #include "coredev/system_core_clock.h"
 #include "blueio_board.h"
 
-//#define APP_SCHED		// use Nordic app scheduler
-
-#ifdef APP_SCHED
-#include "app_scheduler.h"
-#endif
-
 #include "board.h"
 
 #ifdef MCUOSC
@@ -250,11 +244,7 @@ int BleIntrfEvtCallback(DevIntrf_t *pDev, DEVINTRF_EVT EvtId, uint8_t *pBuffer, 
 	return cnt;
 }
 
-#ifdef APP_SCHED
-void PrbsChedHandler(void * p_event_data, uint16_t event_size)
-#else
 void PrbsChedHandler(uint32_t Evt, void *pCtx)
-#endif
 {
 	static uint8_t buff[PACKET_SIZE];
 	static int bufflen = 0;
@@ -276,11 +266,7 @@ void PrbsChedHandler(uint32_t Evt, void *pCtx)
 		{
 			bufflen = 0;
 		}
-#ifdef APP_SCHED
-		app_sched_event_put(NULL, 0, PrbsChedHandler);
-#else
 		AppEvtHandlerQue(0, 0, PrbsChedHandler);
-#endif
 	}
 }
 
@@ -288,11 +274,7 @@ void ReadCharSetNotif(BtGattChar_t *pChar, bool bEnable, uint16_t ConnHdl)
 {
 	if (bEnable)
 	{
-#ifdef APP_SCHED
-		app_sched_event_put(NULL, 0, PrbsChedHandler);
-#else
 		AppEvtHandlerQue(0, 0, PrbsChedHandler);
-#endif
 	}
 }
 
