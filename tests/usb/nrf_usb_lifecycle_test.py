@@ -55,10 +55,10 @@ enum UsbCtrlrEvtType_t {USB_CTRLR_EVT_DRDY=2};
 typedef void (*UsbCtrlrEpHandler_t)(UsbCtrlrEvtType_t, uint16_t, void *);
 struct nRFUsbEpReg_t {UsbCtrlrEpHandler_t Handler;void *pContext;};
 struct UsbdMock {uint8_t IntPrio;bool LowPowerSuspend;
- nRFUsbEpReg_t EpReg[8][2];uint16_t Complete;} s_Usbd;
+ nRFUsbEpReg_t EpReg[8][2];uint16_t Complete;bool bQueRefused;} s_Usbd;
 bool cable, clockOK, readyOK;
 unsigned requests, releases, clockRefs, starts, resets, waits, dispatches;
-unsigned irqDisables, irqPriority;
+unsigned irqDisables, irqPriority, irqPends;
 constexpr int USBD_IRQn=7;
 struct {uint32_t INTEN,USBPULLUP,ENABLE,LOWPOWER,EPDATASTATUS,EVENTS_EP0SETUP;} regs;
 auto *NRF_USBD=&regs;
@@ -68,6 +68,7 @@ void UsbdXtalRelease(){assert(clockRefs==1);--clockRefs;++releases;}
 bool UsbdStartCtrlr(){++starts;return readyOK;}
 void NVIC_SetPriority(int irq,uint8_t p){assert(irq==USBD_IRQn);irqPriority=p;}
 void NVIC_DisableIRQ(int irq){assert(irq==USBD_IRQn);++irqDisables;}
+void NVIC_SetPendingIRQ(int irq){assert(irq==USBD_IRQn);++irqPends;}
 void nRFUsbdDmaWait(){++waits;}
 void nRFUsbdResetState(){++resets;}
 void __ISB(){}
@@ -88,18 +89,15 @@ void init(){
  s_Usbd={6,false,{}};
  cable=clockOK=readyOK=true;
  requests=releases=clockRefs=starts=resets=waits=dispatches=irqDisables=0;
- irqPriority=0;regs={0xFFFF,1,1,0};
+ irqPriority=irqPends=0;regs={0xFFFF,1,1,0};
 }
 '''
 code += '\n'.join(function(n) for n in ['nRFUsbGetEpReg', 'UsbCtrlrEpBind',
-                                        'UsbCtrlrStart', 'UsbCtrlrStop'])
-# UsbCtrlrProcess is inline in the nRF52 usb_ctrlr.h. It does not run the
-# application event queue: the application owns that queue.
-_hdr = (ROOT / 'ARM/Nordic/include/usb_ctrlr.h').read_text()
-_proc = _hdr[_hdr.index('static inline void UsbCtrlrProcess'):]
-_proc = _proc[:_proc.index('}') + 1]
-assert 'AppEvtHandler' not in _proc
-code += '\n' + _proc.replace('static inline ', '') + '\n'
+                                        'UsbCtrlrStart', 'UsbCtrlrStop',
+                                        'UsbCtrlrProcess'])
+# UsbCtrlrProcess does not run the application event queue: the application
+# owns that queue.
+assert 'AppEvtHandler' not in function('UsbCtrlrProcess')
 code += r'''
 namespace startup {
 constexpr uint32_t USBD_EVENTCAUSE_READY_Msk=1,POWER_USBREGSTATUS_OUTPUTRDY_Msk=2;
@@ -227,9 +225,17 @@ int main(){
   init();regs.LOWPOWER=low;
   UsbCtrlrProcess(0);
   assert(dispatches==0 && regs.LOWPOWER==low && requests==0 && releases==0);
+  assert(irqPends==0);
  }
+ // An event the queue refused raises the interrupt once, which sends it again
+ init();s_Usbd.bQueRefused=true;
+ UsbCtrlrProcess(0);
+ assert(irqPends==1 && !s_Usbd.bQueRefused);
+ UsbCtrlrProcess(0);
+ assert(irqPends==1);
  puts("PASS: lifecycle balances clock ownership on success/failure and repeated start/stop");
  puts("PASS: foreground processing leaves the application event queue to the application and owns no peripheral power");
+ puts("PASS: a refused event raises the USBD interrupt once from the process event");
 }
 '''
 with tempfile.TemporaryDirectory() as directory:

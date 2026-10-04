@@ -735,6 +735,7 @@ static __attribute__((noinline)) void nRFUsbdInvalidateEvents(void)
 	for (auto &endpoint : s_Usbd.EpReg)
 		for (auto &registration : endpoint)
 			++registration.Generation;
+	s_Usbd.OutCmplOwed = 0U;
 }
 
 static void nRFUsbdResetState(void)
@@ -939,6 +940,52 @@ static void nRFUsbdProcessQueuedEvent(uint32_t Evt, void *pContext)
 		USB_CTRLR_EVT_XFER_CMPL, (uint8_t)(Evt >> 8U), preg->pContext);
 }
 
+// Queues the completion of OUT endpoint EpNum. The length is read from the
+// controller: the next DMA of this endpoint follows its next readiness event,
+// which waits while the completion is owed.
+static bool nRFUsbdQueOutCmpl(uint32_t EpNum)
+{
+	const uint32_t evt = (NRF_USBD->EPOUT[EpNum].AMOUNT << 8U) | EpNum;
+
+	return UsbEvtQue(evt,
+		(void *)(uintptr_t)nRFUsbGetEpReg(EpNum, 0U)->Generation,
+		nRFUsbdProcessQueuedEvent);
+}
+
+// Retries the completions the queue refused, in endpoint order.
+static void nRFUsbdRetryOutCmpl(void)
+{
+	uint32_t owed = s_Usbd.OutCmplOwed;
+
+	while (owed != 0U)
+	{
+		const uint32_t epnum = 31U - (uint32_t)__CLZ(owed);
+		owed &= ~(1UL << epnum);
+		if (!nRFUsbdQueOutCmpl(epnum))
+		{
+			s_Usbd.bQueRefused = true;
+			return;
+		}
+		s_Usbd.OutCmplOwed &= (uint8_t)~(1U << epnum);
+	}
+}
+
+// Deferred endpoint work is queued with UsbEvtQue and run by whoever owns
+// that queue, the application main loop or the thread serving USB. DMA
+// retirement and immediate handoff stay in the USBD interrupt. An event the
+// queue refused is sent again by that interrupt, raised here once the queue
+// has been served.
+void UsbCtrlrProcess(int DevNo)
+{
+	(void)DevNo;
+
+	if (s_Usbd.bQueRefused)
+	{
+		s_Usbd.bQueRefused = false;
+		NVIC_SetPendingIRQ(USBD_IRQn);
+	}
+}
+
 static void nRFUsbdHandleBusEvent(uint32_t EventCause)
 {
 	if ((EventCause & USBD_EVENTCAUSE_SUSPEND_Msk) != 0U &&
@@ -1071,6 +1118,12 @@ extern "C" void USBD_IRQHandler(void){
 		nRFUsbdHandleSof();
 	}
 
+	// Completions refused earlier go first, ahead of anything newer.
+	if (s_Usbd.OutCmplOwed != 0U)
+	{
+		nRFUsbdRetryOutCmpl();
+	}
+
 	// A completed transfer keeps software DMA ownership for immediate handoff.
 	bool reuseDma = false;
 
@@ -1153,11 +1206,11 @@ extern "C" void USBD_IRQHandler(void){
 				NRF_USBD->EPSTATUS = dmastatus;
 				reuseDma = true;
 				(void)CFifoGet(s_Usbd.hQue);
-				const uint32_t evt =
-					(NRF_USBD->EPOUT[epnum].AMOUNT << 8U) | epnum;
-				UsbEvtQue(evt,
-					(void *)(uintptr_t)nRFUsbGetEpReg(epnum, 0U)->Generation,
-					nRFUsbdProcessQueuedEvent);
+				if (!nRFUsbdQueOutCmpl(epnum))
+				{
+					s_Usbd.OutCmplOwed |= (uint8_t)(1U << epnum);
+					s_Usbd.bQueRefused = true;
+				}
 				break;
 			}
 		}
@@ -1189,9 +1242,11 @@ extern "C" void USBD_IRQHandler(void){
 	// IN host consumption (bits 1-7) and OUT readiness (bits 17-23) both go
 	// to UsbEvtQue in one pass. Rotating the halves keeps the original order:
 	// IN highest endpoint first, then OUT highest endpoint first. A bit stays
-	// set when it cannot be queued and the next IRQ retries it. OUT readiness
-	// waits while its DMA is captured.
-	uint32_t pending = __ROR(datastatus & 0x00FE00FEUL, 16U);
+	// set when it cannot be queued, and the interrupt raised by
+	// UsbCtrlrProcess retries it. OUT readiness waits while its DMA is
+	// captured or its last completion is owed.
+	uint32_t pending = __ROR(datastatus &
+		(0x00FE00FEUL & ~((uint32_t)s_Usbd.OutCmplOwed << 16U)), 16U);
 	while (pending != 0U)
 	{
 		const uint32_t pos = 31U - (uint32_t)__CLZ(pending);
@@ -1208,7 +1263,10 @@ extern "C" void USBD_IRQHandler(void){
 			continue;
 		if (!UsbEvtQue(evt, (void *)(uintptr_t)preg->Generation,
 			nRFUsbdProcessQueuedEvent))
+		{
+			s_Usbd.bQueRefused = true;
 			break;
+		}
 		servicedstatus |= bit;
 	}
 
@@ -1381,6 +1439,10 @@ void UsbCtrlrEpClose(int DevNo, uint8_t EpNo, bool bIn)
 	(void)DevNo;
 	const uint32_t state = DisableInterrupt();
 	++nRFUsbGetEpReg(EpNo, bIn)->Generation;
+	if (!bIn)
+	{
+		s_Usbd.OutCmplOwed &= (uint8_t)~(1U << EpNo);
+	}
 	if (EpNo == NRFX_USBD_ISO_EP_NO)
 	{
 		s_Usbd.IsoOpen = false;

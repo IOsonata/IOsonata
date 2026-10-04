@@ -86,6 +86,7 @@ names = [
     ('nRFUsbdStartQueuedDma', None), ('nRFUsbdResumeQueuedDmaLocked', None),
     ('nRFUsbdHandleSof', None), ('USBD_IRQHandler', None),
     ('nRFUsbdAcquireDma', None), ('nRFUsbdProcessQueuedEvent', None),
+    ('nRFUsbdQueOutCmpl', None), ('nRFUsbdRetryOutCmpl', None),
     ('nRFUsbdInvalidateEvents', None),
     ('nRFUsbdResetState', None),
     ('nRFUsbdEpDisable', None),
@@ -484,6 +485,28 @@ void testDeferredOut(){
  assert(receivers[0].drdy==1 && activeBit==17);
  finish();AppEvtHandlerDispatch();checkPacket(1,9);
  puts("PASS: full AppEvt queue leaves DRDY in hardware for a later ISR to queue");
+ // A completion the full queue refuses is owed, not lost. The next packet's
+ // DRDY waits behind it, and the interrupt raised after the queue has been
+ // served sends the completion first, then the DRDY.
+ deferredInit();dummyCalls=0;receive(1,17);
+ for(unsigned i=0;i<16;++i)assert(AppEvtHandlerQue(0,nullptr,dummyEvent));
+ regs.SIZE.EPOUT[1]=23;regs.EPDATASTATUS.bits|=1U<<17;finish();
+ assert(s_Usbd.OutCmplOwed==(1U<<1) && s_Usbd.bQueRefused && !dmaBusy);
+ assert(regs.EPDATASTATUS.bits==(1U<<17) && !receivers[0].completions);
+ UsbCtrlrProcess(0);assert(dummyCalls==16 && !receivers[0].completions);
+ interrupt();assert(!s_Usbd.OutCmplOwed && !regs.EPDATASTATUS.bits);
+ AppEvtHandlerDispatch();assert(receivers[0].completions==1 && receivers[0].drdy==1);
+ checkPacket(1,17);
+ AppEvtHandlerDispatch();assert(receivers[0].drdy==2 && activeBit==17);
+ finish();AppEvtHandlerDispatch();checkPacket(1,23);
+ // Closing the endpoint drops the owed completion
+ deferredInit();receive(1,9);
+ for(unsigned i=0;i<16;++i)assert(AppEvtHandlerQue(0,nullptr,dummyEvent));
+ finish();assert(s_Usbd.OutCmplOwed==(1U<<1));
+ productionEpClose(0,1,false);assert(!s_Usbd.OutCmplOwed);
+ UsbCtrlrProcess(0);interrupt();AppEvtHandlerExec();
+ assert(!receivers[0].completions);
+ puts("PASS: full AppEvt queue keeps an OUT completion owed and sends it before the next DRDY");
 
  deferredInit();receive(1,5);finish();duringCompletion=queueAnotherOut;
  AppEvtHandlerDispatch();assert(receivers[0].completions==1 && !dmaBusy);

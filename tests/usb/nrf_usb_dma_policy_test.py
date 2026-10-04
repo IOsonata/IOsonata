@@ -111,8 +111,8 @@ assert "UsbEvtQue" not in reg_in
 
 # Regular OUT pops its request and queues its completion at END.
 reg_out = completed[completed.index("case 17U:"):]
-assert reg_out.index("(void)CFifoGet(s_Usbd.hQue);") < reg_out.index("UsbEvtQue(evt,")
-assert "nRFUsbdProcessQueuedEvent" in reg_out
+assert reg_out.index("(void)CFifoGet(s_Usbd.hQue);") < reg_out.index("nRFUsbdQueOutCmpl(epnum)")
+assert "s_Usbd.OutCmplOwed |=" in reg_out
 assert "USB_CTRLR_EVT_XFER_CMPL" not in completed
 assert "nRFUsbdStartQueuedDma" not in completed
 assert "nRFUsbdDmaUnlock" not in completed
@@ -121,7 +121,7 @@ assert "nRFUsbdDmaUnlock" not in completed
 assert interrupt.count("nRFUsbdStartQueuedDma(") == 1
 hand_off = interrupt.index("nRFUsbdStartQueuedDma(ep0out);")
 assert interrupt.index("switch (epno)") < hand_off
-assert hand_off < interrupt.index("uint32_t pending = __ROR(datastatus & 0x00FE00FEUL, 16U);")
+assert hand_off < interrupt.index("uint32_t pending = __ROR(datastatus &")
 assert "if (reuseDma || ((ep0out || resumed) && nRFUsbdAcquireDma()))" in interrupt
 assert interrupt.index("NRF_USBD->EPDATASTATUS = servicedstatus;") > hand_off
 
@@ -133,7 +133,7 @@ assert "resumed" in interrupt[hand_off - 200:hand_off]
 
 # EPDATA: IN completion and OUT DRDY go through AppEvt. The OUT readiness
 # latch is consumed only when the enqueue succeeds; IN stops on a full queue.
-epdata = interrupt[interrupt.index("uint32_t pending = __ROR(datastatus & 0x00FE00FEUL, 16U);"):]
+epdata = interrupt[interrupt.index("uint32_t pending = __ROR(datastatus &"):]
 # One pass in the original order: IN highest endpoint first, then OUT.
 assert "31U - (uint32_t)__CLZ(pending)" in epdata
 assert "evt = (NRF_USBD->EPIN[epnum].AMOUNT << 8U) | epnum | (1UL << 16U);" in epdata

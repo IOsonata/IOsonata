@@ -229,15 +229,9 @@ extern "C" {
 bool UsbCtrlrInit(int DevNo, const UsbCtrlrCfg_t *pCfg);
 bool UsbCtrlrStart(int DevNo);
 void UsbCtrlrStop(int DevNo);
+// Called from the process event.
+void UsbCtrlrProcess(int DevNo);
 #if defined(USBD_PRESENT)
-// Deferred endpoint work is queued with UsbEvtQue and run by whoever owns
-// that queue, the application main loop or the thread serving USB. DMA
-// retirement and immediate handoff stay in USBD_IRQHandler().
-static inline void UsbCtrlrProcess(int DevNo)
-{
-	(void)DevNo;
-}
-
 static inline bool UsbCtrlrVbusDetected(int DevNo)
 {
 	(void)DevNo;
@@ -245,7 +239,6 @@ static inline bool UsbCtrlrVbusDetected(int DevNo)
 		POWER_USBREGSTATUS_VBUSDETECT_Msk) != 0;
 }
 #else
-void UsbCtrlrProcess(int DevNo);
 bool UsbCtrlrVbusDetected(int DevNo);
 #endif
 #if defined(USBD_PRESENT)
@@ -398,6 +391,8 @@ typedef struct __nRF_Usbd_State
 	uint16_t IsoInDmaLen;
 	uint8_t IsoDataFlag;          //!< ISO directions with data ready for DMA.
 	volatile uint8_t Flags;       //!< Controller power/wake state only.
+	uint8_t OutCmplOwed;          //!< OUT endpoints whose completion the queue refused.
+	volatile bool bQueRefused;    //!< UsbEvtQue refused an event, see UsbCtrlrProcess.
 	hCFifo_t hQue;
 	hCFifo_t hEp0Que;
 	// Regular DMA buffers and lengths live in hQue; only ISO retains slots.
