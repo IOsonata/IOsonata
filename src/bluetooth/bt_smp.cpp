@@ -3576,6 +3576,11 @@ static void SmpCryptoRetryEvt(uint32_t Evt, void *pCtx)
 	SmpCryptoRetryPending();
 
 	// One retry per pass: queue again while another link waits on BUSY
+	BtSmpCheckStatus();
+}
+
+void BtSmpCheckStatus(void)
+{
 	for (int i = 0; i < BT_SMP_MAX_LINK; i++)
 	{
 		if (s_SmpLink[i].ConnHdl != BT_CONN_HDL_INVALID &&

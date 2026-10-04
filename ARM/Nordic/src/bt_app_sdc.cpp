@@ -256,8 +256,14 @@ static void BtStackMpslAssert(const char * const file, const uint32_t line)
 
 
 
-// Set while the timeout check is in the queue, so that it is queued once
-static volatile bool s_bBtAppSdcTickQueued = false;
+enum {
+	BT_APP_SDC_TICK_IDLE,
+	BT_APP_SDC_TICK_PENDING,
+	BT_APP_SDC_TICK_QUEUED,
+};
+
+// Keep a refused timer event pending until the Bluetooth queue has room.
+static volatile uint8_t s_BtAppSdcTickState = BT_APP_SDC_TICK_IDLE;
 
 // Timeout checks, queued once per second by the timer
 static void BtAppSdcTickEvt(uint32_t Evt, void *pCtx)
@@ -265,7 +271,7 @@ static void BtAppSdcTickEvt(uint32_t Evt, void *pCtx)
 	(void)Evt;
 	(void)pCtx;
 
-	s_bBtAppSdcTickQueued = false;
+	s_BtAppSdcTickState = BT_APP_SDC_TICK_IDLE;
 
 	// Generic indication transaction timeout (Core Vol 3 Part F 3.3.3). Cheap
 	// no-op when nothing is pending.
@@ -282,17 +288,46 @@ static void BtAppSdcTickEvt(uint32_t Evt, void *pCtx)
 	}
 }
 
+static void BtAppSdcTickQue(void)
+{
+	if (s_BtAppSdcTickState == BT_APP_SDC_TICK_PENDING)
+	{
+		s_BtAppSdcTickState = BT_APP_SDC_TICK_QUEUED;
+		if (BtEvtQue(0, nullptr, BtAppSdcTickEvt) == false)
+		{
+			s_BtAppSdcTickState = BT_APP_SDC_TICK_PENDING;
+		}
+	}
+}
+
 static void BtAppSdcTimerHandler(TimerDev_t *pTimer, uint32_t Evt)
 {
 	(void)pTimer;
 
-	if ((Evt & TIMER_EVT_TRIGGER(0)) && s_bBtAppSdcTickQueued == false)
+	if (Evt & TIMER_EVT_TRIGGER(0))
 	{
-		s_bBtAppSdcTickQueued = true;
-		if (BtEvtQue(0, nullptr, BtAppSdcTickEvt) == false)
+		if (s_BtAppSdcTickState == BT_APP_SDC_TICK_IDLE)
 		{
-			s_bBtAppSdcTickQueued = false;
+			s_BtAppSdcTickState = BT_APP_SDC_TICK_PENDING;
 		}
+		BtAppSdcTickQue();
+	}
+}
+
+// These modules stay optional for applications without security.
+extern "C" void BtSmpCheckStatus(void) __attribute__((weak));
+extern "C" void BtSmpBondNvmCheckStatus(void) __attribute__((weak));
+
+void BtAppCheckStatus(void)
+{
+	BtAppSdcTickQue();
+	if (BtSmpCheckStatus != nullptr)
+	{
+		BtSmpCheckStatus();
+	}
+	if (BtSmpBondNvmCheckStatus != nullptr)
+	{
+		BtSmpBondNvmCheckStatus();
 	}
 }
 

@@ -142,6 +142,14 @@ int BtSmpBondNvmInit(void);
  */
 void BtSmpBondNvmPoll(void);
 
+/**
+ * @brief Queue retained bond saves after the Bluetooth event queue empties.
+ *
+ * Does not advance the storage-failure backoff. BtSmpBondNvmPoll remains the
+ * once-per-second source of that delay.
+ */
+void BtSmpBondNvmCheckStatus(void);
+
 #ifdef __cplusplus
 }
 #endif

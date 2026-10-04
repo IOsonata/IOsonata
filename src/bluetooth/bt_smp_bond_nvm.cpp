@@ -198,6 +198,14 @@ void BtSmpBondNvmPoll(void)
 	BondSaveSchedule();
 }
 
+void BtSmpBondNvmCheckStatus(void)
+{
+	if (s_RetryIdleCycles.load(std::memory_order_acquire) == 0)
+	{
+		BondSaveSchedule();
+	}
+}
+
 static void BondSaveHandler(uint32_t Evt, void *pCtx)
 {
 	(void)Evt;

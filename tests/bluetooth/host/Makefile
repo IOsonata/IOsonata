@@ -378,6 +378,7 @@ test: $(TARGETS)
 		echo "RUN $$target"; \
 		$(TEST_ENV) ./$$target; \
 	done
+	CXX="$(CXX)" $(PYTHON) bt_status_queue_test.py
 
 test-gcc:
 	$(MAKE) clean
