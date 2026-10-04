@@ -904,7 +904,8 @@ static void TestResetAcrossPhasesAndReconnect(void)
 	cbw = MakeCbw(55U, 8U, false, USB_MSC_SCSI_INQUIRY, 6U);
 	cbw.CBWCB[4] = 8U;
 	SendCbw(msc, cbw);
-	CHECK(msc.BotState() == USBD_MSC_BOT_PHASE_ERROR);
+	// The phase error CSW goes out on the same process pass
+	CHECK(msc.BotState() == USBD_MSC_BOT_SEND_CSW);
 	BulkReset(msc);
 	CHECK(msc.BotState() == USBD_MSC_BOT_RESET_RECOVERY);
 	CHECK(UsbEpSetHalt(0, EP_NO, false, false));
@@ -934,6 +935,69 @@ static void TestSectorBufferBounds(void)
 	CHECK(!msc.Init(cfg));
 }
 
+// The USB core runs the class once per process event, and a process event
+// comes from an endpoint event. Drive the class that way: one Process() per
+// delivered packet or completed IN transfer, never a polling loop. Each event
+// must leave a transfer started, or the command stalls.
+static void TestOneProcessPerEvent(void)
+{
+	ResetFake();
+	RamDisk disk;
+	disk.Fill();
+	alignas(4) uint8_t sector[SECTOR_SIZE];
+	UsbdMsc msc;
+	CHECK(msc.Init(MakeCfg(disk, sector)));
+	CHECK(msc.SelectConfig(1U));
+
+	// IN data: INQUIRY
+	UsbMscCmdBlkWrapper_t cbw = MakeCbw(20U, 36U, true,
+		USB_MSC_SCSI_INQUIRY, 6U);
+	cbw.CBWCB[4] = 36U;
+	s_CaptureLength = 0U;
+	SendCbw(msc, cbw);
+	CHECK(s_InBusy);
+	for (int i = 0; i < 8 && s_InBusy; i++)
+	{
+		CompleteIn();
+		msc.Process();
+	}
+	CHECK(!s_InBusy);
+	CHECK(msc.BotState() == USBD_MSC_BOT_WAIT_CBW);
+	CHECK(s_CaptureLength == 36U + sizeof(UsbMscCmdStatusWrapper_t));
+	CheckPassedCsw(20U);
+
+	// No data: TEST UNIT READY
+	cbw = MakeCbw(21U, 0U, false, USB_MSC_SCSI_TEST_UNIT_READY, 6U);
+	s_CaptureLength = 0U;
+	SendCbw(msc, cbw);
+	CHECK(s_InBusy);
+	CompleteIn();
+	msc.Process();
+	CHECK(msc.BotState() == USBD_MSC_BOT_WAIT_CBW);
+	CheckPassedCsw(21U);
+
+	// OUT data: WRITE 10, one sector
+	uint8_t writeData[SECTOR_SIZE];
+	for (size_t n = 0; n < sizeof(writeData); n++)
+		writeData[n] = (uint8_t)(0x5AU ^ n);
+	cbw = MakeCbw(22U, sizeof(writeData), false, USB_MSC_SCSI_WRITE_10, 10U);
+	PutBe32(&cbw.CBWCB[2], 6U);
+	PutBe16(&cbw.CBWCB[7], 1U);
+	s_CaptureLength = 0U;
+	SendCbw(msc, cbw);
+	for (size_t offset = 0; offset < sizeof(writeData); offset += USBD_MSC_FS_MPS)
+	{
+		DeliverOut(&writeData[offset], USBD_MSC_FS_MPS);
+		msc.Process();
+	}
+	CHECK(s_InBusy);
+	CompleteIn();
+	msc.Process();
+	CHECK(msc.BotState() == USBD_MSC_BOT_WAIT_CBW);
+	CHECK(memcmp(disk.Data[6], writeData, SECTOR_SIZE) == 0);
+	CheckPassedCsw(22U);
+}
+
 int main(void)
 {
 	TestInitDescriptorAndControl();
@@ -947,6 +1011,7 @@ int main(void)
 	TestMalformedCbwAndResetRecovery();
 	TestResetAcrossPhasesAndReconnect();
 	TestSectorBufferBounds();
+	TestOneProcessPerEvent();
 
 	if (s_Fail != 0)
 	{

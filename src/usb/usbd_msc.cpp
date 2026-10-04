@@ -929,13 +929,8 @@ static void UsbdMscProcessCsw(UsbdMscDev_t *pMsc)
 	}
 }
 
-static void UsbdMscProcessInternal(UsbdMscDev_t *pMsc)
+static void UsbdMscProcessStep(UsbdMscDev_t *pMsc)
 {
-	if (pMsc == nullptr || !pMsc->bConfigured)
-	{
-		return;
-	}
-
 	switch (pMsc->State)
 	{
 		case USBD_MSC_BOT_WAIT_CBW:
@@ -964,6 +959,28 @@ static void UsbdMscProcessInternal(UsbdMscDev_t *pMsc)
 				pMsc->State = USBD_MSC_BOT_WAIT_CBW;
 			}
 			break;
+	}
+}
+
+// Runs once per USB process event, which comes from an endpoint event. A step
+// that only changes the state (CBW decoded, data done) starts no transfer, so
+// no event would bring the next one: run the steps until the state holds.
+static void UsbdMscProcessInternal(UsbdMscDev_t *pMsc)
+{
+	if (pMsc == nullptr || !pMsc->bConfigured)
+	{
+		return;
+	}
+
+	for (int i = 0; i < 4; i++)
+	{
+		const UsbdMscBotState_t state = pMsc->State;
+
+		UsbdMscProcessStep(pMsc);
+		if (pMsc->State == state)
+		{
+			break;
+		}
 	}
 }
 
@@ -1097,9 +1114,13 @@ bool UsbdMsc::Control(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
 	{
 		if (Stage == USB_CTRL_SETUP)
 		{
+			// A phase error CSW may already be on its way: recovery is due
+			// all the same.
 			const bool recovery =
 				vUsbdMsc.State == USBD_MSC_BOT_RESET_RECOVERY ||
-				vUsbdMsc.State == USBD_MSC_BOT_PHASE_ERROR;
+				vUsbdMsc.State == USBD_MSC_BOT_PHASE_ERROR ||
+				(vUsbdMsc.State == USBD_MSC_BOT_SEND_CSW &&
+				 vUsbdMsc.bRecoveryAfterCsw);
 			UsbdMscResetBot(&vUsbdMsc, false);
 			if (vUsbdMsc.bConfigured && !UsbdMscRestartEndpoints(&vUsbdMsc))
 			{

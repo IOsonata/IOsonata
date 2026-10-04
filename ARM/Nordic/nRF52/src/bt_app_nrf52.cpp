@@ -77,6 +77,7 @@ SOFTWARE.
 #include "bluetooth/bt_smp.h"
 //#include "ble_app_nrf5.h"
 #include "bluetooth/bt_dev.h"
+#include "app_evt_handler.h"		// AppWait, overridden here
 #include "sd_dispatch.h"
 
 /******** For DEBUG ************/
@@ -1819,7 +1820,8 @@ bool BtAppEnableNotify(uint16_t ConnHandle, uint16_t CharHandle)//ble_uuid_t * c
 
 // Wait of AppRun while the SoftDevice is enabled: the SoftDevice must be the
 // one putting the core to sleep. Overrides the weak WFE default, and is linked
-// only by an application that uses Bluetooth.
+// only by an application that uses Bluetooth. C linkage, as declared in
+// app_evt_handler.h, or the weak default stays selected.
 void AppWait(void)
 {
 	if (nrf_sdh_is_enabled() == false)
