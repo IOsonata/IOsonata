@@ -54,6 +54,8 @@ SOFTWARE.
 #include "re01xxx.h"
 
 #include "timer_re01.h"
+#include "interrupt_re01.h"
+#include "coredev/interrupt.h"
 
 RE01_TimerData_t g_Re01TimerData[RE01_TIMER_MAXCNT] = {
 	{.DevNo = 0, .pAgtReg = AGT0,	.IrqOvr = (IRQn_Type)-1, .IrqMatch = {(IRQn_Type)-1, (IRQn_Type)-1},},
@@ -68,19 +70,49 @@ bool TimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 		return false;
 	}
 
-	if (pCfg->DevNo < 0 || pCfg->DevNo >= RE01_TIMER_MAXCNT)
+	if (pCfg->DevNo < 0 || pCfg->DevNo >= RE01_TIMER_MAXCNT ||
+		pCfg->ClkSrc == TIMER_CLKSRC_EXT || pCfg->Freq > 64000000UL)
 	{
 		return false;
 	}
 
-	g_Re01TimerData[pCfg->DevNo].pTimer = pTimer;
+	RE01_TimerData_t *dev = &g_Re01TimerData[pCfg->DevNo];
+	uint32_t state = DisableInterrupt();
+	if (dev->pTimer && dev->pTimer != pTimer)
+	{
+		EnableInterrupt(state);
+		return false;
+	}
+	if (dev->pTimer)
+	{
+		dev->pTimer->Disable(dev->pTimer);
+		for (int i = 0; i < dev->pTimer->GetMaxTrigger(dev->pTimer); i++)
+		{
+			dev->pTimer->DisableTrigger(dev->pTimer, i);
+		}
+		Re01UnregisterIntHandler(dev->IrqOvr);
+		dev->IrqOvr = (IRQn_Type)-1;
+	}
+	dev->pTimer = pTimer;
+	bool result;
 
 	if (pCfg->DevNo < RE01_TIMER_AGT_CNT)
 	{
-		return Re01AgtInit(&g_Re01TimerData[pCfg->DevNo], pCfg);
+		result = Re01AgtInit(dev, pCfg);
 	}
-
-	return Re01TmrInit(&g_Re01TimerData[pCfg->DevNo], pCfg);
+	else
+	{
+		result = Re01TmrInit(dev, pCfg);
+	}
+	if (!result)
+	{
+		dev->pTimer->Disable(dev->pTimer);
+		Re01UnregisterIntHandler(dev->IrqOvr);
+		dev->IrqOvr = (IRQn_Type)-1;
+		dev->pTimer = NULL;
+	}
+	EnableInterrupt(state);
+	return result;
 }
 
 int TimerGetLowFreqDevCount()

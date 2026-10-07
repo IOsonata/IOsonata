@@ -57,6 +57,7 @@ typedef struct {
 		TMR01_Type *pTmrReg;
 	};
 	uint32_t BaseFreq;
+	uint8_t TmrClock;		//!< TMR1 source/divider retained across Disable/Enable
     uint32_t CC[RE01_TIMER_CC_MAXCNT];
     TimerTrig_t Trigger[RE01_TIMER_TRIG_MAXCNT];
     TimerDev_t *pTimer;
