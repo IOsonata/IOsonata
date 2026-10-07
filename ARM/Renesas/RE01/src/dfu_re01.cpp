@@ -9,10 +9,10 @@ P/E mode, during which it cannot be read: the command code runs from RAM,
 the data comes from a RAM buffer and interrupts are held off. The Cortex-M0+
 of this part has VTOR, so the application runs with its vectors in slot 0.
 
-Not confirmed from the repository (see the notes at each step): the command
-issuing area address, the 128 byte program unit, the block sizes, and the
-sequencer clock being the core clock. Every status error, lock or timeout
-makes the call fail.
+The FACI address, commands, 4 KB blocks and 1-32 MHz ICLK range follow the
+Renesas RE01 SDK (r_flash_re01_1500kb.h and r_flash_lowlevel.c). DFU uses
+the 256 byte programming mode. Every status error, lock or timeout makes
+the call fail; a failure to restore read mode resets from RAM.
 
 @author	Hoang Nguyen Hoan
 @date	Sep. 21, 2026
@@ -54,11 +54,8 @@ SOFTWARE.
 // ---------------------------------------------------------------------------
 // FACI flash sequencer
 //
-// The registers are those of RE01_1500KB.h (FLASH_Type). The command issuing
-// area is not in the header: 0x407E0000 is where the same sequencer, with
-// the same register addresses, takes its commands on the other FACI parts.
-// The command codes, key values and error handling follow the FACI program
-// and erase flow of those parts.
+// Registers: RE01_1500KB.h (FLASH_Type). FACI address, command codes and
+// keys: Renesas re-driver-package, SDK_RE01_1500KB, r_flash_lowlevel.c.
 // ---------------------------------------------------------------------------
 
 #define DFU_TGT_FACI_CMD_AREA		0x407E0000UL
@@ -87,25 +84,16 @@ SOFTWARE.
 // Code flash, 1.5 MB from 0.
 #define DFU_TGT_CF_END				0x00180000UL
 
-// One program command takes 128 bytes, 64 halfwords, as on the other FACI
-// code flash.
-#define DFU_TGT_WR_UNIT				128U
+// RE01 supports 8 or 256 byte commands, never 128. Use 256 for bulk DFU.
+#define DFU_TGT_WR_UNIT				256U
+#define DFU_TGT_ERASE_UNIT			0x1000U
 
-// The unit reported to the DFU layer. Every DFU region is aligned on it and
-// it is at least the largest block the FACI code flash has (32 KB), so an
-// erase never reaches outside the unit it was asked for, whatever the block
-// size really is. Inside the unit, a block erase is issued at each 2 KB
-// step that does not already read as ones: one command where the block is
-// 32 KB, one per block where it is smaller.
-#define DFU_TGT_ERASE_UNIT			0x8000U
-#define DFU_TGT_ERASE_STEP			0x800U
-
-// Waits are bounded by loop counts, per MHz of the core clock, long enough
-// at one loop per 4 clocks: 2 s for a block erase (the FACI data gives about
-// 1 s for a 32 KB block), 32 ms for a 128 byte program (15.8 ms), 64 us for
-// the data buffer (2 us) and for the mode changes.
-#define DFU_TGT_WAIT_ERASE			500000UL
-#define DFU_TGT_WAIT_PROGRAM		8000UL
+// Loop counts per MHz, allowing at least 4 clocks per loop: 100 ms erase,
+// 50 ms program, 1 ms forced stop, 64 us buffer/mode changes. The datasheet
+// R01DS0363EJ0110 specifies 12 ms erase and 6 ms program maxima.
+#define DFU_TGT_WAIT_ERASE			25000UL
+#define DFU_TGT_WAIT_PROGRAM		12500UL
+#define DFU_TGT_WAIT_STOP			250UL
 #define DFU_TGT_WAIT_SHORT			16UL
 
 // Everything below that runs with the flash in P/E mode is in RAM: .fastrun
@@ -115,6 +103,23 @@ SOFTWARE.
 
 // Program source, in RAM: the code flash cannot be read while it programs.
 alignas(4) static uint16_t s_DfuTgtBuf[DFU_TGT_WR_UNIT / 2];
+
+// PRIMASK leaves NMI and HardFault enabled. Their vectors must also be in
+// RAM while flash is unavailable. Both reset instead of entering a flash
+// handler. Maskable interrupts remain disabled until the old VTOR returns.
+alignas(512) static uint32_t s_DfuTgtVectors[16];
+
+DFU_TGT_RAMFUNC __attribute__((noreturn)) static void DfuTgtRamReset(void)
+{
+	__DSB();
+	SCB->AIRCR = (0x5FAUL << SCB_AIRCR_VECTKEY_Pos) |
+				 SCB_AIRCR_SYSRESETREQ_Msk;
+	__DSB();
+	for (;;)
+	{
+		__NOP();
+	}
+}
 
 DFU_TGT_RAMFUNC static bool DfuTgtWaitReady(uint32_t Loops)
 {
@@ -134,7 +139,10 @@ DFU_TGT_RAMFUNC static bool DfuTgtWaitReady(uint32_t Loops)
 DFU_TGT_RAMFUNC static void DfuTgtRecover(uint32_t Mhz)
 {
 	DFU_TGT_FACI_CMD8 = DFU_TGT_CMD_FORCED_STOP;
-	(void)DfuTgtWaitReady(Mhz * DFU_TGT_WAIT_ERASE);
+	if (DfuTgtWaitReady(Mhz * DFU_TGT_WAIT_STOP) == false)
+	{
+		DfuTgtRamReset();
+	}
 	if (FLASH->FASTAT & FLASH_FASTAT_CFAE_Msk)
 	{
 		FLASH->FASTAT = 0;
@@ -156,9 +164,6 @@ DFU_TGT_RAMFUNC static bool DfuTgtPeEnter(uint32_t Mhz)
 		}
 	}
 
-	// Sequencer clock, in MHz, rounded up.
-	FLASH->FPCKAR = (uint16_t)(DFU_TGT_FPCKAR_KEY | (Mhz & 0xFFU));
-
 	if (FLASH->FASTAT & FLASH_FASTAT_CMDLK_Msk)
 	{
 		DfuTgtRecover(Mhz);
@@ -177,7 +182,8 @@ DFU_TGT_RAMFUNC static bool DfuTgtPeExit(uint32_t Mhz)
 	{
 		if (n-- == 0)
 		{
-			return false;
+			// Returning to the caller would fetch unavailable flash code.
+			DfuTgtRamReset();
 		}
 	}
 
@@ -228,8 +234,6 @@ DFU_TGT_RAMFUNC static bool DfuTgtRamProgram(uint32_t Addr, uint32_t Mhz)
 		DFU_TGT_FACI_CMD8 = (uint8_t)(DFU_TGT_WR_UNIT / 2);
 		for (uint32_t i = 0; ok && i < DFU_TGT_WR_UNIT / 2; i++)
 		{
-			DFU_TGT_FACI_CMD16 = s_DfuTgtBuf[i];
-
 			uint32_t n = Mhz * DFU_TGT_WAIT_SHORT;
 			while (FLASH->FSTATR & FLASH_FSTATR_DBFULL_Msk)
 			{
@@ -238,6 +242,10 @@ DFU_TGT_RAMFUNC static bool DfuTgtRamProgram(uint32_t Addr, uint32_t Mhz)
 					ok = false;
 					break;
 				}
+			}
+			if (ok)
+			{
+				DFU_TGT_FACI_CMD16 = s_DfuTgtBuf[i];
 			}
 		}
 		if (ok)
@@ -254,32 +262,46 @@ DFU_TGT_RAMFUNC static bool DfuTgtRamProgram(uint32_t Addr, uint32_t Mhz)
 	return DfuTgtPeExit(Mhz) && ok;
 }
 
-// Core clock range of the part; the FACI sequencer needs 4 MHz or more.
-#define DFU_TGT_MHZ_MIN				4U
-#define DFU_TGT_MHZ_MAX				64U
+// ICLK range accepted by the RE01 flash driver. Check Hz before rounding.
+#define DFU_TGT_CLK_MIN				1000000UL
+#define DFU_TGT_CLK_MAX				32000000UL
 
-// The vector table and every handler are in the code flash, so nothing may
-// interrupt while it is in P/E mode.
+// Maskable interrupts stay off; NMI and HardFault use the RAM reset handler.
 static bool DfuTgtRun(bool (*pFunc)(uint32_t, uint32_t), uint32_t Addr)
 {
-	// Core clock in MHz, rounded up: what FPCKAR is told (the sequencer is
-	// taken to run from the core clock here) and what the waits scale with.
-	// Out of range, nothing is programmed with a wrong setting.
-	uint32_t mhz = (SystemCoreClock + 999999UL) / 1000000UL;
-
-	if (mhz < DFU_TGT_MHZ_MIN || mhz > DFU_TGT_MHZ_MAX)
+	if (SystemCoreClock < DFU_TGT_CLK_MIN || SystemCoreClock > DFU_TGT_CLK_MAX)
 	{
 		return false;
 	}
+	uint32_t mhz = (SystemCoreClock + 999999UL) / 1000000UL;
 
 	uint32_t pm = __get_PRIMASK();
 
 	__disable_irq();
+	uint32_t vtor = SCB->VTOR;
+	uint8_t protect = FLASH->FWEPROR;
+	uint8_t readyie = FLASH->FRDYIE;
+	uint8_t errorie = FLASH->FAEINT;
+
+	for (unsigned i = 0; i < 16; i++)
+	{
+		s_DfuTgtVectors[i] = (uint32_t)(uintptr_t)DfuTgtRamReset;
+	}
+	SCB->VTOR = (uint32_t)(uintptr_t)s_DfuTgtVectors;
+	__DSB();
+	__ISB();
+	FLASH->FRDYIE = 0;
+	FLASH->FAEINT = 0;
+	FLASH->FPCKAR = (uint16_t)(DFU_TGT_FPCKAR_KEY | mhz);
 
 	// Code flash P/E permitted (FWEPROR.FLWE = 01).
-	FLASH->FWEPROR = 1;
+	FLASH->FWEPROR = (uint8_t)((protect & ~FLASH_FWEPROR_FLWE_Msk) | 1U);
 
 	bool ok = pFunc(Addr, mhz);
+	FLASH->FWEPROR = protect;
+	FLASH->FRDYIE = readyie;
+	FLASH->FAEINT = errorie;
+	SCB->VTOR = vtor;
 
 	__DSB();
 	__ISB();
@@ -324,16 +346,10 @@ bool DfuTgtErase(uintptr_t Addr)
 		return false;
 	}
 
-	for (uint32_t off = 0; off < DFU_TGT_ERASE_UNIT; off += DFU_TGT_ERASE_STEP)
-	{
-		if (DfuTgtErased(Addr + off, DFU_TGT_ERASE_STEP) == false &&
-			DfuTgtRun(DfuTgtRamErase, Addr + off) == false)
-		{
-			return false;
-		}
-	}
-
-	return DfuTgtErased(Addr, DFU_TGT_ERASE_UNIT);
+	// Erase even an all-ones block: reads do not establish whether it has
+	// already been programmed since its last erase.
+	return DfuTgtRun(DfuTgtRamErase, Addr) &&
+		   DfuTgtErased(Addr, DFU_TGT_ERASE_UNIT);
 }
 
 bool DfuTgtWrite(uintptr_t Addr, const void *pData, uint32_t Len)
