@@ -38,6 +38,12 @@
 #include "cracen_intrf.h"
 
 #define RNG_USE_CRACEN	1
+#elif defined(NRF91_SERIES)
+// The nRF91 has no RNG peripheral: entropy comes from the true random
+// generator of the CryptoCell, through its interface
+#include "cc3xx_intrf.h"
+
+#define RNG_USE_CC3XX	1
 #else
 #if defined(SOFTDEVICE_PRESENT) && SOFTDEVICE_PRESENT
 #include "nrf_sdm.h"
@@ -45,20 +51,11 @@
 #endif
 #endif
 
-#if defined(NRF91_SERIES)
-// The nRF91 has no RNG peripheral at all. There is no NRF_RNG_S to return and
-// no RNG_PRESENT in nrf9160_peripherals.h; entropy comes from the CryptoCell
-// TRNG (CC_RNG) instead. This file was previously reachable for NRF91_SERIES
-// through RngPeriphReg below, which named NRF_RNG_S and could not compile.
-// Say so here rather than failing on an undeclared identifier further down.
-#error "rng_nrfx: the nRF91 has no RNG peripheral, use the CryptoCell TRNG"
-#endif
-
 #ifndef RNG_NRF_POLL_LIMIT
 #define RNG_NRF_POLL_LIMIT	1000000U
 #endif
 
-#if !defined(RNG_USE_CRACEN)
+#if !defined(RNG_USE_CRACEN) && !defined(RNG_USE_CC3XX)
 
 static inline NRF_RNG_Type *RngPeriphReg(void)
 {
@@ -258,7 +255,7 @@ RngPeriphIntrf *RngPeriphIntrfInstance(void)
 	return initialized ? &instance : nullptr;
 }
 
-#endif // !RNG_USE_CRACEN
+#endif
 
 bool CryptoRngNrf::Init(DeviceIntrf * const pIntrf)
 {
@@ -269,6 +266,8 @@ bool CryptoRngNrf::Init(DeviceIntrf * const pIntrf)
 	Interface(pIntrf);
 #if defined(RNG_USE_CRACEN)
 	DeviceAddress(CRACEN_ADDR_RNG);
+#elif defined(RNG_USE_CC3XX)
+	DeviceAddress(CC3XX_ADDR_RNG);
 #else
 	DeviceAddress(0U);
 #endif
@@ -379,6 +378,8 @@ CryptoRngNrf *CryptoRngNrfInstance(void)
 	{
 #if defined(RNG_USE_CRACEN)
 		initialized = instance.Init(CracenIntrfInstance());
+#elif defined(RNG_USE_CC3XX)
+		initialized = instance.Init(Cc3xxIntrfInstance());
 #else
 		initialized = instance.Init(RngPeriphIntrfInstance());
 #endif

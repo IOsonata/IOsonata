@@ -5,8 +5,9 @@
 
 		Validates the CryptoRngNrf engine and the entropy interface it is
 		constructed on: CracenIntrf on nRF54 parts (CTR-DRBG), RngPeriphIntrf
-		on nRF52/nRF53 (RNG peripheral). Run the test twice to cover both
-		run-time paths of the interface:
+		on nRF52/nRF53 (RNG peripheral), Cc3xxIntrf on nRF91 (CryptoCell
+		TRNG, no SoftDevice). Run the test twice to cover both run-time paths
+		of the interface:
 
 		1. Without the SoftDevice enabled: draws come from the entropy
 		   hardware directly.
@@ -95,7 +96,13 @@ volatile uint8_t g_RngTestSample[32];
 // on every supported part and gives the histogram enough mass for the loose
 // bounds below. Overridable for constrained targets; the bounds scale with it.
 #ifndef RNG_TEST_SAMPLE_LEN
+#if defined(NRF91_SERIES)
+// The CryptoCell true random generator is slow, a few hundred bytes a
+// second: a smaller sample keeps the test under ten seconds
+#define RNG_TEST_SAMPLE_LEN		2048U
+#else
 #define RNG_TEST_SAMPLE_LEN		16384U
+#endif
 #endif
 
 // Derived statistical bounds (integer, loose by design):
@@ -127,6 +134,9 @@ static void RngTestReportSource(void)
 #if defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA)
 	printf("Entropy interface : CracenIntrf\r\n");
 	const char *hw = "CRACEN CTR-DRBG (hardware)";
+#elif defined(NRF91_SERIES)
+	printf("Entropy interface : Cc3xxIntrf\r\n");
+	const char *hw = "CryptoCell CC310 TRNG (hardware)";
 #else
 	printf("Entropy interface : RngPeriphIntrf\r\n");
 	const char *hw = "RNG peripheral registers (hardware)";

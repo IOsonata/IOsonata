@@ -23,6 +23,12 @@
 		Enable / Disable follow the interface reference count: the CryptoCell
 		wrapper is powered on first use and off on last release.
 
+		CC3XX_ADDR_RNG selects the true random generator: an Rx transfer on it,
+		with no address phase, fills the buffer with entropy, the same model
+		as the CRACEN random generator selector on nRF54. The transfer holds
+		the CryptoCell as OpHold does, so it is refused while an operation
+		holds it and an operation is refused while it runs.
+
 @author	Hoang Nguyen Hoan
 @date	Jul. 17, 2026
 
@@ -60,6 +66,7 @@ SOFTWARE.
 /// DevAddr base selector. The CC3xx has a single register file; the selector
 /// exists for the transfer protocol and future sub-block splits.
 #define CC3XX_ADDR_REG		0U		//!< Register file base
+#define CC3XX_ADDR_RNG		1U		//!< True random generator entropy read (Rx only)
 
 /// PKA SRAM bytes. The CC310 has 4 KB; override for family members that differ.
 #ifndef CC3XX_PKA_SRAM_SIZE

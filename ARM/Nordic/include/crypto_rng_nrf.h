@@ -11,7 +11,8 @@
 		enabled at run time). On nRF52/nRF53 it is RngPeriphIntrf over the RNG
 		peripheral registers, or the SoftDevice entropy pool when a stack is
 		enabled. The SoftDevice check is made inside the interface on every
-		draw.
+		draw. The nRF91 has no RNG peripheral: there it is Cc3xxIntrf, the
+		true random generator of the CryptoCell CC310.
 
 @author	Hoang Nguyen Hoan
 @date	Jul. 15, 2026
@@ -46,6 +47,7 @@ SOFTWARE.
 #include <stdint.h>
 #include <stddef.h>
 
+#include "nrf.h"
 #include "device_intrf.h"
 #include "crypto/icrypto.h"
 
@@ -53,7 +55,7 @@ SOFTWARE.
   * @{
   */
 
-#if !defined(NRF54H20_XXAA) && !defined(NRF54L15_XXAA)
+#if !defined(NRF54H20_XXAA) && !defined(NRF54L15_XXAA) && !defined(NRF91_SERIES)
 /// @brief	Entropy interface over the RNG peripheral (nRF52 / nRF53).
 class RngPeriphIntrf : public DeviceIntrf {
 public:

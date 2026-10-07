@@ -48,6 +48,12 @@ Modified by          Date              Description
 
 #include "adc_nrf52_saadc.h"
 
+// The nRF91 names its peripherals by security state and the application runs
+// secure
+#if !defined(NRF_SAADC) && defined(NRF_SAADC_S)
+#define NRF_SAADC		NRF_SAADC_S
+#endif
+
 #pragma pack(push, 4)
 typedef struct __ADC_nRF52_Data {
 	AdcnRF52 *pDevObj;
@@ -69,6 +75,29 @@ typedef struct __ADC_nRF52_Data {
 alignas(4) static ADCNRF52_DATA s_AdcnRF52DevData = {
 	NULL, 0,
 };
+
+// The SAADC writes one result per enabled channel, in channel order, so the
+// result of a channel is at the count of enabled channels below it
+static int nRF52ADCResIdx(int Chan)
+{
+	int idx = 0;
+
+	for (int i = 0; i < Chan; i++)
+	{
+		if (s_AdcnRF52DevData.ChanState[i] != 0)
+		{
+			idx++;
+		}
+	}
+
+	return idx;
+}
+
+// Enabled channels, the results of one conversion
+static int nRF52ADCNbEnabled(void)
+{
+	return nRF52ADCResIdx(SAADC_NRF52_MAX_CHAN);
+}
 
 //#define ADC_CFIFO_SIZE		CFIFO_TOTAL_MEMSIZE(SAADC_NRF52_MAX_CHAN, sizeof(ADC_DATA))
 
@@ -96,12 +125,12 @@ extern "C" void SAADC_IRQHandler()
 
 		if (s_AdcnRF52DevData.pDevObj)
 		{
-			int cnt = 0;
+			int cnt = 0;	// result of channel i
 			int timeout = 1000000;
 
 			while (NRF_SAADC->RESULT.AMOUNT == 0 && timeout-- > 0);
 
-			for (int i = 0; i < SAADC_NRF52_MAX_CHAN && cnt < NRF_SAADC->RESULT.AMOUNT; i++)
+			for (int i = 0; i < SAADC_NRF52_MAX_CHAN && cnt < (int)NRF_SAADC->RESULT.AMOUNT; i++)
 			{
 				if (s_AdcnRF52DevData.ChanState[i] != 0)
 				{
@@ -117,13 +146,13 @@ extern "C" void SAADC_IRQHandler()
 						// Vin = ADCresult * Reference / (Resolution * Gain)
 						// => GainFactor = Reference / (Resolution * Gain)
 						// => Vin = ADCresult * GainFactor
-						p->Data = (float)s_AdcnRF52DevData.ResData[i] * s_AdcnRF52DevData.GainFactor[i];
+						p->Data = (float)s_AdcnRF52DevData.ResData[cnt] * s_AdcnRF52DevData.GainFactor[i];
 						p->Timestamp =
 								(s_AdcnRF52DevData.pTimer == NULL) ?
 										s_AdcnRF52DevData.SampleCnt :
 										s_AdcnRF52DevData.pTimer->uSecond();
-						cnt++;
 					}
+					cnt++;
 				}
 			}
 
@@ -136,7 +165,8 @@ extern "C" void SAADC_IRQHandler()
         NRF_SAADC->EVENTS_DONE = 0;
         NRF_SAADC->EVENTS_END = 0;
 
-        if (s_AdcnRF52DevData.pDevObj->Mode() == ADC_CONV_MODE_CONTINUOUS)
+        if (s_AdcnRF52DevData.pDevObj != NULL &&
+        	s_AdcnRF52DevData.pDevObj->Mode() == ADC_CONV_MODE_CONTINUOUS)
         	NRF_SAADC->TASKS_START = 1;
 	}
 	if (NRF_SAADC->EVENTS_DONE)
@@ -465,34 +495,29 @@ uint16_t AdcnRF52::Resolution(uint16_t Val)
 
 bool AdcnRF52::OpenChannel(const AdcChanCfg_t *pChanCfg, int NbChan)
 {
-	if (pChanCfg == NULL || NbChan == 0)
+	if (pChanCfg == NULL || NbChan <= 0)
 		return false;
 
-	NRF_SAADC->ENABLE = 0;
+	for (int i = 0; i < NbChan; i++)
+	{
+		if (pChanCfg[i].Chan < 0 || pChanCfg[i].Chan >= SAADC_NRF52_MAX_CHAN)
+			return false;
+	}
 
-	/// NOTE: Oversampling only work when NbChan is 1
-	/// Multichannels results in Scan mode which is mutually with Oversampling
-	if (NbChan > 1)
-	{
-		// Disable oversampling on multichannels
-		NRF_SAADC->OVERSAMPLE = 0;
-	}
-	else
-	{
-		NRF_SAADC->OVERSAMPLE = s_AdcnRF52DevData.OvrSample;
-	}
+	NRF_SAADC->ENABLE = 0;
 
 	for (int i = 0; i < NbChan; i++)
 	{
 		uint32_t chconfig = 0;	// CH[].CONFIG register value
 
+		// The FIFO is looked up by channel number
 		if (pChanCfg[i].pFifoMem != NULL && pChanCfg[i].FifoMemSize > CFIFO_TOTAL_MEMSIZE(2, sizeof(AdcData_t)))
 		{
-			s_AdcnRF52DevData.hFifo[i] = CFifoInit(pChanCfg[i].pFifoMem, pChanCfg[i].FifoMemSize, sizeof(AdcData_t), false);
+			s_AdcnRF52DevData.hFifo[pChanCfg[i].Chan] = CFifoInit(pChanCfg[i].pFifoMem, pChanCfg[i].FifoMemSize, sizeof(AdcData_t), false);
 		}
 		else
 		{
-			s_AdcnRF52DevData.hFifo[i] = NULL;
+			s_AdcnRF52DevData.hFifo[pChanCfg[i].Chan] = NULL;
 		}
 
 		NRF_SAADC->CH[pChanCfg[i].Chan].PSELP = pChanCfg[i].PinP.PinNo + 1;
@@ -624,7 +649,20 @@ bool AdcnRF52::OpenChannel(const AdcChanCfg_t *pChanCfg, int NbChan)
 
 	}
 
-	s_AdcnRF52DevData.NbChanAct = NbChan;
+	// Channels opened before stay enabled: a conversion covers all of them
+	s_AdcnRF52DevData.NbChanAct = nRF52ADCNbEnabled();
+
+	/// NOTE: Oversampling only work when one channel is enabled
+	/// Multichannels results in Scan mode which is mutually with Oversampling
+	if (s_AdcnRF52DevData.NbChanAct > 1)
+	{
+		// Disable oversampling on multichannels
+		NRF_SAADC->OVERSAMPLE = 0;
+	}
+	else
+	{
+		NRF_SAADC->OVERSAMPLE = s_AdcnRF52DevData.OvrSample;
+	}
 
 	NRF_SAADC->ENABLE = (SAADC_ENABLE_ENABLE_Enabled << SAADC_ENABLE_ENABLE_Pos);
 
@@ -637,11 +675,15 @@ bool AdcnRF52::OpenChannel(const AdcChanCfg_t *pChanCfg, int NbChan)
  */
 void AdcnRF52::CloseChannel(int Chan)
 {
+	if (Chan < 0 || Chan >= SAADC_NRF52_MAX_CHAN)
+		return;
+
 	NRF_SAADC->CH[Chan].PSELP = 0;
 	NRF_SAADC->CH[Chan].PSELN = 0;
 	NRF_SAADC->CH[Chan].CONFIG = 0;
 
 	s_AdcnRF52DevData.ChanState[Chan] = 0;
+	s_AdcnRF52DevData.NbChanAct = nRF52ADCNbEnabled();
 }
 
 
@@ -682,6 +724,8 @@ int AdcnRF52::Read(AdcData_t *pBuff, int Len)
 
 	if (vbInterrupt)
 	{
+		int res = 0;	// result of channel i
+
 		for (int i = 0; i < SAADC_NRF52_MAX_CHAN && Len > 0; i++)
 		{
 			if (s_AdcnRF52DevData.ChanState[i] != 0)
@@ -705,7 +749,7 @@ int AdcnRF52::Read(AdcData_t *pBuff, int Len)
 					// Vin = ADCresult * Reference / (Resolution * Gain)
 					// => GainFactor = Reference / (Resolution * Gain)
 					// => Vin = ADCresult * GainFactor
-					pBuff->Data = (float)s_AdcnRF52DevData.ResData[i] * s_AdcnRF52DevData.GainFactor[i];
+					pBuff->Data = (float)s_AdcnRF52DevData.ResData[res] * s_AdcnRF52DevData.GainFactor[i];
 					if (s_AdcnRF52DevData.pTimer == NULL)
 						pBuff->Timestamp = s_AdcnRF52DevData.SampleCnt;
 					else
@@ -714,6 +758,7 @@ int AdcnRF52::Read(AdcData_t *pBuff, int Len)
 					cnt++;
 					Len--;
 				}
+				res++;
 			}
 		}
 	}
@@ -726,7 +771,7 @@ int AdcnRF52::Read(AdcData_t *pBuff, int Len)
 
 //			s_AdcnRF52DevData.SampleCnt++;
 
-			for (int i = 0; i < SAADC_NRF52_MAX_CHAN && cnt < NRF_SAADC->RESULT.AMOUNT && cnt < Len; i++)
+			for (int i = 0; i < SAADC_NRF52_MAX_CHAN && cnt < (int)NRF_SAADC->RESULT.AMOUNT && cnt < Len; i++)
 			{
 				if (s_AdcnRF52DevData.ChanState[i] != 0)
 				{
@@ -737,7 +782,7 @@ int AdcnRF52::Read(AdcData_t *pBuff, int Len)
 					// Vin = ADCresult * Reference / (Resolution * Gain)
 					// => GainFactor = Reference / (Resolution * Gain)
 					// => Vin = ADCresult * GainFactor
-					pBuff->Data = (float)s_AdcnRF52DevData.ResData[i] * s_AdcnRF52DevData.GainFactor[i];
+					pBuff->Data = (float)s_AdcnRF52DevData.ResData[cnt] * s_AdcnRF52DevData.GainFactor[i];
 					if (s_AdcnRF52DevData.pTimer == NULL)
 						pBuff->Timestamp = s_AdcnRF52DevData.SampleCnt;
 					else
@@ -763,12 +808,18 @@ int AdcnRF52::Read(AdcData_t *pBuff, int Len)
  */
 bool AdcnRF52::Read(int Chan, AdcData_t *pBuff)
 {
-	if (pBuff == NULL || Chan < 0 || Chan >= SAADC_NRF52_MAX_CHAN)
+	if (pBuff == NULL || Chan < 0 || Chan >= SAADC_NRF52_MAX_CHAN ||
+		s_AdcnRF52DevData.ChanState[Chan] == 0)
 		return false;
 
 	if (vbInterrupt)
 	{
-		AdcData_t *p = (AdcData_t *)CFifoGet(s_AdcnRF52DevData.hFifo[Chan]);
+		AdcData_t *p = NULL;
+
+		if (s_AdcnRF52DevData.hFifo[Chan] != NULL)
+		{
+			p = (AdcData_t *)CFifoGet(s_AdcnRF52DevData.hFifo[Chan]);
+		}
 		if (p == NULL)
 		{
 			pBuff->Chan = -1;
@@ -789,11 +840,16 @@ bool AdcnRF52::Read(int Chan, AdcData_t *pBuff)
 		// Vin = ADCresult * Reference / (Resolution * Gain)
 		// => GainFactor = Reference / (Resolution * Gain)
 		// => Vin = ADCresult * GainFactor
-		pBuff->Data = (float)s_AdcnRF52DevData.ResData[Chan] * s_AdcnRF52DevData.GainFactor[Chan];
+		pBuff->Data = (float)s_AdcnRF52DevData.ResData[nRF52ADCResIdx(Chan)] * s_AdcnRF52DevData.GainFactor[Chan];
 		pBuff->Timestamp = s_AdcnRF52DevData.SampleCnt;
 
 		NRF_SAADC->EVENTS_DONE = 0;
 		NRF_SAADC->EVENTS_RESULTDONE = 0;
+	}
+	else
+	{
+		// No conversion ended
+		return false;
 	}
 
 	return true;
