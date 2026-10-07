@@ -1621,9 +1621,6 @@ static void Sam4lI2CReset(DevIntrf_t * const pDev)
 	}
 	else
 	{
-		if (pDev->Cfg.bDmaEn)
-			Sam4lI2CSlavePdcaInit(dev);
-
 		Twis *reg = dev->pSReg;
 		reg->TWIS_IDR = 0xFFFFFFFFU;
 		if (pDev->bDma)
