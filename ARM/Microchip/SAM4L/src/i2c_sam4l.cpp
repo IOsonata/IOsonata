@@ -6,9 +6,9 @@
 The SAM4L separates master (TWIM) and slave (TWIS) functions. IOsonata keeps
 one I2CDev_t API and selects the matching register block from I2CCfg_t::Mode.
 
-Master mode supports polling and interrupt-driven transfers, 7-bit and 10-bit
-addressing, transfer lengths beyond the 8-bit NBYTES field, and the
-write/repeated-start/read sequence used by DeviceIntrfRead(). Interrupt TX
+Master mode supports polling, interrupt-driven, and PDCA-backed transfers,
+7-bit and 10-bit addressing, transfer lengths beyond the 8-bit NBYTES field,
+and the write/repeated-start/read sequence used by DeviceIntrfRead(). Interrupt TX
 copies the complete caller transfer into controller-owned static storage before
 returning so no caller buffer is retained by the ISR.
 
@@ -49,6 +49,7 @@ SOFTWARE.
 
 #include "sam4lxxx.h"
 #include "component/component_pm.h"
+#include "component/component_pdca.h"
 #include "component/component_twim.h"
 #include "component/component_twis.h"
 
@@ -61,6 +62,13 @@ SOFTWARE.
 #define SAM4L_I2C_MAX_NBYTES		255
 #define SAM4L_I2C_INT_TX_BUFFER_SIZE	256
 #define SAM4L_I2C_WAIT_COUNT		1000000U
+
+// PDCA channels 0..3 are reserved by the SAM4L UART port for USART0..3 TX.
+// I2C master uses a fixed RX/TX pair per TWIM instance from channels 4..11.
+#define SAM4L_I2C_PDCA_RX_CHAN(n)	(4U + ((uint32_t)(n) << 1U))
+#define SAM4L_I2C_PDCA_TX_CHAN(n)	(5U + ((uint32_t)(n) << 1U))
+#define SAM4L_PDCA_PID_TWIM_RX(n)	(5U + (uint32_t)(n))
+#define SAM4L_PDCA_PID_TWIM_TX(n)	(23U + (uint32_t)(n))
 
 #define SAM4L_TWIM_ERROR_MASK \
 	(TWIM_SR_ANAK | TWIM_SR_DNAK | TWIM_SR_ARBLST | TWIM_SR_TOUT | TWIM_SR_PECERR)
@@ -162,11 +170,94 @@ static SAM4L_I2CDEV s_Sam4lI2CDev[SAM4L_I2C_MASTER_COUNT] = {
 	},
 };
 
+static void Sam4lI2CMasterRecover(SAM4L_I2CDEV *dev);
+
 static inline void Sam4lPmWrite(volatile uint32_t *pReg, uint32_t Value)
 {
 	const uint32_t offset = (uint32_t)pReg - (uint32_t)SAM4L_PM;
 	SAM4L_PM->PM_UNLOCK = PM_UNLOCK_KEY(0xAAU) | PM_UNLOCK_ADDR(offset);
 	*pReg = Value;
+}
+
+static void Sam4lI2CPdcaClockEnable(void)
+{
+	Sam4lPmWrite(&SAM4L_PM->PM_HSBMASK,
+		SAM4L_PM->PM_HSBMASK | PM_HSBMASK_PDCA);
+	Sam4lPmWrite(&SAM4L_PM->PM_PBBMASK,
+		SAM4L_PM->PM_PBBMASK | PM_PBBMASK_PDCA);
+}
+
+static PdcaChannel *Sam4lI2CPdcaRxChannel(const SAM4L_I2CDEV *dev)
+{
+	return &SAM4L_PDCA->PDCA_CHANNEL[SAM4L_I2C_PDCA_RX_CHAN(dev->DevNo)];
+}
+
+static PdcaChannel *Sam4lI2CPdcaTxChannel(const SAM4L_I2CDEV *dev)
+{
+	return &SAM4L_PDCA->PDCA_CHANNEL[SAM4L_I2C_PDCA_TX_CHAN(dev->DevNo)];
+}
+
+static void Sam4lI2CPdcaChannelInit(PdcaChannel *chan, uint32_t PeripheralId)
+{
+	chan->PDCA_CR = PDCA_CR_TDIS | PDCA_CR_ECLR;
+	chan->PDCA_PSR = PDCA_PSR_PID(PeripheralId);
+	chan->PDCA_MR = PDCA_MR_SIZE_BYTE;
+	chan->PDCA_MAR = 0U;
+	chan->PDCA_TCR = 0U;
+	chan->PDCA_MARR = 0U;
+	chan->PDCA_TCRR = 0U;
+	chan->PDCA_IDR = 0xFFFFFFFFU;
+	(void)chan->PDCA_ISR;
+}
+
+static void Sam4lI2CPdcaInit(SAM4L_I2CDEV *dev)
+{
+	Sam4lI2CPdcaClockEnable();
+	Sam4lI2CPdcaChannelInit(Sam4lI2CPdcaRxChannel(dev),
+		SAM4L_PDCA_PID_TWIM_RX(dev->DevNo));
+	Sam4lI2CPdcaChannelInit(Sam4lI2CPdcaTxChannel(dev),
+		SAM4L_PDCA_PID_TWIM_TX(dev->DevNo));
+}
+
+static void Sam4lI2CPdcaStop(SAM4L_I2CDEV *dev)
+{
+	PdcaChannel *rx = Sam4lI2CPdcaRxChannel(dev);
+	PdcaChannel *tx = Sam4lI2CPdcaTxChannel(dev);
+	rx->PDCA_CR = PDCA_CR_TDIS;
+	tx->PDCA_CR = PDCA_CR_TDIS;
+	rx->PDCA_IDR = 0xFFFFFFFFU;
+	tx->PDCA_IDR = 0xFFFFFFFFU;
+}
+
+static bool Sam4lI2CPdcaWait(SAM4L_I2CDEV *dev, PdcaChannel *chan)
+{
+	uint32_t timeout = SAM4L_I2C_WAIT_COUNT;
+
+	do
+	{
+		const uint32_t isr = chan->PDCA_ISR;
+		if ((isr & PDCA_ISR_TERR) != 0U)
+		{
+			chan->PDCA_CR = PDCA_CR_TDIS | PDCA_CR_ECLR;
+			Sam4lI2CMasterRecover(dev);
+			return false;
+		}
+
+		const uint32_t sr = dev->pMReg->TWIM_SR;
+		if ((sr & SAM4L_TWIM_ERROR_MASK) != 0U)
+		{
+			chan->PDCA_CR = PDCA_CR_TDIS;
+			Sam4lI2CMasterRecover(dev);
+			return false;
+		}
+
+		if (chan->PDCA_TCR == 0U)
+			return true;
+	} while (--timeout != 0U);
+
+	chan->PDCA_CR = PDCA_CR_TDIS;
+	Sam4lI2CMasterRecover(dev);
+	return false;
 }
 
 static inline uint32_t Sam4lI2CClockMask(const SAM4L_I2CDEV *dev)
@@ -488,6 +579,48 @@ static int Sam4lI2CMasterTxPolling(DevIntrf_t * const pDev,
 	return dev->TxCount;
 }
 
+static int Sam4lI2CMasterTxDma(DevIntrf_t * const pDev,
+	const uint8_t *pData, int DataLen)
+{
+	SAM4L_I2CDEV *dev = (SAM4L_I2CDEV *)pDev->pDevData;
+	PdcaChannel *chan = Sam4lI2CPdcaTxChannel(dev);
+	int count = 0;
+
+	while (DataLen > 0)
+	{
+		const int chunk = DataLen > SAM4L_I2C_MAX_NBYTES ?
+			SAM4L_I2C_MAX_NBYTES : DataLen;
+		const bool final = DataLen <= SAM4L_I2C_MAX_NBYTES;
+		const bool stop = final && !pDev->bNoStop;
+		const uint32_t cmd = Sam4lI2CMasterCommand(dev, false, chunk,
+			dev->NeedStart, stop, false, false);
+
+		chan->PDCA_CR = PDCA_CR_TDIS | PDCA_CR_ECLR;
+		chan->PDCA_PSR = PDCA_PSR_PID(SAM4L_PDCA_PID_TWIM_TX(dev->DevNo));
+		chan->PDCA_MAR = (uint32_t)pData;
+		chan->PDCA_TCR = (uint32_t)chunk;
+
+		dev->NeedStart = false;
+		Sam4lI2CMasterIssue(dev, cmd);
+		chan->PDCA_CR = PDCA_CR_TEN;
+
+		if (!Sam4lI2CPdcaWait(dev, chan))
+			return count;
+		chan->PDCA_CR = PDCA_CR_TDIS;
+
+		if (!Sam4lI2CMasterWaitCommand(dev))
+			return count;
+
+		count += chunk;
+		pData += chunk;
+		DataLen -= chunk;
+	}
+
+	dev->TxCount = count;
+	dev->BusHeld = pDev->bNoStop && !dev->LastError;
+	return count;
+}
+
 static int Sam4lI2CMasterTxAsync(DevIntrf_t * const pDev,
 	const uint8_t *pData, int DataLen)
 {
@@ -525,6 +658,9 @@ static int Sam4lI2CTxData(DevIntrf_t * const pDev,
 	SAM4L_I2CDEV *dev = (SAM4L_I2CDEV *)pDev->pDevData;
 	if (dev->pI2cDev->Cfg.Mode != I2CMODE_MASTER)
 		return 0;
+
+	if (pDev->bDma)
+		return Sam4lI2CMasterTxDma(pDev, pData, DataLen);
 
 	return pDev->bIntEn ?
 		Sam4lI2CMasterTxAsync(pDev, pData, DataLen) :
@@ -579,6 +715,102 @@ static bool Sam4lI2CStartRx(DevIntrf_t * const pDev, uint32_t DevAddr)
 	}
 
 	return !dev->LastError;
+}
+
+static int Sam4lI2CMasterReadCombinedDma(DevIntrf_t * const pDev,
+	uint8_t *pBuff, int BuffLen)
+{
+	SAM4L_I2CDEV *dev = (SAM4L_I2CDEV *)pDev->pDevData;
+	Twim *reg = dev->pMReg;
+	PdcaChannel *rx = Sam4lI2CPdcaRxChannel(dev);
+
+	if (dev->SrLen <= 0 || dev->SrLen > SAM4L_I2C_MAX_NBYTES ||
+		pBuff == nullptr || BuffLen <= 0)
+		return 0;
+
+	dev->LastError = false;
+	dev->BusHeld = false;
+	dev->NeedStart = true;
+	dev->TenBitReadReady = false;
+	dev->RxCount = 0;
+
+	reg->TWIM_IDR = 0xFFFFFFFFU;
+	reg->TWIM_SCR = 0xFFFFFFFFU;
+
+	int activeChunk = BuffLen > SAM4L_I2C_MAX_NBYTES ?
+		SAM4L_I2C_MAX_NBYTES : BuffLen;
+	int remain = BuffLen;
+	const bool firstFinal = BuffLen <= SAM4L_I2C_MAX_NBYTES;
+
+	rx->PDCA_CR = PDCA_CR_TDIS | PDCA_CR_ECLR;
+	rx->PDCA_PSR = PDCA_PSR_PID(SAM4L_PDCA_PID_TWIM_RX(dev->DevNo));
+	rx->PDCA_MAR = (uint32_t)pBuff;
+	rx->PDCA_TCR = (uint32_t)activeChunk;
+
+	const uint32_t txcmd = Sam4lI2CMasterCommand(dev, false,
+		dev->SrLen, true, false, false, false);
+	const uint32_t rxcmd = Sam4lI2CMasterCommand(dev, true,
+		activeChunk, true, firstFinal && !pDev->bNoStop, !firstFinal,
+		dev->pI2cDev->Cfg.AddrType == I2CADDR_TYPE_EXT);
+
+	reg->TWIM_CMDR = txcmd;
+	reg->TWIM_NCMDR = rxcmd;
+	rx->PDCA_CR = PDCA_CR_TEN;
+
+	for (int i = 0; i < dev->SrLen; ++i)
+	{
+		if (!Sam4lI2CMasterWait(dev, TWIM_SR_TXRDY))
+			goto done;
+		reg->TWIM_THR = dev->TxBuffer[i];
+	}
+
+	// The queued read is promoted immediately when the write command completes.
+	if (!Sam4lI2CMasterWaitCommand(dev))
+		goto done;
+
+	while (remain > 0)
+	{
+		const int after = remain - activeChunk;
+		int nextChunk = 0;
+
+		if (after > 0)
+		{
+			nextChunk = after > SAM4L_I2C_MAX_NBYTES ?
+				SAM4L_I2C_MAX_NBYTES : after;
+			const bool nextFinal = after <= SAM4L_I2C_MAX_NBYTES;
+			const uint32_t next = Sam4lI2CMasterCommand(dev, true,
+				nextChunk, false, nextFinal && !pDev->bNoStop,
+				!nextFinal, false);
+			reg->TWIM_NCMDR = next;
+		}
+
+		if (!Sam4lI2CPdcaWait(dev, rx))
+			goto done;
+		rx->PDCA_CR = PDCA_CR_TDIS;
+
+		if (!Sam4lI2CMasterWaitCommand(dev))
+			goto done;
+
+		dev->RxCount += activeChunk;
+		pBuff += activeChunk;
+		remain -= activeChunk;
+
+		if (remain <= 0)
+			break;
+
+		activeChunk = nextChunk;
+		rx->PDCA_CR = PDCA_CR_TDIS | PDCA_CR_ECLR;
+		rx->PDCA_MAR = (uint32_t)pBuff;
+		rx->PDCA_TCR = (uint32_t)activeChunk;
+		rx->PDCA_CR = PDCA_CR_TEN;
+	}
+
+done:
+	rx->PDCA_CR = PDCA_CR_TDIS;
+	dev->CombinedRead = false;
+	dev->SrLen = 0;
+	dev->BusHeld = pDev->bNoStop && !dev->LastError;
+	return dev->RxCount;
 }
 
 static int Sam4lI2CMasterReadCombinedPolling(DevIntrf_t * const pDev,
@@ -714,6 +946,63 @@ static int Sam4lI2CMasterRxPolling(DevIntrf_t * const pDev,
 	return dev->RxCount;
 }
 
+static int Sam4lI2CMasterRxDma(DevIntrf_t * const pDev,
+	uint8_t *pBuff, int BuffLen)
+{
+	SAM4L_I2CDEV *dev = (SAM4L_I2CDEV *)pDev->pDevData;
+	PdcaChannel *chan = Sam4lI2CPdcaRxChannel(dev);
+	int count = 0;
+
+	if (dev->LastError)
+		return 0;
+
+	if (dev->pI2cDev->Cfg.AddrType == I2CADDR_TYPE_EXT && !dev->BusHeld)
+	{
+		Sam4lI2CMasterStartRxPreamble(dev);
+		if (!Sam4lI2CMasterWaitCommand(dev))
+			return 0;
+		dev->BusHeld = true;
+		dev->NeedStart = true;
+		dev->TenBitReadReady = true;
+	}
+
+	while (BuffLen > 0)
+	{
+		const int chunk = BuffLen > SAM4L_I2C_MAX_NBYTES ?
+			SAM4L_I2C_MAX_NBYTES : BuffLen;
+		const bool final = BuffLen <= SAM4L_I2C_MAX_NBYTES;
+		const bool stop = final && !pDev->bNoStop;
+		const bool ackLast = !final;
+		const bool repSame = dev->NeedStart && dev->TenBitReadReady;
+		const uint32_t cmd = Sam4lI2CMasterCommand(dev, true, chunk,
+			dev->NeedStart, stop, ackLast, repSame);
+
+		chan->PDCA_CR = PDCA_CR_TDIS | PDCA_CR_ECLR;
+		chan->PDCA_PSR = PDCA_PSR_PID(SAM4L_PDCA_PID_TWIM_RX(dev->DevNo));
+		chan->PDCA_MAR = (uint32_t)pBuff;
+		chan->PDCA_TCR = (uint32_t)chunk;
+
+		dev->NeedStart = false;
+		Sam4lI2CMasterIssue(dev, cmd);
+		chan->PDCA_CR = PDCA_CR_TEN;
+
+		if (!Sam4lI2CPdcaWait(dev, chan))
+			return count;
+		chan->PDCA_CR = PDCA_CR_TDIS;
+
+		if (!Sam4lI2CMasterWaitCommand(dev))
+			return count;
+
+		count += chunk;
+		pBuff += chunk;
+		BuffLen -= chunk;
+	}
+
+	dev->RxCount = count;
+	dev->BusHeld = pDev->bNoStop && !dev->LastError;
+	return count;
+}
+
 static int Sam4lI2CMasterRxAsync(DevIntrf_t * const pDev,
 	uint8_t *pBuff, int BuffLen)
 {
@@ -750,7 +1039,12 @@ static int Sam4lI2CRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 		return 0;
 
 	if (dev->CombinedRead)
-		return Sam4lI2CMasterReadCombinedPolling(pDev, pBuff, BuffLen);
+		return pDev->bDma ?
+			Sam4lI2CMasterReadCombinedDma(pDev, pBuff, BuffLen) :
+			Sam4lI2CMasterReadCombinedPolling(pDev, pBuff, BuffLen);
+
+	if (pDev->bDma)
+		return Sam4lI2CMasterRxDma(pDev, pBuff, BuffLen);
 
 	return pDev->bIntEn ?
 		Sam4lI2CMasterRxAsync(pDev, pBuff, BuffLen) :
@@ -1037,6 +1331,8 @@ static void Sam4lI2CDisable(DevIntrf_t * const pDev)
 	else
 	{
 		dev->pMReg->TWIM_IDR = 0xFFFFFFFFU;
+		if (pDev->bDma)
+			Sam4lI2CPdcaStop(dev);
 		dev->pMReg->TWIM_CR = TWIM_CR_MDIS;
 	}
 	Sam4lI2CClockDisable(dev);
@@ -1143,7 +1439,7 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
 		pCfgData->pIOPinMap == nullptr || pCfgData->NbIOPins < 2 ||
 		pCfgData->DevNo < 0 || pCfgData->DevNo >= SAM4L_I2C_MASTER_COUNT ||
 		pCfgData->Type != I2CTYPE_STANDARD ||
-		pCfgData->Rate == 0U || pCfgData->bDmaEn)
+		pCfgData->Rate == 0U)
 	{
 		return false;
 	}
@@ -1156,7 +1452,8 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
 		if (pCfgData->DevNo >= SAM4L_I2C_SLAVE_COUNT ||
 			pCfgData->NbSlaveAddr != 1 ||
 			pCfgData->AddrType != I2CADDR_TYPE_NORMAL ||
-			pCfgData->SlaveAddr[0] > 0x7FU)
+			pCfgData->SlaveAddr[0] > 0x7FU ||
+			pCfgData->bDmaEn)
 			return false;
 	}
 
@@ -1188,7 +1485,7 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
 
 	pDev->DevIntrf.pDevData = dev;
 	pDev->DevIntrf.Type = DEVINTRF_TYPE_I2C;
-	pDev->DevIntrf.bDma = false;
+	pDev->DevIntrf.bDma = pDev->Cfg.bDmaEn;
 	pDev->DevIntrf.bIntEn = pDev->Cfg.bIntEn;
 	pDev->DevIntrf.bTxReady = true;
 	pDev->DevIntrf.bNoStop = false;
@@ -1217,6 +1514,8 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
 
 	if (pDev->Cfg.Mode == I2CMODE_MASTER)
 	{
+		if (pDev->Cfg.bDmaEn)
+			Sam4lI2CPdcaInit(dev);
 		Sam4lI2CMasterHwReset(dev);
 		if (pDev->Cfg.bIntEn)
 		{
