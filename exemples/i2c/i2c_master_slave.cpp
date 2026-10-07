@@ -128,10 +128,33 @@ static const I2CCfg_t s_I2cCfgMaster = {
 	.bDmaEn = I2C_MASTER_DMA_ENABLE,
 	.bIntEn = I2C_MASTER_INT_ENABLE,
 	.IntPrio = 7,			// Interrupt prio
-	.EvtCB = NULL		// Event callback
+	.EvtCB = I2CMasterIntrfHandler		// Event callback
 };
 
 I2C g_I2CMaster;
+
+static std::atomic<bool> s_MasterCompleted(false);
+static std::atomic<int> s_MasterCount(0);
+
+static int I2CMasterIntrfHandler(DevIntrf_t * const pDev,
+	DEVINTRF_EVT EvtId, uint8_t *pBuffer, int Len)
+{
+	if (EvtId == DEVINTRF_EVT_COMPLETED)
+	{
+		s_MasterCount = Len;
+		s_MasterCompleted = true;
+	}
+	return 0;
+}
+
+static int WaitMasterComplete(int Timeout)
+{
+	while (!s_MasterCompleted && --Timeout > 0)
+	{
+		// Interrupt completion updates the atomic state.
+	}
+	return s_MasterCompleted ? (int)s_MasterCount : -1;
+}
 
 //********** I2C Slave **********
 
@@ -271,7 +294,14 @@ int main()
 	memset(s_WriteRqstData, 0, sizeof(s_WriteRqstData));
 	memset(buff, 0xFF, sizeof(buff));
 
+	s_MasterCompleted = false;
+	s_MasterCount = 0;
 	int c = g_I2CMaster.Write(I2C_SLAVE_ADDR, &offset, 1, wr, sizeof(wr));
+	if (s_I2cCfgMaster.bIntEn)
+	{
+		const int total = WaitMasterComplete(10000000);
+		c = total >= 1 ? total - 1 : 0;
+	}
 	printf("Write %d/%d bytes at offset %d\r\n", c, (int)sizeof(wr), offset);
 
 	memset(buff, 0xFF, sizeof(buff));
@@ -283,6 +313,24 @@ int main()
 
 	bool pass = c == (int)sizeof(wr) &&
 		memcmp(buff, wr, sizeof(wr)) == 0;
+
+	if (pass && s_I2cCfgMaster.bIntEn)
+	{
+		// The register-style read above validates the SAM4L CMDR/NCMDR
+		// repeated-start path. Exercise the ordinary interrupt RX path too.
+		uint8_t rx[4] = { 0xFF, 0xFF, 0xFF, 0xFF };
+		s_MasterCompleted = false;
+		s_MasterCount = 0;
+		int rc = g_I2CMaster.Rx(I2C_SLAVE_ADDR, rx, sizeof(rx));
+		if (rc < 0)
+			rc = WaitMasterComplete(10000000);
+		printf("Interrupt RX %d/%d bytes:", rc, (int)sizeof(rx));
+		for (int i = 0; i < rc; ++i)
+			printf(" %02x", rx[i]);
+		printf("\r\n");
+		pass = rc == (int)sizeof(rx);
+	}
+
 	printf("I2C master/slave loopback %s\r\n", pass ? "PASS" : "FAIL");
 
 	while (1)
