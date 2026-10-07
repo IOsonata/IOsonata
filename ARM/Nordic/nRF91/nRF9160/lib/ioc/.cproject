@@ -46,6 +46,7 @@
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.addtools.createflash.174421187" name="Create flash image" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.addtools.createflash" value="true" valueType="boolean"/>
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.addtools.printsize.1923657885" name="Print size" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.addtools.printsize" value="true" valueType="boolean"/>
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.fpu.abi.1565428603" name="Float ABI" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.fpu.abi" value="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.fpu.abi.hard" valueType="enumerated"/>
+							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.mcmse.2142427296" name="TrustZone (-mcmse)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.mcmse" value="true" valueType="boolean"/>
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.fpu.unit.2029290125" name="FPU Type" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.fpu.unit" value="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.fpu.unit.auto" valueType="enumerated"/>
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.toolchain.id.216667979" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.toolchain.id" value="1287942917" valueType="string"/>
 							<targetPlatform archList="all" binaryParser="org.eclipse.cdt.core.ELF" id="ilg.gnuarmeclipse.managedbuild.cross.targetPlatform.1774058441" isAbstract="false" osList="all" superClass="ilg.gnuarmeclipse.managedbuild.cross.targetPlatform"/>
@@ -60,7 +61,6 @@
 									<listOptionValue builtIn="false" value="../../src"/>
 									<listOptionValue builtIn="false" value="../../include"/>
 									<listOptionValue builtIn="false" value="../../../include"/>
-									<listOptionValue builtIn="false" value="../../../../bsdlib/include"/>
 									<listOptionValue builtIn="false" value="../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../../include"/>
@@ -75,6 +75,8 @@
 									<listOptionValue builtIn="false" value="../../../../../../../../external/nrfx/bsp/stable/mdk/nrf91"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/nrfx/drivers/include"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/sdk-nrfxlib/nrf_modem/include"/>
+									<listOptionValue builtIn="false" value="../../../../../../../../external/nrfx/bsp/stable"/>
+									<listOptionValue builtIn="false" value="../../../../../../../../external/nrfx/bsp/stable/mdk/common"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs.1586342971" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs" useByScannerDiscovery="true" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="uECC_ENABLE_VLI_API"/>
@@ -86,6 +88,7 @@
 									<listOptionValue builtIn="false" value="__PROGRAM_START"/>
 									<listOptionValue builtIn="false" value="NRF9160_XXAA"/>
 									<listOptionValue builtIn="false" value="SPRT_BUFFER_SIZE=128"/>
+									<listOptionValue builtIn="false" value="NRF_SKIP_FICR_NS_COPY_TO_RAM"/>
 								</option>
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std.905169294" name="Language standard" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std" useByScannerDiscovery="true" value="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std.gnu17" valueType="enumerated"/>
 								<inputType id="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input.2019933025" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input"/>
@@ -96,7 +99,6 @@
 									<listOptionValue builtIn="false" value="../../src"/>
 									<listOptionValue builtIn="false" value="../../include"/>
 									<listOptionValue builtIn="false" value="../../../include"/>
-									<listOptionValue builtIn="false" value="../../../../bsdlib/include"/>
 									<listOptionValue builtIn="false" value="../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../../include"/>
@@ -111,6 +113,8 @@
 									<listOptionValue builtIn="false" value="../../../../../../../../external/nrfx/bsp/stable/mdk/nrf91"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/nrfx/drivers/include"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/sdk-nrfxlib/nrf_modem/include"/>
+									<listOptionValue builtIn="false" value="../../../../../../../../external/nrfx/bsp/stable"/>
+									<listOptionValue builtIn="false" value="../../../../../../../../external/nrfx/bsp/stable/mdk/common"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.defs.824842735" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.defs" useByScannerDiscovery="true" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="uECC_ENABLE_VLI_API"/>
@@ -122,6 +126,7 @@
 									<listOptionValue builtIn="false" value="__PROGRAM_START"/>
 									<listOptionValue builtIn="false" value="NRF9160_XXAA"/>
 									<listOptionValue builtIn="false" value="SPRT_BUFFER_SIZE=128"/>
+									<listOptionValue builtIn="false" value="NRF_SKIP_FICR_NS_COPY_TO_RAM"/>
 								</option>
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.noexceptions.302823874" name="Do not use exceptions (-fno-exceptions)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.noexceptions" useByScannerDiscovery="true" value="true" valueType="boolean"/>
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.nortti.975212984" name="Do not use RTTI (-fno-rtti)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.nortti" useByScannerDiscovery="true" value="true" valueType="boolean"/>
@@ -150,7 +155,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/nrfx/drivers/src/nrfx_ipc.c|src/bsdlib_os_bare.c|src/coredev/pdm_nrfx.cpp|src/nrf_rpc.c|src/coredev/spi_nrf91.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/nrf_rpc.c|src/coredev/spi_nrf91.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -201,6 +206,7 @@
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.addtools.createflash.1514489385" name="Create flash image" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.addtools.createflash" value="true" valueType="boolean"/>
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.addtools.printsize.711324987" name="Print size" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.addtools.printsize" value="true" valueType="boolean"/>
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.fpu.abi.1300717486" name="Float ABI" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.fpu.abi" value="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.fpu.abi.hard" valueType="enumerated"/>
+							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.mcmse.2142427297" name="TrustZone (-mcmse)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.mcmse" value="true" valueType="boolean"/>
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.fpu.unit.348799485" name="FPU Type" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.fpu.unit" value="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.fpu.unit.auto" valueType="enumerated"/>
 							<targetPlatform archList="all" binaryParser="org.eclipse.cdt.core.ELF" id="ilg.gnuarmeclipse.managedbuild.cross.targetPlatform.223288120" isAbstract="false" osList="all" superClass="ilg.gnuarmeclipse.managedbuild.cross.targetPlatform"/>
 							<builder buildPath="${workspace_loc:/IOsonata_nRF9160}/Release" id="ilg.gnuarmeclipse.managedbuild.cross.builder.1203710097" keepEnvironmentInBuildfile="false" managedBuildOn="true" name="Gnu Make Builder" superClass="ilg.gnuarmeclipse.managedbuild.cross.builder"/>
@@ -214,7 +220,6 @@
 									<listOptionValue builtIn="false" value="../../src"/>
 									<listOptionValue builtIn="false" value="../../include"/>
 									<listOptionValue builtIn="false" value="../../../include"/>
-									<listOptionValue builtIn="false" value="../../../../bsdlib/include"/>
 									<listOptionValue builtIn="false" value="../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../../include"/>
@@ -229,6 +234,8 @@
 									<listOptionValue builtIn="false" value="../../../../../../../../external/nrfx/bsp/stable/mdk/nrf91"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/nrfx/drivers/include"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/sdk-nrfxlib/nrf_modem/include"/>
+									<listOptionValue builtIn="false" value="../../../../../../../../external/nrfx/bsp/stable"/>
+									<listOptionValue builtIn="false" value="../../../../../../../../external/nrfx/bsp/stable/mdk/common"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs.401361609" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs" useByScannerDiscovery="true" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="uECC_ENABLE_VLI_API"/>
@@ -240,6 +247,7 @@
 									<listOptionValue builtIn="false" value="__PROGRAM_START"/>
 									<listOptionValue builtIn="false" value="NRF9160_XXAA"/>
 									<listOptionValue builtIn="false" value="SPRT_BUFFER_SIZE=128"/>
+									<listOptionValue builtIn="false" value="NRF_SKIP_FICR_NS_COPY_TO_RAM"/>
 								</option>
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std.913777226" name="Language standard" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std" useByScannerDiscovery="true" value="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std.gnu17" valueType="enumerated"/>
 								<inputType id="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input.851772931" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input"/>
@@ -250,7 +258,6 @@
 									<listOptionValue builtIn="false" value="../../src"/>
 									<listOptionValue builtIn="false" value="../../include"/>
 									<listOptionValue builtIn="false" value="../../../include"/>
-									<listOptionValue builtIn="false" value="../../../../bsdlib/include"/>
 									<listOptionValue builtIn="false" value="../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../../include"/>
@@ -265,6 +272,8 @@
 									<listOptionValue builtIn="false" value="../../../../../../../../external/nrfx/bsp/stable/mdk/nrf91"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/nrfx/drivers/include"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/sdk-nrfxlib/nrf_modem/include"/>
+									<listOptionValue builtIn="false" value="../../../../../../../../external/nrfx/bsp/stable"/>
+									<listOptionValue builtIn="false" value="../../../../../../../../external/nrfx/bsp/stable/mdk/common"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.defs.51215947" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.defs" useByScannerDiscovery="true" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="uECC_ENABLE_VLI_API"/>
@@ -276,6 +285,7 @@
 									<listOptionValue builtIn="false" value="__PROGRAM_START"/>
 									<listOptionValue builtIn="false" value="NRF9160_XXAA"/>
 									<listOptionValue builtIn="false" value="SPRT_BUFFER_SIZE=128"/>
+									<listOptionValue builtIn="false" value="NRF_SKIP_FICR_NS_COPY_TO_RAM"/>
 								</option>
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.noexceptions.1998658890" name="Do not use exceptions (-fno-exceptions)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.noexceptions" useByScannerDiscovery="true" value="true" valueType="boolean"/>
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.nortti.938267862" name="Do not use RTTI (-fno-rtti)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.nortti" useByScannerDiscovery="true" value="true" valueType="boolean"/>
@@ -304,7 +314,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/nrfx/drivers/src/nrfx_ipc.c|src/bsdlib_os_bare.c|src/coredev/pdm_nrfx.cpp|src/nrf_rpc.c|src/coredev/spi_nrf91.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/nrf_rpc.c|src/coredev/spi_nrf91.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>

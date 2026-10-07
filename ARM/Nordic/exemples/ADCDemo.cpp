@@ -44,6 +44,8 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 //#define ADC_DEMO_INTERRUPT_ENABLE
 
+// Analog input pins of the nRF52, board.h gives them for another MCU
+#ifndef AIN0_PIN
 #define AIN0_PORT	0
 #define AIN0_PIN	2
 
@@ -67,6 +69,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #define AIN7_PORT	0
 #define AIN7_PIN	31
+#endif
 
 
 int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);

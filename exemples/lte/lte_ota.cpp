@@ -14,11 +14,12 @@ stopped, with a Range request on a new connection.
 	imgtool sign -k dfu_dev_key.pem --header-size 0x20 --pad-header --align 4 \
 		-v 1.0.1 -S <slot 1 size - 32> app.bin app_signed.bin
 
-What the modem needs is the application's: the Modem library, its OS glue
-(nrf_modem_os) and the shared memory set aside for it, the same as for any
-nRF91 socket application. IOsonata does not provide these; this example
-starts once nrf_modem_init has run. With TLS the server certificate goes in
-the modem under LTE_OTA_SEC_TAG beforehand (AT%CMNG).
+The modem needs the Modem library, its OS glue (nrf_modem_os) and the
+shared memory set aside for it, the same as for any nRF91 socket
+application. modem_nrf91.h provides the glue and nRF91ModemInit, see
+lte_modem_info.cpp; this example starts once the modem is initialized. With
+TLS the server certificate goes in the modem under LTE_OTA_SEC_TAG
+beforehand (AT%CMNG).
 
 Configure the server here or from board.h:
 

@@ -380,6 +380,13 @@ void DfuTgtStart(uintptr_t RunAddr)
 {
 	DfuCmQuiesce();
 
+#if defined(NRF91_SERIES)
+	// CLOCK/POWER back to secure, as after a reset: SystemInit of the image
+	// uses POWER at its secure address before it makes CLOCK/POWER non
+	// secure again (system_nrf91.c)
+	NRF_SPU_S->PERIPHID[CLOCK_POWER_IRQn].PERM |= SPU_PERIPHID_PERM_SECATTR_Msk;
+#endif
+
 #if defined(NRF52_SERIES)
 	uint32_t sdmagic = *(const uint32_t *)(DFU_TGT_MBR_SIZE +
 										   DFU_TGT_SD_MAGIC_OFFSET);

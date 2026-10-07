@@ -46,6 +46,12 @@ extern unsigned long __StackTop;
 extern void ResetEntry(void);
 
 void DEF_IRQHandler(void) { while(1); }
+
+// GPIOTE, TIMER and RTC handlers are defined weak by the IOsonata drivers.
+// They are declared weak here without an alias: with two weak definitions
+// the linker keeps the first one it reads, which would be the default handler.
+// The shared serial handlers use the MDK names (SPIMn_..._UARTEn), defined by
+// shared_intrf_nrfx.cpp.
 __attribute__((weak, alias("DEF_IRQHandler"))) void NMI_Handler(void);
 __attribute__((weak/*, alias("DEF_IRQHandler")*/)) void HardFault_Handler(void) { while(1); }
 __attribute__((weak, alias("DEF_IRQHandler"))) void MemoryManagement_Handler(void);
@@ -58,17 +64,17 @@ __attribute__((weak, alias("DEF_IRQHandler"))) void PendSV_Handler(void);
 __attribute__((weak/*, alias("DNT_IRQHandler")*/)) void SysTick_Handler(void) {}
 __attribute__((weak, alias("DEF_IRQHandler"))) void SPU_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void CLOCK_POWER_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void UARTE0_SPIM0_SPIS0_TWIM0_TWIS0_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void UARTE1_SPIM1_SPIS1_TWIM1_TWIS1_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void UARTE2_SPIM2_SPIS2_TWIM2_TWIS2_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void UARTE3_SPIM3_SPIS3_TWIM3_TWIS3_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void GPIOTE0_IRQHandler(void);
+__attribute__((weak, alias("DEF_IRQHandler"))) void SPIM0_SPIS0_TWIM0_TWIS0_UARTE0_IRQHandler(void);
+__attribute__((weak, alias("DEF_IRQHandler"))) void SPIM1_SPIS1_TWIM1_TWIS1_UARTE1_IRQHandler(void);
+__attribute__((weak, alias("DEF_IRQHandler"))) void SPIM2_SPIS2_TWIM2_TWIS2_UARTE2_IRQHandler(void);
+__attribute__((weak, alias("DEF_IRQHandler"))) void SPIM3_SPIS3_TWIM3_TWIS3_UARTE3_IRQHandler(void);
+__attribute__((weak)) void GPIOTE0_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void SAADC_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void TIMER0_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void TIMER1_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void TIMER2_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void RTC0_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void RTC1_IRQHandler(void);
+__attribute__((weak)) void TIMER0_IRQHandler(void);
+__attribute__((weak)) void TIMER1_IRQHandler(void);
+__attribute__((weak)) void TIMER2_IRQHandler(void);
+__attribute__((weak)) void RTC0_IRQHandler(void);
+__attribute__((weak)) void RTC1_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void WDT_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void EGU0_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void EGU1_IRQHandler(void);
@@ -83,7 +89,7 @@ __attribute__((weak, alias("DEF_IRQHandler"))) void PWM3_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void PDM_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void I2S_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void IPC_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void GPIOTE1_IRQHandler(void);
+__attribute__((weak)) void GPIOTE1_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void KMU_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void CRYPTOCELL_IRQHandler(void);
 
@@ -127,10 +133,10 @@ void (* const __Vectors[200])(void) = {
 	0,
 	CLOCK_POWER_IRQHandler,
 	0, 0,
-	UARTE0_SPIM0_SPIS0_TWIM0_TWIS0_IRQHandler,
-	UARTE1_SPIM1_SPIS1_TWIM1_TWIS1_IRQHandler,
-	UARTE2_SPIM2_SPIS2_TWIM2_TWIS2_IRQHandler,
-	UARTE3_SPIM3_SPIS3_TWIM3_TWIS3_IRQHandler,
+	SPIM0_SPIS0_TWIM0_TWIS0_UARTE0_IRQHandler,
+	SPIM1_SPIS1_TWIM1_TWIS1_UARTE1_IRQHandler,
+	SPIM2_SPIS2_TWIM2_TWIS2_UARTE2_IRQHandler,
+	SPIM3_SPIS3_TWIM3_TWIS3_UARTE3_IRQHandler,
 	0,
 	GPIOTE0_IRQHandler,
 	SAADC_IRQHandler,

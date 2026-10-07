@@ -41,6 +41,7 @@ SOFTWARE.
 // into an application that only needs the event queue.
 extern "C" void UsbCheckStatus(void) __attribute__((weak));
 extern "C" void BtAppCheckStatus(void) __attribute__((weak));
+extern "C" void LteCheckStatus(void) __attribute__((weak));
 
 __attribute__((weak)) bool AppCheckStatus(void)
 {
@@ -51,6 +52,10 @@ __attribute__((weak)) bool AppCheckStatus(void)
 	if (BtAppCheckStatus != nullptr)
 	{
 		BtAppCheckStatus();
+	}
+	if (LteCheckStatus != nullptr)
+	{
+		LteCheckStatus();
 	}
 	return AppEvtHandlerPending() == false;
 }

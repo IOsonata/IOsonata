@@ -41,7 +41,13 @@ SOFTWARE.
 #define NRF_RTC0		NRF_RTC0_NS
 #define NRF_RTC1		NRF_RTC1_NS
 #else
+#if defined(NRF91_SERIES)
+// Non secure on nRF91, as POWER, which the Modem library uses there
+// (nrfx_config_nrf91.h)
+#define NRF_CLOCK		NRF_CLOCK_NS
+#else
 #define NRF_CLOCK		NRF_CLOCK_S
+#endif
 #define NRF_RTC0		NRF_RTC0_S
 #define NRF_RTC1		NRF_RTC1_S
 #define NRF_RTC2		NRF_RTC1_S

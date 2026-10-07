@@ -147,7 +147,7 @@ its own loop. No subsystem runs that queue itself, so USB and Bluetooth share
 it in one loop.
 
 When the event queue is empty, `AppRun()` calls `AppCheckStatus()`. Its weak default
-checks the linked USB and Bluetooth subsystems. `BtAppCheckStatus()` retries
+checks the linked USB, Bluetooth and LTE subsystems. `BtAppCheckStatus()` retries
 retained LESC work and port work refused by a full queue. Recovery queues the
 original callback; it does not execute security or stack work in the interrupt.
 Periodic timeout checks continue to use their timers.

@@ -188,10 +188,10 @@ static NRF_GPIOTE_Type *nRFGpioteGetReg(int PortNo)
 	reg = NRF_GPIOTE_NS;
 #else
 	reg = NRF_GPIOTE0_S;
-    if (PortNo & 0x80)
-    {
-    	reg = NRF_GPIOTE1_NS;
-    }
+	if (PortNo & 0x80)
+	{
+		reg = NRF_GPIOTE1_NS;
+	}
 #endif
 #else
     reg = NRF_GPIOTE;
@@ -292,7 +292,8 @@ void IOPinDisableInterrupt(int IntNo)
     if (IntNo >= IOPIN_MAX_INT)
         return;
 
-    NRF_GPIOTE_Type *gpiotereg = nRFGpioteGetReg(s_GpIOSenseEvt[IntNo].PortPinNo >> 8);
+    // A negative IntNo is the port event, the last entry
+    NRF_GPIOTE_Type *gpiotereg = nRFGpioteGetReg(s_GpIOSenseEvt[IntNo < 0 ? IOPIN_MAX_INT : IntNo].PortPinNo >> 8);
 
     if (IntNo < 0)
     {
@@ -396,16 +397,18 @@ void IOPinDisableInterrupt(int IntNo)
 	NVIC_ClearPendingIRQ(GPIOTE_IRQn);
     NVIC_DisableIRQ(GPIOTE_IRQn);
 #elif defined(NRF91_SERIES) || defined(NRF53_SERIES)
-    if (s_GpIOSenseEvt[IntNo].PortPinNo & 0x8000)
-    {
-    	NVIC_ClearPendingIRQ(GPIOTE0_IRQn);
-        NVIC_DisableIRQ(GPIOTE0_IRQn);
-    }
-    else
-    {
-    	NVIC_ClearPendingIRQ(GPIOTE1_IRQn);
-        NVIC_DisableIRQ(GPIOTE1_IRQn);
-    }
+	// GPIOTE1 is the non secure instance, GPIOTE0 the secure one. PortPinNo
+	// is already cleared here, the instance in use tells which one.
+	if (gpiotereg == NRF_GPIOTE1_NS)
+	{
+		NVIC_ClearPendingIRQ(GPIOTE1_IRQn);
+		NVIC_DisableIRQ(GPIOTE1_IRQn);
+	}
+	else
+	{
+		NVIC_ClearPendingIRQ(GPIOTE0_IRQn);
+		NVIC_DisableIRQ(GPIOTE0_IRQn);
+	}
 #else
     NVIC_ClearPendingIRQ(GPIOTE_IRQn);
     NVIC_DisableIRQ(GPIOTE_IRQn);
@@ -500,7 +503,7 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, uint32_t PortNo, uint32_t PinN
 		{
 			if ((1<<i) & PinNo)
 			{
-				reg->PIN_CNF[i] &= ~(GPIO_PIN_CNF_SENSE_Msk << GPIO_PIN_CNF_SENSE_Pos);
+				reg->PIN_CNF[i] &= ~GPIO_PIN_CNF_SENSE_Msk;
 				switch (Sense)
 				{
 					case IOPINSENSE_LOW_TRANSITION:
@@ -525,7 +528,12 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, uint32_t PortNo, uint32_t PinN
 						;
 				}
 
-				gpiotereg->CONFIG[idx] = cfg;
+				// A port event uses the pin sense, not a GPIOTE channel: idx is
+				// negative here and there is no channel to configure
+				if (idx >= 0)
+				{
+					gpiotereg->CONFIG[idx] = cfg;
+				}
 
 				s_GpIOSenseEvt[IntNo].Sense = Sense;
 				s_GpIOSenseEvt[IntNo].PortPinNo = (PortNo << 8) | i; // For use when disable interrupt
@@ -536,7 +544,7 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, uint32_t PortNo, uint32_t PinN
 	}
 	else
 	{
-		reg->PIN_CNF[PinNo] &= ~(GPIO_PIN_CNF_SENSE_Msk << GPIO_PIN_CNF_SENSE_Pos);
+		reg->PIN_CNF[PinNo] &= ~GPIO_PIN_CNF_SENSE_Msk;
 		switch (Sense)
 		{
 			case IOPINSENSE_LOW_TRANSITION:
@@ -602,17 +610,18 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, uint32_t PortNo, uint32_t PinN
     NVIC_SetPriority(GPIOTE_IRQn, IntPrio);
     NVIC_EnableIRQ(GPIOTE_IRQn);
 #elif defined(NRF91_SERIES) || defined(NRF53_SERIES)
+	// GPIOTE1 is the non secure instance, GPIOTE0 the secure one
 	if (PortNo & 0x80)
 	{
-	    NVIC_ClearPendingIRQ(GPIOTE0_IRQn);
-	    NVIC_SetPriority(GPIOTE0_IRQn, IntPrio);
-	    NVIC_EnableIRQ(GPIOTE0_IRQn);
+		NVIC_ClearPendingIRQ(GPIOTE1_IRQn);
+		NVIC_SetPriority(GPIOTE1_IRQn, IntPrio);
+		NVIC_EnableIRQ(GPIOTE1_IRQn);
 	}
 	else
 	{
-	    NVIC_ClearPendingIRQ(GPIOTE1_IRQn);
-	    NVIC_SetPriority(GPIOTE1_IRQn, IntPrio);
-	    NVIC_EnableIRQ(GPIOTE1_IRQn);
+		NVIC_ClearPendingIRQ(GPIOTE0_IRQn);
+		NVIC_SetPriority(GPIOTE0_IRQn, IntPrio);
+		NVIC_EnableIRQ(GPIOTE0_IRQn);
 	}
 #elif defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
 	if ((PortNo & 0x7F) == 0)
@@ -723,7 +732,7 @@ void IOPinSetSense(int PortNo, int PinNo, IOPINSENSE Sense)
 	}
 
 	// Clear sense
-	reg->PIN_CNF[PinNo] &= ~(GPIO_PIN_CNF_SENSE_Msk << GPIO_PIN_CNF_SENSE_Pos);
+	reg->PIN_CNF[PinNo] &= ~GPIO_PIN_CNF_SENSE_Msk;
 	switch (Sense)
 	{
 		case IOPINSENSE_DISABLE:	// Disable pin sense
@@ -760,8 +769,8 @@ void IOPinSetStrength(int PortNo, int PinNo, IOPINSTRENGTH Strength)
 		return;
 	}
 
-	uint32_t val = ((reg->PIN_CNF[PinNo] >> GPIO_PIN_CNF_DRIVE_Pos) & GPIO_PIN_CNF_DRIVE_Msk) & 6;
-	reg->PIN_CNF[PinNo] &= ~(GPIO_PIN_CNF_DRIVE_Msk << GPIO_PIN_CNF_DRIVE_Pos);
+	uint32_t val = ((reg->PIN_CNF[PinNo] & GPIO_PIN_CNF_DRIVE_Msk) >> GPIO_PIN_CNF_DRIVE_Pos) & 6;
+	reg->PIN_CNF[PinNo] &= ~GPIO_PIN_CNF_DRIVE_Msk;
 	if (Strength == IOPINSTRENGTH_STRONG)
 	{
 		// Stronger drive strength
@@ -854,7 +863,7 @@ void __WEAK GPIOTE1_IRQHandler(void)
 	    //NRF_GPIO->LATCH = 0xFFFFFFFF;	// Clear detect latch
 	}
 
-	NVIC_ClearPendingIRQ(GPIOTE0_IRQn);
+	NVIC_ClearPendingIRQ(GPIOTE1_IRQn);
 }
 #elif defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
 
