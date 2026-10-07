@@ -1420,6 +1420,46 @@
 			<type>1</type>
 			<locationURI>PARENT-3-PROJECT_LOC/src/spe_nrf91.c</locationURI>
 		</link>
+		<link>
+			<name>include/lte</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>include/lte/lte.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/lte/lte.h</locationURI>
+		</link>
+		<link>
+			<name>include/net</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>include/net/sock_intrf.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/net/sock_intrf.h</locationURI>
+		</link>
+		<link>
+			<name>src/lte</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/lte/lte.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/lte/lte.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/lte_nrf91.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/lte_nrf91.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/sock_intrf_nrf91.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/sock_intrf_nrf91.cpp</locationURI>
+		</link>
 	</linkedResources>
 	<variableList>
 		<variable>

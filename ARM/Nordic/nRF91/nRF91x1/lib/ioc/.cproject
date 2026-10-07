@@ -151,7 +151,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/nrfx/drivers/src/nrfx_ipc.c|src/bsdlib_os_bare.c|src/coredev/pdm_nrfx.cpp|src/nrf_rpc.c|src/coredev/spi_nrf91.cpp|src/modem_os_nrf91.c" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/nrfx/drivers/src/nrfx_ipc.c|src/bsdlib_os_bare.c|src/coredev/pdm_nrfx.cpp|src/nrf_rpc.c|src/coredev/spi_nrf91.cpp|src/modem_os_nrf91.c|src/lte_nrf91.cpp|src/sock_intrf_nrf91.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -306,7 +306,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/nrfx/drivers/src/nrfx_ipc.c|src/bsdlib_os_bare.c|src/coredev/pdm_nrfx.cpp|src/nrf_rpc.c|src/coredev/spi_nrf91.cpp|src/modem_os_nrf91.c" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/nrfx/drivers/src/nrfx_ipc.c|src/bsdlib_os_bare.c|src/coredev/pdm_nrfx.cpp|src/nrf_rpc.c|src/coredev/spi_nrf91.cpp|src/modem_os_nrf91.c|src/lte_nrf91.cpp|src/sock_intrf_nrf91.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
