@@ -45,6 +45,7 @@ SOFTWARE.
 #include <string.h>
 
 #include "cfifo.h"
+#include "app_evt_handler.h"
 #include "usb/usb.h"
 #include "usb/usbd_bulk.h"
 
@@ -61,7 +62,7 @@ SOFTWARE.
 alignas(4) static uint8_t s_RxFifoMem[CUSTOM_RXFIFO_MEMSIZE];
 alignas(4) static uint8_t s_TxFifoMem[CUSTOM_TXFIFO_MEMSIZE];
 
-static UsbdBulk g_CustomBulk;
+static UsbdBulk s_CustomBulk;
 
 static const UsbdBulkCfg_t s_BulkCfg = {
 	.DevNo = USB_DEVNO,
@@ -81,6 +82,10 @@ static const UsbdBulkCfg_t s_BulkCfg = {
 
 // These VID/PID values are for the example. Use IDs assigned to your product
 // before shipping a device.
+// Application event queue memory, replaces the 4 event library default. The
+// USB controller port queues its deferred endpoint events there.
+alignas(4) uint8_t g_AppEvtHandlerQueMem[APPEVT_HANDLER_QUE_MEMSIZE(16)];
+
 static const UsbCfg_t s_UsbCfg = {
 	.DevNo = USB_DEVNO,
 	.Mode = USB_MODE_DEVICE,
@@ -106,14 +111,15 @@ int main()
 {
 	uint8_t buffer[LOOPBACK_BUFFER_SIZE];
 
-	if (!UsbInit(&s_UsbCfg))
+	if (!AppEvtHandlerInit(g_AppEvtHandlerQueMem, sizeof(g_AppEvtHandlerQueMem)) ||
+		!UsbInit(&s_UsbCfg))
 	{
 		return -1;
 	}
 
 	// UsbdBulk allocates one interface and one bidirectional endpoint pair.
 	// No interface or endpoint number is part of s_BulkCfg.
-	if (!g_CustomBulk.Init(s_BulkCfg))
+	if (!s_CustomBulk.Init(s_BulkCfg))
 	{
 		return -1;
 	}
@@ -127,11 +133,11 @@ int main()
 
 	while (1)
 	{
-		UsbProcess(USB_DEVNO);
+		AppEvtHandlerExec();
 
 		if (pending > 0)
 		{
-			int n = g_CustomBulk.TxData(&buffer[offset], pending);
+			int n = s_CustomBulk.TxData(&buffer[offset], pending);
 			if (n > 0)
 			{
 				offset += n;
@@ -140,7 +146,7 @@ int main()
 			continue;
 		}
 
-		int len = g_CustomBulk.RxData(buffer, sizeof(buffer));
+		int len = s_CustomBulk.RxData(buffer, sizeof(buffer));
 		if (len > 0)
 		{
 			pending = len;

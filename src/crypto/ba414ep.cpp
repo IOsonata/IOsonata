@@ -47,8 +47,8 @@ SOFTWARE.
 // Diagnostic tracing. Define BA414EP_TRACE_ENABLE to trace every operation.
 //#define BA414EP_TRACE_ENABLE
 #if defined(BA414EP_TRACE_ENABLE)
-#include <stdio.h>
-#define BA414EP_TRACE(...)	printf(__VA_ARGS__)
+#include "syslog.h"
+#define BA414EP_TRACE(...)	SysLogPrintf(SysLogGet(), __VA_ARGS__)
 #else
 #define BA414EP_TRACE(...)
 #endif
@@ -173,6 +173,8 @@ static bool PkGeometryValid(Device *pDev)
 	}
 	s_PkSlotSize = maxOpSize > BA414EP_OPERAND_SLOT_4096 ?
 		BA414EP_OPERAND_SLOT_8192 : BA414EP_OPERAND_SLOT_4096;
+	BA414EP_TRACE("Ba414ep geometry accepted: hwconfig=%08x maxop=%u slot=%u\r\n",
+				  (unsigned)cfg, (unsigned)maxOpSize, (unsigned)s_PkSlotSize);
 	return true;
 }
 
@@ -453,15 +455,23 @@ void Ba414ep::OpRelease()
 
 bool Ba414ep::WaitIkIdle()
 {
+	uint32_t pkStatus = 0U;
+	uint32_t ikStatus = 0U;
+
 	for (uint32_t i = 0; i < BA414EP_POLL_LIMIT; i++)
 	{
-		if ((PkRegRead(this, BA414EP_REG_STATUS) & BA414EP_STATUS_BUSY) == 0U &&
-			(PkRegRead(this, BA414EP_IK_REG_PK_STATUS) &
-			 BA414EP_IK_PK_BUSY_MASK) == 0U)
+		pkStatus = PkRegRead(this, BA414EP_REG_STATUS);
+		ikStatus = PkRegRead(this, BA414EP_IK_REG_PK_STATUS);
+		if ((pkStatus & BA414EP_STATUS_BUSY) == 0U &&
+			(ikStatus & BA414EP_IK_PK_BUSY_MASK) == 0U)
 		{
+			BA414EP_TRACE("Ba414ep IK idle: pk=%08x ik=%08x\r\n",
+						  (unsigned)pkStatus, (unsigned)ikStatus);
 			return true;
 		}
 	}
+	BA414EP_TRACE("Ba414ep IK idle timeout: pk=%08x ik=%08x\r\n",
+				  (unsigned)pkStatus, (unsigned)ikStatus);
 	return false;
 }
 
@@ -493,8 +503,13 @@ bool Ba414ep::HandoverProbe()
 		if (idle && status == 0U && res[0] == 0U && res[1] == 0U &&
 			res[2] == 0U && res[3] == 2U)
 		{
+			BA414EP_TRACE("Ba414ep handover probe: attempt=%u PASS\r\n",
+						  (unsigned)attempt);
 			return true;
 		}
+		BA414EP_TRACE("Ba414ep handover probe: attempt=%u idle=%d status=%08x result=%02x%02x%02x%02x\r\n",
+					  (unsigned)attempt, (int)idle, (unsigned)status,
+					  res[0], res[1], res[2], res[3]);
 	}
 	return false;
 }

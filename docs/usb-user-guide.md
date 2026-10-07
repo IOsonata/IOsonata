@@ -1,7 +1,7 @@
 # USB User Guide
 
-IOsonata provides a composable USB device stack for the nRF52840 native USB
-controller. Applications select device classes and provide static storage;
+IOsonata provides a composable USB device stack with MCU-specific controller
+ports. Applications select device classes and provide static storage;
 the USB stack assigns interface and endpoint numbers and assembles the
 configuration descriptor.
 
@@ -14,6 +14,7 @@ composition, endpoint dispatch and controller-port rules.
 | Function | Application class or interface | Shared example | nRF52840 project | Host runner |
 |---|---|---|---|---|
 | CDC ACM | `UsbdCdc` | `exemples/usb/usb_cdc_loopback.cpp` | `UsbCdcLoopback/ioc` | `Python/usb_cdc_loopback.py` |
+| Composite stress | two CDC ports, HID, Interrupt and Isochronous | `exemples/usb/usb_combo_stress.cpp` | `UsbComboStress/ioc` | `Python/usb_combo_stress.py` |
 | Dual CDC ACM | two `UsbdCdc` objects | `exemples/usb/usb_dual_cdc_stress.cpp` | `UsbDualCdcStress/ioc` | `Python/usb_dual_cdc_stress.py` |
 | Custom Bulk | `UsbdBulk` | `exemples/usb/usb_custom_bulk_loopback.cpp` | `UsbCustomBulkLoopback/ioc` | `Python/usb_custom_bulk_loopback.py` |
 | HID | `UsbdHid` | `exemples/usb/usb_hid_loopback.cpp` | `UsbHidLoopback/ioc` | `Python/usb_hid_loopback.py` |
@@ -39,14 +40,66 @@ controller applications.
 The Python runners require only the host packages used by their transport:
 
 - CDC runners use `pyserial`;
-- raw USB Bulk, Interrupt, Isochronous and MSC runners use `pyusb` with a
-  libusb backend;
+- raw USB Bulk, Interrupt and MSC runners use `pyusb` with a libusb backend;
+- Isochronous runners use `libusb1` (the Python `usb1` module);
+- composite stress uses `pyserial`, `hidapi` and `libusb1` together;
 - the HID runner uses `hidapi` and the operating system HID driver.
 
 Linux raw-USB access normally requires an appropriate udev rule or root
 privileges. On macOS, a raw MSC test may require `sudo` because the operating
 system owns the mass-storage interface. Unmounting a volume does not release
 that interface from the kernel driver.
+
+### SAM4L
+
+Build `ARM/Microchip/SAM4L/SAM4LCxC/lib/ioc`, then either `UsbCdcLoopback/ioc`
+or `UsbCdcLoopbackTaktOS/ioc` under `SAM4LCxC/exemples`, using matching Debug
+or Release configurations. Both projects link the shared CDC application.
+For TaktOS, build the sibling `TaktOS/ARM/cm4/ioc` project with its standard
+Debug or Release configuration. Its softfp base AAPCS is compatible with the
+SAM4L application's software floating point; do not select DebugFPU/ReleaseFPU.
+
+Each project's `src/board.h` supplies `MCUOSC` and pin definitions. The CDC
+application defines `g_McuOsc = MCUOSC`, which `SystemInit()` uses to derive
+the 48 MHz USB generic clock from PLL0. The current RC clock setup does not
+enable USB. The controller checks clock readiness and configures the fixed
+DM/DP peripheral pins, PA25/PA26.
+
+The supplied SAM4L8 Xplained Pro configuration uses a 12 MHz crystal, PC11
+for VBUS input and PC12 for the host power-switch enable. The application
+holds PC12 low and configures PC11 explicitly during initialization, after
+its USB queue and classes exist. GPIO edges queue `UsbProcessQue()`, and the
+application's `UsbCtrlrVbusDetected()` override samples the current level.
+The library default returns false. Projects using another external VBUS
+input change their pin definitions and provide the same application handling.
+The Nordic CDC projects use their controller's native cable detection and do
+not require these GPIO definitions.
+
+Program through the DEBUG connector, then connect **TARGET USB** to the host.
+Check the CDC port assigned to the target; the debugger has a separate port.
+Both examples echo received data. The bare-metal example also prints a
+greeting when the CDC port opens.
+
+The SAM4L port supports full-speed control, bulk and interrupt DMA. Eight
+physical endpoints provide EP0 plus seven non-control directions; each IN
+or OUT data direction uses one endpoint. ISO and host operation are disabled.
+The full combo stress workload exceeds this physical endpoint capacity.
+
+Run the controller/platform checks and compile/link checks from the repository
+root (`--toolchain-prefix` can select an Arm GNU installation):
+
+```sh
+make -C tests/usb test-sam4l
+python3 tests/usb/sam4l_cdc_build_test.py --config Release --taktos ../TaktOS
+python3 tests/usb/sam4l_cdc_build_test.py --config Debug --taktos ../TaktOS
+```
+
+Omit `--taktos` to build just bare metal. The script compiles the examples'
+source dependencies and checks project links; it does not build unrelated
+peripherals in the library project. **Hardware validation remains pending:**
+enumeration, short/64-byte binary echo, backpressure, repeated CDC open/close,
+unplug/replug while EDBG remains powered, and host suspend/resume. For TaktOS,
+also check that `g_UsbTaktOSHeartbeat` advances during traffic.
 
 ## Common application lifecycle
 
@@ -64,14 +117,12 @@ int main(void)
         return -1;
     }
 
-    // A board can start without VBUS. UsbProcess() reconnects when it appears.
+    // A board can start without VBUS. The stack connects when it appears.
     (void)UsbEnable(s_UsbCfg.DevNo);
 
-    while (1)
-    {
-        UsbProcess(s_UsbCfg.DevNo);
-        // Application work.
-    }
+    // Runs the queued USB work and waits for the next interrupt. An
+    // application with its own loop calls AppEvtHandlerExec() in it instead.
+    AppRun();
 }
 ```
 
@@ -79,10 +130,33 @@ Initialization order is significant:
 
 1. `UsbInit()` records device identity and initializes the controller.
 2. Each class `Init()` allocates its topology, initializes its data path and
-   registers its full-speed and high-speed descriptor fragments.
+   registers its descriptor fragment or speed-aware descriptor builder.
 3. `UsbEnable()` prepares and validates the complete configuration descriptor
    before connecting the controller.
-4. `UsbProcess()` runs deferred class work and handles VBUS reconnects.
+4. `AppRun()`, or `AppEvtHandlerExec()` in the application loop, runs what
+   the USB stack queued.
+
+The USB stack hands everything that must run outside the interrupt to
+`UsbEvtQue()`, the one way it signals work: deferred endpoint events, and one
+process event after controller and endpoint events, which runs the class
+work (`UsbDeviceClass::Process()`), reports cable changes and retries the
+connection. Its library default puts the work in the application event
+queue, first in first out. The USB stack never runs the queue itself, so USB
+and Bluetooth share it in one loop, and the application does not call
+`UsbProcess()`. The default queue holds 4 events. A USB application normally needs more: define
+`g_AppEvtHandlerQueMem` and pass its size to `AppEvtHandlerInit()` before
+`UsbInit()`, as the USB examples do:
+
+```cpp
+alignas(4) uint8_t g_AppEvtHandlerQueMem[APPEVT_HANDLER_QUE_MEMSIZE(16)];
+
+AppEvtHandlerInit(g_AppEvtHandlerQueMem, sizeof(g_AppEvtHandlerQueMem));
+```
+
+With an RTOS, the thread serving USB owns the deferred work instead: the
+application overrides `UsbEvtQue()` to put it in that thread's queue as a
+message, and the thread runs each one. The application event queue is then
+not linked for USB.
 
 Do not assign interface or endpoint numbers in application configuration.
 Adding or removing a class can change the assigned topology without changing
@@ -173,10 +247,26 @@ Use `--serial` when several matching devices are connected.
 
 ## HID
 
-`UsbdHid` embeds `UsbIntIntrf` and owns HID descriptors and standard HID class
+`UsbdHid` inherits `UsbIntIntrf` and owns HID descriptors and standard HID class
 requests. The application supplies the report descriptor and report meaning.
 Subclass `UsbdHid` only when application-specific control reports are needed,
 and delegate unhandled requests to `UsbdHid::Control()`.
+
+Supply separate caller-owned RX and TX slots in `UsbdHidCfg_t::pRxBuffer`
+and `pTxBuffer`. Both must remain alive for the interface lifetime, be
+4-byte aligned and contain at least `USB_INT_INTRF_PKT_BLKSIZE` bytes.
+This size includes the transport packet header; a 64-byte report array alone
+is not sufficient.
+
+```cpp
+alignas(4) static uint8_t s_HidRxBuffer[USB_INT_INTRF_PKT_BLKSIZE];
+alignas(4) static uint8_t s_HidTxBuffer[USB_INT_INTRF_PKT_BLKSIZE];
+```
+
+Use these arrays in the matching configuration fields, as shown in
+[usb_hid_loopback.cpp](../exemples/usb/usb_hid_loopback.cpp).
+`UsbIntIntrfCfg_t` has the same slot requirements. Rebuild the MCU library
+and application together when migrating from the earlier embedded-buffer API.
 
 The generic loopback is exercised through the native HID driver:
 
@@ -230,7 +320,7 @@ static const UsbdMscCfg_t s_MscCfg = {
 The sector buffer must be at least `DiskIO::GetSectSize()` bytes. Initialization
 rejects an invalid or oversized sector configuration rather than assuming that
 every backend sector fits. Disk reads, writes and SCSI command work run from
-`UsbProcess()`, outside the USB interrupt.
+the queued process event, outside the USB interrupt.
 
 The initial SCSI command set includes INQUIRY, TEST UNIT READY, REQUEST SENSE,
 READ CAPACITY (10), MODE SENSE (6), START STOP UNIT, READ (10), WRITE (10),
@@ -259,6 +349,18 @@ restoring VBUS reloads the configured removable medium. A host can remount it
 with Disk Utility or `diskutil mountDisk /dev/diskN`; the BSD disk number can
 change after reconnect.
 
+## Bluetooth HCI over USB
+
+`BtHciUsb` supplies the USB device transport for a Bluetooth controller.
+It combines HCI class requests and the HCI data path with an optional SCO
+Isochronous endpoint pair. This is separate from the IOsonata Bluetooth
+host stack and its pairing/security configuration.
+
+Use [bt_hci_usb.h](../include/bluetooth/bt_hci_usb.h) for the transport
+configuration. The maintainer validated the HCI/MSC storage optimization
+with HciController for HCI and UsbMscRamDisk for MSC. HciController is not
+included as a target project in this repository.
+
 ## Interrupt and Isochronous transports
 
 `UsbIntIntrf` and `UsbIsoIntrf` are role-neutral endpoint-pair transports used
@@ -278,18 +380,86 @@ runner checks scheduled packet flow and diagnostic counters. Use
 ## Composite devices
 
 Initialize every class object after `UsbInit()` and before `UsbEnable()`. Each
-successful class registration contributes its interfaces, endpoints and static
-descriptor fragment to the same configuration. The allocator prevents fixed
-endpoint assumptions from leaking into reusable application code.
+successful class registration contributes its interfaces, endpoints and
+descriptor fragment or builder to the same configuration. The allocator prevents
+fixed endpoint assumptions from leaking into reusable application code.
 
-Class initialization is atomic: do not continue to `UsbEnable()` after a class
-`Init()` failure. The controller is connected only after the complete
-configuration descriptor is prepared and validated.
+Stop startup on any class `Init()` failure; do not continue to `UsbEnable()`.
+The controller is connected only after the complete configuration descriptor
+is prepared and validated.
+
+### Configuration descriptor storage
+
+The nRF52840 library defaults to `USB_CONFIG_DESC_MAXLEN = 768` bytes.
+The generic fallback for other targets is 1024 bytes; these are storage
+capacities, not the descriptor length reported to the host. UsbComboStress
+uses 398 bytes, including the configuration header and all alternate settings.
+
+Device, string, qualifier and HID report descriptor bodies are separate from
+this configuration buffer. The 768-byte nRF52840 default covers the existing
+class layouts considered in the endpoint-capacity review, including HCI and
+MSC; custom descriptors or extra alternate settings can require more.
+
+To change the capacity, define `USB_CONFIG_DESC_MAXLEN` when building the MCU
+library, then clean and rebuild the application against matching headers and
+library. An application-only definition cannot resize storage in a precompiled
+library.
+
+### Composite stress runner
+
+UsbComboStress runs CDC loopback, CDC PRBS TX, HID, raw Interrupt and
+bidirectional Isochronous traffic concurrently. Install the host dependencies:
+
+```bash
+python3 -m venv .venv
+./.venv/bin/python3 -m pip install pyserial hidapi libusb1
+./.venv/bin/python3 Python/usb_combo_stress.py \
+  --loop-port /dev/cu.usbmodemXXXX01 \
+  --prbs-port /dev/cu.usbmodemXXXX03 \
+  --duration 2000
+```
+
+The host also needs the native libusb library. Replace both serial paths with
+the ports assigned to the current firmware. Save the full result, including
+pending loopback bytes, ISO diagnostics and any failure text, rather than only
+the throughput line. A runner PASS can coexist with nonzero ISO host misses,
+skews or unsent frames; it does not mean all diagnostic counters were zero.
+
+The runner resubmits an ISO burst that the host did not carry out: a request
+refused at submit or failed as a whole, validation frames the host reports as
+not sent, or an OUT transfer started late against IN. These count as host
+misses or skews, and only more than three in a row fail the run. OUT guard
+frames the host reports as not sent count as host unsent frames; the burst
+is still validated. A failure up to the transfer timeout plus one second after
+a host pause, or up to ten seconds after a system sleep, is reported as
+INCONCLUSIVE instead of FAIL.
+
+See the [USB example index](../exemples/usb/README.md) and
+[TinyUSB comparison procedure](../exemples/usb/tinyusb_common/README.md).
+
+## TaktOS integration
+
+The [USB + TaktOS example](../exemples/usb/usb_taktos/README.md) includes an
+nRF52840 IOcomposer project. One thread services USB and nonblocking CDC
+loopback; a lower-priority periodic thread demonstrates scheduler progress.
+The example overrides `UsbEvtQue()` so the USB thread runs the deferred
+endpoint work from its own queue; the application event queue is not used.
+Follow its partial-write handling and bounded service passes when adapting it.
+
+`UsbComboStressTaktOS` adds separate CDC loopback and PRBS threads alongside
+one USB service thread and a heartbeat. Its device composition and host runner
+match `UsbComboStress`; HID/INT/ISO retain their callback paths. The integration
+guide explains thread priorities, USB work ownership and the hardware checks.
 
 ## Suspend, reset and reconnect
 
-Call `UsbProcess()` continuously. It observes VBUS changes, runs class work and
-retries device connection when a board started without a cable. On VBUS
+Keep the queue running (`AppRun()`, the application loop or the USB thread).
+The USB port owns its cable interrupt: VREGUSB on the nRF54LM20, the POWER
+USBDETECTED and USBREMOVED events on the nRF52 (through the SoftDevice SoC
+events when a SoftDevice is enabled, otherwise on the POWER_CLOCK vector it
+shares with the clock). A cable edge queues the process event, which reports
+the change, runs class work and retries device connection when a board
+started without a cable. On VBUS
 removal, the core calls each device class `Detach()` before reporting the cable
 event. Bus reset and unconfiguration call each class `Reset()` and close active
 non-control endpoints.
@@ -332,7 +502,7 @@ detach the kernel mass-storage driver.
 
 ### A device does not reappear after reconnect
 
-Keep `UsbProcess()` running and rediscover the host device path. Serial ports
+Keep the queue running and rediscover the host device path. Serial ports
 and BSD disk numbers are host-assigned and can change. For MSC, removal of VBUS
 reloads a removable medium; a logical eject without VBUS removal intentionally
 keeps it not-ready until the host sends a load request.

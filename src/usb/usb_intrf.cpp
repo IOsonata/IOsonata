@@ -34,7 +34,6 @@ SOFTWARE.
 #include <string.h>
 
 #include "istddef.h"
-#include "app_evt_handler.h"
 #include "coredev/interrupt.h"
 #include "usb/usb_intrf.h"
 

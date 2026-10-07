@@ -420,6 +420,13 @@ uint32_t BtSmpMsTick(void);
 void BtSmpTimeoutCheck(void);
 
 /**
+ * @brief	Queue retained crypto work after the Bluetooth event queue empties.
+ *
+ * Retries a refused enqueue without running crypto or advancing timeouts here.
+ */
+void BtSmpCheckStatus(void);
+
+/**
  * @brief	Initialise the SMP layer and compose its crypto from engines.
  *
  * SMP needs two primitives - ECDH (P-256) and AES-128 ECB - each supplied by an

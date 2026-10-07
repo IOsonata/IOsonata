@@ -38,27 +38,22 @@ SOFTWARE.
 #include "crypto/crypto_softaes.h"
 
 static int s_pass, s_fail;
-static void check(const char *name, bool ok)
-{
-	printf("  [%s] %s\n", ok ? "PASS" : "FAIL", name);
-	if (ok) s_pass++; else s_fail++;
-}
 
-static const uint8_t kCmacKey[16] = {
+static const uint8_t s_CmacKey[16] = {
 	0x2b,0x7e,0x15,0x16,0x28,0xae,0xd2,0xa6,
 	0xab,0xf7,0x15,0x88,0x09,0xcf,0x4f,0x3c };
-static const uint8_t kMsg[64] = {
+static const uint8_t s_Msg[64] = {
 	0x6b,0xc1,0xbe,0xe2,0x2e,0x40,0x9f,0x96,0xe9,0x3d,0x7e,0x11,0x73,0x93,0x17,0x2a,
 	0xae,0x2d,0x8a,0x57,0x1e,0x03,0xac,0x9c,0x9e,0xb7,0x6f,0xac,0x45,0xaf,0x8e,0x51,
 	0x30,0xc8,0x1c,0x46,0xa3,0x5c,0xe4,0x11,0xe5,0xfb,0xc1,0x19,0x1a,0x0a,0x52,0xef,
 	0xf6,0x9f,0x24,0x45,0xdf,0x4f,0x9b,0x17,0xad,0x2b,0x41,0x7b,0xe6,0x6c,0x37,0x10 };
-static const uint8_t kMac0[16] = {
+static const uint8_t s_Mac0[16] = {
 	0xbb,0x1d,0x69,0x29,0xe9,0x59,0x37,0x28,0x7f,0xa3,0x7d,0x12,0x9b,0x75,0x67,0x46 };
-static const uint8_t kMac16[16] = {
+static const uint8_t s_Mac16[16] = {
 	0x07,0x0a,0x16,0xb4,0x6b,0x4d,0x41,0x44,0xf7,0x9b,0xdd,0x9d,0xd0,0x4a,0x28,0x7c };
-static const uint8_t kMac40[16] = {
+static const uint8_t s_Mac40[16] = {
 	0xdf,0xa6,0x67,0x47,0xde,0x9a,0xe6,0x30,0x30,0xca,0x32,0x61,0x14,0x97,0xc8,0x27 };
-static const uint8_t kMac64[16] = {
+static const uint8_t s_Mac64[16] = {
 	0x51,0xf0,0xbe,0xbf,0x7e,0x3b,0x9d,0x92,0xfc,0x49,0x74,0x17,0x79,0x36,0x3c,0xfe };
 
 // The inherited CMAC dispatches its block encrypts through the virtual
@@ -91,12 +86,20 @@ public:
 	bool RefuseBracket = false;
 };
 
+alignas(CryptoSoftAes) static uint8_t s_AesMem[CRYPTO_SOFTAES_MEMSIZE];
+alignas(CountingAes) static uint8_t s_CountingMem[sizeof(CountingAes)];
+
+static void check(const char *name, bool ok)
+{
+	printf("  [%s] %s\n", ok ? "PASS" : "FAIL", name);
+	if (ok) s_pass++; else s_fail++;
+}
+
 int main(void)
 {
 	printf("CryptoSoftAes OO engine validation\n");
 
-	alignas(CryptoSoftAes) static uint8_t mem[CRYPTO_SOFTAES_MEMSIZE];
-	CryptoSoftAes *engine = CryptoSoftAesCreate(mem, sizeof(mem));
+	CryptoSoftAes *engine = CryptoSoftAesCreate(s_AesMem, sizeof(s_AesMem));
 	check("factory constructs aligned engine", engine != nullptr);
 	if (engine == nullptr) return 1;
 	CipherEngine *cipher = engine;
@@ -124,35 +127,35 @@ int main(void)
 
 	CryptoKey signKey{CRYPTO_KEY_AES_128, CRYPTO_KEY_LOC_PLAIN,
 					 CRYPTO_KEY_USE_SIGN, {}};
-	signKey.Plain.pData = kCmacKey;
-	signKey.Plain.Len = sizeof(kCmacKey);
+	signKey.Plain.pData = s_CmacKey;
+	signKey.Plain.Len = sizeof(s_CmacKey);
 	uint8_t tag[16];
 	check("RFC 4493 CMAC len 0",
 		macEngine->Mac(CRYPTO_MAC_CMAC, signKey, nullptr, 0, tag, 16) == CRYPTO_STATUS_OK &&
-		memcmp(tag, kMac0, 16) == 0);
+		memcmp(tag, s_Mac0, 16) == 0);
 	check("RFC 4493 CMAC len 16",
-		macEngine->Mac(CRYPTO_MAC_CMAC, signKey, kMsg, 16, tag, 16) == CRYPTO_STATUS_OK &&
-		memcmp(tag, kMac16, 16) == 0);
+		macEngine->Mac(CRYPTO_MAC_CMAC, signKey, s_Msg, 16, tag, 16) == CRYPTO_STATUS_OK &&
+		memcmp(tag, s_Mac16, 16) == 0);
 	check("RFC 4493 CMAC len 40",
-		macEngine->Mac(CRYPTO_MAC_CMAC, signKey, kMsg, 40, tag, 16) == CRYPTO_STATUS_OK &&
-		memcmp(tag, kMac40, 16) == 0);
+		macEngine->Mac(CRYPTO_MAC_CMAC, signKey, s_Msg, 40, tag, 16) == CRYPTO_STATUS_OK &&
+		memcmp(tag, s_Mac40, 16) == 0);
 	check("RFC 4493 CMAC len 64",
-		macEngine->Mac(CRYPTO_MAC_CMAC, signKey, kMsg, 64, tag, 16) == CRYPTO_STATUS_OK &&
-		memcmp(tag, kMac64, 16) == 0);
+		macEngine->Mac(CRYPTO_MAC_CMAC, signKey, s_Msg, 64, tag, 16) == CRYPTO_STATUS_OK &&
+		memcmp(tag, s_Mac64, 16) == 0);
 
 	CryptoKey ctrKey{CRYPTO_KEY_AES_128, CRYPTO_KEY_LOC_PLAIN,
 					CRYPTO_KEY_USE_ENCRYPT | CRYPTO_KEY_USE_DECRYPT, {}};
-	ctrKey.Plain.pData = kCmacKey;
-	ctrKey.Plain.Len = sizeof(kCmacKey);
+	ctrKey.Plain.pData = s_CmacKey;
+	ctrKey.Plain.Len = sizeof(s_CmacKey);
 	uint8_t iv[16]; memset(iv, 0x24, sizeof(iv));
 	uint8_t encrypted[40], plain[40];
 	CRYPTO_STATUS enc = cipher->Cipher(CRYPTO_CIPHER_CTR, 1, ctrKey, iv, 16,
-									kMsg, 40, encrypted);
+									s_Msg, 40, encrypted);
 	CRYPTO_STATUS dec = cipher->Cipher(CRYPTO_CIPHER_CTR, 0, ctrKey, iv, 16,
 									encrypted, 40, plain);
 	check("AES-CTR encrypt/decrypt round trip",
 		enc == CRYPTO_STATUS_OK && dec == CRYPTO_STATUS_OK &&
-		memcmp(plain, kMsg, 40) == 0);
+		memcmp(plain, s_Msg, 40) == 0);
 
 	CryptoKey denied = encryptKey;
 	denied.Usage = CRYPTO_KEY_USE_DERIVE;
@@ -168,13 +171,12 @@ int main(void)
 
 	check("engine self-test", engine->SelfTest() == 0);
 
-	alignas(CountingAes) static uint8_t countingMem[sizeof(CountingAes)];
-	CountingAes *counting = new (countingMem) CountingAes();
+	CountingAes *counting = new (s_CountingMem) CountingAes();
 	counting->Enable();
 	check("inherited CMAC routes through overridden block primitive",
-		counting->Mac(CRYPTO_MAC_CMAC, signKey, kMsg, 16, tag, 16) ==
+		counting->Mac(CRYPTO_MAC_CMAC, signKey, s_Msg, 16, tag, 16) ==
 			CRYPTO_STATUS_OK && counting->BlockCalls >= 2 &&
-		memcmp(tag, kMac16, 16) == 0);
+		memcmp(tag, s_Mac16, 16) == 0);
 	check("CMAC brackets the operation exactly once",
 		counting->BeginCalls == 1 && counting->EndCalls == 1);
 
@@ -337,7 +339,7 @@ int main(void)
 	for (int i = 0; i < 23 && openZero; i++) openZero = gback[i] == 0U;
 	check("CCM open on refused bracket: BUSY and zeroed", openZero);
 	memset(tag, 0xA5, 16);
-	bool macZero = counting->Mac(CRYPTO_MAC_CMAC, signKey, kMsg, 16, tag,
+	bool macZero = counting->Mac(CRYPTO_MAC_CMAC, signKey, s_Msg, 16, tag,
 								 16) == CRYPTO_STATUS_BUSY;
 	for (int i = 0; i < 16 && macZero; i++) macZero = tag[i] == 0U;
 	check("CMAC on refused bracket: BUSY and zeroed", macZero);

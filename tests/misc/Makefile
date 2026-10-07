@@ -157,9 +157,10 @@ $(APPEVT_OBJECT): $(ROOT)/src/app_evt_handler.cpp $(APPEVT_HEADERS)
 		-DCFifoPeek=PreemptCFifoPeek -DCFifoGet=PreemptCFifoGet -c $< -o $@
 
 $(APPEVT_TARGET): app_evt_handler_test.cpp $(ROOT)/src/cfifo.c \
-		$(APPEVT_OBJECT) $(APPEVT_HEADERS)
+		$(ROOT)/src/app_run.cpp $(APPEVT_OBJECT) $(APPEVT_HEADERS)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) -x c++ \
-		app_evt_handler_test.cpp $(ROOT)/src/cfifo.c -x none \
+		app_evt_handler_test.cpp $(ROOT)/src/cfifo.c \
+		$(ROOT)/src/app_run.cpp -x none \
 		$(APPEVT_OBJECT) -o $@ $(LDFLAGS) $(SANITIZERS)
 
 # The 2021 sources come straight out of git, so nothing legacy is tracked.

@@ -35,6 +35,7 @@ SOFTWARE.
 ----------------------------------------------------------------------------*/
 
 #include "istddef.h"
+#include "app_evt_handler.h"
 #include "bluetooth/bt_app.h"
 #include "bluetooth/blueio_blesrvc.h"
 #include "blueio_board.h"
@@ -96,8 +97,8 @@ static IOPinCfg_t s_UartPins[] = {
 };
 
 /// UART operation mode config
-alignas(4) uint8_t s_UartRxFifo[UARTFIFOSIZE];
-alignas(4) uint8_t s_UartTxFifo[UARTFIFOSIZE];
+alignas(4) static uint8_t s_UartRxFifo[UARTFIFOSIZE];
+alignas(4) static uint8_t s_UartTxFifo[UARTFIFOSIZE];
 
 UARTCfg_t g_UartCfg = {
 	.DevNo = 0,									// Device number zero based
@@ -124,7 +125,7 @@ UART g_Uart;
 
 int g_DelayCnt = 0;
 
-static BtGapScanCfg_t const g_ScanParams = {
+static BtGapScanCfg_t const s_ScanParams = {
 	.Type = BTSCAN_TYPE_ACTIVE,
 	.Param = {
 		.Interval = SCAN_INTERVAL,
@@ -196,21 +197,6 @@ void BtAppInitUserData()
 {
 }
 
-void UartRxChedHandler(void * p_event_data, uint16_t event_size)
-{
-	// TODO: Use CFIFO for this function for avoiding dropped data packets
-	uint8_t buff[PACKET_SIZE];
-
-	int l = g_Uart.Rx(buff, PACKET_SIZE);
-	if (l > 0)
-	{
-	//	if (g_ConnectedDev.ConnHdl != BLE_CONN_HANDLE_INVALID && g_BleTxCharHdl != BLE_CONN_HANDLE_INVALID)
-		{
-	//		BtAppWrite(g_ConnectedDev.ConnHdl, g_BleTxCharHdl, buff, l);
-		}
-	}
-}
-
 int UartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen)
 {
 	int cnt = 0;
@@ -220,7 +206,6 @@ int UartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int Buffer
 	{
 		case UART_EVT_RXTIMEOUT:
 		case UART_EVT_RXDATA:
-		//	app_sched_event_put(NULL, 0, UartRxChedHandler);
 			break;
 		case UART_EVT_TXREADY:
 			break;
@@ -246,15 +231,15 @@ int UartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int Buffer
 
 int main()
 {
-    HardwareInit();
+	HardwareInit();
 
-    BtAppInit(&s_BleAppCfg);
+	BtAppInit(&s_BleAppCfg);
 
-    BtAppScanInit((BtGapScanCfg_t*)&g_ScanParams);
+	BtAppScanInit((BtGapScanCfg_t*)&s_ScanParams);
 
-    BtAppScan();
+	BtAppScan();
 
-    BtAppRun();
+	AppRun();
 
 	return 0;
 }

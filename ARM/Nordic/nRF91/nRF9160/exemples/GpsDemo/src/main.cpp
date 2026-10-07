@@ -1,5 +1,5 @@
 /**-------------------------------------------------------------------------
-@example	mic_demo.cpp
+@example	main.cpp
 
 
 @brief	Microphone demo

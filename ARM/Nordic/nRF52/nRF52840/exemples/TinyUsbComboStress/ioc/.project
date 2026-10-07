@@ -33,9 +33,19 @@
 			<locationURI>PARENT-7-PROJECT_LOC/exemples/usb/tinyusb_combo_stress/main.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/tinyusb_combo_port.h</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/exemples/usb/tinyusb_combo_stress/tinyusb_combo_port.h</locationURI>
+		</link>
+		<link>
+			<name>src/tinyusb_combo_port.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-1-PROJECT_LOC/src/tinyusb_combo_port.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/tusb_config.h</name>
 			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/exemples/usb/tinyusb_combo_stress/tusb_config.h</locationURI>
+			<locationURI>PARENT-1-PROJECT_LOC/src/tusb_config.h</locationURI>
 		</link>
 		<link>
 			<name>src/tusb.c</name>
@@ -70,7 +80,7 @@
 		<link>
 			<name>src/dcd_nrf5x.c</name>
 			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/exemples/usb/tinyusb_combo_stress/dcd_nrf5x.c</locationURI>
+			<locationURI>PARENT-1-PROJECT_LOC/src/dcd_nrf5x.c</locationURI>
 		</link>
 	</linkedResources>
 </projectDescription>

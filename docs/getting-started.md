@@ -211,7 +211,8 @@ host, and run:
 ```
 
 USB applications call `UsbInit()`, initialize every class object, call
-`UsbEnable()`, and continue calling `UsbProcess()`. The controller connects
+`UsbEnable()`, then run the application event queue with `AppRun()` or with
+`AppEvtHandlerExec()` in their own loop. The controller connects
 only after the registered classes have produced a valid configuration
 descriptor.
 

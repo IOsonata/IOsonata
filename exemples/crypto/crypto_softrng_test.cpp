@@ -37,6 +37,9 @@ SOFTWARE.
 #include "crypto/crypto_softrng.h"
 
 static int s_pass, s_fail;
+
+alignas(CryptoSoftRng) static uint8_t s_RngMem[CRYPTO_SOFTRNG_MEMSIZE];
+
 static void check(const char *name, bool ok)
 {
 	printf("  [%s] %s\n", ok ? "PASS" : "FAIL", name);
@@ -46,8 +49,7 @@ static void check(const char *name, bool ok)
 int main(void)
 {
 	printf("CryptoSoftRng OO engine validation\n");
-	alignas(CryptoSoftRng) static uint8_t mem[CRYPTO_SOFTRNG_MEMSIZE];
-	CryptoSoftRng *engine = CryptoSoftRngCreate(mem, sizeof(mem));
+	CryptoSoftRng *engine = CryptoSoftRngCreate(s_RngMem, sizeof(s_RngMem));
 	check("factory constructs aligned engine", engine != nullptr);
 	if (engine == nullptr) return 1;
 

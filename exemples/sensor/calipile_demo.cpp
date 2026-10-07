@@ -1,5 +1,5 @@
 /**-------------------------------------------------------------------------
-@example	calipile_demo.c
+@example	calipile_demo.cpp
 
 @brief	Excelitas Calipile example
 
@@ -55,7 +55,7 @@ int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int Buf
 
 #define FIFOMEMSIZE			CFIFO_MEMSIZE(256)
 
-static uint8_t g_UartTxFifoMem[FIFOMEMSIZE];
+static uint8_t s_UartTxFifoMem[FIFOMEMSIZE];
 
 static const IOPinCfg_t s_UartPins[] = UART_PINS;
 
@@ -76,7 +76,7 @@ static const UARTCfg_t s_UartCfg = {
 	.RxMemSize = 0,
 	.pRxMem = NULL,
 	.TxMemSize = FIFOMEMSIZE,
-	.pTxMem = g_UartTxFifoMem,
+	.pTxMem = s_UartTxFifoMem,
 	.bDMAMode = false,
 };
 
@@ -168,17 +168,16 @@ int main()
 //	g_I2c.Tx(4, &reg, 1);
 //	msDelay(1);
 
-/*	reg = 31;
-	d = 0x80;
-	g_I2c.Write(CALIPILE_I2C_DEVADDR, &reg, 1, &d,1);
+	// reg = 31;
+	// d = 0x80;
+	// g_I2c.Write(CALIPILE_I2C_DEVADDR, &reg, 1, &d,1);
 
-	reg = 63;
+	// reg = 63;
 
-	g_I2c.Read(CALIPILE_I2C_DEVADDR, &reg, 1, &d, 1);
-	printf("%x\r\n", d);
+	// g_I2c.Read(CALIPILE_I2C_DEVADDR, &reg, 1, &d, 1);
+	// printf("%x\r\n", d);
 
-	int i = 0;
-*/
+	// int i = 0;
 //	reg = CALIPILE_INT_STATUS_REG;
 //	g_Calipile.Sensor::Read(&reg,1, &d, 1);
 

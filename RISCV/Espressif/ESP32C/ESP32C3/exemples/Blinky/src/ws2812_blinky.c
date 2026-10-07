@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
 @file	ws2812_blinky.c
 
-@brief	Tier-2 GPIO bring-up diagnostic — bypasses IOPinConfig.
+@brief	Tier-2 GPIO bring-up diagnostic - bypasses IOPinConfig.
 
 	Replaces the IOPinConfig/IOPinSet/IOPinClear path with direct
 	register writes so we can isolate whether the issue is in main's
@@ -10,12 +10,40 @@
 	side-effects).
 
 	If a scope on GPIO 5 shows toggling: main is reached and the
-	hardware works — the previous "no toggle" was an IOPinConfig
+	hardware works - the previous "no toggle" was an IOPinConfig
 	side-effect (something IOPinConfig writes is breaking the pad).
 
 	If no toggle: code is hung before main (init_array, _start, or
 	earlier).  Next step is to add UART output at the top to find
 	exactly where.
+
+@author	Hoang Nguyen Hoan
+@date	May 7, 2026
+
+@license
+
+MIT License
+
+Copyright (c) 2026, I-SYST inc., all rights reserved
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
 ----------------------------------------------------------------------------*/
 #include <stdint.h>
 

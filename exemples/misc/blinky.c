@@ -68,7 +68,7 @@ PulseTrainCfg_t g_PulseTrainCfg = {
 	.Period = 1,
 	.Pol = PULSE_TRAIN_POL_HIGH
 };
-#endif	// PULSE_TRAIN_PINS_MAP
+#endif
 
 volatile bool g_bBut1Pressed = false;
 
@@ -112,7 +112,7 @@ void But3Handler(int IntNo, void *pCtx)
 }
 #endif
 
-#endif	// BUTTON_PINS_MAP
+#endif
 
 //
 // Print a greeting message on standard output and exit.
@@ -167,7 +167,7 @@ int main()
 	}
 #endif
 
-#endif // BUTTON_PINS_MAP
+#endif
 
 	int i = 0;
 

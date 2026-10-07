@@ -1,5 +1,5 @@
 /**-------------------------------------------------------------------------
-@example	BlueIOThingy
+@example	BlueIOThingy.h
 
 @brief	Environmental Sensor BLE demo (Supports BME280, BME680, MS8607).
 

@@ -3,6 +3,33 @@
 
 @brief	USB Mass Storage Bulk-Only Transport device implementation.
 
+@author	Hoang Nguyen Hoan
+@date	Sep. 11, 2026
+
+@license
+
+MIT License
+
+Copyright (c) 2026, I-SYST inc., all rights reserved
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
 ----------------------------------------------------------------------------*/
 #include <string.h>
 
@@ -313,10 +340,27 @@ static int UsbdMscDataEvent(DevIntrf_t * const pDev, DEVINTRF_EVT Event,
 
 	UsbDevIntrf_t *pIntrf = static_cast<UsbDevIntrf_t *>(pDev->pDevData);
 	UsbdMscDev_t *pMsc = static_cast<UsbdMscDev_t *>(pIntrf->pClassContext);
-	if (pMsc != nullptr && Event == DEVINTRF_EVT_TX_TIMEOUT)
+	if (pMsc == nullptr)
 	{
-		pMsc->bTxFailed = true;
+		return 0;
 	}
+
+	switch (Event)
+	{
+		case DEVINTRF_EVT_TX_TIMEOUT:
+			pMsc->bTxFailed = true;
+			break;
+		case DEVINTRF_EVT_RX_DATA:
+		case DEVINTRF_EVT_TX_FIFO_EMPTY:
+			break;
+		default:
+			return 0;
+	}
+
+	// The bulk-only state machine runs from the process event: a packet
+	// received, the TX FIFO drained or a failed send moves it on.
+	UsbProcessQue(pMsc->DevNo);
+
 	return 0;
 }
 
@@ -861,51 +905,55 @@ static void UsbdMscProcessDataIn(UsbdMscDev_t *pMsc)
 static void UsbdMscProcessDataOut(UsbdMscDev_t *pMsc)
 {
 	uint8_t *pPacket = UsbdMscRxPacket(pMsc);
-	const int received = DeviceIntrfRx(&pMsc->pData->DevIntrf, 0,
-		pPacket, pMsc->pData->Mps);
-	if (received <= 0)
+	// Process events coalesce; drain the packets already buffered by UsbIntrf.
+	while (pMsc->State == USBD_MSC_BOT_DATA_OUT)
 	{
-		return;
-	}
-
-	uint32_t use = (uint32_t)received;
-	const uint32_t remaining = pMsc->TransferLimit - pMsc->Transferred;
-	if (use > remaining)
-	{
-		use = remaining;
-	}
-
-	uint32_t offset = 0U;
-	while (offset < use)
-	{
-		uint32_t length = pMsc->SectorSize - pMsc->SectorOffset;
-		if (length > use - offset)
+		const int received = DeviceIntrfRx(&pMsc->pData->DevIntrf, 0,
+			pPacket, pMsc->pData->Mps);
+		if (received <= 0)
 		{
-			length = use - offset;
+			return;
 		}
-		memcpy(&pMsc->pSectorBuffer[pMsc->SectorOffset],
-			&pPacket[offset], length);
-		pMsc->SectorOffset = (uint16_t)(pMsc->SectorOffset + length);
-		pMsc->Transferred += length;
-		offset += length;
 
-		if (pMsc->SectorOffset == pMsc->SectorSize)
+		uint32_t use = (uint32_t)received;
+		const uint32_t remaining = pMsc->TransferLimit - pMsc->Transferred;
+		if (use > remaining)
 		{
-			if (!pMsc->pDisk->SectWrite(pMsc->Lba, pMsc->pSectorBuffer))
+			use = remaining;
+		}
+
+		uint32_t offset = 0U;
+		while (offset < use)
+		{
+			uint32_t length = pMsc->SectorSize - pMsc->SectorOffset;
+			if (length > use - offset)
 			{
-				UsbdMscFail(pMsc, USB_MSC_SENSE_MEDIUM_ERROR,
-					USB_MSC_ASC_WRITE_ERROR);
-				pMsc->bStallAfterData = true;
-				UsbdMscFinishCommand(pMsc);
-				return;
+				length = use - offset;
 			}
-			UsbdMscNextSector(pMsc);
-		}
-	}
+			memcpy(&pMsc->pSectorBuffer[pMsc->SectorOffset],
+				&pPacket[offset], length);
+			pMsc->SectorOffset = (uint16_t)(pMsc->SectorOffset + length);
+			pMsc->Transferred += length;
+			offset += length;
 
-	if (pMsc->Transferred >= pMsc->TransferLimit)
-	{
-		UsbdMscFinishCommand(pMsc);
+			if (pMsc->SectorOffset == pMsc->SectorSize)
+			{
+				if (!pMsc->pDisk->SectWrite(pMsc->Lba, pMsc->pSectorBuffer))
+				{
+					UsbdMscFail(pMsc, USB_MSC_SENSE_MEDIUM_ERROR,
+						USB_MSC_ASC_WRITE_ERROR);
+					pMsc->bStallAfterData = true;
+					UsbdMscFinishCommand(pMsc);
+					return;
+				}
+				UsbdMscNextSector(pMsc);
+			}
+		}
+
+		if (pMsc->Transferred >= pMsc->TransferLimit)
+		{
+			UsbdMscFinishCommand(pMsc);
+		}
 	}
 }
 
@@ -929,13 +977,8 @@ static void UsbdMscProcessCsw(UsbdMscDev_t *pMsc)
 	}
 }
 
-static void UsbdMscProcessInternal(UsbdMscDev_t *pMsc)
+static void UsbdMscProcessStep(UsbdMscDev_t *pMsc)
 {
-	if (pMsc == nullptr || !pMsc->bConfigured)
-	{
-		return;
-	}
-
 	switch (pMsc->State)
 	{
 		case USBD_MSC_BOT_WAIT_CBW:
@@ -964,6 +1007,28 @@ static void UsbdMscProcessInternal(UsbdMscDev_t *pMsc)
 				pMsc->State = USBD_MSC_BOT_WAIT_CBW;
 			}
 			break;
+	}
+}
+
+// Runs once per USB process event, which comes from an endpoint event. A step
+// that only changes the state (CBW decoded, data done) starts no transfer, so
+// no event would bring the next one: run the steps until the state holds.
+static void UsbdMscProcessInternal(UsbdMscDev_t *pMsc)
+{
+	if (pMsc == nullptr || !pMsc->bConfigured)
+	{
+		return;
+	}
+
+	for (int i = 0; i < 4; i++)
+	{
+		const UsbdMscBotState_t state = pMsc->State;
+
+		UsbdMscProcessStep(pMsc);
+		if (pMsc->State == state)
+		{
+			break;
+		}
 	}
 }
 
@@ -1097,9 +1162,13 @@ bool UsbdMsc::Control(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
 	{
 		if (Stage == USB_CTRL_SETUP)
 		{
+			// A phase error CSW may already be on its way: recovery is due
+			// all the same.
 			const bool recovery =
 				vUsbdMsc.State == USBD_MSC_BOT_RESET_RECOVERY ||
-				vUsbdMsc.State == USBD_MSC_BOT_PHASE_ERROR;
+				vUsbdMsc.State == USBD_MSC_BOT_PHASE_ERROR ||
+				(vUsbdMsc.State == USBD_MSC_BOT_SEND_CSW &&
+				 vUsbdMsc.bRecoveryAfterCsw);
 			UsbdMscResetBot(&vUsbdMsc, false);
 			if (vUsbdMsc.bConfigured && !UsbdMscRestartEndpoints(&vUsbdMsc))
 			{

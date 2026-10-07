@@ -59,6 +59,43 @@ static int s_LastDataLen = 0;
 static uint8_t s_RspFrame[PN532_FRAME_DATA_MAX + 12];
 static int s_RspFrameLen = 0;
 
+static void MockIntrfInit(DevIntrf_t *pIntrf);
+static bool MockStartRx(DevIntrf_t * const pDev, uint32_t DevAddr);
+static int MockRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen);
+static void MockStopRx(DevIntrf_t * const pDev);
+static bool MockStartTx(DevIntrf_t * const pDev, uint32_t DevAddr);
+static int MockTxData(DevIntrf_t * const pDev, const uint8_t *pData, int DataLen);
+static void MockStopTx(DevIntrf_t * const pDev);
+
+class MockIntrf : public DeviceIntrf {
+public:
+	MockIntrf() { MockIntrfInit(&vIntrf); }
+	operator DevIntrf_t * () { return &vIntrf; }
+	uint32_t Rate(uint32_t DataRate) { (void)DataRate; return 0; }
+	uint32_t Rate(void) { return 0; }
+	bool StartRx(uint32_t DevAddr) { return MockStartRx(&vIntrf, DevAddr); }
+	int RxData(uint8_t *pBuff, int BuffLen) { return MockRxData(&vIntrf, pBuff, BuffLen); }
+	void StopRx(void) { MockStopRx(&vIntrf); }
+	bool StartTx(uint32_t DevAddr) { return MockStartTx(&vIntrf, DevAddr); }
+	int TxData(const uint8_t *pData, int DataLen) { return MockTxData(&vIntrf, pData, DataLen); }
+	void StopTx(void) { MockStopTx(&vIntrf); }
+private:
+	DevIntrf_t vIntrf;
+};
+
+class TestReader : public RfReaderPn532 {
+public:
+	TestReader() : Detected(0), RxData_(0) {}
+	virtual void EvtHandler(RFTAGCTRL_EVT Evt, uint32_t P0, uint32_t P1)
+	{
+		(void)P0; (void)P1;
+		if (Evt == RFTAGCTRL_EVT_TAG_DETECTED) { Detected++; }
+		else if (Evt == RFTAGCTRL_EVT_RX_DATA) { RxData_++; }
+	}
+	int Detected;
+	int RxData_;
+};
+
 static void Check(const char *pName, bool bOk)
 {
 	if (bOk) { s_Pass++; printf("  [PASS] %s\n", pName); }
@@ -203,35 +240,6 @@ static void MockIntrfInit(DevIntrf_t *pIntrf)
 	pIntrf->MaxRetry = 1;
 	atomic_flag_clear(&pIntrf->bBusy);
 }
-
-class MockIntrf : public DeviceIntrf {
-public:
-	MockIntrf() { MockIntrfInit(&vIntrf); }
-	operator DevIntrf_t * () { return &vIntrf; }
-	uint32_t Rate(uint32_t DataRate) { (void)DataRate; return 0; }
-	uint32_t Rate(void) { return 0; }
-	bool StartRx(uint32_t DevAddr) { return MockStartRx(&vIntrf, DevAddr); }
-	int RxData(uint8_t *pBuff, int BuffLen) { return MockRxData(&vIntrf, pBuff, BuffLen); }
-	void StopRx(void) { MockStopRx(&vIntrf); }
-	bool StartTx(uint32_t DevAddr) { return MockStartTx(&vIntrf, DevAddr); }
-	int TxData(const uint8_t *pData, int DataLen) { return MockTxData(&vIntrf, pData, DataLen); }
-	void StopTx(void) { MockStopTx(&vIntrf); }
-private:
-	DevIntrf_t vIntrf;
-};
-
-class TestReader : public RfReaderPn532 {
-public:
-	TestReader() : Detected(0), RxData_(0) {}
-	virtual void EvtHandler(RFTAGCTRL_EVT Evt, uint32_t P0, uint32_t P1)
-	{
-		(void)P0; (void)P1;
-		if (Evt == RFTAGCTRL_EVT_TAG_DETECTED) { Detected++; }
-		else if (Evt == RFTAGCTRL_EVT_RX_DATA) { RxData_++; }
-	}
-	int Detected;
-	int RxData_;
-};
 
 int main(void)
 {

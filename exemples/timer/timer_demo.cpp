@@ -61,7 +61,7 @@ uint64_t g_TickCount = 0;
 uint32_t g_Period[3] = {0,};
 
 const static TimerCfg_t s_TimerCfg = {
-    .DevNo = 0,
+	.DevNo = 0,
 	.ClkSrc = TIMER_CLKSRC_DEFAULT,
 	.Freq = 0,			// 0 => Default frequency
 	.IntPrio = 7,
@@ -74,43 +74,42 @@ TimerDev_t g_TimerDev;
 Timer g_Timer;
 #endif
 
+static uint64_t s_PreCnt[3] = {0, };
+
 void TimerHandler(TimerDev_t *pTimer, uint32_t Evt)
 {
-	static uint64_t precnt[3] = {0, };
 	uint64_t c = TimerGetNanosecond(pTimer);
 
-    if (Evt & TIMER_EVT_TRIGGER(0))
-    {
-    	// Flip GPIO for oscilloscope measurement
-    	IOPinToggle(s_Leds[0].PortNo, s_Leds[0].PinNo);
-    	g_Period[0] = c - precnt[0];
-    	precnt[0] = c;
-    }
-    if (Evt & TIMER_EVT_TRIGGER(1))
-    {
-    	// Flip GPIO for oscilloscope measurement
-    	if (s_NbLeds > 0)
-    	{
-    		IOPinToggle(s_Leds[1].PortNo, s_Leds[1].PinNo);
-    	}
-    	g_Period[1] = c - precnt[1];
-    	precnt[1] = c;
-    }
-    if (Evt & TIMER_EVT_COUNTER_OVR)
-    {
-    	if (s_NbLeds > 1)
-    	{
-    		IOPinToggle(s_Leds[2].PortNo, s_Leds[2].PinNo);
-    	}
-    	g_Period[2] = c - precnt[2];
-    	precnt[2] = c;
-    }
+	if (Evt & TIMER_EVT_TRIGGER(0))
+	{
+		// Flip GPIO for oscilloscope measurement
+		IOPinToggle(s_Leds[0].PortNo, s_Leds[0].PinNo);
+		g_Period[0] = c - s_PreCnt[0];
+		s_PreCnt[0] = c;
+	}
+	if (Evt & TIMER_EVT_TRIGGER(1))
+	{
+		// Flip GPIO for oscilloscope measurement
+		if (s_NbLeds > 0)
+		{
+			IOPinToggle(s_Leds[1].PortNo, s_Leds[1].PinNo);
+		}
+		g_Period[1] = c - s_PreCnt[1];
+		s_PreCnt[1] = c;
+	}
+	if (Evt & TIMER_EVT_COUNTER_OVR)
+	{
+		if (s_NbLeds > 1)
+		{
+			IOPinToggle(s_Leds[2].PortNo, s_Leds[2].PinNo);
+		}
+		g_Period[2] = c - s_PreCnt[2];
+		s_PreCnt[2] = c;
+	}
 	g_TickCount = c;
 }
 
-/**
- * @brief Function for main application entry.
- */
+// Main application entry
 int main(void)
 {
 	IOPinCfg(s_Leds, s_NbLeds);
@@ -130,9 +129,9 @@ int main(void)
 	}
 
 #else
-    g_Timer.Init(s_TimerCfg);
+	g_Timer.Init(s_TimerCfg);
 
-    // Configure 100ms timer interrupt trigger
+	// Configure 100ms timer interrupt trigger
 	uint64_t period = g_Timer.EnableTimerTrigger(0, 1000UL, TIMER_TRIG_TYPE_CONTINUOUS);
 	if (period == 0)
 	{
@@ -146,17 +145,15 @@ int main(void)
 #endif
 
 	printf("Period = %u\r\n", (uint32_t)period);
-    while (1)
-    {
-        __WFE();
+	while (1)
+	{
+		__WFE();
 #ifdef DEMO_C
-        printf("Count = %u ms, TrigPeriod = %u us, %u us\r\n", (uint32_t)TimerGetMilisecond(&g_TimerDev), g_Period[0] / 1000, g_Period[1] / 1000);
+		printf("Count = %u ms, TrigPeriod = %u us, %u us\r\n", (uint32_t)TimerGetMilisecond(&g_TimerDev), g_Period[0] / 1000, g_Period[1] / 1000);
 #elif defined(DEMO_C_OBJ)
-        printf("Count = %u ms, TrigPeriod = %u us, %u us\r\n", (uint32_t)TimerGetMilisecond(g_Timer), g_Period[0] / 1000, g_Period[1] / 1000);
+		printf("Count = %u ms, TrigPeriod = %u us, %u us\r\n", (uint32_t)TimerGetMilisecond(g_Timer), g_Period[0] / 1000, g_Period[1] / 1000);
 #else
-        printf("Count = %u ms, TrigPeriod = %u us, %u us\r\n", (uint32_t)g_Timer.mSecond(), g_Period[0] / 1000, g_Period[1] / 1000);
+		printf("Count = %u ms, TrigPeriod = %u us, %u us\r\n", (uint32_t)g_Timer.mSecond(), g_Period[0] / 1000, g_Period[1] / 1000);
 #endif
-    }
+	}
 }
-
-/** @} */

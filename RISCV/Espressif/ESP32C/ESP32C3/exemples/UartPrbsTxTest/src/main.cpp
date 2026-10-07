@@ -1,13 +1,13 @@
 /**-------------------------------------------------------------------------
-@file	main.cpp  (UartPrbsTxTest — three-stage bisect)
+@file	main.cpp  (UartPrbsTxTest - three-stage bisect)
 
 @brief	Three-stage UART validation that pinpoints exactly where things break.
 
-	Stage A: BEFORE Init — write 16 × 0xAA directly to UART0 FIFO at
+	Stage A: BEFORE Init - write 16 x 0xAA directly to UART0 FIFO at
 	         0x60000000, polling TXFIFO_CNT in STATUS @ 0x6000001C.
 	         Tests UART core + ROM-supplied state.
 
-	Stage B: AFTER Init — write 16 × 0xCC directly to the SAME UART0
+	Stage B: AFTER Init - write 16 x 0xCC directly to the SAME UART0
 	         FIFO, same polling.  This bypasses the IOsonata driver
 	         dispatch entirely and tells us whether Init left the
 	         hardware in a state where direct register writes still
@@ -16,26 +16,48 @@
 	         class plumbing).  If Stage B also fails, the bug is in
 	         Init's register sequence wedging the core.
 
-	Stage C: driver path — single g_Uart.Tx(0x55) once, then a tight
+	Stage C: driver path - single g_Uart.Tx(0x55) once, then a tight
 	         loop.  This is what we actually care about.
 
 	WS2812 (GPIO 8) stages, 500 ms each so they're clearly visible:
 	    RED       reached main()
-	    YELLOW    Stage A (pre-Init  direct poke) PASSED — 16 × AA out
+	    YELLOW    Stage A (pre-Init  direct poke) PASSED - 16 x AA out
 	    MAGENTA   Stage A FIFO never drained (UART core dead from boot)
 	    ORANGE    Driver Init() returned false
 	    GREEN     Init() returned true
-	    CYAN      Stage B (post-Init direct poke) PASSED — 16 × CC out
+	    CYAN      Stage B (post-Init direct poke) PASSED - 16 x CC out
 	    PINK      Stage B FIFO never drained (Init wedged the core)
 	    BLUE      driver Tx of single 0x55 returned cnt = 1
 	    WHITE     in driver Tx loop (success)
 
 	Expected wire sequence on success:
-	    16 × AA  →  16 × CC  →  one 0x55  →  continuous 0x55 stream
+	    16 x AA  ->  16 x CC  ->  one 0x55  ->  continuous 0x55 stream
 
 @author	Hoang Nguyen Hoan
 @date	May 2026
-@license MIT
+@license
+
+MIT License
+
+Copyright (c) 2026, I-SYST inc., all rights reserved
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 ----------------------------------------------------------------------------*/
 
 #include <stdint.h>

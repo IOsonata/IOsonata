@@ -98,6 +98,24 @@ def is_host_sched_miss(status, setup):
     )
 
 
+def host_unsent_out_frames(setup, lengths):
+    """Indices of OUT frames the host reports it did not send.
+
+    ISO OUT has no handshake, so the device cannot change what the host
+    reports for an OUT frame. On macOS a frame the host controller did not
+    service in its slot (a request that reached the controller after its
+    first frame had passed, for example) comes back COMPLETED with 0 bytes
+    while the request itself succeeds. Those frames never reached the device.
+    """
+    return [
+        index
+        for index, packet in enumerate(setup)
+        if packet["status"] == usb1.TRANSFER_COMPLETED
+        and packet["actual_length"] == 0
+        and lengths[index] > 0
+    ]
+
+
 def is_host_sched_miss_error(error):
     return error is not None and error.startswith(HOST_SCHED_MISS_PREFIX)
 
@@ -390,6 +408,7 @@ def run_burst(
                 None,
             )
 
+        unsent = []
         if not zlp:
             if len(state["out_setup"]) != out_count:
                 return (
@@ -398,7 +417,11 @@ def run_burst(
                     None,
                 )
 
+            unsent = host_unsent_out_frames(state["out_setup"], out_lengths)
+            unsent_set = set(unsent)
             for index, packet in enumerate(state["out_setup"]):
+                if index in unsent_set:
+                    continue
                 if (
                     packet["status"] != usb1.TRANSFER_COMPLETED
                     or packet["actual_length"] != out_lengths[index]
@@ -410,6 +433,17 @@ def run_burst(
                         f"transfer={status_name(state['out_status'])}",
                         None,
                     )
+
+            # Unsent guard frames cost nothing: the guards exist to absorb
+            # the start and end of the burst. A validation frame the host did
+            # not send leaves nothing to check on the device for this burst.
+            if any(guard <= index < guard + rounds for index in unsent):
+                return (
+                    f"{HOST_SCHED_MISS_PREFIX}OUT frame(s) {unsent[:16]} not "
+                    f"sent by host ({len(unsent)} of {out_count}); "
+                    f"{submit_timing(state)}",
+                    None,
+                )
 
         if test_length == 0:
             completed_zero = [
@@ -516,12 +550,18 @@ def run_burst(
             "in_slots": in_count,
             "matched": len(matched),
             "out_packets": out_count,
+            "out_unsent": len(unsent),
             "in_status": status_name(state["in_status"]),
             "stale": stale,
         }
         return None, stats
 
     except usb1.USBError as exc:
+        # On macOS a burst whose start frame is already outside the host
+        # controller's window (IsoTooOld, IsoTooNew) is refused at submit
+        # with LIBUSB_ERROR_OTHER. Nothing of it reached the bus.
+        if isinstance(exc, usb1.USBErrorOther):
+            return f"{HOST_SCHED_MISS_PREFIX}submit refused: {exc}", None
         return f"submit failed: {exc}", None
     finally:
         cancel_transfer(context, in_transfer)

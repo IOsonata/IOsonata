@@ -126,8 +126,8 @@ int main()
 	printf("UART PRBS Test\n\r");
 
 	uint8_t val = 0;
-    uint32_t errcnt = 0;
-    uint32_t cnt = 0;
+	uint32_t errcnt = 0;
+	uint32_t cnt = 0;
 	uint8_t d = 0xff;
 	uint8_t buf[SLIPTEST_BUFSIZE];
 	uint32_t lcnt = 0;
@@ -138,18 +138,18 @@ int main()
 	while(1)
 	{
 #ifdef DEMO_C
-        int l = SlipRx(&g_SlipDev, p, SLIPTEST_BUFSIZE);
+		int l = SlipRx(&g_SlipDev, p, SLIPTEST_BUFSIZE);
 #else
-        int l = g_Slip.Rx(0, p, len);
+		int l = g_Slip.Rx(0, p, len);
 #endif
 //		e += difftime(time(NULL), t);
-        if (l > 0)
-        {
-            lcnt++;
-        	if (p[l-1] == SLIP_END_CODE)
-        	{
-        		l--;
-        		pkcnt++;
+		if (l > 0)
+		{
+			lcnt++;
+			if (p[l-1] == SLIP_END_CODE)
+			{
+				l--;
+				pkcnt++;
 				for (int i = 0; i < l; i++)
 				{
 					cnt++;
@@ -168,29 +168,29 @@ int main()
 						}
 						printf("PRBS %u errors %x %x\n", errcnt, val, buf[i]);
 					}
-		/*            else if ((cnt & 0x7fff) == 0)
-					{
-						printf("PRBS %d rate %.3f B/s, err : %u\n", l, cnt / e, errcnt);
-		//                printf("PRBS rate %.3f B/s, err : %u\n", cnt / elapse.count(), errcnt);
+					// else if ((cnt & 0x7fff) == 0)
+					// {
+						// printf("PRBS %d rate %.3f B/s, err : %u\n", l, cnt / e, errcnt);
+						// printf("PRBS rate %.3f B/s, err : %u\n", cnt / elapse.count(), errcnt);
 
-					}*/
+					// }
 					val = Prbs8(buf[i]);
 				}
-	        	p = buf;
-	        	len = SLIPTEST_BUFSIZE;
-        	}
-        	else
-        	{
-        		p += l;
-        		len -= l;
-        		if (len <= 0)
-        		{
-        			printf("Err len %u %u %p\n", lcnt, pkcnt, p);
-        			p = buf;
-        			len = SLIPTEST_BUFSIZE;
-        		}
-        	}
-        }
+				p = buf;
+				len = SLIPTEST_BUFSIZE;
+			}
+			else
+			{
+				p += l;
+				len -= l;
+				if (len <= 0)
+				{
+					printf("Err len %u %u %p\n", lcnt, pkcnt, p);
+					p = buf;
+					len = SLIPTEST_BUFSIZE;
+				}
+			}
+		}
 	}
 	return 0;
 }

@@ -121,6 +121,11 @@ static const char * const s_Strings[] = {
 
 static uint16_t s_StringDesc[33];
 
+extern "C" void tusb_hal_nrf_power_event(uint32_t Event);
+
+static bool s_Vbus;
+static bool s_Ready;
+
 extern "C" uint8_t const *tud_descriptor_device_cb(void)
 {
 	return reinterpret_cast<const uint8_t *>(&s_DeviceDesc);
@@ -195,11 +200,6 @@ extern "C" uint16_t const *tud_descriptor_string_cb(uint8_t Index,
 
 	return s_StringDesc;
 }
-
-extern "C" void tusb_hal_nrf_power_event(uint32_t Event);
-
-static bool s_Vbus;
-static bool s_Ready;
 
 static void PowerProcess(void)
 {

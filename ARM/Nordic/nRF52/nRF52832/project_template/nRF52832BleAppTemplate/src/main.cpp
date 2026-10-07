@@ -40,6 +40,7 @@ SOFTWARE.
 #include "istddef.h"
 #include "coredev/timer.h"
 
+#include "app_evt_handler.h"
 #include "bluetooth/bt_app.h"
 //#ifndef NRFXLIB_SDC
 //#include "ble_app_nrf5.h"
@@ -133,7 +134,7 @@ int main()
 {
     BtAppInit(&s_BtAppCfg);
 
-    BtAppRun();
+    AppRun();
 
 	return 0;
 }

@@ -10,7 +10,7 @@ EasyDMA channel.
 DevNo selects the controller. Every nRF part has exactly one, USB_CTRLR_CNT is
 1. UsbCtrlrInit validates DevNo; later entry points receive that stored,
 validated controller number and the state stays a singleton. Arraying it is
-work for the first part that carries two.
+work for the first part that has two.
 
 @author	Hoang Nguyen Hoan
 @date	Sep. 3, 2026
@@ -50,7 +50,6 @@ SOFTWARE.
 #include "hal/nrf_ficr.h"
 
 #include "istddef.h"
-#include "app_evt_handler.h"
 #include "cfifo.h"
 #include "coredev/interrupt.h"
 
@@ -66,6 +65,7 @@ SOFTWARE.
 #ifdef SOFTDEVICE_PRESENT
 #include "nrf_soc.h"
 #include "nrf_sdm.h"
+#include "nrf_mbr.h"
 #include "nrf_error.h"
 #endif
 
@@ -168,6 +168,9 @@ nRFUsbdState_t s_Usbd;
 
 extern bool nRFUsbdIsoStart(void) __attribute__((weak));
 
+// usb_ctrlr_nrf52_vbus.cpp: cable attach and removal interrupt
+void nRFUsbdVbusIntInit(uint32_t Prio);
+
 static inline __attribute__((always_inline)) bool nRFUsbdDmaActive(void);
 static void nRFUsbdHostResume(void);
 
@@ -214,15 +217,17 @@ void nRFUsbEpRegisteredEvent(uint8_t EpNum, uint8_t Dir,
  * sd_softdevice_is_enabled is an SVC. On a part with no SoftDevice in flash
  * nothing implements that vector, so the call lands in the default handler
  * and stops there. The image has to be found before it may be asked
- * anything. Same test as SdPresent in nvm_nrfx.cpp.
+ * anything.
  */
 static bool UsbdSdPresent(void)
 {
-#if defined(SD_MAGIC_NUMBER) && defined(MBR_SIZE)
-	return SD_MAGIC_NUMBER_GET(MBR_SIZE) == SD_MAGIC_NUMBER;
-#else
-	return false;
-#endif
+	// SD_MAGIC_NUMBER is only in the bootloader header, which is not part of
+	// this build: an #if on it was always false and the SoftDevice was never
+	// asked for the clock. The magic number follows the MBR.
+	const volatile uint32_t *pMagic = (const volatile uint32_t *)(
+		MBR_SIZE + SOFTDEVICE_INFO_STRUCT_OFFSET + 4U);
+
+	return *pMagic == 0x51B1E5DBUL;
 }
 
 static bool UsbdSdRunning(void)
@@ -724,17 +729,8 @@ __attribute__((noinline)) void nRFUsbdResumeQueuedDmaLocked(void)
 	nRFUsbdStartQueuedDma(false);
 }
 
-// Reset and close-all invalidate the same endpoint lifetimes.
-static __attribute__((noinline)) void nRFUsbdInvalidateEvents(void)
-{
-	for (auto &endpoint : s_Usbd.EpReg)
-		for (auto &registration : endpoint)
-			++registration.Generation;
-}
-
 static void nRFUsbdResetState(void)
 {
-	nRFUsbdInvalidateEvents();
 	CFifoFlush(s_Usbd.hQue);
 	CFifoFlush(s_Usbd.hEp0Que);
 	s_Usbd.Flags = USBD_FLAG_MAC_AWAKE;
@@ -866,7 +862,7 @@ static void nRFUsbdHostResume(void)
 	uint8_t flags = s_Usbd.Flags;
 
 	// A host resume cancels any device-initiated wake request. Keep SUSPENDED
-	// set until the peripheral is actually awake; that state alone gates DMA.
+	// set until the peripheral is actually awake; only that state blocks DMA.
 	flags &= (uint8_t)~USBD_FLAG_REMOTE_WAKE;
 	if ((flags & USBD_FLAG_MAC_AWAKE) != 0U && UsbdIsForceNormal())
 	{
@@ -921,17 +917,12 @@ static void nRFUsbdBusReset(void)
 	nRFUsbdResetState();
 }
 
-// The queued generation identifies the endpoint lifetime, including events
-// already copied out of AppEvt when an ISR closes or resets the endpoint.
-static void nRFUsbdProcessQueuedEvent(uint32_t Evt, void *pContext)
+// Endpoint events run in the USBD interrupt and nothing of the data path is
+// queued, so this controller has no process event work. The core still calls
+// it from the process event.
+void UsbCtrlrProcess(int DevNo)
 {
-	const uint8_t epnum = (uint8_t)Evt;
-	const uint8_t in = (uint8_t)((Evt >> 16U) & 1U);
-	nRFUsbEpReg_t *preg = nRFUsbGetEpReg(epnum, in);
-	if (preg->Generation != (uint32_t)(uintptr_t)pContext)
-		return;
-	preg->Handler((Evt & (1UL << 17U)) != 0U ? USB_CTRLR_EVT_DRDY :
-		USB_CTRLR_EVT_XFER_CMPL, (uint8_t)(Evt >> 8U), preg->pContext);
+	(void)DevNo;
 }
 
 static void nRFUsbdHandleBusEvent(uint32_t EventCause)
@@ -1068,6 +1059,9 @@ extern "C" void USBD_IRQHandler(void){
 
 	// A completed transfer keeps software DMA ownership for immediate handoff.
 	bool reuseDma = false;
+	// Regular OUT endpoint whose DMA just ended, 0 for none, and its length.
+	uint32_t outcmpl = 0U;
+	uint16_t outlen = 0U;
 
 	// Snapshot both status registers before retiring DMA or starting its successor.
 	NRF_USBD->EVENTS_EPDATA = 0U;
@@ -1148,11 +1142,8 @@ extern "C" void USBD_IRQHandler(void){
 				NRF_USBD->EPSTATUS = dmastatus;
 				reuseDma = true;
 				(void)CFifoGet(s_Usbd.hQue);
-				const uint32_t evt =
-					(NRF_USBD->EPOUT[epnum].AMOUNT << 8U) | epnum;
-				AppEvtHandlerQue(evt,
-					(void *)(uintptr_t)nRFUsbGetEpReg(epnum, 0U)->Generation,
-					nRFUsbdProcessQueuedEvent);
+				outcmpl = epnum;
+				outlen = (uint16_t)NRF_USBD->EPOUT[epnum].AMOUNT;
 				break;
 			}
 		}
@@ -1177,15 +1168,22 @@ extern "C" void USBD_IRQHandler(void){
 		(void)NRF_USBD->EVENTS_EP0DATADONE;
 	}
 
-	// EPDATASTATUS describes regular endpoint host-consumption / OUT readiness.
+	// The OUT completion runs after the handoff, so the next DMA does not wait
+	// for it, and before the readiness scan, so its block is published before
+	// the next readiness of the same endpoint reserves one.
+	if (outcmpl != 0U)
+	{
+		nRFUsbEpRegisteredEvent((uint8_t)outcmpl, 0U, USB_CTRLR_EVT_XFER_CMPL,
+			outlen);
+	}
 
-	uint32_t servicedstatus = 0U;
-
-	// IN host consumption (bits 1-7) and OUT readiness (bits 17-23) both go
-	// to AppEvt in one pass. Rotating the halves keeps the original order:
-	// IN highest endpoint first, then OUT highest endpoint first. A bit stays
-	// set when it cannot be queued and the next IRQ retries it. OUT readiness
-	// waits while its DMA is captured.
+	// EPDATASTATUS: IN host consumption (bits 1-7) and OUT readiness (bits
+	// 17-23), handed to the endpoint owner here. Rotating the halves keeps
+	// the original order: IN highest endpoint first, then OUT highest endpoint
+	// first. Each bit is cleared before its handler runs: the handler starts
+	// the next transfer of that endpoint, and the status of that transfer can
+	// be set before this loop ends. OUT readiness waits while its DMA is
+	// captured.
 	uint32_t pending = __ROR(datastatus & 0x00FE00FEUL, 16U);
 	while (pending != 0U)
 	{
@@ -1196,19 +1194,22 @@ extern "C" void USBD_IRQHandler(void){
 		nRFUsbEpReg_t *preg = nRFUsbGetEpReg((uint8_t)epnum, (uint8_t)in);
 		pending &= ~(1UL << pos);
 
-		uint32_t evt = epnum | (1UL << 17U);
 		if (in)
-			evt = (NRF_USBD->EPIN[epnum].AMOUNT << 8U) | epnum | (1UL << 16U);
-		else if ((NRF_USBD->EPSTATUS & bit) != 0U || preg->Handler == NULL)
-			continue;
-		if (!AppEvtHandlerQue(evt, (void *)(uintptr_t)preg->Generation,
-			nRFUsbdProcessQueuedEvent))
-			break;
-		servicedstatus |= bit;
+		{
+			const uint16_t amount = (uint16_t)NRF_USBD->EPIN[epnum].AMOUNT;
+			NRF_USBD->EPDATASTATUS = bit;
+			__DSB();
+			if (preg->Handler != NULL)
+				preg->Handler(USB_CTRLR_EVT_XFER_CMPL, amount, preg->pContext);
+		}
+		else if ((NRF_USBD->EPSTATUS & bit) == 0U && preg->Handler != NULL)
+		{
+			NRF_USBD->EPDATASTATUS = bit;
+			__DSB();
+			preg->Handler(USB_CTRLR_EVT_DRDY, 0U, preg->pContext);
+		}
 	}
 
-	NRF_USBD->EPDATASTATUS = servicedstatus;
-	__DSB();
 	nRFUsbdTryRemoteWake();
 
 	nRFUsbdTryEnterLowPower();
@@ -1233,6 +1234,10 @@ bool UsbCtrlrInit(int DevNo, const UsbCtrlrCfg_t *pCfg)
 						  sizeof(nRFEPPkt_t), true);
 
 	nRFUsbdResetState();
+
+	// The cable edges queue the process event, which connects or disconnects
+	nRFUsbdVbusIntInit(s_Usbd.IntPrio);
+
 	return true;
 }
 
@@ -1240,7 +1245,7 @@ bool UsbCtrlrStart(int DevNo)
 {
 	if (UsbCtrlrVbusDetected(DevNo) == false)
 	{
-		// No cable. Not a failure: the poll in UsbdProcess reports the attach
+		// No cable. Not a failure: the cable interrupt queues the attach
 		// and the caller comes back.
 		return false;
 	}
@@ -1371,7 +1376,6 @@ void UsbCtrlrEpClose(int DevNo, uint8_t EpNo, bool bIn)
 {
 	(void)DevNo;
 	const uint32_t state = DisableInterrupt();
-	++nRFUsbGetEpReg(EpNo, bIn)->Generation;
 	if (EpNo == NRFX_USBD_ISO_EP_NO)
 	{
 		s_Usbd.IsoOpen = false;
@@ -1404,7 +1408,6 @@ void UsbCtrlrEpCloseAll(int DevNo)
 	const uint32_t state = DisableInterrupt();
 	s_Usbd.IsoOpen = false;
 	UsbCtrlrSofEnable(DevNo, false);
-	nRFUsbdInvalidateEvents();
 	nRFUsbdDmaWait(0x01FE01FEUL);
 	CFifoFlush(s_Usbd.hQue);
 

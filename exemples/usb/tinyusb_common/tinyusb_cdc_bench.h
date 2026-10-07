@@ -116,6 +116,13 @@ static const char * const s_TinyUsbBenchStrings[] = {
 
 static uint16_t s_TinyUsbBenchStringDesc[33];
 
+// TinyUSB's Nordic DCD requires the application/BSP to forward USB regulator
+// state transitions to it.
+extern "C" void tusb_hal_nrf_power_event(uint32_t Event);
+
+static bool s_TinyUsbBenchVbus;
+static bool s_TinyUsbBenchReady;
+
 extern "C" uint8_t const *tud_descriptor_device_cb(void)
 {
 	return reinterpret_cast<const uint8_t *>(&s_TinyUsbBenchDeviceDesc);
@@ -192,13 +199,6 @@ extern "C" uint16_t const *tud_descriptor_string_cb(uint8_t Index,
 	return s_TinyUsbBenchStringDesc;
 }
 
-// TinyUSB's Nordic DCD requires the application/BSP to forward USB regulator
-// state transitions to it.
-extern "C" void tusb_hal_nrf_power_event(uint32_t Event);
-
-static bool s_TinyUsbBenchVbus;
-static bool s_TinyUsbBenchReady;
-
 static void TinyUsbBenchPowerProcess(void)
 {
 	const uint32_t status = NRF_POWER->USBREGSTATUS;
@@ -258,4 +258,4 @@ static bool TinyUsbBenchInit(void)
 	return true;
 }
 
-#endif	// __TINYUSB_CDC_BENCH_H__
+#endif

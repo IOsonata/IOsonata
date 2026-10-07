@@ -38,6 +38,7 @@ SOFTWARE.
 
 #include "idelay.h"
 #include "iopinctrl.h"
+#include "app_evt_handler.h"
 #include "usb/usb.h"
 #include "usb/usbd_hid.h"
 
@@ -117,10 +118,60 @@ public:
 	}
 };
 
-static HidKeyboard g_Hid;
+static HidKeyboard s_Hid;
 static HidKeyboardReport_t s_Report;
 static uint8_t s_LedReport;
 static bool s_ReportPending;
+
+static int HidEvent(DevIntrf_t *, DEVINTRF_EVT event,
+	uint8_t *pData, int Length);
+
+alignas(4) static uint8_t s_HidRxBuffer[USB_INT_INTRF_PKT_BLKSIZE];
+alignas(4) static uint8_t s_HidTxBuffer[USB_INT_INTRF_PKT_BLKSIZE];
+
+static const UsbdHidCfg_t s_HidCfg = {
+	.DevNo = USB_DEVNO,
+	.pReportDesc = s_ReportDesc,
+	.ReportDescLength = sizeof(s_ReportDesc),
+	.BcdHid = 0U,
+	.FsMps = sizeof(HidKeyboardReport_t),
+	.HsMps = sizeof(HidKeyboardReport_t),
+	.FsInterval = 1U,
+	.HsInterval = 4U,
+	.SubClass = USB_HID_SUBCLASS_BOOT,
+	.Protocol = USB_HID_PROT_KEYBOARD,
+	.CountryCode = 0U,
+	.InterfaceString = HID_STR_INTERFACE,
+	.EvtCB = HidEvent,
+	.pContext = nullptr,
+	.pRxBuffer = s_HidRxBuffer,
+	.pTxBuffer = s_HidTxBuffer,
+};
+
+// Application event queue memory, replaces the 4 event library default. The
+// USB controller port queues its deferred endpoint events there.
+alignas(4) uint8_t g_AppEvtHandlerQueMem[APPEVT_HANDLER_QUE_MEMSIZE(16)];
+
+static const UsbCfg_t s_UsbCfg = {
+	.DevNo = USB_DEVNO,
+	.Mode = USB_MODE_DEVICE,
+	.Vid = 0x1209,
+	.Pid = 0x0006,
+	.DevVer = 0x0100,
+	.pManufacturer = "I-SYST",
+	.pProduct = "IOsonata HID Keyboard",
+	.pSerial = nullptr,
+	.pFuncName = "HID Keyboard",
+	.IntPrio = 6,
+	.DeviceClass = USB_DEVCLASS_NONE,
+	.DeviceSubClass = 0U,
+	.DeviceProtocol = 0U,
+	.bSelfPowered = false,
+	.bRemoteWakeup = false,
+	.bLowPowerSuspend = false,
+	.MaxPower = 100,
+	.EvtHandler = nullptr,
+};
 
 static bool ButtonDebounce(bool Pressed, bool &Candidate, bool &Stable,
 						   uint8_t &Count)
@@ -231,49 +282,6 @@ static bool HidReportRequest(const UsbSetupData_t *pSetup,
 	return true;
 }
 
-alignas(4) static uint8_t s_HidRxBuffer[USB_INT_INTRF_PKT_BLKSIZE];
-alignas(4) static uint8_t s_HidTxBuffer[USB_INT_INTRF_PKT_BLKSIZE];
-
-static const UsbdHidCfg_t s_HidCfg = {
-	.DevNo = USB_DEVNO,
-	.pReportDesc = s_ReportDesc,
-	.ReportDescLength = sizeof(s_ReportDesc),
-	.BcdHid = 0U,
-	.FsMps = sizeof(HidKeyboardReport_t),
-	.HsMps = sizeof(HidKeyboardReport_t),
-	.FsInterval = 1U,
-	.HsInterval = 4U,
-	.SubClass = USB_HID_SUBCLASS_BOOT,
-	.Protocol = USB_HID_PROT_KEYBOARD,
-	.CountryCode = 0U,
-	.InterfaceString = HID_STR_INTERFACE,
-	.EvtCB = HidEvent,
-	.pContext = nullptr,
-	.pRxBuffer = s_HidRxBuffer,
-	.pTxBuffer = s_HidTxBuffer,
-};
-
-static const UsbCfg_t s_UsbCfg = {
-	.DevNo = USB_DEVNO,
-	.Mode = USB_MODE_DEVICE,
-	.Vid = 0x1209,
-	.Pid = 0x0006,
-	.DevVer = 0x0100,
-	.pManufacturer = "I-SYST",
-	.pProduct = "IOsonata HID Keyboard",
-	.pSerial = nullptr,
-	.pFuncName = "HID Keyboard",
-	.IntPrio = 6,
-	.DeviceClass = USB_DEVCLASS_NONE,
-	.DeviceSubClass = 0U,
-	.DeviceProtocol = 0U,
-	.bSelfPowered = false,
-	.bRemoteWakeup = false,
-	.bLowPowerSuspend = false,
-	.MaxPower = 100,
-	.EvtHandler = nullptr,
-};
-
 int main()
 {
 	IOPinConfig(HID_BUTTON_PORT, HID_BUTTON_PIN, HID_BUTTON_PINOP,
@@ -285,7 +293,8 @@ int main()
 		IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL);
 	KeyboardLedApply(0U);
 
-	if (!UsbInit(&s_UsbCfg) || !g_Hid.Init(s_HidCfg))
+	if (!AppEvtHandlerInit(g_AppEvtHandlerQueMem, sizeof(g_AppEvtHandlerQueMem)) ||
+		!UsbInit(&s_UsbCfg) || !s_Hid.Init(s_HidCfg))
 	{
 		return -1;
 	}
@@ -302,7 +311,7 @@ int main()
 
 	while (1)
 	{
-		UsbProcess(USB_DEVNO);
+		AppEvtHandlerExec();
 		const bool nowSuspended = UsbSuspended(USB_DEVNO);
 		suspended = nowSuspended;
 
@@ -320,7 +329,7 @@ int main()
 		}
 
 		if (!suspended && s_ReportPending &&
-			g_Hid.Tx(0, reinterpret_cast<const uint8_t *>(&s_Report),
+			s_Hid.Tx(0, reinterpret_cast<const uint8_t *>(&s_Report),
 				sizeof(s_Report)) == (int)sizeof(s_Report))
 		{
 			s_ReportPending = false;

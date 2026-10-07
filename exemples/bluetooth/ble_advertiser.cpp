@@ -1,5 +1,5 @@
 /**-------------------------------------------------------------------------
-@example	BleAdvertiser.cpp
+@example	ble_advertiser.cpp
 
 @brief	BLE non-connectable advertiser
 
@@ -40,6 +40,7 @@ SOFTWARE.
 #include "istddef.h"
 #include "coredev/timer.h"
 
+#include "app_evt_handler.h"
 #include "bluetooth/bt_app.h"
 #include "bluetooth/bt_hci_ctlr.h"
 //#ifndef NRFXLIB_SDC
@@ -117,10 +118,6 @@ alignas(8) static uint8_t s_BtCtlrMemPool[2400];
 
 const BtHciCtlrMemPool_t g_BtHciCtlrMemPool = { s_BtCtlrMemPool, sizeof(s_BtCtlrMemPool) };
 
-// This example posts nothing to the vendor event scheduler some ports run,
-// so its queue is left out.
-const BtAppSchedCfg_t g_BtAppSchedCfg = { NULL, 0, 0, 0 };
-
 const BtAppCfg_t s_BtAppCfg = {
 	.Role = BTAPP_ROLE_BROADCASTER,
 	.PeriphDevMax = 0,						// Max peripheral devices we connect to as central
@@ -150,6 +147,27 @@ static const TimerCfg_t s_TimerCfg = {
 	.Freq = 0,
 	.IntPrio = 6,
 };
+
+// NOTE 1: Build DFU zip file
+// SoftDevice v7.2.0
+// 		nrfutil pkg generate --hw-version 52 --sd-req 0x0101 --application-version 0x0 --application ./BleAdvertiser.hex --key-file ../../../../../../src/iosonata_dfukey.pem BleAdvertiser_package.zip
+//
+// SoftDevice v7.3.0
+// 		nrfutil pkg generate --hw-version 52 --sd-req 0x0124 --application-version 0x0 --application ./BleAdvertiser.hex --key-file ../../../../../../src/iosonata_dfukey.pem BleAdvertiser_package.zip
+
+#ifdef UART_PINS
+// SysLog store. With the UART attached at init, each record goes out as it
+// is logged. 16 records of 128 bytes, non blocking, so a burst the UART
+// cannot keep up with drops the oldest lines rather than the newest.
+alignas(4) static uint8_t s_SysLogMem[SYSLOG_MEMSIZE(16, 128)];
+
+static const SysLogCfg_t s_SysLogCfg = {
+	.pMem      = s_SysLogMem,
+	.MemSize   = sizeof(s_SysLogMem),
+	.RecordLen = 128,
+	.bBlocking = false
+};
+#endif
 
 #if 0
 Timer g_Timer;
@@ -181,28 +199,6 @@ void BtAppAdvTimeoutHandler()
 }
 #endif
 
-/* NOTE 1: Build DFU zip file
- * SoftDevice v7.2.0
- * 		nrfutil pkg generate --hw-version 52 --sd-req 0x0101 --application-version 0x0 --application ./BleAdvertiser.hex --key-file ../../../../../../src/iosonata_dfukey.pem BleAdvertiser_package.zip
- *
- * SoftDevice v7.3.0
- * 		nrfutil pkg generate --hw-version 52 --sd-req 0x0124 --application-version 0x0 --application ./BleAdvertiser.hex --key-file ../../../../../../src/iosonata_dfukey.pem BleAdvertiser_package.zip
- */
-
-#ifdef UART_PINS
-// SysLog store. With the UART attached at init, each record goes out as it
-// is logged. 16 records of 128 bytes, non blocking, so a burst the UART
-// cannot keep up with drops the oldest lines rather than the newest.
-alignas(4) static uint8_t s_SysLogMem[SYSLOG_MEMSIZE(16, 128)];
-
-static const SysLogCfg_t s_SysLogCfg = {
-	.pMem      = s_SysLogMem,
-	.MemSize   = sizeof(s_SysLogMem),
-	.RecordLen = 128,
-	.bBlocking = false
-};
-#endif
-
 int main()
 {
 	// Configure Leds
@@ -232,7 +228,7 @@ int main()
 
 	IOPinSet(s_Leds[1].PortNo, s_Leds[1].PinNo);
 
-	BtAppRun();
+	AppRun();
 
 	return 0;
 }

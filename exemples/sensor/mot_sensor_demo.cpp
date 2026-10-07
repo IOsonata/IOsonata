@@ -168,7 +168,7 @@ I2C g_I2c;
 void TimerHandler(TimerDev_t *pTimer, uint32_t Evt);
 
 const static TimerCfg_t s_TimerCfg = {
-    .DevNo = 0,
+	.DevNo = 0,
 	.ClkSrc = TIMER_CLKSRC_DEFAULT,
 	.Freq = 0,			// 0 => Default highest frequency
 	.IntPrio = 1,
@@ -246,15 +246,15 @@ GyroSensor *g_pGyro = NULL;
 MagSensor *g_pMag = NULL;
 
 uint32_t g_DT = 0;
-static uint32_t g_TPrev = 0;
+static uint32_t s_TPrev = 0;
 
 uint32_t g_Pdt = 0;
 
 void TimerHandler(TimerDev_t *pTimer, uint32_t Evt)
 {
-    if (Evt & TIMER_EVT_TRIGGER(0))
-    {
-    }
+	if (Evt & TIMER_EVT_TRIGGER(0))
+	{
+	}
 }
 
 void ImuEvtHandler(Device * const pDev, DEV_EVT Evt)
@@ -281,8 +281,8 @@ void ImuIntHandler(int IntNo, void *pCtx)
 	{
 //		IOPinSet(0, 24);
 		uint64_t t = g_Timer.uSecond();
-		g_DT = t - g_TPrev;
-		g_TPrev = t;
+		g_DT = t - s_TPrev;
+		s_TPrev = t;
 
 		//g_Imu.IntHandler();
 		g_MotSensor.IntHandler();
@@ -422,8 +422,8 @@ int main()
 
 	g_Imu.Enable();
 
-    FusionAhrs ahrs;
-    //FusionAhrsInitialise(&ahrs);
+	FusionAhrs ahrs;
+	//FusionAhrsInitialise(&ahrs);
 
 	while (1)
 	{
@@ -451,13 +451,13 @@ int main()
 		g_MotSensor.Read(accdata);
 		g_MotSensor.Read(gyrodata);
 		//g_Imu.Read(quat);
-        //FusionVector gyroscope = {gyrodata.X, gyrodata.Y, gyrodata.Z}; // replace this with actual gyroscope data in degrees/s
-       // FusionVector accelerometer = {accdata.X, accdata.Y, accdata.Z}; // replace this with actual accelerometer data in g
+		//FusionVector gyroscope = {gyrodata.X, gyrodata.Y, gyrodata.Z}; // replace this with actual gyroscope data in degrees/s
+	   // FusionVector accelerometer = {accdata.X, accdata.Y, accdata.Z}; // replace this with actual accelerometer data in g
 
-       // FusionAhrsUpdateNoMagnetometer(&ahrs, gyroscope, accelerometer, 0.02);
+	   // FusionAhrsUpdateNoMagnetometer(&ahrs, gyroscope, accelerometer, 0.02);
 
-        //FusionEuler euler = FusionQuaternionToEuler(FusionAhrsGetQuaternion(&ahrs));
-       // FusionQuaternion fq = FusionAhrsGetQuaternion(&ahrs);
+		//FusionEuler euler = FusionQuaternionToEuler(FusionAhrsGetQuaternion(&ahrs));
+	   // FusionQuaternion fq = FusionAhrsGetQuaternion(&ahrs);
 
 		//if (cnt-- < 0)
 		{

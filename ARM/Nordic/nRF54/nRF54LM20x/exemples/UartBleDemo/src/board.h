@@ -38,12 +38,12 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #ifndef __BOARD_H__
 #define __BOARD_H__
 
-#define NORDIC_DK
+// Nordic nRF54LM20 DK (PCA10184)
+// IOsonata button/LED 1..4 correspond to DK button/LED 0..3.
 
+#ifndef UART_DEVNO
 #define UART_DEVNO			1
-
-#ifdef NORDIC_DK
-// PCA10156
+#endif
 
 // Button 1
 #define BUT1_PORT		1
@@ -62,6 +62,16 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define BUT2_SENSE_INT	BUT2_PIN
 #define BUT2_INT		6
 #define BUT2_INT_PRIO	6
+
+// Button 3
+#define BUT3_PORT		1
+#define BUT3_PIN		8
+#define BUT3_PINOP		0
+
+// Button 4
+#define BUT4_PORT		0
+#define BUT4_PIN		5
+#define BUT4_PINOP		0
 
 #define BUT_SENSE		IOPINSENSE_TOGGLE
 
@@ -83,28 +93,30 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #define CONNECT_LED_PORT	LED4_PORT
 #define CONNECT_LED_PIN		LED4_PIN
-#define CONNECT_LED_LOGIC	IOPINSENSE_LOW_TRANSITION
+#define CONNECT_LED_LOGIC	1	// Active high
 
+// Debugger serial port 0: UARTE30 on P0.
 #if UART_DEVNO == 0
 
 #define NRFX_UART_INST	30
 
-#define UART_RX_PORT		1
-#define UART_RX_PIN			17
+#define UART_RX_PORT		0
+#define UART_RX_PIN			7
 #define UART_RX_PINOP		1
 
-#define UART_TX_PORT		1
-#define UART_TX_PIN			16
+#define UART_TX_PORT		0
+#define UART_TX_PIN			6
 #define UART_TX_PINOP		1
 
-#define UART_CTS_PORT		1
-#define UART_CTS_PIN		19
+#define UART_CTS_PORT		0
+#define UART_CTS_PIN		9
 #define UART_CTS_PINOP		1
 
-#define UART_RTS_PORT		1
-#define UART_RTS_PIN		18
+#define UART_RTS_PORT		0
+#define UART_RTS_PIN		8
 #define UART_RTS_PINOP		1
 
+// Debugger serial port 1: UARTE20 on P1.
 #elif UART_DEVNO == 1
 
 #define NRFX_UART_INST	20
@@ -125,118 +137,15 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define UART_RTS_PIN		18
 #define UART_RTS_PINOP		1
 
-#elif (UART_DEVNO == 2)
-
-#define NRFX_UART_INST	21
-
-#define UART_RX_PORT		1
-#define UART_RX_PIN			17
-#define UART_RX_PINOP		1
-
-#define UART_TX_PORT		1
-#define UART_TX_PIN			16
-#define UART_TX_PINOP		1
-
-#define UART_CTS_PORT		1
-#define UART_CTS_PIN		19
-#define UART_CTS_PINOP		1
-
-#define UART_RTS_PORT		1
-#define UART_RTS_PIN		18
-#define UART_RTS_PINOP		1
-
-#elif (UART_DEVNO == 3)
-
-#define NRFX_UART_INST	22
-
-#define UART_RX_PORT		1
-#define UART_RX_PIN			17
-#define UART_RX_PINOP		5//1
-
-#define UART_TX_PORT		1
-#define UART_TX_PIN			16
-#define UART_TX_PINOP		1
-
-#define UART_CTS_PORT		1
-#define UART_CTS_PIN		19
-#define UART_CTS_PINOP		1
-
-#define UART_RTS_PORT		1
-#define UART_RTS_PIN		18
-#define UART_RTS_PINOP		1
-
-#elif (UART_DEVNO == 4)
-
-#define NRFX_UART_INST	0
-
-#define UART_RX_PORT		1
-#define UART_RX_PIN			17
-#define UART_RX_PINOP		1
-
-#define UART_TX_PORT		1
-#define UART_TX_PIN			16
-#define UART_TX_PINOP		1
-
-#define UART_CTS_PORT		1
-#define UART_CTS_PIN		19
-#define UART_CTS_PINOP		1
-
-#define UART_RTS_PORT		1
-#define UART_RTS_PIN		18
-#define UART_RTS_PINOP		1
-
-#endif // UART_DEVNO
-
-#else // BOARD
-
-// Button 1
-#define BUT1_PORT		1
-#define BUT1_PIN		8
-#define BUT1_PINOP		0
-#define BUT1_SENSE		IOPINSENSE_LOW_TRANSITION
-#define BUT1_SENSE_INT	0
-#define BUT1_INT		0//BUT1_PIN
-#define BUT1_INT_PRIO	6
-
-// Button 2
-#define BUT2_PORT		0
-#define BUT2_PIN		3
-#define BUT2_PINOP		0
-#define BUT2_SENSE		IOPINSENSE_LOW_TRANSITION
-#define BUT2_SENSE_INT	BUT2_PIN
-#define BUT2_INT		6
-#define BUT2_INT_PRIO	6
-
-#define LED1_PORT		2
-#define LED1_PIN		1
-#define LED1_PINOP		0
-
-#define LED2_PORT		2
-#define LED2_PIN		2
-#define LED2_PINOP		0
-
-#define LED3_PORT		2
-#define LED3_PIN		8
-#define LED3_PINOP		0
-
-
-#define UART_RX_PORT		0
-#define UART_RX_PIN			0
-#define UART_RX_PINOP		1
-#define UART_TX_PORT		0
-#define UART_TX_PIN			1
-#define UART_TX_PINOP		1
-#define UART_CTS_PORT		0
-#define UART_CTS_PIN		2
-#define UART_CTS_PINOP		1
-#define UART_RTS_PORT		0
-#define UART_RTS_PIN		4
-#define UART_RTS_PINOP		1
+#else
+#error "Select UART_DEVNO 0 or 1 for a DevKit virtual serial port"
 #endif
 
 #define BUTTON_PINS		{ \
 	{BUT1_PORT, BUT1_PIN, BUT1_PINOP, IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL}, \
 	{BUT2_PORT, BUT2_PIN, BUT2_PINOP, IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL}, \
+	{BUT3_PORT, BUT3_PIN, BUT3_PINOP, IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL}, \
+	{BUT4_PORT, BUT4_PIN, BUT4_PINOP, IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL}, \
 }
 
 #define LED_PINS	{ \
@@ -245,7 +154,6 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 	{LED3_PORT, LED3_PIN, LED3_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL}, \
 	{LED4_PORT, LED4_PIN, LED4_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL}, \
 }
-
 
 #define UART_PINS			{ \
 	{UART_RX_PORT, UART_RX_PIN, UART_RX_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},\

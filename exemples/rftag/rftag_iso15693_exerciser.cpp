@@ -6,7 +6,7 @@
 Drives a local memory RFTag with an attached RFTagProtoIso15693 engine
 through ProcessFrame. Checks inventory, system information, the CC and empty
 NDEF layout, write and read back, read multiple, block protection and range,
-addressed mode, the addressed and selected mode gating, a read only tag, and
+addressed mode, the addressed and selected mode checks, a read only tag, and
 UID length handling. Events are captured per instance through an EvtHandler
 override, no global hook.
 
@@ -50,12 +50,6 @@ SOFTWARE.
 static int s_Pass = 0;
 static int s_Fail = 0;
 
-static void Check(const char *pName, bool bOk)
-{
-	if (bOk) { s_Pass++; printf("  [PASS] %s\n", pName); }
-	else { s_Fail++; printf("  [FAIL] %s\n", pName); }
-}
-
 class TestTag : public RFTag {
 public:
 	TestTag() : MemChanged(0) {}
@@ -68,6 +62,18 @@ public:
 
 	int MemChanged;
 };
+
+static uint8_t s_Mem[64];		// 16 blocks, block 0 CC, 15 data blocks
+static uint8_t s_SelMem[64];
+static uint8_t s_RoMem[64];
+static uint8_t s_Um[64];
+static uint8_t s_Um5[64];
+
+static void Check(const char *pName, bool bOk)
+{
+	if (bOk) { s_Pass++; printf("  [PASS] %s\n", pName); }
+	else { s_Fail++; printf("  [FAIL] %s\n", pName); }
+}
 
 static bool SetupTag(TestTag &Tag, RFTagProtoIso15693 &Proto, uint8_t *pMem,
 					 uint32_t Size, bool bRo, const uint8_t *pUid = nullptr, int IdLen = 0)
@@ -98,14 +104,13 @@ static bool SetupTag(TestTag &Tag, RFTagProtoIso15693 &Proto, uint8_t *pMem,
 
 int main(void)
 {
-	static uint8_t mem[64];		// 16 blocks, block 0 CC, 15 data blocks
 	uint8_t tx[128];
 	int l;
 
 	TestTag dev;
 	RFTagProtoIso15693 iso;
 
-	if (SetupTag(dev, iso, mem, sizeof(mem), false) == false)
+	if (SetupTag(dev, iso, s_Mem, sizeof(s_Mem), false) == false)
 	{
 		printf("setup failed\n");
 		return 1;
@@ -128,7 +133,7 @@ int main(void)
 		l = dev.ProcessFrame(f, sizeof(f), tx, sizeof(tx));
 		Check("sys info no error", l >= 14 && tx[0] == 0x00 && tx[1] == 0x0F);
 		Check("UID echoed", memcmp(&tx[2], uid, 8) == 0);
-		Check("block count minus 1", tx[12] == (sizeof(mem) / 4) - 1);
+		Check("block count minus 1", tx[12] == (sizeof(s_Mem) / 4) - 1);
 		Check("block size minus 1", tx[13] == 3);
 	}
 
@@ -137,7 +142,7 @@ int main(void)
 		uint8_t f[] = { 0x02, 0x20, 0x00 };		// read single, block 0
 		l = dev.ProcessFrame(f, sizeof(f), tx, sizeof(tx));
 		Check("read block 0 no error", l == 5 && tx[0] == 0x00);
-		Check("CC magic and size", tx[1] == 0xE1 && tx[3] == (sizeof(mem) / 8));
+		Check("CC magic and size", tx[1] == 0xE1 && tx[3] == (sizeof(s_Mem) / 8));
 		uint8_t r1[] = { 0x02, 0x20, 0x01 };	// block 1, NDEF area
 		dev.ProcessFrame(r1, sizeof(r1), tx, sizeof(tx));
 		Check("empty NDEF TLV", tx[1] == 0x03 && tx[2] == 0x00 && tx[3] == 0xFE);
@@ -230,12 +235,11 @@ int main(void)
 		Check("inventory answered after select", l == 10);
 	}
 
-	printf("== 8b. Addressed and selected mode gating ==\n");
+	printf("== 8b. Addressed and selected mode checks ==\n");
 	{
-		static uint8_t selmem[64];
 		TestTag sd;
 		RFTagProtoIso15693 sdiso;
-		SetupTag(sd, sdiso, selmem, sizeof(selmem), false);
+		SetupTag(sd, sdiso, s_SelMem, sizeof(s_SelMem), false);
 		const uint8_t *suid = RFTagProtoIso15693::DefaultUid();
 
 		// Stay Quiet without address must not silence the tag.
@@ -276,10 +280,9 @@ int main(void)
 
 	printf("== 9. Read only tag ==\n");
 	{
-		static uint8_t romem[64];
 		TestTag ro;
 		RFTagProtoIso15693 roiso;
-		SetupTag(ro, roiso, romem, sizeof(romem), true);
+		SetupTag(ro, roiso, s_RoMem, sizeof(s_RoMem), true);
 
 		uint8_t rc[] = { 0x02, 0x20, 0x00 };
 		ro.ProcessFrame(rc, sizeof(rc), tx, sizeof(tx));
@@ -294,21 +297,19 @@ int main(void)
 
 	printf("== 10. UID length handling ==\n");
 	{
-		static uint8_t um[64];
 		uint8_t myuid[8] = { 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x04, 0xE0 };
 		TestTag u;
 		RFTagProtoIso15693 uiso;
-		Check("init with 8 byte UID", SetupTag(u, uiso, um, sizeof(um), false, myuid, 8));
+		Check("init with 8 byte UID", SetupTag(u, uiso, s_Um, sizeof(s_Um), false, myuid, 8));
 
 		uint8_t inv[] = { 0x26, 0x01, 0x00 };
 		u.ProcessFrame(inv, sizeof(inv), tx, sizeof(tx));
 		Check("configured UID in inventory", memcmp(&tx[2], myuid, 8) == 0);
 
-		static uint8_t um5[64];
 		uint8_t uid5[5] = { 0x11, 0x22, 0x33, 0x44, 0x55 };
 		TestTag u5;
 		RFTagProtoIso15693 u5iso;
-		Check("init rejects IdLen 5", SetupTag(u5, u5iso, um5, sizeof(um5), false, uid5, 5) == false);
+		Check("init rejects IdLen 5", SetupTag(u5, u5iso, s_Um5, sizeof(s_Um5), false, uid5, 5) == false);
 	}
 
 	printf("\nresult: pass=%d fail=%d\n", s_Pass, s_Fail);

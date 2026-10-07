@@ -1,5 +1,5 @@
 /**-------------------------------------------------------------------------
-@example	UartPrbsTxSdk5.c
+@example	UartPrbsTxnrfx.c
 
 
 @brief	UART PRBS transmit test with NRF5_SDK

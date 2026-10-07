@@ -1,21 +1,48 @@
-/*
- * usbd.cpp
- *
- * USB HID device for the SlimeVR receiver dongle, implemented directly on
- * nrfx_usbd. No nRF5 SDK app_usbd / nrf_drv dependency.
- *
- * Single HID interface, one 64 byte interrupt IN endpoint and one 64 byte
- * interrupt OUT endpoint on EP3. VID, PID and the HID report descriptor match
- * the SlimeVR reference receiver so the host server enumerates and binds.
- *
- * HID IN report layout matches the reference receiver: each 64 byte report
- * holds up to four 16 byte tracker records. hid_write_packet_n() copies one
- * 16 byte ESB payload, stores rssi in byte 15 for packet types other than 1
- * and 4, queues the record, and the records are packed four per IN report.
- *
- *  Created on: Nov 22, 2024
- *      Author: hoan
- */
+/**-------------------------------------------------------------------------
+@example	usbd.cpp
+
+@brief	USB HID transport for the SlimeVR receiver dongle.
+
+USB HID device for the SlimeVR receiver dongle, implemented directly on
+nrfx_usbd. No nRF5 SDK app_usbd / nrf_drv dependency.
+
+Single HID interface, one 64 byte interrupt IN endpoint and one 64 byte
+interrupt OUT endpoint on EP3. VID, PID and the HID report descriptor match
+the SlimeVR reference receiver so the host server enumerates and binds.
+
+HID IN report layout matches the reference receiver: each 64 byte report
+holds up to four 16 byte tracker records. hid_write_packet_n() copies one
+16 byte ESB payload, stores rssi in byte 15 for packet types other than 1
+and 4, queues the record, and the records are packed four per IN report.
+
+@author	hoan
+@date	Nov 22, 2024
+
+@license
+
+MIT License
+
+Copyright (c) 2024, I-SYST inc., all rights reserved
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+----------------------------------------------------------------------------*/
 
 #include <string.h>
 

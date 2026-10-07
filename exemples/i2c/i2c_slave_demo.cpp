@@ -123,11 +123,11 @@ I2C g_I2CSlave;
 
 #define I2C_BUFF_SIZE	20
 #define I2C_BUFF_SIZE	20
-uint8_t s_ReadRqstData[I2C_BUFF_SIZE];
-uint8_t s_WriteRqstData[I2C_BUFF_SIZE];
-volatile bool s_bWriteRqst = false;
+static uint8_t s_ReadRqstData[I2C_BUFF_SIZE];
+static uint8_t s_WriteRqstData[I2C_BUFF_SIZE];
+static volatile bool s_bWriteRqst = false;
 std::atomic<bool> s_bReadRqst(false);
-int s_Offset = 0;
+static int s_Offset = 0;
 
 int I2CSlaveIntrfHandler(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId, uint8_t *pBuffer, int Len)
 {

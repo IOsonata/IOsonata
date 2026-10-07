@@ -1,9 +1,10 @@
-/*--------------------------------------------------------------------------
-File   : main.cpp
+/**--------------------------------------------------------------------------
+@file	main.cpp
 
-Author : Hoang Nguyen Hoan          May 2026
+@author	Hoang Nguyen Hoan
+@date	May 2026
 
-Desc   : Blinky example for FPB-R9A02G021 (Renesas R9A02G021 RISC-V).
+@brief	Blinky example for FPB-R9A02G021 (Renesas R9A02G021 RISC-V).
 
          Toggles both on-board LEDs at ~2 Hz using the IOsonata GPIO
          abstraction.  This is the minimal smoke test for:
@@ -14,6 +15,8 @@ Desc   : Blinky example for FPB-R9A02G021 (Renesas R9A02G021 RISC-V).
 
          The LED pin map lives in board.h so the same source compiles
          for other R9A02G021 boards by swapping the board header.
+
+@license
 
 Copyright (c) 2026, I-SYST INC. All rights reserved.
 

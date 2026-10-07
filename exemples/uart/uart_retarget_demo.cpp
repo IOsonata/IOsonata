@@ -60,8 +60,8 @@ int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int Buf
 //#define UARTFIFOSIZE			CFIFO_MEMSIZE(256)
 
 #ifdef UARTFIFOSIZE
-uint8_t s_UartRxFifo[UARTFIFOSIZE];
-uint8_t s_UartTxFifo[UARTFIFOSIZE];
+static uint8_t s_UartRxFifo[UARTFIFOSIZE];
+static uint8_t s_UartTxFifo[UARTFIFOSIZE];
 #endif
 
 static IOPinCfg_t s_UartPins[] = {

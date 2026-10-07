@@ -38,6 +38,7 @@ SOFTWARE.
 #include <stdint.h>
 #include <string.h>
 
+#include "app_evt_handler.h"
 #include "usb/usb.h"
 #include "usb/usbd_hid.h"
 
@@ -79,10 +80,60 @@ public:
 	}
 };
 
-static HidLoopback g_Hid;
+static HidLoopback s_Hid;
 static uint8_t s_Pending[HID_REPORT_SIZE];
 static uint16_t s_PendingLength;
 static uint8_t s_ControlReport[HID_REPORT_SIZE];
+
+static int HidEvent(DevIntrf_t *, DEVINTRF_EVT event,
+	uint8_t *pData, int Length);
+
+alignas(4) static uint8_t s_HidRxBuffer[USB_INT_INTRF_PKT_BLKSIZE];
+alignas(4) static uint8_t s_HidTxBuffer[USB_INT_INTRF_PKT_BLKSIZE];
+
+static const UsbdHidCfg_t s_HidCfg = {
+	.DevNo = USB_DEVNO,
+	.pReportDesc = s_ReportDesc,
+	.ReportDescLength = sizeof(s_ReportDesc),
+	.BcdHid = 0U,
+	.FsMps = HID_REPORT_SIZE,
+	.HsMps = HID_REPORT_SIZE,
+	.FsInterval = 1U,
+	.HsInterval = 4U,
+	.SubClass = USB_HID_SUBCLASS_NONE,
+	.Protocol = USB_HID_PROT_NONE,
+	.CountryCode = 0U,
+	.InterfaceString = HID_STR_INTERFACE,
+	.EvtCB = HidEvent,
+	.pContext = nullptr,
+	.pRxBuffer = s_HidRxBuffer,
+	.pTxBuffer = s_HidTxBuffer,
+};
+
+// Application event queue memory, replaces the 4 event library default. The
+// USB controller port queues its deferred endpoint events there.
+alignas(4) uint8_t g_AppEvtHandlerQueMem[APPEVT_HANDLER_QUE_MEMSIZE(16)];
+
+static const UsbCfg_t s_UsbCfg = {
+	.DevNo = USB_DEVNO,
+	.Mode = USB_MODE_DEVICE,
+	.Vid = 0x1209,
+	.Pid = 0x0005,
+	.DevVer = 0x0100,
+	.pManufacturer = "I-SYST",
+	.pProduct = "IOsonata USB HID Loopback",
+	.pSerial = nullptr,
+	.pFuncName = "HID Loopback",
+	.IntPrio = 6,
+	.DeviceClass = USB_DEVCLASS_NONE,
+	.DeviceSubClass = 0U,
+	.DeviceProtocol = 0U,
+	.bSelfPowered = false,
+	.bRemoteWakeup = false,
+	.bLowPowerSuspend = false,
+	.MaxPower = 100,
+	.EvtHandler = nullptr,
+};
 
 static int HidEvent(DevIntrf_t *, DEVINTRF_EVT event,
 	uint8_t *pData, int Length)
@@ -96,7 +147,7 @@ static int HidEvent(DevIntrf_t *, DEVINTRF_EVT event,
 		{
 			return result == USB_CTRLR_XFER_SUCCESS ? Length : 0;
 		}
-		if (g_Hid.Tx(0, pData, Length) != (int)Length)
+		if (s_Hid.Tx(0, pData, Length) != (int)Length)
 		{
 			memcpy(s_Pending, pData, Length);
 			s_PendingLength = Length;
@@ -108,7 +159,7 @@ static int HidEvent(DevIntrf_t *, DEVINTRF_EVT event,
 		{
 			const uint16_t length = s_PendingLength;
 			s_PendingLength = 0U;
-			if (g_Hid.Tx(0, s_Pending, length) != (int)length)
+			if (s_Hid.Tx(0, s_Pending, length) != (int)length)
 			{
 				s_PendingLength = length;
 			}
@@ -142,64 +193,22 @@ static bool HidReportRequest(const UsbSetupData_t *pSetup,
 	if (Stage == USB_CTRL_COMPLETE &&
 		pSetup->bRequest == USB_HID_REQ_SET_REPORT)
 	{
-		return g_Hid.Tx(0, s_ControlReport, *pLength) == (int)*pLength;
+		return s_Hid.Tx(0, s_ControlReport, *pLength) == (int)*pLength;
 	}
 	return true;
 }
 
-alignas(4) static uint8_t s_HidRxBuffer[USB_INT_INTRF_PKT_BLKSIZE];
-alignas(4) static uint8_t s_HidTxBuffer[USB_INT_INTRF_PKT_BLKSIZE];
-
-static const UsbdHidCfg_t s_HidCfg = {
-	.DevNo = USB_DEVNO,
-	.pReportDesc = s_ReportDesc,
-	.ReportDescLength = sizeof(s_ReportDesc),
-	.BcdHid = 0U,
-	.FsMps = HID_REPORT_SIZE,
-	.HsMps = HID_REPORT_SIZE,
-	.FsInterval = 1U,
-	.HsInterval = 4U,
-	.SubClass = USB_HID_SUBCLASS_NONE,
-	.Protocol = USB_HID_PROT_NONE,
-	.CountryCode = 0U,
-	.InterfaceString = HID_STR_INTERFACE,
-	.EvtCB = HidEvent,
-	.pContext = nullptr,
-	.pRxBuffer = s_HidRxBuffer,
-	.pTxBuffer = s_HidTxBuffer,
-};
-
-static const UsbCfg_t s_UsbCfg = {
-	.DevNo = USB_DEVNO,
-	.Mode = USB_MODE_DEVICE,
-	.Vid = 0x1209,
-	.Pid = 0x0005,
-	.DevVer = 0x0100,
-	.pManufacturer = "I-SYST",
-	.pProduct = "IOsonata USB HID Loopback",
-	.pSerial = nullptr,
-	.pFuncName = "HID Loopback",
-	.IntPrio = 6,
-	.DeviceClass = USB_DEVCLASS_NONE,
-	.DeviceSubClass = 0U,
-	.DeviceProtocol = 0U,
-	.bSelfPowered = false,
-	.bRemoteWakeup = false,
-	.bLowPowerSuspend = false,
-	.MaxPower = 100,
-	.EvtHandler = nullptr,
-};
-
 int main()
 {
-	if (!UsbInit(&s_UsbCfg) || !g_Hid.Init(s_HidCfg))
+	if (!AppEvtHandlerInit(g_AppEvtHandlerQueMem, sizeof(g_AppEvtHandlerQueMem)) ||
+		!UsbInit(&s_UsbCfg) || !s_Hid.Init(s_HidCfg))
 	{
 		return -1;
 	}
 	(void)UsbEnable(USB_DEVNO);
 	while (1)
 	{
-		UsbProcess(USB_DEVNO);
+		AppEvtHandlerExec();
 	}
 	return 0;
 }

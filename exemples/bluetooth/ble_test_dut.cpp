@@ -87,6 +87,7 @@ SOFTWARE.
 
 #include "istddef.h"
 #include "app_evt_handler.h"
+#include "coredev/interrupt.h"
 #include "coredev/uart.h"
 #include "coredev/system_core_clock.h"
 #include "syslog.h"
@@ -119,176 +120,6 @@ SOFTWARE.
 #ifdef MCU_OSC
 McuOsc_t g_McuOsc = MCU_OSC;
 #endif
-
-// --- Port shim ---
-//
-// The DUT offers the same command set on every port it is built for, so it
-// names every call it needs whether or not the port provides one. A call the
-// port does not provide is defined here, weak and refusing, and the strong
-// definition wins wherever the library builds it. This belongs to the DUT and
-// not to the library: the library has no reason to grow a definition for the
-// benefit of a test application.
-//
-// Advertising start and stop are named twice in the library. bt_adv_hci.cpp
-// defines BtAppAdvStart and BtAppAdvStop; bt_adv_nrf52.cpp and bt_adv_bm.cpp
-// define BtAdvStart and BtAdvStop. Neither pair is defined on every port. The
-// DUT calls the BtApp pair and the weak definition below forwards to the other
-// one, which resolves on the ports that name it that way.
-//
-// A refusing call reports "not supported" to the harness. Answering success
-// would let a test record a pass for something that never reached the air.
-//
-// Only a call no port defines belongs here. This file is an object the linker
-// always takes, so a weak definition in it is in place before the library is
-// searched, and a port that defines the same call weak never replaces it: two
-// weak definitions resolve to the first one seen, not to the better one. Only
-// a strong port definition wins. BtAppAdvInit was defined here and is weak in
-// three of the four ports, so those three ran this refusal instead of their
-// own and the application would not start. Check how a port defines a call
-// before adding a shim for it.
-
-__attribute__((weak)) void BtAdvStart(void)
-{
-}
-
-__attribute__((weak)) void BtAdvStop(void)
-{
-}
-
-__attribute__((weak)) void BtAppAdvStart(void)
-{
-	BtAdvStart();
-}
-
-__attribute__((weak)) void BtAppAdvStop(void)
-{
-	BtAdvStop();
-}
-
-__attribute__((weak)) bool BtAdvCodingSet(uint8_t PrimOpt, uint8_t SecOpt)
-{
-	(void)PrimOpt;
-	(void)SecOpt;
-
-	return false;
-}
-
-__attribute__((weak)) bool BtAdvPhySet(uint8_t PrimPhy, uint8_t SecPhy)
-{
-	(void)PrimPhy;
-	(void)SecPhy;
-
-	return false;
-}
-
-__attribute__((weak)) bool BtAdvCodingSelectionEnable(bool bEnable)
-{
-	(void)bEnable;
-
-	return false;
-}
-
-__attribute__((weak)) bool BtGapSetPhy(uint16_t ConnHdl, uint8_t TxPhys,
-									   uint8_t RxPhys, uint16_t PhyOptions)
-{
-	(void)ConnHdl;
-	(void)TxPhys;
-	(void)RxPhys;
-	(void)PhyOptions;
-
-	return false;
-}
-
-__attribute__((weak)) bool BtGapReadPhy(uint16_t ConnHdl, uint8_t *pTxPhy,
-										uint8_t *pRxPhy)
-{
-	(void)ConnHdl;
-	(void)pTxPhy;
-	(void)pRxPhy;
-
-	return false;
-}
-
-__attribute__((weak)) bool BtGapSetDataLength(uint16_t ConnHdl,
-											  uint16_t TxOctets,
-											  uint16_t TxTime)
-{
-	(void)ConnHdl;
-	(void)TxOctets;
-	(void)TxTime;
-
-	return false;
-}
-
-__attribute__((weak)) bool BtSmpBonded(uint16_t ConnHdl)
-{
-	(void)ConnHdl;
-
-	return false;
-}
-
-__attribute__((weak)) bool BtPadvInit(const BtPadvCfg_t * const pCfg)
-{
-	(void)pCfg;
-
-	return false;
-}
-
-__attribute__((weak)) bool BtPadvDataSet(uint8_t AdvHdl, const uint8_t *pData,
-										 size_t Len)
-{
-	(void)AdvHdl;
-	(void)pData;
-	(void)Len;
-
-	return false;
-}
-
-__attribute__((weak)) bool BtPadvStart(uint8_t AdvHdl)
-{
-	(void)AdvHdl;
-
-	return false;
-}
-
-__attribute__((weak)) bool BtPadvStop(uint8_t AdvHdl)
-{
-	(void)AdvHdl;
-
-	return false;
-}
-
-__attribute__((weak)) bool BtPadvIsEnabled(uint8_t AdvHdl)
-{
-	(void)AdvHdl;
-
-	return false;
-}
-
-__attribute__((weak)) bool BtPadvSubeventDataSet(uint8_t AdvHdl,
-		const BtPadvSubeventData_t * const pSubevents, uint8_t NbSubevents)
-{
-	(void)AdvHdl;
-	(void)pSubevents;
-	(void)NbSubevents;
-
-	return false;
-}
-
-// The controller bring-up record lives in bt_hci_ctlr.cpp, which the nRF5 SDK
-// configurations do not build: those ports bring the SoftDevice up themselves
-// and have no such step to record. Answering none rather than failing to link
-// keeps one binary for every port, and a reason of none reads as nothing was
-// recorded, which is exactly what happened.
-__attribute__((weak)) BtHciCtlrError_t BtHciCtlrErrorGet(void)
-{
-	return BT_HCI_CTLR_ERROR_NONE;
-}
-
-__attribute__((weak)) int32_t BtHciCtlrErrorValueGet(void)
-{
-	return 0;
-}
 
 #define DUT_DEVICE_NAME			"IOsonataDUT"
 #define DUT_MANUFACTURER_NAME	"I-SYST inc."
@@ -461,7 +292,7 @@ static const BtIntrfCfg_t s_BtIntrfCfg = {
 	.EvtCB = DutBleIntrfEvtHandler,
 };
 
-static BtIntrf g_BtIntrf;
+static BtIntrf s_BtIntrf;
 static bool s_BtIntrfReady = false;
 
 static const BtUuidArr_t s_AdvUuid = {
@@ -558,6 +389,213 @@ static bool s_CodingFeature = false;
 // is scannable, so the mode is held here rather than read back from the two.
 static uint8_t s_AdvMode = DUT_ADV_MODE_CONN;
 
+static char s_OutLine[DUT_OUT_LINE_MAX];
+static int s_OutLen = 0;
+
+typedef struct __Dut_Line {
+	char Buf[DUT_CMD_LINE_MAX];
+	size_t Len;
+} DutLine_t;
+
+static DutLine_t s_UartLine;
+static DutLine_t s_BleLine;
+
+// Pending stays set through queue refusal until the callback runs.
+static volatile bool s_bDutUartPending = false;
+static volatile bool s_bDutBlePending = false;
+
+// Numeric Comparison, Core 5.4 Vol 3 Part H 2.3.5.6.4. The value is reported
+// and the answer comes back as a command, so a harness confirms it the same
+// way a person would. A headless DUT has no operator to compare the value, so
+// by default it confirms the match automatically and pairing completes without
+// a console. A build that has an input path can set DUT_NUMCOMP_AUTO_ACCEPT 0
+// and answer with the y / n command instead.
+#ifndef DUT_NUMCOMP_AUTO_ACCEPT
+#define DUT_NUMCOMP_AUTO_ACCEPT		1
+#endif
+
+// SysLog store. With the UART attached at init, each record goes out as it
+// is logged. 16 records of 128 bytes, non blocking, so a burst the UART
+// cannot keep up with drops the oldest lines rather than the newest.
+alignas(4) static uint8_t s_SysLogMem[SYSLOG_MEMSIZE(16, 128)];
+
+static const SysLogCfg_t s_SysLogCfg = {
+	.pMem      = s_SysLogMem,
+	.MemSize   = sizeof(s_SysLogMem),
+	.RecordLen = 128,
+	.bBlocking = false
+};
+
+// --- Port shim ---
+//
+// The DUT offers the same command set on every port it is built for, so it
+// names every call it needs whether or not the port provides one. A call the
+// port does not provide is defined here, weak and refusing, and the strong
+// definition wins wherever the library builds it. This belongs to the DUT and
+// not to the library: the library has no reason to grow a definition for the
+// benefit of a test application.
+//
+// Advertising start and stop are named twice in the library. bt_adv_hci.cpp
+// defines BtAppAdvStart and BtAppAdvStop; bt_adv_nrf52.cpp and bt_adv_bm.cpp
+// define BtAdvStart and BtAdvStop. Neither pair is defined on every port. The
+// DUT calls the BtApp pair and the weak definition below forwards to the other
+// one, which resolves on the ports that name it that way.
+//
+// A refusing call reports "not supported" to the harness. Answering success
+// would let a test record a pass for something that never reached the air.
+//
+// Only a call no port defines belongs here. This file is an object the linker
+// always takes, so a weak definition in it is in place before the library is
+// searched, and a port that defines the same call weak never replaces it: two
+// weak definitions resolve to the first one seen, not to the better one. Only
+// a strong port definition wins. BtAppAdvInit was defined here and is weak in
+// three of the four ports, so those three ran this refusal instead of their
+// own and the application would not start. Check how a port defines a call
+// before adding a shim for it.
+
+__attribute__((weak)) void BtAdvStart(void)
+{
+}
+
+__attribute__((weak)) void BtAdvStop(void)
+{
+}
+
+__attribute__((weak)) void BtAppAdvStart(void)
+{
+	BtAdvStart();
+}
+
+__attribute__((weak)) void BtAppAdvStop(void)
+{
+	BtAdvStop();
+}
+
+__attribute__((weak)) bool BtAdvCodingSet(uint8_t PrimOpt, uint8_t SecOpt)
+{
+	(void)PrimOpt;
+	(void)SecOpt;
+
+	return false;
+}
+
+__attribute__((weak)) bool BtAdvPhySet(uint8_t PrimPhy, uint8_t SecPhy)
+{
+	(void)PrimPhy;
+	(void)SecPhy;
+
+	return false;
+}
+
+__attribute__((weak)) bool BtAdvCodingSelectionEnable(bool bEnable)
+{
+	(void)bEnable;
+
+	return false;
+}
+
+__attribute__((weak)) bool BtGapSetPhy(uint16_t ConnHdl, uint8_t TxPhys,
+									   uint8_t RxPhys, uint16_t PhyOptions)
+{
+	(void)ConnHdl;
+	(void)TxPhys;
+	(void)RxPhys;
+	(void)PhyOptions;
+
+	return false;
+}
+
+__attribute__((weak)) bool BtGapReadPhy(uint16_t ConnHdl, uint8_t *pTxPhy,
+										uint8_t *pRxPhy)
+{
+	(void)ConnHdl;
+	(void)pTxPhy;
+	(void)pRxPhy;
+
+	return false;
+}
+
+__attribute__((weak)) bool BtGapSetDataLength(uint16_t ConnHdl,
+											  uint16_t TxOctets,
+											  uint16_t TxTime)
+{
+	(void)ConnHdl;
+	(void)TxOctets;
+	(void)TxTime;
+
+	return false;
+}
+
+__attribute__((weak)) bool BtSmpBonded(uint16_t ConnHdl)
+{
+	(void)ConnHdl;
+
+	return false;
+}
+
+__attribute__((weak)) bool BtPadvInit(const BtPadvCfg_t * const pCfg)
+{
+	(void)pCfg;
+
+	return false;
+}
+
+__attribute__((weak)) bool BtPadvDataSet(uint8_t AdvHdl, const uint8_t *pData,
+										 size_t Len)
+{
+	(void)AdvHdl;
+	(void)pData;
+	(void)Len;
+
+	return false;
+}
+
+__attribute__((weak)) bool BtPadvStart(uint8_t AdvHdl)
+{
+	(void)AdvHdl;
+
+	return false;
+}
+
+__attribute__((weak)) bool BtPadvStop(uint8_t AdvHdl)
+{
+	(void)AdvHdl;
+
+	return false;
+}
+
+__attribute__((weak)) bool BtPadvIsEnabled(uint8_t AdvHdl)
+{
+	(void)AdvHdl;
+
+	return false;
+}
+
+__attribute__((weak)) bool BtPadvSubeventDataSet(uint8_t AdvHdl,
+		const BtPadvSubeventData_t * const pSubevents, uint8_t NbSubevents)
+{
+	(void)AdvHdl;
+	(void)pSubevents;
+	(void)NbSubevents;
+
+	return false;
+}
+
+// The controller bring-up record lives in bt_hci_ctlr.cpp, which the nRF5 SDK
+// configurations do not build: those ports bring the SoftDevice up themselves
+// and have no such step to record. Answering none rather than failing to link
+// keeps one binary for every port, and a reason of none reads as nothing was
+// recorded, which is exactly what happened.
+__attribute__((weak)) BtHciCtlrError_t BtHciCtlrErrorGet(void)
+{
+	return BT_HCI_CTLR_ERROR_NONE;
+}
+
+__attribute__((weak)) int32_t BtHciCtlrErrorValueGet(void)
+{
+	return 0;
+}
+
 // ***
 // Report lines
 //
@@ -565,9 +603,6 @@ static uint8_t s_AdvMode = DUT_ADV_MODE_CONN;
 // report reach both interfaces, and what makes a notification carry a line
 // rather than whatever fragment a print call happened to produce.
 //
-
-static char s_OutLine[DUT_OUT_LINE_MAX];
-static int s_OutLen = 0;
 
 static void DutOut(const char *pFmt, ...)
 {
@@ -649,7 +684,7 @@ static void DutOutEnd(void)
 	// the trace either way.
 	if (s_BtIntrfReady && BtConnected())
 	{
-		g_BtIntrf.Tx(0, (uint8_t*)s_OutLine, len);
+		s_BtIntrf.Tx(0, (uint8_t*)s_OutLine, len);
 	}
 
 	s_OutLen = 0;
@@ -662,14 +697,6 @@ static void DutOutEnd(void)
 // One assembler per interface, because a partial line arriving on the UART and
 // a partial line arriving over the air are two different lines.
 //
-
-typedef struct __Dut_Line {
-	char Buf[DUT_CMD_LINE_MAX];
-	size_t Len;
-} DutLine_t;
-
-static DutLine_t s_UartLine;
-static DutLine_t s_BleLine;
 
 static void DutLineFeed(DutLine_t *pLine, const uint8_t *pData, int Len)
 {
@@ -1736,8 +1763,32 @@ static void HandleCommand(const char *pLine)
 // would have one link receiving and transmitting inside a single call.
 //
 
+static void DutUartQue(void)
+{
+	uint32_t state = DisableInterrupt();
+	if (s_bDutUartPending == false)
+	{
+		s_bDutUartPending = true;
+		(void)AppEvtHandlerQue(0, nullptr, DutUartHandler);
+	}
+	EnableInterrupt(state);
+}
+
+static void DutBleQue(void)
+{
+	uint32_t state = DisableInterrupt();
+	if (s_bDutBlePending == false)
+	{
+		s_bDutBlePending = true;
+		(void)AppEvtHandlerQue(0, nullptr, DutBleHandler);
+	}
+	EnableInterrupt(state);
+}
+
 static void DutUartHandler(uint32_t Evt, void *pCtx)
 {
+	s_bDutUartPending = false;
+
 	(void)Evt;
 	(void)pCtx;
 
@@ -1759,7 +1810,7 @@ static int UartEvtHandler(UARTDev_t *pDev, UART_EVT EvtId,
 
 	if (EvtId == UART_EVT_RXDATA || EvtId == UART_EVT_RXTIMEOUT)
 	{
-		AppEvtHandlerQue(0, nullptr, DutUartHandler);
+		DutUartQue();
 	}
 
 	return 0;
@@ -1767,13 +1818,15 @@ static int UartEvtHandler(UARTDev_t *pDev, UART_EVT EvtId,
 
 static void DutBleHandler(uint32_t Evt, void *pCtx)
 {
+	s_bDutBlePending = false;
+
 	(void)Evt;
 	(void)pCtx;
 
 	uint8_t buf[DUT_INTRF_PACKET_MAX];
 	int len;
 
-	while ((len = g_BtIntrf.Rx(0, buf, sizeof(buf))) > 0)
+	while ((len = s_BtIntrf.Rx(0, buf, sizeof(buf))) > 0)
 	{
 		DutLineFeed(&s_BleLine, buf, len);
 	}
@@ -1788,7 +1841,7 @@ static int DutBleIntrfEvtHandler(DevIntrf_t *pDev, DEVINTRF_EVT EvtId,
 
 	if (EvtId == DEVINTRF_EVT_RX_DATA)
 	{
-		AppEvtHandlerQue(0, nullptr, DutBleHandler);
+		DutBleQue();
 	}
 
 	return 0;
@@ -1822,7 +1875,7 @@ void BtAppInitUserServices(void)
 
 	// BtIntrf installs its own write and transmit complete callbacks on the
 	// two characteristics, so it goes after the service is registered.
-	s_BtIntrfReady = g_BtIntrf.Init(s_BtIntrfCfg);
+	s_BtIntrfReady = s_BtIntrf.Init(s_BtIntrfCfg);
 	if (s_BtIntrfReady == false)
 	{
 		DutOut("DUT ERROR intrf_init");
@@ -1867,16 +1920,6 @@ void BtAppPeriphEvtHandler(uint32_t Evt, void *pCtx)
 	(void)Evt;
 	(void)pCtx;
 }
-
-// Numeric Comparison, Core 5.4 Vol 3 Part H 2.3.5.6.4. The value is reported
-// and the answer comes back as a command, so a harness confirms it the same
-// way a person would. A headless DUT has no operator to compare the value, so
-// by default it confirms the match automatically and pairing completes without
-// a console. A build that has an input path can set DUT_NUMCOMP_AUTO_ACCEPT 0
-// and answer with the y / n command instead.
-#ifndef DUT_NUMCOMP_AUTO_ACCEPT
-#define DUT_NUMCOMP_AUTO_ACCEPT		1
-#endif
 
 void BtSmpNumericComparison(uint16_t ConnHdl, uint32_t Value)
 {
@@ -1968,18 +2011,6 @@ void BtPsyncSubeventNotSent(uint8_t AdvHdl, uint8_t Subevent)
 	DutOutEnd();
 }
 
-// SysLog store. With the UART attached at init, each record goes out as it
-// is logged. 16 records of 128 bytes, non blocking, so a burst the UART
-// cannot keep up with drops the oldest lines rather than the newest.
-alignas(4) static uint8_t s_SysLogMem[SYSLOG_MEMSIZE(16, 128)];
-
-static const SysLogCfg_t s_SysLogCfg = {
-	.pMem      = s_SysLogMem,
-	.MemSize   = sizeof(s_SysLogMem),
-	.RecordLen = 128,
-	.bBlocking = false
-};
-
 static void HardwareInit(void)
 {
 	g_Uart.Init(s_UartCfg);
@@ -2027,11 +2058,36 @@ int main(void)
 	DutOut("DUT READY");
 	DutOutEnd();
 
-	BtAppRun();
+	AppRun();
 
 	DutOut("DUT ERROR bt_run_returned");
 	DutOutEnd();
 	while (true)
 	{
 	}
+}
+
+bool AppCheckStatus(void)
+{
+	BtAppCheckStatus();
+
+	// A pending callback on an empty queue was refused. Keep the check and
+	// retry together so an interrupt cannot queue the same callback between them.
+	uint32_t state = DisableInterrupt();
+	if (AppEvtHandlerPending() == false)
+	{
+		if (s_bDutUartPending)
+		{
+			(void)AppEvtHandlerQue(0, nullptr, DutUartHandler);
+		}
+		if (s_bDutBlePending)
+		{
+			(void)AppEvtHandlerQue(0, nullptr, DutBleHandler);
+		}
+	}
+	const bool idle = s_bDutUartPending == false &&
+		s_bDutBlePending == false &&
+		AppEvtHandlerPending() == false;
+	EnableInterrupt(state);
+	return idle;
 }

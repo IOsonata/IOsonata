@@ -50,7 +50,6 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <string.h>
 
 //#include "app_util_platform.h"
-//#include "app_scheduler.h"
 
 
 #include "istddef.h"
@@ -141,14 +140,12 @@ BtAdvManData_t &g_AdvData = *(BtAdvManData_t*)g_AdvDataBuff;
 BtAdvManData_TphSensor_t &g_TPHData = *(BtAdvManData_TphSensor_t *)g_AdvData.Data;
 BtAdvManData_AqSensor_t &g_GasData = *(BtAdvManData_AqSensor_t *)g_AdvData.Data;
 
-void TimerHandler(TimerDev_t * const pTimer, uint32_t Evt);
-
 const static TimerCfg_t s_TimerCfg = {
     .DevNo = 2,
 	.ClkSrc = TIMER_CLKSRC_DEFAULT,
 	.Freq = 0,			// 0 => Default highest frequency
 	.IntPrio = 6,//APP_IRQ_PRIORITY_LOW,
-	.EvtHandler = NULL,//TimerHandler
+	.EvtHandler = NULL,
 };
 
 Timer g_Timer;
@@ -170,10 +167,6 @@ BtUuidArr_t s_AdvUuids = {
 alignas(8) static uint8_t s_BtPeerPoolMem[BT_PEER_POOL_MEMSIZE(1)];
 
 const BtPeerPoolCfg_t g_BtPeerPoolCfg = { s_BtPeerPoolMem, sizeof(s_BtPeerPoolMem) };
-
-// Events are posted with AppEvtHandlerQue, nothing goes to the vendor event
-// scheduler some ports run, so its queue is left out.
-const BtAppSchedCfg_t g_BtAppSchedCfg = { NULL, 0, 0, 0 };
 
 // Controller memory pool, used by the ports that run the controller in the
 // application (SDC) and not linked otherwise. BtHciCtlrMemPoolSizeNeeded
@@ -519,29 +512,42 @@ void ReadPTHData()
 	gascnt++;
 }
 
-//void SchedAdvData(void * p_event_data, uint16_t event_size)
+// Timer requests coalesce until AppRun dispatches the sensor update.
+static volatile bool s_bAdvDataPending = false;
+
 static void SchedAdvData(uint32_t Evt, void *pCtx)
 {
+	s_bAdvDataPending = false;
 	ReadPTHData();
+}
+
+static void AdvDataQue(void)
+{
+	if (s_bAdvDataPending == false)
+	{
+		s_bAdvDataPending = true;
+		AppEvtHandlerQue(0, nullptr, SchedAdvData);
+	}
 }
 
 void AppTimerHandler(TimerDev_t * const pTimer, int TrigNo, void *pContext)
 {
 	if (TrigNo == 0)
 	{
-		AppEvtHandlerQue(0, pContext, SchedAdvData);
-//		app_sched_event_put(pContext, sizeof(uint32_t), SchedAdvData);
+		AdvDataQue();
 	}
 }
 
-void TimerHandler(Timer *pTimer, uint32_t Evt)
+bool AppCheckStatus(void)
 {
-    if (Evt & TIMER_EVT_TRIGGER(0))
-    {
-		// NOTE : Use app_sched is needed as Softdevice will crash if called directly
-		AppEvtHandlerQue(0, &Evt, SchedAdvData);
-//		app_sched_event_put(&Evt, sizeof(uint32_t), SchedAdvData);
-    }
+	BtAppCheckStatus();
+	// A pending request with an empty queue was refused. An interrupt or
+	// Bluetooth recovery may already have queued work since AppRun's check.
+	if (s_bAdvDataPending && AppEvtHandlerPending() == false)
+	{
+		AppEvtHandlerQue(0, nullptr, SchedAdvData);
+	}
+	return s_bAdvDataPending == false && AppEvtHandlerPending() == false;
 }
 
 /// BLE event handler.  Need this to handle events for the services
@@ -778,15 +784,29 @@ void HardwareInit()
 //
 // Adjust it for other toolchains.
 //
+// Application event queue memory, replaces the 4 event library default. The
+// sensor interrupts, the update timer and the Bluetooth stack all queue here.
+alignas(4) uint8_t g_AppEvtHandlerQueMem[APPEVT_HANDLER_QUE_MEMSIZE(16)];
+
 int main()
 {
+	// The queue exists before any interrupt can queue an event
+	AppEvtHandlerInit(g_AppEvtHandlerQueMem, sizeof(g_AppEvtHandlerQueMem));
+
     HardwareInit();
 
-    BtAppInit(&s_BleAppCfg);//, true);
+    if (BtAppInit(&s_BleAppCfg) == false)
+    {
+    	// Stop here so that the debugger shows where it failed
+    	while (1)
+    	{
+    		__WFE();
+    	}
+    }
 
 	uint32_t period = g_Timer.EnableTimerTrigger(0, 500UL, TIMER_TRIG_TYPE_CONTINUOUS, AppTimerHandler);
 
-    BtAppRun();
+    AppRun();
 
 	return 0;
 }

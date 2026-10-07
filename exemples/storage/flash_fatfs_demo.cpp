@@ -36,8 +36,8 @@ SOFTWARE.
 #include <stdbool.h>
 #include <stdlib.h>
 
-#include "ff.h"			/* Obtains integer types */
-#include "ff_diskio.h"		/* Declarations of device I/O functions */
+#include "ff.h"			// Obtains integer types
+#include "ff_diskio.h"		// Declarations of device I/O functions
 
 #include "stddev.h"
 #include "idelay.h"
@@ -95,20 +95,20 @@ static const IOPinCfg_t s_SpiPins[] = SPI_PINS_CFG;
 static const SPICfg_t s_SpiCfg = {
 	.DevNo = SPI_DEVNO,
 	.Phy = SPI_PHY,
-    .Mode = SPIMODE_MASTER,
+	.Mode = SPIMODE_MASTER,
 	.pIOPinMap = s_SpiPins,
 	.NbIOPins = sizeof(s_SpiPins) / sizeof(IOPinCfg_t),
-    .Rate = 8000000,   // Speed in Hz
-    .DataSize = 8,      // Data Size
-    .MaxRetry = 5,      // Max retries
-    .BitOrder = SPIDATABIT_MSB,
-    .DataPhase = SPIDATAPHASE_FIRST_CLK, // Data phase
-    .ClkPol = SPICLKPOL_HIGH,         // clock polarity
-    .ChipSel = SPICSEL_AUTO,
+	.Rate = 8000000,   // Speed in Hz
+	.DataSize = 8,      // Data Size
+	.MaxRetry = 5,      // Max retries
+	.BitOrder = SPIDATABIT_MSB,
+	.DataPhase = SPIDATAPHASE_FIRST_CLK, // Data phase
+	.ClkPol = SPICLKPOL_HIGH,         // clock polarity
+	.ChipSel = SPICSEL_AUTO,
 	.bDmaEn = false,	// DMA
 	.bIntEn = true,
-    .IntPrio = 6, //APP_IRQ_PRIORITY_LOW,      // Interrupt priority
-    .EvtCB = NULL
+	.IntPrio = 6, //APP_IRQ_PRIORITY_LOW,      // Interrupt priority
+	.EvtCB = NULL
 };
 
 SPI g_Spi;
@@ -146,7 +146,7 @@ const MKFS_PARM s_MkFsParm = {
 uint8_t g_Data[4096];
 uint8_t g_Temp[4096];
 uint8_t g_FFBuf[4096];
-static FATFS FatFs;
+static FATFS s_FatFs;
 
 bool FlashWriteDelayCallback(int DevNo, DevIntrf_t *pInterf)
 {
@@ -199,7 +199,7 @@ int main()
 		p[i] = i;
 	}
 
-	FRESULT fres = f_mount(&FatFs, "0:", 1);
+	FRESULT fres = f_mount(&s_FatFs, "0:", 1);
 
 	if (fres != FR_OK)
 	{
@@ -260,12 +260,12 @@ int main()
 }
 
 #if 0
-/*-----------------------------------------------------------------------*/
-/* Get Drive Status                                                      */
-/*-----------------------------------------------------------------------*/
+//-----------------------------------------------------------------------
+// Get Drive Status
+//-----------------------------------------------------------------------
 
 DSTATUS disk_status (
-	BYTE pdrv		/* Physical drive nmuber to identify the drive */
+	BYTE pdrv		// Physical drive nmuber to identify the drive
 )
 {
 	DSTATUS stat;
@@ -305,12 +305,12 @@ DSTATUS disk_status (
 
 
 
-/*-----------------------------------------------------------------------*/
-/* Inidialize a Drive                                                    */
-/*-----------------------------------------------------------------------*/
+//-----------------------------------------------------------------------
+// Inidialize a Drive
+//-----------------------------------------------------------------------
 
 DSTATUS disk_initialize (
-	BYTE pdrv				/* Physical drive nmuber to identify the drive */
+	BYTE pdrv				// Physical drive nmuber to identify the drive
 )
 {
 	if (pdrv > 0)
@@ -333,15 +333,15 @@ DSTATUS disk_initialize (
 
 
 
-/*-----------------------------------------------------------------------*/
-/* Read Sector(s)                                                        */
-/*-----------------------------------------------------------------------*/
+//-----------------------------------------------------------------------
+// Read Sector(s)
+//-----------------------------------------------------------------------
 
 DRESULT disk_read (
-	BYTE pdrv,		/* Physical drive nmuber to identify the drive */
-	BYTE *buff,		/* Data buffer to store read data */
-	LBA_t sector,	/* Start sector in LBA */
-	UINT count		/* Number of sectors to read */
+	BYTE pdrv,		// Physical drive nmuber to identify the drive
+	BYTE *buff,		// Data buffer to store read data
+	LBA_t sector,	// Start sector in LBA
+	UINT count		// Number of sectors to read
 )
 {
 	DRESULT res;
@@ -374,17 +374,17 @@ DRESULT disk_read (
 
 
 
-/*-----------------------------------------------------------------------*/
-/* Write Sector(s)                                                       */
-/*-----------------------------------------------------------------------*/
+//-----------------------------------------------------------------------
+// Write Sector(s)
+//-----------------------------------------------------------------------
 
 #if FF_FS_READONLY == 0
 
 DRESULT disk_write (
-	BYTE pdrv,			/* Physical drive nmuber to identify the drive */
-	const BYTE *buff,	/* Data to be written */
-	LBA_t sector,		/* Start sector in LBA */
-	UINT count			/* Number of sectors to write */
+	BYTE pdrv,			// Physical drive nmuber to identify the drive
+	const BYTE *buff,	// Data to be written
+	LBA_t sector,		// Start sector in LBA
+	UINT count			// Number of sectors to write
 )
 {
 	DRESULT res;
@@ -446,14 +446,14 @@ DRESULT disk_write (
 #endif
 
 
-/*-----------------------------------------------------------------------*/
-/* Miscellaneous Functions                                               */
-/*-----------------------------------------------------------------------*/
+//-----------------------------------------------------------------------
+// Miscellaneous Functions
+//-----------------------------------------------------------------------
 
 DRESULT disk_ioctl (
-	BYTE pdrv,		/* Physical drive nmuber (0..) */
-	BYTE cmd,		/* Control code */
-	void *buff		/* Buffer to send/receive control data */
+	BYTE pdrv,		// Physical drive nmuber (0..)
+	BYTE cmd,		// Control code
+	void *buff		// Buffer to send/receive control data
 )
 {
 	DRESULT res = RES_OK;

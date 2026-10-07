@@ -49,6 +49,7 @@ SOFTWARE.
 
 #include "cfifo.h"
 #include "prbs.h"
+#include "app_evt_handler.h"
 #include "usb/usb.h"
 #include "usb/usbd_cdc.h"
 
@@ -88,6 +89,10 @@ static const UsbdCdcCfg_t s_PrbsCfg = {
 	.pTxFifoMem = s_PrbsTxFifoMem,
 	.EvtCB = nullptr,
 };
+
+// Application event queue memory, replaces the 4 event library default. The
+// USB controller port queues its deferred endpoint events there.
+alignas(4) uint8_t g_AppEvtHandlerQueMem[APPEVT_HANDLER_QUE_MEMSIZE(16)];
 
 static const UsbCfg_t s_UsbCfg = {
 	.DevNo = USB_DEVNO,
@@ -141,7 +146,8 @@ int main()
 	int loopbackPending = 0;
 	int loopbackOffset = 0;
 
-	if (!UsbInit(&s_UsbCfg) ||
+	if (!AppEvtHandlerInit(g_AppEvtHandlerQueMem, sizeof(g_AppEvtHandlerQueMem)) ||
+		!UsbInit(&s_UsbCfg) ||
 		!g_LoopbackCdc.Init(s_LoopbackCfg) ||
 		!g_PrbsCdc.Init(s_PrbsCfg))
 	{
@@ -154,7 +160,7 @@ int main()
 
 	while (1)
 	{
-		UsbProcess(USB_DEVNO);
+		AppEvtHandlerExec();
 
 		// Service at most one loopback operation per pass so the PRBS producer
 		// below always gets a chance to queue data as well.

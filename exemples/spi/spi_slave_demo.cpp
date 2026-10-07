@@ -1,5 +1,5 @@
 /**-------------------------------------------------------------------------
-@example	spi_master_slave.cpp
+@example	spi_slave_demo.cpp
 
 
 @brief	This example demonstrate the use of SPI in both master and slave mode
@@ -82,32 +82,32 @@ UART g_Uart;
 int SpiSlaveHandler(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId, uint8_t *pBuffer, int Len);
 
 static const IOPinCfg_t s_SpiSlavePins[] = {
-    {SPI_SLAVE_SCK_PORT, SPI_SLAVE_SCK_PIN, SPI_SLAVE_SCK_PINOP,
-     IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},		// SCK
-    {SPI_SLAVE_MISO_PORT, SPI_SLAVE_MISO_PIN, SPI_SLAVE_MISO_PINOP,
-     IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},	// MISO
-    {SPI_SLAVE_MOSI_PORT, SPI_SLAVE_MOSI_PIN, SPI_SLAVE_MOSI_PINOP,
-     IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},		// MOSI
-    {SPI_SLAVE_CS_PORT, SPI_SLAVE_CS_PIN, SPI_SLAVE_CS_PINOP,
-     IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL},
+	{SPI_SLAVE_SCK_PORT, SPI_SLAVE_SCK_PIN, SPI_SLAVE_SCK_PINOP,
+	 IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},		// SCK
+	{SPI_SLAVE_MISO_PORT, SPI_SLAVE_MISO_PIN, SPI_SLAVE_MISO_PINOP,
+	 IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},	// MISO
+	{SPI_SLAVE_MOSI_PORT, SPI_SLAVE_MOSI_PIN, SPI_SLAVE_MOSI_PINOP,
+	 IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},		// MOSI
+	{SPI_SLAVE_CS_PORT, SPI_SLAVE_CS_PIN, SPI_SLAVE_CS_PINOP,
+	 IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL},
 };
 
 static const SPICfg_t s_SpiSlaveCfg = {
 	SPI_SLAVE_DEVNO,
 	SPIPHY_NORMAL,
-    SPIMODE_SLAVE,
+	SPIMODE_SLAVE,
 	s_SpiSlavePins,
-    sizeof(s_SpiSlavePins) / sizeof(IOPinCfg_t),
-    1000000,   // Speed in Hz
-    8,      // Data Size
-    5,      // Max retries
-    SPIDATABIT_MSB,
-    SPIDATAPHASE_SECOND_CLK, // Data phase
-    SPICLKPOL_LOW,         // clock polarity
-    SPICSEL_AUTO,
+	sizeof(s_SpiSlavePins) / sizeof(IOPinCfg_t),
+	1000000,   // Speed in Hz
+	8,      // Data Size
+	5,      // Max retries
+	SPIDATABIT_MSB,
+	SPIDATAPHASE_SECOND_CLK, // Data phase
+	SPICLKPOL_LOW,         // clock polarity
+	SPICSEL_AUTO,
 	true,	// DMA
 	true,
-    6, //APP_IRQ_PRIORITY_LOW,      // Interrupt priority
+	6, //APP_IRQ_PRIORITY_LOW,      // Interrupt priority
 	0xff,
 	SpiSlaveHandler
 };

@@ -471,14 +471,11 @@ void nrf_sdh_evts_poll(void)
 	}
 }
 
-// SoftDevice event handler. Wakes any RTOS waiter, then drains the stack
-// event observers. Runs in SD_EVT_IRQn context. Bare-metal builds link the
-// empty weak BtAppEvtNotify, so only the poll has effect. No dispatch model.
-extern void BtAppEvtNotify(void);
-
+// SoftDevice event handler. Drains the stack event observers in SD_EVT_IRQn
+// context. What must run outside the interrupt is queued by the handlers with
+// BtEvtQue. No dispatch model.
 void SD_EVT_IRQHandler(void)
 {
-	BtAppEvtNotify();
 	nrf_sdh_evts_poll();
 }
 

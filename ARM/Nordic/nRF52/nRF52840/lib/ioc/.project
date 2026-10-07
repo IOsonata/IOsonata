@@ -356,6 +356,21 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/app_evt_handler.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/app_run.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/app_run.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/app_wait.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/app_wait.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/power_clock_irq_nrf52.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/power_clock_irq_nrf52.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/audio</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -2514,6 +2529,11 @@
 			<name>src/usb/usb_ctrlr_nrf52_iso.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-3-PROJECT_LOC/src/usb_ctrlr_nrf52_iso.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/usb/usb_ctrlr_nrf52_vbus.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/usb_ctrlr_nrf52_vbus.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/usb/usb_int.cpp</name>

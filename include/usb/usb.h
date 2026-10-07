@@ -58,6 +58,7 @@ SOFTWARE.
 #include <stddef.h>
 #include <stdint.h>
 
+#include "coredev/iopincfg.h"
 #include "usb/usb_def.h"
 #include "usb_ctrlr.h"			// Port supplied, describes this target
 
@@ -70,6 +71,9 @@ SOFTWARE.
 /// schedules the bus and every transaction pays token and handshake overhead.
 #define USB_LINK_RATE_FULL			12000000U
 #define USB_LINK_RATE_HIGH			480000000U
+
+#define USB_VBUS_PIN_IDX			0
+#define USB_ID_PIN_IDX				1
 
 #ifndef USB_CONFIG_DESC_MAXLEN
 #define USB_CONFIG_DESC_MAXLEN		1024U
@@ -127,6 +131,8 @@ typedef struct __Usb_Config {
 	const char *pSerial;			//!< Serial string, NULL to take the MCU unique id
 	const char *pFuncName;			//!< Function name string, NULL for none
 	int IntPrio;					//!< Interrupt priority of the USB peripheral
+	const IOPinCfg_t *pIOPinMap;	//!< Optional board USB pins: VBUS=0, ID=1
+	int NbIOPins;					//!< Number of entries in pIOPinMap
 	uint8_t DeviceClass;			//!< Device descriptor class, zero uses interface classes
 	uint8_t DeviceSubClass;		//!< Device descriptor subclass
 	uint8_t DeviceProtocol;		//!< Device descriptor protocol
@@ -168,8 +174,57 @@ bool UsbEnable(int DevNo);
 /** @brief Disconnect, disable the interrupt and clear state. */
 void UsbDisable(int DevNo);
 
-/** @brief Cable and housekeeping pass. Call from the application loop. */
+/**
+ * @brief	Cable and class work pass: cable level, connection retry, class
+ * 			Process.
+ *
+ * Runs from the process event the USB stack queues itself with UsbEvtQue,
+ * after a cable change or a bus reset, suspend or resume, and when a class
+ * asks for it. Data transfers do not queue it. An application does not call
+ * it.
+ */
 void UsbProcess(int DevNo);
+
+/**
+ * @brief	Queue the process event, once, through UsbEvtQue.
+ *
+ * Called by the source of a cable level change, by the core on a bus reset,
+ * suspend or resume, and by a class whose state machine runs in its Process
+ * (MSC on its data events). The transfer path does not call it. Interrupt
+ * safe.
+ */
+void UsbProcessQue(int DevNo);
+
+/// Retry a process event refused by the USB work queue. Called by the
+/// application's status check, or by the USB worker when it owns that queue.
+void UsbCheckStatus(void);
+
+/// Deferred USB work: runs outside the interrupt with the values it was
+/// queued with. Same signature as AppEvtHandler_t.
+typedef void (*UsbEvtQueHandler_t)(uint32_t EvtId, void *pCtx);
+
+/**
+ * @brief	Queue deferred USB work for execution outside the interrupt.
+ *
+ * Called by the controller port from interrupt context, and by the USB stack
+ * from the thread running its work, so two callers can be in it at once: an
+ * override must take that (an ISR safe RTOS send, or a CFifoPut with the
+ * interrupts masked). The library has a weak default for an application without an OS: it puts the work in the
+ * application event queue (AppEvtHandlerQue), which the main loop runs.
+ *
+ * An application using an RTOS defines its own UsbEvtQue. It stores the three
+ * values in the queue of the thread that serves USB, and that thread calls
+ * Handler(EvtId, pCtx) for each one. The default and the application event
+ * queue are then not used by USB.
+ *
+ * @param	EvtId	: Value to pass to Handler
+ * @param	pCtx	: Value to pass to Handler
+ * @param	Handler	: Function to call outside the interrupt
+ *
+ * @return	true - queued
+ * 			false - queue full, the caller retries or drops
+ */
+bool UsbEvtQue(uint32_t EvtId, void *pCtx, UsbEvtQueHandler_t Handler);
 
 /** @brief Speed enumeration settled on, valid once configured. */
 UsbSpeed_t UsbGetSpeed(int DevNo);

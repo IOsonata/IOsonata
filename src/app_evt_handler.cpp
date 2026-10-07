@@ -6,8 +6,11 @@
 This is an implementation of event handler queuing to schedule event handler
 in firmware application main loop.
 
-AppEvtHandlerInit must be called first to initialize the queue before any other
-function can be used
+Without an AppEvtHandlerInit call, the queue takes g_AppEvtHandlerQueMem, the
+library default holding APPEVT_HANDLER_QUE_DEFAULT_SIZE events, the first time
+an event is queued. An application that needs more defines its own
+g_AppEvtHandlerQueMem and passes its size to AppEvtHandlerInit before any event
+source is enabled.
 
 @author	Hoang Nguyen Hoan
 @date	Oct. 17, 2022
@@ -46,19 +49,44 @@ SOFTWARE.
 #define APPEVT_HANDLER_QUE_CFIFO_DEFAULT_MEMSIZE \
 	CFIFO_TOTAL_MEMSIZE(APPEVT_HANDLER_QUE_DEFAULT_SIZE, sizeof(AppEvtHandlerQue_t))
 
-alignas(4) static uint8_t s_AppEvtHandlerFifoMem[
+// Default queue memory, APPEVT_HANDLER_QUE_DEFAULT_SIZE events. An application
+// that defines its own g_AppEvtHandlerQueMem replaces it at link time, see
+// app_evt_handler.h.
+alignas(4) __attribute__((weak)) uint8_t g_AppEvtHandlerQueMem[
 	APPEVT_HANDLER_QUE_CFIFO_DEFAULT_MEMSIZE];
 
 static hCFifo_t s_hAppEvtHandlerFifo;
-static AppEvtHandlerIdle_t s_IdleHandler[APPEVT_HANDLER_IDLE_MAX_COUNT];
-static uint8_t s_IdleHandlerCount;
+
+// Set when the queue refused an event. AppEvtHandlerExec then runs the status
+// check once the queue is empty, so the subsystem can queue it again.
+static volatile bool s_bAppEvtHandlerRefused = false;
+
+// Without an AppEvtHandlerInit call, the queue takes the default memory the
+// first time it is used. That can be from an interrupt, so the check and the
+// init are one critical section.
+static hCFifo_t AppEvtHandlerFifo(void)
+{
+	if (s_hAppEvtHandlerFifo == nullptr)
+	{
+		uint32_t state = DisableInterrupt();
+		if (s_hAppEvtHandlerFifo == nullptr)
+		{
+			(void)AppEvtHandlerInit(nullptr, 0);
+		}
+		EnableInterrupt(state);
+	}
+
+	return s_hAppEvtHandlerFifo;
+}
 
 bool AppEvtHandlerInit(uint8_t *pFifoMem, size_t Size)
 {
 	if (pFifoMem == nullptr)
 	{
-		s_hAppEvtHandlerFifo = CFifoInit(s_AppEvtHandlerFifoMem,
-				APPEVT_HANDLER_QUE_CFIFO_DEFAULT_MEMSIZE,
+		// This size is the library default even when the application
+		// replaced the array: sizeof is fixed when the library is built.
+		s_hAppEvtHandlerFifo = CFifoInit(g_AppEvtHandlerQueMem,
+				sizeof(g_AppEvtHandlerQueMem),
 				sizeof(AppEvtHandlerQue_t), true);
 	}
 	else if (Size < APPEVT_HANDLER_QUE_CFIFO_DEFAULT_MEMSIZE)
@@ -76,13 +104,19 @@ bool AppEvtHandlerInit(uint8_t *pFifoMem, size_t Size)
 
 bool AppEvtHandlerQue(uint32_t EvtId, void *pCtx, AppEvtHandler_t Handler)
 {
-	if (s_hAppEvtHandlerFifo == nullptr || Handler == nullptr)
+	if (Handler == nullptr)
 	{
 		return false;
 	}
 
-	AppEvtHandlerQue_t *p =
-		(AppEvtHandlerQue_t *)CFifoPut(s_hAppEvtHandlerFifo);
+	hCFifo_t hFifo = AppEvtHandlerFifo();
+
+	// Interrupts and the application both queue here, and CFifoPut takes one
+	// producer at a time. The entry is also filled before anything else can
+	// run, so the application never takes a slot that is not filled yet.
+	uint32_t state = DisableInterrupt();
+
+	AppEvtHandlerQue_t *p = (AppEvtHandlerQue_t *)CFifoPut(hFifo);
 
 	if (p != nullptr)
 	{
@@ -90,6 +124,12 @@ bool AppEvtHandlerQue(uint32_t EvtId, void *pCtx, AppEvtHandler_t Handler)
 		p->pCtx = pCtx;
 		p->Handler = Handler;
 	}
+	else
+	{
+		s_bAppEvtHandlerRefused = true;
+	}
+
+	EnableInterrupt(state);
 
 	return p != nullptr;
 }
@@ -109,28 +149,10 @@ static bool AppEvtHandlerGet(AppEvtHandlerQue_t *pEvt)
 	return p != nullptr;
 }
 
-bool AppEvtHandlerIdleRegister(AppEvtHandlerIdle_t Handler)
+bool AppEvtHandlerPending(void)
 {
-	if (Handler == nullptr)
-	{
-		return false;
-	}
-
-	for (uint8_t i = 0; i < s_IdleHandlerCount; i++)
-	{
-		if (s_IdleHandler[i] == Handler)
-		{
-			return true;
-		}
-	}
-
-	if (s_IdleHandlerCount >= APPEVT_HANDLER_IDLE_MAX_COUNT)
-	{
-		return false;
-	}
-
-	s_IdleHandler[s_IdleHandlerCount++] = Handler;
-	return true;
+	return s_hAppEvtHandlerFifo != nullptr &&
+		CFifoPeek(s_hAppEvtHandlerFifo) != nullptr;
 }
 
 void AppEvtHandlerDispatch(void)
@@ -147,31 +169,38 @@ void AppEvtHandlerDispatch(void)
 	}
 }
 
-void AppEvtHandlerExec(void)
+bool AppEvtHandlerExec(void)
 {
-	if (s_hAppEvtHandlerFifo != nullptr)
+	if (s_hAppEvtHandlerFifo == nullptr)
 	{
-		int cnt = APPEVT_HANDLER_EXEC_MAX_COUNT;
+		return false;
+	}
 
-		while (cnt-- > 0)
+	int cnt = APPEVT_HANDLER_EXEC_MAX_COUNT;
+
+	while (cnt-- > 0)
+	{
+		AppEvtHandlerQue_t evt;
+		if (!AppEvtHandlerGet(&evt))
 		{
-			AppEvtHandlerQue_t evt;
-			if (!AppEvtHandlerGet(&evt))
+			if (s_bAppEvtHandlerRefused == false)
 			{
-				break;
+				return false;
 			}
 
-			if (evt.Handler != nullptr)
-			{
-				evt.Handler(evt.EvtId, evt.pCtx);
-			}
+			// Empty after a refusal: the status check can queue it again
+			s_bAppEvtHandlerRefused = false;
+			(void)AppCheckStatus();
+
+			return AppEvtHandlerPending();
+		}
+
+		if (evt.Handler != nullptr)
+		{
+			evt.Handler(evt.EvtId, evt.pCtx);
 		}
 	}
 
-	// Queued handlers have released their FIFO slots. Deferred subsystems get
-	// one chance to enqueue work that previously lost a race with a full queue.
-	for (uint8_t i = 0; i < s_IdleHandlerCount; i++)
-	{
-		s_IdleHandler[i]();
-	}
+	// Bounded drain: tell the caller whether events are still waiting.
+	return AppEvtHandlerPending();
 }

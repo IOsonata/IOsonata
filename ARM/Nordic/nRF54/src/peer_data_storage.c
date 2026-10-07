@@ -14,7 +14,7 @@
 #include <zephyr/sys/__assert.h>
 #include <bm/bluetooth/peer_manager/peer_manager_types.h>
 
-#include "app_evt_handler.h"
+#include "bluetooth/bt_app.h"
 
 #define PDS_LOAD_TRACE
 
@@ -47,7 +47,6 @@ struct pds_pending {
 
 static struct pds_pending pds_que[PDS_QUE_DEPTH];
 static bool del_peer_running;
-static bool del_peer_queue_retry;
 
 LOG_MODULE_DECLARE(peer_manager, CONFIG_PEER_MANAGER_LOG_LEVEL);
 
@@ -257,16 +256,6 @@ static void pds_work_handler(uint32_t evt, void *ctx);
 static struct pds_pending *pds_pending_claim(void);
 static void peer_delete_kick(void);
 
-static void pds_idle_pump(void)
-{
-	if (!del_peer_queue_retry) {
-		return;
-	}
-
-	del_peer_queue_retry = false;
-	peer_delete_kick();
-}
-
 uint32_t pds_init(void)
 {
 	int err;
@@ -276,11 +265,6 @@ uint32_t pds_init(void)
 	err = BtPdsBmInit();
 	if (err) {
 		LOG_ERR("Could not initialize NVM storage. BtPdsBmInit() returned %d.", err);
-		return NRF_ERROR_RESOURCES;
-	}
-
-	if (!AppEvtHandlerIdleRegister(pds_idle_pump)) {
-		LOG_ERR("Could not register PDS application idle pump.");
 		return NRF_ERROR_RESOURCES;
 	}
 
@@ -376,14 +360,15 @@ static void peer_delete_kick(void)
 	p->entry_id = 0;
 	p->length = 0;
 
-	if (!AppEvtHandlerQue(0, p, pds_work_handler)) {
+	if (!BtEvtQue(0, p, pds_work_handler)) {
+		// Event queue full. The peer stays marked deleted and the delete
+		// starts again from the next peer_delete_kick(), which every
+		// completed storage operation and every pds_peer_id_free() calls.
 		p->del_peer = false;
 		p->busy = false;
-		del_peer_queue_retry = true;
 		return;
 	}
 
-	del_peer_queue_retry = false;
 	del_peer_running = true;
 }
 
@@ -399,10 +384,9 @@ static void pds_work_handler(uint32_t evt, void *ctx)
 
 	if (p->del_peer) {
 		if (peer_delete_step(p)) {
-			if (AppEvtHandlerQue(0, p, pds_work_handler)) {
+			if (BtEvtQue(0, p, pds_work_handler)) {
 				return;
 			}
-			del_peer_queue_retry = true;
 		}
 
 		del_peer_running = false;
@@ -484,7 +468,7 @@ uint32_t pds_peer_data_store(uint16_t peer_id,
 	p->data_id = peer_data->data_id;
 	p->entry_id = entry_id;
 
-	if (!AppEvtHandlerQue(0, p, pds_work_handler)) {
+	if (!BtEvtQue(0, p, pds_work_handler)) {
 		p->busy = false;
 		return NRF_ERROR_BUSY;
 	}
@@ -518,7 +502,7 @@ uint32_t pds_peer_data_delete(uint16_t peer_id,
 	p->entry_id = peer_id_peer_data_id_to_entry_id(peer_id, data_id);
 	p->length = 0;
 
-	if (!AppEvtHandlerQue(0, p, pds_work_handler)) {
+	if (!BtEvtQue(0, p, pds_work_handler)) {
 		p->busy = false;
 		return NRF_ERROR_BUSY;
 	}

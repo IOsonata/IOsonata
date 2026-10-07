@@ -13,9 +13,9 @@ its cable detect are behind UsbdInit and friends, and one port file answers
 them per MCU family, so the same source builds for every target that has a
 USB device controller.
 
-USB RX/TX packet progress is interrupt driven. UsbProcess handles device
-attach/detach and class housekeeping and should still be called regularly from
-the main loop or a thread.
+USB RX/TX packet progress is interrupt driven. Deferred endpoint work, attach,
+detach and class housekeeping are queued by the USB stack in the application
+event queue, which the main loop runs with AppEvtHandlerExec.
 
 @author	Hoang Nguyen Hoan
 @date	Aug. 28, 2026
@@ -50,8 +50,15 @@ SOFTWARE.
 #include <string.h>
 
 #include "cfifo.h"
+#include "app_evt_handler.h"
 #include "usb/usb.h"
 #include "usb/usbd_cdc.h"
+#include "board.h"
+
+
+#ifdef MCUOSC
+McuOsc_t g_McuOsc = MCUOSC;
+#endif
 
 #define USB_DEVNO				0
 
@@ -81,12 +88,20 @@ static const UsbdCdcCfg_t s_CdcCfg = {
 	.EvtCB = CdcEvtHandler,
 };
 
+#ifdef USB_PINS
+static const IOPinCfg_t s_UsbPins[] = USB_PINS;
+#endif
+
 // USB device configuration.
 //
 // 0x1209 is the pid.codes vendor id, which exists for open hardware and is
 // what the other USB demo in this tree uses. Put your own vendor and product
 // id here before shipping anything : a duplicate pair makes the host reuse a
 // driver and a saved COM port from somebody else's board.
+// Application event queue memory, replaces the 4 event library default. The
+// USB controller port queues its deferred endpoint events there.
+alignas(4) uint8_t g_AppEvtHandlerQueMem[APPEVT_HANDLER_QUE_MEMSIZE(16)];
+
 static const UsbCfg_t s_UsbCfg = {
 	.DevNo = USB_DEVNO,
 	.Mode = USB_MODE_DEVICE,
@@ -98,6 +113,13 @@ static const UsbCfg_t s_UsbCfg = {
 	.pSerial = nullptr,			// Taken from the MCU unique id
 	.pFuncName = "IOsonata CDC",
 	.IntPrio = 6,
+#ifdef USB_PINS
+	.pIOPinMap = s_UsbPins,
+	.NbIOPins = sizeof(s_UsbPins) / sizeof(IOPinCfg_t),
+#else
+	.pIOPinMap = nullptr,
+	.NbIOPins = 0,
+#endif
 	.DeviceClass = USB_DEVCLASS_MISC,
 	.DeviceSubClass = 2U,
 	.DeviceProtocol = 1U,
@@ -149,7 +171,8 @@ int main()
 {
 	uint8_t buff[BUFFER_SIZE];
 
-	if (UsbInit(&s_UsbCfg) == false)
+	if (AppEvtHandlerInit(g_AppEvtHandlerQueMem, sizeof(g_AppEvtHandlerQueMem)) == false ||
+		UsbInit(&s_UsbCfg) == false)
 	{
 		return -1;
 	}
@@ -169,12 +192,16 @@ int main()
 
 	while (1)
 	{
-	    UsbProcess(USB_DEVNO);
+	    if (AppEvtHandlerExec() == false)
+	    {
+	    	UsbCheckStatus();
+	    }
 
 	    if (pending > 0)
 	    {
 	        int n = g_Cdc.Tx(0, &buff[offset], pending);
 
+	        //printf("Tx %d\n", n);
 	        if (n > 0)
 	        {
 	            offset += n;
@@ -188,6 +215,7 @@ int main()
 
 	    if (l > 0)
 	    {
+	    	//printf("Rx %d\n", l);
 	        pending = l;
 	        offset = 0;
 	    }

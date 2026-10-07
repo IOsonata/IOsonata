@@ -38,7 +38,6 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ----------------------------------------------------------------------------*/
 
 #include "app_util_platform.h"
-#include "app_scheduler.h"
 
 #include "istddef.h"
 #include "device_intrf.h"
@@ -375,7 +374,6 @@ void BtAppInitUserData()
 
 }
 
-//void UartRxChedHandler(void * p_event_data, uint16_t event_size)
 void UartRxChedHandler(uint32_t Evt, void *pCtx)
 {
 
@@ -390,7 +388,6 @@ int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int Buf
 	{
 		case UART_EVT_RXTIMEOUT:
 		case UART_EVT_RXDATA:
-			//app_sched_event_put(NULL, 0, UartRxChedHandler);
 			AppEvtHandlerQue(0, 0, UartRxChedHandler);
 			break;
 		case UART_EVT_TXREADY:
@@ -467,7 +464,7 @@ int main()
 
     BtAppInit(&s_BleAppCfg);
 
-    BtAppRun();
+    AppRun();
 
 	return 0;
 }
@@ -491,17 +488,6 @@ int BleSpiIntrfEvtCb(DevIntrf_t *pDev, DEVINTRF_EVT EvtId, uint8_t *pBuffer, int
 			ProcSpiPkt(&g_SpiPkt);
 		}
 		cnt += l;
-#if 0
-		// Get available FifoBuffer's capacity for writing data to
-		p = CFifoPutMultiple(g_Ble2SpiFifo, &len);
-		if (p != NULL)
-		{
-			// Write BleIntrf's internal buffer data to FifoBuffer
-			cnt = g_BleSpiIntrf.Rx(0, p, len);
-		}
-		app_sched_event_put(NULL, 0, SpiTxSchedHandler);
-		//DEBUG_PRINTF("\r\n");
-#endif
 	}
 
 	ToggleLed();

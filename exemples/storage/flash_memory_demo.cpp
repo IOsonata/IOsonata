@@ -103,20 +103,20 @@ static const IOPinCfg_t s_SpiPins[] = SPI_PINS_CFG;
 static const SPICfg_t s_SpiCfg = {
 	.DevNo = SPI_DEVNO,
 	.Phy = SPI_PHY,
-    .Mode = SPIMODE_MASTER,
+	.Mode = SPIMODE_MASTER,
 	.pIOPinMap = s_SpiPins,
 	.NbIOPins = sizeof(s_SpiPins) / sizeof(IOPinCfg_t),
-    .Rate = 4000000,   // Speed in Hz
-    .DataSize = 8,      // Data Size
-    .MaxRetry = 5,      // Max retries
-    .BitOrder = SPIDATABIT_MSB,
-    .DataPhase = SPIDATAPHASE_FIRST_CLK, // Data phase
-    .ClkPol = SPICLKPOL_HIGH,         // clock polarity
-    .ChipSel = SPICSEL_AUTO,
+	.Rate = 4000000,   // Speed in Hz
+	.DataSize = 8,      // Data Size
+	.MaxRetry = 5,      // Max retries
+	.BitOrder = SPIDATABIT_MSB,
+	.DataPhase = SPIDATAPHASE_FIRST_CLK, // Data phase
+	.ClkPol = SPICLKPOL_HIGH,         // clock polarity
+	.ChipSel = SPICSEL_AUTO,
 	.bDmaEn = true,	// DMA
 	.bIntEn = false,
-    .IntPrio = 6, //APP_IRQ_PRIORITY_LOW,      // Interrupt priority
-    .EvtCB = NULL
+	.IntPrio = 6, //APP_IRQ_PRIORITY_LOW,      // Interrupt priority
+	.EvtCB = NULL
 };
 
 SPI g_Spi;
@@ -133,12 +133,12 @@ static const FlashCfg_t s_FlashCfg = FLASH_CFG(NULL, NULL);
 
 #if NVM_MODE == 0
 
-FlashDiskIO g_Flash;
+FlashDiskIO s_Flash;
 
 #else
 
-static Nvm g_Nvm;
-static NvmDiskIO g_Flash;
+static Nvm s_Nvm;
+static NvmDiskIO s_Flash;
 
 // The board's legacy FLASH_CFG expressed as the unified config: the values
 // that vary come over, and everything the legacy driver hardcoded or did in
@@ -157,11 +157,11 @@ static const NvmCfg_t s_NvmCfg = {
 	.WrProtPin = { -1, -1, 0, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL },
 };
 
-#endif	// NVM_MODE
+#endif
 
 static uint8_t s_FlashCacheMem[4096];
 DiskIOCache_t g_FlashCache = {
-    -1, 0xFFFFFFFF, s_FlashCacheMem
+	-1, 0xFFFFFFFF, s_FlashCacheMem
 };
 
 bool FlashWriteDelayCallback(int DevNo, DeviceIntrf *pInterf)
@@ -172,111 +172,111 @@ bool FlashWriteDelayCallback(int DevNo, DeviceIntrf *pInterf)
 
 bool IS25LP512M_Init(int DevNo, DeviceIntrf* pInterface)
 {
-    if (pInterface == NULL)
-        return false;
+	if (pInterface == NULL)
+		return false;
 
-    int cnt = 0;
+	int cnt = 0;
 
-    uint32_t d;
-    uint32_t r = 0;
+	uint32_t d;
+	uint32_t r = 0;
 
-    d = FLASH_CMD_RESET_ENABLE;
-    cnt = pInterface->Tx(DevNo, (uint8_t*)&d, 1);
+	d = FLASH_CMD_RESET_ENABLE;
+	cnt = pInterface->Tx(DevNo, (uint8_t*)&d, 1);
 
-    d = FLASH_CMD_RESET_DEVICE;
-    cnt = pInterface->Tx(DevNo, (uint8_t*)&d, 1);
+	d = FLASH_CMD_RESET_DEVICE;
+	cnt = pInterface->Tx(DevNo, (uint8_t*)&d, 1);
 
-    d = FLASH_CMD_READID;
-    cnt = pInterface->Read(DevNo, (uint8_t*)&d, 1, (uint8_t*)&r, 3 );
+	d = FLASH_CMD_READID;
+	cnt = pInterface->Read(DevNo, (uint8_t*)&d, 1, (uint8_t*)&r, 3 );
 
-    if (r != 0x1a609d && r != 0x1a709d)
-    	return false;
+	if (r != 0x1a609d && r != 0x1a709d)
+		return false;
 
-    printf("Flash found!\r\n");
+	printf("Flash found!\r\n");
 
-    // Enable write
-    d = FLASH_CMD_EN4B;
-    cnt = pInterface->Tx(DevNo, (uint8_t*)&d, 1);
+	// Enable write
+	d = FLASH_CMD_EN4B;
+	cnt = pInterface->Tx(DevNo, (uint8_t*)&d, 1);
 
-    return true;
+	return true;
 }
 
 bool MT25QL512_Init(int DevNo, DeviceIntrf* pInterface)
 {
-    if (pInterface == NULL)
-        return false;
+	if (pInterface == NULL)
+		return false;
 
-    int cnt = 0;
+	int cnt = 0;
 
-    uint32_t d;
-    uint32_t r = 0;
+	uint32_t d;
+	uint32_t r = 0;
 
-    d = FLASH_CMD_READID;
-    cnt = pInterface->Read(DevNo, (uint8_t*)&d, 1, (uint8_t*)&r, 3 );
+	d = FLASH_CMD_READID;
+	cnt = pInterface->Read(DevNo, (uint8_t*)&d, 1, (uint8_t*)&r, 3 );
 
-    if (r != 0x20ba20)
-    	return false;
+	if (r != 0x20ba20)
+		return false;
 
-    printf("Flash found!\r\n");
-    // Enable write
-    d = FLASH_CMD_EN4B;
-    cnt = pInterface->Tx(DevNo, (uint8_t*)&d, 1);
+	printf("Flash found!\r\n");
+	// Enable write
+	d = FLASH_CMD_EN4B;
+	cnt = pInterface->Tx(DevNo, (uint8_t*)&d, 1);
 
-    return true;
+	return true;
 }
 
 bool MX25U1635E_init(int DevNo, DeviceIntrf* pInterface)
 {
-    if (pInterface == NULL)
-        return false;
+	if (pInterface == NULL)
+		return false;
 
-    int cnt = 0;
+	int cnt = 0;
 
-    uint32_t d;
-    uint32_t r = 0;
+	uint32_t d;
+	uint32_t r = 0;
 
-    d = FLASH_CMD_READID;
-    cnt = pInterface->Read(DevNo, (uint8_t*)&d, 1, (uint8_t*)&r, 2 );
-    //if ( r != 0x28C2 )
-    //	return false;
+	d = FLASH_CMD_READID;
+	cnt = pInterface->Read(DevNo, (uint8_t*)&d, 1, (uint8_t*)&r, 2 );
+	//if ( r != 0x28C2 )
+	//	return false;
 
-    printf("Flash found!\r\n");
-    // Enable write
-    d = FLASH_CMD_EN4B;
-    cnt = pInterface->Tx(DevNo, (uint8_t*)&d, 1);
+	printf("Flash found!\r\n");
+	// Enable write
+	d = FLASH_CMD_EN4B;
+	cnt = pInterface->Tx(DevNo, (uint8_t*)&d, 1);
 
-    return true;
+	return true;
 }
 
 bool MX25U6435F_init(int DevNo, DeviceIntrf* pInterface)
 {
-    if (pInterface == NULL)
-        return false;
+	if (pInterface == NULL)
+		return false;
 
-    int cnt = 0;
+	int cnt = 0;
 
-    uint32_t d;
-    uint32_t r = 0;
+	uint32_t d;
+	uint32_t r = 0;
 
-    d = FLASH_CMD_RESET_ENABLE;
-    cnt = pInterface->Tx(DevNo, (uint8_t*)&d, 1);
+	d = FLASH_CMD_RESET_ENABLE;
+	cnt = pInterface->Tx(DevNo, (uint8_t*)&d, 1);
 
-    d = FLASH_CMD_RESET_DEVICE;
-    cnt = pInterface->Tx(DevNo, (uint8_t*)&d, 1);
+	d = FLASH_CMD_RESET_DEVICE;
+	cnt = pInterface->Tx(DevNo, (uint8_t*)&d, 1);
 
-    d = FLASH_CMD_READID;
-    cnt = pInterface->Read(DevNo, (uint8_t*)&d, 1, (uint8_t*)&r, 3 );
+	d = FLASH_CMD_READID;
+	cnt = pInterface->Read(DevNo, (uint8_t*)&d, 1, (uint8_t*)&r, 3 );
 
-    if (r != 0x1728C2)
-    	return false;
+	if (r != 0x1728C2)
+		return false;
 
-    printf("Flash found!\r\n");
+	printf("Flash found!\r\n");
 
-    // Enable write
-    d = FLASH_CMD_EN4B;
-    cnt = pInterface->Tx(DevNo, (uint8_t*)&d, 1);
+	// Enable write
+	d = FLASH_CMD_EN4B;
+	cnt = pInterface->Tx(DevNo, (uint8_t*)&d, 1);
 
-    return true;
+	return true;
 }
 
 //
@@ -308,7 +308,7 @@ int main()
 
 	g_Spi.Init(s_SpiCfg);
 
-   // IOPinConfig(FLASH_HOLD_PORT, FLASH_HOLD_PIN, FLASH_HOLD_PINOP, IOPINDIR_OUTPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL);
+	// IOPinConfig(FLASH_HOLD_PORT, FLASH_HOLD_PIN, FLASH_HOLD_PINOP, IOPINDIR_OUTPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL);
 
 	// Regular SPI FLash
 	//g_FlashDiskIO.Init(s_N25Q128A_QFlashCfg, &g_Spi, &g_FlashCache, 1);
@@ -319,10 +319,10 @@ int main()
 	//if (g_FlashDiskIO.Init(s_MX25R6435F_QFlashCfg, &g_Spi, &g_FlashCache, 1) == false)
 //	if (g_Flash.Init(s_MX25L25645G_FlashCfg, &g_Spi)==false)//, &g_FlashCache, 1) == false)
 #if NVM_MODE == 0
-	if (g_Flash.Init(s_FlashCfg, &g_Spi) == false)
+	if (s_Flash.Init(s_FlashCfg, &g_Spi) == false)
 #else
-	if (g_Nvm.Init(s_NvmCfg, &g_Spi) == false ||
-		g_Flash.Init(g_Nvm) == false)
+	if (s_Nvm.Init(s_NvmCfg, &g_Spi) == false ||
+		s_Flash.Init(s_Nvm) == false)
 #endif
 	{
 		printf("Init Flash failed\r\n");
@@ -345,23 +345,23 @@ int main()
 
 	// Ease could take a few minutes
 	//g_FlashDiskIO.EraseBlock(0, 4);
-	g_Flash.Erase();
+	s_Flash.Erase();
 	printf("Writing 2KB data...\r\n");
 
-	g_Flash.SectWrite(1, buff);
+	s_Flash.SectWrite(1, buff);
 
 	p = (uint16_t*)buff2;
 	for (int i = 0; i < 256; i++)
 	{
 		p[i] = i;
 	}
-	g_Flash.SectWrite(2UL, buff2);
+	s_Flash.SectWrite(2UL, buff2);
 	//g_FlashDiskIO.SectWrite(4, buff);
 	//g_FlashDiskIO.SectWrite(8, buff);
 
 	printf("Validate readback...\r\n");
 
-	g_Flash.SectRead(1, tmp);
+	s_Flash.SectRead(1, tmp);
 
 	for (int i = 0; i < 512; i++)
 	{
@@ -381,7 +381,7 @@ int main()
 	}
 
 	memset(tmp, 0, 512);
-	g_Flash.SectRead(2, tmp);
+	s_Flash.SectRead(2, tmp);
 	for (int i = 0; i < 512; i++)
 	{
 		if (buff2[i] != tmp[i])
@@ -398,9 +398,9 @@ int main()
 	{
 		printf("Sector 2 verify success\r\n");
 	}
-	g_Flash.EraseSector(0, 1);
+	s_Flash.EraseSector(0, 1);
 	msDelay(1000);
-	g_Flash.SectRead(0, tmp);
+	s_Flash.SectRead(0, tmp);
 
 	memset(buff, 0xff, 512);
 	if (memcmp(buff, tmp, 512) != 0)
@@ -413,8 +413,8 @@ int main()
 	}
 
 
-	g_Flash.SectWrite(0, buff2);
-	g_Flash.SectRead(0, tmp);
+	s_Flash.SectWrite(0, buff2);
+	s_Flash.SectRead(0, tmp);
 
 	if (memcmp(buff2, tmp, 512) != 0)
 	{
@@ -426,8 +426,8 @@ int main()
 	}
 
 	memset(tmp, 0, 512);
-	g_Flash.SectWrite(30, buff2);
-	g_Flash.SectRead(30, tmp);
+	s_Flash.SectWrite(30, buff2);
+	s_Flash.SectRead(30, tmp);
 	if (memcmp(buff2, tmp, 512) != 0)
 	{
 		printf("Sector 30 verify failed\r\n");
@@ -438,8 +438,8 @@ int main()
 	}
 
 	memset(tmp, 0, 512);
-	g_Flash.SectWrite(40, buff2);
-	g_Flash.SectRead(40, tmp);
+	s_Flash.SectWrite(40, buff2);
+	s_Flash.SectRead(40, tmp);
 	if (memcmp(buff2, tmp, 512) != 0)
 	{
 		printf("Sector 40 verify failed\r\n");

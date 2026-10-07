@@ -3,9 +3,10 @@
 
 @brief	SMP over Bluetooth LE: the SMP GATT service.
 
-See bt_dfu_smp.h. The stack callbacks only copy and queue; the request is
-handled and its response sent from the application event queue, so a slot 1
-erase never runs in a stack callback and there is one sender.
+See bt_dfu_smp.h. The stack callbacks only copy and queue; requests and
+responses run in the main loop or Bluetooth worker. Status checks recover
+retained work, so a slot 1 erase never runs in a stack callback and there
+is one sender.
 
 @author	Hoang Nguyen Hoan
 @date	Sep. 21, 2026
@@ -37,7 +38,7 @@ SOFTWARE.
 ----------------------------------------------------------------------------*/
 #include <string.h>
 
-#include "app_evt_handler.h"
+#include "bluetooth/bt_app.h"
 #include "coredev/interrupt.h"
 #include "bluetooth/bt_dfu_smp.h"
 #include "bluetooth/bt_peer.h"
@@ -58,14 +59,15 @@ static const uint8_t s_BtDfuSmpCharBase[16] = {
 
 static void BtDfuSmpWrCB(BtGattChar_t *pChar, uint8_t *pData, int Offset,
 						 int Len);
-static void BtDfuSmpTxDoneCB(BtGattChar_t *pChar, int CharIdx);
+static void BtDfuSmpNotifCB(BtGattChar_t *pChar, bool bEnable,
+							uint16_t ConnHdl);
 
 static BtGattChar_t s_BtDfuSmpChar[] = {
 	BT_CHAR(BT_DFUSMP_UUID_CHAR, BT_DFUSMP_CHAR_MAXLEN,
 			BT_GATT_CHAR_PROP_WRITE_WORESP | BT_GATT_CHAR_PROP_NOTIFY,
 			nullptr,
 			.WrCB = BtDfuSmpWrCB,
-			.TxCompleteCB = BtDfuSmpTxDoneCB,
+			.SetNotifCB = BtDfuSmpNotifCB,
 			.pUuidBase = s_BtDfuSmpCharBase),
 };
 
@@ -79,14 +81,13 @@ static BtDfuSmpCfg_t s_BtDfuSmpCfg;
 static volatile uint32_t s_BtDfuSmpRxLen = 0;
 static volatile bool s_bBtDfuSmpRxReady = false;
 
-// Response: what is left to notify. Main loop only.
-static uint32_t s_BtDfuSmpTxLen = 0;
+// Response: written by the main loop; stack callbacks only check its length.
+static volatile uint32_t s_BtDfuSmpTxLen = 0;
 static uint32_t s_BtDfuSmpTxOff = 0;
 static uint16_t s_BtDfuSmpConnHdl = BT_CONN_HDL_INVALID;
 
 static void BtDfuSmpProcess(uint32_t Evt, void *pCtx);
 static void BtDfuSmpSend(uint32_t Evt, void *pCtx);
-static void BtDfuSmpIdle(void);
 
 // The link the host listens on: the one that enabled notification.
 static uint16_t BtDfuSmpConnHdl(void)
@@ -146,23 +147,31 @@ static void BtDfuSmpWrCB(BtGattChar_t *pChar, uint8_t *pData, int Offset,
 	}
 
 	s_bBtDfuSmpRxReady = true;
-	if (AppEvtHandlerQue(0, nullptr, BtDfuSmpProcess) == false)
+	// A full queue leaves the complete request for BtDfuSmpCheckStatus.
+	(void)BtEvtQue(0, nullptr, BtDfuSmpProcess);
+}
+
+// Stack context: capacity was freed, possibly by another characteristic or
+// connection. Wake the owning worker; never send from this callback.
+void BtDfuSmpTxReady(void)
+{
+	if (s_BtDfuSmpTxLen != 0)
 	{
-		s_bBtDfuSmpRxReady = false;
-		s_BtDfuSmpRxLen = 0;
+		(void)BtEvtQue(0, nullptr, BtDfuSmpSend);
 	}
 }
 
-// Stack context: a notification went out, send more from the main loop.
-static void BtDfuSmpTxDoneCB(BtGattChar_t *pChar, int CharIdx)
+// Stack context: the host changed the notification setting. A response on
+// its way is looked at again from the main loop: turned off, the rest of it
+// has nowhere to go; turned on, the stack may take what it refused.
+static void BtDfuSmpNotifCB(BtGattChar_t *pChar, bool bEnable,
+							uint16_t ConnHdl)
 {
 	(void)pChar;
-	(void)CharIdx;
+	(void)bEnable;
+	(void)ConnHdl;
 
-	if (s_BtDfuSmpTxLen != 0)
-	{
-		(void)AppEvtHandlerQue(0, nullptr, BtDfuSmpSend);
-	}
+	BtDfuSmpTxReady();
 }
 
 // Notify what the stack takes now; the rest goes on the next completion.
@@ -171,6 +180,8 @@ static void BtDfuSmpSend(uint32_t Evt, void *pCtx)
 	(void)Evt;
 	(void)pCtx;
 
+	bool sent = s_BtDfuSmpTxLen != 0;
+
 	while (s_BtDfuSmpTxOff < s_BtDfuSmpTxLen)
 	{
 		BtDevice_t *peer = BtPeerFindByHdl(s_BtDfuSmpConnHdl);
@@ -178,6 +189,7 @@ static void BtDfuSmpSend(uint32_t Evt, void *pCtx)
 		{
 			// Gone: the response has nowhere to go.
 			s_BtDfuSmpTxLen = 0;
+			sent = false;
 			break;
 		}
 
@@ -197,14 +209,15 @@ static void BtDfuSmpSend(uint32_t Evt, void *pCtx)
 			false)
 		{
 			// The host stopped listening: the rest has nowhere to go.
+			sent = false;
 			break;
 		}
 		if (BtGattCharNotify(s_BtDfuSmpConnHdl, &s_BtDfuSmpChar[0],
 							 s_BtDfuSmpCfg.pTxBuf + s_BtDfuSmpTxOff, n) == false)
 		{
-			// Refused, the stack queue full. A completion on this
-			// characteristic brings us back, and the idle pump does when the
-			// queue was full of another one's notifications.
+			// Retain the unsent bytes. Any TX completion wakes the worker;
+			// its status check also recovers a refused continuation event.
+			// Do not requeue here while the stack still refuses the send.
 			return;
 		}
 		s_BtDfuSmpTxOff += n;
@@ -213,10 +226,15 @@ static void BtDfuSmpSend(uint32_t Evt, void *pCtx)
 	s_BtDfuSmpTxLen = 0;
 	s_BtDfuSmpTxOff = 0;
 
+	if (sent && s_BtDfuSmpCfg.TxDoneCB != nullptr)
+	{
+		s_BtDfuSmpCfg.TxDoneCB();
+	}
+
 	// A request that came in while this response was going out.
 	if (s_bBtDfuSmpRxReady)
 	{
-		(void)AppEvtHandlerQue(0, nullptr, BtDfuSmpProcess);
+		(void)BtEvtQue(0, nullptr, BtDfuSmpProcess);
 	}
 }
 
@@ -225,10 +243,17 @@ static void BtDfuSmpProcess(uint32_t Evt, void *pCtx)
 	(void)Evt;
 	(void)pCtx;
 
-	if (s_bBtDfuSmpRxReady == false || s_BtDfuSmpTxLen != 0)
+	if (s_bBtDfuSmpRxReady == false)
 	{
-		// Nothing whole yet, or the last response still owns the buffer:
+		// Nothing whole yet.
+		return;
+	}
+	if (s_BtDfuSmpTxLen != 0)
+	{
+		// The last response still owns the buffer. Go on with it, the stack
+		// may have refused it while no completion of ours was due.
 		// BtDfuSmpSend queues this again when it is done.
+		BtDfuSmpSend(0, nullptr);
 		return;
 	}
 
@@ -271,18 +296,7 @@ bool BtDfuSmpInit(const BtDfuSmpCfg_t &Cfg)
 	s_BtDfuSmpSrvc.SecType = Cfg.SecType;
 	BtDfuSmpReset();
 
-	return AppEvtHandlerIdleRegister(BtDfuSmpIdle) &&
-		   BtGattSrvcAdd(&s_BtDfuSmpSrvc);
-}
-
-// Main loop, after each pass of the event queue: go on with a response the
-// stack refused while no completion of ours was due.
-static void BtDfuSmpIdle(void)
-{
-	if (s_BtDfuSmpTxLen != 0)
-	{
-		BtDfuSmpSend(0, nullptr);
-	}
+	return BtGattSrvcAdd(&s_BtDfuSmpSrvc);
 }
 
 BtGattSrvc_t *BtDfuSmpSrvc(void)
@@ -310,6 +324,18 @@ void BtDfuSmpReset(void)
 bool BtDfuSmpTxBusy(void)
 {
 	return s_BtDfuSmpTxLen != 0 || s_bBtDfuSmpRxReady;
+}
+
+void BtDfuSmpCheckStatus(void)
+{
+	if (BtDfuSmpTxBusy())
+	{
+		// This is the same owner as BtDfuSmpSend's queued callback. A
+		// refused send returns without queuing itself, allowing sleep.
+		// Complete requests are queued by Send, keeping flash work in
+		// BtDfuSmpProcess.
+		BtDfuSmpSend(0, nullptr);
+	}
 }
 
 /** @} */

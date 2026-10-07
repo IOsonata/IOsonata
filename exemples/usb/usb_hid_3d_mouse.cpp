@@ -42,6 +42,7 @@ SOFTWARE.
 #include "coredev/spi.h"
 #include "coredev/timer.h"
 #include "sensors/ag_bmi323.h"
+#include "app_evt_handler.h"
 #include "usb/usb.h"
 #include "usb/usbd_hid.h"
 
@@ -160,9 +161,9 @@ static const GyroSensorCfg_t s_GyroCfg = {
 	.bFifoEn = false,
 };
 
-static SPI g_Spi;
-static Timer g_Timer;
-static AgBmi323 g_Imu;
+static SPI s_Spi;
+static Timer s_Timer;
+static AgBmi323 s_Imu;
 static bool HidReportRequest(const UsbSetupData_t *pSetup,
 							 UsbCtrlStage_t Stage, uint8_t **ppData,
 							 uint16_t *pLength);
@@ -182,10 +183,57 @@ public:
 	}
 };
 
-static Hid3dMouse g_Hid;
+static Hid3dMouse s_Hid;
 static Hid3dMouseReport_t s_Report;
 static int32_t s_AccelCenter[3];
 static int32_t s_GyroCenter[3];
+
+alignas(4) static uint8_t s_HidRxBuffer[USB_INT_INTRF_PKT_BLKSIZE];
+alignas(4) static uint8_t s_HidTxBuffer[USB_INT_INTRF_PKT_BLKSIZE];
+
+static const UsbdHidCfg_t s_HidCfg = {
+	.DevNo = USB_DEVNO,
+	.pReportDesc = s_ReportDesc,
+	.ReportDescLength = sizeof(s_ReportDesc),
+	.BcdHid = 0U,
+	.FsMps = sizeof(Hid3dMouseReport_t),
+	.HsMps = sizeof(Hid3dMouseReport_t),
+	.FsInterval = 1U,
+	.HsInterval = 4U,
+	.SubClass = USB_HID_SUBCLASS_NONE,
+	.Protocol = USB_HID_PROT_NONE,
+	.CountryCode = 0U,
+	.InterfaceString = HID_STR_INTERFACE,
+	.EvtCB = nullptr,
+	.pContext = nullptr,
+	.pRxBuffer = s_HidRxBuffer,
+	.pTxBuffer = s_HidTxBuffer,
+};
+
+// Application event queue memory, replaces the 4 event library default. The
+// USB controller port queues its deferred endpoint events there.
+alignas(4) uint8_t g_AppEvtHandlerQueMem[APPEVT_HANDLER_QUE_MEMSIZE(16)];
+
+static const UsbCfg_t s_UsbCfg = {
+	.DevNo = USB_DEVNO,
+	.Mode = USB_MODE_DEVICE,
+	.Vid = 0x1209,
+	.Pid = 0x0007,
+	.DevVer = 0x0100,
+	.pManufacturer = "I-SYST",
+	.pProduct = "IOsonata HID 3D Mouse",
+	.pSerial = nullptr,
+	.pFuncName = "HID 3D Mouse",
+	.IntPrio = 6,
+	.DeviceClass = USB_DEVCLASS_NONE,
+	.DeviceSubClass = 0U,
+	.DeviceProtocol = 0U,
+	.bSelfPowered = false,
+	.bRemoteWakeup = false,
+	.bLowPowerSuspend = false,
+	.MaxPower = 100,
+	.EvtHandler = nullptr,
+};
 
 static bool HidReportRequest(const UsbSetupData_t *pSetup,
 							 UsbCtrlStage_t Stage, uint8_t **ppData,
@@ -210,49 +258,6 @@ static bool HidReportRequest(const UsbSetupData_t *pSetup,
 	return true;
 }
 
-alignas(4) static uint8_t s_HidRxBuffer[USB_INT_INTRF_PKT_BLKSIZE];
-alignas(4) static uint8_t s_HidTxBuffer[USB_INT_INTRF_PKT_BLKSIZE];
-
-static const UsbdHidCfg_t s_HidCfg = {
-	.DevNo = USB_DEVNO,
-	.pReportDesc = s_ReportDesc,
-	.ReportDescLength = sizeof(s_ReportDesc),
-	.BcdHid = 0U,
-	.FsMps = sizeof(Hid3dMouseReport_t),
-	.HsMps = sizeof(Hid3dMouseReport_t),
-	.FsInterval = 1U,
-	.HsInterval = 4U,
-	.SubClass = USB_HID_SUBCLASS_NONE,
-	.Protocol = USB_HID_PROT_NONE,
-	.CountryCode = 0U,
-	.InterfaceString = HID_STR_INTERFACE,
-	.EvtCB = nullptr,
-	.pContext = nullptr,
-	.pRxBuffer = s_HidRxBuffer,
-	.pTxBuffer = s_HidTxBuffer,
-};
-
-static const UsbCfg_t s_UsbCfg = {
-	.DevNo = USB_DEVNO,
-	.Mode = USB_MODE_DEVICE,
-	.Vid = 0x1209,
-	.Pid = 0x0007,
-	.DevVer = 0x0100,
-	.pManufacturer = "I-SYST",
-	.pProduct = "IOsonata HID 3D Mouse",
-	.pSerial = nullptr,
-	.pFuncName = "HID 3D Mouse",
-	.IntPrio = 6,
-	.DeviceClass = USB_DEVCLASS_NONE,
-	.DeviceSubClass = 0U,
-	.DeviceProtocol = 0U,
-	.bSelfPowered = false,
-	.bRemoteWakeup = false,
-	.bLowPowerSuspend = false,
-	.MaxPower = 100,
-	.EvtHandler = nullptr,
-};
-
 static bool ImuInit()
 {
 	IOPinCfg(s_PowerPins, sizeof(s_PowerPins) / sizeof(s_PowerPins[0]));
@@ -261,9 +266,9 @@ static bool ImuInit()
 	IOPinSet(BMI323_VDDIO_EN_PORT, BMI323_VDDIO_EN_PIN);
 	msDelay(10U);
 
-	if (!g_Timer.Init(s_TimerCfg) || !g_Spi.Init(s_SpiCfg) ||
-		!g_Imu.Init(s_AccelCfg, &g_Spi, &g_Timer) ||
-		!g_Imu.Init(s_GyroCfg, &g_Spi, &g_Timer))
+	if (!s_Timer.Init(s_TimerCfg) || !s_Spi.Init(s_SpiCfg) ||
+		!s_Imu.Init(s_AccelCfg, &s_Spi, &s_Timer) ||
+		!s_Imu.Init(s_GyroCfg, &s_Spi, &s_Timer))
 	{
 		return false;
 	}
@@ -273,12 +278,12 @@ static bool ImuInit()
 	uint32_t count = 0U;
 	while (count < HID_CENTER_SAMPLES)
 	{
-		if (g_Imu.UpdateData())
+		if (s_Imu.UpdateData())
 		{
 			AccelSensorRawData_t a = {};
 			GyroSensorRawData_t g = {};
-			g_Imu.Read(a);
-			g_Imu.Read(g);
+			s_Imu.Read(a);
+			s_Imu.Read(g);
 			accel[0] += a.X;
 			accel[1] += a.Y;
 			accel[2] += a.Z;
@@ -321,14 +326,14 @@ static int16_t HidAxis(int32_t Sample, int32_t Center, int32_t DeadZone,
 
 static bool HidReportUpdate()
 {
-	if (!g_Imu.UpdateData())
+	if (!s_Imu.UpdateData())
 	{
 		return false;
 	}
 	AccelSensorRawData_t accel = {};
 	GyroSensorRawData_t gyro = {};
-	g_Imu.Read(accel);
-	g_Imu.Read(gyro);
+	s_Imu.Read(accel);
+	s_Imu.Read(gyro);
 	s_Report.X = HidAxis(accel.X, s_AccelCenter[0], HID_ACCEL_DEAD_ZONE,
 		HID_ACCEL_DIVISOR);
 	s_Report.Y = HidAxis(accel.Y, s_AccelCenter[1], HID_ACCEL_DEAD_ZONE,
@@ -346,7 +351,8 @@ static bool HidReportUpdate()
 
 int main()
 {
-	if (!ImuInit() || !UsbInit(&s_UsbCfg) || !g_Hid.Init(s_HidCfg))
+	if (!AppEvtHandlerInit(g_AppEvtHandlerQueMem, sizeof(g_AppEvtHandlerQueMem)) ||
+		!ImuInit() || !UsbInit(&s_UsbCfg) || !s_Hid.Init(s_HidCfg))
 	{
 		return -1;
 	}
@@ -355,12 +361,12 @@ int main()
 	bool suspended = false;
 	while (1)
 	{
-		UsbProcess(USB_DEVNO);
+		AppEvtHandlerExec();
 		const bool nowSuspended = UsbSuspended(USB_DEVNO);
 		suspended = nowSuspended;
 		if (!suspended && HidReportUpdate())
 		{
-			(void)g_Hid.Tx(0,
+			(void)s_Hid.Tx(0,
 				reinterpret_cast<const uint8_t *>(&s_Report), sizeof(s_Report));
 		}
 		msDelay(1U);

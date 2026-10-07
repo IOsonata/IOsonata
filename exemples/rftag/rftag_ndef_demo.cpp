@@ -69,7 +69,7 @@ public:
 	}
 };
 
-static DemoTag g_RFTag;
+static DemoTag s_RFTag;
 static uint8_t s_NdefMem[256];
 
 static const RFTagCfg_t s_RFTagCfg = {
@@ -97,13 +97,13 @@ int main()
 		}
 	}
 
-	g_RFTag.Init(s_RFTagCfg, pIntrf);
+	s_RFTag.Init(s_RFTagCfg, pIntrf);
 
 	RFNdefInit(&msg, s_NdefMem, sizeof(s_NdefMem));
 	RFNdefAddText(&msg, "en", "IOsonata RFTag");
 	RFNdefAddUri(&msg, "https://i-syst.com");
 
-	g_RFTag.SetNdef(msg.pBuf, msg.Len);
+	s_RFTag.SetNdef(msg.pBuf, msg.Len);
 
 	while (true)
 	{

@@ -49,6 +49,7 @@ SOFTWARE.
 #include "bluetooth/bt_peer.h"
 #include "bluetooth/bt_dev.h"
 #include "bluetooth/bt_gatt.h"
+#include "bluetooth/bt_app.h"
 
 /******** For DEBUG Trace ************/
 // Define DEBUG_ENABLE to turn on the SMP handshake trace for this file: every
@@ -306,6 +307,7 @@ static void SmpOobRelease(BtSmpLink_t *pLink)
 // Forward for the dispatcher used by the request and completion paths.
 static void SmpCryptoPump(void);
 static int SmpCryptoStart(BtSmpLink_t *pLink);
+static void SmpCryptoRetryQue(void);
 
 // Drop this link's crypto request. If it owned the engine, free the engine so
 // a waiting link can start.
@@ -3459,6 +3461,7 @@ static int SmpCryptoStart(BtSmpLink_t *pLink)
 		memset(&s_CryptoInflight, 0, sizeof(s_CryptoInflight));
 		pLink->bCryptoWait = true;
 		pLink->bRetryBusy = true;
+		SmpCryptoRetryQue();
 		return rc;
 	}
 	// Hard failure: free the engine, clear the request.
@@ -3523,7 +3526,8 @@ static void SmpCryptoComplete(CryptoEngine * const pEngine, CRYPTO_OP Op,
 }
 
 // Retry links whose engine call returned BUSY, and start any link still waiting
-// for the engine. Driven from the periodic BtSmpTimeoutCheck.
+// for the engine. Queued by SmpCryptoRetryQue when the engine is busy, also
+// run by the periodic BtSmpTimeoutCheck.
 static void SmpCryptoRetryPending(void)
 {
 	// Retry a BUSY link first: clear the flag, re-request the engine. A link
@@ -3558,6 +3562,48 @@ static void SmpCryptoRetryPending(void)
 	}
 	// No BUSY retry outstanding: give the engine to a plain waiter.
 	SmpCryptoPump();
+}
+
+// Set while the busy retry is in the queue, so that it is queued once
+static volatile bool s_bSmpCryptoRetryQueued = false;
+
+static void SmpCryptoRetryEvt(uint32_t Evt, void *pCtx)
+{
+	(void)Evt;
+	(void)pCtx;
+
+	s_bSmpCryptoRetryQueued = false;
+	SmpCryptoRetryPending();
+
+	// One retry per pass: queue again while another link waits on BUSY
+	BtSmpCheckStatus();
+}
+
+void BtSmpCheckStatus(void)
+{
+	for (int i = 0; i < BT_SMP_MAX_LINK; i++)
+	{
+		if (s_SmpLink[i].ConnHdl != BT_CONN_HDL_INVALID &&
+			s_SmpLink[i].CryptoOp != BT_SMP_CRYPTO_OP_NONE &&
+			s_SmpLink[i].bRetryBusy)
+		{
+			SmpCryptoRetryQue();
+			break;
+		}
+	}
+}
+
+// The engine was busy: retry from the Bluetooth event queue
+static void SmpCryptoRetryQue(void)
+{
+	if (s_bSmpCryptoRetryQueued == false)
+	{
+		s_bSmpCryptoRetryQueued = true;
+		if (BtEvtQue(0, nullptr, SmpCryptoRetryEvt) == false)
+		{
+			s_bSmpCryptoRetryQueued = false;
+		}
+	}
 }
 
 bool BtSmpCryptoRand(uint8_t *pBuf, size_t Len)

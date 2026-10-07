@@ -23,6 +23,11 @@ The book remains useful for the object-design model and historical background, b
 6. [Supported Targets](supported-targets.md) — current hardware-validation baselines and target-status rules.
 7. [Dependencies](dependencies.md) — tool, SDK and optional-library boundaries.
 
+## Release preparation
+
+[0.13 changes and migration notes](releases/0.13.md) record the release scope,
+API migration requirements and maintainer-provided validation results.
+
 ## Architecture
 
 ### [Architecture overview](architecture/README.md)
@@ -49,6 +54,26 @@ Documents the C-level interface state, wrapper ownership, transfer sequencing, r
 
 Documents behavioural inheritance, shared virtual `Device` state, multi-function devices, independent devices in one package, configuration-driven variation and object composition.
 
+## NVM and storage
+
+- [NVM User Guide](nvm-user-guide.md): geometry, linker regions, internal and
+  external memory, deferred operations, block/filesystem integration and tests.
+- [NVM architecture](architecture/nvm.md): device/transport ownership,
+  completion state, controller ports and sector adaptation.
+
+## Bluetooth
+
+### [Bluetooth User Guide](bluetooth-user-guide.md)
+
+Covers stack selection, initialization, advertising, scanning, connections,
+GATT, BtIntrf, pairing, bond persistence, periodic advertising, static memory,
+HCI transports, RTOS integration and testing.
+
+### [Bluetooth architecture](architecture/bluetooth.md)
+
+Explains application, host, controller and vendor-port boundaries, per-link
+state, optional feature linking, storage ownership and event dispatch.
+
 ## USB
 
 ### [USB architecture](architecture/usb.md)
@@ -58,7 +83,7 @@ Documents the USB core, `UsbIntrf`, class/function allocation, FIFO and DMA owne
 ### [USB User Guide](usb-user-guide.md)
 
 Shows how to build, configure and test CDC ACM, custom Bulk, HID, Mass Storage,
-Interrupt and Isochronous examples. It includes the common initialization
+Interrupt, Isochronous and composite stress examples, with HCI transport guidance. It includes the common initialization
 lifecycle, static-storage rules, host-runner commands, reconnect behavior and
 troubleshooting.
 

@@ -40,6 +40,7 @@ static bool s_HaltOut;
 static uint8_t s_Capture[SECTOR_SIZE * 4U + 256U];
 static size_t s_CaptureLength;
 static int s_Fail;
+static int s_ProcessQueued;
 
 #define CHECK(c) do { if (!(c)) { \
 	printf("FAIL %s:%d  %s\n", __FILE__, __LINE__, #c); s_Fail++; } } while (0)
@@ -573,6 +574,51 @@ static void TestReadWriteAndRepeatedCommands(void)
 	CheckPassedCsw(12U);
 }
 
+static void TestBufferedWrite(void)
+{
+	ResetFake();
+	RamDisk disk;
+	disk.Fill();
+	alignas(4) uint8_t sector[SECTOR_SIZE];
+	UsbdMsc msc;
+	CHECK(msc.Init(MakeCfg(disk, sector)));
+	CHECK(msc.SelectConfig(1U));
+
+	uint8_t writeData[SECTOR_SIZE * 2U];
+	for (size_t n = 0; n < sizeof(writeData); n++)
+		writeData[n] = (uint8_t)(0x5AU ^ n);
+	UsbMscCmdBlkWrapper_t cbw = MakeCbw(13U, sizeof(writeData), false,
+		USB_MSC_SCSI_WRITE_10, 10U);
+	PutBe32(&cbw.CBWCB[2], 6U);
+	PutBe16(&cbw.CBWCB[7], 2U);
+	SendCbw(msc, cbw);
+
+	// Endpoint callbacks can fill both RX slots before the coalesced USB
+	// process event runs. One Process() must consume each available batch.
+	UsbDevIntrf_t *pIntrf = static_cast<UsbDevIntrf_t *>(s_OutContext);
+	for (size_t offset = 0; offset < sizeof(writeData); offset += SECTOR_SIZE)
+	{
+		DeliverOut(&writeData[offset], USBD_MSC_FS_MPS);
+		DeliverOut(&writeData[offset + USBD_MSC_FS_MPS], USBD_MSC_FS_MPS);
+		CHECK(CFifoUsed(pIntrf->hRxFifo) == 2);
+		msc.Process();
+		CHECK(CFifoUsed(pIntrf->hRxFifo) == 0);
+		CHECK(memcmp(disk.Data[6U + offset / SECTOR_SIZE],
+			&writeData[offset], SECTOR_SIZE) == 0);
+		if (offset == 0U)
+		{
+			CHECK(msc.BotState() == USBD_MSC_BOT_DATA_OUT);
+			CHECK(!s_InBusy);
+		}
+	}
+	CHECK(msc.BotState() == USBD_MSC_BOT_SEND_CSW);
+	CHECK(s_InBusy);
+	CompleteIn();
+	msc.Process();
+	CHECK(msc.BotState() == USBD_MSC_BOT_WAIT_CBW);
+	CheckPassedCsw(13U);
+}
+
 static void TestFailuresSenseResidueAndPhase(void)
 {
 	ResetFake();
@@ -676,7 +722,6 @@ static void TestWriteFailure(void)
 	s_CaptureLength = 0U;
 	SendCbw(msc, cbw);
 	DeliverOut(data, USBD_MSC_FS_MPS);
-	msc.Process();
 	DeliverOut(&data[USBD_MSC_FS_MPS], USBD_MSC_FS_MPS);
 	msc.Process();
 	CHECK(s_HaltOut);
@@ -904,7 +949,8 @@ static void TestResetAcrossPhasesAndReconnect(void)
 	cbw = MakeCbw(55U, 8U, false, USB_MSC_SCSI_INQUIRY, 6U);
 	cbw.CBWCB[4] = 8U;
 	SendCbw(msc, cbw);
-	CHECK(msc.BotState() == USBD_MSC_BOT_PHASE_ERROR);
+	// The phase error CSW goes out on the same process pass
+	CHECK(msc.BotState() == USBD_MSC_BOT_SEND_CSW);
 	BulkReset(msc);
 	CHECK(msc.BotState() == USBD_MSC_BOT_RESET_RECOVERY);
 	CHECK(UsbEpSetHalt(0, EP_NO, false, false));
@@ -934,12 +980,141 @@ static void TestSectorBufferBounds(void)
 	CHECK(!msc.Init(cfg));
 }
 
+// The USB core runs the class once per process event, and a process event
+// comes from an endpoint event. Drive the class that way: one Process() per
+// delivered packet or completed IN transfer, never a polling loop. Each event
+// must leave a transfer started, or the command stalls.
+static void TestOneProcessPerEvent(void)
+{
+	ResetFake();
+	RamDisk disk;
+	disk.Fill();
+	alignas(4) uint8_t sector[SECTOR_SIZE];
+	UsbdMsc msc;
+	CHECK(msc.Init(MakeCfg(disk, sector)));
+	CHECK(msc.SelectConfig(1U));
+
+	// IN data: INQUIRY
+	UsbMscCmdBlkWrapper_t cbw = MakeCbw(20U, 36U, true,
+		USB_MSC_SCSI_INQUIRY, 6U);
+	cbw.CBWCB[4] = 36U;
+	s_CaptureLength = 0U;
+	SendCbw(msc, cbw);
+	CHECK(s_InBusy);
+	for (int i = 0; i < 8 && s_InBusy; i++)
+	{
+		CompleteIn();
+		msc.Process();
+	}
+	CHECK(!s_InBusy);
+	CHECK(msc.BotState() == USBD_MSC_BOT_WAIT_CBW);
+	CHECK(s_CaptureLength == 36U + sizeof(UsbMscCmdStatusWrapper_t));
+	CheckPassedCsw(20U);
+
+	// No data: TEST UNIT READY
+	cbw = MakeCbw(21U, 0U, false, USB_MSC_SCSI_TEST_UNIT_READY, 6U);
+	s_CaptureLength = 0U;
+	SendCbw(msc, cbw);
+	CHECK(s_InBusy);
+	CompleteIn();
+	msc.Process();
+	CHECK(msc.BotState() == USBD_MSC_BOT_WAIT_CBW);
+	CheckPassedCsw(21U);
+
+	// OUT data: WRITE 10, one sector
+	uint8_t writeData[SECTOR_SIZE];
+	for (size_t n = 0; n < sizeof(writeData); n++)
+		writeData[n] = (uint8_t)(0x5AU ^ n);
+	cbw = MakeCbw(22U, sizeof(writeData), false, USB_MSC_SCSI_WRITE_10, 10U);
+	PutBe32(&cbw.CBWCB[2], 6U);
+	PutBe16(&cbw.CBWCB[7], 1U);
+	s_CaptureLength = 0U;
+	SendCbw(msc, cbw);
+	for (size_t offset = 0; offset < sizeof(writeData); offset += USBD_MSC_FS_MPS)
+	{
+		DeliverOut(&writeData[offset], USBD_MSC_FS_MPS);
+		msc.Process();
+	}
+	CHECK(s_InBusy);
+	CompleteIn();
+	msc.Process();
+	CHECK(msc.BotState() == USBD_MSC_BOT_WAIT_CBW);
+	CHECK(memcmp(disk.Data[6], writeData, SECTOR_SIZE) == 0);
+	CheckPassedCsw(22U);
+}
+
+// MSC runs only when it asked for the process event, as on target where the
+// transfer path does not queue it. Each command must still complete.
+static bool ProcessIfQueued(UsbdMsc &Msc)
+{
+	if (s_ProcessQueued == 0)
+	{
+		return false;
+	}
+	s_ProcessQueued = 0;
+	Msc.Process();
+	return true;
+}
+
+static void TestProcessOnRequestOnly(void)
+{
+	ResetFake();
+	RamDisk disk;
+	disk.Fill();
+	alignas(4) uint8_t sector[SECTOR_SIZE];
+	UsbdMsc msc;
+	CHECK(msc.Init(MakeCfg(disk, sector)));
+	CHECK(msc.SelectConfig(1U));
+
+	// IN data: INQUIRY
+	UsbMscCmdBlkWrapper_t cbw = MakeCbw(30U, 36U, true,
+		USB_MSC_SCSI_INQUIRY, 6U);
+	cbw.CBWCB[4] = 36U;
+	s_CaptureLength = 0U;
+	s_ProcessQueued = 0;
+	DeliverOut(reinterpret_cast<const uint8_t *>(&cbw), sizeof(cbw));
+	CHECK(ProcessIfQueued(msc));
+	CHECK(s_InBusy);
+	for (int i = 0; i < 8 && s_InBusy; i++)
+	{
+		CompleteIn();
+		(void)ProcessIfQueued(msc);
+	}
+	CHECK(!s_InBusy);
+	CHECK(msc.BotState() == USBD_MSC_BOT_WAIT_CBW);
+	CHECK(s_CaptureLength == 36U + sizeof(UsbMscCmdStatusWrapper_t));
+	CheckPassedCsw(30U);
+
+	// OUT data: WRITE 10, one sector
+	uint8_t writeData[SECTOR_SIZE];
+	for (size_t n = 0; n < sizeof(writeData); n++)
+		writeData[n] = (uint8_t)(0xA5U ^ n);
+	cbw = MakeCbw(31U, sizeof(writeData), false, USB_MSC_SCSI_WRITE_10, 10U);
+	PutBe32(&cbw.CBWCB[2], 7U);
+	PutBe16(&cbw.CBWCB[7], 1U);
+	s_CaptureLength = 0U;
+	DeliverOut(reinterpret_cast<const uint8_t *>(&cbw), sizeof(cbw));
+	CHECK(ProcessIfQueued(msc));
+	for (size_t offset = 0; offset < sizeof(writeData); offset += USBD_MSC_FS_MPS)
+	{
+		DeliverOut(&writeData[offset], USBD_MSC_FS_MPS);
+		CHECK(ProcessIfQueued(msc));
+	}
+	CHECK(s_InBusy);
+	CompleteIn();
+	(void)ProcessIfQueued(msc);
+	CHECK(msc.BotState() == USBD_MSC_BOT_WAIT_CBW);
+	CHECK(memcmp(disk.Data[7], writeData, SECTOR_SIZE) == 0);
+	CheckPassedCsw(31U);
+}
+
 int main(void)
 {
 	TestInitDescriptorAndControl();
 	TestInquiryStrings();
 	TestReadOnlyCommands();
 	TestReadWriteAndRepeatedCommands();
+	TestBufferedWrite();
 	TestFailuresSenseResidueAndPhase();
 	TestReadOnlyAndStorageFailure();
 	TestWriteFailure();
@@ -947,6 +1122,8 @@ int main(void)
 	TestMalformedCbwAndResetRecovery();
 	TestResetAcrossPhasesAndReconnect();
 	TestSectorBufferBounds();
+	TestProcessOnRequestOnly();
+	TestOneProcessPerEvent();
 
 	if (s_Fail != 0)
 	{
@@ -957,3 +1134,9 @@ int main(void)
 	return 0;
 }
 
+
+// The process event of the USB core: recorded, run by the test.
+void UsbProcessQue(int)
+{
+	s_ProcessQueued++;
+}

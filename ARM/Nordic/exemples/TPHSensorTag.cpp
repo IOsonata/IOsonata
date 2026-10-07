@@ -51,10 +51,10 @@ SOFTWARE.
 #include <string.h>
 
 #include "istddef.h"
+#include "app_evt_handler.h"
 #include "bluetooth/bt_app.h"
 //#ifndef NRFXLIB_SDC
 //#include "app_util_platform.h"
-//#include "app_scheduler.h"
 //#include "ble_app_nrf5.h"
 //#endif
 
@@ -445,44 +445,50 @@ void ReadPTHData()
 	gascnt++;
 }
 
-void TimerHandler(TimerDev_t * const pTimer, uint32_t Evt)
+// Timer requests coalesce until AppRun dispatches the sensor update.
+static volatile bool s_bAdvDataPending = false;
+
+static void SchedAdvData(uint32_t Evt, void *pCtx)
 {
-    if (Evt & TIMER_EVT_TRIGGER(0))
-    {
-    	// SDK15 no longer allow updating advertisement data dynamically
-    	// Have to stop and restart advertisement
-		//BleAppAdvStop();
-    	ReadPTHData();
-		//BleAppAdvStart(BLEAPP_ADVMODE_FAST);
-    }
+	s_bAdvDataPending = false;
+	ReadPTHData();
+#ifndef USE_TIMER_UPDATE
+	BtAdvStart();
+#endif
 }
 
-void AppTimerHandler(TimerDev_t * const pTimer, int TrigNo, void * const pContext)
+static void AdvDataQue(void)
 {
-	if (TrigNo == 0)
+	if (s_bAdvDataPending == false)
 	{
-		ReadPTHData();
-//		app_sched_event_put(pContext, sizeof(uint32_t), SchedAdvData);
+		s_bAdvDataPending = true;
+		AppEvtHandlerQue(0, nullptr, SchedAdvData);
 	}
 }
 
-/*
-void BlePeriphEvtUserHandler(ble_evt_t * p_ble_evt)
+void TimerHandler(TimerDev_t * const pTimer, uint32_t Evt)
 {
-#ifndef USE_TIMER_UPDATE
-    if (p_ble_evt->header.evt_id == BLE_GAP_EVT_TIMEOUT)
-    {
-    	// Update environmental sensor data every time advertisement timeout
-    	// for re-advertisement
-   // 	ReadPTHData();
-    }
-#endif
+	if (Evt & TIMER_EVT_TRIGGER(0))
+	{
+		AdvDataQue();
+	}
 }
-*/
+
+bool AppCheckStatus(void)
+{
+	BtAppCheckStatus();
+	// A pending request with an empty queue was refused. An interrupt or
+	// Bluetooth recovery may already have queued work since AppRun's check.
+	if (s_bAdvDataPending && AppEvtHandlerPending() == false)
+	{
+		AppEvtHandlerQue(0, nullptr, SchedAdvData);
+	}
+	return s_bAdvDataPending == false && AppEvtHandlerPending() == false;
+}
+
 void BtAppAdvTimeoutHandler()
 {
-	ReadPTHData();
-	BtAdvStart();//BLEAPP_ADVMODE_FAST);
+	AdvDataQue();
 }
 
 void HardwareInit()
@@ -566,22 +572,19 @@ void HardwareInit()
 	g_Adc.StartConversion();
 #endif
 
-#ifdef USE_TIMER_UPDATE
-	// Only with SDK14
-
-	uint64_t period = g_Timer.EnableTimerTrigger(0, 500UL, TIMER_TRIG_TYPE_CONTINUOUS);
-#endif
 }
 
 int main()
 {
     HardwareInit();
 
-    BtAppInit(&s_BtDevCfg);//, true);
+    BtAppInit(&s_BtDevCfg);
 
-	//uint64_t period = g_Timer.EnableTimerTrigger(0, 500UL, TIMER_TRIG_TYPE_CONTINUOUS, AppTimerHandler);
+#ifdef USE_TIMER_UPDATE
+	g_Timer.EnableTimerTrigger(0, 500UL, TIMER_TRIG_TYPE_CONTINUOUS);
+#endif
 
-    BtAppRun();
+    AppRun();
 
 	return 0;
 }

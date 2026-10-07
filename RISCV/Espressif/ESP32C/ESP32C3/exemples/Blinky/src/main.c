@@ -1,18 +1,18 @@
 /**-------------------------------------------------------------------------
 @file	main.c
 
-@brief	Blinky for ESP32-C3-DevKitM-1 — drives the on-board WS2812 RGB
+@brief	Blinky for ESP32-C3-DevKitM-1 - drives the on-board WS2812 RGB
 	LED (GPIO 8) by bit-banging the WS2812B protocol.
 
 The DevKitM-1 has one addressable WS2812B RGB LED on GPIO 8.  Plain
-GPIO toggling won't make it show defined colours — the chip needs the
-WS2812 single-wire serial protocol (one bit ≈ 1.25 µs, encoded by the
+GPIO toggling won't make it show defined colours - the chip needs the
+WS2812 single-wire serial protocol (one bit approximately 1.25 us, encoded by the
 ratio of high-time to low-time).
 
-WS2812B timing (datasheet, ±150 ns tolerance):
-  T0H ≈ 0.4  µs   |  T0L ≈ 0.85 µs   ('0' bit)
-  T1H ≈ 0.8  µs   |  T1L ≈ 0.45 µs   ('1' bit)
-  RES > 50   µs low                  (latch)
+WS2812B timing (datasheet, +/-150 ns tolerance):
+  T0H approximately 0.4  us   |  T0L approximately 0.85 us   ('0' bit)
+  T1H approximately 0.8  us   |  T1L approximately 0.45 us   ('1' bit)
+  RES > 50   us low                  (latch)
 
 CPU clock: 80 MHz (ESP32C3 default in IOsonata).  12.5 ns / cycle.
 NOP counts below were chosen to land each pulse near the centre of its
@@ -32,7 +32,29 @@ re-enables IRQs later.
 
 @author	Hoang Nguyen Hoan
 @date	May 2026
-@license MIT
+@license
+
+MIT License
+
+Copyright (c) 2026, I-SYST inc., all rights reserved
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 ----------------------------------------------------------------------------*/
 
 #include <stdint.h>

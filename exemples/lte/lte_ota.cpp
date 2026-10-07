@@ -127,6 +127,13 @@ private:
 	DevIntrf_t vDev = {};
 };
 
+alignas(16) static uint8_t s_ShaMem[CRYPTO_SOFTSHA256_MEMSIZE];
+
+static DfuStore_t s_Slot1;
+static DfuMgr s_Mgr;
+static DfuHttp s_Http;
+static NrfSockIntrf s_Sock;
+
 bool NrfSockIntrf::Open(const char *pHost, uint16_t Port, bool bTls, int SecTag)
 {
 	struct nrf_addrinfo hints = {};
@@ -190,13 +197,6 @@ void NrfSockIntrf::Close(void)
 	vFd = -1;
 	vbEnded = true;
 }
-
-alignas(16) static uint8_t s_ShaMem[CRYPTO_SOFTSHA256_MEMSIZE];
-
-static DfuStore_t s_Slot1;
-static DfuMgr s_Mgr;
-static DfuHttp s_Http;
-static NrfSockIntrf s_Sock;
 
 // Attached once CEREG reports home (1) or roaming (5).
 static bool LteAttach(void)

@@ -61,6 +61,34 @@ static uint16_t s_LastAddr = 0;
 static uint8_t s_PwdTx[32];
 static int s_PwdTxLen = 0;
 
+static void MockIntrfInit(DevIntrf_t *pIntrf);
+static bool MockStartRx(DevIntrf_t * const pDev, uint32_t DevAddr);
+static int MockRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen);
+static void MockStopRx(DevIntrf_t * const pDev);
+static bool MockStartTx(DevIntrf_t * const pDev, uint32_t DevAddr);
+static int MockTxData(DevIntrf_t * const pDev, const uint8_t *pData, int DataLen);
+static void MockStopTx(DevIntrf_t * const pDev);
+
+// Minimal DeviceIntrf wrapper over the mock struct. The facet reaches the C
+// interface through operator DevIntrf_t*, which is all the ST25DV path needs.
+class MockIntrf : public DeviceIntrf {
+public:
+	MockIntrf() { MockIntrfInit(&vIntrf); }
+
+	operator DevIntrf_t * () { return &vIntrf; }
+	uint32_t Rate(uint32_t DataRate) { (void)DataRate; return 0; }
+	uint32_t Rate(void) { return 0; }
+	bool StartRx(uint32_t DevAddr) { return MockStartRx(&vIntrf, DevAddr); }
+	int RxData(uint8_t *pBuff, int BuffLen) { return MockRxData(&vIntrf, pBuff, BuffLen); }
+	void StopRx(void) { MockStopRx(&vIntrf); }
+	bool StartTx(uint32_t DevAddr) { return MockStartTx(&vIntrf, DevAddr); }
+	int TxData(const uint8_t *pData, int DataLen) { return MockTxData(&vIntrf, pData, DataLen); }
+	void StopTx(void) { MockStopTx(&vIntrf); }
+
+private:
+	DevIntrf_t vIntrf;
+};
+
 static void Check(const char *pName, bool bOk)
 {
 	if (bOk)
@@ -154,26 +182,6 @@ static void MockIntrfInit(DevIntrf_t *pIntrf)
 	pIntrf->MaxRetry = 1;
 	atomic_flag_clear(&pIntrf->bBusy);
 }
-
-// Minimal DeviceIntrf wrapper over the mock struct. The facet reaches the C
-// interface through operator DevIntrf_t*, which is all the ST25DV path needs.
-class MockIntrf : public DeviceIntrf {
-public:
-	MockIntrf() { MockIntrfInit(&vIntrf); }
-
-	operator DevIntrf_t * () { return &vIntrf; }
-	uint32_t Rate(uint32_t DataRate) { (void)DataRate; return 0; }
-	uint32_t Rate(void) { return 0; }
-	bool StartRx(uint32_t DevAddr) { return MockStartRx(&vIntrf, DevAddr); }
-	int RxData(uint8_t *pBuff, int BuffLen) { return MockRxData(&vIntrf, pBuff, BuffLen); }
-	void StopRx(void) { MockStopRx(&vIntrf); }
-	bool StartTx(uint32_t DevAddr) { return MockStartTx(&vIntrf, DevAddr); }
-	int TxData(const uint8_t *pData, int DataLen) { return MockTxData(&vIntrf, pData, DataLen); }
-	void StopTx(void) { MockStopTx(&vIntrf); }
-
-private:
-	DevIntrf_t vIntrf;
-};
 
 static RFTagCfg_t BaseCfg(uint32_t MemSize, bool bReadOnly)
 {

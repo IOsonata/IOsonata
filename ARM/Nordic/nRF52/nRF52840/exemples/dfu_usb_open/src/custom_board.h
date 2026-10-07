@@ -1,11 +1,14 @@
-/*--------------------------------------------------------------------------
-File   : custom_board.h
+/**--------------------------------------------------------------------------
+@file	custom_board.h
 
-Author : Hoang Nguyen Hoan          Dec. 4, 2016
+@author	Hoang Nguyen Hoan
+@date	Dec. 4, 2016
 
-Desc   : Custom board for Nordic SDK bsp compilation.
+@brief	Custom board for Nordic SDK bsp compilation.
 		 Contains definitions for BlueIO series boards for the IMM-NRF5x
 		 series modules
+
+@license
 
 Copyright (c) 2016, I-SYST inc., all rights reserved
 

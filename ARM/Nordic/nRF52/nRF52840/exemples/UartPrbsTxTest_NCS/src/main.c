@@ -1,5 +1,5 @@
 /**-------------------------------------------------------------------------
-@example	UartPrbsTx based on nRF Connect SDK
+@example	main.c based on nRF Connect SDK
 
 
 @brief	The firmware generates and transmits Prbs packets over UART interface.

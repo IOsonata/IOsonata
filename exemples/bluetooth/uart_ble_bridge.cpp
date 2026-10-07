@@ -46,13 +46,14 @@ SOFTWARE.
 #include "custom_board.h"
 #include "coredev/iopincfg.h"
 #include "app_evt_handler.h"
+#include "coredev/interrupt.h"
 #include "prbs.h"
 
 #include "board.h"
 
 //#define NORDIC_NUS_SERVICE
 
-#define DEVICE_NAME                     "UARTBridge"                            /**< Name of device. Will be included in the advertising data. */
+#define DEVICE_NAME                     "UARTBridge"                            //!< Name of device. Will be included in the advertising data.
 
 #define BLE_SC_NONE				0
 #define BLE_SC_OOB				5
@@ -74,10 +75,10 @@ SOFTWARE.
 
 #define PACKET_SIZE						244
 
-#define MANUFACTURER_NAME               "I-SYST inc."							/**< Manufacturer. Will be passed to Device Information Service. */
-#define MODEL_NAME                      "IMM-NRF51x"                            /**< Model number. Will be passed to Device Information Service. */
-#define MANUFACTURER_ID                 ISYST_BLUETOOTH_ID						/**< Manufacturer ID, part of System ID. Will be passed to Device Information Service. */
-#define ORG_UNIQUE_ID                   ISYST_BLUETOOTH_ID						/**< Organizational Unique ID, part of System ID. Will be passed to Device Information Service. */
+#define MANUFACTURER_NAME               "I-SYST inc."							//!< Manufacturer. Will be passed to Device Information Service.
+#define MODEL_NAME                      "IMM-NRF51x"                            //!< Model number. Will be passed to Device Information Service.
+#define MANUFACTURER_ID                 ISYST_BLUETOOTH_ID						//!< Manufacturer ID, part of System ID. Will be passed to Device Information Service.
+#define ORG_UNIQUE_ID                   ISYST_BLUETOOTH_ID						//!< Organizational Unique ID, part of System ID. Will be passed to Device Information Service.
 
 #define APP_ADV_INTERVAL                64	// in msec
 
@@ -89,9 +90,9 @@ SOFTWARE.
 #ifdef NORDIC_NUS_SERVICE
 #define BLE_UART_UUID_BASE			NUS_BASE_UUID
 
-#define BLE_UART_UUID_SERVICE		BLE_UUID_NUS_SERVICE			/**< The UUID of the Nordic UART Service. */
-#define BLE_UART_UUID_READ_CHAR		BLE_UUID_NUS_TX_CHARACTERISTIC	/**< The UUID of the TX Characteristic. */
-#define BLE_UART_UUID_WRITE_CHAR	BLE_UUID_NUS_RX_CHARACTERISTIC	/**< The UUID of the RX Characteristic. */
+#define BLE_UART_UUID_SERVICE		BLE_UUID_NUS_SERVICE			//!< The UUID of the Nordic UART Service.
+#define BLE_UART_UUID_READ_CHAR		BLE_UUID_NUS_TX_CHARACTERISTIC	//!< The UUID of the TX Characteristic.
+#define BLE_UART_UUID_WRITE_CHAR	BLE_UUID_NUS_RX_CHARACTERISTIC	//!< The UUID of the RX Characteristic.
 #else
 #define BLE_UART_UUID_BASE			BLUEIO_UUID_BASE
 
@@ -125,19 +126,19 @@ uint8_t g_ManData[8];
 BtGattChar_t g_UartChars[] = {
 	// Read + Notify (server-pushed)
 	BT_CHAR(BLE_UART_UUID_READ_CHAR, PACKET_SIZE,
-	        BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_NOTIFY,
-	        s_RxCharDescString),
+			BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_NOTIFY,
+			s_RxCharDescString),
 	// Write + Write Without Response (peer sink; BtIntrf handles writes)
 	BT_CHAR(BLE_UART_UUID_WRITE_CHAR, PACKET_SIZE,
-	        BT_GATT_CHAR_PROP_WRITE | BT_GATT_CHAR_PROP_WRITE_WORESP,
-	        s_TxCharDescString),
+			BT_GATT_CHAR_PROP_WRITE | BT_GATT_CHAR_PROP_WRITE_WORESP,
+			s_TxCharDescString),
 };
 
 uint8_t g_LWrBuffer[512];
 
 BtGattSrvc_t g_UartBleSrvc = BT_SRVC_CUSTOM(BLE_UART_UUID_BASE,
-                                            BLE_UART_UUID_SERVICE,
-                                            g_UartChars);
+											BLE_UART_UUID_SERVICE,
+											g_UartChars);
 
 const BtAppDevInfo_t s_UartBleDevDesc {
 	MODEL_NAME,           	// Model name
@@ -241,13 +242,23 @@ const UARTCfg_t g_UartCfg = {
 UART g_Uart;
 
 int g_DelayCnt = 0;
-static volatile bool s_bStreamming = false;
-static uint32_t drop = 0;
-uint32_t schedcnt = 0;
+static uint32_t s_Drop = 0;
+static uint32_t s_SchedCnt = 0;
 
 #if BLE_SC_METHOD == BLE_SC_OOB
 static bool s_UartBlePeerOobValid = false;
+#endif
 
+// Pending stays set through queue refusal until the callback runs.
+static volatile bool s_bUartRxPending = false;
+
+void UartRxChedHandler(uint32_t Evt, void *pCtx);
+
+static uint8_t s_UartRxBuff[PACKET_SIZE];
+static int s_UartRxBuffLen = 0;
+static uint8_t s_UartRxVal = 0;
+
+#if BLE_SC_METHOD == BLE_SC_OOB
 static int UartBleHexVal(uint8_t c)
 {
 	if (c >= '0' && c <= '9') return c - '0';
@@ -423,8 +434,8 @@ void BtAppPeriphEvtHandler(uint32_t Evt, void *pCtx)
 
 void BtAppInitUserServices()
 {
-    bool res;
-    res = BtGattSrvcAdd(&g_UartBleSrvc);
+	bool res;
+	res = BtGattSrvcAdd(&g_UartBleSrvc);
 }
 
 void BtAppInitUserData()
@@ -436,20 +447,29 @@ void BtAppInitUserData()
 #endif
 }
 
-//void UartRxChedHandler(void * p_event_data, uint16_t event_size)
+static void UartRxQue(void)
+{
+	uint32_t state = DisableInterrupt();
+	if (s_bUartRxPending == false)
+	{
+		s_bUartRxPending = true;
+		(void)AppEvtHandlerQue(0, nullptr, UartRxChedHandler);
+	}
+	EnableInterrupt(state);
+}
+
 void UartRxChedHandler(uint32_t Evt, void *pCtx)
 {
-	static uint8_t buff[PACKET_SIZE];
-	static int bufflen = 0;
-	static uint8_t d = 0;
+	s_bUartRxPending = false;
+
 	bool flush = false;
 
-	int l = PACKET_SIZE - bufflen;
+	int l = PACKET_SIZE - s_UartRxBuffLen;
 	if (l > 0)
 	{
-		l = g_Uart.Rx(&buff[bufflen], l);
-		bufflen += l;
-		if (bufflen >= PACKET_SIZE || l == 0)
+		l = g_Uart.Rx(&s_UartRxBuff[s_UartRxBuffLen], l);
+		s_UartRxBuffLen += l;
+		if (s_UartRxBuffLen >= PACKET_SIZE || l == 0)
 		{
 			flush = true;
 		}
@@ -461,32 +481,30 @@ void UartRxChedHandler(uint32_t Evt, void *pCtx)
 
 	if (flush)
 	{
-		if (UartBleOobTryCommand(buff, bufflen))
+		if (UartBleOobTryCommand(s_UartRxBuff, s_UartRxBuffLen))
 		{
-			bufflen = 0;
+			s_UartRxBuffLen = 0;
 			flush = false;
 			return;
 		}
 
-		for (int i = 0; i < bufflen; i++)
+		for (int i = 0; i < s_UartRxBuffLen; i++)
 		{
-			if (d != Prbs8(buff[i]) && d != 0)
+			if (s_UartRxVal != Prbs8(s_UartRxBuff[i]) && s_UartRxVal != 0)
 			{
-				drop++;
+				s_Drop++;
 			}
-			d = Prbs8(buff[i]);
+			s_UartRxVal = Prbs8(s_UartRxBuff[i]);
 		}
 //		g_Uart.printf("drop : %d\r\n", drop);
 		if (isConnected())
 		{
-			g_BtIntrf.Tx(0, buff, bufflen);
+			g_BtIntrf.Tx(0, s_UartRxBuff, s_UartRxBuffLen);
 		}
-		bufflen = 0;
+		s_UartRxBuffLen = 0;
 		flush = false;
 	}
-//	app_sched_event_put(NULL, 0, UartRxChedHandler);
-	s_bStreamming = true;
-	AppEvtHandlerQue(0, 0, UartRxChedHandler);
+	UartRxQue();
 }
 
 int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen)
@@ -499,11 +517,10 @@ int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int Buf
 		case UART_EVT_RXTIMEOUT:
 
 		case UART_EVT_RXDATA:
-			if (s_bStreamming == false)
+			if (s_bUartRxPending == false)
 			{
-				schedcnt++;
-				//app_sched_event_put(NULL, 0, UartRxChedHandler);
-				AppEvtHandlerQue(0, 0, UartRxChedHandler);
+				s_SchedCnt++;
+				UartRxQue();
 			}
 			//UartRxChedHandler(0, 0);
 			break;
@@ -538,15 +555,35 @@ void HardwareInit()
 
 int main()
 {
-    HardwareInit();
+	HardwareInit();
 
-    BtAppInit(&s_BleAppCfg);
-    g_Uart.printf("security    : %s\r\n", BLE_SC_NAME);
-    UartBleOobInit();
+	BtAppInit(&s_BleAppCfg);
+	g_Uart.printf("security    : %s\r\n", BLE_SC_NAME);
+	UartBleOobInit();
 
-    g_BtIntrf.Init(s_BleInrfCfg);
+	g_BtIntrf.Init(s_BleInrfCfg);
 
-    BtAppRun();
+	AppRun();
 
 	return 0;
+}
+
+bool AppCheckStatus(void)
+{
+	BtAppCheckStatus();
+
+	// A pending callback on an empty queue was refused. Keep the check and
+	// retry together so an interrupt cannot queue the same callback between them.
+	uint32_t state = DisableInterrupt();
+	if (AppEvtHandlerPending() == false)
+	{
+		if (s_bUartRxPending)
+		{
+			(void)AppEvtHandlerQue(0, nullptr, UartRxChedHandler);
+		}
+	}
+	const bool idle = s_bUartRxPending == false &&
+		AppEvtHandlerPending() == false;
+	EnableInterrupt(state);
+	return idle;
 }

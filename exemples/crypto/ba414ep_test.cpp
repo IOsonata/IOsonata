@@ -40,20 +40,24 @@ SOFTWARE.
 #include "crypto_rng_nrf.h"
 
 static int s_pass, s_fail;
+
+static const uint8_t s_PrivA[32] = {
+	0x3f,0x49,0xf6,0xd4,0xa3,0xc5,0x5f,0x38,0x74,0xc9,0xb3,0xe3,0xd2,0x10,0x3f,0x50,
+	0x4a,0xff,0x60,0x7b,0xeb,0x40,0xb7,0x99,0x58,0x99,0xb8,0xa6,0xcd,0x3c,0x1a,0xbd };
+static const uint8_t s_PubA[64] = {
+	0x20,0xb0,0x03,0xd2,0xf2,0x97,0xbe,0x2c,0x5e,0x2c,0x83,0xa7,0xe9,0xf9,0xa5,0xb9,
+	0xef,0xf4,0x91,0x11,0xac,0xf4,0xfd,0xdb,0xcc,0x03,0x01,0x48,0x0e,0x35,0x9d,0xe6,
+	0xdc,0x80,0x9c,0x49,0x65,0x2a,0xeb,0x6d,0x63,0x32,0x9a,0xbf,0x5a,0x52,0x15,0x5c,
+	0x76,0x63,0x45,0xc2,0x8f,0xed,0x30,0x24,0x74,0x1c,0x8e,0xd0,0x15,0x89,0xd2,0x8b };
+
+static Ba414ep s_HwEngine;
+alignas(CryptoUecc) static uint8_t s_SwMem[CRYPTO_UECC_MEMSIZE];
+
 static void check(const char *name, bool ok)
 {
 	printf("  [%s] %s\n", ok ? "PASS" : "FAIL", name);
 	if (ok) s_pass++; else s_fail++;
 }
-
-static const uint8_t privA[32] = {
-	0x3f,0x49,0xf6,0xd4,0xa3,0xc5,0x5f,0x38,0x74,0xc9,0xb3,0xe3,0xd2,0x10,0x3f,0x50,
-	0x4a,0xff,0x60,0x7b,0xeb,0x40,0xb7,0x99,0x58,0x99,0xb8,0xa6,0xcd,0x3c,0x1a,0xbd };
-static const uint8_t pubA[64] = {
-	0x20,0xb0,0x03,0xd2,0xf2,0x97,0xbe,0x2c,0x5e,0x2c,0x83,0xa7,0xe9,0xf9,0xa5,0xb9,
-	0xef,0xf4,0x91,0x11,0xac,0xf4,0xfd,0xdb,0xcc,0x03,0x01,0x48,0x0e,0x35,0x9d,0xe6,
-	0xdc,0x80,0x9c,0x49,0x65,0x2a,0xeb,0x6d,0x63,0x32,0x9a,0xbf,0x5a,0x52,0x15,0x5c,
-	0x76,0x63,0x45,0xc2,0x8f,0xed,0x30,0x24,0x74,0x1c,0x8e,0xd0,0x15,0x89,0xd2,0x8b };
 
 int main(void)
 {
@@ -62,11 +66,9 @@ int main(void)
 	check("hardware RNG instance", rng != nullptr);
 	if (rng == nullptr || !rng->Enable()) return 1;
 
-	static Ba414ep hardwareEngine;
-	Ba414ep *hardware = hardwareEngine.Init(CracenIntrfInstance(), rng) ?
-		&hardwareEngine : nullptr;
-	alignas(CryptoUecc) static uint8_t swMem[CRYPTO_UECC_MEMSIZE];
-	CryptoUecc *software = CryptoUeccCreate(swMem, sizeof(swMem), rng);
+	Ba414ep *hardware = s_HwEngine.Init(CracenIntrfInstance(), rng) ?
+		&s_HwEngine : nullptr;
+	CryptoUecc *software = CryptoUeccCreate(s_SwMem, sizeof(s_SwMem), rng);
 	check("hardware and software engines construct",
 		hardware != nullptr && software != nullptr);
 
@@ -88,9 +90,9 @@ int main(void)
 		alignas(CryptoUecc::KeyCtx) uint8_t dSw[64];
 		hardware->KeyReset(dHw);
 		software->KeyReset(dSw);
-		memcpy(((Ba414ep::KeyCtx *)dHw)->PrivKey, privA, sizeof(privA));
+		memcpy(((Ba414ep::KeyCtx *)dHw)->PrivKey, s_PrivA, sizeof(s_PrivA));
 		((Ba414ep::KeyCtx *)dHw)->bKeyValid = true;
-		memcpy(((CryptoUecc::KeyCtx *)dSw)->PrivKey, privA, sizeof(privA));
+		memcpy(((CryptoUecc::KeyCtx *)dSw)->PrivKey, s_PrivA, sizeof(s_PrivA));
 		((CryptoUecc::KeyCtx *)dSw)->bKeyValid = true;
 		uint8_t xHw[32] = {0}, xSw[32] = {0};
 		CRYPTO_STATUS sHw = hardware->Agree(CRYPTO_CURVE_P256, dHw, generator, xHw);
@@ -121,15 +123,15 @@ int main(void)
 	alignas(CryptoUecc::KeyCtx) uint8_t fixedSw[64];
 	hardware->KeyReset(fixedHw);
 	software->KeyReset(fixedSw);
-	memcpy(((Ba414ep::KeyCtx *)fixedHw)->PrivKey, privA, sizeof(privA));
+	memcpy(((Ba414ep::KeyCtx *)fixedHw)->PrivKey, s_PrivA, sizeof(s_PrivA));
 	((Ba414ep::KeyCtx *)fixedHw)->bKeyValid = true;
-	memcpy(((CryptoUecc::KeyCtx *)fixedSw)->PrivKey, privA, sizeof(privA));
+	memcpy(((CryptoUecc::KeyCtx *)fixedSw)->PrivKey, s_PrivA, sizeof(s_PrivA));
 	((CryptoUecc::KeyCtx *)fixedSw)->bKeyValid = true;
 	uint8_t fixedHwSecret[32], fixedSwSecret[32];
 	check("fixed BLE vector hardware equals software",
-		hardware->Agree(CRYPTO_CURVE_P256, fixedHw, pubA, fixedHwSecret) ==
+		hardware->Agree(CRYPTO_CURVE_P256, fixedHw, s_PubA, fixedHwSecret) ==
 			CRYPTO_STATUS_OK &&
-		software->Agree(CRYPTO_CURVE_P256, fixedSw, pubA, fixedSwSecret) ==
+		software->Agree(CRYPTO_CURVE_P256, fixedSw, s_PubA, fixedSwSecret) ==
 			CRYPTO_STATUS_OK &&
 		memcmp(fixedHwSecret, fixedSwSecret, sizeof(fixedHwSecret)) == 0);
 
@@ -148,16 +150,16 @@ int main(void)
 			CRYPTO_STATUS_OK);
 	hardware->KeyReset(resetCtx);
 	check("Agree fails after explicit KeyReset",
-		hardware->Agree(CRYPTO_CURVE_P256, resetCtx, pubA, ignored) ==
+		hardware->Agree(CRYPTO_CURVE_P256, resetCtx, s_PubA, ignored) ==
 			CRYPTO_STATUS_FAIL);
 
 	alignas(Ba414ep::KeyCtx) uint8_t singleCtx[64];
 	check("single-use key rejects second Agree",
 		hardware->KeyGen(CRYPTO_CURVE_P256, singleCtx, generatedPub) ==
 			CRYPTO_STATUS_OK &&
-		hardware->Agree(CRYPTO_CURVE_P256, singleCtx, pubA, ignored) ==
+		hardware->Agree(CRYPTO_CURVE_P256, singleCtx, s_PubA, ignored) ==
 			CRYPTO_STATUS_OK &&
-		hardware->Agree(CRYPTO_CURVE_P256, singleCtx, pubA, ignored) ==
+		hardware->Agree(CRYPTO_CURVE_P256, singleCtx, s_PubA, ignored) ==
 			CRYPTO_STATUS_FAIL);
 
 	// Engine contention. The operation lock is owned by the engine device:
@@ -166,7 +168,7 @@ int main(void)
 	// working (the entropy path is independent of the public-key lock).
 	alignas(Ba414ep::KeyCtx) uint8_t contCtx[64];
 	hardware->KeyReset(contCtx);
-	memcpy(((Ba414ep::KeyCtx *)contCtx)->PrivKey, privA, sizeof(privA));
+	memcpy(((Ba414ep::KeyCtx *)contCtx)->PrivKey, s_PrivA, sizeof(s_PrivA));
 	((Ba414ep::KeyCtx *)contCtx)->bKeyValid = true;
 	bool held = hardware->OpAcquire();
 	check("engine accepts one owner and rejects a second",
@@ -175,7 +177,7 @@ int main(void)
 	check("entropy draw works while the engine is held",
 		held && rng->Random(entropy, sizeof(entropy)) == CRYPTO_STATUS_OK);
 	check("Agree fails while the engine is held",
-		held && hardware->Agree(CRYPTO_CURVE_P256, contCtx, pubA, ignored) !=
+		held && hardware->Agree(CRYPTO_CURVE_P256, contCtx, s_PubA, ignored) !=
 			CRYPTO_STATUS_OK);
 	check("KeyGen fails while the engine is held",
 		held && hardware->KeyGen(CRYPTO_CURVE_P256, contCtx, generatedPub) !=

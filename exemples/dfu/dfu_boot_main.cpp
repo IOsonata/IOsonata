@@ -106,6 +106,7 @@ SOFTWARE.
 #endif
 
 #if DFU_TRANSPORT == DFU_TRANSPORT_CDC
+#include "app_evt_handler.h"
 #include "usb/usb.h"
 #include "usb/usbd_cdc.h"
 #elif DFU_TRANSPORT == DFU_TRANSPORT_UART
@@ -163,6 +164,113 @@ extern "C" const unsigned int ecdsa_pub_key_len;
 #define DFU_BOOT_VERSION	0x00010000
 #endif
 
+// The engines are built in place at run time: the digest and the signature
+// check alone, nothing of HMAC, key generation or signing.
+alignas(16) static uint8_t s_ShaMem[CRYPTO_SOFTSHA256_HASH_MEMSIZE];
+alignas(16) static uint8_t s_EccMem[CRYPTO_UECC_VERIFY_MEMSIZE];
+
+#if DFU_TRANSPORT == DFU_TRANSPORT_CDC
+#ifndef USB_DEVNO
+#define USB_DEVNO			0
+#endif
+
+#define DFU_BOOT_CDC_RXPKT	4
+#define DFU_BOOT_CDC_RXMEM	USB_INTRF_RXMEM_SIZE(DFU_BOOT_CDC_RXPKT, \
+								USB_CTRLR_PKT_LEN_MAX(USB_DEVNO, BULK))
+
+alignas(4) static uint8_t s_CdcRxMem[DFU_BOOT_CDC_RXMEM];
+alignas(4) static uint8_t s_CdcTxMem[DFU_BOOT_FIFOSIZE];
+
+static const UsbdCdcCfg_t s_CdcCfg = {
+	.DevNo = USB_DEVNO,
+	.bBlocking = true,
+	.RxFifoMemSize = DFU_BOOT_CDC_RXMEM,
+	.pRxFifoMem = s_CdcRxMem,
+	.TxFifoMemSize = DFU_BOOT_FIFOSIZE,
+	.pTxFifoMem = s_CdcTxMem,
+	.EvtCB = nullptr,
+};
+
+// USB ids, from board.h. The default is the pid.codes test id the USB
+// examples use; a product sets its own. nRF Connect Programmer and nrfutil
+// offer an MCUboot (SMP) upload only to a device they know by its ids.
+#ifndef DFU_BOOT_USB_VID
+#define DFU_BOOT_USB_VID	0x1209
+#endif
+#ifndef DFU_BOOT_USB_PID
+#define DFU_BOOT_USB_PID	0x0001
+#endif
+
+// Application event queue memory, replaces the 4 event library default. The
+// USB controller port queues its deferred endpoint events there.
+alignas(4) uint8_t g_AppEvtHandlerQueMem[APPEVT_HANDLER_QUE_MEMSIZE(16)];
+
+static const UsbCfg_t s_UsbCfg = {
+	.DevNo = USB_DEVNO,
+	.Mode = USB_MODE_DEVICE,
+	.Vid = DFU_BOOT_USB_VID,
+	.Pid = DFU_BOOT_USB_PID,
+	.DevVer = 0x0100,
+	.pManufacturer = "I-SYST",
+	.pProduct = "IOsonata DFU",
+	.pSerial = nullptr,
+	.pFuncName = "IOsonata DFU",
+	.IntPrio = 6,
+	.DeviceClass = USB_DEVCLASS_MISC,
+	.DeviceSubClass = 2U,
+	.DeviceProtocol = 1U,
+	.bSelfPowered = false,
+	.bRemoteWakeup = false,
+	.bLowPowerSuspend = false,
+	.MaxPower = 100,
+	.EvtHandler = nullptr,
+};
+
+static UsbdCdc s_Link;
+#else
+static IOPinCfg_t s_UartPins[] = UART_PINS;
+static uint8_t s_UartRxFifo[DFU_BOOT_FIFOSIZE];
+static uint8_t s_UartTxFifo[DFU_BOOT_FIFOSIZE];
+
+static const UARTCfg_t s_UartCfg = {
+	.DevNo = UART_DEVNO,
+	.pIOPinMap = s_UartPins,
+	.NbIOPins = sizeof(s_UartPins) / sizeof(IOPinCfg_t),
+	.Rate = 115200,
+	.DataBits = 8,
+	.Parity = UART_PARITY_NONE,
+	.StopBits = 1,
+	.FlowControl = UART_FLWCTRL_NONE,
+	.bIntMode = true,
+	.IntPrio = 6,
+	.EvtCallback = nullptr,
+	.bFifoBlocking = true,
+	.RxMemSize = DFU_BOOT_FIFOSIZE,
+	.pRxMem = s_UartRxFifo,
+	.TxMemSize = DFU_BOOT_FIFOSIZE,
+	.pTxMem = s_UartTxFifo,
+};
+
+static UART s_Link;
+#endif
+
+static DfuStore_t s_Slot0;
+static DfuMgr s_Mgr;
+
+// Time for the reset response to leave the FIFO: the frame is under 40
+// bytes, 3.5 ms at 115200 baud.
+#define DFU_BOOT_RESET_DELAY_MS		20
+
+#if DFU_PROTO == DFU_PROTO_WIRE
+static DfuWire s_Proto;
+static uint8_t s_ProtoRx[DFU_WIRE_RXBUF_SIZE(DFU_BOOT_BUFSIZE)];
+#else
+static DfuSmp s_Smp;
+static DfuSerial s_Proto;
+static uint8_t s_SerRx[DFU_SERIAL_RXBUF_SIZE(DFU_BOOT_BUFSIZE)];
+static uint8_t s_SerTx[DFU_SERIAL_TXBUF_SIZE];
+#endif
+
 // The boot never returns, so nothing static is ever destroyed: no exit
 // handlers to register, which also keeps the heap out of the image.
 extern "C" int __cxa_atexit(void (*)(void *), void *, void *)
@@ -206,70 +314,11 @@ extern "C" void exit(int)
 	}
 }
 
-// The engines are built in place at run time: the digest and the signature
-// check alone, nothing of HMAC, key generation or signing.
-alignas(16) static uint8_t s_ShaMem[CRYPTO_SOFTSHA256_HASH_MEMSIZE];
-alignas(16) static uint8_t s_EccMem[CRYPTO_UECC_VERIFY_MEMSIZE];
-
 #if DFU_TRANSPORT == DFU_TRANSPORT_CDC
-
-#ifndef USB_DEVNO
-#define USB_DEVNO			0
-#endif
-
-#define DFU_BOOT_CDC_RXPKT	4
-#define DFU_BOOT_CDC_RXMEM	USB_INTRF_RXMEM_SIZE(DFU_BOOT_CDC_RXPKT, \
-								USB_CTRLR_PKT_LEN_MAX(USB_DEVNO, BULK))
-
-alignas(4) static uint8_t s_CdcRxMem[DFU_BOOT_CDC_RXMEM];
-alignas(4) static uint8_t s_CdcTxMem[DFU_BOOT_FIFOSIZE];
-
-static const UsbdCdcCfg_t s_CdcCfg = {
-	.DevNo = USB_DEVNO,
-	.bBlocking = true,
-	.RxFifoMemSize = DFU_BOOT_CDC_RXMEM,
-	.pRxFifoMem = s_CdcRxMem,
-	.TxFifoMemSize = DFU_BOOT_FIFOSIZE,
-	.pTxFifoMem = s_CdcTxMem,
-	.EvtCB = nullptr,
-};
-
-// USB ids, from board.h. The default is the pid.codes test id the USB
-// examples use; a product sets its own. nRF Connect Programmer and nrfutil
-// offer an MCUboot (SMP) upload only to a device they know by its ids.
-#ifndef DFU_BOOT_USB_VID
-#define DFU_BOOT_USB_VID	0x1209
-#endif
-#ifndef DFU_BOOT_USB_PID
-#define DFU_BOOT_USB_PID	0x0001
-#endif
-
-static const UsbCfg_t s_UsbCfg = {
-	.DevNo = USB_DEVNO,
-	.Mode = USB_MODE_DEVICE,
-	.Vid = DFU_BOOT_USB_VID,
-	.Pid = DFU_BOOT_USB_PID,
-	.DevVer = 0x0100,
-	.pManufacturer = "I-SYST",
-	.pProduct = "IOsonata DFU",
-	.pSerial = nullptr,
-	.pFuncName = "IOsonata DFU",
-	.IntPrio = 6,
-	.DeviceClass = USB_DEVCLASS_MISC,
-	.DeviceSubClass = 2U,
-	.DeviceProtocol = 1U,
-	.bSelfPowered = false,
-	.bRemoteWakeup = false,
-	.bLowPowerSuspend = false,
-	.MaxPower = 100,
-	.EvtHandler = nullptr,
-};
-
-static UsbdCdc s_Link;
-
 static bool DfuBootLinkInit(void)
 {
-	if (UsbInit(&s_UsbCfg) == false || s_Link.Init(s_CdcCfg) == false)
+	if (AppEvtHandlerInit(g_AppEvtHandlerQueMem, sizeof(g_AppEvtHandlerQueMem)) == false ||
+		UsbInit(&s_UsbCfg) == false || s_Link.Init(s_CdcCfg) == false)
 	{
 		return false;
 	}
@@ -282,36 +331,10 @@ static bool DfuBootLinkInit(void)
 
 static void DfuBootLinkRun(void)
 {
-	UsbProcess(USB_DEVNO);
+	AppEvtHandlerExec();
 }
 
 #else
-
-static IOPinCfg_t s_UartPins[] = UART_PINS;
-static uint8_t s_UartRxFifo[DFU_BOOT_FIFOSIZE];
-static uint8_t s_UartTxFifo[DFU_BOOT_FIFOSIZE];
-
-static const UARTCfg_t s_UartCfg = {
-	.DevNo = UART_DEVNO,
-	.pIOPinMap = s_UartPins,
-	.NbIOPins = sizeof(s_UartPins) / sizeof(IOPinCfg_t),
-	.Rate = 115200,
-	.DataBits = 8,
-	.Parity = UART_PARITY_NONE,
-	.StopBits = 1,
-	.FlowControl = UART_FLWCTRL_NONE,
-	.bIntMode = true,
-	.IntPrio = 6,
-	.EvtCallback = nullptr,
-	.bFifoBlocking = true,
-	.RxMemSize = DFU_BOOT_FIFOSIZE,
-	.pRxMem = s_UartRxFifo,
-	.TxMemSize = DFU_BOOT_FIFOSIZE,
-	.pTxMem = s_UartTxFifo,
-};
-
-static UART s_Link;
-
 static bool DfuBootLinkInit(void)
 {
 	return s_Link.Init(s_UartCfg);
@@ -322,9 +345,6 @@ static void DfuBootLinkRun(void)
 }
 
 #endif
-
-static DfuStore_t s_Slot0;
-static DfuMgr s_Mgr;
 
 static bool DfuBootButton(void)
 {
@@ -341,15 +361,7 @@ static bool DfuBootButton(void)
 #endif
 }
 
-// Time for the reset response to leave the FIFO: the frame is under 40
-// bytes, 3.5 ms at 115200 baud.
-#define DFU_BOOT_RESET_DELAY_MS		20
-
 #if DFU_PROTO == DFU_PROTO_WIRE
-
-static DfuWire s_Proto;
-static uint8_t s_ProtoRx[DFU_WIRE_RXBUF_SIZE(DFU_BOOT_BUFSIZE)];
-
 static void DfuBootReset(bool bRecovery)
 {
 	msDelay(DFU_BOOT_RESET_DELAY_MS);
@@ -374,12 +386,6 @@ static bool DfuBootProtoInit(void)
 }
 
 #else
-
-static DfuSmp s_Smp;
-static DfuSerial s_Proto;
-static uint8_t s_SerRx[DFU_SERIAL_RXBUF_SIZE(DFU_BOOT_BUFSIZE)];
-static uint8_t s_SerTx[DFU_SERIAL_TXBUF_SIZE];
-
 static void DfuBootReset(void)
 {
 	msDelay(DFU_BOOT_RESET_DELAY_MS);

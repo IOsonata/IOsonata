@@ -39,10 +39,8 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <stdio.h>
 #include <stdbool.h>
 
-extern "C" {
 #include "nrf_lcd.h"
 #include "nrf_gfx.h"
-}
 
 #include "coredev/iopincfg.h"
 #include "coredev/spi.h"
@@ -67,30 +65,30 @@ static const IOPinCfg_t s_DispPins[] = {
 static const int s_NbDispPins = sizeof(s_DispPins) / sizeof(IOPinCfg_t);
 
 static const IOPinCfg_t s_SpiPins[] = {
-    {EINK_SCK_PORT, EINK_SCK_PIN, EINK_SCK_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},		// SCK
-   // {EINK_SDA_PORT, EINK_SDA_PIN, EINK_SDA_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},		// MOSI
-    {-1, -1, -1, IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL},	// MISO
-    {EINK_SDA_PORT, EINK_SDA_PIN, EINK_SDA_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},		// MOSI
-    {EINK_CS_PORT, EINK_CS_PIN, EINK_CS_PINOP, IOPINDIR_OUTPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL},	// CS
+	{EINK_SCK_PORT, EINK_SCK_PIN, EINK_SCK_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},		// SCK
+	// {EINK_SDA_PORT, EINK_SDA_PIN, EINK_SDA_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},		// MOSI
+	{-1, -1, -1, IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL},	// MISO
+	{EINK_SDA_PORT, EINK_SDA_PIN, EINK_SDA_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},		// MOSI
+	{EINK_CS_PORT, EINK_CS_PIN, EINK_CS_PINOP, IOPINDIR_OUTPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL},	// CS
 };
 
 static const SPICFG s_SpiCfg = {
 	.DevNo = 0,
 	.Phy = SPIPHY_NORMAL,
-    .Mode = SPIMODE_MASTER,
+	.Mode = SPIMODE_MASTER,
 	.pIOPinMap = s_SpiPins,
 	.NbIOPins = sizeof(s_SpiPins) / sizeof(IOPinCfg_t),
-    .Rate = 4000000,   // Speed in Hz
-    .DataSize = 8,      // Data Size
-    .MaxRetry = 5,      // Max retries
-    .BitOrder = SPIDATABIT_MSB,
-    .DataPhase = SPIDATAPHASE_FIRST_CLK, // Data phase
-    .ClkPol = SPICLKPOL_HIGH,         // clock polarity
-    .ChipSel = SPICSEL_AUTO,
+	.Rate = 4000000,   // Speed in Hz
+	.DataSize = 8,      // Data Size
+	.MaxRetry = 5,      // Max retries
+	.BitOrder = SPIDATABIT_MSB,
+	.DataPhase = SPIDATAPHASE_FIRST_CLK, // Data phase
+	.ClkPol = SPICLKPOL_HIGH,         // clock polarity
+	.ChipSel = SPICSEL_AUTO,
 	.bDmaEn = false,	// DMA
 	.bIntEn = false,
-    .IntPrio = 6, //APP_IRQ_PRIORITY_LOW,      // Interrupt priority
-    .EvtCB = NULL
+	.IntPrio = 6, //APP_IRQ_PRIORITY_LOW,      // Interrupt priority
+	.EvtCB = NULL
 };
 
 SPI g_Spi;
@@ -134,66 +132,73 @@ extern "C" void EPD_Display_White( void );
 
 extern const nrf_gfx_font_desc_t orkney_8ptFontInfo;
 
-static lcd_cb_t lcd_cb = {
- .state    = NRFX_DRV_STATE_UNINITIALIZED,
- .height   = 480,//PAPER_PIXEL_HEIGHT,
- .width    = 280,//PAPER_PIXEL_WIDTH,
- .rotation = NRF_LCD_ROTATE_90
+static lcd_cb_t s_LcdCb = {
+	.state    = NRFX_DRV_STATE_UNINITIALIZED,
+	.height   = 480,//PAPER_PIXEL_HEIGHT,
+	.width    = 280,//PAPER_PIXEL_WIDTH,
+	.rotation = NRF_LCD_ROTATE_90
 };
 
-static const nrf_lcd_t lcd = {
-  .lcd_init = paper_init,
-  .lcd_uninit = paper_uninit,
-  .lcd_pixel_draw = paper_pixel_draw,
-  .lcd_rect_draw = paper_rect_draw,
-  .lcd_display = paper_display,
-  .lcd_rotation_set = paper_rotation_set,
-  .lcd_display_invert = paper_display_invert,
-  .p_lcd_cb = &lcd_cb
+static const nrf_lcd_t s_Lcd = {
+	.lcd_init = paper_init,
+	.lcd_uninit = paper_uninit,
+	.lcd_pixel_draw = paper_pixel_draw,
+	.lcd_rect_draw = paper_rect_draw,
+	.lcd_display = paper_display,
+	.lcd_rotation_set = paper_rotation_set,
+	.lcd_display_invert = paper_display_invert,
+	.p_lcd_cb = &s_LcdCb
 };
+
+#define PAPER_BYTE_WIDTH ((PAPER_PIXEL_WIDTH % 8 == 0) ? PAPER_PIXEL_WIDTH / 8 : PAPER_PIXEL_WIDTH / 8 + 1)
+#define PAPER_BYTE_HEIGHT PAPER_PIXEL_HEIGHT
+#define PAPER_BUFLEN PAPER_BYTE_WIDTH * PAPER_BYTE_HEIGHT
+
+extern uint8_t paper_buffer[PAPER_BUFLEN];
+extern "C" void  check_busy_high();
 
 extern "C" void spi_9b_send_9b( uint16_t dat )
 {
-    if (dat & 0x100)
-    {
+	if (dat & 0x100)
+	{
 //    	g_EInkIntrf.SetDataMode(true);
-    	EInkIntrfSetDataMode(g_EInkIntrf, true);
+		EInkIntrfSetDataMode(g_EInkIntrf, true);
 //        spi_9b_send( DCX_DATA, (uint8_t)dat );
-    }
-    else
-    {
-    	//g_EInkIntrf.SetDataMode(false);
-    	EInkIntrfSetDataMode(g_EInkIntrf, false);
+	}
+	else
+	{
+		//g_EInkIntrf.SetDataMode(false);
+		EInkIntrfSetDataMode(g_EInkIntrf, false);
 
 //        spi_9b_send( DCX_CMD, (uint8_t)dat );
-    }
+	}
 	//g_EInkIntrf.Tx(0, (uint8_t*)&dat, 1);
-    EInkIntrfTx(g_EInkIntrf, (uint8_t*)&dat, 1);
+	EInkIntrfTx(g_EInkIntrf, (uint8_t*)&dat, 1);
 }
 
 extern "C" void spi_9b_send( uint16_t dcx, uint8_t dat )
 {
-    if (dcx)
-    {
-    	//g_EInkIntrf.SetDataMode(true);
-    	EInkIntrfSetDataMode(g_EInkIntrf, true);
+	if (dcx)
+	{
+		//g_EInkIntrf.SetDataMode(true);
+		EInkIntrfSetDataMode(g_EInkIntrf, true);
 
 //        spi_9b_send( DCX_DATA, (uint8_t)dat );
-    }
-    else
-    {
+	}
+	else
+	{
 //    	g_EInkIntrf.SetDataMode(false);
-    	EInkIntrfSetDataMode(g_EInkIntrf, false);
+		EInkIntrfSetDataMode(g_EInkIntrf, false);
 //        spi_9b_send( DCX_CMD, (uint8_t)dat );
-    }
+	}
 //	g_EInkIntrf.Tx(0, (uint8_t*)&dat, 1);
-    EInkIntrfTx(g_EInkIntrf, &dat, 1);
+	EInkIntrfTx(g_EInkIntrf, &dat, 1);
 }
 
 int main()
 {
 	// Configure
- 	//IOPinCfg(s_DispPins, s_NbDispPins);
+	//IOPinCfg(s_DispPins, s_NbDispPins);
 	//IOPinSet(EINK_DC_PORT, EINK_DC_PIN);
 #ifdef QTD
 	IOPinCfg(s_LedPins, s_NbLedPins);
@@ -219,30 +224,30 @@ int main()
 	EPD_Init();
 	msDelay(2000);
 
-	nrf_gfx_init(&lcd);
+	nrf_gfx_init(&s_Lcd);
 #ifdef QTD
 	IOPinSet(LED3_PORT, LED3_PIN);
 #endif
 	EPD_Display_Black();
 	// draw a horizontal line
-	nrf_gfx_line_t hline = NRF_GFX_LINE(0, nrf_gfx_height_get(&lcd) / 2,
-										nrf_gfx_width_get(&lcd),
-										nrf_gfx_height_get(&lcd) / 2, 4);
-	nrf_gfx_line_draw(&lcd, &hline, 1);
+	nrf_gfx_line_t hline = NRF_GFX_LINE(0, nrf_gfx_height_get(&s_Lcd) / 2,
+										nrf_gfx_width_get(&s_Lcd),
+										nrf_gfx_height_get(&s_Lcd) / 2, 4);
+	nrf_gfx_line_draw(&s_Lcd, &hline, 1);
 
 	// draw a vertical line
-	nrf_gfx_line_t vline = NRF_GFX_LINE(nrf_gfx_width_get(&lcd) / 2, 0,
-										nrf_gfx_width_get(&lcd) / 2,
-										nrf_gfx_height_get(&lcd), 4);
-	nrf_gfx_line_draw(&lcd, &vline, 1);
+	nrf_gfx_line_t vline = NRF_GFX_LINE(nrf_gfx_width_get(&s_Lcd) / 2, 0,
+										nrf_gfx_width_get(&s_Lcd) / 2,
+										nrf_gfx_height_get(&s_Lcd), 4);
+	nrf_gfx_line_draw(&s_Lcd, &vline, 1);
 
 	nrf_gfx_circle_t cir = {
-		nrf_gfx_width_get(&lcd) / 2,
-		nrf_gfx_height_get(&lcd) / 2,
-		nrf_gfx_width_get(&lcd) / 2
+		nrf_gfx_width_get(&s_Lcd) / 2,
+		nrf_gfx_height_get(&s_Lcd) / 2,
+		nrf_gfx_width_get(&s_Lcd) / 2
 	};
-	nrf_gfx_circle_draw(&lcd, &cir, 1, 0);
-	nrf_gfx_display(&lcd);
+	nrf_gfx_circle_draw(&s_Lcd, &cir, 1, 0);
+	nrf_gfx_display(&s_Lcd);
 
 #ifdef QTD
 	IOPinSet(LED4_PORT, LED4_PIN);
@@ -252,95 +257,85 @@ int main()
 	return 0;
 }
 
-#define PAPER_BYTE_WIDTH ((PAPER_PIXEL_WIDTH % 8 == 0) ? PAPER_PIXEL_WIDTH / 8 : PAPER_PIXEL_WIDTH / 8 + 1)
-#define PAPER_BYTE_HEIGHT PAPER_PIXEL_HEIGHT
-#define PAPER_BUFLEN PAPER_BYTE_WIDTH * PAPER_BYTE_HEIGHT
-
-extern uint8_t paper_buffer[PAPER_BUFLEN];
-extern "C" void  check_busy_high();
 #if 0
 extern "C" ret_code_t _paper_display(void)
 {
-  ret_code_t ret = 0;
+	ret_code_t ret = 0;
 
-  /*
-   * TODO transfer chunks of 256 bytes rather than calling nrf_drv_spi_transfer
-   * for each byte.
-   */
+	// TODO transfer chunks of 256 bytes rather than calling nrf_drv_spi_transfer
+	// for each byte.
 
-  uint8_t command[1];
+	uint8_t command[1];
 #if 0
-  command[0] = 0x10;
-  ret = paper_tx_cmd(command, 1);
-  //if (ret != NRF_SUCCESS) return ret;
+	command[0] = 0x10;
+	ret = paper_tx_cmd(command, 1);
+	//if (ret != NRF_SUCCESS) return ret;
 
-  //paper_begin_data();
-  for (int i = 0; i < PAPER_BUFLEN; i++) {
-  	uint16_t d = 0x100 | ~paper_buffer[i];//paper_prev_buffer[i];
-  	 spi_9b_send_9b(d);
+	//paper_begin_data();
+	for (int i = 0; i < PAPER_BUFLEN; i++) {
+	uint16_t d = 0x100 | ~paper_buffer[i];//paper_prev_buffer[i];
+		spi_9b_send_9b(d);
 
-   // ret = nrf_drv_spi_transfer(&spi, paper_prev_buffer + i, 1, NULL, 0);
-    if (ret != NRF_SUCCESS) return ret;
-  }
+	// ret = nrf_drv_spi_transfer(&spi, paper_prev_buffer + i, 1, NULL, 0);
+	if (ret != NRF_SUCCESS) return ret;
+	}
 
-  msDelay(10);
+	msDelay(10);
 #endif
-  spi_9b_send_9b( 0x10 );
+	spi_9b_send_9b( 0x10 );
 
-  EInkIntrfSetDataMode(g_EInkIntrf, true);
+	EInkIntrfSetDataMode(g_EInkIntrf, true);
 
-  uint8_t d = 0;
-  for (int i = 0; i < PAPER_BUFLEN; i++)
-  {
-  	EInkIntrfTx(g_EInkIntrf, &d, 1);
-  }
+	uint8_t d = 0;
+	for (int i = 0; i < PAPER_BUFLEN; i++)
+	{
+	EInkIntrfTx(g_EInkIntrf, &d, 1);
+	}
 
-  /*
-   * TODO i'm not yet sure about the purpose of sending the previous buffer too.
-   * just sending 0x00s works pretty good. when sending the actual previous
-   * image buffer, it looks like sections that have not changed become kinda
-   * dirty / greyish (which could be useful because one can use three colors).
-   */
+	// TODO i'm not yet sure about the purpose of sending the previous buffer too.
+	// just sending 0x00s works pretty good. when sending the actual previous
+	// image buffer, it looks like sections that have not changed become kinda
+	// dirty / greyish (which could be useful because one can use three colors).
 
-  // memcpy(paper_prev_buffer, paper_buffer, PAPER_BUFLEN);
+	// memcpy(paper_prev_buffer, paper_buffer, PAPER_BUFLEN);
 #if 0
-  command[0] = 0x13;
-  ret = paper_tx_cmd(command, 1);
-  if (ret != NRF_SUCCESS) return ret;
+	command[0] = 0x13;
+	ret = paper_tx_cmd(command, 1);
+	if (ret != NRF_SUCCESS) return ret;
 
-  //paper_begin_data();
-  for (int i = 0; i < PAPER_BUFLEN; i++) {
-	  	uint16_t d = 0x100 | paper_buffer[i];
-	  	 spi_9b_send_9b(d);
-   // ret = nrf_drv_spi_transfer(&spi, paper_buffer + i, 1, NULL, 0);
-    if (ret != NRF_SUCCESS) return ret;
-  }
+	//paper_begin_data();
+	for (int i = 0; i < PAPER_BUFLEN; i++) {
+		uint16_t d = 0x100 | paper_buffer[i];
+			spi_9b_send_9b(d);
+	// ret = nrf_drv_spi_transfer(&spi, paper_buffer + i, 1, NULL, 0);
+	if (ret != NRF_SUCCESS) return ret;
+	}
 #endif
-  //spi_9b_send_9b( 0x13 );
-  //EInkIntrfSetDataMode(g_EInkIntrf, true);
+	//spi_9b_send_9b( 0x13 );
+	//EInkIntrfSetDataMode(g_EInkIntrf, true);
 
-  //EInkIntrfTx(g_EInkIntrf, paper_buffer, PAPER_BUFLEN);
-  uint8_t cmd = 0x13;
+	//EInkIntrfTx(g_EInkIntrf, paper_buffer, PAPER_BUFLEN);
+	uint8_t cmd = 0x13;
 
-  EInkIntrfWrite(g_EInkIntrf, &cmd, 1, paper_buffer, PAPER_BUFLEN);
+	EInkIntrfWrite(g_EInkIntrf, &cmd, 1, paper_buffer, PAPER_BUFLEN);
 
-  msDelay(10);
+	msDelay(10);
 
-  //ret = paper_tx_lut();
-  //if (ret != NRF_SUCCESS) return ret;
+	//ret = paper_tx_lut();
+	//if (ret != NRF_SUCCESS) return ret;
 
-  //spi_9b_send_9b( DRF );
-  //check_busy_high();
-  spi_9b_send_9b( 0x12);//DRF );
-  check_busy_high();
+	//spi_9b_send_9b( DRF );
+	//check_busy_high();
+	spi_9b_send_9b( 0x12);//DRF );
+	check_busy_high();
 
 //  spi_9b_send_9b( POF );
 //  check_busy_low();
 //  ret = paper_tx_cmd(paper_cmd_disp, sizeof(paper_cmd_disp));
 //  if (ret != NRF_SUCCESS) return ret;
 
-  msDelay(100); // TODO use busy pin rather than arbitrary delays
+	msDelay(100); // TODO use busy pin rather than arbitrary delays
 
-  return ret;
+	return ret;
 }
 #endif

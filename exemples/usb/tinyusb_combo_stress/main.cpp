@@ -3,15 +3,26 @@
 
 @brief	TinyUSB composite stress benchmark matching usb_combo_stress.cpp.
 
-Runs dual CDC, HID, raw interrupt and bidirectional isochronous loopback on the
-nRF52840 using TinyUSB. Python/usb_combo_stress.py drives the same workload;
-uses the same VID/PID/product identity as usb_combo_stress.cpp.
+Runs dual CDC, HID, raw interrupt and bidirectional isochronous loopback using
+TinyUSB, with the same workload, VID/PID and product identity as
+usb_combo_stress.cpp. Python/usb_combo_stress.py drives it.
+
+This source is shared by the nRF52840 (full speed) and nRF54LM20 (high speed)
+TinyUsbComboStress projects. Each project keeps its chip glue in its own src
+folder: tusb_config.h and the functions of tinyusb_combo_port.h (controller
+power, USB interrupt handler and device identifier).
 
 The raw interrupt function uses TinyUSB's Vendor class. The ISO interface uses
-a small application class driver because the benchmark intentionally reuses
-the nRF52 fixed EP8 across six alternate settings with different MPS values.
+a small application class driver because the benchmark reuses one endpoint
+pair (EP8, fixed on nRF52840) across six alternate settings with different
+MPS values.
 
-@author	Nguyen Hoan Hoang
+High-speed builds also provide the high-speed configuration, the device
+qualifier and the other-speed configuration. They use 512-byte CDC bulk
+packets and the same HID, interrupt and ISO service intervals as the IOsonata
+combo at high speed.
+
+@author	Hoang Nguyen Hoan
 @date	Sep. 23, 2026
 
 @license
@@ -19,38 +30,59 @@ the nRF52 fixed EP8 across six alternate settings with different MPS values.
 MIT License
 
 Copyright (c) 2026, I-SYST inc., all rights reserved
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
 ----------------------------------------------------------------------------*/
 
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
 
-#include "nrf.h"
 #include "prbs.h"
 #include "tusb.h"
 #include "device/usbd_pvt.h"
+#include "tinyusb_combo_port.h"
 
 #define TINYUSB_COMBO_VID			0x1209U
 #define TINYUSB_COMBO_PID			0x0008U
 #define CDC_NOTIFY_MPS				8U
-#define DATA_MPS					64U
-#define HID_REPORT_SIZE				64U
+#define DATA_FS_MPS					64U
+#define DATA_HS_MPS					512U
+#define DATA_MAX_MPS				(TUD_OPT_HIGH_SPEED ? DATA_HS_MPS : DATA_FS_MPS)
+#define HID_REPORT_LEN				64U
+#define HID_FS_INTERVAL				1U
+#define HID_HS_INTERVAL				4U
 #define INT_MPS						64U
-#define ISO_MAX_MPS				63U
+#define ISO_MAX_MPS					63U
 #define ISO_ALT_COUNT				6U
+#define ISO_FS_INTERVAL				1U
+#define ISO_HS_INTERVAL				4U
 #define ISO_QUEUE_DEPTH				8U
 #define ISO_REQ_GET_DIAG			0x5AU
 #define ISO_REQ_GET_DCD_DIAG		0x5BU
-#define ISO_DCD_DIAG_COUNT			11U
-
-// ISO scheduling counters of the modified nRF52 port (dcd_nrf5x.c).
-extern "C" void dcd_nrf5x_iso_diag_get(uint32_t Counts[ISO_DCD_DIAG_COUNT]);
 
 #define CDC0_NOTIFY_EP				0x81U
-#define CDC0_OUT_EP				0x02U
+#define CDC0_OUT_EP					0x02U
 #define CDC0_IN_EP					0x82U
 #define CDC1_NOTIFY_EP				0x83U
-#define CDC1_OUT_EP				0x04U
+#define CDC1_OUT_EP					0x04U
 #define CDC1_IN_EP					0x84U
 #define HID_OUT_EP					0x05U
 #define HID_IN_EP					0x85U
@@ -91,10 +123,10 @@ static const uint8_t s_HidReportDesc[] = {
 	0x09U, 0x01U,
 	0xA1U, 0x01U,
 	0x75U, 0x08U,
-	0x95U, HID_REPORT_SIZE,
+	0x95U, HID_REPORT_LEN,
 	0x09U, 0x01U,
 	0x81U, 0x02U,
-	0x95U, HID_REPORT_SIZE,
+	0x95U, HID_REPORT_LEN,
 	0x09U, 0x01U,
 	0x91U, 0x02U,
 	0xC0U,
@@ -102,13 +134,52 @@ static const uint8_t s_HidReportDesc[] = {
 
 #define INT_FUNCTION_DESC_LEN	(9U + 3U * (9U + 7U + 7U))
 #define ISO_FUNCTION_DESC_LEN	(9U + ISO_ALT_COUNT * (9U + 7U + 7U))
-#define CONFIG_TOTAL_LEN 	(TUD_CONFIG_DESC_LEN + 2U * TUD_CDC_DESC_LEN + 	 TUD_HID_INOUT_DESC_LEN + INT_FUNCTION_DESC_LEN + ISO_FUNCTION_DESC_LEN)
+#define CONFIG_TOTAL_LEN \
+	(TUD_CONFIG_DESC_LEN + 2U * TUD_CDC_DESC_LEN + TUD_HID_INOUT_DESC_LEN + \
+	INT_FUNCTION_DESC_LEN + ISO_FUNCTION_DESC_LEN)
 
-#define VENDOR_ALT0(_itf, _str) 	9, TUSB_DESC_INTERFACE, (_itf), 0, 0, TUSB_CLASS_VENDOR_SPECIFIC, 0, 0, (_str)
+#define VENDOR_ALT0(_itf, _str) \
+	9, TUSB_DESC_INTERFACE, (_itf), 0, 0, TUSB_CLASS_VENDOR_SPECIFIC, 0, 0, (_str)
 
-#define INT_ALT_DESC(_alt, _interval) 	9, TUSB_DESC_INTERFACE, ITF_INT, (_alt), 2, TUSB_CLASS_VENDOR_SPECIFIC, 0, 0, STR_INT, 	7, TUSB_DESC_ENDPOINT, INT_OUT_EP, TUSB_XFER_INTERRUPT, U16_TO_U8S_LE(INT_MPS), (_interval), 	7, TUSB_DESC_ENDPOINT, INT_IN_EP,  TUSB_XFER_INTERRUPT, U16_TO_U8S_LE(INT_MPS), (_interval)
+#define INT_ALT_DESC(_alt, _interval) \
+	9, TUSB_DESC_INTERFACE, ITF_INT, (_alt), 2, TUSB_CLASS_VENDOR_SPECIFIC, \
+	0, 0, STR_INT, \
+	7, TUSB_DESC_ENDPOINT, INT_OUT_EP, TUSB_XFER_INTERRUPT, \
+	U16_TO_U8S_LE(INT_MPS), (_interval), \
+	7, TUSB_DESC_ENDPOINT, INT_IN_EP, TUSB_XFER_INTERRUPT, \
+	U16_TO_U8S_LE(INT_MPS), (_interval)
 
-#define ISO_ALT_DESC(_alt, _mps) 	9, TUSB_DESC_INTERFACE, ITF_ISO, (_alt), 2, TUSB_CLASS_VENDOR_SPECIFIC, 0, 0, STR_ISO, 	7, TUSB_DESC_ENDPOINT, ISO_OUT_EP, TUSB_XFER_ISOCHRONOUS, U16_TO_U8S_LE(_mps), 1, 	7, TUSB_DESC_ENDPOINT, ISO_IN_EP,  TUSB_XFER_ISOCHRONOUS, U16_TO_U8S_LE(_mps), 1
+#define ISO_ALT_DESC(_alt, _mps, _interval) \
+	9, TUSB_DESC_INTERFACE, ITF_ISO, (_alt), 2, TUSB_CLASS_VENDOR_SPECIFIC, \
+	0, 0, STR_ISO, \
+	7, TUSB_DESC_ENDPOINT, ISO_OUT_EP, TUSB_XFER_ISOCHRONOUS, \
+	U16_TO_U8S_LE(_mps), (_interval), \
+	7, TUSB_DESC_ENDPOINT, ISO_IN_EP, TUSB_XFER_ISOCHRONOUS, \
+	U16_TO_U8S_LE(_mps), (_interval)
+
+// The interrupt alternate settings keep the same bInterval values at both
+// speeds, as the IOsonata combo does.
+#define COMBO_CONFIG_DESC(_dataMps, _hidInterval, _isoInterval) \
+	TUD_CONFIG_DESCRIPTOR(1, ITF_COUNT, 0, CONFIG_TOTAL_LEN, \
+		TUSB_DESC_CONFIG_ATT_REMOTE_WAKEUP, 100), \
+	TUD_CDC_DESCRIPTOR(ITF_CDC0, STR_CDC0, CDC0_NOTIFY_EP, CDC_NOTIFY_MPS, \
+		CDC0_OUT_EP, CDC0_IN_EP, (_dataMps)), \
+	TUD_CDC_DESCRIPTOR(ITF_CDC1, STR_CDC1, CDC1_NOTIFY_EP, CDC_NOTIFY_MPS, \
+		CDC1_OUT_EP, CDC1_IN_EP, (_dataMps)), \
+	TUD_HID_INOUT_DESCRIPTOR(ITF_HID, STR_HID, HID_ITF_PROTOCOL_NONE, \
+		sizeof(s_HidReportDesc), HID_OUT_EP, HID_IN_EP, HID_REPORT_LEN, \
+		(_hidInterval)), \
+	VENDOR_ALT0(ITF_INT, STR_INT), \
+	INT_ALT_DESC(1, 1), \
+	INT_ALT_DESC(2, 4), \
+	INT_ALT_DESC(3, 16), \
+	VENDOR_ALT0(ITF_ISO, STR_ISO), \
+	ISO_ALT_DESC(1, 9, (_isoInterval)), \
+	ISO_ALT_DESC(2, 17, (_isoInterval)), \
+	ISO_ALT_DESC(3, 25, (_isoInterval)), \
+	ISO_ALT_DESC(4, 33, (_isoInterval)), \
+	ISO_ALT_DESC(5, 49, (_isoInterval)), \
+	ISO_ALT_DESC(6, 63, (_isoInterval))
 
 static const tusb_desc_device_t s_DeviceDesc = {
 	.bLength = sizeof(tusb_desc_device_t),
@@ -127,34 +198,35 @@ static const tusb_desc_device_t s_DeviceDesc = {
 	.bNumConfigurations = 1
 };
 
-static const uint8_t s_ConfigDesc[] = {
-	TUD_CONFIG_DESCRIPTOR(1, ITF_COUNT, 0, CONFIG_TOTAL_LEN,
-		TUSB_DESC_CONFIG_ATT_REMOTE_WAKEUP, 100),
-
-	TUD_CDC_DESCRIPTOR(ITF_CDC0, STR_CDC0, CDC0_NOTIFY_EP, CDC_NOTIFY_MPS,
-		CDC0_OUT_EP, CDC0_IN_EP, DATA_MPS),
-	TUD_CDC_DESCRIPTOR(ITF_CDC1, STR_CDC1, CDC1_NOTIFY_EP, CDC_NOTIFY_MPS,
-		CDC1_OUT_EP, CDC1_IN_EP, DATA_MPS),
-
-	TUD_HID_INOUT_DESCRIPTOR(ITF_HID, STR_HID, HID_ITF_PROTOCOL_NONE,
-		sizeof(s_HidReportDesc), HID_OUT_EP, HID_IN_EP, HID_REPORT_SIZE, 1),
-
-	VENDOR_ALT0(ITF_INT, STR_INT),
-	INT_ALT_DESC(1, 1),
-	INT_ALT_DESC(2, 4),
-	INT_ALT_DESC(3, 16),
-
-	VENDOR_ALT0(ITF_ISO, STR_ISO),
-	ISO_ALT_DESC(1, 9),
-	ISO_ALT_DESC(2, 17),
-	ISO_ALT_DESC(3, 25),
-	ISO_ALT_DESC(4, 33),
-	ISO_ALT_DESC(5, 49),
-	ISO_ALT_DESC(6, 63),
+static const uint8_t s_FsConfigDesc[] = {
+	COMBO_CONFIG_DESC(DATA_FS_MPS, HID_FS_INTERVAL, ISO_FS_INTERVAL)
 };
 
-static_assert(sizeof(s_ConfigDesc) == CONFIG_TOTAL_LEN,
-	"TinyUSB combo configuration descriptor length");
+static_assert(sizeof(s_FsConfigDesc) == CONFIG_TOTAL_LEN,
+	"TinyUSB combo full-speed configuration descriptor length");
+
+#if TUD_OPT_HIGH_SPEED
+static const tusb_desc_device_qualifier_t s_QualifierDesc = {
+	.bLength = sizeof(tusb_desc_device_qualifier_t),
+	.bDescriptorType = TUSB_DESC_DEVICE_QUALIFIER,
+	.bcdUSB = 0x0200,
+	.bDeviceClass = TUSB_CLASS_MISC,
+	.bDeviceSubClass = MISC_SUBCLASS_COMMON,
+	.bDeviceProtocol = MISC_PROTOCOL_IAD,
+	.bMaxPacketSize0 = CFG_TUD_ENDPOINT0_SIZE,
+	.bNumConfigurations = 1,
+	.bReserved = 0
+};
+
+static const uint8_t s_HsConfigDesc[] = {
+	COMBO_CONFIG_DESC(DATA_HS_MPS, HID_HS_INTERVAL, ISO_HS_INTERVAL)
+};
+
+static_assert(sizeof(s_HsConfigDesc) == CONFIG_TOTAL_LEN,
+	"TinyUSB combo high-speed configuration descriptor length");
+
+static uint8_t s_OtherSpeedDesc[CONFIG_TOTAL_LEN];
+#endif
 
 static const char * const s_Strings[] = {
 	nullptr,
@@ -170,6 +242,70 @@ static const char * const s_Strings[] = {
 
 static uint16_t s_StringDesc[33];
 
+static void IsoDriverInit(void);
+static bool IsoDriverDeinit(void);
+static void IsoDriverReset(uint8_t RhPort);
+static uint16_t IsoDriverOpen(uint8_t RhPort,
+	const tusb_desc_interface_t *pItf, uint16_t MaxLen);
+static bool IsoDriverControl(uint8_t RhPort, uint8_t Stage,
+	const tusb_control_request_t *pRequest);
+static bool IsoDriverXfer(uint8_t RhPort, uint8_t EpAddr,
+	xfer_result_t Result, uint32_t Length);
+static bool IsoDriverXferIsr(uint8_t RhPort, uint8_t EpAddr,
+	xfer_result_t Result, uint32_t Length);
+
+static uint8_t s_HidPending[HID_REPORT_LEN];
+static uint16_t s_HidPendingLen;
+
+#pragma pack(push, 1)
+typedef struct __TinyUsbIsoDiag {
+	uint32_t RxMissCnt;
+	uint32_t TxMissCnt;
+	uint32_t LoopbackDropCnt;
+	uint32_t RxEmptyCnt;
+	uint32_t TxEmptyCnt;
+} TinyUsbIsoDiag_t;
+#pragma pack(pop)
+
+typedef struct __IsoFrame {
+	alignas(4) uint8_t Data[ISO_MAX_MPS];
+	uint8_t Len;
+} IsoFrame_t;
+
+typedef struct __IsoState {
+	uint8_t RhPort;
+	uint8_t Alt;
+	uint8_t Mps;
+	bool InBusy;
+	const uint8_t *pDesc;
+	uint16_t DescLen;
+	const tusb_desc_endpoint_t *pOutDesc;
+	const tusb_desc_endpoint_t *pInDesc;
+	alignas(4) uint8_t RxBuffer[ISO_MAX_MPS];
+	IsoFrame_t Queue[ISO_QUEUE_DEPTH];
+	uint8_t Put;
+	uint8_t Get;
+	uint8_t Count;
+	TinyUsbIsoDiag_t Diag;
+#if TINYUSB_COMBO_ISO_DIAG
+	uint32_t DcdDiag[TINYUSB_COMBO_DCD_DIAG_COUNT];
+#endif
+} IsoState_t;
+
+static IsoState_t s_Iso;
+
+static const usbd_class_driver_t s_IsoDriver = {
+	.name = "COMBO-ISO",
+	.init = IsoDriverInit,
+	.deinit = IsoDriverDeinit,
+	.reset = IsoDriverReset,
+	.open = IsoDriverOpen,
+	.control_xfer_cb = IsoDriverControl,
+	.xfer_cb = IsoDriverXfer,
+	.xfer_isr = IsoDriverXferIsr,
+	.sof = nullptr,
+};
+
 extern "C" uint8_t const *tud_descriptor_device_cb(void)
 {
 	return reinterpret_cast<const uint8_t *>(&s_DeviceDesc);
@@ -178,8 +314,33 @@ extern "C" uint8_t const *tud_descriptor_device_cb(void)
 extern "C" uint8_t const *tud_descriptor_configuration_cb(uint8_t Index)
 {
 	(void)Index;
-	return s_ConfigDesc;
+#if TUD_OPT_HIGH_SPEED
+	if (tud_speed_get() == TUSB_SPEED_HIGH)
+		return s_HsConfigDesc;
+#endif
+	return s_FsConfigDesc;
 }
+
+#if TUD_OPT_HIGH_SPEED
+// A full-speed-only device stalls these two requests, TinyUSB's default.
+extern "C" uint8_t const *tud_descriptor_device_qualifier_cb(void)
+{
+	return reinterpret_cast<const uint8_t *>(&s_QualifierDesc);
+}
+
+// The configuration the device would use at the other speed, returned with
+// the OTHER_SPEED_CONFIGURATION descriptor type.
+extern "C" uint8_t const *tud_descriptor_other_speed_configuration_cb(
+	uint8_t Index)
+{
+	(void)Index;
+	memcpy(s_OtherSpeedDesc,
+		tud_speed_get() == TUSB_SPEED_HIGH ? s_FsConfigDesc : s_HsConfigDesc,
+		CONFIG_TOTAL_LEN);
+	s_OtherSpeedDesc[1] = TUSB_DESC_OTHER_SPEED_CONFIG;
+	return s_OtherSpeedDesc;
+}
+#endif
 
 extern "C" uint8_t const *tud_hid_descriptor_report_cb(uint8_t Instance)
 {
@@ -190,12 +351,10 @@ extern "C" uint8_t const *tud_hid_descriptor_report_cb(uint8_t Instance)
 static size_t SerialString(uint16_t *pString, size_t MaxLen)
 {
 	static const char Hex[] = "0123456789ABCDEF";
-	const uint32_t id[2] = {
-		NRF_FICR->DEVICEID[0],
-		NRF_FICR->DEVICEID[1]
-	};
+	uint32_t id[2];
 	size_t count = 0;
 
+	TinyUsbPortDeviceId(id);
 	for (unsigned word = 0; word < 2 && count < MaxLen; word++)
 	{
 		for (int shift = 28; shift >= 0 && count < MaxLen; shift -= 4)
@@ -244,14 +403,11 @@ extern "C" uint16_t const *tud_descriptor_string_cb(uint8_t Index,
 	return s_StringDesc;
 }
 
-/* HID --------------------------------------------------------------------- */
-
-static uint8_t s_HidPending[HID_REPORT_SIZE];
-static uint16_t s_HidPendingLen;
+// HID -------------------------------------------------------------------
 
 static void HidSendOrPend(const uint8_t *pData, uint16_t Length)
 {
-	if (Length > HID_REPORT_SIZE)
+	if (Length > HID_REPORT_LEN)
 		return;
 
 	if (tud_hid_ready() && tud_hid_report(0, pData, Length))
@@ -297,7 +453,7 @@ extern "C" void tud_hid_report_complete_cb(uint8_t Instance,
 	}
 }
 
-/* Raw interrupt through TinyUSB Vendor ------------------------------------ */
+// Raw interrupt through TinyUSB Vendor ----------------------------------
 
 extern "C" void tud_vendor_int_rx_cb(uint8_t Index,
 	const uint8_t *pBuffer, uint32_t Length)
@@ -317,42 +473,7 @@ extern "C" void tud_vendor_int_tx_cb(uint8_t Index, uint32_t Length)
 	(void)Length;
 }
 
-/* Custom ISO interface ---------------------------------------------------- */
-
-#pragma pack(push, 1)
-typedef struct __TinyUsbIsoDiag {
-	uint32_t RxMissCnt;
-	uint32_t TxMissCnt;
-	uint32_t LoopbackDropCnt;
-	uint32_t RxEmptyCnt;
-	uint32_t TxEmptyCnt;
-} TinyUsbIsoDiag_t;
-#pragma pack(pop)
-
-typedef struct __IsoFrame {
-	uint8_t Data[ISO_MAX_MPS];
-	uint8_t Len;
-} IsoFrame_t;
-
-typedef struct __IsoState {
-	uint8_t RhPort;
-	uint8_t Alt;
-	uint8_t Mps;
-	bool InBusy;
-	const uint8_t *pDesc;
-	uint16_t DescLen;
-	const tusb_desc_endpoint_t *pOutDesc;
-	const tusb_desc_endpoint_t *pInDesc;
-	uint8_t RxBuffer[ISO_MAX_MPS];
-	IsoFrame_t Queue[ISO_QUEUE_DEPTH];
-	uint8_t Put;
-	uint8_t Get;
-	uint8_t Count;
-	TinyUsbIsoDiag_t Diag;
-	uint32_t DcdDiag[ISO_DCD_DIAG_COUNT];
-} IsoState_t;
-
-static IsoState_t s_Iso;
+// Custom ISO interface --------------------------------------------------
 
 static void IsoQueueReset(void)
 {
@@ -435,8 +556,9 @@ static bool IsoSetAlt(uint8_t Alt)
 	if (Alt > ISO_ALT_COUNT)
 		return false;
 
-	// Reactivating the previous descriptors aborts any transfer still armed on
-	// nRF52 EP8 and clears TinyUSB's endpoint busy state before re-selection.
+	// Reactivating the previous descriptors aborts any transfer still armed
+	// on the ISO endpoints and clears TinyUSB's endpoint busy state before
+	// the new alternate setting is selected.
 	if (s_Iso.pOutDesc != nullptr)
 		(void)usbd_edpt_iso_activate(s_Iso.RhPort, s_Iso.pOutDesc);
 	if (s_Iso.pInDesc != nullptr)
@@ -563,13 +685,15 @@ static bool IsoDriverControl(uint8_t RhPort, uint8_t Stage,
 			return tud_control_xfer(RhPort, pRequest,
 				&s_Iso.Diag, sizeof(s_Iso.Diag));
 		}
+#if TINYUSB_COMBO_ISO_DIAG
 		if (pRequest->bRequest == ISO_REQ_GET_DCD_DIAG &&
 			pRequest->wLength == sizeof(s_Iso.DcdDiag))
 		{
-			dcd_nrf5x_iso_diag_get(s_Iso.DcdDiag);
+			TinyUsbPortIsoDiag(s_Iso.DcdDiag);
 			return tud_control_xfer(RhPort, pRequest,
 				s_Iso.DcdDiag, sizeof(s_Iso.DcdDiag));
 		}
+#endif
 	}
 
 	return false;
@@ -656,18 +780,6 @@ static bool IsoDriverXferIsr(uint8_t RhPort, uint8_t EpAddr,
 	return IsoDriverTransfer(RhPort, EpAddr, Result, Length, true);
 }
 
-static const usbd_class_driver_t s_IsoDriver = {
-	.name = "COMBO-ISO",
-	.init = IsoDriverInit,
-	.deinit = IsoDriverDeinit,
-	.reset = IsoDriverReset,
-	.open = IsoDriverOpen,
-	.control_xfer_cb = IsoDriverControl,
-	.xfer_cb = IsoDriverXfer,
-	.xfer_isr = IsoDriverXferIsr,
-	.sof = nullptr,
-};
-
 extern "C" usbd_class_driver_t const *usbd_app_driver_get_cb(
 	uint8_t *pDriverCount)
 {
@@ -675,75 +787,26 @@ extern "C" usbd_class_driver_t const *usbd_app_driver_get_cb(
 	return &s_IsoDriver;
 }
 
-/* TinyUSB nRF52 power/IRQ glue ------------------------------------------- */
-
-extern "C" void tusb_hal_nrf_power_event(uint32_t Event);
-
-static bool s_Vbus;
-static bool s_Ready;
-
-static void PowerProcess(void)
-{
-	const uint32_t status = NRF_POWER->USBREGSTATUS;
-	const bool vbus =
-		(status & POWER_USBREGSTATUS_VBUSDETECT_Msk) != 0U;
-	const bool ready =
-		(status & POWER_USBREGSTATUS_OUTPUTRDY_Msk) != 0U;
-
-	if (!vbus)
-	{
-		if (s_Vbus)
-			tusb_hal_nrf_power_event(1U);
-		s_Vbus = false;
-		s_Ready = false;
-		return;
-	}
-
-	if (!s_Vbus)
-	{
-		s_Vbus = true;
-		tusb_hal_nrf_power_event(0U);
-	}
-
-	if (ready && !s_Ready)
-	{
-		s_Ready = true;
-		tusb_hal_nrf_power_event(2U);
-	}
-	else if (!ready)
-	{
-		s_Ready = false;
-	}
-}
-
-extern "C" void USBD_IRQHandler(void)
-{
-	tusb_int_handler(0, true);
-}
-
 static bool UsbInit(void)
 {
-	NVIC_SetPriority(USBD_IRQn, 6U);
+	if (!TinyUsbPortInit())
+		return false;
 
 	tusb_rhport_init_t devInit = {};
 	devInit.role = TUSB_ROLE_DEVICE;
-	devInit.speed = TUSB_SPEED_FULL;
+	devInit.speed = TUD_OPT_HIGH_SPEED ? TUSB_SPEED_HIGH : TUSB_SPEED_FULL;
 
-	if (!tusb_init(0, &devInit))
-		return false;
-
-	PowerProcess();
-	return true;
+	return tusb_init(0, &devInit);
 }
 
-/* Main workload ----------------------------------------------------------- */
+// Main workload ---------------------------------------------------------
 
 int main()
 {
 	static constexpr uint8_t LoopbackCdc = 0U;
 	static constexpr uint8_t PrbsCdc = 1U;
 
-	uint8_t loopbackBuffer[DATA_MPS];
+	uint8_t loopbackBuffer[DATA_MAX_MPS];
 	uint8_t loopbackExpected = Prbs8(0xff);
 	uint8_t prbs = 0xff;
 	uint32_t loopbackRxErrorNotify = 0U;
@@ -756,7 +819,7 @@ int main()
 
 	while (1)
 	{
-		PowerProcess();
+		TinyUsbPortProcess();
 		tud_task_ext(0, false);
 
 		const bool connected = tud_cdc_n_connected(LoopbackCdc);
@@ -803,7 +866,7 @@ int main()
 				if (available != 0U)
 				{
 					const uint32_t count =
-						available < DATA_MPS ? available : DATA_MPS;
+						available < DATA_MAX_MPS ? available : DATA_MAX_MPS;
 					const uint32_t length =
 						tud_cdc_n_read(LoopbackCdc, loopbackBuffer, count);
 					for (uint32_t i = 0; i < length; i++)
@@ -818,6 +881,7 @@ int main()
 			}
 		}
 
+		// Byte mode: one PRBS byte per main loop pass
 		const uint8_t prbsByte =
 			loopbackRxErrorNotify != 0U ? 0U : prbs;
 		if (tud_cdc_n_connected(PrbsCdc) &&
@@ -834,7 +898,6 @@ int main()
 		// also what arms it immediately after SET_INTERFACE selects alt 1.
 		if (tud_vendor_n_alt(VENDOR_INT) != 0U)
 			(void)tud_vendor_n_int_read_xfer(VENDOR_INT);
-
 	}
 
 	return 0;

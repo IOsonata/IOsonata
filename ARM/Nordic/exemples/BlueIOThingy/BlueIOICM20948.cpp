@@ -1,11 +1,37 @@
-/*
- * BlueIOICM20948.cpp
- *
- *  Created on: Dec 24, 2018
- *      Author: hoan
- */
+/**-------------------------------------------------------------------------
+@example	BlueIOICM20948.cpp
+
+@brief	ICM20948 motion sensing and Bluetooth data for BlueIOThingy.
+
+@author	hoan
+@date	Dec 24, 2018
+
+@license
+
+MIT License
+
+Copyright (c) 2018, I-SYST inc., all rights reserved
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+----------------------------------------------------------------------------*/
 //#include "ble.h"
-//#include "app_scheduler.h"
 
 #include "bluetooth/bt_app.h"
 #include "bluetooth/bt_gatt.h"
@@ -124,10 +150,29 @@ FusionAhrsSettings ahrs_settings =  {
 };
 #endif
 
-//void ImuDataChedHandler(void * p_event_data, uint16_t event_size)
+
+// Set while ImuDataChedHandler is in the event queue. The sensor interrupt
+// fires faster than the queue may be run, so the read is queued once.
+static volatile bool s_bImuDataQueued = false;
+
+void ImuDataChedHandler(uint32_t Evt, void *pCtx);
+
+static void ImuDataQue(void)
+{
+	if (s_bImuDataQueued == false)
+	{
+		s_bImuDataQueued = true;
+		if (AppEvtHandlerQue(0, 0, ImuDataChedHandler) == false)
+		{
+			s_bImuDataQueued = false;
+		}
+	}
+}
 
 void ImuDataChedHandler(uint32_t Evt, void *pCtx)
 {
+	s_bImuDataQueued = false;
+
 	AccelSensorData_t accdata;
 	GyroSensorData_t gyrodata;
 	MagSensorData_t magdata;
@@ -181,7 +226,7 @@ static void ImuEvtHandler(Device * const pDev, DEV_EVT Evt)
 			// Defer the read and BLE send to the main loop. The FIFO drain
 			// runs in the GPIOTE ISR; doing the send here too races vQuat
 			// against the next sample and ties up the connection interval.
-			AppEvtHandlerQue(0, 0, ImuDataChedHandler);
+			ImuDataQue();
 			break;
 	}
 }
@@ -218,7 +263,7 @@ void ICM20948IntHandler(int IntNo, void *pCtx)
 		// send to the main loop. The on-chip DMP is not used here.
 		s_MotSensor.UpdateData();
 		s_Imu.UpdateData();
-		AppEvtHandlerQue(0, 0, ImuDataChedHandler);
+		ImuDataQue();
 		return;
 #elif 1
 		s_Imu.IntHandler();	// Drives ImuEvtHandler -> ImuDataChedHandler once

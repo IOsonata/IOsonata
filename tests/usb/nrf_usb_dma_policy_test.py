@@ -10,9 +10,9 @@ errata-199 busy word as a software lock:
   event (END cleared, then EPSTATUS), and the channel is handed straight to
   the next queued DMA before the EPDATA scan.
 - EP0 IN chains its next staged packet directly from its END.
-- Regular OUT completion is queued to AppEvt at END. Regular IN completion
-  and OUT readiness (DRDY) are queued to AppEvt from EPDATA; the readiness
-  latch is consumed only when the enqueue succeeds.
+- Regular OUT completes in the ISR after DMA handoff. Regular IN completion
+  and OUT readiness (DRDY) run in the ISR from EPDATA; each status bit is
+  cleared before the owner callback can start another transfer.
 - EpReceive only queues the destination and resumes an idle channel.
 - The close-path wait retires a running DMA and unlocks; it never starts
   another. Its callers exclude interrupts.
@@ -58,7 +58,8 @@ ep_enable = function_body(source, "void nRFUsbdEpHwEnable(")
 # Removed mechanisms stay removed.
 for name in ("nRFUsbdDmaReclaim", "nRFUsbdDmaEndIntEnable", "s_LazyInMask",
              "nRFUsbdGetCompletedXfer", "nRFUsbdProcessInComplete",
-             "nRFUsbdProcessEpEvent", "newDmaWork"):
+             "nRFUsbdProcessEpEvent", "newDmaWork", "OutCmplOwed",
+             "bQueRefused", "nRFUsbdInvalidateEvents"):
     assert name not in source, name
 
 # Start: clear END, trigger. It neither takes the lock nor touches INTEN;
@@ -107,12 +108,12 @@ assert ep0.index("nRFUsbdEp0InStart(pep0);") < ep0.index("reuseDma = false;")
 # Regular IN pops its request; completion is reported later from EPDATA.
 reg_in = completed[completed.index("case 1U:"):completed.index("case 17U:")]
 assert "(void)CFifoGet(s_Usbd.hQue);" in reg_in
-assert "AppEvtHandlerQue" not in reg_in
+assert "UsbEvtQue" not in reg_in
 
-# Regular OUT pops its request and queues its completion at END.
+# Regular OUT captures its endpoint and length at END, before DMA handoff.
 reg_out = completed[completed.index("case 17U:"):]
-assert reg_out.index("(void)CFifoGet(s_Usbd.hQue);") < reg_out.index("AppEvtHandlerQue(evt,")
-assert "nRFUsbdProcessQueuedEvent" in reg_out
+assert reg_out.index("(void)CFifoGet(s_Usbd.hQue);") < reg_out.index("outcmpl = epnum;")
+assert "outlen = (uint16_t)NRF_USBD->EPOUT[epnum].AMOUNT;" in reg_out
 assert "USB_CTRLR_EVT_XFER_CMPL" not in completed
 assert "nRFUsbdStartQueuedDma" not in completed
 assert "nRFUsbdDmaUnlock" not in completed
@@ -121,9 +122,11 @@ assert "nRFUsbdDmaUnlock" not in completed
 assert interrupt.count("nRFUsbdStartQueuedDma(") == 1
 hand_off = interrupt.index("nRFUsbdStartQueuedDma(ep0out);")
 assert interrupt.index("switch (epno)") < hand_off
-assert hand_off < interrupt.index("uint32_t pending = __ROR(datastatus & 0x00FE00FEUL, 16U);")
+assert hand_off < interrupt.index("uint32_t pending = __ROR(datastatus &")
 assert "if (reuseDma || ((ep0out || resumed) && nRFUsbdAcquireDma()))" in interrupt
-assert interrupt.index("NRF_USBD->EPDATASTATUS = servicedstatus;") > hand_off
+out_callback = interrupt.index("nRFUsbEpRegisteredEvent((uint8_t)outcmpl,")
+assert hand_off < out_callback < interrupt.index("uint32_t pending = __ROR(datastatus &")
+assert "outlen);" in interrupt[out_callback:]
 
 # Bus events are handled before retirement; a resume falls through to the
 # scheduler so queued work restarts without another event.
@@ -131,18 +134,18 @@ bus = interrupt.index("if (NRF_USBD->EVENTS_USBEVENT != 0U)")
 assert bus < interrupt.index("switch (epno)")
 assert "resumed" in interrupt[hand_off - 200:hand_off]
 
-# EPDATA: IN completion and OUT DRDY go through AppEvt. The OUT readiness
-# latch is consumed only when the enqueue succeeds; IN stops on a full queue.
-epdata = interrupt[interrupt.index("uint32_t pending = __ROR(datastatus & 0x00FE00FEUL, 16U);"):]
+# EPDATA: IN completion and OUT DRDY run directly. Clear each status before
+# its callback, so a new event during the callback survives for the next ISR.
+epdata = interrupt[interrupt.index("uint32_t pending = __ROR(datastatus &"):]
 # One pass in the original order: IN highest endpoint first, then OUT.
 assert "31U - (uint32_t)__CLZ(pending)" in epdata
-assert "evt = (NRF_USBD->EPIN[epnum].AMOUNT << 8U) | epnum | (1UL << 16U);" in epdata
-assert "uint32_t evt = epnum | (1UL << 17U);" in epdata
-# OUT readiness waits while its DMA is captured, and is consumed only when
-# the enqueue succeeds; a full queue stops the pass with the bit latched.
-assert epdata.index("(NRF_USBD->EPSTATUS & bit) != 0U") < epdata.index("AppEvtHandlerQue(evt,")
-assert epdata.index("AppEvtHandlerQue(evt,") < epdata.index("servicedstatus |= bit;")
-assert "break;" in epdata
+in_event = function_body(epdata, "if (in)")
+assert "const uint16_t amount = (uint16_t)NRF_USBD->EPIN[epnum].AMOUNT;" in in_event
+assert in_event.index("NRF_USBD->EPDATASTATUS = bit;") < in_event.index("preg->Handler(USB_CTRLR_EVT_XFER_CMPL,")
+out_event = function_body(epdata, "else if ((NRF_USBD->EPSTATUS & bit) == 0U && preg->Handler != NULL)")
+assert out_event.index("NRF_USBD->EPDATASTATUS = bit;") < out_event.index("preg->Handler(USB_CTRLR_EVT_DRDY,")
+assert "UsbEvtQue" not in interrupt and "AppEvtHandlerQue" not in interrupt
+assert "servicedstatus" not in interrupt
 assert "CFifoPut" not in epdata
 
 # EpReceive queues the destination and resumes an idle channel. The ISR

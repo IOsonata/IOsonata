@@ -5,7 +5,7 @@
 //
 // The stack is stubbed at the calls bt_dfu_smp.cpp makes: service add,
 // notify, notification enabled, the peer table and the application event
-// queue, which the test runs by hand the way BtAppRun does.
+// queue, which the test runs by hand the way AppRun does.
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -49,15 +49,30 @@ struct QEvt {
 };
 static std::deque<QEvt> s_Que;
 static size_t s_QueMax = 8;
+static bool s_bUseAppQue = false;
 
-extern "C" bool AppEvtHandlerQue(uint32_t EvtId, void *pCtx, AppEvtHandler_t Handler)
+extern "C" bool BtEvtQue(uint32_t EvtId, void *pCtx, AppEvtHandler_t Handler)
 {
+	if (s_bUseAppQue)
+	{
+		return AppEvtHandlerQue(EvtId, pCtx, Handler);
+	}
 	if (s_Que.size() >= s_QueMax)
 	{
 		return false;
 	}
 	s_Que.push_back({ Handler, EvtId, pCtx });
 	return true;
+}
+
+extern "C" void BtAppCheckStatus(void)
+{
+	BtDfuSmpCheckStatus();
+}
+
+extern "C" void AppWait(void)
+{
+	abort(); // This test drives the custom main loop, never AppRun's wait.
 }
 
 static void RunQue(void)
@@ -68,25 +83,6 @@ static void RunQue(void)
 		s_Que.pop_front();
 		e.Handler(e.Evt, e.pCtx);
 	}
-}
-
-static AppEvtHandlerIdle_t s_Idle = nullptr;
-
-extern "C" bool AppEvtHandlerIdleRegister(AppEvtHandlerIdle_t Handler)
-{
-	s_Idle = Handler;
-	return true;
-}
-
-// The main loop: the queue, then the idle pump, as AppEvtHandlerExec does.
-static void Loop(void)
-{
-	RunQue();
-	if (s_Idle != nullptr)
-	{
-		s_Idle();
-	}
-	RunQue();
 }
 
 extern "C" bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)
@@ -156,6 +152,13 @@ static void ResetCB(void *)
 	s_Resets++;
 }
 
+static int s_TxDone = 0;
+
+static void TxDoneCB(void)
+{
+	s_TxDone++;
+}
+
 static BtGattChar_t *Char(void)
 {
 	return &s_pSrvc->pCharArray[0];
@@ -181,7 +184,8 @@ static void Drain(void)
 		{
 			return;
 		}
-		Char()->TxCompleteCB(Char(), 0);
+		BtDfuSmpCheckStatus();
+		BtDfuSmpTxReady();
 	}
 	CHECK(false);
 }
@@ -235,6 +239,66 @@ static bool EchoOk(const std::vector<uint8_t> &Rsp, const char *pStr)
 	return Rsp.size() > 8 && Rsp[7] == DFUSMP_OS_ECHO &&
 		   CborMapRead(Rsp.data() + 8, (uint32_t)Rsp.size() - 8, f, 1) &&
 		   f[0].S.Len == strlen(pStr) && memcmp(f[0].S.p, pStr, f[0].S.Len) == 0;
+}
+
+static void Noop(uint32_t, void *) {}
+
+static void RunAppQue(void)
+{
+	for (int i = 0; i < 100; i++)
+	{
+		if (!AppEvtHandlerExec())
+		{
+			return;
+		}
+	}
+	CHECK(false); // A blocked send must not keep its own queue alive.
+}
+
+// Use the production AppEvt queue and its refusal-triggered status check.
+// The custom main loop calls only AppEvtHandlerExec, never CheckStatus itself.
+static void TestAppQueue(void)
+{
+	s_bUseAppQue = true;
+	CHECK(AppEvtHandlerInit(nullptr, 0));
+	s_Peer.Conn.MaxMtu = 247;
+	std::vector<uint8_t> rsp;
+
+	while (AppEvtHandlerQue(0, nullptr, Noop)) {}
+	Write(Echo("full event queue"), 247);
+	CHECK(BtDfuSmpTxBusy() && s_Rx.empty());
+	RunAppQue();
+	CHECK(TakeRsp(rsp) && EchoOk(rsp, "full event queue"));
+	CHECK(!BtDfuSmpTxBusy() && !AppEvtHandlerPending());
+
+	// Controller backpressure alone does not mark AppEvt as refused. The
+	// completion of another characteristic must queue the pending response.
+	s_NotifyRefuse = 1000;
+	Write(Echo("controller full"), 247);
+	RunAppQue();
+	CHECK(BtDfuSmpTxBusy() && s_Rx.empty() && !AppEvtHandlerPending());
+	int refused = s_NotifyRefuse;
+	for (int i = 0; i < 100; i++) AppEvtHandlerExec();
+	CHECK(s_NotifyRefuse == refused);
+	s_NotifyRefuse = 0;
+	BtDfuSmpTxReady();
+	CHECK(AppEvtHandlerPending() && s_Rx.empty());
+	RunAppQue();
+	CHECK(TakeRsp(rsp) && EchoOk(rsp, "controller full"));
+	CHECK(!BtDfuSmpTxBusy() && !AppEvtHandlerPending());
+
+	// The completion itself can find the work queue full. Its retained
+	// response is recovered by AppEvtHandlerExec after the unrelated work.
+	s_NotifyRefuse = 1000;
+	Write(Echo("full continuation queue"), 247);
+	RunAppQue();
+	while (AppEvtHandlerQue(0, nullptr, Noop)) {}
+	s_NotifyRefuse = 0;
+	BtDfuSmpTxReady();
+	RunAppQue();
+	CHECK(TakeRsp(rsp) && EchoOk(rsp, "full continuation queue"));
+	CHECK(!BtDfuSmpTxBusy() && !AppEvtHandlerPending() && s_Rx.empty());
+	s_bUseAppQue = false;
 }
 
 static void TestTransport(void)
@@ -294,26 +358,90 @@ static void TestTransport(void)
 	CHECK(s_Rx.empty() && BtDfuSmpTxBusy() == false);
 	s_bNotifyOn = true;
 
-	// Queue full at the moment the request completes: dropped, recovered.
+	// Queue full at the moment the request completes: retained until the
+	// worker checks status. Later writes cannot overwrite that request.
 	s_QueMax = 0;
-	Write(Echo("lost"), 247);
+	Write(Echo("retained"), 247);
+	Write(Echo("must not replace"), 247);
+	CHECK(BtDfuSmpTxBusy() && s_Que.empty() && s_Rx.empty());
 	s_QueMax = 8;
-	Drain();
+	BtDfuSmpCheckStatus();
+	CHECK(!s_Que.empty() && s_Rx.empty()); // processing is still queued
+	RunQue();
+	CHECK(TakeRsp(rsp) && EchoOk(rsp, "retained"));
 	CHECK(s_Rx.empty());
-	Write(Echo("found"), 247);
-	Drain();
-	CHECK(TakeRsp(rsp) && EchoOk(rsp, "found"));
+
+	// Reset also drops a complete request whose enqueue was refused.
+	s_QueMax = 0;
+	Write(Echo("reset"), 247);
+	BtDfuSmpReset();
+	s_QueMax = 8;
+	BtDfuSmpCheckStatus();
+	CHECK(!BtDfuSmpTxBusy() && s_Que.empty() && s_Rx.empty());
+
+	int txDone = s_TxDone;
 
 	// Refused while another characteristic filled the stack queue: no
-	// completion of ours ever comes, the main loop goes on with it.
-	s_NotifyRefuse = 3;
+	// completion of ours ever comes. Persistent backpressure leaves the
+	// queue empty so the worker can sleep. Another characteristic's TX
+	// completion wakes it without another host request.
+	s_Peer.Conn.MaxMtu = 65;
+	s_NotifyRefuse = 1000;
 	Write(Echo(big.c_str()), 65);
-	for (int i = 0; i < 10 && (BtDfuSmpTxBusy() || s_Que.size()); i++)
+	RunQue();
+	CHECK(BtDfuSmpTxBusy() && s_Que.empty() && s_Rx.empty());
+	int refused = s_NotifyRefuse;
+	for (int i = 0; i < 100; i++)
 	{
-		Loop();
+		BtDfuSmpCheckStatus();
 	}
+	CHECK(s_NotifyRefuse == refused - 100);
+	CHECK(BtDfuSmpTxBusy() && s_Que.empty() && s_Rx.empty());
+	CHECK(s_TxDone == txDone);
+	s_NotifyRefuse = 0;
+	BtDfuSmpTxReady();
+	CHECK(!s_Que.empty() && s_Rx.empty()); // stack context only queues
+	RunQue();
 	CHECK(TakeRsp(rsp) && EchoOk(rsp, big.c_str()));
-	CHECK(BtDfuSmpTxBusy() == false);
+	CHECK(BtDfuSmpTxBusy() == false && s_Rx.empty());
+	CHECK(s_TxDone == txDone + 1);
+
+	// A partial response survives a refused TX continuation event. Status
+	// sends only the remaining bytes, without duplicating the first fragment.
+	s_Peer.Conn.MaxMtu = 23;
+	s_NotifyCnt = 0;
+	s_NotifyRefuseEvery = 2;
+	Write(Echo(big.c_str()), 23);
+	RunQue();
+	CHECK(BtDfuSmpTxBusy() && s_Rx.size() == 20);
+	s_QueMax = 0;
+	BtDfuSmpTxReady();
+	CHECK(s_Que.empty());
+	s_QueMax = 8;
+	s_NotifyRefuseEvery = 0;
+	BtDfuSmpCheckStatus();
+	CHECK(TakeRsp(rsp) && EchoOk(rsp, big.c_str()));
+	CHECK(!BtDfuSmpTxBusy() && s_Rx.empty());
+	CHECK(s_TxDone == txDone + 2);
+
+	// The next complete request is retained if sending the prior response
+	// cannot queue its processing continuation.
+	s_NotifyRefuse = 1000;
+	Write(Echo("prior"), 23);
+	RunQue();
+	Write(Echo("waiting"), 23);
+	RunQue();
+	s_QueMax = 0;
+	s_NotifyRefuse = 0;
+	BtDfuSmpCheckStatus();
+	CHECK(TakeRsp(rsp) && EchoOk(rsp, "prior"));
+	CHECK(BtDfuSmpTxBusy() && s_Que.empty());
+	s_QueMax = 8;
+	BtDfuSmpCheckStatus();
+	CHECK(s_Rx.empty() && !s_Que.empty());
+	RunQue();
+	CHECK(TakeRsp(rsp) && EchoOk(rsp, "waiting"));
+	CHECK(!BtDfuSmpTxBusy() && s_Rx.empty());
 
 	// Notifications turned off part way through a response: the rest is
 	// dropped, the next request is answered.
@@ -324,8 +452,13 @@ static void TestTransport(void)
 	CHECK(BtDfuSmpTxBusy());
 	s_bNotifyOn = false;
 	s_NotifyRefuse = 0;
-	Loop();
+	txDone = s_TxDone;
+	s_QueMax = 0;
+	Char()->SetNotifCB(Char(), false, s_Peer.Conn.Hdl);
+	s_QueMax = 8;
+	BtDfuSmpCheckStatus();
 	CHECK(BtDfuSmpTxBusy() == false);
+	CHECK(s_TxDone == txDone);		// dropped, not sent
 	s_bNotifyOn = true;
 	s_Rx.clear();
 	Write(Echo("again"), 23);
@@ -480,6 +613,7 @@ int main(int argc, char **argv)
 		.pTxBuf = s_SmpTx,
 		.TxBufSize = sizeof(s_SmpTx),
 		.SecType = BT_GAP_SECTYPE_NONE,
+		.TxDoneCB = TxDoneCB,
 	};
 	CHECK(BtDfuSmpInit(cfg));
 	CHECK(s_pSrvc == BtDfuSmpSrvc() && s_pSrvc->bCustom);
@@ -493,6 +627,7 @@ int main(int argc, char **argv)
 	CHECK(c->Property == (BT_GATT_CHAR_PROP_WRITE_WORESP |
 						  BT_GATT_CHAR_PROP_NOTIFY));
 
+	TestAppQueue();
 	TestTransport();
 
 	std::vector<uint8_t> k = HostReadFile(s_Dir + "/key1.der");

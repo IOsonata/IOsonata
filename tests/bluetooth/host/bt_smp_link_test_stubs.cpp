@@ -45,6 +45,7 @@ SOFTWARE.
 #include "bluetooth/bt_l2cap.h"
 #include "bluetooth/bt_peer.h"
 #include "bluetooth/bt_smp.h"
+#include "bluetooth/bt_app.h"
 
 #include "bt_smp_link_test_stubs.h"
 
@@ -238,4 +239,14 @@ uint8_t BtPeerRole(uint16_t ConnHdl)
 	(void)ConnHdl;
 
 	return BT_CONN_ROLE_UNKNOWN;
+}
+
+// Bluetooth event queue. The busy engine retry is not part of these cases.
+bool BtEvtQue(uint32_t EvtId, void *pCtx, BtEvtQueHandler_t Handler)
+{
+	(void)EvtId;
+	(void)pCtx;
+	(void)Handler;
+
+	return true;
 }

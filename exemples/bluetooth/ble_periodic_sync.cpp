@@ -5,7 +5,7 @@
 
 The receiving half of ble_periodic_advertiser.cpp. It scans, finds the
 advertiser by name, synchronizes to its periodic advertising train, and prints
-the four octet counter the train carries, so a second board proves the train is
+the four octet counter the train sends, so a second board proves the train is
 on air and the payload is moving. This is the interop test a phone cannot do,
 since a phone stack exposes no periodic advertising synchronization.
 
@@ -57,6 +57,7 @@ SOFTWARE.
 #include "iopinctrl.h"
 #include "syslog.h"
 
+#include "app_evt_handler.h"
 #include "bluetooth/bt_app.h"
 #include "bluetooth/bt_adv.h"
 #include "bluetooth/bt_gap.h"
@@ -146,7 +147,7 @@ const BtAppCfg_t s_BtAppCfg = {
 
 // Extended passive scan. Passive because the advertiser is non-connectable
 // non-scannable, so an active scan gains nothing, and extended because the
-// periodic train rides an extended set whose AUX_ADV_IND carries the SyncInfo
+// periodic train rides an extended set whose AUX_ADV_IND holds the SyncInfo
 // the controller needs to synchronize. No service filter: the broadcaster
 // advertises no service UUID, so it is matched by name in the report.
 static const BtGapScanCfg_t s_ScanCfg = {
@@ -166,8 +167,22 @@ static const BtGapScanCfg_t s_ScanCfg = {
 // and Create Sync is refused while one is pending, so the attempt is guarded.
 static volatile bool s_SyncRequested = false;
 static volatile bool s_Synced = false;
-static uint32_t g_LastCnt = 0;
-static bool g_bFirst = true;
+static uint32_t s_LastCnt = 0;
+static bool s_bFirst = true;
+
+#ifdef UART_PINS
+// SysLog store. With the UART attached at init, each record goes out as it
+// is logged. 16 records of 128 bytes, non blocking, so a burst the UART
+// cannot keep up with drops the oldest lines rather than the newest.
+alignas(4) static uint8_t s_SysLogMem[SYSLOG_MEMSIZE(16, 128)];
+
+static const SysLogCfg_t s_SysLogCfg = {
+	.pMem      = s_SysLogMem,
+	.MemSize   = sizeof(s_SysLogMem),
+	.RecordLen = 128,
+	.bBlocking = false
+};
+#endif
 
 bool BtAppScanReport(int8_t Rssi, uint8_t AddrType, uint8_t Addr[6],
 					 size_t AdvLen, uint8_t *pAdvData)
@@ -232,7 +247,7 @@ void BtPsyncEstablished(const BtPsyncInfo_t * const pInfo)
 	}
 
 	s_Synced = true;
-	g_bFirst = true;
+	s_bFirst = true;
 	OUT("Synced hdl=%u sid=%u interval=%u (x1.25ms)\r\n",
 		pInfo->SyncHdl, pInfo->AdvSid, pInfo->Interval);
 }
@@ -264,18 +279,18 @@ void BtPsyncReport(const BtPsyncReportInfo_t * const pRep)
 
 			IOPinToggle(s_Leds[0].PortNo, s_Leds[0].PinNo);
 
-			if (g_bFirst)
+			if (s_bFirst)
 			{
 				OUT("Counter %lu rssi=%d\r\n", (unsigned long)cnt, pRep->Rssi);
-				g_bFirst = false;
+				s_bFirst = false;
 			}
 			else
 			{
-				uint32_t d = cnt - g_LastCnt;
+				uint32_t d = cnt - s_LastCnt;
 				OUT("Counter %lu (+%lu) rssi=%d\r\n",
 					(unsigned long)cnt, (unsigned long)d, pRep->Rssi);
 			}
-			g_LastCnt = cnt;
+			s_LastCnt = cnt;
 			return;
 		}
 
@@ -289,20 +304,6 @@ void BtPsyncLost(uint16_t SyncHdl)
 	s_Synced = false;
 	s_SyncRequested = false;
 }
-
-#ifdef UART_PINS
-// SysLog store. With the UART attached at init, each record goes out as it
-// is logged. 16 records of 128 bytes, non blocking, so a burst the UART
-// cannot keep up with drops the oldest lines rather than the newest.
-alignas(4) static uint8_t s_SysLogMem[SYSLOG_MEMSIZE(16, 128)];
-
-static const SysLogCfg_t s_SysLogCfg = {
-	.pMem      = s_SysLogMem,
-	.MemSize   = sizeof(s_SysLogMem),
-	.RecordLen = 128,
-	.bBlocking = false
-};
-#endif
 
 int main()
 {
@@ -333,7 +334,7 @@ int main()
 
 	OUT("Scanning for %s ...\r\n", TARGET_NAME);
 
-	BtAppRun();
+	AppRun();
 
 	return 0;
 }

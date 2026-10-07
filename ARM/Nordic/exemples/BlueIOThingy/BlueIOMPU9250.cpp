@@ -1,11 +1,37 @@
-/*
- * BLueIOMPU9250.h
- *
- *  Created on: Jul 25, 2018
- *      Author: hoan
- */
+/**-------------------------------------------------------------------------
+@example	BlueIOMPU9250.cpp
+
+@brief	MPU9250 motion sensing and Bluetooth data for BlueIOThingy.
+
+@author	hoan
+@date	Jul 25, 2018
+
+@license
+
+MIT License
+
+Copyright (c) 2018, I-SYST inc., all rights reserved
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+----------------------------------------------------------------------------*/
 //#include "app_util_platform.h"
-//#include "app_scheduler.h"
 
 #include "istddef.h"
 #include "bluetooth/bt_app.h"
@@ -155,9 +181,28 @@ static struct platform_data_s compass_pdata = {
 void ImuRawDataSend(AccelSensorData_t &AccData, GyroSensorData_t GyroData, MagSensorData_t &MagData);
 void ImuQuatDataSend(long Quat[4]);
 
-//static void ImuDataChedHandler(void * p_event_data, uint16_t event_size)
+// Set while ImuDataChedHandler is in the event queue. The sensor interrupt
+// fires faster than the queue may be run, so the read is queued once.
+static volatile bool s_bImuDataQueued = false;
+
+static void ImuDataChedHandler(uint32_t Evt, void *pCtx);
+
+static void ImuDataQue(void)
+{
+	if (s_bImuDataQueued == false)
+	{
+		s_bImuDataQueued = true;
+		if (AppEvtHandlerQue(0, 0, ImuDataChedHandler) == false)
+		{
+			s_bImuDataQueued = false;
+		}
+	}
+}
+
 static void ImuDataChedHandler(uint32_t Evt, void *pCtx)
 {
+	s_bImuDataQueued = false;
+
 	AccelSensorData_t accdata;
 	GyroSensorData_t gyrodata;
 	MagSensorData_t magdata;
@@ -191,8 +236,7 @@ static void ImuEvtHandler(Device * const pDev, DEV_EVT Evt)
 	switch (Evt)
 	{
 		case DEV_EVT_DATA_RDY:
-			AppEvtHandlerQue(0, 0, ImuDataChedHandler);
-			//app_sched_event_put(NULL, 0, ImuDataChedHandler);
+			ImuDataQue();
 			//ImuDataChedHandler(NULL, 0);
 			//g_MotSensor.Read(accdata);
 			break;
@@ -207,7 +251,7 @@ void MPU9250IntHandler(int IntNo, void *pCtx)
 	// loop. The on-chip DMP is not used here.
 	g_Mpu9250.UpdateData();
 	s_Imu.UpdateData();
-	AppEvtHandlerQue(0, 0, ImuDataChedHandler);
+	ImuDataQue();
 	return;
 #else
 	s_Imu.IntHandler();

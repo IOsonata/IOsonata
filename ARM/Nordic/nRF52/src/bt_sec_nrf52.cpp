@@ -67,7 +67,6 @@ SOFTWARE.
 #include "bluetooth/bt_gap.h"
 #include "bluetooth/bt_smp.h"
 #include "bluetooth/bt_dev.h"
-#include "app_evt_handler.h"
 
 /******** For DEBUG ************/
 #define DEBUG_ENABLE
@@ -530,12 +529,6 @@ bool BtGapConnSecGet(uint16_t ConnHdl, BtConnSec_t *pSec)
 	return true;
 }
 
-// Main loop pump of the LESC module: key pair generation and DHKey replies.
-static void BtSecNrf52Poll(void)
-{
-	(void)BtLescRequestHandler();
-}
-
 /**
  * @brief	Start the security module.
  *
@@ -571,8 +564,8 @@ bool BtAppSecInit(void)
     // accelerator and uses software P-256 (CryptoUecc) over the SoftDevice and
     // peripheral RNG. The App owns the engine, the same model as the SDC
     // pairing path. The module owns the key pair, handles the LESC DHKey
-    // request and replies to the SoftDevice; the app only pumps
-    // BtLescRequestHandler in the main loop.
+    // request and replies to the SoftDevice from an event it queues with
+    // BtEvtQue.
     KeyAgreeEngine *pLescEcdh = nullptr;
 #if defined(NRF52840_XXAA)
     alignas(CryptoCc3xx) static uint8_t s_LescEcdhMem[CRYPTO_CC3XX_MEMSIZE];    // CC310 engine object
@@ -701,14 +694,6 @@ bool BtAppSecInit(void)
 	// Route the staged peer OOB data into the pairing when the SoftDevice
 	// asks for it (LESC OOB association model).
 	BtLescOobPeerHandlerSet(BtAppOobPeerDataHandler);
-
-	// The module owns the LESC key pair and the DHKey computation. Both are
-	// pumped from the main loop, after the queued event handlers.
-	if (AppEvtHandlerIdleRegister(BtSecNrf52Poll) == false)
-	{
-		DEBUG_PRINTF("SEC: no idle handler slot for the LESC request pump\r\n");
-		return false;
-	}
 
 	g_BtAppData.bSecInit = true;
 

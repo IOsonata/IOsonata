@@ -257,15 +257,6 @@ static const NvmCfg_t s_ChipCfg = {
 
 static Nvm s_Nvm;
 
-// The interface reports a finished transfer here. Nvm is told, and nothing
-// else on this interface needs it. The interface does not install this
-// itself: the callback belongs to whoever created the interface.
-static int MemIntrfEvtCB(DevIntrf_t * const, DEVINTRF_EVT EvtId, uint8_t *, int)
-{
-	s_Nvm.IntrfEvent(EvtId);
-
-	return 0;
-}
 static uintptr_t s_RegionAddr = 0;
 static int s_Fail = 0;
 
@@ -277,6 +268,127 @@ static volatile uint32_t s_EvtError;
 static volatile int s_EvtLastRes;
 static volatile uint64_t s_EvtLastOff;
 static volatile uint32_t s_EvtLastLen;
+
+static uint8_t s_Big[512];
+static uint8_t s_RBack[512];
+
+#if NVM_DEMO_BLE
+#define DEVICE_NAME					"NvmDemo"
+#define APP_ADV_INTERVAL_MSEC		50
+#define APP_ADV_TIMEOUT_MSEC		1000
+
+#ifndef NVM_DEMO_WRITES_PER_CYCLE
+#define NVM_DEMO_WRITES_PER_CYCLE	16
+#endif
+
+#ifndef NVM_DEMO_SLOTS
+#define NVM_DEMO_SLOTS			64
+#endif
+
+// The library default is 4 slots. The async cycle puts the pump back on the
+// queue on every visit, thousands of times a cycle, alongside whatever the
+// stack posts, so 4 is not enough and a refusal costs a whole cycle.
+alignas(4) uint8_t g_AppEvtHandlerQueMem[APPEVT_HANDLER_QUE_MEMSIZE(16)];
+
+static uint32_t s_AdvCnt = 0;
+static bool s_Ready = false;
+static uint32_t s_Cycles = 0;
+static uint32_t s_Writes = 0;
+static uint32_t s_Slot = 0;
+
+#if NVM_DEMO_ASYNC
+// The async cycle's own state: how many slots of this cycle are left, how many
+// times it handed the loop back, and the slot it started so the next visit can
+// read it back.
+static uint32_t s_Pending = 0;
+static uint32_t s_Requeues = 0;
+static uint32_t s_Dropped = 0;
+static uint32_t s_PendOff = 0;
+static uint32_t s_PendVal = 0;
+static bool s_PendCheck = false;
+
+// Requeues since the pump last got past IsBusy, and the longest such wait
+// the run has seen. The pump goes round about 675 times a second, and one
+// write costs about one advertising interval, so the ordinary wait is a few
+// tens of visits. Recording the longest and reporting it with the cycle is
+// what says whether that ever got worse; printing at the time turned a slow
+// write into a burst of lines, and the burst is what pushed the report out
+// of the UART.
+static uint32_t s_StallRq = 0;
+static uint32_t s_StallMax = 0;
+
+// Waits longer than NVM_DEMO_STALL_LONG. A count rather than a line each
+// time, for the same reason.
+#ifndef NVM_DEMO_STALL_LONG
+#define NVM_DEMO_STALL_LONG		200UL
+#endif
+static uint32_t s_StallLong = 0;
+
+// A wait this long is not slow scheduling, it is an operation that is not
+// going to finish. About thirty seconds at the rate above.
+#ifndef NVM_DEMO_STALL_STUCK
+#define NVM_DEMO_STALL_STUCK	20000UL
+#endif
+
+// Skips by NvmCycleHandler. A memory that never finishes and an advertising
+// timeout that stopped arriving both show as no output at all otherwise.
+static uint32_t s_Skips = 0;
+#endif
+
+const BtAppCfg_t s_BtAppCfg = {
+	.Role = BTAPP_ROLE_BROADCASTER,
+	.PeriphDevMax = 0,
+	.CentralDevMax = 1,
+	.pDevName = (char*)DEVICE_NAME,
+	.VendorId = ISYST_BLUETOOTH_ID,
+	.Appearance = BT_APPEAR_COMPUTER_WEARABLE,
+	.pAdvManData = (uint8_t*)&s_AdvCnt,
+	.AdvManDataLen = sizeof(s_AdvCnt),
+	.pSrManData = NULL,
+	.SrManDataLen = 0,
+	.AdvInterval = APP_ADV_INTERVAL_MSEC,
+	.AdvTimeout = APP_ADV_TIMEOUT_MSEC,
+	.TxPower = 0,
+};
+
+static void NvmCycleHandler(uint32_t Evt, void *pCtx);
+static void NvmCycleReport(void);
+
+#if NVM_DEMO_ASYNC
+// The async cycle never waits. It starts one operation and returns, and while
+// the memory is still working it puts itself back on the queue, so the loop
+// keeps running and the stack keeps its turn. This is the shape a stack event
+// handler needs: start the write, leave, finish it later.
+//
+// It cannot use NvmCycleSlot: that one drains each write so the checks can
+// read it back, which would leave nothing in flight and nothing to requeue
+// for. The readback happens on the next visit instead, once the memory is
+// idle.
+static void NvmCyclePump(uint32_t Evt, void *pCtx);
+#endif
+
+// SysLog store. With the UART attached at init, each record goes out as it
+// is logged. 16 records of 128 bytes, non blocking, so a burst the UART
+// cannot keep up with drops the oldest lines rather than the newest.
+alignas(4) static uint8_t s_SysLogMem[SYSLOG_MEMSIZE(16, 128)];
+
+static const SysLogCfg_t s_SysLogCfg = {
+	.pMem      = s_SysLogMem,
+	.MemSize   = sizeof(s_SysLogMem),
+	.RecordLen = 128,
+	.bBlocking = false
+};
+#endif
+
+// The interface reports a finished transfer here. Nvm is told, and nothing
+// else on this interface needs it. The interface does not install this
+// itself: the callback belongs to whoever created the interface.
+static int MemIntrfEvtCB(DevIntrf_t * const, DEVINTRF_EVT EvtId, uint8_t *, int)
+{
+	s_Nvm.IntrfEvent(EvtId);
+
+	return 0;
+}
 
 static void NvmDemoEvtHandler(Nvm *pMem, NVM_EVT Evt, uint64_t Off,
 							  uint32_t Len, int Res)
@@ -558,16 +670,15 @@ static void NvmDemoVerify(Nvm &Mem)
 		Check(DemoErase(Mem, 0, scratch) == 0, "async: erase the scratch");
 	}
 
-	static uint8_t big[512];
-	for (uint32_t i = 0; i < sizeof(big); i++)
+	for (uint32_t i = 0; i < sizeof(s_Big); i++)
 	{
-		big[i] = (uint8_t)(0xA0 ^ i);
+		s_Big[i] = (uint8_t)(0xA0 ^ i);
 	}
 
 	uint32_t evtBefore = s_EvtWrite;
 	uint32_t errBefore = s_EvtError;
 
-	Check(Mem.Write(0, big, sizeof(big)) == (int)sizeof(big),
+	Check(Mem.Write(0, s_Big, sizeof(s_Big)) == (int)sizeof(s_Big),
 		  "async: write accepted and returned");
 
 	// Nothing reported yet: the operation was established, not finished.
@@ -584,13 +695,12 @@ static void NvmDemoVerify(Nvm &Mem)
 	Check(s_EvtWrite == evtBefore + 1, "async: exactly one event");
 	Check(s_EvtError == errBefore, "async: no error reported");
 	Check(s_EvtLastRes == 0, "async: the event says it succeeded");
-	Check(s_EvtLastOff == 0 && s_EvtLastLen == sizeof(big),
+	Check(s_EvtLastOff == 0 && s_EvtLastLen == sizeof(s_Big),
 		  "async: the event carried the offset and length asked for");
 	Check(Mem.Sync() == 0, "async: nothing left to drain");
 
-	static uint8_t rback[512];
-	Check(Mem.Read(0, rback, sizeof(rback)) == (int)sizeof(rback) &&
-		  memcmp(rback, big, sizeof(big)) == 0,
+	Check(Mem.Read(0, s_RBack, sizeof(s_RBack)) == (int)sizeof(s_RBack) &&
+		  memcmp(s_RBack, s_Big, sizeof(s_Big)) == 0,
 		  "async: the data landed");
 
 	g_Uart.printf("async   : %lu steps, write evt %lu erase evt %lu err %lu\r\n",
@@ -654,6 +764,7 @@ static bool NvmDemoSetup(void)
 				  NVM_DEMO_ASYNC ? "interrupt, IsBusy drives the operation"
 								 : "polling, the call finishes the operation");
 
+#if NVM_DEMO_MEDIUM == 0
 	// What the linker script set aside, if anything. The demo carves its own
 	// scratch out of the top of the application area, so it does not use this,
 	// but a store that does needs to see the numbers arrive.
@@ -672,6 +783,8 @@ static bool NvmDemoSetup(void)
 						  (unsigned long)ra, (unsigned long)rs);
 		}
 	}
+
+#endif
 
 	uint64_t below = (uint64_t)unit * (NVM_DEMO_TOP_RESERVE_PAGES
 									   + NVM_DEMO_REGION_PAGES);
@@ -726,91 +839,6 @@ static bool NvmDemoSetup(void)
 // so the radio is contending for the memory.
 // ---------------------------------------------------------------------------
 
-#define DEVICE_NAME					"NvmDemo"
-#define APP_ADV_INTERVAL_MSEC		50
-#define APP_ADV_TIMEOUT_MSEC		1000
-
-#ifndef NVM_DEMO_WRITES_PER_CYCLE
-#define NVM_DEMO_WRITES_PER_CYCLE	16
-#endif
-
-#ifndef NVM_DEMO_SLOTS
-#define NVM_DEMO_SLOTS			64
-#endif
-
-// The library default is 4 slots. The async cycle puts the pump back on the
-// queue on every visit, thousands of times a cycle, alongside whatever the
-// stack posts, so 4 is not enough and a refusal costs a whole cycle.
-#define APP_EVT_QUE_MEMSIZE			APPEVT_HANDLER_QUE_MEMSIZE(16)
-
-alignas(4) static uint8_t s_AppEvtQueMem[APP_EVT_QUE_MEMSIZE];
-
-static uint32_t g_AdvCnt = 0;
-static bool s_Ready = false;
-static uint32_t s_Cycles = 0;
-static uint32_t s_Writes = 0;
-static uint32_t s_Slot = 0;
-
-#if NVM_DEMO_ASYNC
-// The async cycle's own state: how many slots of this cycle are left, how many
-// times it handed the loop back, and the slot it started so the next visit can
-// read it back.
-static uint32_t s_Pending = 0;
-static uint32_t s_Requeues = 0;
-static uint32_t s_Dropped = 0;
-static uint32_t s_PendOff = 0;
-static uint32_t s_PendVal = 0;
-static bool s_PendCheck = false;
-
-// Requeues since the pump last got past IsBusy, and the longest such wait
-// the run has seen. The pump goes round about 675 times a second, and one
-// write costs about one advertising interval, so the ordinary wait is a few
-// tens of visits. Recording the longest and reporting it with the cycle is
-// what says whether that ever got worse; printing at the time turned a slow
-// write into a burst of lines, and the burst is what pushed the report out
-// of the UART.
-static uint32_t s_StallRq = 0;
-static uint32_t s_StallMax = 0;
-
-// Waits longer than NVM_DEMO_STALL_LONG. A count rather than a line each
-// time, for the same reason.
-#ifndef NVM_DEMO_STALL_LONG
-#define NVM_DEMO_STALL_LONG		200UL
-#endif
-static uint32_t s_StallLong = 0;
-
-// A wait this long is not slow scheduling, it is an operation that is not
-// going to finish. About thirty seconds at the rate above.
-#ifndef NVM_DEMO_STALL_STUCK
-#define NVM_DEMO_STALL_STUCK	20000UL
-#endif
-
-// Skips by NvmCycleHandler. A memory that never finishes and an advertising
-// timeout that stopped arriving both show as no output at all otherwise.
-static uint32_t s_Skips = 0;
-#endif
-
-const BtAppCfg_t s_BtAppCfg = {
-	.Role = BTAPP_ROLE_BROADCASTER,
-	.PeriphDevMax = 0,
-	.CentralDevMax = 1,
-	.pDevName = (char*)DEVICE_NAME,
-	.VendorId = ISYST_BLUETOOTH_ID,
-	.Appearance = BT_APPEAR_COMPUTER_WEARABLE,
-	.pAdvManData = (uint8_t*)&g_AdvCnt,
-	.AdvManDataLen = sizeof(g_AdvCnt),
-	.pSrManData = NULL,
-	.SrManDataLen = 0,
-	.AdvInterval = APP_ADV_INTERVAL_MSEC,
-	.AdvTimeout = APP_ADV_TIMEOUT_MSEC,
-	.TxPower = 0,
-	.pEvtHandlerQueMem = s_AppEvtQueMem,
-	.EvtHandlerQueMemSize = APP_EVT_QUE_MEMSIZE,
-};
-
-static void NvmCycleHandler(uint32_t Evt, void *pCtx);
-static void NvmCycleReport(void);
-
 // One slot: erase and wrap when the scratch is full, then write and read back.
 // Shared by both modes so the work being measured is the same.
 static void NvmCycleSlot(void)
@@ -842,18 +870,6 @@ static void NvmCycleSlot(void)
 }
 
 #if NVM_DEMO_ASYNC
-
-// The async cycle never waits. It starts one operation and returns, and while
-// the memory is still working it puts itself back on the queue, so the loop
-// keeps running and the stack keeps its turn. This is the shape a stack event
-// handler needs: start the write, leave, finish it later.
-//
-// It cannot use NvmCycleSlot: that one drains each write so the checks can
-// read it back, which would leave nothing in flight and nothing to requeue
-// for. The readback happens on the next visit instead, once the memory is
-// idle.
-static void NvmCyclePump(uint32_t Evt, void *pCtx);
-
 // Put the pump back on the queue, or abandon the cycle. A queue slot is not
 // guaranteed: the stack posts its own work and the pump asks for one on every
 // visit, thousands of times a cycle. Without this the first refusal would end
@@ -897,6 +913,7 @@ static void NvmCyclePump(uint32_t Evt, void *pCtx)
 		// one is counted above and reported with the cycle instead.
 		if ((s_StallRq % NVM_DEMO_STALL_STUCK) == 0)
 		{
+#if NVM_DEMO_MEDIUM == 0
 			NvmIntrfStat_t st;
 
 			NvmIntrfGetStat(&st);
@@ -913,6 +930,10 @@ static void NvmCyclePump(uint32_t Evt, void *pCtx)
 						  (unsigned long)st.RepNoWant,
 						  (unsigned long)st.RepNoPend,
 						  (unsigned long)s_Pending);
+#else
+			g_Uart.printf("stuck   : rq %lu pend %lu\r\n",
+						  (unsigned long)s_StallRq, (unsigned long)s_Pending);
+#endif
 		}
 
 		(void)NvmCycleRequeue();
@@ -984,19 +1005,7 @@ static void NvmCyclePump(uint32_t Evt, void *pCtx)
 
 #endif
 
-// SysLog store. With the UART attached at init, each record goes out as it
-// is logged. 16 records of 128 bytes, non blocking, so a burst the UART
-// cannot keep up with drops the oldest lines rather than the newest.
-alignas(4) static uint8_t s_SysLogMem[SYSLOG_MEMSIZE(16, 128)];
-
-static const SysLogCfg_t s_SysLogCfg = {
-	.pMem      = s_SysLogMem,
-	.MemSize   = sizeof(s_SysLogMem),
-	.RecordLen = 128,
-	.bBlocking = false
-};
-
-// Runs from the BtAppRun loop, so blocking here is safe while advertising
+// Runs from AppRun, outside any interrupt, so blocking here is safe while advertising
 // continues.
 static void NvmCycleHandler(uint32_t Evt, void *pCtx)
 {
@@ -1121,9 +1130,9 @@ void BtAppInitUserData()
 // Runs inside the stack event dispatch, so it only queues the work.
 void BtAppAdvTimeoutHandler()
 {
-	g_AdvCnt++;
+	s_AdvCnt++;
 
-	BtAppAdvManDataSet((uint8_t*)&g_AdvCnt, sizeof(g_AdvCnt), NULL, 0);
+	BtAppAdvManDataSet((uint8_t*)&s_AdvCnt, sizeof(s_AdvCnt), NULL, 0);
 
 	if (AppEvtHandlerQue(0, NULL, NvmCycleHandler) == false)
 	{
@@ -1133,6 +1142,9 @@ void BtAppAdvTimeoutHandler()
 
 int main()
 {
+	// The queue exists before any interrupt can queue an event
+	AppEvtHandlerInit(g_AppEvtHandlerQueMem, sizeof(g_AppEvtHandlerQueMem));
+
 	g_Uart.Init(s_UartCfg);
 
 	g_Uart.printf("\r\nNvm demo on the %s, with a stack up\r\n", s_MediumName);
@@ -1142,7 +1154,7 @@ int main()
 
 	BtAppInit(&s_BtAppCfg);
 
-	BtAppRun();
+	AppRun();
 
 	return 0;
 }
@@ -1170,4 +1182,4 @@ int main()
 	}
 }
 
-#endif	// NVM_DEMO_BLE
+#endif

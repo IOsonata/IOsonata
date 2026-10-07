@@ -1404,8 +1404,10 @@ with tempfile.TemporaryDirectory(prefix='iosonata-queue-') as temp:
     subprocess.run([os.environ.get('CXX', 'g++'), '-std=c++17', '-O1',
         '-fsanitize=undefined', '-fno-sanitize-recover=all',
         '-I'+str(ROOT/'include'), '-I'+str(ROOT/'tests/usb/hostport'),
+        '-ffunction-sections', '-Wl,--gc-sections',
         '-x', 'c++', str(path), str(ROOT/'src/cfifo.c'),
-        str(ROOT/'src/app_evt_handler.cpp'), '-o', str(binary)], check=True)
+        str(ROOT/'src/app_evt_handler.cpp'), str(ROOT/'src/app_run.cpp'),
+        '-o', str(binary)], check=True)
     subprocess.run([str(binary), *sys.argv[1:]], check=True)
 
 

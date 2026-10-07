@@ -122,10 +122,10 @@ I2C g_I2CMaster;
 
 #define I2C_BUFF_SIZE	20
 #define I2C_BUFF_SIZE	20
-uint8_t s_ReadRqstData[I2C_BUFF_SIZE];
-uint8_t s_WriteRqstData[I2C_BUFF_SIZE];
-bool s_bWriteRqst = false;
-int s_Offset = 0;
+static uint8_t s_ReadRqstData[I2C_BUFF_SIZE];
+static uint8_t s_WriteRqstData[I2C_BUFF_SIZE];
+static bool s_bWriteRqst = false;
+static int s_Offset = 0;
 std::atomic<bool> g_bCompleted(false);
 std::atomic<int> g_RxCnt(0);
 

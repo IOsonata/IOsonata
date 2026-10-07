@@ -43,6 +43,9 @@ HEADERS := $(wildcard $(ROOT)/include/bluetooth/*.h) \
 
 TEST_NAMES := \
 	app_evt_handler_retry_test \
+	app_run_test \
+	app_run_override_test \
+	app_run_empty_test \
 	cfifo_boundary_test \
 	bt_adv_uuid_test \
 	bt_intrf_test \
@@ -52,6 +55,7 @@ TEST_NAMES := \
 	bt_hci_ctlr_sdc_test \
 	bt_hci_ctlr_sdc_nomod_test \
 	bt_hci_usb_test \
+	bt_hci_uart_test \
 	bt_l2cap_signal_test \
 	bt_att_db_test \
 	bt_att_db_cfg_test \
@@ -91,8 +95,18 @@ HCI_GATT_TEST_STUB := ../bt_hci_gatt_test_stubs.cpp
 
 app_evt_handler_retry_test_SOURCES := \
 	app_evt_handler_retry_test.cpp \
-	$(ROOT)/src/app_evt_handler.cpp
+	$(ROOT)/src/app_evt_handler.cpp $(ROOT)/src/app_run.cpp
 app_evt_handler_retry_test_EXTRA := $(CFIFO_OBJ)
+
+app_run_test_SOURCES := app_run_test.cpp $(ROOT)/src/app_run.cpp \
+	$(ROOT)/src/app_evt_handler.cpp
+app_run_test_EXTRA := $(CFIFO_OBJ)
+app_run_override_test_SOURCES := $(app_run_test_SOURCES)
+app_run_override_test_EXTRA := $(CFIFO_OBJ)
+app_run_override_test_CPPFLAGS := -DAPP_STATUS_OVERRIDE
+app_run_empty_test_SOURCES := $(app_run_test_SOURCES)
+app_run_empty_test_EXTRA := $(CFIFO_OBJ)
+app_run_empty_test_CPPFLAGS := -DAPP_STATUS_NO_SUBSYSTEM
 
 cfifo_boundary_test_SOURCES := cfifo_boundary_test.cpp
 cfifo_boundary_test_EXTRA := $(CFIFO_OBJ)
@@ -138,7 +152,7 @@ bt_hci_usb_test_SOURCES := \
 	$(ROOT)/src/usb/usbd_epalloc.cpp \
 	$(ROOT)/src/usb/usb_iso.cpp \
 	$(ROOT)/src/usb/usb_intrf.cpp \
-	$(ROOT)/src/app_evt_handler.cpp \
+	$(ROOT)/src/app_evt_handler.cpp $(ROOT)/src/app_run.cpp \
 	$(ROOT)/src/device_intrf.cpp
 bt_hci_usb_test_EXTRA := $(CFIFO_OBJ)
 bt_hci_usb_test_DEPS := \
@@ -148,6 +162,19 @@ bt_hci_usb_test_DEPS := \
 	$(ROOT)/include/usb/usb_iso.h \
 	$(ROOT)/include/usb/usbd_epalloc.h \
 	$(ROOT)/tests/usb/hostport/usb_ctrlr.h
+
+bt_hci_uart_test_CPPFLAGS := -I$(ROOT)/tests/dfu/hostport
+bt_hci_uart_test_SOURCES := \
+	bt_hci_uart_test.cpp \
+	$(HCI_GATT_TEST_STUB) \
+	$(ROOT)/src/bluetooth/bt_hci_uart.cpp \
+	$(ROOT)/src/bluetooth/bt_hci_host.cpp \
+	$(ROOT)/src/bluetooth/bt_psync.cpp \
+	$(ROOT)/src/device_intrf.cpp
+bt_hci_uart_test_EXTRA := $(CFIFO_OBJ)
+bt_hci_uart_test_DEPS := \
+	$(ROOT)/include/coredev/uart.h \
+	$(ROOT)/tests/dfu/hostport/idelay.h
 
 bt_l2cap_signal_test_SOURCES := \
 	bt_l2cap_signal_test.cpp \
@@ -365,6 +392,8 @@ test: $(TARGETS)
 		echo "RUN $$target"; \
 		$(TEST_ENV) ./$$target; \
 	done
+	CXX="$(CXX)" $(PYTHON) bt_status_queue_test.py
+	CXX="$(CXX)" $(PYTHON) bt_example_work_test.py
 
 test-gcc:
 	$(MAKE) clean

@@ -44,7 +44,7 @@ SOFTWARE.
 
 #define IOPIN_MAX_PORT			(3)
 
-#define IOPIN_MAX_INT			(IOPIN_MAX_PORT)
+#define IOPIN_MAX_INT			(IOPIN_MAX_PORT * 4)
 
 #pragma pack(push, 4)
 typedef struct {
@@ -55,7 +55,7 @@ typedef struct {
 } IOPINSENS_EVTHOOK;
 #pragma pack(pop)
 
-static IOPINSENS_EVTHOOK s_GpIOSenseEvt[IOPIN_MAX_INT + 1] = { {0, NULL}, };
+static IOPINSENS_EVTHOOK s_GpIOSenseEvt[IOPIN_MAX_INT] = { {0, NULL}, };
 
 /**
  * @brief Configure individual I/O pin.
@@ -75,12 +75,11 @@ static IOPINSENS_EVTHOOK s_GpIOSenseEvt[IOPIN_MAX_INT + 1] = { {0, NULL}, };
  */
 void IOPinConfig(int PortNo, int PinNo, int PinOp, IOPINDIR Dir, IOPINRES Resistor, IOPINTYPE Type)
 {
-	GpioPort *reg = (GpioPort *)((uint32_t)&SAM4L_GPIO->GPIO_PORT[PortNo]);
-
-	if (PortNo == -1 || PinNo == -1 || PortNo > IOPIN_MAX_PORT)
+	if (PortNo < 0 || PortNo >= IOPIN_MAX_PORT || PinNo < 0 || PinNo >= 32)
 		return;
 
-	uint32_t pinmask = 1 << PinNo;
+	GpioPort *reg = (GpioPort *)((uint32_t)&SAM4L_GPIO->GPIO_PORT[PortNo]);
+	uint32_t pinmask = 1U << PinNo;
 
 	// Enable peripheral clock
 	SAM4L_PM->PM_UNLOCK = PM_UNLOCK_KEY(0xAAu)
@@ -241,7 +240,7 @@ void IOPinDisableInterrupt(int IntNo)
  */
 bool IOPinEnableInterrupt(int IntNo, int IntPrio, uint32_t PortNo, uint32_t PinNo, IOPINSENSE Sense, IOPinEvtHandler_t pEvtCB, void *pCtx)
 {
-	if (IntNo < 0 || IntNo >= IOPIN_MAX_INT || (IntNo >> 2) != PortNo || (IntNo & 3) != (PinNo >> 3))
+	if (PortNo >= IOPIN_MAX_PORT || PinNo >= 32U || IntNo < 0 || IntNo >= IOPIN_MAX_INT || (IntNo >> 2) != PortNo || (IntNo & 3) != (PinNo >> 3))
 	{
 		return false;
 	}
@@ -259,6 +258,7 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, uint32_t PortNo, uint32_t PinN
 	s_GpIOSenseEvt[IntNo].SensEvtCB = pEvtCB;
 	s_GpIOSenseEvt[IntNo].pCtx = pCtx;
 
+	reg->GPIO_IFRC = pinmask;
 	reg->GPIO_IERS = pinmask;
 	
 	NVIC_ClearPendingIRQ(GPIO_0_IRQn + IntNo);
@@ -380,194 +380,74 @@ void IOPinSetSpeed(int PortNo, int PinNo, IOPINSPEED Speed)
 	// Not avail
 }
 
-// GPIO handler 0 (PA 0..7)
+// Each IRQ serves eight pins. Acknowledge only enabled sources before the
+// callback, so another edge during the callback remains pending.
+static void Sam4lGpioInterrupt(unsigned IntNo)
+{
+	GpioPort *reg = &SAM4L_GPIO->GPIO_PORT[IntNo >> 2];
+	uint32_t status = reg->GPIO_IFR & reg->GPIO_IER & (0xFFUL << ((IntNo & 3U) * 8U));
+	reg->GPIO_IFRC = status;
+	if (status != 0U && s_GpIOSenseEvt[IntNo].SensEvtCB != NULL)
+		s_GpIOSenseEvt[IntNo].SensEvtCB(status, s_GpIOSenseEvt[IntNo].pCtx);
+}
+
 void GPIO_0_Handler(void)
 {
-	uint32_t status = SAM4L_GPIO->GPIO_PORT[0].GPIO_IFR & 0xFF;
-	
-	if (status)
-	{
-		if (s_GpIOSenseEvt[0].SensEvtCB)
-			s_GpIOSenseEvt[0].SensEvtCB(status, s_GpIOSenseEvt[0].pCtx);
-	}
-
-	SAM4L_GPIO->GPIO_PORT[0].GPIO_IFRC = status;
-
-	NVIC_ClearPendingIRQ(GPIO_0_IRQn);
+	Sam4lGpioInterrupt(0U);
 }
 
-// GPIO handler 1 (PA 8..15)
 void GPIO_1_Handler(void)
 {
-	uint32_t status = SAM4L_GPIO->GPIO_PORT[0].GPIO_IFR & 0xFF00;
-	
-	if (status)
-	{
-		if (s_GpIOSenseEvt[1].SensEvtCB)
-			s_GpIOSenseEvt[1].SensEvtCB(status, s_GpIOSenseEvt[1].pCtx);
-	}
-
-	SAM4L_GPIO->GPIO_PORT[0].GPIO_IFRC = status;
-
-	NVIC_ClearPendingIRQ(GPIO_1_IRQn);
+	Sam4lGpioInterrupt(1U);
 }
 
-// GPIO handler 2 (PA 16..23)
 void GPIO_2_Handler(void)
 {
-	uint32_t status = SAM4L_GPIO->GPIO_PORT[0].GPIO_IFR & 0xFF0000;
-	
-	if (status)
-	{
-		if (s_GpIOSenseEvt[2].SensEvtCB)
-			s_GpIOSenseEvt[2].SensEvtCB(status, s_GpIOSenseEvt[2].pCtx);
-	}
-
-	SAM4L_GPIO->GPIO_PORT[0].GPIO_IFRC = status;
-
-	NVIC_ClearPendingIRQ(GPIO_2_IRQn);
+	Sam4lGpioInterrupt(2U);
 }
 
-// GPIO handler 3 (PA 24..31)
 void GPIO_3_Handler(void)
 {
-	uint32_t status = SAM4L_GPIO->GPIO_PORT[0].GPIO_IFR & 0xFF000000;
-	
-	if (status)
-	{
-		if (s_GpIOSenseEvt[3].SensEvtCB)
-			s_GpIOSenseEvt[3].SensEvtCB(status, s_GpIOSenseEvt[3].pCtx);
-	}
-
-	SAM4L_GPIO->GPIO_PORT[0].GPIO_IFRC = status;
-
-	NVIC_ClearPendingIRQ(GPIO_3_IRQn);
+	Sam4lGpioInterrupt(3U);
 }
 
-// GPIO handler 4 (PB 0..7)
 void GPIO_4_Handler(void)
 {
-	uint32_t status = SAM4L_GPIO->GPIO_PORT[1].GPIO_IFR & 0xFF;
-	
-	if (status)
-	{
-		if (s_GpIOSenseEvt[4].SensEvtCB)
-			s_GpIOSenseEvt[4].SensEvtCB(status, s_GpIOSenseEvt[4].pCtx);
-	}
-
-	SAM4L_GPIO->GPIO_PORT[1].GPIO_IFRC = status;
-
-	NVIC_ClearPendingIRQ(GPIO_4_IRQn);
+	Sam4lGpioInterrupt(4U);
 }
 
-// GPIO handler 5 (PB 8..15)
 void GPIO_5_Handler(void)
 {
-	uint32_t status = SAM4L_GPIO->GPIO_PORT[1].GPIO_IFR & 0xFF;
-
-	if (status)
-	{
-		if (s_GpIOSenseEvt[5].SensEvtCB)
-			s_GpIOSenseEvt[5].SensEvtCB(status, s_GpIOSenseEvt[5].pCtx);
-	}
-
-	SAM4L_GPIO->GPIO_PORT[1].GPIO_IFRC = status;
-
-	NVIC_ClearPendingIRQ(GPIO_5_IRQn);
+	Sam4lGpioInterrupt(5U);
 }
 
-// GPIO handler 6 (PB 16..23)
 void GPIO_6_Handler(void)
 {
-	uint32_t status = SAM4L_GPIO->GPIO_PORT[1].GPIO_IFR & 0xFF;
-
-	if (status)
-	{
-		if (s_GpIOSenseEvt[6].SensEvtCB)
-			s_GpIOSenseEvt[6].SensEvtCB(status, s_GpIOSenseEvt[6].pCtx);
-	}
-
-	SAM4L_GPIO->GPIO_PORT[1].GPIO_IFRC = status;
-
-	NVIC_ClearPendingIRQ(GPIO_6_IRQn);
+	Sam4lGpioInterrupt(6U);
 }
 
-// GPIO handler 7 (PB 24..31)
 void GPIO_7_Handler(void)
 {
-	uint32_t status = SAM4L_GPIO->GPIO_PORT[1].GPIO_IFR & 0xFF;
-
-	if (status)
-	{
-		if (s_GpIOSenseEvt[7].SensEvtCB)
-			s_GpIOSenseEvt[7].SensEvtCB(status, s_GpIOSenseEvt[7].pCtx);
-	}
-
-	SAM4L_GPIO->GPIO_PORT[1].GPIO_IFRC = status;
-
-	NVIC_ClearPendingIRQ(GPIO_7_IRQn);
+	Sam4lGpioInterrupt(7U);
 }
 
-// GPIO handler 8 (PC 0..7)
 void GPIO_8_Handler(void)
 {
-	uint32_t status = SAM4L_GPIO->GPIO_PORT[2].GPIO_IFR & 0xFF;
-
-	if (status)
-	{
-		if (s_GpIOSenseEvt[8].SensEvtCB)
-			s_GpIOSenseEvt[8].SensEvtCB(status, s_GpIOSenseEvt[8].pCtx);
-	}
-
-	SAM4L_GPIO->GPIO_PORT[2].GPIO_IFRC = status;
-
-	NVIC_ClearPendingIRQ(GPIO_8_IRQn);
+	Sam4lGpioInterrupt(8U);
 }
 
-// GPIO handler 10 (PC 16..23)
 void GPIO_9_Handler(void)
 {
-	uint32_t status = SAM4L_GPIO->GPIO_PORT[2].GPIO_IFR & 0xFF;
-
-	if (status)
-	{
-		if (s_GpIOSenseEvt[9].SensEvtCB)
-			s_GpIOSenseEvt[9].SensEvtCB(status, s_GpIOSenseEvt[9].pCtx);
-	}
-
-	SAM4L_GPIO->GPIO_PORT[2].GPIO_IFRC = status;
-
-	NVIC_ClearPendingIRQ(GPIO_9_IRQn);
+	Sam4lGpioInterrupt(9U);
 }
 
-// GPIO handler 10 (PC 16..23)
 void GPIO_10_Handler(void)
 {
-	uint32_t status = SAM4L_GPIO->GPIO_PORT[2].GPIO_IFR & 0xFF;
-
-	if (status)
-	{
-		if (s_GpIOSenseEvt[10].SensEvtCB)
-			s_GpIOSenseEvt[10].SensEvtCB(status, s_GpIOSenseEvt[10].pCtx);
-	}
-
-	SAM4L_GPIO->GPIO_PORT[2].GPIO_IFRC = status;
-
-	NVIC_ClearPendingIRQ(GPIO_10_IRQn);
+	Sam4lGpioInterrupt(10U);
 }
 
-//  GPIO handler 11 (PC 24..31)
 void GPIO_11_Handler(void)
 {
-	uint32_t status = SAM4L_GPIO->GPIO_PORT[2].GPIO_IFR & 0xFF;
-
-	if (status)
-	{
-		if (s_GpIOSenseEvt[11].SensEvtCB)
-			s_GpIOSenseEvt[11].SensEvtCB(status, s_GpIOSenseEvt[11].pCtx);
-	}
-
-	SAM4L_GPIO->GPIO_PORT[2].GPIO_IFRC = status;
-
-	NVIC_ClearPendingIRQ(GPIO_11_IRQn);
+	Sam4lGpioInterrupt(11U);
 }
+

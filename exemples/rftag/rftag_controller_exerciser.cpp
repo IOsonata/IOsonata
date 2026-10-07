@@ -62,6 +62,55 @@ static int s_LastTxLen = 0;
 static RFTagInfo_t s_CannedTag;
 static bool s_ProvideTag = false;
 
+static void MockIntrfInit(DevIntrf_t *pIntrf);
+static bool MockStartRx(DevIntrf_t * const pDev, uint32_t DevAddr);
+static int MockRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen);
+static void MockStopRx(DevIntrf_t * const pDev);
+static bool MockStartTx(DevIntrf_t * const pDev, uint32_t DevAddr);
+static int MockTxData(DevIntrf_t * const pDev, const uint8_t *pData, int DataLen);
+static void MockStopTx(DevIntrf_t * const pDev);
+
+// DeviceIntrfWrite combines the command phase and the payload into a single
+// TxData buffer, command bytes first. Capture the whole buffer here, the tests
+// split it by the known command length.
+static int s_CmdSplit = 0;
+
+class MockIntrf : public DeviceIntrf {
+public:
+	MockIntrf() { MockIntrfInit(&vIntrf); }
+
+	operator DevIntrf_t * () { return &vIntrf; }
+	uint32_t Rate(uint32_t DataRate) { (void)DataRate; return 0; }
+	uint32_t Rate(void) { return 0; }
+	bool StartRx(uint32_t DevAddr) { return MockStartRx(&vIntrf, DevAddr); }
+	int RxData(uint8_t *pBuff, int BuffLen) { return MockRxData(&vIntrf, pBuff, BuffLen); }
+	void StopRx(void) { MockStopRx(&vIntrf); }
+	bool StartTx(uint32_t DevAddr) { return MockStartTx(&vIntrf, DevAddr); }
+	int TxData(const uint8_t *pData, int DataLen) { return MockTxData(&vIntrf, pData, DataLen); }
+	void StopTx(void) { MockStopTx(&vIntrf); }
+
+private:
+	DevIntrf_t vIntrf;
+};
+
+// A controller that counts the events it observes.
+class TestController : public RFTagController {
+public:
+	TestController() : Detected(0), RxData_(0), TxDone(0) {}
+
+	virtual void EvtHandler(RFTAGCTRL_EVT Evt, uint32_t P0, uint32_t P1)
+	{
+		(void)P0; (void)P1;
+		if (Evt == RFTAGCTRL_EVT_TAG_DETECTED) { Detected++; }
+		else if (Evt == RFTAGCTRL_EVT_RX_DATA) { RxData_++; }
+		else if (Evt == RFTAGCTRL_EVT_TX_DONE) { TxDone++; }
+	}
+
+	int Detected;
+	int RxData_;
+	int TxDone;
+};
+
 static void Check(const char *pName, bool bOk)
 {
 	if (bOk)
@@ -82,11 +131,6 @@ static bool MockStartTx(DevIntrf_t * const pDev, uint32_t DevAddr)
 	s_LastDevAddr = DevAddr;
 	return true;
 }
-
-// DeviceIntrfWrite combines the command phase and the payload into a single
-// TxData buffer, command bytes first. Capture the whole buffer here, the tests
-// split it by the known command length.
-static int s_CmdSplit = 0;
 
 static int MockTxData(DevIntrf_t * const pDev, const uint8_t *pData, int DataLen)
 {
@@ -163,42 +207,6 @@ static void ResetCapture(void)
 	memset(s_LastCmd, 0, sizeof(s_LastCmd));
 	memset(s_LastTx, 0, sizeof(s_LastTx));
 }
-
-class MockIntrf : public DeviceIntrf {
-public:
-	MockIntrf() { MockIntrfInit(&vIntrf); }
-
-	operator DevIntrf_t * () { return &vIntrf; }
-	uint32_t Rate(uint32_t DataRate) { (void)DataRate; return 0; }
-	uint32_t Rate(void) { return 0; }
-	bool StartRx(uint32_t DevAddr) { return MockStartRx(&vIntrf, DevAddr); }
-	int RxData(uint8_t *pBuff, int BuffLen) { return MockRxData(&vIntrf, pBuff, BuffLen); }
-	void StopRx(void) { MockStopRx(&vIntrf); }
-	bool StartTx(uint32_t DevAddr) { return MockStartTx(&vIntrf, DevAddr); }
-	int TxData(const uint8_t *pData, int DataLen) { return MockTxData(&vIntrf, pData, DataLen); }
-	void StopTx(void) { MockStopTx(&vIntrf); }
-
-private:
-	DevIntrf_t vIntrf;
-};
-
-// A controller that counts the events it observes.
-class TestController : public RFTagController {
-public:
-	TestController() : Detected(0), RxData_(0), TxDone(0) {}
-
-	virtual void EvtHandler(RFTAGCTRL_EVT Evt, uint32_t P0, uint32_t P1)
-	{
-		(void)P0; (void)P1;
-		if (Evt == RFTAGCTRL_EVT_TAG_DETECTED) { Detected++; }
-		else if (Evt == RFTAGCTRL_EVT_RX_DATA) { RxData_++; }
-		else if (Evt == RFTAGCTRL_EVT_TX_DONE) { TxDone++; }
-	}
-
-	int Detected;
-	int RxData_;
-	int TxDone;
-};
 
 int main(void)
 {

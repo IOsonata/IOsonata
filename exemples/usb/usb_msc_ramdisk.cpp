@@ -6,11 +6,39 @@
 This example exposes only a dedicated 64 KiB RAM disk. It does not expose
 firmware, filesystem, settings or Bluetooth bond-storage regions.
 
+@author	Hoang Nguyen Hoan
+@date	Sep. 11, 2026
+
+@license
+
+MIT License
+
+Copyright (c) 2026, I-SYST inc., all rights reserved
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
 ----------------------------------------------------------------------------*/
 #include <stdint.h>
 #include <string.h>
 
 #include "storage/diskio.h"
+#include "app_evt_handler.h"
 #include "usb/usb.h"
 #include "usb/usbd_msc.h"
 
@@ -92,6 +120,10 @@ static MscRamDisk s_RamDisk;
 static UsbdMsc s_Msc;
 alignas(4) static uint8_t s_SectorBuffer[MSC_SECTOR_SIZE];
 
+// Application event queue memory, replaces the 4 event library default. The
+// USB controller port queues its deferred endpoint events there.
+alignas(4) uint8_t g_AppEvtHandlerQueMem[APPEVT_HANDLER_QUE_MEMSIZE(16)];
+
 static const UsbCfg_t s_UsbCfg = {
 	.DevNo = USB_DEVNO,
 	.Mode = USB_MODE_DEVICE,
@@ -131,7 +163,8 @@ static const UsbdMscCfg_t s_MscCfg = {
 int main(void)
 {
 	s_RamDisk.Init();
-	if (!UsbInit(&s_UsbCfg) || !s_Msc.Init(s_MscCfg))
+	if (!AppEvtHandlerInit(g_AppEvtHandlerQueMem, sizeof(g_AppEvtHandlerQueMem)) ||
+		!UsbInit(&s_UsbCfg) || !s_Msc.Init(s_MscCfg))
 	{
 		return -1;
 	}
@@ -139,7 +172,7 @@ int main(void)
 
 	while (1)
 	{
-		UsbProcess(USB_DEVNO);
+		AppEvtHandlerExec();
 	}
 	return 0;
 }

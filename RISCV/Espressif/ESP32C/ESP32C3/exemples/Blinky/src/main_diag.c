@@ -1,24 +1,46 @@
 /**-------------------------------------------------------------------------
-@file	main.c  (Blinky — MPCCR diagnostic)
+@file	main_diag.c  (Blinky - MPCCR diagnostic)
 
 @brief	Bypass-msDelay diagnostic.  Reads MPCCR twice with a fixed NOP
 	gap between, lights the WS2812 according to what it sees:
 
-	  GREEN   MPCCR is incrementing (perf counter is enabled — the
+	  GREEN   MPCCR is incrementing (perf counter is enabled - the
 	          Esp32EnablePerfCounter() call is running and the rdcycle
 	          path in idelay.h should work).
-	  RED     MPCCR returned 0 both times (counter not enabled — the
+	  RED     MPCCR returned 0 both times (counter not enabled - the
 	          lib hasn't been rebuilt with the new system_esp32_system.c,
 	          so old Esp32SystemInit without the enable is being linked).
 	  BLUE    MPCCR returned the same non-zero value twice (very
-	          unlikely — would mean the counter is paused or saturated).
+	          unlikely - would mean the counter is paused or saturated).
 
 	The bit-bang uses only NOPs, no msDelay, so it works regardless of
 	whether the cycle counter is alive.
 
 @author	Hoang Nguyen Hoan
 @date	May 2026
-@license MIT
+@license
+
+MIT License
+
+Copyright (c) 2026, I-SYST inc., all rights reserved
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 ----------------------------------------------------------------------------*/
 
 #include <stdint.h>

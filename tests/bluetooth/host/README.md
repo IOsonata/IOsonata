@@ -56,13 +56,32 @@ make -C tests/bluetooth/host SANITIZERS=
 - multiple commands in one signaling PDU;
 - bounded response construction when input would generate more responses than fit.
 
-## Planned host layers
+## Additional implemented coverage
 
-1. ATT server requests, long reads, prepare/execute writes and permissions.
-2. ATT client discovery and transaction completion.
-3. SMP association models, timeout paths and bond restore.
-4. Simultaneous links with disconnect at each protocol state.
-5. Recorded HCI trace replay and mutation fuzzing.
+The suite has expanded beyond the three groups above. The current
+[Makefile](Makefile) is the authoritative list of executed tests.
+
+- ATT database sizing, server requests, client transactions and adversarial
+  input: `bt_att_*_test.cpp`.
+- GATT services, per-link CCCDs, security checks and TX completion:
+  `bt_gatt_*_test.cpp`.
+- Peer pools, application multi-link behavior and selected Nordic startup
+  paths: `bt_peer_pool_test.cpp`, `bt_app_*_test.cpp`.
+- SMP key distribution and signing counters: `bt_smp_keydist_test.cpp` and
+  `bt_smp_sign_counter_test.cpp`; SoftDevice LESC adapter checks:
+  `bt_lesc_sd_test.cpp`.
+- Periodic advertising, synchronization and encrypted advertising data:
+  `bt_padv_hci_test.cpp`, `bt_psync_test.cpp`, `bt_ead_test.cpp`.
+- Controller initialization, HCI USB and GATT-backed transport:
+  `bt_hci_ctlr_*_test.cpp`, `bt_hci_usb_test.cpp`, `bt_intrf_test.cpp`.
+- HCI UART (H4) framing, packet order, flush and command waits, including a
+  command sent from a packet handler: `bt_hci_uart_test.cpp`.
+
+These are software checks with test controllers or port stubs, not a claim of
+complete protocol coverage or hardware qualification. The separate
+[compliance suite](../compliance/README.md) includes dual-host ATT and SMP
+scenarios. For application setup, see the
+[Bluetooth User Guide](../../../docs/bluetooth-user-guide.md).
 
 Host tests must remain independent of an RTOS. Scheduling tests should override only
 the existing wait/notify hooks when an execution model needs to be exercised.

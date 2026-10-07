@@ -33,7 +33,7 @@ CORE_SOURCES := \
 	$(ROOT)/src/usb/usb.cpp \
 	$(ROOT)/src/usb/usbd_cdc_desc.cpp \
 	$(ROOT)/src/usb/usbd_epalloc.cpp \
-	$(ROOT)/src/app_evt_handler.cpp \
+	$(ROOT)/src/app_evt_handler.cpp $(ROOT)/src/app_run.cpp \
 	$(ROOT)/src/cfifo.c
 
 MULTICONFIG_TARGET := $(BUILD_DIR)/usb_multiconfig_test
@@ -42,7 +42,7 @@ MULTICONFIG_SOURCES := usb_multiconfig_test.cpp $(filter-out usb_core_test.cpp,$
 LINK_TARGET := $(BUILD_DIR)/usb_stack_link_test
 LINK_SOURCES := \
 	usb_stack_link_test.cpp \
-	$(ROOT)/src/app_evt_handler.cpp \
+	$(ROOT)/src/app_evt_handler.cpp $(ROOT)/src/app_run.cpp \
 	$(ROOT)/src/usb/usb.cpp \
 	$(ROOT)/src/usb/usb_intrf.cpp \
 	$(ROOT)/src/usb/usbd_cdc.cpp \
@@ -57,7 +57,7 @@ BULK_SOURCES := \
 	$(ROOT)/src/usb/usbd_bulk.cpp \
 	$(ROOT)/src/usb/usbd_epalloc.cpp \
 	$(ROOT)/src/usb/usb_intrf.cpp \
-	$(ROOT)/src/app_evt_handler.cpp \
+	$(ROOT)/src/app_evt_handler.cpp $(ROOT)/src/app_run.cpp \
 	$(ROOT)/src/device_intrf.cpp \
 	$(ROOT)/src/cfifo.c
 
@@ -68,7 +68,7 @@ HID_SOURCES := \
 	$(ROOT)/src/usb/usbd_epalloc.cpp \
 	$(ROOT)/src/usb/usb_int.cpp \
 	$(ROOT)/src/usb/usb_intrf.cpp \
-	$(ROOT)/src/app_evt_handler.cpp \
+	$(ROOT)/src/app_evt_handler.cpp $(ROOT)/src/app_run.cpp \
 	$(ROOT)/src/device_intrf.cpp \
 	$(ROOT)/src/cfifo.c
 
@@ -78,7 +78,7 @@ MSC_SOURCES := \
 	$(ROOT)/src/usb/usbd_msc.cpp \
 	$(ROOT)/src/usb/usbd_epalloc.cpp \
 	$(ROOT)/src/usb/usb_intrf.cpp \
-	$(ROOT)/src/app_evt_handler.cpp \
+	$(ROOT)/src/app_evt_handler.cpp $(ROOT)/src/app_run.cpp \
 	$(ROOT)/src/device_intrf.cpp \
 	$(ROOT)/src/storage/diskio_impl.cpp \
 	$(ROOT)/src/cfifo.c
@@ -87,7 +87,7 @@ INTRF_TARGET := $(BUILD_DIR)/usb_intrf_test
 INTRF_SOURCES := \
 	usb_intrf_test.cpp \
 	$(ROOT)/src/usb/usb_intrf.cpp \
-	$(ROOT)/src/app_evt_handler.cpp \
+	$(ROOT)/src/app_evt_handler.cpp $(ROOT)/src/app_run.cpp \
 	$(ROOT)/src/device_intrf.cpp \
 	$(ROOT)/src/cfifo.c
 
@@ -95,7 +95,7 @@ RX_EVENT_TARGET := $(BUILD_DIR)/usb_rx_event_test
 RX_EVENT_SOURCES := \
 	usb_rx_event_test.cpp \
 	$(ROOT)/src/usb/usb_intrf.cpp \
-	$(ROOT)/src/app_evt_handler.cpp \
+	$(ROOT)/src/app_evt_handler.cpp $(ROOT)/src/app_run.cpp \
 	$(ROOT)/src/device_intrf.cpp \
 	$(ROOT)/src/cfifo.c
 
@@ -103,7 +103,7 @@ DIRECT_TARGET := $(BUILD_DIR)/usb_direct_intrf_test
 DIRECT_SOURCES := \
 	usb_direct_intrf_test.cpp \
 	$(ROOT)/src/usb/usb_intrf.cpp \
-	$(ROOT)/src/app_evt_handler.cpp \
+	$(ROOT)/src/app_evt_handler.cpp $(ROOT)/src/app_run.cpp \
 	$(ROOT)/src/device_intrf.cpp \
 	$(ROOT)/src/cfifo.c
 
@@ -112,7 +112,7 @@ ISO_SOURCES := \
 	usb_iso_intrf_test.cpp \
 	$(ROOT)/src/usb/usb_iso.cpp \
 	$(ROOT)/src/usb/usb_intrf.cpp \
-	$(ROOT)/src/app_evt_handler.cpp \
+	$(ROOT)/src/app_evt_handler.cpp $(ROOT)/src/app_run.cpp \
 	$(ROOT)/src/device_intrf.cpp \
 	$(ROOT)/src/cfifo.c
 
@@ -121,7 +121,7 @@ ISO_DUPLEX_SOURCES := \
 	usb_iso_intrf_duplex_test.cpp \
 	$(ROOT)/src/usb/usb_iso.cpp \
 	$(ROOT)/src/usb/usb_intrf.cpp \
-	$(ROOT)/src/app_evt_handler.cpp \
+	$(ROOT)/src/app_evt_handler.cpp $(ROOT)/src/app_run.cpp \
 	$(ROOT)/src/device_intrf.cpp \
 	$(ROOT)/src/cfifo.c
 
@@ -130,7 +130,7 @@ INT_SOURCES := \
 	usb_int_intrf_test.cpp \
 	$(ROOT)/src/usb/usb_int.cpp \
 	$(ROOT)/src/usb/usb_intrf.cpp \
-	$(ROOT)/src/app_evt_handler.cpp \
+	$(ROOT)/src/app_evt_handler.cpp $(ROOT)/src/app_run.cpp \
 	$(ROOT)/src/device_intrf.cpp \
 	$(ROOT)/src/cfifo.c
 
@@ -167,13 +167,21 @@ HID_KEYBOARD_PROJECT := $(ROOT)/ARM/Nordic/nRF52/nRF52840/exemples/UsbHidKeyboar
 HID_3D_MOUSE_FIRMWARE := $(ROOT)/exemples/usb/usb_hid_3d_mouse.cpp
 HID_3D_MOUSE_BOARD := $(ROOT)/ARM/Nordic/nRF52/nRF52840/exemples/UsbHid3dMouse/src/board.h
 HID_3D_MOUSE_PROJECT := $(ROOT)/ARM/Nordic/nRF52/nRF52840/exemples/UsbHid3dMouse/ioc/.project
-HID_DEMO_CPPFLAGS := $(CPPFLAGS) -Idemo_hostport -I$(ROOT)/Linux/include \
+# Host idelay.h: macOS has its own, the Linux one uses clock_nanosleep which
+# macOS does not have.
+ifeq ($(UNAME_S),Darwin)
+HOST_INC := $(ROOT)/OSX/include
+else
+HOST_INC := $(ROOT)/Linux/include
+endif
+HID_DEMO_CPPFLAGS := $(CPPFLAGS) -Idemo_hostport -I$(HOST_INC) \
 	-I$(ROOT)/ARM/Nordic/nRF52/include
 
 # Compile every generic IOsonata USB example against the current public API.
-# The two board-specific HID demos are checked by hid-demo-build.
-USB_EXAMPLE_SOURCES := $(filter-out $(HID_KEYBOARD_FIRMWARE) $(HID_3D_MOUSE_FIRMWARE),\
-	$(wildcard $(ROOT)/exemples/usb/*.cpp))
+# The two board-specific HID demos are checked by hid-demo-build. The TaktOS
+# examples need the TaktOS sources and are built by their own projects.
+USB_EXAMPLE_SOURCES := $(filter-out $(HID_KEYBOARD_FIRMWARE) $(HID_3D_MOUSE_FIRMWARE) \
+	%_taktos.cpp, $(wildcard $(ROOT)/exemples/usb/*.cpp))
 
 # Throughput measurement, not a regression test. Built and run on demand.
 # Sanitizers are left off so the numbers are not distorted.
@@ -181,7 +189,7 @@ PROBE_TARGET := $(BUILD_DIR)/tx_rate_probe
 PROBE_SOURCES := \
 	tx_rate_probe.cpp \
 	$(ROOT)/src/usb/usb_intrf.cpp \
-	$(ROOT)/src/app_evt_handler.cpp \
+	$(ROOT)/src/app_evt_handler.cpp $(ROOT)/src/app_run.cpp \
 	$(ROOT)/src/cfifo.c
 
 SOF_TICKS ?= 500
@@ -207,24 +215,29 @@ TARGETS := $(CORE_TARGET) $(INTRF_TARGET) $(RX_EVENT_TARGET) \
 
 TARGETS += $(MSC_TARGET) $(MULTICONFIG_TARGET)
 
-.PHONY: all test test-combo-shutdown test-c-header test-gcc test-clang test-matrix test-nrf-out-appevt test-nrf-appevt \
-	test-nrf-control-event test-nrf-suspend-policy test-nrf-iso-policy test-nrf-dma-policy test-nrf-iso-dma test-nrf-lifecycle test-nrf54-data \
+.PHONY: all test test-combo-init test-combo-prbs test-combo-shutdown test-combo-host-pause test-iso-host-sched test-c-header test-gcc test-clang test-matrix test-nrf-out test-nrf-endpoints test-nrf-out-appevt test-nrf-appevt \
+	test-nrf-control-event test-nrf-suspend-policy test-nrf-iso-policy test-nrf-dma-policy test-nrf-iso-dma test-nrf-lifecycle test-nrf-vbus test-nrf54-data \
 	iso-hw-build iso-hw int-hw-build int-hw hid-hw-build hid-hw \
 	msc-hw-build msc-hw hid-demo-build examples-build probe clean
 
 all: test
 
 test: $(TARGETS) examples-build
+	$(MAKE) test-combo-init
+	$(MAKE) test-combo-prbs
 	$(MAKE) test-combo-shutdown
+	$(MAKE) test-combo-host-pause
+	$(MAKE) test-iso-host-sched
 	$(MAKE) test-c-header
 	$(MAKE) test-nrf-suspend-policy
 	$(MAKE) test-nrf-iso-policy
 	$(MAKE) test-nrf-control-event
-	$(MAKE) test-nrf-appevt
 	$(MAKE) test-nrf-iso-dma
 	$(MAKE) test-nrf-dma-policy
 	$(MAKE) test-nrf-lifecycle
+	$(MAKE) test-nrf-vbus
 	$(MAKE) test-nrf54-data
+	$(MAKE) test-sam4l
 	$(TEST_ENV) ./$(CORE_TARGET)
 	$(TEST_ENV) ./$(MULTICONFIG_TARGET)
 	$(TEST_ENV) ./$(INTRF_TARGET)
@@ -238,8 +251,20 @@ test: $(TARGETS) examples-build
 	$(TEST_ENV) ./$(MSC_TARGET)
 	$(TEST_ENV) ./$(LINK_TARGET)
 
+test-combo-init:
+	CXX="$(CXX)" python3 ./combo_init_test.py
+
+test-combo-prbs:
+	python3 ./combo_prbs_test.py
+
 test-combo-shutdown:
 	python3 ./combo_shutdown_test.py
+
+test-combo-host-pause:
+	python3 ./combo_host_pause_test.py
+
+test-iso-host-sched:
+	python3 ./iso_host_skew_test.py
 
 test-c-header:
 	@printf '%s\n' '#include "usb/usb_iso.h"' '#include "usb/usb_int.h"' \
@@ -257,17 +282,25 @@ test-nrf-iso-policy:
 test-nrf-iso-dma:
 	CXX=$(CXX) python3 ./nrf_usb_iso_dma_test.py
 
-test-nrf-out-appevt:
+test-nrf-out:
 	CXX=$(CXX) python3 ./nrf_usb_iso_dma_test.py --regular-out
 
-test-nrf-appevt:
+test-nrf-endpoints:
 	CXX=$(CXX) python3 ./nrf_usb_iso_dma_test.py --regular
+
+# Compatibility aliases for the former deferred-endpoint test targets.
+test-nrf-out-appevt: test-nrf-out
+
+test-nrf-appevt: test-nrf-endpoints
 
 test-nrf-control-event:
 	CXX=$(CXX) python3 ./nrf_usb_control_event_test.py
 
 test-nrf-lifecycle:
 	CXX=$(CXX) python3 ./nrf_usb_lifecycle_test.py
+
+test-nrf-vbus:
+	CXX=$(CXX) python3 ./nrf_usb_vbus_test.py
 
 test-nrf54-data:
 	CXX=$(CXX) python3 ./nrf54_usb_data_test.py
@@ -402,3 +435,8 @@ $(MULTICONFIG_TARGET): $(MULTICONFIG_SOURCES) usb_core_test.cpp $(HEADERS)
 	@mkdir -p $(BUILD_DIR)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) \
 		$(MULTICONFIG_SOURCES) -o $@ $(LDFLAGS) $(SANITIZERS)
+
+.PHONY: test-sam4l
+test-sam4l:
+	CXX=$(CXX) python3 ./sam4l_usb_ctrlr_test.py
+	CXX=$(CXX) python3 ./sam4l_usb_platform_test.py

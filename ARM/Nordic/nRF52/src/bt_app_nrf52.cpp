@@ -49,7 +49,6 @@ SOFTWARE.
 #include "ble_dis.h"
 #include "nrf_ble_gatt.h"
 #include "app_util_platform.h"
-#include "app_scheduler.h"
 #include "fds.h"
 #include "nrf_fstorage.h"
 #include "nrf_sdh.h"
@@ -77,7 +76,7 @@ SOFTWARE.
 #include "bluetooth/bt_smp.h"
 //#include "ble_app_nrf5.h"
 #include "bluetooth/bt_dev.h"
-#include "app_evt_handler.h"
+#include "app_evt_handler.h"		// AppWait, overridden here
 #include "sd_dispatch.h"
 
 /******** For DEBUG ************/
@@ -117,13 +116,6 @@ extern "C" ret_code_t nrf_sdh_enable(nrf_clock_lf_cfg_t *clock_lf_cfg);
 
 #define BLEAPP_OBSERVER_PRIO           1                                           /**< Application's BLE observer priority. You shouldn't need to modify this value. */
 //#define BLEAPP_CONN_CFG_TAG            1                                           /**< A tag identifying the SoftDevice BLE configuration. */
-
-#define SCHED_MAX_EVENT_DATA_SIZE 		20 /**< Maximum size of scheduler events. Note that scheduler BLE stack events do not contain any data, as the events are being pulled from the stack in the event handler. */
-#ifdef SVCALL_AS_NORMAL_FUNCTION
-#define SCHED_QUEUE_SIZE                20                                         /**< Maximum number of events in the scheduler queue. More is needed in case of Serialization. */
-#else
-#define SCHED_QUEUE_SIZE          		40                        /**< Maximum number of events in the scheduler queue. */
-#endif
 
 //#define SLAVE_LATENCY                   0                                           /**< Slave latency. */
 //#define CONN_SUP_TIMEOUT                MSEC_TO_UNITS(4000, UNIT_10_MS)             /**< Connection supervisory timeout (4 seconds), Supervision Timeout uses 10 ms units. */
@@ -1355,16 +1347,45 @@ const static TimerCfg_t s_BtAppNrf52TimerCfg = {
 // along with the low frequency one.
 static TimerDev_t s_BtAppNrf52Timer;
 
+// Set while the timeout check is in the queue, so that it is queued once
+static volatile bool s_bBtAppNrf52TickQueued = false;
+
+// Timeout check of the connection support, queued once per second
+static void BtAppNrf52TickEvt(uint32_t Evt, void *pCtx)
+{
+	(void)Evt;
+	(void)pCtx;
+
+	s_bBtAppNrf52TickQueued = false;
+
+	// Generic indication transaction timeout (Core Vol 3 Part F 3.3.3). Cheap
+	// no-op when nothing is pending.
+	// The pairing timeout (Core Vol 3 Part H 3.4) is not driven here: the
+	// SoftDevice runs SMP and its timer on this port.
+	if (s_pBtAppNrf52Conn != nullptr)
+	{
+		s_pBtAppNrf52Conn->Tick();
+	}
+}
+
 static void BtAppNrf52TimerHandler(TimerDev_t * const pTimer, uint32_t Evt)
 {
 	(void)pTimer;
 
-	// The interrupt is also the wakeup of the main loop, which runs the
-	// timeout checks after the wait returns, so that a fully silent link
-	// still reaches them.
 	if (Evt & TIMER_EVT_TRIGGER(0))
 	{
 		BtAppConnParamTick();
+
+		// The timeout check runs outside the interrupt, so that a fully silent
+		// link still reaches it.
+		if (s_bBtAppNrf52TickQueued == false)
+		{
+			s_bBtAppNrf52TickQueued = true;
+			if (BtEvtQue(0, nullptr, BtAppNrf52TickEvt) == false)
+			{
+				s_bBtAppNrf52TickQueued = false;
+			}
+		}
 	}
 }
 
@@ -1521,15 +1542,6 @@ bool BtAppConnInit(void)
 	return true;
 }
 
-// Default queue of the SDK scheduler. An application defines its own
-// g_BtAppSchedCfg to size it, or to leave the scheduler out, see bt_app.h.
-static uint32_t s_BtAppSchedMem[CEIL_DIV(APP_SCHED_BUF_SIZE(SCHED_MAX_EVENT_DATA_SIZE, SCHED_QUEUE_SIZE),
-										 sizeof(uint32_t))];
-
-extern "C" __attribute__((weak)) const BtAppSchedCfg_t g_BtAppSchedCfg = {
-	s_BtAppSchedMem, sizeof(s_BtAppSchedMem), SCHED_MAX_EVENT_DATA_SIZE, SCHED_QUEUE_SIZE
-};
-
 bool BtAppInit(const BtAppCfg_t *pCfg)//, bool bEraseBond)
 {
 	ret_code_t err_code;
@@ -1579,32 +1591,6 @@ bool BtAppInit(const BtAppCfg_t *pCfg)//, bool bEraseBond)
     	g_BtAppData.AppDevice.Conn.MaxMtu = pCfg->MaxMtu;
     else
     	g_BtAppData.AppDevice.Conn.MaxMtu = NRF_BLE_MAX_MTU_SIZE;
-
-	// SDK scheduler, for applications that post events to it. The queue is
-	// described by g_BtAppSchedCfg. An application that does not use the
-	// scheduler defines the descriptor without memory and the default queue
-	// is then not linked.
-	if (g_BtAppSchedCfg.pMem != nullptr)
-	{
-		if (((uintptr_t)g_BtAppSchedCfg.pMem & 3U) != 0 ||
-			g_BtAppSchedCfg.MemSize < APP_SCHED_BUF_SIZE(g_BtAppSchedCfg.EvtSize, g_BtAppSchedCfg.QueSize))
-		{
-			DEBUG_PRINTF("BtAppInit FAIL: scheduler queue memory (mem=%p size=%d)\r\n",
-				g_BtAppSchedCfg.pMem, (int)g_BtAppSchedCfg.MemSize);
-			return false;
-		}
-
-		err_code = app_sched_init(g_BtAppSchedCfg.EvtSize, g_BtAppSchedCfg.QueSize,
-								  g_BtAppSchedCfg.pMem);
-		APP_ERROR_CHECK(err_code);
-	}
-
-    if (AppEvtHandlerInit(pCfg->pEvtHandlerQueMem, pCfg->EvtHandlerQueMemSize) == false)
-    {
-    	DEBUG_PRINTF("BtAppInit FAIL: AppEvtHandlerInit (mem=%p size=%d)\r\n",
-    		(void*)pCfg->pEvtHandlerQueMem, (int)pCfg->EvtHandlerQueMemSize);
-    	return false;
-    }
 
     nrf_clock_lf_cfg_t lfclk = {
     	0
@@ -1720,66 +1706,16 @@ bool BtAppInit(const BtAppCfg_t *pCfg)//, bool bEraseBond)
 
     g_BtAppData.State = BTAPP_STATE_INITIALIZED;
 
+    // Advertising starts here and not from the event queue: an application
+    // interrupt can fill the queue before the application runs it.
+    if (g_BtAppData.AppDevice.Conn.Role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER))
+    {
+    	BtAdvStart();
+    }
+
     return true;
 }
 
-void BtAppRun()
-{
-	if (g_BtAppData.State != BTAPP_STATE_INITIALIZED)
-	{
-		return;
-	}
-
-	//g_BleAppData.bAdvertising = false;
-	//g_BleAppData.State = BLEAPP_STATE_IDLE;
-
-	if (g_BtAppData.AppDevice.Conn.Role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER))// != BLEAPP_ROLE_CENTRAL)
-	{
-		BtAdvStart();//BLEAPP_ADVMODE_FAST);
-	}
-
-	while (1)
-    {
-		if (g_BtAppSchedCfg.pMem != nullptr)
-		{
-			app_sched_execute();
-		}
-		// The LESC request pump runs from here as an idle handler, registered
-		// by BtAppSecInit when the application uses security.
-		AppEvtHandlerExec();
-
-		// Drive the generic indication transaction timeout (Core Vol 3 Part F
-		// 3.3.3). Cheap no-op when nothing is pending. This loop wakes on
-		// events, the 1 s trigger of the port timer is the wakeup of a link
-		// that goes fully silent.
-		// The pairing timeout (Core Vol 3 Part H 3.4) is not driven here: the
-		// SoftDevice runs SMP and its timer on this port. The generic SMP link
-		// table is never populated, so BtSmpTimeoutCheck had nothing to check
-		// and only kept that table and the SMP toolbox in the image.
-		if (s_pBtAppNrf52Conn != nullptr)
-		{
-			s_pBtAppNrf52Conn->Tick();
-		}
-
-		BtAppEvtWait();
-    }
-
-	/*	if (g_BleAppData.AppMode == BLEAPP_MODE_NOCONNECT)
-		{
-			uint32_t err_code = sd_ble_gap_adv_start(g_AdvInstance.adv_handle, BLEAPP_CONN_CFG_TAG);
-			//uint32_t err_code = ble_advertising_start(&g_AdvInstance, BLE_ADV_MODE_FAST);
-			APP_ERROR_CHECK(err_code);
-		}
-		else
-		{
-			if (g_BleAppData.AppRole & BLEAPP_ROLE_PERIPHERAL)
-			{
-				uint32_t err_code = ble_advertising_start(&g_AdvInstance, BLE_ADV_MODE_FAST);
-				APP_ERROR_CHECK(err_code);
-			}
-		}
-	*/
-}
 
 
 
@@ -1846,24 +1782,43 @@ bool BtAppEnableNotify(uint16_t ConnHandle, uint16_t CharHandle)//ble_uuid_t * c
 }
 
 
-void BtAppEvtDispatch()
+// The LESC module is linked only by an application that calls BtAppSecInit.
+// A weak reference does not pull it in.
+extern "C" void BtLescCheckStatus(void) __attribute__((weak));
+extern void BtDfuSmpCheckStatus(void) __attribute__((weak));
+
+void BtAppCheckStatus(void)
 {
-    nrf_sdh_evts_poll();                    /* let the handlers run first, incase the EVENT occured before creating this task */
+	if (BtLescCheckStatus != nullptr)
+	{
+		BtLescCheckStatus();
+	}
+	if (BtDfuSmpCheckStatus != nullptr)
+	{
+		BtDfuSmpCheckStatus();
+	}
 }
 
-// Port-level weak default for BtAppEvtWait. Bare-metal polling apps use this.
-// RTOS apps provide a strong override (e.g. ulTaskNotifyTake / TaktOSSemTake)
-// in their bridge code, which beats this weak.
-__attribute__((weak)) void BtAppEvtWait(void)
+// Wait of AppRun while the SoftDevice is enabled: the SoftDevice must be the
+// one putting the core to sleep. Overrides the weak WFE default, and is linked
+// only by an application that uses Bluetooth. C linkage, as declared in
+// app_evt_handler.h, or the weak default stays selected.
+void AppWait(void)
 {
+	if (nrf_sdh_is_enabled() == false)
+	{
+		__WFE();
+		return;
+	}
+
 	sd_app_evt_wait();
 }
 
-// Trampoline called from sd_dispatch.cpp's SD_EVT_IRQHandler.
-// Notifies any RTOS waiter then drains SoftDevice events so NRF_SDH observers run.
+// Trampoline called from sd_dispatch.cpp's SD_EVT_IRQHandler. SoftDevice
+// events are handled in the interrupt; what must run outside of it is queued
+// with BtEvtQue by the handlers.
 static void BtAppSDDispatch(void)
 {
-	BtAppEvtNotify();
 	nrf_sdh_evts_poll();
 }
 

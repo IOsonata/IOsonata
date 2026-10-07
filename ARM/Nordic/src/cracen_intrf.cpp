@@ -11,8 +11,13 @@
 		The transfer follows the same pattern as SPI and I2C: StartTx or StartRx
 		receives the DevAddr and saves it. TxSrData latches the byte offset from
 		the address phase; TxData writes and RxData reads at the saved base plus
-		the latched offset. Registers are accessed as 32-bit words and operand
-		memory byte-wise, matching the hardware.
+		the latched offset. Registers are accessed as 32-bit words. PKE
+		operand memory uses target-appropriate accesses.
+
+		On CRACEN Lite, PKE operand memory accesses use aligned 32-bit
+		transfers. This is
+		required by CRACEN Lite (nRF54LM20); the source/destination buffers
+		themselves may remain byte aligned.
 
 		Every transfer is self-addressing through the DevAddr module
 		selector, so no cross-operation state lives here. Module power is
@@ -173,11 +178,43 @@ static int CracenTxData(DevIntrf_t * const pIntrf, const uint8_t *pData, int Dat
 	const uint8_t *p = &pData[consumed];
 	if (xfer->bXferMem)
 	{
+#if defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
+		// CRACEN Lite requires word-aligned, word-sized PKE RAM accesses.
+		// All BA414EP operands currently start on a word boundary. Preserve
+		// bytes outside a partial final word rather than issuing byte stores.
+		if ((xfer->Offset & 3U) != 0U)
+		{
+			return consumed;
+		}
+
+		volatile uint32_t *w =
+			(volatile uint32_t *)(xfer->pXferBase + xfer->Offset);
+		int i = 0;
+		for (; i + 4 <= len; i += 4)
+		{
+			w[i / 4] = (uint32_t)p[i] |
+					   ((uint32_t)p[i + 1] << 8) |
+					   ((uint32_t)p[i + 2] << 16) |
+					   ((uint32_t)p[i + 3] << 24);
+		}
+		if (i < len)
+		{
+			uint32_t v = w[i / 4];
+			for (int j = 0; i + j < len; j++)
+			{
+				uint32_t sh = (uint32_t)j * 8U;
+				v = (v & ~(0xFFU << sh)) |
+					((uint32_t)p[i + j] << sh);
+			}
+			w[i / 4] = v;
+		}
+#else
 		volatile uint8_t *d = xfer->pXferBase + xfer->Offset;
 		for (int i = 0; i < len; i++)
 		{
 			d[i] = p[i];
 		}
+#endif
 	}
 	else
 	{
@@ -282,11 +319,35 @@ static int CracenRxData(DevIntrf_t * const pIntrf, uint8_t *pBuff, int BuffLen)
 
 	if (xfer->bXferMem)
 	{
+#if defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
+		if ((xfer->Offset & 3U) != 0U)
+		{
+			return 0;
+		}
+
+		const volatile uint32_t *w =
+			(const volatile uint32_t *)(xfer->pXferBase + xfer->Offset);
+		for (int i = 0; i < BuffLen; )
+		{
+			uint32_t v = w[i / 4];
+			int n = BuffLen - i;
+			if (n > 4)
+			{
+				n = 4;
+			}
+			for (int j = 0; j < n; j++)
+			{
+				pBuff[i + j] = (uint8_t)(v >> ((uint32_t)j * 8U));
+			}
+			i += n;
+		}
+#else
 		const volatile uint8_t *d = xfer->pXferBase + xfer->Offset;
 		for (int i = 0; i < BuffLen; i++)
 		{
 			pBuff[i] = d[i];
 		}
+#endif
 	}
 	else
 	{
@@ -323,13 +384,17 @@ static void CracenStopRx(DevIntrf_t * const pIntrf)
 	xfer->bAddrLatched = false;
 }
 
-// PKE code RAM lives at NRF_CRACENCORE + BA414EP_CODE_OFFSET. The Silex
-// BA414EP on this die is the microcoded configuration: the engine cannot
-// sequence any operation until its code RAM is filled. Initialization verifies
-// the complete retained image before taking the fast path, so corruption in a
-// middle word cannot be accepted as a valid program.
+// CRACEN Base devices that use writable PKE code RAM require the BA414EP
+// microcode at NRF_CRACENCORE + BA414EP_CODE_OFFSET. Initialization verifies
+// the complete retained image before taking the fast path. CRACEN Lite
+// (nRF54LM20) does not use this upload path.
 static bool CracenLoadPkeMicrocode(void)
 {
+#if defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
+	// nRF54LM20 is CRACEN Lite. Nordic's driver only enables microcode
+	// loading for CRACEN Base; the Lite PKE does not use this upload path.
+	return true;
+#else
 	volatile uint32_t *pCode = (volatile uint32_t *)
 		((uintptr_t)NRF_CRACENCORE + BA414EP_CODE_OFFSET);
 	const size_t words = CRACEN_BA414E_UCODE_WORDS;
@@ -361,6 +426,7 @@ static bool CracenLoadPkeMicrocode(void)
 		}
 	}
 	return true;
+#endif
 }
 
 // Transport power, driven by the EnCnt reference count: the first engine
@@ -460,12 +526,10 @@ bool CracenIntrf::Init(void)
 	s_pMemBase = (volatile uint8_t *)((uintptr_t)NRF_CRACENCORE +
 									 BA414EP_CRYPTORAM_OFFSET);
 
-	// Load the BA414EP microcode once, the way the Nordic power-up init does
-	// (cracen_init in sdk-nrf hardware.c): power the PKE module, fill and
-	// verify the code RAM, restore the module power state. The code RAM is
-	// retained across ENABLE cycles; a chip reset clears it and also re-runs
-	// Init. The IK handover and readiness are the generic engine's concern,
-	// proven by its first Enable.
+	// Prepare the PKE implementation while its module is powered. CRACEN Base
+	// loads/verifies the BA414EP microcode; CRACEN Lite has no upload step.
+	// The IK handover and readiness are the generic engine's concern, proven
+	// by its first Enable.
 	const uint32_t prev = NRF_CRACEN->ENABLE & CRACEN_ENABLE_PKEIKG_Msk;
 	NRF_CRACEN->ENABLE |= CRACEN_ENABLE_PKEIKG_Msk;
 	__DMB();

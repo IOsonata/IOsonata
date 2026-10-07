@@ -43,6 +43,7 @@ SOFTWARE.
 #include <stddef.h>
 #include <stdint.h>
 
+#include "coredev/iopincfg.h"
 #include "usb/usb_def.h"
 
 typedef enum __Usb_Ctrlr_Trans_Type {
@@ -144,6 +145,8 @@ typedef void (*UsbCtrlrEpHandler_t)(UsbCtrlrEvtType_t Event,
 /// What the generic layer hands the port at UsbCtrlrInit.
 typedef struct __Usb_Ctrlr_Config {
 	int IntPrio;					//!< Interrupt priority of the USB peripheral
+	const IOPinCfg_t *pIOPinMap;	//!< Optional board USB pins
+	int NbIOPins;					//!< Number of entries in pIOPinMap
 	bool bLowPowerSuspend;			//!< true - Sit in USB low power while suspended
 } UsbCtrlrCfg_t;
 

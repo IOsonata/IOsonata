@@ -1,5 +1,5 @@
 /**-------------------------------------------------------------------------
-@file	BlueIOTcf.cpp
+@file	BlueIOTuis.cpp
 
 @brief	Thingy Configuration Service implementation
 

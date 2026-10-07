@@ -46,14 +46,23 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "coredev/iopincfg.h"
 #include "iopinctrl.h"
 #include "app_evt_handler.h"
+#include "coredev/interrupt.h"
 #include "syslog.h"
 
 #include "board.h"
 
+#ifndef UART_DEVNO
+#define UART_DEVNO					0
+#endif
+
+#ifndef BUT1_INT
+#define BUT1_INT					0
+#endif
+
 // LE Secure Connections method selector.
 //
-// This board has no screen and no buttons: the UART console is both the display
-// and the keyboard. The SMP core prints the numeric value or the passkey to the
+// The UART console provides the display and keyboard for pairing. The SMP
+// core prints the numeric value or the passkey to the
 // terminal and reads the y/n or the typed passkey back from it, so one firmware
 // can exercise any association model. Pick a method here and build the peer
 // (uart_ble_central) with a compatible row:
@@ -71,81 +80,87 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 // taps the tag, reads the le.oob record and pairs with the OOB model. The
 // target port provides the NFC frame transport through BleOobNfcGetTransport,
 // see uart_ble_oob_nfc_port_nrfx.cpp for the Nordic NFCT one.
-#define BLE_SC_NONE				0
-#define BLE_SC_JUSTWORKS		1
-#define BLE_SC_NUMCOMP			2
-#define BLE_SC_PASSKEY_DISP		3
-#define BLE_SC_PASSKEY_INPUT	4
-#define BLE_SC_OOB				5
+#define BLE_SC_NONE					0
+#define BLE_SC_JUSTWORKS			1
+#define BLE_SC_NUMCOMP				2
+#define BLE_SC_PASSKEY_DISP			3
+#define BLE_SC_PASSKEY_INPUT		4
+#define BLE_SC_OOB					5
 
 #ifndef BLE_SC_METHOD
-#define BLE_SC_METHOD			BLE_SC_NUMCOMP
+#define BLE_SC_METHOD				BLE_SC_NUMCOMP
 #endif
 
 #if BLE_SC_METHOD != BLE_SC_NONE
 #include "bluetooth/bt_smp.h"		// SMP IO caps, console pairing callbacks, bond hooks
+
+#ifdef BLE_SC_OOB_NFC
+#include "rftag/rftag.h"
+#include "rftag/rftag_ndef.h"
+#include "bluetooth/bt_oob_rftag.h"
+#endif
 #endif
 
 #if BLE_SC_METHOD == BLE_SC_JUSTWORKS
-#define BLE_SEC_EXCHG			BTAPP_SECEXCHG_NONE
+#define BLE_SEC_EXCHG				BTAPP_SECEXCHG_NONE
 #elif BLE_SC_METHOD == BLE_SC_NUMCOMP
-#define BLE_SEC_EXCHG			(BTAPP_SECEXCHG_DISPLAY | BTAPP_SECEXCHG_YESNO)
+#define BLE_SEC_EXCHG				(BTAPP_SECEXCHG_DISPLAY | BTAPP_SECEXCHG_YESNO)
 #elif BLE_SC_METHOD == BLE_SC_PASSKEY_DISP
-#define BLE_SEC_EXCHG			BTAPP_SECEXCHG_DISPLAY
+#define BLE_SEC_EXCHG				BTAPP_SECEXCHG_DISPLAY
 #elif BLE_SC_METHOD == BLE_SC_PASSKEY_INPUT
-#define BLE_SEC_EXCHG			BTAPP_SECEXCHG_KEYBOARD
+#define BLE_SEC_EXCHG				BTAPP_SECEXCHG_KEYBOARD
 #elif BLE_SC_METHOD == BLE_SC_OOB
-#define BLE_SEC_EXCHG			BTAPP_SECEXCHG_OOB
+#define BLE_SEC_EXCHG				BTAPP_SECEXCHG_OOB
 #else
-#define BLE_SEC_EXCHG			BTAPP_SECEXCHG_NONE
+#define BLE_SEC_EXCHG				BTAPP_SECEXCHG_NONE
 #endif
 
 #if BLE_SC_METHOD == BLE_SC_JUSTWORKS
-#define BLE_SEC_TYPE			BTGAP_SECTYPE_STATICKEY_NO_MITM
-#define BLE_SC_IOCAPS			BT_SMP_IOCAPS_NO_INPUT_NO_OUTPUT
-#define BLE_SC_AUTHREQ			BT_SMP_AUTHREQ_BONDING_FLAG_BONDING
-#define BLE_SC_NAME				"Just Works (bonded, no MITM)"
+#define BLE_SEC_TYPE				BTGAP_SECTYPE_STATICKEY_NO_MITM
+#define BLE_SC_IOCAPS				BT_SMP_IOCAPS_NO_INPUT_NO_OUTPUT
+#define BLE_SC_AUTHREQ				BT_SMP_AUTHREQ_BONDING_FLAG_BONDING
+#define BLE_SC_NAME					"Just Works (bonded, no MITM)"
 #elif BLE_SC_METHOD == BLE_SC_NUMCOMP
-#define BLE_SEC_TYPE			BTGAP_SECTYPE_LESC_MITM
-#define BLE_SC_IOCAPS			BT_SMP_IOCAPS_DISPLAY_YESNO
-#define BLE_SC_AUTHREQ			(BT_SMP_AUTHREQ_BONDING_FLAG_BONDING | BT_SMP_AUTHREQ_MITM)
-#define BLE_SC_NAME				"Numeric Comparison"
+#define BLE_SEC_TYPE				BTGAP_SECTYPE_LESC_MITM
+#define BLE_SC_IOCAPS				BT_SMP_IOCAPS_DISPLAY_YESNO
+#define BLE_SC_AUTHREQ				(BT_SMP_AUTHREQ_BONDING_FLAG_BONDING | BT_SMP_AUTHREQ_MITM)
+#define BLE_SC_NAME					"Numeric Comparison"
 #elif BLE_SC_METHOD == BLE_SC_PASSKEY_DISP
-#define BLE_SEC_TYPE			BTGAP_SECTYPE_LESC_MITM
-#define BLE_SC_IOCAPS			BT_SMP_IOCAPS_DISPLAY_ONLY
-#define BLE_SC_AUTHREQ			(BT_SMP_AUTHREQ_BONDING_FLAG_BONDING | BT_SMP_AUTHREQ_MITM)
-#define BLE_SC_NAME				"Passkey Entry (display)"
+#define BLE_SEC_TYPE				BTGAP_SECTYPE_LESC_MITM
+#define BLE_SC_IOCAPS				BT_SMP_IOCAPS_DISPLAY_ONLY
+#define BLE_SC_AUTHREQ				(BT_SMP_AUTHREQ_BONDING_FLAG_BONDING | BT_SMP_AUTHREQ_MITM)
+#define BLE_SC_NAME					"Passkey Entry (display)"
 #elif BLE_SC_METHOD == BLE_SC_PASSKEY_INPUT
-#define BLE_SEC_TYPE			BTGAP_SECTYPE_LESC_MITM
-#define BLE_SC_IOCAPS			BT_SMP_IOCAPS_KEYBOARD_ONLY
-#define BLE_SC_AUTHREQ			(BT_SMP_AUTHREQ_BONDING_FLAG_BONDING | BT_SMP_AUTHREQ_MITM)
-#define BLE_SC_NAME				"Passkey Entry (keyboard)"
+#define BLE_SEC_TYPE				BTGAP_SECTYPE_LESC_MITM
+#define BLE_SC_IOCAPS				BT_SMP_IOCAPS_KEYBOARD_ONLY
+#define BLE_SC_AUTHREQ				(BT_SMP_AUTHREQ_BONDING_FLAG_BONDING | BT_SMP_AUTHREQ_MITM)
+#define BLE_SC_NAME					"Passkey Entry (keyboard)"
 #elif BLE_SC_METHOD == BLE_SC_OOB
-#define BLE_SEC_TYPE			BTGAP_SECTYPE_LESC_MITM
-#define BLE_SC_IOCAPS			BT_SMP_IOCAPS_NO_INPUT_NO_OUTPUT
-#define BLE_SC_AUTHREQ			(BT_SMP_AUTHREQ_BONDING_FLAG_BONDING | BT_SMP_AUTHREQ_MITM)
-#define BLE_SC_NAME				"LESC OOB"
+#define BLE_SEC_TYPE				BTGAP_SECTYPE_LESC_MITM
+#define BLE_SC_IOCAPS				BT_SMP_IOCAPS_NO_INPUT_NO_OUTPUT
+#define BLE_SC_AUTHREQ				(BT_SMP_AUTHREQ_BONDING_FLAG_BONDING | BT_SMP_AUTHREQ_MITM)
+#define BLE_SC_NAME					"LESC OOB"
 #else
-#define BLE_SEC_TYPE			BTGAP_SECTYPE_NONE
-#define BLE_SC_NAME				"NONE (open link)"
+#define BLE_SEC_TYPE				BTGAP_SECTYPE_NONE
+#define BLE_SC_NAME					"NONE (open link)"
 #endif
 
-#define DEVICE_NAME                     "UARTDemo"
+#define DEVICE_NAME					"UARTDemo"
 
-#define PACKET_SIZE						20
+#define PACKET_SIZE					20
 
-#define MANUFACTURER_NAME               "I-SYST inc."
-#define MODEL_NAME                      "Generic"
+#define MANUFACTURER_NAME			"I-SYST inc."
+#define MODEL_NAME					"Generic"
 
-#define MANUFACTURER_ID                 ISYST_BLUETOOTH_ID
-#define ORG_UNIQUE_ID                   ISYST_BLUETOOTH_ID
+#define MANUFACTURER_ID				ISYST_BLUETOOTH_ID
+#define ORG_UNIQUE_ID				ISYST_BLUETOOTH_ID
 
-#define APP_ADV_INTERVAL                64	// in msec
+#define APP_ADV_INTERVAL			64	// in msec
 
-#define APP_ADV_TIMEOUT					0	// in msec
+#define APP_ADV_TIMEOUT				0	// in msec
 
-#define MIN_CONN_INTERVAL               10	// in msec
-#define MAX_CONN_INTERVAL               40	// in msec
+#define MIN_CONN_INTERVAL			10	// in msec
+#define MAX_CONN_INTERVAL			40	// in msec
 
 #define BLE_UART_UUID_BASE			BLUEIO_UUID_BASE
 
@@ -180,21 +195,21 @@ uint8_t g_ManData[8];
 BtGattChar_t g_UartChars[] = {
 	// Read + Notify (server-pushed value, peer can also subscribe)
 	BT_CHAR(BLE_UART_UUID_RX_CHAR, PACKET_SIZE,
-	        BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_NOTIFY,
-	        s_RxCharDescString),
+			BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_NOTIFY,
+			s_RxCharDescString),
 	// Write Without Response (command sink, callback consumes)
 	BT_CHAR(BLE_UART_UUID_TX_CHAR, PACKET_SIZE,
-	        BT_GATT_CHAR_PROP_WRITE_WORESP,
-	        s_TxCharDescString,
-	        .WrCB = UartTxSrvcCallback),
+			BT_GATT_CHAR_PROP_WRITE_WORESP,
+			s_TxCharDescString,
+			.WrCB = UartTxSrvcCallback),
 };
 
 uint8_t g_LWrBuffer[512];
 
 /// Service definition
 BtGattSrvc_t g_UartBleSrvc = BT_SRVC_CUSTOM(BLE_UART_UUID_BASE,
-                                            BLE_UART_UUID_SERVICE,
-                                            g_UartChars);
+											BLE_UART_UUID_SERVICE,
+											g_UartChars);
 
 const BtAppDevInfo_t s_UartBleDevDesc = {
 	MODEL_NAME,       		// Model name
@@ -244,10 +259,7 @@ static const IOPinCfg_t s_LedPins[] = LED_PINS;
 
 static int s_NbLedPins = sizeof(s_LedPins) / sizeof(IOPinCfg_t);
 
-static const IOPinCfg_t s_ButPins[] = UART_PINS;//{
-//	{BUTTON1_PORT, BUTTON1_PIN, 0, IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL},// Button 1
-//	{BUTTON2_PORT, BUTTON2_PIN, 0, IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL},// Button 2
-//};
+static const IOPinCfg_t s_ButPins[] = BUTTON_PINS;
 
 static int s_NbButPins = sizeof(s_ButPins) / sizeof(IOPinCfg_t);
 
@@ -257,7 +269,11 @@ volatile bool g_bUartState = false;
 static volatile bool s_OobRefreshPending = false;
 #endif
 #if BLE_SC_METHOD != BLE_SC_NONE
-enum { PAIR_INPUT_NONE = 0, PAIR_INPUT_NUMERIC, PAIR_INPUT_PASSKEY };
+enum {
+	PAIR_INPUT_NONE = 0,
+	PAIR_INPUT_NUMERIC,
+	PAIR_INPUT_PASSKEY
+};
 static volatile int s_PairInput = PAIR_INPUT_NONE;
 static uint16_t s_PairConnHdl = 0;
 static uint8_t  s_PairDigits = 0;
@@ -266,7 +282,7 @@ static uint32_t s_PairPasskey = 0;
 
 int UartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);
 
-#define UARTFIFOSIZE			CFIFO_MEMSIZE(256)
+#define UARTFIFOSIZE				CFIFO_MEMSIZE(256)
 
 static uint8_t s_UartRxFifo[UARTFIFOSIZE];
 static uint8_t s_UartTxFifo[UARTFIFOSIZE];
@@ -276,7 +292,7 @@ static IOPinCfg_t s_UartPins[] = UART_PINS;
 
 /// UART configuration
 const UARTCfg_t g_UartCfg = {
-	.DevNo = 0,							// Device number zero based
+	.DevNo = UART_DEVNO,				// Device number zero based
 	.pIOPinMap = s_UartPins,				// UART assigned pins
 	.NbIOPins = sizeof(s_UartPins) / sizeof(IOPinCfg_t),	// Total number of UART pins used
 	.Rate = 115200,						// Baudrate
@@ -301,10 +317,6 @@ UART g_Uart;
 static bool s_UartBlePeerOobValid = false;
 
 #ifdef BLE_SC_OOB_NFC
-#include "rftag/rftag.h"
-#include "rftag/rftag_ndef.h"
-#include "bluetooth/bt_oob_rftag.h"
-
 // NFC frame transport provided by the target port.
 extern DeviceIntrf *BleOobNfcGetTransport(void);
 
@@ -336,12 +348,107 @@ static const RFTagCfg_t s_BleOobTagCfg = {
 	.pCtx = nullptr,
 };
 
+#endif
+
+// Runtime association-model selection.
+//
+// BLE_SC_METHOD is the boot default; the console "sec" command switches the
+// method for the next pairing without a rebuild, so one binary covers the whole
+// matrix instead of one build per cell. BtSmpAuthConfig only assigns the local
+// IO capability and the authentication requirements, and those two plus whether
+// OOB data is present are what choose the model at pairing time, so calling it
+// between connections is enough. SecType in the app config stays as built: it
+// arms security and bonding, it does not pick the model.
+typedef struct {
+	const char *pName;			// console keyword
+	uint8_t IoCaps;				// BT_SMP_IOCAPS_*
+	uint8_t AuthReq;				// bonding / MITM, SC is forced by BtSmpAuthConfig
+	const char *pDesc;
+} UartBleSecMethod_t;
+
+static const UartBleSecMethod_t s_SecMethods[] = {
+	{ "justworks",		BT_SMP_IOCAPS_NO_INPUT_NO_OUTPUT,
+		BT_SMP_AUTHREQ_BONDING_FLAG_BONDING,
+		"Just Works (bonded, no MITM)" },
+	{ "numcomp",		BT_SMP_IOCAPS_DISPLAY_YESNO,
+		BT_SMP_AUTHREQ_BONDING_FLAG_BONDING | BT_SMP_AUTHREQ_MITM,
+		"Numeric Comparison" },
+	{ "passkey-disp",	BT_SMP_IOCAPS_DISPLAY_ONLY,
+		BT_SMP_AUTHREQ_BONDING_FLAG_BONDING | BT_SMP_AUTHREQ_MITM,
+		"Passkey Entry (display)" },
+	{ "passkey-input",	BT_SMP_IOCAPS_KEYBOARD_ONLY,
+		BT_SMP_AUTHREQ_BONDING_FLAG_BONDING | BT_SMP_AUTHREQ_MITM,
+		"Passkey Entry (keyboard)" },
+	{ "oob",			BT_SMP_IOCAPS_NO_INPUT_NO_OUTPUT,
+		BT_SMP_AUTHREQ_BONDING_FLAG_BONDING | BT_SMP_AUTHREQ_MITM,
+		"LESC OOB" },
+};
+
+#define UART_BLE_SEC_METHOD_CNT		(int)(sizeof(s_SecMethods) / sizeof(s_SecMethods[0]))
+
+static int s_SecMethodIdx = 0;
+
+#endif
+
+// SysLog store. With the UART attached at init, each record goes out as it
+// is logged. 16 records of 128 bytes, non blocking, so a burst the UART
+// cannot keep up with drops the oldest lines rather than the newest.
+alignas(4) static uint8_t s_SysLogMem[SYSLOG_MEMSIZE(16, 128)];
+
+static const SysLogCfg_t s_SysLogCfg = {
+	.pMem = s_SysLogMem,
+	.MemSize = sizeof(s_SysLogMem),
+	.RecordLen = 128,
+	.bBlocking = false
+};
+
+// Pending stays set through queue refusal until the callback runs.
+static volatile bool s_bUartRxPending = false;
+static volatile bool s_bSysLogFlushPending = false;
+
+void UartRxChedHandler(uint32_t Evt, void *pCtx);
+static void SysLogFlushEvt(uint32_t Evt, void *pCtx);
+
+#if BLE_SC_METHOD != BLE_SC_NONE
+#ifdef BLE_SC_OOB_NFC
+static DeviceIntrf *s_pOobTransport = nullptr;
+#endif
+#endif
+
+static uint8_t s_UartRxBuff[PACKET_SIZE];
+static int s_UartRxBuffLen = 0;
+
+static void UartRxQue(void)
+{
+	uint32_t state = DisableInterrupt();
+
+	if (s_bUartRxPending == false)
+	{
+		s_bUartRxPending = true;
+		(void)AppEvtHandlerQue(0, nullptr, UartRxChedHandler);
+	}
+	EnableInterrupt(state);
+}
+
+static void SysLogFlushQue(void)
+{
+	uint32_t state = DisableInterrupt();
+
+	if (s_bSysLogFlushPending == false)
+	{
+		s_bSysLogFlushPending = true;
+		(void)AppEvtHandlerQue(0, nullptr, SysLogFlushEvt);
+	}
+	EnableInterrupt(state);
+}
+
+#if BLE_SC_METHOD != BLE_SC_NONE
+#ifdef BLE_SC_OOB_NFC
 // Publish the local OOB data set on the NFC tag. Must be called with the
 // same r and c as the UART printout, the generator makes a new key pair on
 // every call so a second generation would invalidate the published confirm.
 static void UartBleOobNfcPublish(const uint8_t *pRand, const uint8_t *pConf)
 {
-	static DeviceIntrf *s_pOobTransport = nullptr;
 
 	if (s_BleOobNfcReady == false)
 	{
@@ -392,44 +499,6 @@ static void UartBleOobNfcPublish(const uint8_t *pRand, const uint8_t *pConf)
 	g_Uart.printf("OOB data published on NFC tag, tap to pair\r\n");
 }
 #endif
-
-// Runtime association-model selection.
-//
-// BLE_SC_METHOD is the boot default; the console "sec" command switches the
-// method for the next pairing without a rebuild, so one binary covers the whole
-// matrix instead of one build per cell. BtSmpAuthConfig only assigns the local
-// IO capability and the authentication requirements, and those two plus whether
-// OOB data is present are what choose the model at pairing time, so calling it
-// between connections is enough. SecType in the app config stays as built: it
-// arms security and bonding, it does not pick the model.
-typedef struct {
-	const char *pName;			// console keyword
-	uint8_t     IoCaps;			// BT_SMP_IOCAPS_*
-	uint8_t     AuthReq;		// bonding / MITM, SC is forced by BtSmpAuthConfig
-	const char *pDesc;
-} UartBleSecMethod_t;
-
-static const UartBleSecMethod_t s_SecMethods[] = {
-	{ "justworks",		BT_SMP_IOCAPS_NO_INPUT_NO_OUTPUT,
-	  BT_SMP_AUTHREQ_BONDING_FLAG_BONDING,
-	  "Just Works (bonded, no MITM)" },
-	{ "numcomp",		BT_SMP_IOCAPS_DISPLAY_YESNO,
-	  BT_SMP_AUTHREQ_BONDING_FLAG_BONDING | BT_SMP_AUTHREQ_MITM,
-	  "Numeric Comparison" },
-	{ "passkey-disp",	BT_SMP_IOCAPS_DISPLAY_ONLY,
-	  BT_SMP_AUTHREQ_BONDING_FLAG_BONDING | BT_SMP_AUTHREQ_MITM,
-	  "Passkey Entry (display)" },
-	{ "passkey-input",	BT_SMP_IOCAPS_KEYBOARD_ONLY,
-	  BT_SMP_AUTHREQ_BONDING_FLAG_BONDING | BT_SMP_AUTHREQ_MITM,
-	  "Passkey Entry (keyboard)" },
-	{ "oob",			BT_SMP_IOCAPS_NO_INPUT_NO_OUTPUT,
-	  BT_SMP_AUTHREQ_BONDING_FLAG_BONDING | BT_SMP_AUTHREQ_MITM,
-	  "LESC OOB" },
-};
-
-#define UART_BLE_SEC_METHOD_CNT		(int)(sizeof(s_SecMethods) / sizeof(s_SecMethods[0]))
-
-static int s_SecMethodIdx = 0;
 
 static bool UartBleSecIsOob(void)
 {
@@ -485,9 +554,18 @@ static void UartBleSecInit(void)
 
 static int UartBleHexVal(uint8_t c)
 {
-	if (c >= '0' && c <= '9') return c - '0';
-	if (c >= 'a' && c <= 'f') return c - 'a' + 10;
-	if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+	if (c >= '0' && c <= '9')
+	{
+		return c - '0';
+	}
+	if (c >= 'a' && c <= 'f')
+	{
+		return c - 'a' + 10;
+	}
+	if (c >= 'A' && c <= 'F')
+	{
+		return c - 'A' + 10;
+	}
 	return -1;
 }
 
@@ -699,8 +777,6 @@ static bool UartBleOobTryCommand(const uint8_t *pData, int Len)
 // port, which calls BtAppEvtSecured on a successful pairing. That hook flags a
 // refresh and the work runs in app context from UartRxChedHandler, so no
 // crypto, UART or NFCT work runs in the pairing event callback.
-void UartRxChedHandler(uint32_t Evt, void *pCtx);
-
 static void UartBleOobRefresh(void)
 {
 	if (UartBleSecIsOob() == false)
@@ -719,10 +795,13 @@ void BtAppEvtSecured(uint16_t ConnHdl)
 
 	// Keep the callback light. Queue the app context handler to do the refresh.
 	s_OobRefreshPending = true;
-	AppEvtHandlerQue(0, nullptr, UartRxChedHandler);
+	UartRxQue();
 }
 #else
-static void UartBleOobInit(void) {}
+static void UartBleOobInit(void)
+{
+}
+
 static bool UartBleOobTryCommand(const uint8_t *pData, int Len)
 {
 	(void)pData;
@@ -815,8 +894,8 @@ void BtAppPeriphEvtHandler(uint32_t Evt, void * const pCtx)
 
 void BtAppInitUserServices()
 {
-    bool res;
-    res = BtGattSrvcAdd(&g_UartBleSrvc);
+	bool res;
+	res = BtGattSrvcAdd(&g_UartBleSrvc);
 }
 
 #if BLE_SC_METHOD != BLE_SC_NONE
@@ -834,7 +913,7 @@ void BtAppEvtConnected(uint16_t ConnHdl)
 
 void ButEvent(int IntNo, void *pCtx)
 {
-	if (IntNo == 0)
+	if (IntNo == BUT1_INT)
 	{
 		if (g_bUartState == false)
 		{
@@ -849,21 +928,9 @@ void ButEvent(int IntNo, void *pCtx)
 	}
 }
 
-// SysLog store. With the UART attached at init, each record goes out as it
-// is logged. 16 records of 128 bytes, non blocking, so a burst the UART
-// cannot keep up with drops the oldest lines rather than the newest.
-alignas(4) static uint8_t s_SysLogMem[SYSLOG_MEMSIZE(16, 128)];
-
-static const SysLogCfg_t s_SysLogCfg = {
-	.pMem      = s_SysLogMem,
-	.MemSize   = sizeof(s_SysLogMem),
-	.RecordLen = 128,
-	.bBlocking = false
-};
-
 void HardwareInit()
 {
-	g_Uart.Init(g_UartCfg);
+	g_bUartState = g_Uart.Init(g_UartCfg);
 
 	// Route SysLog to the same UART so the SMP/ATT stack traces (SMP_TRACE,
 	// DEBUG_PRINTF) appear here alongside the application output. Without this
@@ -880,7 +947,8 @@ void HardwareInit()
 
 	IOPinCfg(s_ButPins, s_NbButPins);
 
-	IOPinEnableInterrupt(0, IRQ_PRIO_LOW, s_ButPins[0].PortNo, s_ButPins[0].PinNo, IOPINSENSE_LOW_TRANSITION, ButEvent, NULL);
+	IOPinEnableInterrupt(BUT1_INT, IRQ_PRIO_LOW, s_ButPins[0].PortNo,
+						 s_ButPins[0].PinNo, IOPINSENSE_LOW_TRANSITION, ButEvent, NULL);
 }
 
 void BtAppInitUserData()
@@ -981,9 +1049,10 @@ static bool PairInputPoll(void)
 }
 #endif
 
-//void UartRxChedHandler(void * p_event_data, uint16_t event_size)
 void UartRxChedHandler(uint32_t Evt, void *pCtx)
 {
+	s_bUartRxPending = false;
+
 #if BLE_SC_METHOD != BLE_SC_NONE
 	if (s_OobRefreshPending)
 	{
@@ -997,17 +1066,15 @@ void UartRxChedHandler(uint32_t Evt, void *pCtx)
 		return;		// console bytes consumed by the pairing step
 	}
 #endif
-	static uint8_t buff[PACKET_SIZE];
-	static int bufflen = 0;
 	bool flush = false;
 
-	int l = g_Uart.Rx(&buff[bufflen], PACKET_SIZE - bufflen);
+	int l = g_Uart.Rx(&s_UartRxBuff[s_UartRxBuffLen], PACKET_SIZE - s_UartRxBuffLen);
 	if (l > 0)
 	{
-		int start = bufflen;
+		int start = s_UartRxBuffLen;
 
-		bufflen += l;
-		if (bufflen >= PACKET_SIZE)
+		s_UartRxBuffLen += l;
+		if (s_UartRxBuffLen >= PACKET_SIZE)
 		{
 			flush = true;
 		}
@@ -1017,9 +1084,9 @@ void UartRxChedHandler(uint32_t Evt, void *pCtx)
 		// buffer or an RX timeout, so "sec" and "bond del" sat in the buffer
 		// and looked like they did nothing, while a pasted OOB line worked
 		// because it is long enough to fill the buffer on its own.
-		for (int i = start; i < bufflen; i++)
+		for (int i = start; i < s_UartRxBuffLen; i++)
 		{
-			if (buff[i] == '\r' || buff[i] == '\n')
+			if (s_UartRxBuff[i] == '\r' || s_UartRxBuff[i] == '\n')
 			{
 				flush = true;
 				break;
@@ -1028,41 +1095,40 @@ void UartRxChedHandler(uint32_t Evt, void *pCtx)
 	}
 	else
 	{
-		if (bufflen > 0)
+		if (s_UartRxBuffLen > 0)
 		{
 			flush = true;
 		}
 	}
 	if (flush)
 	{
-		if (UartBleSecTryCommand(buff, bufflen))
+		if (UartBleSecTryCommand(s_UartRxBuff, s_UartRxBuffLen))
 		{
-			bufflen = 0;
+			s_UartRxBuffLen = 0;
 			return;
 		}
-		if (UartBleOobTryCommand(buff, bufflen))
+		if (UartBleOobTryCommand(s_UartRxBuff, s_UartRxBuffLen))
 		{
-			bufflen = 0;
+			s_UartRxBuffLen = 0;
 			return;
 		}
-		if (UartBleBondTryCommand(buff, bufflen))
+		if (UartBleBondTryCommand(s_UartRxBuff, s_UartRxBuffLen))
 		{
-			bufflen = 0;
+			s_UartRxBuffLen = 0;
 			return;
 		}
 //		if (BleSrvcCharNotify(&g_UartBleSrvc, 0, buff, bufflen) == 0)
-		if (BtAppNotify(&g_UartChars[0], buff, (uint16_t)bufflen) == true)
+		if (BtAppNotify(&g_UartChars[0], s_UartRxBuff, (uint16_t)s_UartRxBuffLen) == true)
 		{
-			bufflen = 0;
+			s_UartRxBuffLen = 0;
 		}
-		//app_sched_event_put(NULL, 0, UartRxChedHandler);
-		AppEvtHandlerQue(0, 0, UartRxChedHandler);
+		UartRxQue();
 	}
-	else if (bufflen > 0)
+	else if (s_UartRxBuffLen > 0)
 	{
 		// Partial line held. Come back rather than waiting for the next UART
 		// event, which for a line the user stopped typing may never arrive.
-		AppEvtHandlerQue(0, 0, UartRxChedHandler);
+		UartRxQue();
 	}
 }
 
@@ -1075,6 +1141,16 @@ uint32_t BleSrvcCharNotify(BtGattSrvc_t *pSrvc, int Idx, uint8_t *pData, uint16_
 }
 #endif
 
+// SysLog sends a record when it is logged. A record the UART had no room for
+// waits in the store, so the UART ready event queues one flush to send it.
+static void SysLogFlushEvt(uint32_t Evt, void *pCtx)
+{
+	(void)Evt;
+	(void)pCtx;
+	s_bSysLogFlushPending = false;
+	(void)SysLogFlush(SysLogGet());
+}
+
 int UartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen)
 {
 	int cnt = 0;
@@ -1084,10 +1160,13 @@ int UartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int Buffer
 	{
 		case UART_EVT_RXTIMEOUT:
 		case UART_EVT_RXDATA:
-			//app_sched_event_put(NULL, 0, UartRxChedHandler);
-			AppEvtHandlerQue(0, 0, UartRxChedHandler);
+			UartRxQue();
 			break;
 		case UART_EVT_TXREADY:
+			if (CFifoPeek(SysLogGet()->hFifo) != nullptr)
+			{
+				SysLogFlushQue();
+			}
 			break;
 		case UART_EVT_LINESTATE:
 			break;
@@ -1113,28 +1192,54 @@ int main()
 {
 	HardwareInit();
 
-    g_Uart.printf("UART over BLE\r\n");
-    g_Uart.printf("security    : %s\r\n", BLE_SC_NAME);
+	g_Uart.printf("UART over BLE\r\n");
+	g_Uart.printf("security    : %s\r\n", BLE_SC_NAME);
 
-    //g_Uart.Disable();
+	//g_Uart.Disable();
 
-    if (!BtAppInit(&s_BleAppCfg))
-    {
-        g_Uart.printf("BtAppInit failed\r\n");
-        while (true)
-        {
-            __NOP();
-        }
-    }
+	if (!BtAppInit(&s_BleAppCfg))
+	{
+		g_Uart.printf("BtAppInit failed\r\n");
+		while (true)
+		{
+			__NOP();
+		}
+	}
 
-    UartBleOobInit();
-    BtAppRun();
+	UartBleOobInit();
+	AppRun();
 
-    // BtAppRun is not expected to return. Keep embedded startup from falling
-    // through newlib exit if a target implementation does return.
-    g_Uart.printf("BtAppRun returned\r\n");
-    while (true)
-    {
-        __NOP();
-    }
+	// AppRun is not expected to return. Keep embedded startup from falling
+	// through newlib exit if it ever does.
+	g_Uart.printf("AppRun returned\r\n");
+	while (true)
+	{
+		__NOP();
+	}
+}
+
+bool AppCheckStatus(void)
+{
+	BtAppCheckStatus();
+
+	// A pending callback on an empty queue was refused. Keep the check and
+	// retry together so an interrupt cannot queue the same callback between them.
+	uint32_t state = DisableInterrupt();
+
+	if (AppEvtHandlerPending() == false)
+	{
+		if (s_bUartRxPending)
+		{
+			(void)AppEvtHandlerQue(0, nullptr, UartRxChedHandler);
+		}
+		if (s_bSysLogFlushPending)
+		{
+			(void)AppEvtHandlerQue(0, nullptr, SysLogFlushEvt);
+		}
+	}
+	const bool idle = s_bUartRxPending == false &&
+		s_bSysLogFlushPending == false &&
+		AppEvtHandlerPending() == false;
+	EnableInterrupt(state);
+	return idle;
 }

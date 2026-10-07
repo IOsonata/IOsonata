@@ -132,6 +132,24 @@ int BtPdsClear(void);
  */
 int BtSmpBondNvmInit(void);
 
+/**
+ * @brief Retry a bond save that is still marked.
+ *
+ * Called by the security module of the port once per second, from its timer
+ * event, after BtSmpBondNvmInit. Schedules the save again when an earlier attempt could
+ * not be queued or the store reported a failure. Returns at once when
+ * nothing is marked.
+ */
+void BtSmpBondNvmPoll(void);
+
+/**
+ * @brief Queue retained bond saves after the Bluetooth event queue empties.
+ *
+ * Does not advance the storage-failure backoff. BtSmpBondNvmPoll remains the
+ * once-per-second source of that delay.
+ */
+void BtSmpBondNvmCheckStatus(void);
+
 #ifdef __cplusplus
 }
 #endif

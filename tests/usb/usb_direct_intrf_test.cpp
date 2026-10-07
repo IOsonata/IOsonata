@@ -259,3 +259,6 @@ int main(void)
 	return s_Fail == 0 ? 0 : 1;
 }
 
+
+// The process event of the USB core is not part of this test.
+void UsbProcessQue(int) {}

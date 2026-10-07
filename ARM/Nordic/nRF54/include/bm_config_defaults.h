@@ -621,11 +621,14 @@ in your project's build configuration.
  * Must match the reg property in the devicetree / linker script.
  *
  * S145 on nRF54L15: 0x158C00  (partition@158c00, 144 K)
+ * S145 on nRF54LM20A/B: 0x1DA800 (matches gcc_nrf54lm20a_xxaa_s145.ld)
  * S115 on nRF54L05: 0x62000   (partition@62000)
  */
 #ifndef CONFIG_SOFTDEVICE_BASE_ADDRESS
 #if defined(NRF54L15_XXAA)
 #define CONFIG_SOFTDEVICE_BASE_ADDRESS  0x15a800UL//0x158C00
+#elif defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
+#define CONFIG_SOFTDEVICE_BASE_ADDRESS  0x1DA800UL
 #elif defined(NRF54L05_XXAA)
 #define CONFIG_SOFTDEVICE_BASE_ADDRESS  0x62000
 #else

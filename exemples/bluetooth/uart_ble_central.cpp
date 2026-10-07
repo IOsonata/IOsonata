@@ -48,6 +48,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "coredev/uart.h"
 #include "coredev/iopincfg.h"
 #include "app_evt_handler.h"
+#include "coredev/interrupt.h"
 #include "cfifo.h"
 #include "iopinctrl.h"
 
@@ -56,7 +57,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define DEBUG_PRINT		// Enable printing debug info over UART interface
 
 // BLE
-#define DEVICE_NAME             "UARTCentral"          /**< Name of device. Will be included in the advertising data. */
+#define DEVICE_NAME             "UARTCentral"          //!< Name of device. Will be included in the advertising data.
 
 // LE Secure Connections method selector. This board has no screen or keypad;
 // the UART console is the display and the keyboard. Pick a method and build the
@@ -137,20 +138,20 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define BLE_SC_NAME				"NONE (open link)"
 #endif
 
-#define MANUFACTURER_NAME       "I-SYST inc."          /**< Manufacturer. Will be passed to Device Information Service. */
-#define MODEL_NAME              "IMM-NRF5x"            /**< Model number. Will be passed to Device Information Service. */
-#define MANUFACTURER_ID         ISYST_BLUETOOTH_ID     /**< Manufacturer ID, part of System ID. Will be passed to Device Information Service. */
-#define ORG_UNIQUE_ID           ISYST_BLUETOOTH_ID     /**< Organizational Unique ID, part of System ID. Will be passed to Device Information Service. */
+#define MANUFACTURER_NAME       "I-SYST inc."          //!< Manufacturer. Will be passed to Device Information Service.
+#define MODEL_NAME              "IMM-NRF5x"            //!< Model number. Will be passed to Device Information Service.
+#define MANUFACTURER_ID         ISYST_BLUETOOTH_ID     //!< Manufacturer ID, part of System ID. Will be passed to Device Information Service.
+#define ORG_UNIQUE_ID           ISYST_BLUETOOTH_ID     //!< Organizational Unique ID, part of System ID. Will be passed to Device Information Service.
 
-#define MIN_CONN_INTERVAL       7.5	/**< Minimum acceptable connection interval (ms), Will be converted to units of 1.25ms */
-#define MAX_CONN_INTERVAL       40	/**< Maximum acceptable connection interval (ms), Will be converted to units of 1.25ms */
+#define MIN_CONN_INTERVAL       7.5	//!< Minimum acceptable connection interval (ms), Will be converted to units of 1.25ms
+#define MAX_CONN_INTERVAL       40	//!< Maximum acceptable connection interval (ms), Will be converted to units of 1.25ms
 
-#define SCAN_INTERVAL           1000 /**< Determines scan interval (ms). Will be converted to units of 0.625ms */
-#define SCAN_WINDOW             100  /**< Determines scan interval (ms). Will be converted to units of 0.625ms */
-#define SCAN_TIMEOUT            0 	 /**< Timout when scanning. 0x0000 disables timeout. */
+#define SCAN_INTERVAL           1000 //!< Determines scan interval (ms). Will be converted to units of 0.625ms
+#define SCAN_WINDOW             100  //!< Determines scan interval (ms). Will be converted to units of 0.625ms
+#define SCAN_TIMEOUT            0 	 //!< Timout when scanning. 0x0000 disables timeout.
 
-#define APP_ADV_INTERVAL        64 	/**< The advertising interval (ms), Will be converted to units of 0.625ms */
-#define APP_ADV_TIMEOUT			0	/**< The advertising timeout (ms), Will be converted to units of 10ms */
+#define APP_ADV_INTERVAL        64 	//!< The advertising interval (ms), Will be converted to units of 0.625ms
+#define APP_ADV_TIMEOUT			0	//!< The advertising timeout (ms), Will be converted to units of 10ms
 
 // UART
 #define BLE_MTU_SIZE			247//byte
@@ -166,11 +167,10 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 // BLE
 #define BLEFIFOSIZE				CFIFO_MEMSIZE(PACKET_SIZE)
 
-/** Target BLE peripheral device, which requires 2 pieces of info
- *  - Name : the advertising name of the device
- *  - MAC address of the device
- */
-#define TARGET_BRIDGE_DEV_NAME	"UARTDemo"	/**< Name of BLE peripheral device to be scanned */
+// Target BLE peripheral device, which requires 2 pieces of info
+//  - Name : the advertising name of the device
+//  - MAC address of the device
+#define TARGET_BRIDGE_DEV_NAME	"UARTDemo"	//!< Name of BLE peripheral device to be scanned
 
 #define Nordic_PCA10040_DK		{0x25, 0xD3, 0x83, 0x6A, 0xEA, 0xDE}
 #define BlueIO832_01			{0x7C, 0x75, 0x96, 0x65, 0x28, 0xF1}
@@ -235,8 +235,8 @@ static IOPinCfg_t s_UartPins[] = {
 };
 
 // UART configuration
-alignas(4) uint8_t s_UartRxFifo[UARTFIFOSIZE];//internal Uart_Rx buffer
-alignas(4) uint8_t s_UartTxFifo[UARTFIFOSIZE];//internal Uart_Tx buffer
+alignas(4) static uint8_t s_UartRxFifo[UARTFIFOSIZE];//internal Uart_Rx buffer
+alignas(4) static uint8_t s_UartTxFifo[UARTFIFOSIZE];//internal Uart_Tx buffer
 
 UARTCfg_t g_UartCfg = {
 	.DevNo = 0,									// Device number zero based
@@ -261,7 +261,7 @@ UARTCfg_t g_UartCfg = {
 // UART object instance
 UART g_Uart;
 
-static const BtGapScanCfg_t g_ScanParams = {
+static const BtGapScanCfg_t s_ScanParams = {
 	.Type = BTSCAN_TYPE_ACTIVE,
 	.Param = {
 		.OwnAddrType = BTADDR_TYPE_RAND,
@@ -304,6 +304,75 @@ static uint32_t s_PairPasskey = 0;
 #if BLE_SC_METHOD != BLE_SC_NONE
 static bool s_UartBlePeerOobValid = false;
 #endif
+
+// Pending stays set through queue refusal until the callback runs.
+static volatile bool s_bUartRxPending = false;
+static volatile bool s_bBleTxPending = false;
+
+void UartRxSchedHandler(uint32_t Evt, void *pCtx);
+void BleTxSchedHandler(uint32_t Evt, void *pCtx);
+
+#if BLE_SC_METHOD != BLE_SC_NONE
+// Runtime association-model selection.
+//
+// BLE_SC_METHOD is the boot default; the console "sec" command switches the
+// method for the next pairing without a rebuild, so one binary covers the whole
+// matrix instead of one build per cell. BtSmpAuthConfig only assigns the local
+// IO capability and the authentication requirements, and those two plus whether
+// OOB data is present are what choose the model at pairing time, so calling it
+// between connections is enough. SecType in the app config stays as built: it
+// arms security and bonding, it does not pick the model.
+typedef struct {
+	const char *pName;			// console keyword
+	uint8_t     IoCaps;			// BT_SMP_IOCAPS_*
+	uint8_t     AuthReq;		// bonding / MITM, SC is forced by BtSmpAuthConfig
+	const char *pDesc;
+} UartBleSecMethod_t;
+
+static const UartBleSecMethod_t s_SecMethods[] = {
+	{ "justworks",		BT_SMP_IOCAPS_NO_INPUT_NO_OUTPUT,
+	  BT_SMP_AUTHREQ_BONDING_FLAG_BONDING,
+	  "Just Works (bonded, no MITM)" },
+	{ "numcomp",		BT_SMP_IOCAPS_DISPLAY_YESNO,
+	  BT_SMP_AUTHREQ_BONDING_FLAG_BONDING | BT_SMP_AUTHREQ_MITM,
+	  "Numeric Comparison" },
+	{ "passkey-disp",	BT_SMP_IOCAPS_DISPLAY_ONLY,
+	  BT_SMP_AUTHREQ_BONDING_FLAG_BONDING | BT_SMP_AUTHREQ_MITM,
+	  "Passkey Entry (display)" },
+	{ "passkey-input",	BT_SMP_IOCAPS_KEYBOARD_ONLY,
+	  BT_SMP_AUTHREQ_BONDING_FLAG_BONDING | BT_SMP_AUTHREQ_MITM,
+	  "Passkey Entry (keyboard)" },
+	{ "oob",			BT_SMP_IOCAPS_NO_INPUT_NO_OUTPUT,
+	  BT_SMP_AUTHREQ_BONDING_FLAG_BONDING | BT_SMP_AUTHREQ_MITM,
+	  "LESC OOB" },
+};
+
+#define UART_BLE_SEC_METHOD_CNT		(int)(sizeof(s_SecMethods) / sizeof(s_SecMethods[0]))
+
+static int s_SecMethodIdx = 0;
+#endif
+
+static void UartRxQue(void)
+{
+	uint32_t state = DisableInterrupt();
+	if (s_bUartRxPending == false)
+	{
+		s_bUartRxPending = true;
+		(void)AppEvtHandlerQue(0, nullptr, UartRxSchedHandler);
+	}
+	EnableInterrupt(state);
+}
+
+static void BleTxQue(void)
+{
+	uint32_t state = DisableInterrupt();
+	if (s_bBleTxPending == false)
+	{
+		s_bBleTxPending = true;
+		(void)AppEvtHandlerQue(0, nullptr, BleTxSchedHandler);
+	}
+	EnableInterrupt(state);
+}
 
 static void StartPeerDiscovery(uint16_t ConnHdl)
 {
@@ -469,29 +538,35 @@ void BtDeviceDiscovered(BtDevice_t *pDev)
 	{
 		g_Uart.printf("BtAppEnableNotify failed\r\n");
 	}
+
+	BleTxQue();
 }
 
 void BleTxSchedHandler(uint32_t Evt, void *pCtx)
 {
 	(void)Evt;
 	(void)pCtx;
+	s_bBleTxPending = false;
 
-	IOPinToggle(s_Leds[0].PortNo, s_Leds[0].PinNo);
-
-	int len = BLE_WRITE_MAX;
-	uint8_t *p = CFifoGetMultiple(g_UartRx2BleFifo, &len);
-
-	if (p != NULL)
+	if (g_ConnectedDev.Conn.Hdl == BT_CONN_HDL_INVALID ||
+		g_BleTxCharHdl == BT_ATT_HANDLE_INVALID)
 	{
-		if (g_ConnectedDev.Conn.Hdl != BT_CONN_HDL_INVALID && g_BleTxCharHdl != BT_ATT_HANDLE_INVALID)
-		{
-			BtAppWrite(g_ConnectedDev.Conn.Hdl, g_BleTxCharHdl, p, len);
-		}
-
-		// Schedule this func again if g_UartRx2BleFifo is not empty
-		AppEvtHandlerQue(0, NULL, BleTxSchedHandler);
+		// Discovery queues this again when the peer is ready.
+		return;
 	}
 
+	IOPinToggle(s_Leds[0].PortNo, s_Leds[0].PinNo);
+	int len = BLE_WRITE_MAX;
+	uint8_t *p = CFifoPeekMultiple(g_UartRx2BleFifo, &len);
+	if (p != NULL)
+	{
+		if (BtAppWrite(g_ConnectedDev.Conn.Hdl, g_BleTxCharHdl, p, len))
+		{
+			(void)CFifoGetMultiple(g_UartRx2BleFifo, &len);
+		}
+		// A refused write retains the same bytes for the next pass.
+		BleTxQue();
+	}
 	IOPinToggle(s_Leds[0].PortNo, s_Leds[0].PinNo);
 }
 
@@ -574,44 +649,6 @@ static bool PairInputPoll(void)
 #endif
 
 #if BLE_SC_METHOD != BLE_SC_NONE
-// Runtime association-model selection.
-//
-// BLE_SC_METHOD is the boot default; the console "sec" command switches the
-// method for the next pairing without a rebuild, so one binary covers the whole
-// matrix instead of one build per cell. BtSmpAuthConfig only assigns the local
-// IO capability and the authentication requirements, and those two plus whether
-// OOB data is present are what choose the model at pairing time, so calling it
-// between connections is enough. SecType in the app config stays as built: it
-// arms security and bonding, it does not pick the model.
-typedef struct {
-	const char *pName;			// console keyword
-	uint8_t     IoCaps;			// BT_SMP_IOCAPS_*
-	uint8_t     AuthReq;		// bonding / MITM, SC is forced by BtSmpAuthConfig
-	const char *pDesc;
-} UartBleSecMethod_t;
-
-static const UartBleSecMethod_t s_SecMethods[] = {
-	{ "justworks",		BT_SMP_IOCAPS_NO_INPUT_NO_OUTPUT,
-	  BT_SMP_AUTHREQ_BONDING_FLAG_BONDING,
-	  "Just Works (bonded, no MITM)" },
-	{ "numcomp",		BT_SMP_IOCAPS_DISPLAY_YESNO,
-	  BT_SMP_AUTHREQ_BONDING_FLAG_BONDING | BT_SMP_AUTHREQ_MITM,
-	  "Numeric Comparison" },
-	{ "passkey-disp",	BT_SMP_IOCAPS_DISPLAY_ONLY,
-	  BT_SMP_AUTHREQ_BONDING_FLAG_BONDING | BT_SMP_AUTHREQ_MITM,
-	  "Passkey Entry (display)" },
-	{ "passkey-input",	BT_SMP_IOCAPS_KEYBOARD_ONLY,
-	  BT_SMP_AUTHREQ_BONDING_FLAG_BONDING | BT_SMP_AUTHREQ_MITM,
-	  "Passkey Entry (keyboard)" },
-	{ "oob",			BT_SMP_IOCAPS_NO_INPUT_NO_OUTPUT,
-	  BT_SMP_AUTHREQ_BONDING_FLAG_BONDING | BT_SMP_AUTHREQ_MITM,
-	  "LESC OOB" },
-};
-
-#define UART_BLE_SEC_METHOD_CNT		(int)(sizeof(s_SecMethods) / sizeof(s_SecMethods[0]))
-
-static int s_SecMethodIdx = 0;
-
 static bool UartBleSecIsOob(void)
 {
 	return strcmp(s_SecMethods[s_SecMethodIdx].pName, "oob") == 0;
@@ -889,6 +926,8 @@ static bool UartBleSecTryCommand(const uint8_t *pData, int Len)
 
 void UartRxSchedHandler(uint32_t Evt, void *pCtx)
 {
+	s_bUartRxPending = false;
+
 	(void)Evt;
 	(void)pCtx;
 
@@ -956,24 +995,21 @@ void UartRxSchedHandler(uint32_t Evt, void *pCtx)
 		else
 		{
 			memcpy(p, g_UartRxExtBuff, l2);
-			if (l2 < g_UartRxExtBuffLen)
+			g_UartRxExtBuffLen -= l2;
+			if (g_UartRxExtBuffLen > 0)
 			{
-				memcpy(&g_UartRxExtBuff[0], &g_UartRxExtBuff[l2], g_UartRxExtBuffLen - l2);
-			}
-			else
-			{
-				g_UartRxExtBuffLen = 0;
+				memmove(g_UartRxExtBuff, &g_UartRxExtBuff[l2], g_UartRxExtBuffLen);
 			}
 		}
 
 		// Schedule the BleTxSchedHandler for sending data via BLE
-		AppEvtHandlerQue(0, NULL, BleTxSchedHandler);
+		BleTxQue();
 	}
 
 	// Schedule the UartRxSchedHandler if ExternalUartRxBuffer still has data
 	if (g_UartRxExtBuffLen > 0)
 	{
-		AppEvtHandlerQue(0, NULL, UartRxSchedHandler);
+		UartRxQue();
 	}
 }
 
@@ -991,7 +1027,7 @@ int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int Buf
 		case UART_EVT_RXDATA:
 			if (g_UartRxExtBuffLen <= 0)
 			{
-				AppEvtHandlerQue(0, NULL, UartRxSchedHandler);
+				UartRxQue();
 			}
 			break;
 		case UART_EVT_TXREADY:
@@ -1073,11 +1109,36 @@ int main()
 	UartBleOobInit();
 
 	// Register the non-GATT service and its characteristics
-	BtAppScanInit((BtGapScanCfg_t*)&g_ScanParams);
+	BtAppScanInit((BtGapScanCfg_t*)&s_ScanParams);
 
 	BtAppScan();
 
-	BtAppRun();
+	AppRun();
 
 	return 0;
+}
+
+bool AppCheckStatus(void)
+{
+	BtAppCheckStatus();
+
+	// A pending callback on an empty queue was refused. Keep the check and
+	// retry together so an interrupt cannot queue the same callback between them.
+	uint32_t state = DisableInterrupt();
+	if (AppEvtHandlerPending() == false)
+	{
+		if (s_bUartRxPending)
+		{
+			(void)AppEvtHandlerQue(0, nullptr, UartRxSchedHandler);
+		}
+		if (s_bBleTxPending)
+		{
+			(void)AppEvtHandlerQue(0, nullptr, BleTxSchedHandler);
+		}
+	}
+	const bool idle = s_bUartRxPending == false &&
+		s_bBleTxPending == false &&
+		AppEvtHandlerPending() == false;
+	EnableInterrupt(state);
+	return idle;
 }

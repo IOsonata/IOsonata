@@ -43,15 +43,10 @@ SOFTWARE.
 #include "coredev/uart.h"
 #include "coredev/iopincfg.h"
 #include "app_evt_handler.h"
+#include "coredev/interrupt.h"
 #include "prbs.h"
 #include "coredev/system_core_clock.h"
 #include "blueio_board.h"
-
-//#define APP_SCHED		// use Nordic app scheduler
-
-#ifdef APP_SCHED
-#include "app_scheduler.h"
-#endif
 
 #include "board.h"
 
@@ -62,19 +57,19 @@ McuOsc_t g_McuOsc = MCUOSC;
 
 //#define NORDIC_NUS_SERVICE
 #ifdef S132
-#define DEVICE_NAME                     "BlePrbs_S132"                            /**< Name of device. Will be included in the advertising data. */
+#define DEVICE_NAME                     "BlePrbs_S132"                            //!< Name of device. Will be included in the advertising data.
 #elif defined(S140)
-#define DEVICE_NAME                     "BlePrbs_S140"                            /**< Name of device. Will be included in the advertising data. */
+#define DEVICE_NAME                     "BlePrbs_S140"                            //!< Name of device. Will be included in the advertising data.
 #else
-#define DEVICE_NAME                     "BlePrbs_SDC"                            /**< Name of device. Will be included in the advertising data. */
+#define DEVICE_NAME                     "BlePrbs_SDC"                            //!< Name of device. Will be included in the advertising data.
 #endif
 
 #define PACKET_SIZE						244
 
-#define MANUFACTURER_NAME               "I-SYST inc."							/**< Manufacturer. Will be passed to Device Information Service. */
-#define MODEL_NAME                      "IMM-NRF52x"                            /**< Model number. Will be passed to Device Information Service. */
-#define MANUFACTURER_ID                 ISYST_BLUETOOTH_ID						/**< Manufacturer ID, part of System ID. Will be passed to Device Information Service. */
-#define ORG_UNIQUE_ID                   ISYST_BLUETOOTH_ID						/**< Organizational Unique ID, part of System ID. Will be passed to Device Information Service. */
+#define MANUFACTURER_NAME               "I-SYST inc."							//!< Manufacturer. Will be passed to Device Information Service.
+#define MODEL_NAME                      "IMM-NRF52x"                            //!< Model number. Will be passed to Device Information Service.
+#define MANUFACTURER_ID                 ISYST_BLUETOOTH_ID						//!< Manufacturer ID, part of System ID. Will be passed to Device Information Service.
+#define ORG_UNIQUE_ID                   ISYST_BLUETOOTH_ID						//!< Organizational Unique ID, part of System ID. Will be passed to Device Information Service.
 
 #define APP_ADV_INTERVAL                64	// in msec
 
@@ -112,23 +107,23 @@ uint8_t g_ManData[8];
 #define BLESRV_READ_CHAR_IDX		0
 #define BLESRV_WRITE_CHAR_IDX		1
 
-static BtGattChar_t g_UartChars[] = {
+static BtGattChar_t s_UartChars[] = {
 	// Read + Notify (server-pushed)
 	BT_CHAR(BLE_UART_UUID_READ_CHAR, PACKET_SIZE,
-	        BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_NOTIFY,
-	        s_RxCharDescString,
-	        .SetNotifCB = ReadCharSetNotif),
+			BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_NOTIFY,
+			s_RxCharDescString,
+			.SetNotifCB = ReadCharSetNotif),
 	// Write + Write Without Response (peer sink; BtIntrf handles writes)
 	BT_CHAR(BLE_UART_UUID_WRITE_CHAR, PACKET_SIZE,
-	        BT_GATT_CHAR_PROP_WRITE | BT_GATT_CHAR_PROP_WRITE_WORESP,
-	        s_TxCharDescString),
+			BT_GATT_CHAR_PROP_WRITE | BT_GATT_CHAR_PROP_WRITE_WORESP,
+			s_TxCharDescString),
 };
 
 uint8_t g_LWrBuffer[512];
 
 BtGattSrvc_t g_UartBleSrvc = BT_SRVC_CUSTOM(BLE_UART_UUID_BASE,
-                                            BLE_UART_UUID_SERVICE,
-                                            g_UartChars);
+											BLE_UART_UUID_SERVICE,
+											s_UartChars);
 
 static const BtAppDevInfo_t s_UartBleDevDesc {
 	MODEL_NAME,           	// Model name
@@ -231,6 +226,15 @@ UART g_Uart;
 
 int g_DelayCnt = 0;
 
+// Pending stays set through queue refusal until the callback runs.
+static volatile bool s_bPrbsPending = false;
+
+void PrbsChedHandler(uint32_t Evt, void *pCtx);
+
+static uint8_t s_PrbsBuff[PACKET_SIZE];
+static int s_PrbsBuffLen = 0;
+static uint8_t s_PrbsVal = 0xff;
+
 int BleIntrfEvtCallback(DevIntrf_t *pDev, DEVINTRF_EVT EvtId, uint8_t *pBuffer, int BufferLen)
 {
 	int cnt = 0;
@@ -250,37 +254,39 @@ int BleIntrfEvtCallback(DevIntrf_t *pDev, DEVINTRF_EVT EvtId, uint8_t *pBuffer, 
 	return cnt;
 }
 
-#ifdef APP_SCHED
-void PrbsChedHandler(void * p_event_data, uint16_t event_size)
-#else
-void PrbsChedHandler(uint32_t Evt, void *pCtx)
-#endif
+static void PrbsQue(void)
 {
-	static uint8_t buff[PACKET_SIZE];
-	static int bufflen = 0;
-	static uint8_t d = 0xff;
-
-	if (bufflen == 0)
+	uint32_t state = DisableInterrupt();
+	if (s_bPrbsPending == false)
 	{
-		for (;bufflen < PACKET_SIZE; bufflen++)
+		s_bPrbsPending = true;
+		(void)AppEvtHandlerQue(0, nullptr, PrbsChedHandler);
+	}
+	EnableInterrupt(state);
+}
+
+void PrbsChedHandler(uint32_t Evt, void *pCtx)
+{
+	s_bPrbsPending = false;
+
+
+	if (s_PrbsBuffLen == 0)
+	{
+		for (;s_PrbsBuffLen < PACKET_SIZE; s_PrbsBuffLen++)
 		{
-			d = Prbs8(d);
-			buff[bufflen] = d;
+			s_PrbsVal = Prbs8(s_PrbsVal);
+			s_PrbsBuff[s_PrbsBuffLen] = s_PrbsVal;
 		}
 	}
 
 	if (isConnected())
 	{
 //		g_Uart.Tx(buff, bufflen);
-		if (g_BtIntrf.Tx(0, buff, bufflen) > 0)
+		if (g_BtIntrf.Tx(0, s_PrbsBuff, s_PrbsBuffLen) > 0)
 		{
-			bufflen = 0;
+			s_PrbsBuffLen = 0;
 		}
-#ifdef APP_SCHED
-		app_sched_event_put(NULL, 0, PrbsChedHandler);
-#else
-		AppEvtHandlerQue(0, 0, PrbsChedHandler);
-#endif
+		PrbsQue();
 	}
 }
 
@@ -288,11 +294,7 @@ void ReadCharSetNotif(BtGattChar_t *pChar, bool bEnable, uint16_t ConnHdl)
 {
 	if (bEnable)
 	{
-#ifdef APP_SCHED
-		app_sched_event_put(NULL, 0, PrbsChedHandler);
-#else
-		AppEvtHandlerQue(0, 0, PrbsChedHandler);
-#endif
+		PrbsQue();
 	}
 }
 
@@ -303,8 +305,8 @@ void BtAppPeriphEvtHandler(uint32_t Evt, void *pCtx)
 
 void BtAppInitUserServices()
 {
-    bool res;
-    res = BtGattSrvcAdd(&g_UartBleSrvc);
+	bool res;
+	res = BtGattSrvcAdd(&g_UartBleSrvc);
 }
 
 void BtAppInitUserData()
@@ -321,7 +323,6 @@ int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int Buf
 	{
 		case UART_EVT_RXTIMEOUT:
 		case UART_EVT_RXDATA:
-//			app_sched_event_put(NULL, 0, UartRxChedHandler);
 //			AppEvtHandlerQue(0, 0, UartRxChedHandler);
 			break;
 		case UART_EVT_TXREADY:
@@ -361,14 +362,34 @@ void HardwareInit()
 
 int main()
 {
-    HardwareInit();
+	HardwareInit();
 
-    BtAppInit(&s_BleAppCfg);
+	BtAppInit(&s_BleAppCfg);
 
-    g_BtIntrf.Init(s_BleInrfCfg);
+	g_BtIntrf.Init(s_BleInrfCfg);
 
-    //AppEvtHandlerQue(0, 0, PrbsChedHandler);
-    BtAppRun();
+	//AppEvtHandlerQue(0, 0, PrbsChedHandler);
+	AppRun();
 
 	return 0;
+}
+
+bool AppCheckStatus(void)
+{
+	BtAppCheckStatus();
+
+	// A pending callback on an empty queue was refused. Keep the check and
+	// retry together so an interrupt cannot queue the same callback between them.
+	uint32_t state = DisableInterrupt();
+	if (AppEvtHandlerPending() == false)
+	{
+		if (s_bPrbsPending)
+		{
+			(void)AppEvtHandlerQue(0, nullptr, PrbsChedHandler);
+		}
+	}
+	const bool idle = s_bPrbsPending == false &&
+		AppEvtHandlerPending() == false;
+	EnableInterrupt(state);
+	return idle;
 }

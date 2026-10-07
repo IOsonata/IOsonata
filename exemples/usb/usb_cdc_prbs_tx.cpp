@@ -17,8 +17,9 @@ USB device controller.
 Tx follows the same model as UART: the application only fills the Tx CFifo.
 The first write that finds Tx idle starts the endpoint with whatever data is
 available, and every completion interrupt sends whatever has accumulated
-since, until the FIFO comes up empty. UsbProcess is needed while waiting for
-USB attach and port open, not between transmitted bytes.
+since, until the FIFO comes up empty. The deferred USB work runs from the
+application event queue, so the loop runs it while it waits for attach, port
+open or FIFO space.
 
 @author	Hoang Nguyen Hoan
 @date	Aug. 28, 2026
@@ -53,6 +54,7 @@ SOFTWARE.
 
 #include "cfifo.h"
 #include "prbs.h"
+#include "app_evt_handler.h"
 #include "usb/usb.h"
 #include "usb/usbd_cdc.h"
 
@@ -94,6 +96,10 @@ static const UsbdCdcCfg_t s_CdcCfg = {
 //
 // 0x1209 is the pid.codes vendor id, which exists for open hardware. Put your
 // own vendor and product id here before shipping anything.
+// Application event queue memory, replaces the 4 event library default. The
+// USB controller port queues its deferred endpoint events there.
+alignas(4) uint8_t g_AppEvtHandlerQueMem[APPEVT_HANDLER_QUE_MEMSIZE(16)];
+
 static const UsbCfg_t s_UsbCfg = {
 	.DevNo = USB_DEVNO,
 	.Mode = USB_MODE_DEVICE,
@@ -126,7 +132,8 @@ int main()
 	uint8_t buff[TEST_BUFSIZE];
 #endif
 
-	if (UsbInit(&s_UsbCfg) == false)
+	if (AppEvtHandlerInit(g_AppEvtHandlerQueMem, sizeof(g_AppEvtHandlerQueMem)) == false ||
+		UsbInit(&s_UsbCfg) == false)
 	{
 		return -1;
 	}
@@ -145,7 +152,7 @@ int main()
 	{
 		if (g_Cdc.IsPortOpen() == false)
 		{
-			UsbProcess(USB_DEVNO);
+			AppEvtHandlerExec();
 			continue;
 		}
 
@@ -159,12 +166,12 @@ int main()
 		}
 		else
 		{
-			UsbProcess(USB_DEVNO);
+			AppEvtHandlerExec();
 		}
 #else
 		// Preserve the existing buffered-mode event-processing behavior for a
 		// separate measurement.
-		UsbProcess(USB_DEVNO);
+		AppEvtHandlerExec();
 
 		// Demo transfer buffer
 		for (int i = 0; i < TEST_BUFSIZE; i++)
@@ -187,7 +194,7 @@ int main()
 			}
 			else
 			{
-				UsbProcess(USB_DEVNO);
+				AppEvtHandlerExec();
 			}
 
 			if (g_Cdc.IsPortOpen() == false)

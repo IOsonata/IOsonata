@@ -35,6 +35,7 @@ alignas(8) uint8_t s_PeerMem[BT_PEER_POOL_MEMSIZE(2)];
 BtHciDevice_t s_HciDev;
 
 int      s_TxCompleteCount = 0;
+int      s_TxReadyCount = 0;
 int      s_HciPacketCount = 0;
 uint32_t s_SendResult = 1;
 
@@ -102,6 +103,7 @@ void Setup(uint16_t AclMaxLen)
 	BtGattCccdSet(kConnHdl, s_Char[1].CccdHdl, BT_DESC_CLIENT_CHAR_CONFIG_NOTIFICATION);
 
 	s_TxCompleteCount = 0;
+	s_TxReadyCount = 0;
 	s_HciPacketCount = 0;
 	s_SendResult = 1;
 	std::memset(s_Value, 0xA5, sizeof(s_Value));
@@ -127,11 +129,24 @@ void TestUntrackedPacketDoesNotFire()
 	BtGattSendCompleted(kConnHdl, 1);
 	CHECK(s_TxCompleteCount == 0);
 	CHECK(Peer()->TxPendCount == 1);
+	CHECK(s_TxReadyCount == 1);
 
 	// Now the notification completes.
 	BtGattSendCompleted(kConnHdl, 1);
 	CHECK(s_TxCompleteCount == 1);
 	CHECK(Peer()->TxPendCount == 0);
+	CHECK(s_TxReadyCount == 2);
+}
+
+// Shared controller credits can also be returned after a different link's
+// peer entry is gone. No owner completion is invented, but DFU can retry.
+void TestOtherLinkReleasesCapacity()
+{
+	Setup(64);
+	BtGattSendCompleted(kConnHdl + 1, 0);
+	CHECK(s_TxReadyCount == 0);
+	BtGattSendCompleted(kConnHdl + 1, 1);
+	CHECK(s_TxReadyCount == 1 && s_TxCompleteCount == 0);
 }
 
 // Separate unowned operations retain separate positions in send order.
@@ -311,6 +326,13 @@ void TestSendOrderPreserved()
 
 } // namespace
 
+// The optional DFU hook only schedules work; it is separate from the
+// characteristic completion callbacks whose attribution is tested above.
+void BtDfuSmpTxReady(void)
+{
+	++s_TxReadyCount;
+}
+
 // Stubs for the layers below bt_gatt.cpp.
 extern "C" {
 
@@ -335,6 +357,7 @@ void BtSmpBondCccdSave(uint16_t, uint16_t, uint16_t) {}
 int main()
 {
 	TestUntrackedPacketDoesNotFire();
+	TestOtherLinkReleasesCapacity();
 	TestUntrackedGroupsRemainOrdered();
 	TestFragmentedNotifyFiresOnce();
 	TestFragmentsReportedTogether();

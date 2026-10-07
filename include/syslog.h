@@ -164,7 +164,7 @@ typedef struct __Sys_Log_Cfg {
 } SysLogCfg_t;
 
 /**
- * Logger instance. Holds configuration only.
+ * Logger instance. Configuration and the send position in the head record.
  */
 typedef struct __Sys_Log {
 	uint32_t	Marker;		//!< SYSLOG_INIT_MARKER when initialized, else dormant
@@ -173,6 +173,9 @@ typedef struct __Sys_Log {
 	TimerDev_t	*pTimer;	//!< Timestamp tick source. NULL disables timestamp.
 	uint32_t	MinType;	//!< Minimum type field emitted, e.g. SYSSTATUS_TYPE_WRN. 0 emits all.
 	hCFifo_t	hFifo;		//!< Record store, one complete record per block.
+	uint32_t	HeadIdx;	//!< Store index of the record HeadSent belongs to
+	uint32_t	HeadSent;	//!< Bytes of that record already accepted by the sink
+	volatile bool bFlushing;	//!< Set while a SysLogFlush call is sending
 } SysLog_t;
 
 /**
@@ -225,12 +228,21 @@ void SysLogSetSink(SysLog_t * const pLog, DevIntrf_t * const pSink,
  * while there was no transport, or when a sink refused the last record and no
  * further record is coming to send it.
  *
- * One store block is one log record. Each record is passed once to
- * DeviceIntrfTx and consumed only when the whole record is accepted. A zero,
- * partial, or negative result leaves that record queued and ends the call;
- * SysLog does not retry the remainder, so a later call offers the same
- * complete record again. Transport transfer handling remains in the concrete
- * interface implementation.
+ * One store block is one log record. A record is consumed when the sink has
+ * accepted all of it. When the sink takes only part of a record, or returns
+ * zero or a negative value, the call ends and the record stays queued with
+ * the count already sent; the next call sends only the remainder, so no byte
+ * goes out twice. If the non-blocking store evicts that record in the
+ * meantime, the next record is sent from its first byte.
+ *
+ * One flush runs at a time. A call made while another one is sending, from an
+ * interrupt for example, returns 0 and leaves its record to the running call,
+ * which checks the store again before it returns.
+ *
+ * The sink does not call back when it has room again. When records can be
+ * left waiting, call this from the sink ready event (for a UART,
+ * UART_EVT_TXREADY), through the application event queue rather than from
+ * the interrupt.
  *
  * Note this is the opposite of CFifoFlush, which discards. This one sends.
  *

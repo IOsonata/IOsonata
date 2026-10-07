@@ -1,5 +1,5 @@
 /**-------------------------------------------------------------------------
-@example	uart_prbs_tx.cpp
+@example	uart_prbs_tx_freertos.cpp
 
 @brief	UART PRBS transmit test
 

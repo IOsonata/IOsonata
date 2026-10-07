@@ -52,20 +52,6 @@ SOFTWARE.
 static int s_Pass = 0;
 static int s_Fail = 0;
 
-static void Check(const char *pName, bool bOk)
-{
-	if (bOk)
-	{
-		s_Pass++;
-		printf("  [PASS] %s\n", pName);
-	}
-	else
-	{
-		s_Fail++;
-		printf("  [FAIL] %s\n", pName);
-	}
-}
-
 // Tag subclass capturing events per instance. This replaces the former
 // global dispatch hook: each test observes its own tag object.
 class TestTag : public RFTag {
@@ -95,6 +81,24 @@ public:
 // Board style write protect hook capture.
 static int s_WpCalls = 0;
 static bool s_WpLast = false;
+
+static uint8_t s_BigMem[2048];
+static uint8_t s_MemA[144];
+static uint8_t s_MemB[144];
+
+static void Check(const char *pName, bool bOk)
+{
+	if (bOk)
+	{
+		s_Pass++;
+		printf("  [PASS] %s\n", pName);
+	}
+	else
+	{
+		s_Fail++;
+		printf("  [FAIL] %s\n", pName);
+	}
+}
 
 static bool WpCtrl(void *pCtx, bool bVal)
 {
@@ -226,10 +230,9 @@ int main(void)
 	printf("== 5. SECTOR SELECT ==\n");
 	{
 		// 2048 bytes allows sector 1: block 256 is byte 1024.
-		static uint8_t bigmem[2048];
 		TestTag tag;
 		RFTagProtoT2 t2;
-		SetupTag(tag, t2, bigmem, sizeof(bigmem), false);
+		SetupTag(tag, t2, s_BigMem, sizeof(s_BigMem), false);
 
 		uint8_t ss1[] = { 0xC2, 0xFF };
 		l = tag.ProcessFrame(ss1, sizeof(ss1), tx, sizeof(tx));
@@ -243,7 +246,7 @@ int main(void)
 		uint8_t wr[] = { 0xA2, 0x00, 0xAA, 0xBB, 0xCC, 0xDD };
 		l = tag.ProcessFrame(wr, sizeof(wr), tx, sizeof(tx));
 		Check("write in sector 1 ACK", l == 1 && tx[0] == 0x0A);
-		Check("sector 1 memory updated", bigmem[1024] == 0xAA && bigmem[1027] == 0xDD);
+		Check("sector 1 memory updated", s_BigMem[1024] == 0xAA && s_BigMem[1027] == 0xDD);
 
 		// Unavailable sector NAKs on the second frame.
 		tag.ProcessFrame(ss1, sizeof(ss1), tx, sizeof(tx));
@@ -308,7 +311,7 @@ int main(void)
 		RFTagProtoT2 t2;
 		SetupTag(tag, t2, mem, sizeof(mem), false);
 
-		// No hook configured: unsupported, honest false.
+		// No hook configured: unsupported, returns false.
 		Check("no hook reports unsupported", tag.SetWriteProt(true) == false);
 
 		// With the board hook: driven with the requested value.
@@ -333,19 +336,18 @@ int main(void)
 
 	printf("== 9. Two instances stay independent ==\n");
 	{
-		static uint8_t memA[144], memB[144];
 		TestTag tagA, tagB;
 		RFTagProtoT2 t2A, t2B;
 
-		SetupTag(tagA, t2A, memA, sizeof(memA), false);
-		SetupTag(tagB, t2B, memB, sizeof(memB), false);
+		SetupTag(tagA, t2A, s_MemA, sizeof(s_MemA), false);
+		SetupTag(tagB, t2B, s_MemB, sizeof(s_MemB), false);
 
 		uint8_t wr[] = { 0xA2, 0x05, 0x11, 0x22, 0x33, 0x44 };
 		tagA.ProcessFrame(wr, sizeof(wr), tx, sizeof(tx));
 
 		Check("tag A saw its event", tagA.MemChanged == 1);
 		Check("tag B saw nothing", tagB.MemChanged == 0);
-		Check("tag B memory untouched", memB[20] == 0x00);
+		Check("tag B memory untouched", s_MemB[20] == 0x00);
 	}
 
 	printf("\nresult: pass=%d fail=%d\n", s_Pass, s_Fail);

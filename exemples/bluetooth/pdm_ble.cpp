@@ -39,6 +39,7 @@ SOFTWARE.
 
 #include "istddef.h"
 #include "convutil.h"
+#include "app_evt_handler.h"
 #include "bluetooth/bt_app.h"
 #include "bluetooth/bt_intrf.h"
 #include "bluetooth/bt_gap.h"
@@ -53,22 +54,22 @@ SOFTWARE.
 void MicCharSetNotify(BtGattChar_t *pBleSvc, bool bEnable, uint16_t ConnHdl);
 void CfgSrvcCallback(BtGattChar_t *pBleSvc, uint8_t *pData, int Offset, int Len);
 
-#define DEVICE_NAME                     "BlePdmDemo"                          /**< Name of device. Will be included in the advertising data. */
+#define DEVICE_NAME                     "BlePdmDemo"                          //!< Name of device. Will be included in the advertising data.
 
 #define PACKET_SIZE						400
 
 #define MAX_MTU							512
 
-#define MANUFACTURER_NAME               "I-SYST inc."                       /**< Manufacturer. Will be passed to Device Information Service. */
+#define MANUFACTURER_NAME               "I-SYST inc."                       //!< Manufacturer. Will be passed to Device Information Service.
 
-#define MODEL_NAME                      "Generic"                           /**< Model number. Will be passed to Device Information Service. */
+#define MODEL_NAME                      "Generic"                           //!< Model number. Will be passed to Device Information Service.
 
-#define MANUFACTURER_ID                 ISYST_BLUETOOTH_ID                  /**< Manufacturer ID, part of System ID. Will be passed to Device Information Service. */
-#define ORG_UNIQUE_ID                   ISYST_BLUETOOTH_ID                  /**< Organizational Unique ID, part of System ID. Will be passed to Device Information Service. */
+#define MANUFACTURER_ID                 ISYST_BLUETOOTH_ID                  //!< Manufacturer ID, part of System ID. Will be passed to Device Information Service.
+#define ORG_UNIQUE_ID                   ISYST_BLUETOOTH_ID                  //!< Organizational Unique ID, part of System ID. Will be passed to Device Information Service.
 
 #define APP_ADV_INTERVAL                64 //MSEC_TO_UNITS(64, UNIT_0_625_MS)	/**< The advertising interval (in units of 0.625 ms. This value corresponds to 40 ms). */
 
-#define APP_ADV_TIMEOUT					0										/**< The advertising timeout in msec. 0 = no timeout. */
+#define APP_ADV_TIMEOUT					0										//!< The advertising timeout in msec. 0 = no timeout.
 
 #define MIN_CONN_INTERVAL               8//MSEC_TO_UNITS(8, UNIT_1_25_MS)     /**< Minimum acceptable connection interval (20 ms), Connection interval uses 1.25 ms units. */
 #define MAX_CONN_INTERVAL               40 //MSEC_TO_UNITS(40, UNIT_1_25_MS)     /**< Maximum acceptable connection interval (75 ms), Connection interval uses 1.25 ms units. */
@@ -116,21 +117,21 @@ static uint8_t s_PdmWrChar = 0;
 /// Characteristic definitions
 BtGattChar_t g_PdmChars[] = {
 	BT_CHAR(BLE_PDM_CFG_UUID_CHAR, 1,
-	        BT_GATT_CHAR_PROP_WRITE,
-	        s_CfgCharDescString,
-	        .WrCB = CfgSrvcCallback),
+			BT_GATT_CHAR_PROP_WRITE,
+			s_CfgCharDescString,
+			.WrCB = CfgSrvcCallback),
 	BT_CHAR(BLE_PDM_DATA_UUID_CHAR, sizeof(PdmPacket_t),
-	        BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_NOTIFY,
-	        s_DataCharDescString,
-	        .SetNotifCB = MicCharSetNotify),
+			BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_NOTIFY,
+			s_DataCharDescString,
+			.SetNotifCB = MicCharSetNotify),
 };
 
 uint8_t g_LWrBuffer[512];
 
 /// Service definition
 BtGattSrvc_t g_BlePdmSrvc = BT_SRVC_CUSTOM(BLE_PDM_UUID_BASE,
-                                           BLE_PDM_UUID_SERVICE,
-                                           g_PdmChars);
+										   BLE_PDM_UUID_SERVICE,
+										   g_PdmChars);
 
 const BtAppDevInfo_t s_BlePdmDevDesc = {
 	MODEL_NAME,       		// Model name
@@ -232,6 +233,14 @@ int g_DelayCnt = 0;
 volatile bool g_bUartState = false;
 volatile bool g_bEnable = false;
 
+static int s_PdmBuffIdx = 0;
+static int s_SampleCnt = 0;
+static int s_SampleSum = 0;
+static int s_SampleSumL = 0;
+static int s_SampleSumR = 0;
+static int16_t *s_pPdmLeft = g_PdmPacket.Data;
+static int16_t *s_pPdmRight = &g_PdmPacket.Data[1];
+
 int BleIntrfEvtCallback(DevIntrf_t *pDev, DEVINTRF_EVT EvtId, uint8_t *pData, int Len)
 {
 	if (EvtId == DEVINTRF_EVT_RX_DATA)
@@ -268,34 +277,26 @@ void BtPeriphEvtHandler(uint32_t Evt, void *pCtx)
 
 void BtAppInitUserServices()
 {
-    bool res = BtGattSrvcAdd(&g_BlePdmSrvc);
-    assert(res == true);
+	bool res = BtGattSrvcAdd(&g_BlePdmSrvc);
+	assert(res == true);
 }
 
 void PdmHandler(PdmDev_t *pDev, DEVINTRF_EVT Evt)
 {
 	if (Evt == DEVINTRF_EVT_RX_DATA)
 	{
-		static int bidx = 0;
-		static int sample_counter = 0;
-		static int sample_sum = 0;
-		static int sample_sum_L = 0;
-		static int sample_sum_R = 0;
 		//static int pkcnt = 0;
 		//static int j = 0;
-		static int16_t *pl = g_PdmPacket.Data;
-		static int16_t *pr = &g_PdmPacket.Data[1];
 
-		/*
-		int16_t Data1[PDM_BUFF_MAXLEN / 2];
-		for (int i=0;i<PDM_BUFF_MAXLEN / 2;i++){
-			Data1[i]=i;
-		}
-		memcpy(g_PdmPacket.Data, Data1, PDM_BUFF_MAXLEN);
+		// int16_t Data1[PDM_BUFF_MAXLEN / 2];
+		// for (int i=0;i<PDM_BUFF_MAXLEN / 2;i++){
+			// Data1[i]=i;
+		// }
+		// memcpy(g_PdmPacket.Data, Data1, PDM_BUFF_MAXLEN);
 
-		g_BleIntrf.Tx(0, (uint8_t*)&g_PdmPacket, sizeof(PdmPacket_t));
+		// g_BleIntrf.Tx(0, (uint8_t*)&g_PdmPacket, sizeof(PdmPacket_t));
 
-		g_PdmPacket.Cnt++; */
+		// g_PdmPacket.Cnt++;
 
 
 		int16_t *sl = (int16_t*)PdmGetSamples(pDev);
@@ -311,19 +312,19 @@ void PdmHandler(PdmDev_t *pDev, DEVINTRF_EVT Evt)
 					int16_t *sr = sl + 1;
 					for (int i = 0; i < (PDM_BUFF_MAXLEN / 2); i += 2)
 					{
-						sample_sum_L += EndianCvt16(*sl);
-						sample_sum_R += EndianCvt16(*sr);
-						sample_counter +=1;
-						if (sample_counter==3)
+						s_SampleSumL += EndianCvt16(*sl);
+						s_SampleSumR += EndianCvt16(*sr);
+						s_SampleCnt +=1;
+						if (s_SampleCnt==3)
 						{
-							*pl = EndianCvt16(sample_sum_L/3);
-							*pr = EndianCvt16(sample_sum_R/3);
-							pl += 2;
-							pr += 2;
+							*s_pPdmLeft = EndianCvt16(s_SampleSumL/3);
+							*s_pPdmRight = EndianCvt16(s_SampleSumR/3);
+							s_pPdmLeft += 2;
+							s_pPdmRight += 2;
 							//j=j+2;
-							sample_sum_L = EndianCvt16(*sl);
-							sample_sum_R = EndianCvt16(*sr);
-							sample_counter = 1;
+							s_SampleSumL = EndianCvt16(*sl);
+							s_SampleSumR = EndianCvt16(*sr);
+							s_SampleCnt = 1;
 						}
 						sl += 2;
 						sr += 2;
@@ -334,26 +335,26 @@ void PdmHandler(PdmDev_t *pDev, DEVINTRF_EVT Evt)
 					//Downsample MONO-------------------------------------------------------
 					for (int i = 0; i < (PDM_BUFF_MAXLEN / 2); i++)
 					{
-						sample_sum += EndianCvt16(*sl);
-						sample_counter +=1;
-						if (sample_counter==3)
+						s_SampleSum += EndianCvt16(*sl);
+						s_SampleCnt +=1;
+						if (s_SampleCnt==3)
 						{
-							*pl = EndianCvt16(sample_sum/3);
-							pl++;
-							sample_sum = EndianCvt16(*sl);
-							sample_counter = 1;
+							*s_pPdmLeft = EndianCvt16(s_SampleSum/3);
+							s_pPdmLeft++;
+							s_SampleSum = EndianCvt16(*sl);
+							s_SampleCnt = 1;
 						}
 						sl++;
 					}
 				}
 
-				if(bidx & 1)//== 0)
+				if(s_PdmBuffIdx & 1)//== 0)
 				{
 					g_BleIntrf.Tx(0, (uint8_t*)&g_PdmPacket, sizeof(PdmPacket_t));
 					//j = 0;
 					g_PdmPacket.Cnt++;
-					pl = g_PdmPacket.Data;
-					pr = &g_PdmPacket.Data[1];
+					s_pPdmLeft = g_PdmPacket.Data;
+					s_pPdmRight = &g_PdmPacket.Data[1];
 					//pkcnt++;
 				}
 
@@ -366,7 +367,7 @@ void PdmHandler(PdmDev_t *pDev, DEVINTRF_EVT Evt)
 				//pkcnt++;
 			}
 
-			bidx = (bidx + 1) & 1;
+			s_PdmBuffIdx = (s_PdmBuffIdx + 1) & 1;
 		}
 	}
 }
@@ -398,13 +399,13 @@ void BtAppInitUserData()
 
 int main()
 {
-   HardwareInit();
+	HardwareInit();
 
-    BtAppInit(&s_BleAppCfg);//, true);
+	BtAppInit(&s_BleAppCfg);//, true);
 
-    g_BleIntrf.Init(s_BleInrfCfg);
+	g_BleIntrf.Init(s_BleInrfCfg);
 
-    BtAppRun();
+	AppRun();
 
 	return 0;
 }

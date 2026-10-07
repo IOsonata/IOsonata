@@ -149,8 +149,6 @@ typedef struct __Bt_App_Cfg {
 	uint16_t MaxMtu;				//!< Max MTU size or 0 for default
 	BTAPP_COEXMODE CoexMode;		//!< Enable support for CoEx
 	int PeriphDevCnt;				//!< Max number of peripheral connection
-	uint8_t *pEvtHandlerQueMem;		//!< Memory reserved for AppEvtHandler
-	size_t EvtHandlerQueMemSize;	//!< Total pEvtHandlerQueMem length in bytes
 	uint8_t *pPeerPoolMem;			//!< Peer pool storage; NULL -> library default. Size with BT_PEER_POOL_MEMSIZE(N).
 	size_t PeerPoolMemSize;			//!< Total pPeerPoolMem length in bytes
 	uint8_t *pLongWrPoolMem;		//!< Long-write reassembly pool; library splits evenly across peer slots. NULL = no long-write support.
@@ -264,28 +262,6 @@ bool BtAppConnInit(void);
  */
 bool BtAppSecInit(void);
 
-/// Queue of the event scheduler of a port that runs a vendor event scheduler
-/// next to the application event queue (AppEvtHandlerQue).
-typedef struct __Bt_App_Sched_Cfg {
-	void *pMem;				//!< Queue memory, aligned on 4 bytes. NULL : scheduler not used
-	size_t MemSize;			//!< Total pMem length in bytes
-	uint16_t EvtSize;		//!< Maximum size of the data of one event
-	uint16_t QueSize;		//!< Maximum number of events in the queue
-} BtAppSchedCfg_t;
-
-/// Scheduler queue of the port. A port that runs a vendor event scheduler
-/// defines a weak default, so that applications posting events to that
-/// scheduler work without anything to set up. The library itself posts
-/// nothing to it. An application that does not use the vendor scheduler
-/// leaves the queue out with
-///
-///   const BtAppSchedCfg_t g_BtAppSchedCfg = { NULL, 0, 0, 0 };
-///
-/// and one that needs another depth defines its own memory and sizes.
-/// BtAppInit fails when the memory is too small for the sizes given.
-/// Ports without such a scheduler do not use it.
-extern const BtAppSchedCfg_t g_BtAppSchedCfg;
-
 void BtAppEvtConnected(uint16_t ConnHdl);
 void BtAppEvtDisconnected(uint16_t ConnHdl);
 // Called once the link is encrypted (freshly paired or re-encrypted from a
@@ -301,27 +277,55 @@ bool BtAppScanReport(int8_t Rssi, uint8_t AddrType, uint8_t Addr[6], size_t AdvL
 
 //void BleDevServiceDiscovered(uint16_t ConnHdl, uint16_t Count, ble_gattc_service_t * const pServices);
 
-//*** RTOS integration hooks.
-// BtAppEvtNotify is called from port IRQ handlers. Weak default is empty.
-// Apps using an RTOS provide strong overrides:
-//   BtAppEvtWait    - block until BtAppEvtNotify signals (typically a semaphore take)
-//   BtAppEvtNotify  - signal from IRQ (typically semaphore give from ISR)
-// Bare-metal polling apps don't override; the port's BtAppRun handles polling.
-void BtAppEvtWait(void);
-void BtAppEvtNotify(void);
-void BtAppEvtDispatch();
+/// Deferred Bluetooth work: runs outside the caller with the values it was
+/// queued with. Same signature as AppEvtHandler_t.
+typedef void (*BtEvtQueHandler_t)(uint32_t EvtId, void *pCtx);
+
+/**
+ * @brief	Queue deferred Bluetooth work.
+ *
+ * The one way the Bluetooth subsystem signals work: called by the stack,
+ * often from interrupt context, for everything that must run outside the
+ * interrupt (security requests, timeout checks, ...). Work that needs
+ * immediate service is done in the interrupt instead. It is also called from
+ * the thread running the work, so two callers can be in it at once: an
+ * override must take that (an ISR safe RTOS send, or a CFifoPut with the
+ * interrupts masked).
+ *
+ * The library has a weak default for an application without an OS: it puts
+ * the work in the application event queue (AppEvtHandlerQue), which the
+ * application runs with AppRun or its own loop, first in first out.
+ *
+ * An application using an RTOS defines its own BtEvtQue. It sends the three
+ * values as a message to the thread that serves Bluetooth, and that thread
+ * calls Handler(EvtId, pCtx) for each one.
+ *
+ * @param	EvtId	: Value to pass to Handler
+ * @param	pCtx	: Value to pass to Handler
+ * @param	Handler	: Function to call
+ *
+ * @return	true - queued
+ * 			false - queue full
+ */
+bool BtEvtQue(uint32_t EvtId, void *pCtx, BtEvtQueHandler_t Handler);
+
+/// Retry work refused by the Bluetooth work queue. Called by the
+/// application's status check, or by the Bluetooth worker owning that queue.
+void BtAppCheckStatus(void);
 
 /**
  * @brief	BLE main App initialization
  *
+ * Advertising, for a peripheral or broadcaster, starts from the first queued
+ * Bluetooth event, once the application runs the queue (AppRun, its own loop
+ * or its Bluetooth thread).
+ *
  * @param	pBleAppCfg : Pointer to app configuration data
- * @param	bEraseBond : true to force erase all bonding info
  *
  * @return	true - success
  */
 bool BtAppInit(const BtAppCfg_t * const pCfg);
 void BtAppEnterDfu(void);
-void BtAppRun(void);
 void BtAppGapDeviceNameSet(const char* ppDeviceName);
 
 void BtAppSetDevName(const char *pName);

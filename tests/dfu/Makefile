@@ -82,6 +82,9 @@ $(BUILD_DIR)/crc.o: $(ROOT)/src/crc.c $(ROOT)/include/crc.h | $(BUILD_DIR)
 $(BUILD_DIR)/cbor.o: $(ROOT)/src/cbor.c $(ROOT)/include/cbor.h | $(BUILD_DIR)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -Werror -Wshadow $(SANITIZERS) -c $< -o $@
 
+$(BUILD_DIR)/cfifo.o: $(ROOT)/src/cfifo.c $(ROOT)/include/cfifo.h | $(BUILD_DIR)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(SANITIZERS) -c $< -o $@
+
 $(BUILD_DIR)/dfu_image_test: dfu_image_test.cpp $(DFU_SRC) $(CRYPTO_SRC) \
 		$(HOST_SRC) $(UECC_OBJ) | $(BUILD_DIR)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SANITIZERS) -x c++ $(filter %.cpp,$^) \
@@ -122,10 +125,11 @@ $(BUILD_DIR)/dfu_smp_udp_host: dfu_smp_udp_host.cpp $(ROOT)/src/dfu/dfu_smp.cpp 
 $(BUILD_DIR)/bt_dfu_smp_test: bt_dfu_smp_test.cpp \
 		$(ROOT)/src/bluetooth/bt_dfu_smp.cpp $(ROOT)/src/dfu/dfu_smp.cpp $(ROOT)/src/dfu/dfu_mgr.cpp \
 		$(ROOT)/src/dfu/dfu_boot.cpp $(DFU_SRC) $(HOST_SRC) $(CRYPTO_SRC) \
-		$(UECC_OBJ) | $(BUILD_DIR)
+		$(ROOT)/src/app_evt_handler.cpp $(ROOT)/src/app_run.cpp \
+		$(UECC_OBJ) $(BUILD_DIR)/cfifo.o | $(BUILD_DIR)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -Wno-missing-field-initializers \
 		$(SANITIZERS) -x c++ $(filter %.cpp,$^) -x none $(UECC_OBJ) \
-		$(LAYOUT) -o $@
+		$(BUILD_DIR)/cfifo.o $(LAYOUT) -o $@
 
 $(BUILD_DIR)/dfu_serial_test: dfu_serial_test.cpp $(ROOT)/src/dfu/dfu_serial.cpp \
 		$(ROOT)/src/dfu/dfu_smp.cpp $(ROOT)/src/dfu/dfu_mgr.cpp $(ROOT)/src/dfu/dfu_boot.cpp $(DFU_SRC) \

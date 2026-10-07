@@ -44,27 +44,32 @@ public:
 };
 
 static int s_pass, s_fail;
+
+alignas(CryptoUecc::KeyCtx) static uint8_t s_CtxA[64];
+alignas(CryptoUecc::KeyCtx) static uint8_t s_CtxB[64];
+
+alignas(TestSecureRng) static uint8_t s_RngMem[sizeof(TestSecureRng)];
+alignas(CryptoUecc) static uint8_t s_MemA[CRYPTO_UECC_MEMSIZE];
+alignas(CryptoUecc) static uint8_t s_MemB[CRYPTO_UECC_MEMSIZE];
+alignas(CryptoSoftRng) static uint8_t s_PrngMem[sizeof(CryptoSoftRng)];
+alignas(CryptoUecc) static uint8_t s_WeakMem[CRYPTO_UECC_MEMSIZE];
+alignas(CryptoUecc) static uint8_t s_NoRngMem[CRYPTO_UECC_MEMSIZE];
+
 static void check(const char *name, bool ok)
 {
 	printf("  [%s] %s\n", ok ? "PASS" : "FAIL", name);
 	if (ok) s_pass++; else s_fail++;
 }
 
-alignas(CryptoUecc::KeyCtx) static uint8_t g_ctxA[64];
-alignas(CryptoUecc::KeyCtx) static uint8_t g_ctxB[64];
-
 int main(void)
 {
 	printf("CryptoUecc OO engine validation\n");
 
-	alignas(TestSecureRng) static uint8_t rngMem[sizeof(TestSecureRng)];
-	TestSecureRng *secureRng = new (rngMem) TestSecureRng();
+	TestSecureRng *secureRng = new (s_RngMem) TestSecureRng();
 	secureRng->Enable();
 
-	alignas(CryptoUecc) static uint8_t memA[CRYPTO_UECC_MEMSIZE];
-	alignas(CryptoUecc) static uint8_t memB[CRYPTO_UECC_MEMSIZE];
-	CryptoUecc *engineA = CryptoUeccCreate(memA, sizeof(memA), secureRng);
-	CryptoUecc *engineB = CryptoUeccCreate(memB, sizeof(memB), secureRng);
+	CryptoUecc *engineA = CryptoUeccCreate(s_MemA, sizeof(s_MemA), secureRng);
+	CryptoUecc *engineB = CryptoUeccCreate(s_MemB, sizeof(s_MemB), secureRng);
 	check("aligned factories construct engines", engineA != nullptr && engineB != nullptr);
 	if (engineA == nullptr || engineB == nullptr) return 1;
 
@@ -74,13 +79,13 @@ int main(void)
 	check("one object resolves both facets", agreeA != nullptr && signA != nullptr);
 	check("BLE P-256 known-answer self-test", engineA->SelfTest() == 0);
 	check("key context size fits caller storage",
-		agreeA->KeyCtxSize() > 0U && agreeA->KeyCtxSize() <= sizeof(g_ctxA));
+		agreeA->KeyCtxSize() > 0U && agreeA->KeyCtxSize() <= sizeof(s_CtxA));
 
 	uint8_t pubA[64], pubB[64], sharedA[32], sharedB[32];
-	CRYPTO_STATUS keyA = agreeA->KeyGen(CRYPTO_CURVE_P256, g_ctxA, pubA);
-	CRYPTO_STATUS keyB = agreeB->KeyGen(CRYPTO_CURVE_P256, g_ctxB, pubB);
-	CRYPTO_STATUS dhA = agreeA->Agree(CRYPTO_CURVE_P256, g_ctxA, pubB, sharedA);
-	CRYPTO_STATUS dhB = agreeB->Agree(CRYPTO_CURVE_P256, g_ctxB, pubA, sharedB);
+	CRYPTO_STATUS keyA = agreeA->KeyGen(CRYPTO_CURVE_P256, s_CtxA, pubA);
+	CRYPTO_STATUS keyB = agreeB->KeyGen(CRYPTO_CURVE_P256, s_CtxB, pubB);
+	CRYPTO_STATUS dhA = agreeA->Agree(CRYPTO_CURVE_P256, s_CtxA, pubB, sharedA);
+	CRYPTO_STATUS dhB = agreeB->Agree(CRYPTO_CURVE_P256, s_CtxB, pubA, sharedB);
 	check("two generated key pairs derive the same secret",
 		keyA == CRYPTO_STATUS_OK && keyB == CRYPTO_STATUS_OK &&
 		dhA == CRYPTO_STATUS_OK && dhB == CRYPTO_STATUS_OK &&
@@ -88,22 +93,22 @@ int main(void)
 
 	uint8_t badPeer[64]; memset(badPeer, 0xAB, sizeof(badPeer));
 	check("invalid curve point is rejected",
-		agreeA->KeyGen(CRYPTO_CURVE_P256, g_ctxA, pubA) == CRYPTO_STATUS_OK &&
-		agreeA->Agree(CRYPTO_CURVE_P256, g_ctxA, badPeer, sharedA) ==
+		agreeA->KeyGen(CRYPTO_CURVE_P256, s_CtxA, pubA) == CRYPTO_STATUS_OK &&
+		agreeA->Agree(CRYPTO_CURVE_P256, s_CtxA, badPeer, sharedA) ==
 			CRYPTO_STATUS_FAIL);
 
 	check("single-use key rejects a second Agree",
-		agreeA->KeyGen(CRYPTO_CURVE_P256, g_ctxA, pubA) == CRYPTO_STATUS_OK &&
-		agreeA->Agree(CRYPTO_CURVE_P256, g_ctxA, pubB, sharedA) ==
+		agreeA->KeyGen(CRYPTO_CURVE_P256, s_CtxA, pubA) == CRYPTO_STATUS_OK &&
+		agreeA->Agree(CRYPTO_CURVE_P256, s_CtxA, pubB, sharedA) ==
 			CRYPTO_STATUS_OK &&
-		agreeA->Agree(CRYPTO_CURVE_P256, g_ctxA, pubB, sharedA) ==
+		agreeA->Agree(CRYPTO_CURVE_P256, s_CtxA, pubB, sharedA) ==
 			CRYPTO_STATUS_FAIL);
 
 	check("explicit KeyReset cancels an exchange",
-		agreeA->KeyGen(CRYPTO_CURVE_P256, g_ctxA, pubA) == CRYPTO_STATUS_OK);
-	agreeA->KeyReset(g_ctxA);
+		agreeA->KeyGen(CRYPTO_CURVE_P256, s_CtxA, pubA) == CRYPTO_STATUS_OK);
+	agreeA->KeyReset(s_CtxA);
 	check("Agree fails after explicit KeyReset",
-		agreeA->Agree(CRYPTO_CURVE_P256, g_ctxA, pubB, sharedA) ==
+		agreeA->Agree(CRYPTO_CURVE_P256, s_CtxA, pubB, sharedA) ==
 			CRYPTO_STATUS_FAIL);
 
 	static const uint8_t privateKey[32] = {
@@ -132,10 +137,8 @@ int main(void)
 		signA->Verify(CRYPTO_CURVE_P256, publicKey, hash, sizeof(hash), signature) ==
 			CRYPTO_STATUS_FAIL);
 
-	alignas(CryptoSoftRng) static uint8_t prngMem[sizeof(CryptoSoftRng)];
-	CryptoSoftRng *prng = CryptoSoftRngCreate(prngMem, sizeof(prngMem));
-	alignas(CryptoUecc) static uint8_t weakMem[CRYPTO_UECC_MEMSIZE];
-	CryptoUecc *weakEngine = CryptoUeccCreate(weakMem, sizeof(weakMem), prng);
+	CryptoSoftRng *prng = CryptoSoftRngCreate(s_PrngMem, sizeof(s_PrngMem));
+	CryptoUecc *weakEngine = CryptoUeccCreate(s_WeakMem, sizeof(s_WeakMem), prng);
 	alignas(CryptoUecc::KeyCtx) uint8_t weakCtx[64];
 	check("key generation refuses a non-secure PRNG",
 		weakEngine != nullptr && weakEngine->KeyGen(CRYPTO_CURVE_P256,
@@ -153,8 +156,7 @@ int main(void)
 			CRYPTO_STATUS_FAIL);
 	check("refused Agree wipes the retained key", weakKey->bKeyValid == false);
 
-	alignas(CryptoUecc) static uint8_t noRngMem[CRYPTO_UECC_MEMSIZE];
-	CryptoUecc *noRngEngine = CryptoUeccCreate(noRngMem, sizeof(noRngMem),
+	CryptoUecc *noRngEngine = CryptoUeccCreate(s_NoRngMem, sizeof(s_NoRngMem),
 											   nullptr);
 	alignas(CryptoUecc::KeyCtx) uint8_t noRngCtx[64];
 	memset(noRngCtx, 0, sizeof(noRngCtx));

@@ -1040,6 +1040,10 @@ __attribute__((weak)) void BtGattEvtHandler(uint32_t Evt,
 	}
 }
 
+// DFU is optional. Its response may have been refused before any of its own
+// packets were accepted, so its characteristic has no completion due.
+extern void BtDfuSmpTxReady(void) __attribute__((weak));
+
 void BtGattSendCompleted(uint16_t ConnHdl, uint16_t NbPktSent)
 {
 	if (NbPktSent == 0)
@@ -1048,13 +1052,9 @@ void BtGattSendCompleted(uint16_t ConnHdl, uint16_t NbPktSent)
 	}
 
 	BtDevice_t *pConn = BtPeerFindByHdl(ConnHdl);
-	if (pConn == nullptr)
-	{
-		return;
-	}
 
 	uint16_t n = NbPktSent;
-	while (n > 0 && pConn->TxPendCount > 0)
+	while (n > 0 && pConn != nullptr && pConn->TxPendCount > 0)
 	{
 		uint16_t take = min(n,
 			pConn->TxPend[pConn->TxPendHead].Remain);
@@ -1072,5 +1072,12 @@ void BtGattSendCompleted(uint16_t ConnHdl, uint16_t NbPktSent)
 			BT_DEV_TXPEND_MAX);
 		pConn->TxPendCount--;
 		BtGattTxCompleteChar(c);
+	}
+
+	// Shared controller credits can be released by another connection, even
+	// one whose peer entry was already removed. Only queue work in this hook.
+	if (BtDfuSmpTxReady != nullptr)
+	{
+		BtDfuSmpTxReady();
 	}
 }

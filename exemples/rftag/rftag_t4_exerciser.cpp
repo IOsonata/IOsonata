@@ -50,19 +50,6 @@ static int s_Pass = 0;
 static int s_Fail = 0;
 static int s_Gap = 0;
 
-static void Check(const char *pName, bool bOk)
-{
-	if (bOk) { s_Pass++; printf("  [PASS] %s\n", pName); }
-	else { s_Fail++; printf("  [FAIL] %s\n", pName); }
-}
-
-// A known limitation, reported but not counted as a failure.
-static void Gap(const char *pName, bool bOk)
-{
-	if (bOk) { s_Gap++; printf("  [GAP ] %s\n", pName); }
-	else { s_Fail++; printf("  [FAIL] %s\n", pName); }
-}
-
 class TestTag : public RFTag {
 public:
 	TestTag() : Selected(0), Deselected(0), MemChanged(0) {}
@@ -79,6 +66,22 @@ public:
 	int Deselected;
 	int MemChanged;
 };
+
+static uint8_t s_File[512];
+static uint8_t s_RoFile[512];
+
+static void Check(const char *pName, bool bOk)
+{
+	if (bOk) { s_Pass++; printf("  [PASS] %s\n", pName); }
+	else { s_Fail++; printf("  [FAIL] %s\n", pName); }
+}
+
+// A known limitation, reported but not counted as a failure.
+static void Gap(const char *pName, bool bOk)
+{
+	if (bOk) { s_Gap++; printf("  [GAP ] %s\n", pName); }
+	else { s_Fail++; printf("  [FAIL] %s\n", pName); }
+}
 
 static bool SetupTag(TestTag &Tag, RFTagProtoT4 &Proto, uint8_t *pMem,
 					 uint32_t MemSize, bool bReadOnly)
@@ -103,23 +106,22 @@ static bool SetupTag(TestTag &Tag, RFTagProtoT4 &Proto, uint8_t *pMem,
 
 int main(void)
 {
-	static uint8_t file[512];
 	uint8_t tx[512];
 	int l;
 
 	TestTag tag;
 	RFTagProtoT4 t4;
 
-	if (SetupTag(tag, t4, file, sizeof(file), false) == false)
+	if (SetupTag(tag, t4, s_File, sizeof(s_File), false) == false)
 	{
 		printf("setup failed\n");
 		return 1;
 	}
 
 	// NDEF file: NLEN 4, payload ABCD
-	file[0] = 0x00;
-	file[1] = 0x04;
-	memcpy(&file[2], "ABCD", 4);
+	s_File[0] = 0x00;
+	s_File[1] = 0x04;
+	memcpy(&s_File[2], "ABCD", 4);
 
 	printf("== 1. Activation and NDEF read ==\n");
 	{
@@ -226,12 +228,11 @@ int main(void)
 
 	printf("== 7. Read only tag ==\n");
 	{
-		static uint8_t rofile[512];
 		TestTag ro;
 		RFTagProtoT4 t4ro;
 
-		memcpy(rofile, file, sizeof(rofile));
-		SetupTag(ro, t4ro, rofile, sizeof(rofile), true);
+		memcpy(s_RoFile, s_File, sizeof(s_RoFile));
+		SetupTag(ro, t4ro, s_RoFile, sizeof(s_RoFile), true);
 
 		uint8_t r0[] = { 0xE0, 0x80 };
 		ro.ProcessFrame(r0, sizeof(r0), tx, sizeof(tx));

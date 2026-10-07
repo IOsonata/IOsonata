@@ -58,8 +58,6 @@ SOFTWARE.
 #include "bluetooth/bt_gap.h"
 #include "bluetooth/bt_peer.h"
 
-extern "C" bool AppEvtHandlerIdleRegister(void (*Handler)(void));
-
 #ifndef BLE_STATUS_SUCCESS
 #define BLE_STATUS_SUCCESS				0x00
 #endif
@@ -105,7 +103,6 @@ typedef struct __Bt_Gap_WbaState {
 	uint8_t		ScanType;			//!< HCI scan type (active/passive)
 	uint8_t		ScanFilterDup;		//!< Filter duplicate adv reports
 	bool		bConnParamsValid;	//!< Preferred parameters passed spec-range checks
-	bool		bConnParamPumpRegistered;
 	uint16_t	ConnIntervalMin;	//!< Preferred minimum, 1.25ms units
 	uint16_t	ConnIntervalMax;	//!< Preferred maximum, 1.25ms units
 	uint16_t	ConnLatency;		//!< Preferred peripheral latency
@@ -124,7 +121,6 @@ static BtGapWbaState_t s_GapWba = {
 	.ScanType      = BT_GAP_HCI_SCAN_ACTIVE,
 	.ScanFilterDup = 1,
 	.bConnParamsValid = false,
-	.bConnParamPumpRegistered = false,
 	.GapSrvcHdl = BT_ATT_HANDLE_INVALID,
 	.DevNameCharHdl = BT_ATT_HANDLE_INVALID,
 	.AppearanceCharHdl = BT_ATT_HANDLE_INVALID,
@@ -381,7 +377,9 @@ static void BtGapWbaConnParamIssue(BtGapWbaConnParamLink_t *pLink)
 	}
 }
 
-static void BtGapWbaConnParamProcess(void)
+// Declared in bt_wba_event_router.h. Called once per second from the timer
+// event of bt_app_stm32wba.cpp.
+void BtGapWbaConnParamProcess(void)
 {
 	if (!s_GapWba.bConnParamsValid)
 	{
@@ -507,14 +505,7 @@ void BtGapParamInit(const BtGapCfg_t *pCfg)
 		s_GapWba.ConnIntervalMin, s_GapWba.ConnIntervalMax,
 		s_GapWba.ConnLatency, s_GapWba.ConnSupTimeout);
 
-	if (!s_GapWba.bConnParamPumpRegistered)
-	{
-		s_GapWba.bConnParamPumpRegistered =
-			AppEvtHandlerIdleRegister(BtGapWbaConnParamProcess);
-	}
-
 	s_GapWba.bConnParamsValid = paramsValid &&
-		s_GapWba.bConnParamPumpRegistered &&
 		(pCfg->Role & (BT_GAP_ROLE_PERIPHERAL | BT_GAP_ROLE_CENTRAL)) != 0;
 
 	if (paramsValid && (pCfg->Role & BT_GAP_ROLE_PERIPHERAL) != 0)

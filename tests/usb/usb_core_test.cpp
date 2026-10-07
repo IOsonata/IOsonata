@@ -89,6 +89,7 @@ typedef struct {
 	int RemoteWakeCnt;
 	int SofEnableCnt;
 	int IsoServiceCnt;
+	int SofEpCnt;
 	int SetAddressCnt;
 	int CloseAllCnt;
 	int StallCnt;
@@ -332,10 +333,21 @@ static void QueueTestEvent(uint32_t Event, void *pContext)
 	*static_cast<uint32_t *>(pContext) |= 1UL << Event;
 }
 
+// The application gives the queue its memory. UsbInit does not own it.
+alignas(4) uint8_t g_AppEvtHandlerQueMem[APPEVT_HANDLER_QUE_MEMSIZE(16)];
+
 static bool TestAppEvtQueue(void)
 {
+	CHECK(AppEvtHandlerInit(g_AppEvtHandlerQueMem, sizeof(g_AppEvtHandlerQueMem)));
 	CHECK(Fixture());
 	uint32_t events = 0U;
+	// Work queued before UsbInit stays queued, and the default UsbEvtQue
+	// puts USB work in the same queue.
+	CHECK(UsbEvtQue(0U, &events, QueueTestEvent));
+	CHECK(Fixture());
+	AppEvtHandlerExec();
+	CHECK(events == 1U);
+	events = 0U;
 	for (uint32_t i = 0U; i < 16U; i++)
 	{
 		CHECK(AppEvtHandlerQue(i, &events, QueueTestEvent));
@@ -343,6 +355,76 @@ static bool TestAppEvtQueue(void)
 	CHECK(!AppEvtHandlerQue(16U, &events, QueueTestEvent));
 	AppEvtHandlerExec();
 	CHECK(events == 0xFFFFU);
+	return true;
+}
+
+// The application does not call UsbProcess: controller events and UsbEnable
+// queue one process event through UsbEvtQue, which the application event
+// queue runs, however many events arrive before it runs.
+static bool TestProcessEvent(void)
+{
+	CHECK(Fixture());
+	AppEvtHandlerExec();
+	const int before = s_Class.ProcessCnt;
+
+	// SOF has no class work: nothing is queued
+	Sof(1U);
+	Sof(2U);
+	CHECK(!AppEvtHandlerPending());
+
+	// A bus state change queues it, once
+	Event(USB_CTRLR_EVT_SUSPEND);
+	UsbProcessQue(TEST_DEVNO);
+	CHECK(s_Class.ProcessCnt == before);
+	CHECK(AppEvtHandlerExec() == false);
+	CHECK(s_Class.ProcessCnt == before + 1);
+
+	// Queued again once it has run
+	Event(USB_CTRLR_EVT_RESUME);
+	AppEvtHandlerExec();
+	CHECK(s_Class.ProcessCnt == before + 2);
+
+	// All queued callbacks belong to the application. The USB process event
+	// is refused, then recovered by the status check after normal dispatch.
+	uint32_t events = 0U;
+	for (uint32_t i = 0U; i < 16U; i++)
+	{
+		CHECK(AppEvtHandlerQue(i, &events, QueueTestEvent));
+	}
+	UsbProcessQue(TEST_DEVNO);
+	UsbCheckStatus(); // Still full: keep the request owed.
+	AppEvtHandlerExec();
+	CHECK(events == 0xFFFFU);
+	CHECK(s_Class.ProcessCnt == before + 2);
+	UsbCheckStatus();
+	UsbCheckStatus(); // Already queued: no duplicate callback.
+	CHECK(AppEvtHandlerPending());
+	AppEvtHandlerExec();
+	CHECK(s_Class.ProcessCnt == before + 3);
+	UsbCheckStatus();
+	CHECK(!AppEvtHandlerPending());
+
+	// A main loop that only calls AppEvtHandlerExec: the refusal is retried
+	// by the status check that AppEvtHandlerExec runs on the empty queue.
+	events = 0U;
+	for (uint32_t i = 0U; i < 16U; i++)
+	{
+		CHECK(AppEvtHandlerQue(i, &events, QueueTestEvent));
+	}
+	UsbProcessQue(TEST_DEVNO);
+	CHECK(s_Class.ProcessCnt == before + 3);
+	int passes = 0;
+	while (AppEvtHandlerExec() && passes < 4)
+	{
+		passes++;
+	}
+	CHECK(events == 0xFFFFU);
+	CHECK(s_Class.ProcessCnt == before + 4);
+	CHECK(!AppEvtHandlerPending());
+
+	// Without a refusal, the empty queue runs no status check
+	CHECK(AppEvtHandlerExec() == false);
+	CHECK(s_Class.ProcessCnt == before + 4);
 	return true;
 }
 
@@ -1059,9 +1141,11 @@ static bool TestIsoSofScheduling(void)
 	cfg.Pid = 0x0001;
 	CHECK(UsbInit(&cfg));
 
+	// The class also owns the ISO capable pair 9, which no alternate setting
+	// declares as ISO: SOF goes to the endpoints in use only.
 	s_FixtureClass.vWithSetInterface = true;
 	CHECK(UsbClassRegister(TEST_DEVNO, &s_FixtureClass, 0, 1,
-		(uint16_t)(1U << 8), (uint16_t)(1U << 8)));
+		(uint16_t)((1U << 8) | (1U << 9)), (uint16_t)((1U << 8) | (1U << 9))));
 	CHECK(UsbDescRegister(TEST_DEVNO, &s_FixtureClass,
 		s_IsoConfigDesc, sizeof(s_IsoConfigDesc), nullptr));
 	CHECK(UsbEnable(TEST_DEVNO));
@@ -1078,6 +1162,7 @@ static bool TestIsoSofScheduling(void)
 	CHECK(s_Ctrlr.IsoServiceCnt == 1 && s_Ctrlr.LastIsoServiceValue == 10U);
 	Sof(11U);
 	CHECK(s_Ctrlr.IsoServiceCnt == 2 && s_Ctrlr.LastIsoServiceValue == 11U);
+	CHECK(s_Ctrlr.SofEpCnt == 2);
 
 	Event(USB_CTRLR_EVT_SUSPEND);
 	CHECK(!s_Ctrlr.SofEnabled);
@@ -1091,6 +1176,9 @@ static bool TestIsoSofScheduling(void)
 	Setup(STD_IF_OUT, USB_REQ_SET_INTERFACE, 0, 0, 0);
 	CHECK(!s_Ctrlr.SofEnabled);
 	Complete(EP0_IN, 0);
+	// A SOF already raised when alternate 0 was selected reaches no endpoint
+	Sof(14U);
+	CHECK(s_Ctrlr.IsoServiceCnt == 3 && s_Ctrlr.SofEpCnt == 3);
 	return true;
 }
 
@@ -1166,6 +1254,10 @@ extern "C" bool UsbCtrlrEpReceive(int, uint8_t, uint8_t *, uint16_t)
 extern "C" void UsbCtrlrEpProcessEvent(int, uint8_t EpNo, bool bIn,
 	UsbCtrlrEvtType_t Event, uint16_t Value)
 {
+	if (Event == USB_CTRLR_EVT_SOF)
+	{
+		s_Ctrlr.SofEpCnt++;
+	}
 	if (EpNo == 8U && bIn && Event == USB_CTRLR_EVT_SOF)
 	{
 		s_Ctrlr.IsoServiceCnt++;
@@ -1231,7 +1323,8 @@ typedef struct { const char *pName; TestHandler_t Handler; } TestCase_t;
 int main(void)
 {
 	static const TestCase_t tests[] = {
-		{ "USB AppEvt queue holds 16 events", TestAppEvtQueue },
+		{ "USB uses the application event queue, 16 events from the application", TestAppEvtQueue },
+		{ "bus state changes queue one process event, SOF none", TestProcessEvent },
 		{ "enable requires descriptor", TestEnableRequiresDescriptor },
 		{ "descriptors", TestDescriptors },
 		{ "string descriptor bounds", TestStringDescriptorBounds },

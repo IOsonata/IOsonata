@@ -361,6 +361,52 @@ static void nRFUARTPollTx(nRFUartDev_t * const dev)
 }
 
 /**
+ * @brief	Move a finished rx dma transfer into the rx fifo.
+ *
+ * CFifoPutMultiple gives only consecutive blocks, so a transfer that crosses
+ * the end of the fifo memory is put in two parts. Putting only the first part
+ * lost the rest without counting it.
+ *
+ * The next transfer starts only when the fifo can take a whole one. Until
+ * then the receiver has no buffer, so with hardware flow control it holds RTS
+ * off instead of receiving bytes there is no room for. nRFUARTRxData starts
+ * the transfer once the reader has made room.
+ */
+static void nRFUARTRxDmaEnd(nRFUartDev_t * const dev)
+{
+	dev->pDmaReg->EVENTS_RXDRDY = 0;
+	NRFX_UARTE_EVENTS_ENDRX(dev->pDmaReg) = 0;
+	dev->RxDmaCnt = 0;
+
+	int l = NRFX_UARTE_RXD_AMOUNT(dev->pDmaReg);
+	uint8_t *src = dev->RxDmaMem;
+
+	while (l > 0)
+	{
+		int n = l;
+		uint8_t *p = CFifoPutMultiple(dev->pUartDev->hRxFifo, &n);
+		if (p == NULL)
+		{
+			dev->pUartDev->RxDropCnt++;
+			break;
+		}
+		memcpy(p, src, n);
+		src += n;
+		l -= n;
+	}
+
+	if (CFifoAvail(dev->pUartDev->hRxFifo) < NRFX_UART_RXDMA_SIZE)
+	{
+		dev->pUartDev->bRxReady = true;
+	}
+	else
+	{
+		dev->pUartDev->bRxReady = false;
+		NRFX_UARTE_TASKS_STARTRX(dev->pDmaReg) = 1;
+	}
+}
+
+/**
  * @brief	Retire a finished rx dma transfer outside of interrupt context.
  *
  * Same reasoning as nRFUARTPollTx. Without this the rx fifo is never filled
@@ -387,23 +433,7 @@ static void nRFUARTPollRx(nRFUartDev_t * const dev)
 
 	if (NRFX_UARTE_EVENTS_ENDRX(dev->pDmaReg))
 	{
-		dev->pDmaReg->EVENTS_RXDRDY = 0;
-		NRFX_UARTE_EVENTS_ENDRX(dev->pDmaReg) = 0;
-		dev->RxDmaCnt = 0;
-
-		int l = NRFX_UARTE_RXD_AMOUNT(dev->pDmaReg);
-		uint8_t *p = CFifoPutMultiple(dev->pUartDev->hRxFifo, &l);
-		if (p)
-		{
-			memcpy(p, dev->RxDmaMem, l);
-		}
-		else
-		{
-			dev->pUartDev->RxDropCnt++;
-		}
-
-		dev->pUartDev->bRxReady = false;
-		NRFX_UARTE_TASKS_STARTRX(dev->pDmaReg) = 1;
+		nRFUARTRxDmaEnd(dev);
 	}
 }
 #endif
@@ -447,23 +477,7 @@ static void UartIrqHandler(int DevNo, DevIntrf_t * const pDev)
 #ifdef UARTE_PRESENT
 	if (NRFX_UARTE_EVENTS_ENDRX(dev->pDmaReg))
 	{
-		dev->pDmaReg->EVENTS_RXDRDY = 0;
-		NRFX_UARTE_EVENTS_ENDRX(dev->pDmaReg) = 0;
-		dev->RxDmaCnt = 0;
-
-		int l = NRFX_UARTE_RXD_AMOUNT(dev->pDmaReg);
-		uint8_t *p = CFifoPutMultiple(dev->pUartDev->hRxFifo, &l);
-		if (p)
-		{
-			memcpy(p, dev->RxDmaMem, l);
-		}
-		else
-		{
-			dev->pUartDev->RxDropCnt++;
-		}
-
-		dev->pUartDev->bRxReady = false;
-		NRFX_UARTE_TASKS_STARTRX(dev->pDmaReg) = 1;
+		nRFUARTRxDmaEnd(dev);
 	}
 	else
 #endif
@@ -635,7 +649,12 @@ static void UartIrqHandler(int DevNo, DevIntrf_t * const pDev)
 #ifdef UARTE_PRESENT
 		if (pDev->bDma == true)
 		{
-			NRFX_UARTE_TASKS_STARTRX(dev->pDmaReg) = 1;
+			// Not while a transfer is held back for lack of fifo room,
+			// nRFUARTRxData restarts it
+			if (dev->pUartDev->bRxReady == false)
+			{
+				NRFX_UARTE_TASKS_STARTRX(dev->pDmaReg) = 1;
+			}
 		}
 		else
 #endif
@@ -759,10 +778,15 @@ static int nRFUARTRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int Bufflen)
 #ifdef UARTE_PRESENT
 		if (pDev->bDma == true)
 		{
-			dev->pUartDev->bRxReady = false;
-			NRFX_UARTE_RXD_MAXCNT(dev->pDmaReg) = NRFX_UART_RXDMA_SIZE;
-			NRFX_UARTE_RXD_PTR(dev->pDmaReg) = (uint32_t)dev->RxDmaMem;
-			NRFX_UARTE_TASKS_STARTRX(dev->pDmaReg) = 1;
+			// Restart the transfer nRFUARTRxDmaEnd held back once the fifo
+			// can take a whole one
+			if (CFifoAvail(dev->pUartDev->hRxFifo) >= NRFX_UART_RXDMA_SIZE)
+			{
+				dev->pUartDev->bRxReady = false;
+				NRFX_UARTE_RXD_MAXCNT(dev->pDmaReg) = NRFX_UART_RXDMA_SIZE;
+				NRFX_UARTE_RXD_PTR(dev->pDmaReg) = (uint32_t)dev->RxDmaMem;
+				NRFX_UARTE_TASKS_STARTRX(dev->pDmaReg) = 1;
+			}
 		}
 		else
 #endif

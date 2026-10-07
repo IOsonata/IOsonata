@@ -3,6 +3,7 @@
 #include <cstring>
 
 #include "bt_lesc.h"
+#include "bluetooth/bt_app.h"
 #include "bt_test_harness.h"
 #include "nrf_error.h"
 
@@ -232,6 +233,22 @@ int BtLescLinkCount(void)
 	return 2;
 }
 
+// Bluetooth event queue: keeps the last queued work so a test can run it
+static int s_QueCount;
+static BtEvtQueHandler_t s_pQueHandler;
+static bool s_bQueFull;
+
+bool BtEvtQue(uint32_t, void *, BtEvtQueHandler_t Handler)
+{
+	s_QueCount++;
+	if (s_bQueFull)
+	{
+		return false;
+	}
+	s_pQueHandler = Handler;
+	return true;
+}
+
 } // extern "C"
 
 int main()
@@ -274,7 +291,7 @@ int main()
 		BT_CHECK(ctx, BtLescPubKeyGet() != nullptr);
 	});
 
-	ctx.Run("DHKey request stays deferred to main loop", [&]() {
+	ctx.Run("DHKey request stays deferred out of the event", [&]() {
 		engine.Script(CRYPTO_STATUS_OK, CRYPTO_STATUS_OK);
 		BtLescSetCryptoEngine(&engine);
 		BT_CHECK(ctx, BtLescInit());
@@ -290,6 +307,77 @@ int main()
 		BT_CHECK(ctx, s_LastDhStatus == BLE_GAP_SEC_STATUS_SUCCESS);
 		BT_CHECK(ctx, s_LastDhHadKey);
 		BT_CHECK(ctx, engine.AgreeCalls() == 1);
+	});
+
+	ctx.Run("DHKey request queues its reply work", [&]() {
+		engine.Script(CRYPTO_STATUS_OK, CRYPTO_STATUS_OK);
+		BtLescSetCryptoEngine(&engine);
+		BT_CHECK(ctx, BtLescInit());
+		// Run any work left queued by an earlier case
+		if (s_pQueHandler != nullptr)
+		{
+			s_pQueHandler(0, nullptr);
+		}
+		ResetReplies();
+		s_QueCount = 0;
+		s_pQueHandler = nullptr;
+
+		ble_gap_lesc_p256_pk_t peer = {};
+		FillPeerKey(&peer, 0x81U);
+		ble_evt_t evt = MakeDhRequest(1, &peer);
+		BtLescOnBleEvt(&evt);
+		BT_CHECK(ctx, s_DhReplyCount == 0);
+		BT_CHECK(ctx, s_QueCount == 1);
+		BT_CHECK(ctx, s_pQueHandler != nullptr);
+		s_pQueHandler(0, nullptr);
+		BT_CHECK(ctx, s_DhReplyCount == 1);
+		BT_CHECK(ctx, s_LastDhStatus == BLE_GAP_SEC_STATUS_SUCCESS);
+	});
+
+	ctx.Run("status check retries refused work without another BLE event", [&]() {
+		engine.Script(CRYPTO_STATUS_OK, CRYPTO_STATUS_OK);
+		BtLescSetCryptoEngine(&engine);
+		BT_CHECK(ctx, BtLescInit());
+		if (s_pQueHandler != nullptr)
+		{
+			s_pQueHandler(0, nullptr);
+		}
+		ResetReplies();
+		s_QueCount = 0;
+		s_pQueHandler = nullptr;
+
+		s_bQueFull = true;
+		ble_gap_lesc_p256_pk_t peer = {};
+		FillPeerKey(&peer, 0x82U);
+		ble_evt_t req = MakeDhRequest(1, &peer);
+		BtLescOnBleEvt(&req);
+		BT_CHECK(ctx, s_QueCount == 1);
+		BT_CHECK(ctx, s_pQueHandler == nullptr);
+
+		// Still full: the next event tries again and is refused again
+		ble_evt_t other = MakeGapEvent(BLE_GAP_EVT_AUTH_STATUS, 2);
+		BtLescOnBleEvt(&other);
+		BT_CHECK(ctx, s_QueCount == 2);
+		BT_CHECK(ctx, s_pQueHandler == nullptr);
+
+		// The application status check recovers without another BLE event.
+		s_bQueFull = false;
+		BtLescCheckStatus();
+		BT_CHECK(ctx, s_QueCount == 3);
+		BT_CHECK(ctx, s_pQueHandler != nullptr);
+		BtLescCheckStatus();
+		BT_CHECK(ctx, s_QueCount == 3);
+		if (s_pQueHandler != nullptr)
+		{
+			s_pQueHandler(0, nullptr);
+		}
+		BT_CHECK(ctx, s_DhReplyCount == 1);
+		BT_CHECK(ctx, s_LastDhStatus == BLE_GAP_SEC_STATUS_SUCCESS);
+
+		// Completed work is not queued again by the status check.
+		s_pQueHandler = nullptr;
+		BtLescCheckStatus();
+		BT_CHECK(ctx, s_QueCount == 3);
 	});
 
 	ctx.Run("OOB data is reserved by the first connection", [&]() {

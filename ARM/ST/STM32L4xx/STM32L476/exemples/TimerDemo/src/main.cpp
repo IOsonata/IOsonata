@@ -1,5 +1,5 @@
 /**-------------------------------------------------------------------------
-@example	timer_demo.cpp
+@example	main.cpp
 
 @brief	Timer example on STM32L4xx
 

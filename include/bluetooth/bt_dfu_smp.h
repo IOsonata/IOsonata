@@ -90,6 +90,9 @@ typedef struct __Bt_DfuSmp_Cfg {
 	uint16_t TxBufSize;			//!< Its size, 512 covers every response
 	uint8_t SecType;			//!< BT_GAP_SECTYPE_ the link must have to
 								//!< use the service, NONE for an open link
+	void (*TxDoneCB)(void);		//!< Called from the main loop when a response
+								//!< has been handed to the stack in full.
+								//!< Null when not used
 } BtDfuSmpCfg_t;
 
 /**
@@ -111,8 +114,17 @@ BtGattSrvc_t *BtDfuSmpSrvc(void);
 void BtDfuSmpReset(void);
 
 /// True while a response is still going out. An application that resets on
-/// request waits for this to clear first.
+/// request waits for this to clear first, or resets from TxDoneCB.
 bool BtDfuSmpTxBusy(void);
+
+/// Retry retained work from BtAppCheckStatus after the main loop or Bluetooth
+/// worker has drained its BtEvtQue queue. Never call from an interrupt. A
+/// blocked response stays pending without queuing another retry, allowing sleep.
+void BtDfuSmpCheckStatus(void);
+
+/// Stack hook: queue a retry when any connection frees TX capacity. Called
+/// by BtGattSendCompleted; sends and flash work remain in the owning worker.
+void BtDfuSmpTxReady(void);
 
 #endif
 

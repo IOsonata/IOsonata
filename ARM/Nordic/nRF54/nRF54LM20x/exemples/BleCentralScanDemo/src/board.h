@@ -45,17 +45,20 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #ifdef NORDIC_DK
 // PCA10156
 
-#define UART_RX_PORT		1
-#define UART_RX_PIN			17
+#define UART_RX_PORT		0
+#define UART_RX_PIN			7
 #define UART_RX_PINOP		1
-#define UART_TX_PORT		1
-#define UART_TX_PIN			16
+
+#define UART_TX_PORT		0
+#define UART_TX_PIN			6
 #define UART_TX_PINOP		1
-#define UART_CTS_PORT		1
-#define UART_CTS_PIN		19
+
+#define UART_CTS_PORT		0
+#define UART_CTS_PIN		9
 #define UART_CTS_PINOP		1
-#define UART_RTS_PORT		1
-#define UART_RTS_PIN		18
+
+#define UART_RTS_PORT		0
+#define UART_RTS_PIN		8
 #define UART_RTS_PINOP		1
 
 #define BUTTON1_PORT		0

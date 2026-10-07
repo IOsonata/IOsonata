@@ -1,5 +1,5 @@
 /**-------------------------------------------------------------------------
-@example    UartBleTaktOS.cpp
+@example    uart_ble_taktos.cpp
 
 
 @brief  UART over BLE with TaktOS demo
@@ -42,6 +42,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "TaktOS.h"
 #include "TaktOSThread.h"
 #include "TaktOSSem.h"
+#include "TaktOSQueue.h"
 
 #include "bluetooth/bt_app.h"
 #include "bluetooth/bt_gatt.h"
@@ -53,22 +54,28 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "board.h"
 
-#define DEVICE_NAME                     "UARTTaktOS"                            /**< Name of device. Will be included in the advertising data. */
+#define DEVICE_NAME                     "UARTTaktOS"                            //!< Name of device. Will be included in the advertising data.
 
-#define MANUFACTURER_NAME               "I-SYST inc."                       /**< Manufacturer. Will be passed to Device Information Service. */
+#define MANUFACTURER_NAME               "I-SYST inc."                       //!< Manufacturer. Will be passed to Device Information Service.
 
-#define MODEL_NAME                      "I-SYST-BLE"                            /**< Model number. Will be passed to Device Information Service. */
+#define MODEL_NAME                      "I-SYST-BLE"                            //!< Model number. Will be passed to Device Information Service.
 
-#define MANUFACTURER_ID                 ISYST_BLUETOOTH_ID                               /**< Manufacturer ID, part of System ID. Will be passed to Device Information Service. */
-#define ORG_UNIQUE_ID                   ISYST_BLUETOOTH_ID                               /**< Organizational Unique ID, part of System ID. Will be passed to Device Information Service. */
+#define MANUFACTURER_ID                 ISYST_BLUETOOTH_ID                               //!< Manufacturer ID, part of System ID. Will be passed to Device Information Service.
+#define ORG_UNIQUE_ID                   ISYST_BLUETOOTH_ID                               //!< Organizational Unique ID, part of System ID. Will be passed to Device Information Service.
 
 #define APP_ADV_INTERVAL                300//MSEC_TO_UNITS(300, UNIT_0_625_MS)             /**< The advertising interval (in units of 0.625 ms. This value corresponds to 40 ms). */
-#define APP_ADV_TIMEOUT_IN_SECONDS      0                                         /**< The advertising timeout (in units of seconds). */
+#define APP_ADV_TIMEOUT_IN_SECONDS      0                                         //!< The advertising timeout (in units of seconds).
 
 #define MIN_CONN_INTERVAL               10//MSEC_TO_UNITS(10, UNIT_1_25_MS)             /**< Minimum acceptable connection interval (20 ms), Connection interval uses 1.25 ms units. */
 #define MAX_CONN_INTERVAL               40//MSEC_TO_UNITS(40, UNIT_1_25_MS)             /**< Maximum acceptable connection interval (75 ms), Connection interval uses 1.25 ms units. */
 
-#define BLE_TAKTOS_THREAD_STACK         512u
+// The BLE task runs the work of the stack queued with BtEvtQue, the RX task
+// only moves UART bytes to a notification.
+#define BLE_TAKTOS_THREAD_STACK         1024u
+#define RX_TAKTOS_THREAD_STACK          512u
+
+// One notification holds one characteristic value
+#define UART_BLE_PACKET_SIZE            20
 
 #ifndef TAKTOS_APP_TICK_HZ
 #define TAKTOS_APP_TICK_HZ              1000u
@@ -83,14 +90,25 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 void UartTxSrvcCallback(BtGattChar_t *pChar, uint8_t *pData, int Offset, int Len);
 
-static hTaktOSThread_t g_BleTask = NULL;
-static hTaktOSThread_t g_RxTask = NULL;
+static hTaktOSThread_t s_BleTask = NULL;
+static hTaktOSThread_t s_RxTask = NULL;
 
-static TaktOSSem_t g_BleEvtSem;
-static TaktOSSem_t g_RxEvtSem;
+static TaktOSSem_t s_RxEvtSem;
+
+// Bluetooth work: one message per BtEvtQue call, run by the BLE task
+typedef struct {
+	uint32_t EvtId;
+	void *pCtx;
+	BtEvtQueHandler_t Handler;
+} BleWork_t;
+
+#define BLE_WORK_QUE_SIZE				16u
+
+static uint8_t g_BleWorkQueMem[BLE_WORK_QUE_SIZE * sizeof(BleWork_t)] TAKT_ALIGNED(4);
+static TaktOSQueue_t s_BleWorkQue;
 
 static uint8_t g_BleTaskMem[TAKTOS_THREAD_MEM_SIZE(BLE_TAKTOS_THREAD_STACK)] TAKT_ALIGNED(4);
-static uint8_t g_RxTaskMem[TAKTOS_THREAD_MEM_SIZE(BLE_TAKTOS_THREAD_STACK)] TAKT_ALIGNED(4);
+static uint8_t g_RxTaskMem[TAKTOS_THREAD_MEM_SIZE(RX_TAKTOS_THREAD_STACK)] TAKT_ALIGNED(4);
 
 //static const ble_uuid_t s_AdvUuids[] = {
 //	{BLUEIO_UUID_UART_SERVICE, BLE_UUID_TYPE_VENDOR_BEGIN}
@@ -109,20 +127,20 @@ uint8_t g_ManData[8];
 BtGattChar_t g_UartChars[] = {
 	// Read + Notify (server-pushed)
 	BT_CHAR(BLUEIO_UUID_UART_RX_CHAR, 20,
-	        BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_NOTIFY,
-	        s_RxCharDescString),
+			BT_GATT_CHAR_PROP_READ | BT_GATT_CHAR_PROP_NOTIFY,
+			s_RxCharDescString),
 	// Write Without Response (peer sink, callback consumes)
 	BT_CHAR(BLUEIO_UUID_UART_TX_CHAR, 20,
-	        BT_GATT_CHAR_PROP_WRITE_WORESP,
-	        s_TxCharDescString,
-	        .WrCB = UartTxSrvcCallback),
+			BT_GATT_CHAR_PROP_WRITE_WORESP,
+			s_TxCharDescString,
+			.WrCB = UartTxSrvcCallback),
 };
 
 uint8_t g_LWrBuffer[512];
 
 BtGattSrvc_t g_UartBleSrvc = BT_SRVC_CUSTOM(BLUEIO_UUID_BASE,
-                                            BLUEIO_UUID_UART_SERVICE,
-                                            g_UartChars);
+											BLUEIO_UUID_UART_SERVICE,
+											g_UartChars);
 
 const BtAppDevInfo_t s_UartBleDevDesc {
 	MODEL_NAME,           // Model name
@@ -131,8 +149,6 @@ const BtAppDevInfo_t s_UartBleDevDesc {
 	"0.0",                  // Firmware version string
 	"0.0",                  // Hardware version string
 };
-
-void BtAppEvtNotify(void);
 
 const BtAppCfg_t s_BleAppCfg = {
 	.Role = BTAPP_ROLE_PERIPHERAL,
@@ -205,14 +221,18 @@ static int s_NbButPins = sizeof(s_ButPins) / sizeof(IOPINCFG);
 int g_DelayCnt = 0;
 volatile bool g_bUartState = false;
 
+// Local error codes for fatal traps
+#define APP_ERR_INVALID_PARAM    (-1)
+#define APP_ERR_NO_MEM           (-2)
+
 // ADD a generic local fatal handler (no vendor SDK dependency)
 static void AppFatalError(int err)
 {
-    (void)err;
-    while (1)
-    {
-        // trap here
-    }
+	(void)err;
+	while (1)
+	{
+		// trap here
+	}
 }
 void UartTxSrvcCallback(BtGattChar_t *pBlueIOSvc, uint8_t *pData, int Offset, int Len)
 {
@@ -221,12 +241,14 @@ void UartTxSrvcCallback(BtGattChar_t *pBlueIOSvc, uint8_t *pData, int Offset, in
 
 void BtAppPeriphEvtHandler(uint32_t Evt, void * const pCtx)
 {
-    BtGattEvtHandler(Evt, pCtx);
+	// The port has already dispatched this event to the GATT services.
+	(void)Evt;
+	(void)pCtx;
 }
 
 void BtAppInitUserServices()
 {
-   // uint32_t       err_code;
+	// uint32_t       err_code;
 
 	bool res = BtGattSrvcAdd(&g_UartBleSrvc);
 	if (res == false)
@@ -238,19 +260,19 @@ void BtAppInitUserServices()
 
 void ButEvent(int IntNo, void *pCtx)
 {
-    if (IntNo == 0)
-    {
-        if (g_bUartState == false)
-        {
-            g_Uart.Enable();
-            g_bUartState = true;
-        }
-        else
-        {
-            g_Uart.Disable();
-            g_bUartState = false;
-        }
-    }
+	if (IntNo == 0)
+	{
+		if (g_bUartState == false)
+		{
+			g_Uart.Enable();
+			g_bUartState = true;
+		}
+		else
+		{
+			g_Uart.Disable();
+			g_bUartState = false;
+		}
+	}
 }
 
 void HardwareInit()
@@ -259,11 +281,11 @@ void HardwareInit()
 
 	g_Uart.printf("UartBleTaktOS demo\r\n");
 
-    IOPinCfg(s_ButPins, s_NbButPins);
+	IOPinCfg(s_ButPins, s_NbButPins);
 
-    IOPinCfg(s_LedPins, s_NbLedPins);
+	IOPinCfg(s_LedPins, s_NbLedPins);
 
-    for (int i = 0; i < s_NbLedPins; i++)
+	for (int i = 0; i < s_NbLedPins; i++)
 	{
 		IOPinSet(s_LedPins[i].PortNo, s_LedPins[i].PinNo);
 	}
@@ -273,15 +295,19 @@ void HardwareInit()
 	IOPinEnableInterrupt(0, IRQ_PRIO_LOW, s_ButPins[0].PortNo, s_ButPins[0].PinNo, IOPINSENSE_LOW_TRANSITION, ButEvent, NULL);
 }
 
+// UART interrupt: wake the RX task. A full binary semaphore already records
+// the wake, so any number of events before the take cost nothing.
 int UartEvtHandler(UARTDEV *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen)
 {
-	int cnt = 0;
-	uint8_t buff[20];
+	(void)pDev;
+	(void)pBuffer;
+	(void)BufferLen;
+
 	switch (EvtId)
 	{
 		case UART_EVT_RXTIMEOUT:
 		case UART_EVT_RXDATA:
-			(void)TaktOSSemGive(&g_RxEvtSem, false);
+			(void)TaktOSSemGive(&s_RxEvtSem, false);
 			break;
 		case UART_EVT_TXREADY:
 			break;
@@ -289,41 +315,55 @@ int UartEvtHandler(UARTDEV *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLe
 			break;
 	}
 
-	return cnt;
+	return 0;
 }
 
-// RTOS bridge: TaktOS-specific implementations of the generic event hooks
-// declared in bluetooth/bt_app.h. The BLE stack's IRQ glue calls
-// BtAppEvtNotify() from interrupt context; the BLE task blocks in
-// BtAppEvtWait() until the semaphore is signalled, then drains pending
-// events via BtAppEvtDispatch(). Both functions are strong overrides of
-// the weak defaults shipped with the stack and port.
-
-void BtAppEvtNotify(void)
+// RTOS bridge: link-time override of BtEvtQue, see bluetooth/bt_app.h. The
+// Bluetooth stack calls it, often from interrupt context, for every piece of
+// work that must run outside the interrupt. Each one becomes a message to the
+// BLE task, which runs it. The application event queue is not used.
+bool BtEvtQue(uint32_t EvtId, void *pCtx, BtEvtQueHandler_t Handler)
 {
-	(void)TaktOSSemGive(&g_BleEvtSem, false);
+	const BleWork_t work = { EvtId, pCtx, Handler };
+
+	return TaktOSQueueSend(&s_BleWorkQue, &work, false, 0) == TAKTOS_OK;
 }
 
-void BtAppEvtWait(void)
-{
-	(void)TaktOSSemTake(&g_BleEvtSem, true, TAKTOS_WAIT_FOREVER);
-	BtAppEvtDispatch();
-}
-
+// UART to BLE. The characteristic takes UART_BLE_PACKET_SIZE bytes per
+// notification, so the UART FIFO is drained in packets. A packet the stack
+// refuses, its notification queue being full, is kept and offered again: the
+// ports report no notification done event to the application, so the retry
+// waits one tick instead of the next UART event, which may never come.
 static void RxTask(void * pvParameter)
 {
-    while (1)
-    {
-        (void)TaktOSSemTake(&g_RxEvtSem, true, TAKTOS_WAIT_FOREVER);
+	(void)pvParameter;
 
-        uint8_t buff[128];
+	uint8_t buff[UART_BLE_PACKET_SIZE];
+	int pending = 0;
 
-        int l = g_Uart.Rx(buff, 128);
-        if (l > 0)
-        {
-            BtAppNotify(&g_UartBleSrvc.pCharArray[0], buff, l);
-        }
-    }
+	while (1)
+	{
+		(void)TaktOSSemTake(&s_RxEvtSem, true, pending > 0 ? 1u : TAKTOS_WAIT_FOREVER);
+
+		while (true)
+		{
+			if (pending == 0)
+			{
+				pending = g_Uart.Rx(buff, sizeof(buff));
+				if (pending <= 0)
+				{
+					pending = 0;
+					break;
+				}
+			}
+			if (BtAppNotify(&g_UartBleSrvc.pCharArray[0], buff, (uint16_t)pending) == false)
+			{
+				// Not connected, notification off, or the stack queue full
+				break;
+			}
+			pending = 0;
+		}
+	}
 }
 
 void BtAppInitUserData()
@@ -332,59 +372,64 @@ void BtAppInitUserData()
 }
 
 
-// BLE task: runs the stack's main loop. BtAppRun() blocks on BtAppEvtWait()
-// until events arrive, then dispatches them; loops forever.
+// BLE task: runs the Bluetooth work as its messages arrive, forever.
 static void BleTask(void * pvParameter)
 {
-    BtAppRun();
+	(void)pvParameter;
+
+	while (1)
+	{
+		BleWork_t work;
+
+		if (TaktOSQueueReceive(&s_BleWorkQue, &work, false, 0) != TAKTOS_OK)
+		{
+			// Queue empty: queue again the work it refused, then wait
+			BtAppCheckStatus();
+			if (TaktOSQueueReceive(&s_BleWorkQue, &work, true, TAKTOS_WAIT_FOREVER) != TAKTOS_OK)
+			{
+				continue;
+			}
+		}
+		work.Handler(work.EvtId, work.pCtx);
+	}
 }
-
-
-// Local error codes for fatal traps
-#define APP_ERR_INVALID_PARAM    (-1)
-#define APP_ERR_NO_MEM           (-2)
 
 void TaktOSAppInit()
 {
-    if (TaktOSSemInit(&g_BleEvtSem, 0u, 1u) != TAKTOS_OK)
-    {
-        AppFatalError(APP_ERR_INVALID_PARAM);
-    }
+	if (TaktOSSemInit(&s_RxEvtSem, 0u, 1u) != TAKTOS_OK)
+	{
+		AppFatalError(APP_ERR_INVALID_PARAM);
+	}
 
-    if (TaktOSSemInit(&g_RxEvtSem, 0u, 1u) != TAKTOS_OK)
-    {
-        AppFatalError(APP_ERR_INVALID_PARAM);
-    }
+	TaktOSCfg_t cfg = {
+		.KernClockHz = TAKTOS_APP_CORE_CLOCK_HZ,
+		.TickHz = TAKTOS_APP_TICK_HZ,
+	};
 
-    TaktOSCfg_t cfg = {
-        .KernClockHz = TAKTOS_APP_CORE_CLOCK_HZ,
-        .TickHz = TAKTOS_APP_TICK_HZ,
-    };
+	if (TaktOSInit(&cfg) != TAKTOS_OK)
+	{
+		AppFatalError(APP_ERR_INVALID_PARAM);
+	}
 
-    if (TaktOSInit(&cfg) != TAKTOS_OK)
-    {
-        AppFatalError(APP_ERR_INVALID_PARAM);
-    }
+	s_BleTask = TaktOSThreadCreate(g_BleTaskMem,
+								   sizeof(g_BleTaskMem),
+								   BleTask,
+								   NULL,
+								   TAKTOS_PRIORITY_HIGH);
+	if (s_BleTask == NULL)
+	{
+		AppFatalError(APP_ERR_NO_MEM);
+	}
 
-    g_BleTask = TaktOSThreadCreate(g_BleTaskMem,
-                                   sizeof(g_BleTaskMem),
-                                   BleTask,
-                                   NULL,
-                                   TAKTOS_PRIORITY_HIGH);
-    if (g_BleTask == NULL)
-    {
-        AppFatalError(APP_ERR_NO_MEM);
-    }
-
-    g_RxTask = TaktOSThreadCreate(g_RxTaskMem,
-                                  sizeof(g_RxTaskMem),
-                                  RxTask,
-                                  NULL,
-                                  TAKTOS_PRIORITY_NORMAL);
-    if (g_RxTask == NULL)
-    {
-        AppFatalError(APP_ERR_NO_MEM);
-    }
+	s_RxTask = TaktOSThreadCreate(g_RxTaskMem,
+								  sizeof(g_RxTaskMem),
+								  RxTask,
+								  NULL,
+								  TAKTOS_PRIORITY_NORMAL);
+	if (s_RxTask == NULL)
+	{
+		AppFatalError(APP_ERR_NO_MEM);
+	}
 }
 
 //
@@ -402,13 +447,20 @@ void TaktOSAppInit()
 
 int main()
 {
-    HardwareInit();
+	HardwareInit();
 
-    BtAppInit(&s_BleAppCfg);//, true);
+	// The Bluetooth work queue exists before BtAppInit queues its first work
+	if (TaktOSQueueInit(&s_BleWorkQue, g_BleWorkQueMem, sizeof(BleWork_t),
+						BLE_WORK_QUE_SIZE) != TAKTOS_OK)
+	{
+		AppFatalError(APP_ERR_INVALID_PARAM);
+	}
 
-    TaktOSAppInit();
+	BtAppInit(&s_BleAppCfg);//, true);
 
-    TaktOSStart();
+	TaktOSAppInit();
 
-    return 0;
+	TaktOSStart();
+
+	return 0;
 }

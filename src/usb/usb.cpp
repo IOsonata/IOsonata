@@ -52,6 +52,12 @@ SOFTWARE.
 #include "coredev/interrupt.h"
 #include "usb/usb.h"
 
+#if defined(USB_DEBUG_TRACE) && USB_DEBUG_TRACE > 0
+#include "syslog.h"
+#define USB_CORE_TRACE(...) SysLogPrintf(SysLogGet(), "[USB] " __VA_ARGS__)
+#else
+#define USB_CORE_TRACE(...) ((void)0)
+#endif
 
 #define USB_CORE_CLASS_MAXCNT \
 	(USB_EPIN_CNT(0) > USB_EPOUT_CNT(0) ? \
@@ -115,6 +121,9 @@ static struct
 	UsbCoreCtrlState_t CtrlState;
 	uint16_t HaltIn;
 	uint16_t HaltOut;
+#if !defined(USB_CTRLR_SOF_BY_ISO_OPEN)
+	uint16_t IsoSofMask;			//!< ISO endpoints of the active alternate settings
+#endif
 	uint16_t CtrlDataLen;
 	uint16_t CtrlActual;			//!< IN bytes accepted; OUT bytes received
 	int DevNo;					//!< Controller this instance drives
@@ -553,18 +562,27 @@ static const uint8_t *UsbCoreNextActiveEndpoint(UsbCoreWalk_t *pWalk)
 static inline void UsbCoreUpdateSof(void)
 {
 }
+
+// Endpoints offered each SOF: the controller's fixed ISO pair.
+static inline uint16_t UsbCoreSofMask(void)
+{
+	return (uint16_t)(USB_ISO_EPIN_MASK(s_Core.DevNo) &
+		USB_ISO_EPOUT_MASK(s_Core.DevNo));
+}
 #else
-static bool UsbCoreIsoActive(void)
+// ISO endpoint numbers in the active alternate settings that a class owns.
+static uint16_t UsbCoreIsoActiveMask(void)
 {
 	if (s_Core.Configuration == 0U)
-		return false;
+		return 0U;
 
 	UsbCoreWalk_t walk;
 	const uint8_t *p;
 
 	if (!UsbCoreWalkStart(&walk))
-		return false;
+		return 0U;
 
+	uint16_t mask = 0U;
 	while ((p = UsbCoreNextActiveEndpoint(&walk)) != nullptr)
 	{
 		if ((p[3] & 0x03U) == USB_ENDPATT_TRANS_ISO)
@@ -572,17 +590,27 @@ static bool UsbCoreIsoActive(void)
 			const uint8_t epNum = USB_ENDPADDR_NUM(p[2]);
 			const uint8_t dir = USB_ENDPADDR_IS_IN(p[2]) ? 1U : 0U;
 			if (epNum != 0U && epNum < 16U && s_Core.EpClass[dir][epNum] >= 0)
-				return true;
+				mask |= (uint16_t)(1U << epNum);
 		}
 	}
-	return false;
+	return (uint16_t)(mask & USB_ISO_EPIN_MASK(s_Core.DevNo) &
+		USB_ISO_EPOUT_MASK(s_Core.DevNo));
 }
 
+// Runs on every configuration, alternate setting, reset, suspend and resume
+// change, so each SOF only visits the ISO endpoints in use instead of every
+// ISO capable endpoint number.
 static void UsbCoreUpdateSof(void)
 {
+	s_Core.IsoSofMask = UsbCoreIsoActiveMask();
 	if (s_Core.Initialized)
 		UsbCtrlrSofEnable(s_Core.DevNo,
-			!s_Core.Suspended && UsbCoreIsoActive());
+			!s_Core.Suspended && s_Core.IsoSofMask != 0U);
+}
+
+static inline uint16_t UsbCoreSofMask(void)
+{
+	return s_Core.IsoSofMask;
 }
 #endif
 
@@ -1390,16 +1418,19 @@ static void UsbCoreResetDeviceState(bool NotifyClasses)
 
 void UsbDevProcessEvent(int DevNo, const UsbCtrlrEvt_t *pEvt)
 {
-	(void)DevNo;
 	if (pEvt == nullptr)
 	{
 		return;
 	}
 
+	// Only a bus state change has class work for the process event. SOF,
+	// SETUP and EP0 transfers are complete when this returns, and data
+	// transfers never come here.
 	switch (pEvt->Type)
 	{
 		case USB_CTRLR_EVT_RESET:
 			UsbCoreResetDeviceState(true);
+			UsbProcessQue(DevNo);
 			break;
 
 		case USB_CTRLR_EVT_SETUP:
@@ -1416,18 +1447,19 @@ void UsbDevProcessEvent(int DevNo, const UsbCtrlrEvt_t *pEvt)
 		case USB_CTRLR_EVT_SUSPEND:
 			s_Core.Suspended = true;
 			UsbCoreUpdateSof();
+			UsbProcessQue(DevNo);
 			break;
 
 		case USB_CTRLR_EVT_RESUME:
 			s_Core.Suspended = false;
 			UsbCoreUpdateSof();
+			UsbProcessQue(DevNo);
 			break;
 
 		case USB_CTRLR_EVT_SOF:
 			if (!s_Core.Suspended && s_Core.Configuration != 0U)
 			{
-				uint16_t mask = (uint16_t)(USB_ISO_EPIN_MASK(s_Core.DevNo) &
-					USB_ISO_EPOUT_MASK(s_Core.DevNo));
+				uint16_t mask = UsbCoreSofMask();
 				while (mask != 0U)
 				{
 					const uint8_t epNum = (uint8_t)__builtin_ctz(mask);
@@ -1622,6 +1654,7 @@ static bool UsbDevInit(const UsbCfg_t *pCfg)
 {
 	if (pCfg == nullptr || pCfg->Vid == 0 || pCfg->Pid == 0)
 	{
+		USB_CORE_TRACE("UsbDevInit invalid cfg\r\n");
 		return false;
 	}
 
@@ -1645,10 +1678,15 @@ static bool UsbDevInit(const UsbCfg_t *pCfg)
 
 	UsbCtrlrCfg_t ctrlrCfg = {};
 	ctrlrCfg.IntPrio = s_Core.DevCfg.IntPrio;
+	ctrlrCfg.pIOPinMap = s_Core.DevCfg.pIOPinMap;
+	ctrlrCfg.NbIOPins = s_Core.DevCfg.NbIOPins;
 	ctrlrCfg.bLowPowerSuspend = s_Core.DevCfg.bLowPowerSuspend;
 
 	if (!UsbCtrlrInit(s_Core.DevNo, &ctrlrCfg))
 	{
+		USB_CORE_TRACE("UsbCtrlrInit failed dev=%d prio=%d lowpwr=%u\r\n",
+			s_Core.DevNo, ctrlrCfg.IntPrio,
+			static_cast<unsigned>(ctrlrCfg.bLowPowerSuspend));
 		return false;
 	}
 
@@ -1657,6 +1695,8 @@ static bool UsbDevInit(const UsbCfg_t *pCfg)
 
 	if (!UsbCoreInit(&coreCfg))
 	{
+		USB_CORE_TRACE("UsbCoreInit failed ep0mps=%u\r\n",
+			static_cast<unsigned>(coreCfg.Ep0Mps));
 		return false;
 	}
 
@@ -1774,6 +1814,8 @@ bool UsbInit(const UsbCfg_t *pCfg)
 {
 	if (pCfg == nullptr || pCfg->DevNo < 0 || pCfg->DevNo >= USB_CTRLR_CNT)
 	{
+		USB_CORE_TRACE("UsbInit invalid cfg dev=%d count=%d\r\n",
+			pCfg != nullptr ? pCfg->DevNo : -1, USB_CTRLR_CNT);
 		return false;
 	}
 
@@ -1781,12 +1823,8 @@ bool UsbInit(const UsbCfg_t *pCfg)
 	// only, so reject the other roles rather than pretend to support them.
 	if (pCfg->Mode != USB_MODE_DEVICE)
 	{
-		return false;
-	}
-
-	alignas(4) static uint8_t s_AppEvtQueMem[APPEVT_HANDLER_QUE_MEMSIZE(16)];
-	if (!AppEvtHandlerInit(s_AppEvtQueMem, sizeof(s_AppEvtQueMem)))
-	{
+		USB_CORE_TRACE("UsbInit unsupported mode=%d\r\n",
+			static_cast<int>(pCfg->Mode));
 		return false;
 	}
 
@@ -1881,7 +1919,16 @@ const uint8_t *UsbGetDescriptor(int DevNo, uint8_t Type, uint8_t Index,
 
 bool UsbEnable(int DevNo)
 {
-	return DevNo == s_Core.DevNo && UsbDevEnable();
+	if (DevNo != s_Core.DevNo)
+	{
+		return false;
+	}
+
+	// First pass of the process event: reports the cable level and retries the
+	// connection of a board that started without a cable.
+	UsbProcessQue(DevNo);
+
+	return UsbDevEnable();
 }
 
 void UsbDisable(int DevNo)
@@ -1889,6 +1936,49 @@ void UsbDisable(int DevNo)
 	if (DevNo == s_Core.DevNo)
 	{
 		UsbDevDisable();
+	}
+}
+
+// Default for an application without an OS, see usb.h. Interrupt context.
+__attribute__((weak)) bool UsbEvtQue(uint32_t EvtId, void *pCtx,
+									  UsbEvtQueHandler_t Handler)
+{
+	return AppEvtHandlerQue(EvtId, pCtx, Handler);
+}
+
+// Set while the process event is in the queue, so that it is queued once
+static volatile bool s_bUsbProcessQueued = false;
+static volatile bool s_bUsbProcessOwed = false;
+
+static void UsbProcessEvt(uint32_t Evt, void *pCtx)
+{
+	(void)pCtx;
+
+	s_bUsbProcessQueued = false;
+	UsbProcess((int)Evt);
+}
+
+void UsbProcessQue(int DevNo)
+{
+	if (DevNo != s_Core.DevNo || s_bUsbProcessQueued)
+	{
+		return;
+	}
+
+	s_bUsbProcessQueued = true;
+	s_bUsbProcessOwed =
+		UsbEvtQue((uint32_t)DevNo, nullptr, UsbProcessEvt) == false;
+	if (s_bUsbProcessOwed)
+	{
+		s_bUsbProcessQueued = false;
+	}
+}
+
+void UsbCheckStatus(void)
+{
+	if (s_bUsbProcessOwed)
+	{
+		UsbProcessQue(s_Core.DevNo);
 	}
 }
 

@@ -18,8 +18,10 @@ Build and run on the host:
   gcc -std=gnu11 -O1 -I littlefs -c littlefs/lfs.c -o lfs.o
   gcc -std=gnu11 -O1 -I littlefs -c littlefs/lfs_util.c -o lfs_util.o
   g++ -std=gnu++23 -O1 -I include -I include/storage -I littlefs -I Linux/include \
+	  -I tests/dfu/hostport \
 	  exemples/storage/nvm_littlefs_test.cpp src/storage/diskio_nvm.cpp \
-	  src/storage/diskio_impl.cpp src/device.cpp src/device_intrf.cpp \
+	  src/storage/diskio_impl.cpp src/storage/nvm.cpp \
+	  src/device.cpp src/device_intrf.cpp \
 	  lfs.o lfs_util.o -o nvm_littlefs_test
   ./nvm_littlefs_test
 
@@ -55,16 +57,13 @@ SOFTWARE.
 #include <cstring>
 #include <cerrno>
 #include "storage/diskio_nvm.h"
-extern "C" {
+#include "coredev/spi.h"
 #include "lfs.h"
-}
 
-// The pin driver is per architecture; the driver only toggles a protect pin.
-extern "C" {
-void IOPinConfig(int, int, int, IOPINDIR, IOPINRES, IOPINTYPE) {}
-void IOPinSet(int, int) {}
-void IOPinClear(int, int) {}
-}
+static int LfsRead(const struct lfs_config*, lfs_block_t b, lfs_off_t o, void *buf, lfs_size_t n);
+static int LfsProg(const struct lfs_config*, lfs_block_t b, lfs_off_t o, const void *buf, lfs_size_t n);
+static int LfsErase(const struct lfs_config*, lfs_block_t b);
+static int LfsSync(const struct lfs_config*);
 
 #define SIZE  (64u*1024u)
 #define BLK   4096u
@@ -93,13 +92,6 @@ public: uint8_t v[SIZE];
 };
 
 static NvmDiskIO *s_pDisk;
-static int LfsRead(const struct lfs_config*, lfs_block_t b, lfs_off_t o, void *buf, lfs_size_t n)
-{ return s_pDisk->Read(b,o,(uint8_t*)buf,n) == (int)n ? LFS_ERR_OK : LFS_ERR_IO; }
-static int LfsProg(const struct lfs_config*, lfs_block_t b, lfs_off_t o, const void *buf, lfs_size_t n)
-{ return s_pDisk->Write(b,o,(uint8_t*)buf,n) == (int)n ? LFS_ERR_OK : LFS_ERR_IO; }
-static int LfsErase(const struct lfs_config*, lfs_block_t b)
-{ s_pDisk->EraseSector(b,1); return LFS_ERR_OK; }
-static int LfsSync(const struct lfs_config*) { return LFS_ERR_OK; }
 
 static uint8_t s_RdBuf[16], s_PrBuf[16], s_LaBuf[16];
 static struct lfs_config s_Cfg = {
@@ -109,8 +101,30 @@ static struct lfs_config s_Cfg = {
 	.block_cycles = 500, .cache_size = 16, .lookahead_size = 16,
 	.read_buffer = s_RdBuf, .prog_buffer = s_PrBuf, .lookahead_buffer = s_LaBuf,
 };
-static int fails=0;
-#define CK(c,...) do{ if(!(c)){ printf("FAIL: "); printf(__VA_ARGS__); printf("\n"); fails++; } }while(0)
+static int s_Fails=0;
+#define CK(c,...) do{ if(!(c)){ printf("FAIL: "); printf(__VA_ARGS__); printf("\n"); s_Fails++; } }while(0)
+
+static EraseNvm s_Flash;
+static DirectNvm s_Eep;
+
+// The pin driver is per architecture; the driver only toggles a protect pin.
+extern "C" void IOPinConfig(int, int, int, IOPINDIR, IOPINRES, IOPINTYPE) {}
+extern "C" void IOPinSet(int, int) {}
+extern "C" void IOPinClear(int, int) {}
+
+// The in-memory media below never use QSPI. Satisfy the generic Nvm
+// driver's target hooks and reject any accidental hardware command.
+extern "C" void QuadSPISetMemSize(SPIDev_t * const, uint32_t) {}
+extern "C" bool QuadSPISendCmd(SPIDev_t * const, uint8_t, uint32_t,
+				   uint8_t, uint32_t, uint8_t) { return false; }
+
+static int LfsRead(const struct lfs_config*, lfs_block_t b, lfs_off_t o, void *buf, lfs_size_t n)
+{ return s_pDisk->Read(b,o,(uint8_t*)buf,n) == (int)n ? LFS_ERR_OK : LFS_ERR_IO; }
+static int LfsProg(const struct lfs_config*, lfs_block_t b, lfs_off_t o, const void *buf, lfs_size_t n)
+{ return s_pDisk->Write(b,o,(uint8_t*)buf,n) == (int)n ? LFS_ERR_OK : LFS_ERR_IO; }
+static int LfsErase(const struct lfs_config*, lfs_block_t b)
+{ s_pDisk->EraseSector(b,1); return LFS_ERR_OK; }
+static int LfsSync(const struct lfs_config*) { return LFS_ERR_OK; }
 
 static void RunFs(NvmDiskIO &Disk, const char *pWhat)
 {
@@ -137,13 +151,11 @@ static void RunFs(NvmDiskIO &Disk, const char *pWhat)
 	CK(lfs_unmount(&lfs) == 0, "%s: unmount again", pWhat);
 }
 
-static EraseNvm s_Flash;
-static DirectNvm s_Eep;
 int main(){
 	NvmDiskIO d1, d2;
 	CK(d1.Init(s_Flash), "mount the block layer on an erase-write medium");
 	CK(d2.Init(s_Eep, BLK), "mount the block layer on a direct write medium");
 	RunFs(d1, "erase-write medium");
 	RunFs(d2, "direct write medium");
-	printf(fails?"\nRESULT: %d FAIL\n":"\nRESULT: ALL PASS\n", fails);
-	return fails; }
+	printf(s_Fails?"\nRESULT: %d FAIL\n":"\nRESULT: ALL PASS\n", s_Fails);
+	return s_Fails; }

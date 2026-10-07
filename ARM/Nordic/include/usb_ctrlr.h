@@ -16,7 +16,7 @@ compile-time constants so an application can size CFifo memory and DMA staging
 buffers statically, before any endpoint is configured and without calling into
 the stack.
 
-Runtime APIs carry DevNo. The current supported ports expose one controller,
+Runtime APIs take DevNo. The current supported ports expose one controller,
 so the capability accessors select controller zero with normal constant
 expressions. They do not construct identifiers with token-pasting macros.
 
@@ -60,6 +60,7 @@ SOFTWARE.
 
 #include "nrf.h"
 #include "nrf_peripherals.h"
+#include "coredev/iopincfg.h"
 #include "usb/usb_def.h"
 
 #if defined(USBD_PRESENT)
@@ -120,9 +121,9 @@ enum {
 	USB_CTRLR0_BULK_PKT_LEN_MAX = 512,
 	USB_CTRLR0_INT_PKT_LEN_MAX = 1024,
 	USB_CTRLR0_ISO_PKT_LEN_MAX = 1024,
-	USB_ISO_SUPPORTED_0 = 0,
-	USB_ISO_EPIN_MASK_0 = 0,
-	USB_ISO_EPOUT_MASK_0 = 0,
+	USB_ISO_SUPPORTED_0 = 1,
+	USB_ISO_EPIN_MASK_0 = 0xFFFEU,
+	USB_ISO_EPOUT_MASK_0 = 0xFFFEU,
 };
 
 #else
@@ -138,9 +139,9 @@ enum {
 #define USB_ISO_SUPPORTED(CtrlrNo) \
 	((CtrlrNo) == 0 ? USB_ISO_SUPPORTED_0 : 0)
 #define USB_ISO_EPIN_MASK(CtrlrNo) \
-	((CtrlrNo) == 0 ? USB_ISO_EPIN_MASK_0 : 0U)
+	((CtrlrNo) == 0 ? (uint32_t)USB_ISO_EPIN_MASK_0 : 0U)
 #define USB_ISO_EPOUT_MASK(CtrlrNo) \
-	((CtrlrNo) == 0 ? USB_ISO_EPOUT_MASK_0 : 0U)
+	((CtrlrNo) == 0 ? (uint32_t)USB_ISO_EPOUT_MASK_0 : 0U)
 #define USB_CTRLR_PKT_LEN_MAX(CtrlrNo, TransType) \
 	((CtrlrNo) != 0 ? 0 : \
 	 (TransType) == CONTROL ? USB_CTRLR0_CONTROL_PKT_LEN_MAX : \
@@ -148,11 +149,7 @@ enum {
 	 (TransType) == BULK ? USB_CTRLR0_BULK_PKT_LEN_MAX : \
 	 (TransType) == INT ? USB_CTRLR0_INT_PKT_LEN_MAX : 0)
 
-#if defined(USBD_PRESENT)
 #define USB_CTRLR_ISO_INIT(DevNo) UsbCtrlrIsoInit(DevNo)
-#else
-#define USB_CTRLR_ISO_INIT(DevNo) false
-#endif
 
 
 //////////////////////////////////////////////////////////////////////////////
@@ -208,10 +205,11 @@ typedef struct __Usb_Ctrlr_Evt {
 /**
  * @brief	Non-control endpoint event callback.
  *
- * Registered with the endpoint DMA buffer. Called from interrupt or deferred
- * event processing. A NULL OUT buffer withholds reception; controller processing
- * delivers DRDY so the handler can retry pending work and restore the buffer.
- * XFER_CMPL reports success; failure and cancellation use their own events.
+ * Registered with UsbCtrlrEpBind. Called from the USB interrupt, or from the
+ * controller call that changed the endpoint state. DRDY asks the owner for an
+ * OUT destination; an owner without room supplies none and submits one with
+ * UsbCtrlrEpReceive when space returns. XFER_CMPL reports success; failure and
+ * cancellation use their own events.
  */
 typedef void (*UsbCtrlrEpHandler_t)(UsbCtrlrEvtType_t Event,
 									uint16_t Length, void *pContext);
@@ -219,6 +217,8 @@ typedef void (*UsbCtrlrEpHandler_t)(UsbCtrlrEvtType_t Event,
 /// What the generic layer hands the port at UsbCtrlrInit.
 typedef struct __Usb_Ctrlr_Config {
 	int IntPrio;					//!< Interrupt priority of the USB peripheral
+	const IOPinCfg_t *pIOPinMap;	//!< Optional board USB pins
+	int NbIOPins;					//!< Number of entries in pIOPinMap
 	bool bLowPowerSuspend;			//!< true - Sit in USB low power while suspended
 } UsbCtrlrCfg_t;
 
@@ -229,17 +229,9 @@ extern "C" {
 bool UsbCtrlrInit(int DevNo, const UsbCtrlrCfg_t *pCfg);
 bool UsbCtrlrStart(int DevNo);
 void UsbCtrlrStop(int DevNo);
+// Called from the process event.
+void UsbCtrlrProcess(int DevNo);
 #if defined(USBD_PRESENT)
-void AppEvtHandlerExec(void);
-
-// Deferred endpoint work runs from the application event queue. DMA
-// retirement and immediate handoff stay in USBD_IRQHandler().
-static inline void UsbCtrlrProcess(int DevNo)
-{
-	(void)DevNo;
-	AppEvtHandlerExec();
-}
-
 static inline bool UsbCtrlrVbusDetected(int DevNo)
 {
 	(void)DevNo;
@@ -247,7 +239,6 @@ static inline bool UsbCtrlrVbusDetected(int DevNo)
 		POWER_USBREGSTATUS_VBUSDETECT_Msk) != 0;
 }
 #else
-void UsbCtrlrProcess(int DevNo);
 bool UsbCtrlrVbusDetected(int DevNo);
 #endif
 #if defined(USBD_PRESENT)
@@ -260,9 +251,7 @@ static inline bool UsbCtrlrHighSpeed(int DevNo)
 #else
 bool UsbCtrlrHighSpeed(int DevNo);
 #endif
-#if defined(USBD_PRESENT)
 bool UsbCtrlrIsoInit(int DevNo);
-#endif
 #if defined(USBD_PRESENT)
 static inline void UsbCtrlrIntEnable(int DevNo)
 {
@@ -374,7 +363,6 @@ typedef struct __nRF_Usb_Ep_Registration
 {
 	UsbCtrlrEpHandler_t Handler;
 	void *pContext;
-	uint32_t Generation;         //!< Invalidates deferred events on close/reset.
 } nRFUsbEpReg_t;
 
 enum

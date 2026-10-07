@@ -107,18 +107,18 @@ int main()
 	while(1)
 	{
 #ifdef DEMO_C
-        int l = UARTRx(&g_UartDev, buff, len);
+		int l = UARTRx(&g_UartDev, buff, len);
 #else
-        int l = g_Uart.Rx(buff, len);
+		int l = g_Uart.Rx(buff, len);
 #endif
-        if (l > 0)
-        {
+		if (l > 0)
+		{
 #ifdef DEMO_C
-        	UARTTx(&g_UartDev, buff, l);
+			UARTTx(&g_UartDev, buff, l);
 #else
-        	g_Uart.Tx(buff, l);
+			g_Uart.Tx(buff, l);
 #endif
-        }
+		}
 	}
 	return 0;
 }

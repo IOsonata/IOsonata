@@ -53,6 +53,9 @@ static const uint8_t s_ImageSignature[64] = {
 	0x8e,0x09,0xde,0x0f
 };
 
+static uint8_t s_HashMem[CRYPTO_SOFTSHA256_MEMSIZE];
+static uint8_t s_VerifyMem[CRYPTO_UECC_MEMSIZE];
+
 bool DfuImageVerify(HashEngine *pHash, SignEngine *pVerify,
 					const uint8_t VendorPubKey[64],
 					const uint8_t *pImage, size_t ImageLen,
@@ -78,11 +81,9 @@ bool DfuImageVerify(HashEngine *pHash, SignEngine *pVerify,
 int main(void)
 {
 	alignas(CryptoSoftSha256)
-	static uint8_t hashMem[CRYPTO_SOFTSHA256_MEMSIZE];
 	alignas(CryptoUecc)
-	static uint8_t verifyMem[CRYPTO_UECC_MEMSIZE];
-	HashEngine *hash = CryptoSoftSha256Create(hashMem, sizeof(hashMem));
-	SignEngine *verify = CryptoUeccCreate(verifyMem, sizeof(verifyMem), nullptr);
+	HashEngine *hash = CryptoSoftSha256Create(s_HashMem, sizeof(s_HashMem));
+	SignEngine *verify = CryptoUeccCreate(s_VerifyMem, sizeof(s_VerifyMem), nullptr);
 	if (hash == nullptr || verify == nullptr)
 	{
 		printf("crypto engine init failed\n");

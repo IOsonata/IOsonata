@@ -226,7 +226,7 @@ static bool UsbdCdcRequest(UsbdCdcDev_t *pCdc, const UsbSetupData_t *pSetup,
 		case USB_CDC_REQ_GET_LINE_CODING:
 		{
 			// SET is host to device into the pending copy, GET is device to
-			// host from the current one; both carry exactly one line coding.
+			// host from the current one; both transfer exactly one line coding.
 			const bool get = pSetup->bRequest == USB_CDC_REQ_GET_LINE_CODING;
 			if (((pSetup->bmRequestType & USB_REQTYPE_MASK_DIR) != 0U) != get ||
 				pSetup->wValue != 0U ||
@@ -317,6 +317,8 @@ static void UsbdCdcNotifCtrlrEvent(UsbCtrlrEvtType_t Event,
 	{
 		pCdc->SerialStateActive = false;
 		pCdc->SerialStatePending = true;
+		// Sent again from the process event
+		UsbProcessQue(pCdc->DevNo);
 	}
 	else if (Event == USB_CTRLR_EVT_CANCEL)
 	{

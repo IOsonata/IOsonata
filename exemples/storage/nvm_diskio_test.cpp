@@ -13,8 +13,10 @@
 Build and run on the host:
 
   g++ -std=gnu++23 -O1 -I include -I include/storage -I Linux/include \
+	  -I tests/dfu/hostport \
 	  exemples/storage/nvm_diskio_test.cpp src/storage/diskio_nvm.cpp \
-	  src/storage/diskio_impl.cpp src/device.cpp src/device_intrf.cpp \
+	  src/storage/diskio_impl.cpp src/storage/nvm.cpp \
+	  src/device.cpp src/device_intrf.cpp \
 	  -o nvm_diskio_test
   ./nvm_diskio_test
 
@@ -51,25 +53,18 @@ SOFTWARE.
 #include <cstring>
 
 #include "storage/diskio_nvm.h"
-
-
-// The pin driver is per architecture; the driver only toggles a protect pin.
-extern "C" {
-void IOPinConfig(int, int, int, IOPINDIR, IOPINRES, IOPINTYPE) {}
-void IOPinSet(int, int) {}
-void IOPinClear(int, int) {}
-}
+#include "coredev/spi.h"
 
 #define DISK_SIZE		(64u * 1024u)
 #define DISK_SECT		4096u
 
-static int g_Fail = 0;
-static int g_Checks = 0;
+static int s_Fail = 0;
+static int s_Checks = 0;
 
 #define CHECK(cond, ...) do { \
-	g_Checks++; \
+	s_Checks++; \
 	if (!(cond)) { \
-		g_Fail++; \
+		s_Fail++; \
 		printf("FAIL %s:%d: ", __func__, __LINE__); \
 		printf(__VA_ARGS__); \
 		printf("\n"); \
@@ -142,6 +137,25 @@ public:
 	}
 };
 
+static EraseNvm s_Erase;
+static DirectNvm s_Direct;
+
+static uint8_t s_CacheMem1[DISK_SECT];
+static uint8_t s_CacheMem2[DISK_SECT];
+static DiskIOCache_t s_Cache1 = { 0, 0xFFFFFFFF, s_CacheMem1 };
+static DiskIOCache_t s_Cache2 = { 0, 0xFFFFFFFF, s_CacheMem2 };
+
+// The pin driver is per architecture; the driver only toggles a protect pin.
+extern "C" void IOPinConfig(int, int, int, IOPINDIR, IOPINRES, IOPINTYPE) {}
+extern "C" void IOPinSet(int, int) {}
+extern "C" void IOPinClear(int, int) {}
+
+// The in-memory media below never use QSPI. Satisfy the generic Nvm
+// driver's target hooks and reject any accidental hardware command.
+extern "C" void QuadSPISetMemSize(SPIDev_t * const, uint32_t) {}
+extern "C" bool QuadSPISendCmd(SPIDev_t * const, uint8_t, uint32_t,
+				   uint8_t, uint32_t, uint8_t) { return false; }
+
 // ---------------------------------------------------------------------------
 // The same sequence, run against whatever disk it is handed.
 // ---------------------------------------------------------------------------
@@ -197,14 +211,6 @@ static void RunDisk(DiskIO &Disk, const char *pWhat)
 		  "%s: buffered round trip across the edge", pWhat);
 }
 
-static EraseNvm s_Erase;
-static DirectNvm s_Direct;
-
-static uint8_t s_CacheMem1[DISK_SECT];
-static uint8_t s_CacheMem2[DISK_SECT];
-static DiskIOCache_t s_Cache1 = { 0, 0xFFFFFFFF, s_CacheMem1 };
-static DiskIOCache_t s_Cache2 = { 0, 0xFFFFFFFF, s_CacheMem2 };
-
 int main(void)
 {
 	NvmDiskIO diskErase;
@@ -228,12 +234,12 @@ int main(void)
 	RunDisk(diskErase, "erase-write medium");
 	RunDisk(diskDirect, "direct write medium");
 
-	printf("\nChecks run: %d\n", g_Checks);
-	if (g_Fail == 0)
+	printf("\nChecks run: %d\n", s_Checks);
+	if (s_Fail == 0)
 	{
 		printf("RESULT: ALL PASS\n");
 		return 0;
 	}
-	printf("RESULT: %d FAILURES\n", g_Fail);
+	printf("RESULT: %d FAILURES\n", s_Fail);
 	return 1;
 }

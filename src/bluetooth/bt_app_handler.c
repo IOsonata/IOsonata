@@ -38,6 +38,7 @@ Modified by          Date              Description
 ----------------------------------------------------------------------------*/
 #include <stdbool.h>
 
+#include "app_evt_handler.h"
 #include "bluetooth/bt_app.h"
 
 __attribute__((weak)) void BtAppInitUserData()
@@ -79,9 +80,11 @@ __attribute__((weak))  void BtAppCentralEvtHandler(uint32_t Evt, void *pCtx)
 
 }
 
-__attribute__((weak)) void BtAppEvtNotify(void)
+// Default for an application without an OS, see bt_app.h.
+__attribute__((weak)) bool BtEvtQue(uint32_t EvtId, void *pCtx,
+									 BtEvtQueHandler_t Handler)
 {
-
+	return AppEvtHandlerQue(EvtId, pCtx, Handler);
 }
 
 __attribute__((weak)) void BtAppEvtConnected(uint16_t ConnHdl)

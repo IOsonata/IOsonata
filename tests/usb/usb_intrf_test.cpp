@@ -541,6 +541,37 @@ static void TestTxChaining(void)
     CHECK(s_InSubmitCnt == 3);
 }
 
+static void TestTxRejectRetriesHead(void)
+{
+    CHECK(Setup());
+    uint8_t first[MPS];
+    for (unsigned i = 0; i < sizeof(first); ++i)
+        first[i] = (uint8_t)(0x40U + i);
+    const uint8_t next = 0xE7U;
+
+    // The first controller submission is rejected before it owns the source.
+    // The FIFO head must stay queued and the Tx ownership token must return.
+    s_XferOk = false;
+    CHECK(DeviceIntrfTxData(&s_Intrf.DevIntrf, first, sizeof(first)) ==
+          (int)sizeof(first));
+    CHECK(!s_InBusy && s_InSubmitCnt == 0);
+    CHECK(CFifoUsed(s_Intrf.hTxFifo) == (int)sizeof(first));
+    CHECK(atomic_load_explicit(&s_Intrf.DevIntrf.bTxReady,
+          memory_order_acquire));
+
+    // A later Tx call adds newer data but must retry the old head first.
+    s_XferOk = true;
+    CHECK(DeviceIntrfTxData(&s_Intrf.DevIntrf, &next, 1) == 1);
+    CHECK(s_InBusy && s_InSubmitCnt == 1 && s_InLen == MPS);
+    CHECK(memcmp(s_InRegBuf, first, MPS) == 0);
+
+    CompleteIn(MPS);
+    CHECK(s_InBusy && s_InSubmitCnt == 2 && s_InLen == 1U);
+    CHECK(s_InRegBuf[0] == next);
+    CompleteIn(1U);
+    CHECK(!s_InBusy);
+}
+
 static void TestTxAccumulatesDuringTransfer(void)
 {
     CHECK(Setup());
@@ -698,6 +729,7 @@ int main(void)
         { "unconfigure", TestUnconfigure },
         { "disable does not gate", TestDisableDoesNotGate },
         { "tx chaining", TestTxChaining },
+        { "tx rejected retry", TestTxRejectRetriesHead },
         { "tx accumulates", TestTxAccumulatesDuringTransfer },
         { "tx packet boundaries", TestTxPacketMode },
         { "tx packet ZLP", TestTxPacketZlp },
@@ -717,3 +749,6 @@ int main(void)
     printf("%s\n", s_Fail == 0 ? "all pass" : "FAILURES");
     return s_Fail == 0 ? 0 : 1;
 }
+
+// The process event of the USB core is not part of this test.
+void UsbProcessQue(int) {}

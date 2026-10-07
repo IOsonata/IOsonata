@@ -7,6 +7,9 @@ Python-side lock contention.
 """
 
 import argparse
+import os
+import shutil
+import subprocess
 import sys
 import re
 import struct
@@ -15,6 +18,7 @@ import time
 
 try:
     import serial
+    import serial.tools.list_ports
 except ImportError:
     serial = None
 
@@ -43,6 +47,10 @@ ISO_MPS = 63
 
 USB_ENDPOINT_TRANSFER_TYPE_MASK = 0x03
 USB_ENDPOINT_TRANSFER_TYPE_INT = 0x03
+
+# After a system sleep the process can run again before the host has resumed
+# the bus. A failure this long after the wake belongs to the sleep.
+HOST_WAKE_GRACE_S = 10.0
 
 ISO_DIAG_REQUEST = 0x5A
 ISO_DIAG_FORMAT = "<5I"
@@ -91,33 +99,58 @@ def prbs8(curval):
     return ((curval << 1) | newbit) & 0x7f
 
 
-def make_prbs_block(state, length):
-    data = bytearray(length)
-    for index in range(length):
+def make_prbs_cycle():
+    # The existing 7-bit pattern repeats after 127 nonzero states.
+    state = 0x7f
+    data = bytearray()
+    for _ in range(127):
         state = prbs8(state)
-        data[index] = state
-    return bytes(data), state
+        data.append(state)
+    return bytes(data)
+
+
+PRBS_CYCLE = make_prbs_cycle()
+PRBS_NEXT = bytes(prbs8(value) for value in range(256))
+
+
+def make_prbs_block(state, length):
+    if length <= 0:
+        return bytes(length), state
+    first = prbs8(state)
+    if first == 0:
+        return bytes(length), 0
+    offset = PRBS_CYCLE.index(first)
+    cycle = PRBS_CYCLE[offset:] + PRBS_CYCLE[:offset]
+    whole, tail = divmod(length, len(cycle))
+    data = cycle * whole + cycle[:tail]
+    return data, data[-1]
 
 
 def check_stream(data, expected):
-    errors = 0
-    for value in data:
-        if value != expected:
-            errors += 1
-        expected = prbs8(value)
-    return expected, errors
+    if not data:
+        return expected, 0
+    # Translate and compare whole blocks in C on the clean path. Each next
+    # expectation still follows the received byte, including corrupt bytes.
+    following = data.translate(PRBS_NEXT)
+    errors = int(data[0] != expected)
+    received = data[1:]
+    wanted = following[:-1]
+    if received != wanted:
+        errors += sum(value != next_value
+                      for value, next_value in zip(received, wanted))
+    return following[-1], errors
 
 
 def check_prbs_stream(data, expected):
-    errors = 0
-    target_errors = 0
-    for value in data:
-        if value == 0:
-            target_errors += 1
-            continue
-        if expected is not None and value != expected:
-            errors += 1
-        expected = prbs8(value)
+    # Zero is a target RX error marker and does not advance the PRBS state.
+    target_errors = data.count(0)
+    if target_errors:
+        data = data.replace(b"\x00", b"")
+    if not data:
+        return expected, 0, target_errors
+    if expected is None:
+        expected = data[0]
+    expected, errors = check_stream(data, expected)
     return expected, errors, target_errors
 
 
@@ -325,27 +358,46 @@ class Stats:
         self.path_errors = {"hid": 0, "int": 0, "iso": 0}
         self.iso_host_misses = 0
         self.iso_host_skews = 0
+        self.iso_host_unsent = 0
         self.iso_sof_losses = 0
         self.iso_out_losses = 0
         self.host_pauses = 0
         self.host_pause_sec = 0.0
+        self.host_pause_windows = []
         self.failure = None
         self.failure_at = None
 
-    def add_host_pause(self, seconds):
+    def add_host_pause(self, seconds, start, end, asleep=False):
         """The host process was not scheduled for `seconds`.
 
         No path could make progress during that time, so the pause is not
         counted against any of them: every progress timestamp moves forward
-        by the pause.
+        by the pause. `asleep` marks a system sleep.
         """
         with self.lock:
             self.host_pauses += 1
             self.host_pause_sec += seconds
+            self.host_pause_windows.append((start, end, seconds, asleep))
             for name, when in self.last.items():
                 if when is not None:
                     self.last[name] = when + seconds
             return self.host_pauses
+
+    def host_pause_at(self, when, grace):
+        """The pause, if any, during which or right after which `when` falls.
+
+        A worker blocked in a transfer when the host stops times out as soon as
+        the host runs again, so a failure up to `grace` seconds after the end
+        of a pause belongs to that pause. After a system sleep the process can
+        run before the host has resumed the bus, so that window is at least
+        HOST_WAKE_GRACE_S long.
+        """
+        with self.lock:
+            for start, end, seconds, asleep in self.host_pause_windows:
+                limit = max(grace, HOST_WAKE_GRACE_S) if asleep else grace
+                if start <= when <= end + limit:
+                    return seconds
+            return None
 
     def host_pause_summary(self):
         with self.lock:
@@ -368,6 +420,15 @@ class Stats:
     def iso_host_skew_count(self):
         with self.lock:
             return self.iso_host_skews
+
+    def add_iso_host_unsent(self, frames):
+        with self.lock:
+            self.iso_host_unsent += frames
+            return self.iso_host_unsent
+
+    def iso_host_unsent_count(self):
+        with self.lock:
+            return self.iso_host_unsent
 
     def add_iso_link_loss(self, losses):
         with self.lock:
@@ -464,6 +525,15 @@ def prepare_cdc(loop_comm, prbs_comm):
         pass
 
 
+def port_serial(port):
+    """USB serial number of the device behind a serial port, None if unknown."""
+    path = os.path.realpath(port)
+    for info in serial.tools.list_ports.comports():
+        if info.device == port or os.path.realpath(info.device) == path:
+            return info.serial_number
+    return None
+
+
 def find_hid(vid, pid, product, serial_number):
     matches = []
     for info in hid.enumerate(vid, pid):
@@ -473,8 +543,39 @@ def find_hid(vid, pid, product, serial_number):
             continue
         matches.append(info)
     if len(matches) != 1:
+        found = ", ".join(
+            info.get("serial_number") or "?" for info in matches
+        )
         raise RuntimeError(
             f"expected one HID interface, found {len(matches)}"
+            + (f" (serial {found})" if matches else "")
+        )
+    return matches[0]
+
+
+def find_usb(context, vid, pid, serial_number):
+    """The one USB device with this VID, PID and, when given, serial number."""
+    matches = []
+    for device in context.getDeviceIterator(skip_on_error=True):
+        if device.getVendorID() != vid or device.getProductID() != pid:
+            device.close()
+            continue
+        if serial_number is not None:
+            try:
+                number = device.getSerialNumber()
+            except usb1.USBError:
+                number = None
+            if number != serial_number:
+                device.close()
+                continue
+        matches.append(device)
+    if len(matches) != 1:
+        for device in matches:
+            device.close()
+        raise RuntimeError(
+            f"expected one USB device {vid:04x}:{pid:04x}"
+            + (f" serial {serial_number}" if serial_number else "")
+            + f", found {len(matches)}"
         )
     return matches[0]
 
@@ -601,14 +702,10 @@ def hid_worker(vid, pid, product, serial_number, start, stop, stats, timeout_ms)
             device.close()
 
 
-def int_worker(vid, pid, start, stop, stats, timeout_ms):
+def int_worker(vid, pid, serial_number, start, stop, stats, timeout_ms):
     try:
         with usb1.USBContext() as context:
-            device = context.getByVendorIDAndProductID(
-                vid, pid, skip_on_error=True
-            )
-            if device is None:
-                raise RuntimeError("device not found")
+            device = find_usb(context, vid, pid, serial_number)
             interface, ep = discover_interrupt_loopback(device)
             handle = device.open()
             try:
@@ -644,14 +741,10 @@ def int_worker(vid, pid, start, stop, stats, timeout_ms):
         stop.set()
 
 
-def iso_worker(vid, pid, start, stop, stats, timeout_ms, rounds):
+def iso_worker(vid, pid, serial_number, start, stop, stats, timeout_ms, rounds):
     try:
         with usb1.USBContext() as context:
-            device = context.getByVendorIDAndProductID(
-                vid, pid, skip_on_error=True
-            )
-            if device is None:
-                raise RuntimeError("device not found")
+            device = find_usb(context, vid, pid, serial_number)
             interface, ep = iso_test.discover_iso_loopback(device)
             handle = device.open()
             try:
@@ -673,8 +766,9 @@ def iso_worker(vid, pid, start, stop, stats, timeout_ms, rounds):
                             sequence,
                         )
                         if iso_test.is_host_sched_error(error):
-                            # The host never ran the request (miss), or ran
-                            # OUT late against IN so the IN window closed
+                            # The host refused or failed the request, did not
+                            # send some of its validation frames (miss), or
+                            # ran OUT late against IN so the IN window closed
                             # before the last echoes (skew). Count it, move
                             # the sequence on so any queued echoes read as
                             # stale, and resubmit.
@@ -745,6 +839,10 @@ def iso_worker(vid, pid, start, stop, stats, timeout_ms, rounds):
                             sys.stderr.flush()
                             raise RuntimeError(f"{error}; {diag}")
                         stats.add("iso", result["matched"] * ISO_MPS)
+                        if result.get("out_unsent"):
+                            # Guard frames the host did not send; the
+                            # validation frames all went out and came back.
+                            stats.add_iso_host_unsent(result["out_unsent"])
                         sequence += rounds + (
                             2 * iso_test.BURST_GUARD_FRAMES
                         )
@@ -756,7 +854,26 @@ def iso_worker(vid, pid, start, stop, stats, timeout_ms, rounds):
         stop.set()
 
 
-def stop_workers(workers, tx_stop, stop, stats):
+def keep_host_awake():
+    """Keep a macOS host from idle or system sleep while this process runs.
+
+    A host that sleeps in the middle of a run stops every path at once and the
+    run fails with timeouts that say nothing about the device. caffeinate
+    exits with this process. Closing a laptop lid still sleeps the host.
+    """
+    if sys.platform != "darwin" or shutil.which("caffeinate") is None:
+        return None
+    try:
+        return subprocess.Popen(
+            ["caffeinate", "-i", "-m", "-s", "-w", str(os.getpid())],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    except OSError:
+        return None
+
+
+def stop_workers(workers, tx_stop, stop, stats, iso_stop=None):
     # Like the dual-CDC test, keep RX and the other interfaces running until
     # the final CDC write returns. Stopping RX first can block that write
     # through loopback backpressure and manufacture a shutdown timeout.
@@ -766,6 +883,15 @@ def stop_workers(workers, tx_stop, stop, stats):
     if workers[0].is_alive():
         stats.fail("CDC loop TX", "writer did not stop")
     test_end = time.monotonic()
+    # ISO next, before the INT worker selects alternate setting 0. Closing
+    # an OUT endpoint with a transfer armed can need a global OUT NAK on the
+    # device, and ISO OUT data arriving meanwhile is dropped, so the last
+    # ISO burst must finish first.
+    if iso_stop is not None:
+        iso_stop.set()
+        for worker in workers[1:]:
+            if worker.name == "ISO":
+                worker.join(timeout=2.0)
     stop.set()
     for worker in workers[1:]:
         worker.join(timeout=2.0)
@@ -792,6 +918,11 @@ def main():
     parser.add_argument("--iso-rounds", type=int, default=32)
     parser.add_argument("--report", type=float, default=1.0)
     parser.add_argument("--stall-timeout", type=float, default=3.0)
+    parser.add_argument(
+        "--allow-sleep",
+        action="store_true",
+        help="do not keep a macOS host awake during the run",
+    )
     args = parser.parse_args()
 
     missing = []
@@ -817,10 +948,25 @@ def main():
     ):
         parser.error("invalid argument")
 
+    # Every path runs on the board behind --loop-port: several boards with
+    # the same VID, PID and product can be attached at once.
+    if args.serial is None:
+        args.serial = port_serial(args.loop_port)
+        prbs_serial = port_serial(args.prbs_port)
+        if args.serial is not None and prbs_serial not in (None, args.serial):
+            parser.error("--loop-port and --prbs-port are on different devices")
+    print(f"Device serial   : {args.serial or 'unknown, one board only'}")
+
+    awake = None if args.allow_sleep else keep_host_awake()
+    if awake is not None:
+        print("Host sleep      : held off with caffeinate for the run")
+
     loop_comm = None
     prbs_comm = None
     stop = threading.Event()
     tx_stop = threading.Event()
+    # The ISO worker stops on its own event, ahead of the other interfaces.
+    iso_stop = threading.Event()
     start = threading.Event()
     stats = Stats()
 
@@ -866,7 +1012,15 @@ def main():
             threading.Thread(
                 name="INT",
                 target=int_worker,
-                args=(args.vid, args.pid, start, stop, stats, args.timeout),
+                args=(
+                    args.vid,
+                    args.pid,
+                    args.serial,
+                    start,
+                    stop,
+                    stats,
+                    args.timeout,
+                ),
                 daemon=True,
             ),
             threading.Thread(
@@ -875,8 +1029,9 @@ def main():
                 args=(
                     args.vid,
                     args.pid,
+                    args.serial,
                     start,
-                    stop,
+                    iso_stop,
                     stats,
                     args.timeout,
                     args.iso_rounds,
@@ -897,24 +1052,42 @@ def main():
         start.set()
 
         tick = time.monotonic()
-        while not stop.is_set() and time.monotonic() - test_start < args.duration:
+        wall_tick = time.time()
+        # A worker timeout shorter than this is a host pause long enough to
+        # fail a transfer.
+        pause_limit = min(args.stall_timeout, args.timeout / 1000.0, 1.0) / 2
+        while time.monotonic() - test_start < args.duration:
             time.sleep(0.02)
             now = time.monotonic()
-            # This loop only sleeps 20 ms per pass. A pass that took the
-            # stall timeout or longer means the host process itself was not
-            # running (system sleep, App Nap, scheduler); no path could move,
-            # device or not.
-            gap = now - tick
+            wall_now = time.time()
+            # This loop only sleeps 20 ms per pass. A longer pass means the
+            # host process itself was not running (system sleep, App Nap,
+            # scheduler); no path could move, device or not. The monotonic
+            # clock may not count system sleep, the wall clock does.
+            gap = max(now - tick, wall_now - wall_tick)
+            # Only a system sleep moves the wall clock past the monotonic one.
+            asleep = (wall_now - wall_tick) - (now - tick) >= pause_limit
+            pause_start = tick
             tick = now
-            if gap >= args.stall_timeout:
-                total = stats.add_host_pause(gap)
+            wall_tick = wall_now
+            if gap >= pause_limit:
+                total = stats.add_host_pause(gap, pause_start, now, asleep)
                 print(
                     f"Host paused {gap:.1f} s (#{total}, "
-                    f"{time.strftime('%H:%M:%S')}); not counted as a stall",
+                    f"{time.strftime('%H:%M:%S')}"
+                    f"{', system sleep' if asleep else ''}); "
+                    "not counted as a stall",
                     file=sys.stderr,
                     flush=True,
                 )
+                # Checked after the pause is recorded: a worker that timed
+                # out because of the pause has already stopped the run.
+                if stop.is_set():
+                    break
                 continue
+
+            if stop.is_set():
+                break
 
             count, last, loop_errors, prbs_errors, target_errors, path_errors, failure = (
                 stats.snapshot()
@@ -971,7 +1144,9 @@ def main():
                     flush=True,
                 )
 
-        stop_started, test_end = stop_workers(workers, tx_stop, stop, stats)
+        stop_started, test_end = stop_workers(
+            workers, tx_stop, stop, stats, iso_stop
+        )
 
         count, _, loop_errors, prbs_errors, target_errors, path_errors, failure = (
             stats.snapshot()
@@ -1008,12 +1183,14 @@ def main():
         print(f"ISO errors      : {path_errors['iso']}")
         print(f"ISO host misses : {stats.iso_host_miss_count()}")
         print(f"ISO host skews  : {stats.iso_host_skew_count()}")
+        print(f"ISO host unsent : {stats.iso_host_unsent_count()}")
         print(f"ISO SOF losses  : {stats.iso_sof_loss_count()}")
         print(f"ISO OUT losses  : {stats.iso_out_loss_count()}")
         pauses, pause_sec = stats.host_pause_summary()
         print(f"Host pauses     : {pauses} ({pause_sec:.1f} s)")
         print(f"Total bytes     : {total_bytes}")
         print(f"Total B/sec     : {total_rate:.2f}")
+        host_paused = None
         if failure is not None:
             print(f"Failure         : {failure}")
             failure_at = stats.failure_timestamp()
@@ -1021,6 +1198,14 @@ def main():
                      "final CDC write" if failure_at < test_end else
                      "interface shutdown")
             print(f"Failure time    : {failure_at - test_start:.2f} s ({phase})")
+            host_paused = stats.host_pause_at(
+                failure_at, args.timeout / 1000.0 + 1.0
+            )
+            if host_paused is not None:
+                print(
+                    f"Failure cause   : host paused {host_paused:.1f} s; "
+                    "every transfer in flight timed out, not a device result"
+                )
 
         passed = (
             failure is None
@@ -1035,15 +1220,21 @@ def main():
             and count["int"] > 0
             and count["iso"] > 0
         )
+        if not passed and host_paused is not None:
+            print("Result          : INCONCLUSIVE (host paused)")
+            return 3
         print("Result          : " + ("PASS" if passed else "FAIL"))
         return 0 if passed else 1
 
     finally:
         stop.set()
+        iso_stop.set()
         if loop_comm is not None:
             loop_comm.close()
         if prbs_comm is not None:
             prbs_comm.close()
+        if awake is not None:
+            awake.terminate()
 
 
 if __name__ == "__main__":

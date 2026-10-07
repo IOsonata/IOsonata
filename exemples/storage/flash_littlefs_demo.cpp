@@ -99,20 +99,20 @@ static const IOPinCfg_t s_SpiPins[] = SPI_PINS_CFG;
 static const SPICfg_t s_SpiCfg = {
 	.DevNo = SPI_DEVNO,
 	.Phy = SPI_PHY,
-    .Mode = SPIMODE_MASTER,
+	.Mode = SPIMODE_MASTER,
 	.pIOPinMap = s_SpiPins,
 	.NbIOPins = sizeof(s_SpiPins) / sizeof(IOPinCfg_t),
-    .Rate = 8000000,   // Speed in Hz
-    .DataSize = 8,      // Data Size
-    .MaxRetry = 5,      // Max retries
-    .BitOrder = SPIDATABIT_MSB,
-    .DataPhase = SPIDATAPHASE_FIRST_CLK, // Data phase
-    .ClkPol = SPICLKPOL_HIGH,         // clock polarity
-    .ChipSel = SPICSEL_AUTO,
+	.Rate = 8000000,   // Speed in Hz
+	.DataSize = 8,      // Data Size
+	.MaxRetry = 5,      // Max retries
+	.BitOrder = SPIDATABIT_MSB,
+	.DataPhase = SPIDATAPHASE_FIRST_CLK, // Data phase
+	.ClkPol = SPICLKPOL_HIGH,         // clock polarity
+	.ChipSel = SPICSEL_AUTO,
 	.bDmaEn = false,	// DMA
 	.bIntEn = true,
-    .IntPrio = 6, //APP_IRQ_PRIORITY_LOW,      // Interrupt priority
-    .EvtCB = NULL
+	.IntPrio = 6, //APP_IRQ_PRIORITY_LOW,      // Interrupt priority
+	.EvtCB = NULL
 };
 
 SPI g_Spi;
@@ -140,25 +140,25 @@ static const int s_NbFlashCache = sizeof(s_FlashCache) / sizeof(DiskIOCache_t);
 static bool s_bInitialized = false;
 
 // variables used by the filesystem
-lfs_t lfs;
-lfs_file_t file;
+static lfs_t s_Lfs;
+static lfs_file_t s_File;
 
 // configuration of the filesystem is provided by this struct
 const struct lfs_config cfg = {
-    // block device operations
-    .read  = LittleFsRead,
-    .prog  = LittleFsProg,
-    .erase = LittleFsErase,
-    .sync  = LittleFsSync,
+	// block device operations
+	.read  = LittleFsRead,
+	.prog  = LittleFsProg,
+	.erase = LittleFsErase,
+	.sync  = LittleFsSync,
 
-    // block device configuration
-    .read_size = 16,
-    .prog_size = 16,
-    .block_size = s_FlashCfg.SectSize,
-    .block_count = s_FlashCfg.TotalSize * 1024UL / s_FlashCfg.SectSize,
-    .block_cycles = 500,
-    .cache_size = 16,
-    .lookahead_size = 16,
+	// block device configuration
+	.read_size = 16,
+	.prog_size = 16,
+	.block_size = s_FlashCfg.SectSize,
+	.block_count = s_FlashCfg.TotalSize * 1024UL / s_FlashCfg.SectSize,
+	.block_cycles = 500,
+	.cache_size = 16,
+	.lookahead_size = 16,
 };
 
 uint8_t g_Data[4096];
@@ -241,29 +241,29 @@ int main()
 		p[i] = i;
 	}
 
-    // mount the filesystem
-    int err = lfs_mount(&lfs, &cfg);
+	// mount the filesystem
+	int err = lfs_mount(&s_Lfs, &cfg);
 
-    // reformat if we can't mount the filesystem
-    // this should only happen on the first boot
-    if (err)
-    {
+	// reformat if we can't mount the filesystem
+	// this should only happen on the first boot
+	if (err)
+	{
 		printf("formating wait...\n");
 
-		lfs_format(&lfs, &cfg);
-        lfs_mount(&lfs, &cfg);
-    }
+		lfs_format(&s_Lfs, &cfg);
+		lfs_mount(&s_Lfs, &cfg);
+	}
 
-    err = lfs_file_open(&lfs, &file, "test.txt", LFS_O_RDWR | LFS_O_CREAT);
-    if (err == LFS_ERR_OK)
-    {
+	err = lfs_file_open(&s_Lfs, &s_File, "test.txt", LFS_O_RDWR | LFS_O_CREAT);
+	if (err == LFS_ERR_OK)
+	{
 		printf("file open/create success\n");
-	    lfs_file_write(&lfs, &file, g_Data, 4096);
-	    lfs_file_rewind(&lfs, &file);
-	    lfs_file_read(&lfs, &file, g_Temp, 4096);
-	    lfs_file_close(&lfs, &file);
+		lfs_file_write(&s_Lfs, &s_File, g_Data, 4096);
+		lfs_file_rewind(&s_Lfs, &s_File);
+		lfs_file_read(&s_Lfs, &s_File, g_Temp, 4096);
+		lfs_file_close(&s_Lfs, &s_File);
 
-	    //if (memcmp(g_Temp, g_Data, 4096) != 0)
+		//if (memcmp(g_Temp, g_Data, 4096) != 0)
 		for (int i = 0; i < 4096; i++)
 		{
 			if (g_Data[i] != g_Temp[i])
@@ -271,26 +271,26 @@ int main()
 				printf("read failed %d\n", i);
 			}
 		}
-    }
+	}
 
 	memset(g_Temp, 0xa5, 4096);
 
-    err = lfs_file_open(&lfs, &file, "test.txt", LFS_O_RDWR | LFS_O_CREAT);
-    if (err == LFS_ERR_OK)
-    {
+	err = lfs_file_open(&s_Lfs, &s_File, "test.txt", LFS_O_RDWR | LFS_O_CREAT);
+	if (err == LFS_ERR_OK)
+	{
 		printf("file open success\n");
 
-	    lfs_file_read(&lfs, &file, g_Temp, 4096);
-	    lfs_file_close(&lfs, &file);
+		lfs_file_read(&s_Lfs, &s_File, g_Temp, 4096);
+		lfs_file_close(&s_Lfs, &s_File);
 
-	    if (memcmp(g_Temp, g_Data, 4096) != 0)
+		if (memcmp(g_Temp, g_Data, 4096) != 0)
 		{
 			printf("read failed\n");
 		}
-    }
+	}
 
-    // release any resources we were using
-    lfs_unmount(&lfs);
+	// release any resources we were using
+	lfs_unmount(&s_Lfs);
 
 	printf("test complete\n");
 

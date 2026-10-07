@@ -109,11 +109,11 @@ static const SeepCfg_t s_SeepCfg = {
 };
 
 #ifdef C_CODE
-static I2CDev_t g_I2CDev;
-static SeepDev_t g_SeepDev;
+static I2CDev_t s_I2CDev;
+static SeepDev_t s_SeepDev;
 #else
-static I2C g_I2c;
-static Seep g_Seep;
+static I2C s_I2c;
+static Seep s_Seep;
 #endif
 
 #else
@@ -128,7 +128,7 @@ static const NvmCfg_t s_NvmCfg = {
 	.WriteDelayUs = EEPROM_WRITE_DELAY_MS * 1000UL,
 };
 
-static I2C g_I2c;
+static I2C s_I2c;
 static Nvm g_Nvm;
 
 #endif
@@ -136,21 +136,21 @@ static Nvm g_Nvm;
 static bool EepromInit(void)
 {
 #if NVM_MODE == 0 && defined(C_CODE)
-	if (I2CInit(&g_I2CDev, &s_I2cCfg) == false)
+	if (I2CInit(&s_I2CDev, &s_I2cCfg) == false)
 	{
 		return false;
 	}
-	return SeepInit(&g_SeepDev, &s_SeepCfg, &g_I2CDev.DevIntrf);
+	return SeepInit(&s_SeepDev, &s_SeepCfg, &s_I2CDev.DevIntrf);
 #else
-	if (g_I2c.Init(s_I2cCfg) == false)
+	if (s_I2c.Init(s_I2cCfg) == false)
 	{
 		return false;
 	}
 
 #if NVM_MODE == 0
-	return g_Seep.Init(s_SeepCfg, &g_I2c);
+	return s_Seep.Init(s_SeepCfg, &s_I2c);
 #else
-	return g_Nvm.Init(s_NvmCfg, &g_I2c);
+	return g_Nvm.Init(s_NvmCfg, &s_I2c);
 #endif
 #endif
 }
@@ -158,9 +158,9 @@ static bool EepromInit(void)
 static int EepromWrite(uint32_t Addr, uint8_t *pData, uint32_t Len)
 {
 #if NVM_MODE == 0 && defined(C_CODE)
-	return SeepWrite(&g_SeepDev, Addr, pData, (int)Len);
+	return SeepWrite(&s_SeepDev, Addr, pData, (int)Len);
 #elif NVM_MODE == 0
-	return g_Seep.Write(Addr, pData, (int)Len);
+	return s_Seep.Write(Addr, pData, (int)Len);
 #else
 	return g_Nvm.Write(Addr, pData, Len);
 #endif
@@ -169,9 +169,9 @@ static int EepromWrite(uint32_t Addr, uint8_t *pData, uint32_t Len)
 static int EepromRead(uint32_t Addr, uint8_t *pData, uint32_t Len)
 {
 #if NVM_MODE == 0 && defined(C_CODE)
-	return SeepRead(&g_SeepDev, Addr, pData, (int)Len);
+	return SeepRead(&s_SeepDev, Addr, pData, (int)Len);
 #elif NVM_MODE == 0
-	return g_Seep.Read(Addr, pData, (int)Len);
+	return s_Seep.Read(Addr, pData, (int)Len);
 #else
 	return g_Nvm.Read(Addr, pData, Len);
 #endif

@@ -4,7 +4,7 @@
 @brief	BLE periodic advertising broadcaster
 
 This demo brings up a non-connectable extended advertising set and attaches a
-periodic advertising train to it. The train carries a counter that increments
+periodic advertising train to it. The train holds a counter that increments
 once a second, so a scanner that synchronises to the train sees the value move
 and can prove the payload arrives intact.
 
@@ -66,6 +66,7 @@ SOFTWARE.
 #include "iopinctrl.h"
 #include "syslog.h"
 
+#include "app_evt_handler.h"
 #include "bluetooth/bt_app.h"
 #include "bluetooth/bt_appearance.h"
 #include "bluetooth/bt_padv.h"
@@ -158,25 +159,15 @@ static const uint8_t s_ExtManData[] =
 	"IOsonata periodic advertising demo marker payload";
 
 #if PADV_ENABLE_PAWR == 0
-// Periodic advertising payload the train carries. A four byte counter a timer
+// Periodic advertising payload the train sends. A four byte counter a timer
 // increments once a second, so a synchronised scanner sees it move. It is
 // wrapped in a manufacturer specific AD structure so a scanner parses it as
 // manufacturer data rather than four loose octets: length, type 0xFF, the
 // two byte company id, then the counter.
-static uint32_t g_PeriodicCnt = 0;
+static uint32_t s_PeriodicCnt = 0;
 
 #define PERIODIC_AD_SIZE		8		// 1 len + 1 type + 2 company id + 4 counter
 static uint8_t s_PeriodicAd[PERIODIC_AD_SIZE];
-
-static void PeriodicAdBuild(void)
-{
-	uint16_t vid = ISYST_BLUETOOTH_ID;
-
-	s_PeriodicAd[0] = PERIODIC_AD_SIZE - 1;					// Octets after the length byte
-	s_PeriodicAd[1] = BT_GAP_DATA_TYPE_MANUF_SPECIFIC_DATA;	// 0xFF
-	memcpy(&s_PeriodicAd[2], &vid, sizeof(vid));
-	memcpy(&s_PeriodicAd[4], &g_PeriodicCnt, sizeof(g_PeriodicCnt));
-}
 #endif
 
 static const TimerCfg_t s_TimerCfg = {
@@ -219,7 +210,6 @@ const BtAppCfg_t s_BtAppCfg = {
 };
 
 #if PADV_ENABLE_PAWR
-
 // PAwR shape, small enough to fit the RAM budget of the smallest target that
 // has the feature while still giving a scanner more than one subevent.
 #define APP_PAWR_SUBEVENT_CNT		4
@@ -232,7 +222,35 @@ const BtAppCfg_t s_BtAppCfg = {
 static uint8_t s_PawrData[APP_PAWR_SUBEVENT_CNT][APP_PAWR_SUBEVENT_DATA];
 static uint8_t s_PawrLen[APP_PAWR_SUBEVENT_CNT];
 static bool s_PawrReady = false;
+#endif
 
+#ifdef UART_PINS
+// SysLog store. With the UART attached at init, each record goes out as it
+// is logged. 16 records of 128 bytes, non blocking, so a burst the UART
+// cannot keep up with drops the oldest lines rather than the newest.
+alignas(4) static uint8_t s_SysLogMem[SYSLOG_MEMSIZE(16, 128)];
+
+static const SysLogCfg_t s_SysLogCfg = {
+	.pMem      = s_SysLogMem,
+	.MemSize   = sizeof(s_SysLogMem),
+	.RecordLen = 128,
+	.bBlocking = false
+};
+#endif
+
+#if PADV_ENABLE_PAWR == 0
+static void PeriodicAdBuild(void)
+{
+	uint16_t vid = ISYST_BLUETOOTH_ID;
+
+	s_PeriodicAd[0] = PERIODIC_AD_SIZE - 1;					// Octets after the length byte
+	s_PeriodicAd[1] = BT_GAP_DATA_TYPE_MANUF_SPECIFIC_DATA;	// 0xFF
+	memcpy(&s_PeriodicAd[2], &vid, sizeof(vid));
+	memcpy(&s_PeriodicAd[4], &s_PeriodicCnt, sizeof(s_PeriodicCnt));
+}
+#endif
+
+#if PADV_ENABLE_PAWR
 // The controller asks for subevent data every periodic event. Answer every
 // requested subevent from the retained buffers so the train keeps advertising
 // the same payload each rotation. The requested set wraps at the subevent
@@ -342,25 +360,11 @@ void BtAppTimerHandler(TimerDev_t * const pTimer, int TrigNo, void * const pCont
 	IOPinToggle(s_Leds[0].PortNo, s_Leds[0].PinNo);
 
 #if PADV_ENABLE_PAWR == 0
-	g_PeriodicCnt++;
+	s_PeriodicCnt++;
 	PeriodicAdBuild();
 	BtPadvDataSet(APP_ADV_HDL, s_PeriodicAd, sizeof(s_PeriodicAd));
 #endif
 }
-
-#ifdef UART_PINS
-// SysLog store. With the UART attached at init, each record goes out as it
-// is logged. 16 records of 128 bytes, non blocking, so a burst the UART
-// cannot keep up with drops the oldest lines rather than the newest.
-alignas(4) static uint8_t s_SysLogMem[SYSLOG_MEMSIZE(16, 128)];
-
-static const SysLogCfg_t s_SysLogCfg = {
-	.pMem      = s_SysLogMem,
-	.MemSize   = sizeof(s_SysLogMem),
-	.RecordLen = 128,
-	.bBlocking = false
-};
-#endif
 
 int main()
 {
@@ -381,7 +385,8 @@ int main()
 #endif
 
 	// Build the advertising set. This configures an extended, non-connectable
-	// set on handle 0 and leaves it disabled; BtAppRun enables it.
+	// set on handle 0 and leaves it disabled; the first queued Bluetooth event
+	// enables it once AppRun runs.
 	if (BtAppInit(&s_BtAppCfg) == false)
 	{
 #ifdef UART_PINS
@@ -397,7 +402,7 @@ int main()
 
 	// Attach the periodic train to the set. The set exists now, so the
 	// parameters and data commands are accepted; the train reaches the air
-	// once BtAppRun enables the set.
+	// once the set is enabled from AppRun.
 	if (PeriodicTrainInit() == false)
 	{
 #ifdef UART_PINS
@@ -415,7 +420,7 @@ int main()
 	g_Timer.EnableTimerTrigger(0, 1000UL, TIMER_TRIG_TYPE_CONTINUOUS,
 		BtAppTimerHandler);
 
-	BtAppRun();
+	AppRun();
 
 	return 0;
 }

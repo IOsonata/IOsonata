@@ -68,7 +68,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 void TimerHandler(TimerDev_t *pTimer, uint32_t Evt);
 
 const static TimerCfg_t s_TimerCfg = {
-    .DevNo = 1,
+	.DevNo = 1,
 	.ClkSrc = TIMER_CLKSRC_DEFAULT,
 	.Freq = 0,			// 0 => Default highest frequency
 	.IntPrio = 7,
@@ -116,34 +116,34 @@ UART g_Uart;
 
 //********** SPI **********
 static const IOPinCfg_t s_SpiPins[] = {
-    {SPI_SCK_PORT, SPI_SCK_PIN, SPI_SCK_PINOP,
-     IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
-    {SPI_MISO_PORT, SPI_MISO_PIN, SPI_MISO_PINOP,
-     IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL},
-    {SPI_MOSI_PORT, SPI_MOSI_PIN, SPI_MOSI_PINOP,
-     IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
-    {BMEx80_CS_PORT, BMEx80_CS_PIN, BMEx80_CS_PINOP,
-     IOPINDIR_OUTPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL},
+	{SPI_SCK_PORT, SPI_SCK_PIN, SPI_SCK_PINOP,
+	 IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
+	{SPI_MISO_PORT, SPI_MISO_PIN, SPI_MISO_PINOP,
+	 IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL},
+	{SPI_MOSI_PORT, SPI_MOSI_PIN, SPI_MOSI_PINOP,
+	 IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
+	{BMEx80_CS_PORT, BMEx80_CS_PIN, BMEx80_CS_PINOP,
+	 IOPINDIR_OUTPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL},
 };
 
 static const SPICfg_t s_SpiCfg = {
-    0,//SPI_DEVNO,
+	0,//SPI_DEVNO,
 	SPIPHY_NORMAL,
-    SPIMODE_MASTER,
+	SPIMODE_MASTER,
 	s_SpiPins,
-    sizeof(s_SpiPins) / sizeof(IOPinCfg_t),
-    1000000,   // Speed in Hz
-    8,      // Data Size
-    5,      // Max retries
-    SPIDATABIT_MSB,
-    SPIDATAPHASE_SECOND_CLK, // Data phase
-    SPICLKPOL_LOW,         // clock polarity
-    SPICSEL_AUTO,
+	sizeof(s_SpiPins) / sizeof(IOPinCfg_t),
+	1000000,   // Speed in Hz
+	8,      // Data Size
+	5,      // Max retries
+	SPIDATABIT_MSB,
+	SPIDATAPHASE_SECOND_CLK, // Data phase
+	SPICLKPOL_LOW,         // clock polarity
+	SPICSEL_AUTO,
 	true, //DMA
 	false,
-    6, //APP_IRQ_PRIORITY_LOW,      // Interrupt priority
+	6, //APP_IRQ_PRIORITY_LOW,      // Interrupt priority
 	0,
-    NULL
+	NULL
 };
 
 SPI g_Spi;
@@ -247,7 +247,7 @@ int main()
 	// retarget print to UART
 	UARTRetargetEnable(g_Uart, STDOUT_FILENO);
 
-    g_Timer.Init(s_TimerCfg);
+	g_Timer.Init(s_TimerCfg);
 
 #ifdef	TPH_I2C
 	g_I2c.Init(s_I2cCfg);
@@ -289,7 +289,7 @@ int main()
 		g_EnvSensor.StartSampling();
 
 
-        // Gas sensor takes a long time to sample
+		// Gas sensor takes a long time to sample
 		usDelay(1000000);
 
 		g_EnvSensor.Read(tphdata);
@@ -313,7 +313,7 @@ int main()
 		printf("\r\n");
 #endif
 
- 	}
+	}
 
 	return 0;
 }

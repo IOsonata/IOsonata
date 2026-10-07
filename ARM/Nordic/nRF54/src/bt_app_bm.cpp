@@ -85,7 +85,6 @@ SOFTWARE.
 #include "bluetooth/bt_gap.h"
 #include "bluetooth/bt_smp.h"
 #include "bluetooth/bt_dev.h"
-#include "app_evt_handler.h"
 
 extern "C" bool sdh_state_evt_observer_notify(enum nrf_sdh_state_evt state);
 
@@ -98,7 +97,7 @@ void BtAdvBmTerminated();
 // SysLog transport the app configured (UART, USB, RTT, BLE, or any other
 // DeviceIntrf); the trace does not assume a transport. A release build
 // defines NDEBUG, which strips all trace regardless of DEBUG_ENABLE.
-//#define DEBUG_ENABLE
+#define DEBUG_ENABLE
 
 #if !defined(NDEBUG) && defined(DEBUG_ENABLE)
 #include "syslog.h"
@@ -116,11 +115,6 @@ void BtAdvBmTerminated();
 #define MSEC_TO_UNITS(MS, UNIT)			(((MS) * 1000) / (UNIT))
 
 #define BTAPP_CONN_CFG_TAG				CONFIG_NRF_SDH_BLE_CONN_TAG
-
-// Bare-metal fallback polling interval while connected. This guarantees generic
-// SMP/GATT transaction timeouts advance even when the peer goes fully silent.
-// RTOS ports should override BtAppEvtWait with a blocking primitive plus timer.
-#define BTAPP_TIMEOUT_POLL_MS			100U
 
 #define BTAPP_OBSERVER_PRIO				USER		/**< Application's BLE observer priority. */
 
@@ -231,6 +225,77 @@ static uint16_t SecurePendingTake()
 	}
 
 	return BLE_CONN_HANDLE_INVALID;
+}
+
+// Set while SecurePendingEvt is in the queue, so that it is queued once
+static volatile bool s_bSecurePendingQueued = false;
+
+// Secure the links queued by the SoftDevice event interrupt. Peer Manager and
+// LESC work must not run in that interrupt.
+static void SecurePendingEvt(uint32_t Evt, void *pCtx)
+{
+	(void)Evt;
+	(void)pCtx;
+
+	s_bSecurePendingQueued = false;
+
+	while (true)
+	{
+		uint32_t intState = DisableInterrupt();
+		uint16_t connHdl = SecurePendingTake();
+		EnableInterrupt(intState);
+
+		if (connHdl == BLE_CONN_HANDLE_INVALID)
+		{
+			break;
+		}
+
+		// A disconnect may have raced the deferred work. Never secure a stale
+		// handle that has already been returned to the SoftDevice.
+		if (BtPeerFindByHdl(connHdl) == nullptr)
+		{
+			continue;
+		}
+
+		uint32_t err = pm_conn_secure(connHdl, false);
+		DEBUG_PRINTF("pm_conn_secure hdl=%u returned 0x%08" PRIx32 "\r\n",
+			connHdl, err);
+		(void)err;
+	}
+}
+
+static void SecurePendingQue(void)
+{
+	if (s_bSecurePendingQueued == false)
+	{
+		s_bSecurePendingQueued = true;
+		if (BtEvtQue(0, nullptr, SecurePendingEvt) == false)
+		{
+			s_bSecurePendingQueued = false;
+		}
+	}
+}
+
+extern void BtDfuSmpCheckStatus(void) __attribute__((weak));
+
+void BtAppCheckStatus(void)
+{
+	BtLescCheckStatus();
+	if (g_BtAppData.State != BTAPP_STATE_UNKNOWN)
+	{
+		for (int i = 0; i < CONFIG_NRF_SDH_BLE_TOTAL_LINK_COUNT; i++)
+		{
+			if (s_SecurePendingHdl[i] != BLE_CONN_HANDLE_INVALID)
+			{
+				SecurePendingQue();
+				break;
+			}
+		}
+	}
+	if (BtDfuSmpCheckStatus != nullptr)
+	{
+		BtDfuSmpCheckStatus();
+	}
 }
 
 // --- Helper functions ---
@@ -511,13 +576,19 @@ static void ble_evt_dispatch(const ble_evt_t *p_ble_evt, void *p_context)
 			g_BtAppData.State = BTAPP_STATE_CONNECTED;
 			BtAppEvtConnected(p_ble_evt->evt.gap_evt.conn_handle);
 
-			// Start security from the main loop. Peer Manager and LESC work
+			// Start security from a queued event. Peer Manager and LESC work
 			// must not run in the SoftDevice event interrupt.
-			if (g_BtAppData.AppDevice.bSecure &&
-				!SecurePendingAdd(p_gap_evt->conn_handle))
+			if (g_BtAppData.AppDevice.bSecure)
 			{
-				DEBUG_PRINTF("SEC: pending queue full hdl=%u\r\n",
-					p_gap_evt->conn_handle);
+				if (SecurePendingAdd(p_gap_evt->conn_handle))
+				{
+					SecurePendingQue();
+				}
+				else
+				{
+					DEBUG_PRINTF("SEC: pending queue full hdl=%u\r\n",
+						p_gap_evt->conn_handle);
+				}
 			}
 
 			// Re-evaluate connectable advertising after every accepted link.
@@ -1065,7 +1136,7 @@ bool BtAppStackInit(const BtAppCfg_t *pCfg)
 
 static void BtAppPmEvtHandler(const struct pm_evt *p_evt)
 {
-	// IOsonata starts security once from BtAppRun for both new and restored
+	// IOsonata starts security once from a queued event for both new and restored
 	// peers. The Nordic helper also starts it immediately for a restored peer,
 	// before the remaining CONNECTED observers run, so skip that one helper
 	// action while preserving its handling for all other Peer Manager events.
@@ -1334,12 +1405,6 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 {
 	uint32_t err_code;
 
-	// Initialize application event handler
-	if (AppEvtHandlerInit(pCfg->pEvtHandlerQueMem, pCfg->EvtHandlerQueMemSize) == false)
-	{
-		return false;
-	}
-
 	SecurePendingReset();
 	BtSmpOobDataClearInternal();
 
@@ -1456,7 +1521,7 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 	// security without starting it must not run unprotected.
 	if (pCfg->SecType != BTGAP_SECTYPE_NONE && g_BtAppData.bSecInit == false)
 	{
-		DEBUG_PRINTF("BtAppInit FAIL: SecType=%d but BtAppSecInit was not called\r\n",
+		DEBUG_PRINTF("BtAppInit FAIL: security not initialized, SecType=%d\r\n",
 					 (int)pCfg->SecType);
 		return false;
 	}
@@ -1489,18 +1554,18 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 
 	g_BtAppData.State = BTAPP_STATE_INITIALIZED;
 
+	// Advertising starts here and not from the event queue: an application
+	// interrupt can fill the queue before the application runs it.
+	if (g_BtAppData.AppDevice.Conn.Role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER))
+	{
+		BtAdvStart();
+	}
+
 	DEBUG_PRINTF("BtAppInit: success\r\n");
 
 	return true;
 }
 
-/**
- * @brief Main BLE application run loop.
- *
- * Starts advertising (if peripheral/broadcaster) then enters the
- * main event loop.  SoftDevice events are dispatched through the
- * observer infrastructure triggered by the SD_EVT interrupt.
- */
 // Millisecond clock for the generic SMP/GATT transaction timeouts, overriding
 // the weak BtSmpMsTick/BtGattMsTick defaults. The RTC/timer is owned by the
 // SDK + SoftDevice; this reads the free-running GRTC3 count via the s_BtAppSdGrtc3
@@ -1532,87 +1597,10 @@ void BtGattIndicationTimeout(uint16_t ConnHdl)
 	sd_ble_gap_disconnect(ConnHdl, BLE_HCI_REMOTE_USER_TERMINATED_CONNECTION);
 }
 
-void BtAppRun()
-{
-	if (g_BtAppData.State != BTAPP_STATE_INITIALIZED)
-	{
-		return;
-	}
-
-	if (g_BtAppData.AppDevice.Conn.Role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER))
-	{
-		BtAdvStart();
-	}
-
-	DEBUG_PRINTF("BtAppRun: entering main loop\r\n");
-
-	while (1)
-	{
-		// Drain every connection queued by one SoftDevice dispatch. A fixed
-		// array is used because the maximum is already the configured link count.
-		while (true)
-		{
-			uint32_t intState = DisableInterrupt();
-			uint16_t connHdl = SecurePendingTake();
-			EnableInterrupt(intState);
-
-			if (connHdl == BLE_CONN_HANDLE_INVALID)
-			{
-				break;
-			}
-
-			// A disconnect may have raced the deferred work. Never secure a stale
-			// handle that has already been returned to the SoftDevice.
-			if (BtPeerFindByHdl(connHdl) == nullptr)
-			{
-				continue;
-			}
-
-			uint32_t err = pm_conn_secure(connHdl, false);
-			DEBUG_PRINTF("pm_conn_secure hdl=%u returned 0x%08" PRIx32 "\r\n",
-				connHdl, err);
-		}
-
-		// Process any pending LESC DHKey computation. Required for LE Secure
-		// Connections: BtLesc defers the ECDH to be run from the main loop
-		// rather than the BLE event context.
-		if (g_BtAppData.AppDevice.bSecure)
-		{
-			(void)BtLescRequestHandler();
-		}
-
-		AppEvtHandlerExec();
-
-		// The S145 port uses Peer Manager for SMP. Only the generic GATT
-		// indication timeout remains here.
-		BtGattIndicationTimeoutCheck();
-
-		BtAppEvtWait();
-	}
-}
-
-// Port-level weak default for BtAppEvtWait. Bare-metal apps use __WFE.
-// RTOS apps override with sem take in their bridge code.
-__attribute__((weak)) void BtAppEvtWait(void)
-{
-	if (BtPeerIsConnected())
-	{
-		msDelay(BTAPP_TIMEOUT_POLL_MS);
-	}
-	else
-	{
-		__WFE();
-	}
-}
-
-// Drains queued SoftDevice stack events by running the registered observers.
-// Effect: pending stack events are delivered to their handlers. Precondition:
-// SoftDevice enabled. Called from an RTOS BtAppEvtWait override after the
-// waiter unblocks, so observers run in task context. Returns void.
-void BtAppEvtDispatch()
-{
-	nrf_sdh_evts_poll();
-}
+// The S145 port uses Peer Manager for SMP, and the SoftDevice reports the GATT
+// server and client transaction timeouts (BLE_GATTS_EVT_TIMEOUT,
+// BLE_GATTC_EVT_TIMEOUT), on which the link is disconnected. No periodic
+// timeout check is needed on this port.
 
 static void soc_evt_poll(void *context)
 {

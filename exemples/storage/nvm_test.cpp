@@ -17,7 +17,7 @@
 
 Build and run on the host:
 
-  g++ -std=gnu++23 -O1 -I include -I include/storage -I Linux/include \
+  g++ -std=gnu++23 -O1 -I include -I include/storage -I Linux/include -I tests/dfu/hostport \
 	  exemples/storage/nvm_test.cpp src/storage/nvm.cpp \
 	  src/device.cpp src/device_intrf.cpp -o nvm_test
   ./nvm_test
@@ -64,29 +64,26 @@ SOFTWARE.
 // ---------------------------------------------------------------------------
 // Test bookkeeping
 // ---------------------------------------------------------------------------
-static int g_Fail = 0;
-static int g_Checks = 0;
+static int s_Fail = 0;
+static int s_Checks = 0;
 
 #define CHECK(cond, ...) do { \
-	g_Checks++; \
+	s_Checks++; \
 	if (!(cond)) { \
-		g_Fail++; \
+		s_Fail++; \
 		printf("FAIL %s:%d: ", __func__, __LINE__); \
 		printf(__VA_ARGS__); \
 		printf("\n"); \
 	} \
 } while (0)
 
-// The pin driver is per architecture; the driver only toggles a protect pin.
-extern "C" {
-void IOPinConfig(int, int, int, IOPINDIR, IOPINRES, IOPINTYPE) {}
-void IOPinSet(int, int) {}
-void IOPinClear(int, int) {}
-}
+static void MockDisable(DevIntrf_t *);
+static void MockEnable(DevIntrf_t *);
+static uint32_t MockGetRate(DevIntrf_t *);
+static uint32_t MockSetRate(DevIntrf_t *, uint32_t r);
+static void MockPowerOff(DevIntrf_t *);
+static void *MockGetHandle(DevIntrf_t *pDev);
 
-// ---------------------------------------------------------------------------
-// SPI NOR flash. Command byte, write enable latch, status poll, sector erase.
-// ---------------------------------------------------------------------------
 #define NOR_SIZE	(64u * 1024u)
 #define NOR_SECT	4096u
 #define NOR_PAGE	256u
@@ -122,6 +119,133 @@ static int s_NorVioNoWel;
 static int s_NorVioPageCross;
 static std::vector<uint8_t> s_NorTx;
 
+static void NorApply(void);
+
+#define FRAM_SIZE		(32 * 1024)
+#define FRAM_PAGE		256			// transfer chunk, FRAM has no real page
+#define FRAM_ADDR		2
+#define FRAM_ID			0x017F04
+
+static uint8_t s_Fram[FRAM_SIZE];
+static std::vector<uint8_t> s_FramTx;
+static bool s_FramWel;
+static uint8_t s_FramBp;
+static uint32_t s_FramWrsrCnt;
+static uint32_t s_FramRstCnt;
+static uint32_t s_FramVioNoWel;
+
+#define EEP_SIZE	(8u * 1024u)
+#define EEP_PAGE	32u
+#define EEP_ADDR	2
+#define EEP_DEVNO	0x50
+
+static uint8_t s_Eep[EEP_SIZE];
+static int s_EepVioPageCross;
+static uint32_t s_EepDevAddr;
+static bool s_EepRx;
+static std::vector<uint8_t> s_EepBuf;
+
+#define QSPI_SIZE		(256u * 1024u)
+#define QSPI_PAGE		256u
+#define QSPI_ADDR		3
+#define QSPI_ID			0x1628C2
+
+static SPIDev_t s_QDev;
+static uint8_t s_QMem[QSPI_SIZE];
+static bool s_QWel;
+static uint8_t s_QBp;
+static uint8_t s_QCmd;
+static uint32_t s_QAddr;
+static uint8_t s_QLastRdDummy;
+static uint8_t s_QLastWrCmd;
+static uint32_t s_QSetMemSize;
+static uint32_t s_QRstCnt;
+static uint32_t s_QEraseCnt;
+static uint32_t s_QWrsrCnt;
+static uint32_t s_QVioNoWel;
+static uint32_t s_QVioEraseNoWel;
+
+class MockIntrf : public DeviceIntrf {
+public:
+	DevIntrf_t vDev;
+
+	MockIntrf(DEVINTRF_TYPE Type,
+			  bool (*StartRx)(DevIntrf_t*, uint32_t),
+			  int (*RxData)(DevIntrf_t*, uint8_t*, int),
+			  void (*StopRx)(DevIntrf_t*),
+			  bool (*StartTx)(DevIntrf_t*, uint32_t),
+			  int (*TxData)(DevIntrf_t*, const uint8_t*, int),
+			  int (*TxSrData)(DevIntrf_t*, const uint8_t*, int),
+			  void (*StopTx)(DevIntrf_t*))
+	{
+		memset(&vDev, 0, sizeof(vDev));
+		vDev.pDevData = this;
+		vDev.Type = Type;
+		vDev.Disable = MockDisable;
+		vDev.Enable = MockEnable;
+		vDev.GetRate = MockGetRate;
+		vDev.SetRate = MockSetRate;
+		vDev.StartRx = StartRx;
+		vDev.RxData = RxData;
+		vDev.StopRx = StopRx;
+		vDev.StartTx = StartTx;
+		vDev.TxData = TxData;
+		vDev.TxSrData = TxSrData;
+		vDev.StopTx = StopTx;
+		vDev.PowerOff = MockPowerOff;
+		vDev.GetHandle = MockGetHandle;
+		vDev.MaxRetry = 5;
+		vDev.EnCnt = 1;
+		atomic_flag_clear(&vDev.bBusy);
+	}
+
+	operator DevIntrf_t * () override { return &vDev; }
+	uint32_t Rate(uint32_t r) override { return r; }
+	uint32_t Rate(void) override { return 1000000; }
+};
+
+static uint32_t s_EvtCnt;
+static NVM_EVT s_LastEvt;
+static uint64_t s_LastOff;
+static uint32_t s_LastLen;
+static int s_LastRes;
+
+static Nvm *s_pAppNvm;
+
+static uint8_t s_HeldWr[NOR_PAGE * 3];
+
+// A memory reached through its own controller. It answers to an address and
+// nothing else, so the driver must send no command byte and none of the
+// command traffic a chip on a bus needs.
+static uint8_t s_Mem[16384];
+static uint32_t s_MemEraseCnt;
+
+static std::vector<uint8_t> s_MemTx;
+static uint32_t s_MemAddr;
+static bool s_MemAddrSet;
+static int s_MemCmdBytes;
+
+static uint8_t s_MemCtrlBig[256];
+
+// A completion arrives while a read is open on the same interface. Nothing
+// was handed to the interface at that moment, so it belongs to nothing and
+// has to be discarded rather than ending whatever the driver is doing.
+//
+// Note the read cannot overlap an operation on purpose: Nvm::Read drains
+// anything outstanding before it starts. So what is delivered here is a
+// stray event, which is the case the transfer state has to survive.
+static Nvm *s_pLateNvm;
+static uint32_t s_LateAt;
+
+// The pin driver is per architecture; the driver only toggles a protect pin.
+extern "C" void IOPinConfig(int, int, int, IOPINDIR, IOPINRES, IOPINTYPE) {}
+extern "C" void IOPinSet(int, int) {}
+extern "C" void IOPinClear(int, int) {}
+
+// ---------------------------------------------------------------------------
+// SPI NOR flash. Command byte, write enable latch, status poll, sector erase.
+// ---------------------------------------------------------------------------
+
 static void NorPowerOn(void)
 {
 	memset(s_Nor, 0xFF, sizeof(s_Nor));
@@ -146,8 +270,6 @@ static uint32_t NorAddr(const uint8_t *p)
 	return a;
 }
 
-extern "C" {
-
 // A restart inside a read: the command and address are already sent, so the
 // frame must survive.
 static bool NorStartRx(DevIntrf_t *, uint32_t)
@@ -166,8 +288,6 @@ static bool NorStartTx(DevIntrf_t *, uint32_t)
 
 	return true;
 }
-
-static void NorApply(void);
 
 static int NorTxData(DevIntrf_t *pDev, const uint8_t *pData, int Len)
 {
@@ -272,19 +392,6 @@ static int NorRxData(DevIntrf_t *pDev, uint8_t *pBuff, int Len)
 // latches writes behind WREN, answers the status poll, and holds block
 // protect bits. This is the branch the command derivation exists for.
 // ---------------------------------------------------------------------------
-
-#define FRAM_SIZE		(32 * 1024)
-#define FRAM_PAGE		256			// transfer chunk, FRAM has no real page
-#define FRAM_ADDR		2
-#define FRAM_ID			0x017F04
-
-static uint8_t s_Fram[FRAM_SIZE];
-static std::vector<uint8_t> s_FramTx;
-static bool s_FramWel;
-static uint8_t s_FramBp;
-static uint32_t s_FramWrsrCnt;
-static uint32_t s_FramRstCnt;
-static uint32_t s_FramVioNoWel;
 
 static void FramPowerOn(void)
 {
@@ -457,21 +564,10 @@ static void NorApply(void)
 	s_NorTx.clear();
 }
 
-}	// extern "C"
 
 // ---------------------------------------------------------------------------
 // I2C EEPROM. No command byte, no latch, no erase, a fixed write time.
 // ---------------------------------------------------------------------------
-#define EEP_SIZE	(8u * 1024u)
-#define EEP_PAGE	32u
-#define EEP_ADDR	2
-#define EEP_DEVNO	0x50
-
-static uint8_t s_Eep[EEP_SIZE];
-static int s_EepVioPageCross;
-static uint32_t s_EepDevAddr;
-static bool s_EepRx;
-static std::vector<uint8_t> s_EepBuf;
 
 static void EepPowerOn(void)
 {
@@ -491,8 +587,6 @@ static uint32_t EepAddr(void)
 
 	return a;
 }
-
-extern "C" {
 
 static bool EepStartRx(DevIntrf_t *, uint32_t DevAddr)
 {
@@ -544,19 +638,16 @@ static void EepStopTx(DevIntrf_t *)
 	}
 }
 
-}	// extern "C"
 
 // ---------------------------------------------------------------------------
 // A mock bus taking its behaviour from a table of handlers.
 // ---------------------------------------------------------------------------
-extern "C" {
 static void MockDisable(DevIntrf_t *) {}
 static void MockEnable(DevIntrf_t *) {}
 static uint32_t MockGetRate(DevIntrf_t *) { return 1000000; }
 static uint32_t MockSetRate(DevIntrf_t *, uint32_t r) { return r; }
 static void MockPowerOff(DevIntrf_t *) {}
 static void *MockGetHandle(DevIntrf_t *pDev) { return pDev->pDevData; }
-}
 
 // ---------------------------------------------------------------------------
 // Simulated quad SPI NOR behind a phased interface. Commands, addresses and
@@ -565,26 +656,6 @@ static void *MockGetHandle(DevIntrf_t *pDev) { return pDev->pDevData; }
 // reached the interface, so the checks can prove the part's own quad
 // command and dummy cycles were passed through.
 // ---------------------------------------------------------------------------
-
-#define QSPI_SIZE		(256u * 1024u)
-#define QSPI_PAGE		256u
-#define QSPI_ADDR		3
-#define QSPI_ID			0x1628C2
-
-static SPIDev_t s_QDev;
-static uint8_t s_QMem[QSPI_SIZE];
-static bool s_QWel;
-static uint8_t s_QBp;
-static uint8_t s_QCmd;
-static uint32_t s_QAddr;
-static uint8_t s_QLastRdDummy;
-static uint8_t s_QLastWrCmd;
-static uint32_t s_QSetMemSize;
-static uint32_t s_QRstCnt;
-static uint32_t s_QEraseCnt;
-static uint32_t s_QWrsrCnt;
-static uint32_t s_QVioNoWel;
-static uint32_t s_QVioEraseNoWel;
 
 static void QspiPowerOn(void)
 {
@@ -712,45 +783,6 @@ static int QspiTxSrData(DevIntrf_t *d, const uint8_t *p, int n)
 	return QspiTxData(d, p, n);
 }
 static void QspiStopTx(DevIntrf_t *) {}
-
-class MockIntrf : public DeviceIntrf {
-public:
-	DevIntrf_t vDev;
-
-	MockIntrf(DEVINTRF_TYPE Type,
-			  bool (*StartRx)(DevIntrf_t*, uint32_t),
-			  int (*RxData)(DevIntrf_t*, uint8_t*, int),
-			  void (*StopRx)(DevIntrf_t*),
-			  bool (*StartTx)(DevIntrf_t*, uint32_t),
-			  int (*TxData)(DevIntrf_t*, const uint8_t*, int),
-			  int (*TxSrData)(DevIntrf_t*, const uint8_t*, int),
-			  void (*StopTx)(DevIntrf_t*))
-	{
-		memset(&vDev, 0, sizeof(vDev));
-		vDev.pDevData = this;
-		vDev.Type = Type;
-		vDev.Disable = MockDisable;
-		vDev.Enable = MockEnable;
-		vDev.GetRate = MockGetRate;
-		vDev.SetRate = MockSetRate;
-		vDev.StartRx = StartRx;
-		vDev.RxData = RxData;
-		vDev.StopRx = StopRx;
-		vDev.StartTx = StartTx;
-		vDev.TxData = TxData;
-		vDev.TxSrData = TxSrData;
-		vDev.StopTx = StopTx;
-		vDev.PowerOff = MockPowerOff;
-		vDev.GetHandle = MockGetHandle;
-		vDev.MaxRetry = 5;
-		vDev.EnCnt = 1;
-		atomic_flag_clear(&vDev.bBusy);
-	}
-
-	operator DevIntrf_t * () override { return &vDev; }
-	uint32_t Rate(uint32_t r) override { return r; }
-	uint32_t Rate(void) override { return 1000000; }
-};
 
 // ---------------------------------------------------------------------------
 // The configs. This is the whole difference between the two devices.
@@ -1023,12 +1055,6 @@ static void TestQspi(MockIntrf &Bus)
 // Complete() or by the next operation.
 // ---------------------------------------------------------------------------
 
-static uint32_t s_EvtCnt;
-static NVM_EVT s_LastEvt;
-static uint64_t s_LastOff;
-static uint32_t s_LastLen;
-static int s_LastRes;
-
 static void AsyncEvtHandler(Nvm * const, NVM_EVT Evt, uint64_t Off,
 							uint32_t Len, int Res)
 {
@@ -1038,8 +1064,6 @@ static void AsyncEvtHandler(Nvm * const, NVM_EVT Evt, uint64_t Off,
 	s_LastLen = Len;
 	s_LastRes = Res;
 }
-
-static Nvm *s_pAppNvm;
 
 // The application owned interface callback: forwards events to the driver,
 // the path the header documents for an application that keeps EvtCB.
@@ -1253,11 +1277,10 @@ static void TestHeldResult(MockIntrf &Bus)
 	// A write over three pages, with the part refusing the second chunk. The
 	// first chunk goes out from Write, so the failure happens on a later step,
 	// and that step is driven by IsBusy rather than by the call that asked.
-	static uint8_t wr[NOR_PAGE * 3];
-	memset(wr, 0x5A, sizeof(wr));
+	memset(s_HeldWr, 0x5A, sizeof(s_HeldWr));
 
 	s_NorPgmOk = 1;
-	CHECK(mem.Write(0, wr, sizeof(wr)) == (int)sizeof(wr), "held: write starts");
+	CHECK(mem.Write(0, s_HeldWr, sizeof(s_HeldWr)) == (int)sizeof(s_HeldWr), "held: write starts");
 
 	// Step until the medium is done. IsBusy is what sees the refusal.
 	int guard = 64;
@@ -1274,12 +1297,6 @@ static void TestHeldResult(MockIntrf &Bus)
 	s_NorPgmOk = 0xFFFFFFFFUL;
 }
 
-// A memory reached through its own controller. It answers to an address and
-// nothing else, so the driver must send no command byte and none of the
-// command traffic a chip on a bus needs.
-static uint8_t s_Mem[16384];
-static uint32_t s_MemEraseCnt;
-
 // The erase a target port supplies. Nvm calls this rather than framing a
 // command, because a memory reached through a controller has no bus to put
 // one on. Overrides the weak answer in nvm.cpp, the way a real port does.
@@ -1295,10 +1312,6 @@ extern "C" int NvmMcuErase(uintptr_t Addr)
 
 	return 0;
 }
-static std::vector<uint8_t> s_MemTx;
-static uint32_t s_MemAddr;
-static bool s_MemAddrSet;
-static int s_MemCmdBytes;
 
 static bool MemStartTx(DevIntrf_t *, uint32_t)
 {
@@ -1410,11 +1423,10 @@ static void TestMemCtrl(void)
 	CHECK(s_MemCmdBytes == 0, "memctrl: no status poll and no command on a read");
 
 	// A write bigger than one page, so the address is reframed per chunk.
-	static uint8_t big[256];
-	for (uint32_t i = 0; i < sizeof(big); i++) { big[i] = (uint8_t)(i ^ 0x5A); }
-	CHECK(mem.Write(0x400, big, sizeof(big)) == (int)sizeof(big),
+	for (uint32_t i = 0; i < sizeof(s_MemCtrlBig); i++) { s_MemCtrlBig[i] = (uint8_t)(i ^ 0x5A); }
+	CHECK(mem.Write(0x400, s_MemCtrlBig, sizeof(s_MemCtrlBig)) == (int)sizeof(s_MemCtrlBig),
 		  "memctrl: write across pages");
-	CHECK(memcmp(&s_Mem[0x400], big, sizeof(big)) == 0,
+	CHECK(memcmp(&s_Mem[0x400], s_MemCtrlBig, sizeof(s_MemCtrlBig)) == 0,
 		  "memctrl: every chunk landed at its own address");
 	CHECK(s_MemCmdBytes == 0, "memctrl: still no command traffic");
 
@@ -1459,16 +1471,6 @@ static void TestMemCtrl(void)
 	CHECK(farmem.Init(far, &bus) == false,
 		  "memctrl: a region past 32 bits is refused");
 }
-
-// A completion arrives while a read is open on the same interface. Nothing
-// was handed to the interface at that moment, so it belongs to nothing and
-// has to be discarded rather than ending whatever the driver is doing.
-//
-// Note the read cannot overlap an operation on purpose: Nvm::Read drains
-// anything outstanding before it starts. So what is delivered here is a
-// stray event, which is the case the transfer state has to survive.
-static Nvm *s_pLateNvm;
-static uint32_t s_LateAt;
 
 static int NorRxDataLate(DevIntrf_t *pDev, uint8_t *pBuff, int Len)
 {
@@ -1628,12 +1630,12 @@ int main(void)
 	TestLateCompletion(nor);
 	TestSpuriousComplete(nor);
 
-	printf("\nChecks run: %d\n", g_Checks);
-	if (g_Fail == 0)
+	printf("\nChecks run: %d\n", s_Checks);
+	if (s_Fail == 0)
 	{
 		printf("RESULT: ALL PASS\n");
 		return 0;
 	}
-	printf("RESULT: %d FAILURES\n", g_Fail);
+	printf("RESULT: %d FAILURES\n", s_Fail);
 	return 1;
 }

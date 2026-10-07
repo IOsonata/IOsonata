@@ -39,27 +39,22 @@ SOFTWARE.
 #include "crypto/crypto_softsha256.h"
 
 static int s_pass, s_fail;
-static void check(const char *name, bool ok)
-{
-	printf("  [%s] %s\n", ok ? "PASS" : "FAIL", name);
-	if (ok) s_pass++; else s_fail++;
-}
 
 // FIPS 180-4 two-block message vector.
-static const char kMsg56[] =
+static const char s_Msg56[] =
 	"abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq";
-static const uint8_t kDigest56[32] = {
+static const uint8_t s_Digest56[32] = {
 	0x24,0x8d,0x6a,0x61,0xd2,0x06,0x38,0xb8,0xe5,0xc0,0x26,0x93,0x0c,0x3e,0x60,0x39,
 	0xa3,0x3c,0xe4,0x59,0x64,0xff,0x21,0x67,0xf6,0xec,0xed,0xd4,0x19,0xdb,0x06,0xc1 };
 
 // RFC 4231 test case 3: 20 byte 0xaa key, 50 byte 0xdd message.
-static const uint8_t kHmac3Expected[32] = {
+static const uint8_t s_Hmac3Expected[32] = {
 	0x77,0x3e,0xa9,0x1e,0x36,0x80,0x0e,0x46,0x85,0x4d,0xb8,0xeb,0xd0,0x91,0x81,0xa7,
 	0x29,0x59,0x09,0x8b,0x3e,0xf8,0xc1,0x22,0xd9,0x63,0x55,0x14,0xce,0xd5,0x65,0xfe };
 
 // RFC 4231 test case 6: 131 byte 0xaa key (hashed first), message
 // "Test Using Larger Than Block-Size Key - Hash Key First".
-static const uint8_t kHmac6Expected[32] = {
+static const uint8_t s_Hmac6Expected[32] = {
 	0x60,0xe4,0x31,0x59,0x1e,0xe0,0xb6,0x7f,0x0d,0x8a,0x26,0xaa,0xcb,0xf5,0xb7,0x7f,
 	0x8e,0x0b,0xc6,0x21,0x37,0x28,0xc5,0x14,0x05,0x46,0x04,0x0f,0x0e,0xe3,0x7f,0x54 };
 
@@ -89,12 +84,20 @@ public:
 	}
 };
 
+alignas(CryptoSoftSha256) static uint8_t s_ShaMem[CRYPTO_SOFTSHA256_MEMSIZE];
+alignas(CountingSha) static uint8_t s_CountMem[sizeof(CountingSha)];
+
+static void check(const char *name, bool ok)
+{
+	printf("  [%s] %s\n", ok ? "PASS" : "FAIL", name);
+	if (ok) s_pass++; else s_fail++;
+}
+
 int main(void)
 {
 	printf("CryptoSoftSha256 OO engine validation\n");
 
-	alignas(CryptoSoftSha256) static uint8_t mem[CRYPTO_SOFTSHA256_MEMSIZE];
-	CryptoSoftSha256 *engine = CryptoSoftSha256Create(mem, sizeof(mem));
+	CryptoSoftSha256 *engine = CryptoSoftSha256Create(s_ShaMem, sizeof(s_ShaMem));
 	check("factory constructs aligned engine", engine != nullptr);
 	if (engine == nullptr) return 1;
 
@@ -102,9 +105,9 @@ int main(void)
 
 	uint8_t digest[32], digest2[32];
 	check("one-shot two-block FIPS 180-4 vector",
-		engine->Hash(CRYPTO_HASH_SHA256, (const uint8_t *)kMsg56,
-					 sizeof(kMsg56) - 1U, digest) == CRYPTO_STATUS_OK &&
-		memcmp(digest, kDigest56, sizeof(digest)) == 0);
+		engine->Hash(CRYPTO_HASH_SHA256, (const uint8_t *)s_Msg56,
+					 sizeof(s_Msg56) - 1U, digest) == CRYPTO_STATUS_OK &&
+		memcmp(digest, s_Digest56, sizeof(digest)) == 0);
 
 	check("streaming context fits the common bound",
 		engine->HashCtxSize() > 0U &&
@@ -112,17 +115,17 @@ int main(void)
 
 	// Streaming split at odd boundaries must equal the one-shot digest.
 	alignas(uint64_t) uint8_t ctx[CRYPTO_HASHCTX_MAX];
-	const uint8_t *msg = (const uint8_t *)kMsg56;
+	const uint8_t *msg = (const uint8_t *)s_Msg56;
 	bool stream =
 		engine->HashInit(CRYPTO_HASH_SHA256, ctx) == CRYPTO_STATUS_OK &&
 		engine->HashUpdate(ctx, msg, 1) == CRYPTO_STATUS_OK &&
 		engine->HashUpdate(ctx, msg + 1, 30) == CRYPTO_STATUS_OK &&
 		engine->HashUpdate(ctx, msg + 31, 0) == CRYPTO_STATUS_OK &&
-		engine->HashUpdate(ctx, msg + 31, sizeof(kMsg56) - 1U - 31U) ==
+		engine->HashUpdate(ctx, msg + 31, sizeof(s_Msg56) - 1U - 31U) ==
 			CRYPTO_STATUS_OK &&
 		engine->HashFinal(ctx, digest2) == CRYPTO_STATUS_OK;
 	check("streaming digest equals one-shot",
-		stream && memcmp(digest2, kDigest56, sizeof(digest2)) == 0);
+		stream && memcmp(digest2, s_Digest56, sizeof(digest2)) == 0);
 
 	// RFC 4231 case 3.
 	uint8_t key3[20]; memset(key3, 0xAA, sizeof(key3));
@@ -133,7 +136,7 @@ int main(void)
 	check("HMAC RFC 4231 case 3",
 		engine->Mac(CRYPTO_MAC_HMAC, hk, msg3, sizeof(msg3), digest, 32U) ==
 			CRYPTO_STATUS_OK &&
-		memcmp(digest, kHmac3Expected, 32U) == 0);
+		memcmp(digest, s_Hmac3Expected, 32U) == 0);
 
 	// RFC 4231 case 6: the key is longer than the block and is hashed first.
 	static const char msg6[] =
@@ -144,13 +147,13 @@ int main(void)
 	check("HMAC RFC 4231 case 6 (key hashed first)",
 		engine->Mac(CRYPTO_MAC_HMAC, hk, (const uint8_t *)msg6,
 					sizeof(msg6) - 1U, digest, 32U) == CRYPTO_STATUS_OK &&
-		memcmp(digest, kHmac6Expected, 32U) == 0);
+		memcmp(digest, s_Hmac6Expected, 32U) == 0);
 
 	// Truncated tag: first MacLen bytes of the full HMAC.
 	check("HMAC truncated tag",
 		engine->Mac(CRYPTO_MAC_HMAC, hk, (const uint8_t *)msg6,
 					sizeof(msg6) - 1U, digest2, 16U) == CRYPTO_STATUS_OK &&
-		memcmp(digest2, kHmac6Expected, 16U) == 0);
+		memcmp(digest2, s_Hmac6Expected, 16U) == 0);
 
 	// Key policy: usage and type are enforced.
 	CryptoKey noSign = hk;
@@ -169,13 +172,12 @@ int main(void)
 
 	// Dispatch proof: HMAC routes through the virtual streaming trio, three
 	// Init/Final rounds for a long key (key hash, inner, outer).
-	alignas(CountingSha) static uint8_t countMem[sizeof(CountingSha)];
-	CountingSha *counting = new (countMem) CountingSha();
+	CountingSha *counting = new (s_CountMem) CountingSha();
 	counting->Enable();
 	check("HMAC routes through overridden streaming hash",
 		counting->Mac(CRYPTO_MAC_HMAC, hk, (const uint8_t *)msg6,
 					  sizeof(msg6) - 1U, digest, 32U) == CRYPTO_STATUS_OK &&
-		memcmp(digest, kHmac6Expected, 32U) == 0 &&
+		memcmp(digest, s_Hmac6Expected, 32U) == 0 &&
 		counting->InitCalls == 3 && counting->FinalCalls == 3 &&
 		counting->UpdateCalls >= 5);
 
@@ -187,14 +189,14 @@ int main(void)
 	alignas(uint64_t) uint8_t coldCtx[CRYPTO_HASHCTX_MAX];
 	memset(coldCtx, 0x5A, sizeof(coldCtx));
 	check("update before init refused",
-		engine->HashUpdate(coldCtx, (const uint8_t *)kMsg56, 8) ==
+		engine->HashUpdate(coldCtx, (const uint8_t *)s_Msg56, 8) ==
 			CRYPTO_STATUS_UNSUPPORTED);
 	bool dbl =
 		engine->HashInit(CRYPTO_HASH_SHA256, coldCtx) == CRYPTO_STATUS_OK &&
-		engine->HashUpdate(coldCtx, (const uint8_t *)kMsg56,
-						   sizeof(kMsg56) - 1U) == CRYPTO_STATUS_OK &&
+		engine->HashUpdate(coldCtx, (const uint8_t *)s_Msg56,
+						   sizeof(s_Msg56) - 1U) == CRYPTO_STATUS_OK &&
 		engine->HashFinal(coldCtx, digest) == CRYPTO_STATUS_OK &&
-		memcmp(digest, kDigest56, sizeof(digest)) == 0 &&
+		memcmp(digest, s_Digest56, sizeof(digest)) == 0 &&
 		engine->HashFinal(coldCtx, digest2) == CRYPTO_STATUS_UNSUPPORTED;
 	check("second final on a finalized context refused", dbl);
 	check("context alignment surfaced by the facet",

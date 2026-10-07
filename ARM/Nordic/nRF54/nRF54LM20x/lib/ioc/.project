@@ -336,6 +336,16 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/app_evt_handler.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/app_run.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/app_run.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/app_wait.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/app_wait.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/base64.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/base64.c</locationURI>
@@ -521,11 +531,6 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>src/nrf_mpsl.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/nrf_mpsl.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/nrfx</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -696,11 +701,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_att.h</locationURI>
 		</link>
 		<link>
-			<name>include/bluetooth/bt_ctlr.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_ctlr.h</locationURI>
-		</link>
-		<link>
 			<name>include/bluetooth/bt_dev.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_dev.h</locationURI>
@@ -724,11 +724,6 @@
 			<name>include/bluetooth/bt_hcievt.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_hcievt.h</locationURI>
-		</link>
-		<link>
-			<name>include/bluetooth/bt_host.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_host.h</locationURI>
 		</link>
 		<link>
 			<name>include/bluetooth/bt_intrf.h</name>
@@ -1464,16 +1459,6 @@
 			<name>src/bluetooth/bt_crypto_ctlr_sdc.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/src/bt_crypto_ctlr_sdc.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/bluetooth/bt_ctlr_sdc.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/bt_ctlr_sdc.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/bluetooth/bt_dev_sdc.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/bt_dev_sdc.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/bluetooth/bt_gap.cpp</name>
@@ -3126,46 +3111,6 @@
 			<locationURI>PARENT-7-PROJECT_LOC/external/sdk-nrf-bm/lib/bluetooth/peer_manager/include/modules/security_manager.h</locationURI>
 		</link>
 		<link>
-			<name>include/usb/usb_dev.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usb_dev.h</locationURI>
-		</link>
-		<link>
-			<name>include/usb/usbd.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usbd.h</locationURI>
-		</link>
-		<link>
-			<name>include/usb/usbd_bulk_intrf.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usbd_bulk_intrf.h</locationURI>
-		</link>
-		<link>
-			<name>include/usb/usbd_cdc_desc.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usbd_cdc_desc.h</locationURI>
-		</link>
-		<link>
-			<name>include/usb/usbd_cdc_func.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usbd_cdc_func.h</locationURI>
-		</link>
-		<link>
-			<name>include/usb/usbd_cdc_intrf.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usbd_cdc_intrf.h</locationURI>
-		</link>
-		<link>
-			<name>include/usb/usbd_core.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usbd_core.h</locationURI>
-		</link>
-		<link>
-			<name>include/usb/usbd_ctrlr.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usbd_ctrlr.h</locationURI>
-		</link>
-		<link>
 			<name>src/usb</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -3173,17 +3118,7 @@
 		<link>
 			<name>src/usb/usb_ctrlr_nrf54.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/usb_ctrlr_nrf54.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/usb/usbd_core.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usbd_core.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/usb/usbd_bulk_intrf.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usbd_bulk_intrf.cpp</locationURI>
+			<locationURI>PARENT-3-PROJECT_LOC/src/usb_ctrlr_nrf54.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/usb/usbd_cdc_desc.cpp</name>
@@ -3191,19 +3126,124 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usbd_cdc_desc.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/usb/usbd_cdc_func.cpp</name>
+			<name>include/usb/usb.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usbd_cdc_func.cpp</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usb.h</locationURI>
 		</link>
 		<link>
-			<name>src/usb/usb_dev_native.cpp</name>
+			<name>include/usb/usb_int.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usb_dev_native.cpp</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usb_int.h</locationURI>
 		</link>
 		<link>
-			<name>src/usb/usbd_cdc_intrf_native.cpp</name>
+			<name>include/usb/usb_intrf.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usbd_cdc_intrf_native.cpp</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usb_intrf.h</locationURI>
+		</link>
+		<link>
+			<name>include/usb/usb_iso.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usb_iso.h</locationURI>
+		</link>
+		<link>
+			<name>include/usb/usbd_bulk.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usbd_bulk.h</locationURI>
+		</link>
+		<link>
+			<name>include/usb/usbd_cdc.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usbd_cdc.h</locationURI>
+		</link>
+		<link>
+			<name>include/usb/usbd_epalloc.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usbd_epalloc.h</locationURI>
+		</link>
+		<link>
+			<name>include/usb/usbd_hid.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usbd_hid.h</locationURI>
+		</link>
+		<link>
+			<name>include/usb/usbd_msc.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usbd_msc.h</locationURI>
+		</link>
+		<link>
+			<name>src/usb/usb.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usb.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/usb/usb_int.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usb_int.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/usb/usb_intrf.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usb_intrf.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/usb/usb_iso.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usb_iso.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/usb/usbd_bulk.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usbd_bulk.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/usb/usbd_cdc.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usbd_cdc.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/usb/usbd_epalloc.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usbd_epalloc.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/usb/usbd_hid.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usbd_hid.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/usb/usbd_msc.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usbd_msc.cpp</locationURI>
+		</link>
+		<link>
+			<name>include/usb_ctrlr.h</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/include/usb_ctrlr.h</locationURI>
+		</link>
+		<link>
+			<name>include/bluetooth/bt_adv_mandata.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_adv_mandata.h</locationURI>
+		</link>
+		<link>
+			<name>include/bluetooth/bt_hci_ctlr.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_hci_ctlr.h</locationURI>
+		</link>
+		<link>
+			<name>include/bluetooth/bt_hci_usb.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_hci_usb.h</locationURI>
+		</link>
+		<link>
+			<name>include/bluetooth/bt_sdp.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_sdp.h</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/bt_hci_usb.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_hci_usb.cpp</locationURI>
 		</link>
 	</linkedResources>
 </projectDescription>

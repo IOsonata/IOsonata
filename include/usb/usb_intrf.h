@@ -232,7 +232,7 @@ public:
 			pAdCmd, AdCmdLen, pData, DataLen);
 	}
 
-	// Preserve the generic busy/hook contract while avoiding the base
+	// Keep the generic busy flag and hook handling while avoiding the base
 	// class virtual handle conversion for this owned DevIntrf instance.
 	bool StartRx(uint32_t DevAddr) override {
 		return DeviceIntrfStartRx(&vUsbDevIntrf.DevIntrf, DevAddr);

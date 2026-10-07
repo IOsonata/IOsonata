@@ -78,54 +78,32 @@ SOFTWARE.
 // ---------------------------------------------------------------------------
 // Test bookkeeping
 // ---------------------------------------------------------------------------
-static int g_Fail = 0;
-static int g_Checks = 0;
+static int s_Fail = 0;
+static int s_Checks = 0;
 
 #define CHECK(cond, ...) do { \
-	g_Checks++; \
+	s_Checks++; \
 	if (!(cond)) { \
-		g_Fail++; \
+		s_Fail++; \
 		printf("FAIL %s:%d: ", __func__, __LINE__); \
 		printf(__VA_ARGS__); \
 		printf("\n"); \
 	} \
 } while (0)
 
-// Where the run has got to. Printed as it goes and flushed, so a long suite
-// and a stalled one do not look the same from outside.
-static void Step(const char *pWhat, uint32_t Done, uint32_t Total)
-{
-	printf("\r    %-18s %6u / %-6u", pWhat, (unsigned)Done, (unsigned)Total);
-	fflush(stdout);
+static void MockDisable(DevIntrf_t *);
+static void MockEnable(DevIntrf_t *);
+static uint32_t MockGetRate(DevIntrf_t *);
+static uint32_t MockSetRate(DevIntrf_t *, uint32_t r);
+static bool MemStartRx(DevIntrf_t *, uint32_t);
+static int MemRxData(DevIntrf_t *, uint8_t *pBuff, int Len);
+static void MemStopRx(DevIntrf_t *);
+static bool MemStartTx(DevIntrf_t *, uint32_t);
+static int MemTxData(DevIntrf_t *, const uint8_t *pData, int Len);
+static void MemStopTx(DevIntrf_t *);
+static void MockPowerOff(DevIntrf_t *);
+static void *MockGetHandle(DevIntrf_t *);
 
-	if (Done >= Total)
-	{
-		printf("\n");
-	}
-}
-
-// The pin driver is per architecture; the driver only toggles a protect pin.
-extern "C" {
-void IOPinConfig(int, int, int, IOPINDIR, IOPINRES, IOPINTYPE) {}
-void IOPinSet(int, int) {}
-void IOPinClear(int, int) {}
-}
-
-// The two functions a target defines in its QSPI implementation. This memory
-// is not on a bus at all, so neither is ever reached; they are here because
-// the driver serves every transport from one object.
-void QuadSPISetMemSize(SPIDev_t * const, uint32_t) {}
-
-bool QuadSPISendCmd(SPIDev_t * const, uint8_t, uint32_t, uint8_t, uint32_t,
-					uint8_t)
-{
-	return false;
-}
-
-// ---------------------------------------------------------------------------
-// The medium. NOR semantics: an erase sets every bit, a program can only
-// clear bits, and a unit is programmed whole or not at all in normal running.
-// ---------------------------------------------------------------------------
 #define PDS_SECTOR_SIZE		4096U
 #define PDS_MAX_SECTORS		4U
 #define PDS_MAX_REGION		(PDS_MAX_SECTORS * PDS_SECTOR_SIZE)
@@ -151,6 +129,103 @@ static bool s_Dead;
 // Programs the controller would have refused. Any of these is a store fault,
 // not a driver one, because the driver passes the store's offsets through.
 static uint32_t s_AlignFault;
+
+static std::vector<uint8_t> s_Tx;
+static uint32_t s_Addr;
+static bool s_AddrSet;
+static uint32_t s_CmdBytes;
+
+class MemCtrlIntrf : public DeviceIntrf {
+public:
+	DevIntrf_t vDev;
+
+	MemCtrlIntrf()
+	{
+		memset(&vDev, 0, sizeof(vDev));
+		vDev.pDevData = this;
+		vDev.Type = DEVINTRF_TYPE_MEMCTRL;
+		vDev.Disable = MockDisable;
+		vDev.Enable = MockEnable;
+		vDev.GetRate = MockGetRate;
+		vDev.SetRate = MockSetRate;
+		vDev.StartRx = MemStartRx;
+		vDev.RxData = MemRxData;
+		vDev.StopRx = MemStopRx;
+		vDev.StartTx = MemStartTx;
+		vDev.TxData = MemTxData;
+		vDev.TxSrData = MemTxData;
+		vDev.StopTx = MemStopTx;
+		vDev.PowerOff = MockPowerOff;
+		vDev.GetHandle = MockGetHandle;
+		vDev.MaxRetry = 5;
+		vDev.EnCnt = 1;
+		atomic_flag_clear(&vDev.bBusy);
+	}
+
+	operator DevIntrf_t * () override { return &vDev; }
+	uint32_t Rate(uint32_t r) override { return r; }
+	uint32_t Rate(void) override { return 1000000; }
+};
+
+static MemCtrlIntrf s_Bus;
+static Nvm s_Nvm;
+
+typedef std::map<uint32_t, std::vector<uint8_t> > Model_t;
+
+#define PDS_REC_MAGIC		0x53445042UL	// "BPDS"
+#define PDS_SECTOR_MAGIC	0x32534450UL	// "PDS2"
+#define PDS_SECTOR_HDR		24U
+#define PDS_REC_HDR			16U
+
+// How much of a torn programming operation is left behind. A programming
+// operation here is a whole page chunk, so the interesting sizes run past one
+// write unit: half a unit tears a unit in the middle, and a whole chunk is
+// the operation that finished and lost power before its result was read.
+#define BT_PDS_TEAR_POINTS	5U
+#define BT_PDS_TEARS(g)		{ 0U, (g) / 2U, (g), (g) * 2U, PDS_PAGE_SIZE }
+
+// The write that was in flight when the power went. Its record may be whole
+// on the medium or not, and the store never said which, so the id it names is
+// allowed to read back as either value afterwards.
+typedef struct __Pending {
+	bool					Valid;
+	uint32_t				Id;
+	std::vector<uint8_t>	Val;
+} Pending_t;
+
+// Where the run has got to. Printed as it goes and flushed, so a long suite
+// and a stalled one do not look the same from outside.
+static void Step(const char *pWhat, uint32_t Done, uint32_t Total)
+{
+	printf("\r    %-18s %6u / %-6u", pWhat, (unsigned)Done, (unsigned)Total);
+	fflush(stdout);
+
+	if (Done >= Total)
+	{
+		printf("\n");
+	}
+}
+
+// The pin driver is per architecture; the driver only toggles a protect pin.
+extern "C" void IOPinConfig(int, int, int, IOPINDIR, IOPINRES, IOPINTYPE) {}
+extern "C" void IOPinSet(int, int) {}
+extern "C" void IOPinClear(int, int) {}
+
+// The two functions a target defines in its QSPI implementation. This memory
+// is not on a bus at all, so neither is ever reached; they are here because
+// the driver serves every transport from one object.
+void QuadSPISetMemSize(SPIDev_t * const, uint32_t) {}
+
+bool QuadSPISendCmd(SPIDev_t * const, uint8_t, uint32_t, uint8_t, uint32_t,
+					uint8_t)
+{
+	return false;
+}
+
+// ---------------------------------------------------------------------------
+// The medium. NOR semantics: an erase sets every bit, a program can only
+// clear bits, and a unit is programmed whole or not at all in normal running.
+// ---------------------------------------------------------------------------
 
 static void MediumWipe(uint32_t RegionSize, uint32_t Gran)
 {
@@ -220,10 +295,6 @@ extern "C" int NvmMcuErase(uintptr_t Addr)
 // The controller as a device interface. The frame is the address and nothing
 // in front of it, the way the memctrl case in nvm_test.cpp takes it.
 // ---------------------------------------------------------------------------
-static std::vector<uint8_t> s_Tx;
-static uint32_t s_Addr;
-static bool s_AddrSet;
-static uint32_t s_CmdBytes;
 
 static bool MemStartTx(DevIntrf_t *, uint32_t)
 {
@@ -327,41 +398,6 @@ static uint32_t MockGetRate(DevIntrf_t *) { return 0; }
 static uint32_t MockSetRate(DevIntrf_t *, uint32_t r) { return r; }
 static void *MockGetHandle(DevIntrf_t *) { return nullptr; }
 
-class MemCtrlIntrf : public DeviceIntrf {
-public:
-	DevIntrf_t vDev;
-
-	MemCtrlIntrf()
-	{
-		memset(&vDev, 0, sizeof(vDev));
-		vDev.pDevData = this;
-		vDev.Type = DEVINTRF_TYPE_MEMCTRL;
-		vDev.Disable = MockDisable;
-		vDev.Enable = MockEnable;
-		vDev.GetRate = MockGetRate;
-		vDev.SetRate = MockSetRate;
-		vDev.StartRx = MemStartRx;
-		vDev.RxData = MemRxData;
-		vDev.StopRx = MemStopRx;
-		vDev.StartTx = MemStartTx;
-		vDev.TxData = MemTxData;
-		vDev.TxSrData = MemTxData;
-		vDev.StopTx = MemStopTx;
-		vDev.PowerOff = MockPowerOff;
-		vDev.GetHandle = MockGetHandle;
-		vDev.MaxRetry = 5;
-		vDev.EnCnt = 1;
-		atomic_flag_clear(&vDev.bBusy);
-	}
-
-	operator DevIntrf_t * () override { return &vDev; }
-	uint32_t Rate(uint32_t r) override { return r; }
-	uint32_t Rate(void) override { return 1000000; }
-};
-
-static MemCtrlIntrf s_Bus;
-static Nvm s_Nvm;
-
 static NvmCfg_t MemCfg(uint32_t Gran)
 {
 	NvmCfg_t cfg;
@@ -382,11 +418,11 @@ static NvmCfg_t MemCfg(uint32_t Gran)
 // next, and there is nothing left to test.
 static bool Mounted(int Res, const char *pWhat)
 {
-	g_Checks++;
+	s_Checks++;
 
 	if (Res != 0)
 	{
-		g_Fail++;
+		s_Fail++;
 		printf("FAIL %s: mount returned %d\n", pWhat, Res);
 
 		return false;
@@ -413,7 +449,6 @@ static int Boot(uint32_t Gran)
 // ---------------------------------------------------------------------------
 // The reference model
 // ---------------------------------------------------------------------------
-typedef std::map<uint32_t, std::vector<uint8_t> > Model_t;
 
 static std::vector<uint8_t> MakeVal(uint32_t Seed, uint32_t Len)
 {
@@ -454,10 +489,6 @@ static bool ModelMatches(const Model_t &Model, const char *pWhat)
 // What the medium should look like. The store keeps these to itself, so a
 // layout test has to restate them; that is the point of the test.
 // ---------------------------------------------------------------------------
-#define PDS_REC_MAGIC		0x53445042UL	// "BPDS"
-#define PDS_SECTOR_MAGIC	0x32534450UL	// "PDS2"
-#define PDS_SECTOR_HDR		24U
-#define PDS_REC_HDR			16U
 
 static uint32_t MemWord(uint32_t Off)
 {
@@ -755,13 +786,6 @@ static void TestFill(uint32_t Gran)
 		  (unsigned)s_AlignFault);
 }
 
-// How much of a torn programming operation is left behind. A programming
-// operation here is a whole page chunk, so the interesting sizes run past one
-// write unit: half a unit tears a unit in the middle, and a whole chunk is
-// the operation that finished and lost power before its result was read.
-#define BT_PDS_TEAR_POINTS	5U
-#define BT_PDS_TEARS(g)		{ 0U, (g) / 2U, (g), (g) * 2U, PDS_PAGE_SIZE }
-
 // ---------------------------------------------------------------------------
 // Power loss sweeps
 //
@@ -770,14 +794,6 @@ static void TestFill(uint32_t Gran)
 // so what the store must still hold after the next mount is exactly what it
 // told the caller it had taken.
 // ---------------------------------------------------------------------------
-// The write that was in flight when the power went. Its record may be whole
-// on the medium or not, and the store never said which, so the id it names is
-// allowed to read back as either value afterwards.
-typedef struct __Pending {
-	bool					Valid;
-	uint32_t				Id;
-	std::vector<uint8_t>	Val;
-} Pending_t;
 
 static uint32_t RunSequence(uint32_t Count, Model_t &Model, Pending_t &Pend)
 {
@@ -1117,8 +1133,8 @@ int main(void)
 	RunAll(16U);
 	TestSequenceWidth();
 
-	printf("\nChecks run: %d\n", g_Checks);
-	printf("RESULT: %s\n", g_Fail == 0 ? "ALL PASS" : "FAIL");
+	printf("\nChecks run: %d\n", s_Checks);
+	printf("RESULT: %s\n", s_Fail == 0 ? "ALL PASS" : "FAIL");
 
-	return g_Fail == 0 ? 0 : 1;
+	return s_Fail == 0 ? 0 : 1;
 }

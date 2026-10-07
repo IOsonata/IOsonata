@@ -56,7 +56,7 @@ static const int s_NbBut = sizeof(s_But) / sizeof(IOPinCfg_t);
 void TimerHandler(TimerDev_t * const pTimer, uint32_t Evt);
 
 const static TimerCfg_t s_TimerCfg = {
-    .DevNo = 2,
+	.DevNo = 2,
 	.ClkSrc = TIMER_CLKSRC_DEFAULT,
 	.Freq = 0,			// 0 => Default frequency
 	.IntPrio = 7,
@@ -73,25 +73,25 @@ static const IOPinCfg_t s_SpiPins[] = SPI_PINS;
 static const SPICfg_t s_SpiCfg = {
 	.DevNo = SPI_DEVNO,
 	.Phy = SPI_PHY,
-    .Mode = SPIMODE_MASTER,
+	.Mode = SPIMODE_MASTER,
 	.pIOPinMap = s_SpiPins,
 	.NbIOPins = sizeof(s_SpiPins) / sizeof(IOPinCfg_t),
-    .Rate = SPI_RATE,   // Speed in Hz
-    .DataSize = 8,      // Data Size
-    .MaxRetry = 5,      // Max retries
-    .BitOrder = SPIDATABIT_MSB,
-    .DataPhase = SPIDATAPHASE_FIRST_CLK, // Data phase
-    .ClkPol = SPICLKPOL_HIGH,         // clock polarity
-    .ChipSel = SPICSEL_AUTO,
+	.Rate = SPI_RATE,   // Speed in Hz
+	.DataSize = 8,      // Data Size
+	.MaxRetry = 5,      // Max retries
+	.BitOrder = SPIDATABIT_MSB,
+	.DataPhase = SPIDATAPHASE_FIRST_CLK, // Data phase
+	.ClkPol = SPICLKPOL_HIGH,         // clock polarity
+	.ChipSel = SPICSEL_AUTO,
 	.bDmaEn = true,	// DMA
 	.bIntEn = false,
-    .IntPrio = 6, //APP_IRQ_PRIORITY_LOW,      // Interrupt priority
-    .EvtCB = NULL
+	.IntPrio = 6, //APP_IRQ_PRIORITY_LOW,      // Interrupt priority
+	.EvtCB = NULL
 };
 
 SPI g_Spi;
 
-DisplayCfg_t s_LcdCfg = {
+static DisplayCfg_t s_LcdCfg = {
 	.DevAddr = 0,
 	.pPins = s_TFTCtrlPins,
 	.NbPins = sizeof(s_TFTCtrlPins) / sizeof(IOPinCfg_t),
@@ -107,27 +107,27 @@ LcdHX8357 g_Lcd;
 //LcdILI9341 g_Lcd;
 
 static lv_disp_drv_t s_LvglDriver;
-static lv_disp_draw_buf_t draw_buf;
-static lv_color_t buf[LVBUFF_SIZE];
+static lv_disp_draw_buf_t s_DrawBuf;
+static lv_color_t s_Buf[LVBUFF_SIZE];
 uint8_t g_LvglMem[LV_MEM_SIZE];
 lv_disp_t *g_pDispl = NULL;
 bool g_bLandscape = false;
 
 void TimerHandler(TimerDev_t *pTimer, uint32_t Evt)
 {
-    if (Evt & TIMER_EVT_TRIGGER(0))
-    {
-    	lv_tick_inc(LV_DISP_DEF_REFR_PERIOD);
-    }
+	if (Evt & TIMER_EVT_TRIGGER(0))
+	{
+		lv_tick_inc(LV_DISP_DEF_REFR_PERIOD);
+	}
 }
 
 void my_disp_flush( lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color_p )
 {
-    uint32_t w = ( area->x2 - area->x1 + 1 );
-    uint32_t h = ( area->y2 - area->y1 + 1 );
+	uint32_t w = ( area->x2 - area->x1 + 1 );
+	uint32_t h = ( area->y2 - area->y1 + 1 );
 
-    g_Lcd.BitBlt(area->x1, area->y1, w, h, ( uint8_t * )color_p );
-    lv_disp_flush_ready( disp );
+	g_Lcd.BitBlt(area->x1, area->y1, w, h, ( uint8_t * )color_p );
+	lv_disp_flush_ready( disp );
 }
 
 void HardwareInit()
@@ -142,17 +142,17 @@ void HardwareInit()
 	g_Lcd.Clear();
 
 	lv_init();
-	lv_disp_draw_buf_init( &draw_buf, buf, NULL, LVBUFF_SIZE );
+	lv_disp_draw_buf_init( &s_DrawBuf, s_Buf, NULL, LVBUFF_SIZE );
 
 	lv_disp_drv_init( &s_LvglDriver );
 
 	s_LvglDriver.hor_res = g_Lcd.Width();
 	s_LvglDriver.ver_res = g_Lcd.Height();
 	s_LvglDriver.flush_cb = my_disp_flush;
-	s_LvglDriver.draw_buf = &draw_buf;
+	s_LvglDriver.draw_buf = &s_DrawBuf;
 	g_pDispl = lv_disp_drv_register( &s_LvglDriver );
 
-    g_Timer.Init(s_TimerCfg);
+	g_Timer.Init(s_TimerCfg);
 
 }
 

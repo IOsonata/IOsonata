@@ -113,6 +113,32 @@ class ComboShutdownTest(unittest.TestCase):
         self.assertEqual(self.stats.snapshot()[-1], 'CDC loop TX: Write timeout')
         self.assertEqual(self.stats.snapshot()[0]['loop_tx'], 0)
 
+    def test_iso_stops_before_the_other_interfaces(self):
+        # The INT worker selects alternate setting 0 when it sees stop. The
+        # ISO burst in flight must be complete before that happens.
+        iso_stop = threading.Event()
+        order = []
+
+        def iso():
+            iso_stop.wait(1.0)
+            time.sleep(0.05)  # last burst still in flight
+            order.append(('ISO done', self.stop.is_set()))
+
+        def other():
+            self.stop.wait(1.0)
+            order.append(('INT stop', iso_stop.is_set()))
+
+        writer = Mock()
+        writer.is_alive.return_value = False
+        iso_thread = threading.Thread(target=iso, name='ISO')
+        int_thread = threading.Thread(target=other, name='INT')
+        iso_thread.start()
+        int_thread.start()
+        bench.stop_workers([writer, int_thread, iso_thread], self.tx_stop,
+                           self.stop, self.stats, iso_stop)
+        self.assertEqual(order, [('ISO done', False), ('INT stop', True)])
+        self.assertIsNone(self.stats.snapshot()[-1])
+
     def test_writer_that_never_exits_is_a_failure(self):
         writer = Mock()
         writer.is_alive.return_value = True

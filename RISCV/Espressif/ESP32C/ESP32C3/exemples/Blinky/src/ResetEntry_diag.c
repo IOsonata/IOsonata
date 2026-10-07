@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
-@file	ResetEntry.c
+@file	ResetEntry_diag.c
 
-@brief	*** TEMPORARY DIAGNOSTIC VERSION — NOT FOR PRODUCTION ***
+@brief	*** TEMPORARY DIAGNOSTIC VERSION - NOT FOR PRODUCTION ***
 
 	Stripped-down ResetEntry whose only job is to prove Direct Boot
 	on the ESP32-C3 with all four watchdogs correctly disabled.
@@ -17,11 +17,11 @@
 	     production system_esp32_system.c: ***
 
 	   RTC CNTL register offsets (+ from base 0x60008000):
-	     WDTCONFIG0:    0x90  (was 0x94 — wrong by 4 bytes)
-	     WDTFEED:       0xA4  (was 0x9C — off by 8)
-	     WDTWPROTECT:   0xA8  (was 0xA4 — off by 4)
-	     SWD_CONF:      0xAC  (was 0xB0 — off by 4)
-	     SWD_WPROTECT:  0xB0  (was 0xBC — off by 12)
+	     WDTCONFIG0:    0x90  (was 0x94 - wrong by 4 bytes)
+	     WDTFEED:       0xA4  (was 0x9C - off by 8)
+	     WDTWPROTECT:   0xA8  (was 0xA4 - off by 4)
+	     SWD_CONF:      0xAC  (was 0xB0 - off by 4)
+	     SWD_WPROTECT:  0xB0  (was 0xBC - off by 12)
 
 	   Super WDT has its OWN write-protect key, different from RTC WDT:
 	     SWD_WKEY:  0x8F1D312A  (was 0x50D83AA1)
@@ -29,10 +29,38 @@
 
 	   Super WDT disable is bit 30, not bit 31:
 	     bit 31 = SWD_AUTO_FEED_EN (the OPPOSITE of disable)
-	     bit 30 = SWD_DISABLE  ← what we want
+	     bit 30 = SWD_DISABLE  <- what we want
 
 	TIMG0 / TIMG1 offsets and the TIMG WDT key (0x50D83AA1) are
 	correct as they were and unchanged here.
+
+
+@author	Hoang Nguyen Hoan
+@date	May 7, 2026
+
+@license
+
+MIT License
+
+Copyright (c) 2026, I-SYST inc., all rights reserved
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 
 ----------------------------------------------------------------------------*/
 

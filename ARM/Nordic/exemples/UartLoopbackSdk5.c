@@ -1,5 +1,5 @@
 /**-------------------------------------------------------------------------
-@example	UartSdkPrbsTx.c
+@example	UartLoopbackSdk5.c
 
 
 @brief	UART PRBS transmit test
