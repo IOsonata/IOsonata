@@ -113,6 +113,8 @@ typedef struct {
 	bool BusHeld;
 	bool LastError;
 	bool CommandPhase;
+	bool CombinedRead;
+	int SrLen;
 	bool TenBitReadReady;
 
 	int SlaveRxCount;
@@ -446,6 +448,8 @@ static bool Sam4lI2CStartTx(DevIntrf_t * const pDev, uint32_t DevAddr)
 	dev->DevAddr = (uint16_t)DevAddr;
 	dev->LastError = false;
 	dev->CommandPhase = false;
+	dev->CombinedRead = false;
+	dev->SrLen = 0;
 	dev->TenBitReadReady = false;
 	dev->BusHeld = false;
 	dev->NeedStart = true;
@@ -531,8 +535,26 @@ static int Sam4lI2CTxSrData(DevIntrf_t * const pDev,
 	const uint8_t *pData, int DataLen)
 {
 	SAM4L_I2CDEV *dev = (SAM4L_I2CDEV *)pDev->pDevData;
+
+	if (pData == nullptr || DataLen <= 0 ||
+		DataLen > SAM4L_I2C_MAX_NBYTES ||
+		DataLen > SAM4L_I2C_INT_TX_BUFFER_SIZE)
+	{
+		dev->CommandPhase = false;
+		dev->CombinedRead = false;
+		dev->SrLen = 0;
+		return 0;
+	}
+
+	// SAM4L combined write/read transfers must have the read command queued in
+	// NCMDR before the write command finishes. Stage the write/address bytes
+	// here; RxData() knows the receive length and can then program CMDR+NCMDR
+	// as one connected transfer. No caller pointer is retained.
+	memcpy(dev->TxBuffer, pData, DataLen);
+	dev->SrLen = DataLen;
 	dev->CommandPhase = true;
-	return Sam4lI2CTxData(pDev, pData, DataLen);
+	dev->CombinedRead = false;
+	return DataLen;
 }
 
 static bool Sam4lI2CStartRx(DevIntrf_t * const pDev, uint32_t DevAddr)
@@ -544,20 +566,108 @@ static bool Sam4lI2CStartRx(DevIntrf_t * const pDev, uint32_t DevAddr)
 
 	const bool fromCommand = dev->CommandPhase;
 	dev->CommandPhase = false;
+	dev->CombinedRead = fromCommand && dev->SrLen > 0;
 	dev->DevAddr = (uint16_t)DevAddr;
 	dev->NeedStart = true;
-	dev->TenBitReadReady =
-		(dev->pI2cDev->Cfg.AddrType == I2CADDR_TYPE_EXT) && dev->BusHeld;
+	dev->TenBitReadReady = false;
 
-	if (!fromCommand)
+	if (!dev->CombinedRead)
 	{
 		dev->LastError = false;
 		dev->BusHeld = false;
-		dev->TenBitReadReady = false;
 		dev->pMReg->TWIM_SCR = 0xFFFFFFFFU;
 	}
 
 	return !dev->LastError;
+}
+
+static int Sam4lI2CMasterReadCombinedPolling(DevIntrf_t * const pDev,
+	uint8_t *pBuff, int BuffLen)
+{
+	SAM4L_I2CDEV *dev = (SAM4L_I2CDEV *)pDev->pDevData;
+	Twim *reg = dev->pMReg;
+
+	if (dev->SrLen <= 0 || dev->SrLen > SAM4L_I2C_MAX_NBYTES ||
+		pBuff == nullptr || BuffLen <= 0)
+		return 0;
+
+	dev->LastError = false;
+	dev->BusHeld = false;
+	dev->NeedStart = true;
+	dev->TenBitReadReady = false;
+	dev->pRxData = pBuff;
+	dev->RxRemain = BuffLen;
+	dev->RxCount = 0;
+
+	// Polling owns the peripheral while the connected transfer is active.
+	reg->TWIM_IDR = 0xFFFFFFFFU;
+	reg->TWIM_SCR = 0xFFFFFFFFU;
+
+	const uint32_t txcmd = Sam4lI2CMasterCommand(dev, false,
+		dev->SrLen, true, false, false, false);
+
+	int activeChunk = BuffLen > SAM4L_I2C_MAX_NBYTES ?
+		SAM4L_I2C_MAX_NBYTES : BuffLen;
+	bool final = BuffLen <= SAM4L_I2C_MAX_NBYTES;
+	uint32_t rxcmd = Sam4lI2CMasterCommand(dev, true, activeChunk,
+		true, final && !pDev->bNoStop, !final,
+		dev->pI2cDev->Cfg.AddrType == I2CADDR_TYPE_EXT);
+
+	// Section 27.8.7.3: queue the read in NCMDR before the write finishes.
+	reg->TWIM_CMDR = txcmd;
+	reg->TWIM_NCMDR = rxcmd;
+
+	for (int i = 0; i < dev->SrLen; ++i)
+	{
+		if (!Sam4lI2CMasterWait(dev, TWIM_SR_TXRDY))
+			goto done;
+		reg->TWIM_THR = dev->TxBuffer[i];
+	}
+
+	// This completes the write command; hardware has already promoted NCMDR
+	// and generates the repeated START without releasing the bus.
+	if (!Sam4lI2CMasterWaitCommand(dev))
+		goto done;
+
+	while (dev->RxRemain > 0)
+	{
+		int remainingAfterActive = dev->RxRemain - activeChunk;
+		int queuedChunk = 0;
+
+		if (remainingAfterActive > 0)
+		{
+			queuedChunk = remainingAfterActive > SAM4L_I2C_MAX_NBYTES ?
+				SAM4L_I2C_MAX_NBYTES : remainingAfterActive;
+			const bool queuedFinal =
+				remainingAfterActive <= SAM4L_I2C_MAX_NBYTES;
+			const uint32_t next = Sam4lI2CMasterCommand(dev, true,
+				queuedChunk, false,
+				queuedFinal && !pDev->bNoStop, !queuedFinal, false);
+			reg->TWIM_NCMDR = next;
+		}
+
+		for (int i = 0; i < activeChunk; ++i)
+		{
+			if (!Sam4lI2CMasterWait(dev, TWIM_SR_RXRDY))
+				goto done;
+			*dev->pRxData++ = (uint8_t)reg->TWIM_RHR;
+			--dev->RxRemain;
+			++dev->RxCount;
+		}
+
+		if (!Sam4lI2CMasterWaitCommand(dev))
+			goto done;
+
+		if (dev->RxRemain <= 0)
+			break;
+		activeChunk = queuedChunk;
+	}
+
+done:
+	dev->CombinedRead = false;
+	dev->SrLen = 0;
+	dev->BusHeld = pDev->bNoStop && !dev->LastError;
+	return dev->RxCount;
 }
 
 static int Sam4lI2CMasterRxPolling(DevIntrf_t * const pDev,
@@ -638,6 +748,9 @@ static int Sam4lI2CRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 	SAM4L_I2CDEV *dev = (SAM4L_I2CDEV *)pDev->pDevData;
 	if (dev->pI2cDev->Cfg.Mode != I2CMODE_MASTER)
 		return 0;
+
+	if (dev->CombinedRead)
+		return Sam4lI2CMasterReadCombinedPolling(pDev, pBuff, BuffLen);
 
 	return pDev->bIntEn ?
 		Sam4lI2CMasterRxAsync(pDev, pBuff, BuffLen) :
