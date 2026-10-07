@@ -12,6 +12,16 @@
 		Disable hooks power the CryptoCell wrapper by the interface reference
 		count.
 
+		An Rx transfer on CC3XX_ADDR_RNG runs the true random generator the
+		way the Arm CryptoCell runtime runs it in its full entropy mode
+		(llf_rnd_fetrng.c): software reset, sample count, ring oscillator
+		length, hardware tests on, watchdog, then one 192 bit sample at a
+		time. A sample with a test failure or a watchdog timeout is dropped and
+		the next, slower, oscillator setting is tried. A repetition test
+		failure drops the sample as well, where the Arm runtime ignores it
+		outside its FIPS mode. The transfer fails when the slowest setting
+		fails too.
+
 @author	Hoang Nguyen Hoan
 @date	Jul. 17, 2026
 
@@ -41,6 +51,7 @@ SOFTWARE.
 ----------------------------------------------------------------------------*/
 #include <stdatomic.h>
 #include <stdint.h>
+#include <string.h>
 
 #include "istddef.h"
 #include "cc3xx_intrf.h"
@@ -51,10 +62,174 @@ static uint32_t s_Offset;				// byte offset latched from address phase
 static bool s_bAddrLatched;
 
 static uintptr_t s_Base;				// register file base, cached at Init
+static bool s_bRngXfer;					// Rx transfer on CC3XX_ADDR_RNG
+
+// True random generator registers, offsets in the register file
+enum : uint32_t {
+	REG_RNG_IMR = 0x100U,
+	REG_RNG_ISR = 0x104U,
+	REG_RNG_ICR = 0x108U,
+	REG_TRNG_CONFIG = 0x10CU,
+	REG_EHR_DATA = 0x114U,				// 6 words
+	REG_NOISE_SOURCE = 0x12CU,
+	REG_SAMPLE_CNT = 0x130U,
+	REG_TRNG_DEBUG = 0x138U,
+	REG_RNG_SW_RESET = 0x140U,
+	REG_RNG_CLK = 0x1C4U,
+	REG_RNG_WATCHDOG_VAL = 0x1D8U,
+};
+
+#define CC3XX_RNG_ISR_EHR_VALID		(1UL << 0)
+#define CC3XX_RNG_ISR_AUTOCORR_ERR	(1UL << 1)
+#define CC3XX_RNG_ISR_CRNGT_ERR		(1UL << 2)
+#define CC3XX_RNG_ISR_VN_ERR		(1UL << 3)
+#define CC3XX_RNG_ISR_WATCHDOG		(1UL << 4)
+
+// RNG_IMR: everything masked but EHR_VALID, AUTOCORR_ERR and WATCHDOG
+#define CC3XX_RNG_IMR				0xFFFFFFECUL
+
+// TRNG_CONFIG ring oscillator length field
+#define CC3XX_RNG_ROSC_LEN_MSK		0x3UL
+
+// Words of one 192 bit sample
+#define CC3XX_RNG_EHR_WORDS			6
+
+// Watchdog of one sample in RNG clock cycles, over the sample count: the Arm
+// runtime value, 4 times the expected time of 192 bits at 4 samples a bit
+// (von Neumann corrector)
+#define CC3XX_RNG_WATCHDOG			3072UL
+
+// Writes of the sample count after the RNG reset before giving up
+#define CC3XX_RNG_RESET_TRIES		1000
+
+// Sample counts of the ring oscillator lengths, clock cycles between two noise
+// samples, from the fastest oscillator: the full entropy mode values of the
+// Arm runtime (cc_pal_trng.c). The fourth length is not used there either.
+static const uint32_t s_Cc3xxRngSampleCnt[] = { 5000, 1000, 500 };
 
 static inline volatile uint32_t *Cc3xxWord(uint32_t Offset)
 {
 	return (volatile uint32_t *)(s_Base + Offset);
+}
+
+// Clear a copy of random data. Volatile, so the stores are not dropped as
+// unused.
+static void Cc3xxRngClear(void *p, size_t Len)
+{
+	volatile uint8_t *d = (volatile uint8_t *)p;
+
+	while (Len-- > 0)
+	{
+		*d++ = 0;
+	}
+}
+
+// One 192 bit sample with ring oscillator length Rosc
+static bool Cc3xxRngSample(uint32_t Rosc, uint32_t pEhr[CC3XX_RNG_EHR_WORDS])
+{
+	const uint32_t cnt = s_Cc3xxRngSampleCnt[Rosc];
+	const uint32_t wd = cnt * CC3XX_RNG_WATCHDOG;
+	const uint32_t done = CC3XX_RNG_ISR_EHR_VALID | CC3XX_RNG_ISR_AUTOCORR_ERR |
+						  CC3XX_RNG_ISR_WATCHDOG;
+	const uint32_t fail = CC3XX_RNG_ISR_AUTOCORR_ERR | CC3XX_RNG_ISR_CRNGT_ERR |
+						  CC3XX_RNG_ISR_VN_ERR | CC3XX_RNG_ISR_WATCHDOG;
+	int tries = CC3XX_RNG_RESET_TRIES;
+
+	*Cc3xxWord(REG_RNG_CLK) = 1U;
+	*Cc3xxWord(REG_RNG_SW_RESET) = 1U;
+
+	// The reset is over once the sample count holds; it clears the clock
+	// enable meanwhile
+	do {
+		if (tries-- <= 0)
+		{
+			return false;
+		}
+		*Cc3xxWord(REG_RNG_CLK) = 1U;
+		*Cc3xxWord(REG_SAMPLE_CNT) = cnt;
+	} while (*Cc3xxWord(REG_SAMPLE_CNT) != cnt);
+
+	*Cc3xxWord(REG_NOISE_SOURCE) = 0U;
+	*Cc3xxWord(REG_RNG_ICR) = 0xFFFFFFFFUL;
+	*Cc3xxWord(REG_RNG_IMR) = CC3XX_RNG_IMR;
+	*Cc3xxWord(REG_TRNG_CONFIG) = Rosc & CC3XX_RNG_ROSC_LEN_MSK;
+	*Cc3xxWord(REG_TRNG_DEBUG) = 0U;
+	*Cc3xxWord(REG_RNG_WATCHDOG_VAL) = wd;
+	*Cc3xxWord(REG_NOISE_SOURCE) = 1U;
+
+	// The hardware watchdog ends a sample that takes too long; the poll count
+	// is a bound in case the RNG clock does not run, longer than it as a poll
+	// takes more than a cycle
+	uint32_t isr = 0;
+
+	for (uint32_t i = 0; i < wd && (isr & done) == 0; i++)
+	{
+		isr = *Cc3xxWord(REG_RNG_ISR);
+	}
+
+	*Cc3xxWord(REG_NOISE_SOURCE) = 0U;
+	*Cc3xxWord(REG_RNG_ICR) = 0xFFFFFFFFUL;
+
+	if ((isr & CC3XX_RNG_ISR_EHR_VALID) == 0 || (isr & fail) != 0)
+	{
+		return false;
+	}
+
+	for (int i = 0; i < CC3XX_RNG_EHR_WORDS; i++)
+	{
+		pEhr[i] = *Cc3xxWord(REG_EHR_DATA + i * sizeof(uint32_t));
+	}
+
+	return true;
+}
+
+// Fill pBuff with Len bytes of entropy, zeros and false on failure
+static bool Cc3xxRngRead(uint8_t *pBuff, int Len)
+{
+	uint32_t ehr[CC3XX_RNG_EHR_WORDS];
+	uint8_t *p = pBuff;
+	int rem = Len;
+	uint32_t rosc = 0;
+	bool res = true;
+
+	while (rem > 0 && res)
+	{
+		// From the oscillator length of the last good sample to the slowest
+		res = false;
+		while (rosc < sizeof(s_Cc3xxRngSampleCnt) / sizeof(s_Cc3xxRngSampleCnt[0]) && res == false)
+		{
+			res = Cc3xxRngSample(rosc, ehr);
+			if (res == false)
+			{
+				rosc++;
+			}
+		}
+
+		if (res)
+		{
+			int n = rem < (int)sizeof(ehr) ? rem : (int)sizeof(ehr);
+
+			memcpy(p, ehr, n);
+			p += n;
+			rem -= n;
+		}
+	}
+
+	// Reset the generator before its clock goes off, as before a sample, so
+	// that the last sample is not left in EHR_DATA
+	*Cc3xxWord(REG_NOISE_SOURCE) = 0U;
+	*Cc3xxWord(REG_RNG_ICR) = 0xFFFFFFFFUL;
+	*Cc3xxWord(REG_RNG_CLK) = 1U;
+	*Cc3xxWord(REG_RNG_SW_RESET) = 1U;
+	*Cc3xxWord(REG_RNG_CLK) = 0U;
+
+	Cc3xxRngClear(ehr, sizeof(ehr));
+	if (res == false)
+	{
+		Cc3xxRngClear(pBuff, Len);
+	}
+
+	return res;
 }
 
 static void Cc3xxIntrfDisable(DevIntrf_t * const pDevIntrf)
@@ -76,16 +251,57 @@ static uint32_t Cc3xxSetRate(DevIntrf_t * const pDevIntrf, uint32_t Rate) {
 
 static bool Cc3xxStartRx(DevIntrf_t * const pIntrf, uint32_t DevAddr)
 {
-	(void)pIntrf; (void)DevAddr;
+	if (DevAddr == CC3XX_ADDR_RNG)
+	{
+		// The generator needs the CryptoCell powered, which an engine Enable
+		// does through the reference count
+		if (atomic_load(&pIntrf->EnCnt) == 0)
+		{
+			return false;
+		}
+
+		// A draw takes tens of msec: it holds the CryptoCell like an engine
+		// operation, so that an operation is refused instead of losing its
+		// register transfers to the draw. Engines draw their random values
+		// before they hold it.
+		if (atomic_flag_test_and_set(&s_HoldFlag))
+		{
+			return false;
+		}
+		s_pHoldOwner = &s_bRngXfer;
+
+		// A PKA fault powers the CryptoCell off while the count says on
+		if (!Cc3xxEnable())
+		{
+			s_pHoldOwner = nullptr;
+			atomic_flag_clear(&s_HoldFlag);
+
+			return false;
+		}
+		s_bRngXfer = true;
+
+		return true;
+	}
+
 	// Restart condition inside a read: keep the offset latched by the
 	// preceding address phase.
+	s_bRngXfer = false;
+
 	return true;
 }
 
 static int Cc3xxRxData(DevIntrf_t * const pIntrf, uint8_t *pBuff, int BuffLen)
 {
 	(void)pIntrf;
-	if (pBuff == nullptr || BuffLen <= 0 || !s_bAddrLatched)
+	if (pBuff == nullptr || BuffLen <= 0)
+	{
+		return 0;
+	}
+	if (s_bRngXfer)
+	{
+		return Cc3xxRngRead(pBuff, BuffLen) ? BuffLen : 0;
+	}
+	if (!s_bAddrLatched)
 	{
 		return 0;
 	}
@@ -105,14 +321,26 @@ static void Cc3xxStopRx(DevIntrf_t * const pDevIntrf)
 {
 	(void)pDevIntrf;
 	s_bAddrLatched = false;
+	if (s_bRngXfer)
+	{
+		s_bRngXfer = false;
+		s_pHoldOwner = nullptr;
+		atomic_flag_clear(&s_HoldFlag);
+	}
 }
 
 static bool Cc3xxStartTx(DevIntrf_t * const pIntrf, uint32_t DevAddr)
 {
-	(void)pIntrf; (void)DevAddr;
+	(void)pIntrf;
+	// The random generator is read only
+	if (DevAddr == CC3XX_ADDR_RNG)
+	{
+		return false;
+	}
 	// Single register file: the selector is saved for protocol symmetry and
 	// a fresh address phase opens.
 	s_bAddrLatched = false;
+	s_bRngXfer = false;
 	return true;
 }
 
