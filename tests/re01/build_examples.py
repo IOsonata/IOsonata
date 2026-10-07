@@ -67,7 +67,8 @@ def check_image(elf):
 objects = [compile_source(p, p.stem) for p in sorted(port.iterdir())
            if p.suffix in ('.c', '.cpp') and p.name != 'dfu_re01.cpp']
 common = ['ARM/src/ResetEntry.c', 'ARM/src/iatomic.c', 'src/cfifo.c',
-          'src/coredev/uart.cpp', 'src/coredev/timer.cpp', 'src/device_intrf.cpp',
+          'src/coredev/uart.cpp', 'src/coredev/timer.cpp', 'src/coredev/spi.cpp',
+          'src/coredev/i2c.cpp', 'src/device_intrf.cpp',
           'src/prbs.c', 'src/pulse_train.c']
 objects += [compile_source(root / p, Path(p).stem + '_generic') for p in common]
 examples = [('Blinky', 'exemples/misc/blinky.c'),

@@ -81,7 +81,8 @@ app.write_bytes(signed + struct.pack('<HH', 0x6907, len(tlvs) + 4) + tlvs)
 
 sources = sorted(p for p in port.iterdir() if p.suffix in ('.c', '.cpp'))
 common = ['ARM/src/ResetEntry.c', 'ARM/src/iatomic.c', 'src/cfifo.c',
-          'src/coredev/uart.cpp', 'src/coredev/timer.cpp', 'src/device_intrf.cpp',
+          'src/coredev/uart.cpp', 'src/coredev/timer.cpp', 'src/coredev/spi.cpp',
+          'src/coredev/i2c.cpp', 'src/device_intrf.cpp',
           'src/device.cpp', 'src/crc.c', 'src/pulse_train.c',
           'src/slip_intrf.cpp', 'src/crypto/crypto_softsha256.cpp',
           'src/crypto/crypto_uecc.cpp', 'micro-ecc/uECC.c',
