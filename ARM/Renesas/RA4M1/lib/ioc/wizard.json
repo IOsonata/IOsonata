@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "mcu": "RA4M1",
+  "cpu": "cortex-m4",
+  "fpu": true,
+  "fpu_unit": "fpv4spd16",
+  "defines": [
+    "RA4M1"
+  ],
+  "includes": [
+    "${iosonata}/ARM/Renesas/RA4M1/include"
+  ],
+  "linker_script": "${iosonata}/ARM/Renesas/RA4M1/ldscript/gcc_ra4m1.ld",
+  "lib_path": "${iosonata}/ARM/Renesas/RA4M1/lib/ioc/${config}",
+  "lib": "IOsonata_RA4M1"
+}
