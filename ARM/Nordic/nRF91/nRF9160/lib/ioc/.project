@@ -111,11 +111,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/blueio_types.h</locationURI>
 		</link>
 		<link>
-			<name>include/bsdlib_os_bare.h</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/include/bsdlib_os_bare.h</locationURI>
-		</link>
-		<link>
 			<name>include/cfifo.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/cfifo.h</locationURI>
@@ -1386,11 +1381,6 @@
 			<locationURI>PARENT-3-PROJECT_LOC/include/nrfx_config_nrf91.h</locationURI>
 		</link>
 		<link>
-			<name>include/spe_nrf91.h</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/include/spe_nrf91.h</locationURI>
-		</link>
-		<link>
 			<name>src/modem_os_nrf91.c</name>
 			<type>1</type>
 			<locationURI>PARENT-3-PROJECT_LOC/src/modem_os_nrf91.c</locationURI>
@@ -1414,11 +1404,6 @@
 			<name>src/nrfx/drivers/src/nrfx_ipc.c</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/nrfx/drivers/src/nrfx_ipc.c</locationURI>
-		</link>
-		<link>
-			<name>src/spe_nrf91.c</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/src/spe_nrf91.c</locationURI>
 		</link>
 		<link>
 			<name>include/lte</name>
