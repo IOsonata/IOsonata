@@ -3,9 +3,12 @@
 
 @brief	SAM4L8 Xplained Pro I2C master/slave loopback wiring.
 
-Connect the two independent SAM4L TWI instances:
-  PA23 (TWIMS0 TWD, master SDA)  <-> PB00 (TWIMS1 TWD, slave SDA)
-  PA24 (TWIMS0 TWCK, master SCL) <-> PB01 (TWIMS1 TWCK, slave SCL)
+Connect the two independent SAM4L TWI instances on EXT4:
+  PB14 (TWIMS3 TWD, master SDA)  <-> PB00 (TWIMS1 TWD, slave SDA)
+  PB15 (TWIMS3 TWCK, master SCL) <-> PB01 (TWIMS1 TWCK, slave SCL)
+
+TWIMS0 on PA23/PA24 is deliberately not used here because those pins are also
+wired to the on-board EDBG DGI TWI interface.
 
 The master side enables pull-ups through the existing shared example pin
 configuration. External I2C pull-ups can also be used.
@@ -29,14 +32,14 @@ configuration. External I2C pull-ups can also be used.
 #define UART_TX_PIN			27
 #define UART_TX_PINOP		IOPINOP_PERIPHA
 
-// Master: TWIM0 / TWIMS0 on PA23, PA24 peripheral B.
-#define I2C_MASTER_DEVNO		0
-#define I2C_MASTER_SDA_PORT	IOPORTA
-#define I2C_MASTER_SDA_PIN	23
-#define I2C_MASTER_SDA_PINOP	IOPINOP_PERIPHB
-#define I2C_MASTER_SCL_PORT	IOPORTA
-#define I2C_MASTER_SCL_PIN	24
-#define I2C_MASTER_SCL_PINOP	IOPINOP_PERIPHB
+// Master: TWIM3 / TWIMS3 on PB14, PB15 peripheral C.
+#define I2C_MASTER_DEVNO		3
+#define I2C_MASTER_SDA_PORT	IOPORTB
+#define I2C_MASTER_SDA_PIN	14
+#define I2C_MASTER_SDA_PINOP	IOPINOP_PERIPHC
+#define I2C_MASTER_SCL_PORT	IOPORTB
+#define I2C_MASTER_SCL_PIN	15
+#define I2C_MASTER_SCL_PINOP	IOPINOP_PERIPHC
 #define I2C_MASTER_DMA_ENABLE	false
 #define I2C_MASTER_INT_ENABLE	false
 
