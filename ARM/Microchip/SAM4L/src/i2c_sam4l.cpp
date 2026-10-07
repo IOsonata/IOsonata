@@ -1460,75 +1460,99 @@ static void Sam4lI2CSlaveIrqHandler(SAM4L_I2CDEV *dev)
 
 	if ((pending & TWIS_SR_SAM) != 0U)
 	{
-		// TRA is specified to update one CLK_TWIS cycle after SAM. Do not use
-		// the SR snapshot taken at ISR entry.
-		const bool transmit = (reg->TWIS_SR & TWIS_SR_TRA) != 0U;
-		reg->TWIS_CR &= ~TWIS_CR_ACK;
-		reg->TWIS_NBYTES = 0U;
-
-		if (transmit)
+		if (!i2c->DevIntrf.bDma)
 		{
-			int priorRx = 0;
-			if (dev->SlaveRxActive)
+			// Keep the hardware-validated interrupt-only TWIS path unchanged.
+			// TRA is specified to update one CLK_TWIS cycle after SAM.
+			const bool transmit = (reg->TWIS_SR & TWIS_SR_TRA) != 0U;
+			reg->TWIS_CR &= ~TWIS_CR_ACK;
+
+			if (transmit)
 			{
-				priorRx = i2c->DevIntrf.bDma ?
-					Sam4lI2CSlaveRxDmaCount(dev) : dev->SlaveRxCount;
-				if (i2c->DevIntrf.bDma)
-					Sam4lI2CSlavePdcaRxChannel(dev)->PDCA_CR = PDCA_CR_TDIS;
-			}
-
-			dev->SlaveRxActive = false;
-			dev->SlaveTxActive = true;
-			dev->SlaveTxCount = 0;
-			reg->TWIS_IDR = TWIS_IER_RXRDY | TWIS_IER_BTF;
-
-			// A response buffer belongs to this read request. Do not silently
-			// reuse one installed for an earlier transaction.
-			i2c->pRRData[0] = nullptr;
-			i2c->RRDataLen[0] = 0;
-
-			if (i2c->DevIntrf.EvtCB)
-				i2c->DevIntrf.EvtCB(&i2c->DevIntrf,
-					DEVINTRF_EVT_READ_RQST, nullptr, priorRx);
-
-			if (!i2c->DevIntrf.bDma)
-			{
+				const int priorRx = dev->SlaveRxActive ? dev->SlaveRxCount : 0;
+				dev->SlaveRxActive = false;
+				dev->SlaveTxActive = true;
+				dev->SlaveTxCount = 0;
+				reg->TWIS_IDR = TWIS_IER_RXRDY;
 				reg->TWIS_IER = TWIS_IER_BTF;
+
+				if (i2c->DevIntrf.EvtCB)
+					i2c->DevIntrf.EvtCB(&i2c->DevIntrf,
+						DEVINTRF_EVT_READ_RQST, nullptr, priorRx);
 				Sam4lI2CSlavePrimeTx(dev);
 			}
+			else
+			{
+				if (dev->SlaveTxActive && i2c->DevIntrf.EvtCB)
+					i2c->DevIntrf.EvtCB(&i2c->DevIntrf,
+						DEVINTRF_EVT_COMPLETED, nullptr, dev->SlaveTxCount);
+
+				dev->SlaveTxActive = false;
+				dev->SlaveRxActive = true;
+				dev->SlaveRxCount = 0;
+				reg->TWIS_IDR = TWIS_IER_BTF;
+				reg->TWIS_IER = TWIS_IER_RXRDY;
+
+				if (i2c->DevIntrf.EvtCB)
+					i2c->DevIntrf.EvtCB(&i2c->DevIntrf,
+						DEVINTRF_EVT_WRITE_RQST, nullptr, 0);
+			}
+
+			reg->TWIS_SCR = TWIS_SCR_SAM;
 		}
 		else
 		{
-			if (dev->SlaveTxActive && i2c->DevIntrf.EvtCB)
+			const bool transmit = (reg->TWIS_SR & TWIS_SR_TRA) != 0U;
+			reg->TWIS_CR &= ~TWIS_CR_ACK;
+			reg->TWIS_NBYTES = 0U;
+
+			if (transmit)
 			{
-				const int priorTx = i2c->DevIntrf.bDma ?
-					Sam4lI2CSlaveTxDmaCount(dev) : dev->SlaveTxCount;
-				i2c->DevIntrf.EvtCB(&i2c->DevIntrf,
-					DEVINTRF_EVT_COMPLETED, nullptr, priorTx);
+				int priorRx = 0;
+				if (dev->SlaveRxActive)
+				{
+					priorRx = Sam4lI2CSlaveRxDmaCount(dev);
+					Sam4lI2CSlavePdcaRxChannel(dev)->PDCA_CR = PDCA_CR_TDIS;
+				}
+
+				dev->SlaveRxActive = false;
+				dev->SlaveTxActive = true;
+				dev->SlaveTxCount = 0;
+				reg->TWIS_IDR = TWIS_IER_RXRDY | TWIS_IER_BTF;
+
+				i2c->pRRData[0] = nullptr;
+				i2c->RRDataLen[0] = 0;
+
+				if (i2c->DevIntrf.EvtCB)
+					i2c->DevIntrf.EvtCB(&i2c->DevIntrf,
+						DEVINTRF_EVT_READ_RQST, nullptr, priorRx);
 			}
-			if (i2c->DevIntrf.bDma)
-				Sam4lI2CSlavePdcaTxChannel(dev)->PDCA_CR = PDCA_CR_TDIS;
+			else
+			{
+				if (dev->SlaveTxActive)
+				{
+					const int priorTx = Sam4lI2CSlaveTxDmaCount(dev);
+					Sam4lI2CSlavePdcaTxChannel(dev)->PDCA_CR = PDCA_CR_TDIS;
+					if (i2c->DevIntrf.EvtCB)
+						i2c->DevIntrf.EvtCB(&i2c->DevIntrf,
+							DEVINTRF_EVT_COMPLETED, nullptr, priorTx);
+				}
 
-			dev->SlaveTxActive = false;
-			dev->SlaveRxActive = true;
-			dev->SlaveRxCount = 0;
-			reg->TWIS_IDR = TWIS_IER_RXRDY | TWIS_IER_BTF;
+				dev->SlaveTxActive = false;
+				dev->SlaveRxActive = true;
+				dev->SlaveRxCount = 0;
+				reg->TWIS_IDR = TWIS_IER_RXRDY | TWIS_IER_BTF;
 
-			// Receive storage is request-scoped for the same reason.
-			i2c->pTRBuff[0] = nullptr;
-			i2c->TRBuffLen[0] = 0;
+				i2c->pTRBuff[0] = nullptr;
+				i2c->TRBuffLen[0] = 0;
 
-			if (i2c->DevIntrf.EvtCB)
-				i2c->DevIntrf.EvtCB(&i2c->DevIntrf,
-					DEVINTRF_EVT_WRITE_RQST, nullptr, 0);
+				if (i2c->DevIntrf.EvtCB)
+					i2c->DevIntrf.EvtCB(&i2c->DevIntrf,
+						DEVINTRF_EVT_WRITE_RQST, nullptr, 0);
+			}
 
-			if (!i2c->DevIntrf.bDma)
-				reg->TWIS_IER = TWIS_IER_RXRDY;
+			reg->TWIS_SCR = TWIS_SCR_SAM;
 		}
-
-		// SOAM keeps SCL low until SAM is cleared. Request callbacks above can
-		// arm PDCA or install the interrupt-mode buffer before bus progress.
-		reg->TWIS_SCR = TWIS_SCR_SAM;
 	}
 
 	if ((pending & TWIS_SR_RXRDY) != 0U && dev->SlaveRxActive)
