@@ -40,8 +40,8 @@ configuration. External I2C pull-ups can also be used.
 #define I2C_MASTER_SCL_PORT	IOPORTB
 #define I2C_MASTER_SCL_PIN	15
 #define I2C_MASTER_SCL_PINOP	IOPINOP_PERIPHC
-#define I2C_MASTER_DMA_ENABLE	false
-#define I2C_MASTER_INT_ENABLE	true
+#define I2C_MASTER_DMA_ENABLE	true
+#define I2C_MASTER_INT_ENABLE	false
 
 // Slave: TWIS1 / TWIMS1 on PB00, PB01 peripheral A.
 // Slave mode is interrupt driven by the SAM4L port.

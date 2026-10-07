@@ -317,17 +317,20 @@ int main()
 	bool pass = c == (int)sizeof(wr) &&
 		memcmp(buff, wr, sizeof(wr)) == 0;
 
-	if (pass && s_I2cCfgMaster.bIntEn)
+	if (pass && (s_I2cCfgMaster.bIntEn || s_I2cCfgMaster.bDmaEn))
 	{
 		// The register-style read above validates the SAM4L CMDR/NCMDR
-		// repeated-start path. Exercise the ordinary interrupt RX path too.
+		// repeated-start path. Exercise the ordinary RX path for the selected
+		// non-polling transfer engine too.
 		uint8_t rx[4] = { 0xFF, 0xFF, 0xFF, 0xFF };
 		s_MasterCompleted = false;
 		s_MasterCount = 0;
 		int rc = g_I2CMaster.Rx(I2C_SLAVE_ADDR, rx, sizeof(rx));
 		if (rc < 0)
 			rc = WaitMasterComplete(10000000);
-		printf("Interrupt RX %d/%d bytes:", rc, (int)sizeof(rx));
+		printf("%s RX %d/%d bytes:",
+			s_I2cCfgMaster.bDmaEn ? "DMA" : "Interrupt",
+			rc, (int)sizeof(rx));
 		for (int i = 0; i < rc; ++i)
 			printf(" %02x", rx[i]);
 		printf("\r\n");
