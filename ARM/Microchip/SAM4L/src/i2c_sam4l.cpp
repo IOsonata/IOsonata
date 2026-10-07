@@ -105,6 +105,7 @@ typedef struct {
 	int TxRemain;
 	int RxRemain;
 	int ChunkRemain;
+	int ChunkTotal;
 	int TxCount;
 	int RxCount;
 	SAM4L_I2C_OP Op;
@@ -382,6 +383,7 @@ static bool Sam4lI2CMasterStartTxChunk(SAM4L_I2CDEV *dev)
 		dev->NeedStart, stop, false, false);
 
 	dev->ChunkRemain = chunk;
+	dev->ChunkTotal = chunk;
 	dev->NeedStart = false;
 	Sam4lI2CMasterIssue(dev, cmd);
 	return true;
@@ -451,11 +453,11 @@ static int Sam4lI2CMasterTxPolling(DevIntrf_t * const pDev,
 			dev->pMReg->TWIM_THR = *dev->pTxData++;
 			--dev->ChunkRemain;
 			--dev->TxRemain;
-			++dev->TxCount;
 		}
 
 		if (!Sam4lI2CMasterWaitCommand(dev))
 			return dev->TxCount;
+		dev->TxCount += dev->ChunkTotal;
 	}
 
 	dev->BusHeld = pDev->bNoStop && !dev->LastError;
@@ -700,7 +702,6 @@ static void Sam4lI2CMasterIrqHandler(SAM4L_I2CDEV *dev)
 		reg->TWIM_THR = *dev->pTxData++;
 		--dev->ChunkRemain;
 		--dev->TxRemain;
-		++dev->TxCount;
 		if (dev->ChunkRemain == 0)
 			reg->TWIM_IDR = TWIM_IDR_TXRDY;
 	}
@@ -731,6 +732,7 @@ static void Sam4lI2CMasterIrqHandler(SAM4L_I2CDEV *dev)
 
 	if (dev->Op == SAM4L_I2C_OP_MASTER_TX)
 	{
+		dev->TxCount += dev->ChunkTotal;
 		if (dev->TxRemain > 0)
 		{
 			Sam4lI2CMasterStartTxChunk(dev);
