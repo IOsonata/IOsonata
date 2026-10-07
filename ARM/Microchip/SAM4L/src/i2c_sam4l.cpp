@@ -1872,6 +1872,9 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
 		if (Sam4lI2CSetRate(&pDev->DevIntrf, pDev->Cfg.Rate) == 0U)
 			return false;
 
+		if (pDev->Cfg.bDmaEn)
+			Sam4lI2CSlavePdcaInit(dev);
+
 		reg->TWIS_IER = SAM4L_TWIS_BASE_IRQ_MASK;
 		reg->TWIS_CR |= TWIS_CR_SEN;
 
