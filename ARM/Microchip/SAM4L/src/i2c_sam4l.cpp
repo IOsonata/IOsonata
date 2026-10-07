@@ -207,81 +207,101 @@ static uint32_t Sam4lI2CSetRate(DevIntrf_t * const pDev, uint32_t Rate)
 	if (Rate == 0U || pba == 0U || Rate > I2C_SCL_FAST_MODE_PLUS_MAX_SPEED * 1000U)
 		return 0U;
 
+	uint32_t setupNs;
+	uint32_t lowNs;
+	uint32_t highNs;
+	uint32_t staStoNs;
+
+	if (Rate <= I2C_SCL_STD_MODE_MAX_SPEED * 1000U)
+	{
+		setupNs = I2C_TSUDAT_STDMODE_MIN;
+		lowNs = I2C_SCL_TLOW_STD_MODE_MIN;
+		highNs = I2C_SCL_THIGH_STD_MODE_MIN;
+		staStoNs = 4700U; // max(tHD;STA, tSU;STA, tSU;STO) in Standard mode
+	}
+	else if (Rate <= I2C_SCL_FAST_MODE_MAX_SPEED * 1000U)
+	{
+		setupNs = I2C_TSUDAT_FASTMODE_MIN;
+		lowNs = I2C_SCL_TLOW_FAST_MODE_MIN;
+		highNs = I2C_SCL_THIGH_FAST_MODE_MIN;
+		staStoNs = 600U;
+	}
+	else
+	{
+		setupNs = I2C_TSUDAT_FASTMODEPLUS_MIN;
+		lowNs = I2C_SCL_TLOW_FAST_MODE_PLUS_MIN;
+		highNs = I2C_SCL_THIGH_FAST_MODE_PLUS_MIN;
+		staStoNs = 260U;
+	}
+
 	if (i2c->Cfg.Mode == I2CMODE_SLAVE)
 	{
-		// TWIS does not generate SCL. Rate is the intended bus class and is
-		// used to select a compliant data setup interval.
-		uint32_t setupNs = I2C_TSUDAT_STDMODE_MIN;
-		if (Rate > I2C_SCL_FAST_MODE_MAX_SPEED * 1000U)
-			setupNs = I2C_TSUDAT_FASTMODEPLUS_MIN;
-		else if (Rate > I2C_SCL_STD_MODE_MAX_SPEED * 1000U)
-			setupNs = I2C_TSUDAT_FASTMODE_MIN;
-
-		uint32_t cycles = (uint32_t)(((uint64_t)pba * setupNs + 999999999ULL) / 1000000000ULL);
+		// TWIS SUDAT is counted directly from CLK_TWIS, not the EXP prescaler.
+		uint32_t cycles = (uint32_t)(((uint64_t)pba * setupNs + 999999999ULL) /
+			1000000000ULL);
+		if (cycles < 2U)
+			cycles = 2U;
 		if (cycles > 255U)
 			cycles = 255U;
+
 		dev->pSReg->TWIS_TR = TWIS_TR_SUDAT(cycles);
+		dev->pSReg->TWIS_NBYTES = 0U; // required in plain I2C mode
 		i2c->Cfg.Rate = Rate;
 		return Rate;
 	}
 
-	uint32_t lowNs;
-	uint32_t highNs;
-	if (Rate <= I2C_SCL_STD_MODE_MAX_SPEED * 1000U)
-	{
-		lowNs = I2C_SCL_TLOW_STD_MODE_MIN;
-		highNs = I2C_SCL_THIGH_STD_MODE_MIN;
-	}
-	else if (Rate <= I2C_SCL_FAST_MODE_MAX_SPEED * 1000U)
-	{
-		lowNs = I2C_SCL_TLOW_FAST_MODE_MIN;
-		highNs = I2C_SCL_THIGH_FAST_MODE_MIN;
-	}
-	else
-	{
-		lowNs = I2C_SCL_TLOW_FAST_MODE_PLUS_MIN;
-		highNs = I2C_SCL_THIGH_FAST_MODE_PLUS_MIN;
-	}
-
+	// CWGR counters run from fPBA / 2^(EXP+1). DATA is used for both
+	// tHD;DAT and tSU;DAT, so both DATA intervals contribute to SCL low time.
 	for (uint32_t exp = 0U; exp <= 7U; ++exp)
 	{
 		const uint32_t prescale = 1U << (exp + 1U);
-		const uint64_t denom = (uint64_t)Rate * prescale;
-		uint32_t total = (uint32_t)(((uint64_t)pba + denom - 1ULL) / denom);
-		uint32_t low = (uint32_t)(((uint64_t)pba * lowNs +
-			(1000000000ULL * prescale) - 1ULL) / (1000000000ULL * prescale));
-		uint32_t highMin = (uint32_t)(((uint64_t)pba * highNs +
-			(1000000000ULL * prescale) - 1ULL) / (1000000000ULL * prescale));
+		const uint64_t nsDenom = 1000000000ULL * prescale;
 
-		if (low == 0U)
-			low = 1U;
-		if (highMin == 0U)
-			highMin = 1U;
-		if (total < low + highMin)
-			total = low + highMin;
+		uint32_t data = (uint32_t)(((uint64_t)pba * setupNs + nsDenom - 1ULL) /
+			nsDenom);
+		uint32_t low = (uint32_t)(((uint64_t)pba * lowNs + nsDenom - 1ULL) /
+			nsDenom);
+		uint32_t high = (uint32_t)(((uint64_t)pba * highNs + nsDenom - 1ULL) /
+			nsDenom);
+		uint32_t staSto = (uint32_t)(((uint64_t)pba * staStoNs + nsDenom - 1ULL) /
+			nsDenom);
 
-		const uint32_t half = (total + 1U) >> 1U;
-		if (low < half)
-			low = half;
-		uint32_t high = total > low ? total - low : highMin;
-		if (high < highMin)
+		if (data == 0U) data = 1U;
+		if (low == 0U) low = 1U;
+		if (high == 0U) high = 1U;
+		if (staSto == 0U) staSto = 1U;
+
+		if (data > 15U || low > 255U || high > 255U || staSto > 255U)
+			continue;
+
+		const uint64_t rateDenom = (uint64_t)Rate * prescale;
+		uint32_t target = (uint32_t)(((uint64_t)pba + rateDenom - 1ULL) /
+			rateDenom);
+		uint32_t total = low + high + (data << 1);
+
+		// Do not exceed the requested SCL rate. Put any spare cycles into the
+		// LOW/HIGH phases while preserving their minimum bus timings.
+		if (total < target)
 		{
-			high = highMin;
-			total = low + high;
+			uint32_t extra = target - total;
+			low += (extra + 1U) >> 1U;
+			high += extra >> 1U;
 		}
 
-		if (low <= 255U && high <= 255U)
-		{
-			dev->pMReg->TWIM_CWGR =
-				TWIM_CWGR_LOW(low) |
-				TWIM_CWGR_HIGH(high) |
-				TWIM_CWGR_STASTO(high) |
-				TWIM_CWGR_DATA(0) |
-				TWIM_CWGR_EXP(exp);
-			const uint32_t actual = pba / (prescale * (low + high));
-			i2c->Cfg.Rate = actual;
-			return actual;
-		}
+		if (low > 255U || high > 255U)
+			continue;
+
+		dev->pMReg->TWIM_CWGR =
+			TWIM_CWGR_LOW(low) |
+			TWIM_CWGR_HIGH(high) |
+			TWIM_CWGR_STASTO(staSto) |
+			TWIM_CWGR_DATA(data) |
+			TWIM_CWGR_EXP(exp);
+
+		const uint32_t actual = pba /
+			(prescale * (low + high + (data << 1)));
+		i2c->Cfg.Rate = actual;
+		return actual;
 	}
 
 	return 0U;
@@ -928,6 +948,7 @@ static void Sam4lI2CReset(DevIntrf_t * const pDev)
 		reg->TWIS_IDR = 0xFFFFFFFFU;
 		reg->TWIS_CR = TWIS_CR_SWRST;
 		reg->TWIS_SCR = 0xFFFFFFFFU;
+		reg->TWIS_NBYTES = 0U;
 		uint32_t cr = TWIS_CR_SMATCH | TWIS_CR_STREN | TWIS_CR_SOAM |
 			TWIS_CR_ADR(dev->pI2cDev->Cfg.SlaveAddr[0]);
 		if (dev->pI2cDev->Cfg.AddrType == I2CADDR_TYPE_EXT)
@@ -1084,6 +1105,7 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
 		reg->TWIS_IDR = 0xFFFFFFFFU;
 		reg->TWIS_CR = TWIS_CR_SWRST;
 		reg->TWIS_SCR = 0xFFFFFFFFU;
+		reg->TWIS_NBYTES = 0U;
 
 		uint32_t cr = TWIS_CR_SMATCH | TWIS_CR_STREN | TWIS_CR_SOAM |
 			TWIS_CR_ADR(pDev->Cfg.SlaveAddr[0]);
