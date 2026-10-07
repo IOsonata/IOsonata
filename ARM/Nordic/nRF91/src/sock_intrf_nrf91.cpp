@@ -47,6 +47,7 @@ SOFTWARE.
 #endif
 
 #include "nrf_socket.h"
+#include "nrf_modem_at.h"
 #include "nrf_errno.h"
 #include "coredev/interrupt.h"
 #include "net/sock_intrf.h"
@@ -55,6 +56,14 @@ SOFTWARE.
   * @{
   */
 
+// %CMNG operations
+#define SOCKINTRF_NRF91_CMNG_WRITE		0
+#define SOCKINTRF_NRF91_CMNG_LIST		1
+#define SOCKINTRF_NRF91_CMNG_DELETE		3
+
+// Response of a %CMNG list for one tag and type
+#define SOCKINTRF_NRF91_CMNG_RESP_LEN	160
+
 // Open sockets, for the poll callback, which only has the handle
 static SockIntrfDev_t *s_pSockIntrfNrf91[NRF_MODEM_MAX_SOCKET_COUNT];
 
@@ -62,6 +71,10 @@ static SockIntrfDev_t *s_pSockIntrfNrf91[NRF_MODEM_MAX_SOCKET_COUNT];
 static const int s_SockIntrfNrf91Rai[] = {
 	NRF_RAI_NO_DATA, NRF_RAI_LAST, NRF_RAI_ONE_RESP, NRF_RAI_ONGOING, NRF_RAI_WAIT_MORE
 };
+
+// %CMNG credential types, indexed by SOCKINTRF_CRED: root CA certificate,
+// client certificate, client private key, PSK, PSK identity
+static const int s_SockIntrfNrf91CredType[] = { 0, 1, 2, 3, 4 };
 
 // Errors after which the socket cannot be used again. Others (no memory,
 // rate control, message too large, timeout) leave it open.
@@ -457,6 +470,51 @@ bool SockIntrfRai(SockIntrfDev_t * const pDev, SOCKINTRF_RAI Rai)
 	int val = s_SockIntrfNrf91Rai[Rai];
 
 	return nrf_setsockopt(pDev->Hdl, NRF_SOL_SOCKET, NRF_SO_RAI, &val, sizeof(val)) == 0;
+}
+
+static bool SockIntrfNrf91CredArgs(int SecTag, SOCKINTRF_CRED Type)
+{
+	return SecTag >= 0 &&
+		   (unsigned)Type < sizeof(s_SockIntrfNrf91CredType) / sizeof(s_SockIntrfNrf91CredType[0]);
+}
+
+// The modem stores credentials with %CMNG, with the radio off (CFUN 0 or 4)
+bool SockIntrfCredWrite(int SecTag, SOCKINTRF_CRED Type, const char *pData)
+{
+	if (SockIntrfNrf91CredArgs(SecTag, Type) == false || pData == nullptr || pData[0] == 0 ||
+		strchr(pData, '"') != nullptr)
+	{
+		return false;
+	}
+
+	return nrf_modem_at_printf("AT%%CMNG=%d,%d,%d,\"%s\"", SOCKINTRF_NRF91_CMNG_WRITE, SecTag,
+							   s_SockIntrfNrf91CredType[Type], pData) == 0;
+}
+
+bool SockIntrfCredDelete(int SecTag, SOCKINTRF_CRED Type)
+{
+	if (SockIntrfNrf91CredArgs(SecTag, Type) == false)
+	{
+		return false;
+	}
+
+	return nrf_modem_at_printf("AT%%CMNG=%d,%d,%d", SOCKINTRF_NRF91_CMNG_DELETE, SecTag,
+							   s_SockIntrfNrf91CredType[Type]) == 0;
+}
+
+// A stored credential is listed as %CMNG: <tag>,<type>,<hash>
+bool SockIntrfCredExists(int SecTag, SOCKINTRF_CRED Type)
+{
+	char resp[SOCKINTRF_NRF91_CMNG_RESP_LEN];
+
+	if (SockIntrfNrf91CredArgs(SecTag, Type) == false ||
+		nrf_modem_at_cmd(resp, sizeof(resp), "AT%%CMNG=%d,%d,%d", SOCKINTRF_NRF91_CMNG_LIST, SecTag,
+						 s_SockIntrfNrf91CredType[Type]) != 0)
+	{
+		return false;
+	}
+
+	return strstr(resp, "%CMNG:") != nullptr;
 }
 
 /** @} End of group device_intrf */

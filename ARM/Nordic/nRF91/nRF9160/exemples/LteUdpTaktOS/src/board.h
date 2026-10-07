@@ -1,10 +1,9 @@
 /**-------------------------------------------------------------------------
 @example	board.h
 
-@brief	Board specific definitions, LTE UDP on the nRF91x1 DKs
+@brief	Board specific definitions, LTE UDP with TaktOS on the nRF9160 DK
 
-For the nRF9161 DK and the nRF9151 DK, which use the same pins. The console
-is UART0 on the interface MCU VCOM port.
+The console is the nRF9160 UART0 on the interface MCU VCOM port.
 
 @author	Hoang Nguyen Hoan
 @date	Oct. 6, 2026
@@ -42,14 +41,10 @@ SOFTWARE.
 // Console, UART0 to the interface MCU (VCOM0)
 #define UART_DEVNO			0
 #define UART_RX_PORT		0
-#define UART_RX_PIN			26
+#define UART_RX_PIN			28
 #define UART_RX_PINOP		1
 #define UART_TX_PORT		0
-#define UART_TX_PIN			27
+#define UART_TX_PIN			29
 #define UART_TX_PINOP		1
-
-// Timer of the modem waits and of the send interval: RTC0, RTC1 is the
-// timer of the Bluetooth port (bt_app_nrf91.cpp)
-#define LTE_TIMER_DEVNO		0
 
 #endif

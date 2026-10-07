@@ -48,4 +48,8 @@ SOFTWARE.
 #define UART_TX_PIN			27
 #define UART_TX_PINOP		1
 
+// Timer of the modem waits: RTC0, RTC1 is the timer of the Bluetooth port
+// (bt_app_nrf91.cpp)
+#define LTE_TIMER_DEVNO		0
+
 #endif

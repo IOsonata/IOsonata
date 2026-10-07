@@ -1,19 +1,17 @@
 /**-------------------------------------------------------------------------
-@example	lte_udp.cpp
+@example	lte_udp_taktos.cpp
 
-@brief	LTE UDP: attach, then send a UDP packet to a server at an interval.
+@brief	LTE UDP with TaktOS: the LTE work runs in its own thread.
 
-Starts the LTE subsystem (lte.h) with PSM requested, opens a UDP socket
-(net/sock_intrf.h) once registered and sends a short message every
-LTE_UDP_INTERVAL seconds, with a release assistance hint so the network
-lets the modem sleep right after it. Network events and anything the
-server sends back are printed on the console UART. Between packets the
-modem is in PSM and the application waits in AppRun. For an average current
-measurement, leave the console out: its receiver draws far more than the
-modem in PSM. After a modem fault the example starts LTE again.
+The same as lte_udp.cpp, with TaktOS. The application overrides LteEvtQue:
+each piece of LTE work becomes a message to the LTE thread, which runs it,
+the way uart_ble_taktos.cpp serves Bluetooth. The thread starts LTE, runs
+its messages and sends a UDP packet every LTE_UDP_INTERVAL seconds once
+registered. Data the server sends back comes in as a message too.
 
-Everything runs from the application event queue: the LTE events, the
-received data and the send timer.
+The modem waits use TaktOS: the project links the TaktOS modem glue of the
+port, so LTE gets no timer. LteInit and every AT command run in the LTE
+thread, never before TaktOSStart.
 
 Configure the server here or from board.h:
 
@@ -23,11 +21,10 @@ Configure the server here or from board.h:
 	LTE_UDP_INTERVAL	seconds between packets
 	LTE_UDP_RAI			1 to use release assistance (modem support needed)
 
-The board.h of the project gives the console UART pins and the timer used
-by the modem waits and the send interval.
+The board.h of the project gives the console UART pins.
 
 @author	Hoang Nguyen Hoan
-@date	Oct. 6, 2026
+@date	Oct. 7, 2026
 
 @license
 
@@ -57,11 +54,14 @@ SOFTWARE.
 #include <stdint.h>
 #include <stdio.h>
 
-#include "app_evt_handler.h"
+#include "TaktOS.h"
+#include "TaktOSThread.h"
+#include "TaktOSQueue.h"
+
 #include "coredev/interrupt.h"
 #include "coredev/iopincfg.h"
 #include "coredev/uart.h"
-#include "coredev/timer.h"
+#include "coredev/system_core_clock.h"
 #include "lte/lte.h"
 #include "net/sock_intrf.h"
 
@@ -83,25 +83,33 @@ SOFTWARE.
 #define LTE_UDP_RAI				1
 #endif
 
-// Timer triggers: one kept for the modem waits, one for the send interval
-#define LTE_UDP_TRIG_MODEM		0
-#define LTE_UDP_TRIG_SEND		1
+#ifndef TAKTOS_APP_TICK_HZ
+#define TAKTOS_APP_TICK_HZ		1000u
+#endif
+
+// LTE thread: AT commands, name lookup and the console printing
+#define LTE_UDP_THREAD_STACK	3072u
+
+// Messages to the LTE thread
+#define LTE_UDP_WORK_QUE_SIZE	16u
 
 // Longest message and longest received datagram printed
 #define LTE_UDP_MSG_LEN			64
 #define LTE_UDP_RX_LEN			128
 
-// Application events
-#define LTE_UDP_EVT_SEND		1
+// Application work queued to the LTE thread
 #define LTE_UDP_EVT_RX			2
 
-// Application event queue: LTE work, received data and the send timer
-alignas(4) uint8_t g_AppEvtHandlerQueMem[APPEVT_HANDLER_QUE_MEMSIZE(8)];
+// LTE work: one message per LteEvtQue call
+typedef struct {
+	uint32_t EvtId;
+	void *pCtx;
+	LteEvtQueHandler_t Handler;
+} LteWork_t;
 
 static void LteUdpEvtHandler(LTE_EVT Evt, const LteStatus_t * const pStatus);
 static void LteUdpUrcHandler(const char *pUrc);
 static int LteUdpSockEvt(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId, uint8_t *pBuffer, int Len);
-static void LteUdpRecv(uint32_t Evt, void *pCtx);
 
 static const IOPinCfg_t s_UartPins[] = {
 	{UART_RX_PORT, UART_RX_PIN, UART_RX_PINOP, IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL},
@@ -128,18 +136,7 @@ static const UARTCfg_t s_UartCfg = {
 	.bDMAMode = true,
 };
 
-// Low frequency timer: modem waits and the send interval
-static const TimerCfg_t s_TimerCfg = {
-	.DevNo = LTE_TIMER_DEVNO,
-	.ClkSrc = TIMER_CLKSRC_DEFAULT,
-	.Freq = 0,
-	.IntPrio = IRQ_PRIO_LOW,
-	.EvtHandler = nullptr,
-	.bTickInt = false,
-};
-
-static TimerDev_t s_TimerDev;
-
+// No timer: the TaktOS modem glue does the waits
 static const LteCfg_t s_LteCfg = {
 	.Rat = LTE_RAT_LTEM_NBIOT,
 	.RatPref = LTE_RAT_LTEM,
@@ -154,8 +151,8 @@ static const LteCfg_t s_LteCfg = {
 	.EdrxCycle = 0,
 	.bRai = LTE_UDP_RAI != 0,
 	.IntPrio = IRQ_PRIO_LOW,
-	.pTimer = &s_TimerDev,
-	.TimerTrigNo = LTE_UDP_TRIG_MODEM,
+	.pTimer = nullptr,
+	.TimerTrigNo = 0,
 	.UrcMemSize = 0,
 	.EvtHandler = LteUdpEvtHandler,
 	.UrcHandler = LteUdpUrcHandler,
@@ -172,6 +169,11 @@ static const SockIntrfCfg_t s_SockCfg = {
 	.EvtCB = LteUdpSockEvt,
 };
 
+static uint8_t s_LteWorkQueMem[LTE_UDP_WORK_QUE_SIZE * sizeof(LteWork_t)] TAKT_ALIGNED(4);
+static TaktOSQueue_t s_LteWorkQue;
+static uint8_t s_LteThreadMem[TAKTOS_THREAD_MEM_SIZE(LTE_UDP_THREAD_STACK)] TAKT_ALIGNED(4);
+static hTaktOSThread_t s_LteThread = nullptr;
+
 static UART s_Uart;
 static SockIntrf s_Sock;
 static uint32_t s_TxCount = 0;
@@ -179,17 +181,19 @@ static uint32_t s_TxCount = 0;
 // Data arrived and not read yet: queued once, kept when the queue refused it
 static volatile bool s_bRxPending = false;
 
-static void LteUdpSend(uint32_t Evt, void *pCtx)
+// RTOS bridge: link-time override of LteEvtQue, see lte/lte.h. Called from
+// the modem interrupt and by LteCheckStatus in the LTE thread. Each piece of
+// work becomes a message to the LTE thread. The application event queue is
+// not used.
+bool LteEvtQue(uint32_t EvtId, void *pCtx, LteEvtQueHandler_t Handler)
 {
-	(void)Evt;
-	(void)pCtx;
+	const LteWork_t work = { EvtId, pCtx, Handler };
 
-	// A read the queue refused
-	if (s_bRxPending)
-	{
-		LteUdpRecv(LTE_UDP_EVT_RX, nullptr);
-	}
+	return TaktOSQueueSend(&s_LteWorkQue, &work, false, 0) == TAKTOS_OK;
+}
 
+static void LteUdpSend(void)
+{
 	if (LteRegistered() == false)
 	{
 		return;
@@ -209,7 +213,7 @@ static void LteUdpSend(uint32_t Evt, void *pCtx)
 		rsrp = 0;
 	}
 
-	int len = snprintf(msg, sizeof(msg), "IOsonata LteUdp %u rsrp %d", (unsigned)s_TxCount, rsrp);
+	int len = snprintf(msg, sizeof(msg), "IOsonata LteUdpTaktOS %u rsrp %d", (unsigned)s_TxCount, rsrp);
 
 	// The send is the last of the exchange: the network releases the radio
 	// connection right after it
@@ -247,7 +251,7 @@ static void LteUdpRecv(uint32_t Evt, void *pCtx)
 	}
 }
 
-// Interrupt context: queue the read
+// Interrupt context: the read runs in the LTE thread
 static int LteUdpSockEvt(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId, uint8_t *pBuffer, int Len)
 {
 	(void)pDev;
@@ -257,22 +261,13 @@ static int LteUdpSockEvt(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId, uint8_t *p
 	if (EvtId == DEVINTRF_EVT_RX_DATA && s_bRxPending == false)
 	{
 		s_bRxPending = true;
-		AppEvtHandlerQue(LTE_UDP_EVT_RX, nullptr, LteUdpRecv);
+		LteEvtQue(LTE_UDP_EVT_RX, nullptr, LteUdpRecv);
 	}
 
 	return 0;
 }
 
-// Interrupt context: queue the send
-static void LteUdpTimerTrig(TimerDev_t * const pTimer, int TrigNo, void * const pContext)
-{
-	(void)pTimer;
-	(void)TrigNo;
-	(void)pContext;
-
-	AppEvtHandlerQue(LTE_UDP_EVT_SEND, nullptr, LteUdpSend);
-}
-
+// LTE thread
 static void LteUdpEvtHandler(LTE_EVT Evt, const LteStatus_t * const pStatus)
 {
 	switch (Evt)
@@ -282,12 +277,7 @@ static void LteUdpEvtHandler(LTE_EVT Evt, const LteStatus_t * const pStatus)
 						  pStatus->RegStat == LTE_REG_ROAMING ? "roaming" : "home",
 						  pStatus->Rat == LTE_RAT_NBIOT ? "NB-IoT" : "LTE-M",
 						  (unsigned)pStatus->Tac, (unsigned)pStatus->CellId);
-			if (pStatus->bPsm)
-			{
-				s_Uart.printf("PSM TAU %u s, active %u s\r\n",
-							  (unsigned)pStatus->PsmTau, (unsigned)pStatus->PsmActive);
-			}
-			LteUdpSend(0, nullptr);
+			LteUdpSend();
 			break;
 
 		case LTE_EVT_UNREGISTERED:
@@ -335,39 +325,108 @@ static void LteUdpUrcHandler(const char *pUrc)
 	s_Uart.printf("URC %s\r\n", pUrc);
 }
 
-int main()
+// Starts LTE, then runs the LTE work as its messages arrive and sends a
+// packet at each interval
+static void LteThread(void *pArg)
 {
-	AppEvtHandlerInit(g_AppEvtHandlerQueMem, sizeof(g_AppEvtHandlerQueMem));
+	(void)pArg;
 
-	s_Uart.Init(s_UartCfg);
-	s_Uart.printf("LteUdp\r\n");
-
-	char info[48];
-
-	if (TimerInit(&s_TimerDev, &s_TimerCfg) == false)
-	{
-		s_Uart.printf("Timer init failed\r\n");
-	}
-	else if (LteInit(&s_LteCfg) == false)
+	if (LteInit(&s_LteCfg) == false)
 	{
 		s_Uart.printf("LTE init failed\r\n");
 	}
 	else
 	{
+		char info[48];
+
 		if (LteGetInfo(LTE_INFO_FWVER, info, sizeof(info)))
 		{
 			s_Uart.printf("Modem firmware %s\r\n", info);
 		}
-		if (LteGetInfo(LTE_INFO_IMEI, info, sizeof(info)))
-		{
-			s_Uart.printf("IMEI %s\r\n", info);
-		}
-		msTimerEnableTrigger(&s_TimerDev, LTE_UDP_TRIG_SEND, LTE_UDP_INTERVAL * 1000U,
-							 TIMER_TRIG_TYPE_CONTINUOUS, LteUdpTimerTrig, nullptr);
 		s_Uart.printf("Attaching\r\n");
 	}
 
-	AppRun();
+	const uint32_t period = LTE_UDP_INTERVAL * TaktOSGetTickHz();
+	uint32_t next = TaktOSTickCount() + period;
+
+	while (1)
+	{
+		int32_t wait = (int32_t)(next - TaktOSTickCount());
+
+		if (wait <= 0)
+		{
+			LteUdpSend();
+			next += period;
+			if ((int32_t)(next - TaktOSTickCount()) <= 0)
+			{
+				// The send took longer than a period: no catching up
+				next = TaktOSTickCount() + period;
+			}
+			continue;
+		}
+
+		LteWork_t work;
+
+		if (TaktOSQueueReceive(&s_LteWorkQue, &work, false, 0) != TAKTOS_OK)
+		{
+			// Queue empty: queue again the work it refused, read what a
+			// refused read left, then wait for a message or the next send
+			LteCheckStatus();
+			if (s_bRxPending)
+			{
+				LteUdpRecv(LTE_UDP_EVT_RX, nullptr);
+			}
+			if (TaktOSQueueReceive(&s_LteWorkQue, &work, true, (uint32_t)wait) != TAKTOS_OK)
+			{
+				continue;
+			}
+		}
+		work.Handler(work.EvtId, work.pCtx);
+	}
+}
+
+int main()
+{
+	s_Uart.Init(s_UartCfg);
+	s_Uart.printf("LteUdpTaktOS\r\n");
+
+	// The work queue exists before anything can queue LTE work
+	if (TaktOSQueueInit(&s_LteWorkQue, s_LteWorkQueMem, sizeof(LteWork_t),
+						LTE_UDP_WORK_QUE_SIZE) != TAKTOS_OK)
+	{
+		s_Uart.printf("Queue init failed\r\n");
+		while (1)
+		{
+			__WFE();
+		}
+	}
+
+	TaktOSCfg_t cfg = {
+		.KernClockHz = SystemCoreClockGet(),
+		.TickHz = TAKTOS_APP_TICK_HZ,
+	};
+
+	if (TaktOSInit(&cfg) != TAKTOS_OK)
+	{
+		s_Uart.printf("TaktOS init failed\r\n");
+		while (1)
+		{
+			__WFE();
+		}
+	}
+
+	s_LteThread = TaktOSThreadCreate(s_LteThreadMem, sizeof(s_LteThreadMem), LteThread, nullptr,
+									 TAKTOS_PRIORITY_NORMAL);
+	if (s_LteThread == nullptr)
+	{
+		s_Uart.printf("Thread create failed\r\n");
+		while (1)
+		{
+			__WFE();
+		}
+	}
+
+	TaktOSStart();
 
 	return 0;
 }

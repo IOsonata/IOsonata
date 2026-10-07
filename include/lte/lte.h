@@ -179,6 +179,9 @@ typedef struct __Lte_Cfg {
 	LTE_RAT Rat;						//!< Radio access technologies allowed
 	LTE_RAT RatPref;					//!< Preferred one when both are allowed, LTE_RAT_NONE for none
 	bool bGnss;							//!< Keep the GNSS receiver usable, where the modem has one
+	const uint8_t *pBand;				//!< LTE bands allowed (band numbers, all supported by the
+										//!< modem), NULL to keep the band setting of the modem
+	int NbBand;							//!< Number of entries in pBand
 	const char *pApn;					//!< Access point name, NULL for the network default
 	LTE_PDN PdnType;					//!< PDN type, used with pApn
 	bool bPsm;							//!< Request Power Saving Mode
@@ -230,7 +233,9 @@ bool LteInit(const LteCfg_t * const pCfg);
 /// Attach to the network again after LteDisconnect
 bool LteConnect(void);
 
-/// Leave the network, radio off, configuration kept (flight mode)
+/// Leave the network, radio off, configuration kept (flight mode). An
+/// application that turns the modem off itself (AT+CFUN=0) starts again with
+/// LteInit, not LteConnect: the modem drops some settings when off.
 bool LteDisconnect(void);
 
 /**

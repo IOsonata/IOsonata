@@ -673,6 +673,7 @@ bool LteCoreInit(const LteCfg_t * const pCfg)
 		(pCfg->Rat != LTE_RAT_LTEM && pCfg->Rat != LTE_RAT_NBIOT && pCfg->Rat != LTE_RAT_LTEM_NBIOT) ||
 		(pCfg->RatPref != LTE_RAT_NONE && pCfg->RatPref != LTE_RAT_LTEM && pCfg->RatPref != LTE_RAT_NBIOT) ||
 		(pCfg->RatPref & ~pCfg->Rat) != 0 ||
+		pCfg->NbBand < 0 || (pCfg->NbBand > 0 && pCfg->pBand == nullptr) ||
 		(unsigned)pCfg->PdnType >= sizeof(s_LtePdnName) / sizeof(s_LtePdnName[0]))
 	{
 		return false;

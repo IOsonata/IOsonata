@@ -27,7 +27,18 @@ the socket open; data left after a close can still be read.
 The IP stack and the name lookup belong to the network implementation of
 the target, so a port implements this API: on nRF91 the modem
 (sock_intrf_nrf91.cpp). TLS and DTLS credentials are stored in it
-beforehand, under the security tag of the configuration.
+beforehand with SockIntrfCredWrite, under the security tag the socket
+configuration gives. Where the network stack is in a modem, it writes and
+deletes them only with the radio off. On LTE, LteInit starts the attach,
+so:
+
+	LteInit(&ltecfg);
+	if (SockIntrfCredExists(Tag, SOCKINTRF_CRED_CA_CERT) == false)
+	{
+		LteDisconnect();
+		SockIntrfCredWrite(Tag, SOCKINTRF_CRED_CA_CERT, s_CaPem);
+		LteConnect();
+	}
 
 @author	Hoang Nguyen Hoan
 @date	Oct. 6, 2026
@@ -89,6 +100,15 @@ typedef enum __Sock_Intrf_Rai {
 	SOCKINTRF_RAI_WAIT_MORE,			//!< Keep the connection, more data coming
 } SOCKINTRF_RAI;
 
+/// DTLS and TLS credential kinds, stored under a security tag
+typedef enum __Sock_Intrf_Cred {
+	SOCKINTRF_CRED_CA_CERT,				//!< Certificate of the authority the peer is checked with, PEM
+	SOCKINTRF_CRED_CERT,				//!< Own certificate, PEM
+	SOCKINTRF_CRED_KEY,					//!< Own private key, PEM
+	SOCKINTRF_CRED_PSK,					//!< Pre-shared key, hexadecimal string
+	SOCKINTRF_CRED_PSK_ID,				//!< Pre-shared key identity
+} SOCKINTRF_CRED;
+
 #pragma pack(push, 4)
 
 typedef struct __Sock_Intrf_Cfg {
@@ -144,6 +164,27 @@ static inline bool SockIntrfConnected(SockIntrfDev_t * const pDev) { return pDev
  * @return	true - set
  */
 bool SockIntrfRai(SockIntrfDev_t * const pDev, SOCKINTRF_RAI Rai);
+
+/**
+ * @brief	Store a credential in the network implementation.
+ *
+ * Replaces the one of the same kind under the tag. Not from an interrupt.
+ * See the file description for when the network takes it.
+ *
+ * @param	SecTag	: Security tag, the one of the socket configuration
+ * @param	Type	: Kind of credential
+ * @param	pData	: The credential, 0 terminated, without double quote
+ *
+ * @return	true - stored
+ */
+bool SockIntrfCredWrite(int SecTag, SOCKINTRF_CRED Type, const char *pData);
+
+/// Remove a credential, with the radio off as for SockIntrfCredWrite. false
+/// when nothing was stored or the network refused.
+bool SockIntrfCredDelete(int SecTag, SOCKINTRF_CRED Type);
+
+/// true when a credential of that kind is stored under the tag
+bool SockIntrfCredExists(int SecTag, SOCKINTRF_CRED Type);
 
 static inline int SockIntrfRx(SockIntrfDev_t * const pDev, uint8_t *pBuff, int BuffLen) {
 	return DeviceIntrfRx(&pDev->DevIntrf, 0, pBuff, BuffLen);

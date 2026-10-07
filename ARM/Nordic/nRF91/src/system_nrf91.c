@@ -65,6 +65,16 @@ void SystemLockFICRNS(void);
     static bool is_empty_word(uint32_t const volatile * word);
 #endif
 
+/**
+ * @brief	Get core clock frequency
+ *
+ * @return	Core frequency in Hz.
+ */
+uint32_t SystemCoreClockGet(void)
+{
+	return SystemCoreClock;
+}
+
 void SystemCoreClockUpdate(void)
 {
     SystemCoreClock = __SYSTEM_CLOCK_DEFAULT;

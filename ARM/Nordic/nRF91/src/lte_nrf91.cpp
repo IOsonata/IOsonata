@@ -5,10 +5,11 @@
 
 Implements the port part of lte.h: LteInit turns the modem on through
 nRF91ModemInit when the application has not done it (see modem_nrf91.h),
-sets the system mode (%XSYSTEMMODE), the 3GPP configuration of the generic
-layer and release assistance (%RAI), then attaches. URCs and modem faults
-come from the Modem library interrupt and go to LteUrcPut and LteFaultPut.
-AT commands go through nrf_modem_at_cmd, which waits on the modem glue.
+sets the system mode (%XSYSTEMMODE), the band lock (%XBANDLOCK, runtime lock),
+the 3GPP configuration of the generic layer and release assistance (%RAI),
+then attaches. URCs and modem faults come from the Modem library interrupt
+and go to LteUrcPut and LteFaultPut. AT commands go through
+nrf_modem_at_cmd, which waits on the modem glue.
 
 A fault is reported only when LteInit turned the modem on: an application
 that does it itself gets the fault through its own nRF91ModemCfg_t handler.
@@ -68,6 +69,10 @@ SOFTWARE.
 // Longest %XSYSTEMMODE command
 #define LTE_NRF91_SYSMODE_LEN		40
 
+// Highest band %XBANDLOCK takes, and the longest command
+#define LTE_NRF91_BAND_MAX			88
+#define LTE_NRF91_BANDLOCK_LEN		(LTE_NRF91_BAND_MAX + 24)
+
 // %XSYSTEMMODE LTE preference: none, LTE-M, NB-IoT
 #define LTE_NRF91_PREF_NONE			0
 #define LTE_NRF91_PREF_LTEM			1
@@ -101,6 +106,39 @@ static void LteNrf91Fault(struct nrf_modem_fault_info *pInfo)
 	(void)pInfo;
 
 	LteFaultPut();
+}
+
+// Runtime band lock: a string of one bit per band, the highest band first,
+// band 1 last. The modem drops it at CFUN=0 and at a reset, so LteInit sets
+// it at each start, after its CFUN=0. LteDisconnect (CFUN=4) keeps it.
+static bool LteNrf91BandLockCmd(const LteCfg_t * const pCfg, char pCmd[LTE_NRF91_BANDLOCK_LEN])
+{
+	int top = 0;
+
+	for (int i = 0; i < pCfg->NbBand; i++)
+	{
+		if (pCfg->pBand[i] < 1 || pCfg->pBand[i] > LTE_NRF91_BAND_MAX)
+		{
+			return false;
+		}
+		if (pCfg->pBand[i] > top)
+		{
+			top = pCfg->pBand[i];
+		}
+	}
+
+	int len = snprintf(pCmd, LTE_NRF91_BANDLOCK_LEN, "AT%%XBANDLOCK=2,\"");
+	char *mask = &pCmd[len];
+
+	memset(mask, '0', (size_t)top);
+	for (int i = 0; i < pCfg->NbBand; i++)
+	{
+		mask[top - pCfg->pBand[i]] = '1';
+	}
+	mask[top] = '"';
+	mask[top + 1] = 0;
+
+	return true;
 }
 
 int LteAtCmd(const char *pCmd, char *pResp, int RespLen)
@@ -170,11 +208,23 @@ bool LteDisconnect(void)
 
 bool LteInit(const LteCfg_t * const pCfg)
 {
+	char bandlock[LTE_NRF91_BANDLOCK_LEN];
+
+	// Checked first: a refused configuration leaves a running LTE as it is
+	if (pCfg == nullptr || pCfg->NbBand < 0 ||
+		(pCfg->NbBand > 0 && (pCfg->pBand == nullptr || LteNrf91BandLockCmd(pCfg, bandlock) == false)))
+	{
+		return false;
+	}
+
 	// No URC while the generic layer sets up its FIFO again
 	nrf_modem_at_notif_handler_set(nullptr);
 
 	if (LteCoreInit(pCfg) == false)
 	{
+		// Refused before anything changed: the earlier configuration holds
+		nrf_modem_at_notif_handler_set(LteNrf91Urc);
+
 		return false;
 	}
 
@@ -216,10 +266,11 @@ bool LteInit(const LteCfg_t * const pCfg)
 			 (pCfg->Rat & LTE_RAT_LTEM) ? 1 : 0, (pCfg->Rat & LTE_RAT_NBIOT) ? 1 : 0,
 			 pCfg->bGnss ? 1 : 0, pref);
 
-	// System mode and PDN settings are accepted with the radio off
+	// System mode, band lock and PDN settings are accepted with the radio off
 	if (nrf_modem_at_notif_handler_set(LteNrf91Urc) != 0 ||
 		LteAtCmd("AT+CFUN=0", nullptr, 0) != 0 ||
 		LteAtCmd(sysmode, nullptr, 0) != 0 ||
+		(pCfg->NbBand > 0 && LteAtCmd(bandlock, nullptr, 0) != 0) ||
 		LteCoreConfig() == false)
 	{
 		return false;

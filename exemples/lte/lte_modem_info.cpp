@@ -13,7 +13,8 @@ configuration of the library and the Modem library, cellular variant:
 
 	sdk-nrfxlib/nrf_modem/lib/cellular/<nrf9160 or nrf9120>/hard-float/libmodem.a
 
-The board.h of the project gives the console UART pins.
+The board.h of the project gives the console UART pins and the timer of the
+modem waits.
 
 @author	Hoang Nguyen Hoan
 @date	Oct. 6, 2026
@@ -88,7 +89,7 @@ static const UARTCfg_t s_UartCfg = {
 
 // Low frequency timer for the timeouts of the modem waits
 static const TimerCfg_t s_TimerCfg = {
-	.DevNo = 1,
+	.DevNo = LTE_TIMER_DEVNO,
 	.ClkSrc = TIMER_CLKSRC_DEFAULT,
 	.Freq = 0,
 	.IntPrio = 6,
