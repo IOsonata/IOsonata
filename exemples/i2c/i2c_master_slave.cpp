@@ -109,6 +109,9 @@ UART g_Uart;
 //********** I2C Master **********
 #define I2C_SCL_RATE	100000 // Rate in Hz, supported 100k, 250k, and 400k
 
+static int I2CMasterIntrfHandler(DevIntrf_t * const pDev,
+	DEVINTRF_EVT EvtId, uint8_t *pBuffer, int Len);
+
 static const IOPinCfg_t s_I2cMasterPins[] = {
 	{I2C_MASTER_SDA_PORT, I2C_MASTER_SDA_PIN, I2C_MASTER_SDA_PINOP, IOPINDIR_BI, IOPINRES_PULLUP, IOPINTYPE_OPENDRAIN},	// SDA
 	{I2C_MASTER_SCL_PORT, I2C_MASTER_SCL_PIN, I2C_MASTER_SCL_PINOP, IOPINDIR_OUTPUT, IOPINRES_PULLUP, IOPINTYPE_OPENDRAIN},	// SCL
