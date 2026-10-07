@@ -6,10 +6,11 @@
 The SAM4L separates master (TWIM) and slave (TWIS) functions. IOsonata keeps
 one I2CDev_t API and selects the matching register block from I2CCfg_t::Mode.
 
-Master mode is synchronous/polling by design: DeviceIntrf transmit buffers are
-immediate-use and must not be retained after the call returns. It supports
-7-bit and 10-bit addressing, transfer lengths beyond the 8-bit NBYTES field,
-and the write/repeated-start/read sequence used by DeviceIntrfRead().
+Master mode supports polling and interrupt-driven transfers, 7-bit and 10-bit
+addressing, transfer lengths beyond the 8-bit NBYTES field, and the
+write/repeated-start/read sequence used by DeviceIntrfRead(). Interrupt TX
+copies the complete caller transfer into controller-owned static storage before
+returning so no caller buffer is retained by the ISR.
 
 Slave mode is interrupt driven. The TWIS address-match clock stretching is used
 so application callbacks can install the read/write buffers before the transfer
@@ -58,10 +59,20 @@ SOFTWARE.
 #define SAM4L_I2C_MASTER_COUNT		4
 #define SAM4L_I2C_SLAVE_COUNT		2
 #define SAM4L_I2C_MAX_NBYTES		255
+#define SAM4L_I2C_INT_TX_BUFFER_SIZE	256
 #define SAM4L_I2C_WAIT_COUNT		1000000U
 
 #define SAM4L_TWIM_ERROR_MASK \
 	(TWIM_SR_ANAK | TWIM_SR_DNAK | TWIM_SR_ARBLST | TWIM_SR_TOUT | TWIM_SR_PECERR)
+
+#define SAM4L_TWIM_ERROR_IRQ_MASK \
+	(TWIM_IER_ANAK | TWIM_IER_DNAK | TWIM_IER_ARBLST | TWIM_IER_TOUT | TWIM_IER_PECERR)
+
+#define SAM4L_TWIM_TX_IRQ_MASK \
+	(TWIM_IER_TXRDY | TWIM_IER_CCOMP | SAM4L_TWIM_ERROR_IRQ_MASK)
+
+#define SAM4L_TWIM_RX_IRQ_MASK \
+	(TWIM_IER_RXRDY | TWIM_IER_CCOMP | SAM4L_TWIM_ERROR_IRQ_MASK)
 
 #define SAM4L_TWIS_ERROR_MASK \
 	(TWIS_SR_URUN | TWIS_SR_ORUN | TWIS_SR_SMBTOUT | TWIS_SR_SMBPECERR | TWIS_SR_BUSERR)
@@ -69,6 +80,13 @@ SOFTWARE.
 #define SAM4L_TWIS_BASE_IRQ_MASK \
 	(TWIS_IER_SAM | TWIS_IER_TCOMP | TWIS_IER_REP | \
 	 TWIS_IER_URUN | TWIS_IER_ORUN | TWIS_IER_SMBTOUT | TWIS_IER_SMBPECERR | TWIS_IER_BUSERR)
+
+typedef enum {
+	SAM4L_I2C_OP_NONE,
+	SAM4L_I2C_OP_MASTER_TX,
+	SAM4L_I2C_OP_MASTER_RX_PREAMBLE,
+	SAM4L_I2C_OP_MASTER_RX,
+} SAM4L_I2C_OP;
 
 typedef struct {
 	int DevNo;
@@ -79,6 +97,7 @@ typedef struct {
 	Twim *pMReg;
 	Twis *pSReg;
 	I2CDev_t *pI2cDev;
+	uint8_t TxBuffer[SAM4L_I2C_INT_TX_BUFFER_SIZE];
 
 	uint16_t DevAddr;
 	const uint8_t *pTxData;
@@ -88,6 +107,7 @@ typedef struct {
 	int ChunkRemain;
 	int TxCount;
 	int RxCount;
+	SAM4L_I2C_OP Op;
 	bool NeedStart;
 	bool BusHeld;
 	bool LastError;
@@ -286,6 +306,7 @@ static void Sam4lI2CMasterRecover(SAM4L_I2CDEV *dev)
 	dev->BusHeld = false;
 	dev->NeedStart = true;
 	dev->TenBitReadReady = false;
+	dev->Op = SAM4L_I2C_OP_NONE;
 	Sam4lI2CMasterHwReset(dev);
 }
 
@@ -441,6 +462,34 @@ static int Sam4lI2CMasterTxPolling(DevIntrf_t * const pDev,
 	return dev->TxCount;
 }
 
+static int Sam4lI2CMasterTxAsync(DevIntrf_t * const pDev,
+	const uint8_t *pData, int DataLen)
+{
+	SAM4L_I2CDEV *dev = (SAM4L_I2CDEV *)pDev->pDevData;
+
+	// DeviceIntrf TX buffers are immediate-use. Interrupt mode must therefore
+	// take ownership of the bytes before returning. Larger transfers fall back
+	// to the synchronous path instead of retaining the caller's pointer.
+	if (DataLen > SAM4L_I2C_INT_TX_BUFFER_SIZE)
+		return Sam4lI2CMasterTxPolling(pDev, pData, DataLen);
+
+	memcpy(dev->TxBuffer, pData, DataLen);
+	dev->pTxData = dev->TxBuffer;
+	dev->TxRemain = DataLen;
+	dev->TxCount = 0;
+	dev->Op = SAM4L_I2C_OP_MASTER_TX;
+	pDev->bTxReady = false;
+
+	if (!Sam4lI2CMasterStartTxChunk(dev))
+	{
+		pDev->bTxReady = true;
+		return 0;
+	}
+
+	dev->pMReg->TWIM_IER = SAM4L_TWIM_TX_IRQ_MASK;
+	return -1;
+}
+
 static int Sam4lI2CTxData(DevIntrf_t * const pDev,
 	const uint8_t *pData, int DataLen)
 {
@@ -451,7 +500,9 @@ static int Sam4lI2CTxData(DevIntrf_t * const pDev,
 	if (dev->pI2cDev->Cfg.Mode != I2CMODE_MASTER)
 		return 0;
 
-	return Sam4lI2CMasterTxPolling(pDev, pData, DataLen);
+	return pDev->bIntEn ?
+		Sam4lI2CMasterTxAsync(pDev, pData, DataLen) :
+		Sam4lI2CMasterTxPolling(pDev, pData, DataLen);
 }
 
 static int Sam4lI2CTxSrData(DevIntrf_t * const pDev,
@@ -531,6 +582,32 @@ static int Sam4lI2CMasterRxPolling(DevIntrf_t * const pDev,
 	return dev->RxCount;
 }
 
+static int Sam4lI2CMasterRxAsync(DevIntrf_t * const pDev,
+	uint8_t *pBuff, int BuffLen)
+{
+	SAM4L_I2CDEV *dev = (SAM4L_I2CDEV *)pDev->pDevData;
+	if (dev->LastError)
+		return 0;
+
+	dev->pRxData = pBuff;
+	dev->RxRemain = BuffLen;
+	dev->RxCount = 0;
+
+	if (dev->pI2cDev->Cfg.AddrType == I2CADDR_TYPE_EXT && !dev->BusHeld)
+	{
+		dev->Op = SAM4L_I2C_OP_MASTER_RX_PREAMBLE;
+		Sam4lI2CMasterStartRxPreamble(dev);
+	}
+	else
+	{
+		dev->Op = SAM4L_I2C_OP_MASTER_RX;
+		Sam4lI2CMasterStartRxChunk(dev);
+	}
+
+	dev->pMReg->TWIM_IER = SAM4L_TWIM_RX_IRQ_MASK;
+	return -1;
+}
+
 static int Sam4lI2CRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 {
 	if (pBuff == nullptr || BuffLen <= 0)
@@ -540,7 +617,9 @@ static int Sam4lI2CRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 	if (dev->pI2cDev->Cfg.Mode != I2CMODE_MASTER)
 		return 0;
 
-	return Sam4lI2CMasterRxPolling(pDev, pBuff, BuffLen);
+	return pDev->bIntEn ?
+		Sam4lI2CMasterRxAsync(pDev, pBuff, BuffLen) :
+		Sam4lI2CMasterRxPolling(pDev, pBuff, BuffLen);
 }
 
 static void Sam4lI2CStopTx(DevIntrf_t * const pDev)
@@ -560,6 +639,117 @@ static void Sam4lI2CStopTx(DevIntrf_t * const pDev)
 static void Sam4lI2CStopRx(DevIntrf_t * const pDev)
 {
 	Sam4lI2CStopTx(pDev);
+}
+
+static void Sam4lI2CMasterAsyncComplete(SAM4L_I2CDEV *dev)
+{
+	DevIntrf_t *intrf = &dev->pI2cDev->DevIntrf;
+	dev->pMReg->TWIM_IDR = 0xFFFFFFFFU;
+
+	if (dev->Op == SAM4L_I2C_OP_MASTER_TX)
+	{
+		const int count = dev->TxCount;
+		dev->BusHeld = intrf->bNoStop && !dev->LastError;
+		dev->Op = SAM4L_I2C_OP_NONE;
+
+		if (intrf->bNoStop)
+		{
+			intrf->bTxReady = true;
+			return;
+		}
+
+		DeviceIntrfTxComplete(intrf);
+		if (intrf->EvtCB)
+			intrf->EvtCB(intrf, DEVINTRF_EVT_COMPLETED, nullptr, count);
+	}
+	else
+	{
+		const int count = dev->RxCount;
+		dev->BusHeld = intrf->bNoStop && !dev->LastError;
+		dev->Op = SAM4L_I2C_OP_NONE;
+		DeviceIntrfStopRx(intrf);
+		if (intrf->EvtCB)
+			intrf->EvtCB(intrf, DEVINTRF_EVT_COMPLETED, nullptr, count);
+	}
+}
+
+static void Sam4lI2CMasterIrqHandler(SAM4L_I2CDEV *dev)
+{
+	Twim *reg = dev->pMReg;
+	const uint32_t sr = reg->TWIM_SR;
+	const uint32_t pending = sr & reg->TWIM_IMR;
+
+	if ((sr & SAM4L_TWIM_ERROR_MASK) != 0U)
+	{
+		const SAM4L_I2C_OP op = dev->Op;
+		Sam4lI2CMasterRecover(dev);
+		dev->Op = op;
+		if (op == SAM4L_I2C_OP_MASTER_TX && dev->pI2cDev->DevIntrf.bNoStop)
+		{
+			dev->pI2cDev->DevIntrf.bTxReady = true;
+			dev->Op = SAM4L_I2C_OP_NONE;
+			return;
+		}
+		Sam4lI2CMasterAsyncComplete(dev);
+		return;
+	}
+
+	if ((pending & TWIM_SR_TXRDY) != 0U &&
+		dev->Op == SAM4L_I2C_OP_MASTER_TX && dev->ChunkRemain > 0)
+	{
+		reg->TWIM_THR = *dev->pTxData++;
+		--dev->ChunkRemain;
+		--dev->TxRemain;
+		++dev->TxCount;
+		if (dev->ChunkRemain == 0)
+			reg->TWIM_IDR = TWIM_IDR_TXRDY;
+	}
+
+	if ((pending & TWIM_SR_RXRDY) != 0U &&
+		dev->Op == SAM4L_I2C_OP_MASTER_RX && dev->ChunkRemain > 0)
+	{
+		*dev->pRxData++ = (uint8_t)reg->TWIM_RHR;
+		--dev->ChunkRemain;
+		--dev->RxRemain;
+		++dev->RxCount;
+	}
+
+	if ((pending & TWIM_SR_CCOMP) == 0U)
+		return;
+
+	reg->TWIM_SCR = TWIM_SCR_CCOMP;
+
+	if (dev->Op == SAM4L_I2C_OP_MASTER_RX_PREAMBLE)
+	{
+		dev->BusHeld = true;
+		dev->NeedStart = true;
+		dev->TenBitReadReady = true;
+		dev->Op = SAM4L_I2C_OP_MASTER_RX;
+		Sam4lI2CMasterStartRxChunk(dev);
+		return;
+	}
+
+	if (dev->Op == SAM4L_I2C_OP_MASTER_TX)
+	{
+		if (dev->TxRemain > 0)
+		{
+			Sam4lI2CMasterStartTxChunk(dev);
+			reg->TWIM_IER = TWIM_IER_TXRDY;
+			return;
+		}
+		Sam4lI2CMasterAsyncComplete(dev);
+		return;
+	}
+
+	if (dev->Op == SAM4L_I2C_OP_MASTER_RX)
+	{
+		if (dev->RxRemain > 0)
+		{
+			Sam4lI2CMasterStartRxChunk(dev);
+			return;
+		}
+		Sam4lI2CMasterAsyncComplete(dev);
+	}
 }
 
 static void Sam4lI2CSlavePrimeTx(SAM4L_I2CDEV *dev)
@@ -824,9 +1014,11 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
 	SAM4L_I2CDEV *dev = &s_Sam4lI2CDev[pCfgData->DevNo];
 	memcpy(&pDev->Cfg, pCfgData, sizeof(I2CCfg_t));
 	if (pDev->Cfg.Mode == I2CMODE_SLAVE)
+	{
+		// Slave timing is controlled by the external master; TWIS therefore
+		// always uses its interrupt path regardless of the requested setting.
 		pDev->Cfg.bIntEn = true;
-	else
-		pDev->Cfg.bIntEn = false;
+	}
 
 	memset(pDev->pRRData, 0, sizeof(pDev->pRRData));
 	memset(pDev->RRDataLen, 0, sizeof(pDev->RRDataLen));
@@ -834,6 +1026,7 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
 	memset(pDev->TRBuffLen, 0, sizeof(pDev->TRBuffLen));
 
 	dev->pI2cDev = pDev;
+	dev->Op = SAM4L_I2C_OP_NONE;
 	dev->NeedStart = true;
 	dev->BusHeld = false;
 	dev->LastError = false;
@@ -876,6 +1069,12 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
 	if (pDev->Cfg.Mode == I2CMODE_MASTER)
 	{
 		Sam4lI2CMasterHwReset(dev);
+		if (pDev->Cfg.bIntEn)
+		{
+			NVIC_ClearPendingIRQ(dev->MasterIrq);
+			NVIC_SetPriority(dev->MasterIrq, pDev->Cfg.IntPrio);
+			NVIC_EnableIRQ(dev->MasterIrq);
+		}
 	}
 	else
 	{
@@ -902,6 +1101,26 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
 	}
 
 	return pDev->Cfg.Rate != 0U;
+}
+
+extern "C" void TWIM0_Handler(void)
+{
+	Sam4lI2CMasterIrqHandler(&s_Sam4lI2CDev[0]);
+}
+
+extern "C" void TWIM1_Handler(void)
+{
+	Sam4lI2CMasterIrqHandler(&s_Sam4lI2CDev[1]);
+}
+
+extern "C" void TWIM2_Handler(void)
+{
+	Sam4lI2CMasterIrqHandler(&s_Sam4lI2CDev[2]);
+}
+
+extern "C" void TWIM3_Handler(void)
+{
+	Sam4lI2CMasterIrqHandler(&s_Sam4lI2CDev[3]);
 }
 
 extern "C" void TWIS0_Handler(void)
