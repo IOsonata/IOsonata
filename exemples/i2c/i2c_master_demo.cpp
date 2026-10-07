@@ -54,6 +54,14 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "stddev.h"
 #include "board.h"
 
+#ifdef MCUOSC
+McuOsc_t g_McuOsc = MCUOSC;
+#endif
+
+#ifndef I2C_MASTER_DMA_ENABLE
+#define I2C_MASTER_DMA_ENABLE true
+#endif
+
 //int nRFUartEvthandler(UARTDEV *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);
 
 #define FIFOSIZE		CFIFO_MEMSIZE(512)
@@ -108,7 +116,7 @@ static const I2CCfg_t s_I2cCfgMaster = {
 	.AddrType = I2CADDR_TYPE_NORMAL,
 	.NbSlaveAddr = 0,			// Number of slave addresses
 	.SlaveAddr = {0,},		// Slave addresses
-	.bDmaEn = true,
+	.bDmaEn = I2C_MASTER_DMA_ENABLE,
 	.bIntEn = true,
 	.IntPrio = 7,			// Interrupt prio
 	.EvtCB = I2CMasterIntrfHandler		// Event callback
