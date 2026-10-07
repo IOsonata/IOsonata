@@ -273,7 +273,10 @@ void IOPinConfig(int PortNo, int PinNo, int PinOp, IOPINDIR Dir, IOPINRES Resist
 
 	RE01IOPinSupplyEnable(PortNo, PinNo);
 
-	uint32_t psfval = PFS_DSCR_Msk;	// Default high drive
+	PORT0_Type *port = (PORT0_Type*)(PORT0_BASE + PortNo * 0x20);
+	// PFS aliases the output latch. Keep a preloaded CS or open-drain line
+	// high when changing direction or switching between GPIO and peripheral.
+	uint32_t psfval = PFS_DSCR_Msk | ((port->PODR >> PinNo) & PFS_PODR_Msk);
 
 	if (PinOp == IOPINOP_GPIO)
 	{
@@ -313,6 +316,10 @@ void IOPinConfig(int PortNo, int PinNo, int PinOp, IOPINDIR Dir, IOPINRES Resist
 			}
 			break;
 		case IOPINRES_NONE:
+			if (Type == IOPINTYPE_OPENDRAIN)
+			{
+				psfval |= PFS_NCODR_Msk; // N-channel with external pull-up.
+			}
 			break;
 	}
 

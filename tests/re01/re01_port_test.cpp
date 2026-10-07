@@ -185,6 +185,18 @@ static void icuAndGpio()
 	assert(SYSTEM->PRCR == 0xA500);
 	IOPinConfig(2, 8, IOPINOP_GPIO, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL);
 	assert(SYSTEM->PRCR == 0xA500);
+	IOPinConfig(0, 9, IOPINOP_GPIO, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_OPENDRAIN);
+	assert((*(volatile uint32_t*)(PFS_BASE + 9 * 4) & 0xF0U) == 0x40U);
+	IOPinConfig(0, 9, IOPINOP_FUNC15, IOPINDIR_BI, IOPINRES_NONE, IOPINTYPE_OPENDRAIN);
+	assert((*(volatile uint32_t*)(PFS_BASE + 9 * 4) & 0xF0U) == 0x40U);
+	IOPinConfig(0, 9, IOPINOP_GPIO, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL);
+	assert((*(volatile uint32_t*)(PFS_BASE + 9 * 4) & 0xC0U) == 0);
+	PORT0->PODR |= 1U << 9;
+	IOPinConfig(0, 9, IOPINOP_GPIO, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL);
+	assert(*(volatile uint32_t*)(PFS_BASE + 9 * 4) & 1U);
+	PORT0->PODR &= ~(1U << 9);
+	IOPinConfig(0, 9, IOPINOP_FUNC15, IOPINDIR_BI, IOPINRES_NONE, IOPINTYPE_OPENDRAIN);
+	assert((*(volatile uint32_t*)(PFS_BASE + 9 * 4) & 1U) == 0);
 	assert(!IOPinEnableInterrupt(0, 1, 9, 0, IOPINSENSE_TOGGLE, hook, &a));
 	assert(!IOPinEnableInterrupt(0, 1, 0, 0, IOPINSENSE_TOGGLE, hook, &a));
 	assert(IOPinEnableInterrupt(8, 1, 1, 5, IOPINSENSE_TOGGLE, hook, &a));
