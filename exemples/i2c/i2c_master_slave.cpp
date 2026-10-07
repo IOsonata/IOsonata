@@ -300,7 +300,7 @@ int main()
 	s_MasterCompleted = false;
 	s_MasterCount = 0;
 	int c = g_I2CMaster.Write(I2C_SLAVE_ADDR, &offset, 1, wr, sizeof(wr));
-	if (s_I2cCfgMaster.bIntEn)
+	if (c < 0)
 	{
 		const int total = WaitMasterComplete(10000000);
 		c = total >= 1 ? total - 1 : 0;
