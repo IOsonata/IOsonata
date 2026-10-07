@@ -776,15 +776,25 @@ static void Sam4lI2CMasterIrqHandler(SAM4L_I2CDEV *dev)
 
 static void Sam4lI2CSlavePrimeTx(SAM4L_I2CDEV *dev)
 {
-	if (!dev->SlaveTxActive || dev->pSReg == nullptr ||
-		(dev->pSReg->TWIS_SR & TWIS_SR_TXRDY) == 0U)
+	if (!dev->SlaveTxActive || dev->pSReg == nullptr)
 		return;
 
 	I2CDev_t *i2c = dev->pI2cDev;
-	if (dev->SlaveTxCount < i2c->RRDataLen[0] && i2c->pRRData[0] != nullptr)
-		dev->pSReg->TWIS_THR = i2c->pRRData[0][dev->SlaveTxCount++];
-	else
-		dev->pSReg->TWIS_THR = 0xFFU;
+	if (dev->SlaveTxCount >= i2c->RRDataLen[0] || i2c->pRRData[0] == nullptr)
+	{
+		// Leave THR empty. With STREN set, TWIS stretches SCL until the
+		// application supplies data through I2CSetReadRqstData().
+		return;
+	}
+
+	// The first byte may need to be loaded while SOAM is still holding the
+	// address phase. TXRDY is not guaranteed to be asserted yet at that point.
+	// After the first byte, only refill an empty THR.
+	if (dev->SlaveTxCount != 0 &&
+		(dev->pSReg->TWIS_SR & TWIS_SR_TXRDY) == 0U)
+		return;
+
+	dev->pSReg->TWIS_THR = i2c->pRRData[0][dev->SlaveTxCount++];
 }
 
 static void Sam4lI2CSlaveFinish(SAM4L_I2CDEV *dev)
@@ -819,7 +829,10 @@ static void Sam4lI2CSlaveIrqHandler(SAM4L_I2CDEV *dev)
 
 	if ((pending & TWIS_SR_SAM) != 0U)
 	{
-		const bool transmit = (sr & TWIS_SR_TRA) != 0U;
+		// TRA is specified to update one CLK_TWIS cycle after SAM. Do not use
+		// the SR snapshot taken at ISR entry or a read request can be mistaken
+		// for a write request, leaving THR empty while STREN holds SCL forever.
+		const bool transmit = (reg->TWIS_SR & TWIS_SR_TRA) != 0U;
 		reg->TWIS_CR &= ~TWIS_CR_ACK;
 
 		if (transmit)
