@@ -38,6 +38,7 @@ SOFTWARE.
 #include <stdbool.h>
 
 #include "re01xxx.h"
+#include "coredev/interrupt.h"
 #include "coredev/iopincfg.h"
 #include "interrupt_re01.h"
 
@@ -79,30 +80,35 @@ SOFTWARE.
 #define RE01_1500KB_PIN_MAX_INT		(10)
 #define RE01_1500KB_MAX_PORT		(9)
 
-static int s_MaxNbIOPins[RE01_1500KB_MAX_PORT] = {
-#ifdef RE01_1500KB_DBN
-	16, 15, 7, 8, 10, 15, 11, 5, 16
-#elif defined(RE01_1500KB_CFB)
-	16, 14, 7, 16, 10, 15, 11, 5, 16
-#elif defined(RE01_1500KB_CFP)
-	16, 14, 7, 5, 5, 5, 5, 5, 5
-#endif
-};
+// Package pin counts are not pin-number limits: some ports have gaps.
+// Board pin maps select the pins bonded out on the particular package.
+static bool IsValidIOPin(int PortNo, int PinNo)
+{
+	return PortNo >= 0 && PortNo < RE01_1500KB_MAX_PORT && PinNo >= 0 && PinNo < 16;
+}
 
 #pragma pack(push, 4)
 typedef struct {
 	int Idx;
 	IOPINSENSE Sense;
 	IOPinEvtHandler_t SensEvtCB;
-    uint16_t PortPinNo;
-    void *pCtx;
-    IRQn_Type IrqNo;
+	uint16_t PortPinNo;
+	void *pCtx;
+	IRQn_Type IrqNo;
 } IOPINSENS_EVTHOOK;
 #pragma pack(pop)
 
-static IOPINSENS_EVTHOOK s_GpIOSenseEvt[RE01_1500KB_PIN_MAX_INT + 1] = {
-	{0, 0, NULL}, {1, 0, NULL}, {2, 0, NULL}, {3, 0, NULL}, {4, 0, NULL},
-	{5, 0, NULL}, {6, 0, NULL}, {7, 0, NULL}, {8, 0, NULL}, {9, 0, NULL}
+static IOPINSENS_EVTHOOK s_GpIOSenseEvt[RE01_1500KB_PIN_MAX_INT] = {
+	{0, IOPINSENSE_DISABLE, NULL, 0xFFFF, NULL, (IRQn_Type)-1},
+	{1, IOPINSENSE_DISABLE, NULL, 0xFFFF, NULL, (IRQn_Type)-1},
+	{2, IOPINSENSE_DISABLE, NULL, 0xFFFF, NULL, (IRQn_Type)-1},
+	{3, IOPINSENSE_DISABLE, NULL, 0xFFFF, NULL, (IRQn_Type)-1},
+	{4, IOPINSENSE_DISABLE, NULL, 0xFFFF, NULL, (IRQn_Type)-1},
+	{5, IOPINSENSE_DISABLE, NULL, 0xFFFF, NULL, (IRQn_Type)-1},
+	{6, IOPINSENSE_DISABLE, NULL, 0xFFFF, NULL, (IRQn_Type)-1},
+	{7, IOPINSENSE_DISABLE, NULL, 0xFFFF, NULL, (IRQn_Type)-1},
+	{8, IOPINSENSE_DISABLE, NULL, 0xFFFF, NULL, (IRQn_Type)-1},
+	{9, IOPINSENSE_DISABLE, NULL, 0xFFFF, NULL, (IRQn_Type)-1}
 };
 
 static uint16_t s_GpIOPowerSupply[RE01_1500KB_MAX_PORT] = {0,};
@@ -124,9 +130,9 @@ static const uint32_t s_Re01IntPins[] = {
 static bool IsValidIOInterrupt(int IntNo, int PortNo, int PinNo)
 {
 	bool retval = false;
-	int pinval = ((IntNo & 0xf) << 8) | ((PortNo & 0xf) << 4) | (PinNo & 0xf);
+	uint32_t pinval = ((IntNo & 0xf) << 8) | ((PortNo & 0xf) << 4) | (PinNo & 0xf);
 
-	for (int i = 0; i < sizeof(s_Re01IntPins) / sizeof(uint32_t); i++)
+	for (unsigned i = 0; i < sizeof(s_Re01IntPins) / sizeof(uint32_t); i++)
 	{
 		if (s_Re01IntPins[i] == pinval)
 		{
@@ -140,11 +146,15 @@ static bool IsValidIOInterrupt(int IntNo, int PortNo, int PinNo)
 
 static int IOPinFindAvailInterrupt(int PortNo, int PinNo)
 {
+	if (!IsValidIOPin(PortNo, PinNo))
+	{
+		return -1;
+	}
 	int retval = -1;
 
-	for (int i = 0; i < sizeof(s_Re01IntPins) / sizeof(uint32_t); i++)
+	for (unsigned i = 0; i < sizeof(s_Re01IntPins) / sizeof(uint32_t); i++)
 	{
-		int pinval = ((PortNo & 0xf) << 4) | (PinNo & 0xf);
+		uint32_t pinval = ((PortNo & 0xf) << 4) | (PinNo & 0xf);
 		if ((s_Re01IntPins[i] & 0xff) == pinval)
 		{
 			retval = s_Re01IntPins[i] >> 8;
@@ -167,14 +177,18 @@ static void RE01IOPinIRQHandler(int IntNo, void *pCtx)
 
 static void RE01IOPinSupplyEnable(int PortNo, int PinNo)
 {
-    SYSTEM->PRCR = 0xA502U;
+	// Pins outside the switchable domains must not unlock PRCR.
+	if ((PortNo == 0 && PinNo < 10) || (PortNo == 2 && (PinNo < 2 || PinNo > 4)) || PortNo == 4)
+	{
+		return;
+	}
+	uint32_t state = DisableInterrupt();
+	uint16_t protection = SYSTEM->PRCR & 0xFU;
+	SYSTEM->PRCR = 0xA502U | protection;
 	switch (PortNo)
 	{
 		case 0:
-			if (PinNo < 10 || PinNo > 15)
-			{
-				return;
-			}
+			// Fall through: P0.10-15 and P5 share IV3.
 		case 5:
 			SYSTEM->VOCR_b.IV3CTL = 0;
 			break;
@@ -182,10 +196,7 @@ static void RE01IOPinSupplyEnable(int PortNo, int PinNo)
 			SYSTEM->VOCR_b.IV2CTL = 0;
 			break;
 		case 2:
-			if (PinNo < 2 || PinNo > 4)
-			{
-				return;
-			}
+			// Fall through: P2.2-4, P3, P6 and P7 share IV1.
 		case 3:
 		case 6:
 		case 7:
@@ -198,12 +209,20 @@ static void RE01IOPinSupplyEnable(int PortNo, int PinNo)
 
 	// Keep track of IO that needs power supply enabled
 	s_GpIOPowerSupply[PortNo] |= 1 << PinNo;
-    SYSTEM->PRCR = 0xA500U;
+	SYSTEM->PRCR = 0xA500U | protection;
+	EnableInterrupt(state);
 }
 
 static void RE01IOPinSupplyDisable(int PortNo, int PinNo)
 {
-    SYSTEM->PRCR = 0xA502U;
+	uint32_t state = DisableInterrupt();
+	if ((s_GpIOPowerSupply[PortNo] & (1U << PinNo)) == 0)
+	{
+		EnableInterrupt(state);
+		return;
+	}
+	uint16_t protection = SYSTEM->PRCR & 0xFU;
+	SYSTEM->PRCR = 0xA502U | protection;
 
 	s_GpIOPowerSupply[PortNo] &= ~(1 << PinNo);
 
@@ -230,7 +249,8 @@ static void RE01IOPinSupplyDisable(int PortNo, int PinNo)
 	{
 		SYSTEM->VOCR_b.IV3CTL = 1;
 	}
-    SYSTEM->PRCR = 0xA500U;
+	SYSTEM->PRCR = 0xA500U | protection;
+	EnableInterrupt(state);
 }
 
 /**
@@ -248,9 +268,7 @@ static void RE01IOPinSupplyDisable(int PortNo, int PinNo)
  */
 void IOPinConfig(int PortNo, int PinNo, int PinOp, IOPINDIR Dir, IOPINRES Resistor, IOPINTYPE Type)
 {
-	PORT0_Type *reg = (PORT0_Type *)(PORT0_BASE + PortNo * 0x20);
-
-	if (PortNo == -1 || PinNo == -1 || PortNo > RE01_1500KB_MAX_PORT)
+	if (!IsValidIOPin(PortNo, PinNo) || PinOp < IOPINOP_GPIO || PinOp > IOPINOP_FUNC31)
 		return;
 
 	RE01IOPinSupplyEnable(PortNo, PinNo);
@@ -323,8 +341,14 @@ void IOPinConfig(int PortNo, int PinNo, int PinOp, IOPINDIR Dir, IOPINRES Resist
  */
 void IOPinDisable(int PortNo, int PinNo)
 {
-	if (PortNo == -1 || PinNo == -1)
+	if (!IsValidIOPin(PortNo, PinNo))
 		return;
+
+	int intno = IOPinFindAvailInterrupt(PortNo, PinNo);
+	if (intno >= 0 && s_GpIOSenseEvt[intno].PortPinNo == ((PortNo << 8) | PinNo))
+	{
+		IOPinDisableInterrupt(intno);
+	}
 
 	PMISC->PWPR = 0;
 	PMISC->PWPR = PMISC_PWPR_PFSWE_Msk;	// Write enable
@@ -349,8 +373,15 @@ void IOPinDisableInterrupt(int IntNo)
 	{
 		return;
 	}
+	uint32_t state = DisableInterrupt();
+	if (s_GpIOSenseEvt[IntNo].IrqNo == (IRQn_Type)-1)
+	{
+		EnableInterrupt(state);
+		return;
+	}
 
 	Re01UnregisterIntHandler(s_GpIOSenseEvt[IntNo].IrqNo);
+	ICU->WUPEN &= ~(1UL << IntNo);
 
 	int pinno = s_GpIOSenseEvt[IntNo].PortPinNo & 0xFF;
 	int portno = (s_GpIOSenseEvt[IntNo].PortPinNo >> 8) & 0xf;
@@ -367,11 +398,12 @@ void IOPinDisableInterrupt(int IntNo)
 	PMISC->PWPR = PMISC_PWPR_B0WI_Msk;
 
 
-    s_GpIOSenseEvt[IntNo].PortPinNo = -1;
-    s_GpIOSenseEvt[IntNo].Sense = IOPINSENSE_DISABLE;
-    s_GpIOSenseEvt[IntNo].SensEvtCB = NULL;
-    s_GpIOSenseEvt[IntNo].pCtx = NULL;
-    s_GpIOSenseEvt[IntNo].IrqNo = -1;
+	s_GpIOSenseEvt[IntNo].PortPinNo = 0xFFFF;
+	s_GpIOSenseEvt[IntNo].Sense = IOPINSENSE_DISABLE;
+	s_GpIOSenseEvt[IntNo].SensEvtCB = NULL;
+	s_GpIOSenseEvt[IntNo].pCtx = NULL;
+	s_GpIOSenseEvt[IntNo].IrqNo = (IRQn_Type)-1;
+	EnableInterrupt(state);
 }
 
 /**
@@ -393,8 +425,9 @@ void IOPinDisableInterrupt(int IntNo)
  */
 bool IOPinEnableInterrupt(int IntNo, int IntPrio, uint32_t PortNo, uint32_t PinNo, IOPINSENSE Sense, IOPinEvtHandler_t pEvtCB, void *pCtx)
 {
-	if (IntNo < 0 || IntNo >= RE01_1500KB_PIN_MAX_INT)// ||
-//		IsValidIOInterrupt(IntNo, PortNo, PinNo) == false)
+	if (PortNo >= RE01_1500KB_MAX_PORT || PinNo >= 16 ||
+		Sense < IOPINSENSE_LOW_TRANSITION || Sense > IOPINSENSE_TOGGLE ||
+		IntNo < 0 || IntNo >= RE01_1500KB_PIN_MAX_INT)
 	{
 		return false;
 	}
@@ -402,6 +435,24 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, uint32_t PortNo, uint32_t PinN
 	if (IsValidIOInterrupt(IntNo, PortNo, PinNo) == false)
 	{
 		IntNo = IOPinFindAvailInterrupt(PortNo, PinNo);
+	}
+	if (IntNo < 0)
+	{
+		return false;
+	}
+	uint32_t state = DisableInterrupt();
+	IOPINSENS_EVTHOOK *hook = &s_GpIOSenseEvt[IntNo];
+	if (hook->IrqNo != (IRQn_Type)-1 && hook->PortPinNo != ((PortNo << 8) | PinNo))
+	{
+		EnableInterrupt(state);
+		return false;
+	}
+	uint8_t evtid = IntNo < 8 ? RE01_EVTID_PORT_IRQ0 + IntNo : RE01_EVTID_PORT_IRQ8 + IntNo - 8;
+	IRQn_Type irq = Re01RegisterIntHandler(evtid, IntPrio, RE01IOPinIRQHandler, hook);
+	if (irq == (IRQn_Type)-1)
+	{
+		EnableInterrupt(state);
+		return false;
 	}
 
 	int offset = (PinNo + (PortNo << 4)) << 2;
@@ -426,6 +477,8 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, uint32_t PortNo, uint32_t PinN
 			psfval |= (3<<PFS_EOFR_Pos);
 			irqcr[idx] = ICU_IRQCR_IRQMD_FALLING_RISING_EDGE;
 			break;
+		default:
+			break;
 	}
 
 	psfval |= PFS_ISEL_Msk;
@@ -445,15 +498,8 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, uint32_t PortNo, uint32_t PinN
 	PMISC->PWPR = 0;	// Write disable
 	PMISC->PWPR = PMISC_PWPR_B0WI_Msk;
 
-	IRQn_Type irq = Re01RegisterIntHandler(IntNo + RE01_EVTID_PORT_IRQ0, IntPrio, RE01IOPinIRQHandler, &s_GpIOSenseEvt[idx]);
-
-	if (irq == -1)
-	{
-		// Can't allocate interrupt
-		return false;
-	}
-
 	s_GpIOSenseEvt[idx].IrqNo = irq;
+	EnableInterrupt(state);
 
 	return true;
 }
@@ -503,6 +549,10 @@ int IOPinAllocateInterrupt(int IntPrio, int PortNo, int PinNo, IOPINSENSE Sense,
  */
 void IOPinSetSense(int PortNo, int PinNo, IOPINSENSE Sense)
 {
+	if (!IsValidIOPin(PortNo, PinNo))
+	{
+		return;
+	}
 	int offset = (PinNo + (PortNo << 4)) << 2;
 	__IOM uint32_t *psf = (__IOM uint32_t*)(PFS_BASE + offset);
 	uint32_t psfval = *psf & ~PFS_EOFR_Msk;
@@ -517,6 +567,8 @@ void IOPinSetSense(int PortNo, int PinNo, IOPINSENSE Sense)
 			break;
 		case IOPINSENSE_TOGGLE:
 			psfval |= (3<<PFS_EOFR_Pos);
+			break;
+		default:
 			break;
 	}
 
@@ -540,6 +592,10 @@ void IOPinSetSense(int PortNo, int PinNo, IOPINSENSE Sense)
  */
 void IOPinSetStrength(int PortNo, int PinNo, IOPINSTRENGTH Strength)
 {
+	if (!IsValidIOPin(PortNo, PinNo))
+	{
+		return;
+	}
 	int offset = (PinNo + (PortNo << 4)) << 2;
 	__IOM uint32_t *psf = (__IOM uint32_t*)(PFS_BASE + offset);
 	uint32_t psfval = *psf & ~PFS_DSCR_Msk;
@@ -568,5 +624,4 @@ void IOPinSetSpeed(int PortNo, int PinNo, IOPINSPEED Speed)
 {
 	// Not available on this Renesas
 }
-
 

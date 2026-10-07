@@ -218,6 +218,7 @@ static const Re01EvtIdMap_t s_Re01EvtIdMap[] = {
 	{0, 0, 0, 0, 0, 0, 0x1d, 0},// RE01_EVTID_SPI1_SPTEND			0xA2
 	{0, 0, 0, 0x12, 0, 0, 0, 0x12},// RE01_EVTID_QSPI_INTR			0xA3
 	{0, 0, 0, 0, 0, 0, 0, 0x1e},// RE01_EVTID_DIV_CALCCOMP			0xA4
+	{0,},						// 0xA5, reserved
 	{0, 0x1e, 0, 0, 0, 0, 0, 0},// RE01_EVTID_MLCD_TEI				0xA6
 	{0, 0, 0x1d, 0, 0, 0, 0, 0},// RE01_EVTID_MLCD_TEMI				0xA7
 	{0, 0, 0, 0x1e, 0, 0, 0, 0},// RE01_EVTID_GDT_DATII				0xA8
@@ -237,6 +238,7 @@ static const Re01EvtIdMap_t s_Re01EvtIdMap[] = {
 };
 
 static const int  s_NbRe01EvtIdMap = sizeof(s_Re01EvtIdMap) / sizeof(Re01EvtIdMap_t);
+static_assert(s_NbRe01EvtIdMap == RE01_EVTID_PORT_IRQ9 + 1, "RE01 event map must include reserved IDs");
 
 #pragma pack(push,4)
 typedef struct {
@@ -251,6 +253,13 @@ alignas(4) static Re01IrqTbl_t s_IrqHandlerTbl[RE01_IELS_CNT] = {
 
 IRQn_Type Re01RegisterIntHandler(uint8_t EvtId, int Prio, Re01IRQHandler_t pHandler, void *pCtx)
 {
+	if (EvtId == RE01_EVTID_DISABLE || EvtId >= s_NbRe01EvtIdMap || pHandler == nullptr)
+	{
+		return (IRQn_Type)-1;
+	}
+	uint32_t state = DisableInterrupt();
+	__IOM uint32_t *ielsr = (__IOM uint32_t*)&ICU->IELSR0;
+	int freeidx = -1;
 	for (int grp = 0; grp < IELS_GROUP_CNT; grp++)
 	{
 		if (s_Re01EvtIdMap[EvtId].iels[grp] != 0)
@@ -258,37 +267,42 @@ IRQn_Type Re01RegisterIntHandler(uint8_t EvtId, int Prio, Re01IRQHandler_t pHand
 			for (int i = 0; i < 4; i++)
 			{
 				uint8_t idx = (i << 3) + grp;
-				__IOM uint32_t *ielsr = (__IOM uint32_t*)&ICU->IELSR0;
-
 				uint32_t ielsrval = s_Re01EvtIdMap[EvtId].iels[grp];
 
-				if (ielsrval == ielsr[idx])
+				if (ielsrval == (ielsr[idx] & ICU_IELSR0_IELS_Msk))
 				{
-					// Already allocated.
-					return (IRQn_Type)((int)IEL0_IRQn + idx);
-				}
-				else if (s_IrqHandlerTbl[idx].Handler == 0)
-				{
-					uint32_t state = DisableInterrupt();
-					s_IrqHandlerTbl[idx].Handler = pHandler;
-					s_IrqHandlerTbl[idx].pCtx = pCtx;
-
-					IRQn_Type irq = (IRQn_Type)((int)IEL0_IRQn + idx);
-
-					ielsr[idx] = s_Re01EvtIdMap[EvtId].iels[grp];
-
-					NVIC_ClearPendingIRQ(irq);
-					NVIC_SetPriority(irq, Prio);
-					NVIC_EnableIRQ(irq);
+					// An event belongs to exactly one registered handler/context.
+					IRQn_Type irq = (IRQn_Type)-1;
+					if (s_IrqHandlerTbl[idx].Handler == pHandler && s_IrqHandlerTbl[idx].pCtx == pCtx)
+					{
+						irq = (IRQn_Type)((int)IEL0_IRQn + idx);
+						NVIC_SetPriority(irq, Prio);
+					}
 					EnableInterrupt(state);
-
 					return irq;
+				}
+				if (freeidx < 0 && s_IrqHandlerTbl[idx].Handler == nullptr &&
+					(ielsr[idx] & ICU_IELSR0_IELS_Msk) == 0)
+				{
+					freeidx = idx;
 				}
 			}
 		}
 	}
-
-	return (IRQn_Type)-1;
+	IRQn_Type irq = (IRQn_Type)-1;
+	if (freeidx >= 0)
+	{
+		s_IrqHandlerTbl[freeidx].Handler = pHandler;
+		s_IrqHandlerTbl[freeidx].pCtx = pCtx;
+		irq = (IRQn_Type)((int)IEL0_IRQn + freeidx);
+		NVIC_DisableIRQ(irq);
+		ielsr[freeidx] = s_Re01EvtIdMap[EvtId].iels[freeidx & 7];
+		NVIC_ClearPendingIRQ(irq);
+		NVIC_SetPriority(irq, Prio);
+		NVIC_EnableIRQ(irq);
+	}
+	EnableInterrupt(state);
+	return irq;
 }
 
 void Re01UnregisterIntHandler(IRQn_Type IrqNo)
