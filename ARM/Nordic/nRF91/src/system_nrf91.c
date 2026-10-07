@@ -262,6 +262,14 @@ void SystemInit(void)
         SCB->NSACR |= (3UL << 10ul);
 
         nrf91_handle_approtect();
+
+		// CLOCK and POWER, one SPU id, become non secure: the Modem library
+		// uses POWER at its non secure address, so IOsonata uses CLOCK and
+		// POWER there on nRF91 (nrfx_config_nrf91.h). Code stays secure and
+		// their interrupt stays secure; with SAU ALLNS above, the accesses at
+		// the non secure address are non secure ones, which the SPU lets
+		// through.
+		NRF_SPU_S->PERIPHID[CLOCK_POWER_IRQn].PERM &= ~SPU_PERIPHID_PERM_SECATTR_Msk;
     #endif
     
     /* Enable the FPU if the compiler used floating point unit instructions. __FPU_USED is a MACRO defined by the

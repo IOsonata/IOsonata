@@ -91,7 +91,7 @@ NRF_GPIO_Type *nRFGpioGetReg(int PortNo)
 #elif defined(NRF5340_XXAA_NETWORK)
 			reg = NRF_P0_NS;
 #else
-			if (IOPIN_NRF_PORT_NS(PortNo))
+			if (PortNo & 0x80)
 			{
 				reg = NRF_P0_NS;
 			}
@@ -108,7 +108,7 @@ NRF_GPIO_Type *nRFGpioGetReg(int PortNo)
 #elif defined(NRF5340_XXAA_NETWORK)
 			reg = NRF_P1_NS;
 #else
-			if (IOPIN_NRF_PORT_NS(PortNo))
+			if (PortNo & 0x80)
 			{
 				reg = NRF_P1_NS;
 			}
@@ -124,7 +124,7 @@ NRF_GPIO_Type *nRFGpioGetReg(int PortNo)
 #if defined(NRF5340_XXAA_NETWORK)
 			reg = NRF_P2_NS;
 #else
-			if (IOPIN_NRF_PORT_NS(PortNo))
+			if (PortNo & 0x80)
 			{
 				reg = NRF_P2_NS;
 			}
@@ -140,7 +140,7 @@ NRF_GPIO_Type *nRFGpioGetReg(int PortNo)
 #if defined(NRF54H20_XXAA_NETWORK)
 			reg = NRF_P3_NS;
 #else
-			if (IOPIN_NRF_PORT_NS(PortNo))
+			if (PortNo & 0x80)
 			{
 				reg = NRF_P3_NS;
 			}
@@ -188,7 +188,7 @@ static NRF_GPIOTE_Type *nRFGpioteGetReg(int PortNo)
 	reg = NRF_GPIOTE_NS;
 #else
 	reg = NRF_GPIOTE0_S;
-	if (IOPIN_NRF_PORT_NS(PortNo))
+	if (PortNo & 0x80)
 	{
 		reg = NRF_GPIOTE1_NS;
 	}
@@ -606,7 +606,7 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, uint32_t PortNo, uint32_t PinN
     NVIC_EnableIRQ(GPIOTE_IRQn);
 #elif defined(NRF91_SERIES) || defined(NRF53_SERIES)
 	// GPIOTE1 is the non secure instance, GPIOTE0 the secure one
-	if (IOPIN_NRF_PORT_NS(PortNo))
+	if (PortNo & 0x80)
 	{
 		NVIC_ClearPendingIRQ(GPIOTE1_IRQn);
 		NVIC_SetPriority(GPIOTE1_IRQn, IntPrio);

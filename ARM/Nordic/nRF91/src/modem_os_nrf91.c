@@ -58,10 +58,7 @@ SOFTWARE.
 #include <stdatomic.h>
 
 #include "nrf.h"
-
-#ifndef NRF_TRUSTZONE_NONSECURE
-#error "modem_os_nrf91.c is for a non secure build, the Modem library runs non secure"
-#endif
+#include "nrf_peripherals.h"
 
 #include "nrf_modem.h"
 #include "nrf_modem_os.h"
@@ -98,6 +95,9 @@ SOFTWARE.
 
 // Bytes of a hex dump line of the log
 #define NRF91_MODEM_LOG_DUMP_LINE		16
+
+// Start of RAM, where SPU RAM region 0 is
+#define NRF91_MODEM_RAM_START			0x20000000UL
 
 // Longest single timer wait, within the counter range of the timer clocks
 #define NRF91_MODEM_BM_PAUSE_MAX_MS		60000
@@ -161,10 +161,10 @@ __attribute__((weak, aligned(8))) uint8_t g_nRF91ModemHeap[NRF91_MODEM_HEAP_DEFA
 __attribute__((section(".modem_shm.ctrl"), aligned(8)))
 static uint8_t s_nRF91ModemShmCtrl[NRF91_MODEM_SHM_CTRL_MAXSIZE];
 
-// Non secure RAM start and end of the RAM the modem reaches, from
-// nrf91xx_xxaa_ns.ld
-extern const uint8_t __tz_ns_ram_start[];
-extern const uint8_t __modem_shm_limit[];
+// The .modem_shm section: first in RAM, in whole SPU RAM regions below
+// 128 KB (nrf9160_xxaa.ld, nrf9120_xxaa.ld)
+extern const uint8_t __start_modem_shm[];
+extern const uint8_t __stop_modem_shm[];
 
 static const char s_nRF91ModemHex[] = "0123456789ABCDEF";
 
@@ -197,14 +197,37 @@ static void nRF91ModemDfuCb(uint32_t DfuResult)
 	}
 }
 
-// True when Size bytes at pMem are not word aligned non secure RAM in the
-// modem reach
+// True when Size bytes at pMem are not word aligned memory of the
+// .modem_shm section
 static bool nRF91ModemShmOut(const uint8_t *pMem, uint32_t Size)
 {
 	uintptr_t addr = (uintptr_t)pMem;
 
-	return (addr & 3U) != 0 || addr < (uintptr_t)__tz_ns_ram_start ||
-		   addr + Size > (uintptr_t)__modem_shm_limit;
+	return (addr & 3U) != 0 || addr < (uintptr_t)__start_modem_shm ||
+		   addr > (uintptr_t)__stop_modem_shm ||
+		   Size > (uintptr_t)__stop_modem_shm - addr;
+}
+
+// The application stays secure. Only what the modem side uses becomes non
+// secure in the SPU: the RAM regions of the .modem_shm section, as the modem
+// accesses are always non secure, and IPC, which the Modem library uses at
+// its non secure address. The IPC interrupt stays secure.
+static void nRF91ModemSpuOpen(void)
+{
+	NRF_SPU_Type * const spu = NRF_SPU_S;
+
+	for (uintptr_t a = (uintptr_t)__start_modem_shm; a < (uintptr_t)__stop_modem_shm;
+		 a += SPU_RAMREGION_SIZE)
+	{
+		const uintptr_t n = (a - NRF91_MODEM_RAM_START) / SPU_RAMREGION_SIZE;
+
+		if (n < sizeof(spu->RAMREGION) / sizeof(spu->RAMREGION[0]))
+		{
+			spu->RAMREGION[n].PERM &= ~SPU_RAMREGION_PERM_SECATTR_Msk;
+		}
+	}
+
+	spu->PERIPHID[IPC_IRQn].PERM &= ~SPU_PERIPHID_PERM_SECATTR_Msk;
 }
 
 int nRF91ModemInit(const nRF91ModemCfg_t * const pCfg)
@@ -248,6 +271,8 @@ int nRF91ModemInit(const nRF91ModemCfg_t * const pCfg)
 	{
 		return -NRF_EINVAL;
 	}
+
+	nRF91ModemSpuOpen();
 
 	s_nRF91ModemOs.pCfg = pCfg;
 	s_nRF91ModemOs.TxSize = txsize;

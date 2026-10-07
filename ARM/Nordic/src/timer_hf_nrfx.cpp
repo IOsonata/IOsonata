@@ -41,20 +41,22 @@ SOFTWARE.
 
 #include "timer_nrfx.h"
 
-// nRF91 and the nRF5340 application core name their peripherals by security
-// state: the secure alias in a secure build, the non secure one in a non
-// secure build. The nRF5340 network core has the non secure ones only.
-#if defined(NRF5340_XXAA_NETWORK) || \
-	((defined(NRF91_SERIES) || defined(NRF5340_XXAA_APPLICATION)) && defined(NRF_TRUSTZONE_NONSECURE))
+#if defined(NRF91_SERIES) || defined(NRF5340_XXAA_APPLICATION)
+#define NRF_TIMER0			NRF_TIMER0_S
+#define NRF_TIMER1			NRF_TIMER1_S
+#define NRF_TIMER2			NRF_TIMER2_S
+#if defined(NRF91_SERIES)
+// Non secure on nRF91, as POWER, which the Modem library uses there
+// (nrfx_config_nrf91.h)
+#define NRF_CLOCK			NRF_CLOCK_NS
+#else
+#define NRF_CLOCK			NRF_CLOCK_S
+#endif
+#elif defined(NRF5340_XXAA_NETWORK)
 #define NRF_TIMER0			NRF_TIMER0_NS
 #define NRF_TIMER1			NRF_TIMER1_NS
 #define NRF_TIMER2			NRF_TIMER2_NS
 #define NRF_CLOCK			NRF_CLOCK_NS
-#elif defined(NRF91_SERIES) || defined(NRF5340_XXAA_APPLICATION)
-#define NRF_TIMER0			NRF_TIMER0_S
-#define NRF_TIMER1			NRF_TIMER1_S
-#define NRF_TIMER2			NRF_TIMER2_S
-#define NRF_CLOCK			NRF_CLOCK_S
 #elif defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
 #define NRF_TIMER0			NRF_TIMER00_S
 #define NRF_TIMER1			NRF_TIMER10_S

@@ -90,7 +90,7 @@ SOFTWARE.
 
 #if defined(NRF_FICR)
 #define DFU_TGT_FICR_REG		NRF_FICR
-#elif defined(NRF_TRUSTZONE_NONSECURE) || defined(NRF5340_XXAA_NETWORK)
+#elif defined(NRF5340_XXAA_NETWORK)
 #define DFU_TGT_FICR_REG		NRF_FICR_NS
 #else
 #define DFU_TGT_FICR_REG		NRF_FICR_S
@@ -116,12 +116,7 @@ uint32_t DfuTgtEraseUnit(uintptr_t Addr)
 // or erase mode keeps the cache invalidated, so nothing stale is read back.
 static void DfuTgtMode(uint32_t Mode)
 {
-#if defined(NRF_TRUSTZONE_NONSECURE)
-	// CONFIG is secure only, the non secure side has CONFIGNS, same values
-	DFU_TGT_NVMC_REG->CONFIGNS = Mode;
-#else
 	DFU_TGT_NVMC_REG->CONFIG = Mode;
-#endif
 	__DSB();
 }
 
@@ -384,6 +379,13 @@ static uint32_t DfuTgtMbrCall(DfuTgtMbrCmd_t *pCmd)
 void DfuTgtStart(uintptr_t RunAddr)
 {
 	DfuCmQuiesce();
+
+#if defined(NRF91_SERIES)
+	// CLOCK/POWER back to secure, as after a reset: SystemInit of the image
+	// uses POWER at its secure address before it makes CLOCK/POWER non
+	// secure again (system_nrf91.c)
+	NRF_SPU_S->PERIPHID[CLOCK_POWER_IRQn].PERM |= SPU_PERIPHID_PERM_SECATTR_Msk;
+#endif
 
 #if defined(NRF52_SERIES)
 	uint32_t sdmagic = *(const uint32_t *)(DFU_TGT_MBR_SIZE +

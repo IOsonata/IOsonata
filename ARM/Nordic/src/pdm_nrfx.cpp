@@ -39,20 +39,11 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 // The MDK indexes the PDM instance on nRF53 but not on nRF91, so the secure
 // alias and the interrupt number are spelled differently on the two families.
-// A non secure build uses the non secure alias.
 #if defined(NRF53_SERIES)
-#ifdef NRF_TRUSTZONE_NONSECURE
-#define NRF_PDM			NRF_PDM0_NS
-#else
 #define NRF_PDM			NRF_PDM0_S
-#endif
 #define PDM_IRQn		PDM0_IRQn
 #elif defined(NRF91_SERIES)
-#ifdef NRF_TRUSTZONE_NONSECURE
-#define NRF_PDM			NRF_PDM_NS
-#else
 #define NRF_PDM			NRF_PDM_S
-#endif
 #endif
 
 // Only one DPM device on chip

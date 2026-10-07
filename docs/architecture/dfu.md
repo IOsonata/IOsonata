@@ -251,8 +251,7 @@ the upload, before the record is written.
 
 `exemples/bluetooth/ble_ota.cpp` is the BLE OTA application,
 `exemples/lte/lte_ota.cpp` the nRF91 LTE one. The LTE example needs the
-application's Modem library integration (nrf_modem and its OS glue), which
-IOsonata does not provide.
+Modem library with its IOsonata OS glue (`modem_nrf91.h`).
 
 ## Keys, signing and production
 

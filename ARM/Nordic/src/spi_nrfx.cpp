@@ -46,25 +46,6 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "spi_nrfx.h"
 
-// nRF91 and the nRF5340 application core name their peripherals by security
-// state: the secure alias in a secure build, the non secure one in a non
-// secure build.
-#if defined(NRF91_SERIES) || defined(NRF5340_XXAA_APPLICATION)
-#ifdef NRF_TRUSTZONE_NONSECURE
-#define NRF_SPIM0		NRF_SPIM0_NS
-#define NRF_SPIM1		NRF_SPIM1_NS
-#define NRF_SPIM2		NRF_SPIM2_NS
-#define NRF_SPIM3		NRF_SPIM3_NS
-#define NRF_QSPI		NRF_QSPI_NS
-#else
-#define NRF_SPIM0		NRF_SPIM0_S
-#define NRF_SPIM1		NRF_SPIM1_S
-#define NRF_SPIM2		NRF_SPIM2_S
-#define NRF_SPIM3		NRF_SPIM3_S
-#define NRF_QSPI		NRF_QSPI_S
-#endif
-#endif
-
 #define NRFSPI_TIMEOUT			100000
 
 bool nRFxQSPIInit(SPIDev_t * const pDev);
@@ -104,20 +85,20 @@ alignas(4) nRFSpiDev_t g_nRFxSPIDev[NRFX_SPI_MAXDEV] = {
 	},
 #else
 	{
-		0, NULL, NRF_SPIM0,
+		0, NULL, (NRF_SPIM_Type*)NRF_SPIM0_S_BASE,
 	},
 	{
-		1, NULL, NRF_SPIM1,
+		1, NULL, (NRF_SPIM_Type*)NRF_SPIM1_S_BASE,
 	},
 	{
-		2, NULL, NRF_SPIM2,
+		2, NULL, (NRF_SPIM_Type*)NRF_SPIM2_S_BASE,
 	},
 	{
-		3, NULL, NRF_SPIM3,
+		3, NULL, (NRF_SPIM_Type*)NRF_SPIM3_S_BASE,
 	},
 #ifdef NRF5340_XXAA_APPLICATION
 	{
-		4, NULL, {.pQSpiReg = NRF_QSPI},
+		4, NULL, {.pQSpiReg = (NRF_QSPI_Type*)NRF_QSPI_S_BASE},
 	}
 #endif
 #endif

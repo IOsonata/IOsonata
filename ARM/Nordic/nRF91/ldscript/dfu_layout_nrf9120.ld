@@ -20,11 +20,9 @@
  * The boot is at 0 and runs out of reset. It sets VTOR to slot 0, which is
  * 4 KB aligned.
  *
- * __dfu_flag is the recovery request word, the last 16 bytes of RAM, above
- * the 0x2003E000 page where SystemInit copies FICR for the non secure side
- * at every reset (NRF_FICR_NS in nrf.h): the boot and the application both
- * stop their RAM short of it, so neither links anything there nor clears it
- * at startup.
+ * __dfu_flag is the recovery request word, the last 16 bytes of RAM: the
+ * boot and the application both stop their RAM short of it, so neither
+ * links anything there nor clears it at startup.
  */
 
 __dfu_flag			= 0x2003FFF0;

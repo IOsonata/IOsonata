@@ -52,10 +52,6 @@ SOFTWARE.
 
 #include "nrf.h"
 
-#ifndef NRF_TRUSTZONE_NONSECURE
-#error "modem_os_nrf91_taktos.c is for a non secure build, the Modem library runs non secure"
-#endif
-
 #include "TaktOS.h"
 #include "TaktKernel.h"
 #include "TaktOSThread.h"

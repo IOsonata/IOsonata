@@ -10,20 +10,27 @@ modem. This is that glue for IOsonata, bare metal by default. A TaktOS
 application also links modem_os_nrf91_taktos.c, which replaces the waits,
 the semaphores and the mutex with TaktOS ones.
 
-The application runs non secure (see spe_nrf91.h), linked with
-nrf91xx_xxaa_ns.ld and a non secure configuration of the library, and links
-the Modem library variant of its modem firmware, for the nRF91x1 cellular
-firmware:
+The application is a single secure image, linked with nrf9160_xxaa.ld or
+nrf9120_xxaa.ld (or their _dfu variant) and the library, as any other nRF91
+application, and links the Modem library variant of its modem firmware, for
+the nRF91x1 cellular firmware:
 
 	sdk-nrfxlib/nrf_modem/lib/cellular/nrf9120/hard-float/libmodem.a
+
+Only what the modem side uses is non secure in the SPU, the code stays
+secure. The modem accesses memory as non secure, and the Modem library uses
+IPC and POWER at their non secure address: SystemInit makes CLOCK/POWER non
+secure (one SPU id), nRF91ModemInit the IPC and the RAM regions of the
+shared memory. IOsonata uses CLOCK and POWER at their non secure address on
+nRF91 for that reason.
 
 nRF91ModemInit replaces nrf_modem_init. Everything else is the Modem library
 API: nrf_modem_at for AT commands, nrf_socket, nrf_modem_gnss.
 
 Memory shared with the modem must be in the lower 128 KB of RAM. It goes in
-the .modem_shm sections, which the non secure linker script puts at the start
-of RAM. The library has weak definitions of the TX and RX areas and of the
-library heap, with the default sizes below. An application that needs other
+the .modem_shm sections, which the linker script puts at the start of RAM,
+in whole SPU RAM regions. The library has weak definitions of the TX and RX
+areas and of the library heap, with the default sizes below. An application that needs other
 sizes defines its own, which replace the library ones at link time, and
 passes their sizes in the configuration:
 
@@ -35,6 +42,9 @@ Bare metal, a wait with a timeout uses the timer given in the configuration,
 with the trigger of the configuration that the application leaves to it, and
 sleeps until the timeout or the next interrupt. Without a timer, such a wait
 polls in 1 ms busy steps. A wait without a timeout always sleeps.
+
+nRF91ModemInit wraps nrf_modem_init only: a full modem firmware update
+through nrf_modem_bootloader_init is not covered yet.
 
 The bare metal glue has a single waiting context: call the Modem library
 from the main loop (or the handlers it runs), not from interrupts, except
@@ -131,14 +141,15 @@ extern uint8_t g_nRF91ModemHeap[];
  * @brief	Initialize the Modem library and turn on the modem.
  *
  * Replaces nrf_modem_init: sets up the shared memory, the heap and the time
- * base from the configuration, then calls nrf_modem_init.
+ * base from the configuration, makes IPC and the shared memory regions non
+ * secure in the SPU, then calls nrf_modem_init.
  *
  * @param	pCfg : Configuration, kept by the library until nrf_modem_shutdown
  *
  * @return	0 - success
  * 			-NRF_EINVAL - invalid configuration (DECT NR+ on nRF9160, timer
  * 						  not initialized, trigger out of range), shared
- * 						  memory not word aligned or out of reach of the modem
+ * 						  memory not word aligned or not in .modem_shm
  * 			-NRF_EPERM - the library is already initialized
  * 			otherwise the nrf_modem_init result (negative NRF errno)
  */

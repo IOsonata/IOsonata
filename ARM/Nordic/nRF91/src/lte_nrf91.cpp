@@ -49,10 +49,6 @@ SOFTWARE.
 
 #include "nrf.h"
 
-#ifndef NRF_TRUSTZONE_NONSECURE
-#error "lte_nrf91.cpp is for a non secure build, the Modem library runs non secure"
-#endif
-
 #include "nrf_modem.h"
 #include "nrf_modem_at.h"
 #include "nrf_errno.h"

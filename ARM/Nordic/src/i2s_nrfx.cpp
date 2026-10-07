@@ -43,24 +43,13 @@ SOFTWARE.
 
 // The MDK indexes the I2S instance on nRF53 but not on nRF91, the same split
 // the PDM has. nRF52 needs no alias, its register block is named NRF_I2S.
-// A non secure build uses the non secure alias.
 #if defined(NRF53_SERIES)
-#ifdef NRF_TRUSTZONE_NONSECURE
-#define NRF_I2S			NRF_I2S0_NS
-#define NRF_I2S_BASE	NRF_I2S0_NS_BASE
-#else
 #define NRF_I2S			NRF_I2S0_S
 #define NRF_I2S_BASE	NRF_I2S0_S_BASE
-#endif
 #define I2S_IRQn		I2S0_IRQn
 #elif !defined(NRF52_SERIES)
-#ifdef NRF_TRUSTZONE_NONSECURE
-#define NRF_I2S			NRF_I2S_NS
-#define NRF_I2S_BASE	NRF_I2S_NS_BASE
-#else
 #define NRF_I2S			NRF_I2S_S
 #define NRF_I2S_BASE	NRF_I2S_S_BASE
-#endif
 #endif
 
 #pragma pack(push, 4)

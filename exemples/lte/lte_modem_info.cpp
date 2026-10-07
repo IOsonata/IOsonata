@@ -7,9 +7,8 @@ Starts the Modem library with the IOsonata glue (modem_nrf91.h) and prints
 the modem firmware version, the IMEI, the hardware version and the
 functional mode on the console UART. It does not attach to a network.
 
-The application runs non secure after the secure stage
-(secure_boot_nrf91.cpp): link it with nrf91xx_xxaa_ns.ld, a non secure
-configuration of the library and the Modem library, cellular variant:
+A plain secure image: link it with nrf9160_xxaa.ld or nrf9120_xxaa.ld, the
+library and the Modem library, cellular variant:
 
 	sdk-nrfxlib/nrf_modem/lib/cellular/<nrf9160 or nrf9120>/hard-float/libmodem.a
 

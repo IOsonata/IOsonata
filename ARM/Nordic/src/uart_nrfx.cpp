@@ -64,23 +64,6 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "coredev/interrupt.h"
 #include "coredev/shared_intrf.h"
 
-// nRF91 and the nRF5340 application core name their peripherals by security
-// state: the secure alias in a secure build, the non secure one in a non
-// secure build.
-#if defined(NRF91_SERIES) || defined(NRF5340_XXAA_APPLICATION)
-#ifdef NRF_TRUSTZONE_NONSECURE
-#define NRF_UARTE0		NRF_UARTE0_NS
-#define NRF_UARTE1		NRF_UARTE1_NS
-#define NRF_UARTE2		NRF_UARTE2_NS
-#define NRF_UARTE3		NRF_UARTE3_NS
-#else
-#define NRF_UARTE0		NRF_UARTE0_S
-#define NRF_UARTE1		NRF_UARTE1_S
-#define NRF_UARTE2		NRF_UARTE2_S
-#define NRF_UARTE3		NRF_UARTE3_S
-#endif
-#endif
-
 // Defining common bitfields for both DMA & non DMA registers
 #define NRFX_UART_ERRORSRC_BREAK_Pos (3UL) /*!< Position of BREAK field. */
 #define NRFX_UART_ERRORSRC_BREAK_Msk (0x1UL << NRFX_UART_ERRORSRC_BREAK_Pos) /*!< Bit mask of BREAK field. */
@@ -261,7 +244,7 @@ alignas(4) static nRFUartDev_t s_nRFxUARTDev[] = {
 #else
 	{
 		.DevNo = 0,
-		.pDmaReg = NRF_UARTE0,
+		.pDmaReg = NRF_UARTE0_S,
 		.pUartDev = NULL,
 		.RxPin = (uint32_t)-1,
 		.TxPin = (uint32_t)-1,
@@ -270,7 +253,7 @@ alignas(4) static nRFUartDev_t s_nRFxUARTDev[] = {
 	},
 	{
 		.DevNo = 1,
-		.pDmaReg = NRF_UARTE1,
+		.pDmaReg = NRF_UARTE1_S,
 		.pUartDev = NULL,
 		.RxPin = (uint32_t)-1,
 		.TxPin = (uint32_t)-1,
@@ -279,7 +262,7 @@ alignas(4) static nRFUartDev_t s_nRFxUARTDev[] = {
 	},
 	{
 		.DevNo = 2,
-		.pDmaReg = NRF_UARTE2,
+		.pDmaReg = NRF_UARTE2_S,
 		.pUartDev = NULL,
 		.RxPin = (uint32_t)-1,
 		.TxPin = (uint32_t)-1,
@@ -288,7 +271,7 @@ alignas(4) static nRFUartDev_t s_nRFxUARTDev[] = {
 	},
 	{
 		.DevNo = 3,
-		.pDmaReg = NRF_UARTE3,
+		.pDmaReg = NRF_UARTE3_S,
 		.pUartDev = NULL,
 		.RxPin = (uint32_t)-1,
 		.TxPin = (uint32_t)-1,
