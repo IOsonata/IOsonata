@@ -62,6 +62,10 @@ McuOsc_t g_McuOsc = MCUOSC;
 #define I2C_MASTER_DMA_ENABLE true
 #endif
 
+#ifndef I2C_MASTER_INT_ENABLE
+#define I2C_MASTER_INT_ENABLE true
+#endif
+
 //int nRFUartEvthandler(UARTDEV *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);
 
 #define FIFOSIZE		CFIFO_MEMSIZE(512)
@@ -117,7 +121,7 @@ static const I2CCfg_t s_I2cCfgMaster = {
 	.NbSlaveAddr = 0,			// Number of slave addresses
 	.SlaveAddr = {0,},		// Slave addresses
 	.bDmaEn = I2C_MASTER_DMA_ENABLE,
-	.bIntEn = true,
+	.bIntEn = I2C_MASTER_INT_ENABLE,
 	.IntPrio = 7,			// Interrupt prio
 	.EvtCB = I2CMasterIntrfHandler		// Event callback
 };
