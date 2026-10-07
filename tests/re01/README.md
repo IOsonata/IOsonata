@@ -15,24 +15,32 @@ and reuse, UART polling and interrupt paths, SCI9 module control, repeated
 initialization, RX drops, error clearing, and partial IRQ allocation cleanup.
 The baud-rate check uses an independent exhaustive BRR/MDDR calculation.
 
-Build and link Blinky, TimerDemo and UartPrbsTxTest for Cortex-M0+ with both
-normal linker scripts, then inspect the resulting ELF sections and option bytes:
+Build and link Blinky, TimerDemo, UartPrbsTxTest, PulseTrain, UartRetargetDemo,
+I2CMasterDemo and SPIMasterDemo for Cortex-M0+ with both normal linker scripts,
+then inspect the resulting ELF sections and option bytes:
 
 ```sh
 python3 tests/re01/build_examples.py
+python3 tests/re01/build_examples.py --all-timers
 ```
 
 Use `--tool-prefix /path/to/bin/arm-none-eabi-` if the compiler is not on PATH.
 `--package DBN`, `--package CFB` or `--package CFP` selects the package define.
 The check requires vectors below 0x400, 64 erased option bytes at 0x400,
 code/data load addresses at or above 0x440, and heap/stack limits inside RAM.
+`--timer-devno 0` through `--timer-devno 8` selects a TimerDemo device; the
+default is GPT0 (3). `--all-timers` builds all nine selections. The script
+resolves source and board paths from the actual example project links and uses
+GNU C++23 for C++ sources. Console builds include the real UART retarget and
+stdio device adapters.
 These are direct compiler/linker checks of the example sources, not an
 IOcomposer or Eclipse project build. The script uses newlib-nano and nosys.
 
-Validated with GCC 14.3.Rel1 for all three package defines. The affected RE01
-sources compile without warnings. Existing shared `ARM/src/iatomic.c` builtin
-declaration warnings and example printf/unused-variable warnings are still
-reported by the example builds.
+Validated with GCC 14.3.Rel1 for all three package defines: 90 image checks
+cover the seven examples, all nine TimerDemo selections and both normal linker
+scripts. The affected RE01 sources and new/updated examples compile without
+warnings. Existing shared `ARM/src/iatomic.c` builtin declaration warnings and
+UART PRBS unused-variable warnings are still reported by the example builds.
 
 The host test does not emulate FIFO side effects, oscillator stabilization, voltage
 transitions, asynchronous AGT stop acknowledgement, interrupt timing, or flash
@@ -139,8 +147,11 @@ Set both `bIntEn` and `bDmaEn` to `false`. Unsupported configurations fail
 initialization: SPI slave, multiplexed 3-wire, quad/octal, frames below 8 or
 above 16 bits; I2C slave, SMBus, 10-bit addresses and requests above 400 kHz;
 and interrupt or DMA operation on either bus. Polling callbacks are not issued.
-The existing I2C master demo selects interrupts/DMA and needs a polling
-configuration for this target. The SPI master demo already selects polling.
+The older shared `i2c_master_demo.cpp` selects interrupts/DMA. The RE01
+I2CMasterDemo and SPIMasterDemo projects link the new polling applications,
+with both bus interrupt/DMA flags disabled and transfer counts checked.
+Their wiring, peer protocol, console settings and project configurations are
+documented in `ARM/Renesas/RE01/RE01_1500KB/exemples/README.md`.
 
 SPI supports all four clock modes, MSB/LSB order, multiple active-low GPIO
 chip selects (`SPICSEL_AUTO`), and application-controlled selects
