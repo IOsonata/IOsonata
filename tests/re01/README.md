@@ -40,6 +40,93 @@ programming. Board validation is still required for normal/boost startup, PLL
 fallback, SCI loopback and burst traffic, GPIO wake, timer rate/reset/resume,
 and simultaneous AGT compare events. SPI/I2C checks are described below.
 
+## General-purpose timers
+
+The RE01 Timer port exposes nine devices through the existing C handle and
+C++ wrapper. The original device numbers are preserved:
+
+| DevNo | Hardware | Counter width | Compare triggers |
+| --- | --- | --- | --- |
+| 0 | AGT0 | 16 bits | 2 |
+| 1 | AGT1 | 16 bits | 1 |
+| 2 | TMR0/1 in cascade | 16 bits | 2 |
+| 3 | GPT0 (GPT320) | 32 bits | 4 |
+| 4 | GPT1 (GPT321) | 32 bits | 4 |
+| 5 | GPT2 (GPT162) | 16 bits | 4 |
+| 6 | GPT3 (GPT163) | 16 bits | 4 |
+| 7 | GPT4 (GPT164) | 16 bits | 4 |
+| 8 | GPT5 (GPT165) | 16 bits | 4 |
+
+`TimerGetLowFreqDevCount()` returns 2, `TimerGetHighFreqDevCount()` returns 7,
+and `TimerGetHighFreqDevNo()` returns 2. GPT compare triggers use A/B/C/D
+with buffering disabled; E/F are not exposed because they have no independent
+ICU interrupt events. GPT16 and GPT32 use 32-bit register accesses. Starting,
+stopping or resetting a GPT channel does not change another channel or disable
+their shared module clock. The library project includes the new GPT source.
+
+AGT selects LOCO (LFRC), the subclock (LFXTAL), or PCLKB (HF/default fallback),
+and divides by powers of two from 1 to 128. TMR uses the current PCLKB with
+divisors 1/2/8/32/64/1024/8192. GPT uses PCLKA, equal to ICLK, with divisors
+1/4/16/64/256/1024. These drivers do not switch the system oscillator or start
+an unconfigured oscillator; the application must supply a running source.
+Frequency requests select the nearest representable integer rate, and zero
+selects the maximum. Rates below the slowest divider clamp to that rate.
+Reinitialize the timer after changing the system/peripheral clocks.
+
+Reset clears the extended count, peripheral/ICU pending flags and compare
+deadlines while preserving running/disabled state. Disable/Enable retains the
+counter, clock selection and triggers. Frequency changes reset and restart the
+counter, recalculate active compare periods, and fail without changing the
+configuration if an active period no longer fits. Trigger periods must round
+to 3 through 65535 ticks for 16-bit counters, or 3 through 4294967295 ticks
+for GPT32. Check the actual returned period; zero means the request failed.
+
+One-shot completion releases its ICU route before the callback, permitting
+immediate rearming. Continuous triggers advance from the previous deadline
+and skip missed periods, rather than adding ISR latency to every period.
+Callbacks run in interrupt context and must be short. Every initialized timer
+needs an overflow route and each active compare needs another route; allocation
+can fail because the ICU has only 32 lines with event-specific routing limits.
+A failed allocation leaves existing trigger configuration intact. A timer has
+one static owner; the same handle can reinitialize that device but cannot move
+to another device while it owns the first. Keep initialized handles alive.
+
+Extended counts account for one pending wrap before the overflow ISR runs,
+including reads inside overflow callbacks. Interrupts must be serviced within
+one full counter cycle; multiple unserviced wraps cannot be reconstructed.
+Trigger periods must also allow enough time to service and rearm the compare.
+AGT retains the maintainer's stop/update sequence and simultaneous-comparator
+hardware caution: use compare B at a frequency no higher than compare A.
+Its stop wait is bounded, and a failed stop in the compare ISR releases both
+compare routes rather than leaking them.
+
+Raw per-tick interrupts (`bTickInt = true`), external counter clocks and external
+trigger inputs are unsupported and fail closed. Use compare triggers for
+periodic callbacks. RTC, watchdogs, the low-speed clock timer (LST), low-speed
+pulse generator (LPG) and clock correction circuit (CCC) are separate hardware
+functions, outside this general-purpose Timer list. SysTick retains its
+separate `TimerSysTick` implementation.
+
+Register definitions, write-protection key, count direction, prescaler
+encodings and buffer controls were checked against Renesas's official
+[RE01 SVD](https://github.com/renesas/re-driver-package/blob/d67d8f1410421e33923e65a776add5401fbb11b8/SDK_RE01_1500KB/RE01_1500KB_DFP/SVD/RE01_1500KB.svd)
+and generated device header. The SVD calls the GPT input clock PCLKD; this
+RE01 device has PCLKA/PCLKB. The Renesas
+[datasheet](https://docs.rs-online.com/5a08/A700000007228313.pdf),
+R01DS0363EJ0110, section 6.3.6 identifies PCLKA for GPT timing; section 5
+identifies PCLKB for GPT register access. The full hardware manual could not
+be retrieved during this review.
+
+Host regression checks exercise all nine devices, each GPT divider and A-D
+event route, counter widths, pending wraps and callback reads, reset/resume,
+one-shot release/rearming, continuous phase and missed periods, simultaneous
+AGT flags, frequency changes, ownership, invalid requests, exhausted ICU routes
+and the bounded AGT stop failure. Cortex-M0+ compile/link/layout checks cover
+the examples with both linker scripts for DBN/CFB/CFP. These checks do not
+validate GPT/AGT clock-domain timing, actual interrupt latency, low-power
+operation or the reported AGT comparator hardware issue. Validate counter
+rates, wrap/reset/resume and simultaneous compare callbacks on the board.
+
 ## SPI and I2C polling masters
 
 The RE01 port now provides SPI0/1 and RIIC0/1 through the existing C handles,

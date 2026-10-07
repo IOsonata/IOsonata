@@ -70,8 +70,11 @@ static void Re01AgtUnfIRQHandler(int IntNo, void *pCtx)
 
 	if (dev->pAgtReg->AGTCR & AGT0_AGTCR_TUNDF_Msk)
 	{
+		uint32_t state = DisableInterrupt();
 		dev->pAgtReg->AGTCR_b.TUNDF = 0;
+		Re01TimerClearPending(dev->IrqOvr);
 		dev->pTimer->Rollover += 0x10000;
+		EnableInterrupt(state);
 		if (dev->pTimer->EvtHandler)
 		{
 			dev->pTimer->EvtHandler(dev->pTimer, TIMER_EVT_COUNTER_OVR);
@@ -79,78 +82,59 @@ static void Re01AgtUnfIRQHandler(int IntNo, void *pCtx)
 	}
 }
 
-// NOTE: Handle both comparator at the same time work better.
-// When the comparator interrupt are handle separately seems cause
-// pause of the TMCB
+void Re01AgtDisableTrigger(TimerDev_t * const pTimer, int TrigNo);
+
+// Service both flags together, retaining the existing AGT stop/update sequence.
 static void Re01AgtTcmIRQHandler(int IntNo, void *pCtx)
 {
 	RE01_TimerData_t *dev = (RE01_TimerData_t*)pCtx;
 	uint8_t cr = dev->pAgtReg->AGTCR & (AGT0_AGTCR_TCMAF_Msk | AGT0_AGTCR_TCMBF_Msk);
-//	volatile uint16_t cnt = dev->pAgtReg->AGT;
-
-	if (cr)
+	if (cr == 0) return;
+	bool running = (dev->pAgtReg->AGTCR & AGT0_AGTCR_TSTART_Msk) != 0;
+	if (!Re01AgtStop(dev))
 	{
-		// AGT requires stop timer to update counter
-		if (!Re01AgtStop(dev))
+		Re01AgtDisableTrigger(dev->pTimer, 0);
+		if (dev->DevNo == 0) Re01AgtDisableTrigger(dev->pTimer, 1);
+		return;
+	}
+	dev->pAgtReg->AGTCR &= ~cr;
+	TimerDev_t *timer = dev->pTimer;
+	TimerEvtHandler_t evtHandler = timer->EvtHandler;
+	TimerTrig_t trig[RE01_TIMER_AGT_TRIG_MAXCNT] = {};
+	uint8_t fired = 0;
+	uint16_t count = 0xFFFFU - dev->pAgtReg->AGT;
+	int maxtrig = dev->DevNo == 0 ? RE01_TIMER_AGT_TRIG_MAXCNT : 1;
+	for (int i = 0; i < maxtrig; i++)
+	{
+		if ((cr & (AGT0_AGTCR_TCMAF_Msk << i)) == 0 ||
+			dev->IrqMatch[i] == (IRQn_Type)-1) continue;
+		trig[i] = dev->Trigger[i];
+		fired |= 1U << i;
+		Re01TimerClearPending(dev->IrqMatch[i]);
+		volatile uint16_t *cmp = i ? &dev->pAgtReg->AGTCMB : &dev->pAgtReg->AGTCMA;
+		if (trig[i].Type == TIMER_TRIG_TYPE_CONTINUOUS)
 		{
-			dev->pAgtReg->AGTCMSR = 0;
-			return;
+			*cmp = 0xFFFFU - Re01TimerNextCompare(0xFFFFU - *cmp,
+				count, dev->CC[i], 0xFFFFUL);
 		}
-		dev->pAgtReg->AGTCR &= ~cr;
-
-		uint16_t cnt = dev->pAgtReg->AGT;
-
-		// AGT does not support periodic compare
-		// Do it manually
-		if (cr & AGT0_AGTCR_TCMAF_Msk)
+		else
 		{
-			if (dev->Trigger[0].Type == TIMER_TRIG_TYPE_CONTINUOUS)
-			{
-				dev->pAgtReg->AGTCMA = cnt - dev->CC[0];
-			}
-			else
-			{
-				dev->pAgtReg->AGTCMSR &= ~AGT0_AGTCMSR_TCMEA_Msk;
-				dev->pAgtReg->AGTCMA = 0xFFFF;
-			}
+			Re01AgtDisableTrigger(dev->pTimer, i);
+			*cmp = 0xFFFF;
 		}
-		if (dev->DevNo == 0 && (cr & AGT0_AGTCR_TCMBF_Msk))
+	}
+	if (running) dev->pAgtReg->AGTCR |= AGT0_AGTCR_TSTART_Msk;
+	// Snapshot both callbacks before either can reconfigure the timer.
+	for (int i = 0; i < maxtrig; i++)
+	{
+		if ((fired & (1U << i)) == 0) continue;
+		if (trig[i].Handler)
 		{
-			if (dev->Trigger[1].Type == TIMER_TRIG_TYPE_CONTINUOUS)
-			{
-				dev->pAgtReg->AGTCMB = cnt - dev->CC[1];
-			}
-			else
-			{
-				dev->pAgtReg->AGTCMSR &= ~AGT0_AGTCMSR_TCMEB_Msk;
-				dev->pAgtReg->AGTCMB = 0xFFFF;
-			}
+			trig[i].Handler(timer, i, trig[i].pContext);
 		}
-		dev->pAgtReg->AGTCR |= AGT0_AGTCR_TSTART_Msk;
-
-		// Call the user handle after re-starting the timer to minimize counter delays
-		// which lead to bigger drift
-		if (cr & AGT0_AGTCR_TCMAF_Msk)
+		else if (evtHandler)
 		{
-			if (dev->Trigger[0].Handler)
-			{
-				dev->Trigger[0].Handler(dev->pTimer, 0, dev->Trigger[0].pContext);
-			}
-			else if (dev->pTimer->EvtHandler)
-			{
-				dev->pTimer->EvtHandler(dev->pTimer, TIMER_EVT_TRIGGER(0));
-			}
-		}
-		if (dev->DevNo == 0 && (cr & AGT0_AGTCR_TCMBF_Msk))
-		{
-			if (dev->Trigger[1].Handler)
-			{
-				dev->Trigger[1].Handler(dev->pTimer, 1, dev->Trigger[1].pContext);
-			}
-			else if (dev->pTimer->EvtHandler)
-			{
-				dev->pTimer->EvtHandler(dev->pTimer, TIMER_EVT_TRIGGER(1));
-			}
+			evtHandler(timer, TIMER_EVT_TRIGGER(i));
 		}
 	}
 }
@@ -167,8 +151,9 @@ static void Re01AgtTcmIRQHandler(int IntNo, void *pCtx)
  */
 static bool Re01AgtEnable(TimerDev_t * const pTimer)
 {
-	RE01_TimerData_t *dev = &g_Re01TimerData[pTimer->DevNo];
+	RE01_TimerData_t *dev = Re01TimerData(pTimer);
 
+	if (dev == NULL) return false;
 	dev->pAgtReg->AGTCR |= AGT0_AGTCR_TSTART_Msk;
 
 	return true;
@@ -182,9 +167,9 @@ static bool Re01AgtEnable(TimerDev_t * const pTimer)
  */
 static void Re01AgtDisable(TimerDev_t * const pTimer)
 {
-	RE01_TimerData_t *dev = &g_Re01TimerData[pTimer->DevNo];
+	RE01_TimerData_t *dev = Re01TimerData(pTimer);
 
-	dev->pAgtReg->AGTCR &= ~AGT0_AGTCR_TSTART_Msk;
+	if (dev) dev->pAgtReg->AGTCR &= ~AGT0_AGTCR_TSTART_Msk;
 }
 
 /**
@@ -192,7 +177,8 @@ static void Re01AgtDisable(TimerDev_t * const pTimer)
  */
 static void Re01AgtReset(TimerDev_t * const pTimer)
 {
-	RE01_TimerData_t *dev = &g_Re01TimerData[pTimer->DevNo];
+	RE01_TimerData_t *dev = Re01TimerData(pTimer);
+	if (dev == NULL) return;
 	uint32_t state = DisableInterrupt();
 	bool running = (dev->pAgtReg->AGTCR & AGT0_AGTCR_TSTART_Msk) != 0;
 	if (!Re01AgtStop(dev))
@@ -240,39 +226,57 @@ static void Re01AgtReset(TimerDev_t * const pTimer)
  */
 static uint32_t Re01AgtSetFrequency(TimerDev_t * const pTimer, uint32_t Freq)
 {
-	RE01_TimerData_t *dev = &g_Re01TimerData[pTimer->DevNo];
-	if (dev->BaseFreq == 0)
+	RE01_TimerData_t *dev = Re01TimerData(pTimer);
+	if (dev == NULL || dev->BaseFreq == 0 || Freq > 64000000UL) return 0;
+	uint32_t cks = 0;
+	uint32_t freq = dev->BaseFreq;
+	uint32_t error = Freq > freq ? Freq - freq : freq - Freq;
+	if (Freq)
 	{
-		return 0;
-	}
-	uint32_t div = Freq > 0 ? ((uint64_t)dev->BaseFreq + (Freq >> 1)) / Freq : 1;
-	uint32_t cks = div > 1 ? 31 - __CLZ(div) : 0;
-	if (cks > 7)
-	{
-		cks = 7;
+		for (uint32_t i = 1; i <= 7; i++)
+		{
+			uint32_t candidate = dev->BaseFreq >> i;
+			if (candidate == 0) break;
+			uint32_t diff = Freq > candidate ? Freq - candidate : candidate - Freq;
+			if (diff < error)
+			{
+				error = diff;
+				freq = candidate;
+				cks = i;
+			}
+		}
 	}
 	uint32_t state = DisableInterrupt();
-	if (!Re01AgtStop(dev))
+	uint32_t cc[RE01_TIMER_TRIG_MAXCNT];
+	if (!Re01TimerNewPeriods(dev, freq, 0xFFFFUL, cc) || !Re01AgtStop(dev))
 	{
 		EnableInterrupt(state);
 		return 0;
 	}
 	dev->pAgtReg->AGTMR2 = (dev->pAgtReg->AGTMR2 & ~AGT0_AGTMR2_CKS_Msk) | cks;
-	pTimer->Freq = dev->BaseFreq >> cks;
-	pTimer->nsPeriod = (1000000000ULL + (pTimer->Freq >> 1)) / pTimer->Freq;
+	pTimer->Freq = freq;
+	pTimer->nsPeriod = (1000000000ULL + (freq >> 1)) / freq;
+	Re01TimerSetPeriods(dev, cc);
 	Re01AgtReset(pTimer);
 	Re01AgtEnable(pTimer);
 	EnableInterrupt(state);
-	return pTimer->Freq;
+	return freq;
 }
 
 static uint64_t Re01AgtGetTickCount(TimerDev_t * const pTimer)
 {
-	RE01_TimerData_t *dev = &g_Re01TimerData[pTimer->DevNo];
+	RE01_TimerData_t *dev = Re01TimerData(pTimer);
+	if (dev == NULL) return 0;
 	uint32_t state = DisableInterrupt();
 	uint16_t cnt = dev->pAgtReg->AGT;
+	uint64_t rollover = pTimer->Rollover;
+	if (dev->pAgtReg->AGTCR & AGT0_AGTCR_TUNDF_Msk)
+	{
+		cnt = dev->pAgtReg->AGT;
+		rollover += 0x10000ULL;
+	}
 	pTimer->LastCount = 0xFFFFU - cnt;
-	uint64_t ticks = pTimer->LastCount + pTimer->Rollover;
+	uint64_t ticks = rollover + pTimer->LastCount;
 	EnableInterrupt(state);
 	return ticks;
 }
@@ -284,7 +288,8 @@ static uint64_t Re01AgtGetTickCount(TimerDev_t * const pTimer)
  */
 int Re01AgtGetMaxTrigger(TimerDev_t * const pTimer)
 {
-	return pTimer->DevNo == 0 ? RE01_TIMER_TRIG_MAXCNT : 1;
+	if (Re01TimerData(pTimer) == NULL) return 0;
+	return pTimer->DevNo == 0 ? RE01_TIMER_AGT_TRIG_MAXCNT : 1;
 }
 
 /**
@@ -302,42 +307,43 @@ int Re01AgtGetMaxTrigger(TimerDev_t * const pTimer)
 uint64_t Re01AgtEnableTrigger(TimerDev_t * const pTimer, int TrigNo, uint64_t nsPeriod, TIMER_TRIG_TYPE Type,
 								 TimerTrigEvtHandler_t const Handler, void * const pContext)
 {
-    if (pTimer == NULL || TrigNo < 0 || TrigNo >= RE01_TIMER_TRIG_MAXCNT)
-    {
-    	return 0;
-    }
+	if (pTimer == NULL || TrigNo < 0 || TrigNo >= RE01_TIMER_AGT_TRIG_MAXCNT)
+	{
+		return 0;
+	}
 
-    if (pTimer->DevNo == 1 && TrigNo > 0)
-    {
-    	// AGT1 does not support compare B event
-    	return 0;
-    }
+	if (pTimer->DevNo == 1 && TrigNo > 0)
+	{
+		// AGT1 does not support compare B event
+		return 0;
+	}
 
-    RE01_TimerData_t *dev = &g_Re01TimerData[pTimer->DevNo];
-    uint64_t cc = TimerNanosecondToTick(pTimer, nsPeriod);
+	RE01_TimerData_t *dev = Re01TimerData(pTimer);
+	if (dev == NULL || (Type != TIMER_TRIG_TYPE_SINGLE && Type != TIMER_TRIG_TYPE_CONTINUOUS)) return 0;
+	uint64_t cc = TimerNanosecondToTick(pTimer, nsPeriod);
 
-    if (cc <= 2ULL || cc >= 0x10000ULL)
-    {
-        return 0;
-    }
+	if (cc <= 2ULL || cc >= 0x10000ULL)
+	{
+		return 0;
+	}
 
-    volatile uint16_t *cntreg = 0;
-    uint8_t evtid = 0;
-    Re01IRQHandler_t hndlr = 0;
+	volatile uint16_t *cntreg = 0;
+	uint8_t evtid = 0;
+	Re01IRQHandler_t hndlr = 0;
 
 
-    if (TrigNo > 0)
-    {
-    	evtid = RE01_EVTID_AGT0_AGTCMBI;
-    	hndlr = Re01AgtTcmBIRQHandler;
-    	cntreg = &dev->pAgtReg->AGTCMB;
-    }
-    else
-    {
-    	evtid = pTimer->DevNo > 0? RE01_EVTID_AGT1_AGTCMAI : RE01_EVTID_AGT0_AGTCMAI;
-    	hndlr = Re01AgtTcmAIRQHandler;
-    	cntreg = &dev->pAgtReg->AGTCMA;
-    }
+	if (TrigNo > 0)
+	{
+		evtid = RE01_EVTID_AGT0_AGTCMBI;
+		hndlr = Re01AgtTcmBIRQHandler;
+		cntreg = &dev->pAgtReg->AGTCMB;
+	}
+	else
+	{
+		evtid = pTimer->DevNo > 0? RE01_EVTID_AGT1_AGTCMAI : RE01_EVTID_AGT0_AGTCMAI;
+		hndlr = Re01AgtTcmAIRQHandler;
+		cntreg = &dev->pAgtReg->AGTCMA;
+	}
 
 	uint32_t state = DisableInterrupt();
 	IRQn_Type irq = Re01RegisterIntHandler(evtid, dev->IntPrio, hndlr, dev);
@@ -367,16 +373,17 @@ uint64_t Re01AgtEnableTrigger(TimerDev_t * const pTimer, int TrigNo, uint64_t ns
 	dev->Trigger[TrigNo].Handler = Handler;
 	dev->Trigger[TrigNo].pContext = pContext;
 
-    *cntreg = dev->pAgtReg->AGT - cc;
+	*cntreg = dev->pAgtReg->AGT - cc;
 
-    dev->pAgtReg->AGTCMSR |= (1 << (TrigNo << 2));
+	dev->pAgtReg->AGTCMSR |= (1 << (TrigNo << 2));
 
 	if (running)
 	{
 		dev->pAgtReg->AGTCR |= AGT0_AGTCR_TSTART_Msk;
 	}
+	uint64_t period = dev->Trigger[TrigNo].nsPeriod;
 	EnableInterrupt(state);
-	return dev->Trigger[TrigNo].nsPeriod;
+	return period;
 }
 
 /**
@@ -390,11 +397,14 @@ void Re01AgtDisableTrigger(TimerDev_t * const pTimer, int TrigNo)
 	{
 		return;
 	}
-	RE01_TimerData_t *dev = &g_Re01TimerData[pTimer->DevNo];
+	RE01_TimerData_t *dev = Re01TimerData(pTimer);
+	if (dev == NULL) return;
 	uint32_t state = DisableInterrupt();
 	dev->pAgtReg->AGTCMSR &= ~(1U << (TrigNo << 2));
 	Re01UnregisterIntHandler(dev->IrqMatch[TrigNo]);
 	dev->IrqMatch[TrigNo] = (IRQn_Type)-1;
+	dev->CC[TrigNo] = 0;
+	dev->Trigger[TrigNo] = {};
 	// Do not write the compare register while the counter is running.
 	EnableInterrupt(state);
 }
@@ -434,7 +444,8 @@ bool Re01AgtEnableExtTrigger(TimerDev_t * const pTimer, int TrigDevNo, TIMER_EXT
  */
 static int Re01AgtFindAvailTrigger(TimerDev_t * const pTimer)
 {
-	RE01_TimerData_t *dev = &g_Re01TimerData[pTimer->DevNo];
+	RE01_TimerData_t *dev = Re01TimerData(pTimer);
+	if (dev == NULL) return -1;
 	for (int i = 0; i < Re01AgtGetMaxTrigger(pTimer); i++)
 	{
 		if ((dev->pAgtReg->AGTCMSR & (1U << (i << 2))) == 0)
@@ -466,17 +477,17 @@ bool Re01AgtInit(RE01_TimerData_t * const pTimerData, const TimerCfg_t * const p
 	pTimerData->IntPrio = pCfg->IntPrio;
 	pTimerData->pTimer->DevNo = pCfg->DevNo;
 	pTimerData->pTimer->EvtHandler = pCfg->EvtHandler;
-    pTimerData->pTimer->Disable = Re01AgtDisable;
-    pTimerData->pTimer->Enable = Re01AgtEnable;
-    pTimerData->pTimer->Reset = Re01AgtReset;
-    pTimerData->pTimer->GetTickCount = Re01AgtGetTickCount;
-    pTimerData->pTimer->SetFrequency = Re01AgtSetFrequency;
-    pTimerData->pTimer->GetMaxTrigger = Re01AgtGetMaxTrigger;
-    pTimerData->pTimer->FindAvailTrigger = Re01AgtFindAvailTrigger;
-    pTimerData->pTimer->DisableTrigger = Re01AgtDisableTrigger;
-    pTimerData->pTimer->EnableTrigger = Re01AgtEnableTrigger;
-    pTimerData->pTimer->DisableExtTrigger = Re01AgtDisableExtTrigger;
-    pTimerData->pTimer->EnableExtTrigger = Re01AgtEnableExtTrigger;
+	pTimerData->pTimer->Disable = Re01AgtDisable;
+	pTimerData->pTimer->Enable = Re01AgtEnable;
+	pTimerData->pTimer->Reset = Re01AgtReset;
+	pTimerData->pTimer->GetTickCount = Re01AgtGetTickCount;
+	pTimerData->pTimer->SetFrequency = Re01AgtSetFrequency;
+	pTimerData->pTimer->GetMaxTrigger = Re01AgtGetMaxTrigger;
+	pTimerData->pTimer->FindAvailTrigger = Re01AgtFindAvailTrigger;
+	pTimerData->pTimer->DisableTrigger = Re01AgtDisableTrigger;
+	pTimerData->pTimer->EnableTrigger = Re01AgtEnableTrigger;
+	pTimerData->pTimer->DisableExtTrigger = Re01AgtDisableExtTrigger;
+	pTimerData->pTimer->EnableExtTrigger = Re01AgtEnableExtTrigger;
 
 
 	TIMER_CLKSRC clksrc = pCfg->ClkSrc;

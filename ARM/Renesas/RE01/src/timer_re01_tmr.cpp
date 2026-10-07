@@ -41,70 +41,55 @@ SOFTWARE.
 
 extern RE01_TimerData_t g_Re01TimerData[RE01_TIMER_MAXCNT];
 
-// TMR0 OVR Interrupt handler
-// Possible IELS : 4, 12, 20, 28
-// 20 is chosen
+static void Re01TmrDisableTrigger(TimerDev_t * const pTimer, int TrigNo);
+
 static void Re01TmrOvrIRQHandler(int IntNo, void *pCtx)
 {
-	g_Re01TimerData[2].pTimer->Rollover += 0x10000ULL;
-	if (g_Re01TimerData[2].pTimer->EvtHandler)
+	RE01_TimerData_t *dev = (RE01_TimerData_t*)pCtx;
+	uint32_t state = DisableInterrupt();
+	// Clear the pending wrap before callbacks can read the extended count.
+	Re01TimerClearPending(dev->IrqOvr);
+	dev->pTimer->Rollover += 0x10000ULL;
+	EnableInterrupt(state);
+	if (dev->pTimer->EvtHandler)
 	{
-		g_Re01TimerData[2].pTimer->EvtHandler(g_Re01TimerData[2].pTimer, TIMER_EVT_COUNTER_OVR);
+		dev->pTimer->EvtHandler(dev->pTimer, TIMER_EVT_COUNTER_OVR);
 	}
 }
 
-// TMR0 Compare A interrupt
-// Possible IELS : 2, 10, 18, 26
-// 18 is chosen
+static void Re01TmrCompareIRQHandler(RE01_TimerData_t *dev, int TrigNo)
+{
+	if (dev->IrqMatch[TrigNo] == (IRQn_Type)-1) return;
+	TimerTrig_t trig = dev->Trigger[TrigNo];
+	Re01TimerClearPending(dev->IrqMatch[TrigNo]);
+	if (trig.Type == TIMER_TRIG_TYPE_CONTINUOUS)
+	{
+		volatile uint16_t *cmp = TrigNo ? &TMR01->TCORB : &TMR01->TCORA;
+		*cmp = Re01TimerNextCompare(*cmp, TMR01->TCNT, dev->CC[TrigNo], 0xFFFFUL);
+	}
+	else
+	{
+		// Release before invoking the callback, which may rearm this trigger.
+		Re01TmrDisableTrigger(dev->pTimer, TrigNo);
+	}
+	if (trig.Handler)
+	{
+		trig.Handler(dev->pTimer, TrigNo, trig.pContext);
+	}
+	else if (dev->pTimer->EvtHandler)
+	{
+		dev->pTimer->EvtHandler(dev->pTimer, TIMER_EVT_TRIGGER(TrigNo));
+	}
+}
+
 static void Re01TmrTcmAIRQHandler(int IntNo, void *pCtx)
 {
-	// TMR does not support periodic trigger.
-	// Do it manually
-	if (g_Re01TimerData[2].Trigger[0].Type == TIMER_TRIG_TYPE_CONTINUOUS)
-	{
-		TMR01->TCORA = (g_Re01TimerData[2].CC[0] + TMR01->TCNT);
-	}
-	else
-	{
-		TMR0->TCR_b.CMIEA = 0;
-		TMR01->TCORA = 0;
-	}
-
-	if (g_Re01TimerData[2].Trigger[0].Handler)
-	{
-		g_Re01TimerData[2].Trigger[0].Handler(g_Re01TimerData[2].pTimer, 0, g_Re01TimerData[2].Trigger[0].pContext);
-	}
-	else if (g_Re01TimerData[2].pTimer->EvtHandler)
-	{
-		g_Re01TimerData[2].pTimer->EvtHandler(g_Re01TimerData[2].pTimer, TIMER_EVT_TRIGGER(0));
-	}
+	Re01TmrCompareIRQHandler((RE01_TimerData_t*)pCtx, 0);
 }
 
-// TMR0 Compare B interrupt
-// Possible IELS : 3, 11, 19, 27
-// 18 is chosen
 static void Re01TmrTcmBIRQHandler(int IntNo, void *pCtx)
 {
-	// TMR does not support periodic trigger.
-	// Do it manually
-	if (g_Re01TimerData[2].Trigger[1].Type == TIMER_TRIG_TYPE_CONTINUOUS)
-	{
-		TMR01->TCORB = (g_Re01TimerData[2].CC[1] + TMR01->TCNT);
-	}
-	else
-	{
-		TMR0->TCR_b.CMIEB = 0;
-		TMR01->TCORB = 0;
-	}
-
-	if (g_Re01TimerData[2].Trigger[1].Handler)
-	{
-		g_Re01TimerData[2].Trigger[1].Handler(g_Re01TimerData[2].pTimer, 1, g_Re01TimerData[2].Trigger[1].pContext);
-	}
-	else if (g_Re01TimerData[2].pTimer->EvtHandler)
-	{
-		g_Re01TimerData[2].pTimer->EvtHandler(g_Re01TimerData[2].pTimer, TIMER_EVT_TRIGGER(1));
-	}
+	Re01TmrCompareIRQHandler((RE01_TimerData_t*)pCtx, 1);
 }
 
 /**
@@ -115,8 +100,9 @@ static void Re01TmrTcmBIRQHandler(int IntNo, void *pCtx)
  */
 static bool Re01TmrEnable(TimerDev_t * const pTimer)
 {
-	RE01_TimerData_t *dev = &g_Re01TimerData[pTimer->DevNo];
+	RE01_TimerData_t *dev = Re01TimerData(pTimer);
 
+	if (dev == NULL) return false;
 	// 16bits mode
 	TMR0->TCCR = TMR0_TCCR_CSS_Msk;
 	TMR1->TCCR = dev->TmrClock;
@@ -132,6 +118,7 @@ static bool Re01TmrEnable(TimerDev_t * const pTimer)
  */
 static void Re01TmrDisable(TimerDev_t * const pTimer)
 {
+	if (Re01TimerData(pTimer) == NULL) return;
 	TMR0->TCCR = 0;
 	TMR1->TCCR = 0;
 }
@@ -141,8 +128,9 @@ static void Re01TmrDisable(TimerDev_t * const pTimer)
  */
 static void Re01TmrReset(TimerDev_t * const pTimer)
 {
-	RE01_TimerData_t *dev = &g_Re01TimerData[pTimer->DevNo];
+	RE01_TimerData_t *dev = Re01TimerData(pTimer);
 
+	if (dev == NULL) return;
 	uint32_t state = DisableInterrupt();
 	uint8_t clock = TMR1->TCCR;
 	TMR1->TCCR = 0;
@@ -183,80 +171,66 @@ static void Re01TmrReset(TimerDev_t * const pTimer)
  */
 static uint32_t Re01TmrSetFrequency(TimerDev_t * const pTimer, uint32_t Freq)
 {
-	RE01_TimerData_t *dev = &g_Re01TimerData[pTimer->DevNo];
-	if (dev->BaseFreq == 0)
+	RE01_TimerData_t *dev = Re01TimerData(pTimer);
+	if (dev == NULL || dev->BaseFreq == 0 || Freq > 64000000UL)
 	{
 		return 0;
 	}
-	uint32_t div = Freq > 0 ? ((uint64_t)dev->BaseFreq + (Freq >> 1)) / Freq : 1;
-	uint32_t tmp = 0;
+	// CKS encodes /1, /2, /8, /32, /64, /1024, /8192.
+	static const uint8_t shifts[] = {0, 1, 3, 5, 6, 10, 13};
+	uint32_t code = 0;
+	uint32_t freq = dev->BaseFreq;
+	uint32_t error = Freq > freq ? Freq - freq : freq - Freq;
+	if (Freq)
+	{
+		for (uint32_t i = 1; i < sizeof(shifts); i++)
+		{
+			uint32_t candidate = dev->BaseFreq >> shifts[i];
+			if (candidate == 0) break;
+			uint32_t diff = Freq > candidate ? Freq - candidate : candidate - Freq;
+			if (diff < error)
+			{
+				error = diff;
+				freq = candidate;
+				code = i;
+			}
+		}
+	}
 	uint32_t state = DisableInterrupt();
+	uint32_t cc[RE01_TIMER_TRIG_MAXCNT];
+	if (!Re01TimerNewPeriods(dev, freq, 0xFFFFUL, cc))
+	{
+		EnableInterrupt(state);
+		return 0;
+	}
 	Re01TmrDisable(pTimer);
 	TMR0->TCCR = TMR0_TCCR_CSS_Msk;
-
-	if (div < 2)
-	{
-		// PCLK
-		TMR1->TCCR = 1 << TMR1_TCCR_CSS_Pos;
-	}
-	else if (div < 8)
-	{
-		// PCLK/2
-		TMR1->TCCR = (1 << TMR1_TCCR_CSS_Pos) | (1 << TMR1_TCCR_CKS_Pos);
-		tmp = 1;
-	}
-	else if (div < 32)
-	{
-		// PCLK/8
-		TMR1->TCCR = (1 << TMR1_TCCR_CSS_Pos) | (2 << TMR1_TCCR_CKS_Pos);
-		tmp = 3;
-	}
-	else if (div < 64)
-	{
-		// PCLK/32
-		TMR1->TCCR = (1 << TMR1_TCCR_CSS_Pos) | (3 << TMR1_TCCR_CKS_Pos);
-		tmp = 5;
-	}
-	else if (div < 1024)
-	{
-		// PCLK/64
-		TMR1->TCCR = (1 << TMR1_TCCR_CSS_Pos) | (4 << TMR1_TCCR_CKS_Pos);
-		tmp = 6;
-	}
-	else if (div < 8192)
-	{
-		// PCLK/1024
-		TMR1->TCCR = (1 << TMR1_TCCR_CSS_Pos) | (5 << TMR1_TCCR_CKS_Pos);
-		tmp = 10;
-	}
-	else
-	{
-		// PCLK/8192
-		TMR1->TCCR = (1 << TMR1_TCCR_CSS_Pos) | (6 << TMR1_TCCR_CKS_Pos);
-		tmp = 13;
-	}
-
-	pTimer->Freq = dev->BaseFreq >> tmp;
-	dev->TmrClock = TMR1->TCCR;
+	dev->TmrClock = (1U << TMR1_TCCR_CSS_Pos) | (code << TMR1_TCCR_CKS_Pos);
+	pTimer->Freq = freq;
+	pTimer->nsPeriod = (1000000000ULL + (freq >> 1)) / freq;
+	Re01TimerSetPeriods(dev, cc);
 	Re01TmrReset(pTimer);
-
-	// Pre-calculate periods for faster timer counter to time conversion use later
-    pTimer->nsPeriod = (1000000000ULL + ((uint64_t)pTimer->Freq >> 1))/ (uint64_t)pTimer->Freq;     // Period in nsec
-
+	Re01TmrEnable(pTimer);
 	EnableInterrupt(state);
-    return pTimer->Freq;
+	return freq;
 }
 
 static uint64_t Re01TmrGetTickCount(TimerDev_t * const pTimer)
 {
+	RE01_TimerData_t *dev = Re01TimerData(pTimer);
+	if (dev == NULL) return 0;
 	uint32_t state = DisableInterrupt();
 	uint16_t cnt = TMR01->TCNT;
-
-    pTimer->LastCount = cnt;
-
-	uint64_t ticks = (uint64_t)cnt + pTimer->Rollover;
+	uint64_t rollover = pTimer->Rollover;
+	if (dev->IrqOvr != (IRQn_Type)-1 &&
+		((&ICU->IELSR0)[dev->IrqOvr - IEL0_IRQn] & ICU_IELSR0_IR_Msk))
+	{
+		cnt = TMR01->TCNT;
+		rollover += 0x10000ULL;
+	}
+	pTimer->LastCount = cnt;
 	EnableInterrupt(state);
-	return ticks;
+	return rollover + cnt;
 }
 
 /**
@@ -266,7 +240,7 @@ static uint64_t Re01TmrGetTickCount(TimerDev_t * const pTimer)
  */
 static int Re01TmrGetMaxTrigger(TimerDev_t * const pTimer)
 {
-	return RE01_TIMER_TRIG_MAXCNT;
+	return Re01TimerData(pTimer) ? RE01_TIMER_TMR_TRIG_MAXCNT : 0;
 }
 
 /**
@@ -284,18 +258,19 @@ static int Re01TmrGetMaxTrigger(TimerDev_t * const pTimer)
 static uint64_t Re01TmrEnableTrigger(TimerDev_t * const pTimer, int TrigNo, uint64_t nsPeriod, TIMER_TRIG_TYPE Type,
 							  TimerTrigEvtHandler_t const Handler, void * const pContext)
 {
-    if (pTimer == NULL || TrigNo < 0 || TrigNo >= RE01_TIMER_TRIG_MAXCNT)
-        return 0;
+	if (pTimer == NULL || TrigNo < 0 || TrigNo >= RE01_TIMER_TMR_TRIG_MAXCNT)
+		return 0;
 
-    RE01_TimerData_t *dev = &g_Re01TimerData[pTimer->DevNo];
-    uint64_t cc = TimerNanosecondToTick(pTimer, nsPeriod);
+	RE01_TimerData_t *dev = Re01TimerData(pTimer);
+	if (dev == NULL || (Type != TIMER_TRIG_TYPE_SINGLE && Type != TIMER_TRIG_TYPE_CONTINUOUS)) return 0;
+	uint64_t cc = TimerNanosecondToTick(pTimer, nsPeriod);
 
-    if (cc <= 2ULL || cc >= 0x10000ULL)
-    {
-        return 0;
-    }
+	if (cc <= 2ULL || cc >= 0x10000ULL)
+	{
+		return 0;
+	}
 
-    uint32_t state = DisableInterrupt();
+	uint32_t state = DisableInterrupt();
 	uint8_t evtid = TrigNo ? RE01_EVTID_TMR_CMIB0 : RE01_EVTID_TMR_CMIA0;
 	Re01IRQHandler_t handler = TrigNo ? Re01TmrTcmBIRQHandler : Re01TmrTcmAIRQHandler;
 	IRQn_Type irq = Re01RegisterIntHandler(evtid, dev->IntPrio, handler, dev);
@@ -309,28 +284,29 @@ static uint64_t Re01TmrEnableTrigger(TimerDev_t * const pTimer, int TrigNo, uint
 	(&ICU->IELSR0)[irq - IEL0_IRQn] &= ~ICU_IELSR0_IR_Msk;
 	NVIC_ClearPendingIRQ(irq);
 
-    dev->Trigger[TrigNo].Type = Type;
-    dev->CC[TrigNo] = cc & 0xFFFF;
+	dev->Trigger[TrigNo].Type = Type;
+	dev->CC[TrigNo] = cc & 0xFFFF;
 
-    dev->Trigger[TrigNo].nsPeriod = TimerTickToTime(pTimer, cc, 1000000000UL);
-    dev->Trigger[TrigNo].Handler = Handler;
-    dev->Trigger[TrigNo].pContext = pContext;
+	dev->Trigger[TrigNo].nsPeriod = TimerTickToTime(pTimer, cc, 1000000000UL);
+	dev->Trigger[TrigNo].Handler = Handler;
+	dev->Trigger[TrigNo].pContext = pContext;
 
 	// TMR does not support periodic trigger.
 	// Do it manually within interrupt handler
-   	if (TrigNo > 0)
-   	{
-   		TMR01->TCORB = (cc + TMR01->TCNT);
-   	}
-    else
-    {
-   		TMR01->TCORA = (cc + TMR01->TCNT);
-    }
+	if (TrigNo > 0)
+	{
+		TMR01->TCORB = (cc + TMR01->TCNT);
+	}
+	else
+	{
+		TMR01->TCORA = (cc + TMR01->TCNT);
+	}
 
 	TMR0->TCR |= (TrigNo + 1) << TMR0_TCR_CMIEA_Pos;
 
+	uint64_t period = dev->Trigger[TrigNo].nsPeriod;
 	EnableInterrupt(state);
-    return dev->Trigger[TrigNo].nsPeriod;
+	return period;
 }
 
 /**
@@ -340,26 +316,29 @@ static uint64_t Re01TmrEnableTrigger(TimerDev_t * const pTimer, int TrigNo, uint
  */
 static void Re01TmrDisableTrigger(TimerDev_t * const pTimer, int TrigNo)
 {
-    if (pTimer == NULL || TrigNo < 0 || TrigNo >= RE01_TIMER_TRIG_MAXCNT)
-        return;
+	if (pTimer == NULL || TrigNo < 0 || TrigNo >= RE01_TIMER_TMR_TRIG_MAXCNT)
+		return;
 
-    RE01_TimerData_t *dev = &g_Re01TimerData[pTimer->DevNo];
-    uint32_t state = DisableInterrupt();
-    TMR0->TCR &= ~((TrigNo + 1) << TMR0_TCR_CMIEA_Pos);
+	RE01_TimerData_t *dev = Re01TimerData(pTimer);
+	if (dev == NULL) return;
+	uint32_t state = DisableInterrupt();
+	TMR0->TCR &= ~((TrigNo + 1) << TMR0_TCR_CMIEA_Pos);
 
-    if (dev->IrqMatch[TrigNo] != -1)
-    {
-    	Re01UnregisterIntHandler(dev->IrqMatch[TrigNo]);
-    	dev->IrqMatch[TrigNo] = (IRQn_Type)-1;
-    }
-    if (TrigNo > 0)
-    {
+	if (dev->IrqMatch[TrigNo] != -1)
+	{
+		Re01UnregisterIntHandler(dev->IrqMatch[TrigNo]);
+		dev->IrqMatch[TrigNo] = (IRQn_Type)-1;
+	}
+	dev->CC[TrigNo] = 0;
+	dev->Trigger[TrigNo] = {};
+	if (TrigNo > 0)
+	{
 		TMR01->TCORB = 0;
-    }
-    else
-    {
+	}
+	else
+	{
 		TMR01->TCORA = 0;
-    }
+	}
 	EnableInterrupt(state);
 }
 
@@ -410,7 +389,8 @@ static bool Re01TmrEnableExtTrigger(TimerDev_t * const pTimer, int TrigDevNo, TI
  */
 static int Re01TmrFindAvailTrigger(TimerDev_t * const pTimer)
 {
-	for (int i = 0; i < RE01_TIMER_TRIG_MAXCNT; i++)
+	if (Re01TimerData(pTimer) == NULL) return -1;
+	for (int i = 0; i < RE01_TIMER_TMR_TRIG_MAXCNT; i++)
 	{
 		if ((TMR0->TCR & ((i + 1) << TMR0_TCR_CMIEA_Pos)) == 0)
 		{
@@ -441,17 +421,17 @@ bool Re01TmrInit(RE01_TimerData_t * const pTimerData, const TimerCfg_t * const p
 	pTimerData->IntPrio = pCfg->IntPrio;
 	pTimerData->pTimer->DevNo = pCfg->DevNo;
 	pTimerData->pTimer->EvtHandler = pCfg->EvtHandler;
-    pTimerData->pTimer->Disable = Re01TmrDisable;
-    pTimerData->pTimer->Enable = Re01TmrEnable;
-    pTimerData->pTimer->Reset = Re01TmrReset;
-    pTimerData->pTimer->GetTickCount = Re01TmrGetTickCount;
-    pTimerData->pTimer->SetFrequency = Re01TmrSetFrequency;
-    pTimerData->pTimer->GetMaxTrigger = Re01TmrGetMaxTrigger;
-    pTimerData->pTimer->FindAvailTrigger = Re01TmrFindAvailTrigger;
-    pTimerData->pTimer->DisableTrigger = Re01TmrDisableTrigger;
-    pTimerData->pTimer->EnableTrigger = Re01TmrEnableTrigger;
-    pTimerData->pTimer->DisableExtTrigger = Re01TmrDisableExtTrigger;
-    pTimerData->pTimer->EnableExtTrigger = Re01TmrEnableExtTrigger;
+	pTimerData->pTimer->Disable = Re01TmrDisable;
+	pTimerData->pTimer->Enable = Re01TmrEnable;
+	pTimerData->pTimer->Reset = Re01TmrReset;
+	pTimerData->pTimer->GetTickCount = Re01TmrGetTickCount;
+	pTimerData->pTimer->SetFrequency = Re01TmrSetFrequency;
+	pTimerData->pTimer->GetMaxTrigger = Re01TmrGetMaxTrigger;
+	pTimerData->pTimer->FindAvailTrigger = Re01TmrFindAvailTrigger;
+	pTimerData->pTimer->DisableTrigger = Re01TmrDisableTrigger;
+	pTimerData->pTimer->EnableTrigger = Re01TmrEnableTrigger;
+	pTimerData->pTimer->DisableExtTrigger = Re01TmrDisableExtTrigger;
+	pTimerData->pTimer->EnableExtTrigger = Re01TmrEnableExtTrigger;
 
 	MSTP->MSTPCRD &= ~MSTP_MSTPCRD_MSTPD1_Msk;
 
@@ -480,7 +460,7 @@ bool Re01TmrInit(RE01_TimerData_t * const pTimerData, const TimerCfg_t * const p
 	}
 	TMR0->TCR |= TMR0_TCR_OVIE_Msk;
 
-    return true;
+	return true;
 }
 
 
