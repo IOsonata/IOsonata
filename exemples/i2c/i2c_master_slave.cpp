@@ -300,8 +300,11 @@ int main()
 	s_MasterCompleted = false;
 	s_MasterCount = 0;
 	int c = g_I2CMaster.Write(I2C_SLAVE_ADDR, &offset, 1, wr, sizeof(wr));
-	if (c < 0)
+	if (s_I2cCfgMaster.bIntEn)
 	{
+		// DeviceIntrfWrite() converts the target TxData() async -1 return
+		// into 0 after subtracting the address-command length. In interrupt
+		// mode completion must therefore be taken from the callback.
 		const int total = WaitMasterComplete(10000000);
 		c = total >= 1 ? total - 1 : 0;
 	}
