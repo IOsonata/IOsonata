@@ -59,6 +59,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "nrf_peripherals.h"
 
 #include "istddef.h"
+#include "idelay.h"
 #include "iopinctrl.h"
 #include "coredev/uart.h"
 #include "coredev/interrupt.h"
@@ -1045,10 +1046,17 @@ static void apply_workaround_for_enable_anomaly(nRFUartDev_t * const pDev)
 
     if (*rxenable_reg == 1)
     {
-    	pDev->pDmaReg->ENABLE = UARTE_ENABLE_ENABLE_Msk;
+    	// No interrupt may restart the receiver while it is being stopped
+    	pDev->pDmaReg->INTENCLR = 0xFFFFFFFFUL;
+    	pDev->pDmaReg->ENABLE = UARTE_ENABLE_ENABLE_Enabled << UARTE_ENABLE_ENABLE_Pos;
     	pDev->pDmaReg->TASKS_STOPRX = 1;
 
-        while (*rxenable_reg) {}
+    	// Up to 4 bytes can still arrive after STOPRX, 40 ms at 1200 baud with
+    	// parity and 2 stop bits
+    	for (int i = 0; *rxenable_reg && i < 40000; i++)
+    	{
+    		usDelay(1);
+    	}
 
         pDev->pDmaReg->ERRORSRC = pDev->pDmaReg->ERRORSRC;
 
@@ -1124,7 +1132,7 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	s_nRFxUARTDev[devno].pReg->PSELRXD = pincfg[UARTPIN_RX_IDX].PinNo;
 	s_nRFxUARTDev[devno].pReg->PSELTXD = pincfg[UARTPIN_TX_IDX].PinNo;
 
-	s_nRFxUARTDev[devno].pReg->CONFIG &= ~(UART_CONFIG_PARITY_Msk << UART_CONFIG_PARITY_Pos);
+	s_nRFxUARTDev[devno].pReg->CONFIG &= ~UART_CONFIG_PARITY_Msk;
 	if (pCfg->Parity == UART_PARITY_NONE)
 	{
 		s_nRFxUARTDev[devno].pReg->CONFIG |= UART_CONFIG_PARITY_Excluded << UART_CONFIG_PARITY_Pos;
@@ -1174,7 +1182,7 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 		s_nRFxUARTDev[devno].pDmaReg->FRAMETIMEOUT = 8;
 	}
 #elif defined(UARTE_PRESENT)
-	s_nRFxUARTDev[devno].pDmaReg->CONFIG &= ~(UARTE_CONFIG_PARITY_Msk << UARTE_CONFIG_PARITY_Pos);
+	s_nRFxUARTDev[devno].pDmaReg->CONFIG &= ~UARTE_CONFIG_PARITY_Msk;
 
 	if (pCfg->Parity == UART_PARITY_NONE)
 	{
@@ -1184,6 +1192,13 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	{
 		s_nRFxUARTDev[devno].pDmaReg->CONFIG |= UARTE_CONFIG_PARITY_Included << UARTE_CONFIG_PARITY_Pos;
 	}
+#ifdef UARTE_CONFIG_STOP_Msk
+	s_nRFxUARTDev[devno].pDmaReg->CONFIG &= ~UARTE_CONFIG_STOP_Msk;
+	if (pCfg->StopBits == 2)
+	{
+		s_nRFxUARTDev[devno].pDmaReg->CONFIG |= UARTE_CONFIG_STOP_Two << UARTE_CONFIG_STOP_Pos;
+	}
+#endif
 #endif
 
     // Set baud

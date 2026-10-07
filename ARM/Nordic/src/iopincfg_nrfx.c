@@ -503,7 +503,7 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, uint32_t PortNo, uint32_t PinN
 		{
 			if ((1<<i) & PinNo)
 			{
-				reg->PIN_CNF[i] &= ~(GPIO_PIN_CNF_SENSE_Msk << GPIO_PIN_CNF_SENSE_Pos);
+				reg->PIN_CNF[i] &= ~GPIO_PIN_CNF_SENSE_Msk;
 				switch (Sense)
 				{
 					case IOPINSENSE_LOW_TRANSITION:
@@ -528,7 +528,12 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, uint32_t PortNo, uint32_t PinN
 						;
 				}
 
-				gpiotereg->CONFIG[idx] = cfg;
+				// A port event uses the pin sense, not a GPIOTE channel: idx is
+				// negative here and there is no channel to configure
+				if (idx >= 0)
+				{
+					gpiotereg->CONFIG[idx] = cfg;
+				}
 
 				s_GpIOSenseEvt[IntNo].Sense = Sense;
 				s_GpIOSenseEvt[IntNo].PortPinNo = (PortNo << 8) | i; // For use when disable interrupt
@@ -539,7 +544,7 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, uint32_t PortNo, uint32_t PinN
 	}
 	else
 	{
-		reg->PIN_CNF[PinNo] &= ~(GPIO_PIN_CNF_SENSE_Msk << GPIO_PIN_CNF_SENSE_Pos);
+		reg->PIN_CNF[PinNo] &= ~GPIO_PIN_CNF_SENSE_Msk;
 		switch (Sense)
 		{
 			case IOPINSENSE_LOW_TRANSITION:
@@ -727,7 +732,7 @@ void IOPinSetSense(int PortNo, int PinNo, IOPINSENSE Sense)
 	}
 
 	// Clear sense
-	reg->PIN_CNF[PinNo] &= ~(GPIO_PIN_CNF_SENSE_Msk << GPIO_PIN_CNF_SENSE_Pos);
+	reg->PIN_CNF[PinNo] &= ~GPIO_PIN_CNF_SENSE_Msk;
 	switch (Sense)
 	{
 		case IOPINSENSE_DISABLE:	// Disable pin sense
@@ -764,8 +769,8 @@ void IOPinSetStrength(int PortNo, int PinNo, IOPINSTRENGTH Strength)
 		return;
 	}
 
-	uint32_t val = ((reg->PIN_CNF[PinNo] >> GPIO_PIN_CNF_DRIVE_Pos) & GPIO_PIN_CNF_DRIVE_Msk) & 6;
-	reg->PIN_CNF[PinNo] &= ~(GPIO_PIN_CNF_DRIVE_Msk << GPIO_PIN_CNF_DRIVE_Pos);
+	uint32_t val = ((reg->PIN_CNF[PinNo] & GPIO_PIN_CNF_DRIVE_Msk) >> GPIO_PIN_CNF_DRIVE_Pos) & 6;
+	reg->PIN_CNF[PinNo] &= ~GPIO_PIN_CNF_DRIVE_Msk;
 	if (Strength == IOPINSTRENGTH_STRONG)
 	{
 		// Stronger drive strength

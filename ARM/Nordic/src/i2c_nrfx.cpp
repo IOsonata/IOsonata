@@ -711,7 +711,7 @@ void I2CSetReadRqstData(I2CDev_t * const pDev, int SlaveIdx, uint8_t * const pDa
 
 #ifdef TWIM_PRESENT
     nrfdev->pDmaSReg->TXD.PTR = (uint32_t)pDev->pRRData[SlaveIdx];
-    nrfdev->pDmaSReg->TXD.MAXCNT = pDev->RRDataLen[SlaveIdx] & 0xFF;
+    nrfdev->pDmaSReg->TXD.MAXCNT = min(pDev->RRDataLen[SlaveIdx], NRFX_I2C_DMA_MAXCNT);
     nrfdev->pDmaSReg->TASKS_PREPARETX = 1;
     nrfdev->pDmaSReg->TASKS_RESUME = 1;
 #endif
@@ -1017,6 +1017,10 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
 	pDev->DevIntrf.EnCnt = 1;
 	pDev->DevIntrf.Type = DEVINTRF_TYPE_I2C;
 	pDev->DevIntrf.bDma = pCfgData->bDmaEn;
+#ifndef TWI_PRESENT
+	// Only TWIM with EasyDMA on this MCU
+	pDev->DevIntrf.bDma = true;
+#endif
 	pDev->DevIntrf.bIntEn = pCfgData->bIntEn;
 	pDev->DevIntrf.bTxReady = true;
 	pDev->DevIntrf.bNoStop = false;
@@ -1081,7 +1085,8 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
     if (pCfgData->Mode == I2CMODE_SLAVE)
     {
     	NRF_TWIS_Type *sreg = s_nRFxI2CDev[pCfgData->DevNo].pDmaSReg;
-        pDev->Cfg.NbSlaveAddr = min(pCfgData->NbSlaveAddr, NRFX_I2CSLAVE_MAXDEV);
+        // TWIS matches at most as many addresses as it has ADDRESS registers
+        pDev->Cfg.NbSlaveAddr = min(pCfgData->NbSlaveAddr, (int)(sizeof(sreg->ADDRESS) / sizeof(sreg->ADDRESS[0])));
 
         sreg->CONFIG = 0;
         sreg->ORC = 0xff;

@@ -42,6 +42,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define NRF_PWM0		NRF_PWM0_S
 #define NRF_PWM1		NRF_PWM1_S
 #define NRF_PWM2		NRF_PWM2_S
+#define NRF_PWM3		NRF_PWM3_S
 #elif defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
 #define NRF_PWM0		NRF_PWM20_S
 #define NRF_PWM1		NRF_PWM21_S
@@ -51,7 +52,11 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define PWM2_IRQn		PWM22_IRQn
 #endif
 
+#ifdef NRF_PWM3
+#define PWM_NRF5_MAX_DEV		4
+#else
 #define PWM_NRF5_MAX_DEV		3
+#endif
 #define PWM_NRF5_MAX_CHAN		4
 
 #pragma pack(push,4)
@@ -71,6 +76,9 @@ alignas(4) static nRFPwmDev_t s_PwmnRFDev[PWM_NRF5_MAX_DEV] = {
 	{NRF_PWM0, },
 	{NRF_PWM1, },
 	{NRF_PWM2, },
+#ifdef NRF_PWM3
+	{NRF_PWM3, },
+#endif
 };
 
 bool nRF52PWMWWaitForSTop(nRFPwmDev_t *pDev, int Timeout)
@@ -105,7 +113,7 @@ bool PWMInit(PwmDev_t *pDev, const PwmCfg_t *pCfg)
 
 	pDev->DevNo = pCfg->DevNo;
 	pDev->Mode = pCfg->Mode;
-	pDev->Mode = pCfg->Mode;
+	pDev->pEvtHandler = pCfg->pEvtHandler;
 	dev = &s_PwmnRFDev[pCfg->DevNo];
 	dev->pDev = pDev;
 	pDev->pDevData = (void*)dev;
@@ -167,6 +175,11 @@ bool PWMInit(PwmDev_t *pDev, const PwmCfg_t *pCfg)
 			case 2:
 				irqno = PWM2_IRQn;
 				break;
+#ifdef NRF_PWM3
+			case 3:
+				irqno = PWM3_IRQn;
+				break;
+#endif
 		}
 		NVIC_ClearPendingIRQ(irqno);
 		NVIC_SetPriority(irqno, pCfg->IntPrio);
@@ -452,27 +465,31 @@ bool PWMPlay(PwmDev_t *pDev, int Chan, uint32_t Freq, uint32_t Dur)
 void nRF52PWMIrqHandler(int PwmNo)
 {
 	nRFPwmDev_t *dev = &s_PwmnRFDev[PwmNo];
-	PWM_EVT evt = (PWM_EVT)-1;
+	PWM_EVT evt = PWM_EVT_STOPPED;
+	bool bEvt = false;
 
 	if (dev->pReg->EVENTS_LOOPSDONE == 1)
 	{
 		evt = PWM_EVT_STARTED;
+		bEvt = true;
 		dev->pReg->EVENTS_LOOPSDONE = 0;
 	}
 
 	if (dev->pReg->EVENTS_PWMPERIODEND == 1)
 	{
 		evt = PWM_EVT_PERIOD;
+		bEvt = true;
 		dev->pReg->EVENTS_PWMPERIODEND = 0;
 	}
 	if (dev->pReg->EVENTS_STOPPED == 1)
 	{
 		evt = PWM_EVT_STOPPED;
+		bEvt = true;
 		dev->pReg->EVENTS_STOPPED = 0;
 		dev->bStarted = false;
 	}
 
-	if (evt != -1 && dev->pDev->pEvtHandler)
+	if (bEvt && dev->pDev->pEvtHandler)
 	{
 		dev->pDev->pEvtHandler(dev->pDev, evt);
 	}
@@ -506,5 +523,12 @@ void PWM2_IRQHandler()
 {
 	nRF52PWMIrqHandler(2);
 }
+
+#ifdef NRF_PWM3
+void PWM3_IRQHandler()
+{
+	nRF52PWMIrqHandler(3);
+}
+#endif
 
 } // extern "C"
