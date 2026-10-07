@@ -45,8 +45,16 @@ SOFTWARE.
 
 #include "app_evt_handler.h"
 #include "usb/usb.h"
+#include "board.h"
 #include "usb/usb_int.h"
 #include "usb/usbd_epalloc.h"
+#ifdef MCUOSC
+McuOsc_t g_McuOsc = MCUOSC;
+#endif
+
+#ifdef USB_PINS
+static const IOPinCfg_t s_UsbPins[] = USB_PINS;
+#endif
 
 #define USB_DEVNO			0
 #define INT_CONFIG_VALUE	1U
@@ -251,6 +259,13 @@ static const UsbCfg_t s_UsbCfg = {
 	.pSerial = nullptr,
 	.pFuncName = "USB Interrupt Loopback",
 	.IntPrio = 6,
+#ifdef USB_PINS
+	.pIOPinMap = s_UsbPins,
+	.NbIOPins = sizeof(s_UsbPins) / sizeof(IOPinCfg_t),
+#else
+	.pIOPinMap = nullptr,
+	.NbIOPins = 0,
+#endif
 	.DeviceClass = USB_DEVCLASS_NONE,
 	.DeviceSubClass = 0U,
 	.DeviceProtocol = 0U,

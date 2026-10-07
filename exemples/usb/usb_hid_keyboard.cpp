@@ -44,6 +44,14 @@ SOFTWARE.
 
 #include "board.h"
 
+#ifdef MCUOSC
+McuOsc_t g_McuOsc = MCUOSC;
+#endif
+
+#ifdef USB_PINS
+static const IOPinCfg_t s_UsbPins[] = USB_PINS;
+#endif
+
 #define USB_DEVNO			0
 #define HID_STR_INTERFACE	4U
 #define HID_KEY_A			0x04U
@@ -163,6 +171,13 @@ static const UsbCfg_t s_UsbCfg = {
 	.pSerial = nullptr,
 	.pFuncName = "HID Keyboard",
 	.IntPrio = 6,
+#ifdef USB_PINS
+	.pIOPinMap = s_UsbPins,
+	.NbIOPins = sizeof(s_UsbPins) / sizeof(IOPinCfg_t),
+#else
+	.pIOPinMap = nullptr,
+	.NbIOPins = 0,
+#endif
 	.DeviceClass = USB_DEVCLASS_NONE,
 	.DeviceSubClass = 0U,
 	.DeviceProtocol = 0U,

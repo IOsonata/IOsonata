@@ -594,8 +594,12 @@ bool UsbCtrlrEpOpenData(int DevNo, uint8_t EpNo, bool bIn, uint8_t Type,
 		(bIn ? USBC_UECFG0_EPDIR : 0U);
 	__DMB();
 	SAM4L_USBC->USBC_UERST |= 1U << physical;
+	// Bulk/interrupt IN is kept explicitly NAKed while software owns the
+	// free bank. ISO IN is different: an empty bank must remain visible so
+	// hardware can produce the specified automatic ZLP on an IN token.
 	Sam4lUsbEpReg(USBC_UECON0SET_OFFSET, physical) = USBC_UECON0SET_RAMACERES |
-		(bIn ? 0U : USBC_UECON0SET_BUSY0S | USBC_UECON0SET_RXOUTES);
+		(bIn ? (Type == ISO ? 0U : USBC_UECON0SET_BUSY0S) :
+		 USBC_UECON0SET_BUSY0S | USBC_UECON0SET_RXOUTES);
 	__DSB();
 	// Do not return a successfully opened IN endpoint until its first bank
 	// is writable. The caller may submit immediately and owns its TX queue.
@@ -725,24 +729,60 @@ bool UsbCtrlrEpSend(int DevNo, uint8_t EpNum, uint8_t *pBuffer, uint16_t Length)
 	}
 	// Suspension or HALT does not discard a newly queued IN packet. The
 	// bank remains owned until the host resumes/clears HALT, or cancellation.
-	if ((Sam4lUsbEpReg(USBC_UESTA0_OFFSET, physical) & USBC_UESTA0_TXINI) == 0U ||
-		(Sam4lUsbEpReg(USBC_UECON0_OFFSET, physical) & USBC_UECON0_FIFOCON) == 0U)
+	//
+	// Bulk/interrupt idle banks are held with BUSY0E after open/completion.
+	// TXINI is acknowledged at completion (ASF's ownership sequence), so for
+	// those endpoints FIFOCON + BUSY0E is the software ownership handshake.
+	// ISO keeps the native TXINI/FIFOCON handshake because an empty ISO bank
+	// must remain available for automatic ZLP generation.
+	const uint32_t epStatus = Sam4lUsbEpReg(USBC_UESTA0_OFFSET, physical);
+	const uint32_t epControl = Sam4lUsbEpReg(USBC_UECON0_OFFSET, physical);
+	const bool iso = ep->Type == ISO;
+	if ((epControl & USBC_UECON0_FIFOCON) == 0U ||
+		(iso ? (epStatus & USBC_UESTA0_TXINI) == 0U :
+		       (epControl & USBC_UECON0_BUSY0) == 0U))
 	{
 		EnableInterrupt(state);
 		return false;
 	}
-	s_Bank[physical][0].Address = reinterpret_cast<uintptr_t>(
+	uintptr_t dmaAddress = reinterpret_cast<uintptr_t>(
 		pBuffer != nullptr ? pBuffer : s_Ep0Buffer);
+	const uint32_t misalign = static_cast<uint32_t>(dmaAddress & 3U);
+	if (Length != 0U && misalign != 0U)
+	{
+		// USBC DMA requires a word-aligned source. Transfer only the leading
+		// bytes required to reach the next word boundary. Completion advances
+		// the owner's FIFO by this shortened length; the following submission
+		// is naturally aligned and remains zero-copy.
+		const uint16_t repair = static_cast<uint16_t>(4U - misalign);
+		if (Length > repair)
+			Length = repair;
+
+		// Every SAM4L endpoint descriptor has two 16-byte bank records, but
+		// this driver configures EPBK=single. Bank 1 is therefore never owned
+		// by USBC. Its aligned Address word is a per-physical-endpoint 4-byte
+		// scratch slot, preserving independent endpoint DMA with no extra BSS.
+		uint32_t scratch = 0U;
+		memcpy(&scratch, pBuffer, Length);
+		s_Bank[physical][1].Address = scratch;
+		dmaAddress = reinterpret_cast<uintptr_t>(
+			&s_Bank[physical][1].Address);
+	}
+	s_Bank[physical][0].Address = dmaAddress;
 	s_Bank[physical][0].PacketSize = Length;
 	s_Bank[physical][0].Status = 0U;
 	ep->Length = Length;
 	ep->Busy = true;
 	__DMB();
-	if (ep->Type == ISO)
+	if (iso)
 		Sam4lUsbEpReg(USBC_UESTA0CLR_OFFSET, physical) = SAM4L_USB_ISO_ERRORFI;
-	// TXINI must be acknowledged BEFORE handing FIFOCON to hardware.
+	// TXINI must be acknowledged BEFORE handing FIFOCON to hardware. For
+	// bulk/interrupt the bank is still forced busy here, so descriptor writes
+	// cannot race an IN token. Release BUSY0 only after FIFOCON is handed off.
 	Sam4lUsbEpReg(USBC_UESTA0CLR_OFFSET, physical) = USBC_UESTA0CLR_TXINIC;
 	Sam4lUsbEpReg(USBC_UECON0CLR_OFFSET, physical) = USBC_UECON0CLR_FIFOCONC;
+	if (!iso)
+		Sam4lUsbEpReg(USBC_UECON0CLR_OFFSET, physical) = USBC_UECON0CLR_BUSY0C;
 	Sam4lUsbEpReg(USBC_UECON0SET_OFFSET, physical) = USBC_UECON0SET_TXINES;
 	EnableInterrupt(state);
 	return true;
@@ -1032,7 +1072,18 @@ static void Sam4lUsbDataInterrupt(uint8_t Physical)
 	if ((active & USBC_UESTA0_RAMACERI) != 0U)
 		Sam4lUsbEpReg(USBC_UESTA0CLR_OFFSET, Physical) = USBC_UESTA0CLR_RAMACERIC;
 	if (in)
+	{
 		Sam4lUsbEpReg(USBC_UECON0CLR_OFFSET, Physical) = USBC_UECON0CLR_TXINEC;
+		// Match the SAM4L reference-driver ownership sequence for normal IN:
+		// force NAK before acknowledging TXINI, then keep the bank locked while
+		// the completion callback advances the queue and programs the next DMA.
+		// ISO must not be locked: an empty ISO IN bank intentionally auto-ZLPs.
+		if (ep->Type != ISO)
+		{
+			Sam4lUsbEpReg(USBC_UECON0SET_OFFSET, Physical) = USBC_UECON0SET_BUSY0S;
+			Sam4lUsbEpReg(USBC_UESTA0CLR_OFFSET, Physical) = USBC_UESTA0CLR_TXINIC;
+		}
+	}
 	if (!ep->Busy)
 	{
 		if (!in)
@@ -1059,8 +1110,9 @@ static void Sam4lUsbDataInterrupt(uint8_t Physical)
 		return;
 	if (!in)
 		Sam4lUsbEpReg(USBC_UESTA0CLR_OFFSET, Physical) = USBC_UESTA0CLR_RXOUTIC;
-	// On IN success leave TXINI/FIFOCON set, with TXINE masked. On OUT
-	// leave FIFOCON set until a replacement destination has been installed.
+	// Non-ISO IN remains BUSY/NAKed until the completion callback queues the
+	// next packet. ISO keeps its native empty-bank state. OUT retains FIFOCON
+	// until a replacement destination has been installed.
 	const uint32_t generation = ep->Generation;
 	ep->Busy = false;
 	Sam4lUsbNotify(Physical, failed ? USB_CTRLR_EVT_XFER_FAILED : USB_CTRLR_EVT_XFER_CMPL,
