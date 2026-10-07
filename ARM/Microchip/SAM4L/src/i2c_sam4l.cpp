@@ -135,6 +135,7 @@ typedef struct {
 
 	int SlaveRxCount;
 	int SlaveTxCount;
+	int SlaveTxLoaded;
 	bool SlaveRxActive;
 	bool SlaveTxActive;
 } SAM4L_I2CDEV;
@@ -1394,7 +1395,7 @@ static void Sam4lI2CSlavePrimeTx(SAM4L_I2CDEV *dev)
 		return;
 
 	I2CDev_t *i2c = dev->pI2cDev;
-	if (dev->SlaveTxCount >= i2c->RRDataLen[0] || i2c->pRRData[0] == nullptr)
+	if (dev->SlaveTxLoaded >= i2c->RRDataLen[0] || i2c->pRRData[0] == nullptr)
 	{
 		// Leave THR empty. With STREN set, TWIS stretches SCL until the
 		// application supplies data through I2CSetReadRqstData().
@@ -1404,11 +1405,11 @@ static void Sam4lI2CSlavePrimeTx(SAM4L_I2CDEV *dev)
 	// The first byte may need to be loaded while SOAM is still holding the
 	// address phase. TXRDY is not guaranteed to be asserted yet at that point.
 	// After the first byte, only refill an empty THR.
-	if (dev->SlaveTxCount != 0 &&
+	if (dev->SlaveTxLoaded != 0 &&
 		(dev->pSReg->TWIS_SR & TWIS_SR_TXRDY) == 0U)
 		return;
 
-	dev->pSReg->TWIS_THR = i2c->pRRData[0][dev->SlaveTxCount++];
+	dev->pSReg->TWIS_THR = i2c->pRRData[0][dev->SlaveTxLoaded++];
 }
 
 static void Sam4lI2CSlaveFinish(SAM4L_I2CDEV *dev)
@@ -1438,6 +1439,7 @@ static void Sam4lI2CSlaveFinish(SAM4L_I2CDEV *dev)
 	dev->SlaveTxActive = false;
 	dev->SlaveRxCount = 0;
 	dev->SlaveTxCount = 0;
+	dev->SlaveTxLoaded = 0;
 	dev->pSReg->TWIS_IDR = TWIS_IER_RXRDY | TWIS_IER_BTF;
 	dev->pSReg->TWIS_CR &= ~TWIS_CR_ACK;
 
@@ -1473,6 +1475,7 @@ static void Sam4lI2CSlaveIrqHandler(SAM4L_I2CDEV *dev)
 				dev->SlaveRxActive = false;
 				dev->SlaveTxActive = true;
 				dev->SlaveTxCount = 0;
+				dev->SlaveTxLoaded = 0;
 				reg->TWIS_IDR = TWIS_IER_RXRDY;
 				reg->TWIS_IER = TWIS_IER_BTF;
 
@@ -1518,6 +1521,7 @@ static void Sam4lI2CSlaveIrqHandler(SAM4L_I2CDEV *dev)
 				dev->SlaveRxActive = false;
 				dev->SlaveTxActive = true;
 				dev->SlaveTxCount = 0;
+				dev->SlaveTxLoaded = 0;
 				reg->TWIS_IDR = TWIS_IER_RXRDY | TWIS_IER_BTF;
 
 				i2c->pRRData[0] = nullptr;
@@ -1575,6 +1579,11 @@ static void Sam4lI2CSlaveIrqHandler(SAM4L_I2CDEV *dev)
 
 	if ((pending & TWIS_SR_BTF) != 0U && dev->SlaveTxActive)
 	{
+		// THR can be filled ahead of the byte on the bus. Count completed
+		// bytes at BTF, including the final byte terminated by the master's NAK.
+		if (!i2c->DevIntrf.bDma && dev->SlaveTxCount < dev->SlaveTxLoaded)
+			++dev->SlaveTxCount;
+
 		if ((sr & TWIS_SR_NAK) != 0U)
 		{
 			reg->TWIS_SCR = TWIS_SCR_BTF | TWIS_SCR_NAK;
@@ -1809,6 +1818,7 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
 	dev->TenBitReadReady = false;
 	dev->SlaveRxCount = 0;
 	dev->SlaveTxCount = 0;
+	dev->SlaveTxLoaded = 0;
 	dev->SlaveRxActive = false;
 	dev->SlaveTxActive = false;
 

@@ -314,6 +314,7 @@ int main()
 		c = total >= 1 ? total - 1 : 0;
 	}
 	printf("Write %d/%d bytes at offset %d\r\n", c, (int)sizeof(wr), offset);
+	const bool writeOk = c == (int)sizeof(wr);
 
 	memset(buff, 0xFF, sizeof(buff));
 	c = g_I2CMaster.Read(I2C_SLAVE_ADDR, &offset, 1, buff, sizeof(wr));
@@ -322,14 +323,15 @@ int main()
 		printf(" %02x", buff[i]);
 	printf("\r\n");
 
-	bool pass = c == (int)sizeof(wr) &&
+	bool pass = writeOk && c == (int)sizeof(wr) &&
 		memcmp(buff, wr, sizeof(wr)) == 0;
 
-	if (pass && (s_I2cCfgMaster.bIntEn || s_I2cCfgMaster.bDmaEn))
+	if (pass)
 	{
 		// The register-style read above validates the SAM4L CMDR/NCMDR
 		// repeated-start path. Exercise the ordinary RX path for the selected
-		// non-polling transfer engine too.
+		// transfer engine too.
+		const uint8_t expectedRx[4] = { 0x0C, 0x0D, 0x0E, 0x0F };
 		uint8_t rx[4] = { 0xFF, 0xFF, 0xFF, 0xFF };
 		s_MasterCompleted = false;
 		s_MasterCount = 0;
@@ -337,12 +339,16 @@ int main()
 		if (rc < 0)
 			rc = WaitMasterComplete(10000000);
 		printf("%s RX %d/%d bytes:",
-			s_I2cCfgMaster.bDmaEn ? "DMA" : "Interrupt",
+			s_I2cCfgMaster.bDmaEn ? "DMA" :
+				(s_I2cCfgMaster.bIntEn ? "Interrupt" : "Polling"),
 			rc, (int)sizeof(rx));
-		for (int i = 0; i < rc; ++i)
+		for (int i = 0; i < rc && i < (int)sizeof(rx); ++i)
 			printf(" %02x", rx[i]);
 		printf("\r\n");
-		pass = rc == (int)sizeof(rx);
+		pass = rc == (int)sizeof(rx) &&
+			memcmp(rx, expectedRx, sizeof(rx)) == 0;
+		if (!pass)
+			printf("Expected RX 4/4 bytes: 0c 0d 0e 0f\r\n");
 	}
 
 	printf("I2C master/slave loopback %s\r\n", pass ? "PASS" : "FAIL");
