@@ -283,6 +283,11 @@ int main()
 
 	HardwareInit();
 
+	printf("I2C master DMA=%d INT=%d\r\n",
+		s_I2cCfgMaster.bDmaEn, s_I2cCfgMaster.bIntEn);
+	printf("I2C slave  DMA=%d INT=%d\r\n",
+		s_I2cCfgSlave.bDmaEn, s_I2cCfgSlave.bIntEn);
+
 	bool masterOk = g_I2CMaster.Init(s_I2cCfgMaster);
 	bool slaveOk = g_I2CSlave.Init(s_I2cCfgSlave);
 	printf("I2C init master=%d slave=%d\r\n", masterOk, slaveOk);
