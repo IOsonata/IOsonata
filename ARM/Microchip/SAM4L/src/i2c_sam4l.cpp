@@ -1451,7 +1451,7 @@ static void Sam4lI2CSlaveIrqHandler(SAM4L_I2CDEV *dev)
 	Twis *reg = dev->pSReg;
 	I2CDev_t *i2c = dev->pI2cDev;
 	const uint32_t sr = reg->TWIS_SR;
-	const uint32_t pending = sr & reg->TWIS_IMR;
+	uint32_t pending = sr & reg->TWIS_IMR;
 
 	if ((pending & SAM4L_TWIS_ERROR_MASK) != 0U)
 	{
@@ -1477,6 +1477,10 @@ static void Sam4lI2CSlaveIrqHandler(SAM4L_I2CDEV *dev)
 				dev->SlaveTxCount = 0;
 				dev->SlaveTxLoaded = 0;
 				reg->TWIS_IDR = TWIS_IER_RXRDY;
+				// Receive bytes also set BTF. Discard the preceding write's
+				// completion before counting bytes in this new read phase.
+				reg->TWIS_SCR = TWIS_SCR_BTF;
+				pending &= ~TWIS_SR_BTF;
 				reg->TWIS_IER = TWIS_IER_BTF;
 
 				if (i2c->DevIntrf.EvtCB)
