@@ -36,7 +36,9 @@ SOFTWARE.
 #include "timer_nrfx.h"
 
 #if defined(NRF91_SERIES) || defined(NRF53_SERIES)
-#ifdef NRF5340_XXAA_NETWORK
+// The secure alias in a secure build, the non secure one in a non secure
+// build. The nRF5340 network core has the non secure ones only.
+#if defined(NRF5340_XXAA_NETWORK) || defined(NRF_TRUSTZONE_NONSECURE)
 #define NRF_CLOCK		NRF_CLOCK_NS
 #define NRF_RTC0		NRF_RTC0_NS
 #define NRF_RTC1		NRF_RTC1_NS

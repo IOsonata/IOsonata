@@ -55,6 +55,16 @@ SOFTWARE.
 ///
 #define IOPIN_PORT_MAXCOUNT		GPIO_COUNT
 
+// Parts with TrustZone (nRF53, nRF54, nRF91) name the port registers by
+// security state. A secure build reaches a port through its secure alias, or
+// through its non secure alias when bit 7 of the port number is set. A non
+// secure build has the non secure aliases only.
+#ifdef NRF_TRUSTZONE_NONSECURE
+#define IOPIN_NRF_PORT_NS(PortNo)	(1)
+#else
+#define IOPIN_NRF_PORT_NS(PortNo)	(((PortNo) & 0x80) != 0)
+#endif
+
 #ifdef NRF52832_XXAA
 #define IOPIN_P0_MAXCOUNT		P0_PIN_NUM
 #define IOPIN_MAX_COUNT			(P0_PIN_NUM)
@@ -103,7 +113,7 @@ static inline __attribute__((always_inline)) void IOPinSetDir(int PortNo, int Pi
 	NRF_GPIO_Type *reg = nRFGpioGetReg(PortNo);
 #elif defined(NRF91_SERIES) || defined(NRF53_SERIES)
 	NRF_GPIO_Type *reg;
-	if (PortNo & 0x80)
+	if (IOPIN_NRF_PORT_NS(PortNo))
 	{
 		reg = NRF_P0_NS;
 	}
@@ -145,7 +155,7 @@ static inline __attribute__((always_inline)) int IOPinRead(int PortNo, int PinNo
 	NRF_GPIO_Type *reg = nRFGpioGetReg(PortNo);
 	return (reg->IN >> PinNo) & 1;
 #elif defined(NRF91_SERIES) || defined(NRF53_SERIES)
-	if (PortNo & 0x80)
+	if (IOPIN_NRF_PORT_NS(PortNo))
 	{
 		return (NRF_P0_NS->IN >> PinNo) & 1;
 	}
@@ -168,7 +178,7 @@ static inline __attribute__((always_inline)) void IOPinSet(int PortNo, int PinNo
 
 	reg->OUTSET = (1 << PinNo);
 #elif defined(NRF91_SERIES) || defined(NRF53_SERIES)
-	if (PortNo & 0x80)
+	if (IOPIN_NRF_PORT_NS(PortNo))
 	{
 		NRF_P0_NS->OUTSET = (1 << PinNo);
 	}
@@ -193,7 +203,7 @@ static inline __attribute__((always_inline)) void IOPinClear(int PortNo, int Pin
 
 	reg->OUTCLR = (1 << PinNo);
 #elif defined(NRF91_SERIES) || defined(NRF53_SERIES)
-	if (PortNo & 0x80)
+	if (IOPIN_NRF_PORT_NS(PortNo))
 	{
 		NRF_P0_NS->OUTCLR = (1 << PinNo);
 	}
@@ -218,7 +228,7 @@ static inline __attribute__((always_inline)) void IOPinToggle(int PortNo, int Pi
 
 	reg->OUT ^= (1 << PinNo);
 #elif defined(NRF91_SERIES) || defined(NRF53_SERIES)
-	if (PortNo & 0x80)
+	if (IOPIN_NRF_PORT_NS(PortNo))
 	{
 		NRF_P0_NS->OUT ^= (1 << PinNo);
 	}
@@ -244,7 +254,7 @@ static inline __attribute__((always_inline)) uint32_t IOPinReadPort(int PortNo) 
 
 	return reg->IN;
 #elif defined(NRF91_SERIES) || defined(NRF53_SERIES)
-	if (PortNo & 0x80)
+	if (IOPIN_NRF_PORT_NS(PortNo))
 	{
 		return NRF_P0_NS->IN;
 	}
@@ -266,7 +276,7 @@ static inline __attribute__((always_inline)) void IOPinWritePort(int PortNo, uin
 
 	reg->OUT = Data;
 #elif defined(NRF91_SERIES) || defined(NRF53_SERIES)
-	if (PortNo & 0x80)
+	if (IOPIN_NRF_PORT_NS(PortNo))
 	{
 		NRF_P0_NS->OUT = Data;
 	}

@@ -91,7 +91,7 @@ NRF_GPIO_Type *nRFGpioGetReg(int PortNo)
 #elif defined(NRF5340_XXAA_NETWORK)
 			reg = NRF_P0_NS;
 #else
-			if (PortNo & 0x80)
+			if (IOPIN_NRF_PORT_NS(PortNo))
 			{
 				reg = NRF_P0_NS;
 			}
@@ -108,7 +108,7 @@ NRF_GPIO_Type *nRFGpioGetReg(int PortNo)
 #elif defined(NRF5340_XXAA_NETWORK)
 			reg = NRF_P1_NS;
 #else
-			if (PortNo & 0x80)
+			if (IOPIN_NRF_PORT_NS(PortNo))
 			{
 				reg = NRF_P1_NS;
 			}
@@ -124,7 +124,7 @@ NRF_GPIO_Type *nRFGpioGetReg(int PortNo)
 #if defined(NRF5340_XXAA_NETWORK)
 			reg = NRF_P2_NS;
 #else
-			if (PortNo & 0x80)
+			if (IOPIN_NRF_PORT_NS(PortNo))
 			{
 				reg = NRF_P2_NS;
 			}
@@ -140,7 +140,7 @@ NRF_GPIO_Type *nRFGpioGetReg(int PortNo)
 #if defined(NRF54H20_XXAA_NETWORK)
 			reg = NRF_P3_NS;
 #else
-			if (PortNo & 0x80)
+			if (IOPIN_NRF_PORT_NS(PortNo))
 			{
 				reg = NRF_P3_NS;
 			}
@@ -188,10 +188,10 @@ static NRF_GPIOTE_Type *nRFGpioteGetReg(int PortNo)
 	reg = NRF_GPIOTE_NS;
 #else
 	reg = NRF_GPIOTE0_S;
-    if (PortNo & 0x80)
-    {
-    	reg = NRF_GPIOTE1_NS;
-    }
+	if (IOPIN_NRF_PORT_NS(PortNo))
+	{
+		reg = NRF_GPIOTE1_NS;
+	}
 #endif
 #else
     reg = NRF_GPIOTE;
@@ -292,7 +292,8 @@ void IOPinDisableInterrupt(int IntNo)
     if (IntNo >= IOPIN_MAX_INT)
         return;
 
-    NRF_GPIOTE_Type *gpiotereg = nRFGpioteGetReg(s_GpIOSenseEvt[IntNo].PortPinNo >> 8);
+    // A negative IntNo is the port event, the last entry
+    NRF_GPIOTE_Type *gpiotereg = nRFGpioteGetReg(s_GpIOSenseEvt[IntNo < 0 ? IOPIN_MAX_INT : IntNo].PortPinNo >> 8);
 
     if (IntNo < 0)
     {
@@ -396,16 +397,18 @@ void IOPinDisableInterrupt(int IntNo)
 	NVIC_ClearPendingIRQ(GPIOTE_IRQn);
     NVIC_DisableIRQ(GPIOTE_IRQn);
 #elif defined(NRF91_SERIES) || defined(NRF53_SERIES)
-    if (s_GpIOSenseEvt[IntNo].PortPinNo & 0x8000)
-    {
-    	NVIC_ClearPendingIRQ(GPIOTE0_IRQn);
-        NVIC_DisableIRQ(GPIOTE0_IRQn);
-    }
-    else
-    {
-    	NVIC_ClearPendingIRQ(GPIOTE1_IRQn);
-        NVIC_DisableIRQ(GPIOTE1_IRQn);
-    }
+	// GPIOTE1 is the non secure instance, GPIOTE0 the secure one. PortPinNo
+	// is already cleared here, the instance in use tells which one.
+	if (gpiotereg == NRF_GPIOTE1_NS)
+	{
+		NVIC_ClearPendingIRQ(GPIOTE1_IRQn);
+		NVIC_DisableIRQ(GPIOTE1_IRQn);
+	}
+	else
+	{
+		NVIC_ClearPendingIRQ(GPIOTE0_IRQn);
+		NVIC_DisableIRQ(GPIOTE0_IRQn);
+	}
 #else
     NVIC_ClearPendingIRQ(GPIOTE_IRQn);
     NVIC_DisableIRQ(GPIOTE_IRQn);
@@ -602,17 +605,18 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, uint32_t PortNo, uint32_t PinN
     NVIC_SetPriority(GPIOTE_IRQn, IntPrio);
     NVIC_EnableIRQ(GPIOTE_IRQn);
 #elif defined(NRF91_SERIES) || defined(NRF53_SERIES)
-	if (PortNo & 0x80)
+	// GPIOTE1 is the non secure instance, GPIOTE0 the secure one
+	if (IOPIN_NRF_PORT_NS(PortNo))
 	{
-	    NVIC_ClearPendingIRQ(GPIOTE0_IRQn);
-	    NVIC_SetPriority(GPIOTE0_IRQn, IntPrio);
-	    NVIC_EnableIRQ(GPIOTE0_IRQn);
+		NVIC_ClearPendingIRQ(GPIOTE1_IRQn);
+		NVIC_SetPriority(GPIOTE1_IRQn, IntPrio);
+		NVIC_EnableIRQ(GPIOTE1_IRQn);
 	}
 	else
 	{
-	    NVIC_ClearPendingIRQ(GPIOTE1_IRQn);
-	    NVIC_SetPriority(GPIOTE1_IRQn, IntPrio);
-	    NVIC_EnableIRQ(GPIOTE1_IRQn);
+		NVIC_ClearPendingIRQ(GPIOTE0_IRQn);
+		NVIC_SetPriority(GPIOTE0_IRQn, IntPrio);
+		NVIC_EnableIRQ(GPIOTE0_IRQn);
 	}
 #elif defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
 	if ((PortNo & 0x7F) == 0)
@@ -854,7 +858,7 @@ void __WEAK GPIOTE1_IRQHandler(void)
 	    //NRF_GPIO->LATCH = 0xFFFFFFFF;	// Clear detect latch
 	}
 
-	NVIC_ClearPendingIRQ(GPIOTE0_IRQn);
+	NVIC_ClearPendingIRQ(GPIOTE1_IRQn);
 }
 #elif defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
 

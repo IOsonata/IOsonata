@@ -1375,6 +1375,51 @@
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_p256.cpp</locationURI>
 		</link>
+		<link>
+			<name>include/modem_nrf91.h</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/include/modem_nrf91.h</locationURI>
+		</link>
+		<link>
+			<name>include/nrfx_config_nrf91.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/include/nrfx_config_nrf91.h</locationURI>
+		</link>
+		<link>
+			<name>include/spe_nrf91.h</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/include/spe_nrf91.h</locationURI>
+		</link>
+		<link>
+			<name>src/modem_os_nrf91.c</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/modem_os_nrf91.c</locationURI>
+		</link>
+		<link>
+			<name>src/nrfx</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/nrfx/drivers</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/nrfx/drivers/src</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/nrfx/drivers/src/nrfx_ipc.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/nrfx/drivers/src/nrfx_ipc.c</locationURI>
+		</link>
+		<link>
+			<name>src/spe_nrf91.c</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/spe_nrf91.c</locationURI>
+		</link>
 	</linkedResources>
 	<variableList>
 		<variable>

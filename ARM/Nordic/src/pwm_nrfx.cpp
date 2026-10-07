@@ -38,7 +38,12 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "coredev/pwm.h"
 
-#if defined(NRF91_SERIES) || defined(NRF53_SERIES)
+#if (defined(NRF91_SERIES) || defined(NRF53_SERIES)) && defined(NRF_TRUSTZONE_NONSECURE)
+// The non secure alias in a non secure build, the secure one otherwise
+#define NRF_PWM0		NRF_PWM0_NS
+#define NRF_PWM1		NRF_PWM1_NS
+#define NRF_PWM2		NRF_PWM2_NS
+#elif defined(NRF91_SERIES) || defined(NRF53_SERIES)
 #define NRF_PWM0		NRF_PWM0_S
 #define NRF_PWM1		NRF_PWM1_S
 #define NRF_PWM2		NRF_PWM2_S

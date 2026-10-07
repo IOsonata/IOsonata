@@ -90,7 +90,7 @@ SOFTWARE.
 
 #if defined(NRF_FICR)
 #define DFU_TGT_FICR_REG		NRF_FICR
-#elif defined(NRF5340_XXAA_NETWORK)
+#elif defined(NRF_TRUSTZONE_NONSECURE) || defined(NRF5340_XXAA_NETWORK)
 #define DFU_TGT_FICR_REG		NRF_FICR_NS
 #else
 #define DFU_TGT_FICR_REG		NRF_FICR_S
@@ -116,7 +116,12 @@ uint32_t DfuTgtEraseUnit(uintptr_t Addr)
 // or erase mode keeps the cache invalidated, so nothing stale is read back.
 static void DfuTgtMode(uint32_t Mode)
 {
+#if defined(NRF_TRUSTZONE_NONSECURE)
+	// CONFIG is secure only, the non secure side has CONFIGNS, same values
+	DFU_TGT_NVMC_REG->CONFIGNS = Mode;
+#else
 	DFU_TGT_NVMC_REG->CONFIG = Mode;
+#endif
 	__DSB();
 }
 

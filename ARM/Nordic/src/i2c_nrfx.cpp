@@ -46,6 +46,23 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "coredev/interrupt.h"
 #include "coredev/shared_intrf.h"
 
+// nRF91 and the nRF5340 application core name their peripherals by security
+// state: the secure alias in a secure build, the non secure one in a non
+// secure build.
+#if defined(NRF91_SERIES) || defined(NRF5340_XXAA_APPLICATION)
+#ifdef NRF_TRUSTZONE_NONSECURE
+#define NRF_TWIM0		NRF_TWIM0_NS
+#define NRF_TWIM1		NRF_TWIM1_NS
+#define NRF_TWIM2		NRF_TWIM2_NS
+#define NRF_TWIM3		NRF_TWIM3_NS
+#else
+#define NRF_TWIM0		NRF_TWIM0_S
+#define NRF_TWIM1		NRF_TWIM1_S
+#define NRF_TWIM2		NRF_TWIM2_S
+#define NRF_TWIM3		NRF_TWIM3_S
+#endif
+#endif
+
 #define I2C_TIMEOUT_CNT				100000
 
 #ifdef TWIM_PRESENT
@@ -121,16 +138,16 @@ alignas(4) static nRFTwiDev_t s_nRFxI2CDev[NRFX_I2C_MAXDEV] = {
 	},
 #else
 	{
-		0, NULL, (NRF_TWIM_Type *)NRF_TWIM0_S_BASE,
+		0, NULL, NRF_TWIM0,
 	},
 	{
-		1, NULL, (NRF_TWIM_Type *)NRF_TWIM1_S_BASE,
+		1, NULL, NRF_TWIM1,
 	},
 	{
-		2, NULL, (NRF_TWIM_Type *)NRF_TWIM2_S_BASE,
+		2, NULL, NRF_TWIM2,
 	},
 	{
-		3, NULL, (NRF_TWIM_Type *)NRF_TWIM3_S_BASE,
+		3, NULL, NRF_TWIM3,
 	},
 #endif
 #else
