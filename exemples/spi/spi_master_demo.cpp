@@ -43,6 +43,10 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "stddev.h"
 #include "board.h"
 
+#ifdef MCUOSC
+McuOsc_t g_McuOsc = MCUOSC;
+#endif
+
 #define FIFOSIZE			CFIFO_MEMSIZE(256)
 
 uint8_t g_UarTxBuff[FIFOSIZE];

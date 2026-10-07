@@ -936,6 +936,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/spi.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/coredev/spi_sam4l.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/spi_sam4l.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/coredev/timer.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/timer.cpp</locationURI>
