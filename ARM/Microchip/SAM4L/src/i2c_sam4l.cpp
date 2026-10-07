@@ -12,9 +12,9 @@ and the write/repeated-start/read sequence used by DeviceIntrfRead(). Interrupt 
 copies the complete caller transfer into controller-owned static storage before
 returning so no caller buffer is retained by the ISR.
 
-Slave mode is interrupt driven. The TWIS address-match clock stretching is used
-so application callbacks can install the read/write buffers before the transfer
-continues.
+Slave mode is interrupt driven, with optional PDCA data movement. The TWIS
+address-match clock stretching is used so application callbacks can install the
+read/write buffers before the transfer continues.
 
 @author	Hoang Nguyen Hoan
 @date	Oct. 7, 2026
@@ -67,8 +67,13 @@ SOFTWARE.
 // I2C master uses a fixed RX/TX pair per TWIM instance from channels 4..11.
 #define SAM4L_I2C_PDCA_RX_CHAN(n)	(4U + ((uint32_t)(n) << 1U))
 #define SAM4L_I2C_PDCA_TX_CHAN(n)	(5U + ((uint32_t)(n) << 1U))
+#define SAM4L_I2C_PDCA_SLAVE_RX_CHAN(n)	(12U + ((uint32_t)(n) << 1U))
+#define SAM4L_I2C_PDCA_SLAVE_TX_CHAN(n)	(13U + ((uint32_t)(n) << 1U))
 #define SAM4L_PDCA_PID_TWIM_RX(n)	(5U + (uint32_t)(n))
 #define SAM4L_PDCA_PID_TWIM_TX(n)	(23U + (uint32_t)(n))
+#define SAM4L_PDCA_PID_TWIS_RX(n)	(9U + (uint32_t)(n))
+#define SAM4L_PDCA_PID_TWIS_TX(n)	(27U + (uint32_t)(n))
+#define SAM4L_PDCA_MAX_COUNT		0xFFFFU
 
 #define SAM4L_TWIM_ERROR_MASK \
 	(TWIM_SR_ANAK | TWIM_SR_DNAK | TWIM_SR_ARBLST | TWIM_SR_TOUT | TWIM_SR_PECERR)
@@ -200,6 +205,16 @@ static PdcaChannel *Sam4lI2CPdcaTxChannel(const SAM4L_I2CDEV *dev)
 	return &SAM4L_PDCA->PDCA_CHANNEL[SAM4L_I2C_PDCA_TX_CHAN(dev->DevNo)];
 }
 
+static PdcaChannel *Sam4lI2CSlavePdcaRxChannel(const SAM4L_I2CDEV *dev)
+{
+	return &SAM4L_PDCA->PDCA_CHANNEL[SAM4L_I2C_PDCA_SLAVE_RX_CHAN(dev->DevNo)];
+}
+
+static PdcaChannel *Sam4lI2CSlavePdcaTxChannel(const SAM4L_I2CDEV *dev)
+{
+	return &SAM4L_PDCA->PDCA_CHANNEL[SAM4L_I2C_PDCA_SLAVE_TX_CHAN(dev->DevNo)];
+}
+
 static void Sam4lI2CPdcaChannelInit(PdcaChannel *chan, uint32_t PeripheralId)
 {
 	chan->PDCA_CR = PDCA_CR_TDIS | PDCA_CR_ECLR;
@@ -220,6 +235,31 @@ static void Sam4lI2CPdcaInit(SAM4L_I2CDEV *dev)
 		SAM4L_PDCA_PID_TWIM_RX(dev->DevNo));
 	Sam4lI2CPdcaChannelInit(Sam4lI2CPdcaTxChannel(dev),
 		SAM4L_PDCA_PID_TWIM_TX(dev->DevNo));
+}
+
+static void Sam4lI2CSlavePdcaInit(SAM4L_I2CDEV *dev)
+{
+	Sam4lI2CPdcaClockEnable();
+	Sam4lI2CPdcaChannelInit(Sam4lI2CSlavePdcaRxChannel(dev),
+		SAM4L_PDCA_PID_TWIS_RX(dev->DevNo));
+	Sam4lI2CPdcaChannelInit(Sam4lI2CSlavePdcaTxChannel(dev),
+		SAM4L_PDCA_PID_TWIS_TX(dev->DevNo));
+
+	const IRQn_Type irq = (IRQn_Type)(PDCA_0_IRQn +
+		SAM4L_I2C_PDCA_SLAVE_RX_CHAN(dev->DevNo));
+	NVIC_ClearPendingIRQ(irq);
+	NVIC_SetPriority(irq, dev->pI2cDev->Cfg.IntPrio);
+	NVIC_EnableIRQ(irq);
+}
+
+static void Sam4lI2CSlavePdcaStop(SAM4L_I2CDEV *dev)
+{
+	PdcaChannel *rx = Sam4lI2CSlavePdcaRxChannel(dev);
+	PdcaChannel *tx = Sam4lI2CSlavePdcaTxChannel(dev);
+	rx->PDCA_CR = PDCA_CR_TDIS;
+	tx->PDCA_CR = PDCA_CR_TDIS;
+	rx->PDCA_IDR = 0xFFFFFFFFU;
+	tx->PDCA_IDR = 0xFFFFFFFFU;
 }
 
 static void Sam4lI2CPdcaStop(SAM4L_I2CDEV *dev)
@@ -1293,8 +1333,63 @@ static void Sam4lI2CMasterIrqHandler(SAM4L_I2CDEV *dev)
 	}
 }
 
+static int Sam4lI2CSlaveRxDmaCount(SAM4L_I2CDEV *dev)
+{
+	I2CDev_t *i2c = dev->pI2cDev;
+	if (i2c->pTRBuff[0] == nullptr || i2c->TRBuffLen[0] <= 0)
+		return dev->SlaveRxCount;
+
+	int dmaLen = i2c->TRBuffLen[0] - 1;
+	if (dmaLen < 0)
+		dmaLen = 0;
+	uint32_t remain = Sam4lI2CSlavePdcaRxChannel(dev)->PDCA_TCR;
+	if (remain > (uint32_t)dmaLen)
+		remain = (uint32_t)dmaLen;
+	const int dmaCount = dmaLen - (int)remain;
+	return dev->SlaveRxCount > dmaCount ? dev->SlaveRxCount : dmaCount;
+}
+
+static int Sam4lI2CSlaveTxDmaCount(SAM4L_I2CDEV *dev)
+{
+	I2CDev_t *i2c = dev->pI2cDev;
+	if (i2c->pRRData[0] == nullptr || i2c->RRDataLen[0] <= 0)
+		return dev->SlaveTxCount;
+
+	const int dmaLen = i2c->RRDataLen[0];
+	uint32_t remain = Sam4lI2CSlavePdcaTxChannel(dev)->PDCA_TCR;
+	if (remain > (uint32_t)dmaLen)
+		remain = (uint32_t)dmaLen;
+	const int dmaCount = dmaLen - (int)remain;
+	return dev->SlaveTxCount > dmaCount ? dev->SlaveTxCount : dmaCount;
+}
+
+static void Sam4lI2CSlaveRxPdcaIrqHandler(SAM4L_I2CDEV *dev)
+{
+	PdcaChannel *chan = Sam4lI2CSlavePdcaRxChannel(dev);
+	const uint32_t isr = chan->PDCA_ISR;
+
+	if ((isr & (PDCA_ISR_TRC | PDCA_ISR_TERR)) == 0U)
+		return;
+
+	dev->SlaveRxCount = Sam4lI2CSlaveRxDmaCount(dev);
+	chan->PDCA_CR = PDCA_CR_TDIS;
+	chan->PDCA_IDR = PDCA_IER_TRC | PDCA_IER_TERR;
+
+	if ((isr & PDCA_ISR_TERR) != 0U)
+		chan->PDCA_CR = PDCA_CR_ECLR;
+
+	// The datasheet specifies receive DMA size-1. Once that region is full,
+	// leave the last byte to the TWIS ISR; STREN prevents RHR overrun while
+	// the interrupt takes over.
+	if (dev->SlaveRxActive)
+		dev->pSReg->TWIS_IER = TWIS_IER_RXRDY;
+}
+
 static void Sam4lI2CSlavePrimeTx(SAM4L_I2CDEV *dev)
 {
+	if (dev->pI2cDev->DevIntrf.bDma)
+		return;
+
 	if (!dev->SlaveTxActive || dev->pSReg == nullptr)
 		return;
 
@@ -1319,7 +1414,25 @@ static void Sam4lI2CSlavePrimeTx(SAM4L_I2CDEV *dev)
 static void Sam4lI2CSlaveFinish(SAM4L_I2CDEV *dev)
 {
 	I2CDev_t *i2c = dev->pI2cDev;
-	const int count = dev->SlaveTxActive ? dev->SlaveTxCount : dev->SlaveRxCount;
+	int count;
+
+	if (i2c->DevIntrf.bDma)
+	{
+		if (dev->SlaveTxActive)
+		{
+			count = Sam4lI2CSlaveTxDmaCount(dev);
+			Sam4lI2CSlavePdcaTxChannel(dev)->PDCA_CR = PDCA_CR_TDIS;
+		}
+		else
+		{
+			count = Sam4lI2CSlaveRxDmaCount(dev);
+			Sam4lI2CSlavePdcaRxChannel(dev)->PDCA_CR = PDCA_CR_TDIS;
+		}
+	}
+	else
+	{
+		count = dev->SlaveTxActive ? dev->SlaveTxCount : dev->SlaveRxCount;
+	}
 
 	dev->SlaveRxActive = false;
 	dev->SlaveTxActive = false;
@@ -1331,7 +1444,6 @@ static void Sam4lI2CSlaveFinish(SAM4L_I2CDEV *dev)
 	if (i2c->DevIntrf.EvtCB)
 		i2c->DevIntrf.EvtCB(&i2c->DevIntrf, DEVINTRF_EVT_COMPLETED, nullptr, count);
 }
-
 static void Sam4lI2CSlaveIrqHandler(SAM4L_I2CDEV *dev)
 {
 	Twis *reg = dev->pSReg;
@@ -1349,44 +1461,73 @@ static void Sam4lI2CSlaveIrqHandler(SAM4L_I2CDEV *dev)
 	if ((pending & TWIS_SR_SAM) != 0U)
 	{
 		// TRA is specified to update one CLK_TWIS cycle after SAM. Do not use
-		// the SR snapshot taken at ISR entry or a read request can be mistaken
-		// for a write request, leaving THR empty while STREN holds SCL forever.
+		// the SR snapshot taken at ISR entry.
 		const bool transmit = (reg->TWIS_SR & TWIS_SR_TRA) != 0U;
 		reg->TWIS_CR &= ~TWIS_CR_ACK;
+		reg->TWIS_NBYTES = 0U;
 
 		if (transmit)
 		{
-			const int priorRx = dev->SlaveRxActive ? dev->SlaveRxCount : 0;
+			int priorRx = 0;
+			if (dev->SlaveRxActive)
+			{
+				priorRx = i2c->DevIntrf.bDma ?
+					Sam4lI2CSlaveRxDmaCount(dev) : dev->SlaveRxCount;
+				if (i2c->DevIntrf.bDma)
+					Sam4lI2CSlavePdcaRxChannel(dev)->PDCA_CR = PDCA_CR_TDIS;
+			}
+
 			dev->SlaveRxActive = false;
 			dev->SlaveTxActive = true;
 			dev->SlaveTxCount = 0;
-			reg->TWIS_IDR = TWIS_IER_RXRDY;
-			reg->TWIS_IER = TWIS_IER_BTF;
+			reg->TWIS_IDR = TWIS_IER_RXRDY | TWIS_IER_BTF;
+
+			// A response buffer belongs to this read request. Do not silently
+			// reuse one installed for an earlier transaction.
+			i2c->pRRData[0] = nullptr;
+			i2c->RRDataLen[0] = 0;
 
 			if (i2c->DevIntrf.EvtCB)
 				i2c->DevIntrf.EvtCB(&i2c->DevIntrf,
 					DEVINTRF_EVT_READ_RQST, nullptr, priorRx);
-			Sam4lI2CSlavePrimeTx(dev);
+
+			if (!i2c->DevIntrf.bDma)
+			{
+				reg->TWIS_IER = TWIS_IER_BTF;
+				Sam4lI2CSlavePrimeTx(dev);
+			}
 		}
 		else
 		{
 			if (dev->SlaveTxActive && i2c->DevIntrf.EvtCB)
+			{
+				const int priorTx = i2c->DevIntrf.bDma ?
+					Sam4lI2CSlaveTxDmaCount(dev) : dev->SlaveTxCount;
 				i2c->DevIntrf.EvtCB(&i2c->DevIntrf,
-					DEVINTRF_EVT_COMPLETED, nullptr, dev->SlaveTxCount);
+					DEVINTRF_EVT_COMPLETED, nullptr, priorTx);
+			}
+			if (i2c->DevIntrf.bDma)
+				Sam4lI2CSlavePdcaTxChannel(dev)->PDCA_CR = PDCA_CR_TDIS;
 
 			dev->SlaveTxActive = false;
 			dev->SlaveRxActive = true;
 			dev->SlaveRxCount = 0;
-			reg->TWIS_IDR = TWIS_IER_BTF;
-			reg->TWIS_IER = TWIS_IER_RXRDY;
+			reg->TWIS_IDR = TWIS_IER_RXRDY | TWIS_IER_BTF;
+
+			// Receive storage is request-scoped for the same reason.
+			i2c->pTRBuff[0] = nullptr;
+			i2c->TRBuffLen[0] = 0;
 
 			if (i2c->DevIntrf.EvtCB)
 				i2c->DevIntrf.EvtCB(&i2c->DevIntrf,
 					DEVINTRF_EVT_WRITE_RQST, nullptr, 0);
+
+			if (!i2c->DevIntrf.bDma)
+				reg->TWIS_IER = TWIS_IER_RXRDY;
 		}
 
-		// SOAM keeps SCL low until SAM is cleared. The request callback above
-		// therefore gets the first opportunity to install its buffer.
+		// SOAM keeps SCL low until SAM is cleared. Request callbacks above can
+		// arm PDCA or install the interrupt-mode buffer before bus progress.
 		reg->TWIS_SCR = TWIS_SCR_SAM;
 	}
 
@@ -1438,6 +1579,8 @@ static void Sam4lI2CDisable(DevIntrf_t * const pDev)
 	if (dev->pI2cDev->Cfg.Mode == I2CMODE_SLAVE)
 	{
 		dev->pSReg->TWIS_IDR = 0xFFFFFFFFU;
+		if (pDev->bDma)
+			Sam4lI2CSlavePdcaStop(dev);
 		dev->pSReg->TWIS_CR &= ~TWIS_CR_SEN;
 	}
 	else
@@ -1478,13 +1621,20 @@ static void Sam4lI2CReset(DevIntrf_t * const pDev)
 	}
 	else
 	{
+		if (pDev->Cfg.bDmaEn)
+			Sam4lI2CSlavePdcaInit(dev);
+
 		Twis *reg = dev->pSReg;
 		reg->TWIS_IDR = 0xFFFFFFFFU;
+		if (pDev->bDma)
+			Sam4lI2CSlavePdcaStop(dev);
 		reg->TWIS_CR = TWIS_CR_SWRST;
 		reg->TWIS_SCR = 0xFFFFFFFFU;
 		reg->TWIS_NBYTES = 0U;
 		uint32_t cr = TWIS_CR_SMATCH | TWIS_CR_STREN | TWIS_CR_SOAM |
 			TWIS_CR_ADR(dev->pI2cDev->Cfg.SlaveAddr[0]);
+		if (pDev->bDma)
+			cr |= TWIS_CR_CUP;
 		if (dev->pI2cDev->Cfg.AddrType == I2CADDR_TYPE_EXT)
 			cr |= TWIS_CR_TENBIT;
 		reg->TWIS_CR = cr | TWIS_CR_SEN;
@@ -1514,12 +1664,31 @@ void I2CSetReadRqstData(I2CDev_t * const pDev, int SlaveIdx,
 	if (pDev == nullptr || SlaveIdx != 0 || DataLen < 0)
 		return;
 
+	if (DataLen > (int)SAM4L_PDCA_MAX_COUNT)
+		DataLen = (int)SAM4L_PDCA_MAX_COUNT;
+
 	pDev->pRRData[0] = pData;
 	pDev->RRDataLen[0] = DataLen;
 
 	SAM4L_I2CDEV *dev = (SAM4L_I2CDEV *)pDev->DevIntrf.pDevData;
-	if (dev != nullptr && pDev->Cfg.Mode == I2CMODE_SLAVE)
+	if (dev == nullptr || pDev->Cfg.Mode != I2CMODE_SLAVE ||
+		!dev->SlaveTxActive || pData == nullptr || DataLen <= 0)
+		return;
+
+	if (pDev->DevIntrf.bDma)
+	{
+		PdcaChannel *chan = Sam4lI2CSlavePdcaTxChannel(dev);
+		chan->PDCA_CR = PDCA_CR_TDIS | PDCA_CR_ECLR;
+		chan->PDCA_PSR = PDCA_PSR_PID(SAM4L_PDCA_PID_TWIS_TX(dev->DevNo));
+		chan->PDCA_MAR = (uint32_t)pData;
+		chan->PDCA_TCR = (uint32_t)DataLen;
+		chan->PDCA_IDR = 0xFFFFFFFFU;
+		chan->PDCA_CR = PDCA_CR_TEN;
+	}
+	else
+	{
 		Sam4lI2CSlavePrimeTx(dev);
+	}
 }
 
 void I2CSetWriteRqstBuffer(I2CDev_t * const pDev, int SlaveIdx,
@@ -1528,15 +1697,43 @@ void I2CSetWriteRqstBuffer(I2CDev_t * const pDev, int SlaveIdx,
 	if (pDev == nullptr || SlaveIdx != 0 || BuffLen < 0)
 		return;
 
+	if (BuffLen > (int)SAM4L_PDCA_MAX_COUNT)
+		BuffLen = (int)SAM4L_PDCA_MAX_COUNT;
+
 	pDev->pTRBuff[0] = pBuff;
 	pDev->TRBuffLen[0] = BuffLen;
 
 	SAM4L_I2CDEV *dev = (SAM4L_I2CDEV *)pDev->DevIntrf.pDevData;
 	if (dev == nullptr || pDev->Cfg.Mode != I2CMODE_SLAVE ||
-		!dev->SlaveRxActive || pBuff == nullptr)
+		!dev->SlaveRxActive || pBuff == nullptr || BuffLen <= 0)
 		return;
 
 	Twis *reg = dev->pSReg;
+	if (pDev->DevIntrf.bDma)
+	{
+		PdcaChannel *chan = Sam4lI2CSlavePdcaRxChannel(dev);
+		const uint32_t dmaLen = BuffLen > 1 ? (uint32_t)(BuffLen - 1) : 0U;
+
+		chan->PDCA_CR = PDCA_CR_TDIS | PDCA_CR_ECLR;
+		chan->PDCA_PSR = PDCA_PSR_PID(SAM4L_PDCA_PID_TWIS_RX(dev->DevNo));
+		chan->PDCA_MAR = (uint32_t)pBuff;
+		chan->PDCA_TCR = dmaLen;
+		chan->PDCA_IDR = 0xFFFFFFFFU;
+		dev->SlaveRxCount = 0;
+
+		reg->TWIS_IDR = TWIS_IER_RXRDY;
+		if (dmaLen > 0U)
+		{
+			chan->PDCA_IER = PDCA_IER_TRC | PDCA_IER_TERR;
+			chan->PDCA_CR = PDCA_CR_TEN;
+		}
+		else
+		{
+			reg->TWIS_IER = TWIS_IER_RXRDY;
+		}
+		return;
+	}
+
 	if ((reg->TWIS_SR & TWIS_SR_RXRDY) != 0U &&
 		dev->SlaveRxCount < BuffLen)
 	{
@@ -1564,8 +1761,7 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
 		if (pCfgData->DevNo >= SAM4L_I2C_SLAVE_COUNT ||
 			pCfgData->NbSlaveAddr != 1 ||
 			pCfgData->AddrType != I2CADDR_TYPE_NORMAL ||
-			pCfgData->SlaveAddr[0] > 0x7FU ||
-			pCfgData->bDmaEn)
+			pCfgData->SlaveAddr[0] > 0x7FU)
 			return false;
 	}
 
@@ -1646,6 +1842,8 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
 
 		uint32_t cr = TWIS_CR_SMATCH | TWIS_CR_STREN | TWIS_CR_SOAM |
 			TWIS_CR_ADR(pDev->Cfg.SlaveAddr[0]);
+		if (pDev->Cfg.bDmaEn)
+			cr |= TWIS_CR_CUP;
 		if (pDev->Cfg.AddrType == I2CADDR_TYPE_EXT)
 			cr |= TWIS_CR_TENBIT;
 		reg->TWIS_CR = cr;
@@ -1692,4 +1890,14 @@ extern "C" void TWIS0_Handler(void)
 extern "C" void TWIS1_Handler(void)
 {
 	Sam4lI2CSlaveIrqHandler(&s_Sam4lI2CDev[1]);
+}
+
+extern "C" void PDCA_12_Handler(void)
+{
+	Sam4lI2CSlaveRxPdcaIrqHandler(&s_Sam4lI2CDev[0]);
+}
+
+extern "C" void PDCA_14_Handler(void)
+{
+	Sam4lI2CSlaveRxPdcaIrqHandler(&s_Sam4lI2CDev[1]);
 }
