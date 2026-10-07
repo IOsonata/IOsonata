@@ -68,6 +68,14 @@ alignas(4) static uint8_t s_UartTxFifo[UARTFIFOSIZE];
 
 static const IOPinCfg_t s_UartPins[] = UART_PINS;
 
+// Boards can select the execution modes their UART port supports.
+#ifndef UART_INT_MODE
+#define UART_INT_MODE false
+#endif
+#ifndef UART_DMA_MODE
+#define UART_DMA_MODE true
+#endif
+
 // UART configuration data
 static const UARTCfg_t s_UartCfg = {
 	.DevNo = UART_DEVNO,
@@ -78,7 +86,7 @@ static const UARTCfg_t s_UartCfg = {
 	.Parity = UART_PARITY_NONE,
 	.StopBits = 1,
 	.FlowControl = UART_FLWCTRL_NONE,
-	.bIntMode = false,
+	.bIntMode = UART_INT_MODE,
 	.IntPrio = IRQ_PRIO_NORMAL,
 	.EvtCallback = nRFUartEvthandler,
 	.bFifoBlocking = true,
@@ -93,7 +101,7 @@ static const UARTCfg_t s_UartCfg = {
 	.TxMemSize = 0,
 	.pTxMem = NULL,
 #endif
-	.bDMAMode = true,
+	.bDMAMode = UART_DMA_MODE,
 };
 
 #ifdef DEMO_C
