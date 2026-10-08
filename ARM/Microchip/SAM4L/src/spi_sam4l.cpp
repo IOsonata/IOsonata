@@ -4,9 +4,12 @@
 @brief	SAM4L SPI master implementation.
 
 The SAM4L has one dedicated SPI controller. This port implements the
-IOsonata polling master path using software-controlled GPIO chip selects.
+IOsonata polling, interrupt and PDCA master paths using GPIO chip selects.
 The hardware peripheral-select field is kept on CSR0 so every device attached
 to one IOsonata SPI object uses the same configured transfer format and rate.
+With INT enabled, RX and TX up to 256 bytes return -1 and complete by callback.
+Larger TX and Read command phases finish synchronously to preserve TX ownership.
+PDCA moves bounded halfword chunks; INT selects asynchronous completion.
 
 @author	Hoang Nguyen Hoan
 @date	Oct. 7, 2026
@@ -41,6 +44,7 @@ SOFTWARE.
 
 #include "sam4lxxx.h"
 #include "component/component_pm.h"
+#include "component/component_pdca.h"
 #include "component/component_spi.h"
 
 #include "coredev/spi.h"
@@ -49,17 +53,61 @@ SOFTWARE.
 
 #define SAM4L_SPI_WAIT_COUNT	100000U
 #define SAM4L_SPI_PCS0		0x0EU
+#define SAM4L_SPI_DMA_WORDS	64
+#define SAM4L_SPI_TX_SIZE		256
+#define SAM4L_SPI_ERRORS		(SPI_SR_MODF | SPI_SR_OVRES)
+
+// UART owns channels 0..3; I2C owns 4..11 (master/slave share per DevNo).
+#define SAM4L_SPI_RX_CHAN		12
+#define SAM4L_SPI_TX_CHAN		13
 
 typedef struct __Sam4l_Spi_Dev
 {
 	Spi *pReg;
 	SPIDev_t *pSpiDev;
+	const uint8_t *pTx;
+	uint8_t *pRx;
+	int Length;
+	int Count;
+	int Step;
+	int ChunkWords;
+	bool Active;
+	bool Async;
+	bool DmaInitialized;
+	uint8_t TxBuffer[SAM4L_SPI_TX_SIZE];
+	uint16_t DmaTx[SAM4L_SPI_DMA_WORDS];
+	uint16_t DmaRx[SAM4L_SPI_DMA_WORDS];
 } Sam4lSpiDev_t;
 
 static Sam4lSpiDev_t s_SpiDev = {
 	.pReg = SAM4L_SPI,
 	.pSpiDev = nullptr,
 };
+
+static void Sam4lSpiCancel(Sam4lSpiDev_t *dev);
+
+static PdcaChannel *Sam4lSpiRxChannel(void)
+{
+	return &SAM4L_PDCA->PDCA_CHANNEL[SAM4L_SPI_RX_CHAN];
+}
+
+static PdcaChannel *Sam4lSpiTxChannel(void)
+{
+	return &SAM4L_PDCA->PDCA_CHANNEL[SAM4L_SPI_TX_CHAN];
+}
+
+static void Sam4lSpiDmaStop(Sam4lSpiDev_t *dev)
+{
+	if (!dev->DmaInitialized)
+		return;
+	Sam4lSpiRxChannel()->PDCA_IDR = 0xFFFFFFFFU;
+	Sam4lSpiTxChannel()->PDCA_IDR = 0xFFFFFFFFU;
+	Sam4lSpiRxChannel()->PDCA_CR = PDCA_CR_TDIS;
+	Sam4lSpiTxChannel()->PDCA_CR = PDCA_CR_TDIS;
+	// SAM4L erratum: allow two cycles after stopping PDCA before SPI disable.
+	__NOP();
+	__NOP();
+}
 
 static inline void Sam4lSpiPmWrite(volatile uint32_t *pReg, uint32_t Value)
 {
@@ -134,12 +182,13 @@ static void Sam4lSpiConfigure(Sam4lSpiDev_t *dev)
 	const SPICfg_t &cfg = dev->pSpiDev->Cfg;
 
 	reg->SPI_IDR = 0xFFFFFFFFU;
+	Sam4lSpiDmaStop(dev);
 	reg->SPI_CR = SPI_CR_SPIDIS;
 	reg->SPI_CR = SPI_CR_SWRST;
 
-	// Variable peripheral select lets TDR.PCS select CSR0 for every character.
+	// Fixed peripheral select keeps CSR0 selected for halfword PDCA writes.
 	// Physical slave selection is handled by the IOsonata GPIO CS array.
-	reg->SPI_MR = SPI_MR_MSTR | SPI_MR_MODFDIS | SPI_MR_PS |
+	reg->SPI_MR = SPI_MR_MSTR | SPI_MR_MODFDIS |
 		SPI_MR_PCS(SAM4L_SPI_PCS0);
 
 	uint32_t csr = SPI_CSR_BITS(cfg.DataSize - 8U);
@@ -156,7 +205,7 @@ static void Sam4lSpiConfigure(Sam4lSpiDev_t *dev)
 	(void)Sam4lSpiSetRate(&dev->pSpiDev->DevIntrf, cfg.Rate);
 
 	// Drop any stale receive characters before enabling a new session.
-	while ((reg->SPI_SR & SPI_SR_RDRF) != 0U)
+	if ((reg->SPI_SR & SPI_SR_RDRF) != 0U)
 		(void)reg->SPI_RDR;
 
 	reg->SPI_CR = SPI_CR_SPIEN;
@@ -165,6 +214,7 @@ static void Sam4lSpiConfigure(Sam4lSpiDev_t *dev)
 static void Sam4lSpiDisable(DevIntrf_t * const pDev)
 {
 	Sam4lSpiDev_t *dev = static_cast<Sam4lSpiDev_t *>(pDev->pDevData);
+	Sam4lSpiCancel(dev);
 	(void)Sam4lSpiWait(dev->pReg, SPI_SR_TXEMPTY);
 	dev->pReg->SPI_CR = SPI_CR_SPIDIS;
 	Sam4lSpiClockDisable();
@@ -181,6 +231,7 @@ static void Sam4lSpiReset(DevIntrf_t * const pDev)
 {
 	Sam4lSpiDev_t *dev = static_cast<Sam4lSpiDev_t *>(pDev->pDevData);
 	Sam4lSpiClockEnable();
+	Sam4lSpiCancel(dev);
 	Sam4lSpiConfigure(dev);
 }
 
@@ -219,6 +270,7 @@ static void Sam4lSpiDeselect(DevIntrf_t * const pDev)
 			spi->Cfg.pIOPinMap[SPI_CS_IOPIN_IDX + spi->CurDevCs];
 		IOPinSet(pin.PortNo, pin.PinNo);
 	}
+	spi->CurDevCs = -1;
 }
 
 static inline bool Sam4lSpiStartRx(DevIntrf_t * const pDev, uint32_t DevCs)
@@ -257,7 +309,7 @@ static bool Sam4lSpiTransferWord(Sam4lSpiDev_t *dev, uint16_t Tx, uint16_t *pRx)
 	return true;
 }
 
-static int Sam4lSpiTxData(DevIntrf_t * const pDev, const uint8_t *pData, int DataLen)
+static int Sam4lSpiCommand(DevIntrf_t * const pDev, const uint8_t *pData, int DataLen)
 {
 	if (pData == nullptr || DataLen <= 0)
 		return 0;
@@ -282,7 +334,7 @@ static int Sam4lSpiTxData(DevIntrf_t * const pDev, const uint8_t *pData, int Dat
 	return count;
 }
 
-static int Sam4lSpiRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
+static int Sam4lSpiPollingRx(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 {
 	if (pBuff == nullptr || BuffLen <= 0)
 		return 0;
@@ -313,6 +365,287 @@ static int Sam4lSpiRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 	return count;
 }
 
+static void Sam4lSpiDmaInit(Sam4lSpiDev_t *dev)
+{
+	Sam4lSpiPmWrite(&SAM4L_PM->PM_HSBMASK,
+		SAM4L_PM->PM_HSBMASK | PM_HSBMASK_PDCA);
+	Sam4lSpiPmWrite(&SAM4L_PM->PM_PBBMASK,
+		SAM4L_PM->PM_PBBMASK | PM_PBBMASK_PDCA);
+	dev->DmaInitialized = true;
+	Sam4lSpiDmaStop(dev);
+	for (int i = 0; i < 2; ++i)
+	{
+		PdcaChannel *chan = i == 0 ? Sam4lSpiRxChannel() : Sam4lSpiTxChannel();
+		chan->PDCA_CR = PDCA_CR_TDIS | PDCA_CR_ECLR;
+		chan->PDCA_PSR = PDCA_PSR_PID(i == 0 ? 4U : 22U);
+		chan->PDCA_MR = PDCA_MR_SIZE(1U); // Halfword; SPI data is 8..16 bits.
+		chan->PDCA_TCR = 0U;
+		chan->PDCA_MARR = 0U;
+		chan->PDCA_TCRR = 0U;
+	}
+}
+
+static uint16_t Sam4lSpiTxWord(Sam4lSpiDev_t *dev, int Offset)
+{
+	if (dev->pTx != nullptr)
+	{
+		uint16_t word = dev->pTx[Offset];
+		if (dev->Step == 2)
+			word |= static_cast<uint16_t>(dev->pTx[Offset + 1]) << 8U;
+		return word;
+	}
+	const uint16_t dummy = dev->pSpiDev->Cfg.DummyByte;
+	return dev->Step == 2 ? dummy | (dummy << 8U) : dummy;
+}
+
+static void Sam4lSpiRxWord(Sam4lSpiDev_t *dev, uint16_t Word)
+{
+	if (dev->pRx != nullptr)
+	{
+		dev->pRx[dev->Count] = static_cast<uint8_t>(Word);
+		if (dev->Step == 2)
+			dev->pRx[dev->Count + 1] = static_cast<uint8_t>(Word >> 8U);
+	}
+	dev->Count += dev->Step;
+}
+
+static void Sam4lSpiFinish(Sam4lSpiDev_t *dev, bool Error)
+{
+	DevIntrf_t *intrf = &dev->pSpiDev->DevIntrf;
+	const bool async = dev->Async;
+	const bool read = dev->pRx != nullptr;
+	uint8_t *buffer = dev->pRx;
+	const int count = dev->Count;
+	dev->pReg->SPI_IDR = 0xFFFFFFFFU;
+	Sam4lSpiDmaStop(dev);
+	if (Error)
+		Sam4lSpiConfigure(dev);
+	dev->Active = false;
+	intrf->bTxReady = true;
+	if (!async)
+		return;
+
+	// The generic stop helpers own the busy flag. Release before callbacks.
+	if (read)
+		DeviceIntrfStopRx(intrf);
+	else
+		DeviceIntrfTxComplete(intrf);
+	if (intrf->EvtCB != nullptr)
+		intrf->EvtCB(intrf, DEVINTRF_EVT_COMPLETED, buffer, count);
+}
+
+static void Sam4lSpiCancel(Sam4lSpiDev_t *dev)
+{
+	// Cancellation is silent: caller is resetting/disabling the interface.
+	// Mask the whole transfer before inspecting state shared with the ISR.
+	const uint32_t primask = __get_PRIMASK();
+	__disable_irq();
+	dev->pReg->SPI_IDR = 0xFFFFFFFFU;
+	Sam4lSpiDmaStop(dev);
+	if (dev->Active)
+	{
+		DevIntrf_t *intrf = &dev->pSpiDev->DevIntrf;
+		const bool async = dev->Async;
+		const bool read = dev->pRx != nullptr;
+		dev->Active = false;
+		Sam4lSpiConfigure(dev);
+		intrf->bTxReady = true;
+		if (async)
+		{
+			if (read)
+				DeviceIntrfStopRx(intrf);
+			else
+				DeviceIntrfStopTx(intrf);
+		}
+	}
+	NVIC_ClearPendingIRQ(SPI_IRQn);
+	NVIC_ClearPendingIRQ(PDCA_12_IRQn);
+	NVIC_ClearPendingIRQ(PDCA_13_IRQn);
+	__set_PRIMASK(primask);
+}
+
+static void Sam4lSpiDmaChunk(Sam4lSpiDev_t *dev)
+{
+	int words = (dev->Length - dev->Count) / dev->Step;
+	if (words > SAM4L_SPI_DMA_WORDS)
+		words = SAM4L_SPI_DMA_WORDS;
+	dev->ChunkWords = words;
+	for (int i = 0; i < words; ++i)
+		dev->DmaTx[i] = Sam4lSpiTxWord(dev, dev->Count + i * dev->Step);
+
+	PdcaChannel *rx = Sam4lSpiRxChannel();
+	PdcaChannel *tx = Sam4lSpiTxChannel();
+	rx->PDCA_CR = PDCA_CR_TDIS | PDCA_CR_ECLR;
+	tx->PDCA_CR = PDCA_CR_TDIS | PDCA_CR_ECLR;
+	rx->PDCA_MAR = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(dev->DmaRx));
+	tx->PDCA_MAR = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(dev->DmaTx));
+	rx->PDCA_TCR = words;
+	tx->PDCA_TCR = words;
+	__DMB();
+	if (dev->Async)
+	{
+		rx->PDCA_IER = PDCA_IER_TRC | PDCA_IER_TERR;
+		tx->PDCA_IER = PDCA_IER_TERR;
+	}
+	// Every transmitted word produces receive data, even for a TX-only API.
+	// Arm RX first so the first character cannot overrun RDR.
+	rx->PDCA_CR = PDCA_CR_TEN;
+	tx->PDCA_CR = PDCA_CR_TEN;
+}
+
+static void Sam4lSpiDmaCollect(Sam4lSpiDev_t *dev)
+{
+	Sam4lSpiDmaStop(dev);
+	__DMB();
+	int words = dev->ChunkWords - static_cast<int>(Sam4lSpiRxChannel()->PDCA_TCR);
+	if (words < 0 || words > dev->ChunkWords)
+		words = 0;
+	for (int i = 0; i < words; ++i)
+		Sam4lSpiRxWord(dev, dev->DmaRx[i]);
+	dev->ChunkWords = 0;
+}
+
+static int Sam4lSpiTransfer(Sam4lSpiDev_t *dev, const uint8_t *Tx,
+						   uint8_t *Rx, int Length, bool Async)
+{
+	if (dev->Active || Length <= 0)
+		return 0;
+	dev->Step = dev->pSpiDev->Cfg.DataSize > 8U ? 2 : 1;
+	dev->Length = Length - Length % dev->Step;
+	if (dev->Length == 0)
+		return 0;
+	dev->Count = 0;
+	dev->ChunkWords = 0;
+	dev->pRx = Rx;
+	dev->pTx = Tx;
+	dev->Async = Async;
+	if (Async && Tx != nullptr)
+	{
+		memcpy(dev->TxBuffer, Tx, dev->Length);
+		dev->pTx = dev->TxBuffer;
+	}
+	dev->Active = true;
+	dev->pSpiDev->DevIntrf.bTxReady = false;
+
+	if (Async)
+		dev->pReg->SPI_IER = SAM4L_SPI_ERRORS;
+	if (dev->pSpiDev->Cfg.bDmaEn)
+	{
+		do
+		{
+			Sam4lSpiDmaChunk(dev);
+			if (Async)
+				return -1;
+			uint32_t timeout = SAM4L_SPI_WAIT_COUNT;
+			bool error = false;
+			do
+			{
+				error = ((Sam4lSpiRxChannel()->PDCA_ISR |
+					Sam4lSpiTxChannel()->PDCA_ISR) & PDCA_ISR_TERR) != 0U ||
+					(dev->pReg->SPI_SR & SAM4L_SPI_ERRORS) != 0U;
+				if (error || Sam4lSpiRxChannel()->PDCA_TCR == 0U)
+					break;
+			} while (--timeout != 0U);
+			Sam4lSpiDmaCollect(dev);
+			if (error || timeout == 0U)
+			{
+				Sam4lSpiFinish(dev, true);
+				return dev->Count;
+			}
+		} while (dev->Count < dev->Length);
+		Sam4lSpiFinish(dev, !Sam4lSpiWait(dev->pReg, SPI_SR_TXEMPTY));
+		return dev->Count;
+	}
+	// Interrupt mode allows only one outstanding character. RDRF advances it.
+	dev->pReg->SPI_IER = SPI_IER_RDRF;
+	dev->pReg->SPI_TDR = Sam4lSpiTxWord(dev, 0);
+	return -1;
+}
+
+static int Sam4lSpiTxData(DevIntrf_t * const pDev, const uint8_t *Data, int Length)
+{
+	if (Data == nullptr || Length <= 0)
+		return 0;
+	Sam4lSpiDev_t *dev = static_cast<Sam4lSpiDev_t *>(pDev->pDevData);
+	// Long TX stays synchronous so no caller buffer survives this call.
+	const bool async = pDev->bIntEn && Length <= SAM4L_SPI_TX_SIZE;
+	if (!pDev->bDma && !async)
+		return Sam4lSpiCommand(pDev, Data, Length);
+	return Sam4lSpiTransfer(dev, Data, nullptr, Length, async);
+}
+
+static int Sam4lSpiRxData(DevIntrf_t * const pDev, uint8_t *Buffer, int Length)
+{
+	if (Buffer == nullptr || Length <= 0)
+		return 0;
+	if (!pDev->bDma && !pDev->bIntEn)
+		return Sam4lSpiPollingRx(pDev, Buffer, Length);
+	return Sam4lSpiTransfer(static_cast<Sam4lSpiDev_t *>(pDev->pDevData),
+		nullptr, Buffer, Length, pDev->bIntEn);
+}
+
+extern "C" void SPI_Handler(void)
+{
+	Sam4lSpiDev_t *dev = &s_SpiDev;
+	const uint32_t status = dev->pReg->SPI_SR;
+	const uint32_t pending = status & dev->pReg->SPI_IMR;
+	if (!dev->Active || !dev->Async)
+		return;
+	if ((pending & SAM4L_SPI_ERRORS) != 0U)
+	{
+		if (dev->pSpiDev->Cfg.bDmaEn && dev->ChunkWords > 0)
+			Sam4lSpiDmaCollect(dev);
+		Sam4lSpiFinish(dev, true);
+		return;
+	}
+	if ((pending & SPI_SR_RDRF) != 0U)
+	{
+		Sam4lSpiRxWord(dev, static_cast<uint16_t>(dev->pReg->SPI_RDR));
+		if (dev->Count < dev->Length)
+			dev->pReg->SPI_TDR = Sam4lSpiTxWord(dev, dev->Count);
+		else
+		{
+			dev->pReg->SPI_IDR = SPI_IDR_RDRF;
+			dev->pReg->SPI_IER = SPI_IER_TXEMPTY;
+		}
+		return; // Re-read TXEMPTY on the next IRQ, never use stale status.
+	}
+	if ((pending & SPI_SR_TXEMPTY) != 0U)
+		Sam4lSpiFinish(dev, false);
+}
+
+static void Sam4lSpiDmaIrq(void)
+{
+	Sam4lSpiDev_t *dev = &s_SpiDev;
+	const uint32_t rx = Sam4lSpiRxChannel()->PDCA_ISR & Sam4lSpiRxChannel()->PDCA_IMR;
+	const uint32_t tx = Sam4lSpiTxChannel()->PDCA_ISR & Sam4lSpiTxChannel()->PDCA_IMR;
+	if (!dev->Active || !dev->Async)
+		return;
+	if (((rx | tx) & PDCA_ISR_TERR) != 0U)
+	{
+		Sam4lSpiDmaCollect(dev);
+		Sam4lSpiFinish(dev, true);
+		return;
+	}
+	if ((rx & PDCA_ISR_TRC) == 0U)
+		return;
+	Sam4lSpiDmaCollect(dev);
+	if (dev->Count < dev->Length)
+		Sam4lSpiDmaChunk(dev);
+	else
+		dev->pReg->SPI_IER = SPI_IER_TXEMPTY;
+}
+
+extern "C" void PDCA_12_Handler(void)
+{
+	Sam4lSpiDmaIrq();
+}
+
+extern "C" void PDCA_13_Handler(void)
+{
+	Sam4lSpiDmaIrq();
+}
+
 static void *Sam4lSpiGetHandle(DevIntrf_t * const pDev)
 {
 	Sam4lSpiDev_t *dev = static_cast<Sam4lSpiDev_t *>(pDev->pDevData);
@@ -329,7 +662,7 @@ bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfgData)
 		pCfgData->DataSize < 8U || pCfgData->DataSize > 16U ||
 		pCfgData->Rate == 0U ||
 		pCfgData->pIOPinMap == nullptr || pCfgData->NbIOPins < SPI_CS_IOPIN_IDX ||
-		pCfgData->bDmaEn || pCfgData->bIntEn)
+		s_SpiDev.Active)
 	{
 		return false;
 	}
@@ -339,6 +672,13 @@ bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfgData)
 		return false;
 	}
 
+	NVIC_DisableIRQ(SPI_IRQn);
+	NVIC_DisableIRQ(PDCA_12_IRQn);
+	NVIC_DisableIRQ(PDCA_13_IRQn);
+	Sam4lSpiDmaStop(&s_SpiDev);
+	NVIC_ClearPendingIRQ(SPI_IRQn);
+	NVIC_ClearPendingIRQ(PDCA_12_IRQn);
+	NVIC_ClearPendingIRQ(PDCA_13_IRQn);
 	pDev->Cfg = *pCfgData;
 	pDev->CurDevCs = -1;
 	pDev->FirstRdData = -1;
@@ -363,7 +703,8 @@ bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfgData)
 	pDev->DevIntrf.StopRx = Sam4lSpiStopRx;
 	pDev->DevIntrf.StartTx = Sam4lSpiStartTx;
 	pDev->DevIntrf.TxData = Sam4lSpiTxData;
-	pDev->DevIntrf.TxSrData = Sam4lSpiTxData;
+	// The generic Read command phase must finish before it starts RX.
+	pDev->DevIntrf.TxSrData = Sam4lSpiCommand;
 	pDev->DevIntrf.StopTx = Sam4lSpiStopTx;
 	pDev->DevIntrf.Reset = Sam4lSpiReset;
 	pDev->DevIntrf.PowerOff = Sam4lSpiPowerOff;
@@ -371,13 +712,28 @@ bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfgData)
 	pDev->DevIntrf.IntPrio = pDev->Cfg.IntPrio;
 	pDev->DevIntrf.EvtCB = pDev->Cfg.EvtCB;
 	pDev->DevIntrf.MaxRetry = pDev->Cfg.MaxRetry;
-	pDev->DevIntrf.bDma = false;
-	pDev->DevIntrf.bIntEn = false;
+	pDev->DevIntrf.bDma = pDev->Cfg.bDmaEn;
+	pDev->DevIntrf.bIntEn = pDev->Cfg.bIntEn;
 	pDev->DevIntrf.bTxReady = true;
 	pDev->DevIntrf.bNoStop = false;
 	pDev->DevIntrf.EnCnt = 1;
 	atomic_flag_clear(&pDev->DevIntrf.bBusy);
 
 	Sam4lSpiConfigure(&s_SpiDev);
+	if (pDev->Cfg.bDmaEn)
+		Sam4lSpiDmaInit(&s_SpiDev);
+	if (pDev->Cfg.bIntEn)
+	{
+		NVIC_SetPriority(SPI_IRQn, pDev->Cfg.IntPrio);
+		NVIC_SetPriority(PDCA_12_IRQn, pDev->Cfg.IntPrio);
+		NVIC_SetPriority(PDCA_13_IRQn, pDev->Cfg.IntPrio);
+		NVIC_EnableIRQ(SPI_IRQn);
+		if (pDev->Cfg.bDmaEn)
+		{
+			NVIC_EnableIRQ(PDCA_12_IRQn);
+			NVIC_EnableIRQ(PDCA_13_IRQn);
+		}
+	}
 	return pDev->Cfg.Rate != 0U;
 }
+

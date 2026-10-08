@@ -65,10 +65,12 @@ SOFTWARE.
 
 // PDCA channels 0..3 are reserved by the SAM4L UART port for USART0..3 TX.
 // I2C master uses a fixed RX/TX pair per TWIM instance from channels 4..11.
+// Each DevNo owns one state record, configured as master OR slave. Both modes
+// share that pair; SPI reserves channels 12/13.
 #define SAM4L_I2C_PDCA_RX_CHAN(n)	(4U + ((uint32_t)(n) << 1U))
 #define SAM4L_I2C_PDCA_TX_CHAN(n)	(5U + ((uint32_t)(n) << 1U))
-#define SAM4L_I2C_PDCA_SLAVE_RX_CHAN(n)	(12U + ((uint32_t)(n) << 1U))
-#define SAM4L_I2C_PDCA_SLAVE_TX_CHAN(n)	(13U + ((uint32_t)(n) << 1U))
+#define SAM4L_I2C_PDCA_SLAVE_RX_CHAN(n)	SAM4L_I2C_PDCA_RX_CHAN(n)
+#define SAM4L_I2C_PDCA_SLAVE_TX_CHAN(n)	SAM4L_I2C_PDCA_TX_CHAN(n)
 #define SAM4L_PDCA_PID_TWIM_RX(n)	(5U + (uint32_t)(n))
 #define SAM4L_PDCA_PID_TWIM_TX(n)	(23U + (uint32_t)(n))
 #define SAM4L_PDCA_PID_TWIS_RX(n)	(9U + (uint32_t)(n))
@@ -231,6 +233,10 @@ static void Sam4lI2CPdcaChannelInit(PdcaChannel *chan, uint32_t PeripheralId)
 
 static void Sam4lI2CPdcaInit(SAM4L_I2CDEV *dev)
 {
+	const IRQn_Type irq = (IRQn_Type)(PDCA_0_IRQn +
+		SAM4L_I2C_PDCA_RX_CHAN(dev->DevNo));
+	NVIC_DisableIRQ(irq);
+	NVIC_ClearPendingIRQ(irq);
 	Sam4lI2CPdcaClockEnable();
 	Sam4lI2CPdcaChannelInit(Sam4lI2CPdcaRxChannel(dev),
 		SAM4L_PDCA_PID_TWIM_RX(dev->DevNo));
@@ -1366,8 +1372,11 @@ static int Sam4lI2CSlaveTxDmaCount(SAM4L_I2CDEV *dev)
 
 static void Sam4lI2CSlaveRxPdcaIrqHandler(SAM4L_I2CDEV *dev)
 {
+	if (dev->pI2cDev == nullptr || dev->pI2cDev->Cfg.Mode != I2CMODE_SLAVE ||
+		!dev->pI2cDev->DevIntrf.bDma)
+		return;
 	PdcaChannel *chan = Sam4lI2CSlavePdcaRxChannel(dev);
-	const uint32_t isr = chan->PDCA_ISR;
+	const uint32_t isr = chan->PDCA_ISR & chan->PDCA_IMR;
 
 	if ((isr & (PDCA_ISR_TRC | PDCA_ISR_TERR)) == 0U)
 		return;
@@ -1930,12 +1939,13 @@ extern "C" void TWIS1_Handler(void)
 	Sam4lI2CSlaveIrqHandler(&s_Sam4lI2CDev[1]);
 }
 
-extern "C" void PDCA_12_Handler(void)
+extern "C" void PDCA_4_Handler(void)
 {
 	Sam4lI2CSlaveRxPdcaIrqHandler(&s_Sam4lI2CDev[0]);
 }
 
-extern "C" void PDCA_14_Handler(void)
+extern "C" void PDCA_6_Handler(void)
 {
 	Sam4lI2CSlaveRxPdcaIrqHandler(&s_Sam4lI2CDev[1]);
 }
+

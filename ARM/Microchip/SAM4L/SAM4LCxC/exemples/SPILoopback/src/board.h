@@ -45,7 +45,7 @@ SOFTWARE.
 // PC04 and PC05 use peripheral A. SCK and CS need no loopback jumpers.
 #define SPI_LOOPBACK_WIRING "Jumper EXT2 pin 7 (PC04/MISO) <-> pin 8 (PC05/MOSI)"
 #define SPI_MASTER_DMA_ENABLE false
-#define SPI_MASTER_INT_ENABLE false
+#define SPI_MASTER_INT_ENABLE true
 
 // SAM4L8 Xplained Pro dedicated SPI signals.
 // CS is intentionally GPIO: the IOsonata SPI API owns CS across a complete
@@ -80,3 +80,4 @@ SOFTWARE.
 #define UART_RTS_PINOP		IOPINOP_GPIO
 
 #endif // __BOARD_H__
+
