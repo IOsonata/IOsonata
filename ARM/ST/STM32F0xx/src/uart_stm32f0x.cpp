@@ -44,8 +44,8 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "coredev/uart.h"
 #include "idelay.h"
 #include "coredev/interrupt.h"
+#include "coredev/system_core_clock.h"
 
-#define SYSCFG_CFGR1_USART3_DMA_RMP		(1<<26)
 
 #define STM32F0X_UART_HWFIFO_SIZE		6
 #define STM32F0X_UART_RXTIMEOUT			15
@@ -66,7 +66,6 @@ typedef struct _STM32F0X_UART_Dev {
 	uint32_t TxPin;
 	uint32_t CtsPin;
 	uint32_t RtsPin;
-	uint8_t TxDmaCache[STM32F0X_UART_BUFF_SIZE];
 	uint8_t RxFifoMem[STM32F0X_UART_CFIFO_SIZE];
 	uint8_t TxFifoMem[STM32F0X_UART_CFIFO_SIZE];
 } STM32F0X_UARTDEV;
@@ -80,7 +79,7 @@ static STM32F0X_UARTDEV s_Stm32f03xUartDev[] = {
 		.DevNo = 0,
 		.pReg = USART1,
 	},
-#if !defined(STM32F030x4) && !defined(STM32F030x6)
+#if defined(USART2)
 	{
 		.DevNo = 1,
 		.pReg = USART2,
@@ -112,24 +111,19 @@ static const int s_NbUartDev = sizeof(s_Stm32f03xUartDev) / sizeof(STM32F0X_UART
 
 UARTDEV const *UARTGetInstance(int DevNo)
 {
-	return s_Stm32f03xUartDev[DevNo].pUartDev;
+	return DevNo >= 0 && DevNo < s_NbUartDev ? s_Stm32f03xUartDev[DevNo].pUartDev : NULL;
 }
 
-
-bool STM32F03xUARTWaitForRxReady(STM32F0X_UARTDEV * const pDev, uint32_t Timeout)
-{
-	return false;
-}
-
-bool STM32F03xUARTWaitForTxReady(STM32F0X_UARTDEV * const pDev, uint32_t Timeout)
-{
-	return false;
-}
 
 static void UART_IRQHandler(STM32F0X_UARTDEV * const pDev)
 {
 	UARTDEV *dev = (UARTDEV *)pDev->pUartDev;
+	if (dev == NULL || !dev->DevIntrf.bIntEn)
+	{
+		return;
+	}
 	uint32_t iflag = pDev->pReg->ISR;
+	uint32_t cr1 = pDev->pReg->CR1;
 
 	// RX errors: clear only the error flags in ICR, then drain RDR to
 	// release RXNE and let the line recover.
@@ -138,12 +132,16 @@ static void UART_IRQHandler(STM32F0X_UARTDEV * const pDev)
 		pDev->ErrCnt++;
 		pDev->pReg->ICR = iflag & (USART_ICR_PECF | USART_ICR_FECF |
 		                           USART_ICR_ORECF | USART_ICR_NCF);
-		(void)pDev->pReg->RDR;
+		if (iflag & USART_ISR_RXNE)
+		{
+			(void)pDev->pReg->RDR;
+		}
+		iflag &= ~USART_ISR_RXNE;
 	}
 
-	if (iflag & USART_ISR_RXNE)
+	if ((iflag & USART_ISR_RXNE) && (cr1 & USART_CR1_RXNEIE))
 	{
-		uint8_t c = (uint8_t)pDev->pReg->RDR;    // read clears RXNE
+		uint8_t c = (uint8_t)pDev->pReg->RDR & (dev->DataBits == 7 ? 0x7F : 0xFF);    // read clears RXNE
 		uint8_t *p = CFifoPut(dev->hRxFifo);
 		if (p != NULL)
 		{
@@ -160,7 +158,7 @@ static void UART_IRQHandler(STM32F0X_UARTDEV * const pDev)
 		}
 	}
 
-	if (iflag & USART_ISR_TXE)
+	if ((iflag & USART_ISR_TXE) && (cr1 & USART_CR1_TXEIE))
 	{
 		uint8_t *p = CFifoGet(dev->hTxFifo);
 		if (p != NULL)
@@ -179,7 +177,7 @@ static void UART_IRQHandler(STM32F0X_UARTDEV * const pDev)
 		}
 	}
 
-	if (iflag & USART_ISR_RTOF)
+	if ((iflag & USART_ISR_RTOF) && (cr1 & USART_CR1_RTOIE))
 	{
 		pDev->pReg->ICR = USART_ICR_RTOCF;
 		if (dev->EvtCallback)
@@ -196,7 +194,7 @@ extern "C" void USART1_IRQHandler()
 	UART_IRQHandler(&s_Stm32f03xUartDev[0]);
 }
 
-#if !defined(STM32F030x4) && !defined(STM32F030x6)
+#if defined(USART2)
 extern "C" void USART2_IRQHandler()
 {
 	UART_IRQHandler(&s_Stm32f03xUartDev[1]);
@@ -204,26 +202,16 @@ extern "C" void USART2_IRQHandler()
 #endif
 
 #if defined(STM32F070xB) || defined(STM32F030xC)
-extern "C" void UART3_IRQHandler()
-{
-	UART_IRQHandler(&s_Stm32f03xUartDev[2]);
-}
-
-extern "C" void UART4_IRQHandler()
-{
-	UART_IRQHandler(&s_Stm32f03xUartDev[3]);
-}
-#endif
-
 #ifdef STM32F030xC
-extern "C" void UART5_IRQHandler()
+extern "C" void USART3_6_IRQHandler()
+#else
+extern "C" void USART3_4_IRQHandler()
+#endif
 {
-	UART_IRQHandler(&s_Stm32f03xUartDev[4]);
-}
-
-extern "C" void UART6_IRQHandler()
-{
-	UART_IRQHandler(&s_Stm32f03xUartDev[5]);
+	for (int i = 2; i < s_NbUartDev; i++)
+	{
+		UART_IRQHandler(&s_Stm32f03xUartDev[i]);
+	}
 }
 #endif
 
@@ -235,17 +223,22 @@ static uint32_t STM32F03xUARTGetRate(DevIntrf_t * const pDev)
 static uint32_t STM32F03xUARTSetRate(DevIntrf_t * const pDev, uint32_t Rate)
 {
 	STM32F0X_UARTDEV *dev = (STM32F0X_UARTDEV *)pDev->pDevData;
-	uint32_t fclkfreq = SystemCoreClockGet();
-
-	// OVER16 handles every baud from 300 to 3 Mbaud on F0 at 48 MHz with
-	// ample accuracy. OVER8 offers no benefit here and its BRR bit-packing
-	// is a common source of bugs.
-	dev->pReg->CR1 &= ~USART_CR1_OVER8;
-
+	uint32_t fclkfreq = SystemPeriphClockGet(0);
+	if (Rate == 0 || Rate > fclkfreq / 16)
+	{
+		return 0;
+	}
 	uint32_t div = (fclkfreq + (Rate >> 1)) / Rate;
-	if (div < 16) div = 16;            // hard minimum per RM0360
+	if (div < 16 || div > 0xFFFF)
+	{
+		return 0;
+	}
 
+	uint32_t cr1 = dev->pReg->CR1;
+	dev->pReg->CR1 = cr1 & ~USART_CR1_UE;
+	dev->pReg->CR1 &= ~USART_CR1_OVER8;
 	dev->pReg->BRR = div;
+	dev->pReg->CR1 = cr1 & ~USART_CR1_OVER8;
 	dev->pUartDev->Rate = fclkfreq / div;
 
 	return dev->pUartDev->Rate;
@@ -261,6 +254,24 @@ static int STM32F03xUARTRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int Buff
 	STM32F0X_UARTDEV *dev = (STM32F0X_UARTDEV *)pDev->pDevData;
 	int cnt = 0;
 
+	if (!pDev->bIntEn)
+	{
+		while (cnt < Bufflen)
+		{
+			uint32_t flags = dev->pReg->ISR;
+			if (flags & (USART_ISR_PE | USART_ISR_FE | USART_ISR_ORE | USART_ISR_NE))
+			{
+				dev->pReg->ICR = flags & (USART_ICR_PECF | USART_ICR_FECF |
+						USART_ICR_ORECF | USART_ICR_NCF);
+				if (flags & USART_ISR_RXNE) (void)dev->pReg->RDR;
+				break;
+			}
+			if (!(flags & USART_ISR_RXNE)) break;
+			pBuff[cnt++] = (uint8_t)dev->pReg->RDR & (dev->pUartDev->DataBits == 7 ? 0x7F : 0xFF);
+		}
+		return cnt;
+	}
+
 	uint32_t state = DisableInterrupt();
 	while (Bufflen)
 	{
@@ -273,17 +284,8 @@ static int STM32F03xUARTRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int Buff
 		pBuff += l;
 		Bufflen -= l;
 	}
+	dev->pUartDev->bRxReady = CFifoUsed(dev->pUartDev->hRxFifo) != 0;
 	EnableInterrupt(state);
-
-	if (dev->pUartDev->bRxReady)
-	{
-		uint8_t *p = CFifoPut(dev->pUartDev->hRxFifo);
-		if (p)
-		{
-			dev->pUartDev->bRxReady = false;
-			*p = dev->pReg->RDR;
-		}
-	}
 
 	return cnt;
 }
@@ -301,6 +303,16 @@ static int STM32F03xUARTTxData(DevIntrf_t * const pDev, uint8_t const *pData, in
 	STM32F0X_UARTDEV *dev = (STM32F0X_UARTDEV *)pDev->pDevData;
     int cnt = 0;
     int rtry = pDev->MaxRetry;
+
+	if (!pDev->bIntEn)
+	{
+		// A partial return lets the caller retry without an unbounded wait.
+		while (cnt < Datalen && (dev->pReg->ISR & USART_ISR_TXE))
+		{
+			dev->pReg->TDR = pData[cnt++];
+		}
+		return cnt;
+	}
 
     while (Datalen > 0 && rtry-- > 0)
     {
@@ -320,7 +332,7 @@ static int STM32F03xUARTTxData(DevIntrf_t * const pDev, uint8_t const *pData, in
 
         // Kick off TX from inside the critical section so the ISR cannot
         // double-fetch the same byte we just queued and overwrite TDR.
-        if (dev->pUartDev->bTxReady)
+        if (dev->pUartDev->bTxReady && (dev->pReg->ISR & USART_ISR_TXE))
         {
             uint8_t *p = CFifoGet(dev->pUartDev->hTxFifo);
             if (p != NULL)
@@ -329,6 +341,12 @@ static int STM32F03xUARTTxData(DevIntrf_t * const pDev, uint8_t const *pData, in
                 dev->pReg->TDR = *p;
                 dev->pReg->CR1 |= USART_CR1_TXEIE;
             }
+        }
+
+        if (CFifoUsed(dev->pUartDev->hTxFifo) > 0)
+        {
+            dev->pUartDev->bTxReady = false;
+            dev->pReg->CR1 |= USART_CR1_TXEIE;
         }
 
         EnableInterrupt(state);
@@ -346,7 +364,6 @@ static void STM32F03xUARTDisable(DevIntrf_t * const pDev)
 	dev->pReg->CR1 &= ~(USART_CR1_UE | USART_CR1_RE | USART_CR1_TE);
 	dev->pReg->CR2 &= ~USART_CR2_RTOEN;
 
-	RCC->CFGR3 &= ~RCC_CFGR3_USART1SW_Msk;
 }
 
 static void STM32F03xUARTEnable(DevIntrf_t * const pDev)
@@ -357,15 +374,17 @@ static void STM32F03xUARTEnable(DevIntrf_t * const pDev)
 	dev->RxTimeoutCnt = 0;
 	dev->RxDropCnt = 0;
 	dev->TxDropCnt = 0;
-	atomic_flag_clear(&pDev->bBusy);
 
 	CFifoFlush(dev->pUartDev->hTxFifo);
 
 	dev->pUartDev->bTxReady = true;
 
-	RCC->CFGR3 |= RCC_CFGR3_USART1SW_SYSCLK;
+	if (dev->DevNo == 0)
+	{
+		RCC->CFGR3 &= ~RCC_CFGR3_USART1SW_Msk;
+	}
 	dev->pReg->CR1 |= USART_CR1_UE | USART_CR1_RE | USART_CR1_TE;
-	dev->pReg->CR2 |= USART_CR2_RTOEN;
+	dev->pReg->CR2 &= ~USART_CR2_RTOEN;
 
 }
 
@@ -380,7 +399,7 @@ static void STM32F03xUARTPowerOff(DevIntrf_t * const pDev)
 		case 0:
 			RCC->APB2ENR &= ~RCC_APB2ENR_USART1EN;
 			break;
-#if !defined(STM32F030x4) && !defined(STM32F030x6)
+#if defined(USART2)
 		case 1:
 			RCC->APB1ENR &= ~RCC_APB1ENR_USART2EN;
 			break;
@@ -417,7 +436,7 @@ static void STM32F03xUARTReset(DevIntrf_t * const pDev)
 			usDelay(100);
 			RCC->APB2RSTR &= ~RCC_APB2RSTR_USART1RST;
 			break;
-#if !defined(STM32F030x4) && !defined(STM32F030x6)
+#if defined(USART2)
 		case 1:
 			RCC->APB1RSTR |= RCC_APB1RSTR_USART2RST;
 			usDelay(100);
@@ -451,6 +470,11 @@ static void STM32F03xUARTReset(DevIntrf_t * const pDev)
 	}
 }
 
+static void *STM32F03xUARTGetHandle(DevIntrf_t * const pDev)
+{
+	return ((STM32F0X_UARTDEV *)pDev->pDevData)->pUartDev;
+}
+
 bool UARTInit(UARTDEV * const pDev, const UARTCFG *pCfg)
 {
 	// Config I/O pins
@@ -469,6 +493,27 @@ bool UARTInit(UARTDEV * const pDev, const UARTCFG *pCfg)
 		return false;
 	}
 
+	// This port supports byte streams, polling or FIFO interrupts. DMA,
+	// synchronous USART, IrDA and software flow control are not implemented.
+	if (pCfg->bDMAMode || pCfg->bIrDAMode || pCfg->Mode != UART_MODE_UART ||
+		(pCfg->FlowControl != UART_FLWCTRL_NONE && pCfg->FlowControl != UART_FLWCTRL_HW) ||
+		(pCfg->Parity != UART_PARITY_NONE && pCfg->Parity != UART_PARITY_EVEN && pCfg->Parity != UART_PARITY_ODD) ||
+		(pCfg->DataBits != 7 && pCfg->DataBits != 8) ||
+		(pCfg->StopBits != 1 && pCfg->StopBits != 2) || pCfg->Rate <= 0)
+	{
+		return false;
+	}
+	int wordbits = pCfg->DataBits + (pCfg->Parity != UART_PARITY_NONE ? 1 : 0);
+#ifndef USART_CR1_M1
+	if (wordbits == 7) return false;
+#endif
+	uint32_t clock = SystemPeriphClockGet(0);
+	uint32_t divisor = (clock + ((uint32_t)pCfg->Rate >> 1)) / (uint32_t)pCfg->Rate;
+	if (divisor < 16 || divisor > 0xFFFF || (uint32_t)pCfg->Rate > clock / 16)
+	{
+		return false;
+	}
+
 	int devno = pCfg->DevNo;
 	USART_TypeDef *reg = s_Stm32f03xUartDev[devno].pReg;
 
@@ -482,7 +527,7 @@ bool UARTInit(UARTDEV * const pDev, const UARTCFG *pCfg)
 		case 0:
 			RCC->APB2ENR |= RCC_APB2ENR_USART1EN;
 			break;
-#if !defined(STM32F030x4) && !defined(STM32F030x6)
+#if defined(USART2)
 		case 1:
 			RCC->APB1ENR |= RCC_APB1ENR_USART2EN;
 			break;
@@ -505,11 +550,10 @@ bool UARTInit(UARTDEV * const pDev, const UARTCFG *pCfg)
 #endif
 	}
 
-	// USART1 has a per-peripheral kernel-clock mux; leave USART2+ on PCLK.
+	// Select PCLK for USART1 too, so all baud divisors use the APB clock.
 	if (devno == 0)
 	{
-		RCC->CFGR3 = (RCC->CFGR3 & ~RCC_CFGR3_USART1SW_Msk) |
-		             RCC_CFGR3_USART1SW_SYSCLK;
+		RCC->CFGR3 &= ~RCC_CFGR3_USART1SW_Msk;
 	}
 
 	STM32F03xUARTReset(&pDev->DevIntrf);
@@ -521,7 +565,6 @@ bool UARTInit(UARTDEV * const pDev, const UARTCFG *pCfg)
 	// output on PA8 (AF1) for smartcard/sync modes. Async UART uses no
 	// clock pin.
 
-	uint32_t fclkfreq = SystemCoreClockGet();
 
 	if (pCfg->pRxMem && pCfg->RxMemSize > 0)
 	{
@@ -549,36 +592,17 @@ bool UARTInit(UARTDEV * const pDev, const UARTCFG *pCfg)
     // Set baud
     pDev->Rate = STM32F03xUARTSetRate(&pDev->DevIntrf, pCfg->Rate);
 
-	switch (pCfg->Parity)
-	{
-		case UART_PARITY_NONE:
-			reg->CR1 &= ~USART_CR1_PCE;
-			break;
-		case UART_PARITY_EVEN:
-			reg->CR1 |= USART_CR1_PS | USART_CR1_PCE;
-			break;
-		case UART_PARITY_ODD:
-			reg->CR1 &= ~USART_CR1_PS;
-			reg->CR1 |= USART_CR1_PCE;
-			break;
-	}
-
-	reg->CR1 &= ~(USART_CR1_M | (1 << 28));
-
-	if (pCfg->DataBits == 9)
-	{
-		reg->CR1 |=  USART_CR1_M;
-	}
-	else if (pCfg->DataBits == 7)
-	{
-		reg->CR1 |=  (1 << 28);
-	}
+	reg->CR1 &= ~(USART_CR1_PCE | USART_CR1_PS | USART_CR1_M);
+#ifdef USART_CR1_M1
+	reg->CR1 &= ~USART_CR1_M1;
+	if (wordbits == 7) reg->CR1 |= USART_CR1_M1;
+#endif
+	if (pCfg->Parity != UART_PARITY_NONE) reg->CR1 |= USART_CR1_PCE;
+	if (pCfg->Parity == UART_PARITY_ODD) reg->CR1 |= USART_CR1_PS;
+	if (wordbits == 9) reg->CR1 |= USART_CR1_M;
 
 	reg->CR2 &= ~USART_CR2_STOP_Msk;
-	if (pCfg->StopBits == 2)
-	{
-		reg->CR2 |= 2;
-	}
+	if (pCfg->StopBits == 2) reg->CR2 |= USART_CR2_STOP_1;
 
     if (pCfg->FlowControl == UART_FLWCTRL_HW)
 	{
@@ -610,6 +634,12 @@ bool UARTInit(UARTDEV * const pDev, const UARTCFG *pCfg)
 	pDev->Parity = pCfg->Parity;
 	pDev->EvtCallback = pCfg->EvtCallback;
 	pDev->DevIntrf.bIntEn = pCfg->bIntMode;
+	pDev->DevIntrf.bDma = false;
+	pDev->DevIntrf.bTxReady = true;
+	pDev->DevIntrf.bNoStop = false;
+	pDev->DevIntrf.EvtCB = NULL;
+	pDev->DevIntrf.TxSrData = NULL;
+	pDev->DevIntrf.GetHandle = STM32F03xUARTGetHandle;
 	pDev->DevIntrf.Reset = STM32F03xUARTReset;
 	pDev->DevIntrf.Disable = STM32F03xUARTDisable;
 	pDev->DevIntrf.Enable = STM32F03xUARTEnable;
@@ -626,38 +656,7 @@ bool UARTInit(UARTDEV * const pDev, const UARTCFG *pCfg)
 	pDev->DevIntrf.EnCnt = 1;
 	atomic_flag_clear(&pDev->DevIntrf.bBusy);
 
-	if (pDev->DevIntrf.bDma == true)
-	{
-#if defined(STM32F030x4) || defined(STM32F030x6) || defined(STM32F030x8) || defined(STM32F070x6) || defined(STM32F070xB)
-		if (devno == 0)
-		{
-			SYSCFG->CFGR1 |= SYSCFG_CFGR1_USART1TX_DMA_RMP;
-		}
-#endif
-#if defined(STM32F030xB)
-		if (devno == 2)
-		{
-			// USART3_DMA_RMP
-			SYSCFG->CFGR1 |= SYSCFG_CFGR1_USART3_DMA_RMP;
-		}
-#endif
-		// Not using DMA transfer on Rx. It is useless on UART as we need to process 1 char at a time
-		// cannot wait until DMA buffer is filled.
-		reg->CR3 |= USART_CR3_DMAT;
-	}
-	else
-	{
-		if (devno == 0)
-		{
-			SYSCFG->CFGR1 &= ~(SYSCFG_CFGR1_USART1TX_DMA_RMP | SYSCFG_CFGR1_USART1RX_DMA_RMP);
-		}
-		if (devno == 2)
-		{
-			SYSCFG->CFGR1 &= ~(SYSCFG_CFGR1_USART3_DMA_RMP);
-		}
-
-		reg->CR3 &= ~(USART_CR3_DMAT | USART_CR3_DMAR);
-	}
+	reg->CR3 &= ~(USART_CR3_DMAT | USART_CR3_DMAR | USART_CR3_CTSIE | USART_CR3_EIE);
 
 	// Select duplex mode
 	reg->CR3 &= ~USART_CR3_HDSEL;
@@ -681,10 +680,7 @@ bool UARTInit(UARTDEV * const pDev, const UARTCFG *pCfg)
 		// cause an interrupt storm.
 		tmp |= USART_CR1_RXNEIE | USART_CR1_PEIE;
 
-		if (pCfg->FlowControl == UART_FLWCTRL_HW)
-	    {
-			reg->CR3 |= USART_CR3_CTSIE;
-	    }
+		// CTSE/RTSE perform hardware flow control without a CTS interrupt.
 		reg->CR3 |= USART_CR3_EIE;   // FE, NE, ORE error IRQ via CR3
 
 		switch (devno)
@@ -694,7 +690,7 @@ bool UARTInit(UARTDEV * const pDev, const UARTCFG *pCfg)
 				NVIC_SetPriority(USART1_IRQn, pCfg->IntPrio);
 				NVIC_EnableIRQ(USART1_IRQn);
 				break;
-#if !defined(STM32F030x4) && !defined(STM32F030x6)
+#if defined(USART2)
 			case 1:
 				NVIC_ClearPendingIRQ(USART2_IRQn);
 				NVIC_SetPriority(USART2_IRQn, pCfg->IntPrio);
@@ -702,29 +698,14 @@ bool UARTInit(UARTDEV * const pDev, const UARTCFG *pCfg)
 				break;
 #endif
 #if defined(STM32F070xB) || defined(STM32F030xC)
-			case 2:
-				NVIC_ClearPendingIRQ(USART3_IRQn);
-				NVIC_SetPriority(USART3_IRQn, pCfg->IntPrio);
-				NVIC_EnableIRQ(USART3_IRQn);
-				break;
-
-			case 3:
-				NVIC_ClearPendingIRQ(USART4_IRQn);
-				NVIC_SetPriority(USART4_IRQn, pCfg->IntPrio);
-				NVIC_EnableIRQ(USART4_IRQn);
-				break;
-#endif
+			default:
 #ifdef STM32F030xC
-			case 4:
-				NVIC_ClearPendingIRQ(USART5_IRQn);
-				NVIC_SetPriority(USART5_IRQn, pCfg->IntPrio);
-				NVIC_EnableIRQ(USART5_IRQn);
-				break;
-
-			case 5:
-				NVIC_ClearPendingIRQ(USART6_IRQn);
-				NVIC_SetPriority(USART6_IRQn, pCfg->IntPrio);
-				NVIC_EnableIRQ(USART6_IRQn);
+				NVIC_SetPriority(USART3_6_IRQn, pCfg->IntPrio);
+				NVIC_EnableIRQ(USART3_6_IRQn);
+#else
+				NVIC_SetPriority(USART3_4_IRQn, pCfg->IntPrio);
+				NVIC_EnableIRQ(USART3_4_IRQn);
+#endif
 				break;
 #endif
 		}
@@ -745,5 +726,6 @@ void UARTSetCtrlLineState(UARTDEV * const pDev, uint32_t LineState)
 	STM32F0X_UARTDEV *dev = (STM32F0X_UARTDEV *)pDev->DevIntrf.pDevData;
 
 }
+
 
 

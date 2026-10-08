@@ -220,5 +220,20 @@
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/src/system_stm32f4xx.c</locationURI>
 		</link>
+		<link>
+			<name>src/ResetEntry.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/ARM/src/ResetEntry.c</locationURI>
+		</link>
+		<link>
+			<name>src/cfifo.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/src/cfifo.c</locationURI>
+		</link>
+		<link>
+			<name>src/iatomic.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/ARM/src/iatomic.c</locationURI>
+		</link>
 	</linkedResources>
 </projectDescription>
