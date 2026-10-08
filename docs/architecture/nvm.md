@@ -33,7 +33,7 @@ reference to an NVM device; it is not a new memory technology. This follows
 | `NvmIntrf` port | Internal controller access, staged transfer data and supported arbitration routes |
 | Stack arbiter | When an internal-memory operation may run alongside radio activity |
 | `NvmDiskIO` | Sector geometry, erase-before-sector-write and synchronization before buffer reuse |
-| Filesystem / record store | Files or records, caching policy, recovery and durability contract |
+| Filesystem / record store | Files or records, caching policy, recovery, and which writes survive a reset |
 
 `NvmCfg_t::bIntEn` belongs to the NVM operation. The injected interface's
 interrupt/DMA settings belong to its creator. `Nvm::Init()` reads that

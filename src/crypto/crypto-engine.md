@@ -3,16 +3,16 @@
 IOsonata's cryptographic primitives are modeled the same way as every other
 device in the framework: as objects on the `Device` base. A crypto engine is a
 `Device`, so it carries the same lifecycle (`Enable` / `Disable` / `Reset`) and
-event model as a bus or a sensor. On top of `Device` sit the crypto facets, each
+event model as a bus or a sensor. On top of `Device` sit the crypto interfaces, each
 a small abstract interface for one family of operations.
 
-## The facet tree
+## Crypto interfaces
 
-`include/crypto/icrypto.h` defines the facets. Each is a pure interface that
+`include/crypto/icrypto.h` defines the interfaces. Each is a pure interface that
 states what operation is wanted, never how or where it runs:
 
 - `CryptoEngine` : the common base, `virtual public Device`. Holds the async
-  completion contract (see below).
+  completion handler (see below).
 - `CipherEngine` : symmetric cipher (`Cipher`, AES-128 ECB/CTR/CBC).
 - `MacEngine` : keyed message authentication (`Mac`, AES-CMAC).
 - `HashEngine` : unkeyed message digest (`Hash`, SHA-256).
@@ -21,15 +21,15 @@ states what operation is wanted, never how or where it runs:
 - `SignEngine` : signature (`Sign`, `Verify`, ECDSA P-256).
 - `RngEngine` : random source (`Random`).
 
-A facet derives `virtual public CryptoEngine`, so a concrete engine that
-implements several facets (for example a part that does both AES and ECDH)
+An interface derives `virtual public CryptoEngine`, so a concrete engine that
+implements several interfaces (for example a part that does both AES and ECDH)
 inherits one `Device` sub-object through the virtual base rather than several.
 
-A consumer holds a facet pointer (`KeyAgreeEngine *`, `CipherEngine *`) and calls
-the facet method. It is blind to whether the work is software, a hardware
+A consumer holds an interface pointer (`KeyAgreeEngine *`, `CipherEngine *`) and calls
+the interface method. It is blind to whether the work is software, a hardware
 accelerator (Arm CryptoCell CC310, Silex CRACEN / BA414EP), or the BLE
 controller. An operation a given engine does not implement returns
-`CRYPTO_STATUS_UNSUPPORTED`; the base facet method supplies that default, so an
+`CRYPTO_STATUS_UNSUPPORTED`; the base interface method supplies that default, so an
 engine only overrides what it provides.
 
 `Device::Enable()` is pure virtual, so every concrete engine must override
@@ -62,7 +62,7 @@ symbol-based selector and are not needed in the object model.
 
 ## Per-instance key state
 
-Facets that hold a key between calls (`KeyAgreeEngine`) take a `pKeyCtx` (a
+Interfaces that hold a key between calls (`KeyAgreeEngine`) take a `pKeyCtx` (a
 caller-owned key-context buffer of `KeyCtxSize()` bytes). `KeyGen` writes the
 private key into it and `Agree` consumes it, so one engine object serves several
 independent key contexts. The engine object itself is stateless beyond its
@@ -72,7 +72,7 @@ the object owns.
 `CipherEngine`, `MacEngine`, and `HashEngine` take the key (if any) in the call,
 so they hold no per-instance key state and one object serves any number of keys.
 
-## The async completion contract
+## Asynchronous completion
 
 `CryptoEngine` carries an operation and completion model, so an in-call software
 engine and an interrupt-driven or off-die hardware engine present the same
@@ -89,8 +89,8 @@ interface:
 
 SMP drives both paths through one code path: it arms its pending machinery, and a
 sync engine completes inline while an async engine completes through the handler.
-Every engine in the tree today is synchronous; the contract is in place so an
-async engine can be added without an interface change.
+Every engine in the tree today is synchronous; the completion handler allows an
+asynchronous engine to be added without an interface change.
 
 ## Security properties
 
@@ -117,12 +117,12 @@ consumer is curve-blind and key-blind:
 
 ## Engines
 
-| Engine | Facets | Location | Notes |
+| Engine | Interfaces | Location | Notes |
 |---|---|---|---|
 | `CryptoUecc` | `KeyAgreeEngine`, `SignEngine` | `src/crypto/crypto_uecc.cpp` | Software P-256 (micro-ecc): ECDH and ECDSA. Uses `RngGet` for `KeyGen`/`Sign`; `Verify` needs no RNG. Software fallback on any part. |
 | `Ba414ep` | `KeyAgreeEngine` | `src/crypto/ba414ep.cpp`, `ARM/Nordic/src/ba414ep_nrfx.cpp` | Hardware P-256 on the Silex BA414EP public-key accelerator (Nordic CRACEN). nRF54L15 / nRF54H20. Microcode-free, fixed-function; no vendor blob. |
 | `CryptoCc3xx` | `KeyAgreeEngine` | `ARM/src/crypto_cc3xx.cpp` | Hardware P-256 on the Arm CryptoCell CC3xx PKA. nRF52840 (CC310). Self-contained register-level driver; the target header `crypto_cc3xx.h` supplies the register base and enable/disable. |
-| `CryptoSoftAes` | `CipherEngine`, `MacEngine` | `src/crypto/crypto_softaes.cpp` | Software AES-128 (FIPS-197) and AES-CMAC. The software base of the symmetric facets: a hardware AES block overrides `Cipher`, and the inherited software CMAC then runs over that hardware AES through the virtual `Cipher` call. |
+| `CryptoSoftAes` | `CipherEngine`, `MacEngine` | `src/crypto/crypto_softaes.cpp` | Software AES-128 (FIPS-197) and AES-CMAC. The software base of the symmetric interfaces: a hardware AES block overrides `Cipher`, and the inherited software CMAC then runs over that hardware AES through the virtual `Cipher` call. |
 | `CryptoMaster` | `CipherEngine`, `MacEngine` | `src/crypto/cryptomaster.cpp` | Hardware AES-128 on the Silex CryptoMaster (BA411e) block. Overrides `Cipher`; CMAC is the inherited software core over the hardware cipher. |
 | `CryptoSoftSha256` | `HashEngine` | `src/crypto/crypto_softsha256.cpp` | Software SHA-256 (FIPS 180-4). Unkeyed digest; serves DFU image verification and any hashing consumer. |
 | `CryptoSoftRng` | `RngEngine` | `src/crypto/crypto_softrng.cpp` | Software PRNG base. Statistical use only; not a security random source. |
@@ -175,16 +175,16 @@ state machine in-host:
 
 ## Reuse beyond Bluetooth
 
-The facets are not Bluetooth-scoped. The same engines serve any consumer: secure
+The interfaces are not Bluetooth-scoped. The same engines serve any consumer: secure
 DFU (`CryptoSoftSha256` + `CryptoUecc::Verify` validate a signed image), and TLS
 or encrypted storage as those consumers arrive. New primitives are added by
-appending a facet or an algorithm value, never by renumbering existing ones.
+appending an interface or an algorithm value, never by renumbering existing ones.
 
 ## File layout
 
 | File | Role |
 |---|---|
-| `include/crypto/icrypto.h` | The facet tree: `CryptoEngine` and the facet interfaces, the algorithm and operation enums, the async completion contract, `CryptoKey`, `RngGet`, `CryptoSecureWipe`, and the P-256 helper declarations. |
+| `include/crypto/icrypto.h` | Crypto interfaces: `CryptoEngine` and its operation interfaces, the algorithm and operation enums, the asynchronous completion handling, `CryptoKey`, `RngGet`, `CryptoSecureWipe`, and the P-256 helper declarations. |
 | `src/crypto/crypto_p256.cpp` | Generic P-256 math: constant-time byte helpers, scalar and field range checks, and the ladder scalar regularization (`P256RegularizeScalar`, `P256RegularBit`). Exports functions only; the curve point arithmetic stays in each engine. |
 | `src/crypto/crypto_uecc.cpp` | Software P-256 engine (micro-ecc): ECDH and ECDSA. |
 | `src/crypto/crypto_softaes.cpp` | Software AES-128 engine: cipher and CMAC. |

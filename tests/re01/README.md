@@ -111,7 +111,7 @@ Its stop wait is bounded, and a failed stop in the compare ISR releases both
 compare routes rather than leaking them.
 
 Raw per-tick interrupts (`bTickInt = true`), external counter clocks and external
-trigger inputs are unsupported and fail closed. Use compare triggers for
+trigger inputs are unsupported and their enable functions return false. Use compare triggers for
 periodic callbacks. RTC, watchdogs, the low-speed clock timer (LST), low-speed
 pulse generator (LPG) and clock correction circuit (CCC) are separate hardware
 functions, outside this general-purpose Timer list. SysTick retains its

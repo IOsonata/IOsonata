@@ -106,7 +106,7 @@ is not implemented by every older port.
 
 `BtAppCfg_t` holds the device name, service UUID list, manufacturer data and
 advertising settings. `AdvInterval` and connection intervals are in
-milliseconds; the public `AdvTimeout` contract is seconds. Some older
+milliseconds; the public `AdvTimeout` field is in seconds. Some older
 examples use a misleading MSEC name/comment for that timeout. Check the
 selected port's timeout support rather than copying that label.
 
