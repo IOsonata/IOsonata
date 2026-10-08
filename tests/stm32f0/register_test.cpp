@@ -52,7 +52,13 @@ int main() {
 	assert(USART1->CR1 & USART_CR1_PS);
 	cfg.DataBits = 7; assert(UARTInit(&dev, &cfg)); assert(!(USART1->CR1 & USART_CR1_M));
 	cfg.DataBits = 9; assert(!UARTInit(&dev, &cfg)); cfg.DataBits = 8;
-	cfg.bDMAMode = true; assert(!UARTInit(&dev, &cfg)); cfg.bDMAMode = false;
+	cfg.bDMAMode = true;
+#ifdef STM32F030x8
+	assert(UARTInit(&dev, &cfg));
+#else
+	assert(!UARTInit(&dev, &cfg));
+#endif
+	cfg.bIntMode = false; assert(!UARTInit(&dev, &cfg)); cfg.bDMAMode = false;
 	cfg.bIntMode = false; cfg.Parity = UART_PARITY_NONE; assert(UARTInit(&dev, &cfg));
 	assert(!(USART1->CR3 & USART_CR3_EIE));
 	USART1->ISR = 0; assert(dev.DevIntrf.TxData(&dev.DevIntrf, &byte, 1) == 0);

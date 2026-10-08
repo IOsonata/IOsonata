@@ -43,7 +43,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define UART_INT_MODE true
 #endif
 #ifndef UART_DMA_MODE
-#define UART_DMA_MODE false
+#define UART_DMA_MODE true
 #endif
 
 #define UART_DEVNO			0
