@@ -165,7 +165,7 @@ typedef union __Bt_Hci_Usb_Descriptor_Buffer {
 
 typedef struct __Bt_Hci_Usb_Config {
 	int DevNo;
-	bool bBlocking;
+	bool bBlocking;				//!< RX FIFO policy; TX always admits whole packets or returns 0.
 	bool bSco;				//!< Add synchronous alternate settings and SCO transport
 	bool bBulkSerialization;	//!< Add HCI alt-1 serialized bulk transport
 	int RxFifoMemSize;
@@ -214,6 +214,8 @@ typedef struct __Bt_Hci_Usb_Dev {
 	bool CommandPending;
 	bool AclRxPending;
 	bool EventTxActive;
+	bool EventTxBusy;
+	bool BulkTxBusy;
 	bool EventTxNeedZlp;
 	bool EventTxZlp;
 	bool ScoTxActive;
@@ -228,6 +230,8 @@ typedef struct __Bt_Hci_Usb_Dev {
 	uint16_t EventTxLength;
 	uint16_t EventTxOffset;
 	uint16_t EventTxChunkLength;
+	uint16_t BulkTxOffset;
+	uint16_t BulkTxChunkLength;
 	uint16_t ScoRxLength;
 	uint16_t ScoRxExpected;
 	uint16_t ScoRxPacketLength[BT_HCI_USB_SCO_RX_BUFFER_COUNT];
@@ -238,7 +242,8 @@ typedef struct __Bt_Hci_Usb_Dev {
 	uint32_t AclRxBuffer[(BT_HCI_USB_PACKET_MAX_SIZE + 4U) / 4U];
 	uint32_t AclTxPacket[(BT_HCI_USB_ACL_PKT_BLKSIZE + 3U) / 4U];
 	uint32_t EventTxBuffer[(BT_HCI_USB_EVENT_MAX_SIZE + 3U) / 4U];
-	uint32_t EventTxTransfer[(BT_HCI_USB_EVENT_MAX_MPS + 3U) / 4U];
+	uint32_t EventTxTransfer[((BT_HCI_USB_EVENT_MAX_MPS > BT_HCI_USB_ACL_MAX_MPS ?
+		BT_HCI_USB_EVENT_MAX_MPS : BT_HCI_USB_ACL_MAX_MPS) + 3U) / 4U];
 	uint32_t ScoRxBuffer[BT_HCI_USB_SCO_RX_BUFFER_COUNT]
 		[(BT_HCI_USB_SCO_MAX_SIZE + 3U) / 4U];
 	uint32_t ScoTxBuffer[(BT_HCI_USB_SCO_MAX_SIZE + 3U) / 4U];
@@ -277,3 +282,4 @@ private:
 /** @} End of group Bluetooth */
 
 #endif	// __BT_HCI_USB_H__
+
