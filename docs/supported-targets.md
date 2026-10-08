@@ -80,7 +80,7 @@ SysTick/TIM17 overrides. See the [F030x8 port notes](../ARM/ST/STM32F0xx/README.
 for virtual ordering, capabilities and remaining board checks. The
 [F030x8 example index](../ARM/ST/STM32F0xx/STM32F030x8/exemples/README.md)
 lists the target projects and separates peripheral examples from software-only
-crypto and simulated RF-tag tests.
+crypto tests.
 
 No new STM32 board-validation record is established by these checks. Record
 on-board startup, GPIO, UART traffic and timer results separately when available.

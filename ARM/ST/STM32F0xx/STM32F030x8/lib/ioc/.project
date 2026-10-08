@@ -1155,50 +1155,5 @@
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_softrng.cpp</locationURI>
 		</link>
-		<link>
-			<name>src/rftag</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>src/rftag/rfreader_pn532.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/rftag/rfreader_pn532.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/rftag/rftag.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/rftag/rftag.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/rftag/rftag_controller.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/rftag/rftag_controller.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/rftag/rftag_ndef.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/rftag/rftag_ndef.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/rftag/rftag_proto_iso15693.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/rftag/rftag_proto_iso15693.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/rftag/rftag_proto_t2.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/rftag/rftag_proto_t2.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/rftag/rftag_proto_t4.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/rftag/rftag_proto_t4.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/rftag/st25dv.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/rftag/st25dv.cpp</locationURI>
-		</link>
 	</linkedResources>
 </projectDescription>

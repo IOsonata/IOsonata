@@ -49,19 +49,15 @@ These projects use the debugger console and require no external wiring.
 | CryptoSoftRngTest | `crypto/crypto_softrng_test.cpp` | Software PRNG checks |
 | CryptoUeccTest | `crypto/crypto_uecc_test.cpp` | Software P-256 engine |
 | DfuImageVerify | `crypto/dfu_image_verify.cpp` | Signature verification only; does not flash an image |
-| RfReaderPn532Test | `rftag/rfreader_pn532_exerciser.cpp` | PN532 framing with a simulated transport |
-| RfTagControllerTest | `rftag/rftag_controller_exerciser.cpp` | Controller framing with a simulated transport |
-| RfTagIso15693Test | `rftag/rftag_iso15693_exerciser.cpp` | ISO15693 protocol over memory-backed tags |
-| RfTagT2Test | `rftag/rftag_t2_exerciser.cpp` | Type 2 tag protocol over memory-backed tags |
-| RfTagT4Test | `rftag/rftag_t4_exerciser.cpp` | Type 4 tag protocol over memory-backed tags |
-| St25dvTest | `rftag/st25dv_exerciser.cpp` | ST25DV operations with a simulated transport |
 
-Software PRNG test fixtures are not a cryptographic entropy source. RF-tag
-exercisers do not establish physical NFC/RF, I2C or SPI support on this MCU.
-The library project links the existing portable AES, PRNG and RF-tag sources
+Software PRNG test fixtures are not a cryptographic entropy source.
+The library project links the existing portable AES and PRNG sources
 needed by these tests; their implementations are unchanged.
 
 ## Existing boot project and exclusions
+
+RF-tag example projects are deferred until the required MCU transport support
+is implemented. Simulated RF-tag exercisers are not included as F030 examples.
 
 DfuBoot remains a separate existing project with its own flash layout and boot
 requirements; it is not covered by the new example link checks.
@@ -76,8 +72,8 @@ it is not represented as a working FreeRTOS example.
 
 ## Validation
 
-All 18 added shared example sources compile for Cortex-M0 with Arm GNU 14.3.1
-at `-O0` and `-Os`. All 36 firmware images link using the real startup, vector,
+The 12 retained shared example sources were compiled for Cortex-M0 with Arm GNU 14.3.1
+at `-O0` and `-Os`. Their 24 firmware images linked using the real startup, vector,
 clock and required library sources, with the 64 KB flash / 8 KB RAM linker
 regions. The TaktOS image also links the real Cortex-M0 kernel and context
 switch implementation. These command-line checks use the necessary library
