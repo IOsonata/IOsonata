@@ -1,15 +1,49 @@
 # STM32F030x8 port
 
 STM32F030x8 implements the minimum supported MCU set: startup, GPIO, UART
-and timer. Other F030 memory variants are not covered by the new timer backend.
+and timer. Other F030 memory variants are not covered by the new timer implementation.
 GPIO includes pin configuration, digital I/O and pin-specific EXTI allocation.
-UART supports polling and FIFO interrupts; its existing mode restrictions remain.
+UART supports polling, FIFO interrupts and optional TX DMA.
+
+## UART DMA
+
+Set both `bIntMode` and `bDMAMode` to true for TX DMA on STM32F030x8.
+RX remains interrupt driven. Other F0 variants still reject DMA requests.
+
+| Virtual DevNo | Hardware | TX DMA channel | IRQ |
+|---|---|---|---|
+| 0 | USART1 | DMA1 channel 2 | DMA1_Channel2_3 |
+| 1 | USART2 | DMA1 channel 4 | DMA1_Channel4_5 |
+
+TX copies queued bytes into a fixed 16-byte DMA buffer. Completion interrupts
+start the next burst. A positive `Tx()` return counts accepted bytes; the caller
+may reuse its buffer immediately. FIFO blocking/drop behavior is unchanged.
+DMA transfer errors discard the unsent part of that burst, add its remaining
+byte count to `UARTDev_t::TxDropCnt`, and continue with queued bytes.
+Disable and reset stop DMA before touching the USART. Enable flushes queued TX
+data, as in interrupt-only mode. Reinitialization also stops any prior burst.
+A rate change is rejected while a DMA burst is active.
+
+These channels are reserved while UART DMA is configured. Initialization refuses
+a channel already configured by another user. Do not repurpose a channel or
+its IRQ while the UART owns it. Channels 3 and 5 share the vectors but are not
+handled by this driver; adding another DMA peripheral requires shared dispatch.
+The driver does not reset or gate off the whole DMA controller.
+
+`UartPrbsTest/src/board.h` enables DMA. The shared byte-at-a-time PRBS source is
+unchanged. For the 1 Mbaud comparison, build with `UART_BAUDRATE=1000000` and use
+the same baud rate in `Python/uartprbs_rx.py`. The example's default remains
+115200 baud. Rebuild both the MCU library and application.
+
+`python3 tests/stm32f0/uart_dma_test.py` checks FIFO wrap, backpressure, caller
+buffer reuse, both USARTs, RX during TX, transfer errors and lifecycle handling.
+These are host register tests. Board PRBS throughput with DMA remains unverified.
 
 ## Peripheral timers
 
 All seven TIM peripherals are implemented through the standard C and C++ Timer
 interfaces. Virtual numbering follows the low-power/low-frequency to
-high-power/high-frequency convention. This MCU has no LPTIM backend; these TIM
+high-power/high-frequency convention. This MCU has no LPTIM peripheral; these TIM
 peripherals all use the APB timer clock, with simpler timers ordered first.
 The low-frequency device count is 0, high-frequency count is 7, and the first
 high-frequency virtual index is 0. The order within that group is a device-table
@@ -41,7 +75,7 @@ Use `TIMER_CLKSRC_DEFAULT`; no independent oscillator is selected. `Freq = 0`
 selects the maximum clock rate. Other requests select a rounded, clamped
 prescaler (1-65536); use the returned frequency. IRQ priority is 0-3.
 Per-counter-tick interrupts (`bTickInt`), external triggers, input capture, DMA
-and PWM output are outside this Timer backend. Unsupported configuration and
+and PWM output are outside this Timer implementation. Unsupported configuration and
 external-trigger requests return failure. No GPIO is configured by the timer.
 
 Trigger periods are rounded to ticks and must be at least four ticks. Compare
@@ -107,7 +141,7 @@ seven devices and trigger channels, clocks, overflow, long compares, lifecycle,
 callback cancellation and TIM17 override refusal. They do not simulate APB
 bus latency or instruction-level interrupt preemption.
 
-Arm GNU 14.3.1 Cortex-M0 checks at -O0 and -Os compile the backend and vectors
+Arm GNU 14.3.1 Cortex-M0 checks at -O0 and -Os compile the driver and vectors
 and link archive smoke images with timer use, application SysTick/TIM17
 handlers, and SysTick-only use. The last image does not pull in TimerInit.
 These smoke images are not the full TaktOS benchmark or IOC library build.
