@@ -85,8 +85,13 @@ void UsbCtrlrEpClose(int, uint8_t EpNo, bool bIn)
     s_CloseCount++;
     if (EpNo < 16U)
     {
+		const bool busy = bIn ? s_InBusy[EpNo] : s_OutDma[EpNo];
         if (bIn) s_InBusy[EpNo] = false;
         else s_OutDma[EpNo] = false;
+		// SAM4L reports cancellation synchronously when closing a busy EP.
+		RegisteredEp_t *pReg = FindRegistered(EpNo | (bIn ? 0x80U : 0U));
+		if (busy && pReg != nullptr)
+			pReg->Handler(USB_CTRLR_EVT_CANCEL, 0U, pReg->pContext);
     }
 }
 void UsbCtrlrEpCloseAll(int) {}
@@ -760,6 +765,349 @@ static void TestConfigurationFailure(void)
     CHECK(DeviceIntrfGetRate(hci.Data()) == 0U);
 }
 
+static void DrainIn(void)
+{
+	for (unsigned pass = 0; pass < 64U; ++pass)
+	{
+		bool busy = false;
+		for (uint8_t ep = 1U; ep < 16U; ++ep)
+			if (s_InBusy[ep])
+			{
+				busy = true;
+				CompleteIn(ep);
+			}
+		if (!busy) return;
+	}
+	CHECK(false);
+}
+
+static void CheckWire(int First, uint8_t EpNo, const uint8_t *pData,
+	unsigned Length, unsigned Prefix = 0U)
+{
+	unsigned offset = 0U;
+	for (int i = First; i < s_SendCount; ++i)
+	{
+		if (s_Sent[i].EpAddr != USB_ENDPADDR_DIRIN(EpNo)) continue;
+		for (unsigned j = 0U; j < s_Sent[i].Length; ++j, ++offset)
+		{
+			CHECK(offset < Length + (Prefix != 0U));
+			if (Prefix && offset == 0U)
+				CHECK(s_Sent[i].Data[j] == Prefix);
+			else if (offset < Length + (Prefix != 0U))
+				CHECK(s_Sent[i].Data[j] == pData[offset - (Prefix != 0U)]);
+		}
+	}
+	CHECK(offset == Length + (Prefix != 0U));
+}
+
+static void FillAcl(uint8_t *pData, unsigned Length)
+{
+	pData[0] = 1U;
+	pData[1] = 0U;
+	pData[2] = (uint8_t)(Length - 4U);
+	pData[3] = (uint8_t)((Length - 4U) >> 8);
+	for (unsigned i = 4U; i < Length; ++i) pData[i] = (uint8_t)(i ^ 0xA5U);
+}
+
+static void TestHciZlpRestartsReceive(void)
+{
+	ResetFake();
+	BtHciUsb hci;
+	BtHciUsbCfg_t cfg = MakeCfg();
+	cfg.RxFifoMemSize = BT_HCI_USB_ACL_RXMEM_SIZE(1U);
+	CHECK(hci.Init(cfg));
+	CHECK(hci.SelectConfig(1U));
+	BtHciUsbDev_t *pHci = hci;
+	const uint8_t ep = pHci->AclEpNo;
+	uint8_t first[64];
+	FillAcl(first, sizeof(first));
+	const uint8_t second[] = {1U, 0U, 1U, 0U, 42U};
+	ReceiveOut(ep, first, sizeof(first));
+	ReceiveOut(ep, nullptr, 0U);
+	// The unread HCI packet holds up its ZLP. The following OUT waits in
+	// hardware while the one-slot FIFO is full.
+	RegisteredEp_t *pReg = FindRegistered(ep);
+	memcpy(s_HwOut[ep], second, sizeof(second));
+	s_HwOutLength[ep] = sizeof(second);
+	s_HwOutReady[ep] = true;
+	pReg->Handler(USB_CTRLR_EVT_DRDY, sizeof(second), pReg->pContext);
+	CHECK(!s_OutDma[ep]);
+	CHECK(pHci->pData->RxPending);
+	uint8_t rx[64];
+	CHECK(hci.Rx(BT_HCI_USB_PACKET_ACL, rx, sizeof(rx)) == 64);
+	CHECK(memcmp(rx, first, sizeof(first)) == 0);
+	CHECK(hci.Rx(BT_HCI_USB_PACKET_ACL, rx, sizeof(rx)) == 0);
+	CHECK(s_OutDma[ep]);
+	CHECK(!pHci->pData->RxPending);
+	if (s_OutDma[ep])
+	{
+		memcpy(pReg->pBuffer, second, sizeof(second));
+		s_HwOutReady[ep] = false;
+		s_OutDma[ep] = false;
+		pReg->Handler(USB_CTRLR_EVT_XFER_CMPL, sizeof(second), pReg->pContext);
+		CHECK(hci.Rx(BT_HCI_USB_PACKET_ACL, rx, sizeof(rx)) == (int)sizeof(second));
+		CHECK(memcmp(rx, second, sizeof(second)) == 0);
+	}
+}
+
+static void TestHciNonblockingAdmission(void)
+{
+	ResetFake();
+	BtHciUsb hci;
+	BtHciUsbCfg_t cfg = MakeCfg();
+	cfg.bBlocking = false;
+	cfg.TxFifoMemSize = BT_HCI_USB_ACL_TXMEM_SIZE(2U);
+	CHECK(hci.Init(cfg));
+	CHECK(hci.SelectConfig(1U));
+	BtHciUsbDev_t *pHci = hci;
+	uint8_t acl[132];
+	FillAcl(acl, sizeof(acl));
+	CHECK(hci.Tx(BT_HCI_USB_PACKET_ACL, acl, sizeof(acl)) == 0);
+	CHECK(s_SendCount == 0);
+	FillAcl(acl, 128U);
+	CHECK(hci.Tx(BT_HCI_USB_PACKET_ACL, acl, 128) == 128);
+	const uint8_t next[] = {1U, 0U, 1U, 0U, 42U};
+	CHECK(hci.Tx(BT_HCI_USB_PACKET_ACL, next, sizeof(next)) == 0);
+	CompleteIn(pHci->AclEpNo);
+	// Completed fragments remain owned until the entire HCI packet finishes.
+	CHECK(hci.Tx(BT_HCI_USB_PACKET_ACL, next, sizeof(next)) == 0);
+	DrainIn();
+	CheckWire(0, pHci->AclEpNo, acl, 128U);
+	CHECK(s_Sent[s_SendCount - 1].Length == 0U);
+	CHECK(pHci->pData->hTxFifo->DropCnt == 0U);
+	const int first = s_SendCount;
+	CHECK(hci.Tx(BT_HCI_USB_PACKET_ACL, next, sizeof(next)) == (int)sizeof(next));
+	DrainIn();
+	CheckWire(first, pHci->AclEpNo, next, sizeof(next));
+}
+
+static void TestHciPacketBoundaries(void)
+{
+	const unsigned sizes[] = {4U, 63U, 64U, 65U, 127U, 128U, 129U, 1024U};
+	for (unsigned serial = 0; serial < 2U; ++serial)
+		for (unsigned size : sizes)
+		{
+			ResetFake();
+			BtHciUsb hci;
+			CHECK(hci.Init(MakeCfg(false, true)));
+			CHECK(hci.SelectConfig(1U));
+			CHECK(hci.SelectInterface(0U, serial));
+			BtHciUsbDev_t *pHci = hci;
+			uint8_t acl[1024];
+			FillAcl(acl, size);
+			CHECK(hci.Tx(BT_HCI_USB_PACKET_ACL, acl, size) == (int)size);
+			DrainIn();
+			CheckWire(0, pHci->AclEpNo, acl, size,
+				serial ? BT_HCI_USB_PACKET_ACL : BT_HCI_USB_PACKET_NONE);
+			const unsigned wireLength = size + serial;
+			CHECK(s_SendCount == (int)((wireLength + 63U) / 64U + (wireLength % 64U == 0U)));
+			CHECK(CFifoUsed(pHci->pData->hTxFifo) == 0);
+		}
+
+	ResetFake();
+	BtHciUsb hci;
+	BtHciUsbCfg_t cfg = MakeCfg(false, true);
+	cfg.TxFifoMemSize = BT_HCI_USB_ACL_TXMEM_SIZE(3U);
+	CHECK(hci.Init(cfg));
+	CHECK(hci.SelectConfig(1U));
+	CHECK(hci.SelectInterface(0U, 1U));
+	BtHciUsbDev_t *pHci = hci;
+	uint8_t acl[132];
+	FillAcl(acl, 5U);
+	CHECK(hci.Tx(BT_HCI_USB_PACKET_ACL, acl, 5) == 5);
+	DrainIn();
+	const int first = s_SendCount;
+	FillAcl(acl, sizeof(acl));
+	CHECK(hci.Tx(BT_HCI_USB_PACKET_ACL, acl, sizeof(acl)) == (int)sizeof(acl));
+	DrainIn();
+	CheckWire(first, pHci->AclEpNo, acl, sizeof(acl), BT_HCI_USB_PACKET_ACL);
+}
+
+static void TestHciModeSwitchRetainsPackets(void)
+{
+	// Switch before any ACK, between fragments, and while the ZLP is pending.
+	for (unsigned from = 0; from < 2U; ++from)
+		for (unsigned completed = 0; completed < 3U; ++completed)
+		{
+			ResetFake();
+			BtHciUsb hci;
+			CHECK(hci.Init(MakeCfg(false, true)));
+			CHECK(hci.SelectConfig(1U));
+			CHECK(hci.SelectInterface(0U, from));
+			BtHciUsbDev_t *pHci = hci;
+			uint8_t acl[128];
+			const unsigned size = sizeof(acl) - from;
+			FillAcl(acl, size);
+			const uint8_t next[] = {1U, 0U, 1U, 0U, 42U};
+			CHECK(hci.Tx(BT_HCI_USB_PACKET_ACL, acl, size) == (int)size);
+			CHECK(hci.Tx(BT_HCI_USB_PACKET_ACL, next, sizeof(next)) == (int)sizeof(next));
+			for (unsigned i = 0; i < completed; ++i) CompleteIn(pHci->AclEpNo);
+			const int first = s_SendCount;
+			CHECK(hci.SelectInterface(0U, 1U - from));
+			const unsigned wireLength = size + (from == 0U);
+			const unsigned transactions = (wireLength + 63U) / 64U + (wireLength % 64U == 0U);
+			for (unsigned i = 1; i < transactions; ++i) CompleteIn(pHci->AclEpNo);
+			CheckWire(first, pHci->AclEpNo, acl, size,
+				from ? BT_HCI_USB_PACKET_NONE : BT_HCI_USB_PACKET_ACL);
+			const int nextFirst = s_SendCount;
+			CompleteIn(pHci->AclEpNo);
+			DrainIn();
+			CheckWire(nextFirst, pHci->AclEpNo, next, sizeof(next),
+				from ? BT_HCI_USB_PACKET_NONE : BT_HCI_USB_PACKET_ACL);
+		}
+}
+
+static void TestHciModeSwitchEvents(void)
+{
+	ResetFake();
+	BtHciUsb hci;
+	CHECK(hci.Init(MakeCfg(false, true)));
+	CHECK(hci.SelectConfig(1U));
+	BtHciUsbDev_t *pHci = hci;
+	uint8_t event[32] = {0xFFU, 30U};
+	for (unsigned i = 2; i < sizeof(event); ++i) event[i] = i;
+	const uint8_t acl[] = {1U, 0U, 1U, 0U, 42U};
+	CHECK(hci.Tx(BT_HCI_USB_PACKET_EVENT, event, sizeof(event)) == (int)sizeof(event));
+	CHECK(hci.Tx(BT_HCI_USB_PACKET_ACL, acl, sizeof(acl)) == (int)sizeof(acl));
+	CompleteIn(pHci->EventEpNo);
+	const int first = s_SendCount;
+	CHECK(hci.SelectInterface(0U, 1U));
+	CheckWire(first, pHci->AclEpNo, event, sizeof(event), BT_HCI_USB_PACKET_EVENT);
+	const int next = s_SendCount;
+	CompleteIn(pHci->AclEpNo);
+	DrainIn();
+	CheckWire(next, pHci->AclEpNo, acl, sizeof(acl), BT_HCI_USB_PACKET_ACL);
+
+	// Queued serialized events survive rollback, then move to interrupt IN.
+	CHECK(hci.Tx(BT_HCI_USB_PACKET_EVENT, event, sizeof(event)) == (int)sizeof(event));
+	CHECK(hci.Tx(BT_HCI_USB_PACKET_EVENT, event, sizeof(event)) == (int)sizeof(event));
+	s_OpenFailAt = s_OpenCount + 2;
+	CHECK(!hci.SelectInterface(0U, 0U));
+	CHECK(pHci->BulkSerialization && pHci->Configured);
+	const int events = s_SendCount;
+	CHECK(hci.SelectInterface(0U, 0U));
+	DrainIn();
+	uint8_t expected[64];
+	memcpy(expected, event, sizeof(event));
+	memcpy(expected + sizeof(event), event, sizeof(event));
+	CheckWire(events, pHci->EventEpNo, expected, sizeof(expected));
+	CHECK(CFifoUsed(pHci->pData->hTxFifo) == 0);
+}
+
+static void TestHciModeSwitchScoIso(void)
+{
+	ResetFake();
+	BtHciUsb hci;
+	CHECK(hci.Init(MakeCfg(true, true)));
+	CHECK(hci.SelectConfig(1U));
+	CHECK(hci.SelectInterface(0U, 1U));
+	BtHciUsbDev_t *pHci = hci;
+	const uint8_t sco[] = {1U, 0U, 2U, 41U, 42U};
+	CHECK(hci.Tx(BT_HCI_USB_PACKET_SCO, sco, sizeof(sco)) == (int)sizeof(sco));
+	const int first = s_SendCount;
+	CHECK(hci.SelectInterface(0U, 0U));
+	CHECK(s_SendCount == first);
+	CHECK(hci.SelectInterface(1U, 1U));
+	IsoSof(pHci->ScoEpNo);
+	CompleteIn(pHci->ScoEpNo);
+	CheckWire(first, pHci->ScoEpNo, sco, sizeof(sco));
+	CHECK(hci.SelectInterface(1U, 0U));
+	CHECK(hci.SelectInterface(0U, 1U));
+	const uint8_t iso[] = {1U, 0U, 1U, 0U, 42U};
+	CHECK(hci.Tx(BT_HCI_USB_PACKET_ISO, iso, sizeof(iso)) == (int)sizeof(iso));
+	CHECK(hci.SelectInterface(0U, 0U));
+	const int pending = s_SendCount;
+	CHECK(hci.SelectInterface(0U, 1U));
+	DrainIn();
+	CheckWire(pending, pHci->AclEpNo, iso, sizeof(iso), BT_HCI_USB_PACKET_ISO);
+}
+
+static void TestHciRetainedEventBoundaries(void)
+{
+	const unsigned sizes[] = {15U, 16U, 63U, 64U, 257U};
+	for (unsigned from = 0U; from < 2U; ++from)
+		for (unsigned size : sizes)
+		{
+			ResetFake();
+			BtHciUsb hci;
+			CHECK(hci.Init(MakeCfg(false, true)));
+			CHECK(hci.SelectConfig(1U));
+			CHECK(hci.SelectInterface(0U, from));
+			BtHciUsbDev_t *pHci = hci;
+			uint8_t event[257] = {0xFFU};
+			event[1] = (uint8_t)(size - 2U);
+			for (unsigned i = 2U; i < size; ++i) event[i] = (uint8_t)i;
+			CHECK(hci.Tx(BT_HCI_USB_PACKET_EVENT, event, size) == (int)size);
+			const int first = s_SendCount;
+			CHECK(hci.SelectInterface(0U, 1U - from));
+			DrainIn();
+			CheckWire(first, from ? pHci->EventEpNo : pHci->AclEpNo,
+				event, size, from ? BT_HCI_USB_PACKET_NONE : BT_HCI_USB_PACKET_EVENT);
+			const unsigned wireLength = size + (from == 0U);
+			const unsigned mps = from ? 16U : 64U;
+			CHECK(s_SendCount - first == (int)((wireLength + mps - 1U) / mps +
+				(wireLength % mps == 0U)));
+			CHECK(!pHci->EventTxActive && !pHci->BulkTxBusy);
+			CHECK(CFifoUsed(pHci->pData->hTxFifo) == 0);
+		}
+}
+
+static void TestHciQueuedFailure(void)
+{
+	ResetFake();
+	BtHciUsb hci;
+	CHECK(hci.Init(MakeCfg(false, true)));
+	CHECK(hci.SelectConfig(1U));
+	CHECK(hci.SelectInterface(0U, 1U));
+	BtHciUsbDev_t *pHci = hci;
+	uint8_t acl[128];
+	FillAcl(acl, sizeof(acl));
+	const uint8_t next[] = {1U, 0U, 1U, 0U, 42U};
+	CHECK(hci.Tx(BT_HCI_USB_PACKET_ACL, acl, sizeof(acl)) == (int)sizeof(acl));
+	CHECK(hci.Tx(BT_HCI_USB_PACKET_ACL, next, sizeof(next)) == (int)sizeof(next));
+	const int first = s_SendCount;
+	CompleteIn(pHci->AclEpNo, USB_CTRLR_EVT_XFER_FAILED);
+	CHECK(s_LastEvent == DEVINTRF_EVT_TX_TIMEOUT);
+	CHECK(CFifoUsed(pHci->pData->hTxFifo) == 1);
+	DrainIn();
+	CheckWire(first, pHci->AclEpNo, next, sizeof(next), BT_HCI_USB_PACKET_ACL);
+	CHECK(CFifoUsed(pHci->pData->hTxFifo) == 0);
+	CHECK(!pHci->BulkTxBusy);
+}
+
+static void TestHciRetainedPacketOrder(void)
+{
+	for (unsigned sco = 0U; sco < 2U; ++sco)
+	{
+		ResetFake();
+		BtHciUsb hci;
+		CHECK(hci.Init(MakeCfg(sco, true)));
+		CHECK(hci.SelectConfig(1U));
+		CHECK(hci.SelectInterface(0U, 1U));
+		BtHciUsbDev_t *pHci = hci;
+		const uint8_t acl[] = {1U, 0U, 1U, 0U, 42U};
+		const uint8_t event[] = {0xFFU, 3U, 1U, 2U, 3U};
+		const uint8_t sync[] = {1U, 0U, 2U, 41U, 42U};
+		const uint8_t *pData = sco ? sync : event;
+		const BtHciUsbPacketType_t type = sco ? BT_HCI_USB_PACKET_SCO : BT_HCI_USB_PACKET_EVENT;
+		CHECK(hci.Tx(BT_HCI_USB_PACKET_ACL, acl, sizeof(acl)) == (int)sizeof(acl));
+		CHECK(hci.Tx(type, pData, sizeof(event)) == (int)sizeof(event));
+		CHECK(hci.SelectInterface(0U, 0U));
+		if (sco) CHECK(hci.SelectInterface(1U, 1U));
+		// Older packets are behind ACL in the retained queue.
+		const int first = s_SendCount;
+		CHECK(hci.Tx(type, pData, sizeof(event)) == 0);
+		CHECK(s_SendCount == first);
+		CompleteIn(pHci->AclEpNo);
+		if (sco) IsoSof(pHci->ScoEpNo);
+		DrainIn();
+		CheckWire(first, sco ? pHci->ScoEpNo : pHci->EventEpNo, pData, sizeof(event));
+		CHECK(hci.Tx(type, pData, sizeof(event)) == (int)sizeof(event));
+		if (sco) IsoSof(pHci->ScoEpNo, 1U);
+		DrainIn();
+	}
+}
+
 int main(void)
 {
     TestDescriptors();
@@ -774,6 +1122,15 @@ int main(void)
     TestScoBackpressure();
     TestScoAlternateLifecycle();
     TestConfigurationFailure();
+	TestHciZlpRestartsReceive();
+	TestHciNonblockingAdmission();
+	TestHciPacketBoundaries();
+	TestHciModeSwitchRetainsPackets();
+	TestHciModeSwitchEvents();
+	TestHciModeSwitchScoIso();
+	TestHciRetainedEventBoundaries();
+	TestHciQueuedFailure();
+	TestHciRetainedPacketOrder();
 
     if (s_Fail != 0)
     {
@@ -786,3 +1143,4 @@ int main(void)
 
 // The process event of the USB core is not part of this test.
 void UsbProcessQue(int) {}
+

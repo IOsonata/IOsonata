@@ -154,7 +154,7 @@ static int UsbIntrfRxData(DevIntrf_t * const pDevIntrf, uint8_t *pBuffer,
 {
 	UsbDevIntrf_t *pIntrf = static_cast<UsbDevIntrf_t *>(pDevIntrf->pDevData);
 
-	if (pBuffer == nullptr || BufferLen <= 0)
+	if (BufferLen < 0 || (pBuffer == nullptr && BufferLen != 0))
 	{
 		return 0;
 	}
@@ -162,7 +162,9 @@ static int UsbIntrfRxData(DevIntrf_t * const pDevIntrf, uint8_t *pBuffer,
 	int cnt = 0;
 	bool consumed = false;
 
-	while (BufferLen > 0)
+	// A zero-capacity read consumes one ZLP without touching the next packet.
+	// It must still release a receive withheld for lack of FIFO space.
+	do
 	{
 		UsbPkt_t *pkt = reinterpret_cast<UsbPkt_t *>(CFifoPeek(pIntrf->hRxFifo));
 		if (pkt == nullptr)
@@ -184,10 +186,11 @@ static int UsbIntrfRxData(DevIntrf_t * const pDevIntrf, uint8_t *pBuffer,
 
 		(void)CFifoGet(pIntrf->hRxFifo);
 		consumed = true;
-		pBuffer += len;
+		if (len != 0U)
+			pBuffer += len;
 		BufferLen -= len;
 		cnt += len;
-	}
+	} while (BufferLen > 0);
 
 	// Masked so the endpoint interrupt cannot fill and publish the block
 	// between reserving the destination and submitting the receive.
@@ -706,4 +709,5 @@ int UsbIntrfTxUsed(UsbDevIntrf_t *pIntrf)
 	}
 	return pIntrf->hTxFifo != nullptr ? CFifoUsed(pIntrf->hTxFifo) : 0;
 }
+
 

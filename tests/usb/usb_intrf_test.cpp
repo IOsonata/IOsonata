@@ -346,6 +346,31 @@ static void TestZlpReleasesPendingReceive(void)
 	CHECK(out == pending);
 }
 
+static void TestZeroCapacityZlp(void)
+{
+	CHECK(Setup());
+	Deliver(nullptr, 0U);
+	const uint8_t data = 0xA7U;
+	Deliver(&data, 1U);
+	CHECK(DeviceIntrfRxData(&s_Intrf.DevIntrf, nullptr, 0) == 0);
+	CHECK(CFifoUsed(s_Intrf.hRxFifo) == 1);
+	CHECK(DeviceIntrfRxData(&s_Intrf.DevIntrf, nullptr, 0) == 0);
+	CHECK(CFifoUsed(s_Intrf.hRxFifo) == 1);
+	uint8_t out = 0U;
+	CHECK(DeviceIntrfRxData(&s_Intrf.DevIntrf, &out, 1) == 1);
+	CHECK(out == data);
+
+	CHECK(Setup());
+	for (unsigned i = 0; i < SLOTS; ++i) Deliver(nullptr, 0U);
+	CHECK(!Drdy(&data, 1U) && s_Intrf.RxPending);
+	CHECK(DeviceIntrfRxData(&s_Intrf.DevIntrf, nullptr, 0) == 0);
+	CHECK(CFifoUsed(s_Intrf.hRxFifo) == (int)SLOTS - 1);
+	CHECK(s_OutDma && !s_Intrf.RxPending);
+	CompleteOut();
+	CHECK(DeviceIntrfRxData(&s_Intrf.DevIntrf, &out, 1) == 1);
+	CHECK(out == data);
+}
+
 static void TestBackpressure(void)
 {
     CHECK(Setup());
@@ -719,6 +744,7 @@ int main(void)
         { "whole packets", TestWholePackets },
         { "zero length packet", TestZlp },
         { "ZLP pending receive", TestZlpReleasesPendingReceive },
+		{ "zero-capacity ZLP", TestZeroCapacityZlp },
         { "backpressure", TestBackpressure },
         { "non-blocking drop", TestNonBlockingDropOldest },
         { "reconfigure during DMA", TestReconfigureDuringDma },
@@ -752,3 +778,4 @@ int main(void)
 
 // The process event of the USB core is not part of this test.
 void UsbProcessQue(int) {}
+
