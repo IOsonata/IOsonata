@@ -52,14 +52,6 @@ SOFTWARE.
 #define SPI_SLAVE_DMA_ENABLE false
 #define SPI_SLAVE_INT_ENABLE true
 #define SPI_SLAVE_DEVNO 0
-// Failure-only snapshot. SPI_SR clears NSSR/error flags when read.
-#define SPI_LOOPBACK_DIAG_FORMAT \
-	"SPI SR=%08lx IMR=%08lx MR=%08lx CSR0=%08lx IRQ enabled=%lu pending=%lu PRIMASK=%lu\r\n"
-#define SPI_LOOPBACK_DIAG_VALUES \
-	(unsigned long)SAM4L_SPI->SPI_SR, (unsigned long)SAM4L_SPI->SPI_IMR, \
-	(unsigned long)SAM4L_SPI->SPI_MR, (unsigned long)SAM4L_SPI->SPI_CSR[0], \
-	(unsigned long)NVIC_GetEnableIRQ(SPI_IRQn), \
-	(unsigned long)NVIC_GetPendingIRQ(SPI_IRQn), (unsigned long)__get_PRIMASK()
 #define SPI_SLAVE_SCK_PORT IOPORTC
 #define SPI_SLAVE_SCK_PIN 30
 #define SPI_SLAVE_SCK_PINOP IOPINOP_PERIPHB

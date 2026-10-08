@@ -118,6 +118,9 @@ static volatile unsigned s_Completions;
 static volatile unsigned s_Arms;
 SPI g_SpiSlave;
 
+// Optional target-test diagnostic implementation, outside board configuration.
+void SpiSlaveLoopbackDiagnostics(void) __attribute__((weak));
+
 static int SlaveEvent(DevIntrf_t * const pDev, DEVINTRF_EVT Event,
 					 uint8_t *pBuffer, int Length)
 {
@@ -231,11 +234,8 @@ static bool Frame(int Mode, int Length, uint8_t Seed)
 			IOPinRead(SPI_MASTER_CS_PORT, SPI_MASTER_CS_PIN),
 			IOPinRead(SPI_SLAVE_CS_PORT, SPI_SLAVE_CS_PIN),
 			before, s_Completions, armsBefore, s_Arms, s_Count);
-#ifdef SPI_LOOPBACK_DIAG_FORMAT
-		// Target register expressions live with the target configuration.
-		// SR is read-to-clear: take this snapshot only after a failed frame.
-		printf(SPI_LOOPBACK_DIAG_FORMAT, SPI_LOOPBACK_DIAG_VALUES);
-#endif
+		if (SpiSlaveLoopbackDiagnostics != nullptr)
+			SpiSlaveLoopbackDiagnostics();
 	}
 	if (mismatch >= 0)
 		printf("Mismatch at %d: master RX=%02x expected=%02x slave RX=%02x expected=%02x\r\n",
