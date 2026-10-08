@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <projectDescription>
-	<name>SPISlaveLoopback</name>
+	<name>SPIMasterSlave</name>
 	<comment></comment>
 	<projects>
 	</projects>
@@ -26,9 +26,9 @@
 	</natures>
 	<linkedResources>
 		<link>
-			<name>src/spi_slave_diag.cpp</name>
+			<name>src/spi_master_slave_diag.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-1-PROJECT_LOC/src/spi_slave_diag.cpp</locationURI>
+			<locationURI>PARENT-1-PROJECT_LOC/src/spi_master_slave_diag.cpp</locationURI>
 		</link>
 		<link>
 			<name>src</name>
@@ -36,9 +36,9 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>src/spi_slave_loopback.cpp</name>
+			<name>src/spi_master_slave.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/exemples/spi/spi_slave_loopback.cpp</locationURI>
+			<locationURI>PARENT-7-PROJECT_LOC/exemples/spi/spi_master_slave.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/board.h</name>

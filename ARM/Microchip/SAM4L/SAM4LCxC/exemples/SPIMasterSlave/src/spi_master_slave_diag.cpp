@@ -1,10 +1,10 @@
-// SAM4L-only failure diagnostics for SPISlaveLoopback.
+// SAM4L-only failure diagnostics for SPIMasterSlave.
 // Copyright (c) 2026 I-SYST inc. MIT License.
 #include <stdio.h>
 #include "sam4lxxx.h"
 #include "board.h"
 
-void SpiSlaveLoopbackDiagnostics(void)
+void SpiMasterSlaveDiagnostics(void)
 {
 	// Capture once, after timeout. Reading SR clears NSSR/error flags.
 	const uint32_t state = __get_PRIMASK();

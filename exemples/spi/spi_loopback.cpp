@@ -40,6 +40,16 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "stddev.h"
 #include "board.h"
 
+#ifndef SPI_MASTER_SOFTWARE
+#define SPI_MASTER_SOFTWARE false
+#endif
+#if SPI_MASTER_SOFTWARE
+#include "coredev/spi_soft.h"
+#endif
+#ifndef SPI_MASTER_RATE
+#define SPI_MASTER_RATE 1000000
+#endif
+
 #ifdef MCUOSC
 McuOsc_t g_McuOsc = MCUOSC;
 #endif
@@ -103,13 +113,17 @@ static int SpiEvent(DevIntrf_t * const pDev, DEVINTRF_EVT Event,
 }
 
 static const IOPinCfg_t s_SpiMasterPins[] = {
-	{SPI_MASTER_SCK_PORT, SPI_MASTER_SCK_PIN, SPI_MASTER_SCK_PINOP,
+	{SPI_MASTER_SCK_PORT, SPI_MASTER_SCK_PIN,
+	 SPI_MASTER_SOFTWARE ? IOPINOP_GPIO : SPI_MASTER_SCK_PINOP,
 	 IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},		// SCK
-	{SPI_MASTER_MISO_PORT, SPI_MASTER_MISO_PIN, SPI_MASTER_MISO_PINOP,
+	{SPI_MASTER_MISO_PORT, SPI_MASTER_MISO_PIN,
+	 SPI_MASTER_SOFTWARE ? IOPINOP_GPIO : SPI_MASTER_MISO_PINOP,
 	 IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL},	// MISO
-	{SPI_MASTER_MOSI_PORT, SPI_MASTER_MOSI_PIN, SPI_MASTER_MOSI_PINOP,
+	{SPI_MASTER_MOSI_PORT, SPI_MASTER_MOSI_PIN,
+	 SPI_MASTER_SOFTWARE ? IOPINOP_GPIO : SPI_MASTER_MOSI_PINOP,
 	 IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},		// MOSI
-	{SPI_MASTER_CS_PORT, SPI_MASTER_CS_PIN, SPI_MASTER_CS_PINOP,
+	{SPI_MASTER_CS_PORT, SPI_MASTER_CS_PIN,
+	 SPI_MASTER_SOFTWARE ? IOPINOP_GPIO : SPI_MASTER_CS_PINOP,
 	 IOPINDIR_OUTPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL},	// CS
 };
 
@@ -119,21 +133,25 @@ static const SPICfg_t s_SpiMasterCfg = {
 	SPIMODE_MASTER,
 	s_SpiMasterPins,
 	sizeof(s_SpiMasterPins) / sizeof(IOPinCfg_t),
-	1000000,   // Speed in Hz
+	SPI_MASTER_RATE,   // Speed in Hz
 	8,      // Data Size
 	5,      // Max retries
 	SPIDATABIT_MSB,
 	SPIDATAPHASE_SECOND_CLK, // Data phase
 	SPICLKPOL_LOW,         // clock polarity
 	SPICSEL_AUTO,
-	SPI_MASTER_DMA_ENABLE,	// DMA
-	SPI_MASTER_INT_ENABLE,
+	!SPI_MASTER_SOFTWARE && SPI_MASTER_DMA_ENABLE,	// DMA
+	!SPI_MASTER_SOFTWARE && SPI_MASTER_INT_ENABLE,
 	6, //APP_IRQ_PRIORITY_LOW,      // Interrupt priority
 	0xff,
 	SpiEvent
 };
 
+#if SPI_MASTER_SOFTWARE
+SPISoft g_SpiMaster;
+#else
 SPI g_SpiMaster;
+#endif
 
 static int SpiWait(int Count)
 {
@@ -166,7 +184,8 @@ void HardwareInit()
 int main()
 {
 	HardwareInit();
-	printf("SPI master DMA=%d INT=%d\r\n",
+	printf("SPI master %s DMA=%d INT=%d\r\n",
+		SPI_MASTER_SOFTWARE ? "SPISoft" : "hardware",
 		s_SpiMasterCfg.bDmaEn, s_SpiMasterCfg.bIntEn);
 #ifdef SPI_LOOPBACK_WIRING
 	printf("%s\r\n", SPI_LOOPBACK_WIRING);
@@ -192,8 +211,9 @@ int main()
 				break;
 			}
 			if (p == 0)
-				printf("SPI mode=%d bits=8 rate=%lu Hz\r\n",
-					mode, (unsigned long)g_SpiMaster.Rate());
+				printf("SPI mode=%d bits=8 rate=%lu Hz%s\r\n",
+					mode, (unsigned long)g_SpiMaster.Rate(),
+					SPI_MASTER_SOFTWARE ? " (nominal software rate)" : "");
 
 			// Fill with the inverse so a missing receive write cannot pass.
 			memset(rx, (uint8_t)~patterns[p], sizeof(rx));

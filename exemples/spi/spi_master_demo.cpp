@@ -2,10 +2,9 @@
 @example	spi_master_demo.cpp
 
 
-@brief	This example demonstrate the use of SPI in both master and slave mode
+@brief	SPI master transfers using the hardware or SPISoft driver.
 
-Two SPI devices are created, one in master mode and the other in slave mode.
-User is require to connected the wire to the appropriate pins.
+Select SPI_MASTER_SOFTWARE in board.h to use GPIO clocking.
 
 
 @author	Hoang Nguyen Hoan
@@ -42,6 +41,16 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "coredev/spi.h"
 #include "stddev.h"
 #include "board.h"
+
+#ifndef SPI_MASTER_SOFTWARE
+#define SPI_MASTER_SOFTWARE false
+#endif
+#if SPI_MASTER_SOFTWARE
+#include "coredev/spi_soft.h"
+#endif
+#ifndef SPI_MASTER_RATE
+#define SPI_MASTER_RATE 1000000
+#endif
 
 #ifdef MCUOSC
 McuOsc_t g_McuOsc = MCUOSC;
@@ -83,13 +92,17 @@ UART g_Uart;
 
 //********** SPI Master **********
 static const IOPinCfg_t s_SpiMasterPins[] = {
-	{SPI_MASTER_SCK_PORT, SPI_MASTER_SCK_PIN, SPI_MASTER_SCK_PINOP,
+	{SPI_MASTER_SCK_PORT, SPI_MASTER_SCK_PIN,
+	 SPI_MASTER_SOFTWARE ? IOPINOP_GPIO : SPI_MASTER_SCK_PINOP,
 	 IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},		// SCK
-	{SPI_MASTER_MISO_PORT, SPI_MASTER_MISO_PIN, SPI_MASTER_MISO_PINOP,
+	{SPI_MASTER_MISO_PORT, SPI_MASTER_MISO_PIN,
+	 SPI_MASTER_SOFTWARE ? IOPINOP_GPIO : SPI_MASTER_MISO_PINOP,
 	 IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL},	// MISO
-	{SPI_MASTER_MOSI_PORT, SPI_MASTER_MOSI_PIN, SPI_MASTER_MOSI_PINOP,
+	{SPI_MASTER_MOSI_PORT, SPI_MASTER_MOSI_PIN,
+	 SPI_MASTER_SOFTWARE ? IOPINOP_GPIO : SPI_MASTER_MOSI_PINOP,
 	 IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},		// MOSI
-	{SPI_MASTER_CS_PORT, SPI_MASTER_CS_PIN, SPI_MASTER_CS_PINOP,
+	{SPI_MASTER_CS_PORT, SPI_MASTER_CS_PIN,
+	 SPI_MASTER_SOFTWARE ? IOPINOP_GPIO : SPI_MASTER_CS_PINOP,
 	 IOPINDIR_OUTPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL},	// CS
 };
 
@@ -99,7 +112,7 @@ static const SPICfg_t s_SpiMasterCfg = {
 	SPIMODE_MASTER,
 	s_SpiMasterPins,
 	sizeof(s_SpiMasterPins) / sizeof(IOPinCfg_t),
-	1000000,   // Speed in Hz
+	SPI_MASTER_RATE,   // Speed in Hz
 	8,      // Data Size
 	5,      // Max retries
 	SPIDATABIT_MSB,
@@ -113,7 +126,11 @@ static const SPICfg_t s_SpiMasterCfg = {
 	NULL
 };
 
+#if SPI_MASTER_SOFTWARE
+SPISoft g_SpiMaster;
+#else
 SPI g_SpiMaster;
+#endif
 
 
 void HardwareInit()
@@ -143,7 +160,15 @@ int main()
 {
 	HardwareInit();
 
-	g_SpiMaster.Init(s_SpiMasterCfg);
+	if (!g_SpiMaster.Init(s_SpiMasterCfg))
+	{
+		printf("SPI master init FAIL\r\n");
+		while (1) __WFE();
+	}
+	printf("SPI master %s DMA=0 INT=0 rate=%lu Hz%s\r\n",
+		SPI_MASTER_SOFTWARE ? "SPISoft" : "hardware",
+		(unsigned long)g_SpiMaster.Rate(),
+		SPI_MASTER_SOFTWARE ? " (nominal software rate)" : "");
 
 	uint8_t data[100];
 	uint8_t buff[100];
