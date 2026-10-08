@@ -192,12 +192,16 @@ void SystemInit(void)
   SystemInit_ExtMemCtl(); 
 #endif /* DATA_IN_ExtSRAM || DATA_IN_ExtSDRAM */
 
-  /* Configure the Vector Table location add offset address ------------------*/
-#ifdef VECT_TAB_SRAM
-  SCB->VTOR = SRAM_BASE | VECT_TAB_OFFSET; /* Vector Table Relocation in Internal SRAM */
+  /* Use this image's linked vectors, including an application in a DFU slot. */
+#ifdef __ICCARM__
+  extern void (* const __vector_table[])(void);
+  SCB->VTOR = (uint32_t)(uintptr_t)__vector_table;
 #else
-  SCB->VTOR = FLASH_BASE | VECT_TAB_OFFSET; /* Vector Table Relocation in Internal FLASH */
+  extern void (* const __Vectors[])(void);
+  SCB->VTOR = (uint32_t)(uintptr_t)__Vectors;
 #endif
+  __DSB();
+  __ISB();
 }
 
 /**
@@ -759,3 +763,4 @@ void SystemInit_ExtMemCtl(void)
   * @}
   */
 /************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/
+

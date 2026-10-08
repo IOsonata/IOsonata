@@ -38,6 +38,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "stm32f0xx.h"
 
 #include "coredev/iopincfg.h"
+#include "coredev/interrupt.h"
 
 #define IOPIN_MAX_INT			(16)
 
@@ -193,7 +194,7 @@ void IOPinDisable(int PortNo, int PinNo)
  */
 void IOPinDisableInterrupt(int IntNo)
 {
-	if (IntNo < 0 || IntNo >= IOPIN_MAX_INT)
+	if (IntNo < 0 || IntNo >= IOPIN_MAX_INT || s_GpIOSenseEvt[IntNo].SensEvtCB == NULL)
 	{
 		return;
 	}
@@ -264,12 +265,16 @@ void IOPinDisableInterrupt(int IntNo)
  */
 bool IOPinEnableInterrupt(int IntNo, int IntPrio, uint32_t PortNo, uint32_t PinNo, IOPINSENSE Sense, IOPinEvtHandler_t pEvtCB, void *pCtx)
 {
-	if (IntNo < 0 || IntNo >= IOPIN_MAX_INT || IntNo != PinNo)
+	if (IntNo < 0 || IntNo >= IOPIN_MAX_INT || (uint32_t)IntNo != PinNo ||
+		PortNo > 5 || PortNo == 4 || pEvtCB == NULL ||
+		(Sense != IOPINSENSE_LOW_TRANSITION && Sense != IOPINSENSE_HIGH_TRANSITION && Sense != IOPINSENSE_TOGGLE))
 	{
 		return false;
 	}
 
+	uint32_t state = DisableInterrupt();
 	RCC->APB2ENR |= RCC_APB2ENR_SYSCFGCOMPEN;
+	EXTI->IMR &= ~(1U << PinNo);
 
 	int idx = IntNo >> 2;
 	uint32_t pos = (IntNo & 0x3) << 2;
@@ -296,12 +301,13 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, uint32_t PortNo, uint32_t PinN
 			break;
 	}
 
-	EXTI->IMR |= mask;
 
     s_GpIOSenseEvt[IntNo].Sense = Sense;
 	s_GpIOSenseEvt[IntNo].PortPinNo = (PortNo << 8) | PinNo; // For use when disable interrupt
 	s_GpIOSenseEvt[IntNo].SensEvtCB = pEvtCB;
 	s_GpIOSenseEvt[IntNo].pCtx = pCtx;
+	EXTI->PR = mask;
+	EXTI->IMR |= mask;
 
 
 	if (IntNo < 2)
@@ -323,6 +329,7 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, uint32_t PortNo, uint32_t PinN
 		NVIC_EnableIRQ(EXTI4_15_IRQn);
     }
 
+	EnableInterrupt(state);
     return true;
 }
 
@@ -360,16 +367,20 @@ int IOPinFindAvailInterrupt()
  */
 int IOPinAllocateInterrupt(int IntPrio, int PortNo, int PinNo, IOPINSENSE Sense, IOPinEvtHandler_t pEvtCB, void *pCtx)
 {
-	int intno = IOPinFindAvailInterrupt();
-
-	if (intno >= 0)
+	if (PinNo < 0 || PinNo >= IOPIN_MAX_INT)
 	{
-		bool res = IOPinEnableInterrupt(intno, IntPrio, PortNo, PinNo, Sense, pEvtCB, pCtx);
-		if (res == true)
-			return intno;
+		return -1;
 	}
-
-	return -1;
+	// EXTI line N can only be connected to pin N of one GPIO port.
+	uint32_t state = DisableInterrupt();
+	int intno = -1;
+	if (s_GpIOSenseEvt[PinNo].SensEvtCB == NULL &&
+		IOPinEnableInterrupt(PinNo, IntPrio, PortNo, PinNo, Sense, pEvtCB, pCtx))
+	{
+		intno = PinNo;
+	}
+	EnableInterrupt(state);
+	return intno;
 }
 
 /**
@@ -434,7 +445,7 @@ void IOPinSetSpeed(int PortNo, int PinNo, IOPINSPEED Speed)
 	reg->OSPEEDR = tmp;
 }
 
-void __WEAK EXTI0_1_IRQHandler(void)
+void EXTI0_1_IRQHandler(void)
 {
 	if (EXTI->PR & 1)
 	{
@@ -456,7 +467,7 @@ void __WEAK EXTI0_1_IRQHandler(void)
 	NVIC_ClearPendingIRQ(EXTI0_1_IRQn);
 }
 
-void __WEAK EXTI2_3_IRQHandler(void)
+void EXTI2_3_IRQHandler(void)
 {
 	if (EXTI->PR & 4)
 	{
@@ -478,7 +489,7 @@ void __WEAK EXTI2_3_IRQHandler(void)
 	NVIC_ClearPendingIRQ(EXTI2_3_IRQn);
 }
 
-void __WEAK EXTI4_15_IRQHandler(void)
+void EXTI4_15_IRQHandler(void)
 {
 	uint32_t mask = 0x10;
 
@@ -496,5 +507,6 @@ void __WEAK EXTI4_15_IRQHandler(void)
 
 	NVIC_ClearPendingIRQ(EXTI4_15_IRQn);
 }
+
 
 
