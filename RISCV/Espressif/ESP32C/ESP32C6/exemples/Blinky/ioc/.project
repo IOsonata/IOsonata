@@ -33,7 +33,7 @@
 		<link>
 			<name>src/blinky.c</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/exemples/misc/blinky.c</locationURI>
+			<locationURI>PARENT-7-PROJECT_LOC/exemples/misc/blinky.c</locationURI>
 		</link>
 		<link>
 			<name>src/board.h</name>

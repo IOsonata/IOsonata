@@ -31,14 +31,14 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>src/UartSdkLoopbackTx.c</name>
+			<name>src/UartLoopbackSdk5.c</name>
 			<type>1</type>
-			<locationURI>PARENT-5-PROJECT_LOC/exemples/UartSdkLoopbackTx.c</locationURI>
+			<locationURI>PARENT-5-PROJECT_LOC/exemples/UartLoopbackSdk5.c</locationURI>
 		</link>
 		<link>
 			<name>src/board.h</name>
 			<type>1</type>
-			<locationURI>copy_PARENT1/src/board.h</locationURI>
+			<locationURI>PARENT-2-PROJECT_LOC/UartLoopbackSdk5/src/board.h</locationURI>
 		</link>
 		<link>
 			<name>src/nrfx</name>
@@ -48,7 +48,7 @@
 		<link>
 			<name>src/sdk_config.h</name>
 			<type>1</type>
-			<location>/Users/hoan/swdev/IOsonata/ARM/Nordic/nRF52/nRF52832/exemples/UartSdkPrbsTest/src/sdk_config.h</location>
+			<locationURI>PARENT-2-PROJECT_LOC/UartLoopbackSdk5/src/sdk_config.h</locationURI>
 		</link>
 		<link>
 			<name>src/nrfx/drivers</name>
