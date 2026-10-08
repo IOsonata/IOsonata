@@ -168,7 +168,9 @@ int main() {
 		Service(dev);assert(events[dev][0]==5);
 		t.DisableTrigger(&t,0);Advance(dev,period);assert(events[dev][0]==5);
 		assert(t.FindAvailTrigger(&t)==0);
-		assert(!t.EnableTrigger(&t,0,UINT64_MAX,TIMER_TRIG_TYPE_SINGLE,nullptr,nullptr));
+		assert(t.EnableTrigger(&t,0,UINT64_MAX,TIMER_TRIG_TYPE_SINGLE,nullptr,nullptr)==
+			(UINT32_MAX*1000000000ULL+t.Freq/2)/t.Freq);
+		t.DisableTrigger(&t,0);
 		assert(!t.EnableTrigger(&t,-1,100000000,TIMER_TRIG_TYPE_SINGLE,nullptr,nullptr));
 	}
 	auto &t=timers[1]; t.Reset(&t);
@@ -219,6 +221,18 @@ int main() {
 	assert(a.EnableTrigger(&a,0,100000000,TIMER_TRIG_TYPE_CONTINUOUS,nullptr,nullptr));
 	assert(a.SetFrequency(&a,1)==1);
 	assert(g_Sam4lTimerData[0].Trigger[0].Info.nsPeriod==4000000000ULL);
+	// Large requests select the maximum period without overflowing.
+	for(int dev=0;dev<7;++dev) {
+		auto &timer=timers[dev];
+		assert(timer.SetFrequency(&timer,1)==(dev?375000u:1u));
+		uint64_t maximum=(UINT32_MAX*1000000000ULL+timer.Freq/2)/timer.Freq;
+		assert(timer.EnableTrigger(&timer,0,UINT64_MAX,TIMER_TRIG_TYPE_CONTINUOUS,nullptr,nullptr)==maximum);
+		// Raising frequency must not fail because that period no longer fits.
+		assert(timer.SetFrequency(&timer,UINT32_MAX)==(dev?24000000u:16384u));
+		assert(g_Sam4lTimerData[dev].Trigger[0].Ticks==UINT32_MAX);
+		assert(g_Sam4lTimerData[dev].Trigger[0].Info.nsPeriod==
+			(UINT32_MAX*1000000000ULL+timer.Freq/2)/timer.Freq);
+	}
 	// A stuck synchronization flag must time out and make Enable return false.
 	ast.AST_SR.value|=AST_SR_BUSY;a.Reset(&a);assert(!a.Enable(&a));
 	puts("SAM4L timer register-model tests passed");

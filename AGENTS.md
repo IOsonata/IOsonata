@@ -236,6 +236,16 @@ matrix setup to separate target modules, while another MCU keeps those operation
 in the UART source file. Read all cooperating target files before judging the
 implementation incomplete.
 
+## Frequency and rate selection
+
+Frequency, data-rate, baud-rate and similar setters select and return the
+closest supported value. This rule applies throughout IOsonata, not only timers.
+Do not reject a request merely because it is outside the hardware range or
+cannot be represented exactly. The application decides whether the returned
+value is suitable. Preserve documented special values such as zero for
+automatic selection. Hardware failures and invalid device handles are separate
+from a requested value being outside the supported range.
+
 ## Configuration and memory rules
 
 Configuration is C/C++ data placed beside the application code. IOsonata does

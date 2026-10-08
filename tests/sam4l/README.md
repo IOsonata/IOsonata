@@ -93,9 +93,11 @@ The register model checks both clock enable and start before advancing a TC.
   leaves sibling channels and block synchronization registers untouched.
 - Single and continuous triggers use 4 through UINT32_MAX ticks. A positive
   period shorter than four ticks is rounded up to four ticks; the return value
-  reports the actual period. Zero and periods exceeding UINT32_MAX ticks are
-  rejected. At 1 Hz, AST therefore accepts the demo's 100 ms request as 4 seconds.
-  Frequency changes apply the same minimum to active triggers. Longer
+  reports the actual period. Longer requests are rounded down to UINT32_MAX
+  ticks. The application decides whether the returned value is suitable.
+  Zero periods remain invalid. At 1 Hz, AST accepts the demo's 100 ms request
+  as 4 seconds.
+  Frequency changes apply both limits to active triggers. Longer
   periods than the hardware counter cycle are supported. Continuous triggers
   keep their original schedule. If several periods pass before the interrupt is
   handled, one callback reports them. When a trigger callback is supplied, it

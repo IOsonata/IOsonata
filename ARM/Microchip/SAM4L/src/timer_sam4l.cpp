@@ -108,11 +108,15 @@ static bool Plan(Sam4l_TimerData_t &d, uint32_t request, uint32_t &select, uint3
 }
 static bool Period(uint32_t freq, uint64_t ns, uint32_t &ticks, uint64_t &actual)
 {
-	if (!freq || !ns || ns / 1000000000ULL > UINT32_MAX / freq) return false;
-	uint64_t v = ns / 1000000000ULL * freq +
-		(ns % 1000000000ULL * freq + 500000000ULL) / 1000000000ULL;
-	if (v > UINT32_MAX) return false;
-	// Return the shortest supported period for a positive request below it.
+	if (!freq || !ns) return false;
+	// Bound the whole-second product before multiplication.
+	uint64_t v = UINT32_MAX;
+	if (ns / 1000000000ULL <= UINT32_MAX / freq) {
+		v = ns / 1000000000ULL * freq +
+			(ns % 1000000000ULL * freq + 500000000ULL) / 1000000000ULL;
+	}
+	if (v > UINT32_MAX) v = UINT32_MAX;
+	// Return the closest supported period; the application decides if it fits.
 	if (v < 4) v = 4;
 	ticks = (uint32_t)v;
 	actual = (v * 1000000000ULL + freq / 2) / freq;
