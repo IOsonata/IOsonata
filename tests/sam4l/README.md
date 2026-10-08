@@ -149,3 +149,13 @@ The same script accepts `--mcu SAM4LS2C`, `--mcu SAM4LS4C` or
 SPI and USB controller sources in both configurations. See the
 [SAM4LS port notes](../../ARM/Microchip/SAM4L/SAM4LSxC/README.md) for setup.
 SAM4LS is not hardware validated.
+
+The peripheral projects have a separate build check:
+
+```sh
+python3 tests/sam4l/peripheral_build_test.py --taktos ../TaktOS
+```
+
+This builds the 18 SAM4LS8C UART, I2C, SPI and USB examples in Debug and
+Release. TaktOS is optional; without its path, the TaktOS example is reported
+as skipped. These builds do not establish hardware validation.

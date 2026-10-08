@@ -71,7 +71,7 @@ part or core.
 | MCU project | Implementation and project status | Timer status | Validation and limits |
 |---|---|---|---|
 | [SAM4LCxC](../ARM/Microchip/SAM4L/SAM4LCxC/lib/ioc/) | Supported; hardware validated | AST + six TC channels | SAM4LC8C on SAM4L8 Xplained Pro: startup, GPIO, UART, timers, I2C, SPI and USB. See the recorded tests below. |
-| [SAM4LSxC](../ARM/Microchip/SAM4L/SAM4LSxC/README.md) | Supported; shares SAM4L drivers | AST + six TC channels | Shared SAM4L drivers, IOcomposer library, Blinky and TimerDemo projects. Not hardware validated; users can build and try the port. |
+| [SAM4LSxC](../ARM/Microchip/SAM4L/SAM4LSxC/README.md) | Supported; shares SAM4L drivers | AST + six TC channels | Shared SAM4L drivers and IOcomposer projects for GPIO, timers, UART, I2C, SPI and USB, including CDC with TaktOS. Not hardware validated; users can build and try the port. |
 | [SAM4E16E](../ARM/Microchip/SAM4E/SAM4E16E/lib/ioc/) | Incomplete minimum port | No target Timer implementation in the repository/project | Startup, GPIO and UART sources exist. The generic timer wrapper alone does not complete the port. |
 
 SAM4L is hardware validated, confirmed by the maintainer on 2026-10-08.
