@@ -65,11 +65,28 @@ GPIO configuration. `PowerOff` also releases owned pins; `Enable` restores them.
 `Reset` retires a selected session through the framework stop helper. Lifecycle
 operations must be serialized with synchronous transfers by the caller.
 
-The shared spi_master_slave.cpp selects SPISoft when SPI_MASTER_SOFTWARE is
-true, and the hardware SPI driver otherwise. SPISoft uses Transfer for full
-duplex frames; hardware SPI uses the standard Tx/Rx APIs for separate frames.
-SPI_MASTER_RATE, SPI_MASTER_DMA_ENABLE, SPI_MASTER_INT_ENABLE,
-SPI_SLAVE_DMA_ENABLE and SPI_SLAVE_INT_ENABLE are configurable in board.h.
+All generic SPI examples with a master support the same selection in board.h:
+
+```cpp
+#define SPI_MASTER_SOFTWARE true
+#define SPI_MASTER_RATE 100000
+```
+
+This applies to spi_master_demo.cpp, spi_polling_master_demo.cpp,
+spi_loopback.cpp and spi_master_slave.cpp. The default is hardware SPI.
+The examples select GPIO pin functions and disable master DMA/interrupts
+automatically for SPISoft, retaining the board's master pin numbers. Choose
+free GPIO-capable pins in board.h and compile spi_soft.cpp into the target
+library as described above. Startup output identifies the selected driver
+and DMA/interrupt settings. Software clock rates are nominal.
+
+The two polling demos remain synchronous with either driver. spi_loopback.cpp
+and spi_master_slave.cpp honor SPI_MASTER_DMA_ENABLE and SPI_MASTER_INT_ENABLE
+for hardware masters. The master/slave example also accepts
+SPI_SLAVE_DMA_ENABLE and SPI_SLAVE_INT_ENABLE; its software master uses Transfer
+for full duplex frames, while its hardware master uses standard Tx/Rx APIs for
+separate frames. spi_slave_demo.cpp remains a hardware-slave example because
+SPISoft implements master mode only.
 
 The SAM4L target project is now SPIMasterSlave (formerly SPISlaveLoopback).
 Reimport the renamed project after rebuilding the SAM4L library. Wiring is
