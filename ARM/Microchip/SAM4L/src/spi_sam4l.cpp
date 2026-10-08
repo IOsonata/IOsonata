@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
 @file	spi_sam4l.cpp
 
-@brief	SAM4L SPI master implementation.
+@brief	SAM4L SPI master and interrupt slave implementation.
 
 The SAM4L has one dedicated SPI controller. This port implements the
 IOsonata polling, interrupt and PDCA master paths using GPIO chip selects.
@@ -10,6 +10,10 @@ to one IOsonata SPI object uses the same configured transfer format and rate.
 With INT enabled, RX and TX up to 256 bytes return -1 and complete by callback.
 Larger TX and Read command phases finish synchronously to preserve TX ownership.
 PDCA moves bounded halfword chunks; INT selects asynchronous completion.
+Slave mode currently supports 8-bit interrupt transfers, framed by NPCS0.
+STATECHG supplies buffers before clocks start; COMPLETED reports RX at NSS rising.
+Slave buffers remain owned by the application until COMPLETED. Update buffers
+in STATECHG, or Reset while NSS is high to apply foreground buffer changes.
 
 @author	Hoang Nguyen Hoan
 @date	Oct. 7, 2026
@@ -41,6 +45,7 @@ SOFTWARE.
 ----------------------------------------------------------------------------*/
 #include <stdint.h>
 #include <string.h>
+#include <limits.h>
 
 #include "sam4lxxx.h"
 #include "component/component_pm.h"
@@ -74,6 +79,9 @@ typedef struct __Sam4l_Spi_Dev
 	bool Active;
 	bool Async;
 	bool DmaInitialized;
+	bool SlaveReady;
+	bool SlaveError;
+	int SlaveTxLength;
 	uint8_t TxBuffer[SAM4L_SPI_TX_SIZE];
 	uint16_t DmaTx[SAM4L_SPI_DMA_WORDS];
 	uint16_t DmaRx[SAM4L_SPI_DMA_WORDS];
@@ -85,6 +93,7 @@ static Sam4lSpiDev_t s_SpiDev = {
 };
 
 static void Sam4lSpiCancel(Sam4lSpiDev_t *dev);
+static void Sam4lSpiSlaveArm(Sam4lSpiDev_t *dev);
 
 static PdcaChannel *Sam4lSpiRxChannel(void)
 {
@@ -151,6 +160,8 @@ static uint32_t Sam4lSpiSetRate(DevIntrf_t * const pDev, uint32_t Rate)
 	Sam4lSpiDev_t *dev = static_cast<Sam4lSpiDev_t *>(pDev->pDevData);
 	if (dev == nullptr || dev->pSpiDev == nullptr || Rate == 0U)
 		return 0U;
+	if (dev->pSpiDev->Cfg.Mode == SPIMODE_SLAVE)
+		return dev->pSpiDev->Cfg.Rate; // The external master owns SCK.
 
 	const uint32_t pba = SystemPeriphClockGet(0);
 	if (pba == 0U)
@@ -183,13 +194,17 @@ static void Sam4lSpiConfigure(Sam4lSpiDev_t *dev)
 
 	reg->SPI_IDR = 0xFFFFFFFFU;
 	Sam4lSpiDmaStop(dev);
+	// Slave-disable erratum: read pending receive data before software reset.
+	if (cfg.Mode == SPIMODE_SLAVE)
+		for (unsigned i = 0; i < 4U && (reg->SPI_SR & SPI_SR_RDRF) != 0U; ++i)
+			(void)reg->SPI_RDR;
 	reg->SPI_CR = SPI_CR_SPIDIS;
 	reg->SPI_CR = SPI_CR_SWRST;
 
 	// Fixed peripheral select keeps CSR0 selected for halfword PDCA writes.
 	// Physical slave selection is handled by the IOsonata GPIO CS array.
-	reg->SPI_MR = SPI_MR_MSTR | SPI_MR_MODFDIS |
-		SPI_MR_PCS(SAM4L_SPI_PCS0);
+	reg->SPI_MR = cfg.Mode == SPIMODE_MASTER ?
+		SPI_MR_MSTR | SPI_MR_MODFDIS | SPI_MR_PCS(SAM4L_SPI_PCS0) : 0U;
 
 	uint32_t csr = SPI_CSR_BITS(cfg.DataSize - 8U);
 	if (cfg.ClkPol == SPICLKPOL_LOW)
@@ -202,7 +217,8 @@ static void Sam4lSpiConfigure(Sam4lSpiDev_t *dev)
 	for (unsigned i = 0U; i < 4U; ++i)
 		reg->SPI_CSR[i] = csr;
 
-	(void)Sam4lSpiSetRate(&dev->pSpiDev->DevIntrf, cfg.Rate);
+	if (cfg.Mode == SPIMODE_MASTER)
+		(void)Sam4lSpiSetRate(&dev->pSpiDev->DevIntrf, cfg.Rate);
 
 	// Drop any stale receive characters before enabling a new session.
 	if ((reg->SPI_SR & SPI_SR_RDRF) != 0U)
@@ -215,8 +231,15 @@ static void Sam4lSpiDisable(DevIntrf_t * const pDev)
 {
 	Sam4lSpiDev_t *dev = static_cast<Sam4lSpiDev_t *>(pDev->pDevData);
 	Sam4lSpiCancel(dev);
-	(void)Sam4lSpiWait(dev->pReg, SPI_SR_TXEMPTY);
+	if (dev->pSpiDev->Cfg.Mode == SPIMODE_MASTER)
+		(void)Sam4lSpiWait(dev->pReg, SPI_SR_TXEMPTY);
 	dev->pReg->SPI_CR = SPI_CR_SPIDIS;
+	if (dev->pSpiDev->Cfg.Mode == SPIMODE_SLAVE)
+	{
+		for (unsigned i = 0; i < 4U && (dev->pReg->SPI_SR & SPI_SR_RDRF) != 0U; ++i)
+			(void)dev->pReg->SPI_RDR;
+		dev->pReg->SPI_CR = SPI_CR_SWRST;
+	}
 	Sam4lSpiClockDisable();
 }
 
@@ -225,6 +248,11 @@ static void Sam4lSpiEnable(DevIntrf_t * const pDev)
 	Sam4lSpiDev_t *dev = static_cast<Sam4lSpiDev_t *>(pDev->pDevData);
 	Sam4lSpiClockEnable();
 	dev->pReg->SPI_CR = SPI_CR_SPIEN;
+	if (dev->pSpiDev->Cfg.Mode == SPIMODE_SLAVE)
+	{
+		Sam4lSpiConfigure(dev);
+		Sam4lSpiSlaveArm(dev);
+	}
 }
 
 static void Sam4lSpiReset(DevIntrf_t * const pDev)
@@ -233,6 +261,8 @@ static void Sam4lSpiReset(DevIntrf_t * const pDev)
 	Sam4lSpiClockEnable();
 	Sam4lSpiCancel(dev);
 	Sam4lSpiConfigure(dev);
+	if (dev->pSpiDev->Cfg.Mode == SPIMODE_SLAVE)
+		Sam4lSpiSlaveArm(dev);
 }
 
 static void Sam4lSpiPowerOff(DevIntrf_t * const pDev)
@@ -245,6 +275,8 @@ static bool Sam4lSpiSelect(DevIntrf_t * const pDev, uint32_t DevCs)
 	Sam4lSpiDev_t *dev = static_cast<Sam4lSpiDev_t *>(pDev->pDevData);
 	SPIDev_t *spi = dev->pSpiDev;
 
+	if (spi->Cfg.Mode == SPIMODE_SLAVE)
+		return false;
 	if (spi->Cfg.ChipSel == SPICSEL_MAN)
 		return true;
 
@@ -263,6 +295,8 @@ static void Sam4lSpiDeselect(DevIntrf_t * const pDev)
 	Sam4lSpiDev_t *dev = static_cast<Sam4lSpiDev_t *>(pDev->pDevData);
 	SPIDev_t *spi = dev->pSpiDev;
 
+	if (spi->Cfg.Mode == SPIMODE_SLAVE)
+		return;
 	(void)Sam4lSpiWait(dev->pReg, SPI_SR_TXEMPTY);
 	if (spi->Cfg.ChipSel != SPICSEL_MAN && spi->CurDevCs >= 0)
 	{
@@ -315,6 +349,8 @@ static int Sam4lSpiCommand(DevIntrf_t * const pDev, const uint8_t *pData, int Da
 		return 0;
 
 	Sam4lSpiDev_t *dev = static_cast<Sam4lSpiDev_t *>(pDev->pDevData);
+	if (dev->pSpiDev->Cfg.Mode != SPIMODE_MASTER)
+		return 0;
 	const bool wide = dev->pSpiDev->Cfg.DataSize > 8U;
 	int count = 0;
 
@@ -442,6 +478,7 @@ static void Sam4lSpiCancel(Sam4lSpiDev_t *dev)
 	__disable_irq();
 	dev->pReg->SPI_IDR = 0xFFFFFFFFU;
 	Sam4lSpiDmaStop(dev);
+	dev->SlaveReady = false;
 	if (dev->Active)
 	{
 		DevIntrf_t *intrf = &dev->pSpiDev->DevIntrf;
@@ -567,6 +604,8 @@ static int Sam4lSpiTxData(DevIntrf_t * const pDev, const uint8_t *Data, int Leng
 	if (Data == nullptr || Length <= 0)
 		return 0;
 	Sam4lSpiDev_t *dev = static_cast<Sam4lSpiDev_t *>(pDev->pDevData);
+	if (dev->pSpiDev->Cfg.Mode != SPIMODE_MASTER)
+		return 0;
 	// Long TX stays synchronous so no caller buffer survives this call.
 	const bool async = pDev->bIntEn && Length <= SAM4L_SPI_TX_SIZE;
 	if (!pDev->bDma && !async)
@@ -578,10 +617,87 @@ static int Sam4lSpiRxData(DevIntrf_t * const pDev, uint8_t *Buffer, int Length)
 {
 	if (Buffer == nullptr || Length <= 0)
 		return 0;
+	if (static_cast<Sam4lSpiDev_t *>(pDev->pDevData)->pSpiDev->Cfg.Mode != SPIMODE_MASTER)
+		return 0;
 	if (!pDev->bDma && !pDev->bIntEn)
 		return Sam4lSpiPollingRx(pDev, Buffer, Length);
 	return Sam4lSpiTransfer(static_cast<Sam4lSpiDev_t *>(pDev->pDevData),
 		nullptr, Buffer, Length, pDev->bIntEn);
+}
+
+static void Sam4lSpiSlaveArm(Sam4lSpiDev_t *dev)
+{
+	SPIDev_t *spi = dev->pSpiDev;
+	DevIntrf_t *intrf = &spi->DevIntrf;
+	dev->SlaveReady = false;
+	if (intrf->EvtCB != nullptr)
+		intrf->EvtCB(intrf, DEVINTRF_EVT_STATECHG, nullptr, 0);
+	if (intrf->EnCnt == 0 || spi->Cfg.Mode != SPIMODE_SLAVE)
+		return;
+	dev->pRx = spi->pRxBuff[0];
+	dev->Length = dev->pRx != nullptr && spi->RxBuffLen[0] > 0 ?
+		spi->RxBuffLen[0] : 0;
+	dev->pTx = spi->pTxData[0];
+	dev->SlaveTxLength = dev->pTx != nullptr && spi->TxDataLen[0] > 0 ?
+		spi->TxDataLen[0] : 0;
+	dev->Count = 0;
+	dev->SlaveError = false;
+	dev->SlaveReady = true;
+	// Preload exactly one character. RDRF loads the following character;
+	// software must not overwrite the first response before NSS falls.
+	dev->pReg->SPI_TDR = dev->SlaveTxLength > 0 ?
+		dev->pTx[0] : spi->Cfg.DummyByte;
+	dev->pReg->SPI_IER = SPI_IER_RDRF | SPI_IER_NSSR |
+		SPI_IER_OVRES | SPI_IER_UNDES;
+}
+
+static void Sam4lSpiSlaveIrq(Sam4lSpiDev_t *dev, uint32_t Status)
+{
+	if (!dev->SlaveReady)
+		return;
+	uint32_t events = Status;
+	bool received = false;
+	// The receive FIFO holds four characters. NSSR can arrive alongside
+	// several unread characters; drain them before retiring the frame.
+	for (unsigned i = 0; i < 4U && (Status & SPI_SR_RDRF) != 0U; ++i)
+	{
+		const uint8_t data = static_cast<uint8_t>(dev->pReg->SPI_RDR);
+		received = true;
+		if (dev->pRx != nullptr && dev->Count < dev->Length)
+			dev->pRx[dev->Count] = data;
+		else if (dev->pRx != nullptr)
+			dev->SlaveError = true;
+		if (dev->Count < INT_MAX)
+			++dev->Count;
+		else
+			dev->SlaveError = true;
+
+		Status = dev->pReg->SPI_SR;
+		events |= Status; // SR reads clear NSSR and error flags.
+	}
+	if ((events & (SPI_SR_OVRES | SPI_SR_UNDES)) != 0U)
+		dev->SlaveError = true;
+	if ((events & SPI_SR_NSSR) == 0U)
+	{
+		if (received)
+			dev->pReg->SPI_TDR = dev->Count < dev->SlaveTxLength ?
+				dev->pTx[dev->Count] : dev->pSpiDev->Cfg.DummyByte;
+		return;
+	}
+
+	DevIntrf_t *intrf = &dev->pSpiDev->DevIntrf;
+	uint8_t *buffer = dev->pRx;
+	const int count = dev->SlaveError ? -1 : dev->Count;
+	dev->SlaveReady = false;
+	dev->pReg->SPI_IDR = 0xFFFFFFFFU;
+	// Discard the unused preloaded character at a frame boundary. The next
+	// frame must start at TX byte zero, including after a short transaction.
+	Sam4lSpiConfigure(dev);
+	if (intrf->EvtCB != nullptr)
+		intrf->EvtCB(intrf, DEVINTRF_EVT_COMPLETED, buffer, count);
+	if (intrf->EnCnt > 0 && dev->pSpiDev->Cfg.Mode == SPIMODE_SLAVE &&
+		!dev->SlaveReady)
+		Sam4lSpiSlaveArm(dev);
 }
 
 extern "C" void SPI_Handler(void)
@@ -589,6 +705,11 @@ extern "C" void SPI_Handler(void)
 	Sam4lSpiDev_t *dev = &s_SpiDev;
 	const uint32_t status = dev->pReg->SPI_SR;
 	const uint32_t pending = status & dev->pReg->SPI_IMR;
+	if (dev->pSpiDev != nullptr && dev->pSpiDev->Cfg.Mode == SPIMODE_SLAVE)
+	{
+		Sam4lSpiSlaveIrq(dev, status);
+		return;
+	}
 	if (!dev->Active || !dev->Async)
 		return;
 	if ((pending & SAM4L_SPI_ERRORS) != 0U)
@@ -656,7 +777,7 @@ bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfgData)
 {
 	if (pDev == nullptr || pCfgData == nullptr ||
 		pCfgData->DevNo != 0 ||
-		pCfgData->Mode != SPIMODE_MASTER ||
+		(pCfgData->Mode != SPIMODE_MASTER && pCfgData->Mode != SPIMODE_SLAVE) ||
 		pCfgData->Phy != SPIPHY_NORMAL ||
 		pCfgData->BitOrder != SPIDATABIT_MSB ||
 		pCfgData->DataSize < 8U || pCfgData->DataSize > 16U ||
@@ -666,6 +787,11 @@ bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfgData)
 	{
 		return false;
 	}
+	// Slave DMA and wide words need their own external-clock validation.
+	if (pCfgData->Mode == SPIMODE_SLAVE &&
+		(pCfgData->bDmaEn || pCfgData->DataSize != 8U ||
+		 pCfgData->NbIOPins <= SPI_CS_IOPIN_IDX))
+		return false;
 	if (pCfgData->ChipSel != SPICSEL_MAN &&
 		pCfgData->NbIOPins <= SPI_CS_IOPIN_IDX)
 	{
@@ -680,6 +806,8 @@ bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfgData)
 	NVIC_ClearPendingIRQ(PDCA_12_IRQn);
 	NVIC_ClearPendingIRQ(PDCA_13_IRQn);
 	pDev->Cfg = *pCfgData;
+	if (pDev->Cfg.Mode == SPIMODE_SLAVE)
+		pDev->Cfg.bIntEn = true;
 	pDev->CurDevCs = -1;
 	pDev->FirstRdData = -1;
 	s_SpiDev.pSpiDev = pDev;
@@ -687,7 +815,7 @@ bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfgData)
 
 	Sam4lSpiClockEnable();
 	IOPinCfg(pDev->Cfg.pIOPinMap, pDev->Cfg.NbIOPins);
-	if (pDev->Cfg.ChipSel != SPICSEL_MAN)
+	if (pDev->Cfg.Mode == SPIMODE_MASTER && pDev->Cfg.ChipSel != SPICSEL_MAN)
 	{
 		for (int i = SPI_CS_IOPIN_IDX; i < pDev->Cfg.NbIOPins; ++i)
 			IOPinSet(pDev->Cfg.pIOPinMap[i].PortNo, pDev->Cfg.pIOPinMap[i].PinNo);
@@ -720,6 +848,8 @@ bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfgData)
 	atomic_flag_clear(&pDev->DevIntrf.bBusy);
 
 	Sam4lSpiConfigure(&s_SpiDev);
+	if (pDev->Cfg.Mode == SPIMODE_SLAVE)
+		Sam4lSpiSlaveArm(&s_SpiDev);
 	if (pDev->Cfg.bDmaEn)
 		Sam4lSpiDmaInit(&s_SpiDev);
 	if (pDev->Cfg.bIntEn)
