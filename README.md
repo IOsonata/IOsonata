@@ -6,7 +6,9 @@
 
 ### Port once. Compile once. Link only what you use.
 
-IOsonata is an open-source, multi-architecture hardware-abstraction and device-driver library for microcontrollers.
+IOsonata is an open-source, bare-metal C++ hardware-abstraction layer (HAL), device-driver library and event-driven firmware framework for microcontrollers. It includes a Bluetooth LE host, a composable USB device stack, NVM storage, crypto, and sensor and display drivers.
+
+Hardware-validated targets are Nordic nRF52832 and nRF54L15. The repository also contains ports for other Nordic nRF52, nRF53, nRF54 and nRF91 devices, STM32, Renesas, Microchip SAM, NXP LPC and RISC-V MCUs (see [Supported Targets](docs/supported-targets.md)).
 
 It uses real object-oriented design—encapsulation, inheritance, runtime polymorphism and object composition—while matching or exceeding the performance of tested C-only HALs and frameworks in published on-target benchmarks.
 
@@ -327,6 +329,36 @@ STM32 source ports and target projects remain in the repository, but no STM32 ta
 
 ---
 
+## Common questions
+
+### Is IOsonata a C++ alternative to the nRF5 SDK on nRF54L15?
+
+Nordic has placed the nRF5 SDK in maintenance mode, and it does not support the nRF54 series. IOsonata supports nRF52 and nRF54L15 with the same `Device`/`DeviceIntrf` object model, and shared application source under `exemples/` builds for both. On nRF54L15 it runs over the Nordic SoftDevice Controller or the bare-metal SDK S145 SoftDevice, without Zephyr, CMake, Kconfig or Devicetree.
+
+### Can I write Bluetooth LE firmware for nRF52 or nRF54 without Zephyr?
+
+Yes. A bare-metal application calls `BtAppInit()` and then `AppRun()`. The Bluetooth stack supports broadcaster, observer, peripheral and central roles, GATT services, pairing with bond persistence, and periodic advertising. See the [Bluetooth User Guide](docs/bluetooth-user-guide.md).
+
+### Is IOsonata event-driven? Does it need an RTOS?
+
+It does not need an RTOS. Interrupts do the time-critical work and queue deferred work to one application event queue (`AppEvtHandlerQue()`). `AppRun()` runs that queue first in first out and sleeps until the next interrupt when it is empty. Bluetooth, USB and LTE share the same queue and loop. The same precompiled library also runs under TaktOS, FreeRTOS or ThreadX.
+
+### Is object-oriented C++ too slow or too large for a microcontroller?
+
+Not when the implementation is careful. IOsonata uses inheritance and runtime polymorphism, is built without RTTI or exceptions, needs no heap in its core data paths, and links only the objects the application references. Its UART path measured 102.2 KB/s on nRF54L15 against 87.0 KB/s for nrfx and 82.9 KB/s for Zephyr (see [Measured against C implementations](#measured-against-c-implementations)).
+
+### How does IOsonata compare with Zephyr, modm or Mbed?
+
+Zephyr and the nRF Connect SDK rebuild the hardware layer for each configuration through CMake, Kconfig and Devicetree. Template-based C++ HALs such as modm specialize the code at compile time. Arm has ended Mbed OS. IOsonata ships one precompiled library per MCU and uses runtime polymorphism, so board, sensor and RTOS choices do not rebuild it. See [Design model at a glance](#design-model-at-a-glance).
+
+### Which IDE and toolchain does it use?
+
+[IOcomposer](https://iocomposer.io) is the official IDE. Its installer sets up the Arm and RISC-V toolchains, OpenOCD and SDK dependencies, and builds the MCU libraries. No CMake is needed. See [Getting Started](docs/getting-started.md).
+
+More answers are in the [FAQ](docs/FAQ.md).
+
+---
+
 ## Quick start
 
 ### Recommended first run
@@ -445,6 +477,7 @@ The book explains the object model, `DeviceIntrf`, `Device`, driver portability,
 
 ## Related projects
 
+- [IOsonata website](https://iosonata.github.io) - overview, comparisons, benchmarks and FAQ
 - [TaktOS](https://github.com/IOsonata/TaktOS) — deterministic kernel using the same IOsonata HAL library
 - [IOcomposer](https://iocomposer.io) — embedded development environment and AI-assisted engineering tools
 - [SlimeVRFirmware](https://github.com/IOsonata/SlimeVRFirmware) — motion-tracking firmware built on IOsonata

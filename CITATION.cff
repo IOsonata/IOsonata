@@ -1,0 +1,54 @@
+cff-version: 1.2.0
+message: "If you use IOsonata in your work, please cite it as below."
+type: software
+title: "IOsonata: bare-metal, event-driven C++ HAL and firmware framework for microcontrollers"
+abstract: >-
+  IOsonata is an open-source, bare-metal C++ hardware-abstraction layer,
+  device-driver library and event-driven firmware framework for
+  microcontrollers. It uses object-oriented design with runtime polymorphism,
+  ships one precompiled static library per MCU, and includes a Bluetooth LE
+  host, a composable USB device stack, NVM storage, crypto, and sensor and
+  display drivers. Hardware-validated targets are Nordic nRF52832 and
+  nRF54L15; the repository also contains ports for other Nordic, STM32,
+  Renesas, Microchip, NXP and RISC-V MCUs.
+authors:
+  - given-names: "Nguyen Hoan"
+    family-names: "Hoang"
+    affiliation: "I-SYST inc."
+  - name: "I-SYST inc."
+    city: "Brossard"
+    region: "Quebec"
+    country: "CA"
+    website: "https://www.i-syst.com"
+repository-code: "https://github.com/IOsonata/IOsonata"
+url: "https://iosonata.github.io"
+license: MIT
+keywords:
+  - embedded
+  - firmware
+  - C++
+  - hardware abstraction layer
+  - HAL
+  - bare metal
+  - event-driven
+  - object-oriented design
+  - microcontroller
+  - ARM Cortex-M
+  - RISC-V
+  - Nordic nRF52
+  - Nordic nRF54
+  - nRF54L15
+  - nRF91
+  - STM32
+  - Bluetooth Low Energy
+  - USB device stack
+  - device drivers
+  - RTOS
+references:
+  - type: book
+    title: "Beyond Blinky: Object-Oriented C++ Programming - Fun, Fast, and Fearless Embedded Development"
+    authors:
+      - given-names: "Nguyen Hoan"
+        family-names: "Hoang"
+    year: 2025
+    url: "https://leanpub.com/beyondblinky"

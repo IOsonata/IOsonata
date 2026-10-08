@@ -1,0 +1,55 @@
+# IOsonata
+
+> IOsonata is an open-source (MIT), bare-metal C++ hardware-abstraction layer (HAL), device-driver library and event-driven firmware framework for microcontrollers. It uses object-oriented design (inheritance, runtime polymorphism, composition) without RTTI, exceptions or heap in the core data paths, and ships as one precompiled static library per MCU (libIOsonata_<MCU>.a). It includes a Bluetooth LE host, a composable USB device stack, NVM storage, crypto, and sensor and display drivers. Hardware-validated targets: Nordic nRF52832 and nRF54L15. Maintained by I-SYST inc. (Quebec, Canada).
+
+Key facts:
+
+- Execution model: interrupts do time-critical work and queue deferred work with AppEvtHandlerQue(); AppRun() runs the queue first in first out and sleeps until the next interrupt. Bluetooth, USB and LTE share that queue. No RTOS is required; the same library binary also links with TaktOS, FreeRTOS and ThreadX.
+- Object model: DeviceIntrf is the data path (UART, I2C, SPI, QSPI, USB, Bluetooth, SLIP). Device is the device family (sensors, displays, storage). One sensor driver works over any compatible DeviceIntrf.
+- Build model: no CMake, Kconfig or Devicetree. Board data lives in the application board.h. The linker selects only referenced objects. Official IDE: IOcomposer (https://iocomposer.io).
+- Measured: UART on nRF54L15 102.2 KB/s vs nrfx 87.0 KB/s vs Zephyr 82.9 KB/s; nRF52832 at 2 MBaud 203 KB/s vs nrfx 183.7 KB/s.
+- Ports in the repository: Nordic nRF52 (nRF52805/810/832/840), nRF53, nRF54 (nRF54L15, nRF54LM20, nRF54H20), nRF91 (nRF9160, nRF91x1), ST STM32 (F0, F3, F4, L4, WBA), Renesas RA4M1/RE01, Microchip SAM4E/SAM4L, NXP LPC, Raspberry Pi RP2, Espressif ESP32-C and other RISC-V. Only nRF52832 and nRF54L15 are listed as hardware validated; see Supported Targets.
+
+## Start here
+
+- [README](https://raw.githubusercontent.com/IOsonata/IOsonata/main/README.md): scope, precompiled-library model, benchmarks, quick start
+- [Documentation index](https://raw.githubusercontent.com/IOsonata/IOsonata/main/docs/README.md): reading order and precedence rules
+- [Getting Started](https://raw.githubusercontent.com/IOsonata/IOsonata/main/docs/getting-started.md): install IOcomposer, build an MCU library, open, flash and debug an example
+- [FAQ](https://raw.githubusercontent.com/IOsonata/IOsonata/main/docs/FAQ.md): architecture and build-model questions
+- [Supported Targets](https://raw.githubusercontent.com/IOsonata/IOsonata/main/docs/supported-targets.md): hardware-validation status per MCU
+- [Quick Reference](https://raw.githubusercontent.com/IOsonata/IOsonata/main/docs/quick-reference.md): commands and common configuration
+
+## Architecture
+
+- [Architecture overview](https://raw.githubusercontent.com/IOsonata/IOsonata/main/docs/architecture/README.md): MCU-centric library, Device and DeviceIntrf, static memory, RTOS independence
+- [Device inheritance and composition](https://raw.githubusercontent.com/IOsonata/IOsonata/main/docs/architecture/device-composition.md)
+- [DeviceIntrf implementer notes](https://raw.githubusercontent.com/IOsonata/IOsonata/main/docs/architecture/devintrf-implementer-notes.md)
+- [IOcomposer workflow](https://raw.githubusercontent.com/IOsonata/IOsonata/main/docs/architecture/iocomposer-workflow.md)
+- [Dependencies](https://raw.githubusercontent.com/IOsonata/IOsonata/main/docs/dependencies.md): tool, SDK and optional-library boundaries
+
+## Subsystems
+
+- [Bluetooth User Guide](https://raw.githubusercontent.com/IOsonata/IOsonata/main/docs/bluetooth-user-guide.md): roles, GATT, pairing and bonding, periodic advertising, HCI transports, RTOS integration
+- [Bluetooth architecture](https://raw.githubusercontent.com/IOsonata/IOsonata/main/docs/architecture/bluetooth.md)
+- [USB User Guide](https://raw.githubusercontent.com/IOsonata/IOsonata/main/docs/usb-user-guide.md): CDC ACM, HID, MSC, custom Bulk, Interrupt and Isochronous transports, composite devices
+- [USB architecture](https://raw.githubusercontent.com/IOsonata/IOsonata/main/docs/architecture/usb.md)
+- [USB on nRF54LM20](https://raw.githubusercontent.com/IOsonata/IOsonata/main/docs/usb-nrf54lm20x.md)
+- [NVM User Guide](https://raw.githubusercontent.com/IOsonata/IOsonata/main/docs/nvm-user-guide.md)
+- [NVM architecture](https://raw.githubusercontent.com/IOsonata/IOsonata/main/docs/architecture/nvm.md)
+- [DFU](https://raw.githubusercontent.com/IOsonata/IOsonata/main/docs/architecture/dfu.md)
+
+## Key headers
+
+- [device.h](https://raw.githubusercontent.com/IOsonata/IOsonata/main/include/device.h): Device base class
+- [device_intrf.h](https://raw.githubusercontent.com/IOsonata/IOsonata/main/include/device_intrf.h): DeviceIntrf base class
+- [app_evt_handler.h](https://raw.githubusercontent.com/IOsonata/IOsonata/main/include/app_evt_handler.h): event queue, AppRun, AppCheckStatus, AppWait
+- [bt_app.h](https://raw.githubusercontent.com/IOsonata/IOsonata/main/include/bluetooth/bt_app.h): Bluetooth application API
+- [usb.h](https://raw.githubusercontent.com/IOsonata/IOsonata/main/include/usb/usb.h): USB device API
+
+## Optional
+
+- [Release 0.13 notes](https://raw.githubusercontent.com/IOsonata/IOsonata/main/docs/releases/0.13.md)
+- [Beyond Blinky, free edition text (Dec. 2025 snapshot)](https://raw.githubusercontent.com/IOsonata/IOsonata/main/docs/beyond_blinky_free_edition_2025_raw.md): book on the object model; current docs take precedence
+- [TaktOS](https://github.com/IOsonata/TaktOS): deterministic RTOS kernel built on the same IOsonata library, with KVB and Thread-Metric benchmarks
+- [IOcomposer](https://iocomposer.io): official IDE and installer
+- [Website](https://iosonata.github.io): overview, comparisons, benchmarks and FAQ
