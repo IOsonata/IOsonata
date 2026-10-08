@@ -1,6 +1,10 @@
 # STM32L4 port status
 
-Library projects exist for STM32L476, STM32L496 and STM32L4S9.
+STM32L476, STM32L496 and STM32L4S9 are supported at the minimum MCU level:
+startup, interrupt-driven UART and LPTIM1/2 are implemented. Library projects
+exist for each MCU. Complete library/application links and board validation
+remain outstanding for the reviewed changes. See the
+[central MCU support list](../../../docs/supported-targets.md).
 An MCU needs startup, UART and timer support to be considered supported.
 Peripheral source files and project metadata alone do not establish this.
 Hardware validation is recorded separately from implementation coverage.

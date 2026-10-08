@@ -1,6 +1,6 @@
 # Supported Targets
 
-This document records the current IOsonata hardware-validation baselines. It is not an inventory of every MCU directory, source port or historical project in the repository.
+This document records MCU implementation support and hardware-validation evidence separately. The STM32 table reflects the startup, UART and timer review for 0.13; it is not a claim that every peripheral on those MCUs is implemented.
 
 The presence of a target port or build project means that implementation source exists. It does not by itself mean that the target is part of the current hardware-validation loop.
 
@@ -14,6 +14,8 @@ from this minimum implementation requirement.
 
 ## Status terms
 
+- **Supported (minimum implemented)** - startup, UART and at least one timer backend are implemented. Optional peripherals and modes have separate limits; full builds and hardware results are recorded independently.
+- **Incomplete MCU port** - one or more minimum requirements are missing. Headers, linker scripts, vector tables or an available project do not make the MCU supported.
 - **Hardware validated** — the current tree has been built and exercised on the named hardware using the documented IOcomposer workflow.
 - **Build project available** — a target library project exists and can be selected by the installed builder, but it is not necessarily part of routine hardware validation.
 - **Experimental** — implementation work is incomplete, locally dependent or awaiting broader hardware coverage.
@@ -29,6 +31,48 @@ from this minimum implementation requirement.
 These rows identify the active reference targets. Feature coverage still varies by target and subsystem. A hardware-validated MCU does not imply that every optional interface, radio stack, storage mode or crypto provider has the same validation depth.
 
 STM32 source ports and target projects remain in the repository, but the current documentation does not record an exact STM32 board, IOsonata commit and hardware-test result. STM32 is therefore not listed above as a current hardware-validation baseline.
+
+## STM32 MCU support
+
+Status below reflects the implementation at [b2eea8c](https://github.com/IOsonata/IOsonata/commit/b2eea8c4450b371eefffab77ce92aa70f4dc7ea4).
+Only the named MCUs are covered; support does not extend automatically to their
+entire series.
+
+| MCU | Startup | UART | Timer | MCU support |
+|---|---|---|---|---|
+| STM32L476 | Implemented | Interrupt-driven UART, virtual devices 0-5 | LPTIM1/2, virtual devices 0/1 | Supported (minimum implemented) |
+| STM32L496 | Implemented | Interrupt-driven UART, virtual devices 0-5 | LPTIM1/2, virtual devices 0/1 | Supported (minimum implemented) |
+| STM32L4S9 | Implemented | Interrupt-driven UART, virtual devices 0-5 | LPTIM1/2, virtual devices 0/1 | Supported (minimum implemented) |
+| STM32F030x8 | Implemented | Implemented | No target timer backend | Incomplete MCU port |
+| STM32F401xC | Implemented | No target UART backend | No target timer backend | Incomplete MCU port |
+| STM32F301x8, STM32F302x8 | Vector files only; startup port incomplete | No target UART backend | No target timer backend | Incomplete MCU port |
+| STM32WBA | Partial Bluetooth sources and linker support; startup missing | No target UART backend | No target timer backend | Incomplete MCU port |
+| STM32L152 | Not implemented | Not implemented | Not implemented | Planned after 0.13 |
+
+The L4 UART supports seven/eight payload bits, none/even/odd parity and one/two
+stop bits. LPUART1 cannot use seven payload bits without parity; nine-bit
+payload requests are rejected. General-purpose TIM is not implemented:
+initialization rejects its reserved indices and reports zero high-frequency
+timers. LPTIM is sufficient for the minimum timer requirement.
+
+L4 I2C and extended SPI (QSPI/OSPI) currently accept polling master
+configurations only. These optional-peripheral limits do not change the
+minimum MCU classification. See the [L4 port notes](../ARM/ST/STM32L4xx/README.md)
+for virtual mappings, exact restrictions and validation commands.
+
+### STM32 validation evidence
+
+For the L4 fixes above, 12 focused host regression executions passed with
+UBSan, including clock-source decoding, UART framing and receive overflow,
+LPTIM disable/enable, and virtual-device dispatch. Twenty additional ARM
+translation-unit builds passed using Arm GNU 14.3.1 at `-O0` and `-Os`:
+startup, UART and LPTIM for all three MCUs, plus the alternative L4+ startup
+source for L4S9. These are compilation and host-model results, not complete
+IOC library/application links or hardware tests.
+
+No STM32 board-validation record is established by these checks. Record
+on-board startup, UART traffic and timer results separately when available.
+The planned L152/Nucleo-64 work is outside the 0.13 support list.
 
 ## Other source ports
 
