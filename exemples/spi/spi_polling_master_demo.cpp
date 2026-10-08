@@ -7,6 +7,16 @@
 #include "idelay.h"
 #include "board.h"
 
+#ifndef SPI_MASTER_SOFTWARE
+#define SPI_MASTER_SOFTWARE false
+#endif
+#if SPI_MASTER_SOFTWARE
+#include "coredev/spi_soft.h"
+#endif
+#ifndef SPI_MASTER_RATE
+#define SPI_MASTER_RATE 1000000
+#endif
+
 alignas(4) static uint8_t s_UartTxMem[CFIFO_MEMSIZE(256)];
 static const IOPinCfg_t s_UartPins[] = {
 	{UART_RX_PORT, UART_RX_PIN, UART_RX_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
@@ -31,13 +41,17 @@ static const UARTCfg_t s_UartCfg = {
 };
 
 static const IOPinCfg_t s_SpiPins[] = {
-	{SPI_MASTER_SCK_PORT, SPI_MASTER_SCK_PIN, SPI_MASTER_SCK_PINOP,
+	{SPI_MASTER_SCK_PORT, SPI_MASTER_SCK_PIN,
+	 SPI_MASTER_SOFTWARE ? IOPINOP_GPIO : SPI_MASTER_SCK_PINOP,
 	 IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
-	{SPI_MASTER_MISO_PORT, SPI_MASTER_MISO_PIN, SPI_MASTER_MISO_PINOP,
+	{SPI_MASTER_MISO_PORT, SPI_MASTER_MISO_PIN,
+	 SPI_MASTER_SOFTWARE ? IOPINOP_GPIO : SPI_MASTER_MISO_PINOP,
 	 IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
-	{SPI_MASTER_MOSI_PORT, SPI_MASTER_MOSI_PIN, SPI_MASTER_MOSI_PINOP,
+	{SPI_MASTER_MOSI_PORT, SPI_MASTER_MOSI_PIN,
+	 SPI_MASTER_SOFTWARE ? IOPINOP_GPIO : SPI_MASTER_MOSI_PINOP,
 	 IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
-	{SPI_MASTER_CS_PORT, SPI_MASTER_CS_PIN, SPI_MASTER_CS_PINOP,
+	{SPI_MASTER_CS_PORT, SPI_MASTER_CS_PIN,
+	 SPI_MASTER_SOFTWARE ? IOPINOP_GPIO : SPI_MASTER_CS_PINOP,
 	 IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
 };
 
@@ -47,7 +61,7 @@ static const SPICfg_t s_SpiCfg = {
 	.Mode = SPIMODE_MASTER,
 	.pIOPinMap = s_SpiPins,
 	.NbIOPins = sizeof(s_SpiPins) / sizeof(IOPinCfg_t),
-	.Rate = 1000000,
+	.Rate = SPI_MASTER_RATE,
 	.DataSize = 8,
 	.MaxRetry = 5,
 	.BitOrder = SPIDATABIT_MSB,
@@ -62,7 +76,11 @@ static const SPICfg_t s_SpiCfg = {
 };
 
 static UART s_Uart;
+#if SPI_MASTER_SOFTWARE
+static SPISoft s_Spi;
+#else
 static SPI s_Spi;
+#endif
 
 int main()
 {
@@ -75,6 +93,10 @@ int main()
 		s_Uart.printf("SPI initialization failed\r\n");
 		while (1) __WFE();
 	}
+
+	s_Uart.printf("SPI master %s DMA=0 INT=0%s\r\n",
+		SPI_MASTER_SOFTWARE ? "SPISoft" : "hardware",
+		SPI_MASTER_SOFTWARE ? " (nominal software rate)" : "");
 
 	uint8_t command = 0;
 	uint8_t data[16] = {0,};
