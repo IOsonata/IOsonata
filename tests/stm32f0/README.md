@@ -34,3 +34,8 @@ and F4 startup/DFU support is not a complete peripheral port. F0 UART supports
 polling or FIFO interrupts, 7-bit data with parity and 8-bit data with or without
 parity, and one or two stop bits. DMA, synchronous mode, IrDA and software flow
 control requests fail initialization rather than reporting false success.
+
+The shared SLIP RX example regression (`python3 tests/stm32f0/run_slip_example.py`)
+uses the production decoder with buffered and fragmented fake UART input. It
+covers empty frames, exact-buffer and oversized frames, split escape sequences,
+and PRBS continuity under UBSan. This does not model UART interrupt timing.

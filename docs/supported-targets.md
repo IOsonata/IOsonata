@@ -77,7 +77,10 @@ does not validate the newly added peripheral timer backend: the benchmark uses
 SysTick for kernel timing and TIM17 as an IRQ probe. The new timers pass host
 register tests and Cortex-M0 archive-link smoke checks, including strong
 SysTick/TIM17 overrides. See the [F030x8 port notes](../ARM/ST/STM32F0xx/README.md)
-for virtual ordering, capabilities, example and remaining board checks.
+for virtual ordering, capabilities and remaining board checks. The
+[F030x8 example index](../ARM/ST/STM32F0xx/STM32F030x8/exemples/README.md)
+lists the target projects and separates peripheral examples from software-only
+crypto and simulated RF-tag tests.
 
 No new STM32 board-validation record is established by these checks. Record
 on-board startup, GPIO, UART traffic and timer results separately when available.

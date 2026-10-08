@@ -74,7 +74,10 @@ IRQ handler or repurpose a peripheral after initializing it through Timer.
 Timer handles and callback contexts must outlive the timer; disabling pauses
 it and does not transfer ownership to another handle.
 
-## Example and validation
+## Examples and validation
+
+The [example index](STM32F030x8/exemples/README.md) lists GPIO, timer, UART,
+TaktOS and software-only projects, their wiring, dependencies and exclusions.
 
 Build the MCU library, then open
 `STM32F030x8/exemples/TimerDemo/ioc/`. It links the existing shared

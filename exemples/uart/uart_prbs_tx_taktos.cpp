@@ -49,6 +49,13 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 // This include contain i/o definition the board in use
 #include "board.h"
 
+#ifndef UART_BAUDRATE
+#define UART_BAUDRATE 1000000
+#endif
+#ifndef UART_DMA_MODE
+#define UART_DMA_MODE true
+#endif
+
 #ifdef MCUOSC
 McuOsc_t g_McuOsc = MCUOSC;
 #endif
@@ -82,7 +89,7 @@ static const UARTCfg_t s_UartCfg = {
 	.DevNo = UART_DEVNO,
 	.pIOPinMap = s_UartPins,
 	.NbIOPins = sizeof(s_UartPins) / sizeof(IOPinCfg_t),
-	.Rate = 1000000,
+	.Rate = UART_BAUDRATE,
 	.DataBits = 8,
 	.Parity = UART_PARITY_NONE,
 	.StopBits = 1,
@@ -102,7 +109,7 @@ static const UARTCfg_t s_UartCfg = {
 	.TxMemSize = 0,
 	.pTxMem = NULL,
 #endif
-	.bDMAMode = true,
+	.bDMAMode = UART_DMA_MODE,
 };
 
 #ifdef DEMO_C

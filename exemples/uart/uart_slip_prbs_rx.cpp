@@ -47,6 +47,10 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 // This include contain i/o definition the board in use
 #include "board.h"
 
+#ifndef UART_BAUDRATE
+#define UART_BAUDRATE 115200
+#endif
+
 #define DEMO_C
 
 int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);
@@ -64,7 +68,7 @@ const UARTCfg_t g_UartCfg = {
 	.DevNo = UART_DEVNO,
 	.pIOPinMap = s_UartPortPins,
 	.NbIOPins = sizeof(s_UartPortPins) / sizeof(IOPINCFG),
-	.Rate = 115200,
+	.Rate = UART_BAUDRATE,
 	.DataBits = 8,
 	.Parity = UART_PARITY_NONE,
 	.StopBits = 1,
@@ -117,79 +121,51 @@ int main()
 
 #ifdef DEMO_C
 	res = UARTInit(&g_UartDev, &g_UartCfg);
+	if (!res) return 1;
 	SlipInit(&g_SlipDev, &g_UartDev.DevIntrf, false);
 #else
 	res = g_Uart.Init(g_UartCfg);
+	if (!res) return 1;
 	g_Slip.Init(&g_Uart, false);
 #endif
 
 	printf("UART PRBS Test\n\r");
 
 	uint8_t val = 0;
+	bool haveValue = false;
 	uint32_t errcnt = 0;
-	uint32_t cnt = 0;
-	uint8_t d = 0xff;
-	uint8_t buf[SLIPTEST_BUFSIZE];
-	uint32_t lcnt = 0;
 	uint32_t pkcnt = 0;
-	uint8_t *p = buf;
-	int len = SLIPTEST_BUFSIZE;
+	uint8_t buf[SLIPTEST_BUFSIZE] = {};
 
-	while(1)
+	while (1)
 	{
 #ifdef DEMO_C
-		int l = SlipRx(&g_SlipDev, p, SLIPTEST_BUFSIZE);
+		int len = SlipRx(&g_SlipDev, buf, sizeof(buf));
+		bool complete = SlipRxCompleted(&g_SlipDev);
 #else
-		int l = g_Slip.Rx(0, p, len);
+		int len = g_Slip.Rx(0, buf, sizeof(buf));
+		bool complete = g_Slip.RxCompleted();
 #endif
-//		e += difftime(time(NULL), t);
-		if (l > 0)
+		if (len < 0) continue;
+		// Validate payload chunks as they arrive, including frames larger than buf.
+		// Rx excludes END; completion can also accompany a zero-byte read.
+		for (int i = 0; i < len; i++)
 		{
-			lcnt++;
-			if (p[l-1] == SLIP_END_CODE)
+			if (haveValue && val != buf[i])
 			{
-				l--;
-				pkcnt++;
-				for (int i = 0; i < l; i++)
-				{
-					cnt++;
-
-					if (val == 0)
-					{
-						val = buf[i];
-					}
-					// If success send next code
-					if (val != buf[i])
-					{
-						errcnt++;
-						if ((cnt & 0xf) == 0)
-						{
-							printf("Err %d\n", errcnt);
-						}
-						printf("PRBS %u errors %x %x\n", errcnt, val, buf[i]);
-					}
-					// else if ((cnt & 0x7fff) == 0)
-					// {
-						// printf("PRBS %d rate %.3f B/s, err : %u\n", l, cnt / e, errcnt);
-						// printf("PRBS rate %.3f B/s, err : %u\n", cnt / elapse.count(), errcnt);
-
-					// }
-					val = Prbs8(buf[i]);
-				}
-				p = buf;
-				len = SLIPTEST_BUFSIZE;
+				errcnt++;
+				printf("PRBS %u errors %x %x\n", errcnt, val, buf[i]);
 			}
-			else
-			{
-				p += l;
-				len -= l;
-				if (len <= 0)
-				{
-					printf("Err len %u %u %p\n", lcnt, pkcnt, p);
-					p = buf;
-					len = SLIPTEST_BUFSIZE;
-				}
-			}
+			val = Prbs8(buf[i]);
+			haveValue = true;
+		}
+		// Nonblocking SLIP leaves a pending escape in the next output byte.
+		// Preserve that byte when reusing the buffer for the next chunk.
+		buf[0] = !complete && len < (int)sizeof(buf) ? buf[len] : 0;
+		if (complete)
+		{
+			pkcnt++;
+			if ((pkcnt & 0xff) == 0) printf("frames %u errors %u\n", pkcnt, errcnt);
 		}
 	}
 	return 0;

@@ -47,6 +47,10 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 // This include contain i/o definition the board in use
 #include "board.h"
 
+#ifndef UART_BAUDRATE
+#define UART_BAUDRATE 1000000
+#endif
+
 #define DEMO_C
 
 int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);
@@ -65,7 +69,7 @@ const UARTCfg_t g_UartCfg = {
 	.DevNo = UART_DEVNO,
 	.pIOPinMap = s_UartPortPins,
 	.NbIOPins = sizeof(s_UartPortPins) / sizeof(IOPINCFG),
-	.Rate = 1000000,
+	.Rate = UART_BAUDRATE,
 	.DataBits = 8,
 	.Parity = UART_PARITY_NONE,
 	.StopBits = 1,
@@ -120,9 +124,11 @@ int main()
 
 #ifdef DEMO_C
 	res = UARTInit(&g_UartDev, &g_UartCfg);
+	if (!res) return 1;
 	SlipInit(&g_SlipDev, &g_UartDev.DevIntrf, true);
 #else
 	res = g_Uart.Init(g_UartCfg);
+	if (!res) return 1;
 	g_Slip.Init(&g_Uart);
 #endif
 

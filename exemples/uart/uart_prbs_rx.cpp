@@ -38,12 +38,28 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
-#include <chrono>
+
 //#include <time.h>
 #include "istddef.h"
 #include "coredev/uart.h"
 #include "prbs.h"
 #include "board.h"
+
+#ifndef UART_PRBS_VERBOSE
+#define UART_PRBS_VERBOSE 1
+#endif
+#ifndef UART_BAUDRATE
+#define UART_BAUDRATE 1000000
+#endif
+#ifndef UART_INT_MODE
+#define UART_INT_MODE false
+#endif
+#ifndef UART_DMA_MODE
+#define UART_DMA_MODE true
+#endif
+#ifndef UART_INT_PRIO
+#define UART_INT_PRIO 6
+#endif
 
 #define UARTFIFOSIZE			CFIFO_MEMSIZE(256)
 
@@ -59,20 +75,20 @@ const UARTCfg_t g_UartCfg = {
 	.DevNo = UART_NO,
 	.pIOPinMap = s_UartPortPins,
 	.NbIOPins = UART_PORTPIN_COUNT,
-	.Rate = 1000000,
+	.Rate = UART_BAUDRATE,
 	.DataBits = 8,
 	.Parity = UART_PARITY_NONE,
 	.StopBits = 1,
 	.FlowControl = UART_FLWCTRL_NONE,
-	.bIntMode = false,					// Interrupt mode
-	.IntPrio = 6,//APP_IRQ_PRIORITY_LOW,	// Interrupt priority
+	.bIntMode = UART_INT_MODE,					// Interrupt mode
+	.IntPrio = UART_INT_PRIO,//APP_IRQ_PRIORITY_LOW,	// Interrupt priority
 	.EvtCallback = NULL,//nRFUartEvthandler,	// UART event handler
 	.bFifoBlocking = true,				// Blocking FIFO
 	.RxMemSize = UARTFIFOSIZE,
 	.pRxMem = s_UartRxFifo,
 	.TxMemSize = UARTFIFOSIZE,
 	.pTxMem = s_UartTxFifo,
-	.bDMAMode = true,
+	.bDMAMode = UART_DMA_MODE,
 };
 
 #define DEMO_C
@@ -102,18 +118,14 @@ int main()
 	res = g_Uart.Init(g_UartCfg);
 #endif
 
+	if (!res) return 1;
+
 	uint8_t d = 0xff;
 	uint8_t val = 0;
 	uint32_t errcnt = 0;
 	uint32_t cnt = 0;
-	auto t_start = std::chrono::high_resolution_clock::now();
-	auto t_end = std::chrono::high_resolution_clock::now();
     
-	std::chrono::duration<float> elapse = std::chrono::duration<float>(0);
-	t_start = std::chrono::high_resolution_clock::now();
 
-	// time_t t;
-	double e = 0.0;
 	bool isOK = false;
 //    do {
 #ifdef DEMO_C
@@ -128,21 +140,18 @@ int main()
     
 	while(1)
 	{
-		t_start = std::chrono::high_resolution_clock::now();
-		//t = time(NULL);
 #ifdef DEMO_C
 		while (UARTRx(&g_UartDev, &d, 1) <= 0);
 #else
 		while (g_Uart.Rx(&d, 1) <= 0);
 #endif
 		{
-		   // e += difftime(time(NULL), t);
-			t_end = std::chrono::high_resolution_clock::now();
-			elapse += std::chrono::duration<float>(t_end-t_start);
 			cnt++;
             
 			// If success send next code
+#if UART_PRBS_VERBOSE
 			printf("%x\n", d);
+#endif
 		   // UARTTx(&g_UartDev, &d, 1);
 			if (val != d)
 			{
@@ -151,8 +160,6 @@ int main()
 			}
 			else if ((cnt & 0x7fff) == 0)
 			{
-			   // printf("PRBS rate %.3f B/s, err : %u\n", cnt / e, errcnt);
-//                printf("PRBS rate %.3f B/s, err : %u\n", cnt / elapse.count(), errcnt);
 
 			}
 			val = Prbs8(d);
