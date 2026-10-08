@@ -3,7 +3,8 @@
 The SAM4L timer implementation provides the C and C++ Timer functions using
 AST and TC. Each timer has a fixed data structure and records the count at
 which each trigger should fire, as in the STM32F0 implementation.
-The maintainer has confirmed initialization; timer timing tests are in progress.
+The maintainer has reported continuous trigger output on hardware for devices
+0, 1, 3, and 6. Testing of the remaining devices and timer operations is pending.
 
 | Virtual DevNo | Peripheral | Triggers | Default frequency |
 | --- | --- | --- | --- |
@@ -19,17 +20,18 @@ replaced with six independent channel indices. `TimerGetHighFreqDevNo()` is 1.
 1. Build `ARM/Microchip/SAM4L/SAM4LCxC/lib/ioc` in IOcomposer, then the existing
    `ARM/Microchip/SAM4L/SAM4LCxC/exemples/TimerDemo/ioc` project in the same
    Debug or Release configuration. The supplied project targets SAM4LC8C.
-2. Confirm LED pins and, if needed, define `MCUOSC` in TimerDemo's `src/board.h`
-   for your board. Existing LED definitions are retained; copied, unused UART
-   definitions were replaced with USART1 RX PC26 / TX PC27, peripheral A,
-   matching the SAM4LCxC CDC example. Open the UART console at 115200 8N1,
-   no flow control. `TIMER_DEMO_UART` enables the shared demo's UART retargeting.
+2. The board file selects the SAM4L8 Xplained Pro yellow LED0 on PC07,
+   active low, and USART1 RX PC26 / TX PC27, peripheral A. Adjust these pins
+   and, if needed, define `MCUOSC` in TimerDemo's `src/board.h` for another board.
+   Open the UART console at 115200 8N1, no flow control.
+   `TIMER_DEMO_UART` enables the shared demo's UART retargeting.
 3. Start with `TIMER_DEVNO 0` in that board file. Flash and run continuously.
    `g_TimerInitOk` must become true, `g_TriggerCount[0]` must advance about ten
-   times per second, and LED1 toggles on each trigger.
+   times per second, and the user LED toggles on each trigger.
 4. Repeat with `TIMER_DEVNO` 1 through 6, or define `TIMER_DEMO_DEVNO` in the
    compiler settings. TC trigger counters 0, 1, 2 should advance every 100,
-   1000, and 250 ms. LEDs 1 and 2 toggle on triggers 0 and 1.
+   1000, and 250 ms. The single user LED toggles on trigger 0;
+   triggers 1 and 2 are visible in the UART output and debugger counters.
 5. Inspect `g_TriggerPeriod[]` (accepted periods, ns), `g_Period[]` (measured
    periods, ns), and `g_TickCount` (elapsed ns). At 1024 Hz AST rounds 100 ms
    to 102 ticks, or 99.609375 ms. Allow initial callback latency and oscillator
