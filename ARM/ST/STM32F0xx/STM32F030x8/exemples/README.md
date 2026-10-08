@@ -11,7 +11,7 @@ directory; pin assignments and target settings belong in each application's
 | Project directory | Shared source | Purpose |
 |---|---|---|
 | Blinky (existing) | `misc/blinky.c` | GPIO LEDs; check its board-specific pin map |
-| PulseTrain | `misc/pulse_train_test.c` | Moving pulse on the DISCO PC9/PC8 LEDs |
+| PulseTrain | `misc/pulse_train_test.c` | Pulse train across all 55 GPIOs exposed by the STM32F030R8 package |
 | TimerDemo (existing) | `timer/timer_demo.cpp` | All seven virtual TIM devices, selected in board.h |
 | UartPrbsTest (existing) | `uart/uart_prbs_tx.cpp` | Raw PRBS transmitter |
 | UartPrbsRxTest | `uart/uart_prbs_rx.cpp` | Raw PRBS receiver and error reporting |
@@ -94,3 +94,8 @@ python3 tests/stm32f0/run_slip_example.py
 
 Hardware UART data integrity, debugger console behavior and GPIO/timer activity
 still require on-board checks.
+
+The full GPIO pulse train includes PA13/PA14 (SWD) and oscillator pins. Use an
+internal clock and isolate conflicting ST-LINK/oscillator connections for this
+standalone test. Blinky enters the pulse train after B1 and disables its button
+interrupts before reusing the pins as outputs.
