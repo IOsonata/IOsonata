@@ -111,7 +111,9 @@ static bool Period(uint32_t freq, uint64_t ns, uint32_t &ticks, uint64_t &actual
 	if (!freq || !ns || ns / 1000000000ULL > UINT32_MAX / freq) return false;
 	uint64_t v = ns / 1000000000ULL * freq +
 		(ns % 1000000000ULL * freq + 500000000ULL) / 1000000000ULL;
-	if (v < 4 || v > UINT32_MAX) return false;
+	if (v > UINT32_MAX) return false;
+	// Return the shortest supported period for a positive request below it.
+	if (v < 4) v = 4;
 	ticks = (uint32_t)v;
 	actual = (v * 1000000000ULL + freq / 2) / freq;
 	return true;
