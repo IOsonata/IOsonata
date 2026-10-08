@@ -9,7 +9,7 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[2]
 PORT = ROOT / 'ARM/Microchip/SAM4L'
 clock = (PORT / 'src/system_sam4l.c').read_text()
-clock = clock[clock.index('\t// MCUOSC owns the USB clock.'):clock.index('\t/** Low-freq clock configuration **/')]
+clock = clock[clock.rindex('\tif (g_McuOsc.bUSBClk) {'):clock.index('\t__set_PRIMASK(primask);', clock.rindex('\tif (g_McuOsc.bUSBClk) {'))]
 gpio = (PORT / 'src/iopincfg_sam4l.c').read_text()
 
 def function(name):
@@ -27,6 +27,8 @@ header = r'''
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <csetjmp>
+#include <initializer_list>
 typedef uint32_t RwReg;
 typedef uint32_t RoReg;
 typedef uint32_t WoReg;
@@ -54,6 +56,19 @@ static McuOsc_t g_Osc;
 static uint32_t s_PllFreq;
 #define USB_FREQ 48000000U
 #define PLL0_GEN_CLK_SRC 16U
+#define SAM4L_STARTUP_GCLK 1U
+static std::jmp_buf startupFailure;
+static bool clockReady = true;
+static void Sam4lStartupFailed(uint32_t error) {
+ assert(error == SAM4L_STARTUP_GCLK); std::longjmp(startupFailure, 1);
+}
+// This model starts after oscillator/PLL validation in SystemInit.
+// Model only the clock helper result and PM writes used by this block.
+static bool Sam4lGenericClock(unsigned index, uint32_t config) {
+ if (!clockReady) return false;
+ scif.SCIF_GCCTRL[index].SCIF_GCCTRL = config; return true;
+}
+static void Sam4lWritePm(volatile uint32_t *reg, uint32_t value) { *reg = value; }
 '''
 constants = '\n'.join(re.findall(r'^#define IOPIN_MAX_.*$', gpio, re.M))
 typedef = gpio[gpio.index('typedef struct {'):gpio.index('#pragma pack(pop)')]
@@ -84,14 +99,14 @@ int main() {
   assert(scif.SCIF_GCCTRL[7].SCIF_GCCTRL == expected);
   assert((pm.PM_HSBMASK & PM_HSBMASK_USBC) && (pm.PM_PBBMASK & PM_PBBMASK_USBC));
  }
- g_Osc.CoreOsc.Type = OSC_TYPE_RC; configureUsbClock();
- assert(!(scif.SCIF_GCCTRL[7].SCIF_GCCTRL & SCIF_GCCTRL_CEN));
- g_Osc.CoreOsc.Type = OSC_TYPE_TCXO; s_PllFreq = 96000000U;
- configureUsbClock(); assert(scif.SCIF_GCCTRL[7].SCIF_GCCTRL & SCIF_GCCTRL_CEN);
- scif.SCIF_PCLKSR = 0; configureUsbClock();
- assert(!(scif.SCIF_GCCTRL[7].SCIF_GCCTRL & SCIF_GCCTRL_CEN));
- scif.SCIF_PCLKSR = SCIF_PCLKSR_PLL0LOCK; s_PllFreq = 80000000U;
- configureUsbClock(); assert(!(scif.SCIF_GCCTRL[7].SCIF_GCCTRL & SCIF_GCCTRL_CEN));
+ // Invalid divisors and a refused generic clock must fail startup.
+ for (uint32_t rate : {0U, 80000000U, 144000000U}) {
+  s_PllFreq = rate;
+  if (setjmp(startupFailure) == 0) { configureUsbClock(); assert(false); }
+ }
+ s_PllFreq = 96000000U; clockReady = false;
+ if (setjmp(startupFailure) == 0) { configureUsbClock(); assert(false); }
+ clockReady = true;
  assert(IOPIN_MAX_INT == 12);
  assert(!IOPinEnableInterrupt(12, 6, 3, 0, IOPINSENSE_TOGGLE, onPin, nullptr));
  assert(!IOPinEnableInterrupt(8, 6, 2, 11, IOPINSENSE_TOGGLE, onPin, nullptr));

@@ -978,13 +978,19 @@ code = (preamble.replace('@@DRIVER_TYPES@@', types)
         .replace('@@PROTOTYPES@@', prototypes) + '\n' + bodies + '\n' + tests)
 
 with tempfile.TemporaryDirectory(prefix='iosonata-iso-') as temp:
+    # Model interrupt masking consistently in the controller and AppEvt.
+    (Path(temp) / 'coredev').mkdir()
+    (Path(temp) / 'coredev/interrupt.h').write_text(
+        '#pragma once\n#include <stdint.h>\n'
+        'uint32_t DisableInterrupt();\nvoid EnableInterrupt(uint32_t);\n')
     path = Path(temp) / 'iso_test.cpp'
     path.write_text(code)
     compiler = os.environ.get('CXX', 'g++')
     subprocess.run([compiler, '-std=c++17', '-O1', '-Wall', '-Wextra',
                     '-Wno-unused-function', '-Wno-missing-field-initializers',
                     '-fsanitize=undefined', '-fno-sanitize-recover=all',
-                    '-I' + str(ROOT / 'include'), '-I' + str(ROOT / 'tests/usb/hostport'),
+                    '-I' + temp, '-I' + str(ROOT / 'include'),
+                    '-I' + str(ROOT / 'tests/usb/hostport'),
                     '-ffunction-sections', '-Wl,--gc-sections',
                     '-x', 'c++', str(path), str(ROOT / 'src/app_evt_handler.cpp'),
                     str(ROOT / 'src/app_run.cpp'),

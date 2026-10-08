@@ -7,6 +7,7 @@ OPT ?= -O1
 
 # hostport supplies usb_ctrlr.h, the header every real port provides.
 CPPFLAGS += -I$(ROOT)/include -Ihostport
+USB_EXAMPLE_CPPFLAGS = $(CPPFLAGS) -Iexample_hostport
 
 CFLAGS ?= -std=gnu17 -Wall -Wextra -Werror -Wshadow -Wundef
 CXXFLAGS ?= $(OPT) -g
@@ -310,28 +311,28 @@ test-nrf-dma-policy:
 
 iso-hw-build: $(ISO_HW_SCRIPT) $(ISO_HW_FIRMWARE)
 	python3 -c "compile(open('$(ISO_HW_SCRIPT)', encoding='utf-8').read(), '$(ISO_HW_SCRIPT)', 'exec')"
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -x c++ -fsyntax-only $(ISO_HW_FIRMWARE)
+	$(CXX) $(USB_EXAMPLE_CPPFLAGS) $(CXXFLAGS) -x c++ -fsyntax-only $(ISO_HW_FIRMWARE)
 
 iso-hw: iso-hw-build
 	python3 $(ISO_HW_SCRIPT) $(ISO_HW_ARGS)
 
 int-hw-build: $(INT_HW_SCRIPT) $(INT_HW_FIRMWARE)
 	python3 -c "compile(open('$(INT_HW_SCRIPT)', encoding='utf-8').read(), '$(INT_HW_SCRIPT)', 'exec')"
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -x c++ -fsyntax-only $(INT_HW_FIRMWARE)
+	$(CXX) $(USB_EXAMPLE_CPPFLAGS) $(CXXFLAGS) -x c++ -fsyntax-only $(INT_HW_FIRMWARE)
 
 int-hw: int-hw-build
 	python3 $(INT_HW_SCRIPT) $(INT_HW_ARGS)
 
 hid-hw-build: $(HID_HW_SCRIPT) $(HID_HW_FIRMWARE)
 	python3 -c "compile(open('$(HID_HW_SCRIPT)', encoding='utf-8').read(), '$(HID_HW_SCRIPT)', 'exec')"
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -x c++ -fsyntax-only $(HID_HW_FIRMWARE)
+	$(CXX) $(USB_EXAMPLE_CPPFLAGS) $(CXXFLAGS) -x c++ -fsyntax-only $(HID_HW_FIRMWARE)
 
 hid-hw: hid-hw-build
 	python3 $(HID_HW_SCRIPT) $(HID_HW_ARGS)
 
 msc-hw-build: $(MSC_HW_SCRIPT) $(MSC_HW_FIRMWARE) $(MSC_HW_PROJECT)
 	python3 -c "compile(open('$(MSC_HW_SCRIPT)', encoding='utf-8').read(), '$(MSC_HW_SCRIPT)', 'exec')"
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -x c++ -fsyntax-only $(MSC_HW_FIRMWARE)
+	$(CXX) $(USB_EXAMPLE_CPPFLAGS) $(CXXFLAGS) -x c++ -fsyntax-only $(MSC_HW_FIRMWARE)
 
 msc-hw: msc-hw-build
 	python3 $(MSC_HW_SCRIPT) $(MSC_HW_ARGS)
@@ -351,7 +352,7 @@ hid-demo-build: $(HID_KEYBOARD_FIRMWARE) $(HID_KEYBOARD_BOARD) \
 examples-build: hid-demo-build $(USB_EXAMPLE_SOURCES) $(HEADERS)
 	@set -e; for source in $(USB_EXAMPLE_SOURCES); do \
 		echo "Checking $$source"; \
-		$(CXX) $(CPPFLAGS) $(CXXFLAGS) -x c++ -fsyntax-only "$$source"; \
+		$(CXX) $(USB_EXAMPLE_CPPFLAGS) $(CXXFLAGS) -x c++ -fsyntax-only "$$source"; \
 	done
 
 probe: $(PROBE_TARGET)

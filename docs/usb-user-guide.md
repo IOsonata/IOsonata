@@ -67,11 +67,10 @@ DM/DP peripheral pins, PA25/PA26.
 
 The supplied SAM4L8 Xplained Pro configuration uses a 12 MHz crystal, PC11
 for VBUS input and PC12 for the host power-switch enable. The application
-holds PC12 low and configures PC11 explicitly during initialization, after
-its USB queue and classes exist. GPIO edges queue `UsbProcessQue()`, and the
-application's `UsbCtrlrVbusDetected()` override samples the current level.
-The library default returns false. Projects using another external VBUS
-input change their pin definitions and provide the same application handling.
+holds PC12 low and supplies the USB pin map to controller initialization,
+which installs the PC11 GPIO callback. GPIO edges queue `UsbProcessQue()`,
+and the controller's `UsbCtrlrVbusDetected()` samples the configured pin.
+Projects using another external VBUS input change their board pin map.
 The Nordic CDC projects use their controller's native cable detection and do
 not require these GPIO definitions.
 
@@ -80,9 +79,10 @@ Check the CDC port assigned to the target; the debugger has a separate port.
 Both examples echo received data. The bare-metal example also prints a
 greeting when the CDC port opens.
 
-The SAM4L port supports full-speed control, bulk and interrupt DMA. Eight
+The SAM4L port supports full-speed control, bulk, interrupt and ISO DMA. Eight
 physical endpoints provide EP0 plus seven non-control directions; each IN
-or OUT data direction uses one endpoint. ISO and host operation are disabled.
+or OUT data direction uses one endpoint. ISO entry points are linked from
+a separate archive member; host operation is unsupported.
 The full combo stress workload exceeds this physical endpoint capacity.
 
 Run the controller/platform checks and compile/link checks from the repository
@@ -96,10 +96,12 @@ python3 tests/usb/sam4l_cdc_build_test.py --config Debug --taktos ../TaktOS
 
 Omit `--taktos` to build just bare metal. The script compiles the examples'
 source dependencies and checks project links; it does not build unrelated
-peripherals in the library project. **Hardware validation remains pending:**
-enumeration, short/64-byte binary echo, backpressure, repeated CDC open/close,
-unplug/replug while EDBG remains powered, and host suspend/resume. For TaktOS,
-also check that `g_UsbTaktOSHeartbeat` advances during traffic.
+peripherals in the library project. Maintainer CDC loopback, ISO packet-size
+and ISO suspend/wake results are recorded in the [0.13 notes](releases/0.13.md).
+For final-release validation, check enumeration, short/64-byte binary echo,
+backpressure, repeated CDC open/close, unplug/replug while EDBG remains powered,
+and host suspend/resume. For TaktOS, also check that `g_UsbTaktOSHeartbeat`
+advances during traffic.
 
 ## Common application lifecycle
 

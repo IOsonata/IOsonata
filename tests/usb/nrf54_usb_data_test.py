@@ -214,7 +214,7 @@ static void init(bool hs=false,bool lowPower=false){
  resetEvents=setupEvents=ep0Completions=sofEvents=setupAction=0;
  wrapper={};powerRegs[0x400/4]=1U<<2;
  memset(irqEnabled,0,sizeof(irqEnabled));
- UsbCtrlrCfg_t cfg={6,lowPower};assert(UsbCtrlrInit(0,&cfg));
+ UsbCtrlrCfg_t cfg={};cfg.IntPrio=6;cfg.bLowPowerSuspend=lowPower;assert(UsbCtrlrInit(0,&cfg));
  set(0x010,1U<<31);set(0x048,2U<<3);set(0x04C,3040U<<16);
  assert(UsbCtrlrStart(0));assert(s_Ctrlr.Started);
  assert(get(0x05C)==0x0BE00C00U);

@@ -114,7 +114,11 @@ static int UsbIntrfEpSendQueued(UsbDevIntrf_t *pIntrf)
 		UsbIntrfSetTxIdle(pIntrf);
 		return -1;
 	}
-	(void)UsbCtrlrEpSend(pIntrf->DevNo, pIntrf->EpNo, data, (uint16_t)count);
+	if (!UsbCtrlrEpSend(pIntrf->DevNo, pIntrf->EpNo, data, (uint16_t)count))
+	{
+		// Keep the FIFO head for the next write to retry. No transfer owns it.
+		UsbIntrfSetTxIdle(pIntrf);
+	}
 	return count;
 }
 
