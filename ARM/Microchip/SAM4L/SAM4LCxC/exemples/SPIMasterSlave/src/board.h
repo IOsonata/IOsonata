@@ -51,6 +51,16 @@ SOFTWARE.
 // Reference: SAM4L8 Xplained Pro user guide, tables 4-1/4-2.
 // These pins also reach EXT5; disconnect any LCD extension for this test.
 #define SPI_LOOPBACK_WIRING "Caps: EXT1 10-12 (same column), 17-18; EXT2 7-8, 15-16"
+#define SPI_MASTER_SOFTWARE true
+#define SPI_MASTER_DEVNO 0
+#define SPI_MASTER_RATE 100000
+#define SPI_MASTER_DMA_ENABLE false
+#define SPI_MASTER_INT_ENABLE false
+#define SPI_MASTER_SCK_PINOP IOPINOP_GPIO
+#define SPI_MASTER_MISO_PINOP IOPINOP_GPIO
+#define SPI_MASTER_MOSI_PINOP IOPINOP_GPIO
+#define SPI_MASTER_CS_PINOP IOPINOP_GPIO
+
 #define SPI_SLAVE_DMA_ENABLE 	true
 #define SPI_SLAVE_INT_ENABLE 	true
 #define SPI_SLAVE_DEVNO 		0
