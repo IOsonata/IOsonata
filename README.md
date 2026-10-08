@@ -8,7 +8,7 @@
 
 IOsonata is an open-source, bare-metal C++ hardware-abstraction layer (HAL), device-driver library and event-driven firmware framework for microcontrollers. It includes a Bluetooth LE host, a composable USB device stack, NVM storage, crypto, and sensor and display drivers.
 
-MCU support varies by target and peripheral. The [MCU support matrix](docs/supported-targets.md) covers Nordic, STM32, Renesas, Microchip SAM, NXP LPC, Espressif and RP2040 projects, separating implemented core drivers, incomplete integration and recorded hardware results. Maintainer hardware evidence includes nRF52832, nRF52840, nRF54L15, nRF54LM20, SAM4LC8C and STM32F030x8, with different tested functions on each.
+MCU support varies by target and peripheral. The [MCU support matrix](docs/supported-targets.md) covers Nordic, STM32, Renesas, Microchip SAM, NXP LPC, Espressif and RP2040 projects, separating implemented core drivers, incomplete integration and recorded hardware results. Maintainer hardware evidence includes nRF52832, nRF52840, nRF54L15, nRF54LM20, SAM4LC8C, STM32F030x8 and STM32L476/L496/L4S9, with different tested functions on each.
 
 It uses real object-oriented design—encapsulation, inheritance, runtime polymorphism and object composition—while matching or exceeding the performance of tested C-only HALs and frameworks in published on-target benchmarks.
 
@@ -319,7 +319,8 @@ IOsonata is developed and validated on I-SYST reference hardware as well as vend
 | nRF52840 | Bare-metal and TaktOS composite USB endurance |
 | nRF54LM20 | Bare-metal and TaktOS high-speed composite USB endurance |
 | SAM4LC8C | SAM4L8 Xplained Pro CDC, ISO and manual suspend/wake |
-| STM32F030x8 | STM32F0308-DISCO startup, GPIO, USART1, TIM6/TIM16 and UART DMA PRBS |
+| STM32F030x8 | Hardware validated on STM32F0308-DISCO; startup, GPIO, USART1, TIM6/TIM16 and UART DMA PRBS |
+| STM32L476 / STM32L496 / STM32L4S9 | Hardware validated and used in existing projects, confirmed by the maintainer |
 
 These are function-specific maintainer results, not a claim that every
 peripheral or the latest commit has passed hardware validation.

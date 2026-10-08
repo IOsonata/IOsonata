@@ -93,10 +93,10 @@ entire series.
 
 | MCU | Startup | GPIO | UART | Timer | MCU support |
 |---|---|---|---|---|---|
-| STM32L476 | Implemented | Implemented | Interrupt-driven UART, virtual devices 0-5 | LPTIM1/2, virtual devices 0/1 | Supported (minimum implemented) |
-| STM32L496 | Implemented | Implemented | Interrupt-driven UART, virtual devices 0-5 | LPTIM1/2, virtual devices 0/1 | Supported (minimum implemented) |
-| STM32L4S9 | Implemented | Implemented | Interrupt-driven UART, virtual devices 0-5 | LPTIM1/2, virtual devices 0/1 | Supported (minimum implemented) |
-| STM32F030x8 | Implemented | Implemented, including EXTI | Implemented | TIM6, TIM14, TIM16, TIM17, TIM15, TIM3, TIM1 | Supported (minimum implemented) |
+| STM32L476 | Implemented | Implemented | Interrupt-driven UART, virtual devices 0-5 | LPTIM1/2, virtual devices 0/1 | Supported; hardware validated |
+| STM32L496 | Implemented | Implemented | Interrupt-driven UART, virtual devices 0-5 | LPTIM1/2, virtual devices 0/1 | Supported; hardware validated |
+| STM32L4S9 | Implemented | Implemented | Interrupt-driven UART, virtual devices 0-5 | LPTIM1/2, virtual devices 0/1 | Supported; hardware validated |
+| STM32F030x8 | Implemented | Implemented, including EXTI | Implemented | TIM6, TIM14, TIM16, TIM17, TIM15, TIM3, TIM1 | Supported; hardware validated |
 | STM32F401xC | Implemented | No target GPIO driver | No target UART driver | No target timer driver | Incomplete MCU port |
 | STM32F301x8, STM32F302x8 | Vector files only; startup port incomplete | No target GPIO driver | No target UART driver | No target timer driver | Incomplete MCU port |
 | STM32WBA | Partial Bluetooth sources and linker support; startup missing | No target GPIO driver | No target UART driver | No target timer driver | Incomplete MCU port |
@@ -114,6 +114,12 @@ minimum MCU classification. See the [L4 port notes](../ARM/ST/STM32L4xx/README.m
 for virtual mappings, exact restrictions and validation commands.
 
 ### STM32 validation evidence
+
+The maintainer confirms STM32F0 and STM32L4 hardware validation. The listed
+STM32L476, STM32L496 and STM32L4S9 ports are also used in existing projects
+(confirmation recorded 2026-10-08). They are not host-only or awaiting initial
+board validation. The detailed tests below describe additional review coverage
+and do not replace that established hardware use.
 
 For the L4 fixes above, 12 focused host regression executions passed with
 UBSan, including clock-source decoding, UART framing and receive overflow,
@@ -170,10 +176,12 @@ the review commit or that every project passed both IOC build profiles.
 | nRF52840 | Composite USB, bare metal and TaktOS | CDC loopback/PRBS, HID, interrupt and ISO endurance | 2000-second results recorded in the [0.13 notes](releases/0.13.md#recorded-validation); exact firmware SHA/toolchain not supplied with those reports. |
 | nRF54LM20 | Composite USB, bare metal and TaktOS | High-speed composite USB endurance | 2000-second results in the same release record; exact board/variant and firmware revision must accompany future runs. |
 | SAM4LC8C | SAM4L8 Xplained Pro | CDC loopback, ISO alternate settings and manual suspend/wake | Recorded results precede later driver/example changes; see [SAM4L release evidence](releases/0.13.md#sam4l-usb-port). |
-| STM32F030x8 | STM32F0308-DISCO | Startup, LED GPIO, USART1, TIM6 and TIM16; later UART TX DMA PRBS | Function-specific maintainer results; other TIM devices still need hardware coverage. |
+| STM32F030x8 | STM32F0308-DISCO | Hardware validated: startup, GPIO, UART and timers; later UART TX DMA PRBS | Maintainer-confirmed validation. Detailed recorded timer runs cover TIM6/TIM16; coverage of additional modes is tracked separately. |
+| STM32L476, STM32L496, STM32L4S9 | Maintainer's existing projects | Hardware validated and used in projects | Confirmed by the maintainer on 2026-10-08; board names and per-project configurations were not supplied in this confirmation. |
 
-For RA4M1, RE01 and STM32L4, retain the model/compiler/linker results in their
-port notes without relabeling them as physical tests. An unrecorded hardware
+For RA4M1 and RE01, retain the model/compiler/linker results in their
+port notes without relabeling them as physical tests. STM32L4 has separate
+maintainer-confirmed hardware validation and project use. An unrecorded hardware
 result is unknown, not proof that the port fails.
 
 ## Release build and example status
