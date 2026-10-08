@@ -36,11 +36,13 @@ stdio device adapters.
 These are direct compiler/linker checks of the example sources, not an
 IOcomposer or Eclipse project build. The script uses newlib-nano and nosys.
 
-Validated with GCC 14.3.Rel1 for all three package defines: 90 image checks
-cover the seven examples, all nine TimerDemo selections and both normal linker
-scripts. The affected RE01 sources and new/updated examples compile without
-warnings. Existing shared `ARM/src/iatomic.c` builtin declaration warnings and
-UART PRBS unused-variable warnings are still reported by the example builds.
+The original example set was validated with GCC 14.3.Rel1 for all three
+package defines: 90 image checks covered the seven examples, all nine TimerDemo
+selections and both normal linker scripts. After linking the existing shared
+bus demos, 24 I2CMasterDemo/SPIMasterDemo checks passed across Debug/Release
+defines, all three packages and both normal linker scripts. Existing shared
+`ARM/src/iatomic.c` builtin declaration warnings, I2C demo switch/unused-variable
+warnings and UART PRBS unused-variable warnings remain.
 
 The host test does not emulate FIFO side effects, oscillator stabilization, voltage
 transitions, asynchronous AGT stop acknowledgement, interrupt timing, or flash
@@ -147,9 +149,10 @@ Set both `bIntEn` and `bDmaEn` to `false`. Unsupported configurations fail
 initialization: SPI slave, multiplexed 3-wire, quad/octal, frames below 8 or
 above 16 bits; I2C slave, SMBus, 10-bit addresses and requests above 400 kHz;
 and interrupt or DMA operation on either bus. Polling callbacks are not issued.
-The older shared `i2c_master_demo.cpp` selects interrupts/DMA. The RE01
-I2CMasterDemo and SPIMasterDemo projects link the new polling applications,
-with both bus interrupt/DMA flags disabled and transfer counts checked.
+The RE01 I2CMasterDemo and SPIMasterDemo projects link the existing shared
+`i2c_master_demo.cpp` and `spi_master_demo.cpp` applications. All six RE01 I2C
+configurations define `I2C_MASTER_DMA_ENABLE=false` and
+`I2C_MASTER_INT_ENABLE=false`; the shared SPI example already selects polling.
 Their wiring, peer protocol, console settings and project configurations are
 documented in `ARM/Renesas/RE01/RE01_1500KB/exemples/README.md`.
 

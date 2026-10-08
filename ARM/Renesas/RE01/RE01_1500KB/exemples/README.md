@@ -18,8 +18,8 @@ newlib-nano and nosys, with no semihosting requirement.
 | TimerDemo | `exemples/timer/timer_demo.cpp` | Selectable timer, all available compare callbacks and UART period reports |
 | UartRetargetDemo | `exemples/uart/uart_retarget_demo.cpp` | UART console using printf/scanf, static RX/TX FIFOs and interrupts |
 | UartPrbsTxTest | `exemples/uart/uart_prbs_tx.cpp` | Existing UART PRBS transmission benchmark |
-| I2CMasterDemo | `exemples/i2c/i2c_polling_master_demo.cpp` | Synchronous command/read with repeated START at 100 kHz |
-| SPIMasterDemo | `exemples/spi/spi_polling_master_demo.cpp` | Synchronous command/read and transmit at 1 MHz, mode 0, 8-bit MSB first |
+| I2CMasterDemo | `exemples/i2c/i2c_master_demo.cpp` | Polling transmit, receive and register reads at 100 kHz |
+| SPIMasterDemo | `exemples/spi/spi_master_demo.cpp` | Polling transmit and command/read at 1 MHz, mode 3, 8-bit MSB first |
 
 The existing DFU and scheduler/SLIP projects remain separate. The direct build
 check below covers the seven applications in this table.
@@ -27,10 +27,10 @@ check below covers the seven applications in this table.
 ## Pin assignments and peer setup
 
 The following are sample MCU pin assignments, not a board connector map. Match
-each application's `board.h` to your wiring before flashing. The new UART
-console/bus examples and TimerDemo use SCI4 at 115200 baud, 8-N-1, without flow
-control or DMA. Connect the adapter's TX to RXD4, RX to TXD4 and common ground.
-UartPrbsTxTest retains its existing, separate pin map.
+each application's `board.h` to your wiring before flashing. The UART console, I2CMasterDemo and TimerDemo use SCI4 at 115200 baud.
+SPIMasterDemo retains the shared example's 1000000-baud console. All use 8-N-1
+without flow control or DMA. Connect the adapter's TX to RXD4, RX to TXD4 and
+common ground. UartPrbsTxTest retains its existing, separate pin map.
 
 | Signal | MCU pin | PinOp | Use |
 | --- | --- | --- | --- |
@@ -45,17 +45,20 @@ UartPrbsTxTest retains its existing, separate pin map.
 | PulseTrain / Timer LEDs | P009, P008, P007 | `IOPINOP_GPIO` | Three application outputs |
 
 SPI0 uses the same group B for all peripheral signals. The CS pin is a GPIO,
-and the driver holds it low across the command and receive phase. The sample
-peer must accept command 0 followed by 16 receive bytes, then a separate
-16-byte transmit transaction. Adapt the command and protocol to your peer;
+and the driver holds it low across the command and receive phase. The shared example sends a 100-byte transaction containing values 0 through
+99, then command 0 followed by 20 receive bytes. The peer must use SPI mode 3.
+Adapt the command and protocol to your peer;
 completed SPI clocks alone do not verify the peer's identity or response.
 
-The I2C peer uses 7-bit address 0x22 and a one-byte register offset. The demo
-reads five bytes starting at offset 3 and reports a short transfer on NACK or
-timeout. Adapt the address/offset to your peer in the application source.
-Fit external SDA/SCL pull-ups to the correct I/O supply; the map uses open-drain
-pins with internal pull-ups disabled. Both polling examples check initialization
-and returned byte counts. Their UART diagnostics run in the main loop.
+The I2C peer uses 7-bit address 0x22 and a one-byte register offset. The shared example transmits 11 bytes, receives nine bytes, reads five bytes
+starting at offset 3 and then reads five bytes without a command prefix.
+Adapt the address/offset to your peer in the application source. Fit external
+SDA/SCL pull-ups to the correct I/O supply; the shared example also enables
+internal pull-ups. All six RE01 I2CMasterDemo configurations define
+`I2C_MASTER_DMA_ENABLE=false` and `I2C_MASTER_INT_ENABLE=false`, selecting the
+existing example's synchronous path. SPIMasterDemo already selects polling.
+The shared examples retarget printf to UART in Release configurations; inspect
+transfer buffers and counts in the debugger for Debug configurations.
 
 Pin names and mux values follow Renesas's
 [pin configuration source](https://github.com/renesas/re-driver-package/blob/d67d8f1410421e33923e65a776add5401fbb11b8/SDK_RE01_1500KB/RE01_1500KB_DFP/Device/pin.c)
@@ -105,6 +108,9 @@ and board links, compiles with GNU C++23, links both normal scripts and checks
 vector, option-memory, code/data and RAM layout. This is a direct compiler/linker
 check, not an Eclipse build or a hardware timing test.
 
-Validated with GCC 14.3.Rel1 for all three packages: 90 images passed the
-compiler, linker and memory-layout checks. Project XML checks verified the
-six configurations, package defines, source/include links and linker settings.
+The original example set passed 90 compiler/linker/layout checks with GCC
+14.3.Rel1 across all three packages. After switching to the shared bus examples,
+I2CMasterDemo and SPIMasterDemo passed 24 checks covering Debug/Release defines,
+all three packages and both normal linker scripts. XML checks verified both
+source links and the polling flags in all six I2C configurations. Existing
+shared atomic and I2C demo warnings remain; no hardware test was performed.

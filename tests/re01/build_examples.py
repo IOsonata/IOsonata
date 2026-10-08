@@ -94,6 +94,8 @@ for name in examples:
     defines = []
     if name == 'UartRetargetDemo':
         defines = ['UART_INT_MODE=true', 'UART_DMA_MODE=false', 'UART_BAUDRATE=115200']
+    if name == 'I2CMasterDemo':
+        defines = ['I2C_MASTER_DMA_ENABLE=false', 'I2C_MASTER_INT_ENABLE=false']
     if name == 'TimerDemo':
         defines = ['TIMER_DEMO_FREQ=32768', 'TIMER_DEMO_UART']
     devices = range(9) if name == 'TimerDemo' and args.all_timers else (
