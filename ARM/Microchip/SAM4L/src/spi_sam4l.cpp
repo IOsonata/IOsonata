@@ -649,10 +649,11 @@ static void Sam4lSpiSlaveArm(Sam4lSpiDev_t *dev)
 	dev->SlaveDmaFrame = spi->Cfg.bDmaEn &&
 		dev->Length <= 65535 && dev->SlaveTxLength <= 65535;
 	dev->SlaveRxDma = false;
-	// Preload exactly one character. RDRF loads the following character;
-	// software must not overwrite the first response before NSS falls.
-	dev->pReg->SPI_TDR = dev->SlaveTxLength > 0 ?
-		dev->pTx[0] : spi->Cfg.DummyByte;
+	// PDCA owns every TX byte in DMA mode, including the first one.
+	// A CPU preload as well would transmit byte zero twice.
+	if (!dev->SlaveDmaFrame || dev->SlaveTxLength == 0)
+		dev->pReg->SPI_TDR = dev->SlaveTxLength > 0 ?
+			dev->pTx[0] : spi->Cfg.DummyByte;
 	uint32_t mask = SPI_IER_NSSR | SPI_IER_OVRES | SPI_IER_UNDES;
 	if (dev->SlaveDmaFrame)
 	{
@@ -675,9 +676,6 @@ static void Sam4lSpiSlaveArm(Sam4lSpiDev_t *dev)
 		}
 		else
 			mask |= SPI_IER_RDRF;
-		// In slave mode the first TDR write immediately loads the shifter.
-		// Duplicate byte zero in TDR: the next load at transfer start must
-		// not replace it with byte one (datasheet 26.7.4).
 		if (dev->SlaveTxLength > 0)
 		{
 			tx->PDCA_IER = PDCA_IER_TRC | PDCA_IER_TERR;
