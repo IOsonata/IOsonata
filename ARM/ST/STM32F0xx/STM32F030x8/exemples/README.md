@@ -27,11 +27,11 @@ New UART projects use USART1, virtual device 0, TX PA9 and RX PA10 at
 assumed to provide a virtual COM port. Use another board/transmitter to feed the
 RX examples. Raw PRBS and SLIP are separate wire formats.
 
-The new projects other than UartRetargetDemo use `rdimon` semihosting: run with a
+The new projects other than TimerDemo and UartRetargetDemo use `rdimon` semihosting: run with a
 debugger that enables semihosting. PRBS/SLIP diagnostics go to the debugger, not
 into the test UART stream. Per-byte logging is disabled for the F030 raw receiver
-to avoid stalling reception. UartRetargetDemo uses `nosys` with IOsonata's UART
-stdio retargeting and does not require semihosting.
+to avoid stalling reception. TimerDemo and UartRetargetDemo use `nosys` with
+IOsonata's UART stdio retargeting and do not require semihosting.
 
 For UartPrbsTxTestTaktOS, place the TaktOS checkout beside IOsonata, import
 `TaktOS/ARM/cm0/ioc`, and build `TaktOS_M0` in the matching configuration before
