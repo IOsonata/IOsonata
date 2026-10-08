@@ -2,8 +2,10 @@
 
 STM32L476, STM32L496 and STM32L4S9 are supported at the minimum MCU level:
 startup, GPIO, interrupt-driven UART and LPTIM1/2 are implemented. Library projects
-exist for each MCU. Complete library/application links and board validation
-remain outstanding for the reviewed changes. See the
+exist for each MCU. The maintainer confirms these STM32L4 ports are hardware
+validated and used in existing projects (2026-10-08). The automated checks
+below describe the scope of the recent source review; they do not mean the
+ports lack hardware validation. See the
 [central MCU support list](../../../docs/supported-targets.md).
 An MCU needs startup, GPIO, UART and timer support to be considered supported.
 Peripheral source files and project metadata alone do not establish this.
@@ -37,8 +39,8 @@ I2C currently accepts polling master configurations only. Slave, interrupt
 and DMA requests return false before changing the device or hardware state.
 L4S9 I2C4 uses virtual index 3.
 
-These restrictions make unfinished paths explicit; they do not certify the
-remaining transfer implementations or LPTIM behavior on hardware.
+These restrictions identify unsupported modes within the hardware-validated
+ports. Hardware validation does not imply that every optional mode is implemented.
 
 ## Validation
 
@@ -66,7 +68,7 @@ optimization levels; the alternative system_stm32l4plus.c compiles for L4S9
 checks with staged headers,
 not complete IOC library/application links or on-board tests.
 
-Before claiming a release validation baseline, verify startup clocks, GPIO, UART
-traffic and LPTIM ticks/triggers on the named MCU and board. Record the tested
-revision, toolchain and results. Other peripheral modes require their own
-validation.
+For a new release-candidate run, record the project, MCU/board, revision,
+toolchain and exercised modes alongside the existing hardware-validation
+record. Validate changes affecting clocks, GPIO, UART or LPTIM on the relevant
+project; optional peripheral modes retain their documented limits.
