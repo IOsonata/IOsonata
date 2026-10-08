@@ -13,7 +13,8 @@ IOsonata timer implementation. Optional peripherals, project integration, build
 verification and hardware results are separate facts. A generic wrapper such
 as `src/coredev/timer.cpp` does not supply a MCU-specific timer implementation.
 
-- **Supported, minimum implemented**: the four core implementations exist.
+- **Supported**: startup, GPIO, UART and timers are implemented.
+  Other implemented peripherals are described in the target notes.
   This does not certify every peripheral, operating mode or example.
 - **Project integration incomplete**: reusable target code exists, but the
   supplied library project does not include the required implementation.
@@ -35,14 +36,14 @@ startup and timer selections differ by MCU/core.
 
 | MCU / core | Implementation and project status | Timer implementation | Validation and limits |
 |---|---|---|---|
-| [nRF52832](../ARM/Nordic/nRF52/nRF52832/lib/ioc/) | Supported, minimum implemented | RTC + TIMER | Established BLE, UART, sensor and low-power hardware baseline. No native USB controller port. |
-| [nRF52840](../ARM/Nordic/nRF52/nRF52840/lib/ioc/) | Supported, minimum implemented | RTC + TIMER | Recorded bare-metal and TaktOS USB composite endurance runs; native full-speed USB. |
-| [nRF54L15](../ARM/Nordic/nRF54/nRF54L15/lib/ioc/) | Supported, minimum implemented | GRTC + TIMER | Established UART/Bluetooth and TaktOS hardware baseline. LM20 USB support does not extend to L15. |
-| [nRF54LM20A/B](../ARM/Nordic/nRF54/nRF54LM20x/lib/ioc/) | Supported, minimum implemented | GRTC + TIMER | Recorded bare-metal and TaktOS high-speed USB composite runs. Select the matching LM20 variant in the project. |
-| [nRF5340 application core](../ARM/Nordic/nRF53/nRF5340_App/lib/ioc/) | Supported, minimum implemented in source | RTC + TIMER | Separate startup and shared-interface dispatch. Current full IOC builds and hardware results are not established by this review. |
-| [nRF5340 network core](../ARM/Nordic/nRF53/nRF5340_Net/lib/ioc/) | Supported, minimum implemented in source | RTC + TIMER | Separate network-core startup and serial dispatch. Application-core results do not validate this core or an inter-core radio transport. |
-| [nRF9160](../ARM/Nordic/nRF91/nRF9160/lib/ioc/) | Supported, minimum implemented in source | RTC + TIMER | Shared nRF91 startup. LTE/GNSS depend on modem integration and firmware; MCU support does not certify those services. |
-| [nRF91x1 project](../ARM/Nordic/nRF91/nRF91x1/lib/ioc/) | Supported, minimum implemented in source; exact variant configuration matters | RTC + TIMER | Debug/Release currently define `NRF9120_XXAA`. The directory name is not evidence of a build or hardware test for every nRF91 variant. |
+| [nRF52832](../ARM/Nordic/nRF52/nRF52832/lib/ioc/) | Supported | RTC + TIMER | Established BLE, UART, sensor and low-power hardware baseline. No native USB controller port. |
+| [nRF52840](../ARM/Nordic/nRF52/nRF52840/lib/ioc/) | Supported | RTC + TIMER | Recorded bare-metal and TaktOS USB composite endurance runs; native full-speed USB. |
+| [nRF54L15](../ARM/Nordic/nRF54/nRF54L15/lib/ioc/) | Supported | GRTC + TIMER | Established UART/Bluetooth and TaktOS hardware baseline. LM20 USB support does not extend to L15. |
+| [nRF54LM20A/B](../ARM/Nordic/nRF54/nRF54LM20x/lib/ioc/) | Supported | GRTC + TIMER | Recorded bare-metal and TaktOS high-speed USB composite runs. Select the matching LM20 variant in the project. |
+| [nRF5340 application core](../ARM/Nordic/nRF53/nRF5340_App/lib/ioc/) | Supported | RTC + TIMER | Separate startup and shared-interface dispatch. Current full IOC builds and hardware results are not established by this review. |
+| [nRF5340 network core](../ARM/Nordic/nRF53/nRF5340_Net/lib/ioc/) | Supported | RTC + TIMER | Separate network-core startup and serial dispatch. Application-core results do not validate this core or an inter-core radio transport. |
+| [nRF9160](../ARM/Nordic/nRF91/nRF9160/lib/ioc/) | Supported | RTC + TIMER | Shared nRF91 startup. LTE/GNSS depend on modem integration and firmware; MCU support does not certify those services. |
+| [nRF91x1 project](../ARM/Nordic/nRF91/nRF91x1/lib/ioc/) | Supported; exact variant configuration matters | RTC + TIMER | Debug/Release currently define `NRF9120_XXAA`. The directory name is not evidence of a build or hardware test for every nRF91 variant. |
 | [nRF52805](../ARM/Nordic/nRF52/nRF52805/lib/ioc/), [nRF52810](../ARM/Nordic/nRF52/nRF52810/lib/ioc/) | Project integration incomplete | Shared RTC/TIMER sources available, absent from these library source lists | Projects link the generic timer wrapper and SDK `app_timer.c`, but omit `timer_nrfx.cpp`, `timer_lf_nrfx.cpp` and `timer_hf_nrfx.cpp`. Restore the target Timer integration and verify builds before treating these projects as complete. |
 | nRF54H20 [application](../ARM/Nordic/nRF54/nRF54H20/nRF54H20_App/lib/ioc/), [network](../ARM/Nordic/nRF54/nRF54H20/nRF54H20_Net/lib/ioc/) and [RISC-V](../RISCV/Nordic/nRF54/nRF54H20/lib/ioc/) | Incomplete ports | Target integration incomplete | App startup link names missing `system_nrf54h.c`; H20 peripheral, NRFS USB, MPSL and inter-core HCI integration remain incomplete. See [H20 notes](../ARM/Nordic/nRF54/nRF54H20/README.md). |
 
@@ -61,8 +62,8 @@ part or core.
 
 | MCU | Implementation and project status | UART / timers | Validation and limits |
 |---|---|---|---|
-| [RA4M1](../ARM/Renesas/RA4M1/README.md) | Supported, minimum implemented | SCI polling/interrupt; AGT0/1 and GPT0-7 | Startup/GPIO/ICU/UART/timer models and ARM layout checks are documented. Physical validation remains pending. No native USB controller or DMA/DTC support in this port. See [timer details](../ARM/Renesas/RA4M1/TIMER.md). |
-| [RE01 1500 KB](../ARM/Renesas/RE01/RE01_1500KB/lib/ioc/) | Supported, minimum implemented | SCI polling/interrupt; AGT0/1, cascaded TMR0/1 and GPT0-5 (nine virtual devices) | DBN/CFB/CFP example compile/link/layout checks and register models are documented. SPI and I2C currently provide polling master modes; do not claim interrupt/DMA or slave support. See [examples](../ARM/Renesas/RE01/RE01_1500KB/exemples/README.md) and [validation](../tests/re01/README.md). |
+| [RA4M1](../ARM/Renesas/RA4M1/README.md) | Supported | SCI polling/interrupt; AGT0/1 and GPT0-7 | Startup/GPIO/ICU/UART/timer models and ARM layout checks are documented. Physical validation remains pending. No native USB controller or DMA/DTC support in this port. See [timer details](../ARM/Renesas/RA4M1/TIMER.md). |
+| [RE01 1500 KB](../ARM/Renesas/RE01/RE01_1500KB/lib/ioc/) | Supported | SCI polling/interrupt; AGT0/1, cascaded TMR0/1 and GPT0-5 (nine virtual devices) | DBN/CFB/CFP example compile/link/layout checks and register models are documented. SPI and I2C currently provide polling master modes; do not claim interrupt/DMA or slave support. See [examples](../ARM/Renesas/RE01/RE01_1500KB/exemples/README.md) and [validation](../tests/re01/README.md). |
 | [R9A02G021](../RISCV/Renesas/R9A02/R9A02G021/lib/ioc/) | Partial port | Startup, GPIO and UART sources; standalone AGT0 millisecond tick | `agt_tick_r9a02.c` supplies `R9A02_AgtTickInit/Isr`, not the generic `TimerInit` implementation. The tick helper does not establish complete IOsonata Timer support. Current full IOC/hardware validation is not recorded here. |
 
 ## Microchip SAM
@@ -70,7 +71,7 @@ part or core.
 | MCU project | Implementation and project status | Timer status | Validation and limits |
 |---|---|---|---|
 | [SAM4LCxC](../ARM/Microchip/SAM4L/SAM4LCxC/lib/ioc/) | Supported; hardware validated | AST + six TC channels | SAM4LC8C on SAM4L8 Xplained Pro: startup, GPIO, UART, timers, I2C, SPI and USB. See the recorded tests below. |
-| [SAM4LSxC](../ARM/Microchip/SAM4L/SAM4LSxC/lib/ioc/) | Supported, minimum implemented; shares SAM4L drivers | AST + six TC channels | Uses the same timer sources and library integration. Hardware confirmation is for SAM4LC8C; separate LS-device testing is not recorded. |
+| [SAM4LSxC](../ARM/Microchip/SAM4L/SAM4LSxC/README.md) | Supported; shares SAM4L drivers | AST + six TC channels | Shared SAM4L drivers, IOcomposer library, Blinky and TimerDemo projects. Not hardware validated; users can build and try the port. |
 | [SAM4E16E](../ARM/Microchip/SAM4E/SAM4E16E/lib/ioc/) | Incomplete minimum port | No target Timer implementation in the repository/project | Startup, GPIO and UART sources exist. The generic timer wrapper alone does not complete the port. |
 
 SAM4L is hardware validated, confirmed by the maintainer on 2026-10-08.

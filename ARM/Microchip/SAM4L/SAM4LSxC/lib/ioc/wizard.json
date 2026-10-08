@@ -1,15 +1,16 @@
 {
   "schema_version": 1,
-  "mcu": "SAM4LSXC",
+  "mcu": "SAM4LS8C",
   "cpu": "cortex-m4",
   "fpu": false,
   "fpu_unit": "none",
-  "defines": [],
-  "includes": [
-    "${iosonata}/ARM/Microchip/SAM4L/include",
-    "${iosonata}/ARM/Microchip/SAM4L/SAM4LSXC/lib/include"
+  "defines": [
+    "__SAM4LS8C__"
   ],
-  "linker_script": "${iosonata}/ARM/Microchip/SAM4L/SAM4LSXC/ldscript/gcc_sam4lsxc.ld",
-  "lib_path": "${iosonata}/ARM/Microchip/SAM4L/SAM4LSXC/lib/ioc/${config}",
-  "lib": "IOsonata_SAM4LSXC"
+  "includes": [
+    "${iosonata}/ARM/Microchip/SAM4L/include"
+  ],
+  "linker_script": "${iosonata}/ARM/Microchip/SAM4L/ldscript/gcc_sam4lx8.ld",
+  "lib_path": "${iosonata}/ARM/Microchip/SAM4L/SAM4LSxC/lib/ioc/${config}",
+  "lib": "IOsonata_SAM4LSxC"
 }
