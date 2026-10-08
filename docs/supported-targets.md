@@ -1,39 +1,87 @@
-# Supported Targets
+# Supported MCUs
 
-This document records MCU implementation support and hardware-validation evidence separately. The STM32 table reflects the startup, GPIO, UART and timer review for 0.13; it is not a claim that every peripheral on those MCUs is implemented.
+Reviewed against main `05e00ed094aaa0f5cb21493e5ed8dda871de7c26` on
+2026-10-08. This inventory covers all 30 MCU library projects under
+`ARM/` and `RISCV/`, plus source-only and planned targets noted below.
 
-The presence of a target port or build project means that implementation source exists. It does not by itself mean that the target is part of the current hardware-validation loop.
+## What support means
 
-## Minimum MCU support
+**Minimum MCU support** requires implemented startup, GPIO, UART and an
+IOsonata timer backend. Optional peripherals, project integration, build
+verification and hardware results are separate facts. A generic wrapper such
+as `src/coredev/timer.cpp` does not supply a target timer backend.
 
-An MCU must provide startup, GPIO, UART and timer support to be considered supported.
-A device header, vector table or library project alone is insufficient. Record
-which timer driver and UART modes are implemented; other peripherals have
-separate capability limits. Hardware-validation status is recorded separately
-from this minimum implementation requirement.
+- **Supported, minimum implemented**: the four core implementations exist.
+  This does not certify every peripheral, operating mode or example.
+- **Project integration incomplete**: reusable target code exists, but the
+  supplied library project does not include the required implementation.
+- **Incomplete port**: required target code is missing or contains unfinished
+  operations. A device header or library project alone is insufficient.
+- **Hardware evidence**: a recorded run of named functions on a target.
+  Earlier results remain useful, but do not certify the current commit.
+- **Build/model evidence**: compiler, linker or host register tests. These
+  are not hardware tests or substitutes for a full IOC application build.
 
-## Status terms
+The library builder discovers projects; its menu is not a support-status list.
+Timer device numbers are virtual indices, not hardware timer numbers. Shared
+ARM SysTick support is separate from the target Timer backends listed here.
 
-- **Supported (minimum implemented)** - startup, GPIO, UART and at least one timer driver are implemented. Optional peripherals and modes have separate limits; full builds and hardware results are recorded independently.
-- **Incomplete MCU port** - one or more minimum requirements are missing. Headers, linker scripts, vector tables or an available project do not make the MCU supported.
-- **Hardware validated** — the current tree has been built and exercised on the named hardware using the documented IOcomposer workflow.
-- **Build project available** — a target library project exists and can be selected by the installed builder, but it is not necessarily part of routine hardware validation.
-- **Experimental** — implementation work is incomplete, locally dependent or awaiting broader hardware coverage.
-- **Legacy** — source or projects remain for historical compatibility but are not maintained as a current baseline.
+## Nordic
 
-## Current hardware-validation baselines
+All rows below use the shared Nordic GPIO and UART implementations. The
+startup and timer selections differ by MCU/core.
 
-| MCU target | Reference hardware | Role |
-|---|---|---|
-| Nordic nRF52832 | IDK-BLYST-NANO, BLUEIO-TAG-EVIM, Nordic nRF52 DK | Primary Cortex-M4F, Bluetooth, UART, sensor and low-power baseline |
-| Nordic nRF54L15 | BLYSTL15, Nordic nRF54L15 DK | Cortex-M33 and `sdk-nrf-bm` bare-metal baseline |
+| MCU / core | Implementation and project status | Timer backend | Validation and limits |
+|---|---|---|---|
+| [nRF52832](../ARM/Nordic/nRF52/nRF52832/lib/ioc/) | Supported, minimum implemented | RTC + TIMER | Established BLE, UART, sensor and low-power hardware baseline. No native USB controller port. |
+| [nRF52840](../ARM/Nordic/nRF52/nRF52840/lib/ioc/) | Supported, minimum implemented | RTC + TIMER | Recorded bare-metal and TaktOS USB composite endurance runs; native full-speed USB. |
+| [nRF54L15](../ARM/Nordic/nRF54/nRF54L15/lib/ioc/) | Supported, minimum implemented | GRTC + TIMER | Established UART/Bluetooth and TaktOS hardware baseline. LM20 USB support does not extend to L15. |
+| [nRF54LM20A/B](../ARM/Nordic/nRF54/nRF54LM20x/lib/ioc/) | Supported, minimum implemented | GRTC + TIMER | Recorded bare-metal and TaktOS high-speed USB composite runs. Select the matching LM20 variant in the project. |
+| [nRF5340 application core](../ARM/Nordic/nRF53/nRF5340_App/lib/ioc/) | Supported, minimum implemented in source | RTC + TIMER | Separate startup and shared-interface dispatch. Current full IOC builds and hardware results are not established by this review. |
+| [nRF5340 network core](../ARM/Nordic/nRF53/nRF5340_Net/lib/ioc/) | Supported, minimum implemented in source | RTC + TIMER | Separate network-core startup and serial dispatch. Application-core results do not validate this core or an inter-core radio transport. |
+| [nRF9160](../ARM/Nordic/nRF91/nRF9160/lib/ioc/) | Supported, minimum implemented in source | RTC + TIMER | Shared nRF91 startup. LTE/GNSS depend on modem integration and firmware; MCU support does not certify those services. |
+| [nRF91x1 project](../ARM/Nordic/nRF91/nRF91x1/lib/ioc/) | Supported, minimum implemented in source; exact variant configuration matters | RTC + TIMER | Debug/Release currently define `NRF9120_XXAA`. The directory name is not evidence of a build or hardware test for every nRF91 variant. |
+| [nRF52805](../ARM/Nordic/nRF52/nRF52805/lib/ioc/), [nRF52810](../ARM/Nordic/nRF52/nRF52810/lib/ioc/) | Project integration incomplete | Shared RTC/TIMER sources available, absent from these library source lists | Projects link the generic timer wrapper and SDK `app_timer.c`, but omit `timer_nrfx.cpp`, `timer_lf_nrfx.cpp` and `timer_hf_nrfx.cpp`. Restore the target Timer integration and verify builds before treating these projects as complete. |
+| nRF54H20 [application](../ARM/Nordic/nRF54/nRF54H20/nRF54H20_App/lib/ioc/), [network](../ARM/Nordic/nRF54/nRF54H20/nRF54H20_Net/lib/ioc/) and [RISC-V](../RISCV/Nordic/nRF54/nRF54H20/lib/ioc/) | Incomplete ports | Target integration incomplete | App startup link names missing `system_nrf54h.c`; H20 peripheral, NRFS USB, MPSL and inter-core HCI integration remain incomplete. See [H20 notes](../ARM/Nordic/nRF54/nRF54H20/README.md). |
 
-These rows identify the active reference targets. Feature coverage still varies by target and subsystem. A hardware-validated MCU does not imply that every optional interface, radio stack, storage mode or crypto provider has the same validation depth.
+Source evidence: [GPIO](../ARM/Nordic/src/iopincfg_nrfx.c),
+[UART](../ARM/Nordic/src/uart_nrfx.cpp),
+[timer dispatch](../ARM/Nordic/src/timer_nrfx.cpp),
+[RTC](../ARM/Nordic/src/timer_lf_nrfx.cpp),
+[GRTC](../ARM/Nordic/nRF54/src/timer_lf_nrf54.cpp) and
+[TIMER](../ARM/Nordic/src/timer_hf_nrfx.cpp).
+Radio stack and SDK choices are described in the
+[Bluetooth guide](bluetooth-user-guide.md) and [dependencies](dependencies.md).
+A family-shared implementation does not establish hardware coverage for every
+part or core.
 
-The maintainer confirmed the STM32F030x8 minimum port on STM32F0308-DISCO:
-startup, LED GPIO, USART1 UART output/retargeting, TIM6 and TIM16. See the
-STM32 validation record below. The Nordic rows above identify routine
-reference platforms; they are not the complete supported-MCU list.
+## Renesas
+
+| MCU | Implementation and project status | UART / timers | Validation and limits |
+|---|---|---|---|
+| [RA4M1](../ARM/Renesas/RA4M1/README.md) | Supported, minimum implemented | SCI polling/interrupt; AGT0/1 and GPT0-7 | Startup/GPIO/ICU/UART/timer models and ARM layout checks are documented. Physical validation remains pending. No native USB controller or DMA/DTC support in this port. See [timer details](../ARM/Renesas/RA4M1/TIMER.md). |
+| [RE01 1500 KB](../ARM/Renesas/RE01/RE01_1500KB/lib/ioc/) | Supported, minimum implemented | SCI polling/interrupt; AGT0/1, cascaded TMR0/1 and GPT0-5 (nine virtual devices) | DBN/CFB/CFP example compile/link/layout checks and register models are documented. SPI and I2C currently provide polling master modes; do not claim interrupt/DMA or slave support. See [examples](../ARM/Renesas/RE01/RE01_1500KB/exemples/README.md) and [validation](../tests/re01/README.md). |
+| [R9A02G021](../RISCV/Renesas/R9A02/R9A02G021/lib/ioc/) | Partial port | Startup, GPIO and UART sources; standalone AGT0 millisecond tick | `agt_tick_r9a02.c` supplies `R9A02_AgtTickInit/Isr`, not the generic `TimerInit` backend. The tick helper does not establish complete IOsonata Timer support. Current full IOC/hardware validation is not recorded here. |
+
+## Microchip SAM
+
+| MCU project | Implementation and project status | Timer status | Validation and limits |
+|---|---|---|---|
+| [SAM4LCxC](../ARM/Microchip/SAM4L/SAM4LCxC/lib/ioc/) | Startup/GPIO/UART and native USB implemented; Timer port incomplete | AST partial; TC stub | SAM4L8 Xplained Pro has recorded CDC, ISO and suspend/wake results. These validate USB paths, not the unfinished Timer API. |
+| [SAM4LSxC](../ARM/Microchip/SAM4L/SAM4LSxC/lib/ioc/) | Shares SAM4L source; Timer port incomplete | AST partial; TC stub | Do not transfer SAM4LC8C hardware results to every LS device/configuration. |
+| [SAM4E16E](../ARM/Microchip/SAM4E/SAM4E16E/lib/ioc/) | Incomplete minimum port | No target Timer backend in the repository/project | Startup, GPIO and UART sources exist. The generic timer wrapper alone does not complete the port. |
+
+The SAM4L [AST driver](../ARM/Microchip/SAM4L/src/timer_sam4l_ast.cpp)
+has empty reset/disable-trigger operations and interrupt handlers that do not
+dispatch the configured trigger callbacks. The
+[TC initializer](../ARM/Microchip/SAM4L/src/timer_sam4l_tc.cpp)
+returns success without installing a working timer implementation. Neither
+should be described as a complete timer port.
+
+SAM4L USB provides EP0 and seven physical data endpoints; each data direction
+uses a physical endpoint. The complete composite stress configuration exceeds
+that endpoint budget. USB host mode is unsupported. See the
+[USB guide](usb-user-guide.md#sam4l) for supported individual examples.
 
 ## STM32 MCU support
 
@@ -98,65 +146,82 @@ those functions, not a test of every mode or all seven timers. TIM14, TIM17,
 TIM15, TIM3 and TIM1 still need hardware coverage.
 The planned L152/Nucleo-64 work is outside the 0.13 support list.
 
-## Other source ports
+## NXP, Espressif and Raspberry Pi
 
-IOsonata contains additional Arm, RISC-V and host implementations under:
+| MCU project | Available implementation | Missing minimum support / integration |
+|---|---|---|
+| [LPC11U35](../ARM/NXP/LPC11xx/LPC11U35/lib/ioc/) | Legacy startup, GPIO, UART and other peripheral sources | No target Timer backend; older interfaces/projects require current build verification. |
+| [LPC1769](../ARM/NXP/LPC17xx/LPC1769/lib/ioc/) | Legacy startup, GPIO and UART sources | No target Timer backend; older interfaces/projects require current build verification. |
+| [LPC54605](../ARM/NXP/LPC546xx/LPC54605/lib/ioc/) | Startup/vector/linker project | Target GPIO, UART and Timer integration incomplete. Shared LPC code is not proof of a working LPC54605 port. |
+| [ESP32-C3](../RISCV/Espressif/ESP32C/ESP32C3/lib/ioc/) | Startup, GPIO and UART sources, clock and interrupt routing | No IOsonata target Timer backend. Optional bus sources do not establish complete peripheral support. |
+| [ESP32-C6](../RISCV/Espressif/ESP32C/ESP32C6/lib/ioc/) | Startup, PCR and interrupt-routing sources | No target Timer backend; the library source list also omits the shared Espressif GPIO/UART implementation. Fixing the Blinky source link alone does not complete this port. |
+| [RP2040](../ARM/RPI/RP20/RP2040/lib/ioc/) | Project scaffold and generic sources | Native startup/GPIO/UART/Timer integration absent. Incomplete port. |
 
-```text
-ARM/
-RISCV/
-Linux/
-Win/
-OSX/
-```
+## Recorded hardware evidence
 
-The installed MCU-library builder discovers the build projects available in the current checkout. Use that menu to determine which target libraries can be built by the installed environment.
+This table records the scope of maintainer results, independently of the
+minimum-port classification. It is not a claim that every row was tested at
+the review commit or that every project passed both IOC build profiles.
 
-Do not convert directory presence into a support claim. Read the complete target implementation, its example projects and recent test history before describing its status.
+| MCU | Hardware / configuration recorded | Exercised functions | Evidence scope |
+|---|---|---|---|
+| nRF52832 | IDK-BLYST-NANO, BLUEIO-TAG-EVIM, Nordic nRF52 DK | BLE, UART, sensors and low-power applications | Established reference baseline; specific configurations still matter. |
+| nRF54L15 | BLYSTL15, Nordic nRF54L15 DK | UART, Bluetooth and TaktOS benchmarks | Established reference baseline. |
+| nRF52840 | Composite USB, bare metal and TaktOS | CDC loopback/PRBS, HID, interrupt and ISO endurance | 2000-second results recorded in the [0.13 notes](releases/0.13.md#recorded-validation); exact firmware SHA/toolchain not supplied with those reports. |
+| nRF54LM20 | Composite USB, bare metal and TaktOS | High-speed composite USB endurance | 2000-second results in the same release record; exact board/variant and firmware revision must accompany future runs. |
+| SAM4LC8C | SAM4L8 Xplained Pro | CDC loopback, ISO alternate settings and manual suspend/wake | Recorded results precede later driver/example changes; see [SAM4L release evidence](releases/0.13.md#sam4l-usb-port). |
+| STM32F030x8 | STM32F0308-DISCO | Startup, LED GPIO, USART1, TIM6 and TIM16; later UART TX DMA PRBS | Function-specific maintainer results; other TIM devices still need hardware coverage. |
+
+For RA4M1, RE01 and STM32L4, retain the model/compiler/linker results in their
+port notes without relabeling them as physical tests. An unrecorded hardware
+result is unknown, not proof that the port fails.
+
+## Release build and example status
+
+At `05e00ed`, clean USB and Bluetooth host builds/tests passed with
+GCC 13.3, ASan/UBSan and leak detection disabled. The SAM4LC8C bare-metal CDC
+source closure compiled and linked with Arm GNU 14.3.1 in Debug and Release;
+the existing RWX LOAD-segment warning remains. That script builds a selected
+source closure, not the complete IOC MCU library, and does not compile the
+unfinished SAM4L timer sources.
+
+Full IOC library/application builds and final hardware smoke tests remain
+release gates. Earlier measurements do not certify later changes.
+
+The legacy `UartSdkLoopbackTest` and `UartLoopbackSdk5` target projects were
+removed in [PR 79](https://github.com/IOsonata/IOsonata/pull/79).
+The shared SDK UART source remains. The nRF52840 `PwmToneDemo` project still
+references missing `exemples/pwm/pwm_tone_demo.cpp`; its presence is not a
+working-example claim. An incomplete example does not by itself invalidate
+the MCU's core drivers.
 
 ## Desktop targets
 
-| Platform | Status | Intended use |
-|---|---|---|
-| macOS | Best effort | Host-supported interfaces, tools and test harnesses |
-| Linux | Best effort | Host-supported interfaces, tools and test harnesses |
-| Windows | Best effort | Host-supported interfaces, tools and test harnesses |
+macOS, Linux and Windows source is for host interfaces, tools and tests.
+These are not MCU ports and are not included in the minimum-driver matrix.
+Host tests cannot establish peripheral timing or electrical behavior.
 
-Desktop support does not mean that MCU peripheral drivers execute unchanged on a desktop operating system. Hardware-dependent behaviour must still be validated on the target MCU and board.
+## Updating this inventory
 
-## Promoting a target to hardware validated
+For implementation changes, name the MCU/core, link the target driver and
+library project, and record any intentionally unsupported modes. Keep a
+partial driver explicit instead of marking an entire family as supported.
 
-Record all of the following in the same change:
-
-1. exact MCU and board;
-2. IOsonata commit;
-3. IOcomposer and compiler versions;
-4. vendor SDK or binary-component revision where applicable;
-5. Debug and Release library-build result;
-6. application examples exercised on hardware;
-7. flash, runtime and data-integrity results relevant to the subsystem;
-8. any known unsupported modes or local requirements.
-
-A target requiring uncommitted local patches is not hardware validated from the current tree.
+For build or hardware results, record the MCU and board, IOsonata commit,
+IOcomposer/compiler versions, SDK or binary-component revisions, Debug/Release
+build result, applications exercised and remaining limitations. Preserve
+older maintainer results with their original scope when some metadata is
+missing; do not silently promote them to a test of the current tree.
 
 ## Reporting a target issue
 
-Include:
-
-- host operating system;
-- IOcomposer version;
-- compiler version;
-- target project path;
-- MCU and board name;
-- Debug or Release profile;
-- example or application name;
-- relevant board configuration;
-- complete build log;
-- flash and runtime output when applicable.
+Include the MCU/core and board, project path, Debug/Release profile, IOsonata
+revision, compiler/SDK versions, relevant `board.h` configuration, complete
+build log and flash/runtime output.
 
 ## Related documentation
 
 - [Documentation index](README.md)
 - [Getting Started](getting-started.md)
 - [IOcomposer workflow](architecture/iocomposer-workflow.md)
-- [Architecture overview](architecture/README.md)
+- [0.13 release notes](releases/0.13.md)
