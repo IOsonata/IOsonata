@@ -112,6 +112,16 @@ void Advance(int dev,uint32_t ticks,bool service=true) {
 }
 int main() {
 	g_McuOsc.LowPwrOsc.Freq=32768;
+	// AST is only reset by POR (42023H table 10-12), not by debugger reset.
+	// Model a previous firmware's running timer with no live software owner.
+	ast.AST_CLOCK=AST_CLOCK_CSSEL_32KHZCLK;
+	(void)(uint32_t)ast.AST_SR;
+	ast.AST_CLOCK |= AST_CLOCK_CEN;
+	(void)(uint32_t)ast.AST_SR;
+	ast.AST_CR=AST_CR_EN | AST_CR_PSEL(7);
+	ast.AST_CV=123456;
+	ast.AST_SR.value=AST_SR_OVF | AST_SR_ALARM0;
+	ast.AST_IMR=AST_SR_ALARM0;
 	TimerDev_t timers[7]={},other={};
 	TimerCfg_t cfg={0,TIMER_CLKSRC_DEFAULT,0,7,Event,false};
 	assert(TimerGetLowFreqDevCount()==1&&TimerGetHighFreqDevCount()==6&&TimerGetHighFreqDevNo()==1);
@@ -119,11 +129,20 @@ int main() {
 	cfg.ClkSrc=TIMER_CLKSRC_EXT; assert(!TimerInit(&other,&cfg)); cfg.ClkSrc=TIMER_CLKSRC_DEFAULT;
 	cfg.IntPrio=16; assert(!TimerInit(&other,&cfg)); cfg.IntPrio=7;
 	assert(!TimerInit(nullptr,&cfg)); cfg.DevNo=7; assert(!TimerInit(&other,&cfg));
+	cfg.DevNo=0;
+	NVIC_EnableIRQ(AST_ALARM_IRQn);
+	assert(!TimerInit(&other,&cfg));
+	assert(g_Sam4lTimerInitStage==SAM4L_TIMER_INIT_IRQ);
+	assert(ast.AST_CR&AST_CR_EN); // Do not take a live interrupt owner.
+	NVIC_DisableIRQ(AST_ALARM_IRQn);
 	for(int dev=0;dev<7;++dev) {
 		cfg.DevNo=dev; timers[dev].pObj=&timers[dev];
 		assert(TimerInit(&timers[dev],&cfg));
+		assert(g_Sam4lTimerInitStage==SAM4L_TIMER_INIT_OK);
+		assert(timers[dev].GetTickCount(&timers[dev])==0);
 		assert(timers[dev].pObj==&timers[dev]);
 		assert(!TimerInit(&other,&cfg));
+		assert(g_Sam4lTimerInitStage==SAM4L_TIMER_INIT_OWNER);
 		assert(!TimerInit(&timers[dev],&cfg));
 		assert(timers[dev].Freq==(dev?375000u:1024u));
 		assert(timers[dev].GetMaxTrigger(&timers[dev])==(dev?3:1));

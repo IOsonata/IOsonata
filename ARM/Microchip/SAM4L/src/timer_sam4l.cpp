@@ -33,6 +33,8 @@ SOFTWARE.
 ----------------------------------------------------------------------------*/
 #include "timer_sam4l.h"
 
+volatile uint32_t g_Sam4lTimerInitStage;
+
 Sam4l_TimerData_t g_Sam4lTimerData[SAM4L_TIMER_MAXCNT] = {
 	{nullptr, nullptr, AST_ALARM_IRQn, PM_PBDMASK_AST},
 	{nullptr, &SAM4L_TC0->TC_CHANNEL[0], TC00_IRQn, PM_PBAMASK_TC0},
@@ -236,13 +238,16 @@ void Sam4lTimerIRQ(int devno)
 }
 bool TimerInit(TimerDev_t *t, const TimerCfg_t *cfg)
 {
+	g_Sam4lTimerInitStage = SAM4L_TIMER_INIT_CONFIG;
 	if (!t || !cfg || (unsigned)cfg->DevNo >= SAM4L_TIMER_MAXCNT || cfg->bTickInt ||
 		cfg->IntPrio < 0 || cfg->IntPrio >= (1 << __NVIC_PRIO_BITS)) return false;
 	uint32_t state = DisableInterrupt();
 	auto &d = g_Sam4lTimerData[cfg->DevNo];
+	g_Sam4lTimerInitStage = SAM4L_TIMER_INIT_OWNER;
 	// Match existing static-owner ports: a live handle cannot move or be stolen.
 	for (auto &entry : g_Sam4lTimerData) if (entry.Timer == t) { EnableInterrupt(state); return false; }
 	if (d.Timer) { EnableInterrupt(state); return false; }
+	g_Sam4lTimerInitStage = SAM4L_TIMER_INIT_SOURCE;
 	if (d.TcReg) {
 		if (cfg->ClkSrc != TIMER_CLKSRC_DEFAULT) { EnableInterrupt(state); return false; }
 		d.BaseFreq = SystemPeriphClockGet(0);
@@ -257,15 +262,21 @@ bool TimerInit(TimerDev_t *t, const TimerCfg_t *cfg)
 		d.BaseFreq = rc ? 32768 : GetLowFreqOscFreq();
 	}
 	uint32_t freq;
+	g_Sam4lTimerInitStage = SAM4L_TIMER_INIT_FREQUENCY;
 	if (!Plan(d, cfg->Freq, d.Select, freq)) { EnableInterrupt(state); return false; }
+	g_Sam4lTimerInitStage = SAM4L_TIMER_INIT_SYNC;
 	if (!d.TcReg) {
 		Sam4lTimerPmWrite(&SAM4L_PM->PM_PBDMASK, SAM4L_PM->PM_PBDMASK | PM_PBDMASK_AST);
 		if (!Sam4lAstWait(AST_SR_BUSY | AST_SR_CLKBUSY)) { EnableInterrupt(state); return false; }
 	}
-	// Refuse a peripheral already in use outside the Timer API.
+	g_Sam4lTimerInitStage = SAM4L_TIMER_INIT_IRQ;
+	// AST survives every reset except POR (42023H table 10-12). CR.EN
+	// alone therefore does not imply a live owner. With no software owner
+	// or enabled AST NVIC delivery, Setup/Reset may reclaim retained state.
+	// TC is in the core reset domain; a running channel remains a conflict.
 	if ((NVIC->ISER[(unsigned)d.Irq / 32] & (1UL << ((unsigned)d.Irq % 32))) ||
-		(!d.TcReg && ((SAM4L_AST->AST_CR & AST_CR_EN) ||
-		(NVIC->ISER[(unsigned)AST_OVF_IRQn / 32] & (1UL << ((unsigned)AST_OVF_IRQn % 32))))) ||
+		(!d.TcReg &&
+		(NVIC->ISER[(unsigned)AST_OVF_IRQn / 32] & (1UL << ((unsigned)AST_OVF_IRQn % 32)))) ||
 		(d.TcReg && (SAM4L_PM->PM_PBAMASK & d.ClockMask) && (d.TcReg->TC_SR & TC_SR_CLKSTA))) {
 		EnableInterrupt(state); return false;
 	}
@@ -277,12 +288,21 @@ bool TimerInit(TimerDev_t *t, const TimerCfg_t *cfg)
 	t->DisableTrigger = TriggerDisable; t->EnableTrigger = TriggerEnable;
 	t->DisableExtTrigger = ExtDisable; t->EnableExtTrigger = ExtEnable;
 	Irq(d, false);
+	g_Sam4lTimerInitStage = SAM4L_TIMER_INIT_SETUP;
 	if (d.TcReg) Sam4lTcSetup(d);
 	else d.Healthy = Sam4lAstSetup(d);
-	bool ok = d.Healthy && ResetCounter(d);
+	bool ok = d.Healthy;
+	if (ok) {
+		g_Sam4lTimerInitStage = SAM4L_TIMER_INIT_RESET;
+		ok = ResetCounter(d);
+	}
 	NVIC_SetPriority(d.Irq, cfg->IntPrio);
 	if (!d.TcReg) NVIC_SetPriority(AST_OVF_IRQn, cfg->IntPrio);
-	ok = ok && Run(d, true);
+	if (ok) {
+		g_Sam4lTimerInitStage = SAM4L_TIMER_INIT_START;
+		ok = Run(d, true);
+	}
+	if (ok) g_Sam4lTimerInitStage = SAM4L_TIMER_INIT_OK;
 	if (!ok) { d.Healthy = false; d.Running = false; Irq(d, false); d.Timer = nullptr; }
 	EnableInterrupt(state); return ok;
 }

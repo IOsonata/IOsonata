@@ -45,6 +45,22 @@ SOFTWARE.
 #define SAM4L_TC_TIMER_TRIG_MAXCNT 3
 #define SAM4L_TIMER_MAXCNT 7
 
+// Debugger-visible stage of the most recent TimerInit; zero means success.
+// On failure it retains the stage that rejected the request or timed out.
+enum SAM4L_TIMER_INIT_STAGE {
+	SAM4L_TIMER_INIT_OK = 0,
+	SAM4L_TIMER_INIT_CONFIG,
+	SAM4L_TIMER_INIT_OWNER,
+	SAM4L_TIMER_INIT_SOURCE,
+	SAM4L_TIMER_INIT_FREQUENCY,
+	SAM4L_TIMER_INIT_SYNC,
+	SAM4L_TIMER_INIT_IRQ,
+	SAM4L_TIMER_INIT_SETUP,
+	SAM4L_TIMER_INIT_RESET,
+	SAM4L_TIMER_INIT_START
+};
+extern volatile uint32_t g_Sam4lTimerInitStage;
+
 struct Sam4lTimerTrigger {
 	TimerTrig_t Info;
 	uint64_t Deadline;

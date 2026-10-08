@@ -36,6 +36,17 @@ replaced with six independent channel indices. `TimerGetHighFreqDevNo()` is 1.
 Both project configurations use nosys instead of semihosting, so printf does not
 require a debugger console. Use the existing debugger variables and LEDs.
 Do not use debugger halts as a timing measurement: AST can continue while halted.
+AST also survives debugger, external and watchdog resets (datasheet table 10-12).
+Initialization reclaims that retained hardware state when there is no live Timer
+owner or enabled AST alarm/overflow NVIC delivery; CR.EN alone is not an ownership
+check. The regression test starts with AST already enabled and stale count/flags.
+
+If `g_TimerInitOk` is false, inspect `g_Sam4lTimerInitStage` before another Init:
+1 = invalid configuration, 2 = software owner conflict, 3 = clock source not
+ready/matching, 4 = no usable frequency, 5 = initial AST synchronization timeout,
+6 = active IRQ/peripheral conflict, 7 = hardware setup failure, 8 = reset failure,
+9 = start failure. Zero means initialization succeeded. This is target-local
+debugger state; the generic Timer API is unchanged.
 
 ## Behavior and limits
 
