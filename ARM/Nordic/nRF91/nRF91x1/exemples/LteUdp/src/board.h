@@ -39,6 +39,10 @@ SOFTWARE.
 
 #include "coredev/iopincfg.h"
 
+#define LTE_UDP_HOST		"echo.u-blox.com"
+#define LTE_UDP_PORT		7
+#define LTE_UDP_RAI			0
+
 // Console, UART0 to the interface MCU (VCOM0)
 #define UART_DEVNO			0
 #define UART_RX_PORT		0
