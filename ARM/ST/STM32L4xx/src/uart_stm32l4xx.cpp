@@ -198,37 +198,37 @@ static void UART_IRQHandler(STM32L4X_UARTDEV * const pDev)
 
 extern "C" void USART1_IRQHandler()
 {
-	UART_IRQHandler(&s_Stm32l4xUartDev[0]);
-	NVIC_ClearPendingIRQ(USART2_IRQn);
+	UART_IRQHandler(&s_Stm32l4xUartDev[1]);
+	NVIC_ClearPendingIRQ(USART1_IRQn);
 }
 
 extern "C" void USART2_IRQHandler()
 {
-	UART_IRQHandler(&s_Stm32l4xUartDev[1]);
+	UART_IRQHandler(&s_Stm32l4xUartDev[2]);
 	NVIC_ClearPendingIRQ(USART2_IRQn);
 }
 
 extern "C" void USART3_IRQHandler()
 {
-	UART_IRQHandler(&s_Stm32l4xUartDev[2]);
+	UART_IRQHandler(&s_Stm32l4xUartDev[3]);
 	NVIC_ClearPendingIRQ(USART3_IRQn);
 }
 
 extern "C" void UART4_IRQHandler()
 {
-	UART_IRQHandler(&s_Stm32l4xUartDev[3]);
+	UART_IRQHandler(&s_Stm32l4xUartDev[4]);
 	NVIC_ClearPendingIRQ(UART4_IRQn);
 }
 
 extern "C" void UART5_IRQHandler()
 {
-	UART_IRQHandler(&s_Stm32l4xUartDev[4]);
+	UART_IRQHandler(&s_Stm32l4xUartDev[5]);
 	NVIC_ClearPendingIRQ(UART5_IRQn);
 }
 
 extern "C" void LPUART1_IRQHandler()
 {
-	UART_IRQHandler(&s_Stm32l4xUartDev[5]);
+	UART_IRQHandler(&s_Stm32l4xUartDev[0]);
 	NVIC_ClearPendingIRQ(LPUART1_IRQn);
 }
 
@@ -390,17 +390,17 @@ static void STM32L4xUARTDisable(DevIntrf_t * const pDev)
 	dev->pReg->CR1 &= ~(USART_CR1_UE | USART_CR1_RE | USART_CR1_TE);
 	dev->pReg->CR2 &= ~USART_CR2_RTOEN;
 
-	if (dev->DevNo == 0)
+	if (dev->DevNo == 1)
 	{
 		RCC->APB2ENR &= ~RCC_APB2ENR_USART1EN;
 	}
-	else if (dev->DevNo == 5)
+	else if (dev->DevNo == 0)
 	{
 		RCC->APB1ENR2 &= ~RCC_APB1ENR2_LPUART1EN;
 	}
-	else if (dev->DevNo > 0)
+	else if (dev->DevNo >= 2)
 	{
-		RCC->APB1ENR1 &= ~(RCC_APB1ENR1_USART2EN << (dev->DevNo - 1));
+		RCC->APB1ENR1 &= ~(RCC_APB1ENR1_USART2EN << (dev->DevNo - 2));
 	}
 
 	IOPinDis(dev->pIOPinMap, dev->NbPins);
@@ -419,17 +419,17 @@ static void STM32L4xUARTEnable(DevIntrf_t * const pDev)
 
 	dev->pUartDev->bTxReady = true;
 
-	if (dev->DevNo == 0)
+	if (dev->DevNo == 1)
 	{
 		RCC->APB2ENR |= RCC_APB2ENR_USART1EN;
 	}
-	else if (dev->DevNo == 5)
+	else if (dev->DevNo == 0)
 	{
 		RCC->APB1ENR2 |= RCC_APB1ENR2_LPUART1EN;
 	}
-	else if (dev->DevNo > 0)
+	else if (dev->DevNo >= 2)
 	{
-		RCC->APB1ENR1 |= (RCC_APB1ENR1_USART2EN << (dev->DevNo - 1));
+		RCC->APB1ENR1 |= (RCC_APB1ENR1_USART2EN << (dev->DevNo - 2));
 	}
 
 	IOPinCfg(dev->pIOPinMap, dev->NbPins);
@@ -450,60 +450,38 @@ static void STM32L4xUARTPowerOff(DevIntrf_t * const pDev)
 	STM32L4X_UARTDEV *dev = (STM32L4X_UARTDEV *)pDev->pDevData;
 
 	STM32L4xUARTDisable(pDev);
-
-	switch (dev->DevNo)
+	// DevNo 0 is LPUART1; the remaining entries are USART1 through UART5.
+	if (dev->DevNo == 0)
 	{
-		case 0:
-			RCC->APB2ENR &= ~RCC_APB2ENR_USART1EN;
-			RCC->CCIPR &= ~RCC_CCIPR_USART1SEL_Msk;
-			break;
-		case 1:
-			RCC->APB1ENR1 &= ~RCC_APB1ENR1_USART2EN;
-			RCC->CCIPR &= ~RCC_CCIPR_USART1SEL_Msk;
-			break;
-		case 2:
-			RCC->APB1ENR1 &= ~RCC_APB1ENR1_USART3EN;
-			RCC->CCIPR &= ~RCC_CCIPR_USART1SEL_Msk;
-			break;
-		case 3:
-			RCC->APB1ENR1 &= ~RCC_APB1ENR1_UART4EN;
-			RCC->CCIPR &= ~RCC_CCIPR_USART1SEL_Msk;
-			break;
-		case 4:
-			RCC->APB1ENR1 &= ~RCC_APB1ENR1_UART5EN;
-			RCC->CCIPR &= ~RCC_CCIPR_USART1SEL_Msk;
-			break;
-		case 5:
-			RCC->APB1ENR2 &= ~RCC_APB1ENR2_LPUART1EN;
-			RCC->CCIPR &= ~RCC_CCIPR_USART1SEL_Msk;
-			break;
+		RCC->CCIPR &= ~RCC_CCIPR_LPUART1SEL_Msk;
 	}
-
-	//dev->pReg->CR2 &= ~USART_CR2_CLKEN;
-	IOPinDis(dev->pIOPinMap, dev->NbPins);
+	else
+	{
+		RCC->CCIPR &= ~(RCC_CCIPR_USART1SEL_Msk << ((dev->DevNo - 1) << 1));
+	}
 }
 
 static void STM32L4xUARTReset(DevIntrf_t * const pDev)
 {
 	STM32L4X_UARTDEV *dev = (STM32L4X_UARTDEV *)pDev->pDevData;
 
-	if (dev->DevNo == 0)
+	if (dev->DevNo == 1)
 	{
 		RCC->APB2RSTR |= RCC_APB2RSTR_USART1RST;
 		usDelay(100);
 		RCC->APB2RSTR &= ~RCC_APB2RSTR_USART1RST;
 	}
-	else if (dev->DevNo == 5)
+	else if (dev->DevNo == 0)
 	{
 		RCC->APB1RSTR2 |= RCC_APB1RSTR2_LPUART1RST;
 		usDelay(100);
 		RCC->APB1RSTR2 &= ~RCC_APB1RSTR2_LPUART1RST;
 	}
-	else if (dev->DevNo > 0)
+	else if (dev->DevNo >= 2)
 	{
-		RCC->APB1RSTR1 |= RCC_APB1RSTR1_USART2RST << (dev->DevNo - 1);
+		RCC->APB1RSTR1 |= RCC_APB1RSTR1_USART2RST << (dev->DevNo - 2);
 		usDelay(100);
-		RCC->APB1RSTR1 &= ~(RCC_APB1RSTR1_USART2RST << (dev->DevNo - 1));
+		RCC->APB1RSTR1 &= ~(RCC_APB1RSTR1_USART2RST << (dev->DevNo - 2));
 	}
 }
 
@@ -753,34 +731,34 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 
 		switch (devno)
 		{
-			case 0:
+			case 1:
 				NVIC_ClearPendingIRQ(USART1_IRQn);
 				NVIC_SetPriority(USART1_IRQn, pCfg->IntPrio);
 				NVIC_EnableIRQ(USART1_IRQn);
 				break;
-			case 1:
+			case 2:
 				NVIC_ClearPendingIRQ(USART2_IRQn);
 				NVIC_SetPriority(USART2_IRQn, pCfg->IntPrio);
 				NVIC_EnableIRQ(USART2_IRQn);
 				break;
-			case 2:
+			case 3:
 				NVIC_ClearPendingIRQ(USART3_IRQn);
 				NVIC_SetPriority(USART3_IRQn, pCfg->IntPrio);
 				NVIC_EnableIRQ(USART3_IRQn);
 				break;
 
-			case 3:
+			case 4:
 				NVIC_ClearPendingIRQ(UART4_IRQn);
 				NVIC_SetPriority(UART4_IRQn, pCfg->IntPrio);
 				NVIC_EnableIRQ(UART4_IRQn);
 				break;
-			case 4:
+			case 5:
 				NVIC_ClearPendingIRQ(UART5_IRQn);
 				NVIC_SetPriority(UART5_IRQn, pCfg->IntPrio);
 				NVIC_EnableIRQ(UART5_IRQn);
 				break;
 
-			case 5:
+			case 0:
 				NVIC_ClearPendingIRQ(LPUART1_IRQn);
 				NVIC_SetPriority(LPUART1_IRQn, pCfg->IntPrio);
 				NVIC_EnableIRQ(LPUART1_IRQn);

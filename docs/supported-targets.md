@@ -4,6 +4,14 @@ This document records the current IOsonata hardware-validation baselines. It is 
 
 The presence of a target port or build project means that implementation source exists. It does not by itself mean that the target is part of the current hardware-validation loop.
 
+## Minimum MCU support
+
+An MCU must provide startup, UART and timer support to be considered supported.
+A device header, vector table or library project alone is insufficient. Record
+which timer backend and UART modes are implemented; other peripherals have
+separate capability limits. Hardware-validation status is recorded separately
+from this minimum implementation requirement.
+
 ## Status terms
 
 - **Hardware validated** — the current tree has been built and exercised on the named hardware using the documented IOcomposer workflow.
