@@ -52,6 +52,16 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #define TEST_BUFSIZE		16
 
+#ifndef UART_BAUDRATE
+#define UART_BAUDRATE 115200
+#endif
+#ifndef UART_INT_MODE
+#define UART_INT_MODE false
+#endif
+#ifndef UART_DMA_MODE
+#define UART_DMA_MODE true
+#endif
+
 #ifdef MCUOSC
 McuOsc_t g_McuOsc = MCUOSC;
 #endif
@@ -68,20 +78,12 @@ alignas(4) static uint8_t s_UartTxFifo[UARTFIFOSIZE];
 
 static const IOPinCfg_t s_UartPins[] = UART_PINS;
 
-// Boards can select the execution modes their UART port supports.
-#ifndef UART_INT_MODE
-#define UART_INT_MODE false
-#endif
-#ifndef UART_DMA_MODE
-#define UART_DMA_MODE true
-#endif
-
 // UART configuration data
 static const UARTCfg_t s_UartCfg = {
 	.DevNo = UART_DEVNO,
 	.pIOPinMap = s_UartPins,
 	.NbIOPins = sizeof(s_UartPins) / sizeof(IOPinCfg_t),
-	.Rate = 115200,
+	.Rate = UART_BAUDRATE,
 	.DataBits = 8,
 	.Parity = UART_PARITY_NONE,
 	.StopBits = 1,
@@ -115,6 +117,9 @@ UART g_Uart;
 
 int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen)
 {
+	(void)pDev;
+	(void)pBuffer;
+	(void)BufferLen;
 	switch (EvtId)
 	{
 		case UART_EVT_RXTIMEOUT:
@@ -129,20 +134,23 @@ int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int Buf
 	return 0;
 }
 
+volatile bool g_UartInitOk = false;
+
 int main()
 {
-	bool res;
-
 #ifdef DEMO_C
-	res = UARTInit(&g_UartDev, &s_UartCfg);
+	g_UartInitOk = UARTInit(&g_UartDev, &s_UartCfg);
 	//UARTprintf(&g_UartDev, "UART PRBS Test\n\r");
 #else
-	res = g_Uart.Init(s_UartCfg);
+	g_UartInitOk = g_Uart.Init(s_UartCfg);
 	//g_Uart.printf("UART PRBS Test\n\r");
 #endif
+	if (!g_UartInitOk) return 1;
 
 	uint8_t d = 0xff;
+#ifndef BYTE_MODE
 	uint8_t buff[TEST_BUFSIZE];
+#endif
 
 	while (1)
 	{

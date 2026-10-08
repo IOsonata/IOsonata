@@ -51,41 +51,41 @@ __attribute__((weak, alias("DEF_IRQHandler"))) void PendSV_Handler(void);
 /* Keep IOsonata's overridable SysTick default; startup does not start it. */
 __attribute__((weak)) void SysTick_Handler(void) {}
 
-/* Strong definitions supplied by a future RA4M1 interrupt manager or an
- * application replace these defaults without changing the vector table.
+/* Defined by interrupt_ra4m1.cpp, as in the RE01 port. Keep these references
+ * strong so static-library extraction cannot select local weak trap aliases.
  */
-__attribute__((weak, alias("DEF_IRQHandler"))) void IEL0_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IEL1_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IEL2_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IEL3_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IEL4_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IEL5_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IEL6_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IEL7_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IEL8_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IEL9_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IEL10_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IEL11_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IEL12_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IEL13_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IEL14_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IEL15_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IEL16_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IEL17_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IEL18_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IEL19_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IEL20_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IEL21_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IEL22_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IEL23_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IEL24_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IEL25_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IEL26_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IEL27_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IEL28_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IEL29_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IEL30_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IEL31_IRQHandler(void);
+extern void IEL0_IRQHandler(void);
+extern void IEL1_IRQHandler(void);
+extern void IEL2_IRQHandler(void);
+extern void IEL3_IRQHandler(void);
+extern void IEL4_IRQHandler(void);
+extern void IEL5_IRQHandler(void);
+extern void IEL6_IRQHandler(void);
+extern void IEL7_IRQHandler(void);
+extern void IEL8_IRQHandler(void);
+extern void IEL9_IRQHandler(void);
+extern void IEL10_IRQHandler(void);
+extern void IEL11_IRQHandler(void);
+extern void IEL12_IRQHandler(void);
+extern void IEL13_IRQHandler(void);
+extern void IEL14_IRQHandler(void);
+extern void IEL15_IRQHandler(void);
+extern void IEL16_IRQHandler(void);
+extern void IEL17_IRQHandler(void);
+extern void IEL18_IRQHandler(void);
+extern void IEL19_IRQHandler(void);
+extern void IEL20_IRQHandler(void);
+extern void IEL21_IRQHandler(void);
+extern void IEL22_IRQHandler(void);
+extern void IEL23_IRQHandler(void);
+extern void IEL24_IRQHandler(void);
+extern void IEL25_IRQHandler(void);
+extern void IEL26_IRQHandler(void);
+extern void IEL27_IRQHandler(void);
+extern void IEL28_IRQHandler(void);
+extern void IEL29_IRQHandler(void);
+extern void IEL30_IRQHandler(void);
+extern void IEL31_IRQHandler(void);
 
 __attribute__((section(".vectors"), used, aligned(256)))
 void (* const __Vectors[RA4M1_VECTOR_COUNT])(void) = {

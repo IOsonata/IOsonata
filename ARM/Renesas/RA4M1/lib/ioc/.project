@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <projectDescription>
 	<name>IOsonata_RA4M1</name>
-	<comment>Native RA4M1 startup library; no board or FSP runtime dependency.</comment>
+	<comment>Native RA4M1 startup, GPIO, ICU, UART and timer library; no board or FSP runtime dependency.</comment>
 	<projects/>
 	<buildSpec>
 		<buildCommand>
@@ -81,6 +81,81 @@
 			<name>src/ra4m1_startup_regs.h</name>
 			<type>1</type>
 			<locationURI>PARENT-2-PROJECT_LOC/src/ra4m1_startup_regs.h</locationURI>
+		</link>
+		<link>
+			<name>include/ra4m1_ioregs.h</name>
+			<type>1</type>
+			<locationURI>PARENT-2-PROJECT_LOC/include/ra4m1_ioregs.h</locationURI>
+		</link>
+		<link>
+			<name>include/iopinctrl.h</name>
+			<type>1</type>
+			<locationURI>PARENT-2-PROJECT_LOC/include/iopinctrl.h</locationURI>
+		</link>
+		<link>
+			<name>include/interrupt_ra4m1.h</name>
+			<type>1</type>
+			<locationURI>PARENT-2-PROJECT_LOC/include/interrupt_ra4m1.h</locationURI>
+		</link>
+		<link>
+			<name>src/iopincfg_ra4m1.c</name>
+			<type>1</type>
+			<locationURI>PARENT-2-PROJECT_LOC/src/iopincfg_ra4m1.c</locationURI>
+		</link>
+		<link>
+			<name>src/interrupt_ra4m1.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-2-PROJECT_LOC/src/interrupt_ra4m1.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/uart_ra4m1.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-2-PROJECT_LOC/src/uart_ra4m1.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/ra4m1_uart_regs.h</name>
+			<type>1</type>
+			<locationURI>PARENT-2-PROJECT_LOC/src/ra4m1_uart_regs.h</locationURI>
+		</link>
+		<link>
+			<name>src/ra4m1_uart_baud.h</name>
+			<type>1</type>
+			<locationURI>PARENT-2-PROJECT_LOC/src/ra4m1_uart_baud.h</locationURI>
+		</link>
+		<link>
+			<name>src/cfifo.c</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/src/cfifo.c</locationURI>
+		</link>
+		<link>
+			<name>src/device_intrf.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/src/device_intrf.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/uart.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/src/coredev/uart.cpp</locationURI>
+		</link>
+		<link>
+			<name>include/timer_ra4m1.h</name>
+			<type>1</type>
+			<locationURI>PARENT-2-PROJECT_LOC/include/timer_ra4m1.h</locationURI>
+		</link>
+		<link>
+			<name>src/ra4m1_timer_regs.h</name>
+			<type>1</type>
+			<locationURI>PARENT-2-PROJECT_LOC/src/ra4m1_timer_regs.h</locationURI>
+		</link>
+		<link>
+			<name>src/timer_ra4m1.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-2-PROJECT_LOC/src/timer_ra4m1.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/timer.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/src/coredev/timer.cpp</locationURI>
 		</link>
 	</linkedResources>
 </projectDescription>

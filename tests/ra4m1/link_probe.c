@@ -1,6 +1,8 @@
 /* Link-layout probe only, NOT an alternative firmware startup/runtime. */
 #include <stdint.h>
 #include "ra4m1xxx.h"
+#include "iopinctrl.h"
+#include "interrupt_ra4m1.h"
 extern unsigned long __data_loc__, __data_start__, __data_size__, __bss_start__, __bss_size__;
 uint32_t SystemMicroSecLoopCnt = 1;
 volatile uint32_t probe_data = 0x12345678;
@@ -16,5 +18,8 @@ __attribute__((section(".AppStart"))) void ResetEntry(void)
            (uint32_t)(uintptr_t)&__bss_size__;
  SystemInit();
  SystemCoreClockUpdate();
+ /* Link only: no application board or electrical assumptions are exercised. */
+ IOPinConfig(1, 0, IOPINOP_GPIO, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL);
+ IOPinSetDir(1, 0, IOPINDIR_INPUT);
  for(;;){probe_bss=probe_ram();}
 }

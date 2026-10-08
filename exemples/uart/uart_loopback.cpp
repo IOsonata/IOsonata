@@ -38,17 +38,34 @@ SOFTWARE.
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
-#include <chrono>
-#include <time.h>
 
 #include "coredev/uart.h"
-#include "prbs.h"
+#include "coredev/system_core_clock.h"
 #include "board.h"
 
 //#define DEMO_C
 //#define BYTE_MODE
 
 #define BUFFER_SIZE				16
+
+#ifndef UART_BAUDRATE
+#define UART_BAUDRATE 1000000
+#endif
+#ifndef UART_INT_MODE
+#define UART_INT_MODE true
+#endif
+#ifndef UART_DMA_MODE
+#define UART_DMA_MODE true
+#endif
+
+#ifdef MCUOSC
+McuOsc_t g_McuOsc = MCUOSC;
+#endif
+
+#ifdef UARTFIFOSIZE
+alignas(4) static uint8_t s_UartRxFifo[UARTFIFOSIZE];
+alignas(4) static uint8_t s_UartTxFifo[UARTFIFOSIZE];
+#endif
 
 // This defines the s_UartPortPins map and pin count.
 // See board.h for target device specific definitions
@@ -59,20 +76,27 @@ const UARTCfg_t g_UartCfg = {
 	.DevNo = UART_NO,
 	.pIOPinMap = s_UartPortPins,
 	.NbIOPins = UART_PORTPIN_COUNT,
-	.Rate = 1000000,
+	.Rate = UART_BAUDRATE,
 	.DataBits = 8,
 	.Parity = UART_PARITY_NONE,
 	.StopBits = 1,
 	.FlowControl = UART_FLWCTRL_NONE,
-	.bIntMode = true,
+	.bIntMode = UART_INT_MODE,
 	.IntPrio = 1,
-	.EvtCallback = nullptr,//nRFUartEvthandler,
+	.EvtCallback = nullptr,
 	.bFifoBlocking = true,
+#ifdef UARTFIFOSIZE
+	.RxMemSize = UARTFIFOSIZE,
+	.pRxMem = s_UartRxFifo,
+	.TxMemSize = UARTFIFOSIZE,
+	.pTxMem = s_UartTxFifo,
+#else
 	.RxMemSize = 0,
 	.pRxMem = nullptr,
 	.TxMemSize = 0,
 	.pTxMem = nullptr,
-	.bDMAMode = true,
+#endif
+	.bDMAMode = UART_DMA_MODE,
 };
 
 #ifdef DEMO_C
@@ -84,9 +108,10 @@ UARTDev_t g_UartDev;
 UART g_Uart;
 #endif
 
+volatile bool g_UartInitOk = false;
+
 int main()
 {
-	bool res;
 	uint8_t buff[BUFFER_SIZE];
 #ifdef BYTE_MODE
 	int len = 1;
@@ -95,29 +120,43 @@ int main()
 #endif
 
 #ifdef DEMO_C
-	res = UARTInit(&g_UartDev, &g_UartCfg);
-	UARTprintf("UART Loopback Test\r\n");
+	g_UartInitOk = UARTInit(&g_UartDev, &g_UartCfg);
 #else
-	res = g_Uart.Init(g_UartCfg);
+	g_UartInitOk = g_Uart.Init(g_UartCfg);
+#endif
+	if (!g_UartInitOk) return 1;
+#ifdef DEMO_C
+	UARTprintf(&g_UartDev, "UART Loopback Test\r\n");
+#else
 	g_Uart.printf("UART Loopback Test\r\n");
 #endif
 
-
-
-	while(1)
+	int pending = 0;
+	int offset = 0;
+	while (1)
 	{
-#ifdef DEMO_C
-		int l = UARTRx(&g_UartDev, buff, len);
-#else
-		int l = g_Uart.Rx(buff, len);
-#endif
-		if (l > 0)
+		// Keep the unsent suffix until accepted; never overwrite it with RX.
+		if (pending == 0)
 		{
 #ifdef DEMO_C
-			UARTTx(&g_UartDev, buff, l);
+			pending = UARTRx(&g_UartDev, buff, len);
 #else
-			g_Uart.Tx(buff, l);
+			pending = g_Uart.Rx(buff, len);
 #endif
+			offset = 0;
+		}
+		if (pending > 0)
+		{
+#ifdef DEMO_C
+			int sent = UARTTx(&g_UartDev, buff + offset, pending);
+#else
+			int sent = g_Uart.Tx(buff + offset, pending);
+#endif
+			if (sent > 0)
+			{
+				offset += sent;
+				pending -= sent;
+			}
 		}
 	}
 	return 0;

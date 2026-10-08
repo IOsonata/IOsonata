@@ -37,23 +37,35 @@ SOFTWARE.
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <stdio.h>
 
 #include "idelay.h"
 #include "coredev/timer.h"
-#include "coredev/uart.h"
-#include "stddev.h"
 #include "iopinctrl.h"
 
 #include "board.h"
+
+#ifdef TIMER_DEMO_UART
+#include "coredev/uart.h"
+#include "stddev.h"
+#endif
 
 //#define DEMO_C
 #define DEMO_C_OBJ
 
 #ifndef TIMER_DEMO_DEVNO
+#ifdef TIMER_DEVNO
+#define TIMER_DEMO_DEVNO TIMER_DEVNO
+#else
 #define TIMER_DEMO_DEVNO 0
 #endif
+#endif
 #ifndef TIMER_DEMO_FREQ
+#ifdef TIMER_FREQ
+#define TIMER_DEMO_FREQ TIMER_FREQ
+#else
 #define TIMER_DEMO_FREQ 0
+#endif
 #endif
 
 void TimerHandler(TimerDev_t * const pTimer, uint32_t Evt);
@@ -69,6 +81,9 @@ static const int s_NbLeds = sizeof(s_Leds) / sizeof(IOPinCfg_t);
 volatile uint64_t g_TickCount = 0;
 volatile uint64_t g_Period[5] = {0,};
 volatile uint32_t g_TriggerCount[4] = {0,};
+// Actual accepted trigger periods, in nanoseconds; zero means not enabled.
+volatile uint64_t g_TriggerPeriod[4] = {0,};
+volatile bool g_TimerInitOk = false;
 
 const static TimerCfg_t s_TimerCfg = {
 	.DevNo = TIMER_DEMO_DEVNO,
@@ -146,31 +161,46 @@ int main(void)
 #endif
 
 #ifdef DEMO_C
-	bool initialized = TimerInit(&g_TimerDev, &s_TimerCfg);
+	g_TimerInitOk = TimerInit(&g_TimerDev, &s_TimerCfg);
 	TimerDev_t *dev = &g_TimerDev;
 #else
-	bool initialized = g_Timer.Init(s_TimerCfg);
+	g_TimerInitOk = g_Timer.Init(s_TimerCfg);
 	TimerDev_t *dev = g_Timer;
 #endif
-	if (!initialized)
+	if (!g_TimerInitOk)
 	{
 		printf("Timer %d initialization failed\r\n", s_TimerCfg.DevNo);
-		while (1) __WFE();
+		return 1;
 	}
 
-	// Compare B is slower than A, as required by the RE01 AGT caution.
+	// Keep trigger 1 slower than trigger 0 for timers with ordered compares.
 	static const uint32_t periodsMs[] = {100, 1000, 250, 500};
 	int triggers = TimerGetMaxTrigger(dev);
+	if (triggers < 1)
+	{
+		printf("No timer triggers available\r\n");
+		TimerDisable(dev);
+		return 1;
+	}
 	if (triggers > 4) triggers = 4;
 	for (int i = 0; i < triggers; i++)
 	{
+		uint64_t ns = (uint64_t)periodsMs[i] * 1000000ULL;
 #ifdef DEMO_C
-		uint32_t period = msTimerEnableTrigger(dev, i, periodsMs[i], TIMER_TRIG_TYPE_CONTINUOUS, NULL, NULL);
+		uint64_t period = nsTimerEnableTrigger(dev, i,
+			ns, TIMER_TRIG_TYPE_CONTINUOUS, NULL, NULL);
 #else
-		uint32_t period = g_Timer.EnableTimerTrigger(i, periodsMs[i], TIMER_TRIG_TYPE_CONTINUOUS);
+		uint64_t period = g_Timer.EnableTimerTrigger(i,
+			ns, TIMER_TRIG_TYPE_CONTINUOUS);
 #endif
-		printf("Timer %d trigger %d: %lu ms\r\n", s_TimerCfg.DevNo, i, (unsigned long)period);
-		if (period == 0) while (1) __WFE();
+		g_TriggerPeriod[i] = period;
+		printf("Timer %d trigger %d: %lu ms\r\n", s_TimerCfg.DevNo, i, (unsigned long)(period / 1000000ULL));
+		if (period == 0)
+		{
+			for (int n = 0; n < i; n++) TimerDisableTrigger(dev, n);
+			TimerDisable(dev);
+			return 1;
+		}
 	}
 
 	uint32_t previousCounts[4] = {0,};
