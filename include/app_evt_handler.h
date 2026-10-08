@@ -136,8 +136,8 @@ bool AppEvtHandlerExec(void);
  *
  * Called with an empty event queue: by AppEvtHandlerExec after an event was
  * refused, and by AppRun before it waits. The weak default checks linked USB,
- * Bluetooth and LTE subsystems. An application may override it to select its
- * checks or add others and report whether its system is idle. Checks may
+ * Bluetooth, LTE and GNSS subsystems. An application may override it to select
+ * its checks or add others and report whether its system is idle. Checks may
  * queue work; AppRun also checks AppEvtHandlerPending before waiting. This
  * function does not drain events.
  *

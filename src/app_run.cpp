@@ -42,6 +42,7 @@ SOFTWARE.
 extern "C" void UsbCheckStatus(void) __attribute__((weak));
 extern "C" void BtAppCheckStatus(void) __attribute__((weak));
 extern "C" void LteCheckStatus(void) __attribute__((weak));
+extern "C" void GnssCheckStatus(void) __attribute__((weak));
 
 __attribute__((weak)) bool AppCheckStatus(void)
 {
@@ -56,6 +57,10 @@ __attribute__((weak)) bool AppCheckStatus(void)
 	if (LteCheckStatus != nullptr)
 	{
 		LteCheckStatus();
+	}
+	if (GnssCheckStatus != nullptr)
+	{
+		GnssCheckStatus();
 	}
 	return AppEvtHandlerPending() == false;
 }

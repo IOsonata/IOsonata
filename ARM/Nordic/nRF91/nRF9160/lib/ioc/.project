@@ -1441,6 +1441,26 @@
 			<locationURI>PARENT-3-PROJECT_LOC/src/lte_nrf91.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/gnss</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/gnss/gnss.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/gnss/gnss.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/gnss_nrf91.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/gnss_nrf91.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/modem_ipc_nrf91.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/modem_ipc_nrf91.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/sock_intrf_nrf91.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-3-PROJECT_LOC/src/sock_intrf_nrf91.cpp</locationURI>
