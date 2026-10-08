@@ -7,7 +7,7 @@ USBHS controller. Build the MCU library and applications from the same revision.
 | --- | --- |
 | nRF52 USBD | Full-speed reference; nRF52840 bare-metal and TaktOS combo builds and 2,000-second hardware runs pass |
 | nRF54LM20x USBHS | Device-mode implementation; bare-metal and TaktOS combo builds and 2,000-second hardware runs pass, with host register-model coverage |
-| nRF54H20 | Not covered by this port integration; its NRFS power service requires a separate backend |
+| nRF54H20 | Not covered by this port integration; its NRFS power service requires a separate implementation |
 | Legacy LPC / host USB | Different controller APIs; unchanged |
 
 ## Supported transfers
@@ -85,9 +85,9 @@ The keyboard pin map follows the existing LM20 Nordic DK examples: A on
 P1.26, Caps Lock on P1.09 and the Caps Lock LED on P1.22, all active low.
 Adapt `src/board.h` for another board.
 
-`UsbHid3dMouse` still needs an LM20 SPI backend and a BMI323 board pin map.
+`UsbHid3dMouse` still needs an LM20 SPI driver and a BMI323 board pin map.
 The LM20 library currently links only the generic SPI helpers, which do not
-define `SPIInit`; the existing Nordic SPI backend is not ported to LM20.
+define `SPIInit`; the existing Nordic SPI driver is not ported to LM20.
 The legacy nRF5 SDK USB demos and TinyUSB comparison projects are separate
 integrations and are not part of this portable USB project set.
 `exemples/TinyUsbComboStress/ioc` runs the combo workload on TinyUSB's DWC2

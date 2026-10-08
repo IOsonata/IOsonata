@@ -10,10 +10,10 @@ directory; pin assignments and target settings belong in each application's
 
 | Project directory | Shared source | Purpose |
 |---|---|---|
-| Blinky (existing) | `misc/blinky.c` | GPIO LEDs; check its board-specific pin map |
+| Blinky | `misc/blinky.c` | GPIO LEDs; check its board-specific pin map |
 | PulseTrain | `misc/pulse_train_test.c` | Pulse train across all 55 GPIOs exposed by the STM32F030R8 package |
-| TimerDemo (existing) | `timer/timer_demo.cpp` | All seven virtual TIM devices, selected in board.h |
-| UartPrbsTest (existing) | `uart/uart_prbs_tx.cpp` | Raw PRBS transmitter |
+| TimerDemo | `timer/timer_demo.cpp` | All seven virtual TIM devices, selected in board.h |
+| UartPrbsTest | `uart/uart_prbs_tx.cpp` | Raw PRBS transmitter |
 | UartPrbsRxTest | `uart/uart_prbs_rx.cpp` | Raw PRBS receiver and error reporting |
 | UartLoopback | `uart/uart_loopback.cpp` | Echo received UART bytes |
 | UartRetargetDemo | `uart/uart_retarget_demo.cpp` | printf/scanf through UART |
@@ -62,7 +62,7 @@ is implemented. Simulated RF-tag exercisers are not included as F030 examples.
 DfuBoot remains a separate existing project with its own flash layout and boot
 requirements; it is not covered by the new example link checks.
 
-Examples requiring unimplemented F030 backends (I2C, SPI, ADC/comparator, PWM,
+Examples requiring unimplemented F030 drivers (I2C, SPI, ADC/comparator, PWM,
 watchdog, USB, Bluetooth, LTE or hardware crypto/RNG) are not added. The generic
 NDEF demo needs a board-supplied `RFTagDemoGetIntrf()` adapter and is not a
 standalone software exerciser. Storage host tests use simulated memories larger
@@ -88,8 +88,18 @@ frames and split escape sequences:
 python3 tests/stm32f0/run_slip_example.py
 ```
 
-Hardware UART data integrity, debugger console behavior and GPIO/timer activity
-still require on-board checks.
+The maintainer confirmed startup, LED GPIO, USART1 UART output/retargeting,
+TIM6 (virtual device 0) and TIM16 (virtual device 2) on STM32F0308-DISCO on
+2026-10-08. TIM6 printed 115 consecutive 100 ms periods over 11.5 seconds.
+TimerDemo uses UART retargeting; semihosting pauses can disturb measurements.
+If an external UART adapter uses a level shifter, power that circuit as well.
+
+The maintainer also confirmed UART TX DMA with the Release PRBS transmitter
+at approximately 81.0 kB/s at 1 Mbaud and zero drops in the supplied output
+([PR 77](https://github.com/IOsonata/IOsonata/pull/77)). UART RX/loopback,
+SLIP data integrity, the remaining timer devices and software crypto examples
+still need their own hardware checks. The minimum
+MCU port is complete; this does not mean every example has been run on board.
 
 The full GPIO pulse train includes PA13/PA14 (SWD) and oscillator pins. Use an
 internal clock and isolate conflicting ST-LINK/oscillator connections for this

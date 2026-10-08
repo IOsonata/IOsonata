@@ -8,13 +8,13 @@ The presence of a target port or build project means that implementation source 
 
 An MCU must provide startup, GPIO, UART and timer support to be considered supported.
 A device header, vector table or library project alone is insufficient. Record
-which timer backend and UART modes are implemented; other peripherals have
+which timer driver and UART modes are implemented; other peripherals have
 separate capability limits. Hardware-validation status is recorded separately
 from this minimum implementation requirement.
 
 ## Status terms
 
-- **Supported (minimum implemented)** - startup, GPIO, UART and at least one timer backend are implemented. Optional peripherals and modes have separate limits; full builds and hardware results are recorded independently.
+- **Supported (minimum implemented)** - startup, GPIO, UART and at least one timer driver are implemented. Optional peripherals and modes have separate limits; full builds and hardware results are recorded independently.
 - **Incomplete MCU port** - one or more minimum requirements are missing. Headers, linker scripts, vector tables or an available project do not make the MCU supported.
 - **Hardware validated** — the current tree has been built and exercised on the named hardware using the documented IOcomposer workflow.
 - **Build project available** — a target library project exists and can be selected by the installed builder, but it is not necessarily part of routine hardware validation.
@@ -30,13 +30,16 @@ from this minimum implementation requirement.
 
 These rows identify the active reference targets. Feature coverage still varies by target and subsystem. A hardware-validated MCU does not imply that every optional interface, radio stack, storage mode or crypto provider has the same validation depth.
 
-STM32 source ports and target projects remain in the repository, but the current documentation does not record an exact STM32 board, IOsonata commit and hardware-test result. STM32 is therefore not listed above as a current hardware-validation baseline.
+The maintainer confirmed the STM32F030x8 minimum port on STM32F0308-DISCO:
+startup, LED GPIO, USART1 UART output/retargeting, TIM6 and TIM16. See the
+STM32 validation record below. The Nordic rows above identify routine
+reference platforms; they are not the complete supported-MCU list.
 
 ## STM32 MCU support
 
 The table describes the current source. L4 review evidence is recorded at
 [b2eea8c](https://github.com/IOsonata/IOsonata/commit/b2eea8c4450b371eefffab77ce92aa70f4dc7ea4);
-F030x8 now includes all seven peripheral TIM backends.
+F030x8 now includes all seven peripheral TIM drivers.
 Only the named MCUs are covered; support does not extend automatically to their
 entire series.
 
@@ -46,9 +49,9 @@ entire series.
 | STM32L496 | Implemented | Implemented | Interrupt-driven UART, virtual devices 0-5 | LPTIM1/2, virtual devices 0/1 | Supported (minimum implemented) |
 | STM32L4S9 | Implemented | Implemented | Interrupt-driven UART, virtual devices 0-5 | LPTIM1/2, virtual devices 0/1 | Supported (minimum implemented) |
 | STM32F030x8 | Implemented | Implemented, including EXTI | Implemented | TIM6, TIM14, TIM16, TIM17, TIM15, TIM3, TIM1 | Supported (minimum implemented) |
-| STM32F401xC | Implemented | No target GPIO backend | No target UART backend | No target timer backend | Incomplete MCU port |
-| STM32F301x8, STM32F302x8 | Vector files only; startup port incomplete | No target GPIO backend | No target UART backend | No target timer backend | Incomplete MCU port |
-| STM32WBA | Partial Bluetooth sources and linker support; startup missing | No target GPIO backend | No target UART backend | No target timer backend | Incomplete MCU port |
+| STM32F401xC | Implemented | No target GPIO driver | No target UART driver | No target timer driver | Incomplete MCU port |
+| STM32F301x8, STM32F302x8 | Vector files only; startup port incomplete | No target GPIO driver | No target UART driver | No target timer driver | Incomplete MCU port |
+| STM32WBA | Partial Bluetooth sources and linker support; startup missing | No target GPIO driver | No target UART driver | No target timer driver | Incomplete MCU port |
 | STM32L152 | Not implemented | Not implemented | Not implemented | Not implemented | Planned after 0.13 |
 
 The L4 UART supports seven/eight payload bits, none/even/odd parity and one/two
@@ -73,7 +76,7 @@ source for L4S9. These are compilation and host-model results, not complete
 IOC library/application links or hardware tests.
 
 F030x8 has existing maintainer-reported use in TaktOS benchmarks. That evidence
-does not validate the newly added peripheral timer backend: the benchmark uses
+is separate from the peripheral timer tests: the benchmark uses
 SysTick for kernel timing and TIM17 as an IRQ probe. The new timers pass host
 register tests and Cortex-M0 archive-link smoke checks, including strong
 SysTick/TIM17 overrides. See the [F030x8 port notes](../ARM/ST/STM32F0xx/README.md)
@@ -82,8 +85,17 @@ for virtual ordering, capabilities and remaining board checks. The
 lists the target projects and separates peripheral examples from software-only
 crypto tests.
 
-No new STM32 board-validation record is established by these checks. Record
-on-board startup, GPIO, UART traffic and timer results separately when available.
+On 2026-10-08, the maintainer confirmed STM32F0308-DISCO startup, LED GPIO,
+USART1 TX/stdio retargeting, TIM6 (virtual device 0) and TIM16 (virtual device 2).
+TIM6's UART log contains 115 consecutive 100000 us intervals over 11.5 seconds.
+The previous timing variation came from `rdimon` semihosting; a missing
+level-shifter supply explained the temporary loss of UART output.
+
+The implementation was merged in [PR 75](https://github.com/IOsonata/IOsonata/pull/75).
+The exact flashed revision, successful build profile and complete tool versions
+were not recorded with these runs. This is maintainer hardware evidence for
+those functions, not a test of every mode or all seven timers. TIM14, TIM17,
+TIM15, TIM3 and TIM1 still need hardware coverage.
 The planned L152/Nucleo-64 work is outside the 0.13 support list.
 
 ## Other source ports

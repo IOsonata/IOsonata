@@ -292,7 +292,7 @@ IOsonata includes generic and target-specific implementations across:
 - USB and host-side interfaces
 - bare-metal, TaktOS, FreeRTOS and ThreadX applications
 
-An MCU is supported when startup, GPIO, UART and a timer backend are implemented.
+An MCU is supported when startup, GPIO, UART and a timer driver are implemented.
 Optional peripheral capabilities and hardware validation are recorded separately.
 See [Supported Targets](docs/supported-targets.md) for the current matrix.
 
@@ -321,7 +321,9 @@ STM32L476, STM32L496 and STM32L4S9 meet the minimum MCU support requirement
 through their startup, GPIO, UART and LPTIM implementations. Their host regressions
 and ARM compilation checks are recorded; hardware validation remains pending.
 STM32F030x8 also implements startup, GPIO, UART and all seven peripheral timers;
-its existing TaktOS benchmark use is separate from validation of the new timers.
+the maintainer confirmed startup, LED GPIO, USART1 UART retargeting, TIM6 and
+TIM16 on STM32F0308-DISCO. Its earlier TaktOS benchmark use is recorded
+separately. See the port notes for the remaining timer hardware checks.
 Other STM32 ports with missing minimum components remain incomplete. See
 [Supported Targets](docs/supported-targets.md) for the MCU list and limitations.
 

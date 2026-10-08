@@ -40,7 +40,7 @@ controller applications.
 The Python runners require only the host packages used by their transport:
 
 - CDC runners use `pyserial`;
-- raw USB Bulk, Interrupt and MSC runners use `pyusb` with a libusb backend;
+- raw USB Bulk, Interrupt and MSC runners use `pyusb` with libusb;
 - Isochronous runners use `libusb1` (the Python `usb1` module);
 - composite stress uses `pyserial`, `hidapi` and `libusb1` together;
 - the HID runner uses `hidapi` and the operating system HID driver.
@@ -321,7 +321,7 @@ static const UsbdMscCfg_t s_MscCfg = {
 
 The sector buffer must be at least `DiskIO::GetSectSize()` bytes. Initialization
 rejects an invalid or oversized sector configuration rather than assuming that
-every backend sector fits. Disk reads, writes and SCSI command work run from
+every storage sector fits. Disk reads, writes and SCSI command work run from
 the queued process event, outside the USB interrupt.
 
 The initial SCSI command set includes INQUIRY, TEST UNIT READY, REQUEST SENSE,

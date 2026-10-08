@@ -254,7 +254,7 @@ guide does not migrate them automatically to `NvmDiskIO`.
 
 ## Bond storage, DFU and shared consumers
 
-Bluetooth's optional PDS bond backend and DFU storage can use NVM. Keep their
+Bluetooth's optional PDS bond storage and DFU storage can use NVM. Keep their
 regions disjoint from application files and any USB MSC volume. Reserve space
 in the linker/partition layout; do not let each consumer choose the same
 apparently unused top-of-memory range independently.
