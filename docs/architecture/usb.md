@@ -676,7 +676,7 @@ and interface selection belong in `usbh_*` and must not change the reusable
 
 ## Rules for new USB work
 
-Keep these invariants when adding a class, transfer type or future host support:
+Follow these rules when adding a class, transfer type or future host support:
 
 1. `usb_*` remains role-neutral reusable USB infrastructure.
 2. `usbd_*` contains USB device-side class behavior.

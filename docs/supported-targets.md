@@ -1,15 +1,17 @@
 # Supported MCUs
 
-Reviewed against main `05e00ed094aaa0f5cb21493e5ed8dda871de7c26` on
-2026-10-08. This inventory covers all 30 MCU library projects under
+Initial review: main `05e00ed094aaa0f5cb21493e5ed8dda871de7c26`, 2026-10-08.
+Updated for the SAM4L timers and maintainer hardware validation in
+[PR 81](https://github.com/IOsonata/IOsonata/pull/81).
+This inventory covers all 30 MCU library projects under
 `ARM/` and `RISCV/`, plus source-only and planned targets noted below.
 
 ## What support means
 
 **Minimum MCU support** requires implemented startup, GPIO, UART and an
-IOsonata timer backend. Optional peripherals, project integration, build
+IOsonata timer implementation. Optional peripherals, project integration, build
 verification and hardware results are separate facts. A generic wrapper such
-as `src/coredev/timer.cpp` does not supply a target timer backend.
+as `src/coredev/timer.cpp` does not supply a MCU-specific timer implementation.
 
 - **Supported, minimum implemented**: the four core implementations exist.
   This does not certify every peripheral, operating mode or example.
@@ -24,14 +26,14 @@ as `src/coredev/timer.cpp` does not supply a target timer backend.
 
 The library builder discovers projects; its menu is not a support-status list.
 Timer device numbers are virtual indices, not hardware timer numbers. Shared
-ARM SysTick support is separate from the target Timer backends listed here.
+ARM SysTick support is separate from the MCU-specific Timer implementations listed here.
 
 ## Nordic
 
 All rows below use the shared Nordic GPIO and UART implementations. The
 startup and timer selections differ by MCU/core.
 
-| MCU / core | Implementation and project status | Timer backend | Validation and limits |
+| MCU / core | Implementation and project status | Timer implementation | Validation and limits |
 |---|---|---|---|
 | [nRF52832](../ARM/Nordic/nRF52/nRF52832/lib/ioc/) | Supported, minimum implemented | RTC + TIMER | Established BLE, UART, sensor and low-power hardware baseline. No native USB controller port. |
 | [nRF52840](../ARM/Nordic/nRF52/nRF52840/lib/ioc/) | Supported, minimum implemented | RTC + TIMER | Recorded bare-metal and TaktOS USB composite endurance runs; native full-speed USB. |
@@ -61,22 +63,28 @@ part or core.
 |---|---|---|---|
 | [RA4M1](../ARM/Renesas/RA4M1/README.md) | Supported, minimum implemented | SCI polling/interrupt; AGT0/1 and GPT0-7 | Startup/GPIO/ICU/UART/timer models and ARM layout checks are documented. Physical validation remains pending. No native USB controller or DMA/DTC support in this port. See [timer details](../ARM/Renesas/RA4M1/TIMER.md). |
 | [RE01 1500 KB](../ARM/Renesas/RE01/RE01_1500KB/lib/ioc/) | Supported, minimum implemented | SCI polling/interrupt; AGT0/1, cascaded TMR0/1 and GPT0-5 (nine virtual devices) | DBN/CFB/CFP example compile/link/layout checks and register models are documented. SPI and I2C currently provide polling master modes; do not claim interrupt/DMA or slave support. See [examples](../ARM/Renesas/RE01/RE01_1500KB/exemples/README.md) and [validation](../tests/re01/README.md). |
-| [R9A02G021](../RISCV/Renesas/R9A02/R9A02G021/lib/ioc/) | Partial port | Startup, GPIO and UART sources; standalone AGT0 millisecond tick | `agt_tick_r9a02.c` supplies `R9A02_AgtTickInit/Isr`, not the generic `TimerInit` backend. The tick helper does not establish complete IOsonata Timer support. Current full IOC/hardware validation is not recorded here. |
+| [R9A02G021](../RISCV/Renesas/R9A02/R9A02G021/lib/ioc/) | Partial port | Startup, GPIO and UART sources; standalone AGT0 millisecond tick | `agt_tick_r9a02.c` supplies `R9A02_AgtTickInit/Isr`, not the generic `TimerInit` implementation. The tick helper does not establish complete IOsonata Timer support. Current full IOC/hardware validation is not recorded here. |
 
 ## Microchip SAM
 
 | MCU project | Implementation and project status | Timer status | Validation and limits |
 |---|---|---|---|
-| [SAM4LCxC](../ARM/Microchip/SAM4L/SAM4LCxC/lib/ioc/) | Startup/GPIO/UART and native USB implemented; Timer port incomplete | AST partial; TC stub | SAM4L8 Xplained Pro has recorded CDC, ISO and suspend/wake results. These validate USB paths, not the unfinished Timer API. |
-| [SAM4LSxC](../ARM/Microchip/SAM4L/SAM4LSxC/lib/ioc/) | Shares SAM4L source; Timer port incomplete | AST partial; TC stub | Do not transfer SAM4LC8C hardware results to every LS device/configuration. |
-| [SAM4E16E](../ARM/Microchip/SAM4E/SAM4E16E/lib/ioc/) | Incomplete minimum port | No target Timer backend in the repository/project | Startup, GPIO and UART sources exist. The generic timer wrapper alone does not complete the port. |
+| [SAM4LCxC](../ARM/Microchip/SAM4L/SAM4LCxC/lib/ioc/) | Supported; hardware validated | AST + six TC channels | SAM4LC8C on SAM4L8 Xplained Pro: startup, GPIO, UART, timers, I2C, SPI and USB. See the recorded tests below. |
+| [SAM4LSxC](../ARM/Microchip/SAM4L/SAM4LSxC/lib/ioc/) | Supported, minimum implemented; shares SAM4L drivers | AST + six TC channels | Uses the same timer sources and library integration. Hardware confirmation is for SAM4LC8C; separate LS-device testing is not recorded. |
+| [SAM4E16E](../ARM/Microchip/SAM4E/SAM4E16E/lib/ioc/) | Incomplete minimum port | No target Timer implementation in the repository/project | Startup, GPIO and UART sources exist. The generic timer wrapper alone does not complete the port. |
 
-The SAM4L [AST driver](../ARM/Microchip/SAM4L/src/timer_sam4l_ast.cpp)
-has empty reset/disable-trigger operations and interrupt handlers that do not
-dispatch the configured trigger callbacks. The
-[TC initializer](../ARM/Microchip/SAM4L/src/timer_sam4l_tc.cpp)
-returns success without installing a working timer implementation. Neither
-should be described as a complete timer port.
+SAM4L is hardware validated, confirmed by the maintainer on 2026-10-08.
+The [AST driver](../ARM/Microchip/SAM4L/src/timer_sam4l_ast.cpp) provides
+virtual device 0 with one trigger. The
+[TC driver](../ARM/Microchip/SAM4L/src/timer_sam4l_tc.cpp) provides devices
+1 through 6 with three triggers each. Both SAM4LCxC and SAM4LSxC library
+projects include the timer sources.
+
+TimerDemo logs cover AST and TC devices 1, 3 and 6. TC triggers run at 100,
+1000 and 250 ms. AST reports 99.609 ms at its default rate, 4000 ms at 1 Hz,
+and 500 ms when a 10 Hz request selects 8 Hz. These longer periods follow
+the four-tick minimum. The maintainer also confirmed LED0 on PC07.
+See [timer tests and limits](../tests/sam4l/README.md).
 
 SAM4L USB provides EP0 and seven physical data endpoints; each data direction
 uses a physical endpoint. The complete composite stress configuration exceeds
@@ -156,11 +164,11 @@ The planned L152/Nucleo-64 work is outside the 0.13 support list.
 
 | MCU project | Available implementation | Missing minimum support / integration |
 |---|---|---|
-| [LPC11U35](../ARM/NXP/LPC11xx/LPC11U35/lib/ioc/) | Legacy startup, GPIO, UART and other peripheral sources | No target Timer backend; older interfaces/projects require current build verification. |
-| [LPC1769](../ARM/NXP/LPC17xx/LPC1769/lib/ioc/) | Legacy startup, GPIO and UART sources | No target Timer backend; older interfaces/projects require current build verification. |
+| [LPC11U35](../ARM/NXP/LPC11xx/LPC11U35/lib/ioc/) | Legacy startup, GPIO, UART and other peripheral sources | No target Timer implementation; older interfaces/projects require current build verification. |
+| [LPC1769](../ARM/NXP/LPC17xx/LPC1769/lib/ioc/) | Legacy startup, GPIO and UART sources | No target Timer implementation; older interfaces/projects require current build verification. |
 | [LPC54605](../ARM/NXP/LPC546xx/LPC54605/lib/ioc/) | Startup/vector/linker project | Target GPIO, UART and Timer integration incomplete. Shared LPC code is not proof of a working LPC54605 port. |
-| [ESP32-C3](../RISCV/Espressif/ESP32C/ESP32C3/lib/ioc/) | Startup, GPIO and UART sources, clock and interrupt routing | No IOsonata target Timer backend. Optional bus sources do not establish complete peripheral support. |
-| [ESP32-C6](../RISCV/Espressif/ESP32C/ESP32C6/lib/ioc/) | Startup, PCR and interrupt-routing sources | No target Timer backend; the library source list also omits the shared Espressif GPIO/UART implementation. Fixing the Blinky source link alone does not complete this port. |
+| [ESP32-C3](../RISCV/Espressif/ESP32C/ESP32C3/lib/ioc/) | Startup, GPIO and UART sources, clock and interrupt routing | No IOsonata target Timer implementation. Optional bus sources do not establish complete peripheral support. |
+| [ESP32-C6](../RISCV/Espressif/ESP32C/ESP32C6/lib/ioc/) | Startup, PCR and interrupt-routing sources | No target Timer implementation; the library source list also omits the shared Espressif GPIO/UART implementation. Fixing the Blinky source link alone does not complete this port. |
 | [RP2040](../ARM/RPI/RP20/RP2040/lib/ioc/) | Project scaffold and generic sources | Native startup/GPIO/UART/Timer integration absent. Incomplete port. |
 
 ## Recorded hardware evidence
@@ -175,7 +183,7 @@ the review commit or that every project passed both IOC build profiles.
 | nRF54L15 | BLYSTL15, Nordic nRF54L15 DK | UART, Bluetooth and TaktOS benchmarks | Established reference baseline. |
 | nRF52840 | Composite USB, bare metal and TaktOS | CDC loopback/PRBS, HID, interrupt and ISO endurance | 2000-second results recorded in the [0.13 notes](releases/0.13.md#recorded-validation); exact firmware SHA/toolchain not supplied with those reports. |
 | nRF54LM20 | Composite USB, bare metal and TaktOS | High-speed composite USB endurance | 2000-second results in the same release record; exact board/variant and firmware revision must accompany future runs. |
-| SAM4LC8C | SAM4L8 Xplained Pro | CDC loopback, ISO alternate settings and manual suspend/wake | Recorded results precede later driver/example changes; see [SAM4L release evidence](releases/0.13.md#sam4l-usb-port). |
+| SAM4LC8C | SAM4L8 Xplained Pro | Startup, LED GPIO, UART, AST/TC timers, I2C, SPI, CDC loopback, ISO and manual suspend/wake | Hardware validated, confirmed 2026-10-08. See [timer results](../tests/sam4l/README.md) and [USB results](releases/0.13.md#sam4l-usb-port). |
 | STM32F030x8 | STM32F0308-DISCO | Hardware validated: startup, GPIO, UART and timers; later UART TX DMA PRBS | Maintainer-confirmed validation. Detailed recorded timer runs cover TIM6/TIM16; coverage of additional modes is tracked separately. |
 | STM32L476, STM32L496, STM32L4S9 | Maintainer's existing projects | Hardware validated and used in projects | Confirmed by the maintainer on 2026-10-08; board names and per-project configurations were not supplied in this confirmation. |
 
@@ -188,13 +196,14 @@ result is unknown, not proof that the port fails.
 
 At `05e00ed`, clean USB and Bluetooth host builds/tests passed with
 GCC 13.3, ASan/UBSan and leak detection disabled. The SAM4LC8C bare-metal CDC
-source closure compiled and linked with Arm GNU 14.3.1 in Debug and Release;
-the existing RWX LOAD-segment warning remains. That script builds a selected
-source closure, not the complete IOC MCU library, and does not compile the
-unfinished SAM4L timer sources.
+example and its required sources compiled and linked with Arm GNU 14.3.1 in Debug and Release;
+the existing RWX LOAD-segment warning remains. That script builds the sources required by the CDC example. It does not build
+the complete IOC MCU library or the SAM4L timer sources.
+The separate TimerDemo build check compiles and links all seven timer device
+selections in Debug and Release with Arm GNU 14.3.1.
 
-Full IOC library/application builds and final hardware smoke tests remain
-release gates. Earlier measurements do not certify later changes.
+Full IOC library/application builds and final hardware checks are required
+before release. Earlier measurements do not certify later changes.
 
 The legacy `UartSdkLoopbackTest` and `UartLoopbackSdk5` target projects were
 removed in [PR 79](https://github.com/IOsonata/IOsonata/pull/79).

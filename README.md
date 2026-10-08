@@ -318,7 +318,7 @@ IOsonata is developed and validated on I-SYST reference hardware as well as vend
 | nRF54L15 | UART, Bluetooth and TaktOS benchmarks |
 | nRF52840 | Bare-metal and TaktOS composite USB endurance |
 | nRF54LM20 | Bare-metal and TaktOS high-speed composite USB endurance |
-| SAM4LC8C | SAM4L8 Xplained Pro CDC, ISO and manual suspend/wake |
+| SAM4LC8C | Hardware validated on SAM4L8 Xplained Pro: startup, GPIO, UART, AST/TC timers, I2C, SPI, CDC, ISO and manual suspend/wake |
 | STM32F030x8 | Hardware validated on STM32F0308-DISCO; startup, GPIO, USART1, TIM6/TIM16 and UART DMA PRBS |
 | STM32L476 / STM32L496 / STM32L4S9 | Hardware validated and used in existing projects, confirmed by the maintainer |
 

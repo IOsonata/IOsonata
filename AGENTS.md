@@ -209,7 +209,7 @@ Core interfaces normally have:
 The C++ layer must not create a second unrelated implementation. Examples such
 as `exemples/uart/uart_prbs_tx.cpp` show both forms using the same driver.
 
-Older C ports are also part of the compatibility surface. Do not assume that all
+Changes must also remain compatible with older C ports. Do not assume that all
 ports use the newest typedef names or initialize every recently added field.
 
 ## Generic and target separation
@@ -228,13 +228,23 @@ target port without reading the generic caller. For a common API change, search
 all implementations before proposing the change.
 
 A public symbol must have one definer in each library configuration. Weak
-fallbacks must fail closed where unsupported behavior would be unsafe.
+fallbacks must report failure for unsupported operations.
 
 Different MCU ports can divide responsibilities differently. For example, an
 Espressif UART port may delegate clock reset, GPIO matrix routing, and interrupt
 matrix setup to separate target modules, while another MCU keeps those operations
 in the UART source file. Read all cooperating target files before judging the
 implementation incomplete.
+
+## Frequency and rate selection
+
+Frequency, data-rate, baud-rate and similar setters select and return the
+closest supported value. This rule applies throughout IOsonata, not only timers.
+Do not reject a request merely because it is outside the hardware range or
+cannot be represented exactly. The application decides whether the returned
+value is suitable. Preserve documented special values such as zero for
+automatic selection. Hardware failures and invalid device handles are separate
+from a requested value being outside the supported range.
 
 ## Configuration and memory rules
 
@@ -398,7 +408,8 @@ explicit.
 
 Software capability bases are working implementations. Hardware providers
 replace only supported operations. Operation storage is static or
-caller-provided, secrets are wiped, and security failures must fail closed.
+caller-provided, secrets are wiped, and an operation must stop and report failure
+if a security check fails.
 
 ### Storage
 
@@ -439,6 +450,11 @@ NVM implementation uses polling.
 ## Writing and code style
 
 Use plain engineering language. Avoid promotional or artificial wording.
+In documentation and PR descriptions, do not use "backend", "contract",
+"API surface", "source closure", or similar abstract labels. Name the driver,
+implementation, function, required behavior, or files being built. Explain what
+happens, what is supported, and what was tested. Preserve exact code identifiers,
+quoted source material, and license text.
 
 - ASCII text in source and project documentation.
 - Tabs for source indentation, matching the existing file.

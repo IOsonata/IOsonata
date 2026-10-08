@@ -4,23 +4,23 @@ In the object model an engine's capability is not a bitfield. It is expressed
 two ways:
 
 1. **Which operation family the engine exposes.** A `KeyAgreeEngine *`,
-   `CipherEngine *`, or `HashEngine *` selects the relevant API surface. The
+   `CipherEngine *`, or `HashEngine *` selects the relevant interface. The
    call result still decides whether that concrete engine implements the
-   requested operation and algorithm; a facet pointer is not a capability bit.
-2. **Which algorithm value the facet method accepts.** Within a facet the
+   requested operation and algorithm; an interface pointer is not a capability bit.
+2. **Which algorithm value the interface method accepts.** Within an interface the
    algorithm is an argument (`CRYPTO_CIPHER_ALG`, `CRYPTO_MAC_ALG`,
    `CRYPTO_HASH_ALG`, `CRYPTO_CURVE`). An engine that does not implement a given
-   value returns `CRYPTO_STATUS_UNSUPPORTED` from the base facet method, which it
+   value returns `CRYPTO_STATUS_UNSUPPORTED` from the base interface method, which it
    simply does not override.
 
 There is no `Cap` word to query and no `CryptoIsCapable`. "Can this engine do X"
-is answered by a non-null facet pointer followed by the operation return status.
+is answered by a non-null interface pointer followed by the operation return status.
 Algorithm support is also answered by that return status. This removes the class of bug where
 a `Cap` bit and the backing function pointer disagree.
 
-## Facets
+## Interfaces
 
-| Facet | Operation | Algorithm argument | Values today |
+| Interface | Operation | Algorithm argument | Values today |
 |---|---|---|---|
 | `CipherEngine` | `Cipher` | `CRYPTO_CIPHER_ALG` | `CRYPTO_CIPHER_ECB`, `CRYPTO_CIPHER_CTR`, `CRYPTO_CIPHER_CBC` (AES-128); XTS reserved |
 | `MacEngine` | `Mac` | `CRYPTO_MAC_ALG` | `CRYPTO_MAC_CMAC` (AES engines), `CRYPTO_MAC_HMAC` (SHA-256 engine); GMAC reserved |
@@ -39,7 +39,7 @@ retry, while `CRYPTO_STATUS_FAIL` always consumes it.
 
 New primitives are added by extending an algorithm enum (a new
 `CRYPTO_CIPHER_*` or `CRYPTO_HASH_*` value) or, for a new primitive family, by
-adding a facet. Existing values are never renumbered.
+adding an interface. Existing values are never renumbered.
 
 ## Engine descriptive properties
 
@@ -56,9 +56,9 @@ property of which concrete class was constructed (`Ba414ep`, `CryptoCc3xx`),
 known at the point of construction, so it does not need a runtime property
 bit.
 
-## Which engine implements which facet
+## Which engine implements which interface
 
-| Engine | Facets |
+| Engine | Interfaces |
 |---|---|
 | `CryptoUecc` | `KeyAgreeEngine`, `SignEngine` |
 | `Ba414ep` | `KeyAgreeEngine` |
@@ -89,5 +89,5 @@ requires a synchronous hash engine (`!IsAsync()`).
 utility for download / DFU key checking: it returns a hex string and keeps global
 state (one hash at a time). It is not part of the crypto engine tree and is not
 shared with it. The crypto-layer digest is `CryptoSoftSha256` (the `HashEngine`
-facet), which returns a raw 32-byte digest and is per-instance. The two do not
+interface), which returns a raw 32-byte digest and is per-instance. The two do not
 collide and serve different purposes.

@@ -357,7 +357,7 @@ run outside newly acquired PRIMASK sections and may queue more data. The SCI
 source is negated/synchronized and the ICU route acknowledged before application
 code; a callback-time arrival is not cleared on dispatcher exit. Code/context
 must remain valid until an already active callback returns after higher-priority
-preemption, as with the ICU registration contract.
+preemption, as with ICU interrupt registration.
 
 Polling allocates no ICU slots and writes accepted bytes directly to TDR, never
 leaving accepted data in an undriven software TX queue. Reads return currently
@@ -387,7 +387,7 @@ RX/TX FIFO memory, invalid modes and partial initialization failures are rejecte
 Run `python3 tests/ra4m1/run_uart_validation.py` from the repository root for the
 UART model and the existing startup/GPIO/ICU regression suite. The UART test
 executes the actual UART, GPIO and ICU sources, but its CMSIS and UART/DevIntrf
-headers are reduced test contracts. Its default standalone run uses a CFifo test
+headers are simplified for the tests. Its default standalone run uses a CFifo test
 double. In a full checkout, the runner additionally builds against the unchanged
 production `src/cfifo.c`. The model checks register access sizes, frame/baud
 configuration, all four SCI channels, FIFO overflow, partial transfers, TX restart,
@@ -400,8 +400,8 @@ never these test shims.
 ## Validation status
 
 Run `python3 tests/ra4m1/run_validation.py` from the repository root.
-The tests use reduced CMSIS/generic-contract **test shims**, clearly separated
-from production includes. They run the actual startup implementation against a
+The tests use simplified CMSIS and generic API **test headers**, kept separate
+from production headers. They run the actual startup implementation against a
 register model and compile/link an ARM layout probe. They are not an FSP build,
 a full IOsonata/newlib firmware build, a CPU emulator, or hardware validation.
 
@@ -421,7 +421,7 @@ particular LED, button, test-pin pairing, or evaluation-board project is assumed
 
 IOsonata patterns were read from `sam4l_usb_debug` commit
 `721b361401b1db64ce7ccd2ebc532f88bbfb48b8`: the RE01 startup/vectors, shared
-ResetEntry, generic clock/interrupt contracts, and common ARM linker script.
+ResetEntry, generic clock and interrupt interfaces, and common ARM linker script.
 
 Hardware basis: Renesas RA4M1 Group User's Manual: Hardware,
 **R01UH0887EJ0110, Rev. 1.10, September 29, 2023**. Relevant sections are chapter

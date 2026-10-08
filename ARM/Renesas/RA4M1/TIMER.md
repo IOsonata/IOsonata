@@ -1,9 +1,8 @@
 # RA4M1 timers
 
-Native backend for the existing `coredev/timer.h` interface. No board wiring,
-Arduino/FSP runtime, replacement timer API, SysTick handler or application
-scheduler is introduced. `SystemInit`, UART, GPIO, ICU and shared sources are
-unchanged by this increment.
+The RA4M1 timer implementation uses AGT0/1 and GPT0-7 through the existing
+`coredev/timer.h` interface. Timer registers and interrupt handling are
+configured in the MCU code; board pins belong in the application.
 
 ## Device numbering and implemented triggers
 
@@ -22,7 +21,7 @@ unavailable route fails initialization or trigger enable rather than sharing
 another client's slot. A completed GPT single shot keeps its route for rearming;
 `TimerDisableTrigger()` releases it.
 
-## Frequency and count contract
+## Frequency and tick counts
 
 A zero requested frequency selects the maximum supported count frequency.
 Otherwise the closest hardware divisor is selected, with ties choosing the
@@ -35,8 +34,8 @@ AGT DEFAULT follows the already initialized low-frequency oscillator descriptor.
 LFRC selects an already running LOCO; LFXTAL requires the configured 32768 Hz
 crystal and running subclock. GPT DEFAULT uses the current PCLKD. HFRC/HFXTAL
 are accepted only when the established system source matches that request.
-The timer driver does not start, switch or retune oscillators. Clock-dependent
-clients must be quiesced before changing system clocks; reset/reconfigure the
+The timer driver does not start, switch or retune oscillators. Peripherals that use these
+clocks must be stopped before changing system clocks; reset/reconfigure the
 timer frequency before resuming timing measurements afterwards.
 
 `GetTickCount` returns increasing 64-bit ticks, including one pending hardware
@@ -84,13 +83,13 @@ wrap; a continuous trigger advances with a bounded retry. An unrecoverable
 compare-write/programming failure disables that trigger and records a diagnostic.
 
 The handler acknowledges its own ICU route before application code, using the
-existing `Ra4m1AcknowledgeInt` contract. A fresh callback-time arrival is not
+existing `Ra4m1AcknowledgeInt` function. A fresh callback-time arrival is not
 cleared by the dispatcher's trailing acknowledgement. Callbacks are synchronous
 ISR calls, outside newly acquired global interrupt masks. They may rearm or
 disable triggers; they must not block. An already claimed callback may finish
 across higher-priority preemption, so keep its timer object and context alive.
-There is no timer-release API in the generic contract; initialized objects must
-have persistent lifetime. `Disable` is a pause, not deallocation.
+The Timer API has no release function; initialized objects must remain alive
+while their timers are in use. `Disable` is a pause, not deallocation.
 
 A trigger-specific handler takes precedence. When it is null, the timer's event
 handler receives `TIMER_EVT_TRIGGER(n)`. Counter overflow notification uses
@@ -98,14 +97,14 @@ handler receives `TIMER_EVT_TRIGGER(n)`. Counter overflow notification uses
 notification and a trigger notification. `bTickInt=true` is rejected: this
 increment does not synthesize an interrupt for each counter increment.
 
-## Lifecycle, protection and failures
+## Start, stop, reset, and error handling
 
 `TimerDisable` stops and settles the counter, folds elapsed ticks into the
 software origin, and disables its CPU interrupts. `TimerEnable` resumes the
 count and restarts active trigger periods from the resume point. `TimerReset`
 zeros the count and restarts active trigger phases while retaining the previous
-running/paused state. `TimerSetFrequency` resets and restarts as required by the
-generic contract, requantizing active trigger periods before changing hardware.
+running/paused state. `TimerSetFrequency` resets and restarts the timer. Before changing hardware,
+it rounds active trigger periods to the new tick interval.
 An unrepresentable active trigger rejects the frequency change before mutation.
 
 AGT start/stop waits for TCSTF with a bounded poll and accesses no other AGT
@@ -119,12 +118,12 @@ bits that another timer handler might clear.
 Module writes preserve unrelated MSTPCRD and PRCR bits. GPT's shared module
 clock remains enabled after pausing one channel; this driver does not gate a
 neighbouring GPT. Raw running channels and existing CPU/DTC/DMAC routes for the
-channel are rejected. Applications must also quiesce any other raw/ELC consumer
+channel are rejected. Applications must also stop any other code or ELC peripheral using the channel
 before assigning the channel to this driver. Register readback and bounded
 handshakes detect the implemented failure cases, not every possible bus fault.
-A hardware failure is not transactional rollback: the timer/trigger can remain
-stopped. Read `g_Ra4m1TimerError[DevNo]` from `timer_ra4m1.h`. A failed stop
-quarantines the affected timer from ordinary enable; successful reset can recover
+After a hardware failure, the timer or trigger may remain stopped; its previous
+configuration is not restored. Read `g_Ra4m1TimerError[DevNo]` from `timer_ra4m1.h`. A failed stop
+prevents the affected timer from being enabled; successful reset can recover
 an initialized timer after a confirmed stop. A failed initialization never keeps
 a caller's object pointer; unconfirmed hardware stop blocks reuse until MCU reset.
 
@@ -168,7 +167,7 @@ widths/protection, asynchronous start/stop handshakes, pending-overflow races,
 D/E mapping, all six GPT triggers, phase catch-up, programming latency,
 callback-time arrivals, callback rearming, shared gates and failure paths.
 
-**The headers are reduced test contracts.** The UART regression uses its
+**The tests use simplified headers, not the production headers.** The UART regression uses its
 existing CFifo test double in the standalone source package; its runner also
 uses production CFifo when that source is present in a full checkout. The
 inherited ARM link probe validates startup/vector archive extraction, not a

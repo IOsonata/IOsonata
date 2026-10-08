@@ -21,7 +21,7 @@ disabled, like the current nRF54L libraries. The application event queue,
   directly and is deliberately not linked into either H20 project.
 - The radio project still needs H20 MPSL integration. The shared
   `ARM/Nordic/src/nrf_mpsl.cpp` selects nRF54L or older Nordic interrupt
-  mappings; it is not an H20 backend and is not added to this project.
+  mappings; it does not implement H20 interrupt handling and is not added to this project.
 - The application project's existing `src/system_nrf54h.c` link points to a
   file absent from the repository. Startup, target peripheral support, and
   the external H20 SDK configuration remain to be integrated and built.
@@ -32,6 +32,6 @@ The L15/LM20 S145 BM profiles must not be copied into H20 as a substitute
 for these target integrations. The RISC-V H20 project is a separate unfinished
 port and is not changed by this Arm project update.
 
-Validation of this update covers XML, repository source links, C/C++ backend
+Validation of this update covers XML, repository source links, C/C++ preprocessor
 definitions, and Debug/Release source parity. An H20 cross-build and hardware
 validation are still required after the missing target code is implemented.
