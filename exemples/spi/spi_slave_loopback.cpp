@@ -115,6 +115,7 @@ static int s_FrameLength;
 static volatile bool s_Done;
 static volatile int s_Count;
 static volatile unsigned s_Completions;
+static volatile unsigned s_Arms;
 SPI g_SpiSlave;
 
 static int SlaveEvent(DevIntrf_t * const pDev, DEVINTRF_EVT Event,
@@ -124,6 +125,7 @@ static int SlaveEvent(DevIntrf_t * const pDev, DEVINTRF_EVT Event,
 	(void)pBuffer;
 	if (Event == DEVINTRF_EVT_STATECHG)
 	{
+		++s_Arms;
 		g_SpiSlave.SetSlaveRxBuffer(0, s_SlaveRx, s_FrameLength);
 		g_SpiSlave.SetSlaveTxData(0, s_SlaveTx, s_FrameLength);
 	}
@@ -201,6 +203,7 @@ static bool Frame(int Mode, int Length, uint8_t Seed)
 	uint8_t masterRx[129];
 	s_Done = false;
 	const unsigned before = s_Completions;
+	const unsigned armsBefore = s_Arms;
 	IOPinClear(SPI_MASTER_CS_PORT, SPI_MASTER_CS_PIN);
 	Delay();
 	for (int i = 0; i < Length; ++i)
@@ -222,7 +225,18 @@ static bool Frame(int Mode, int Length, uint8_t Seed)
 	printf("Full duplex %d bytes slave RX=%d %s\r\n",
 		Length, s_Done ? s_Count : 0, pass ? "PASS" : "FAIL");
 	if (!s_Done)
+	{
 		printf("Slave completion TIMEOUT\r\n");
+		printf("CS master=%d slave=%d callbacks=%u->%u arms=%u->%u last RX=%d\r\n",
+			IOPinRead(SPI_MASTER_CS_PORT, SPI_MASTER_CS_PIN),
+			IOPinRead(SPI_SLAVE_CS_PORT, SPI_SLAVE_CS_PIN),
+			before, s_Completions, armsBefore, s_Arms, s_Count);
+#ifdef SPI_LOOPBACK_DIAG_FORMAT
+		// Target register expressions live with the target configuration.
+		// SR is read-to-clear: take this snapshot only after a failed frame.
+		printf(SPI_LOOPBACK_DIAG_FORMAT, SPI_LOOPBACK_DIAG_VALUES);
+#endif
+	}
 	if (mismatch >= 0)
 		printf("Mismatch at %d: master RX=%02x expected=%02x slave RX=%02x expected=%02x\r\n",
 			mismatch, masterRx[mismatch], s_SlaveTx[mismatch],
@@ -271,17 +285,30 @@ int main()
 			memset(s_SlaveRx, 0, sizeof(s_SlaveRx));
 			// Reload the preloaded first byte after changing foreground data.
 			g_SpiSlave.Reset();
-			pass = Frame(mode, s_FrameLength, 0x30) && pass;
+			if (!Frame(mode, s_FrameLength, 0x30))
+			{
+				pass = false;
+				break;
+			}
 			// No reset: NSS rising must rearm byte zero for the next frame.
 			memset(s_SlaveRx, 0, sizeof(s_SlaveRx));
-			pass = Frame(mode, s_FrameLength, 0x50) && pass;
+			if (!Frame(mode, s_FrameLength, 0x50))
+			{
+				pass = false;
+				break;
+			}
 			if (s_FrameLength > 1)
 			{
 				// A short CS frame must discard the unused TX prefetch.
-				pass = Frame(mode, 1, 0x70) && pass;
-				pass = Frame(mode, s_FrameLength, 0x90) && pass;
+				if (!Frame(mode, 1, 0x70) || !Frame(mode, s_FrameLength, 0x90))
+				{
+					pass = false;
+					break;
+				}
 			}
 		}
+		if (!pass)
+			break;
 	}
 	printf("SPI slave loopback %s\r\n", pass ? "PASS" : "FAIL");
 	while (1)
