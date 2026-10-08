@@ -447,7 +447,7 @@ SPIPHY STM32L4xxSPIPhy(SPIDEV * const pDev, SPIPHY Phy)
 	switch (Phy)
 	{
 		case SPIPHY_3WIRE:
-			if (pDev->Cfg.DevNo < STM32L4XX_SPI_MAXDEV - 2)
+			if (pDev->Cfg.DevNo < STM32L4XX_SPI_DEV_COUNT)
 			{
 				SPI_TypeDef *reg;
 
@@ -458,7 +458,7 @@ SPIPHY STM32L4xxSPIPhy(SPIDEV * const pDev, SPIPHY Phy)
 			}
 			break;
 		case SPIPHY_NORMAL:
-			if (pDev->Cfg.DevNo < STM32L4XX_SPI_MAXDEV - 2)
+			if (pDev->Cfg.DevNo < STM32L4XX_SPI_DEV_COUNT)
 			{
 				SPI_TypeDef *reg;
 
@@ -601,7 +601,8 @@ SPIPHY SPISetPhy(SPIDEV * const pDev, SPIPHY Phy)
 {
 	if (Phy != pDev->Cfg.Phy)
 	{
-		if (pDev->Cfg.DevNo == STM32L4XX_SPI_MAXDEV - 1)
+		if (pDev->Cfg.DevNo >= STM32L4XX_SPI_DEV_COUNT &&
+			pDev->Cfg.DevNo < STM32L4XX_SPI_MAXDEV)
 		{
 			if (Phy == SPIPHY_QUAD_DDR)
 			{
@@ -630,7 +631,13 @@ bool SPIInit(SPIDEV * const pDev, const SPICFG *pCfgData)
 		return false;
 	}
 
-	if (pCfgData->DevNo >= STM32L4XX_SPI_MAXDEV)
+	if (pCfgData->DevNo < 0 || pCfgData->DevNo >= STM32L4XX_SPI_MAXDEV)
+	{
+		return false;
+	}
+
+	if (pCfgData->DevNo >= STM32L4XX_SPI_DEV_COUNT &&
+		(pCfgData->Mode != SPIMODE_MASTER || pCfgData->bIntEn || pCfgData->bDmaEn))
 	{
 		return false;
 	}
@@ -647,7 +654,7 @@ bool SPIInit(SPIDEV * const pDev, const SPICFG *pCfgData)
 		IOPinSetSpeed(pCfgData->pIOPinMap[i].PortNo, pCfgData->pIOPinMap[i].PinNo, IOPINSPEED_TURBO);
 	}
 
-	if (pCfgData->DevNo < STM32L4XX_SPI_MAXDEV - 1)
+	if (pCfgData->DevNo < STM32L4XX_SPI_DEV_COUNT)
 	{
 		// SPI only
 		retval = STM32L4xxSPIInit(pDev, pCfgData);

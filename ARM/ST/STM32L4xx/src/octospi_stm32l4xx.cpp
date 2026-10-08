@@ -84,6 +84,11 @@ bool STM32L4xxOSPIWaitFifo(STM32L4XX_SPIDev_t *pDev, int Timeout)
 // return actual rate
 static uint32_t STM32L4xxOSPISetRate(DevIntrf_t * const pDev, uint32_t DataRate)
 {
+	if (DataRate == 0)
+	{
+		return 0;
+	}
+
 	STM32L4XX_SPIDev_t *dev = (STM32L4XX_SPIDev_t *)pDev->pDevData;
 	uint32_t tmp = (RCC->CFGR & RCC_CFGR_HPRE_Msk) >> RCC_CFGR_HPRE_Pos;
 	uint32_t hclk = tmp & 8 ? SystemCoreClock >> ((tmp & 7) + 1) : SystemCoreClock;
@@ -96,9 +101,14 @@ static uint32_t STM32L4xxOSPISetRate(DevIntrf_t * const pDev, uint32_t DataRate)
 		div = 0;
 	}
 
+	if (div > 255)
+	{
+		div = 255;
+	}
+
 	dev->pOReg->DCR2 &= ~OCTOSPI_DCR2_PRESCALER_Msk;
 	dev->pOReg->DCR2 |= (div & 0xFF) << OCTOSPI_DCR2_PRESCALER_Pos;
-	dev->pSpiDev->Cfg.Rate = hclk / div;
+	dev->pSpiDev->Cfg.Rate = hclk / (div + 1);
 
 	return dev->pSpiDev->Cfg.Rate;
 }
@@ -134,7 +144,7 @@ static void STM32L4xxOSPIPowerOff(DevIntrf_t * const pDev)
 
 	STM32L4xxOSPIDisable(pDev);
 
-	RCC->AHB3ENR &= ~(1 << (RCC_AHB3ENR_OSPI1EN + dev->DevNo - STM32L4XX_OSPI_DEVNO_START));
+	RCC->AHB3ENR &= ~(RCC_AHB3ENR_OSPI1EN << (dev->DevNo - STM32L4XX_OSPI_DEVNO_START));
 
 	for (int i = 0; i < dev->pSpiDev->Cfg.NbIOPins; i++)
 	{
@@ -375,8 +385,8 @@ static void STM32L4xxOSPIStopTx(DevIntrf_t * const pDev)
 
 	if (dev->pSpiDev->Cfg.ChipSel == SPICSEL_DRIVER)
 	{
-		IOPinSet(dev->pSpiDev->Cfg.pIOPinMap[dev->pSpiDev->CurDevCs + SPI_CS_IOPIN_IDX].PortNo,
-				dev->pSpiDev->Cfg.pIOPinMap[dev->pSpiDev->CurDevCs + SPI_CS_IOPIN_IDX].PinNo);
+		IOPinSet(dev->pSpiDev->Cfg.pIOPinMap[dev->pSpiDev->CurDevCs + OSPI_CS_IOPIN_IDX].PortNo,
+				dev->pSpiDev->Cfg.pIOPinMap[dev->pSpiDev->CurDevCs + OSPI_CS_IOPIN_IDX].PinNo);
 	}
 }
 
@@ -385,7 +395,8 @@ bool STM32L4xxOctoSPIInit(SPIDEV * const pDev, const SPICFG *pCfgData)
 	OCTOSPI_TypeDef *reg;
 	uint32_t ctrlreg = 0;
 
-	if (pCfgData->DevNo != (STM32L4XX_SPI_MAXDEV - 1))
+	if (pCfgData->DevNo < STM32L4XX_OSPI_DEVNO_START ||
+		pCfgData->DevNo >= STM32L4XX_SPI_MAXDEV)
 	{
 		return false;
 	}
@@ -397,8 +408,8 @@ bool STM32L4xxOctoSPIInit(SPIDEV * const pDev, const SPICFG *pCfgData)
 
 	STM32L4xxOSPIReset(&pDev->DevIntrf);
 
-	RCC->AHB3ENR |= 1 << (RCC_AHB3ENR_OSPI1EN + dev->DevNo - STM32L4XX_OSPI_DEVNO_START);
-	RCC->AHB3SMENR &= ~(1 << (RCC_AHB3ENR_OSPI1EN + dev->DevNo - STM32L4XX_OSPI_DEVNO_START));
+	RCC->AHB3ENR |= RCC_AHB3ENR_OSPI1EN << (dev->DevNo - STM32L4XX_OSPI_DEVNO_START);
+	RCC->AHB3SMENR &= ~(RCC_AHB3ENR_OSPI1EN << (dev->DevNo - STM32L4XX_OSPI_DEVNO_START));
 
 	reg->CR &= ~OCTOSPI_CR_FTHRES_Msk;
 	reg->TCR &= ~OCTOSPI_TCR_SSHIFT;
@@ -443,7 +454,8 @@ bool STM32L4xxOctoSPIInit(SPIDEV * const pDev, const SPICFG *pCfgData)
  */
 void QuadSPISetMemSize(SPIDEV * const pDev, uint32_t Size)
 {
-	if (pDev->Cfg.DevNo == (STM32L4XX_SPI_MAXDEV - 1))
+	if (pDev->Cfg.DevNo >= STM32L4XX_OSPI_DEVNO_START &&
+		pDev->Cfg.DevNo < STM32L4XX_SPI_MAXDEV)
 	{
 		STM32L4XX_SPIDev_t *dev = (STM32L4XX_SPIDev_t *)pDev->DevIntrf.pDevData;
 
@@ -471,7 +483,8 @@ void QuadSPISetMemSize(SPIDEV * const pDev, uint32_t Size)
 
 bool QuadSPISendCmd(SPIDEV * const pDev, uint8_t Cmd, uint32_t Addr, uint8_t AddrLen, uint32_t DataLen, uint8_t DummyCycle)
 {
-	if (pDev->Cfg.DevNo == STM32L4XX_SPI_MAXDEV - 1)
+	if (pDev->Cfg.DevNo >= STM32L4XX_OSPI_DEVNO_START &&
+		pDev->Cfg.DevNo < STM32L4XX_SPI_MAXDEV)
 	{
 		return STM32L4xxOSPISendCmd(&pDev->DevIntrf, Cmd, Addr, AddrLen, DataLen, DummyCycle);
 	}

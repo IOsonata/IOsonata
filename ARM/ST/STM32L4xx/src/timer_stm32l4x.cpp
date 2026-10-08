@@ -67,6 +67,12 @@ bool TimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 		return false;
 	}
 
+	// The TIM backend is unfinished; do not publish an unusable instance.
+	if (pCfg->DevNo >= STM32L4XX_LPTIM_CNT)
+	{
+		return false;
+	}
+
 	g_Stm32l4TimerData[pCfg->DevNo].pTimer = pTimer;
 
 	if (pCfg->DevNo < STM32L4XX_LPTIM_CNT)
@@ -84,7 +90,7 @@ int TimerGetLowFreqDevCount()
 
 int TimerGetHighFreqDevCount()
 {
-	return STM32L4XX_TIM_CNT;
+	return 0;
 }
 
 int TimerGetHighFreqDevNo()

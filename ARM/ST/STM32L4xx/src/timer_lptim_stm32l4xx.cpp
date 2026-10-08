@@ -76,8 +76,13 @@ static bool Stm32l4LptEnable(TimerDev_t * const pTimer)
 	{
 		RCC->APB1ENR2 |= RCC_APB1ENR2_LPTIM2EN | RCC_APB1SMENR2_LPTIM2SMEN;
 	}
-	dev->pLPTimReg->CR = LPTIM_CR_ENABLE | LPTIM_CR_CNTSTRT;
-	//vpLPTimReg->CR |= LPTIM_CR_CNTSTRT;
+	// Interrupt enables must be programmed while the timer is disabled.
+	if (!(dev->pLPTimReg->CR & LPTIM_CR_ENABLE))
+	{
+		dev->pLPTimReg->IER |= LPTIM_IER_ARRMIE;
+		dev->pLPTimReg->CR = LPTIM_CR_ENABLE;
+		dev->pLPTimReg->CR |= LPTIM_CR_CNTSTRT;
+	}
 	return true;
 }
 

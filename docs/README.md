@@ -20,7 +20,7 @@ The book remains useful for the object-design model and historical background, b
 3. [Quick Reference](quick-reference.md) — commands, project actions and common configuration examples.
 4. [USB User Guide](usb-user-guide.md) — build, configure and test the supported USB device functions.
 5. [FAQ](FAQ.md) — concise answers about the architecture, target projects and build model.
-6. [Supported Targets](supported-targets.md) — current hardware-validation baselines and target-status rules.
+6. [Supported Targets](supported-targets.md) — MCU support, implementation limits, hardware-validation baselines and target-status rules.
 7. [Dependencies](dependencies.md) — tool, SDK and optional-library boundaries.
 
 ## Release preparation
@@ -113,7 +113,8 @@ Current architecture and workflow documents take precedence when procedures, too
 - Keep tutorials, quick-reference material and architecture rules in separate files.
 - Use real repository paths and current public APIs.
 - IOcomposer is the official IDE. Current migrated IOsonata managed-build projects use `ioc/`; show an `Eclipse/` path only when it is still the actual repository path for an unmigrated target, an external dependency or dated historical material.
-- Update target status only with a named board and recorded hardware result.
+- Classify MCU support from implemented startup, UART and timer backends; record optional-peripheral limits separately.
+- Update hardware-validation status only with a named board and recorded hardware result.
 - Do not retain an implementation or validation matrix without clear ownership and current evidence.
 - Do not embed proposed scripts, workflows or README fragments inside user documentation.
 - Keep dated publications clearly separated from current repository instructions.

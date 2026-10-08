@@ -74,7 +74,7 @@ static STM32L4XX_I2CDEV s_STM32L4xxI2CDev[STM32L4XX_I2C_MAXDEV] = {
 	},
 #ifdef STM32L4S9xx
 	{
-		2, NULL, I2C4
+		3, NULL, I2C4
 	},
 #endif
 };
@@ -466,7 +466,13 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
 		return false;
 	}
 
-	if (pCfgData->DevNo >= STM32L4XX_I2C_MAXDEV)
+	if (pCfgData->DevNo < 0 || pCfgData->DevNo >= STM32L4XX_I2C_MAXDEV)
+	{
+		return false;
+	}
+
+	// Only synchronous master transfers are implemented by this port.
+	if (pCfgData->Mode != I2CMODE_MASTER || pCfgData->bIntEn || pCfgData->bDmaEn)
 	{
 		return false;
 	}
@@ -477,7 +483,7 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
 	s_STM32L4xxI2CDev[pCfgData->DevNo].pI2cDev  = pDev;
 	pDev->DevIntrf.pDevData = (void*)&s_STM32L4xxI2CDev[pCfgData->DevNo];
 
-	pDev->DevIntrf.Type = DEVINTRF_TYPE_SPI;
+	pDev->DevIntrf.Type = DEVINTRF_TYPE_I2C;
 	pDev->DevIntrf.Reset = STM32L4xxI2CReset;
 	pDev->DevIntrf.Disable = STM32L4xxI2CDisable;
 	pDev->DevIntrf.Enable = STM32L4xxI2CEnable;
@@ -492,7 +498,8 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
 	pDev->DevIntrf.IntPrio = pCfgData->IntPrio;
 	pDev->DevIntrf.EvtCB = pCfgData->EvtCB;
 	pDev->DevIntrf.MaxRetry = pCfgData->MaxRetry;
-	pDev->DevIntrf.bDma = pCfgData->bDmaEn;
+	pDev->DevIntrf.bDma = false;
+	pDev->DevIntrf.bIntEn = false;
 	pDev->DevIntrf.PowerOff = STM32L4xxI2CPowerOff;
 	pDev->DevIntrf.EnCnt = 1;
 	atomic_flag_clear(&pDev->DevIntrf.bBusy);
@@ -580,7 +587,7 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
     	}
     }
 
-    reg->CR1 = cr1 | I2C_CR1_PE | I2C_CR1_RXIE | I2C_CR1_STOPIE | I2C_CR1_NACKIE | I2C_CR1_TCIE | I2C_CR1_RXIE;
+    reg->CR1 = I2C_CR1_PE;
 	reg->ICR = 0x3F38;
 
 	return true;

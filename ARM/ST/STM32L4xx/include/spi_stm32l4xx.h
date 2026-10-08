@@ -40,6 +40,8 @@ SOFTWARE.
 #include "stm32l4xx.h"
 #include "coredev/spi.h"
 
+#define STM32L4XX_SPI_DEV_COUNT		3
+
 #ifdef STM32L4S9xx
 #define STM32L4XX_SPI_MAXDEV		5
 #define STM32L4XX_OSPI_DEVNO_START	3
