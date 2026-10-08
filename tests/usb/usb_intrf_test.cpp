@@ -734,6 +734,79 @@ static void TestTxFailureEvent(void)
     }
 }
 
+static void TestTxFailureRecovery(void)
+{
+	// Controllers can report zero bytes (nRF54) or the submitted length
+	// (SAM4L) on failure. Retry from either the callback or a later write.
+	static bool retryInCallback;
+	static uint16_t failedLength;
+	static int retryLength;
+	alignas(4) static uint8_t retry[PACKET_BLOCK_SIZE];
+	for (unsigned packetMode = 0; packetMode < 2; ++packetMode)
+	for (unsigned zeroLength = 0; zeroLength < 2; ++zeroLength)
+	for (unsigned callback = 0; callback < 2; ++callback)
+	{
+		CHECK(packetMode ? SetupPacketMode() : Setup());
+		retryInCallback = callback != 0;
+		failedLength = zeroLength ? 0U : MPS;
+		retryLength = packetMode ? PACKET_BLOCK_SIZE : MPS;
+		memset(retry, 0x33, sizeof(retry));
+		if (packetMode)
+			PacketAt(retry, 0)->Hdr.Length = MPS;
+		s_TxTimeoutCnt = 0;
+		s_Intrf.DevIntrf.EvtCB = [](DevIntrf_t *dev, DEVINTRF_EVT event,
+								  uint8_t *, int length) -> int {
+			if (event == DEVINTRF_EVT_TX_TIMEOUT)
+			{
+				CHECK(length == failedLength);
+				CHECK(atomic_load_explicit(&dev->bTxReady, memory_order_acquire));
+				++s_TxTimeoutCnt;
+				if (retryInCallback)
+					CHECK(DeviceIntrfTxData(dev, retry, retryLength) == retryLength);
+			}
+			else
+			{
+				CHECK(event == DEVINTRF_EVT_TX_FIFO_EMPTY);
+				CHECK(CFifoUsed(s_Intrf.hTxFifo) == 0);
+			}
+			return length;
+		};
+		alignas(4) uint8_t data[PACKET_BLOCK_SIZE * 2U] = {};
+		const int length = packetMode ? sizeof(data) : MPS * 2U;
+		for (unsigned i = 0; i < 2; ++i)
+		{
+			uint8_t *payload = packetMode ? PacketAt(data, i)->Data : data + i * MPS;
+			if (packetMode)
+				PacketAt(data, i)->Hdr.Length = MPS;
+			memset(payload, i == 0 ? 0x11 : 0x22, MPS);
+		}
+		CHECK(DeviceIntrfTxData(&s_Intrf.DevIntrf, data, length) == length);
+		CompleteIn(failedLength, USB_CTRLR_EVT_XFER_FAILED);
+		CHECK(s_TxTimeoutCnt == 1);
+		if (!retryInCallback)
+		{
+			CHECK(!s_InBusy && s_InSubmitCnt == 1);
+			CHECK(DeviceIntrfTxData(&s_Intrf.DevIntrf, retry, retryLength) == retryLength);
+		}
+		CHECK(s_InBusy && s_InSubmitCnt == 2);
+		CHECK(!atomic_load_explicit(&s_Intrf.DevIntrf.bTxReady, memory_order_acquire));
+		// Byte mode retains unconsumed bytes; packet mode retires the failed slot.
+		const unsigned first = !packetMode && zeroLength ? 0U : 1U;
+		for (unsigned i = first; i < 3; ++i)
+		{
+			CHECK(s_InBusy && s_InLen == MPS);
+			uint8_t expected[MPS];
+			memset(expected, (i + 1U) * 0x11U, sizeof(expected));
+			CHECK(memcmp(s_InRegBuf, expected, MPS) == 0);
+			CompleteIn(MPS);
+		}
+		CHECK(!s_InBusy && CFifoUsed(s_Intrf.hTxFifo) == 0);
+		CHECK(atomic_load_explicit(&s_Intrf.DevIntrf.bTxReady, memory_order_acquire));
+		CHECK(s_InSubmitCnt == (int)(4U - first));
+		CHECK(s_TxTimeoutCnt == 1);
+	}
+}
+
 struct Case { const char *Name; void (*Fn)(void); };
 
 int main(void)
@@ -762,6 +835,7 @@ int main(void)
         { "tx packet full", TestTxPacketFull },
         { "tx packet maximum slot", TestTxPacketMaximumSlot },
         { "tx failure event", TestTxFailureEvent },
+		{ "tx failure recovery", TestTxFailureRecovery },
     };
 
     for (unsigned i = 0; i < sizeof(cases) / sizeof(cases[0]); i++)

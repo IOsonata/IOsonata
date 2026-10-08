@@ -534,6 +534,8 @@ static void UsbIntrfCtrlrInEvent(UsbCtrlrEvtType_t Event,
 
 	if (Event == USB_CTRLR_EVT_XFER_FAILED)
 	{
+		// Release ownership before the timeout callback can submit another write.
+		UsbIntrfSetTxIdle(pIntrf);
 		UsbIntrfTxFailure(pIntrf, Length);
 		return;
 	}
