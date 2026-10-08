@@ -48,16 +48,27 @@ void Sam4lTcSetup(Sam4l_TimerData_t &d)
 }
 void Sam4lTcRun(Sam4l_TimerData_t &d, bool run)
 {
-	d.TcReg->TC_CCR = run ? TC_CCR_CLKEN : TC_CCR_CLKDIS;
+	if (!run) {
+		d.TcReg->TC_CCR = TC_CCR_CLKDIS;
+		return;
+	}
+	// Enabling and starting are separate operations (30.6.1.4). A trigger
+	// issued while CLKDIS is set cannot start a newly configured counter.
+	// Start/reset on the first enable after Reset; ordinary resume keeps CV.
+	d.TcReg->TC_CCR = TC_CCR_CLKEN | (d.StartPending ? TC_CCR_SWTRG : 0);
+	d.StartPending = false;
 }
 void Sam4lTcReset(Sam4l_TimerData_t &d)
 {
-	// SWTRG resets even with the channel clock disabled (30.6.1.4 and 30.9.1).
-	d.TcReg->TC_CCR = TC_CCR_CLKDIS | TC_CCR_SWTRG;
+	// Leave the counter paused. The next enable resets and starts it with
+	// CLKEN | SWTRG. Count reads return zero until that first enable.
+	d.TcReg->TC_CCR = TC_CCR_CLKDIS;
+	d.StartPending = true;
 	(void)d.TcReg->TC_SR;
 }
 uint64_t Sam4lTcCount(Sam4l_TimerData_t &d)
 {
+	if (d.StartPending) return 0;
 	// TC_SR is read-to-clear. Account for rollover here as well as in the
 	// ISR; absolute deadlines preserve compares consumed by foreground reads.
 	uint32_t before = d.TcReg->TC_SR;

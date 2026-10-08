@@ -72,7 +72,7 @@ struct Sam4l_TimerData_t {
 	TcChannel *TcReg; // NULL selects AST.
 	IRQn_Type Irq;
 	uint32_t ClockMask, BaseFreq, Select, Epoch;
-	bool Running, Healthy, Overflow;
+	bool Running, Healthy, Overflow, StartPending;
 	Sam4lTimerTrigger Trigger[3];
 };
 extern Sam4l_TimerData_t g_Sam4lTimerData[SAM4L_TIMER_MAXCNT];

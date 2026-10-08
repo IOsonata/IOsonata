@@ -51,6 +51,11 @@ ready/matching, 4 = no usable frequency, 5 = initial AST synchronization timeout
 6 = active IRQ/peripheral conflict, 7 = hardware setup failure, 8 = reset failure,
 9 = start failure. Zero means initialization succeeded. This variable is specific to SAM4L.
 
+TC clock enable and counter start are separate commands (datasheet 30.6.1.4).
+The first Enable after initialization or Reset writes CLKEN | SWTRG together.
+Later Disable/Enable calls pause and resume without resetting the counter.
+The register model checks both clock enable and start before advancing a TC.
+
 ## Behavior and limits
 
 - Init starts the timer. Disable pauses it; Enable resumes without resetting.

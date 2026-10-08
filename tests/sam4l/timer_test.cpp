@@ -27,10 +27,14 @@ struct Status {
 };
 struct Command {
 	uint32_t *cv; Status *sr;
+	bool Started=false;
 	void operator=(uint32_t v) {
 		if(v&TC_CCR_CLKDIS) sr->value &= ~TC_SR_CLKSTA;
 		else if(v&TC_CCR_CLKEN) sr->value |= TC_SR_CLKSTA;
-		if(v&TC_CCR_SWTRG) *cv=0;
+		if(v&TC_CCR_SWTRG) {
+			*cv=0;
+			if(sr->value&TC_SR_CLKSTA) Started=true;
+		}
 	}
 };
 struct MaskWrite {
@@ -96,7 +100,7 @@ void Advance(int dev,uint32_t ticks,bool service=true) {
 	for(uint32_t i=0;i<ticks;++i) {
 		if(d.TcReg) {
 			auto &r=*d.TcReg;
-			if(r.TC_SR.value&TC_SR_CLKSTA) {
+			if((r.TC_SR.value&TC_SR_CLKSTA) && r.TC_CCR.Started) {
 				r.TC_CV=(r.TC_CV+1)&65535;
 				if(!r.TC_CV)r.TC_SR.value|=TC_SR_COVFS;
 				if(r.TC_CV==r.TC_RA)r.TC_SR.value|=TC_SR_CPAS;
@@ -157,7 +161,9 @@ int main() {
 		uint64_t count=t.GetTickCount(&t); assert(count==period*3);
 		t.Disable(&t); Advance(dev,period);assert(t.GetTickCount(&t)==count);
 		assert(t.Enable(&t));Advance(dev,period);assert(events[dev][0]==4);
-		t.Reset(&t);assert(t.GetTickCount(&t)==0);
+		t.Disable(&t);t.Reset(&t);assert(t.GetTickCount(&t)==0);
+		Advance(dev,period);assert(t.GetTickCount(&t)==0);
+		assert(t.Enable(&t));
 		Advance(dev,period,false);assert(t.GetTickCount(&t)==period); // reading status must not lose compare
 		Service(dev);assert(events[dev][0]==5);
 		t.DisableTrigger(&t,0);Advance(dev,period);assert(events[dev][0]==5);
