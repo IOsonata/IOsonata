@@ -42,13 +42,15 @@ SOFTWARE.
 	{ OSC_TYPE_XTAL, 32768, 20, 125 }, true }
 
 // Four adjacent caps; EXT4 I2C jumpers remain in place.
-// EXT1 11 PA23 GPIO-CS <-> 12 PA24 SPI-NPCS0 (A)
+// EXT1 10 PB13 GPIO-CS <-> 12 PA24 SPI-NPCS0 (A)
+// CS cap runs along the even-numbered column (10-12), not across a row.
+// PA23 is unused: its pad remained low despite a high GPIO output latch.
 // EXT1 17 PA21 GPIO-SCK <-> 18 PC30 SPI-SCK (B)
 // EXT2  7 PC04 SPI-MISO (A) <-> 8 PC05 GPIO-MISO
 // EXT2 15 PB11 GPIO-MOSI <-> 16 PA22 SPI-MOSI (A)
 // Reference: SAM4L8 Xplained Pro user guide, tables 4-1/4-2.
 // These pins also reach EXT5; disconnect any LCD extension for this test.
-#define SPI_LOOPBACK_WIRING "Caps: EXT1 11-12, 17-18; EXT2 7-8, 15-16"
+#define SPI_LOOPBACK_WIRING "Caps: EXT1 10-12 (same column), 17-18; EXT2 7-8, 15-16"
 #define SPI_SLAVE_DMA_ENABLE false
 #define SPI_SLAVE_INT_ENABLE true
 #define SPI_SLAVE_DEVNO 0
@@ -71,8 +73,8 @@ SOFTWARE.
 #define SPI_MASTER_MISO_PIN 5
 #define SPI_MASTER_MOSI_PORT IOPORTB
 #define SPI_MASTER_MOSI_PIN 11
-#define SPI_MASTER_CS_PORT IOPORTA
-#define SPI_MASTER_CS_PIN 23
+#define SPI_MASTER_CS_PORT IOPORTB
+#define SPI_MASTER_CS_PIN 13
 
 // SAM4L8 Xplained Pro Virtual COM Port: USART1 on PC26/PC27, peripheral A.
 #define UART_DEVNO			1
