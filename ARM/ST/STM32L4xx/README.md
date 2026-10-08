@@ -1,11 +1,11 @@
 # STM32L4 port status
 
 STM32L476, STM32L496 and STM32L4S9 are supported at the minimum MCU level:
-startup, interrupt-driven UART and LPTIM1/2 are implemented. Library projects
+startup, GPIO, interrupt-driven UART and LPTIM1/2 are implemented. Library projects
 exist for each MCU. Complete library/application links and board validation
 remain outstanding for the reviewed changes. See the
 [central MCU support list](../../../docs/supported-targets.md).
-An MCU needs startup, UART and timer support to be considered supported.
+An MCU needs startup, GPIO, UART and timer support to be considered supported.
 Peripheral source files and project metadata alone do not establish this.
 Hardware validation is recorded separately from implementation coverage.
 
@@ -66,7 +66,7 @@ optimization levels; the alternative system_stm32l4plus.c compiles for L4S9
 checks with staged headers,
 not complete IOC library/application links or on-board tests.
 
-Before claiming a release validation baseline, verify startup clocks, UART
+Before claiming a release validation baseline, verify startup clocks, GPIO, UART
 traffic and LPTIM ticks/triggers on the named MCU and board. Record the tested
 revision, toolchain and results. Other peripheral modes require their own
 validation.

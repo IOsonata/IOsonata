@@ -4,6 +4,8 @@ Run from a Linux checkout with GCC, G++ and Python 3:
 
 ```
 python3 tests/stm32f0/run.py
+python3 tests/stm32f0/run_timer.py
+python3 tests/stm32f0/run_timer_arm.py
 python3 tests/stm32f4/run.py
 ```
 
@@ -24,9 +26,16 @@ on a nonzero pin, external oscillator startup, and F401 application interrupts
 when launched from the DFU slot at 0x08010000. Full ARM firmware builds were not
 run in the host validation environment.
 
-Port scope remains partial. F0 supplies UART/GPIO/startup; this change does not
-add missing I2C/SPI/timer/ADC/USB implementations. F3 remains vector scaffolding,
+F030x8 supplies startup, GPIO, UART and all seven peripheral timers. See
+[port notes](../../ARM/ST/STM32F0xx/README.md) for timer coverage and limits.
+Other F0 variants retain their existing scope. I2C/SPI/ADC/USB implementations
+are not added here. F3 remains vector scaffolding,
 and F4 startup/DFU support is not a complete peripheral port. F0 UART supports
 polling or FIFO interrupts, 7-bit data with parity and 8-bit data with or without
 parity, and one or two stop bits. DMA, synchronous mode, IrDA and software flow
 control requests fail initialization rather than reporting false success.
+
+The shared SLIP RX example regression (`python3 tests/stm32f0/run_slip_example.py`)
+uses the production decoder with buffered and fragmented fake UART input. It
+covers empty frames, exact-buffer and oversized frames, split escape sequences,
+and PRBS continuity under UBSan. This does not model UART interrupt timing.

@@ -202,6 +202,16 @@ int main()
 	}
 
 #ifdef PULSE_TRAIN_PINS_MAP
+	// The GPIO test may reuse button pins as outputs.
+#ifdef BUT1_INT
+	IOPinDisableInterrupt(BUT1_INT);
+#endif
+#ifdef BUT2_INT
+	IOPinDisableInterrupt(BUT2_INT);
+#endif
+#ifdef BUT3_INT
+	IOPinDisableInterrupt(BUT3_INT);
+#endif
 	PulseTrain(&g_PulseTrainCfg, 0); // infinite loop
 #endif
 

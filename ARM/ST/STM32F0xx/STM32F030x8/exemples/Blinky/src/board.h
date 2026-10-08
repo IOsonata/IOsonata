@@ -39,57 +39,52 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #ifndef __BOARD_H__
 #define __BOARD_H__
 
-// Button 1
+// STM32F0308-DISCO (UM1658): B1 user button on PA0, active high.
+// Use EXTI0 so the shared example does not use its active-low polling path.
 #define BUT1_PORT		0
-#define BUT1_PIN		1
+#define BUT1_PIN		0
 #define BUT1_PINOP		0
-#define BUT1_SENSE		IOPINSENSE_LOW_TRANSITION
-#define BUT1_SENSE_INT	0
-#define BUT1_INT_PRIO	6
+#define BUT1_SENSE		IOPINSENSE_HIGH_TRANSITION
+#define BUT1_INT		0
+#define BUT1_INT_PRIO	2
 
-// Button 2
-#define BUT2_PORT		0
-#define BUT2_PIN		2
-#define BUT2_PINOP		0
-#define BUT2_SENSE		IOPINSENSE_LOW_TRANSITION
-#define BUT2_SENSE_INT	1
-#define BUT2_INT_PRIO	6
-
-
-#define LED1_PORT		0
-#define LED1_PIN		3
+// LD3 green on PC9 and LD4 blue on PC8, both active high.
+#define LED1_PORT		2
+#define LED1_PIN		9
 #define LED1_PINOP		0
 
-#define LED2_PORT		0
-#define LED2_PIN		4
+#define LED2_PORT		2
+#define LED2_PIN		8
 #define LED2_PINOP		0
 
-#define LED3_PORT		0
-#define LED3_PIN		5
-#define LED3_PINOP		0
-
-#define LED4_PORT		0
-#define LED4_PIN		6
-#define LED4_PINOP		0
-
 #define BUTTON_PINS_MAP		{ \
-	{BUT1_PORT, BUT1_PIN, BUT1_PINOP, IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL}, \
-	{BUT2_PORT, BUT2_PIN, BUT2_PINOP, IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL}, \
+	{BUT1_PORT, BUT1_PIN, BUT1_PINOP, IOPINDIR_INPUT, IOPINRES_PULLDOWN, IOPINTYPE_NORMAL}, \
 }
 
 #define LED_PINS_MAP	{ \
 	{LED1_PORT, LED1_PIN, LED1_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL}, \
 	{LED2_PORT, LED2_PIN, LED2_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL}, \
-	{LED3_PORT, LED3_PIN, LED3_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL}, \
-	{LED4_PORT, LED4_PIN, LED4_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL}, \
 }
 
-#define PULSE_TRAIN_PINS_MAP	{ \
-	{0, 2, 0}, {0, 3, 0}, {0, 4, 0}, {0, 5, 0}, {0, 6, 0}, {0, 7, 0}, \
-	{0, 8, 0}, {0, 9, 0}, {0, 10, 0}, {0, 11, 0}, {0, 12, 0}, {0, 13, 0}, {0, 14, 0}, {0, 15, 0}, \
-	{0, 16, 0}, {0, 17, 0}, {0, 18, 0}, {0, 19, 0}, {0, 20, 0}, {0, 21, 0}, {0, 22, 0}, {0, 23, 0}, \
-	{0, 24, 0}, {0, 25, 0}, {0, 26, 0}, {0, 27, 0}, {0, 28, 0}, {0, 29, 0}, {0, 30, 0}, {0, 31, 0} \
+// Full STM32F030R8 LQFP64 GPIO test: PA0-15, PB0-15, PC0-15, PD2,
+// PF0/1/4/5/6/7 (55 pins). NRST, BOOT0 and supply pins are not GPIO.
+// This also drives SWD PA13/PA14 and oscillator pins: run standalone with
+// conflicting ST-LINK/oscillator connections isolated and an internal clock.
+#define PULSE_TRAIN_PINS_MAP { \
+	{0, 0, 0}, {0, 1, 0}, {0, 2, 0}, {0, 3, 0}, \
+	{0, 4, 0}, {0, 5, 0}, {0, 6, 0}, {0, 7, 0}, \
+	{0, 8, 0}, {0, 9, 0}, {0, 10, 0}, {0, 11, 0}, \
+	{0, 12, 0}, {0, 13, 0}, {0, 14, 0}, {0, 15, 0}, \
+	{1, 0, 0}, {1, 1, 0}, {1, 2, 0}, {1, 3, 0}, \
+	{1, 4, 0}, {1, 5, 0}, {1, 6, 0}, {1, 7, 0}, \
+	{1, 8, 0}, {1, 9, 0}, {1, 10, 0}, {1, 11, 0}, \
+	{1, 12, 0}, {1, 13, 0}, {1, 14, 0}, {1, 15, 0}, \
+	{2, 0, 0}, {2, 1, 0}, {2, 2, 0}, {2, 3, 0}, \
+	{2, 4, 0}, {2, 5, 0}, {2, 6, 0}, {2, 7, 0}, \
+	{2, 8, 0}, {2, 9, 0}, {2, 10, 0}, {2, 11, 0}, \
+	{2, 12, 0}, {2, 13, 0}, {2, 14, 0}, {2, 15, 0}, \
+	{3, 2, 0}, {5, 0, 0}, {5, 1, 0}, {5, 4, 0}, \
+	{5, 5, 0}, {5, 6, 0}, {5, 7, 0}, \
 }
 
 #endif // __BOARD_H__
-

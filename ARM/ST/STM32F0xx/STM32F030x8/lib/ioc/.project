@@ -261,6 +261,11 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>include/syslog.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/syslog.h</locationURI>
+		</link>
+		<link>
 			<name>include/sysstatus.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/sysstatus.h</locationURI>
@@ -506,9 +511,9 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>src/sysstatus.c</name>
+			<name>src/syslog.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/sysstatus.c</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/src/syslog.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/system_stm32f0xx.c</name>
@@ -1134,6 +1139,21 @@
 			<name>src/storage/stdfs_littlefs.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/storage/stdfs_littlefs.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/timer_stm32f030x8.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/timer_stm32f030x8.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/crypto_softaes.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_softaes.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/crypto_softrng.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_softrng.cpp</locationURI>
 		</link>
 	</linkedResources>
 </projectDescription>

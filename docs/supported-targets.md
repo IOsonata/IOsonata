@@ -1,12 +1,12 @@
 # Supported Targets
 
-This document records MCU implementation support and hardware-validation evidence separately. The STM32 table reflects the startup, UART and timer review for 0.13; it is not a claim that every peripheral on those MCUs is implemented.
+This document records MCU implementation support and hardware-validation evidence separately. The STM32 table reflects the startup, GPIO, UART and timer review for 0.13; it is not a claim that every peripheral on those MCUs is implemented.
 
 The presence of a target port or build project means that implementation source exists. It does not by itself mean that the target is part of the current hardware-validation loop.
 
 ## Minimum MCU support
 
-An MCU must provide startup, UART and timer support to be considered supported.
+An MCU must provide startup, GPIO, UART and timer support to be considered supported.
 A device header, vector table or library project alone is insufficient. Record
 which timer backend and UART modes are implemented; other peripherals have
 separate capability limits. Hardware-validation status is recorded separately
@@ -14,7 +14,7 @@ from this minimum implementation requirement.
 
 ## Status terms
 
-- **Supported (minimum implemented)** - startup, UART and at least one timer backend are implemented. Optional peripherals and modes have separate limits; full builds and hardware results are recorded independently.
+- **Supported (minimum implemented)** - startup, GPIO, UART and at least one timer backend are implemented. Optional peripherals and modes have separate limits; full builds and hardware results are recorded independently.
 - **Incomplete MCU port** - one or more minimum requirements are missing. Headers, linker scripts, vector tables or an available project do not make the MCU supported.
 - **Hardware validated** — the current tree has been built and exercised on the named hardware using the documented IOcomposer workflow.
 - **Build project available** — a target library project exists and can be selected by the installed builder, but it is not necessarily part of routine hardware validation.
@@ -34,20 +34,22 @@ STM32 source ports and target projects remain in the repository, but the current
 
 ## STM32 MCU support
 
-Status below reflects the implementation at [b2eea8c](https://github.com/IOsonata/IOsonata/commit/b2eea8c4450b371eefffab77ce92aa70f4dc7ea4).
+The table describes the current source. L4 review evidence is recorded at
+[b2eea8c](https://github.com/IOsonata/IOsonata/commit/b2eea8c4450b371eefffab77ce92aa70f4dc7ea4);
+F030x8 now includes all seven peripheral TIM backends.
 Only the named MCUs are covered; support does not extend automatically to their
 entire series.
 
-| MCU | Startup | UART | Timer | MCU support |
-|---|---|---|---|---|
-| STM32L476 | Implemented | Interrupt-driven UART, virtual devices 0-5 | LPTIM1/2, virtual devices 0/1 | Supported (minimum implemented) |
-| STM32L496 | Implemented | Interrupt-driven UART, virtual devices 0-5 | LPTIM1/2, virtual devices 0/1 | Supported (minimum implemented) |
-| STM32L4S9 | Implemented | Interrupt-driven UART, virtual devices 0-5 | LPTIM1/2, virtual devices 0/1 | Supported (minimum implemented) |
-| STM32F030x8 | Implemented | Implemented | No target timer backend | Incomplete MCU port |
-| STM32F401xC | Implemented | No target UART backend | No target timer backend | Incomplete MCU port |
-| STM32F301x8, STM32F302x8 | Vector files only; startup port incomplete | No target UART backend | No target timer backend | Incomplete MCU port |
-| STM32WBA | Partial Bluetooth sources and linker support; startup missing | No target UART backend | No target timer backend | Incomplete MCU port |
-| STM32L152 | Not implemented | Not implemented | Not implemented | Planned after 0.13 |
+| MCU | Startup | GPIO | UART | Timer | MCU support |
+|---|---|---|---|---|---|
+| STM32L476 | Implemented | Implemented | Interrupt-driven UART, virtual devices 0-5 | LPTIM1/2, virtual devices 0/1 | Supported (minimum implemented) |
+| STM32L496 | Implemented | Implemented | Interrupt-driven UART, virtual devices 0-5 | LPTIM1/2, virtual devices 0/1 | Supported (minimum implemented) |
+| STM32L4S9 | Implemented | Implemented | Interrupt-driven UART, virtual devices 0-5 | LPTIM1/2, virtual devices 0/1 | Supported (minimum implemented) |
+| STM32F030x8 | Implemented | Implemented, including EXTI | Implemented | TIM6, TIM14, TIM16, TIM17, TIM15, TIM3, TIM1 | Supported (minimum implemented) |
+| STM32F401xC | Implemented | No target GPIO backend | No target UART backend | No target timer backend | Incomplete MCU port |
+| STM32F301x8, STM32F302x8 | Vector files only; startup port incomplete | No target GPIO backend | No target UART backend | No target timer backend | Incomplete MCU port |
+| STM32WBA | Partial Bluetooth sources and linker support; startup missing | No target GPIO backend | No target UART backend | No target timer backend | Incomplete MCU port |
+| STM32L152 | Not implemented | Not implemented | Not implemented | Not implemented | Planned after 0.13 |
 
 The L4 UART supports seven/eight payload bits, none/even/odd parity and one/two
 stop bits. LPUART1 cannot use seven payload bits without parity; nine-bit
@@ -70,8 +72,18 @@ startup, UART and LPTIM for all three MCUs, plus the alternative L4+ startup
 source for L4S9. These are compilation and host-model results, not complete
 IOC library/application links or hardware tests.
 
-No STM32 board-validation record is established by these checks. Record
-on-board startup, UART traffic and timer results separately when available.
+F030x8 has existing maintainer-reported use in TaktOS benchmarks. That evidence
+does not validate the newly added peripheral timer backend: the benchmark uses
+SysTick for kernel timing and TIM17 as an IRQ probe. The new timers pass host
+register tests and Cortex-M0 archive-link smoke checks, including strong
+SysTick/TIM17 overrides. See the [F030x8 port notes](../ARM/ST/STM32F0xx/README.md)
+for virtual ordering, capabilities and remaining board checks. The
+[F030x8 example index](../ARM/ST/STM32F0xx/STM32F030x8/exemples/README.md)
+lists the target projects and separates peripheral examples from software-only
+crypto tests.
+
+No new STM32 board-validation record is established by these checks. Record
+on-board startup, GPIO, UART traffic and timer results separately when available.
 The planned L152/Nucleo-64 work is outside the 0.13 support list.
 
 ## Other source ports

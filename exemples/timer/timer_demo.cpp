@@ -68,6 +68,10 @@ SOFTWARE.
 #endif
 #endif
 
+#ifndef TIMER_DEMO_INT_PRIO
+#define TIMER_DEMO_INT_PRIO 7
+#endif
+
 void TimerHandler(TimerDev_t * const pTimer, uint32_t Evt);
 
 #ifdef MCUOSC
@@ -89,7 +93,7 @@ const static TimerCfg_t s_TimerCfg = {
 	.DevNo = TIMER_DEMO_DEVNO,
 	.ClkSrc = TIMER_CLKSRC_DEFAULT,
 	.Freq = TIMER_DEMO_FREQ,
-	.IntPrio = 7,
+	.IntPrio = TIMER_DEMO_INT_PRIO,
 	.EvtHandler = TimerHandler
 };
 
