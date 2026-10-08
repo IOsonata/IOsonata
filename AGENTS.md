@@ -40,6 +40,12 @@ Hardware build and test output from the maintainer is authoritative.
 
 ## Port status is part of the review
 
+A supported MCU requires startup, GPIO, UART and timer implementations at a
+minimum. Record optional peripheral limits and hardware-validation evidence
+separately. Timer DevNo values are virtual table indices, ordered from
+low-power/low-frequency timers to high-power/high-frequency timers; they are
+not hardware timer numbers. Existing ARM SysTick support is shared infrastructure.
+
 Not every port has the same maturity or supported operating modes. During the
 preflight, classify each relevant port as one of:
 

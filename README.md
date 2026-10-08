@@ -292,7 +292,7 @@ IOsonata includes generic and target-specific implementations across:
 - USB and host-side interfaces
 - bare-metal, TaktOS, FreeRTOS and ThreadX applications
 
-An MCU is supported when startup, UART and a timer backend are implemented.
+An MCU is supported when startup, GPIO, UART and a timer backend are implemented.
 Optional peripheral capabilities and hardware validation are recorded separately.
 See [Supported Targets](docs/supported-targets.md) for the current matrix.
 
@@ -318,8 +318,10 @@ IOsonata is developed and validated on I-SYST reference hardware as well as vend
 | nRF54L15 | BLYSTL15, Nordic nRF54L15 DK | Hardware validated |
 
 STM32L476, STM32L496 and STM32L4S9 meet the minimum MCU support requirement
-through their startup, UART and LPTIM implementations. Their host regressions
+through their startup, GPIO, UART and LPTIM implementations. Their host regressions
 and ARM compilation checks are recorded; hardware validation remains pending.
+STM32F030x8 also implements startup, GPIO, UART and all seven peripheral timers;
+its existing TaktOS benchmark use is separate from validation of the new timers.
 Other STM32 ports with missing minimum components remain incomplete. See
 [Supported Targets](docs/supported-targets.md) for the MCU list and limitations.
 
