@@ -57,11 +57,22 @@ McuOsc_t g_McuOsc = MCUOSC;
 
 int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);
 
-//#define UARTFIFOSIZE			CFIFO_MEMSIZE(256)
+#ifndef UARTFIFOSIZE
+#define UARTFIFOSIZE			CFIFO_MEMSIZE(256)
+#endif
+#ifndef UART_INT_MODE
+#define UART_INT_MODE true
+#endif
+#ifndef UART_DMA_MODE
+#define UART_DMA_MODE true
+#endif
+#ifndef UART_BAUDRATE
+#define UART_BAUDRATE 1000000
+#endif
 
 #ifdef UARTFIFOSIZE
-static uint8_t s_UartRxFifo[UARTFIFOSIZE];
-static uint8_t s_UartTxFifo[UARTFIFOSIZE];
+alignas(4) static uint8_t s_UartRxFifo[UARTFIFOSIZE];
+alignas(4) static uint8_t s_UartTxFifo[UARTFIFOSIZE];
 #endif
 
 static IOPinCfg_t s_UartPins[] = {
@@ -76,12 +87,12 @@ static const UARTCfg_t s_UartCfg = {
 	.DevNo = UART_DEVNO,
 	.pIOPinMap = s_UartPins,
 	.NbIOPins = sizeof(s_UartPins) / sizeof(IOPinCfg_t),
-	.Rate = 1000000,
+	.Rate = UART_BAUDRATE,
 	.DataBits = 8,
 	.Parity = UART_PARITY_NONE,
 	.StopBits = 1,
 	.FlowControl = UART_FLWCTRL_NONE,
-	.bIntMode = true,
+	.bIntMode = UART_INT_MODE,
 	.IntPrio = 1,
 	.EvtCallback = nRFUartEvthandler,
 	.bFifoBlocking = true,
@@ -96,7 +107,7 @@ static const UARTCfg_t s_UartCfg = {
 	.TxMemSize = 0,
 	.pTxMem = NULL,
 #endif
-	.bDMAMode = true,
+	.bDMAMode = UART_DMA_MODE,
 };
 
 #ifdef DEMO_C
@@ -115,7 +126,6 @@ McuOsc_t g_McuOsc = BOARD_OSC;
 int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen)
 {
 	int cnt = 0;
-	uint8_t buff[20];
 
 	switch (EvtId)
 	{
@@ -138,15 +148,20 @@ int main()
 
 #ifdef DEMO_C
 	res = UARTInit(&g_UartDev, &s_UartCfg);
+	if (!res) while (1) __WFE();
 	UARTRetargetEnable(&g_UartDev, STDIN_FILENO);
 	UARTRetargetEnable(&g_UartDev, STDOUT_FILENO);
 #else
 	res = g_Uart.Init(s_UartCfg);
+	if (!res) while (1) __WFE();
 	UARTRetargetEnable(g_Uart, STDIN_FILENO);
 	UARTRetargetEnable(g_Uart, STDOUT_FILENO);
 #endif
 
 	char buff[512];
+	// Retargeted input reads one character at a time; do not use libc buffering.
+	setvbuf(stdin, NULL, _IONBF, 0);
+	setvbuf(stdout, NULL, _IONBF, 0);
 
 	printf("Hello, welcome to UART retarget demo\r\n");
 	while(1)
@@ -157,8 +172,8 @@ int main()
 		printf("You typed : '%c'\r\n", c);
 #else
 		printf("Please type something then press enter\r\n");
-		scanf("%s", &buff);
-		printf("You typed : '%s'\r\n", buff);
+		if (scanf("%511s", buff) == 1)
+			printf("You typed : '%s'\r\n", buff);
 #endif
 	}
 	return 0;

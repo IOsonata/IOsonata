@@ -40,12 +40,21 @@ SOFTWARE.
 
 #include "idelay.h"
 #include "coredev/timer.h"
+#include "coredev/uart.h"
+#include "stddev.h"
 #include "iopinctrl.h"
 
 #include "board.h"
 
 //#define DEMO_C
 #define DEMO_C_OBJ
+
+#ifndef TIMER_DEMO_DEVNO
+#define TIMER_DEMO_DEVNO 0
+#endif
+#ifndef TIMER_DEMO_FREQ
+#define TIMER_DEMO_FREQ 0
+#endif
 
 void TimerHandler(TimerDev_t * const pTimer, uint32_t Evt);
 
@@ -57,13 +66,14 @@ McuOsc_t g_McuOsc = MCUOSC;
 static const IOPinCfg_t s_Leds[] = LED_PINS_MAP;
 static const int s_NbLeds = sizeof(s_Leds) / sizeof(IOPinCfg_t);
 
-uint64_t g_TickCount = 0;
-uint32_t g_Period[3] = {0,};
+volatile uint64_t g_TickCount = 0;
+volatile uint64_t g_Period[5] = {0,};
+volatile uint32_t g_TriggerCount[4] = {0,};
 
 const static TimerCfg_t s_TimerCfg = {
-	.DevNo = 0,
+	.DevNo = TIMER_DEMO_DEVNO,
 	.ClkSrc = TIMER_CLKSRC_DEFAULT,
-	.Freq = 0,			// 0 => Default frequency
+	.Freq = TIMER_DEMO_FREQ,
 	.IntPrio = 7,
 	.EvtHandler = TimerHandler
 };
@@ -74,37 +84,52 @@ TimerDev_t g_TimerDev;
 Timer g_Timer;
 #endif
 
-static uint64_t s_PreCnt[3] = {0, };
+static uint64_t s_PreCnt[5] = {0, };
+
+#ifdef TIMER_DEMO_UART
+static const IOPinCfg_t s_UartPins[] = {
+	{UART_RX_PORT, UART_RX_PIN, UART_RX_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
+	{UART_TX_PORT, UART_TX_PIN, UART_TX_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
+};
+alignas(4) static uint8_t s_UartTxMem[CFIFO_MEMSIZE(256)];
+static const UARTCfg_t s_UartCfg = {
+	.DevNo = UART_DEVNO,
+	.pIOPinMap = s_UartPins,
+	.NbIOPins = sizeof(s_UartPins) / sizeof(IOPinCfg_t),
+	.Rate = 115200,
+	.DataBits = 8,
+	.Parity = UART_PARITY_NONE,
+	.StopBits = 1,
+	.FlowControl = UART_FLWCTRL_NONE,
+	.bIntMode = true,
+	.IntPrio = IRQ_PRIO_NORMAL,
+	.bFifoBlocking = true,
+	.TxMemSize = sizeof(s_UartTxMem),
+	.pTxMem = s_UartTxMem,
+	.bDMAMode = false,
+};
+static UART s_Uart;
+#endif
 
 void TimerHandler(TimerDev_t *pTimer, uint32_t Evt)
 {
 	uint64_t c = TimerGetNanosecond(pTimer);
 
-	if (Evt & TIMER_EVT_TRIGGER(0))
+	for (int i = 0; i < 4; i++)
 	{
-		// Flip GPIO for oscilloscope measurement
-		IOPinToggle(s_Leds[0].PortNo, s_Leds[0].PinNo);
-		g_Period[0] = c - s_PreCnt[0];
-		s_PreCnt[0] = c;
-	}
-	if (Evt & TIMER_EVT_TRIGGER(1))
-	{
-		// Flip GPIO for oscilloscope measurement
-		if (s_NbLeds > 0)
+		if (Evt & TIMER_EVT_TRIGGER(i))
 		{
-			IOPinToggle(s_Leds[1].PortNo, s_Leds[1].PinNo);
+			if (i < s_NbLeds)
+				IOPinToggle(s_Leds[i].PortNo, s_Leds[i].PinNo);
+			g_Period[i] = c - s_PreCnt[i];
+			s_PreCnt[i] = c;
+			g_TriggerCount[i] = g_TriggerCount[i] + 1;
 		}
-		g_Period[1] = c - s_PreCnt[1];
-		s_PreCnt[1] = c;
 	}
 	if (Evt & TIMER_EVT_COUNTER_OVR)
 	{
-		if (s_NbLeds > 1)
-		{
-			IOPinToggle(s_Leds[2].PortNo, s_Leds[2].PinNo);
-		}
-		g_Period[2] = c - s_PreCnt[2];
-		s_PreCnt[2] = c;
+		g_Period[4] = c - s_PreCnt[4];
+		s_PreCnt[4] = c;
 	}
 	g_TickCount = c;
 }
@@ -114,46 +139,58 @@ int main(void)
 {
 	IOPinCfg(s_Leds, s_NbLeds);
 
-#ifdef DEMO_C
-	TimerInit(&g_TimerDev, &s_TimerCfg);
-
-	uint64_t period = msTimerEnableTrigger(&g_TimerDev, 0, 1000UL, TIMER_TRIG_TYPE_CONTINUOUS, NULL, NULL);
-	if (period == 0)
-	{
-		printf("Trigger 0 failed\r\n");
-	}
-	period = msTimerEnableTrigger(&g_TimerDev, 1, 100UL, TIMER_TRIG_TYPE_CONTINUOUS, NULL, NULL);
-	if (period == 0)
-	{
-		printf("Trigger 1 failed\r\n");
-	}
-
-#else
-	g_Timer.Init(s_TimerCfg);
-
-	// Configure 100ms timer interrupt trigger
-	uint64_t period = g_Timer.EnableTimerTrigger(0, 1000UL, TIMER_TRIG_TYPE_CONTINUOUS);
-	if (period == 0)
-	{
-		printf("Trigger 0 failed\r\n");
-	}
-	period = g_Timer.EnableTimerTrigger(1, 100UL, TIMER_TRIG_TYPE_CONTINUOUS);
-	if (period == 0)
-	{
-		printf("Trigger 1 failed\r\n");
-	}
+#ifdef TIMER_DEMO_UART
+	if (!s_Uart.Init(s_UartCfg)) while (1) __WFE();
+	UARTRetargetEnable(s_Uart, STDOUT_FILENO);
+	setvbuf(stdout, NULL, _IONBF, 0);
 #endif
 
-	printf("Period = %u\r\n", (uint32_t)period);
+#ifdef DEMO_C
+	bool initialized = TimerInit(&g_TimerDev, &s_TimerCfg);
+	TimerDev_t *dev = &g_TimerDev;
+#else
+	bool initialized = g_Timer.Init(s_TimerCfg);
+	TimerDev_t *dev = g_Timer;
+#endif
+	if (!initialized)
+	{
+		printf("Timer %d initialization failed\r\n", s_TimerCfg.DevNo);
+		while (1) __WFE();
+	}
+
+	// Compare B is slower than A, as required by the RE01 AGT caution.
+	static const uint32_t periodsMs[] = {100, 1000, 250, 500};
+	int triggers = TimerGetMaxTrigger(dev);
+	if (triggers > 4) triggers = 4;
+	for (int i = 0; i < triggers; i++)
+	{
+#ifdef DEMO_C
+		uint32_t period = msTimerEnableTrigger(dev, i, periodsMs[i], TIMER_TRIG_TYPE_CONTINUOUS, NULL, NULL);
+#else
+		uint32_t period = g_Timer.EnableTimerTrigger(i, periodsMs[i], TIMER_TRIG_TYPE_CONTINUOUS);
+#endif
+		printf("Timer %d trigger %d: %lu ms\r\n", s_TimerCfg.DevNo, i, (unsigned long)period);
+		if (period == 0) while (1) __WFE();
+	}
+
+	uint32_t previousCounts[4] = {0,};
 	while (1)
 	{
 		__WFE();
-#ifdef DEMO_C
-		printf("Count = %u ms, TrigPeriod = %u us, %u us\r\n", (uint32_t)TimerGetMilisecond(&g_TimerDev), g_Period[0] / 1000, g_Period[1] / 1000);
-#elif defined(DEMO_C_OBJ)
-		printf("Count = %u ms, TrigPeriod = %u us, %u us\r\n", (uint32_t)TimerGetMilisecond(g_Timer), g_Period[0] / 1000, g_Period[1] / 1000);
-#else
-		printf("Count = %u ms, TrigPeriod = %u us, %u us\r\n", (uint32_t)g_Timer.mSecond(), g_Period[0] / 1000, g_Period[1] / 1000);
-#endif
+		uint64_t periods[4];
+		bool changed = false;
+		uint32_t state = DisableInterrupt();
+		for (int i = 0; i < triggers; i++)
+		{
+			periods[i] = g_Period[i];
+			if (previousCounts[i] != g_TriggerCount[i]) changed = true;
+			previousCounts[i] = g_TriggerCount[i];
+		}
+		EnableInterrupt(state);
+		if (!changed) continue;
+		printf("Count = %lu ms", (unsigned long)TimerGetMilisecond(dev));
+		for (int i = 0; i < triggers; i++)
+			printf(", T%d = %lu us", i, (unsigned long)(periods[i] / 1000));
+		printf("\r\n");
 	}
 }

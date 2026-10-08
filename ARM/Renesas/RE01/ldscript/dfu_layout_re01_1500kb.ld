@@ -13,16 +13,15 @@
  * No radio on this part: updates come over the wire into slot 0 directly,
  * so there is no slot 1.
  *
- * Every region starts and ends on 32 KB, the erase unit dfu_re01 reports:
- * no code flash block of the FACI parts is larger, so erasing one region
- * never touches its neighbour whatever the block size of this part is.
+ * RE01 has uniform 4 KB erase blocks. The existing region boundaries are
+ * retained and each is a block boundary, so an erase never touches the
+ * neighbouring region.
  * Slot 0 also meets the VTOR alignment of the 100 entry vector table
  * (512 bytes).
  *
- * The boot is about 41 KB at -Os (Cortex-M0+ code, micro-ecc in C), more
- * than one 32 KB unit, so it takes two.
+ * The boot keeps its 64 KB reservation (Cortex-M0+ code, micro-ecc in C).
  *
- * The record needs one program unit (128) for its magic, plus the record
+ * The record needs one program unit (256) for its magic, plus the record
  * body, about 3.2 KB; the rest of its 32 KB stays erased.
  *
  * __dfu_flag is the recovery request word, the last 16 bytes of the 256 KB
@@ -31,9 +30,15 @@
  */
 
 __dfu_flag			= 0x2003FFF0;
+__dfu_state_unit		= 256;
 __dfu_boot_start	= 0x00000000;
 __dfu_boot_end		= 0x00010000;
 __dfu_rec_start		= 0x00010000;
 __dfu_rec_end		= 0x00018000;
 __dfu_slot0_start	= 0x00018000;
 __dfu_slot0_end		= 0x00180000;
+
+ASSERT((__dfu_boot_start % 0x1000) == 0 && (__dfu_boot_end % 0x1000) == 0 &&
+	   (__dfu_rec_start % 0x1000) == 0 && (__dfu_rec_end % 0x1000) == 0 &&
+	   (__dfu_slot0_start % 0x1000) == 0 && (__dfu_slot0_end % 0x1000) == 0,
+	   "RE01 DFU regions must align to 4 KB erase blocks")

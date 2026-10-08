@@ -996,6 +996,11 @@
 			<locationURI>PARENT-3-PROJECT_LOC/src/timer_re01_agt.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/coredev/timer_re01_gpt.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/timer_re01_gpt.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/coredev/timer_re01_tmr.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-3-PROJECT_LOC/src/timer_re01_tmr.cpp</locationURI>

@@ -44,11 +44,12 @@ SOFTWARE.
 #include <stdlib.h>
 #include <assert.h>
 
-#include "RE01xxx.h"
+#include "re01xxx.h"
 #include "coredev/system_core_clock.h"
 
 #define SYSTEM_CORE_CLOCK_MAX			64000000UL	// TODO: Adjust value for CPU with fixed core frequency
 #define SYSTEM_NSDELAY_CORE_FACTOR		(34UL)		// TODO: Adjustment value for nanosec delay
+#define RE01_OSC_WAIT_COUNT				1000000UL
 
 #define SYSTEM_SCKSCR_CKSEL_HOCO	(0)		// High speed RC
 #define SYSTEM_SCKSCR_CKSEL_MOCO	(1)		// Mid speed RC
@@ -110,8 +111,27 @@ void SetFlashWaitState(uint32_t CoreFreq)
 	}
 }
 
+static bool Re01WaitOsc(uint8_t Mask, bool bStable)
+{
+	for (uint32_t retry = RE01_OSC_WAIT_COUNT; retry > 0; retry--)
+	{
+		if (((SYSTEM->OSCSF & Mask) != 0) == bStable)
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
 bool EnterBoostMode()
 {
+	if (SYSTEM->PWSTF_b.BOOSTM)
+	{
+		return true;
+	}
+	uint16_t sbycr = SYSTEM->SBYCR;
+	uint8_t dpsbycr = SYSTEM->DPSBYCR;
+	uint8_t snzcr = SYSTEM->SNZCR;
     /* Set the software standby mode. (step1) */
     SYSTEM->SBYCR_b.SSBYMP  = 0U;
 
@@ -130,6 +150,9 @@ bool EnterBoostMode()
     /* Returns an error because the PWSTCR.PWST[2:0] bits could not be modified. */
     if(0x05U != SYSTEM->PWSTCR)
     {
+		SYSTEM->SBYCR = sbycr;
+		SYSTEM->DPSBYCR = dpsbycr;
+		SYSTEM->SNZCR = snzcr;
         return false;
     }
 
@@ -137,12 +160,16 @@ bool EnterBoostMode()
     __WFE();
 
     /* Wait the transition from normal mode to Boost mode. */
-    while(1U != SYSTEM->PWSTF_b.BOOSTM)
-    {
-        __WFE();
-    }
-
-    return true;
+	uint32_t retry = RE01_OSC_WAIT_COUNT;
+	while (!SYSTEM->PWSTF_b.BOOSTM && retry > 0)
+	{
+		retry--;
+	}
+	bool ready = SYSTEM->PWSTF_b.BOOSTM != 0;
+	SYSTEM->SBYCR = sbycr;
+	SYSTEM->DPSBYCR = dpsbycr;
+	SYSTEM->SNZCR = snzcr;
+	return ready;
 }
 
 // USB operation requires PLL clock source
@@ -157,28 +184,37 @@ uint32_t ConfigPLL(uint32_t SrcFreq)
 		tf = 48000000;
 	}
 	// Make sure PLL is stopped
+	if (SYSTEM->SCKSCR_b.CKSEL == SYSTEM_SCKSCR_CKSEL_PLL)
+	{
+		return 0;
+	}
 	SYSTEM->PLLCR = SYSTEM_PLLCR_PLLSTP_Msk;
-	while ((SYSTEM->OSCSF & SYSTEM_OSCSF_PLLSF_Msk) == 1);
-
-	EnterBoostMode();
+	if (!Re01WaitOsc(SYSTEM_OSCSF_PLLSF_Msk, false))
+	{
+		return 0;
+	}
 
 	for (int div = 1; div < 5; div++)
 	{
-		uint32_t divfreq = SrcFreq / div;
 		for (int mul = 2; mul < 9; mul++)
 		{
 			// PLL Freq = (SrcFreq / div) * mul;
-			uint32_t f = divfreq * mul;
-
-			if (f == tf)
+			if ((uint64_t)SrcFreq * mul == (uint64_t)tf * div)
 			{
+				if (!EnterBoostMode())
+				{
+					return 0;
+				}
 				SYSTEM->PLLCCR = ((div - 1) << SYSTEM_PLLCCR_PLIDIV_Pos) |
 								 ((mul - 1) << SYSTEM_PLLCCR_PLLMUL_Pos);
 				SYSTEM->PLLCR = 0;	// Start PLL
 
-				while ((SYSTEM->OSCSF & SYSTEM_OSCSF_PLLSF_Msk) == 0);
-
-				return 48000000UL;
+				if (!Re01WaitOsc(SYSTEM_OSCSF_PLLSF_Msk, true))
+				{
+					SYSTEM->PLLCR = SYSTEM_PLLCR_PLLSTP_Msk;
+					return 0;
+				}
+				return tf;
 			}
 		}
 	}
@@ -188,7 +224,7 @@ uint32_t ConfigPLL(uint32_t SrcFreq)
 
 void SystemCoreClockUpdate(void)
 {
-	uint8_t clksrc = SYSTEM->SCKSCR;
+	uint8_t clksrc = SYSTEM->SCKSCR_b.CKSEL;
 	uint32_t div = 1 << ((SYSTEM->SCKDIVCR & SYSTEM_SCKDIVCR_ICK_Msk) >> SYSTEM_SCKDIVCR_ICK_Pos);
 
 	switch (clksrc)
@@ -221,7 +257,8 @@ void SystemCoreClockUpdate(void)
 			SystemCoreClock = g_McuOsc.CoreOsc.Freq;
 			break;
 		case SYSTEM_SCKSCR_CKSEL_PLL:
-			SystemCoreClock = (g_McuOsc.CoreOsc.Freq / (SYSTEM->PLLCCR_b.PLIDIV + 1)) * (SYSTEM->PLLCCR_b.PLLMUL + 1);
+			SystemCoreClock = (uint64_t)g_McuOsc.CoreOsc.Freq * (SYSTEM->PLLCCR_b.PLLMUL + 1) /
+							  (SYSTEM->PLLCCR_b.PLIDIV + 1);
 			break;
 		default:
 			assert(0);
@@ -231,10 +268,7 @@ void SystemCoreClockUpdate(void)
 
 	SystemCoreClock /= div;
 
-	// Update Flash wait state to current core freq.
-	SetFlashWaitState(SystemCoreClock);
-	SystemPeriphClockSet(0, SystemCoreClock);
-	SystemPeriphClockSet(1, SystemCoreClock >> 1);
+	// Reporting clocks must not change divider or flash settings.
 }
 
 
@@ -243,6 +277,13 @@ void SystemInit(void)
     SYSTEM->PRCR = 0xA503U;
 
 	FLASH->FLWT = 1;
+	// Move off HOCO/PLL before stopping or reprogramming either oscillator.
+	SYSTEM->MOCOCR = 0;
+	SYSTEM->SCKSCR = SYSTEM_SCKSCR_CKSEL_MOCO;
+	(void)SYSTEM->SCKSCR;
+	// PCLKA follows ICLK. PCLKB is limited to 32 MHz, even in boost mode.
+	SYSTEM->SCKDIVCR = (SYSTEM->SCKDIVCR & ~(SYSTEM_SCKDIVCR_ICK_Msk | SYSTEM_SCKDIVCR_PCKB_Msk)) |
+						  (1UL << SYSTEM_SCKDIVCR_PCKB_Pos);
 
     if (g_McuOsc.CoreOsc.Type == OSC_TYPE_RC)
 	{
@@ -280,14 +321,23 @@ void SystemInit(void)
     		// Freq higher than 32MHz requires boost mode
 			if (g_McuOsc.CoreOsc.Freq > 32000000)
 			{
-				EnterBoostMode();
+				if (!EnterBoostMode())
+				{
+					goto init_done;
+				}
 			}
 
     		SYSTEM->HOCOCR = 1;	// Stop HOCO
-			while ((SYSTEM->OSCSF & SYSTEM_OSCSF_HOCOSF_Msk) == 1);
+			if (!Re01WaitOsc(SYSTEM_OSCSF_HOCOSF_Msk, false))
+			{
+				goto init_done;
+			}
 			SYSTEM->HOCOMCR = hcfrq;
     		SYSTEM->HOCOCR = 0;	// Start HOCO
-			while ((SYSTEM->OSCSF & SYSTEM_OSCSF_HOCOSF_Msk) == 0);
+			if (!Re01WaitOsc(SYSTEM_OSCSF_HOCOSF_Msk, true))
+			{
+				goto init_done;
+			}
 
 			SYSTEM->SCKSCR = SYSTEM_SCKSCR_CKSEL_HOCO;
     	}
@@ -295,6 +345,11 @@ void SystemInit(void)
 	else
 	{
 		// Main clock range 8-32MHz
+		if (g_McuOsc.CoreOsc.Freq < 8000000UL || g_McuOsc.CoreOsc.Freq > 32000000UL)
+		{
+			g_McuOsc.bUSBClk = false;
+			goto init_done;
+		}
 
 		if (g_McuOsc.CoreOsc.Type == OSC_TYPE_TCXO)
 		{
@@ -309,15 +364,26 @@ void SystemInit(void)
 
 		SYSTEM->MOSCCR = 0;	// Start main clock oscillator
 
-		while ((SYSTEM->OSCSF & SYSTEM_OSCSF_MOSCSF_Msk) == 0);
+		if (!Re01WaitOsc(SYSTEM_OSCSF_MOSCSF_Msk, true))
+		{
+			g_McuOsc.bUSBClk = false;
+			goto init_done;
+		}
 
 		uint32_t pllfreq = ConfigPLL(g_McuOsc.CoreOsc.Freq);
-		assert(pllfreq!=0UL);
-
-		// Select source clock PLL 48MHz
-		SYSTEM->SCKSCR = SYSTEM_SCKSCR_CKSEL_PLL;
+		if (pllfreq != 0)
+		{
+			SYSTEM->SCKSCR = SYSTEM_SCKSCR_CKSEL_PLL;
+		}
+		else
+		{
+			// Keep a live main clock when PLL/boost setup fails.
+			SYSTEM->SCKSCR = SYSTEM_SCKSCR_CKSEL_MCO;
+			g_McuOsc.bUSBClk = false;
+		}
 	}
 
+init_done:
     if (g_McuOsc.LowPwrOsc.Type == OSC_TYPE_RC)
     {
     	SYSTEM->LOCOCR = 0;
@@ -330,6 +396,7 @@ void SystemInit(void)
     SYSTEM->PRCR = 0xA500U;
 
     SystemCoreClockUpdate();
+	SetFlashWaitState(SystemCoreClock);
 }
 
 /**
@@ -386,28 +453,55 @@ uint32_t SystemPeriphClockGet(int Idx)
  */
 uint32_t SystemPeriphClockSet(int Idx, uint32_t Freq)
 {
-	uint32_t clk = 0;
-
+	if ((Idx != 0 && Idx != 1) || Freq == 0 || s_PeriphSrcFreq == 0)
+	{
+		return 0;
+	}
+	if (Idx == 1 && Freq > 32000000UL)
+	{
+		Freq = 32000000UL;
+	}
+	uint32_t div = 0;
+	while (div < 6 && (s_PeriphSrcFreq >> div) > Freq)
+	{
+		div++;
+	}
+	if ((s_PeriphSrcFreq >> div) > Freq)
+	{
+		return 0;
+	}
+	uint32_t reg = SYSTEM->SCKDIVCR;
+	uint32_t ick = (reg & SYSTEM_SCKDIVCR_ICK_Msk) >> SYSTEM_SCKDIVCR_ICK_Pos;
+	uint32_t pckb = (reg & SYSTEM_SCKDIVCR_PCKB_Msk) >> SYSTEM_SCKDIVCR_PCKB_Pos;
 	if (Idx == 0)
 	{
-		clk =  SystemCoreClock;
+		ick = div;
+		if (pckb < ick)
+		{
+			pckb = ick;
+		}
+		// Set wait states before increasing the CPU clock.
+		if ((s_PeriphSrcFreq >> ick) > SystemCoreClock)
+		{
+			SetFlashWaitState(s_PeriphSrcFreq >> ick);
+		}
 	}
-	else if (Idx == 1 && Freq > 0)
+	else
 	{
-		uint32_t div = s_PeriphSrcFreq / Freq;
-
-		if (div > 0)
-		{
-			SYSTEM->SCKDIVCR_b.PCKB = div - 1;
-			clk = s_PeriphSrcFreq / div;
-		}
-		else
-		{
-			clk = s_PeriphSrcFreq;
-		}
+		pckb = div < ick ? ick : div;
 	}
-
-	return clk;
+	while (pckb < 6 && (s_PeriphSrcFreq >> pckb) > 32000000UL)
+	{
+		pckb++;
+	}
+	uint16_t protection = SYSTEM->PRCR & 0xFU;
+	SYSTEM->PRCR = 0xA501U | protection;
+	SYSTEM->SCKDIVCR = (reg & ~(SYSTEM_SCKDIVCR_ICK_Msk | SYSTEM_SCKDIVCR_PCKB_Msk)) |
+						  (ick << SYSTEM_SCKDIVCR_ICK_Pos) | (pckb << SYSTEM_SCKDIVCR_PCKB_Pos);
+	SYSTEM->PRCR = 0xA500U | protection;
+	SystemCoreClockUpdate();
+	SetFlashWaitState(SystemCoreClock);
+	return SystemPeriphClockGet(Idx);
 }
 
 uint32_t SystemCoreClockGet()

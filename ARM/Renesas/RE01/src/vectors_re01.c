@@ -35,7 +35,7 @@ SOFTWARE.
 ----------------------------------------------------------------------------*/
 #include <stdint.h>
 
-#include "RE01xxx.h"
+#include "re01xxx.h"
 
 extern unsigned long __StackTop;
 extern void ResetEntry(void);

@@ -15,14 +15,18 @@
 #   start   the payload at slot 0 and its record, built here as dfu_layout.cpp
 #           lays it out: the boot verifies it and jumps to the application
 #   tamper  as start with one payload byte changed: refused, recovery
+#   legacy  re01 only: old 128-byte record format is refused, recovery
 #   write   slot 0 and the record hold junk; DfuTgtErase and DfuTgtWrite of
 #           the boot, called in the emulator, erase them and write the
 #           payload (source in flash) and the record (source in RAM,
 #           unaligned); then a reset: the boot starts the application
-#   write8k re01 only: as write, with 8 KB blocks everywhere
 #   fail    the sequencer reports a program error on the second command:
 #           DfuTgtWrite returns false, P/E mode is left, and a later write
 #           works
+#   checks  re01 only: block isolation, erased-ones erase, geometry, clock
+#           bounds/rounding, address bounds and register/PRIMASK restoration
+#   dbfull/timeout re01 only: buffer/command timeout, then a successful retry
+#   exitfail/stopfail re01 only: stuck sequencer resets from RAM
 #
 # The model checks that every command is issued from RAM with interrupts off,
 # in P/E mode, that nothing reads or runs from the code flash while it is in
@@ -41,12 +45,16 @@ SCEN = sys.argv[4] if len(sys.argv) > 4 else "start"
 
 RV = T == "r9a02"
 if T == "re01":
-    FLASH, RAM, RAMSZ, WU = 0x180000, 0x20000000, 0x40000, 128
+    FLASH, RAM, RAMSZ, WU = 0x180000, 0x20000000, 0x40000, 256
 elif RV:
     FLASH, RAM, RAMSZ, WU = 0x40000, 0x20000000, 0x8000, 4
 else:
     sys.exit("target: re01 or r9a02")
 UNIT = max(16, WU)                  # DfuStateUnit
+SPECIAL = ("checks", "dbfull", "timeout", "exitfail", "stopfail")
+assert SCEN in ("empty", "start", "tamper", "legacy", "write", "fail") + SPECIAL
+assert not RV or SCEN != "legacy"
+assert not RV or SCEN not in SPECIAL
 STOP = 0x000FFF00 if RV else 0x0017FF00   # return address of the calls here
 
 sym = {}
@@ -80,14 +88,15 @@ def magic_unit():
 def pad(b):
     return b + b"\xff" * (plen - len(b))
 
-if SCEN in ("start", "tamper"):
+if SCEN in ("start", "tamper", "legacy"):
     p = bytearray(pad(payload))
     if SCEN == "tamper":
         p[500] ^= 1
     mem[SLOT0:SLOT0 + plen] = p
     body = record_body()
-    mem[REC:REC + UNIT] = magic_unit()
-    mem[REC + UNIT:REC + UNIT + len(body)] = body
+    recunit = 128 if SCEN == "legacy" else UNIT
+    mem[REC:REC + recunit] = magic_unit()[:recunit]
+    mem[REC + recunit:REC + recunit + len(body)] = body
 elif SCEN.startswith("write") or SCEN == "fail":
     # Junk where the image and the record go, so every erase has work to do,
     # and a copy of the payload high in flash as the program source.
@@ -112,7 +121,7 @@ uc.mem_map(0xE0000000, 0x100000, UC_PROT_ALL)    # SCS / CLIC
 errors = []
 ev = {"erase": 0, "program": 0, "pe": 0}
 st = {"pe": 0, "err": 0, "fail_at": 2 if SCEN == "fail" else 0, "fetch": None}
-GEOM = "8k" if SCEN == "write8k" else "ra6"
+programmed = set()
 
 def pc():
     return uc.reg_read(UC_RISCV_REG_PC if RV else UC_ARM_REG_PC)
@@ -129,6 +138,15 @@ def check_cmd(what):
         errors.append("%s with interrupts on" % what)
     if st["pe"] != 1:
         errors.append("%s outside code flash P/E mode" % what)
+    if not RV:
+        vtor = struct.unpack("<I", uc.mem_read(0xE000ED08, 4))[0]
+        if vtor % 512 or not RAM <= vtor < RAM + RAMSZ:
+            errors.append("P/E vectors outside aligned RAM")
+        else:
+            for entry in (2, 3):
+                handler = struct.unpack("<I", uc.mem_read(vtor + 4 * entry, 4))[0]
+                if not (handler & 1 and RAM <= handler < RAM + RAMSZ):
+                    errors.append("NMI/HardFault handler outside RAM")
 
 def hook_fetch(uc, addr, size, ud):
     errors.append("code flash run at 0x%x in P/E mode" % addr)
@@ -155,11 +173,13 @@ def program(addr, data, errbit):
         st["err"] |= errbit
         return
     old = bytes(uc.mem_read(addr, len(data)))
-    if old != b"\xff" * len(data):
+    if old != b"\xff" * len(data) or (not RV and addr in programmed):
         errors.append("program 0x%x over non erased memory" % addr)
         st["err"] |= errbit
         return
     uc.mem_write(addr, bytes(data))
+    if not RV:
+        programmed.update(range(addr, addr + len(data), 8))
 
 def w32(addr, v):
     uc.mem_write(addr, struct.pack("<I", v & 0xFFFFFFFF))
@@ -169,10 +189,12 @@ def w32(addr, v):
 # ---------------------------------------------------------------------------
 FACI_CMD, FASTAT, FSADDR, FSTATR = 0x407E0000, 0x407FE010, 0x407FE030, 0x407FE080
 FENTRYR, FPCKAR, FWEPROR = 0x407FE084, 0x407FE0E4, 0x4001E416
-fc = {"state": "idle", "n": 0, "data": b"", "fwep": 0, "pcka": 0}
+fc = {"state": "idle", "n": 0, "data": b"", "fwep": 0, "pcka": 0,
+      "busy": False, "inject": None}
 
 def re01_block(addr):
-    b = 0x2000 if (GEOM == "8k" or addr < 0x10000) else 0x8000
+    # Renesas SDK r_flash_re01_1500kb.h: 384 uniform 4096-byte blocks.
+    b = 0x1000
     return addr & ~(b - 1), b
 
 def re01_w(uc, access, addr, size, value, ud):
@@ -180,7 +202,8 @@ def re01_w(uc, access, addr, size, value, ud):
         if value == 0xAA01:
             pe(True)
         elif value == 0xAA00:
-            pe(False)
+            if fc["inject"] != "exitfail":
+                pe(False)
         else:
             errors.append("FENTRYR 0x%x" % value)
     elif addr == FWEPROR:
@@ -193,26 +216,34 @@ def re01_w(uc, access, addr, size, value, ud):
         pass
     elif addr == FACI_CMD:
         s = fc["state"]
+        if size == 1 and value in (0x50, 0xB3):
+            check_cmd("FACI recovery 0x%02x" % value)
+            if value == 0x50:
+                st["err"] = 0
+            elif fc["inject"] != "stopfail":
+                fc["busy"] = False
+                if fc["inject"] != "exitfail":
+                    fc["inject"] = None
+            fc["state"] = "idle"
+            return
         if s == "data":
             if size != 2:
                 errors.append("program data written with size %d" % size)
             fc["data"] += struct.pack("<H", value & 0xFFFF)
+            if fc["inject"] == "dbfull":
+                errors.append("program data issued while DBFULL")
             if len(fc["data"]) == 2 * fc["n"]:
                 fc["state"] = "final_p"
             return
         if size != 1:
             errors.append("command written with size %d" % size)
         v = value & 0xFF
-        if v in (0x50, 0xB3):
-            if v == 0x50:
-                st["err"] = 0
-            fc["state"] = "idle"
-            return
         check_cmd("FACI 0x%02x" % v)
         if fc["fwep"] != 1:
             errors.append("command with FWEPROR %d" % fc["fwep"])
-        if fc["pcka"] == 0:
-            errors.append("command with FPCKAR unset")
+        clk = struct.unpack("<I", uc.mem_read(sym["SystemCoreClock"], 4))[0]
+        if not 1000000 <= clk <= 32000000 or fc["pcka"] != (clk + 999999) // 1000000:
+            errors.append("command with invalid FPCKAR/ICLK")
         if s == "idle" and v == 0xE8:
             fc["state"] = "count"
         elif s == "count":
@@ -226,11 +257,16 @@ def re01_w(uc, access, addr, size, value, ud):
             if a % WU:
                 errors.append("program at 0x%x" % a)
             program(a, fc["data"], 1 << 12)
+            if fc["inject"] in ("timeout", "stopfail"):
+                fc["busy"] = True
             fc["state"] = "idle"
         elif s == "final_e" and v == 0xD0:
             a = struct.unpack("<I", uc.mem_read(FSADDR, 4))[0]
             base, b = re01_block(a)
+            if a != base:
+                errors.append("unaligned 4 KB erase at 0x%x" % a)
             uc.mem_write(base, b"\xff" * b)
+            programmed.difference_update(range(base, base + b, 8))
             ev["erase"] += 1
             fc["state"] = "idle"
         else:
@@ -240,7 +276,9 @@ def re01_w(uc, access, addr, size, value, ud):
 
 def re01_r(uc, access, addr, size, value, ud):
     if addr == FSTATR:
-        w32(FSTATR, 0x8000 | st["err"])
+        dbfull = fc["inject"] == "dbfull" and fc["state"] == "data"
+        w32(FSTATR, (0 if fc["busy"] else 0x8000) | st["err"] |
+            (0x400 if dbfull else 0))
     elif addr == FENTRYR:
         uc.mem_write(FENTRYR, struct.pack("<H", 1 if st["pe"] else 0))
     elif addr == FASTAT:
@@ -336,6 +374,8 @@ class Recovery(Exception):
 
 def hook_scs_w(uc, access, addr, size, value, ud):
     if addr == 0xE000ED0C and (value >> 16) == 0x05FA:
+        if fc["inject"] in ("exitfail", "stopfail"):
+            check_cmd("reset after sequencer failure")
         raise Reset()
 
 uc.hook_add(UC_HOOK_MEM_READ, hook_flash_r, begin=0, end=FLASH - 1)
@@ -392,7 +432,7 @@ def run_from_reset():
         uc.reg_write(UC_ARM_REG_PRIMASK, 0)
         uc.emu_start(rpc | 1, app_entry, timeout=1_800_000_000)
 
-def call(name, *args):
+def call(name, *args, mask=0):
     fn = addr_of(name)
     if RV:
         for r, v in zip((UC_RISCV_REG_A0, UC_RISCV_REG_A1, UC_RISCV_REG_A2), args):
@@ -406,8 +446,15 @@ def call(name, *args):
         uc.reg_write(r, v)
     uc.reg_write(UC_ARM_REG_LR, STOP | 1)
     uc.reg_write(UC_ARM_REG_SP, sym["__StackTop"] - 0x100)
-    uc.reg_write(UC_ARM_REG_PRIMASK, 0)
+    uc.reg_write(UC_ARM_REG_PRIMASK, mask)
+    saved = [bytes(uc.mem_read(a, size)) for a, size in
+             ((FWEPROR, 1), (0x407FE014, 1), (0x407FE018, 1), (0xE000ED08, 4))]
     uc.emu_start(fn | 1, STOP, timeout=600_000_000)
+    assert pc() == STOP, "target call timed out"
+    assert uc.reg_read(UC_ARM_REG_PRIMASK) == mask, "PRIMASK not restored"
+    restored = [bytes(uc.mem_read(a, size)) for a, size in
+                ((FWEPROR, 1), (0x407FE014, 1), (0x407FE018, 1), (0xE000ED08, 4))]
+    assert restored == saved, "flash protection/interrupts or VTOR not restored"
     return uc.reg_read(UC_ARM_REG_R0) & 0xFF
 
 # The boot's own target layer, called with the RAM set up by a reset.
@@ -418,9 +465,9 @@ def prepare_by_target():
     stop_at_main[0] = False
     assert at_main[0], "main not reached"
     SCR = RAM + 0x6000                 # scratch source buffers, unaligned
-    for a in range(SLOT0, SLOT0 + plen + 0x1000, 0x800 if RV else 0x8000):
+    for a in range(SLOT0, SLOT0 + plen + 0x1000, 0x800 if RV else 0x1000):
         calls.append(("erase 0x%x" % a, call("DfuTgtErase", a)))
-    for a in range(REC, REC + 0x1000, 0x800 if RV else 0x8000):
+    for a in range(REC, REC + 0x1000, 0x800 if RV else 0x1000):
         calls.append(("erase rec 0x%x" % a, call("DfuTgtErase", a)))
     if SCEN == "fail":
         r = call("DfuTgtWrite", SLOT0, SRC, 4 * WU)
@@ -440,6 +487,76 @@ def prepare_by_target():
 
 ok = True
 started = recovery = False
+if SCEN in SPECIAL:
+    stop_at_main[0] = True
+    run_from_reset()
+    stop_at_main[0] = False
+    assert at_main[0], "main not reached"
+    SCR = RAM + 0x6000
+    uc.mem_write(SCR + 1, bytes(range(256)))
+    w32(sym["SystemCoreClock"], 1000000)
+    if SCEN == "checks":
+        call("DfuTgtWriteUnit")
+        assert uc.reg_read(UC_ARM_REG_R0) == WU
+        for a in range(0, FLASH, 0x1000):
+            # Full-width result for the geometry getter.
+            call("DfuTgtEraseUnit", a)
+            assert uc.reg_read(UC_ARM_REG_R0) == 0x1000
+        call("DfuTgtEraseUnit", FLASH)
+        assert uc.reg_read(UC_ARM_REG_R0) == 0
+        for a in (SLOT0, FLASH - 0x1000):
+            uc.mem_write(a - 0x1000, b"\x35" * 0x1000)
+            uc.mem_write(a, b"\x00" * 0x1000)
+            if a + 0x1000 < FLASH:
+                uc.mem_write(a + 0x1000, b"\x53" * 0x1000)
+            assert call("DfuTgtErase", a)
+            assert bytes(uc.mem_read(a, 0x1000)) == b"\xff" * 0x1000
+            assert bytes(uc.mem_read(a - 0x1000, 0x1000)) == b"\x35" * 0x1000
+            if a + 0x1000 < FLASH:
+                assert bytes(uc.mem_read(a + 0x1000, 0x1000)) == b"\x53" * 0x1000
+            before = ev["erase"]
+            assert call("DfuTgtWrite", a, a, WU)  # all ones from flash
+            assert call("DfuTgtErase", a)
+            assert ev["erase"] == before + 1, "all-ones block was not erased"
+        for clk in (0, 32768, 999999, 32000001, 48000000, 64000000, 0xFFFFFFFF):
+            w32(sym["SystemCoreClock"], clk)
+            before = dict(ev)
+            assert not call("DfuTgtErase", SLOT0)
+            assert not call("DfuTgtWrite", SLOT0, SCR + 1, WU)
+            assert ev == before, "invalid clock issued commands"
+        for mask in (0, 1):
+            for clk in (1000000, 2000000, 4000000, 16000001, 32000000):
+                w32(sym["SystemCoreClock"], clk)
+                uc.mem_write(FWEPROR, b"\x02")
+                uc.mem_write(0x407FE014, b"\x91")
+                uc.mem_write(0x407FE018, b"\x01")
+                assert call("DfuTgtErase", SLOT0, mask=mask)
+                assert call("DfuTgtWrite", SLOT0, SCR + 1, WU, mask=mask)
+                assert bytes(uc.mem_read(SLOT0, WU)) == bytes(range(256))
+        before = dict(ev)
+        for a in (SLOT0 + 4, FLASH, 0xFFFFF000):
+            assert not call("DfuTgtErase", a)
+        for a, n in ((SLOT0 + 128, WU), (SLOT0, 128),
+                     (FLASH - WU, 2 * WU), (FLASH, WU), (SLOT0, 0xFFFFFF00)):
+            assert not call("DfuTgtWrite", a, SCR + 1, n)
+        assert ev == before, "invalid address/length issued commands"
+        assert call("DfuTgtErase", FLASH - 0x1000)
+        assert call("DfuTgtWrite", FLASH - WU, SCR + 1, WU)
+    else:
+        assert call("DfuTgtErase", SLOT0)
+        fc["inject"] = SCEN
+        reset = False
+        try:
+            r = call("DfuTgtWrite", SLOT0, SCR + 1, WU)
+            assert r == 0 and st["pe"] == 0
+        except Reset:
+            reset = True
+        assert reset == (SCEN in ("exitfail", "stopfail")), "wrong failure recovery"
+        if not reset:
+            fc["inject"] = None
+            assert call("DfuTgtErase", SLOT0)
+            assert call("DfuTgtWrite", SLOT0, SCR + 1, WU)
+            assert bytes(uc.mem_read(SLOT0, WU)) == bytes(range(256))
 if SCEN.startswith("write") or SCEN == "fail":
     ok = prepare_by_target()
     for n, r in calls:
@@ -453,7 +570,7 @@ if SCEN.startswith("write") or SCEN == "fail":
         print("  %-40s -> %d" % ("erase + write after the error", r))
         ok = ok and r == 1
 
-if SCEN != "fail":
+if SCEN != "fail" and SCEN not in SPECIAL:
     for attempt in range(2):
         try:
             run_from_reset()
@@ -470,9 +587,9 @@ print("  slot 0 0x%x - 0x%x, record 0x%x, boot 0x%x - 0x%x" %
       (SLOT0, SLOT0_END, REC, sym["__dfu_boot_start"], sym["__dfu_boot_end"]))
 print("  commands: %d erase, %d program, %d P/E entries" %
       (ev["erase"], ev["program"], ev["pe"]))
-if SCEN != "fail":
+if SCEN != "fail" and SCEN not in SPECIAL:
     print("  started application: %s, recovery: %s, pc 0x%x" % (started, recovery, pc()))
-if SCEN in ("start", "write", "write8k"):
+if SCEN in ("start", "write"):
     ok = ok and started and not recovery
     if started and not RV:
         vtor = struct.unpack("<I", uc.mem_read(0xE000ED08, 4))[0]
@@ -485,7 +602,7 @@ if SCEN in ("start", "write", "write8k"):
         ok = ok and mie == 0
     if SCEN.startswith("write"):
         ok = ok and bytes(uc.mem_read(SLOT0, img_size)) == payload
-elif SCEN in ("empty", "tamper"):
+elif SCEN in ("empty", "tamper", "legacy"):
     ok = ok and recovery and not started
 for e in errors[:8]:
     print("  error:", e)

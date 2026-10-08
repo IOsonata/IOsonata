@@ -22,6 +22,8 @@ NOTE: In this Renesas RE01 implementation :
 
 DevNo : 0..1 are AGTs
 DevNo : 2 is TMR01 (16 bits linked)
+DevNo : 3..4 are GPT0..1 (32 bits)
+DevNo : 5..8 are GPT2..5 (16 bits)
 
 @author	Hoang Nguyen Hoan
 @date	Feb. 3, 2022
@@ -54,11 +56,19 @@ SOFTWARE.
 #include "re01xxx.h"
 
 #include "timer_re01.h"
+#include "interrupt_re01.h"
+#include "coredev/interrupt.h"
 
 RE01_TimerData_t g_Re01TimerData[RE01_TIMER_MAXCNT] = {
 	{.DevNo = 0, .pAgtReg = AGT0,	.IrqOvr = (IRQn_Type)-1, .IrqMatch = {(IRQn_Type)-1, (IRQn_Type)-1},},
 	{.DevNo = 1, .pAgtReg1 = AGT1, .IrqOvr = (IRQn_Type)-1, .IrqMatch = {(IRQn_Type)-1, (IRQn_Type)-1},},
 	{.DevNo = 2, .pTmrReg = TMR01, .IrqOvr = (IRQn_Type)-1, .IrqMatch = {(IRQn_Type)-1, (IRQn_Type)-1},},
+	{.DevNo = 3, .pGptReg = GPT320, .IrqOvr = (IRQn_Type)-1},
+	{.DevNo = 4, .pGptReg = GPT321, .IrqOvr = (IRQn_Type)-1},
+	{.DevNo = 5, .pGptReg = (GPT320_Type*)GPT162, .IrqOvr = (IRQn_Type)-1},
+	{.DevNo = 6, .pGptReg = (GPT320_Type*)GPT163, .IrqOvr = (IRQn_Type)-1},
+	{.DevNo = 7, .pGptReg = (GPT320_Type*)GPT164, .IrqOvr = (IRQn_Type)-1},
+	{.DevNo = 8, .pGptReg = (GPT320_Type*)GPT165, .IrqOvr = (IRQn_Type)-1},
 };
 
 bool TimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
@@ -68,19 +78,77 @@ bool TimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 		return false;
 	}
 
-	if (pCfg->DevNo < 0 || pCfg->DevNo >= RE01_TIMER_MAXCNT)
+	if (pCfg->DevNo < 0 || pCfg->DevNo >= RE01_TIMER_MAXCNT ||
+		pCfg->ClkSrc < TIMER_CLKSRC_DEFAULT || pCfg->ClkSrc >= TIMER_CLKSRC_EXT ||
+		pCfg->Freq > 64000000UL || pCfg->bTickInt)
 	{
 		return false;
 	}
 
-	g_Re01TimerData[pCfg->DevNo].pTimer = pTimer;
+	RE01_TimerData_t *dev = &g_Re01TimerData[pCfg->DevNo];
+	uint32_t state = DisableInterrupt();
+	for (int i = 0; i < RE01_TIMER_MAXCNT; i++)
+	{
+		if (g_Re01TimerData[i].pTimer == pTimer && &g_Re01TimerData[i] != dev)
+		{
+			EnableInterrupt(state);
+			return false;
+		}
+	}
+	if (dev->pTimer && dev->pTimer != pTimer)
+	{
+		EnableInterrupt(state);
+		return false;
+	}
+	if (dev->pTimer)
+	{
+		dev->pTimer->Disable(dev->pTimer);
+		for (int i = 0; i < dev->pTimer->GetMaxTrigger(dev->pTimer); i++)
+		{
+			dev->pTimer->DisableTrigger(dev->pTimer, i);
+		}
+		Re01UnregisterIntHandler(dev->IrqOvr);
+		dev->IrqOvr = (IRQn_Type)-1;
+	}
+	dev->pTimer = pTimer;
+	dev->BaseFreq = 0;
+	memset(dev->CC, 0, sizeof(dev->CC));
+	memset(dev->Trigger, 0, sizeof(dev->Trigger));
+	for (int i = 0; i < RE01_TIMER_CC_MAXCNT; i++)
+	{
+		dev->IrqMatch[i] = (IRQn_Type)-1;
+	}
+	bool result;
 
 	if (pCfg->DevNo < RE01_TIMER_AGT_CNT)
 	{
-		return Re01AgtInit(&g_Re01TimerData[pCfg->DevNo], pCfg);
+		result = Re01AgtInit(dev, pCfg);
 	}
-
-	return Re01TmrInit(&g_Re01TimerData[pCfg->DevNo], pCfg);
+	else if (pCfg->DevNo < RE01_TIMER_GPT_DEVNO)
+	{
+		result = Re01TmrInit(dev, pCfg);
+	}
+	else
+	{
+		result = Re01GptInit(dev, pCfg);
+	}
+	if (!result)
+	{
+		dev->pTimer->Disable(dev->pTimer);
+		for (int i = 0; i < dev->pTimer->GetMaxTrigger(dev->pTimer); i++)
+		{
+			dev->pTimer->DisableTrigger(dev->pTimer, i);
+		}
+		Re01UnregisterIntHandler(dev->IrqOvr);
+		dev->IrqOvr = (IRQn_Type)-1;
+		pTimer->Freq = 0;
+		pTimer->nsPeriod = 0;
+		pTimer->Rollover = 0;
+		pTimer->LastCount = 0;
+		dev->pTimer = NULL;
+	}
+	EnableInterrupt(state);
+	return result;
 }
 
 int TimerGetLowFreqDevCount()
@@ -90,7 +158,7 @@ int TimerGetLowFreqDevCount()
 
 int TimerGetHighFreqDevCount()
 {
-	return RE01_TIMER_TMR_CNT;
+	return RE01_TIMER_TMR_CNT + RE01_TIMER_GPT_CNT;
 }
 
 int TimerGetHighFreqDevNo()

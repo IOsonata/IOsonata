@@ -27,4 +27,33 @@ MEMORY
 }
 
 
+
+SECTIONS
+{
+	/* Reset options and security MPU words, as in the DFU boot image. */
+	.osm 0x400 :
+	{
+		LONG(0xFFFFFFFF)
+		LONG(0xFFFFFFFF)
+		LONG(0xFFFFFFFF)
+		LONG(0xFFFFFFFF)
+		LONG(0xFFFFFFFF)
+		LONG(0xFFFFFFFF)
+		LONG(0xFFFFFFFF)
+		LONG(0xFFFFFFFF)
+		LONG(0xFFFFFFFF)
+		LONG(0xFFFFFFFF)
+		LONG(0xFFFFFFFF)
+		LONG(0xFFFFFFFF)
+		LONG(0xFFFFFFFF)
+		LONG(0xFFFFFFFF)
+		LONG(0xFFFFFFFF)
+		LONG(0xFFFFFFFF)
+	} > FLASH
+} INSERT AFTER .ivector;
+
 INCLUDE "gcc_arm_flash.ld"
+
+ASSERT(ADDR(.ivector) + SIZEOF(.ivector) <= 0x400, "vector table overlaps option-setting memory")
+ASSERT(ADDR(.osm) == 0x400 && SIZEOF(.osm) == 0x40, "option-setting memory misplaced")
+ASSERT(ADDR(.Version) >= 0x440, "code overlaps option-setting memory")
