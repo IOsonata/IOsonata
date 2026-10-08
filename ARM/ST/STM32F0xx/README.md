@@ -1,7 +1,7 @@
 # STM32F030x8 port
 
 STM32F030x8 implements the minimum supported MCU set: startup, GPIO, UART
-and timer. Other F030 memory variants are not covered by the new timer backend.
+and timer. Other F030 memory variants are not covered by the new timer driver.
 GPIO includes pin configuration, digital I/O and pin-specific EXTI allocation.
 UART supports polling and FIFO interrupts; its existing mode restrictions remain.
 
@@ -9,7 +9,7 @@ UART supports polling and FIFO interrupts; its existing mode restrictions remain
 
 All seven TIM peripherals are implemented through the standard C and C++ Timer
 interfaces. Virtual numbering follows the low-power/low-frequency to
-high-power/high-frequency convention. This MCU has no LPTIM backend; these TIM
+high-power/high-frequency convention. This MCU has no LPTIM driver; these TIM
 peripherals all use the APB timer clock, with simpler timers ordered first.
 The low-frequency device count is 0, high-frequency count is 7, and the first
 high-frequency virtual index is 0. The order within that group is a device-table
@@ -41,7 +41,7 @@ Use `TIMER_CLKSRC_DEFAULT`; no independent oscillator is selected. `Freq = 0`
 selects the maximum clock rate. Other requests select a rounded, clamped
 prescaler (1-65536); use the returned frequency. IRQ priority is 0-3.
 Per-counter-tick interrupts (`bTickInt`), external triggers, input capture, DMA
-and PWM output are outside this Timer backend. Unsupported configuration and
+and PWM output are outside this Timer driver. Unsupported configuration and
 external-trigger requests return failure. No GPIO is configured by the timer.
 
 Trigger periods are rounded to ticks and must be at least four ticks. Compare
@@ -89,8 +89,10 @@ the board's ST-LINK/V2 provides a virtual COM port.
 Select `TIMER_DEMO_DEVNO` from 0 through 6 in `board.h` and rebuild the example
 to exercise each timer. The 10 kHz counter allows all demo periods on TIM6.
 Observe `g_TimerInitOk`, `g_TriggerCount`, `g_TriggerPeriod` and UART output.
-The example source is unchanged apart from an optional interrupt-priority
-configuration, required for the Cortex-M0 priority range.
+The shared example uses optional UART output and board-selected timer settings.
+It configures only the trigger channels supplied by the selected timer, checks
+initialization and trigger setup, and prints from the main loop. The interrupt
+callback records counts and periods and toggles the LED.
 
 From the repository root:
 
@@ -107,11 +109,23 @@ seven devices and trigger channels, clocks, overflow, long compares, lifecycle,
 callback cancellation and TIM17 override refusal. They do not simulate APB
 bus latency or instruction-level interrupt preemption.
 
-Arm GNU 14.3.1 Cortex-M0 checks at -O0 and -Os compile the backend and vectors
+Arm GNU 14.3.1 Cortex-M0 checks at -O0 and -Os compile the driver and vectors
 and link archive smoke images with timer use, application SysTick/TIM17
 handlers, and SysTick-only use. The last image does not pull in TimerInit.
 These smoke images are not the full TaktOS benchmark or IOC library build.
-The new timer implementation and TimerDemo still require board execution.
+TimerDemo also passed complete application links at -O0/-Os with Arm GNU
+14.3.1 using the required library sources, including UART retargeting.
+
+On 2026-10-08 the maintainer confirmed startup, LED GPIO, USART1 UART
+output/retargeting, TIM6 (DevNo 0) and TIM16 (DevNo 2) on STM32F0308-DISCO.
+TIM6 reported 115 consecutive 100000 us intervals over 11.5 seconds through
+UART. Semihosting caused the earlier timing variation. A missing level-shifter
+supply caused the temporary UART output failure.
+
+This completes the minimum MCU port. The successful hardware runs did not
+record an exact flashed revision, build profile or complete tool versions.
+TIM14, TIM17, TIM15, TIM3 and TIM1 still need board tests; the existing host
+checks do not establish their hardware timing.
 
 Register behavior was checked against ST RM0360 Rev 5, clock-tree rules and
 timer chapters 13-17. Board pins follow ST UM1658 / 32F0308DISCOVERY.

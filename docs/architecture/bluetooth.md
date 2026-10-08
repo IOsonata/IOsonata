@@ -133,7 +133,7 @@ Bond persistence is separate from successful pairing. The generic bond layer
 has serialization and save/load hooks; the optional PDS adapter defers writes
 through `BtEvtQue()` and retries failures from the port timer. Continue
 processing deferred work before expecting a saved bond to survive reset.
-Vendor-host persistence follows the selected port's backend.
+Vendor-host persistence uses the storage implementation supplied by that port.
 
 ## Events and scheduling
 
