@@ -431,7 +431,7 @@ with tempfile.TemporaryDirectory(prefix='iosonata-nrf54-usb-') as tmp:
     path.write_text(MODEL + '\n' + source + '\n' + TEST)
     # Non-PIE keeps static DMA pointers representable in the MCU's 32-bit registers.
     subprocess.run([os.environ.get('CXX', 'g++'), '-std=gnu++17', '-O1', '-g',
-                    '-Wall', '-Wextra', '-Werror', '-Wno-missing-field-initializers',
+                    '-x', 'c++', '-Wall', '-Wextra', '-Werror', '-Wno-missing-field-initializers',
                     '-fsanitize=undefined', '-fno-sanitize-recover=all', '-no-pie',
                     '-I' + str(tmp), '-I' + str(ROOT / 'include'),
                     '-I' + str(ROOT / 'ARM/Nordic/include'),
