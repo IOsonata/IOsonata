@@ -253,7 +253,7 @@ int main()
 #endif
 	printf("Init SPI slave loopback demo\r\n");
 	printf("SPI master GPIO DMA=0 INT=0 (software clock)\r\n");
-	printf("SPI slave DMA=%d INT=%d\r\n",
+	printf("SPI slave requested DMA=%d INT=%d\r\n",
 		s_SlaveCfg.bDmaEn, s_SlaveCfg.bIntEn);
 	printf("%s\r\n", SPI_LOOPBACK_WIRING);
 	IOPinSet(SPI_MASTER_CS_PORT, SPI_MASTER_CS_PIN);
@@ -275,6 +275,11 @@ int main()
 			printf("SPI slave init FAIL\r\n");
 			pass = false;
 			break;
+		}
+		if (mode == 0)
+		{
+			const DevIntrf_t *intrf = static_cast<DevIntrf_t *>(g_SpiSlave);
+			printf("SPI slave effective DMA=%d INT=%d\r\n", intrf->bDma, intrf->bIntEn);
 		}
 		printf("SPI mode=%d bits=8 software-paced clock\r\n", mode);
 		for (unsigned n = 0; n < sizeof(lengths) / sizeof(lengths[0]); ++n)

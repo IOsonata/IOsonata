@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
 @file	spi_sam4l.cpp
 
-@brief	SAM4L SPI master and interrupt slave implementation.
+@brief	SAM4L SPI master and interrupt/PDCA slave implementation.
 
 The SAM4L has one dedicated SPI controller. This port implements the
 IOsonata polling, interrupt and PDCA master paths using GPIO chip selects.
@@ -10,7 +10,8 @@ to one IOsonata SPI object uses the same configured transfer format and rate.
 With INT enabled, RX and TX up to 256 bytes return -1 and complete by callback.
 Larger TX and Read command phases finish synchronously to preserve TX ownership.
 PDCA moves bounded halfword chunks; INT selects asynchronous completion.
-Slave mode currently supports 8-bit interrupt transfers, framed by NPCS0.
+Slave mode supports 8-bit interrupt/PDCA transfers, framed by NPCS0.
+Slave PDCA uses byte buffers up to 65535 bytes; larger frames use interrupts.
 STATECHG supplies buffers before clocks start; COMPLETED reports RX at NSS rising.
 Slave buffers remain owned by the application until COMPLETED. Update buffers
 in STATECHG, or Reset while NSS is high to apply foreground buffer changes.
@@ -81,6 +82,8 @@ typedef struct __Sam4l_Spi_Dev
 	bool DmaInitialized;
 	bool SlaveReady;
 	bool SlaveError;
+	bool SlaveDmaFrame;
+	bool SlaveRxDma;
 	int SlaveTxLength;
 	uint8_t TxBuffer[SAM4L_SPI_TX_SIZE];
 	uint16_t DmaTx[SAM4L_SPI_DMA_WORDS];
@@ -643,12 +646,64 @@ static void Sam4lSpiSlaveArm(Sam4lSpiDev_t *dev)
 	dev->Count = 0;
 	dev->SlaveError = false;
 	dev->SlaveReady = true;
+	dev->SlaveDmaFrame = spi->Cfg.bDmaEn &&
+		dev->Length <= 65535 && dev->SlaveTxLength <= 65535;
+	dev->SlaveRxDma = false;
 	// Preload exactly one character. RDRF loads the following character;
 	// software must not overwrite the first response before NSS falls.
 	dev->pReg->SPI_TDR = dev->SlaveTxLength > 0 ?
 		dev->pTx[0] : spi->Cfg.DummyByte;
-	dev->pReg->SPI_IER = SPI_IER_RDRF | SPI_IER_NSSR |
-		SPI_IER_OVRES | SPI_IER_UNDES;
+	uint32_t mask = SPI_IER_NSSR | SPI_IER_OVRES | SPI_IER_UNDES;
+	if (dev->SlaveDmaFrame)
+	{
+		PdcaChannel *rx = Sam4lSpiRxChannel();
+		PdcaChannel *tx = Sam4lSpiTxChannel();
+		rx->PDCA_CR = PDCA_CR_TDIS | PDCA_CR_ECLR;
+		tx->PDCA_CR = PDCA_CR_TDIS | PDCA_CR_ECLR;
+		rx->PDCA_MR = PDCA_MR_SIZE_BYTE;
+		tx->PDCA_MR = PDCA_MR_SIZE_BYTE;
+		rx->PDCA_TCR = dev->Length;
+		tx->PDCA_TCR = dev->SlaveTxLength;
+		rx->PDCA_MAR = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(dev->pRx));
+		tx->PDCA_MAR = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(dev->pTx));
+		__DMB();
+		if (dev->Length > 0)
+		{
+			dev->SlaveRxDma = true;
+			rx->PDCA_IER = PDCA_IER_TRC | PDCA_IER_TERR;
+			rx->PDCA_CR = PDCA_CR_TEN;
+		}
+		else
+			mask |= SPI_IER_RDRF;
+		// In slave mode the first TDR write immediately loads the shifter.
+		// Duplicate byte zero in TDR: the next load at transfer start must
+		// not replace it with byte one (datasheet 26.7.4).
+		if (dev->SlaveTxLength > 0)
+		{
+			tx->PDCA_IER = PDCA_IER_TRC | PDCA_IER_TERR;
+			tx->PDCA_CR = PDCA_CR_TEN;
+		}
+		else
+			mask |= SPI_IER_TDRE;
+	}
+	else
+		mask |= SPI_IER_RDRF;
+	dev->pReg->SPI_IER = mask;
+}
+
+// Stop before sampling TCR so CPU and PDCA never consume the same RDR.
+static void Sam4lSpiSlaveDmaCollect(Sam4lSpiDev_t *dev)
+{
+	if (!dev->SlaveRxDma)
+		return;
+	PdcaChannel *rx = Sam4lSpiRxChannel();
+	rx->PDCA_IDR = 0xFFFFFFFFU;
+	rx->PDCA_CR = PDCA_CR_TDIS;
+	__NOP();
+	__NOP();
+	__DMB();
+	dev->Count = dev->Length - static_cast<int>(rx->PDCA_TCR);
+	dev->SlaveRxDma = false;
 }
 
 static void Sam4lSpiSlaveIrq(Sam4lSpiDev_t *dev, uint32_t Status)
@@ -656,6 +711,22 @@ static void Sam4lSpiSlaveIrq(Sam4lSpiDev_t *dev, uint32_t Status)
 	if (!dev->SlaveReady)
 		return;
 	uint32_t events = Status;
+	if (dev->SlaveDmaFrame)
+	{
+		if ((events & SPI_SR_NSSR) != 0U)
+		{
+			if (((Sam4lSpiRxChannel()->PDCA_ISR |
+				Sam4lSpiTxChannel()->PDCA_ISR) & PDCA_ISR_TERR) != 0U)
+				dev->SlaveError = true;
+			Sam4lSpiDmaStop(dev);
+			Sam4lSpiSlaveDmaCollect(dev);
+			// The captured RDRF may have been serviced by PDCA already.
+			Status = dev->pReg->SPI_SR;
+			events |= Status;
+		}
+		else if (dev->SlaveRxDma)
+			Status &= ~SPI_SR_RDRF;
+	}
 	bool received = false;
 	// The receive FIFO holds four characters. NSSR can arrive alongside
 	// several unread characters; drain them before retiring the frame.
@@ -679,9 +750,11 @@ static void Sam4lSpiSlaveIrq(Sam4lSpiDev_t *dev, uint32_t Status)
 		dev->SlaveError = true;
 	if ((events & SPI_SR_NSSR) == 0U)
 	{
-		if (received)
+		if (!dev->SlaveDmaFrame && received)
 			dev->pReg->SPI_TDR = dev->Count < dev->SlaveTxLength ?
 				dev->pTx[dev->Count] : dev->pSpiDev->Cfg.DummyByte;
+		if (dev->SlaveDmaFrame && (events & dev->pReg->SPI_IMR & SPI_SR_TDRE) != 0U)
+			dev->pReg->SPI_TDR = dev->pSpiDev->Cfg.DummyByte;
 		return;
 	}
 
@@ -740,6 +813,31 @@ static void Sam4lSpiDmaIrq(void)
 	Sam4lSpiDev_t *dev = &s_SpiDev;
 	const uint32_t rx = Sam4lSpiRxChannel()->PDCA_ISR & Sam4lSpiRxChannel()->PDCA_IMR;
 	const uint32_t tx = Sam4lSpiTxChannel()->PDCA_ISR & Sam4lSpiTxChannel()->PDCA_IMR;
+	if (dev->pSpiDev != nullptr && dev->pSpiDev->Cfg.Mode == SPIMODE_SLAVE)
+	{
+		if (!dev->SlaveReady || !dev->SlaveDmaFrame)
+			return;
+		if (((rx | tx) & PDCA_ISR_TERR) != 0U)
+		{
+			dev->SlaveError = true;
+			Sam4lSpiDmaStop(dev);
+			Sam4lSpiSlaveDmaCollect(dev);
+			dev->pReg->SPI_IER = SPI_IER_RDRF | SPI_IER_TDRE;
+			return; // Report error at NSS rising, once per frame.
+		}
+		if ((rx & PDCA_ISR_TRC) != 0U)
+		{
+			Sam4lSpiSlaveDmaCollect(dev);
+			dev->pReg->SPI_IER = SPI_IER_RDRF; // Detect excess clocks safely.
+		}
+		if ((tx & PDCA_ISR_TRC) != 0U)
+		{
+			Sam4lSpiTxChannel()->PDCA_IDR = 0xFFFFFFFFU;
+			Sam4lSpiTxChannel()->PDCA_CR = PDCA_CR_TDIS;
+			dev->pReg->SPI_IER = SPI_IER_TDRE; // Dummy bytes after TX ends.
+		}
+		return;
+	}
 	if (!dev->Active || !dev->Async)
 		return;
 	if (((rx | tx) & PDCA_ISR_TERR) != 0U)
@@ -787,9 +885,9 @@ bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfgData)
 	{
 		return false;
 	}
-	// Slave DMA and wide words need their own external-clock validation.
+	// Slave wide words need their own external-clock validation.
 	if (pCfgData->Mode == SPIMODE_SLAVE &&
-		(pCfgData->bDmaEn || pCfgData->DataSize != 8U ||
+		(pCfgData->DataSize != 8U ||
 		 pCfgData->NbIOPins <= SPI_CS_IOPIN_IDX))
 		return false;
 	if (pCfgData->ChipSel != SPICSEL_MAN &&
@@ -848,10 +946,10 @@ bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfgData)
 	atomic_flag_clear(&pDev->DevIntrf.bBusy);
 
 	Sam4lSpiConfigure(&s_SpiDev);
-	if (pDev->Cfg.Mode == SPIMODE_SLAVE)
-		Sam4lSpiSlaveArm(&s_SpiDev);
 	if (pDev->Cfg.bDmaEn)
 		Sam4lSpiDmaInit(&s_SpiDev);
+	if (pDev->Cfg.Mode == SPIMODE_SLAVE)
+		Sam4lSpiSlaveArm(&s_SpiDev);
 	if (pDev->Cfg.bIntEn)
 	{
 		NVIC_SetPriority(SPI_IRQn, pDev->Cfg.IntPrio);
