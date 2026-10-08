@@ -37,7 +37,7 @@ def compile(p,targetdir=out,extra=[]):
  flags=['-std=gnu++23','-fno-rtti','-fno-exceptions'] if p.suffix=='.cpp' else ['-std=gnu17'] if p.suffix=='.c' else ['-x','assembler-with-cpp']
  run([cc+('g++' if p.suffix=='.cpp' else 'gcc'),*base,*flags,*extra,*inc,'-c',str(p),'-o',str(o)])
  return str(o)
-files=['src/CppRuntimeOverload.cpp','ARM/src/ResetEntry.c','ARM/Microchip/SAM4L/src/vectors_sam4l.c','ARM/Microchip/SAM4L/src/system_sam4l.c','ARM/Microchip/SAM4L/src/iopincfg_sam4l.c','ARM/Microchip/SAM4L/src/usb_ctrlr_sam4l.cpp','src/cfifo.c','src/device_intrf.cpp','src/device.cpp','src/app_evt_handler.cpp','src/app_run.cpp','src/usb/usb.cpp','src/usb/usb_intrf.cpp','src/usb/usbd_epalloc.cpp','src/usb/usbd_cdc.cpp','src/usb/usbd_cdc_desc.cpp','src/usb/usbd_hid.cpp','src/usb/usb_int.cpp','src/usb/usbd_bulk.cpp','src/usb/usbd_msc.cpp']
+files=['src/CppRuntimeOverload.cpp','src/syslog.cpp','ARM/src/ResetEntry.c','ARM/Microchip/SAM4L/src/vectors_sam4l.c','ARM/Microchip/SAM4L/src/system_sam4l.c','ARM/Microchip/SAM4L/src/iopincfg_sam4l.c','ARM/Microchip/SAM4L/src/usb_ctrlr_sam4l.cpp','src/cfifo.c','src/device_intrf.cpp','src/device.cpp','src/app_evt_handler.cpp','src/app_run.cpp','src/usb/usb.cpp','src/usb/usb_intrf.cpp','src/usb/usbd_epalloc.cpp','src/usb/usbd_cdc.cpp','src/usb/usbd_cdc_desc.cpp','src/usb/usbd_hid.cpp','src/usb/usb_int.cpp','src/usb/usbd_bulk.cpp','src/usb/usbd_msc.cpp']
 objs=[compile(root/p, extra=trace_flags) for p in files]
 run([cc+'ar','rcs',str(out/'libIOsonata_SAM4LCxC.a'),*objs])
 def check_project(name):
