@@ -77,7 +77,19 @@ int main() {
 	finish(DMA1_Channel2, 4, output);
 	assert(output == std::vector<uint8_t>{0xA5} && ready == 1);
 	assert(uart.bTxReady && !(DMA1_Channel2->CCR & DMA_CCR_EN));
-	assert(!(USART1->CR3 & USART_CR3_DMAT));
+	assert(USART1->CR3 & USART_CR3_DMAT); // Disabled channel gates idle requests.
+	// Repeated isolated writes must rearm the same DMA addresses and never
+	// repeat a completed byte when the FIFO is empty between calls.
+	uint32_t cache = DMA1_Channel2->CMAR;
+	output.clear();
+	for (int i = 0; i < 256; ++i) {
+		b = uint8_t(i);
+		assert(UARTTx(&uart, &b, 1) == 1);
+		b = 0;
+		assert(DMA1_Channel2->CMAR == cache);
+		finish(DMA1_Channel2, 4, output);
+		assert(output.back() == uint8_t(i));
+	}
 	// Byte-at-a-time producer, repeated FIFO wrap and backpressure.
 	output.clear(); std::vector<uint8_t> expected;
 	for (int i = 0; i < 4096; ++i) {

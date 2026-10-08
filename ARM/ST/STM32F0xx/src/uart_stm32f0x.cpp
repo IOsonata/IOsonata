@@ -129,32 +129,29 @@ UARTDEV const *UARTGetInstance(int DevNo)
 	return DevNo >= 0 && DevNo < s_NbUartDev ? s_Stm32f03xUartDev[DevNo].pUartDev : NULL;
 }
 
-// Call with interrupts masked. DMA must never retain a CFIFO span: puts
-// can reuse it as soon as GetMultiple advances the read index.
-static void STM32F03xUARTDmaStart(STM32F0X_UARTDEV *dev)
+// The channel is disabled before either caller fills the fixed TX cache.
+// CPAR and CMAR are constant and are set once during initialization.
+static void STM32F03xUARTDmaArm(STM32F0X_UARTDEV *dev, int Count)
 {
-	if (!dev->pUartDev->bTxReady || !(dev->pReg->CR1 & USART_CR1_UE))
-		return;
-	int count = 0;
-	while (count < STM32F0X_UART_BUFF_SIZE)
-	{
-		int len = STM32F0X_UART_BUFF_SIZE - count;
-		uint8_t *p = CFifoGetMultiple(dev->pUartDev->hTxFifo, &len);
-		if (p == NULL) break;
-		memcpy(dev->TxDmaCache + count, p, len);
-		count += len;
-	}
-	if (count == 0) return;
-	DMA_Channel_TypeDef *chan = dev->pTxDma;
-	chan->CCR = 0;
-	DMA1->IFCR = DMA_IFCR_CGIF1 << dev->TxDmaShift;
-	chan->CPAR = (uint32_t)(uintptr_t)&dev->pReg->TDR;
-	chan->CMAR = (uint32_t)(uintptr_t)dev->TxDmaCache;
-	chan->CNDTR = count;
+	dev->pTxDma->CNDTR = Count;
 	dev->pUartDev->bTxReady = false;
 	__DMB();
-	chan->CCR = DMA_CCR_DIR | DMA_CCR_MINC | DMA_CCR_TCIE | DMA_CCR_TEIE | DMA_CCR_EN;
-	dev->pReg->CR3 |= USART_CR3_DMAT;
+	dev->pTxDma->CCR = DMA_CCR_DIR | DMA_CCR_MINC | DMA_CCR_TCIE | DMA_CCR_TEIE | DMA_CCR_EN;
+}
+
+// Call with interrupts masked. Copy before the producer can reuse the span.
+static void STM32F03xUARTDmaStart(STM32F0X_UARTDEV *dev)
+{
+	int len = STM32F0X_UART_BUFF_SIZE;
+	uint8_t *p = CFifoGetMultiple(dev->pUartDev->hTxFifo, &len);
+	if (p == NULL)
+	{
+		dev->pUartDev->bTxReady = true;
+		return;
+	}
+	if (len == 1) dev->TxDmaCache[0] = *p;
+	else memcpy(dev->TxDmaCache, p, len);
+	STM32F03xUARTDmaArm(dev, len);
 }
 
 static void STM32F03xUARTDmaStop(STM32F0X_UARTDEV *dev)
@@ -182,7 +179,6 @@ static void STM32F03xUARTDmaIrq(STM32F0X_UARTDEV *dev)
 		EnableInterrupt(state);
 		return;
 	}
-	dev->pReg->CR3 &= ~USART_CR3_DMAT;
 	dev->pTxDma->CCR = 0;
 	if (flags & DMA_ISR_TEIF1)
 	{
@@ -190,7 +186,6 @@ static void STM32F03xUARTDmaIrq(STM32F0X_UARTDEV *dev)
 		dev->pUartDev->TxDropCnt += dev->pTxDma->CNDTR;
 	}
 	DMA1->IFCR = DMA_IFCR_CGIF1 << dev->TxDmaShift;
-	dev->pUartDev->bTxReady = true;
 	STM32F03xUARTDmaStart(dev);
 	bool ready = dev->pUartDev->bTxReady;
 	EnableInterrupt(state);
@@ -416,14 +411,34 @@ static int STM32F03xUARTTxData(DevIntrf_t * const pDev, uint8_t const *pData, in
     while (Datalen > 0 && rtry-- > 0)
     {
         uint32_t state = DisableInterrupt();
+		if (!(dev->pReg->CR1 & USART_CR1_UE))
+		{
+			EnableInterrupt(state);
+			break;
+		}
+
+		// Ready means both the DMA cache and queued FIFO are empty.
+		// Avoid a FIFO round trip when the caller can fill the cache directly.
+		if (pDev->bDma && dev->pUartDev->bTxReady)
+		{
+			int len = Datalen < STM32F0X_UART_BUFF_SIZE ? Datalen : STM32F0X_UART_BUFF_SIZE;
+			if (len == 1) dev->TxDmaCache[0] = *pData;
+			else memcpy(dev->TxDmaCache, pData, len);
+			STM32F03xUARTDmaArm(dev, len);
+			Datalen -= len;
+			pData += len;
+			cnt += len;
+		}
 
         while (Datalen > 0)
         {
             int l = Datalen;
-            uint8_t *p = CFifoPutMultiple(dev->pUartDev->hTxFifo, &l);
+            uint8_t *p = l == 1 ? CFifoPut(dev->pUartDev->hTxFifo) :
+				CFifoPutMultiple(dev->pUartDev->hTxFifo, &l);
             if (p == NULL)
                 break;
-            memcpy(p, pData, l);
+			if (l == 1) *p = *pData;
+			else memcpy(p, pData, l);
             Datalen -= l;
             pData += l;
             cnt += l;
@@ -431,7 +446,6 @@ static int STM32F03xUARTTxData(DevIntrf_t * const pDev, uint8_t const *pData, in
 
 		if (pDev->bDma)
 		{
-			STM32F03xUARTDmaStart(dev);
 			EnableInterrupt(state);
 			continue;
 		}
@@ -494,6 +508,7 @@ static void STM32F03xUARTEnable(DevIntrf_t * const pDev)
 	{
 		RCC->CFGR3 &= ~RCC_CFGR3_USART1SW_Msk;
 	}
+	if (dev->DmaOwned) dev->pReg->CR3 |= USART_CR3_DMAT;
 	dev->pReg->CR1 |= USART_CR1_UE | USART_CR1_RE | USART_CR1_TE;
 	dev->pReg->CR2 &= ~USART_CR2_RTOEN;
 
@@ -799,6 +814,9 @@ bool UARTInit(UARTDEV * const pDev, const UARTCFG *pCfg)
 #endif
 		dev->DmaOwned = true;
 		STM32F03xUARTDmaStop(dev);
+		dev->pTxDma->CPAR = (uint32_t)(uintptr_t)&reg->TDR;
+		dev->pTxDma->CMAR = (uint32_t)(uintptr_t)dev->TxDmaCache;
+		reg->CR3 |= USART_CR3_DMAT;
 		NVIC_SetPriority(dev->TxDmaIrq, pCfg->IntPrio);
 		NVIC_EnableIRQ(dev->TxDmaIrq);
 	}

@@ -15,8 +15,10 @@ RX remains interrupt driven. Other F0 variants still reject DMA requests.
 | 0 | USART1 | DMA1 channel 2 | DMA1_Channel2_3 |
 | 1 | USART2 | DMA1 channel 4 | DMA1_Channel4_5 |
 
-TX copies queued bytes into a fixed 16-byte DMA buffer. Completion interrupts
-start the next burst. A positive `Tx()` return counts accepted bytes; the caller
+An idle TX copies directly into a fixed 16-byte DMA buffer. Writes arriving
+while DMA is active use the TX FIFO; completion interrupts copy one contiguous
+FIFO span and start the next burst. DMA addresses are configured once. The
+USART DMA request stays enabled while the disabled channel gates idle requests. A positive `Tx()` return counts accepted bytes; the caller
 may reuse its buffer immediately. FIFO blocking/drop behavior is unchanged.
 DMA transfer errors discard the unsent part of that burst, add its remaining
 byte count to `UARTDev_t::TxDropCnt`, and continue with queued bytes.
@@ -37,7 +39,11 @@ the same baud rate in `Python/uartprbs_rx.py`. The example's default remains
 
 `python3 tests/stm32f0/uart_dma_test.py` checks FIFO wrap, backpressure, caller
 buffer reuse, both USARTs, RX during TX, transfer errors and lifecycle handling.
-These are host register tests. Board PRBS throughput with DMA remains unverified.
+These are host register tests. The first DMA implementation measured about
+41.3 kB/s at 1 Mbaud on the maintainer's board, below the interrupt-only result
+of 56.7 kB/s. The revised transfer path removes the idle FIFO round trip,
+repeated address setup and extra FIFO probing. Its board throughput remains
+unverified.
 
 ## Peripheral timers
 
