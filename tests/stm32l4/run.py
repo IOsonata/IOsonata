@@ -224,3 +224,7 @@ with tempfile.TemporaryDirectory(prefix='stm32l4-') as directory:
             exe=work/(name+'-'+variant)
             subprocess.run(shlex.split(os.environ.get('CXX','g++'))+['-std=c++17','-O2','-g','-fsanitize=undefined','-fno-sanitize-recover=all','-D'+variant,str(file),'-o',str(exe)],check=True)
             subprocess.run([str(exe)],check=True)
+
+# Startup, framing, RX overflow and timer lifecycle regressions.
+import sys
+subprocess.run([sys.executable, str(Path(__file__).with_name("runtime.py"))], check=True)

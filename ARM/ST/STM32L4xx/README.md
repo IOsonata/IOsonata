@@ -11,6 +11,12 @@ UART indices are 0 for LPUART1, 1 for USART1, 2 for USART2, 3 for USART3,
 4 for UART4 and 5 for UART5. IRQ selection, reset and clock control use this
 mapping. These indices are not hardware instance numbers.
 
+UART supports seven or eight payload bits, none/even/odd parity and one or
+two stop bits. LPUART1 cannot use seven payload bits without parity. Invalid
+framing and nine-bit payload requests fail before device state is changed.
+When the receive FIFO is full, the ISR consumes and counts the dropped byte;
+foreground reads drain only the software FIFO.
+
 SPI indices 0-2 select SPI1-3. On L476/L496, index 3 selects QUADSPI.
 On L4S9, indices 3 and 4 select OCTOSPI1 and OCTOSPI2. Extended SPI
 controllers currently accept polling master configurations only; interrupt,
@@ -42,12 +48,18 @@ The tests compile extracted production function bodies against small register
 and dispatch models, with UBSan. They cover UART IRQ/NVIC/reset/clock mapping,
 SPI versus extended-controller dispatch, OSPI clock masks and prescaler limits,
 I2C configuration refusal, and TIM refusal while preserving LPTIM dispatch.
+They also cover direct/PLL clock sources and MSI range selection in both
+startup files, UART framing and RX overflow, and restoring LPTIM overflow
+interrupts across disable/enable cycles.
 They do not simulate the complete UART, I2C, SPI or timer hardware.
 
 The changed UART, SPI, I2C, timer-dispatch and TIM translation units compile
 for L476, L496 and L4S9 with Arm GNU 14.3.1, GNU C++17, Cortex-M4 hard-float,
 no exceptions/RTTI, at -O0 and -Os. The changed OSPI translation unit also
-compiles for L4S9. These are source compilation checks with staged headers,
+compiles for L4S9. Startup and LPTIM compile for all three targets at both
+optimization levels; the alternative system_stm32l4plus.c compiles for L4S9
+(the L4S9 project uses system_stm32l4xx.c). These are source compilation
+checks with staged headers,
 not complete IOC library/application links or on-board tests.
 
 Before claiming a release validation baseline, verify startup clocks, UART

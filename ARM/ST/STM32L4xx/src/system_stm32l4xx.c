@@ -186,29 +186,38 @@ void SystemCoreClockUpdate(void)
 {
 	uint32_t cfgr = RCC->CFGR;
 	uint32_t pllcfgr = RCC->PLLCFGR;
-	uint32_t clk = DEFAULT_RC_FREQ;
+	uint32_t range = (RCC->CR & RCC_CR_MSIRGSEL)
+		? (RCC->CR & RCC_CR_MSIRANGE_Msk) >> RCC_CR_MSIRANGE_Pos
+		: (RCC->CSR & RCC_CSR_MSISRANGE_Msk) >> RCC_CSR_MSISRANGE_Pos;
+	uint32_t msi = MSIRangeTable[range];
+	uint32_t clk = msi;
 
-	if (pllcfgr & RCC_PLLCFGR_PLLSRC_MSI)
+	switch (cfgr & RCC_CFGR_SWS_Msk)
 	{
-		int ridx = (RCC->CR & RCC_CR_MSIRANGE_Msk) >> RCC_CR_MSIRANGE_Pos;
-		SystemCoreClock = MSIRangeTable[ridx];
+		case RCC_CFGR_SWS_HSI:
+			clk = 16000000;
+			break;
+		case RCC_CFGR_SWS_HSE:
+			clk = g_McuOsc.CoreOsc.Freq;
+			break;
+		case RCC_CFGR_SWS_PLL:
+		{
+			switch (pllcfgr & RCC_PLLCFGR_PLLSRC_Msk)
+			{
+				case RCC_PLLCFGR_PLLSRC_MSI: clk = msi; break;
+				case RCC_PLLCFGR_PLLSRC_HSI: clk = 16000000; break;
+				case RCC_PLLCFGR_PLLSRC_HSE: clk = g_McuOsc.CoreOsc.Freq; break;
+				default: clk = 0; break;
+			}
+			uint32_t m = ((pllcfgr & RCC_PLLCFGR_PLLM_Msk) >> RCC_PLLCFGR_PLLM_Pos) + 1;
+			uint32_t n = (pllcfgr & RCC_PLLCFGR_PLLN_Msk) >> RCC_PLLCFGR_PLLN_Pos;
+			uint32_t r = (((pllcfgr & RCC_PLLCFGR_PLLR_Msk) >> RCC_PLLCFGR_PLLR_Pos) + 1) << 1;
+			clk = (uint32_t)((uint64_t)clk * n / (m * r));
+			break;
+		}
+		default: break; // MSI
 	}
-	else if (pllcfgr & RCC_PLLCFGR_PLLSRC_HSE)
-	{
-		SystemCoreClock = g_McuOsc.CoreOsc.Freq;//s_ClkSrcFreq;
-	}
-	else if (pllcfgr & RCC_PLLCFGR_PLLSRC_HSI)
-	{
-		SystemCoreClock = 16000000;
-	}
-
-	if (cfgr & RCC_CFGR_SWS_PLL)
-	{
-		uint32_t m = ((pllcfgr & RCC_PLLCFGR_PLLM_Msk) >> RCC_PLLCFGR_PLLM_Pos) + 1;
-		uint32_t n = (pllcfgr & RCC_PLLCFGR_PLLN_Msk) >> RCC_PLLCFGR_PLLN_Pos;
-		uint32_t r = (((pllcfgr & RCC_PLLCFGR_PLLR_Msk) >> RCC_PLLCFGR_PLLR_Pos) + 1) << 1;
-		SystemCoreClock = (SystemCoreClock * n / (m * r));
-	}
+	SystemCoreClock = clk;
 
 #ifdef STM32L4S9xx
 	if (SystemCoreClock > 80000000)

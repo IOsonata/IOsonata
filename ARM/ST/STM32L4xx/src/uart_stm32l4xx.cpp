@@ -139,17 +139,18 @@ static void UART_IRQHandler(STM32L4X_UARTDEV * const pDev)
 	{
 		int cnt = STM32L4X_UART_HWFIFO_SIZE;
 		do {
+			// RDR belongs to the ISR, including when the software FIFO is full.
+			uint8_t value = (uint16_t)pDev->pReg->RDR & (dev->DataBits == 7 ? 0x7F : 0xFF);
 			uint8_t *p = CFifoPut(dev->hRxFifo);
-			if (p == NULL)
+			if (p)
+			{
+				*p = value;
+				dev->bRxReady = true;
+			}
+			else
 			{
 				pDev->RxDropCnt++;
-				dev->bRxReady = true;
-				uint8_t x = (uint16_t)pDev->pReg->RDR & 0xFF;
-				pDev->pReg->ICR = USART_ISR_RXNE;
-				break;
 			}
-			*p = (uint16_t)pDev->pReg->RDR & 0xFF;
-			//pDev->pReg->ICR = USART_ISR_RXNE;
 		} while (pDev->pReg->ISR & USART_ISR_RXNE && cnt-- > 0);
 		if (dev->EvtCallback)
 		{
@@ -310,17 +311,8 @@ static int STM32L4xUARTRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int Buffl
 		pBuff += l;
 		Bufflen -= l;
 	}
+	dev->pUartDev->bRxReady = CFifoUsed(dev->pUartDev->hRxFifo) != 0;
 	EnableInterrupt(state);
-
-	if (dev->pUartDev->bRxReady)
-	{
-		uint8_t *p = CFifoPut(dev->pUartDev->hRxFifo);
-		if (p)
-		{
-			dev->pUartDev->bRxReady = false;
-			*p = dev->pReg->RDR;
-		}
-	}
 
 	return cnt;
 }
@@ -503,6 +495,15 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 		return false;
 	}
 
+	// The byte-oriented API supports seven or eight payload bits.
+	if ((pCfg->DataBits != 7 && pCfg->DataBits != 8) ||
+		(pCfg->Parity != UART_PARITY_NONE && pCfg->Parity != UART_PARITY_EVEN && pCfg->Parity != UART_PARITY_ODD) ||
+		(pCfg->StopBits != 1 && pCfg->StopBits != 2) ||
+		(pCfg->DevNo == 0 && pCfg->DataBits == 7 && pCfg->Parity == UART_PARITY_NONE))
+	{
+		return false;
+	}
+
 	int devno = pCfg->DevNo;
 	USART_TypeDef *reg = s_Stm32l4xUartDev[devno].pReg;
 	uint32_t tmp;
@@ -594,36 +595,16 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 
     msDelay(1);
 
-	switch (pCfg->Parity)
-	{
-		case UART_PARITY_NONE:
-			reg->CR1 &= ~USART_CR1_PCE;
-			break;
-		case UART_PARITY_EVEN:
-			reg->CR1 |= USART_CR1_PS | USART_CR1_PCE;
-			break;
-		case UART_PARITY_ODD:
-			reg->CR1 &= ~USART_CR1_PS;
-			reg->CR1 |= USART_CR1_PCE;
-			break;
-	}
-
-	reg->CR1 &= ~(USART_CR1_M | (1 << 28));
-
-	if (pCfg->DataBits == 9)
-	{
-		reg->CR1 |=  USART_CR1_M;
-	}
-	else if (pCfg->DataBits == 7)
-	{
-		reg->CR1 |=  (1 << 28);
-	}
+	// Hardware word length includes the parity bit.
+	int wordbits = pCfg->DataBits + (pCfg->Parity != UART_PARITY_NONE ? 1 : 0);
+	reg->CR1 &= ~(USART_CR1_PCE | USART_CR1_PS | USART_CR1_M0 | USART_CR1_M1);
+	if (pCfg->Parity != UART_PARITY_NONE) reg->CR1 |= USART_CR1_PCE;
+	if (pCfg->Parity == UART_PARITY_ODD) reg->CR1 |= USART_CR1_PS;
+	if (wordbits == 9) reg->CR1 |= USART_CR1_M0;
+	else if (wordbits == 7) reg->CR1 |= USART_CR1_M1;
 
 	reg->CR2 &= ~USART_CR2_STOP_Msk;
-	if (pCfg->StopBits == 2)
-	{
-		reg->CR2 |= 2;
-	}
+	if (pCfg->StopBits == 2) reg->CR2 |= USART_CR2_STOP_1;
 
 	// Swap
 	//reg->CR2 |= USART_CR2_SWAP;
