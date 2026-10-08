@@ -38,7 +38,9 @@ files = ['src/CppRuntimeOverload.cpp', 'ARM/src/ResetEntry.c',
          'ARM/Microchip/SAM4L/src/timer_sam4l.cpp',
          'ARM/Microchip/SAM4L/src/timer_sam4l_ast.cpp',
          'ARM/Microchip/SAM4L/src/timer_sam4l_tc.cpp',
-         'src/coredev/timer.cpp']
+         'src/coredev/timer.cpp', 'src/coredev/uart.cpp',
+         'ARM/Microchip/SAM4L/src/uart_sam4l.cpp', 'src/uart_retarget.c',
+         'src/stddev.c', 'src/cfifo.c', 'src/device_intrf.cpp']
 includes = ['-I' + str(root / s) for s in ['include', 'ARM/include',
             'ARM/Microchip/SAM4L/include', 'ARM/CMSIS/Core/Include']]
 def run(cmd):
