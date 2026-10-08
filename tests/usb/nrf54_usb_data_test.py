@@ -214,7 +214,7 @@ static void init(bool hs=false,bool lowPower=false){
  resetEvents=setupEvents=ep0Completions=sofEvents=setupAction=0;
  wrapper={};powerRegs[0x400/4]=1U<<2;
  memset(irqEnabled,0,sizeof(irqEnabled));
- UsbCtrlrCfg_t cfg={6,lowPower};assert(UsbCtrlrInit(0,&cfg));
+ UsbCtrlrCfg_t cfg={};cfg.IntPrio=6;cfg.bLowPowerSuspend=lowPower;assert(UsbCtrlrInit(0,&cfg));
  set(0x010,1U<<31);set(0x048,2U<<3);set(0x04C,3040U<<16);
  assert(UsbCtrlrStart(0));assert(s_Ctrlr.Started);
  assert(get(0x05C)==0x0BE00C00U);
@@ -429,9 +429,10 @@ with tempfile.TemporaryDirectory(prefix='iosonata-nrf54-usb-') as tmp:
     path = tmp / 'test.cpp'
     binary = tmp / 'test'
     path.write_text(MODEL + '\n' + source + '\n' + TEST)
+    # DeviceIntrf uses GNU C++ variable-length arrays; keep that extension enabled.
     # Non-PIE keeps static DMA pointers representable in the MCU's 32-bit registers.
     subprocess.run([os.environ.get('CXX', 'g++'), '-std=gnu++17', '-O1', '-g',
-                    '-Wall', '-Wextra', '-Werror', '-Wno-missing-field-initializers',
+                    '-x', 'c++', '-Wall', '-Wextra', '-Werror', '-Wno-missing-field-initializers', '-Wno-vla',
                     '-fsanitize=undefined', '-fno-sanitize-recover=all', '-no-pie',
                     '-I' + str(tmp), '-I' + str(ROOT / 'include'),
                     '-I' + str(ROOT / 'ARM/Nordic/include'),

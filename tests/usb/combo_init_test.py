@@ -64,16 +64,16 @@ int main(int argc, char **)
 	assert(UsbInit(&s_UsbCfg));
 	assert(s_LoopbackCdc.Init(s_LoopbackCfg));
 	assert(s_PrbsCdc.Init(s_PrbsCfg));
-	assert(g_Hid.Init(s_HidCfg));
+	assert(s_Hid.Init(s_HidCfg));
 	assert(IntInit());
 	if (argc > 1)
 	{
 		// Exhaust all remaining ISO candidates. Refusal must be clean.
 		EndpointBlocker blocker;
 		const uint16_t usedIn = s_LoopbackCdc.EpInMask() |
-			s_PrbsCdc.EpInMask() | g_Hid.EpInMask() | s_IntClass.EpInMask();
+			s_PrbsCdc.EpInMask() | s_Hid.EpInMask() | s_IntClass.EpInMask();
 		const uint16_t usedOut = s_LoopbackCdc.EpOutMask() |
-			s_PrbsCdc.EpOutMask() | g_Hid.EpOutMask() | s_IntClass.EpOutMask();
+			s_PrbsCdc.EpOutMask() | s_Hid.EpOutMask() | s_IntClass.EpOutMask();
 		assert(UsbClassRegister(0, &blocker, 0, 0,
 			USB_ISO_EPIN_MASK(0) & ~usedIn,
 			USB_ISO_EPOUT_MASK(0) & ~usedOut));
@@ -83,7 +83,7 @@ int main(int argc, char **)
 	}
 	assert(IsoInit());
 	UsbDeviceClass *classes[] = {
-		&s_LoopbackCdc, &s_PrbsCdc, &g_Hid, &s_IntClass, &s_IsoClass,
+		&s_LoopbackCdc, &s_PrbsCdc, &s_Hid, &s_IntClass, &s_IsoClass,
 	};
 	uint16_t usedIn = 0U, usedOut = 0U;
 	unsigned interfaces = 0U;
@@ -134,6 +134,7 @@ with tempfile.TemporaryDirectory(prefix='iosonata-combo-init-') as directory:
             '-fsanitize=undefined', '-fno-sanitize-recover=all',
             '-I' + str(ROOT), '-I' + str(ROOT / 'include'),
             '-I' + str(work), '-I' + str(ROOT / port),
+            '-I' + str(ROOT / 'tests/usb/example_hostport'),
             str(work / 'test.cpp'), *[str(ROOT / p) for p in SOURCES],
             '-Wl,-dead_strip' if sys.platform == 'darwin' else '-Wl,--gc-sections',
             '-o', str(output),
