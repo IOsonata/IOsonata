@@ -4,6 +4,7 @@ Run from a Linux checkout with GCC, G++ and Python 3:
 
 ```
 python3 tests/stm32f0/run.py
+python3 tests/stm32f0/uart_dma_test.py
 python3 tests/stm32f0/run_timer.py
 python3 tests/stm32f0/run_timer_arm.py
 python3 tests/stm32f4/run.py
@@ -17,7 +18,7 @@ startup or ARM instructions. No extra Python packages are required.
 
 F0 coverage: F030x6/x8/xC and F070x6/xB; interrupt RX without phantom bytes,
 RX error discard, TX interrupt arming, parity/word length/stop bits, unsupported
-DMA rejection, polling transfers, shared USART dispatch, pin-specific EXTI
+unsupported DMA rejection, polling transfers, shared USART dispatch, pin-specific EXTI
 allocation, AHB/APB clock calculations. F4 coverage: F401 startup selects the
 linked vector symbol instead of forcing FLASH_BASE.
 
@@ -32,10 +33,19 @@ Other F0 variants retain their existing scope. I2C/SPI/ADC/USB implementations
 are not added here. F3 remains vector scaffolding,
 and F4 startup/DFU support is not a complete peripheral port. F0 UART supports
 polling or FIFO interrupts, 7-bit data with parity and 8-bit data with or without
-parity, and one or two stop bits. DMA, synchronous mode, IrDA and software flow
+parity, and one or two stop bits. Synchronous mode, IrDA and software flow
 control requests fail initialization rather than reporting false success.
 
 The shared SLIP RX example regression (`python3 tests/stm32f0/run_slip_example.py`)
 uses the production decoder with buffered and fragmented fake UART input. It
 covers empty frames, exact-buffer and oversized frames, split escape sequences,
 and PRBS continuity under UBSan. This does not model UART interrupt timing.
+
+STM32F030x8 supports TX DMA on USART1/2 with interrupt-driven RX. Both interrupt
+and DMA mode must be enabled. Other F0 variants still reject DMA. The DMA test
+uses the public UART API and real driver with modeled DMA completion/error flags.
+It checks caller-buffer lifetime, byte writes, FIFO wrap and backpressure,
+caller-supplied FIFO storage, independent USARTs, unrelated IRQ flags, RX during
+TX, error recovery, disable/enable/reset/power-off and reinitialization to IRQ
+mode. It does not measure baud accuracy or throughput. ARM Debug/Release PRBS
+application links were checked separately; the DMA path needs board validation.

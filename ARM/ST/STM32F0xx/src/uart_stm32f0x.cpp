@@ -66,6 +66,11 @@ typedef struct _STM32F0X_UART_Dev {
 	uint32_t TxPin;
 	uint32_t CtsPin;
 	uint32_t RtsPin;
+	DMA_Channel_TypeDef *pTxDma;
+	uint32_t TxDmaShift;
+	IRQn_Type TxDmaIrq;
+	bool DmaOwned;
+	alignas(4) uint8_t TxDmaCache[STM32F0X_UART_BUFF_SIZE];
 	uint8_t RxFifoMem[STM32F0X_UART_CFIFO_SIZE];
 	uint8_t TxFifoMem[STM32F0X_UART_CFIFO_SIZE];
 } STM32F0X_UARTDEV;
@@ -78,11 +83,21 @@ static STM32F0X_UARTDEV s_Stm32f03xUartDev[] = {
 	{
 		.DevNo = 0,
 		.pReg = USART1,
+#ifdef STM32F030x8
+		.pTxDma = DMA1_Channel2,
+		.TxDmaShift = 4,
+		.TxDmaIrq = DMA1_Channel2_3_IRQn,
+#endif
 	},
 #if defined(USART2)
 	{
 		.DevNo = 1,
 		.pReg = USART2,
+#ifdef STM32F030x8
+		.pTxDma = DMA1_Channel4,
+		.TxDmaShift = 12,
+		.TxDmaIrq = DMA1_Channel4_5_IRQn,
+#endif
 	},
 #endif
 #if defined(STM32F070xB) || defined(STM32F030xC)
@@ -114,6 +129,82 @@ UARTDEV const *UARTGetInstance(int DevNo)
 	return DevNo >= 0 && DevNo < s_NbUartDev ? s_Stm32f03xUartDev[DevNo].pUartDev : NULL;
 }
 
+// The channel is disabled before either caller fills the fixed TX cache.
+// CPAR and CMAR are constant and are set once during initialization.
+static void STM32F03xUARTDmaArm(STM32F0X_UARTDEV *dev, int Count)
+{
+	dev->pTxDma->CNDTR = Count;
+	dev->pUartDev->bTxReady = false;
+	__DMB();
+	dev->pTxDma->CCR = DMA_CCR_DIR | DMA_CCR_MINC | DMA_CCR_TCIE | DMA_CCR_TEIE | DMA_CCR_EN;
+}
+
+// Call with interrupts masked. Copy before the producer can reuse the span.
+static void STM32F03xUARTDmaStart(STM32F0X_UARTDEV *dev)
+{
+	int len = STM32F0X_UART_BUFF_SIZE;
+	uint8_t *p = CFifoGetMultiple(dev->pUartDev->hTxFifo, &len);
+	if (p == NULL)
+	{
+		dev->pUartDev->bTxReady = true;
+		return;
+	}
+	if (len == 1) dev->TxDmaCache[0] = *p;
+	else memcpy(dev->TxDmaCache, p, len);
+	STM32F03xUARTDmaArm(dev, len);
+}
+
+static void STM32F03xUARTDmaStop(STM32F0X_UARTDEV *dev)
+{
+	if (!dev->DmaOwned) return;
+	dev->pReg->CR3 &= ~USART_CR3_DMAT;
+	dev->pTxDma->CCR = 0;
+	DMA1->IFCR = DMA_IFCR_CGIF1 << dev->TxDmaShift;
+	dev->pTxDma->CNDTR = 0;
+	dev->pUartDev->bTxReady = true;
+}
+
+#ifdef STM32F030x8
+static void STM32F03xUARTDmaIrq(STM32F0X_UARTDEV *dev)
+{
+	uint32_t state = DisableInterrupt();
+	if (!dev->DmaOwned || !(dev->pTxDma->CCR & (DMA_CCR_TCIE | DMA_CCR_TEIE)))
+	{
+		EnableInterrupt(state);
+		return;
+	}
+	uint32_t flags = (DMA1->ISR >> dev->TxDmaShift) & (DMA_ISR_TCIF1 | DMA_ISR_TEIF1);
+	if (flags == 0)
+	{
+		EnableInterrupt(state);
+		return;
+	}
+	dev->pTxDma->CCR = 0;
+	if (flags & DMA_ISR_TEIF1)
+	{
+		dev->ErrCnt++;
+		dev->pUartDev->TxDropCnt += dev->pTxDma->CNDTR;
+	}
+	DMA1->IFCR = DMA_IFCR_CGIF1 << dev->TxDmaShift;
+	STM32F03xUARTDmaStart(dev);
+	bool ready = dev->pUartDev->bTxReady;
+	EnableInterrupt(state);
+	if (ready && dev->pUartDev->EvtCallback)
+		dev->pUartDev->EvtCallback(dev->pUartDev, UART_EVT_TXREADY, NULL, 0);
+}
+
+// Only UART's channel flags are acknowledged. Channels 3 and 5 are unused
+// by this driver; future users must share these vector handlers.
+extern "C" void DMA1_Channel2_3_IRQHandler()
+{
+	STM32F03xUARTDmaIrq(&s_Stm32f03xUartDev[0]);
+}
+
+extern "C" void DMA1_Channel4_5_IRQHandler()
+{
+	STM32F03xUARTDmaIrq(&s_Stm32f03xUartDev[1]);
+}
+#endif
 
 static void UART_IRQHandler(STM32F0X_UARTDEV * const pDev)
 {
@@ -233,6 +324,8 @@ static uint32_t STM32F03xUARTSetRate(DevIntrf_t * const pDev, uint32_t Rate)
 	{
 		return 0;
 	}
+	// Do not change the USART clock divider during an active DMA burst.
+	if (dev->DmaOwned && !dev->pUartDev->bTxReady) return 0;
 
 	uint32_t cr1 = dev->pReg->CR1;
 	dev->pReg->CR1 = cr1 & ~USART_CR1_UE;
@@ -301,6 +394,7 @@ static bool STM32F03xUARTStartTx(DevIntrf_t * const pDev, uint32_t DevAddr)
 static int STM32F03xUARTTxData(DevIntrf_t * const pDev, uint8_t const *pData, int Datalen)
 {
 	STM32F0X_UARTDEV *dev = (STM32F0X_UARTDEV *)pDev->pDevData;
+	if (pData == NULL || Datalen <= 0 || !(dev->pReg->CR1 & USART_CR1_UE)) return 0;
     int cnt = 0;
     int rtry = pDev->MaxRetry;
 
@@ -317,18 +411,44 @@ static int STM32F03xUARTTxData(DevIntrf_t * const pDev, uint8_t const *pData, in
     while (Datalen > 0 && rtry-- > 0)
     {
         uint32_t state = DisableInterrupt();
+		if (!(dev->pReg->CR1 & USART_CR1_UE))
+		{
+			EnableInterrupt(state);
+			break;
+		}
+
+		// Ready means both the DMA cache and queued FIFO are empty.
+		// Avoid a FIFO round trip when the caller can fill the cache directly.
+		if (pDev->bDma && dev->pUartDev->bTxReady)
+		{
+			int len = Datalen < STM32F0X_UART_BUFF_SIZE ? Datalen : STM32F0X_UART_BUFF_SIZE;
+			if (len == 1) dev->TxDmaCache[0] = *pData;
+			else memcpy(dev->TxDmaCache, pData, len);
+			STM32F03xUARTDmaArm(dev, len);
+			Datalen -= len;
+			pData += len;
+			cnt += len;
+		}
 
         while (Datalen > 0)
         {
             int l = Datalen;
-            uint8_t *p = CFifoPutMultiple(dev->pUartDev->hTxFifo, &l);
+            uint8_t *p = l == 1 ? CFifoPut(dev->pUartDev->hTxFifo) :
+				CFifoPutMultiple(dev->pUartDev->hTxFifo, &l);
             if (p == NULL)
                 break;
-            memcpy(p, pData, l);
+			if (l == 1) *p = *pData;
+			else memcpy(p, pData, l);
             Datalen -= l;
             pData += l;
             cnt += l;
         }
+
+		if (pDev->bDma)
+		{
+			EnableInterrupt(state);
+			continue;
+		}
 
         // Kick off TX from inside the critical section so the ISR cannot
         // double-fetch the same byte we just queued and overwrite TDR.
@@ -360,15 +480,20 @@ static inline void STM32F03xUARTStopTx(DevIntrf_t * const pDev) {
 static void STM32F03xUARTDisable(DevIntrf_t * const pDev)
 {
 	STM32F0X_UARTDEV *dev = (STM32F0X_UARTDEV *)pDev->pDevData;
+	uint32_t state = DisableInterrupt();
+	STM32F03xUARTDmaStop(dev);
 
 	dev->pReg->CR1 &= ~(USART_CR1_UE | USART_CR1_RE | USART_CR1_TE);
 	dev->pReg->CR2 &= ~USART_CR2_RTOEN;
 
+	EnableInterrupt(state);
 }
 
 static void STM32F03xUARTEnable(DevIntrf_t * const pDev)
 {
 	STM32F0X_UARTDEV *dev = (STM32F0X_UARTDEV *)pDev->pDevData;
+	uint32_t state = DisableInterrupt();
+	STM32F03xUARTDmaStop(dev);
 
 	dev->ErrCnt = 0;
 	dev->RxTimeoutCnt = 0;
@@ -383,9 +508,11 @@ static void STM32F03xUARTEnable(DevIntrf_t * const pDev)
 	{
 		RCC->CFGR3 &= ~RCC_CFGR3_USART1SW_Msk;
 	}
+	if (dev->DmaOwned) dev->pReg->CR3 |= USART_CR3_DMAT;
 	dev->pReg->CR1 |= USART_CR1_UE | USART_CR1_RE | USART_CR1_TE;
 	dev->pReg->CR2 &= ~USART_CR2_RTOEN;
 
+	EnableInterrupt(state);
 }
 
 static void STM32F03xUARTPowerOff(DevIntrf_t * const pDev)
@@ -428,6 +555,9 @@ static void STM32F03xUARTPowerOff(DevIntrf_t * const pDev)
 static void STM32F03xUARTReset(DevIntrf_t * const pDev)
 {
 	STM32F0X_UARTDEV *dev = (STM32F0X_UARTDEV *)pDev->pDevData;
+	uint32_t state = DisableInterrupt();
+	STM32F03xUARTDmaStop(dev);
+	if (dev->DmaOwned) CFifoFlush(dev->pUartDev->hTxFifo);
 
 	switch (dev->DevNo)
 	{
@@ -468,6 +598,7 @@ static void STM32F03xUARTReset(DevIntrf_t * const pDev)
 			break;
 #endif
 	}
+	EnableInterrupt(state);
 }
 
 static void *STM32F03xUARTGetHandle(DevIntrf_t * const pDev)
@@ -493,9 +624,10 @@ bool UARTInit(UARTDEV * const pDev, const UARTCFG *pCfg)
 		return false;
 	}
 
-	// This port supports byte streams, polling or FIFO interrupts. DMA,
-	// synchronous USART, IrDA and software flow control are not implemented.
-	if (pCfg->bDMAMode || pCfg->bIrDAMode || pCfg->Mode != UART_MODE_UART ||
+	// TX DMA uses completion interrupts; RX remains a character stream.
+	// DMA routing is provided for STM32F030x8 only.
+	if ((pCfg->bDMAMode && (!pCfg->bIntMode ||
+		s_Stm32f03xUartDev[pCfg->DevNo].pTxDma == NULL)) || pCfg->bIrDAMode || pCfg->Mode != UART_MODE_UART ||
 		(pCfg->FlowControl != UART_FLWCTRL_NONE && pCfg->FlowControl != UART_FLWCTRL_HW) ||
 		(pCfg->Parity != UART_PARITY_NONE && pCfg->Parity != UART_PARITY_EVEN && pCfg->Parity != UART_PARITY_ODD) ||
 		(pCfg->DataBits != 7 && pCfg->DataBits != 8) ||
@@ -515,7 +647,18 @@ bool UARTInit(UARTDEV * const pDev, const UARTCFG *pCfg)
 	}
 
 	int devno = pCfg->DevNo;
-	USART_TypeDef *reg = s_Stm32f03xUartDev[devno].pReg;
+	STM32F0X_UARTDEV *dev = &s_Stm32f03xUartDev[devno];
+	USART_TypeDef *reg = dev->pReg;
+	uint32_t state = DisableInterrupt();
+	// Do not take an active UART DMA channel from another device object.
+	if ((dev->DmaOwned && dev->pUartDev != pDev) ||
+		(pCfg->bDMAMode && !dev->DmaOwned && dev->pTxDma->CCR != 0))
+	{
+		EnableInterrupt(state);
+		return false;
+	}
+	STM32F03xUARTDmaStop(dev);
+	dev->DmaOwned = false;
 
 	pDev->DevIntrf.pDevData = &s_Stm32f03xUartDev[devno];
 	s_Stm32f03xUartDev[devno].pUartDev = pDev;
@@ -620,6 +763,7 @@ bool UARTInit(UARTDEV * const pDev, const UARTCFG *pCfg)
     s_Stm32f03xUartDev[devno].RxTimeoutCnt = 0;
     s_Stm32f03xUartDev[devno].RxDropCnt = 0;
     s_Stm32f03xUartDev[devno].TxDropCnt = 0;
+	pDev->TxDropCnt = 0;
 
 	pDev->DevIntrf.Type = DEVINTRF_TYPE_UART;
 	pDev->Mode = pCfg->Mode;
@@ -634,7 +778,7 @@ bool UARTInit(UARTDEV * const pDev, const UARTCFG *pCfg)
 	pDev->Parity = pCfg->Parity;
 	pDev->EvtCallback = pCfg->EvtCallback;
 	pDev->DevIntrf.bIntEn = pCfg->bIntMode;
-	pDev->DevIntrf.bDma = false;
+	pDev->DevIntrf.bDma = pCfg->bDMAMode;
 	pDev->DevIntrf.bTxReady = true;
 	pDev->DevIntrf.bNoStop = false;
 	pDev->DevIntrf.EvtCB = NULL;
@@ -657,6 +801,25 @@ bool UARTInit(UARTDEV * const pDev, const UARTCFG *pCfg)
 	atomic_flag_clear(&pDev->DevIntrf.bBusy);
 
 	reg->CR3 &= ~(USART_CR3_DMAT | USART_CR3_DMAR | USART_CR3_CTSIE | USART_CR3_EIE);
+
+	if (pCfg->bDMAMode)
+	{
+		RCC->AHBENR |= RCC_AHBENR_DMAEN;
+		(void)RCC->AHBENR;
+#ifdef STM32F030x8
+		// RM0360: USART1_TX -> channel 2; USART2_TX -> channel 4.
+		RCC->APB2ENR |= RCC_APB2ENR_SYSCFGEN;
+		(void)RCC->APB2ENR;
+		if (devno == 0) SYSCFG->CFGR1 &= ~SYSCFG_CFGR1_USART1TX_DMA_RMP;
+#endif
+		dev->DmaOwned = true;
+		STM32F03xUARTDmaStop(dev);
+		dev->pTxDma->CPAR = (uint32_t)(uintptr_t)&reg->TDR;
+		dev->pTxDma->CMAR = (uint32_t)(uintptr_t)dev->TxDmaCache;
+		reg->CR3 |= USART_CR3_DMAT;
+		NVIC_SetPriority(dev->TxDmaIrq, pCfg->IntPrio);
+		NVIC_EnableIRQ(dev->TxDmaIrq);
+	}
 
 	// Select duplex mode
 	reg->CR3 &= ~USART_CR3_HDSEL;
@@ -718,6 +881,7 @@ bool UARTInit(UARTDEV * const pDev, const UARTCFG *pCfg)
 	// Note: RTOEN intentionally not set. Receiver timeout needs RTOR
 	// programmed with a sensible bit count; the demo doesn't use it.
 
+	EnableInterrupt(state);
 	return true;
 }
 

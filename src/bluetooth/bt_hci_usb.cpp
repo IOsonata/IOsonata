@@ -30,7 +30,6 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ----------------------------------------------------------------------------*/
-#include <limits.h>
 #include <string.h>
 
 #include "coredev/interrupt.h"
@@ -53,6 +52,10 @@ BtHciUsb::BtHciUsb() = default;
 #define BT_HCI_USB_HISTORICAL_COMMAND_REQUEST	0xE0U
 
 static void BtHciUsbClearEventTx(BtHciUsbDev_t *pHci);
+static void BtHciUsbKickTx(BtHciUsbDev_t *pHci);
+static void BtHciUsbBulkComplete(UsbCtrlrEvtType_t Event,
+	uint16_t Length, void *pContext);
+static const UsbPkt_t *BtHciUsbTxHead(BtHciUsbDev_t *pHci);
 
 static const uint8_t s_BtHciUsbScoMps[BT_HCI_USB_SCO_ALT_COUNT] = {
 	9U, 17U, 25U, 33U, 49U, 63U,
@@ -193,6 +196,13 @@ static void BtHciUsbClearSco(BtHciUsbDev_t *pHci)
 static void BtHciUsbCloseScoEndpoints(BtHciUsbDev_t *pHci)
 {
 	UsbIsoIntrfClose(pHci->pScoIso);
+	const UsbPkt_t *pHead = BtHciUsbTxHead(pHci);
+	if (!pHci->BulkSerialization && pHead != nullptr &&
+		pHead->Hdr.Reserved == BT_HCI_USB_PACKET_SCO)
+	{
+		pHci->BulkTxBusy = false;
+		pHci->BulkTxOffset = 0U;
+	}
 	BtHciUsbClearSco(pHci);
 }
 
@@ -204,6 +214,10 @@ static void BtHciUsbClearTransport(BtHciUsbDev_t *pHci)
 	pHci->CommandPending = false;
 	pHci->AclRxPending = false;
 	pHci->EventTxActive = false;
+	pHci->EventTxBusy = false;
+	pHci->BulkTxBusy = false;
+	pHci->BulkTxOffset = 0U;
+	pHci->BulkTxChunkLength = 0U;
 	pHci->EventTxNeedZlp = false;
 	pHci->EventTxZlp = false;
 	pHci->CommandLength = 0U;
@@ -235,13 +249,16 @@ static bool BtHciUsbResetBulkTransport(BtHciUsbDev_t *pHci)
 	const uint16_t mps = BtHciUsbAclMps(pHci);
 	UsbCtrlrEpClose(pHci->DevNo, pHci->AclEpNo, false);
 	UsbCtrlrEpClose(pHci->DevNo, pHci->AclEpNo, true);
-	UsbIntrfUnconfigure(pHci->pData);
-	BtHciUsbClearBulkTransport(pHci);
-
-	if (!UsbIntrfConfigure(pHci->pData, mps))
+	// A mode switch discards the old OUT framing, but retains complete HCI
+	// packets awaiting IN delivery. Configure/Unconfigure would flush TX.
+	while (CFifoGet(pHci->pData->hRxFifo) != nullptr)
 	{
-		return false;
 	}
+	pHci->pData->RxPending = 0U;
+	BtHciUsbClearBulkTransport(pHci);
+	pHci->BulkTxBusy = false;
+	pHci->BulkTxOffset = 0U;
+	pHci->BulkTxChunkLength = 0U;
 
 	if (!BtHciUsbOpenEndpoint(pHci, pHci->AclEpNo, true,
 			USB_ENDPATT_TRANS_BULK, mps) ||
@@ -250,7 +267,6 @@ static bool BtHciUsbResetBulkTransport(BtHciUsbDev_t *pHci)
 	{
 		UsbCtrlrEpClose(pHci->DevNo, pHci->AclEpNo, false);
 		UsbCtrlrEpClose(pHci->DevNo, pHci->AclEpNo, true);
-		UsbIntrfUnconfigure(pHci->pData);
 		return false;
 	}
 	return true;
@@ -266,7 +282,9 @@ static bool BtHciUsbOpenHciAlt(BtHciUsbDev_t *pHci, uint8_t Alt)
 	pHci->CommandPending = false;
 	pHci->CommandLength = 0U;
 	UsbCtrlrEpClose(pHci->DevNo, pHci->EventEpNo, true);
-	BtHciUsbClearEventTx(pHci);
+	pHci->EventTxBusy = false;
+	pHci->EventTxOffset = 0U;
+	pHci->EventTxZlp = false;
 
 	if (Alt == 0U &&
 		!BtHciUsbOpenEndpoint(pHci, pHci->EventEpNo, true,
@@ -277,6 +295,9 @@ static bool BtHciUsbOpenHciAlt(BtHciUsbDev_t *pHci, uint8_t Alt)
 
 	pHci->HciAlt = Alt;
 	pHci->BulkSerialization = Alt == 1U;
+	const unsigned length = pHci->EventTxLength + (Alt == 1U ? 1U : 0U);
+	pHci->EventTxNeedZlp = (length % (Alt == 1U ?
+		BtHciUsbAclMps(pHci) : BtHciUsbEventMps(pHci))) == 0U;
 	return true;
 }
 
@@ -354,19 +375,21 @@ static bool BtHciUsbSetInterface(BtHciUsbDev_t *pHci,
 		{
 			return true;
 		}
-		if (pHci->ScoAlt != 0U || pHci->EventTxActive)
+		if (pHci->ScoAlt != 0U)
 		{
 			return false;
 		}
 
 		const uint8_t oldAlt = pHci->HciAlt;
-		if (BtHciUsbOpenHciAlt(pHci, Alt))
-		{
-			return true;
-		}
-
-		(void)BtHciUsbOpenHciAlt(pHci, oldAlt);
-		return false;
+		const uint32_t state = DisableInterrupt();
+		// Close may synchronously cancel an endpoint on some controllers.
+		// Keep callbacks and writers out until the new endpoints are ready.
+		pHci->Configured = false;
+		const bool selected = BtHciUsbOpenHciAlt(pHci, Alt);
+		pHci->Configured = selected || BtHciUsbOpenHciAlt(pHci, oldAlt);
+		BtHciUsbKickTx(pHci);
+		EnableInterrupt(state);
+		return selected;
 	}
 	if (InterfaceNo != (uint8_t)pHci->SyncItfNo ||
 		Alt > BT_HCI_USB_SCO_ALT_COUNT ||
@@ -395,6 +418,7 @@ static bool BtHciUsbSetInterface(BtHciUsbDev_t *pHci,
 	if (UsbIsoIntrfOpen(pHci->pScoIso, BtHciUsbScoMps(Alt), interval))
 	{
 		pHci->ScoAlt = Alt;
+		BtHciUsbKickTx(pHci);
 		return true;
 	}
 
@@ -402,6 +426,7 @@ static bool BtHciUsbSetInterface(BtHciUsbDev_t *pHci,
 		UsbIsoIntrfOpen(pHci->pScoIso, BtHciUsbScoMps(oldAlt), interval))
 	{
 		pHci->ScoAlt = oldAlt;
+		BtHciUsbKickTx(pHci);
 	}
 	return false;
 }
@@ -480,6 +505,7 @@ static bool BtHciUsbRequest(const UsbSetupData_t *pSetup,
 static void BtHciUsbClearEventTx(BtHciUsbDev_t *pHci)
 {
 	pHci->EventTxActive = false;
+	pHci->EventTxBusy = false;
 	pHci->EventTxNeedZlp = false;
 	pHci->EventTxZlp = false;
 	pHci->EventTxLength = 0U;
@@ -490,42 +516,59 @@ static void BtHciUsbClearEventTx(BtHciUsbDev_t *pHci)
 static void BtHciUsbEventTxFailure(BtHciUsbDev_t *pHci, uint16_t Length)
 {
 	BtHciUsbClearEventTx(pHci);
+	BtHciUsbKickTx(pHci);
 	(void)BtHciUsbNotify(pHci, DEVINTRF_EVT_TX_TIMEOUT, Length);
 }
 
 static bool BtHciUsbSendEventChunk(BtHciUsbDev_t *pHci)
 {
+	const uint8_t prefix = pHci->BulkSerialization ? 1U : 0U;
 	const uint16_t remaining =
-		(uint16_t)(pHci->EventTxLength - pHci->EventTxOffset);
-	const uint16_t mps = BtHciUsbEventMps(pHci);
+		(uint16_t)(pHci->EventTxLength + prefix - pHci->EventTxOffset);
+	const uint16_t mps = prefix ? BtHciUsbAclMps(pHci) : BtHciUsbEventMps(pHci);
 	pHci->EventTxChunkLength = remaining < mps ? remaining : mps;
 	pHci->EventTxZlp = false;
-	memcpy(BtHciUsbEventTxTransfer(pHci),
-		&BtHciUsbEventTxBuffer(pHci)[pHci->EventTxOffset],
-		pHci->EventTxChunkLength);
-	return UsbCtrlrEpSend(pHci->DevNo, pHci->EventEpNo,
+	const uint8_t copied = prefix && pHci->EventTxOffset == 0U ? 1U : 0U;
+	if (copied)
+		BtHciUsbEventTxTransfer(pHci)[0] = BT_HCI_USB_PACKET_EVENT;
+	memcpy(&BtHciUsbEventTxTransfer(pHci)[copied],
+		&BtHciUsbEventTxBuffer(pHci)[pHci->EventTxOffset + copied - prefix],
+		pHci->EventTxChunkLength - copied);
+	pHci->EventTxBusy = UsbCtrlrEpSend(pHci->DevNo,
+		prefix ? pHci->AclEpNo : pHci->EventEpNo,
 		BtHciUsbEventTxTransfer(pHci),
 		pHci->EventTxChunkLength);
+	return pHci->EventTxBusy;
 }
 
 static bool BtHciUsbSendEventZlp(BtHciUsbDev_t *pHci)
 {
 	pHci->EventTxChunkLength = 0U;
 	pHci->EventTxZlp = true;
-	return UsbCtrlrEpSend(pHci->DevNo, pHci->EventEpNo,
+	pHci->EventTxBusy = UsbCtrlrEpSend(pHci->DevNo,
+		pHci->BulkSerialization ? pHci->AclEpNo : pHci->EventEpNo,
 		BtHciUsbEventTxTransfer(pHci), 0U);
+	return pHci->EventTxBusy;
 }
 
 static void BtHciUsbEventComplete(UsbCtrlrEvtType_t Event,
 								 uint16_t Length, void *pContext)
 {
 	BtHciUsbDev_t *pHci = static_cast<BtHciUsbDev_t *>(pContext);
-	if (pHci == nullptr ||
-		(Event != USB_CTRLR_EVT_XFER_CMPL && Event != USB_CTRLR_EVT_XFER_FAILED) ||
-		!pHci->EventTxActive)
+	if (pHci == nullptr || !pHci->Configured ||
+		(Event != USB_CTRLR_EVT_XFER_CMPL && Event != USB_CTRLR_EVT_XFER_FAILED))
 	{
 		return;
 	}
+	if (!pHci->EventTxBusy)
+	{
+		const UsbPkt_t *pHead = BtHciUsbTxHead(pHci);
+		if (!pHci->BulkSerialization && pHead != nullptr &&
+			pHead->Hdr.Reserved == BT_HCI_USB_PACKET_EVENT)
+			BtHciUsbBulkComplete(Event, Length, pContext);
+		return;
+	}
+	pHci->EventTxBusy = false;
 
 	const uint16_t expected = pHci->EventTxChunkLength;
 	if (Event == USB_CTRLR_EVT_XFER_FAILED || Length != expected)
@@ -538,7 +581,8 @@ static void BtHciUsbEventComplete(UsbCtrlrEvtType_t Event,
 	{
 		pHci->EventTxOffset = (uint16_t)(pHci->EventTxOffset +
 			pHci->EventTxChunkLength);
-		if (pHci->EventTxOffset < pHci->EventTxLength)
+		if (pHci->EventTxOffset < pHci->EventTxLength +
+			(pHci->BulkSerialization ? 1U : 0U))
 		{
 			if (BtHciUsbSendEventChunk(pHci))
 			{
@@ -560,6 +604,7 @@ static void BtHciUsbEventComplete(UsbCtrlrEvtType_t Event,
 	}
 
 	BtHciUsbClearEventTx(pHci);
+	BtHciUsbKickTx(pHci);
 	(void)BtHciUsbNotify(pHci, DEVINTRF_EVT_TX_READY, 0);
 }
 
@@ -668,6 +713,14 @@ static bool BtHciUsbSendScoChunk(BtHciUsbDev_t *pHci)
 static void BtHciUsbScoSendFrameComplete(BtHciUsbDev_t *pHci, uint16_t Length,
 										bool Failed)
 {
+	const UsbPkt_t *pHead = BtHciUsbTxHead(pHci);
+	if (!pHci->BulkSerialization && pHci->BulkTxBusy && pHead != nullptr &&
+		pHead->Hdr.Reserved == BT_HCI_USB_PACKET_SCO)
+	{
+		BtHciUsbBulkComplete(Failed ? USB_CTRLR_EVT_XFER_FAILED :
+			USB_CTRLR_EVT_XFER_CMPL, Length, pHci);
+		return;
+	}
 	if (!pHci->ScoTxActive)
 	{
 		return;
@@ -694,6 +747,7 @@ static void BtHciUsbScoSendFrameComplete(BtHciUsbDev_t *pHci, uint16_t Length,
 	pHci->ScoTxLength = 0U;
 	pHci->ScoTxOffset = 0U;
 	pHci->ScoTxChunkLength = 0U;
+	BtHciUsbKickTx(pHci);
 	(void)BtHciUsbNotify(pHci, DEVINTRF_EVT_TX_READY, 0);
 }
 
@@ -809,9 +863,14 @@ static bool BtHciUsbConsumeAcl(BtHciUsbDev_t *pHci)
 		(size_t)pHci->AclRxLength + length >
 			BT_HCI_USB_PACKET_MAX_SIZE + (pHci->BulkSerialization ? 1U : 0U))
 	{
-		(void)CFifoGet(pHci->pData->hRxFifo);
+		// Consume through UsbIntrf so freeing a slot also restarts withheld
+		// OUT DMA. Zero capacity consumes exactly one ZLP.
+		const int capacity = length < sizeof(pHci->AclRxBuffer) ?
+			length : sizeof(pHci->AclRxBuffer);
+		const int count = pHci->AclRxData(&pHci->pData->DevIntrf,
+			BtHciUsbAclRxBuffer(pHci), capacity);
 		BtHciUsbClearBulkRx(pHci);
-		return true;
+		return count == length;
 	}
 
 	const int count = pHci->AclRxData(&pHci->pData->DevIntrf,
@@ -1018,71 +1077,199 @@ static bool BtHciUsbDevStartTx(DevIntrf_t * const pDev, uint32_t DevAddr)
 	return true;
 }
 
+// TX FIFO blocks hold complete HCI packets without USB framing. The first
+// block stores total length and packet type; continuation blocks use only
+// Data. Nothing is released until the last transaction (including ZLP) has
+// completed, so an alternate switch can restart the whole HCI packet.
+static const UsbPkt_t *BtHciUsbTxHead(BtHciUsbDev_t *pHci)
+{
+	return reinterpret_cast<const UsbPkt_t *>(CFifoPeek(pHci->pData->hTxFifo));
+}
+
+static bool BtHciUsbHasQueuedType(BtHciUsbDev_t *pHci, BtHciUsbPacketType_t Type)
+{
+	CFifo_t cursor = *pHci->pData->hTxFifo;
+	const UsbPkt_t *pPacket;
+	while ((pPacket = reinterpret_cast<const UsbPkt_t *>(CFifoGet(&cursor))) != nullptr)
+	{
+		if (pPacket->Hdr.Reserved == Type)
+			return true;
+	}
+	return false;
+}
+
+static void BtHciUsbCopyTx(BtHciUsbDev_t *pHci, uint8_t *pDest,
+						 unsigned Offset, unsigned Length)
+{
+	// Traverse a read-only snapshot; only completion consumes the real FIFO.
+	// Callers exclude interrupts while inspecting and copying queued data.
+	CFifo_t cursor = *pHci->pData->hTxFifo;
+	while (Offset >= BT_HCI_USB_ACL_MAX_MPS)
+	{
+		(void)CFifoGet(&cursor);
+		Offset -= BT_HCI_USB_ACL_MAX_MPS;
+	}
+	while (Length != 0U)
+	{
+		const UsbPkt_t *pPacket = reinterpret_cast<const UsbPkt_t *>(CFifoGet(&cursor));
+		const unsigned room = BT_HCI_USB_ACL_MAX_MPS - Offset;
+		const unsigned count = Length < room ? Length : room;
+		memcpy(pDest, &pPacket->Data[Offset], count);
+		pDest += count;
+		Length -= count;
+		Offset = 0U;
+	}
+}
+
+static uint16_t BtHciUsbQueuedMps(BtHciUsbDev_t *pHci, uint16_t Type)
+{
+	if (!pHci->BulkSerialization)
+	{
+		if (Type == BT_HCI_USB_PACKET_EVENT)
+			return BtHciUsbEventMps(pHci);
+		if (Type == BT_HCI_USB_PACKET_SCO)
+			return BtHciUsbScoMps(pHci->ScoAlt);
+	}
+	return BtHciUsbAclMps(pHci);
+}
+
+static void BtHciUsbKickTx(BtHciUsbDev_t *pHci)
+{
+	const uint32_t state = DisableInterrupt();
+	if (!pHci->Configured)
+	{
+		EnableInterrupt(state);
+		return;
+	}
+
+	// The independent legacy event buffer survives a switch too. Send it
+	// first on bulk IN before resuming the queued packets in serialized mode.
+	if (pHci->EventTxActive && !pHci->EventTxBusy &&
+		(!pHci->BulkSerialization || !pHci->BulkTxBusy))
+		(void)BtHciUsbSendEventChunk(pHci);
+
+	const UsbPkt_t *pHead = BtHciUsbTxHead(pHci);
+	atomic_store_explicit(&pHci->pData->DevIntrf.bTxReady,
+		pHead == nullptr && !pHci->EventTxActive, memory_order_release);
+	if (pHead == nullptr || pHci->BulkTxBusy ||
+		(pHci->BulkSerialization && pHci->EventTxActive))
+	{
+		EnableInterrupt(state);
+		return;
+	}
+
+	const uint16_t type = pHead->Hdr.Reserved;
+	const bool event = !pHci->BulkSerialization && type == BT_HCI_USB_PACKET_EVENT;
+	const bool sco = !pHci->BulkSerialization && type == BT_HCI_USB_PACKET_SCO;
+	if ((event && pHci->EventTxActive) ||
+		(sco && (pHci->ScoAlt == 0U || pHci->ScoTxActive)) ||
+		(!pHci->BulkSerialization && type == BT_HCI_USB_PACKET_ISO))
+	{
+		// ISO has no legacy endpoint. Retain it until serialized mode returns;
+		// retained SCO waits for the host to select a synchronous alternate.
+		EnableInterrupt(state);
+		return;
+	}
+
+	const unsigned prefix = pHci->BulkSerialization ? 1U : 0U;
+	const unsigned remaining = pHead->Hdr.Length + prefix - pHci->BulkTxOffset;
+	const uint16_t mps = BtHciUsbQueuedMps(pHci, type);
+	pHci->BulkTxChunkLength = remaining < mps ? remaining : mps;
+	uint8_t *pBuffer = event ? BtHciUsbEventTxTransfer(pHci) :
+		BtHciUsbAclTxPacket(pHci)->Data;
+	const unsigned copied = prefix && pHci->BulkTxOffset == 0U ? 1U : 0U;
+	if (copied)
+		pBuffer[0] = (uint8_t)type;
+	BtHciUsbCopyTx(pHci, &pBuffer[copied],
+		pHci->BulkTxOffset + copied - prefix, pHci->BulkTxChunkLength - copied);
+	pHci->BulkTxBusy = sco ?
+		UsbIsoIntrfSendFrame(pHci->pScoIso, pBuffer, pHci->BulkTxChunkLength) :
+		UsbCtrlrEpSend(pHci->DevNo, event ? pHci->EventEpNo : pHci->AclEpNo,
+			pBuffer, pHci->BulkTxChunkLength);
+	EnableInterrupt(state);
+}
+
+static void BtHciUsbBulkComplete(UsbCtrlrEvtType_t Event,
+	uint16_t Length, void *pContext)
+{
+	BtHciUsbDev_t *pHci = static_cast<BtHciUsbDev_t *>(pContext);
+	if (!pHci->Configured ||
+		(Event != USB_CTRLR_EVT_XFER_CMPL && Event != USB_CTRLR_EVT_XFER_FAILED))
+		return;
+	if (pHci->BulkSerialization && pHci->EventTxBusy)
+	{
+		BtHciUsbEventComplete(Event, Length, pContext);
+		return;
+	}
+	if (!pHci->BulkTxBusy)
+		return;
+
+	const uint32_t state = DisableInterrupt();
+	const UsbPkt_t *pHead = BtHciUsbTxHead(pHci);
+	const uint16_t total = pHead->Hdr.Length;
+	const uint16_t type = pHead->Hdr.Reserved;
+	const bool failed = Event == USB_CTRLR_EVT_XFER_FAILED ||
+		Length != pHci->BulkTxChunkLength;
+	pHci->BulkTxBusy = false;
+	pHci->BulkTxOffset += Length;
+	const unsigned wireLength = total + (pHci->BulkSerialization ? 1U : 0U);
+	const bool sco = !pHci->BulkSerialization && type == BT_HCI_USB_PACKET_SCO;
+	if (!failed && (pHci->BulkTxOffset < wireLength ||
+		(!sco && Length == BtHciUsbQueuedMps(pHci, type))))
+	{
+		BtHciUsbKickTx(pHci);
+		EnableInterrupt(state);
+		return;
+	}
+
+	unsigned blocks = (total + BT_HCI_USB_ACL_MAX_MPS - 1U) / BT_HCI_USB_ACL_MAX_MPS;
+	while (blocks-- != 0U)
+		(void)CFifoGet(pHci->pData->hTxFifo);
+	pHci->BulkTxOffset = 0U;
+	pHci->BulkTxChunkLength = 0U;
+	BtHciUsbKickTx(pHci);
+	const bool empty = BtHciUsbTxHead(pHci) == nullptr;
+	EnableInterrupt(state);
+	if (failed || empty)
+		(void)BtHciUsbNotify(pHci, failed ? DEVINTRF_EVT_TX_TIMEOUT :
+			DEVINTRF_EVT_TX_FIFO_EMPTY, failed ? total : 0);
+}
+
 static int BtHciUsbQueueAcl(BtHciUsbDev_t *pHci, const uint8_t *pData,
 						   int DataLen)
 {
-	const uint16_t mps = pHci->pData->Mps;
-	const uint8_t prefix = pHci->BulkSerialization ? 1U : 0U;
-	const size_t wireLength = (size_t)DataLen + prefix;
-	const size_t packetCount = (wireLength + mps - 1U) / mps;
-	const bool needZlp = (wireLength % mps) == 0U;
-	const size_t blocks = packetCount + (needZlp ? 1U : 0U);
-
-	// The transport takes blocks one call at a time and does not know they
-	// form one ACL. On a blocking FIFO the whole packet set must fit before
-	// the first block goes in, or a later refusal leaves a partial ACL
-	// queued and the retry sends its head twice. Checked here, inside the
-	// TX lock the caller holds, so the room cannot change under it.
-	if (blocks > INT_MAX || pData == nullptr || DataLen <= 0 ||
-		(pHci->pData->bBlocking &&
-		 CFifoAvail(pHci->pData->hTxFifo) < (int)blocks))
+	const unsigned blocks = (DataLen + BT_HCI_USB_ACL_MAX_MPS - 1U) /
+		BT_HCI_USB_ACL_MAX_MPS;
+	// Whole-packet admission also applies to a nonblocking FIFO. Overwriting
+	// even one old block would corrupt an HCI packet already in flight.
+	if (CFifoAvail(pHci->pData->hTxFifo) < (int)blocks)
 	{
+		BtHciUsbKickTx(pHci);
 		return 0;
 	}
 
-	UsbPkt_t *pPacket = BtHciUsbAclTxPacket(pHci);
-	pPacket->Hdr.Reserved = 0U;
-	size_t wireOffset = 0U;
-	while (wireOffset < wireLength)
+	unsigned offset = 0U;
+	while (offset < (unsigned)DataLen)
 	{
-		const size_t remaining = wireLength - wireOffset;
-		const uint16_t length = (uint16_t)(remaining < mps ? remaining : mps);
-		pPacket->Hdr.Length = length;
-		uint16_t copied = 0U;
-		if (prefix != 0U && wireOffset == 0U)
-		{
-			pPacket->Data[0] = (uint8_t)pHci->TxType;
-			copied = 1U;
-		}
-		const size_t dataOffset = wireOffset + copied - prefix;
-		memcpy(&pPacket->Data[copied], &pData[dataOffset], length - copied);
-		if (pHci->AclTxData(&pHci->pData->DevIntrf,
-			reinterpret_cast<uint8_t *>(pPacket),
-			BT_HCI_USB_ACL_PKT_BLKSIZE) != (int)BT_HCI_USB_ACL_PKT_BLKSIZE)
-		{
-			return 0;
-		}
-		wireOffset += length;
+		UsbPkt_t *pPacket = reinterpret_cast<UsbPkt_t *>(CFifoPut(pHci->pData->hTxFifo));
+		pPacket->Hdr.Length = offset == 0U ? DataLen : 0U;
+		pPacket->Hdr.Reserved = offset == 0U ? pHci->TxType : BT_HCI_USB_PACKET_NONE;
+		const unsigned remaining = DataLen - offset;
+		const unsigned count = remaining < BT_HCI_USB_ACL_MAX_MPS ?
+			remaining : BT_HCI_USB_ACL_MAX_MPS;
+		memcpy(pPacket->Data, &pData[offset], count);
+		offset += count;
 	}
-
-	if (needZlp)
-	{
-		pPacket->Hdr.Length = 0U;
-		if (pHci->AclTxData(&pHci->pData->DevIntrf,
-			reinterpret_cast<uint8_t *>(pPacket),
-			BT_HCI_USB_ACL_PKT_BLKSIZE) != (int)BT_HCI_USB_ACL_PKT_BLKSIZE)
-		{
-			return 0;
-		}
-	}
-
+	BtHciUsbKickTx(pHci);
 	return DataLen;
 }
 
 static int BtHciUsbSendEvent(BtHciUsbDev_t *pHci, const uint8_t *pData,
 							int DataLen)
 {
-	if (pHci->EventTxActive)
+	// A newly submitted legacy event must not overtake older events retained
+	// in the serialized queue, even while an ACL occupies its head.
+	if (pHci->EventTxActive || BtHciUsbHasQueuedType(pHci, BT_HCI_USB_PACKET_EVENT))
 	{
 		return 0;
 	}
@@ -1107,6 +1294,7 @@ static int BtHciUsbSendSco(BtHciUsbDev_t *pHci, const uint8_t *pData,
 						  int DataLen)
 {
 	if (pHci->ScoAlt == 0U || pHci->ScoTxActive ||
+		BtHciUsbHasQueuedType(pHci, BT_HCI_USB_PACKET_SCO) ||
 		!UsbIsoIntrfTxReady(pHci->pScoIso))
 	{
 		return 0;
@@ -1124,7 +1312,7 @@ static int BtHciUsbSendSco(BtHciUsbDev_t *pHci, const uint8_t *pData,
 	return DataLen;
 }
 
-static int BtHciUsbDevTxData(DevIntrf_t * const pDev, const uint8_t *pData,
+static int BtHciUsbTxDataLocked(DevIntrf_t * const pDev, const uint8_t *pData,
 							 int DataLen)
 {
 	BtHciUsbDev_t *pHci = BtHciUsbFromDev(pDev);
@@ -1158,6 +1346,15 @@ static int BtHciUsbDevTxData(DevIntrf_t * const pDev, const uint8_t *pData,
 	}
 
 	return 0;
+}
+
+static int BtHciUsbDevTxData(DevIntrf_t * const pDev, const uint8_t *pData,
+							 int DataLen)
+{
+	const uint32_t state = DisableInterrupt();
+	const int count = BtHciUsbTxDataLocked(pDev, pData, DataLen);
+	EnableInterrupt(state);
+	return count;
 }
 
 static void BtHciUsbDevReset(DevIntrf_t * const pDev)
@@ -1508,6 +1705,10 @@ static bool BtHciUsbInitInternal(BtHciUsbDev_t * const pHci,
 	}
 	UsbCtrlrEpBind(pHci->DevNo, pHci->EventEpNo, true, false,
 		BtHciUsbEventComplete, pHci);
+	// HCI retains complete packets across alternate switches. The OUT path
+	// stays with UsbIntrf; the packet-aware IN completion belongs here.
+	UsbCtrlrEpBind(pHci->DevNo, pHci->AclEpNo, true, true,
+		BtHciUsbBulkComplete, pHci);
 
 	BtHciUsbInitDevIntrf(pHci);
 
@@ -1556,3 +1757,4 @@ void BtHciUsb::Reset()
 {
 	BtHciUsbReset(&vBtHciUsb);
 }
+

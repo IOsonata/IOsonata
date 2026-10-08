@@ -42,7 +42,9 @@ SOFTWARE.
 
 #include <string.h>
 
+#if __has_include("board.h")
 #include "board.h"
+#endif
 #ifdef MCUOSC
 McuOsc_t g_McuOsc = MCUOSC;
 #endif

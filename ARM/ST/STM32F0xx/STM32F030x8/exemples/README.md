@@ -94,8 +94,11 @@ TIM6 (virtual device 0) and TIM16 (virtual device 2) on STM32F0308-DISCO on
 TimerDemo uses UART retargeting; semihosting pauses can disturb measurements.
 If an external UART adapter uses a level shifter, power that circuit as well.
 
-UART RX/loopback, PRBS/SLIP data integrity, the remaining timer devices and
-software crypto examples still need their own hardware checks. The minimum
+The maintainer also confirmed UART TX DMA with the Release PRBS transmitter
+at approximately 81.0 kB/s at 1 Mbaud and zero drops in the supplied output
+([PR 77](https://github.com/IOsonata/IOsonata/pull/77)). UART RX/loopback,
+SLIP data integrity, the remaining timer devices and software crypto examples
+still need their own hardware checks. The minimum
 MCU port is complete; this does not mean every example has been run on board.
 
 The full GPIO pulse train includes PA13/PA14 (SWD) and oscillator pins. Use an
