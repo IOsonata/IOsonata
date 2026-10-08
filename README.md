@@ -8,7 +8,7 @@
 
 IOsonata is an open-source, bare-metal C++ hardware-abstraction layer (HAL), device-driver library and event-driven firmware framework for microcontrollers. It includes a Bluetooth LE host, a composable USB device stack, NVM storage, crypto, and sensor and display drivers.
 
-Hardware-validated targets are Nordic nRF52832 and nRF54L15. The repository also contains ports for other Nordic nRF52, nRF53, nRF54 and nRF91 devices, STM32, Renesas, Microchip SAM, NXP LPC and RISC-V MCUs (see [Supported Targets](docs/supported-targets.md)).
+MCU support varies by target and peripheral. The [MCU support matrix](docs/supported-targets.md) covers Nordic, STM32, Renesas, Microchip SAM, NXP LPC, Espressif and RP2040 projects, separating implemented core drivers, incomplete integration and recorded hardware results. Maintainer hardware evidence includes nRF52832, nRF52840, nRF54L15, nRF54LM20, SAM4LC8C, STM32F030x8 and STM32L476/L496/L4S9, with different tested functions on each.
 
 It uses real object-oriented design—encapsulation, inheritance, runtime polymorphism and object composition—while matching or exceeding the performance of tested C-only HALs and frameworks in published on-target benchmarks.
 
@@ -310,22 +310,24 @@ IOsonata is developed and validated on I-SYST reference hardware as well as vend
 | [IDAP-Link](https://www.i-syst.com/products/idap-link) | CMSIS-DAP SWD/JTAG probe with USB-UART bridge | Flashing, debugging and serial output |
 | CS-BLYST-06 / IBK-NRF52840 | nRF52832 / nRF52840 breakout boards | MCU bring-up and peripheral development |
 
-### Current hardware-validation baseline
+### Recorded hardware validation
 
-| MCU target | Reference hardware | Status |
-|---|---|---|
-| nRF52832 | IDK-BLYST-NANO, BLUEIO-TAG-EVIM, Nordic nRF52 DK | Hardware validated |
-| nRF54L15 | BLYSTL15, Nordic nRF54L15 DK | Hardware validated |
+| MCU target | Recorded coverage |
+|---|---|
+| nRF52832 | BLE, UART, sensor and low-power reference applications |
+| nRF54L15 | UART, Bluetooth and TaktOS benchmarks |
+| nRF52840 | Bare-metal and TaktOS composite USB endurance |
+| nRF54LM20 | Bare-metal and TaktOS high-speed composite USB endurance |
+| SAM4LC8C | Hardware validated on SAM4L8 Xplained Pro: startup, GPIO, UART, AST/TC timers, I2C, SPI, CDC, ISO and manual suspend/wake |
+| STM32F030x8 | Hardware validated on STM32F0308-DISCO; startup, GPIO, USART1, TIM6/TIM16 and UART DMA PRBS |
+| STM32L476 / STM32L496 / STM32L4S9 | Hardware validated and used in existing projects, confirmed by the maintainer |
 
-STM32L476, STM32L496 and STM32L4S9 meet the minimum MCU support requirement
-through their startup, GPIO, UART and LPTIM implementations. Their host regressions
-and ARM compilation checks are recorded; hardware validation remains pending.
-STM32F030x8 also implements startup, GPIO, UART and all seven peripheral timers;
-the maintainer confirmed startup, LED GPIO, USART1 UART retargeting, TIM6 and
-TIM16 on STM32F0308-DISCO. Its earlier TaktOS benchmark use is recorded
-separately. See the port notes for the remaining timer hardware checks.
-Other STM32 ports with missing minimum components remain incomplete. See
-[Supported Targets](docs/supported-targets.md) for the MCU list and limitations.
+These are function-specific maintainer results, not a claim that every
+peripheral or the latest commit has passed hardware validation.
+[Supported MCUs](docs/supported-targets.md) records core-driver coverage,
+project integration gaps, model/build evidence and hardware scope.
+[0.13 release notes](docs/releases/0.13.md) retain the detailed USB measurements.
+
 
 ---
 

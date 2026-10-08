@@ -3,8 +3,8 @@
 The SAM4L timer implementation provides the C and C++ Timer functions using
 AST and TC. Each timer has a fixed data structure and records the count at
 which each trigger should fire, as in the STM32F0 implementation.
-The maintainer has reported continuous trigger output on hardware for devices
-0, 1, 3, and 6. Testing of the remaining devices and timer operations is pending.
+The maintainer confirmed SAM4L hardware validation on SAM4L8 Xplained Pro
+(SAM4LC8C) on 2026-10-08. The recorded timer runs are listed below.
 
 | Virtual DevNo | Peripheral | Triggers | Default frequency |
 | --- | --- | --- | --- |
@@ -15,7 +15,28 @@ The maintainer has reported continuous trigger output on hardware for devices
 The previous TC initializer was a stub. Its two block-level indices have been
 replaced with six independent channel indices. `TimerGetHighFreqDevNo()` is 1.
 
-## Immediate hardware test
+## Recorded hardware tests
+
+| Device | Frequency request | Reported trigger periods |
+| --- | --- | --- |
+| 0 (AST) | Default | 99.609 ms, continuous output beyond 13 seconds |
+| 0 (AST) | 1 Hz | 4000 ms, repeated through 16 seconds |
+| 0 (AST) | 10 Hz | 500 ms, repeated through 10.5 seconds |
+| 1 (TC0 channel 0) | As configured in the maintainer's run | About 100, 1000 and 250 ms, continuing through 6.9 seconds |
+| 3 (TC0 channel 2) | 1 Hz | About 100, 1000 and 250 ms |
+| 6 (TC1 channel 2) | 100 Hz | About 100, 1000 and 250 ms, continuing through 2.7 seconds |
+
+AST selects 8 Hz for a 10 Hz request; its four-tick minimum gives 500 ms.
+TC selects the nearest available divided PBA rate for low frequency requests;
+at 48 MHz PBA the lowest rate is 375 kHz. The trigger periods remain
+100, 1000 and 250 ms. Initial measured intervals include trigger setup time.
+The maintainer confirmed the yellow LED0 on PC07 works after the pin correction.
+
+These logs cover continuous triggers. Separate logs for devices 2, 4 and 5,
+single triggers, pause/resume and reset are not recorded here. The register
+tests cover those operations; they do not replace hardware timing tests.
+
+## Running TimerDemo
 
 1. Build `ARM/Microchip/SAM4L/SAM4LCxC/lib/ioc` in IOcomposer, then the existing
    `ARM/Microchip/SAM4L/SAM4LCxC/exemples/TimerDemo/ioc` project in the same

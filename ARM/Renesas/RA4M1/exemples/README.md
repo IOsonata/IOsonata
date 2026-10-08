@@ -75,7 +75,7 @@ selector, separate example, or MCU-specific timer include is required.
 RA4M1 has one device-number space: 0-1 are low-frequency timers and 2-9 are
 high-frequency timers. The existing `TimerGetLowFreqDevCount()`,
 `TimerGetHighFreqDevCount()` and `TimerGetHighFreqDevNo()` report 2, 8 and 2.
-The hardware mapping stays in the MCU backend. Device 0 is the example default;
+The hardware mapping stays in the MCU implementation. Device 0 is the example default;
 changing only `TIMER_DEVNO` to 2 selects the first high-frequency device.
 `TimerGetMaxTrigger()` determines how many trigger channels the demo can use.
 Devices 0-1 expose one trigger in this port, so the remaining accepted periods
@@ -136,8 +136,8 @@ all ten logical device numbers (0-9) by overriding only `TIMER_DEVNO`, and check
 C API and C++ API selections, O0/Os/O2, and fatal AddressSanitizer/UndefinedBehaviorSanitizer. It exercises init-failure
 handling, one/four-trigger selection, trigger-failure cleanup, callback values,
 513-byte echo preservation under short/zero writes, and 1024 PRBS bytes with
-retries. Its API wrappers/CMSIS are **reduced test contracts**, not a production
-C++ wrapper or MCU execution test. The timer API double exercises device
+retries. It uses **simplified API wrappers and CMSIS definitions**. It does not test
+the production C++ wrapper or execute code on the MCU. The timer API double exercises device
 selection and callback handling, not hardware period limits; those are tested
 separately in `timer_model.cpp`. Blinky is linked unchanged and receives
 project/pin-map checks, not an execution test in this suite.

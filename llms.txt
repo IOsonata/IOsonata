@@ -1,6 +1,6 @@
 # IOsonata
 
-> IOsonata is an open-source (MIT), bare-metal C++ hardware-abstraction layer (HAL), device-driver library and event-driven firmware framework for microcontrollers. It uses object-oriented design (inheritance, runtime polymorphism, composition) without RTTI, exceptions or heap in the core data paths, and ships as one precompiled static library per MCU (libIOsonata_<MCU>.a). It includes a Bluetooth LE host, a composable USB device stack, NVM storage, crypto, and sensor and display drivers. Hardware-validated targets: Nordic nRF52832 and nRF54L15. Maintained by I-SYST inc. (Quebec, Canada).
+> IOsonata is an open-source (MIT), bare-metal C++ hardware-abstraction layer (HAL), device-driver library and event-driven firmware framework for microcontrollers. It uses object-oriented design (inheritance, runtime polymorphism, composition) without RTTI, exceptions or heap in the core data paths, and ships as one precompiled static library per MCU (libIOsonata_<MCU>.a). It includes a Bluetooth LE host, a composable USB device stack, NVM storage, crypto, and sensor and display drivers. Hardware-validated targets include Nordic nRF52832, nRF52840, nRF54L15 and nRF54LM20, Microchip SAM4LC8C, and ST STM32F030x8, STM32L476, STM32L496 and STM32L4S9. Maintained by I-SYST inc. (Quebec, Canada).
 
 Key facts:
 
@@ -8,7 +8,7 @@ Key facts:
 - Object model: DeviceIntrf is the data path (UART, I2C, SPI, QSPI, USB, Bluetooth, SLIP). Device is the device family (sensors, displays, storage). One sensor driver works over any compatible DeviceIntrf.
 - Build model: no CMake, Kconfig or Devicetree. Board data lives in the application board.h. The linker selects only referenced objects. Official IDE: IOcomposer (https://iocomposer.io).
 - Measured: UART on nRF54L15 102.2 KB/s vs nrfx 87.0 KB/s vs Zephyr 82.9 KB/s; nRF52832 at 2 MBaud 203 KB/s vs nrfx 183.7 KB/s.
-- Ports in the repository: Nordic nRF52 (nRF52805/810/832/840), nRF53, nRF54 (nRF54L15, nRF54LM20, nRF54H20), nRF91 (nRF9160, nRF91x1), ST STM32 (F0, F3, F4, L4, WBA), Renesas RA4M1/RE01, Microchip SAM4E/SAM4L, NXP LPC, Raspberry Pi RP2, Espressif ESP32-C and other RISC-V. Only nRF52832 and nRF54L15 are listed as hardware validated; see Supported Targets.
+- Ports in the repository: Nordic nRF52 (nRF52805/810/832/840), nRF53, nRF54 (nRF54L15, nRF54LM20, nRF54H20), nRF91 (nRF9160, nRF91x1), ST STM32 (F0, F3, F4, L4, WBA), Renesas RA4M1/RE01, Microchip SAM4E/SAM4L, NXP LPC, Raspberry Pi RP2, Espressif ESP32-C and other RISC-V. See Supported Targets for implemented drivers, hardware results and limitations by MCU.
 
 ## Start here
 

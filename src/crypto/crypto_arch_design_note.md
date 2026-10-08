@@ -9,19 +9,19 @@ test of whether the abstraction is right.
 
 - Crypto is modelled on the IOsonata **Device** base, not DeviceIntrf. A crypto
   engine is a controllable hardware entity with a lifecycle and capability
-  facets, not a byte transport.
-- Each capability facet base is a **working software implementation**, not a pure
-  interface. A hardware driver inherits the facet and **overrides only the
+  interfaces, not a byte transport.
+- Each capability interface base is a **working software implementation**, not a pure
+  interface. A hardware driver inherits the interface and **overrides only the
   operations it accelerates**; anything it does not override runs the software
   base. This is the AccelSensor / Timer idiom: a base with real method bodies,
   concrete drivers overriding what they need. The software base tree is, by
   itself, a complete software crypto library.
-- A real block **multiply-inherits** the facets it implements, with every facet
+- A real block **multiply-inherits** the interfaces it implements, with every interface
   `virtual public CryptoEngine` so the shared base subobject is single. This is
   the Sensor : virtual public Device diamond discipline, and it is what makes a
-  MAC facet's call to the cipher facet resolve to the hardware override on a
+  MAC interface's call to the cipher interface resolve to the hardware override on a
   combined block.
-- **No RTTI, no dynamic allocation.** Facet presence is a compile-time base, not
+- **No RTTI, no dynamic allocation.** Interface presence is a compile-time base, not
   a runtime query; there is no dynamic_cast and no capability bitmask to keep in
   sync. Per-instance and operation state is caller-provided static memory, the
   way AccelSensor holds vData and CFifo takes an external buffer.
@@ -33,10 +33,10 @@ test of whether the abstraction is right.
   objects** (setup / update / finish) placement-constructed in caller storage,
   with one-shot convenience wrappers for the single-block SMP style. This carries
   Wi-Fi and storage payloads and retires the ad-hoc pOpCtx async patch.
-- The existing **Cryptor** composition layer stays, holding typed facet base
+- The existing **Cryptor** composition layer stays, holding typed interface base
   pointers and remaining the owner of a shared hardware lock. With software bases
   present, most single-engine use cases need no Cryptor at all: the engine object
-  already answers every facet, in hardware where it can and software where it
+  already answers every interface, in hardware where it can and software where it
   cannot.
 
 ## 2. Why Device, not DeviceIntrf
@@ -46,21 +46,21 @@ retry counts, Tx-ready flags. Its whole vocabulary is moving opaque bytes across
 a wire. Crypto does not move bytes across a wire; it transforms data under a key.
 Every DeviceIntrf verb would be dead weight or metaphor.
 
-Device is the right base because each of its facets maps to a real crypto need:
+Device is the right base because each of its interfaces maps to a real crypto need:
 
-| Device facet                         | Crypto need it serves                                   |
+| Device interface                         | Crypto need it serves                                   |
 | ------------------------------------ | ------------------------------------------------------- |
 | Enable / Disable / PowerOff          | Wrapper power, accelerator enable, low-power gate        |
 | Reset / Valid()                      | Bring-up, self-test result, fault recovery               |
 | EvtHandler (DEV_EVT)                  | Async completion for offload/secure-service engines      |
 | Holds a DeviceIntrf*, is not one      | Offload proxy holds the channel to the far side          |
-| Virtual-inheritance capability facets | Cipher/Mac/Hash/KeyAgree/Sign/Kdf as separate interfaces |
+| Virtual-inheritance capability interfaces | Cipher/Mac/Hash/KeyAgree/Sign/Kdf as separate interfaces |
 
 The last two are the decisive ones. Device holds an interface (Interface(pIntrf))
 rather than being one, which is exactly how a secure-domain or HCI-offload crypto
 engine should hold the channel to the real engine: the operation crosses the
 boundary, the key does not. And Sensor : virtual public Device, with a combined
-part multiply-inheriting several sensor facets, is the precedent for a crypto
+part multiply-inheriting several sensor interfaces, is the precedent for a crypto
 block implementing several primitive interfaces at once.
 
 ## 3. The object model
@@ -143,10 +143,10 @@ is not forced through the streaming object.
 
 ## 4. The engine tree
 
-The facet method bodies are software implementations. `= 0` appears nowhere in a
-facet; every method runs. A hardware driver overrides the ones it accelerates.
+The interface method bodies are software implementations. `= 0` appears nowhere in an
+interface; every method runs. A hardware driver overrides the ones it accelerates.
 
-Key idea, made concrete: a MAC facet computes CMAC by calling the cipher facet's
+Key idea, made concrete: a MAC interface computes CMAC by calling the cipher interface's
 AES block. Because that call is a virtual method on the same object, a combined
 hardware block that overrode the cipher gets hardware AES inside its inherited
 software CMAC, with no extra wiring. This delegation already exists today in C
@@ -162,7 +162,7 @@ public:
     // Enable/Disable/Reset/PowerOff/EvtHandler/Interface inherited from Device.
 };
 
-// --- Capability facets: each base is a WORKING SOFTWARE IMPLEMENTATION ---
+// --- Capability interfaces: each base is a WORKING SOFTWARE IMPLEMENTATION ---
 
 class CipherEngine : virtual public CryptoEngine {
 public:
@@ -187,7 +187,7 @@ public:
 
 class AeadEngine : virtual public CryptoEngine {
 public:
-    // Software CCM/GCM over the cipher facet; ChaCha20-Poly1305 later. HW override
+    // Software CCM/GCM over the cipher interface; ChaCha20-Poly1305 later. HW override
     // where a native AEAD exists.
     virtual CRYPTO_STATUS Aead(int Alg, int bEncrypt, const CryptoKey &Key,
                                const uint8_t *pNonce, size_t NonceLen,
@@ -227,7 +227,7 @@ public:
 class KdfEngine : virtual public CryptoEngine {
 public:
     // Software HKDF/PBKDF2/WPA-PRF/LoRa-block, built over the mac and cipher
-    // facets. Rarely a HW override; the value is the software algorithm.
+    // interfaces. Rarely a HW override; the value is the software algorithm.
     virtual CRYPTO_STATUS Derive(int Alg, const CryptoKey &InKey,
                                  const uint8_t *pInfo, size_t InfoLen,
                                  const uint8_t *pSalt, size_t SaltLen,
@@ -246,7 +246,7 @@ public:
 ```
 
 The base tree above is a complete software crypto library on its own. Hardware
-drivers multiply-inherit their facets and override only the accelerated paths,
+drivers multiply-inherit their interfaces and override only the accelerated paths,
 exactly like a combined sensor part inherits several sensor interfaces and
 implements the ones its silicon provides:
 
@@ -261,7 +261,7 @@ class CryptoMaster : public CipherEngine, public AeadEngine,
     // Mac/Aead not overridden -> inherited software CMAC/CCM run over HW Cipher.
 };
 
-// Silex BA414EP public-key core: overrides the PK facets.
+// Silex BA414EP public-key core: overrides the PK interfaces.
 class Ba414ep : public KeyAgreeEngine, public SignEngine {
     CRYPTO_STATUS KeyGen(...) override;   // BA414EP point mult
     CRYPTO_STATUS Agree(...)  override;
@@ -269,28 +269,28 @@ class Ba414ep : public KeyAgreeEngine, public SignEngine {
     CRYPTO_STATUS Verify(...) override;
 };
 
-// A pure software engine is just the facet bases with nothing overridden:
+// A pure software engine is just the interface bases with nothing overridden:
 class CryptoSoft : public CipherEngine, public MacEngine, public AeadEngine,
                    public HashEngine,  public KeyAgreeEngine, public SignEngine,
                    public KdfEngine,   public RngEngine {};
 ```
 
-virtual public on every facet keeps the single CryptoEngine (and Device)
+virtual public on every interface keeps the single CryptoEngine (and Device)
 subobject, so this->Cipher inside inherited software CMAC resolves to CryptoMaster's
 hardware override. This is the Sensor : virtual public Device discipline.
 
 ## 4a. Where the software bodies live (own vs delegate)
 
 Rule: a body delegates to a free function when that function is useful to other
-callers; otherwise the body lives in the facet. Applied to what exists today:
+callers; otherwise the body lives in the interface. Applied to what exists today:
 
 - **KeyAgree / Sign -> DELEGATE** to crypto_p256.cpp. Those P256* helpers are
   already free functions reused by both the CC3xx and CRACEN engines, so the
-  software facet bodies call them rather than re-implement.
+  software interface bodies call them rather than re-implement.
 - **Mac / Aead (CMAC, CCM, GCM) -> DELEGATE** to the existing CryptoCmac /
   CryptoCcm* / CryptoGcm* free functions in crypto.cpp. They are already exported
   and already dispatch AES through a virtual/pointer indirection, so they port
-  directly to calling the Cipher facet.
+  directly to calling the Cipher interface.
 - **Cipher (software AES block) and Hash (software SHA-256) -> OWN BODY.** These
   live today as static functions inside crypto.cpp (Sha256Block/Init/Update/Final,
   and the software AES core), reachable by nothing outside that file. There is no
@@ -302,14 +302,14 @@ callers; otherwise the body lives in the facet. Applied to what exists today:
 
 ## 5. Composition: Cryptor and the target port
 
-With software bases present, a single engine object already answers every facet,
+With software bases present, a single engine object already answers every interface,
 so many use cases need no Cryptor: pass the engine (for example a CryptoSoft, or a
 CryptoMaster) straight to the consumer and it gets hardware where the silicon has
 it and software everywhere else.
 
 Cryptor remains for the case that motivated it: composing two separate hardware
-cores into one handle. On nRF54 the symmetric facets are on CryptoMaster and the
-public-key facets are on Ba414ep; a Cryptor holds a typed pointer per facet
+cores into one handle. On nRF54 the symmetric interfaces are on CryptoMaster and the
+public-key interfaces are on Ba414ep; a Cryptor holds a typed pointer per interface
 (CipherEngine*, MacEngine*, KeyAgreeEngine*, ...) and forwards. Routing is by
 typed base pointer set at init, not dynamic_cast and not a capability bitmask, so
 there is no RTTI and no Cap/dispatch drift. Cryptor also owns the shared hardware
@@ -340,15 +340,15 @@ Needs: AES-128-ECB (toolbox e), CMAC (f4/f5/f6), P-256 ECDH.
 CryptoKey tk{ CRYPTO_KEY_AES_128, CRYPTO_KEY_LOC_PLAIN, CRYPTO_KEY_USE_ENCRYPT,
               {.Plain={t, 16}} };
 
-// f5 derives the MacKey/LTK: AES-CMAC-based. One Mac facet call.
+// f5 derives the MacKey/LTK: AES-CMAC-based. One Mac interface call.
 crypto.Mac(CRYPTO_MAC_CMAC, tk, in, in_len, mac, 16);
 
-// DHKey: KeyAgree facet, private scalar kept in the engine's KeyCtx.
+// DHKey: KeyAgree interface, private scalar kept in the engine's KeyCtx.
 crypto.KeyGen(CRYPTO_CURVE_P256, keyCtx, localPub);      // on connect
 crypto.Agree(CRYPTO_CURVE_P256, keyCtx, peerPub, dhKey); // on peer key
 ```
 
-Facets exercised: CipherEngine, MacEngine, KeyAgreeEngine. Same set on CryptoMaster
+Interfaces exercised: CipherEngine, MacEngine, KeyAgreeEngine. Same set on CryptoMaster
 + BA414EP (hardware) or CryptoSoftAes + CryptoUecc (software), no consumer change.
 
 ### 6.2 LoRaWAN 1.0.x end device
@@ -374,7 +374,7 @@ CryptoKey app{ CRYPTO_KEY_AES_128, CRYPTO_KEY_LOC_PLAIN,
 crypto.Cipher(CRYPTO_CIPHER_CTR, 1, app, a_i, 16, payload, len, out);
 ```
 
-Facets exercised: KdfEngine, MacEngine, CipherEngine. Note the KdfEngine derives a
+Interfaces exercised: KdfEngine, MacEngine, CipherEngine. Note the KdfEngine derives a
 CryptoKey rather than the caller hand-rolling the block, and the same MacEngine
 (CMAC) serves both SMP and LoRaWAN. No new interface was needed for LoRaWAN.
 
@@ -400,10 +400,10 @@ crypto.Aead(CRYPTO_AEAD_CCM, 1, tk, nonce, 13, aad, aadLen,
             frame, frameLen, out, mic, 8);
 ```
 
-Facets exercised: KdfEngine (PBKDF2 and PRF), MacEngine (HMAC), AeadEngine (CCM/
+Interfaces exercised: KdfEngine (PBKDF2 and PRF), MacEngine (HMAC), AeadEngine (CCM/
 GCM). WPA3 SAE adds KeyAgreeEngine (the finite-field/EC Dragonfly exchange) and
-more HMAC; both facets already exist. WPA3-192 raises AES to 256, SHA to 384, and
-the curve to P-384; all three are the same facets with a different Alg/type
+more HMAC; both interfaces already exist. WPA3-192 raises AES to 256, SHA to 384, and
+the curve to P-384; all three are the same interfaces with a different Alg/type
 parameter, which is why the interfaces are parameterized by algorithm rather than
 baked to 128/P-256.
 
@@ -411,7 +411,7 @@ baked to 128/P-256.
 
 - One primitive set, small: Cipher, Aead, Mac, Hash, KeyAgree, Sign, Kdf, Rng.
   No consumer needed an interface outside this set.
-- The same facet serves multiple consumers (CMAC in SMP and LoRaWAN; CCM in Wi-Fi
+- The same interface serves multiple consumers (CMAC in SMP and LoRaWAN; CCM in Wi-Fi
   and BLE CCM links; HMAC in Wi-Fi and any HKDF user).
 - Key derivation is first class and pays off immediately for LoRaWAN and Wi-Fi;
   SMP simply does not use KdfEngine.
@@ -426,23 +426,23 @@ baked to 128/P-256.
 Implement only what BLE needs, on the full tree, so the shape is proven before
 breadth is added:
 
-- CryptoEngine base + CipherEngine, MacEngine, KeyAgreeEngine facets.
+- CryptoEngine base + CipherEngine, MacEngine, KeyAgreeEngine interfaces.
 - CryptoKey with LOC_PLAIN only.
 - CryptoMaster (Cipher via BA411e, Mac via CMAC-over-ECB) and Ba414ep (KeyAgree
   P-256) for nRF54; CryptoSoftAes + CryptoUecc software fallbacks.
 - One-shot Cipher/Mac; streaming CipherOp/AeadOp/MacOp declared but implemented as
   the breadth work for LoRaWAN/Wi-Fi lands.
-- Cryptor routing by facet.
+- Cryptor routing by interface.
 
 Deferred, interface already shaped for them: AeadEngine (CCM/GCM), HashEngine,
-KdfEngine (PBKDF2/HKDF/WPA-PRF/LoRa-block), SignEngine, RngEngine as a facet,
+KdfEngine (PBKDF2/HKDF/WPA-PRF/LoRa-block), SignEngine, RngEngine as an interface,
 LOC_SLOT/LOC_OPAQUE keys.
 
 ## 9. Resolved decisions
 
 Resolved by the model choices:
 
-- **Virtual base**: yes. Every facet is virtual public CryptoEngine, matching
+- **Virtual base**: yes. Every interface is virtual public CryptoEngine, matching
   Sensor : virtual public Device, so a combined block has one shared subobject and
   inherited software algorithms call into the hardware overrides.
 - **Dispatch**: typed base pointers, no RTTI, no dynamic_cast, no capability
@@ -463,19 +463,19 @@ Resolved by the model choices:
   union already reserves LOC_SLOT/LOC_OPAQUE, so adding a secure element later
   needs a new engine that accepts those locations, not an interface change. A
   KeyStore, if ever wanted, layers on top as the producer of LOC_OPAQUE keys
-  without touching any facet signature.
+  without touching any interface signature.
 
-- **RNG: an RngEngine facet whose base is a software PRNG, overridden by a
+- **RNG: an RngEngine interface whose base is a software PRNG, overridden by a
   hardware DRBG on MCUs that have an entropy source.** RngEngine joins the object
-  model like every other facet, so a consumer cannot tell the source apart at the
+  model like every other interface, so a consumer cannot tell the source apart at the
   call site. The honest split: software with no entropy can only be a PRNG
   (deterministic, no security claim), fine for statistical use; a DRBG is a real
   security generator only because the silicon supplies entropy, so it lives in the
   target-MCU derived class that overrides the PRNG base. No hardware entropy means
   no DRBG: the derived class is not instantiated and the PRNG base stands. The old
-  RngGet was a Nordic-usage wrapper and is retired into this facet under standard
+  RngGet was a Nordic-usage wrapper and is retired into this interface under standard
   IOsonata naming; current direct callers (crypto_p256, crypto_uecc, crypto_mbedtls)
-  move to the RngEngine facet. Security-critical generation (P-256 key generation
+  move to the RngEngine interface. Security-critical generation (P-256 key generation
   and the countermeasure factors) must resolve to the DRBG override; on an MCU
   with no entropy source that operation must fail rather than fall back to the
   PRNG base, since a PRNG-generated private scalar is a broken key.
