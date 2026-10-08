@@ -1,9 +1,9 @@
 # SAM4L timers
 
-The SAM4L backend implements the existing generic C/C++ Timer API. It follows
-the STM32F0 port's static ownership and absolute-deadline trigger pattern.
-No heap, SysTick allocation, pin configuration, or system clock changes are used.
-Hardware validation is pending.
+The SAM4L timer implementation provides the C and C++ Timer functions using
+AST and TC. Each timer has a fixed data structure and records the count at
+which each trigger should fire, as in the STM32F0 implementation.
+The maintainer has confirmed initialization; timer timing tests are in progress.
 
 | Virtual DevNo | Peripheral | Triggers | Default frequency |
 | --- | --- | --- | --- |
@@ -40,22 +40,22 @@ retargeted to USART1 at 115200 baud; a semihosting console is not required.
 The debugger variables and LEDs remain available.
 Do not use debugger halts as a timing measurement: AST can continue while halted.
 AST also survives debugger, external and watchdog resets (datasheet table 10-12).
-Initialization reclaims that retained hardware state when there is no live Timer
-owner or enabled AST alarm/overflow NVIC delivery; CR.EN alone is not an ownership
-check. The regression test starts with AST already enabled and stale count/flags.
+Initialization resets AST when no Timer object is using it and its alarm and
+overflow interrupts are disabled in the NVIC. CR.EN can remain set after reset
+and does not, by itself, mean that another object is using AST. The regression
+test starts with AST enabled and count and status registers left from a prior run.
 
 If `g_TimerInitOk` is false, inspect `g_Sam4lTimerInitStage` before another Init:
-1 = invalid configuration, 2 = software owner conflict, 3 = clock source not
+1 = invalid configuration, 2 = Timer object already in use, 3 = clock source not
 ready/matching, 4 = no usable frequency, 5 = initial AST synchronization timeout,
 6 = active IRQ/peripheral conflict, 7 = hardware setup failure, 8 = reset failure,
-9 = start failure. Zero means initialization succeeded. This is target-local
-debugger state; the generic Timer API is unchanged.
+9 = start failure. Zero means initialization succeeded. This variable is specific to SAM4L.
 
 ## Behavior and limits
 
 - Init starts the timer. Disable pauses it; Enable resumes without resetting.
   Reset restarts elapsed ticks and active trigger phases. SetFrequency resets
-  and starts the timer, preserving active trigger periods after quantization.
+  and starts the timer, rounding active trigger periods to the new tick interval.
 - AST uses the system's already-running CLK32 source. DEFAULT accepts that source;
   LFRC and LFXTAL require the matching selected source. It does not switch the
   shared oscillator. Its prescaler divides by `2^(PSEL+1)`; the default 32.768 kHz
@@ -65,13 +65,14 @@ debugger state; the generic Timer API is unchanged.
   leaves sibling channels and block synchronization registers untouched.
 - Single and continuous triggers accept 4 through UINT32_MAX ticks. Longer
   periods than the hardware counter cycle are supported. Continuous triggers
-  retain phase and coalesce missed periods into one callback. Trigger callbacks
-  take precedence over the device event handler, matching the generic contract.
+  keep their original schedule. If several periods pass before the interrupt is
+  handled, one callback reports them. When a trigger callback is supplied, it
+  is called instead of the device event handler.
 - Counters are extended to 64 bits. Interrupts or count reads must service each
   hardware wrap: TC every `65536 / actual_frequency` seconds (about 174.76 ms at
   48 MHz PBA / 128), AST every `2^32 / actual_frequency` seconds. Multiple wraps
   while interrupts are masked cannot be recovered from a single status flag.
-- TC requires the PBA clock while running; no deep-sleep clock policy is added.
+- TC requires the PBA clock while running.
   AST backup-domain wake and restart behavior is not implemented here.
 - External capture and per-tick interrupts are unsupported and rejected.
   Reinitializing a live handle, moving it to another timer, or taking another
@@ -82,7 +83,7 @@ debugger state; the generic Timer API is unchanged.
 Register sequences follow ATSAM4L8/L4/L2 datasheet 42023H (November 2016),
 sections 10.7.5, 19.5/19.6, and 30.6/30.9/30.10. AST uses synchronized W1C
 acknowledgement; TC status reads account for rollover and preserve due triggers
-through absolute deadlines.
+by comparing the current count with each trigger's scheduled count.
 
 ## Reproducible checks
 
@@ -96,8 +97,9 @@ python3 tests/sam4l/timer_build_test.py --toolchain-prefix arm-none-eabi-
 ```
 
 The register model compiles all three production sources and checks all seven
-channels, ownership, clock division, pause/resume, single/continuous triggers,
-long deadlines, missed-period coalescing, callback cancellation/reset, rollover
+channels, attempts to use a timer twice, clock division, pause/resume,
+single/continuous triggers, long periods, late interrupts, callback
+cancellation/reset, rollover
 races, read-to-clear/W1C acknowledgement, frequency changes, and a stuck AST
 synchronization flag. It does not simulate electrical clock timing.
 

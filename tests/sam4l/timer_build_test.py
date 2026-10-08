@@ -2,7 +2,7 @@
 """Compile/link the existing SAM4LCxC TimerDemo for every virtual timer.
 
 Uses the real vendor headers, startup, vectors and linker script. This is a
-source-closure check, not an IOcomposer invocation or hardware validation.
+compile and link check. It does not run IOcomposer or test hardware.
 """
 import argparse
 from pathlib import Path

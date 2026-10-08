@@ -244,7 +244,7 @@ bool TimerInit(TimerDev_t *t, const TimerCfg_t *cfg)
 	uint32_t state = DisableInterrupt();
 	auto &d = g_Sam4lTimerData[cfg->DevNo];
 	g_Sam4lTimerInitStage = SAM4L_TIMER_INIT_OWNER;
-	// Match existing static-owner ports: a live handle cannot move or be stolen.
+	// Reject a handle that is already assigned to a timer.
 	for (auto &entry : g_Sam4lTimerData) if (entry.Timer == t) { EnableInterrupt(state); return false; }
 	if (d.Timer) { EnableInterrupt(state); return false; }
 	g_Sam4lTimerInitStage = SAM4L_TIMER_INIT_SOURCE;
@@ -271,8 +271,8 @@ bool TimerInit(TimerDev_t *t, const TimerCfg_t *cfg)
 	}
 	g_Sam4lTimerInitStage = SAM4L_TIMER_INIT_IRQ;
 	// AST survives every reset except POR (42023H table 10-12). CR.EN
-	// alone therefore does not imply a live owner. With no software owner
-	// or enabled AST NVIC delivery, Setup/Reset may reclaim retained state.
+	// alone does not mean another Timer object is using AST. If no object
+	// uses it and its NVIC interrupts are disabled, reset its old state.
 	// TC is in the core reset domain; a running channel remains a conflict.
 	if ((NVIC->ISER[(unsigned)d.Irq / 32] & (1UL << ((unsigned)d.Irq % 32))) ||
 		(!d.TcReg &&

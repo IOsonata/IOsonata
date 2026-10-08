@@ -193,7 +193,7 @@ int main() {
 	t.Reset(&t);assert(t.EnableTrigger(&t,0,10000000,TIMER_TRIG_TYPE_SINGLE,nullptr,nullptr));
 	assert(t.EnableTrigger(&t,1,10000000,TIMER_TRIG_TYPE_SINGLE,nullptr,nullptr));
 	resetInCallback=true;Advance(1,15000);resetInCallback=false;assert(events[1][1]==0);
-	// Synchronization fault is bounded and makes enable fail closed.
+	// A stuck synchronization flag must time out and make Enable return false.
 	ast.AST_SR.value|=AST_SR_BUSY;a.Reset(&a);assert(!a.Enable(&a));
 	puts("SAM4L timer register-model tests passed");
 }
