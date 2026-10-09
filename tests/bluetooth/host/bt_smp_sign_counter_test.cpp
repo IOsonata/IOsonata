@@ -109,6 +109,15 @@ void AddBond()
 	BtSmpBondAdd(kConnHdl, &s_Keys);
 }
 
+void SetPeerAddr(uint8_t Base)
+{
+	s_Peer.Conn.PeerAddrType = BTADDR_TYPE_PUBLIC;
+	for (size_t i = 0; i < sizeof(s_Peer.Conn.PeerAddr); ++i)
+	{
+		s_Peer.Conn.PeerAddr[i] = static_cast<uint8_t>(Base + i);
+	}
+}
+
 bool VerifyCounter(uint32_t Counter, bool ValidMac = true)
 {
 	uint8_t msg[12] = {
@@ -303,7 +312,7 @@ void TestResolvedIdentityLookup()
 void TestRepeatedAttemptBackoff()
 {
 	ResetHarness(true);
-	BtSmpPairingAttemptSucceeded(kConnHdl);
+	SetPeerAddr(0x90);
 
 	BT_CHECK(s_Test, BtSmpPairingAttemptAllowed(kConnHdl, 100U));
 	BtSmpPairingAttemptFailed(kConnHdl, 100U);
@@ -316,30 +325,65 @@ void TestRepeatedAttemptBackoff()
 
 	BtSmpPairingAttemptFailed(kConnHdl, 4000U);
 	BT_CHECK(s_Test, !BtSmpPairingAttemptAllowed(kConnHdl, 7999U));
+
+	// A success is not a SIG-defined reset. The penalty decreases only through
+	// the quiet-time exponential decay.
 	BtSmpPairingAttemptSucceeded(kConnHdl);
-	BT_CHECK(s_Test, BtSmpPairingAttemptAllowed(kConnHdl, 4001U));
+	BT_CHECK(s_Test, !BtSmpPairingAttemptAllowed(kConnHdl, 4001U));
+	BT_CHECK(s_Test, BtSmpPairingAttemptAllowed(kConnHdl, 8000U));
+
+	// The next failure therefore uses the next exponential interval (8 s).
+	BtSmpPairingAttemptFailed(kConnHdl, 8000U);
+	BT_CHECK(s_Test, !BtSmpPairingAttemptAllowed(kConnHdl, 15999U));
+	BT_CHECK(s_Test, BtSmpPairingAttemptAllowed(kConnHdl, 16000U));
 }
 
 void TestRepeatedAttemptDecay()
 {
 	ResetHarness(true);
-	BtSmpPairingAttemptSucceeded(kConnHdl);
+	SetPeerAddr(0xA0);
 
-	BtSmpPairingAttemptFailed(kConnHdl, 100U);
-	BtSmpPairingAttemptFailed(kConnHdl, 1100U);
+	const uint32_t base = 100000U;
+	BtSmpPairingAttemptFailed(kConnHdl, base);
+	BtSmpPairingAttemptFailed(kConnHdl, base + 1000U);
 
-	uint32_t quiet = 1100U + BT_SMP_REPEAT_DECAY_MS;
+	uint32_t quiet = base + 1000U + BT_SMP_REPEAT_DECAY_MS;
 	BT_CHECK(s_Test, BtSmpPairingAttemptAllowed(kConnHdl, quiet));
 	BtSmpPairingAttemptFailed(kConnHdl, quiet);
 	BT_CHECK(s_Test, !BtSmpPairingAttemptAllowed(kConnHdl, quiet + 1999U));
 	BT_CHECK(s_Test, BtSmpPairingAttemptAllowed(kConnHdl, quiet + 2000U));
 
+}
+
+void TestRepeatedAttemptSuccessPreservesIdentityPenalty()
+{
+	ResetHarness(true);
+
+	const uint8_t raw[6] = { 0x21, 0x32, 0x43, 0x54, 0x65, 0x46 };
+	const uint8_t identity[6] = { 0x31, 0x42, 0x53, 0x64, 0x75, 0xC6 };
+	s_Peer.Conn.PeerAddrType = BTADDR_TYPE_RAND;
+	std::memcpy(s_Peer.Conn.PeerAddr, raw, sizeof(raw));
+
+	const uint32_t base = 3U * BT_SMP_REPEAT_DECAY_MS + 300000U;
+	BtSmpPairingAttemptFailed(kConnHdl, base);
+
+	// Pairing then reveals a stable identity and the bond is installed before
+	// the success notification. The one-second penalty must migrate, not vanish.
+	s_Keys.IdAddrType = BTADDR_TYPE_RAND;
+	std::memcpy(s_Keys.IdAddr, identity, sizeof(identity));
+	AddBond();
 	BtSmpPairingAttemptSucceeded(kConnHdl);
+
+	s_Peer.Conn.PeerAddrType = BTADDR_TYPE_RANDOM_STATIC;
+	std::memcpy(s_Peer.Conn.PeerAddr, identity, sizeof(identity));
+	BT_CHECK(s_Test, !BtSmpPairingAttemptAllowed(kConnHdl, base + 500U));
+	BT_CHECK(s_Test, BtSmpPairingAttemptAllowed(kConnHdl, base + 1000U));
 }
 
 void TestRepeatedAttemptSaturationPreservesPenalty()
 {
 	ResetHarness(true);
+	const uint32_t base = 4U * BT_SMP_REPEAT_DECAY_MS + 400000U;
 
 	uint8_t firstAddr[6] = {};
 	for (unsigned n = 0; n < BT_SMP_REPEAT_TRACK_MAX; ++n)
@@ -352,8 +396,8 @@ void TestRepeatedAttemptSaturationPreservesPenalty()
 		{
 			std::memcpy(firstAddr, s_Peer.Conn.PeerAddr, sizeof(firstAddr));
 		}
-		BT_CHECK(s_Test, BtSmpPairingAttemptAllowed(kConnHdl, 100U + n));
-		BtSmpPairingAttemptFailed(kConnHdl, 100U + n);
+		BT_CHECK(s_Test, BtSmpPairingAttemptAllowed(kConnHdl, base + n));
+		BtSmpPairingAttemptFailed(kConnHdl, base + n);
 	}
 
 	// All exact slots are still inside their one-second wait. An untracked
@@ -363,11 +407,11 @@ void TestRepeatedAttemptSaturationPreservesPenalty()
 	{
 		s_Peer.Conn.PeerAddr[i] = static_cast<uint8_t>(0xD0U + i);
 	}
-	BT_CHECK(s_Test, BtSmpPairingAttemptAllowed(kConnHdl, 500U));
-	BtSmpPairingAttemptFailed(kConnHdl, 500U);
+	BT_CHECK(s_Test, BtSmpPairingAttemptAllowed(kConnHdl, base + 400U));
+	BtSmpPairingAttemptFailed(kConnHdl, base + 400U);
 
 	std::memcpy(s_Peer.Conn.PeerAddr, firstAddr, sizeof(firstAddr));
-	BT_CHECK(s_Test, !BtSmpPairingAttemptAllowed(kConnHdl, 600U));
+	BT_CHECK(s_Test, !BtSmpPairingAttemptAllowed(kConnHdl, base + 500U));
 
 	// A second untracked identity is also held briefly while the exact table is
 	// saturated. This is fail-closed behavior under an address-churn attack.
@@ -375,8 +419,8 @@ void TestRepeatedAttemptSaturationPreservesPenalty()
 	{
 		s_Peer.Conn.PeerAddr[i] = static_cast<uint8_t>(0xE0U + i);
 	}
-	BT_CHECK(s_Test, !BtSmpPairingAttemptAllowed(kConnHdl, 600U));
-	BT_CHECK(s_Test, BtSmpPairingAttemptAllowed(kConnHdl, 1500U));
+	BT_CHECK(s_Test, !BtSmpPairingAttemptAllowed(kConnHdl, base + 500U));
+	BT_CHECK(s_Test, BtSmpPairingAttemptAllowed(kConnHdl, base + 1400U));
 }
 
 } // namespace
@@ -468,6 +512,8 @@ int main()
 			   TestRepeatedAttemptBackoff);
 	s_Test.Run("repeated-attempt penalty decays",
 			   TestRepeatedAttemptDecay);
+	s_Test.Run("successful pairing preserves identity-scoped penalty",
+			   TestRepeatedAttemptSuccessPreservesIdentityPenalty);
 	s_Test.Run("repeated-attempt saturation preserves active penalties",
 			   TestRepeatedAttemptSaturationPreservesPenalty);
 	return s_Test.Finish();

@@ -442,7 +442,11 @@ bool BtSmpPairingAttemptAllowed(uint16_t ConnHdl, uint32_t Now);
 /** Record a failed pairing and start or exponentially increase its wait. */
 void BtSmpPairingAttemptFailed(uint16_t ConnHdl, uint32_t Now);
 
-/** Clear the claimant's penalty after a successful pairing. */
+/**
+ * A successful pairing may reveal a stable peer identity. Migrate any
+ * raw-address attempt history to that identity, but do not reset the penalty:
+ * Core Vol 3 Part H 2.3.6 decreases it only through failure-free time.
+ */
 void BtSmpPairingAttemptSucceeded(uint16_t ConnHdl);
 
 /**

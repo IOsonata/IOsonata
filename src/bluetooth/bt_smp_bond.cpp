@@ -1007,25 +1007,51 @@ void BtSmpPairingAttemptSucceeded(uint16_t ConnHdl)
 	{
 		return;
 	}
+
 	uint8_t rawType = type;
 	uint8_t rawAddr[6];
 	memcpy(rawAddr, addr, 6);
 
 	uint32_t state = BtSmpBondTableEnter();
 	BtSmpRepeatNormalizeLocked(&type, addr);
-	for (int i = 0; i < BT_SMP_REPEAT_TRACK_MAX; i++)
+
+	// Success does not erase the history. Core Vol 3 Part H 2.3.6 requires
+	// the waiting interval to decrease exponentially only after a period with
+	// no new failures. A successful attempt may, however, reveal the claimant's
+	// stable identity (IRK / identity address). Move the existing raw-address
+	// penalty to that identity so an RPA change cannot bypass the history.
+	if (rawType != type || memcmp(rawAddr, addr, 6) != 0)
 	{
-		bool raw = s_BtSmpRepeat[i].InUse &&
-			s_BtSmpRepeat[i].AddrType == rawType &&
-			memcmp(s_BtSmpRepeat[i].Addr, rawAddr, 6) == 0;
-		bool normalized = s_BtSmpRepeat[i].InUse &&
-			s_BtSmpRepeat[i].AddrType == type &&
-			memcmp(s_BtSmpRepeat[i].Addr, addr, 6) == 0;
-		if (raw || normalized)
+		int raw = BtSmpRepeatFind(rawType, rawAddr);
+		int normalized = BtSmpRepeatFind(type, addr);
+
+		if (raw >= 0 && normalized < 0)
 		{
-			memset(&s_BtSmpRepeat[i], 0, sizeof(s_BtSmpRepeat[i]));
+			s_BtSmpRepeat[raw].AddrType = type;
+			memcpy(s_BtSmpRepeat[raw].Addr, addr, 6);
+		}
+		else if (raw >= 0 && normalized >= 0 && raw != normalized)
+		{
+			// Both names already have history. Keep the stronger history on
+			// the stable identity. At equal level the more recent failure is
+			// stricter for the subsequent quiet-time decay.
+			BtSmpRepeatEntry_t *pRaw = &s_BtSmpRepeat[raw];
+			BtSmpRepeatEntry_t *pNorm = &s_BtSmpRepeat[normalized];
+			if (pRaw->Level > pNorm->Level ||
+				(pRaw->Level == pNorm->Level &&
+				 (int32_t)(pRaw->LastFailure - pNorm->LastFailure) > 0))
+			{
+				uint8_t idType = pNorm->AddrType;
+				uint8_t idAddr[6];
+				memcpy(idAddr, pNorm->Addr, 6);
+				*pNorm = *pRaw;
+				pNorm->AddrType = idType;
+				memcpy(pNorm->Addr, idAddr, 6);
+			}
+			memset(pRaw, 0, sizeof(*pRaw));
 		}
 	}
+
 	BtSmpBondTableExit(state);
 }
 
