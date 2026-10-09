@@ -8,7 +8,8 @@ make -C tests/buzzer test
 
 The tests use the real Buzzer and BuzzerMelody implementations with injected
 PWM and timer objects. They check default state, MIDI note conversion and
-bounds, legacy blocking playback, volume zero, failed playback, rests,
+bounds, named pitches, sharp/flat aliases, dotted and triplet lengths,
+legacy blocking playback, volume zero, failed playback, rests,
 articulation, tempo, finite/infinite repeat, cancellation, millisecond counter
 wrap, oversized gaps and delayed application processing.
 

@@ -5,7 +5,9 @@ Release configuration of `ioc/PwmToneDemo`.
 
 The shared [source](../../../../../../exemples/pwm/pwm_tone_demo.cpp) plays
 the chorus of James Lord Pierpont's public-domain *Jingle Bells* (1857).
-It uses `Buzzer` and `BuzzerMelody`, with C8-G8 (4186-6272 Hz), 50% duty,
+The table uses named notes (C8-G8) and musical lengths such as quarter
+and dotted quarter. `BuzzerMelody` converts them using the chosen tempo.
+Playback uses 50% duty,
 120 quarter notes per minute and 20 ms gaps between notes. A one-second
 rest precedes each repeat. There are no blocking note delays in the demo.
 

@@ -137,8 +137,9 @@ bool BuzzerMelody::Play(const BuzzerNote_t *pNotes, unsigned int Count,
 	}
 	for (unsigned int i = 0; i < Count; i++)
 	{
-		uint64_t duration = (uint64_t)pNotes[i].Ticks * 60000 / (24UL * Bpm);
-		if (duration == 0 || duration > 0x7fffffffUL)
+		uint64_t duration = (uint64_t)pNotes[i].Duration * 60000 / (24UL * Bpm);
+		if ((unsigned)pNotes[i].Note > (unsigned)BuzzerPitch::Rest ||
+			duration == 0 || duration > 0x7fffffffUL)
 		{
 			vbFailed = true;
 			return false;
@@ -157,12 +158,14 @@ bool BuzzerMelody::Play(const BuzzerNote_t *pNotes, unsigned int Count,
 bool BuzzerMelody::BeginNote()
 {
 	const BuzzerNote_t &note = vpNotes[vIndex];
-	vDuration = (uint64_t)note.Ticks * 60000 / (24UL * vBpm);
+	vDuration = (uint64_t)note.Duration * 60000 / (24UL * vBpm);
 	uint32_t gap = vGapMs < vDuration ? vGapMs : vDuration - 1;
 	vSoundDuration = vDuration - gap;
 	vStarted = vpTimer->mSecond();
-	vbSounding = note.Freq != 0;
-	if (!vpBuzzer->Start(note.Freq))
+	vbSounding = note.Note != BuzzerPitch::Rest;
+	uint32_t frequency = vbSounding ?
+		(s_MidiNoteFreq[(unsigned)note.Note] + 500) / 1000 : 0;
+	if (!vpBuzzer->Start(frequency))
 	{
 		Stop();
 		vbFailed = true;

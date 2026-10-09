@@ -23,10 +23,13 @@ It neither initializes nor changes that timer. A note table stays in caller-owne
 memory for the whole playback and must not be modified while playing:
 
 ```cpp
+using Note = BuzzerPitch;
+using Length = BuzzerDuration;
+
 static const BuzzerNote_t notes[] = {
-    {440, 24}, // Quarter note
-    {0,   12}, // Eighth-note rest
-    {660, 48}  // Half note
+    {Note::C5,   Length::Quarter},
+    {Note::Rest, Length::Eighth},
+    {Note::G5,   Length::Half}
 };
 
 BuzzerMelody melody;
@@ -34,7 +37,14 @@ melody.Init(&buzzer, &timer);
 melody.Play(notes, 3, 120, 1, 20);
 ```
 
-Durations use 24 ticks per quarter note, allowing straight and triplet rhythms.
+Write pitches as `C4`, `A4`, `Fs5` or `Bb5`; `Rest` means silence.
+C4 is middle C and A4 is 440 Hz. Sharp and flat aliases such as `Cs5`
+and `Db5` select the same pitch. Pitches cover C0 through G9.
+
+Lengths include `Whole`, `Half`, `Quarter`, `Eighth`, `Sixteenth` and
+`ThirtySecond`, plus dotted and triplet lengths such as `DottedQuarter`
+and `EighthTriplet`. The player converts notes to frequency and musical
+lengths to time; no frequency or tick calculations are needed.
 `Play()` takes tempo in quarter notes per minute, a repeat count (zero means
 until stopped), and an articulation gap in milliseconds. The gap is part of
 the note duration, not added to it. It is shortened for very short notes.

@@ -55,31 +55,28 @@ static const PwmChanCfg_t s_ToneChannel = {
 
 // Jingle Bells, James Lord Pierpont (1857), chorus in C major.
 // C8-G8 keeps the melody near the buzzer's useful frequency range.
-static const uint32_t C8 = 4186;
-static const uint32_t D8 = 4699;
-static const uint32_t E8 = 5274;
-static const uint32_t F8 = 5588;
-static const uint32_t G8 = 6272;
+using Note = BuzzerPitch;
+using Length = BuzzerDuration;
 
 static const BuzzerNote_t s_Melody[] = {
-	{0, 48}, // One second of silence before each chorus.
-	{E8, 24}, {E8, 24}, {E8, 48},
-	{E8, 24}, {E8, 24}, {E8, 48},
-	{E8, 24}, {G8, 24}, {C8, 36}, {D8, 12},
-	{E8, 96},
-	{F8, 24}, {F8, 24}, {F8, 36}, {F8, 12},
-	{F8, 24}, {E8, 24}, {E8, 24}, {E8, 12}, {E8, 12},
-	{E8, 24}, {D8, 24}, {D8, 24}, {E8, 24},
-	{D8, 48}, {G8, 48},
+	{Note::Rest, Length::Half}, // One second of silence before each chorus.
+	{Note::E8, Length::Quarter}, {Note::E8, Length::Quarter}, {Note::E8, Length::Half},
+	{Note::E8, Length::Quarter}, {Note::E8, Length::Quarter}, {Note::E8, Length::Half},
+	{Note::E8, Length::Quarter}, {Note::G8, Length::Quarter}, {Note::C8, Length::DottedQuarter}, {Note::D8, Length::Eighth},
+	{Note::E8, Length::Whole},
+	{Note::F8, Length::Quarter}, {Note::F8, Length::Quarter}, {Note::F8, Length::DottedQuarter}, {Note::F8, Length::Eighth},
+	{Note::F8, Length::Quarter}, {Note::E8, Length::Quarter}, {Note::E8, Length::Quarter}, {Note::E8, Length::Eighth}, {Note::E8, Length::Eighth},
+	{Note::E8, Length::Quarter}, {Note::D8, Length::Quarter}, {Note::D8, Length::Quarter}, {Note::E8, Length::Quarter},
+	{Note::D8, Length::Half}, {Note::G8, Length::Half},
 
-	{E8, 24}, {E8, 24}, {E8, 48},
-	{E8, 24}, {E8, 24}, {E8, 48},
-	{E8, 24}, {G8, 24}, {C8, 36}, {D8, 12},
-	{E8, 96},
-	{F8, 24}, {F8, 24}, {F8, 36}, {F8, 12},
-	{F8, 24}, {E8, 24}, {E8, 24}, {E8, 12}, {E8, 12},
-	{G8, 24}, {G8, 24}, {F8, 24}, {D8, 24},
-	{C8, 96}
+	{Note::E8, Length::Quarter}, {Note::E8, Length::Quarter}, {Note::E8, Length::Half},
+	{Note::E8, Length::Quarter}, {Note::E8, Length::Quarter}, {Note::E8, Length::Half},
+	{Note::E8, Length::Quarter}, {Note::G8, Length::Quarter}, {Note::C8, Length::DottedQuarter}, {Note::D8, Length::Eighth},
+	{Note::E8, Length::Whole},
+	{Note::F8, Length::Quarter}, {Note::F8, Length::Quarter}, {Note::F8, Length::DottedQuarter}, {Note::F8, Length::Eighth},
+	{Note::F8, Length::Quarter}, {Note::E8, Length::Quarter}, {Note::E8, Length::Quarter}, {Note::E8, Length::Eighth}, {Note::E8, Length::Eighth},
+	{Note::G8, Length::Quarter}, {Note::G8, Length::Quarter}, {Note::F8, Length::Quarter}, {Note::D8, Length::Quarter},
+	{Note::C8, Length::Whole}
 };
 
 // The application chooses and owns the timer. On nRF52840, device 2 is RTC2.
