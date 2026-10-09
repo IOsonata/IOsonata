@@ -1260,5 +1260,15 @@
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/storage/stdfs_littlefs.cpp</locationURI>
 		</link>
+		<link>
+			<name>src/coredev/i2c_re01.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/i2c_re01.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/spi_re01.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/spi_re01.cpp</locationURI>
+		</link>
 	</linkedResources>
 </projectDescription>

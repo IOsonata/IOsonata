@@ -137,14 +137,14 @@ all SDK integrations were rebuilt for 0.13.
 | MCU | Implemented peripherals | Application examples | Status and validation |
 |---|---|---|---|
 | [RA4M1](../ARM/Renesas/RA4M1/README.md) | Startup, GPIO, ICU interrupt routing, SCI UART polling/interrupt operation, AGT0/1 and GPT0-7 timers | [Examples](../ARM/Renesas/RA4M1/exemples/): Blinky, TimerDemo, UART loopback and PRBS | Supported; register models and ARM layout checks are documented. Hardware validation is pending. USB and DMA/DTC are not implemented. |
-| [RE01 1500 KB](../ARM/Renesas/RE01/RE01_1500KB/lib/ioc/) | Startup, GPIO, interrupt routing, SCI UART, AGT0/1, cascaded TMR0/1 and GPT0-5; polling I2C/SPI master drivers also exist | [Examples](../ARM/Renesas/RE01/RE01_1500KB/exemples/README.md): UART/SLIP, TaktOS UART, timers, pulse trains, I2C and SPI | Supported UART/timer port; DBN/CFB/CFP compile/link/layout and register-model results are documented. I2C/SPI library integration remains incomplete. Hardware validation is pending. |
+| [RE01 1500 KB](../ARM/Renesas/RE01/RE01_1500KB/lib/ioc/) | Startup, GPIO, interrupt routing, SCI UART, AGT0/1, cascaded TMR0/1 and GPT0-5, polling RIIC0/1 I2C master and SPI0/1 master | [Examples](../ARM/Renesas/RE01/RE01_1500KB/exemples/README.md): UART/SLIP, TaktOS UART, timers, pulse trains, I2C and SPI | Supported; DBN/CFB/CFP compile/link/layout and register-model results are documented. Hardware validation is pending. |
 | [R9A02G021](../RISCV/Renesas/R9A02/R9A02G021/lib/ioc/) | RISC-V startup, GPIO, UART and standalone AGT0 millisecond tick | [Examples](../RISCV/Renesas/R9A02/R9A02G021/exemples/): Blinky and DFU projects | Partial port. The tick helper supplies `R9A02_AgtTickInit/Isr`, not IOsonata `TimerInit`. Full IOC/hardware validation is not recorded here. |
 
 RE01's [I2C](../ARM/Renesas/RE01/src/i2c_re01.cpp) and
 [SPI](../ARM/Renesas/RE01/src/spi_re01.cpp) implementations perform polling
 master transfers. They do not implement slave, interrupt or DMA transfers.
-The current library `.project` lists the generic bus wrappers but omits these
-two target files, so the supplied bus examples need that integration completed.
+The library project includes both target drivers and the generic bus wrappers
+for DBN, CFB and CFP, in Debug and Release configurations.
 See [RE01 tests](../tests/re01/README.md) and
 [RA4M1 timer details](../ARM/Renesas/RA4M1/TIMER.md).
 

@@ -1,5 +1,17 @@
 # RE01 port regression checks
 
+## Library project integration (2026-10-09)
+
+The RE01 library project includes `i2c_re01.cpp` and `spi_re01.cpp` alongside
+its generic I2C/SPI sources. Both driver links resolve, and none of the six
+DBN/CFB/CFP Debug/Release configurations excludes them.
+
+The serial regression firmware was compiled and linked for all three packages
+with Arm GNU 14.3.1. The SPI and I2C register-model checks passed for each
+package, including C++ dispatch, transfer sequencing and error handling.
+These checks use the command-line test script, not an IOC IDE build.
+Hardware testing is still pending.
+
 Run the Linux host checks from the repository root:
 
 ```sh
