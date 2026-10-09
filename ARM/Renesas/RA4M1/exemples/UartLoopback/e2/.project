@@ -3,7 +3,7 @@
 	<name>UartLoopback_e2</name>
 	<comment>Native RA4M1 example; links the shared IOsonata example source.</comment>
 	<projects>
-		<project>IOsonata_RA4M1</project>
+		<project>IOsonata_RA4M1_e2</project>
 	</projects>
 	<buildSpec>
 		<buildCommand>
