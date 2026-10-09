@@ -348,7 +348,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/bluetooth/bt_id_sd.cpp|src/nRF5_SDK/ble/nrf_ble_scan|src/nRF5_SDK/ble/ble_dtm|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/bluetooth/bt_ctlr_att.cpp|src/bluetooth/bt_ctlr.cpp|src/display/fonts/orkney8pts.c|src/display/fonts/orkney24pts.c|src/miscdev/button.cpp|src/storage/ff_diskio.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/nRF5_SDK/ble/nrf_ble_scan|src/nRF5_SDK/ble/ble_dtm|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/bluetooth/bt_ctlr_att.cpp|src/bluetooth/bt_ctlr.cpp|src/display/fonts/orkney8pts.c|src/display/fonts/orkney24pts.c|src/miscdev/button.cpp|src/storage/ff_diskio.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -701,7 +701,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/bluetooth/bt_id_sd.cpp|src/nRF5_SDK/ble/nrf_ble_scan|src/nRF5_SDK/ble/ble_dtm|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/bluetooth/bt_ctlr_att.cpp|src/bluetooth/bt_ctlr.cpp|src/display/fonts/orkney8pts.c|src/display/fonts/orkney24pts.c|src/miscdev/button.cpp|src/storage/ff_diskio.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/nRF5_SDK/ble/nrf_ble_scan|src/nRF5_SDK/ble/ble_dtm|src/nRF5_SDK/softdevice/common/nrf_sdh_freertos.c|src/bluetooth/bt_ctlr_att.cpp|src/bluetooth/bt_ctlr.cpp|src/display/fonts/orkney8pts.c|src/display/fonts/orkney24pts.c|src/miscdev/button.cpp|src/storage/ff_diskio.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
