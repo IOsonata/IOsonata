@@ -31,69 +31,14 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>include/cbor.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/cbor.h</locationURI>
-		</link>
-		<link>
-			<name>include/crypto</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>include/crypto/crypto_softsha256.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/crypto_softsha256.h</locationURI>
-		</link>
-		<link>
-			<name>include/crypto/crypto_uecc.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/crypto_uecc.h</locationURI>
-		</link>
-		<link>
-			<name>include/crypto/icrypto.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/icrypto.h</locationURI>
-		</link>
-		<link>
-			<name>include/dfu</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>include/dfu/dfu_boot.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/dfu/dfu_boot.h</locationURI>
-		</link>
-		<link>
-			<name>include/dfu/dfu_image.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/dfu/dfu_image.h</locationURI>
-		</link>
-		<link>
-			<name>include/dfu/dfu_smp.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/dfu/dfu_smp.h</locationURI>
-		</link>
-		<link>
-			<name>include/dfu/dfu_serial.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/dfu/dfu_serial.h</locationURI>
-		</link>
-		<link>
-			<name>include/dfu/dfu_target.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/dfu/dfu_target.h</locationURI>
-		</link>
-		<link>
-			<name>include/dfu/dfu_writer.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/dfu/dfu_writer.h</locationURI>
-		</link>
-		<link>
 			<name>src</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>include/app_evt_handler.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/app_evt_handler.h</locationURI>
 		</link>
 		<link>
 			<name>include/audio</name>
@@ -109,6 +54,11 @@
 			<name>include/blueio_types.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/blueio_types.h</locationURI>
+		</link>
+		<link>
+			<name>include/cbor.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/cbor.h</locationURI>
 		</link>
 		<link>
 			<name>include/cfifo.h</name>
@@ -136,6 +86,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/crc.h</locationURI>
 		</link>
 		<link>
+			<name>include/crypto</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>include/device bridge.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/device%20bridge.h</locationURI>
@@ -151,14 +106,9 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/device_intrf.h</locationURI>
 		</link>
 		<link>
-			<name>include/storage/diskio.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/storage/diskio.h</locationURI>
-		</link>
-		<link>
-			<name>include/storage/diskio_flash.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/storage/diskio_flash.h</locationURI>
+			<name>include/dfu</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
 			<name>include/display</name>
@@ -171,19 +121,9 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/excelitas_serlink.h</locationURI>
 		</link>
 		<link>
-			<name>include/storage/fatfs.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/storage/fatfs.h</locationURI>
-		</link>
-		<link>
 			<name>include/idelay.h</name>
 			<type>1</type>
 			<locationURI>PARENT-5-PROJECT_LOC/include/idelay.h</locationURI>
-		</link>
-		<link>
-			<name>include/motion</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
 			<name>include/intelhex.h</name>
@@ -216,6 +156,11 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>include/motion</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>include/prbs.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/prbs.h</locationURI>
@@ -226,11 +171,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/pulse_train.h</locationURI>
 		</link>
 		<link>
-			<name>include/coredev/pwm.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/pwm.h</locationURI>
-		</link>
-		<link>
 			<name>include/pwrmgnt</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -239,16 +179,6 @@
 			<name>include/sam4lxxx.h</name>
 			<type>1</type>
 			<locationURI>PARENT-3-PROJECT_LOC/include/sam4lxxx.h</locationURI>
-		</link>
-		<link>
-			<name>include/storage/sdcard.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/storage/sdcard.h</locationURI>
-		</link>
-		<link>
-			<name>include/storage/seep.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/storage/seep.h</locationURI>
 		</link>
 		<link>
 			<name>include/sensors</name>
@@ -264,6 +194,11 @@
 			<name>include/stddev.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/stddev.h</locationURI>
+		</link>
+		<link>
+			<name>include/storage</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
 			<name>include/sys</name>
@@ -291,6 +226,11 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>include/usb_ctrlr.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/include/usb_ctrlr.h</locationURI>
+		</link>
+		<link>
 			<name>include/utf8.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/utf8.h</locationURI>
@@ -309,6 +249,16 @@
 			<name>src/ResetEntry.c</name>
 			<type>1</type>
 			<locationURI>PARENT-5-PROJECT_LOC/src/ResetEntry.c</locationURI>
+		</link>
+		<link>
+			<name>src/app_evt_handler.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/app_evt_handler.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/app_run.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/app_run.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/base64.c</name>
@@ -346,21 +296,6 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>src/crypto/crypto_p256.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_p256.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/crypto/crypto_softsha256.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_softsha256.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/crypto/crypto_uecc.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_uecc.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/device.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/device.cpp</locationURI>
@@ -376,51 +311,6 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>src/dfu/dfu_boot.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/dfu/dfu_boot.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/dfu/dfu_image.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/dfu/dfu_image.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/dfu/dfu_layout.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/dfu/dfu_layout.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/dfu/dfu_mgr.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/dfu/dfu_mgr.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/dfu/dfu_wire.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/dfu/dfu_wire.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/dfu/dfu_smp.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/dfu/dfu_smp.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/dfu/dfu_sam4l.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/ARM/Microchip/SAM4L/src/dfu_sam4l.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/dfu/dfu_serial.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/dfu/dfu_serial.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/dfu/dfu_writer.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/dfu/dfu_writer.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/display</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -429,31 +319,6 @@
 			<name>src/excelitas_serlink.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/excelitas_serlink.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/micro-ecc</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>src/micro-ecc/uECC.c</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/micro-ecc/uECC.c</locationURI>
-		</link>
-		<link>
-			<name>src/micro-ecc/uECC.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/micro-ecc/uECC.h</locationURI>
-		</link>
-		<link>
-			<name>src/micro-ecc/uECC_vli.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/micro-ecc/uECC_vli.h</locationURI>
-		</link>
-		<link>
-			<name>src/motion</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
 			<name>src/intelhex.c</name>
@@ -476,7 +341,17 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/md5.c</locationURI>
 		</link>
 		<link>
+			<name>src/micro-ecc</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>src/miscdev</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/motion</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
@@ -521,6 +396,11 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>src/syslog.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/syslog.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/system_sam4l.c</name>
 			<type>1</type>
 			<locationURI>PARENT-3-PROJECT_LOC/src/system_sam4l.c</locationURI>
@@ -529,6 +409,11 @@
 			<name>src/uart_retarget.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/uart_retarget.c</locationURI>
+		</link>
+		<link>
+			<name>src/usb</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
 			<name>src/utf8.c</name>
@@ -611,6 +496,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/pdm.h</locationURI>
 		</link>
 		<link>
+			<name>include/coredev/pwm.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/pwm.h</locationURI>
+		</link>
+		<link>
 			<name>include/coredev/spi.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/spi.h</locationURI>
@@ -631,44 +521,54 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/uart.h</locationURI>
 		</link>
 		<link>
+			<name>include/crypto/crypto_softsha256.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/crypto_softsha256.h</locationURI>
+		</link>
+		<link>
+			<name>include/crypto/crypto_uecc.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/crypto_uecc.h</locationURI>
+		</link>
+		<link>
+			<name>include/crypto/icrypto.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/icrypto.h</locationURI>
+		</link>
+		<link>
+			<name>include/dfu/dfu_boot.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/dfu/dfu_boot.h</locationURI>
+		</link>
+		<link>
+			<name>include/dfu/dfu_image.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/dfu/dfu_image.h</locationURI>
+		</link>
+		<link>
+			<name>include/dfu/dfu_serial.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/dfu/dfu_serial.h</locationURI>
+		</link>
+		<link>
+			<name>include/dfu/dfu_smp.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/dfu/dfu_smp.h</locationURI>
+		</link>
+		<link>
+			<name>include/dfu/dfu_target.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/dfu/dfu_target.h</locationURI>
+		</link>
+		<link>
+			<name>include/dfu/dfu_writer.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/dfu/dfu_writer.h</locationURI>
+		</link>
+		<link>
 			<name>include/display/eink_intrf.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/display/eink_intrf.h</locationURI>
-		</link>
-		<link>
-			<name>include/motion/icm20948_img_dmp3a.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/motion/icm20948_img_dmp3a.h</locationURI>
-		</link>
-		<link>
-			<name>include/motion/att.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/motion/att.h</locationURI>
-		</link>
-		<link>
-			<name>include/motion/mot_icm20948.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/motion/mot_icm20948.h</locationURI>
-		</link>
-		<link>
-			<name>include/motion/mot_invn_icm20948.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/motion/mot_invn_icm20948.h</locationURI>
-		</link>
-		<link>
-			<name>include/motion/mot_mpu9250.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/motion/mot_mpu9250.h</locationURI>
-		</link>
-		<link>
-			<name>include/motion/mpu9250_dmpkey.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/motion/mpu9250_dmpkey.h</locationURI>
-		</link>
-		<link>
-			<name>include/motion/mpu9250_dmpmap.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/motion/mpu9250_dmpmap.h</locationURI>
 		</link>
 		<link>
 			<name>include/miscdev/buzzer.h</name>
@@ -709,6 +609,41 @@
 			<name>include/miscdev/tca6424a.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/miscdev/tca6424a.h</locationURI>
+		</link>
+		<link>
+			<name>include/motion/att.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/motion/att.h</locationURI>
+		</link>
+		<link>
+			<name>include/motion/icm20948_img_dmp3a.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/motion/icm20948_img_dmp3a.h</locationURI>
+		</link>
+		<link>
+			<name>include/motion/mot_icm20948.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/motion/mot_icm20948.h</locationURI>
+		</link>
+		<link>
+			<name>include/motion/mot_invn_icm20948.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/motion/mot_invn_icm20948.h</locationURI>
+		</link>
+		<link>
+			<name>include/motion/mot_mpu9250.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/motion/mot_mpu9250.h</locationURI>
+		</link>
+		<link>
+			<name>include/motion/mpu9250_dmpkey.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/motion/mpu9250_dmpkey.h</locationURI>
+		</link>
+		<link>
+			<name>include/motion/mpu9250_dmpmap.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/motion/mpu9250_dmpmap.h</locationURI>
 		</link>
 		<link>
 			<name>include/pwrmgnt/fg_lc709203f.h</name>
@@ -861,9 +796,39 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/tphg_bme680.h</locationURI>
 		</link>
 		<link>
+			<name>include/storage/diskio.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/storage/diskio.h</locationURI>
+		</link>
+		<link>
+			<name>include/storage/diskio_flash.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/storage/diskio_flash.h</locationURI>
+		</link>
+		<link>
+			<name>include/storage/fatfs.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/storage/fatfs.h</locationURI>
+		</link>
+		<link>
+			<name>include/storage/sdcard.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/storage/sdcard.h</locationURI>
+		</link>
+		<link>
+			<name>include/storage/seep.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/storage/seep.h</locationURI>
+		</link>
+		<link>
 			<name>include/sys/dirent.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/sys/dirent.h</locationURI>
+		</link>
+		<link>
+			<name>include/usb/usb.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usb.h</locationURI>
 		</link>
 		<link>
 			<name>include/usb/usb_cdcdef.h</name>
@@ -886,9 +851,49 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usb_hidhost.h</locationURI>
 		</link>
 		<link>
+			<name>include/usb/usb_int.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usb_int.h</locationURI>
+		</link>
+		<link>
+			<name>include/usb/usb_intrf.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usb_intrf.h</locationURI>
+		</link>
+		<link>
+			<name>include/usb/usb_iso.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usb_iso.h</locationURI>
+		</link>
+		<link>
 			<name>include/usb/usb_mscdef.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usb_mscdef.h</locationURI>
+		</link>
+		<link>
+			<name>include/usb/usbd_bulk.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usbd_bulk.h</locationURI>
+		</link>
+		<link>
+			<name>include/usb/usbd_cdc.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usbd_cdc.h</locationURI>
+		</link>
+		<link>
+			<name>include/usb/usbd_epalloc.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usbd_epalloc.h</locationURI>
+		</link>
+		<link>
+			<name>include/usb/usbd_hid.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usbd_hid.h</locationURI>
+		</link>
+		<link>
+			<name>include/usb/usbd_msc.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usbd_msc.h</locationURI>
 		</link>
 		<link>
 			<name>src/converters/adc_ltc2495.cpp</name>
@@ -921,14 +926,14 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/spi.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/coredev/spi_soft.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/spi_soft.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/coredev/spi_sam4l.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-3-PROJECT_LOC/src/spi_sam4l.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/spi_soft.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/spi_soft.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/coredev/timer.cpp</name>
@@ -961,24 +966,84 @@
 			<locationURI>PARENT-3-PROJECT_LOC/src/uart_sam4l.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/crypto/crypto_p256.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_p256.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/crypto_softsha256.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_softsha256.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/crypto_uecc.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_uecc.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/dfu/dfu_boot.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/dfu/dfu_boot.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/dfu/dfu_image.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/dfu/dfu_image.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/dfu/dfu_layout.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/dfu/dfu_layout.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/dfu/dfu_mgr.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/dfu/dfu_mgr.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/dfu/dfu_sam4l.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/ARM/Microchip/SAM4L/src/dfu_sam4l.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/dfu/dfu_serial.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/dfu/dfu_serial.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/dfu/dfu_smp.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/dfu/dfu_smp.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/dfu/dfu_wire.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/dfu/dfu_wire.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/dfu/dfu_writer.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/dfu/dfu_writer.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/display/eink_intrf.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/display/eink_intrf.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/motion/att.cpp</name>
+			<name>src/micro-ecc/uECC.c</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/motion/att.cpp</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/micro-ecc/uECC.c</locationURI>
 		</link>
 		<link>
-			<name>src/motion/mot_icm20948.cpp</name>
+			<name>src/micro-ecc/uECC.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/motion/mot_icm20948.cpp</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/micro-ecc/uECC.h</locationURI>
 		</link>
 		<link>
-			<name>src/motion/mot_mpu9250.cpp</name>
+			<name>src/micro-ecc/uECC_vli.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/motion/mot_mpu9250.cpp</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/micro-ecc/uECC_vli.h</locationURI>
 		</link>
 		<link>
 			<name>src/miscdev/buzzer.cpp</name>
@@ -1019,6 +1084,21 @@
 			<name>src/miscdev/modem.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/miscdev/modem.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/motion/att.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/motion/att.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/motion/mot_icm20948.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/motion/mot_icm20948.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/motion/mot_mpu9250.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/motion/mot_mpu9250.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/pwrmgnt/fg_lc709203f.cpp</name>
@@ -1206,86 +1286,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/storage/stdfs_littlefs.cpp</locationURI>
 		</link>
 		<link>
-			<name>include/app_evt_handler.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/app_evt_handler.h</locationURI>
-		</link>
-		<link>
-			<name>include/storage</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>include/usb_ctrlr.h</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/include/usb_ctrlr.h</locationURI>
-		</link>
-		<link>
-			<name>src/app_evt_handler.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/app_evt_handler.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/app_run.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/app_run.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/syslog.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/syslog.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/usb</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>include/usb/usb.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usb.h</locationURI>
-		</link>
-		<link>
-			<name>include/usb/usb_int.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usb_int.h</locationURI>
-		</link>
-		<link>
-			<name>include/usb/usb_intrf.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usb_intrf.h</locationURI>
-		</link>
-		<link>
-			<name>include/usb/usb_iso.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usb_iso.h</locationURI>
-		</link>
-		<link>
-			<name>include/usb/usbd_bulk.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usbd_bulk.h</locationURI>
-		</link>
-		<link>
-			<name>include/usb/usbd_cdc.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usbd_cdc.h</locationURI>
-		</link>
-		<link>
-			<name>include/usb/usbd_epalloc.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usbd_epalloc.h</locationURI>
-		</link>
-		<link>
-			<name>include/usb/usbd_hid.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usbd_hid.h</locationURI>
-		</link>
-		<link>
-			<name>include/usb/usbd_msc.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usbd_msc.h</locationURI>
-		</link>
-		<link>
 			<name>src/usb/usb.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usb.cpp</locationURI>
@@ -1344,11 +1344,6 @@
 			<name>src/usb/usbd_msc.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usbd_msc.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/sysstatus.c</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/sysstatus.c</locationURI>
 		</link>
 	</linkedResources>
 </projectDescription>
