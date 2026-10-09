@@ -2,8 +2,11 @@
 @example	board.h
 
 @brief	Board specific definitions, GNSS demo on the nRF9160 DK
+or the Nordic Thingy:91
 
-The console is the nRF9160 UART0 on the interface MCU VCOM port.
+The console is the nRF9160 UART0, the SysLog output: on the nRF9160 DK the
+interface MCU VCOM0 port, on the Thingy:91 the first USB serial port of its
+nRF52840. Select the board below.
 
 @author	Hoang Nguyen Hoan
 @date	Oct. 8, 2026
@@ -40,14 +43,30 @@ SOFTWARE.
 #include "modem_ipc_nrf91.h"
 #include "gnss_nrf91.h"
 
-// Console, UART0 to the interface MCU (VCOM0)
+// Board selection, define one:
+//	NRF9160_DK		nRF9160 DK, console on the interface MCU VCOM0
+//	NORDIC_THINGY91	Nordic Thingy:91, console on the first USB serial port of
+//					its nRF52840 running the Connectivity Bridge firmware
+#define NRF9160_DK
+//#define NORDIC_THINGY91
+
+// Console, UART0, the SysLog output
 #define UART_DEVNO			0
 #define UART_RX_PORT		0
-#define UART_RX_PIN			28
 #define UART_RX_PINOP		1
 #define UART_TX_PORT		0
-#define UART_TX_PIN			29
 #define UART_TX_PINOP		1
+
+#if defined(NORDIC_THINGY91)
+// P0.19 and P0.18, to UART0 of the nRF52840
+#define UART_RX_PIN			19
+#define UART_TX_PIN			18
+#elif defined(NRF9160_DK)
+#define UART_RX_PIN			28
+#define UART_TX_PIN			29
+#else
+#error "Select the board: NRF9160_DK or NORDIC_THINGY91"
+#endif
 
 // Receiver: the GNSS of the modem, on the IPC interface of the modem
 #define GNSS_RECEIVER		GnssNrf91
@@ -67,11 +86,19 @@ SOFTWARE.
 // the Bluetooth port (bt_app_nrf91.cpp)
 #define GNSS_TIMER_DEVNO	0
 
-// Receiver commands of the DK: MAGPIO sets the antenna tuning for the GNSS
-// band, COEX0 turns the LNA of the onboard GNSS antenna on while GNSS runs
+// Receiver commands of the board: MAGPIO sets the antenna tuning, COEX0 turns
+// the LNA of the onboard GNSS antenna on while GNSS runs. The Thingy:91 MAGPIO
+// also tunes its antenna for the LTE bands, as Nordic sets it for this board.
+#if defined(NORDIC_THINGY91)
+#define GNSS_CMD_LIST		{ \
+	"AT%XMAGPIO=1,1,1,7,1,746,803,2,698,748,2,1710,2200,3,824,894,4,880,960,5,791,849,7,1565,1586", \
+	"AT%XCOEX0=1,1,1565,1586" \
+}
+#else
 #define GNSS_CMD_LIST		{ \
 	"AT%XMAGPIO=1,0,0,1,1,1574,1577", \
 	"AT%XCOEX0=1,1,1565,1586" \
 }
+#endif
 
 #endif
