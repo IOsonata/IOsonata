@@ -16,6 +16,7 @@ configurations, the Cortex-M33 TaktOS library and keyboard wiring.
 | [usb_cdc_loopback.cpp](usb_cdc_loopback.cpp) | UsbCdcLoopback/ioc | One CDC loopback port |
 | [usb_cdc_loopback_taktos.cpp](usb_cdc_loopback_taktos.cpp) | UsbCdcLoopbackTaktOS/ioc | CDC loopback and periodic task under TaktOS |
 | [usb_cdc_prbs_tx.cpp](usb_cdc_prbs_tx.cpp) | UsbCdcPrbsTx/ioc | CDC PRBS transmitter |
+| [uart_usb_bridge.cpp](uart_usb_bridge.cpp) | UartUsbBridge/ioc | CDC port bridged to a UART |
 | [usb_dual_cdc_stress.cpp](usb_dual_cdc_stress.cpp) | UsbDualCdcStress/ioc | CDC loopback and PRBS concurrently |
 | [usb_combo_stress.cpp](usb_combo_stress.cpp) | UsbComboStress/ioc | Dual CDC, HID, raw INT and bidirectional ISO |
 | [usb_combo_stress_taktos.cpp](usb_combo_stress_taktos.cpp) | UsbComboStressTaktOS/ioc | Composite stress with separate USB service, CDC loopback and PRBS threads |
@@ -42,6 +43,24 @@ for HCI protocol validation.
 
 See [USB with TaktOS](usb_taktos/README.md) for the RTOS build, single-thread
 USB ownership, nonblocking transfers and hardware validation procedure.
+
+## UART bridge
+
+`UartUsbBridge` connects a UART to a CDC port, in both directions, without
+adding anything to the data. The UART rate follows the rate the host sets on
+the port; the frame stays 8N1. The UART and its pins are in the board.h of
+each project:
+
+| Target project | Board | UART |
+|---|---|---|
+| nRF52840 | nRF52840 DK | UART0, VCOM0 lines: RX P0.08, TX P0.06 |
+| nRF52840 | Nordic Thingy:91 (`NORDIC_THINGY91` in board.h) | UART0 to the nRF9160 UART0: RX P0.11, TX P0.15 |
+| nRF54LM20x | nRF54LM20 DK | Debugger serial port 1, UARTE20: RX P1.17, TX P1.16 (`UART_DEVNO 0` for port 0) |
+| SAM4LCxC | SAM4L8 Xplained Pro | USART1, EDBG Virtual COM Port: RX PC26, TX PC27 |
+| SAM4LSxC | SAM4LS C-package board | USART1: RX PC26, TX PC27 |
+
+On the Thingy:91 the bridge replaces the Connectivity Bridge firmware of the
+nRF52840, and the nRF9160 console comes out on the bridge CDC port.
 
 ## Comparing implementations
 
