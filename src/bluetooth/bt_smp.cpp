@@ -3846,10 +3846,29 @@ void BtSmpAuthConfig(uint8_t IoCaps, uint8_t AuthReq)
 // no application display there is no way to perform the user check, so reject.
 // An application advertising DisplayYesNo / KeyboardDisplay overrides this with
 // a strong definition that displays Value and later calls the reply function.
+__attribute__((weak)) bool BtAppPairConfirm(uint16_t ConnHdl, uint32_t Number)
+{
+	(void)ConnHdl;
+	(void)Number;
+	return false;
+}
+
+__attribute__((weak)) bool BtAppPasskeyShow(uint16_t ConnHdl, uint32_t Passkey)
+{
+	(void)ConnHdl;
+	(void)Passkey;
+	return false;
+}
+
+__attribute__((weak)) uint32_t BtAppPasskeyInput(uint16_t ConnHdl)
+{
+	(void)ConnHdl;
+	return BT_SMP_PASSKEY_INVALID;
+}
+
 __attribute__((weak)) void BtSmpNumericComparison(uint16_t ConnHdl, uint32_t Value)
 {
-	(void)Value;
-	BtSmpNumericComparisonReply(ConnHdl, false);
+	BtSmpNumericComparisonReply(ConnHdl, BtAppPairConfirm(ConnHdl, Value));
 }
 
 // Resume a Numeric Comparison pairing after the user has compared the value
@@ -3955,8 +3974,10 @@ void BtSmpNumericComparisonReply(uint16_t ConnHdl, bool Confirm)
 // An application advertising a display overrides this with a strong definition.
 __attribute__((weak)) void BtSmpPasskeyDisplay(uint16_t ConnHdl, uint32_t Passkey)
 {
-	(void)Passkey;
-	BtSmpPasskeyReply(ConnHdl, BT_SMP_PASSKEY_INVALID);
+	if (!BtAppPasskeyShow(ConnHdl, Passkey))
+	{
+		BtSmpPasskeyReply(ConnHdl, BT_SMP_PASSKEY_INVALID);
+	}
 }
 
 // Weak default for the Passkey Entry request. The inputting device must obtain
@@ -3965,7 +3986,7 @@ __attribute__((weak)) void BtSmpPasskeyDisplay(uint16_t ConnHdl, uint32_t Passke
 // a strong definition that prompts the user and calls BtSmpPasskeyReply.
 __attribute__((weak)) void BtSmpPasskeyRequest(uint16_t ConnHdl)
 {
-	BtSmpPasskeyReply(ConnHdl, BT_SMP_PASSKEY_INVALID);
+	BtSmpPasskeyReply(ConnHdl, BtAppPasskeyInput(ConnHdl));
 }
 
 // Resume a Passkey Entry pairing after the user has entered the value shown on
