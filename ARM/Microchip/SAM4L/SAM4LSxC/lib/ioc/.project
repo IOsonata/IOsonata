@@ -206,6 +206,11 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>include/syslog.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/syslog.h</locationURI>
+		</link>
+		<link>
 			<name>include/sysstatus.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/sysstatus.h</locationURI>

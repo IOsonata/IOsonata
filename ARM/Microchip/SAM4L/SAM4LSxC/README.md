@@ -74,6 +74,12 @@ these build checks. DFU hardware testing remains deferred.
 
 ## Build checks
 
+The maintainer reported a successful library build on 2026-10-08 after
+removing the obsolete `sysstatus.c` project entry. The build configuration
+was not specified. `syslog.cpp` supplies the current logging implementation;
+`syslog.h` is linked in the project. This is build confirmation, not hardware
+validation.
+
 From the repository root:
 
 ```sh
