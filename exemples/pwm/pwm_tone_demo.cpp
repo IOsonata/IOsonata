@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
 @example	pwm_tone_demo.cpp
 
-@brief	Play a repeating tone sequence with PWM
+@brief	Play the opening rhythm of Holst's Mars with PWM
 
 @author	Hoang Nguyen Hoan
 @date	May 15, 2018
@@ -37,7 +37,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 static const PwmCfg_t s_PwmCfg = {
 	.DevNo = 0,
-	.Freq = 440,
+	.Freq = 4978,
 	.Mode = PWM_MODE_EDGE,
 	.bIntEn = false,
 	.IntPrio = 6,
@@ -51,7 +51,14 @@ static const PwmChanCfg_t s_ToneChannel = {
 	.Pin = TONE_PIN
 };
 
-static const uint32_t s_ToneFreq[] = {440, 554, 659, 880};
+// Holst, The Planets, Mars: opening 5/4 ostinato.
+// Three triplet eighths, two quarters, two eighths, one quarter.
+// Six ticks per quarter at 120 BPM: 30 ticks per bar.
+// The original repeated G is transposed to Eb8 (4978 Hz) for this buzzer.
+static const uint32_t s_ToneFreq = 4978;
+static const uint8_t s_MarsTicks[] = {2, 2, 2, 6, 6, 3, 3, 6};
+static const uint32_t s_QuarterUs = 500000;
+static const uint32_t s_GapUs = 20000;
 
 Pwm g_Pwm;
 
@@ -70,22 +77,34 @@ int main()
 
 	while (1)
 	{
-		for (unsigned int i = 0; i < sizeof(s_ToneFreq) / sizeof(s_ToneFreq[0]); i++)
+		for (unsigned int bar = 0; bar < 8; bar++)
 		{
-			// Change frequency while stopped, then restore 50% duty.
-			if (!g_Pwm.Frequency(s_ToneFreq[i]) ||
-				!g_Pwm.DutyCycle(s_ToneChannel.Chan, 50) ||
-				!g_Pwm.Start())
+			uint32_t ticks = 0;
+			uint32_t elapsed = 0;
+			for (unsigned int i = 0; i < sizeof(s_MarsTicks); i++)
 			{
-				g_Pwm.Stop();
-				g_Pwm.CloseChannel(s_ToneChannel.Chan);
-				g_Pwm.Disable();
-				return 1;
-			}
+				ticks += s_MarsTicks[i];
+				uint32_t end = ticks * s_QuarterUs / 6;
+				uint32_t duration = end - elapsed;
+				elapsed = end;
 
-			usDelay(250000);
-			g_Pwm.Stop();
-			usDelay(100000);
+				if (!g_Pwm.Frequency(s_ToneFreq) ||
+					!g_Pwm.DutyCycle(s_ToneChannel.Chan, 50) ||
+					!g_Pwm.Start())
+				{
+					g_Pwm.Stop();
+					g_Pwm.CloseChannel(s_ToneChannel.Chan);
+					g_Pwm.Disable();
+					return 1;
+				}
+
+				usDelay(duration - s_GapUs);
+				// Load an inactive sample before stopping the output.
+				g_Pwm.DutyCycle(s_ToneChannel.Chan, 0);
+				usDelay(1000);
+				g_Pwm.Stop();
+				usDelay(s_GapUs - 1000);
+			}
 		}
 		usDelay(1000000);
 	}
