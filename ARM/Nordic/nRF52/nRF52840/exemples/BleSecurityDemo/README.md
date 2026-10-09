@@ -22,27 +22,33 @@ The Bluetooth library owns ECDH, pairing, bond storage, identity resolution,
 security event processing and reconnection. The example only calls
 `BtAppSecInit()` from `BtAppInitUserData()`.
 
-## When user interaction is necessary
+## Optional application interaction callbacks
 
-Provide application callbacks *only for the capabilities selected*. The
-Bluetooth library invokes:
+The default Just Works configuration needs no callbacks. For authenticated
+association methods, provide only the required synchronous application hook:
 
-- `void BtSmpNumericComparison(uint16_t conn, uint32_t value)`: display the
-  six-digit value through the application's UI, obtain an explicit yes/no
-  decision and call `BtSmpNumericComparisonReply(conn, confirm)`.
-- `void BtSmpPasskeyDisplay(uint16_t conn, uint32_t passkey)`: present the
-  six-digit passkey to the user.
-- `void BtSmpPasskeyRequest(uint16_t conn)`: request six digits using the
-  application's own input device, then call `BtSmpPasskeyReply(conn, passkey)`.
-  Use `BT_SMP_PASSKEY_INVALID` to cancel.
-- For OOB, obtain local values with `BtSmpOobLocalDataGen()` and stage the
-  peer data with `BtSmpOobPeerDataSet()` through the application's transport.
+```cpp
+bool BtAppPairConfirm(uint16_t conn, uint32_t number);
+bool BtAppPasskeyShow(uint16_t conn, uint32_t passkey);
+uint32_t BtAppPasskeyInput(uint16_t conn);
+```
 
-These callbacks must never silently approve Numeric Comparison or fabricate a
-passkey. They can be asynchronous: retain the connection handle and call the
-appropriate reply when the human interaction completes. The library's
-rejecting defaults apply when interaction is requested but no application
-callback is supplied. There is no UART terminal requirement.
+The application's implementation presents/obtains the user value and returns
+the result. The Bluetooth library performs the actual SMP or SoftDevice
+reply; the application must not call `BtSmpNumericComparisonReply` or
+`BtSmpPasskeyReply`. A returned `false` rejects confirmation/display,
+and `BT_SMP_PASSKEY_INVALID` cancels passkey input.
+
+Callbacks are invoked from Bluetooth event processing and must return promptly.
+Do **not** wait synchronously for button/console events inside a callback.
+For a product needing asynchronous UI, use the library's existing explicit
+reply API until a deferred decision interface is provided; do not assume
+that a callback may return before the user has made a decision. No terminal,
+command interpreter or manual transaction handling is required for Just Works.
+
+For LESC OOB, the application supplies the out-of-band transport and stages
+peer data through the existing `BtSmpOob*` APIs; cryptography and SMP remain
+library-owned.
 
 ## Separation of responsibilities
 
