@@ -701,7 +701,7 @@ static void BtAppConnParamInit(void)
 	}
 }
 
-// Peer Manager event handling, the SMP user interaction bridge and the LESC
+// SoftDevice security event handling, the SMP user interaction bridge and the LESC
 // OOB data handling are in bt_sec_nrf52.cpp. That object is linked only when
 // the application calls BtAppSecInit.
 
@@ -725,7 +725,7 @@ static void BtAppNrf52ConnEvt(ble_evt_t const * p_ble_evt, void *p_context)
 	ble_gap_evt_t const * p_gap_evt = &p_ble_evt->evt.gap_evt;
 	uint16_t role = ble_conn_state_role(p_ble_evt->evt.gap_evt.conn_handle);
 
-	// The LESC module receives BLE events through the peer_manager path:
+	// The LESC module receives BLE events through the security path:
 	// sm_ble_evt_handler (bt_sec_sd.cpp) forwards every event to BtLescOnBleEvt
 	// as its single delivery point. Calling it here as well would deliver each
 	// event twice and run sd_ble_gap_lesc_oob_data_set twice on an OOB DHKey
@@ -777,7 +777,7 @@ static void BtAppNrf52ConnEvt(ble_evt_t const * p_ble_evt, void *p_context)
 			DEBUG_PRINTF("SEC: EVT_CONN_SEC_UPDATE sm=%d lv=%d ks=%d\r\n",
 					pcs->sec_mode.sm, pcs->sec_mode.lv, pcs->encr_key_size);
 			// Capture the negotiated encryption key size for BtGapConnSecGet.
-			// pm_conn_sec_status_get does not report key size; this event does.
+			// Capture the negotiated key size from this event.
 			BtDevice_t *pdev = BtPeerFindByHdl(p_ble_evt->evt.gap_evt.conn_handle);
 			if (pdev != nullptr)
 			{
@@ -819,8 +819,8 @@ static void BtAppNrf52ConnEvt(ble_evt_t const * p_ble_evt, void *p_context)
 
         	// If a secure SecType was configured, security is requested on
         	// the link by the security observer in bt_sec_nrf52.cpp
-        	// (pm_conn_secure -> sd_ble_gap_authenticate). It runs after this
-        	// dispatcher and after the Peer Manager have seen the event.
+        	// (BtSecSdSecure -> sd_ble_gap_authenticate). It runs after this
+        	// dispatcher has created the peer record.
 
         	BtAppEvtConnected(p_ble_evt->evt.gap_evt.conn_handle);
 		}
@@ -1653,7 +1653,7 @@ bool BtAppInit(const BtAppCfg_t *pCfg)//, bool bEraseBond)
 
     BtAppInitUserData();
 
-    // The security module (Peer Manager, LESC, ECDH engine) is linked and
+    // The security module (IOsonata bond/security state, LESC, ECDH engine) is linked and
     // started only when the application calls BtAppSecInit, normally from
     // BtAppInitUserData above. A configuration that asks for security without
     // starting it must not run unprotected.

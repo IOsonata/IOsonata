@@ -3,14 +3,14 @@
 
 @brief	nRF5_SDK SoftDevice application security module.
 
-		Extracted from bt_app_nrf52.cpp. Owns the Peer Manager start up and
+		Extracted from bt_app_nrf52.cpp. Owns SoftDevice security startup and
 		event handling, the ECDH engine used for LESC, the SMP user
 		interaction bridge and the LESC OOB data.
 
 		This object is linked only when the application calls BtAppSecInit,
 		normally from BtAppInitUserData. An application that does not use
-		security never references it, so the Peer Manager, its storage, the
-		LESC module and the ECDH engine stay out of the image.
+		security never references it, so the security state, bond store, LESC
+		module and ECDH engine stay out of the image.
 
 @author	Hoang Nguyen Hoan
 @date	Oct. 1, 2026
@@ -89,12 +89,8 @@ void BtSecSdAuthConfig(uint8_t IoCaps, uint8_t AuthReq);
 void BtSecSdOobSet(bool Enable);
 
 
-/**@brief Function for handling Peer Manager events.
- *
- * @param[in] p_evt  Peer Manager event.
- */
 // ===========================================================================
-// SMP user interaction bridge (SoftDevice / Peer Manager port).
+// SMP user interaction bridge (SoftDevice port).
 //
 // The SoftDevice owns the SMP exchange and surfaces the user steps as GAP
 // events: BLE_GAP_EVT_PASSKEY_DISPLAY (Numeric Comparison when match_request is
@@ -336,7 +332,7 @@ extern "C" int BtLescLinkCount(void)
  * @brief	Start the security module.
  *
  * Called by the application, normally from BtAppInitUserData. The call is
- * what links this module: the Peer Manager, its storage, the LESC module and
+ * what links this module: the IOsonata security state/bond store, LESC module and
  * the ECDH engine. Uses the SecType and SecExchg given to BtAppInit.
  *
  * @return	true - security started
