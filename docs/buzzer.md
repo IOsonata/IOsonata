@@ -69,6 +69,55 @@ missed notes in a burst. Note durations are rounded down to milliseconds.
 The timer must remain running at its configured frequency, without resets,
 and servicing must not be interrupted for a full 32-bit millisecond wrap.
 
+## Sound effects
+
+`BuzzerPlayer` is another name for the same `BuzzerMelody` class. Use one
+player for both: every new playback stops the previous melody or effect.
+Initialization and `Process()` are unchanged.
+
+```cpp
+BuzzerPlayer player;
+player.Init(&buzzer, &timer);
+player.Play(BuzzerEffect::Chirp);       // One chirp
+// Or, in response to another application event:
+player.Play(BuzzerEffect::Siren, 2000); // Repeat for two seconds
+```
+
+Available effects are `Chirp` (rising pitch), `Laser` (falling pitch and
+volume), `Siren` (up/down sweep), `Warble` (alternating notes), `Pulse`
+(tone/rest) and `Fade` (falling volume). The presets use high notes near
+C8-G8; Laser falls to C7. Their sound and loudness depend on the buzzer.
+A duration of zero plays the pattern once; a nonzero duration repeats it
+until that many milliseconds have elapsed. `Stop()` cancels it immediately.
+
+Custom effects use notes, milliseconds and optional volume endpoints:
+
+```cpp
+static const BuzzerEffectStep_t effect[] = {
+    {Note::C8,   Note::G8,   300},          // Rising pitch
+    {Note::G8,   Note::G8,   200, 100, 0},  // Fade out
+    {Note::Rest, Note::Rest, 100}            // Silence
+};
+player.PlayEffect(effect, 3, 2); // Play the sequence twice; zero repeats forever
+```
+
+Equal notes hold a pitch; two rests create silence. To fade a sound to silence,
+use a zero volume endpoint rather than sweeping to `Rest`. Mixed note/rest
+endpoints, zero durations and volume percentages above 100 are rejected.
+The step table must remain valid and unchanged while playing.
+
+Pitch and volume interpolate linearly as `Process()` is called. This is a
+stepped sweep, not an audio synthesizer: service it every 5 ms for the demo.
+Changed pitch or volume restarts the tone through the existing PWM API;
+there is no guarantee of phase continuity. A late call advances at most one
+step, while a named effect's total duration still expires on elapsed time.
+
+Volumes are percentages of the buzzer's volume at playback start, so a muted
+buzzer stays muted. The player restores that setting when stopped, replaced,
+finished or failed. Do not change the buzzer directly during playback.
+PWM duty controls volume in coarse steps and is not linear in perceived
+loudness. No heap allocation or blocking note delay is used.
+
 ## Nordic PWM silence
 
 The Nordic driver configures each opened pin as an output, with its inactive

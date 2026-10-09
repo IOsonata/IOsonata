@@ -155,6 +155,120 @@ bool BuzzerMelody::Play(const BuzzerNote_t *pNotes, unsigned int Count,
 	return BeginNote();
 }
 
+namespace {
+using Pitch = BuzzerPitch;
+static const BuzzerEffectStep_t s_Chirp[] = {
+	{Pitch::C8, Pitch::G8, 160}
+};
+static const BuzzerEffectStep_t s_Laser[] = {
+	{Pitch::G8, Pitch::C7, 300, 100, 20}
+};
+static const BuzzerEffectStep_t s_Siren[] = {
+	{Pitch::C8, Pitch::G8, 600}, {Pitch::G8, Pitch::C8, 600}
+};
+static const BuzzerEffectStep_t s_Warble[] = {
+	{Pitch::C8, Pitch::C8, 100}, {Pitch::G8, Pitch::G8, 100}
+};
+static const BuzzerEffectStep_t s_Pulse[] = {
+	{Pitch::E8, Pitch::E8, 100}, {Pitch::Rest, Pitch::Rest, 100}
+};
+static const BuzzerEffectStep_t s_Fade[] = {
+	{Pitch::E8, Pitch::E8, 800, 100, 0}
+};
+}
+
+bool BuzzerMelody::Play(BuzzerEffect Effect, uint32_t DurationMs)
+{
+	const BuzzerEffectStep_t *steps = nullptr;
+	unsigned int count = 0;
+	switch (Effect)
+	{
+		case BuzzerEffect::Chirp: steps = s_Chirp; count = 1; break;
+		case BuzzerEffect::Laser: steps = s_Laser; count = 1; break;
+		case BuzzerEffect::Siren: steps = s_Siren; count = 2; break;
+		case BuzzerEffect::Warble: steps = s_Warble; count = 2; break;
+		case BuzzerEffect::Pulse: steps = s_Pulse; count = 2; break;
+		case BuzzerEffect::Fade: steps = s_Fade; count = 1; break;
+	}
+	if (DurationMs > 0x7fffffffUL)
+	{
+		Stop();
+		vbFailed = true;
+		return false;
+	}
+	if (!PlayEffect(steps, count, DurationMs ? 0 : 1)) return false;
+	vEffectLimit = DurationMs;
+	vEffectStarted = vpTimer->mSecond();
+	return true;
+}
+
+bool BuzzerMelody::PlayEffect(const BuzzerEffectStep_t *pSteps,
+							unsigned int Count, uint32_t Repeats)
+{
+	Stop();
+	if (!vpBuzzer || !vpTimer || !pSteps || !Count)
+	{
+		vbFailed = true;
+		return false;
+	}
+	for (unsigned int i = 0; i < Count; ++i)
+	{
+		const BuzzerEffectStep_t &step = pSteps[i];
+		if ((unsigned)step.From > (unsigned)Pitch::Rest ||
+			(unsigned)step.To > (unsigned)Pitch::Rest ||
+			((step.From == Pitch::Rest) != (step.To == Pitch::Rest)) ||
+			!step.DurationMs || step.DurationMs > 0x7fffffffUL ||
+			step.VolumeFrom > 100 || step.VolumeTo > 100)
+		{
+			vbFailed = true;
+			return false;
+		}
+	}
+	vpEffects = pSteps;
+	vSavedVolume = vpBuzzer->GetVolume();
+	vCount = Count;
+	vIndex = 0;
+	vRepeats = Repeats;
+	vbPlaying = true;
+	return BeginEffect();
+}
+
+bool BuzzerMelody::BeginEffect()
+{
+	vStarted = vpTimer->mSecond();
+	vDuration = vpEffects[vIndex].DurationMs;
+	vEffectVolume = -1;
+	return UpdateEffect(0);
+}
+
+bool BuzzerMelody::UpdateEffect(uint32_t Elapsed)
+{
+	const BuzzerEffectStep_t &step = vpEffects[vIndex];
+	uint32_t frequency = 0;
+	if (step.From != Pitch::Rest)
+	{
+		int64_t from = s_MidiNoteFreq[(unsigned)step.From];
+		int64_t to = s_MidiNoteFreq[(unsigned)step.To];
+		frequency = (from + (to - from) * Elapsed / vDuration + 500) / 1000;
+	}
+	int volume = (int)step.VolumeFrom +
+		((int64_t)step.VolumeTo - step.VolumeFrom) * Elapsed / vDuration;
+	volume = volume * vSavedVolume / 100;
+	// Avoid touching PWM when neither pitch nor volume has changed.
+	if (frequency == vEffectFrequency && volume == vEffectVolume) return true;
+	vEffectFrequency = frequency;
+	vEffectVolume = volume;
+	vpBuzzer->Stop();
+	vpBuzzer->Volume(volume);
+	if (!vpBuzzer->Start(frequency))
+	{
+		Stop();
+		vbFailed = true;
+		return false;
+	}
+	return true;
+}
+
 bool BuzzerMelody::BeginNote()
 {
 	const BuzzerNote_t &note = vpNotes[vIndex];
@@ -177,8 +291,22 @@ bool BuzzerMelody::BeginNote()
 void BuzzerMelody::Process()
 {
 	if (!vbPlaying) return;
-	uint32_t elapsed = vpTimer->mSecond() - vStarted;
-	if (vbSounding && elapsed >= vSoundDuration)
+	uint32_t now = vpTimer->mSecond();
+	uint32_t elapsed = now - vStarted;
+	if (vpEffects)
+	{
+		if (vEffectLimit && (uint32_t)(now - vEffectStarted) >= vEffectLimit)
+		{
+			Stop();
+			return;
+		}
+		if (elapsed < vDuration)
+		{
+			UpdateEffect(elapsed);
+			return;
+		}
+	}
+	if (!vpEffects && vbSounding && elapsed >= vSoundDuration)
 	{
 		vpBuzzer->Stop();
 		vbSounding = false;
@@ -196,12 +324,19 @@ void BuzzerMelody::Process()
 	}
 	// At most one note transition per call. A late caller extends playback;
 	// it does not emit a burst of missed notes.
-	BeginNote();
+	if (vpEffects) BeginEffect();
+	else BeginNote();
 }
 
 void BuzzerMelody::Stop()
 {
-	if (vpBuzzer) vpBuzzer->Stop();
+	if (vpBuzzer)
+	{
+		vpBuzzer->Stop();
+		if (vpEffects) vpBuzzer->Volume(vSavedVolume);
+	}
+	vpEffects = nullptr;
+	vEffectLimit = 0;
 	vbPlaying = false;
 	vbSounding = false;
 	vbFailed = false;

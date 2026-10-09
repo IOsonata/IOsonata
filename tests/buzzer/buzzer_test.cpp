@@ -1,5 +1,6 @@
 #include <cassert>
 #include <cstdio>
+#include <initializer_list>
 #include "miscdev/buzzer.h"
 #include "coredev/timer.h"
 uint64_t g_DelayUs = 0;
@@ -77,5 +78,44 @@ int main() {
  timer.now=166;player.Process();assert(!player.IsPlaying());
  const BuzzerNote_t invalid[]={{static_cast<Note>(255),Length::Quarter}};
  assert(!player.Play(invalid,1) && player.Failed() && !pwm.running);
- puts("PASS: buzzer MIDI, mute, failures; melody timing, rests, tempo, repeat, cancel, wrap and delayed service");
+
+ // Effects share the player, preserve volume, and never use blocking delays.
+ buzzer.Volume(80); timer.now=0;
+ const BuzzerEffectStep_t sweep[]={{Note::A4,Note::A5,1000,100,0}};
+ assert(player.PlayEffect(sweep,1)); assert(pwm.hz==440 && pwm.duty==40);
+ starts=pwm.starts;player.Process();assert(pwm.starts==starts);
+ timer.now=500;player.Process();assert(pwm.hz==660 && pwm.duty==20);
+ timer.now=1000;player.Process();assert(!player.IsPlaying()&&!pwm.running&&buzzer.GetVolume()==80);
+ const BuzzerEffectStep_t rise[]={{Note::A5,Note::A4,1000,0,100}};
+ timer.now=0;assert(player.PlayEffect(rise,1));assert(!pwm.running);
+ timer.now=500;player.Process();assert(pwm.running&&pwm.hz==660&&pwm.duty==20);
+ player.Stop();assert(buzzer.GetVolume()==80&&!pwm.running);
+ const BuzzerEffectStep_t pulse[]={{Note::A4,Note::A4,100},{Note::Rest,Note::Rest,100}};
+ timer.now=0;assert(player.PlayEffect(pulse,2,2));
+ timer.now=100;player.Process();assert(!pwm.running&&player.IsPlaying());
+ timer.now=200;player.Process();assert(pwm.running);
+ timer.now=300;player.Process();assert(!pwm.running);
+ timer.now=400;player.Process();assert(!player.IsPlaying());
+ for (auto effect : {BuzzerEffect::Chirp,BuzzerEffect::Laser,BuzzerEffect::Siren,
+                     BuzzerEffect::Warble,BuzzerEffect::Pulse,BuzzerEffect::Fade}) {
+  timer.now=0xfffffff0;assert(player.Play(effect,2000));
+  timer.now+=1999;player.Process();assert(player.IsPlaying());
+  timer.now+=1;player.Process();assert(!player.IsPlaying()&&!pwm.running&&buzzer.GetVolume()==80);
+ }
+ assert(player.Play(BuzzerEffect::Chirp));timer.now+=160;player.Process();assert(!player.IsPlaying());
+ assert(player.Play(single,1));assert(player.Play(BuzzerEffect::Laser));
+ timer.now+=100;player.Process();assert(player.Play(single,1));assert(pwm.hz==440&&pwm.duty==40);
+ assert(player.PlayEffect(sweep,1,0));timer.now+=1000;player.Process();assert(player.IsPlaying());
+ pwm.fail=true;timer.now+=500;player.Process();assert(player.Failed()&&!player.IsPlaying()&&!pwm.running&&buzzer.GetVolume()==80);pwm.fail=false;
+ const BuzzerEffectStep_t invalidEffect[]={{Note::Rest,Note::C5,100}};
+ assert(!player.PlayEffect(invalidEffect,1)&&player.Failed());
+ const BuzzerEffectStep_t zeroEffect[]={{Note::C5,Note::C5,0}};
+ assert(!player.PlayEffect(zeroEffect,1));
+ const BuzzerEffectStep_t badVolume[]={{Note::C5,Note::C5,100,101,0}};
+ assert(!player.PlayEffect(badVolume,1));
+ assert(!player.Play(static_cast<BuzzerEffect>(255)));
+ assert(!player.Play(BuzzerEffect::Chirp,0x80000000));
+ buzzer.Volume(0);assert(player.Play(BuzzerEffect::Siren));timer.now+=300;player.Process();assert(!pwm.running);player.Stop();assert(buzzer.GetVolume()==0);
+ assert(g_DelayUs==delay);
+ puts("PASS: buzzer MIDI, mute, failures; melody timing, rests, tempo, repeat, cancel, wrap, delayed service, effects, fades and playback replacement");
 }

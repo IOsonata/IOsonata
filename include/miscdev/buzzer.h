@@ -70,6 +70,7 @@ public:
 	 * @param 	Volume	: Volume in % (0-100)
 	 */
 	virtual void Volume(int Volume);
+	int GetVolume() const { return vDutyCycle * 2; }
 
 	// Start a continuous tone without waiting. Zero frequency means silence.
 	virtual bool Start(uint32_t Freq);
@@ -138,6 +139,20 @@ struct BuzzerNote_t {
 	BuzzerDuration Duration;
 };
 
+enum class BuzzerEffect : uint8_t {
+	Chirp, Laser, Siren, Warble, Pulse, Fade
+};
+
+// Equal notes hold a pitch. Two rests make a silent step.
+// Volume endpoints are percentages of the buzzer volume at playback start.
+struct BuzzerEffectStep_t {
+	BuzzerPitch From;
+	BuzzerPitch To;
+	uint32_t DurationMs;
+	uint8_t VolumeFrom = 100;
+	uint8_t VolumeTo = 100;
+};
+
 // All calls belong to one application context or RTOS thread, never an ISR.
 // The caller owns the initialized timer, buzzer and immutable note table.
 class BuzzerMelody {
@@ -146,6 +161,10 @@ public:
 	// Repeats: 1 plays once, 0 repeats until Stop(). BPM is quarter notes/minute.
 	bool Play(const BuzzerNote_t *pNotes, unsigned int Count,
 			uint16_t Bpm = 120, uint32_t Repeats = 1, uint32_t GapMs = 20);
+	// A named effect plays once by default; a nonzero duration repeats until it expires.
+	bool Play(BuzzerEffect Effect, uint32_t DurationMs = 0);
+	bool PlayEffect(const BuzzerEffectStep_t *pSteps, unsigned int Count,
+					uint32_t Repeats = 1);
 	// Call from the main loop or worker thread. No note-duration waits or allocation.
 	void Process();
 	void Stop();
@@ -153,9 +172,17 @@ public:
 	bool Failed() const { return vbFailed; }
 private:
 	bool BeginNote();
+	bool BeginEffect();
+	bool UpdateEffect(uint32_t Elapsed);
 	Buzzer *vpBuzzer = nullptr;
 	Timer *vpTimer = nullptr;
 	const BuzzerNote_t *vpNotes = nullptr;
+	const BuzzerEffectStep_t *vpEffects = nullptr;
+	uint32_t vEffectStarted = 0;
+	uint32_t vEffectLimit = 0;
+	uint32_t vEffectFrequency = 0;
+	int vEffectVolume = -1;
+	int vSavedVolume = 100;
 	unsigned int vCount = 0;
 	unsigned int vIndex = 0;
 	uint16_t vBpm = 120;
@@ -168,6 +195,9 @@ private:
 	bool vbSounding = false;
 	bool vbFailed = false;
 };
+
+// One player handles both melodies and effects.
+using BuzzerPlayer = BuzzerMelody;
 
 extern "C" {
 #endif // __cplusplus

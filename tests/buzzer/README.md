@@ -11,7 +11,10 @@ PWM and timer objects. They check default state, MIDI note conversion and
 bounds, named pitches, sharp/flat aliases, dotted and triplet lengths,
 legacy blocking playback, volume zero, failed playback, rests,
 articulation, tempo, finite/infinite repeat, cancellation, millisecond counter
-wrap, oversized gaps and delayed application processing.
+wrap, oversized gaps and delayed application processing. Effect checks cover
+rising/falling pitch, volume fades and restoration, rests, repeats, named
+effect duration across counter wrap, replacement of melodies, failures and
+invalid steps.
 
 Build the nRF52840 example and the real PWM/GPIO register fixture:
 

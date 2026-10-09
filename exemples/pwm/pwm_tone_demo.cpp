@@ -102,7 +102,7 @@ static const TimerCfg_t s_TimerCfg = {
 Pwm g_Pwm;
 Timer g_Timer;
 Buzzer g_Buzzer;
-BuzzerMelody g_Melody;
+BuzzerPlayer g_Melody;
 
 int main()
 {
@@ -114,12 +114,28 @@ int main()
 		TIMER_TRIG_TYPE_CONTINUOUS, MelodyWake, nullptr)) return 1;
 	if (!g_Melody.Init(&g_Buzzer, &g_Timer) ||
 		!g_Melody.Play(s_Melody, sizeof(s_Melody) / sizeof(s_Melody[0]),
-					  120, 0, 20)) return 1;
+					  120, 1, 20)) return 1;
 
-	while (g_Melody.IsPlaying())
+	static const BuzzerEffect effects[] = {
+		BuzzerEffect::Chirp, BuzzerEffect::Laser, BuzzerEffect::Siren,
+		BuzzerEffect::Warble, BuzzerEffect::Pulse, BuzzerEffect::Fade
+	};
+	unsigned int effectIndex = 0;
+	while (!g_Melody.Failed())
 	{
 		g_Melody.Process();
-		__WFE();
+		if (!g_Melody.IsPlaying() && !g_Melody.Failed())
+		{
+			if (effectIndex < sizeof(effects) / sizeof(effects[0]))
+				g_Melody.Play(effects[effectIndex++], 2000);
+			else
+			{
+				effectIndex = 0;
+				g_Melody.Play(s_Melody, sizeof(s_Melody) / sizeof(s_Melody[0]),
+							  120, 1, 20);
+			}
+		}
+		if (g_Melody.IsPlaying()) __WFE();
 	}
 	g_Timer.DisableTimerTrigger(0);
 	g_Timer.Disable();

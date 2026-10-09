@@ -9,7 +9,9 @@ The table uses named notes (C8-G8) and musical lengths such as quarter
 and dotted quarter. `BuzzerMelody` converts them using the chosen tempo.
 Playback uses 50% duty,
 120 quarter notes per minute and 20 ms gaps between notes. A one-second
-rest precedes each repeat. There are no blocking note delays in the demo.
+rest precedes each chorus. After the melody, the demo plays Chirp, Laser,
+Siren, Warble, Pulse and Fade for two seconds each, then repeats from the
+melody. There are no blocking note delays.
 
 PWM device 0/channel 0 supplies the sound. Timer device 2 (RTC2 on nRF52840)
 wakes the main loop every 5 ms. The interrupt only wakes the loop; melody
