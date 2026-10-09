@@ -311,10 +311,10 @@ before release. Earlier measurements do not certify later changes.
 
 The legacy `UartSdkLoopbackTest` and `UartLoopbackSdk5` target projects were
 removed in [PR 79](https://github.com/IOsonata/IOsonata/pull/79).
-The shared SDK UART source remains. The nRF52840 `PwmToneDemo` project still
-references missing `exemples/pwm/pwm_tone_demo.cpp`; its presence is not a
-working-example claim. An incomplete example does not by itself invalidate
-the MCU's core drivers.
+The shared SDK UART source remains. The nRF52840
+[PwmToneDemo](../ARM/Nordic/nRF52/nRF52840/exemples/PwmToneDemo/README.md)
+now includes its shared tone source and corrected library paths. Selected-source
+ARM compile/link checks pass at `-O0` and `-Os`; hardware testing is pending.
 
 ## Desktop targets
 
