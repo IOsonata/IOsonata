@@ -673,12 +673,7 @@ ret_code_t BtSecSdSecure(uint16_t ConnHdl, bool ForceRepair)
 		return NRF_ERROR_INVALID_STATE;
 	}
 
-	if (!BtSmpPairingAttemptAllowed(ConnHdl, BtSmpMsTick()))
-	{
-		return NRF_ERROR_INVALID_STATE;
-	}
-
-	ret_code_t r = NRF_ERROR_NOT_FOUND;
+ret_code_t r = NRF_ERROR_NOT_FOUND;
 	if (IsCentral(ConnHdl) && !ForceRepair)
 	{
 		BtSmpKeys_t keys;
@@ -698,6 +693,14 @@ ret_code_t BtSecSdSecure(uint16_t ConnHdl, bool ForceRepair)
 		{
 			CryptoSecureWipe(&keys, sizeof(keys));
 		}
+	}
+
+	// The Core repeated-attempt wait applies to a new pairing procedure. A
+	// valid stored bond may still re-encrypt the link; that path above does not
+	// perform pairing and must not be suppressed by a previous pairing failure.
+	if (!BtSmpPairingAttemptAllowed(ConnHdl, BtSmpMsTick()))
+	{
+		return NRF_ERROR_INVALID_STATE;
 	}
 
 	r = sd_ble_gap_authenticate(ConnHdl, &s_SecParams);
