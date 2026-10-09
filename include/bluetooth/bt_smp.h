@@ -518,6 +518,15 @@ bool BtSmpInit(KeyAgreeEngine *pEcdh, CipherEngine *pAes, RngEngine *pRng);
 /// Connections bit is forced set; this build does not pair with legacy.
 void BtSmpAuthConfig(uint8_t IoCaps, uint8_t AuthReq);
 
+// Application-facing synchronous security decisions. IOsonata completes the
+// protocol transaction; applications must not invoke SMP reply primitives.
+// Implement only the callbacks required by the chosen SecExchg capabilities.
+// Defaults fail closed. These run in Bluetooth event context and must return
+// promptly; never block waiting for console input or another event.
+bool BtAppPairConfirm(uint16_t ConnHdl, uint32_t Number);
+bool BtAppPasskeyShow(uint16_t ConnHdl, uint32_t Passkey);
+uint32_t BtAppPasskeyInput(uint16_t ConnHdl);
+
 /// Numeric Comparison user interaction. The SMP core calls this when a pairing
 /// selects the Numeric Comparison model: display Value (a 6 digit number) and
 /// ask the user whether it matches the value shown on the peer, then resume by
