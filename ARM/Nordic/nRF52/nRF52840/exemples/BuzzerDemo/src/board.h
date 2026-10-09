@@ -131,8 +131,8 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define TONE_PORT			0
 #define TONE_PIN			15
 #else
-#define TONE_PORT			LED3_PORT
-#define TONE_PIN			LED3_PIN
+#define TONE_PORT			0
+#define TONE_PIN			26
 #endif
 
 #endif // __BOARD_H__
