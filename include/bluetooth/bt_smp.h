@@ -529,8 +529,8 @@ uint32_t BtAppPasskeyInput(uint16_t ConnHdl);
 
 /// Numeric Comparison user interaction. The SMP core calls this when a pairing
 /// selects the Numeric Comparison model: display Value (a 6 digit number) and
-/// ask the user whether it matches the value shown on the peer, then resume by
-/// calling BtSmpNumericComparisonReply. The library provides a weak default
+/// ask the user whether it matches the value shown on the peer, and return the decision through BtAppPairConfirm.
+/// The library performs the protocol reply. The library provides a weak default
 /// that rejects the pairing; an application advertising DisplayYesNo or
 /// KeyboardDisplay overrides it with a strong definition.
 void BtSmpNumericComparison(uint16_t ConnHdl, uint32_t Value);
