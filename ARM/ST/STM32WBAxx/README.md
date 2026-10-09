@@ -1,10 +1,10 @@
-# STM32WBA MCU port — integration status
+# STM32WBA MCU port — STM32WBA65 priority
 
 IOsonata currently contains the STM32WBA Bluetooth ACI adapter and linker
-scripts, but **not** a complete standalone STM32WBA MCU port. The supported
-target of this integration plan is an STM32WBA55/WBA52 variant with sufficient
-flash and RAM for the selected Bluetooth stack; memory sizes and security
-partitions must be matched to the exact chip.
+scripts, but **not** a complete standalone STM32WBA MCU port. The hardware bring-up target is **STM32WBA65**. Select the precise device
+suffix (for example STM32WBA65RI for NUCLEO-WBA65RI) and match its flash,
+SRAM, security configuration and middleware version. The WBA5x linker scripts
+are retained solely for WBA5x devices and must **not** be used for WBA65.
 
 ## Existing IOsonata sources
 
@@ -31,7 +31,8 @@ CMSIS startup/system implementation are required. The presence of
 
 ## Work required before claiming an IOsonata MCU port
 
-1. Add device-specific system clock and reset/startup implementation, vector
+1. For STM32WBA65, add the exact WBA65 CMSIS device package, device-specific
+   system clock and reset/startup implementation, vector
    table and interrupt dispatch using the existing IOsonata MCU pattern.
 2. Implement and test MCU-owned GPIO/pinmux, UART and Timer drivers using
    the target reference manual and the correct STM32WBA device definitions.
@@ -39,7 +40,8 @@ CMSIS startup/system implementation are required. The presence of
    ACI and link-layer dependencies, and verify controller/stack bring-up.
 4. Create an MCU library project and small bring-up applications with
    application-owned `board.h` files; do not put board wiring in the library.
-5. Verify linker FLASH/RAM sizes and secure/non-secure placement against the
+5. Create a dedicated STM32WBA65 linker script (the 1 MB/128 KB WBA5x
+   script is incompatible). Verify FLASH/RAM sizes and secure/non-secure placement against the
    exact WBA part and chosen provisioning configuration.
 6. Run compiler/link checks and hardware tests for startup, UART, timers,
    BLE advertising, connecting, GATT, pairing/bonding and NVM persistence.
@@ -50,3 +52,19 @@ The BLE adapter is designed for ST's CubeWBA host/controller middleware,
 not a replacement of its radio controller.
 
 ST's firmware package: https://github.com/STMicroelectronics/STM32CubeWBA
+
+## STM32WBA65 hardware priority (2026-10-09)
+
+The maintainer has a WBA65 development board available for target testing.
+WBA65 is now the first STM32WBA bring-up target. ST documents WBA65 family
+variants with up to 2 MB flash and 512 KB SRAM, a 100 MHz Cortex-M33 and
+Bluetooth LE support. Confirm the exact MCU marking before selecting the
+flash/RAM layout; do not assume every WBA65 has the maximum memory.
+
+If the board is NUCLEO-WBA65RI, use the corresponding STM32WBA65RI device
+header and board-local pin definitions in examples; no board pin assignments
+belong in the shared MCU library.
+
+References:
+- https://www.st.com/en/evaluation-tools/nucleo-wba65ri.html
+- https://www.st.com/en/microcontrollers-microprocessors/stm32wba65mi.html
