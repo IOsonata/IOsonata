@@ -2736,16 +2736,6 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>src/nRF5_SDK/libraries/fds</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/libraries/fstorage</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
 			<name>src/nRF5_SDK/libraries/log</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -3399,61 +3389,6 @@
 			<name>src/nRF5_SDK/libraries/experimental_section_vars/nrf_section_iter.c</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/libraries/experimental_section_vars/nrf_section_iter.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/libraries/fds/fds.c</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/libraries/fds/fds.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/libraries/fds/fds.h</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/libraries/fds/fds.h</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/libraries/fds/fds_internal_defs.h</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/libraries/fds/fds_internal_defs.h</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/libraries/fds/fds_nvmc.h</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/libraries/fds/fds_nvmc.h</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/libraries/fds/fds_sd.h</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/libraries/fds/fds_sd.h</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/libraries/fstorage/nrf_fstorage.c</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/libraries/fstorage/nrf_fstorage.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/libraries/fstorage/nrf_fstorage.h</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/libraries/fstorage/nrf_fstorage.h</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/libraries/fstorage/nrf_fstorage_nvmc.c</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/libraries/fstorage/nrf_fstorage_nvmc.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/libraries/fstorage/nrf_fstorage_nvmc.h</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/libraries/fstorage/nrf_fstorage_nvmc.h</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/libraries/fstorage/nrf_fstorage_sd.c</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/libraries/fstorage/nrf_fstorage_sd.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/libraries/fstorage/nrf_fstorage_sd.h</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/libraries/fstorage/nrf_fstorage_sd.h</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK/libraries/log/nrf_log.h</name>
