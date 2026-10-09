@@ -337,26 +337,46 @@ void TestRepeatedAttemptDecay()
 	BtSmpPairingAttemptSucceeded(kConnHdl);
 }
 
-void TestRepeatedAttemptTableDoesNotGloballyLock()
+void TestRepeatedAttemptSaturationPreservesPenalty()
 {
 	ResetHarness(true);
 
-	for (unsigned n = 0; n < BT_SMP_REPEAT_TRACK_MAX + 2U; ++n)
+	uint8_t firstAddr[6] = {};
+	for (unsigned n = 0; n < BT_SMP_REPEAT_TRACK_MAX; ++n)
 	{
 		for (unsigned i = 0; i < sizeof(s_Peer.Conn.PeerAddr); ++i)
 		{
 			s_Peer.Conn.PeerAddr[i] = static_cast<uint8_t>(n * 17U + i + 1U);
 		}
+		if (n == 0)
+		{
+			std::memcpy(firstAddr, s_Peer.Conn.PeerAddr, sizeof(firstAddr));
+		}
 		BT_CHECK(s_Test, BtSmpPairingAttemptAllowed(kConnHdl, 100U + n));
 		BtSmpPairingAttemptFailed(kConnHdl, 100U + n);
 	}
 
+	// All exact slots are still inside their one-second wait. An untracked
+	// claimant may make one attempt, but its failure goes into the overflow
+	// guard; it must not evict one of the exact active penalties.
 	for (unsigned i = 0; i < sizeof(s_Peer.Conn.PeerAddr); ++i)
 	{
 		s_Peer.Conn.PeerAddr[i] = static_cast<uint8_t>(0xD0U + i);
 	}
 	BT_CHECK(s_Test, BtSmpPairingAttemptAllowed(kConnHdl, 500U));
-	BtSmpPairingAttemptSucceeded(kConnHdl);
+	BtSmpPairingAttemptFailed(kConnHdl, 500U);
+
+	std::memcpy(s_Peer.Conn.PeerAddr, firstAddr, sizeof(firstAddr));
+	BT_CHECK(s_Test, !BtSmpPairingAttemptAllowed(kConnHdl, 600U));
+
+	// A second untracked identity is also held briefly while the exact table is
+	// saturated. This is fail-closed behavior under an address-churn attack.
+	for (unsigned i = 0; i < sizeof(s_Peer.Conn.PeerAddr); ++i)
+	{
+		s_Peer.Conn.PeerAddr[i] = static_cast<uint8_t>(0xE0U + i);
+	}
+	BT_CHECK(s_Test, !BtSmpPairingAttemptAllowed(kConnHdl, 600U));
+	BT_CHECK(s_Test, BtSmpPairingAttemptAllowed(kConnHdl, 1500U));
 }
 
 } // namespace
@@ -448,7 +468,7 @@ int main()
 			   TestRepeatedAttemptBackoff);
 	s_Test.Run("repeated-attempt penalty decays",
 			   TestRepeatedAttemptDecay);
-	s_Test.Run("repeated-attempt table is not a global lock",
-			   TestRepeatedAttemptTableDoesNotGloballyLock);
+	s_Test.Run("repeated-attempt saturation preserves active penalties",
+			   TestRepeatedAttemptSaturationPreservesPenalty);
 	return s_Test.Finish();
 }

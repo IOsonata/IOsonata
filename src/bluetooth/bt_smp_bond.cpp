@@ -785,6 +785,12 @@ typedef struct __Bt_Smp_Repeat_Entry {
 } BtSmpRepeatEntry_t;
 
 static BtSmpRepeatEntry_t s_BtSmpRepeat[BT_SMP_REPEAT_TRACK_MAX];
+// Used only when every exact identity slot still has an active penalty. This
+// prevents address churn from evicting a claimant that is inside its required
+// waiting interval. It is intentionally shared: saturation is already an
+// attack condition, so fail closed briefly rather than weaken an existing
+// identity penalty.
+static BtSmpRepeatEntry_t s_BtSmpRepeatOverflow;
 
 static bool BtSmpTimeBefore(uint32_t Now, uint32_t Deadline)
 {
@@ -922,7 +928,9 @@ bool BtSmpPairingAttemptAllowed(uint16_t ConnHdl, uint32_t Now)
 	}
 	else
 	{
-		allowed = true;
+		BtSmpRepeatDecay(&s_BtSmpRepeatOverflow, Now);
+		allowed = !s_BtSmpRepeatOverflow.InUse ||
+			!BtSmpTimeBefore(Now, s_BtSmpRepeatOverflow.NextAllowed);
 	}
 	BtSmpBondTableExit(state);
 	return allowed;
@@ -942,10 +950,10 @@ void BtSmpPairingAttemptFailed(uint16_t ConnHdl, uint32_t Now)
 	int i = BtSmpRepeatFind(type, addr);
 	if (i < 0)
 	{
-		// Prefer a free slot. When the bounded table is full, replace the
-		// claimant whose last failure is oldest. The Core rule is scoped to a
-		// device claiming the same identity; a peer presenting a different
-		// identity must not globally lock out unrelated devices.
+		// Never evict a claimant whose waiting interval is still active. A
+		// different-address attacker could otherwise cycle through the bounded
+		// table and erase its own earlier penalty. Prefer a free slot, then the
+		// oldest expired slot.
 		uint32_t oldestAge = 0;
 		int victim = -1;
 		for (int n = 0; n < BT_SMP_REPEAT_TRACK_MAX; n++)
@@ -955,12 +963,29 @@ void BtSmpPairingAttemptFailed(uint16_t ConnHdl, uint32_t Now)
 				victim = n;
 				break;
 			}
-			uint32_t age = Now - s_BtSmpRepeat[n].LastFailure;
-			if (victim < 0 || age > oldestAge)
+
+			BtSmpRepeatDecay(&s_BtSmpRepeat[n], Now);
+			if (!BtSmpTimeBefore(Now, s_BtSmpRepeat[n].NextAllowed))
 			{
-				victim = n;
-				oldestAge = age;
+				uint32_t age = Now - s_BtSmpRepeat[n].LastFailure;
+				if (victim < 0 || age > oldestAge)
+				{
+					victim = n;
+					oldestAge = age;
+				}
 			}
+		}
+
+		if (victim < 0)
+		{
+			if (!s_BtSmpRepeatOverflow.InUse)
+			{
+				memset(&s_BtSmpRepeatOverflow, 0, sizeof(s_BtSmpRepeatOverflow));
+				s_BtSmpRepeatOverflow.InUse = true;
+			}
+			BtSmpRepeatRecordFailure(&s_BtSmpRepeatOverflow, Now);
+			BtSmpBondTableExit(state);
+			return;
 		}
 
 		i = victim;
