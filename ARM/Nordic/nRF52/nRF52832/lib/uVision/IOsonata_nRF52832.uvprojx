@@ -384,6 +384,81 @@
           <GroupName>src</GroupName>
           <Files>
             <File>
+              <FileName>bt_app.cpp</FileName>
+              <FileType>8</FileType>
+              <FilePath>..\..\..\..\..\..\src\bluetooth\bt_app.cpp</FilePath>
+            </File>
+            <File>
+              <FileName>bt_peer.cpp</FileName>
+              <FileType>8</FileType>
+              <FilePath>..\..\..\..\..\..\src\bluetooth\bt_peer.cpp</FilePath>
+            </File>
+            <File>
+              <FileName>bt_gap.cpp</FileName>
+              <FileType>8</FileType>
+              <FilePath>..\..\..\..\..\..\src\bluetooth\bt_gap.cpp</FilePath>
+            </File>
+            <File>
+              <FileName>bt_gatt.cpp</FileName>
+              <FileType>8</FileType>
+              <FilePath>..\..\..\..\..\..\src\bluetooth\bt_gatt.cpp</FilePath>
+            </File>
+            <File>
+              <FileName>bt_smp.cpp</FileName>
+              <FileType>8</FileType>
+              <FilePath>..\..\..\..\..\..\src\bluetooth\bt_smp.cpp</FilePath>
+            </File>
+            <File>
+              <FileName>bt_smp_bond.cpp</FileName>
+              <FileType>8</FileType>
+              <FilePath>..\..\..\..\..\..\src\bluetooth\bt_smp_bond.cpp</FilePath>
+            </File>
+            <File>
+              <FileName>bt_smp_bond_nvm.cpp</FileName>
+              <FileType>8</FileType>
+              <FilePath>..\..\..\..\..\..\src\bluetooth\bt_smp_bond_nvm.cpp</FilePath>
+            </File>
+            <File>
+              <FileName>bt_pds.cpp</FileName>
+              <FileType>8</FileType>
+              <FilePath>..\..\..\..\..\..\src\bluetooth\bt_pds.cpp</FilePath>
+            </File>
+            <File>
+              <FileName>bt_app_nrf52.cpp</FileName>
+              <FileType>8</FileType>
+              <FilePath>..\..\..\src\bt_app_nrf52.cpp</FilePath>
+            </File>
+            <File>
+              <FileName>bt_sec_nrf52.cpp</FileName>
+              <FileType>8</FileType>
+              <FilePath>..\..\..\src\bt_sec_nrf52.cpp</FilePath>
+            </File>
+            <File>
+              <FileName>bt_sec_sd.cpp</FileName>
+              <FileType>8</FileType>
+              <FilePath>..\..\..\src\bt_sec_sd.cpp</FilePath>
+            </File>
+            <File>
+              <FileName>bt_gap_nrf52.cpp</FileName>
+              <FileType>8</FileType>
+              <FilePath>..\..\..\src\bt_gap_nrf52.cpp</FilePath>
+            </File>
+            <File>
+              <FileName>bt_gatt_nrf52.cpp</FileName>
+              <FileType>8</FileType>
+              <FilePath>..\..\..\src\bt_gatt_nrf52.cpp</FilePath>
+            </File>
+            <File>
+              <FileName>bt_lesc_sd.cpp</FileName>
+              <FileType>8</FileType>
+              <FilePath>..\..\..\..\src\bt_lesc_sd.cpp</FilePath>
+            </File>
+            <File>
+              <FileName>crypto_uecc.cpp</FileName>
+              <FileType>8</FileType>
+              <FilePath>..\..\..\..\..\..\src\crypto\crypto_uecc.cpp</FilePath>
+            </File>
+            <File>
               <FileName>system_nrf52832.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\src\system_nrf52832.c</FilePath>
@@ -883,11 +958,7 @@
               <FileType>1</FileType>
               <FilePath>..\..\..\..\..\..\..\external\nRF5_SDK\components\libraries\fstorage\nrf_fstorage_sd.c</FilePath>
             </File>
-            <File>
-              <FileName>fds.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\..\..\..\..\..\..\external\nRF5_SDK\components\libraries\fds\fds.c</FilePath>
-            </File>
+            
             <File>
               <FileName>nrf_section_iter.c</FileName>
               <FileType>1</FileType>
@@ -1058,71 +1129,19 @@
               <FileType>1</FileType>
               <FilePath>..\..\..\..\..\..\..\external\nRF5_SDK\components\libraries\atomic\nrf_atomic.c</FilePath>
             </File>
-            <File>
-              <FileName>auth_status_tracker.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\..\..\..\..\..\..\external\nRF5_SDK\components\ble\peer_manager\auth_status_tracker.c</FilePath>
-            </File>
-            <File>
-              <FileName>gatt_cache_manager.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\..\..\..\..\..\..\external\nRF5_SDK\components\ble\peer_manager\gatt_cache_manager.c</FilePath>
-            </File>
-            <File>
-              <FileName>gatts_cache_manager.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\..\..\..\..\..\..\external\nRF5_SDK\components\ble\peer_manager\gatts_cache_manager.c</FilePath>
-            </File>
-            <File>
-              <FileName>id_manager.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\..\..\..\..\..\..\external\nRF5_SDK\components\ble\peer_manager\id_manager.c</FilePath>
-            </File>
-            <File>
-              <FileName>nrf_ble_lesc.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\..\..\..\..\..\..\external\nRF5_SDK\components\ble\peer_manager\nrf_ble_lesc.c</FilePath>
-            </File>
-            <File>
-              <FileName>peer_data_storage.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\..\..\..\..\..\..\external\nRF5_SDK\components\ble\peer_manager\peer_data_storage.c</FilePath>
-            </File>
-            <File>
-              <FileName>peer_database.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\..\..\..\..\..\..\external\nRF5_SDK\components\ble\peer_manager\peer_database.c</FilePath>
-            </File>
-            <File>
-              <FileName>peer_id.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\..\..\..\..\..\..\external\nRF5_SDK\components\ble\peer_manager\peer_id.c</FilePath>
-            </File>
-            <File>
-              <FileName>peer_manager.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\..\..\..\..\..\..\external\nRF5_SDK\components\ble\peer_manager\peer_manager.c</FilePath>
-            </File>
-            <File>
-              <FileName>peer_manager_handler.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\..\..\..\..\..\..\external\nRF5_SDK\components\ble\peer_manager\peer_manager_handler.c</FilePath>
-            </File>
-            <File>
-              <FileName>pm_buffer.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\..\..\..\..\..\..\external\nRF5_SDK\components\ble\peer_manager\pm_buffer.c</FilePath>
-            </File>
-            <File>
-              <FileName>security_dispatcher.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\..\..\..\..\..\..\external\nRF5_SDK\components\ble\peer_manager\security_dispatcher.c</FilePath>
-            </File>
-            <File>
-              <FileName>security_manager.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\..\..\..\..\..\..\external\nRF5_SDK\components\ble\peer_manager\security_manager.c</FilePath>
-            </File>
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
             <File>
               <FileName>nrf_ble_scan.c</FileName>
               <FileType>1</FileType>
@@ -1580,6 +1599,81 @@
           <GroupName>src</GroupName>
           <Files>
             <File>
+              <FileName>bt_app.cpp</FileName>
+              <FileType>8</FileType>
+              <FilePath>..\..\..\..\..\..\src\bluetooth\bt_app.cpp</FilePath>
+            </File>
+            <File>
+              <FileName>bt_peer.cpp</FileName>
+              <FileType>8</FileType>
+              <FilePath>..\..\..\..\..\..\src\bluetooth\bt_peer.cpp</FilePath>
+            </File>
+            <File>
+              <FileName>bt_gap.cpp</FileName>
+              <FileType>8</FileType>
+              <FilePath>..\..\..\..\..\..\src\bluetooth\bt_gap.cpp</FilePath>
+            </File>
+            <File>
+              <FileName>bt_gatt.cpp</FileName>
+              <FileType>8</FileType>
+              <FilePath>..\..\..\..\..\..\src\bluetooth\bt_gatt.cpp</FilePath>
+            </File>
+            <File>
+              <FileName>bt_smp.cpp</FileName>
+              <FileType>8</FileType>
+              <FilePath>..\..\..\..\..\..\src\bluetooth\bt_smp.cpp</FilePath>
+            </File>
+            <File>
+              <FileName>bt_smp_bond.cpp</FileName>
+              <FileType>8</FileType>
+              <FilePath>..\..\..\..\..\..\src\bluetooth\bt_smp_bond.cpp</FilePath>
+            </File>
+            <File>
+              <FileName>bt_smp_bond_nvm.cpp</FileName>
+              <FileType>8</FileType>
+              <FilePath>..\..\..\..\..\..\src\bluetooth\bt_smp_bond_nvm.cpp</FilePath>
+            </File>
+            <File>
+              <FileName>bt_pds.cpp</FileName>
+              <FileType>8</FileType>
+              <FilePath>..\..\..\..\..\..\src\bluetooth\bt_pds.cpp</FilePath>
+            </File>
+            <File>
+              <FileName>bt_app_nrf52.cpp</FileName>
+              <FileType>8</FileType>
+              <FilePath>..\..\..\src\bt_app_nrf52.cpp</FilePath>
+            </File>
+            <File>
+              <FileName>bt_sec_nrf52.cpp</FileName>
+              <FileType>8</FileType>
+              <FilePath>..\..\..\src\bt_sec_nrf52.cpp</FilePath>
+            </File>
+            <File>
+              <FileName>bt_sec_sd.cpp</FileName>
+              <FileType>8</FileType>
+              <FilePath>..\..\..\src\bt_sec_sd.cpp</FilePath>
+            </File>
+            <File>
+              <FileName>bt_gap_nrf52.cpp</FileName>
+              <FileType>8</FileType>
+              <FilePath>..\..\..\src\bt_gap_nrf52.cpp</FilePath>
+            </File>
+            <File>
+              <FileName>bt_gatt_nrf52.cpp</FileName>
+              <FileType>8</FileType>
+              <FilePath>..\..\..\src\bt_gatt_nrf52.cpp</FilePath>
+            </File>
+            <File>
+              <FileName>bt_lesc_sd.cpp</FileName>
+              <FileType>8</FileType>
+              <FilePath>..\..\..\..\src\bt_lesc_sd.cpp</FilePath>
+            </File>
+            <File>
+              <FileName>crypto_uecc.cpp</FileName>
+              <FileType>8</FileType>
+              <FilePath>..\..\..\..\..\..\src\crypto\crypto_uecc.cpp</FilePath>
+            </File>
+            <File>
               <FileName>system_nrf52832.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\src\system_nrf52832.c</FilePath>
@@ -2079,11 +2173,7 @@
               <FileType>1</FileType>
               <FilePath>..\..\..\..\..\..\..\external\nRF5_SDK\components\libraries\fstorage\nrf_fstorage_sd.c</FilePath>
             </File>
-            <File>
-              <FileName>fds.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\..\..\..\..\..\..\external\nRF5_SDK\components\libraries\fds\fds.c</FilePath>
-            </File>
+            
             <File>
               <FileName>nrf_section_iter.c</FileName>
               <FileType>1</FileType>
@@ -2254,71 +2344,19 @@
               <FileType>1</FileType>
               <FilePath>..\..\..\..\..\..\..\external\nRF5_SDK\components\libraries\atomic\nrf_atomic.c</FilePath>
             </File>
-            <File>
-              <FileName>auth_status_tracker.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\..\..\..\..\..\..\external\nRF5_SDK\components\ble\peer_manager\auth_status_tracker.c</FilePath>
-            </File>
-            <File>
-              <FileName>gatt_cache_manager.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\..\..\..\..\..\..\external\nRF5_SDK\components\ble\peer_manager\gatt_cache_manager.c</FilePath>
-            </File>
-            <File>
-              <FileName>gatts_cache_manager.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\..\..\..\..\..\..\external\nRF5_SDK\components\ble\peer_manager\gatts_cache_manager.c</FilePath>
-            </File>
-            <File>
-              <FileName>id_manager.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\..\..\..\..\..\..\external\nRF5_SDK\components\ble\peer_manager\id_manager.c</FilePath>
-            </File>
-            <File>
-              <FileName>nrf_ble_lesc.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\..\..\..\..\..\..\external\nRF5_SDK\components\ble\peer_manager\nrf_ble_lesc.c</FilePath>
-            </File>
-            <File>
-              <FileName>peer_data_storage.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\..\..\..\..\..\..\external\nRF5_SDK\components\ble\peer_manager\peer_data_storage.c</FilePath>
-            </File>
-            <File>
-              <FileName>peer_database.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\..\..\..\..\..\..\external\nRF5_SDK\components\ble\peer_manager\peer_database.c</FilePath>
-            </File>
-            <File>
-              <FileName>peer_id.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\..\..\..\..\..\..\external\nRF5_SDK\components\ble\peer_manager\peer_id.c</FilePath>
-            </File>
-            <File>
-              <FileName>peer_manager.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\..\..\..\..\..\..\external\nRF5_SDK\components\ble\peer_manager\peer_manager.c</FilePath>
-            </File>
-            <File>
-              <FileName>peer_manager_handler.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\..\..\..\..\..\..\external\nRF5_SDK\components\ble\peer_manager\peer_manager_handler.c</FilePath>
-            </File>
-            <File>
-              <FileName>pm_buffer.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\..\..\..\..\..\..\external\nRF5_SDK\components\ble\peer_manager\pm_buffer.c</FilePath>
-            </File>
-            <File>
-              <FileName>security_dispatcher.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\..\..\..\..\..\..\external\nRF5_SDK\components\ble\peer_manager\security_dispatcher.c</FilePath>
-            </File>
-            <File>
-              <FileName>security_manager.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\..\..\..\..\..\..\external\nRF5_SDK\components\ble\peer_manager\security_manager.c</FilePath>
-            </File>
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
             <File>
               <FileName>nrf_ble_scan.c</FileName>
               <FileType>1</FileType>
