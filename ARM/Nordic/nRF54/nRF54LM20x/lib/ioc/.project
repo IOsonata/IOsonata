@@ -3245,5 +3245,15 @@
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_hci_usb.cpp</locationURI>
 		</link>
+		<link>
+			<name>src/coredev/i2c_nrfx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/i2c_nrfx.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/spi_nrfx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/spi_nrfx.cpp</locationURI>
+		</link>
 	</linkedResources>
 </projectDescription>

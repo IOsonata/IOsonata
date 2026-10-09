@@ -3125,5 +3125,15 @@
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/sdk-nrf-bm/lib/bluetooth/peer_manager/include/modules/security_manager.h</locationURI>
 		</link>
+		<link>
+			<name>src/coredev/i2c_nrfx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/i2c_nrfx.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/spi_nrfx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/spi_nrfx.cpp</locationURI>
+		</link>
 	</linkedResources>
 </projectDescription>

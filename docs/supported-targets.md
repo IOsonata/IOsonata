@@ -54,12 +54,12 @@ by MCU and selected radio stack.
 |---|---|---|---|
 | [nRF52832](../ARM/Nordic/nRF52/nRF52832/lib/ioc/) | GPIO, UART/UARTE, I2C, SPI, RTC/TIMER, PWM, SAADC, analog comparator, PDM microphone capture, NFC target frames, internal NVM, RNG and Bluetooth | [Examples](../ARM/Nordic/nRF52/nRF52832/exemples/): BLE advertising/scanning and UART bridges, I2C/SPI master/slave, ADC, PWM, environmental/motion sensors, displays, EEPROM/flash/filesystems, FreeRTOS and TaktOS | Mature, extensive port; established BLE, UART, sensor and low-power hardware use. |
 | [nRF52840](../ARM/Nordic/nRF52/nRF52840/lib/ioc/) | GPIO, UART/UARTE, I2C, SPI/QSPI, RTC/TIMER, PWM, SAADC, comparator, PDM, NFC target frames, NVM, RNG, CC3xx crypto, Bluetooth and native full-speed USB device | [Examples](../ARM/Nordic/nRF52/nRF52840/exemples/): BLE, sensors/displays, flash/filesystems, PDM capture, QSPI, UART/SLIP, CDC, HID, bulk, interrupt, ISO, MSC and composite USB; bare metal and RTOS | Mature, extensive port; recorded bare-metal and TaktOS composite USB endurance runs. |
-| [nRF54L15](../ARM/Nordic/nRF54/nRF54L15/lib/ioc/) | GPIO, UART/UARTE, GRTC/TIMER, PWM, NVM, RNG, CRACEN crypto, NFC target frames and Bluetooth | [Examples](../ARM/Nordic/nRF54/nRF54L15/exemples/): BLE advertising/scanning, periodic advertising/sync, UART BLE peripheral/central, UART/SLIP PRBS, PWM, timers and TaktOS | Mature, actively developed port; established UART/Bluetooth and TaktOS hardware use. I2C/SPI project integration is noted below. |
-| [nRF54LM20A/B](../ARM/Nordic/nRF54/nRF54LM20x/lib/ioc/) | Shared nRF54L GPIO, UART, timers, PWM, NVM, crypto, NFC and Bluetooth support, plus native high-speed USB device | [Examples](../ARM/Nordic/nRF54/nRF54LM20x/exemples/): nRF54L serial/BLE applications, USB/BLE bridges, CDC, HID, bulk, interrupt, ISO, MSC and composite USB, including TaktOS | Extensive port; recorded bare-metal and TaktOS high-speed USB composite runs. Select the matching LM20 variant. |
+| [nRF54L15](../ARM/Nordic/nRF54/nRF54L15/lib/ioc/) | GPIO, UART/UARTE, I2C, SPI, GRTC/TIMER, PWM, NVM, RNG, CRACEN crypto, NFC target frames and Bluetooth | [Examples](../ARM/Nordic/nRF54/nRF54L15/exemples/): BLE advertising/scanning, periodic advertising/sync, UART BLE peripheral/central, UART/SLIP PRBS, PWM, timers and TaktOS | Mature, actively developed port; established UART/Bluetooth and TaktOS hardware use. I2C/SPI modes and validation are noted below. |
+| [nRF54LM20A/B](../ARM/Nordic/nRF54/nRF54LM20x/lib/ioc/) | Shared nRF54L GPIO, UART, I2C, SPI, timers, PWM, NVM, crypto, NFC and Bluetooth support, plus native high-speed USB device | [Examples](../ARM/Nordic/nRF54/nRF54LM20x/exemples/): nRF54L serial/BLE applications, USB/BLE bridges, CDC, HID, bulk, interrupt, ISO, MSC and composite USB, including TaktOS | Extensive port; recorded bare-metal and TaktOS high-speed USB composite runs. Select the matching LM20 variant. |
 | [nRF5340 application core](../ARM/Nordic/nRF53/nRF5340_App/lib/ioc/) | GPIO, UART, I2C, SPI/QSPI, RTC/TIMER, PWM and PDM; application-core startup and shared-peripheral interrupt dispatch | [Examples](../ARM/Nordic/nRF53/nRF5340_App/exemples/): I2C/SPI master/slave, UART TX/RX PRBS, SLIP, retargeting and timers | Supported; current full IOC builds and hardware results are not recorded in this review. |
 | [nRF5340 network core](../ARM/Nordic/nRF53/nRF5340_Net/lib/ioc/) | GPIO, UART, I2C, SPI, RTC/TIMER and RNG; separate network-core startup and dispatch | [Examples](../ARM/Nordic/nRF53/nRF5340_Net/exemples/): UART PRBS, timers and BLE projects | Supported MCU drivers. BLE example presence does not establish a validated inter-core radio application. |
-| [nRF9160](../ARM/Nordic/nRF91/nRF9160/lib/ioc/) | GPIO, UART, I2C, SPI, RTC/TIMER, PWM, SAADC, watchdog, NVM, RNG/CC3xx, modem IPC, LTE, sockets and GNSS | [Examples](../ARM/Nordic/nRF91/nRF9160/exemples/): modem information, LTE UDP with bare metal/TaktOS, GNSS fixes, ADC, NVM, watchdog and crypto | Supported, with implemented cellular and GNSS integration. Network and GNSS hardware results are not recorded here. |
-| [nRF91x1](../ARM/Nordic/nRF91/nRF91x1/lib/ioc/) | Shared nRF91 peripheral, LTE/socket and GNSS implementations | [Examples](../ARM/Nordic/nRF91/nRF91x1/exemples/): LTE/GNSS, ADC, NVM, watchdog, crypto, I2C/SPI, EEPROM, environmental sensors, PWM, UART/SLIP and timers | Supported; Debug/Release currently select `NRF9120_XXAA`. Select and verify the intended part and modem firmware. |
+| [nRF9160](../ARM/Nordic/nRF91/nRF9160/lib/ioc/) | GPIO, UART, I2C, SPI, RTC/TIMER, PWM, SAADC, watchdog, NVM, RNG/CC3xx, modem IPC, LTE, sockets and GNSS | [Examples](../ARM/Nordic/nRF91/nRF9160/exemples/): modem information, LTE UDP with bare metal/TaktOS, GNSS fixes, ADC, NVM, watchdog and crypto | Hardware tested with `LteModemInfo`: modem initialization and AT replies confirmed. LTE registration, data transfer and GNSS results are not recorded here. |
+| [nRF91x1](../ARM/Nordic/nRF91/nRF91x1/lib/ioc/) | Shared nRF91 peripheral, LTE/socket and GNSS implementations | [Examples](../ARM/Nordic/nRF91/nRF91x1/exemples/): LTE/GNSS, ADC, NVM, watchdog, crypto, I2C/SPI, EEPROM, environmental sensors, PWM, UART/SLIP and timers | Hardware tested, confirmed by the maintainer. Debug/Release currently select `NRF9120_XXAA`. Select and verify the intended part and modem firmware. |
 | [nRF52805](../ARM/Nordic/nRF52/nRF52805/lib/ioc/), [nRF52810](../ARM/Nordic/nRF52/nRF52810/lib/ioc/) | Shared nRF52 startup, GPIO, UART, I2C, SPI, RNG and Bluetooth sources | Blinky and DFU projects in each target directory | Timer project integration incomplete: generic `timer.cpp` and SDK `app_timer.c` are present, but the IOsonata RTC/TIMER implementations are absent from these library source lists. |
 | nRF54H20 [application](../ARM/Nordic/nRF54/nRF54H20/nRF54H20_App/lib/ioc/), [network](../ARM/Nordic/nRF54/nRF54H20/nRF54H20_Net/lib/ioc/) and [RISC-V](../RISCV/Nordic/nRF54/nRF54H20/lib/ioc/) | Initial projects and partial target integration | See [H20 development notes](../ARM/Nordic/nRF54/nRF54H20/README.md) | Incomplete ports: startup, peripheral, NRFS USB, MPSL and inter-core HCI work remains. |
 
@@ -77,11 +77,35 @@ frames. These are distinct from the unfinished
 [I2S transfer implementation](../ARM/Nordic/src/i2s_nrfx.cpp), which is not
 included in the feature claims above.
 
-The nRF54L15/LM20 library projects currently link generic I2C/SPI wrappers but
-omit `i2c_nrfx.cpp` and `spi_nrfx.cpp`. Their shared peripheral dispatch exists;
-these buses still need target/project verification before being listed as
-ready-to-use nRF54 features. The nRF52832 has no native USB controller, and
-LM20 USB support does not apply to nRF54L15.
+The nRF54L15/LM20 library projects include `i2c_nrfx.cpp` and `spi_nrfx.cpp`.
+Both support polling EasyDMA masters (`bIntEn = false`) and interrupt-driven
+slaves. Master interrupt operation is unfinished and these ports reject that
+mode during initialization. I2C uses 7-bit addresses and selects the closest
+100, 250, 400 or 1000 kbit/s rate. SPI uses 8-bit words and selects the closest
+rate available from the instance's prescaler. Requests below or above the
+available rates return the closest rate; the application decides whether to use
+it. Slave clocks come from the external master.
+
+Device numbers follow the same serial-instance order as UART:
+
+| DevNo | Serial instance | I2C | SPI | MCU |
+|---|---|---|---|---|
+| 0 | SERIAL30 | TWIM/TWIS30 | SPIM/SPIS30 | L15, LM20A/B |
+| 1 | SERIAL20 | TWIM/TWIS20 | SPIM/SPIS20 | L15, LM20A/B |
+| 2 | SERIAL21 | TWIM/TWIS21 | SPIM/SPIS21 | L15, LM20A/B |
+| 3 | SERIAL22 | TWIM/TWIS22 | SPIM/SPIS22 | L15, LM20A/B |
+| 4 | SERIAL00 | Not available | SPIM/SPIS00 | L15, LM20A/B |
+| 5 | SERIAL23 | TWIM/TWIS23 | SPIM/SPIS23 | LM20A/B |
+| 6 | SERIAL24 | TWIM/TWIS24 | SPIM/SPIS24 | LM20A/B |
+
+Do not use the same serial instance for UART, I2C and SPI at the same time.
+Choose pins supported by the selected instance in the application's `board.h`.
+The new bus code passes Arm compilation and register tests for L15, LM20A and
+LM20B; physical I2C/SPI tests are still needed. See the
+[bus test instructions](../tests/nrf54_buses/README.md).
+
+The nRF52832 has no native USB controller, and LM20 USB support does not apply
+to nRF54L15.
 
 The nRF91 implementation includes
 [LTE](../ARM/Nordic/nRF91/src/lte_nrf91.cpp),
@@ -250,6 +274,8 @@ the review commit or that every project passed both IOC build profiles.
 | nRF54L15 | BLYSTL15, Nordic nRF54L15 DK | UART, Bluetooth and TaktOS benchmarks | Established Bluetooth and RTOS development platform. |
 | nRF52840 | Composite USB, bare metal and TaktOS | CDC loopback/PRBS, HID, interrupt and ISO endurance | 2000-second results recorded in the [0.13 notes](releases/0.13.md#recorded-validation); exact firmware SHA/toolchain not supplied with those reports. |
 | nRF54LM20 | Composite USB, bare metal and TaktOS | High-speed composite USB endurance | 2000-second results in the same release record; exact board/variant and firmware revision must accompany future runs. |
+| nRF9160 | `LteModemInfo`, modem library `3.5.0-cellular-44ef973ed31b`, firmware `mfw_nrf9160_1.2.8` | Modem initialization and AT communication | Maintainer output on 2026-10-08: firmware, identity, hardware-version and functional-mode queries returned `OK`; `CFUN` was 0. This run did not exercise network registration, data transfer or GNSS. |
+| nRF91x1 | Maintainer hardware | Port hardware tested | Confirmed by the maintainer on 2026-10-08; exact part, board and individual test coverage were not specified. |
 | SAM4LC8C | SAM4L8 Xplained Pro | Startup, LED GPIO, UART, AST/TC timers, I2C, SPI, CDC loopback, ISO and manual suspend/wake | Hardware validated, confirmed 2026-10-08. See [timer results](../tests/sam4l/README.md) and [USB results](releases/0.13.md#sam4l-usb-port). |
 | STM32F030x8 | STM32F0308-DISCO | Hardware validated: startup, GPIO, UART and timers; later UART TX DMA PRBS | Maintainer-confirmed validation. Detailed recorded timer runs cover TIM6/TIM16; coverage of additional modes is tracked separately. |
 | STM32L476, STM32L496, STM32L4S9 | Maintainer's existing projects | Hardware validated and used in projects | Confirmed by the maintainer on 2026-10-08; board names and per-project configurations were not supplied in this confirmation. |
