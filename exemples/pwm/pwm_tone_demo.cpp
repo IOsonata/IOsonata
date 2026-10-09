@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
 @example	pwm_tone_demo.cpp
 
-@brief	Play the opening rhythm of Holst's Mars with PWM
+@brief	Play the Jingle Bells chorus with PWM
 
 @author	Hoang Nguyen Hoan
 @date	May 15, 2018
@@ -37,7 +37,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 static const PwmCfg_t s_PwmCfg = {
 	.DevNo = 0,
-	.Freq = 4978,
+	.Freq = 5274,
 	.Mode = PWM_MODE_EDGE,
 	.bIntEn = false,
 	.IntPrio = 6,
@@ -51,13 +51,40 @@ static const PwmChanCfg_t s_ToneChannel = {
 	.Pin = TONE_PIN
 };
 
-// Holst, The Planets, Mars: opening 5/4 ostinato.
-// Three triplet eighths, two quarters, two eighths, one quarter.
-// Six ticks per quarter at 120 BPM: 30 ticks per bar.
-// The original repeated G is transposed to Eb8 (4978 Hz) for this buzzer.
-static const uint32_t s_ToneFreq = 4978;
-static const uint8_t s_MarsTicks[] = {2, 2, 2, 6, 6, 3, 3, 6};
-static const uint32_t s_QuarterUs = 500000;
+// Jingle Bells, James Lord Pierpont (1857), chorus in C major.
+// C8-G8 keeps the melody near the buzzer's useful frequency range.
+static const uint32_t C8 = 4186;
+static const uint32_t D8 = 4699;
+static const uint32_t E8 = 5274;
+static const uint32_t F8 = 5588;
+static const uint32_t G8 = 6272;
+
+typedef struct {
+	uint32_t Freq;
+	uint8_t Eighths;
+} ToneNote_t;
+
+static const ToneNote_t s_Melody[] = {
+	{E8, 2}, {E8, 2}, {E8, 4},
+	{E8, 2}, {E8, 2}, {E8, 4},
+	{E8, 2}, {G8, 2}, {C8, 3}, {D8, 1},
+	{E8, 8},
+	{F8, 2}, {F8, 2}, {F8, 3}, {F8, 1},
+	{F8, 2}, {E8, 2}, {E8, 2}, {E8, 1}, {E8, 1},
+	{E8, 2}, {D8, 2}, {D8, 2}, {E8, 2},
+	{D8, 4}, {G8, 4},
+
+	{E8, 2}, {E8, 2}, {E8, 4},
+	{E8, 2}, {E8, 2}, {E8, 4},
+	{E8, 2}, {G8, 2}, {C8, 3}, {D8, 1},
+	{E8, 8},
+	{F8, 2}, {F8, 2}, {F8, 3}, {F8, 1},
+	{F8, 2}, {E8, 2}, {E8, 2}, {E8, 1}, {E8, 1},
+	{G8, 2}, {G8, 2}, {F8, 2}, {D8, 2},
+	{C8, 8}
+};
+
+static const uint32_t s_EighthUs = 250000; // 120 quarter notes per minute.
 static const uint32_t s_GapUs = 20000;
 
 Pwm g_Pwm;
@@ -77,34 +104,25 @@ int main()
 
 	while (1)
 	{
-		for (unsigned int bar = 0; bar < 8; bar++)
+		for (unsigned int i = 0; i < sizeof(s_Melody) / sizeof(s_Melody[0]); i++)
 		{
-			uint32_t ticks = 0;
-			uint32_t elapsed = 0;
-			for (unsigned int i = 0; i < sizeof(s_MarsTicks); i++)
+			uint32_t duration = s_Melody[i].Eighths * s_EighthUs;
+			if (!g_Pwm.Frequency(s_Melody[i].Freq) ||
+				!g_Pwm.DutyCycle(s_ToneChannel.Chan, 50) ||
+				!g_Pwm.Start())
 			{
-				ticks += s_MarsTicks[i];
-				uint32_t end = ticks * s_QuarterUs / 6;
-				uint32_t duration = end - elapsed;
-				elapsed = end;
-
-				if (!g_Pwm.Frequency(s_ToneFreq) ||
-					!g_Pwm.DutyCycle(s_ToneChannel.Chan, 50) ||
-					!g_Pwm.Start())
-				{
-					g_Pwm.Stop();
-					g_Pwm.CloseChannel(s_ToneChannel.Chan);
-					g_Pwm.Disable();
-					return 1;
-				}
-
-				usDelay(duration - s_GapUs);
-				// Load an inactive sample before stopping the output.
-				g_Pwm.DutyCycle(s_ToneChannel.Chan, 0);
-				usDelay(1000);
 				g_Pwm.Stop();
-				usDelay(s_GapUs - 1000);
+				g_Pwm.CloseChannel(s_ToneChannel.Chan);
+				g_Pwm.Disable();
+				return 1;
 			}
+
+			usDelay(duration - s_GapUs);
+			// Load an inactive sample before stopping the output.
+			g_Pwm.DutyCycle(s_ToneChannel.Chan, 0);
+			usDelay(1000);
+			g_Pwm.Stop();
+			usDelay(s_GapUs - 1000);
 		}
 		usDelay(1000000);
 	}
