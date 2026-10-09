@@ -38,6 +38,12 @@ SOFTWARE.
 
 #include "coredev/iopincfg.h"
 
+// UDP echo server, see lte_udp.cpp. No release assistance: the echo comes
+// back after the send, and modem firmware 1.2.x has no AT%RAI.
+#define LTE_UDP_HOST		"echo.u-blox.com"
+#define LTE_UDP_PORT		7
+#define LTE_UDP_RAI			0
+
 // Console, UART0 to the interface MCU (VCOM0)
 #define UART_DEVNO			0
 #define UART_RX_PORT		0
