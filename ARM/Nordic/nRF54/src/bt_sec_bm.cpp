@@ -54,6 +54,7 @@ typedef struct __Bt_Sec_Sd_Link {
 	ble_gap_sec_params_t    ReplyParams;
 	bool                    bReplyPending;
 	bool                    bReplyReject;
+	bool                    bReplySc;
 	bool                    bSecurePending;
 	bool                    bForceRepair;
 	bool                    bPairing;
@@ -324,7 +325,7 @@ static void ConnSecUpdate(uint16_t ConnHdl, const ble_gap_conn_sec_t *pSdSec)
 	}
 }
 
-static void KeysetFill(uint16_t ConnHdl, ble_gap_sec_keyset_t *pKeyset)
+static void KeysetFill(uint16_t ConnHdl, bool bSc, ble_gap_sec_keyset_t *pKeyset)
 {
 	BtSecBmLink_t *pLink = LinkGet(ConnHdl);
 	memset(pKeyset, 0, sizeof(*pKeyset));
@@ -333,8 +334,11 @@ static void KeysetFill(uint16_t ConnHdl, ble_gap_sec_keyset_t *pKeyset)
 		return;
 	}
 
-	pKeyset->keys_own.p_pk = BtLescPubKeyGet();
-	pKeyset->keys_peer.p_pk = &pLink->PeerPk;
+	if (bSc)
+	{
+		pKeyset->keys_own.p_pk = BtLescPubKeyGet();
+		pKeyset->keys_peer.p_pk = &pLink->PeerPk;
+	}
 
 	if (!s_SecParams.bond)
 	{
@@ -342,10 +346,10 @@ static void KeysetFill(uint16_t ConnHdl, ble_gap_sec_keyset_t *pKeyset)
 	}
 
 	pKeyset->keys_own.p_enc_key = &pLink->OwnEnc;
-	// S140 requires the peer encryption-key pointer to be NULL for an
-	// LE Secure Connections-only procedure. Legacy pairing still needs it
-	// because the peer may distribute a distinct LTK for role reversal.
-	pKeyset->keys_peer.p_enc_key = s_bScOnly ? nullptr : &pLink->PeerEnc;
+	// In LE Secure Connections the peer encryption-key pointer must be NULL;
+	// the LTK is derived, not distributed. Legacy pairing needs this buffer
+	// because the peer may distribute a distinct LTK for later role reversal.
+	pKeyset->keys_peer.p_enc_key = bSc ? nullptr : &pLink->PeerEnc;
 	pKeyset->keys_peer.p_id_key = &pLink->PeerId;
 
 	if (s_SecParams.kdist_own.sign)
@@ -358,7 +362,8 @@ static void KeysetFill(uint16_t ConnHdl, ble_gap_sec_keyset_t *pKeyset)
 	}
 }
 
-static uint32_t ParamsReplyAttempt(uint16_t ConnHdl, const ble_gap_sec_params_t *pParams)
+static uint32_t ParamsReplyAttempt(uint16_t ConnHdl, const ble_gap_sec_params_t *pParams,
+								 bool bSc)
 {
 	BtSecBmLink_t *pLink = LinkGet(ConnHdl);
 	if (pLink == nullptr || BtPeerFindByHdl(ConnHdl) == nullptr)
@@ -374,6 +379,7 @@ static uint32_t ParamsReplyAttempt(uint16_t ConnHdl, const ble_gap_sec_params_t 
 		// SMP timer expires.
 		(void)sd_ble_gap_disconnect(ConnHdl, BLE_HCI_AUTHENTICATION_FAILURE);
 		pLink->bReplyPending = false;
+		pLink->bReplySc = false;
 		return NRF_SUCCESS;
 	}
 
@@ -394,11 +400,12 @@ static uint32_t ParamsReplyAttempt(uint16_t ConnHdl, const ble_gap_sec_params_t 
 	if (secStatus == BLE_GAP_SEC_STATUS_SUCCESS)
 	{
 		LinkKeyBuffersReset(pLink);
-		KeysetFill(ConnHdl, &keyset);
-		if (s_SecParams.lesc && keyset.keys_own.p_pk == nullptr)
+		KeysetFill(ConnHdl, bSc, &keyset);
+		if (bSc && keyset.keys_own.p_pk == nullptr)
 		{
 			pLink->bReplyPending = true;
 			pLink->bReplyReject = false;
+			pLink->bReplySc = bSc;
 			pLink->ReplyParams = *pParams;
 			return NRF_ERROR_BUSY;
 		}
@@ -414,6 +421,7 @@ static uint32_t ParamsReplyAttempt(uint16_t ConnHdl, const ble_gap_sec_params_t 
 	{
 		pLink->bReplyPending = true;
 		pLink->bReplyReject = pParams == nullptr;
+		pLink->bReplySc = bSc;
 		if (pParams != nullptr)
 		{
 			pLink->ReplyParams = *pParams;
@@ -423,6 +431,7 @@ static uint32_t ParamsReplyAttempt(uint16_t ConnHdl, const ble_gap_sec_params_t 
 	{
 		pLink->bReplyPending = false;
 		pLink->bReplyReject = false;
+		pLink->bReplySc = false;
 	}
 	return r;
 }
@@ -456,7 +465,8 @@ static void ParamsRequestProcess(const ble_gap_evt_t *pGapEvt)
 
 	pLink->bPairing = true;
 	pLink->bBonding = pPeer->bond && s_SecParams.bond;
-	uint32_t r = ParamsReplyAttempt(h, &s_SecParams);
+	bool bSc = s_SecParams.lesc && pPeer->lesc;
+	uint32_t r = ParamsReplyAttempt(h, &s_SecParams, bSc);
 	if (r != NRF_SUCCESS && r != NRF_ERROR_BUSY)
 	{
 		DEBUG_PRINTF("SEC: params reply failed 0x%X\r\n", (unsigned)r);
@@ -845,7 +855,7 @@ void BtSecBmCheckStatus(void)
 		{
 			const ble_gap_sec_params_t *p = pLink->bReplyReject ?
 				nullptr : &pLink->ReplyParams;
-			(void)ParamsReplyAttempt(h, p);
+			(void)ParamsReplyAttempt(h, p, pLink->bReplySc);
 		}
 		if (pLink->bSecurePending)
 		{
