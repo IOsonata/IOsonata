@@ -319,15 +319,29 @@ void BtAppInitUserData()
 {
 }
 
+void BtAppEvtConnected(uint16_t ConnHdl)
+{
+	(void)ConnHdl;
+	// Retry a frame held while the BLE link had no notification recipient.
+	if (s_UartRxBuffLen > 0)
+	{
+		UartRxQue();
+	}
+}
+
 void UartRxChedHandler(uint32_t Evt, void *pCtx)
 {
 	(void)Evt;
 	(void)pCtx;
 	s_bUartRxPending = false;
-	int len = g_Uart.Rx(s_UartRxBuff, sizeof(s_UartRxBuff));
-	if (len > 0)
+	if (s_UartRxBuffLen == 0)
 	{
-		(void)BtAppNotify(&g_UartChars[0], s_UartRxBuff, (uint16_t)len);
+		s_UartRxBuffLen = g_Uart.Rx(s_UartRxBuff, sizeof(s_UartRxBuff));
+	}
+	if (s_UartRxBuffLen > 0 &&
+		BtAppNotify(&g_UartChars[0], s_UartRxBuff, (uint16_t)s_UartRxBuffLen))
+	{
+		s_UartRxBuffLen = 0;
 	}
 }
 
