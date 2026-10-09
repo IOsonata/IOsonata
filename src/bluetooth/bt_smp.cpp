@@ -2082,6 +2082,7 @@ static void SmpHandlePairingRandom(BtHciDevice_t * const pDev, BtSmpLink_t *pLin
 			{
 				SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_CONFIRM_VALUE_FAILED);
 				SmpAuthFailCount(pLink);
+				BtSmpPairingAttemptFailed(ConnHdl, BtSmpMsTick());
 				SmpAbortPairing(pLink);
 				return;
 			}
