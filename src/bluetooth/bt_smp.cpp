@@ -640,6 +640,14 @@ static void SmpSendFailed(BtHciDevice_t * const pDev, uint16_t ConnHdl, uint8_t 
 	f.Code = BT_SMP_CODE_PAIRING_FAILED;
 	f.Reason = Reason;
 	SmpSend(pDev, ConnHdl, &f, sizeof(f));
+
+	// A blocked retry is not a new pairing failure and must not let packet
+	// spam extend the waiting interval. Every other locally terminated pairing
+	// enters the identity-scoped Core 2.3.6 backoff at this chokepoint.
+	if (Reason != BT_SMP_ERR_REPEATED_ATTEMPTS)
+	{
+		BtSmpPairingAttemptFailed(ConnHdl, BtSmpMsTick());
+	}
 }
 
 static void SmpSendHciCmd(BtHciDevice_t * const pDev, uint16_t OpCode,
@@ -2412,6 +2420,7 @@ static void SmpKeyDistReceived(BtSmpLink_t *pLink, uint8_t KeyBit)
 	if (pLink->Ctx.KeyDistExp == 0)
 	{
 		pLink->Ctx.State = BT_SMP_STATE_DONE;
+		BtSmpPairingAttemptSucceeded(pLink->ConnHdl);
 		BtSmpPairingComplete(pLink->ConnHdl, true, &pLink->Keys);
 	}
 }
@@ -2546,6 +2555,11 @@ void BtProcessSmpData(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 	switch (pSmp->Code)
 	{
 		case BT_SMP_CODE_PAIRING_REQ:
+			if (!BtSmpPairingAttemptAllowed(ConnHdl, BtSmpMsTick()))
+			{
+				SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_REPEATED_ATTEMPTS);
+				return;
+			}
 			// A Pairing Request travels central to peripheral only (Vol 3
 			// Part H 3.5.1). A central receiving one answers Pairing Failed
 			// with Command Not Supported. Gated only when the link role is
@@ -2690,6 +2704,7 @@ void BtProcessSmpData(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 			if (pLink->Ctx.State != BT_SMP_STATE_IDLE)
 			{
 				SmpAbortPairing(pLink);
+				BtSmpPairingAttemptFailed(ConnHdl, BtSmpMsTick());
 				pLink->Ctx.FailCount++;
 				if (pLink->Ctx.FailCount >= BT_SMP_MAX_PAIR_ATTEMPTS)
 				{
@@ -2701,6 +2716,11 @@ void BtProcessSmpData(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 		}
 
 		case BT_SMP_CODE_PAIRING_SECURITY_REQ:
+			if (!BtSmpPairingAttemptAllowed(ConnHdl, BtSmpMsTick()))
+			{
+				SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_REPEATED_ATTEMPTS);
+				break;
+			}
 			// A Security Request travels peripheral to central only (Vol 3
 			// Part H 3.6.7 / 2.4.6). A peripheral receiving one answers
 			// Pairing Failed with Command Not Supported (S1). Gated only when
@@ -3224,6 +3244,7 @@ void BtSmpEncryptionChanged(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 		{
 			// No peer keys expected: the record is already complete.
 			pLink->Ctx.State = BT_SMP_STATE_DONE;
+			BtSmpPairingAttemptSucceeded(ConnHdl);
 			BtSmpPairingComplete(ConnHdl, true, &pLink->Keys);
 		}
 	}
@@ -3985,6 +4006,11 @@ void BtSmpPasskeyReply(uint16_t ConnHdl, uint32_t Passkey)
 __attribute__((weak))
 void BtSmpRequestSecurity(uint16_t ConnHdl)
 {
+	if (!BtSmpPairingAttemptAllowed(ConnHdl, BtSmpMsTick()))
+	{
+		return;
+	}
+
 	BtDevice_t *pPeer = BtPeerFindByHdl(ConnHdl);
 	if (pPeer == nullptr || pPeer->pHciDev == nullptr)
 	{
@@ -4060,6 +4086,11 @@ void BtSmpStartPairing(uint16_t ConnHdl)
 		DEBUG_PRINTF("SMP central reconnect, encrypt from bond\r\n");
 		BtSmpHciEnableEncryption(pDev, ConnHdl, pLink->Keys.Rand,
 								 pLink->Keys.Ediv, pLink->Keys.Ltk);
+		return;
+	}
+
+	if (!BtSmpPairingAttemptAllowed(ConnHdl, BtSmpMsTick()))
+	{
 		return;
 	}
 
@@ -4197,6 +4228,7 @@ void BtSmpTimeoutCheck(void)
 					  pLink->ConnHdl);
 			pLink->Ctx.KeyDistExp = 0;
 			pLink->Ctx.State = BT_SMP_STATE_DONE;
+			BtSmpPairingAttemptSucceeded(pLink->ConnHdl);
 			BtSmpPairingComplete(pLink->ConnHdl, true, &pLink->Keys);
 		}
 	}

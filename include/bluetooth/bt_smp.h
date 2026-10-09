@@ -151,12 +151,40 @@ SOFTWARE.
 #define BT_SMP_TIMEOUT_MS							30000
 #endif
 
-/// Lock a link after this many failed pairing attempts within one connection
-/// (Core Vol 3 Part H 2.3.6, repeated attempts). Further attempts are refused
-/// until the link disconnects. Cross-connection exponential back-off needs
-/// persistent state and is left to the platform.
+/// Fast per-connection lockout. The identity-scoped repeated-attempt policy
+/// below is normative; this local counter is defense in depth so one connection
+/// cannot burn CPU continuously between identity-policy checks.
 #ifndef BT_SMP_MAX_PAIR_ATTEMPTS
 #define BT_SMP_MAX_PAIR_ATTEMPTS					3
+#endif
+
+/// Repeated-attempt policy (Core Vol 3 Part H 2.3.6).
+///
+/// The verifier waits after a failed pairing before initiating or responding to
+/// the same claimant again. Each failure doubles the interval up to the cap.
+/// After a quiet period the exponent is reduced one step; repeated quiet periods
+/// therefore reduce the future waiting interval exponentially to the minimum.
+///
+/// These are local policy values, not protocol fields. State is kept in RAM so
+/// an unauthenticated peer cannot force flash wear merely by failing pairing.
+#ifndef BT_SMP_REPEAT_MIN_WAIT_MS
+#define BT_SMP_REPEAT_MIN_WAIT_MS				1000U
+#endif
+#ifndef BT_SMP_REPEAT_MAX_WAIT_MS
+#define BT_SMP_REPEAT_MAX_WAIT_MS				3600000U
+#endif
+#ifndef BT_SMP_REPEAT_DECAY_MS
+#define BT_SMP_REPEAT_DECAY_MS					3600000U
+#endif
+#ifndef BT_SMP_REPEAT_TRACK_MAX
+#define BT_SMP_REPEAT_TRACK_MAX					8
+#endif
+
+#if BT_SMP_REPEAT_MIN_WAIT_MS == 0 || \
+	BT_SMP_REPEAT_MAX_WAIT_MS < BT_SMP_REPEAT_MIN_WAIT_MS || \
+	BT_SMP_REPEAT_MAX_WAIT_MS >= 0x80000000U || \
+	BT_SMP_REPEAT_DECAY_MS == 0 || BT_SMP_REPEAT_TRACK_MAX == 0
+#error "Invalid Bluetooth repeated-attempt policy"
 #endif
 
 /// SMP pairing phase. Drives the per-link state machine in bt_smp.cpp.
@@ -398,6 +426,21 @@ void BtSmpStartPairing(uint16_t ConnHdl);
  *			disconnection hook to free the per-connection pairing context.
  */
 void BtSmpDisconnected(uint16_t ConnHdl);
+
+/**
+ * @brief	Check the Core repeated-attempt waiting interval for this claimant.
+ *
+ * A bonded RPA is normalized to its distributed identity; otherwise the live
+ * peer address is used. The state survives disconnect/reconnect in RAM.
+ * Now is the port's monotonic millisecond counter.
+ */
+bool BtSmpPairingAttemptAllowed(uint16_t ConnHdl, uint32_t Now);
+
+/** Record a failed pairing and start or exponentially increase its wait. */
+void BtSmpPairingAttemptFailed(uint16_t ConnHdl, uint32_t Now);
+
+/** Clear the claimant's penalty after a successful pairing. */
+void BtSmpPairingAttemptSucceeded(uint16_t ConnHdl);
 
 /**
  * @brief	Millisecond tick for the SMP pairing timeout (Core Vol 3 Part H 3.4).

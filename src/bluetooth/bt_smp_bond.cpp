@@ -582,6 +582,263 @@ static int BtSmpBondFind(uint16_t ConnHdl, uint64_t Rand, uint16_t Ediv)
 		BtSmpBondFindByAddr(pPeer->Conn.PeerAddrType, pPeer->Conn.PeerAddr) : -1;
 }
 
+// ---------------------------------------------------------------------------
+// Repeated pairing attempts (Core Vol 3 Part H 2.3.6)
+// ---------------------------------------------------------------------------
+// The Core rule is claimant/identity scoped, not connection-handle scoped.
+// Keep the backoff in RAM across disconnects. This deliberately is not written
+// to NVM: an unauthenticated radio peer must not be able to consume flash
+// endurance by intentionally failing pairing.
+
+typedef struct __Bt_Smp_Repeat_Entry {
+	bool InUse;
+	uint8_t AddrType;
+	uint8_t Addr[6];
+	uint8_t Level;			//!< exponent for the next failed pairing
+	uint32_t LastFailure;
+	uint32_t NextAllowed;
+} BtSmpRepeatEntry_t;
+
+static BtSmpRepeatEntry_t s_BtSmpRepeat[BT_SMP_REPEAT_TRACK_MAX];
+// Fail-closed overflow bucket. If every identity slot has an active penalty,
+// address churn gets one shared exponentially growing backoff instead of an
+// untracked path with unlimited attempts.
+static BtSmpRepeatEntry_t s_BtSmpRepeatOverflow;
+
+static bool BtSmpTimeBefore(uint32_t Now, uint32_t Deadline)
+{
+	return (int32_t)(Now - Deadline) < 0;
+}
+
+static bool BtSmpRepeatAddrZero(const uint8_t Addr[6])
+{
+	uint8_t v = 0;
+	for (int i = 0; i < 6; i++) { v |= Addr[i]; }
+	return v == 0;
+}
+
+static uint32_t BtSmpRepeatWait(uint8_t Level)
+{
+	uint32_t wait = BT_SMP_REPEAT_MIN_WAIT_MS;
+	while (Level-- != 0U && wait < BT_SMP_REPEAT_MAX_WAIT_MS)
+	{
+		if (wait > BT_SMP_REPEAT_MAX_WAIT_MS / 2U)
+		{
+			return BT_SMP_REPEAT_MAX_WAIT_MS;
+		}
+		wait *= 2U;
+	}
+	return wait > BT_SMP_REPEAT_MAX_WAIT_MS ? BT_SMP_REPEAT_MAX_WAIT_MS : wait;
+}
+
+// Reduce the future penalty exponentially after quiet periods. The current
+// deadline is never extended by maintenance; with the default one-hour decay
+// and one-hour maximum it has already expired before the first decay step.
+static void BtSmpRepeatDecay(BtSmpRepeatEntry_t *p, uint32_t Now)
+{
+	if (p == nullptr || !p->InUse || p->Level == 0U)
+	{
+		return;
+	}
+
+	uint32_t quiet = Now - p->LastFailure;
+	uint32_t steps = quiet / BT_SMP_REPEAT_DECAY_MS;
+	if (steps == 0U)
+	{
+		return;
+	}
+
+	uint8_t dec = steps > p->Level ? p->Level : (uint8_t)steps;
+	p->Level = (uint8_t)(p->Level - dec);
+	p->LastFailure += (uint32_t)dec * BT_SMP_REPEAT_DECAY_MS;
+}
+
+// Caller holds the bond/attempt lock. A known RPA is resolved by the bond
+// table. Once an identity address was distributed use that stable identity,
+// so a later connection on a different RPA reaches the same penalty.
+static void BtSmpRepeatNormalizeLocked(uint8_t *pType, uint8_t Addr[6])
+{
+	int slot = BtSmpBondFindByAddr(*pType, Addr);
+	if (slot < 0 || s_pBtSmpBondTable == nullptr)
+	{
+		return;
+	}
+
+	const BtSmpBond_t *pBond = &s_pBtSmpBondTable[slot];
+	uint8_t idType;
+	if (!BtSmpRepeatAddrZero(pBond->Keys.IdAddr) &&
+		BtSmpAddrIdentityType(pBond->Keys.IdAddrType, pBond->Keys.IdAddr, &idType))
+	{
+		*pType = idType;
+		memcpy(Addr, pBond->Keys.IdAddr, 6);
+	}
+	else if (BtSmpAddrIdentityType(pBond->PeerAddrType, pBond->PeerAddr, &idType))
+	{
+		*pType = idType;
+		memcpy(Addr, pBond->PeerAddr, 6);
+	}
+}
+
+static bool BtSmpRepeatRawIdentity(uint16_t ConnHdl, uint8_t *pType, uint8_t Addr[6])
+{
+	BtDevice_t *pPeer = BtPeerFindByHdl(ConnHdl);
+	if (pPeer == nullptr || pType == nullptr || Addr == nullptr)
+	{
+		return false;
+	}
+	*pType = pPeer->Conn.PeerAddrType;
+	memcpy(Addr, pPeer->Conn.PeerAddr, 6);
+	return true;
+}
+
+static int BtSmpRepeatFind(uint8_t Type, const uint8_t Addr[6])
+{
+	for (int i = 0; i < BT_SMP_REPEAT_TRACK_MAX; i++)
+	{
+		if (s_BtSmpRepeat[i].InUse && s_BtSmpRepeat[i].AddrType == Type &&
+			memcmp(s_BtSmpRepeat[i].Addr, Addr, 6) == 0)
+		{
+			return i;
+		}
+	}
+	return -1;
+}
+
+static void BtSmpRepeatRecordFailure(BtSmpRepeatEntry_t *p, uint32_t Now)
+{
+	BtSmpRepeatDecay(p, Now);
+	uint32_t wait = BtSmpRepeatWait(p->Level);
+	p->LastFailure = Now;
+	p->NextAllowed = Now + wait;
+
+	if (p->Level != 0xFFU)
+	{
+		uint8_t next = (uint8_t)(p->Level + 1U);
+		if (BtSmpRepeatWait(next) > wait)
+		{
+			p->Level = next;
+		}
+	}
+}
+
+bool BtSmpPairingAttemptAllowed(uint16_t ConnHdl, uint32_t Now)
+{
+	uint8_t type;
+	uint8_t addr[6];
+	if (!BtSmpRepeatRawIdentity(ConnHdl, &type, addr))
+	{
+		return false;
+	}
+
+	uint32_t state = BtSmpBondTableEnter();
+	BtSmpRepeatNormalizeLocked(&type, addr);
+	int i = BtSmpRepeatFind(type, addr);
+	bool allowed;
+	if (i >= 0)
+	{
+		BtSmpRepeatDecay(&s_BtSmpRepeat[i], Now);
+		allowed = !BtSmpTimeBefore(Now, s_BtSmpRepeat[i].NextAllowed);
+	}
+	else
+	{
+		BtSmpRepeatDecay(&s_BtSmpRepeatOverflow, Now);
+		allowed = !s_BtSmpRepeatOverflow.InUse ||
+			!BtSmpTimeBefore(Now, s_BtSmpRepeatOverflow.NextAllowed);
+	}
+	BtSmpBondTableExit(state);
+	return allowed;
+}
+
+void BtSmpPairingAttemptFailed(uint16_t ConnHdl, uint32_t Now)
+{
+	uint8_t type;
+	uint8_t addr[6];
+	if (!BtSmpRepeatRawIdentity(ConnHdl, &type, addr))
+	{
+		return;
+	}
+
+	uint32_t state = BtSmpBondTableEnter();
+	BtSmpRepeatNormalizeLocked(&type, addr);
+	int i = BtSmpRepeatFind(type, addr);
+	if (i < 0)
+	{
+		// Reuse only a slot whose active wait has elapsed. Among those choose
+		// the oldest claimant. Active identity penalties are never evicted.
+		uint32_t oldestAge = 0;
+		int victim = -1;
+		for (int n = 0; n < BT_SMP_REPEAT_TRACK_MAX; n++)
+		{
+			if (!s_BtSmpRepeat[n].InUse)
+			{
+				victim = n;
+				break;
+			}
+			BtSmpRepeatDecay(&s_BtSmpRepeat[n], Now);
+			if (!BtSmpTimeBefore(Now, s_BtSmpRepeat[n].NextAllowed))
+			{
+				uint32_t age = Now - s_BtSmpRepeat[n].LastFailure;
+				if (victim < 0 || age > oldestAge)
+				{
+					victim = n;
+					oldestAge = age;
+				}
+			}
+		}
+
+		if (victim < 0)
+		{
+			if (!s_BtSmpRepeatOverflow.InUse)
+			{
+				memset(&s_BtSmpRepeatOverflow, 0, sizeof(s_BtSmpRepeatOverflow));
+				s_BtSmpRepeatOverflow.InUse = true;
+			}
+			BtSmpRepeatRecordFailure(&s_BtSmpRepeatOverflow, Now);
+			BtSmpBondTableExit(state);
+			return;
+		}
+
+		i = victim;
+		memset(&s_BtSmpRepeat[i], 0, sizeof(s_BtSmpRepeat[i]));
+		s_BtSmpRepeat[i].InUse = true;
+		s_BtSmpRepeat[i].AddrType = type;
+		memcpy(s_BtSmpRepeat[i].Addr, addr, 6);
+	}
+
+	BtSmpRepeatRecordFailure(&s_BtSmpRepeat[i], Now);
+	BtSmpBondTableExit(state);
+}
+
+void BtSmpPairingAttemptSucceeded(uint16_t ConnHdl)
+{
+	uint8_t type;
+	uint8_t addr[6];
+	if (!BtSmpRepeatRawIdentity(ConnHdl, &type, addr))
+	{
+		return;
+	}
+	uint8_t rawType = type;
+	uint8_t rawAddr[6];
+	memcpy(rawAddr, addr, 6);
+
+	uint32_t state = BtSmpBondTableEnter();
+	BtSmpRepeatNormalizeLocked(&type, addr);
+	for (int i = 0; i < BT_SMP_REPEAT_TRACK_MAX; i++)
+	{
+		bool raw = s_BtSmpRepeat[i].InUse &&
+			s_BtSmpRepeat[i].AddrType == rawType &&
+			memcmp(s_BtSmpRepeat[i].Addr, rawAddr, 6) == 0;
+		bool normalized = s_BtSmpRepeat[i].InUse &&
+			s_BtSmpRepeat[i].AddrType == type &&
+			memcmp(s_BtSmpRepeat[i].Addr, addr, 6) == 0;
+		if (raw || normalized)
+		{
+			memset(&s_BtSmpRepeat[i], 0, sizeof(s_BtSmpRepeat[i]));
+		}
+	}
+	BtSmpBondTableExit(state);
+}
+
 static int BtSmpBondAllocSlot(void)
 {
 	for (int i = 0; i < BT_SMP_BOND_MAX; i++)
