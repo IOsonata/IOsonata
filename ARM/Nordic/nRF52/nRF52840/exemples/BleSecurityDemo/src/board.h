@@ -122,3 +122,19 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #endif // __BOARD_H__
 
+
+
+// Bluetooth security policy. Change these two values to select the desired
+// association model; IOsonata performs pairing, key exchange and bond storage.
+// Just Works (default): no display or user interaction required.
+// Numeric Comparison: LESC_MITM + DISPLAY | YESNO. Application supplies
+// BtSmpNumericComparison() and replies with BtSmpNumericComparisonReply().
+// Passkey: LESC_MITM + DISPLAY or KEYBOARD. Application supplies the
+// corresponding BtSmpPasskeyDisplay() or BtSmpPasskeyRequest() callback.
+// OOB: LESC_MITM + OOB; application supplies OOB data using BtSmpOob* APIs.
+#ifndef BLE_SECURITY_TYPE
+#define BLE_SECURITY_TYPE BTGAP_SECTYPE_STATICKEY_NO_MITM
+#endif
+#ifndef BLE_SECURITY_EXCHG
+#define BLE_SECURITY_EXCHG BTAPP_SECEXCHG_NONE
+#endif
