@@ -2353,6 +2353,38 @@
     </group>
     <group>
         <name>src</name>
+        <file>
+            <name>$PROJ_DIR$\..\..\..\..\..\..\src\crypto\crypto_softsha256.cpp</name>
+        </file>
+
+        <file>
+            <name>$PROJ_DIR$\..\..\..\..\..\..\src\crypto\crypto_p256.cpp</name>
+        </file>
+
+        <file>
+            <name>$PROJ_DIR$\..\..\..\..\..\..\src\crypto\crypto_uecc.cpp</name>
+        </file>
+
+        <file>
+            <name>$PROJ_DIR$\..\..\..\..\..\..\src\coredev\uart.cpp</name>
+        </file>
+
+        <file>
+            <name>$PROJ_DIR$\..\..\..\src\timer_tim_stm32l4xx.cpp</name>
+        </file>
+
+        <file>
+            <name>$PROJ_DIR$\..\..\..\src\timer_stm32l4x.cpp</name>
+        </file>
+
+        <file>
+            <name>$PROJ_DIR$\..\..\..\src\quadspi_stm32l4xx.cpp</name>
+        </file>
+
+        <file>
+            <name>$PROJ_DIR$\..\..\..\src\i2c_stm32l4xx.cpp</name>
+        </file>
+
         <group>
             <name>converters</name>
         </group>
