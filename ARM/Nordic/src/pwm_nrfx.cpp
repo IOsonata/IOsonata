@@ -37,6 +37,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "nrf_peripherals.h"
 
 #include "coredev/pwm.h"
+#include "iopinctrl.h"
 
 #if defined(NRF91_SERIES) || defined(NRF53_SERIES)
 #define NRF_PWM0		NRF_PWM0_S
@@ -69,6 +70,8 @@ typedef struct {
 	uint16_t Seq0[PWM_NRF5_MAX_CHAN];
 	uint16_t Seq1[PWM_NRF5_MAX_CHAN];
 	volatile bool bStarted;
+	uint32_t OpenMask;
+	PwmChanCfg_t Channel[PWM_NRF5_MAX_CHAN];
 } nRFPwmDev_t;
 #pragma pack(pop)
 
@@ -85,7 +88,7 @@ bool nRF52PWMWWaitForSTop(nRFPwmDev_t *pDev, int Timeout)
 {
 	while (Timeout-- > 0)
 	{
-		if (pDev->pReg->EVENTS_STOPPED)
+		if (pDev->pReg->EVENTS_STOPPED || !pDev->bStarted)
 		{
 			pDev->pReg->EVENTS_STOPPED = 0;
 			pDev->bStarted = false;
@@ -117,6 +120,12 @@ bool PWMInit(PwmDev_t *pDev, const PwmCfg_t *pCfg)
 	dev = &s_PwmnRFDev[pCfg->DevNo];
 	dev->pDev = pDev;
 	pDev->pDevData = (void*)dev;
+
+	// Release previous pin assignments before reinitializing this peripheral.
+	dev->pReg->ENABLE = PWM_ENABLE_ENABLE_Disabled;
+	for (int i = 0; i < PWM_NRF5_MAX_CHAN; i++)
+		dev->pReg->PSEL.OUT[i] = PWM_PSEL_OUT_CONNECT_Msk;
+	dev->OpenMask = 0;
 
 	// Clear all events
 	dev->pReg->EVENTS_LOOPSDONE = 0;
@@ -299,44 +308,50 @@ bool PWMEnable(PwmDev_t *pDev)
 
 void PWMDisable(PwmDev_t *pDev)
 {
-	if (pDev != NULL)
-	{
-		nRFPwmDev_t *dev = (nRFPwmDev_t*)pDev->pDevData;
+	PWMStop(pDev);
+}
 
-		dev->pReg->ENABLE = PWM_ENABLE_ENABLE_Disabled;
-	}
+static void PwmPinIdle(const PwmChanCfg_t &Chan)
+{
+	if (Chan.Pol == PWM_POL_HIGH)
+		IOPinClear(Chan.Port, Chan.Pin);
+	else
+		IOPinSet(Chan.Port, Chan.Pin);
 }
 
 bool PWMOpenChannel(PwmDev_t *pDev, const PwmChanCfg_t *pChanCfg, int NbChan)
 {
-	if (pDev == NULL || pChanCfg == NULL)
-		return false;
-
+	if (!pDev || !pDev->pDevData || !pChanCfg || NbChan <= 0 ||
+		NbChan > PWM_NRF5_MAX_CHAN) return false;
 	nRFPwmDev_t *dev = (nRFPwmDev_t*)pDev->pDevData;
-
 	for (int i = 0; i < NbChan; i++)
 	{
-		if (pChanCfg[i].Chan >= 0 && pChanCfg[i].Chan < PWM_NRF5_MAX_CHAN)
-		{
-			dev->Pol[pChanCfg[i].Chan] = pChanCfg[i].Pol;
-			dev->pReg->PSEL.OUT[pChanCfg[i].Chan] = (pChanCfg[i].Pin & 0x1f) | ((pChanCfg[i].Port & 1) << 5);
-		}
+		const PwmChanCfg_t &cfg = pChanCfg[i];
+		if (cfg.Chan < 0 || cfg.Chan >= PWM_NRF5_MAX_CHAN ||
+			cfg.Pin < 0 || cfg.Pin >= 32 || !nRFGpioGetReg(cfg.Port)) return false;
 	}
-
+	for (int i = 0; i < NbChan; i++)
+	{
+		const PwmChanCfg_t &cfg = pChanCfg[i];
+		if (dev->OpenMask & (1UL << cfg.Chan)) PWMCloseChannel(pDev, cfg.Chan);
+		dev->Channel[cfg.Chan] = cfg;
+		dev->Pol[cfg.Chan] = cfg.Pol;
+		PwmPinIdle(cfg);
+		IOPinConfig(cfg.Port, cfg.Pin, IOPINOP_GPIO, IOPINDIR_OUTPUT,
+					IOPINRES_NONE, IOPINTYPE_NORMAL);
+		dev->OpenMask |= 1UL << cfg.Chan;
+		dev->pReg->PSEL.OUT[cfg.Chan] = (cfg.Pin & 0x1f) | ((cfg.Port & 1) << 5);
+	}
 	return true;
 }
 
 void PWMCloseChannel(PwmDev_t *pDev, int Chan)
 {
-	if (pDev == NULL)
-		return;
-
+	if (!pDev || !pDev->pDevData || Chan < 0 || Chan >= PWM_NRF5_MAX_CHAN) return;
 	nRFPwmDev_t *dev = (nRFPwmDev_t*)pDev->pDevData;
-
-	if (Chan >= 0 && Chan < PWM_NRF5_MAX_CHAN)
-	{
-		dev->pReg->PSEL.OUT[Chan] |= (PWM_PSEL_OUT_CONNECT_Disconnected << PWM_PSEL_OUT_CONNECT_Pos);
-	}
+	dev->pReg->PSEL.OUT[Chan] = PWM_PSEL_OUT_CONNECT_Msk;
+	if (dev->OpenMask & (1UL << Chan)) PwmPinIdle(dev->Channel[Chan]);
+	dev->OpenMask &= ~(1UL << Chan);
 }
 
 bool PWMStart(PwmDev_t *pDev, uint32_t msDur)
@@ -348,6 +363,15 @@ bool PWMStart(PwmDev_t *pDev, uint32_t msDur)
 
 	if (dev == NULL)
 		return false;
+
+	for (int i = 0; i < PWM_NRF5_MAX_CHAN; i++)
+	{
+		if (!(dev->OpenMask & (1UL << i))) continue;
+		const PwmChanCfg_t &cfg = dev->Channel[i];
+		PwmPinIdle(cfg);
+		dev->pReg->PSEL.OUT[i] = (cfg.Pin & 0x1f) | ((cfg.Port & 1) << 5);
+	}
+	dev->pReg->ENABLE = PWM_ENABLE_ENABLE_Enabled;
 
 	dev->pReg->EVENTS_STOPPED = 0;
 
@@ -376,14 +400,21 @@ bool PWMStart(PwmDev_t *pDev, uint32_t msDur)
 
 void PWMStop(PwmDev_t *pDev)
 {
-	if (pDev != NULL)
+	if (!pDev || !pDev->pDevData) return;
+	nRFPwmDev_t *dev = (nRFPwmDev_t*)pDev->pDevData;
+	if (dev->bStarted)
 	{
-		nRFPwmDev_t *dev = (nRFPwmDev_t*)pDev->pDevData;
-
 		dev->pReg->TASKS_STOP = 1;
-		dev->bStarted = false;
 		nRF52PWMWWaitForSTop(dev, 100000);
 	}
+	// Release the pins even if the peripheral did not report STOPPED in time.
+	dev->pReg->ENABLE = PWM_ENABLE_ENABLE_Disabled;
+	for (int i = 0; i < PWM_NRF5_MAX_CHAN; i++)
+	{
+		dev->pReg->PSEL.OUT[i] = PWM_PSEL_OUT_CONNECT_Msk;
+		if (dev->OpenMask & (1UL << i)) PwmPinIdle(dev->Channel[i]);
+	}
+	dev->bStarted = false;
 }
 
 

@@ -32,7 +32,8 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ----------------------------------------------------------------------------*/
 #include "coredev/pwm.h"
-#include "idelay.h"
+#include "coredev/timer.h"
+#include "miscdev/buzzer.h"
 #include "iopinctrl.h"
 #include "board.h"
 
@@ -60,78 +61,70 @@ static const uint32_t E8 = 5274;
 static const uint32_t F8 = 5588;
 static const uint32_t G8 = 6272;
 
-typedef struct {
-	uint32_t Freq;
-	uint8_t Eighths;
-} ToneNote_t;
+static const BuzzerNote_t s_Melody[] = {
+	{0, 48}, // One second of silence before each chorus.
+	{E8, 24}, {E8, 24}, {E8, 48},
+	{E8, 24}, {E8, 24}, {E8, 48},
+	{E8, 24}, {G8, 24}, {C8, 36}, {D8, 12},
+	{E8, 96},
+	{F8, 24}, {F8, 24}, {F8, 36}, {F8, 12},
+	{F8, 24}, {E8, 24}, {E8, 24}, {E8, 12}, {E8, 12},
+	{E8, 24}, {D8, 24}, {D8, 24}, {E8, 24},
+	{D8, 48}, {G8, 48},
 
-static const ToneNote_t s_Melody[] = {
-	{E8, 2}, {E8, 2}, {E8, 4},
-	{E8, 2}, {E8, 2}, {E8, 4},
-	{E8, 2}, {G8, 2}, {C8, 3}, {D8, 1},
-	{E8, 8},
-	{F8, 2}, {F8, 2}, {F8, 3}, {F8, 1},
-	{F8, 2}, {E8, 2}, {E8, 2}, {E8, 1}, {E8, 1},
-	{E8, 2}, {D8, 2}, {D8, 2}, {E8, 2},
-	{D8, 4}, {G8, 4},
-
-	{E8, 2}, {E8, 2}, {E8, 4},
-	{E8, 2}, {E8, 2}, {E8, 4},
-	{E8, 2}, {G8, 2}, {C8, 3}, {D8, 1},
-	{E8, 8},
-	{F8, 2}, {F8, 2}, {F8, 3}, {F8, 1},
-	{F8, 2}, {E8, 2}, {E8, 2}, {E8, 1}, {E8, 1},
-	{G8, 2}, {G8, 2}, {F8, 2}, {D8, 2},
-	{C8, 8}
+	{E8, 24}, {E8, 24}, {E8, 48},
+	{E8, 24}, {E8, 24}, {E8, 48},
+	{E8, 24}, {G8, 24}, {C8, 36}, {D8, 12},
+	{E8, 96},
+	{F8, 24}, {F8, 24}, {F8, 36}, {F8, 12},
+	{F8, 24}, {E8, 24}, {E8, 24}, {E8, 12}, {E8, 12},
+	{G8, 24}, {G8, 24}, {F8, 24}, {D8, 24},
+	{C8, 96}
 };
 
-static const uint32_t s_EighthUs = 250000; // 120 quarter notes per minute.
-static const uint32_t s_GapUs = 20000;
+// The application chooses and owns the timer. On nRF52840, device 2 is RTC2.
+#ifndef TONE_TIMER_DEVNO
+#define TONE_TIMER_DEVNO 2
+#endif
+
+static void MelodyWake(TimerDev_t *, int, void *)
+{
+	// Only wake the main loop; PWM and melody work runs outside the ISR.
+	__SEV();
+}
+
+static const TimerCfg_t s_TimerCfg = {
+	.DevNo = TONE_TIMER_DEVNO,
+	.ClkSrc = TIMER_CLKSRC_DEFAULT,
+	.Freq = 0,
+	.IntPrio = 6,
+	.EvtHandler = nullptr,
+	.bTickInt = false
+};
 
 Pwm g_Pwm;
-
-static void ToneStop()
-{
-	g_Pwm.Stop();
-	g_Pwm.CloseChannel(s_ToneChannel.Chan);
-	g_Pwm.Disable();
-	IOPinClear(TONE_PORT, TONE_PIN);
-}
+Timer g_Timer;
+Buzzer g_Buzzer;
+BuzzerMelody g_Melody;
 
 int main()
 {
-	// The buzzer uses an active-high transistor gate.
-	IOPinClear(TONE_PORT, TONE_PIN);
-	IOPinConfig(TONE_PORT, TONE_PIN, IOPINOP_GPIO, IOPINDIR_OUTPUT,
-				IOPINRES_NONE, IOPINTYPE_NORMAL);
-	if (!g_Pwm.Init(s_PwmCfg))
+	if (!g_Pwm.Init(s_PwmCfg) || !g_Pwm.OpenChannel(&s_ToneChannel, 1) ||
+		!g_Buzzer.Init(&g_Pwm, s_ToneChannel.Chan)) return 1;
+	g_Buzzer.Stop();
+	if (!g_Timer.Init(s_TimerCfg)) return 1;
+	if (!g_Timer.EnableTimerTrigger(0, (uint32_t)5,
+		TIMER_TRIG_TYPE_CONTINUOUS, MelodyWake, nullptr)) return 1;
+	if (!g_Melody.Init(&g_Buzzer, &g_Timer) ||
+		!g_Melody.Play(s_Melody, sizeof(s_Melody) / sizeof(s_Melody[0]),
+					  120, 0, 20)) return 1;
+
+	while (g_Melody.IsPlaying())
 	{
-		return 1;
+		g_Melody.Process();
+		__WFE();
 	}
-
-	g_Pwm.Disable();
-	// A silent interval before the first note also checks the idle output.
-	usDelay(2000000);
-
-	while (1)
-	{
-		for (unsigned int i = 0; i < sizeof(s_Melody) / sizeof(s_Melody[0]); i++)
-		{
-			uint32_t duration = s_Melody[i].Eighths * s_EighthUs;
-			if (!g_Pwm.Enable() ||
-				!g_Pwm.Frequency(s_Melody[i].Freq) ||
-				!g_Pwm.OpenChannel(&s_ToneChannel, 1) ||
-				!g_Pwm.DutyCycle(s_ToneChannel.Chan, 50) ||
-				!g_Pwm.Start())
-			{
-				ToneStop();
-				return 1;
-			}
-
-			usDelay(duration - s_GapUs);
-			ToneStop();
-			usDelay(s_GapUs);
-		}
-		usDelay(1000000);
-	}
+	g_Timer.DisableTimerTrigger(0);
+	g_Timer.Disable();
+	return g_Melody.Failed() ? 1 : 0;
 }

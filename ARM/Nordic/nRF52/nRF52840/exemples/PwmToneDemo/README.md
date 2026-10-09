@@ -1,31 +1,30 @@
-# PWM tone example
+# PWM melody example
 
-Build the nRF52840 library and then the matching Debug or Release configuration
-of `ioc/PwmToneDemo`.
+Rebuild the nRF52840 library, then clean and rebuild the matching Debug or
+Release configuration of `ioc/PwmToneDemo`.
 
-The shared [source](../../../../../../exemples/pwm/pwm_tone_demo.cpp) uses
-PWM device 0, channel 0 at 50% duty. It plays the 16-bar chorus of
-James Lord Pierpont's public-domain *Jingle Bells* (1857), then pauses for
-one second before repeating.
+The shared [source](../../../../../../exemples/pwm/pwm_tone_demo.cpp) plays
+the chorus of James Lord Pierpont's public-domain *Jingle Bells* (1857).
+It uses `Buzzer` and `BuzzerMelody`, with C8-G8 (4186-6272 Hz), 50% duty,
+120 quarter notes per minute and 20 ms gaps between notes. A one-second
+rest precedes each repeat. There are no blocking note delays in the demo.
 
-The melody uses C8-G8 (4186-6272 Hz), transposed high for the SMT-0540-S-R
-buzzer. The note table stores frequency and duration in eighth notes.
-Tempo is 120 quarter notes per minute, set by `s_EighthUs`.
-Each note includes a 20 ms articulation gap so repeated notes remain distinct.
-Timing uses the application's blocking delay loop. The active-high transistor
-gate is initialized as a low GPIO output. After each note the application
-stops PWM, disconnects the channel, disables PWM and holds the gate low.
-The next note enables PWM, sets its frequency, reconnects the channel and
-sets its duty before starting.
-There is also a two-second silent interval before the first note.
+PWM device 0/channel 0 supplies the sound. Timer device 2 (RTC2 on nRF52840)
+wakes the main loop every 5 ms. The interrupt only wakes the loop; melody
+processing runs in the main loop. Override `TONE_TIMER_DEVNO` when needed,
+and reserve that timer and trigger 0 for the example.
 
-Set `TONE_PORT` and `TONE_PIN` in [board.h](src/board.h) for your connection.
-The default follows the existing BlueIO LED3 mapping, P0.28; `NORDIC_DK`
-selects P0.15. These are output-pin defaults, not an onboard buzzer claim.
-Use a scope to observe the waveform, or connect a passive buzzer through a
-suitable driver circuit. All pin assignments remain in the application.
+Set `TONE_PORT` and `TONE_PIN` in [board.h](src/board.h). The repository's
+existing default is P0.28 (BlueIO LED3), or P0.15 with `NORDIC_DK` selected.
+For BLUEIO-WIZARD's transistor-driven buzzer, select P0.26. Local pin changes
+remain in `board.h`; the shared example contains no board wiring.
 
-The source and the real nRF52840 PWM, startup and vector files compile and
-link at `-O0` and `-Os` with Arm GNU 14.3.1. Both project configurations
-reference their matching library directory. These are selected-source
-command-line builds, not full IOC library builds. Hardware testing is pending.
+The Nordic PWM driver now owns GPIO initialization and inactive output levels.
+Stopping disconnects PWM and leaves the transistor gate low; restarting restores
+the channel. The previous application GPIO workaround has been removed.
+
+See the [Buzzer guide](../../../../../../docs/buzzer.md) for note tables,
+tempo, rests, cancellation and RTOS usage, and
+[tests](../../../../../../tests/buzzer/README.md) for compilation and register
+checks. The earlier blocking demo was heard on hardware; the refactored
+nonblocking player still needs hardware validation.
