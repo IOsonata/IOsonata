@@ -85,7 +85,6 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-oberon-psa-crypto/oberon/drivers&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-oberon-psa-crypto/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrf-bm/include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrf-bm/lib/bluetooth/peer_manager/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrf-bm/components/softdevice/nrf54lm/s145/s145_API/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrf-bm/include/bm/storage&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrf-bm/include/bm/softdevice_handler&quot;"/>
@@ -137,7 +136,6 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-oberon-psa-crypto/oberon/drivers&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-oberon-psa-crypto/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrf-bm/include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrf-bm/lib/bluetooth/peer_manager/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrf-bm/components/softdevice/nrf54lm/s145/s145_API/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrf-bm/include/bm/storage&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrf-bm/include/bm/softdevice_handler&quot;"/>
@@ -272,7 +270,6 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-oberon-psa-crypto/oberon/drivers&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-oberon-psa-crypto/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrf-bm/include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrf-bm/lib/bluetooth/peer_manager/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrf-bm/components/softdevice/nrf54lm/s145/s145_API/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrf-bm/include/bm/storage&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrf-bm/include/bm/softdevice_handler&quot;"/>
@@ -324,7 +321,6 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-oberon-psa-crypto/oberon/drivers&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-oberon-psa-crypto/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrf-bm/include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrf-bm/lib/bluetooth/peer_manager/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrf-bm/components/softdevice/nrf54lm/s145/s145_API/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrf-bm/include/bm/storage&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrf-bm/include/bm/softdevice_handler&quot;"/>
@@ -368,7 +364,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/nrfx/drivers/src/nrfx_power.c|src/sdk-nrf-bm|src/display/fonts/orkney8pts.c|src/display/fonts/orkney24pts.c|src/miscdev/button.cpp|src/bluetooth/bt_adv_bm.cpp|src/bluetooth/bt_app_bm.cpp|src/bluetooth/bt_gap_bm.cpp|src/bluetooth/bt_gatt_bm.cpp|src/bluetooth/bt_scan_bm.cpp|src/bluetooth/bt_sec_bm.cpp|src/bluetooth/bt_id_bm.cpp|src/bluetooth/bt_lesc_sd.cpp|src/bluetooth/bm_scheduler.c|src/bluetooth/bm_timer.c|src/bluetooth/nrf_sdh.c|src/bluetooth/peer_data_storage.c" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/sdk-nrf-bm/lib/bluetooth/peer_manager|src/nrfx/drivers/src/nrfx_power.c|src/sdk-nrf-bm|src/display/fonts/orkney8pts.c|src/display/fonts/orkney24pts.c|src/miscdev/button.cpp|src/bluetooth/bt_adv_bm.cpp|src/bluetooth/bt_app_bm.cpp|src/bluetooth/bt_gap_bm.cpp|src/bluetooth/bt_gatt_bm.cpp|src/bluetooth/bt_scan_bm.cpp|src/bluetooth/bt_sec_bm.cpp|src/bluetooth/bt_id_bm.cpp|src/bluetooth/bt_lesc_sd.cpp|src/bluetooth/bm_scheduler.c|src/bluetooth/bm_timer.c|src/bluetooth/nrf_sdh.c|src/bluetooth/peer_data_storage.c" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -457,7 +453,6 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-oberon-psa-crypto/oberon/drivers&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-oberon-psa-crypto/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrf-bm/include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrf-bm/lib/bluetooth/peer_manager/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrf-bm/components/softdevice/nrf54lm/s145/s145_API/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrf-bm/include/bm/storage&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrf-bm/include/bm/softdevice_handler&quot;"/>
@@ -510,7 +505,6 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-oberon-psa-crypto/oberon/drivers&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-oberon-psa-crypto/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrf-bm/include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrf-bm/lib/bluetooth/peer_manager/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrf-bm/components/softdevice/nrf54lm/s145/s145_API/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrf-bm/include/bm/storage&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrf-bm/include/bm/softdevice_handler&quot;"/>
@@ -645,7 +639,6 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-oberon-psa-crypto/oberon/drivers&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-oberon-psa-crypto/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrf-bm/include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrf-bm/lib/bluetooth/peer_manager/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrf-bm/components/softdevice/nrf54lm/s145/s145_API/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrf-bm/include/bm/storage&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrf-bm/include/bm/softdevice_handler&quot;"/>
@@ -698,7 +691,6 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-oberon-psa-crypto/oberon/drivers&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-oberon-psa-crypto/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrf-bm/include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrf-bm/lib/bluetooth/peer_manager/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrf-bm/components/softdevice/nrf54lm/s145/s145_API/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrf-bm/include/bm/storage&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/sdk-nrf-bm/include/bm/softdevice_handler&quot;"/>
@@ -743,7 +735,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/nrfx/drivers/src/nrfx_power.c|src/sdk-nrf-bm|src/display/fonts/orkney8pts.c|src/display/fonts/orkney24pts.c|src/miscdev/button.cpp|src/bluetooth/bt_adv_bm.cpp|src/bluetooth/bt_app_bm.cpp|src/bluetooth/bt_gap_bm.cpp|src/bluetooth/bt_gatt_bm.cpp|src/bluetooth/bt_scan_bm.cpp|src/bluetooth/bt_sec_bm.cpp|src/bluetooth/bt_id_bm.cpp|src/bluetooth/bt_lesc_sd.cpp|src/bluetooth/bm_scheduler.c|src/bluetooth/bm_timer.c|src/bluetooth/nrf_sdh.c|src/bluetooth/peer_data_storage.c" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/sdk-nrf-bm/lib/bluetooth/peer_manager|src/nrfx/drivers/src/nrfx_power.c|src/sdk-nrf-bm|src/display/fonts/orkney8pts.c|src/display/fonts/orkney24pts.c|src/miscdev/button.cpp|src/bluetooth/bt_adv_bm.cpp|src/bluetooth/bt_app_bm.cpp|src/bluetooth/bt_gap_bm.cpp|src/bluetooth/bt_gatt_bm.cpp|src/bluetooth/bt_scan_bm.cpp|src/bluetooth/bt_sec_bm.cpp|src/bluetooth/bt_id_bm.cpp|src/bluetooth/bt_lesc_sd.cpp|src/bluetooth/bm_scheduler.c|src/bluetooth/bm_timer.c|src/bluetooth/nrf_sdh.c|src/bluetooth/peer_data_storage.c" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>

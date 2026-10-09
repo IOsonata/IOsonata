@@ -1446,8 +1446,8 @@ static void soc_evt_poll(void *context)
  * BLE event pumping is handled by the SDK nrf_sdh_ble.c ble_evt_poll, which is
  * registered as NRF_SDH_STACK_EVT_OBSERVER(ble_evt_obs, ...). That function
  * maintains the connection-handle index table (idx_assign on CONNECTED,
- * idx_unassign on DISCONNECTED) that nrf_sdh_ble_idx_get / peer_manager
- * conn_state rely on, then fans the event out to all NRF_SDH_BLE_OBSERVERs.
+ * idx_unassign on DISCONNECTED) that nrf_sdh_ble_idx_get relies on, then
+ * fans the event out to all NRF_SDH_BLE_OBSERVERs.
  * IOsonata's own GAP/GATT handling is one such observer (ble_evt_dispatch,
  * registered below). A second pump here would also drain sd_ble_evt_get and
  * fan out without the idx tracking, leaving nrf_sdh_ble_idx_get returning -1,

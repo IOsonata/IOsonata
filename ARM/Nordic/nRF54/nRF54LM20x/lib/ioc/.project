@@ -1506,11 +1506,6 @@
 			<locationURI>PARENT-4-PROJECT_LOC/src/bt_hci_ctlr_sdc.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/bluetooth/bt_id_bm.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/nRF54/src/bt_id_bm.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/bluetooth/bt_intrf.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_intrf.cpp</locationURI>
@@ -2631,11 +2626,6 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>src/sdk-nrf-bm/lib/bluetooth/peer_manager</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
 			<name>src/sdk-nrf-bm/lib/bm_scheduler/bm_scheduler.c</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/sdk-nrf-bm/lib/bm_scheduler/bm_scheduler.c</locationURI>
@@ -2729,11 +2719,6 @@
 			<name>src/sdk-nrf-bm/include/bm/bluetooth/ble_scan.h</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/sdk-nrf-bm/include/bm/bluetooth/ble_scan.h</locationURI>
-		</link>
-		<link>
-			<name>src/sdk-nrf-bm/include/bm/bluetooth/peer_manager</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
 			<name>src/sdk-nrf-bm/include/bm/bluetooth/services</name>
@@ -2851,46 +2836,6 @@
 			<locationURI>PARENT-7-PROJECT_LOC/external/sdk-nrf-bm/lib/bluetooth/ble_radio_notification/ble_radio_notification.c</locationURI>
 		</link>
 		<link>
-			<name>src/sdk-nrf-bm/lib/bluetooth/peer_manager/include</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>src/sdk-nrf-bm/lib/bluetooth/peer_manager/modules</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>src/sdk-nrf-bm/lib/bluetooth/peer_manager/nrf_strerror.c</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/sdk-nrf-bm/lib/bluetooth/peer_manager/nrf_strerror.c</locationURI>
-		</link>
-		<link>
-			<name>src/sdk-nrf-bm/lib/bluetooth/peer_manager/peer_manager.c</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/sdk-nrf-bm/lib/bluetooth/peer_manager/peer_manager.c</locationURI>
-		</link>
-		<link>
-			<name>src/sdk-nrf-bm/include/bm/bluetooth/peer_manager/nrf_ble_lesc.h</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/sdk-nrf-bm/include/bm/bluetooth/peer_manager/nrf_ble_lesc.h</locationURI>
-		</link>
-		<link>
-			<name>src/sdk-nrf-bm/include/bm/bluetooth/peer_manager/peer_manager.h</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/sdk-nrf-bm/include/bm/bluetooth/peer_manager/peer_manager.h</locationURI>
-		</link>
-		<link>
-			<name>src/sdk-nrf-bm/include/bm/bluetooth/peer_manager/peer_manager_handler.h</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/sdk-nrf-bm/include/bm/bluetooth/peer_manager/peer_manager_handler.h</locationURI>
-		</link>
-		<link>
-			<name>src/sdk-nrf-bm/include/bm/bluetooth/peer_manager/peer_manager_types.h</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/sdk-nrf-bm/include/bm/bluetooth/peer_manager/peer_manager_types.h</locationURI>
-		</link>
-		<link>
 			<name>src/sdk-nrf-bm/include/bm/bluetooth/services/ble_bms.h</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/sdk-nrf-bm/include/bm/bluetooth/services/ble_bms.h</locationURI>
@@ -3004,111 +2949,6 @@
 			<name>src/sdk-nrf-bm/include/bm/nfc/t4t/ndef_file.h</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/sdk-nrf-bm/include/bm/nfc/t4t/ndef_file.h</locationURI>
-		</link>
-		<link>
-			<name>src/sdk-nrf-bm/lib/bluetooth/peer_manager/include/modules</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>src/sdk-nrf-bm/lib/bluetooth/peer_manager/include/nrf_strerror.h</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/sdk-nrf-bm/lib/bluetooth/peer_manager/include/nrf_strerror.h</locationURI>
-		</link>
-		<link>
-			<name>src/sdk-nrf-bm/lib/bluetooth/peer_manager/modules/auth_status_tracker.c</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/sdk-nrf-bm/lib/bluetooth/peer_manager/modules/auth_status_tracker.c</locationURI>
-		</link>
-		<link>
-			<name>src/sdk-nrf-bm/lib/bluetooth/peer_manager/modules/conn_state.c</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/sdk-nrf-bm/lib/bluetooth/peer_manager/modules/conn_state.c</locationURI>
-		</link>
-		<link>
-			<name>src/sdk-nrf-bm/lib/bluetooth/peer_manager/modules/gatt_cache_manager.c</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/sdk-nrf-bm/lib/bluetooth/peer_manager/modules/gatt_cache_manager.c</locationURI>
-		</link>
-		<link>
-			<name>src/sdk-nrf-bm/lib/bluetooth/peer_manager/modules/gatts_cache_manager.c</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/sdk-nrf-bm/lib/bluetooth/peer_manager/modules/gatts_cache_manager.c</locationURI>
-		</link>
-		<link>
-			<name>src/sdk-nrf-bm/lib/bluetooth/peer_manager/modules/peer_database.c</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/sdk-nrf-bm/lib/bluetooth/peer_manager/modules/peer_database.c</locationURI>
-		</link>
-		<link>
-			<name>src/sdk-nrf-bm/lib/bluetooth/peer_manager/modules/peer_id.c</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/sdk-nrf-bm/lib/bluetooth/peer_manager/modules/peer_id.c</locationURI>
-		</link>
-		<link>
-			<name>src/sdk-nrf-bm/lib/bluetooth/peer_manager/modules/peer_manager_handler.c</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/sdk-nrf-bm/lib/bluetooth/peer_manager/modules/peer_manager_handler.c</locationURI>
-		</link>
-		<link>
-			<name>src/sdk-nrf-bm/lib/bluetooth/peer_manager/modules/pm_buffer.c</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/sdk-nrf-bm/lib/bluetooth/peer_manager/modules/pm_buffer.c</locationURI>
-		</link>
-		<link>
-			<name>src/sdk-nrf-bm/lib/bluetooth/peer_manager/include/modules/auth_status_tracker.h</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/sdk-nrf-bm/lib/bluetooth/peer_manager/include/modules/auth_status_tracker.h</locationURI>
-		</link>
-		<link>
-			<name>src/sdk-nrf-bm/lib/bluetooth/peer_manager/include/modules/gatt_cache_manager.h</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/sdk-nrf-bm/lib/bluetooth/peer_manager/include/modules/gatt_cache_manager.h</locationURI>
-		</link>
-		<link>
-			<name>src/sdk-nrf-bm/lib/bluetooth/peer_manager/include/modules/gatts_cache_manager.h</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/sdk-nrf-bm/lib/bluetooth/peer_manager/include/modules/gatts_cache_manager.h</locationURI>
-		</link>
-		<link>
-			<name>src/sdk-nrf-bm/lib/bluetooth/peer_manager/include/modules/id_manager.h</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/sdk-nrf-bm/lib/bluetooth/peer_manager/include/modules/id_manager.h</locationURI>
-		</link>
-		<link>
-			<name>src/sdk-nrf-bm/lib/bluetooth/peer_manager/include/modules/peer_data_storage.h</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/sdk-nrf-bm/lib/bluetooth/peer_manager/include/modules/peer_data_storage.h</locationURI>
-		</link>
-		<link>
-			<name>src/sdk-nrf-bm/lib/bluetooth/peer_manager/include/modules/peer_database.h</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/sdk-nrf-bm/lib/bluetooth/peer_manager/include/modules/peer_database.h</locationURI>
-		</link>
-		<link>
-			<name>src/sdk-nrf-bm/lib/bluetooth/peer_manager/include/modules/peer_id.h</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/sdk-nrf-bm/lib/bluetooth/peer_manager/include/modules/peer_id.h</locationURI>
-		</link>
-		<link>
-			<name>src/sdk-nrf-bm/lib/bluetooth/peer_manager/include/modules/peer_manager_internal.h</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/sdk-nrf-bm/lib/bluetooth/peer_manager/include/modules/peer_manager_internal.h</locationURI>
-		</link>
-		<link>
-			<name>src/sdk-nrf-bm/lib/bluetooth/peer_manager/include/modules/pm_buffer.h</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/sdk-nrf-bm/lib/bluetooth/peer_manager/include/modules/pm_buffer.h</locationURI>
-		</link>
-		<link>
-			<name>src/sdk-nrf-bm/lib/bluetooth/peer_manager/include/modules/security_dispatcher.h</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/sdk-nrf-bm/lib/bluetooth/peer_manager/include/modules/security_dispatcher.h</locationURI>
-		</link>
-		<link>
-			<name>src/sdk-nrf-bm/lib/bluetooth/peer_manager/include/modules/security_manager.h</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/sdk-nrf-bm/lib/bluetooth/peer_manager/include/modules/security_manager.h</locationURI>
 		</link>
 		<link>
 			<name>src/usb</name>
