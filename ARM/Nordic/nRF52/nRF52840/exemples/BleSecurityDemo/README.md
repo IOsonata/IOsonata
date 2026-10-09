@@ -1,28 +1,55 @@
-# BLE Security Demo (nRF52840)
+# BLE Security Demo — nRF52840
 
-Import `ioc/.project` as **BleSecurityDemo**. This application links
-`exemples/bluetooth/ble_security_demo.cpp` and uses the local `src/board.h`
-for physical pins. Build the matching nRF52840 IOsonata MCU library first.
+This example uses **declarative security configuration**. There is no pairing
+console, command interpreter, or application-managed SMP state machine.
+Import `ioc/.project` and build with the matching IOsonata MCU library.
 
-The security **library** owns SMP/LESC, key distribution, peer identities,
-bonding and PDS/NVM storage. This demonstration owns only the UART-based user
-interaction, method-selection console and optional OOB transport.
+## Configure security in `src/board.h`
 
-UART console at 115200 baud:
+Set `BLE_SECURITY_TYPE` and `BLE_SECURITY_EXCHG`; the example passes them
+directly to `BtAppCfg_t.SecType` and `BtAppCfg_t.SecExchg`. The defaults
+request bonded Just Works pairing without MITM and require no human input.
 
-- `sec` prints the current association method
-- `sec numcomp`, `sec justworks`, `sec passkey-disp`,
-  `sec passkey-input`, or `sec oob` selects the next pairing method
-- `oob` displays local OOB data; `oob peer <hex>` supplies peer data
-- `bond del` requests deletion of stored bonds
-- For Numeric Comparison type `y` or `n`; for Passkey Entry type six digits
+| Intended association | `BLE_SECURITY_TYPE` | `BLE_SECURITY_EXCHG` |
+| --- | --- | --- |
+| Just Works, no MITM | `BTGAP_SECTYPE_STATICKEY_NO_MITM` | `BTAPP_SECEXCHG_NONE` |
+| LESC Numeric Comparison | `BTGAP_SECTYPE_LESC_MITM` | `BTAPP_SECEXCHG_DISPLAY \| BTAPP_SECEXCHG_YESNO` |
+| LESC Passkey display | `BTGAP_SECTYPE_LESC_MITM` | `BTAPP_SECEXCHG_DISPLAY` |
+| LESC Passkey entry | `BTGAP_SECTYPE_LESC_MITM` | `BTAPP_SECEXCHG_KEYBOARD` |
+| LESC OOB | `BTGAP_SECTYPE_LESC_MITM` | `BTAPP_SECEXCHG_OOB` |
 
-Optional `BLE_SC_OOB_NFC` requires the platform NFC transport.
-Association changes apply to subsequent pairing procedures, not an active one.
+The Bluetooth library owns ECDH, pairing, bond storage, identity resolution,
+security event processing and reconnection. The example only calls
+`BtAppSecInit()` from `BtAppInitUserData()`.
 
-The companion `UartBleDemo` is a plain, open-link UART/BLE bridge without
-the security command interpreter. This demo preserves the broader security
-test matrix rather than implementing the SMP protocol itself.
+## When user interaction is necessary
 
-The project definition was generated from UartBleDemo and structurally checked,
-but a clean ARM firmware build and target smoke test have **not** been run.
+Provide application callbacks *only for the capabilities selected*. The
+Bluetooth library invokes:
+
+- `void BtSmpNumericComparison(uint16_t conn, uint32_t value)`: display the
+  six-digit value through the application's UI, obtain an explicit yes/no
+  decision and call `BtSmpNumericComparisonReply(conn, confirm)`.
+- `void BtSmpPasskeyDisplay(uint16_t conn, uint32_t passkey)`: present the
+  six-digit passkey to the user.
+- `void BtSmpPasskeyRequest(uint16_t conn)`: request six digits using the
+  application's own input device, then call `BtSmpPasskeyReply(conn, passkey)`.
+  Use `BT_SMP_PASSKEY_INVALID` to cancel.
+- For OOB, obtain local values with `BtSmpOobLocalDataGen()` and stage the
+  peer data with `BtSmpOobPeerDataSet()` through the application's transport.
+
+These callbacks must never silently approve Numeric Comparison or fabricate a
+passkey. They can be asynchronous: retain the connection handle and call the
+appropriate reply when the human interaction completes. The library's
+rejecting defaults apply when interaction is requested but no application
+callback is supplied. There is no UART terminal requirement.
+
+## Separation of responsibilities
+
+`UartBleDemo` is an open UART-over-BLE data bridge. `BleSecurityDemo`
+illustrates configuring the library to secure a connection while retaining
+the same service as test traffic. User-interface implementation belongs to
+the application, not to the generic BLE library or MCU-specific source.
+
+**Validation:** Source/project references were checked, but a clean target
+build and hardware regression of this refactor have not been performed.
