@@ -292,9 +292,11 @@ IOsonata includes generic and target-specific implementations across:
 - USB and host-side interfaces
 - bare-metal, TaktOS, FreeRTOS and ThreadX applications
 
-An MCU is supported when startup, GPIO, UART and a timer driver are implemented.
-Optional peripheral capabilities and hardware validation are recorded separately.
-See [Supported Targets](docs/supported-targets.md) for the current matrix.
+Nordic ports are IOsonata's most developed and most complete MCU family, with
+extensive Bluetooth, peripheral, sensor, storage and RTOS examples. STM32F0,
+STM32L4 and SAM4LC also have established hardware use.
+[Supported MCUs](docs/supported-targets.md) describes each target's implemented
+peripherals, application examples, validation and remaining work.
 
 ---
 
@@ -304,8 +306,8 @@ IOsonata is developed and validated on I-SYST reference hardware as well as vend
 
 | Platform | MCU / role | IOsonata use |
 |---|---|---|
-| [BLYST Nano](https://www.i-syst.com/products/blyst-nano) / IDK-BLYST-NANO | nRF52832 Cortex-M4F | Primary BLE, UART, sensor and low-power baseline |
-| BLYSTL15 | nRF54L15 Cortex-M33 | nRF54L and `sdk-nrf-bm` bare-metal baseline |
+| [BLYST Nano](https://www.i-syst.com/products/blyst-nano) / IDK-BLYST-NANO | nRF52832 Cortex-M4F | BLE, UART, sensor and low-power application development |
+| BLYSTL15 | nRF54L15 Cortex-M33 | nRF54L Bluetooth, `sdk-nrf-bm` and RTOS development |
 | BLUEIO-TAG-EVIM | nRF52832 with environmental and motion sensors | Bluetooth and multi-sensor reference platform |
 | [IDAP-Link](https://www.i-syst.com/products/idap-link) | CMSIS-DAP SWD/JTAG probe with USB-UART bridge | Flashing, debugging and serial output |
 | CS-BLYST-06 / IBK-NRF52840 | nRF52832 / nRF52840 breakout boards | MCU bring-up and peripheral development |
@@ -324,8 +326,8 @@ IOsonata is developed and validated on I-SYST reference hardware as well as vend
 
 These are function-specific maintainer results, not a claim that every
 peripheral or the latest commit has passed hardware validation.
-[Supported MCUs](docs/supported-targets.md) records core-driver coverage,
-project integration gaps, model/build evidence and hardware scope.
+[Supported MCUs](docs/supported-targets.md) records peripheral coverage, examples,
+project integration, build results and hardware scope.
 [0.13 release notes](docs/releases/0.13.md) retain the detailed USB measurements.
 
 
