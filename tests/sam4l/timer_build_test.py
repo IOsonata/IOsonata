@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compile/link the existing SAM4LCxC TimerDemo for every virtual timer.
+"""Compile/link the existing SAM4L TimerDemo for every virtual timer.
 
 Uses the real vendor headers, startup, vectors and linker script. This is a
 compile and link check. It does not run IOcomposer or test hardware.
@@ -13,8 +13,12 @@ root = Path(__file__).resolve().parents[2]
 p = argparse.ArgumentParser(description=__doc__)
 p.add_argument('--toolchain-prefix', default='arm-none-eabi-')
 p.add_argument('--build-dir', type=Path, default=root / 'tests/sam4l/build')
+p.add_argument('--mcu', choices=['SAM4LC8C', 'SAM4LS2C', 'SAM4LS4C', 'SAM4LS8C'],
+               default='SAM4LC8C')
 a = p.parse_args()
-project = root / 'ARM/Microchip/SAM4L/SAM4LCxC/exemples/TimerDemo/ioc'
+family = 'SAM4LSxC' if a.mcu.startswith('SAM4LS') else 'SAM4LCxC'
+linker = 'gcc_sam4lx' + a.mcu[-2] + '.ld'
+project = root / 'ARM/Microchip/SAM4L' / family / 'exemples/TimerDemo/ioc'
 for link in ET.parse(project / '.project').findall('.//link'):
     uri = link.findtext('locationURI')
     if not uri.startswith('PARENT-'):
@@ -46,11 +50,11 @@ includes = ['-I' + str(root / s) for s in ['include', 'ARM/include',
 def run(cmd):
     subprocess.run(cmd, check=True)
 for mode, opt in [('Debug', '-O0'), ('Release', '-Os')]:
-    out = a.build_dir.resolve() / mode
+    out = a.build_dir.resolve() / a.mcu / mode
     out.mkdir(parents=True, exist_ok=True)
     flags = ['-mcpu=cortex-m4', '-mthumb', '-mfloat-abi=soft', opt, '-g',
              '-ffunction-sections', '-fdata-sections', '-D__PROGRAM_START',
-             '-D__SAM4LC8C__', '-DDEBUG' if mode == 'Debug' else '-DNDEBUG']
+             '-D__' + a.mcu + '__', '-DDEBUG' if mode == 'Debug' else '-DNDEBUG']
     def compile(path, extra=()):
         obj = out / (path.name + '.o')
         cpp = path.suffix == '.cpp'
@@ -59,7 +63,7 @@ for mode, opt in [('Debug', '-O0'), ('Release', '-Os')]:
              *includes, *extra, '-c', str(path), '-o', str(obj)])
         return str(obj)
     objs = [compile(root / path) for path in files]
-    lib = out / 'libIOsonata_SAM4LCxC.a'
+    lib = out / ('libIOsonata_' + family + '.a')
     run([a.toolchain_prefix + 'ar', 'rcs', str(lib), *objs])
     for dev in range(7):
         app = compile(root / 'exemples/timer/timer_demo.cpp',
@@ -67,10 +71,20 @@ for mode, opt in [('Debug', '-O0'), ('Release', '-Os')]:
         elf = out / ('TimerDemo-' + str(dev) + '.elf')
         run([a.toolchain_prefix + 'g++', *flags, '--specs=nano.specs', '--specs=nosys.specs',
              '-Wl,--gc-sections', '-L' + str(root / 'ARM/ldscript'),
-             '-T' + str(root / 'ARM/Microchip/SAM4L/ldscript/gcc_sam4lx8.ld'),
+             '-T' + str(root / 'ARM/Microchip/SAM4L/ldscript' / linker),
              app, str(lib), '-o', str(elf)])
         symbols = subprocess.check_output([a.toolchain_prefix + 'nm', str(elf)], text=True)
         for handler in ['AST_ALARM_Handler', 'AST_OVF_Handler', 'TC00_Handler',
                         'TC01_Handler', 'TC02_Handler', 'TC10_Handler', 'TC11_Handler', 'TC12_Handler']:
             assert ' T ' + handler + '\n' in symbols, handler + ' must override weak default vector'
-    print(mode + ': all seven TimerDemo devices compiled and linked', flush=True)
+    if family == 'SAM4LSxC':
+        blinky = compile(root / 'exemples/misc/blinky.c',
+                         ['-I' + str(project.parents[1] / 'Blinky/src')])
+        run([a.toolchain_prefix + 'g++', *flags, '--specs=nano.specs', '--specs=nosys.specs',
+             '-Wl,--gc-sections', '-L' + str(root / 'ARM/ldscript'),
+             '-T' + str(root / 'ARM/Microchip/SAM4L/ldscript' / linker),
+             blinky, str(lib), '-o', str(out / 'Blinky.elf')])
+        for source in ['i2c_sam4l.cpp', 'spi_sam4l.cpp', 'usb_ctrlr_sam4l.cpp',
+                       'usb_ctrlr_sam4l_iso.cpp']:
+            compile(root / 'ARM/Microchip/SAM4L/src' / source)
+    print(a.mcu + ' ' + mode + ': all seven TimerDemo devices compiled and linked', flush=True)

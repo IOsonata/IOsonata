@@ -39,29 +39,15 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #ifndef __BOARD_H__
 #define __BOARD_H__
 
-// SAM4L8 Xplained Pro yellow LED0, active low.
-#define LED1_PORT		IOPORTC
-#define LED1_PIN		7
-#define LED1_PINOP		IOPINOP_GPIO
+// Example wiring for a SAM4LS C-package application, not a supplied board.
+// Connect an LED with a series resistor from VDD to PC07, or change this pin.
+// The library defaults to internal oscillators; define MCUOSC for your board.
+#define LED1_PORT IOPORTC
+#define LED1_PIN 7
+#define LED1_PINOP IOPINOP_GPIO
 
-// USART1 console, matching the SAM4LCxC CDC example.
-#define TIMER_DEMO_UART
-#define UART_DEVNO 		1
-#define UART_RX_PORT 	IOPORTC
-#define UART_RX_PIN 	26
-#define UART_RX_PINOP 	IOPINOP_PERIPHA
-#define UART_TX_PORT 	IOPORTC
-#define UART_TX_PIN 	27
-#define UART_TX_PINOP 	IOPINOP_PERIPHA
-
-// Virtual device 0 = AST, 1..3 = TC0 channels 0..2, 4..6 = TC1 channels 0..2.
-// Compiler -DTIMER_DEMO_DEVNO also overrides this selection.
-#define TIMER_DEVNO 	0
-#define TIMER_FREQ 		0
-
-#define LED_PINS_MAP	{ \
+#define LED_PINS_MAP { \
 	{LED1_PORT, LED1_PIN, LED1_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL}, \
 }
 
 #endif // __BOARD_H__
-

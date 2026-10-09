@@ -39,29 +39,30 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #ifndef __BOARD_H__
 #define __BOARD_H__
 
-// SAM4L8 Xplained Pro yellow LED0, active low.
-#define LED1_PORT		IOPORTC
-#define LED1_PIN		7
-#define LED1_PINOP		IOPINOP_GPIO
+// Example wiring only. Check these pins and clocks against your SAM4LS board.
+// SAM4LS hardware validation has not been performed.
 
-// USART1 console, matching the SAM4LCxC CDC example.
-#define TIMER_DEMO_UART
-#define UART_DEVNO 		1
-#define UART_RX_PORT 	IOPORTC
-#define UART_RX_PIN 	26
-#define UART_RX_PINOP 	IOPINOP_PERIPHA
-#define UART_TX_PORT 	IOPORTC
-#define UART_TX_PIN 	27
-#define UART_TX_PINOP 	IOPINOP_PERIPHA
+// USART1 adapter: RX on PC26, TX on PC27, peripheral A; no flow control.
+#define UART_DEVNO 1
+#define UART_RX_PORT IOPORTC
+#define UART_RX_PIN 26
+#define UART_RX_PINOP IOPINOP_PERIPHA
+#define UART_TX_PORT IOPORTC
+#define UART_TX_PIN 27
+#define UART_TX_PINOP IOPINOP_PERIPHA
+#define UART_CTS_PORT -1
+#define UART_CTS_PIN -1
+#define UART_CTS_PINOP IOPINOP_GPIO
+#define UART_RTS_PORT -1
+#define UART_RTS_PIN -1
+#define UART_RTS_PINOP IOPINOP_GPIO
 
-// Virtual device 0 = AST, 1..3 = TC0 channels 0..2, 4..6 = TC1 channels 0..2.
-// Compiler -DTIMER_DEMO_DEVNO also overrides this selection.
-#define TIMER_DEVNO 	0
-#define TIMER_FREQ 		0
+#define UART_PINS			{ \
+	{UART_RX_PORT, UART_RX_PIN, UART_RX_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},\
+	{UART_TX_PORT, UART_TX_PIN, UART_TX_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},\
+	{UART_CTS_PORT, UART_CTS_PIN, UART_CTS_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},\
+	{UART_RTS_PORT, UART_RTS_PIN, UART_RTS_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},}
 
-#define LED_PINS_MAP	{ \
-	{LED1_PORT, LED1_PIN, LED1_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL}, \
-}
 
 #endif // __BOARD_H__
 
