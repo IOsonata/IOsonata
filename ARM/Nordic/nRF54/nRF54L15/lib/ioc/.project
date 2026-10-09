@@ -1606,11 +1606,6 @@
 			<locationURI>PARENT-3-PROJECT_LOC/src/nrf_sdh.c</locationURI>
 		</link>
 		<link>
-			<name>src/bluetooth/peer_data_storage.c</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/src/peer_data_storage.c</locationURI>
-		</link>
-		<link>
 			<name>src/bluetooth/services</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
