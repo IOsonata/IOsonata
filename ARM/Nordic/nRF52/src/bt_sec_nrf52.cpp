@@ -397,10 +397,14 @@ bool BtAppSecInit(void)
 		case BTGAP_SECTYPE_SIGNED_MITM:
 			secParam.mitm = 1;
 			secParam.lesc = 1;
+			secParam.kdist_own.sign = 1;
+			secParam.kdist_peer.sign = 1;
 			break;
 
 		case BTGAP_SECTYPE_SIGNED_NO_MITM:
 			secParam.lesc = 1;
+			secParam.kdist_own.sign = 1;
+			secParam.kdist_peer.sign = 1;
 			break;
 
 		case BTGAP_SECTYPE_NONE:
