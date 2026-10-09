@@ -33,6 +33,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ----------------------------------------------------------------------------*/
 #include "coredev/pwm.h"
 #include "idelay.h"
+#include "iopinctrl.h"
 #include "board.h"
 
 static const PwmCfg_t s_PwmCfg = {
@@ -89,40 +90,47 @@ static const uint32_t s_GapUs = 20000;
 
 Pwm g_Pwm;
 
+static void ToneStop()
+{
+	g_Pwm.Stop();
+	g_Pwm.CloseChannel(s_ToneChannel.Chan);
+	g_Pwm.Disable();
+	IOPinClear(TONE_PORT, TONE_PIN);
+}
+
 int main()
 {
+	// The buzzer uses an active-high transistor gate.
+	IOPinClear(TONE_PORT, TONE_PIN);
+	IOPinConfig(TONE_PORT, TONE_PIN, IOPINOP_GPIO, IOPINDIR_OUTPUT,
+				IOPINRES_NONE, IOPINTYPE_NORMAL);
 	if (!g_Pwm.Init(s_PwmCfg))
 	{
 		return 1;
 	}
 
-	if (!g_Pwm.OpenChannel(&s_ToneChannel, 1))
-	{
-		g_Pwm.Disable();
-		return 1;
-	}
+	g_Pwm.Disable();
+	// A silent interval before the first note also checks the idle output.
+	usDelay(2000000);
 
 	while (1)
 	{
 		for (unsigned int i = 0; i < sizeof(s_Melody) / sizeof(s_Melody[0]); i++)
 		{
 			uint32_t duration = s_Melody[i].Eighths * s_EighthUs;
-			if (!g_Pwm.Frequency(s_Melody[i].Freq) ||
+			if (!g_Pwm.Enable() ||
+				!g_Pwm.Frequency(s_Melody[i].Freq) ||
+				!g_Pwm.OpenChannel(&s_ToneChannel, 1) ||
 				!g_Pwm.DutyCycle(s_ToneChannel.Chan, 50) ||
 				!g_Pwm.Start())
 			{
-				g_Pwm.Stop();
-				g_Pwm.CloseChannel(s_ToneChannel.Chan);
-				g_Pwm.Disable();
+				ToneStop();
 				return 1;
 			}
 
 			usDelay(duration - s_GapUs);
-			// Load an inactive sample before stopping the output.
-			g_Pwm.DutyCycle(s_ToneChannel.Chan, 0);
-			usDelay(1000);
-			g_Pwm.Stop();
-			usDelay(s_GapUs - 1000);
+			ToneStop();
+			usDelay(s_GapUs);
 		}
 		usDelay(1000000);
 	}

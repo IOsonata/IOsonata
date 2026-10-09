@@ -12,8 +12,12 @@ The melody uses C8-G8 (4186-6272 Hz), transposed high for the SMT-0540-S-R
 buzzer. The note table stores frequency and duration in eighth notes.
 Tempo is 120 quarter notes per minute, set by `s_EighthUs`.
 Each note includes a 20 ms articulation gap so repeated notes remain distinct.
-Timing uses the application's blocking delay loop. A zero-duty sample is
-loaded before stopping between notes.
+Timing uses the application's blocking delay loop. The active-high transistor
+gate is initialized as a low GPIO output. After each note the application
+stops PWM, disconnects the channel, disables PWM and holds the gate low.
+The next note enables PWM, sets its frequency, reconnects the channel and
+sets its duty before starting.
+There is also a two-second silent interval before the first note.
 
 Set `TONE_PORT` and `TONE_PIN` in [board.h](src/board.h) for your connection.
 The default follows the existing BlueIO LED3 mapping, P0.28; `NORDIC_DK`
