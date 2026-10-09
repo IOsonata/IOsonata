@@ -49,8 +49,6 @@ SOFTWARE.
 #include "ble_dis.h"
 #include "nrf_ble_gatt.h"
 #include "app_util_platform.h"
-#include "fds.h"
-#include "nrf_fstorage.h"
 #include "nrf_sdh.h"
 #include "nrf_sdh_soc.h"
 #include "nrf_sdh_ble.h"
@@ -1089,20 +1087,6 @@ void BtGattInit(void)
     }
 }
 
-/**@brief Function for handling File Data Storage events.
- *
- * @param[in] p_evt  Peer Manager event.
- * @param[in] cmd
- */
-static void fds_evt_handler(fds_evt_t const * const p_fds_evt)
-{
-    if (p_fds_evt->id == FDS_EVT_GC)
-    {
-//        printf("GC completed");
-    }
-}
-
-
 void BtDisInit(const BtAppCfg_t *pCfg)
 {
     ble_dis_init_t   dis_init;
@@ -1347,6 +1331,11 @@ const static TimerCfg_t s_BtAppNrf52TimerCfg = {
 // along with the low frequency one.
 static TimerDev_t s_BtAppNrf52Timer;
 
+// Security is optional. Weak references keep the direct SoftDevice security
+// adapter and its PDS bond store out of open-link applications.
+extern void BtSecSdPoll(void) __attribute__((weak));
+extern void BtSecSdCheckStatus(void) __attribute__((weak));
+
 // Set while the timeout check is in the queue, so that it is queued once
 static volatile bool s_bBtAppNrf52TickQueued = false;
 
@@ -1365,6 +1354,10 @@ static void BtAppNrf52TickEvt(uint32_t Evt, void *pCtx)
 	if (s_pBtAppNrf52Conn != nullptr)
 	{
 		s_pBtAppNrf52Conn->Tick();
+	}
+	if (BtSecSdPoll != nullptr)
+	{
+		BtSecSdPoll();
 	}
 }
 
@@ -1793,6 +1786,10 @@ void BtAppCheckStatus(void)
 	{
 		BtLescCheckStatus();
 	}
+	if (BtSecSdCheckStatus != nullptr)
+	{
+		BtSecSdCheckStatus();
+	}
 	if (BtDfuSmpCheckStatus != nullptr)
 	{
 		BtDfuSmpCheckStatus();
@@ -1826,7 +1823,7 @@ static void BtAppSDDispatch(void)
 // We need this here in order for the Linker to keep the nrf_sdh_soc.c
 // which is require for Softdevice to function properly
 // Create section set "sdh_soc_observers".
-// This is needed for FSTORAGE event to work.
+// This also delivers the SoftDevice flash completion events used by NvmIntrf.
 extern "C" void nrf_sdh_soc_evts_poll(void * p_context);
 
 NRF_SDH_STACK_OBSERVER(m_nrf_sdh_soc_evts_poll, NRF_SDH_SOC_STACK_OBSERVER_PRIO) = {
