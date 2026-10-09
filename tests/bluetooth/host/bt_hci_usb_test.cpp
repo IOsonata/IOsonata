@@ -586,11 +586,11 @@ static void TestBulkSerialization(void)
     const int sameAltOpen = s_OpenCount;
     const int sameAltClose = s_CloseCount;
     CHECK(hci.SelectInterface(0U, 1U));
-    CHECK(s_OpenCount == sameAltOpen);
-    CHECK(s_CloseCount == sameAltClose);
+    CHECK(s_OpenCount == sameAltOpen + 2);
+    CHECK(s_CloseCount == sameAltClose + 3);
     CHECK(hci.SelectInterface(1U, 0U));
-    CHECK(s_OpenCount == sameAltOpen);
-    CHECK(s_CloseCount == sameAltClose);
+    CHECK(s_OpenCount == sameAltOpen + 2);
+    CHECK(s_CloseCount == sameAltClose + 3);
 
     const uint8_t cmd[] = { 0x03U, 0x0CU, 0x00U };
     const uint8_t wireCmd[] = {
@@ -957,6 +957,44 @@ static void TestHciModeSwitchRetainsPackets(void)
 		}
 }
 
+static void TestHciReselectRestartsEvent(void)
+{
+	// Reopening a host session selects the current alternate again. An
+	// unfinished event must restart from its header, not its next fragment.
+	for (unsigned serial = 0U; serial < 2U; ++serial)
+	{
+		ResetFake();
+		BtHciUsb hci;
+		CHECK(hci.Init(MakeCfg(true, true)));
+		CHECK(hci.SelectConfig(1U));
+		CHECK(hci.SelectInterface(0U, serial));
+		// Reselecting HCI alt-0 must also work while SCO is active.
+		if (!serial) CHECK(hci.SelectInterface(1U, 1U));
+		BtHciUsbDev_t *pHci = hci;
+		uint8_t event[130] = {0xFFU, 128U};
+		for (unsigned i = 2U; i < sizeof(event); ++i) event[i] = i;
+		const uint8_t ep = serial ? pHci->AclEpNo : pHci->EventEpNo;
+		CHECK(hci.Tx(BT_HCI_USB_PACKET_EVENT, event, sizeof(event)) == (int)sizeof(event));
+		CompleteIn(ep);
+		const int first = s_SendCount;
+		const int opened = s_OpenCount;
+		const int closed = s_CloseCount;
+		CHECK(hci.SelectInterface(0U, serial));
+		CHECK(s_OpenCount == opened + (serial ? 2 : 3));
+		CHECK(s_CloseCount == closed + 3);
+		CHECK(pHci->ScoAlt == (serial ? 0U : 1U));
+		DrainIn();
+		CheckWire(first, ep, event, sizeof(event),
+			serial ? BT_HCI_USB_PACKET_EVENT : BT_HCI_USB_PACKET_NONE);
+		const uint8_t resetComplete[] = {0x0EU, 4U, 1U, 3U, 0x0CU, 0U};
+		const int resetFirst = s_SendCount;
+		CHECK(hci.Tx(BT_HCI_USB_PACKET_EVENT, resetComplete, sizeof(resetComplete)) == (int)sizeof(resetComplete));
+		DrainIn();
+		CheckWire(resetFirst, ep, resetComplete, sizeof(resetComplete),
+			serial ? BT_HCI_USB_PACKET_EVENT : BT_HCI_USB_PACKET_NONE);
+	}
+}
+
 static void TestHciModeSwitchEvents(void)
 {
 	ResetFake();
@@ -1126,6 +1164,7 @@ int main(void)
 	TestHciNonblockingAdmission();
 	TestHciPacketBoundaries();
 	TestHciModeSwitchRetainsPackets();
+	TestHciReselectRestartsEvent();
 	TestHciModeSwitchEvents();
 	TestHciModeSwitchScoIso();
 	TestHciRetainedEventBoundaries();
@@ -1143,4 +1182,5 @@ int main(void)
 
 // The process event of the USB core is not part of this test.
 void UsbProcessQue(int) {}
+
 
