@@ -55,7 +55,7 @@
 									<listOptionValue builtIn="false" value="LESC_DEBUG_MODE"/>
 									<listOptionValue builtIn="false" value="BL_SETTINGS_ACCESS_ONLY"/>
 									<listOptionValue builtIn="false" value="NRF_DFU_SETTINGS_VERSION=1"/>
-									<listOptionValue builtIn="false" value="NRF_SD_BLE_API_VERSION=6"/>
+									<listOptionValue builtIn="false" value="NRF_SD_BLE_API_VERSION=7"/>
 									<listOptionValue builtIn="false" value="SOFTDEVICE_PRESENT"/>
 									<listOptionValue builtIn="false" value="BLE_STACK_SUPPORT_REQD"/>
 									<listOptionValue builtIn="false" value="S140"/>
@@ -132,7 +132,7 @@
 									<listOptionValue builtIn="false" value="LESC_DEBUG_MODE"/>
 									<listOptionValue builtIn="false" value="BL_SETTINGS_ACCESS_ONLY"/>
 									<listOptionValue builtIn="false" value="NRF_DFU_SETTINGS_VERSION=1"/>
-									<listOptionValue builtIn="false" value="NRF_SD_BLE_API_VERSION=6"/>
+									<listOptionValue builtIn="false" value="NRF_SD_BLE_API_VERSION=7"/>
 									<listOptionValue builtIn="false" value="SOFTDEVICE_PRESENT"/>
 									<listOptionValue builtIn="false" value="BLE_STACK_SUPPORT_REQD"/>
 									<listOptionValue builtIn="false" value="S140"/>
@@ -314,7 +314,7 @@
 									<listOptionValue builtIn="false" value="LESC_DEBUG_MODE"/>
 									<listOptionValue builtIn="false" value="BL_SETTINGS_ACCESS_ONLY"/>
 									<listOptionValue builtIn="false" value="NRF_DFU_SETTINGS_VERSION=1"/>
-									<listOptionValue builtIn="false" value="NRF_SD_BLE_API_VERSION=6"/>
+									<listOptionValue builtIn="false" value="NRF_SD_BLE_API_VERSION=7"/>
 									<listOptionValue builtIn="false" value="SOFTDEVICE_PRESENT"/>
 									<listOptionValue builtIn="false" value="BLE_STACK_SUPPORT_REQD"/>
 									<listOptionValue builtIn="false" value="S140"/>
@@ -391,7 +391,7 @@
 									<listOptionValue builtIn="false" value="LESC_DEBUG_MODE"/>
 									<listOptionValue builtIn="false" value="BL_SETTINGS_ACCESS_ONLY"/>
 									<listOptionValue builtIn="false" value="NRF_DFU_SETTINGS_VERSION=1"/>
-									<listOptionValue builtIn="false" value="NRF_SD_BLE_API_VERSION=6"/>
+									<listOptionValue builtIn="false" value="NRF_SD_BLE_API_VERSION=7"/>
 									<listOptionValue builtIn="false" value="SOFTDEVICE_PRESENT"/>
 									<listOptionValue builtIn="false" value="BLE_STACK_SUPPORT_REQD"/>
 									<listOptionValue builtIn="false" value="S140"/>
