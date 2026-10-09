@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <projectDescription>
-	<name>PwmToneDemo</name>
+	<name>BuzzerDemo</name>
 	<comment></comment>
 	<projects>
 	</projects>
@@ -32,9 +32,9 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>src/pwm_tone_demo.cpp</name>
+			<name>src/buzzer_demo.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/exemples/pwm/pwm_tone_demo.cpp</locationURI>
+			<locationURI>PARENT-7-PROJECT_LOC/exemples/audio/buzzer_demo.cpp</locationURI>
 		</link>
 	</linkedResources>
 </projectDescription>

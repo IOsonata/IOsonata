@@ -37,7 +37,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "coredev/pwm.h"
 
-/** @addtogroup MiscDev
+/** @addtogroup Audio
   * @{
   */
 

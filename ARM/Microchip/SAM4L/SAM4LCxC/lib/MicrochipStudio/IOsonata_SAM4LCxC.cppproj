@@ -303,9 +303,9 @@
       <SubType>compile</SubType>
       <Link>src\md5.c</Link>
     </Compile>
-    <Compile Include="..\..\..\..\..\..\src\miscdev\buzzer.cpp">
+    <Compile Include="..\..\..\..\..\..\src\audio\buzzer.cpp">
       <SubType>compile</SubType>
-      <Link>src\miscdev\buzzer.cpp</Link>
+      <Link>src\audio\buzzer.cpp</Link>
     </Compile>
     <Compile Include="..\..\..\..\..\..\src\miscdev\ledmx.c">
       <SubType>compile</SubType>

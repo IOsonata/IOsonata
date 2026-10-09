@@ -32,7 +32,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ----------------------------------------------------------------------------*/
 #include "idelay.h"
-#include "miscdev/buzzer.h"
+#include "audio/buzzer.h"
 #include "coredev/timer.h"
 
 // Equal-tempered MIDI frequencies, rounded to millihertz (A4 = 440 Hz).

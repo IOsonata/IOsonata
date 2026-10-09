@@ -170,6 +170,7 @@ Reusable source lives under [`exemples/`](../exemples/):
 
 ```text
 exemples/
+├── audio/
 ├── misc/
 ├── uart/
 ├── i2c/
@@ -189,6 +190,7 @@ Useful starting points include:
 - `UartPrbsTxTest` - `exemples/uart/uart_prbs_tx.cpp`;
 - `I2CMasterDemo` - `exemples/i2c/i2c_master_demo.cpp`;
 - `SPIMasterDemo` - `exemples/spi/spi_master_demo.cpp`;
+- `BuzzerDemo` - `exemples/audio/buzzer_demo.cpp`;
 - storage examples under `exemples/storage/`;
 - Bluetooth examples under `exemples/bluetooth/`;
 - sensor examples under `exemples/sensor/`;
@@ -262,6 +264,7 @@ Run the MCU-library builder again, clean the application and relink it.
 
 - [Documentation index](README.md)
 - [Quick Reference](quick-reference.md)
+- [Buzzer User Guide](buzzer.md)
 - [USB User Guide](usb-user-guide.md)
 - [Architecture overview](architecture/README.md)
 - [IOcomposer workflow](architecture/iocomposer-workflow.md)

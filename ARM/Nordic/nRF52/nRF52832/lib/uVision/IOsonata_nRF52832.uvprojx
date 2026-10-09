@@ -511,7 +511,7 @@
             <File>
               <FileName>buzzer.cpp</FileName>
               <FileType>8</FileType>
-              <FilePath>..\..\..\..\..\..\src\miscdev\buzzer.cpp</FilePath>
+              <FilePath>..\..\..\..\..\..\src\audio\buzzer.cpp</FilePath>
             </File>
             <File>
               <FileName>led_apa102.cpp</FileName>
@@ -1707,7 +1707,7 @@
             <File>
               <FileName>buzzer.cpp</FileName>
               <FileType>8</FileType>
-              <FilePath>..\..\..\..\..\..\src\miscdev\buzzer.cpp</FilePath>
+              <FilePath>..\..\..\..\..\..\src\audio\buzzer.cpp</FilePath>
             </File>
             <File>
               <FileName>led_apa102.cpp</FileName>

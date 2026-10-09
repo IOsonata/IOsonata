@@ -1,7 +1,7 @@
 #include <cassert>
 #include <cstdio>
 #include <initializer_list>
-#include "miscdev/buzzer.h"
+#include "audio/buzzer.h"
 #include "coredev/timer.h"
 uint64_t g_DelayUs = 0;
 // Base-class C entry points must never be called by these injected test devices.

@@ -18,10 +18,11 @@ The book remains useful for the object-design model and historical background, b
 1. [Project README](../README.md) — project scope, precompiled-library model, benchmarks and hardware references.
 2. [Getting Started](getting-started.md) — install IOcomposer, build an MCU library, open an example, flash and debug.
 3. [Quick Reference](quick-reference.md) — commands, project actions and common configuration examples.
-4. [USB User Guide](usb-user-guide.md) — build, configure and test the supported USB device functions.
-5. [FAQ](FAQ.md) — concise answers about the architecture, target projects and build model.
-6. [Supported Targets](supported-targets.md) — MCU support, implementation limits, hardware-validation baselines and target-status rules.
-7. [Dependencies](dependencies.md) — tool, SDK and optional-library boundaries.
+4. [Buzzer User Guide](buzzer.md) — continuous tones, note/tempo melodies, sound effects and PWM-backed audio output.
+5. [USB User Guide](usb-user-guide.md) — build, configure and test the supported USB device functions.
+6. [FAQ](FAQ.md) — concise answers about the architecture, target projects and build model.
+7. [Supported Targets](supported-targets.md) — MCU support, implementation limits, hardware-validation baselines and target-status rules.
+8. [Dependencies](dependencies.md) — tool, SDK and optional-library boundaries.
 
 ## Release preparation
 
@@ -73,6 +74,15 @@ HCI transports, RTOS integration and testing.
 
 Explains application, host, controller and vendor-port boundaries, per-link
 state, optional feature linking, storage ownership and event dispatch.
+
+## Audio
+
+### [Buzzer User Guide](buzzer.md)
+
+Covers the PWM-backed buzzer audio device, application-owned pin configuration,
+named musical notes and lengths, tempo-driven nonblocking melodies, named and
+custom sound effects, service timing, silence behavior and BuzzerDemo
+validation status. PWM itself remains a general-purpose core peripheral.
 
 ## USB
 

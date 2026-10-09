@@ -16,7 +16,7 @@ rising/falling pitch, volume fades and restoration, rests, repeats, named
 effect duration across counter wrap, replacement of melodies, failures and
 invalid steps.
 
-Build the nRF52840 example and the real PWM/GPIO register fixture:
+Build the nRF52840 BuzzerDemo and the real PWM/GPIO register fixture:
 
 ```sh
 python3 tests/buzzer/build_arm.py --mdk /path/to/nordic/mdk \
@@ -36,4 +36,4 @@ both example configurations; both PWM register fixtures passed with and
 without a simulated STOPPED event. The updated PWM source also compiled
 for nRF52832, nRF52840, nRF5340 application core, nRF9160, nRF9120,
 nRF54L15, nRF54LM20A and nRF54LM20B. These are selected-source checks,
-not full IOC library builds. The refactored melody player needs a hardware run.
+not full IOC library builds. The current melody/effect player still needs a hardware listening test.

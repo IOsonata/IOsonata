@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
-@example	pwm_tone_demo.cpp
+@example	buzzer_demo.cpp
 
-@brief	Play the Jingle Bells chorus with PWM
+@brief	Buzzer melody and sound effects example
 
 @author	Hoang Nguyen Hoan
 @date	May 15, 2018
@@ -33,7 +33,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ----------------------------------------------------------------------------*/
 #include "coredev/pwm.h"
 #include "coredev/timer.h"
-#include "miscdev/buzzer.h"
+#include "audio/buzzer.h"
 #include "iopinctrl.h"
 #include "board.h"
 

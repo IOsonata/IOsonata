@@ -53,7 +53,7 @@
             <file>$PROJ_DIR$\..\..\..\..\..\..\include\coredev\i2c.h</file>
             <file>$PROJ_DIR$\..\..\..\..\..\..\include\imu\mpu9250_dmpkey.h</file>
             <file>$PROJ_DIR$\..\..\..\..\..\..\include\miscdev\led_apa102.h</file>
-            <file>$PROJ_DIR$\..\..\..\..\..\..\include\miscdev\buzzer.h</file>
+            <file>$PROJ_DIR$\..\..\..\..\..\..\include\audio\buzzer.h</file>
             <file>$PROJ_DIR$\..\..\..\..\..\..\include\sensors\gyro_sensor.h</file>
             <file>$PROJ_DIR$\..\..\..\..\..\..\include\sensors\agm_mpu9250.h</file>
             <file>$PROJ_DIR$\..\..\..\..\..\..\include\sensors\mag_bmm150.h</file>
@@ -112,7 +112,7 @@
             <file>$PROJ_DIR$\..\..\..\..\..\..\src\sensors\tph_bme280.cpp</file>
             <file>$PROJ_DIR$\..\..\..\..\..\..\src\isha256.c</file>
             <file>$PROJ_DIR$\..\..\..\src\uart_stm32l4xx.cpp</file>
-            <file>$PROJ_DIR$\..\..\..\..\..\..\src\miscdev\buzzer.cpp</file>
+            <file>$PROJ_DIR$\..\..\..\..\..\..\src\audio\buzzer.cpp</file>
             <file>$PROJ_DIR$\..\..\..\..\..\..\src\sensors\tph_ms8607.cpp</file>
             <file>$PROJ_DIR$\..\..\..\..\..\..\src\sensors\agm_invn_icm20948.cpp</file>
             <file>$PROJ_DIR$\..\..\..\..\..\..\src\miscdev\led_pwm.cpp</file>
@@ -818,7 +818,7 @@
             </inputs>
         </file>
         <file>
-            <name>$PROJ_DIR$\..\..\..\..\..\..\src\miscdev\buzzer.cpp</name>
+            <name>$PROJ_DIR$\..\..\..\..\..\..\src\audio\buzzer.cpp</name>
             <outputs>
                 <tool>
                     <name>ICCARM</name>
@@ -1873,7 +1873,7 @@
             <file>$PROJ_DIR$\..\..\..\..\..\..\include\coredev\i2c.h</file>
             <file>$PROJ_DIR$\..\..\..\..\..\..\include\imu\mpu9250_dmpkey.h</file>
             <file>$PROJ_DIR$\..\..\..\..\..\..\include\miscdev\led_apa102.h</file>
-            <file>$PROJ_DIR$\..\..\..\..\..\..\include\miscdev\buzzer.h</file>
+            <file>$PROJ_DIR$\..\..\..\..\..\..\include\audio\buzzer.h</file>
             <file>$PROJ_DIR$\..\..\..\..\..\..\include\sensors\gyro_sensor.h</file>
             <file>$PROJ_DIR$\..\..\..\..\..\..\include\sensors\agm_mpu9250.h</file>
             <file>$PROJ_DIR$\..\..\..\..\..\..\include\sensors\mag_bmm150.h</file>
@@ -1932,7 +1932,7 @@
             <file>$PROJ_DIR$\..\..\..\..\..\..\src\sensors\tph_bme280.cpp</file>
             <file>$PROJ_DIR$\..\..\..\..\..\..\src\isha256.c</file>
             <file>$PROJ_DIR$\..\..\..\src\uart_stm32l4xx.cpp</file>
-            <file>$PROJ_DIR$\..\..\..\..\..\..\src\miscdev\buzzer.cpp</file>
+            <file>$PROJ_DIR$\..\..\..\..\..\..\src\audio\buzzer.cpp</file>
             <file>$PROJ_DIR$\..\..\..\..\..\..\src\sensors\tph_ms8607.cpp</file>
             <file>$PROJ_DIR$\..\..\..\..\..\..\src\sensors\agm_invn_icm20948.cpp</file>
             <file>$PROJ_DIR$\..\..\..\..\..\..\src\miscdev\led_pwm.cpp</file>
@@ -2644,7 +2644,7 @@
             </inputs>
         </file>
         <file>
-            <name>$PROJ_DIR$\..\..\..\..\..\..\src\miscdev\buzzer.cpp</name>
+            <name>$PROJ_DIR$\..\..\..\..\..\..\src\audio\buzzer.cpp</name>
             <outputs>
                 <tool>
                     <name>ICCARM</name>

@@ -312,9 +312,13 @@ before release. Earlier measurements do not certify later changes.
 The legacy `UartSdkLoopbackTest` and `UartLoopbackSdk5` target projects were
 removed in [PR 79](https://github.com/IOsonata/IOsonata/pull/79).
 The shared SDK UART source remains. The nRF52840
-[PwmToneDemo](../ARM/Nordic/nRF52/nRF52840/exemples/PwmToneDemo/README.md)
-now includes its shared tone source and corrected library paths. Selected-source
-ARM compile/link checks pass at `-O0` and `-Os`; hardware testing is pending.
+[BuzzerDemo](../ARM/Nordic/nRF52/nRF52840/exemples/BuzzerDemo/README.md)
+uses the shared audio-layer buzzer player in
+`exemples/audio/buzzer_demo.cpp` with application-owned `board.h` pin
+selection. Host playback tests and selected-source Debug/Release ARM builds
+have passed; Nordic PWM register tests cover stop/restart and inactive-pin
+handling. These are not full IOC library builds. The latest player, named
+effects and sweep quality have not yet been listening-tested on hardware.
 
 ## Desktop targets
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the nRF52840 melody example and PWM register fixture."""
+"""Build the nRF52840 buzzer example and PWM register fixture."""
 import argparse
 from pathlib import Path
 import subprocess
@@ -12,9 +12,9 @@ a=p.parse_args()
 root=Path(__file__).resolve().parents[2]
 includes=[root/'include',root/'ARM/include',root/'ARM/Nordic/include',
           root/'ARM/Nordic/nRF52/nRF52840/lib/include',
-          root/'ARM/Nordic/nRF52/nRF52840/exemples/PwmToneDemo/src',a.cmsis,a.mdk,
+          root/'ARM/Nordic/nRF52/nRF52840/exemples/BuzzerDemo/src',a.cmsis,a.mdk,
           *[x for x in a.mdk.rglob('*') if x.is_dir()]]
-common=['src/miscdev/buzzer.cpp','src/coredev/timer.cpp',
+common=['src/audio/buzzer.cpp','src/coredev/timer.cpp',
         'ARM/Nordic/src/pwm_nrfx.cpp','ARM/Nordic/src/iopincfg_nrfx.c',
         'ARM/Nordic/src/timer_nrfx.cpp','ARM/Nordic/src/timer_lf_nrfx.cpp',
         'ARM/Nordic/src/timer_hf_nrfx.cpp','ARM/Nordic/nRF52/src/system_nrf52.c',
@@ -33,7 +33,7 @@ for opt,name in [('-O0','Debug'),('-Os','Release')]:
     '-c',str(root/source),'-o',str(obj)],check=True)
   return str(obj)
  objects=[compile_file(s) for s in common]
- for source in ['exemples/pwm/pwm_tone_demo.cpp','tests/buzzer/pwm_nrf52840_test.cpp']:
+ for source in ['exemples/audio/buzzer_demo.cpp','tests/buzzer/pwm_nrf52840_test.cpp']:
   obj=compile_file(source)
   elf=out/(Path(source).stem+'.elf')
   subprocess.run([a.tool_prefix+'g++',*flags,'--specs=nano.specs','--specs=nosys.specs',

@@ -961,9 +961,9 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/display/igfx.h</locationURI>
 		</link>
 		<link>
-			<name>include/miscdev/buzzer.h</name>
+			<name>include/audio/buzzer.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/miscdev/buzzer.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/include/audio/buzzer.h</locationURI>
 		</link>
 		<link>
 			<name>include/miscdev/led.h</name>
@@ -2066,9 +2066,9 @@
 			<locationURI>PARENT-6-PROJECT_LOC/micro-ecc/uECC_vli.h</locationURI>
 		</link>
 		<link>
-			<name>src/miscdev/buzzer.cpp</name>
+			<name>src/audio/buzzer.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/miscdev/buzzer.cpp</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/src/audio/buzzer.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/miscdev/led_apa102.cpp</name>
