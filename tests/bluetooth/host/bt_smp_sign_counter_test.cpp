@@ -236,6 +236,34 @@ void TestDirectionalLegacyLtk()
 	BT_CHECK(s_Test, restored.LocalEdiv == s_Keys.LocalEdiv);
 }
 
+void TestLegacyLocalOnlyLtkBond()
+{
+	ResetHarness(true);
+	s_Keys.bSc = false;
+
+	// The peer did not distribute an LTK. The local LTK is still a complete
+	// legacy bond for reconnects where this device is the peripheral.
+	std::memset(s_Keys.Ltk, 0, sizeof(s_Keys.Ltk));
+	s_Keys.Ediv = 0;
+	s_Keys.Rand = 0;
+	s_Keys.LocalEdiv = 0x7788;
+	s_Keys.LocalRand = UINT64_C(0x2122232425262728);
+	AddBond();
+
+	BtSmpKeys_t restored = {};
+	BT_CHECK(s_Test, BtSmpBondKeysLookup(kConnHdl, 0, 0, &restored));
+	BT_CHECK(s_Test, !AllZero(restored.LocalLtk, sizeof(restored.LocalLtk)));
+	BT_CHECK(s_Test, AllZero(restored.Ltk, sizeof(restored.Ltk)));
+
+	uint8_t ltk[16] = {};
+	BT_CHECK(s_Test, BtSmpBondLtkLookup(kConnHdl, s_Keys.LocalRand,
+									 s_Keys.LocalEdiv, ltk));
+	BT_CHECK(s_Test, std::memcmp(ltk, s_Keys.LocalLtk, sizeof(ltk)) == 0);
+
+	// A zero master id does not turn a legacy local-only record into an SC key.
+	BT_CHECK(s_Test, !BtSmpBondLtkLookup(kConnHdl, 0, 0, ltk));
+}
+
 void TestResolvedIdentityLookup()
 {
 	ResetHarness(true);
@@ -412,6 +440,8 @@ int main()
 			   TestFailedReservationStaysClosed);
 	s_Test.Run("legacy bond keeps both LTK directions",
 			   TestDirectionalLegacyLtk);
+	s_Test.Run("legacy local-only LTK bond stays usable",
+			   TestLegacyLocalOnlyLtkBond);
 	s_Test.Run("resolved identity finds restored bond",
 			   TestResolvedIdentityLookup);
 	s_Test.Run("repeated attempts back off exponentially",

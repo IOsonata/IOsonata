@@ -511,9 +511,11 @@ static void KeysFromLink(uint16_t ConnHdl, const ble_gap_evt_auth_status_t *pAut
 	memcpy(pKeys->IdAddr, pLink->PeerId.id_addr_info.addr, sizeof(pKeys->IdAddr));
 	memcpy(pKeys->Csrk, pLink->PeerSign.csrk, sizeof(pKeys->Csrk));
 
+	bool peerLtk = KeyPresent(pKeys->Ltk, sizeof(pKeys->Ltk));
+	bool localLtk = KeyPresent(pKeys->LocalLtk, sizeof(pKeys->LocalLtk));
 	pKeys->bValid = pKeys->EncKeySize >= BT_SMP_MIN_ENC_KEY_SIZE &&
 		pKeys->EncKeySize <= BT_SMP_MAX_ENC_KEY_SIZE &&
-		KeyPresent(pKeys->Ltk, sizeof(pKeys->Ltk));
+		(sc ? peerLtk : (peerLtk || localLtk));
 }
 
 static void AuthStatusProcess(const ble_gap_evt_t *pGapEvt)
@@ -631,6 +633,15 @@ static bool SecRequestSatisfied(uint16_t ConnHdl, const ble_gap_evt_sec_request_
 
 static uint32_t EncryptFromBond(uint16_t ConnHdl, const BtSmpKeys_t *pKeys)
 {
+	// Central encryption uses the LTK distributed by the peer (or the common
+	// derived LTK for SC). A legacy bond may legitimately contain only the
+	// locally distributed LTK; that record is still useful when this device is
+	// the peripheral, but it cannot start encryption as the central.
+	if (pKeys == nullptr || !KeyPresent(pKeys->Ltk, sizeof(pKeys->Ltk)))
+	{
+		return NRF_ERROR_NOT_FOUND;
+	}
+
 	ble_gap_enc_info_t enc;
 	ble_gap_master_id_t id;
 	memset(&enc, 0, sizeof(enc));

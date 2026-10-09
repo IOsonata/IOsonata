@@ -4107,12 +4107,19 @@ void BtSmpStartPairing(uint16_t ConnHdl)
 	// completes it.
 	if (BtSmpBondKeysLookup(ConnHdl, 0U, 0U, &pLink->Keys))
 	{
-		pLink->Ctx.bInitiator = true;
-		pLink->Ctx.State = BT_SMP_STATE_DONE;
-		DEBUG_PRINTF("SMP central reconnect, encrypt from bond\r\n");
-		BtSmpHciEnableEncryption(pDev, ConnHdl, pLink->Keys.Rand,
-								 pLink->Keys.Ediv, pLink->Keys.Ltk);
-		return;
+		// Central encryption needs the peer-distributed LTK (or the common SC
+		// LTK). A legacy record holding only our locally distributed LTK remains
+		// a valid bond for the opposite role, but cannot encrypt from this role.
+		if (SmpKeyPresent(pLink->Keys.Ltk, sizeof(pLink->Keys.Ltk)))
+		{
+			pLink->Ctx.bInitiator = true;
+			pLink->Ctx.State = BT_SMP_STATE_DONE;
+			DEBUG_PRINTF("SMP central reconnect, encrypt from bond\r\n");
+			BtSmpHciEnableEncryption(pDev, ConnHdl, pLink->Keys.Rand,
+									 pLink->Keys.Ediv, pLink->Keys.Ltk);
+			return;
+		}
+		CryptoSecureWipe(&pLink->Keys, sizeof(pLink->Keys));
 	}
 
 	if (!BtSmpPairingAttemptAllowed(ConnHdl, BtSmpMsTick()))

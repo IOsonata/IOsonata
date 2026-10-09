@@ -201,6 +201,20 @@ static uint32_t BtSmpBondCrc32(const void *pData, size_t Len)
 	return ~crc;
 }
 
+static bool BtSmpBondKeyPresent(const uint8_t Key[16])
+{
+	if (Key == nullptr)
+	{
+		return false;
+	}
+	uint8_t nz = 0;
+	for (int i = 0; i < 16; i++)
+	{
+		nz |= Key[i];
+	}
+	return nz != 0;
+}
+
 static bool BtSmpBondHasCsrk(const BtSmpBond_t *pBond)
 {
 	if (pBond == nullptr)
@@ -1198,25 +1212,38 @@ bool BtSmpBondLtkLookup(uint16_t ConnHdl, uint64_t Rand,
 	{
 		return false;
 	}
+
 	BtSmpKeys_t keys;
 	bool found = BtSmpBondKeysLookup(ConnHdl, Rand, Ediv, &keys);
+	bool usable = false;
 	if (found)
 	{
-		if (Ediv != 0U || Rand != 0U)
+		if (keys.bSc)
 		{
-			memcpy(Ltk, keys.LocalLtk, 16);
+			// Secure Connections has one derived LTK and a zero master id.
+			if (Rand == 0U && Ediv == 0U &&
+				BtSmpBondKeyPresent(keys.Ltk))
+			{
+				memcpy(Ltk, keys.Ltk, 16);
+				usable = true;
+			}
 		}
-		else
+		else if (keys.LocalRand == Rand && keys.LocalEdiv == Ediv &&
+				 BtSmpBondKeyPresent(keys.LocalLtk))
 		{
-			memcpy(Ltk, keys.Ltk, 16);
+			// Controller LTK requests arrive when this device is the
+			// peripheral, so answer with the LTK this device distributed.
+			memcpy(Ltk, keys.LocalLtk, 16);
+			usable = true;
 		}
 	}
-	else
+
+	if (!usable)
 	{
 		CryptoSecureWipe(Ltk, 16);
 	}
 	CryptoSecureWipe(&keys, sizeof(keys));
-	return found;
+	return usable;
 }
 
 static bool BtSmpBondedImpl(uint16_t ConnHdl)
