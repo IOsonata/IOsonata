@@ -8,6 +8,10 @@ The console is the nRF9160 UART0, the SysLog output: on the nRF9160 DK the
 interface MCU VCOM0 port, on the Thingy:91 the first USB serial port of its
 nRF52840. Select the board below.
 
+GNSS needs modem firmware 1.3.4 or newer, which revision 2 of the nRF9160
+runs. Revision 1 runs at most firmware 1.2.8 and has no GNSS: GnssDemo then
+prints "GNSS init failed".
+
 @author	Hoang Nguyen Hoan
 @date	Oct. 8, 2026
 
