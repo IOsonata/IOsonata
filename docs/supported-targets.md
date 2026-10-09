@@ -60,7 +60,7 @@ by MCU and selected radio stack.
 | [nRF5340 network core](../ARM/Nordic/nRF53/nRF5340_Net/lib/ioc/) | GPIO, UART, I2C, SPI, RTC/TIMER and RNG; separate network-core startup and dispatch | [Examples](../ARM/Nordic/nRF53/nRF5340_Net/exemples/): UART PRBS, timers and BLE projects | Supported MCU drivers. BLE example presence does not establish a validated inter-core radio application. |
 | [nRF9160](../ARM/Nordic/nRF91/nRF9160/lib/ioc/) | GPIO, UART, I2C, SPI, RTC/TIMER, PWM, SAADC, watchdog, NVM, RNG/CC3xx, modem IPC, LTE, sockets and GNSS | [Examples](../ARM/Nordic/nRF91/nRF9160/exemples/): modem information, LTE UDP with bare metal/TaktOS, GNSS fixes, ADC, NVM, watchdog and crypto | Hardware tested with `LteModemInfo`: modem initialization and AT replies confirmed. LTE registration, data transfer and GNSS results are not recorded here. |
 | [nRF91x1](../ARM/Nordic/nRF91/nRF91x1/lib/ioc/) | Shared nRF91 peripheral, LTE/socket and GNSS implementations | [Examples](../ARM/Nordic/nRF91/nRF91x1/exemples/): LTE/GNSS, ADC, NVM, watchdog, crypto, I2C/SPI, EEPROM, environmental sensors, PWM, UART/SLIP and timers | Hardware tested, confirmed by the maintainer. Debug/Release currently select `NRF9120_XXAA`. Select and verify the intended part and modem firmware. |
-| [nRF52805](../ARM/Nordic/nRF52/nRF52805/lib/ioc/), [nRF52810](../ARM/Nordic/nRF52/nRF52810/lib/ioc/) | Shared nRF52 startup, GPIO, UART, I2C, SPI, RNG and Bluetooth sources | Blinky and DFU projects in each target directory | Timer project integration incomplete: generic `timer.cpp` and SDK `app_timer.c` are present, but the IOsonata RTC/TIMER implementations are absent from these library source lists. |
+| [nRF52805](../ARM/Nordic/nRF52/nRF52805/lib/ioc/), [nRF52810](../ARM/Nordic/nRF52/nRF52810/lib/ioc/) | Shared nRF52 startup, GPIO, UART, I2C, SPI, RTC/TIMER, RNG and Bluetooth sources | Blinky and DFU projects in each target directory | RTC/TIMER drivers included in both library projects. Timer compile/link checks pass for both MCUs; hardware validation is pending. |
 | nRF54H20 [application](../ARM/Nordic/nRF54/nRF54H20/nRF54H20_App/lib/ioc/), [network](../ARM/Nordic/nRF54/nRF54H20/nRF54H20_Net/lib/ioc/) and [RISC-V](../RISCV/Nordic/nRF54/nRF54H20/lib/ioc/) | Initial projects and partial target integration | See [H20 development notes](../ARM/Nordic/nRF54/nRF54H20/README.md) | Incomplete ports: startup, peripheral, NRFS USB, MPSL and inter-core HCI work remains. |
 
 ### Nordic implementation details
@@ -76,6 +76,16 @@ a FIFO, and the [NFC driver](../ARM/Nordic/src/nfct_nrfx.cpp) handles target-mod
 frames. These are distinct from the unfinished
 [I2S transfer implementation](../ARM/Nordic/src/i2s_nrfx.cpp), which is not
 included in the feature claims above.
+
+The nRF52805/52810 library projects include the shared timer dispatcher,
+RTC driver and TIMER driver. On both MCUs, timer devices 0 and 1 select RTC0
+and RTC1; devices 2, 3 and 4 select TIMER0, TIMER1 and TIMER2. RTC0 provides
+three triggers and RTC1 four. Each TIMER provides three triggers, with its
+fourth compare register reserved for reading the counter. Avoid peripherals
+reserved by the selected SoftDevice or SDK `app_timer` configuration.
+The timer sources compile and link at `-O0` and `-Os` with Arm GNU 14.3.1
+for both MCUs. These are timer-only checks, not full IOC application builds.
+No hardware board is available for validation.
 
 The nRF54L15/LM20 library projects include `i2c_nrfx.cpp` and `spi_nrfx.cpp`.
 Both support polling EasyDMA masters (`bIntEn = false`) and interrupt-driven
