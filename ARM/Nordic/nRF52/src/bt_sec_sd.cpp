@@ -69,7 +69,15 @@ static ble_gap_sec_params_t s_SecParams;
 static bool s_bInit;
 static bool s_bScOnly;
 static bool s_bBondStore;
+static bool s_bIdentitySyncPending;
 static uint8_t s_MinKeySize = BT_SMP_MIN_ENC_KEY_SIZE;
+static bool s_bAuthCfgSet;
+static uint8_t s_AuthIoCaps;
+static uint8_t s_AuthReq;
+static bool s_bOobCfgSet;
+static bool s_bOobCfg;
+static bool s_bScOnlyCfgSet;
+static bool s_bMinKeyCfgSet;
 
 static inline BtSecSdLink_t *LinkGet(uint16_t ConnHdl)
 {
@@ -103,6 +111,91 @@ static bool KeyPresent(const uint8_t *pKey, size_t Len)
 		v |= pKey[i];
 	}
 	return v != 0;
+}
+
+static uint32_t SoftDeviceIdentityListSync(void)
+{
+	ble_gap_id_key_t keys[BLE_GAP_DEVICE_IDENTITIES_MAX_COUNT];
+	const ble_gap_id_key_t *ptrs[BLE_GAP_DEVICE_IDENTITIES_MAX_COUNT];
+	memset(keys, 0, sizeof(keys));
+	memset(ptrs, 0, sizeof(ptrs));
+
+	uint8_t count = 0;
+	for (int slot = 0; slot < BtSmpBondSlotCount() &&
+		count < BLE_GAP_DEVICE_IDENTITIES_MAX_COUNT; slot++)
+	{
+		uint8_t addrType;
+		uint8_t addr[6];
+		uint8_t irk[16];
+		if (!BtSmpBondIdentityGet(slot, &addrType, addr, irk))
+		{
+			continue;
+		}
+
+		keys[count].id_addr_info.addr_type =
+			addrType == BTADDR_TYPE_PUBLIC ?
+			BLE_GAP_ADDR_TYPE_PUBLIC : BLE_GAP_ADDR_TYPE_RANDOM_STATIC;
+		memcpy(keys[count].id_addr_info.addr, addr, sizeof(addr));
+		memcpy(keys[count].id_info.irk, irk, sizeof(irk));
+		ptrs[count] = &keys[count];
+		count++;
+		CryptoSecureWipe(irk, sizeof(irk));
+	}
+
+	uint32_t r = count == 0 ?
+		sd_ble_gap_device_identities_set(nullptr, nullptr, 0) :
+		sd_ble_gap_device_identities_set(ptrs, nullptr, count);
+	CryptoSecureWipe(keys, sizeof(keys));
+	return r;
+}
+
+static uint32_t SoftDeviceLocalIdentitySync(void)
+{
+	ble_gap_privacy_params_t privacy;
+	ble_gap_irk_t deviceIrk;
+	uint8_t savedIrk[16];
+	memset(&privacy, 0, sizeof(privacy));
+	memset(&deviceIrk, 0, sizeof(deviceIrk));
+	memset(savedIrk, 0, sizeof(savedIrk));
+	privacy.p_device_irk = &deviceIrk;
+
+	uint32_t r = sd_ble_gap_privacy_get(&privacy);
+	if (r != NRF_SUCCESS)
+	{
+		return r;
+	}
+
+	if (BtSmpLocalIrkGet(savedIrk))
+	{
+		if (memcmp(deviceIrk.irk, savedIrk, sizeof(savedIrk)) != 0)
+		{
+			memcpy(deviceIrk.irk, savedIrk, sizeof(savedIrk));
+			privacy.p_device_irk = &deviceIrk;
+			r = sd_ble_gap_privacy_set(&privacy);
+		}
+	}
+	else if (KeyPresent(deviceIrk.irk, sizeof(deviceIrk.irk)))
+	{
+		(void)BtSmpLocalIrkSet(deviceIrk.irk);
+	}
+	else
+	{
+		r = NRF_ERROR_INVALID_DATA;
+	}
+
+	CryptoSecureWipe(savedIrk, sizeof(savedIrk));
+	CryptoSecureWipe(&deviceIrk, sizeof(deviceIrk));
+	return r;
+}
+
+static uint32_t SoftDeviceIdentitySync(void)
+{
+	uint32_t r = SoftDeviceLocalIdentitySync();
+	if (r != NRF_SUCCESS)
+	{
+		return r;
+	}
+	return SoftDeviceIdentityListSync();
 }
 
 static bool IsCentral(uint16_t ConnHdl)
@@ -447,6 +540,7 @@ static void AuthStatusProcess(const ble_gap_evt_t *pGapEvt)
 		else
 		{
 			LinkSecFromBond(pLink, &keys);
+			s_bIdentitySyncPending = true;
 		}
 		CryptoSecureWipe(&keys, sizeof(keys));
 	}
@@ -644,6 +738,11 @@ void BtSecSdBleEvt(const ble_evt_t *pEvt)
 		case BLE_GAP_EVT_DISCONNECTED:
 			ConnSecClear(pGapEvt->conn_handle);
 			LinkReset(pGapEvt->conn_handle);
+			if (s_bIdentitySyncPending)
+			{
+				uint32_t r = SoftDeviceIdentitySync();
+				s_bIdentitySyncPending = r != NRF_SUCCESS;
+			}
 			break;
 
 		default:
@@ -656,33 +755,48 @@ void BtSecSdBleEvt(const ble_evt_t *pEvt)
 	BtLescOnBleEvt(pEvt);
 }
 
+static void BtSecSdAuthConfigApply(void)
+{
+	if (!s_bAuthCfgSet)
+	{
+		return;
+	}
+	s_SecParams.io_caps = s_AuthIoCaps;
+	s_SecParams.bond = (s_AuthReq & BT_SMP_AUTHREQ_BONDING_FLAG_MASK) !=
+		BT_SMP_AUTHREQ_BONDING_FLAG_NO_BONDING;
+	s_SecParams.mitm = (s_AuthReq & BT_SMP_AUTHREQ_MITM) != 0;
+	s_SecParams.keypress = (s_AuthReq & BT_SMP_AUTHREQ_KEYPRESS) != 0;
+
+	// The portable IOsonata SMP API selects Secure Connections. A caller that
+	// needs legacy fallback stays on the port's initial SecType configuration.
+	s_SecParams.lesc = 1;
+	s_bScOnly = true;
+	s_bScOnlyCfgSet = true;
+}
+
 void BtSecSdAuthConfig(uint8_t IoCaps, uint8_t AuthReq)
 {
 	if (IoCaps > BT_SMP_IOCAPS_KEYBOARD_DISPLAY)
 	{
 		return;
 	}
-	s_SecParams.io_caps = IoCaps;
-	s_SecParams.bond = (AuthReq & BT_SMP_AUTHREQ_BONDING_FLAG_MASK) !=
-		BT_SMP_AUTHREQ_BONDING_FLAG_NO_BONDING;
-	s_SecParams.mitm = (AuthReq & BT_SMP_AUTHREQ_MITM) != 0;
-	s_SecParams.keypress = (AuthReq & BT_SMP_AUTHREQ_KEYPRESS) != 0;
-
-	// BtSmpAuthConfig is the portable IOsonata SMP configuration entry.
-	// The generic host is Secure-Connections-only; keep the vendor-host port
-	// on the same policy when this entry point is used.
-	s_SecParams.lesc = 1;
-	s_bScOnly = true;
+	s_AuthIoCaps = IoCaps;
+	s_AuthReq = AuthReq;
+	s_bAuthCfgSet = true;
+	BtSecSdAuthConfigApply();
 }
 
 void BtSecSdOobSet(bool Enable)
 {
+	s_bOobCfg = Enable;
+	s_bOobCfgSet = true;
 	s_SecParams.oob = Enable ? 1 : 0;
 }
 
 void BtSecSdScOnlySet(bool Enable)
 {
 	s_bScOnly = Enable;
+	s_bScOnlyCfgSet = true;
 	if (Enable)
 	{
 		s_SecParams.lesc = 1;
@@ -694,6 +808,7 @@ void BtSecSdMinKeySizeSet(uint8_t Size)
 	if (Size >= BT_SMP_MIN_ENC_KEY_SIZE && Size <= BT_SMP_MAX_ENC_KEY_SIZE)
 	{
 		s_MinKeySize = Size;
+		s_bMinKeyCfgSet = true;
 		s_SecParams.min_key_size = Size;
 	}
 }
@@ -703,6 +818,11 @@ void BtSecSdCheckStatus(void)
 	if (!s_bInit)
 	{
 		return;
+	}
+	if (s_bIdentitySyncPending && !BtPeerIsConnected())
+	{
+		uint32_t r = SoftDeviceIdentitySync();
+		s_bIdentitySyncPending = r != NRF_SUCCESS;
 	}
 
 	for (uint16_t h = 0; h < NRF_SDH_BLE_TOTAL_LINK_COUNT; h++)
@@ -751,9 +871,21 @@ bool BtSecSdInit(const ble_gap_sec_params_t *pParams)
 
 	memset(s_Links, 0, sizeof(s_Links));
 	s_SecParams = *pParams;
-	s_MinKeySize = pParams->min_key_size >= BT_SMP_MIN_ENC_KEY_SIZE ?
-		pParams->min_key_size : BT_SMP_MIN_ENC_KEY_SIZE;
-	s_bScOnly = pParams->lesc != 0;
+	if (!s_bMinKeyCfgSet)
+	{
+		s_MinKeySize = pParams->min_key_size >= BT_SMP_MIN_ENC_KEY_SIZE ?
+			pParams->min_key_size : BT_SMP_MIN_ENC_KEY_SIZE;
+	}
+	s_SecParams.min_key_size = s_MinKeySize;
+	if (!s_bScOnlyCfgSet)
+	{
+		s_bScOnly = pParams->lesc != 0;
+	}
+	BtSecSdAuthConfigApply();
+	if (s_bOobCfgSet)
+	{
+		s_SecParams.oob = s_bOobCfg ? 1 : 0;
+	}
 
 	if (!BtLescInit())
 	{
@@ -770,6 +902,18 @@ bool BtSecSdInit(const ble_gap_sec_params_t *pParams)
 		DEBUG_PRINTF("SEC: bond store init failed %d\r\n", r);
 		return false;
 	}
+	uint32_t identityStatus = SoftDeviceIdentitySync();
+	if (identityStatus != NRF_SUCCESS)
+	{
+		DEBUG_PRINTF("SEC: identity sync failed 0x%X\r\n",
+			(unsigned)identityStatus);
+		s_bIdentitySyncPending = true;
+	}
+	else
+	{
+		s_bIdentitySyncPending = false;
+	}
+
 	s_bBondStore = true;
 	s_bInit = true;
 	return true;

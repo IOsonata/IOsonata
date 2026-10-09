@@ -55,10 +55,7 @@ SOFTWARE.
 #include "bm/softdevice_handler/nrf_sdh.h"
 #include "bm/softdevice_handler/nrf_sdh_ble.h"
 #include "bm/softdevice_handler/nrf_sdh_soc.h"
-#include "bm/bluetooth/ble_conn_state.h"
 #include "bm/bluetooth/ble_conn_params.h"
-#include "bm/bluetooth/peer_manager/peer_manager.h"
-#include "bm/bluetooth/peer_manager/peer_manager_handler.h"
 #include "bluetooth/services/bt_dis.h"
 
 #include "cracen_intrf.h"
@@ -107,6 +104,13 @@ void BtAdvBmTerminated();
 #endif
 /*******************************/
 
+bool BtSecBmInit(const ble_gap_sec_params_t *pParams);
+void BtSecBmBleEvt(const ble_evt_t *pEvt);
+uint32_t BtSecBmSecure(uint16_t ConnHdl, bool ForceRepair);
+void BtSecBmAuthConfig(uint8_t IoCaps, uint8_t AuthReq);
+void BtSecBmOobSet(bool Enable);
+void BtSecBmCheckStatus(void);
+
 /*******************************/
 
 /// Unit conversion macros (same as old nRF5_SDK definitions)
@@ -128,7 +132,7 @@ void BtAdvBmTerminated();
 #endif
 #endif
 
-#define SEC_PARAM_MIN_KEY_SIZE			7			/**< Minimum encryption key size. */
+#define SEC_PARAM_MIN_KEY_SIZE			BT_SMP_CFG_MIN_ENC_KEY_SIZE
 #define SEC_PARAM_MAX_KEY_SIZE			16			/**< Maximum encryption key size. */
 
 // S145 tx_power values (nRF54L15)
@@ -257,8 +261,8 @@ static void SecurePendingEvt(uint32_t Evt, void *pCtx)
 			continue;
 		}
 
-		uint32_t err = pm_conn_secure(connHdl, false);
-		DEBUG_PRINTF("pm_conn_secure hdl=%u returned 0x%08" PRIx32 "\r\n",
+		uint32_t err = BtSecBmSecure(connHdl, false);
+		DEBUG_PRINTF("BtSecBmSecure hdl=%u returned 0x%08" PRIx32 "\r\n",
 			connHdl, err);
 		(void)err;
 	}
@@ -281,6 +285,10 @@ extern void BtDfuSmpCheckStatus(void) __attribute__((weak));
 void BtAppCheckStatus(void)
 {
 	BtLescCheckStatus();
+	if (g_BtAppData.bSecInit)
+	{
+		BtSecBmCheckStatus();
+	}
 	if (g_BtAppData.State != BTAPP_STATE_UNKNOWN)
 	{
 		for (int i = 0; i < CONFIG_NRF_SDH_BLE_TOTAL_LINK_COUNT; i++)
@@ -399,31 +407,9 @@ static ble_gap_lesc_oob_data_t s_BtAppPeerOob;
 static bool s_BtAppPeerOobValid = false;
 static uint16_t s_BtAppPeerOobHdl = BLE_CONN_HANDLE_INVALID;
 
-typedef struct __Bt_Smp_Bm_Auth_Cfg {
-	uint8_t IoCaps;
-	uint8_t AuthReq;
-	bool bSet;
-} BtSmpBmAuthCfg_t;
-
-static BtSmpBmAuthCfg_t s_BtSmpAuthCfg;
-
-static uint32_t BtAppSecParamsSet(BTGAP_SECTYPE SecType, uint8_t SecKeyExchg);
-
 void BtSmpAuthConfig(uint8_t IoCaps, uint8_t AuthReq)
 {
-	if (IoCaps > BT_SMP_IOCAPS_KEYBOARD_DISPLAY)
-	{
-		return;
-	}
-	s_BtSmpAuthCfg.IoCaps = IoCaps;
-	s_BtSmpAuthCfg.AuthReq = (uint8_t)(AuthReq | BT_SMP_AUTHREQ_SC);
-	s_BtSmpAuthCfg.bSet = true;
-
-	if (g_BtAppData.bSecInit)
-	{
-		// Security is already started, apply to the next pairing
-		(void)BtAppSecParamsSet(g_BtAppData.SecType, g_BtAppData.SecExchg);
-	}
+	BtSecBmAuthConfig(IoCaps, AuthReq);
 }
 
 static void BtSmpOobDataClearInternal()
@@ -431,6 +417,7 @@ static void BtSmpOobDataClearInternal()
 	s_BtAppPeerOobValid = false;
 	s_BtAppPeerOobHdl = BLE_CONN_HANDLE_INVALID;
 	CryptoSecureWipe(&s_BtAppPeerOob, sizeof(s_BtAppPeerOob));
+	BtSecBmOobSet(false);
 }
 
 static void BtSmpOobDataClearConn(uint16_t ConnHdl)
@@ -515,6 +502,7 @@ void BtSmpOobPeerDataSet(const uint8_t * const pRand, const uint8_t * const pCon
 	memcpy(s_BtAppPeerOob.r, pRand, 16);
 	memcpy(s_BtAppPeerOob.c, pConf, 16);
 	s_BtAppPeerOobValid = true;
+	BtSecBmOobSet(true);
 }
 
 void BtSmpOobDataClear(void)
@@ -536,6 +524,12 @@ static void ble_evt_dispatch(const ble_evt_t *p_ble_evt, void *p_context)
 	const ble_gap_evt_t *p_gap_evt = &p_ble_evt->evt.gap_evt;
 
 	DEBUG_PRINTF("evt: 0x%x\r\n", p_ble_evt->header.evt_id);
+	if (g_BtAppData.bSecInit &&
+		p_ble_evt->header.evt_id != BLE_GAP_EVT_CONNECTED &&
+		p_ble_evt->header.evt_id != BLE_GAP_EVT_DISCONNECTED)
+	{
+		BtSecBmBleEvt(p_ble_evt);
+	}
 	switch (p_ble_evt->header.evt_id)
 	{
 		case BLE_GAP_EVT_CONNECTED:
@@ -573,6 +567,11 @@ static void ble_evt_dispatch(const ble_evt_t *p_ble_evt, void *p_context)
 				return;
 			}
 
+			if (g_BtAppData.bSecInit)
+			{
+				BtSecBmBleEvt(p_ble_evt);
+			}
+
 			g_BtAppData.State = BTAPP_STATE_CONNECTED;
 			BtAppEvtConnected(p_ble_evt->evt.gap_evt.conn_handle);
 
@@ -607,6 +606,10 @@ static void ble_evt_dispatch(const ble_evt_t *p_ble_evt, void *p_context)
 			uint16_t connHdl = p_ble_evt->evt.gap_evt.conn_handle;
 			BtDevice_t *pPeer = BtPeerFindByHdl(connHdl);
 
+			if (g_BtAppData.bSecInit)
+			{
+				BtSecBmBleEvt(p_ble_evt);
+			}
 			SecurePendingRemove(connHdl);
 			BtSmpOobDataClearConn(connHdl);
 			BtPeerFree(pPeer);
@@ -634,7 +637,7 @@ static void ble_evt_dispatch(const ble_evt_t *p_ble_evt, void *p_context)
 		{
 			const ble_gap_conn_sec_t *pcs = &p_gap_evt->params.conn_sec_update.conn_sec;
 			// Capture the negotiated encryption key size for BtGapConnSecGet.
-			// pm_conn_sec_status_get does not report key size; this event does.
+			// Keep the negotiated key size in the generic peer security record.
 			BtDevice_t *pdev = BtPeerFindByHdl(p_gap_evt->conn_handle);
 			if (pdev != nullptr)
 			{
@@ -1116,282 +1119,95 @@ bool BtAppStackInit(const BtAppCfg_t *pCfg)
 //		return false;
 //	}
 
-	// Initialize connection state tracking
-	//ble_conn_state_init();
-
 	return true;
 }
 
 // ---------------------------------------------------------------------------
-// Secure Connections: peer_manager + BtLesc, mirroring the nRF52 SoftDevice
-// port. The S145 SoftDevice owns the SMP state machine; peer_manager drives it
-// and persists bonds (through the IOsonata bt_pds store), and the IOsonata
-// BtLesc module performs the LESC ECDH. The application observes link security
-// through these peer_manager events; no key material is surfaced to the app on
-// this path (peer_manager is the authority), matching nRF52.
+// Secure Connections: S145 owns on-air SMP; IOsonata owns security policy,
+// bond identity/state and PDS persistence.
 // ---------------------------------------------------------------------------
 
-#define BT_APP_SEC_PARAM_MIN_KEY_SIZE	7
-#define BT_APP_SEC_PARAM_MAX_KEY_SIZE	16
-
-static void BtAppPmEvtHandler(const struct pm_evt *p_evt)
-{
-	// IOsonata starts security once from a queued event for both new and restored
-	// peers. The Nordic helper also starts it immediately for a restored peer,
-	// before the remaining CONNECTED observers run, so skip that one helper
-	// action while preserving its handling for all other Peer Manager events.
-	if (p_evt->evt_id != PM_EVT_BONDED_PEER_CONNECTED)
-	{
-		pm_handler_on_pm_evt(p_evt);
-	}
-	pm_handler_disconnect_on_sec_failure(p_evt);
-	pm_handler_flash_clean(p_evt);
-
-	switch (p_evt->evt_id)
-	{
-		case PM_EVT_CONN_SEC_SUCCEEDED:
-			BtSmpOobDataClearConn(p_evt->conn_handle);
-			// Link is encrypted. peer_manager holds the bond. Notify the app so
-			// it can run work that needs an encrypted link (e.g. a central
-			// reading protected characteristics). (nRF52 optionally enforces
-			// MITM here; left permissive.)
-			BtAppEvtSecured(p_evt->conn_handle);
-			break;
-
-		case PM_EVT_CONN_SEC_FAILED:
-			BtSmpOobDataClearConn(p_evt->conn_handle);
-			// Security setup failed. pm_handler_disconnect_on_sec_failure above
-			// already tears the link down when required.
-			break;
-
-		case PM_EVT_CONN_SEC_CONFIG_REQ:
-		{
-			// Allow an already-bonded peer to re-pair.
-			struct pm_conn_sec_config cfg = { .allow_repairing = true };
-			pm_conn_sec_config_reply(p_evt->conn_handle, &cfg);
-		}
-			break;
-
-		case PM_EVT_STORAGE_FULL:
-			// The IOsonata bt_pds store compacts itself on write, so unlike the
-			// nRF52 fds_gc() path there is nothing to trigger here.
-			break;
-
-		case PM_EVT_PEERS_DELETE_SUCCEEDED:
-			// Bonds cleared. Resume advertising if we are a peripheral.
-			if (g_BtAppData.AppDevice.Conn.Role &
-				(BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER))
-			{
-				BtAdvStart();
-			}
-			break;
-
-		default:
-			break;
-	}
-}
-
-// Initialize peer_manager and LESC. The pairing parameters are set by
-// BtAppSecParamsSet below.
-static uint32_t BtAppPeerMngrInit(BTGAP_SECTYPE SecType, uint8_t SecKeyExchg, bool bEraseBond)
-{
-	uint32_t err_code;
-
-	// Provide the LESC layer its ECDH engine BEFORE pm_init. pm_init ->
-	// sm_init (the IOsonata bt_sec_bm security manager) calls BtLescInit, which
-	// requires the engine to be injected at that point, else pairing has no
-	// P-256 provider. The App owns the engine and injects it. On nRF54L15 the
-	// P-256 hardware is the Silex BA414EP (Ba414ep), reached through the CRACEN
-	// crypto interface the
-	// same way a sensor reaches its bus. Its randomness for key generation and
-	// blinding comes from the security-grade hardware RNG (CryptoRngNrf).
-	static Ba414ep s_LescEcdh;
-	Ba414ep *pLescEcdh = nullptr;
-	if (s_LescEcdh.Init(CracenIntrfInstance(), CryptoRngNrfInstance()))
-	{
-		pLescEcdh = &s_LescEcdh;
-		DEBUG_PRINTF("Crypto ECDH engine: Ba414ep (hardware P-256)\r\n");
-	}
-	else
-	{
-		// The P-256 engine did not come up. LE Secure Connections pairing
-		// cannot run. Report it here rather than at the first pairing attempt.
-		DEBUG_PRINTF("Crypto ECDH engine MISSING, LESC pairing will fail\r\n");
-	}
-
-	BtLescSetCryptoEngine(pLescEcdh);
-
-	err_code = pm_init();
-	if (err_code != NRF_SUCCESS)
-	{
-		DEBUG_PRINTF("pm_init failed: 0x%x\r\n", err_code);
-		return err_code;
-	}
-
-	if (bEraseBond)
-	{
-		(void)pm_peers_delete();
-	}
-
-	err_code = BtAppSecParamsSet(SecType, SecKeyExchg);
-	if (err_code != NRF_SUCCESS)
-	{
-		return err_code;
-	}
-
-	err_code = pm_register(BtAppPmEvtHandler);
-	if (err_code != NRF_SUCCESS)
-	{
-		DEBUG_PRINTF("pm_register failed: 0x%x\r\n", err_code);
-		return err_code;
-	}
-
-	// LESC is initialized by the IOsonata security manager (bt_sec_bm.cpp)
-	// inside pm_init -> sm_init, which owns the BtLesc key pair and injected
-	// crypto engine. Only the staged peer OOB data routing is set up here, so
-	// the SoftDevice receives it when it asks (LESC OOB association model).
-	BtLescOobPeerHandlerSet(BtAppOobPeerDataHandler);
-
-	return NRF_SUCCESS;
-}
-
-// Set the pairing parameters of the Peer Manager. Maps the app SecType /
-// key-exchange config onto ble_gap_sec_params_t exactly as the nRF52 port does
-// (the BTAPP_SECTYPE_* values alias the same BT_GAP_SECTYPE_* the nRF52
-// BLEAPP_SECTYPE_* use). A configuration given to BtSmpAuthConfig replaces the
-// values derived from them.
-static uint32_t BtAppSecParamsSet(BTGAP_SECTYPE SecType, uint8_t SecKeyExchg)
-{
-	ble_gap_sec_params_t sec_param;
-	uint32_t err_code;
-
-	memset(&sec_param, 0, sizeof(sec_param));
-
-	sec_param.bond           = 1;
-	sec_param.min_key_size   = BT_APP_SEC_PARAM_MIN_KEY_SIZE;
-	sec_param.max_key_size   = BT_APP_SEC_PARAM_MAX_KEY_SIZE;
-	sec_param.kdist_own.enc  = 1;
-	sec_param.kdist_own.id   = 1;
-	sec_param.kdist_peer.enc = 1;
-	sec_param.kdist_peer.id  = 1;
-
-	switch (SecType)
-	{
-		case BTGAP_SECTYPE_NONE:
-		case BTGAP_SECTYPE_STATICKEY_NO_MITM:
-			break;
-		case BTGAP_SECTYPE_STATICKEY_MITM:
-			sec_param.mitm = 1;
-			break;
-		case BTGAP_SECTYPE_LESC_MITM:
-			sec_param.mitm = 1;
-			sec_param.lesc = 1;
-			break;
-		case BTGAP_SECTYPE_SIGNED_NO_MITM:
-			sec_param.lesc = 1;
-			break;
-		case BTGAP_SECTYPE_SIGNED_MITM:
-			sec_param.mitm = 1;
-			sec_param.lesc = 1;
-			break;
-		default:
-			break;
-	}
-
-	int exchg = SecKeyExchg & (BTAPP_SECEXCHG_KEYBOARD | BTAPP_SECEXCHG_DISPLAY | BTAPP_SECEXCHG_YESNO);
-	switch (exchg)
-	{
-		case BTAPP_SECEXCHG_KEYBOARD:
-			sec_param.keypress = 1;
-			sec_param.io_caps  = BLE_GAP_IO_CAPS_KEYBOARD_ONLY;
-			break;
-		case BTAPP_SECEXCHG_DISPLAY:
-			sec_param.io_caps  = BLE_GAP_IO_CAPS_DISPLAY_ONLY;
-			break;
-		case (BTAPP_SECEXCHG_DISPLAY | BTAPP_SECEXCHG_YESNO):
-			sec_param.io_caps  = BLE_GAP_IO_CAPS_DISPLAY_YESNO;
-			break;
-		case (BTAPP_SECEXCHG_KEYBOARD | BTAPP_SECEXCHG_DISPLAY):
-		case (BTAPP_SECEXCHG_KEYBOARD | BTAPP_SECEXCHG_DISPLAY | BTAPP_SECEXCHG_YESNO):
-			sec_param.keypress = 1;
-			sec_param.io_caps  = BLE_GAP_IO_CAPS_KEYBOARD_DISPLAY;
-			break;
-		default:
-			break;
-	}
-
-	if (s_BtSmpAuthCfg.bSet)
-	{
-		sec_param.bond = (s_BtSmpAuthCfg.AuthReq &
-						  BT_SMP_AUTHREQ_BONDING_FLAG_MASK) !=
-						 BT_SMP_AUTHREQ_BONDING_FLAG_NO_BONDING;
-		sec_param.mitm = (s_BtSmpAuthCfg.AuthReq & BT_SMP_AUTHREQ_MITM) != 0;
-		sec_param.lesc = (s_BtSmpAuthCfg.AuthReq & BT_SMP_AUTHREQ_SC) != 0;
-		sec_param.keypress = (s_BtSmpAuthCfg.AuthReq & BT_SMP_AUTHREQ_KEYPRESS) != 0;
-
-		switch (s_BtSmpAuthCfg.IoCaps)
-		{
-			case BT_SMP_IOCAPS_DISPLAY_ONLY:
-				sec_param.io_caps = BLE_GAP_IO_CAPS_DISPLAY_ONLY;
-				break;
-			case BT_SMP_IOCAPS_DISPLAY_YESNO:
-				sec_param.io_caps = BLE_GAP_IO_CAPS_DISPLAY_YESNO;
-				break;
-			case BT_SMP_IOCAPS_KEYBOARD_ONLY:
-				sec_param.io_caps = BLE_GAP_IO_CAPS_KEYBOARD_ONLY;
-				break;
-			case BT_SMP_IOCAPS_KEYBOARD_DISPLAY:
-				sec_param.io_caps = BLE_GAP_IO_CAPS_KEYBOARD_DISPLAY;
-				break;
-			case BT_SMP_IOCAPS_NO_INPUT_NO_OUTPUT:
-			default:
-				sec_param.io_caps = BLE_GAP_IO_CAPS_NONE;
-				break;
-		}
-	}
-
-	if (SecKeyExchg & BTAPP_SECEXCHG_OOB)
-	{
-		sec_param.oob = 1;
-	}
-
-	err_code = pm_sec_params_set(&sec_param);
-	if (err_code != NRF_SUCCESS)
-	{
-		DEBUG_PRINTF("pm_sec_params_set failed: 0x%x\r\n", err_code);
-	}
-
-	return err_code;
-}
-
-/**
- * @brief	Start the security module.
- *
- * Called by the application, normally from BtAppInitUserData. Uses the
- * SecType and SecExchg given to BtAppInit. A pairing configuration set with
- * BtSmpAuthConfig after this call replaces the one derived from them.
- *
- * @return	true - security started
- */
 bool BtAppSecInit(void)
 {
 	if (g_BtAppData.bSecInit)
 	{
-		// Already started
 		return true;
 	}
 
-	// No erase-bond flag in BtAppCfg_t; bonds are preserved across init.
-	// A dedicated clear (pm_peers_delete / BtSmpBondClearAll) can be added
-	// as a separate API if forced re-bonding is needed.
-	if (BtAppPeerMngrInit(g_BtAppData.SecType, g_BtAppData.SecExchg, false) != NRF_SUCCESS)
+	static Ba414ep s_LescEcdh;
+	if (!s_LescEcdh.Init(CracenIntrfInstance(), CryptoRngNrfInstance()))
 	{
-		DEBUG_PRINTF("BtAppPeerMngrInit failed\r\n");
+		DEBUG_PRINTF("Crypto ECDH engine missing\r\n");
+		return false;
+	}
+	BtLescSetCryptoEngine(&s_LescEcdh);
+	DEBUG_PRINTF("Crypto ECDH engine: Ba414ep (hardware P-256)\r\n");
+
+	ble_gap_sec_params_t secParam;
+	memset(&secParam, 0, sizeof(secParam));
+	secParam.bond = 1;
+	secParam.min_key_size = BT_SMP_CFG_MIN_ENC_KEY_SIZE;
+	secParam.max_key_size = BT_SMP_MAX_ENC_KEY_SIZE;
+	secParam.io_caps = BLE_GAP_IO_CAPS_NONE;
+	secParam.kdist_own.enc = 1;
+	secParam.kdist_own.id = 1;
+	secParam.kdist_peer.enc = 1;
+	secParam.kdist_peer.id = 1;
+
+	switch (g_BtAppData.SecType)
+	{
+		case BTGAP_SECTYPE_STATICKEY_MITM:
+			secParam.mitm = 1;
+			break;
+		case BTGAP_SECTYPE_LESC_MITM:
+		case BTGAP_SECTYPE_SIGNED_MITM:
+			secParam.mitm = 1;
+			secParam.lesc = 1;
+			break;
+		case BTGAP_SECTYPE_SIGNED_NO_MITM:
+			secParam.lesc = 1;
+			break;
+		default:
+			break;
+	}
+
+	int exchg = g_BtAppData.SecExchg &
+		(BTAPP_SECEXCHG_KEYBOARD | BTAPP_SECEXCHG_DISPLAY | BTAPP_SECEXCHG_YESNO);
+	switch (exchg)
+	{
+		case BTAPP_SECEXCHG_KEYBOARD:
+			secParam.keypress = 1;
+			secParam.io_caps = BLE_GAP_IO_CAPS_KEYBOARD_ONLY;
+			break;
+		case BTAPP_SECEXCHG_DISPLAY:
+			secParam.io_caps = BLE_GAP_IO_CAPS_DISPLAY_ONLY;
+			break;
+		case (BTAPP_SECEXCHG_DISPLAY | BTAPP_SECEXCHG_YESNO):
+			secParam.io_caps = BLE_GAP_IO_CAPS_DISPLAY_YESNO;
+			break;
+		case (BTAPP_SECEXCHG_KEYBOARD | BTAPP_SECEXCHG_DISPLAY):
+		case (BTAPP_SECEXCHG_KEYBOARD | BTAPP_SECEXCHG_DISPLAY |
+			  BTAPP_SECEXCHG_YESNO):
+			secParam.keypress = 1;
+			secParam.io_caps = BLE_GAP_IO_CAPS_KEYBOARD_DISPLAY;
+			break;
+		default:
+			break;
+	}
+
+	if (g_BtAppData.SecExchg & BTAPP_SECEXCHG_OOB)
+	{
+		secParam.oob = 1;
+	}
+
+	if (!BtSecBmInit(&secParam))
+	{
 		return false;
 	}
 
+	BtLescOobPeerHandlerSet(BtAppOobPeerDataHandler);
 	g_BtAppData.bSecInit = true;
-
+	DEBUG_PRINTF("STORE: bt_pds -> Nvm (S145, no peer_manager)\r\n");
 	return true;
 }
 
@@ -1597,7 +1413,7 @@ void BtGattIndicationTimeout(uint16_t ConnHdl)
 	sd_ble_gap_disconnect(ConnHdl, BLE_HCI_REMOTE_USER_TERMINATED_CONNECTION);
 }
 
-// The S145 port uses Peer Manager for SMP, and the SoftDevice reports the GATT
+// The S145 SoftDevice owns SMP packet sequencing and reports the GATT
 // server and client transaction timeouts (BLE_GATTS_EVT_TIMEOUT,
 // BLE_GATTC_EVT_TIMEOUT), on which the link is disconnected. No periodic
 // timeout check is needed on this port.

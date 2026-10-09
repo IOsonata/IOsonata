@@ -597,6 +597,70 @@ static bool BtSmpAddrIdentityType(uint8_t AddrType, const uint8_t Addr[6],
 	return false;
 }
 
+bool BtSmpBondIdentityGet(int Slot, uint8_t *pAddrType, uint8_t Addr[6],
+						 uint8_t Irk[16])
+{
+	if (Slot < 0 || Slot >= BT_SMP_BOND_MAX || pAddrType == nullptr ||
+		Addr == nullptr || Irk == nullptr || s_pBtSmpBondTable == nullptr)
+	{
+		return false;
+	}
+
+	uint32_t state = BtSmpBondTableEnter();
+	const BtSmpBond_t *pBond = &s_pBtSmpBondTable[Slot];
+	bool valid = pBond->bValid && BtSmpBondHasIrk(pBond);
+	uint8_t addrType = 0;
+	uint8_t addr[6] = {};
+	uint8_t irk[16] = {};
+
+	if (valid)
+	{
+		uint8_t identityType;
+		uint8_t idNonzero = 0;
+		uint8_t peerNonzero = 0;
+		for (int i = 0; i < 6; i++)
+		{
+			idNonzero |= pBond->Keys.IdAddr[i];
+			peerNonzero |= pBond->PeerAddr[i];
+		}
+		if (idNonzero != 0 &&
+			BtSmpAddrIdentityType(pBond->Keys.IdAddrType,
+								  pBond->Keys.IdAddr, &identityType))
+		{
+			addrType = identityType;
+			memcpy(addr, pBond->Keys.IdAddr, sizeof(addr));
+		}
+		else if (peerNonzero != 0 &&
+			BtSmpAddrIdentityType(pBond->PeerAddrType,
+									 pBond->PeerAddr, &identityType))
+		{
+			addrType = identityType;
+			memcpy(addr, pBond->PeerAddr, sizeof(addr));
+		}
+		else
+		{
+			valid = false;
+		}
+		if (valid)
+		{
+			memcpy(irk, pBond->Keys.Irk, sizeof(irk));
+		}
+	}
+	BtSmpBondTableExit(state);
+
+	if (!valid)
+	{
+		CryptoSecureWipe(irk, sizeof(irk));
+		return false;
+	}
+
+	*pAddrType = addrType;
+	memcpy(Addr, addr, sizeof(addr));
+	memcpy(Irk, irk, sizeof(irk));
+	CryptoSecureWipe(irk, sizeof(irk));
+	return true;
+}
+
 static int BtSmpBondFindByAddr(uint8_t AddrType, const uint8_t Addr[6])
 {
 	if (s_pBtSmpBondTable == nullptr)

@@ -4513,6 +4513,33 @@ bool BtSmpLocalIdRestore(const void *pRec, size_t Len)
 	return true;
 }
 
+bool BtSmpLocalIrkSet(const uint8_t Irk[16])
+{
+	if (Irk == nullptr)
+	{
+		return false;
+	}
+
+	uint8_t nonzero = 0;
+	for (int i = 0; i < 16; i++)
+	{
+		nonzero |= Irk[i];
+	}
+	if (nonzero == 0)
+	{
+		return false;
+	}
+	if (s_SmpLocalId.bValid && memcmp(s_SmpLocalId.Irk, Irk, 16) == 0)
+	{
+		return true;
+	}
+
+	memcpy(s_SmpLocalId.Irk, Irk, 16);
+	s_SmpLocalId.bValid = true;
+	BtSmpLocalIdSave();
+	return true;
+}
+
 bool BtSmpLocalIrkGet(uint8_t Irk[16])
 {
 	if (Irk == nullptr)

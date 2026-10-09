@@ -765,6 +765,16 @@ void   BtSmpBondRestore(int Slot, const void *pBond, size_t Len);
 size_t BtSmpBondSerialize(int Slot, void *pBuff, size_t BuffLen);
 
 /**
+ * @brief Copy the stable peer identity stored in one bond-table slot.
+ *
+ * Returns only identities containing a nonzero IRK and a public or random
+ * static identity address. Vendor-host ports use this to program their
+ * resolving list after the generic bond store is loaded.
+ */
+bool BtSmpBondIdentityGet(int Slot, uint8_t *pAddrType, uint8_t Addr[6],
+						 uint8_t Irk[16]);
+
+/**
  * @brief	Get the device's stable local identity IRK.
  *
  * The same IRK is distributed to every bonded peer, so any of them can
@@ -780,6 +790,14 @@ size_t BtSmpBondSerialize(int Slot, void *pBuff, size_t BuffLen);
  *			and no identity exists yet.
  */
 bool BtSmpLocalIrkGet(uint8_t Irk[16]);
+
+/**
+ * @brief Adopt a stable local IRK supplied by a vendor host/controller.
+ *
+ * The key is persisted through BtSmpLocalIdSave exactly like a locally
+ * generated identity. All-zero keys are refused.
+ */
+bool BtSmpLocalIrkSet(const uint8_t Irk[16]);
 
 /**
  * Local identity persistence hooks. Same division of labour as the bond

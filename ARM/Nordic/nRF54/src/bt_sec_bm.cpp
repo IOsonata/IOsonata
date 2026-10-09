@@ -1,1627 +1,941 @@
 /**-------------------------------------------------------------------------
 @file	bt_sec_bm.cpp
 
-@brief	IOsonata security manager for the sdk-nrf-bm SoftDevice path (nRF54L).
+@brief	IOsonata security manager for the sdk-nrf-bm S145 SoftDevice path.
 
-		Replaces the sdk-nrf-bm peer_manager modules security_manager.c and
-		security_dispatcher.c with one module, the same shape as the nRF52
-		implementation bt_sec_sd.cpp. It implements the sm_* API surface peer_manager.c
-		calls (security_manager.h), provides smd_init (peer_manager.c calls it
-		right after sm_init), emits the same struct pm_evt events through
-		pm_sm_evt_handler, and drives the S145 SoftDevice GAP security
-		procedures directly. The peer data layer stays in place: peer_database,
-		peer_id and the IOsonata peer_data_storage replacement are used
-		unchanged, so bond records keep their layout.
+The SoftDevice owns the on-air SMP state machine. IOsonata owns security
+policy, peer state, bond records and persistence. No nRF5 SDK Peer Manager,
+security_manager, id_manager, FDS or auth_status_tracker state is used here.
 
-		LESC runs on the IOsonata BtLesc module (OO KeyAgreeEngine based),
-		wired where the stock module called the lesc layer: init in sm_init,
-		the public key at the params reply, event delivery at the end of
-		sm_ble_evt_handler. DHKey computation stays deferred to
-		BtLescRequestHandler, which the lesc module queues with BtEvtQue.
-
-		The keyset handed to sd_ble_gap_sec_params_reply points into the
-		pm_peer_data_bonding inside the peer_database write buffer, so the
-		SoftDevice writes the distributed keys straight into the structure the
-		store commits at AUTH_STATUS with pdb_write_buf_store.
-
-		Fixes carried over from the nRF52 implementation, all applying here too:
-		- Per-connection state record. The stock dispatcher shares one static
-		  LESC peer public key buffer across links, so concurrent pairings
-		  overwrite each other. Here each link owns its receive buffer.
-		- The pending params reply preserves the exact application answer,
-		  including a rejection, across an NRF_ERROR_BUSY retry; the stock
-		  module loses it.
-		- Re-pairing denied at AUTH_STATUS disconnects the link instead of
-		  reporting success while it stays encrypted with a key the
-		  application refused. The early reject at params-reply time (a stock
-		  sdk-nrf-bm improvement over the frozen nRF5 SDK) is kept as well.
-		- SIG policy the stock module never offered: Secure Connections Only
-		  rejects legacy pairing with Authentication Requirements (Core Vol 3
-		  Part H 2.3.5.1); the minimum encryption key size is checked on
-		  every CONN_SEC_UPDATE and an under-keyed link is failed and
-		  disconnected (KNOB class downgrade mitigation).
-		- Connection handle recycling: the whole per-link record is reset at
-		  BLE_GAP_EVT_CONNECTED.
-		- A bond store hitting NRF_ERROR_BUSY is deferred and retried by the
-		  pending pumps, so the terminal pairing event reports a truthful
-		  data_stored. NRF_ERROR_RESOURCES emits PM_EVT_STORAGE_FULL and
-		  reports the store as accepted, matching the stock module.
-
-		Divergence from stock kept on purpose: a central securing a link with
-		a known peer id but no readable bond data (NRF_ERROR_NOT_FOUND) falls
-		back to pairing instead of failing, matching the nRF52 implementation.
-
-		Both roles are implemented, each gated by its SoftDevice variant
-		option (CONFIG_SOFTDEVICE_PERIPHERAL / CONFIG_SOFTDEVICE_CENTRAL).
-		Runs entirely in the pm BLE event dispatch context, the same as the
-		stock modules it replaces.
+The SoftDevice keyset points into fixed per-link storage. On successful
+bonding the resulting keys are converted to BtSmpKeys_t and committed through
+the generic IOsonata bond table/PDS path. Repeated-attempt policy is the same
+identity-scoped policy used by the generic SMP host.
 
 @author	Hoang Nguyen Hoan
-@date	Jul. 14, 2026
+@date	Oct. 9, 2026
 
-@license
-
-MIT License
-
-Copyright (c) 2026, I-SYST, all rights reserved
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+@license MIT, (c) 2026 I-SYST.
 ----------------------------------------------------------------------------*/
+#include <stdint.h>
 #include <string.h>
-#include <errno.h>
 
-#include <nrf_error.h>
-#include <ble.h>
-#include <ble_gap.h>
-#include <ble_err.h>
-#include <ble_hci.h>
-
-#include "storage/nvm.h"
-#include "storage/nvm_intrf.h"
-#include "storage/nvm_region.h"
-#include "bluetooth/bt_pds.h"
-
+#include "nrf_error.h"
+#include "ble.h"
+#include "ble_gap.h"
+#include "ble_hci.h"
 #include <bm/softdevice_handler/nrf_sdh_ble.h>
-#include <bm/bluetooth/peer_manager/peer_manager.h>	// pm_peers_delete
-#include <bm/bluetooth/peer_manager/peer_manager_types.h>
-
-#include "bluetooth/bt_smp.h"				// BtSmpBondErase, overridden below
-
-#include <modules/peer_manager_internal.h>
-#include <modules/security_manager.h>		// the sm_* API this module implements
-#include <modules/security_dispatcher.h>	// smd_init, called by pm_init; the rest
-											// of the smd layer is absorbed here
-#include <modules/conn_state.h>
-#include <modules/peer_database.h>
-#include <modules/peer_data_storage.h>
-#include <modules/id_manager.h>
-
-#if defined(CONFIG_PM_RA_PROTECTION)
-#include <modules/auth_status_tracker.h>
-#endif
 
 #include "bt_lesc.h"
+#include "bluetooth/bt_app.h"
+#include "bluetooth/bt_gap.h"
+#include "bluetooth/bt_gatt.h"
+#include "bluetooth/bt_peer.h"
+#include "bluetooth/bt_pds.h"
+#include "bluetooth/bt_smp.h"
+#include "crypto/icrypto.h"
 
 /******** For DEBUG Trace ************/
 #define DEBUG_ENABLE
-
 #if !defined(NDEBUG) && defined(DEBUG_ENABLE)
 #include "syslog.h"
 #define DEBUG_PRINTF(...)		SysLogPrintf(SysLogGet(), __VA_ARGS__)
 #else
 #define DEBUG_PRINTF(...)
 #endif
-/*******************************/
 
-// Event sink in peer_manager.c; the same extern hookup the stock sm uses.
-extern "C" void pm_sm_evt_handler(struct pm_evt *sm_evt);
-
-// The context type used in PM_EVT_CONN_SEC_PARAMS_REQ events and in calls to
-// sm_sec_params_reply(). The application interacts with it only through
-// sm_sec_params_reply.
-typedef struct {
-	ble_gap_sec_params_t *pSecParams;		// params to use in the reply
-	ble_gap_sec_params_t  SecParamsMem;		// buffer holding the params
-	bool                  bReplyCalled;		// sm_sec_params_reply was called
-} SecParamsReplyCtx_t;
-
-static bool                  s_bInit;
-static ble_gap_sec_params_t  s_SecParams;	// default sec params buffer
-static ble_gap_sec_params_t *s_pSecParams;	// NULL until sm_sec_params_set
-
-// SIG policy the stock module never offered. See the file header.
-static bool    s_bScOnly;
-static uint8_t s_MinKeySize = 7;
-
-// Per-connection state, indexed by nrf_sdh_ble_idx_get (S145 connection
-// handles are not guaranteed dense). PeerPk is the LESC peer public key
-// receive buffer for the keyset: per link, so concurrent pairings cannot
-// overwrite each other (the stock dispatcher shares one static buffer).
-// The pending reply record preserves the exact application answer, including
-// a rejection, across an NRF_ERROR_BUSY retry.
-typedef struct {
-	ble_gap_lesc_p256_pk_t PeerPk;			// SoftDevice writes the peer key here
-	ble_gap_sec_params_t   ReplyParams;		// pending reply parameters
-	bool                   bReplyValid;		// a reply is pending retry
-	bool                   bReplyReject;	// the pending reply is a rejection
-	bool                   bStorePending;	// bond store deferred on busy
-	bool                   bStoreNewPeer;	// the pending store allocated the peer id
-	uint16_t               StorePeerId;		// peer id of the pending store
-	uint16_t               StoreConnHdl;	// connection handle of the pending store
-	uint8_t                EncrKeySize;		// negotiated key size, from CONN_SEC_UPDATE
+typedef struct __Bt_Sec_Sd_Link {
+	ble_gap_enc_key_t       OwnEnc;
+	ble_gap_enc_key_t       PeerEnc;
+	ble_gap_id_key_t        PeerId;
+	ble_gap_sign_info_t     OwnSign;
+	ble_gap_sign_info_t     PeerSign;
+	ble_gap_lesc_p256_pk_t  PeerPk;
+	ble_gap_sec_params_t    ReplyParams;
+	bool                    bReplyPending;
+	bool                    bReplyReject;
+	bool                    bSecurePending;
+	bool                    bForceRepair;
+	bool                    bPairing;
+	bool                    bBonding;
+	bool                    bSc;
+	bool                    bAuthenticated;
+	bool                    bSecuredNotified;
+	uint8_t                 KeySize;
 } BtSecBmLink_t;
 
 static BtSecBmLink_t s_Links[CONFIG_NRF_SDH_BLE_TOTAL_LINK_COUNT];
+static ble_gap_sec_params_t s_SecParams;
+static bool s_bInit;
+static bool s_bScOnly;
+static bool s_bBondStore;
+static bool s_bIdentitySyncPending;
+static uint8_t s_MinKeySize = BT_SMP_MIN_ENC_KEY_SIZE;
+static bool s_bAuthCfgSet;
+static uint8_t s_AuthIoCaps;
+static uint8_t s_AuthReq;
+static bool s_bOobCfgSet;
+static bool s_bOobCfg;
+static bool s_bScOnlyCfgSet;
+static bool s_bMinKeyCfgSet;
+static uint32_t s_LastBondPoll;
 
 static inline BtSecBmLink_t *LinkGet(uint16_t ConnHdl)
 {
 	const int idx = nrf_sdh_ble_idx_get(ConnHdl);
-
-	return (idx >= 0 && idx < CONFIG_NRF_SDH_BLE_TOTAL_LINK_COUNT) ?
-		   &s_Links[idx] : nullptr;
+	return idx >= 0 && idx < CONFIG_NRF_SDH_BLE_TOTAL_LINK_COUNT ?
+		&s_Links[idx] : nullptr;
 }
 
-static void LinkReplyClear(uint16_t ConnHdl)
+static uint64_t RandGet(const uint8_t Rand[BLE_GAP_SEC_RAND_LEN])
 {
-	BtSecBmLink_t *pLink = LinkGet(ConnHdl);
-	if (pLink != nullptr)
+	uint64_t v = 0;
+	for (int i = BLE_GAP_SEC_RAND_LEN - 1; i >= 0; i--)
 	{
-		pLink->bReplyValid  = false;
-		pLink->bReplyReject = false;
+		v = (v << 8) | Rand[i];
+	}
+	return v;
+}
+
+static void RandSet(uint8_t Rand[BLE_GAP_SEC_RAND_LEN], uint64_t Value)
+{
+	for (int i = 0; i < BLE_GAP_SEC_RAND_LEN; i++)
+	{
+		Rand[i] = (uint8_t)Value;
+		Value >>= 8;
 	}
 }
 
-// Procedure bookkeeping and retry flags, one bit per connection.
-static int s_FlagSecProc           = PM_CONN_STATE_USER_FLAG_INVALID;
-static int s_FlagSecProcPairing    = PM_CONN_STATE_USER_FLAG_INVALID;
-static int s_FlagSecProcBonding    = PM_CONN_STATE_USER_FLAG_INVALID;
-static int s_FlagAllowRepairing    = PM_CONN_STATE_USER_FLAG_INVALID;
-static int s_FlagSecurePendBusy    = PM_CONN_STATE_USER_FLAG_INVALID;
-static int s_FlagSecureForceRepair = PM_CONN_STATE_USER_FLAG_INVALID;
-static int s_FlagSecureNullParams  = PM_CONN_STATE_USER_FLAG_INVALID;
-static int s_FlagReplyPendBusy     = PM_CONN_STATE_USER_FLAG_INVALID;
-
-// ---- Event emission ---------------------------------------------------------
-
-static struct pm_evt NewEvt(enum pm_evt_id EvtId, uint16_t ConnHdl)
+static bool KeyPresent(const uint8_t *pKey, size_t Len)
 {
-	struct pm_evt evt;
-
-	memset(&evt, 0, sizeof(evt));
-	evt.evt_id      = EvtId;
-	evt.conn_handle = ConnHdl;
-	evt.peer_id     = im_peer_id_get_by_conn_handle(ConnHdl);
-
-	return evt;
-}
-
-static void EvtSend(struct pm_evt *pEvt)
-{
-	pm_sm_evt_handler(pEvt);
-}
-
-static void UnexpectedErrorSend(uint16_t ConnHdl, uint32_t ErrCode)
-{
-	struct pm_evt evt = NewEvt(PM_EVT_ERROR_UNEXPECTED, ConnHdl);
-
-	evt.error_unexpected.error = ErrCode;
-	EvtSend(&evt);
-}
-
-static void StorageFullSend(uint16_t ConnHdl)
-{
-	struct pm_evt evt = NewEvt(PM_EVT_STORAGE_FULL, ConnHdl);
-
-	EvtSend(&evt);
-}
-
-// ---- Procedure bookkeeping --------------------------------------------------
-
-static void SecProcStart(uint16_t ConnHdl, bool bSuccess, enum pm_conn_sec_procedure Procedure)
-{
-	pm_conn_state_user_flag_set(ConnHdl, s_FlagSecProc, bSuccess);
-	if (bSuccess)
+	uint8_t v = 0;
+	for (size_t i = 0; i < Len; i++)
 	{
-		pm_conn_state_user_flag_set(ConnHdl, s_FlagSecProcPairing,
-									Procedure != PM_CONN_SEC_PROCEDURE_ENCRYPTION);
-		pm_conn_state_user_flag_set(ConnHdl, s_FlagSecProcBonding,
-									Procedure == PM_CONN_SEC_PROCEDURE_BONDING);
-
-		struct pm_evt evt = NewEvt(PM_EVT_CONN_SEC_START, ConnHdl);
-		evt.conn_sec_start.procedure = Procedure;
-		EvtSend(&evt);
+		v |= pKey[i];
 	}
+	return v != 0;
 }
 
-// True while a pairing (not encryption-only) procedure runs on the link.
-static bool ProcIsPairing(uint16_t ConnHdl)
+static uint32_t SoftDeviceIdentityListSync(void)
 {
-	return pm_conn_state_user_flag_get(ConnHdl, s_FlagSecProc) &&
-		   pm_conn_state_user_flag_get(ConnHdl, s_FlagSecProcPairing);
-}
+	ble_gap_id_key_t keys[BLE_GAP_DEVICE_IDENTITIES_MAX_COUNT];
+	const ble_gap_id_key_t *ptrs[BLE_GAP_DEVICE_IDENTITIES_MAX_COUNT];
+	memset(keys, 0, sizeof(keys));
+	memset(ptrs, 0, sizeof(ptrs));
 
-static enum pm_conn_sec_procedure ProcGet(uint16_t ConnHdl)
-{
-	if (!pm_conn_state_user_flag_get(ConnHdl, s_FlagSecProcPairing))
+	uint8_t count = 0;
+	for (int slot = 0; slot < BtSmpBondSlotCount() &&
+		count < BLE_GAP_DEVICE_IDENTITIES_MAX_COUNT; slot++)
 	{
-		return PM_CONN_SEC_PROCEDURE_ENCRYPTION;
+		uint8_t addrType;
+		uint8_t addr[6];
+		uint8_t irk[16];
+		if (!BtSmpBondIdentityGet(slot, &addrType, addr, irk))
+		{
+			continue;
+		}
+
+		keys[count].id_addr_info.addr_type =
+			addrType == BTADDR_TYPE_PUBLIC ?
+			BLE_GAP_ADDR_TYPE_PUBLIC : BLE_GAP_ADDR_TYPE_RANDOM_STATIC;
+		memcpy(keys[count].id_addr_info.addr, addr, sizeof(addr));
+		memcpy(keys[count].id_info.irk, irk, sizeof(irk));
+		ptrs[count] = &keys[count];
+		count++;
+		CryptoSecureWipe(irk, sizeof(irk));
 	}
-	return pm_conn_state_user_flag_get(ConnHdl, s_FlagSecProcBonding) ?
-		   PM_CONN_SEC_PROCEDURE_BONDING : PM_CONN_SEC_PROCEDURE_PAIRING;
+
+	uint32_t r = count == 0 ?
+		sd_ble_gap_device_identities_set(nullptr, nullptr, 0) :
+		sd_ble_gap_device_identities_set(ptrs, nullptr, count);
+	CryptoSecureWipe(keys, sizeof(keys));
+	return r;
 }
 
-// Common failure emission: report CONN_SEC_FAILED with the in-flight procedure
-// and clear the procedure flag.
-static void SecFailureSend(uint16_t ConnHdl, uint16_t Error, uint8_t ErrorSrc)
+static uint32_t SoftDeviceLocalIdentitySync(void)
 {
-	if (!pm_conn_state_user_flag_get(ConnHdl, s_FlagSecProc))
-	{
-		return;		// no procedure in flight; nothing to report
-	}
-	pm_conn_state_user_flag_set(ConnHdl, s_FlagSecProc, false);
+	ble_gap_privacy_params_t privacy;
+	ble_gap_irk_t deviceIrk;
+	uint8_t savedIrk[16];
+	memset(&privacy, 0, sizeof(privacy));
+	memset(&deviceIrk, 0, sizeof(deviceIrk));
+	memset(savedIrk, 0, sizeof(savedIrk));
+	privacy.p_device_irk = &deviceIrk;
 
-	struct pm_evt evt = NewEvt(PM_EVT_CONN_SEC_FAILED, ConnHdl);
-	evt.conn_sec_failed.procedure = ProcGet(ConnHdl);
-	evt.conn_sec_failed.error     = Error;
-	evt.conn_sec_failed.error_src = ErrorSrc;
-	EvtSend(&evt);
-}
-
-static bool AllowRepairing(uint16_t ConnHdl)
-{
-	return pm_conn_state_user_flag_get(ConnHdl, s_FlagAllowRepairing);
-}
-
-static ble_gap_lesc_p256_pk_t *LescPubKeyGet(void)
-{
-	return BtLescPubKeyGet();
-}
-
-static void WriteBufRelease(uint16_t ConnHdl);
-
-// ---- Keyset construction ----------------------------------------------------
-
-// Point the SoftDevice keyset into the pm_peer_data_bonding inside the
-// peer_database write buffer, so the distributed keys land directly in the
-// structure the store commits. Returns NRF_SUCCESS, NRF_ERROR_BUSY (no buffer
-// yet, retried by the pending pump) or an internal error.
-static uint32_t SecKeysetFill(uint16_t ConnHdl, uint8_t Role,
-							  ble_gap_sec_keyset_t *pKeyset)
-{
-	struct pm_peer_data peerData;
-	uint16_t tempPeerId;
-
-	uint32_t r = pdb_temp_peer_id_get(ConnHdl, &tempPeerId);
-	if (r == NRF_SUCCESS)
-	{
-		r = pdb_write_buf_get(tempPeerId, PM_PEER_DATA_ID_BONDING, 1, &peerData);
-	}
-	if (r == NRF_ERROR_BUSY)
+	uint32_t r = sd_ble_gap_privacy_get(&privacy);
+	if (r != NRF_SUCCESS)
 	{
 		return r;
 	}
-	if (r != NRF_SUCCESS)
+
+	if (BtSmpLocalIrkGet(savedIrk))
 	{
-		return NRF_ERROR_INTERNAL;
+		if (memcmp(deviceIrk.irk, savedIrk, sizeof(savedIrk)) != 0)
+		{
+			memcpy(deviceIrk.irk, savedIrk, sizeof(savedIrk));
+			privacy.p_device_irk = &deviceIrk;
+			r = sd_ble_gap_privacy_set(&privacy);
+		}
+	}
+	else if (KeyPresent(deviceIrk.irk, sizeof(deviceIrk.irk)))
+	{
+		(void)BtSmpLocalIrkSet(deviceIrk.irk);
+	}
+	else
+	{
+		r = NRF_ERROR_INVALID_DATA;
 	}
 
-	memset(peerData.bonding_data, 0, sizeof(struct pm_peer_data_bonding));
-	peerData.bonding_data->own_role = Role;
+	CryptoSecureWipe(savedIrk, sizeof(savedIrk));
+	CryptoSecureWipe(&deviceIrk, sizeof(deviceIrk));
+	return r;
+}
 
-	pKeyset->keys_own.p_enc_key  = &peerData.bonding_data->own_ltk;
-	pKeyset->keys_own.p_pk       = LescPubKeyGet();
-	pKeyset->keys_peer.p_enc_key = &peerData.bonding_data->peer_ltk;
-	pKeyset->keys_peer.p_id_key  = &peerData.bonding_data->peer_ble_id;
+static uint32_t SoftDeviceIdentitySync(void)
+{
+	uint32_t r = SoftDeviceLocalIdentitySync();
+	if (r != NRF_SUCCESS)
+	{
+		return r;
+	}
+	return SoftDeviceIdentityListSync();
+}
 
-	BtSecBmLink_t *pLink = LinkGet(ConnHdl);
+static bool IsCentral(uint16_t ConnHdl)
+{
+	return BtPeerRole(ConnHdl) == BT_CONN_ROLE_CENTRAL;
+}
+
+static bool IsPeripheral(uint16_t ConnHdl)
+{
+	return BtPeerRole(ConnHdl) == BT_CONN_ROLE_PERIPHERAL;
+}
+
+static void LinkKeyBuffersReset(BtSecBmLink_t *pLink)
+{
 	if (pLink == nullptr)
 	{
-		(void)pdb_write_buf_release(tempPeerId, PM_PEER_DATA_ID_BONDING);
-		return NRF_ERROR_INVALID_STATE;
+		return;
 	}
-	pKeyset->keys_peer.p_pk      = &pLink->PeerPk;
-
-	// The address the peer used at connection establishment; overwritten by
-	// the identity if the peer distributes one.
-	r = im_ble_addr_get(ConnHdl, &peerData.bonding_data->peer_ble_id.id_addr_info);
-	if (r != NRF_SUCCESS)
-	{
-		(void)pdb_write_buf_release(tempPeerId, PM_PEER_DATA_ID_BONDING);
-		return NRF_ERROR_INVALID_STATE;
-	}
-
-	return NRF_SUCCESS;
+	CryptoSecureWipe(&pLink->OwnEnc, sizeof(pLink->OwnEnc));
+	CryptoSecureWipe(&pLink->PeerEnc, sizeof(pLink->PeerEnc));
+	CryptoSecureWipe(&pLink->PeerId, sizeof(pLink->PeerId));
+	CryptoSecureWipe(&pLink->OwnSign, sizeof(pLink->OwnSign));
+	CryptoSecureWipe(&pLink->PeerSign, sizeof(pLink->PeerSign));
+	CryptoSecureWipe(&pLink->PeerPk, sizeof(pLink->PeerPk));
+	pLink->bSc = false;
+	pLink->bAuthenticated = false;
+	pLink->KeySize = 0;
 }
 
-// ---- sec params reply (SEC_PARAMS_REQUEST answer) ---------------------------
-
-static uint32_t ParamsReplyPerform(uint16_t ConnHdl, ble_gap_sec_params_t *pSecParams)
+static void LinkReset(uint16_t ConnHdl)
 {
-	uint8_t              role = pm_conn_state_role(ConnHdl);
-	uint8_t              secStatus = BLE_GAP_SEC_STATUS_SUCCESS;
-	ble_gap_sec_keyset_t keyset;
-	uint32_t             r = NRF_SUCCESS;
-	bool                 bWriteBufHeld = false;
+	BtSecBmLink_t *pLink = LinkGet(ConnHdl);
+	if (pLink != nullptr)
+	{
+		CryptoSecureWipe(pLink, sizeof(*pLink));
+	}
+}
 
-	memset(&keyset, 0, sizeof(keyset));
+static void ConnSecClear(uint16_t ConnHdl)
+{
+	BtConnSec_t sec = {};
+	BtGapConnSecSet(ConnHdl, &sec);
+	BtDevice_t *pPeer = BtPeerFindByHdl(ConnHdl);
+	if (pPeer != nullptr)
+	{
+		pPeer->bSecure = false;
+	}
+}
 
-	if (role == BLE_GAP_ROLE_INVALID)
+static void LinkSecFromBond(BtSecBmLink_t *pLink, const BtSmpKeys_t *pKeys)
+{
+	if (pLink == nullptr || pKeys == nullptr || !pKeys->bValid)
+	{
+		return;
+	}
+	pLink->bSc = pKeys->bSc;
+	pLink->bAuthenticated = pKeys->bAuthenticated;
+	pLink->KeySize = pKeys->EncKeySize;
+}
+
+static void ConnSecUpdate(uint16_t ConnHdl, const ble_gap_conn_sec_t *pSdSec)
+{
+	BtDevice_t *pPeer = BtPeerFindByHdl(ConnHdl);
+	BtSecBmLink_t *pLink = LinkGet(ConnHdl);
+	if (pPeer == nullptr || pSdSec == nullptr)
+	{
+		return;
+	}
+
+	BtConnSec_t sec = {};
+	bool encrypted = pSdSec->sec_mode.sm == 1 && pSdSec->sec_mode.lv >= 2;
+	if (encrypted)
+	{
+		sec.KeySize = pSdSec->encr_key_size;
+		if (pSdSec->sec_mode.lv >= 4)
+		{
+			sec.Level = BT_GAP_SEC_LEVEL_LESC_AUTH;
+			sec.Flags |= BT_GAP_SEC_FLAG_SC;
+		}
+		else if (pSdSec->sec_mode.lv >= 3)
+		{
+			sec.Level = BT_GAP_SEC_LEVEL_ENC_AUTH;
+		}
+		else
+		{
+			sec.Level = BT_GAP_SEC_LEVEL_ENC_UNAUTH;
+		}
+
+		if (pLink != nullptr && pLink->bSc)
+		{
+			sec.Flags |= BT_GAP_SEC_FLAG_SC;
+		}
+		if (BtSmpBonded(ConnHdl))
+		{
+			sec.Flags |= BT_GAP_SEC_FLAG_BONDED;
+		}
+	}
+
+	BtGapConnSecSet(ConnHdl, &sec);
+	pPeer->bSecure = encrypted;
+
+	if (pLink != nullptr)
+	{
+		pLink->KeySize = pSdSec->encr_key_size;
+	}
+
+	if (encrypted && pSdSec->encr_key_size < s_MinKeySize)
+	{
+		DEBUG_PRINTF("SEC: key size %u below policy %u, disconnect\r\n",
+			(unsigned)pSdSec->encr_key_size, (unsigned)s_MinKeySize);
+		(void)sd_ble_gap_disconnect(ConnHdl, BLE_HCI_AUTHENTICATION_FAILURE);
+		return;
+	}
+
+	if (encrypted)
+	{
+		BtGattCccdRestoreBonded(ConnHdl);
+		if (pLink != nullptr && !pLink->bSecuredNotified)
+		{
+			pLink->bSecuredNotified = true;
+			BtAppEvtSecured(ConnHdl);
+		}
+	}
+}
+
+static void KeysetFill(uint16_t ConnHdl, ble_gap_sec_keyset_t *pKeyset)
+{
+	BtSecBmLink_t *pLink = LinkGet(ConnHdl);
+	memset(pKeyset, 0, sizeof(*pKeyset));
+	if (pLink == nullptr)
+	{
+		return;
+	}
+
+	pKeyset->keys_own.p_pk = BtLescPubKeyGet();
+	pKeyset->keys_peer.p_pk = &pLink->PeerPk;
+
+	if (!s_SecParams.bond)
+	{
+		return;
+	}
+
+	pKeyset->keys_own.p_enc_key = &pLink->OwnEnc;
+	// S140 requires the peer encryption-key pointer to be NULL for an
+	// LE Secure Connections-only procedure. Legacy pairing still needs it
+	// because the peer may distribute a distinct LTK for role reversal.
+	pKeyset->keys_peer.p_enc_key = s_bScOnly ? nullptr : &pLink->PeerEnc;
+	pKeyset->keys_peer.p_id_key = &pLink->PeerId;
+
+	if (s_SecParams.kdist_own.sign)
+	{
+		pKeyset->keys_own.p_sign_key = &pLink->OwnSign;
+	}
+	if (s_SecParams.kdist_peer.sign)
+	{
+		pKeyset->keys_peer.p_sign_key = &pLink->PeerSign;
+	}
+}
+
+static uint32_t ParamsReplyAttempt(uint16_t ConnHdl, const ble_gap_sec_params_t *pParams)
+{
+	BtSecBmLink_t *pLink = LinkGet(ConnHdl);
+	if (pLink == nullptr || BtPeerFindByHdl(ConnHdl) == nullptr)
 	{
 		return BLE_ERROR_INVALID_CONN_HANDLE;
 	}
 
-#if defined(CONFIG_PM_RA_PROTECTION)
-	if (ast_peer_deny_listed(ConnHdl))
+	if (!BtSmpPairingAttemptAllowed(ConnHdl, BtSmpMsTick()))
 	{
-		secStatus  = BLE_GAP_SEC_STATUS_REPEATED_ATTEMPTS;
-		pSecParams = NULL;
+		// Core Vol 3 Part H 2.3.6: during the waiting interval do not
+		// respond to another pairing procedure from the same claimant.
+		// Drop the link rather than pinning a SoftDevice procedure until its
+		// SMP timer expires.
+		(void)sd_ble_gap_disconnect(ConnHdl, BLE_HCI_AUTHENTICATION_FAILURE);
+		pLink->bReplyPending = false;
+		return NRF_SUCCESS;
 	}
-	else
-#endif
-	if (pSecParams == NULL)
+
+	uint8_t secStatus = BLE_GAP_SEC_STATUS_SUCCESS;
+	ble_gap_sec_params_t *pReply = const_cast<ble_gap_sec_params_t *>(pParams);
+	if (pReply == nullptr)
 	{
-		// Reject pairing.
 		secStatus = BLE_GAP_SEC_STATUS_PAIRING_NOT_SUPP;
 	}
-	else
+	else if (s_bScOnly && !pReply->lesc)
 	{
-#if defined(CONFIG_SOFTDEVICE_PERIPHERAL)
-		if (role == BLE_GAP_ROLE_PERIPH && !AllowRepairing(ConnHdl) &&
-			im_peer_id_get_by_conn_handle(ConnHdl) != PM_PEER_ID_INVALID)
-		{
-			// A bond already exists for an identified peer: ask before the
-			// pairing runs (early reject, a stock sdk-nrf-bm improvement).
-			// Peers only identified after key distribution are still caught
-			// at AUTH_STATUS.
-			struct pm_evt evt = NewEvt(PM_EVT_CONN_SEC_CONFIG_REQ, ConnHdl);
-			EvtSend(&evt);
-			if (!AllowRepairing(ConnHdl))
-			{
-				secStatus = BLE_GAP_SEC_STATUS_PAIRING_NOT_SUPP;
-			}
-		}
-#endif
-
-		if (secStatus == BLE_GAP_SEC_STATUS_SUCCESS)
-		{
-			if (!pSecParams->bond)
-			{
-				// Pairing without bonding: no store buffer, but the LESC
-				// public key exchange still needs its buffers.
-				BtSecBmLink_t *pLink = LinkGet(ConnHdl);
-				if (pLink == nullptr)
-				{
-					return BLE_ERROR_INVALID_CONN_HANDLE;
-				}
-				keyset.keys_own.p_pk  = LescPubKeyGet();
-				keyset.keys_peer.p_pk = &pLink->PeerPk;
-			}
-			else
-			{
-				r = SecKeysetFill(ConnHdl, role, &keyset);
-				if (r != NRF_SUCCESS)
-				{
-					pm_conn_state_user_flag_set(ConnHdl, s_FlagReplyPendBusy,
-												r == NRF_ERROR_BUSY);
-					return r;
-				}
-				bWriteBufHeld = true;
-			}
-		}
+		secStatus = BLE_GAP_SEC_STATUS_AUTH_REQ;
+		pReply = nullptr;
 	}
 
-	// Peripheral replies with its parameters; a central gave them at
-	// sd_ble_gap_authenticate. The keyset is always passed, zeroed on reject.
-	ble_gap_sec_params_t *pReplyParams = NULL;
-#if defined(CONFIG_SOFTDEVICE_PERIPHERAL)
-	if (role == BLE_GAP_ROLE_PERIPH && secStatus == BLE_GAP_SEC_STATUS_SUCCESS)
+	ble_gap_sec_keyset_t keyset;
+	memset(&keyset, 0, sizeof(keyset));
+	if (secStatus == BLE_GAP_SEC_STATUS_SUCCESS)
 	{
-		pReplyParams = pSecParams;
-	}
-#endif
-
-	r = sd_ble_gap_sec_params_reply(ConnHdl, secStatus, pReplyParams, &keyset);
-	pm_conn_state_user_flag_set(ConnHdl, s_FlagReplyPendBusy, r == NRF_ERROR_BUSY);
-
-	if (bWriteBufHeld && r != NRF_SUCCESS && r != NRF_ERROR_BUSY)
-	{
-		WriteBufRelease(ConnHdl);
-	}
-
-	if (r == NRF_ERROR_INVALID_STATE && !pm_conn_state_valid(ConnHdl))
-	{
-		return NRF_SUCCESS;		// link dropped; benign
-	}
-	// A live link returning INVALID_STATE is a sequencing defect (duplicate
-	// reply, wrong phase) and surfaces to the caller.
-	// NRF_ERROR_BUSY propagates: ReplyAttempt must see it to keep the exact
-	// reply for the retry. Conversion to a success result for the public API
-	// happens at the callers.
-	return r;
-}
-
-// Perform a reply and keep the exact answer, including a rejection, for the
-// BUSY retry. On a terminal result the pending record is cleared.
-static uint32_t ReplyAttempt(uint16_t ConnHdl, ble_gap_sec_params_t *pSecParams)
-{
-	uint32_t r = ParamsReplyPerform(ConnHdl, pSecParams);
-	BtSecBmLink_t *pLink = LinkGet(ConnHdl);
-
-	if (pLink != nullptr)
-	{
-		if (r == NRF_ERROR_BUSY)
+		LinkKeyBuffersReset(pLink);
+		KeysetFill(ConnHdl, &keyset);
+		if (s_SecParams.lesc && keyset.keys_own.p_pk == nullptr)
 		{
-			pLink->bReplyReject = (pSecParams == NULL);
-			if (pSecParams != NULL)
-			{
-				pLink->ReplyParams = *pSecParams;
-			}
-			pLink->bReplyValid = true;
-		}
-		else
-		{
-			pLink->bReplyValid  = false;
+			pLink->bReplyPending = true;
 			pLink->bReplyReject = false;
+			pLink->ReplyParams = *pParams;
+			return NRF_ERROR_BUSY;
 		}
 	}
-	return r;
-}
 
-// PM_EVT_CONN_SEC_PARAMS_REQ handling: emit the event with a reply context; if
-// the application does not answer within its handler through
-// sm_sec_params_reply, reply with the context (default) parameters.
-static void ParamsRequestProcess(uint16_t ConnHdl, const ble_gap_sec_params_t *pPeerParams)
-{
-	SecParamsReplyCtx_t ctx;
+	// Only a peripheral returns local security parameters here. A central
+	// already supplied them to sd_ble_gap_authenticate().
+	ble_gap_sec_params_t *pSdParams = IsPeripheral(ConnHdl) ? pReply : nullptr;
+	uint32_t r = sd_ble_gap_sec_params_reply(ConnHdl, secStatus, pSdParams,
+		secStatus == BLE_GAP_SEC_STATUS_SUCCESS ? &keyset : nullptr);
 
-	ctx.pSecParams   = s_pSecParams;
-	ctx.bReplyCalled = false;
-
-	struct pm_evt evt = NewEvt(PM_EVT_CONN_SEC_PARAMS_REQ, ConnHdl);
-	evt.conn_sec_params_req.peer_params = pPeerParams;
-	evt.conn_sec_params_req.context     = &ctx;
-	EvtSend(&evt);
-
-	if (!ctx.bReplyCalled)
-	{
-		uint32_t r = ReplyAttempt(ConnHdl, ctx.pSecParams);
-		if (r != NRF_SUCCESS && r != NRF_ERROR_BUSY)
-		{
-			UnexpectedErrorSend(ConnHdl, r);
-		}
-	}
-}
-
-// ---- link secure (pm_conn_secure and Security Request) ----------------------
-
-#if defined(CONFIG_SOFTDEVICE_CENTRAL)
-#if !defined(NDEBUG) && defined(DEBUG_ENABLE)
-static bool ReconnectIrkPresent(const ble_gap_irk_t *pIrk)
-{
-	if (pIrk == nullptr)
-	{
-		return false;
-	}
-
-	uint8_t present = 0;
-	for (uint32_t i = 0; i < BLE_GAP_SEC_KEY_LEN; i++)
-	{
-		present |= pIrk->irk[i];
-	}
-	return present != 0;
-}
-
-static void ReconnectPeerTrace(uint16_t ConnHdl, uint16_t PeerId)
-{
-	ble_gap_addr_t connAddr;
-	memset(&connAddr, 0, sizeof(connAddr));
-	uint32_t addrStatus = im_ble_addr_get(ConnHdl, &connAddr);
-
-	if (addrStatus == NRF_SUCCESS)
-	{
-		DEBUG_PRINTF(
-				"BM ID: hdl=%u peer=%u type=%u addr=%02x:%02x:%02x:%02x:%02x:%02x\r\n",
-				(unsigned)ConnHdl, (unsigned)PeerId,
-				(unsigned)connAddr.addr_type,
-				connAddr.addr[5], connAddr.addr[4], connAddr.addr[3],
-				connAddr.addr[2], connAddr.addr[1], connAddr.addr[0]);
-	}
-	else
-	{
-		DEBUG_PRINTF(
-				"BM ID: hdl=%u peer=%u address read failed 0x%08lx\r\n",
-				(unsigned)ConnHdl, (unsigned)PeerId,
-				(unsigned long)addrStatus);
-	}
-
-	if (PeerId != PM_PEER_ID_INVALID)
-	{
-		return;
-	}
-
-	uint16_t candidateId;
-	uint16_t iter;
-	struct pm_peer_data_const peerData;
-	uint8_t buffer[PM_PEER_DATA_MAX_SIZE];
-
-	memset(&peerData, 0, sizeof(peerData));
-	memset(buffer, 0, sizeof(buffer));
-	peerData.all_data = buffer;
-	pds_peer_data_iterate_prepare(&iter);
-
-	while (pds_peer_data_iterate(PM_PEER_DATA_ID_BONDING, &candidateId,
-								 &peerData, &iter))
-	{
-		const ble_gap_id_key_t *pId = &peerData.bonding_data->peer_ble_id;
-		bool direct = addrStatus == NRF_SUCCESS &&
-			connAddr.addr_type == pId->id_addr_info.addr_type &&
-			memcmp(connAddr.addr, pId->id_addr_info.addr,
-					BLE_GAP_ADDR_LEN) == 0;
-		bool rpa = addrStatus == NRF_SUCCESS &&
-			connAddr.addr_type == BLE_GAP_ADDR_TYPE_RANDOM_PRIVATE_RESOLVABLE &&
-			ReconnectIrkPresent(&pId->id_info) &&
-			im_address_resolve(&connAddr, &pId->id_info);
-
-		DEBUG_PRINTF(
-				"BM ID: candidate=%u type=%u addr=%02x:%02x:%02x:%02x:%02x:%02x "
-				"irk=%u direct=%u rpa=%u\r\n",
-				(unsigned)candidateId, (unsigned)pId->id_addr_info.addr_type,
-				pId->id_addr_info.addr[5], pId->id_addr_info.addr[4],
-				pId->id_addr_info.addr[3], pId->id_addr_info.addr[2],
-				pId->id_addr_info.addr[1], pId->id_addr_info.addr[0],
-				ReconnectIrkPresent(&pId->id_info) ? 1U : 0U,
-				direct ? 1U : 0U, rpa ? 1U : 0U);
-	}
-}
-
-static void ReconnectBondTrace(uint16_t PeerId, uint32_t Status,
-							   const struct pm_peer_data_bonding *pBond)
-{
-	if (Status != NRF_SUCCESS || pBond == nullptr)
-	{
-		DEBUG_PRINTF("BM SEC: bond read peer=%u status=0x%08lx\r\n",
-				(unsigned)PeerId, (unsigned long)Status);
-		return;
-	}
-
-	const ble_gap_addr_t *pAddr = &pBond->peer_ble_id.id_addr_info;
-	DEBUG_PRINTF(
-			"BM SEC: bond peer=%u own(sc=%u len=%u) peer(sc=%u len=%u) "
-			"idtype=%u id=%02x:%02x:%02x:%02x:%02x:%02x irk=%u\r\n",
-			(unsigned)PeerId,
-			(unsigned)pBond->own_ltk.enc_info.lesc,
-			(unsigned)pBond->own_ltk.enc_info.ltk_len,
-			(unsigned)pBond->peer_ltk.enc_info.lesc,
-			(unsigned)pBond->peer_ltk.enc_info.ltk_len,
-			(unsigned)pAddr->addr_type,
-			pAddr->addr[5], pAddr->addr[4], pAddr->addr[3],
-			pAddr->addr[2], pAddr->addr[1], pAddr->addr[0],
-			ReconnectIrkPresent(&pBond->peer_ble_id.id_info) ? 1U : 0U);
-}
-#else
-static inline void ReconnectPeerTrace(uint16_t ConnHdl, uint16_t PeerId)
-{
-	(void)ConnHdl;
-	(void)PeerId;
-}
-
-static inline void ReconnectBondTrace(uint16_t PeerId, uint32_t Status,
-								  const struct pm_peer_data_bonding *pBond)
-{
-	(void)PeerId;
-	(void)Status;
-	(void)pBond;
-}
-#endif
-
-static uint32_t LinkSecureCentralEncrypt(uint16_t ConnHdl, uint16_t PeerId)
-{
-	struct pm_peer_data_bonding bondData;
-	struct pm_peer_data peerData;
-	const uint32_t bufSize = sizeof(bondData);
-	const ble_gap_enc_key_t *pKey = NULL;
-
-	memset(&bondData, 0, sizeof(bondData));
-	peerData.bonding_data = &bondData;
-
-	uint32_t r = pds_peer_data_read(PeerId, PM_PEER_DATA_ID_BONDING,
-									&peerData, &bufSize);
-	ReconnectBondTrace(PeerId, r, r == NRF_SUCCESS ? &bondData : nullptr);
-	if (r == NRF_SUCCESS)
-	{
-		// Peer distributed its LTK as peripheral; for LESC both sides hold
-		// the same LTK under own_ltk.
-		pKey = &bondData.peer_ltk;
-		if (bondData.own_ltk.enc_info.lesc)
-		{
-			pKey = &bondData.own_ltk;
-		}
-		else if (!im_master_id_is_valid(&pKey->master_id))
-		{
-			pKey = NULL;		// no usable legacy key
-		}
-	}
-	else if (r == NRF_ERROR_BUSY)
-	{
-		return NRF_ERROR_BUSY;	// storage busy; retried by the pump
-	}
-	else if (r != NRF_ERROR_NOT_FOUND)
-	{
-		return NRF_ERROR_INTERNAL;
-	}
-
-	if (pKey == NULL || !pKey->enc_info.ltk_len)
-	{
-		DEBUG_PRINTF("BM SEC: peer=%u has no usable LTK, pair instead\r\n",
-				(unsigned)PeerId);
-		return NRF_ERROR_NOT_FOUND;		// no usable key; caller falls back to pairing
-	}
-
-	r = sd_ble_gap_encrypt(ConnHdl, &pKey->master_id, &pKey->enc_info);
-	DEBUG_PRINTF(
-			"BM SEC: encrypt hdl=%u peer=%u sc=%u len=%u ediv=0x%04x status=0x%08lx\r\n",
-			(unsigned)ConnHdl, (unsigned)PeerId,
-			(unsigned)pKey->enc_info.lesc, (unsigned)pKey->enc_info.ltk_len,
-			(unsigned)pKey->master_id.ediv, (unsigned long)r);
-	if (r == NRF_SUCCESS)
-	{
-		SecProcStart(ConnHdl, true, PM_CONN_SEC_PROCEDURE_ENCRYPTION);
-	}
-	return r;
-}
-#endif
-
-static uint32_t LinkSecureAuthenticate(uint16_t ConnHdl, ble_gap_sec_params_t *pSecParams)
-{
-	uint32_t r = sd_ble_gap_authenticate(ConnHdl, pSecParams);
-
-	DEBUG_PRINTF("BM SEC: authenticate hdl=%u status=0x%08lx\r\n",
-			(unsigned)ConnHdl, (unsigned long)r);
-
-	if (r == NRF_SUCCESS)
-	{
-#if defined(CONFIG_SOFTDEVICE_CENTRAL)
-		if (pm_conn_state_role(ConnHdl) == BLE_GAP_ROLE_CENTRAL && pSecParams != NULL)
-		{
-			SecProcStart(ConnHdl, true, pSecParams->bond ?
-						 PM_CONN_SEC_PROCEDURE_BONDING : PM_CONN_SEC_PROCEDURE_PAIRING);
-		}
-#endif
-		// Peripheral: this sends the Security Request; the procedure starts
-		// at SEC_PARAMS_REQUEST when the central responds.
-	}
-	else if (r == NRF_ERROR_NO_MEM)
-	{
-		r = NRF_ERROR_BUSY;		// too many concurrent procedures; retried
-	}
-	return r;
-}
-
-static uint32_t LinkSecure(uint16_t ConnHdl, bool bNullParams, bool bForceRepairing,
-						   bool bSendEvents)
-{
-	uint32_t              r;
-	ble_gap_sec_params_t *pParams = bNullParams ? NULL : s_pSecParams;
-	uint8_t               role = pm_conn_state_role(ConnHdl);
-
-	DEBUG_PRINTF("BM SEC: secure hdl=%u role=%u force=%u null=%u\r\n",
-			(unsigned)ConnHdl, (unsigned)role,
-			bForceRepairing ? 1U : 0U, bNullParams ? 1U : 0U);
-
-	if (role == BLE_GAP_ROLE_INVALID)
-	{
-		return BLE_ERROR_INVALID_CONN_HANDLE;
-	}
-
-#if defined(CONFIG_SOFTDEVICE_CENTRAL)
-	if (role == BLE_GAP_ROLE_CENTRAL)
-	{
-		// Record the repairing decision at procedure start, stock behavior.
-		pm_conn_state_user_flag_set(ConnHdl, s_FlagAllowRepairing, bForceRepairing);
-
-		if (!bForceRepairing)
-		{
-			uint16_t peerId = im_peer_id_get_by_conn_handle(ConnHdl);
-			ReconnectPeerTrace(ConnHdl, peerId);
-
-			if (peerId != PM_PEER_ID_INVALID)
-			{
-				r = LinkSecureCentralEncrypt(ConnHdl, peerId);
-				if (r != NRF_ERROR_NOT_FOUND)
-				{
-					goto done;
-				}
-				// No stored key: fall through to pairing.
-			}
-		}
-	}
-#else
-	(void)bForceRepairing;
-#endif
-
-	r = LinkSecureAuthenticate(ConnHdl, pParams);
-
-#if defined(CONFIG_SOFTDEVICE_CENTRAL)
-done:
-#endif
-	// Track retry state for BUSY; remember the call shape for the retry.
-	pm_conn_state_user_flag_set(ConnHdl, s_FlagSecurePendBusy, r == NRF_ERROR_BUSY);
 	if (r == NRF_ERROR_BUSY)
 	{
-		pm_conn_state_user_flag_set(ConnHdl, s_FlagSecureForceRepair, bForceRepairing);
-		pm_conn_state_user_flag_set(ConnHdl, s_FlagSecureNullParams, bNullParams);
-	}
-
-	if (bSendEvents && r != NRF_SUCCESS && r != NRF_ERROR_BUSY &&
-		r != NRF_ERROR_INVALID_STATE)
-	{
-		if (r == NRF_ERROR_TIMEOUT)
+		pLink->bReplyPending = true;
+		pLink->bReplyReject = pParams == nullptr;
+		if (pParams != nullptr)
 		{
-			struct pm_evt evt = NewEvt(PM_EVT_CONN_SEC_FAILED, ConnHdl);
-			evt.conn_sec_failed.procedure =
-				(pParams != NULL && pParams->bond) ? PM_CONN_SEC_PROCEDURE_BONDING
-												   : PM_CONN_SEC_PROCEDURE_PAIRING;
-			evt.conn_sec_failed.error     = PM_CONN_SEC_ERROR_SMP_TIMEOUT;
-			evt.conn_sec_failed.error_src = BLE_GAP_SEC_STATUS_SOURCE_LOCAL;
-			EvtSend(&evt);
-		}
-		else
-		{
-			UnexpectedErrorSend(ConnHdl, r);
+			pLink->ReplyParams = *pParams;
 		}
 	}
-
-	if (r == NRF_ERROR_BUSY ||
-		(r == NRF_ERROR_INVALID_STATE && !pm_conn_state_valid(ConnHdl)))
+	else
 	{
-		r = NRF_SUCCESS;	// BUSY retried by the pump; INVALID_STATE: link gone
+		pLink->bReplyPending = false;
+		pLink->bReplyReject = false;
 	}
 	return r;
 }
 
-// ---- GAP event handlers -----------------------------------------------------
-
-static void SecParamsRequestProcess(const ble_gap_evt_t *pGapEvt)
+static void ParamsRequestProcess(const ble_gap_evt_t *pGapEvt)
 {
-	if (s_bScOnly && !pGapEvt->params.sec_params_request.peer_params.lesc)
+	uint16_t h = pGapEvt->conn_handle;
+	BtSecBmLink_t *pLink = LinkGet(h);
+	if (pLink == nullptr)
 	{
-		// Secure Connections Only: reject legacy pairing without asking the
-		// application. The failure is reported through AUTH_STATUS.
-		(void)sd_ble_gap_sec_params_reply(pGapEvt->conn_handle,
-										  BLE_GAP_SEC_STATUS_AUTH_REQ, NULL, NULL);
 		return;
 	}
 
-#if defined(CONFIG_SOFTDEVICE_PERIPHERAL)
-	if (pm_conn_state_role(pGapEvt->conn_handle) == BLE_GAP_ROLE_PERIPH)
+	const ble_gap_sec_params_t *pPeer = &pGapEvt->params.sec_params_request.peer_params;
+	if (!BtSmpPairingAttemptAllowed(h, BtSmpMsTick()))
 	{
-		// New security procedure: reset the repairing decision for the link.
-		pm_conn_state_user_flag_set(pGapEvt->conn_handle, s_FlagAllowRepairing, false);
-		SecProcStart(pGapEvt->conn_handle, true,
-					 pGapEvt->params.sec_params_request.peer_params.bond ?
-					 PM_CONN_SEC_PROCEDURE_BONDING : PM_CONN_SEC_PROCEDURE_PAIRING);
+		(void)sd_ble_gap_disconnect(h, BLE_HCI_AUTHENTICATION_FAILURE);
+		return;
 	}
-#endif
-	ParamsRequestProcess(pGapEvt->conn_handle,
-						 &pGapEvt->params.sec_params_request.peer_params);
+
+	if (pPeer->max_key_size < s_MinKeySize ||
+		pPeer->max_key_size > BT_SMP_MAX_ENC_KEY_SIZE ||
+		(s_bScOnly && !pPeer->lesc))
+	{
+		uint8_t st = pPeer->max_key_size < s_MinKeySize ||
+			pPeer->max_key_size > BT_SMP_MAX_ENC_KEY_SIZE ?
+			BLE_GAP_SEC_STATUS_ENC_KEY_SIZE : BLE_GAP_SEC_STATUS_AUTH_REQ;
+		(void)sd_ble_gap_sec_params_reply(h, st, nullptr, nullptr);
+		return;
+	}
+
+	pLink->bPairing = true;
+	pLink->bBonding = pPeer->bond && s_SecParams.bond;
+	uint32_t r = ParamsReplyAttempt(h, &s_SecParams);
+	if (r != NRF_SUCCESS && r != NRF_ERROR_BUSY)
+	{
+		DEBUG_PRINTF("SEC: params reply failed 0x%X\r\n", (unsigned)r);
+	}
 }
 
-#if defined(CONFIG_SOFTDEVICE_PERIPHERAL)
-static void SecInfoRequestProcess(const ble_gap_evt_t *pGapEvt)
+static void KeysFromLink(uint16_t ConnHdl, const ble_gap_evt_auth_status_t *pAuth,
+	BtSmpKeys_t *pKeys)
 {
-	const ble_gap_enc_info_t *pEncInfo = NULL;
-	struct pm_peer_data_bonding bondData;
-	struct pm_peer_data peerData;
-	const uint32_t bufSize = sizeof(bondData);
-
-	uint16_t peerId = im_peer_id_get_by_master_id(
-						&pGapEvt->params.sec_info_request.master_id);
-	if (peerId == PM_PEER_ID_INVALID)
+	BtSecBmLink_t *pLink = LinkGet(ConnHdl);
+	memset(pKeys, 0, sizeof(*pKeys));
+	if (pLink == nullptr)
 	{
-		peerId = im_peer_id_get_by_conn_handle(pGapEvt->conn_handle);
+		return;
+	}
+
+	bool sc = pAuth->lesc || pLink->OwnEnc.enc_info.lesc;
+	pKeys->bSc = sc;
+	pKeys->bAuthenticated = pLink->OwnEnc.enc_info.auth ||
+		pLink->PeerEnc.enc_info.auth;
+	pKeys->EncKeySize = pLink->KeySize != 0 ? pLink->KeySize :
+		(pLink->OwnEnc.enc_info.ltk_len != 0 ? pLink->OwnEnc.enc_info.ltk_len :
+		 pLink->PeerEnc.enc_info.ltk_len);
+
+	if (sc)
+	{
+		memcpy(pKeys->Ltk, pLink->OwnEnc.enc_info.ltk, sizeof(pKeys->Ltk));
+		memcpy(pKeys->LocalLtk, pKeys->Ltk, sizeof(pKeys->LocalLtk));
 	}
 	else
 	{
-		// The peer may have been unrecognized until now (e.g. random
-		// non-resolvable advertising address). Record the discovery.
-		im_new_peer_id(pGapEvt->conn_handle, peerId);
+		memcpy(pKeys->Ltk, pLink->PeerEnc.enc_info.ltk, sizeof(pKeys->Ltk));
+		pKeys->Rand = RandGet(pLink->PeerEnc.master_id.rand);
+		pKeys->Ediv = pLink->PeerEnc.master_id.ediv;
+		memcpy(pKeys->LocalLtk, pLink->OwnEnc.enc_info.ltk, sizeof(pKeys->LocalLtk));
+		pKeys->LocalRand = RandGet(pLink->OwnEnc.master_id.rand);
+		pKeys->LocalEdiv = pLink->OwnEnc.master_id.ediv;
 	}
 
-	DEBUG_PRINTF("BM SEC: sec-info request hdl=%u peer=%u enc=%u ediv=0x%04x\r\n",
-			(unsigned)pGapEvt->conn_handle, (unsigned)peerId,
-			(unsigned)pGapEvt->params.sec_info_request.enc_info,
-			(unsigned)pGapEvt->params.sec_info_request.master_id.ediv);
+	memcpy(pKeys->Irk, pLink->PeerId.id_info.irk, sizeof(pKeys->Irk));
+	pKeys->IdAddrType = pLink->PeerId.id_addr_info.addr_type;
+	memcpy(pKeys->IdAddr, pLink->PeerId.id_addr_info.addr, sizeof(pKeys->IdAddr));
+	memcpy(pKeys->Csrk, pLink->PeerSign.csrk, sizeof(pKeys->Csrk));
 
-	SecProcStart(pGapEvt->conn_handle, true, PM_CONN_SEC_PROCEDURE_ENCRYPTION);
-
-	if (peerId != PM_PEER_ID_INVALID)
-	{
-		memset(&bondData, 0, sizeof(bondData));
-		peerData.bonding_data = &bondData;
-
-		uint32_t r = pds_peer_data_read(peerId, PM_PEER_DATA_ID_BONDING,
-										&peerData, &bufSize);
-		DEBUG_PRINTF("BM SEC: sec-info bond peer=%u status=0x%08lx sc=%u len=%u\r\n",
-				(unsigned)peerId, (unsigned long)r,
-				r == NRF_SUCCESS ? (unsigned)bondData.own_ltk.enc_info.lesc : 0U,
-				r == NRF_SUCCESS ? (unsigned)bondData.own_ltk.enc_info.ltk_len : 0U);
-		if (r == NRF_SUCCESS)
-		{
-			// Reply with own LTK when it is the one the request names. A LESC
-			// LTK has an all-zero master id (nothing to compare, and the
-			// compare treats a zero id as invalid), so the lesc flag alone
-			// selects it, exactly as the stock dispatcher does.
-			const ble_gap_enc_key_t *pKey = &bondData.own_ltk;
-
-			if (pGapEvt->params.sec_info_request.enc_info &&
-				(pKey->enc_info.lesc ||
-				 im_master_ids_compare(&pKey->master_id,
-									   &pGapEvt->params.sec_info_request.master_id)))
-			{
-				pEncInfo = &pKey->enc_info;
-			}
-		}
-		else if (r != NRF_ERROR_NOT_FOUND)
-		{
-			UnexpectedErrorSend(pGapEvt->conn_handle, r);
-		}
-	}
-
-	// S145 copies the enc info during the call; the stack buffer is fine.
-	uint32_t r = sd_ble_gap_sec_info_reply(pGapEvt->conn_handle, pEncInfo);
-	DEBUG_PRINTF("BM SEC: sec-info reply hdl=%u peer=%u key=%u status=0x%08lx\r\n",
-			(unsigned)pGapEvt->conn_handle, (unsigned)peerId,
-			pEncInfo != NULL ? 1U : 0U, (unsigned long)r);
-	if (r == NRF_ERROR_INVALID_STATE)
-	{
-		// Another module already replied, or the link is going down; the
-		// DISCONNECTED handling catches the latter.
-	}
-	else if (r != NRF_SUCCESS)
-	{
-		UnexpectedErrorSend(pGapEvt->conn_handle, r);
-	}
-	else if (pGapEvt->params.sec_info_request.enc_info && pEncInfo == NULL)
-	{
-		SecFailureSend(pGapEvt->conn_handle, PM_CONN_SEC_ERROR_PIN_OR_KEY_MISSING,
-					   BLE_GAP_SEC_STATUS_SOURCE_LOCAL);
-	}
-}
-#endif // CONFIG_SOFTDEVICE_PERIPHERAL
-
-#if defined(CONFIG_SOFTDEVICE_CENTRAL)
-// Central receives a Security Request from the peripheral.
-static void SecRequestProcess(const ble_gap_evt_t *pGapEvt)
-{
-	bool bForceRepairing = false;
-	bool bNullParams = (s_pSecParams == NULL);
-
-	DEBUG_PRINTF("BM SEC: security request hdl=%u bond=%u mitm=%u lesc=%u\r\n",
-			(unsigned)pGapEvt->conn_handle,
-			(unsigned)pGapEvt->params.sec_request.bond,
-			(unsigned)pGapEvt->params.sec_request.mitm,
-			(unsigned)pGapEvt->params.sec_request.lesc);
-
-	if (!bNullParams && pm_conn_state_encrypted(pGapEvt->conn_handle))
-	{
-		struct pm_conn_sec_status req;
-
-		memset(&req, 0, sizeof(req));
-		req.bonded         = pGapEvt->params.sec_request.bond;
-		req.mitm_protected = pGapEvt->params.sec_request.mitm;
-		req.lesc           = pGapEvt->params.sec_request.lesc;
-		bForceRepairing    = !sm_sec_is_sufficient(pGapEvt->conn_handle, &req);
-	}
-
-	(void)LinkSecure(pGapEvt->conn_handle, bNullParams, bForceRepairing, true);
-
-	// Forward the request to the application, as the stock module does.
-	struct pm_evt evt = NewEvt(PM_EVT_PERIPHERAL_SECURITY_REQ, pGapEvt->conn_handle);
-	evt.peripheral_security_req = pGapEvt->params.sec_request;
-	EvtSend(&evt);
-}
-#endif // CONFIG_SOFTDEVICE_CENTRAL
-
-static void PairingSuccessSend(const ble_gap_evt_t *pGapEvt, bool bDataStored)
-{
-	pm_conn_state_user_flag_set(pGapEvt->conn_handle, s_FlagSecProc, false);
-
-	struct pm_evt evt = NewEvt(PM_EVT_CONN_SEC_SUCCEEDED, pGapEvt->conn_handle);
-	evt.conn_sec_succeeded.procedure = pGapEvt->params.auth_status.bonded ?
-			PM_CONN_SEC_PROCEDURE_BONDING : PM_CONN_SEC_PROCEDURE_PAIRING;
-	evt.conn_sec_succeeded.data_stored = bDataStored;
-	EvtSend(&evt);
-}
-
-// Commit the bond. NRF_ERROR_BUSY defers the store and the retry pumps repeat
-// it; the terminal pairing event is emitted only when the store reaches a
-// terminal result, so data_stored is truthful. NRF_ERROR_RESOURCES means the
-// store was accepted but the storage needs maintenance: PM_EVT_STORAGE_FULL is
-// emitted and the store reported as done, matching the stock module.
-static void BondStoreAttempt(uint16_t ConnHdl, uint16_t PeerId, bool bNewPeer)
-{
-	BtSecBmLink_t *pLink = LinkGet(ConnHdl);
-	uint16_t tempPeerId;
-
-	uint32_t r = pdb_temp_peer_id_get(ConnHdl, &tempPeerId);
-	if (r == NRF_SUCCESS)
-	{
-		r = pdb_write_buf_store(tempPeerId, PM_PEER_DATA_ID_BONDING, PeerId);
-	}
-
-	if (r == NRF_ERROR_BUSY && pLink != nullptr)
-	{
-		pLink->bStorePending = true;
-		pLink->bStoreNewPeer = bNewPeer;
-		pLink->StorePeerId   = PeerId;
-		pLink->StoreConnHdl  = ConnHdl;
-		return;			// retried by the pumps; no terminal event yet
-	}
-
-	if (pLink != nullptr)
-	{
-		pLink->bStorePending = false;
-	}
-
-	if (r == NRF_ERROR_RESOURCES)
-	{
-		StorageFullSend(ConnHdl);
-		r = NRF_SUCCESS;
-	}
-
-	pm_conn_state_user_flag_set(ConnHdl, s_FlagSecProc, false);
-
-	struct pm_evt evt = NewEvt(PM_EVT_CONN_SEC_SUCCEEDED, ConnHdl);
-	evt.conn_sec_succeeded.procedure   = PM_CONN_SEC_PROCEDURE_BONDING;
-	evt.conn_sec_succeeded.data_stored = (r == NRF_SUCCESS);
-	if (r != NRF_SUCCESS)
-	{
-		UnexpectedErrorSend(ConnHdl, r);
-		if (bNewPeer)
-		{
-			(void)im_peer_free(PeerId);
-		}
-	}
-	EvtSend(&evt);
-}
-
-static void WriteBufRelease(uint16_t ConnHdl)
-{
-	uint16_t tempPeerId;
-
-	if (pdb_temp_peer_id_get(ConnHdl, &tempPeerId) == NRF_SUCCESS)
-	{
-		(void)pdb_write_buf_release(tempPeerId, PM_PEER_DATA_ID_BONDING);
-	}
-}
-
-static void AuthStatusSuccessProcess(const ble_gap_evt_t *pGapEvt)
-{
-	uint16_t connHdl = pGapEvt->conn_handle;
-	BtSecBmLink_t *pKsLink = LinkGet(connHdl);
-
-	if (pKsLink != nullptr && pKsLink->EncrKeySize != 0 &&
-		pKsLink->EncrKeySize < s_MinKeySize)
-	{
-		// The key size check already failed the procedure and requested the
-		// disconnect; do not store a bond keyed below policy.
-		WriteBufRelease(connHdl);
-		return;
-	}
-
-	if (!pGapEvt->params.auth_status.bonded)
-	{
-		// Pairing without bonding: nothing was allocated, nothing to store.
-		PairingSuccessSend(pGapEvt, false);
-		return;
-	}
-
-	// Locate or allocate the peer id for the new bond.
-	bool bNewPeerId = false;
-	struct pm_peer_data peerData;
-	uint16_t tempPeerId;
-	uint16_t peerId = im_peer_id_get_by_conn_handle(connHdl);
-
-	uint32_t r = pdb_temp_peer_id_get(connHdl, &tempPeerId);
-	if (r == NRF_SUCCESS)
-	{
-		r = pdb_write_buf_get(tempPeerId, PM_PEER_DATA_ID_BONDING, 1, &peerData);
-	}
-	if (r != NRF_SUCCESS)
-	{
-		UnexpectedErrorSend(connHdl, r);
-		PairingSuccessSend(pGapEvt, false);
-		return;
-	}
-
-	if (peerId == PM_PEER_ID_INVALID)
-	{
-		// Repairing detection: an existing bond for this identity.
-		peerId = im_find_duplicate_bonding_data(peerData.bonding_data, PM_PEER_ID_INVALID);
-		if (peerId != PM_PEER_ID_INVALID)
-		{
-			// Known identity re-pairing. Map the connection to the existing
-			// peer first (the stock module does), so peer lookups work even
-			// when the application denies. Then ask unless a decision was
-			// already made for this procedure; default deny. On deny the old
-			// bond record is kept, and the link is disconnected: it is
-			// encrypted with a key the application refused, so leaving it up
-			// and reporting success (the stock behavior) is wrong. The
-			// procedure flag stays set; the disconnect path reports
-			// CONN_SEC_FAILED.
-			im_new_peer_id(connHdl, peerId);
-
-			if (!AllowRepairing(connHdl))
-			{
-				struct pm_evt evt = NewEvt(PM_EVT_CONN_SEC_CONFIG_REQ, connHdl);
-				evt.peer_id = peerId;
-				EvtSend(&evt);
-
-				if (!AllowRepairing(connHdl))
-				{
-					WriteBufRelease(connHdl);
-					(void)sd_ble_gap_disconnect(connHdl,
-												BLE_HCI_AUTHENTICATION_FAILURE);
-					return;
-				}
-			}
-		}
-	}
-
-	if (peerId == PM_PEER_ID_INVALID)
-	{
-		peerId = pds_peer_id_allocate();
-		if (peerId == PM_PEER_ID_INVALID)
-		{
-			WriteBufRelease(connHdl);
-			UnexpectedErrorSend(connHdl, NRF_ERROR_NO_MEM);
-			PairingSuccessSend(pGapEvt, false);
-			return;
-		}
-		bNewPeerId = true;
-		im_new_peer_id(connHdl, peerId);
-	}
-
-	BondStoreAttempt(connHdl, peerId, bNewPeerId);
+	pKeys->bValid = pKeys->EncKeySize >= BT_SMP_MIN_ENC_KEY_SIZE &&
+		pKeys->EncKeySize <= BT_SMP_MAX_ENC_KEY_SIZE &&
+		KeyPresent(pKeys->Ltk, sizeof(pKeys->Ltk));
 }
 
 static void AuthStatusProcess(const ble_gap_evt_t *pGapEvt)
 {
-	LinkReplyClear(pGapEvt->conn_handle);
-
-	if (pGapEvt->params.auth_status.auth_status == BLE_GAP_SEC_STATUS_SUCCESS)
+	uint16_t h = pGapEvt->conn_handle;
+	BtSecBmLink_t *pLink = LinkGet(h);
+	if (pLink == nullptr)
 	{
-		AuthStatusSuccessProcess(pGapEvt);
+		return;
 	}
-	else
+	pLink->bReplyPending = false;
+
+	const ble_gap_evt_auth_status_t *pAuth = &pGapEvt->params.auth_status;
+	if (pAuth->auth_status != BLE_GAP_SEC_STATUS_SUCCESS)
 	{
-		WriteBufRelease(pGapEvt->conn_handle);
-		SecFailureSend(pGapEvt->conn_handle,
-					   pGapEvt->params.auth_status.auth_status,
-					   pGapEvt->params.auth_status.error_src);
-#if defined(CONFIG_PM_RA_PROTECTION)
-		ast_auth_error_notify(pGapEvt->conn_handle);
-#endif
-	}
-}
-
-static void ConnSecUpdateProcess(const ble_gap_evt_t *pGapEvt)
-{
-	uint8_t keySize = pGapEvt->params.conn_sec_update.conn_sec.encr_key_size;
-	BtSecBmLink_t *pLink = LinkGet(pGapEvt->conn_handle);
-
-	if (pLink != nullptr)
-	{
-		pLink->EncrKeySize = keySize;
-	}
-
-	DEBUG_PRINTF("BM SEC: update hdl=%u role=%u enc=%u mitm=%u lesc=%u key=%u\r\n",
-			(unsigned)pGapEvt->conn_handle,
-			(unsigned)pm_conn_state_role(pGapEvt->conn_handle),
-			pm_conn_state_encrypted(pGapEvt->conn_handle) ? 1U : 0U,
-			pm_conn_state_mitm_protected(pGapEvt->conn_handle) ? 1U : 0U,
-			pm_conn_state_lesc(pGapEvt->conn_handle) ? 1U : 0U,
-			(unsigned)keySize);
-
-	if (pm_conn_state_encrypted(pGapEvt->conn_handle) && keySize < s_MinKeySize)
-	{
-		// Under-keyed link: fail the procedure and disconnect regardless of
-		// whether this is a fresh pairing or a reconnect.
-		SecFailureSend(pGapEvt->conn_handle, BLE_GAP_SEC_STATUS_ENC_KEY_SIZE,
-					   BLE_GAP_SEC_STATUS_SOURCE_LOCAL);
-		(void)sd_ble_gap_disconnect(pGapEvt->conn_handle,
-									BLE_HCI_AUTHENTICATION_FAILURE);
+		DEBUG_PRINTF("SEC: pairing failed hdl=%u status=0x%02X src=%u\r\n",
+			(unsigned)h, (unsigned)pAuth->auth_status, (unsigned)pAuth->error_src);
+		BtSmpPairingAttemptFailed(h, BtSmpMsTick());
+		pLink->bPairing = false;
+		pLink->bBonding = false;
 		return;
 	}
 
-	if (ProcIsPairing(pGapEvt->conn_handle))
+	BtSmpPairingAttemptSucceeded(h);
+	pLink->bSc = pAuth->lesc != 0;
+	pLink->bAuthenticated = pLink->OwnEnc.enc_info.auth ||
+		pLink->PeerEnc.enc_info.auth;
+
+	if (pAuth->bonded)
 	{
-		return;		// pairing completion is reported at AUTH_STATUS
-	}
-
-	if (!pm_conn_state_encrypted(pGapEvt->conn_handle))
-	{
-		SecFailureSend(pGapEvt->conn_handle, PM_CONN_SEC_ERROR_PIN_OR_KEY_MISSING,
-					   BLE_GAP_SEC_STATUS_SOURCE_REMOTE);
-		return;
-	}
-
-	pm_conn_state_user_flag_set(pGapEvt->conn_handle, s_FlagSecProc, false);
-
-	struct pm_evt evt = NewEvt(PM_EVT_CONN_SEC_SUCCEEDED, pGapEvt->conn_handle);
-	evt.conn_sec_succeeded.procedure   = PM_CONN_SEC_PROCEDURE_ENCRYPTION;
-	evt.conn_sec_succeeded.data_stored = false;
-	EvtSend(&evt);
-}
-
-static void DisconnectProcess(const ble_gap_evt_t *pGapEvt)
-{
-	uint16_t error =
-		(pGapEvt->params.disconnected.reason == BLE_HCI_CONN_TERMINATED_DUE_TO_MIC_FAILURE) ?
-		PM_CONN_SEC_ERROR_MIC_FAILURE : PM_CONN_SEC_ERROR_DISCONNECT;
-
-	SecFailureSend(pGapEvt->conn_handle, error, BLE_GAP_SEC_STATUS_SOURCE_LOCAL);
-	LinkReplyClear(pGapEvt->conn_handle);
-
-	BtSecBmLink_t *pLink = LinkGet(pGapEvt->conn_handle);
-	if (pLink != nullptr && pLink->bStorePending)
-	{
-		pLink->bStorePending = false;
-		if (pLink->bStoreNewPeer)
+		BtSmpKeys_t keys;
+		KeysFromLink(h, pAuth, &keys);
+		if (!keys.bValid || !BtSmpBondAdd(h, &keys))
 		{
-			(void)im_peer_free(pLink->StorePeerId);
+			BtSmpBondStoreFailed(h);
+		}
+		else
+		{
+			LinkSecFromBond(pLink, &keys);
+			s_bIdentitySyncPending = true;
+		}
+		CryptoSecureWipe(&keys, sizeof(keys));
+	}
+
+	pLink->bPairing = false;
+	pLink->bBonding = false;
+
+	// AUTH_STATUS and CONN_SEC_UPDATE ordering is stack-defined. If the
+	// security update already ran, surface completion now; otherwise that
+	// event will do it.
+	BtDevice_t *pPeer = BtPeerFindByHdl(h);
+	if (pPeer != nullptr && pPeer->bSecure && !pLink->bSecuredNotified)
+	{
+		pLink->bSecuredNotified = true;
+		BtAppEvtSecured(h);
+	}
+}
+
+static void SecInfoRequestProcess(const ble_gap_evt_t *pGapEvt)
+{
+	uint16_t h = pGapEvt->conn_handle;
+	const ble_gap_evt_sec_info_request_t *pReq = &pGapEvt->params.sec_info_request;
+	uint64_t rand = RandGet(pReq->master_id.rand);
+	uint16_t ediv = pReq->master_id.ediv;
+	BtSmpKeys_t keys;
+	const ble_gap_enc_info_t *pEnc = nullptr;
+	ble_gap_enc_info_t enc;
+	memset(&enc, 0, sizeof(enc));
+	memset(&keys, 0, sizeof(keys));
+
+	if (pReq->enc_info && BtSmpBondKeysLookup(h, rand, ediv, &keys))
+	{
+		const uint8_t *pLtk = keys.bSc ? keys.Ltk : keys.LocalLtk;
+		if (KeyPresent(pLtk, 16))
+		{
+			memcpy(enc.ltk, pLtk, 16);
+			enc.lesc = keys.bSc;
+			enc.auth = keys.bAuthenticated;
+			enc.ltk_len = keys.EncKeySize;
+			pEnc = &enc;
+			LinkSecFromBond(LinkGet(h), &keys);
 		}
 	}
-	WriteBufRelease(pGapEvt->conn_handle);
+
+	uint32_t r = sd_ble_gap_sec_info_reply(h, pEnc, nullptr, nullptr);
+	if (r != NRF_SUCCESS && r != NRF_ERROR_INVALID_STATE)
+	{
+		DEBUG_PRINTF("SEC: info reply failed 0x%X\r\n", (unsigned)r);
+	}
+	CryptoSecureWipe(&enc, sizeof(enc));
+	CryptoSecureWipe(&keys, sizeof(keys));
 }
 
-// ---- Retry pumps ------------------------------------------------------------
-
-static void ReplyPendingHandle(uint16_t ConnHdl, void *pCtx)
+static bool SecRequestSatisfied(uint16_t ConnHdl, const ble_gap_evt_sec_request_t *pReq)
 {
-	(void)pCtx;
-	ble_gap_sec_params_t *pParams = s_pSecParams;
+	BtConnSec_t sec;
+	if (!BtGapConnSecGet(ConnHdl, &sec) || sec.Level == BT_GAP_SEC_LEVEL_NONE)
+	{
+		return false;
+	}
+	if (pReq->bond && !(sec.Flags & BT_GAP_SEC_FLAG_BONDED))
+	{
+		return false;
+	}
+	if (pReq->mitm && sec.Level < BT_GAP_SEC_LEVEL_ENC_AUTH)
+	{
+		return false;
+	}
+	if (pReq->lesc && !(sec.Flags & BT_GAP_SEC_FLAG_SC))
+	{
+		return false;
+	}
+	return true;
+}
+
+static uint32_t EncryptFromBond(uint16_t ConnHdl, const BtSmpKeys_t *pKeys)
+{
+	ble_gap_enc_info_t enc;
+	ble_gap_master_id_t id;
+	memset(&enc, 0, sizeof(enc));
+	memset(&id, 0, sizeof(id));
+
+	memcpy(enc.ltk, pKeys->Ltk, 16);
+	enc.lesc = pKeys->bSc;
+	enc.auth = pKeys->bAuthenticated;
+	enc.ltk_len = pKeys->EncKeySize;
+	if (!pKeys->bSc)
+	{
+		id.ediv = pKeys->Ediv;
+		RandSet(id.rand, pKeys->Rand);
+	}
+
+	uint32_t r = sd_ble_gap_encrypt(ConnHdl, &id, &enc);
+	CryptoSecureWipe(&enc, sizeof(enc));
+	CryptoSecureWipe(&id, sizeof(id));
+	return r;
+}
+
+uint32_t BtSecBmSecure(uint16_t ConnHdl, bool ForceRepair)
+{
 	BtSecBmLink_t *pLink = LinkGet(ConnHdl);
-
-	if (pLink != nullptr && pLink->bReplyValid)
-	{
-		// Replay the application reply exactly, including a rejection.
-		pParams = pLink->bReplyReject ? NULL : &pLink->ReplyParams;
-	}
-	(void)ReplyAttempt(ConnHdl, pParams);
-}
-
-static void SecurePendingHandle(uint16_t ConnHdl, void *pCtx)
-{
-	(void)pCtx;
-	bool bForce = pm_conn_state_user_flag_get(ConnHdl, s_FlagSecureForceRepair);
-	bool bNull  = pm_conn_state_user_flag_get(ConnHdl, s_FlagSecureNullParams);
-
-	(void)LinkSecure(ConnHdl, bNull, bForce, true);
-}
-
-static void PendingPumpsRun(void)
-{
-	(void)pm_conn_state_for_each_set_user_flag(s_FlagReplyPendBusy,
-											   ReplyPendingHandle, NULL);
-	(void)pm_conn_state_for_each_set_user_flag(s_FlagSecurePendBusy,
-											   SecurePendingHandle, NULL);
-
-	for (int i = 0; i < CONFIG_NRF_SDH_BLE_TOTAL_LINK_COUNT; i++)
-	{
-		if (s_Links[i].bStorePending && pm_conn_state_valid(s_Links[i].StoreConnHdl))
-		{
-			s_Links[i].bStorePending = false;
-			BondStoreAttempt(s_Links[i].StoreConnHdl, s_Links[i].StorePeerId,
-							 s_Links[i].bStoreNewPeer);
-		}
-	}
-}
-
-// ---- The bond store ---------------------------------------------------------
-
-// Which linker declared region the peer data lives in. A project that wants
-// it somewhere else moves the region in its linker script, not here.
-#ifndef BT_SEC_BM_REGION_NO
-#define BT_SEC_BM_REGION_NO			0
-#endif
-
-static NvmIntrf s_PdsIntrf;
-static Nvm s_PdsMem;
-static bool s_bPdsMounted = false;
-
-// ---- sm_* API surface (called by peer_manager.c) ----------------------------
-
-// The sm_* surface below is declared in modules/security_manager.h and
-// BtSmpBondErase in bt_smp.h, whose C++ guards give those definitions their
-// C linkage. BtPdsBmInit is declared in no header, so it alone is marked.
-
-// Bring up the memory and mount the store on it. peer_data_storage.c calls
-// this from pds_init; it is C, and Nvm is a C++ class, so the construction
-// lives here and it gets a C entry point. Safe to call more than once.
-extern "C" int BtPdsBmInit(void)
-{
-	if (s_bPdsMounted)
-	{
-		return 0;
-	}
-
-	// The region the linker set aside is the device: base and size come from
-	// it, and the geometry from the part. Asked for before the interface is
-	// brought up, so a project with no region declared does not leave one
-	// initialised with no store on it.
-	uintptr_t base = NvmRegionAddr(BT_SEC_BM_REGION_NO);
-	size_t size = NvmRegionSize(BT_SEC_BM_REGION_NO);
-
-	DEBUG_PRINTF("PDS: linker NVM%d at %08lX size %08lX\r\n",
-			   BT_SEC_BM_REGION_NO, (unsigned long)base,
-			   (unsigned long)size);
-
-	if (base == 0 || size == 0)
-	{
-		DEBUG_PRINTF("PDS: no NVM%d region in the linker script, "
-				   "peer data will not persist\r\n", BT_SEC_BM_REGION_NO);
-
-		return -ENODEV;
-	}
-
-	// Nothing else is set up here beyond the memory itself. Who may touch it
-	// and when is registered with the interface by whoever owns the radio, and
-	// how long a program takes is the memory's own timing.
-	if (s_PdsIntrf.Init() == false)
-	{
-		DEBUG_PRINTF("PDS: memory interface init failed\r\n");
-
-		return -EIO;
-	}
-
-	NvmCfg_t cfg;
-	memset(&cfg, 0, sizeof(cfg));
-	NvmMcuCfg(cfg);
-
-	cfg.BaseAddr = base;
-	cfg.TotalSize = size;
-
-	// The region is the whole of this device, so no window inside it.
-	if (s_PdsMem.Init(cfg, &s_PdsIntrf, 0, 0) == false)
-	{
-		DEBUG_PRINTF("PDS: Nvm init failed\r\n");
-
-		return -EIO;
-	}
-
-	DEBUG_PRINTF("PDS: Nvm ok, size %lu, sector %lu, wr %lu\r\n",
-			   (unsigned long)s_PdsMem.Size(),
-			   (unsigned long)s_PdsMem.LogicalSectorSize(),
-			   (unsigned long)s_PdsMem.WriteGran());
-
-	int r = BtPdsInit(&s_PdsMem);
-	if (r != 0)
-	{
-		DEBUG_PRINTF("PDS: store mount failed %d\r\n", r);
-
-		return r;
-	}
-
-	DEBUG_PRINTF("PDS: store mounted\r\n");
-
-	s_bPdsMounted = true;
-
-	return 0;
-}
-
-// Wipe the stored bonds. This is the platform half of the seam: the generic
-// BtSmpBondClearAll in bt_smp_bond.cpp clears the RAM table it owns and then
-// calls here for whatever the platform keeps. On this path the S145 stack owns
-// the SMP state machine and peer_manager owns the bonds, so that is
-// pm_peers_delete. bt_app_bm.cpp already named this as the entry that was
-// missing. Overrides the weak answer in bt_smp_bond.cpp.
-//
-// The delete runs through peer_data_storage, which reports each peer with
-// PM_EVT_PEER_DELETE_SUCCEEDED or _FAILED as it finishes.
-void BtSmpBondErase(void)
-{
-	uint32_t err = pm_peers_delete();
-
-	DEBUG_PRINTF("PDS: clear all peers, pm_peers_delete returned 0x%lX\r\n",
-			   (unsigned long)err);
-}
-
-// pm_init calls smd_init right after sm_init. Everything the dispatcher
-// initialized lives in this module and is set up in sm_init, so this only
-// checks the ordering held.
-uint32_t smd_init(void)
-{
-	return s_bInit ? NRF_SUCCESS : NRF_ERROR_INVALID_STATE;
-}
-
-uint32_t sm_init(void)
-{
-	DEBUG_PRINTF("BM SEC: init\r\n");
-
-	if (s_bInit)
+	if (!s_bInit || pLink == nullptr || BtPeerFindByHdl(ConnHdl) == nullptr)
 	{
 		return NRF_ERROR_INVALID_STATE;
 	}
 
-	if (!BtLescInit())
+	if (!BtSmpPairingAttemptAllowed(ConnHdl, BtSmpMsTick()))
 	{
-		DEBUG_PRINTF("BM SEC: BtLescInit failed\r\n");
-		return NRF_ERROR_INTERNAL;
+		return NRF_ERROR_INVALID_STATE;
 	}
 
-	s_FlagSecProc           = pm_conn_state_user_flag_acquire();
-	s_FlagSecProcPairing    = pm_conn_state_user_flag_acquire();
-	s_FlagSecProcBonding    = pm_conn_state_user_flag_acquire();
-	s_FlagAllowRepairing    = pm_conn_state_user_flag_acquire();
-	s_FlagSecurePendBusy    = pm_conn_state_user_flag_acquire();
-	s_FlagSecureForceRepair = pm_conn_state_user_flag_acquire();
-	s_FlagSecureNullParams  = pm_conn_state_user_flag_acquire();
-	s_FlagReplyPendBusy     = pm_conn_state_user_flag_acquire();
-
-	if (s_FlagReplyPendBusy == PM_CONN_STATE_USER_FLAG_INVALID)
+	uint32_t r = NRF_ERROR_NOT_FOUND;
+	if (IsCentral(ConnHdl) && !ForceRepair)
 	{
-		DEBUG_PRINTF("SEC: could not acquire conn_state user flags; increase "
-				"PM_CONN_STATE_USER_FLAG_COUNT\r\n");
-		return NRF_ERROR_INTERNAL;
-	}
-
-#if defined(CONFIG_PM_RA_PROTECTION)
-	uint32_t r = ast_init();
-	if (r != NRF_SUCCESS)
-	{
-		DEBUG_PRINTF("BM SEC: ast_init failed: 0x%lx\r\n", (unsigned long)r);
-		return r;
-	}
-#endif
-
-	s_bInit = true;
-	DEBUG_PRINTF("BM SEC: init complete\r\n");
-	return NRF_SUCCESS;
-}
-
-void sm_ble_evt_handler(const ble_evt_t *ble_evt)
-{
-	const ble_gap_evt_t *pGapEvt = &ble_evt->evt.gap_evt;
-
-	switch (ble_evt->header.evt_id)
-	{
-	case BLE_GAP_EVT_CONNECTED:
-	{
-		// Connection handles are recycled. Reset the whole per-link record so
-		// no state from a previous connection on this slot (pending reply,
-		// deferred store, key size, peer key) can leak into the new one. The
-		// structural reset here is the invariant; the per-event clears
-		// elsewhere are then belt and braces.
-		BtSecBmLink_t *pLink = LinkGet(pGapEvt->conn_handle);
-		if (pLink != nullptr)
+		BtSmpKeys_t keys;
+		memset(&keys, 0, sizeof(keys));
+		if (BtSmpBondKeysLookup(ConnHdl, 0, 0, &keys) && keys.bValid)
 		{
-			memset(pLink, 0, sizeof(*pLink));
+			LinkSecFromBond(pLink, &keys);
+			r = EncryptFromBond(ConnHdl, &keys);
+			CryptoSecureWipe(&keys, sizeof(keys));
+			if (r == NRF_SUCCESS)
+			{
+				pLink->bSecurePending = false;
+				return r;
+			}
 		}
-		DEBUG_PRINTF("BM SEC: connected hdl=%u role=%u\r\n",
-				(unsigned)pGapEvt->conn_handle,
-				(unsigned)pm_conn_state_role(pGapEvt->conn_handle));
-		break;
+		else
+		{
+			CryptoSecureWipe(&keys, sizeof(keys));
+		}
 	}
 
-	case BLE_GAP_EVT_SEC_PARAMS_REQUEST:
-		SecParamsRequestProcess(pGapEvt);
-		break;
-
-#if defined(CONFIG_SOFTDEVICE_PERIPHERAL)
-	case BLE_GAP_EVT_SEC_INFO_REQUEST:
-		SecInfoRequestProcess(pGapEvt);
-		break;
-#endif
-
-#if defined(CONFIG_SOFTDEVICE_CENTRAL)
-	case BLE_GAP_EVT_SEC_REQUEST:
-		SecRequestProcess(pGapEvt);
-		break;
-#endif
-
-	case BLE_GAP_EVT_AUTH_STATUS:
-		AuthStatusProcess(pGapEvt);
-		break;
-
-	case BLE_GAP_EVT_CONN_SEC_UPDATE:
-		ConnSecUpdateProcess(pGapEvt);
-		break;
-
-	case BLE_GAP_EVT_DISCONNECTED:
-		DisconnectProcess(pGapEvt);
-		break;
-
-	default:
-		break;
-	}
-
-	// LESC key handling: single delivery point into the lesc module. DHKey
-	// computation stays deferred to BtLescRequestHandler, queued by the lesc
-	// module with BtEvtQue.
-	BtLescOnBleEvt(ble_evt);
-
-	PendingPumpsRun();
-}
-
-// security_manager.h and security_dispatcher.h impose C linkage on every
-// declaration they carry, so the sm_* and smd_* definitions above inherit it.
-// This one is not in any header. peer_database.c reaches it through a local
-// extern, so the linkage has to be stated here or the definition is mangled
-// and the C caller does not find it.
-extern "C" void sm_pdb_evt_handler(struct pm_evt *event)
-{
-	switch (event->evt_id)
+	r = sd_ble_gap_authenticate(ConnHdl, &s_SecParams);
+	if (r == NRF_ERROR_NO_MEM || r == NRF_ERROR_BUSY)
 	{
-	case PM_EVT_FLASH_GARBAGE_COLLECTED:
-	case PM_EVT_PEER_DATA_UPDATE_SUCCEEDED:
-	case PM_EVT_PEER_DATA_UPDATE_FAILED:
-	case PM_EVT_PEER_DELETE_SUCCEEDED:
-	case PM_EVT_PEER_DELETE_FAILED:
-		// Storage capacity may have changed; retry pending work.
-		PendingPumpsRun();
-		break;
-
-	default:
-		break;
+		pLink->bSecurePending = true;
+		pLink->bForceRepair = ForceRepair;
+		return NRF_ERROR_BUSY;
 	}
-}
-
-// IOsonata extensions beyond the stock sm ABI.
-void BtSecBmScOnlySet(bool bEnable)
-{
-	s_bScOnly = bEnable;
-}
-
-void BtSecBmMinKeySizeSet(uint8_t Size)
-{
-	if (Size >= 7 && Size <= 16)
+	pLink->bSecurePending = false;
+	if (r == NRF_SUCCESS && IsCentral(ConnHdl))
 	{
-		s_MinKeySize = Size;
-	}
-}
-
-uint32_t sm_sec_params_set(ble_gap_sec_params_t *sec_params)
-{
-	if (sec_params == NULL)
-	{
-		s_pSecParams = NULL;
-	}
-	else
-	{
-		s_SecParams  = *sec_params;
-		s_pSecParams = &s_SecParams;
-	}
-	return NRF_SUCCESS;
-}
-
-uint32_t sm_sec_params_reply(uint16_t conn_handle, ble_gap_sec_params_t *sec_params,
-							 const void *context)
-{
-	if (context == NULL)
-	{
-		return NRF_ERROR_NULL;
-	}
-
-	SecParamsReplyCtx_t *pCtx = (SecParamsReplyCtx_t *)context;
-
-	if (sec_params == NULL)
-	{
-		pCtx->pSecParams = NULL;			// reject pairing
-	}
-	else
-	{
-		pCtx->SecParamsMem = *sec_params;
-		pCtx->pSecParams   = &pCtx->SecParamsMem;
-	}
-	pCtx->bReplyCalled = true;
-
-	uint32_t r = ReplyAttempt(conn_handle, pCtx->pSecParams);
-	if (r == NRF_ERROR_BUSY)
-	{
-		r = NRF_SUCCESS;	// retried by the pending pump
+		pLink->bPairing = true;
+		pLink->bBonding = s_SecParams.bond != 0;
 	}
 	return r;
 }
 
-void sm_conn_sec_config_reply(uint16_t conn_handle, struct pm_conn_sec_config *conn_sec_config)
+static void SecRequestProcess(const ble_gap_evt_t *pGapEvt)
 {
-	if (conn_sec_config != NULL)
+	if (SecRequestSatisfied(pGapEvt->conn_handle, &pGapEvt->params.sec_request))
 	{
-		pm_conn_state_user_flag_set(conn_handle, s_FlagAllowRepairing,
-									conn_sec_config->allow_repairing);
+		return;
+	}
+	(void)BtSecBmSecure(pGapEvt->conn_handle, true);
+}
+
+void BtSecBmBleEvt(const ble_evt_t *pEvt)
+{
+	if (!s_bInit || pEvt == nullptr)
+	{
+		return;
+	}
+
+	const ble_gap_evt_t *pGapEvt = &pEvt->evt.gap_evt;
+	switch (pEvt->header.evt_id)
+	{
+		case BLE_GAP_EVT_CONNECTED:
+			LinkReset(pGapEvt->conn_handle);
+			ConnSecClear(pGapEvt->conn_handle);
+			break;
+
+		case BLE_GAP_EVT_SEC_PARAMS_REQUEST:
+			ParamsRequestProcess(pGapEvt);
+			break;
+
+		case BLE_GAP_EVT_SEC_INFO_REQUEST:
+			SecInfoRequestProcess(pGapEvt);
+			break;
+
+		case BLE_GAP_EVT_SEC_REQUEST:
+			SecRequestProcess(pGapEvt);
+			break;
+
+		case BLE_GAP_EVT_AUTH_STATUS:
+			AuthStatusProcess(pGapEvt);
+			break;
+
+		case BLE_GAP_EVT_CONN_SEC_UPDATE:
+			ConnSecUpdate(pGapEvt->conn_handle,
+				&pGapEvt->params.conn_sec_update.conn_sec);
+			break;
+
+		case BLE_GAP_EVT_DISCONNECTED:
+			ConnSecClear(pGapEvt->conn_handle);
+			LinkReset(pGapEvt->conn_handle);
+			if (s_bIdentitySyncPending)
+			{
+				uint32_t r = SoftDeviceIdentitySync();
+				s_bIdentitySyncPending = r != NRF_SUCCESS;
+			}
+			break;
+
+		default:
+			break;
+	}
+
+	// Single delivery point for the SoftDevice LESC helper. It owns the P-256
+	// private-key lifetime and regenerates after every completed or aborted
+	// pairing procedure.
+	BtLescOnBleEvt(pEvt);
+}
+
+static void BtSecBmAuthConfigApply(void)
+{
+	if (!s_bAuthCfgSet)
+	{
+		return;
+	}
+	s_SecParams.io_caps = s_AuthIoCaps;
+	s_SecParams.bond = (s_AuthReq & BT_SMP_AUTHREQ_BONDING_FLAG_MASK) !=
+		BT_SMP_AUTHREQ_BONDING_FLAG_NO_BONDING;
+	s_SecParams.mitm = (s_AuthReq & BT_SMP_AUTHREQ_MITM) != 0;
+	s_SecParams.keypress = (s_AuthReq & BT_SMP_AUTHREQ_KEYPRESS) != 0;
+
+	// The portable IOsonata SMP API selects Secure Connections. A caller that
+	// needs legacy fallback stays on the port's initial SecType configuration.
+	s_SecParams.lesc = 1;
+	s_bScOnly = true;
+	s_bScOnlyCfgSet = true;
+}
+
+void BtSecBmAuthConfig(uint8_t IoCaps, uint8_t AuthReq)
+{
+	if (IoCaps > BT_SMP_IOCAPS_KEYBOARD_DISPLAY)
+	{
+		return;
+	}
+	s_AuthIoCaps = IoCaps;
+	s_AuthReq = AuthReq;
+	s_bAuthCfgSet = true;
+	BtSecBmAuthConfigApply();
+}
+
+void BtSecBmOobSet(bool Enable)
+{
+	s_bOobCfg = Enable;
+	s_bOobCfgSet = true;
+	s_SecParams.oob = Enable ? 1 : 0;
+}
+
+void BtSecBmScOnlySet(bool Enable)
+{
+	s_bScOnly = Enable;
+	s_bScOnlyCfgSet = true;
+	if (Enable)
+	{
+		s_SecParams.lesc = 1;
 	}
 }
 
-uint32_t sm_lesc_public_key_set(ble_gap_lesc_p256_pk_t *public_key)
+void BtSecBmMinKeySizeSet(uint8_t Size)
 {
-	// The LESC key pair is owned by the lesc module; an externally supplied
-	// key is not supported.
-	(void)public_key;
-	return NRF_ERROR_FORBIDDEN;
+	if (Size >= BT_SMP_MIN_ENC_KEY_SIZE && Size <= BT_SMP_MAX_ENC_KEY_SIZE)
+	{
+		s_MinKeySize = Size;
+		s_bMinKeyCfgSet = true;
+		s_SecParams.min_key_size = Size;
+	}
 }
 
-uint32_t sm_conn_sec_status_get(uint16_t conn_handle, struct pm_conn_sec_status *conn_sec_status)
+void BtSecBmCheckStatus(void)
 {
-	if (conn_sec_status == NULL)
+	if (!s_bInit)
 	{
-		return NRF_ERROR_NULL;
+		return;
+	}
+	if (s_bIdentitySyncPending && !BtPeerIsConnected())
+	{
+		uint32_t r = SoftDeviceIdentitySync();
+		s_bIdentitySyncPending = r != NRF_SUCCESS;
 	}
 
-	uint8_t role = pm_conn_state_role(conn_handle);
-	if (role == BLE_GAP_ROLE_INVALID)
+	for (uint16_t i = 0; i < BtPeerCount(); i++)
 	{
-		return BLE_ERROR_INVALID_CONN_HANDLE;
-	}
-
-	uint16_t peerId = im_peer_id_get_by_conn_handle(conn_handle);
-
-	memset(conn_sec_status, 0, sizeof(*conn_sec_status));
-	conn_sec_status->connected      = true;
-	conn_sec_status->encrypted      = pm_conn_state_encrypted(conn_handle);
-	conn_sec_status->mitm_protected = pm_conn_state_mitm_protected(conn_handle);
-	conn_sec_status->bonded         = (peerId != PM_PEER_ID_INVALID);
-	conn_sec_status->lesc           = pm_conn_state_lesc(conn_handle);
-
-	if (!conn_sec_status->lesc && peerId != PM_PEER_ID_INVALID &&
-		conn_sec_status->encrypted)
-	{
-		// Encrypted from a stored LESC bond: the link flag only reflects a
-		// live pairing, so consult the bond record.
-		struct pm_peer_data_bonding bondData;
-		struct pm_peer_data peerData;
-		const uint32_t bufSize = sizeof(bondData);
-
-		memset(&bondData, 0, sizeof(bondData));
-		peerData.bonding_data = &bondData;
-
-		if (pds_peer_data_read(peerId, PM_PEER_DATA_ID_BONDING,
-							   &peerData, &bufSize) == NRF_SUCCESS)
+		BtDevice_t *pPeer = BtPeerSlot(i);
+		if (pPeer == nullptr || pPeer->Conn.Hdl == BT_CONN_HDL_INVALID)
 		{
-			conn_sec_status->lesc = bondData.own_ltk.enc_info.lesc;
+			continue;
+		}
+		uint16_t h = pPeer->Conn.Hdl;
+		BtSecBmLink_t *pLink = LinkGet(h);
+		if (pLink == nullptr)
+		{
+			continue;
+		}
+		if (pLink->bReplyPending)
+		{
+			const ble_gap_sec_params_t *p = pLink->bReplyReject ?
+				nullptr : &pLink->ReplyParams;
+			(void)ParamsReplyAttempt(h, p);
+		}
+		if (pLink->bSecurePending)
+		{
+			(void)BtSecBmSecure(h, pLink->bForceRepair);
 		}
 	}
 
-	return NRF_SUCCESS;
+	if (s_bBondStore)
+	{
+		BtSmpBondNvmCheckStatus();
+
+		// nRF54's GRTC is free-running under the SoftDevice; this port does
+		// not own a periodic compare interrupt. Advance storage retry backoff
+		// from the status hook only when a real second elapsed.
+		uint32_t now = BtSmpMsTick();
+		if ((uint32_t)(now - s_LastBondPoll) >= 1000U)
+		{
+			s_LastBondPoll = now;
+			BtSmpBondNvmPoll();
+		}
+	}
 }
 
-bool sm_sec_is_sufficient(uint16_t conn_handle, struct pm_conn_sec_status *sec_status_req)
+void BtSecBmPoll(void)
 {
-	struct pm_conn_sec_status status;
+	if (s_bBondStore)
+	{
+		s_LastBondPoll = BtSmpMsTick();
+		BtSmpBondNvmPoll();
+	}
+}
 
-	if (sm_conn_sec_status_get(conn_handle, &status) != NRF_SUCCESS)
+bool BtSecBmInit(const ble_gap_sec_params_t *pParams)
+{
+	if (s_bInit)
+	{
+		return true;
+	}
+	if (pParams == nullptr)
 	{
 		return false;
 	}
 
-	return (!sec_status_req->connected      || status.connected) &&
-		   (!sec_status_req->encrypted      || status.encrypted) &&
-		   (!sec_status_req->mitm_protected || status.mitm_protected) &&
-		   (!sec_status_req->bonded         || status.bonded) &&
-		   (!sec_status_req->lesc           || status.lesc);
-}
-
-uint32_t sm_link_secure(uint16_t conn_handle, bool force_repairing)
-{
-	if (!s_bInit)
+	memset(s_Links, 0, sizeof(s_Links));
+	s_SecParams = *pParams;
+	if (!s_bMinKeyCfgSet)
 	{
-		return NRF_ERROR_INVALID_STATE;
+		s_MinKeySize = pParams->min_key_size >= BT_SMP_MIN_ENC_KEY_SIZE ?
+			pParams->min_key_size : BT_SMP_MIN_ENC_KEY_SIZE;
 	}
-	return LinkSecure(conn_handle, s_pSecParams == NULL, force_repairing, false);
+	s_SecParams.min_key_size = s_MinKeySize;
+	if (!s_bScOnlyCfgSet)
+	{
+		s_bScOnly = pParams->lesc != 0;
+	}
+	BtSecBmAuthConfigApply();
+	if (s_bOobCfgSet)
+	{
+		s_SecParams.oob = s_bOobCfg ? 1 : 0;
+	}
+
+	if (!BtLescInit())
+	{
+		DEBUG_PRINTF("SEC: BtLescInit failed\r\n");
+		return false;
+	}
+
+	// One portable bond format/store for SoftDevice and SDC. The nRF52 Nvm
+	// interface submits flash operations through sd_flash_* while a SoftDevice
+	// owns the controller, so no FDS/Peer Manager arbitration is needed.
+	int r = BtSmpBondNvmInit();
+	if (r != 0)
+	{
+		DEBUG_PRINTF("SEC: bond store init failed %d\r\n", r);
+		return false;
+	}
+	uint32_t identityStatus = SoftDeviceIdentitySync();
+	if (identityStatus != NRF_SUCCESS)
+	{
+		DEBUG_PRINTF("SEC: identity sync failed 0x%X\r\n",
+			(unsigned)identityStatus);
+		s_bIdentitySyncPending = true;
+	}
+	else
+	{
+		s_bIdentitySyncPending = false;
+	}
+
+	s_bBondStore = true;
+	s_LastBondPoll = BtSmpMsTick();
+	s_bInit = true;
+	return true;
 }
