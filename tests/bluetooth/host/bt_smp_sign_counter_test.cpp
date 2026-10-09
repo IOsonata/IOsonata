@@ -276,6 +276,65 @@ void TestResolvedIdentityLookup()
 								sizeof(restored.Ltk)) == 0);
 }
 
+void TestRepeatedAttemptBackoff()
+{
+	ResetHarness(true);
+	BtSmpPairingAttemptSucceeded(kConnHdl);
+
+	BT_CHECK(s_Test, BtSmpPairingAttemptAllowed(kConnHdl, 100U));
+	BtSmpPairingAttemptFailed(kConnHdl, 100U);
+	BT_CHECK(s_Test, !BtSmpPairingAttemptAllowed(kConnHdl, 1099U));
+	BT_CHECK(s_Test, BtSmpPairingAttemptAllowed(kConnHdl, 1100U));
+
+	BtSmpPairingAttemptFailed(kConnHdl, 1100U);
+	BT_CHECK(s_Test, !BtSmpPairingAttemptAllowed(kConnHdl, 3099U));
+	BT_CHECK(s_Test, BtSmpPairingAttemptAllowed(kConnHdl, 3100U));
+
+	BtSmpPairingAttemptFailed(kConnHdl, 4000U);
+	BT_CHECK(s_Test, !BtSmpPairingAttemptAllowed(kConnHdl, 7999U));
+	BtSmpPairingAttemptSucceeded(kConnHdl);
+	BT_CHECK(s_Test, BtSmpPairingAttemptAllowed(kConnHdl, 4001U));
+}
+
+void TestRepeatedAttemptDecay()
+{
+	ResetHarness(true);
+	BtSmpPairingAttemptSucceeded(kConnHdl);
+
+	BtSmpPairingAttemptFailed(kConnHdl, 100U);
+	BtSmpPairingAttemptFailed(kConnHdl, 1100U);
+
+	uint32_t quiet = 1100U + BT_SMP_REPEAT_DECAY_MS;
+	BT_CHECK(s_Test, BtSmpPairingAttemptAllowed(kConnHdl, quiet));
+	BtSmpPairingAttemptFailed(kConnHdl, quiet);
+	BT_CHECK(s_Test, !BtSmpPairingAttemptAllowed(kConnHdl, quiet + 1999U));
+	BT_CHECK(s_Test, BtSmpPairingAttemptAllowed(kConnHdl, quiet + 2000U));
+
+	BtSmpPairingAttemptSucceeded(kConnHdl);
+}
+
+void TestRepeatedAttemptTableDoesNotGloballyLock()
+{
+	ResetHarness(true);
+
+	for (unsigned n = 0; n < BT_SMP_REPEAT_TRACK_MAX + 2U; ++n)
+	{
+		for (unsigned i = 0; i < sizeof(s_Peer.Conn.PeerAddr); ++i)
+		{
+			s_Peer.Conn.PeerAddr[i] = static_cast<uint8_t>(n * 17U + i + 1U);
+		}
+		BT_CHECK(s_Test, BtSmpPairingAttemptAllowed(kConnHdl, 100U + n));
+		BtSmpPairingAttemptFailed(kConnHdl, 100U + n);
+	}
+
+	for (unsigned i = 0; i < sizeof(s_Peer.Conn.PeerAddr); ++i)
+	{
+		s_Peer.Conn.PeerAddr[i] = static_cast<uint8_t>(0xD0U + i);
+	}
+	BT_CHECK(s_Test, BtSmpPairingAttemptAllowed(kConnHdl, 500U));
+	BtSmpPairingAttemptSucceeded(kConnHdl);
+}
+
 } // namespace
 
 extern "C" {
@@ -359,5 +418,11 @@ int main()
 			   TestVersionOneRetiresUncertainCsrk);
 	s_Test.Run("resolved identity finds restored bond",
 			   TestResolvedIdentityLookup);
+	s_Test.Run("repeated attempts back off exponentially",
+			   TestRepeatedAttemptBackoff);
+	s_Test.Run("repeated-attempt penalty decays",
+			   TestRepeatedAttemptDecay);
+	s_Test.Run("repeated-attempt table is not a global lock",
+			   TestRepeatedAttemptTableDoesNotGloballyLock);
 	return s_Test.Finish();
 }

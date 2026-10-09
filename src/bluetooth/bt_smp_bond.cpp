@@ -600,10 +600,6 @@ typedef struct __Bt_Smp_Repeat_Entry {
 } BtSmpRepeatEntry_t;
 
 static BtSmpRepeatEntry_t s_BtSmpRepeat[BT_SMP_REPEAT_TRACK_MAX];
-// Fail-closed overflow bucket. If every identity slot has an active penalty,
-// address churn gets one shared exponentially growing backoff instead of an
-// untracked path with unlimited attempts.
-static BtSmpRepeatEntry_t s_BtSmpRepeatOverflow;
 
 static bool BtSmpTimeBefore(uint32_t Now, uint32_t Deadline)
 {
@@ -741,9 +737,7 @@ bool BtSmpPairingAttemptAllowed(uint16_t ConnHdl, uint32_t Now)
 	}
 	else
 	{
-		BtSmpRepeatDecay(&s_BtSmpRepeatOverflow, Now);
-		allowed = !s_BtSmpRepeatOverflow.InUse ||
-			!BtSmpTimeBefore(Now, s_BtSmpRepeatOverflow.NextAllowed);
+		allowed = true;
 	}
 	BtSmpBondTableExit(state);
 	return allowed;
@@ -763,8 +757,10 @@ void BtSmpPairingAttemptFailed(uint16_t ConnHdl, uint32_t Now)
 	int i = BtSmpRepeatFind(type, addr);
 	if (i < 0)
 	{
-		// Reuse only a slot whose active wait has elapsed. Among those choose
-		// the oldest claimant. Active identity penalties are never evicted.
+		// Prefer a free slot. When the bounded table is full, replace the
+		// claimant whose last failure is oldest. The Core rule is scoped to a
+		// device claiming the same identity; a peer presenting a different
+		// identity must not globally lock out unrelated devices.
 		uint32_t oldestAge = 0;
 		int victim = -1;
 		for (int n = 0; n < BT_SMP_REPEAT_TRACK_MAX; n++)
@@ -774,28 +770,12 @@ void BtSmpPairingAttemptFailed(uint16_t ConnHdl, uint32_t Now)
 				victim = n;
 				break;
 			}
-			BtSmpRepeatDecay(&s_BtSmpRepeat[n], Now);
-			if (!BtSmpTimeBefore(Now, s_BtSmpRepeat[n].NextAllowed))
+			uint32_t age = Now - s_BtSmpRepeat[n].LastFailure;
+			if (victim < 0 || age > oldestAge)
 			{
-				uint32_t age = Now - s_BtSmpRepeat[n].LastFailure;
-				if (victim < 0 || age > oldestAge)
-				{
-					victim = n;
-					oldestAge = age;
-				}
+				victim = n;
+				oldestAge = age;
 			}
-		}
-
-		if (victim < 0)
-		{
-			if (!s_BtSmpRepeatOverflow.InUse)
-			{
-				memset(&s_BtSmpRepeatOverflow, 0, sizeof(s_BtSmpRepeatOverflow));
-				s_BtSmpRepeatOverflow.InUse = true;
-			}
-			BtSmpRepeatRecordFailure(&s_BtSmpRepeatOverflow, Now);
-			BtSmpBondTableExit(state);
-			return;
 		}
 
 		i = victim;
