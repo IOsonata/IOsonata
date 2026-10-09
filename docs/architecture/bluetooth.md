@@ -130,10 +130,13 @@ Header macros applied only to an application do not resize arrays already
 compiled into the MCU library. Rebuild both sides after ABI/layout changes.
 
 Bond persistence is separate from successful pairing. The generic bond layer
-has serialization and save/load hooks; the optional PDS adapter defers writes
-through `BtEvtQue()` and retries failures from the port timer. Continue
-processing deferred work before expecting a saved bond to survive reset.
-Vendor-host persistence uses the storage implementation supplied by that port.
+has serialization and save/load hooks; the PDS adapter defers writes through
+`BtEvtQue()` and retries failures from the port timer. Nordic SDC and Nordic
+SoftDevice ports use this same IOsonata bond table and PDS/NVM persistence;
+the SoftDevice remains responsible for its on-air SMP procedure but does not
+own the peer database. Other vendor-host ports may provide their own storage
+adapter. Continue processing deferred work before expecting a saved bond to
+survive reset.
 
 ## Events and scheduling
 

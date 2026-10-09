@@ -211,10 +211,13 @@ port's security adapter; the generic SMP engine is not the pairing engine
 inside a Nordic SoftDevice.
 
 A successful pairing does not alone prove that a bond survives reset.
-Generic SMP has an in-memory bond store and persistence hooks. The optional
-[bt_smp_bond_nvm.cpp](../src/bluetooth/bt_smp_bond_nvm.cpp) adapter uses PDS and
-`BtSmpBondNvmInit()`; follow the selected application's link/startup setup.
-SoftDevice ports use their vendor persistence path.
+IOsonata uses one portable bond table and persistence format for the generic
+SMP host and the Nordic SoftDevice ports. The
+[bt_smp_bond_nvm.cpp](../src/bluetooth/bt_smp_bond_nvm.cpp) adapter stores that
+table through PDS on an `Nvm`; the selected linker script must reserve the
+configured NVM region and the port calls `BtSmpBondNvmInit()` when security is
+enabled. Nordic SoftDevice builds do not use Peer Manager, FDS or
+`auth_status_tracker` for Bluetooth security persistence.
 
 Validate reconnect both before and after power cycling, and exercise storage
 failure and bond deletion. Keep bond storage separate from firmware and any
