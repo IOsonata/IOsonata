@@ -22,7 +22,6 @@ MEMORY
 {
 	FLASH (rx)	: ORIGIN = __dfu_slot0_start, LENGTH = __dfu_slot0_end - __dfu_slot0_start
 	NVM0 (rw)	: ORIGIN = __dfu_nvm0_start, LENGTH = __dfu_nvm_size
-	NVM1 (rw)	: ORIGIN = __dfu_nvm1_start, LENGTH = __dfu_nvm_size
 	RAM (rwx)	: ORIGIN = 0x20004000, LENGTH = __dfu_flag - 0x20004000
 }
 
@@ -36,13 +35,6 @@ SECTIONS
 		__stop_nvm0 = .;
 	} > NVM0
 
-	nvm1 (NOLOAD) :
-	{
-		__start_nvm1 = .;
-		KEEP(*(nvm1))
-		. = ORIGIN(NVM1) + LENGTH(NVM1);
-		__stop_nvm1 = .;
-	} > NVM1
 }
 
 SECTIONS
