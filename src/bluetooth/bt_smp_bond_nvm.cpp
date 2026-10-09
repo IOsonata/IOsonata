@@ -350,9 +350,9 @@ void BtSmpBondLoad(void)
 	for (int s = 0; s < slots; s++)
 	{
 		ssize_t n = BtPdsRead(BT_SMP_BOND_KEY_BASE + (uint32_t)s, blob, rsz);
-		if (n == (ssize_t)rsz)
+		if (n > 0 && BtSmpBondRecordSizeValid((size_t)n))
 		{
-			BtSmpBondRestore(s, blob, rsz);
+			BtSmpBondRestore(s, blob, (size_t)n);
 			found++;
 		}
 		else if (n != -ENOENT)

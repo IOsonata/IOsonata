@@ -75,8 +75,44 @@ SOFTWARE.
 #endif
 
 #define BT_SMP_BOND_RECORD_MAGIC		0x424D5053U	// "SMPB" little-endian
-#define BT_SMP_BOND_RECORD_VERSION_OLD	1U
-#define BT_SMP_BOND_RECORD_VERSION		2U
+#define BT_SMP_BOND_RECORD_VERSION_V1	1U
+#define BT_SMP_BOND_RECORD_VERSION_V2	2U
+#define BT_SMP_BOND_RECORD_VERSION		3U
+
+// Versions 1 and 2 predate the second legacy LTK direction. Keep their exact
+// target-ABI layout here so an installed 0.13 prerelease can migrate its bond
+// records instead of forcing every peer to pair again.
+typedef struct __Bt_Smp_Keys_V2 {
+	uint8_t  Ltk[16];
+	uint8_t  Irk[16];
+	uint8_t  Csrk[16];
+	uint64_t Rand;
+	uint16_t Ediv;
+	uint8_t  EncKeySize;
+	uint8_t  IdAddrType;
+	uint8_t  IdAddr[6];
+	bool     bAuthenticated;
+	bool     bSc;
+	bool     bValid;
+} BtSmpKeysV2_t;
+
+typedef struct __Bt_Smp_Bond_V2 {
+	bool		bValid;
+	uint8_t		PeerAddrType;
+	uint8_t		PeerAddr[6];
+	BtSmpKeysV2_t Keys;
+	uint8_t		NbCccd;
+	BtGattCccdState_t Cccd[BT_GATT_CCCD_STATE_MAX];
+	uint32_t	SignCounter;
+} BtSmpBondV2_t;
+
+typedef struct __Bt_Smp_Bond_Record_V2 {
+	uint32_t	Magic;
+	uint16_t	Version;
+	uint16_t	Length;
+	uint32_t	Crc;
+	BtSmpBondV2_t Bond;
+} BtSmpBondRecordV2_t;
 
 typedef struct __Bt_Smp_Bond {
 	bool		bValid;			//!< Slot in use
@@ -251,6 +287,12 @@ size_t BtSmpBondRecordSize(void)
 	return sizeof(BtSmpBondRecord_t);
 }
 
+bool BtSmpBondRecordSizeValid(size_t Len)
+{
+	return Len == sizeof(BtSmpBondRecord_t) ||
+		   Len == sizeof(BtSmpBondRecordV2_t);
+}
+
 // Build one coherent slot image. The deferred persistence path can run from a
 // different context than the Bluetooth event that changes the slot. On Arm,
 // the short copy window masks interrupts; host tests use an atomic flag. CRC
@@ -396,42 +438,104 @@ static bool BtSmpBondFieldsValid(const BtSmpBond_t *p)
 		p->Keys.EncKeySize <= BT_SMP_MAX_ENC_KEY_SIZE;
 }
 
+static bool BtSmpBondFieldsV2Valid(const BtSmpBondV2_t *p)
+{
+	return p != nullptr && p->bValid && p->Keys.bValid &&
+		p->NbCccd <= BT_GATT_CCCD_STATE_MAX &&
+		p->PeerAddrType <= BTADDR_TYPE_RANDOM_STATIC &&
+		p->Keys.EncKeySize >= BT_SMP_CFG_MIN_ENC_KEY_SIZE &&
+		p->Keys.EncKeySize <= BT_SMP_MAX_ENC_KEY_SIZE;
+}
+
+static void BtSmpBondV2Convert(BtSmpBond_t *pDst, const BtSmpBondV2_t *pSrc)
+{
+	memset(pDst, 0, sizeof(*pDst));
+	pDst->bValid = pSrc->bValid;
+	pDst->PeerAddrType = pSrc->PeerAddrType;
+	memcpy(pDst->PeerAddr, pSrc->PeerAddr, sizeof(pDst->PeerAddr));
+	memcpy(pDst->Keys.Ltk, pSrc->Keys.Ltk, sizeof(pDst->Keys.Ltk));
+	memcpy(pDst->Keys.Irk, pSrc->Keys.Irk, sizeof(pDst->Keys.Irk));
+	memcpy(pDst->Keys.Csrk, pSrc->Keys.Csrk, sizeof(pDst->Keys.Csrk));
+	pDst->Keys.Rand = pSrc->Keys.Rand;
+	pDst->Keys.Ediv = pSrc->Keys.Ediv;
+	pDst->Keys.EncKeySize = pSrc->Keys.EncKeySize;
+	pDst->Keys.IdAddrType = pSrc->Keys.IdAddrType;
+	memcpy(pDst->Keys.IdAddr, pSrc->Keys.IdAddr, sizeof(pDst->Keys.IdAddr));
+	pDst->Keys.bAuthenticated = pSrc->Keys.bAuthenticated;
+	pDst->Keys.bSc = pSrc->Keys.bSc;
+	pDst->Keys.bValid = pSrc->Keys.bValid;
+	pDst->NbCccd = pSrc->NbCccd;
+	memcpy(pDst->Cccd, pSrc->Cccd, sizeof(pDst->Cccd));
+	pDst->SignCounter = pSrc->SignCounter;
+}
+
 void BtSmpBondRestore(int Slot, const void *pBond, size_t Len)
 {
 	if (Slot < 0 || Slot >= BT_SMP_BOND_MAX || pBond == nullptr ||
-		Len != sizeof(BtSmpBondRecord_t))
+		!BtSmpBondRecordSizeValid(Len))
 	{
 		return;
 	}
 
 	BtSmpBondTableAttach();
 
-	BtSmpBondRecord_t record;
-	memcpy(&record, pBond, sizeof(record));
-	uint32_t savedCrc = record.Crc;
-	record.Crc = 0U;
-	bool versionValid = record.Version == BT_SMP_BOND_RECORD_VERSION ||
-		record.Version == BT_SMP_BOND_RECORD_VERSION_OLD;
-	bool valid = record.Magic == BT_SMP_BOND_RECORD_MAGIC && versionValid &&
-		record.Length == sizeof(record) &&
-		savedCrc == BtSmpBondCrc32(&record, sizeof(record)) &&
-		BtSmpBondFieldsValid(&record.Bond);
-	bool migrate = valid && record.Version == BT_SMP_BOND_RECORD_VERSION_OLD;
-	bool persist = false;
+	BtSmpBond_t restored;
+	memset(&restored, 0, sizeof(restored));
+	bool valid = false;
+	bool migrate = false;
+	bool retireCsrk = false;
 
+	if (Len == sizeof(BtSmpBondRecord_t))
+	{
+		BtSmpBondRecord_t record;
+		memcpy(&record, pBond, sizeof(record));
+		uint32_t savedCrc = record.Crc;
+		record.Crc = 0U;
+		valid = record.Magic == BT_SMP_BOND_RECORD_MAGIC &&
+			record.Version == BT_SMP_BOND_RECORD_VERSION &&
+			record.Length == sizeof(record) &&
+			savedCrc == BtSmpBondCrc32(&record, sizeof(record)) &&
+			BtSmpBondFieldsValid(&record.Bond);
+		if (valid)
+		{
+			restored = record.Bond;
+		}
+		CryptoSecureWipe(&record, sizeof(record));
+	}
+	else
+	{
+		BtSmpBondRecordV2_t record;
+		memcpy(&record, pBond, sizeof(record));
+		uint32_t savedCrc = record.Crc;
+		record.Crc = 0U;
+		bool oldVersion = record.Version == BT_SMP_BOND_RECORD_VERSION_V1 ||
+			record.Version == BT_SMP_BOND_RECORD_VERSION_V2;
+		valid = record.Magic == BT_SMP_BOND_RECORD_MAGIC && oldVersion &&
+			record.Length == sizeof(record) &&
+			savedCrc == BtSmpBondCrc32(&record, sizeof(record)) &&
+			BtSmpBondFieldsV2Valid(&record.Bond);
+		if (valid)
+		{
+			BtSmpBondV2Convert(&restored, &record.Bond);
+			migrate = true;
+			retireCsrk = record.Version == BT_SMP_BOND_RECORD_VERSION_V1;
+		}
+		CryptoSecureWipe(&record, sizeof(record));
+	}
+
+	bool persist = false;
 	uint32_t state = BtSmpBondTableEnter();
 	memset(&s_pBtSmpBondTable[Slot], 0, sizeof(s_pBtSmpBondTable[Slot]));
 	BtSmpSignStateReset(Slot, 0U, 0U);
 
 	if (valid)
 	{
-		memcpy(&s_pBtSmpBondTable[Slot], &record.Bond, sizeof(record.Bond));
+		memcpy(&s_pBtSmpBondTable[Slot], &restored, sizeof(restored));
 
-		if (migrate)
+		if (retireCsrk)
 		{
 			CryptoSecureWipe(s_pBtSmpBondTable[Slot].Keys.Csrk, 16);
 			s_pBtSmpBondTable[Slot].SignCounter = 0U;
-			persist = true;
 		}
 		else
 		{
@@ -439,10 +543,10 @@ void BtSmpBondRestore(int Slot, const void *pBond, size_t Len)
 			BtSmpSignStateReset(Slot, high, high);
 			persist = BtSmpSignCounterPrepare(Slot);
 		}
+		persist = persist || migrate;
 	}
 	BtSmpBondTableExit(state);
-
-	CryptoSecureWipe(&record, sizeof(record));
+	CryptoSecureWipe(&restored, sizeof(restored));
 
 	if (persist)
 	{
@@ -564,12 +668,15 @@ static int BtSmpBondFind(uint16_t ConnHdl, uint64_t Rand, uint16_t Ediv)
 
 	if (Ediv != 0U || Rand != 0U)
 	{
+		// A controller LTK request names the LTK this device distributed
+		// while it was the peripheral. The peer-distributed tuple is used
+		// when this device later acts as the central and starts encryption.
 		for (int i = 0; i < BT_SMP_BOND_MAX; i++)
 		{
 			if (s_pBtSmpBondTable[i].bValid &&
 				!s_pBtSmpBondTable[i].Keys.bSc &&
-				s_pBtSmpBondTable[i].Keys.Ediv == Ediv &&
-				s_pBtSmpBondTable[i].Keys.Rand == Rand)
+				s_pBtSmpBondTable[i].Keys.LocalEdiv == Ediv &&
+				s_pBtSmpBondTable[i].Keys.LocalRand == Rand)
 			{
 				return i;
 			}
@@ -1031,7 +1138,14 @@ bool BtSmpBondLtkLookup(uint16_t ConnHdl, uint64_t Rand,
 	bool found = BtSmpBondKeysLookup(ConnHdl, Rand, Ediv, &keys);
 	if (found)
 	{
-		memcpy(Ltk, keys.Ltk, 16);
+		if (Ediv != 0U || Rand != 0U)
+		{
+			memcpy(Ltk, keys.LocalLtk, 16);
+		}
+		else
+		{
+			memcpy(Ltk, keys.Ltk, 16);
+		}
 	}
 	else
 	{

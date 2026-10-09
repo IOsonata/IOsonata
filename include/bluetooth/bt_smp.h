@@ -210,11 +210,14 @@ typedef enum __Bt_Smp_State {
 /// Per-link security key material. For bonded peers it is the record the
 /// application persists and reloads on reconnect.
 typedef struct __Bt_Smp_Keys {
-	uint8_t  Ltk[16];				//!< Long Term Key
+	uint8_t  Ltk[16];				//!< Peer-distributed legacy LTK; for SC, the shared derived LTK
 	uint8_t  Irk[16];				//!< Identity Resolving Key (peer)
 	uint8_t  Csrk[16];				//!< Connection Signature Resolving Key (peer)
-	uint64_t Rand;					//!< LTK Rand (legacy; 0 for SC)
-	uint16_t Ediv;					//!< LTK EDIV (legacy; 0 for SC)
+	uint64_t Rand;					//!< Peer-distributed LTK Rand (legacy; 0 for SC)
+	uint16_t Ediv;					//!< Peer-distributed LTK EDIV (legacy; 0 for SC)
+	uint8_t  LocalLtk[16];			//!< LTK distributed by this device for legacy role reversal
+	uint64_t LocalRand;				//!< Local-distributed LTK Rand (legacy only)
+	uint16_t LocalEdiv;				//!< Local-distributed LTK EDIV (legacy only)
 	uint8_t  EncKeySize;			//!< Negotiated encryption key size, bytes
 	uint8_t  IdAddrType;			//!< Peer identity address type
 	uint8_t  IdAddr[6];				//!< Peer identity address
@@ -757,6 +760,7 @@ void BtSmpBondErase(void);
  */
 int    BtSmpBondSlotCount(void);
 size_t BtSmpBondRecordSize(void);
+bool   BtSmpBondRecordSizeValid(size_t Len);
 void   BtSmpBondRestore(int Slot, const void *pBond, size_t Len);
 size_t BtSmpBondSerialize(int Slot, void *pBuff, size_t BuffLen);
 

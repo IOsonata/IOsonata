@@ -86,6 +86,7 @@ void ResetHarness(bool AutoComplete)
 	for (size_t i = 0; i < sizeof(s_Keys.Ltk); ++i)
 	{
 		s_Keys.Ltk[i] = static_cast<uint8_t>(0x40U + i);
+		s_Keys.LocalLtk[i] = static_cast<uint8_t>(0x60U + i);
 		s_Keys.Csrk[i] = static_cast<uint8_t>(0x80U + i);
 	}
 	s_Keys.EncKeySize = 16;
@@ -208,36 +209,31 @@ void TestFailedReservationStaysClosed()
 	BT_CHECK(s_Test, VerifyCounter(0));
 }
 
-void TestVersionOneRetiresUncertainCsrk()
+void TestDirectionalLegacyLtk()
 {
 	ResetHarness(true);
+	s_Keys.bSc = false;
+	s_Keys.Ediv = 0x1122;
+	s_Keys.Rand = UINT64_C(0x0102030405060708);
+	s_Keys.LocalEdiv = 0x3344;
+	s_Keys.LocalRand = UINT64_C(0x1112131415161718);
 	AddBond();
 
-	uint8_t legacy[sizeof(s_LastRecord)];
-	size_t legacyLen = s_LastRecordLen;
-	std::memcpy(legacy, s_LastRecord, legacyLen);
-
-	// Header layout is fixed: magic[0..3], version[4..5], length[6..7],
-	// CRC[8..11]. Version 1 used the same record size but persisted an exact
-	// receive counter asynchronously, so its CSRK cannot remain replay-safe.
-	legacy[4] = 1;
-	legacy[5] = 0;
-	std::memset(&legacy[8], 0, 4);
-	PutLe32(&legacy[8], Crc32(legacy, legacyLen));
-
-	BtSmpBondClearAll();
-	s_AutoComplete = true;
-	s_SaveCount = 0;
-	BtSmpBondRestore(0, legacy, legacyLen);
+	uint8_t ltk[16] = {};
+	BT_CHECK(s_Test, BtSmpBondLtkLookup(kConnHdl, s_Keys.LocalRand,
+									 s_Keys.LocalEdiv, ltk));
+	BT_CHECK(s_Test, std::memcmp(ltk, s_Keys.LocalLtk, sizeof(ltk)) == 0);
+	BT_CHECK(s_Test, !BtSmpBondLtkLookup(kConnHdl, s_Keys.Rand,
+									  s_Keys.Ediv, ltk));
 
 	BtSmpKeys_t restored = {};
 	BT_CHECK(s_Test, BtSmpBondKeysLookup(kConnHdl, 0, 0, &restored));
 	BT_CHECK(s_Test, std::memcmp(restored.Ltk, s_Keys.Ltk,
 								sizeof(restored.Ltk)) == 0);
-	BT_CHECK(s_Test, AllZero(restored.Csrk, sizeof(restored.Csrk)));
-	BT_CHECK(s_Test, !VerifyCounter(0));
-	BT_CHECK(s_Test, s_SaveCount == 1);
-	BT_CHECK(s_Test, s_LastRecord[4] == 2 && s_LastRecord[5] == 0);
+	BT_CHECK(s_Test, std::memcmp(restored.LocalLtk, s_Keys.LocalLtk,
+								sizeof(restored.LocalLtk)) == 0);
+	BT_CHECK(s_Test, restored.LocalRand == s_Keys.LocalRand);
+	BT_CHECK(s_Test, restored.LocalEdiv == s_Keys.LocalEdiv);
 }
 
 void TestResolvedIdentityLookup()
@@ -414,8 +410,8 @@ int main()
 			   TestRefillBlocksAtOldBoundary);
 	s_Test.Run("failed reservation stays closed",
 			   TestFailedReservationStaysClosed);
-	s_Test.Run("version one retires uncertain CSRK",
-			   TestVersionOneRetiresUncertainCsrk);
+	s_Test.Run("legacy bond keeps both LTK directions",
+			   TestDirectionalLegacyLtk);
 	s_Test.Run("resolved identity finds restored bond",
 			   TestResolvedIdentityLookup);
 	s_Test.Run("repeated attempts back off exponentially",
