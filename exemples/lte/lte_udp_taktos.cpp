@@ -63,6 +63,7 @@ SOFTWARE.
 #include "coredev/interrupt.h"
 #include "coredev/iopincfg.h"
 #include "coredev/uart.h"
+#include "syslog.h"
 #include "coredev/system_core_clock.h"
 #include "lte/lte.h"
 #include "net/sock_intrf.h"
@@ -183,6 +184,20 @@ static uint8_t s_LteThreadMem[TAKTOS_THREAD_MEM_SIZE(LTE_UDP_THREAD_STACK)] TAKT
 static hTaktOSThread_t s_LteThread = nullptr;
 
 static UART s_Uart;
+
+// SysLog on the console UART, a record goes out as soon as it is logged.
+// 16 records of 192 bytes. A record the UART does not take in full stays in
+// the store and the rest goes out at the next log call. bBlocking keeps the
+// oldest records when the store is full.
+alignas(4) static uint8_t s_SysLogMem[SYSLOG_MEMSIZE(16, 192)];
+
+static const SysLogCfg_t s_SysLogCfg = {
+	.pMem = s_SysLogMem,
+	.MemSize = sizeof(s_SysLogMem),
+	.RecordLen = 192,
+	.bBlocking = true,
+};
+
 static SockIntrf s_Sock;
 static uint32_t s_TxCount = 0;
 
@@ -209,7 +224,7 @@ static void LteUdpSend(void)
 
 	if (s_Sock.Connected() == false && s_Sock.Init(s_SockCfg) == false)
 	{
-		s_Uart.printf("Socket to %s:%d failed\r\n", LTE_UDP_HOST, LTE_UDP_PORT);
+		SysLogPrintf(SysLogGet(), "Socket to %s:%d failed\r\n", LTE_UDP_HOST, LTE_UDP_PORT);
 		return;
 	}
 
@@ -232,12 +247,12 @@ static void LteUdpSend(void)
 
 	if (s_Sock.Tx(0, (uint8_t *)msg, len) == len)
 	{
-		s_Uart.printf("Sent %d: %s\r\n", len, msg);
+		SysLogPrintf(SysLogGet(), "Sent %d: %s\r\n", len, msg);
 		s_TxCount++;
 	}
 	else
 	{
-		s_Uart.printf("Send failed\r\n");
+		SysLogPrintf(SysLogGet(), "Send failed\r\n");
 	}
 }
 
@@ -255,7 +270,7 @@ static void LteUdpRecv(uint32_t Evt, void *pCtx)
 	while ((n = s_Sock.Rx(0, buf, sizeof(buf) - 1)) > 0)
 	{
 		buf[n] = 0;
-		s_Uart.printf("Received %d: %s\r\n", n, (char *)buf);
+		SysLogPrintf(SysLogGet(), "Received %d: %s\r\n", n, (char *)buf);
 	}
 }
 
@@ -281,48 +296,48 @@ static void LteUdpEvtHandler(LTE_EVT Evt, const LteStatus_t * const pStatus)
 	switch (Evt)
 	{
 		case LTE_EVT_REGISTERED:
-			s_Uart.printf("Registered %s, %s, TAC %04X, cell %08X\r\n",
-						  pStatus->RegStat == LTE_REG_ROAMING ? "roaming" : "home",
-						  pStatus->Rat == LTE_RAT_NBIOT ? "NB-IoT" : "LTE-M",
-						  (unsigned)pStatus->Tac, (unsigned)pStatus->CellId);
+			SysLogPrintf(SysLogGet(), "Registered %s, %s, TAC %04X, cell %08X\r\n",
+									  pStatus->RegStat == LTE_REG_ROAMING ? "roaming" : "home",
+									  pStatus->Rat == LTE_RAT_NBIOT ? "NB-IoT" : "LTE-M",
+									  (unsigned)pStatus->Tac, (unsigned)pStatus->CellId);
 			LteUdpSend();
 			break;
 
 		case LTE_EVT_UNREGISTERED:
-			s_Uart.printf("Unregistered, state %d\r\n", (int)pStatus->RegStat);
+			SysLogPrintf(SysLogGet(), "Unregistered, state %d\r\n", (int)pStatus->RegStat);
 			break;
 
 		case LTE_EVT_REG_STATE:
-			s_Uart.printf("Registration state %d\r\n", (int)pStatus->RegStat);
+			SysLogPrintf(SysLogGet(), "Registration state %d\r\n", (int)pStatus->RegStat);
 			break;
 
 		case LTE_EVT_CELL:
-			s_Uart.printf("Cell TAC %04X, cell %08X\r\n", (unsigned)pStatus->Tac, (unsigned)pStatus->CellId);
+			SysLogPrintf(SysLogGet(), "Cell TAC %04X, cell %08X\r\n", (unsigned)pStatus->Tac, (unsigned)pStatus->CellId);
 			break;
 
 		case LTE_EVT_RRC_CONNECTED:
-			s_Uart.printf("RRC connected\r\n");
+			SysLogPrintf(SysLogGet(), "RRC connected\r\n");
 			break;
 
 		case LTE_EVT_RRC_IDLE:
-			s_Uart.printf("RRC idle\r\n");
+			SysLogPrintf(SysLogGet(), "RRC idle\r\n");
 			break;
 
 		case LTE_EVT_PSM:
-			s_Uart.printf("PSM %s, TAU %u s, active %u s\r\n", pStatus->bPsm ? "on" : "off",
-						  (unsigned)pStatus->PsmTau, (unsigned)pStatus->PsmActive);
+			SysLogPrintf(SysLogGet(), "PSM %s, TAU %u s, active %u s\r\n", pStatus->bPsm ? "on" : "off",
+									  (unsigned)pStatus->PsmTau, (unsigned)pStatus->PsmActive);
 			break;
 
 		case LTE_EVT_EDRX:
-			s_Uart.printf("eDRX %u ms, PTW %u ms\r\n", (unsigned)pStatus->EdrxCycle, (unsigned)pStatus->EdrxPtw);
+			SysLogPrintf(SysLogGet(), "eDRX %u ms, PTW %u ms\r\n", (unsigned)pStatus->EdrxCycle, (unsigned)pStatus->EdrxPtw);
 			break;
 
 		case LTE_EVT_MODEM_FAULT:
-			s_Uart.printf("Modem fault, restarting\r\n");
+			SysLogPrintf(SysLogGet(), "Modem fault, restarting\r\n");
 			s_Sock.Close();
 			if (LteInit(&s_LteCfg) == false)
 			{
-				s_Uart.printf("LTE init failed\r\n");
+				SysLogPrintf(SysLogGet(), "LTE init failed\r\n");
 			}
 			break;
 	}
@@ -330,7 +345,7 @@ static void LteUdpEvtHandler(LTE_EVT Evt, const LteStatus_t * const pStatus)
 
 static void LteUdpUrcHandler(const char *pUrc)
 {
-	s_Uart.printf("URC %s\r\n", pUrc);
+	SysLogPrintf(SysLogGet(), "URC %s\r\n", pUrc);
 }
 
 // Starts LTE, then runs the LTE work as its messages arrive and sends a
@@ -341,7 +356,7 @@ static void LteThread(void *pArg)
 
 	if (LteInit(&s_LteCfg) == false)
 	{
-		s_Uart.printf("LTE init failed\r\n");
+		SysLogPrintf(SysLogGet(), "LTE init failed\r\n");
 	}
 	else
 	{
@@ -349,9 +364,9 @@ static void LteThread(void *pArg)
 
 		if (LteGetInfo(LTE_INFO_FWVER, info, sizeof(info)))
 		{
-			s_Uart.printf("Modem firmware %s\r\n", info);
+			SysLogPrintf(SysLogGet(), "Modem firmware %s\r\n", info);
 		}
-		s_Uart.printf("Attaching\r\n");
+		SysLogPrintf(SysLogGet(), "Attaching\r\n");
 	}
 
 	const uint32_t period = LTE_UDP_INTERVAL * TaktOSGetTickHz();
@@ -396,13 +411,14 @@ static void LteThread(void *pArg)
 int main()
 {
 	s_Uart.Init(s_UartCfg);
-	s_Uart.printf("LteUdpTaktOS\r\n");
+	SysLogInit(SysLogGet(), &s_SysLogCfg, (DevIntrf_t *)s_Uart, 0, nullptr, 0);
+	SysLogPrintf(SysLogGet(), "LteUdpTaktOS\r\n");
 
 	// The work queue exists before anything can queue LTE work
 	if (TaktOSQueueInit(&s_LteWorkQue, s_LteWorkQueMem, sizeof(LteWork_t),
 						LTE_UDP_WORK_QUE_SIZE) != TAKTOS_OK)
 	{
-		s_Uart.printf("Queue init failed\r\n");
+		SysLogPrintf(SysLogGet(), "Queue init failed\r\n");
 		while (1)
 		{
 			__WFE();
@@ -416,7 +432,7 @@ int main()
 
 	if (TaktOSInit(&cfg) != TAKTOS_OK)
 	{
-		s_Uart.printf("TaktOS init failed\r\n");
+		SysLogPrintf(SysLogGet(), "TaktOS init failed\r\n");
 		while (1)
 		{
 			__WFE();
@@ -427,7 +443,7 @@ int main()
 									 TAKTOS_PRIORITY_NORMAL);
 	if (s_LteThread == nullptr)
 	{
-		s_Uart.printf("Thread create failed\r\n");
+		SysLogPrintf(SysLogGet(), "Thread create failed\r\n");
 		while (1)
 		{
 			__WFE();

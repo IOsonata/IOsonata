@@ -35,6 +35,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "adc_nrf52_saadc.h"
 #include "coredev/uart.h"
+#include "syslog.h"
 #include "stddev.h"
 #include "iopinctrl.h"
 #include "idelay.h"
@@ -119,6 +120,19 @@ static const UARTCfg_t s_UartCfg = {
 };
 
 UART g_Uart;
+
+// SysLog on the console UART, a record goes out as soon as it is logged.
+// 16 records of 128 bytes. A record the UART does not take in full stays in
+// the store and the rest goes out at the next log call. bBlocking keeps the
+// oldest records when the store is full.
+alignas(4) static uint8_t s_SysLogMem[SYSLOG_MEMSIZE(16, 128)];
+
+static const SysLogCfg_t s_SysLogCfg = {
+	.pMem = s_SysLogMem,
+	.MemSize = sizeof(s_SysLogMem),
+	.RecordLen = 128,
+	.bBlocking = true,
+};
 
 // Define available voltage sources
 static const AdcRefVolt_t s_RefVolt[] = {
@@ -219,7 +233,7 @@ void ADVEventHandler(Device *pAdcDev, DEV_EVT Evt)
 		cnt = g_Adc.Read(df, s_NbChan);
 		if (cnt > 0)
 		{
-			g_Uart.printf("%d ADC[0] = %.2fV, ADC[1] = %.2fV, ADC[2] = %.2fV, ADC[3] = %.2fV\r\n",
+			SysLogPrintf(SysLogGet(), "%d ADC[0] = %.2fV, ADC[1] = %.2fV, ADC[2] = %.2fV, ADC[3] = %.2fV\r\n",
 					df[0].Timestamp, df[0].Data, df[1].Data, df[2].Data, df[3].Data);
 		}
 
@@ -254,10 +268,11 @@ int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int Buf
 void HardwareInit()
 {
 	g_Uart.Init(s_UartCfg);
+	SysLogInit(SysLogGet(), &s_SysLogCfg, (DevIntrf_t *)g_Uart, 0, nullptr, 0);
 //	UARTRetargetEnable(g_Uart, STDIN_FILENO);
 //	UARTRetargetEnable(g_Uart, STDOUT_FILENO);
 
-	g_Uart.printf("Init ADC\r\n");
+	SysLogPrintf(SysLogGet(), "Init ADC\r\n");
 	IOPinDisable(AIN0_PORT, AIN0_PIN);//AIN0
 	IOPinDisable(AIN1_PORT, AIN1_PIN);//AIN1
 
@@ -303,10 +318,10 @@ int main()
 		{
 			for (int i=0; i<cnt; i++)
 			{
-				g_Uart.printf("#%d ADC[%d] = %.2fV | ", df[i].Timestamp, i, df[i].Data);
+				SysLogPrintf(SysLogGet(), "#%d ADC[%d] = %.2fV | ", df[i].Timestamp, i, df[i].Data);
 			}
-			g_Uart.printf("\r\n");
-//			g_Uart.printf("#%d | ADC[0] = %.2fV, ADC[1] = %.2fV, ADC[2] = %.2fV, ADC[3] = %.2fV\r\n",
+			SysLogPrintf(SysLogGet(), "\r\n");
+//			SysLogPrintf(SysLogGet(), "#%d | ADC[0] = %.2fV, ADC[1] = %.2fV, ADC[2] = %.2fV, ADC[3] = %.2fV\r\n",
 //					df[0].Timestamp, df[0].Data, df[1].Data, df[2].Data, df[3].Data);
 		}
 		g_Adc.StartConversion();

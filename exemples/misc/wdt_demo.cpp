@@ -4,9 +4,9 @@
 @brief	Watchdog demo
 
 Starts the watchdog with a WDT_DEMO_TIMEOUT msec timeout and reloads it every
-WDT_DEMO_PERIOD msec, WDT_DEMO_RELOADS times, printing each reload on the
-console UART. Then it stops reloading: the watchdog resets the MCU and the
-demo starts over, which shows as the banner printed again.
+WDT_DEMO_PERIOD msec, WDT_DEMO_RELOADS times, logging each reload with
+SysLog on the console UART. Then it stops reloading: the watchdog resets the
+MCU and the demo starts over, which shows as the banner logged again.
 
 When the watchdog still runs from before the reset (on MCU where a reset
 does not stop it), the banner says so and the demo goes on with the running
@@ -46,6 +46,7 @@ SOFTWARE.
 
 #include "coredev/iopincfg.h"
 #include "coredev/uart.h"
+#include "syslog.h"
 #include "coredev/wdt.h"
 #include "idelay.h"
 
@@ -105,6 +106,20 @@ static const WdtCfg_t s_WdtCfg = {
 };
 
 static UART s_Uart;
+
+// SysLog on the console UART, a record goes out as soon as it is logged.
+// 16 records of 128 bytes. A record the UART does not take in full stays in
+// the store and the rest goes out at the next log call. bBlocking keeps the
+// oldest records when the store is full.
+alignas(4) static uint8_t s_SysLogMem[SYSLOG_MEMSIZE(16, 128)];
+
+static const SysLogCfg_t s_SysLogCfg = {
+	.pMem = s_SysLogMem,
+	.MemSize = sizeof(s_SysLogMem),
+	.RecordLen = 128,
+	.bBlocking = true,
+};
+
 static Wdt s_Wdt;
 
 // Interrupt context, the reset follows: nothing more than a flag
@@ -119,12 +134,13 @@ static void WdtDemoTimeout(WdtDev_t * const pDev)
 int main()
 {
 	s_Uart.Init(s_UartCfg);
+	SysLogInit(SysLogGet(), &s_SysLogCfg, (DevIntrf_t *)s_Uart, 0, nullptr, 0);
 
-	s_Uart.printf("WdtDemo\r\n");
+	SysLogPrintf(SysLogGet(), "WdtDemo\r\n");
 
 	if (s_Wdt.Init(s_WdtCfg) == false)
 	{
-		s_Uart.printf("Watchdog init failed\r\n");
+		SysLogPrintf(SysLogGet(), "Watchdog init failed\r\n");
 
 		while (1)
 		{
@@ -135,11 +151,11 @@ int main()
 	// Init does not start the watchdog: running here means from before
 	if (s_Wdt.Running())
 	{
-		s_Uart.printf("Watchdog already running, timeout %u ms\r\n", (unsigned)s_Wdt.Timeout());
+		SysLogPrintf(SysLogGet(), "Watchdog already running, timeout %u ms\r\n", (unsigned)s_Wdt.Timeout());
 	}
 	else
 	{
-		s_Uart.printf("Watchdog timeout %u ms\r\n", (unsigned)s_Wdt.Timeout());
+		SysLogPrintf(SysLogGet(), "Watchdog timeout %u ms\r\n", (unsigned)s_Wdt.Timeout());
 	}
 
 	s_Wdt.Start();
@@ -148,10 +164,10 @@ int main()
 	{
 		msDelay(WDT_DEMO_PERIOD);
 		s_Wdt.Reload(0);
-		s_Uart.printf("Reload %d\r\n", i + 1);
+		SysLogPrintf(SysLogGet(), "Reload %d\r\n", i + 1);
 	}
 
-	s_Uart.printf("No more reloads, reset in %u ms\r\n", (unsigned)s_Wdt.Timeout());
+	SysLogPrintf(SysLogGet(), "No more reloads, reset in %u ms\r\n", (unsigned)s_Wdt.Timeout());
 
 	while (1)
 	{

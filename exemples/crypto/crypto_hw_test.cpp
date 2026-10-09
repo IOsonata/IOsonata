@@ -4,7 +4,8 @@
 @brief	Runner of the crypto hardware tests on the console UART
 
 The crypto hardware acceptance tests print on stdout. This runner sends
-stdout to the console UART of board.h and runs them one after the other:
+stdout to SysLog, whose output is the console UART of board.h, and runs them
+one after the other:
 
 	RngTest			rng_test.cpp, the hardware random generator engine
 	Cc3xxEcdhTest	cc3xx_ecdh_test.cpp, P-256 on the CryptoCell, when
@@ -47,6 +48,8 @@ SOFTWARE.
 
 #include "coredev/iopincfg.h"
 #include "coredev/uart.h"
+#include "stddev.h"
+#include "syslog.h"
 
 #include "board.h"
 
@@ -84,12 +87,64 @@ static const UARTCfg_t s_UartCfg = {
 	.bDMAMode = true,
 };
 
+// Longest SysLog record, the stdout writes are cut to it
+#define CRYPTO_HW_TEST_LOG_RECLEN	128
+
+static int CryptoHwTestLogWrite(void * const pDevObj, int Handle, uint8_t *pBuff, size_t Len);
+
 static UART s_Uart;
+
+// SysLog on the console UART, a record goes out as soon as it is logged.
+// 16 records. A record the UART does not take in full stays in the store
+// and the rest goes out at the next log call. bBlocking keeps the oldest
+// records when the store is full.
+alignas(4) static uint8_t s_SysLogMem[SYSLOG_MEMSIZE(16, CRYPTO_HW_TEST_LOG_RECLEN)];
+
+static const SysLogCfg_t s_SysLogCfg = {
+	.pMem = s_SysLogMem,
+	.MemSize = sizeof(s_SysLogMem),
+	.RecordLen = CRYPTO_HW_TEST_LOG_RECLEN,
+	.bBlocking = true,
+};
+
+// stdout of the tests, into SysLog
+static StdDev_t s_LogStdDev = {
+	"SYSLOG",
+	nullptr,
+	nullptr,
+	nullptr,
+	nullptr,
+	CryptoHwTestLogWrite,
+	nullptr,
+};
+
+static int CryptoHwTestLogWrite(void * const pDevObj, int Handle, uint8_t *pBuff, size_t Len)
+{
+	(void)pDevObj;
+	(void)Handle;
+
+	size_t done = 0;
+
+	while (done < Len)
+	{
+		size_t n = Len - done;
+
+		if (n > CRYPTO_HW_TEST_LOG_RECLEN - 1)
+		{
+			n = CRYPTO_HW_TEST_LOG_RECLEN - 1;
+		}
+		SysLogPrintf(SysLogGet(), "%.*s", (int)n, (const char *)&pBuff[done]);
+		done += n;
+	}
+
+	return (int)Len;
+}
 
 int main()
 {
 	s_Uart.Init(s_UartCfg);
-	UARTRetargetEnable(s_Uart, STDOUT_FILENO);
+	SysLogInit(SysLogGet(), &s_SysLogCfg, (DevIntrf_t *)s_Uart, 0, nullptr, 0);
+	InstallBlkDev(&s_LogStdDev, STDOUT_FILENO);
 
 	printf("Crypto hardware tests\r\n");
 
@@ -100,6 +155,7 @@ int main()
 #endif
 
 	printf("\r\nCrypto hardware tests %s\r\n", res ? "PASS" : "FAIL");
+	fflush(stdout);
 
 	while (1)
 	{

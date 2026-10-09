@@ -168,6 +168,18 @@ static const UARTCfg_t s_UartCfg = {
 
 UART g_Uart;
 
+// SysLog store. With the UART attached at init, each record goes out as it
+// is logged. 16 records of 128 bytes, non blocking, so a burst the UART
+// cannot keep up with drops the oldest lines rather than the newest.
+alignas(4) static uint8_t s_SysLogMem[SYSLOG_MEMSIZE(16, 128)];
+
+static const SysLogCfg_t s_SysLogCfg = {
+	.pMem      = s_SysLogMem,
+	.MemSize   = sizeof(s_SysLogMem),
+	.RecordLen = 128,
+	.bBlocking = false
+};
+
 #if NVM_DEMO_MEDIUM == 0
 
 static const char s_MediumName[] = "internal memory";
@@ -367,17 +379,6 @@ static void NvmCycleReport(void);
 static void NvmCyclePump(uint32_t Evt, void *pCtx);
 #endif
 
-// SysLog store. With the UART attached at init, each record goes out as it
-// is logged. 16 records of 128 bytes, non blocking, so a burst the UART
-// cannot keep up with drops the oldest lines rather than the newest.
-alignas(4) static uint8_t s_SysLogMem[SYSLOG_MEMSIZE(16, 128)];
-
-static const SysLogCfg_t s_SysLogCfg = {
-	.pMem      = s_SysLogMem,
-	.MemSize   = sizeof(s_SysLogMem),
-	.RecordLen = 128,
-	.bBlocking = false
-};
 #endif
 
 // The interface reports a finished transfer here. Nvm is told, and nothing
@@ -471,12 +472,12 @@ static void Check(bool Cond, const char *pMsg)
 {
 	if (Cond)
 	{
-		g_Uart.printf("  ok   : %s\r\n", pMsg);
+		SysLogPrintf(SysLogGet(), "  ok   : %s\r\n", pMsg);
 	}
 	else
 	{
 		s_Fail++;
-		g_Uart.printf("  FAIL : %s\r\n", pMsg);
+		SysLogPrintf(SysLogGet(), "  FAIL : %s\r\n", pMsg);
 	}
 }
 
@@ -523,9 +524,9 @@ static void StampCheck(Nvm &Mem)
 	Mem.Read(off, stamp, sizeof(stamp));
 
 #if NVM_DEMO_MEDIUM == 0
-	g_Uart.printf("raw     : [0x%08lX] = 0x%08lX 0x%08lX before anything is touched\r\n",
-				  (unsigned long)raw, (unsigned long)RawWord(raw),
-				  (unsigned long)RawWord(raw + 4));
+	SysLogPrintf(SysLogGet(), "raw     : [0x%08lX] = 0x%08lX 0x%08lX before anything is touched\r\n",
+							  (unsigned long)raw, (unsigned long)RawWord(raw),
+							  (unsigned long)RawWord(raw + 4));
 
 	Check(stamp[0] == RawWord(raw), "driver reads the same memory as a direct read");
 #else
@@ -537,12 +538,12 @@ static void StampCheck(Nvm &Mem)
 	if (stamp[0] == NVM_DEMO_MAGIC)
 	{
 		boots = stamp[1] + 1;
-		g_Uart.printf("persist : stamp found, previous boot %lu, data survived\r\n",
-					  (unsigned long)stamp[1]);
+		SysLogPrintf(SysLogGet(), "persist : stamp found, previous boot %lu, data survived\r\n",
+								  (unsigned long)stamp[1]);
 	}
 	else
 	{
-		g_Uart.printf("persist : no stamp yet, first run on this region\r\n");
+		SysLogPrintf(SysLogGet(), "persist : no stamp yet, first run on this region\r\n");
 	}
 
 	uint32_t ns[2] = { NVM_DEMO_MAGIC, boots };
@@ -563,8 +564,8 @@ static void StampCheck(Nvm &Mem)
 		  "the stamp is in the memory, not only in the driver view");
 #endif
 
-	g_Uart.printf("persist : boot %lu stamped, power cycle and it must rise\r\n",
-				  (unsigned long)boots);
+	SysLogPrintf(SysLogGet(), "persist : boot %lu stamped, power cycle and it must rise\r\n",
+							  (unsigned long)boots);
 }
 
 // The checks that need real memory. Uses the scratch pages only.
@@ -574,9 +575,9 @@ static void NvmDemoVerify(Nvm &Mem)
 	uint32_t page = UnitSize(Mem);
 	uint32_t scratch = page * NVM_DEMO_SCRATCH_PAGES;
 
-	g_Uart.printf("region  : 0x%08lX size %lu, unit %lu, write unit %lu\r\n",
-				  (unsigned long)RegionAddr, (unsigned long)Mem.Size(),
-				  (unsigned long)page, (unsigned long)Mem.WriteGran());
+	SysLogPrintf(SysLogGet(), "region  : 0x%08lX size %lu, unit %lu, write unit %lu\r\n",
+							  (unsigned long)RegionAddr, (unsigned long)Mem.Size(),
+							  (unsigned long)page, (unsigned long)Mem.WriteGran());
 
 	StampCheck(Mem);
 
@@ -634,11 +635,11 @@ static void NvmDemoVerify(Nvm &Mem)
 
 	if (rd == half)
 	{
-		g_Uart.printf("medium  : clears bits only, an erase is needed to set them\r\n");
+		SysLogPrintf(SysLogGet(), "medium  : clears bits only, an erase is needed to set them\r\n");
 	}
 	else if (rd == ones)
 	{
-		g_Uart.printf("medium  : replaces the word, it rewrites in place\r\n");
+		SysLogPrintf(SysLogGet(), "medium  : replaces the word, it rewrites in place\r\n");
 	}
 	else
 	{
@@ -663,7 +664,7 @@ static void NvmDemoVerify(Nvm &Mem)
 	// What the mode is for: the call establishes the operation and returns,
 	// and something else drives it. A write bigger than one page needs several
 	// steps, so IsBusy has real work to do rather than answering false at once.
-	g_Uart.printf("async   : the call returns, IsBusy drives the rest\r\n");
+	SysLogPrintf(SysLogGet(), "async   : the call returns, IsBusy drives the rest\r\n");
 
 	if (Mem.EraseSize() != 0)
 	{
@@ -703,9 +704,9 @@ static void NvmDemoVerify(Nvm &Mem)
 		  memcmp(s_RBack, s_Big, sizeof(s_Big)) == 0,
 		  "async: the data landed");
 
-	g_Uart.printf("async   : %lu steps, write evt %lu erase evt %lu err %lu\r\n",
-				  (unsigned long)steps, (unsigned long)s_EvtWrite,
-				  (unsigned long)s_EvtErase, (unsigned long)s_EvtError);
+	SysLogPrintf(SysLogGet(), "async   : %lu steps, write evt %lu erase evt %lu err %lu\r\n",
+							  (unsigned long)steps, (unsigned long)s_EvtWrite,
+							  (unsigned long)s_EvtErase, (unsigned long)s_EvtError);
 
 	// This block filled the scratch, and the cycle that follows expects it
 	// erased: programming only clears bits, so writing a slot twice without an
@@ -720,16 +721,16 @@ static void NvmDemoVerify(Nvm &Mem)
 	NvmIntrfStat_t st;
 	NvmIntrfGetStat(&st);
 
-	g_Uart.printf("\r\n%s | ops %lu busy %lu evt %lu skipped %lu\r\n",
-				  s_Fail == 0 ? "ALL PASS" : "FAILURES",
-				  (unsigned long)st.Ops, (unsigned long)st.Busy,
-				  (unsigned long)st.Evt, (unsigned long)st.Skipped);
+	SysLogPrintf(SysLogGet(), "\r\n%s | ops %lu busy %lu evt %lu skipped %lu\r\n",
+							  s_Fail == 0 ? "ALL PASS" : "FAILURES",
+							  (unsigned long)st.Ops, (unsigned long)st.Busy,
+							  (unsigned long)st.Evt, (unsigned long)st.Skipped);
 
-	g_Uart.printf("path    : sd %lu slot %lu direct %lu\r\n",
-				  (unsigned long)st.Sd, (unsigned long)st.Slot,
-				  (unsigned long)st.Direct);
+	SysLogPrintf(SysLogGet(), "path    : sd %lu slot %lu direct %lu\r\n",
+							  (unsigned long)st.Sd, (unsigned long)st.Slot,
+							  (unsigned long)st.Direct);
 #else
-	g_Uart.printf("\r\n%s\r\n", s_Fail == 0 ? "ALL PASS" : "FAILURES");
+	SysLogPrintf(SysLogGet(), "\r\n%s\r\n", s_Fail == 0 ? "ALL PASS" : "FAILURES");
 #endif
 }
 
@@ -755,13 +756,13 @@ static bool NvmDemoSetup(void)
 
 	uint32_t unit = cfg.EraseSize != 0 ? cfg.EraseSize : 256;
 
-	g_Uart.printf("device  : %lu bytes, unit %lu\r\n",
-				  (unsigned long)cfg.TotalSize, (unsigned long)unit);
+	SysLogPrintf(SysLogGet(), "device  : %lu bytes, unit %lu\r\n",
+							  (unsigned long)cfg.TotalSize, (unsigned long)unit);
 
 	// Which completion mode was built, so a log says it rather than the reader
 	// working it out from what is missing.
-	g_Uart.printf("mode    : %s\r\n",
-				  NVM_DEMO_ASYNC ? "interrupt, IsBusy drives the operation"
+	SysLogPrintf(SysLogGet(), "mode    : %s\r\n",
+							  NVM_DEMO_ASYNC ? "interrupt, IsBusy drives the operation"
 								 : "polling, the call finishes the operation");
 
 #if NVM_DEMO_MEDIUM == 0
@@ -775,12 +776,12 @@ static bool NvmDemoSetup(void)
 
 		if (ra == 0 && rs == 0)
 		{
-			g_Uart.printf("linker  : NVM%d not declared\r\n", i);
+			SysLogPrintf(SysLogGet(), "linker  : NVM%d not declared\r\n", i);
 		}
 		else
 		{
-			g_Uart.printf("linker  : NVM%d at %08lX size %08lX\r\n", i,
-						  (unsigned long)ra, (unsigned long)rs);
+			SysLogPrintf(SysLogGet(), "linker  : NVM%d at %08lX size %08lX\r\n", i,
+									  (unsigned long)ra, (unsigned long)rs);
 		}
 	}
 
@@ -791,7 +792,7 @@ static bool NvmDemoSetup(void)
 
 	if (ceiling < below)
 	{
-		g_Uart.printf("device too small for the region\r\n");
+		SysLogPrintf(SysLogGet(), "device too small for the region\r\n");
 		return false;
 	}
 
@@ -814,7 +815,7 @@ static bool NvmDemoSetup(void)
 	if (s_MemIntrf.Init(s_I2cCfg) == false)
 #endif
 	{
-		g_Uart.printf("memory interface init failed\r\n");
+		SysLogPrintf(SysLogGet(), "memory interface init failed\r\n");
 		return false;
 	}
 
@@ -825,7 +826,7 @@ static bool NvmDemoSetup(void)
 
 	if (s_Nvm.Init(cfg, &s_MemIntrf, s_RegionAddr, regionsize) == false)
 	{
-		g_Uart.printf("Nvm init failed\r\n");
+		SysLogPrintf(SysLogGet(), "Nvm init failed\r\n");
 		return false;
 	}
 
@@ -918,21 +919,21 @@ static void NvmCyclePump(uint32_t Evt, void *pCtx)
 
 			NvmIntrfGetStat(&st);
 
-			g_Uart.printf("stuck   : rq %lu ops %lu evt %lu\r\n",
-						  (unsigned long)s_StallRq, (unsigned long)st.Ops,
-						  (unsigned long)st.Evt);
+			SysLogPrintf(SysLogGet(), "stuck   : rq %lu ops %lu evt %lu\r\n",
+									  (unsigned long)s_StallRq, (unsigned long)st.Ops,
+									  (unsigned long)st.Evt);
 
 			// Passed on, dropped with nothing wanting it, dropped with nothing
 			// outstanding. Either of the last two means the driver is waiting
 			// for a completion that has already been and gone.
-			g_Uart.printf("stuck   : rep %lu/%lu/%lu pend %lu\r\n",
-						  (unsigned long)st.RepDone,
-						  (unsigned long)st.RepNoWant,
-						  (unsigned long)st.RepNoPend,
-						  (unsigned long)s_Pending);
+			SysLogPrintf(SysLogGet(), "stuck   : rep %lu/%lu/%lu pend %lu\r\n",
+									  (unsigned long)st.RepDone,
+									  (unsigned long)st.RepNoWant,
+									  (unsigned long)st.RepNoPend,
+									  (unsigned long)s_Pending);
 #else
-			g_Uart.printf("stuck   : rq %lu pend %lu\r\n",
-						  (unsigned long)s_StallRq, (unsigned long)s_Pending);
+			SysLogPrintf(SysLogGet(), "stuck   : rq %lu pend %lu\r\n",
+									  (unsigned long)s_StallRq, (unsigned long)s_Pending);
 #endif
 		}
 
@@ -1030,9 +1031,9 @@ static void NvmCycleHandler(uint32_t Evt, void *pCtx)
 		s_Skips++;
 		if (s_Skips == 3UL || (s_Skips % 10UL) == 0)
 		{
-			g_Uart.printf("cycle   : skip %lu pend %lu rq %lu\r\n",
-						  (unsigned long)s_Skips, (unsigned long)s_Pending,
-						  (unsigned long)s_StallRq);
+			SysLogPrintf(SysLogGet(), "cycle   : skip %lu pend %lu rq %lu\r\n",
+									  (unsigned long)s_Skips, (unsigned long)s_Pending,
+									  (unsigned long)s_StallRq);
 		}
 
 		return;
@@ -1074,37 +1075,37 @@ static void NvmCycleReport(void)
 		// Split in two. UARTvprintf formats into SPRT_BUFFER_SIZE, which is
 		// 80, so a line past 79 characters loses its tail before the FIFO
 		// sees it. The single line this replaced was already over.
-		g_Uart.printf("async   : requeues %lu dropped %lu txdrop %lu\r\n",
-					  (unsigned long)s_Requeues, (unsigned long)s_Dropped,
-					  (unsigned long)((UARTDev_t*)g_Uart)->TxDropCnt);
-		g_Uart.printf("async   : write evt %lu erase evt %lu err %lu\r\n",
-					  (unsigned long)s_EvtWrite, (unsigned long)s_EvtErase,
-					  (unsigned long)s_EvtError);
+		SysLogPrintf(SysLogGet(), "async   : requeues %lu dropped %lu txdrop %lu\r\n",
+								  (unsigned long)s_Requeues, (unsigned long)s_Dropped,
+								  (unsigned long)((UARTDev_t*)g_Uart)->TxDropCnt);
+		SysLogPrintf(SysLogGet(), "async   : write evt %lu erase evt %lu err %lu\r\n",
+								  (unsigned long)s_EvtWrite, (unsigned long)s_EvtErase,
+								  (unsigned long)s_EvtError);
 
 		// max is the longest the pump ever waited on one operation, in visits
 		// of about 1.5 msec each. long is how many waits passed the threshold.
-		g_Uart.printf("wait    : max %lu long %lu\r\n",
-					  (unsigned long)s_StallMax, (unsigned long)s_StallLong);
+		SysLogPrintf(SysLogGet(), "wait    : max %lu long %lu\r\n",
+								  (unsigned long)s_StallMax, (unsigned long)s_StallLong);
 
 #endif
-		g_Uart.printf("cycles %lu writes %lu fails %lu\r\n",
-					  (unsigned long)s_Cycles, (unsigned long)s_Writes,
-					  (unsigned long)s_Fail);
+		SysLogPrintf(SysLogGet(), "cycles %lu writes %lu fails %lu\r\n",
+								  (unsigned long)s_Cycles, (unsigned long)s_Writes,
+								  (unsigned long)s_Fail);
 		// rep, not evt. Evt counts only the SoftDevice flash event, so on a
 		// timeslot build it stays at 0 while every operation completes
 		// normally. RepDone counts what was passed to the driver whichever
 		// path the operation took, so ops against rep is the check that
 		// reads the same on both.
-		g_Uart.printf("intrf   : ops %lu busy %lu rep %lu\r\n",
-					  (unsigned long)st.Ops, (unsigned long)st.Busy,
-					  (unsigned long)st.RepDone);
-		g_Uart.printf("path    : sd %lu slot %lu direct %lu\r\n",
-					  (unsigned long)st.Sd, (unsigned long)st.Slot,
-					  (unsigned long)st.Direct);
+		SysLogPrintf(SysLogGet(), "intrf   : ops %lu busy %lu rep %lu\r\n",
+								  (unsigned long)st.Ops, (unsigned long)st.Busy,
+								  (unsigned long)st.RepDone);
+		SysLogPrintf(SysLogGet(), "path    : sd %lu slot %lu direct %lu\r\n",
+								  (unsigned long)st.Sd, (unsigned long)st.Slot,
+								  (unsigned long)st.Direct);
 #else
-		g_Uart.printf("cycles %lu writes %lu fails %lu\r\n",
-					  (unsigned long)s_Cycles, (unsigned long)s_Writes,
-					  (unsigned long)s_Fail);
+		SysLogPrintf(SysLogGet(), "cycles %lu writes %lu fails %lu\r\n",
+								  (unsigned long)s_Cycles, (unsigned long)s_Writes,
+								  (unsigned long)s_Fail);
 #endif
 	}
 }
@@ -1123,8 +1124,8 @@ void BtAppInitUserData()
 	s_Writes = 0;
 	s_Ready = true;
 
-	g_Uart.printf("advertising now, %d writes per cycle\r\n",
-				  NVM_DEMO_WRITES_PER_CYCLE);
+	SysLogPrintf(SysLogGet(), "advertising now, %d writes per cycle\r\n",
+							  NVM_DEMO_WRITES_PER_CYCLE);
 }
 
 // Runs inside the stack event dispatch, so it only queues the work.
@@ -1136,7 +1137,7 @@ void BtAppAdvTimeoutHandler()
 
 	if (AppEvtHandlerQue(0, NULL, NvmCycleHandler) == false)
 	{
-		g_Uart.printf("cycle   : event queue refused the cycle\r\n");
+		SysLogPrintf(SysLogGet(), "cycle   : event queue refused the cycle\r\n");
 	}
 }
 
@@ -1146,11 +1147,10 @@ int main()
 	AppEvtHandlerInit(g_AppEvtHandlerQueMem, sizeof(g_AppEvtHandlerQueMem));
 
 	g_Uart.Init(s_UartCfg);
-
-	g_Uart.printf("\r\nNvm demo on the %s, with a stack up\r\n", s_MediumName);
-
 	SysLogInit(SysLogGet(), &s_SysLogCfg, (DevIntrf_t *)g_Uart, 0,
 			   nullptr, 0);
+
+	SysLogPrintf(SysLogGet(), "\r\nNvm demo on the %s, with a stack up\r\n", s_MediumName);
 
 	BtAppInit(&s_BtAppCfg);
 
@@ -1168,8 +1168,10 @@ int main()
 int main()
 {
 	g_Uart.Init(s_UartCfg);
+	SysLogInit(SysLogGet(), &s_SysLogCfg, (DevIntrf_t *)g_Uart, 0,
+			   nullptr, 0);
 
-	g_Uart.printf("\r\nNvm demo on the %s\r\n", s_MediumName);
+	SysLogPrintf(SysLogGet(), "\r\nNvm demo on the %s\r\n", s_MediumName);
 
 	if (NvmDemoSetup())
 	{

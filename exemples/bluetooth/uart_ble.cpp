@@ -457,7 +457,7 @@ static void UartBleOobNfcPublish(const uint8_t *pRand, const uint8_t *pConf)
 		if (s_pOobTransport == nullptr ||
 			g_BleOobTag.Init(s_BleOobTagCfg, s_pOobTransport) == false)
 		{
-			g_Uart.printf("OOB NFC tag init failed\r\n");
+			SysLogPrintf(SysLogGet(), "OOB NFC tag init failed\r\n");
 			return;
 		}
 	}
@@ -484,7 +484,7 @@ static void UartBleOobNfcPublish(const uint8_t *pRand, const uint8_t *pConf)
 	if (BtOobLeNdefAdd(&msg, &oob) == false ||
 		g_BleOobTag.SetNdef(msg.pBuf, msg.Len) == false)
 	{
-		g_Uart.printf("OOB NFC publish failed, NFC disabled\r\n");
+		SysLogPrintf(SysLogGet(), "OOB NFC publish failed, NFC disabled\r\n");
 		return;
 	}
 
@@ -496,7 +496,7 @@ static void UartBleOobNfcPublish(const uint8_t *pRand, const uint8_t *pConf)
 
 	s_BleOobNfcReady = true;
 
-	g_Uart.printf("OOB data published on NFC tag, tap to pair\r\n");
+	SysLogPrintf(SysLogGet(), "OOB data published on NFC tag, tap to pair\r\n");
 }
 #endif
 
@@ -511,8 +511,8 @@ static void UartBleSecPrint(void)
 {
 	const UartBleSecMethod_t *m = &s_SecMethods[s_SecMethodIdx];
 
-	g_Uart.printf("SEC method=%s iocaps=%d authreq=0x%02x desc=%s\r\n",
-				  m->pName, m->IoCaps, m->AuthReq, m->pDesc);
+	SysLogPrintf(SysLogGet(), "SEC method=%s iocaps=%d authreq=0x%02x desc=%s\r\n",
+							  m->pName, m->IoCaps, m->AuthReq, m->pDesc);
 }
 
 static void UartBleSecApply(int Idx)
@@ -609,7 +609,7 @@ static void UartBlePrintHex(const uint8_t *pData, int Len)
 {
 	for (int i = 0; i < Len; i++)
 	{
-		g_Uart.printf("%02X", pData[i]);
+		SysLogPrintf(SysLogGet(), "%02X", pData[i]);
 	}
 }
 
@@ -620,15 +620,15 @@ static void UartBleOobPrintLocal(void)
 
 	if (BtSmpOobLocalDataGen(g_BtAppData.AppDevice.pHciDev, r, c) != 0)
 	{
-		g_Uart.printf("OOB local data generation failed\r\n");
+		SysLogPrintf(SysLogGet(), "OOB local data generation failed\r\n");
 		return;
 	}
 
-	g_Uart.printf("OOB local data. Paste this line on peer:\r\n");
-	g_Uart.printf("oob peer ");
+	SysLogPrintf(SysLogGet(), "OOB local data. Paste this line on peer:\r\n");
+	SysLogPrintf(SysLogGet(), "oob peer ");
 	UartBlePrintHex(r, sizeof(r));
 	UartBlePrintHex(c, sizeof(c));
-	g_Uart.printf("\r\n");
+	SysLogPrintf(SysLogGet(), "\r\n");
 
 #ifdef BLE_SC_OOB_NFC
 	// Same r and c as the printout, one generation feeds both channels.
@@ -645,7 +645,7 @@ static bool UartBleOobSetPeer(const uint8_t *pText, int Len)
 	{
 		BtSmpOobPeerDataSet(&raw[0], &raw[16]);
 		s_UartBlePeerOobValid = true;
-		g_Uart.printf("OOB peer data loaded\r\n");
+		SysLogPrintf(SysLogGet(), "OOB peer data loaded\r\n");
 		return true;
 	}
 
@@ -653,11 +653,11 @@ static bool UartBleOobSetPeer(const uint8_t *pText, int Len)
 	{
 		BtSmpOobPeerDataSet(&raw[7], &raw[23]);
 		s_UartBlePeerOobValid = true;
-		g_Uart.printf("OOB peer data loaded\r\n");
+		SysLogPrintf(SysLogGet(), "OOB peer data loaded\r\n");
 		return true;
 	}
 
-	g_Uart.printf("OOB peer format: oob peer <r+c hex> or <addrtype+addr+r+c hex>\r\n");
+	SysLogPrintf(SysLogGet(), "OOB peer format: oob peer <r+c hex> or <addrtype+addr+r+c hex>\r\n");
 	return false;
 }
 
@@ -673,7 +673,7 @@ static void UartBleOobInit(void)
 		UartBleOobPrintLocal();
 	}
 
-	g_Uart.printf("Commands: sec [method], oob, oob peer <hex>, bond del\r\n");
+	SysLogPrintf(SysLogGet(), "Commands: sec [method], oob, oob peer <hex>, bond del\r\n");
 }
 
 // "sec" prints the current method, "sec <name>" selects one for the next
@@ -724,12 +724,12 @@ static bool UartBleSecTryCommand(const uint8_t *pData, int Len)
 		}
 	}
 
-	g_Uart.printf("SEC unknown, one of:");
+	SysLogPrintf(SysLogGet(), "SEC unknown, one of:");
 	for (int i = 0; i < UART_BLE_SEC_METHOD_CNT; i++)
 	{
-		g_Uart.printf(" %s", s_SecMethods[i].pName);
+		SysLogPrintf(SysLogGet(), " %s", s_SecMethods[i].pName);
 	}
-	g_Uart.printf("\r\n");
+	SysLogPrintf(SysLogGet(), "\r\n");
 
 	return true;
 }
@@ -769,7 +769,7 @@ static bool UartBleOobTryCommand(const uint8_t *pData, int Len)
 		return true;
 	}
 
-	g_Uart.printf("Commands: oob, oob peer <hex>\r\n");
+	SysLogPrintf(SysLogGet(), "Commands: oob, oob peer <hex>\r\n");
 	return true;
 }
 
@@ -868,7 +868,7 @@ static bool UartBleBondTryCommand(const uint8_t *pData, int Len)
 	// Requested, not done: the delete is queued and each peer reports as it
 	// finishes, the PDS trace prints one line per peer, and peer_manager
 	// raises PM_EVT_PEERS_DELETE_SUCCEEDED when the last one is gone.
-	g_Uart.printf("bond deletion requested\r\n");
+	SysLogPrintf(SysLogGet(), "bond deletion requested\r\n");
 	BtSmpBondClearAll();
 
 	return true;
@@ -903,7 +903,7 @@ void BtAppEvtConnected(uint16_t ConnHdl)
 {
 	// Security is initiated by the underlying stack when a secure SecType is
 	// configured - the application stays SDK-neutral and does not request it here.
-	g_Uart.printf("CONNECTED hdl=%d\r\n", ConnHdl);
+	SysLogPrintf(SysLogGet(), "CONNECTED hdl=%d\r\n", ConnHdl);
 }
 
 // Bond capture (BtSmpBondAdd) and LTK lookup (BtSmpBondLtkLookup) are provided
@@ -972,8 +972,8 @@ void BtAppInitUserData()
 // reads the y/n or the typed passkey and resumes pairing.
 void BtSmpNumericComparison(uint16_t ConnHdl, uint32_t Value)
 {
-	g_Uart.printf("\r\nSMP numeric comparison: %06u\r\n", (unsigned)Value);
-	g_Uart.printf("Do both devices show this value? type y or n\r\n");
+	SysLogPrintf(SysLogGet(), "\r\nSMP numeric comparison: %06u\r\n", (unsigned)Value);
+	SysLogPrintf(SysLogGet(), "Do both devices show this value? type y or n\r\n");
 	s_PairConnHdl = ConnHdl;
 	s_PairInput = PAIR_INPUT_NUMERIC;
 }
@@ -981,12 +981,12 @@ void BtSmpNumericComparison(uint16_t ConnHdl, uint32_t Value)
 void BtSmpPasskeyDisplay(uint16_t ConnHdl, uint32_t Passkey)
 {
 	(void)ConnHdl;
-	g_Uart.printf("\r\nSMP passkey (enter this on the peer): %06u\r\n", (unsigned)Passkey);
+	SysLogPrintf(SysLogGet(), "\r\nSMP passkey (enter this on the peer): %06u\r\n", (unsigned)Passkey);
 }
 
 void BtSmpPasskeyRequest(uint16_t ConnHdl)
 {
-	g_Uart.printf("\r\nSMP passkey entry: type the 6 digits shown on the peer\r\n");
+	SysLogPrintf(SysLogGet(), "\r\nSMP passkey entry: type the 6 digits shown on the peer\r\n");
 	s_PairConnHdl = ConnHdl;
 	s_PairDigits = 0;
 	s_PairPasskey = 0;
@@ -1009,14 +1009,14 @@ static bool PairInputPoll(void)
 			if (c == 'y' || c == 'Y')
 			{
 				s_PairInput = PAIR_INPUT_NONE;
-				g_Uart.printf("match\r\n");
+				SysLogPrintf(SysLogGet(), "match\r\n");
 				BtSmpNumericComparisonReply(s_PairConnHdl, true);
 				return true;
 			}
 			if (c == 'n' || c == 'N')
 			{
 				s_PairInput = PAIR_INPUT_NONE;
-				g_Uart.printf("no match\r\n");
+				SysLogPrintf(SysLogGet(), "no match\r\n");
 				BtSmpNumericComparisonReply(s_PairConnHdl, false);
 				return true;
 			}
@@ -1031,7 +1031,7 @@ static bool PairInputPoll(void)
 				if (s_PairDigits == 6)
 				{
 					s_PairInput = PAIR_INPUT_NONE;
-					g_Uart.printf("\r\n");
+					SysLogPrintf(SysLogGet(), "\r\n");
 					BtSmpPasskeyReply(s_PairConnHdl, s_PairPasskey);
 					return true;
 				}
@@ -1039,7 +1039,7 @@ static bool PairInputPoll(void)
 			else if (c == 0x1b)
 			{
 				s_PairInput = PAIR_INPUT_NONE;
-				g_Uart.printf("\r\ncancelled\r\n");
+				SysLogPrintf(SysLogGet(), "\r\ncancelled\r\n");
 				BtSmpPasskeyReply(s_PairConnHdl, BT_SMP_PASSKEY_INVALID);
 				return true;
 			}
@@ -1192,14 +1192,14 @@ int main()
 {
 	HardwareInit();
 
-	g_Uart.printf("UART over BLE\r\n");
-	g_Uart.printf("security    : %s\r\n", BLE_SC_NAME);
+	SysLogPrintf(SysLogGet(), "UART over BLE\r\n");
+	SysLogPrintf(SysLogGet(), "security    : %s\r\n", BLE_SC_NAME);
 
 	//g_Uart.Disable();
 
 	if (!BtAppInit(&s_BleAppCfg))
 	{
-		g_Uart.printf("BtAppInit failed\r\n");
+		SysLogPrintf(SysLogGet(), "BtAppInit failed\r\n");
 		while (true)
 		{
 			__NOP();
@@ -1211,7 +1211,7 @@ int main()
 
 	// AppRun is not expected to return. Keep embedded startup from falling
 	// through newlib exit if it ever does.
-	g_Uart.printf("AppRun returned\r\n");
+	SysLogPrintf(SysLogGet(), "AppRun returned\r\n");
 	while (true)
 	{
 		__NOP();

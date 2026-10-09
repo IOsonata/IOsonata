@@ -5,7 +5,8 @@
 
 Starts the Modem library with the IOsonata glue (modem_nrf91.h) and prints
 the modem firmware version, the IMEI, the hardware version and the
-functional mode on the console UART. It does not attach to a network.
+functional mode with SysLog on the console UART. It does not attach to a
+network.
 
 A plain secure image: link it with nrf9160_xxaa.ld or nrf9120_xxaa.ld, the
 library and the Modem library, cellular variant:
@@ -50,6 +51,7 @@ SOFTWARE.
 #include "nrf_modem_at.h"
 #include "coredev/iopincfg.h"
 #include "coredev/uart.h"
+#include "syslog.h"
 #include "coredev/timer.h"
 #include "modem_nrf91.h"
 
@@ -114,6 +116,20 @@ static const nRF91ModemCfg_t s_ModemCfg = {
 };
 
 static UART s_Uart;
+
+// SysLog on the console UART, a record goes out as soon as it is logged.
+// 16 records of 256 bytes. A record the UART does not take in full stays in
+// the store and the rest goes out at the next log call. bBlocking keeps the
+// oldest records when the store is full.
+alignas(4) static uint8_t s_SysLogMem[SYSLOG_MEMSIZE(16, 256)];
+
+static const SysLogCfg_t s_SysLogCfg = {
+	.pMem = s_SysLogMem,
+	.MemSize = sizeof(s_SysLogMem),
+	.RecordLen = 256,
+	.bBlocking = true,
+};
+
 static char s_Resp[LTE_MODEM_INFO_RESP_SIZE];
 
 static void LteModemInfoAt(const char *pCmd)
@@ -122,35 +138,37 @@ static void LteModemInfoAt(const char *pCmd)
 
 	if (res == 0)
 	{
-		s_Uart.printf("%s\r\n%s", pCmd, s_Resp);
+		SysLogPrintf(SysLogGet(), "%s\r\n", pCmd);
+		SysLogPrintf(SysLogGet(), "%s", s_Resp);
 	}
 	else
 	{
-		s_Uart.printf("%s failed %d\r\n", pCmd, res);
+		SysLogPrintf(SysLogGet(), "%s failed %d\r\n", pCmd, res);
 	}
 }
 
 int main()
 {
 	s_Uart.Init(s_UartCfg);
+	SysLogInit(SysLogGet(), &s_SysLogCfg, (DevIntrf_t *)s_Uart, 0, nullptr, 0);
 
-	s_Uart.printf("LteModemInfo\r\n");
+	SysLogPrintf(SysLogGet(), "LteModemInfo\r\n");
 
 	if (!TimerInit(&s_TimerDev, &s_TimerCfg))
 	{
-		s_Uart.printf("Timer init failed\r\n");
+		SysLogPrintf(SysLogGet(), "Timer init failed\r\n");
 	}
 
 	int res = nRF91ModemInit(&s_ModemCfg);
 
 	if (res != 0)
 	{
-		s_Uart.printf("Modem init failed %d, firmware update result 0x%x\r\n",
-					  res, (unsigned)nRF91ModemDfuResult());
+		SysLogPrintf(SysLogGet(), "Modem init failed %d, firmware update result 0x%x\r\n",
+								  res, (unsigned)nRF91ModemDfuResult());
 	}
 	else
 	{
-		s_Uart.printf("Modem library %s\r\n", nrf_modem_build_version());
+		SysLogPrintf(SysLogGet(), "Modem library %s\r\n", nrf_modem_build_version());
 
 		LteModemInfoAt("AT+CGMR");			// Modem firmware version
 		LteModemInfoAt("AT+CGSN");			// IMEI
@@ -168,8 +186,8 @@ int main()
 
 		if (!faultshown && nRF91ModemFault(&fault))
 		{
-			s_Uart.printf("Modem fault 0x%x at 0x%x\r\n",
-						  (unsigned)fault.reason, (unsigned)fault.program_counter);
+			SysLogPrintf(SysLogGet(), "Modem fault 0x%x at 0x%x\r\n",
+									  (unsigned)fault.reason, (unsigned)fault.program_counter);
 			faultshown = true;
 		}
 	}

@@ -7,10 +7,10 @@ Starts the LTE subsystem (lte.h) with PSM requested, opens a UDP socket
 (net/sock_intrf.h) once registered and sends a short message every
 LTE_UDP_INTERVAL seconds, with a release assistance hint so the network
 lets the modem sleep right after it. Network events and anything the
-server sends back are printed on the console UART. Between packets the
-modem is in PSM and the application waits in AppRun. For an average current
-measurement, leave the console out: its receiver draws far more than the
-modem in PSM. After a modem fault the example starts LTE again.
+server sends back are logged with SysLog on the console UART. Between
+packets the modem is in PSM and the application waits in AppRun. For an
+average current measurement, leave the console out: its receiver draws far
+more than the modem in PSM. After a modem fault the example starts LTE again.
 
 Everything runs from the application event queue: the LTE events, the
 received data and the send timer.
@@ -63,6 +63,7 @@ SOFTWARE.
 #include "coredev/interrupt.h"
 #include "coredev/iopincfg.h"
 #include "coredev/uart.h"
+#include "syslog.h"
 #include "coredev/timer.h"
 #include "lte/lte.h"
 #include "net/sock_intrf.h"
@@ -181,6 +182,20 @@ static const SockIntrfCfg_t s_SockCfg = {
 };
 
 static UART s_Uart;
+
+// SysLog on the console UART, a record goes out as soon as it is logged.
+// 16 records of 192 bytes. A record the UART does not take in full stays in
+// the store and the rest goes out at the next log call. bBlocking keeps the
+// oldest records when the store is full.
+alignas(4) static uint8_t s_SysLogMem[SYSLOG_MEMSIZE(16, 192)];
+
+static const SysLogCfg_t s_SysLogCfg = {
+	.pMem = s_SysLogMem,
+	.MemSize = sizeof(s_SysLogMem),
+	.RecordLen = 192,
+	.bBlocking = true,
+};
+
 static SockIntrf s_Sock;
 static uint32_t s_TxCount = 0;
 
@@ -205,7 +220,7 @@ static void LteUdpSend(uint32_t Evt, void *pCtx)
 
 	if (s_Sock.Connected() == false && s_Sock.Init(s_SockCfg) == false)
 	{
-		s_Uart.printf("Socket to %s:%d failed\r\n", LTE_UDP_HOST, LTE_UDP_PORT);
+		SysLogPrintf(SysLogGet(), "Socket to %s:%d failed\r\n", LTE_UDP_HOST, LTE_UDP_PORT);
 		return;
 	}
 
@@ -228,12 +243,12 @@ static void LteUdpSend(uint32_t Evt, void *pCtx)
 
 	if (s_Sock.Tx(0, (uint8_t *)msg, len) == len)
 	{
-		s_Uart.printf("Sent %d: %s\r\n", len, msg);
+		SysLogPrintf(SysLogGet(), "Sent %d: %s\r\n", len, msg);
 		s_TxCount++;
 	}
 	else
 	{
-		s_Uart.printf("Send failed\r\n");
+		SysLogPrintf(SysLogGet(), "Send failed\r\n");
 	}
 }
 
@@ -251,7 +266,7 @@ static void LteUdpRecv(uint32_t Evt, void *pCtx)
 	while ((n = s_Sock.Rx(0, buf, sizeof(buf) - 1)) > 0)
 	{
 		buf[n] = 0;
-		s_Uart.printf("Received %d: %s\r\n", n, (char *)buf);
+		SysLogPrintf(SysLogGet(), "Received %d: %s\r\n", n, (char *)buf);
 	}
 }
 
@@ -286,53 +301,53 @@ static void LteUdpEvtHandler(LTE_EVT Evt, const LteStatus_t * const pStatus)
 	switch (Evt)
 	{
 		case LTE_EVT_REGISTERED:
-			s_Uart.printf("Registered %s, %s, TAC %04X, cell %08X\r\n",
-						  pStatus->RegStat == LTE_REG_ROAMING ? "roaming" : "home",
-						  pStatus->Rat == LTE_RAT_NBIOT ? "NB-IoT" : "LTE-M",
-						  (unsigned)pStatus->Tac, (unsigned)pStatus->CellId);
+			SysLogPrintf(SysLogGet(), "Registered %s, %s, TAC %04X, cell %08X\r\n",
+									  pStatus->RegStat == LTE_REG_ROAMING ? "roaming" : "home",
+									  pStatus->Rat == LTE_RAT_NBIOT ? "NB-IoT" : "LTE-M",
+									  (unsigned)pStatus->Tac, (unsigned)pStatus->CellId);
 			if (pStatus->bPsm)
 			{
-				s_Uart.printf("PSM TAU %u s, active %u s\r\n",
-							  (unsigned)pStatus->PsmTau, (unsigned)pStatus->PsmActive);
+				SysLogPrintf(SysLogGet(), "PSM TAU %u s, active %u s\r\n",
+										  (unsigned)pStatus->PsmTau, (unsigned)pStatus->PsmActive);
 			}
 			LteUdpSend(0, nullptr);
 			break;
 
 		case LTE_EVT_UNREGISTERED:
-			s_Uart.printf("Unregistered, state %d\r\n", (int)pStatus->RegStat);
+			SysLogPrintf(SysLogGet(), "Unregistered, state %d\r\n", (int)pStatus->RegStat);
 			break;
 
 		case LTE_EVT_REG_STATE:
-			s_Uart.printf("Registration state %d\r\n", (int)pStatus->RegStat);
+			SysLogPrintf(SysLogGet(), "Registration state %d\r\n", (int)pStatus->RegStat);
 			break;
 
 		case LTE_EVT_CELL:
-			s_Uart.printf("Cell TAC %04X, cell %08X\r\n", (unsigned)pStatus->Tac, (unsigned)pStatus->CellId);
+			SysLogPrintf(SysLogGet(), "Cell TAC %04X, cell %08X\r\n", (unsigned)pStatus->Tac, (unsigned)pStatus->CellId);
 			break;
 
 		case LTE_EVT_RRC_CONNECTED:
-			s_Uart.printf("RRC connected\r\n");
+			SysLogPrintf(SysLogGet(), "RRC connected\r\n");
 			break;
 
 		case LTE_EVT_RRC_IDLE:
-			s_Uart.printf("RRC idle\r\n");
+			SysLogPrintf(SysLogGet(), "RRC idle\r\n");
 			break;
 
 		case LTE_EVT_PSM:
-			s_Uart.printf("PSM %s, TAU %u s, active %u s\r\n", pStatus->bPsm ? "on" : "off",
-						  (unsigned)pStatus->PsmTau, (unsigned)pStatus->PsmActive);
+			SysLogPrintf(SysLogGet(), "PSM %s, TAU %u s, active %u s\r\n", pStatus->bPsm ? "on" : "off",
+									  (unsigned)pStatus->PsmTau, (unsigned)pStatus->PsmActive);
 			break;
 
 		case LTE_EVT_EDRX:
-			s_Uart.printf("eDRX %u ms, PTW %u ms\r\n", (unsigned)pStatus->EdrxCycle, (unsigned)pStatus->EdrxPtw);
+			SysLogPrintf(SysLogGet(), "eDRX %u ms, PTW %u ms\r\n", (unsigned)pStatus->EdrxCycle, (unsigned)pStatus->EdrxPtw);
 			break;
 
 		case LTE_EVT_MODEM_FAULT:
-			s_Uart.printf("Modem fault, restarting\r\n");
+			SysLogPrintf(SysLogGet(), "Modem fault, restarting\r\n");
 			s_Sock.Close();
 			if (LteInit(&s_LteCfg) == false)
 			{
-				s_Uart.printf("LTE init failed\r\n");
+				SysLogPrintf(SysLogGet(), "LTE init failed\r\n");
 			}
 			break;
 	}
@@ -340,7 +355,7 @@ static void LteUdpEvtHandler(LTE_EVT Evt, const LteStatus_t * const pStatus)
 
 static void LteUdpUrcHandler(const char *pUrc)
 {
-	s_Uart.printf("URC %s\r\n", pUrc);
+	SysLogPrintf(SysLogGet(), "URC %s\r\n", pUrc);
 }
 
 int main()
@@ -348,31 +363,32 @@ int main()
 	AppEvtHandlerInit(g_AppEvtHandlerQueMem, sizeof(g_AppEvtHandlerQueMem));
 
 	s_Uart.Init(s_UartCfg);
-	s_Uart.printf("LteUdp\r\n");
+	SysLogInit(SysLogGet(), &s_SysLogCfg, (DevIntrf_t *)s_Uart, 0, nullptr, 0);
+	SysLogPrintf(SysLogGet(), "LteUdp\r\n");
 
 	char info[48];
 
 	if (TimerInit(&s_TimerDev, &s_TimerCfg) == false)
 	{
-		s_Uart.printf("Timer init failed\r\n");
+		SysLogPrintf(SysLogGet(), "Timer init failed\r\n");
 	}
 	else if (LteInit(&s_LteCfg) == false)
 	{
-		s_Uart.printf("LTE init failed\r\n");
+		SysLogPrintf(SysLogGet(), "LTE init failed\r\n");
 	}
 	else
 	{
 		if (LteGetInfo(LTE_INFO_FWVER, info, sizeof(info)))
 		{
-			s_Uart.printf("Modem firmware %s\r\n", info);
+			SysLogPrintf(SysLogGet(), "Modem firmware %s\r\n", info);
 		}
 		if (LteGetInfo(LTE_INFO_IMEI, info, sizeof(info)))
 		{
-			s_Uart.printf("IMEI %s\r\n", info);
+			SysLogPrintf(SysLogGet(), "IMEI %s\r\n", info);
 		}
 		msTimerEnableTrigger(&s_TimerDev, LTE_UDP_TRIG_SEND, LTE_UDP_INTERVAL * 1000U,
 							 TIMER_TRIG_TYPE_CONTINUOUS, LteUdpTimerTrig, nullptr);
-		s_Uart.printf("Attaching\r\n");
+		SysLogPrintf(SysLogGet(), "Attaching\r\n");
 	}
 
 	AppRun();

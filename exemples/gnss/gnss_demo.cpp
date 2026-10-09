@@ -3,12 +3,12 @@
 
 @brief	GNSS demo
 
-Starts the GNSS receiver for a fix every second and prints each update on the
-console UART. While searching: the time searched and the satellites tracked
-with their signal strength (C/N0 in dB-Hz, system letter G GPS, E Galileo,
-J QZSS, R GLONASS, C BeiDou). With a fix: the UTC time, the position, its
-accuracy, the speed and the satellites used. The time to the first fix is
-printed once.
+Starts the GNSS receiver for a fix every second and logs each update with
+SysLog on the console UART. While searching: the time searched and the
+satellites tracked with their signal strength (C/N0 in dB-Hz, system letter
+G GPS, E Galileo, J QZSS, R GLONASS, C BeiDou). With a fix: the UTC time,
+the position, its accuracy, the speed and the satellites used. The time to
+the first fix is logged once.
 
 The board.h of the project gives the console UART pins, the receiver and its
 interface (GNSS_RECEIVER, GNSS_INTRF, GNSS_INTRF_CFG_T, GNSS_INTRF_CFG), the
@@ -54,6 +54,7 @@ SOFTWARE.
 #include "coredev/interrupt.h"
 #include "coredev/iopincfg.h"
 #include "coredev/uart.h"
+#include "syslog.h"
 #include "coredev/timer.h"
 #include "gnss/gnss.h"
 
@@ -154,6 +155,20 @@ static const uint32_t s_NumScale[GNSS_DEMO_DEC_MAX + 1] = {
 };
 
 static UART s_Uart;
+
+// SysLog on the console UART, a record goes out as soon as it is logged.
+// 16 records of 192 bytes. A record the UART does not take in full stays in
+// the store and the rest goes out at the next log call. bBlocking keeps the
+// oldest records when the store is full.
+alignas(4) static uint8_t s_SysLogMem[SYSLOG_MEMSIZE(16, 192)];
+
+static const SysLogCfg_t s_SysLogCfg = {
+	.pMem = s_SysLogMem,
+	.MemSize = sizeof(s_SysLogMem),
+	.RecordLen = 192,
+	.bBlocking = true,
+};
+
 static Timer s_Timer;
 static const GNSS_INTRF_CFG_T s_GnssIntrfCfg = GNSS_INTRF_CFG(s_Timer, GNSS_DEMO_TIMER_TRIG,
 																GnssDemoIntrfEvt);
@@ -240,19 +255,19 @@ static void GnssDemoEvtHandler(Gnss * const pGnss, GNSS_EVT Evt, const GnssStatu
 				if (s_bFirstFix)
 				{
 					s_bFirstFix = false;
-					s_Uart.printf("First fix after %u s\r\n", GnssDemoSec());
+					SysLogPrintf(SysLogGet(), "First fix after %u s\r\n", GnssDemoSec());
 				}
 
-				s_Uart.printf("%04u-%02u-%02u %02u:%02u:%02u UTC lat %s lon %s alt %s m acc %s m",
-							  f.Time.Year, f.Time.Month, f.Time.Day, f.Time.Hour, f.Time.Min,
-							  f.Time.Sec, GnssDemoNum(n1, f.Lat, 7), GnssDemoNum(n2, f.Lon, 7),
-							  GnssDemoNum(n3, f.Alt, 1), GnssDemoNum(n4, f.PosAccH, 1));
+				SysLogPrintf(SysLogGet(), "%04u-%02u-%02u %02u:%02u:%02u UTC lat %s lon %s alt %s m acc %s m",
+										  f.Time.Year, f.Time.Month, f.Time.Day, f.Time.Hour, f.Time.Min,
+										  f.Time.Sec, GnssDemoNum(n1, f.Lat, 7), GnssDemoNum(n2, f.Lon, 7),
+										  GnssDemoNum(n3, f.Alt, 1), GnssDemoNum(n4, f.PosAccH, 1));
 				if (f.bVelValid)
 				{
-					s_Uart.printf(" speed %s m/s",
-								  GnssDemoNum(n5, sqrtf(f.Vel[0] * f.Vel[0] + f.Vel[1] * f.Vel[1]), 1));
+					SysLogPrintf(SysLogGet(), " speed %s m/s",
+											  GnssDemoNum(n5, sqrtf(f.Vel[0] * f.Vel[0] + f.Vel[1] * f.Vel[1]), 1));
 				}
-				s_Uart.printf(" sats %u/%u\r\n", pStatus->NbSatUsed, pStatus->NbSatTracked);
+				SysLogPrintf(SysLogGet(), " sats %u/%u\r\n", pStatus->NbSatUsed, pStatus->NbSatTracked);
 			}
 			break;
 
@@ -260,33 +275,33 @@ static void GnssDemoEvtHandler(Gnss * const pGnss, GNSS_EVT Evt, const GnssStatu
 			{
 				int nb = pGnss->GetSat(s_Sat, GNSS_DEMO_SAT_MAX);
 
-				s_Uart.printf("No fix, %u s since start, tracked %u:", GnssDemoSec(), pStatus->NbSatTracked);
+				SysLogPrintf(SysLogGet(), "No fix, %u s since start, tracked %u:", GnssDemoSec(), pStatus->NbSatTracked);
 				for (int i = 0; i < nb; i++)
 				{
-					s_Uart.printf(" %c%u:%u", GnssDemoSysLetter(s_Sat[i].Sys), s_Sat[i].Id,
-								  s_Sat[i].Cn0 / 10U);
+					SysLogPrintf(SysLogGet(), " %c%u:%u", GnssDemoSysLetter(s_Sat[i].Sys), s_Sat[i].Id,
+											  s_Sat[i].Cn0 / 10U);
 				}
-				s_Uart.printf("\r\n");
+				SysLogPrintf(SysLogGet(), "\r\n");
 			}
 			break;
 
 		case GNSS_EVT_TIMEOUT:
-			s_Uart.printf("No fix within the timeout\r\n");
+			SysLogPrintf(SysLogGet(), "No fix within the timeout\r\n");
 			break;
 
 		case GNSS_EVT_BLOCKED:
-			s_Uart.printf("Receiver held off, its radio is in use\r\n");
+			SysLogPrintf(SysLogGet(), "Receiver held off, its radio is in use\r\n");
 			break;
 
 		case GNSS_EVT_UNBLOCKED:
-			s_Uart.printf("Receiver running again\r\n");
+			SysLogPrintf(SysLogGet(), "Receiver running again\r\n");
 			break;
 
 		case GNSS_EVT_FAULT:
-			s_Uart.printf("Receiver fault, restarting\r\n");
+			SysLogPrintf(SysLogGet(), "Receiver fault, restarting\r\n");
 			if (GnssDemoStart() == false)
 			{
-				s_Uart.printf("GNSS init failed\r\n");
+				SysLogPrintf(SysLogGet(), "GNSS init failed\r\n");
 			}
 			break;
 	}
@@ -297,19 +312,20 @@ int main()
 	AppEvtHandlerInit(g_AppEvtHandlerQueMem, sizeof(g_AppEvtHandlerQueMem));
 
 	s_Uart.Init(s_UartCfg);
-	s_Uart.printf("GnssDemo\r\n");
+	SysLogInit(SysLogGet(), &s_SysLogCfg, (DevIntrf_t *)s_Uart, 0, nullptr, 0);
+	SysLogPrintf(SysLogGet(), "GnssDemo\r\n");
 
 	if (s_Timer.Init(s_TimerCfg) == false)
 	{
-		s_Uart.printf("Timer init failed\r\n");
+		SysLogPrintf(SysLogGet(), "Timer init failed\r\n");
 	}
 	else if (GnssDemoStart() == false)
 	{
-		s_Uart.printf("GNSS init failed\r\n");
+		SysLogPrintf(SysLogGet(), "GNSS init failed\r\n");
 	}
 	else
 	{
-		s_Uart.printf("Searching, a fix needs a view of the sky\r\n");
+		SysLogPrintf(SysLogGet(), "Searching, a fix needs a view of the sky\r\n");
 	}
 
 	AppRun();
