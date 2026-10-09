@@ -1,9 +1,10 @@
 # STM32WBA MCU port — STM32WBA65 priority
 
 IOsonata currently contains the STM32WBA Bluetooth ACI adapter and linker
-scripts, but **not** a complete standalone STM32WBA MCU port. The hardware bring-up target is **STM32WBA65**. Select the precise device
-suffix (for example STM32WBA65RI for NUCLEO-WBA65RI) and match its flash,
-SRAM, security configuration and middleware version. The WBA5x linker scripts
+scripts, but **not** a complete standalone STM32WBA MCU port. The hardware bring-up target is **STM32WBA65**. The target board is **STM32WBA65I-DK1 Discovery Kit**, with the
+**STM32WBA65RIV7** device (2 MB flash / 512 KB SRAM), as confirmed by ST's
+UM3462 and the board product page. Match its TrustZone configuration and
+middleware version. The WBA5x linker scripts
 are retained solely for WBA5x devices and must **not** be used for WBA65.
 
 ## Existing IOsonata sources
@@ -61,10 +62,13 @@ variants with up to 2 MB flash and 512 KB SRAM, a 100 MHz Cortex-M33 and
 Bluetooth LE support. Confirm the exact MCU marking before selecting the
 flash/RAM layout; do not assume every WBA65 has the maximum memory.
 
-If the board is NUCLEO-WBA65RI, use the corresponding STM32WBA65RI device
-header and board-local pin definitions in examples; no board pin assignments
-belong in the shared MCU library.
+For STM32WBA65I-DK1, use the WBA65 device header and board-local pin
+assignments in examples; no Discovery Kit wiring belongs in the MCU library.
+The Discovery Kit has STLINK-V3EC (including USB virtual COM), OLED display,
+three LEDs and joystick, enabling startup, UART, GPIO and interactive BLE
+security validation. Board support must not be confused with the NUCLEO kit.
 
 References:
-- https://www.st.com/en/evaluation-tools/nucleo-wba65ri.html
+- https://www.st.com/en/evaluation-tools/stm32wba65i-dk1.html
+- https://www.st.com/resource/en/user_manual/DM01147159.pdf
 - https://www.st.com/en/microcontrollers-microprocessors/stm32wba65mi.html
