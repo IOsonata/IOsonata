@@ -536,7 +536,6 @@ static void AuthStatusProcess(const ble_gap_evt_t *pGapEvt)
 		return;
 	}
 
-	BtSmpPairingAttemptSucceeded(h);
 	pLink->bSc = pAuth->lesc != 0;
 	pLink->bAuthenticated = pLink->OwnEnc.enc_info.auth ||
 		pLink->PeerEnc.enc_info.auth;
@@ -556,6 +555,12 @@ static void AuthStatusProcess(const ble_gap_evt_t *pGapEvt)
 		}
 		CryptoSecureWipe(&keys, sizeof(keys));
 	}
+
+	// A successful pairing may have delivered the peer identity/IRK. Run the
+	// success hook only after the bond table has seen those keys so the
+	// repeated-attempt history can migrate from a transient RPA to the stable
+	// claimant identity. Success does not erase the penalty.
+	BtSmpPairingAttemptSucceeded(h);
 
 	pLink->bPairing = false;
 	pLink->bBonding = false;
