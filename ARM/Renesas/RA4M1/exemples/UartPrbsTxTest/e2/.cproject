@@ -93,7 +93,7 @@
 									<listOptionValue builtIn="false" value="IOsonata_RA4M1" />
 								</option>
 								<option id="ra4m1.example.1006" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.paths" valueType="libPaths">
-									<listOptionValue builtIn="false" value="&quot;../../../../lib/ioc/Debug&quot;" />
+									<listOptionValue builtIn="false" value="&quot;../../../../lib/e2/Debug&quot;" />
 								</option>
 							</tool>
 							<tool id="ra4m1.example.47" name="GNU Arm Cross C++ Linker" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.linker">
@@ -107,7 +107,7 @@
 									<listOptionValue builtIn="false" value="IOsonata_RA4M1" />
 								</option>
 								<option id="ra4m1.example.1012" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.paths" valueType="libPaths">
-									<listOptionValue builtIn="false" value="&quot;../../../../lib/ioc/Debug&quot;" />
+									<listOptionValue builtIn="false" value="&quot;../../../../lib/e2/Debug&quot;" />
 								</option>
 								<inputType id="ra4m1.example.cpp.link.input.debug" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.linker.input">
 									<additionalInput kind="additionalinputdependency" paths="$(USER_OBJS)" />
@@ -220,7 +220,7 @@
 									<listOptionValue builtIn="false" value="IOsonata_RA4M1" />
 								</option>
 								<option id="ra4m1.example.1018" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.linker.paths" valueType="libPaths">
-									<listOptionValue builtIn="false" value="&quot;../../../../lib/ioc/Release&quot;" />
+									<listOptionValue builtIn="false" value="&quot;../../../../lib/e2/Release&quot;" />
 								</option>
 							</tool>
 							<tool id="ra4m1.example.98" name="GNU Arm Cross C++ Linker" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.linker">
@@ -234,7 +234,7 @@
 									<listOptionValue builtIn="false" value="IOsonata_RA4M1" />
 								</option>
 								<option id="ra4m1.example.1024" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.paths" valueType="libPaths">
-									<listOptionValue builtIn="false" value="&quot;../../../../lib/ioc/Release&quot;" />
+									<listOptionValue builtIn="false" value="&quot;../../../../lib/e2/Release&quot;" />
 								</option>
 								<inputType id="ra4m1.example.cpp.link.input.release" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.linker.input">
 									<additionalInput kind="additionalinputdependency" paths="$(USER_OBJS)" />
