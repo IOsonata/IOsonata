@@ -44,6 +44,11 @@ SOFTWARE.
 #define LTE_UDP_PORT		7
 #define LTE_UDP_RAI			0
 
+// LTE-M only: modem firmware 1.2.x runs one of LTE-M and NB-IoT at a time,
+// both at once needs 1.3.0 or later
+#define LTE_UDP_RAT			LTE_RAT_LTEM
+#define LTE_UDP_RAT_PREF	LTE_RAT_NONE
+
 // Console, UART0 to the interface MCU (VCOM0)
 #define UART_DEVNO			0
 #define UART_RX_PORT		0

@@ -20,6 +20,8 @@ Configure the server here or from board.h:
 	LTE_UDP_APN			APN, NULL for the network default
 	LTE_UDP_INTERVAL	seconds between packets
 	LTE_UDP_RAI			1 to use release assistance (modem support needed)
+	LTE_UDP_RAT			radio access technologies allowed, LTE_RAT_*
+	LTE_UDP_RAT_PREF	preferred one when both are allowed, LTE_RAT_NONE for none
 
 The board.h of the project gives the console UART pins.
 
@@ -82,6 +84,12 @@ SOFTWARE.
 #ifndef LTE_UDP_RAI
 #define LTE_UDP_RAI				1
 #endif
+#ifndef LTE_UDP_RAT
+#define LTE_UDP_RAT				LTE_RAT_LTEM_NBIOT
+#endif
+#ifndef LTE_UDP_RAT_PREF
+#define LTE_UDP_RAT_PREF		LTE_RAT_LTEM
+#endif
 
 #ifndef TAKTOS_APP_TICK_HZ
 #define TAKTOS_APP_TICK_HZ		1000u
@@ -138,8 +146,8 @@ static const UARTCfg_t s_UartCfg = {
 
 // No timer: the TaktOS modem glue does the waits
 static const LteCfg_t s_LteCfg = {
-	.Rat = LTE_RAT_LTEM_NBIOT,
-	.RatPref = LTE_RAT_LTEM,
+	.Rat = LTE_UDP_RAT,
+	.RatPref = LTE_UDP_RAT_PREF,
 	.bGnss = false,
 	.pBand = nullptr,			// Band setting of the modem kept
 	.NbBand = 0,
