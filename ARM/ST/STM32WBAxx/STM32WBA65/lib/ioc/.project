@@ -1696,7 +1696,7 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/i2c.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/coredev/gpio_stm32wbaxx.c</name>
+			<name>src/gpio_stm32wbaxx.c</name>
 			<type>1</type>
 			<locationURI>PARENT-3-PROJECT_LOC/src/gpio_stm32wbaxx.c</locationURI>
 		</link>
