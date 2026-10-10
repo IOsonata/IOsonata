@@ -486,6 +486,17 @@ static void Stm32UartDmaStop(Stm32UartDev_t * const pDev)
 static bool Stm32UartRxFifoPut(UARTDev_t * const pDev, uint8_t Data)
 {
 	CFifo_t *pFifo = pDev->hRxFifo;
+	if (!pFifo->bBlocking)
+	{
+		uint8_t *p = CFifoPut(pFifo);
+		if (p == NULL)
+		{
+			return false;
+		}
+		*p = Data;
+		return true;
+	}
+
 	uint32_t put = pFifo->PutIdx;
 	uint32_t get = pFifo->GetIdx;
 	if (put - get >= (uint32_t)pFifo->MaxIdxCnt)
