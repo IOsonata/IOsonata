@@ -4,7 +4,15 @@
  * the target provisioning configuration before programming.
  */
 SEARCH_DIR(.)
-SEARCH_DIR("../../../../../../ARM/ldscript")
+SEARCH_DIR("../../../ldscript")
+SEARCH_DIR("../../../../ldscript")
+SEARCH_DIR("../../../../../ldscript")
+SEARCH_DIR("../../../../../../ldscript")
+SEARCH_DIR("../../../../../../../ldscript")
+SEARCH_DIR("../../../../../../../../ldscript")
+SEARCH_DIR("../../../../IOsonata/ARM/ldscript")
+SEARCH_DIR("../../../../../IOsonata/ARM/ldscript")
+SEARCH_DIR("../../../../../../IOsonata/ARM/ldscript")
 GROUP(-lstdc++ -lgcc -lc)
 
 MEMORY
