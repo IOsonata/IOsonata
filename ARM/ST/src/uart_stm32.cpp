@@ -876,11 +876,9 @@ static int Stm32UartTxData(DevIntrf_t * const pDev, uint8_t const *pData, int Da
 		return cnt;
 	}
 
-	int rtry = pDev->MaxRetry;
-
-	while (Datalen > 0 && rtry-- > 0)
+	// One FIFO enqueue attempt: do not busy-retry with RX IRQs masked.
+	uint32_t state = DisableInterrupt();
 	{
-		uint32_t state = DisableInterrupt();
 
 		if ((reg->CR1 & USART_CR1_UE) == 0)
 		{
@@ -929,14 +927,8 @@ static int Stm32UartTxData(DevIntrf_t * const pDev, uint8_t const *pData, int Da
 			reg->CR1 |= ST_USART_CR1_TXEIE;
 		}
 
-		EnableInterrupt(state);
 	}
-
-	// Datalen is what the FIFO did not take after all retries.
-	if (Datalen > 0)
-	{
-		dev->pUartDev->TxDropCnt += (uint32_t)Datalen;
-	}
+	EnableInterrupt(state);
 
 	return cnt;
 }
