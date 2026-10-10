@@ -34,6 +34,7 @@ SOFTWARE.
 """
 import argparse
 import sys
+import threading
 import time
 
 import serial
@@ -45,58 +46,124 @@ def prbs8(curval):
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="PRBS UART loopback test")
-    parser.add_argument("--port", required=True, help="Serial transmit port")
+    parser = argparse.ArgumentParser(description="Threaded PRBS UART loopback")
+    parser.add_argument("--port", required=True, help="Transmit serial port")
     parser.add_argument("--rx-port", help="Separate receive port (default: --port)")
-    parser.add_argument("--baud", type=int, default=1000000,
-                        help="Baud rate (default: 1000000)")
+    parser.add_argument("--baud", type=int, default=1000000)
     parser.add_argument("--timeout", type=float, default=1.0,
-                        help="Receive timeout in seconds (default: 1)")
-    parser.add_argument("--report-interval", type=float, default=1.0,
-                        help="Statistics interval in seconds (default: 1)")
+                        help="No-receive timeout in seconds (default: 1)")
+    parser.add_argument("--report-interval", type=float, default=1.0)
+    parser.add_argument("--block-size", type=int, default=16,
+                        help="Transmitted bytes per write (default: 16)")
+    parser.add_argument("--window", type=int, default=128,
+                        help="Maximum unacknowledged bytes (default: 128)")
     return parser.parse_args()
 
 
 def main():
     args = parse_args()
-    if args.baud <= 0 or args.timeout <= 0 or args.report_interval <= 0:
-        print("ERROR: baud, timeout, and report interval must be positive",
+    if (args.baud <= 0 or args.timeout <= 0 or args.report_interval <= 0 or
+            args.block_size <= 0 or args.window < args.block_size):
+        print("ERROR: invalid baud, timeout, interval, block size or window",
               file=sys.stderr)
         return 2
 
     tx = None
     rx = None
+    worker = None
+    stop = threading.Event()
+    condition = threading.Condition()
+    state = {"sent": 0, "received": 0, "errors": 0, "failure": None}
+
+    # PRBS7 repeats every 127 bytes; generate the stream once for efficient
+    # block transmission, then independently check every received byte.
+    sequence = bytearray()
+    value = prbs8(0xff)
+    for _ in range(127):
+        sequence.append(value)
+        value = prbs8(value)
+    pattern = bytes(sequence)
+
+    def transmit():
+        try:
+            while not stop.is_set():
+                with condition:
+                    condition.wait_for(
+                        lambda: stop.is_set() or
+                        state["sent"] - state["received"] < args.window,
+                        timeout=0.1)
+                    if stop.is_set():
+                        return
+                    available = args.window - (state["sent"] - state["received"])
+                    if available <= 0:
+                        continue
+                    offset = state["sent"]
+                    length = min(args.block_size, available)
+                block = bytes(pattern[(offset + i) % len(pattern)]
+                              for i in range(length))
+                written = tx.write(block)
+                if written != length:
+                    raise serial.SerialTimeoutException(
+                        "Short UART write: %d of %d" % (written, length))
+                with condition:
+                    state["sent"] += written
+                    condition.notify_all()
+        except (serial.SerialException, OSError) as exc:
+            with condition:
+                state["failure"] = exc
+                condition.notify_all()
+            stop.set()
+
     try:
         tx = serial.Serial(port=args.port, baudrate=args.baud,
-                           timeout=args.timeout, write_timeout=args.timeout,
+                           timeout=0.1, write_timeout=args.timeout,
                            rtscts=False)
-        if args.rx_port and args.rx_port != args.port:
-            rx = serial.Serial(port=args.rx_port, baudrate=args.baud,
-                               timeout=args.timeout, rtscts=False)
-        else:
-            rx = tx
-
+        rx = (serial.Serial(port=args.rx_port, baudrate=args.baud,
+                            timeout=0.1, rtscts=False)
+              if args.rx_port and args.rx_port != args.port else tx)
         rx.reset_input_buffer()
-        value = prbs8(0xff)
-        count = 0
-        errors = 0
+
+        worker = threading.Thread(target=transmit, name="uart-prbs-tx",
+                                  daemon=True)
+        worker.start()
         start = time.perf_counter()
         last_report = start
+        last_received_at = start
+        prior_received = 0
 
-        while True:
-            tx.write(bytes((value,)))
-            data = rx.read(1)
-            if not data or data[0] != value:
-                errors += 1
-            value = prbs8(value)
-            count += 1
-
+        while not stop.is_set():
+            data = rx.read(args.window)
             now = time.perf_counter()
+            if data:
+                with condition:
+                    position = state["received"]
+                    for byte in data:
+                        if byte != pattern[position % len(pattern)]:
+                            state["errors"] += 1
+                        position += 1
+                    state["received"] = position
+                    condition.notify_all()
+                last_received_at = now
+
+            with condition:
+                sent = state["sent"]
+                received = state["received"]
+                errors = state["errors"]
+                failure = state["failure"]
+
+            if failure is not None:
+                raise failure
             if now - last_report >= args.report_interval:
-                elapsed = now - start
-                print("Bytes/sec : %.2f, errors %d" %
-                      (count / elapsed if elapsed > 0 else 0.0, errors))
+                elapsed = now - last_report
+                rate = (received - prior_received) / elapsed
+                print("Rx B/s : %.2f, errors %d, pending %d" %
+                      (rate, errors, max(0, sent - received)), flush=True)
+                prior_received = received
                 last_report = now
+            if now - last_received_at >= args.timeout:
+                raise serial.SerialTimeoutException(
+                    "No UART echo for %.2f seconds (%d sent, %d received)" %
+                    (args.timeout, sent, received))
 
     except KeyboardInterrupt:
         print("KeyboardInterrupt. Exiting.")
@@ -104,6 +171,11 @@ def main():
         print("ERROR: %s" % exc, file=sys.stderr)
         return 2
     finally:
+        stop.set()
+        with condition:
+            condition.notify_all()
+        if worker is not None:
+            worker.join(timeout=args.timeout + 0.2)
         if rx is not None and rx is not tx:
             rx.close()
         if tx is not None:
