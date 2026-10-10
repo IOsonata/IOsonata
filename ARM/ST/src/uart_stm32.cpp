@@ -30,7 +30,7 @@
 		bIntMode false : polling, TxData and RxData access the data register
 		bIntMode true  : USART interrupts drain the TX CFIFO and fill the
 		                 RX CFIFO
-		bDMAMode true  : not implemented, UARTInit fails
+		bDMAMode true  : STM32F030x8 normal-mode TX DMA; RX remains CPU driven
 
 		Not mapped yet: the RCC names of WBA.
 
@@ -354,7 +354,10 @@ static void *Stm32UartGetHandle(DevIntrf_t * const pDev);
 // ownership passes to the DMA controller. Called with interrupts masked.
 static void Stm32UartDmaStart(Stm32UartDev_t * const pDev)
 {
-	if (pDev->DmaActive) return;
+	if (pDev->DmaActive)
+	{
+		return;
+	}
 
 	int len = ST_UART_DMA_TX_SIZE;
 	uint8_t *p = CFifoGetMultiple(pDev->pUartDev->hTxFifo, &len);
@@ -369,24 +372,36 @@ static void Stm32UartDmaStart(Stm32UartDev_t * const pDev)
 	DMA1->IFCR = DMA_IFCR_CGIF1 << pDev->TxDmaShift;
 	pDev->pTxDma->CNDTR = (uint32_t)len;
 	__DMB();
-	uint32_t ccr = DMA_CCR_DIR | DMA_CCR_MINC | DMA_CCR_TEIE;
-	if (pDev->pUartDev->DevIntrf.bIntEn) ccr |= DMA_CCR_TCIE;
+	uint32_t ccr = DMA_CCR_DIR | DMA_CCR_MINC;
+	if (pDev->pUartDev->DevIntrf.bIntEn)
+	{
+		ccr |= DMA_CCR_TCIE | DMA_CCR_TEIE;
+	}
 	pDev->DmaActive = true;
 	pDev->pTxDma->CCR = ccr | DMA_CCR_EN;
 }
 
 static void Stm32UartDmaService(Stm32UartDev_t * const pDev)
 {
-	if (pDev->pUartDev == NULL || !pDev->DmaActive) return;
+	if (pDev->pUartDev == NULL || !pDev->DmaActive)
+	{
+		return;
+	}
 	uint32_t flags = (DMA1->ISR >> pDev->TxDmaShift) &
 					 (DMA_ISR_TCIF1 | DMA_ISR_TEIF1);
-	if (flags == 0U) return;
+	if (flags == 0U)
+	{
+		return;
+	}
 
 	uint32_t left = pDev->pTxDma->CNDTR;
 	pDev->pTxDma->CCR = 0;
 	DMA1->IFCR = DMA_IFCR_CGIF1 << pDev->TxDmaShift;
 	pDev->DmaActive = false;
-	if (flags & DMA_ISR_TEIF1) pDev->pUartDev->TxDropCnt += left;
+	if (flags & DMA_ISR_TEIF1)
+	{
+		pDev->pUartDev->TxDropCnt += left;
+	}
 
 	Stm32UartDmaStart(pDev);
 	if (!pDev->DmaActive && pDev->pUartDev->EvtCallback)
@@ -397,7 +412,10 @@ static void Stm32UartDmaService(Stm32UartDev_t * const pDev)
 
 static void Stm32UartDmaStop(Stm32UartDev_t * const pDev)
 {
-	if (pDev->pTxDma == NULL) return;
+	if (pDev->pTxDma == NULL)
+	{
+		return;
+	}
 	pDev->pReg->CR3 &= ~USART_CR3_DMAT;
 	pDev->pTxDma->CCR = 0;
 	DMA1->IFCR = DMA_IFCR_CGIF1 << pDev->TxDmaShift;
@@ -717,9 +735,18 @@ static int Stm32UartTxData(DevIntrf_t * const pDev, uint8_t const *pData, int Da
 			int len = Datalen;
 			uint8_t *p = len == 1 ? CFifoPut(dev->pUartDev->hTxFifo) :
 						 CFifoPutMultiple(dev->pUartDev->hTxFifo, &len);
-			if (p == NULL) break;
-			if (len == 1) *p = *pData;
-			else memcpy(p, pData, len);
+			if (p == NULL)
+			{
+				break;
+			}
+			if (len == 1)
+			{
+				*p = *pData;
+			}
+			else
+			{
+				memcpy(p, pData, len);
+			}
 			cnt += len;
 			Datalen -= len;
 			pData += len;
@@ -825,7 +852,10 @@ static void Stm32UartDisable(DevIntrf_t * const pDev)
 	uint32_t state = DisableInterrupt();
 
 #if defined(STM32F030x8)
-	if (pDev->bDma) Stm32UartDmaStop(dev);
+	if (pDev->bDma)
+	{
+		Stm32UartDmaStop(dev);
+	}
 #endif
 	dev->pReg->CR1 &= ~(USART_CR1_UE | USART_CR1_RE | USART_CR1_TE);
 	*dev->pRccEnReg &= ~dev->RccMask;
@@ -847,7 +877,10 @@ static void Stm32UartEnable(DevIntrf_t * const pDev)
 	dev->pUartDev->TxDropCnt = 0;
 
 #if defined(STM32F030x8)
-	if (pDev->bDma) Stm32UartDmaStop(dev);
+	if (pDev->bDma)
+	{
+		Stm32UartDmaStop(dev);
+	}
 #endif
 	CFifoFlush(dev->pUartDev->hTxFifo);
 
@@ -871,7 +904,10 @@ static void Stm32UartReset(DevIntrf_t * const pDev)
 	uint32_t state = DisableInterrupt();
 
 #if defined(STM32F030x8)
-	if (pDev->bDma) Stm32UartDmaStop(dev);
+	if (pDev->bDma)
+	{
+		Stm32UartDmaStop(dev);
+	}
 #endif
 	*dev->pRccRstReg |= dev->RccMask;
 	(void)*dev->pRccRstReg;
@@ -908,8 +944,8 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 		return false;
 	}
 
-	// Polling and USART interrupt operation. DMA is not implemented, so a
-	// DMA request fails here instead of running in another mode.
+	// Select polling, USART interrupt or hardware TX DMA transport.
+	// DMA is supported only on mapped F030x8 TX channels.
 	if (pCfg->bIrDAMode || pCfg->Mode != UART_MODE_UART ||
 		(pCfg->FlowControl != UART_FLWCTRL_NONE && pCfg->FlowControl != UART_FLWCTRL_HW) ||
 		(pCfg->Parity != UART_PARITY_NONE && pCfg->Parity != UART_PARITY_EVEN && pCfg->Parity != UART_PARITY_ODD) ||
@@ -932,11 +968,20 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	Stm32UartDev_t *dev = &s_Stm32UartDev[pCfg->DevNo];
 	USART_TypeDef *reg = dev->pReg;
 #if defined(STM32F030x8)
-	if (pCfg->bDMAMode && dev->pTxDma == NULL) return false;
+	if (pCfg->bDMAMode && dev->pTxDma == NULL)
+	{
+		return false;
+	}
 	if (pCfg->bDMAMode && dev->pTxDma->CCR != 0U &&
-		(dev->pUartDev == NULL || dev->pUartDev != pDev)) return false;
+		(dev->pUartDev == NULL || dev->pUartDev != pDev))
+	{
+		return false;
+	}
 #else
-	if (pCfg->bDMAMode) return false;
+	if (pCfg->bDMAMode)
+	{
+		return false;
+	}
 #endif
 	uint32_t state = DisableInterrupt();
 
