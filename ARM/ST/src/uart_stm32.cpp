@@ -103,8 +103,8 @@ typedef struct {
 	uint32_t RxTimeoutCnt;
 	uint32_t ErrCnt;
 	uint32_t ErrFlag;
-	uint8_t RxFifoMem[STM32_UART_CFIFO_SIZE];
-	uint8_t TxFifoMem[STM32_UART_CFIFO_SIZE];
+	alignas(4) uint8_t RxFifoMem[STM32_UART_CFIFO_SIZE];
+	alignas(4) uint8_t TxFifoMem[STM32_UART_CFIFO_SIZE];
 } Stm32UartDev_t;
 
 
@@ -1200,6 +1200,7 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	IOPinCfg(dev->pIOPinMap, dev->NbPins);
 
 	pDev->DevIntrf.Type = DEVINTRF_TYPE_UART;
+	pDev->DevIntrf.IntPrio = pCfg->IntPrio;
 	pDev->DevIntrf.bIntEn = pCfg->bIntMode;
 	pDev->DevIntrf.bDma = false;
 	pDev->DevIntrf.bTxReady = true;
