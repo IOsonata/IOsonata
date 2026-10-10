@@ -2,7 +2,7 @@
 /**-------------------------------------------------------------------------
 @file	gpio_stm32l4xx.c
 
-@brief	I/O pin configuration implementation on STM32L4x series
+@brief	STM32L4 GPIO clock and EXTI implementation
 
 @author	Hoang Nguyen Hoan
 @date	June 3, 2019
