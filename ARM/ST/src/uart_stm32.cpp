@@ -374,13 +374,10 @@ static void Stm32UartDmaStart(Stm32UartDev_t * const pDev)
 	DMA1->IFCR = DMA_IFCR_CGIF1 << pDev->TxDmaShift;
 	pDev->pTxDma->CNDTR = (uint32_t)len;
 	__DMB();
-	uint32_t ccr = DMA_CCR_DIR | DMA_CCR_MINC;
-	if (pDev->pUartDev->DevIntrf.bIntEn)
-	{
-		ccr |= DMA_CCR_TCIE | DMA_CCR_TEIE;
-	}
+	// CCR direction, width and interrupt policy are configured at init.
+	// Only the transfer count and enable state change between transfers.
 	pDev->DmaActive = true;
-	pDev->pTxDma->CCR = ccr | DMA_CCR_EN;
+	pDev->pTxDma->CCR |= DMA_CCR_EN;
 }
 
 static void Stm32UartDmaService(Stm32UartDev_t * const pDev)
@@ -397,7 +394,7 @@ static void Stm32UartDmaService(Stm32UartDev_t * const pDev)
 	}
 
 	uint32_t left = pDev->pTxDma->CNDTR;
-	pDev->pTxDma->CCR = 0;
+	pDev->pTxDma->CCR &= ~DMA_CCR_EN;
 	DMA1->IFCR = DMA_IFCR_CGIF1 << pDev->TxDmaShift;
 	pDev->DmaActive = false;
 	if (flags & DMA_ISR_TEIF1)
@@ -1144,6 +1141,12 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 		dev->pTxDma->CPAR = (uint32_t)(uintptr_t)&ST_USART_TDR(reg);
 		dev->pTxDma->CMAR = (uint32_t)(uintptr_t)dev->TxDmaCache;
 		dev->pTxDma->CNDTR = 0;
+		uint32_t dmaCcr = DMA_CCR_DIR | DMA_CCR_MINC;
+		if (pCfg->bIntMode)
+		{
+			dmaCcr |= DMA_CCR_TCIE | DMA_CCR_TEIE;
+		}
+		dev->pTxDma->CCR = dmaCcr;
 		dev->DmaActive = false;
 		cr3 |= USART_CR3_DMAT;
 		if (pCfg->bIntMode)
