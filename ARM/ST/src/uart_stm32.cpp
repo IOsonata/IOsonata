@@ -198,6 +198,7 @@ SOFTWARE.
 // not supply its own
 #define ST_UART_BUFF_SIZE		16
 #define ST_UART_CFIFO_SIZE		CFIFO_MEMSIZE(ST_UART_BUFF_SIZE)
+#define ST_UART_DMA_TX_SIZE		16
 
 #pragma pack(push, 4)
 
@@ -213,6 +214,13 @@ typedef struct __Stm32_Uart_Dev {
 	const IOPinCfg_t *pIOPinMap;	//!< Pins configured again by Enable
 	int NbIOPins;					//!< Number of pins in pIOPinMap
 	bool PollTxStarted;				//!< Polling frame already started
+#if defined(STM32F030x8)
+	DMA_Channel_TypeDef *pTxDma;
+	IRQn_Type TxDmaIrq;
+	uint32_t TxDmaShift;
+	bool DmaActive;
+	alignas(4) uint8_t TxDmaCache[ST_UART_DMA_TX_SIZE];
+#endif
 	alignas(4) uint8_t RxFifoMem[ST_UART_CFIFO_SIZE];	//!< Default RX CFIFO memory
 	alignas(4) uint8_t TxFifoMem[ST_UART_CFIFO_SIZE];	//!< Default TX CFIFO memory
 } Stm32UartDev_t;
@@ -233,6 +241,11 @@ static Stm32UartDev_t s_Stm32UartDev[] = {
 	{
 		.pReg = USART1,
 		.IrqNo = USART1_IRQn,
+#if defined(STM32F030x8)
+		.pTxDma = DMA1_Channel2,
+		.TxDmaIrq = DMA1_Channel2_3_IRQn,
+		.TxDmaShift = 4,
+#endif
 		.pRccEnReg = &RCC->APB2ENR,
 		.pRccRstReg = &RCC->APB2RSTR,
 		.RccMask = RCC_APB2ENR_USART1EN,
@@ -242,6 +255,11 @@ static Stm32UartDev_t s_Stm32UartDev[] = {
 	{
 		.pReg = USART2,
 		.IrqNo = USART2_IRQn,
+#if defined(STM32F030x8)
+		.pTxDma = DMA1_Channel4,
+		.TxDmaIrq = DMA1_Channel4_5_IRQn,
+		.TxDmaShift = 12,
+#endif
 		.pRccEnReg = &RCC->ST_RCC_APB1ENR,
 		.pRccRstReg = &RCC->ST_RCC_APB1RSTR,
 		.RccMask = ST_RCC_APB1EN(USART2),
@@ -313,6 +331,11 @@ static Stm32UartDev_t s_Stm32UartDev[] = {
 static const int s_NbUartDev = sizeof(s_Stm32UartDev) / sizeof(Stm32UartDev_t);
 
 static void Stm32UartIrqHandler(USART_TypeDef * const pReg);
+#if defined(STM32F030x8)
+static void Stm32UartDmaStart(Stm32UartDev_t * const pDev);
+static void Stm32UartDmaService(Stm32UartDev_t * const pDev);
+static void Stm32UartDmaStop(Stm32UartDev_t * const pDev);
+#endif
 static uint32_t Stm32UartGetRate(DevIntrf_t * const pDev);
 static uint32_t Stm32UartSetRate(DevIntrf_t * const pDev, uint32_t Rate);
 static bool Stm32UartStartRx(DevIntrf_t * const pDev, uint32_t DevAddr);
@@ -325,6 +348,62 @@ static void Stm32UartDisable(DevIntrf_t * const pDev);
 static void Stm32UartEnable(DevIntrf_t * const pDev);
 static void Stm32UartReset(DevIntrf_t * const pDev);
 static void *Stm32UartGetHandle(DevIntrf_t * const pDev);
+
+#if defined(STM32F030x8)
+// Normal-mode DMA: FIFO contents are copied to a private cache before
+// ownership passes to the DMA controller. Called with interrupts masked.
+static void Stm32UartDmaStart(Stm32UartDev_t * const pDev)
+{
+	if (pDev->DmaActive) return;
+
+	int len = ST_UART_DMA_TX_SIZE;
+	uint8_t *p = CFifoGetMultiple(pDev->pUartDev->hTxFifo, &len);
+	if (p == NULL)
+	{
+		pDev->pUartDev->bTxReady = true;
+		return;
+	}
+
+	memcpy(pDev->TxDmaCache, p, len);
+	pDev->pUartDev->bTxReady = false;
+	DMA1->IFCR = DMA_IFCR_CGIF1 << pDev->TxDmaShift;
+	pDev->pTxDma->CNDTR = (uint32_t)len;
+	__DMB();
+	uint32_t ccr = DMA_CCR_DIR | DMA_CCR_MINC | DMA_CCR_TEIE;
+	if (pDev->pUartDev->DevIntrf.bIntEn) ccr |= DMA_CCR_TCIE;
+	pDev->DmaActive = true;
+	pDev->pTxDma->CCR = ccr | DMA_CCR_EN;
+}
+
+static void Stm32UartDmaService(Stm32UartDev_t * const pDev)
+{
+	if (pDev->pUartDev == NULL || !pDev->DmaActive) return;
+	uint32_t flags = (DMA1->ISR >> pDev->TxDmaShift) &
+					 (DMA_ISR_TCIF1 | DMA_ISR_TEIF1);
+	if (flags == 0U) return;
+
+	uint32_t left = pDev->pTxDma->CNDTR;
+	pDev->pTxDma->CCR = 0;
+	DMA1->IFCR = DMA_IFCR_CGIF1 << pDev->TxDmaShift;
+	pDev->DmaActive = false;
+	if (flags & DMA_ISR_TEIF1) pDev->pUartDev->TxDropCnt += left;
+
+	Stm32UartDmaStart(pDev);
+	if (!pDev->DmaActive && pDev->pUartDev->EvtCallback)
+	{
+		pDev->pUartDev->EvtCallback(pDev->pUartDev, UART_EVT_TXREADY, NULL, 0);
+	}
+}
+
+static void Stm32UartDmaStop(Stm32UartDev_t * const pDev)
+{
+	if (pDev->pTxDma == NULL) return;
+	pDev->pReg->CR3 &= ~USART_CR3_DMAT;
+	pDev->pTxDma->CCR = 0;
+	DMA1->IFCR = DMA_IFCR_CGIF1 << pDev->TxDmaShift;
+	pDev->DmaActive = false;
+}
+#endif
 
 static void Stm32UartIrqHandler(USART_TypeDef * const pReg)
 {
