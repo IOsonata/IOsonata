@@ -629,9 +629,9 @@ static int Stm32UartTxData(DevIntrf_t * const pDev, uint8_t const *pData, int Da
 
 	if (!pDev->bIntEn)
 	{
-		// The foreground producer may re-enter before TXE reflects a TDR
-		// write. After the first byte, gate each write on the previous
-		// frame's TC flag. This avoids overwriting data in fast builds.
+		// The first write waits for TXE, the next ones for TC of the
+		// previous frame, so frames are not sent back to back. With TXE
+		// only, Release builds dropped data on the F030 PRBS test.
 		while (cnt < Datalen)
 		{
 			uint32_t ready = dev->PollTxStarted ? ST_USART_ISR_TC : ST_USART_ISR_TXE;
