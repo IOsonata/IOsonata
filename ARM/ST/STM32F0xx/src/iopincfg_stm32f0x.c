@@ -1,3 +1,30 @@
+extern "C" bool Stm32GpioEnableClock(int port, int pin, int op, IOPINDIR dir)
+{
+    (void)pin; (void)op; (void)dir;
+    uint32_t mask = 0U;
+    switch (port) {
+#ifdef RCC_AHBENR_GPIOAEN
+    case IOPORTA: mask = RCC_AHBENR_GPIOAEN; break;
+#endif
+#ifdef RCC_AHBENR_GPIOBEN
+    case IOPORTB: mask = RCC_AHBENR_GPIOBEN; break;
+#endif
+#ifdef RCC_AHBENR_GPIOCEN
+    case IOPORTC: mask = RCC_AHBENR_GPIOCEN; break;
+#endif
+#ifdef RCC_AHBENR_GPIODEN
+    case IOPORTD: mask = RCC_AHBENR_GPIODEN; break;
+#endif
+#ifdef RCC_AHBENR_GPIOFEN
+    case IOPORTF: mask = RCC_AHBENR_GPIOFEN; break;
+#endif
+    default: return false;
+    }
+    RCC->AHBENR |= mask;
+    (void)RCC->AHBENR;
+    return true;
+}
+
 /**-------------------------------------------------------------------------
 @file	iopincfg_stm32f0xx.c
 
@@ -35,7 +62,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <stdio.h>
 #include <stdbool.h>
 
-#include "stm32f0xx.h"
+#include "iopinctrl.h"
 
 #include "coredev/iopincfg.h"
 #include "coredev/interrupt.h"
@@ -72,125 +99,6 @@ static IOPINSENS_EVTHOOK s_GpIOSenseEvt[IOPIN_MAX_INT + 1] = { {0, NULL}, };
  * 			Dir     : I/O direction
  *			Resistor: Resistor configuration
  *			Type	: I/O type
- */
-void IOPinConfig(int PortNo, int PinNo, int PinOp, IOPINDIR Dir, IOPINRES Resistor, IOPINTYPE Type)
-{
-	GPIO_TypeDef *reg = (GPIO_TypeDef *)(GPIOA_BASE + PortNo * 0x400);
-
-	if (PortNo == -1 || PinNo == -1 || PortNo == 4)
-		return;
-
-	uint32_t tmp;
-
-	switch (PortNo)
-	{
-		case 0:	// Port A
-			RCC->AHBENR |= RCC_AHBENR_GPIOAEN;
-			break;
-		case 1: // Port B
-			RCC->AHBENR |= RCC_AHBENR_GPIOBEN;
-			break;
-		case 2: // Port C
-			RCC->AHBENR |= RCC_AHBENR_GPIOCEN;
-			break;
-		case 3: // Port D
-			RCC->AHBENR |= RCC_AHBENR_GPIODEN;
-			break;
-		case 5: // Port F
-			RCC->AHBENR |= RCC_AHBENR_GPIOFEN;
-			break;
-	}
-
-	uint32_t pos = PinNo << 1;
-	tmp = reg->MODER & ~(GPIO_MODER_MODER0_Msk << pos);
-
-	switch (PinOp & 0xF)
-	{
-		case 0:	// GPIO input
-		case 1:	// GPIO ouput
-			if (Dir == IOPINDIR_OUTPUT)
-			{
-				tmp |= 1 << pos;
-			}
-
-			break;
-		case 2:	// Alternate function
-			{
-				tmp |= 2 << pos;
-
-				pos = (PinNo & 0x7) << 2;
-				int idx = PinNo >> 3;
-
-				reg->AFR[idx] &= ~(0xf << pos);
-				reg->AFR[idx] |= ((PinOp >> 4) & 0xf) << pos;
-
-			}
-			break;
-		case 3:	// Analog
-			tmp |= 3 << pos;
-			break;
-	}
-
-	reg->MODER = tmp;
-
-	pos = PinNo << 1;
-
-	uint32_t pull = reg->PUPDR & ~(3 << pos);
-
-	switch (Resistor)
-	{
-		case IOPINRES_FOLLOW:
-		case IOPINRES_PULLUP:
-			pull |= GPIO_PUPDR_PUPDR0_0 << pos;
-			break;
-		case IOPINRES_PULLDOWN:
-			pull |=  GPIO_PUPDR_PUPDR0_1 << pos;
-			break;
-		case IOPINRES_NONE:
-			break;
-	}
-	reg->PUPDR = pull;
-
-	tmp = reg->OTYPER & ~(1 << PinNo);
-	if (Type == IOPINTYPE_OPENDRAIN)
-	{
-		tmp |= (1 << PinNo);
-	}
-	reg->OTYPER = tmp;
-
-	// Default high speed
-	IOPinSetSpeed(PortNo, PinNo, IOPINSPEED_HIGH);
-
-}
-
-/**
- * @brief	Disable I/O pin
- *
- * Some hardware such as low power mcu allow I/O pin to be disconnected
- * in order to save power. There is no enable function. Reconfigure the
- * I/O pin to re-enable it.
- *
- * @param	PortNo 	: Port number
- * @param	PinNo	: Pin Number
- */
-void IOPinDisable(int PortNo, int PinNo)
-{
-	if (PortNo == -1 || PinNo == -1)
-		return;
-
-	GPIO_TypeDef *reg = (GPIO_TypeDef *)(GPIOA_BASE + PortNo * 0x400);
-	uint32_t pos = PinNo << 1;
-	uint32_t tmp = reg->MODER & ~(GPIO_MODER_MODER0_Msk << pos);
-	reg->MODER = tmp;
-
-	tmp= reg->PUPDR & ~(GPIO_PUPDR_PUPDR0_Msk << pos);
-	reg->PUPDR = tmp;
-}
-
-/**
- * @brief	Disable I/O pin sense interrupt
- *
- * @param	IntNo : Interrupt number to disable
  */
 void IOPinDisableInterrupt(int IntNo)
 {
@@ -407,44 +315,6 @@ void IOPinSetSense(int PortNo, int PinNo, IOPINSENSE Sense)
  * 			PinNo  	: Pin number (up to 32 pins)
  * 			Strength: Pin drive strength
  */
-void IOPinSetStrength(int PortNo, int PinNo, IOPINSTRENGTH Strength)
-{
-	// Not available on this STM32
-}
-
-/**
- * @brief Set I/O pin speed option
- *
- * Some hardware allow setting pin speed. This requires the I/O already configured
- *
- * @param	PortNo 	: Port number (up to 32 ports)
- * @Param	PinNo  	: Pin number (up to 32 pins)
- * @Param	Speed	: Pin speed
- */
-void IOPinSetSpeed(int PortNo, int PinNo, IOPINSPEED Speed)
-{
-	if (PortNo == -1 || PinNo == -1)
-		return;
-
-	GPIO_TypeDef *reg = (GPIO_TypeDef *)(GPIOA_BASE + PortNo * 0x400);
-	uint32_t pos = PinNo << 1;
-	uint32_t tmp = reg->OSPEEDR & ~(GPIO_OSPEEDR_OSPEEDR0_Msk << pos);
-
-	switch (Speed)
-	{
-		case IOPINSPEED_LOW:
-			break;
-		case IOPINSPEED_MEDIUM:
-			tmp |= (1 << pos);
-			break;
-		case IOPINSPEED_HIGH:
-			tmp |= (2 << pos);
-			break;
-	}
-
-	reg->OSPEEDR = tmp;
-}
-
 void EXTI0_1_IRQHandler(void)
 {
 	if (EXTI->PR & 1)
