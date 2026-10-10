@@ -72,12 +72,12 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/Fusion&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Drivers/CMSIS/Device/ST/STM32WBAxx/Include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Drivers/STM32WBAxx_HAL_Driver/inc&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Middlewares/ST/STM32_WPAN/ble/stack/include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Middlewares/ST/STM32_WPAN/ble/stack/include/auto&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Middlewares/ST/STM32_WPAN/ble/svc/Inc&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Middlewares/ST/STM32_WPAN/link_layer/ll_sys/inc&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Middlewares/ST/STM32_WPAN/link_layer/ll_cmd_lib/porting&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Middlewares/ST/STM32_WPAN/link_layer/ll_cmd_lib/inc/ot_inc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/ble/stack/include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/ble/stack/include/auto&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/ble/svc/Inc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/link_layer/ll_sys/inc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/link_layer/ll_cmd_lib/porting&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/link_layer/ll_cmd_lib/inc/ot_inc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Utilities/tim_serv&quot;"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="wba65.36" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs" useByScannerDiscovery="true" valueType="definedSymbols">
@@ -103,12 +103,12 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/Fusion&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Drivers/CMSIS/Device/ST/STM32WBAxx/Include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Drivers/STM32WBAxx_HAL_Driver/inc&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Middlewares/ST/STM32_WPAN/ble/stack/include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Middlewares/ST/STM32_WPAN/ble/stack/include/auto&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Middlewares/ST/STM32_WPAN/ble/svc/Inc&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Middlewares/ST/STM32_WPAN/link_layer/ll_sys/inc&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Middlewares/ST/STM32_WPAN/link_layer/ll_cmd_lib/porting&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Middlewares/ST/STM32_WPAN/link_layer/ll_cmd_lib/inc/ot_inc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/ble/stack/include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/ble/stack/include/auto&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/ble/svc/Inc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/link_layer/ll_sys/inc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/link_layer/ll_cmd_lib/porting&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/link_layer/ll_cmd_lib/inc/ot_inc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Utilities/tim_serv&quot;"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="wba65.41" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.defs" useByScannerDiscovery="true" valueType="definedSymbols">
@@ -209,12 +209,12 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/Fusion&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Drivers/CMSIS/Device/ST/STM32WBAxx/Include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Drivers/STM32WBAxx_HAL_Driver/inc&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Middlewares/ST/STM32_WPAN/ble/stack/include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Middlewares/ST/STM32_WPAN/ble/stack/include/auto&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Middlewares/ST/STM32_WPAN/ble/svc/Inc&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Middlewares/ST/STM32_WPAN/link_layer/ll_sys/inc&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Middlewares/ST/STM32_WPAN/link_layer/ll_cmd_lib/porting&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Middlewares/ST/STM32_WPAN/link_layer/ll_cmd_lib/inc/ot_inc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/ble/stack/include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/ble/stack/include/auto&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/ble/svc/Inc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/link_layer/ll_sys/inc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/link_layer/ll_cmd_lib/porting&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/link_layer/ll_cmd_lib/inc/ot_inc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Utilities/tim_serv&quot;"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="wba65.87" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs" useByScannerDiscovery="true" valueType="definedSymbols">
@@ -240,12 +240,12 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/Fusion&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Drivers/CMSIS/Device/ST/STM32WBAxx/Include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Drivers/STM32WBAxx_HAL_Driver/inc&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Middlewares/ST/STM32_WPAN/ble/stack/include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Middlewares/ST/STM32_WPAN/ble/stack/include/auto&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Middlewares/ST/STM32_WPAN/ble/svc/Inc&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Middlewares/ST/STM32_WPAN/link_layer/ll_sys/inc&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Middlewares/ST/STM32_WPAN/link_layer/ll_cmd_lib/porting&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Middlewares/ST/STM32_WPAN/link_layer/ll_cmd_lib/inc/ot_inc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/ble/stack/include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/ble/stack/include/auto&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/ble/svc/Inc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/link_layer/ll_sys/inc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/link_layer/ll_cmd_lib/porting&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/link_layer/ll_cmd_lib/inc/ot_inc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Utilities/tim_serv&quot;"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="wba65.92" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.defs" useByScannerDiscovery="true" valueType="definedSymbols">
