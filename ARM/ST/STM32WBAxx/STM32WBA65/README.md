@@ -18,13 +18,24 @@ following target-specific components are not yet linked:
 - STM32WBA65RIV7 interrupt-vector source
 - IOsonata WBA6 startup/system-clock and interrupt dispatch
 - IOsonata WBA6 GPIO, UART and Timer drivers
-- Variant-appropriate application linker script
+- Verified vendor startup and MCU-specific system/interrupt integration
 
 Use the WBA65 device definitions and interrupt mapping from a consistent
 STM32CubeWBA release. Do not compile WBA5x startup or link with the WBA5x
 1 MB/128 KB linker script. The STM32WBA Bluetooth adapter in
 `../src/` additionally requires CubeWBA middleware; it is not yet
 included in this library configuration.
+
+The application linker layouts are now provided in `ldscript/`:
+
+- `gcc_stm32wba65_i.ld`: 2 MB flash, 512 KB SRAM (STM32WBA65RIV7).
+- `gcc_stm32wba65_g.ld`: 1 MB flash, 256 KB SRAM.
+
+Each reserves two 16 KB flash NVM partitions at the upper end of its
+variant's flash. The memory boundaries require verification against the
+chosen ST secure/nonsecure image layout, option bytes, and radio firmware
+reservation before flashing. These linker scripts are not evidence of a
+successful boot or a working BLE stack.
 
 The initial bring-up sequence is startup, GPIO, UART, Timer, then BLE.
 Discovery Kit GPIO/USART wiring belongs in each example's `board.h`,
