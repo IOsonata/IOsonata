@@ -50,7 +50,8 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define STM32F0X_UART_HWFIFO_SIZE		6
 #define STM32F0X_UART_RXTIMEOUT			15
 #define STM32F0X_UART_BUFF_SIZE			16
-#define STM32F0X_UART_RXDMA_SIZE		64
+#define STM32F0X_UART_RXDMA_SIZE		256
+#define STM32F0X_UART_TXDMA_SIZE		128
 #define STM32F0X_UART_CFIFO_SIZE		CFIFO_MEMSIZE(STM32F0X_UART_BUFF_SIZE)
 
 #pragma pack(push, 4)
@@ -74,7 +75,7 @@ typedef struct _STM32F0X_UART_Dev {
 	uint16_t RxDmaPos;
 	IRQn_Type TxDmaIrq;
 	bool DmaOwned;
-	alignas(4) uint8_t TxDmaCache[STM32F0X_UART_BUFF_SIZE];
+	alignas(4) uint8_t TxDmaCache[STM32F0X_UART_TXDMA_SIZE];
 	alignas(4) uint8_t RxDmaCache[STM32F0X_UART_RXDMA_SIZE];
 	uint8_t RxFifoMem[STM32F0X_UART_CFIFO_SIZE];
 	uint8_t TxFifoMem[STM32F0X_UART_CFIFO_SIZE];
@@ -156,7 +157,7 @@ static void STM32F03xUARTDmaArm(STM32F0X_UARTDEV *dev, int Count)
 // Call with interrupts masked. Copy before the producer can reuse the span.
 static void STM32F03xUARTDmaStart(STM32F0X_UARTDEV *dev)
 {
-	int len = STM32F0X_UART_BUFF_SIZE;
+	int len = STM32F0X_UART_TXDMA_SIZE;
 	uint8_t *p = CFifoGetMultiple(dev->pUartDev->hTxFifo, &len);
 	if (p == NULL)
 	{
@@ -559,7 +560,7 @@ static int STM32F03xUARTTxData(DevIntrf_t * const pDev, uint8_t const *pData, in
 		// Avoid a FIFO round trip when the caller can fill the cache directly.
 		if (pDev->bDma && dev->pUartDev->bTxReady)
 		{
-			int len = Datalen < STM32F0X_UART_BUFF_SIZE ? Datalen : STM32F0X_UART_BUFF_SIZE;
+			int len = Datalen < STM32F0X_UART_TXDMA_SIZE ? Datalen : STM32F0X_UART_TXDMA_SIZE;
 			if (len == 1) dev->TxDmaCache[0] = *pData;
 			else memcpy(dev->TxDmaCache, pData, len);
 			STM32F03xUARTDmaArm(dev, len);
