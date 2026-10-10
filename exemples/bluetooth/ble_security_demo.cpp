@@ -139,7 +139,8 @@ uint8_t g_LWrBuffer[512];
 /// Service definition
 BtGattSrvc_t g_UartBleSrvc = BT_SRVC_CUSTOM(BLE_UART_UUID_BASE,
 											BLE_UART_UUID_SERVICE,
-											g_UartChars);
+											g_UartChars,
+											.SecType = BLE_SECURITY_TYPE);
 
 const BtAppDevInfo_t s_UartBleDevDesc = {
 	MODEL_NAME,       		// Model name
