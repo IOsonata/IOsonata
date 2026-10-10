@@ -307,8 +307,9 @@ static void STM32F03xUARTDmaIrq(STM32F0X_UARTDEV *dev)
 	uint32_t state = DisableInterrupt();
 	if (dev->DmaOwned)
 	{
-		STM32F03xUARTRxDmaService(dev);
+		// Retire TX immediately before the potentially lengthy RX FIFO copy.
 		STM32F03xUARTTxDmaService(dev);
+		STM32F03xUARTRxDmaService(dev);
 	}
 	EnableInterrupt(state);
 }
