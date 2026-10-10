@@ -23,5 +23,7 @@
     <link><name>src/ResetEntry.c</name><type>1</type><locationURI>PARENT-5-PROJECT_LOC/src/ResetEntry.c</locationURI></link>
     <link><name>src/system_stm32wbaxx.c</name><type>1</type><locationURI>PARENT-3-PROJECT_LOC/src/system_stm32wbaxx.c</locationURI></link>
     <link><name>src/vectors_stm32wba65.c</name><type>1</type><locationURI>PARENT-2-PROJECT_LOC/src/vectors_stm32wba65.c</locationURI></link>
+    <link><name>include/iopinctrl.h</name><type>1</type><locationURI>PARENT-3-PROJECT_LOC/include/iopinctrl.h</locationURI></link>
+    <link><name>src/iopincfg_stm32wbaxx.c</name><type>1</type><locationURI>PARENT-3-PROJECT_LOC/src/iopincfg_stm32wbaxx.c</locationURI></link>
   </linkedResources>
 </projectDescription>
