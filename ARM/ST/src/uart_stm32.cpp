@@ -730,7 +730,12 @@ static int Stm32UartTxData(DevIntrf_t * const pDev, uint8_t const *pData, int Da
 	if (pDev->bDma)
 	{
 		uint32_t state = DisableInterrupt();
-		Stm32UartDmaService(dev);
+		// DMA interrupts retire transfers in IRQ mode. Poll completion
+		// here only when the DMA IRQ is disabled.
+		if (!pDev->bIntEn)
+		{
+			Stm32UartDmaService(dev);
+		}
 
 		while (Datalen > 0)
 		{
