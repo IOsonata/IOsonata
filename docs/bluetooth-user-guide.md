@@ -194,21 +194,42 @@ On the updated ports, setting `SecType` alone does not link/start security.
 Call `BtAppSecInit()` from `BtAppInitUserData()` and check its result.
 `BtAppInit()` rejects a non-NONE security mode if security was not started.
 
-`SecExchg` describes local user interaction capabilities, not a list of keys
-to distribute. The UART peripheral and central examples implement pairing
-interaction through a console. Generic SMP exposes:
+The security policy is declarative. Configure `BtAppCfg_t.SecType` and
+`BtAppCfg_t.SecExchg`, then call `BtAppSecInit()` from
+`BtAppInitUserData()`. The library owns pairing, cryptography, SMP replies,
+key distribution, bonding and PDS persistence. The application must not
+implement an SMP state machine or manually drive protocol transactions.
 
-| Interaction | Application callback | Reply |
-|---|---|---|
-| Numeric comparison | `BtSmpNumericComparison()` | `BtSmpNumericComparisonReply()` |
-| Display passkey | `BtSmpPasskeyDisplay()` | Display the value |
-| Enter passkey | `BtSmpPasskeyRequest()` | `BtSmpPasskeyReply()` |
-| Out-of-band exchange | See `BtSmpOobLocalDataGen()` | Supply peer data with `BtSmpOobPeerDataSet()` |
+| Required user interaction | Application hook |
+|---|---|
+| Numeric Comparison | `int BtAppPairConfirm(uint16_t conn, uint32_t number)` |
+| Show six-digit passkey | `bool BtAppPasskeyShow(uint16_t conn, uint32_t passkey)` |
+| Obtain six-digit passkey | `uint32_t BtAppPasskeyInput(uint16_t conn)` |
+| OOB exchange | Transport supplies data through the existing `BtSmpOob*` API |
 
-Preserve the connection handle through deferred user interaction. Reject a
-mismatch or cancellation rather than accepting automatically. Use the chosen
-port's security adapter; the generic SMP engine is not the pairing engine
-inside a Nordic SoftDevice.
+`BtAppPairConfirm` returns **1** only if the two displayed numbers match,
+**0** to reject, or **-1** if an application UI needs time to respond. After
+`-1`, the application uses `BtAppPairDecision(conn, confirmed)` when the
+user acts; IOsonata performs the SMP/SoftDevice reply internally. The callback
+must never block the Bluetooth event thread. Other interaction hooks also
+fail closed if no application input is available; asynchronous passkey input
+is not yet offered through the same high-level interface.
+
+The shared `exemples/bluetooth/ble_security_demo.cpp` and the nRF52832
+`BleSecurityDemo` project provide an opt-in two-button test UI: BUT1 accepts
+matching numbers; BUT2 rejects. Neither button should silently approve a
+comparison. `BLE_SECURITY_DISCONNECT_ON_REJECT` is enabled in the nRF52832
+example to avoid leaving an S132 peer waiting for its Numeric Comparison
+procedure to time out. The example advertises as `BLESec` (distinct from
+`UARTDemo`). The plain `UartBleDemo` remains an open-link data bridge.
+
+For sensitive services, set the service or characteristic `SecType` as well:
+application-level pairing policy alone does not protect an open GATT service.
+With `BTGAP_SECTYPE_LESC_MITM`, ATT access requires authenticated LESC
+protection; after pairing rejection, the ACL connection may remain established
+but protected characteristic access must be denied. Signed-write policies are
+unsupported on Nordic S132/S140 SoftDevice and must not be substituted with
+an encryption-only policy.
 
 A successful pairing does not alone prove that a bond survives reset.
 IOsonata uses one portable bond table and persistence format for the generic
