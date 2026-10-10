@@ -130,9 +130,11 @@ static void Nrf52PasskeyFromVal(uint32_t Val, uint8_t *pAscii)
 // with no key), false reports no match (reply NONE) and aborts pairing.
 void BtSmpNumericComparisonReply(uint16_t ConnHdl, bool Confirm)
 {
-	(void)sd_ble_gap_auth_key_reply(ConnHdl,
+	ret_code_t rc = sd_ble_gap_auth_key_reply(ConnHdl,
 			Confirm ? BLE_GAP_AUTH_KEY_TYPE_PASSKEY : BLE_GAP_AUTH_KEY_TYPE_NONE,
 			NULL);
+	DEBUG_PRINTF("SEC: numeric comparison %s hdl=%u reply=0x%X\r\n",
+			Confirm ? "accept" : "reject", (unsigned)ConnHdl, (unsigned)rc);
 }
 
 // Resume Passkey Entry on the input side. A value in 0..999999 is sent as six
