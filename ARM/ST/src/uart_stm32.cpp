@@ -94,6 +94,7 @@ typedef struct _STM32F0X_UART_Dev {
 	uint32_t TxDmaShift;
 	IRQn_Type TxDmaIrq;
 	bool DmaOwned;
+	bool PollTxStarted;
 	alignas(4) uint8_t TxDmaCache[STM32F0X_UART_BUFF_SIZE];
 	uint8_t RxFifoMem[STM32F0X_UART_CFIFO_SIZE];
 	uint8_t TxFifoMem[STM32F0X_UART_CFIFO_SIZE];
@@ -413,10 +414,17 @@ static int STM32F03xUARTTxData(DevIntrf_t * const pDev, uint8_t const *pData, in
 
 	if (!pDev->bIntEn)
 	{
-		// A partial return lets the caller retry without an unbounded wait.
-		while (cnt < Datalen && (dev->pReg->ISR & USART_ISR_TXE))
+		// In foreground mode, do not overwrite a frame still transmitting.
+		// The first byte starts on TXE; later bytes advance on TC.
+		while (cnt < Datalen)
 		{
+			uint32_t ready = dev->PollTxStarted ? USART_ISR_TC : USART_ISR_TXE;
+			if ((dev->pReg->ISR & ready) == 0U)
+			{
+				break;
+			}
 			dev->pReg->TDR = pData[cnt++];
+			dev->PollTxStarted = true;
 		}
 		return cnt;
 	}
@@ -791,6 +799,7 @@ bool UARTInit(UARTDEV * const pDev, const UARTCFG *pCfg)
 	pDev->EvtCallback = pCfg->EvtCallback;
 	pDev->DevIntrf.bIntEn = pCfg->bIntMode;
 	pDev->DevIntrf.bDma = false;
+	dev->PollTxStarted = false;
 	pDev->DevIntrf.bTxReady = true;
 	pDev->DevIntrf.bNoStop = false;
 	pDev->DevIntrf.EvtCB = NULL;
