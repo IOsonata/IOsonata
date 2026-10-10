@@ -276,7 +276,7 @@ static void STM32F03xUARTRxDmaStart(STM32F0X_UARTDEV *dev)
 
 static void STM32F03xUARTTxDmaService(STM32F0X_UARTDEV *dev)
 {
-	if (!dev->DmaOwned || (dev->pTxDma->CCR & DMA_CCR_EN) == 0U)
+	if (!dev->DmaOwned || dev->pUartDev == NULL || dev->pUartDev->bTxReady)
 	{
 		return;
 	}
@@ -530,7 +530,7 @@ static int STM32F03xUARTTxData(DevIntrf_t * const pDev, uint8_t const *pData, in
     int cnt = 0;
     int rtry = pDev->MaxRetry;
 
-	if (!pDev->bIntEn)
+	if (!pDev->bIntEn && !pDev->bDma)
 	{
 		// A partial return lets the caller retry without an unbounded wait.
 		while (cnt < Datalen && (dev->pReg->ISR & USART_ISR_TXE))
