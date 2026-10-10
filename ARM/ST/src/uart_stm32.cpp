@@ -241,29 +241,29 @@ static Stm32UartDev_t s_Stm32UartDev[] = {
 	{
 		.pReg = USART1,
 		.IrqNo = USART1_IRQn,
+		.pRccEnReg = &RCC->APB2ENR,
+		.pRccRstReg = &RCC->APB2RSTR,
+		.RccMask = RCC_APB2ENR_USART1EN,
+		.PclkIdx = ST_PCLK_APB2,
 #if defined(STM32F030x8)
 		.pTxDma = DMA1_Channel2,
 		.TxDmaIrq = DMA1_Channel2_3_IRQn,
 		.TxDmaShift = 4,
 #endif
-		.pRccEnReg = &RCC->APB2ENR,
-		.pRccRstReg = &RCC->APB2RSTR,
-		.RccMask = RCC_APB2ENR_USART1EN,
-		.PclkIdx = ST_PCLK_APB2,
 	},
 #ifdef USART2
 	{
 		.pReg = USART2,
 		.IrqNo = USART2_IRQn,
+		.pRccEnReg = &RCC->ST_RCC_APB1ENR,
+		.pRccRstReg = &RCC->ST_RCC_APB1RSTR,
+		.RccMask = ST_RCC_APB1EN(USART2),
+		.PclkIdx = 0,
 #if defined(STM32F030x8)
 		.pTxDma = DMA1_Channel4,
 		.TxDmaIrq = DMA1_Channel4_5_IRQn,
 		.TxDmaShift = 12,
 #endif
-		.pRccEnReg = &RCC->ST_RCC_APB1ENR,
-		.pRccRstReg = &RCC->ST_RCC_APB1RSTR,
-		.RccMask = ST_RCC_APB1EN(USART2),
-		.PclkIdx = 0,
 	},
 #endif
 #ifdef USART3
