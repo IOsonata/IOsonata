@@ -1,17 +1,3 @@
-extern "C" bool Stm32GpioEnableClock(int port, int pin, int op, IOPINDIR dir)
-{
-    (void)pin; (void)op; (void)dir;
-    if (!Stm32Gpio(port)) return false;
-    if (port == IOPORTG) {
-#ifdef RCC_APB1ENR1_PWREN
-        RCC->APB1ENR1 |= RCC_APB1ENR1_PWREN;
-        PWR->CR2 |= PWR_CR2_IOSV;
-#endif
-    }
-    RCC->AHB2ENR |= 1UL << (unsigned)port;
-    (void)RCC->AHB2ENR;
-    return true;
-}
 
 /**-------------------------------------------------------------------------
 @file	iopincfg_stm32l4xx.c
@@ -87,6 +73,21 @@ static IOPINSENS_EVTHOOK s_GpIOSenseEvt[IOPIN_MAX_INT + 1] = { {0, NULL}, };
  *			Resistor: Resistor configuration
  *			Type	: I/O type
  */
+bool Stm32GpioEnableClock(int port, int pin, int op, IOPINDIR dir)
+{
+    (void)pin; (void)op; (void)dir;
+    if (!Stm32Gpio(port)) return false;
+    if (port == IOPORTG) {
+#ifdef RCC_APB1ENR1_PWREN
+        RCC->APB1ENR1 |= RCC_APB1ENR1_PWREN;
+        PWR->CR2 |= PWR_CR2_IOSV;
+#endif
+    }
+    RCC->AHB2ENR |= 1UL << (unsigned)port;
+    (void)RCC->AHB2ENR;
+    return true;
+}
+
 void IOPinDisableInterrupt(int IntNo)
 {
 	if (IntNo < 0 || IntNo >= IOPIN_MAX_INT)
