@@ -198,7 +198,7 @@ SOFTWARE.
 // not supply its own
 #define ST_UART_BUFF_SIZE		16
 #define ST_UART_CFIFO_SIZE		CFIFO_MEMSIZE(ST_UART_BUFF_SIZE)
-#define ST_UART_DMA_TX_SIZE		128
+#define ST_UART_DMA_TX_SIZE		256
 #define ST_UART_DMA_CFIFO_SIZE	CFIFO_MEMSIZE(ST_UART_DMA_TX_SIZE)
 
 #pragma pack(push, 4)
@@ -220,7 +220,10 @@ typedef struct __Stm32_Uart_Dev {
 	IRQn_Type TxDmaIrq;
 	uint32_t TxDmaShift;
 	bool DmaActive;
-	uint32_t TxDmaLength;			//!< FIFO bytes owned by the active DMA transfer
+	uint32_t TxDmaLength;			//!< Ring bytes owned by the active DMA transfer
+	uint16_t TxDmaRead;			//!< DMA ring consumer index
+	uint16_t TxDmaWrite;			//!< DMA ring producer index
+	alignas(4) uint8_t TxDmaRing[ST_UART_DMA_TX_SIZE];
 	alignas(4) uint8_t TxDmaFifoMem[ST_UART_DMA_CFIFO_SIZE];
 #endif
 	alignas(4) uint8_t RxFifoMem[ST_UART_CFIFO_SIZE];	//!< Default RX CFIFO memory
@@ -361,19 +364,24 @@ static void Stm32UartDmaStart(Stm32UartDev_t * const pDev)
 		return;
 	}
 
-	// DMA owns the FIFO's contiguous read span until completion.
-	int len = ST_UART_DMA_TX_SIZE;
-	uint8_t *p = CFifoPeekMultiple(pDev->pUartDev->hTxFifo, &len);
-	if (p == NULL)
+	uint32_t used = (uint16_t)(pDev->TxDmaWrite - pDev->TxDmaRead);
+	if (used == 0U)
 	{
 		pDev->pUartDev->bTxReady = true;
 		return;
 	}
 
+	uint32_t index = pDev->TxDmaRead & (ST_UART_DMA_TX_SIZE - 1U);
+	uint32_t length = ST_UART_DMA_TX_SIZE - index;
+	if (length > used)
+	{
+		length = used;
+	}
+
 	pDev->pUartDev->bTxReady = false;
-	pDev->TxDmaLength = (uint32_t)len;
-	pDev->pTxDma->CMAR = (uint32_t)(uintptr_t)p;
-	pDev->pTxDma->CNDTR = (uint32_t)len;
+	pDev->TxDmaLength = length;
+	pDev->pTxDma->CMAR = (uint32_t)(uintptr_t)&pDev->TxDmaRing[index];
+	pDev->pTxDma->CNDTR = length;
 	DMA1->IFCR = DMA_IFCR_CGIF1 << pDev->TxDmaShift;
 	pDev->DmaActive = true;
 	pDev->pTxDma->CCR |= DMA_CCR_EN;
@@ -400,13 +408,8 @@ static void Stm32UartDmaService(Stm32UartDev_t * const pDev)
 
 	uint32_t transferred = (flags & DMA_ISR_TEIF1) ?
 			pDev->TxDmaLength - remaining : pDev->TxDmaLength;
-	int len = (int)transferred;
-	if (len > 0)
-	{
-		(void)CFifoGetMultiple(pDev->pUartDev->hTxFifo, &len);
-	}
+	pDev->TxDmaRead += (uint16_t)transferred;
 	pDev->TxDmaLength = 0;
-
 	if (flags & DMA_ISR_TEIF1)
 	{
 		pDev->pUartDev->TxDropCnt += remaining;
@@ -430,6 +433,8 @@ static void Stm32UartDmaStop(Stm32UartDev_t * const pDev)
 	DMA1->IFCR = DMA_IFCR_CGIF1 << pDev->TxDmaShift;
 	pDev->DmaActive = false;
 	pDev->TxDmaLength = 0;
+	pDev->TxDmaRead = 0;
+	pDev->TxDmaWrite = 0;
 }
 #endif
 
@@ -749,24 +754,29 @@ static int Stm32UartTxData(DevIntrf_t * const pDev, uint8_t const *pData, int Da
 
 		while (Datalen > 0)
 		{
-			int len = Datalen;
-			uint8_t *p = len == 1 ? CFifoPut(dev->pUartDev->hTxFifo) :
-						 CFifoPutMultiple(dev->pUartDev->hTxFifo, &len);
-			if (p == NULL)
+			uint32_t used = (uint16_t)(dev->TxDmaWrite - dev->TxDmaRead);
+			if (used >= ST_UART_DMA_TX_SIZE)
 			{
 				break;
 			}
-			if (len == 1)
+
+			uint32_t index = dev->TxDmaWrite & (ST_UART_DMA_TX_SIZE - 1U);
+			uint32_t len = ST_UART_DMA_TX_SIZE - index;
+			uint32_t available = ST_UART_DMA_TX_SIZE - used;
+			if (len > available)
 			{
-				*p = *pData;
+				len = available;
 			}
-			else
+			if (len > (uint32_t)Datalen)
 			{
-				memcpy(p, pData, len);
+				len = (uint32_t)Datalen;
 			}
-			cnt += len;
-			Datalen -= len;
+
+			memcpy(&dev->TxDmaRing[index], pData, len);
+			dev->TxDmaWrite += (uint16_t)len;
 			pData += len;
+			Datalen -= (int)len;
+			cnt += (int)len;
 		}
 		Stm32UartDmaStart(dev);
 		EnableInterrupt(state);
@@ -1163,6 +1173,8 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 		dev->pTxDma->CCR = dmaCcr;
 		dev->DmaActive = false;
 		dev->TxDmaLength = 0;
+		dev->TxDmaRead = 0;
+		dev->TxDmaWrite = 0;
 		cr3 |= USART_CR3_DMAT;
 		if (pCfg->bIntMode)
 		{
