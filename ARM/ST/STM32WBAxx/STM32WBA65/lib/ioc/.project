@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<projectDescription>
+  <name>IOsonata_STM32WBA65</name>
+  <comment>STM32WBA65 shared MCU library; device startup and peripherals require target integration</comment>
+  <projects/>
+  <buildSpec>
+    <buildCommand><name>org.eclipse.cdt.managedbuilder.core.genmakebuilder</name><triggers>clean,full,incremental,</triggers><arguments/></buildCommand>
+    <buildCommand><name>org.eclipse.cdt.managedbuilder.core.ScannerConfigBuilder</name><triggers>full,incremental,</triggers><arguments/></buildCommand>
+  </buildSpec>
+  <natures><nature>org.eclipse.cdt.core.cnature</nature><nature>org.eclipse.cdt.core.ccnature</nature><nature>org.eclipse.cdt.managedbuilder.core.managedBuildNature</nature><nature>org.eclipse.cdt.managedbuilder.core.ScannerConfigNature</nature></natures>
+  <linkedResources>
+    <link><name>include</name><type>2</type><locationURI>virtual:/virtual</locationURI></link>
+    <link><name>src</name><type>2</type><locationURI>virtual:/virtual</locationURI></link>
+    <link><name>include/stm32wbaxx.h</name><type>1</type><locationURI>PARENT-3-PROJECT_LOC/include/stm32wbaxx.h</locationURI></link>
+    <link><name>include/system_stm32wbaxx.h</name><type>1</type><locationURI>PARENT-3-PROJECT_LOC/include/system_stm32wbaxx.h</locationURI></link>
+    <link><name>include/ARM</name><type>2</type><locationURI>PARENT-5-PROJECT_LOC/include</locationURI></link>
+    <link><name>include/coredev</name><type>2</type><locationURI>PARENT-6-PROJECT_LOC/include/coredev</locationURI></link>
+    <link><name>include/CMSIS</name><type>2</type><locationURI>PARENT-5-PROJECT_LOC/CMSIS/Core/Include</locationURI></link>
+    <link><name>src/cfifo.c</name><type>1</type><locationURI>PARENT-6-PROJECT_LOC/src/cfifo.c</locationURI></link>
+    <link><name>src/device_intrf.cpp</name><type>1</type><locationURI>PARENT-6-PROJECT_LOC/src/device_intrf.cpp</locationURI></link>
+    <link><name>src/uart.cpp</name><type>1</type><locationURI>PARENT-6-PROJECT_LOC/src/coredev/uart.cpp</locationURI></link>
+    <link><name>src/timer.cpp</name><type>1</type><locationURI>PARENT-6-PROJECT_LOC/src/coredev/timer.cpp</locationURI></link>
+  </linkedResources>
+</projectDescription>
