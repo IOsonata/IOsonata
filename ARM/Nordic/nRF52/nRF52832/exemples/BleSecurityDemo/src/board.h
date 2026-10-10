@@ -145,14 +145,14 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 	{UART_RTS_PORT, UART_RTS_PIN, UART_RTS_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},}
 
 // BLE security policy: IOsonata handles pairing, key exchange and bonding.
-// Just Works: no application interaction. For Numeric Comparison select
-// LESC_MITM and DISPLAY | YESNO; provide BtAppPairConfirm() in the app.
+// Default: LESC Numeric Comparison (MITM). The application must provide
+// BtAppPairConfirm() to explicitly confirm the displayed number.
 // Passkey UI uses BtAppPasskeyShow() or BtAppPasskeyInput().
 #ifndef BLE_SECURITY_TYPE
-#define BLE_SECURITY_TYPE BTGAP_SECTYPE_STATICKEY_NO_MITM
+#define BLE_SECURITY_TYPE BTGAP_SECTYPE_LESC_MITM
 #endif
 #ifndef BLE_SECURITY_EXCHG
-#define BLE_SECURITY_EXCHG BTAPP_SECEXCHG_NONE
+#define BLE_SECURITY_EXCHG (BTAPP_SECEXCHG_DISPLAY | BTAPP_SECEXCHG_YESNO)
 #endif
 
 #endif // __BOARD_H__
