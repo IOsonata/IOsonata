@@ -144,21 +144,15 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 	{UART_CTS_PORT, UART_CTS_PIN, UART_CTS_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},\
 	{UART_RTS_PORT, UART_RTS_PIN, UART_RTS_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},}
 
-#endif // __BOARD_H__
-
-
-
-// Bluetooth security policy. Change these two values to select the desired
-// association model; IOsonata performs pairing, key exchange and bond storage.
-// Just Works (default): no display or user interaction required.
-// Numeric Comparison: LESC_MITM + DISPLAY | YESNO. Application supplies
-// BtSmpNumericComparison() and replies with BtSmpNumericComparisonReply().
-// Passkey: LESC_MITM + DISPLAY or KEYBOARD. Application supplies the
-// corresponding BtSmpPasskeyDisplay() or BtSmpPasskeyRequest() callback.
-// OOB: LESC_MITM + OOB; application supplies OOB data using BtSmpOob* APIs.
+// BLE security policy: IOsonata handles pairing, key exchange and bonding.
+// Just Works: no application interaction. For Numeric Comparison select
+// LESC_MITM and DISPLAY | YESNO; provide BtAppPairConfirm() in the app.
+// Passkey UI uses BtAppPasskeyShow() or BtAppPasskeyInput().
 #ifndef BLE_SECURITY_TYPE
 #define BLE_SECURITY_TYPE BTGAP_SECTYPE_STATICKEY_NO_MITM
 #endif
 #ifndef BLE_SECURITY_EXCHG
 #define BLE_SECURITY_EXCHG BTAPP_SECEXCHG_NONE
 #endif
+
+#endif // __BOARD_H__
