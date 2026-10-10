@@ -1158,7 +1158,7 @@
 			<link>
 			<name>src/iopincfg_stm32.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-5-PROJECT_LOC/src/iopincfg_stm32.cpp</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/src/iopincfg_stm32.cpp</locationURI>
 		</link>
 	</linkedResources>
 </projectDescription>
