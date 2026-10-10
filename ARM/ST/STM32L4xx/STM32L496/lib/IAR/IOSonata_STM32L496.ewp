@@ -2394,7 +2394,7 @@
                 <name>$PROJ_DIR$\..\..\..\..\..\..\src\coredev\i2c.cpp</name>
             </file>
             <file>
-                <name>$PROJ_DIR$\..\..\..\src\iopincfg_stm32l4xx.c</name>
+                <name>$PROJ_DIR$\..\..\..\..\src\iopincfg_stm32.cpp</name>
             </file>
             <file>
                 <name>$PROJ_DIR$\..\..\..\..\..\..\src\coredev\spi.cpp</name>

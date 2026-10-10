@@ -95,7 +95,8 @@ GPIO register configuration, RCC port enabling, and EXTI callback dispatch.
 No family `gpio_stm32*.c` translation units are linked. F0, F4, and L4 EXTI
 paths select their ST CMSIS register definitions at compile time.
 
-STM32WBA65 GPIO configuration remains available, but EXTI registration
-currently returns false until its CMSIS EXTI routing and pending-register
-layout can be verified against the selected STM32CubeWBA device headers.
-No guessed WBA6 register offsets are used for interrupt configuration.
+STM32WBA65 EXTI is implemented with the STM32CubeWBA CMSIS EXTI_TypeDef:
+RTSR1/FTSR1 select edges, IMR1 masks lines, RPR1/FPR1 report and clear
+pending edges, and EXTI->EXTICR[] selects the GPIO port. No inferred register
+offsets or replacement peripheral structures are used. This path still
+requires hardware regression testing on STM32WBA65I-DK1.
