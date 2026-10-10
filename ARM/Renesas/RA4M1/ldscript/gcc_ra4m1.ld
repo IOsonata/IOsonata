@@ -148,7 +148,8 @@ SECTIONS
     .stack __StackLimit (NOLOAD) : ALIGN(8)
     {
         KEEP(*(.stack .stack.*))
-        . = MAX(., __StackTop);
+        /* Section-local offset: using __StackTop here adds the RAM base twice. */
+        . = MAX(., __StackSize);
     } > RAM
 
     /DISCARD/ : { *(.note.GNU-stack) }
