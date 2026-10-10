@@ -74,6 +74,18 @@ static inline void IOPinToggle(int port, int pin)
     }
 }
 
+static inline uint32_t IOPinReadPort(int port)
+{
+    GPIO_TypeDef *gpio = Stm32WbaGpio(port);
+    return gpio ? gpio->IDR : 0U;
+}
+
+static inline void IOPinWritePort(int port, uint32_t data)
+{
+    GPIO_TypeDef *gpio = Stm32WbaGpio(port);
+    if (gpio) gpio->ODR = data;
+}
+
 #ifdef __cplusplus
 }
 #endif
