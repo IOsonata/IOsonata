@@ -146,12 +146,9 @@ static void STM32F03xUARTDmaArm(STM32F0X_UARTDEV *dev, int Count)
 	dev->pTxDma->CNDTR = Count;
 	dev->pUartDev->bTxReady = false;
 	__DMB();
-	uint32_t ctrl = DMA_CCR_DIR | DMA_CCR_MINC | DMA_CCR_EN;
-	if (dev->pUartDev->DevIntrf.bIntEn)
-	{
-		ctrl |= DMA_CCR_TCIE | DMA_CCR_TEIE;
-	}
-	dev->pTxDma->CCR = ctrl;
+	dev->pTxDma->CCR = DMA_CCR_DIR | DMA_CCR_MINC |
+		(dev->pUartDev->DevIntrf.bIntEn ? (DMA_CCR_TCIE | DMA_CCR_TEIE) : 0U) |
+		DMA_CCR_EN;
 }
 
 // Call with interrupts masked. Copy before the producer can reuse the span.
@@ -287,7 +284,10 @@ static void STM32F03xUARTTxDmaService(STM32F0X_UARTDEV *dev)
 	{
 		return;
 	}
+	// Disable the channel before reusing the staging buffer; the TC flag
+	// is the ownership handoff from DMA to the UART driver.
 	dev->pTxDma->CCR = 0U;
+	__DMB();
 	if ((flags & DMA_ISR_TEIF1) != 0U)
 	{
 		dev->ErrCnt++;
