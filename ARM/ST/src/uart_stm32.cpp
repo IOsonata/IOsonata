@@ -92,6 +92,14 @@ SOFTWARE.
 #define STM32_UART_CR1_TXIE				USART_CR1_TXEIE
 #endif
 
+#if defined(USART_ICR_NCF)
+#define STM32_UART_ICR_NOISECF			USART_ICR_NCF
+#elif defined(USART_ICR_NECF)
+#define STM32_UART_ICR_NOISECF			USART_ICR_NECF
+#else
+#error "uart_stm32.cpp: USART noise-error clear flag is not defined"
+#endif
+
 
 typedef struct {
 	int DevNo;
@@ -211,7 +219,7 @@ static void Stm32UartClearErrors(Stm32UartDev_t *pDev, uint32_t Flags)
 	}
 	if (Flags & USART_ISR_NE)
 	{
-		clear |= USART_ICR_NCF;
+		clear |= STM32_UART_ICR_NOISECF;
 	}
 
 	if (clear != 0U)
@@ -1278,7 +1286,7 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	}
 
 	uint32_t clear = USART_ICR_PECF | USART_ICR_FECF |
-					 USART_ICR_ORECF | USART_ICR_NCF;
+					 USART_ICR_ORECF | STM32_UART_ICR_NOISECF;
 #if defined(USART_ICR_RTOCF)
 	clear |= USART_ICR_RTOCF;
 #endif
