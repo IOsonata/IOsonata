@@ -309,6 +309,7 @@ static Stm32UartDev_t s_Stm32UartDev[] = {
 static const int s_NbUartDev = sizeof(s_Stm32UartDev) / sizeof(Stm32UartDev_t);
 
 static void Stm32UartIrqHandler(Stm32UartDev_t * const pDev);
+static void Stm32UartRxError(UARTDev_t * const pDev, USART_TypeDef * const pReg, uint32_t Flags);
 static uint32_t Stm32UartGetRate(DevIntrf_t * const pDev);
 static uint32_t Stm32UartSetRate(DevIntrf_t * const pDev, uint32_t Rate);
 static bool Stm32UartStartRx(DevIntrf_t * const pDev, uint32_t DevAddr);
@@ -323,6 +324,28 @@ static void Stm32UartPowerOff(DevIntrf_t * const pDev);
 static void Stm32UartReset(DevIntrf_t * const pDev);
 static void *Stm32UartGetHandle(DevIntrf_t * const pDev);
 static uint32_t Stm32UartClkSrc(Stm32UartDev_t * const pDev, uint32_t Rate, uint32_t * const pFreq);
+
+static void Stm32UartRxError(UARTDev_t * const pDev, USART_TypeDef * const pReg, uint32_t Flags)
+{
+	if (Flags & USART_ISR_ORE)
+	{
+		pDev->RxOvrErrCnt++;
+	}
+	if (Flags & USART_ISR_PE)
+	{
+		pDev->ParErrCnt++;
+	}
+	if (Flags & USART_ISR_FE)
+	{
+		pDev->FramErrCnt++;
+	}
+
+	pReg->ICR = Flags & ST_USART_ICR_RXERR;
+	if (Flags & ST_USART_ISR_RXNE)
+	{
+		(void)pReg->RDR;
+	}
+}
 
 static void Stm32UartIrqHandler(Stm32UartDev_t * const pDev)
 {
@@ -341,23 +364,7 @@ static void Stm32UartIrqHandler(Stm32UartDev_t * const pDev)
 	// RXNE and let the line recover.
 	if (iflag & ST_USART_ISR_RXERR)
 	{
-		if (iflag & USART_ISR_ORE)
-		{
-			dev->RxOvrErrCnt++;
-		}
-		if (iflag & USART_ISR_PE)
-		{
-			dev->ParErrCnt++;
-		}
-		if (iflag & USART_ISR_FE)
-		{
-			dev->FramErrCnt++;
-		}
-		reg->ICR = iflag & ST_USART_ICR_RXERR;
-		if (iflag & ST_USART_ISR_RXNE)
-		{
-			(void)reg->RDR;
-		}
+		Stm32UartRxError(dev, reg, iflag);
 		iflag &= ~ST_USART_ISR_RXNE;
 	}
 
@@ -532,6 +539,11 @@ static int Stm32UartRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int Bufflen)
 	USART_TypeDef *reg = dev->pReg;
 	int cnt = 0;
 
+	if (pBuff == NULL || Bufflen <= 0)
+	{
+		return 0;
+	}
+
 	if (!pDev->bIntEn)
 	{
 		while (cnt < Bufflen)
@@ -540,23 +552,7 @@ static int Stm32UartRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int Bufflen)
 
 			if (flags & ST_USART_ISR_RXERR)
 			{
-				if (flags & USART_ISR_ORE)
-				{
-					dev->pUartDev->RxOvrErrCnt++;
-				}
-				if (flags & USART_ISR_PE)
-				{
-					dev->pUartDev->ParErrCnt++;
-				}
-				if (flags & USART_ISR_FE)
-				{
-					dev->pUartDev->FramErrCnt++;
-				}
-				reg->ICR = flags & ST_USART_ICR_RXERR;
-				if (flags & ST_USART_ISR_RXNE)
-				{
-					(void)reg->RDR;
-				}
+				Stm32UartRxError(dev->pUartDev, reg, flags);
 				break;
 			}
 			if ((flags & ST_USART_ISR_RXNE) == 0)
@@ -761,50 +757,37 @@ static void *Stm32UartGetHandle(DevIntrf_t * const pDev)
 	return ((Stm32UartDev_t *)pDev->pDevData)->pUartDev;
 }
 
-#if defined(IOSONATA_STM32_F0)
-
-// Every F0 instance runs from PCLK. USART1 also has its own selection field,
-// set back to PCLK through the instance table.
+// Only the kernel clock source is family dependent; transfer timing and
+// USART divider programming are shared by every instance.
 static uint32_t Stm32UartClkSrc(Stm32UartDev_t * const pDev, uint32_t Rate, uint32_t * const pFreq)
 {
-	*pFreq = SystemPeriphClockGet(0);
-
-	return ST_UART_CLKSEL_PCLK;
-}
-
-#elif defined(IOSONATA_STM32_L4)
-
-// USART and UART instances run from SYSCLK. LPUART1 needs fck between 3 and
-// 4096 times the rate, so it runs from the LSE crystal up to LSE / 3, from
-// HSI16 up to 16 MHz / 3 and from SYSCLK above that.
-static uint32_t Stm32UartClkSrc(Stm32UartDev_t * const pDev, uint32_t Rate, uint32_t * const pFreq)
-{
+#if defined(IOSONATA_STM32_L4)
 	if (pDev->pReg == LPUART1)
 	{
 		if (GetLowFreqOscType() == OSC_TYPE_XTAL && Rate <= GetLowFreqOscFreq() / 3U)
 		{
 			*pFreq = GetLowFreqOscFreq();
-
 			return ST_UART_CLKSEL_LSE;
 		}
 
 		if (Rate <= ST_UART_HSI16_FREQ / 3U)
 		{
 			RCC->CR |= RCC_CR_HSION;
-			while ((RCC->CR & RCC_CR_HSIRDY) == 0);
-
+			while ((RCC->CR & RCC_CR_HSIRDY) == 0U);
 			*pFreq = ST_UART_HSI16_FREQ;
-
 			return ST_UART_CLKSEL_HSI16;
 		}
 	}
 
 	*pFreq = SystemCoreClockGet();
-
 	return ST_UART_CLKSEL_SYSCLK;
-}
-
+#else
+	(void)pDev;
+	(void)Rate;
+	*pFreq = SystemPeriphClockGet(0);
+	return ST_UART_CLKSEL_PCLK;
 #endif
+}
 
 UARTDev_t const *UARTGetInstance(int DevNo)
 {
@@ -852,6 +835,14 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	Stm32UartDev_t *dev = &s_Stm32UartDev[pCfg->DevNo];
 	USART_TypeDef *reg = dev->pReg;
 	uint32_t state = DisableInterrupt();
+
+	// A live peripheral cannot be rebound to a different UART object.
+	if (dev->pUartDev != NULL && dev->pUartDev != pDev &&
+		(reg->CR1 & USART_CR1_UE) != 0U)
+	{
+		EnableInterrupt(state);
+		return false;
+	}
 
 	pDev->DevIntrf.pDevData = dev;
 	dev->pUartDev = pDev;
