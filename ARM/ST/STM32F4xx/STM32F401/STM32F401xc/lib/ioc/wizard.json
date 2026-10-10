@@ -8,6 +8,7 @@
     "STM32F401xC"
   ],
   "includes": [
+    "${iosonata}/ARM/ST/include",
     "${iosonata}/ARM/ST/STM32F4xx/include",
     "${iosonata}/ARM/ST/STM32F4xx/STM32F401/STM32F401xc/lib/include"
   ],
