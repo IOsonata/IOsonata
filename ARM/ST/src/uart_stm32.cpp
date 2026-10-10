@@ -3,35 +3,36 @@
 
 @brief	STM32 UART implementation.
 
-		One implementation for the STM32 USART and LPUART with the ISR, ICR,
-		TDR and RDR register set, using the ST CMSIS definitions selected by
-		stm32.h. The transfer paths, the interrupt handler and the baud rate
-		divider are common. What follows from the MCU model is the instance
-		table, the USART kernel clock source and the interrupt vectors.
+		One driver for the STM32 USART and LPUART. The engine is the same on
+		every family. What differs is a few register and bit names, mapped
+		below from the CMSIS device header selected by stm32.h:
 
-		Families served
+		- SR and DR on F1, F2 and F4 in place of ISR, ICR, TDR and RDR
+		- the FIFO names of the TXE and RXNE flags
+		- the RCC register holding the APB1 clock enables
+		- the LPUART clock registers
+		- the shared USART3 and up vector of the F0 parts
 
-		F0 : USART1 to USART6 depending on the part, all on PCLK
-		L4 : LPUART1, USART1 to USART3, UART4, UART5, USART and UART on
-		     SYSCLK, LPUART1 on the LSE crystal or HSI16
+		The instance table and the interrupt vectors list every instance the
+		device header defines. DevNo is the position in that list:
 
-		F4 : USART1, USART2 and USART6 (SR/DR register adapter)
+		LPUART1, USART1, USART2, USART3, USART4 or UART4, USART5 or UART5,
+		USART6
 
-		Not served
+		F030x8 : 0 USART1, 1 USART2
+		F401   : 0 USART1, 1 USART2, 2 USART6
+		L4     : 0 LPUART1, 1 USART1, 2 USART2, 3 USART3, 4 UART4, 5 UART5
 
-		WBA : instance table and kernel clock source not written yet
+		USART kernel clock is PCLK, the reset value of its selection field,
+		read with SystemPeriphClockGet. LPUART1 runs from the LSE crystal or
+		HSI16 for the rates they can make.
 
-		Operating modes
-
-		bIntMode false : polling, TxData and RxData access TDR and RDR
+		bIntMode false : polling, TxData and RxData access the data register
 		bIntMode true  : USART interrupts drain the TX CFIFO and fill the
 		                 RX CFIFO
 		bDMAMode true  : not implemented, UARTInit fails
 
-		DevNo mapping
-
-		F0 : 0 USART1, 1 USART2, 2 USART3, 3 USART4, 4 USART5, 5 USART6
-		L4 : 0 LPUART1, 1 USART1, 2 USART2, 3 USART3, 4 UART4, 5 UART5
+		Not mapped yet: the RCC names of WBA.
 
 @author	Hoang Nguyen Hoan
 @date	Jun. 7, 2019
@@ -72,86 +73,126 @@ SOFTWARE.
 #include "coredev/interrupt.h"
 #include "coredev/system_core_clock.h"
 
-#if !defined(IOSONATA_STM32_F0) && !defined(IOSONATA_STM32_F4) && !defined(IOSONATA_STM32_L4)
-#error "uart_stm32.cpp: no USART instance table for this STM32 family"
-#endif
-
-#if defined(IOSONATA_STM32_F4)
-// F401 USARTs use SR/DR instead of ISR/RDR/TDR/ICR.
-// The transfer engine remains shared across register generations.
-#define ST_UART_STATUS(reg)		((reg)->SR)
-#define ST_UART_READ(reg)		((reg)->DR)
-#define ST_UART_WRITE(reg, data)	((reg)->DR = (data))
-#define USART_ISR_TXE			USART_SR_TXE
-#define USART_ISR_RXNE			USART_SR_RXNE
-#define USART_ISR_PE			USART_SR_PE
-#define USART_ISR_FE			USART_SR_FE
-#define USART_ISR_NE			USART_SR_NE
-#define USART_ISR_ORE			USART_SR_ORE
-#define USART_ICR_PECF			USART_SR_PE
-#define USART_ICR_FECF			USART_SR_FE
-#define USART_ICR_NCF			USART_SR_NE
-#define USART_ICR_ORECF			USART_SR_ORE
-#else
-#define ST_UART_STATUS(reg)		((reg)->ISR)
-#define ST_UART_READ(reg)		((reg)->RDR)
-#define ST_UART_WRITE(reg, data)	((reg)->TDR = (data))
-#endif
-
-// USARTs with a hardware FIFO name the TXE and RXNE bits after their FIFO
-// meaning. With FIFOEN cleared, its reset value kept by this driver, they are
-// the plain TXE and RXNE flags.
+// Status, data and receive error clear. Most families have ISR, ICR, TDR and
+// RDR. F1, F2 and F4 have SR and one DR, and clear the receive errors when DR
+// is read after SR, which the receive paths do since an error comes with
+// RXNE. The flags sit at the same bit positions in ISR and SR.
+#if defined(USART_ISR_TXE) || defined(USART_ISR_TXE_TXFNF)
+#define ST_USART_ISR(Reg)				((Reg)->ISR)
+#define ST_USART_RDR(Reg)				((Reg)->RDR)
+#define ST_USART_TDR(Reg)				((Reg)->TDR)
+#define ST_USART_RXERR_CLEAR(Reg, Flags)	((Reg)->ICR = (Flags) & ST_USART_ICR_RXERR)
+#define ST_USART_ISR_PE					USART_ISR_PE
+#define ST_USART_ISR_FE					USART_ISR_FE
+#define ST_USART_ISR_NE					USART_ISR_NE
+#define ST_USART_ISR_ORE				USART_ISR_ORE
 #ifdef USART_ISR_TXE
-#define ST_USART_ISR_TXE		USART_ISR_TXE
-#define ST_USART_ISR_RXNE		USART_ISR_RXNE
-#define ST_USART_CR1_TXEIE		USART_CR1_TXEIE
-#define ST_USART_CR1_RXNEIE		USART_CR1_RXNEIE
+#define ST_USART_ISR_TXE				USART_ISR_TXE
+#define ST_USART_ISR_RXNE				USART_ISR_RXNE
+#define ST_USART_CR1_TXEIE				USART_CR1_TXEIE
+#define ST_USART_CR1_RXNEIE				USART_CR1_RXNEIE
 #else
-#define ST_USART_ISR_TXE		USART_ISR_TXE_TXFNF
-#define ST_USART_ISR_RXNE		USART_ISR_RXNE_RXFNE
-#define ST_USART_CR1_TXEIE		USART_CR1_TXEIE_TXFNFIE
-#define ST_USART_CR1_RXNEIE		USART_CR1_RXNEIE_RXFNEIE
+// Hardware FIFO names. With FIFOEN at its reset value, cleared, they are the
+// plain TXE and RXNE flags.
+#define ST_USART_ISR_TXE				USART_ISR_TXE_TXFNF
+#define ST_USART_ISR_RXNE				USART_ISR_RXNE_RXFNE
+#define ST_USART_CR1_TXEIE				USART_CR1_TXEIE_TXFNFIE
+#define ST_USART_CR1_RXNEIE				USART_CR1_RXNEIE_RXFNEIE
 #endif
-
 #ifdef USART_ICR_NECF
-#define ST_USART_ICR_NECF		USART_ICR_NECF
+#define ST_USART_ICR_NECF				USART_ICR_NECF
 #else
-#define ST_USART_ICR_NECF		USART_ICR_NCF
+#define ST_USART_ICR_NECF				USART_ICR_NCF
+#endif
+// The ICR clear bits sit at the same positions as the ISR flags.
+#define ST_USART_ICR_RXERR				(USART_ICR_PECF | USART_ICR_FECF | ST_USART_ICR_NECF | USART_ICR_ORECF)
+#elif defined(USART_SR_TXE)
+#define ST_USART_ISR(Reg)				((Reg)->SR)
+#define ST_USART_RDR(Reg)				((Reg)->DR)
+#define ST_USART_TDR(Reg)				((Reg)->DR)
+#define ST_USART_RXERR_CLEAR(Reg, Flags)
+#define ST_USART_ISR_PE					USART_SR_PE
+#define ST_USART_ISR_FE					USART_SR_FE
+#define ST_USART_ISR_NE					USART_SR_NE
+#define ST_USART_ISR_ORE				USART_SR_ORE
+#define ST_USART_ISR_TXE				USART_SR_TXE
+#define ST_USART_ISR_RXNE				USART_SR_RXNE
+#define ST_USART_CR1_TXEIE				USART_CR1_TXEIE
+#define ST_USART_CR1_RXNEIE				USART_CR1_RXNEIE
+#else
+#error "uart_stm32.cpp: USART register names not mapped"
 #endif
 
-// Word length bit for 9 bit words. Parts with a single bit call it M.
+#define ST_USART_ISR_RXERR		(ST_USART_ISR_PE | ST_USART_ISR_FE | ST_USART_ISR_NE | ST_USART_ISR_ORE)
+
+// 9 bit word. Parts with a single word length bit call it M.
 #ifdef USART_CR1_M0
 #define ST_USART_CR1_M0			USART_CR1_M0
 #else
 #define ST_USART_CR1_M0			USART_CR1_M
 #endif
 
-// Receive errors. The ICR clear bits sit at the same positions as the ISR
-// flags, so the flags read from ISR select what is cleared.
-#define ST_USART_ISR_RXERR		(USART_ISR_PE | USART_ISR_FE | USART_ISR_NE | USART_ISR_ORE)
-#define ST_USART_ICR_RXERR		(USART_ICR_PECF | USART_ICR_FECF | ST_USART_ICR_NECF | USART_ICR_ORECF)
+// RCC register holding the APB1 clock enables, split in two on L4. The reset
+// bit of a peripheral has the same position as its enable bit.
+#if defined(RCC_APB1ENR1_PWREN)
+#define ST_RCC_APB1ENR			APB1ENR1
+#define ST_RCC_APB1RSTR			APB1RSTR1
+#define ST_RCC_APB1EN(Inst)		RCC_APB1ENR1_##Inst##EN
+#elif defined(RCC_APB1ENR_PWREN)
+#define ST_RCC_APB1ENR			APB1ENR
+#define ST_RCC_APB1RSTR			APB1RSTR
+#define ST_RCC_APB1EN(Inst)		RCC_APB1ENR_##Inst##EN
+#else
+#error "uart_stm32.cpp: RCC APB1 register names not mapped"
+#endif
 
-// Values of the 2 bit RCC kernel clock selection field. PCLK and SYSCLK are
-// the same on every family. HSI16 and LSE are the L4 encoding.
-#define ST_UART_CLKSEL_MSK		3U
-#define ST_UART_CLKSEL_PCLK		0U
-#define ST_UART_CLKSEL_SYSCLK	1U
-#define ST_UART_CLKSEL_HSI16	2U
-#define ST_UART_CLKSEL_LSE		3U
+// SystemPeriphClockGet index of the APB2 instances. Parts with a single APB
+// prescaler have one PCLK.
+#ifdef RCC_CFGR_PPRE2
+#define ST_PCLK_APB2			1
+#else
+#define ST_PCLK_APB2			0
+#endif
 
-#define ST_UART_HSI16_FREQ		16000000U
+// LPUART1 clock enable and kernel clock selection
+#if defined(LPUART1) && defined(RCC_APB1ENR2_LPUART1EN)
+#define ST_RCC_LPUART1ENR		APB1ENR2
+#define ST_RCC_LPUART1RSTR		APB1RSTR2
+#define ST_RCC_LPUART1EN		RCC_APB1ENR2_LPUART1EN
+#define ST_RCC_LPUART1SELR		CCIPR
+#define ST_RCC_LPUART1SEL_Pos	RCC_CCIPR_LPUART1SEL_Pos
+#elif defined(LPUART1)
+#error "uart_stm32.cpp: LPUART1 RCC names not mapped"
+#endif
+
+// F0 parts route USART3 and up to one vector. The device header names it
+// USART3_4 on every part that has it.
+#if defined(USART3_4_IRQn) || defined(USART3_6_IRQn)
+#define ST_USART3_IRQn			USART3_4_IRQn
+#define ST_USART6_IRQn			USART3_4_IRQn
+#else
+#define ST_USART3_IRQn			USART3_IRQn
+#define ST_USART6_IRQn			USART6_IRQn
+#endif
+
+// LPUART kernel clock selection values and the HSI16 frequency
+#define ST_LPUART_CLKSEL_MSK	3U
+#define ST_LPUART_CLKSEL_PCLK	0U
+#define ST_LPUART_CLKSEL_HSI16	2U
+#define ST_LPUART_CLKSEL_LSE	3U
+#define ST_HSI16_FREQ			16000000U
 
 // USART divider range. Oversampling by 16 uses BRR = fck / baud, by 8 uses
 // USARTDIV = 2 x fck / baud. Both must be at least 16.
 #define ST_USART_DIV_MIN		16U
 #define ST_USART_DIV_MAX		0xFFFFU
 
-// LPUART BRR = 256 x fck / baud and its valid range.
+// LPUART BRR = 256 x fck / baud and its valid range
 #define ST_LPUART_BRR_MIN		0x300U
 #define ST_LPUART_BRR_MAX		0xFFFFFU
 
 // Default CFIFO memory of each instance, used when the configuration does
-// not supply its own.
+// not supply its own
 #define ST_UART_BUFF_SIZE		16
 #define ST_UART_CFIFO_SIZE		CFIFO_MEMSIZE(ST_UART_BUFF_SIZE)
 
@@ -159,15 +200,12 @@ SOFTWARE.
 
 /// Device driver data require by low level functions
 typedef struct __Stm32_Uart_Dev {
-	int DevNo;						//!< UART interface number
 	USART_TypeDef *pReg;			//!< USART or LPUART registers
-	IRQn_Type IrqNo;				//!< Interrupt number, shared by several instances on some parts
-	volatile uint32_t *pClkEnReg;	//!< RCC peripheral clock enable register
-	uint32_t ClkEnMask;				//!< Peripheral clock enable bit
-	volatile uint32_t *pRstReg;		//!< RCC peripheral reset register
-	uint32_t RstMask;				//!< Peripheral reset bit
-	volatile uint32_t *pClkSelReg;	//!< RCC kernel clock selection register, NULL when the instance has none
-	uint32_t ClkSelPos;				//!< Position of the kernel clock selection field in pClkSelReg
+	IRQn_Type IrqNo;				//!< Interrupt number
+	volatile uint32_t *pRccEnReg;	//!< RCC clock enable register
+	volatile uint32_t *pRccRstReg;	//!< RCC reset register
+	uint32_t RccMask;				//!< Enable bit, also the reset bit
+	int PclkIdx;					//!< SystemPeriphClockGet index of the instance bus
 	UARTDev_t *pUartDev;			//!< Pointer to generic UART dev. data
 	const IOPinCfg_t *pIOPinMap;	//!< Pins configured again by Enable
 	int NbIOPins;					//!< Number of pins in pIOPinMap
@@ -178,189 +216,99 @@ typedef struct __Stm32_Uart_Dev {
 #pragma pack(pop)
 
 static Stm32UartDev_t s_Stm32UartDev[] = {
-#if defined(IOSONATA_STM32_F0)
+#ifdef LPUART1
 	{
-		.DevNo = 0,
+		.pReg = LPUART1,
+		.IrqNo = LPUART1_IRQn,
+		.pRccEnReg = &RCC->ST_RCC_LPUART1ENR,
+		.pRccRstReg = &RCC->ST_RCC_LPUART1RSTR,
+		.RccMask = ST_RCC_LPUART1EN,
+		.PclkIdx = 0,
+	},
+#endif
+	{
 		.pReg = USART1,
 		.IrqNo = USART1_IRQn,
-		.pClkEnReg = &RCC->APB2ENR,
-		.ClkEnMask = RCC_APB2ENR_USART1EN,
-		.pRstReg = &RCC->APB2RSTR,
-		.RstMask = RCC_APB2RSTR_USART1RST,
-		.pClkSelReg = &RCC->CFGR3,
-		.ClkSelPos = RCC_CFGR3_USART1SW_Pos,
+		.pRccEnReg = &RCC->APB2ENR,
+		.pRccRstReg = &RCC->APB2RSTR,
+		.RccMask = RCC_APB2ENR_USART1EN,
+		.PclkIdx = ST_PCLK_APB2,
 	},
 #ifdef USART2
 	{
-		.DevNo = 1,
 		.pReg = USART2,
 		.IrqNo = USART2_IRQn,
-		.pClkEnReg = &RCC->APB1ENR,
-		.ClkEnMask = RCC_APB1ENR_USART2EN,
-		.pRstReg = &RCC->APB1RSTR,
-		.RstMask = RCC_APB1RSTR_USART2RST,
-		.pClkSelReg = NULL,
-		.ClkSelPos = 0,
+		.pRccEnReg = &RCC->ST_RCC_APB1ENR,
+		.pRccRstReg = &RCC->ST_RCC_APB1RSTR,
+		.RccMask = ST_RCC_APB1EN(USART2),
+		.PclkIdx = 0,
 	},
 #endif
-#if defined(STM32F070xB) || defined(STM32F030xC)
+#ifdef USART3
 	{
-		.DevNo = 2,
 		.pReg = USART3,
-#ifdef STM32F030xC
-		.IrqNo = USART3_6_IRQn,
-#else
-		.IrqNo = USART3_4_IRQn,
-#endif
-		.pClkEnReg = &RCC->APB1ENR,
-		.ClkEnMask = RCC_APB1ENR_USART3EN,
-		.pRstReg = &RCC->APB1RSTR,
-		.RstMask = RCC_APB1RSTR_USART3RST,
-		.pClkSelReg = NULL,
-		.ClkSelPos = 0,
+		.IrqNo = ST_USART3_IRQn,
+		.pRccEnReg = &RCC->ST_RCC_APB1ENR,
+		.pRccRstReg = &RCC->ST_RCC_APB1RSTR,
+		.RccMask = ST_RCC_APB1EN(USART3),
+		.PclkIdx = 0,
 	},
+#endif
+#ifdef USART4
 	{
-		.DevNo = 3,
 		.pReg = USART4,
-#ifdef STM32F030xC
-		.IrqNo = USART3_6_IRQn,
-#else
 		.IrqNo = USART3_4_IRQn,
-#endif
-		.pClkEnReg = &RCC->APB1ENR,
-		.ClkEnMask = RCC_APB1ENR_USART4EN,
-		.pRstReg = &RCC->APB1RSTR,
-		.RstMask = RCC_APB1RSTR_USART4RST,
-		.pClkSelReg = NULL,
-		.ClkSelPos = 0,
+		.pRccEnReg = &RCC->ST_RCC_APB1ENR,
+		.pRccRstReg = &RCC->ST_RCC_APB1RSTR,
+		.RccMask = ST_RCC_APB1EN(USART4),
+		.PclkIdx = 0,
 	},
 #endif
-#ifdef STM32F030xC
+#ifdef UART4
 	{
-		.DevNo = 4,
-		.pReg = USART5,
-		.IrqNo = USART3_6_IRQn,
-		.pClkEnReg = &RCC->APB1ENR,
-		.ClkEnMask = RCC_APB1ENR_USART5EN,
-		.pRstReg = &RCC->APB1RSTR,
-		.RstMask = RCC_APB1RSTR_USART5RST,
-		.pClkSelReg = NULL,
-		.ClkSelPos = 0,
-	},
-	{
-		.DevNo = 5,
-		.pReg = USART6,
-		.IrqNo = USART3_6_IRQn,
-		.pClkEnReg = &RCC->APB2ENR,
-		.ClkEnMask = RCC_APB2ENR_USART6EN,
-		.pRstReg = &RCC->APB2RSTR,
-		.RstMask = RCC_APB2RSTR_USART6RST,
-		.pClkSelReg = NULL,
-		.ClkSelPos = 0,
-	},
-#endif
-#elif defined(IOSONATA_STM32_F4)
-	{
-		.DevNo = 0,
-		.pReg = USART1,
-		.IrqNo = USART1_IRQn,
-		.pClkEnReg = &RCC->APB2ENR,
-		.ClkEnMask = RCC_APB2ENR_USART1EN,
-		.pRstReg = &RCC->APB2RSTR,
-		.RstMask = RCC_APB2RSTR_USART1RST,
-	},
-	{
-		.DevNo = 1,
-		.pReg = USART2,
-		.IrqNo = USART2_IRQn,
-		.pClkEnReg = &RCC->APB1ENR,
-		.ClkEnMask = RCC_APB1ENR_USART2EN,
-		.pRstReg = &RCC->APB1RSTR,
-		.RstMask = RCC_APB1RSTR_USART2RST,
-	},
-	{
-		.DevNo = 2,
-		.pReg = USART6,
-		.IrqNo = USART6_IRQn,
-		.pClkEnReg = &RCC->APB2ENR,
-		.ClkEnMask = RCC_APB2ENR_USART6EN,
-		.pRstReg = &RCC->APB2RSTR,
-		.RstMask = RCC_APB2RSTR_USART6RST,
-	},
-#elif defined(IOSONATA_STM32_L4)
-	{
-		.DevNo = 0,
-		.pReg = LPUART1,
-		.IrqNo = LPUART1_IRQn,
-		.pClkEnReg = &RCC->APB1ENR2,
-		.ClkEnMask = RCC_APB1ENR2_LPUART1EN,
-		.pRstReg = &RCC->APB1RSTR2,
-		.RstMask = RCC_APB1RSTR2_LPUART1RST,
-		.pClkSelReg = &RCC->CCIPR,
-		.ClkSelPos = RCC_CCIPR_LPUART1SEL_Pos,
-	},
-	{
-		.DevNo = 1,
-		.pReg = USART1,
-		.IrqNo = USART1_IRQn,
-		.pClkEnReg = &RCC->APB2ENR,
-		.ClkEnMask = RCC_APB2ENR_USART1EN,
-		.pRstReg = &RCC->APB2RSTR,
-		.RstMask = RCC_APB2RSTR_USART1RST,
-		.pClkSelReg = &RCC->CCIPR,
-		.ClkSelPos = RCC_CCIPR_USART1SEL_Pos,
-	},
-	{
-		.DevNo = 2,
-		.pReg = USART2,
-		.IrqNo = USART2_IRQn,
-		.pClkEnReg = &RCC->APB1ENR1,
-		.ClkEnMask = RCC_APB1ENR1_USART2EN,
-		.pRstReg = &RCC->APB1RSTR1,
-		.RstMask = RCC_APB1RSTR1_USART2RST,
-		.pClkSelReg = &RCC->CCIPR,
-		.ClkSelPos = RCC_CCIPR_USART2SEL_Pos,
-	},
-	{
-		.DevNo = 3,
-		.pReg = USART3,
-		.IrqNo = USART3_IRQn,
-		.pClkEnReg = &RCC->APB1ENR1,
-		.ClkEnMask = RCC_APB1ENR1_USART3EN,
-		.pRstReg = &RCC->APB1RSTR1,
-		.RstMask = RCC_APB1RSTR1_USART3RST,
-		.pClkSelReg = &RCC->CCIPR,
-		.ClkSelPos = RCC_CCIPR_USART3SEL_Pos,
-	},
-	{
-		.DevNo = 4,
 		.pReg = UART4,
 		.IrqNo = UART4_IRQn,
-		.pClkEnReg = &RCC->APB1ENR1,
-		.ClkEnMask = RCC_APB1ENR1_UART4EN,
-		.pRstReg = &RCC->APB1RSTR1,
-		.RstMask = RCC_APB1RSTR1_UART4RST,
-		.pClkSelReg = &RCC->CCIPR,
-		.ClkSelPos = RCC_CCIPR_UART4SEL_Pos,
+		.pRccEnReg = &RCC->ST_RCC_APB1ENR,
+		.pRccRstReg = &RCC->ST_RCC_APB1RSTR,
+		.RccMask = ST_RCC_APB1EN(UART4),
+		.PclkIdx = 0,
 	},
+#endif
+#ifdef USART5
 	{
-		.DevNo = 5,
+		.pReg = USART5,
+		.IrqNo = USART3_4_IRQn,
+		.pRccEnReg = &RCC->ST_RCC_APB1ENR,
+		.pRccRstReg = &RCC->ST_RCC_APB1RSTR,
+		.RccMask = ST_RCC_APB1EN(USART5),
+		.PclkIdx = 0,
+	},
+#endif
+#ifdef UART5
+	{
 		.pReg = UART5,
 		.IrqNo = UART5_IRQn,
-		.pClkEnReg = &RCC->APB1ENR1,
-		.ClkEnMask = RCC_APB1ENR1_UART5EN,
-		.pRstReg = &RCC->APB1RSTR1,
-		.RstMask = RCC_APB1RSTR1_UART5RST,
-		.pClkSelReg = &RCC->CCIPR,
-		.ClkSelPos = RCC_CCIPR_UART5SEL_Pos,
+		.pRccEnReg = &RCC->ST_RCC_APB1ENR,
+		.pRccRstReg = &RCC->ST_RCC_APB1RSTR,
+		.RccMask = ST_RCC_APB1EN(UART5),
+		.PclkIdx = 0,
+	},
+#endif
+#ifdef USART6
+	{
+		.pReg = USART6,
+		.IrqNo = ST_USART6_IRQn,
+		.pRccEnReg = &RCC->APB2ENR,
+		.pRccRstReg = &RCC->APB2RSTR,
+		.RccMask = RCC_APB2ENR_USART6EN,
+		.PclkIdx = ST_PCLK_APB2,
 	},
 #endif
 };
 
 static const int s_NbUartDev = sizeof(s_Stm32UartDev) / sizeof(Stm32UartDev_t);
 
-static void Stm32UartIrqHandler(Stm32UartDev_t * const pDev);
-static void Stm32UartRxError(UARTDev_t * const pDev, USART_TypeDef * const pReg, uint32_t Flags);
+static void Stm32UartIrqHandler(USART_TypeDef * const pReg);
 static uint32_t Stm32UartGetRate(DevIntrf_t * const pDev);
 static uint32_t Stm32UartSetRate(DevIntrf_t * const pDev, uint32_t Rate);
 static bool Stm32UartStartRx(DevIntrf_t * const pDev, uint32_t DevAddr);
@@ -371,63 +319,58 @@ static int Stm32UartTxData(DevIntrf_t * const pDev, uint8_t const *pData, int Da
 static void Stm32UartStopTx(DevIntrf_t * const pDev);
 static void Stm32UartDisable(DevIntrf_t * const pDev);
 static void Stm32UartEnable(DevIntrf_t * const pDev);
-static void Stm32UartPowerOff(DevIntrf_t * const pDev);
 static void Stm32UartReset(DevIntrf_t * const pDev);
 static void *Stm32UartGetHandle(DevIntrf_t * const pDev);
-static uint32_t Stm32UartClkSrc(Stm32UartDev_t * const pDev, uint32_t Rate, uint32_t * const pFreq);
 
-static void Stm32UartRxError(UARTDev_t * const pDev, USART_TypeDef * const pReg, uint32_t Flags)
+static void Stm32UartIrqHandler(USART_TypeDef * const pReg)
 {
-	if (Flags & USART_ISR_ORE)
-	{
-		pDev->RxOvrErrCnt++;
-	}
-	if (Flags & USART_ISR_PE)
-	{
-		pDev->ParErrCnt++;
-	}
-	if (Flags & USART_ISR_FE)
-	{
-		pDev->FramErrCnt++;
-	}
+	UARTDev_t *dev = NULL;
 
-#if defined(IOSONATA_STM32_F4)
-	// SR was sampled by the caller; read DR to clear RXNE and errors.
-	(void)ST_UART_READ(pReg);
-#else
-	pReg->ICR = Flags & ST_USART_ICR_RXERR;
-	if (Flags & ST_USART_ISR_RXNE)
+	for (int i = 0; i < s_NbUartDev; i++)
 	{
-		(void)ST_UART_READ(pReg);
+		if (s_Stm32UartDev[i].pReg == pReg)
+		{
+			dev = s_Stm32UartDev[i].pUartDev;
+			break;
+		}
 	}
-#endif
-}
-
-static void Stm32UartIrqHandler(Stm32UartDev_t * const pDev)
-{
-	UARTDev_t *dev = pDev->pUartDev;
 
 	if (dev == NULL || !dev->DevIntrf.bIntEn)
 	{
 		return;
 	}
 
-	USART_TypeDef *reg = pDev->pReg;
-	uint32_t iflag = ST_UART_STATUS(reg);
-	uint32_t cr1 = reg->CR1;
+	uint32_t iflag = ST_USART_ISR(pReg);
+	uint32_t cr1 = pReg->CR1;
 
 	// RX errors: clear only the error flags seen, then drain RDR to release
 	// RXNE and let the line recover.
 	if (iflag & ST_USART_ISR_RXERR)
 	{
-		Stm32UartRxError(dev, reg, iflag);
+		if (iflag & ST_USART_ISR_ORE)
+		{
+			dev->RxOvrErrCnt++;
+		}
+		if (iflag & ST_USART_ISR_PE)
+		{
+			dev->ParErrCnt++;
+		}
+		if (iflag & ST_USART_ISR_FE)
+		{
+			dev->FramErrCnt++;
+		}
+		ST_USART_RXERR_CLEAR(pReg, iflag);
+		if (iflag & ST_USART_ISR_RXNE)
+		{
+			(void)ST_USART_RDR(pReg);
+		}
 		iflag &= ~ST_USART_ISR_RXNE;
 	}
 
 	if ((iflag & ST_USART_ISR_RXNE) && (cr1 & ST_USART_CR1_RXNEIE))
 	{
 		// Reading RDR clears RXNE
-		uint8_t c = (uint8_t)ST_UART_READ(reg) & (dev->DataBits == 7 ? 0x7F : 0xFF);
+		uint8_t c = (uint8_t)ST_USART_RDR(pReg) & (dev->DataBits == 7 ? 0x7F : 0xFF);
 		uint8_t *p = CFifoPut(dev->hRxFifo);
 		if (p != NULL)
 		{
@@ -450,12 +393,12 @@ static void Stm32UartIrqHandler(Stm32UartDev_t * const pDev)
 		if (p != NULL)
 		{
 			// Writing TDR clears TXE
-			ST_UART_WRITE(reg, *p);
+			ST_USART_TDR(pReg) = *p;
 		}
 		else
 		{
 			// FIFO empty, mask TXEIE so TXE does not keep interrupting.
-			reg->CR1 &= ~ST_USART_CR1_TXEIE;
+			pReg->CR1 &= ~ST_USART_CR1_TXEIE;
 			dev->bTxReady = true;
 			if (dev->EvtCallback)
 			{
@@ -478,44 +421,47 @@ static uint32_t Stm32UartSetRate(DevIntrf_t * const pDev, uint32_t Rate)
 {
 	Stm32UartDev_t *dev = (Stm32UartDev_t *)pDev->pDevData;
 	USART_TypeDef *reg = dev->pReg;
+	uint32_t fclk = SystemPeriphClockGet(dev->PclkIdx);
 
-	if (Rate == 0)
+	if (Rate == 0 || fclk == 0)
 	{
 		return 0;
 	}
 
-	// The kernel clock source, OVER8 and BRR are changed with UE cleared.
-	// The interrupt handler writes CR1 too, so the sequence is not
-	// interrupted.
+	// The kernel clock, OVER8 and BRR are changed with UE cleared. The
+	// interrupt handler writes CR1 too, so the sequence is not interrupted.
 	uint32_t state = DisableInterrupt();
-	uint32_t cr1 = reg->CR1;
-	reg->CR1 = cr1 & ~USART_CR1_UE;
-
-	uint32_t fclk = 0;
-	uint32_t clksel = Stm32UartClkSrc(dev, Rate, &fclk);
-
-	if (fclk == 0)
-	{
-		reg->CR1 = cr1;
-		EnableInterrupt(state);
-
-		return 0;
-	}
-
-	if (dev->pClkSelReg != NULL)
-	{
-		*dev->pClkSelReg = (*dev->pClkSelReg & ~(ST_UART_CLKSEL_MSK << dev->ClkSelPos)) |
-						   (clksel << dev->ClkSelPos);
-	}
-
+	uint32_t cr1 = reg->CR1 & ~USART_CR1_OVER8;
 	uint32_t brr = 0;
 	uint32_t rate = 0;
 
-	cr1 &= ~USART_CR1_OVER8;
+	reg->CR1 = cr1 & ~USART_CR1_UE;
 
 #ifdef LPUART1
 	if (reg == LPUART1)
 	{
+		// fck must be between 3 and 4096 times the rate. The LSE crystal
+		// keeps the LPUART running in low power modes, HSI16 covers the
+		// rates up to 16 MHz / 3, PCLK the ones above.
+		uint32_t clksel = ST_LPUART_CLKSEL_PCLK;
+
+		if (GetLowFreqOscType() == OSC_TYPE_XTAL && Rate <= GetLowFreqOscFreq() / 3U)
+		{
+			clksel = ST_LPUART_CLKSEL_LSE;
+			fclk = GetLowFreqOscFreq();
+		}
+		else if (Rate <= ST_HSI16_FREQ / 3U)
+		{
+			RCC->CR |= RCC_CR_HSION;
+			while ((RCC->CR & RCC_CR_HSIRDY) == 0);
+
+			clksel = ST_LPUART_CLKSEL_HSI16;
+			fclk = ST_HSI16_FREQ;
+		}
+
+		RCC->ST_RCC_LPUART1SELR = (RCC->ST_RCC_LPUART1SELR & ~(ST_LPUART_CLKSEL_MSK << ST_RCC_LPUART1SEL_Pos)) |
+								  (clksel << ST_RCC_LPUART1SEL_Pos);
+
 		uint64_t f = (uint64_t)fclk << 8;
 		uint64_t div = (f + (Rate >> 1)) / Rate;
 
@@ -604,18 +550,34 @@ static int Stm32UartRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int Bufflen)
 	{
 		while (cnt < Bufflen)
 		{
-			uint32_t flags = ST_UART_STATUS(reg);
+			uint32_t flags = ST_USART_ISR(reg);
 
 			if (flags & ST_USART_ISR_RXERR)
 			{
-				Stm32UartRxError(dev->pUartDev, reg, flags);
+				if (flags & ST_USART_ISR_ORE)
+				{
+					dev->pUartDev->RxOvrErrCnt++;
+				}
+				if (flags & ST_USART_ISR_PE)
+				{
+					dev->pUartDev->ParErrCnt++;
+				}
+				if (flags & ST_USART_ISR_FE)
+				{
+					dev->pUartDev->FramErrCnt++;
+				}
+				ST_USART_RXERR_CLEAR(reg, flags);
+				if (flags & ST_USART_ISR_RXNE)
+				{
+					(void)ST_USART_RDR(reg);
+				}
 				break;
 			}
 			if ((flags & ST_USART_ISR_RXNE) == 0)
 			{
 				break;
 			}
-			pBuff[cnt++] = (uint8_t)ST_UART_READ(reg) & (dev->pUartDev->DataBits == 7 ? 0x7F : 0xFF);
+			pBuff[cnt++] = (uint8_t)ST_USART_RDR(reg) & (dev->pUartDev->DataBits == 7 ? 0x7F : 0xFF);
 		}
 
 		return cnt;
@@ -666,9 +628,9 @@ static int Stm32UartTxData(DevIntrf_t * const pDev, uint8_t const *pData, int Da
 		// TDR holds the next frame while the shift register sends the
 		// current one. TXE set means TDR is free. Write only while it is
 		// free and return the count, the caller retries the rest.
-		while (cnt < Datalen && (ST_UART_STATUS(reg) & ST_USART_ISR_TXE))
+		while (cnt < Datalen && (ST_USART_ISR(reg) & ST_USART_ISR_TXE))
 		{
-			ST_UART_WRITE(reg, pData[cnt++]);
+			ST_USART_TDR(reg) = pData[cnt++];
 		}
 
 		return cnt;
@@ -710,13 +672,13 @@ static int Stm32UartTxData(DevIntrf_t * const pDev, uint8_t const *pData, int Da
 
 		// Start TX inside the critical section so the interrupt cannot fetch
 		// the same byte again and overwrite TDR.
-		if (dev->pUartDev->bTxReady && (ST_UART_STATUS(reg) & ST_USART_ISR_TXE))
+		if (dev->pUartDev->bTxReady && (ST_USART_ISR(reg) & ST_USART_ISR_TXE))
 		{
 			uint8_t *p = CFifoGet(dev->pUartDev->hTxFifo);
 			if (p != NULL)
 			{
 				dev->pUartDev->bTxReady = false;
-				ST_UART_WRITE(reg, *p);
+				ST_USART_TDR(reg) = *p;
 				reg->CR1 |= ST_USART_CR1_TXEIE;
 			}
 		}
@@ -743,15 +705,15 @@ static void Stm32UartStopTx(DevIntrf_t * const pDev)
 {
 }
 
+// Also the PowerOff hook. Registers keep their content while the clock is
+// off, Enable restarts the UART without a new UARTInit.
 static void Stm32UartDisable(DevIntrf_t * const pDev)
 {
 	Stm32UartDev_t *dev = (Stm32UartDev_t *)pDev->pDevData;
 	uint32_t state = DisableInterrupt();
 
 	dev->pReg->CR1 &= ~(USART_CR1_UE | USART_CR1_RE | USART_CR1_TE);
-
-	// Registers keep their content while the peripheral clock is off.
-	*dev->pClkEnReg &= ~dev->ClkEnMask;
+	*dev->pRccEnReg &= ~dev->RccMask;
 
 	IOPinDis(dev->pIOPinMap, dev->NbIOPins);
 
@@ -773,8 +735,8 @@ static void Stm32UartEnable(DevIntrf_t * const pDev)
 
 	dev->pUartDev->bTxReady = true;
 
-	*dev->pClkEnReg |= dev->ClkEnMask;
-	(void)*dev->pClkEnReg;
+	*dev->pRccEnReg |= dev->RccMask;
+	(void)*dev->pRccEnReg;
 
 	IOPinCfg(dev->pIOPinMap, dev->NbIOPins);
 
@@ -783,27 +745,15 @@ static void Stm32UartEnable(DevIntrf_t * const pDev)
 	EnableInterrupt(state);
 }
 
-static void Stm32UartPowerOff(DevIntrf_t * const pDev)
-{
-	Stm32UartDev_t *dev = (Stm32UartDev_t *)pDev->pDevData;
-
-	Stm32UartDisable(pDev);
-
-	// Return the kernel clock selection to its reset value, PCLK.
-	if (dev->pClkSelReg != NULL)
-	{
-		*dev->pClkSelReg &= ~(ST_UART_CLKSEL_MSK << dev->ClkSelPos);
-	}
-}
-
+// RCC reset of the instance, all its registers back to their reset value.
 static void Stm32UartReset(DevIntrf_t * const pDev)
 {
 	Stm32UartDev_t *dev = (Stm32UartDev_t *)pDev->pDevData;
 	uint32_t state = DisableInterrupt();
 
-	*dev->pRstReg |= dev->RstMask;
-	(void)*dev->pRstReg;
-	*dev->pRstReg &= ~dev->RstMask;
+	*dev->pRccRstReg |= dev->RccMask;
+	(void)*dev->pRccRstReg;
+	*dev->pRccRstReg &= ~dev->RccMask;
 
 	EnableInterrupt(state);
 }
@@ -811,48 +761,6 @@ static void Stm32UartReset(DevIntrf_t * const pDev)
 static void *Stm32UartGetHandle(DevIntrf_t * const pDev)
 {
 	return ((Stm32UartDev_t *)pDev->pDevData)->pUartDev;
-}
-
-// Only the kernel clock source is family dependent; transfer timing and
-// USART divider programming are shared by every instance.
-static uint32_t Stm32UartClkSrc(Stm32UartDev_t * const pDev, uint32_t Rate, uint32_t * const pFreq)
-{
-#if defined(IOSONATA_STM32_L4)
-	if (pDev->pReg == LPUART1)
-	{
-		if (GetLowFreqOscType() == OSC_TYPE_XTAL && Rate <= GetLowFreqOscFreq() / 3U)
-		{
-			*pFreq = GetLowFreqOscFreq();
-			return ST_UART_CLKSEL_LSE;
-		}
-
-		if (Rate <= ST_UART_HSI16_FREQ / 3U)
-		{
-			RCC->CR |= RCC_CR_HSION;
-			while ((RCC->CR & RCC_CR_HSIRDY) == 0U);
-			*pFreq = ST_UART_HSI16_FREQ;
-			return ST_UART_CLKSEL_HSI16;
-		}
-	}
-
-	*pFreq = SystemCoreClockGet();
-	return ST_UART_CLKSEL_SYSCLK;
-#else
-	(void)pDev;
-	(void)Rate;
-#if defined(IOSONATA_STM32_F4)
-	// F401 USART1/6 use APB2, USART2 uses APB1.
-	// RCC PPRE encoding 0..3 = /1, 4 = /2, 5 = /4, 6 = /8, 7 = /16.
-	uint32_t ppre = pDev->DevNo == 1 ?
-			(RCC->CFGR & RCC_CFGR_PPRE1_Msk) >> RCC_CFGR_PPRE1_Pos :
-			(RCC->CFGR & RCC_CFGR_PPRE2_Msk) >> RCC_CFGR_PPRE2_Pos;
-	uint32_t shift = ppre < 4U ? 0U : ppre - 3U;
-	*pFreq = SystemCoreClockGet() >> shift;
-#else
-	*pFreq = SystemPeriphClockGet(0);
-#endif
-	return ST_UART_CLKSEL_PCLK;
-#endif
 }
 
 UARTDev_t const *UARTGetInstance(int DevNo)
@@ -902,11 +810,11 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	USART_TypeDef *reg = dev->pReg;
 	uint32_t state = DisableInterrupt();
 
-	// A live peripheral cannot be rebound to a different UART object.
-	if (dev->pUartDev != NULL && dev->pUartDev != pDev &&
-		(reg->CR1 & USART_CR1_UE) != 0U)
+	// An instance running for another UART object is not taken over.
+	if (dev->pUartDev != NULL && dev->pUartDev != pDev && (reg->CR1 & USART_CR1_UE))
 	{
 		EnableInterrupt(state);
+
 		return false;
 	}
 
@@ -916,8 +824,8 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	dev->NbIOPins = pCfg->NbIOPins;
 
 	// Peripheral clock first. Register writes before it are ignored.
-	*dev->pClkEnReg |= dev->ClkEnMask;
-	(void)*dev->pClkEnReg;
+	*dev->pRccEnReg |= dev->RccMask;
+	(void)*dev->pRccEnReg;
 
 	// All USART registers at their reset value, UE cleared.
 	Stm32UartReset(&pDev->DevIntrf);
@@ -943,7 +851,7 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	// CFifoInit returns NULL when the supplied memory is too small.
 	if (pDev->hRxFifo == NULL || pDev->hTxFifo == NULL)
 	{
-		*dev->pClkEnReg &= ~dev->ClkEnMask;
+		*dev->pRccEnReg &= ~dev->RccMask;
 		EnableInterrupt(state);
 
 		return false;
@@ -954,7 +862,7 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	pDev->Rate = (int)Stm32UartSetRate(&pDev->DevIntrf, (uint32_t)pCfg->Rate);
 	if (pDev->Rate == 0)
 	{
-		*dev->pClkEnReg &= ~dev->ClkEnMask;
+		*dev->pRccEnReg &= ~dev->RccMask;
 		EnableInterrupt(state);
 
 		return false;
@@ -1033,7 +941,7 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	pDev->DevIntrf.TxData = Stm32UartTxData;
 	pDev->DevIntrf.StopTx = Stm32UartStopTx;
 	pDev->DevIntrf.MaxRetry = UART_RETRY_MAX;
-	pDev->DevIntrf.PowerOff = Stm32UartPowerOff;
+	pDev->DevIntrf.PowerOff = Stm32UartDisable;
 	pDev->DevIntrf.EnCnt = 1;
 	atomic_flag_clear(&pDev->DevIntrf.bBusy);
 
@@ -1064,82 +972,67 @@ void UARTSetCtrlLineState(UARTDev_t * const pDev, uint32_t LineState)
 {
 }
 
-#if defined(IOSONATA_STM32_F0)
+#ifdef LPUART1
+extern "C" void LPUART1_IRQHandler()
+{
+	Stm32UartIrqHandler(LPUART1);
+}
+#endif
 
 extern "C" void USART1_IRQHandler()
 {
-	Stm32UartIrqHandler(&s_Stm32UartDev[0]);
+	Stm32UartIrqHandler(USART1);
 }
 
 #ifdef USART2
 extern "C" void USART2_IRQHandler()
 {
-	Stm32UartIrqHandler(&s_Stm32UartDev[1]);
+	Stm32UartIrqHandler(USART2);
 }
 #endif
 
-#if defined(STM32F070xB) || defined(STM32F030xC)
-// USART3 and up share one vector.
-#ifdef STM32F030xC
-extern "C" void USART3_6_IRQHandler()
-#else
+#if defined(USART3_4_IRQn) || defined(USART3_6_IRQn)
+// One vector for USART3 and up, named USART3_4 by the device header on every
+// part that has it.
 extern "C" void USART3_4_IRQHandler()
+{
+	Stm32UartIrqHandler(USART3);
+#ifdef USART4
+	Stm32UartIrqHandler(USART4);
 #endif
-{
-	for (int i = 2; i < s_NbUartDev; i++)
-	{
-		Stm32UartIrqHandler(&s_Stm32UartDev[i]);
-	}
-}
+#ifdef USART5
+	Stm32UartIrqHandler(USART5);
 #endif
-
-#elif defined(IOSONATA_STM32_F4)
-
-extern "C" void USART1_IRQHandler()
-{
-	Stm32UartIrqHandler(&s_Stm32UartDev[0]);
+#ifdef USART6
+	Stm32UartIrqHandler(USART6);
+#endif
 }
-
-extern "C" void USART2_IRQHandler()
-{
-	Stm32UartIrqHandler(&s_Stm32UartDev[1]);
-}
-
-extern "C" void USART6_IRQHandler()
-{
-	Stm32UartIrqHandler(&s_Stm32UartDev[2]);
-}
-
-#elif defined(IOSONATA_STM32_L4)
-
-extern "C" void LPUART1_IRQHandler()
-{
-	Stm32UartIrqHandler(&s_Stm32UartDev[0]);
-}
-
-extern "C" void USART1_IRQHandler()
-{
-	Stm32UartIrqHandler(&s_Stm32UartDev[1]);
-}
-
-extern "C" void USART2_IRQHandler()
-{
-	Stm32UartIrqHandler(&s_Stm32UartDev[2]);
-}
-
+#else
+#ifdef USART3
 extern "C" void USART3_IRQHandler()
 {
-	Stm32UartIrqHandler(&s_Stm32UartDev[3]);
+	Stm32UartIrqHandler(USART3);
 }
+#endif
 
+#ifdef UART4
 extern "C" void UART4_IRQHandler()
 {
-	Stm32UartIrqHandler(&s_Stm32UartDev[4]);
+	Stm32UartIrqHandler(UART4);
 }
+#endif
 
+#ifdef UART5
 extern "C" void UART5_IRQHandler()
 {
-	Stm32UartIrqHandler(&s_Stm32UartDev[5]);
+	Stm32UartIrqHandler(UART5);
 }
+#endif
 
+#ifdef USART6
+extern "C" void USART6_IRQHandler()
+{
+	Stm32UartIrqHandler(USART6);
+}
+#endif
 #endif
