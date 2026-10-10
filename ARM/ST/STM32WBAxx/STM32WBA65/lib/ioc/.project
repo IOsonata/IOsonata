@@ -1411,6 +1411,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usb_cdcdef.h</locationURI>
 		</link>
 		<link>
+			<name>include/usb/usb_ctrlr.h</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/include/usb_ctrlr.h</locationURI>
+		</link>
+		<link>
 			<name>include/usb/usb_def.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usb_def.h</locationURI>
@@ -1694,6 +1699,11 @@
 			<name>src/coredev/i2c.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/i2c.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/iopincfg_stm32.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/iopincfg_stm32.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/coredev/shared_intrf.cpp</name>
@@ -2634,16 +2644,6 @@
 			<name>src/display/fonts/FreeSerif/FreeSerifIta8pt.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/display/fonts/FreeSerif/FreeSerifIta8pt.c</locationURI>
-		</link>
-		<link>
-			<name>include/usb_ctrlr.h</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/include/usb_ctrlr.h</locationURI>
-		</link>
-			<link>
-			<name>src/iopincfg_stm32.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/iopincfg_stm32.cpp</locationURI>
 		</link>
 	</linkedResources>
 </projectDescription>
