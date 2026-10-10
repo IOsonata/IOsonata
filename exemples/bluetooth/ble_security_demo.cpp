@@ -67,6 +67,10 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define UART_DEVNO					0
 #endif
 
+#ifndef BUT2_INT
+#define BUT2_INT 1
+#endif
+
 #ifndef BUT1_INT
 #define BUT1_INT					0
 #endif
@@ -287,8 +291,34 @@ void BtAppInitUserServices()
 	res = BtGattSrvcAdd(&g_UartBleSrvc);
 }
 
+#ifdef BLE_SECURITY_BUTTON_CONFIRM
+// User-interface state only. The IOsonata library retains the pairing
+// transaction while awaiting the decision.
+static volatile uint8_t s_PairDecision = 0; // 0=pending, 1=accept, 2=reject
+static volatile bool s_PairAwaiting = false;
+static uint16_t s_PairConn = 0;
+
+int BtAppPairConfirm(uint16_t ConnHdl, uint32_t Number)
+{
+	s_PairConn = ConnHdl;
+	s_PairDecision = 0;
+	s_PairAwaiting = true;
+	SysLogPrintf(SysLogGet(), "Compare %06u on both devices: BUT1=accept, BUT2=reject\r\n",
+			(unsigned)Number);
+	return -1; // Defer; no blocking and no protocol reply in this callback.
+}
+#endif
+
 void ButEvent(int IntNo, void *pCtx)
 {
+#ifdef BLE_SECURITY_BUTTON_CONFIRM
+	if (s_PairAwaiting)
+	{
+		if (IntNo == BUT1_INT) s_PairDecision = 1;
+		else if (IntNo == BUT2_INT) s_PairDecision = 2;
+		return;
+	}
+#endif
 	if (IntNo == BUT1_INT)
 	{
 		if (g_bUartState == false)
@@ -325,6 +355,10 @@ void HardwareInit()
 
 	IOPinEnableInterrupt(BUT1_INT, IRQ_PRIO_LOW, s_ButPins[0].PortNo,
 						 s_ButPins[0].PinNo, IOPINSENSE_LOW_TRANSITION, ButEvent, NULL);
+#ifdef BLE_SECURITY_BUTTON_CONFIRM
+	IOPinEnableInterrupt(BUT2_INT, IRQ_PRIO_LOW, s_ButPins[1].PortNo,
+						 s_ButPins[1].PinNo, IOPINSENSE_LOW_TRANSITION, ButEvent, NULL);
+#endif
 }
 
 void BtAppInitUserData()
@@ -439,6 +473,21 @@ int main()
 bool AppCheckStatus(void)
 {
 	BtAppCheckStatus();
+#ifdef BLE_SECURITY_BUTTON_CONFIRM
+	uint32_t irq = DisableInterrupt();
+	uint8_t decision = s_PairDecision;
+	uint16_t conn = s_PairConn;
+	if (decision != 0)
+	{
+		s_PairDecision = 0;
+		s_PairAwaiting = false;
+	}
+	EnableInterrupt(irq);
+	if (decision != 0)
+	{
+		BtAppPairDecision(conn, decision == 1);
+	}
+#endif
 
 	// A pending callback on an empty queue was refused. Keep the check and
 	// retry together so an interrupt cannot queue the same callback between them.
