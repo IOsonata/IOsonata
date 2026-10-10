@@ -706,6 +706,29 @@ static int Stm32UartTxData(DevIntrf_t * const pDev, uint8_t const *pData, int Da
 		return 0;
 	}
 
+#if defined(STM32F030x8)
+	if (pDev->bDma)
+	{
+		uint32_t state = DisableInterrupt();
+		Stm32UartDmaService(dev);
+
+		while (Datalen > 0)
+		{
+			int len = Datalen;
+			uint8_t *p = len == 1 ? CFifoPut(dev->pUartDev->hTxFifo) :
+						 CFifoPutMultiple(dev->pUartDev->hTxFifo, &len);
+			if (p == NULL) break;
+			if (len == 1) *p = *pData;
+			else memcpy(p, pData, len);
+			cnt += len;
+			Datalen -= len;
+			pData += len;
+		}
+		Stm32UartDmaStart(dev);
+		EnableInterrupt(state);
+		return cnt;
+	}
+#endif
 	if (!pDev->bIntEn)
 	{
 		// The first write waits for TXE, the next ones for TC of the
@@ -801,6 +824,9 @@ static void Stm32UartDisable(DevIntrf_t * const pDev)
 	Stm32UartDev_t *dev = (Stm32UartDev_t *)pDev->pDevData;
 	uint32_t state = DisableInterrupt();
 
+#if defined(STM32F030x8)
+	if (pDev->bDma) Stm32UartDmaStop(dev);
+#endif
 	dev->pReg->CR1 &= ~(USART_CR1_UE | USART_CR1_RE | USART_CR1_TE);
 	*dev->pRccEnReg &= ~dev->RccMask;
 
@@ -820,6 +846,9 @@ static void Stm32UartEnable(DevIntrf_t * const pDev)
 	dev->pUartDev->RxDropCnt = 0;
 	dev->pUartDev->TxDropCnt = 0;
 
+#if defined(STM32F030x8)
+	if (pDev->bDma) Stm32UartDmaStop(dev);
+#endif
 	CFifoFlush(dev->pUartDev->hTxFifo);
 
 	dev->PollTxStarted = false;
@@ -841,6 +870,9 @@ static void Stm32UartReset(DevIntrf_t * const pDev)
 	Stm32UartDev_t *dev = (Stm32UartDev_t *)pDev->pDevData;
 	uint32_t state = DisableInterrupt();
 
+#if defined(STM32F030x8)
+	if (pDev->bDma) Stm32UartDmaStop(dev);
+#endif
 	*dev->pRccRstReg |= dev->RccMask;
 	(void)*dev->pRccRstReg;
 	*dev->pRccRstReg &= ~dev->RccMask;
@@ -878,7 +910,7 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 
 	// Polling and USART interrupt operation. DMA is not implemented, so a
 	// DMA request fails here instead of running in another mode.
-	if (pCfg->bDMAMode || pCfg->bIrDAMode || pCfg->Mode != UART_MODE_UART ||
+	if (pCfg->bIrDAMode || pCfg->Mode != UART_MODE_UART ||
 		(pCfg->FlowControl != UART_FLWCTRL_NONE && pCfg->FlowControl != UART_FLWCTRL_HW) ||
 		(pCfg->Parity != UART_PARITY_NONE && pCfg->Parity != UART_PARITY_EVEN && pCfg->Parity != UART_PARITY_ODD) ||
 		(pCfg->DataBits != 7 && pCfg->DataBits != 8) ||
@@ -899,6 +931,13 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 
 	Stm32UartDev_t *dev = &s_Stm32UartDev[pCfg->DevNo];
 	USART_TypeDef *reg = dev->pReg;
+#if defined(STM32F030x8)
+	if (pCfg->bDMAMode && dev->pTxDma == NULL) return false;
+	if (pCfg->bDMAMode && dev->pTxDma->CCR != 0U &&
+		(dev->pUartDev == NULL || dev->pUartDev != pDev)) return false;
+#else
+	if (pCfg->bDMAMode) return false;
+#endif
 	uint32_t state = DisableInterrupt();
 
 	// An instance running for another UART object is not taken over.
@@ -1014,7 +1053,7 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	pDev->TxDropCnt = 0;
 	pDev->DevIntrf.IntPrio = pCfg->IntPrio;
 	pDev->DevIntrf.bIntEn = pCfg->bIntMode;
-	pDev->DevIntrf.bDma = false;
+	pDev->DevIntrf.bDma = pCfg->bDMAMode;
 	pDev->DevIntrf.bTxReady = true;
 	pDev->DevIntrf.bNoStop = false;
 	pDev->DevIntrf.EvtCB = NULL;
@@ -1036,6 +1075,26 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	pDev->DevIntrf.EnCnt = 1;
 	atomic_flag_clear(&pDev->DevIntrf.bBusy);
 
+#if defined(STM32F030x8)
+	if (pCfg->bDMAMode)
+	{
+		RCC->AHBENR |= RCC_AHBENR_DMA1EN;
+		(void)RCC->AHBENR;
+		dev->pTxDma->CCR = 0;
+		DMA1->IFCR = DMA_IFCR_CGIF1 << dev->TxDmaShift;
+		dev->pTxDma->CPAR = (uint32_t)(uintptr_t)&ST_USART_TDR(reg);
+		dev->pTxDma->CMAR = (uint32_t)(uintptr_t)dev->TxDmaCache;
+		dev->pTxDma->CNDTR = 0;
+		dev->DmaActive = false;
+		cr3 |= USART_CR3_DMAT;
+		if (pCfg->bIntMode)
+		{
+			NVIC_ClearPendingIRQ(dev->TxDmaIrq);
+			NVIC_SetPriority(dev->TxDmaIrq, pCfg->IntPrio);
+			NVIC_EnableIRQ(dev->TxDmaIrq);
+		}
+	}
+#endif
 	if (pCfg->bIntMode)
 	{
 		// Only the interrupts the handler services. TXEIE is set by
@@ -1058,6 +1117,22 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 
 	return true;
 }
+
+#if defined(STM32F030x8)
+extern "C" void DMA1_Channel2_3_IRQHandler()
+{
+	uint32_t state = DisableInterrupt();
+	Stm32UartDmaService(&s_Stm32UartDev[0]);
+	EnableInterrupt(state);
+}
+
+extern "C" void DMA1_Channel4_5_IRQHandler()
+{
+	uint32_t state = DisableInterrupt();
+	Stm32UartDmaService(&s_Stm32UartDev[1]);
+	EnableInterrupt(state);
+}
+#endif
 
 void UARTSetCtrlLineState(UARTDev_t * const pDev, uint32_t LineState)
 {
