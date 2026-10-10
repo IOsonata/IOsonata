@@ -486,6 +486,8 @@ bool AppCheckStatus(void)
 	EnableInterrupt(irq);
 	if (decision != 0)
 	{
+		SysLogPrintf(SysLogGet(), "Pairing numeric comparison %s (hdl=%u)\r\n",
+				decision == 1 ? "accepted" : "rejected", (unsigned)conn);
 		BtAppPairDecision(conn, decision == 1);
 	}
 #endif
