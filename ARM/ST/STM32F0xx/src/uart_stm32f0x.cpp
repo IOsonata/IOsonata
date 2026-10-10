@@ -50,7 +50,6 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define STM32F0X_UART_HWFIFO_SIZE		6
 #define STM32F0X_UART_RXTIMEOUT			15
 #define STM32F0X_UART_BUFF_SIZE			16
-#define STM32F0X_UART_RXDMA_SIZE		64
 #define STM32F0X_UART_CFIFO_SIZE		CFIFO_MEMSIZE(STM32F0X_UART_BUFF_SIZE)
 
 #pragma pack(push, 4)
@@ -68,14 +67,10 @@ typedef struct _STM32F0X_UART_Dev {
 	uint32_t CtsPin;
 	uint32_t RtsPin;
 	DMA_Channel_TypeDef *pTxDma;
-	DMA_Channel_TypeDef *pRxDma;
 	uint32_t TxDmaShift;
-	uint32_t RxDmaShift;
-	uint16_t RxDmaPos;
 	IRQn_Type TxDmaIrq;
 	bool DmaOwned;
 	alignas(4) uint8_t TxDmaCache[STM32F0X_UART_BUFF_SIZE];
-	alignas(4) uint8_t RxDmaCache[STM32F0X_UART_RXDMA_SIZE];
 	uint8_t RxFifoMem[STM32F0X_UART_CFIFO_SIZE];
 	uint8_t TxFifoMem[STM32F0X_UART_CFIFO_SIZE];
 } STM32F0X_UARTDEV;
@@ -90,9 +85,7 @@ static STM32F0X_UARTDEV s_Stm32f03xUartDev[] = {
 		.pReg = USART1,
 #ifdef STM32F030x8
 		.pTxDma = DMA1_Channel2,
-		.pRxDma = DMA1_Channel3,
 		.TxDmaShift = 4,
-		.RxDmaShift = 8,
 		.TxDmaIrq = DMA1_Channel2_3_IRQn,
 #endif
 	},
@@ -102,9 +95,7 @@ static STM32F0X_UARTDEV s_Stm32f03xUartDev[] = {
 		.pReg = USART2,
 #ifdef STM32F030x8
 		.pTxDma = DMA1_Channel4,
-		.pRxDma = DMA1_Channel5,
 		.TxDmaShift = 12,
-		.RxDmaShift = 16,
 		.TxDmaIrq = DMA1_Channel4_5_IRQn,
 #endif
 	},
@@ -145,12 +136,7 @@ static void STM32F03xUARTDmaArm(STM32F0X_UARTDEV *dev, int Count)
 	dev->pTxDma->CNDTR = Count;
 	dev->pUartDev->bTxReady = false;
 	__DMB();
-	uint32_t ctrl = DMA_CCR_DIR | DMA_CCR_MINC | DMA_CCR_EN;
-	if (dev->pUartDev->DevIntrf.bIntEn)
-	{
-		ctrl |= DMA_CCR_TCIE | DMA_CCR_TEIE;
-	}
-	dev->pTxDma->CCR = ctrl;
+	dev->pTxDma->CCR = DMA_CCR_DIR | DMA_CCR_MINC | DMA_CCR_TCIE | DMA_CCR_TEIE | DMA_CCR_EN;
 }
 
 // Call with interrupts masked. Copy before the producer can reuse the span.
@@ -179,145 +165,42 @@ static void STM32F03xUARTDmaStop(STM32F0X_UARTDEV *dev)
 }
 
 #ifdef STM32F030x8
-/**
- * @brief Move RX bytes from circular DMA storage into the UART FIFO.
- *
- * Call at least once per half buffer period while DMA is active.
- * Without interrupts, the caller must poll often enough to avoid a full
- * circular wrap between checks.
- */
-static void STM32F03xUARTRxDmaService(STM32F0X_UARTDEV *dev)
+static void STM32F03xUARTDmaIrq(STM32F0X_UARTDEV *dev)
 {
-	if (!dev->DmaOwned || dev->pUartDev == NULL)
+	uint32_t state = DisableInterrupt();
+	if (!dev->DmaOwned || !(dev->pTxDma->CCR & (DMA_CCR_TCIE | DMA_CCR_TEIE)))
 	{
+		EnableInterrupt(state);
 		return;
 	}
-
-	uint32_t flags = (DMA1->ISR >> dev->RxDmaShift) &
-					 (DMA_ISR_HTIF1 | DMA_ISR_TCIF1 | DMA_ISR_TEIF1);
-	uint16_t pos = (uint16_t)(STM32F0X_UART_RXDMA_SIZE - dev->pRxDma->CNDTR);
-
-	if (pos >= STM32F0X_UART_RXDMA_SIZE)
+	uint32_t flags = (DMA1->ISR >> dev->TxDmaShift) & (DMA_ISR_TCIF1 | DMA_ISR_TEIF1);
+	if (flags == 0)
 	{
-		pos = 0U;
-	}
-
-	int count = 0;
-	while (dev->RxDmaPos != pos)
-	{
-		uint8_t *p = CFifoPut(dev->pUartDev->hRxFifo);
-		if (p != NULL)
-		{
-			*p = dev->RxDmaCache[dev->RxDmaPos];
-			count++;
-		}
-		else
-		{
-			dev->pUartDev->RxDropCnt++;
-		}
-		dev->RxDmaPos++;
-		if (dev->RxDmaPos >= STM32F0X_UART_RXDMA_SIZE)
-		{
-			dev->RxDmaPos = 0U;
-		}
-	}
-
-	if (flags != 0U)
-	{
-		DMA1->IFCR = DMA_IFCR_CGIF1 << dev->RxDmaShift;
-	}
-	if ((flags & DMA_ISR_TEIF1) != 0U)
-	{
-		dev->ErrCnt++;
-		dev->pReg->CR3 &= ~USART_CR3_DMAR;
-		dev->pRxDma->CCR = 0U;
-		dev->pRxDma->CNDTR = STM32F0X_UART_RXDMA_SIZE;
-		dev->RxDmaPos = 0U;
-		dev->pRxDma->CCR = DMA_CCR_MINC | DMA_CCR_CIRC | DMA_CCR_EN |
-						 (dev->pUartDev->DevIntrf.bIntEn ?
-						  (DMA_CCR_HTIE | DMA_CCR_TCIE | DMA_CCR_TEIE) : 0U);
-		dev->pReg->CR3 |= USART_CR3_DMAR;
-	}
-
-	dev->pUartDev->bRxReady = CFifoUsed(dev->pUartDev->hRxFifo) != 0;
-	if (count > 0 && dev->pUartDev->DevIntrf.bIntEn &&
-		dev->pUartDev->EvtCallback != NULL)
-	{
-		dev->pUartDev->EvtCallback(dev->pUartDev, UART_EVT_RXDATA,
-								 NULL, CFifoUsed(dev->pUartDev->hRxFifo));
-	}
-}
-
-static void STM32F03xUARTRxDmaStop(STM32F0X_UARTDEV *dev)
-{
-	if (!dev->DmaOwned)
-	{
+		EnableInterrupt(state);
 		return;
 	}
-	dev->pReg->CR3 &= ~USART_CR3_DMAR;
-	dev->pRxDma->CCR = 0U;
-	DMA1->IFCR = DMA_IFCR_CGIF1 << dev->RxDmaShift;
-	dev->RxDmaPos = 0U;
-}
-
-static void STM32F03xUARTRxDmaStart(STM32F0X_UARTDEV *dev)
-{
-	dev->pRxDma->CCR = 0U;
-	DMA1->IFCR = DMA_IFCR_CGIF1 << dev->RxDmaShift;
-	dev->pRxDma->CPAR = (uint32_t)(uintptr_t)&dev->pReg->RDR;
-	dev->pRxDma->CMAR = (uint32_t)(uintptr_t)dev->RxDmaCache;
-	dev->pRxDma->CNDTR = STM32F0X_UART_RXDMA_SIZE;
-	dev->RxDmaPos = 0U;
-	dev->pRxDma->CCR = DMA_CCR_MINC | DMA_CCR_CIRC | DMA_CCR_EN |
-					(dev->pUartDev->DevIntrf.bIntEn ?
-					 (DMA_CCR_HTIE | DMA_CCR_TCIE | DMA_CCR_TEIE) : 0U);
-	dev->pReg->CR3 |= USART_CR3_DMAR;
-}
-
-static void STM32F03xUARTTxDmaService(STM32F0X_UARTDEV *dev)
-{
-	if (!dev->DmaOwned || (dev->pTxDma->CCR & DMA_CCR_EN) == 0U)
-	{
-		return;
-	}
-	uint32_t flags = (DMA1->ISR >> dev->TxDmaShift) &
-					 (DMA_ISR_TCIF1 | DMA_ISR_TEIF1);
-	if (flags == 0U)
-	{
-		return;
-	}
-	dev->pTxDma->CCR = 0U;
-	if ((flags & DMA_ISR_TEIF1) != 0U)
+	dev->pTxDma->CCR = 0;
+	if (flags & DMA_ISR_TEIF1)
 	{
 		dev->ErrCnt++;
 		dev->pUartDev->TxDropCnt += dev->pTxDma->CNDTR;
 	}
 	DMA1->IFCR = DMA_IFCR_CGIF1 << dev->TxDmaShift;
 	STM32F03xUARTDmaStart(dev);
-	if (dev->pUartDev->bTxReady && dev->pUartDev->DevIntrf.bIntEn &&
-		dev->pUartDev->EvtCallback != NULL)
-	{
-		dev->pUartDev->EvtCallback(dev->pUartDev, UART_EVT_TXREADY, NULL, 0);
-	}
-}
-
-static void STM32F03xUARTDmaIrq(STM32F0X_UARTDEV *dev)
-{
-	uint32_t state = DisableInterrupt();
-	if (dev->DmaOwned)
-	{
-		STM32F03xUARTRxDmaService(dev);
-		STM32F03xUARTTxDmaService(dev);
-	}
+	bool ready = dev->pUartDev->bTxReady;
 	EnableInterrupt(state);
+	if (ready && dev->pUartDev->EvtCallback)
+		dev->pUartDev->EvtCallback(dev->pUartDev, UART_EVT_TXREADY, NULL, 0);
 }
 
-extern "C" void DMA1_Channel2_3_IRQHandler(void)
+// Only UART's channel flags are acknowledged. Channels 3 and 5 are unused
+// by this driver; future users must share these vector handlers.
+extern "C" void DMA1_Channel2_3_IRQHandler()
 {
 	STM32F03xUARTDmaIrq(&s_Stm32f03xUartDev[0]);
 }
 
-extern "C" void DMA1_Channel4_5_IRQHandler(void)
+extern "C" void DMA1_Channel4_5_IRQHandler()
 {
 	STM32F03xUARTDmaIrq(&s_Stm32f03xUartDev[1]);
 }
@@ -340,14 +223,14 @@ static void UART_IRQHandler(STM32F0X_UARTDEV * const pDev)
 		pDev->ErrCnt++;
 		pDev->pReg->ICR = iflag & (USART_ICR_PECF | USART_ICR_FECF |
 		                           USART_ICR_ORECF | USART_ICR_NCF);
-		if ((iflag & USART_ISR_RXNE) && !pDev->DmaOwned)
+		if (iflag & USART_ISR_RXNE)
 		{
 			(void)pDev->pReg->RDR;
 		}
 		iflag &= ~USART_ISR_RXNE;
 	}
 
-	if ((iflag & USART_ISR_RXNE) && (cr1 & USART_CR1_RXNEIE) && !pDev->DmaOwned)
+	if ((iflag & USART_ISR_RXNE) && (cr1 & USART_CR1_RXNEIE))
 	{
 		uint8_t c = (uint8_t)pDev->pReg->RDR & (dev->DataBits == 7 ? 0x7F : 0xFF);    // read clears RXNE
 		uint8_t *p = CFifoPut(dev->hRxFifo);
@@ -385,14 +268,6 @@ static void UART_IRQHandler(STM32F0X_UARTDEV * const pDev)
 		}
 	}
 
-#ifdef STM32F030x8
-	if (pDev->DmaOwned && (iflag & USART_ISR_IDLE) &&
-		(cr1 & USART_CR1_IDLEIE))
-	{
-		pDev->pReg->ICR = USART_ICR_IDLECF;
-		STM32F03xUARTRxDmaService(pDev);
-	}
-#endif
 	if ((iflag & USART_ISR_RTOF) && (cr1 & USART_CR1_RTOIE))
 	{
 		pDev->pReg->ICR = USART_ICR_RTOCF;
@@ -472,7 +347,7 @@ static int STM32F03xUARTRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int Buff
 	STM32F0X_UARTDEV *dev = (STM32F0X_UARTDEV *)pDev->pDevData;
 	int cnt = 0;
 
-	if (!pDev->bIntEn && !pDev->bDma)
+	if (!pDev->bIntEn)
 	{
 		while (cnt < Bufflen)
 		{
@@ -491,13 +366,6 @@ static int STM32F03xUARTRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int Buff
 	}
 
 	uint32_t state = DisableInterrupt();
-#ifdef STM32F030x8
-	if (pDev->bDma)
-	{
-		STM32F03xUARTTxDmaService(dev);
-		STM32F03xUARTRxDmaService(dev);
-	}
-#endif
 	while (Bufflen)
 	{
 		int l  = Bufflen;
@@ -543,12 +411,6 @@ static int STM32F03xUARTTxData(DevIntrf_t * const pDev, uint8_t const *pData, in
     while (Datalen > 0 && rtry-- > 0)
     {
         uint32_t state = DisableInterrupt();
-#ifdef STM32F030x8
-		if (pDev->bDma)
-		{
-			STM32F03xUARTTxDmaService(dev);
-		}
-#endif
 		if (!(dev->pReg->CR1 & USART_CR1_UE))
 		{
 			EnableInterrupt(state);
@@ -620,9 +482,6 @@ static void STM32F03xUARTDisable(DevIntrf_t * const pDev)
 	STM32F0X_UARTDEV *dev = (STM32F0X_UARTDEV *)pDev->pDevData;
 	uint32_t state = DisableInterrupt();
 	STM32F03xUARTDmaStop(dev);
-#ifdef STM32F030x8
-	STM32F03xUARTRxDmaStop(dev);
-#endif
 
 	dev->pReg->CR1 &= ~(USART_CR1_UE | USART_CR1_RE | USART_CR1_TE);
 	dev->pReg->CR2 &= ~USART_CR2_RTOEN;
@@ -635,9 +494,6 @@ static void STM32F03xUARTEnable(DevIntrf_t * const pDev)
 	STM32F0X_UARTDEV *dev = (STM32F0X_UARTDEV *)pDev->pDevData;
 	uint32_t state = DisableInterrupt();
 	STM32F03xUARTDmaStop(dev);
-#ifdef STM32F030x8
-	STM32F03xUARTRxDmaStop(dev);
-#endif
 
 	dev->ErrCnt = 0;
 	dev->RxTimeoutCnt = 0;
@@ -652,13 +508,7 @@ static void STM32F03xUARTEnable(DevIntrf_t * const pDev)
 	{
 		RCC->CFGR3 &= ~RCC_CFGR3_USART1SW_Msk;
 	}
-	if (dev->DmaOwned)
-	{
-		dev->pReg->CR3 |= USART_CR3_DMAT;
-#ifdef STM32F030x8
-		STM32F03xUARTRxDmaStart(dev);
-#endif
-	}
+	if (dev->DmaOwned) dev->pReg->CR3 |= USART_CR3_DMAT;
 	dev->pReg->CR1 |= USART_CR1_UE | USART_CR1_RE | USART_CR1_TE;
 	dev->pReg->CR2 &= ~USART_CR2_RTOEN;
 
@@ -707,9 +557,6 @@ static void STM32F03xUARTReset(DevIntrf_t * const pDev)
 	STM32F0X_UARTDEV *dev = (STM32F0X_UARTDEV *)pDev->pDevData;
 	uint32_t state = DisableInterrupt();
 	STM32F03xUARTDmaStop(dev);
-#ifdef STM32F030x8
-	STM32F03xUARTRxDmaStop(dev);
-#endif
 	if (dev->DmaOwned) CFifoFlush(dev->pUartDev->hTxFifo);
 
 	switch (dev->DevNo)
@@ -777,10 +624,10 @@ bool UARTInit(UARTDEV * const pDev, const UARTCFG *pCfg)
 		return false;
 	}
 
-	// DMA must be available in both directions. IRQs are optional.
-	if ((pCfg->bDMAMode &&
-		(s_Stm32f03xUartDev[pCfg->DevNo].pTxDma == NULL ||
-		 s_Stm32f03xUartDev[pCfg->DevNo].pRxDma == NULL)) || pCfg->bIrDAMode || pCfg->Mode != UART_MODE_UART ||
+	// TX DMA uses completion interrupts; RX remains a character stream.
+	// DMA routing is provided for STM32F030x8 only.
+	if ((pCfg->bDMAMode && (!pCfg->bIntMode ||
+		s_Stm32f03xUartDev[pCfg->DevNo].pTxDma == NULL)) || pCfg->bIrDAMode || pCfg->Mode != UART_MODE_UART ||
 		(pCfg->FlowControl != UART_FLWCTRL_NONE && pCfg->FlowControl != UART_FLWCTRL_HW) ||
 		(pCfg->Parity != UART_PARITY_NONE && pCfg->Parity != UART_PARITY_EVEN && pCfg->Parity != UART_PARITY_ODD) ||
 		(pCfg->DataBits != 7 && pCfg->DataBits != 8) ||
@@ -805,15 +652,12 @@ bool UARTInit(UARTDEV * const pDev, const UARTCFG *pCfg)
 	uint32_t state = DisableInterrupt();
 	// Do not take an active UART DMA channel from another device object.
 	if ((dev->DmaOwned && dev->pUartDev != pDev) ||
-		(pCfg->bDMAMode && !dev->DmaOwned && (dev->pTxDma->CCR != 0 || dev->pRxDma->CCR != 0)))
+		(pCfg->bDMAMode && !dev->DmaOwned && dev->pTxDma->CCR != 0))
 	{
 		EnableInterrupt(state);
 		return false;
 	}
 	STM32F03xUARTDmaStop(dev);
-#ifdef STM32F030x8
-	STM32F03xUARTRxDmaStop(dev);
-#endif
 	dev->DmaOwned = false;
 
 	pDev->DevIntrf.pDevData = &s_Stm32f03xUartDev[devno];
@@ -973,15 +817,8 @@ bool UARTInit(UARTDEV * const pDev, const UARTCFG *pCfg)
 		dev->pTxDma->CPAR = (uint32_t)(uintptr_t)&reg->TDR;
 		dev->pTxDma->CMAR = (uint32_t)(uintptr_t)dev->TxDmaCache;
 		reg->CR3 |= USART_CR3_DMAT;
-#ifdef STM32F030x8
-		STM32F03xUARTRxDmaStart(dev);
-#endif
-		if (pCfg->bIntMode)
-		{
-			NVIC_ClearPendingIRQ(dev->TxDmaIrq);
-			NVIC_SetPriority(dev->TxDmaIrq, pCfg->IntPrio);
-			NVIC_EnableIRQ(dev->TxDmaIrq);
-		}
+		NVIC_SetPriority(dev->TxDmaIrq, pCfg->IntPrio);
+		NVIC_EnableIRQ(dev->TxDmaIrq);
 	}
 
 	// Select duplex mode
@@ -1004,15 +841,7 @@ bool UARTInit(UARTDEV * const pDev, const UARTCFG *pCfg)
 		// fire on a permanently-empty FIFO at boot. TCIE, IDLEIE and
 		// RTOIE are NOT enabled — their flags don't auto-clear and would
 		// cause an interrupt storm.
-		tmp |= USART_CR1_PEIE;
-		if (pCfg->bDMAMode)
-		{
-			tmp |= USART_CR1_IDLEIE;
-		}
-		else
-		{
-			tmp |= USART_CR1_RXNEIE;
-		}
+		tmp |= USART_CR1_RXNEIE | USART_CR1_PEIE;
 
 		// CTSE/RTSE perform hardware flow control without a CTS interrupt.
 		reg->CR3 |= USART_CR3_EIE;   // FE, NE, ORE error IRQ via CR3
