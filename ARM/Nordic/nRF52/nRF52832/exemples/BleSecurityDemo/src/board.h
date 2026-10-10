@@ -147,6 +147,8 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 // Use both board buttons for deferred Numeric Comparison confirmation.
 // BUT1 accepts only after verifying the six digits; BUT2 rejects.
 #define BLE_SECURITY_BUTTON_CONFIRM
+// Avoid S132 central-side confirmation timeout after explicit rejection.
+#define BLE_SECURITY_DISCONNECT_ON_REJECT
 
 // BLE security policy: IOsonata handles pairing, key exchange and bonding.
 // Default: LESC Numeric Comparison (MITM). The application must provide
