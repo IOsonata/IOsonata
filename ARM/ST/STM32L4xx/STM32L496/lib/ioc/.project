@@ -906,11 +906,6 @@
 			<locationURI>PARENT-3-PROJECT_LOC/src/i2c_stm32l4xx.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/gpio_stm32l4xx.c</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/src/gpio_stm32l4xx.c</locationURI>
-		</link>
-		<link>
 			<name>src/coredev/quadspi_stm32l4xx.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-3-PROJECT_LOC/src/quadspi_stm32l4xx.cpp</locationURI>
