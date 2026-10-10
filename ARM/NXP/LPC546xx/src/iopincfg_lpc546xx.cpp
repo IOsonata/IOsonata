@@ -11,9 +11,11 @@
 		0, which is GPIO on the digital pins. IOPINOP_FUNCn selects
 		function n.
 
-		The I2C pins (IOCON type I) use bit 10 and 11 for drive and glitch
-		filter instead of slew rate and open drain. IOPinConfig writes the
-		type D layout; the I2C driver sets those pins itself.
+		The I2C pins (IOCON type I, P3_23 and P3_24) have I2CSLEW in bit 6,
+		I2CDRIVE in bit 10 and I2CFILTER in bit 11 instead of slew rate and
+		open drain. On them IOPinConfig leaves I2CSLEW at 0, I2C mode, keeps
+		I2CDRIVE, and IOPINTYPE_OPENDRAIN sets I2CFILTER, the 50 ns glitch
+		filter off, which is also the NXP SDK setting for these pins.
 
 @author	Hoang Nguyen Hoan
 @date	Oct. 10, 2026
@@ -176,7 +178,7 @@ void IOPinDisable(int PortNo, int PinNo)
 	Lpc546xxGpioClockEnable(PortNo);
 
 	IOCON->PIO[PortNo][PinNo] = 0;
-	GPIO->DIRCLR[PortNo] = 1UL << (unsigned)PinNo;
+	IOPinSetDir(PortNo, PinNo, IOPINDIR_INPUT);
 }
 
 /**

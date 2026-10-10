@@ -45,6 +45,9 @@ SOFTWARE.
 /**
  * @brief	Set pin direction.
  *
+ * Read-modify-write of DIR. The NXP SDK does not use the DIRSET and DIRCLR
+ * registers on this family, they are not relied on here either.
+ *
  * @param	PortNo	: Port number
  * @param	PinNo	: Pin number
  * @param	Dir		: IOPINDIR_INPUT or IOPINDIR_OUTPUT
@@ -53,11 +56,11 @@ static inline __attribute__((always_inline)) void IOPinSetDir(int PortNo, int Pi
 {
 	if (Dir == IOPINDIR_OUTPUT)
 	{
-		GPIO->DIRSET[PortNo] = 1UL << (unsigned)PinNo;
+		GPIO->DIR[PortNo] |= 1UL << (unsigned)PinNo;
 	}
 	else if (Dir == IOPINDIR_INPUT)
 	{
-		GPIO->DIRCLR[PortNo] = 1UL << (unsigned)PinNo;
+		GPIO->DIR[PortNo] &= ~(1UL << (unsigned)PinNo);
 	}
 }
 
