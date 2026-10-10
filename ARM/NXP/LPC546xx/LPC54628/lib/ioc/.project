@@ -1100,7 +1100,7 @@
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_softrng.cpp</locationURI>
 		</link>
-			<link>
+		<link>
 			<name>include/coredev/iopinctrl.h</name>
 			<type>1</type>
 			<locationURI>PARENT-3-PROJECT_LOC/include/iopinctrl.h</locationURI>
@@ -1159,6 +1159,31 @@
 			<name>src/dfu/dfu_lpc546xx.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-3-PROJECT_LOC/src/dfu_lpc546xx.cpp</locationURI>
+		</link>
+		<link>
+			<name>include/coredev/shared_intrf.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/shared_intrf.h</locationURI>
+		</link>
+		<link>
+			<name>include/flexcomm_lpc546xx.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/include/flexcomm_lpc546xx.h</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/shared_intrf.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/shared_intrf.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/flexcomm_lpc546xx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/flexcomm_lpc546xx.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/uart_lpc546xx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/uart_lpc546xx.cpp</locationURI>
 		</link>
 	</linkedResources>
 </projectDescription>
