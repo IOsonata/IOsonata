@@ -1,29 +1,3 @@
-extern "C" bool Stm32GpioEnableClock(int port, int pin, int op, IOPINDIR dir)
-{
-    (void)pin; (void)op; (void)dir;
-    uint32_t mask = 0U;
-    switch (port) {
-#ifdef RCC_AHBENR_GPIOAEN
-    case IOPORTA: mask = RCC_AHBENR_GPIOAEN; break;
-#endif
-#ifdef RCC_AHBENR_GPIOBEN
-    case IOPORTB: mask = RCC_AHBENR_GPIOBEN; break;
-#endif
-#ifdef RCC_AHBENR_GPIOCEN
-    case IOPORTC: mask = RCC_AHBENR_GPIOCEN; break;
-#endif
-#ifdef RCC_AHBENR_GPIODEN
-    case IOPORTD: mask = RCC_AHBENR_GPIODEN; break;
-#endif
-#ifdef RCC_AHBENR_GPIOFEN
-    case IOPORTF: mask = RCC_AHBENR_GPIOFEN; break;
-#endif
-    default: return false;
-    }
-    RCC->AHBENR |= mask;
-    (void)RCC->AHBENR;
-    return true;
-}
 
 /**-------------------------------------------------------------------------
 @file	iopincfg_stm32f0xx.c
@@ -100,6 +74,33 @@ static IOPINSENS_EVTHOOK s_GpIOSenseEvt[IOPIN_MAX_INT + 1] = { {0, NULL}, };
  *			Resistor: Resistor configuration
  *			Type	: I/O type
  */
+bool Stm32GpioEnableClock(int port, int pin, int op, IOPINDIR dir)
+{
+    (void)pin; (void)op; (void)dir;
+    uint32_t mask = 0U;
+    switch (port) {
+#ifdef RCC_AHBENR_GPIOAEN
+    case IOPORTA: mask = RCC_AHBENR_GPIOAEN; break;
+#endif
+#ifdef RCC_AHBENR_GPIOBEN
+    case IOPORTB: mask = RCC_AHBENR_GPIOBEN; break;
+#endif
+#ifdef RCC_AHBENR_GPIOCEN
+    case IOPORTC: mask = RCC_AHBENR_GPIOCEN; break;
+#endif
+#ifdef RCC_AHBENR_GPIODEN
+    case IOPORTD: mask = RCC_AHBENR_GPIODEN; break;
+#endif
+#ifdef RCC_AHBENR_GPIOFEN
+    case IOPORTF: mask = RCC_AHBENR_GPIOFEN; break;
+#endif
+    default: return false;
+    }
+    RCC->AHBENR |= mask;
+    (void)RCC->AHBENR;
+    return true;
+}
+
 void IOPinDisableInterrupt(int IntNo)
 {
 	if (IntNo < 0 || IntNo >= IOPIN_MAX_INT || s_GpIOSenseEvt[IntNo].SensEvtCB == NULL)
