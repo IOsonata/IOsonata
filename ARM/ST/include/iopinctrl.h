@@ -9,6 +9,9 @@
 extern "C" {
 #endif
 
+/* Internal family hook: enables the port clock and required IO supply. */
+bool Stm32GpioEnableClock(int port, int pin, int op, IOPINDIR dir);
+
 static inline GPIO_TypeDef *Stm32Gpio(int port)
 {
     switch (port) {
