@@ -144,6 +144,10 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 	{UART_CTS_PORT, UART_CTS_PIN, UART_CTS_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},\
 	{UART_RTS_PORT, UART_RTS_PIN, UART_RTS_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},}
 
+// Use both board buttons for deferred Numeric Comparison confirmation.
+// BUT1 accepts only after verifying the six digits; BUT2 rejects.
+#define BLE_SECURITY_BUTTON_CONFIRM
+
 // BLE security policy: IOsonata handles pairing, key exchange and bonding.
 // Default: LESC Numeric Comparison (MITM). The application must provide
 // BtAppPairConfirm() to explicitly confirm the displayed number.
