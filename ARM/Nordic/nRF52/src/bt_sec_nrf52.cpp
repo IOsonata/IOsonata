@@ -394,18 +394,17 @@ bool BtAppSecInit(void)
 			break;
 
 		case BTGAP_SECTYPE_LESC_MITM:
-		case BTGAP_SECTYPE_SIGNED_MITM:
 			secParam.mitm = 1;
 			secParam.lesc = 1;
-			secParam.kdist_own.sign = 1;
-			secParam.kdist_peer.sign = 1;
 			break;
 
+		case BTGAP_SECTYPE_SIGNED_MITM:
 		case BTGAP_SECTYPE_SIGNED_NO_MITM:
-			secParam.lesc = 1;
-			secParam.kdist_own.sign = 1;
-			secParam.kdist_peer.sign = 1;
-			break;
+			// S132/S140 SoftDevice does not support data signing/CSRK
+			// distribution. Reject a signed security policy rather than
+			// silently substitute encryption-only authentication.
+			DEBUG_PRINTF("SEC: signed writes unsupported by SoftDevice\r\n");
+			return false;
 
 		case BTGAP_SECTYPE_NONE:
 		case BTGAP_SECTYPE_STATICKEY_NO_MITM:
