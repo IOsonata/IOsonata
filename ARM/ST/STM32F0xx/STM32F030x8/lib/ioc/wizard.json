@@ -8,6 +8,7 @@
     "STM32F030x8"
   ],
   "includes": [
+    "${iosonata}/ARM/ST/include",
     "${iosonata}/ARM/ST/STM32F0xx/include",
     "${iosonata}/ARM/ST/STM32F0xx/STM32F030x8/lib/include"
   ],
