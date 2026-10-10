@@ -20,7 +20,7 @@ but does not configure PLLs, flash latency or TrustZone.
 - Verify startup and vector placement with the installed STM32WBA65 CMSIS
   headers, hardware, and security configuration
 - Implement live RCC clock-frequency decoding before changing from HSI16
-- Complete EXTI interrupt routing/dispatch and UART/Timer drivers
+- Verify EXTI interrupt routing/dispatch on hardware and implement UART/Timer drivers
 - Validate the application linker script against STM32WBA65 flash/SRAM banks
   and the configured secure/nonsecure partitions
 - Integrate and test the STM32CubeWBA radio middleware
@@ -43,8 +43,9 @@ reservation before flashing. These linker scripts are not evidence of a
 successful boot or a working BLE stack.
 
 The shared GPIO implementation now supports input, output, alternate functions,
-pull resistors, output type, pin speed, and atomic BSRR set/clear. GPIO EXTI
-allocation and interrupts are not implemented; enable requests return false.
+pull resistors, output type, pin speed, and atomic BSRR set/clear. GPIO EXTI0–EXTI15 now route callbacks by pin number; interrupt allocation uses
+the fixed EXTI line matching that pin, and a line cannot be assigned to two
+ports simultaneously. This implementation has not been hardware-validated.
 GPIO register writes and peripheral clocks have not been hardware tested.
 
 The initial bring-up sequence is startup, GPIO, UART, Timer, then BLE.
