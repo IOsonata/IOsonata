@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "mcu": "STM32WBA65",
+  "cpu": "cortex-m33",
+  "fpu": true,
+  "fpu_unit": "fpv5spd16",
+  "defines": [
+    "STM32WBA65xx"
+  ],
+  "includes": [
+    "${iosonata}/ARM/ST/include",
+    "${iosonata}/ARM/ST/STM32WBAxx/include",
+    "${iosonata}/ARM/ST/STM32WBAxx/STM32WBA65/include"
+  ],
+  "linker_script": "${iosonata}/ARM/ST/STM32WBAxx/STM32WBA65/ldscript/gcc_stm32wba65_i.ld",
+  "lib_path": "${iosonata}/ARM/ST/STM32WBAxx/STM32WBA65/lib/ioc/${config}",
+  "lib": "IOsonata_STM32WBA65"
+}
