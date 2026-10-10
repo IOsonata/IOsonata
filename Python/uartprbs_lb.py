@@ -83,6 +83,10 @@ def main():
         sequence.append(value)
         value = prbs8(value)
     pattern = bytes(sequence)
+    # Every byte in this maximal-length PRBS7 sequence is unique.
+    # Use its position to reacquire phase after a missing/extra byte.
+    phase_by_byte = {byte: i for i, byte in enumerate(pattern)}
+    expected_phase = None
 
     def transmit():
         try:
@@ -141,12 +145,24 @@ def main():
             now = time.perf_counter()
             if data:
                 with condition:
-                    position = state["received"]
                     for byte in data:
-                        if byte != pattern[position % len(pattern)]:
+                        if expected_phase is None:
+                            # A stream can begin partway through the PRBS
+                            # after opening or resetting the serial port.
+                            expected_phase = phase_by_byte.get(byte)
+                            if expected_phase is None:
+                                state["errors"] += 1
+                                continue
+                        elif byte != pattern[expected_phase]:
+                            # Count phase discontinuities, not all bytes
+                            # following a single lost byte as errors.
                             state["errors"] += 1
-                        position += 1
-                    state["received"] = position
+                            expected_phase = phase_by_byte.get(byte)
+                            if expected_phase is None:
+                                expected_phase = None
+                                continue
+                        expected_phase = (expected_phase + 1) % len(pattern)
+                    state["received"] += len(data)
                     condition.notify_all()
                 last_received_at = now
 
