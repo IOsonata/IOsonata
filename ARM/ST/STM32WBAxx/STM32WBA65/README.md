@@ -87,3 +87,15 @@ target-specific BLE application configuration, not the standalone
 middleware root. Their integration, and linking the BLE binary libraries,
 remain outstanding. BLE adapter sources are currently excluded from
 the IOC configurations.
+
+## GPIO consolidation
+
+All STM32 IOC libraries now use `ARM/ST/src/iopincfg_stm32.cpp` for
+GPIO register configuration, RCC port enabling, and EXTI callback dispatch.
+No family `gpio_stm32*.c` translation units are linked. F0, F4, and L4 EXTI
+paths select their ST CMSIS register definitions at compile time.
+
+STM32WBA65 GPIO configuration remains available, but EXTI registration
+currently returns false until its CMSIS EXTI routing and pending-register
+layout can be verified against the selected STM32CubeWBA device headers.
+No guessed WBA6 register offsets are used for interrupt configuration.
