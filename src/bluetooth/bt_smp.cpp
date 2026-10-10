@@ -3846,7 +3846,7 @@ void BtSmpAuthConfig(uint8_t IoCaps, uint8_t AuthReq)
 // no application display there is no way to perform the user check, so reject.
 // An application advertising DisplayYesNo / KeyboardDisplay overrides this with
 // a strong definition that displays Value and later calls the reply function.
-__attribute__((weak)) bool BtAppPairConfirm(uint16_t ConnHdl, uint32_t Number)
+__attribute__((weak)) int BtAppPairConfirm(uint16_t ConnHdl, uint32_t Number)
 {
 	(void)ConnHdl;
 	(void)Number;
@@ -3866,9 +3866,18 @@ __attribute__((weak)) uint32_t BtAppPasskeyInput(uint16_t ConnHdl)
 	return BT_SMP_PASSKEY_INVALID;
 }
 
+void BtAppPairDecision(uint16_t ConnHdl, bool Confirm)
+{
+	BtSmpNumericComparisonReply(ConnHdl, Confirm);
+}
+
 __attribute__((weak)) void BtSmpNumericComparison(uint16_t ConnHdl, uint32_t Value)
 {
-	BtSmpNumericComparisonReply(ConnHdl, BtAppPairConfirm(ConnHdl, Value));
+	int decision = BtAppPairConfirm(ConnHdl, Value);
+	if (decision >= 0)
+	{
+		BtAppPairDecision(ConnHdl, decision != 0);
+	}
 }
 
 // Resume a Numeric Comparison pairing after the user has compared the value
