@@ -1,6 +1,6 @@
 /* Shared STM32 USB device-controller API.
  * USB controller implementation is selected by MCU family.
- * usb_ctrlr_caps.h supplies the per-controller silicon capabilities.
+ * Target definitions below provide compile-time controller capabilities.
  * Applications use the same IOsonata USB stack regardless of STM32 USB IP.
  */
 #ifndef __STM32_USB_CTRLR_H__
@@ -10,10 +10,9 @@
 #include <stdint.h>
 #include "coredev/iopincfg.h"
 #include "usb/usb_def.h"
-/* STM32WBA65 USB OTG HS capabilities. Other STM32 USB IP variants
- * are added here when their controller drivers are implemented.
+/* Peripheral capability values are compile-time allocation bounds.
+ * A controller driver must still be implemented for the selected USB IP.
  */
-#if defined(STM32WBA65xx)
 typedef enum __Usb_Ctrlr_Trans_Type {
 	CONTROL = USB_ENDPATT_TRANS_CONTROL,
 	ISO = USB_ENDPATT_TRANS_ISO,
@@ -21,20 +20,44 @@ typedef enum __Usb_Ctrlr_Trans_Type {
 	INT = USB_ENDPATT_TRANS_INT,
 } UsbCtrlrTransType_t;
 
-// Nine bidirectional endpoint numbers, including EP0. HS integrated PHY.
+#if defined(STM32WBA65xx)
+/* STM32WBA65: USB OTG HS, integrated HS PHY, nine endpoint numbers. */
 enum {
-	USB_CTRLR_CNT = 1,
-	USB_HIGHSPEED_CAPABLE_0 = 1,
-	USB_EPIN_CNT_0 = 9,
-	USB_EPOUT_CNT_0 = 9,
-	USB_CTRLR0_CONTROL_PKT_LEN_MAX = 64,
-	USB_CTRLR0_BULK_PKT_LEN_MAX = 512,
-	USB_CTRLR0_INT_PKT_LEN_MAX = 1024,
-	USB_CTRLR0_ISO_PKT_LEN_MAX = 1024,
-	USB_ISO_SUPPORTED_0 = 1,
-	USB_ISO_EPIN_MASK_0 = 0x01FEU,
-	USB_ISO_EPOUT_MASK_0 = 0x01FEU,
+    USB_CTRLR_CNT = 1,
+    USB_HIGHSPEED_CAPABLE_0 = 1,
+    USB_EPIN_CNT_0 = 9,
+    USB_EPOUT_CNT_0 = 9,
+    USB_CTRLR0_CONTROL_PKT_LEN_MAX = 64,
+    USB_CTRLR0_BULK_PKT_LEN_MAX = 512,
+    USB_CTRLR0_INT_PKT_LEN_MAX = 1024,
+    USB_CTRLR0_ISO_PKT_LEN_MAX = 1024,
+    USB_ISO_SUPPORTED_0 = 1,
+    USB_ISO_EPIN_MASK_0 = 0x01FEU,
+    USB_ISO_EPOUT_MASK_0 = 0x01FEU,
 };
+#elif defined(STM32L476xx) || defined(STM32L496xx)
+/* STM32L476/L496: USB OTG FS, six bidirectional endpoint numbers.
+ * USB endpoint size constants represent full-speed packet limits.
+ */
+enum {
+    USB_CTRLR_CNT = 1,
+    USB_HIGHSPEED_CAPABLE_0 = 0,
+    USB_EPIN_CNT_0 = 6,
+    USB_EPOUT_CNT_0 = 6,
+    USB_CTRLR0_CONTROL_PKT_LEN_MAX = 64,
+    USB_CTRLR0_BULK_PKT_LEN_MAX = 64,
+    USB_CTRLR0_INT_PKT_LEN_MAX = 64,
+    USB_CTRLR0_ISO_PKT_LEN_MAX = 1023,
+    USB_ISO_SUPPORTED_0 = 1,
+    USB_ISO_EPIN_MASK_0 = 0x003EU,
+    USB_ISO_EPOUT_MASK_0 = 0x003EU,
+};
+#elif defined(STM32F030x8)
+/* STM32F030x8 has no USB peripheral; reject USB stack inclusion. */
+#error "STM32F030x8 does not contain a USB device controller"
+#else
+#error "STM32 USB capabilities not defined for this MCU variant"
+#endif
 
 #ifndef USB_CONFIG_DESC_MAXLEN
 #define USB_CONFIG_DESC_MAXLEN		768U
@@ -60,9 +83,6 @@ enum {
 	 (TransType) == INT ? USB_CTRLR0_INT_PKT_LEN_MAX : 0)
 
 #define USB_CTRLR_ISO_INIT(DevNo) UsbCtrlrIsoInit(DevNo)
-#else
-#error "STM32 USB controller capabilities not defined for this MCU"
-#endif
 
 typedef enum __Usb_Ctrlr_Xfer_Result {
 	USB_CTRLR_XFER_SUCCESS,
