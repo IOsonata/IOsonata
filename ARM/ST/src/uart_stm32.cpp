@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
 @file	uart_stm32.cpp
 
-@brief	Common STM32 UART baseline, initially supporting F0 interrupt and polling modes.
+@brief	Common STM32 UART interrupt transport and family-specific peripheral setup.
 
 @author	Hoang Nguyen Hoan
 @date	June 7, 2019
@@ -35,9 +35,31 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <stdio.h>
 #include <stdint.h>
 #include <stdarg.h>
-//#include <atomic>
+
 
 #include "stm32.h"
+
+#include "coredev/uart.h"
+static int Stm32UartRxFifoRead(UARTDEV *pDev, uint8_t *pBuff, int Bufflen)
+{
+	int cnt = 0;
+	while (Bufflen > 0)
+	{
+		int len = Bufflen;
+		uint8_t *p = CFifoGetMultiple(pDev->hRxFifo, &len);
+		if (p == NULL)
+		{
+			break;
+		}
+		memcpy(pBuff, p, len);
+		pBuff += len;
+		Bufflen -= len;
+		cnt += len;
+	}
+	pDev->bRxReady = CFifoUsed(pDev->hRxFifo) != 0;
+	return cnt;
+}
+
 
 #if defined(IOSONATA_STM32_F0)
 
@@ -368,18 +390,7 @@ static int STM32F03xUARTRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int Buff
 	}
 
 	uint32_t state = DisableInterrupt();
-	while (Bufflen)
-	{
-		int l  = Bufflen;
-		uint8_t *p = CFifoGetMultiple(dev->pUartDev->hRxFifo, &l);
-		if (p == NULL)
-			break;
-		memcpy(pBuff, p, l);
-		cnt += l;
-		pBuff += l;
-		Bufflen -= l;
-	}
-	dev->pUartDev->bRxReady = CFifoUsed(dev->pUartDev->hRxFifo) != 0;
+	cnt = Stm32UartRxFifoRead(dev->pUartDev, pBuff, Bufflen);
 	EnableInterrupt(state);
 
 	return cnt;
@@ -881,3 +892,723 @@ void UARTSetCtrlLineState(UARTDEV * const pDev, uint32_t LineState)
 
 
 #endif // IOSONATA_STM32_F0
+
+#if defined(IOSONATA_STM32_L4)
+
+#include "istddef.h"
+#include "iopinctrl.h"
+#include "idelay.h"
+#include "coredev/interrupt.h"
+
+#define RCC_CCIPR_USARTSEL_PCLK			(0)
+#define RCC_CCIPR_USARTSEL_SYSCLK		(1)
+#define RCC_CCIPR_USARTSEL_HSI16		(2)
+#define RCC_CCIPR_USARTSEL_LSE			(3)
+
+#define RCC_CCIPR_USARTSEL(n, clk)		(clk<<((n-1) << 1))
+
+#ifdef STM32L4S9xx
+#define USART_ISR_RXNE			USART_ISR_RXNE_RXFNE
+#define USART_ISR_TXE			USART_ISR_TXE_TXFNF
+#define USART_CR1_TXEIE			USART_CR1_TXEIE_TXFNFIE
+#define USART_CR1_RXNEIE		USART_CR1_RXNEIE_RXFNEIE
+#endif
+
+#define STM32L4X_UART_HWFIFO_SIZE		8
+#define STM32L4X_UART_RXTIMEOUT			15
+#define STM32L4X_UART_BUFF_SIZE			(4 * STM32L4X_UART_HWFIFO_SIZE)
+#define STM32L4X_UART_CFIFO_SIZE		CFIFO_MEMSIZE(STM32L4X_UART_BUFF_SIZE)
+
+#pragma pack(push, 4)
+// Device driver data require by low level functions
+typedef struct _STM32L4X_UART_Dev {
+	int DevNo;				// UART interface number
+	USART_TypeDef *pReg;	// UART registers
+	UARTDev_t	*pUartDev;		// Pointer to generic UART dev. data
+	uint32_t RxDropCnt;
+	uint32_t RxTimeoutCnt;
+	uint32_t ErrCnt;
+	const IOPinCfg_t *pIOPinMap;
+	int NbPins;
+	uint8_t TxDmaCache[STM32L4X_UART_BUFF_SIZE];
+	uint8_t RxFifoMem[STM32L4X_UART_CFIFO_SIZE];
+	uint8_t TxFifoMem[STM32L4X_UART_CFIFO_SIZE];
+	uint32_t ErrFlag;
+} STM32L4X_UARTDEV;
+
+#pragma pack(pop)
+
+static uint32_t s_FclkFreq = SystemCoreClock;		// FCLK frequency in Hz
+
+static STM32L4X_UARTDEV s_Stm32l4xUartDev[] = {
+	{
+		.DevNo = 0,
+		.pReg = LPUART1,
+	},
+	{
+		.DevNo = 1,
+		.pReg = USART1,
+	},
+	{
+		.DevNo = 2,
+		.pReg = USART2,
+	},
+	{
+		.DevNo = 3,
+		.pReg = USART3,
+	},
+	{
+		.DevNo = 4,
+		.pReg = UART4,
+	},
+	{
+		.DevNo = 5,
+		.pReg = UART5,
+	},
+};
+
+static const int s_NbUartDev = sizeof(s_Stm32l4xUartDev) / sizeof(STM32L4X_UARTDEV);
+
+UARTDev_t const *UARTGetInstance(int DevNo)
+{
+	return s_Stm32l4xUartDev[DevNo].pUartDev;
+}
+
+bool STM32L4xUARTWaitForRxReady(STM32L4X_UARTDEV * const pDev, uint32_t Timeout)
+{
+	return false;
+}
+
+bool STM32L4xUARTWaitForTxReady(STM32L4X_UARTDEV * const pDev, uint32_t Timeout)
+{
+	return false;
+}
+
+static void UART_IRQHandler(STM32L4X_UARTDEV * const pDev)
+{
+	UARTDev_t *dev = (UARTDev_t *)pDev->pUartDev;
+	int len = 0;
+	int cnt = 0;
+	uint32_t iflag = pDev->pReg->ISR;
+
+	if (iflag & USART_ISR_RXNE)
+	{
+		int cnt = STM32L4X_UART_HWFIFO_SIZE;
+		do {
+			// RDR belongs to the ISR, including when the software FIFO is full.
+			uint8_t value = (uint16_t)pDev->pReg->RDR & (dev->DataBits == 7 ? 0x7F : 0xFF);
+			uint8_t *p = CFifoPut(dev->hRxFifo);
+			if (p)
+			{
+				*p = value;
+				dev->bRxReady = true;
+			}
+			else
+			{
+				pDev->RxDropCnt++;
+			}
+		} while (pDev->pReg->ISR & USART_ISR_RXNE && cnt-- > 0);
+		if (dev->EvtCallback)
+		{
+			dev->EvtCallback(dev, UART_EVT_RXDATA, NULL, CFifoUsed(dev->hRxFifo));
+		}
+	}
+	if (iflag & USART_ISR_TXE)// | USART_ISR_TC))
+	{
+		//pDev->pReg->ICR = USART_ISR_TXE;
+		int cnt = STM32L4X_UART_HWFIFO_SIZE;
+
+		do {
+			uint8_t *p = CFifoGet(dev->hTxFifo);
+			if (p == NULL)
+			{
+				dev->bTxReady = true;
+				break;
+			}
+			dev->bTxReady = false;
+			pDev->pReg->TDR = *p;
+		} while (pDev->pReg->ISR & USART_ISR_TXE && cnt-- > 0);
+
+		if (dev->EvtCallback)
+		{
+			dev->EvtCallback(dev, UART_EVT_TXREADY, NULL, CFifoUsed(dev->hRxFifo));
+		}
+	}
+	if (iflag & USART_ISR_RTOF)
+	{
+		if (dev->EvtCallback)
+		{
+			dev->EvtCallback(dev, UART_EVT_RXTIMEOUT, NULL, CFifoUsed(dev->hRxFifo));
+		}
+		//pDev->pReg->ICR = USART_ISR_RTOF;
+	}
+
+	if (iflag & (USART_ISR_PE | USART_ISR_FE | USART_ISR_ORE | USART_ISR_NE))
+	{
+		// error
+		pDev->ErrCnt++;
+		pDev->ErrFlag = iflag & (USART_ISR_PE | USART_ISR_FE | USART_ISR_ORE | USART_ISR_NE);
+		//pDev->pReg->ICR = (USART_ISR_PE | USART_ISR_FE | USART_ISR_ORE | USART_ISR_NE);
+	}
+	pDev->pReg->ICR = iflag & 0x121BDF;
+}
+
+extern "C" void USART1_IRQHandler()
+{
+	UART_IRQHandler(&s_Stm32l4xUartDev[1]);
+	NVIC_ClearPendingIRQ(USART1_IRQn);
+}
+
+extern "C" void USART2_IRQHandler()
+{
+	UART_IRQHandler(&s_Stm32l4xUartDev[2]);
+	NVIC_ClearPendingIRQ(USART2_IRQn);
+}
+
+extern "C" void USART3_IRQHandler()
+{
+	UART_IRQHandler(&s_Stm32l4xUartDev[3]);
+	NVIC_ClearPendingIRQ(USART3_IRQn);
+}
+
+extern "C" void UART4_IRQHandler()
+{
+	UART_IRQHandler(&s_Stm32l4xUartDev[4]);
+	NVIC_ClearPendingIRQ(UART4_IRQn);
+}
+
+extern "C" void UART5_IRQHandler()
+{
+	UART_IRQHandler(&s_Stm32l4xUartDev[5]);
+	NVIC_ClearPendingIRQ(UART5_IRQn);
+}
+
+extern "C" void LPUART1_IRQHandler()
+{
+	UART_IRQHandler(&s_Stm32l4xUartDev[0]);
+	NVIC_ClearPendingIRQ(LPUART1_IRQn);
+}
+
+static uint32_t STM32L4xUARTGetRate(DevIntrf_t * const pDev)
+{
+	return ((STM32L4X_UARTDEV*)pDev->pDevData)->pUartDev->Rate;
+}
+
+static uint32_t STM32L4xUARTSetRate(DevIntrf_t * const pDev, uint32_t Rate)
+{
+	STM32L4X_UARTDEV *dev = (STM32L4X_UARTDEV *)pDev->pDevData;
+	uint32_t div;
+
+	if (dev->DevNo == 0)
+	{
+		uint64_t fclk2 = 16000000 << 8;
+		uint32_t tmp = RCC->CCIPR;
+		if (GetLowFreqOscType() == OSC_TYPE_XTAL && Rate < 10922)
+		{
+			fclk2 = 32768 << 8;
+			tmp = (tmp & ~RCC_CCIPR_LPUART1SEL_Msk) | RCC_CCIPR_USARTSEL(6, RCC_CCIPR_USARTSEL_LSE);
+		}
+		else if (Rate < 5333333)
+		{
+			tmp = (tmp & ~RCC_CCIPR_LPUART1SEL_Msk) | RCC_CCIPR_USARTSEL(6, RCC_CCIPR_USARTSEL_HSI16);
+		}
+		div = (fclk2 + (uint64_t)(Rate >> 1ULL)) / Rate;
+		dev->pUartDev->Rate = fclk2 / div;
+		RCC->CCIPR = tmp;
+	}
+	else
+	{
+		uint32_t fclk2 = s_FclkFreq << 1;
+		uint32_t rem8 = fclk2 % Rate;
+		uint32_t rem16 = s_FclkFreq % Rate;
+
+		if (rem8 < rem16)
+		{
+			// /8 better
+			s_Stm32l4xUartDev[dev->DevNo].pReg->CR1 |= USART_CR1_OVER8;
+
+			div = (fclk2 + (Rate >> 1)) / Rate;
+			dev->pUartDev->Rate = (fclk2 + (div >> 1)) / div;
+			div = ((div & 0xf) >> 1) | (div & 0xFFFFFFF0);
+		}
+		else
+		{
+			// /16 better
+			s_Stm32l4xUartDev[dev->DevNo].pReg->CR1 &= ~USART_CR1_OVER8;
+
+			div = (s_FclkFreq + (Rate >> 1)) / Rate;
+			dev->pUartDev->Rate = (s_FclkFreq + (div >> 1)) / div;
+		}
+	}
+	s_Stm32l4xUartDev[dev->DevNo].pReg->BRR = div;
+
+	return dev->pUartDev->Rate;
+}
+
+static bool STM32L4xUARTStartRx(DevIntrf_t * const pSerDev, uint32_t DevAddr)
+{
+	return true;
+}
+
+static int STM32L4xUARTRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int Bufflen)
+{
+	STM32L4X_UARTDEV *dev = (STM32L4X_UARTDEV *)pDev->pDevData;
+	int cnt = 0;
+
+	uint32_t state = DisableInterrupt();
+	cnt = Stm32UartRxFifoRead(dev->pUartDev, pBuff, Bufflen);
+	EnableInterrupt(state);
+
+	return cnt;
+}
+
+static void STM32L4xUARTStopRx(DevIntrf_t * const pDev) {
+}
+
+static bool STM32L4xUARTStartTx(DevIntrf_t * const pDev, uint32_t DevAddr)
+{
+	return true;
+}
+
+static int STM32L4xUARTTxData(DevIntrf_t * const pDev, uint8_t const *pData, int Datalen)
+{
+	STM32L4X_UARTDEV *dev = (STM32L4X_UARTDEV *)pDev->pDevData;
+    int cnt = 0;
+    int rtry = pDev->MaxRetry;
+
+    while (Datalen > 0 && rtry-- > 0)
+    {
+        uint32_t state = DisableInterrupt();
+
+        while (Datalen > 0)
+        {
+            int l = Datalen;
+            uint8_t *p = CFifoPutMultiple(dev->pUartDev->hTxFifo, &l);
+            if (p == NULL)
+                break;
+            memcpy(p, pData, l);
+            Datalen -= l;
+            pData += l;
+            cnt += l;
+        }
+        EnableInterrupt(state);
+
+        if (dev->pUartDev->bTxReady)
+        {
+        	uint8_t *p = CFifoGet(dev->pUartDev->hTxFifo);
+        	if (p != NULL)
+        	{
+        		dev->pUartDev->bTxReady = false;
+        		dev->pReg->TDR = *p;
+        	}
+        }
+    }
+
+    // Datalen is what is left and cnt is what was accepted, both moved by the
+    // same loop above, so the drop is Datalen. Taking cnt off it underflowed
+    // the unsigned counter whenever more was accepted than remained, and the
+    // old rtry test only ran when the FIFO refused, so with a large FIFO this
+    // reported 0 no matter what was lost.
+    if (Datalen > 0)
+    {
+    	dev->pUartDev->TxDropCnt += (uint32_t)Datalen;
+    }
+    return cnt;
+}
+
+static void STM32L4xUARTStopTx(DevIntrf_t * const pDev)
+{
+}
+
+static void STM32L4xUARTDisable(DevIntrf_t * const pDev)
+{
+	STM32L4X_UARTDEV *dev = (STM32L4X_UARTDEV *)pDev->pDevData;
+
+	dev->pReg->CR1 &= ~(USART_CR1_UE | USART_CR1_RE | USART_CR1_TE);
+	dev->pReg->CR2 &= ~USART_CR2_RTOEN;
+
+	if (dev->DevNo == 1)
+	{
+		RCC->APB2ENR &= ~RCC_APB2ENR_USART1EN;
+	}
+	else if (dev->DevNo == 0)
+	{
+		RCC->APB1ENR2 &= ~RCC_APB1ENR2_LPUART1EN;
+	}
+	else if (dev->DevNo >= 2)
+	{
+		RCC->APB1ENR1 &= ~(RCC_APB1ENR1_USART2EN << (dev->DevNo - 2));
+	}
+
+	IOPinDis(dev->pIOPinMap, dev->NbPins);
+}
+
+static void STM32L4xUARTEnable(DevIntrf_t * const pDev)
+{
+	STM32L4X_UARTDEV *dev = (STM32L4X_UARTDEV *)pDev->pDevData;
+
+	dev->ErrCnt = 0;
+	dev->RxTimeoutCnt = 0;
+	dev->RxDropCnt = 0;
+	atomic_flag_clear(&pDev->bBusy);
+
+	CFifoFlush(dev->pUartDev->hTxFifo);
+
+	dev->pUartDev->bTxReady = true;
+
+	if (dev->DevNo == 1)
+	{
+		RCC->APB2ENR |= RCC_APB2ENR_USART1EN;
+	}
+	else if (dev->DevNo == 0)
+	{
+		RCC->APB1ENR2 |= RCC_APB1ENR2_LPUART1EN;
+	}
+	else if (dev->DevNo >= 2)
+	{
+		RCC->APB1ENR1 |= (RCC_APB1ENR1_USART2EN << (dev->DevNo - 2));
+	}
+
+	IOPinCfg(dev->pIOPinMap, dev->NbPins);
+	for (int i = 0; i < dev->NbPins; i++)
+	{
+		if (dev->pIOPinMap[i].PortNo >= 0)
+		{
+			IOPinSetSpeed(dev->pIOPinMap[i].PortNo, dev->pIOPinMap[i].PinNo, IOPINSPEED_TURBO);
+		}
+	}
+
+	dev->pReg->CR1 |= USART_CR1_UE | USART_CR1_RE | USART_CR1_TE;
+	dev->pReg->CR2 |= USART_CR2_RTOEN;
+}
+
+static void STM32L4xUARTPowerOff(DevIntrf_t * const pDev)
+{
+	STM32L4X_UARTDEV *dev = (STM32L4X_UARTDEV *)pDev->pDevData;
+
+	STM32L4xUARTDisable(pDev);
+	// DevNo 0 is LPUART1; the remaining entries are USART1 through UART5.
+	if (dev->DevNo == 0)
+	{
+		RCC->CCIPR &= ~RCC_CCIPR_LPUART1SEL_Msk;
+	}
+	else
+	{
+		RCC->CCIPR &= ~(RCC_CCIPR_USART1SEL_Msk << ((dev->DevNo - 1) << 1));
+	}
+}
+
+static void STM32L4xUARTReset(DevIntrf_t * const pDev)
+{
+	STM32L4X_UARTDEV *dev = (STM32L4X_UARTDEV *)pDev->pDevData;
+
+	if (dev->DevNo == 1)
+	{
+		RCC->APB2RSTR |= RCC_APB2RSTR_USART1RST;
+		usDelay(100);
+		RCC->APB2RSTR &= ~RCC_APB2RSTR_USART1RST;
+	}
+	else if (dev->DevNo == 0)
+	{
+		RCC->APB1RSTR2 |= RCC_APB1RSTR2_LPUART1RST;
+		usDelay(100);
+		RCC->APB1RSTR2 &= ~RCC_APB1RSTR2_LPUART1RST;
+	}
+	else if (dev->DevNo >= 2)
+	{
+		RCC->APB1RSTR1 |= RCC_APB1RSTR1_USART2RST << (dev->DevNo - 2);
+		usDelay(100);
+		RCC->APB1RSTR1 &= ~(RCC_APB1RSTR1_USART2RST << (dev->DevNo - 2));
+	}
+}
+
+bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
+{
+	// Config I/O pins
+	if (pDev == NULL || pCfg == NULL)
+	{
+		return false;
+	}
+
+	if (pCfg->pIOPinMap == NULL || pCfg->NbIOPins <= 0)
+	{
+		return false;
+	}
+
+	if (pCfg->DevNo < 0 || pCfg->DevNo >= s_NbUartDev)
+	{
+		return false;
+	}
+
+	// The byte-oriented API supports seven or eight payload bits.
+	if ((pCfg->DataBits != 7 && pCfg->DataBits != 8) ||
+		(pCfg->Parity != UART_PARITY_NONE && pCfg->Parity != UART_PARITY_EVEN && pCfg->Parity != UART_PARITY_ODD) ||
+		(pCfg->StopBits != 1 && pCfg->StopBits != 2) ||
+		(pCfg->DevNo == 0 && pCfg->DataBits == 7 && pCfg->Parity == UART_PARITY_NONE))
+	{
+		return false;
+	}
+
+	int devno = pCfg->DevNo;
+	USART_TypeDef *reg = s_Stm32l4xUartDev[devno].pReg;
+	uint32_t tmp;
+
+	pDev->DevIntrf.pDevData = &s_Stm32l4xUartDev[devno];
+	s_Stm32l4xUartDev[devno].pUartDev = pDev;
+	s_Stm32l4xUartDev[devno].pIOPinMap = (const IOPinCfg_t*)pCfg->pIOPinMap;
+	s_Stm32l4xUartDev[devno].NbPins = pCfg->NbIOPins;
+	STM32L4xUARTReset(&pDev->DevIntrf);
+
+	// Disable UART first because some field can't be set is it is already enabled
+	reg->CR1 &= ~USART_CR1_UE;
+
+	// Enable clock
+	tmp = RCC->CCIPR;
+	switch (devno)
+	{
+		case 0:
+			if (GetLowFreqOscType() == OSC_TYPE_XTAL)
+			{
+				tmp = (tmp & ~RCC_CCIPR_LPUART1SEL_Msk) | RCC_CCIPR_USARTSEL(6, RCC_CCIPR_USARTSEL_LSE);
+			}
+			else
+			{
+				tmp = (tmp & ~RCC_CCIPR_LPUART1SEL_Msk) | RCC_CCIPR_USARTSEL(6, RCC_CCIPR_USARTSEL_HSI16);
+			}
+			RCC->APB1ENR2 |= RCC_APB1ENR2_LPUART1EN;
+			break;
+		case 1:
+			tmp = (tmp & ~RCC_CCIPR_USART1SEL_Msk) | RCC_CCIPR_USARTSEL(1, RCC_CCIPR_USARTSEL_SYSCLK);
+			RCC->APB2ENR |= RCC_APB2ENR_USART1EN;
+			break;
+		case 2:
+			tmp = (tmp & ~RCC_CCIPR_USART2SEL_Msk) | RCC_CCIPR_USARTSEL(2, RCC_CCIPR_USARTSEL_SYSCLK);
+			RCC->APB1ENR1 |= RCC_APB1ENR1_USART2EN;
+			break;
+		case 3:
+			tmp = (tmp & ~RCC_CCIPR_USART3SEL_Msk) | RCC_CCIPR_USARTSEL(3, RCC_CCIPR_USARTSEL_SYSCLK);
+			RCC->APB1ENR1 |= RCC_APB1ENR1_USART3EN;
+			break;
+		case 4:
+			tmp = (tmp & ~RCC_CCIPR_UART4SEL_Msk) | RCC_CCIPR_USARTSEL(4, RCC_CCIPR_USARTSEL_SYSCLK);
+			RCC->APB1ENR1 |= RCC_APB1ENR1_UART4EN;
+			break;
+		case 5:
+			tmp = (tmp & ~RCC_CCIPR_UART5SEL_Msk) | RCC_CCIPR_USARTSEL(5, RCC_CCIPR_USARTSEL_SYSCLK);
+			RCC->APB1ENR1 |= RCC_APB1ENR1_UART5EN;
+			break;
+	}
+	RCC->CCIPR = tmp;
+
+	msDelay(1);
+
+	if (pCfg->pRxMem && pCfg->RxMemSize > 0)
+	{
+		pDev->hRxFifo = CFifoInit(pCfg->pRxMem, pCfg->RxMemSize, 1, pCfg->bFifoBlocking);
+	}
+	else
+	{
+		pDev->hRxFifo = CFifoInit(s_Stm32l4xUartDev[devno].RxFifoMem, STM32L4X_UART_CFIFO_SIZE, 1, pCfg->bFifoBlocking);
+	}
+
+	if (pCfg->pTxMem && pCfg->TxMemSize > 0)
+	{
+		pDev->hTxFifo = CFifoInit(pCfg->pTxMem, pCfg->TxMemSize, 1, pCfg->bFifoBlocking);
+	}
+	else
+	{
+		pDev->hTxFifo = CFifoInit(s_Stm32l4xUartDev[devno].TxFifoMem, STM32L4X_UART_CFIFO_SIZE, 1, pCfg->bFifoBlocking);
+	}
+
+	// Configure UART pins
+	IOPinCfg_t *pincfg = (IOPinCfg_t*)pCfg->pIOPinMap;
+
+	IOPinCfg(pincfg, pCfg->NbIOPins);
+
+	for (int i = 0; i < pCfg->NbIOPins; i++)
+	{
+		if (pincfg[i].PortNo >= 0)
+		{
+			IOPinSetSpeed(pincfg[i].PortNo, pincfg[i].PinNo, IOPINSPEED_TURBO);
+		}
+	}
+
+	msDelay(1);
+
+    // Set baud
+    pDev->Rate = STM32L4xUARTSetRate(&pDev->DevIntrf, pCfg->Rate);
+
+    msDelay(1);
+
+	// Hardware word length includes the parity bit.
+	int wordbits = pCfg->DataBits + (pCfg->Parity != UART_PARITY_NONE ? 1 : 0);
+	reg->CR1 &= ~(USART_CR1_PCE | USART_CR1_PS | USART_CR1_M0 | USART_CR1_M1);
+	if (pCfg->Parity != UART_PARITY_NONE) reg->CR1 |= USART_CR1_PCE;
+	if (pCfg->Parity == UART_PARITY_ODD) reg->CR1 |= USART_CR1_PS;
+	if (wordbits == 9) reg->CR1 |= USART_CR1_M0;
+	else if (wordbits == 7) reg->CR1 |= USART_CR1_M1;
+
+	reg->CR2 &= ~USART_CR2_STOP_Msk;
+	if (pCfg->StopBits == 2) reg->CR2 |= USART_CR2_STOP_1;
+
+	// Swap
+	//reg->CR2 |= USART_CR2_SWAP;
+
+    if (pCfg->FlowControl == UART_FLWCTRL_HW)
+	{
+    	reg->CR3 |= USART_CR3_CTSE | USART_CR3_RTSE;
+	}
+	else
+	{
+    	reg->CR3 &= ~(USART_CR3_CTSE | USART_CR3_RTSE);
+	}
+
+    s_Stm32l4xUartDev[devno].pUartDev->bRxReady = false;
+    s_Stm32l4xUartDev[devno].pUartDev->bTxReady = true;
+    s_Stm32l4xUartDev[devno].ErrCnt = 0;
+    s_Stm32l4xUartDev[devno].RxTimeoutCnt = 0;
+    s_Stm32l4xUartDev[devno].RxDropCnt = 0;
+
+	pDev->DevIntrf.Type = DEVINTRF_TYPE_UART;
+	pDev->Mode = pCfg->Mode;
+	pDev->Duplex = pCfg->Duplex;
+	pDev->DataBits = pCfg->DataBits;
+	pDev->FlowControl = pCfg->FlowControl;
+	pDev->StopBits = pCfg->StopBits;
+	pDev->bIrDAFixPulse = pCfg->bIrDAFixPulse;
+	pDev->bIrDAInvert = pCfg->bIrDAInvert;
+	pDev->bIrDAMode = pCfg->bIrDAMode;
+	pDev->IrDAPulseDiv = pCfg->IrDAPulseDiv;
+	pDev->Parity = pCfg->Parity;
+	pDev->EvtCallback = pCfg->EvtCallback;
+	pDev->DevIntrf.bIntEn = pCfg->bIntMode;
+	pDev->DevIntrf.bDma = false;
+	pDev->DevIntrf.Reset = STM32L4xUARTReset;
+	pDev->DevIntrf.Disable = STM32L4xUARTDisable;
+	pDev->DevIntrf.Enable = STM32L4xUARTEnable;
+	pDev->DevIntrf.GetRate = STM32L4xUARTGetRate;
+	pDev->DevIntrf.SetRate = STM32L4xUARTSetRate;
+	pDev->DevIntrf.StartRx = STM32L4xUARTStartRx;
+	pDev->DevIntrf.RxData = STM32L4xUARTRxData;
+	pDev->DevIntrf.StopRx = STM32L4xUARTStopRx;
+	pDev->DevIntrf.StartTx = STM32L4xUARTStartTx;
+	pDev->DevIntrf.TxData = STM32L4xUARTTxData;
+	pDev->DevIntrf.StopTx = STM32L4xUARTStopTx;
+	pDev->DevIntrf.MaxRetry = UART_RETRY_MAX;
+	pDev->DevIntrf.PowerOff = STM32L4xUARTPowerOff;
+	pDev->DevIntrf.EnCnt = 1;
+	atomic_flag_clear(&pDev->DevIntrf.bBusy);
+
+
+	if (false && pCfg->bDMAMode)
+	{
+/*		if (devno == 0)
+		{
+			SYSCFG->CFGR1 |= SYSCFG_CFGR1_USART1TX_DMA_RMP;
+		}
+		if (devno == 2)
+		{
+			// USART3_DMA_RMP
+			SYSCFG->CFGR1 |= SYSCFG_CFGR1_USART3_DMA_RMP;
+		}*/
+		// Not using DMA transfer on Rx. It is useless on UART as we need to process 1 char at a time
+		// cannot wait until DMA buffer is filled.
+		reg->CR3 |= USART_CR3_DMAT;
+	}
+	else
+	{
+/*		if (devno == 0)
+		{
+			SYSCFG->CFGR1 &= ~(SYSCFG_CFGR1_USART1TX_DMA_RMP | SYSCFG_CFGR1_USART1RX_DMA_RMP);
+		}
+		if (devno == 2)
+		{
+			SYSCFG->CFGR1 &= ~(SYSCFG_CFGR1_USART3_DMA_RMP);
+		}
+*/
+		reg->CR3 &= ~(USART_CR3_DMAT | USART_CR3_DMAR);
+	}
+
+	// Select duplex mode
+	reg->CR3 &= ~USART_CR3_HDSEL;
+	if (pDev->Duplex == UART_DUPLEX_HALF)
+	{
+		reg->CR3 |= USART_CR3_HDSEL;
+	}
+
+	tmp = reg->CR1;
+
+	reg->ICR = 0xFFFFFFFF;
+	reg->RQR |= USART_RQR_RXFRQ;
+
+	(void)reg->RDR;
+
+	// Disable all interrupts
+	tmp &= ~(USART_CR1_PEIE | USART_CR1_TXEIE | USART_CR1_RTOIE | USART_CR1_TCIE | USART_CR1_RXNEIE | USART_CR1_IDLEIE);
+
+	if (pCfg->bIntMode)
+	{
+		tmp |= (USART_CR1_PEIE | USART_CR1_TCIE | USART_CR1_RXNEIE);
+
+		if (pCfg->FlowControl == UART_FLWCTRL_HW)
+	    {
+			reg->CR3 |= USART_CR3_CTSIE;
+	    }
+		reg->CR3 |= USART_CR3_EIE;
+
+		switch (devno)
+		{
+			case 1:
+				NVIC_ClearPendingIRQ(USART1_IRQn);
+				NVIC_SetPriority(USART1_IRQn, pCfg->IntPrio);
+				NVIC_EnableIRQ(USART1_IRQn);
+				break;
+			case 2:
+				NVIC_ClearPendingIRQ(USART2_IRQn);
+				NVIC_SetPriority(USART2_IRQn, pCfg->IntPrio);
+				NVIC_EnableIRQ(USART2_IRQn);
+				break;
+			case 3:
+				NVIC_ClearPendingIRQ(USART3_IRQn);
+				NVIC_SetPriority(USART3_IRQn, pCfg->IntPrio);
+				NVIC_EnableIRQ(USART3_IRQn);
+				break;
+
+			case 4:
+				NVIC_ClearPendingIRQ(UART4_IRQn);
+				NVIC_SetPriority(UART4_IRQn, pCfg->IntPrio);
+				NVIC_EnableIRQ(UART4_IRQn);
+				break;
+			case 5:
+				NVIC_ClearPendingIRQ(UART5_IRQn);
+				NVIC_SetPriority(UART5_IRQn, pCfg->IntPrio);
+				NVIC_EnableIRQ(UART5_IRQn);
+				break;
+
+			case 0:
+				NVIC_ClearPendingIRQ(LPUART1_IRQn);
+				NVIC_SetPriority(LPUART1_IRQn, pCfg->IntPrio);
+				NVIC_EnableIRQ(LPUART1_IRQn);
+				break;
+		}
+    }
+
+	msDelay(1);
+
+	// Enable USART
+	tmp |= USART_CR1_UE | USART_CR1_RE | USART_CR1_TE;
+
+	reg->CR1 = tmp;
+	reg->CR2 |= USART_CR2_RTOEN;
+
+	return true;
+}
+
+void UARTSetCtrlLineState(UARTDev_t * const pDev, uint32_t LineState)
+{
+	STM32L4X_UARTDEV *dev = (STM32L4X_UARTDEV *)pDev->DevIntrf.pDevData;
+
+}
+
+
+#endif // IOSONATA_STM32_L4

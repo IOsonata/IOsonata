@@ -946,9 +946,9 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/uart.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/coredev/uart_stm32l4xx.cpp</name>
+			<name>src/coredev/uart_stm32.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/src/uart_stm32l4xx.cpp</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/ARM/ST/src/uart_stm32.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/display/display.cpp</name>
