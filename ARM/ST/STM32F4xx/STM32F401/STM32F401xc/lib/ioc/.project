@@ -235,5 +235,6 @@
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/ARM/src/iatomic.c</locationURI>
 		</link>
+			<link><name>include/iopinctrl.h</name><type>1</type><locationURI>PARENT-6-PROJECT_LOC/include/iopinctrl.h</locationURI></link>
 	</linkedResources>
 </projectDescription>
