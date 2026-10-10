@@ -132,7 +132,12 @@ def main():
         prior_received = 0
 
         while not stop.is_set():
-            data = rx.read(args.window)
+            # Read data already available without waiting for a full window.
+            # The transmit window is also args.window, so requesting that
+            # many bytes causes a timeout-driven send/receive feedback loop
+            # whenever fewer bytes are outstanding.
+            ready = rx.in_waiting
+            data = rx.read(min(ready, args.window) if ready else 1)
             now = time.perf_counter()
             if data:
                 with condition:
