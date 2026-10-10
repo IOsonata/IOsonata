@@ -61,21 +61,8 @@ static int Stm32UartRxFifoRead(UARTDEV *pDev, uint8_t *pBuff, int Bufflen)
 }
 
 
+// STM32 UART types and module state.
 #if defined(IOSONATA_STM32_F0)
-
-#include "istddef.h"
-#include "iopinctrl.h"
-#include "coredev/uart.h"
-#include "idelay.h"
-#include "coredev/interrupt.h"
-#include "coredev/system_core_clock.h"
-
-
-#define STM32F0X_UART_HWFIFO_SIZE		6
-#define STM32F0X_UART_RXTIMEOUT			15
-#define STM32F0X_UART_BUFF_SIZE			16
-#define STM32F0X_UART_CFIFO_SIZE		CFIFO_MEMSIZE(STM32F0X_UART_BUFF_SIZE)
-
 #pragma pack(push, 4)
 // Device driver data require by low level functions
 typedef struct _STM32F0X_UART_Dev {
@@ -148,6 +135,76 @@ static STM32F0X_UARTDEV s_Stm32f03xUartDev[] = {
 };
 
 static const int s_NbUartDev = sizeof(s_Stm32f03xUartDev) / sizeof(STM32F0X_UARTDEV);
+
+
+#elif defined(IOSONATA_STM32_L4)
+#pragma pack(push, 4)
+// Device driver data require by low level functions
+typedef struct _STM32L4X_UART_Dev {
+	int DevNo;				// UART interface number
+	USART_TypeDef *pReg;	// UART registers
+	UARTDev_t	*pUartDev;		// Pointer to generic UART dev. data
+	uint32_t RxDropCnt;
+	uint32_t RxTimeoutCnt;
+	uint32_t ErrCnt;
+	const IOPinCfg_t *pIOPinMap;
+	int NbPins;
+	uint8_t TxDmaCache[STM32L4X_UART_BUFF_SIZE];
+	uint8_t RxFifoMem[STM32L4X_UART_CFIFO_SIZE];
+	uint8_t TxFifoMem[STM32L4X_UART_CFIFO_SIZE];
+	uint32_t ErrFlag;
+} STM32L4X_UARTDEV;
+
+#pragma pack(pop)
+
+static uint32_t s_FclkFreq = SystemCoreClock;		// FCLK frequency in Hz
+
+static STM32L4X_UARTDEV s_Stm32l4xUartDev[] = {
+	{
+		.DevNo = 0,
+		.pReg = LPUART1,
+	},
+	{
+		.DevNo = 1,
+		.pReg = USART1,
+	},
+	{
+		.DevNo = 2,
+		.pReg = USART2,
+	},
+	{
+		.DevNo = 3,
+		.pReg = USART3,
+	},
+	{
+		.DevNo = 4,
+		.pReg = UART4,
+	},
+	{
+		.DevNo = 5,
+		.pReg = UART5,
+	},
+};
+
+static const int s_NbUartDev = sizeof(s_Stm32l4xUartDev) / sizeof(STM32L4X_UARTDEV);
+
+
+#endif
+
+#if defined(IOSONATA_STM32_F0)
+
+#include "istddef.h"
+#include "iopinctrl.h"
+#include "coredev/uart.h"
+#include "idelay.h"
+#include "coredev/interrupt.h"
+#include "coredev/system_core_clock.h"
+
+
+#define STM32F0X_UART_HWFIFO_SIZE		6
+#define STM32F0X_UART_RXTIMEOUT			15
+#define STM32F0X_UART_BUFF_SIZE			16
+#define STM32F0X_UART_CFIFO_SIZE		CFIFO_MEMSIZE(STM32F0X_UART_BUFF_SIZE)
 
 UARTDEV const *UARTGetInstance(int DevNo)
 {
@@ -927,56 +984,6 @@ void UARTSetCtrlLineState(UARTDEV * const pDev, uint32_t LineState)
 #define STM32L4X_UART_RXTIMEOUT			15
 #define STM32L4X_UART_BUFF_SIZE			(4 * STM32L4X_UART_HWFIFO_SIZE)
 #define STM32L4X_UART_CFIFO_SIZE		CFIFO_MEMSIZE(STM32L4X_UART_BUFF_SIZE)
-
-#pragma pack(push, 4)
-// Device driver data require by low level functions
-typedef struct _STM32L4X_UART_Dev {
-	int DevNo;				// UART interface number
-	USART_TypeDef *pReg;	// UART registers
-	UARTDev_t	*pUartDev;		// Pointer to generic UART dev. data
-	uint32_t RxDropCnt;
-	uint32_t RxTimeoutCnt;
-	uint32_t ErrCnt;
-	const IOPinCfg_t *pIOPinMap;
-	int NbPins;
-	uint8_t TxDmaCache[STM32L4X_UART_BUFF_SIZE];
-	uint8_t RxFifoMem[STM32L4X_UART_CFIFO_SIZE];
-	uint8_t TxFifoMem[STM32L4X_UART_CFIFO_SIZE];
-	uint32_t ErrFlag;
-} STM32L4X_UARTDEV;
-
-#pragma pack(pop)
-
-static uint32_t s_FclkFreq = SystemCoreClock;		// FCLK frequency in Hz
-
-static STM32L4X_UARTDEV s_Stm32l4xUartDev[] = {
-	{
-		.DevNo = 0,
-		.pReg = LPUART1,
-	},
-	{
-		.DevNo = 1,
-		.pReg = USART1,
-	},
-	{
-		.DevNo = 2,
-		.pReg = USART2,
-	},
-	{
-		.DevNo = 3,
-		.pReg = USART3,
-	},
-	{
-		.DevNo = 4,
-		.pReg = UART4,
-	},
-	{
-		.DevNo = 5,
-		.pReg = UART5,
-	},
-};
-
-static const int s_NbUartDev = sizeof(s_Stm32l4xUartDev) / sizeof(STM32L4X_UARTDEV);
 
 UARTDev_t const *UARTGetInstance(int DevNo)
 {
