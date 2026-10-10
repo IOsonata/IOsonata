@@ -125,11 +125,6 @@ int main()
 	g_UartInitOk = g_Uart.Init(g_UartCfg);
 #endif
 	if (!g_UartInitOk) return 1;
-#ifdef DEMO_C
-	UARTprintf(&g_UartDev, "UART Loopback Test\r\n");
-#else
-	g_Uart.printf("UART Loopback Test\r\n");
-#endif
 
 	int pending = 0;
 	int offset = 0;
