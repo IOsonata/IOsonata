@@ -231,6 +231,26 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/stddev.h</locationURI>
 		</link>
 		<link>
+			<name>include/stm32wba65xx.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/include/stm32wba65xx.h</locationURI>
+		</link>
+		<link>
+			<name>include/stm32wba6mxx.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/include/stm32wba6mxx.h</locationURI>
+		</link>
+		<link>
+			<name>include/stm32wbaxx.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/include/stm32wbaxx.h</locationURI>
+		</link>
+		<link>
+			<name>include/stm32wbaxx_hal_conf.h</name>
+			<type>1</type>
+			<locationURI>PARENT-2-PROJECT_LOC/include/stm32wbaxx_hal_conf.h</locationURI>
+		</link>
+		<link>
 			<name>include/storage</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -279,11 +299,6 @@
 			<name>src/CppRuntimeOverload.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/CppRuntimeOverload.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/ResetEntry.c</name>
-			<type>1</type>
-			<locationURI>PARENT-5-PROJECT_LOC/src/ResetEntry.c</locationURI>
 		</link>
 		<link>
 			<name>src/app_evt_handler.cpp</name>
@@ -391,11 +406,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/intelhex.c</locationURI>
 		</link>
 		<link>
-			<name>src/iopincfg_stm32wbaxx.c</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/src/iopincfg_stm32wbaxx.c</locationURI>
-		</link>
-		<link>
 			<name>src/iosonata_logo.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/iosonata_logo.c</locationURI>
@@ -491,19 +501,19 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/syslog.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/sysstatus.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/sysstatus.c</locationURI>
+		</link>
+		<link>
+			<name>src/sysstatus_impl.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/sysstatus_impl.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/system_stm32wbaxx.c</name>
 			<type>1</type>
 			<locationURI>PARENT-3-PROJECT_LOC/src/system_stm32wbaxx.c</locationURI>
-		</link>
-		<link>
-			<name>src/timer.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/timer.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/uart.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/uart.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/uart_retarget.c</name>
@@ -776,11 +786,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/spi_soft.h</locationURI>
 		</link>
 		<link>
-			<name>include/coredev/stm32wbaxx.h</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/include/stm32wbaxx.h</locationURI>
-		</link>
-		<link>
 			<name>include/coredev/system_core_clock.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/system_core_clock.h</locationURI>
@@ -1039,6 +1044,11 @@
 			<name>include/motion/mot_icm456x.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/motion/mot_icm456x.h</locationURI>
+		</link>
+		<link>
+			<name>include/motion/mot_invn_icm20948.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/motion/mot_invn_icm20948.h</locationURI>
 		</link>
 		<link>
 			<name>include/motion/mot_mpu9250.h</name>
@@ -1719,21 +1729,6 @@
 			<name>src/crypto/ba414ep.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/ba414ep.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/crypto/crypto-caps.md</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto-caps.md</locationURI>
-		</link>
-		<link>
-			<name>src/crypto/crypto-engine.md</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto-engine.md</locationURI>
-		</link>
-		<link>
-			<name>src/crypto/crypto_arch_design_note.md</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_arch_design_note.md</locationURI>
 		</link>
 		<link>
 			<name>src/crypto/crypto_p256.cpp</name>

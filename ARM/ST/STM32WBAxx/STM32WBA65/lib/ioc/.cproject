@@ -130,8 +130,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="include/usb"/>
-						<entry excluding="bluetooth/bt_smp_bond_stm32wba.cpp|bluetooth/bt_scan_stm32wba.cpp|bluetooth/bt_pds_stm32wba.cpp|bluetooth/bt_gatt_stm32wba.cpp|bluetooth/bt_gap_stm32wba.cpp|bluetooth/bt_app_stm32wba.cpp|bluetooth/bt_adv_stm32wba.cpp|bluetooth/bt_hci_usb.cpp|usb" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="src"/>
+						<entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -267,8 +266,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="include/usb"/>
-						<entry excluding="bluetooth/bt_smp_bond_stm32wba.cpp|bluetooth/bt_scan_stm32wba.cpp|bluetooth/bt_pds_stm32wba.cpp|bluetooth/bt_gatt_stm32wba.cpp|bluetooth/bt_gap_stm32wba.cpp|bluetooth/bt_app_stm32wba.cpp|bluetooth/bt_adv_stm32wba.cpp|bluetooth/bt_hci_usb.cpp|usb" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="src"/>
+						<entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
