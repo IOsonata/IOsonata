@@ -198,7 +198,8 @@ SOFTWARE.
 // not supply its own
 #define ST_UART_BUFF_SIZE		16
 #define ST_UART_CFIFO_SIZE		CFIFO_MEMSIZE(ST_UART_BUFF_SIZE)
-#define ST_UART_DMA_TX_SIZE		16
+#define ST_UART_DMA_TX_SIZE		128
+#define ST_UART_DMA_CFIFO_SIZE	CFIFO_MEMSIZE(ST_UART_DMA_TX_SIZE)
 
 #pragma pack(push, 4)
 
@@ -220,6 +221,7 @@ typedef struct __Stm32_Uart_Dev {
 	uint32_t TxDmaShift;
 	bool DmaActive;
 	alignas(4) uint8_t TxDmaCache[ST_UART_DMA_TX_SIZE];
+	alignas(4) uint8_t TxDmaFifoMem[ST_UART_DMA_CFIFO_SIZE];
 #endif
 	alignas(4) uint8_t RxFifoMem[ST_UART_CFIFO_SIZE];	//!< Default RX CFIFO memory
 	alignas(4) uint8_t TxFifoMem[ST_UART_CFIFO_SIZE];	//!< Default TX CFIFO memory
@@ -1018,6 +1020,13 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	{
 		pDev->hTxFifo = CFifoInit(pCfg->pTxMem, pCfg->TxMemSize, 1, pCfg->bFifoBlocking);
 	}
+#if defined(STM32F030x8)
+	else if (pCfg->bDMAMode)
+	{
+		pDev->hTxFifo = CFifoInit(dev->TxDmaFifoMem, ST_UART_DMA_CFIFO_SIZE, 1,
+								 pCfg->bFifoBlocking);
+	}
+#endif
 	else
 	{
 		pDev->hTxFifo = CFifoInit(dev->TxFifoMem, ST_UART_CFIFO_SIZE, 1, pCfg->bFifoBlocking);
