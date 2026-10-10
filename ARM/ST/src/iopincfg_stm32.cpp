@@ -4,9 +4,7 @@
  */
 #include "iopinctrl.h"
 
-extern "C" bool Stm32GpioEnableClock(int port, int pin, int op, IOPINDIR dir);
-
-extern "C" void IOPinConfig(int port, int pin, int op, IOPINDIR dir,
+void IOPinConfig(int port, int pin, int op, IOPINDIR dir,
                             IOPINRES resistor, IOPINTYPE type)
 {
     GPIO_TypeDef *gpio = Stm32Gpio(port);
@@ -32,7 +30,7 @@ extern "C" void IOPinConfig(int port, int pin, int op, IOPINDIR dir,
     gpio->PUPDR = (gpio->PUPDR & ~(3UL << shift)) | (pull << shift);
     gpio->MODER = (gpio->MODER & ~(3UL << shift)) | (mode << shift);
 }
-extern "C" void IOPinDisable(int port, int pin)
+void IOPinDisable(int port, int pin)
 {
     GPIO_TypeDef *gpio = Stm32Gpio(port);
     if (!gpio || (unsigned)pin >= 16U) return;
@@ -40,11 +38,11 @@ extern "C" void IOPinDisable(int port, int pin)
     gpio->MODER |= 3UL << shift;
     gpio->PUPDR &= ~(3UL << shift);
 }
-extern "C" void IOPinSetStrength(int port, int pin, IOPINSTRENGTH strength)
+void IOPinSetStrength(int port, int pin, IOPINSTRENGTH strength)
 {
     (void)port; (void)pin; (void)strength;
 }
-extern "C" void IOPinSetSpeed(int port, int pin, IOPINSPEED speed)
+void IOPinSetSpeed(int port, int pin, IOPINSPEED speed)
 {
     GPIO_TypeDef *gpio = Stm32Gpio(port);
     if (!gpio || (unsigned)pin >= 16U) return;
