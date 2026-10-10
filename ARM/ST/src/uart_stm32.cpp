@@ -878,13 +878,11 @@ static int Stm32UartTxData(DevIntrf_t * const pDev, uint8_t const *pData, int Da
 
 	// One FIFO enqueue attempt: do not busy-retry with RX IRQs masked.
 	uint32_t state = DisableInterrupt();
+	if ((reg->CR1 & USART_CR1_UE) == 0)
 	{
-
-		if ((reg->CR1 & USART_CR1_UE) == 0)
-		{
-			EnableInterrupt(state);
-			break;
-		}
+		EnableInterrupt(state);
+		return 0;
+	}
 
 		while (Datalen > 0)
 		{
@@ -927,7 +925,6 @@ static int Stm32UartTxData(DevIntrf_t * const pDev, uint8_t const *pData, int Da
 			reg->CR1 |= ST_USART_CR1_TXEIE;
 		}
 
-	}
 	EnableInterrupt(state);
 
 	return cnt;
