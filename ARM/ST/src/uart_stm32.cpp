@@ -220,6 +220,7 @@ typedef struct __Stm32_Uart_Dev {
 	IRQn_Type TxDmaIrq;
 	uint32_t TxDmaShift;
 	bool DmaActive;
+	bool DmaSeedPending;			//!< Initial UART frame awaiting TC before DMA starts
 	alignas(4) uint8_t TxDmaCache[ST_UART_DMA_TX_SIZE];
 	alignas(4) uint8_t TxDmaFifoMem[ST_UART_DMA_CFIFO_SIZE];
 #endif
@@ -419,6 +420,8 @@ static void Stm32UartDmaStop(Stm32UartDev_t * const pDev)
 	pDev->pTxDma->CCR = 0;
 	DMA1->IFCR = DMA_IFCR_CGIF1 << pDev->TxDmaShift;
 	pDev->DmaActive = false;
+	pDev->DmaSeedPending = false;
+	pDev->pReg->CR1 &= ~USART_CR1_TCIE;
 }
 #endif
 
@@ -442,6 +445,27 @@ static void Stm32UartIrqHandler(USART_TypeDef * const pReg)
 
 	uint32_t iflag = ST_USART_ISR(pReg);
 	uint32_t cr1 = pReg->CR1;
+
+#if defined(STM32F030x8)
+	// In DMA mode the first byte uses TDR. During its frame, the producer
+	// fills the FIFO; TC then launches DMA for the accumulated bytes.
+	if (dev->DevIntrf.bDma && (cr1 & USART_CR1_TCIE) &&
+		(iflag & ST_USART_ISR_TC))
+	{
+		pReg->CR1 &= ~USART_CR1_TCIE;
+		pReg->ICR = USART_ICR_TCCF;
+		for (int i = 0; i < s_NbUartDev; i++)
+		{
+			Stm32UartDev_t *pDmaDev = &s_Stm32UartDev[i];
+			if (pDmaDev->pReg == pReg && pDmaDev->DmaSeedPending)
+			{
+				pDmaDev->DmaSeedPending = false;
+				Stm32UartDmaStart(pDmaDev);
+				break;
+			}
+		}
+	}
+#endif
 
 	// RX errors: clear only the error flags seen, then drain RDR to release
 	// RXNE and let the line recover.
@@ -755,7 +779,23 @@ static int Stm32UartTxData(DevIntrf_t * const pDev, uint8_t const *pData, int Da
 			Datalen -= len;
 			pData += len;
 		}
-		Stm32UartDmaStart(dev);
+		if (pDev->bIntEn && !dev->DmaActive && !dev->DmaSeedPending)
+		{
+			// Use one UART frame to aggregate the next DMA batch.
+			uint8_t *p = CFifoGet(dev->pUartDev->hTxFifo);
+			if (p != NULL)
+			{
+				dev->DmaSeedPending = true;
+				dev->pUartDev->bTxReady = false;
+				reg->ICR = USART_ICR_TCCF;
+				reg->CR1 |= USART_CR1_TCIE;
+				ST_USART_TDR(reg) = *p;
+			}
+		}
+		else if (!pDev->bIntEn)
+		{
+			Stm32UartDmaStart(dev);
+		}
 		EnableInterrupt(state);
 		return cnt;
 	}
@@ -1148,6 +1188,7 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 		}
 		dev->pTxDma->CCR = dmaCcr;
 		dev->DmaActive = false;
+		dev->DmaSeedPending = false;
 		cr3 |= USART_CR3_DMAT;
 		if (pCfg->bIntMode)
 		{
