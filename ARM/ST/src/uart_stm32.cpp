@@ -413,23 +413,9 @@ static int STM32F03xUARTTxData(DevIntrf_t * const pDev, uint8_t const *pData, in
 
 	if (!pDev->bIntEn)
 	{
-		// In polling mode wait for TDR availability rather than returning
-		// immediately between consecutive bytes. Preserve partial writes on
-		// a stalled peripheral and never overwrite TDR while TXE is clear.
-		while (cnt < Datalen)
+		// A partial return lets the caller retry without an unbounded wait.
+		while (cnt < Datalen && (dev->pReg->ISR & USART_ISR_TXE))
 		{
-			int retry = pDev->MaxRetry;
-			while ((dev->pReg->ISR & USART_ISR_TXE) == 0U && retry-- > 0)
-			{
-				if ((dev->pReg->CR1 & USART_CR1_UE) == 0U)
-				{
-					return cnt;
-				}
-			}
-			if ((dev->pReg->ISR & USART_ISR_TXE) == 0U)
-			{
-				break;
-			}
 			dev->pReg->TDR = pData[cnt++];
 		}
 		return cnt;
