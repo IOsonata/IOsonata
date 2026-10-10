@@ -1,12 +1,3 @@
-extern "C" bool Stm32GpioEnableClock(int port, int pin, int op, IOPINDIR dir)
-{
-    (void)pin; (void)op; (void)dir;
-    uint32_t mask = Stm32WbaGpioClockMask(port);
-    if (!mask || !Stm32Gpio(port)) return false;
-    RCC->AHB2ENR |= mask;
-    (void)RCC->AHB2ENR;
-    return true;
-}
 
 /* STM32WBA GPIO configuration, shared by peripheral-compatible WBA targets. */
 #include "iopinctrl.h"
@@ -35,6 +26,16 @@ static uint32_t Stm32WbaGpioClockMask(int port)
 #endif
         default: return 0U;
     }
+}
+
+bool Stm32GpioEnableClock(int port, int pin, int op, IOPINDIR dir)
+{
+    (void)pin; (void)op; (void)dir;
+    uint32_t mask = Stm32WbaGpioClockMask(port);
+    if (!mask || !Stm32Gpio(port)) return false;
+    RCC->AHB2ENR |= mask;
+    (void)RCC->AHB2ENR;
+    return true;
 }
 
 void IOPinDisableInterrupt(int intNo)
