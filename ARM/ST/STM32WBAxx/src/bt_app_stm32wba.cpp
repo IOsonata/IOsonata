@@ -63,7 +63,6 @@ SOFTWARE.
 // STM32CubeWBA BLE middleware. Names are stable across 1.3.x / 1.4.x.
 #include "ble_types.h"
 #include "ble_std.h"
-#include "ble.h"
 #include "ble_gap_aci.h"
 #include "ble_gatt_aci.h"
 #include "ble_hal_aci.h"
