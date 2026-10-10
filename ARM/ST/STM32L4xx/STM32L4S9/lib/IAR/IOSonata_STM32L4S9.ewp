@@ -2428,7 +2428,7 @@
                 <name>$PROJ_DIR$\..\..\..\..\..\..\src\coredev\uart.c</name>
             </file>
             <file>
-                <name>$PROJ_DIR$\..\..\..\src\uart_stm32l4xx.cpp</name>
+                <name>$PROJ_DIR$\..\..\..\..\src\uart_stm32.cpp</name>
             </file>
         </group>
         <group>
