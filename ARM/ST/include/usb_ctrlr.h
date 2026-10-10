@@ -35,6 +35,21 @@ enum {
     USB_ISO_EPIN_MASK_0 = 0x01FEU,
     USB_ISO_EPOUT_MASK_0 = 0x01FEU,
 };
+#elif defined(STM32F401xC) || defined(STM32F401xE)
+/* STM32F401: USB OTG FS, four endpoint numbers including EP0. */
+enum {
+    USB_CTRLR_CNT = 1,
+    USB_HIGHSPEED_CAPABLE_0 = 0,
+    USB_EPIN_CNT_0 = 4,
+    USB_EPOUT_CNT_0 = 4,
+    USB_CTRLR0_CONTROL_PKT_LEN_MAX = 64,
+    USB_CTRLR0_BULK_PKT_LEN_MAX = 64,
+    USB_CTRLR0_INT_PKT_LEN_MAX = 64,
+    USB_CTRLR0_ISO_PKT_LEN_MAX = 1023,
+    USB_ISO_SUPPORTED_0 = 1,
+    USB_ISO_EPIN_MASK_0 = 0x000EU,
+    USB_ISO_EPOUT_MASK_0 = 0x000EU,
+};
 #elif defined(STM32L476xx) || defined(STM32L496xx)
 /* STM32L476/L496: USB OTG FS, six bidirectional endpoint numbers.
  * USB endpoint size constants represent full-speed packet limits.
