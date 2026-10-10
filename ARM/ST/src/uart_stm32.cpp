@@ -88,6 +88,7 @@ SOFTWARE.
 #define ST_USART_ISR_ORE				USART_ISR_ORE
 #ifdef USART_ISR_TXE
 #define ST_USART_ISR_TXE				USART_ISR_TXE
+#define ST_USART_ISR_TC				USART_ISR_TC
 #define ST_USART_ISR_RXNE				USART_ISR_RXNE
 #define ST_USART_CR1_TXEIE				USART_CR1_TXEIE
 #define ST_USART_CR1_RXNEIE				USART_CR1_RXNEIE
@@ -95,6 +96,7 @@ SOFTWARE.
 // Hardware FIFO names. With FIFOEN at its reset value, cleared, they are the
 // plain TXE and RXNE flags.
 #define ST_USART_ISR_TXE				USART_ISR_TXE_TXFNF
+#define ST_USART_ISR_TC				USART_ISR_TC
 #define ST_USART_ISR_RXNE				USART_ISR_RXNE_RXFNE
 #define ST_USART_CR1_TXEIE				USART_CR1_TXEIE_TXFNFIE
 #define ST_USART_CR1_RXNEIE				USART_CR1_RXNEIE_RXFNEIE
@@ -116,6 +118,7 @@ SOFTWARE.
 #define ST_USART_ISR_NE					USART_SR_NE
 #define ST_USART_ISR_ORE				USART_SR_ORE
 #define ST_USART_ISR_TXE				USART_SR_TXE
+#define ST_USART_ISR_TC				USART_SR_TC
 #define ST_USART_ISR_RXNE				USART_SR_RXNE
 #define ST_USART_CR1_TXEIE				USART_CR1_TXEIE
 #define ST_USART_CR1_RXNEIE				USART_CR1_RXNEIE
@@ -209,6 +212,7 @@ typedef struct __Stm32_Uart_Dev {
 	UARTDev_t *pUartDev;			//!< Pointer to generic UART dev. data
 	const IOPinCfg_t *pIOPinMap;	//!< Pins configured again by Enable
 	int NbIOPins;					//!< Number of pins in pIOPinMap
+	bool PollTxStarted;				//!< Polling frame already started
 	alignas(4) uint8_t RxFifoMem[ST_UART_CFIFO_SIZE];	//!< Default RX CFIFO memory
 	alignas(4) uint8_t TxFifoMem[ST_UART_CFIFO_SIZE];	//!< Default TX CFIFO memory
 } Stm32UartDev_t;
@@ -625,12 +629,18 @@ static int Stm32UartTxData(DevIntrf_t * const pDev, uint8_t const *pData, int Da
 
 	if (!pDev->bIntEn)
 	{
-		// TDR holds the next frame while the shift register sends the
-		// current one. TXE set means TDR is free. Write only while it is
-		// free and return the count, the caller retries the rest.
-		while (cnt < Datalen && (ST_USART_ISR(reg) & ST_USART_ISR_TXE))
+		// The foreground producer may re-enter before TXE reflects a TDR
+		// write. After the first byte, gate each write on the previous
+		// frame's TC flag. This avoids overwriting data in fast builds.
+		while (cnt < Datalen)
 		{
+			uint32_t ready = dev->PollTxStarted ? ST_USART_ISR_TC : ST_USART_ISR_TXE;
+			if ((ST_USART_ISR(reg) & ready) == 0U)
+			{
+				break;
+			}
 			ST_USART_TDR(reg) = pData[cnt++];
+			dev->PollTxStarted = true;
 		}
 
 		return cnt;
@@ -733,6 +743,7 @@ static void Stm32UartEnable(DevIntrf_t * const pDev)
 
 	CFifoFlush(dev->pUartDev->hTxFifo);
 
+	dev->PollTxStarted = false;
 	dev->pUartDev->bTxReady = true;
 
 	*dev->pRccEnReg |= dev->RccMask;
@@ -754,6 +765,7 @@ static void Stm32UartReset(DevIntrf_t * const pDev)
 	*dev->pRccRstReg |= dev->RccMask;
 	(void)*dev->pRccRstReg;
 	*dev->pRccRstReg &= ~dev->RccMask;
+	dev->PollTxStarted = false;
 
 	EnableInterrupt(state);
 }
