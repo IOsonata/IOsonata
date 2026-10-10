@@ -489,6 +489,15 @@ bool AppCheckStatus(void)
 		SysLogPrintf(SysLogGet(), "Pairing numeric comparison %s (hdl=%u)\r\n",
 				decision == 1 ? "accepted" : "rejected", (unsigned)conn);
 		BtAppPairDecision(conn, decision == 1);
+#ifdef BLE_SECURITY_DISCONNECT_ON_REJECT
+		// S132 may defer its SMP Pairing Failed until the central transmits
+		// DHKey Check. Terminate this test connection on explicit user rejection
+		// instead of leaving the central's confirmation UI to time out.
+		if (decision == 2)
+		{
+			BtAppDisconnectConn(conn);
+		}
+#endif
 	}
 #endif
 
