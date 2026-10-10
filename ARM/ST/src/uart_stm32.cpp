@@ -30,7 +30,8 @@
 		bIntMode false : polling, TxData and RxData access the data register
 		bIntMode true  : USART interrupts drain the TX CFIFO and fill the
 		                 RX CFIFO
-		bDMAMode true  : STM32F030x8 normal-mode TX DMA; RX remains CPU driven
+		bDMAMode true  : STM32F030x8 only, TX DMA in normal mode, RX DMA in
+		                 circular mode
 
 		Not mapped yet: the RCC names of WBA.
 
@@ -524,10 +525,10 @@ static void Stm32UartIrqHandler(USART_TypeDef * const pReg)
 	}
 #endif
 
-
-
-	// RX errors: clear only the error flags seen, then drain RDR to release
-	// RXNE and let the line recover.
+	// RX errors: clear only the error flags seen. PE, FE and NE belong to the
+	// character in RDR, which is read and dropped. ORE means the character
+	// after it was lost, the one in RDR is valid and is read below. With RX
+	// DMA, RXNEIE is off and RDR is left to the DMA.
 	if (iflag & ST_USART_ISR_RXERR)
 	{
 		if (iflag & ST_USART_ISR_ORE)
@@ -543,11 +544,15 @@ static void Stm32UartIrqHandler(USART_TypeDef * const pReg)
 			dev->FramErrCnt++;
 		}
 		ST_USART_RXERR_CLEAR(pReg, iflag);
-		if (iflag & ST_USART_ISR_RXNE)
+		if ((iflag & (ST_USART_ISR_PE | ST_USART_ISR_FE | ST_USART_ISR_NE)) &&
+			(cr1 & ST_USART_CR1_RXNEIE))
 		{
-			(void)ST_USART_RDR(pReg);
+			if (iflag & ST_USART_ISR_RXNE)
+			{
+				(void)ST_USART_RDR(pReg);
+			}
+			iflag &= ~ST_USART_ISR_RXNE;
 		}
-		iflag &= ~ST_USART_ISR_RXNE;
 	}
 
 	if ((iflag & ST_USART_ISR_RXNE) && (cr1 & ST_USART_CR1_RXNEIE))
@@ -759,11 +764,15 @@ static int Stm32UartRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int Bufflen)
 					dev->pUartDev->FramErrCnt++;
 				}
 				ST_USART_RXERR_CLEAR(reg, flags);
-				if (flags & ST_USART_ISR_RXNE)
+				// The character in RDR is valid after an overrun alone
+				if (flags & (ST_USART_ISR_PE | ST_USART_ISR_FE | ST_USART_ISR_NE))
 				{
-					(void)ST_USART_RDR(reg);
+					if (flags & ST_USART_ISR_RXNE)
+					{
+						(void)ST_USART_RDR(reg);
+					}
+					break;
 				}
-				break;
 			}
 			if ((flags & ST_USART_ISR_RXNE) == 0)
 			{
@@ -775,20 +784,47 @@ static int Stm32UartRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int Bufflen)
 		return cnt;
 	}
 
-	uint32_t state = DisableInterrupt();
+	hCFifo_t fifo = dev->pUartDev->hRxFifo;
+	uint32_t state;
 
-	while (cnt < Bufflen)
+	if (CFifoIsBlocking(fifo))
 	{
-		int len = Bufflen - cnt;
-		uint8_t *p = CFifoGetMultiple(dev->pUartDev->hRxFifo, &len);
-		if (p == NULL)
+		// The interrupt is the only writer and a blocking FIFO does not
+		// overwrite unread bytes. Copy with interrupts enabled, then release
+		// the bytes. RDR holds one character, so the interrupt must not wait
+		// for the copy.
+		while (cnt < Bufflen)
 		{
-			break;
+			int len = Bufflen - cnt;
+			uint8_t *p = CFifoPeekMultiple(fifo, &len);
+			if (p == NULL)
+			{
+				break;
+			}
+			memcpy(&pBuff[cnt], p, len);
+			CFifoGetMultiple(fifo, &len);
+			cnt += len;
 		}
-		memcpy(&pBuff[cnt], p, len);
-		cnt += len;
+		state = DisableInterrupt();
 	}
-	dev->pUartDev->bRxReady = CFifoUsed(dev->pUartDev->hRxFifo) != 0;
+	else
+	{
+		// A full non-blocking FIFO drops its oldest bytes from the interrupt,
+		// so the bytes are copied before the interrupt can run.
+		state = DisableInterrupt();
+		while (cnt < Bufflen)
+		{
+			int len = Bufflen - cnt;
+			uint8_t *p = CFifoGetMultiple(fifo, &len);
+			if (p == NULL)
+			{
+				break;
+			}
+			memcpy(&pBuff[cnt], p, len);
+			cnt += len;
+		}
+	}
+	dev->pUartDev->bRxReady = CFifoUsed(fifo) != 0;
 
 	EnableInterrupt(state);
 
@@ -876,19 +912,41 @@ static int Stm32UartTxData(DevIntrf_t * const pDev, uint8_t const *pData, int Da
 		return cnt;
 	}
 
-	// One FIFO enqueue attempt: do not busy-retry with RX IRQs masked.
-	uint32_t state = DisableInterrupt();
-	if ((reg->CR1 & USART_CR1_UE) == 0)
-	{
-		EnableInterrupt(state);
-		return 0;
-	}
+	// One FIFO enqueue attempt, the caller retries.
+	hCFifo_t fifo = dev->pUartDev->hTxFifo;
+	uint32_t state;
 
+	if (Datalen > 1 && CFifoIsBlocking(fifo))
+	{
+		// A multi-byte copy into a blocking FIFO runs with interrupts enabled
+		// so RX is not delayed. Reserved bytes are not seen by the interrupt
+		// until CFifoPutMultiple publishes them.
 		while (Datalen > 0)
 		{
 			int l = Datalen;
-			uint8_t *p = l == 1 ? CFifoPut(dev->pUartDev->hTxFifo) :
-						 CFifoPutMultiple(dev->pUartDev->hTxFifo, &l);
+			uint8_t *p = CFifoResvMultiple(fifo, &l);
+			if (p == NULL)
+			{
+				break;
+			}
+			memcpy(p, pData, l);
+			CFifoPutMultiple(fifo, &l);
+			Datalen -= l;
+			pData += l;
+			cnt += l;
+		}
+		state = DisableInterrupt();
+	}
+	else
+	{
+		// One byte is stored directly. A non-blocking FIFO may drop queued
+		// bytes to make room and publishes them at once, so it is filled with
+		// interrupts masked.
+		state = DisableInterrupt();
+		while (Datalen > 0)
+		{
+			int l = Datalen;
+			uint8_t *p = l == 1 ? CFifoPut(fifo) : CFifoPutMultiple(fifo, &l);
 			if (p == NULL)
 			{
 				break;
@@ -905,12 +963,15 @@ static int Stm32UartTxData(DevIntrf_t * const pDev, uint8_t const *pData, int Da
 			pData += l;
 			cnt += l;
 		}
+	}
 
-		// Start TX inside the critical section so the interrupt cannot fetch
-		// the same byte again and overwrite TDR.
+	// Start TX inside the critical section so the interrupt cannot fetch
+	// the same byte again and overwrite TDR.
+	if ((reg->CR1 & USART_CR1_UE) != 0)
+	{
 		if (dev->pUartDev->bTxReady && (ST_USART_ISR(reg) & ST_USART_ISR_TXE))
 		{
-			uint8_t *p = CFifoGet(dev->pUartDev->hTxFifo);
+			uint8_t *p = CFifoGet(fifo);
 			if (p != NULL)
 			{
 				dev->pUartDev->bTxReady = false;
@@ -919,11 +980,12 @@ static int Stm32UartTxData(DevIntrf_t * const pDev, uint8_t const *pData, int Da
 			}
 		}
 
-		if (CFifoUsed(dev->pUartDev->hTxFifo) > 0)
+		if (CFifoUsed(fifo) > 0)
 		{
 			dev->pUartDev->bTxReady = false;
 			reg->CR1 |= ST_USART_CR1_TXEIE;
 		}
+	}
 
 	EnableInterrupt(state);
 
@@ -1037,8 +1099,8 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 		return false;
 	}
 
-	// Select polling, USART interrupt or hardware TX DMA transport.
-	// DMA is supported only on mapped F030x8 TX channels.
+	// Select polling, USART interrupt or DMA. DMA is supported only on the
+	// F030x8 instances with mapped DMA channels.
 	if ((pCfg->bDMAMode && !pCfg->bFifoBlocking) ||
 		pCfg->bIrDAMode || pCfg->Mode != UART_MODE_UART ||
 		(pCfg->FlowControl != UART_FLWCTRL_NONE && pCfg->FlowControl != UART_FLWCTRL_HW) ||
