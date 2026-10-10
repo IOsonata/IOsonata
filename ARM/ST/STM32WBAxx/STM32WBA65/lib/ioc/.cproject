@@ -8,6 +8,7 @@
 						<entry flags="VALUE_WORKSPACE_PATH" kind="includePath" name="/IOsonata_STM32WBA65/include"/>
 						<entry flags="VALUE_WORKSPACE_PATH" kind="includePath" name="/IOsonata_STM32WBA65/include/ARM"/>
 						<entry flags="VALUE_WORKSPACE_PATH" kind="includePath" name="/IOsonata_STM32WBA65/include/CMSIS"/>
+						<entry flags="VALUE_WORKSPACE_PATH" kind="includePath" name="/IOsonata_STM32WBA65"/>
 						<entry flags="VALUE_WORKSPACE_PATH" kind="libraryPath" name="/IOsonata_STM32WBA65/Debug"/>
 						<entry flags="RESOLVED" kind="libraryFile" name="IOsonata_STM32WBA65" srcPrefixMapping="" srcRootPath=""/>
 					</externalSetting>
@@ -22,77 +23,89 @@
 				</extensions>
 			</storageModule>
 			<storageModule moduleId="cdtBuildSystem" version="4.0.0">
-				<configuration artifactExtension="a" artifactName="${ProjName}" buildArtefactType="org.eclipse.cdt.build.core.buildArtefactType.staticLib" buildProperties="org.eclipse.cdt.build.core.buildArtefactType=org.eclipse.cdt.build.core.buildArtefactType.staticLib,org.eclipse.cdt.build.core.buildType=org.eclipse.cdt.build.core.buildType.debug" cleanCommand="${cross_rm} -rf" description="Debug STM32WBA65 Cortex-M4F startup library" id="wba65.1" name="Debug" parent="ilg.gnuarmeclipse.managedbuild.cross.config.lib.debug">
+				<configuration artifactExtension="a" artifactName="${ProjName}" buildArtefactType="org.eclipse.cdt.build.core.buildArtefactType.staticLib" buildProperties="org.eclipse.cdt.build.core.buildArtefactType=org.eclipse.cdt.build.core.buildArtefactType.staticLib,org.eclipse.cdt.build.core.buildType=org.eclipse.cdt.build.core.buildType.debug" cleanCommand="${cross_rm} -rf" description="Debug STM32WBA65 Cortex-M4F startup library" id="wba65.1" name="Debug" optionalBuildProperties="org.eclipse.cdt.docker.launcher.containerbuild.property.selectedvolumes=,org.eclipse.cdt.docker.launcher.containerbuild.property.volumes=" parent="ilg.gnuarmeclipse.managedbuild.cross.config.lib.debug">
 					<folderInfo id="wba65.2" name="/" resourcePath="">
 						<toolChain id="wba65.3" name="Arm Cross GCC" superClass="ilg.gnuarmeclipse.managedbuild.cross.toolchain.lib.debug">
-							<option id="wba65.4" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.optimization.level" value="ilg.gnuarmeclipse.managedbuild.cross.option.optimization.level.none" valueType="enumerated"/>
-							<option id="wba65.5" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.optimization.messagelength" value="true" valueType="boolean"/>
-							<option id="wba65.6" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.optimization.signedchar" value="true" valueType="boolean"/>
-							<option id="wba65.7" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.optimization.functionsections" value="true" valueType="boolean"/>
-							<option id="wba65.8" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.optimization.datasections" value="true" valueType="boolean"/>
-							<option id="wba65.9" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.debugging.level" value="ilg.gnuarmeclipse.managedbuild.cross.option.debugging.level.max" valueType="enumerated"/>
-							<option id="wba65.10" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.debugging.format"/>
+							<option id="wba65.4" name="Optimization Level" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.optimization.level" value="ilg.gnuarmeclipse.managedbuild.cross.option.optimization.level.none" valueType="enumerated"/>
+							<option id="wba65.5" name="Message length (-fmessage-length=0)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.optimization.messagelength" value="true" valueType="boolean"/>
+							<option id="wba65.6" name="'char' is signed (-fsigned-char)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.optimization.signedchar" value="true" valueType="boolean"/>
+							<option id="wba65.7" name="Function sections (-ffunction-sections)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.optimization.functionsections" value="true" valueType="boolean"/>
+							<option id="wba65.8" name="Data sections (-fdata-sections)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.optimization.datasections" value="true" valueType="boolean"/>
+							<option id="wba65.9" name="Debug level" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.debugging.level" value="ilg.gnuarmeclipse.managedbuild.cross.option.debugging.level.max" valueType="enumerated"/>
+							<option id="wba65.10" name="Debug format" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.debugging.format"/>
 							<option id="wba65.11" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.toolchain.name" value="GNU Tools for ARM Embedded Processors" valueType="string"/>
 							<option id="wba65.12" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.toolchain.id" value="1287942917" valueType="string"/>
-							<option id="wba65.13" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.architecture" value="ilg.gnuarmeclipse.managedbuild.cross.option.architecture.arm" valueType="enumerated"/>
-							<option id="wba65.14" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.family" value="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.mcpu.cortex-m33" valueType="enumerated"/>
-							<option id="wba65.15" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.instructionset" value="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.instructionset.thumb" valueType="enumerated"/>
-							<option id="wba65.16" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.fpu.abi" value="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.fpu.abi.hard" valueType="enumerated"/>
-							<option id="wba65.17" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.fpu.unit" value="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.fpu.unit.fpv5spd16" valueType="enumerated"/>
-							<option id="wba65.18" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.command.prefix" value="arm-none-eabi-" valueType="string"/>
-							<option id="wba65.19" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.command.c" value="gcc" valueType="string"/>
-							<option id="wba65.20" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.command.cpp" value="g++" valueType="string"/>
-							<option id="wba65.21" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.command.ar" value="ar" valueType="string"/>
-							<option id="wba65.22" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.command.objcopy" value="objcopy" valueType="string"/>
-							<option id="wba65.23" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.command.objdump" value="objdump" valueType="string"/>
-							<option id="wba65.24" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.command.size" value="size" valueType="string"/>
-							<option id="wba65.25" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.command.make" value="make" valueType="string"/>
-							<option id="wba65.26" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.command.rm" value="rm" valueType="string"/>
-							<option id="wba65.27" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.addtools.createflash" value="false" valueType="boolean"/>
-							<option id="wba65.28" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.addtools.printsize" value="true" valueType="boolean"/>
+							<option id="wba65.13" name="Architecture" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.architecture" value="ilg.gnuarmeclipse.managedbuild.cross.option.architecture.arm" valueType="enumerated"/>
+							<option id="wba65.14" name="Arm family (-mcpu)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.family" value="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.mcpu.cortex-m33" valueType="enumerated"/>
+							<option id="wba65.15" name="Instruction set" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.instructionset" value="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.instructionset.thumb" valueType="enumerated"/>
+							<option id="wba65.16" name="Float ABI" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.fpu.abi" value="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.fpu.abi.hard" valueType="enumerated"/>
+							<option id="wba65.17" name="FPU Type" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.fpu.unit" value="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.fpu.unit.fpv5spd16" valueType="enumerated"/>
+							<option id="wba65.18" name="Prefix" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.command.prefix" value="arm-none-eabi-" valueType="string"/>
+							<option id="wba65.19" name="C compiler" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.command.c" value="gcc" valueType="string"/>
+							<option id="wba65.20" name="C++ compiler" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.command.cpp" value="g++" valueType="string"/>
+							<option id="wba65.21" name="Archiver" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.command.ar" value="ar" valueType="string"/>
+							<option id="wba65.22" name="Hex/Bin converter" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.command.objcopy" value="objcopy" valueType="string"/>
+							<option id="wba65.23" name="Listing generator" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.command.objdump" value="objdump" valueType="string"/>
+							<option id="wba65.24" name="Size command" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.command.size" value="size" valueType="string"/>
+							<option id="wba65.25" name="Build command" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.command.make" value="make" valueType="string"/>
+							<option id="wba65.26" name="Remove command" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.command.rm" value="rm" valueType="string"/>
+							<option id="wba65.27" name="Create flash image" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.addtools.createflash" value="false" valueType="boolean"/>
+							<option id="wba65.28" name="Print size" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.addtools.printsize" value="true" valueType="boolean"/>
 							<targetPlatform archList="all" binaryParser="org.eclipse.cdt.core.ELF" id="wba65.29" isAbstract="false" osList="all" superClass="ilg.gnuarmeclipse.managedbuild.cross.targetPlatform"/>
 							<builder buildPath="${workspace_loc:/IOsonata_STM32WBA65}/Debug" id="wba65.30" keepEnvironmentInBuildfile="false" managedBuildOn="true" name="Gnu Make Builder" parallelBuildOn="true" parallelizationNumber="optimal" superClass="ilg.gnuarmeclipse.managedbuild.cross.builder"/>
 							<tool id="wba65.31" name="GNU Arm Cross Assembler" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.assembler">
-								<option id="wba65.32" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.assembler.usepreprocessor" value="true" valueType="boolean"/>
+								<option id="wba65.32" name="Use preprocessor" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.assembler.usepreprocessor" value="true" valueType="boolean"/>
 								<inputType id="wba65.33" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.assembler.input"/>
 							</tool>
 							<tool id="wba65.34" name="GNU Arm Cross C Compiler" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler">
-								<option id="wba65.35" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.include.paths" IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" useByScannerDiscovery="true" valueType="includePath">
+								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="wba65.35" name="Include paths (-I)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.include.paths" useByScannerDiscovery="true" valueType="includePath">
+									<listOptionValue builtIn="false" value="&quot;../../src&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../include&quot;"/>
-                                        <listOptionValue builtIn="false" value="&quot;../../../../../../../external/STM32CubeWBA/Drivers/CMSIS/Device/ST/STM32WBAxx/Include&quot;"/>
-                                        <listOptionValue builtIn="false" value="&quot;../../../../../../../external/STM32CubeWBA/Drivers/CMSIS/Include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../src&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../CMSIS/Core/Include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../CMSIS/Core/Include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../fatfs&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../littlefs&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../micro-ecc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/Fusion&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Drivers/CMSIS/Device/ST/STM32WBAxx/Include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Drivers/STM32WBAxx_HAL_Driver/inc&quot;"/>
 								</option>
-								<option id="wba65.36" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs" IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" useByScannerDiscovery="true" valueType="definedSymbols">
+								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="wba65.36" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs" useByScannerDiscovery="true" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="__PROGRAM_START"/>
 									<listOptionValue builtIn="false" value="STM32WBA65xx"/>
 									<listOptionValue builtIn="false" value="DEBUG"/>
 								</option>
-								<option id="wba65.37" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std" useByScannerDiscovery="true" value="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std.gnu17" valueType="enumerated"/>
+								<option id="wba65.37" name="Language standard" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std" useByScannerDiscovery="true" value="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std.gnu17" valueType="enumerated"/>
 								<inputType id="wba65.38" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input"/>
 							</tool>
 							<tool id="wba65.39" name="GNU Arm Cross C++ Compiler" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.compiler">
-								<option id="wba65.40" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.include.paths" IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" useByScannerDiscovery="true" valueType="includePath">
+								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="wba65.40" name="Include paths (-I)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.include.paths" useByScannerDiscovery="true" valueType="includePath">
+									<listOptionValue builtIn="false" value="&quot;../../src&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../include&quot;"/>
-                                        <listOptionValue builtIn="false" value="&quot;../../../../../../../external/STM32CubeWBA/Drivers/CMSIS/Device/ST/STM32WBAxx/Include&quot;"/>
-                                        <listOptionValue builtIn="false" value="&quot;../../../../../../../external/STM32CubeWBA/Drivers/CMSIS/Include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../src&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../CMSIS/Core/Include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../CMSIS/Core/Include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../fatfs&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../littlefs&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../micro-ecc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/Fusion&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Drivers/CMSIS/Device/ST/STM32WBAxx/Include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Drivers/STM32WBAxx_HAL_Driver/inc&quot;"/>
 								</option>
-								<option id="wba65.41" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.defs" IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" useByScannerDiscovery="true" valueType="definedSymbols">
+								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="wba65.41" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.defs" useByScannerDiscovery="true" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="__PROGRAM_START"/>
 									<listOptionValue builtIn="false" value="STM32WBA65xx"/>
 									<listOptionValue builtIn="false" value="DEBUG"/>
 								</option>
-								<option id="wba65.42" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.std" useByScannerDiscovery="true" value="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.std.gnucpp23" valueType="enumerated"/>
+								<option id="wba65.42" name="Language standard" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.std" useByScannerDiscovery="true" value="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.std.gnucpp23" valueType="enumerated"/>
+								<option id="wba65.44" name="Do not use RTTI (-fno-rtti)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.nortti" useByScannerDiscovery="true" value="true" valueType="boolean"/>
+								<option id="wba65.45" name="Do not use exceptions (-fno-exceptions)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.noexceptions" useByScannerDiscovery="true" value="true" valueType="boolean"/>
 								<inputType id="wba65.43" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.compiler.input"/>
-								<option id="wba65.44" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.nortti" value="true" valueType="boolean" useByScannerDiscovery="true"/>
-								<option id="wba65.45" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.noexceptions" value="true" valueType="boolean" useByScannerDiscovery="true"/>
 							</tool>
 							<tool id="wba65.46" name="GNU Arm Cross C Linker" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.linker"/>
 							<tool id="wba65.47" name="GNU Arm Cross C++ Linker" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.linker"/>
@@ -103,7 +116,8 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="src"/>
+						<entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="include/usb"/>
+						<entry excluding="bluetooth/bt_smp_bond_stm32wba.cpp|bluetooth/bt_scan_stm32wba.cpp|bluetooth/bt_pds_stm32wba.cpp|bluetooth/bt_gatt_stm32wba.cpp|bluetooth/bt_gap_stm32wba.cpp|bluetooth/bt_app_stm32wba.cpp|bluetooth/bt_adv_stm32wba.cpp|bluetooth/bt_hci_usb.cpp|usb" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="src"/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -117,6 +131,7 @@
 						<entry flags="VALUE_WORKSPACE_PATH" kind="includePath" name="/IOsonata_STM32WBA65/include"/>
 						<entry flags="VALUE_WORKSPACE_PATH" kind="includePath" name="/IOsonata_STM32WBA65/include/ARM"/>
 						<entry flags="VALUE_WORKSPACE_PATH" kind="includePath" name="/IOsonata_STM32WBA65/include/CMSIS"/>
+						<entry flags="VALUE_WORKSPACE_PATH" kind="includePath" name="/IOsonata_STM32WBA65"/>
 						<entry flags="VALUE_WORKSPACE_PATH" kind="libraryPath" name="/IOsonata_STM32WBA65/Release"/>
 						<entry flags="RESOLVED" kind="libraryFile" name="IOsonata_STM32WBA65" srcPrefixMapping="" srcRootPath=""/>
 					</externalSetting>
@@ -131,77 +146,89 @@
 				</extensions>
 			</storageModule>
 			<storageModule moduleId="cdtBuildSystem" version="4.0.0">
-				<configuration artifactExtension="a" artifactName="${ProjName}" buildArtefactType="org.eclipse.cdt.build.core.buildArtefactType.staticLib" buildProperties="org.eclipse.cdt.build.core.buildArtefactType=org.eclipse.cdt.build.core.buildArtefactType.staticLib,org.eclipse.cdt.build.core.buildType=org.eclipse.cdt.build.core.buildType.release" cleanCommand="${cross_rm} -rf" description="Release STM32WBA65 Cortex-M4F startup library" id="wba65.52" name="Release" parent="ilg.gnuarmeclipse.managedbuild.cross.config.lib.release">
+				<configuration artifactExtension="a" artifactName="${ProjName}" buildArtefactType="org.eclipse.cdt.build.core.buildArtefactType.staticLib" buildProperties="org.eclipse.cdt.build.core.buildArtefactType=org.eclipse.cdt.build.core.buildArtefactType.staticLib,org.eclipse.cdt.build.core.buildType=org.eclipse.cdt.build.core.buildType.release" cleanCommand="${cross_rm} -rf" description="Release STM32WBA65 Cortex-M4F startup library" id="wba65.52" name="Release" optionalBuildProperties="" parent="ilg.gnuarmeclipse.managedbuild.cross.config.lib.release">
 					<folderInfo id="wba65.53" name="/" resourcePath="">
 						<toolChain id="wba65.54" name="Arm Cross GCC" superClass="ilg.gnuarmeclipse.managedbuild.cross.toolchain.lib.release">
-							<option id="wba65.55" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.optimization.level" value="ilg.gnuarmeclipse.managedbuild.cross.option.optimization.level.size" valueType="enumerated"/>
-							<option id="wba65.56" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.optimization.messagelength" value="true" valueType="boolean"/>
-							<option id="wba65.57" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.optimization.signedchar" value="true" valueType="boolean"/>
-							<option id="wba65.58" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.optimization.functionsections" value="true" valueType="boolean"/>
-							<option id="wba65.59" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.optimization.datasections" value="true" valueType="boolean"/>
-							<option id="wba65.60" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.debugging.level"/>
-							<option id="wba65.61" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.debugging.format"/>
+							<option id="wba65.55" name="Optimization Level" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.optimization.level" value="ilg.gnuarmeclipse.managedbuild.cross.option.optimization.level.size" valueType="enumerated"/>
+							<option id="wba65.56" name="Message length (-fmessage-length=0)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.optimization.messagelength" value="true" valueType="boolean"/>
+							<option id="wba65.57" name="'char' is signed (-fsigned-char)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.optimization.signedchar" value="true" valueType="boolean"/>
+							<option id="wba65.58" name="Function sections (-ffunction-sections)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.optimization.functionsections" value="true" valueType="boolean"/>
+							<option id="wba65.59" name="Data sections (-fdata-sections)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.optimization.datasections" value="true" valueType="boolean"/>
+							<option id="wba65.60" name="Debug level" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.debugging.level"/>
+							<option id="wba65.61" name="Debug format" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.debugging.format"/>
 							<option id="wba65.62" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.toolchain.name" value="GNU Tools for ARM Embedded Processors" valueType="string"/>
 							<option id="wba65.63" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.toolchain.id" value="1287942917" valueType="string"/>
-							<option id="wba65.64" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.architecture" value="ilg.gnuarmeclipse.managedbuild.cross.option.architecture.arm" valueType="enumerated"/>
-							<option id="wba65.65" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.family" value="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.mcpu.cortex-m33" valueType="enumerated"/>
-							<option id="wba65.66" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.instructionset" value="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.instructionset.thumb" valueType="enumerated"/>
-							<option id="wba65.67" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.fpu.abi" value="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.fpu.abi.hard" valueType="enumerated"/>
-							<option id="wba65.68" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.fpu.unit" value="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.fpu.unit.fpv5spd16" valueType="enumerated"/>
-							<option id="wba65.69" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.command.prefix" value="arm-none-eabi-" valueType="string"/>
-							<option id="wba65.70" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.command.c" value="gcc" valueType="string"/>
-							<option id="wba65.71" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.command.cpp" value="g++" valueType="string"/>
-							<option id="wba65.72" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.command.ar" value="ar" valueType="string"/>
-							<option id="wba65.73" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.command.objcopy" value="objcopy" valueType="string"/>
-							<option id="wba65.74" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.command.objdump" value="objdump" valueType="string"/>
-							<option id="wba65.75" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.command.size" value="size" valueType="string"/>
-							<option id="wba65.76" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.command.make" value="make" valueType="string"/>
-							<option id="wba65.77" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.command.rm" value="rm" valueType="string"/>
-							<option id="wba65.78" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.addtools.createflash" value="false" valueType="boolean"/>
-							<option id="wba65.79" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.addtools.printsize" value="true" valueType="boolean"/>
+							<option id="wba65.64" name="Architecture" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.architecture" value="ilg.gnuarmeclipse.managedbuild.cross.option.architecture.arm" valueType="enumerated"/>
+							<option id="wba65.65" name="Arm family (-mcpu)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.family" value="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.mcpu.cortex-m33" valueType="enumerated"/>
+							<option id="wba65.66" name="Instruction set" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.instructionset" value="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.instructionset.thumb" valueType="enumerated"/>
+							<option id="wba65.67" name="Float ABI" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.fpu.abi" value="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.fpu.abi.hard" valueType="enumerated"/>
+							<option id="wba65.68" name="FPU Type" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.fpu.unit" value="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.fpu.unit.fpv5spd16" valueType="enumerated"/>
+							<option id="wba65.69" name="Prefix" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.command.prefix" value="arm-none-eabi-" valueType="string"/>
+							<option id="wba65.70" name="C compiler" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.command.c" value="gcc" valueType="string"/>
+							<option id="wba65.71" name="C++ compiler" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.command.cpp" value="g++" valueType="string"/>
+							<option id="wba65.72" name="Archiver" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.command.ar" value="ar" valueType="string"/>
+							<option id="wba65.73" name="Hex/Bin converter" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.command.objcopy" value="objcopy" valueType="string"/>
+							<option id="wba65.74" name="Listing generator" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.command.objdump" value="objdump" valueType="string"/>
+							<option id="wba65.75" name="Size command" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.command.size" value="size" valueType="string"/>
+							<option id="wba65.76" name="Build command" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.command.make" value="make" valueType="string"/>
+							<option id="wba65.77" name="Remove command" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.command.rm" value="rm" valueType="string"/>
+							<option id="wba65.78" name="Create flash image" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.addtools.createflash" value="false" valueType="boolean"/>
+							<option id="wba65.79" name="Print size" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.addtools.printsize" value="true" valueType="boolean"/>
 							<targetPlatform archList="all" binaryParser="org.eclipse.cdt.core.ELF" id="wba65.80" isAbstract="false" osList="all" superClass="ilg.gnuarmeclipse.managedbuild.cross.targetPlatform"/>
 							<builder buildPath="${workspace_loc:/IOsonata_STM32WBA65}/Release" id="wba65.81" keepEnvironmentInBuildfile="false" managedBuildOn="true" name="Gnu Make Builder" parallelBuildOn="true" parallelizationNumber="optimal" superClass="ilg.gnuarmeclipse.managedbuild.cross.builder"/>
 							<tool id="wba65.82" name="GNU Arm Cross Assembler" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.assembler">
-								<option id="wba65.83" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.assembler.usepreprocessor" value="true" valueType="boolean"/>
+								<option id="wba65.83" name="Use preprocessor" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.assembler.usepreprocessor" value="true" valueType="boolean"/>
 								<inputType id="wba65.84" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.assembler.input"/>
 							</tool>
 							<tool id="wba65.85" name="GNU Arm Cross C Compiler" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler">
-								<option id="wba65.86" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.include.paths" IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" useByScannerDiscovery="true" valueType="includePath">
+								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="wba65.86" name="Include paths (-I)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.include.paths" useByScannerDiscovery="true" valueType="includePath">
+									<listOptionValue builtIn="false" value="&quot;../../src&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../include&quot;"/>
-                                        <listOptionValue builtIn="false" value="&quot;../../../../../../../external/STM32CubeWBA/Drivers/CMSIS/Device/ST/STM32WBAxx/Include&quot;"/>
-                                        <listOptionValue builtIn="false" value="&quot;../../../../../../../external/STM32CubeWBA/Drivers/CMSIS/Include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../src&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../CMSIS/Core/Include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../CMSIS/Core/Include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../fatfs&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../littlefs&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../micro-ecc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/Fusion&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Drivers/CMSIS/Device/ST/STM32WBAxx/Include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Drivers/STM32WBAxx_HAL_Driver/inc&quot;"/>
 								</option>
-								<option id="wba65.87" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs" IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" useByScannerDiscovery="true" valueType="definedSymbols">
+								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="wba65.87" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs" useByScannerDiscovery="true" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="__PROGRAM_START"/>
 									<listOptionValue builtIn="false" value="STM32WBA65xx"/>
 									<listOptionValue builtIn="false" value="NDEBUG"/>
 								</option>
-								<option id="wba65.88" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std" useByScannerDiscovery="true" value="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std.gnu17" valueType="enumerated"/>
+								<option id="wba65.88" name="Language standard" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std" useByScannerDiscovery="true" value="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std.gnu17" valueType="enumerated"/>
 								<inputType id="wba65.89" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input"/>
 							</tool>
 							<tool id="wba65.90" name="GNU Arm Cross C++ Compiler" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.compiler">
-								<option id="wba65.91" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.include.paths" IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" useByScannerDiscovery="true" valueType="includePath">
+								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="wba65.91" name="Include paths (-I)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.include.paths" useByScannerDiscovery="true" valueType="includePath">
+									<listOptionValue builtIn="false" value="&quot;../../src&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../include&quot;"/>
-                                        <listOptionValue builtIn="false" value="&quot;../../../../../../../external/STM32CubeWBA/Drivers/CMSIS/Device/ST/STM32WBAxx/Include&quot;"/>
-                                        <listOptionValue builtIn="false" value="&quot;../../../../../../../external/STM32CubeWBA/Drivers/CMSIS/Include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../src&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../CMSIS/Core/Include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../CMSIS/Core/Include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../fatfs&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../littlefs&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../micro-ecc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/Fusion&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Drivers/CMSIS/Device/ST/STM32WBAxx/Include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Drivers/STM32WBAxx_HAL_Driver/inc&quot;"/>
 								</option>
-								<option id="wba65.92" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.defs" IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" useByScannerDiscovery="true" valueType="definedSymbols">
+								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="wba65.92" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.defs" useByScannerDiscovery="true" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="__PROGRAM_START"/>
 									<listOptionValue builtIn="false" value="STM32WBA65xx"/>
 									<listOptionValue builtIn="false" value="NDEBUG"/>
 								</option>
-								<option id="wba65.93" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.std" useByScannerDiscovery="true" value="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.std.gnucpp23" valueType="enumerated"/>
+								<option id="wba65.93" name="Language standard" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.std" useByScannerDiscovery="true" value="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.std.gnucpp23" valueType="enumerated"/>
+								<option id="wba65.95" name="Do not use RTTI (-fno-rtti)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.nortti" useByScannerDiscovery="true" value="true" valueType="boolean"/>
+								<option id="wba65.96" name="Do not use exceptions (-fno-exceptions)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.noexceptions" useByScannerDiscovery="true" value="true" valueType="boolean"/>
 								<inputType id="wba65.94" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.compiler.input"/>
-								<option id="wba65.95" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.nortti" value="true" valueType="boolean" useByScannerDiscovery="true"/>
-								<option id="wba65.96" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.noexceptions" value="true" valueType="boolean" useByScannerDiscovery="true"/>
 							</tool>
 							<tool id="wba65.97" name="GNU Arm Cross C Linker" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.linker"/>
 							<tool id="wba65.98" name="GNU Arm Cross C++ Linker" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.linker"/>
@@ -212,7 +239,8 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="src"/>
+						<entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="include/usb"/>
+						<entry excluding="bluetooth/bt_smp_bond_stm32wba.cpp|bluetooth/bt_scan_stm32wba.cpp|bluetooth/bt_pds_stm32wba.cpp|bluetooth/bt_gatt_stm32wba.cpp|bluetooth/bt_gap_stm32wba.cpp|bluetooth/bt_app_stm32wba.cpp|bluetooth/bt_adv_stm32wba.cpp|bluetooth/bt_hci_usb.cpp|usb" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="src"/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>

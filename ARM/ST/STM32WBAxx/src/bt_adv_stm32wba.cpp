@@ -28,11 +28,11 @@ Copyright (c) 2026, I-SYST inc., all rights reserved
 #include "stm32wbaxx.h"
 #include "stm32wbaxx_hal.h"
 
-#include "ble_types.h"
-#include "ble_std.h"
-#include "ble.h"
-#include "ble_gap_aci.h"
-#include "ble_hci_le.h"
+//#include "ble_types.h"
+//#include "ble_std.h"
+//#include "ble.h"
+//#include "ble_gap_aci.h"
+//#include "ble_hci_le.h"
 
 #include "istddef.h"
 #include "bluetooth/bt_uuid.h"
