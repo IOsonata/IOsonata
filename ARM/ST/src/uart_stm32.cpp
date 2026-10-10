@@ -199,6 +199,7 @@ SOFTWARE.
 #define ST_UART_BUFF_SIZE		16
 #define ST_UART_CFIFO_SIZE		CFIFO_MEMSIZE(ST_UART_BUFF_SIZE)
 #define ST_UART_DMA_TX_SIZE		256
+#define ST_UART_DMA_RX_SIZE		256
 #define ST_UART_DMA_CFIFO_SIZE	CFIFO_MEMSIZE(ST_UART_DMA_TX_SIZE)
 
 #pragma pack(push, 4)
@@ -216,6 +217,10 @@ typedef struct __Stm32_Uart_Dev {
 	int NbIOPins;					//!< Number of pins in pIOPinMap
 	bool PollTxStarted;				//!< Polling frame already started
 #if defined(STM32F030x8)
+	DMA_Channel_TypeDef *pRxDma;	//!< RX DMA channel
+	uint32_t RxDmaShift;		//!< Channel flags shift
+	uint16_t RxDmaRead;		//!< RX consumer index
+	alignas(4) uint8_t RxDmaRing[ST_UART_DMA_RX_SIZE];
 	DMA_Channel_TypeDef *pTxDma;
 	IRQn_Type TxDmaIrq;
 	uint32_t TxDmaShift;
@@ -251,6 +256,8 @@ static Stm32UartDev_t s_Stm32UartDev[] = {
 		.RccMask = RCC_APB2ENR_USART1EN,
 		.PclkIdx = ST_PCLK_APB2,
 #if defined(STM32F030x8)
+		.pRxDma = DMA1_Channel3,
+		.RxDmaShift = 8,
 		.pTxDma = DMA1_Channel2,
 		.TxDmaIrq = DMA1_Channel2_3_IRQn,
 		.TxDmaShift = 4,
@@ -265,6 +272,8 @@ static Stm32UartDev_t s_Stm32UartDev[] = {
 		.RccMask = ST_RCC_APB1EN(USART2),
 		.PclkIdx = 0,
 #if defined(STM32F030x8)
+		.pRxDma = DMA1_Channel5,
+		.RxDmaShift = 16,
 		.pTxDma = DMA1_Channel4,
 		.TxDmaIrq = DMA1_Channel4_5_IRQn,
 		.TxDmaShift = 12,
@@ -337,6 +346,8 @@ static const int s_NbUartDev = sizeof(s_Stm32UartDev) / sizeof(Stm32UartDev_t);
 
 static void Stm32UartIrqHandler(USART_TypeDef * const pReg);
 #if defined(STM32F030x8)
+static int Stm32UartDmaRxRead(Stm32UartDev_t * const pDev, uint8_t *pData, int Length);
+static void Stm32UartDmaRxStop(Stm32UartDev_t * const pDev);
 static void Stm32UartDmaStart(Stm32UartDev_t * const pDev);
 static void Stm32UartDmaService(Stm32UartDev_t * const pDev);
 static void Stm32UartDmaStop(Stm32UartDev_t * const pDev);
@@ -357,6 +368,37 @@ static void *Stm32UartGetHandle(DevIntrf_t * const pDev);
 #if defined(STM32F030x8)
 // Normal-mode DMA: FIFO contents are copied to a private cache before
 // ownership passes to the DMA controller. Called with interrupts masked.
+// RX DMA stays in circular mode. The producer is CNDTR, not an ISR copy.
+static int Stm32UartDmaRxRead(Stm32UartDev_t * const pDev, uint8_t *pData, int Length)
+{
+	uint32_t write = (ST_UART_DMA_RX_SIZE - pDev->pRxDma->CNDTR) &
+					 (ST_UART_DMA_RX_SIZE - 1U);
+	uint32_t available = (write - pDev->RxDmaRead) &
+						 (ST_UART_DMA_RX_SIZE - 1U);
+	int copied = 0;
+	while (copied < Length && available > 0U)
+	{
+		pData[copied++] = pDev->RxDmaRing[pDev->RxDmaRead];
+		pDev->RxDmaRead = (pDev->RxDmaRead + 1U) & (ST_UART_DMA_RX_SIZE - 1U);
+		available--;
+	}
+	pDev->pUartDev->bRxReady = available != 0U;
+	return copied;
+}
+
+static void Stm32UartDmaRxStop(Stm32UartDev_t * const pDev)
+{
+	if (pDev->pRxDma == NULL)
+	{
+		return;
+	}
+	pDev->pReg->CR3 &= ~USART_CR3_DMAR;
+	pDev->pReg->CR1 &= ~USART_CR1_IDLEIE;
+	pDev->pRxDma->CCR &= ~DMA_CCR_EN;
+	DMA1->IFCR = DMA_IFCR_CGIF1 << pDev->RxDmaShift;
+	pDev->RxDmaRead = 0;
+}
+
 static void Stm32UartDmaStart(Stm32UartDev_t * const pDev)
 {
 	if (pDev->DmaActive)
@@ -458,6 +500,29 @@ static void Stm32UartIrqHandler(USART_TypeDef * const pReg)
 
 	uint32_t iflag = ST_USART_ISR(pReg);
 	uint32_t cr1 = pReg->CR1;
+#if defined(STM32F030x8)
+	if (dev->DevIntrf.bDma && (cr1 & USART_CR1_IDLEIE) &&
+		(iflag & USART_ISR_IDLE))
+	{
+		pReg->ICR = USART_ICR_IDLECF;
+		for (int i = 0; i < s_NbUartDev; i++)
+		{
+			Stm32UartDev_t *pU = &s_Stm32UartDev[i];
+			if (pU->pReg == pReg)
+			{
+				uint32_t write = (ST_UART_DMA_RX_SIZE - pU->pRxDma->CNDTR) &
+								 (ST_UART_DMA_RX_SIZE - 1U);
+				int available = (write - pU->RxDmaRead) & (ST_UART_DMA_RX_SIZE - 1U);
+				dev->bRxReady = available > 0;
+				if (available > 0 && dev->EvtCallback)
+				{
+					dev->EvtCallback(dev, UART_EVT_RXDATA, NULL, available);
+				}
+				break;
+			}
+		}
+	}
+#endif
 
 
 
@@ -664,6 +729,15 @@ static int Stm32UartRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int Bufflen)
 		return 0;
 	}
 
+#if defined(STM32F030x8)
+	if (pDev->bDma)
+	{
+		uint32_t state = DisableInterrupt();
+		cnt = Stm32UartDmaRxRead(dev, pBuff, Bufflen);
+		EnableInterrupt(state);
+		return cnt;
+	}
+#endif
 	if (!pDev->bIntEn)
 	{
 		while (cnt < Bufflen)
@@ -881,6 +955,7 @@ static void Stm32UartDisable(DevIntrf_t * const pDev)
 #if defined(STM32F030x8)
 	if (pDev->bDma)
 	{
+		Stm32UartDmaRxStop(dev);
 		Stm32UartDmaStop(dev);
 	}
 #endif
@@ -906,6 +981,7 @@ static void Stm32UartEnable(DevIntrf_t * const pDev)
 #if defined(STM32F030x8)
 	if (pDev->bDma)
 	{
+		Stm32UartDmaRxStop(dev);
 		Stm32UartDmaStop(dev);
 	}
 #endif
@@ -933,6 +1009,7 @@ static void Stm32UartReset(DevIntrf_t * const pDev)
 #if defined(STM32F030x8)
 	if (pDev->bDma)
 	{
+		Stm32UartDmaRxStop(dev);
 		Stm32UartDmaStop(dev);
 	}
 #endif
@@ -1160,6 +1237,20 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	{
 		RCC->AHBENR |= RCC_AHBENR_DMA1EN;
 		(void)RCC->AHBENR;
+		// USART1 uses the default DMA request mapping on channel 3.
+		if (reg == USART1)
+		{
+			RCC->APB2ENR |= RCC_APB2ENR_SYSCFGEN;
+			SYSCFG->CFGR1 &= ~SYSCFG_CFGR1_USART1_RX_DMA_RMP;
+		}
+		dev->pRxDma->CCR = 0;
+		DMA1->IFCR = DMA_IFCR_CGIF1 << dev->RxDmaShift;
+		dev->pRxDma->CPAR = (uint32_t)(uintptr_t)&ST_USART_RDR(reg);
+		dev->pRxDma->CMAR = (uint32_t)(uintptr_t)dev->RxDmaRing;
+		dev->pRxDma->CNDTR = ST_UART_DMA_RX_SIZE;
+		dev->pRxDma->CCR = DMA_CCR_MINC | DMA_CCR_CIRC | DMA_CCR_EN;
+		dev->RxDmaRead = 0;
+
 		dev->pTxDma->CCR = 0;
 		DMA1->IFCR = DMA_IFCR_CGIF1 << dev->TxDmaShift;
 		dev->pTxDma->CPAR = (uint32_t)(uintptr_t)&ST_USART_TDR(reg);
@@ -1175,7 +1266,7 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 		dev->TxDmaLength = 0;
 		dev->TxDmaRead = 0;
 		dev->TxDmaWrite = 0;
-		cr3 |= USART_CR3_DMAT;
+		cr3 |= USART_CR3_DMAT | USART_CR3_DMAR;
 		if (pCfg->bIntMode)
 		{
 			NVIC_ClearPendingIRQ(dev->TxDmaIrq);
@@ -1189,7 +1280,14 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 		// Only the interrupts the handler services. TXEIE is set by
 		// Stm32UartTxData when the TX FIFO has data. TCIE, IDLEIE and RTOIE
 		// stay off, their flags are not cleared by the handler.
-		cr1 |= ST_USART_CR1_RXNEIE | USART_CR1_PEIE;
+		if (pCfg->bDMAMode)
+		{
+			cr1 |= USART_CR1_IDLEIE | USART_CR1_PEIE;
+		}
+		else
+		{
+			cr1 |= ST_USART_CR1_RXNEIE | USART_CR1_PEIE;
+		}
 
 		// FE, NE and ORE
 		cr3 |= USART_CR3_EIE;
