@@ -2400,7 +2400,7 @@
                 <name>$PROJ_DIR$\..\..\..\src\i2c_stm32l4xx.cpp</name>
             </file>
             <file>
-                <name>$PROJ_DIR$\..\..\..\src\iopincfg_stm32l4xx.c</name>
+                <name>$PROJ_DIR$\..\..\..\src\gpio_stm32l4xx.c</name>
             </file>
             <file>
                 <name>$PROJ_DIR$\..\..\..\src\octospi_stm32l4xx.cpp</name>
