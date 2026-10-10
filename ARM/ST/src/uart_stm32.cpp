@@ -15,9 +15,10 @@
 		L4 : LPUART1, USART1 to USART3, UART4, UART5, USART and UART on
 		     SYSCLK, LPUART1 on the LSE crystal or HSI16
 
+		F4 : USART1, USART2 and USART6 (SR/DR register adapter)
+
 		Not served
 
-		F4  : SR/DR register set
 		WBA : instance table and kernel clock source not written yet
 
 		Operating modes
@@ -71,8 +72,30 @@ SOFTWARE.
 #include "coredev/interrupt.h"
 #include "coredev/system_core_clock.h"
 
-#if !defined(IOSONATA_STM32_F0) && !defined(IOSONATA_STM32_L4)
+#if !defined(IOSONATA_STM32_F0) && !defined(IOSONATA_STM32_F4) && !defined(IOSONATA_STM32_L4)
 #error "uart_stm32.cpp: no USART instance table for this STM32 family"
+#endif
+
+#if defined(IOSONATA_STM32_F4)
+// F401 USARTs use SR/DR instead of ISR/RDR/TDR/ICR.
+// The transfer engine remains shared across register generations.
+#define ST_UART_STATUS(reg)		((reg)->SR)
+#define ST_UART_READ(reg)		((reg)->DR)
+#define ST_UART_WRITE(reg, data)	((reg)->DR = (data))
+#define USART_ISR_TXE			USART_SR_TXE
+#define USART_ISR_RXNE			USART_SR_RXNE
+#define USART_ISR_PE			USART_SR_PE
+#define USART_ISR_FE			USART_SR_FE
+#define USART_ISR_NE			USART_SR_NE
+#define USART_ISR_ORE			USART_SR_ORE
+#define USART_ICR_PECF			USART_SR_PE
+#define USART_ICR_FECF			USART_SR_FE
+#define USART_ICR_NCF			USART_SR_NE
+#define USART_ICR_ORECF			USART_SR_ORE
+#else
+#define ST_UART_STATUS(reg)		((reg)->ISR)
+#define ST_UART_READ(reg)		((reg)->RDR)
+#define ST_UART_WRITE(reg, data)	((reg)->TDR = (data))
 #endif
 
 // USARTs with a hardware FIFO name the TXE and RXNE bits after their FIFO
@@ -236,6 +259,34 @@ static Stm32UartDev_t s_Stm32UartDev[] = {
 		.ClkSelPos = 0,
 	},
 #endif
+#elif defined(IOSONATA_STM32_F4)
+	{
+		.DevNo = 0,
+		.pReg = USART1,
+		.IrqNo = USART1_IRQn,
+		.pClkEnReg = &RCC->APB2ENR,
+		.ClkEnMask = RCC_APB2ENR_USART1EN,
+		.pRstReg = &RCC->APB2RSTR,
+		.RstMask = RCC_APB2RSTR_USART1RST,
+	},
+	{
+		.DevNo = 1,
+		.pReg = USART2,
+		.IrqNo = USART2_IRQn,
+		.pClkEnReg = &RCC->APB1ENR,
+		.ClkEnMask = RCC_APB1ENR_USART2EN,
+		.pRstReg = &RCC->APB1RSTR,
+		.RstMask = RCC_APB1RSTR_USART2RST,
+	},
+	{
+		.DevNo = 2,
+		.pReg = USART6,
+		.IrqNo = USART6_IRQn,
+		.pClkEnReg = &RCC->APB2ENR,
+		.ClkEnMask = RCC_APB2ENR_USART6EN,
+		.pRstReg = &RCC->APB2RSTR,
+		.RstMask = RCC_APB2RSTR_USART6RST,
+	},
 #elif defined(IOSONATA_STM32_L4)
 	{
 		.DevNo = 0,
@@ -340,11 +391,16 @@ static void Stm32UartRxError(UARTDev_t * const pDev, USART_TypeDef * const pReg,
 		pDev->FramErrCnt++;
 	}
 
+#if defined(IOSONATA_STM32_F4)
+	// SR was sampled by the caller; read DR to clear RXNE and errors.
+	(void)ST_UART_READ(pReg);
+#else
 	pReg->ICR = Flags & ST_USART_ICR_RXERR;
 	if (Flags & ST_USART_ISR_RXNE)
 	{
-		(void)pReg->RDR;
+		(void)ST_UART_READ(pReg);
 	}
+#endif
 }
 
 static void Stm32UartIrqHandler(Stm32UartDev_t * const pDev)
@@ -357,7 +413,7 @@ static void Stm32UartIrqHandler(Stm32UartDev_t * const pDev)
 	}
 
 	USART_TypeDef *reg = pDev->pReg;
-	uint32_t iflag = reg->ISR;
+	uint32_t iflag = ST_UART_STATUS(reg);
 	uint32_t cr1 = reg->CR1;
 
 	// RX errors: clear only the error flags seen, then drain RDR to release
@@ -371,7 +427,7 @@ static void Stm32UartIrqHandler(Stm32UartDev_t * const pDev)
 	if ((iflag & ST_USART_ISR_RXNE) && (cr1 & ST_USART_CR1_RXNEIE))
 	{
 		// Reading RDR clears RXNE
-		uint8_t c = (uint8_t)reg->RDR & (dev->DataBits == 7 ? 0x7F : 0xFF);
+		uint8_t c = (uint8_t)ST_UART_READ(reg) & (dev->DataBits == 7 ? 0x7F : 0xFF);
 		uint8_t *p = CFifoPut(dev->hRxFifo);
 		if (p != NULL)
 		{
@@ -394,7 +450,7 @@ static void Stm32UartIrqHandler(Stm32UartDev_t * const pDev)
 		if (p != NULL)
 		{
 			// Writing TDR clears TXE
-			reg->TDR = *p;
+			ST_UART_WRITE(reg, *p);
 		}
 		else
 		{
@@ -548,7 +604,7 @@ static int Stm32UartRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int Bufflen)
 	{
 		while (cnt < Bufflen)
 		{
-			uint32_t flags = reg->ISR;
+			uint32_t flags = ST_UART_STATUS(reg);
 
 			if (flags & ST_USART_ISR_RXERR)
 			{
@@ -559,7 +615,7 @@ static int Stm32UartRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int Bufflen)
 			{
 				break;
 			}
-			pBuff[cnt++] = (uint8_t)reg->RDR & (dev->pUartDev->DataBits == 7 ? 0x7F : 0xFF);
+			pBuff[cnt++] = (uint8_t)ST_UART_READ(reg) & (dev->pUartDev->DataBits == 7 ? 0x7F : 0xFF);
 		}
 
 		return cnt;
@@ -610,9 +666,9 @@ static int Stm32UartTxData(DevIntrf_t * const pDev, uint8_t const *pData, int Da
 		// TDR holds the next frame while the shift register sends the
 		// current one. TXE set means TDR is free. Write only while it is
 		// free and return the count, the caller retries the rest.
-		while (cnt < Datalen && (reg->ISR & ST_USART_ISR_TXE))
+		while (cnt < Datalen && (ST_UART_STATUS(reg) & ST_USART_ISR_TXE))
 		{
-			reg->TDR = pData[cnt++];
+			ST_UART_WRITE(reg, pData[cnt++]);
 		}
 
 		return cnt;
@@ -654,13 +710,13 @@ static int Stm32UartTxData(DevIntrf_t * const pDev, uint8_t const *pData, int Da
 
 		// Start TX inside the critical section so the interrupt cannot fetch
 		// the same byte again and overwrite TDR.
-		if (dev->pUartDev->bTxReady && (reg->ISR & ST_USART_ISR_TXE))
+		if (dev->pUartDev->bTxReady && (ST_UART_STATUS(reg) & ST_USART_ISR_TXE))
 		{
 			uint8_t *p = CFifoGet(dev->pUartDev->hTxFifo);
 			if (p != NULL)
 			{
 				dev->pUartDev->bTxReady = false;
-				reg->TDR = *p;
+				ST_UART_WRITE(reg, *p);
 				reg->CR1 |= ST_USART_CR1_TXEIE;
 			}
 		}
@@ -784,7 +840,17 @@ static uint32_t Stm32UartClkSrc(Stm32UartDev_t * const pDev, uint32_t Rate, uint
 #else
 	(void)pDev;
 	(void)Rate;
+#if defined(IOSONATA_STM32_F4)
+	// F401 USART1/6 use APB2, USART2 uses APB1.
+	// RCC PPRE encoding 0..3 = /1, 4 = /2, 5 = /4, 6 = /8, 7 = /16.
+	uint32_t ppre = pDev->DevNo == 1 ?
+			(RCC->CFGR & RCC_CFGR_PPRE1_Msk) >> RCC_CFGR_PPRE1_Pos :
+			(RCC->CFGR & RCC_CFGR_PPRE2_Msk) >> RCC_CFGR_PPRE2_Pos;
+	uint32_t shift = ppre < 4U ? 0U : ppre - 3U;
+	*pFreq = SystemCoreClockGet() >> shift;
+#else
 	*pFreq = SystemPeriphClockGet(0);
+#endif
 	return ST_UART_CLKSEL_PCLK;
 #endif
 }
@@ -1026,6 +1092,23 @@ extern "C" void USART3_4_IRQHandler()
 	}
 }
 #endif
+
+#elif defined(IOSONATA_STM32_F4)
+
+extern "C" void USART1_IRQHandler()
+{
+	Stm32UartIrqHandler(&s_Stm32UartDev[0]);
+}
+
+extern "C" void USART2_IRQHandler()
+{
+	Stm32UartIrqHandler(&s_Stm32UartDev[1]);
+}
+
+extern "C" void USART6_IRQHandler()
+{
+	Stm32UartIrqHandler(&s_Stm32UartDev[2]);
+}
 
 #elif defined(IOSONATA_STM32_L4)
 
