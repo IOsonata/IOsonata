@@ -345,6 +345,7 @@ static Stm32UartDev_t s_Stm32UartDev[] = {
 static const int s_NbUartDev = sizeof(s_Stm32UartDev) / sizeof(Stm32UartDev_t);
 
 static void Stm32UartIrqHandler(USART_TypeDef * const pReg);
+static bool Stm32UartRxFifoPut(UARTDev_t * const pDev, uint8_t Data);
 #if defined(STM32F030x8)
 static int Stm32UartDmaRxRead(Stm32UartDev_t * const pDev, uint8_t *pData, int Length);
 static void Stm32UartDmaRxStop(Stm32UartDev_t * const pDev);
@@ -480,6 +481,26 @@ static void Stm32UartDmaStop(Stm32UartDev_t * const pDev)
 }
 #endif
 
+// RX interrupt is the only FIFO producer; foreground RX reads with IRQs
+// masked. Avoid a per-byte compare-exchange loop in the interrupt handler.
+static bool Stm32UartRxFifoPut(UARTDev_t * const pDev, uint8_t Data)
+{
+	CFifo_t *pFifo = pDev->hRxFifo;
+	uint32_t put = pFifo->PutIdx;
+	uint32_t get = pFifo->GetIdx;
+	if (put - get >= (uint32_t)pFifo->MaxIdxCnt)
+	{
+		return false;
+	}
+
+	uint32_t index = pFifo->Mask != 0U ? put & pFifo->Mask :
+					 put % (uint32_t)pFifo->MaxIdxCnt;
+	pFifo->pMemStart[index] = Data;
+	__DMB();
+	pFifo->PutIdx = put + 1U;
+	return true;
+}
+
 static void Stm32UartIrqHandler(USART_TypeDef * const pReg)
 {
 	UARTDev_t *dev = NULL;
@@ -554,10 +575,8 @@ static void Stm32UartIrqHandler(USART_TypeDef * const pReg)
 	{
 		// Reading RDR clears RXNE
 		uint8_t c = (uint8_t)ST_USART_RDR(pReg) & (dev->DataBits == 7 ? 0x7F : 0xFF);
-		uint8_t *p = CFifoPut(dev->hRxFifo);
-		if (p != NULL)
+		if (Stm32UartRxFifoPut(dev, c))
 		{
-			*p = c;
 			dev->bRxReady = true;
 		}
 		else
