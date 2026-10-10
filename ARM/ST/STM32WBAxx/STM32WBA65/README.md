@@ -66,3 +66,24 @@ vendor this device header. The shared initial system module runs from the
 The existing `gcc_arm_flash.ld` calls IOsonata `ResetEntry` and places
 `__Vectors` in `.ivector`. Do not link the STM32CubeWBA GCC startup module
 in the same image or two startup/vector definitions will conflict.
+
+## External middleware checkout
+
+Clone the ST Bluetooth middleware independently of STM32CubeWBA:
+
+```sh
+cd ~/swdev/external
+git clone https://github.com/STMicroelectronics/stm32-mw-wpan.git
+```
+
+The IOC project uses `external/stm32-mw-wpan/ble/` and
+`external/stm32-mw-wpan/link_layer/` for the BLE middleware headers.
+STM32CubeWBA remains the source for CMSIS, HAL, and `Utilities/tim_serv`.
+Use a WPAN revision compatible with the selected STM32CubeWBA version;
+ST documents component compatibility in STM32CubeWBA release notes.
+
+`host_stack_if.h` and `ll_sys_if.h` belong to the CubeWBA
+target-specific BLE application configuration, not the standalone
+middleware root. Their integration, and linking the BLE binary libraries,
+remain outstanding. BLE adapter sources are currently excluded from
+the IOC configurations.
