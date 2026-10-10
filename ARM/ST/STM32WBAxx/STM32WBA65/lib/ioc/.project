@@ -2643,7 +2643,12 @@
 		<link>
 			<name>include/usb_ctrlr.h</name>
 			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/include/usb_ctrlr.h</locationURI>
+			<locationURI>PARENT-5-PROJECT_LOC/include/usb_ctrlr.h</locationURI>
+		</link>
+		<link>
+			<name>include/usb_ctrlr_caps.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/include/usb_ctrlr_caps.h</locationURI>
 		</link>
 	</linkedResources>
 </projectDescription>
