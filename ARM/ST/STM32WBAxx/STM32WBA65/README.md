@@ -10,15 +10,20 @@ layout requires a separate library configuration.
 
 ## Integration status
 
-The project currently links generic IOsonata support sources and shared
-STM32WBA headers. **It is not a complete buildable MCU library.** The
-following target-specific components are not yet linked:
+The IOC library now includes IOsonata `ResetEntry.c`, the WBA65 interrupt
+vector table, and a shared HSI16 system initializer. The vector table follows
+STM32WBA65xx interrupt order. The system initializer installs the vector base
+but does not configure PLLs, flash latency or TrustZone.
 
-- ST CMSIS `stm32wba65xx.h` and WBA65 system/startup dependencies
-- STM32WBA65RIV7 interrupt-vector source
-- IOsonata WBA6 startup/system-clock and interrupt dispatch
-- IOsonata WBA6 GPIO, UART and Timer drivers
-- Verified vendor startup and MCU-specific system/interrupt integration
+**The MCU port is not ready for application builds.** Outstanding work:
+
+- Verify startup and vector placement with the installed STM32WBA65 CMSIS
+  headers, hardware, and security configuration
+- Implement live RCC clock-frequency decoding before changing from HSI16
+- Implement GPIO, interrupt dispatch, UART and Timer drivers
+- Validate the application linker script against STM32WBA65 flash/SRAM banks
+  and the configured secure/nonsecure partitions
+- Integrate and test the STM32CubeWBA radio middleware
 
 Use the WBA65 device definitions and interrupt mapping from a consistent
 STM32CubeWBA release. Do not compile WBA5x startup or link with the WBA5x
@@ -43,3 +48,15 @@ not in the library.
 
 References: STM32WBA6 reference manual RM0515 and STM32CubeWBA:
 https://github.com/STMicroelectronics/STM32CubeWBA
+
+## Build dependency
+
+The IOC build configuration expects the official CMSIS headers in a sibling
+`external/STM32CubeWBA/Drivers/CMSIS/` checkout, including
+`Device/ST/STM32WBAxx/Include/stm32wba65xx.h`. The project does not
+vendor this device header. The shared initial system module runs from the
+16 MHz reset HSI clock; clock configuration beyond that is not yet supported.
+
+The existing `gcc_arm_flash.ld` calls IOsonata `ResetEntry` and places
+`__Vectors` in `.ivector`. Do not link the STM32CubeWBA GCC startup module
+in the same image or two startup/vector definitions will conflict.
