@@ -1241,7 +1241,7 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 		if (reg == USART1)
 		{
 			RCC->APB2ENR |= RCC_APB2ENR_SYSCFGEN;
-			SYSCFG->CFGR1 &= ~SYSCFG_CFGR1_USART1_RX_DMA_RMP;
+			SYSCFG->CFGR1 &= ~SYSCFG_CFGR1_USART1RX_DMA_RMP;
 		}
 		dev->pRxDma->CCR = 0;
 		DMA1->IFCR = DMA_IFCR_CGIF1 << dev->RxDmaShift;
