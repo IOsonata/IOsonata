@@ -494,6 +494,7 @@ static int STM32F03xUARTRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int Buff
 #ifdef STM32F030x8
 	if (pDev->bDma)
 	{
+		STM32F03xUARTTxDmaService(dev);
 		STM32F03xUARTRxDmaService(dev);
 	}
 #endif
