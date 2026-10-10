@@ -48,10 +48,9 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "board.h"
 
 //#define DEMO_C	// Select demo C code
-// Define BYTE_MODE explicitly to benchmark byte-at-a-time overhead.
-//#define BYTE_MODE
+#define BYTE_MODE
 
-#define TEST_BUFSIZE		128
+#define TEST_BUFSIZE		16
 
 #ifndef UART_BAUDRATE
 #define UART_BAUDRATE 		1000000
