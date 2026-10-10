@@ -1,35 +1,72 @@
-// STM32F0308-DISCO application wiring. Change here for another board.
+/**-------------------------------------------------------------------------
+@example	board.h
+
+@brief	Board specific definitions
+
+This file contains all I/O definitions for a specific board for the
+application firmware.  This files should be located in each project and
+modified to suit the need for the application use case.
+
+@author	Hoang Nguyen Hoan
+@date	Nov. 16, 2016
+
+@license
+
+Copyright (c) 2016, I-SYST inc., all rights reserved
+
+Permission to use, copy, modify, and distribute this software for any purpose
+with or without fee is hereby granted, provided that the above copyright
+notice and this permission notice appear in all copies, and none of the
+names : I-SYST or its contributors may be used to endorse or
+promote products derived from this software without specific prior written
+permission.
+
+For info or contributing contact : hnhoan at i-syst dot com
+
+THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND ANY
+EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE FOR ANY
+DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+----------------------------------------------------------------------------*/
+
 #ifndef __BOARD_H__
 #define __BOARD_H__
-#include "stm32f0xx.h"
-#include "coredev/iopincfg.h"
 
-// USART1 (virtual DevNo 0). External 3.3 V adapter; common GND, no flow control.
-#define UART_DEVNO 0
-#define UART_NO UART_DEVNO
-#define UART_BAUDRATE 115200
+#ifndef UART_INT_MODE
 #define UART_INT_MODE true
-#define UART_DMA_MODE false
-#define UART_INT_PRIO 2
-#define UART_RX_PORT 0
-#define UART_RX_PIN 10
-#define UART_RX_PINOP IOPINOP_FUNC1
-#define UART_TX_PORT 0
-#define UART_TX_PIN 9
-#define UART_TX_PINOP IOPINOP_FUNC1
-#define UART_CTS_PORT -1
-#define UART_CTS_PIN -1
-#define UART_CTS_PINOP 0
-#define UART_RTS_PORT -1
-#define UART_RTS_PIN -1
-#define UART_RTS_PINOP 0
-#define UART_PINS { \
-	{UART_RX_PORT, UART_RX_PIN, UART_RX_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL}, \
-	{UART_TX_PORT, UART_TX_PIN, UART_TX_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL}, \
-}
-#define UART_PORTPINS IOPinCfg_t s_UartPortPins[] = UART_PINS
-#define UART_PORTPIN_COUNT (sizeof(s_UartPortPins) / sizeof(s_UartPortPins[0]))
-
-#define UARTFIFOSIZE CFIFO_MEMSIZE(256)
-
 #endif
+#ifndef UART_DMA_MODE
+#define UART_DMA_MODE false
+#endif
+
+#define UART_DEVNO			0
+#define UART_RX_PORT		0
+#define UART_RX_PIN			10
+#define UART_RX_PINOP		IOPINOP_FUNC1
+
+#define UART_TX_PORT		0
+#define UART_TX_PIN			9
+#define UART_TX_PINOP		IOPINOP_FUNC1
+
+#define UART_CTS_PORT		0
+#define UART_CTS_PIN		1
+#define UART_CTS_PINOP		IOPINOP_FUNC1
+#define UART_RTS_PORT		0
+#define UART_RTS_PIN		2
+#define UART_RTS_PINOP		IOPINOP_FUNC1
+
+#define UART_PINS			{ \
+	{UART_RX_PORT, UART_RX_PIN, UART_RX_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},\
+	{UART_TX_PORT, UART_TX_PIN, UART_TX_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},}
+
+
+#endif // __BOARD_H__
+
+
