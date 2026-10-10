@@ -16,5 +16,16 @@ periods longer than a counter cycle, single shot and continuous triggers, the
 pending interrupt for a deadline passed while arming, prescaler selection,
 and the configuration checks of TimerInit.
 
-The model does not cover the prescaler counter, bus timing through the async
-APB bridge or interrupt preemption. Hardware validation is still required.
+`i2c_spi_test.cpp` compiles the Flexcomm selection, I2C master and SPI master
+drivers with the generic `device_intrf.cpp`. The I2C model is the master state
+machine of the Flexcomm I2C with one simulated slave. It checks the START,
+repeated START, data acknowledge and the NACK of the last byte read, NACK of
+the address and of data, the SCL low and high times selected for 100 kHz,
+400 kHz and 1 MHz, and the configuration checks of I2CInit. The SPI model is a
+MOSI to MISO loopback. It checks the dummy byte on receive, the RX FIFO not
+written on transmit, the chip select held for a command and read, the frames
+in flight, the clock divider, and the Flexcomm function change and lock.
+
+The models do not cover the prescaler counter, bus timing through the async
+APB bridge, I2C clock stretching or interrupt preemption. Hardware validation
+is still required.

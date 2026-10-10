@@ -1190,5 +1190,15 @@
 			<type>1</type>
 			<locationURI>PARENT-3-PROJECT_LOC/src/timer_lpc546xx.cpp</locationURI>
 		</link>
+		<link>
+			<name>src/i2c_lpc546xx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/i2c_lpc546xx.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/spi_lpc546xx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/spi_lpc546xx.cpp</locationURI>
+		</link>
 	</linkedResources>
 </projectDescription>
