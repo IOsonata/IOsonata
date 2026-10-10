@@ -2,7 +2,7 @@
 /**-------------------------------------------------------------------------
 @file	iopincfg_stm32f0xx.c
 
-@brief	I/O pin configuration implementation on STM32F0x series
+@brief	STM32F0 GPIO clock and EXTI implementation
 
 @author	Hoang Nguyen Hoan
 @date	June 3, 2019
