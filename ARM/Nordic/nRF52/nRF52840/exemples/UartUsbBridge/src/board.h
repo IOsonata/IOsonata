@@ -50,8 +50,8 @@ SOFTWARE.
 // Board selection, define one:
 //	NRF52840_DK		nRF52840 DK, bridge to the interface MCU VCOM0
 //	NORDIC_THINGY91	Nordic Thingy:91, bridge to the nRF9160 UART0
-#define NRF52840_DK
-//#define NORDIC_THINGY91
+//#define NRF52840_DK
+#define NORDIC_THINGY91
 
 // Start rate. The host sets the rate it wants when it opens the port.
 #define UART_DEVNO			0

@@ -36,6 +36,11 @@
 			<locationURI>PARENT-1-PROJECT_LOC/src/custom_board.h</locationURI>
 		</link>
 		<link>
+			<name>src/iosonata_dfu_public_key.c</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/src/iosonata_dfu_public_key.c</locationURI>
+		</link>
+		<link>
 			<name>src/main.c</name>
 			<type>1</type>
 			<locationURI>$%7BPARENT-1-PROJECT_LOC%7D/src/main.c</locationURI>
@@ -48,7 +53,7 @@
 		<link>
 			<name>src/nrfx_usbd_drv.c</name>
 			<type>1</type>
-			<location>/Users/hoan/swdev/IOsonata/ARM/Nordic/nRF52/nRF52840/exemples/dfu_usb_open/src/nrfx_usbd_drv.c</location>
+			<locationURI>PARENT-1-PROJECT_LOC/src/nrfx_usbd_drv.c</locationURI>
 		</link>
 		<link>
 			<name>src/open_bootloader_gcc_nrf52.ld</name>
@@ -67,6 +72,16 @@
 		</link>
 		<link>
 			<name>src/nRF5_SDK/libraries</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/libraries/atomic</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/libraries/balloc</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
@@ -346,6 +361,11 @@
 			<locationURI>$%7BPARENT-8-PROJECT_LOC%7D/external/nRF5_SDK/components/libraries/timer/app_timer2.c</locationURI>
 		</link>
 		<link>
+			<name>src/nRF5_SDK/libraries/timer/app_timer.c</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/timer/app_timer.c</locationURI>
+		</link>
+		<link>
 			<name>src/nRF5_SDK/libraries/timer/drv_rtc.c</name>
 			<type>1</type>
 			<locationURI>$%7BPARENT-8-PROJECT_LOC%7D/external/nRF5_SDK/components/libraries/timer/drv_rtc.c</locationURI>
@@ -561,6 +581,16 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>src/nRF5_SDK/libraries/fstorage</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/libraries/scheduler</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>src/nRF5_SDK/libraries/usbd/class/cdc</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -601,6 +631,21 @@
 			<locationURI>$%7BPARENT-8-PROJECT_LOC%7D/external/nRF5_SDK/components/libraries/crypto/backend/cc310_bl/cc310_bl_backend_shared.c</locationURI>
 		</link>
 		<link>
+			<name>src/nRF5_SDK/libraries/fstorage/nrf_fstorage.c</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/fstorage/nrf_fstorage.c</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/libraries/fstorage/nrf_fstorage_nvmc.c</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/fstorage/nrf_fstorage_nvmc.c</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/libraries/scheduler/app_scheduler.c</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/scheduler/app_scheduler.c</locationURI>
+		</link>
+		<link>
 			<name>src/nRF5_SDK/libraries/usbd/class/cdc/acm</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -609,6 +654,16 @@
 			<name>src/nRF5_SDK/libraries/usbd/class/nrf_dfu_trigger/app_usbd_nrf_dfu_trigger.c</name>
 			<type>1</type>
 			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/usbd/class/nrf_dfu_trigger/app_usbd_nrf_dfu_trigger.c</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/libraries/atomic/nrf_atomic.c</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/atomic/nrf_atomic.c</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/libraries/balloc/nrf_balloc.c</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/balloc/nrf_balloc.c</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK/libraries/usbd/class/cdc/acm/app_usbd_cdc_acm.c</name>

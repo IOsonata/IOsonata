@@ -621,11 +621,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/intelhex.c</locationURI>
 		</link>
 		<link>
-			<name>src/iosonata_dfu_public_key.c</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/iosonata_dfu_public_key.c</locationURI>
-		</link>
-		<link>
 			<name>src/isha1.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/isha1.c</locationURI>
@@ -3441,11 +3436,6 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>src/nRF5_SDK/ble/ble_services/ble_dfu</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
 			<name>src/nRF5_SDK/ble/ble_services/ble_dis</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -5674,26 +5664,6 @@
 			<name>src/nRF5_SDK/ble/ble_services/ble_bas/ble_bas.h</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/ble/ble_services/ble_bas/ble_bas.h</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/ble/ble_services/ble_dfu/ble_dfu.c</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/ble/ble_services/ble_dfu/ble_dfu.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/ble/ble_services/ble_dfu/ble_dfu.h</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/ble/ble_services/ble_dfu/ble_dfu.h</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/ble/ble_services/ble_dfu/ble_dfu_bonded.c</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/ble/ble_services/ble_dfu/ble_dfu_bonded.c</locationURI>
-		</link>
-		<link>
-			<name>src/nRF5_SDK/ble/ble_services/ble_dfu/ble_dfu_unbonded.c</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK/components/ble/ble_services/ble_dfu/ble_dfu_unbonded.c</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK/ble/ble_services/ble_dis/ble_dis.c</name>

@@ -163,9 +163,10 @@ static void dfu_observer(nrf_dfu_evt_type_t evt_type)
 //            bsp_board_init(BSP_INIT_LEDS);
         	IOPinClear(LED1_PORT, LED1_PIN);
 
-            if (!nrf_clock_lf_is_running())
+        	nrf_clock_lfclk_t clksrc;
+            if (!nrf_clock_is_running(NRF_CLOCK, NRF_CLOCK_DOMAIN_LFCLK, &clksrc))
             {
-                nrf_clock_task_trigger(NRF_CLOCK_TASK_LFCLKSTART);
+                nrf_clock_task_trigger(NRF_CLOCK, NRF_CLOCK_TASK_LFCLKSTART);
             }
             err_code = app_timer_init();
             APP_ERROR_CHECK(err_code);

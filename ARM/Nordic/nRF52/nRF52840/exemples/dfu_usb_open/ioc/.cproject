@@ -51,8 +51,6 @@
 							</tool>
 							<tool id="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.333062902" name="GNU ARM Cross C Compiler" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler">
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs.38901757" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs" useByScannerDiscovery="true" valueType="definedSymbols">
-									<listOptionValue builtIn="false" value="APP_TIMER_V2"/>
-									<listOptionValue builtIn="false" value="APP_TIMER_V2_RTC1_ENABLED"/>
 									<listOptionValue builtIn="false" value="MBR_PRESENT"/>
 									<listOptionValue builtIn="false" value="BOARD_CUSTOM"/>
 									<listOptionValue builtIn="false" value="CONFIG_GPIO_AS_PINRESET"/>
@@ -130,8 +128,6 @@
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.noexceptions.1131957068" name="Do not use exceptions (-fno-exceptions)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.noexceptions" useByScannerDiscovery="true" value="true" valueType="boolean"/>
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.nortti.1942846439" name="Do not use RTTI (-fno-rtti)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.nortti" useByScannerDiscovery="true" value="true" valueType="boolean"/>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.defs.1209927632" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.defs" useByScannerDiscovery="true" valueType="definedSymbols">
-									<listOptionValue builtIn="false" value="APP_TIMER_V2"/>
-									<listOptionValue builtIn="false" value="APP_TIMER_V2_RTC1_ENABLED"/>
 									<listOptionValue builtIn="false" value="MBR_PRESENT"/>
 									<listOptionValue builtIn="false" value="BOARD_CUSTOM"/>
 									<listOptionValue builtIn="false" value="CONFIG_GPIO_AS_PINRESET"/>
@@ -250,7 +246,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/nRF5_SDK/libraries/bootloader/dfu/nrf_dfu_svci_handler.c|src/nRF5_SDK/libraries/bootloader/serial_dfu/nrf_dfu_serial_uart.c|src/sdk5/bootloader/dfu/nrf_dfu_trigger_usb.c|src/bootloader/dfu/nrf_dfu_trigger_usb.c|src/nRF5_SDK/boards/boards.c|src/nRF5_SDK/libraries/timer/app_timer2.c|src/nRF5_SDK/libraries/timer/drv_rtc.c|src/bootloader/dfu/nrf_dfu_settings_svci.c|src/nRF5_SDK/drivers_nrf|src/nRF5_SDK/utf_converter|src/nRF5_SDK/nrfx/soc|src/nRF5_SDK/libraries/fstorage|src/nRF5_SDK/libraries/experimental_section_vars|src/nRF5_SDK/libraries/scheduler|src/nRF5_SDK/nrfx/drivers/src/nrfx_usbd.c|src/nRF5_SDK/nrfx/drivers/src/nrfx_systick.c|src/nRF5_SDK/libraries/balloc|src/nRF5_SDK/libraries/atomic_fifo|src/nRF5_SDK/libraries/atomic|src/nRF5_SDK/nrfx/hal|src/iosonata_dfu_public_key.c|src/Vectors_nRF52840.c|src/system_nrf52840.c|src/ResetEntry.c|src/nRF5_SDK/libraries/util/app_error.c|src/nRF5_SDK/libraries/util/app_error_handler_gcc.c|src/nRF5_SDK/libraries/crypto/nrf_crypto_svc.c|src/nRF5_SDK/libraries/bootloader/dfu/nrf_dfu_settings_svci.c|src/nRF5_SDK/libraries/bootloader/dfu/nrf_dfu_trigger_usb.c" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/nRF5_SDK/libraries/bootloader/dfu/nrf_dfu_svci_handler.c|src/nRF5_SDK/libraries/bootloader/serial_dfu/nrf_dfu_serial_uart.c|src/sdk5/bootloader/dfu/nrf_dfu_trigger_usb.c|src/bootloader/dfu/nrf_dfu_trigger_usb.c|src/nRF5_SDK/boards/boards.c|src/nRF5_SDK/libraries/timer/app_timer2.c|src/nRF5_SDK/libraries/timer/drv_rtc.c|src/bootloader/dfu/nrf_dfu_settings_svci.c|src/nRF5_SDK/drivers_nrf|src/nRF5_SDK/utf_converter|src/nRF5_SDK/nrfx/soc|src/nRF5_SDK/libraries/experimental_section_vars|src/nRF5_SDK/nrfx/drivers/src/nrfx_usbd.c|src/nRF5_SDK/nrfx/drivers/src/nrfx_systick.c|src/nRF5_SDK/libraries/atomic_fifo|src/nRF5_SDK/nrfx/hal|src/Vectors_nRF52840.c|src/system_nrf52840.c|src/ResetEntry.c|src/nRF5_SDK/libraries/util/app_error.c|src/nRF5_SDK/libraries/util/app_error_handler_gcc.c|src/nRF5_SDK/libraries/crypto/nrf_crypto_svc.c|src/nRF5_SDK/libraries/bootloader/dfu/nrf_dfu_settings_svci.c|src/nRF5_SDK/libraries/bootloader/dfu/nrf_dfu_trigger_usb.c" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -295,6 +291,8 @@
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.command.size.1502386233" name="Size command" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.command.size" value="size" valueType="string"/>
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.command.make.375050229" name="Build command" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.command.make" value="make" valueType="string"/>
 							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.command.rm.396885335" name="Remove command" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.command.rm" value="rm" valueType="string"/>
+							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.fpu.abi.1907051400" name="Float ABI" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.fpu.abi" value="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.fpu.abi.hard" valueType="enumerated"/>
+							<option id="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.fpu.unit.1907051401" name="FPU Type" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.fpu.unit" value="ilg.gnuarmeclipse.managedbuild.cross.option.arm.target.fpu.unit.fpv4spd16" valueType="enumerated"/>
 							<targetPlatform archList="all" binaryParser="org.eclipse.cdt.core.ELF" id="ilg.gnuarmeclipse.managedbuild.cross.targetPlatform.1792268287" isAbstract="false" osList="all" superClass="ilg.gnuarmeclipse.managedbuild.cross.targetPlatform"/>
 							<builder buildPath="${workspace_loc:/open_bootloader}/Debug" id="ilg.gnuarmeclipse.managedbuild.cross.builder.1648192796" keepEnvironmentInBuildfile="false" managedBuildOn="true" name="Gnu Make Builder" superClass="ilg.gnuarmeclipse.managedbuild.cross.builder"/>
 							<tool id="ilg.gnuarmeclipse.managedbuild.cross.tool.assembler.295078951" name="GNU ARM Cross Assembler" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.assembler">
@@ -303,8 +301,6 @@
 							</tool>
 							<tool id="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.715699192" name="GNU ARM Cross C Compiler" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler">
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs.878886067" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs" useByScannerDiscovery="true" valueType="definedSymbols">
-									<listOptionValue builtIn="false" value="APP_TIMER_V2"/>
-									<listOptionValue builtIn="false" value="APP_TIMER_V2_RTC1_ENABLED"/>
 									<listOptionValue builtIn="false" value="MBR_PRESENT"/>
 									<listOptionValue builtIn="false" value="BOARD_CUSTOM"/>
 									<listOptionValue builtIn="false" value="CONFIG_GPIO_AS_PINRESET"/>
@@ -469,11 +465,12 @@
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.gcsections.1618454577" name="Remove unused sections (-Xlinker --gc-sections)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.gcsections" value="true" valueType="boolean"/>
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.other.1991179645" name="Other linker flags" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.other" value="--specs=rdimon.specs -Wl,--start-group -lgcc -lc -lc -lm -lrdimon -Wl,--end-group" valueType="string"/>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.libs.287792542" name="Libraries (-l)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.libs" valueType="libs">
-									<listOptionValue builtIn="false" value="nrf_cc310_bl_0.9.12"/>
+									<listOptionValue builtIn="false" value="IOsonata_nRF52840"/>
+									<listOptionValue builtIn="false" value="nrf_cc310_bl_0.9.13"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.paths.1303509619" name="Library search path (-L)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.paths" useByScannerDiscovery="false" valueType="libPaths">
 									<listOptionValue builtIn="false" value="../../../../lib/ioc/Debug"/>
-									<listOptionValue builtIn="false" value="../../../../../../../../../external/nRF5_SDK/external/nrf_cc310_bl/lib/cortex-m4/soft-float"/>
+									<listOptionValue builtIn="false" value="../../../../../../../../../external/nRF5_SDK/external/nrf_cc310_bl/lib/cortex-m4/hard-float"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.scriptfile.15682554" name="Script files (-T)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.linker.scriptfile" valueType="stringList">
 									<listOptionValue builtIn="false" value="&quot;../../src/open_bootloader_gcc_nrf52.ld&quot;"/>
@@ -499,7 +496,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/nRF5_SDK/libraries/bootloader/dfu/nrf_dfu_svci_handler.c|src/nRF5_SDK/libraries/bootloader/serial_dfu/nrf_dfu_serial_uart.c|src/sdk5/bootloader/dfu/nrf_dfu_trigger_usb.c|src/bootloader/dfu/nrf_dfu_trigger_usb.c|src/nRF5_SDK/boards/boards.c|src/nRF5_SDK/libraries/timer/app_timer2.c|src/nRF5_SDK/libraries/timer/drv_rtc.c|src/bootloader/dfu/nrf_dfu_settings_svci.c|src/nRF5_SDK/utf_converter|src/nRF5_SDK/nrfx/soc|src/nRF5_SDK/libraries/fstorage|src/nRF5_SDK/libraries/experimental_section_vars|src/nRF5_SDK/libraries/scheduler|src/nRF5_SDK/nrfx/drivers/src/nrfx_usbd.c|src/nRF5_SDK/nrfx/drivers/src/nrfx_systick.c|src/nRF5_SDK/libraries/balloc|src/nRF5_SDK/libraries/atomic_fifo|src/nRF5_SDK/libraries/atomic|src/nRF5_SDK/nrfx/hal|src/iosonata_dfu_public_key.c|src/Vectors_nRF52840.c|src/system_nrf52840.c|src/ResetEntry.c|src/nRF5_SDK/libraries/util/app_error.c|src/nRF5_SDK/libraries/util/app_error_handler_gcc.c|src/nRF5_SDK/libraries/crypto/nrf_crypto_svc.c|src/nRF5_SDK/libraries/bootloader/dfu/nrf_dfu_settings_svci.c|src/nRF5_SDK/libraries/bootloader/dfu/nrf_dfu_trigger_usb.c" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/nRF5_SDK/libraries/bootloader/dfu/nrf_dfu_svci_handler.c|src/nRF5_SDK/libraries/bootloader/serial_dfu/nrf_dfu_serial_uart.c|src/sdk5/bootloader/dfu/nrf_dfu_trigger_usb.c|src/bootloader/dfu/nrf_dfu_trigger_usb.c|src/nRF5_SDK/boards/boards.c|src/nRF5_SDK/libraries/timer/app_timer2.c|src/nRF5_SDK/libraries/timer/drv_rtc.c|src/bootloader/dfu/nrf_dfu_settings_svci.c|src/nRF5_SDK/utf_converter|src/nRF5_SDK/nrfx/soc|src/nRF5_SDK/libraries/experimental_section_vars|src/nRF5_SDK/nrfx/drivers/src/nrfx_usbd.c|src/nRF5_SDK/nrfx/drivers/src/nrfx_systick.c|src/nRF5_SDK/libraries/atomic_fifo|src/nRF5_SDK/nrfx/hal|src/Vectors_nRF52840.c|src/system_nrf52840.c|src/ResetEntry.c|src/nRF5_SDK/libraries/util/app_error.c|src/nRF5_SDK/libraries/util/app_error_handler_gcc.c|src/nRF5_SDK/libraries/crypto/nrf_crypto_svc.c|src/nRF5_SDK/libraries/bootloader/dfu/nrf_dfu_settings_svci.c|src/nRF5_SDK/libraries/bootloader/dfu/nrf_dfu_trigger_usb.c" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>

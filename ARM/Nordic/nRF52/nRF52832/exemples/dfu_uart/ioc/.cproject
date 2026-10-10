@@ -171,7 +171,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/nRF5_SDK/libraries/bootloader/dfu/nrf_dfu_svci.c|src/nRF5_SDK/libraries/bootloader/dfu/nrf_dfu_svci_handler.c|src/nRF5_SDK/softdevice/common" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/nRF5_SDK/libraries/bootloader/dfu/nrf_dfu_svci.c|src/nRF5_SDK/libraries/bootloader/dfu/nrf_dfu_svci_handler.c|src/nRF5_SDK/softdevice/common|src/nRF5_SDK/libraries/bootloader/serial_dfu/nrf_dfu_serial_uart.c|src/nRF5_SDK/nrfx/legacy/nrf_drv_uart.c|src/nRF5_SDK/nrfx/drivers/src/nrfx_uart.c" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>

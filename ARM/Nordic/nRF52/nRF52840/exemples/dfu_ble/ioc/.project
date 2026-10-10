@@ -491,6 +491,11 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>src/nRF5_SDK/libraries/sha256</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>src/nRF5_SDK/libraries/crypto/backend/cc310_bl/cc310_bl_backend_ecc.c</name>
 			<type>1</type>
 			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/crypto/backend/cc310_bl/cc310_bl_backend_ecc.c</locationURI>
@@ -559,6 +564,11 @@
 			<name>src/nRF5_SDK/libraries/crypto/backend/nrf_sw/nrf_sw_backend_hash.h</name>
 			<type>1</type>
 			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/crypto/backend/nrf_sw/nrf_sw_backend_hash.h</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/libraries/sha256/sha256.c</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/sha256/sha256.c</locationURI>
 		</link>
 	</linkedResources>
 </projectDescription>
