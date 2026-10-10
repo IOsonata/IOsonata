@@ -49,11 +49,55 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define PLL_PDEC_VAL_P (0)                                       /* PDEC is in bits  6:0 */
 #define PLL_PDEC_VAL_M (0x7FUL << PLL_PDEC_VAL_P)
 
-// FLASHCFG FLASHTIM for a system clock up to 12 MHz, 1 clock flash access
-#define LPC546XX_FLASHTIM_12MHZ		0U
+#ifndef SYSTEM_CORE_CLOCK_MAX
+#error "SYSTEM_CORE_CLOCK_MAX must be defined by the MCU system header"
+#endif
 
 // nsDelay loop length in core clocks
 #define LPC546XX_NSDELAY_LOOP_CLK	3UL
+
+// System PLL. Fcco = 2 * M * Fin / N must stay within the CCO range. The PLL
+// output is Fcco, or Fcco / (2 * P) with the post divider.
+#define LPC546XX_PLL_CCO_MIN		275000000UL
+#define LPC546XX_PLL_CCO_MAX		550000000UL
+#define LPC546XX_PLL_REF_MIN		1000000UL		// Lowest Fin / N used, keeps the PLL reference high
+#define LPC546XX_PLL_LOCK_WAIT		100000UL		// SYSPLLSTAT reads before giving up
+#define LPC546XX_PLLCLKSEL_FRO12M	0U
+#define LPC546XX_PLLCLKSEL_CLKIN	1U
+#define LPC546XX_MAINCLKSELB_MAINA	0U
+#define LPC546XX_MAINCLKSELB_PLL	2U
+
+// System oscillator range, FREQRANGE 0 up to 20 MHz, 1 from 15 to 25 MHz
+#define LPC546XX_SYSOSC_FREQ_MIN	1000000UL
+#define LPC546XX_SYSOSC_FREQ_MAX	25000000UL
+#define LPC546XX_SYSOSC_RANGE_LOW	20000000UL
+
+// Voltage domain level registers, one word per domain VD1 to VD6, and the
+// domain status register. They are not described in UM10912. Addresses,
+// levels and frequency limits are the ones POWER_SetVoltageForFreq and
+// POWER_SetPLL write in the NXP SDK power library (libpower, BSD-3-Clause).
+// Level n is 0.65 V + n * 50 mV.
+#define LPC546XX_VD_LEVEL			((volatile uint32_t *)0x40020000UL)
+#define LPC546XX_VD_STATUS			(*(volatile uint32_t *)0x40020054UL)
+#define LPC546XX_VD_STATUS_VD3_RDY	(1UL << 5)
+#define LPC546XX_VD_STATUS_WAIT		100000UL
+#define LPC546XX_VD_1V20			11U
+#define LPC546XX_VD_1V25			12U
+#define LPC546XX_VD_1V30			13U
+#define LPC546XX_VD_1V40			15U
+#define LPC546XX_VD_FREQ_MID		100000000UL		// VD1 and VD4 at 1.30 V above this
+#define LPC546XX_VD_FREQ_HIGH		180000000UL		// VD1 and VD4 at 1.40 V above this
+
+// FLASHTIM above LPC546XX_VD_FREQ_HIGH. The 1.40 V core voltage gives the
+// flash access time of 168 MHz.
+#define LPC546XX_FLASHTIM_VD_HIGH	7U
+
+typedef struct {
+	uint32_t N;					//!< Pre divider, 1 to NVALMAX
+	uint32_t M;					//!< Multiplier, 1 to MVALMAX
+	uint32_t P;					//!< Post divider, 0 when not used
+	uint32_t Freq;				//!< Output frequency in Hz
+} Lpc546xxPll_t;
 
 extern void *__Vectors;
 
@@ -65,6 +109,12 @@ __WEAK McuOsc_t g_McuOsc = {
 
 static const uint8_t wdtFreqLookup[32] = {0, 8, 12, 15, 18, 20, 24, 26, 28, 30, 32, 34, 36, 38, 40, 41, 42, 44, 45, 46,
                                             48, 49, 50, 52, 53, 54, 56, 57, 58, 59, 60, 61};
+// Flash access time is FLASHTIM + 1 system clocks. Entry n is the highest
+// system clock for FLASHTIM n.
+static const uint32_t s_FlashTimFreq[] = {
+	12000000UL, 24000000UL, 36000000UL, 60000000UL, 96000000UL,
+	120000000UL, 144000000UL, 168000000UL, 180000000UL
+};
 uint32_t SystemCoreClock = DEFAULT_SYSTEM_CLOCK;
 uint32_t SystemnsDelayFactor = LPC546XX_NSDELAY_LOOP_CLK * 1000000000UL / DEFAULT_SYSTEM_CLOCK;
 
@@ -249,7 +299,266 @@ static uint32_t findPllMMult(uint32_t ctrlReg, uint32_t mDecReg)
     return mMult;
 }
 
+// NDEC, PDEC and MDEC encodings, the reverse of the decoders above
+static uint32_t pllEncodeN(uint32_t N)
+{
+	if (N == 1U)
+	{
+		return 0x302U;
+	}
+	if (N == 2U)
+	{
+		return 0x202U;
+	}
 
+	uint32_t x = 0x80U;
+
+	for (uint32_t i = N; i <= NVALMAX; i++)
+	{
+		x = (((x ^ (x >> 2U) ^ (x >> 3U) ^ (x >> 4U)) & 1U) << 7U) | ((x >> 1U) & 0x7FU);
+	}
+
+	return x & (PLL_NDEC_VAL_M >> PLL_NDEC_VAL_P);
+}
+
+static uint32_t pllEncodeP(uint32_t P)
+{
+	if (P == 0U)
+	{
+		return 0x7FU;
+	}
+	if (P == 1U)
+	{
+		return 0x62U;
+	}
+	if (P == 2U)
+	{
+		return 0x42U;
+	}
+
+	uint32_t x = 0x10U;
+
+	for (uint32_t i = P; i <= PVALMAX; i++)
+	{
+		x = (((x ^ (x >> 2U)) & 1U) << 4U) | ((x >> 1U) & 0xFU);
+	}
+
+	return x & (PLL_PDEC_VAL_M >> PLL_PDEC_VAL_P);
+}
+
+static uint32_t pllEncodeM(uint32_t M)
+{
+	if (M == 1U)
+	{
+		return 0x18003U;
+	}
+	if (M == 2U)
+	{
+		return 0x10003U;
+	}
+
+	uint32_t x = 0x4000U;
+
+	for (uint32_t i = M; i <= MVALMAX; i++)
+	{
+		x = (((x ^ (x >> 1U)) & 1U) << 14U) | ((x >> 1U) & 0x3FFFU);
+	}
+
+	return x & (PLL_MDEC_VAL_M >> PLL_MDEC_VAL_P);
+}
+
+// SYSPLLCTRL value. The bandwidth is set from the total multiplier 2 * M,
+// which gives the values of the NXP LPCXpresso54628 180 and 220 MHz setups.
+static uint32_t Lpc546xxPllCtrl(uint32_t M, bool bDirectOut)
+{
+	uint32_t mt = M << 1;
+	uint32_t selp = mt < 60U ? (mt >> 1) + 1U : PVALMAX - 1U;
+	uint32_t seli;
+
+	if (mt > 16384U)
+	{
+		seli = 1U;
+	}
+	else if (mt > 8192U)
+	{
+		seli = 2U;
+	}
+	else if (mt > 2048U)
+	{
+		seli = 4U;
+	}
+	else if (mt >= 501U)
+	{
+		seli = 8U;
+	}
+	else if (mt >= 60U)
+	{
+		seli = 4096U / (mt + 9U);
+	}
+	else
+	{
+		seli = (mt & 0x3CU) + 4U;
+	}
+
+	return SYSCON_SYSPLLCTRL_SELI(seli) | SYSCON_SYSPLLCTRL_SELP(selp) | SYSCON_SYSPLLCTRL_SELR(0) |
+		   (bDirectOut ? SYSCON_SYSPLLCTRL_DIRECTO_MASK : 0U);
+}
+
+// Find the PLL setting with the highest output not above Fout. Direct output
+// and small dividers are tried first.
+static bool Lpc546xxPllFind(uint32_t Fin, uint32_t Fout, Lpc546xxPll_t *pPll)
+{
+	pPll->N = 1;
+	pPll->M = 1;
+	pPll->P = 0;
+	pPll->Freq = 0;
+
+	for (uint32_t p = 0; p <= PVALMAX; p++)
+	{
+		uint32_t div = p == 0U ? 1U : p << 1;
+		uint64_t fcco = (uint64_t)Fout * div;
+
+		if (fcco < LPC546XX_PLL_CCO_MIN)
+		{
+			continue;
+		}
+		if (fcco > LPC546XX_PLL_CCO_MAX)
+		{
+			break;
+		}
+
+		for (uint32_t n = 1; n <= NVALMAX && Fin / n >= LPC546XX_PLL_REF_MIN; n++)
+		{
+			uint64_t m = fcco * n / ((uint64_t)Fin << 1);
+
+			if (m == 0U || m > MVALMAX)
+			{
+				continue;
+			}
+
+			uint64_t cco = ((uint64_t)Fin * (m << 1)) / n;
+
+			if (cco < LPC546XX_PLL_CCO_MIN)
+			{
+				continue;
+			}
+
+			uint32_t f = (uint32_t)(cco / div);
+
+			if (f > pPll->Freq)
+			{
+				pPll->N = n;
+				pPll->M = (uint32_t)m;
+				pPll->P = p;
+				pPll->Freq = f;
+			}
+			if (f == Fout)
+			{
+				return true;
+			}
+		}
+	}
+
+	return pPll->Freq != 0U;
+}
+
+// Core voltage for a system clock frequency
+static void Lpc546xxSetVoltage(uint32_t Freq)
+{
+	uint32_t vd = LPC546XX_VD_1V20;
+
+	if (Freq > LPC546XX_VD_FREQ_HIGH)
+	{
+		vd = LPC546XX_VD_1V40;
+	}
+	else if (Freq > LPC546XX_VD_FREQ_MID)
+	{
+		vd = LPC546XX_VD_1V30;
+	}
+
+	LPC546XX_VD_LEVEL[0] = vd;
+	LPC546XX_VD_LEVEL[1] = LPC546XX_VD_1V25;
+	LPC546XX_VD_LEVEL[2] = LPC546XX_VD_1V20;
+	LPC546XX_VD_LEVEL[3] = vd;
+	LPC546XX_VD_LEVEL[4] = LPC546XX_VD_1V20;
+	LPC546XX_VD_LEVEL[5] = LPC546XX_VD_1V20;
+}
+
+// Flash access time for a system clock frequency
+static void Lpc546xxSetFlashTime(uint32_t Freq)
+{
+	uint32_t tim = LPC546XX_FLASHTIM_VD_HIGH;
+
+	if (Freq <= LPC546XX_VD_FREQ_HIGH)
+	{
+		tim = 0;
+		while (tim < sizeof(s_FlashTimFreq) / sizeof(s_FlashTimFreq[0]) - 1U && Freq > s_FlashTimFreq[tim])
+		{
+			tim++;
+		}
+	}
+
+	SYSCON->FLASHCFG = (SYSCON->FLASHCFG & ~SYSCON_FLASHCFG_FLASHTIM_MASK) | SYSCON_FLASHCFG_FLASHTIM(tim);
+}
+
+// FRO on, main clock from fro_12m, AHB divider 1
+static void Lpc546xxMainClockFro12M(void)
+{
+	SYSCON->PDRUNCFGCLR[0] = SYSCON_PDRUNCFG_PDEN_FRO_MASK;
+	SYSCON->MAINCLKSELA = SYSCON_MAINCLKSELA_SEL(0);
+	SYSCON->MAINCLKSELB = SYSCON_MAINCLKSELB_SEL(LPC546XX_MAINCLKSELB_MAINA);
+	SYSCON->AHBCLKDIV = 0;
+}
+
+// Program and start the system PLL. The main clock must not be on the PLL.
+static bool Lpc546xxPllStart(uint32_t ClkSel, const Lpc546xxPll_t *pPll)
+{
+	uint32_t cnt = LPC546XX_VD_STATUS_WAIT;
+
+	// VD3 supplies the PLL
+	SYSCON->PDRUNCFGCLR[0] = SYSCON_PDRUNCFG_PDEN_VD3_MASK;
+	while ((LPC546XX_VD_STATUS & LPC546XX_VD_STATUS_VD3_RDY) == 0U && --cnt > 0U);
+	if (cnt == 0U)
+	{
+		return false;
+	}
+
+	// The PLL is powered down while it is changed. A divider value is taken
+	// when its REQ bit is written.
+	SYSCON->PDRUNCFGSET[0] = SYSCON_PDRUNCFG_PDEN_SYS_PLL_MASK;
+	SYSCON->SYSPLLCLKSEL = SYSCON_SYSPLLCLKSEL_SEL(ClkSel);
+	SYSCON->SYSPLLCTRL = Lpc546xxPllCtrl(pPll->M, pPll->P == 0U);
+
+	uint32_t ndec = SYSCON_SYSPLLNDEC_NDEC(pllEncodeN(pPll->N));
+	uint32_t pdec = SYSCON_SYSPLLPDEC_PDEC(pllEncodeP(pPll->P));
+	uint32_t mdec = SYSCON_SYSPLLMDEC_MDEC(pllEncodeM(pPll->M));
+
+	SYSCON->SYSPLLNDEC = ndec;
+	SYSCON->SYSPLLNDEC = ndec | SYSCON_SYSPLLNDEC_NREQ_MASK;
+	SYSCON->SYSPLLPDEC = pdec;
+	SYSCON->SYSPLLPDEC = pdec | SYSCON_SYSPLLPDEC_PREQ_MASK;
+	SYSCON->SYSPLLMDEC = mdec;
+	SYSCON->SYSPLLMDEC = mdec | SYSCON_SYSPLLMDEC_MREQ_MASK;
+
+	SYSCON->PDRUNCFGCLR[0] = SYSCON_PDRUNCFG_PDEN_SYS_PLL_MASK;
+
+	cnt = LPC546XX_PLL_LOCK_WAIT;
+	while ((SYSCON->SYSPLLSTAT & SYSCON_SYSPLLSTAT_LOCK_MASK) == 0U && --cnt > 0U);
+	if (cnt == 0U)
+	{
+		SYSCON->PDRUNCFGSET[0] = SYSCON_PDRUNCFG_PDEN_SYS_PLL_MASK;
+
+		return false;
+	}
+
+	return true;
+}
+
+// clk_in is the system oscillator when the core oscillator is external
+static uint32_t Lpc546xxClkInFreq(void)
+{
+	return g_McuOsc.CoreOsc.Type != OSC_TYPE_RC ? g_McuOsc.CoreOsc.Freq : 0U;
+}
 
 void SystemInit(void)
 {
@@ -270,6 +579,8 @@ void SystemInit(void)
     SYSCON->AHBCLKCTRLSET[0] = SYSCON_AHBCLKCTRL_SRAM1_MASK | SYSCON_AHBCLKCTRL_SRAM2_MASK | SYSCON_AHBCLKCTRL_SRAM3_MASK;
 #endif
 
+	// On failure the PLL is tried from the FRO. If it does not lock either,
+	// the core stays on the 12 MHz FRO.
 	if (SystemCoreClockSelect(g_McuOsc.CoreOsc.Type, g_McuOsc.CoreOsc.Freq) == false)
 	{
 		SystemCoreClockSelect(OSC_TYPE_RC, CLK_FRO_12MHZ);
@@ -277,33 +588,82 @@ void SystemInit(void)
 }
 
 /**
- * @brief	Select the core clock.
+ * @brief	Select the core clock oscillator.
  *
- * The core runs from the 12 MHz FRO. Above 12 MHz the core voltage must be
- * raised first, which NXP provides only through its binary power library
- * (POWER_SetVoltageForFreq). That library is not linked, so a request for
- * another source or frequency returns false and leaves the clock unchanged.
+ * The core runs from the system PLL at SYSTEM_CORE_CLOCK_MAX, or the closest
+ * frequency below it. The PLL input is the 12 MHz FRO for OSC_TYPE_RC, the
+ * system oscillator for OSC_TYPE_XTAL and OSC_TYPE_TCXO (clock on XTALIN).
+ * The core voltage and the flash access time are set for that frequency.
  *
  * @param	ClkSrc	: Oscillator type
- * @param	OscFreq	: Requested frequency in Hz
+ * @param	OscFreq	: Oscillator frequency in Hz, 12 MHz for OSC_TYPE_RC
  *
- * @return	true - clock selected
+ * @return	true - core on the PLL
+ * 			false - invalid oscillator, or the PLL did not lock. The core is
+ * 			then on the 12 MHz FRO when the PLL was tried.
  */
 bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 {
-	if (ClkSrc != OSC_TYPE_RC || OscFreq != CLK_FRO_12MHZ)
+	uint32_t clksel = LPC546XX_PLLCLKSEL_FRO12M;
+	Lpc546xxPll_t pll;
+
+	if (ClkSrc == OSC_TYPE_RC)
+	{
+		if (OscFreq != CLK_FRO_12MHZ)
+		{
+			return false;
+		}
+	}
+	else if (ClkSrc == OSC_TYPE_XTAL || ClkSrc == OSC_TYPE_TCXO)
+	{
+		if (OscFreq < LPC546XX_SYSOSC_FREQ_MIN || OscFreq > LPC546XX_SYSOSC_FREQ_MAX)
+		{
+			return false;
+		}
+		clksel = LPC546XX_PLLCLKSEL_CLKIN;
+	}
+	else
 	{
 		return false;
 	}
 
-	// FRO on, main clock from fro_12m, AHB divider 1. The clock is lowered
-	// before the flash access time is shortened.
-	SYSCON->PDRUNCFGCLR[0] = SYSCON_PDRUNCFG_PDEN_FRO_MASK;
-	SYSCON->MAINCLKSELA = SYSCON_MAINCLKSELA_SEL(0);
-	SYSCON->MAINCLKSELB = SYSCON_MAINCLKSELB_SEL(0);
-	SYSCON->AHBCLKDIV = 0;
-	SYSCON->FLASHCFG = (SYSCON->FLASHCFG & ~SYSCON_FLASHCFG_FLASHTIM_MASK) |
-					   SYSCON_FLASHCFG_FLASHTIM(LPC546XX_FLASHTIM_12MHZ);
+	if (Lpc546xxPllFind(OscFreq, SYSTEM_CORE_CLOCK_MAX, &pll) == false)
+	{
+		return false;
+	}
+
+	// Run from the FRO while the voltage, the flash access time and the PLL
+	// change. The higher voltage and longer flash access are safe at 12 MHz.
+	Lpc546xxMainClockFro12M();
+	Lpc546xxSetVoltage(pll.Freq);
+	Lpc546xxSetFlashTime(pll.Freq);
+
+	if (clksel == LPC546XX_PLLCLKSEL_CLKIN)
+	{
+		// VD2_ANA supplies the system oscillator
+		SYSCON->PDRUNCFGCLR[0] = SYSCON_PDRUNCFG_PDEN_VD2_ANA_MASK;
+		SYSCON->SYSOSCCTRL = (ClkSrc == OSC_TYPE_TCXO ? SYSCON_SYSOSCCTRL_BYPASS_MASK : 0U) |
+							 (OscFreq > LPC546XX_SYSOSC_RANGE_LOW ? SYSCON_SYSOSCCTRL_FREQRANGE_MASK : 0U);
+		SYSCON->PDRUNCFGCLR[1] = SYSCON_PDRUNCFG_PDEN_SYSOSC_MASK;
+	}
+
+	if (Lpc546xxPllStart(clksel, &pll) == false)
+	{
+		if (clksel == LPC546XX_PLLCLKSEL_CLKIN)
+		{
+			SYSCON->PDRUNCFGSET[1] = SYSCON_PDRUNCFG_PDEN_SYSOSC_MASK;
+		}
+		Lpc546xxSetFlashTime(CLK_FRO_12MHZ);
+		Lpc546xxSetVoltage(CLK_FRO_12MHZ);
+		SystemCoreClockUpdate();
+
+		return false;
+	}
+
+	SYSCON->MAINCLKSELB = SYSCON_MAINCLKSELB_SEL(LPC546XX_MAINCLKSELB_PLL);
+
+	g_McuOsc.CoreOsc.Type = ClkSrc;
+	g_McuOsc.CoreOsc.Freq = OscFreq;
 
 	SystemCoreClockUpdate();
 
@@ -348,7 +708,7 @@ uint32_t clkRate = 0;
                     clkRate = CLK_FRO_12MHZ;
                     break;
                 case 0x01: /* CLKIN Source (clk_in) */
-                    clkRate = CLK_CLK_IN;
+                    clkRate = Lpc546xxClkInFreq();
                     break;
                 case 0x02: /* Watchdog oscillator (wdt_clk) */
                     clkRate = getWdtOscFreq();
@@ -372,7 +732,7 @@ uint32_t clkRate = 0;
                     clkRate = CLK_FRO_12MHZ;
                     break;
                 case 0x01: /* CLKIN Source (clk_in) */
-                    clkRate = CLK_CLK_IN;
+                    clkRate = Lpc546xxClkInFreq();
                     break;
                 case 0x02: /* Watchdog oscillator (wdt_clk) */
                     clkRate = getWdtOscFreq();

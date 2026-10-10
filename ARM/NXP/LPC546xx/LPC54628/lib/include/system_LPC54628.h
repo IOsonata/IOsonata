@@ -40,11 +40,11 @@ SOFTWARE.
 #include <stdint.h>
 
 #define DEFAULT_SYSTEM_CLOCK			12000000u	//!< Core clock after reset, FRO 12 MHz
+#define SYSTEM_CORE_CLOCK_MAX			220000000u	//!< Highest core clock
 #define CLK_RTC_32K_CLK					32768u		//!< RTC oscillator 32 kHz output (32k_clk)
 #define CLK_FRO_12MHZ					12000000u	//!< FRO 12 MHz (fro_12m)
 #define CLK_FRO_48MHZ					48000000u	//!< FRO 48 MHz (fro_48m)
 #define CLK_FRO_96MHZ					96000000u	//!< FRO 96 MHz (fro_96m)
-#define CLK_CLK_IN						0u			//!< CLK_IN pin clock, not used
 
 #ifdef __cplusplus
 extern "C" {
@@ -56,7 +56,8 @@ extern uint32_t SystemCoreClock;
 /**
  * @brief	Setup the microcontroller system.
  *
- * Called by ResetEntry before main. Selects the core clock from g_McuOsc.
+ * Called by ResetEntry before main. Runs the core at SYSTEM_CORE_CLOCK_MAX
+ * from the oscillator in g_McuOsc.
  */
 void SystemInit(void);
 

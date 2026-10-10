@@ -39,6 +39,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <stdint.h>
 
 #define DEFAULT_SYSTEM_CLOCK           12000000u           /* Default System clock value */
+#define SYSTEM_CORE_CLOCK_MAX         180000000u           // Highest core clock
 #define CLK_RTC_32K_CLK                   32768u           /* RTC oscillator 32 kHz output (32k_clk */
 #define CLK_FRO_12MHZ                  12000000u           /* FRO 12 MHz (fro_12m) */
 #define CLK_FRO_48MHZ                  48000000u           /* FRO 48 MHz (fro_48m) */
