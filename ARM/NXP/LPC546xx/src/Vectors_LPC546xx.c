@@ -40,6 +40,11 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 extern unsigned long __StackTop;
 extern void ResetEntry(void);
 
+// The boot ROM starts the flash image when the first 8 vector words sum to
+// zero. The linker script computes the word at offset 0x1C from the 7 words
+// before it. Weak so a script without it links with 0 there.
+extern void __valid_user_code_checksum(void) __attribute__((weak));
+
 void DEF_IRQHandler(void) { while(1); }
 __attribute__((weak, alias("DEF_IRQHandler"))) void NMI_Handler(void);
 __attribute__((weak/*, alias("DEF_IRQHandler")*/)) void HardFault_Handler(void) { while(1); }
@@ -132,8 +137,8 @@ void (* const __Vectors[100])(void) = {
 	MemManage_Handler,
 	BusFault_Handler,
 	UsageFault_Handler,
-	0,
-	(void (*) )-1,		// Checksum value
+	__valid_user_code_checksum,	// Checksum of the 7 words above
+	(void (*) )-1,		// ECRP, enhanced code read protection off
 	0, 0,
 	SVC_Handler,
 	DebugMon_Handler,

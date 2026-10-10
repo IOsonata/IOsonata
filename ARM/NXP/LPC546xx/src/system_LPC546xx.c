@@ -34,6 +34,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ----------------------------------------------------------------------------*/
 #include <stdint.h>
+#include <stdbool.h>
 
 #include "LPC546xx.h"
 #include "coredev/system_core_clock.h"
@@ -48,6 +49,12 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define PLL_PDEC_VAL_P (0)                                       /* PDEC is in bits  6:0 */
 #define PLL_PDEC_VAL_M (0x7FUL << PLL_PDEC_VAL_P)
 
+// FLASHCFG FLASHTIM for a system clock up to 12 MHz, 1 clock flash access
+#define LPC546XX_FLASHTIM_12MHZ		0U
+
+// nsDelay loop length in core clocks
+#define LPC546XX_NSDELAY_LOOP_CLK	3UL
+
 extern void *__Vectors;
 
 __WEAK McuOsc_t g_McuOsc = {
@@ -59,6 +66,7 @@ __WEAK McuOsc_t g_McuOsc = {
 static const uint8_t wdtFreqLookup[32] = {0, 8, 12, 15, 18, 20, 24, 26, 28, 30, 32, 34, 36, 38, 40, 41, 42, 44, 45, 46,
                                             48, 49, 50, 52, 53, 54, 56, 57, 58, 59, 60, 61};
 uint32_t SystemCoreClock = DEFAULT_SYSTEM_CLOCK;
+uint32_t SystemnsDelayFactor = LPC546XX_NSDELAY_LOOP_CLK * 1000000000UL / DEFAULT_SYSTEM_CLOCK;
 
 
 /* Get WATCH DOG Clk */
@@ -262,28 +270,64 @@ void SystemInit(void)
     SYSCON->AHBCLKCTRLSET[0] = SYSCON_AHBCLKCTRL_SRAM1_MASK | SYSCON_AHBCLKCTRL_SRAM2_MASK | SYSCON_AHBCLKCTRL_SRAM3_MASK;
 #endif
 
-    switch (g_McuOsc.CoreOsc.Type)
-    {
-  		case OSC_TYPE_RC:
-  			if (g_McuOsc.CoreOsc.Freq < 48000000)
-  			{
-  				// FRO 12MHz
-  			}
-  			else if (g_McuOsc.CoreOsc.Freq < 96000000)
-  			{
-  				// HF PRO 48MHz
-  			}
-  			else
-  			{
-  				// HF FRO 96MHz
-  			}
-  			break;
-  		case OSC_TYPE_XTAL:
-  			break;
-  		case OSC_TYPE_TCXO:
-  			break;
-    }
+	if (SystemCoreClockSelect(g_McuOsc.CoreOsc.Type, g_McuOsc.CoreOsc.Freq) == false)
+	{
+		SystemCoreClockSelect(OSC_TYPE_RC, CLK_FRO_12MHZ);
+	}
+}
 
+/**
+ * @brief	Select the core clock.
+ *
+ * The core runs from the 12 MHz FRO. Above 12 MHz the core voltage must be
+ * raised first, which NXP provides only through its binary power library
+ * (POWER_SetVoltageForFreq). That library is not linked, so a request for
+ * another source or frequency returns false and leaves the clock unchanged.
+ *
+ * @param	ClkSrc	: Oscillator type
+ * @param	OscFreq	: Requested frequency in Hz
+ *
+ * @return	true - clock selected
+ */
+bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
+{
+	if (ClkSrc != OSC_TYPE_RC || OscFreq != CLK_FRO_12MHZ)
+	{
+		return false;
+	}
+
+	// FRO on, main clock from fro_12m, AHB divider 1. The clock is lowered
+	// before the flash access time is shortened.
+	SYSCON->PDRUNCFGCLR[0] = SYSCON_PDRUNCFG_PDEN_FRO_MASK;
+	SYSCON->MAINCLKSELA = SYSCON_MAINCLKSELA_SEL(0);
+	SYSCON->MAINCLKSELB = SYSCON_MAINCLKSELB_SEL(0);
+	SYSCON->AHBCLKDIV = 0;
+	SYSCON->FLASHCFG = (SYSCON->FLASHCFG & ~SYSCON_FLASHCFG_FLASHTIM_MASK) |
+					   SYSCON_FLASHCFG_FLASHTIM(LPC546XX_FLASHTIM_12MHZ);
+
+	SystemCoreClockUpdate();
+
+	return true;
+}
+
+uint32_t SystemCoreClockGet(void)
+{
+	return SystemCoreClock;
+}
+
+/**
+ * @brief	Get peripheral bus clock frequency.
+ *
+ * The LPC546xx peripherals are on the AHB clock. Flexcomm and timer function
+ * clocks have their own selection in their drivers.
+ *
+ * @param	Idx : 0, the AHB clock
+ *
+ * @return	Frequency in Hz, 0 for an invalid index
+ */
+uint32_t SystemPeriphClockGet(int Idx)
+{
+	return Idx == 0 ? SystemCoreClock : 0;
 }
 
 /* ----------------------------------------------------------------------------
@@ -360,6 +404,10 @@ uint32_t clkRate = 0;
             break;
     }
     SystemCoreClock = clkRate / ((SYSCON->AHBCLKDIV & 0xFFUL) + 1UL);
+	if (SystemCoreClock != 0)
+	{
+		SystemnsDelayFactor = LPC546XX_NSDELAY_LOOP_CLK * 1000000000UL / SystemCoreClock;
+	}
 }
 
 /* ----------------------------------------------------------------------------
