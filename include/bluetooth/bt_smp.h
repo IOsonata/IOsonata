@@ -523,7 +523,10 @@ void BtSmpAuthConfig(uint8_t IoCaps, uint8_t AuthReq);
 // Implement only the callbacks required by the chosen SecExchg capabilities.
 // Defaults fail closed. These run in Bluetooth event context and must return
 // promptly; never block waiting for console input or another event.
-bool BtAppPairConfirm(uint16_t ConnHdl, uint32_t Number);
+// Return 1 to approve, 0 to reject, -1 for asynchronous user interaction.
+// A pending decision is completed with BtAppPairDecision().
+int BtAppPairConfirm(uint16_t ConnHdl, uint32_t Number);
+void BtAppPairDecision(uint16_t ConnHdl, bool Confirm);
 bool BtAppPasskeyShow(uint16_t ConnHdl, uint32_t Passkey);
 uint32_t BtAppPasskeyInput(uint16_t ConnHdl);
 
