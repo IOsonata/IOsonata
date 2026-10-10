@@ -220,8 +220,7 @@ typedef struct __Stm32_Uart_Dev {
 	IRQn_Type TxDmaIrq;
 	uint32_t TxDmaShift;
 	bool DmaActive;
-	bool DmaSeedPending;			//!< Initial UART frame awaiting TC before DMA starts
-	alignas(4) uint8_t TxDmaCache[ST_UART_DMA_TX_SIZE];
+	uint32_t TxDmaLength;			//!< FIFO bytes owned by the active DMA transfer
 	alignas(4) uint8_t TxDmaFifoMem[ST_UART_DMA_CFIFO_SIZE];
 #endif
 	alignas(4) uint8_t RxFifoMem[ST_UART_CFIFO_SIZE];	//!< Default RX CFIFO memory
@@ -362,21 +361,20 @@ static void Stm32UartDmaStart(Stm32UartDev_t * const pDev)
 		return;
 	}
 
+	// DMA owns the FIFO's contiguous read span until completion.
 	int len = ST_UART_DMA_TX_SIZE;
-	uint8_t *p = CFifoGetMultiple(pDev->pUartDev->hTxFifo, &len);
+	uint8_t *p = CFifoPeekMultiple(pDev->pUartDev->hTxFifo, &len);
 	if (p == NULL)
 	{
 		pDev->pUartDev->bTxReady = true;
 		return;
 	}
 
-	memcpy(pDev->TxDmaCache, p, len);
 	pDev->pUartDev->bTxReady = false;
-	DMA1->IFCR = DMA_IFCR_CGIF1 << pDev->TxDmaShift;
+	pDev->TxDmaLength = (uint32_t)len;
+	pDev->pTxDma->CMAR = (uint32_t)(uintptr_t)p;
 	pDev->pTxDma->CNDTR = (uint32_t)len;
-	__DMB();
-	// CCR direction, width and interrupt policy are configured at init.
-	// Only the transfer count and enable state change between transfers.
+	DMA1->IFCR = DMA_IFCR_CGIF1 << pDev->TxDmaShift;
 	pDev->DmaActive = true;
 	pDev->pTxDma->CCR |= DMA_CCR_EN;
 }
@@ -387,6 +385,7 @@ static void Stm32UartDmaService(Stm32UartDev_t * const pDev)
 	{
 		return;
 	}
+
 	uint32_t flags = (DMA1->ISR >> pDev->TxDmaShift) &
 					 (DMA_ISR_TCIF1 | DMA_ISR_TEIF1);
 	if (flags == 0U)
@@ -394,13 +393,23 @@ static void Stm32UartDmaService(Stm32UartDev_t * const pDev)
 		return;
 	}
 
-	uint32_t left = pDev->pTxDma->CNDTR;
 	pDev->pTxDma->CCR &= ~DMA_CCR_EN;
+	uint32_t remaining = pDev->pTxDma->CNDTR;
 	DMA1->IFCR = DMA_IFCR_CGIF1 << pDev->TxDmaShift;
 	pDev->DmaActive = false;
+
+	uint32_t transferred = (flags & DMA_ISR_TEIF1) ?
+			pDev->TxDmaLength - remaining : pDev->TxDmaLength;
+	int len = (int)transferred;
+	if (len > 0)
+	{
+		(void)CFifoGetMultiple(pDev->pUartDev->hTxFifo, &len);
+	}
+	pDev->TxDmaLength = 0;
+
 	if (flags & DMA_ISR_TEIF1)
 	{
-		pDev->pUartDev->TxDropCnt += left;
+		pDev->pUartDev->TxDropCnt += remaining;
 	}
 
 	Stm32UartDmaStart(pDev);
@@ -420,8 +429,7 @@ static void Stm32UartDmaStop(Stm32UartDev_t * const pDev)
 	pDev->pTxDma->CCR = 0;
 	DMA1->IFCR = DMA_IFCR_CGIF1 << pDev->TxDmaShift;
 	pDev->DmaActive = false;
-	pDev->DmaSeedPending = false;
-	pDev->pReg->CR1 &= ~USART_CR1_TCIE;
+	pDev->TxDmaLength = 0;
 }
 #endif
 
@@ -446,26 +454,7 @@ static void Stm32UartIrqHandler(USART_TypeDef * const pReg)
 	uint32_t iflag = ST_USART_ISR(pReg);
 	uint32_t cr1 = pReg->CR1;
 
-#if defined(STM32F030x8)
-	// In DMA mode the first byte uses TDR. During its frame, the producer
-	// fills the FIFO; TC then launches DMA for the accumulated bytes.
-	if (dev->DevIntrf.bDma && (cr1 & USART_CR1_TCIE) &&
-		(iflag & ST_USART_ISR_TC))
-	{
-		pReg->CR1 &= ~USART_CR1_TCIE;
-		pReg->ICR = USART_ICR_TCCF;
-		for (int i = 0; i < s_NbUartDev; i++)
-		{
-			Stm32UartDev_t *pDmaDev = &s_Stm32UartDev[i];
-			if (pDmaDev->pReg == pReg && pDmaDev->DmaSeedPending)
-			{
-				pDmaDev->DmaSeedPending = false;
-				Stm32UartDmaStart(pDmaDev);
-				break;
-			}
-		}
-	}
-#endif
+
 
 	// RX errors: clear only the error flags seen, then drain RDR to release
 	// RXNE and let the line recover.
@@ -779,23 +768,7 @@ static int Stm32UartTxData(DevIntrf_t * const pDev, uint8_t const *pData, int Da
 			Datalen -= len;
 			pData += len;
 		}
-		if (pDev->bIntEn && !dev->DmaActive && !dev->DmaSeedPending)
-		{
-			// Use one UART frame to aggregate the next DMA batch.
-			uint8_t *p = CFifoGet(dev->pUartDev->hTxFifo);
-			if (p != NULL)
-			{
-				dev->DmaSeedPending = true;
-				dev->pUartDev->bTxReady = false;
-				reg->ICR = USART_ICR_TCCF;
-				reg->CR1 |= USART_CR1_TCIE;
-				ST_USART_TDR(reg) = *p;
-			}
-		}
-		else if (!pDev->bIntEn)
-		{
-			Stm32UartDmaStart(dev);
-		}
+		Stm32UartDmaStart(dev);
 		EnableInterrupt(state);
 		return cnt;
 	}
@@ -990,7 +963,8 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 
 	// Select polling, USART interrupt or hardware TX DMA transport.
 	// DMA is supported only on mapped F030x8 TX channels.
-	if (pCfg->bIrDAMode || pCfg->Mode != UART_MODE_UART ||
+	if ((pCfg->bDMAMode && !pCfg->bFifoBlocking) ||
+		pCfg->bIrDAMode || pCfg->Mode != UART_MODE_UART ||
 		(pCfg->FlowControl != UART_FLWCTRL_NONE && pCfg->FlowControl != UART_FLWCTRL_HW) ||
 		(pCfg->Parity != UART_PARITY_NONE && pCfg->Parity != UART_PARITY_EVEN && pCfg->Parity != UART_PARITY_ODD) ||
 		(pCfg->DataBits != 7 && pCfg->DataBits != 8) ||
@@ -1179,7 +1153,7 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 		dev->pTxDma->CCR = 0;
 		DMA1->IFCR = DMA_IFCR_CGIF1 << dev->TxDmaShift;
 		dev->pTxDma->CPAR = (uint32_t)(uintptr_t)&ST_USART_TDR(reg);
-		dev->pTxDma->CMAR = (uint32_t)(uintptr_t)dev->TxDmaCache;
+		dev->pTxDma->CMAR = 0;
 		dev->pTxDma->CNDTR = 0;
 		uint32_t dmaCcr = DMA_CCR_DIR | DMA_CCR_MINC;
 		if (pCfg->bIntMode)
@@ -1188,7 +1162,7 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 		}
 		dev->pTxDma->CCR = dmaCcr;
 		dev->DmaActive = false;
-		dev->DmaSeedPending = false;
+		dev->TxDmaLength = 0;
 		cr3 |= USART_CR3_DMAT;
 		if (pCfg->bIntMode)
 		{
