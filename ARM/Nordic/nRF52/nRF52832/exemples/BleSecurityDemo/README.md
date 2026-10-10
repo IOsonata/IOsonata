@@ -21,3 +21,19 @@ for the supported modes and callback semantics.
 This nRF52832 project was derived from the existing MCU-specific UartBleDemo
 build configuration. Source references and project structure were checked;
 compilation and hardware pairing validation are pending.
+
+## Security rejection test
+
+A BLE ACL connection may remain connected after SMP Pairing Failed. This does
+**not** imply that the link has authenticated. The UART GATT service now declares
+`.SecType = BLE_SECURITY_TYPE`, so its characteristic reads/writes and CCCD
+access must meet the configured security policy. Under LESC_MITM, an
+unauthenticated or unencrypted central must **not** read/write UART data,
+even when the controller connection remains established.
+
+For the negative test, reject with BUT2. The log records `Pairing numeric
+comparison rejected`. Verify that subsequent central UART writes do not reach
+the peripheral UART. For the positive test, compare both numbers and press
+BUT1; verify `accepted`, DHKey Check and encryption, then UART traffic.
+An existing Just Works bond does not satisfy the LESC MITM policy; remove
+stale bonds on both peers before comparing new pairing results.
