@@ -75,7 +75,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define BUT1_INT					0
 #endif
 
-#define DEVICE_NAME					"UARTDemo"
+#define DEVICE_NAME					"BLESecurityDemo"
 
 #define PACKET_SIZE					20
 
