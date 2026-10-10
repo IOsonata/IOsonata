@@ -377,62 +377,54 @@ static int Lpc546xxUartTxData(DevIntrf_t * const pDev, uint8_t const *pData, int
 		return cnt;
 	}
 
-	int rtry = pDev->MaxRetry;
+	// One CFIFO enqueue with interrupts disabled. A full CFIFO returns the
+	// count taken so far, DeviceIntrfTx retries, and the RX interrupt is not
+	// held off by a retry loop here.
+	uint32_t state = DisableInterrupt();
 
-	while (Datalen > 0 && rtry-- > 0)
+	if ((reg->CFG & USART_CFG_ENABLE_MASK) == 0)
 	{
-		uint32_t state = DisableInterrupt();
+		EnableInterrupt(state);
 
-		if ((reg->CFG & USART_CFG_ENABLE_MASK) == 0)
+		return 0;
+	}
+
+	while (Datalen > 0)
+	{
+		int l = Datalen;
+		uint8_t *p = l == 1 ? CFifoPut(dev->pUartDev->hTxFifo) :
+					 CFifoPutMultiple(dev->pUartDev->hTxFifo, &l);
+		if (p == NULL)
 		{
-			EnableInterrupt(state);
 			break;
 		}
-
-		while (Datalen > 0)
+		if (l == 1)
 		{
-			int l = Datalen;
-			uint8_t *p = l == 1 ? CFifoPut(dev->pUartDev->hTxFifo) :
-						 CFifoPutMultiple(dev->pUartDev->hTxFifo, &l);
-			if (p == NULL)
-			{
-				break;
-			}
-			if (l == 1)
-			{
-				*p = *pData;
-			}
-			else
-			{
-				memcpy(p, pData, l);
-			}
-			Datalen -= l;
-			pData += l;
-			cnt += l;
+			*p = *pData;
 		}
-
-		// With the TX level interrupt off, the hardware FIFO is filled here.
-		// Older data is always taken from the CFIFO first, so the order is
-		// kept.
-		if (dev->pUartDev->bTxReady)
+		else
 		{
-			Lpc546xxUartTxFill(dev);
+			memcpy(p, pData, l);
 		}
-
-		if (CFifoUsed(dev->pUartDev->hTxFifo) > 0)
-		{
-			dev->pUartDev->bTxReady = false;
-			reg->FIFOINTENSET = USART_FIFOINTENSET_TXLVL_MASK;
-		}
-
-		EnableInterrupt(state);
+		Datalen -= l;
+		pData += l;
+		cnt += l;
 	}
 
-	// Datalen is what the CFIFO did not take after all retries.
-	if (Datalen > 0)
+	// With the TX level interrupt off, the hardware FIFO is filled here.
+	// Older data is always taken from the CFIFO first, so the order is kept.
+	if (dev->pUartDev->bTxReady)
 	{
-		dev->pUartDev->TxDropCnt += (uint32_t)Datalen;
+		Lpc546xxUartTxFill(dev);
 	}
+
+	if (CFifoUsed(dev->pUartDev->hTxFifo) > 0)
+	{
+		dev->pUartDev->bTxReady = false;
+		reg->FIFOINTENSET = USART_FIFOINTENSET_TXLVL_MASK;
+	}
+
+	EnableInterrupt(state);
 
 	return cnt;
 }
