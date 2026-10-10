@@ -30,7 +30,7 @@ static uint32_t Stm32WbaGpioClockMask(int port)
 void IOPinConfig(int port, int pin, int op, IOPINDIR dir,
                  IOPINRES resistor, IOPINTYPE type)
 {
-    GPIO_TypeDef *gpio = Stm32WbaGpio(port);
+    GPIO_TypeDef *gpio = Stm32Gpio(port);
     uint32_t clock = Stm32WbaGpioClockMask(port);
     if (!gpio || !clock || (unsigned)pin >= 16U)
     {
@@ -80,7 +80,7 @@ void IOPinConfig(int port, int pin, int op, IOPINDIR dir,
 
 void IOPinDisable(int port, int pin)
 {
-    GPIO_TypeDef *gpio = Stm32WbaGpio(port);
+    GPIO_TypeDef *gpio = Stm32Gpio(port);
     if (gpio && (unsigned)pin < 16U)
     {
         uint32_t shift = (uint32_t)pin * 2U;
@@ -162,7 +162,7 @@ bool IOPinEnableInterrupt(int intNo, int priority, uint32_t port,
                           IOPinEvtHandler_t cb, void *ctx)
 {
     if (pin >= 16U || intNo != (int)pin || cb == 0 ||
-        Stm32WbaGpio((int)port) == 0 ||
+        Stm32Gpio((int)port) == 0 ||
         (unsigned)priority >= (1U << __NVIC_PRIO_BITS) ||
         (sense != IOPINSENSE_LOW_TRANSITION &&
          sense != IOPINSENSE_HIGH_TRANSITION &&
@@ -227,7 +227,7 @@ void IOPinSetStrength(int port, int pin, IOPINSTRENGTH strength)
 
 void IOPinSetSpeed(int port, int pin, IOPINSPEED speed)
 {
-    GPIO_TypeDef *gpio = Stm32WbaGpio(port);
+    GPIO_TypeDef *gpio = Stm32Gpio(port);
     if (!gpio || (unsigned)pin >= 16U) return;
     uint32_t shift = (uint32_t)pin * 2U;
     uint32_t v = speed == IOPINSPEED_LOW ? 0U :
