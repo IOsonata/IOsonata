@@ -237,6 +237,5 @@
 		</link>
 			<link><name>include/iopinctrl.h</name><type>1</type><locationURI>PARENT-5-PROJECT_LOC/include/iopinctrl.h</locationURI></link>
 			<link><name>src/iopincfg_stm32.cpp</name><type>1</type><locationURI>PARENT-5-PROJECT_LOC/src/iopincfg_stm32.cpp</locationURI></link>
-			<link><name>src/gpio_stm32f4xx.c</name><type>1</type><locationURI>PARENT-4-PROJECT_LOC/src/gpio_stm32f4xx.c</locationURI></link>
 	</linkedResources>
 </projectDescription>
