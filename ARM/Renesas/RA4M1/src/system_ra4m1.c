@@ -225,8 +225,8 @@ static bool Ra4m1StartHoco(uint8_t Config)
 			return false;
 		if (RA4M1_RD8(RA4M1_HOCOCR2) == Config)
 		{
-			RA4M1_WR8(RA4M1_HOCOWTCR, 5U);
-			return RA4M1_RD8(RA4M1_HOCOWTCR) == 5U;
+			/* RA4M1 changes HOCOWTCR only at 64 MHz. */
+			return true;
 		}
 		RA4M1_WR8(RA4M1_HOCOCR, 1U);
 	}
@@ -234,9 +234,12 @@ static bool Ra4m1StartHoco(uint8_t Config)
 		!Ra4m1Wait8(RA4M1_OSCSF, RA4M1_OSCSF_HOCO, 0U))
 		return false;
 	RA4M1_WR8(RA4M1_HOCOCR2, Config);
-	RA4M1_WR8(RA4M1_HOCOWTCR, 5U);
-	if (RA4M1_RD8(RA4M1_HOCOCR2) != Config ||
-		RA4M1_RD8(RA4M1_HOCOWTCR) != 5U)
+	/* RA4M1 FSP only programs HOCOWTCR for 64 MHz, to 6. */
+	if (Config == 0x28U)
+	{
+		RA4M1_WR8(RA4M1_HOCOWTCR, 6U);
+	}
+	if (RA4M1_RD8(RA4M1_HOCOCR2) != Config)
 		return false;
 	Ra4m1DelayUs(2U);
 	RA4M1_WR8(RA4M1_HOCOCR, 0U);
