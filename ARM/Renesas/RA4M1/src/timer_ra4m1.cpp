@@ -169,7 +169,7 @@ static bool Stop(Ra4m1TimerData &d)
         Sync(d);
         d.AgtReg->AGT16.CTRL.AGTCR =  0U;
         for (uint32_t i=0; i<1000000UL; ++i)
-            if (!(d.AgtReg->AGT16.CTRL.AGTCR & 0x01UED)) {
+            if (!(d.AgtReg->AGT16.CTRL.AGTCR & 0x02U)) {
                 d.Running=false; return true;
             }
     } else {
@@ -192,7 +192,7 @@ static bool Start(Ra4m1TimerData &d)
         NVIC_ClearPendingIRQ(d.Irq);
         d.AgtReg->AGT16.CTRL.AGTCR =  0x01U;
         for (uint32_t i=0; i<1000000UL; ++i)
-            if (d.AgtReg->AGT16.CTRL.AGTCR&0x01UED) {
+            if (d.AgtReg->AGT16.CTRL.AGTCR&0x02U) {
                 d.Running=true; IrqsEnable(d,true); return true;
             }
     } else {
@@ -413,7 +413,7 @@ static uint32_t Frequency(TimerDev_t *t, uint32_t Request)
     if (d->Agt) d->AgtReg->AGT16.CTRL.AGTMR2 = d->ClockBits;
     else d->GptReg->GTCR = (uint32_t)d->ClockBits<<24;
     bool programmed=d->Agt ? d->AgtReg->AGT16.CTRL.AGTMR2==d->ClockBits :
-        d->GptReg->GTCR==((uint32_t)d->ClockBits<<24;
+        d->GptReg->GTCR==((uint32_t)d->ClockBits<<24);
     if (!programmed) {
         d->Fault=true; t->Freq=0; t->nsPeriod=0;
         g_Ra4m1TimerError[d->No]=RA4M1_TIMER_ACCESS_ERROR; return 0;
@@ -547,7 +547,7 @@ bool TimerInit(TimerDev_t *t, const TimerCfg_t *cfg)
                     d.GptReg->GTST = 0U;
                     for (unsigned i=0;i<6;++i) d.GptReg->GTCCR[s_GptCompareIndex[i]] = d.Mask;
                     ok=d.GptReg->GTPR==d.Mask &&
-                        d.GptReg->GTCR==((uint32_t)plan.Bits<<24;
+                        d.GptReg->GTCR==((uint32_t)plan.Bits<<24);
                 }
                 if (ok) {
                     for (unsigned i=0;i<d.MaxTrigger;++i) {
