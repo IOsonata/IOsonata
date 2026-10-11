@@ -193,6 +193,12 @@ static bool DmaStart(Ra4m1UartDev *d)
         return false;
     }
 
+    // Do not consume FIFO data until the first SCI TDR write is possible.
+    if ((d->Regs->SSR & SCI_SSR_TDRE) == 0U)
+    {
+        return false;
+    }
+
     unsigned count = 0U;
     while (count < RA4M1_DMA_BUFFER_SIZE)
     {
@@ -212,21 +218,31 @@ static bool DmaStart(Ra4m1UartDev *d)
 
     R_DMAC0_Type *dma = s_DmaRegs[d->DmaChannel];
     dma->DMCNT_b.DTE = 0U;
-    dma->DMSAR = (uint32_t)(uintptr_t)d->DmaTxMem;
+    if (count == 1U)
+    {
+        d->Regs->SCR &= (uint8_t)~SCI_SCR_TIE;
+        d->Regs->TDR = d->DmaTxMem[0];
+        d->Regs->SCR |= SCI_SCR_TEIE;
+        return true;
+    }
+
+    dma->DMSAR = (uint32_t)(uintptr_t)&d->DmaTxMem[1];
     dma->DMDAR = (uint32_t)(uintptr_t)&d->Regs->TDR;
-    dma->DMCRA = count;
+    dma->DMCRA = count - 1U;
     dma->DMCRB = 0U;
-    dma->DMTMD = 1U;
+    // FSP normal mode: DCTG=1 (peripheral), DTS=2 (no repeat area).
+    dma->DMTMD = 1U | (2U << 12U);
     dma->DMAMD = (2U << 14U);
     dma->DMINT = 0x10U;
     d->DmaBusy = true;
 
-    // DMA owns TXI: enable its peripheral request, not a CPU TXI route.
+    // CPU primes TDR once, then TXI requests transfer the remaining bytes.
     d->Regs->SCR &= (uint8_t)~(SCI_SCR_TIE | SCI_SCR_TEIE);
     R_DMA->DELSR[d->DmaChannel] = d->Event + 1U;
     R_DMA->DMAST_b.DMST = 1U;
     dma->DMCNT_b.DTE = 1U;
     d->Regs->SCR |= SCI_SCR_TIE;
+    d->Regs->TDR = d->DmaTxMem[0];
     return true;
 }
 
@@ -334,7 +350,14 @@ static void UartIrq(int irq, void *ctx)
         uint8_t scr = d->Regs->SCR;
         if ((scr & SCI_SCR_TEIE) && (d->Regs->SSR & SCI_SSR_TEND)) {
             d->Regs->SCR = scr & ~SCI_SCR_TEIE;
-            TxReady(d, true);
+            if (d->DmaMode && DmaStart(d))
+            {
+                TxReady(d, false);
+            }
+            else
+            {
+                TxReady(d, true);
+            }
             event = UART_EVT_TXREADY; length = CFifoAvail(u->hTxFifo); notify = true;
         }
     }
