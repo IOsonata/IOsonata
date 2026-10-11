@@ -506,7 +506,8 @@ bool UARTInit(UARTDEV * const u, const UARTCFG *cfg)
     u->EvtCallback = cfg->EvtCallback; u->hRxFifo = rx; u->hTxFifo = tx;
     u->LineState = 0; u->hStdIn = u->hStdOut = -1;
     u->RxOvrErrCnt = u->ParErrCnt = u->FramErrCnt = u->RxDropCnt = u->TxDropCnt = 0;
-    u->bRxReady = u->bTxReady = false;
+    u->bRxReady = false;
+    u->bTxReady = false;
     // Preserve pObj installed by the existing C++ UART constructor.
     DevIntrf_t *p = &u->DevIntrf;
     p->pDevData = d; p->IntPrio = cfg->IntPrio; p->EvtCB = nullptr;

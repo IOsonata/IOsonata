@@ -32,6 +32,13 @@ SOFTWARE.
 #define RA4M1_TIMER_REGS_H
 #include "ra4m1_ioregs.h"
 #define RA4M1_TIMER_MSTPCRD ((uintptr_t)&R_MSTP->MSTPCRD)
+/* Clock-source selection values are specific to the RA4M1 system clock. */
+#define RA4M1_LOCOCR  ((uintptr_t)&R_SYSTEM->LOCOCR)
+#define RA4M1_SCKSCR  ((uintptr_t)&R_SYSTEM->SCKSCR)
+#define RA4M1_CK_HOCO 0U
+#define RA4M1_CK_MOCO 1U
+#define RA4M1_CK_MOSC 3U
+#define RA4M1_CK_PLL  5U
 #define RA4M1_AGT_BASE(n) (0x40084000UL + 0x100UL * (n))
 #define RA4M1_GPT_BASE(n) (0x40078000UL + 0x100UL * (n))
 /* AGT data registers are halfwords; control registers are bytes. */
