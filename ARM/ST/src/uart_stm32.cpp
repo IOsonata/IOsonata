@@ -207,6 +207,11 @@ SOFTWARE.
 // RX DMA ring, power of 2. Moved into the RX CFIFO at half and full ring, on
 // IDLE and by RxData.
 #define ST_UART_DMA_RX_RING		64
+// A finished TX DMA block is followed at once by the next one when at least
+// this many bytes are queued. With fewer, TX waits for TC so that more bytes
+// are queued for the next block. A block of a byte or two would cost an
+// interrupt each and keep the next blocks as small.
+#define ST_UART_DMA_TX_CHAIN	4
 
 #pragma pack(push, 4)
 
@@ -232,6 +237,8 @@ typedef struct __Stm32_Uart_Dev {
 	IRQn_Type TxDmaIrq;
 	uint32_t TxDmaShift;
 	bool DmaActive;					//!< TX DMA transfer running
+	bool TxDmaWaitTc;				//!< TX DMA done with nothing queued, waiting for TC
+	bool TxDmaEndTc;				//!< Running TX DMA block ends on TC instead of the DMA
 	uint32_t TxDmaLength;			//!< TX CFIFO bytes owned by the running transfer
 	alignas(4) uint8_t TxDmaAlign[4];	//!< Bytes up to the next aligned FIFO address
 	alignas(4) uint8_t TxDmaFifoMem[ST_UART_DMA_CFIFO_SIZE];	//!< Default TX CFIFO memory in DMA mode
@@ -446,6 +453,11 @@ static inline int Stm32UartFifoTakeByte(CFifo_t * const pFifo)
 // TX DMA side of the TX CFIFO. The DMA path is the only consumer and runs in
 // the interrupt or with interrupts disabled. Block gives the first contiguous
 // run of queued bytes for a transfer in place, Release frees them once sent.
+static inline uint32_t Stm32UartFifoUsed(CFifo_t * const pFifo)
+{
+	return __atomic_load_n(&pFifo->PutIdx, __ATOMIC_ACQUIRE) - pFifo->GetIdx;
+}
+
 static inline uint8_t *Stm32UartFifoBlock(CFifo_t * const pFifo, uint32_t *pLen)
 {
 	uint32_t get = pFifo->GetIdx;
@@ -530,9 +542,10 @@ static void Stm32UartDmaSetup(Stm32UartDev_t * const pDev)
 	pDev->pTxDma->CPAR = (uint32_t)(uintptr_t)&ST_USART_TDR(reg);
 	pDev->pTxDma->CMAR = 0;
 	pDev->pTxDma->CNDTR = 0;
-	// The end of a block is the USART TC flag. TEIE reports a stopped transfer.
 	pDev->pTxDma->CCR = DMA_CCR_DIR | DMA_CCR_MINC | (intmode ? DMA_CCR_TEIE : 0U);
 	pDev->DmaActive = false;
+	pDev->TxDmaWaitTc = false;
+	pDev->TxDmaEndTc = false;
 	pDev->TxDmaLength = 0;
 
 	reg->CR3 |= USART_CR3_DMAT | USART_CR3_DMAR;
@@ -544,18 +557,21 @@ static void Stm32UartDmaSetup(Stm32UartDev_t * const pDev)
 
 // Start a DMA block with the first contiguous run of the TX CFIFO, sent in
 // place. The bytes stay in the FIFO, so the producer cannot write over them,
-// until the block is done. The DMA reads from an aligned address: when the
-// FIFO read position is not aligned, the bytes up to the next aligned
+// until the DMA has moved them. The DMA reads from an aligned address: when
+// the FIFO read position is not aligned, the bytes up to the next aligned
 // address are copied to TxDmaAlign and sent first, the next block continues
 // aligned. A longer block is cut to a multiple of 4 so that the next one
-// starts aligned too, the rest goes in the next block. TC is cleared first
-// so that it is set again by the last character of this block. Returns false
-// when the FIFO is empty.
+// starts aligned too, the rest goes in the next block. TC is cleared first,
+// as in the RM0360 DMA transmit procedure. On an idle line the DMA moves the
+// first two bytes at once, TDR and the shift register take them, so a block
+// of one or two bytes would be done before anything else is queued: it ends
+// on TC instead, one interrupt per block and the bytes queued meanwhile go in
+// the next one. Returns false when the FIFO is empty.
 static bool Stm32UartDmaTxStart(Stm32UartDev_t * const pDev)
 {
-	hCFifo_t fifo = pDev->pUartDev->hTxFifo;
 	uint32_t len;
-	uint8_t *p = Stm32UartFifoBlock(fifo, &len);
+	uint8_t *p = Stm32UartFifoBlock(pDev->pUartDev->hTxFifo, &len);
+	bool intmode = pDev->pUartDev->DevIntrf.bIntEn;
 
 	if (len == 0U)
 	{
@@ -585,59 +601,111 @@ static bool Stm32UartDmaTxStart(Stm32UartDev_t * const pDev)
 			len &= ~3U;
 		}
 	}
+	pDev->TxDmaEndTc = len <= 2U && (ST_USART_ISR(pDev->pReg) & USART_ISR_TC) != 0U;
 	pDev->TxDmaLength = len;
 	pDev->pReg->ICR = USART_ICR_TCCF;
+	pDev->pTxDma->CCR = DMA_CCR_DIR | DMA_CCR_MINC |
+						(intmode ? DMA_CCR_TEIE | (pDev->TxDmaEndTc ? 0U : DMA_CCR_TCIE) : 0U);
 	pDev->pTxDma->CMAR = (uint32_t)(uintptr_t)p;
 	pDev->pTxDma->CNDTR = len;
 	DMA1->IFCR = DMA_IFCR_CGIF1 << pDev->TxDmaShift;
 	pDev->DmaActive = true;
-	pDev->pTxDma->CCR |= DMA_CCR_EN;
-	if (pDev->pUartDev->DevIntrf.bIntEn)
+	if (intmode)
 	{
-		pDev->pReg->CR1 |= USART_CR1_TCIE;
+		if (pDev->TxDmaEndTc)
+		{
+			pDev->pReg->CR1 |= USART_CR1_TCIE;
+		}
+		else
+		{
+			pDev->pReg->CR1 &= ~USART_CR1_TCIE;
+		}
 	}
+	pDev->pTxDma->CCR |= DMA_CCR_EN;
 
 	return true;
 }
 
-// A block is done when the DMA has moved all of it and TC is set, its last
-// character has left the line, or when the DMA stopped on a transfer error.
-// The DMA transfer complete flag is not used, it is set as soon as the last
-// byte is in TDR. Holding TX busy until TC lets the bytes queued meanwhile go
-// in the next block. The block bytes are released and the next block takes
-// what was queued. With the FIFO empty TX is ready again and the application
-// is told. From the TC and DMA interrupts, or from TxData in polling mode.
-// Returns false if no block was done.
+// TX DMA progress. From the DMA and TC interrupts, or from TxData without
+// interrupt. A block is done when the DMA has moved its last byte to TDR, on
+// TC for a short block started on an idle line, or when the DMA stopped on a
+// transfer error. Its bytes are released and the next block takes what was
+// queued meanwhile, while TDR and the shift register still send, so the line
+// has no gap. With nothing queued TX stays busy until TC, the last character
+// has left the line: bytes queued during those characters go in a new block,
+// otherwise TX is ready again and the application is told. Returns false if
+// nothing was done.
 static bool Stm32UartDmaService(Stm32UartDev_t * const pDev)
 {
 	UARTDev_t *dev = pDev->pUartDev;
 
-	if (dev == NULL || !pDev->DmaActive)
+	if (dev == NULL)
 	{
 		return false;
 	}
 
-	uint32_t te = DMA1->ISR & (DMA_ISR_TEIF1 << pDev->TxDmaShift);
-	if (te == 0U && (pDev->pTxDma->CNDTR != 0U ||
-		(ST_USART_ISR(pDev->pReg) & USART_ISR_TC) == 0U))
+	if (pDev->DmaActive)
+	{
+		uint32_t flags = DMA1->ISR & ((DMA_ISR_TCIF1 | DMA_ISR_TEIF1) << pDev->TxDmaShift);
+
+		if (pDev->TxDmaEndTc)
+		{
+			if ((flags & (DMA_ISR_TEIF1 << pDev->TxDmaShift)) == 0U &&
+				(pDev->pTxDma->CNDTR != 0U || (ST_USART_ISR(pDev->pReg) & USART_ISR_TC) == 0U))
+			{
+				return false;
+			}
+		}
+		else if (flags == 0U)
+		{
+			return false;
+		}
+		pDev->pTxDma->CCR &= ~DMA_CCR_EN;
+		// Not sent when a transfer error stopped the block
+		dev->TxDropCnt += pDev->pTxDma->CNDTR;
+		DMA1->IFCR = DMA_IFCR_CGIF1 << pDev->TxDmaShift;
+		pDev->DmaActive = false;
+		Stm32UartFifoRelease(dev->hTxFifo, pDev->TxDmaLength);
+		pDev->TxDmaLength = 0;
+
+		if ((pDev->TxDmaEndTc || Stm32UartFifoUsed(dev->hTxFifo) >= ST_UART_DMA_TX_CHAIN) &&
+			Stm32UartDmaTxStart(pDev))
+		{
+			return true;
+		}
+		if (pDev->TxDmaEndTc == false)
+		{
+			// The last TDR write cleared TC. The TC handler starts what is
+			// queued by then.
+			pDev->TxDmaWaitTc = true;
+			if (dev->DevIntrf.bIntEn)
+			{
+				pDev->pReg->CR1 |= USART_CR1_TCIE;
+			}
+
+			return true;
+		}
+	}
+	else if (pDev->TxDmaWaitTc)
+	{
+		if ((ST_USART_ISR(pDev->pReg) & USART_ISR_TC) == 0U)
+		{
+			return false;
+		}
+		pDev->TxDmaWaitTc = false;
+		if (Stm32UartDmaTxStart(pDev))
+		{
+			return true;
+		}
+	}
+	else
 	{
 		return false;
 	}
 
-	pDev->pTxDma->CCR &= ~DMA_CCR_EN;
-	// Not sent when a transfer error stopped the block
-	dev->TxDropCnt += pDev->pTxDma->CNDTR;
-	DMA1->IFCR = DMA_IFCR_CGIF1 << pDev->TxDmaShift;
-	pDev->DmaActive = false;
-	Stm32UartFifoRelease(dev->hTxFifo, pDev->TxDmaLength);
-	pDev->TxDmaLength = 0;
-
-	if (Stm32UartDmaTxStart(pDev))
-	{
-		return true;
-	}
-
+	// Line idle and nothing queued
 	pDev->pReg->CR1 &= ~USART_CR1_TCIE;
+	pDev->TxDmaEndTc = false;
 	dev->bTxReady = true;
 	if (dev->DevIntrf.bIntEn && dev->EvtCallback)
 	{
@@ -648,7 +716,8 @@ static bool Stm32UartDmaService(Stm32UartDev_t * const pDev)
 	return true;
 }
 
-// DMA interrupt of an instance: RX ring half or full, TX transfer error
+// DMA interrupt of an instance: RX ring half or full, TX block done or
+// transfer error
 static void Stm32UartDmaIrq(Stm32UartDev_t * const pDev)
 {
 	UARTDev_t *dev = pDev->pUartDev;
@@ -681,6 +750,8 @@ static void Stm32UartDmaStop(Stm32UartDev_t * const pDev)
 	pDev->pTxDma->CCR = 0;
 	DMA1->IFCR = DMA_IFCR_CGIF1 << pDev->TxDmaShift;
 	pDev->DmaActive = false;
+	pDev->TxDmaWaitTc = false;
+	pDev->TxDmaEndTc = false;
 	pDev->TxDmaLength = 0;
 }
 #endif
@@ -774,8 +845,7 @@ static void Stm32UartIrqHandler(Stm32UartDev_t * const pDev)
 #if defined(STM32F030x8)
 	if ((iflag & USART_ISR_TC) && (cr1 & USART_CR1_TCIE))
 	{
-		// End of a TX DMA block. If the DMA is still behind, TC is cleared and
-		// set again by the last character.
+		// Last character of the TX DMA data has left the line
 		if (!Stm32UartDmaService(pDev))
 		{
 			reg->ICR = USART_ICR_TCCF;
@@ -1092,8 +1162,8 @@ static int Stm32UartTxData(DevIntrf_t * const pDev, uint8_t const *pData, int Da
 #if defined(STM32F030x8)
 	if (pDev->bDma)
 	{
-		// DMA: a block from the FIFO, the TC interrupt sends the rest.
-		// Without the interrupt the finished block is retired here.
+		// DMA: a block from the FIFO, the DMA and TC interrupts send the rest.
+		// Without the interrupt the transfer is moved on here.
 		if (!pDev->bIntEn || dev->pUartDev->bTxReady)
 		{
 			state = DisableInterrupt();
