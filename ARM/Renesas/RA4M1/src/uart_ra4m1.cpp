@@ -286,6 +286,7 @@ static bool Kick(Ra4m1UartDev *d)
 
     d->Regs->TDR = d->pDev->DataBits == 7 ?
         (uint8_t)byte & 0x7FU : (uint8_t)byte;
+    Sync(d);
     TxReady(d, false);
 
     if (CFifoUsed(d->pDev->hTxFifo) != 0U)
@@ -442,8 +443,10 @@ static int TxData(DevIntrf_t *p, const uint8_t *data, int len)
                 // software FIFO and TXI dispatch latency on an idle TDR.
                 uint8_t value = d->pDev->DataBits == 7 ?
                     data[count] & 0x7FU : data[count];
+                d->Regs->SCR &= (uint8_t)~(SCI_SCR_TIE | SCI_SCR_TEIE);
                 d->Regs->TDR = value;
-                d->Regs->SCR = (d->Regs->SCR & ~SCI_SCR_TIE) | SCI_SCR_TEIE;
+                Sync(d);
+                d->Regs->SCR |= SCI_SCR_TEIE;
                 TxReady(d, false);
                 accepted = true;
             }
