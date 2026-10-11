@@ -122,14 +122,14 @@ typedef UARTDev_t	UARTDEV;
  * @param pDev : Device handle
  * @param EvtId : Event code
  * @param pBuffer : In/Out Buffer containing data
- * 					- on UART_EVT_RXTIMEOUT & UART_EVT_RXDATA, buffer contains data received.
- * 					- on UART_EVT_TXREADY, buffer for data to be transmit with max length
- * 					BufferLen.
+ * 					- on UART_EVT_RXTIMEOUT & UART_EVT_RXDATA, buffer contains data received. If
+ * 					driver implements CFIFO, this parameter is NULL with BufferLen indicating total data
+ * 					in FIFO.
+ * 					- on UART_EVT_TXREADY, buffer allocated for data to be transmit with max length
+ * 					BufferLen (FIFO size). If driver implements CFIFO, this parameter is NULL and BufferLen
+ * 					indicates max available space in FIFO
  * 					- on UART_EVT_LINESTATE, buffer contains 1 byte Line Status
- * 					pBuffer and BufferLen are used only for a direct buffer transfer. A driver
- * 					using a CFIFO passes NULL for the RX and TX events and BufferLen has no
- * 					meaning. The application reads with UARTRx and writes with UARTTx.
- * @param BufferLen : Length of pBuffer.  See above description
+ * @param BufferLen : Max buffer length.  See above description
  *
  * @return number of bytes written to pBuffer for transmit
  */
