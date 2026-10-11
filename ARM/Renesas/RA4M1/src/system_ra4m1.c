@@ -24,7 +24,64 @@ SOFTWARE.
 #include <stdbool.h>
 #include "ra4m1xxx.h"
 #include "coredev/interrupt.h"
-#include "ra4m1_startup_regs.h"
+#if defined(RA4M1_HOST_TEST)
+#include "ra4m1_startup_regs.h" /* Host register model only. */
+#else
+/* Use the authoritative Renesas CMSIS register structures. */
+#define RA4M1_RD8(a) (*(volatile const uint8_t *)(uintptr_t)(a))
+#define RA4M1_WR8(a,v) (*(volatile uint8_t *)(uintptr_t)(a) = (uint8_t)(v))
+#define RA4M1_RD16(a) (*(volatile const uint16_t *)(uintptr_t)(a))
+#define RA4M1_WR16(a,v) (*(volatile uint16_t *)(uintptr_t)(a) = (uint16_t)(v))
+#define RA4M1_RD32(a) (*(volatile const uint32_t *)(uintptr_t)(a))
+#define RA4M1_WR32(a,v) (*(volatile uint32_t *)(uintptr_t)(a) = (uint32_t)(v))
+#define RA4M1_HOCOCR2 ((uintptr_t)&R_SYSTEM->HOCOCR2)
+#define RA4M1_SCKDIVCR ((uintptr_t)&R_SYSTEM->SCKDIVCR)
+#define RA4M1_SCKSCR ((uintptr_t)&R_SYSTEM->SCKSCR)
+#define RA4M1_PLLCR ((uintptr_t)&R_SYSTEM->PLLCR)
+#define RA4M1_PLLCCR2 ((uintptr_t)&R_SYSTEM->PLLCCR2)
+#define RA4M1_MEMWAIT ((uintptr_t)&R_SYSTEM->MEMWAIT)
+#define RA4M1_MOSCCR ((uintptr_t)&R_SYSTEM->MOSCCR)
+#define RA4M1_SOSCCR ((uintptr_t)&R_SYSTEM->SOSCCR)
+#define RA4M1_LOCOCR ((uintptr_t)&R_SYSTEM->LOCOCR)
+#define RA4M1_HOCOCR ((uintptr_t)&R_SYSTEM->HOCOCR)
+#define RA4M1_MOCOCR ((uintptr_t)&R_SYSTEM->MOCOCR)
+#define RA4M1_OSCSF ((uintptr_t)&R_SYSTEM->OSCSF)
+#define RA4M1_OSTDCR ((uintptr_t)&R_SYSTEM->OSTDCR)
+#define RA4M1_OSTDSR ((uintptr_t)&R_SYSTEM->OSTDSR)
+#define RA4M1_HOCOUTCR ((uintptr_t)&R_SYSTEM->HOCOUTCR)
+#define RA4M1_OPCCR ((uintptr_t)&R_SYSTEM->OPCCR)
+#define RA4M1_MOSCWTCR ((uintptr_t)&R_SYSTEM->MOSCWTCR)
+#define RA4M1_HOCOWTCR ((uintptr_t)&R_SYSTEM->HOCOWTCR)
+#define RA4M1_SOPCCR ((uintptr_t)&R_SYSTEM->SOPCCR)
+#define RA4M1_USBCKCR ((uintptr_t)&R_SYSTEM->USBCKCR)
+#define RA4M1_PRCR ((uintptr_t)&R_SYSTEM->PRCR)
+#define RA4M1_MOMCR ((uintptr_t)&R_SYSTEM->MOMCR)
+#define RA4M1_SOMCR ((uintptr_t)&R_SYSTEM->SOMCR)
+#define RA4M1_FCACHEE ((uintptr_t)&R_FCACHE->FCACHEE)
+#define RA4M1_FCACHEIV ((uintptr_t)&R_FCACHE->FCACHEIV)
+#define RA4M1_IELSR(n) ((uintptr_t)&R_ICU->IELSR[(n)])
+#define RA4M1_USB_SYSCFG ((uintptr_t)&R_USB_FS0->SYSCFG)
+
+#define RA4M1_STARTUP_REGS_H
+#define RA4M1_PRCR_KEY      0xA500U
+#define RA4M1_PRCR_PRC0     0x01U
+#define RA4M1_PRCR_PRC1     0x02U
+#define RA4M1_OSCSF_HOCO    0x01U
+#define RA4M1_OSCSF_MOSC    0x08U
+#define RA4M1_OSCSF_PLL     0x20U
+#define RA4M1_MODE_BUSY     0x10U
+#define RA4M1_CK_HOCO       0U
+#define RA4M1_CK_MOCO       1U
+#define RA4M1_CK_LOCO       2U
+#define RA4M1_CK_MOSC       3U
+#define RA4M1_CK_SOSC       4U
+#define RA4M1_CK_PLL        5U
+#define RA4M1_MOCO_HZ       8000000UL
+#define RA4M1_LOCO_HZ       32768UL
+#define RA4M1_RESET_DIV     0x44044444UL
+#define RA4M1_FAST_DIV      0x10010100UL
+#define RA4M1_SLOW_DIV      0x00000000UL
+#endif
 
 #if RA4M1_MOSC_WAIT > 9U || RA4M1_SOSC_DRIVE > 3U
 #error "Invalid RA4M1 oscillator control setting"

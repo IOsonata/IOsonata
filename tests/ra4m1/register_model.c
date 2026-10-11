@@ -36,7 +36,7 @@ static uint32_t nominal(void)
 {
  unsigned sel=sys[0x26]&7;
  if(sel==1)return 8000000;
- if(sel==0){unsigned h=(sys[0]>>3)&7;return h==0?24000000:h==2?32000000:h==4?48000000:h==5?64000000:0;}
+ if(sel==0){unsigned h=(sys[0x37]>>3)&7;return h==0?24000000:h==2?32000000:h==4?48000000:h==5?64000000:0;}
  if(sel==3)return input_hz;
  if(sel==5){unsigned c=sys[0x2B];return (input_hz*((c&31)+1))/(1U<<(c>>6));}
  return 32768;
@@ -118,11 +118,11 @@ int main(void)
  for(unsigned i=0;i<7;i++){reset_model();assert(!SystemCoreClockSelect(OSC_TYPE_RC,bad[i]));assert(writes==0&&SystemCoreClock==500000);pass("invalid RC frequency rejected without register writes");}
  reset_model();assert(!SystemCoreClockSelect((OSC_TYPE)99,12000000));assert(writes==0);pass("unknown oscillator type rejected");
  const uint32_t exts[]={4000000,6000000,8000000,12000000};
- for(unsigned i=0;i<4;i++){reset_model();input_hz=exts[i];g_McuOsc.bUSBClk=true;assert(SystemCoreClockSelect(OSC_TYPE_XTAL,input_hz));assert(SystemCoreClock==48000000&&SystemUsbClockGet()==48000000);assert(sys[0xD0]==0);pass("external crystal to exact 48 MHz PLL and USB source");}
+ for(unsigned i=0;i<4;i++){reset_model();input_hz=exts[i];g_McuOsc.bUSBClk=true;assert(SystemCoreClockSelect(OSC_TYPE_XTAL,input_hz));assert(SystemCoreClock==48000000&&SystemUsbClockGet()==48000000);assert(sys[0x74]==0);pass("external crystal to exact 48 MHz PLL and USB source");}
  reset_model();input_hz=12000000;assert(SystemCoreClockSelect(OSC_TYPE_TCXO,input_hz));assert(sys[0x413]==0x40&&sys[0xA2]==0&&SystemCoreClock==48000000);pass("external-clock bypass and zero MOSC wait");
  const uint32_t direct[]={1000000,10000000,12288000,16000000,20000000};
  for(unsigned i=0;i<5;i++){reset_model();input_hz=direct[i];assert(SystemCoreClockSelect(OSC_TYPE_XTAL,input_hz));assert(SystemCoreClock==input_hz&&sys[0x26]==3&&sys[0x31]==0);pass("external frequencies without exact PLL solution use MOSC directly");}
- reset_model();g_McuOsc.bUSBClk=true;assert(SystemCoreClockSelect(OSC_TYPE_RC,48000000));assert(sys[0xD0]==1&&SystemUsbClockGet()==48000000);pass("48 MHz HOCO USB source, controller stays disabled");
+ reset_model();g_McuOsc.bUSBClk=true;assert(SystemCoreClockSelect(OSC_TYPE_RC,48000000));assert(sys[0x74]==1&&SystemUsbClockGet()==48000000);pass("48 MHz HOCO USB source, controller stays disabled");
  reset_model();g_McuOsc.bUSBClk=true;assert(!SystemCoreClockSelect(OSC_TYPE_XTAL,16000000));assert(writes==0);pass("USB request rejects non-48 MHz plan");
  reset_model();g_McuOsc.bUSBClk=true;sys[0x62]=1;assert(!SystemCoreClockSelect(OSC_TYPE_RC,48000000));assert(g_Ra4m1StartupError==RA4M1_STARTUP_USB_CLOCK&&SystemUsbClockGet()==0);pass("nonzero HOCO user trim is not silently used for USB");
  reset_model();usb_cfg=0x400;assert(!SystemCoreClockSelect(OSC_TYPE_RC,48000000));assert(g_Ra4m1StartupError==RA4M1_STARTUP_USB_CLOCK&&dividers==RA4M1_RESET_DIV);pass("clock change refused with USB SCKE enabled");
