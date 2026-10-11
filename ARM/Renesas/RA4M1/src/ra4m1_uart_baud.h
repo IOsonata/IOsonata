@@ -5,7 +5,10 @@
 #define RA4M1_UART_BAUD_H
 #include <stdint.h>
 #include <stdbool.h>
-#include "ra4m1_uart_regs.h"
+#define SCI_SEMR_BRME  0x04U
+#define SCI_SEMR_ABCSE 0x08U
+#define SCI_SEMR_ABCS  0x10U
+#define SCI_SEMR_BGDM  0x40U
 #ifndef RA4M1_UART_MAX_ERROR_PPM
 #define RA4M1_UART_MAX_ERROR_PPM 20000UL
 #endif
