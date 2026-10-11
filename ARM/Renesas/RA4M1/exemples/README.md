@@ -110,8 +110,10 @@ existing `UARTFIFOSIZE` option; memory includes the CFifo headers. Set
 `UART_INT_MODE=false` in the example configuration to exercise polling mode.
 `UART_BAUDRATE` can be overridden; `UART_DMA_MODE` stays false for this port.
 
-The projects use **newlib-nano + nosys**, not semihosting. No debugger console
-is required to run the applications. Ordinary timer/Blinky `printf` output is
+The supplied projects are configured for **newlib-nano + nosys**, not
+semihosting. A locally modified application using `rdimon` and J-Link
+semihosting can incur large CPU stalls when printing. No debugger console
+is required to run the supplied applications. Ordinary timer/Blinky `printf` output is
 not routed to SCI automatically; use the GPIOs/debugger variables or the existing
 retarget facilities once deliberately configured. The UART loopback banner is
 sent through its UART object, independently of stdio retargeting.
@@ -120,6 +122,21 @@ Outputs are `ioc/Debug/<IOC-project-name>.elf` and the corresponding Release
 file, plus the managed build's flash image and size report. The linker retains
 `ResetEntry` and `__Vectors` from the archive and uses the MCU's option-memory
 layout; no alternative reset handler or bootloader layout is supplied.
+
+## Hardware bring-up status (October 11, 2026)
+
+On the EK-RA4M1, the user verified compilation and successful execution of
+Blinky and TimerDemo after migrating the port to vendor CMSIS registers.
+A Timer DevNo 3 (GPT1) run produced callbacks from four compare triggers at
+100, 1000, 250 and 500 ms. The printed periods are not reliable jitter
+measurements because the run used J-Link `rdimon` semihosting; acquire timing
+samples in RAM or use a nonblocking logging path before measuring latency.
+Other examples, GPIO edge interrupts and UART polling/interrupt tests have
+not yet been confirmed in hardware.
+
+The 32 peripheral NVIC slots are assigned dynamically through the RA4M1 ICU,
+not fixed to a peripheral. See [INTERRUPTS.md](../INTERRUPTS.md) for the
+routing model, callback ownership and registration restrictions.
 
 ## Validation
 
@@ -145,6 +162,7 @@ project/pin-map checks, not an execution test in this suite.
 Use `--metadata-only` for project checks without Clang++, and
 `--allow-partial-checkout` only when testing the standalone port package without
 unmodified shared repository files. Missing source existence checks are then
-reported explicitly. Production GNU/newlib firmware linking, IOC import/managed
-build, physical GPIO/UART behavior, oscillator accuracy and timing remain
-unverified here. The driver regression limitations in `../TIMER.md` still apply.
+reported explicitly. Firmware compilation and basic GPIO/timer execution were subsequently
+confirmed by the user on an EK-RA4M1. UART behavior, oscillator accuracy,
+interrupt latency, and updated CMSIS host-model regressions remain
+unverified. The driver regression limitations in `../TIMER.md` still apply.
