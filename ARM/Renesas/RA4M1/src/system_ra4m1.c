@@ -62,7 +62,6 @@ SOFTWARE.
 #define RA4M1_IELSR(n) ((uintptr_t)&R_ICU->IELSR[(n)])
 #define RA4M1_USB_SYSCFG ((uintptr_t)&R_USB_FS0->SYSCFG)
 
-#define RA4M1_STARTUP_REGS_H
 #define RA4M1_PRCR_KEY      0xA500U
 #define RA4M1_PRCR_PRC0     0x01U
 #define RA4M1_PRCR_PRC1     0x02U
@@ -93,7 +92,6 @@ SOFTWARE.
 #error "RA4M1 startup timeout and delay factor must be nonzero"
 #endif
 
-#define RA4M1_USB_SYSCFG     0x40090000UL
 #define RA4M1_USB_SCKE       0x0400U
 
 /* Reset is MOCO /16, not HOCO. ResetEntry initializes this storage before
