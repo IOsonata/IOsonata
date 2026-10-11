@@ -221,12 +221,7 @@ static bool DmaStart(Ra4m1UartDev *d)
     unsigned remaining = (unsigned)count - skip;
     dma->DMCNT_b.DTE = 0U;
     dma->DMSAR = (uint32_t)(uintptr_t)(source + skip);
-    dma->DMDAR = (uint32_t)(uintptr_t)&d->Regs->TDR;
     dma->DMCRA = remaining;
-    dma->DMCRB = 0U;
-    dma->DMTMD = 1U | (2U << 12U);
-    dma->DMAMD = (2U << 14U);
-    dma->DMINT = 0x10U;
 
     d->DmaCount = (uint16_t)remaining;
     d->DmaBusy = true;
@@ -710,6 +705,14 @@ bool UARTInit(UARTDEV * const u, const UARTCFG *cfg)
         R_MSTP->MSTPCRA &= ~RA4M1_DMA_MSTP_MASK;
         R_SYSTEM->PRCR = 0xA500U | protect;
         __DSB();
+
+        R_DMAC0_Type *dma = s_DmaRegs[d->DmaChannel];
+        dma->DMCNT_b.DTE = 0U;
+        dma->DMDAR = (uint32_t)(uintptr_t)&d->Regs->TDR;
+        dma->DMCRB = 0U;
+        dma->DMTMD = 1U | (2U << 12U);
+        dma->DMAMD = (2U << 14U);
+        dma->DMINT = 0x10U;
 
         R_DMA->DMAST_b.DMST = 1U;
         R_DMA->DELSR[d->DmaChannel] = d->Event + 1U;
