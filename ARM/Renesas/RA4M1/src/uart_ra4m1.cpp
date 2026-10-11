@@ -196,14 +196,15 @@ static bool Kick(Ra4m1UartDev *d)
         return false;
     }
 
-    uint8_t *p = CFifoGet(d->pDev->hTxFifo);
-    if (p == nullptr)
+    int byte = CFifoGetByte(d->pDev->hTxFifo);
+    if (byte < 0)
     {
         d->Regs->SCR = scr | SCI_SCR_TEIE;
         return false;
     }
 
-    d->Regs->TDR = d->pDev->DataBits == 7 ? *p & 0x7FU : *p;
+    d->Regs->TDR = d->pDev->DataBits == 7 ?
+        (uint8_t)byte & 0x7FU : (uint8_t)byte;
     TxReady(d, false);
 
     if (CFifoUsed(d->pDev->hTxFifo) != 0U)
@@ -231,9 +232,14 @@ static void UartIrq(int irq, void *ctx)
         uint8_t byte;
         if (Receive(d, &byte, &errors)) {
             uint32_t dropped = u->hRxFifo->DropCnt;
-            uint8_t *p = CFifoPut(u->hRxFifo);
-            if (p) { *p = byte; notify = true; }
-            else ++u->RxDropCnt;
+            if (CFifoPutByte(u->hRxFifo, byte))
+            {
+                notify = true;
+            }
+            else
+            {
+                ++u->RxDropCnt;
+            }
             u->RxDropCnt += u->hRxFifo->DropCnt - dropped;
             length = CFifoUsed(u->hRxFifo);
             u->bRxReady = length != 0;
@@ -287,9 +293,13 @@ static int RxData(DevIntrf_t *p, uint8_t *buffer, int len)
         Ra4m1UartDev *d = Owner(p);
         if (!d || !d->Enabled || !d->Rx) { EnableInterrupt(state); break; }
         if (p->bIntEn) {
-            uint8_t *data = CFifoGet(d->pDev->hRxFifo);
-            if (!data) { EnableInterrupt(state); break; }
-            buffer[count++] = *data;
+            int byte = CFifoGetByte(d->pDev->hRxFifo);
+            if (byte < 0)
+            {
+                EnableInterrupt(state);
+                break;
+            }
+            buffer[count++] = (uint8_t)byte;
             d->pDev->bRxReady = CFifoUsed(d->pDev->hRxFifo) != 0;
         } else {
             uint8_t errors, byte;
@@ -328,10 +338,8 @@ static int TxData(DevIntrf_t *p, const uint8_t *data, int len)
             else
             {
                 uint32_t dropped = d->pDev->hTxFifo->DropCnt;
-                uint8_t *dest = CFifoPut(d->pDev->hTxFifo);
-                if (dest != nullptr)
+                if (CFifoPutByte(d->pDev->hTxFifo, data[count]))
                 {
-                    *dest = data[count];
                     accepted = true;
                     TxReady(d, false);
                 }
