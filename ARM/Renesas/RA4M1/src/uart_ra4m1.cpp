@@ -401,18 +401,31 @@ static int TxData(DevIntrf_t *p, const uint8_t *data, int len)
         bool accepted = false;
         if (d->DmaMode)
         {
-            uint32_t dropped = d->pDev->hTxFifo->DropCnt;
-            bool wasReady = d->pDev->bTxReady;
-            if (CFifoPutByte(d->pDev->hTxFifo, data[count]))
+            if (d->pDev->bTxReady &&
+                CFifoUsed(d->pDev->hTxFifo) == 0 &&
+                (d->Regs->SSR & SCI_SSR_TDRE) != 0U)
             {
+                // Submit the first byte directly; there is no need to
+                // enqueue and immediately remove it from the FIFO.
+                d->Regs->TDR = d->pDev->DataBits == 7 ?
+                    data[count] & 0x7FU : data[count];
                 accepted = true;
-                if (wasReady)
-                {
-                    TxReady(d, false);
-                    DmaStart(d);
-                }
             }
-            d->pDev->TxDropCnt += d->pDev->hTxFifo->DropCnt - dropped;
+            else
+            {
+                uint32_t dropped = d->pDev->hTxFifo->DropCnt;
+                bool wasReady = d->pDev->bTxReady;
+                if (CFifoPutByte(d->pDev->hTxFifo, data[count]))
+                {
+                    accepted = true;
+                    if (wasReady)
+                    {
+                        TxReady(d, false);
+                        DmaStart(d);
+                    }
+                }
+                d->pDev->TxDropCnt += d->pDev->hTxFifo->DropCnt - dropped;
+            }
         }
         else if (p->bIntEn)
         {
