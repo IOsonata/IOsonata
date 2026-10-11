@@ -66,7 +66,12 @@ struct Ra4m1UartDev {
 };
 static R_SCI0_Type * const s_SciRegs[4] = {R_SCI0, R_SCI1, R_SCI2, R_SCI9};
 static Ra4m1UartDev s_Uart[4];
-static R_DMAC0_Type * const s_DmaRegs[4] = {R_DMAC0, R_DMAC1, R_DMAC2, R_DMAC3};
+static R_DMAC0_Type * const s_DmaRegs[4] = {
+    R_DMAC0,
+    reinterpret_cast<R_DMAC0_Type *>(R_DMAC1),
+    reinterpret_cast<R_DMAC0_Type *>(R_DMAC2),
+    reinterpret_cast<R_DMAC0_Type *>(R_DMAC3)
+};
 static const uint8_t s_Channel[] = {0, 1, 2, 9};
 static const uint8_t s_Event[] = {RA4M1_EVTID_SCI0_RXI, RA4M1_EVTID_SCI1_RXI,
     RA4M1_EVTID_SCI2_RXI, RA4M1_EVTID_SCI9_RXI};
@@ -216,11 +221,12 @@ static bool DmaStart(Ra4m1UartDev *d)
     dma->DMINT = 0x10U;
     d->DmaBusy = true;
 
-    // DMA owns TXI; CPU TXI must remain disabled.
+    // DMA owns TXI: enable its peripheral request, not a CPU TXI route.
     d->Regs->SCR &= (uint8_t)~(SCI_SCR_TIE | SCI_SCR_TEIE);
     R_DMA->DELSR[d->DmaChannel] = d->Event + 1U;
     R_DMA->DMAST_b.DMST = 1U;
     dma->DMCNT_b.DTE = 1U;
+    d->Regs->SCR |= SCI_SCR_TIE;
     return true;
 }
 
@@ -238,7 +244,8 @@ static void DmaIrqHandler(int irq, void *ctx)
     {
         if (!DmaStart(d))
         {
-            d->Regs->SCR |= SCI_SCR_TEIE;
+            d->Regs->SCR = (d->Regs->SCR & (uint8_t)~SCI_SCR_TIE) |
+                SCI_SCR_TEIE;
         }
     }
 
@@ -597,6 +604,7 @@ bool UARTInit(UARTDEV * const u, const UARTCFG *cfg)
         (cfg->Parity != UART_PARITY_NONE && cfg->Parity != UART_PARITY_ODD && cfg->Parity != UART_PARITY_EVEN) ||
         cfg->Mode != UART_MODE_UART || cfg->Duplex != UART_DUPLEX_FULL ||
         cfg->FlowControl != UART_FLWCTRL_NONE || cfg->bIrDAMode ||
+        (cfg->bDMAMode && !cfg->bIntMode) ||
         (cfg->bIntMode && (unsigned)cfg->IntPrio >= (1UL << __NVIC_PRIO_BITS)) ||
         !MemoryValid(cfg->pRxMem, cfg->RxMemSize) || !MemoryValid(cfg->pTxMem, cfg->TxMemSize)) return false;
     if (cfg->pRxMem && cfg->pTxMem) {
@@ -639,7 +647,7 @@ bool UARTInit(UARTDEV * const u, const UARTCFG *cfg)
     d->DmaBusy = false;
     d->DmaChannel = (uint8_t)cfg->DevNo;
     d->DmaIrq = (IRQn_Type)-1;
-    if (d->DmaMode && ((R_MSTP->MSTPCRA & RA4M1_DMA_MSTP_MASK) == 0U) &&
+    if (d->DmaMode && (R_MSTP->MSTPCRA & RA4M1_DMA_MSTP_MASK) == 0U &&
         (R_DMA->DELSR[d->DmaChannel] & 0x1FFU) != 0U)
     {
         EnableInterrupt(state);
