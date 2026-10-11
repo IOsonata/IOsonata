@@ -213,6 +213,7 @@ typedef struct __Stm32_Uart_Dev {
 	UARTDev_t *pUartDev;			//!< Pointer to generic UART dev. data
 	const IOPinCfg_t *pIOPinMap;	//!< Pins configured again by Enable
 	int NbIOPins;					//!< Number of pins in pIOPinMap
+	uint8_t RxDataMask;				//!< RDR data bits, 0x7F with 7 data bits
 #if defined(STM32F030x8)
 	DMA_Channel_TypeDef *pRxDma;	//!< RX DMA channel
 	uint32_t RxDmaShift;		//!< Channel flags shift
@@ -233,6 +234,36 @@ typedef struct __Stm32_Uart_Dev {
 } Stm32UartDev_t;
 
 #pragma pack(pop)
+
+// Position of each instance in s_Stm32UartDev, in the same order and under
+// the same conditions as the table. The vectors pass their entry directly.
+enum {
+#ifdef LPUART1
+	ST_LPUART1_IDX,
+#endif
+	ST_USART1_IDX,
+#ifdef USART2
+	ST_USART2_IDX,
+#endif
+#ifdef USART3
+	ST_USART3_IDX,
+#endif
+#ifdef USART4
+	ST_USART4_IDX,
+#endif
+#ifdef UART4
+	ST_UART4_IDX,
+#endif
+#ifdef USART5
+	ST_USART5_IDX,
+#endif
+#ifdef UART5
+	ST_UART5_IDX,
+#endif
+#ifdef USART6
+	ST_USART6_IDX,
+#endif
+};
 
 static Stm32UartDev_t s_Stm32UartDev[] = {
 #ifdef LPUART1
@@ -341,7 +372,7 @@ static Stm32UartDev_t s_Stm32UartDev[] = {
 
 static const int s_NbUartDev = sizeof(s_Stm32UartDev) / sizeof(Stm32UartDev_t);
 
-static void Stm32UartIrqHandler(USART_TypeDef * const pReg);
+static void Stm32UartIrqHandler(Stm32UartDev_t * const pDev);
 #if defined(STM32F030x8)
 static int Stm32UartDmaRxRead(Stm32UartDev_t * const pDev, uint8_t *pData, int Length);
 static void Stm32UartDmaRxStop(Stm32UartDev_t * const pDev);
@@ -477,46 +508,72 @@ static void Stm32UartDmaStop(Stm32UartDev_t * const pDev)
 }
 #endif
 
-static void Stm32UartIrqHandler(USART_TypeDef * const pReg)
+// Byte put and take on the CFIFO indices for one producer and one consumer.
+// The RX FIFO producer is the interrupt, the TX FIFO consumer is the interrupt
+// or the masked TX start in TxData. The byte is written before PutIdx is
+// published and read before GetIdx is released. Put handles only a power of 2
+// FIFO that is not full and returns false otherwise, the caller then uses
+// CFifoPut for the blocking drop, the non-blocking overwrite and the modulo
+// index. Take returns -1 when the FIFO is empty.
+static inline bool Stm32UartFifoPutByte(CFifo_t * const pFifo, uint8_t Data)
 {
-	UARTDev_t *dev = NULL;
+	uint32_t put = pFifo->PutIdx;
+	uint32_t get = __atomic_load_n(&pFifo->GetIdx, __ATOMIC_RELAXED);
 
-	for (int i = 0; i < s_NbUartDev; i++)
+	if (pFifo->Mask == 0U || put - get >= (uint32_t)pFifo->MaxIdxCnt)
 	{
-		if (s_Stm32UartDev[i].pReg == pReg)
-		{
-			dev = s_Stm32UartDev[i].pUartDev;
-			break;
-		}
+		return false;
 	}
+	pFifo->pMemStart[put & pFifo->Mask] = Data;
+	__atomic_store_n(&pFifo->PutIdx, put + 1U, __ATOMIC_RELEASE);
 
+	return true;
+}
+
+static inline int Stm32UartFifoTakeByte(CFifo_t * const pFifo)
+{
+	uint32_t get = pFifo->GetIdx;
+
+	if (get == __atomic_load_n(&pFifo->PutIdx, __ATOMIC_ACQUIRE))
+	{
+		return -1;
+	}
+	if (pFifo->Mask == 0U)
+	{
+		return *CFifoGet(pFifo);
+	}
+	int c = pFifo->pMemStart[get & pFifo->Mask];
+	__atomic_store_n(&pFifo->GetIdx, get + 1U, __ATOMIC_RELEASE);
+
+	return c;
+}
+
+// The vector passes its instance.
+static void Stm32UartIrqHandler(Stm32UartDev_t * const pDev)
+{
+	UARTDev_t *dev = pDev->pUartDev;
+
+	// Instances sharing a vector may be unused or in polling mode
 	if (dev == NULL || !dev->DevIntrf.bIntEn)
 	{
 		return;
 	}
 
-	uint32_t iflag = ST_USART_ISR(pReg);
-	uint32_t cr1 = pReg->CR1;
+	USART_TypeDef *reg = pDev->pReg;
+	uint32_t iflag = ST_USART_ISR(reg);
+	uint32_t cr1 = reg->CR1;
+
 #if defined(STM32F030x8)
-	if (dev->DevIntrf.bDma && (cr1 & USART_CR1_IDLEIE) &&
-		(iflag & USART_ISR_IDLE))
+	if ((cr1 & USART_CR1_IDLEIE) && (iflag & USART_ISR_IDLE))
 	{
-		pReg->ICR = USART_ICR_IDLECF;
-		for (int i = 0; i < s_NbUartDev; i++)
+		reg->ICR = USART_ICR_IDLECF;
+		uint32_t write = (ST_UART_DMA_RX_SIZE - pDev->pRxDma->CNDTR) &
+						 (ST_UART_DMA_RX_SIZE - 1U);
+		int available = (write - pDev->RxDmaRead) & (ST_UART_DMA_RX_SIZE - 1U);
+		dev->bRxReady = available > 0;
+		if (available > 0 && dev->EvtCallback)
 		{
-			Stm32UartDev_t *pU = &s_Stm32UartDev[i];
-			if (pU->pReg == pReg)
-			{
-				uint32_t write = (ST_UART_DMA_RX_SIZE - pU->pRxDma->CNDTR) &
-								 (ST_UART_DMA_RX_SIZE - 1U);
-				int available = (write - pU->RxDmaRead) & (ST_UART_DMA_RX_SIZE - 1U);
-				dev->bRxReady = available > 0;
-				if (available > 0 && dev->EvtCallback)
-				{
-					dev->EvtCallback(dev, UART_EVT_RXDATA, NULL, available);
-				}
-				break;
-			}
+			dev->EvtCallback(dev, UART_EVT_RXDATA, NULL, available);
 		}
 	}
 #endif
@@ -539,13 +596,13 @@ static void Stm32UartIrqHandler(USART_TypeDef * const pReg)
 		{
 			dev->FramErrCnt++;
 		}
-		ST_USART_RXERR_CLEAR(pReg, iflag);
+		ST_USART_RXERR_CLEAR(reg, iflag);
 		if ((iflag & (ST_USART_ISR_PE | ST_USART_ISR_FE | ST_USART_ISR_NE)) &&
 			(cr1 & ST_USART_CR1_RXNEIE))
 		{
 			if (iflag & ST_USART_ISR_RXNE)
 			{
-				(void)ST_USART_RDR(pReg);
+				(void)ST_USART_RDR(reg);
 			}
 			iflag &= ~ST_USART_ISR_RXNE;
 		}
@@ -554,35 +611,45 @@ static void Stm32UartIrqHandler(USART_TypeDef * const pReg)
 	if ((iflag & ST_USART_ISR_RXNE) && (cr1 & ST_USART_CR1_RXNEIE))
 	{
 		// Reading RDR clears RXNE
-		uint8_t c = (uint8_t)ST_USART_RDR(pReg) & (dev->DataBits == 7 ? 0x7F : 0xFF);
-		uint8_t *p = CFifoPut(dev->hRxFifo);
-		if (p != NULL)
+		uint8_t c = (uint8_t)ST_USART_RDR(reg) & pDev->RxDataMask;
+		CFifo_t *fifo = dev->hRxFifo;
+
+		if (Stm32UartFifoPutByte(fifo, c))
 		{
-			*p = c;
 			dev->bRxReady = true;
 		}
 		else
 		{
-			dev->RxDropCnt++;
+			uint8_t *p = CFifoPut(fifo);
+			if (p != NULL)
+			{
+				*p = c;
+				dev->bRxReady = true;
+			}
+			else
+			{
+				dev->RxDropCnt++;
+			}
 		}
 		if (dev->EvtCallback)
 		{
-			dev->EvtCallback(dev, UART_EVT_RXDATA, NULL, CFifoUsed(dev->hRxFifo));
+			dev->EvtCallback(dev, UART_EVT_RXDATA, NULL, CFifoUsed(fifo));
 		}
 	}
 
 	if ((iflag & ST_USART_ISR_TXE) && (cr1 & ST_USART_CR1_TXEIE))
 	{
-		uint8_t *p = CFifoGet(dev->hTxFifo);
-		if (p != NULL)
+		int c = Stm32UartFifoTakeByte(dev->hTxFifo);
+
+		if (c >= 0)
 		{
 			// Writing TDR clears TXE
-			ST_USART_TDR(pReg) = *p;
+			ST_USART_TDR(reg) = (uint8_t)c;
 		}
 		else
 		{
 			// FIFO empty, mask TXEIE so TXE does not keep interrupting.
-			pReg->CR1 &= ~ST_USART_CR1_TXEIE;
+			reg->CR1 &= ~ST_USART_CR1_TXEIE;
 			dev->bTxReady = true;
 			if (dev->EvtCallback)
 			{
@@ -774,7 +841,7 @@ static int Stm32UartRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int Bufflen)
 			{
 				break;
 			}
-			pBuff[cnt++] = (uint8_t)ST_USART_RDR(reg) & (dev->pUartDev->DataBits == 7 ? 0x7F : 0xFF);
+			pBuff[cnt++] = (uint8_t)ST_USART_RDR(reg) & dev->RxDataMask;
 		}
 
 		return cnt;
@@ -906,32 +973,39 @@ static int Stm32UartTxData(DevIntrf_t * const pDev, uint8_t const *pData, int Da
 	hCFifo_t fifo = dev->pUartDev->hTxFifo;
 	uint32_t state;
 
-	if (Datalen > 1 && CFifoIsBlocking(fifo))
+	if (CFifoIsBlocking(fifo) && (Datalen > 1 || fifo->Mask != 0U))
 	{
-		// A multi-byte copy into a blocking FIFO runs with interrupts enabled
-		// so RX is not delayed. Reserved bytes are not seen by the interrupt
-		// until CFifoPutMultiple publishes them.
-		while (Datalen > 0)
+		// A blocking FIFO is filled with interrupts enabled so RX is not
+		// delayed. The interrupt does not see the bytes until they are
+		// published.
+		if (Datalen == 1)
 		{
-			int l = Datalen;
-			uint8_t *p = CFifoResvMultiple(fifo, &l);
-			if (p == NULL)
+			cnt = Stm32UartFifoPutByte(fifo, *pData) ? 1 : 0;
+		}
+		else
+		{
+			while (Datalen > 0)
 			{
-				break;
+				int l = Datalen;
+				uint8_t *p = CFifoResvMultiple(fifo, &l);
+				if (p == NULL)
+				{
+					break;
+				}
+				memcpy(p, pData, l);
+				CFifoPutMultiple(fifo, &l);
+				Datalen -= l;
+				pData += l;
+				cnt += l;
 			}
-			memcpy(p, pData, l);
-			CFifoPutMultiple(fifo, &l);
-			Datalen -= l;
-			pData += l;
-			cnt += l;
 		}
 		state = DisableInterrupt();
 	}
 	else
 	{
-		// One byte is stored directly. A non-blocking FIFO may drop queued
-		// bytes to make room and publishes them at once, so it is filled with
-		// interrupts masked.
+		// A non-blocking FIFO may drop queued bytes to make room and publishes
+		// them at once, so it is filled with interrupts masked. So is one byte
+		// into a FIFO whose size is not a power of 2.
 		state = DisableInterrupt();
 		while (Datalen > 0)
 		{
@@ -956,25 +1030,17 @@ static int Stm32UartTxData(DevIntrf_t * const pDev, uint8_t const *pData, int Da
 	}
 
 	// Start TX inside the critical section so the interrupt cannot fetch
-	// the same byte again and overwrite TDR.
-	if ((reg->CR1 & USART_CR1_UE) != 0)
+	// the same byte again and overwrite TDR. bTxReady clear means TXEIE is
+	// set and the interrupt takes the bytes just published.
+	if (dev->pUartDev->bTxReady && fifo->PutIdx != fifo->GetIdx &&
+		(reg->CR1 & USART_CR1_UE) != 0)
 	{
-		if (dev->pUartDev->bTxReady && (ST_USART_ISR(reg) & ST_USART_ISR_TXE))
+		dev->pUartDev->bTxReady = false;
+		if (ST_USART_ISR(reg) & ST_USART_ISR_TXE)
 		{
-			uint8_t *p = CFifoGet(fifo);
-			if (p != NULL)
-			{
-				dev->pUartDev->bTxReady = false;
-				ST_USART_TDR(reg) = *p;
-				reg->CR1 |= ST_USART_CR1_TXEIE;
-			}
+			ST_USART_TDR(reg) = (uint8_t)Stm32UartFifoTakeByte(fifo);
 		}
-
-		if (CFifoUsed(fifo) > 0)
-		{
-			dev->pUartDev->bTxReady = false;
-			reg->CR1 |= ST_USART_CR1_TXEIE;
-		}
+		reg->CR1 |= ST_USART_CR1_TXEIE;
 	}
 
 	EnableInterrupt(state);
@@ -1232,6 +1298,7 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	pDev->Mode = pCfg->Mode;
 	pDev->Duplex = pCfg->Duplex;
 	pDev->DataBits = pCfg->DataBits;
+	dev->RxDataMask = pCfg->DataBits == 7 ? 0x7F : 0xFF;
 	pDev->FlowControl = pCfg->FlowControl;
 	pDev->StopBits = pCfg->StopBits;
 	pDev->bIrDAFixPulse = pCfg->bIrDAFixPulse;
@@ -1348,14 +1415,14 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 extern "C" void DMA1_Channel2_3_IRQHandler()
 {
 	uint32_t state = DisableInterrupt();
-	Stm32UartDmaService(&s_Stm32UartDev[0]);
+	Stm32UartDmaService(&s_Stm32UartDev[ST_USART1_IDX]);
 	EnableInterrupt(state);
 }
 
 extern "C" void DMA1_Channel4_5_IRQHandler()
 {
 	uint32_t state = DisableInterrupt();
-	Stm32UartDmaService(&s_Stm32UartDev[1]);
+	Stm32UartDmaService(&s_Stm32UartDev[ST_USART2_IDX]);
 	EnableInterrupt(state);
 }
 #endif
@@ -1367,19 +1434,19 @@ void UARTSetCtrlLineState(UARTDev_t * const pDev, uint32_t LineState)
 #ifdef LPUART1
 extern "C" void LPUART1_IRQHandler()
 {
-	Stm32UartIrqHandler(LPUART1);
+	Stm32UartIrqHandler(&s_Stm32UartDev[ST_LPUART1_IDX]);
 }
 #endif
 
 extern "C" void USART1_IRQHandler()
 {
-	Stm32UartIrqHandler(USART1);
+	Stm32UartIrqHandler(&s_Stm32UartDev[ST_USART1_IDX]);
 }
 
 #ifdef USART2
 extern "C" void USART2_IRQHandler()
 {
-	Stm32UartIrqHandler(USART2);
+	Stm32UartIrqHandler(&s_Stm32UartDev[ST_USART2_IDX]);
 }
 #endif
 
@@ -1388,43 +1455,43 @@ extern "C" void USART2_IRQHandler()
 // part that has it.
 extern "C" void USART3_4_IRQHandler()
 {
-	Stm32UartIrqHandler(USART3);
+	Stm32UartIrqHandler(&s_Stm32UartDev[ST_USART3_IDX]);
 #ifdef USART4
-	Stm32UartIrqHandler(USART4);
+	Stm32UartIrqHandler(&s_Stm32UartDev[ST_USART4_IDX]);
 #endif
 #ifdef USART5
-	Stm32UartIrqHandler(USART5);
+	Stm32UartIrqHandler(&s_Stm32UartDev[ST_USART5_IDX]);
 #endif
 #ifdef USART6
-	Stm32UartIrqHandler(USART6);
+	Stm32UartIrqHandler(&s_Stm32UartDev[ST_USART6_IDX]);
 #endif
 }
 #else
 #ifdef USART3
 extern "C" void USART3_IRQHandler()
 {
-	Stm32UartIrqHandler(USART3);
+	Stm32UartIrqHandler(&s_Stm32UartDev[ST_USART3_IDX]);
 }
 #endif
 
 #ifdef UART4
 extern "C" void UART4_IRQHandler()
 {
-	Stm32UartIrqHandler(UART4);
+	Stm32UartIrqHandler(&s_Stm32UartDev[ST_UART4_IDX]);
 }
 #endif
 
 #ifdef UART5
 extern "C" void UART5_IRQHandler()
 {
-	Stm32UartIrqHandler(UART5);
+	Stm32UartIrqHandler(&s_Stm32UartDev[ST_UART5_IDX]);
 }
 #endif
 
 #ifdef USART6
 extern "C" void USART6_IRQHandler()
 {
-	Stm32UartIrqHandler(USART6);
+	Stm32UartIrqHandler(&s_Stm32UartDev[ST_USART6_IDX]);
 }
 #endif
 #endif
