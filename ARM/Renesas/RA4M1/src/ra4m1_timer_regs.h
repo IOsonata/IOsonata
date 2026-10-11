@@ -30,7 +30,6 @@ SOFTWARE.
 ----------------------------------------------------------------------------*/
 #ifndef RA4M1_TIMER_REGS_H
 #define RA4M1_TIMER_REGS_H
-#include <stddef.h>
 #include "ra4m1_ioregs.h"
 #define RA4M1_TIMER_MSTPCRD ((uintptr_t)&R_MSTP->MSTPCRD)
 /* Clock-source selection values are specific to the RA4M1 system clock. */
@@ -40,53 +39,46 @@ SOFTWARE.
 #define RA4M1_CK_MOCO 1U
 #define RA4M1_CK_MOSC 3U
 #define RA4M1_CK_PLL  5U
-#define RA4M1_AGT_BASE(n) ((uintptr_t)((n) == 0U ? R_AGT0 : R_AGT1))
-#define RA4M1_GPT_BASE(n) ((uintptr_t)R_GPT0 + (uintptr_t)(n) * (R_GPT1_BASE - R_GPT0_BASE))
+#define RA4M1_AGT_BASE(n) (0x40084000UL + 0x100UL * (n))
+#define RA4M1_GPT_BASE(n) (0x40078000UL + 0x100UL * (n))
 /* AGT data registers are halfwords; control registers are bytes. */
-#define RA4M1_AGT offsetof(R_AGTX0_Type, AGT16.AGT)
-#define RA4M1_AGTCMA offsetof(R_AGTX0_Type, AGT16.AGTCMA)
-#define RA4M1_AGTCMB offsetof(R_AGTX0_Type, AGT16.AGTCMB)
-#define RA4M1_AGTCR offsetof(R_AGTX0_Type, AGT16.CTRL.AGTCR)
-#define RA4M1_AGTMR1 offsetof(R_AGTX0_Type, AGT16.CTRL.AGTMR1)
-#define RA4M1_AGTMR2 offsetof(R_AGTX0_Type, AGT16.CTRL.AGTMR2)
-#define RA4M1_AGTIOC offsetof(R_AGTX0_Type, AGT16.CTRL.AGTIOC)
-#define RA4M1_AGTISR offsetof(R_AGTX0_Type, AGT16.CTRL.AGTISR)
-#define RA4M1_AGTCMSR offsetof(R_AGTX0_Type, AGT16.CTRL.AGTCMSR)
-#define RA4M1_AGTIOSEL offsetof(R_AGTX0_Type, AGT16.CTRL.AGTIOSEL)
+#define RA4M1_AGT 0x00U
+#define RA4M1_AGTCMA 0x02U
+#define RA4M1_AGTCMB 0x04U
+#define RA4M1_AGTCR 0x08U
+#define RA4M1_AGTMR1 0x09U
+#define RA4M1_AGTMR2 0x0AU
+#define RA4M1_AGTIOC 0x0CU
+#define RA4M1_AGTISR 0x0DU
+#define RA4M1_AGTCMSR 0x0EU
+#define RA4M1_AGTIOSEL 0x0FU
 #define RA4M1_AGT_START 0x01U
 #define RA4M1_AGT_STARTED 0x02U
 #define RA4M1_AGT_UNDERFLOW 0x20U
 /* All GPT registers require word accesses, including GPT16 channels. */
-#define RA4M1_GTWP offsetof(R_GPT0_Type, GTWP)
-#define RA4M1_GTSSR offsetof(R_GPT0_Type, GTSSR)
-#define RA4M1_GTPSR offsetof(R_GPT0_Type, GTPSR)
-#define RA4M1_GTCSR offsetof(R_GPT0_Type, GTCSR)
-#define RA4M1_GTUPSR offsetof(R_GPT0_Type, GTUPSR)
-#define RA4M1_GTDNSR offsetof(R_GPT0_Type, GTDNSR)
-#define RA4M1_GTICASR offsetof(R_GPT0_Type, GTICASR)
-#define RA4M1_GTICBSR offsetof(R_GPT0_Type, GTICBSR)
-#define RA4M1_GTCR offsetof(R_GPT0_Type, GTCR)
-#define RA4M1_GTUDDTYC offsetof(R_GPT0_Type, GTUDDTYC)
-#define RA4M1_GTIOR offsetof(R_GPT0_Type, GTIOR)
-#define RA4M1_GTINTAD offsetof(R_GPT0_Type, GTINTAD)
-#define RA4M1_GTST offsetof(R_GPT0_Type, GTST)
-#define RA4M1_GTBER offsetof(R_GPT0_Type, GTBER)
-#define RA4M1_GTCNT offsetof(R_GPT0_Type, GTCNT)
-#define RA4M1_GTPR offsetof(R_GPT0_Type, GTPR)
-#define RA4M1_GTPBR offsetof(R_GPT0_Type, GTPBR)
-#define RA4M1_GTDTCR offsetof(R_GPT0_Type, GTDTCR)
-#define RA4M1_GTDVU offsetof(R_GPT0_Type, GTDVU)
+#define RA4M1_GTWP 0x00U
+#define RA4M1_GTSSR 0x10U
+#define RA4M1_GTPSR 0x14U
+#define RA4M1_GTCSR 0x18U
+#define RA4M1_GTUPSR 0x1CU
+#define RA4M1_GTDNSR 0x20U
+#define RA4M1_GTICASR 0x24U
+#define RA4M1_GTICBSR 0x28U
+#define RA4M1_GTCR 0x2CU
+#define RA4M1_GTUDDTYC 0x30U
+#define RA4M1_GTIOR 0x34U
+#define RA4M1_GTINTAD 0x38U
+#define RA4M1_GTST 0x3CU
+#define RA4M1_GTBER 0x40U
+#define RA4M1_GTCNT 0x48U
+#define RA4M1_GTPR 0x64U
+#define RA4M1_GTPBR 0x68U
+#define RA4M1_GTDTCR 0x88U
+#define RA4M1_GTDVU 0x8CU
 #define RA4M1_GPT_OVERFLOW (1UL << 6)
 #define RA4M1_GTWP_KEY 0xA500UL
 /* Physical order is A, B, C, E, D, F -- NOT alphabetical. */
-static const uint8_t s_Ra4m1GtccrOffset[6] = {
-    (uint8_t)(offsetof(R_GPT0_Type, GTCCR) + 0U * sizeof(uint32_t)),
-    (uint8_t)(offsetof(R_GPT0_Type, GTCCR) + 1U * sizeof(uint32_t)),
-    (uint8_t)(offsetof(R_GPT0_Type, GTCCR) + 2U * sizeof(uint32_t)),
-    (uint8_t)(offsetof(R_GPT0_Type, GTCCR) + 4U * sizeof(uint32_t)),
-    (uint8_t)(offsetof(R_GPT0_Type, GTCCR) + 3U * sizeof(uint32_t)),
-    (uint8_t)(offsetof(R_GPT0_Type, GTCCR) + 5U * sizeof(uint32_t))
-};
+static const uint8_t s_Ra4m1GtccrOffset[6] = {0x4C, 0x50, 0x54, 0x5C, 0x58, 0x60};
 #ifndef RA4M1_TIMER_READY_POLLS
 #define RA4M1_TIMER_READY_POLLS 1000000UL
 #endif
