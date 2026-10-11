@@ -27,11 +27,15 @@
 		read with SystemPeriphClockGet. LPUART1 runs from the LSE crystal or
 		HSI16 for the rates they can make.
 
-		bIntMode false : polling, TxData and RxData access the data register
+		TxData puts the data in the TX CFIFO, then starts TX if it is ready.
+		RxData reads from the RX CFIFO, then moves what the hardware holds.
+
+		bIntMode false : polling, TxData and RxData move the CFIFO data to and
+		                 from the data register
 		bIntMode true  : USART interrupts drain the TX CFIFO and fill the
 		                 RX CFIFO
-		bDMAMode true  : STM32F030x8 only, TX DMA sends from the TX CFIFO, RX DMA
-		                 in circular mode
+		bDMAMode true  : STM32F030x8 only, TX DMA sends blocks from the TX
+		                 CFIFO, circular RX DMA ring moved into the RX CFIFO
 
 		Not mapped yet: the RCC names of WBA.
 
@@ -199,9 +203,10 @@ SOFTWARE.
 #define ST_UART_DMA_TX_SIZE		256
 #define ST_UART_DMA_RX_SIZE		256
 #define ST_UART_DMA_CFIFO_SIZE	CFIFO_MEMSIZE(ST_UART_DMA_TX_SIZE)
-// Up to this many queued bytes go to TDR by the TXE interrupt, more go in
-// one DMA block. A block costs a setup and the transfer complete interrupt.
-#define ST_UART_DMA_TX_MIN		2
+#define ST_UART_DMA_RX_CFIFO_SIZE	CFIFO_MEMSIZE(ST_UART_DMA_RX_SIZE)
+// RX DMA ring, power of 2. Moved into the RX CFIFO at half and full ring, on
+// IDLE and by RxData.
+#define ST_UART_DMA_RX_RING		64
 
 #pragma pack(push, 4)
 
@@ -220,8 +225,9 @@ typedef struct __Stm32_Uart_Dev {
 #if defined(STM32F030x8)
 	DMA_Channel_TypeDef *pRxDma;	//!< RX DMA channel
 	uint32_t RxDmaShift;		//!< Channel flags shift
-	uint16_t RxDmaRead;		//!< RX consumer index
-	alignas(4) uint8_t RxDmaRing[ST_UART_DMA_RX_SIZE];
+	uint16_t RxDmaRead;		//!< Ring index of the next byte to move to the RX CFIFO
+	alignas(4) uint8_t RxDmaRing[ST_UART_DMA_RX_RING];
+	alignas(4) uint8_t RxDmaFifoMem[ST_UART_DMA_RX_CFIFO_SIZE];	//!< Default RX CFIFO memory in DMA mode
 	DMA_Channel_TypeDef *pTxDma;
 	IRQn_Type TxDmaIrq;
 	uint32_t TxDmaShift;
@@ -374,12 +380,12 @@ static const int s_NbUartDev = sizeof(s_Stm32UartDev) / sizeof(Stm32UartDev_t);
 
 static void Stm32UartIrqHandler(Stm32UartDev_t * const pDev);
 #if defined(STM32F030x8)
-static int Stm32UartDmaRxRead(Stm32UartDev_t * const pDev, uint8_t *pData, int Length);
+static int Stm32UartDmaRxMove(Stm32UartDev_t * const pDev);
+static void Stm32UartDmaIrq(Stm32UartDev_t * const pDev);
 static void Stm32UartDmaRxStop(Stm32UartDev_t * const pDev);
 static void Stm32UartDmaSetup(Stm32UartDev_t * const pDev);
-static void Stm32UartDmaTxStart(Stm32UartDev_t * const pDev);
-static void Stm32UartDmaTxNext(Stm32UartDev_t * const pDev);
-static void Stm32UartDmaService(Stm32UartDev_t * const pDev);
+static bool Stm32UartDmaTxStart(Stm32UartDev_t * const pDev);
+static bool Stm32UartDmaService(Stm32UartDev_t * const pDev);
 static void Stm32UartDmaStop(Stm32UartDev_t * const pDev);
 #endif
 static uint32_t Stm32UartGetRate(DevIntrf_t * const pDev);
@@ -389,6 +395,8 @@ static int Stm32UartRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int Bufflen)
 static void Stm32UartStopRx(DevIntrf_t * const pDev);
 static bool Stm32UartStartTx(DevIntrf_t * const pDev, uint32_t DevAddr);
 static int Stm32UartTxData(DevIntrf_t * const pDev, uint8_t const *pData, int Datalen);
+static void Stm32UartTxStart(Stm32UartDev_t * const pDev);
+static void Stm32UartPollRx(Stm32UartDev_t * const pDev);
 static void Stm32UartStopTx(DevIntrf_t * const pDev);
 static void Stm32UartDisable(DevIntrf_t * const pDev);
 static void Stm32UartEnable(DevIntrf_t * const pDev);
@@ -438,11 +446,6 @@ static inline int Stm32UartFifoTakeByte(CFifo_t * const pFifo)
 // TX DMA side of the TX CFIFO. The DMA path is the only consumer and runs in
 // the interrupt or with interrupts masked. Block gives the first contiguous
 // run of queued bytes for a transfer in place, Release frees them once sent.
-static inline uint32_t Stm32UartFifoUsed(CFifo_t * const pFifo)
-{
-	return __atomic_load_n(&pFifo->PutIdx, __ATOMIC_ACQUIRE) - pFifo->GetIdx;
-}
-
 static inline uint8_t *Stm32UartFifoBlock(CFifo_t * const pFifo, uint32_t *pLen)
 {
 	uint32_t get = pFifo->GetIdx;
@@ -462,22 +465,35 @@ static inline void Stm32UartFifoRelease(CFifo_t * const pFifo, uint32_t Len)
 
 #if defined(STM32F030x8)
 // RX DMA runs in circular mode over RxDmaRing, CNDTR gives the write
-// position. Called with interrupts masked.
-static int Stm32UartDmaRxRead(Stm32UartDev_t * const pDev, uint8_t *pData, int Length)
+// position. Move what it wrote since the last call into the RX CFIFO, as
+// nRFUARTRxDmaEnd does with its DMA buffer. A full FIFO drops the rest.
+// Interrupts masked. Returns the number of bytes moved.
+static int Stm32UartDmaRxMove(Stm32UartDev_t * const pDev)
 {
-	uint32_t write = (ST_UART_DMA_RX_SIZE - pDev->pRxDma->CNDTR) &
-					 (ST_UART_DMA_RX_SIZE - 1U);
-	uint32_t available = (write - pDev->RxDmaRead) &
-						 (ST_UART_DMA_RX_SIZE - 1U);
-	int copied = 0;
-	while (copied < Length && available > 0U)
+	UARTDev_t *dev = pDev->pUartDev;
+	uint32_t write = (ST_UART_DMA_RX_RING - pDev->pRxDma->CNDTR) & (ST_UART_DMA_RX_RING - 1U);
+	int cnt = 0;
+
+	while (pDev->RxDmaRead != write)
 	{
-		pData[copied++] = pDev->RxDmaRing[pDev->RxDmaRead];
-		pDev->RxDmaRead = (pDev->RxDmaRead + 1U) & (ST_UART_DMA_RX_SIZE - 1U);
-		available--;
+		int l = (write > pDev->RxDmaRead ? write : ST_UART_DMA_RX_RING) - pDev->RxDmaRead;
+		uint8_t *p = CFifoPutMultiple(dev->hRxFifo, &l);
+		if (p == NULL)
+		{
+			dev->RxDropCnt += (write - pDev->RxDmaRead) & (ST_UART_DMA_RX_RING - 1U);
+			pDev->RxDmaRead = write;
+			break;
+		}
+		memcpy(p, &pDev->RxDmaRing[pDev->RxDmaRead], l);
+		pDev->RxDmaRead = (pDev->RxDmaRead + l) & (ST_UART_DMA_RX_RING - 1U);
+		cnt += l;
 	}
-	pDev->pUartDev->bRxReady = available != 0U;
-	return copied;
+	if (cnt > 0)
+	{
+		dev->bRxReady = true;
+	}
+
+	return cnt;
 }
 
 static void Stm32UartDmaRxStop(Stm32UartDev_t * const pDev)
@@ -504,8 +520,9 @@ static void Stm32UartDmaSetup(Stm32UartDev_t * const pDev)
 	DMA1->IFCR = DMA_IFCR_CGIF1 << pDev->RxDmaShift;
 	pDev->pRxDma->CPAR = (uint32_t)(uintptr_t)&ST_USART_RDR(reg);
 	pDev->pRxDma->CMAR = (uint32_t)(uintptr_t)pDev->RxDmaRing;
-	pDev->pRxDma->CNDTR = ST_UART_DMA_RX_SIZE;
-	pDev->pRxDma->CCR = DMA_CCR_MINC | DMA_CCR_CIRC | DMA_CCR_EN;
+	pDev->pRxDma->CNDTR = ST_UART_DMA_RX_RING;
+	pDev->pRxDma->CCR = DMA_CCR_MINC | DMA_CCR_CIRC | DMA_CCR_EN |
+						(intmode ? DMA_CCR_HTIE | DMA_CCR_TCIE : 0U);
 	pDev->RxDmaRead = 0;
 
 	pDev->pTxDma->CCR = 0;
@@ -513,7 +530,8 @@ static void Stm32UartDmaSetup(Stm32UartDev_t * const pDev)
 	pDev->pTxDma->CPAR = (uint32_t)(uintptr_t)&ST_USART_TDR(reg);
 	pDev->pTxDma->CMAR = 0;
 	pDev->pTxDma->CNDTR = 0;
-	pDev->pTxDma->CCR = DMA_CCR_DIR | DMA_CCR_MINC | (intmode ? DMA_CCR_TCIE | DMA_CCR_TEIE : 0U);
+	// The end of a block is the USART TC flag. TEIE reports a stopped transfer.
+	pDev->pTxDma->CCR = DMA_CCR_DIR | DMA_CCR_MINC | (intmode ? DMA_CCR_TEIE : 0U);
 	pDev->DmaActive = false;
 	pDev->TxDmaLength = 0;
 
@@ -524,95 +542,106 @@ static void Stm32UartDmaSetup(Stm32UartDev_t * const pDev)
 	}
 }
 
-// Send the first contiguous block of the TX CFIFO in place. The bytes stay
-// in the FIFO, so the producer cannot write over them, until the transfer
-// completes and releases them.
-static void Stm32UartDmaTxStart(Stm32UartDev_t * const pDev)
+// Start a DMA block with the first contiguous run of the TX CFIFO, sent in
+// place. The bytes stay in the FIFO, so the producer cannot write over them,
+// until the block is done. TC is cleared first so that it is set again by
+// the last character of this block. Returns false when the FIFO is empty.
+static bool Stm32UartDmaTxStart(Stm32UartDev_t * const pDev)
 {
 	uint32_t len;
 	uint8_t *p = Stm32UartFifoBlock(pDev->pUartDev->hTxFifo, &len);
 
+	if (len == 0U)
+	{
+		return false;
+	}
 	if (len > 0xFFFFU)
 	{
 		len = 0xFFFFU;
 	}
 	pDev->TxDmaLength = len;
+	pDev->pReg->ICR = USART_ICR_TCCF;
 	pDev->pTxDma->CMAR = (uint32_t)(uintptr_t)p;
 	pDev->pTxDma->CNDTR = len;
 	DMA1->IFCR = DMA_IFCR_CGIF1 << pDev->TxDmaShift;
 	pDev->DmaActive = true;
 	pDev->pTxDma->CCR |= DMA_CCR_EN;
+	if (pDev->pUartDev->DevIntrf.bIntEn)
+	{
+		pDev->pReg->CR1 |= USART_CR1_TCIE;
+	}
+
+	return true;
 }
 
-// Next TX step, no transfer running and bTxReady clear. More than
-// ST_UART_DMA_TX_MIN queued bytes go in one DMA block, which waits for TXE
-// by itself. A byte or two go to TDR from here and the TXE interrupt, a
-// block would cost a setup and an interrupt for them. Once the FIFO is
-// empty TX is ready again.
-static void Stm32UartDmaTxNext(Stm32UartDev_t * const pDev)
+// A block is done when the DMA has moved all of it and TC is set, its last
+// character has left the line, or when the DMA stopped on a transfer error.
+// The DMA transfer complete flag is not used, it is set as soon as the last
+// byte is in TDR. Holding TX busy until TC lets the bytes queued meanwhile go
+// in the next block. The block bytes are released and the next block takes
+// what was queued. With the FIFO empty TX is ready again and the application
+// is told. From the TC and DMA interrupts, or from TxData in polling mode.
+// Returns false if no block was done.
+static bool Stm32UartDmaService(Stm32UartDev_t * const pDev)
 {
 	UARTDev_t *dev = pDev->pUartDev;
-	USART_TypeDef *reg = pDev->pReg;
-	uint32_t used = Stm32UartFifoUsed(dev->hTxFifo);
 
-	if (used == 0U)
+	if (dev == NULL || !pDev->DmaActive)
 	{
-		reg->CR1 &= ~ST_USART_CR1_TXEIE;
-		dev->bTxReady = true;
-		if (dev->DevIntrf.bIntEn && dev->EvtCallback)
-		{
-			dev->EvtCallback(dev, UART_EVT_TXREADY, NULL, CFifoAvail(dev->hTxFifo));
-		}
-	}
-	else if (used > ST_UART_DMA_TX_MIN)
-	{
-		reg->CR1 &= ~ST_USART_CR1_TXEIE;
-		Stm32UartDmaTxStart(pDev);
-	}
-	else
-	{
-		if (ST_USART_ISR(reg) & ST_USART_ISR_TXE)
-		{
-			ST_USART_TDR(reg) = (uint8_t)Stm32UartFifoTakeByte(dev->hTxFifo);
-		}
-		// Polling mode checks again on the next TxData
-		if (dev->DevIntrf.bIntEn)
-		{
-			reg->CR1 |= ST_USART_CR1_TXEIE;
-		}
-	}
-}
-
-// Retire a finished TX transfer: release its bytes from the TX CFIFO and go
-// to the next step. From the DMA interrupt, or from TxData in polling mode.
-static void Stm32UartDmaService(Stm32UartDev_t * const pDev)
-{
-	if (pDev->pUartDev == NULL || !pDev->DmaActive)
-	{
-		return;
+		return false;
 	}
 
-	uint32_t flags = (DMA1->ISR >> pDev->TxDmaShift) &
-					 (DMA_ISR_TCIF1 | DMA_ISR_TEIF1);
-	if (flags == 0U)
+	uint32_t te = DMA1->ISR & (DMA_ISR_TEIF1 << pDev->TxDmaShift);
+	if (te == 0U && (pDev->pTxDma->CNDTR != 0U ||
+		(ST_USART_ISR(pDev->pReg) & USART_ISR_TC) == 0U))
 	{
-		return;
+		return false;
 	}
 
 	pDev->pTxDma->CCR &= ~DMA_CCR_EN;
-	uint32_t remaining = pDev->pTxDma->CNDTR;
+	// Not sent when a transfer error stopped the block
+	dev->TxDropCnt += pDev->pTxDma->CNDTR;
 	DMA1->IFCR = DMA_IFCR_CGIF1 << pDev->TxDmaShift;
 	pDev->DmaActive = false;
-	if (flags & DMA_ISR_TEIF1)
-	{
-		// The rest of the block is not sent
-		pDev->pUartDev->TxDropCnt += remaining;
-	}
-
-	Stm32UartFifoRelease(pDev->pUartDev->hTxFifo, pDev->TxDmaLength);
+	Stm32UartFifoRelease(dev->hTxFifo, pDev->TxDmaLength);
 	pDev->TxDmaLength = 0;
 
-	Stm32UartDmaTxNext(pDev);
+	if (Stm32UartDmaTxStart(pDev))
+	{
+		return true;
+	}
+
+	pDev->pReg->CR1 &= ~USART_CR1_TCIE;
+	dev->bTxReady = true;
+	if (dev->DevIntrf.bIntEn && dev->EvtCallback)
+	{
+		// Length is the free space in the TX FIFO
+		dev->EvtCallback(dev, UART_EVT_TXREADY, NULL, CFifoAvail(dev->hTxFifo));
+	}
+
+	return true;
+}
+
+// DMA interrupt of an instance: RX ring half or full, TX transfer error
+static void Stm32UartDmaIrq(Stm32UartDev_t * const pDev)
+{
+	UARTDev_t *dev = pDev->pUartDev;
+
+	if (dev == NULL || !dev->DevIntrf.bDma)
+	{
+		return;
+	}
+
+	if (DMA1->ISR & ((DMA_ISR_HTIF1 | DMA_ISR_TCIF1) << pDev->RxDmaShift))
+	{
+		DMA1->IFCR = DMA_IFCR_CGIF1 << pDev->RxDmaShift;
+		if (Stm32UartDmaRxMove(pDev) > 0 && dev->EvtCallback)
+		{
+			dev->EvtCallback(dev, UART_EVT_RXDATA, NULL, CFifoUsed(dev->hRxFifo));
+		}
+	}
+
+	Stm32UartDmaService(pDev);
 }
 
 static void Stm32UartDmaStop(Stm32UartDev_t * const pDev)
@@ -622,6 +651,7 @@ static void Stm32UartDmaStop(Stm32UartDev_t * const pDev)
 		return;
 	}
 	pDev->pReg->CR3 &= ~USART_CR3_DMAT;
+	pDev->pReg->CR1 &= ~USART_CR1_TCIE;
 	pDev->pTxDma->CCR = 0;
 	DMA1->IFCR = DMA_IFCR_CGIF1 << pDev->TxDmaShift;
 	pDev->DmaActive = false;
@@ -647,14 +677,11 @@ static void Stm32UartIrqHandler(Stm32UartDev_t * const pDev)
 #if defined(STM32F030x8)
 	if ((cr1 & USART_CR1_IDLEIE) && (iflag & USART_ISR_IDLE))
 	{
+		// End of an RX burst, what the DMA received goes in the RX CFIFO
 		reg->ICR = USART_ICR_IDLECF;
-		uint32_t write = (ST_UART_DMA_RX_SIZE - pDev->pRxDma->CNDTR) &
-						 (ST_UART_DMA_RX_SIZE - 1U);
-		int available = (write - pDev->RxDmaRead) & (ST_UART_DMA_RX_SIZE - 1U);
-		dev->bRxReady = available > 0;
-		if (available > 0 && dev->EvtCallback)
+		if (Stm32UartDmaRxMove(pDev) > 0 && dev->EvtCallback)
 		{
-			dev->EvtCallback(dev, UART_EVT_RXDATA, NULL, available);
+			dev->EvtCallback(dev, UART_EVT_RXDATA, NULL, CFifoUsed(dev->hRxFifo));
 		}
 	}
 #endif
@@ -718,16 +745,20 @@ static void Stm32UartIrqHandler(Stm32UartDev_t * const pDev)
 		}
 	}
 
+#if defined(STM32F030x8)
+	if ((iflag & USART_ISR_TC) && (cr1 & USART_CR1_TCIE))
+	{
+		// End of a TX DMA block. If the DMA is still behind, TC is cleared and
+		// set again by the last character.
+		if (!Stm32UartDmaService(pDev))
+		{
+			reg->ICR = USART_ICR_TCCF;
+		}
+	}
+#endif
+
 	if ((iflag & ST_USART_ISR_TXE) && (cr1 & ST_USART_CR1_TXEIE))
 	{
-#if defined(STM32F030x8)
-		if (dev->DevIntrf.bDma)
-		{
-			// TDR is free after a DMA block, send what was queued meanwhile
-			Stm32UartDmaTxNext(pDev);
-			return;
-		}
-#endif
 		int c = Stm32UartFifoTakeByte(dev->hTxFifo);
 
 		if (c >= 0)
@@ -876,10 +907,62 @@ static bool Stm32UartStartRx(DevIntrf_t * const pDev, uint32_t DevAddr)
 	return true;
 }
 
+// Without the interrupt, RDR goes in the RX CFIFO as the interrupt would put
+// it, while a character is there and the FIFO takes it. Interrupts masked.
+static void Stm32UartPollRx(Stm32UartDev_t * const pDev)
+{
+	UARTDev_t *dev = pDev->pUartDev;
+	USART_TypeDef *reg = pDev->pReg;
+
+	while (true)
+	{
+		uint32_t flags = ST_USART_ISR(reg);
+
+		if (flags & ST_USART_ISR_RXERR)
+		{
+			if (flags & ST_USART_ISR_ORE)
+			{
+				dev->RxOvrErrCnt++;
+			}
+			if (flags & ST_USART_ISR_PE)
+			{
+				dev->ParErrCnt++;
+			}
+			if (flags & ST_USART_ISR_FE)
+			{
+				dev->FramErrCnt++;
+			}
+			ST_USART_RXERR_CLEAR(reg, flags);
+			// The character in RDR is valid after an overrun alone
+			if (flags & (ST_USART_ISR_PE | ST_USART_ISR_FE | ST_USART_ISR_NE))
+			{
+				if (flags & ST_USART_ISR_RXNE)
+				{
+					(void)ST_USART_RDR(reg);
+				}
+				continue;
+			}
+		}
+		if ((flags & ST_USART_ISR_RXNE) == 0)
+		{
+			break;
+		}
+
+		uint8_t *p = CFifoPut(dev->hRxFifo);
+		if (p == NULL)
+		{
+			// FIFO full, the character waits in RDR
+			break;
+		}
+		*p = (uint8_t)ST_USART_RDR(reg) & pDev->RxDataMask;
+		dev->bRxReady = true;
+	}
+}
+
 static int Stm32UartRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int Bufflen)
 {
 	Stm32UartDev_t *dev = (Stm32UartDev_t *)pDev->pDevData;
-	USART_TypeDef *reg = dev->pReg;
+	hCFifo_t fifo = dev->pUartDev->hRxFifo;
 	int cnt = 0;
 
 	if (pBuff == NULL || Bufflen <= 0)
@@ -887,99 +970,42 @@ static int Stm32UartRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int Bufflen)
 		return 0;
 	}
 
+	// Read from the RX CFIFO first
+	uint32_t state = DisableInterrupt();
+	while (Bufflen > 0)
+	{
+		int l = Bufflen;
+		uint8_t *p = CFifoGetMultiple(fifo, &l);
+		if (p == NULL)
+		{
+			break;
+		}
+		memcpy(pBuff, p, l);
+		cnt += l;
+		pBuff += l;
+		Bufflen -= l;
+	}
+	dev->pUartDev->bRxReady = CFifoUsed(fifo) != 0;
+	EnableInterrupt(state);
+
+	// Then what the hardware received goes in the FIFO for the next read,
+	// as the interrupt would do. DMA: the ring since the last move.
+	// Without the interrupt: RDR.
 #if defined(STM32F030x8)
 	if (pDev->bDma)
 	{
-		uint32_t state = DisableInterrupt();
-		cnt = Stm32UartDmaRxRead(dev, pBuff, Bufflen);
+		state = DisableInterrupt();
+		Stm32UartDmaRxMove(dev);
 		EnableInterrupt(state);
-		return cnt;
 	}
+	else
 #endif
 	if (!pDev->bIntEn)
 	{
-		while (cnt < Bufflen)
-		{
-			uint32_t flags = ST_USART_ISR(reg);
-
-			if (flags & ST_USART_ISR_RXERR)
-			{
-				if (flags & ST_USART_ISR_ORE)
-				{
-					dev->pUartDev->RxOvrErrCnt++;
-				}
-				if (flags & ST_USART_ISR_PE)
-				{
-					dev->pUartDev->ParErrCnt++;
-				}
-				if (flags & ST_USART_ISR_FE)
-				{
-					dev->pUartDev->FramErrCnt++;
-				}
-				ST_USART_RXERR_CLEAR(reg, flags);
-				// The character in RDR is valid after an overrun alone
-				if (flags & (ST_USART_ISR_PE | ST_USART_ISR_FE | ST_USART_ISR_NE))
-				{
-					if (flags & ST_USART_ISR_RXNE)
-					{
-						(void)ST_USART_RDR(reg);
-					}
-					break;
-				}
-			}
-			if ((flags & ST_USART_ISR_RXNE) == 0)
-			{
-				break;
-			}
-			pBuff[cnt++] = (uint8_t)ST_USART_RDR(reg) & dev->RxDataMask;
-		}
-
-		return cnt;
-	}
-
-	hCFifo_t fifo = dev->pUartDev->hRxFifo;
-	uint32_t state;
-
-	if (CFifoIsBlocking(fifo))
-	{
-		// The interrupt is the only writer and a blocking FIFO does not
-		// overwrite unread bytes. Copy with interrupts enabled, then release
-		// the bytes. RDR holds one character, so the interrupt must not wait
-		// for the copy.
-		while (cnt < Bufflen)
-		{
-			int len = Bufflen - cnt;
-			uint8_t *p = CFifoPeekMultiple(fifo, &len);
-			if (p == NULL)
-			{
-				break;
-			}
-			memcpy(&pBuff[cnt], p, len);
-			CFifoGetMultiple(fifo, &len);
-			cnt += len;
-		}
 		state = DisableInterrupt();
+		Stm32UartPollRx(dev);
+		EnableInterrupt(state);
 	}
-	else
-	{
-		// A full non-blocking FIFO drops its oldest bytes from the interrupt,
-		// so the bytes are copied before the interrupt can run.
-		state = DisableInterrupt();
-		while (cnt < Bufflen)
-		{
-			int len = Bufflen - cnt;
-			uint8_t *p = CFifoGetMultiple(fifo, &len);
-			if (p == NULL)
-			{
-				break;
-			}
-			memcpy(&pBuff[cnt], p, len);
-			cnt += len;
-		}
-	}
-	dev->pUartDev->bRxReady = CFifoUsed(fifo) != 0;
-
-	EnableInterrupt(state);
 
 	return cnt;
 }
@@ -993,144 +1019,111 @@ static bool Stm32UartStartTx(DevIntrf_t * const pDev, uint32_t DevAddr)
 	return true;
 }
 
+// Start TX from the TX CFIFO, TX ready and interrupts masked. DMA: a block
+// from the FIFO, the TC interrupt, or the next TxData without interrupt,
+// sends the rest. Interrupt: the first byte goes to TDR and the TXE interrupt
+// sends the rest. Polling: TDR takes what it can now, the next TxData sends
+// the rest, TX stays ready.
+static void Stm32UartTxStart(Stm32UartDev_t * const pDev)
+{
+	UARTDev_t *dev = pDev->pUartDev;
+	USART_TypeDef *reg = pDev->pReg;
+	hCFifo_t fifo = dev->hTxFifo;
+
+#if defined(STM32F030x8)
+	if (dev->DevIntrf.bDma)
+	{
+		if (Stm32UartDmaTxStart(pDev))
+		{
+			dev->bTxReady = false;
+		}
+		return;
+	}
+#endif
+	if (dev->DevIntrf.bIntEn)
+	{
+		if (fifo->PutIdx != fifo->GetIdx)
+		{
+			dev->bTxReady = false;
+			if (ST_USART_ISR(reg) & ST_USART_ISR_TXE)
+			{
+				ST_USART_TDR(reg) = (uint8_t)Stm32UartFifoTakeByte(fifo);
+			}
+			reg->CR1 |= ST_USART_CR1_TXEIE;
+		}
+		return;
+	}
+
+	// TXE set means TDR is free while the shift register still sends the
+	// previous character
+	int c;
+	while ((ST_USART_ISR(reg) & ST_USART_ISR_TXE) &&
+		   (c = Stm32UartFifoTakeByte(fifo)) >= 0)
+	{
+		ST_USART_TDR(reg) = (uint8_t)c;
+	}
+}
+
 static int Stm32UartTxData(DevIntrf_t * const pDev, uint8_t const *pData, int Datalen)
 {
 	Stm32UartDev_t *dev = (Stm32UartDev_t *)pDev->pDevData;
-	USART_TypeDef *reg = dev->pReg;
+	hCFifo_t fifo = dev->pUartDev->hTxFifo;
 	int cnt = 0;
+	int rtry = pDev->MaxRetry;
 
-	if (pData == NULL || Datalen <= 0 || (reg->CR1 & USART_CR1_UE) == 0)
+	if (pData == NULL || Datalen <= 0)
 	{
 		return 0;
 	}
 
-	if (!pDev->bIntEn && !pDev->bDma)
+	while (Datalen > 0 && rtry-- > 0)
 	{
-		// TXE set means TDR is free while the shift register still sends
-		// the previous character. Writing on TXE keeps the frames back to
-		// back. The count written is returned, the caller retries the rest.
-		while (cnt < Datalen && (ST_USART_ISR(reg) & ST_USART_ISR_TXE))
-		{
-			ST_USART_TDR(reg) = pData[cnt++];
-		}
+		uint32_t state = DisableInterrupt();
 
-		return cnt;
-	}
-
-	// One FIFO enqueue attempt, the caller retries. The interrupt or the DMA
-	// sends from the FIFO.
-	hCFifo_t fifo = dev->pUartDev->hTxFifo;
-	uint32_t state;
-
-	if (CFifoIsBlocking(fifo) && (Datalen > 1 || fifo->Mask != 0U))
-	{
-		// A blocking FIFO is filled with interrupts enabled so RX is not
-		// delayed. The interrupt does not see the bytes until they are
-		// published.
-		if (Datalen == 1)
+		// The data goes in the TX CFIFO first. One byte into a power of 2 FIFO
+		// with room takes the short path, CFifoPutMultiple does the rest.
+		if (Datalen == 1 && Stm32UartFifoPutByte(fifo, *pData))
 		{
-			cnt = Stm32UartFifoPutByte(fifo, *pData) ? 1 : 0;
+			Datalen--;
+			cnt++;
 		}
-		else
-		{
-			while (Datalen > 0)
-			{
-				int l = Datalen;
-				uint8_t *p = CFifoResvMultiple(fifo, &l);
-				if (p == NULL)
-				{
-					break;
-				}
-				memcpy(p, pData, l);
-				CFifoPutMultiple(fifo, &l);
-				Datalen -= l;
-				pData += l;
-				cnt += l;
-			}
-		}
-		state = DisableInterrupt();
-	}
-	else
-	{
-		// A non-blocking FIFO may drop queued bytes to make room and publishes
-		// them at once, so it is filled with interrupts masked. So is one byte
-		// into a FIFO whose size is not a power of 2.
-		state = DisableInterrupt();
 		while (Datalen > 0)
 		{
 			int l = Datalen;
-			uint8_t *p = l == 1 ? CFifoPut(fifo) : CFifoPutMultiple(fifo, &l);
+			uint8_t *p = CFifoPutMultiple(fifo, &l);
 			if (p == NULL)
 			{
 				break;
 			}
-			if (l == 1)
-			{
-				*p = *pData;
-			}
-			else
-			{
-				memcpy(p, pData, l);
-			}
+			memcpy(p, pData, l);
 			Datalen -= l;
 			pData += l;
 			cnt += l;
 		}
-	}
 
 #if defined(STM32F030x8)
-	if (pDev->bDma)
-	{
-		// In polling mode the finished transfer is retired here, otherwise by
-		// the DMA interrupt. bTxReady clear means a transfer or the next
-		// step is pending and takes the bytes just published.
-		if (!pDev->bIntEn)
+		if (pDev->bDma && !pDev->bIntEn)
 		{
+			// No interrupt retires the finished DMA block, it is done here
 			Stm32UartDmaService(dev);
-			if (!dev->DmaActive && !dev->pUartDev->bTxReady)
-			{
-				Stm32UartDmaTxNext(dev);
-			}
 		}
-		if (dev->pUartDev->bTxReady && fifo->PutIdx != fifo->GetIdx &&
-			(reg->CR1 & USART_CR1_UE) != 0)
-		{
-			// Nothing in flight: TDR takes what it can directly, a byte at a
-			// time costs no DMA setup and no interrupt. The next step takes
-			// the rest.
-			int c;
-			while ((ST_USART_ISR(reg) & ST_USART_ISR_TXE) &&
-				   (c = Stm32UartFifoTakeByte(fifo)) >= 0)
-			{
-				ST_USART_TDR(reg) = (uint8_t)c;
-			}
-			if (fifo->PutIdx != fifo->GetIdx)
-			{
-				dev->pUartDev->bTxReady = false;
-				Stm32UartDmaTxNext(dev);
-			}
-		}
-		EnableInterrupt(state);
-
-		return cnt;
-	}
 #endif
 
-	// Start TX inside the critical section so the interrupt cannot fetch
-	// the same byte again and overwrite TDR. bTxReady clear means TXEIE is
-	// set and the interrupt takes the bytes just published.
-	if (dev->pUartDev->bTxReady && fifo->PutIdx != fifo->GetIdx &&
-		(reg->CR1 & USART_CR1_UE) != 0)
-	{
-		dev->pUartDev->bTxReady = false;
-		if (ST_USART_ISR(reg) & ST_USART_ISR_TXE)
+		// Start TX inside the critical section so the interrupt cannot take
+		// the same bytes again. When TX is busy, the interrupt or the DMA
+		// takes the bytes just put.
+		if (dev->pUartDev->bTxReady)
 		{
-			ST_USART_TDR(reg) = (uint8_t)Stm32UartFifoTakeByte(fifo);
+			Stm32UartTxStart(dev);
 		}
-		reg->CR1 |= ST_USART_CR1_TXEIE;
+
+		EnableInterrupt(state);
 	}
 
-	EnableInterrupt(state);
+	if (Datalen > 0)
+	{
+		dev->pUartDev->TxDropCnt += (uint32_t)Datalen;
+	}
 
 	return cnt;
 }
@@ -1312,6 +1305,13 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	{
 		pDev->hRxFifo = CFifoInit(pCfg->pRxMem, pCfg->RxMemSize, 1, pCfg->bFifoBlocking);
 	}
+#if defined(STM32F030x8)
+	else if (pCfg->bDMAMode)
+	{
+		pDev->hRxFifo = CFifoInit(dev->RxDmaFifoMem, ST_UART_DMA_RX_CFIFO_SIZE, 1,
+								 pCfg->bFifoBlocking);
+	}
+#endif
 	else
 	{
 		pDev->hRxFifo = CFifoInit(dev->RxFifoMem, ST_UART_CFIFO_SIZE, 1, pCfg->bFifoBlocking);
@@ -1455,8 +1455,8 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	if (pCfg->bIntMode)
 	{
 		// Only the interrupts the handler services. TXEIE is set by
-		// Stm32UartTxData when the TX FIFO has data. TCIE, IDLEIE and RTOIE
-		// stay off, their flags are not cleared by the handler.
+		// Stm32UartTxData when the TX FIFO has data, TCIE by the TX DMA start.
+		// IDLEIE is used with RX DMA. RTOIE stays off.
 		if (pCfg->bDMAMode)
 		{
 			cr1 |= USART_CR1_IDLEIE | USART_CR1_PEIE;
@@ -1486,14 +1486,14 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 extern "C" void DMA1_Channel2_3_IRQHandler()
 {
 	uint32_t state = DisableInterrupt();
-	Stm32UartDmaService(&s_Stm32UartDev[ST_USART1_IDX]);
+	Stm32UartDmaIrq(&s_Stm32UartDev[ST_USART1_IDX]);
 	EnableInterrupt(state);
 }
 
 extern "C" void DMA1_Channel4_5_IRQHandler()
 {
 	uint32_t state = DisableInterrupt();
-	Stm32UartDmaService(&s_Stm32UartDev[ST_USART2_IDX]);
+	Stm32UartDmaIrq(&s_Stm32UartDev[ST_USART2_IDX]);
 	EnableInterrupt(state);
 }
 #endif
