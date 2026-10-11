@@ -47,16 +47,62 @@ SOFTWARE.
 #include <stdint.h>
 
 #include "cfifo.h"
+#ifndef __GCC_HAVE_SYNC_COMPARE_AND_SWAP_4
+#include "coredev/interrupt.h"
+#endif
 
 #define CFIFO_ATOMIC_STORE(p, v, order) \
 	__atomic_store_n((p), (v), (order))
 #define CFIFO_ATOMIC_LOAD(p, order) \
 	__atomic_load_n((p), (order))
+#ifdef __GCC_HAVE_SYNC_COMPARE_AND_SWAP_4
+// Native 32-bit compare and swap (LDREX/STREX, RISC-V A extension, host).
+// The compiler inlines it.
 #define CFIFO_ATOMIC_CAS_WEAK(p, expected, desired, success, failure) \
 	__atomic_compare_exchange_n((p), (expected), (desired), true, \
 		(success), (failure))
 #define CFIFO_ATOMIC_FETCH_ADD(p, v, order) \
 	__atomic_fetch_add((p), (v), (order))
+#else
+// No native 32-bit compare and swap (Cortex-M0/M0+/M1, RISC-V without the
+// A extension). The compiler would call __atomic_compare_exchange_4 and
+// __atomic_fetch_add_4. Do the same read, compare and write inline with
+// interrupts masked instead. Single core only, like the library call.
+static inline bool cfifo_cas(uint32_t *p, uint32_t *pExpected, uint32_t Desired)
+{
+	uint32_t state = DisableInterrupt();
+	uint32_t cur = *(volatile uint32_t *)p;
+	bool res = cur == *pExpected;
+
+	if (res)
+	{
+		*(volatile uint32_t *)p = Desired;
+	}
+	else
+	{
+		*pExpected = cur;
+	}
+	EnableInterrupt(state);
+
+	return res;
+}
+
+static inline uint32_t cfifo_fetch_add(uint32_t *p, uint32_t Val)
+{
+	uint32_t state = DisableInterrupt();
+	uint32_t old = *(volatile uint32_t *)p;
+
+	*(volatile uint32_t *)p = old + Val;
+	EnableInterrupt(state);
+
+	return old;
+}
+
+#define CFIFO_ATOMIC_CAS_WEAK(p, expected, desired, success, failure) \
+	cfifo_cas((p), (expected), (desired))
+#define CFIFO_ATOMIC_FETCH_ADD(p, v, order) \
+	cfifo_fetch_add((p), (v))
+#endif
 
 static inline uint32_t cfifo_slot(const CFifo_t *pFifo, uint32_t Idx)
 {
