@@ -3,7 +3,9 @@
 Native MCU port under the existing `ARM/Renesas` tree: system startup, clock
 reporting, Cortex-M4 vectors, normal-boot linker layout, GPIO/pin control, and
 CPU interrupt registration through the ICU, asynchronous SCI UART, and AGT/GPT timers.
-See [TIMER.md](TIMER.md) for timer device mapping, operation and validation limits.
+See [TIMER.md](TIMER.md) for timer device mapping and validation limits, and
+[INTERRUPTS.md](INTERRUPTS.md) for the ICU/NVIC routing architecture,
+registration contract, and interrupt-maintenance invariants.
 No board package, Arduino/FSP runtime, USB controller, DMA/DTC, or NMI
 driver is included yet.
 
