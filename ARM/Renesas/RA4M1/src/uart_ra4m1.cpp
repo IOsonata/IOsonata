@@ -261,10 +261,9 @@ static bool Kick(Ra4m1UartDev *d)
         return false;
     }
 
-    // TXI is responsible for queued bytes. Do not use FIFO emptiness
-    // to infer that the transmitter is idle.
     if ((d->Regs->SSR & SCI_SSR_TDRE) == 0U)
     {
+        // The current TDR byte will produce TXI when it is consumed.
         d->Regs->SCR = (d->Regs->SCR & (uint8_t)~SCI_SCR_TEIE) |
             SCI_SCR_TIE;
         return false;
@@ -273,8 +272,8 @@ static bool Kick(Ra4m1UartDev *d)
     int byte = CFifoGetByte(d->pDev->hTxFifo);
     if (byte < 0)
     {
-        d->Regs->SCR = (d->Regs->SCR & (uint8_t)~SCI_SCR_TIE) |
-            SCI_SCR_TEIE;
+        d->Regs->SCR &= (uint8_t)~(SCI_SCR_TIE | SCI_SCR_TEIE);
+        TxReady(d, true);
         return false;
     }
 
@@ -289,8 +288,10 @@ static bool Kick(Ra4m1UartDev *d)
     }
     else
     {
-        d->Regs->SCR = (d->Regs->SCR & (uint8_t)~SCI_SCR_TIE) |
-            SCI_SCR_TEIE;
+        // FIFO ownership ends as soon as the byte is submitted to TDR.
+        // A later TxData may write TDR directly when TDRE is asserted.
+        d->Regs->SCR &= (uint8_t)~(SCI_SCR_TIE | SCI_SCR_TEIE);
+        TxReady(d, true);
     }
 
     return true;
@@ -334,7 +335,6 @@ static void UartIrq(int irq, void *ctx)
             d->Regs->SCR = scr & (uint8_t)~SCI_SCR_TEIE;
             if (!d->DmaMode && CFifoUsed(u->hTxFifo) != 0)
             {
-                // A queued byte takes precedence over releasing TX ownership.
                 Kick(d);
             }
             else
@@ -444,15 +444,13 @@ static int TxData(DevIntrf_t *p, const uint8_t *data, int len)
             if (d->pDev->bTxReady &&
                 (d->Regs->SSR & SCI_SSR_TDRE) != 0U)
             {
-                // An idle transmitter is primed directly. All subsequent
-                // bytes belong to TXI until TEI releases bTxReady.
+                // No queued bytes: submit directly to available TDR.
+                // Keep software TX ready; TDR readiness gates the next write.
                 uint8_t value = d->pDev->DataBits == 7 ?
                     data[count] & 0x7FU : data[count];
-                TxReady(d, false);
                 d->Regs->SCR &= (uint8_t)~(SCI_SCR_TIE | SCI_SCR_TEIE);
                 d->Regs->TDR = value;
                 Sync(d);
-                d->Regs->SCR |= SCI_SCR_TEIE;
                 accepted = true;
             }
             else
