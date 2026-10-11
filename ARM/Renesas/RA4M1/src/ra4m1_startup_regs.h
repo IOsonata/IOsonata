@@ -45,7 +45,8 @@ SOFTWARE.
 #define RA4M1_WR32(a, v)    (*(volatile uint32_t *)(uintptr_t)(a) = (uint32_t)(v))
 #endif
 
-#define RA4M1_HOCOCR2       0x4001E000UL
+/* Renesas TN-RA*-A0083A: HOCOCR2 is SYSC base + 0x037. */
+#define RA4M1_HOCOCR2       0x4001E037UL
 #define RA4M1_SCKDIVCR      0x4001E020UL
 #define RA4M1_SCKSCR        0x4001E026UL
 #define RA4M1_PLLCR         0x4001E02AUL
