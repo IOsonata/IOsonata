@@ -31,12 +31,7 @@ SOFTWARE.
 #include <stddef.h>
 #include "iopinctrl.h"
 #include "interrupt_ra4m1.h"
-#include "ra4m1_startup_regs.h"
 
-#define RA4M1_VBTCR1    0x4001E41FUL
-#define RA4M1_VBTSR     0x4001E4B1UL
-#define RA4M1_VBTICTLR  0x4001E4BBUL
-#define RA4M1_VBTOCTLR  0x4001E4BCUL
 #ifndef RA4M1_IO_READY_POLLS
 #define RA4M1_IO_READY_POLLS 1000000UL
 #endif

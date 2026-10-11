@@ -45,6 +45,16 @@ SOFTWARE.
 #define RA4M1_RD32(a)      (*(volatile const uint32_t *)(uintptr_t)(a))
 #define RA4M1_WR32(a, v)   (*(volatile uint32_t *)(uintptr_t)(a) = (uint32_t)(v))
 #endif
+/* Vendor CMSIS register structures are authoritative. */
+#define RA4M1_PRCR       ((uintptr_t)&R_SYSTEM->PRCR)
+#define RA4M1_PRCR_KEY   0xA500U
+#define RA4M1_PRCR_PRC1  0x02U
+#define RA4M1_MOSCCR     ((uintptr_t)&R_SYSTEM->MOSCCR)
+#define RA4M1_SOSCCR     ((uintptr_t)&R_SYSTEM->SOSCCR)
+#define RA4M1_VBTCR1     ((uintptr_t)&R_SYSTEM->VBTCR1)
+#define RA4M1_VBTSR      ((uintptr_t)&R_SYSTEM->VBTSR)
+#define RA4M1_VBTICTLR   ((uintptr_t)&R_SYSTEM->VBTICTLR)
+#define RA4M1_VBTOCTLR   ((uintptr_t)&R_SYSTEM->VBTOCTLR)
 #define RA4M1_PCNTR1(p)    (0x40040000UL + 0x20UL * (p))
 #define RA4M1_PCNTR2(p)    (0x40040004UL + 0x20UL * (p))
 #define RA4M1_PCNTR3(p)    (0x40040008UL + 0x20UL * (p))

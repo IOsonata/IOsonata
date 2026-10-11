@@ -38,5 +38,5 @@
 #define SCI_SEMR_ABCS 0x10U
 #define SCI_SEMR_BGDM 0x40U
 #define SCI_SPTR_MARK 0x06U
-#define RA4M1_UART_MSTPCRB 0x40047000UL
+#define RA4M1_UART_MSTPCRB ((uintptr_t)&R_MSTP->MSTPCRB)
 #endif

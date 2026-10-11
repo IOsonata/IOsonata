@@ -24,7 +24,6 @@ SOFTWARE.
 #include "coredev/uart.h"
 #include "iopinctrl.h"
 #include "interrupt_ra4m1.h"
-#include "ra4m1_startup_regs.h"
 #include "ra4m1_uart_baud.h"
 
 #ifndef RA4M1_UART_FIFO_SIZE
