@@ -224,6 +224,7 @@ static bool DmaStart(Ra4m1UartDev *d)
     d->DmaCount = (uint16_t)count;
     d->DmaBusy = true;
     dma->DMCNT_b.DTE = 1U;
+    d->Regs->SCR |= SCI_SCR_TIE;
 
     return true;
 }
@@ -236,6 +237,7 @@ static void DmaIrqHandler(int irq, void *ctx)
 
     dma->DMCNT_b.DTE = 0U;
     dma->DMSTS = 0U;
+    d->Regs->SCR &= (uint8_t)~SCI_SCR_TIE;
     CFifoRelease(d->pDev->hTxFifo, d->DmaCount);
     d->DmaCount = 0U;
     d->DmaBusy = false;
@@ -549,8 +551,7 @@ static void Enable(DevIntrf_t *p)
         }
         TxReady(d, d->Tx);
         d->Regs->SCR = (d->Tx ? SCI_SCR_TE : 0U) | (d->Rx ? SCI_SCR_RE : 0U) |
-            (d->Rx && p->bIntEn ? SCI_SCR_RIE : 0U) |
-            (d->DmaMode && d->Tx ? SCI_SCR_TIE : 0U);
+            (d->Rx && p->bIntEn ? SCI_SCR_RIE : 0U);
         if (d->DmaMode)
         {
             DmaStart(d);
