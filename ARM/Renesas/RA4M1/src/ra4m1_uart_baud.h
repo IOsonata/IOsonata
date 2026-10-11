@@ -25,6 +25,8 @@ static bool Ra4m1UartPlanBaud(uint32_t Clock, uint32_t Rate, Ra4m1UartBaud *Plan
         SCI_SEMR_BGDM | SCI_SEMR_ABCS, SCI_SEMR_ABCSE};
     uint64_t best = UINT64_MAX;
     Ra4m1UartBaud result = {};
+    Ra4m1UartBaud stable = {};
+    uint64_t stableError = UINT64_MAX;
     /* Evaluate both adjacent BRR divisors for every legal MDDR. Compare in
      * microhertz, not truncated integer Hz or integer 256/M. Ties retain the
      * higher sampling margin and, within a mode, disabled modulation first.
@@ -43,19 +45,42 @@ static bool Ra4m1UartPlanBaud(uint32_t Clock, uint32_t Rate, Ra4m1UartBaud *Plan
                     uint64_t actual = numerator * 1000000U / denominator;
                     uint64_t desired = (uint64_t)Rate * 1000000U;
                     uint64_t error = actual > desired ? actual-desired : desired-actual;
-                    if (error >= best) continue;
+                    if (mode < 2U && m == 256U && error < stableError)
+                    {
+                        stableError = error;
+                        stable.Actual = (uint32_t)((numerator + denominator / 2U) / denominator);
+                        stable.Cks = (uint8_t)cks;
+                        stable.Brr = (uint8_t)(n - 1U);
+                        stable.Mddr = 255U;
+                        stable.Semr = modes[mode];
+                    }
+
+                    if (error >= best)
+                    {
+                        continue;
+                    }
+
                     best = error;
-                    result.Actual = (uint32_t)((numerator + denominator/2U) / denominator);
+                    result.Actual = (uint32_t)((numerator + denominator / 2U) / denominator);
                     result.Cks = (uint8_t)cks;
-                    result.Brr = (uint8_t)(n-1U);
-                    result.Mddr = m == 256 ? 255 : (uint8_t)m;
-                    result.Semr = modes[mode] | (m == 256 ? 0 : SCI_SEMR_BRME);
+                    result.Brr = (uint8_t)(n - 1U);
+                    result.Mddr = m == 256U ? 255U : (uint8_t)m;
+                    result.Semr = modes[mode] | (m == 256U ? 0U : SCI_SEMR_BRME);
                 }
             }
         }
     }
+    if (stableError != UINT64_MAX && stableError <= (uint64_t)Rate * 10000U)
+    {
+        *Plan = stable;
+        return true;
+    }
+
     if (best == UINT64_MAX || best > (uint64_t)Rate * RA4M1_UART_MAX_ERROR_PPM)
+    {
         return false;
+    }
+
     *Plan = result;
     return true;
 }
