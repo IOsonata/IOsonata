@@ -200,41 +200,14 @@ static bool DmaStart(Ra4m1UartDev *d)
     }
 
     R_DMAC0_Type *dma = s_DmaRegs[d->DmaChannel];
-    bool idle = (d->Regs->SSR & SCI_SSR_TEND) != 0U;
-    bool prime = idle && (d->Regs->SSR & SCI_SSR_TDRE) != 0U;
 
-    // A single byte at idle needs CPU priming: no TXI request exists yet.
-    // Keep TX ownership until TEI, which will start any queued successors.
-    if (prime && count == 1)
-    {
-        d->Regs->SCR &= (uint8_t)~(SCI_SCR_TIE | SCI_SCR_TEIE);
-        d->Regs->TDR = d->pDev->DataBits == 7 ?
-            source[0] & 0x7FU : source[0];
-        CFifoRelease(d->pDev->hTxFifo, 1);
-        d->Regs->SCR |= SCI_SCR_TEIE;
-        return true;
-    }
-
-    // When SCI is running, arm DMA immediately for the next TXI request.
-    // Do not require TDRE/TEND or re-prime TDR between DMA segments.
-    unsigned skip = prime ? 1U : 0U;
-    unsigned remaining = (unsigned)count - skip;
-    dma->DMCNT_b.DTE = 0U;
-    dma->DMSAR = (uint32_t)(uintptr_t)(source + skip);
-    dma->DMCRA = remaining;
-
-    d->DmaCount = (uint16_t)remaining;
+    // The SCI TXI event is configured once at initialization. DMA reads
+    // directly from the FIFO; the FIFO remains owned until completion.
+    dma->DMSAR = (uint32_t)(uintptr_t)source;
+    dma->DMCRA = (uint32_t)count;
+    d->DmaCount = (uint16_t)count;
     d->DmaBusy = true;
-    d->Regs->SCR &= (uint8_t)~(SCI_SCR_TIE | SCI_SCR_TEIE);
     dma->DMCNT_b.DTE = 1U;
-    d->Regs->SCR |= SCI_SCR_TIE;
-
-    if (prime)
-    {
-        d->Regs->TDR = d->pDev->DataBits == 7 ?
-            source[0] & 0x7FU : source[0];
-        CFifoRelease(d->pDev->hTxFifo, 1);
-    }
 
     return true;
 }
@@ -244,9 +217,9 @@ static void DmaIrqHandler(int irq, void *ctx)
     Ra4m1UartDev *d = static_cast<Ra4m1UartDev *>(ctx);
     uint32_t state = DisableInterrupt();
     R_DMAC0_Type *dma = s_DmaRegs[d->DmaChannel];
+
     dma->DMCNT_b.DTE = 0U;
     dma->DMSTS = 0U;
-    d->Regs->SCR &= (uint8_t)~SCI_SCR_TIE;
     CFifoRelease(d->pDev->hTxFifo, d->DmaCount);
     d->DmaCount = 0U;
     d->DmaBusy = false;
@@ -256,9 +229,7 @@ static void DmaIrqHandler(int irq, void *ctx)
     {
         if (!DmaStart(d))
         {
-            // DMA completion means TDR was written, not that the wire is idle.
-            // Leave ownership active until TEI confirms the last frame.
-            d->Regs->SCR |= SCI_SCR_TEIE;
+            TxReady(d, true);
         }
     }
 
@@ -347,14 +318,7 @@ static void UartIrq(int irq, void *ctx)
         uint8_t scr = d->Regs->SCR;
         if ((scr & SCI_SCR_TEIE) && (d->Regs->SSR & SCI_SSR_TEND)) {
             d->Regs->SCR = scr & ~SCI_SCR_TEIE;
-            if (d->DmaMode && DmaStart(d))
-            {
-                TxReady(d, false);
-            }
-            else
-            {
-                TxReady(d, true);
-            }
+            TxReady(d, true);
             event = UART_EVT_TXREADY; length = CFifoAvail(u->hTxFifo); notify = true;
         }
     }
@@ -553,7 +517,8 @@ static void Enable(DevIntrf_t *p)
         }
         TxReady(d, d->Tx);
         d->Regs->SCR = (d->Tx ? SCI_SCR_TE : 0U) | (d->Rx ? SCI_SCR_RE : 0U) |
-            (d->Rx && p->bIntEn ? SCI_SCR_RIE : 0U);
+            (d->Rx && p->bIntEn ? SCI_SCR_RIE : 0U) |
+            (d->DmaMode && d->Tx ? SCI_SCR_TIE : 0U);
         if (d->DmaMode)
         {
             DmaStart(d);
