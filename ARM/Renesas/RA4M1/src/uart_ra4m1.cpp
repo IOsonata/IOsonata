@@ -175,18 +175,46 @@ static void TxReady(Ra4m1UartDev *d, bool ready)
 }
 static bool Kick(Ra4m1UartDev *d)
 {
-    if (!d->Enabled || !d->Tx || !CFifoUsed(d->pDev->hTxFifo)) return false;
+    if (!d->Enabled || !d->Tx)
+    {
+        return false;
+    }
+
     uint8_t scr = d->Regs->SCR & ~(SCI_SCR_TIE | SCI_SCR_TEIE);
-    // Enqueue can follow the previous final-byte submission while TDR is
-    // still occupied. Arm TXI even then; otherwise those bytes are stranded.
-    d->Regs->SCR = scr | SCI_SCR_TIE;
-    if (!(d->Regs->SSR & SCI_SSR_TDRE)) return false;
-    uint8_t *p = CFifoGet(d->pDev->hTxFifo);
-    if (!p) return false;
-    d->Regs->TDR = d->pDev->DataBits == 7 ? *p & 0x7FU : *p;
-    if (!CFifoUsed(d->pDev->hTxFifo))
+
+    if (CFifoUsed(d->pDev->hTxFifo) == 0U)
+    {
+        // An empty FIFO must not leave TXI enabled while TDRE remains set.
         d->Regs->SCR = scr | SCI_SCR_TEIE;
+        return false;
+    }
+
+    if ((d->Regs->SSR & SCI_SSR_TDRE) == 0U)
+    {
+        // TDR is occupied: TXI will service the queued data when TDRE sets.
+        d->Regs->SCR = scr | SCI_SCR_TIE;
+        return false;
+    }
+
+    uint8_t *p = CFifoGet(d->pDev->hTxFifo);
+    if (p == nullptr)
+    {
+        d->Regs->SCR = scr | SCI_SCR_TEIE;
+        return false;
+    }
+
+    d->Regs->TDR = d->pDev->DataBits == 7 ? *p & 0x7FU : *p;
     TxReady(d, false);
+
+    if (CFifoUsed(d->pDev->hTxFifo) != 0U)
+    {
+        d->Regs->SCR = scr | SCI_SCR_TIE;
+    }
+    else
+    {
+        d->Regs->SCR = scr | SCI_SCR_TEIE;
+    }
+
     return true;
 }
 static void UartIrq(int irq, void *ctx)
