@@ -135,8 +135,7 @@ source in the hardware manual; this port does not configure that wake policy.
 
 ## IOC integration and first test
 
-The existing IOC library project links `src/timer_ra4m1.cpp`, its private register
-header, the target mapping/diagnostic header, and unchanged shared
+The existing IOC library project links `src/timer_ra4m1.cpp`, the target mapping/diagnostic header, and unchanged shared
 `src/coredev/timer.cpp`. The generic source is necessary for the C++ auto-select
 trigger overloads. Debug/Release and hard-float settings remain unchanged.
 
@@ -157,23 +156,40 @@ Run from the repository root:
 python3 tests/ra4m1/run_timer_validation.py
 ```
 
-The runner executes the actual timer and ICU source against a register/event
-model, with 411 assertions at O0, Os and O2 and under ASan/UBSan. It also runs
-the existing 59 startup scenarios, 188 GPIO/ICU assertions and 224 UART
-assertions, package/linker/archive checks and IOC metadata validation. Timer
-Cortex-M4 C++11 compilation is checked at all three optimization levels for
-soft and hard float ABI. The model includes all ten channels, correct access
-widths/protection, asynchronous start/stop handshakes, pending-overflow races,
-D/E mapping, all six GPT triggers, phase catch-up, programming latency,
-callback-time arrivals, callback rearming, shared gates and failure paths.
+The runner contains historical host-model coverage for startup, GPIO/ICU,
+UART, timer and ARM object compilation. **Its published assertion counts
+predate the migration to the Renesas CMSIS peripheral structures.** The
+simplified register-model tests must be refreshed and rerun before reporting
+those counts as results for the current branch. These models are not a
+substitute for a production-header firmware build or hardware execution.
 
 **The tests use simplified headers, not the production headers.** The UART regression uses its
 existing CFifo test double in the standalone source package; its runner also
 uses production CFifo when that source is present in a full checkout. The
 inherited ARM link probe validates startup/vector archive extraction, not a
-complete timer application link. Production CMSIS/newlib GNU firmware build,
-IOC managed build, hardware boot, physical periods, interrupt latency and
-standby behavior have not been tested here.
+complete timer application link. The user subsequently confirmed that RA4M1 firmware compiles and that
+Blinky and TimerDemo run on an EK-RA4M1. Timing accuracy, interrupt latency,
+UART, standby, and the refreshed host regression suite remain unverified.
+
+## EK-RA4M1 bring-up (October 11, 2026)
+
+The user confirmed successful firmware compilation and operation of Blinky
+and TimerDemo following the vendor CMSIS register migration. The AGT0
+`TimerInit()` failure is no longer observed in that hardware test.
+
+Timer DevNo 3 (GPT1) was tested with four compare triggers at 100, 1000,
+250 and 500 ms. All four produced callbacks. After initial arming, triggers
+0, 1 and 2 largely reported their requested periods. Trigger 3's reported
+intervals varied in the captured debugger output. That output used J-Link
+`rdimon` semihosting; debugger-mediated printing can halt the core and
+distort callback timestamps. It does not establish a GPT hardware-clock or
+compare-register timing defect. Capture timestamps in RAM, without
+semihosted printing during measurement, before assessing jitter.
+
+The driver accesses `R_AGTn->AGT16` and `R_GPTn` through Renesas CMSIS
+peripheral structures, and routes each event through the MCU ICU manager.
+See [INTERRUPTS.md](INTERRUPTS.md) for the difference between ARM system
+exceptions, NVIC slot numbers, peripheral event IDs and their lifecycles.
 
 ## Hardware basis
 
