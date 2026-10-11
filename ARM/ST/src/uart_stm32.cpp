@@ -567,8 +567,7 @@ static bool Stm32UartDmaService(Stm32UartDev_t * const pDev)
 	dev->TxDropCnt += pDev->pTxDma->CNDTR;
 	DMA1->IFCR = DMA_IFCR_CGIF1 << pDev->TxDmaShift;
 	pDev->DmaActive = false;
-	int l = (int)pDev->TxDmaLength;
-	CFifoGetMultiple(dev->hTxFifo, &l);
+	CFifoRelease(dev->hTxFifo, (int)pDev->TxDmaLength);
 	pDev->TxDmaLength = 0;
 
 	if (Stm32UartDmaTxStart(pDev))
@@ -686,11 +685,9 @@ static void Stm32UartIrqHandler(Stm32UartDev_t * const pDev)
 		// Reading RDR clears RXNE
 		uint8_t c = (uint8_t)ST_USART_RDR(reg) & pDev->RxDataMask;
 		CFifo_t *fifo = dev->hRxFifo;
-		uint8_t *p = CFifoPut(fifo);
 
-		if (p != NULL)
+		if (CFifoPutByte(fifo, c))
 		{
-			*p = c;
 			dev->bRxReady = true;
 		}
 		else
@@ -717,12 +714,12 @@ static void Stm32UartIrqHandler(Stm32UartDev_t * const pDev)
 
 	if ((iflag & ST_USART_ISR_TXE) && (cr1 & ST_USART_CR1_TXEIE))
 	{
-		uint8_t *p = CFifoGet(dev->hTxFifo);
+		int c = CFifoGetByte(dev->hTxFifo);
 
-		if (p != NULL)
+		if (c >= 0)
 		{
 			// Writing TDR clears TXE
-			ST_USART_TDR(reg) = *p;
+			ST_USART_TDR(reg) = (uint8_t)c;
 		}
 		else
 		{
@@ -991,20 +988,16 @@ static int Stm32UartTxData(DevIntrf_t * const pDev, uint8_t const *pData, int Da
 		return 0;
 	}
 
-	// The data goes in the TX CFIFO first. CFifoPut and CFifoPutMultiple
-	// publish the slots before they are written, so interrupts are disabled.
-	state = DisableInterrupt();
+	// The data goes in the TX CFIFO first. CFifoPutByte writes the byte
+	// before it is published. CFifoPutMultiple publishes the slots before
+	// they are written, so interrupts are disabled for the copy.
 	if (Datalen == 1)
 	{
-		uint8_t *p = CFifoPut(fifo);
-		if (p != NULL)
-		{
-			*p = *pData;
-			cnt = 1;
-		}
+		cnt = CFifoPutByte(fifo, *pData) ? 1 : 0;
 	}
 	else
 	{
+		state = DisableInterrupt();
 		while (Datalen > 0)
 		{
 			int l = Datalen;
@@ -1018,8 +1011,8 @@ static int Stm32UartTxData(DevIntrf_t * const pDev, uint8_t const *pData, int Da
 			pData += l;
 			cnt += l;
 		}
+		EnableInterrupt(state);
 	}
-	EnableInterrupt(state);
 
 	// Then start TX if it is ready. Otherwise the running interrupt or DMA
 	// transfer takes the bytes just put. Checked again with interrupts
@@ -1056,11 +1049,11 @@ static int Stm32UartTxData(DevIntrf_t * const pDev, uint8_t const *pData, int Da
 			{
 				// The first byte goes to TDR, the TXE interrupt sends the rest.
 				// TX ready means TDR is empty.
-				uint8_t *p = CFifoGet(fifo);
-				if (p != NULL)
+				int c = CFifoGetByte(fifo);
+				if (c >= 0)
 				{
 					dev->pUartDev->bTxReady = false;
-					ST_USART_TDR(reg) = *p;
+					ST_USART_TDR(reg) = (uint8_t)c;
 					reg->CR1 |= ST_USART_CR1_TXEIE;
 				}
 			}
@@ -1071,12 +1064,12 @@ static int Stm32UartTxData(DevIntrf_t * const pDev, uint8_t const *pData, int Da
 				// shift register still sends the previous character.
 				while (ST_USART_ISR(reg) & ST_USART_ISR_TXE)
 				{
-					uint8_t *p = CFifoGet(fifo);
-					if (p == NULL)
+					int c = CFifoGetByte(fifo);
+					if (c < 0)
 					{
 						break;
 					}
-					ST_USART_TDR(reg) = *p;
+					ST_USART_TDR(reg) = (uint8_t)c;
 				}
 			}
 		}
