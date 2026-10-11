@@ -92,7 +92,7 @@ typedef enum IRQn {
 #define __PROGRAM_START          /* IOsonata owns ResetEntry, not CMSIS CRT. */
 #endif
 #endif
-#include "core_cm4.h"
+#include "R7FA4M1AB.h"
 
 #define RA4M1_IRQ_COUNT           32U
 #define RA4M1_VECTOR_COUNT        (16U + RA4M1_IRQ_COUNT)
