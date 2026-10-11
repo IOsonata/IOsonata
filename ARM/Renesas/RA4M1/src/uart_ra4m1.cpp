@@ -426,14 +426,35 @@ static int TxData(DevIntrf_t *p, const uint8_t *data, int len)
         bool accepted = false;
         if (d->DmaMode)
         {
-            uint32_t dropped = d->pDev->hTxFifo->DropCnt;
-            if (CFifoPutByte(d->pDev->hTxFifo, data[count]))
+            // Do not schedule a one-byte DMA transfer. The SCI TDR is
+            // already an efficient single-byte hardware queue.
+            if (!d->DmaBusy &&
+                CFifoUsed(d->pDev->hTxFifo) == 0 &&
+                (d->Regs->SSR & SCI_SSR_TDRE) != 0U)
             {
-                accepted = true;
+                d->Regs->TDR = d->pDev->DataBits == 7 ?
+                    data[count] & 0x7FU : data[count];
                 TxReady(d, false);
+                accepted = true;
             }
-            d->pDev->TxDropCnt += d->pDev->hTxFifo->DropCnt - dropped;
-            DmaStart(d);
+            else
+            {
+                uint32_t dropped = d->pDev->hTxFifo->DropCnt;
+                if (CFifoPutByte(d->pDev->hTxFifo, data[count]))
+                {
+                    accepted = true;
+                    TxReady(d, false);
+                }
+                d->pDev->TxDropCnt += d->pDev->hTxFifo->DropCnt - dropped;
+
+                if (!d->DmaBusy && !DmaStart(d) &&
+                    CFifoUsed(d->pDev->hTxFifo) != 0)
+                {
+                    // The TDR is occupied. Keep TEI armed so queued data
+                    // cannot be stranded after the current frame completes.
+                    d->Regs->SCR |= SCI_SCR_TEIE;
+                }
+            }
         }
         else if (p->bIntEn)
         {
