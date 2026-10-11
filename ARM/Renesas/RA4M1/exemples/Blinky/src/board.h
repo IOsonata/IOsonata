@@ -40,9 +40,10 @@ SOFTWARE.
 // Keep the library's internal oscillator defaults. Define MCUOSC here only
 // when the application needs a different oscillator configuration.
 
-// LED or oscilloscope outputs
+// EK-RA4M1 LED1 (red user LED): P106, active high.
+// Additional outputs below are test points, not on-board LEDs.
 #define LED0_PORT			1
-#define LED0_PIN			2
+#define LED0_PIN			6
 #define LED0_PINOP			IOPINOP_GPIO
 
 #define LED1_PORT			1
