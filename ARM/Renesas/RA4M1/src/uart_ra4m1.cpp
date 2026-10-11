@@ -462,10 +462,9 @@ static int TxData(DevIntrf_t *p, const uint8_t *data, int len)
                 {
                     accepted = true;
                     TxReady(d, false);
-                    // On the first queued byte, TXI must be armed even
-                    // while TDR is occupied. Do not wait for TEI.
-                    d->Regs->SCR = (d->Regs->SCR &
-                        (uint8_t)~SCI_SCR_TEIE) | SCI_SCR_TIE;
+                    // Service an already-empty TDR immediately. Merely
+                    // enabling TXI does not guarantee a fresh TXI event.
+                    Kick(d);
                 }
                 d->pDev->TxDropCnt += d->pDev->hTxFifo->DropCnt - dropped;
             }
