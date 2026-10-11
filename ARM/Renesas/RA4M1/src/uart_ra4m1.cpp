@@ -425,14 +425,36 @@ static int TxData(DevIntrf_t *p, const uint8_t *data, int len)
         bool accepted = false;
         if (d->DmaMode)
         {
-            uint32_t dropped = d->pDev->hTxFifo->DropCnt;
-            if (CFifoPutByte(d->pDev->hTxFifo, data[count]))
+            // The one-byte API must not require a TEI round trip per byte.
+            // Preserve FIFO order: direct TDR writes are only allowed when
+            // no older bytes remain queued and DMA is inactive.
+            if (!d->DmaBusy &&
+                CFifoUsed(d->pDev->hTxFifo) == 0U &&
+                (d->Regs->SSR & SCI_SSR_TDRE) != 0U)
             {
-                accepted = true;
+                uint8_t value = d->pDev->DataBits == 7 ?
+                    data[count] & 0x7FU : data[count];
+                d->Regs->SCR &= (uint8_t)~SCI_SCR_TEIE;
+                d->Regs->TDR = value;
                 TxReady(d, false);
+                accepted = true;
             }
-            d->pDev->TxDropCnt += d->pDev->hTxFifo->DropCnt - dropped;
-            DmaStart(d);
+            else
+            {
+                uint32_t dropped = d->pDev->hTxFifo->DropCnt;
+                if (CFifoPutByte(d->pDev->hTxFifo, data[count]))
+                {
+                    accepted = true;
+                    TxReady(d, false);
+                }
+                d->pDev->TxDropCnt += d->pDev->hTxFifo->DropCnt - dropped;
+                if (!DmaStart(d) && !d->DmaBusy &&
+                    CFifoUsed(d->pDev->hTxFifo) != 0U)
+                {
+                    // TDR is occupied. TEI resumes any waiting FIFO data.
+                    d->Regs->SCR |= SCI_SCR_TEIE;
+                }
+            }
         }
         else if (p->bIntEn)
         {
