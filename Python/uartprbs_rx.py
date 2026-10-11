@@ -10,18 +10,17 @@ Printed each report interval, counters are totals since start:
     Bytes/sec    : bytes received during the last interval per second
     drop         : bytes that are not the successor of the byte before them
                    (same count as earlier versions of this script)
-    corrupt      : bytes replaced or inserted, the stream then continues
-    lost         : jumps in the sequence, data missing between two bytes,
-                   with the number of bytes missing. The sequence repeats
-                   every 127 bytes, so a loss of a multiple of 127 bytes is
-                   not seen
+    corrupt      : received bytes rejected while reacquiring the sequence
+    lost         : short forward phase jumps consistent with missing bytes;
+                   these are estimates because PRBS repeats every 127 bytes
     out of frame : bytes above 0x7F, which the transmitter never sends
-                   after its first 0xFF. They mean that the receiver splits
-                   the bit stream at the wrong place, usually because it
-                   started in the middle of a stream with no idle time
-                   between characters. Reset the board with this script
-                   running.
-    restart      : the transmitter started again (0xFF then 0x7E)
+                   after its first 0xFF. They suggest incorrect UART
+                   decoding or corrupted data; the script cannot itself
+                   repair hardware framing. Consider resetting the board
+                   if the problem persists.
+    restart      : confirmed transmitter restart (0xFF then valid PRBS)
+    uncertain    : discontinuities not safely classifiable as short losses
+    recovered    : synchronization recovered after a verified 8-byte run
     average      : bytes per second since the first byte
 
 A report is printed even when no data arrives.
@@ -256,7 +255,7 @@ def report(chk, rate, average, oof_interval, count_interval):
     if count_interval == 0:
         print("  no data")
     elif oof_interval * 100 > count_interval:
-        print("  receiver out of frame: reset the board with this script running")
+        print("  receiver out of frame: UART decoding may be misaligned; reset the board if this persists")
 
 
 def main():
