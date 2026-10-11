@@ -38,6 +38,8 @@ SOFTWARE.
 #define SCI_SSR_TDRE 0x80U
 #define SCI_SSR_ERRORS (SCI_SSR_PER | SCI_SSR_FER | SCI_SSR_ORER)
 #define SCI_SPTR_MARK 0x06U
+#define RA4M1_DMA_MSTP_MASK (1UL << 22U)
+#define RA4M1_DMA_BUFFER_SIZE 256U
 
 #ifndef RA4M1_UART_FIFO_SIZE
 #define RA4M1_UART_FIFO_SIZE 16
@@ -53,12 +55,18 @@ struct Ra4m1UartDev {
     uint32_t OldPfs[2];
     uint32_t SyncCycles;
     uint8_t Event;
+    uint8_t DmaChannel;
+    IRQn_Type DmaIrq;
+    bool DmaMode;
+    bool DmaBusy;
     bool Enabled, Rx, Tx;
+    alignas(4) uint8_t DmaTxMem[RA4M1_DMA_BUFFER_SIZE];
     alignas(4) uint8_t RxMem[CFIFO_MEMSIZE(RA4M1_UART_FIFO_SIZE)];
     alignas(4) uint8_t TxMem[CFIFO_MEMSIZE(RA4M1_UART_FIFO_SIZE)];
 };
 static R_SCI0_Type * const s_SciRegs[4] = {R_SCI0, R_SCI1, R_SCI2, R_SCI9};
 static Ra4m1UartDev s_Uart[4];
+static R_DMAC0_Type * const s_DmaRegs[4] = {R_DMAC0, R_DMAC1, R_DMAC2, R_DMAC3};
 static const uint8_t s_Channel[] = {0, 1, 2, 9};
 static const uint8_t s_Event[] = {RA4M1_EVTID_SCI0_RXI, RA4M1_EVTID_SCI1_RXI,
     RA4M1_EVTID_SCI2_RXI, RA4M1_EVTID_SCI9_RXI};
@@ -173,9 +181,73 @@ static void TxReady(Ra4m1UartDev *d, bool ready)
     d->pDev->bTxReady = ready;
     d->pDev->DevIntrf.bTxReady = ready;
 }
+static bool DmaStart(Ra4m1UartDev *d)
+{
+    if (!d->DmaMode || d->DmaBusy || !d->Enabled || !d->Tx)
+    {
+        return false;
+    }
+
+    unsigned count = 0U;
+    while (count < RA4M1_DMA_BUFFER_SIZE)
+    {
+        int byte = CFifoGetByte(d->pDev->hTxFifo);
+        if (byte < 0)
+        {
+            break;
+        }
+        d->DmaTxMem[count] = (uint8_t)byte;
+        ++count;
+    }
+
+    if (count == 0U)
+    {
+        return false;
+    }
+
+    R_DMAC0_Type *dma = s_DmaRegs[d->DmaChannel];
+    dma->DMCNT_b.DTE = 0U;
+    dma->DMSAR = (uint32_t)(uintptr_t)d->DmaTxMem;
+    dma->DMDAR = (uint32_t)(uintptr_t)&d->Regs->TDR;
+    dma->DMCRA = count;
+    dma->DMCRB = 0U;
+    dma->DMTMD = 1U;
+    dma->DMAMD = (2U << 14U);
+    dma->DMINT = 0x10U;
+    d->DmaBusy = true;
+
+    // DMA owns TXI; CPU TXI must remain disabled.
+    d->Regs->SCR &= (uint8_t)~(SCI_SCR_TIE | SCI_SCR_TEIE);
+    R_DMA->DELSR[d->DmaChannel] = d->Event + 1U;
+    R_DMA->DMAST_b.DMST = 1U;
+    dma->DMCNT_b.DTE = 1U;
+    return true;
+}
+
+static void DmaIrqHandler(int irq, void *ctx)
+{
+    Ra4m1UartDev *d = static_cast<Ra4m1UartDev *>(ctx);
+    uint32_t state = DisableInterrupt();
+    R_DMAC0_Type *dma = s_DmaRegs[d->DmaChannel];
+    dma->DMCNT_b.DTE = 0U;
+    dma->DMSTS = 0U;
+    d->DmaBusy = false;
+    Ra4m1AcknowledgeInt((IRQn_Type)irq);
+
+    if (d->Enabled && d->pDev)
+    {
+        if (!DmaStart(d))
+        {
+            d->Regs->SCR |= SCI_SCR_TEIE;
+        }
+    }
+
+    EnableInterrupt(state);
+}
+
 static bool Kick(Ra4m1UartDev *d)
 {
-    if (!d->Enabled || !d->Tx)
+    if (!d->Enabled || !d->Tx || d->DmaMode)
     {
         return false;
     }
@@ -321,7 +393,18 @@ static int TxData(DevIntrf_t *p, const uint8_t *data, int len)
         Ra4m1UartDev *d = Owner(p);
         if (!d || !d->Enabled || !d->Tx) { EnableInterrupt(state); break; }
         bool accepted = false;
-        if (p->bIntEn)
+        if (d->DmaMode)
+        {
+            uint32_t dropped = d->pDev->hTxFifo->DropCnt;
+            if (CFifoPutByte(d->pDev->hTxFifo, data[count]))
+            {
+                accepted = true;
+                TxReady(d, false);
+            }
+            d->pDev->TxDropCnt += d->pDev->hTxFifo->DropCnt - dropped;
+            DmaStart(d);
+        }
+        else if (p->bIntEn)
         {
             if (CFifoUsed(d->pDev->hTxFifo) == 0U &&
                 (d->Regs->SSR & SCI_SSR_TDRE) != 0U)
@@ -389,6 +472,12 @@ static void Disable(DevIntrf_t *p)
         for (unsigned i = 0; i < 4; ++i)
             if ((int)d->Irq[i] >= 0) NVIC_DisableIRQ(d->Irq[i]);
         d->Regs->SCR = 0;
+        if (d->DmaMode)
+        {
+            s_DmaRegs[d->DmaChannel]->DMCNT_b.DTE = 0U;
+            R_DMA->DELSR[d->DmaChannel] = 0U;
+            d->DmaBusy = false;
+        }
         ClearRoutes(d);
         d->Enabled = false;
         d->pDev->TxDropCnt += CFifoUsed(d->pDev->hTxFifo);
@@ -410,10 +499,23 @@ static void Enable(DevIntrf_t *p)
         ClearRoutes(d);
         d->Enabled = true;
         for (unsigned i = 0; i < 4; ++i)
-            if ((int)d->Irq[i] >= 0) NVIC_EnableIRQ(d->Irq[i]);
+        {
+            if ((int)d->Irq[i] >= 0)
+            {
+                NVIC_EnableIRQ(d->Irq[i]);
+            }
+        }
+        if (d->DmaMode)
+        {
+            NVIC_EnableIRQ(d->DmaIrq);
+        }
         TxReady(d, d->Tx);
         d->Regs->SCR = (d->Tx ? SCI_SCR_TE : 0U) | (d->Rx ? SCI_SCR_RE : 0U) |
             (d->Rx && p->bIntEn ? SCI_SCR_RIE : 0U);
+        if (d->DmaMode)
+        {
+            DmaStart(d);
+        }
     }
     EnableInterrupt(state);
 }
@@ -437,8 +539,32 @@ static void PowerOff(DevIntrf_t *p)
     if (d) {
         Disable(p);
         ReleaseRoutes(d);
+        if (d->DmaMode)
+        {
+            NVIC_DisableIRQ(d->DmaIrq);
+            Ra4m1UnregisterIntHandler(d->DmaIrq);
+            d->DmaIrq = (IRQn_Type)-1;
+        }
         RestorePins(d, 2);
         Clock(d, false);
+        if (d->DmaMode)
+        {
+            bool used = false;
+            for (unsigned i = 0; i < 4; ++i)
+            {
+                if (&s_Uart[i] != d && s_Uart[i].pDev && s_Uart[i].DmaMode)
+                {
+                    used = true;
+                }
+            }
+            if (!used)
+            {
+                uint16_t protect = R_SYSTEM->PRCR & 15U;
+                R_SYSTEM->PRCR = 0xA500U | protect | 0x02U;
+                R_MSTP->MSTPCRA |= RA4M1_DMA_MSTP_MASK;
+                R_SYSTEM->PRCR = 0xA500U | protect;
+            }
+        }
         CFifoFlush(d->pDev->hRxFifo);
         d->pDev->bRxReady = false;
         d->pDev = nullptr;
@@ -470,7 +596,7 @@ bool UARTInit(UARTDEV * const u, const UARTCFG *cfg)
         (cfg->StopBits != 1 && cfg->StopBits != 2) ||
         (cfg->Parity != UART_PARITY_NONE && cfg->Parity != UART_PARITY_ODD && cfg->Parity != UART_PARITY_EVEN) ||
         cfg->Mode != UART_MODE_UART || cfg->Duplex != UART_DUPLEX_FULL ||
-        cfg->FlowControl != UART_FLWCTRL_NONE || cfg->bDMAMode || cfg->bIrDAMode ||
+        cfg->FlowControl != UART_FLWCTRL_NONE || cfg->bIrDAMode ||
         (cfg->bIntMode && (unsigned)cfg->IntPrio >= (1UL << __NVIC_PRIO_BITS)) ||
         !MemoryValid(cfg->pRxMem, cfg->RxMemSize) || !MemoryValid(cfg->pTxMem, cfg->TxMemSize)) return false;
     if (cfg->pRxMem && cfg->pTxMem) {
@@ -509,6 +635,16 @@ bool UARTInit(UARTDEV * const u, const UARTCFG *cfg)
     d->Event = s_Event[cfg->DevNo];
     d->SyncCycles = (2U*((SystemCoreClock + clock-1U)/clock) + 2U);
     d->Enabled = false; d->Rx = present[0]; d->Tx = present[1];
+    d->DmaMode = cfg->bDMAMode;
+    d->DmaBusy = false;
+    d->DmaChannel = (uint8_t)cfg->DevNo;
+    d->DmaIrq = (IRQn_Type)-1;
+    if (d->DmaMode && ((R_MSTP->MSTPCRA & RA4M1_DMA_MSTP_MASK) == 0U) &&
+        (R_DMA->DELSR[d->DmaChannel] & 0x1FFU) != 0U)
+    {
+        EnableInterrupt(state);
+        return false;
+    }
     for (unsigned i = 0; i < 4; ++i) d->Irq[i] = (IRQn_Type)-1;
     // Do not take a running SCI instance from another peripheral implementation.
     if (!(R_MSTP->MSTPCRB & d->StopMask)) { EnableInterrupt(state); return false; }
@@ -518,6 +654,14 @@ bool UARTInit(UARTDEV * const u, const UARTCFG *cfg)
         if (d->OldPfs[i] & RA4M1_PFS_ISEL) { EnableInterrupt(state); return false; }
     }
     if (!Clock(d, true)) { EnableInterrupt(state); return false; }
+    if (d->DmaMode)
+    {
+        uint16_t protect = R_SYSTEM->PRCR & 15U;
+        R_SYSTEM->PRCR = 0xA500U | protect | 0x02U;
+        R_MSTP->MSTPCRA &= ~RA4M1_DMA_MSTP_MASK;
+        R_SYSTEM->PRCR = 0xA500U | protect;
+        __DSB();
+    }
     d->Regs->SCR = 0;
     if (cfg->DevNo < 2) d->Regs->FCR = 0; // Disable hardware FIFO.
     d->Regs->SPTR = SCI_SPTR_MARK;
@@ -536,10 +680,16 @@ bool UARTInit(UARTDEV * const u, const UARTCFG *cfg)
         (cfg->DevNo >= 2 || !(d->Regs->FCR & 1U)) && ApplyBaud(d, baud);
     if (ok && cfg->bIntMode) {
         for (unsigned i = 0; i < 4 && ok; ++i) {
-            if ((i == 0 || i == 3) ? !d->Rx : !d->Tx) continue;
+            if ((i == 0 || i == 3) ? !d->Rx : !d->Tx || (d->DmaMode && i == 1U)) continue;
             d->Irq[i] = Ra4m1RegisterIntHandler(d->Event+i, cfg->IntPrio, UartIrq, d);
             ok = (int)d->Irq[i] >= 0;
         }
+    }
+    if (ok && d->DmaMode)
+    {
+        d->DmaIrq = Ra4m1RegisterIntHandler(RA4M1_EVTID_DMAC0_INT +
+            d->DmaChannel, cfg->IntPrio, DmaIrqHandler, d);
+        ok = (int)d->DmaIrq >= 0;
     }
     for (unsigned i = 0; i < 2 && ok; ++i) {
         configured = i+1;
@@ -560,7 +710,14 @@ bool UARTInit(UARTDEV * const u, const UARTCFG *cfg)
         ok = rx && tx;
     }
     if (!ok) {
-        d->Regs->SCR = 0; ReleaseRoutes(d); RestorePins(d, configured); Clock(d, false);
+        d->Regs->SCR = 0;
+        ReleaseRoutes(d);
+        if ((int)d->DmaIrq >= 0)
+        {
+            Ra4m1UnregisterIntHandler(d->DmaIrq);
+        }
+        RestorePins(d, configured);
+        Clock(d, false);
         EnableInterrupt(state); return false;
     }
     u->Mode = cfg->Mode; u->Duplex = cfg->Duplex; u->Rate = (int)baud.Actual;
