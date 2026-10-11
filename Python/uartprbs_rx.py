@@ -198,10 +198,22 @@ def parse_args() -> argparse.Namespace:
 
 
 def report(chk, rate, average, oof_interval, count_interval):
-    print("Bytes/sec : %.2f, drop %d, corrupt %d, lost %d (%d bytes), "
-          "out of frame %d, restart %d, average %.2f"
-          % (rate, chk.drop, chk.corrupt, chk.lost, chk.lost_bytes,
-             chk.out_of_frame, chk.restart, average))
+    fields = ["Bytes/sec : %.2f" % rate]
+
+    if chk.drop:
+        fields.append("drop %d" % chk.drop)
+    if chk.corrupt:
+        fields.append("corrupt %d" % chk.corrupt)
+    if chk.lost or chk.lost_bytes:
+        fields.append("lost %d (%d bytes)" % (chk.lost, chk.lost_bytes))
+    if chk.out_of_frame:
+        fields.append("out of frame %d" % chk.out_of_frame)
+    if chk.restart:
+        fields.append("restart %d" % chk.restart)
+
+    fields.append("average %.2f" % average)
+    print(", ".join(fields))
+
     if count_interval == 0:
         print("  no data")
     elif oof_interval * 100 > count_interval:
