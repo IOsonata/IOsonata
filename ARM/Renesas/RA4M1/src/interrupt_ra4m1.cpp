@@ -29,7 +29,6 @@ SOFTWARE.
 
 ----------------------------------------------------------------------------*/
 #include "interrupt_ra4m1.h"
-#include "ra4m1_ioregs.h"
 #include "coredev/interrupt.h"
 
 extern "C" void (* const __Vectors[])(void);
@@ -147,8 +146,8 @@ IRQn_Type Ra4m1RegisterIntHandler(uint8_t EvtId, int Prio,
     uint32_t state = DisableInterrupt();
     int available = -1;
     for (int i = 0; i < RA4M1_IELS_CNT; ++i) {
-        uint32_t reg = RA4M1_RD32(RA4M1_IELSR(i));
-        if (s_IntHook[i].Event == EvtId || (reg & RA4M1_IELS_MASK) == EvtId) {
+        uint32_t reg = R_ICU->IELSR[i];
+        if (s_IntHook[i].Event == EvtId || (reg & 0xFFU) == EvtId) {
             EnableInterrupt(state);
             return (IRQn_Type)-1;
         }
@@ -158,7 +157,7 @@ IRQn_Type Ra4m1RegisterIntHandler(uint8_t EvtId, int Prio,
             __Vectors[16+i] == s_DefaultIEL[i]) available = i;
     }
     for (int i = 0; i < 4; ++i) {
-        if ((RA4M1_RD32(RA4M1_DELSR(i)) & RA4M1_IELS_MASK) == EvtId) {
+        if ((R_DMA->DELSR[i] & 0xFFU) == EvtId) {
             EnableInterrupt(state);
             return (IRQn_Type)-1;
         }
@@ -176,10 +175,10 @@ IRQn_Type Ra4m1RegisterIntHandler(uint8_t EvtId, int Prio,
     hook.Event = EvtId;
     ++hook.Generation;
     NVIC_SetPriority(irq, (uint32_t)Prio);
-    RA4M1_WR32(RA4M1_IELSR(available), EvtId); // DTCE=0, never write IR=1
-    if ((RA4M1_RD32(RA4M1_IELSR(available)) &
-        (RA4M1_IELS_MASK | RA4M1_IELS_DTCE)) != EvtId) {
-        RA4M1_WR32(RA4M1_IELSR(available), 0);
+    R_ICU->IELSR[available] = EvtId; // DTCE=0, never write IR=1
+    if ((R_ICU->IELSR[available] &
+        (0xFFU | (1UL << 24))) != EvtId) {
+        R_ICU->IELSR[available] = 0;
         hook.Handler = nullptr;
         hook.pCtx = nullptr;
         hook.Event = 0;
@@ -199,10 +198,10 @@ void Ra4m1UnregisterIntHandler(IRQn_Type IrqNo)
     uint32_t state = DisableInterrupt();
     Ra4m1IntHook &hook = s_IntHook[(unsigned)IrqNo];
     /* Do not commandeer a manually installed route or a DTC transfer. */
-    uint32_t reg = RA4M1_RD32(RA4M1_IELSR((unsigned)IrqNo));
-    if (hook.Handler && (reg & (RA4M1_IELS_MASK | RA4M1_IELS_DTCE)) == hook.Event) {
+    uint32_t reg = R_ICU->IELSR[(unsigned)IrqNo];
+    if (hook.Handler && (reg & (0xFFU | (1UL << 24))) == hook.Event) {
         NVIC_DisableIRQ(IrqNo);
-        RA4M1_WR32(RA4M1_IELSR((unsigned)IrqNo), 0);
+        R_ICU->IELSR[(unsigned)IrqNo] = 0;
         __DSB();
         NVIC_ClearPendingIRQ(IrqNo);
         ++hook.Generation;
@@ -218,11 +217,11 @@ bool Ra4m1AcknowledgeInt(IRQn_Type IrqNo)
     if ((unsigned)IrqNo >= RA4M1_IELS_CNT) return false;
     uint32_t state = DisableInterrupt();
     Ra4m1IntHook &hook = s_IntHook[(unsigned)IrqNo];
-    uint32_t reg = RA4M1_RD32(RA4M1_IELSR((unsigned)IrqNo));
+    uint32_t reg = R_ICU->IELSR[(unsigned)IrqNo];
     bool owned = hook.Handler &&
-        (reg & (RA4M1_IELS_MASK | RA4M1_IELS_DTCE)) == hook.Event;
+        (reg & (0xFFU | (1UL << 24))) == hook.Event;
     if (owned) {
-        RA4M1_WR32(RA4M1_IELSR((unsigned)IrqNo), hook.Event);
+        R_ICU->IELSR[(unsigned)IrqNo] = hook.Event;
         __DSB();
         ++hook.Generation; // Suppress only this dispatcher's trailing clear.
     }
@@ -234,8 +233,8 @@ static void Ra4m1Dispatch(int IrqNo)
 {
     uint32_t state = DisableInterrupt();
     Ra4m1IntHook &hook = s_IntHook[IrqNo];
-    uint32_t reg = RA4M1_RD32(RA4M1_IELSR(IrqNo));
-    if (!hook.Handler || (reg & (RA4M1_IELS_MASK | RA4M1_IELS_DTCE)) != hook.Event) {
+    uint32_t reg = R_ICU->IELSR[IrqNo];
+    if (!hook.Handler || (reg & (0xFFU | (1UL << 24))) != hook.Event) {
         /* No software owner, or unsupported raw change: stop the IRQ storm
          * without clearing a hardware/DTC-owned route or its pending flag.
          */
@@ -243,7 +242,7 @@ static void Ra4m1Dispatch(int IrqNo)
         EnableInterrupt(state);
         return;
     }
-    if (!(reg & RA4M1_IELS_IR)) {
+    if (!(reg & (1UL << 16))) {
         EnableInterrupt(state);
         return;
     }
@@ -252,24 +251,24 @@ static void Ra4m1Dispatch(int IrqNo)
     uint32_t generation = hook.Generation;
     uint8_t event = hook.Event;
     bool pinEdge = event <= RA4M1_EVTID_PORT_IRQ15 &&
-        (RA4M1_RD8(RA4M1_IRQCR(event-1U)) & 3U) != 3U;
+        (R_ICU->IRQCR[event-1U] & 3U) != 3U;
     if (pinEdge) {
         /* The edge detector is a pulse source. Reading IRQCR above plus
          * this barrier settles the peripheral read before acknowledging IR.
          * The startup-supported PCLKB is ICLK or ICLK/2.
          */
         __NOP(); __NOP(); __NOP(); __NOP();
-        RA4M1_WR32(RA4M1_IELSR(IrqNo), event);
+        R_ICU->IELSR[IrqNo] = event;
         __DSB();
     }
     EnableInterrupt(state);
     handler(IrqNo, ctx);
     if (!pinEdge) {
         state = DisableInterrupt();
-        reg = RA4M1_RD32(RA4M1_IELSR(IrqNo));
+        reg = R_ICU->IELSR[IrqNo];
         if (hook.Generation == generation && hook.Handler == handler &&
-            (reg & (RA4M1_IELS_MASK | RA4M1_IELS_DTCE)) == event) {
-            RA4M1_WR32(RA4M1_IELSR(IrqNo), event);
+            (reg & (0xFFU | (1UL << 24))) == event) {
+            R_ICU->IELSR[IrqNo] = event;
             __DSB();
         }
         EnableInterrupt(state);
