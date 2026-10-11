@@ -192,11 +192,6 @@ static bool DmaStart(Ra4m1UartDev *d)
         return false;
     }
 
-    if ((d->Regs->SSR & SCI_SSR_TDRE) == 0U)
-    {
-        return false;
-    }
-
     int count = 0xFFFF;
     uint8_t *source = CFifoPeekMultiple(d->pDev->hTxFifo, &count);
     if (source == nullptr || count <= 0)
@@ -205,13 +200,14 @@ static bool DmaStart(Ra4m1UartDev *d)
     }
 
     R_DMAC0_Type *dma = s_DmaRegs[d->DmaChannel];
-    dma->DMCNT_b.DTE = 0U;
+    bool idle = (d->Regs->SSR & SCI_SSR_TEND) != 0U;
+    bool prime = idle && (d->Regs->SSR & SCI_SSR_TDRE) != 0U;
 
-    // The first byte primes non-FIFO SCI transmission. Keep the remaining
-    // FIFO slots reserved until the DMAC transfer-end interrupt.
-    d->Regs->SCR &= (uint8_t)~(SCI_SCR_TIE | SCI_SCR_TEIE);
-    if (count == 1)
+    // A single byte at idle needs CPU priming: no TXI request exists yet.
+    // Keep TX ownership until TEI, which will start any queued successors.
+    if (prime && count == 1)
     {
+        d->Regs->SCR &= (uint8_t)~(SCI_SCR_TIE | SCI_SCR_TEIE);
         d->Regs->TDR = d->pDev->DataBits == 7 ?
             source[0] & 0x7FU : source[0];
         CFifoRelease(d->pDev->hTxFifo, 1);
@@ -219,24 +215,31 @@ static bool DmaStart(Ra4m1UartDev *d)
         return true;
     }
 
-    // FIFO is not advanced for these bytes until DMA reports completion.
-    dma->DMSAR = (uint32_t)(uintptr_t)(source + 1);
+    // When SCI is running, arm DMA immediately for the next TXI request.
+    // Do not require TDRE/TEND or re-prime TDR between DMA segments.
+    unsigned skip = prime ? 1U : 0U;
+    unsigned remaining = (unsigned)count - skip;
+    dma->DMCNT_b.DTE = 0U;
+    dma->DMSAR = (uint32_t)(uintptr_t)(source + skip);
     dma->DMDAR = (uint32_t)(uintptr_t)&d->Regs->TDR;
-    dma->DMCRA = (uint32_t)(count - 1);
+    dma->DMCRA = remaining;
     dma->DMCRB = 0U;
     dma->DMTMD = 1U | (2U << 12U);
     dma->DMAMD = (2U << 14U);
     dma->DMINT = 0x10U;
 
-    d->DmaCount = (uint16_t)(count - 1);
+    d->DmaCount = (uint16_t)remaining;
     d->DmaBusy = true;
-    R_DMA->DELSR[d->DmaChannel] = d->Event + 1U;
-    R_DMA->DMAST_b.DMST = 1U;
+    d->Regs->SCR &= (uint8_t)~(SCI_SCR_TIE | SCI_SCR_TEIE);
     dma->DMCNT_b.DTE = 1U;
     d->Regs->SCR |= SCI_SCR_TIE;
-    d->Regs->TDR = d->pDev->DataBits == 7 ?
-        source[0] & 0x7FU : source[0];
-    CFifoRelease(d->pDev->hTxFifo, 1);
+
+    if (prime)
+    {
+        d->Regs->TDR = d->pDev->DataBits == 7 ?
+            source[0] & 0x7FU : source[0];
+        CFifoRelease(d->pDev->hTxFifo, 1);
+    }
 
     return true;
 }
@@ -246,22 +249,20 @@ static void DmaIrqHandler(int irq, void *ctx)
     Ra4m1UartDev *d = static_cast<Ra4m1UartDev *>(ctx);
     uint32_t state = DisableInterrupt();
     R_DMAC0_Type *dma = s_DmaRegs[d->DmaChannel];
-
     dma->DMCNT_b.DTE = 0U;
     dma->DMSTS = 0U;
     d->Regs->SCR &= (uint8_t)~SCI_SCR_TIE;
-
-    // Release DMA-owned FIFO slots only after all TDR writes complete.
     CFifoRelease(d->pDev->hTxFifo, d->DmaCount);
     d->DmaCount = 0U;
     d->DmaBusy = false;
-
     Ra4m1AcknowledgeInt((IRQn_Type)irq);
 
     if (d->Enabled && d->pDev)
     {
         if (!DmaStart(d))
         {
+            // DMA completion means TDR was written, not that the wire is idle.
+            // Leave ownership active until TEI confirms the last frame.
             d->Regs->SCR |= SCI_SCR_TEIE;
         }
     }
@@ -427,13 +428,17 @@ static int TxData(DevIntrf_t *p, const uint8_t *data, int len)
         if (d->DmaMode)
         {
             uint32_t dropped = d->pDev->hTxFifo->DropCnt;
+            bool wasReady = d->pDev->bTxReady;
             if (CFifoPutByte(d->pDev->hTxFifo, data[count]))
             {
                 accepted = true;
-                TxReady(d, false);
+                if (wasReady)
+                {
+                    TxReady(d, false);
+                    DmaStart(d);
+                }
             }
             d->pDev->TxDropCnt += d->pDev->hTxFifo->DropCnt - dropped;
-            DmaStart(d);
         }
         else if (p->bIntEn)
         {
