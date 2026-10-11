@@ -488,7 +488,9 @@ static void Stm32UartDmaService(Stm32UartDev_t * const pDev)
 	Stm32UartDmaStart(pDev);
 	if (!pDev->DmaActive && pDev->pUartDev->EvtCallback)
 	{
-		pDev->pUartDev->EvtCallback(pDev->pUartDev, UART_EVT_TXREADY, NULL, 0);
+		// Length is the free space in the TX ring
+		int avail = ST_UART_DMA_TX_SIZE - (uint16_t)(pDev->TxDmaWrite - pDev->TxDmaRead);
+		pDev->pUartDev->EvtCallback(pDev->pUartDev, UART_EVT_TXREADY, NULL, avail);
 	}
 }
 
@@ -653,7 +655,8 @@ static void Stm32UartIrqHandler(Stm32UartDev_t * const pDev)
 			dev->bTxReady = true;
 			if (dev->EvtCallback)
 			{
-				dev->EvtCallback(dev, UART_EVT_TXREADY, NULL, 0);
+				// Length is the free space in the TX FIFO
+				dev->EvtCallback(dev, UART_EVT_TXREADY, NULL, CFifoAvail(dev->hTxFifo));
 			}
 		}
 	}
