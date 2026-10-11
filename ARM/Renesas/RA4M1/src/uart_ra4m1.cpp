@@ -261,41 +261,36 @@ static bool Kick(Ra4m1UartDev *d)
         return false;
     }
 
-    uint8_t scr = d->Regs->SCR & ~(SCI_SCR_TIE | SCI_SCR_TEIE);
-
-    if (CFifoUsed(d->pDev->hTxFifo) == 0U)
-    {
-        // An empty FIFO must not leave TXI enabled while TDRE remains set.
-        d->Regs->SCR = scr | SCI_SCR_TEIE;
-        return false;
-    }
-
+    // TXI is responsible for queued bytes. Do not use FIFO emptiness
+    // to infer that the transmitter is idle.
     if ((d->Regs->SSR & SCI_SSR_TDRE) == 0U)
     {
-        // TDR is occupied: TXI will service the queued data when TDRE sets.
-        d->Regs->SCR = scr | SCI_SCR_TIE;
+        d->Regs->SCR = (d->Regs->SCR & (uint8_t)~SCI_SCR_TEIE) |
+            SCI_SCR_TIE;
         return false;
     }
 
     int byte = CFifoGetByte(d->pDev->hTxFifo);
     if (byte < 0)
     {
-        d->Regs->SCR = scr | SCI_SCR_TEIE;
+        d->Regs->SCR = (d->Regs->SCR & (uint8_t)~SCI_SCR_TIE) |
+            SCI_SCR_TEIE;
         return false;
     }
 
     d->Regs->TDR = d->pDev->DataBits == 7 ?
         (uint8_t)byte & 0x7FU : (uint8_t)byte;
     Sync(d);
-    TxReady(d, false);
 
-    if (CFifoUsed(d->pDev->hTxFifo) != 0U)
+    if (CFifoUsed(d->pDev->hTxFifo) != 0)
     {
-        d->Regs->SCR = scr | SCI_SCR_TIE;
+        d->Regs->SCR = (d->Regs->SCR & (uint8_t)~SCI_SCR_TEIE) |
+            SCI_SCR_TIE;
     }
     else
     {
-        d->Regs->SCR = scr | SCI_SCR_TEIE;
+        d->Regs->SCR = (d->Regs->SCR & (uint8_t)~SCI_SCR_TIE) |
+            SCI_SCR_TEIE;
     }
 
     return true;
@@ -336,9 +331,19 @@ static void UartIrq(int irq, void *ctx)
     } else if (irq == (int)d->Irq[2]) {
         uint8_t scr = d->Regs->SCR;
         if ((scr & SCI_SCR_TEIE) && (d->Regs->SSR & SCI_SSR_TEND)) {
-            d->Regs->SCR = scr & ~SCI_SCR_TEIE;
-            TxReady(d, true);
-            event = UART_EVT_TXREADY; length = CFifoAvail(u->hTxFifo); notify = true;
+            d->Regs->SCR = scr & (uint8_t)~SCI_SCR_TEIE;
+            if (!d->DmaMode && CFifoUsed(u->hTxFifo) != 0)
+            {
+                // A queued byte takes precedence over releasing TX ownership.
+                Kick(d);
+            }
+            else
+            {
+                TxReady(d, true);
+                event = UART_EVT_TXREADY;
+                length = CFifoAvail(u->hTxFifo);
+                notify = true;
+            }
         }
     }
     Sync(d);
@@ -436,18 +441,18 @@ static int TxData(DevIntrf_t *p, const uint8_t *data, int len)
         }
         else if (p->bIntEn)
         {
-            if (CFifoUsed(d->pDev->hTxFifo) == 0U &&
+            if (d->pDev->bTxReady &&
                 (d->Regs->SSR & SCI_SSR_TDRE) != 0U)
             {
-                // Prime TDR directly. A one-byte API call must not incur
-                // software FIFO and TXI dispatch latency on an idle TDR.
+                // An idle transmitter is primed directly. All subsequent
+                // bytes belong to TXI until TEI releases bTxReady.
                 uint8_t value = d->pDev->DataBits == 7 ?
                     data[count] & 0x7FU : data[count];
+                TxReady(d, false);
                 d->Regs->SCR &= (uint8_t)~(SCI_SCR_TIE | SCI_SCR_TEIE);
                 d->Regs->TDR = value;
                 Sync(d);
                 d->Regs->SCR |= SCI_SCR_TEIE;
-                TxReady(d, false);
                 accepted = true;
             }
             else
@@ -457,9 +462,12 @@ static int TxData(DevIntrf_t *p, const uint8_t *data, int len)
                 {
                     accepted = true;
                     TxReady(d, false);
+                    // On the first queued byte, TXI must be armed even
+                    // while TDR is occupied. Do not wait for TEI.
+                    d->Regs->SCR = (d->Regs->SCR &
+                        (uint8_t)~SCI_SCR_TEIE) | SCI_SCR_TIE;
                 }
                 d->pDev->TxDropCnt += d->pDev->hTxFifo->DropCnt - dropped;
-                Kick(d);
             }
         }
         else
