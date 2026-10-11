@@ -26,7 +26,7 @@ SOFTWARE.
 #include "coredev/interrupt.h"
 #include "interrupt_ra4m1.h"
 #include "timer_ra4m1.h"
-#include "ra4m1_timer_regs.h"
+
 
 struct Ra4m1TimerTrigger {
     TimerTrig_t Info;
@@ -39,7 +39,8 @@ struct Ra4m1TimerTrigger {
 struct Ra4m1TimerData {
     TimerDev_t *Timer;
     Ra4m1TimerTrigger *Trigger;
-    uintptr_t Base;
+    R_AGTX0_Type *AgtReg;
+    R_GPT0_Type *GptReg;
     uint64_t Cycle; // 2^32 is representable; AGT cycle can be shortened.
     uint32_t Mask, BaseFreq, Divider, SyncCycles, Epoch;
     IRQn_Type Irq;
@@ -47,6 +48,12 @@ struct Ra4m1TimerData {
     uint8_t No, ClockBits, MaxTrigger, Priority;
     bool Agt, Running, Fault;
 };
+static R_AGTX0_Type * const s_AgtRegs[2] = {R_AGT0, R_AGT1};
+static R_GPT0_Type * const s_GptRegs[8] = {
+    R_GPT0, R_GPT1, R_GPT2, R_GPT3,
+    R_GPT4, R_GPT5, R_GPT6, R_GPT7
+};
+static const uint8_t s_GptCompareIndex[6] = {0, 1, 2, 4, 3, 5};
 static Ra4m1TimerData s_Timer[RA4M1_TIMER_COUNT];
 static Ra4m1TimerTrigger s_AgtTrigger[2];
 static Ra4m1TimerTrigger s_GptTrigger[8][6];
@@ -58,11 +65,11 @@ static uint32_t ModuleBit(const Ra4m1TimerData &d)
 }
 static bool ModuleWrite(uint32_t Value)
 {
-    const uint16_t prcr = RA4M1_RD16(RA4M1_PRCR) & 15U;
-    RA4M1_WR16(RA4M1_PRCR, RA4M1_PRCR_KEY | prcr | RA4M1_PRCR_PRC1);
-    RA4M1_WR32(RA4M1_TIMER_MSTPCRD, Value);
-    const bool ok = RA4M1_RD32(RA4M1_TIMER_MSTPCRD) == Value;
-    RA4M1_WR16(RA4M1_PRCR, RA4M1_PRCR_KEY | prcr);
+    const uint16_t prcr = R_SYSTEM->PRCR & 15U;
+    R_SYSTEM->PRCR =  0xA500U | prcr | 0x02U;
+    R_MSTP->MSTPCRD =  Value;
+    const bool ok = R_MSTP->MSTPCRD == Value;
+    R_SYSTEM->PRCR =  0xA500U | prcr;
     return ok;
 }
 /* AGT's LF counting continues with MSTPD set. Section 23.4.10 requires its
@@ -76,20 +83,20 @@ public:
     bool Ok;
     explicit TimerAccess(Ra4m1TimerData &Dev) : d(Dev), State(DisableInterrupt()), Wp(0), Ok(false)
     {
-        uint32_t mask = RA4M1_RD32(RA4M1_TIMER_MSTPCRD);
+        uint32_t mask = R_MSTP->MSTPCRD;
         if (d.Agt) Ok = ModuleWrite(mask & ~ModuleBit(d));
         else Ok = !(mask & ModuleBit(d));
         if (Ok && !d.Agt) {
-            Wp = RA4M1_RD32(d.Base+RA4M1_GTWP) & 1U;
-            RA4M1_WR32(d.Base+RA4M1_GTWP, RA4M1_GTWP_KEY);
-            Ok = !(RA4M1_RD32(d.Base+RA4M1_GTWP) & 1U);
+            Wp = d.GptReg->GTWP & 1U;
+            d.GptReg->GTWP =  0xA500UL;
+            Ok = !(d.GptReg->GTWP & 1U);
         }
         if (!Ok) g_Ra4m1TimerError[d.No] = RA4M1_TIMER_ACCESS_ERROR;
     }
     ~TimerAccess()
     {
-        if (Ok && !d.Agt) RA4M1_WR32(d.Base+RA4M1_GTWP, RA4M1_GTWP_KEY | Wp);
-        if (d.Agt && !ModuleWrite(RA4M1_RD32(RA4M1_TIMER_MSTPCRD) | ModuleBit(d)))
+        if (Ok && !d.Agt) d.GptReg->GTWP =  0xA500UL | Wp;
+        if (d.Agt && !ModuleWrite(R_MSTP->MSTPCRD | ModuleBit(d)))
             g_Ra4m1TimerError[d.No] = RA4M1_TIMER_ACCESS_ERROR;
         EnableInterrupt(State);
     }
@@ -106,18 +113,18 @@ static void Sync(const Ra4m1TimerData &d)
 }
 static bool IrqPending(IRQn_Type irq)
 {
-    return irq >= 0 && (RA4M1_RD32(RA4M1_IELSR((unsigned)irq)) & RA4M1_IELS_IR);
+    return irq >= 0 && (R_ICU->IELSR[(unsigned)irq] & (1UL << 16));
 }
 static bool Overflow(const Ra4m1TimerData &d)
 {
-    const bool flag = d.Agt ? (RA4M1_RD8(d.Base+RA4M1_AGTCR) & RA4M1_AGT_UNDERFLOW) :
-        (RA4M1_RD32(d.Base+RA4M1_GTST) & RA4M1_GPT_OVERFLOW);
+    const bool flag = d.Agt ? (d.AgtReg->AGT16.CTRL.AGTCR & 0x20U) :
+        (d.GptReg->GTST & (1UL << 6));
     return flag || IrqPending(d.Irq);
 }
 static uint32_t Count(const Ra4m1TimerData &d)
 {
-    return d.Agt ? (uint32_t)(d.Cycle-1U)-RA4M1_RD16(d.Base+RA4M1_AGT) :
-        RA4M1_RD32(d.Base+RA4M1_GTCNT) & d.Mask;
+    return d.Agt ? (uint32_t)(d.Cycle-1U)-d.AgtReg->AGT16.AGT :
+        d.GptReg->GTCNT & d.Mask;
 }
 /* Caller excludes ISR updates, not the hardware clock. If a wrap races the
  * sample, reread the counter from the new cycle. Do not consume the IRQ here.
@@ -136,8 +143,8 @@ static void ClearOverflow(Ra4m1TimerData &d)
     /* These status flags only permit writing zero. GPT compare IRQ latches
      * are independent: never use their sticky GTST bits as dispatch causes.
      */
-    if (d.Agt) RA4M1_WR8(d.Base+RA4M1_AGTCR, d.Running ? RA4M1_AGT_START : 0U);
-    else RA4M1_WR32(d.Base+RA4M1_GTST, 0U);
+    if (d.Agt) d.AgtReg->AGT16.CTRL.AGTCR =  d.Running ? 0x01U : 0U;
+    else d.GptReg->GTST =  0U;
     Sync(d);
     if (d.Irq >= 0) Ra4m1AcknowledgeInt(d.Irq);
 }
@@ -160,18 +167,18 @@ static bool Stop(Ra4m1TimerData &d)
          * remains in the ICU; settle the pulse before the control write.
          */
         Sync(d);
-        RA4M1_WR8(d.Base+RA4M1_AGTCR, 0U);
-        for (uint32_t i=0; i<RA4M1_TIMER_READY_POLLS; ++i)
-            if (!(RA4M1_RD8(d.Base+RA4M1_AGTCR) & RA4M1_AGT_STARTED)) {
+        d.AgtReg->AGT16.CTRL.AGTCR =  0U;
+        for (uint32_t i=0; i<1000000UL; ++i)
+            if (!(d.AgtReg->AGT16.CTRL.AGTCR & 0x01UED)) {
                 d.Running=false; return true;
             }
     } else {
-        RA4M1_WR32(d.Base+RA4M1_GTCR, (uint32_t)d.ClockBits << 24);
+        d.GptReg->GTCR =  (uint32_t)d.ClockBits << 24;
         /* CST readback precedes the final prescaled counter edge (22.9.4).
          * Wait at least two count-clock cycles before reading the stopped CNT.
          */
         for (uint32_t i=0; i<d.SyncCycles*d.Divider; ++i) __NOP();
-        if (!(RA4M1_RD32(d.Base+RA4M1_GTCR)&1U)) { d.Running=false; return true; }
+        if (!(d.GptReg->GTCR&1U)) { d.Running=false; return true; }
     }
     d.Fault=true; IrqsEnable(d,false);
     g_Ra4m1TimerError[d.No]=RA4M1_TIMER_STOP_TIMEOUT;
@@ -183,14 +190,14 @@ static bool Start(Ra4m1TimerData &d)
     if (d.Agt) {
         ClearOverflow(d);
         NVIC_ClearPendingIRQ(d.Irq);
-        RA4M1_WR8(d.Base+RA4M1_AGTCR, RA4M1_AGT_START);
-        for (uint32_t i=0; i<RA4M1_TIMER_READY_POLLS; ++i)
-            if (RA4M1_RD8(d.Base+RA4M1_AGTCR)&RA4M1_AGT_STARTED) {
+        d.AgtReg->AGT16.CTRL.AGTCR =  0x01U;
+        for (uint32_t i=0; i<1000000UL; ++i)
+            if (d.AgtReg->AGT16.CTRL.AGTCR&0x01UED) {
                 d.Running=true; IrqsEnable(d,true); return true;
             }
     } else {
-        RA4M1_WR32(d.Base+RA4M1_GTCR, ((uint32_t)d.ClockBits<<24)|1U);
-        if (RA4M1_RD32(d.Base+RA4M1_GTCR)&1U) {
+        d.GptReg->GTCR =  ((uint32_t)d.ClockBits<<24)|1U;
+        if (d.GptReg->GTCR&1U) {
             d.Running=true; IrqsEnable(d,true); return true;
         }
     }
@@ -205,14 +212,14 @@ static bool Plan(bool Agt, TIMER_CLKSRC Source, uint32_t Request, TimerPlan &p)
         Source=g_McuOsc.LowPwrOsc.Type == OSC_TYPE_RC ? TIMER_CLKSRC_LFRC : TIMER_CLKSRC_LFXTAL;
     uint32_t base=0;
     if (Agt) {
-        if (Source == TIMER_CLKSRC_LFRC && !(RA4M1_RD8(RA4M1_LOCOCR)&1U)) base=32768U;
+        if (Source == TIMER_CLKSRC_LFRC && !(R_SYSTEM->LOCOCR&1U)) base=32768U;
         if (Source == TIMER_CLKSRC_LFXTAL && g_McuOsc.LowPwrOsc.Type == OSC_TYPE_XTAL &&
-            g_McuOsc.LowPwrOsc.Freq == 32768U && !(RA4M1_RD8(RA4M1_SOSCCR)&1U)) base=32768U;
+            g_McuOsc.LowPwrOsc.Freq == 32768U && !(R_SYSTEM->SOSCCR&1U)) base=32768U;
     } else {
-        uint8_t src=RA4M1_RD8(RA4M1_SCKSCR)&7U;
+        uint8_t src=R_SYSTEM->SCKSCR&7U;
         if (Source == TIMER_CLKSRC_DEFAULT ||
-            (Source == TIMER_CLKSRC_HFRC && (src==RA4M1_CK_HOCO || src==RA4M1_CK_MOCO)) ||
-            (Source == TIMER_CLKSRC_HFXTAL && (src==RA4M1_CK_MOSC || src==RA4M1_CK_PLL) &&
+            (Source == TIMER_CLKSRC_HFRC && (src==0U || src==1U)) ||
+            (Source == TIMER_CLKSRC_HFXTAL && (src==3U || src==5U) &&
              g_McuOsc.CoreOsc.Type==OSC_TYPE_XTAL)) base=SystemPeriphClockGet(3);
     }
     uint32_t bus=SystemPeriphClockGet(Agt ? 1 : 3), cpu=SystemCoreClockGet();
@@ -240,11 +247,11 @@ static bool Period(uint32_t Freq, uint64_t Ns, uint64_t Max, uint32_t &CountOut,
 }
 static bool CompareWrite(Ra4m1TimerData &d, unsigned No, uint64_t Deadline)
 {
-    uintptr_t addr=d.Base+s_Ra4m1GtccrOffset[No];
+
     // Rollover may hold a non-aligned origin after pause/reconfiguration.
     uint32_t value=(uint32_t)(Deadline-d.Timer->Rollover) & d.Mask;
-    RA4M1_WR32(addr,value);
-    return RA4M1_RD32(addr)==value;
+    d.GptReg->GTCCR[s_GptCompareIndex[No]] = value;
+    return d.GptReg->GTCCR[s_GptCompareIndex[No]] == value;
 }
 static void CompareIrq(int IrqNo, void *Ctx);
 static bool ArmCompare(Ra4m1TimerData &d, Ra4m1TimerTrigger &tr, bool Periodic)
@@ -346,15 +353,15 @@ static bool Rebase(Ra4m1TimerData &d, uint64_t Cycle, bool Zero)
     ClearOverflow(d);
     d.Timer->Rollover=Zero ? 0 : elapsed; d.Timer->LastCount=0;
     d.Cycle=Cycle;
-    if (d.Agt) RA4M1_WR16(d.Base+RA4M1_AGT,(uint16_t)(Cycle-1U));
-    else RA4M1_WR32(d.Base+RA4M1_GTCNT,0U);
+    if (d.Agt) d.AgtReg->AGT16.AGT = (uint16_t)(Cycle-1U);
+    else d.GptReg->GTCNT = 0U;
     for (unsigned i=0; i<d.MaxTrigger && !d.Agt; ++i) {
         Ra4m1TimerTrigger &tr=d.Trigger[i];
         if (tr.Irq>=0) { Ra4m1AcknowledgeInt(tr.Irq); NVIC_ClearPendingIRQ(tr.Irq); }
     }
     NVIC_ClearPendingIRQ(d.Irq);
     ++d.Epoch;
-    bool ok=d.Agt ? RA4M1_RD16(d.Base+RA4M1_AGT)==Cycle-1U : RA4M1_RD32(d.Base+RA4M1_GTCNT)==0;
+    bool ok=d.Agt ? d.AgtReg->AGT16.AGT==Cycle-1U : d.GptReg->GTCNT==0;
     if (!ok) { d.Fault=true; g_Ra4m1TimerError[d.No]=RA4M1_TIMER_ACCESS_ERROR; }
     return ok;
 }
@@ -403,10 +410,10 @@ static uint32_t Frequency(TimerDev_t *t, uint32_t Request)
     uint64_t cycle=d->Agt && count[0] ? count[0] : (uint64_t)d->Mask+1U;
     if (!Rebase(*d,cycle,true)) return 0;
     d->BaseFreq=plan.Base; d->Divider=plan.Divider; d->ClockBits=plan.Bits; d->SyncCycles=plan.SyncCycles;
-    if (d->Agt) RA4M1_WR8(d->Base+RA4M1_AGTMR2,d->ClockBits);
-    else RA4M1_WR32(d->Base+RA4M1_GTCR,(uint32_t)d->ClockBits<<24);
-    bool programmed=d->Agt ? RA4M1_RD8(d->Base+RA4M1_AGTMR2)==d->ClockBits :
-        RA4M1_RD32(d->Base+RA4M1_GTCR)==((uint32_t)d->ClockBits<<24);
+    if (d->Agt) d->AgtReg->AGT16.CTRL.AGTMR2 = d->ClockBits;
+    else d->GptReg->GTCR = (uint32_t)d->ClockBits<<24;
+    bool programmed=d->Agt ? d->AgtReg->AGT16.CTRL.AGTMR2==d->ClockBits :
+        d->GptReg->GTCR==((uint32_t)d->ClockBits<<24;
     if (!programmed) {
         d->Fault=true; t->Freq=0; t->nsPeriod=0;
         g_Ra4m1TimerError[d->No]=RA4M1_TIMER_ACCESS_ERROR; return 0;
@@ -491,49 +498,56 @@ bool TimerInit(TimerDev_t *t, const TimerCfg_t *cfg)
         (uint8_t)(RA4M1_EVTID_GPT0_CCMPA+8U*(cfg->DevNo-2));
     uint8_t last=(uint8_t)(first+(agt ? 2U : 7U));
     for (unsigned i=0;i<RA4M1_IELS_CNT+4U;++i) {
-        uintptr_t a=i<RA4M1_IELS_CNT ? RA4M1_IELSR(i) : RA4M1_DELSR(i-RA4M1_IELS_CNT);
-        uint32_t event=RA4M1_RD32(a)&RA4M1_IELS_MASK;
+        uint32_t event = i < RA4M1_IELS_CNT ?
+            R_ICU->IELSR[i] & 0xFFU : R_DMA->DELSR[i-RA4M1_IELS_CNT] & 0xFFU;
         if (event>=first && event<=last) {EnableInterrupt(state);return false;}
     }
-    d.No=(uint8_t)cfg->DevNo; d.Agt=agt; d.Base=agt ? RA4M1_AGT_BASE(d.No) : RA4M1_GPT_BASE(d.No-2U);
+    d.No=(uint8_t)cfg->DevNo; d.Agt=agt; d.AgtReg = agt ? s_AgtRegs[d.No] : nullptr;
+    d.GptReg = agt ? nullptr : s_GptRegs[d.No-2U];
     d.Trigger=agt ? &s_AgtTrigger[d.No] : s_GptTrigger[d.No-2U];
     d.MaxTrigger=agt ? 1U : 6U; d.Mask=(!agt && d.No<4) ? UINT32_MAX : 65535U;
     d.Cycle=(uint64_t)d.Mask+1U; d.BaseFreq=plan.Base; d.Divider=plan.Divider;
     d.ClockBits=plan.Bits; d.Source=plan.Source; d.SyncCycles=plan.SyncCycles;
     d.Irq=(IRQn_Type)-1; d.Fault=false; d.Running=false; d.Priority=(uint8_t)cfg->IntPrio;
-    uint32_t previous=RA4M1_RD32(RA4M1_TIMER_MSTPCRD);
+    uint32_t previous=R_MSTP->MSTPCRD;
     if (!agt && !ModuleWrite(previous & ~ModuleBit(d))) {EnableInterrupt(state);return false;}
     bool ok=false, startAttempted=false;
     {
         TimerAccess access(d);
         if (access.Ok) {
             /* Do not overwrite a running GPT/AGT owned outside this driver. */
-            bool busy=agt ? (RA4M1_RD8(d.Base+RA4M1_AGTCR)&3U) : (RA4M1_RD32(d.Base+RA4M1_GTCR)&1U);
+            bool busy=agt ? (d.AgtReg->AGT16.CTRL.AGTCR&3U) : (d.GptReg->GTCR&1U);
             if (!busy) {
                 if (agt) {
-                    RA4M1_WR8(d.Base+RA4M1_AGTCMSR,0U);
-                    RA4M1_WR8(d.Base+RA4M1_AGTMR1,plan.Source==TIMER_CLKSRC_LFRC ? 0x40U : 0x60U);
-                    RA4M1_WR8(d.Base+RA4M1_AGTMR2,plan.Bits);
-                    RA4M1_WR8(d.Base+RA4M1_AGTIOC,0U); RA4M1_WR8(d.Base+RA4M1_AGTISR,0U);
-                    RA4M1_WR8(d.Base+RA4M1_AGTIOSEL,0U);
-                    RA4M1_WR16(d.Base+RA4M1_AGTCMA,65535U); RA4M1_WR16(d.Base+RA4M1_AGTCMB,65535U);
-                    RA4M1_WR16(d.Base+RA4M1_AGT,65535U); RA4M1_WR8(d.Base+RA4M1_AGTCR,0U);
-                    ok=RA4M1_RD16(d.Base+RA4M1_AGT)==65535U &&
-                        RA4M1_RD8(d.Base+RA4M1_AGTMR1)==(plan.Source==TIMER_CLKSRC_LFRC ? 0x40U : 0x60U) &&
-                        RA4M1_RD8(d.Base+RA4M1_AGTMR2)==plan.Bits;
+                    d.AgtReg->AGT16.CTRL.AGTCMSR = 0U;
+                    d.AgtReg->AGT16.CTRL.AGTMR1 = plan.Source==TIMER_CLKSRC_LFRC ? 0x40U : 0x60U;
+                    d.AgtReg->AGT16.CTRL.AGTMR2 = plan.Bits;
+                    d.AgtReg->AGT16.CTRL.AGTIOC = 0U; d.AgtReg->AGT16.CTRL.AGTISR = 0U;
+                    d.AgtReg->AGT16.CTRL.AGTIOSEL = 0U;
+                    d.AgtReg->AGT16.AGTCMA = 65535U; d.AgtReg->AGT16.AGTCMB = 65535U;
+                    d.AgtReg->AGT16.AGT = 65535U; d.AgtReg->AGT16.CTRL.AGTCR = 0U;
+                    ok=d.AgtReg->AGT16.AGT==65535U &&
+                        d.AgtReg->AGT16.CTRL.AGTMR1==(plan.Source==TIMER_CLKSRC_LFRC ? 0x40U : 0x60U) &&
+                        d.AgtReg->AGT16.CTRL.AGTMR2==plan.Bits;
                 } else {
-                    for (unsigned offset=RA4M1_GTSSR;offset<=RA4M1_GTICBSR;offset+=4U) RA4M1_WR32(d.Base+offset,0U);
-                    RA4M1_WR32(d.Base+RA4M1_GTCR,(uint32_t)plan.Bits<<24);
-                    RA4M1_WR32(d.Base+RA4M1_GTUDDTYC,3U); // UDF forces up-count direction.
-                    RA4M1_WR32(d.Base+RA4M1_GTUDDTYC,1U);
-                    RA4M1_WR32(d.Base+RA4M1_GTIOR,0U); RA4M1_WR32(d.Base+RA4M1_GTINTAD,0U);
-                    RA4M1_WR32(d.Base+RA4M1_GTBER,0U); RA4M1_WR32(d.Base+RA4M1_GTDTCR,0U);
-                    RA4M1_WR32(d.Base+RA4M1_GTDVU,0U); RA4M1_WR32(d.Base+RA4M1_GTPR,d.Mask);
-                    RA4M1_WR32(d.Base+RA4M1_GTPBR,d.Mask); RA4M1_WR32(d.Base+RA4M1_GTCNT,0U);
-                    RA4M1_WR32(d.Base+RA4M1_GTST,0U);
-                    for (unsigned i=0;i<6;++i) RA4M1_WR32(d.Base+s_Ra4m1GtccrOffset[i],d.Mask);
-                    ok=RA4M1_RD32(d.Base+RA4M1_GTPR)==d.Mask &&
-                        RA4M1_RD32(d.Base+RA4M1_GTCR)==((uint32_t)plan.Bits<<24);
+                    d.GptReg->GTSSR = 0U;
+                    d.GptReg->GTPSR = 0U;
+                    d.GptReg->GTCSR = 0U;
+                    d.GptReg->GTUPSR = 0U;
+                    d.GptReg->GTDNSR = 0U;
+                    d.GptReg->GTICASR = 0U;
+                    d.GptReg->GTICBSR = 0U;
+                    d.GptReg->GTCR = (uint32_t)plan.Bits<<24;
+                    d.GptReg->GTUDDTYC = 3U; // UDF forces up-count direction.
+                    d.GptReg->GTUDDTYC = 1U;
+                    d.GptReg->GTIOR = 0U; d.GptReg->GTINTAD = 0U;
+                    d.GptReg->GTBER = 0U; d.GptReg->GTDTCR = 0U;
+                    d.GptReg->GTDVU = 0U; d.GptReg->GTPR = d.Mask;
+                    d.GptReg->GTPBR = d.Mask; d.GptReg->GTCNT = 0U;
+                    d.GptReg->GTST = 0U;
+                    for (unsigned i=0;i<6;++i) d.GptReg->GTCCR[s_GptCompareIndex[i]] = d.Mask;
+                    ok=d.GptReg->GTPR==d.Mask &&
+                        d.GptReg->GTCR==((uint32_t)plan.Bits<<24;
                 }
                 if (ok) {
                     for (unsigned i=0;i<d.MaxTrigger;++i) {
@@ -572,7 +586,7 @@ bool TimerInit(TimerDev_t *t, const TimerCfg_t *cfg)
      * that was already clocked before this initialization attempt.
      */
     if (!ok && !agt && (previous&ModuleBit(d)))
-        ModuleWrite(RA4M1_RD32(RA4M1_TIMER_MSTPCRD)|ModuleBit(d));
+        ModuleWrite(R_MSTP->MSTPCRD|ModuleBit(d));
     EnableInterrupt(state); return ok;
 }
 int TimerGetLowFreqDevCount(void) {return RA4M1_TIMER_AGT_COUNT;}
