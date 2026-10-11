@@ -206,6 +206,7 @@ static bool DmaStart(Ra4m1UartDev *d)
     {
         d->Regs->TDR = d->pDev->DataBits == 7 ?
             source[0] & 0x7FU : source[0];
+        Sync(d);
         CFifoRelease(d->pDev->hTxFifo, 1);
         ++source;
         --count;
@@ -409,6 +410,9 @@ static int TxData(DevIntrf_t *p, const uint8_t *data, int len)
                 // enqueue and immediately remove it from the FIFO.
                 d->Regs->TDR = d->pDev->DataBits == 7 ?
                     data[count] & 0x7FU : data[count];
+                // Complete the SCI peripheral write before a subsequent
+                // UARTTx call can observe the previous TDRE state.
+                Sync(d);
                 accepted = true;
             }
             else
