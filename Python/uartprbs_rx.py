@@ -252,6 +252,9 @@ def report(chk, rate, average, oof_interval, count_interval):
     fields.append("average %.2f" % average)
     print(", ".join(fields))
 
+    if count_interval is None:
+        return
+
     if count_interval == 0:
         print("  no data")
     elif oof_interval * 100 > count_interval:
@@ -323,7 +326,7 @@ def main():
             elapsed = time.perf_counter() - start_time
             if elapsed > 0:
                 average = (chk.count - start_count) / elapsed
-        report(chk, 0.0, average, 0, -1)
+        report(chk, 0.0, average, 0, None)
     finally:
         comm.close()
 
