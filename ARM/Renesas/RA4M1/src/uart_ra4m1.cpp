@@ -199,10 +199,25 @@ static bool DmaStart(Ra4m1UartDev *d)
         return false;
     }
 
-    R_DMAC0_Type *dma = s_DmaRegs[d->DmaChannel];
+    // An idle TDR has no future empty transition to trigger DMA. Submit
+    // the first byte directly, then arm DMA for the remaining FIFO data.
+    // This also avoids a DMA transaction for each one-byte UARTTx call.
+    if ((d->Regs->SSR & SCI_SSR_TDRE) != 0U)
+    {
+        d->Regs->TDR = d->pDev->DataBits == 7 ?
+            source[0] & 0x7FU : source[0];
+        CFifoRelease(d->pDev->hTxFifo, 1);
+        ++source;
+        --count;
 
-    // The SCI TXI event is configured once at initialization. DMA reads
-    // directly from the FIFO; the FIFO remains owned until completion.
+        if (count == 0)
+        {
+            TxReady(d, true);
+            return true;
+        }
+    }
+
+    R_DMAC0_Type *dma = s_DmaRegs[d->DmaChannel];
     dma->DMSAR = (uint32_t)(uintptr_t)source;
     dma->DMCRA = (uint32_t)count;
     d->DmaCount = (uint16_t)count;
