@@ -437,10 +437,20 @@ static int TxData(DevIntrf_t *p, const uint8_t *data, int len)
                 Kick(d);
             }
         }
-        else if (d->Regs->SSR & SCI_SSR_TDRE) {
-            d->Regs->TDR = d->pDev->DataBits == 7 ? data[count] & 0x7FU : data[count];
-            TxReady(d, false);
-            accepted = true;
+        else
+        {
+            // Conservative polling mode: require complete wire transmission
+            // before accepting another byte. This isolates TDR/TSR timing
+            // from the DMA and interrupt transfer paths.
+            uint8_t status = d->Regs->SSR;
+            if ((status & (SCI_SSR_TDRE | SCI_SSR_TEND)) ==
+                (SCI_SSR_TDRE | SCI_SSR_TEND))
+            {
+                d->Regs->TDR = d->pDev->DataBits == 7 ?
+                    data[count] & 0x7FU : data[count];
+                TxReady(d, false);
+                accepted = true;
+            }
         }
         EnableInterrupt(state);
         if (accepted) { ++count; tries = p->MaxRetry > 0 ? p->MaxRetry : 1; }
