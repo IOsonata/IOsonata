@@ -710,6 +710,9 @@ bool UARTInit(UARTDEV * const u, const UARTCFG *cfg)
         R_MSTP->MSTPCRA &= ~RA4M1_DMA_MSTP_MASK;
         R_SYSTEM->PRCR = 0xA500U | protect;
         __DSB();
+
+        R_DMA->DMAST_b.DMST = 1U;
+        R_DMA->DELSR[d->DmaChannel] = d->Event + 1U;
     }
     d->Regs->SCR = 0;
     if (cfg->DevNo < 2) d->Regs->FCR = 0; // Disable hardware FIFO.
