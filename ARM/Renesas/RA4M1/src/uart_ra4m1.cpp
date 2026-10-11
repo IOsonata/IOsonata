@@ -39,7 +39,6 @@ SOFTWARE.
 #define SCI_SSR_ERRORS (SCI_SSR_PER | SCI_SSR_FER | SCI_SSR_ORER)
 #define SCI_SPTR_MARK 0x06U
 #define RA4M1_DMA_MSTP_MASK (1UL << 22U)
-#define RA4M1_DMA_BUFFER_SIZE 256U
 
 #ifndef RA4M1_UART_FIFO_SIZE
 #define RA4M1_UART_FIFO_SIZE 16
@@ -60,7 +59,7 @@ struct Ra4m1UartDev {
     bool DmaMode;
     bool DmaBusy;
     bool Enabled, Rx, Tx;
-    alignas(4) uint8_t DmaTxMem[RA4M1_DMA_BUFFER_SIZE];
+    uint16_t DmaCount;
     alignas(4) uint8_t RxMem[CFIFO_MEMSIZE(RA4M1_UART_FIFO_SIZE)];
     alignas(4) uint8_t TxMem[CFIFO_MEMSIZE(RA4M1_UART_FIFO_SIZE)];
 };
@@ -193,56 +192,52 @@ static bool DmaStart(Ra4m1UartDev *d)
         return false;
     }
 
-    // Do not consume FIFO data until the first SCI TDR write is possible.
     if ((d->Regs->SSR & SCI_SSR_TDRE) == 0U)
     {
         return false;
     }
 
-    unsigned count = 0U;
-    while (count < RA4M1_DMA_BUFFER_SIZE)
-    {
-        int byte = CFifoGetByte(d->pDev->hTxFifo);
-        if (byte < 0)
-        {
-            break;
-        }
-        d->DmaTxMem[count] = (uint8_t)byte;
-        ++count;
-    }
-
-    if (count == 0U)
+    int count = 0xFFFF;
+    uint8_t *source = CFifoPeekMultiple(d->pDev->hTxFifo, &count);
+    if (source == nullptr || count <= 0)
     {
         return false;
     }
 
     R_DMAC0_Type *dma = s_DmaRegs[d->DmaChannel];
     dma->DMCNT_b.DTE = 0U;
-    if (count == 1U)
+
+    // The first byte primes non-FIFO SCI transmission. Keep the remaining
+    // FIFO slots reserved until the DMAC transfer-end interrupt.
+    d->Regs->SCR &= (uint8_t)~(SCI_SCR_TIE | SCI_SCR_TEIE);
+    if (count == 1)
     {
-        d->Regs->SCR &= (uint8_t)~SCI_SCR_TIE;
-        d->Regs->TDR = d->DmaTxMem[0];
+        d->Regs->TDR = d->pDev->DataBits == 7 ?
+            source[0] & 0x7FU : source[0];
+        CFifoRelease(d->pDev->hTxFifo, 1);
         d->Regs->SCR |= SCI_SCR_TEIE;
         return true;
     }
 
-    dma->DMSAR = (uint32_t)(uintptr_t)&d->DmaTxMem[1];
+    // FIFO is not advanced for these bytes until DMA reports completion.
+    dma->DMSAR = (uint32_t)(uintptr_t)(source + 1);
     dma->DMDAR = (uint32_t)(uintptr_t)&d->Regs->TDR;
-    dma->DMCRA = count - 1U;
+    dma->DMCRA = (uint32_t)(count - 1);
     dma->DMCRB = 0U;
-    // FSP normal mode: DCTG=1 (peripheral), DTS=2 (no repeat area).
     dma->DMTMD = 1U | (2U << 12U);
     dma->DMAMD = (2U << 14U);
     dma->DMINT = 0x10U;
-    d->DmaBusy = true;
 
-    // CPU primes TDR once, then TXI requests transfer the remaining bytes.
-    d->Regs->SCR &= (uint8_t)~(SCI_SCR_TIE | SCI_SCR_TEIE);
+    d->DmaCount = (uint16_t)(count - 1);
+    d->DmaBusy = true;
     R_DMA->DELSR[d->DmaChannel] = d->Event + 1U;
     R_DMA->DMAST_b.DMST = 1U;
     dma->DMCNT_b.DTE = 1U;
     d->Regs->SCR |= SCI_SCR_TIE;
-    d->Regs->TDR = d->DmaTxMem[0];
+    d->Regs->TDR = d->pDev->DataBits == 7 ?
+        source[0] & 0x7FU : source[0];
+    CFifoRelease(d->pDev->hTxFifo, 1);
+
     return true;
 }
 
@@ -251,17 +246,23 @@ static void DmaIrqHandler(int irq, void *ctx)
     Ra4m1UartDev *d = static_cast<Ra4m1UartDev *>(ctx);
     uint32_t state = DisableInterrupt();
     R_DMAC0_Type *dma = s_DmaRegs[d->DmaChannel];
+
     dma->DMCNT_b.DTE = 0U;
     dma->DMSTS = 0U;
+    d->Regs->SCR &= (uint8_t)~SCI_SCR_TIE;
+
+    // Release DMA-owned FIFO slots only after all TDR writes complete.
+    CFifoRelease(d->pDev->hTxFifo, d->DmaCount);
+    d->DmaCount = 0U;
     d->DmaBusy = false;
+
     Ra4m1AcknowledgeInt((IRQn_Type)irq);
 
     if (d->Enabled && d->pDev)
     {
         if (!DmaStart(d))
         {
-            d->Regs->SCR = (d->Regs->SCR & (uint8_t)~SCI_SCR_TIE) |
-                SCI_SCR_TEIE;
+            d->Regs->SCR |= SCI_SCR_TEIE;
         }
     }
 
@@ -517,6 +518,7 @@ static void Disable(DevIntrf_t *p)
             s_DmaRegs[d->DmaChannel]->DMCNT_b.DTE = 0U;
             R_DMA->DELSR[d->DmaChannel] = 0U;
             d->DmaBusy = false;
+            d->DmaCount = 0U;
         }
         ClearRoutes(d);
         d->Enabled = false;
@@ -637,7 +639,7 @@ bool UARTInit(UARTDEV * const u, const UARTCFG *cfg)
         (cfg->Parity != UART_PARITY_NONE && cfg->Parity != UART_PARITY_ODD && cfg->Parity != UART_PARITY_EVEN) ||
         cfg->Mode != UART_MODE_UART || cfg->Duplex != UART_DUPLEX_FULL ||
         cfg->FlowControl != UART_FLWCTRL_NONE || cfg->bIrDAMode ||
-        (cfg->bDMAMode && !cfg->bIntMode) ||
+        (cfg->bDMAMode && (!cfg->bIntMode || !cfg->bFifoBlocking)) ||
         (cfg->bIntMode && (unsigned)cfg->IntPrio >= (1UL << __NVIC_PRIO_BITS)) ||
         !MemoryValid(cfg->pRxMem, cfg->RxMemSize) || !MemoryValid(cfg->pTxMem, cfg->TxMemSize)) return false;
     if (cfg->pRxMem && cfg->pTxMem) {
@@ -678,6 +680,7 @@ bool UARTInit(UARTDEV * const u, const UARTCFG *cfg)
     d->Enabled = false; d->Rx = present[0]; d->Tx = present[1];
     d->DmaMode = cfg->bDMAMode;
     d->DmaBusy = false;
+    d->DmaCount = 0U;
     d->DmaChannel = (uint8_t)cfg->DevNo;
     d->DmaIrq = (IRQn_Type)-1;
     if (d->DmaMode && (R_MSTP->MSTPCRA & RA4M1_DMA_MSTP_MASK) == 0U &&
@@ -773,7 +776,7 @@ bool UARTInit(UARTDEV * const u, const UARTCFG *cfg)
     // Preserve pObj installed by the existing C++ UART constructor.
     DevIntrf_t *p = &u->DevIntrf;
     p->pDevData = d; p->IntPrio = cfg->IntPrio; p->EvtCB = nullptr;
-    p->Type = DEVINTRF_TYPE_UART; p->bDma = false; p->bIntEn = cfg->bIntMode;
+    p->Type = DEVINTRF_TYPE_UART; p->bDma = cfg->bDMAMode; p->bIntEn = cfg->bIntMode;
     p->MaxRetry = UART_RETRY_MAX; p->EnCnt = 1; p->bTxReady = true; p->bNoStop = false;
     atomic_flag_clear(&p->bBusy);
     p->Enable = Enable; p->Disable = Disable; p->PowerOff = PowerOff; p->Reset = Reset;
