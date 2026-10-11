@@ -7,6 +7,61 @@ See [TIMER.md](TIMER.md) for timer device mapping, operation and validation limi
 No board package, Arduino/FSP runtime, USB controller, DMA/DTC, or NMI
 driver is included yet.
 
+## Implementation status (October 11, 2026)
+
+Target: `prerelease_0.13`. The RA4M1 register-access migration uses Renesas
+CMSIS peripheral structures rather than handwritten base addresses and
+register-offset wrappers. The existing IOsonata interfaces remain unchanged.
+This is an MCU-level implementation, not an EK-RA4M1 board support package.
+
+The user has confirmed successful firmware compilation and execution on an
+EK-RA4M1: **Blinky PASS** (startup and GPIO output) and **TimerDemo PASS**
+(initialization and timer callback operation). A subsequent hardware log
+exercised Timer DevNo 3 (GPT1), with four compare callbacks configured for
+100 ms, 1000 ms, 250 ms and 500 ms. All four generated callbacks; sustained
+T0/T1/T2 measured intervals largely matched their requested periods.
+The printed T3 callback intervals varied; the test used J-Link `rdimon`
+semihosting, which can halt the CPU and distort callback timestamps.
+Therefore the log is **functional evidence, not a bound on GPT interrupt
+latency or period accuracy**. For timing measurement, collect timestamps in
+RAM without semihosting inside the measurement loop.
+
+**Not yet confirmed on hardware:** SCI UART polling/interrupt throughput,
+GPIO edge interrupts, other AGT/GPT channels and all six GPT compare routes,
+long-run rollover/pause/resume, stop/start recovery, low-power operation,
+USB, DMA/DTC and ELC integration. The historical host-register-model test
+runners under `tests/ra4m1` predate the CMSIS migration and require updates;
+the old published model assertion counts are not post-migration results.
+Neither a complete automated production-header compiler matrix nor updated
+host regression results are claimed here.
+
+### Interrupt architecture
+
+The Cortex-M4 vector table has **16 ARM-defined system positions** (the first
+stores the initial MSP) followed by **32 external NVIC vectors** IRQ0..IRQ31.
+Renesas ICU `IELSR[0..31]` selects which peripheral event feeds each external
+NVIC slot. The NVIC positions and independent priorities are fixed; their
+peripheral event sources are programmable. Thus the peripheral events do
+**not** all share one interrupt.
+
+`interrupt_ra4m1.cpp` implements the shared **ICU registration and routing
+infrastructure**: it selects an unused CPU slot, assigns its event ID, installs
+a callback/context, sets NVIC priority, dispatches the corresponding
+`IELn_IRQHandler`, acknowledges the ICU request and releases routes.
+`vectors_ra4m1.c` supplies the hardware vector table. One timer overflow
+event and each enabled GPT compare event may consume separate CPU slots;
+Timer DevNo 3 with four compare triggers can use five slots. GPIO's fixed
+external pin IRQ *line* is distinct from the dynamically allocated NVIC slot.
+The ICU driver is not a replacement for the ARM NVIC.
+
+### Remaining engineering work
+
+Complete the RA4M1 coding-style pass (file headers, declaration placement,
+one statement per line, explicit multi-line control-flow blocks), refresh the
+CMSIS-based host regression models, run production-header Cortex-M4 Debug
+and Release checks, and validate SCI UART and GPIO interrupts on hardware.
+No merge into `main` is authorized by this documentation update.
+
 ## IOsonata integration
 
 The pattern is `ARM/Renesas/RE01`: an MCU include wrapper, a weak `g_McuOsc`,
@@ -64,13 +119,16 @@ use `-mfpu=fpv4-sp-d16` and the same `-mfloat-abi` in the application and every
 linked library. Compile the vector object directly, or retain it from the
 library through the existing ResetEntry reference to `__Vectors`.
 
-The wrapper `ra4m1xxx.h` supplies the CMSIS core configuration and the 32 ICU
-slot IRQ numbers. `src/ra4m1_startup_regs.h` is explicitly a **private startup
-register subset**, not a complete Renesas device header. `ra4m1_ioregs.h`
-adds the GPIO/ICU subset used by this port. These keep the implementation
-independent of FSP configuration headers. Other peripheral definitions remain
-work for subsequent increments. Do not include both this core wrapper and an
-unrelated complete vendor device header in the same translation unit.
+The wrapper `ra4m1xxx.h` supplies the CMSIS core configuration, the
+32 ICU slot IRQ numbers, and includes the Renesas vendor device header
+`include/R7FA4M1AB.h`. Production startup, GPIO/PFS, ICU, AGT/GPT and SCI
+drivers access the vendor peripheral structures and register members directly
+(`R_SYSTEM`, `R_PORTn`, `R_PFS`, `R_ICU`, `R_AGTn`, `R_GPTn`, `R_SCIn`).
+The old private register-map headers `ra4m1_ioregs.h`,
+`ra4m1_timer_regs.h` and `ra4m1_uart_regs.h` were removed. Pin/package
+capability masks and peripheral control-bit values remain MCU-specific data,
+not alternative register-address maps. No FSP runtime or vendor driver is used.
+The Renesas header retains its vendor licensing.
 
 The shared ResetEntry copies `.data` (including `.fastrun`), clears `.bss`,
 calls SystemInit, updates the clock information, and enters its existing runtime
