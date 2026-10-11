@@ -54,6 +54,14 @@ SOFTWARE.
 #define UART_BAUDRATE 1000000
 #endif
 
+#ifndef UART_INT_MODE
+#define UART_INT_MODE true
+#endif
+#ifndef UART_DMA_MODE
+#define UART_DMA_MODE false
+#endif
+
+
 #ifdef MCUOSC
 McuOsc_t g_McuOsc = MCUOSC;
 #endif

@@ -39,16 +39,6 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #ifndef __BOARD_H__
 #define __BOARD_H__
 
-#ifndef UART_INT_MODE
-#define UART_INT_MODE true
-#endif
-#ifndef UART_DMA_MODE
-#define UART_DMA_MODE false
-#endif
-
-#define UART_BAUDRATE		1000000
-#define UARTFIFOSIZE		CFIFO_MEMSIZE(256)
-
 #define UART_DEVNO			0
 #define UART_RX_PORT		0
 #define UART_RX_PIN			10
