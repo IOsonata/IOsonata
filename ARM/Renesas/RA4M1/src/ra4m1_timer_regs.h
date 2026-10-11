@@ -31,8 +31,7 @@ SOFTWARE.
 #ifndef RA4M1_TIMER_REGS_H
 #define RA4M1_TIMER_REGS_H
 #include "ra4m1_ioregs.h"
-#include "ra4m1_startup_regs.h"
-#define RA4M1_TIMER_MSTPCRD 0x40047008UL
+#define RA4M1_TIMER_MSTPCRD ((uintptr_t)&R_MSTP->MSTPCRD)
 #define RA4M1_AGT_BASE(n) (0x40084000UL + 0x100UL * (n))
 #define RA4M1_GPT_BASE(n) (0x40078000UL + 0x100UL * (n))
 /* AGT data registers are halfwords; control registers are bytes. */
