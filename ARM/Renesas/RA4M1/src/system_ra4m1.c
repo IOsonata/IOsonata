@@ -24,44 +24,6 @@ SOFTWARE.
 #include <stdbool.h>
 #include "ra4m1xxx.h"
 #include "coredev/interrupt.h"
-#if defined(RA4M1_HOST_TEST)
-#include "ra4m1_startup_regs.h" /* Host register model only. */
-#else
-/* Use the authoritative Renesas CMSIS register structures. */
-#define RA4M1_RD8(a) (*(volatile const uint8_t *)(uintptr_t)(a))
-#define RA4M1_WR8(a,v) (*(volatile uint8_t *)(uintptr_t)(a) = (uint8_t)(v))
-#define RA4M1_RD16(a) (*(volatile const uint16_t *)(uintptr_t)(a))
-#define RA4M1_WR16(a,v) (*(volatile uint16_t *)(uintptr_t)(a) = (uint16_t)(v))
-#define RA4M1_RD32(a) (*(volatile const uint32_t *)(uintptr_t)(a))
-#define RA4M1_WR32(a,v) (*(volatile uint32_t *)(uintptr_t)(a) = (uint32_t)(v))
-#define RA4M1_HOCOCR2 ((uintptr_t)&R_SYSTEM->HOCOCR2)
-#define RA4M1_SCKDIVCR ((uintptr_t)&R_SYSTEM->SCKDIVCR)
-#define RA4M1_SCKSCR ((uintptr_t)&R_SYSTEM->SCKSCR)
-#define RA4M1_PLLCR ((uintptr_t)&R_SYSTEM->PLLCR)
-#define RA4M1_PLLCCR2 ((uintptr_t)&R_SYSTEM->PLLCCR2)
-#define RA4M1_MEMWAIT ((uintptr_t)&R_SYSTEM->MEMWAIT)
-#define RA4M1_MOSCCR ((uintptr_t)&R_SYSTEM->MOSCCR)
-#define RA4M1_SOSCCR ((uintptr_t)&R_SYSTEM->SOSCCR)
-#define RA4M1_LOCOCR ((uintptr_t)&R_SYSTEM->LOCOCR)
-#define RA4M1_HOCOCR ((uintptr_t)&R_SYSTEM->HOCOCR)
-#define RA4M1_MOCOCR ((uintptr_t)&R_SYSTEM->MOCOCR)
-#define RA4M1_OSCSF ((uintptr_t)&R_SYSTEM->OSCSF)
-#define RA4M1_OSTDCR ((uintptr_t)&R_SYSTEM->OSTDCR)
-#define RA4M1_OSTDSR ((uintptr_t)&R_SYSTEM->OSTDSR)
-#define RA4M1_HOCOUTCR ((uintptr_t)&R_SYSTEM->HOCOUTCR)
-#define RA4M1_OPCCR ((uintptr_t)&R_SYSTEM->OPCCR)
-#define RA4M1_MOSCWTCR ((uintptr_t)&R_SYSTEM->MOSCWTCR)
-#define RA4M1_HOCOWTCR ((uintptr_t)&R_SYSTEM->HOCOWTCR)
-#define RA4M1_SOPCCR ((uintptr_t)&R_SYSTEM->SOPCCR)
-#define RA4M1_USBCKCR ((uintptr_t)&R_SYSTEM->USBCKCR)
-#define RA4M1_PRCR ((uintptr_t)&R_SYSTEM->PRCR)
-#define RA4M1_MOMCR ((uintptr_t)&R_SYSTEM->MOMCR)
-#define RA4M1_SOMCR ((uintptr_t)&R_SYSTEM->SOMCR)
-#define RA4M1_FCACHEE ((uintptr_t)&R_FCACHE->FCACHEE)
-#define RA4M1_FCACHEIV ((uintptr_t)&R_FCACHE->FCACHEIV)
-#define RA4M1_IELSR(n) ((uintptr_t)&R_ICU->IELSR[(n)])
-#define RA4M1_USB_SYSCFG ((uintptr_t)&R_USB_FS0->SYSCFG)
-
 #define RA4M1_PRCR_KEY      0xA500U
 #define RA4M1_PRCR_PRC0     0x01U
 #define RA4M1_PRCR_PRC1     0x02U
@@ -80,7 +42,6 @@ SOFTWARE.
 #define RA4M1_RESET_DIV     0x44044444UL
 #define RA4M1_FAST_DIV      0x10010100UL
 #define RA4M1_SLOW_DIV      0x00000000UL
-#endif
 
 #if RA4M1_MOSC_WAIT > 9U || RA4M1_SOSC_DRIVE > 3U
 #error "Invalid RA4M1 oscillator control setting"
@@ -123,21 +84,21 @@ typedef struct __Ra4m1_Clock_Plan {
 	uint8_t FlashWait;
 } Ra4m1ClockPlan_t;
 
-static bool Ra4m1Wait8(uintptr_t Address, uint8_t Mask, uint8_t Value)
+static bool Ra4m1Wait8(volatile const uint8_t *Register, uint8_t Mask, uint8_t Value)
 {
 	uint32_t n = RA4M1_STARTUP_TIMEOUT;
 	do {
-		if ((RA4M1_RD8(Address) & Mask) == Value)
+		if (((*Register) & Mask) == Value)
 			return true;
 	} while (--n != 0U);
 	return false;
 }
 
-static bool Ra4m1Wait16(uintptr_t Address, uint16_t Mask, uint16_t Value)
+static bool Ra4m1Wait16(volatile const uint16_t *Register, uint16_t Mask, uint16_t Value)
 {
 	uint32_t n = RA4M1_STARTUP_TIMEOUT;
 	do {
-		if ((RA4M1_RD16(Address) & Mask) == Value)
+		if (((*Register) & Mask) == Value)
 			return true;
 	} while (--n != 0U);
 	return false;
@@ -256,50 +217,50 @@ static bool Ra4m1ValidLf(OSC_TYPE Type, uint32_t Freq)
 
 static bool Ra4m1SetDividers(uint32_t Value)
 {
-	RA4M1_WR32(RA4M1_SCKDIVCR, Value);
+	R_SYSTEM->SCKDIVCR =  Value;
 	__DSB();
-	const bool ok = RA4M1_RD32(RA4M1_SCKDIVCR) == Value;
+	const bool ok = R_SYSTEM->SCKDIVCR == Value;
 	__ISB();
 	return ok;
 }
 
 static bool Ra4m1SetSource(uint8_t Source)
 {
-	RA4M1_WR8(RA4M1_SCKSCR, Source);
+	R_SYSTEM->SCKSCR =  Source;
 	__DSB();
-	const bool ok = Ra4m1Wait8(RA4M1_SCKSCR, 7U, Source);
+	const bool ok = Ra4m1Wait8(&R_SYSTEM->SCKSCR, 7U, Source);
 	__ISB();
 	return ok;
 }
 
 static bool Ra4m1StartHoco(uint8_t Config)
 {
-	if ((RA4M1_RD8(RA4M1_HOCOCR) & 1U) == 0U)
+	if ((R_SYSTEM->HOCOCR & 1U) == 0U)
 	{
-		if (!Ra4m1Wait8(RA4M1_OSCSF, RA4M1_OSCSF_HOCO, RA4M1_OSCSF_HOCO))
+		if (!Ra4m1Wait8(&R_SYSTEM->OSCSF, RA4M1_OSCSF_HOCO, RA4M1_OSCSF_HOCO))
 			return false;
-		if (RA4M1_RD8(RA4M1_HOCOCR2) == Config)
+		if (R_SYSTEM->HOCOCR2 == Config)
 		{
 			/* RA4M1 changes HOCOWTCR only at 64 MHz. */
 			return true;
 		}
-		RA4M1_WR8(RA4M1_HOCOCR, 1U);
+		R_SYSTEM->HOCOCR =  1U;
 	}
-	if (!Ra4m1Wait8(RA4M1_HOCOCR, 1U, 1U) ||
-		!Ra4m1Wait8(RA4M1_OSCSF, RA4M1_OSCSF_HOCO, 0U))
+	if (!Ra4m1Wait8(&R_SYSTEM->HOCOCR, 1U, 1U) ||
+		!Ra4m1Wait8(&R_SYSTEM->OSCSF, RA4M1_OSCSF_HOCO, 0U))
 		return false;
-	RA4M1_WR8(RA4M1_HOCOCR2, Config);
+	R_SYSTEM->HOCOCR2 =  Config;
 	/* RA4M1 FSP only programs HOCOWTCR for 64 MHz, to 6. */
 	if (Config == 0x28U)
 	{
-		RA4M1_WR8(RA4M1_HOCOWTCR, 6U);
+		R_SYSTEM->HOCOWTCR =  6U;
 	}
-	if (RA4M1_RD8(RA4M1_HOCOCR2) != Config)
+	if (R_SYSTEM->HOCOCR2 != Config)
 		return false;
 	Ra4m1DelayUs(2U);
-	RA4M1_WR8(RA4M1_HOCOCR, 0U);
-	return Ra4m1Wait8(RA4M1_HOCOCR, 1U, 0U) &&
-		Ra4m1Wait8(RA4M1_OSCSF, RA4M1_OSCSF_HOCO, RA4M1_OSCSF_HOCO);
+	R_SYSTEM->HOCOCR =  0U;
+	return Ra4m1Wait8(&R_SYSTEM->HOCOCR, 1U, 0U) &&
+		Ra4m1Wait8(&R_SYSTEM->OSCSF, RA4M1_OSCSF_HOCO, RA4M1_OSCSF_HOCO);
 }
 
 static bool Ra4m1StartMain(OSC_TYPE Type, uint32_t Freq)
@@ -308,23 +269,23 @@ static bool Ra4m1StartMain(OSC_TYPE Type, uint32_t Freq)
 						  (Freq <= 10000000UL ? 0x08U : 0U);
 	const uint8_t wait = Type == OSC_TYPE_TCXO ? 0U : RA4M1_MOSC_WAIT;
 	/* CPU is on MOCO. Stop PLL before changing its input oscillator. */
-	RA4M1_WR8(RA4M1_PLLCR, 1U);
-	if (!Ra4m1Wait8(RA4M1_PLLCR, 1U, 1U) ||
-		!Ra4m1Wait8(RA4M1_OSCSF, RA4M1_OSCSF_PLL, 0U))
+	R_SYSTEM->PLLCR =  1U;
+	if (!Ra4m1Wait8(&R_SYSTEM->PLLCR, 1U, 1U) ||
+		!Ra4m1Wait8(&R_SYSTEM->OSCSF, RA4M1_OSCSF_PLL, 0U))
 		return false;
-	RA4M1_WR8(RA4M1_MOSCCR, 1U);
-	if (!Ra4m1Wait8(RA4M1_MOSCCR, 1U, 1U) ||
-		!Ra4m1Wait8(RA4M1_OSCSF, RA4M1_OSCSF_MOSC, 0U))
+	R_SYSTEM->MOSCCR =  1U;
+	if (!Ra4m1Wait8(&R_SYSTEM->MOSCCR, 1U, 1U) ||
+		!Ra4m1Wait8(&R_SYSTEM->OSCSF, RA4M1_OSCSF_MOSC, 0U))
 		return false;
-	RA4M1_WR8(RA4M1_MOMCR, config);
-	RA4M1_WR8(RA4M1_MOSCWTCR, wait);
-	if (RA4M1_RD8(RA4M1_MOMCR) != config ||
-		RA4M1_RD8(RA4M1_MOSCWTCR) != wait)
+	R_SYSTEM->MOMCR =  config;
+	R_SYSTEM->MOSCWTCR =  wait;
+	if (R_SYSTEM->MOMCR != config ||
+		R_SYSTEM->MOSCWTCR != wait)
 		return false;
 	s_MainOscFreq = Freq;
-	RA4M1_WR8(RA4M1_MOSCCR, 0U);
-	return Ra4m1Wait8(RA4M1_MOSCCR, 1U, 0U) &&
-		Ra4m1Wait8(RA4M1_OSCSF, RA4M1_OSCSF_MOSC, RA4M1_OSCSF_MOSC);
+	R_SYSTEM->MOSCCR =  0U;
+	return Ra4m1Wait8(&R_SYSTEM->MOSCCR, 1U, 0U) &&
+		Ra4m1Wait8(&R_SYSTEM->OSCSF, RA4M1_OSCSF_MOSC, RA4M1_OSCSF_MOSC);
 }
 
 /* Caller has interrupts masked, peripherals/DMA quiesced, and USB SCKE=0.
@@ -334,53 +295,53 @@ static bool Ra4m1StartMain(OSC_TYPE Type, uint32_t Freq)
 static Ra4m1StartupError_t Ra4m1ApplyPlan(const Ra4m1ClockPlan_t *pPlan,
 									   OSC_TYPE Type, uint32_t Freq, bool Usb)
 {
-	const uint8_t source = RA4M1_RD8(RA4M1_SCKSCR) & 7U;
+	const uint8_t source = R_SYSTEM->SCKSCR & 7U;
 	if (source == RA4M1_CK_LOCO || source == RA4M1_CK_SOSC || source > RA4M1_CK_PLL ||
-		(RA4M1_RD8(RA4M1_SOPCCR) & (1U | RA4M1_MODE_BUSY)) != 0U ||
-		RA4M1_RD8(RA4M1_OSTDCR) != 0U ||
-		(RA4M1_RD8(RA4M1_OSTDSR) & 1U) != 0U)
+		(R_SYSTEM->SOPCCR & (1U | RA4M1_MODE_BUSY)) != 0U ||
+		R_SYSTEM->OSTDCR != 0U ||
+		(R_SYSTEM->OSTDSR & 1U) != 0U)
 		return RA4M1_STARTUP_BAD_ENTRY;
-	if ((RA4M1_RD16(RA4M1_USB_SYSCFG) & RA4M1_USB_SCKE) != 0U)
+	if ((R_USB_FS0->SYSCFG & RA4M1_USB_SCKE) != 0U)
 		return RA4M1_STARTUP_USB_CLOCK;
-	if (!Ra4m1Wait8(RA4M1_OPCCR, RA4M1_MODE_BUSY, 0U))
+	if (!Ra4m1Wait8(&R_SYSTEM->OPCCR, RA4M1_MODE_BUSY, 0U))
 		return RA4M1_STARTUP_POWER_MODE;
 
 	/* In low-voltage mode HOCO must remain running. The emitted option word
 	 * ensures this from reset; tolerate an existing image with HOCO stopped
 	 * only by enabling its valid configured oscillator before changing mode.
 	 */
-	if ((RA4M1_RD8(RA4M1_OPCCR) & 3U) == 2U &&
-		(RA4M1_RD8(RA4M1_HOCOCR) & 1U) != 0U)
+	if ((R_SYSTEM->OPCCR & 3U) == 2U &&
+		(R_SYSTEM->HOCOCR & 1U) != 0U)
 	{
-		if (Ra4m1HocoHz(RA4M1_RD8(RA4M1_HOCOCR2)) == 0U)
+		if (Ra4m1HocoHz(R_SYSTEM->HOCOCR2) == 0U)
 			return RA4M1_STARTUP_HOCO;
-		RA4M1_WR8(RA4M1_HOCOCR, 0U);
+		R_SYSTEM->HOCOCR =  0U;
 	}
-	if ((RA4M1_RD8(RA4M1_HOCOCR) & 1U) == 0U &&
-		!Ra4m1Wait8(RA4M1_OSCSF, RA4M1_OSCSF_HOCO, RA4M1_OSCSF_HOCO))
+	if ((R_SYSTEM->HOCOCR & 1U) == 0U &&
+		!Ra4m1Wait8(&R_SYSTEM->OSCSF, RA4M1_OSCSF_HOCO, RA4M1_OSCSF_HOCO))
 		return RA4M1_STARTUP_HOCO;
 
-	RA4M1_WR16(RA4M1_FCACHEE, 0U);
-	if (!Ra4m1Wait16(RA4M1_FCACHEE, 1U, 0U))
+	R_FCACHE->FCACHEE =  0U;
+	if (!Ra4m1Wait16(&R_FCACHE->FCACHEE, 1U, 0U))
 		return RA4M1_STARTUP_FLASH;
 	/* Down-divide the current source before selecting MOCO: no transient
 	 * overclock even when the previous CPU source was an external PLL.
 	 */
 	if (!Ra4m1SetDividers(RA4M1_RESET_DIV))
 		return RA4M1_STARTUP_CLOCK;
-	RA4M1_WR8(RA4M1_MOCOCR, 0U);
-	if (!Ra4m1Wait8(RA4M1_MOCOCR, 1U, 0U))
+	R_SYSTEM->MOCOCR =  0U;
+	if (!Ra4m1Wait8(&R_SYSTEM->MOCOCR, 1U, 0U))
 		return RA4M1_STARTUP_MOCO;
 	Ra4m1DelayUs(2U);
 	if (!Ra4m1SetSource(RA4M1_CK_MOCO))
 		return RA4M1_STARTUP_CLOCK;
 
-	RA4M1_WR8(RA4M1_OPCCR, 0U);
-	if (!Ra4m1Wait8(RA4M1_OPCCR, 0x13U, 0U))
+	R_SYSTEM->OPCCR =  0U;
+	if (!Ra4m1Wait8(&R_SYSTEM->OPCCR, 0x13U, 0U))
 		return RA4M1_STARTUP_POWER_MODE;
 	/* CPU is 500 kHz, cache disabled, power mode is now High-speed. */
-	RA4M1_WR8(RA4M1_MEMWAIT, pPlan->FlashWait);
-	if (RA4M1_RD8(RA4M1_MEMWAIT) != pPlan->FlashWait)
+	R_SYSTEM->MEMWAIT =  pPlan->FlashWait;
+	if (R_SYSTEM->MEMWAIT != pPlan->FlashWait)
 		return RA4M1_STARTUP_FLASH;
 
 	if (pPlan->Source == RA4M1_CK_HOCO)
@@ -394,13 +355,13 @@ static Ra4m1StartupError_t Ra4m1ApplyPlan(const Ra4m1ClockPlan_t *pPlan,
 			return RA4M1_STARTUP_MOSC;
 		if (pPlan->Source == RA4M1_CK_PLL)
 		{
-			RA4M1_WR8(RA4M1_PLLCCR2, pPlan->Pll);
-			if (RA4M1_RD8(RA4M1_PLLCCR2) != pPlan->Pll)
+			R_SYSTEM->PLLCCR2 =  pPlan->Pll;
+			if (R_SYSTEM->PLLCCR2 != pPlan->Pll)
 				return RA4M1_STARTUP_PLL;
 			Ra4m1DelayUs(2U); /* PLLMUL-to-PLL-start minimum is 1 us. */
-			RA4M1_WR8(RA4M1_PLLCR, 0U);
-			if (!Ra4m1Wait8(RA4M1_PLLCR, 1U, 0U) ||
-				!Ra4m1Wait8(RA4M1_OSCSF, RA4M1_OSCSF_PLL, RA4M1_OSCSF_PLL))
+			R_SYSTEM->PLLCR =  0U;
+			if (!Ra4m1Wait8(&R_SYSTEM->PLLCR, 1U, 0U) ||
+				!Ra4m1Wait8(&R_SYSTEM->OSCSF, RA4M1_OSCSF_PLL, RA4M1_OSCSF_PLL))
 				return RA4M1_STARTUP_PLL;
 		}
 	}
@@ -408,27 +369,27 @@ static Ra4m1StartupError_t Ra4m1ApplyPlan(const Ra4m1ClockPlan_t *pPlan,
 	if (Usb)
 	{
 		const uint8_t usbSource = pPlan->Source == RA4M1_CK_HOCO ? 1U : 0U;
-		if (usbSource != 0U && RA4M1_RD8(RA4M1_HOCOUTCR) != 0U)
+		if (usbSource != 0U && R_SYSTEM->HOCOUTCR != 0U)
 			return RA4M1_STARTUP_USB_CLOCK;
-		RA4M1_WR8(RA4M1_USBCKCR, usbSource);
-		if (RA4M1_RD8(RA4M1_USBCKCR) != usbSource)
+		R_SYSTEM->USBCKCR =  usbSource;
+		if (R_SYSTEM->USBCKCR != usbSource)
 			return RA4M1_STARTUP_USB_CLOCK;
 	}
 	if (!Ra4m1SetDividers(pPlan->Dividers) || !Ra4m1SetSource(pPlan->Source))
 		return RA4M1_STARTUP_CLOCK;
 
-	RA4M1_WR16(RA4M1_FCACHEIV, 1U);
-	if (!Ra4m1Wait16(RA4M1_FCACHEIV, 1U, 0U))
+	R_FCACHE->FCACHEIV =  1U;
+	if (!Ra4m1Wait16(&R_FCACHE->FCACHEIV, 1U, 0U))
 		return RA4M1_STARTUP_FLASH;
-	RA4M1_WR16(RA4M1_FCACHEE, 1U);
-	return Ra4m1Wait16(RA4M1_FCACHEE, 1U, 1U) ?
+	R_FCACHE->FCACHEE =  1U;
+	return Ra4m1Wait16(&R_FCACHE->FCACHEE, 1U, 1U) ?
 		RA4M1_STARTUP_OK : RA4M1_STARTUP_FLASH;
 }
 
 static uint32_t Ra4m1SourceHz(uint8_t Source)
 {
-	const uint8_t ready = RA4M1_RD8(RA4M1_OSCSF);
-	if ((RA4M1_RD8(RA4M1_OSTDSR) & 1U) != 0U)
+	const uint8_t ready = R_SYSTEM->OSCSF;
+	if ((R_SYSTEM->OSTDSR & 1U) != 0U)
 	{
 		/* OSTDF redirects MOSC to MOCO without a software selector write.
 		 * A failed PLL input leaves the PLL free-running: its rate is unknown.
@@ -441,24 +402,24 @@ static uint32_t Ra4m1SourceHz(uint8_t Source)
 	switch (Source)
 	{
 		case RA4M1_CK_HOCO:
-			return (RA4M1_RD8(RA4M1_HOCOCR) & 1U) == 0U &&
+			return (R_SYSTEM->HOCOCR & 1U) == 0U &&
 				(ready & RA4M1_OSCSF_HOCO) != 0U ?
-				Ra4m1HocoHz(RA4M1_RD8(RA4M1_HOCOCR2)) : 0U;
+				Ra4m1HocoHz(R_SYSTEM->HOCOCR2) : 0U;
 		case RA4M1_CK_MOCO:
-			return (RA4M1_RD8(RA4M1_MOCOCR) & 1U) == 0U ? RA4M1_MOCO_HZ : 0U;
+			return (R_SYSTEM->MOCOCR & 1U) == 0U ? RA4M1_MOCO_HZ : 0U;
 		case RA4M1_CK_LOCO:
-			return (RA4M1_RD8(RA4M1_LOCOCR) & 1U) == 0U ? RA4M1_LOCO_HZ : 0U;
+			return (R_SYSTEM->LOCOCR & 1U) == 0U ? RA4M1_LOCO_HZ : 0U;
 		case RA4M1_CK_MOSC:
-			return (RA4M1_RD8(RA4M1_MOSCCR) & 1U) == 0U &&
+			return (R_SYSTEM->MOSCCR & 1U) == 0U &&
 				(ready & RA4M1_OSCSF_MOSC) != 0U ? s_MainOscFreq : 0U;
 		case RA4M1_CK_SOSC:
-			return (RA4M1_RD8(RA4M1_SOSCCR) & 1U) == 0U ? 32768UL : 0U;
+			return (R_SYSTEM->SOSCCR & 1U) == 0U ? 32768UL : 0U;
 		case RA4M1_CK_PLL:
-			if ((RA4M1_RD8(RA4M1_PLLCR) & 1U) != 0U ||
+			if ((R_SYSTEM->PLLCR & 1U) != 0U ||
 				(ready & (RA4M1_OSCSF_PLL | RA4M1_OSCSF_MOSC)) !=
 						 (RA4M1_OSCSF_PLL | RA4M1_OSCSF_MOSC))
 				return 0U;
-			return Ra4m1PllHz(s_MainOscFreq, RA4M1_RD8(RA4M1_PLLCCR2));
+			return Ra4m1PllHz(s_MainOscFreq, R_SYSTEM->PLLCCR2);
 		default: return 0U;
 	}
 }
@@ -466,8 +427,8 @@ static uint32_t Ra4m1SourceHz(uint8_t Source)
 static uint32_t Ra4m1DividedClock(unsigned Shift)
 {
 	const uint32_t state = DisableInterrupt();
-	const uint8_t source = RA4M1_RD8(RA4M1_SCKSCR) & 7U;
-	const uint32_t div = (RA4M1_RD32(RA4M1_SCKDIVCR) >> Shift) & 7U;
+	const uint8_t source = R_SYSTEM->SCKSCR & 7U;
+	const uint32_t div = (R_SYSTEM->SCKDIVCR >> Shift) & 7U;
 	const uint32_t freq = Ra4m1SourceHz(source);
 	EnableInterrupt(state);
 	return div <= 6U ? freq >> div : 0U;
@@ -500,9 +461,9 @@ uint32_t SystemUsbClockGet(void)
 	uint32_t hz = 0U;
 	if (g_McuOsc.bUSBClk)
 	{
-		const bool hoco = (RA4M1_RD8(RA4M1_USBCKCR) & 1U) != 0U;
+		const bool hoco = (R_SYSTEM->USBCKCR & 1U) != 0U;
 		hz = Ra4m1SourceHz(hoco ? RA4M1_CK_HOCO : RA4M1_CK_PLL);
-		if (hoco && RA4M1_RD8(RA4M1_HOCOUTCR) != 0U)
+		if (hoco && R_SYSTEM->HOCOUTCR != 0U)
 			hz = 0U;
 	}
 	EnableInterrupt(state);
@@ -518,13 +479,13 @@ bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t Freq)
 		return false;
 	}
 	const uint32_t state = DisableInterrupt();
-	const uint16_t protect = RA4M1_RD16(RA4M1_PRCR) & 0x0BU;
-	RA4M1_WR16(RA4M1_PRCR, RA4M1_PRCR_KEY | protect | 3U);
+	const uint16_t protect = R_SYSTEM->PRCR & 0x0BU;
+	R_SYSTEM->PRCR =  RA4M1_PRCR_KEY | protect | 3U;
 	Ra4m1StartupError_t result = RA4M1_STARTUP_PROTECT;
-	if ((RA4M1_RD16(RA4M1_PRCR) & 3U) == 3U)
+	if ((R_SYSTEM->PRCR & 3U) == 3U)
 		result = Ra4m1ApplyPlan(&plan, ClkSrc, Freq, g_McuOsc.bUSBClk);
-	RA4M1_WR16(RA4M1_PRCR, RA4M1_PRCR_KEY | protect);
-	if ((RA4M1_RD16(RA4M1_PRCR) & 0x0BU) != protect)
+	R_SYSTEM->PRCR =  RA4M1_PRCR_KEY | protect;
+	if ((R_SYSTEM->PRCR & 0x0BU) != protect)
 		result = RA4M1_STARTUP_PROTECT;
 	if (result == RA4M1_STARTUP_OK)
 	{
@@ -546,15 +507,15 @@ bool SystemLowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t Freq)
 		return false;
 	}
 	const uint32_t state = DisableInterrupt();
-	const uint16_t protect = RA4M1_RD16(RA4M1_PRCR) & 0x0BU;
-	RA4M1_WR16(RA4M1_PRCR, RA4M1_PRCR_KEY | protect | RA4M1_PRCR_PRC0);
-	bool ok = (RA4M1_RD16(RA4M1_PRCR) & RA4M1_PRCR_PRC0) != 0U;
+	const uint16_t protect = R_SYSTEM->PRCR & 0x0BU;
+	R_SYSTEM->PRCR =  RA4M1_PRCR_KEY | protect | RA4M1_PRCR_PRC0;
+	bool ok = (R_SYSTEM->PRCR & RA4M1_PRCR_PRC0) != 0U;
 	if (ok && ClkSrc == OSC_TYPE_RC)
 	{
-		if ((RA4M1_RD8(RA4M1_LOCOCR) & 1U) != 0U)
+		if ((R_SYSTEM->LOCOCR & 1U) != 0U)
 		{
-			RA4M1_WR8(RA4M1_LOCOCR, 0U);
-			ok = Ra4m1Wait8(RA4M1_LOCOCR, 1U, 0U);
+			R_SYSTEM->LOCOCR =  0U;
+			ok = Ra4m1Wait8(&R_SYSTEM->LOCOCR, 1U, 0U);
 		}
 		if (ok)
 			Ra4m1DelayUs(100U); /* LOCO has no oscillator-ready flag. */
@@ -564,21 +525,21 @@ bool SystemLowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t Freq)
 		/* Preserve a running sub-clock and the retained RTC. Its consumers
 		 * choose LOCO/SOSC themselves; SystemInit does not reset the RTC.
 		 */
-		if ((RA4M1_RD8(RA4M1_SOSCCR) & 1U) != 0U)
+		if ((R_SYSTEM->SOSCCR & 1U) != 0U)
 		{
-			RA4M1_WR8(RA4M1_SOMCR, RA4M1_SOSC_DRIVE);
-			ok = RA4M1_RD8(RA4M1_SOMCR) == RA4M1_SOSC_DRIVE;
+			R_SYSTEM->SOMCR =  RA4M1_SOSC_DRIVE;
+			ok = R_SYSTEM->SOMCR == RA4M1_SOSC_DRIVE;
 			if (ok)
 			{
-				RA4M1_WR8(RA4M1_SOSCCR, 0U);
-				ok = Ra4m1Wait8(RA4M1_SOSCCR, 1U, 0U);
+				R_SYSTEM->SOSCCR =  0U;
+				ok = Ra4m1Wait8(&R_SYSTEM->SOSCCR, 1U, 0U);
 			}
 		}
 		if (ok)
 			Ra4m1DelayUs(RA4M1_SOSC_STARTUP_US);
 	}
-	RA4M1_WR16(RA4M1_PRCR, RA4M1_PRCR_KEY | protect);
-	ok = ok && (RA4M1_RD16(RA4M1_PRCR) & 0x0BU) == protect;
+	R_SYSTEM->PRCR =  RA4M1_PRCR_KEY | protect;
+	ok = ok && (R_SYSTEM->PRCR & 0x0BU) == protect;
 	if (ok)
 	{
 		g_McuOsc.LowPwrOsc.Type = ClkSrc;
@@ -626,7 +587,7 @@ void SystemInit(void)
 	for (unsigned i = 0U; i < RA4M1_IRQ_COUNT; ++i)
 	{
 		NVIC_DisableIRQ((IRQn_Type)i);
-		RA4M1_WR32(RA4M1_IELSR(i), 0U);
+		R_ICU->IELSR[i] = 0U;
 		NVIC_ClearPendingIRQ((IRQn_Type)i);
 	}
 	Ra4m1ClockPlan_t plan;
