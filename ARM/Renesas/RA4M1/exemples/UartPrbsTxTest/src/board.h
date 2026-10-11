@@ -66,7 +66,13 @@ SOFTWARE.
 #ifndef UART_INT_MODE
 #define UART_INT_MODE		true
 #endif
-#define UART_DMA_MODE		false
+#ifndef UART_DMA_MODE
+#define UART_DMA_MODE       false
+#endif
+
+#if UART_DMA_MODE
+#define UART_PRBS_BUFFER_MODE
+#endif
 #define UARTFIFOSIZE		CFIFO_MEMSIZE(256)
 
 #endif // __BOARD_H__
