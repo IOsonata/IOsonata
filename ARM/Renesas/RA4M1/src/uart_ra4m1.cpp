@@ -311,13 +311,35 @@ static int TxData(DevIntrf_t *p, const uint8_t *data, int len)
         Ra4m1UartDev *d = Owner(p);
         if (!d || !d->Enabled || !d->Tx) { EnableInterrupt(state); break; }
         bool accepted = false;
-        if (p->bIntEn) {
-            uint32_t dropped = d->pDev->hTxFifo->DropCnt;
-            uint8_t *dest = CFifoPut(d->pDev->hTxFifo);
-            if (dest) { *dest = data[count]; accepted = true; TxReady(d, false); }
-            d->pDev->TxDropCnt += d->pDev->hTxFifo->DropCnt - dropped;
-            Kick(d);
-        } else if (d->Regs->SSR & SCI_SSR_TDRE) {
+        if (p->bIntEn)
+        {
+            if (CFifoUsed(d->pDev->hTxFifo) == 0U &&
+                (d->Regs->SSR & SCI_SSR_TDRE) != 0U)
+            {
+                // Prime TDR directly. A one-byte API call must not incur
+                // software FIFO and TXI dispatch latency on an idle TDR.
+                uint8_t value = d->pDev->DataBits == 7 ?
+                    data[count] & 0x7FU : data[count];
+                d->Regs->TDR = value;
+                d->Regs->SCR = (d->Regs->SCR & ~SCI_SCR_TIE) | SCI_SCR_TEIE;
+                TxReady(d, false);
+                accepted = true;
+            }
+            else
+            {
+                uint32_t dropped = d->pDev->hTxFifo->DropCnt;
+                uint8_t *dest = CFifoPut(d->pDev->hTxFifo);
+                if (dest != nullptr)
+                {
+                    *dest = data[count];
+                    accepted = true;
+                    TxReady(d, false);
+                }
+                d->pDev->TxDropCnt += d->pDev->hTxFifo->DropCnt - dropped;
+                Kick(d);
+            }
+        }
+        else if (d->Regs->SSR & SCI_SSR_TDRE) {
             d->Regs->TDR = d->pDev->DataBits == 7 ? data[count] & 0x7FU : data[count];
             TxReady(d, false);
             accepted = true;
