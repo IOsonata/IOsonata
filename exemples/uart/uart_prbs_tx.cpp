@@ -48,16 +48,9 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "board.h"
 
 //#define DEMO_C	// Select demo C code
-// Byte mode measures single-byte API overhead. Use buffered mode for DMA.
-#ifndef UART_PRBS_BUFFER_MODE
 #define BYTE_MODE
-#endif
 
-#ifdef UART_PRBS_BUFFER_MODE
-#define TEST_BUFSIZE        256
-#else
-#define TEST_BUFSIZE        16
-#endif
+#define TEST_BUFSIZE		16
 
 #ifndef UART_BAUDRATE
 #define UART_BAUDRATE 		1000000
