@@ -40,8 +40,14 @@ SOFTWARE.
 #include <stdint.h>
 #include "coredev/system_core_clock.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
 extern uint32_t SystemMicroSecLoopCnt;
 extern uint32_t SystemnsDelayFactor;
+#ifdef __cplusplus
+}
+#endif
 
 /** @addtogroup Utilities
   * @{
