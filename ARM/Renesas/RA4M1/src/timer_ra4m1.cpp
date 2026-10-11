@@ -516,7 +516,31 @@ bool TimerInit(TimerDev_t *t, const TimerCfg_t *cfg)
         TimerAccess access(d);
         if (access.Ok) {
             /* Do not overwrite a running GPT/AGT owned outside this driver. */
-            bool busy=agt ? (d.AgtReg->AGT16.CTRL.AGTCR&3U) : (d.GptReg->GTCR&1U);
+            bool busy = false;
+            if (agt)
+            {
+                uint8_t status = d.AgtReg->AGT16.CTRL.AGTCR;
+                if ((status & 0x01U) != 0U)
+                {
+                    busy = true;
+                }
+                else
+                {
+                    for (uint32_t poll = 0U; poll < 1000000UL; ++poll)
+                    {
+                        status = d.AgtReg->AGT16.CTRL.AGTCR;
+                        if ((status & 0x02U) == 0U)
+                        {
+                            break;
+                        }
+                    }
+                    busy = (status & 0x03U) != 0U;
+                }
+            }
+            else
+            {
+                busy = (d.GptReg->GTCR & 1U) != 0U;
+            }
             if (!busy) {
                 if (agt) {
                     d.AgtReg->AGT16.CTRL.AGTCMSR = 0U;
