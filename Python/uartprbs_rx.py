@@ -88,26 +88,20 @@ for _i in range(PRBS_PERIOD):
     _v = NEXT[_v]
 
 
-# Longest run of bytes off the sequence kept for a decision. A longer run,
-# as from a receiver out of frame, is counted as corrupt and checking starts
-# again from the next byte.
+# Require enough consecutive valid PRBS bytes to establish a reliable
+# phase before accepting measurements after a damaged stream.
+SYNC_BYTES = 8
 MAX_RUN = 16
-
-
-def advance(v, n):
-    """Value n steps after v in the sequence."""
-    for _ in range(n):
-        v = NEXT[v]
-    return v
+MAX_ESTIMATED_LOSS = 16
 
 
 class PrbsCheck:
-    """Classifies the received bytes. The bytes that do not continue the
-    sequence are kept until two bytes in a row follow each other again.
-    If that pair is where the sequence would be without the kept bytes, they
-    replaced the same number of bytes (corrupt). If the pair starts at the
-    last kept byte, the sequence jumped there: data lost, or the
-    transmitter restarted with 0xFF. The other kept bytes are corrupt."""
+    """Validate PRBS continuity and reacquire phase after sustained errors.
+
+    Drop counts raw adjacent-byte discontinuities independently of recovery.
+    Corrupt and lost counts describe only observations that can be classified
+    with confidence. The 127-byte PRBS period limits loss estimation.
+    """
 
     def __init__(self):
         self.count = 0
@@ -117,67 +111,108 @@ class PrbsCheck:
         self.lost_bytes = 0
         self.out_of_frame = 0
         self.restart = 0
-        self.last = None        # last byte received, for the drop count
-        self.prev = None        # last byte on the sequence
-        self.run = []           # bytes after prev that do not continue it
+        self.uncertain = 0
+        self.recovered = 0
+        self.last = None
+        self.prev = None
+        self.synced = False
+        self.had_sync = False
+        self.run = []
+        self.anchor = None
+
+    @staticmethod
+    def valid(c):
+        return c in INDEX or c == PRBS_START
+
+    @staticmethod
+    def confirmed(values):
+        if len(values) != SYNC_BYTES or not PrbsCheck.valid(values[0]):
+            return False
+        for previous, current in zip(values, values[1:]):
+            if current != NEXT[previous] or current not in INDEX:
+                return False
+        return True
+
+    def _recover(self):
+        if len(self.run) < SYNC_BYTES:
+            return
+
+        candidate = self.run[-SYNC_BYTES:]
+        if not self.confirmed(candidate):
+            if len(self.run) > MAX_RUN:
+                # Bound both memory and speculative accounting. Retain the
+                # last SYNC_BYTES - 1 bytes for a candidate across reads.
+                flushed = len(self.run) - (SYNC_BYTES - 1)
+                if self.had_sync:
+                    self.corrupt += flushed
+                self.run = self.run[-(SYNC_BYTES - 1):]
+                self.anchor = None
+            return
+
+        prefix = len(self.run) - SYNC_BYTES
+        first = candidate[0]
+
+        if self.had_sync:
+            self.corrupt += prefix
+
+            if first == PRBS_START:
+                self.restart += 1
+            elif self.anchor is not None and self.anchor in INDEX:
+                expected = NEXT[self.anchor]
+                # Extra received bytes cannot be distinguished from a long
+                # jump around the 127-byte PRBS period. Only report bounded
+                # forward losses; preserve other events as uncertain.
+                distance = (INDEX[first] - INDEX[expected]) % PRBS_PERIOD
+                missing = distance - prefix
+                if missing == 0:
+                    pass
+                elif 0 < missing <= MAX_ESTIMATED_LOSS:
+                    self.lost += 1
+                    self.lost_bytes += missing
+                else:
+                    self.uncertain += 1
+            elif self.anchor is not None:
+                self.uncertain += 1
+
+        if self.had_sync:
+            self.recovered += 1
+
+        self.had_sync = True
+        self.synced = True
+        self.prev = candidate[-1]
+        self.run = []
+        self.anchor = None
 
     def feed(self, data):
-        nxt = NEXT
         for c in data:
             if c > 0x7F and c != PRBS_START:
                 self.out_of_frame += 1
 
-            last = self.last
-            if last is not None and c != nxt[last]:
+            if self.last is not None and c != NEXT[self.last]:
                 self.drop += 1
             self.last = c
 
-            prev = self.prev
-            if prev is None:
-                self.prev = c
-                continue
-
-            run = self.run
-            if not run:
-                if c == nxt[prev]:
+            if self.synced:
+                if c == NEXT[self.prev]:
                     self.prev = c
-                else:
-                    run.append(c)
-                continue
+                    continue
 
-            if c == advance(prev, len(run) + 1):
-                # The kept bytes took the place of as many bytes
-                self.corrupt += len(run)
-            elif c == nxt[run[-1]]:
-                # The sequence continues from the last kept byte, the others
-                # replaced bytes or were inserted
-                p = run[-1]
-                self.corrupt += len(run) - 1
-                if p == PRBS_START:
-                    self.restart += 1
-                elif p in INDEX and nxt[prev] in INDEX:
-                    # Steps from prev to p
-                    dist = (INDEX[p] - INDEX[nxt[prev]]) % PRBS_PERIOD + 1
-                    if dist == PRBS_PERIOD:
-                        # p is prev sent again
-                        self.corrupt += 1
-                    elif dist > len(run):
-                        self.lost += 1
-                        self.lost_bytes += dist - len(run)
-                else:
-                    self.lost += 1
+                self.synced = False
+                self.anchor = self.prev
+                self.run = [c]
             else:
-                run.append(c)
-                if len(run) > MAX_RUN:
-                    self.corrupt += len(run)
-                    self.run = []
-                    self.prev = None
-                continue
+                self.run.append(c)
 
-            self.prev = c
-            self.run = []
+            self._recover()
 
         self.count += len(data)
+
+    def finish(self):
+        """Include an unresolved tail in final corruption statistics."""
+        if self.run and self.had_sync:
+            self.corrupt += len(self.run)
+            self.uncertain += 1
+        self.run = []
 
 
 def parse_args() -> argparse.Namespace:
@@ -210,6 +245,10 @@ def report(chk, rate, average, oof_interval, count_interval):
         fields.append("out of frame %d" % chk.out_of_frame)
     if chk.restart:
         fields.append("restart %d" % chk.restart)
+    if chk.uncertain:
+        fields.append("uncertain %d" % chk.uncertain)
+    if chk.recovered:
+        fields.append("recovered %d" % chk.recovered)
 
     fields.append("average %.2f" % average)
     print(", ".join(fields))
@@ -278,7 +317,14 @@ def main():
                 last_oof = chk.out_of_frame
 
     except KeyboardInterrupt:
-        print("KeyboardInterrupt. Exiting.")
+        chk.finish()
+        print("KeyboardInterrupt. Final counters:")
+        average = 0.0
+        if start_time is not None:
+            elapsed = time.perf_counter() - start_time
+            if elapsed > 0:
+                average = (chk.count - start_count) / elapsed
+        report(chk, 0.0, average, 0, -1)
     finally:
         comm.close()
 
