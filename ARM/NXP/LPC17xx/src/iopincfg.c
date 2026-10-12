@@ -92,7 +92,7 @@ void IOPinConfig(int PortNo, int PinNo, int PinOp, IOPINDIR Dir, IOPINRES Resist
 	*regs->pSelect[half] = (*regs->pSelect[half] & ~(3UL << shift)) | (func << shift);
 
 	// P0.27/28 are always open drain without internal pulls. Their ordinary
-	// PINMODE/PINMODE_OD fields are reserved (UM10360, tables 86, 91, 99).
+	// PINMODE/PINMODE_OD fields are reserved (see UM10360 PINCON chapter).
 	if (PortNo == 0 && (PinNo == 27 || PinNo == 28))
 	{
 		uint32_t padmode = 1UL << (PinNo == 27 ? 1U : 3U);
@@ -117,6 +117,14 @@ void IOPinConfig(int PortNo, int PinNo, int PinOp, IOPINDIR Dir, IOPINRES Resist
 	else
 	{
 		*regs->pOpenDrain &= ~mask;
+	}
+
+	// USB pads P0.29/30 have valid open-drain controls, but no configurable
+	// pulls. Their PINMODE1 fields are reserved (UM10360, table 88).
+	if (PortNo == 0 && (PinNo == 29 || PinNo == 30))
+	{
+		EnableInterrupt(state);
+		return;
 	}
 
 	switch (Resistor)

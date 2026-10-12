@@ -169,3 +169,14 @@ pad mode. Tests cover both pins, all 16 initial pad-control combinations, both
 output types, every pull request, GPIO/I2C transitions and complete PINCON
 preservation outside the selected mux/mode fields. Electrical behavior remains
 subject to board testing. See NXP UM10360, PINMODE1, PINMODE_OD0 and I2CPADCFG.
+
+LPC17xx USB pads P0.29/P0.30 have no configurable pull resistors. All pull
+requests, including cleanup through IOPinDisable, leave their reserved
+PINMODE1 fields unchanged; their valid open-drain controls still work.
+Tests cover both pins, all pull requests, normal/open-drain transitions and
+complete PINCON preservation outside the selected mux/open-drain fields.
+These pads also share their physical GPIO direction: both FIO0DIR bits must
+be set for outputs; clearing either makes both inputs. Callers must configure
+the pair consistently. Per-pin APIs retain individual direction-bit writes
+and do not silently configure the companion pin. See NXP UM10360 table 88
+and section 9.5.1.

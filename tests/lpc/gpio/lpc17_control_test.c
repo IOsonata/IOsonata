@@ -289,7 +289,7 @@ static void CheckI2cPads(void)
 
 static void CheckMux(void)
 {
-	const int pins[][2] = {{0, 0}, {0, 15}, {0, 16}, {0, 30},
+	const int pins[][2] = {{0, 0}, {0, 15}, {0, 16}, {0, 29}, {0, 30},
 		{1, 0}, {1, 15}, {1, 16}, {1, 31}, {2, 0}, {2, 13},
 		{3, 25}, {3, 26}, {4, 28}, {4, 29}};
 	const IOPINRES pulls[] = {IOPINRES_NONE, IOPINRES_PULLUP, IOPINRES_PULLDOWN, IOPINRES_FOLLOW};
@@ -303,6 +303,7 @@ static void CheckMux(void)
 		unsigned index = (unsigned)port * 2U + (unsigned)pin / 16U;
 		unsigned shift = ((unsigned)pin % 16U) * 2U;
 		uint32_t mask = 3U << shift;
+		int usbpad = port == 0 && (pin == 29 || pin == 30);
 		volatile uint32_t *sel = (volatile uint32_t *)(uintptr_t)(LPC_PINCON_BASE + index * 4U);
 		volatile uint32_t *mode = (volatile uint32_t *)(uintptr_t)(LPC_PINCON_BASE + 0x40U + index * 4U);
 		volatile uint32_t *od = (volatile uint32_t *)(uintptr_t)(LPC_PINCON_BASE + 0x68U + (unsigned)port * 4U);
@@ -321,7 +322,8 @@ static void CheckMux(void)
 			*od = 0;
 			LPC_GPIO0[port].FIODIR = 0;
 			IOPinConfig(port, pin, IOPINOP_GPIO, IOPINDIR_OUTPUT, pulls[r], IOPINTYPE_OPENDRAIN);
-			assert(*mode == ((0x5A5A5A5AU & ~mask) | (modes[r] << shift)));
+			assert(*mode == (usbpad ? 0x5A5A5A5AU :
+				((0x5A5A5A5AU & ~mask) | (modes[r] << shift))));
 			assert(*od == (1U << pin));
 			assert(LPC_GPIO0[port].FIODIR == (1U << pin));
 			IOPinConfig(port, pin, IOPINOP_GPIO, IOPINDIR_INPUT, pulls[r], IOPINTYPE_NORMAL);
@@ -334,10 +336,29 @@ static void CheckMux(void)
 		LPC_GPIO0[port].FIODIR = UINT32_MAX;
 		IOPinDisable(port, pin);
 		assert(*sel == (UINT32_MAX & ~mask));
-		assert(*mode == (2U << shift));
+		assert(*mode == (usbpad ? 0U : (2U << shift)));
 		assert(*od == (UINT32_MAX & ~(1U << pin)));
 		assert(LPC_GPIO0[port].FIODIR == (UINT32_MAX & ~(1U << pin)));
 	}
+	// USB pull requests must preserve the entire reserved PINMODE1 region.
+	for (int pin = 29; pin <= 30; pin++)
+	{
+		for (unsigned r = 0; r < 4; r++)
+		{
+			LPC_PINCON_TypeDef expected;
+
+			memset((void *)LPC_PINCON, 0x5A, sizeof(expected));
+			memcpy(&expected, (const void *)LPC_PINCON, sizeof(expected));
+			expected.PINSEL1 &= ~(3U << ((pin - 16) * 2));
+			expected.PINMODE_OD0 |= 1U << pin;
+			IOPinConfig(0, pin, IOPINOP_GPIO, IOPINDIR_OUTPUT, pulls[r], IOPINTYPE_OPENDRAIN);
+			assert(memcmp(&expected, (const void *)LPC_PINCON, sizeof(expected)) == 0);
+			expected.PINMODE_OD0 &= ~(1U << pin);
+			IOPinDisable(0, pin);
+			assert(memcmp(&expected, (const void *)LPC_PINCON, sizeof(expected)) == 0);
+		}
+	}
+
 	IOPinCfg(s_UartPins, 2);
 	assert(((LPC_PINCON->PINSEL0 >> 4) & 15U) == 5U);
 	IOPinDis(s_UartPins, 2);
