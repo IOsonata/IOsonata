@@ -41,6 +41,9 @@ uint32_t SystemMicroSecLoopCnt;
 static LPC_SC_TypeDef s_Regs;
 static unsigned s_Unsafe;
 static unsigned s_Checks;
+static unsigned s_OscWait;
+static unsigned s_OscReadyAfter;
+static unsigned s_EarlyClockChange;
 static const uint32_t s_Rates[] = {
 	20000000, 22000000, 40000000, 42000000, 60000000, 62000000,
 	80000000, 82000000, 100000000, 102000000, 120000000
@@ -50,6 +53,19 @@ extern uint32_t SystemCoreClockSet(uint32_t CoreFreq, int ClkFreq);
 LPC_SC_TypeDef *TestSystemRegs(void)
 {
 	uint32_t status = s_Regs.PLL0CFG | (7U << 24);
+
+	if ((s_Regs.SCS & 0x60U) == 0x20U)
+	{
+		if (s_Regs.CCLKCFG != 0 || s_Regs.CLKSRCSEL != 0 || s_Regs.PLL0CON != 0)
+		{
+			s_EarlyClockChange++;
+		}
+		s_OscWait++;
+		if (s_OscWait >= s_OscReadyAfter)
+		{
+			s_Regs.SCS |= 0x40U;
+		}
+	}
 
 	// Model ready status from configuration; analog locking/feed are not modeled.
 	memcpy((uint8_t *)&s_Regs + offsetof(LPC_SC_TypeDef, PLL0STAT), &status, sizeof(status));
@@ -93,6 +109,28 @@ int main(void)
 		assert(s_Checks != 0);
 		assert((s_Regs.FLASHCFG & ~0xF000U) == 0xA500003AU);
 	}
-	printf("LPC17xx flash timing: %u errors\n", errors);
+	// Check oscillator readiness in both range selections, with delayed status.
+	for (unsigned input = 12000000; input <= 16000000; input += 4000000)
+	{
+		for (unsigned delay = 1; delay <= 4; delay += 3)
+		{
+			memset(&s_Regs, 0, sizeof(s_Regs));
+			s_Regs.FLASHCFG = 0x303AU;
+			s_Unsafe = 0;
+			s_OscWait = 0;
+			s_OscReadyAfter = delay;
+			s_EarlyClockChange = 0;
+			assert(SystemCoreClockSet(120000000, input) == 120000000);
+			assert(s_Unsafe == 0);
+			assert(s_Regs.SCS == (input == 12000000 ? 0x60U : 0x70U));
+			if (s_EarlyClockChange != 0)
+			{
+				printf("input=%u delay=%u clock changed before oscillator ready\n", input, delay);
+				errors++;
+			}
+			assert(s_OscWait == delay);
+		}
+	}
+	printf("LPC17xx flash timing and oscillator wait: %u errors\n", errors);
 	return errors != 0;
 }

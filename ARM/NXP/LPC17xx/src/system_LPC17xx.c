@@ -129,7 +129,10 @@ uint32_t SystemCoreClockSet(uint32_t CoreFreq, int ClkFreq)
 			temp |= 0x10;	/* Oscillator range 15MHz-25MHz */
 
 		LPC_SC->SCS = temp;
-		while ((LPC_SC->SCS & 0x70) == 0x50);	/* Wait for main oscillator ready */
+		// OSCSTAT (bit 6) must be set before selecting the main oscillator.
+		while ((LPC_SC->SCS & (1U << 6)) == 0U)
+		{
+		}
 
 	}
 	else if (ClkFreq < IRC_FREQ)

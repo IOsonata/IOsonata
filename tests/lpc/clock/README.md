@@ -128,3 +128,12 @@ physical flash access. Existing PLL selection and switching limitations
 remain separate work. The old code fails both transition ordering and
 between-boundary timing checks. O0/O2 UBSan tests pass after the fix.
 Reference: NXP UM10360 revision 2, chapter 5, table 49.
+
+The external-oscillator path now waits for SCS.OSCSTAT (bit 6) to become
+set before changing the CPU divider or selecting the main oscillator.
+The previous comparison against 0x50 included enable/range bits and
+skipped the wait with the oscillator enabled. The fixture tests 12 MHz
+and 16 MHz inputs (both range selections), with immediately ready and
+delayed status. It fails if clock changes occur before ready status.
+The existing waits are still unbounded; missing-oscillator/PLL timeout
+recovery remains separate work. Reference: UM10360 chapter 3, table 13.
