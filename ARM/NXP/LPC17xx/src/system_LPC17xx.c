@@ -287,6 +287,7 @@ void SystemConnectPLL1(void)
 {
 	uint32_t sysclk = SystemClkFreq;
 	uint32_t val;
+	uint32_t wait;
 
 	// PLL1 is clocked only by the main oscillator. This legacy API knows
 	// its frequency only while MAIN is the selected PLL0 input.
@@ -307,13 +308,33 @@ void SystemConnectPLL1(void)
 
 	LPC_SC->PLL1CON = 0x01;
 	Lpc17PllFeed(&LPC_SC->PLL1FEED);
-	/* Wait for PLL1 to lock */
-	while (!(LPC_SC->PLL1STAT & (1U << 10)));
+	// USB must remain stopped until PLL1 is ready.
+	wait = LPC17_PLL_WAIT_MAX;
+	while ((LPC_SC->PLL1STAT & (1U << 10)) == 0U)
+	{
+		if (--wait == 0U)
+		{
+			LPC_SC->PLL1CON = 0;
+			Lpc17PllFeed(&LPC_SC->PLL1FEED);
+
+			return;
+		}
+	}
 
 	LPC_SC->PLL1CON = 0x03;
 	Lpc17PllFeed(&LPC_SC->PLL1FEED);
-	/* Wait for PLL1 to connect */
-	while (!(LPC_SC->PLL1STAT & (1U << 9)));
+	// USB must remain stopped until PLL1 is ready.
+	wait = LPC17_PLL_WAIT_MAX;
+	while ((LPC_SC->PLL1STAT & (1U << 9)) == 0U)
+	{
+		if (--wait == 0U)
+		{
+			LPC_SC->PLL1CON = 0;
+			Lpc17PllFeed(&LPC_SC->PLL1FEED);
+
+			return;
+		}
+	}
 }
 
 /**

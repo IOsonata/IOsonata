@@ -222,7 +222,7 @@ The host fixture detects an unprotected first feed write in the old code.
 Tests exercise both PLL paths with interrupts initially enabled and disabled,
 checking guard calls and exact mask restoration. Target assembly is checked
 for CPSID before the stores and PRIMASK restoration afterward. This change
-protects feed sequencing; it does not bound PLL1 waits or simulate hardware IRQ delivery.
+protects feed sequencing; it does not simulate hardware IRQ delivery.
 
 PLL1 USB setup uses the documented 12/16/24 MHz main-oscillator inputs,
 M=4/3/2 respectively, and P=2 (PSEL=1) for a 192 MHz CCO and 48 MHz USB
@@ -238,4 +238,18 @@ uses another source, but this legacy API cannot independently describe the
 main oscillator in that case. The caller must stop USB before setup.
 Tests check all three valid encodings and preservation for invalid inputs,
 including zero, plus IRC/RTC selection and an unready main oscillator.
-PLL1 timeout recovery and reconfiguration sequencing remain separate work.
+PLL1 reconfiguration sequencing remains separate work.
+
+PLL1 lock and connection waits are now each bounded to 1,000,000 status
+reads. A timeout writes PLL1CON=0 and performs the protected feed sequence,
+cancelling connection and disabling PLL1 before returning. PLL1 serves USB,
+so this does not stop the CPU clock. USB must already be stopped as required
+by this API. The existing void return type is unchanged and provides no
+explicit error result; returning alone is not proof that the USB clock is
+ready. The read-count bounds still require hardware timing validation.
+
+Host tests withhold lock or connection for each 12/16/24 MHz input, verify
+disable/feed, unchanged CPU clock and USB divider, preserved IRQ mask,
+and successful retry when ready status is allowed. The old unbounded wait
+hits the fixture's read-count guard. Hardware lock/connect transitions,
+feed latching and active-PLL reconfiguration remain unvalidated.
