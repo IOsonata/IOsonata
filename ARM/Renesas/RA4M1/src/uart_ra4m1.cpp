@@ -346,8 +346,12 @@ static void UartIrq(int irq, void *ctx)
                 ++u->RxDropCnt;
             }
             u->RxDropCnt += u->hRxFifo->DropCnt - dropped;
-            length = CFifoUsed(u->hRxFifo);
-            u->bRxReady = length != 0;
+			// The byte was queued, or the blocking FIFO was already full.
+			u->bRxReady = true;
+			if (notify && u->EvtCallback)
+			{
+				length = CFifoUsed(u->hRxFifo);
+			}
         } else if (errors) {
             event = UART_EVT_LINESTATE; length = 1; notify = true;
         }
