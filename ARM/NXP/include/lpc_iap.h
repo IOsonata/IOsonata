@@ -93,6 +93,10 @@ typedef struct {
 extern "C" {
 #endif
 
+// All wrappers mask interrupts for each ROM call and restore the caller's
+// prior state on return. Callers still serialize multi-call operations such
+// as prepare plus erase/write and provide the required ROM workspace/stack.
+
 // Write the factory value only on ROM success. On error the output is unchanged;
 // a null output returns PARAM_ERROR without calling ROM.
 IAPSTATUS IAPReadFactorySettings(uint32_t RegAddr, uint32_t *pBuff);
@@ -118,7 +122,7 @@ IAPSTATUS IAPReadFlashSignature(uint32_t *pSig);
 IAPSTATUS IAPReadExtFlashSignature(uint32_t StartAddr, uint32_t EndAddr, uint32_t NbState, uint32_t *pSig);
 // LPC546xx command 81 writes one complete EEPROM page (128 bytes).
 // pData must point to a readable page buffer. SystemCoreClock supplies the
-// timing in kHz; callers must keep it current and provide IAP call protection.
+// timing in kHz; callers must keep it current.
 // A null source returns PARAM_ERROR; other ROM status codes pass through.
 IAPSTATUS IAPEepromWritePage(uint32_t PageNo, uint8_t *pData);
 //IAPSTATUS IAPEepromRead(uint32_t PageNo, uint8_t *pBuff);

@@ -10,14 +10,18 @@ for opt in ['-O0', '-O2']:
         obj = str(Path(tmp) / 'iap.o')
         flags = [opt, '-Wall', '-Wextra', '-Werror', '-Wno-unused-parameter',
                  '-fsanitize=undefined', '-fno-sanitize-recover=all',
+                 '-I' + str(root / 'tests/lpc_iap_shared/shim'),
                  '-I' + str(root / 'ARM/NXP/include')]
         subprocess.run(['gcc', '-std=gnu11', *flags, '-Wno-pointer-to-int-cast',
                         '-DLPC54628_SERIES', '-c',
                         str(root / 'ARM/NXP/src/lpc_iap.c'), '-o', obj], check=True)
-        for test in ['signature_test', 'eeprom_page_test']:
+        for test in ['signature_test', 'eeprom_page_test', 'interrupt_test']:
+            stub = []
+            if test != 'interrupt_test':
+                stub = [str(root / 'tests/lpc_iap_shared/interrupt_stub.c')]
             for compiler, standard in [('gcc', '-std=gnu11'), ('g++', '-std=c++17')]:
                 exe = str(Path(tmp) / test)
                 subprocess.run([compiler, standard, *flags,
                                 str(root / 'tests/lpc_iap_shared' / (test + '.c')),
-                                obj, '-o', exe], check=True)
+                                obj, *stub, '-o', exe], check=True)
                 subprocess.run([exe], check=True)

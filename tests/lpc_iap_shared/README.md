@@ -30,10 +30,19 @@ Its ROM stub checks command 81, page number, buffer address and conversion
 of the core clock from Hz to kHz at 12 and 48 MHz. It checks success and ROM
 error propagation and rejects a null source without calling ROM. The command
 layout follows NXP UM10912 section 5.6.13, table 85. This is a complete-page
-write; the caller supplies all 128 bytes and the required IAP call protection.
+write; the caller supplies all 128 bytes.
 The test failed to link before the implementation was added.
 
-The shared IAP source also compiles to Cortex-M4 assembly with
-LPC54628_SERIES at -O0 and -O2. Tests do not execute hardware ROM or validate
+The interrupt test exercises all 16 wrappers with interrupts initially enabled
+and already disabled, for both success and error returns. ROM entry must be
+masked and the original state must be restored exactly once. The old code
+failed this check. Production uses coredev/interrupt.h, which saves and
+restores PRIMASK through CMSIS on ARM. Test substitutes model these helpers.
+This follows UM10912 section 5.3.8.1. Per-call protection does not serialize a
+multi-call prepare/erase/write sequence; the caller still owns that sequence.
+The ISP case tests a returning ROM stub, not bootloader entry.
+
+The shared IAP source also compiles to Cortex-M0 and Cortex-M4 assembly with
+LPC11XX_SERIES and LPC54628_SERIES at -O0 and -O2. Tests do not execute hardware ROM or validate
 the numerical signature for real flash contents. Full firmware linking
 and hardware validation remain pending.
