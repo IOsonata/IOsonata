@@ -37,6 +37,9 @@ Modified by          Date              Description
 
 extern unsigned long __StackTop;
 extern void ResetEntry(void);
+
+// Shared ARM ResetEntry references __Vectors. Keep the legacy name too.
+extern void (* const __Vectors[51])(void) __attribute__((alias("g_Vectors")));
 extern void __valid_user_code_checksum(void) __attribute__((weak));
 
 void DEF_IRQHandler(void) { while(1); }

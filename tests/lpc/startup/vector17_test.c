@@ -10,6 +10,7 @@ Copyright (c) 2026 I-SYST inc. MIT License.
 #include "LPC17xx.h"
 
 extern void (* const g_Vectors[])(void);
+extern void (* const __Vectors[])(void);
 unsigned long __StackTop;
 static volatile int s_LastIrq;
 
@@ -195,6 +196,7 @@ void CANActivity_IRQHandler(void)
 
 int main(void)
 {
+	assert(&__Vectors[0] == &g_Vectors[0]);
 	assert(g_Vectors[0] == (void (*)(void))&__StackTop);
 	assert(g_Vectors[1] == ResetEntry);
 	for (int irq = 0; irq <= CANActivity_IRQn; irq++)

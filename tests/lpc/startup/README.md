@@ -69,3 +69,8 @@ checksum reference, but must define __valid_user_code_checksum or patch
 word 7 before programming. Custom scripts must also retain .vectors.
 An ARM firmware link and power-cycle boot remain required for hardware
 validation.
+
+LPC17xx exports __Vectors as an alias of the existing g_Vectors table,
+matching the symbol referenced by ARM/src/ResetEntry.c. The host vector
+test references both names and checks that they have the same address;
+the target assembly contains a single 204-byte table.
