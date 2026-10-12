@@ -59,6 +59,8 @@ uint32_t SystemCoreClock = 48000000UL;	// System Clock Frequency (Core Clock)
 uint32_t SystemMainClkFreq = IRC_FREQ;		// System clock frequency, reset default IRC
 uint32_t SystemnsDelayFactor = SYSTEM_NSDELAY_CORE_FACTOR;
 
+static uint32_t s_SysOscFreq = OSC_FREQ;
+
 // Nominal watchdog analog frequencies, UM10462 Table 14. Index zero is undefined.
 static const uint32_t s_WdtOscFreq[] = {
 	0, 600000, 1050000, 1400000,
@@ -72,7 +74,7 @@ static inline uint32_t GetSysPllClk(void)
 	switch (LPC_SYSCON->SYSPLLCLKSEL & SYSPLLCLKSEL_MASK)
 	{
 	case SYSPLLCLKSEL_SYSOSC:
-		return OSC_FREQ;
+		return s_SysOscFreq;
 	case SYSPLLCLKSEL_IRC:
 		return IRC_FREQ;
 	default:
@@ -117,53 +119,60 @@ void SystemCoreClockUpdate(void)
 uint32_t SystemCoreClockSet(bool Crystal, int ClkFreq)
 {
 	uint32_t sysclk = IRC_FREQ;
+	uint32_t pll = 0;
+	uint32_t div = 0;
+	uint32_t fclko = 0;
 
 	if (Crystal)
 	{
-		// Use crystal osc source
-		LPC_SYSCON->PDRUNCFG     &= ~PDRUNCFG_SYSOSC_PD;
-		sysclk = ClkFreq;
+		// ClkFreq describes the physical input, not a requested CPU rate.
+		if (ClkFreq < 10000000 || ClkFreq > 25000000)
+		{
+			return 0;
+		}
+		sysclk = (uint32_t)ClkFreq;
+	}
+
+	// Plan both PLLs before touching the running clock. USB requires 48 MHz.
+	for (uint32_t p = 0; p < 4 && div == 0; p++)
+	{
+		for (uint32_t m = 1; m <= 32; m++)
+		{
+			uint32_t output = m * sysclk;
+			uint64_t cco = (uint64_t)output * (2U << p);
+
+			if (cco < 156000000ULL || cco > 320000000ULL ||
+				output % SYSTEM_CORE_CLOCK != 0)
+			{
+				continue;
+			}
+			fclko = output;
+			div = output / SYSTEM_CORE_CLOCK;
+			pll = (m - 1U) | (p << 5);
+			break;
+		}
+	}
+	if (div == 0)
+	{
+		return 0;
+	}
+
+	if (Crystal)
+	{
+		LPC_SYSCON->PDRUNCFG &= ~PDRUNCFG_SYSOSC_PD;
 		LPC_SYSCON->SYSPLLCLKSEL = SYSPLLCLKSEL_SYSOSC;
 		LPC_SYSCON->USBPLLCLKSEL = USBPLLCLKSEL_SYSOSC;
+		s_SysOscFreq = sysclk;
 	}
 	else
 	{
 		LPC_SYSCON->SYSPLLCLKSEL = SYSPLLCLKSEL_IRC;
 		LPC_SYSCON->USBPLLCLKSEL = USBPLLCLKSEL_IRC;
 	}
-	LPC_SYSCON->SYSPLLCLKUEN  = 0x01;               /* Update Clock Source      */
-	LPC_SYSCON->SYSPLLCLKUEN  = 0x00;               /* Toggle Update Register   */
-	LPC_SYSCON->SYSPLLCLKUEN  = 0x01;
-	while (!(LPC_SYSCON->SYSPLLCLKUEN & 0x01));     /* Wait Until Updated       */
-
-	// Calc PLL values
-	uint32_t m = 1;
-	uint32_t p = 0;
-	uint32_t div = 1;
-
-	// FCCO = M * Fclkin * 2 * P
-	// Find best fit m & p values
-	uint32_t fclko = 48000000;
-
-	while (p < 4)
-	{
-		uint32_t fcco = m * sysclk * ((1 << p) << 1);
-
-		if (fcco > 156000000UL && fcco < 320000000)
-		{
-			fclko = fcco /((1 << p) << 1);
-			div = fclko / 48000000;
-			if ((fclko % 48000000) == 0)
-				break;
-		}
-		if (++m >= 0x20 || fcco >= 320000000)
-		{
-			m = 1;
-			p++;
-		}
-	}
-
-	uint32_t pll = (m - 1) | (p << 5);
+	LPC_SYSCON->SYSPLLCLKUEN = 0x01;
+	LPC_SYSCON->SYSPLLCLKUEN = 0x00;
+	LPC_SYSCON->SYSPLLCLKUEN = 0x01;
+	while (!(LPC_SYSCON->SYSPLLCLKUEN & 0x01));
 
 	// Core clock
 	LPC_SYSCON->SYSPLLCTRL = pll;

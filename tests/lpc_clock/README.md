@@ -26,8 +26,19 @@ setter also returned the 96 MHz PLL rate for a 48 MHz CPU configuration.
 
 Oscillator startup, PLL
 programming, board oscillator selection and peripheral-clock API completion
-remain separate review items. The system oscillator assumption is still 12 MHz.
+remain separate review items. The system oscillator defaults to 12 MHz; a successful crystal setter records
+the supplied input so later clock updates also work with other crystals.
 Watchdog frequencies are nominal, not measurements.
 
 Reference: NXP UM10462 revision 4.1, chapter 3, Tables 9, 14, 16, 20 and 22.
 https://www.keil.com/dd/docs/datashts/nxp/lpc11uxx/um10462.pdf
+
+PLL selection is validated before any clock register changes. Invalid physical
+inputs (outside 10-25 MHz) and inputs with no exact 48 MHz CPU/USB solution
+return zero and preserve registers and clock globals. This is an input-clock
+constraint, not a nearest-rate request. The search includes M=1..32, all four
+P encodings and the inclusive 156-320 MHz CCO range, with 64-bit arithmetic.
+Tests cover negative/zero/large inputs, valid-range inputs with no solution,
+and 12/16/19.2/24 MHz crystal configurations through both entry points.
+PLL lock waits and safe switching of an already active PLL still require
+separate startup work; these tests supply lock bits in mapped memory.

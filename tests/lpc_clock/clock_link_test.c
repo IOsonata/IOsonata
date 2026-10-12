@@ -32,6 +32,7 @@ SOFTWARE.
 
 ----------------------------------------------------------------------------*/
 #include <assert.h>
+#include <limits.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -45,6 +46,32 @@ static ClockSetter_t const s_Setters[] = {
 	SystemSetCoreClock,
 	SystemCoreClockSet,
 };
+
+static const int s_InvalidInputs[] = {
+	0, -1, INT_MIN, INT_MAX, 9999999, 25000001, 10000000, 13000000, 25000000,
+};
+
+static const int s_CrystalInputs[] = {
+	12000000, 16000000, 19200000, 24000000,
+};
+
+extern uint32_t SystemMainClkFreq;
+
+static void CheckRejected(ClockSetter_t Setter, void *Regs)
+{
+	uint8_t before[sizeof(LPC_SYSCON_Type)];
+	uint32_t core = SystemCoreClock;
+	uint32_t mainclk = SystemMainClkFreq;
+
+	memcpy(&before, Regs, sizeof(before));
+	for (unsigned i = 0; i < sizeof(s_InvalidInputs) / sizeof(s_InvalidInputs[0]); i++)
+	{
+		assert(Setter(true, s_InvalidInputs[i]) == 0);
+		assert(memcmp(&before, Regs, sizeof(before)) == 0);
+		assert(SystemCoreClock == core);
+		assert(SystemMainClkFreq == mainclk);
+	}
+}
 
 int main(void)
 {
@@ -69,6 +96,26 @@ int main(void)
 			SystemCoreClockUpdate();
 			assert(SystemCoreClock == 48000000);
 		}
+		for (unsigned input = 0; input < sizeof(s_CrystalInputs) / sizeof(s_CrystalInputs[0]); input++)
+		{
+			uint32_t freq = (uint32_t)s_CrystalInputs[input];
+
+			assert(s_Setters[i](true, (int)freq) == 48000000);
+			uint32_t ctrl = LPC_SYSCON->SYSPLLCTRL;
+			uint32_t output = freq * ((ctrl & 31U) + 1U);
+			uint64_t cco = (uint64_t)output * (2U << ((ctrl >> 5) & 3U));
+
+			assert((ctrl & ~127U) == 0);
+			assert(cco >= 156000000 && cco <= 320000000);
+			assert(output / LPC_SYSCON->SYSAHBCLKDIV == 48000000);
+			assert(LPC_SYSCON->USBPLLCTRL == ctrl);
+			assert(output / LPC_SYSCON->USBCLKDIV == 48000000);
+			SystemCoreClockUpdate();
+			assert(SystemCoreClock == 48000000);
+			CheckRejected(s_Setters[i], regs);
+			SystemCoreClockUpdate();
+			assert(SystemCoreClock == 48000000);
+		}
 	}
-	puts("LPC11Uxx clock setter linkage: PASS");
+	puts("LPC11Uxx clock setter linkage and PLL selection: PASS");
 }
