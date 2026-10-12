@@ -267,7 +267,10 @@ uint8_t *CFifoGetMultiple(hCFifo_t const pFifo, int *pCnt)
 	return cfifo_addr(pFifo, cfifo_slot(pFifo, getIdx));
 }
 
-static uint8_t *cfifo_reserve(hCFifo_t const pFifo, bool bPublish)
+// Next block for the producer, for Resv and Put alike. A full blocking FIFO
+// returns NULL. A full non-blocking FIFO drops the oldest block, so the
+// producer always gets a block.
+static uint8_t *cfifo_reserve(hCFifo_t const pFifo)
 {
 	if (pFifo == NULL)
 	{
@@ -281,7 +284,7 @@ static uint8_t *cfifo_reserve(hCFifo_t const pFifo, bool bPublish)
 
 	if (used >= max)
 	{
-		if (!bPublish || pFifo->bBlocking)
+		if (pFifo->bBlocking)
 		{
 			return NULL;
 		}
@@ -299,11 +302,13 @@ static uint8_t *cfifo_reserve(hCFifo_t const pFifo, bool bPublish)
 
 uint8_t *CFifoResv(hCFifo_t const pFifo)
 {
-	return cfifo_reserve(pFifo, false);
+	return cfifo_reserve(pFifo);
 }
 
-static uint8_t *cfifo_reserve_multiple(hCFifo_t const pFifo, int *pCnt,
-		bool bPublish)
+// Consecutive blocks for the producer, for ResvMultiple and PutMultiple alike.
+// A full blocking FIFO returns NULL. A full non-blocking FIFO drops up to
+// *pCnt of the oldest blocks, so the producer always gets at least one.
+static uint8_t *cfifo_reserve_multiple(hCFifo_t const pFifo, int *pCnt)
 {
 	if (pFifo == NULL || *pCnt <= 0)
 	{
@@ -319,7 +324,7 @@ static uint8_t *cfifo_reserve_multiple(hCFifo_t const pFifo, int *pCnt,
 
 	if (avail == 0U)
 	{
-		if (!bPublish || pFifo->bBlocking)
+		if (pFifo->bBlocking)
 		{
 			*pCnt = 0;
 			return NULL;
@@ -366,13 +371,13 @@ uint8_t *CFifoResvMultiple(hCFifo_t const pFifo, int *pCnt)
 	{
 		return CFifoResv(pFifo);
 	}
-	return cfifo_reserve_multiple(pFifo, pCnt, false);
+	return cfifo_reserve_multiple(pFifo, pCnt);
 }
 
-// Put permits dropping when full, then publishes. Only one producer owns PutIdx.
+// Reserve, then publish. Only one producer owns PutIdx.
 uint8_t *CFifoPut(hCFifo_t const pFifo)
 {
-	uint8_t *p = cfifo_reserve(pFifo, true);
+	uint8_t *p = cfifo_reserve(pFifo);
 	if (p != NULL)
 	{
 		CFIFO_ATOMIC_STORE(&pFifo->PutIdx,
@@ -390,7 +395,7 @@ uint8_t *CFifoPutMultiple(hCFifo_t const pFifo, int *pCnt)
 		return CFifoPut(pFifo);
 	}
 
-	uint8_t *p = cfifo_reserve_multiple(pFifo, pCnt, true);
+	uint8_t *p = cfifo_reserve_multiple(pFifo, pCnt);
 	if (p != NULL)
 	{
 		CFIFO_ATOMIC_STORE(&pFifo->PutIdx,

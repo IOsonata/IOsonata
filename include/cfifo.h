@@ -101,9 +101,9 @@ typedef CFifo_t* hCFifo_t;
  * @param	BlkSize 		: Block size in bytes
  * @param   bBlocking  		: Behavior when FIFO is full.\n
  *                    			false - Old data will be pushed out to make place
- *                            		for new data. Put always succeed\n
- *                    			true  - New data will not be pushed in. Put will
- *                    					return fail.
+ *                            		for new data. Put and Resv always succeed\n
+ *                    			true  - New data will not be pushed in. Put and
+ *                    					Resv will return fail.
  *
  * 	@return CFifo Handle
  */
@@ -112,8 +112,9 @@ hCFifo_t CFifoInit(uint8_t * const pMemBlk, uint32_t TotalMemSize, uint32_t BlkS
 /**
  * @brief	Inspect the next FIFO block without consuming it.
  *
- * The returned pointer remains owned by the FIFO. A later non-blocking put may
- * overwrite it when the FIFO is full, so callers must not retain the pointer.
+ * The returned pointer remains owned by the FIFO. A later non-blocking put or
+ * reserve may overwrite it when the FIFO is full, so callers must not retain
+ * the pointer.
  * This is intended for checking a block header before deciding whether to
  * consume the block with CFifoGet().
  *
@@ -193,8 +194,10 @@ uint8_t *CFifoPutMultiple(hCFifo_t const hFifo, int *pCnt);
  * until the producer publishes it with CFifoPut, which returns this same
  * block. Lets a DMA fill the block in place before it is published.
  * Single producer only: two callers reserving at once receive the same block.
- * A full FIFO returns NULL in either mode, leaving existing data untouched.
- * CFifoPut still discards the oldest block when the FIFO is non-blocking.
+ * Full FIFO, same as CFifoPut: blocking returns NULL, non-blocking drops the
+ * oldest block and returns the freed one. The block stays dropped even if the
+ * reservation is never published. Reserving again before publishing returns
+ * the same block without dropping another.
  *
  * @param	hFifo : CFIFO handle
  *
@@ -208,7 +211,9 @@ uint8_t *CFifoResv(hCFifo_t const hFifo);
  * Put-side counterpart of CFifoPeekMultiple. Reserve the most that could be
  * written, fill some or all of it, then publish the count actually written
  * with CFifoPutMultiple, which returns this same address. Single producer only.
- * A full FIFO returns NULL in either mode without discarding data.
+ * Full FIFO, same as CFifoPutMultiple: blocking returns NULL, non-blocking
+ * drops up to *pCnt of the oldest blocks and returns the freed ones. Dropped
+ * blocks stay dropped when fewer are published.
  *
  * @param	hFifo : CFIFO handle
  * @param	pCnt  : Number of blocks wanted\n
