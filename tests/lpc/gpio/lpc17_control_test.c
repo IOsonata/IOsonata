@@ -307,6 +307,10 @@ static void CheckMux(void)
 	assert(MBEDPRESSO_SRPWM_PWM2_OP == IOPINOP_FUNC1);
 	assert(MBEDPRESSO_SRPWM_PWM3_OP == IOPINOP_FUNC1);
 	memcpy(saved, (const void *)LPC_PINCON, sizeof(saved));
+	// Optional unsupported pad controls still link from both C and C++.
+	IOPinSetStrength(0, 27, IOPINSTRENGTH_STRONG);
+	IOPinSetSpeed(0, 28, IOPINSPEED_TURBO);
+	assert(memcmp(saved, (const void *)LPC_PINCON, sizeof(saved)) == 0);
 	IOPinDisable(-1, 0);
 	IOPinDisable(5, 0);
 	IOPinDisable(0, -1);

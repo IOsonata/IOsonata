@@ -152,3 +152,9 @@ reads return zero and invalid writes leave registers untouched, matching the
 LPC11 convention. These bounds describe register slots, not package pin
 availability. Tests cover negative indices, upper boundaries, INT_MIN/INT_MAX,
 all valid pin indices and existing byte/halfword/full-port write behavior.
+
+IOPinSetStrength and IOPinSetSpeed are intentional no-ops on LPC17xx, as on
+LPC11. There are no general per-pin drive-strength or slew-rate settings.
+These functions supply generic API linkage without claiming hardware support
+or changing the specialized I2C0 pad controls. The C/C++ fixture calls both
+functions and verifies PINCON, including I2CPADCFG, remains unchanged.

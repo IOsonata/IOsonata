@@ -364,3 +364,19 @@ void EINT3_IRQHandler(void)
 #ifdef __cplusplus
 }
 #endif
+
+// No general-purpose programmable drive strength or slew rate on LPC17xx.
+// The special I2C0 pad controls are configured with the I2C operating mode.
+void IOPinSetStrength(int PortNo, int PinNo, IOPINSTRENGTH Strength)
+{
+	(void)PortNo;
+	(void)PinNo;
+	(void)Strength;
+}
+
+void IOPinSetSpeed(int PortNo, int PinNo, IOPINSPEED Speed)
+{
+	(void)PortNo;
+	(void)PinNo;
+	(void)Speed;
+}
