@@ -222,5 +222,20 @@ The host fixture detects an unprotected first feed write in the old code.
 Tests exercise both PLL paths with interrupts initially enabled and disabled,
 checking guard calls and exact mask restoration. Target assembly is checked
 for CPSID before the stores and PRIMASK restoration afterward. This change
-protects feed sequencing; it does not correct PLL1 frequency selection or
-its existing unbounded waits, nor simulate hardware IRQ delivery.
+protects feed sequencing; it does not bound PLL1 waits or simulate hardware IRQ delivery.
+
+PLL1 USB setup uses the documented 12/16/24 MHz main-oscillator inputs,
+M=4/3/2 respectively, and P=2 (PSEL=1) for a 192 MHz CCO and 48 MHz USB
+output. The old direct-divider path used P=1, putting the CCO at 96 MHz,
+below its 156-320 MHz range. The old alternate search could also produce
+incorrect USB rates. See UM10360 sections 4.6 and 4.6.9.
+
+The legacy no-argument API requires MAIN selected and ready so its frequency
+is known from SystemClkFreq. It leaves registers unchanged for unknown,
+unready or unsupported inputs. This is a fixed USB clock requirement,
+not an arbitrary frequency request. Hardware permits PLL1 while the CPU
+uses another source, but this legacy API cannot independently describe the
+main oscillator in that case. The caller must stop USB before setup.
+Tests check all three valid encodings and preservation for invalid inputs,
+including zero, plus IRC/RTC selection and an unready main oscillator.
+PLL1 timeout recovery and reconfiguration sequencing remain separate work.

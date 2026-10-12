@@ -93,6 +93,12 @@ void SystemCoreClockUpdate (void);
  */
 uint32_t SystemSetCoreClock(uint32_t CoreFreq, int ClkSel);
 
+/**
+ * Configure PLL1 for the fixed 48 MHz USB clock.
+ * Requires MAIN selected and ready, with its 12, 16 or 24 MHz frequency
+ * recorded by the clock setup. Other inputs leave PLL1 unchanged.
+ * The caller must stop USB before configuring its clock.
+ */
 void SystemConnectPLL1(void);
 
 #ifdef __cplusplus
@@ -100,3 +106,4 @@ void SystemConnectPLL1(void);
 #endif
 
 #endif /* __SYSTEM_LPC17xx_H__ */
+

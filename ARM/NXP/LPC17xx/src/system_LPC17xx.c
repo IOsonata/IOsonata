@@ -285,57 +285,35 @@ uint32_t SystemCoreClockSet(uint32_t CoreFreq, int ClkFreq)
 
 void SystemConnectPLL1(void)
 {
-	uint32_t sysclk = GetSysClk();
-	int m, p, found = 0;
-	uint32_t clk;
-	uint32_t val = 0;
+	uint32_t sysclk = SystemClkFreq;
+	uint32_t val;
 
-	if ((48000000 % sysclk) != 0)
+	// PLL1 is clocked only by the main oscillator. This legacy API knows
+	// its frequency only while MAIN is the selected PLL0 input.
+	if ((LPC_SC->CLKSRCSEL & 3U) != CLKSRCSEL_MAIN ||
+		(LPC_SC->SCS & 0x60U) != 0x60U)
 	{
-		p = 1;
-		for (m = 1; m < 33 && found == 0; m++)
-		{
-			/* try multiplier first with USBCLK = M × FOSC */
-			clk = sysclk * m;
-			if (clk == 48000000)
-			{
-				val = m - 1;
-				found = 1;
-				break;
-			}
-			/* try divider FCCO = FOSC × M × 2 × P */
-			for (p = 1; p < 9; p<<=1)
-			{
-				clk *= (p << 1);
-				if ((clk % 48000000) == 0)
-				{
-					val = (m - 1) | ((p -1) << 5);
-					found = 1;
-					break;
-				}
-			}
-		}
+		return;
 	}
-	else
+	if (sysclk != 12000000U && sysclk != 16000000U && sysclk != 24000000U)
 	{
-		val = 48000000 / sysclk - 1;
+		return;
 	}
 
-	if (val)
-	{
-		LPC_SC->PLL1CFG   = val;
-		Lpc17PllFeed(&LPC_SC->PLL1FEED);
+	// USB requires 48 MHz. P=2 (PSEL=1) gives a 192 MHz CCO.
+	val = (48000000U / sysclk - 1U) | (1U << 5);
+	LPC_SC->PLL1CFG = val;
+	Lpc17PllFeed(&LPC_SC->PLL1FEED);
 
-		LPC_SC->PLL1CON   = 0x01;
-		Lpc17PllFeed(&LPC_SC->PLL1FEED);
-		/* Wait for PLL1 to lock */
-		while (!(LPC_SC->PLL1STAT & (1<<10)));
+	LPC_SC->PLL1CON = 0x01;
+	Lpc17PllFeed(&LPC_SC->PLL1FEED);
+	/* Wait for PLL1 to lock */
+	while (!(LPC_SC->PLL1STAT & (1U << 10)));
 
-		LPC_SC->PLL1CON   = 0x03;
-		Lpc17PllFeed(&LPC_SC->PLL1FEED);
-		/* Wait for PLL1 to connect */
-		while (!(LPC_SC->PLL1STAT & (1<< 9)));
-	}
+	LPC_SC->PLL1CON = 0x03;
+	Lpc17PllFeed(&LPC_SC->PLL1FEED);
+	/* Wait for PLL1 to connect */
+	while (!(LPC_SC->PLL1STAT & (1U << 9)));
 }
 
 /**

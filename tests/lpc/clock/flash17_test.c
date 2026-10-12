@@ -61,6 +61,8 @@ static const uint32_t s_Rates[] = {
 static const int s_InvalidInputs[] = {
 	0, -1, INT_MIN, 1, 32767, 32769, 999999, 25000001, INT_MAX
 };
+static const uint32_t s_UsbInputs[] = {12000000, 16000000, 24000000};
+static const uint32_t s_UsbInvalidInputs[] = {0, 32768, 4000000, 10000000, 20000000, 25000000};
 extern uint32_t SystemClkFreq;
 extern uint32_t SystemCoreClockSet(uint32_t CoreFreq, int ClkFreq);
 
@@ -357,12 +359,58 @@ int main(void)
 
 		memset(&s_Regs, 0, sizeof(s_Regs));
 		s_Regs.CLKSRCSEL = CLKSRCSEL_MAIN;
+		s_Regs.SCS = 0x60;
 		SystemClkFreq = 12000000;
 		memcpy((uint8_t *)&s_Regs + offsetof(LPC_SC_TypeDef, PLL1STAT), &status, sizeof(status));
 		s_FeedGuards = 0;
 		SystemConnectPLL1();
 		assert(s_Primask == mask);
 		assert(s_FeedGuards == 3);
+	}
+	// PLL1 needs exactly 48 MHz output and P=2 for its 192 MHz CCO.
+	for (unsigned i = 0; i < sizeof(s_UsbInputs) / sizeof(s_UsbInputs[0]); i++)
+	{
+		uint32_t status = 7U << 8;
+
+		memset(&s_Regs, 0, sizeof(s_Regs));
+		s_Regs.CLKSRCSEL = CLKSRCSEL_MAIN;
+		s_Regs.SCS = 0x60;
+		SystemClkFreq = s_UsbInputs[i];
+		memcpy((uint8_t *)&s_Regs + offsetof(LPC_SC_TypeDef, PLL1STAT), &status, sizeof(status));
+		SystemConnectPLL1();
+		assert(s_Regs.PLL1CFG == ((48000000U / s_UsbInputs[i] - 1U) | 0x20U));
+		assert(s_Regs.PLL1CON == 3);
+	}
+
+	for (unsigned i = 0; i < sizeof(s_UsbInvalidInputs) / sizeof(s_UsbInvalidInputs[0]); i++)
+	{
+		LPC_SC_TypeDef before;
+		uint32_t status = 7U << 8;
+
+		memset(&s_Regs, 0, sizeof(s_Regs));
+		s_Regs.CLKSRCSEL = CLKSRCSEL_MAIN;
+		s_Regs.SCS = 0x60;
+		SystemClkFreq = s_UsbInvalidInputs[i];
+		memcpy((uint8_t *)&s_Regs + offsetof(LPC_SC_TypeDef, PLL1STAT), &status, sizeof(status));
+		TestSystemRegs();
+		memcpy(&before, &s_Regs, sizeof(before));
+		SystemConnectPLL1();
+		assert(memcmp(&before, &s_Regs, sizeof(before)) == 0);
+	}
+
+	// A valid frequency alone is insufficient without a known, ready MAIN source.
+	for (unsigned source = 0; source < 3; source++)
+	{
+		LPC_SC_TypeDef before;
+
+		memset(&s_Regs, 0, sizeof(s_Regs));
+		s_Regs.CLKSRCSEL = source;
+		s_Regs.SCS = source == CLKSRCSEL_MAIN ? 0 : 0x60;
+		SystemClkFreq = 12000000;
+		TestSystemRegs();
+		memcpy(&before, &s_Regs, sizeof(before));
+		SystemConnectPLL1();
+		assert(memcmp(&before, &s_Regs, sizeof(before)) == 0);
 	}
 	printf("LPC17xx flash timing and oscillator wait: %u errors\n", errors);
 	return errors != 0;
