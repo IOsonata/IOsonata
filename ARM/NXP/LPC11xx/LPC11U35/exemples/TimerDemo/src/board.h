@@ -38,10 +38,12 @@ SOFTWARE.
 #ifndef __BOARD_H__
 #define __BOARD_H__
 
-// Same LED pins as the LPC11U35 Blinky example.
+// IBK-IDAP-M revision 0, schematic 03-2021-04 (2021-04-25).
+
+// Active-low LEDs: LED1 green on P3.1, LED2 red on P3.2.
 #define LED_PINS_MAP { \
-	{0, 3, IOPINOP_GPIO, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL}, \
-	{0, 4, IOPINOP_GPIO, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL}, \
+	{0, 23, IOPINOP_GPIO, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL}, \
+	{0, 16, IOPINOP_GPIO, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL}, \
 }
 
 // DevNo 0/1: CT16B0/CT16B1; DevNo 2/3: CT32B0/CT32B1.
@@ -55,6 +57,7 @@ SOFTWARE.
 
 // Same RX/TX pins as UartPrbsTxTest, no hardware flow control.
 #define TIMER_DEMO_UART
+// UART0: RX P2.3 (P0.18), TX P2.4 (P0.19).
 #define UART_DEVNO			0
 #define UART_RX_PORT		0
 #define UART_RX_PIN			18

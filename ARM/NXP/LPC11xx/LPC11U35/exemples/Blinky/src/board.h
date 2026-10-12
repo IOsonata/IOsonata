@@ -39,7 +39,9 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #ifndef __BOARD_H__
 #define __BOARD_H__
 
-// Button 1
+// IBK-IDAP-M revision 0, schematic 03-2021-04 (2021-04-25).
+
+// S2: active-low user button on P2.7. S1 is reset, not a GPIO button.
 #define BUT1_PORT		0
 #define BUT1_PIN		1
 #define BUT1_PINOP		IOPINOP_GPIO
@@ -47,28 +49,18 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define BUT1_SENSE_INT	0
 #define BUT1_INT_PRIO	3
 
-// Button 2
-#define BUT2_PORT		0
-#define BUT2_PIN		2
-#define BUT2_PINOP		IOPINOP_GPIO
-#define BUT2_SENSE		IOPINSENSE_LOW_TRANSITION
-#define BUT2_SENSE_INT	1
-#define BUT2_INT_PRIO	3
-
-
-// LED4
+// LED1: green, active-low, also on P3.1.
 #define LED1_PORT		0
-#define LED1_PIN		3
+#define LED1_PIN		23
 #define LED1_PINOP		IOPINOP_GPIO
 
-// LED5
+// LED2: red, active-low, also on P3.2.
 #define LED2_PORT		0
-#define LED2_PIN		4
+#define LED2_PIN		16
 #define LED2_PINOP		IOPINOP_GPIO
 
 #define BUTTON_PINS_MAP		{ \
-	{BUT1_PORT, BUT1_PIN, BUT1_PINOP, IOPINDIR_INPUT, IOPINRES_PULLDOWN, IOPINTYPE_NORMAL}, \
-	{BUT2_PORT, BUT2_PIN, BUT2_PINOP, IOPINDIR_INPUT, IOPINRES_PULLDOWN, IOPINTYPE_NORMAL}, \
+	{BUT1_PORT, BUT1_PIN, BUT1_PINOP, IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL}, \
 }
 
 #define LED_PINS_MAP	{ \
@@ -76,11 +68,14 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 	{LED2_PORT, LED2_PIN, LED2_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL}, \
 }
 
-#define PULSE_TRAIN_PINS_MAP	{ \
-	{0, 0, 0}, {0, 1, 0}, {0, 2, 0}, {0, 3, 0}, {0, 4, 0}, {0, 6, 0}, {0, 7, 0}, \
-	{0, 8, 0}, {0, 9, 0}, {0, 10, 0}, {0, 11, 0}, {0, 12, 0}, {0, 13, 0}, {0, 14, 0}, {0, 15, 0}, \
-	{0, 16, 0}, {0, 17, 0}, {0, 18, 0}, {0, 19, 0}, {0, 20, 0}, {0, 21, 0}, {0, 22, 0}, {0, 23, 0}, \
-	{0, 24, 0}, {0, 25, 0}, {0, 26, 0}, {0, 27, 0}, {0, 28, 0}, {0, 29, 0}, {0, 30, 0} \
+// Exposed P2/P3 GPIOs, excluding S2, reset, LEDs and the P1 SWD signals.
+#define PULSE_TRAIN_PINS_MAP { \
+	{1, 15, IOPINOP_GPIO}, {0, 17, IOPINOP_GPIO}, {0, 18, IOPINOP_GPIO}, \
+	{0, 19, IOPINOP_GPIO}, {1, 19, IOPINOP_GPIO}, {0, 20, IOPINOP_GPIO}, \
+	{0, 2, IOPINOP_GPIO}, {0, 4, IOPINOP_GPIO}, {0, 5, IOPINOP_GPIO}, \
+	{0, 14, IOPINOP_GPIO}, {0, 13, IOPINOP_GPIO}, {0, 12, IOPINOP_GPIO}, \
+	{0, 11, IOPINOP_GPIO}, {0, 22, IOPINOP_GPIO}, {0, 9, IOPINOP_GPIO}, \
+	{0, 8, IOPINOP_GPIO}, {0, 7, IOPINOP_GPIO}, {0, 21, IOPINOP_GPIO}, \
 }
 
 #endif // __BOARD_H__

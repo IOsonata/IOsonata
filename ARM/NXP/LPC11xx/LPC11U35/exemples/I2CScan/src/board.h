@@ -38,11 +38,14 @@ SOFTWARE.
 #ifndef __BOARD_H__
 #define __BOARD_H__
 
+// IBK-IDAP-M revision 0, schematic 03-2021-04 (2021-04-25).
+
 #define I2C_DEVNO			0
 #ifndef I2C_SCAN_RATE
 #define I2C_SCAN_RATE		100000
 #endif
 
+// P2.11 = SDA (P0.5), P2.10 = SCL (P0.4).
 // Dedicated open-drain I2C pins; external pull-ups are required.
 // The generic I2C pin order is SDA, then SCL.
 #define I2C_PINS { \
@@ -54,6 +57,7 @@ SOFTWARE.
 // (7-bit address) and I2C_SCAN_REG (8-bit register address) for your device.
 
 // Same UART pins as UartPrbsTxTest; output at 115200 baud, no flow control.
+// UART0: RX P2.3 (P0.18), TX P2.4 (P0.19).
 #define UART_DEVNO			0
 #define UART_RX_PORT		0
 #define UART_RX_PIN			18
