@@ -15,6 +15,11 @@ ROM error and null-output rejection. The ROM stub supplies deliberately
 invalid result words on error to catch wrappers that copy them anyway.
 The ordinary signature regression failed before its error handling was fixed.
 
+Factory-settings reads are checked for success, parameter/unsupported-command/
+busy errors and null output. Error-result words must not replace the caller's
+existing value. The test register address is only a value passed to the ROM
+stub; this test does not establish command support on any particular chip.
+
 The command layout follows NXP UM10912 section 5.6.11, table 83. Although
 earlier argument names said StartPage/EndPage, LPC546xx ROM expects flash
 addresses. The public header now states this and requires a four-word

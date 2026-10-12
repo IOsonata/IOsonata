@@ -53,13 +53,20 @@ IAPSTATUS IAPReadFactorySettings(uint32_t RegAddr, uint32_t *pBuff)
 	IAP_CMD_STATUS cmd;
 	IAP_CMD_STATUS res;
 
+	if (pBuff == 0)
+	{
+		return IAPSTATUS_PARAM_ERROR;
+	}
 
 	cmd.CmdStatus = IAPCMD_READ_FACTORY_SETTINGS;
 	cmd.Data[0] = RegAddr;
 	cmd.Data[1] = (uint32_t)pBuff;
 
 	IapEntry(&cmd, &res);
-	*pBuff = res.Data[0];
+	if (res.CmdStatus == IAPSTATUS_SUCCESS)
+	{
+		*pBuff = res.Data[0];
+	}
 
 	return res.CmdStatus;
 }

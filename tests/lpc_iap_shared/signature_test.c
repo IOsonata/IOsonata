@@ -25,6 +25,10 @@ static const uint32_t s_Signature[4] = {
 static void RomCall(IAP_CMD_STATUS *pCmd, IAP_CMD_STATUS *pRes)
 {
 	assert(pCmd->CmdStatus == s_Command);
+	if (s_Command == 40)
+	{
+		assert(pCmd->Data[0] == 0x40060010);
+	}
 	if (s_Command == 73)
 	{
 		assert(pCmd->Data[0] == 0x1000);
@@ -87,6 +91,25 @@ int main(void)
 	assert(output[1] == s_Signature[0]);
 	assert(IAPReadFlashSignature(0) == IAPSTATUS_PARAM_ERROR);
 	assert(s_Calls == 4);
-	puts("Shared LPC IAP signatures: linkage, parameters and output passed");
+	s_Command = 40;
+	s_Status = IAPSTATUS_SUCCESS;
+	output[1] = 0;
+	assert(IAPReadFactorySettings(0x40060010, &output[1]) == IAPSTATUS_SUCCESS);
+	assert(s_Calls == 5);
+	assert(output[1] == s_Signature[0]);
+	assert(output[0] == 0xdeadbeef);
+	assert(output[2] == s_Signature[1]);
+
+	const uint32_t errors[] = {IAPSTATUS_PARAM_ERROR, IAPSTATUS_INVALID_COMMAND, IAPSTATUS_BUSY};
+	for (unsigned i = 0; i < sizeof(errors) / sizeof(errors[0]); i++)
+	{
+		s_Status = errors[i];
+		assert((uint32_t)IAPReadFactorySettings(0x40060010, &output[1]) == s_Status);
+		assert(s_Calls == 6 + i);
+		assert(output[1] == s_Signature[0]);
+	}
+	assert(IAPReadFactorySettings(0x40060010, 0) == IAPSTATUS_PARAM_ERROR);
+	assert(s_Calls == 8);
+	puts("Shared LPC IAP reads: linkage, parameters and output passed");
 	return 0;
 }

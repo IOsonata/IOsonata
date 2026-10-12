@@ -93,6 +93,8 @@ typedef struct {
 extern "C" {
 #endif
 
+// Write the factory value only on ROM success. On error the output is unchanged;
+// a null output returns PARAM_ERROR without calling ROM.
 IAPSTATUS IAPReadFactorySettings(uint32_t RegAddr, uint32_t *pBuff);
 IAPSTATUS IAPPrepSectWrite(int StartSect, int EndSect);
 IAPSTATUS IAPCopyRamToFlash(uint8_t *pDst, uint8_t *pSrc, int Size);
