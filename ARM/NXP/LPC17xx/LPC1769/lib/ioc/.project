@@ -278,7 +278,7 @@
 		<link>
 			<name>include/system_core_clock.h</name>
 			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/Include/system_core_clock.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/system_core_clock.h</locationURI>
 		</link>
 		<link>
 			<name>include/usb</name>
@@ -548,7 +548,7 @@
 		<link>
 			<name>src/usb_hidhost.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/usb_hidhost.cpp</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usb_hidhost.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/utf8.c</name>
@@ -598,7 +598,7 @@
 		<link>
 			<name>include/coredev/iopinctrl.h</name>
 			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/include/iopinctrl.h</locationURI>
+			<locationURI>PARENT-3-PROJECT_LOC/Include/iopinctrl.h</locationURI>
 		</link>
 		<link>
 			<name>include/coredev/pdm.h</name>
@@ -711,14 +711,14 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/pwrmgnt/pwrmgnt.h</locationURI>
 		</link>
 		<link>
-			<name>include/pwrmgnt/pwrmgnt_as3701.h</name>
+			<name>include/pwrmgnt/pm_as3701.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/pwrmgnt/pwrmgnt_as3701.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/include/pwrmgnt/pm_as3701.h</locationURI>
 		</link>
 		<link>
-			<name>include/sensors/a_adxl362.h</name>
+			<name>include/sensors/accel_adxl362.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/a_adxl362.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/accel_adxl362.h</locationURI>
 		</link>
 		<link>
 			<name>include/sensors/accel_sensor.h</name>
