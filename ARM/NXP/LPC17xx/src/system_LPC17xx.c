@@ -67,9 +67,12 @@ static const uint16_t s_Lpc17RtcMultipliers[] = {
 	21973, 23071, 23438, 23804, 24170
 };
 
-/* Select system clock oscillator source */
-#define DEF_CLK_SRC			IRC_FREQ
-//#define CLKSRCSEL_VAL		CLKSRCSEL_MAIN
+// Preserve the legacy IRC startup unless the application supplies its board descriptor.
+__WEAK McuOsc_t g_McuOsc = {
+	{OSC_TYPE_RC, IRC_FREQ, 0, 0},
+	{OSC_TYPE_XTAL, RTC_FREQ, 0, 0},
+	false
+};
 
 /*
  * This variable indicates actual Core Clock (cclk) in Hz
@@ -302,14 +305,12 @@ static Lpc17ClockConfig_t Lpc17ClockSelect(uint32_t Request, uint32_t Input)
 	return best;
 }
 
-uint32_t SystemCoreClockSet(uint32_t CoreFreq, int ClkFreq)
+static uint32_t Lpc17CoreClockSet(uint32_t CoreFreq, int ClkFreq, uint32_t clksrcsel)
 {
 	uint32_t temp = 0;
 	Lpc17ClockConfig_t clock;
-	uint32_t clksrcsel = CLKSRCSEL_IRC;	// Default internal RC
 
 	// ClkFreq describes a physical input, not the requested CPU rate.
-	// The legacy selector uses 4 MHz for IRC and 32768 Hz for RTC.
 	if (ClkFreq != (int)RTC_FREQ && (ClkFreq < 1000000 || ClkFreq > 25000000))
 	{
 		return 0;
@@ -322,7 +323,7 @@ uint32_t SystemCoreClockSet(uint32_t CoreFreq, int ClkFreq)
 
 	/* Init system clock */
 
-	if (ClkFreq != (int)IRC_FREQ && ClkFreq != (int)RTC_FREQ)
+	if (clksrcsel == CLKSRCSEL_MAIN)
 	{
 		uint32_t wait = LPC17_OSC_WAIT_MAX;
 
@@ -344,10 +345,6 @@ uint32_t SystemCoreClockSet(uint32_t CoreFreq, int ClkFreq)
 			}
 		}
 
-	}
-	else if (ClkFreq == (int)RTC_FREQ)
-	{
-		clksrcsel = CLKSRCSEL_RTC;
 	}
 
 
@@ -491,6 +488,42 @@ clock_ready:
 	return SystemCoreClock;
 }
 
+uint32_t SystemCoreClockSet(uint32_t CoreFreq, int ClkFreq)
+{
+	// Preserve the frequency-based legacy source selection.
+	uint32_t source = ClkFreq == (int)IRC_FREQ ? CLKSRCSEL_IRC :
+		(ClkFreq == (int)RTC_FREQ ? CLKSRCSEL_RTC : CLKSRCSEL_MAIN);
+
+	return Lpc17CoreClockSet(CoreFreq, ClkFreq, source);
+}
+
+bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
+{
+	uint32_t source;
+
+	if (ClkSrc == OSC_TYPE_RC && OscFreq == IRC_FREQ)
+	{
+		source = CLKSRCSEL_IRC;
+	}
+	else if (ClkSrc == OSC_TYPE_XTAL && OscFreq >= 1000000U && OscFreq <= 25000000U)
+	{
+		source = CLKSRCSEL_MAIN;
+	}
+	else
+	{
+		return false;
+	}
+
+	if (Lpc17CoreClockSet(CORE_FREQ, (int)OscFreq, source) == 0)
+	{
+		return false;
+	}
+	g_McuOsc.CoreOsc.Type = ClkSrc;
+	g_McuOsc.CoreOsc.Freq = OscFreq;
+
+	return true;
+}
+
 uint32_t SystemSetCoreClock(uint32_t CoreFreq, int ClkSel)
 {
 	int clkfreq;
@@ -604,6 +637,6 @@ void SystemInit (void)
 		memcpy(__data_ahb_start__, __data_ahb_loc__, ahbsize);
 	}
 
-	SystemCoreClockSet(CORE_FREQ, DEF_CLK_SRC);
+	SystemCoreClockSelect(g_McuOsc.CoreOsc.Type, g_McuOsc.CoreOsc.Freq);
 }
 

@@ -37,8 +37,11 @@ SOFTWARE.
 #include <stdio.h>
 #include <string.h>
 #include "flash17_shim.h"
+#include "coredev/system_core_clock.h"
 
 uint32_t SystemMicroSecLoopCnt;
+TestScb_t g_TestScb;
+void (* const __Vectors[])(void) = {0};
 static LPC_SC_TypeDef s_Regs;
 static unsigned s_Unsafe;
 static unsigned s_Checks;
@@ -345,9 +348,57 @@ static void CheckClosest(uint32_t Input, uint32_t Request)
 	}
 }
 
+void TestDSB(void)
+{
+}
+
+void TestISB(void)
+{
+}
+
 int main(void)
 {
 	unsigned errors = 0;
+
+	// Startup must consume the descriptor rather than hard-code IRC.
+	g_McuOsc.CoreOsc.Type = OSC_TYPE_XTAL;
+	g_McuOsc.CoreOsc.Freq = 12000000;
+	s_OscReadyAfter = 4;
+	SystemInit();
+	assert(s_Regs.CLKSRCSEL == CLKSRCSEL_MAIN);
+	assert(SystemClkFreq == 12000000);
+	CheckClosest(12000000, CORE_FREQ);
+
+	// Explicit source selection must distinguish a 4 MHz crystal from IRC.
+	for (unsigned crystal = 0; crystal <= 1; crystal++)
+	{
+		memset(&s_Regs, 0, sizeof(s_Regs));
+		s_OscWait = 0;
+		s_OscReadyAfter = 4;
+		assert(SystemCoreClockSelect(crystal ? OSC_TYPE_XTAL : OSC_TYPE_RC, 4000000));
+		assert(s_Regs.CLKSRCSEL == (crystal ? CLKSRCSEL_MAIN : CLKSRCSEL_IRC));
+		assert(g_McuOsc.CoreOsc.Type == (crystal ? OSC_TYPE_XTAL : OSC_TYPE_RC));
+		assert(g_McuOsc.CoreOsc.Freq == 4000000);
+		CheckClosest(4000000, CORE_FREQ);
+	}
+	{
+		LPC_SC_TypeDef before;
+		McuOsc_t desc = g_McuOsc;
+
+		memcpy(&before, &s_Regs, sizeof(before));
+		assert(!SystemCoreClockSelect(OSC_TYPE_RC, 12000000));
+		assert(!SystemCoreClockSelect(OSC_TYPE_XTAL, 32768));
+		assert(!SystemCoreClockSelect(OSC_TYPE_XTAL, UINT32_MAX));
+		assert(!SystemCoreClockSelect(OSC_TYPE_TCXO, 12000000));
+		assert(!SystemCoreClockSelect((OSC_TYPE)99, 4000000));
+		assert(memcmp(&before, &s_Regs, sizeof(before)) == 0);
+		assert(memcmp(&desc, &g_McuOsc, sizeof(desc)) == 0);
+		memset(&s_Regs, 0, sizeof(s_Regs));
+		s_OscReadyAfter = 0;
+		assert(!SystemCoreClockSelect(OSC_TYPE_XTAL, 12000000));
+		assert(memcmp(&desc, &g_McuOsc, sizeof(desc)) == 0);
+	}
+
 
 	for (unsigned i = 0; i < sizeof(s_ClosestCases) / sizeof(s_ClosestCases[0]); i++)
 	{

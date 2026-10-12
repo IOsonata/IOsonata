@@ -421,3 +421,16 @@ requests, zero and UINT32_MAX, both IRQ mask states, grouped CAN updates,
 fixed RTC behavior, invalid indices and unknown CPU clock. The complete
 register block is compared except for the intended fields. C/C++ linkage
 coverage catches the previously missing SystemPeriphClockSet symbol.
+
+LPC17xx startup now uses the application's overridable `g_McuOsc.CoreOsc`.
+The weak default remains the 4 MHz IRC. `SystemCoreClockSelect` supports
+IRC at 4 MHz and main crystals at 1–25 MHz, choosing the closest supported
+CPU rate to CORE_FREQ. Explicit selection distinguishes a 4 MHz crystal
+from IRC; the legacy frequency API retains its original interpretation.
+Unsupported types (including TCXO), invalid physical frequencies and hardware
+timeouts return false. Descriptor type/frequency are updated only on success.
+LowPwrOsc and bUSBClk are not configured by this CPU-only API; USB setup
+still requires the separate legacy API and readiness checks. Callers must
+stop clock-sensitive peripherals before changing the CPU source.
+Tests cover source identity, invalid inputs, oscillator timeout, descriptor
+preservation, closest CPU rates and C/C++ linkage.
