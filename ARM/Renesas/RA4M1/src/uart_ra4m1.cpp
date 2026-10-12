@@ -400,29 +400,57 @@ static void Stop(DevIntrf_t *p)
 }
 static int RxData(DevIntrf_t *p, uint8_t *buffer, int len)
 {
-    if (!buffer || len <= 0) return 0;
+    if (!buffer || len <= 0)
+    {
+        return 0;
+    }
+
     int count = 0;
-    while (count < len) {
+
+    while (count < len)
+    {
         uint32_t state = DisableInterrupt();
         Ra4m1UartDev *d = Owner(p);
-        if (!d || !d->Enabled || !d->Rx) { EnableInterrupt(state); break; }
-        if (p->bIntEn) {
-            int byte = CFifoGetByte(d->pDev->hRxFifo);
-            if (byte < 0)
+        if (!d || !d->Enabled || !d->Rx)
+        {
+            EnableInterrupt(state);
+            break;
+        }
+
+        if (p->bIntEn)
+        {
+            // Keep RXI masked until the returned FIFO memory is copied:
+            // CFifoGetMultiple advances the read index immediately.
+            int remaining = len - count;
+            uint8_t *source = CFifoGetMultiple(d->pDev->hRxFifo, &remaining);
+            if (!source || remaining <= 0)
             {
                 EnableInterrupt(state);
                 break;
             }
-            buffer[count++] = (uint8_t)byte;
+
+            for (int i = 0; i < remaining; ++i)
+            {
+                buffer[count + i] = source[i];
+            }
+            count += remaining;
             d->pDev->bRxReady = CFifoUsed(d->pDev->hRxFifo) != 0;
-        } else {
-            uint8_t errors, byte;
-            bool received = Receive(d, &byte, &errors, false);
-            if (received) buffer[count++] = byte;
-            else { EnableInterrupt(state); break; }
         }
+        else
+        {
+            uint8_t errors;
+            uint8_t byte;
+            if (!Receive(d, &byte, &errors, false))
+            {
+                EnableInterrupt(state);
+                break;
+            }
+            buffer[count++] = byte;
+        }
+
         EnableInterrupt(state);
     }
+
     return count;
 }
 static int TxData(DevIntrf_t *p, const uint8_t *data, int len)
