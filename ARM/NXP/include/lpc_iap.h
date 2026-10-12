@@ -107,7 +107,11 @@ IAPSTATUS IAPErasePage(int StartPage, int EndPage);
 IAPSTATUS IAPEepromWrite(uint32_t EepAddr, uint8_t *pData, int Size);
 IAPSTATUS IAPEepromRead(uint32_t EepAddr, uint8_t *pData, int Size);
 IAPSTATUS IAPReadFlashSignature(uint32_t *pSig);
-IAPSTATUS IAPReadExtFlashSignature(uint32_t StartPage, uint32_t EndPage, uint32_t NbState, uint32_t *pSig);
+// LPC546xx command 73: StartAddr and EndAddr are flash addresses, not page
+// indices. NbState uses the FLASHCFG.FLASHTIM encoding. pSig must hold four
+// uint32_t words (128-bit signature, least significant word first).
+// On ROM error the output is unchanged; a null output returns PARAM_ERROR.
+IAPSTATUS IAPReadExtFlashSignature(uint32_t StartAddr, uint32_t EndAddr, uint32_t NbState, uint32_t *pSig);
 IAPSTATUS IAPEepromWritePage(uint32_t PageNo, uint8_t *pData);
 //IAPSTATUS IAPEepromRead(uint32_t PageNo, uint8_t *pBuff);
 

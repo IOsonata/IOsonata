@@ -242,15 +242,30 @@ IAPSTATUS IAPReadFlashSignature(uint32_t *pSig)
 	return res.CmdStatus;
 }
 
-IAPSTATUS IAPReadFlashExtSignature(uint32_t StartPage, uint32_t EndPage, uint32_t NumOfState, uint32_t *pSig)
+IAPSTATUS IAPReadExtFlashSignature(uint32_t StartAddr, uint32_t EndAddr, uint32_t NbState, uint32_t *pSig)
 {
 	IAP_CMD_STATUS cmd;
 	IAP_CMD_STATUS res;
 
+	if (pSig == 0)
+	{
+		return IAPSTATUS_PARAM_ERROR;
+	}
+
 	cmd.CmdStatus = IAPCMD_READ_FLASH_EXTSIG;
+	cmd.Data[0] = StartAddr;
+	cmd.Data[1] = EndAddr;
+	cmd.Data[2] = NbState;
+	cmd.Data[3] = 0;
 
 	IapEntry(&cmd, &res);
-	*pSig = res.Data[0];
+	if (res.CmdStatus == IAPSTATUS_SUCCESS)
+	{
+		for (unsigned i = 0; i < 4; i++)
+		{
+			pSig[i] = res.Data[i];
+		}
+	}
 
 	return res.CmdStatus;
 }

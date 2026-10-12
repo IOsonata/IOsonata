@@ -1,0 +1,21 @@
+# Shared LPC IAP extended signature
+
+Run `python3 tests/lpc_iap_shared/run.py`. Host GCC compiles the production
+shared IAP implementation as C, then GCC and G++ link callers of the public
+IAPReadExtFlashSignature declaration at -O0 and -O2 with UBSan.
+
+A ROM stub verifies command 73, the start/end flash addresses, wait-state
+encoding and required zero fourth parameter. Tests verify all four words
+of the 128-bit result, surrounding output sentinels, unchanged output on
+ROM error and rejection of a null output without a ROM call. Before the
+fix, the test failed to link because the implementation had a different name.
+
+The command layout follows NXP UM10912 section 5.6.11, table 83. Although
+earlier argument names said StartPage/EndPage, LPC546xx ROM expects flash
+addresses. The public header now states this and requires a four-word
+output buffer. No generic driver API is changed.
+
+The shared IAP source also compiles to Cortex-M4 assembly with
+LPC54628_SERIES at -O0 and -O2. Tests do not execute hardware ROM or validate
+the numerical signature for real flash contents. Full firmware linking
+and hardware validation remain pending.
