@@ -37,6 +37,7 @@ Modified by          Date              Description
 #include <cstdio>
 #include <cstring>
 #include <cmath>
+#include <climits>
 #include <deque>
 #include <vector>
 #include <sys/mman.h>
@@ -57,6 +58,7 @@ struct UartModel {
 };
 static UartModel s_Model[LPCUART_DEV_COUNT];
 static bool s_Irq[64];
+static uint32_t s_Priority[64];
 static int s_Events[4];
 static UARTDev_t s_Uart[LPCUART_DEV_COUNT];
 static int s_PinConfigs;
@@ -87,8 +89,9 @@ uint32_t SystemMainClkFreq = 48000000;
 void NVIC_ClearPendingIRQ(IRQn_Type)
 {
 }
-void NVIC_SetPriority(IRQn_Type, uint32_t)
+void NVIC_SetPriority(IRQn_Type Irq, uint32_t Priority)
 {
+	s_Priority[Irq] = Priority;
 }
 void NVIC_EnableIRQ(IRQn_Type Irq)
 {
@@ -396,13 +399,14 @@ static void DriverTest()
 }
 
 #ifndef TEST_LPC17
-static void RejectPins(const UARTCfg_t &Cfg)
+static void RejectConfig(const UARTCfg_t &Cfg)
 {
 	uint8_t syscon[sizeof(*LPC_SYSCON)];
 	uint8_t usart[sizeof(*LPC_USART)];
 	uint8_t object[sizeof(s_Uart)];
 	uint8_t driver[sizeof(s_LpcUartDev)];
 	bool irq[sizeof(s_Irq) / sizeof(s_Irq[0])];
+	uint32_t priority = s_Priority[UART_IRQn];
 	int configs = s_PinConfigs;
 	int writes = s_RegWrites;
 
@@ -418,6 +422,47 @@ static void RejectPins(const UARTCfg_t &Cfg)
 	assert(memcmp(driver, s_LpcUartDev, sizeof(driver)) == 0);
 	assert(memcmp(irq, s_Irq, sizeof(irq)) == 0);
 	assert(s_PinConfigs == configs && s_RegWrites == writes);
+	assert(s_Priority[UART_IRQn] == priority);
+}
+
+static void PriorityTest()
+{
+	UARTCfg_t cfg = {};
+
+	cfg.pIOPinMap = s_Pins;
+	cfg.NbIOPins = 4;
+	cfg.Rate = 1000000;
+	cfg.DataBits = 8;
+	cfg.Parity = UART_PARITY_NONE;
+	cfg.StopBits = 1;
+	cfg.bIntMode = true;
+	cfg.bFifoBlocking = true;
+	s_Model[0].Polling = true;
+	for (int priority = 0; priority < 4; priority++)
+	{
+		cfg.IntPrio = priority;
+		assert(UARTInit(&s_Uart[0], &cfg));
+		assert(s_Priority[UART_IRQn] == (uint32_t)priority);
+		assert(s_Irq[UART_IRQn]);
+	}
+	assert(CFifoPutByte(s_Uart[0].hRxFifo, 0xA5));
+	assert(CFifoPutByte(s_Uart[0].hTxFifo, 0x5A));
+	for (int priority : {-1, 4, 7, INT_MIN, INT_MAX})
+	{
+		cfg.IntPrio = priority;
+		RejectConfig(cfg);
+	}
+	// Polling never programs NVIC priority, even across Disable/Enable.
+	cfg.bIntMode = false;
+	for (int priority : {-1, 4, 7, INT_MIN, INT_MAX})
+	{
+		cfg.IntPrio = priority;
+		assert(UARTInit(&s_Uart[0], &cfg));
+		UARTDisable(&s_Uart[0]);
+		UARTEnable(&s_Uart[0]);
+		assert(!s_Irq[UART_IRQn]);
+		assert(s_Priority[UART_IRQn] == 3);
+	}
 }
 
 static void PinTest()
@@ -447,10 +492,10 @@ static void PinTest()
 			pins[1].PinOp = tx[2];
 			assert(UARTInit(&s_Uart[0], &cfg));
 			pins[0].PinOp = IOPINOP_GPIO;
-			RejectPins(cfg);
+			RejectConfig(cfg);
 			pins[0].PinOp = rx[2];
 			pins[1].PinOp = IOPINOP_FUNC7;
-			RejectPins(cfg);
+			RejectConfig(cfg);
 			pins[1].PinOp = tx[2];
 		}
 	}
@@ -466,31 +511,31 @@ static void PinTest()
 	for (int i = 0; i < 4; i++)
 	{
 		pins[i].PinOp = IOPINOP_FUNC0;
-		RejectPins(cfg);
+		RejectConfig(cfg);
 		pins[i] = s_Pins[i];
 		pins[i].PortNo = 2;
-		RejectPins(cfg);
+		RejectConfig(cfg);
 		pins[i] = s_Pins[i];
 		pins[i].PinNo = 32;
-		RejectPins(cfg);
+		RejectConfig(cfg);
 		pins[i] = s_Pins[i];
 	}
 	for (int i = 2; i < 4; i++)
 	{
 		pins[i].PinNo = -1;
-		RejectPins(cfg);
+		RejectConfig(cfg);
 		pins[i] = s_Pins[i];
 		pins[i].PortNo = -1;
-		RejectPins(cfg);
+		RejectConfig(cfg);
 		pins[i] = s_Pins[i];
 	}
 	cfg.NbIOPins = 2;
-	RejectPins(cfg);
+	RejectConfig(cfg);
 	cfg.NbIOPins = UART_NB_PINS + 1;
-	RejectPins(cfg);
+	RejectConfig(cfg);
 	cfg.NbIOPins = 4;
 	std::swap(pins[0], pins[1]);
-	RejectPins(cfg);
+	RejectConfig(cfg);
 	std::swap(pins[0], pins[1]);
 	// Unconnected entries remain supported when hardware flow is disabled.
 	cfg.FlowControl = UART_FLWCTRL_NONE;
@@ -516,7 +561,7 @@ static void PinTest()
 		for (int i = 4; i < UART_NB_PINS; i++)
 		{
 			pins[i].PinOp = IOPINOP_FUNC2;
-			RejectPins(cfg);
+			RejectConfig(cfg);
 			pins[i].PinOp = IOPINOP_FUNC1;
 		}
 	}
@@ -525,13 +570,13 @@ static void PinTest()
 	pins[0].PinNo = 14;
 	pins[0].PinOp = IOPINOP_FUNC3;
 	pins[5].PinNo = 14;
-	RejectPins(cfg);
+	RejectConfig(cfg);
 	pins[0] = s_Pins[0];
 	pins[1].PortNo = 1;
 	pins[1].PinNo = 13;
 	pins[1].PinOp = IOPINOP_FUNC3;
 	pins[6].PinNo = 13;
-	RejectPins(cfg);
+	RejectConfig(cfg);
 }
 #endif
 
@@ -543,6 +588,7 @@ int main()
 	RateTest();
 	DriverTest();
 #ifndef TEST_LPC17
+	PriorityTest();
 	PinTest();
 #endif
 	printf("legacy LPC UART (%d instances): PASS\n", LPCUART_DEV_COUNT);
