@@ -74,3 +74,14 @@ LPC17xx exports __Vectors as an alias of the existing g_Vectors table,
 matching the symbol referenced by ARM/src/ResetEntry.c. The host vector
 test references both names and checks that they have the same address;
 the target assembly contains a single 204-byte table.
+
+LPC17xx SystemInit copies .data_RAMAHB from its flash load image using
+__data_ahb_loc__, __data_ahb_start__ and the absolute __data_ahb_size__
+linker symbol. This runs after ResetEntry initializes ordinary .data/.bss
+and before constructors or application entry. The references are weak so
+DFU boot and custom layouts without the optional section continue to work.
+Custom layouts that use initialized AHB data must define all three symbols.
+The host regression calls the real SystemInit at O0/O2 with UBSan, checking
+the copied bytes, an unchanged trailing guard, and absent optional symbols.
+Clock-ready status is supplied by the fixture; clock transitions and ARM
+reset execution are not simulated. Target startup validation remains pending.

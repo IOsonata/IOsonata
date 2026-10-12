@@ -121,3 +121,19 @@ for name in layouts:
                                    if line.split()[-1] == 'ahb_data'), 16)
                 assert address == 0x2007c000, hex(address)
         print(name + ': checksum and image origin passed at two handler placements')
+
+# Run the real LPC17xx SystemInit with and without the optional AHB section.
+for opt in ['-O0', '-O2']:
+    for ahb in [False, True]:
+        with tempfile.TemporaryDirectory() as tmp:
+            exe = str(Path(tmp) / 'ahb17_test')
+            extra = ['-DTEST_AHB_DATA', '-Wl,--defsym=__data_ahb_size__=16'] if ahb else []
+            subprocess.run(['gcc', '-std=gnu17', opt, '-Wall', '-Wextra',
+                            '-Wno-sign-compare', '-Wno-unused-but-set-variable',
+                            '-fsanitize=undefined', '-fno-sanitize-recover=all', '-no-pie',
+                            '-I' + str(root / 'tests/lpc/uart/shim'),
+                            '-I' + str(root / 'ARM/NXP/LPC17xx/Include'),
+                            *extra, str(root / 'tests/lpc/startup/ahb17_test.c'),
+                            str(root / 'ARM/NXP/LPC17xx/src/system_LPC17xx.c'),
+                            '-o', exe], check=True)
+            subprocess.run([exe], check=True)

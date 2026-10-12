@@ -33,6 +33,7 @@ Modified by          Date              Description
 
 ----------------------------------------------------------------------------*/
 #include <stdint.h>
+#include <string.h>
 
 #include "LPC17xx.h"
 #include "system_LPC17xx.h"
@@ -54,6 +55,11 @@ Modified by          Date              Description
 uint32_t SystemCoreClock = IRC_FREQ;/*!< System Clock Frequency (Core Clock)*/
 uint32_t SystemClkFreq = IRC_FREQ;	/* System clock frequency, reset default IRC */
 extern uint32_t SystemMicroSecLoopCnt;
+
+// Optional initialized AHB RAM section supplied by the application linker.
+extern unsigned char __data_ahb_loc__[] __attribute__((weak));
+extern unsigned char __data_ahb_start__[] __attribute__((weak));
+extern unsigned char __data_ahb_size__ __attribute__((weak));
 
 uint32_t GetSysClk(void)
 {
@@ -281,5 +287,15 @@ void SystemConnectPLL1(void)
  */
 void SystemInit (void)
 {
+	size_t ahbsize = (size_t)&__data_ahb_size__;
+
+	// ResetEntry initializes local SRAM before calling SystemInit.
+	// Copy the separate AHB load image before application initialization.
+	if (ahbsize != 0 && &__data_ahb_start__[0] != &__data_ahb_loc__[0])
+	{
+		memcpy(__data_ahb_start__, __data_ahb_loc__, ahbsize);
+	}
+
 	SystemCoreClockSet(CORE_FREQ, DEF_CLK_SRC);
 }
+
