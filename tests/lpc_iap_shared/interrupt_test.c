@@ -45,6 +45,7 @@ void EnableInterrupt(uint32_t State)
 
 static void RomCall(IAP_CMD_STATUS *pCmd, IAP_CMD_STATUS *pRes)
 {
+	assert(pRes != NULL);
 	assert(s_Mask == 1);
 	assert(pCmd->CmdStatus == s_Command);
 	s_Calls++;
@@ -133,6 +134,22 @@ int main(void)
 				assert(s_Restores == 1);
 			}
 		}
+	}
+	for (uint32_t mask = 0; mask <= 1; mask++)
+	{
+		s_Mask = mask;
+		s_Calls = 0;
+		s_Disables = 0;
+		s_Restores = 0;
+		assert(IAPBlankCheck(1, 1, NULL) == IAPSTATUS_PARAM_ERROR);
+		assert(IAPReadPartId(NULL) == IAPSTATUS_PARAM_ERROR);
+		assert(IAPReadBootCodeVers(NULL) == IAPSTATUS_PARAM_ERROR);
+		assert(IAPCompare((uint8_t *)0x1000, (uint8_t *)0x10000100, 256, NULL) == IAPSTATUS_PARAM_ERROR);
+		assert(IAPReadUID(NULL) == IAPSTATUS_PARAM_ERROR);
+		assert(s_Calls == 0);
+		assert(s_Disables == 0);
+		assert(s_Restores == 0);
+		assert(s_Mask == mask);
 	}
 	puts("Shared LPC IAP: all 16 wrappers preserve interrupt state on success/error");
 	return 0;

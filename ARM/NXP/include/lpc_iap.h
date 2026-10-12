@@ -96,6 +96,8 @@ extern "C" {
 // All wrappers mask interrupts for each ROM call and restore the caller's
 // prior state on return. Callers still serialize multi-call operations such
 // as prepare plus erase/write and provide the required ROM workspace/stack.
+// Wrappers accepting IAP_CMD_STATUS *pRes require a result buffer; null returns
+// PARAM_ERROR without calling ROM or changing interrupt state.
 
 // Write the factory value only on ROM success. On error the output is unchanged;
 // a null output returns PARAM_ERROR without calling ROM.

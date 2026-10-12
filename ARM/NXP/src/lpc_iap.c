@@ -131,6 +131,11 @@ IAPSTATUS IAPBlankCheck(int StartSect, int EndSect, IAP_CMD_STATUS *pRes)
 {
 	IAP_CMD_STATUS cmd;
 
+	if (pRes == 0)
+	{
+		return IAPSTATUS_PARAM_ERROR;
+	}
+
 	cmd.CmdStatus = IAPCMD_BLANK_CHECK;
 	cmd.Data[0] = StartSect;
 	cmd.Data[1] = EndSect;
@@ -144,6 +149,11 @@ IAPSTATUS IAPReadPartId(IAP_CMD_STATUS *pRes)
 {
 	IAP_CMD_STATUS cmd;
 
+	if (pRes == 0)
+	{
+		return IAPSTATUS_PARAM_ERROR;
+	}
+
 	cmd.CmdStatus = IAPCMD_READ_PARTID;
 
 	IapCall(&cmd, pRes);
@@ -155,6 +165,11 @@ IAPSTATUS IAPReadBootCodeVers(IAP_CMD_STATUS *pRes)
 {
 	IAP_CMD_STATUS cmd;
 
+	if (pRes == 0)
+	{
+		return IAPSTATUS_PARAM_ERROR;
+	}
+
 	cmd.CmdStatus = IAPCMD_READ_BOOTCODE_VER;
 
 	IapCall(&cmd, pRes);
@@ -165,6 +180,11 @@ IAPSTATUS IAPReadBootCodeVers(IAP_CMD_STATUS *pRes)
 IAPSTATUS IAPCompare(uint8_t *pDst, uint8_t *pSrc, int Size, IAP_CMD_STATUS *pRes)
 {
 	IAP_CMD_STATUS cmd;
+
+	if (pRes == 0)
+	{
+		return IAPSTATUS_PARAM_ERROR;
+	}
 
 	cmd.CmdStatus = IAPCMD_COMPARE;
 	cmd.Data[0] = (uint32_t)pDst;
@@ -191,6 +211,11 @@ IAPSTATUS IAPJumpISP()
 IAPSTATUS IAPReadUID(IAP_CMD_STATUS *pRes)
 {
 	IAP_CMD_STATUS cmd;
+
+	if (pRes == 0)
+	{
+		return IAPSTATUS_PARAM_ERROR;
+	}
 
 	cmd.CmdStatus = IAPCMD_READ_UID;
 
