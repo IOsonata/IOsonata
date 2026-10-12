@@ -92,7 +92,7 @@ The internal memory is read memory mapped. Shared helpers:
 | `ARM/NXP/LPC17xx/src/dfu_lpc17xx.cpp` | LPC17 (IAP) |
 | `ARM/NXP/LPC546xx/src/dfu_lpc546xx.cpp` | LPC546xx (ROM IAP) |
 | `ARM/Renesas/RE01/src/dfu_re01.cpp` | RE01 (flash sequencer) |
-| `RISCV/Renesas/R9A02/src/dfu_r9a02.cpp` | R9A02G021 (FACI) |
+| `RISCV/Renesas/R9A02/src/dfu_r9a02.cpp` | R9A02G021 (FLCN flash sequencer) |
 
 On nRF52 with a SoftDevice, and on nRF54L with MPSL, the application writes
 slot 1 through `Nvm` and `NvmIntrf` so the radio arbitrates each operation

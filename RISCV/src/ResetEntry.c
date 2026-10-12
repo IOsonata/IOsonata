@@ -9,12 +9,12 @@ Boot sequence:
      (placed at flash 0x00000000 by the device-specific linker script).
      ResetEntry is the only function in that section.
 
-  2. ResetEntry sets up sp from __StackTop and gp from __global_pointer$.
-     The gp load MUST be wrapped in .option norelax — otherwise the
-     linker can relax la gp,__global_pointer$ into a gp-relative form
-     that uses gp before it is set, corrupting it.  This is a known
-     RISC-V startup gotcha (the GCC RISC-V manual calls it out under
-     "Linker relaxation").
+  2. ResetEntry (naked, no stack frame) sets up gp from __global_pointer$
+     and sp from __StackTop, then jumps to ResetEntryInit. The gp load
+     MUST be wrapped in .option norelax, otherwise the linker can relax
+     la gp,__global_pointer$ into a gp-relative form that uses gp before
+     it is set, corrupting it (GCC RISC-V manual, "Linker relaxation").
+     ResetEntryInit runs steps 3 to 7.
 
   3. Optional executable-RAM (.iram.text) is copied from flash LMA to
      its runtime VMA, then a fence.i ensures any cached instruction
@@ -88,111 +88,108 @@ extern void SystemInit(void);
 extern void SystemCoreClockUpdate(void);
 extern void _start(void);
 
-__attribute__((section(".reset"), used, retain, noreturn))
+__attribute__((noreturn, used)) void ResetEntryInit(void);
+
+// First instruction after reset. Naked so that the compiler emits no stack
+// frame: some cores (R9A02G021 for one) leave sp undefined at reset, the
+// prologue of a normal function would store through it.
+//
+// .option norelax is required for the gp load. Without it, the linker can
+// relax the la (auipc + addi) into a gp-relative form, which uses gp before
+// it is set and produces a wrong gp value.
+__attribute__((section(".reset"), naked, used, retain, noreturn))
 void ResetEntry(void)
 {
-    unsigned long *src, *dst;
+	__asm volatile(
+		".option push				\n"
+		".option norelax			\n"
+		"la gp, __global_pointer$	\n"
+		"la sp, __StackTop			\n"
+		".option pop				\n"
+		"tail ResetEntryInit		\n"
+	);
+}
 
-    // Initialize stack pointer.
-    __asm volatile("la sp, __StackTop");
+// Memory init and startup, entered from ResetEntry with sp and gp set.
+__attribute__((noreturn, used))
+void ResetEntryInit(void)
+{
+	unsigned long *src, *dst;
 
-    // Initialize global pointer (ABI requirement).
-    //
-    // .option norelax is REQUIRED here.  Without it, the linker can relax
-    // the la (auipc + addi) into a gp-relative form, which uses gp before
-    // it is set and produces a wrong gp value.  Symptoms range from "small
-    // global accesses through gp return garbage" to "boots fine, then any
-    // function that uses %gprel addressing crashes" — both consistent with
-    // intermittent reset issues.
-    __asm volatile(
-        ".option push           \n"
-        ".option norelax        \n"
-        "la gp, __global_pointer$ \n"
-        ".option pop            \n"
-        ::: "memory");
-
-    /* Only clear SATP if we KNOW we're running in S-mode on a paged system.
-       By default for bare-metal MCUs (M-mode), do nothing. */
+	// Only clear SATP if we KNOW we're running in S-mode on a paged system.
+	// By default for bare-metal MCUs (M-mode), do nothing.
 #if defined(__riscv_zicsr) && (defined(__riscv_sv32) || defined(__riscv_sv39) || defined(__riscv_sv48) || defined(__riscv_sv57))
-    __asm volatile("csrw satp, zero");
-    // Optional: flush stale translations if you were actually in S-mode
-    __asm volatile("sfence.vma");
+	__asm volatile("csrw satp, zero");
+	// Optional: flush stale translations if you were actually in S-mode
+	__asm volatile("sfence.vma");
 #endif
 
-    /*
-     * Copy optional executable-RAM code from flash LMA to its runtime VMA.
-     * Target linker scripts may place early trap/vector handlers or other
-     * timing-sensitive routines in this section.  No-op when the section
-     * is empty or when start and end resolve to the same address.
-     */
-    src = &__iram_loc__;
-    dst = &__iram_data_start__;
-    unsigned long *iram_end = (unsigned long *)((uintptr_t)&__iram_data_start__ +
-                                                ((uintptr_t)&__iram_end__ - (uintptr_t)&__iram_start__));
-    while (dst < iram_end)
-    {
-        *dst++ = *src++;
-    }
+	// Copy optional executable-RAM code from flash LMA to its runtime VMA.
+	// Target linker scripts may place early trap/vector handlers or other
+	// timing-sensitive routines in this section.  No-op when the section
+	// is empty or when start and end resolve to the same address.
+	src = &__iram_loc__;
+	dst = &__iram_data_start__;
+	unsigned long *iram_end = (unsigned long *)((uintptr_t)&__iram_data_start__ +
+												((uintptr_t)&__iram_end__ - (uintptr_t)&__iram_start__));
+	while (dst < iram_end)
+	{
+		*dst++ = *src++;
+	}
 #if defined(__riscv_zifencei)
-    __asm volatile("fence.i" ::: "memory");
+	__asm volatile("fence.i" ::: "memory");
 #else
-    /* Encoding for FENCE.I.  Some toolchains require -march=...zifencei
-     * before accepting the mnemonic. */
-    __asm volatile(".word 0x0000100f" ::: "memory");
+	// Encoding for FENCE.I.  Some toolchains require -march=...zifencei
+	// before accepting the mnemonic.
+	__asm volatile(".word 0x0000100f" ::: "memory");
 #endif
 
-    /*
-     * Copy the initialized data of the ".data" segment from flash to RAM.
-     */
-    src = &__data_loc__;
-    dst = &__data_start__;
-    while (dst < &__data_end__)
-    {
-        *dst++ = *src++;
-    }
+	// Copy the initialized data of the ".data" segment from flash to RAM.
+	src = &__data_loc__;
+	dst = &__data_start__;
+	while (dst < &__data_end__)
+	{
+		*dst++ = *src++;
+	}
 
-    /*
-     * Clear the ".bss" segment.
-     */
-    dst = &__bss_start__;
-    while (dst < &__bss_end__)
-    {
-        *dst++ = 0;
-    }
+	// Clear the ".bss" segment.
+	dst = &__bss_start__;
+	while (dst < &__bss_end__)
+	{
+		*dst++ = 0;
+	}
 
-    /*
-     * Now memory has been initialized.
-     * Run chip-specific bring-up (clock tree, mtvec, ...) then update the
-     * core-clock period globals.
-     */
-    SystemInit();
-    SystemCoreClockUpdate();
+	// Now memory has been initialized.
+	// Run chip-specific bring-up (clock tree, mtvec, ...) then update the
+	// core-clock period globals.
+	SystemInit();
+	SystemCoreClockUpdate();
 
-    _start();
+	_start();
 
-    /* Loop forever if main returns */
-    while (1) { }
+	// Loop forever if main returns
+	while (1) { }
 }
 
 /* --- Minimal heap (_sbrk) implementation --- */
 __attribute__((weak))
 caddr_t _sbrk(ptrdiff_t incr)
 {
-    static uint8_t *heap_ptr = NULL;
-    uint8_t *prev_heap;
+	static uint8_t *heap_ptr = NULL;
+	uint8_t *prev_heap;
 
-    if (heap_ptr == NULL)
-        heap_ptr = (uint8_t *)&__heap_start__;
+	if (heap_ptr == NULL)
+		heap_ptr = (uint8_t *)&__heap_start__;
 
-    prev_heap = heap_ptr;
+	prev_heap = heap_ptr;
 
-    if ((heap_ptr + incr) > (uint8_t *)&__heap_end__) {
-        errno = ENOMEM;
-        return (caddr_t)-1;
-    }
+	if ((heap_ptr + incr) > (uint8_t *)&__heap_end__) {
+		errno = ENOMEM;
+		return (caddr_t)-1;
+	}
 
-    heap_ptr += incr;
-    return (caddr_t)prev_heap;
+	heap_ptr += incr;
+	return (caddr_t)prev_heap;
 }
 
 __attribute__((weak)) int  _close(int fd)                              { (void)fd; return -1; }
