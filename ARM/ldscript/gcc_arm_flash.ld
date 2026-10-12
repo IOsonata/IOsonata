@@ -215,11 +215,14 @@ SECTIONS {
 		_pvHeapStart = .;
 		KEEP(*(.heap*))
 
-		__heap_size__ = 	(ORIGIN(RAM) + LENGTH(RAM)) * 2 / 3;
-		__HeapSize = __heap_size__;
-		__heap_end__ = __heap_start__ + __heap_size__;
-		__HeapLimit = __HeapBase + __HeapSize;
 	} > RAM
+
+	/* Use two thirds of the RAM remaining after static data. Define sizes
+	 * outside .heap so they are byte counts, not section-relative addresses. */
+	__heap_size__ = ((__StackTop - __heap_start__) * 2 / 3) & ~3;
+	__HeapSize = __heap_size__;
+	__heap_end__ = __heap_start__ + __heap_size__;
+	__HeapLimit = __heap_end__;
 
 	/* .stack_dummy section doesn't contains any symbols. It is only
 	 * used for linker to calculate size of stack sections, and assign
