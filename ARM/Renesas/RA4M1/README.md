@@ -393,14 +393,21 @@ array slot. At least one direction must be present.
 
 This increment supports asynchronous full-duplex UART, 7/8 data bits, no/odd/even
 parity, and one/two stop bits. Both polling and interrupt mode are implemented.
-Unsupported requests fail initialization: DMA, IrDA, hardware/software flow
-control, half-duplex, synchronous/network mode, 9-bit data and automatic baud.
+TX DMA is available with interrupt mode and a blocking software FIFO; RX remains
+interrupt-driven. Unsupported requests fail initialization: IrDA, hardware/software
+flow control, half-duplex, synchronous/network mode, 9-bit data and automatic baud.
 `UARTSetCtrlLineState` does not drive modem lines or transmit break in this
 increment. Framing, parity, overrun and received-break indications are reported
 through the existing counters/line-state callback; damaged bytes are discarded.
 
-SCI0/1 hardware FIFOs are disabled deliberately, giving all four channels the
-same non-FIFO register path. Each direction has a default 16-byte software FIFO,
+SCI0/1 use their 16-entry hardware RX and TX FIFOs. SCI2/9 use RDR/TDR.
+RXI triggers at eight received bytes; the hardware data-ready timeout delivers
+shorter bursts through RXI (FCR.DRES=0). The handler drains at most sixteen
+entries before software FIFO accounting, and checks each FRDRHL entry for
+framing/parity errors. Hardware overrun counts lost arrivals; valid bytes already
+buffered are retained. RxDropCnt also includes software FIFO overflow.
+
+Each direction also has a default 16-byte software FIFO,
 overridable at library build with `RA4M1_UART_FIFO_SIZE`, or with the existing
 caller-supplied, word-aligned FIFO memory in `UARTCfg_t`. Memory sizes include
 `sizeof(CFifo_t)`. `bFifoBlocking=true` refuses insertion when full; RX still
@@ -408,22 +415,30 @@ drains the hardware and counts dropped new bytes, rather than blocking an ISR.
 `false` retains the existing CFifo push-out policy and counts evicted bytes.
 There is no hardware receive backpressure without flow control.
 
-Interrupt TX copies accepted bytes into CFifo and primes TDR directly. TXI feeds
-subsequent bytes; TEI marks final wire completion. Queuing during an in-flight
-final byte re-arms TXI. `UART_EVT_TXREADY` is delivered when a full FIFO gains
-space and when transmission drains; its length is the available FIFO space.
-RX callbacks carry a null buffer and the queued byte count. Application callbacks
-run outside newly acquired PRIMASK sections and may queue more data. The SCI
-source is negated/synchronized and the ICU route acknowledged before application
-code; a callback-time arrival is not cleared on dispatcher exit. Code/context
-must remain valid until an already active callback returns after higher-priority
-preemption, as with ICU interrupt registration.
+Interrupt TX copies accepted data in bounded blocks and fills the available
+hardware space. SCI0/1 TXI triggers at eight or fewer buffered bytes, allowing a
+batch refill. SCI2/9 prime TDR directly and continue through TXI. TEI is not
+allocated: software readiness means the queued data have been handed to hardware,
+not that the final stop bit has reached the wire. TX callbacks report available
+software FIFO space; RX callbacks report the queued byte count with a null buffer.
 
-Polling allocates no ICU slots and writes accepted bytes directly to TDR, never
-leaving accepted data in an undriven software TX queue. Reads return currently
-available data; writes have a bounded retry count. Both modes can return a partial
-byte count. The caller must retry the unaccepted suffix. Polling completion flags
-are sampled on API return, not updated asynchronously without interrupts.
+DMA writes FTDRL on SCI0/1 and TDR on SCI2/9. FIFO DMA uses TTRG=15 and
+normal-mode byte transfers: each activation has room for one byte. The software
+FIFO retains the active DMA source until completion. CPU priming and DMA never
+write the same active transfer concurrently.
+
+The UART handler checks RX before TX regardless of which SCI event caused entry.
+All routes for one UART, including DMA completion, use the configured priority.
+UART/DMA handlers do not acquire a handler-wide PRIMASK. Foreground FIFO copies
+and TX scheduling use bounded critical sections. Application callbacks run after
+source synchronization and ICU acknowledgement, and may queue more data or
+disable/reinitialize the device; obsolete notifications are then suppressed.
+
+Polling allocates no ICU slots and writes directly to available hardware space,
+never leaving accepted data in an undriven software TX queue. Reads return
+currently available data; writes have a bounded retry count. Both modes can
+return a partial byte count. The caller must retry the unaccepted suffix.
+Polling completion flags are sampled on API return.
 
 Baud selection uses PCLKA from `SystemPeriphClockGet(0)`, integer BRR/CKS and
 optional MDDR modulation. The returned `Rate` is the rounded nominal hardware
@@ -431,7 +446,7 @@ rate, not the requested value or a measurement of oscillator accuracy. The
 planner considers the supported sampling modes and rejects nominal divisor
 error above `RA4M1_UART_MAX_ERROR_PPM` (default 20,000 = 2%). Include oscillator
 and peer-clock tolerance in the application's total error budget. The legal
-clock/divisor range is not a throughput guarantee for the non-FIFO ISR path.
+clock/divisor range is not a throughput guarantee.
 
 `UARTSetRate` requires `UARTDisable` and a quiesced peer first; it returns zero
 without changing a running interface. Changing system clocks also requires
@@ -444,18 +459,22 @@ releases ICU routes, restores prior pin configuration, gates the SCI module and
 requires full UARTInit for reuse. Duplicate channel/device ownership, overlapping
 RX/TX FIFO memory, invalid modes and partial initialization failures are rejected.
 
-Run `python3 tests/ra4m1/run_uart_validation.py` from the repository root for the
-UART model and the existing startup/GPIO/ICU regression suite. The UART test
-executes the actual UART, GPIO and ICU sources, but its CMSIS and UART/DevIntrf
-headers are simplified for the tests. Its default standalone run uses a CFifo test
-double. In a full checkout, the runner additionally builds against the unchanged
-production `src/cfifo.c`. The model checks register access sizes, frame/baud
-configuration, all four SCI channels, FIFO overflow, partial transfers, TX restart,
-callback-time RX, callback rearming/release, disable/rate/reset, allocation and
-write failure cleanup, and simultaneous independent channel ownership. It does
-not prove the production C++ ABI, interrupt latency, maximum sustainable baud or
-physical serial operation. IOC uses production headers and the shared sources,
-never these test shims.
+Run `python3 tests/ra4m1/run_uart_fifo_validation.py` for focused FIFO tests.
+The runner extracts the production transfer functions, reads bit definitions
+from the official CMSIS header, and uses the production CFifo implementation.
+Its behavioral SCI model covers short bursts, FIFO bounds, stale interrupts,
+overruns, per-entry errors, software overflow, wraparound, interrupt/DMA TX
+ownership, and callback invalidation. Set `UART_FIFO_SANITIZE=1` to also run
+ASan/UBSan. The model does not execute the complete initializer or ICU and does
+not measure interrupt latency or validate physical UART operation.
+
+The older `run_uart_validation.py` still depends on the removed handwritten
+register-access shim and is not validation of the current CMSIS driver.
+The FIFO refactor was compiled and linked with the unchanged UART loopback
+example, production CMSIS headers, GNU Arm GCC 13.2 and newlib at -O0 and -Os.
+On-board FIFO/full-duplex throughput, PRBS errors, and repeated restarts remain
+to be validated. RE01 remains a separate driver; no shared Renesas SCI driver
+is introduced by this refactor.
 
 ## Validation status
 
@@ -499,3 +518,4 @@ IOsonata `main` at `eef99dc82cb3936e5c0f796563a3a58104e50ead`.
 UART hardware basis: the same Rev.1.10 manual, chapter 28 (SCI), chapter 10
 (module stop) and section 13.3 (interrupt request handling). Renesas FSP
 `v6.6.0` `r_sci_uart.c` was a secondary sequencing cross-check only.
+
