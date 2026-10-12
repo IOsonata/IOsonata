@@ -55,6 +55,7 @@ Modified by          Date              Description
 uint32_t SystemCoreClock = IRC_FREQ;/*!< System Clock Frequency (Core Clock)*/
 uint32_t SystemClkFreq = IRC_FREQ;	/* System clock frequency, reset default IRC */
 extern uint32_t SystemMicroSecLoopCnt;
+extern void (* const __Vectors[])(void);
 
 // Optional initialized AHB RAM section supplied by the application linker.
 extern unsigned char __data_ahb_loc__[] __attribute__((weak));
@@ -288,6 +289,11 @@ void SystemConnectPLL1(void)
 void SystemInit (void)
 {
 	size_t ahbsize = (size_t)&__data_ahb_size__;
+
+	// Select this image's vectors, including when linked in the DFU slot.
+	SCB->VTOR = (uint32_t)(uintptr_t)__Vectors;
+	__DSB();
+	__ISB();
 
 	// ResetEntry initializes local SRAM before calling SystemInit.
 	// Copy the separate AHB load image before application initialization.

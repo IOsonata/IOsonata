@@ -85,3 +85,11 @@ The host regression calls the real SystemInit at O0/O2 with UBSan, checking
 the copied bytes, an unchanged trailing guard, and absent optional symbols.
 Clock-ready status is supplied by the fixture; clock transitions and ARM
 reset execution are not simulated. Target startup validation remains pending.
+
+LPC17xx SystemInit selects __Vectors through CMSIS SCB->VTOR before clock
+setup, following the LPC546xx startup pattern. DSB and ISB follow the write.
+The SystemInit host tests begin with a stale VTOR and link __Vectors at
+zero and 0xD000 (the DFU slot), with and without initialized AHB data.
+A test-only SCB field and barrier hooks check the selected address and
+write/barrier order; they do not simulate exception delivery. Cortex-M3
+assembly is checked separately using the production CMSIS header.

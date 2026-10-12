@@ -124,10 +124,12 @@ for name in layouts:
 
 # Run the real LPC17xx SystemInit with and without the optional AHB section.
 for opt in ['-O0', '-O2']:
-    for ahb in [False, True]:
+    for ahb, vector_base in [(False, 0), (True, 0), (False, 0xd000), (True, 0xd000)]:
         with tempfile.TemporaryDirectory() as tmp:
             exe = str(Path(tmp) / 'ahb17_test')
             extra = ['-DTEST_AHB_DATA', '-Wl,--defsym=__data_ahb_size__=16'] if ahb else []
+            extra += [f'-DTEST_VECTOR_BASE={vector_base}', f'-Wl,--defsym=__Vectors={vector_base}',
+                      '-include', str(root / 'tests/lpc/startup/system17_shim.h')]
             subprocess.run(['gcc', '-std=gnu17', opt, '-Wall', '-Wextra',
                             '-Wno-sign-compare', '-Wno-unused-but-set-variable',
                             '-fsanitize=undefined', '-fno-sanitize-recover=all', '-no-pie',
