@@ -83,6 +83,13 @@ SOFTWARE.
 // disabled, to keep the RX interrupt latency short
 #define RA4M1_UART_COPY_MAX			8
 
+// Caller of Ra4m1UartRxHw. Without the FIFO it decides when RDR is read.
+typedef enum {
+	RA4M1_UART_RX_POLL,				// Polling, RDR read with RDRF or an error flag
+	RA4M1_UART_RX_RXI,				// RXI, RDR read, RDRF may already be cleared
+	RA4M1_UART_RX_OTHER,			// ERI or TXI, RDR read only with an error flag
+} RA4M1_UART_RX;
+
 #pragma pack(push, 4)
 typedef struct {
 	int DevNo;
@@ -203,9 +210,10 @@ static void Ra4m1UartReleaseIRQs(Ra4m1UartDev_t * const pDev)
 // error is dropped. Returns the number of characters read from the hardware,
 // pErr the line state errors seen. Interrupts disabled or from the interrupt.
 //
-// bRxi : called for the RXI of a SCI without FIFO, RDR holds a character. In
-// all other cases RDR is read only with RDRF or an error flag set.
-static int Ra4m1UartRxHw(Ra4m1UartDev_t * const pDev, bool bRxi, uint8_t *pErr)
+// Src : caller, it decides when RDR is read without the FIFO. RXI tells that
+// RDR holds a character, RDRF may already be cleared by then. A character read
+// on another interrupt would be put again by its own RXI.
+static int Ra4m1UartRxHw(Ra4m1UartDev_t * const pDev, RA4M1_UART_RX Src, uint8_t *pErr)
 {
 	UARTDev_t *udev = pDev->pUartDev;
 	R_SCI0_Type *reg = pDev->pReg;
@@ -214,57 +222,64 @@ static int Ra4m1UartRxHw(Ra4m1UartDev_t * const pDev, bool bRxi, uint8_t *pErr)
 
 	if (pDev->bHwFifo)
 	{
-		uint8_t status = reg->SSR_FIFO;
+		// The FIFO is read until it is empty, then the flags are read and
+		// cleared, as the Renesas FSP does. DR is cleared only with the FIFO
+		// empty and RDF only below the trigger level. A flag left set gives no
+		// new RXI, the next characters would wait for an overrun. Characters
+		// arriving during a pass are read in one more pass. Bounded at twice
+		// the FIFO size, the line does not fill it faster than it is read.
 		int n = (reg->FDR & R_SCI0_FDR_R_Msk) >> R_SCI0_FDR_R_Pos;
 
-		// Each FIFO entry has its own framing and parity status
-		for (; cnt < n; cnt++)
-		{
-			uint16_t d = reg->FRDRHL;
-
-			if (d & (R_SCI0_FRDRHL_FER_Msk | R_SCI0_FRDRHL_PER_Msk))
+		do {
+			// Each FIFO entry has its own framing and parity status
+			for (; n > 0; n--, cnt++)
 			{
-				if (d & R_SCI0_FRDRHL_FER_Msk)
+				uint16_t d = reg->FRDRHL;
+
+				if (d & (R_SCI0_FRDRHL_FER_Msk | R_SCI0_FRDRHL_PER_Msk))
 				{
-					udev->FramErrCnt++;
-					err |= UART_LINESTATE_FRMERR;
+					if (d & R_SCI0_FRDRHL_FER_Msk)
+					{
+						udev->FramErrCnt++;
+						err |= UART_LINESTATE_FRMERR;
+					}
+					if (d & R_SCI0_FRDRHL_PER_Msk)
+					{
+						udev->ParErrCnt++;
+						err |= UART_LINESTATE_PARERR;
+					}
+					udev->RxDropCnt++;
 				}
-				if (d & R_SCI0_FRDRHL_PER_Msk)
+				else if (CFifoPutByte(udev->hRxFifo, (uint8_t)d & pDev->RxDataMask))
 				{
-					udev->ParErrCnt++;
-					err |= UART_LINESTATE_PARERR;
+					udev->bRxReady = true;
 				}
-				udev->RxDropCnt++;
+				else
+				{
+					udev->RxDropCnt++;
+				}
 			}
-			else if (CFifoPutByte(udev->hRxFifo, (uint8_t)d & pDev->RxDataMask))
-			{
-				udev->bRxReady = true;
-			}
-			else
-			{
-				udev->RxDropCnt++;
-			}
-		}
 
-		// Overrun loses the arriving character, the FIFO content is kept
-		if (status & R_SCI0_SSR_FIFO_ORER_Msk)
-		{
-			udev->RxOvrErrCnt++;
-			err |= UART_LINESTATE_OVR;
-		}
+			uint8_t status = reg->SSR_FIFO;
 
-		// Flags cleared by writing 0 to them only. RDF, ORER, FER and PER
-		// once the FIFO is read, DR only once it is empty.
-		uint8_t clr = status & (R_SCI0_SSR_FIFO_RDF_Msk | R_SCI0_SSR_FIFO_ORER_Msk |
-								R_SCI0_SSR_FIFO_FER_Msk | R_SCI0_SSR_FIFO_PER_Msk);
-		if ((reg->FDR & R_SCI0_FDR_R_Msk) == 0)
-		{
-			clr |= status & R_SCI0_SSR_FIFO_DR_Msk;
-		}
-		if (clr)
-		{
-			reg->SSR_FIFO = (uint8_t)~clr;
-		}
+			// Overrun loses the arriving characters until ORER is cleared, the
+			// FIFO content is kept
+			if (status & R_SCI0_SSR_FIFO_ORER_Msk)
+			{
+				udev->RxOvrErrCnt++;
+				err |= UART_LINESTATE_OVR;
+			}
+
+			// Flags cleared by writing 0 to them only
+			uint8_t clr = status & (R_SCI0_SSR_FIFO_RDF_Msk | R_SCI0_SSR_FIFO_ORER_Msk |
+									R_SCI0_SSR_FIFO_FER_Msk | R_SCI0_SSR_FIFO_PER_Msk |
+									R_SCI0_SSR_FIFO_DR_Msk);
+			if (clr)
+			{
+				reg->SSR_FIFO = (uint8_t)~clr;
+			}
+			n = (reg->FDR & R_SCI0_FDR_R_Msk) >> R_SCI0_FDR_R_Pos;
+		} while (n > 0 && cnt < 2 * RA4M1_SCI_HWFIFO_SIZE);
 	}
 	else
 	{
@@ -274,7 +289,8 @@ static int Ra4m1UartRxHw(Ra4m1UartDev_t * const pDev, bool bRxi, uint8_t *pErr)
 		{
 			// RDR holds the character received with the error. After an
 			// overrun alone it holds the last good character, the arriving
-			// one is lost.
+			// one is lost. That character is put only if RDRF says it was
+			// not read yet, an RXI may have read it already.
 			uint8_t d = reg->RDR;
 
 			if (status & R_SCI0_SSR_ORER_Msk)
@@ -296,6 +312,10 @@ static int Ra4m1UartRxHw(Ra4m1UartDev_t * const pDev, bool bRxi, uint8_t *pErr)
 			{
 				udev->RxDropCnt++;
 			}
+			else if ((status & R_SCI0_SSR_RDRF_Msk) == 0)
+			{
+				// Overrun alone, RDR already read
+			}
 			else if (CFifoPutByte(udev->hRxFifo, d & pDev->RxDataMask))
 			{
 				udev->bRxReady = true;
@@ -308,7 +328,7 @@ static int Ra4m1UartRxHw(Ra4m1UartDev_t * const pDev, bool bRxi, uint8_t *pErr)
 			reg->SSR = (uint8_t)~(status & RA4M1_SCI_SSR_RXERR);
 			cnt = 1;
 		}
-		else if (bRxi || (status & R_SCI0_SSR_RDRF_Msk))
+		else if (Src == RA4M1_UART_RX_RXI || (Src == RA4M1_UART_RX_POLL && (status & R_SCI0_SSR_RDRF_Msk)))
 		{
 			// Reading RDR clears RDRF
 			if (CFifoPutByte(udev->hRxFifo, reg->RDR & pDev->RxDataMask))
@@ -387,7 +407,7 @@ static void Ra4m1UartPoll(Ra4m1UartDev_t * const pDev)
 {
 	uint8_t err;
 
-	Ra4m1UartRxHw(pDev, false, &err);
+	Ra4m1UartRxHw(pDev, RA4M1_UART_RX_POLL, &err);
 	Ra4m1UartTxHw(pDev);
 }
 
@@ -399,8 +419,19 @@ static void Ra4m1UartIRQHandler(int IntNo, void *pCtx)
 	R_SCI0_Type *reg = dev->pReg;
 	uint8_t err = 0;
 	bool txevt = false;
+	bool eri = IntNo == (int)dev->IrqEri;
 
-	int rxcnt = Ra4m1UartRxHw(dev, IntNo == (int)dev->IrqRxi, &err);
+	// RXI and TXI are edge events. Their ICU IR flag is cleared first, as the
+	// Renesas FSP does: an event while the handler runs sets it again and the
+	// handler runs once more. Cleared at the end, that event would be lost,
+	// RDF or DR left set with no RXI, or TDRE set again by a TDR write to an
+	// idle line with no TXI.
+	if (!eri)
+	{
+		Ra4m1AcknowledgeInt((IRQn_Type)IntNo);
+	}
+
+	int rxcnt = Ra4m1UartRxHw(dev, IntNo == (int)dev->IrqRxi ? RA4M1_UART_RX_RXI : RA4M1_UART_RX_OTHER, &err);
 
 	if (reg->SCR & R_SCI0_SCR_TIE_Msk)
 	{
@@ -414,15 +445,18 @@ static void Ra4m1UartIRQHandler(int IntNo, void *pCtx)
 		txevt = true;
 	}
 
-	// The SCI request is negated, its ICU IR flag can be cleared
-	Ra4m1UartSync(dev);
-	if (err && !dev->bHwFifo)
+	if (eri || err)
 	{
-		// RXI and ERI may both be pending for the character just read
-		Ra4m1AcknowledgeInt(dev->IrqRxi);
+		// The error flags are cleared, the ERI request is negated and its ICU
+		// IR flag can be cleared. Without the FIFO, RXI may also be pending
+		// for the character just read with the error.
+		Ra4m1UartSync(dev);
 		Ra4m1AcknowledgeInt(dev->IrqEri);
+		if (err && !dev->bHwFifo)
+		{
+			Ra4m1AcknowledgeInt(dev->IrqRxi);
+		}
 	}
-	Ra4m1AcknowledgeInt((IRQn_Type)IntNo);
 
 	if (udev->EvtCallback)
 	{

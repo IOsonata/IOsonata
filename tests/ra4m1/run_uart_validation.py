@@ -10,7 +10,10 @@ SCI and PRCR bit definitions and the SCI event ids are copied from the RA4M1
 headers into build/uart. When arm-none-eabi-g++ is found, the driver is also
 compiled for the Cortex-M4 with the real headers at -O0 and -Os.
 
-Not hardware validation: no timing, no electrical test, no ICU edge handling.
+The ICU model takes RXI, TXI and ERI as edge events that set the IR flag of
+their slot, as the handler order of the Renesas FSP assumes, and the line can
+move while the handler runs. Not hardware validation: no exact timing, no
+electrical test.
 
 MIT License
 

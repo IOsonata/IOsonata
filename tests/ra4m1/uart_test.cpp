@@ -10,13 +10,23 @@
 		Line model : one step moves one character each way. TX shifts out the
 		character in the shift register and loads the next from TDR or the TX
 		FIFO, TDR written with the line idle goes to the shift register right
-		away. RX receives the next character of RxIn. RXI (RIE and RDRF, or
-		RDF or DR with the FIFO) and ERI (RIE and ORER, FER or PER) are
-		levels. TXI is latched when TDRE goes to 1, TDFE when the TX FIFO goes
-		down to the trigger level, with TIE set, or when TE and TIE are set by
-		the same write, and cleared when it is taken. Interrupts are taken
-		when interrupts are enabled again and after each step. An interrupt
-		that stays requested after 200 calls fails the test.
+		away. RX receives the next character of RxIn, C_IDLE in RxIn is one
+		step without a character.
+
+		ICU model : each slot has its IR flag. RXI (RIE and RDRF, or RDF or DR
+		with the FIFO) and ERI (RIE and ORER, FER or PER) set it when their
+		request goes from 0 to 1. TXI sets it when TDRE goes to 1, TDFE when
+		the TX FIFO goes down to the trigger level, with TIE set, or when TE
+		and TIE are set by the same write. An event with IR already set is
+		lost. Ra4m1AcknowledgeInt clears IR, otherwise it is cleared when the
+		handler returns, as the ICU dispatcher of interrupt_ra4m1.cpp does.
+		The handler is called while IR is set, when interrupts are enabled
+		again and after each step. With s_IsrStepEvery the line also moves
+		inside the handler, every n register accesses.
+
+		FIFO flags : RDF is cleared only below the RX trigger, DR only with the
+		RX FIFO empty, TDFE only above the TX trigger, FER and PER only with no
+		such character left in the FIFO. Reception stops while ORER is set.
 
 		Checked on every access : the SCI module is running, SMR, SEMR, BRR,
 		MDDR, SCMR and the FIFO resets are written with TE and RE cleared,
@@ -24,7 +34,7 @@
 		not read empty, the TX FIFO and TDR are not written full, MSTPCRB is
 		written with PRCR.PRC1 set.
 
-		Not a timing or electrical test, not a test of the ICU edge handling.
+		Not a timing or electrical test.
 
 @author	Hoang Nguyen Hoan
 @date	Oct. 12, 2026
@@ -55,6 +65,7 @@ SOFTWARE.
 
 ----------------------------------------------------------------------------*/
 #include <math.h>
+#include <stdlib.h>
 #include <stdio.h>
 #include <deque>
 #include <vector>
@@ -74,6 +85,7 @@ SOFTWARE.
 
 #define C_FER		R_SCI0_FRDRHL_FER_Msk	// Error bits of a character in RxIn
 #define C_PER		R_SCI0_FRDRHL_PER_Msk
+#define C_IDLE		0x8000U					// RxIn : one step without a character
 
 #define TE			R_SCI0_SCR_TE_Msk
 #define RE			R_SCI0_SCR_RE_Msk
@@ -93,7 +105,7 @@ typedef struct {
 	bool bTdrFull;
 	int Tsr;						// Character in the TX shift register, -1 none
 	int Idle;						// Steps without RX character
-	bool bTxiIr;					// TXI latched in the ICU
+	bool bTxiEvt;					// TXI event, moved to the ICU slot
 	bool bRxdLow;					// RXD held low, break
 	std::vector<uint8_t> Wire;		// Characters sent
 	unsigned StaleRdr;				// RDR read without RDRF or an error flag
@@ -105,6 +117,9 @@ typedef struct {
 	int Evt;
 	Ra4m1IRQHandler_t Handler;
 	void *pCtx;
+	bool bIr;						// ICU IR flag
+	bool bReq;						// Request level of RXI and ERI, last seen
+	bool bAcked;					// Ra4m1AcknowledgeInt called by the handler
 } IcuSlot_t;
 
 static int s_FailCnt;
@@ -118,6 +133,9 @@ static IcuSlot_t s_Slot[32];
 static bool s_bInIsr;
 static unsigned s_IrqPoints;
 static unsigned s_StepEvery;		// Line step every n interrupt points, 0 none
+static unsigned s_IsrStepEvery;		// Line step after n register accesses in the handler, 0 none
+static unsigned s_IsrAccess;		// Register accesses in the handler since the last step
+static unsigned s_LostEvt;			// Events that found IR already set
 static unsigned s_IsrCnt;
 static int s_PinCfgCnt;
 static int s_PinDisCnt;
@@ -166,7 +184,7 @@ static void SetTxFlag(SciModel_t &m)
 		m.Flags |= B_TDRE;
 		if (m.Scr & TIE)
 		{
-			m.bTxiIr = true;
+			m.bTxiEvt = true;
 		}
 	}
 }
@@ -181,7 +199,10 @@ static int SciUnit(const void *pReg)
 	return u;
 }
 
-uint32_t TestRegRead(const void *pReg, int Id)
+static void LineStep(int u);
+static void UpdateIcu(void);
+
+static uint32_t RegRead(const void *pReg, int Id)
 {
 	if (Id == SYSREG_PRCR)
 	{
@@ -238,7 +259,7 @@ uint32_t TestRegRead(const void *pReg, int Id)
 	}
 }
 
-void TestRegWrite(const void *pReg, int Id, uint32_t Val)
+static void RegWrite(const void *pReg, int Id, uint32_t Val)
 {
 	if (Id == SYSREG_PRCR)
 	{
@@ -295,7 +316,7 @@ void TestRegWrite(const void *pReg, int Id, uint32_t Val)
 				if (v & TIE)
 				{
 					// TE and TIE set by the same write
-					m.bTxiIr = true;
+					m.bTxiEvt = true;
 				}
 			}
 			if (!(v & TE))
@@ -317,7 +338,38 @@ void TestRegWrite(const void *pReg, int Id, uint32_t Val)
 			uint8_t clearable = Fifo(m) ? (B_TDRE | B_RDRF | B_RXERR | B_DR) : B_RXERR;
 
 			CHECK((clr & ~m.Seen) == 0);
-			if (!Fifo(m))
+			if (Fifo(m))
+			{
+				// FIFO flags are cleared only once their condition is gone
+				bool fer = false;
+				bool per = false;
+				for (uint16_t c : m.RxFifo)
+				{
+					fer |= (c & C_FER) != 0;
+					per |= (c & C_PER) != 0;
+				}
+				if (m.RxFifo.size() >= RxTrigger(m))
+				{
+					clearable &= ~B_RDRF;
+				}
+				if (!m.RxFifo.empty())
+				{
+					clearable &= ~B_DR;
+				}
+				if (m.TxFifo.size() <= TxTrigger(m))
+				{
+					clearable &= ~B_TDRE;
+				}
+				if (fer)
+				{
+					clearable &= ~B_FER;
+				}
+				if (per)
+				{
+					clearable &= ~B_PER;
+				}
+			}
+			else
 			{
 				// RDRF and TDRE are left to the hardware by the driver
 				CHECK((~v & (B_TDRE | B_RDRF)) == 0);
@@ -364,6 +416,36 @@ void TestRegWrite(const void *pReg, int Id, uint32_t Val)
 	}
 }
 
+// Line state after a register access. In the handler the line moves once
+// s_IsrStepEvery accesses are made since the last step, the time the handler
+// takes.
+static void AccessDone(void)
+{
+	UpdateIcu();
+	if (s_bInIsr && s_IsrStepEvery && ++s_IsrAccess >= s_IsrStepEvery)
+	{
+		for (int u = 0; u < 4; u++)
+		{
+			LineStep(u);
+		}
+	}
+}
+
+uint32_t TestRegRead(const void *pReg, int Id)
+{
+	uint32_t v = RegRead(pReg, Id);
+
+	AccessDone();
+
+	return v;
+}
+
+void TestRegWrite(const void *pReg, int Id, uint32_t Val)
+{
+	RegWrite(pReg, Id, Val);
+	AccessDone();
+}
+
 // A character on RXD
 static void Arrive(SciModel_t &m, uint16_t c)
 {
@@ -371,6 +453,12 @@ static void Arrive(SciModel_t &m, uint16_t c)
 
 	if (Fifo(m))
 	{
+		if (m.Flags & B_ORER)
+		{
+			// Reception stopped until ORER is cleared
+			m.RxLost++;
+			return;
+		}
 		if (m.RxFifo.size() >= 16)
 		{
 			m.Flags |= B_ORER;
@@ -421,9 +509,19 @@ static void LineStep(int u)
 {
 	SciModel_t &m = s_Sci[u];
 
+	if (u == 0)
+	{
+		// One step of all units is one character time
+		s_IsrAccess = 0;
+	}
 	if (s_Mstpcrb & s_MstpBit[u])
 	{
 		return;
+	}
+	bool idle = !m.RxIn.empty() && m.RxIn.front() == C_IDLE;
+	if (idle)
+	{
+		m.RxIn.pop_front();
 	}
 
 	if (m.Tsr >= 0)
@@ -459,7 +557,7 @@ static void LineStep(int u)
 		}
 	}
 
-	if ((m.Scr & RE) && !m.RxIn.empty())
+	if ((m.Scr & RE) && !idle && !m.RxIn.empty())
 	{
 		Arrive(m, m.RxIn.front());
 		m.RxIn.pop_front();
@@ -472,34 +570,60 @@ static void LineStep(int u)
 			m.Flags |= B_DR;
 		}
 	}
+	UpdateIcu();
 }
 
-static bool Requested(int Slot)
+// Unit and kind of a slot : 0 RXI, 1 TXI, 3 ERI. -1 for another event.
+static int SlotUnit(int Slot, int *pKind)
 {
-	int u = -1;
-	int kind = 0;
-
 	for (int i = 0; i < 4; i++)
 	{
 		int k = s_Slot[Slot].Evt - s_EvtRxi[i];
 		if (k == 0 || k == 1 || k == 3)
 		{
-			u = i;
-			kind = k;
+			*pKind = k;
+			return (s_Mstpcrb & s_MstpBit[i]) ? -1 : i;
 		}
 	}
-	if (u < 0 || (s_Mstpcrb & s_MstpBit[u]))
-	{
-		return false;
-	}
+	return -1;
+}
 
-	SciModel_t &m = s_Sci[u];
-
-	switch (kind)
+// IR set by the events of the SCI
+static void UpdateIcu(void)
+{
+	for (int i = 0; i < 32; i++)
 	{
-		case 0: return (m.Scr & RIE) && (m.Flags & (Fifo(m) ? (B_RDRF | B_DR) : B_RDRF));
-		case 1: return m.bTxiIr;
-		default: return (m.Scr & RIE) && (m.Flags & B_RXERR);
+		int kind = 0;
+		int u = s_Slot[i].Handler ? SlotUnit(i, &kind) : -1;
+
+		if (u < 0)
+		{
+			continue;
+		}
+
+		SciModel_t &m = s_Sci[u];
+		bool evt = false;
+
+		if (kind == 1)
+		{
+			evt = m.bTxiEvt;
+			m.bTxiEvt = false;
+		}
+		else
+		{
+			bool req = (m.Scr & RIE) && (kind == 0 ? (m.Flags & (Fifo(m) ? (B_RDRF | B_DR) : B_RDRF)) :
+										 (m.Flags & B_RXERR));
+			evt = req && !s_Slot[i].bReq;
+			s_Slot[i].bReq = req;
+		}
+		if (evt)
+		{
+			if (s_Slot[i].bIr)
+			{
+				s_LostEvt++;
+			}
+			s_Slot[i].bIr = true;
+		}
 	}
 }
 
@@ -509,12 +633,13 @@ static void Dispatch(void)
 	{
 		return;
 	}
+	UpdateIcu();
 	for (int n = 0; ; n++)
 	{
 		int slot = -1;
 		for (int i = 0; i < 32 && slot < 0; i++)
 		{
-			if (s_Slot[i].Handler && Requested(i))
+			if (s_Slot[i].Handler && s_Slot[i].bIr)
 			{
 				slot = i;
 			}
@@ -528,18 +653,16 @@ static void Dispatch(void)
 			CHECK(n < 200);
 			return;
 		}
-		for (int i = 0; i < 4; i++)
-		{
-			if (s_Slot[slot].Evt == s_EvtRxi[i] + 1)
-			{
-				// TXI taken, its ICU flag is cleared
-				s_Sci[i].bTxiIr = false;
-			}
-		}
 		uint32_t pm = g_TestPrimask;
 		s_bInIsr = true;
 		g_TestPrimask = 1;
+		s_Slot[slot].bAcked = false;
 		s_Slot[slot].Handler(slot, s_Slot[slot].pCtx);
+		if (!s_Slot[slot].bAcked)
+		{
+			// The dispatcher clears IR after a handler that did not
+			s_Slot[slot].bIr = false;
+		}
 		g_TestPrimask = pm;
 		s_bInIsr = false;
 		s_IsrCnt++;
@@ -589,6 +712,7 @@ IRQn_Type Ra4m1RegisterIntHandler(uint8_t EvtId, int Prio, Ra4m1IRQHandler_t pHa
 	{
 		if (s_Slot[i].Handler == NULL)
 		{
+			s_Slot[i] = IcuSlot_t();
 			s_Slot[i].Evt = EvtId;
 			s_Slot[i].Handler = pHandler;
 			s_Slot[i].pCtx = pCtx;
@@ -602,14 +726,20 @@ void Ra4m1UnregisterIntHandler(IRQn_Type IrqNo)
 {
 	if ((unsigned)IrqNo < 32)
 	{
-		s_Slot[IrqNo].Handler = NULL;
-		s_Slot[IrqNo].Evt = 0;
+		s_Slot[IrqNo] = IcuSlot_t();
 	}
 }
 
 bool Ra4m1AcknowledgeInt(IRQn_Type IrqNo)
 {
-	return (unsigned)IrqNo < 32 && s_Slot[IrqNo].Handler != NULL;
+	if ((unsigned)IrqNo >= 32 || s_Slot[IrqNo].Handler == NULL)
+	{
+		return false;
+	}
+	s_Slot[IrqNo].bIr = false;
+	s_Slot[IrqNo].bAcked = true;
+
+	return true;
 }
 
 static int SlotCnt(void)
@@ -701,6 +831,8 @@ static void ResetModel(void)
 	s_Mstpcrb = 0xFFFFFFFFU;
 	s_Prcr = 0;
 	s_StepEvery = 0;
+	s_IsrStepEvery = 0;
+	s_IsrAccess = 0;
 	s_EvtRx = s_EvtTx = s_EvtLine = 0;
 	s_LastLine = 0;
 	s_RefillLeft = 0;
@@ -952,6 +1084,12 @@ static void TestTx(int u, bool bIntMode, int Len, int Chunk)
 	CHECK(s_Uart.bTxReady == true);
 	CHECK((s_Sci[u].Scr & TIE) == 0);
 	CHECK(CFifoUsed(s_Uart.hTxFifo) == 0);
+	if (s_Sci[u].Wire != d)
+	{
+		printf("  TestTx unit %d int %d chunk %d : %zu of %d sent, TX FIFO %zu, TIE %d, TDFE %d\n", u, bIntMode, Chunk,
+			   s_Sci[u].Wire.size(), Len, s_Sci[u].TxFifo.size(), (s_Sci[u].Scr & TIE) != 0,
+			   (s_Sci[u].Flags & B_TDRE) != 0);
+	}
 }
 
 // RX of Len bytes, read Chunk bytes per UARTRx call
@@ -1021,6 +1159,72 @@ static void TestLoopback(int u, bool bIntMode, int Len)
 	CHECK(s_Sci[u].RxLost == 0);
 	CHECK(s_Sci[u].StaleRdr == 0);
 	CHECK(s_Uart.RxOvrErrCnt == 0 && s_Uart.RxDropCnt == 0);
+}
+
+// Echo as exemples/uart/uart_loopback.cpp does it, the characters arriving
+// in bursts of 1 to 40 with 0 to 4 idle steps between them. IsrStep : line
+// step after n register accesses in the handler, 0 none.
+static void TestLoopbackBursts(int u, bool bIntMode, int Len, unsigned IsrStep, unsigned Seed)
+{
+	ResetModel();
+	UARTCfg_t cfg = Cfg(u, bIntMode);
+	CHECK(UARTInit(&s_Uart, &cfg) == true);
+
+	std::vector<uint8_t> d;
+	Pattern(d, Len, (uint8_t)(0x20 + u));
+	unsigned x = Seed;
+	for (int i = 0; i < Len; )
+	{
+		x = x * 1103515245U + 12345U;
+		int burst = 1 + (int)((x >> 16) % 40);
+		for (int k = 0; k < burst && i < Len; k++, i++)
+		{
+			s_Sci[u].RxIn.push_back(d[i]);
+		}
+		x = x * 1103515245U + 12345U;
+		for (int k = (int)((x >> 16) % 5); k > 0; k--)
+		{
+			s_Sci[u].RxIn.push_back(C_IDLE);
+		}
+	}
+	s_StepEvery = bIntMode || u < 2 ? 5 : 0;
+	s_IsrStepEvery = IsrStep;
+	unsigned lostevt = s_LostEvt;
+	size_t last = 0;
+	int still = 0;
+	// Ends when all is echoed, or nothing moved for 2000 steps
+	while (s_Sci[u].Wire.size() < (size_t)Len && still < 2000)
+	{
+		uint8_t buf[16];
+		int n = UARTRx(&s_Uart, buf, sizeof(buf));
+		if (n > 0)
+		{
+			SendAll(buf, n, n);
+		}
+		RunLine(1);
+		still = s_Sci[u].Wire.size() == last ? still + 1 : 0;
+		last = s_Sci[u].Wire.size();
+	}
+	CHECK(s_Sci[u].Wire == d);
+	CHECK(s_Sci[u].RxLost == 0);
+	CHECK(s_Sci[u].StaleRdr == 0);
+	CHECK(s_Uart.RxOvrErrCnt == 0 && s_Uart.RxDropCnt == 0);
+	if (s_Sci[u].Wire != d && getenv("UART_TEST_DUMP"))
+	{
+		size_t k = 0;
+		while (k < d.size() && k < s_Sci[u].Wire.size() && s_Sci[u].Wire[k] == d[k]) k++;
+		printf("  first difference at %zu :", k);
+		for (size_t j = k > 3 ? k - 3 : 0; j < k + 8 && j < s_Sci[u].Wire.size(); j++) printf(" %02x", s_Sci[u].Wire[j]);
+		printf("  expected");
+		for (size_t j = k > 3 ? k - 3 : 0; j < k + 8 && j < d.size(); j++) printf(" %02x", d[j]);
+		printf("\n");
+	}
+	if (s_Sci[u].Wire != d || s_Sci[u].RxLost)
+	{
+		printf("  TestLoopbackBursts unit %d int %d isr step %u seed %u : %zu of %d echoed, lost %u, ovr %u, events lost %u\n",
+			   u, bIntMode, IsrStep, Seed, s_Sci[u].Wire.size(), Len, s_Sci[u].RxLost, s_Uart.RxOvrErrCnt,
+			   s_LostEvt - lostevt);
+	}
 }
 
 static void TestErrors(void)
@@ -1237,6 +1441,14 @@ int main()
 			TestRx(u, intmode, 1000, 16);
 			TestRx(u, intmode, 1000, 64);
 			TestLoopback(u, intmode, 2000);
+			// Without FIFO, a handler slower than one character overruns RDR
+			for (unsigned isrstep = 0; isrstep < 20; isrstep += (isrstep == 0 && u >= 2) ? 8 : 4)
+			{
+				for (unsigned seed = 1; seed <= 3; seed++)
+				{
+					TestLoopbackBursts(u, intmode, 3000, isrstep, seed);
+				}
+			}
 		}
 	}
 	TestErrors();
