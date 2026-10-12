@@ -400,10 +400,14 @@ and DMA with a non-blocking FIFO. `UARTSetCtrlLineState` does nothing.
   whatever the event. TXI is enabled while the TX CFIFO has data, `bTxReady`
   is true when the TX CFIFO is empty. The ICU IR flag of RXI and TXI is cleared
   at the start of the handler, ERI at the end, as the Renesas FSP does. SCI2/9
-  have no FIFO: when ERI or TXI read RDR with a receive error, the RXI of that
-  character is cleared and RDR is checked once more for a character that
-  arrived meanwhile. A pending RXI found by the RXI handler is of a new
-  character and is left set.
+  have no FIFO: RDR holds one character and the next one overruns it a
+  character time later. Their RXI and ERI service RX only and run at
+  `IntPrio`, TXI and the DMA transfer end service TX only and run one level
+  lower (unless `IntPrio` is already the lowest), so that RXI can preempt
+  them. When ERI reads RDR with a receive error, the RXI of that character is
+  cleared and RDR is checked once more for a character that arrived
+  meanwhile. A pending RXI found by the RXI handler is of a new character and
+  is left set. Callbacks from RX and TX interrupts can nest on SCI2/9.
 - DMA mode (`bDMAMode`): while the channel is idle the CPU puts what the SCI
   takes, as without DMA (TX FIFO of SCI0/1, TDR of SCI2/9), which costs no
   interrupt. DMAC channel `DevNo` sends the rest in blocks straight from the
@@ -428,8 +432,9 @@ and DMA with a non-blocking FIFO. `UARTSetCtrlLineState` does nothing.
   (MSTPA22) is started and never stopped by the driver, other drivers may use
   it. UARTInit fails if channel `DevNo` is linked to another event.
 - Polling mode: TxData and RxData move the data between the SCI and the CFIFOs.
-  With SCI2 and SCI9 the application must call RxData at least once per
-  character time or characters are lost to overrun.
+  With SCI2 and SCI9 the application must call RxData or TxData at least once
+  per character time or characters are lost to overrun. With DMA, RDR is read
+  again after the end of a block and the start of the next one.
 - SCI0 and SCI1 FIFO mode: RXI at 8 received characters, or with fewer once the
   line is idle for 1.5 frames (receive data ready). TXI at 8 or fewer characters
   in the TX FIFO.

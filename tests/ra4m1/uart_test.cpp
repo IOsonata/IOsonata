@@ -121,6 +121,7 @@ typedef struct {
 	bool bIr;						// ICU IR flag
 	bool bReq;						// Request level of RXI and ERI, last seen
 	bool bAcked;					// Ra4m1AcknowledgeInt called by the handler
+	int Prio;						// NVIC priority given at registration
 } IcuSlot_t;
 
 static int s_FailCnt;
@@ -1024,6 +1025,7 @@ IRQn_Type Ra4m1RegisterIntHandler(uint8_t EvtId, int Prio, Ra4m1IRQHandler_t pHa
 			s_Slot[i].Evt = EvtId;
 			s_Slot[i].Handler = pHandler;
 			s_Slot[i].pCtx = pCtx;
+			s_Slot[i].Prio = Prio;
 			return (IRQn_Type)i;
 		}
 	}
@@ -1608,6 +1610,32 @@ static void TestRxOverrunOnce(void)
 	}
 }
 
+// Interrupt priorities: RXI and ERI at IntPrio. SCI2/9 have no RX FIFO, their
+// TXI or DMA transfer end is one level lower (a larger number) so that RXI can
+// preempt it, unless IntPrio is already the lowest. SCI0/1 use IntPrio for all.
+static void TestIntPrio(void)
+{
+	for (int u = 0; u < 4; u++)
+	{
+		for (int dma = 0; dma < 2; dma++)
+		{
+			for (int prio = 1; prio <= 15; prio += 14)
+			{
+				ResetModel();
+				UARTCfg_t cfg = Cfg(u, true, dma);
+				cfg.IntPrio = prio;
+				CHECK(UARTInit(&s_Uart, &cfg) == true);
+				Ra4m1UartDev_t *dev = &s_Ra4m1UartDev[u];
+				int tx = dma ? dev->IrqDma : dev->IrqTxi;
+				int txprio = u >= 2 && prio < 15 ? prio + 1 : prio;
+				CHECK(s_Slot[dev->IrqRxi].Prio == prio);
+				CHECK(s_Slot[dev->IrqEri].Prio == prio);
+				CHECK(tx >= 0 && s_Slot[tx].Prio == txprio);
+			}
+		}
+	}
+}
+
 // RX of Len bytes, read Chunk bytes per UARTRx call
 static void TestRx(int u, bool bIntMode, int Len, int Chunk, bool bDma = false)
 {
@@ -2003,6 +2031,7 @@ int main()
 {
 	TestInit();
 	TestSetRate();
+	TestIntPrio();
 	// Without DMA, then with DMA for a request made while DTE is cleared held
 	// in DELSR and lost, then held with the channel taking each request one
 	// register access or line step later

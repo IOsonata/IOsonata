@@ -728,6 +728,13 @@ static void Ra4m1UartPoll(Ra4m1UartDev_t * const pDev)
 		{
 			pDev->pUartDev->bTxReady = false;
 		}
+		if (!pDev->bHwFifo)
+		{
+			// RDR holds one character and the next one comes a character time
+			// later. The end of a block and the start of the next one take
+			// about as long on SCI2/9, RX is read again after them.
+			Ra4m1UartRxHw(pDev, RA4M1_UART_RX_POLL, &err);
+		}
 	}
 	else
 	{
@@ -755,10 +762,18 @@ static void Ra4m1UartIRQHandler(int IntNo, void *pCtx)
 		Ra4m1AcknowledgeInt((IRQn_Type)IntNo);
 	}
 
-	int rxcnt = Ra4m1UartRxHw(dev, IntNo == (int)dev->IrqRxi ? RA4M1_UART_RX_RXI : RA4M1_UART_RX_OTHER, &err);
+	// SCI2/9: RXI and ERI service RX only, TXI services TX only. TXI runs one
+	// priority level lower and RXI can preempt it, they do not share state.
+	bool txi = IntNo == (int)dev->IrqTxi;
+	int rxcnt = 0;
+
+	if (dev->bHwFifo || !txi)
+	{
+		rxcnt = Ra4m1UartRxHw(dev, IntNo == (int)dev->IrqRxi ? RA4M1_UART_RX_RXI : RA4M1_UART_RX_OTHER, &err);
+	}
 
 	// With DMA, TIE is for the channel and TXI goes to it
-	if (!udev->DevIntrf.bDma && (reg->SCR & R_SCI0_SCR_TIE_Msk))
+	if (!udev->DevIntrf.bDma && (dev->bHwFifo || txi) && (reg->SCR & R_SCI0_SCR_TIE_Msk))
 	{
 		Ra4m1UartTxHw(dev);
 		if (CFifoUsed(udev->hTxFifo) == 0)
@@ -778,12 +793,12 @@ static void Ra4m1UartIRQHandler(int IntNo, void *pCtx)
 		Ra4m1AcknowledgeInt(dev->IrqEri);
 		if (err && !dev->bHwFifo && IntNo != (int)dev->IrqRxi)
 		{
-			// Without the FIFO, ERI or TXI read RDR with the error, the RXI of
-			// that character may be pending: run again, it would read RDR a
-			// second time. It is cleared and a character that arrived since
-			// is read now. On RXI the pending RXI is of a new character and
-			// stays: cleared, that character would wait in RDR for the next
-			// one to overrun it, and each overrun would lose the next RXI.
+			// Without the FIFO, ERI read RDR with the error, the RXI of that
+			// character may be pending: run again, it would read RDR a second
+			// time. It is cleared and a character that arrived since is read
+			// now. On RXI the pending RXI is of a new character and stays:
+			// cleared, that character would wait in RDR for the next one to
+			// overrun it, and each overrun would lose the next RXI.
 			uint8_t e = 0;
 
 			Ra4m1AcknowledgeInt(dev->IrqRxi);
@@ -1408,16 +1423,24 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	{
 		// One handler for RXI, TXI and ERI, TEI is not used. With DMA the TXI
 		// goes to the DMAC channel, whose transfer end has its own handler.
+		// SCI2/9 have no RX FIFO: RDR holds one character, the next one
+		// overruns it a character time later. Their TXI or transfer end runs
+		// one priority level lower so that RXI can preempt it.
+		int txprio = pCfg->IntPrio;
+		if (!dev->bHwFifo && txprio < (1 << __NVIC_PRIO_BITS) - 1)
+		{
+			txprio++;
+		}
 		dev->IrqRxi = Ra4m1RegisterIntHandler(dev->EvtRxi, pCfg->IntPrio, Ra4m1UartIRQHandler, dev);
 		dev->IrqEri = Ra4m1RegisterIntHandler(dev->EvtRxi + 3, pCfg->IntPrio, Ra4m1UartIRQHandler, dev);
 		IRQn_Type irqtx;
 		if (pCfg->bDMAMode)
 		{
-			irqtx = dev->IrqDma = Ra4m1RegisterIntHandler(dev->EvtDma, pCfg->IntPrio, Ra4m1UartDmaIRQHandler, dev);
+			irqtx = dev->IrqDma = Ra4m1RegisterIntHandler(dev->EvtDma, txprio, Ra4m1UartDmaIRQHandler, dev);
 		}
 		else
 		{
-			irqtx = dev->IrqTxi = Ra4m1RegisterIntHandler(dev->EvtRxi + 1, pCfg->IntPrio, Ra4m1UartIRQHandler, dev);
+			irqtx = dev->IrqTxi = Ra4m1RegisterIntHandler(dev->EvtRxi + 1, txprio, Ra4m1UartIRQHandler, dev);
 		}
 		if (dev->IrqRxi == (IRQn_Type)-1 || irqtx == (IRQn_Type)-1 || dev->IrqEri == (IRQn_Type)-1)
 		{
