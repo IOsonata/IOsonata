@@ -236,6 +236,27 @@ IAPSTATUS IAPEepromRead(uint32_t EepAddr, uint8_t *pData, int Size)
 	return res.CmdStatus;
 }
 
+IAPSTATUS IAPEepromWritePage(uint32_t PageNo, uint8_t *pData)
+{
+	IAP_CMD_STATUS cmd;
+	IAP_CMD_STATUS res;
+
+	if (pData == 0)
+	{
+		return IAPSTATUS_PARAM_ERROR;
+	}
+
+	cmd.CmdStatus = IAPCMD_EEPROM_WRITE_PAGE;
+	cmd.Data[0] = PageNo;
+	cmd.Data[1] = (uint32_t)pData;
+	cmd.Data[2] = SystemCoreClock / 1000;
+	cmd.Data[3] = 0;
+
+	IapEntry(&cmd, &res);
+
+	return res.CmdStatus;
+}
+
 IAPSTATUS IAPReadFlashSignature(uint32_t *pSig)
 {
 	IAP_CMD_STATUS cmd;

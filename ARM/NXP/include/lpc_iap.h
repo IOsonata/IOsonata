@@ -116,6 +116,10 @@ IAPSTATUS IAPReadFlashSignature(uint32_t *pSig);
 // uint32_t words (128-bit signature, least significant word first).
 // On ROM error the output is unchanged; a null output returns PARAM_ERROR.
 IAPSTATUS IAPReadExtFlashSignature(uint32_t StartAddr, uint32_t EndAddr, uint32_t NbState, uint32_t *pSig);
+// LPC546xx command 81 writes one complete EEPROM page (128 bytes).
+// pData must point to a readable page buffer. SystemCoreClock supplies the
+// timing in kHz; callers must keep it current and provide IAP call protection.
+// A null source returns PARAM_ERROR; other ROM status codes pass through.
 IAPSTATUS IAPEepromWritePage(uint32_t PageNo, uint8_t *pData);
 //IAPSTATUS IAPEepromRead(uint32_t PageNo, uint8_t *pBuff);
 

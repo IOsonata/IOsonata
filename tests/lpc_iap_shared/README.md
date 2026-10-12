@@ -1,4 +1,4 @@
-# Shared LPC IAP signatures
+# Shared LPC IAP
 
 Run `python3 tests/lpc_iap_shared/run.py`. Host GCC compiles the production
 shared IAP implementation as C, then GCC and G++ link callers of the public
@@ -24,6 +24,14 @@ The command layout follows NXP UM10912 section 5.6.11, table 83. Although
 earlier argument names said StartPage/EndPage, LPC546xx ROM expects flash
 addresses. The public header now states this and requires a four-word
 output buffer. No generic driver API is changed.
+
+The EEPROM page test covers the previously missing IAPEepromWritePage symbol.
+Its ROM stub checks command 81, page number, buffer address and conversion
+of the core clock from Hz to kHz at 12 and 48 MHz. It checks success and ROM
+error propagation and rejects a null source without calling ROM. The command
+layout follows NXP UM10912 section 5.6.13, table 85. This is a complete-page
+write; the caller supplies all 128 bytes and the required IAP call protection.
+The test failed to link before the implementation was added.
 
 The shared IAP source also compiles to Cortex-M4 assembly with
 LPC54628_SERIES at -O0 and -O2. Tests do not execute hardware ROM or validate
