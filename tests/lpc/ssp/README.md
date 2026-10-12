@@ -43,7 +43,9 @@ transfer returns its completed byte count (zero if the final idle wait fails)
 and Stop resets the peripheral before releasing CS. The generic Start/Stop
 helpers continue to own the busy flag. PowerOff requires full reinitialization.
 
-LPC17xx still has no SPIInit implementation. These host tests and ARM compiler
+LPC17xx now supplies SPIInit for SSP0 (DevNo 0) and SSP1 (DevNo 1),
+using the same shared transfer and rate functions as LPC11Uxx. The older
+non-SSP SPI controller is not exposed. These host tests and ARM compiler
 checks do not establish a working board port. Pin muxing, electrical timing,
 and transfers on real hardware still require validation.
 
@@ -65,3 +67,30 @@ Choose pins bonded out on the actual package. Tests exercise every combination
 above and check that invalid functions, swapped data pins, wrong-controller
 maps and overlapping CS pins leave registers, pin calls and driver state
 unchanged. Rate tests now use real routes for each controller.
+
+LPC17xx supports the same polling-master frame formats and chip-select modes
+as LPC11Uxx. It selects PCLK = SystemCoreClock independently for each SSP,
+disables peripheral DMA and interrupts, and preloads GPIO CS high before
+configuring pins. Its LPC1769 library project includes the new initializer.
+
+| Controller | SCK | MISO | MOSI |
+| --- | --- | --- | --- |
+| SSP0 | P0.15 FUNC2, P1.20 FUNC3 | P0.17 FUNC2, P1.23 FUNC3 | P0.18 FUNC2, P1.24 FUNC3 |
+| SSP1 | P0.7 FUNC2, P1.31 FUNC2 | P0.8 FUNC2 | P0.9 FUNC2 |
+
+LPC17xx has no LPC11Uxx PRESETCTRL equivalent. PCONP only gates the SSP
+clock. Reset waits for queued frames to finish at their existing rate, then
+disables SSP, drains RX and clears status before releasing CS. A bounded
+idle-wait failure leaves SSP disabled with an error; Enable cannot restart
+it. Init requires an idle transmitter before reconfiguration. A controller
+that remains stuck with queued TX data may require a chip reset.
+
+The LPC17xx test compiles the initializer, shared SSP transfers, generic
+DeviceIntrf helpers and actual GPIO configuration together. It covers both
+instances, all clock modes and pin routes, 129-byte reads, command/read, wide
+frames, rate limits, ownership, invalid routes, rejected execution modes,
+stale RX draining, persistent busy failure and power-off. The FIFO model
+does not establish hardware timing or simulate PCONP clock gating.
+
+LPC17xx register and pin reference: NXP UM10360, chapters 4, 8 and 18,
+https://www.pololu.com/file/0J431/user.manual.lpc17xx.pdf.

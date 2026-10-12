@@ -30,3 +30,16 @@ for opt in ['-O0', '-O2']:
                         *['-I' + str(root / p) for p in includes],
                         str(root / 'tests/lpc/ssp/transfer_test.cpp'), '-o', exe], check=True)
         subprocess.run([exe], check=True)
+
+# LPC17xx family setup with the shared transfer code and real pin configuration.
+for opt in ['-O0', '-O2']:
+    includes = ['tests/lpc/uart/shim', 'include', 'ARM/NXP/include',
+                'ARM/NXP/LPC17xx/Include']
+    with tempfile.TemporaryDirectory() as tmp:
+        exe = str(Path(tmp) / 'init17_test')
+        subprocess.run(['g++', '-std=c++17', opt, '-Wall', '-Wextra',
+                        '-Wno-missing-field-initializers', '-Wno-unused-parameter',
+                        '-fsanitize=undefined', '-fno-sanitize-recover=all',
+                        *['-I' + str(root / p) for p in includes],
+                        str(root / 'tests/lpc/ssp/init17_test.cpp'), '-o', exe], check=True)
+        subprocess.run([exe], check=True)

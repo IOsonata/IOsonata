@@ -1185,6 +1185,11 @@
 			<type>1</type>
 			<locationURI>PARENT-3-PROJECT_LOC/Include/i2c_lpc_target.h</locationURI>
 		</link>
+		<link>
+			<name>src/coredev/spi_lpc17xx.c</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/spi_lpc17xx.c</locationURI>
+		</link>
 	</linkedResources>
 </projectDescription>
 
