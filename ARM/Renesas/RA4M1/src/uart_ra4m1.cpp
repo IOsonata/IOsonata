@@ -20,6 +20,8 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ----------------------------------------------------------------------------*/
+#include <string.h>
+
 #include "ra4m1xxx.h"
 #include "coredev/uart.h"
 #include "iopinctrl.h"
@@ -333,7 +335,9 @@ static void UartIrq(int irq, void *ctx)
     uint8_t errors = 0;
     int length = 0;
     bool notify = false;
-    if (irq == (int)d->Irq[0] || irq == (int)d->Irq[3]) {
+	bool rxIrq = irq == (int)d->Irq[0] || irq == (int)d->Irq[3];
+	if (rxIrq)
+	{
         uint8_t byte;
         if (Receive(d, &byte, &errors)) {
             uint32_t dropped = u->hRxFifo->DropCnt;
@@ -377,10 +381,15 @@ static void UartIrq(int irq, void *ctx)
             }
         }
     }
-    Sync(d);
-    Ra4m1AcknowledgeInt((IRQn_Type)irq);
-    UARTEvtHandler_t callback = u->EvtCallback;
-    EnableInterrupt(state);
+	Sync(d);
+	UARTEvtHandler_t callback = u->EvtCallback;
+	// Without an RX callback, the dispatcher can acknowledge on return.
+	// Callback paths acknowledge first because application code may reinit.
+	if (!rxIrq || callback)
+	{
+		Ra4m1AcknowledgeInt((IRQn_Type)irq);
+	}
+	EnableInterrupt(state);
     // No register/state accesses after application code: it may power off/reinit.
     if (notify && callback) callback(u, event, errors ? &errors : nullptr, length);
 }
@@ -404,30 +413,62 @@ static void Stop(DevIntrf_t *p)
 }
 static int RxData(DevIntrf_t *p, uint8_t *buffer, int len)
 {
-    if (!buffer || len <= 0) return 0;
-    int count = 0;
-    while (count < len) {
-        uint32_t state = DisableInterrupt();
-        Ra4m1UartDev *d = Owner(p);
-        if (!d || !d->Enabled || !d->Rx) { EnableInterrupt(state); break; }
-        if (p->bIntEn) {
-            int byte = CFifoGetByte(d->pDev->hRxFifo);
-            if (byte < 0)
-            {
-                EnableInterrupt(state);
-                break;
-            }
-            buffer[count++] = (uint8_t)byte;
-            d->pDev->bRxReady = CFifoUsed(d->pDev->hRxFifo) != 0;
-        } else {
-            uint8_t errors, byte;
-            bool received = Receive(d, &byte, &errors);
-            if (received) buffer[count++] = byte;
-            else { EnableInterrupt(state); break; }
-        }
-        EnableInterrupt(state);
-    }
-    return count;
+	if (!buffer || len <= 0)
+	{
+		return 0;
+	}
+
+	int count = 0;
+
+	while (count < len)
+	{
+		uint32_t state = DisableInterrupt();
+		Ra4m1UartDev *d = Owner(p);
+
+		if (!d || !d->Enabled || !d->Rx)
+		{
+			EnableInterrupt(state);
+			break;
+		}
+		if (p->bIntEn)
+		{
+			// Bound each masked copy, even for a large application buffer.
+			int length = len - count;
+
+			if (length > 8)
+			{
+				length = 8;
+			}
+			uint8_t *data = CFifoGetMultiple(d->pDev->hRxFifo, &length);
+
+			if (data == nullptr)
+			{
+				d->pDev->bRxReady = false;
+				EnableInterrupt(state);
+				break;
+			}
+			// GetMultiple releases the slots. Keep the producer excluded
+			// until their contents have been copied to the caller.
+			memcpy(buffer + count, data, length);
+			count += length;
+			d->pDev->bRxReady = CFifoUsed(d->pDev->hRxFifo) != 0;
+		}
+		else
+		{
+			uint8_t errors;
+			uint8_t byte;
+
+			if (!Receive(d, &byte, &errors))
+			{
+				EnableInterrupt(state);
+				break;
+			}
+			buffer[count++] = byte;
+		}
+		EnableInterrupt(state);
+	}
+
+	return count;
 }
 static int TxData(DevIntrf_t *p, const uint8_t *data, int len)
 {
