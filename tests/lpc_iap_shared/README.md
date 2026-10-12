@@ -1,4 +1,4 @@
-# Shared LPC IAP extended signature
+# Shared LPC IAP signatures
 
 Run `python3 tests/lpc_iap_shared/run.py`. Host GCC compiles the production
 shared IAP implementation as C, then GCC and G++ link callers of the public
@@ -9,6 +9,11 @@ encoding and required zero fourth parameter. Tests verify all four words
 of the 128-bit result, surrounding output sentinels, unchanged output on
 ROM error and rejection of a null output without a ROM call. Before the
 fix, the test failed to link because the implementation had a different name.
+
+Command 70 is also checked for its single-word result, unchanged output on
+ROM error and null-output rejection. The ROM stub supplies deliberately
+invalid result words on error to catch wrappers that copy them anyway.
+The ordinary signature regression failed before its error handling was fixed.
 
 The command layout follows NXP UM10912 section 5.6.11, table 83. Although
 earlier argument names said StartPage/EndPage, LPC546xx ROM expects flash

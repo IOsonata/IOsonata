@@ -234,10 +234,18 @@ IAPSTATUS IAPReadFlashSignature(uint32_t *pSig)
 	IAP_CMD_STATUS cmd;
 	IAP_CMD_STATUS res;
 
+	if (pSig == 0)
+	{
+		return IAPSTATUS_PARAM_ERROR;
+	}
+
 	cmd.CmdStatus = IAPCMD_READ_FLASH_SIG;
 
 	IapEntry(&cmd, &res);
-	*pSig = res.Data[0];
+	if (res.CmdStatus == IAPSTATUS_SUCCESS)
+	{
+		*pSig = res.Data[0];
+	}
 
 	return res.CmdStatus;
 }

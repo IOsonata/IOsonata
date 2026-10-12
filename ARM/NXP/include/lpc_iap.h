@@ -106,6 +106,8 @@ IAPSTATUS IAPReadUID(IAP_CMD_STATUS *pRes);
 IAPSTATUS IAPErasePage(int StartPage, int EndPage);
 IAPSTATUS IAPEepromWrite(uint32_t EepAddr, uint8_t *pData, int Size);
 IAPSTATUS IAPEepromRead(uint32_t EepAddr, uint8_t *pData, int Size);
+// Write one 32-bit signature on success. On ROM error the output is unchanged;
+// a null output returns PARAM_ERROR without calling ROM.
 IAPSTATUS IAPReadFlashSignature(uint32_t *pSig);
 // LPC546xx command 73: StartAddr and EndAddr are flash addresses, not page
 // indices. NbState uses the FLASHCFG.FLASHTIM encoding. pSig must hold four

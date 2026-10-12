@@ -1,4 +1,4 @@
-/* Shared LPC IAP extended-signature regression; ROM calls are substituted. */
+/* Shared LPC IAP signature regression; ROM calls are substituted. */
 #include <assert.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -16,6 +16,7 @@ uint32_t SystemCoreClock = 12000000;
 #endif
 
 static uint32_t s_Status;
+static uint32_t s_Command = 73;
 static unsigned s_Calls;
 static const uint32_t s_Signature[4] = {
 	0x12345678, 0x87654321, 0xa5a55a5a, 0xff00ff00
@@ -23,13 +24,21 @@ static const uint32_t s_Signature[4] = {
 
 static void RomCall(IAP_CMD_STATUS *pCmd, IAP_CMD_STATUS *pRes)
 {
-	assert(pCmd->CmdStatus == 73);
-	assert(pCmd->Data[0] == 0x1000);
-	assert(pCmd->Data[1] == 0x1fff);
-	assert(pCmd->Data[2] == 3);
-	assert(pCmd->Data[3] == 0);
+	assert(pCmd->CmdStatus == s_Command);
+	if (s_Command == 73)
+	{
+		assert(pCmd->Data[0] == 0x1000);
+		assert(pCmd->Data[1] == 0x1fff);
+		assert(pCmd->Data[2] == 3);
+		assert(pCmd->Data[3] == 0);
+	}
 	s_Calls++;
 	pRes->CmdStatus = s_Status;
+	// Error-result words must not be copied to the caller.
+	for (unsigned i = 0; i < 4; i++)
+	{
+		pRes->Data[i] = 0xbad00bad;
+	}
 	if (s_Status == IAPSTATUS_SUCCESS)
 	{
 		for (unsigned i = 0; i < 4; i++)
@@ -63,6 +72,21 @@ int main(void)
 	}
 	assert(IAPReadExtFlashSignature(0x1000, 0x1fff, 3, 0) == IAPSTATUS_PARAM_ERROR);
 	assert(s_Calls == 2);
-	puts("Shared LPC IAP extended signature: linkage, parameters and output passed");
+	s_Command = 70;
+	s_Status = IAPSTATUS_SUCCESS;
+	output[1] = 0;
+	assert(IAPReadFlashSignature(&output[1]) == IAPSTATUS_SUCCESS);
+	assert(s_Calls == 3);
+	assert(output[1] == s_Signature[0]);
+	assert(output[0] == 0xdeadbeef);
+	assert(output[2] == s_Signature[1]);
+
+	s_Status = IAPSTATUS_INVALID_COMMAND;
+	assert(IAPReadFlashSignature(&output[1]) == IAPSTATUS_INVALID_COMMAND);
+	assert(s_Calls == 4);
+	assert(output[1] == s_Signature[0]);
+	assert(IAPReadFlashSignature(0) == IAPSTATUS_PARAM_ERROR);
+	assert(s_Calls == 4);
+	puts("Shared LPC IAP signatures: linkage, parameters and output passed");
 	return 0;
 }
