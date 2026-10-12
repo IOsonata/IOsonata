@@ -47,6 +47,10 @@ static unsigned s_OscReadyAfter;
 static unsigned s_EarlyClockChange;
 static unsigned s_PllWait;
 static int s_FailPllLock;
+static int s_FailPllConnect;
+static int s_StuckDisconnect;
+static unsigned s_ConnectSeen;
+static unsigned s_ConnectWait;
 static const uint32_t s_Rates[] = {
 	20000000, 22000000, 40000000, 42000000, 60000000, 62000000,
 	80000000, 82000000, 99000000, 100000000, 101000000, 102000000,
@@ -61,6 +65,25 @@ extern uint32_t SystemCoreClockSet(uint32_t CoreFreq, int ClkFreq);
 LPC_SC_TypeDef *TestSystemRegs(void)
 {
 	uint32_t status = s_Regs.PLL0CFG | ((s_Regs.PLL0CON & 3U) << 24);
+
+	if (s_FailPllConnect)
+	{
+		if ((s_Regs.PLL0CON & 2U) != 0)
+		{
+			s_ConnectSeen = 1;
+			status &= ~(1U << 25);
+		}
+		else if (s_ConnectSeen && s_StuckDisconnect)
+		{
+			// Late connection that does not acknowledge cancellation.
+			status |= 1U << 25;
+		}
+		if (s_ConnectSeen)
+		{
+			s_ConnectWait++;
+			assert(s_ConnectWait < 3000000U);
+		}
+	}
 
 	if (s_FailPllLock && (s_Regs.PLL0CON & 1U) != 0)
 	{
@@ -255,6 +278,28 @@ int main(void)
 		assert(SystemMicroSecLoopCnt == 0);
 		assert(s_Unsafe == 0);
 		s_FailPllLock = 0;
+	}
+	// Connection failure must cancel the request without stopping a possible CPU clock.
+	for (unsigned stuck = 0; stuck < 2; stuck++)
+	{
+		memset(&s_Regs, 0, sizeof(s_Regs));
+		s_Regs.FLASHCFG = 0x303AU;
+		s_Regs.USBCLKCFG = 9;
+		s_FailPllConnect = 1;
+		s_StuckDisconnect = stuck;
+		s_ConnectSeen = 0;
+		s_ConnectWait = 0;
+		s_Unsafe = 0;
+		assert(SystemCoreClockSet(120000000, 4000000) == 0);
+		assert(s_ConnectSeen != 0);
+		assert(s_Regs.PLL0CON == 1);
+		assert(s_Regs.PLL0FEED == 0x55);
+		assert(s_Regs.USBCLKCFG == 9);
+		assert(s_Regs.FLASHCFG == 0x503AU);
+		assert(SystemCoreClock == (stuck ? 120000000U : 1000000U));
+		assert(SystemMicroSecLoopCnt == SystemCoreClock / 16000000U);
+		assert(s_Unsafe == 0);
+		s_FailPllConnect = 0;
 	}
 	// UM10360 table 21: supported RTC multipliers with MSEL bit 12 set.
 	memset(&s_Regs, 0, sizeof(s_Regs));

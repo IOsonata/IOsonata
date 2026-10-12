@@ -180,8 +180,7 @@ startup time; its timing still needs board validation.
 Tests withhold oscillator readiness for both range selections, verify an
 IRC-started attempt returns without changing its clock selection or globals,
 and then allow a successful retry. A host read-count guard catches the
-previous endless wait. PLL connect waits and reconfiguration of an already-running PLL remain
-separate work.
+previous endless wait. Reconfiguration of an already-running PLL remains separate work.
 
 PLL0 lock polling is also bounded to 1,000,000 status reads. On timeout,
 the setter returns zero before requesting PLL connection or changing the
@@ -196,4 +195,18 @@ no connect request occurs, and verify the reported bypass rate and retained
 USB divider. The fixture now derives enable/connect status from PLL0CON;
 feed latching and analog timing are still not simulated. The old loop hits
 the read-count guard. Physical lock behavior (especially with RTC input),
-connect timeout handling and live PLL reconfiguration still need work.
+live PLL reconfiguration still needs work.
+
+PLL0 connection polling now has the same read-count bound. On timeout it
+clears the connection request and feeds PLL0, then waits with a bound for
+any late connection to clear. It returns zero and updates the reported
+CPU rate from status. PLL0 stays enabled throughout recovery because it
+may still be supplying the CPU if disconnection is not acknowledged.
+Flash timing stays safe and the USB divider is not changed.
+
+The host tests cover a connection that never arrives and a late connection
+whose status remains set despite cancellation. Both must return failure,
+cancel the request, retain PLL enable, and report the status-indicated
+bypass or PLL rate. The old connect loop hits the test read-count guard.
+This validates control flow; physical feed timing and clock transitions
+still require hardware testing.

@@ -229,8 +229,30 @@ uint32_t SystemCoreClockSet(uint32_t CoreFreq, int ClkFreq)
 	LPC_SC->PLL0CON   = 0x03;
 	LPC_SC->PLL0FEED  = 0xAA;
 	LPC_SC->PLL0FEED  = 0x55;
-	/* Wait for PLL0 connect */
-	while (!(LPC_SC->PLL0STAT & (1<<25)));
+	temp = LPC17_PLL_WAIT_MAX;
+	while ((LPC_SC->PLL0STAT & (1U << 25)) == 0U)
+	{
+		if (--temp == 0U)
+		{
+			// Cancel a pending connection, but keep PLL0 enabled in case
+			// the hardware connects late or cannot acknowledge disconnect.
+			LPC_SC->PLL0CON = 0x01;
+			LPC_SC->PLL0FEED = 0xAA;
+			LPC_SC->PLL0FEED = 0x55;
+
+			temp = LPC17_PLL_WAIT_MAX;
+			while ((LPC_SC->PLL0STAT & (1U << 25)) != 0U)
+			{
+				if (--temp == 0U)
+				{
+					break;
+				}
+			}
+			SystemCoreClockUpdate();
+
+			return 0;
+		}
+	}
 
 	/* USBCLK divider */
 	temp = (pllclk / 48000000) - 1;
