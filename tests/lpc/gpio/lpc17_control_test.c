@@ -229,7 +229,23 @@ static void CheckMux(void)
 			IOPinConfig(port, pin, IOPINOP_GPIO, IOPINDIR_INPUT, pulls[r], IOPINTYPE_NORMAL);
 			assert(*od == 0 && LPC_GPIO0[port].FIODIR == 0);
 		}
+		// Disable a peripheral/output pin without altering its neighbors.
+		*sel = UINT32_MAX;
+		*mode = 0;
+		*od = UINT32_MAX;
+		LPC_GPIO0[port].FIODIR = UINT32_MAX;
+		IOPinDisable(port, pin);
+		assert(*sel == (UINT32_MAX & ~mask));
+		assert(*mode == (2U << shift));
+		assert(*od == (UINT32_MAX & ~(1U << pin)));
+		assert(LPC_GPIO0[port].FIODIR == (UINT32_MAX & ~(1U << pin)));
 	}
+	IOPinCfg(s_UartPins, 2);
+	assert(((LPC_PINCON->PINSEL0 >> 4) & 15U) == 5U);
+	IOPinDis(s_UartPins, 2);
+	assert(((LPC_PINCON->PINSEL0 >> 4) & 15U) == 0);
+	assert(((LPC_PINCON->PINMODE0 >> 4) & 15U) == 10U);
+	assert((LPC_GPIO0->FIODIR & 12U) == 0);
 	IOPinCfg(s_UartPins, 2);
 	assert(((LPC_PINCON->PINSEL0 >> 4) & 15U) == 5U);
 	IOPinConfig(0, 27, IOPINOP_FUNC1, IOPINDIR_BI, IOPINRES_NONE, IOPINTYPE_OPENDRAIN);
@@ -242,6 +258,10 @@ static void CheckMux(void)
 	assert(MBEDPRESSO_SRPWM_PWM2_OP == IOPINOP_FUNC1);
 	assert(MBEDPRESSO_SRPWM_PWM3_OP == IOPINOP_FUNC1);
 	memcpy(saved, (const void *)LPC_PINCON, sizeof(saved));
+	IOPinDisable(-1, 0);
+	IOPinDisable(5, 0);
+	IOPinDisable(0, -1);
+	IOPinDisable(0, 32);
 	IOPinConfig(-1, 0, IOPINOP_GPIO, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL);
 	IOPinConfig(5, 0, IOPINOP_GPIO, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL);
 	IOPinConfig(0, -1, IOPINOP_GPIO, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL);

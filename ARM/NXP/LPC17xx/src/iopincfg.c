@@ -118,6 +118,12 @@ void IOPinConfig(int PortNo, int PinNo, int PinOp, IOPINDIR Dir, IOPINRES Resist
 	EnableInterrupt(state);
 }
 
+// Leave the pin as a GPIO input without pulls; this is not input-buffer disconnect.
+void IOPinDisable(int PortNo, int PinNo)
+{
+	IOPinConfig(PortNo, PinNo, IOPINOP_GPIO, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL);
+}
+
 void IOPinSetSense(int PortNo, int PinNo, IOPINSENSE Sense)
 {
 	volatile uint32_t *rise;

@@ -127,3 +127,11 @@ priority changes, registration collisions, every supported slot, release, pause,
 callback cancellation and edges arriving during callbacks. The mmap fixture
 emulates W1C at callback/NVIC boundaries; it does not model electrical timing
 or interrupt preemption. C/C++ builds exercise the EINT3 symbol at O0/O2.
+
+LPC17xx IOPinDisable returns a pin to GPIO input, no pull resistor and normal
+(non-open-drain) mode, following the LPC11 cleanup pattern. It does not promise
+to disconnect the input buffer or release an interrupt registration. Callers
+stop peripheral activity and release callbacks separately. Reconfiguration
+restores the desired pin function. Tests cover low/high pin halves, all ports,
+neighbor preservation, invalid indices and the generic IOPinDis batch helper.
+The previous port fails linking these tests because IOPinDisable is missing.
