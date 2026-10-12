@@ -86,6 +86,8 @@ static const UARTCfg_t s_UartCfg = {
 	.Rate = UART_BAUDRATE,
 	.DataBits = 8,
 	.Parity = UART_PARITY_NONE,
+	// 2 stop bits add an idle bit per character, which lets a receiver started
+	// mid-stream find the frame. nRF51 and nRF52832 send 1 stop bit only.
 	.StopBits = 1,
 	.FlowControl = UART_FLWCTRL_NONE,
 	.bIntMode = UART_INT_MODE,
