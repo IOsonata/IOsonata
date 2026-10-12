@@ -57,6 +57,43 @@ SSPDEV g_SspDev[LPC11U_MAX_SSPDEV] = {
 		{1, 0, LPC_SSP1, NULL, false, false, false},
 };
 
+// UM10462 chapter 7: routes are MCU-specific; transfers remain shared.
+static bool Lpc11SSPSignalPin(int DevNo, int Signal, const IOPinCfg_t *pPin)
+{
+	if (DevNo == 0)
+	{
+		switch (Signal)
+		{
+			case SPI_SCK_IOPIN_IDX:
+				return (pPin->PortNo == 0 && (pPin->PinNo == 6 || pPin->PinNo == 10) &&
+					pPin->PinOp == IOPINOP_FUNC2) ||
+					(pPin->PortNo == 1 && pPin->PinNo == 29 && pPin->PinOp == IOPINOP_FUNC1);
+			case SPI_MISO_IOPIN_IDX:
+				return pPin->PortNo == 0 && pPin->PinNo == 8 && pPin->PinOp == IOPINOP_FUNC1;
+			case SPI_MOSI_IOPIN_IDX:
+				return pPin->PortNo == 0 && pPin->PinNo == 9 && pPin->PinOp == IOPINOP_FUNC1;
+		}
+	}
+	else
+	{
+		switch (Signal)
+		{
+			case SPI_SCK_IOPIN_IDX:
+				return pPin->PortNo == 1 &&
+					((pPin->PinNo == 15 && pPin->PinOp == IOPINOP_FUNC3) ||
+					(pPin->PinNo == 20 && pPin->PinOp == IOPINOP_FUNC2));
+			case SPI_MISO_IOPIN_IDX:
+				return (pPin->PortNo == 0 && pPin->PinNo == 22 && pPin->PinOp == IOPINOP_FUNC3) ||
+					(pPin->PortNo == 1 && pPin->PinNo == 21 && pPin->PinOp == IOPINOP_FUNC2);
+			case SPI_MOSI_IOPIN_IDX:
+				return pPin->PinOp == IOPINOP_FUNC2 &&
+					((pPin->PortNo == 0 && pPin->PinNo == 21) ||
+					(pPin->PortNo == 1 && pPin->PinNo == 22));
+		}
+	}
+	return false;
+}
+
 static void Lpc11SSPReset(DevIntrf_t *pDev)
 {
 	SSPDEV *dev = (SSPDEV *)pDev->pDevData;
@@ -123,6 +160,8 @@ bool SPIInit(SPIDev_t *pDev, const SPICfg_t *pCfgData)
 	{
 		return false;
 	}
+	uint32_t used[2] = {0, 0};
+
 	for (int i = 0; i < pCfgData->NbIOPins; i++)
 	{
 		const IOPinCfg_t *pin = &pCfgData->pIOPinMap[i];
@@ -132,6 +171,18 @@ bool SPIInit(SPIDev_t *pDev, const SPICfg_t *pCfgData)
 		{
 			return false;
 		}
+		if (i < SPI_CS_IOPIN_IDX && !Lpc11SSPSignalPin(pCfgData->DevNo, i, pin))
+		{
+			return false;
+		}
+		uint32_t mask = 1UL << pin->PinNo;
+
+		// A later pin entry must not disconnect a signal or alias another CS.
+		if (used[pin->PortNo] & mask)
+		{
+			return false;
+		}
+		used[pin->PortNo] |= mask;
 		// Automatic CS is driven by the GPIO helpers.
 		if (i >= SPI_CS_IOPIN_IDX && pCfgData->ChipSel == SPICSEL_AUTO &&
 			(pin->PinOp != IOPINOP_GPIO || pin->PinDir != IOPINDIR_OUTPUT))

@@ -43,7 +43,18 @@ Modified by          Date              Description
 static const uint32_t s_Clocks[] = {12000000U, 48000000U, 120000000U, UINT32_MAX};
 static const uint32_t s_Rates[] = {0, 1, 738, 1000, 100000, 1234567,
 	10000000, 24000000, 48000000, UINT32_MAX};
-static const IOPinCfg_t s_Pins[3] = {};
+static const IOPinCfg_t s_Pins[2][3] = {
+	{
+		{0, 6, IOPINOP_FUNC2, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
+		{0, 8, IOPINOP_FUNC1, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
+		{0, 9, IOPINOP_FUNC1, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL}
+	},
+	{
+		{1, 15, IOPINOP_FUNC3, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
+		{0, 22, IOPINOP_FUNC3, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
+		{0, 21, IOPINOP_FUNC2, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL}
+	}
+};
 uint32_t SystemCoreClock = 12000000;
 uint32_t SystemMainClkFreq = 48000000;
 
@@ -143,7 +154,7 @@ int main()
 
 #ifndef TEST_LPC17
 	SPICfg_t cfg = {};
-	cfg.pIOPinMap = s_Pins;
+	cfg.pIOPinMap = s_Pins[0];
 	cfg.NbIOPins = 3;
 	cfg.ChipSel = SPICSEL_MAN;
 	cfg.Rate = 1000000;
@@ -158,6 +169,7 @@ int main()
 	assert(LPC_SYSCON->SSP1CLKDIV == 0);
 	SPIDev_t spi1 = {};
 	cfg.DevNo = 1;
+	cfg.pIOPinMap = s_Pins[1];
 	SetStatus(LPC_SSP1, LPCSSP_SR_TFE);
 	LPC_SYSCON->SSP0CLKDIV = 7;
 	assert(SPIInit(&spi1, &cfg));

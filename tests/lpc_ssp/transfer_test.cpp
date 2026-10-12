@@ -54,6 +54,7 @@ struct SspModel {
 };
 static SspModel s_Model;
 static SPIDev_t s_Spi;
+static int s_PinConfigs;
 static const IOPinCfg_t s_Pins[] = {
 	{0, 6, IOPINOP_FUNC2, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
 	{0, 8, IOPINOP_FUNC1, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
@@ -69,6 +70,7 @@ void NVIC_DisableIRQ(IRQn_Type)
 }
 void IOPinConfig(int, int, int, IOPINDIR, IOPINRES, IOPINTYPE)
 {
+	s_PinConfigs++;
 }
 static void ModelPinSet(int, int Pin)
 {
@@ -161,6 +163,109 @@ static void Init(SPICfg_t Cfg)
 	assert(SPIInit(&s_Spi, &Cfg));
 	s_Spi.DevIntrf.Reset = ModelReset;
 	s_Model.Cs.clear();
+}
+
+static void RejectPins(SPIDev_t *pSpi, const SPICfg_t &Cfg)
+{
+	uint8_t syscon[sizeof(*LPC_SYSCON)];
+	uint8_t ssp0[sizeof(*LPC_SSP0)];
+	uint8_t ssp1[sizeof(*LPC_SSP1)];
+	uint8_t object[sizeof(*pSpi)];
+	uint8_t devices[sizeof(g_SspDev)];
+	int configs = s_PinConfigs;
+	size_t selects = s_Model.Cs.size();
+
+	memcpy(syscon, LPC_SYSCON, sizeof(syscon));
+	memcpy(ssp0, LPC_SSP0, sizeof(ssp0));
+	memcpy(ssp1, LPC_SSP1, sizeof(ssp1));
+	memcpy(object, pSpi, sizeof(object));
+	memcpy(devices, g_SspDev, sizeof(devices));
+	assert(!SPIInit(pSpi, &Cfg));
+	assert(memcmp(syscon, LPC_SYSCON, sizeof(syscon)) == 0);
+	assert(memcmp(ssp0, LPC_SSP0, sizeof(ssp0)) == 0);
+	assert(memcmp(ssp1, LPC_SSP1, sizeof(ssp1)) == 0);
+	assert(memcmp(object, pSpi, sizeof(object)) == 0);
+	assert(memcmp(devices, g_SspDev, sizeof(devices)) == 0);
+	assert(s_PinConfigs == configs && s_Model.Cs.size() == selects);
+}
+
+static void CheckPins()
+{
+	IOPinCfg_t pins[5];
+	SPICfg_t cfg = Config();
+	SPIDev_t spi1 = {};
+
+	memcpy(pins, s_Pins, sizeof(pins));
+	cfg.pIOPinMap = pins;
+	// All three SSP0 clock routes, retaining the fixed MISO/MOSI pair.
+	for (int clock = 0; clock < 3; clock++)
+	{
+		pins[0].PortNo = clock == 2 ? 1 : 0;
+		pins[0].PinNo = clock == 0 ? 6 : clock == 1 ? 10 : 29;
+		pins[0].PinOp = clock == 2 ? IOPINOP_FUNC1 : IOPINOP_FUNC2;
+		Init(cfg);
+	}
+	memcpy(pins, s_Pins, sizeof(pins));
+	// Wrong function (including GPIO), swapped data pins and wrong controller.
+	for (int signal = 0; signal < 3; signal++)
+	{
+		int op = pins[signal].PinOp;
+		for (int bad : {IOPINOP_GPIO, IOPINOP_FUNC0, IOPINOP_FUNC7})
+		{
+			pins[signal].PinOp = bad;
+			RejectPins(&s_Spi, cfg);
+		}
+		pins[signal].PinOp = op;
+	}
+	std::swap(pins[1], pins[2]);
+	RejectPins(&s_Spi, cfg);
+	std::swap(pins[1], pins[2]);
+	cfg.DevNo = 1;
+	RejectPins(&spi1, cfg);
+	cfg.DevNo = 0;
+	// CS must not remux any bus pin, even with application-controlled CS.
+	for (SPICSEL select : {SPICSEL_AUTO, SPICSEL_MAN})
+	{
+		cfg.ChipSel = select;
+		for (int signal = 0; signal < 3; signal++)
+		{
+			pins[3].PinNo = pins[signal].PinNo;
+			RejectPins(&s_Spi, cfg);
+		}
+		pins[3] = s_Pins[3];
+		pins[4] = pins[3];
+		RejectPins(&s_Spi, cfg);
+		pins[4] = s_Pins[4];
+	}
+	cfg.ChipSel = SPICSEL_AUTO;
+	cfg.DevNo = 1;
+	uint32_t ready = LPCSSP_SR_TFE | LPCSSP_SR_TNF;
+
+	memcpy((uint8_t *)LPC_SSP1 + offsetof(LpcSSPReg_t, SR), &ready, sizeof(ready));
+	// Every combination of the two SCK, MISO and MOSI routes on SSP1.
+	for (int route = 0; route < 8; route++)
+	{
+		pins[0].PortNo = 1;
+		pins[0].PinNo = route & 1 ? 20 : 15;
+		pins[0].PinOp = route & 1 ? IOPINOP_FUNC2 : IOPINOP_FUNC3;
+		pins[1].PortNo = route & 2 ? 1 : 0;
+		pins[1].PinNo = route & 2 ? 21 : 22;
+		pins[1].PinOp = route & 2 ? IOPINOP_FUNC2 : IOPINOP_FUNC3;
+		pins[2].PortNo = route & 4 ? 1 : 0;
+		pins[2].PinNo = route & 4 ? 22 : 21;
+		pins[2].PinOp = IOPINOP_FUNC2;
+		assert(SPIInit(&spi1, &cfg));
+		for (int signal = 0; signal < 3; signal++)
+		{
+			int op = pins[signal].PinOp;
+
+			pins[signal].PinOp = IOPINOP_FUNC1;
+			RejectPins(&spi1, cfg);
+			pins[signal].PinOp = op;
+		}
+	}
+	cfg.DevNo = 0;
+	RejectPins(&s_Spi, cfg);
 }
 
 int main()
@@ -307,6 +412,7 @@ int main()
 	pins[3].PinOp = IOPINOP_GPIO;
 	pins[0].PinOp = IOPINOP_FUNC8;
 	assert(!SPIInit(&s_Spi, &cfg));
+	CheckPins();
 	puts("Legacy LPC SSP transfer: PASS");
 	munmap(memory, 0x200000);
 	return 0;

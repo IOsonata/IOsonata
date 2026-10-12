@@ -50,3 +50,18 @@ and transfers on real hardware still require validation.
 Hardware reference: NXP UM10462, clock diagram and SSP chapter, especially
 CR0 SCR and CPSR CPSDVSR. SCK = PCLK / (CPSDVSR * (SCR + 1)); CPSDVSR is even
 from 2 through 254, and SCR is from 0 through 255.
+
+LPC11Uxx initialization validates the SCK/MISO/MOSI routes for the selected
+controller before touching registers, ownership, or pins. It rejects duplicate
+pads, including a CS that would replace a bus signal. Route checks follow
+UM10462 chapter 7, tables 67, 69-71, 82-83, 100, 105-107 and 114.
+
+| Controller | SCK | MISO | MOSI |
+| --- | --- | --- | --- |
+| SSP0 | P0.6 FUNC2, P0.10 FUNC2, P1.29 FUNC1 | P0.8 FUNC1 | P0.9 FUNC1 |
+| SSP1 | P1.15 FUNC3, P1.20 FUNC2 | P0.22 FUNC3, P1.21 FUNC2 | P0.21 FUNC2, P1.22 FUNC2 |
+
+Choose pins bonded out on the actual package. Tests exercise every combination
+above and check that invalid functions, swapped data pins, wrong-controller
+maps and overlapping CS pins leave registers, pin calls and driver state
+unchanged. Rate tests now use real routes for each controller.
