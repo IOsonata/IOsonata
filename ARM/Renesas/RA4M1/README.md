@@ -31,8 +31,9 @@ RAM without semihosting inside the measurement loop.
 **Not yet confirmed on hardware:** SCI UART polling/interrupt throughput,
 GPIO edge interrupts, other AGT/GPT channels and all six GPT compare routes,
 long-run rollover/pause/resume, stop/start recovery, low-power operation,
-USB, DMA/DTC and ELC integration. The historical host-register-model test
-runners under `tests/ra4m1` predate the CMSIS migration and require updates;
+USB, DMA/DTC and ELC integration. Apart from the UART test
+(`run_uart_validation.py`, see SCI UART), the host-register-model test runners
+under `tests/ra4m1` predate the CMSIS migration and require updates;
 the old published model assertion counts are not post-migration results.
 Neither a complete automated production-header compiler matrix nor updated
 host regression results are claimed here.
@@ -163,7 +164,7 @@ Expected default successful-startup state:
 | `FCACHEE` | `1`, after completed invalidation |
 | `IELSR[0..31]` | `0` (unassigned) |
 
-**The default 48 MHz operating point requires VCC of 2.7–5.5 V.** This initial
+**The default 48 MHz operating point requires VCC of 2.7-5.5 V.** This initial
 startup deliberately uses High-speed mode, not automatic supply-voltage
 measurement or low-voltage power optimization. The hardware's wider supply
 range does not permit 48 MHz across that entire range.
@@ -181,8 +182,8 @@ Core RC descriptors accept 8 MHz (MOCO), and 24, 32, or 48 MHz (HOCO).
 A 64 MHz CPU request is rejected; the decoder can nevertheless identify the
 64 MHz HOCO encoding if it reads an externally established configuration.
 
-Main crystal/external-clock descriptors accept 1–20 MHz. Startup uses an exact
-48 MHz PLL solution when the input is 4–12.5 MHz and a legal integer multiplier
+Main crystal/external-clock descriptors accept 1-20 MHz. Startup uses an exact
+48 MHz PLL solution when the input is 4-12.5 MHz and a legal integer multiplier
 and output divider exist. Otherwise it uses the main oscillator directly.
 Examples: 4, 6, 8, and 12 MHz can supply the 48 MHz PLL plan; 16 MHz cannot use
 this PLL input range and is therefore used directly. PLLCCR2 is an **8-bit**
@@ -332,7 +333,7 @@ activation/acknowledgement rules.
 `IOPinEnableInterrupt(IntNo, ...)` strictly validates the fixed hardware line
 against the pin. `IOPinAllocateInterrupt(...)` finds that line and returns it;
 `IOPinDisableInterrupt(...)` accepts the returned line. The GPIO callback receives
-this **fixed GPIO line**, not its dynamically allocated CPU slot. Lines 0–12, 14,
+this **fixed GPIO line**, not its dynamically allocated CPU slot. Lines 0-12, 14,
 and 15 are supported where bonded; there is no IRQ13. The complete group map is:
 
 | IRQ line | MCU pins |
@@ -361,7 +362,7 @@ another pin's interrupt. Existing WUPEN routes are not commandeered. GPIO
 interrupt registration does not change low-power wake policy.
 
 Like RE01, `IOPinSetSense` configures port-group EOF/EOR events, not the IRQCR
-mode of a registered pin interrupt. It applies to ports 1–4 and requires the
+mode of a registered pin interrupt. It applies to ports 1-4 and requires the
 consumer to disconnect its ELC route while changing sense. General ELC consumers
 remain outside this increment.
 
@@ -372,109 +373,63 @@ aliases. Strong application vector overrides are still supported.
 
 ## SCI UART
 
-The native `uart_ra4m1.cpp` implements the existing `UARTDEV`, `UARTCfg_t`,
-`DevIntrf_t`, and `CFifo` interfaces. There is no second UART API, queue or FSP
-runtime. Device numbering follows the compact RE01 convention:
+`uart_ra4m1.cpp` implements the IOsonata UART (`UARTDev_t`, `UARTCfg_t`,
+`DevIntrf_t` and the CFIFOs) with the same structure as the other UART drivers.
 
-| `UARTCfg_t.DevNo` | Hardware SCI | Clock | Module-stop bit |
+| `UARTCfg_t.DevNo` | SCI | Hardware FIFO | Module stop bit |
 | --- | --- | --- | --- |
-| 0 | SCI0 | PCLKA | MSTPB31 |
-| 1 | SCI1 | PCLKA | MSTPB30 |
-| 2 | SCI2 | PCLKA | MSTPB29 |
-| 3 | SCI9 | PCLKA | MSTPB22 |
+| 0 | SCI0 | 16 bytes RX and TX | MSTPB31 |
+| 1 | SCI1 | 16 bytes RX and TX | MSTPB30 |
+| 2 | SCI2 | none, RDR and TDR | MSTPB29 |
+| 3 | SCI9 | none, RDR and TDR | MSTPB22 |
 
-Supply exactly two `IOPINCFG` entries in the usual **RX, TX** order. Pin functions
-are the application's MCU pin-map choices, not a board default. RX must be input,
-TX output, and each present pin must specify its valid SCI peripheral PSEL code
-using the target's `IOPINOP_FUNCn` convention. The caller must select the correct
-per-SCI/per-pin combination from the hardware manual; the generic pin configurator
-does not resolve that mapping. To omit RX or TX, use `PortNo=PinNo=-1` in its
-array slot. At least one direction must be present.
+The pin map is RX then TX, with the PSEL function code of each pin in `PinOp`
+(`IOPINOP_FUNCn`). The pin map is selected by the application from the hardware
+manual, the driver does not check the SCI and pin combination.
 
-This increment supports asynchronous full-duplex UART, 7/8 data bits, no/odd/even
-parity, and one/two stop bits. Both polling and interrupt mode are implemented.
-TX DMA is available with interrupt mode and a blocking software FIFO; RX remains
-interrupt-driven. Unsupported requests fail initialization: IrDA, hardware/software
-flow control, half-duplex, synchronous/network mode, 9-bit data and automatic baud.
-`UARTSetCtrlLineState` does not drive modem lines or transmit break in this
-increment. Framing, parity, overrun and received-break indications are reported
-through the existing counters/line-state callback; damaged bytes are discarded.
+Supported: asynchronous full duplex, 7 or 8 data bits, parity none, odd or even,
+1 or 2 stop bits, polling and interrupt mode. UARTInit fails for flow control,
+IrDA, half duplex, synchronous mode, 9 data bits and parity mark or space. DMA is
+not implemented, `bDMAMode` is ignored and `DevIntrf.bDma` is false.
+`UARTSetCtrlLineState` does nothing.
 
-SCI0/1 use their 16-entry hardware RX and TX FIFOs. SCI2/9 use RDR/TDR.
-RXI triggers at eight received bytes; the hardware data-ready timeout delivers
-shorter bursts through RXI (FCR.DRES=0). The handler drains at most sixteen
-entries before software FIFO accounting, and checks each FRDRHL entry for
-framing/parity errors. Hardware overrun counts lost arrivals; valid bytes already
-buffered are retained. RxDropCnt also includes software FIFO overflow.
+- TxData puts the data in the TX CFIFO, then starts TX if it is ready. RxData
+  reads from the RX CFIFO. Copies to and from a CFIFO are done in pieces of at
+  most 8 bytes with interrupts disabled.
+- Interrupt mode: one handler for RXI, TXI and ERI, registered with
+  `Ra4m1RegisterIntHandler` at `IntPrio`. TEI is not used. RX is serviced first
+  whatever the event. TXI is enabled while the TX CFIFO has data, `bTxReady`
+  is true when the TX CFIFO is empty.
+- Polling mode: TxData and RxData move the data between the SCI and the CFIFOs.
+  With SCI2 and SCI9 the application must call RxData at least once per
+  character time or characters are lost to overrun.
+- SCI0 and SCI1 FIFO mode: RXI at 8 received characters, or with fewer once the
+  line is idle for 1.5 frames (receive data ready). TXI at 8 or fewer characters
+  in the TX FIFO.
+- Characters with a framing or parity error are dropped and counted
+  (`FramErrCnt`, `ParErrCnt`, `RxDropCnt`). Overruns are counted in
+  `RxOvrErrCnt`, the characters already received are kept. The line state
+  callback gets the error bits, with `UART_LINESTATE_BRK` when RXD is still low
+  after a framing error. A full blocking RX CFIFO drops the new character
+  (`RxDropCnt`), a full non-blocking one drops the oldest.
+- The default CFIFO is 16 bytes (`RA4M1_UART_CFIFO_SIZE`), `pRxMem` and `pTxMem`
+  in `UARTCfg_t` give larger ones.
+- Rate: PCLKA from `SystemPeriphClockGet(0)`. SetRate sets and returns the
+  closest rate the SCI makes (BRR, CKS, SEMR base clock and MDDR modulation). A
+  running UART is stopped for one bit time while the rate changes. 0 returns 0,
+  there is no automatic rate.
+- Disable clears TE and RE. Enable flushes the TX CFIFO, resets the hardware
+  FIFOs and the error counters, the RX CFIFO is kept. PowerOff releases the
+  interrupts, disconnects the pins and stops the SCI module, a new UARTInit is
+  needed after it.
 
-Each direction also has a default 16-byte software FIFO,
-overridable at library build with `RA4M1_UART_FIFO_SIZE`, or with the existing
-caller-supplied, word-aligned FIFO memory in `UARTCfg_t`. Memory sizes include
-`sizeof(CFifo_t)`. `bFifoBlocking=true` refuses insertion when full; RX still
-drains the hardware and counts dropped new bytes, rather than blocking an ISR.
-`false` retains the existing CFifo push-out policy and counts evicted bytes.
-There is no hardware receive backpressure without flow control.
-
-Interrupt TX copies accepted data in bounded blocks and fills the available
-hardware space. SCI0/1 TXI triggers at eight or fewer buffered bytes, allowing a
-batch refill. SCI2/9 prime TDR directly and continue through TXI. TEI is not
-allocated: software readiness means the queued data have been handed to hardware,
-not that the final stop bit has reached the wire. TX callbacks report available
-software FIFO space; RX callbacks report the queued byte count with a null buffer.
-
-DMA writes FTDRL on SCI0/1 and TDR on SCI2/9. FIFO DMA uses TTRG=15 and
-normal-mode byte transfers: each activation has room for one byte. The software
-FIFO retains the active DMA source until completion. CPU priming and DMA never
-write the same active transfer concurrently.
-
-The UART handler checks RX before TX regardless of which SCI event caused entry.
-All routes for one UART, including DMA completion, use the configured priority.
-UART/DMA handlers do not acquire a handler-wide PRIMASK. Foreground FIFO copies
-and TX scheduling use bounded critical sections. Application callbacks run after
-source synchronization and ICU acknowledgement, and may queue more data or
-disable/reinitialize the device; obsolete notifications are then suppressed.
-
-Polling allocates no ICU slots and writes directly to available hardware space,
-never leaving accepted data in an undriven software TX queue. Reads return
-currently available data; writes have a bounded retry count. Both modes can
-return a partial byte count. The caller must retry the unaccepted suffix.
-Polling completion flags are sampled on API return.
-
-Baud selection uses PCLKA from `SystemPeriphClockGet(0)`, integer BRR/CKS and
-optional MDDR modulation. The returned `Rate` is the rounded nominal hardware
-rate, not the requested value or a measurement of oscillator accuracy. The
-planner considers the supported sampling modes and rejects nominal divisor
-error above `RA4M1_UART_MAX_ERROR_PPM` (default 20,000 = 2%). Include oscillator
-and peer-clock tolerance in the application's total error budget. The legal
-clock/divisor range is not a throughput guarantee.
-
-`UARTSetRate` requires `UARTDisable` and a quiesced peer first; it returns zero
-without changing a running interface. Changing system clocks also requires
-quiescing UART, then setting its rate again before enabling. Disable aborts
-in-flight TX and discards/counts queued TX while retaining RX FIFO data, register
-configuration and module clock. Bytes already in the hardware pipeline may be
-truncated; their exact wire progress is not counted as a known byte drop. Enable
-restores operation without full initialization. Reset also flushes RX. PowerOff
-releases ICU routes, restores prior pin configuration, gates the SCI module and
-requires full UARTInit for reuse. Duplicate channel/device ownership, overlapping
-RX/TX FIFO memory, invalid modes and partial initialization failures are rejected.
-
-Run `python3 tests/ra4m1/run_uart_fifo_validation.py` for focused FIFO tests.
-The runner extracts the production transfer functions, reads bit definitions
-from the official CMSIS header, and uses the production CFifo implementation.
-Its behavioral SCI model covers short bursts, FIFO bounds, stale interrupts,
-overruns, per-entry errors, software overflow, wraparound, interrupt/DMA TX
-ownership, and callback invalidation. Set `UART_FIFO_SANITIZE=1` to also run
-ASan/UBSan. The model does not execute the complete initializer or ICU and does
-not measure interrupt latency or validate physical UART operation.
-
-The older `run_uart_validation.py` still depends on the removed handwritten
-register-access shim and is not validation of the current CMSIS driver.
-The FIFO refactor was compiled and linked with the unchanged UART loopback
-example, production CMSIS headers, GNU Arm GCC 13.2 and newlib at -O0 and -Os.
-On-board FIFO/full-duplex throughput, PRBS errors, and repeated restarts remain
-to be validated. RE01 remains a separate driver; no shared Renesas SCI driver
-is introduced by this refactor.
+Host test: `python3 tests/ra4m1/run_uart_validation.py`. It compiles the driver
+with a model of the SCI registers, module stop, PRCR and ICU (`tests/ra4m1/uart_include`)
+and the real CFIFO and DeviceIntrf code. It covers init, rate selection against
+every register setting, TX and RX in both modes on the four SCIs, an echo loop,
+receive errors, overrun, full CFIFOs, callbacks, Disable/Enable and PowerOff.
+It also compiles the driver with GNU Arm for the Cortex-M4. It does not test
+timing, the electrical interface or the ICU edge handling.
 
 ## Validation status
 

@@ -113,16 +113,6 @@
 			<locationURI>PARENT-2-PROJECT_LOC/src/uart_ra4m1.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/ra4m1_uart_regs.h</name>
-			<type>1</type>
-			<locationURI>PARENT-2-PROJECT_LOC/src/ra4m1_uart_regs.h</locationURI>
-		</link>
-		<link>
-			<name>src/ra4m1_uart_baud.h</name>
-			<type>1</type>
-			<locationURI>PARENT-2-PROJECT_LOC/src/ra4m1_uart_baud.h</locationURI>
-		</link>
-		<link>
 			<name>src/cfifo.c</name>
 			<type>1</type>
 			<locationURI>PARENT-5-PROJECT_LOC/src/cfifo.c</locationURI>
