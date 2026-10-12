@@ -310,10 +310,16 @@ int main(void)
 	IOPinClear(1, 31);
 	assert(LPC_GPIO1->FIOCLR == 0x80000000U);
 	IOPinWritePort(1, 0x12345678U);
+	LPC_GPIO1->FIOSET = 0;
 	IOPinToggle(1, 31);
+	assert(LPC_GPIO1->FIOSET == 0x80000000U);
+	LPC_GPIO1->FIOPIN |= LPC_GPIO1->FIOSET;
 	assert(IOPinReadPort(1) == 0x92345678U);
 	assert(IOPinRead(1, 31) == 1);
+	LPC_GPIO1->FIOCLR = 0;
 	IOPinToggle(1, 31);
+	assert(LPC_GPIO1->FIOCLR == 0x80000000U);
+	LPC_GPIO1->FIOPIN &= ~LPC_GPIO1->FIOCLR;
 	assert(IOPinReadPort(1) == 0x12345678U);
 	assert(IOPinRead(1, 31) == 0);
 	puts("LPC17xx GPIO access-width regressions passed");

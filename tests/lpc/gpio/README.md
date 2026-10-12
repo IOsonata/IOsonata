@@ -135,3 +135,13 @@ stop peripheral activity and release callbacks separately. Reconfiguration
 restores the desired pin function. Tests cover low/high pin halves, all ports,
 neighbor preservation, invalid indices and the generic IOPinDis batch helper.
 The previous port fails linking these tests because IOPinDisable is missing.
+
+LPC17xx direction changes and toggles save/restore interrupt state around
+read-modify-write decisions. Toggle writes only the selected FIOSET/FIOCLR bit,
+leaving unrelated output latches alone. Invalid port/pin indices do not access
+registers; SetDir retains its no-change behavior for directions other than
+INPUT/OUTPUT. Full-port writes remain explicit full-port operations.
+The inline-control test asserts masked register access and exact mask restoration
+for all pin indices on all five ports, both initial interrupt states and both
+toggle levels. It compares the complete vendor GPIO blocks to detect unwanted
+writes. It models critical-section calls, not asynchronous hardware timing.

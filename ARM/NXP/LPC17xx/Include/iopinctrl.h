@@ -44,10 +44,25 @@ Modified by          Date              Description
 
 static inline void IOPinSetDir(int PortNo, int PinNo, IOPINDIR Dir)
 {
+	uint32_t state;
+	uint32_t mask;
+
+	if ((unsigned)PortNo >= 5U || (unsigned)PinNo >= 32U ||
+		(Dir != IOPINDIR_OUTPUT && Dir != IOPINDIR_INPUT))
+	{
+		return;
+	}
+	mask = 1UL << (unsigned)PinNo;
+	state = DisableInterrupt();
 	if (Dir == IOPINDIR_OUTPUT)
-		LPC_GPIO0[PortNo].FIODIR |= 1UL << PinNo;
-	else if (Dir == IOPINDIR_INPUT)
-		LPC_GPIO0[PortNo].FIODIR &= ~(1UL << PinNo);
+	{
+		LPC_GPIO0[PortNo].FIODIR |= mask;
+	}
+	else
+	{
+		LPC_GPIO0[PortNo].FIODIR &= ~mask;
+	}
+	EnableInterrupt(state);
 }
 
 static inline int IOPinRead(int PortNo, int PinNo)
@@ -68,7 +83,25 @@ static inline void IOPinClear(int PortNo, int PinNo)
 
 static inline void IOPinToggle(int PortNo, int PinNo)
 {
-	LPC_GPIO0[PortNo].FIOPIN = LPC_GPIO0[PortNo].FIOPIN ^ (1UL << PinNo);
+	uint32_t state;
+	uint32_t mask;
+
+	if ((unsigned)PortNo >= 5U || (unsigned)PinNo >= 32U)
+	{
+		return;
+	}
+	mask = 1UL << (unsigned)PinNo;
+	state = DisableInterrupt();
+	// Change only the selected output; never write back unrelated pad levels.
+	if ((LPC_GPIO0[PortNo].FIOPIN & mask) != 0)
+	{
+		LPC_GPIO0[PortNo].FIOCLR = mask;
+	}
+	else
+	{
+		LPC_GPIO0[PortNo].FIOSET = mask;
+	}
+	EnableInterrupt(state);
 }
 
 static inline uint32_t IOPinReadPort(int PortNo)

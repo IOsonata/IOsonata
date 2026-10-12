@@ -33,3 +33,14 @@ for compiler, standard in [('gcc', '-std=gnu11'), ('g++', '-std=c++17')]:
                             str(root / 'ARM/NXP/LPC17xx/src/iopincfg.c'),
                             '-o', exe], check=True)
             subprocess.run([exe], check=True)
+
+for compiler, standard in [('gcc', '-std=gnu11'), ('g++', '-std=c++17')]:
+    for opt in ['-O0', '-O2']:
+        with tempfile.TemporaryDirectory() as tmp:
+            exe = str(Path(tmp) / 'lpc17_atomic_test')
+            subprocess.run([compiler, standard, opt, '-Wall', '-Wextra', '-Werror',
+                            '-fsanitize=undefined', '-fno-sanitize-recover=all',
+                            *['-I' + str(root / p) for p in includes],
+                            str(root / 'tests/lpc/gpio/lpc17_atomic_test.c'),
+                            '-o', exe], check=True)
+            subprocess.run([exe], check=True)
