@@ -48,6 +48,11 @@ static void Check(uint32_t Main, uint32_t Core)
 	SystemCoreClockUpdate();
 	assert(SystemMainClkFreq == Main);
 	assert(SystemCoreClockGet() == Core);
+	assert(SystemPeriphClockGet(0) == Core);
+	assert(SystemPeriphClockGet(-1) == 0);
+	assert(SystemPeriphClockGet(1) == 0);
+	assert(SystemPeriphClockSet(0, 1000000) == 0);
+	assert(SystemCoreClockGet() == Core);
 	assert(memcmp(&before, (const void *)LPC_SYSCON, sizeof(before)) == 0);
 }
 

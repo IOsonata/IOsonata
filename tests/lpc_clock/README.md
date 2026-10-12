@@ -24,8 +24,7 @@ The test supplies PLL lock indications; it does not simulate analog startup.
 The original source fails to link a caller of SystemSetCoreClock. The old
 setter also returned the 96 MHz PLL rate for a 48 MHz CPU configuration.
 
-Peripheral-clock API completion remains a separate review item. The system
-oscillator defaults to 12 MHz; a successful external-clock configuration records
+The system oscillator defaults to 12 MHz; a successful external-clock configuration records
 the supplied input so later clock updates also work with other crystals.
 Watchdog frequencies are nominal, not measurements.
 
@@ -81,3 +80,10 @@ This function selects a physical input and retains the fixed 48 MHz CPU target.
 C and C++ callers test generic selection, descriptor updates, invalid-input
 preservation, USB lock failure and successful retry. The previous source fails
 to link these callers because SystemCoreClockSelect was missing.
+
+SystemPeriphClockGet(0) reports the system bus clock (SystemCoreClock), matching
+the LPC546xx index convention. Other indices return zero. UART/SSP function
+clocks are separate and remain driver-managed. SystemPeriphClockSet explicitly
+returns zero without changes: the bus has no divider independent of the CPU.
+Clock-decoding tests check the getter across every tested source and AHB divider,
+invalid indices and the setter's preservation of registers and CPU frequency.

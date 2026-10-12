@@ -349,37 +349,32 @@ void SystemInit (void)
 }
 
 /**
- * @brief	Get peripheral clock frequency (PCLK)
+ * @brief Get peripheral bus clock frequency.
  *
- * Most often the PCLK numbering starts from 1 (PCLK1, PCLK2,...).
- * Therefore the clock Idx parameter = 0 indicate PCK1, 1 indicate PCLK2
+ * The AHB/APB bus uses the divided system clock, shared with the CPU.
+ * UART and SSP function-clock dividers are managed by their drivers.
  *
- * @param	Idx : Zero based peripheral clock number. Many processors can
- * 				  have more than 1 peripheral clock settings.
- *
- * @return	Peripheral clock frequency in Hz.
- * 			0 - Bad clock number
+ * @param Idx : 0 for the system bus clock.
+ * @return Frequency in Hz, or zero for an invalid index.
  */
 uint32_t SystemPeriphClockGet(int Idx)
 {
-	return 0;
+	return Idx == 0 ? SystemCoreClock : 0;
 }
 
 /**
- * @brief	Set peripheral clock (PCLK) frequency
+ * @brief Independent peripheral bus clock changes are not supported.
  *
- * Most often the PCLK numbering starts from 1 (PCLK1, PCLK2,...).
- * Therefore the clock Idx parameter = 0 indicate PCK1, 1 indicate PCLK2
+ * Changing SYSAHBCLKDIV also changes the CPU clock. Do not silently change
+ * it through a peripheral-only request.
  *
- * @param	Idx  : Zero based peripheral clock number. Many processors can
- * 				   have more than 1 peripheral clock settings.
- * @param	Freq : Clock frequency in Hz.
- *
- * @return	Actual frequency set in Hz.
- * 			0 - Failed
+ * @return Zero; no clock registers are changed.
  */
 uint32_t SystemPeriphClockSet(int Idx, uint32_t Freq)
 {
+	(void)Idx;
+	(void)Freq;
+
 	return 0;
 }
 
