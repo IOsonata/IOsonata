@@ -80,6 +80,9 @@ int main(void)
 	uint32_t locked = 1;
 
 	assert(regs == (void *)0x40048000);
+	assert(mmap((void *)0x4003c000, 0x1000, PROT_READ | PROT_WRITE,
+		MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0) == (void *)0x4003c000);
+	LPC_FLASHCTRL->FLASHCFG = 0xa5a50000U;
 	for (unsigned i = 0; i < sizeof(s_Setters) / sizeof(s_Setters[0]); i++)
 	{
 		for (unsigned crystal = 0; crystal < 2; crystal++)
@@ -93,6 +96,13 @@ int main(void)
 			assert(LPC_SYSCON->SYSAHBCLKDIV == 2);
 			assert(LPC_SYSCON->SYSPLLCLKSEL == crystal);
 			assert(SystemCoreClock == 48000000);
+			assert(LPC_FLASHCTRL->FLASHCFG == 0xa5a50002U);
+			if (crystal == 0)
+			{
+				assert(LPC_SYSCON->USBCLKDIV == 0);
+				assert(LPC_SYSCON->PDRUNCFG & PDRUNCFG_USBPAD_PD);
+				assert(LPC_SYSCON->PDRUNCFG & PDRUNCFG_USBPLL_PD);
+			}
 			SystemCoreClockUpdate();
 			assert(SystemCoreClock == 48000000);
 		}
@@ -112,10 +122,34 @@ int main(void)
 			assert(output / LPC_SYSCON->USBCLKDIV == 48000000);
 			SystemCoreClockUpdate();
 			assert(SystemCoreClock == 48000000);
+			assert((LPC_SYSCON->SYSOSCCTRL & 3U) == (freq > 20000000U ? 2U : 0U));
 			CheckRejected(s_Setters[i], regs);
 			SystemCoreClockUpdate();
 			assert(SystemCoreClock == 48000000);
 		}
+		// Reconfigure from an active PLL, then inject each PLL lock failure.
+		for (unsigned usbFailure = 0; usbFailure < 2; usbFailure++)
+		{
+			uint32_t unlocked = 0;
+
+			memcpy((char *)regs + offsetof(LPC_SYSCON_Type, SYSPLLSTAT), &locked, sizeof(locked));
+			memcpy((char *)regs + offsetof(LPC_SYSCON_Type, USBPLLSTAT), &locked, sizeof(locked));
+			assert(s_Setters[i](true, 12000000) == 48000000);
+			size_t offset = usbFailure ? offsetof(LPC_SYSCON_Type, USBPLLSTAT) :
+				offsetof(LPC_SYSCON_Type, SYSPLLSTAT);
+
+			memcpy((char *)regs + offset, &unlocked, sizeof(unlocked));
+			assert(s_Setters[i](true, 12000000) == 0);
+			assert(LPC_SYSCON->MAINCLKSEL == MAINCLKSEL_IRC);
+			assert(LPC_SYSCON->SYSAHBCLKDIV == 1);
+			assert(SystemMainClkFreq == 12000000 && SystemCoreClock == 12000000);
+			assert((LPC_SYSCON->PDRUNCFG & (PDRUNCFG_SYSPLL_PD | PDRUNCFG_USBPLL_PD)) ==
+				(PDRUNCFG_SYSPLL_PD | PDRUNCFG_USBPLL_PD));
+			assert(LPC_SYSCON->USBCLKDIV == 0);
+			assert(LPC_SYSCON->PDRUNCFG & PDRUNCFG_USBPAD_PD);
+			memcpy((char *)regs + offset, &locked, sizeof(locked));
+			assert(s_Setters[i](true, 12000000) == 48000000);
+		}
 	}
-	puts("LPC11Uxx clock setter linkage and PLL selection: PASS");
+	puts("LPC11Uxx clock setters, PLL selection and lock recovery: PASS");
 }

@@ -24,9 +24,8 @@ The test supplies PLL lock indications; it does not simulate analog startup.
 The original source fails to link a caller of SystemSetCoreClock. The old
 setter also returned the 96 MHz PLL rate for a 48 MHz CPU configuration.
 
-Oscillator startup, PLL
-programming, board oscillator selection and peripheral-clock API completion
-remain separate review items. The system oscillator defaults to 12 MHz; a successful crystal setter records
+Board oscillator selection and peripheral-clock API completion remain separate
+review items. The system oscillator defaults to 12 MHz; a successful crystal setter records
 the supplied input so later clock updates also work with other crystals.
 Watchdog frequencies are nominal, not measurements.
 
@@ -40,5 +39,19 @@ constraint, not a nearest-rate request. The search includes M=1..32, all four
 P encodings and the inclusive 156-320 MHz CCO range, with 64-bit arithmetic.
 Tests cover negative/zero/large inputs, valid-range inputs with no solution,
 and 12/16/19.2/24 MHz crystal configurations through both entry points.
-PLL lock waits and safe switching of an already active PLL still require
-separate startup work; these tests supply lock bits in mapped memory.
+Clock reconfiguration now moves the CPU to IRC before powering down and
+programming either PLL. Flash timing is set before switching up to 48 MHz.
+Crystal range selection covers both oscillator ranges. Startup uses bounded
+read-count delays and waits, independent of timers or delay calibration.
+
+Callers must stop USB and other clock-dependent peripherals before changing
+clocks. IRC mode leaves USB clock/pads disabled. Missing system-PLL or USB-PLL
+lock returns zero, leaves the CPU on the 12 MHz IRC and disables both PLLs and
+USB. Tests inject each lock failure after a successful PLL configuration and
+verify fallback and successful retry through both C and C++ entry points.
+They also check reserved flash bits and crystal range selection. Tests supply
+lock bits in mapped memory; analog startup timing, clock glitches, IRQ latency
+and the physical switching sequence still need board validation. A hardware
+clock-source latch failure is distinct from PLL lock failure: if even the IRC
+fallback latch fails, the globals report an unknown frequency (zero), and the
+PLLs remain powered rather than stopping a possible CPU clock source.

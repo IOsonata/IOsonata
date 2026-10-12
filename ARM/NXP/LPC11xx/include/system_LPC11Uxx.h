@@ -110,6 +110,9 @@ void SystemCoreClockUpdate (void);
 // Returns the CPU frequency after the AHB divider and updates the clock globals.
 // Returns zero without register changes if the crystal input cannot produce
 // the fixed 48 MHz CPU/USB target within the PLL limits.
+// Stop clock-dependent peripherals (including USB) before calling. Successful
+// IRC operation leaves USB disabled. PLL lock failure returns zero with the
+// CPU on the 12 MHz IRC and USB disabled; reinitialize peripherals after retry.
 uint32_t SystemSetCoreClock(bool Crystal, int ClkFreq);
 
 // Retain the name exported by older LPC11Uxx libraries.

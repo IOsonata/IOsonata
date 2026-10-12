@@ -37,6 +37,7 @@ Modified by          Date              Description
 #include <stdbool.h>
 
 #include "coredev/system_core_clock.h"
+#include "coredev/interrupt.h"
 #include "LPC11Uxx.h"
 
 
@@ -45,6 +46,8 @@ Modified by          Date              Description
 
 #define SYSTEM_CORE_CLOCK				48000000UL		// TODO: Adjust value for CPU with fixed core frequency
 #define SYSTEM_NSDELAY_CORE_FACTOR		(93UL)			// TODO: Adjustment value
+
+#define LPC11_CLOCK_WAIT_MAX		100000U
 
 // Select system clock oscillator source
 #define DEF_CLK_SRC				IRC_FREQ
@@ -116,6 +119,52 @@ void SystemCoreClockUpdate(void)
 	SystemCoreClock = div != 0 ? sysclk / div : 0;
 }
 
+// A register-read budget bounds startup even if an oscillator or PLL fails.
+static bool Lpc11ClockReady(volatile const uint32_t *pReg)
+{
+	for (uint32_t count = 0; count < LPC11_CLOCK_WAIT_MAX; count++)
+	{
+		if (*pReg & 1U)
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+static bool Lpc11ClockLatch(volatile uint32_t *pReg)
+{
+	*pReg = 0;
+	*pReg = 1;
+
+	return Lpc11ClockReady(pReg);
+}
+
+// Startup cannot use timers or delay calibration that depend on the old clock.
+static void Lpc11ClockDelay(uint32_t Reads)
+{
+	for (uint32_t count = 0; count < Reads; count++)
+	{
+		(void)LPC_SYSCON->SYSAHBCLKDIV;
+	}
+}
+
+static bool Lpc11MainClockIRC(void)
+{
+	LPC_SYSCON->MAINCLKSEL = MAINCLKSEL_IRC;
+	if (!Lpc11ClockLatch(&LPC_SYSCON->MAINCLKUEN))
+	{
+		SystemMainClkFreq = 0;
+		SystemCoreClock = 0;
+		return false;
+	}
+	LPC_SYSCON->SYSAHBCLKDIV = 1;
+	SystemMainClkFreq = IRC_FREQ;
+	SystemCoreClock = IRC_FREQ;
+
+	return true;
+}
+
 uint32_t SystemCoreClockSet(bool Crystal, int ClkFreq)
 {
 	uint32_t sysclk = IRC_FREQ;
@@ -157,60 +206,100 @@ uint32_t SystemCoreClockSet(bool Crystal, int ClkFreq)
 		return 0;
 	}
 
+	uint32_t state = DisableInterrupt();
+
+	// Three flash clocks are required at 48 MHz. Preserve reserved bits.
+	LPC_SYSCON->SYSAHBCLKCTRL |= 1U << 3;
+	LPC_FLASHCTRL->FLASHCFG = (LPC_FLASHCTRL->FLASHCFG & ~3U) | 2U;
+	LPC_SYSCON->PDRUNCFG &= ~(PDRUNCFG_IRC_PD | PDRUNCFG_IRCOUT_PD);
+	Lpc11ClockDelay(1024U);
+	if (!Lpc11MainClockIRC())
+	{
+		// Do not power down a PLL that may still be clocking the CPU.
+		EnableInterrupt(state);
+		return 0;
+	}
+
+	// Callers must stop USB and other clock-dependent peripherals first.
+	LPC_SYSCON->USBCLKDIV = 0;
+	LPC_SYSCON->PDRUNCFG |= PDRUNCFG_USBPAD_PD | PDRUNCFG_SYSPLL_PD | PDRUNCFG_USBPLL_PD;
 	if (Crystal)
 	{
+		LPC_SYSCON->PDRUNCFG |= PDRUNCFG_SYSOSC_PD;
+		LPC_SYSCON->SYSOSCCTRL = (LPC_SYSCON->SYSOSCCTRL & ~3U) |
+			(sysclk > 20000000U ? SYSOSCCTRL_FREQRANGE15 : SYSOSCCTRL_FREQRANGE0);
 		LPC_SYSCON->PDRUNCFG &= ~PDRUNCFG_SYSOSC_PD;
-		LPC_SYSCON->SYSPLLCLKSEL = SYSPLLCLKSEL_SYSOSC;
-		LPC_SYSCON->USBPLLCLKSEL = USBPLLCLKSEL_SYSOSC;
+		// At least 1 ms at the 12 MHz IRC; PLL lock is checked separately.
+		Lpc11ClockDelay(12000U);
 		s_SysOscFreq = sysclk;
+	}
+	LPC_SYSCON->SYSPLLCLKSEL = Crystal ? SYSPLLCLKSEL_SYSOSC : SYSPLLCLKSEL_IRC;
+	if (!Lpc11ClockLatch(&LPC_SYSCON->SYSPLLCLKUEN))
+	{
+		goto clock_failed;
+	}
+	LPC_SYSCON->SYSPLLCTRL = pll;
+	LPC_SYSCON->PDRUNCFG &= ~PDRUNCFG_SYSPLL_PD;
+	if (!Lpc11ClockReady(&LPC_SYSCON->SYSPLLSTAT))
+	{
+		goto clock_failed;
+	}
+
+	if (Crystal)
+	{
+		LPC_SYSCON->USBPLLCLKSEL = USBPLLCLKSEL_SYSOSC;
+		if (!Lpc11ClockLatch(&LPC_SYSCON->USBPLLCLKUEN))
+		{
+			goto clock_failed;
+		}
+		LPC_SYSCON->USBPLLCTRL = pll;
+		LPC_SYSCON->PDRUNCFG &= ~PDRUNCFG_USBPLL_PD;
+		if (!Lpc11ClockReady(&LPC_SYSCON->USBPLLSTAT))
+		{
+			goto clock_failed;
+		}
+	}
+
+	// Install the divider before connecting the faster PLL output.
+	LPC_SYSCON->SYSAHBCLKDIV = div;
+	LPC_SYSCON->MAINCLKSEL = MAINCLKSEL_PLLOUT;
+	if (!Lpc11ClockLatch(&LPC_SYSCON->MAINCLKUEN))
+	{
+		goto clock_failed;
+	}
+	if (Crystal)
+	{
+		LPC_SYSCON->USBCLKSEL = USBCLKSEL_PLLOUT;
+		if (!Lpc11ClockLatch(&LPC_SYSCON->USBCLKUEN))
+		{
+			goto clock_failed;
+		}
+		LPC_SYSCON->USBCLKDIV = div;
+		LPC_SYSCON->PDRUNCFG &= ~PDRUNCFG_USBPAD_PD;
+	}
+	LPC_SYSCON->SYSAHBCLKCTRL |= 1U << 16;
+	SystemMainClkFreq = fclko;
+	SystemCoreClock = fclko / div;
+	EnableInterrupt(state);
+
+	return SystemCoreClock;
+
+clock_failed:
+	LPC_SYSCON->USBCLKDIV = 0;
+	LPC_SYSCON->PDRUNCFG |= PDRUNCFG_USBPAD_PD;
+	if (Lpc11MainClockIRC())
+	{
+		LPC_SYSCON->PDRUNCFG |= PDRUNCFG_SYSPLL_PD | PDRUNCFG_USBPLL_PD;
 	}
 	else
 	{
-		LPC_SYSCON->SYSPLLCLKSEL = SYSPLLCLKSEL_IRC;
-		LPC_SYSCON->USBPLLCLKSEL = USBPLLCLKSEL_IRC;
+		// A failed clock-source latch leaves the active frequency unknown.
+		SystemMainClkFreq = 0;
+		SystemCoreClock = 0;
 	}
-	LPC_SYSCON->SYSPLLCLKUEN = 0x01;
-	LPC_SYSCON->SYSPLLCLKUEN = 0x00;
-	LPC_SYSCON->SYSPLLCLKUEN = 0x01;
-	while (!(LPC_SYSCON->SYSPLLCLKUEN & 0x01));
+	EnableInterrupt(state);
 
-	// Core clock
-	LPC_SYSCON->SYSPLLCTRL = pll;
-	LPC_SYSCON->PDRUNCFG &= ~PDRUNCFG_SYSPLL_PD;	// Power-up SYSPLL
-	while (!(LPC_SYSCON->SYSPLLSTAT & 0x01));	    // Wait Until PLL Locked
-
-	LPC_SYSCON->SYSAHBCLKDIV  = div;
-
-	LPC_SYSCON->MAINCLKSEL    = MAINCLKSEL_PLLOUT;
-	LPC_SYSCON->MAINCLKUEN    = 0x00;
-	LPC_SYSCON->MAINCLKUEN    = 0x01;
-	while (!(LPC_SYSCON->MAINCLKUEN & 0x01));
-
-	if (Crystal == true)
-	{
-	// USB clock
-	LPC_SYSCON->PDRUNCFG     &= ~PDRUNCFG_USBPLL_PD;	// Power-up USB PLL
-	LPC_SYSCON->USBPLLCLKSEL  = USBPLLCLKSEL_SYSOSC;	// Select PLL Input
-	LPC_SYSCON->USBPLLCLKUEN  = 0x00;               	// Toggle Update Register
-	LPC_SYSCON->USBPLLCLKUEN  = 0x01;
-	while (!(LPC_SYSCON->USBPLLCLKUEN & 0x01));     	// Wait Until Updated
-
-	// USB PLL
-	LPC_SYSCON->USBPLLCTRL    = pll;
-	while (!(LPC_SYSCON->USBPLLSTAT   & 0x01));     	// Wait Until PLL Locked
-	LPC_SYSCON->USBCLKSEL     = USBCLKSEL_PLLOUT;		// Select USB PLL
-	}
-	LPC_SYSCON->USBCLKDIV	= div;      				// Set USB clock divider
-	LPC_SYSCON->USBCLKUEN	= 0x00;               		// Toggle Update Register
-	LPC_SYSCON->USBCLKUEN	= 0x01;
-
-	LPC_SYSCON->SYSAHBCLKCTRL |= (1<<16);				// Power-up IOCON
-	LPC_SYSCON->PDRUNCFG     &= ~PDRUNCFG_USBPAD_PD;	// Power-up USB PHY         */
-
-	SystemMainClkFreq = fclko;
-	SystemCoreClock = fclko / div;
-
-	return SystemCoreClock;
+	return 0;
 }
 
 uint32_t SystemSetCoreClock(bool Crystal, int ClkFreq)
