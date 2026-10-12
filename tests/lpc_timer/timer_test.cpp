@@ -162,7 +162,8 @@ static void ResetHandler(TimerDev_t * const pTimer, int, void *)
 
 int main()
 {
-	TimerDev_t timers[4] = {}, other = {};
+	Timer timers[4];
+	TimerDev_t other = {};
 	TimerCfg_t cfg = {};
 	cfg.ClkSrc = TIMER_CLKSRC_DEFAULT;
 	cfg.IntPrio = 3;
@@ -178,7 +179,7 @@ int main()
 	for (int d = 0; d < 4; d++)
 	{
 		cfg.DevNo = d;
-		TimerDev_t &t = timers[d];
+		TimerDev_t &t = *(TimerDev_t *)timers[d];
 		int maxprio = (1U << __NVIC_PRIO_BITS) - 1U;
 		for (int priority : {INT_MIN, -1, 0, 1, 2, 3, maxprio, maxprio + 1, INT_MAX})
 		{
@@ -252,6 +253,21 @@ int main()
 		// Extreme duration conversion must not overflow into a short delay.
 		assert(t.EnableTrigger(&t, 2, UINT64_MAX, TIMER_TRIG_TYPE_SINGLE, nullptr, nullptr) > UINT64_MAX - 1000);
 		assert(g_LpcTimer[d].Trig[2].Ticks > 10000000000000000ULL);
+		// Automatic allocation must distinguish exhaustion from valid slot 0.
+		assert(timers[d].Init(cfg));
+		for (int n = 0; n < 3; n++)
+		{
+			assert(timers[d].EnableTimerTrigger((uint64_t)1000000,
+				TIMER_TRIG_TYPE_CONTINUOUS) == n);
+		}
+		assert(timers[d].EnableTimerTrigger((uint64_t)1000000,
+			TIMER_TRIG_TYPE_CONTINUOUS) == -1);
+		assert(timers[d].EnableTimerTrigger((uint32_t)1,
+			TIMER_TRIG_TYPE_CONTINUOUS) == -1);
+		timers[d].DisableTimerTrigger(0);
+		assert(timers[d].EnableTimerTrigger((uint32_t)1,
+			TIMER_TRIG_TYPE_CONTINUOUS) == 0);
+		timers[d].Disable();
 	}
 	puts("lpc11uxx timer: PASS");
 	return 0;

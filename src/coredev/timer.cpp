@@ -38,7 +38,9 @@ int Timer::EnableTimerTrigger(uint64_t nsPeriod, TIMER_TRIG_TYPE Type, TimerTrig
 {
 	int idx = FindAvailTimerTrigger();
 	if (idx < 0)
-		return 0;
+	{
+		return -1;
+	}
 
 	EnableTimerTrigger(idx, nsPeriod, Type, Handler, pContext);
 
@@ -49,7 +51,9 @@ int Timer::EnableTimerTrigger(uint32_t msPeriod, TIMER_TRIG_TYPE Type, TimerTrig
 {
 	int idx = FindAvailTimerTrigger();
 	if (idx < 0)
-		return 0;
+	{
+		return -1;
+	}
 
 	EnableTimerTrigger(idx, msPeriod, Type, Handler, pContext);
 

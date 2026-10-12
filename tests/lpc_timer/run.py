@@ -13,5 +13,6 @@ for opt in ['-O0', '-O2']:
                         '-Wno-missing-field-initializers', '-Wno-unused-parameter',
                         '-fsanitize=undefined', '-fno-sanitize-recover=all',
                         *['-I' + str(root / p) for p in includes],
-                        str(root / 'tests/lpc_timer/timer_test.cpp'), '-o', exe], check=True)
+                        str(root / 'tests/lpc_timer/timer_test.cpp'),
+                        str(root / 'src/coredev/timer.cpp'), '-o', exe], check=True)
         subprocess.run([exe], check=True)
