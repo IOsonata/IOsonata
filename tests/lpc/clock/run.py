@@ -78,6 +78,10 @@ for opt, variant in [(opt, variant) for opt in ['-O0', '-O2'] for variant in var
                         '-include', str(root / 'tests/lpc/clock/flash17_shim.h'),
                         '-c', str(root / 'ARM/NXP/LPC17xx/src/system_LPC17xx.c'),
                         '-o', obj], check=True)
+        # ResetEntry.c owns SystemRamStart; a second strong definition breaks firmware linking.
+        symbols = subprocess.check_output(['nm', '--defined-only', obj], text=True)
+        assert not any(line.split()[-1] == 'SystemRamStart'
+                       for line in symbols.splitlines() if line.split())
         subprocess.run(['gcc', '-std=gnu17', *flags, '-Dmain=TestClock17Run',
                         '-c', str(root / 'tests/lpc/clock/flash17_test.c'),
                         '-o', fixture], check=True)

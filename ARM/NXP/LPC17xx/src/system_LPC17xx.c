@@ -102,12 +102,6 @@ static void Lpc17PllFeed(volatile uint32_t *pFeed)
 }
 
 // Match the other LPC ports: setters and SystemCoreClockUpdate maintain this value.
-// Start of physical local SRAM, independent of application linker placement.
-void *SystemRamStart(void)
-{
-	return (void *)LPC_RAM_BASE;
-}
-
 uint32_t SystemCoreClockGet(void)
 {
 	return SystemCoreClock;

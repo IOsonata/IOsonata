@@ -444,11 +444,10 @@ See https://www.pololu.com/file/0J431/user.manual.lpc17xx.pdf .
 Tests cover external inputs at 1/4/12/15/25 MHz and just above the range-select
 threshold, startup, invalid frequencies, missing-ready timeout and retry.
 
-LPC17xx `SystemRamStart()` returns the physical local SRAM base from the
-vendor CMSIS `LPC_RAM_BASE` definition (0x10000000). It does not report free
-heap space, the AHB SRAM banks or the application's linked data start.
-The C/C++ linkage fixture checks the address; the previous implementation
-fails to link because the generic function is missing.
+LPC17xx uses `SystemRamStart()` from `ARM/src/ResetEntry.c`, which returns
+`__data_start__` from the application linker script. The clock source must not
+provide a second definition. The clock regression checks its compiled object
+for this duplicate symbol; the standalone clock fixture does not link startup.
 
 If the configured CPU oscillator cannot be selected during SystemInit, LPC17xx
 startup attempts recovery to the undivided 4 MHz IRC with PLL0 stopped. This

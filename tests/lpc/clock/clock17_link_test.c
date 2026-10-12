@@ -25,7 +25,6 @@ int main(void)
 {
 	int result;
 
-	assert((uintptr_t)SystemRamStart() == 0x10000000U);
 	assert(g_McuOsc.CoreOsc.Type == OSC_TYPE_RC);
 	assert(g_McuOsc.CoreOsc.Freq == 4000000U);
 	assert(g_McuOsc.CoreOsc.Accuracy == 123);
