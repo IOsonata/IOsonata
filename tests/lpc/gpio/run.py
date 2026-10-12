@@ -20,7 +20,8 @@ for compiler, standard in [('gcc', '-std=gnu11'), ('g++', '-std=c++17')]:
                                 '-o', exe], check=True)
                 subprocess.run([exe], check=True)
 
-includes = ['tests/lpc/uart/shim', 'include', 'ARM/NXP/LPC17xx/Include']
+includes = ['tests/lpc/uart/shim', 'include', 'ARM/NXP/LPC17xx/Include',
+            'ARM/NXP/LPC17xx/LPC1769/exemples/DfuBoot/src']
 for compiler, standard in [('gcc', '-std=gnu11'), ('g++', '-std=c++17')]:
     for opt in ['-O0', '-O2']:
         with tempfile.TemporaryDirectory() as tmp:
@@ -29,5 +30,6 @@ for compiler, standard in [('gcc', '-std=gnu11'), ('g++', '-std=c++17')]:
                             '-fsanitize=undefined', '-fno-sanitize-recover=all',
                             *['-I' + str(root / p) for p in includes],
                             str(root / 'tests/lpc/gpio/lpc17_control_test.c'),
+                            str(root / 'ARM/NXP/LPC17xx/src/iopincfg.c'),
                             '-o', exe], check=True)
             subprocess.run([exe], check=True)

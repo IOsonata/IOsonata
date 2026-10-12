@@ -27,7 +27,16 @@ Blinky, DFU and UART examples have been updated.
 Configuration uses pointers to named vendor IOCON registers. LPC17xx PINCON
 and LPC546xx IOCON differ, so these GPIO registers are not combined into one
 shared driver. Shared legacy UART and SSP remain separate from pin setup.
-LPC17xx GPIO is still an older implementation using raw mux values.
+LPC17xx now uses the same generic pin-function constants: GPIO and FUNC0
+select hardware function 0, and FUNC1 through FUNC3 select functions 1 through
+3. External LPC17xx maps using raw mux values must migrate to IOPINOP_FUNCn.
+The LPC1769 DfuBoot UART map and MBEDPRESSO PWM definitions are migrated.
+LPC17xx configuration retains volatile access through named vendor PINCON
+registers and protects register read/modify/write operations with an interrupt
+lock. Invalid port, pin-index and function ranges leave registers unchanged;
+callers must still choose pins and alternate functions available on their part.
+Tests cover register-bank boundaries, P1.31, all four mux and pull encodings,
+open drain, direction, DfuBoot UART pins and the three I2C mux selections.
 
 ADC functions select analog mode without digital input, pulls, hysteresis or
 open drain; configuring GPIO or a digital alternate function restores digital

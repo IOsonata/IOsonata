@@ -32,54 +32,63 @@ Modified by          Date              Description
 
 ----------------------------------------------------------------------------*/
 
-#include <stdio.h>
 #include "LPC17xx.h"
-
 #include "coredev/iopincfg.h"
 
-/*
- * Configure individual I/O pin
- *
- * @Param 	PortNo	: Port number
- * 			PinNo  	: Pin number
- * 			PinOp	: Pin function index from 0. MCU dependent
- * 			Dir     : I/O direction
- *			Res 	: Resistor config
- *			Type	: I/O type
- *
- */
+typedef struct {
+	volatile uint32_t *pSelect[2];
+	volatile uint32_t *pMode[2];
+	volatile uint32_t *pOpenDrain;
+} Lpc17PinRegs_t;
+
+static const Lpc17PinRegs_t s_PinRegs[] = {
+	{{&LPC_PINCON->PINSEL0, &LPC_PINCON->PINSEL1},
+	 {&LPC_PINCON->PINMODE0, &LPC_PINCON->PINMODE1}, &LPC_PINCON->PINMODE_OD0},
+	{{&LPC_PINCON->PINSEL2, &LPC_PINCON->PINSEL3},
+	 {&LPC_PINCON->PINMODE2, &LPC_PINCON->PINMODE3}, &LPC_PINCON->PINMODE_OD1},
+	{{&LPC_PINCON->PINSEL4, &LPC_PINCON->PINSEL5},
+	 {&LPC_PINCON->PINMODE4, &LPC_PINCON->PINMODE5}, &LPC_PINCON->PINMODE_OD2},
+	{{&LPC_PINCON->PINSEL6, &LPC_PINCON->PINSEL7},
+	 {&LPC_PINCON->PINMODE6, &LPC_PINCON->PINMODE7}, &LPC_PINCON->PINMODE_OD3},
+	{{&LPC_PINCON->PINSEL8, &LPC_PINCON->PINSEL9},
+	 {&LPC_PINCON->PINMODE8, &LPC_PINCON->PINMODE9}, &LPC_PINCON->PINMODE_OD4},
+};
+
+// IOPINOP_GPIO and FUNC0 select hardware function 0; FUNCn selects n.
+// The caller must choose a function and pin available on the actual package.
 void IOPinConfig(int PortNo, int PinNo, int PinOp, IOPINDIR Dir, IOPINRES Resistor, IOPINTYPE Type)
 {
-	uint32_t *pinselreg = (uint32_t *)&LPC_PINCON->PINSEL0 + (PortNo << 1);
-	uint32_t *pinmodereg = (uint32_t *)&LPC_PINCON->PINMODE0 + (PortNo << 1);
-	uint32_t *pinodreg = (uint32_t *)&LPC_PINCON->PINMODE_OD0 + PortNo;
-
-	// Configure direction
-	if (Dir == IOPINDIR_OUTPUT)
-		LPC_GPIO0[PortNo].FIODIR |= (1 << PinNo);
-	else
-		LPC_GPIO0[PortNo].FIODIR &= ~(1 << PinNo);
-
-	// Configure open drain
-	*pinodreg &= ~(1 << PinNo);
-	if (Type == IOPINTYPE_OPENDRAIN)
-		*pinodreg |= (1 << PinNo);
-
-	if (PinNo > 15)
+	if ((unsigned)PortNo >= 5U || (unsigned)PinNo >= 32U ||
+		PinOp < IOPINOP_GPIO || PinOp > IOPINOP_FUNC3)
 	{
-		pinselreg++;
-		pinmodereg++;
-		PinNo -= 16;
+		return;
 	}
+	const Lpc17PinRegs_t *regs = &s_PinRegs[PortNo];
+	unsigned half = (unsigned)PinNo / 16U;
+	unsigned shift = ((unsigned)PinNo % 16U) * 2U;
+	uint32_t mask = 1UL << (unsigned)PinNo;
+	uint32_t func = PinOp == IOPINOP_GPIO ? 0U : (uint32_t)(PinOp - IOPINOP_FUNC0);
+	uint32_t rmode = 0;
+	uint32_t state = DisableInterrupt();
 
-	PinNo <<= 1;
+	if (Dir == IOPINDIR_OUTPUT)
+	{
+		LPC_GPIO0[PortNo].FIODIR |= mask;
+	}
+	else
+	{
+		LPC_GPIO0[PortNo].FIODIR &= ~mask;
+	}
+	if (Type == IOPINTYPE_OPENDRAIN)
+	{
+		*regs->pOpenDrain |= mask;
+	}
+	else
+	{
+		*regs->pOpenDrain &= ~mask;
+	}
+	*regs->pSelect[half] = (*regs->pSelect[half] & ~(3UL << shift)) | (func << shift);
 
-	// Configure pin function
-	*pinselreg &= ~(3 << PinNo);
-	*pinselreg |= (PinOp & 3) << PinNo;
-
-	// Configure pin resistor
-	int rmode = 0;
 	switch (Resistor)
 	{
 		case IOPINRES_NONE:
@@ -95,10 +104,6 @@ void IOPinConfig(int PortNo, int PinNo, int PinOp, IOPINDIR Dir, IOPINRES Resist
 			rmode = 1;
 			break;
 	}
-	*pinmodereg &= ~(3 << PinNo);
-	*pinmodereg |= (rmode & 3) << PinNo;
+	*regs->pMode[half] = (*regs->pMode[half] & ~(3UL << shift)) | (rmode << shift);
+	EnableInterrupt(state);
 }
-
-
-
-
