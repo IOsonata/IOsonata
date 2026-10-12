@@ -56,7 +56,9 @@ SOFTWARE.
 #endif
 
 // Same UART0 pins as the LPC1769 DfuBoot example.
+#ifndef DEBUG
 #define TIMER_DEMO_UART		1
+#endif
 #define UART_DEVNO			0
 #define UART_RX_PORT		0
 #define UART_RX_PIN			3

@@ -18,8 +18,9 @@ to exercise all four devices:
 
 Connect a 3.3 V UART adapter RX to P0.2 (TXD0), and connect ground.
 P0.3 is RXD0. Open the terminal at 115200 baud, 8-N-1, no flow control.
-The pin selection follows the LPC1769 DfuBoot example. UART retargeting is
-enabled in both build configurations; a semihosting debugger is not required.
+The pin selection follows the LPC1769 DfuBoot example. Release uses UART
+without semihosting. Debug defaults to semihosting; enable it in the debugger
+to see console output. The UART wiring above applies to Release.
 
 Expect startup periods of 100, 1000 and 250 ms, then measured periods near
 100000, 1000000 and 250000 us. The first reported period for each trigger can

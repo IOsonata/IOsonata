@@ -21,8 +21,9 @@ The green LED on P0.23 toggles every 100 ms and the red LED on P0.16 every 1 s.
 Trigger 2 runs every 250 ms and is visible in the UART output and debugger
 counters.
 
-UART output is enabled in both Debug and Release builds. No semihosting
-debugger is required for console output.
+Debug defaults to semihosting; enable semihosting in the debugger to see
+console output. Release uses UART without semihosting. The wiring and terminal
+settings below apply to Release.
 
 Connect a 3.3 V UART adapter RX to P0.19 and connect ground. P0.18 is UART RX.
 Open the terminal at 115200 baud, 8-N-1, without flow control. Expect three
