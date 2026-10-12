@@ -34,6 +34,6 @@ the accepted periods in nanoseconds. Repeat with DevNo 2 and 3.
 
 The default rate gives the 16-bit timers a 3.2768 s half-cycle interrupt
 service limit. Higher timer frequencies shorten that interval; see
-`tests/lpc_timer/README.md` for driver limits.
+`tests/lpc/timer/README.md` for driver limits.
 
 Hardware validation and a full firmware link remain pending.
