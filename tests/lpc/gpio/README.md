@@ -95,3 +95,13 @@ SSP initialization rejects P1.30 as a chip select.
 
 Hardware reference: NXP UM10462, chapters 7 (IOCON) and 9 (GPIO),
 https://www.keil.com/dd/docs/datashts/nxp/lpc11uxx/um10462.pdf.
+
+LPC17xx IOPinSetSense configures rising, falling, both or neither edge on
+P0.0-11/P0.15-30 and P2.0-13 through vendor GPIOINT registers. Package pin
+availability remains the caller's responsibility. Reserved pins, other ports
+and invalid sense values are ignored. Updates preserve unrelated enable bits
+and pending events under the existing saved-interrupt-state helper. The caller
+configures pin mux/direction separately. This API does not allocate callbacks
+or enable NVIC; LPC17xx callback allocation and dispatch remain unimplemented.
+C/C++ tests cover every pin and mode, invalid inputs and full register-block
+preservation at O0/O2 with UBSan.

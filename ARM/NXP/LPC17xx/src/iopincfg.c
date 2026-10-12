@@ -107,3 +107,53 @@ void IOPinConfig(int PortNo, int PinNo, int PinOp, IOPINDIR Dir, IOPINRES Resist
 	*regs->pMode[half] = (*regs->pMode[half] & ~(3UL << shift)) | (rmode << shift);
 	EnableInterrupt(state);
 }
+
+void IOPinSetSense(int PortNo, int PinNo, IOPINSENSE Sense)
+{
+	volatile uint32_t *rise;
+	volatile uint32_t *fall;
+	uint32_t mask;
+	uint32_t state;
+
+	if ((unsigned)PinNo >= 32U ||
+		(Sense != IOPINSENSE_DISABLE && Sense != IOPINSENSE_HIGH_TRANSITION &&
+		Sense != IOPINSENSE_LOW_TRANSITION && Sense != IOPINSENSE_TOGGLE))
+	{
+		return;
+	}
+	mask = 1UL << (unsigned)PinNo;
+	if (PortNo == 0 && (mask & 0x7FFF8FFFU) != 0)
+	{
+		rise = &LPC_GPIOINT->IO0IntEnR;
+		fall = &LPC_GPIOINT->IO0IntEnF;
+	}
+	else if (PortNo == 2 && PinNo < 14)
+	{
+		rise = &LPC_GPIOINT->IO2IntEnR;
+		fall = &LPC_GPIOINT->IO2IntEnF;
+	}
+	else
+	{
+		return;
+	}
+
+	// Preserve other pins and pending events; NVIC ownership belongs to IRQ setup.
+	state = DisableInterrupt();
+	if (Sense == IOPINSENSE_HIGH_TRANSITION || Sense == IOPINSENSE_TOGGLE)
+	{
+		*rise |= mask;
+	}
+	else
+	{
+		*rise &= ~mask;
+	}
+	if (Sense == IOPINSENSE_LOW_TRANSITION || Sense == IOPINSENSE_TOGGLE)
+	{
+		*fall |= mask;
+	}
+	else
+	{
+		*fall &= ~mask;
+	}
+	EnableInterrupt(state);
+}

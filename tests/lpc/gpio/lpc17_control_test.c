@@ -12,6 +12,43 @@
 
 static const IOPinCfg_t s_UartPins[] = UART_PINS;
 
+static void CheckSense(void)
+{
+	unsigned char expected[sizeof(LPC_GPIOINT_TypeDef)];
+	const IOPINSENSE senses[] = {IOPINSENSE_DISABLE, IOPINSENSE_HIGH_TRANSITION,
+		IOPINSENSE_LOW_TRANSITION, IOPINSENSE_TOGGLE};
+
+	for (int port = -1; port <= 5; port++)
+	{
+		for (int pin = -1; pin <= 32; pin++)
+		{
+			bool valid = (port == 0 && ((pin >= 0 && pin <= 11) || (pin >= 15 && pin <= 30))) ||
+				(port == 2 && pin >= 0 && pin <= 13);
+
+			for (unsigned sense = 0; sense < 4; sense++)
+			{
+				memset((void *)LPC_GPIOINT, 0xA5, sizeof(LPC_GPIOINT_TypeDef));
+				if (valid)
+				{
+					volatile uint32_t *rise = port == 0 ? &LPC_GPIOINT->IO0IntEnR : &LPC_GPIOINT->IO2IntEnR;
+					volatile uint32_t *fall = port == 0 ? &LPC_GPIOINT->IO0IntEnF : &LPC_GPIOINT->IO2IntEnF;
+					uint32_t mask = 1U << pin;
+
+					*rise = (0xA5A5A5A5U & ~mask) | ((sense == 1 || sense == 3) ? mask : 0);
+					*fall = (0xA5A5A5A5U & ~mask) | ((sense == 2 || sense == 3) ? mask : 0);
+				}
+				memcpy(expected, (const void *)LPC_GPIOINT, sizeof(expected));
+				memset((void *)LPC_GPIOINT, 0xA5, sizeof(LPC_GPIOINT_TypeDef));
+				IOPinSetSense(port, pin, senses[sense]);
+				assert(memcmp(expected, (const void *)LPC_GPIOINT, sizeof(expected)) == 0);
+			}
+		}
+	}
+	memcpy(expected, (const void *)LPC_GPIOINT, sizeof(expected));
+	IOPinSetSense(0, 0, (IOPINSENSE)99);
+	assert(memcmp(expected, (const void *)LPC_GPIOINT, sizeof(expected)) == 0);
+}
+
 static void CheckMux(void)
 {
 	const int pins[][2] = {{0, 0}, {0, 15}, {0, 16}, {0, 30},
@@ -80,6 +117,9 @@ int main(void)
 		MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0) == (void *)LPC_GPIO_BASE);
 	assert(mmap((void *)LPC_PINCON_BASE, 0x1000, PROT_READ | PROT_WRITE,
 		MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0) == (void *)LPC_PINCON_BASE);
+	assert(mmap((void *)(LPC_GPIOINT_BASE & ~0xFFFUL), 0x1000, PROT_READ | PROT_WRITE,
+		MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0) == (void *)(LPC_GPIOINT_BASE & ~0xFFFUL));
+	CheckSense();
 	CheckMux();
 
 	// Narrow writes must keep every supplied bit and preserve higher pins.
