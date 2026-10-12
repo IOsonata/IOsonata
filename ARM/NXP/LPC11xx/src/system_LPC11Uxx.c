@@ -52,13 +52,13 @@ Modified by          Date              Description
 // Select system clock oscillator source
 #define DEF_CLK_SRC				IRC_FREQ
 
-__WEAK McuOsc_t s_McuOsc = {
+__WEAK McuOsc_t g_McuOsc = {
 	{OSC_TYPE_XTAL, 12000000, 20},
 	{OSC_TYPE_RC, 4000000, 20},
 	true
 };
 
-uint32_t SystemCoreClock = 48000000UL;	// System Clock Frequency (Core Clock)
+uint32_t SystemCoreClock = IRC_FREQ;	// System Clock Frequency (Core Clock)
 uint32_t SystemMainClkFreq = IRC_FREQ;		// System clock frequency, reset default IRC
 uint32_t SystemnsDelayFactor = SYSTEM_NSDELAY_CORE_FACTOR;
 
@@ -165,16 +165,21 @@ static bool Lpc11MainClockIRC(void)
 	return true;
 }
 
-uint32_t SystemCoreClockSet(bool Crystal, int ClkFreq)
+static uint32_t Lpc11SetCoreClock(OSC_TYPE Type, uint32_t ClkFreq, bool UsbClock)
 {
+	bool external = Type != OSC_TYPE_RC;
 	uint32_t sysclk = IRC_FREQ;
 	uint32_t pll = 0;
 	uint32_t div = 0;
 	uint32_t fclko = 0;
 
-	if (Crystal)
+	if (external)
 	{
 		// ClkFreq describes the physical input, not a requested CPU rate.
+		if (Type != OSC_TYPE_XTAL && Type != OSC_TYPE_TCXO)
+		{
+			return 0;
+		}
 		if (ClkFreq < 10000000 || ClkFreq > 25000000)
 		{
 			return 0;
@@ -223,17 +228,18 @@ uint32_t SystemCoreClockSet(bool Crystal, int ClkFreq)
 	// Callers must stop USB and other clock-dependent peripherals first.
 	LPC_SYSCON->USBCLKDIV = 0;
 	LPC_SYSCON->PDRUNCFG |= PDRUNCFG_USBPAD_PD | PDRUNCFG_SYSPLL_PD | PDRUNCFG_USBPLL_PD;
-	if (Crystal)
+	if (external)
 	{
 		LPC_SYSCON->PDRUNCFG |= PDRUNCFG_SYSOSC_PD;
 		LPC_SYSCON->SYSOSCCTRL = (LPC_SYSCON->SYSOSCCTRL & ~3U) |
-			(sysclk > 20000000U ? SYSOSCCTRL_FREQRANGE15 : SYSOSCCTRL_FREQRANGE0);
+			(sysclk > 20000000U ? SYSOSCCTRL_FREQRANGE15 : SYSOSCCTRL_FREQRANGE0) |
+			(Type == OSC_TYPE_TCXO ? SYSOSCCTRL_BYPASS : 0U);
 		LPC_SYSCON->PDRUNCFG &= ~PDRUNCFG_SYSOSC_PD;
 		// At least 1 ms at the 12 MHz IRC; PLL lock is checked separately.
 		Lpc11ClockDelay(12000U);
 		s_SysOscFreq = sysclk;
 	}
-	LPC_SYSCON->SYSPLLCLKSEL = Crystal ? SYSPLLCLKSEL_SYSOSC : SYSPLLCLKSEL_IRC;
+	LPC_SYSCON->SYSPLLCLKSEL = external ? SYSPLLCLKSEL_SYSOSC : SYSPLLCLKSEL_IRC;
 	if (!Lpc11ClockLatch(&LPC_SYSCON->SYSPLLCLKUEN))
 	{
 		goto clock_failed;
@@ -245,7 +251,7 @@ uint32_t SystemCoreClockSet(bool Crystal, int ClkFreq)
 		goto clock_failed;
 	}
 
-	if (Crystal)
+	if (external && UsbClock)
 	{
 		LPC_SYSCON->USBPLLCLKSEL = USBPLLCLKSEL_SYSOSC;
 		if (!Lpc11ClockLatch(&LPC_SYSCON->USBPLLCLKUEN))
@@ -267,7 +273,7 @@ uint32_t SystemCoreClockSet(bool Crystal, int ClkFreq)
 	{
 		goto clock_failed;
 	}
-	if (Crystal)
+	if (external && UsbClock)
 	{
 		LPC_SYSCON->USBCLKSEL = USBCLKSEL_PLLOUT;
 		if (!Lpc11ClockLatch(&LPC_SYSCON->USBCLKUEN))
@@ -302,6 +308,12 @@ clock_failed:
 	return 0;
 }
 
+uint32_t SystemCoreClockSet(bool Crystal, int ClkFreq)
+{
+	return Lpc11SetCoreClock(Crystal ? OSC_TYPE_XTAL : OSC_TYPE_RC,
+		(uint32_t)ClkFreq, Crystal);
+}
+
 uint32_t SystemSetCoreClock(bool Crystal, int ClkFreq)
 {
 	return SystemCoreClockSet(Crystal, ClkFreq);
@@ -309,7 +321,7 @@ uint32_t SystemSetCoreClock(bool Crystal, int ClkFreq)
 
 void SystemInit (void)
 {
-	SystemSetCoreClock(true, OSC_FREQ);
+	Lpc11SetCoreClock(g_McuOsc.CoreOsc.Type, g_McuOsc.CoreOsc.Freq, g_McuOsc.bUSBClk);
 	SystemCoreClockUpdate();
 }
 

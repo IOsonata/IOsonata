@@ -24,8 +24,8 @@ The test supplies PLL lock indications; it does not simulate analog startup.
 The original source fails to link a caller of SystemSetCoreClock. The old
 setter also returned the 96 MHz PLL rate for a 48 MHz CPU configuration.
 
-Board oscillator selection and peripheral-clock API completion remain separate
-review items. The system oscillator defaults to 12 MHz; a successful crystal setter records
+Peripheral-clock API completion remains a separate review item. The system
+oscillator defaults to 12 MHz; a successful external-clock configuration records
 the supplied input so later clock updates also work with other crystals.
 Watchdog frequencies are nominal, not measurements.
 
@@ -55,3 +55,18 @@ and the physical switching sequence still need board validation. A hardware
 clock-source latch failure is distinct from PLL lock failure: if even the IRC
 fallback latch fails, the globals report an unknown frequency (zero), and the
 PLLs remain powered rather than stopping a possible CPU clock source.
+
+SystemInit uses the generic weak g_McuOsc board descriptor. Its default remains
+a 12 MHz crystal with USB enabled. An application can override it with its own
+McuOsc_t definition (the MCUOSC pattern used by TimerDemo). OSC_TYPE_RC uses the
+fixed 12 MHz IRC input, OSC_TYPE_XTAL uses the crystal, and OSC_TYPE_TCXO sets
+SYSOSCCTRL.BYPASS for an external clock on XTALIN. All retain the existing
+48 MHz CPU target. bUSBClk=false leaves USB PLL, clock and pads disabled;
+IRC mode also leaves USB disabled even if bUSBClk is true.
+
+Tests link the weak default and a strong board definition separately. The
+strong-definition tests cover all three oscillator types and both USB choices
+in C and C++, including 24 MHz startup with no USB lock indication required.
+Legacy boolean setters retain their existing crystal/IRC and USB behavior;
+they do not use the board descriptor. The low-power oscillator descriptor is
+not used to program WDTOSCCTRL by this change.

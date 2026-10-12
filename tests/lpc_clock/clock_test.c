@@ -56,6 +56,10 @@ int main(void)
 	assert(mmap((void *)0x40048000, 0x1000, PROT_READ | PROT_WRITE,
 		MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0) == (void *)0x40048000);
 
+	assert(GetHighFreqOscType() == OSC_TYPE_XTAL);
+	assert(GetHighFreqOscFreq() == 12000000);
+	assert(g_McuOsc.bUSBClk);
+
 	// Reset IRC source must report 12 MHz, not 6 MHz.
 	LPC_SYSCON->SYSAHBCLKDIV = 1;
 	Check(12000000, 12000000);

@@ -39,8 +39,16 @@ SOFTWARE.
 #include <string.h>
 #include <sys/mman.h>
 #include "LPC11Uxx.h"
+#include "coredev/system_core_clock.h"
 
 typedef uint32_t (*ClockSetter_t)(bool, int);
+
+// Strong board definition must override the driver's weak default in C and C++.
+McuOsc_t g_McuOsc = {
+	{OSC_TYPE_XTAL, 24000000, 20, 0},
+	{OSC_TYPE_RC, 0, 0, 0},
+	false,
+};
 
 static ClockSetter_t const s_Setters[] = {
 	SystemSetCoreClock,
@@ -83,6 +91,40 @@ int main(void)
 	assert(mmap((void *)0x4003c000, 0x1000, PROT_READ | PROT_WRITE,
 		MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0) == (void *)0x4003c000);
 	LPC_FLASHCTRL->FLASHCFG = 0xa5a50000U;
+	memcpy((char *)regs + offsetof(LPC_SYSCON_Type, SYSPLLSTAT), &locked, sizeof(locked));
+	SystemInit();
+	assert(GetHighFreqOscFreq() == 24000000);
+	assert(SystemCoreClock == 48000000);
+	assert(((LPC_SYSCON->SYSPLLCTRL & 31U) + 1U) * 24000000U /
+		LPC_SYSCON->SYSAHBCLKDIV == 48000000);
+	assert(LPC_SYSCON->USBCLKDIV == 0);
+	assert(LPC_SYSCON->PDRUNCFG & PDRUNCFG_USBPLL_PD);
+	assert(LPC_SYSCON->PDRUNCFG & PDRUNCFG_USBPAD_PD);
+
+	// Exercise each board oscillator type with USB requested and disabled.
+	for (unsigned type = OSC_TYPE_RC; type <= OSC_TYPE_TCXO; type++)
+	{
+		for (unsigned usb = 0; usb < 2; usb++)
+		{
+			g_McuOsc.CoreOsc.Type = (OSC_TYPE)type;
+			g_McuOsc.CoreOsc.Freq = type == OSC_TYPE_RC ? 12000000U : 24000000U;
+			g_McuOsc.bUSBClk = usb != 0;
+			memcpy((char *)regs + offsetof(LPC_SYSCON_Type, USBPLLSTAT), &locked, sizeof(locked));
+			SystemInit();
+			assert(SystemCoreClock == 48000000);
+			assert(GetHighFreqOscType() == (OSC_TYPE)type);
+			assert(LPC_SYSCON->SYSPLLCLKSEL == (type == OSC_TYPE_RC ? 0U : 1U));
+			if (type != OSC_TYPE_RC)
+			{
+				assert((LPC_SYSCON->SYSOSCCTRL & 3U) == (type == OSC_TYPE_TCXO ? 3U : 2U));
+			}
+			bool usbEnabled = type != OSC_TYPE_RC && usb != 0;
+
+			assert((LPC_SYSCON->USBCLKDIV != 0) == usbEnabled);
+			assert(((LPC_SYSCON->PDRUNCFG & PDRUNCFG_USBPLL_PD) == 0) == usbEnabled);
+			assert(((LPC_SYSCON->PDRUNCFG & PDRUNCFG_USBPAD_PD) == 0) == usbEnabled);
+		}
+	}
 	for (unsigned i = 0; i < sizeof(s_Setters) / sizeof(s_Setters[0]); i++)
 	{
 		for (unsigned crystal = 0; crystal < 2; crystal++)
