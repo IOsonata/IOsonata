@@ -31,7 +31,6 @@ SOFTWARE.
 #include "interrupt_ra4m1.h"
 #include "coredev/interrupt.h"
 
-extern "C" void (* const __Vectors[])(void);
 static void Ra4m1Dispatch(int IrqNo);
 
 /* The vector object has unresolved references to these weak entries. This
@@ -120,21 +119,36 @@ static Ra4m1IntHook s_IntHook[RA4M1_IELS_CNT];
 
 static bool Ra4m1CpuEventValid(uint8_t Event)
 {
-    /* CPU-only subset of Table 13.4. Do not treat the whole 8-bit selector as
-     * valid. FIFO/DTC-completion-only and software-ELC sources are deliberately
-     * deferred until their transfer-engine integration is implemented.
-     * 0xDB in newer FSP event headers is not in the Rev.1.10 hardware table.
-     */
-    if (Event == 0 || Event > RA4M1_EVTID_SPI1_SPTEND) return false;
-    switch (Event) {
-        case 0x0E: case 0x16: case 0x40: // holes in the hardware event table
-        case RA4M1_EVTID_SYSTEM_SNZREQ:
-        case RA4M1_EVTID_USBFS_D0FIFO: case RA4M1_EVTID_USBFS_D1FIFO:
-        case RA4M1_EVTID_SSIE0_SSITXI: case RA4M1_EVTID_SSIE0_SSIRXI:
-        case RA4M1_EVTID_ELC_SWEVT0: case RA4M1_EVTID_ELC_SWEVT1:
-            return false;
-        default: return true;
-    }
+	/* CPU-only subset of Table 13.4. ADC window-monitor and SCI0 snooze
+	 * events cannot connect to the NVIC. USB/SSI FIFO and software-ELC
+	 * sources remain deferred until their integration is implemented.
+	 * 0xDB in newer FSP event headers is not in the Rev.1.10 hardware table.
+	 */
+	if (Event == 0 || Event > RA4M1_EVTID_SPI1_SPTEND)
+	{
+		return false;
+	}
+
+	switch (Event)
+	{
+		case 0x0E: // Holes in the hardware event table.
+		case 0x16:
+		case 0x40:
+		case RA4M1_EVTID_SYSTEM_SNZREQ:
+		case RA4M1_EVTID_ADC140_WCMPM:
+		case RA4M1_EVTID_ADC140_WCMPUM:
+		case RA4M1_EVTID_SCI0_RXI_OR_ERI:
+		case RA4M1_EVTID_USBFS_D0FIFO:
+		case RA4M1_EVTID_USBFS_D1FIFO:
+		case RA4M1_EVTID_SSIE0_SSITXI:
+		case RA4M1_EVTID_SSIE0_SSIRXI:
+		case RA4M1_EVTID_ELC_SWEVT0:
+		case RA4M1_EVTID_ELC_SWEVT1:
+			return false;
+
+		default:
+			return true;
+	}
 }
 
 IRQn_Type Ra4m1RegisterIntHandler(uint8_t EvtId, int Prio,
@@ -152,9 +166,13 @@ IRQn_Type Ra4m1RegisterIntHandler(uint8_t EvtId, int Prio,
             return (IRQn_Type)-1;
         }
         IRQn_Type irq = (IRQn_Type)i;
-        if (available < 0 && !s_IntHook[i].Handler && reg == 0 &&
-            !NVIC_GetEnableIRQ(irq) && !NVIC_GetActive(irq) &&
-            __Vectors[16+i] == s_DefaultIEL[i]) available = i;
+		// CMSIS reads the active vector table selected by SCB->VTOR.
+		if (available < 0 && !s_IntHook[i].Handler && reg == 0 &&
+			!NVIC_GetEnableIRQ(irq) && !NVIC_GetActive(irq) &&
+			NVIC_GetVector(irq) == (uintptr_t)s_DefaultIEL[i])
+		{
+			available = i;
+		}
     }
     for (int i = 0; i < 4; ++i) {
         if ((R_DMA->DELSR[i] & 0xFFU) == EvtId) {
