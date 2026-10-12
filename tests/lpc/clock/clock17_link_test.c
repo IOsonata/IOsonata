@@ -7,6 +7,7 @@ Copyright (c) 2026 I-SYST inc. MIT License.
 ----------------------------------------------------------------------------*/
 #include <assert.h>
 #include "system_LPC17xx.h"
+#include "coredev/system_core_clock.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -18,9 +19,15 @@ int TestClock17Run(void);
 
 int main(void)
 {
+	int result;
+
+	assert(SystemCoreClockGet() == 4000000U);
 	// Both entry points must link from the public header without local declarations.
 	assert(SystemSetCoreClock(120000000, -1) == 0);
 	assert(SystemCoreClockSet(120000000, 0) == 0);
 
-	return TestClock17Run();
+	result = TestClock17Run();
+	assert(SystemCoreClockGet() == SystemCoreClock);
+
+	return result;
 }

@@ -47,6 +47,7 @@ for opt in ['-O0', '-O2']:
                         '-ffunction-sections', '-fdata-sections', '-Wl,--gc-sections',
                         '-include', str(root / 'tests/lpc/startup/system17_shim.h'),
                         '-I' + str(root / 'tests/lpc/uart/shim'),
+                        '-I' + str(root / 'include'),
                         '-I' + str(root / 'ARM/NXP/LPC17xx/Include'),
                         str(root / 'tests/lpc/clock/clock17_test.c'),
                         str(root / 'ARM/NXP/LPC17xx/src/system_LPC17xx.c'),
@@ -69,6 +70,7 @@ for opt, variant in [(opt, variant) for opt in ['-O0', '-O2'] for variant in var
                  '-fsanitize=undefined', '-fno-sanitize-recover=all',
                  '-ffunction-sections', '-fdata-sections',
                  '-I' + str(root / 'tests/lpc/uart/shim'),
+                 '-I' + str(root / 'include'),
                  '-I' + str(root / 'ARM/NXP/LPC17xx/Include')]
         obj = str(Path(tmp) / 'system17.o')
         fixture = str(Path(tmp) / 'flash17.o')

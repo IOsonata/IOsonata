@@ -37,6 +37,7 @@ Modified by          Date              Description
 
 #include "LPC17xx.h"
 #include "system_LPC17xx.h"
+#include "coredev/system_core_clock.h"
 
 #define OSC_FREQ				OSC_FREQ_16MHZ  /* Installed oscillator frequency */
 #define IRC_FREQ				(4000000UL)		/* Internal RC freq */
@@ -93,6 +94,12 @@ static void Lpc17PllFeed(volatile uint32_t *pFeed)
 	*pFeed = 0xAA;
 	*pFeed = 0x55;
 	__set_PRIMASK(primask);
+}
+
+// Match the other LPC ports: setters and SystemCoreClockUpdate maintain this value.
+uint32_t SystemCoreClockGet(void)
+{
+	return SystemCoreClock;
 }
 
 uint32_t GetSysClk(void)

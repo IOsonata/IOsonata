@@ -372,3 +372,15 @@ premature lock status, and both IRQ mask states. Counts are 50, 100 and
 premature-lock case by skipping the wait. Clock/startup tests pass at O0/O2;
 Cortex-M3 assembly inspection confirms the volatile countdown remains at
 both optimization levels. Physical PLL settling still needs board testing.
+
+LPC17xx now implements the generic SystemCoreClockGet declared in
+coredev/system_core_clock.h. Like LPC11Uxx and LPC546xx, it returns the
+SystemCoreClock value maintained by startup, clock setters and explicit
+SystemCoreClockUpdate calls, without register access. This supplies the
+symbol used by generic application code such as the TaktOS clock setup.
+The generic header and other clock APIs are unchanged.
+
+The existing C/C++ link caller includes the real generic header and calls
+the getter before and after clock regression tests. Previously it fails
+linking with an undefined SystemCoreClockGet. This checks the API linkage
+and reset/updated clock values; it is not a complete TaktOS firmware build.
