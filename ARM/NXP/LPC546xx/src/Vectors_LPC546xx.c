@@ -206,8 +206,9 @@ void (* const __Vectors[100])(void) = {
 	SMARTCARD1_IRQHandler,				// Smart card 1 interrupt
 };
 
+// The initial stack pointer is already included in either vector table.
 #ifdef __ICCARM__
-const uint32_t g_VectorSize = sizeof(__vector_table) + 4;
+const uint32_t g_VectorSize = sizeof(__vector_table);
 #else
-const uint32_t g_VectorSize = sizeof(__Vectors) + 4;
+const uint32_t g_VectorSize = sizeof(__Vectors);
 #endif
