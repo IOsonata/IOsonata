@@ -55,18 +55,4 @@ SOFTWARE.
 	{UART_TX_PORT, UART_TX_PIN, UART_TX_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL}, \
 }
 
-// Names consumed by the existing shared UART loopback example.
-#define UART_NO				UART_DEVNO
-#define UART_PORTPINS		IOPinCfg_t s_UartPortPins[] = UART_PINS
-#define UART_PORTPIN_COUNT	(sizeof(s_UartPortPins) / sizeof(s_UartPortPins[0]))
-
-#ifndef UART_BAUDRATE
-#define UART_BAUDRATE		115200
-#endif
-#ifndef UART_INT_MODE
-#define UART_INT_MODE		true
-#endif
-#define UART_DMA_MODE		false
-#define UARTFIFOSIZE		CFIFO_MEMSIZE(256)
-
 #endif // __BOARD_H__
