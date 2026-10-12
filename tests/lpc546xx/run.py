@@ -4,7 +4,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 root = Path(__file__).resolve().parents[2]
-includes = ['tests/lpc546xx/shim', 'include', 'ARM/NXP/LPC546xx/include',
+includes = ['tests/lpc546xx/shim', 'include', 'ARM/NXP/include', 'ARM/NXP/LPC546xx/include',
             'ARM/NXP/LPC546xx/LPC54628/lib/include']
 for test in ['timer_test.cpp', 'i2c_spi_test.cpp']:
     with tempfile.TemporaryDirectory() as tmp:

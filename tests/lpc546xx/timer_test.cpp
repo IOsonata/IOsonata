@@ -74,6 +74,7 @@ void NVIC_DisableIRQ(IRQn_Type n) { s_NvicEn &= ~(1UL << (n & 31)); }
 #define ASYNC_SYSCON ((ASYNC_SYSCON_Type *)s_AsyncSysconMem)
 
 #include "../../ARM/NXP/LPC546xx/src/timer_lpc546xx.cpp"
+#include "../../ARM/NXP/src/timer_lpcxx.cpp"
 
 // Virtual DevNo to CTIMER number and its handler
 static const int s_CtNo[5] = {3, 4, 0, 1, 2};
@@ -84,7 +85,7 @@ static void (* const s_Handler[5])(void) = {
 static void Service(int DevNo)
 {
 	CtimerRegs &r = s_Ct[s_CtNo[DevNo]];
-	uint32_t bit = 1UL << (s_Lpc546xxTimer[DevNo].IrqNo & 31);
+	uint32_t bit = 1UL << (g_LpcTimer[DevNo].IrqNo & 31);
 
 	for (int i = 0; i < 4 && (s_NvicEn & bit) && g_IrqMasked == 0 && ((s_NvicPend & bit) || r.IR.value); i++)
 	{
@@ -245,18 +246,18 @@ int main()
 	assert(s_Evt[1] == 2 && s_EvtAt[1] == 9600000000ULL);
 	t0.DisableTrigger(&t0, 1);
 
-	// Shortest period is LPC546XX_TIMER_TICKS_MIN ticks
+	// Shortest period is LPC_TIMER_TICKS_MIN ticks
 	ResetCounts();
 	assert(t0.EnableTrigger(&t0, 0, 1ULL, TIMER_TRIG_TYPE_SINGLE, nullptr, nullptr) == 333ULL);
-	assert(s_Lpc546xxTimer[0].Trig[0].Ticks == 4U);
+	assert(g_LpcTimer[0].Trig[0].Ticks == 4U);
 	t0.DisableTrigger(&t0, 0);
 
 	// A deadline already passed when the match register is written goes
 	// through the pending interrupt
 	g_IrqMasked = 1;
 	assert(t0.EnableTrigger(&t0, 0, 1000ULL, TIMER_TRIG_TYPE_SINGLE, nullptr, nullptr) == 1000ULL);
-	s_Lpc546xxTimer[0].Trig[0].Deadline = t0.GetTickCount(&t0);
-	Lpc546xxTimerArm(&s_Lpc546xxTimer[0], 0);
+	g_LpcTimer[0].Trig[0].Deadline = t0.GetTickCount(&t0);
+	LpcTimerArm(&g_LpcTimer[0], 0);
 	g_IrqMasked = 0;
 	assert(s_NvicPend & (1UL << CTIMER3_IRQn));
 	Service(0);
@@ -281,10 +282,10 @@ int main()
 
 	// Closest frequency, the trigger keeps its period in time
 	assert(t2.EnableTrigger(&t2, 0, 100000000ULL, TIMER_TRIG_TYPE_CONTINUOUS, nullptr, nullptr) == 100000000ULL);
-	assert(s_Lpc546xxTimer[2].Trig[0].Ticks == 1000U);
+	assert(g_LpcTimer[2].Trig[0].Ticks == 1000U);
 	assert(t2.SetFrequency(&t2, 3000000) == 3013698U);
 	assert(s_Ct[0].PR == 72U);
-	assert(s_Lpc546xxTimer[2].Trig[0].Ticks == 301370U);
+	assert(g_LpcTimer[2].Trig[0].Ticks == 301370U);
 	assert(t2.SetFrequency(&t2, 1) == 1U && s_Ct[0].PR == 219999999U);
 
 	printf("lpc546xx timer: PASS\n");
