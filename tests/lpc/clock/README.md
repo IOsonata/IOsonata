@@ -87,3 +87,25 @@ clocks are separate and remain driver-managed. SystemPeriphClockSet explicitly
 returns zero without changes: the bus has no divider independent of the CPU.
 Clock-decoding tests check the getter across every tested source and AHB divider,
 invalid indices and the setter's preservation of registers and CPU frequency.
+
+## LPC17xx clock decoding
+
+The same runner also compiles the production LPC17xx clock decoder at O0/O2
+with UBSan and the vendor CMSIS peripheral declarations. It checks the
+12 MHz / M=400 / N=24 / CPU-divider=4 configuration (100 MHz), the RTC
+M=4272 / N=1 / CPU-divider=4 configuration (69,992,448 Hz), and reserved
+PLL0STAT bit 15. The former overflowed the 32-bit product and the latter
+lost multiplier bit 12 with the old 0xEFFF mask. The decoder now uses bits
+14:0 and 64-bit intermediate arithmetic through the CPU division.
+
+Tests also cover all CPU dividers, each source with the PLL bypassed,
+every multiplier bit and every predivider encoding. Some field-decoding
+cases are outside permitted operating limits; they are not clock settings
+to program on a board. Every update must leave all peripheral registers
+unchanged and update the existing delay-loop factor. Startup and clock
+setter sections are discarded from this host test; PLL setup, switching,
+flash timing and analog lock behavior are not validated by it.
+
+Reference: NXP UM10360 revision 2, chapter 4, sections 4.5.5 and 4.5.10,
+and table 21 for the RTC setting.
+https://www.pololu.com/file/0J431/user.manual.lpc17xx.pdf

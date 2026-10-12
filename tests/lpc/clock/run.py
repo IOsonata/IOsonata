@@ -35,3 +35,20 @@ for opt in ['-O0', '-O2']:
                             str(root / 'tests/lpc/clock/clock_link_test.c'),
                             obj, '-o', exe], check=True)
             subprocess.run([exe], check=True, timeout=5)
+
+# Decode LPC17xx clocks using the real system source and vendor peripheral types.
+# Unused startup/setter sections are discarded; no PLL transitions are simulated.
+for opt in ['-O0', '-O2']:
+    with tempfile.TemporaryDirectory() as tmp:
+        exe = str(Path(tmp) / 'clock17_test')
+        subprocess.run(['gcc', '-std=gnu17', opt, '-Wall', '-Wextra', '-Werror',
+                        '-Wno-sign-compare', '-Wno-unused-but-set-variable',
+                        '-fsanitize=undefined', '-fno-sanitize-recover=all',
+                        '-ffunction-sections', '-fdata-sections', '-Wl,--gc-sections',
+                        '-include', str(root / 'tests/lpc/startup/system17_shim.h'),
+                        '-I' + str(root / 'tests/lpc/uart/shim'),
+                        '-I' + str(root / 'ARM/NXP/LPC17xx/Include'),
+                        str(root / 'tests/lpc/clock/clock17_test.c'),
+                        str(root / 'ARM/NXP/LPC17xx/src/system_LPC17xx.c'),
+                        '-o', exe], check=True)
+        subprocess.run([exe], check=True)

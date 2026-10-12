@@ -85,29 +85,25 @@ uint32_t GetSysClk(void)
 /*
  * Update SystemCoreClock based on registers values
  */
-void SystemCoreClockUpdate (void)            /* Get Core Clock Frequency      */
+void SystemCoreClockUpdate (void)
 {
-	uint32_t sysclk;
+	uint64_t sysclk = GetSysClk();
 	uint32_t pll0stat = LPC_SC->PLL0STAT;
-	int32_t	n, m;
+	uint32_t n, m;
 
-	sysclk = GetSysClk();
-
-	if ((pll0stat & 0x3000000) == 0x3000000)
+	if ((pll0stat & 0x03000000U) == 0x03000000U)
 	{
-		/* PLL0 is connected */
-		m = (pll0stat & 0xefff) + 1;
-		n = ((pll0stat >> 16) & 0xff) + 1;
+		// PLL0 is enabled and connected. MSEL is bits 14:0; bit 15 is reserved.
+		m = (pll0stat & 0x7FFFU) + 1U;
+		n = ((pll0stat >> 16) & 0xFFU) + 1U;
 
-		/* FCCO = (2 × M × FIN) / N */
-		SystemCoreClock = sysclk * 2 * m / n;
+		// FCCO = (2 * M * FIN) / N. The product can exceed 32 bits.
+		sysclk = sysclk * 2U * m / n;
 	}
-	else
-		SystemCoreClock = sysclk;
 
-	/* adjust to cclk divider */
-	SystemCoreClock /= (LPC_SC->CCLKCFG & 0xFF) + 1;
-	SystemMicroSecLoopCnt = (SystemCoreClock / 16000000);
+	// Apply the CPU divider before narrowing the result.
+	SystemCoreClock = (uint32_t)(sysclk / ((LPC_SC->CCLKCFG & 0xFFU) + 1U));
+	SystemMicroSecLoopCnt = SystemCoreClock / 16000000U;
 }
 
 uint32_t SystemCoreClockSet(uint32_t CoreFreq, int ClkFreq)
