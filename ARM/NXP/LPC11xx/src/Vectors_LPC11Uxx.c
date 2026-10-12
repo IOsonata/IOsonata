@@ -130,5 +130,6 @@ void (* const __Vectors[])(void) =
     0,                                // 31 - Reserved
 };
 
-const uint32_t g_iVectorSize = sizeof(__Vectors) + 4;
+// The initial stack pointer is already included in __Vectors.
+const uint32_t g_iVectorSize = sizeof(__Vectors);
 
