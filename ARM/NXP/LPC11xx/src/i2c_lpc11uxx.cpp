@@ -91,6 +91,5 @@ bool I2CInit(I2CDev_t *pDev, const I2CCfg_t *pCfg)
 	{
 		return false;
 	}
-	s_I2C.Clock = SystemCoreClock;
-	return LpcI2CMasterInit(&s_I2C, pDev, pCfg);
+	return LpcI2CMasterInit(&s_I2C, pDev, pCfg, SystemCoreClock);
 }

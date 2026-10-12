@@ -364,7 +364,7 @@ static void *LpcI2CGetHandle(DevIntrf_t *pIntrf)
 	return LpcI2CData(pIntrf)->pDev;
 }
 
-bool LpcI2CMasterInit(LpcI2CMaster_t *pData, I2CDev_t *pDev, const I2CCfg_t *pCfg)
+bool LpcI2CMasterInit(LpcI2CMaster_t *pData, I2CDev_t *pDev, const I2CCfg_t *pCfg, uint32_t Clock)
 {
 	uint32_t state = DisableInterrupt();
 
@@ -373,6 +373,7 @@ bool LpcI2CMasterInit(LpcI2CMaster_t *pData, I2CDev_t *pDev, const I2CCfg_t *pCf
 		EnableInterrupt(state);
 		return false;
 	}
+	pData->Clock = Clock;
 	pData->pDev = pDev;
 	pData->bEnabled = false;
 	pData->bError = false;

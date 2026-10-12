@@ -145,8 +145,7 @@ bool I2CInit(I2CDev_t *pDev, const I2CCfg_t *pCfg)
 	}
 	LpcI2CMaster_t *data = &s_I2C[pCfg->DevNo];
 
-	data->Clock = SystemCoreClock / 4U;
-	bool result = LpcI2CMasterInit(data, pDev, pCfg);
+	bool result = LpcI2CMasterInit(data, pDev, pCfg, SystemCoreClock / 4U);
 
 	EnableInterrupt(state);
 	return result;

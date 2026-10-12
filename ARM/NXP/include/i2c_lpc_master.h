@@ -64,7 +64,7 @@ typedef struct {
 extern "C" {
 #endif
 
-bool LpcI2CMasterInit(LpcI2CMaster_t *pData, I2CDev_t *pDev, const I2CCfg_t *pCfg);
+bool LpcI2CMasterInit(LpcI2CMaster_t *pData, I2CDev_t *pDev, const I2CCfg_t *pCfg, uint32_t Clock);
 void LpcI2CMasterClock(LpcI2CMaster_t *pData, bool Enable);
 void LpcI2CMasterReset(LpcI2CMaster_t *pData);
 

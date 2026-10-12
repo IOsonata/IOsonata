@@ -211,7 +211,14 @@ int main()
 	assert(dev.Cfg.pIOPinMap == pins && I2CGetDevHandle(d) == &dev);
 	assert(I2CGetRate(&dev) == 100000 && s_Regs.SCLL + s_Regs.SCLH == 480);
 	assert(d->EnCnt == 1 && (s_Syscon.SYSAHBCLKCTRL & 32U));
+	// Rejected initialization must preserve the current owner's clock.
+	uint32_t savedCoreClock = SystemCoreClock;
+	uint32_t savedClock = s_I2C.Clock;
+
+	SystemCoreClock /= 2U;
 	assert(!I2CInit(&other, &cfg));
+	assert(s_I2C.Clock == savedClock);
+	SystemCoreClock = savedCoreClock;
 	cfg.DevNo = 1;
 	assert(!I2CInit(&dev, &cfg));
 	cfg.DevNo = 0;
@@ -289,6 +296,15 @@ int main()
 	I2CEnable(&dev);
 	assert(s_I2C.bEnabled && s_Regs.SCLL + s_Regs.SCLH == 120);
 	assert(s_PinConfigs >= 2);
+	// The same object also cannot change the clock during a transfer.
+	s_Steps = {{8, 0, -1}, {0x18, 0, -1}};
+	assert(I2CStartTx(&dev, 0x22));
+	SystemCoreClock /= 2U;
+	assert(!I2CInit(&dev, &cfg));
+	assert(s_I2C.Clock == savedClock);
+	assert(s_I2C.bTransfer && s_I2C.bOwned);
+	SystemCoreClock = savedCoreClock;
+	I2CStopTx(&dev);
 	DeviceIntrfReset(d);
 	assert(I2CGetRate(&dev) == 400000);
 	I2CPowerOff(&dev);
