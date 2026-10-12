@@ -475,3 +475,12 @@ forced to fail. They must still succeed with PLL0 stopped, the expected CPU
 divider and the USB divider unchanged. The previous tie-breaker tries PLL0
 and fails the first request. Existing closest-rate and USB clock cases verify
 that genuinely better PLL choices and PLL-to-PLL tie preferences still work.
+
+Successful runtime SystemCoreClockSelect transitions from an external source
+to IRC also replace the external accuracy/load metadata with the existing
+10000 ppm/zero-load IRC defaults. An already-RC descriptor retains application
+calibration. Failed selections leave the descriptor unchanged. External
+accuracy and load values remain board-provided; applications switching back
+to an external source must supply that source's descriptor. C/C++ tests cover
+RC, crystal and TCXO starting descriptors, PLL failure followed by retry, and
+preservation of the low-frequency descriptor and USB option.

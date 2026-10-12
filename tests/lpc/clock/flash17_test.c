@@ -455,6 +455,32 @@ int main(void)
 	assert(g_McuOsc.CoreOsc.Type == OSC_TYPE_TCXO);
 	CheckClosest(12000000, CORE_FREQ);
 
+	// Runtime IRC selection must not retain an external oscillator's metadata.
+	// A descriptor already describing IRC may contain application calibration.
+	for (unsigned previous = OSC_TYPE_RC; previous <= OSC_TYPE_TCXO; previous++)
+	{
+		McuOsc_t saved;
+
+		memset(&s_Regs, 0, sizeof(s_Regs));
+		g_McuOsc.CoreOsc.Type = (OSC_TYPE)previous;
+		g_McuOsc.CoreOsc.Freq = previous == OSC_TYPE_RC ? 4000000U : 12000000U;
+		g_McuOsc.CoreOsc.Accuracy = 123;
+		g_McuOsc.CoreOsc.LoadCap = previous == OSC_TYPE_RC ? 0U : 120U;
+		saved = g_McuOsc;
+		s_FailPllLock = 1;
+		s_PllWait = 0;
+		assert(!SystemCoreClockSelect(OSC_TYPE_RC, 4000000));
+		assert(memcmp(&saved, &g_McuOsc, sizeof(saved)) == 0);
+		s_FailPllLock = 0;
+		assert(SystemCoreClockSelect(OSC_TYPE_RC, 4000000));
+		assert(GetHighFreqOscType() == OSC_TYPE_RC);
+		assert(GetHighFreqOscFreq() == 4000000);
+		assert(GetHighFreqOscAcc() == (previous == OSC_TYPE_RC ? 123U : 10000U));
+		assert(GetHighFreqLoadCap() == 0);
+		assert(memcmp(&saved.LowPwrOsc, &g_McuOsc.LowPwrOsc, sizeof(saved.LowPwrOsc)) == 0);
+		assert(saved.bUSBClk == g_McuOsc.bUSBClk);
+	}
+
 	// Explicit source selection must distinguish a 4 MHz crystal from IRC.
 	for (unsigned crystal = 0; crystal <= 1; crystal++)
 	{

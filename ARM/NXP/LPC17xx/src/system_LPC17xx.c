@@ -539,6 +539,13 @@ bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 	{
 		return false;
 	}
+	if (ClkSrc == OSC_TYPE_RC && g_McuOsc.CoreOsc.Type != OSC_TYPE_RC)
+	{
+		// External accuracy and crystal load do not describe the internal RC.
+		// Retain application calibration when the descriptor already is RC.
+		g_McuOsc.CoreOsc.Accuracy = 10000;
+		g_McuOsc.CoreOsc.LoadCap = 0;
+	}
 	g_McuOsc.CoreOsc.Type = ClkSrc;
 	g_McuOsc.CoreOsc.Freq = OscFreq;
 
