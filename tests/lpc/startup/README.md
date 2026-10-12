@@ -1,4 +1,4 @@
-# LPC11U35 startup checksum
+# LPC startup checks
 
 Run `python3 tests/lpc/startup/run.py` with host GNU `as`, `ld` and
 `objcopy`. The test uses the three production LPC11U35 linker scripts,
@@ -35,3 +35,14 @@ is zero. Repeat after overriding NMI_Handler or HardFault_Handler. Flash
 without checksum patching and verify a power-cycle boot. Repeat the checksum
 check for the DFU boot and application layouts (application vectors are at
 slot 0, not flash address zero).
+
+The LPC17xx vector regression links the actual production vector source with
+35 distinct strong application handlers at O0 and O2 with UBSan. It checks
+all peripheral vector positions against the vendor CMSIS IRQ numbers and
+verifies a 51-entry table (16 core plus 35 peripheral entries). PLL1,
+USBActivity and CANActivity occupy IRQs 32, 33 and 34. The existing
+PWM_IRQHandler name remains at PWM1_IRQn for compatibility. Host pointer
+width differs from ARM; target assembly separately confirms 204 bytes.
+This test does not execute Cortex-M exception entry or validate board startup.
+LPC17xx still uses a hard-coded checksum and needs programmer checksum
+patching until its linker scripts calculate the checksum.

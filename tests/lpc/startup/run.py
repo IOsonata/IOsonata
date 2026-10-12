@@ -61,3 +61,20 @@ DfuTgtStart:
             origin = 0xa000 if name == layouts[1] else 0
             assert origin + padding <= words[1] < origin + padding + 64
         print(name + ': checksum passed at two handler placements')
+
+# Link the actual LPC17xx vector source with strong application handlers.
+for opt in ['-O0', '-O2']:
+    with tempfile.TemporaryDirectory() as tmp:
+        exe = str(Path(tmp) / 'vector17_test')
+        subprocess.run(['gcc', '-std=gnu17', opt, '-Wall', '-Wextra', '-Werror',
+                        '-fsanitize=undefined', '-fno-sanitize-recover=all',
+                        '-I' + str(root / 'tests/lpc/uart/shim'),
+                        '-I' + str(root / 'ARM/NXP/LPC17xx/Include'),
+                        str(root / 'tests/lpc/startup/vector17_test.c'),
+                        str(root / 'ARM/NXP/LPC17xx/src/Vectors_LPC17xx.c'),
+                        '-o', exe], check=True)
+        symbols = subprocess.check_output(['nm', '-S', exe], text=True)
+        size = int(next(line.split()[1] for line in symbols.splitlines()
+                        if line.split()[-1] == 'g_Vectors'), 16)
+        assert size == 51 * struct.calcsize('P'), size
+        subprocess.run([exe], check=True)

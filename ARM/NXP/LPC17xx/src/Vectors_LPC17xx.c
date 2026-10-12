@@ -82,6 +82,9 @@ __attribute__((weak, alias("DEF_IRQHandler"))) void ENET_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void RIT_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void MCPWM_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void QEI_IRQHandler(void);
+__attribute__((weak, alias("DEF_IRQHandler"))) void PLL1_IRQHandler(void);
+__attribute__((weak, alias("DEF_IRQHandler"))) void USBActivity_IRQHandler(void);
+__attribute__((weak, alias("DEF_IRQHandler"))) void CANActivity_IRQHandler(void);
 
 /**
  * This interrupt vector is by default located in FLASH. Though it can not be
@@ -92,7 +95,7 @@ __attribute__((weak, alias("DEF_IRQHandler"))) void QEI_IRQHandler(void);
 __attribute__ ((section(".intvect"), used))
 void (* const g_Vectors[])(void) =
 {
-	(void (*) )((int32_t)&__StackTop),
+	(void (*)(void))&__StackTop,
 	ResetEntry,
 	NMI_Handler,
 	HardFault_Handler,
@@ -138,6 +141,9 @@ void (* const g_Vectors[])(void) =
 	ENET_IRQHandler,
 	RIT_IRQHandler,
 	MCPWM_IRQHandler,
-	QEI_IRQHandler
+	QEI_IRQHandler,
+	PLL1_IRQHandler,
+	USBActivity_IRQHandler,
+	CANActivity_IRQHandler
 };
 
