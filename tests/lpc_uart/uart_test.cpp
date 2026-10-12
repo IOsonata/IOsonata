@@ -59,7 +59,28 @@ static UartModel s_Model[LPCUART_DEV_COUNT];
 static bool s_Irq[64];
 static int s_Events[4];
 static UARTDev_t s_Uart[LPCUART_DEV_COUNT];
-static const IOPinCfg_t s_Pins[4] = {};
+static int s_PinConfigs;
+static int s_RegWrites;
+static const IOPinCfg_t s_Pins[4] = {
+	{0, 18, IOPINOP_FUNC1, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
+	{0, 19, IOPINOP_FUNC1, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
+	{0, 7, IOPINOP_FUNC1, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
+	{0, 17, IOPINOP_FUNC1, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL}
+};
+#ifndef TEST_LPC17
+static const int s_RxRoutes[][3] = {
+	{0, 18, IOPINOP_FUNC1},
+	{1, 14, IOPINOP_FUNC3},
+	{1, 17, IOPINOP_FUNC2},
+	{1, 26, IOPINOP_FUNC2}
+};
+static const int s_TxRoutes[][3] = {
+	{0, 19, IOPINOP_FUNC1},
+	{1, 13, IOPINOP_FUNC3},
+	{1, 18, IOPINOP_FUNC2},
+	{1, 27, IOPINOP_FUNC2}
+};
+#endif
 uint32_t SystemCoreClock = 120000000;
 uint32_t SystemMainClkFreq = 48000000;
 
@@ -79,6 +100,7 @@ void NVIC_DisableIRQ(IRQn_Type Irq)
 }
 void IOPinConfig(int, int, int, IOPINDIR, IOPINRES, IOPINTYPE)
 {
+	s_PinConfigs++;
 }
 
 #ifdef TEST_LPC17
@@ -153,6 +175,7 @@ static uint32_t ModelRead(int No, const char *Reg)
 
 static void ModelWrite(int No, const char *Reg, uint32_t Value)
 {
+	s_RegWrites++;
 	auto &m = s_Model[No];
 	if (!strcmp(Reg, "THR"))
 	{
@@ -372,6 +395,146 @@ static void DriverTest()
 #endif
 }
 
+#ifndef TEST_LPC17
+static void RejectPins(const UARTCfg_t &Cfg)
+{
+	uint8_t syscon[sizeof(*LPC_SYSCON)];
+	uint8_t usart[sizeof(*LPC_USART)];
+	uint8_t object[sizeof(s_Uart)];
+	uint8_t driver[sizeof(s_LpcUartDev)];
+	bool irq[sizeof(s_Irq) / sizeof(s_Irq[0])];
+	int configs = s_PinConfigs;
+	int writes = s_RegWrites;
+
+	memcpy(syscon, LPC_SYSCON, sizeof(syscon));
+	memcpy(usart, LPC_USART, sizeof(usart));
+	memcpy(object, s_Uart, sizeof(object));
+	memcpy(driver, s_LpcUartDev, sizeof(driver));
+	memcpy(irq, s_Irq, sizeof(irq));
+	assert(!UARTInit(&s_Uart[0], &Cfg));
+	assert(memcmp(syscon, LPC_SYSCON, sizeof(syscon)) == 0);
+	assert(memcmp(usart, LPC_USART, sizeof(usart)) == 0);
+	assert(memcmp(object, s_Uart, sizeof(object)) == 0);
+	assert(memcmp(driver, s_LpcUartDev, sizeof(driver)) == 0);
+	assert(memcmp(irq, s_Irq, sizeof(irq)) == 0);
+	assert(s_PinConfigs == configs && s_RegWrites == writes);
+}
+
+static void PinTest()
+{
+	IOPinCfg_t pins[UART_NB_PINS];
+	UARTCfg_t cfg = {};
+
+	memcpy(pins, s_Pins, sizeof(s_Pins));
+	cfg.pIOPinMap = pins;
+	cfg.NbIOPins = 2;
+	cfg.Rate = 1000000;
+	cfg.DataBits = 8;
+	cfg.Parity = UART_PARITY_NONE;
+	cfg.StopBits = 1;
+	cfg.bFifoBlocking = true;
+	s_Model[0].Polling = true;
+	// RX and TX routes can be mixed independently.
+	for (const auto &rx : s_RxRoutes)
+	{
+		for (const auto &tx : s_TxRoutes)
+		{
+			pins[0].PortNo = rx[0];
+			pins[0].PinNo = rx[1];
+			pins[0].PinOp = rx[2];
+			pins[1].PortNo = tx[0];
+			pins[1].PinNo = tx[1];
+			pins[1].PinOp = tx[2];
+			assert(UARTInit(&s_Uart[0], &cfg));
+			pins[0].PinOp = IOPINOP_GPIO;
+			RejectPins(cfg);
+			pins[0].PinOp = rx[2];
+			pins[1].PinOp = IOPINOP_FUNC7;
+			RejectPins(cfg);
+			pins[1].PinOp = tx[2];
+		}
+	}
+	memcpy(pins, s_Pins, sizeof(s_Pins));
+	cfg.NbIOPins = 4;
+	cfg.FlowControl = UART_FLWCTRL_HW;
+	assert(UARTInit(&s_Uart[0], &cfg));
+	assert((LPC_USART->MCR & (LPCUART_MCR_RTSEN | LPCUART_MCR_CTSEN)) ==
+		(LPCUART_MCR_RTSEN | LPCUART_MCR_CTSEN));
+	// Rejection must preserve queued data as well as registers and ownership.
+	assert(CFifoPutByte(s_Uart[0].hRxFifo, 0xA5));
+	assert(CFifoPutByte(s_Uart[0].hTxFifo, 0x5A));
+	for (int i = 0; i < 4; i++)
+	{
+		pins[i].PinOp = IOPINOP_FUNC0;
+		RejectPins(cfg);
+		pins[i] = s_Pins[i];
+		pins[i].PortNo = 2;
+		RejectPins(cfg);
+		pins[i] = s_Pins[i];
+		pins[i].PinNo = 32;
+		RejectPins(cfg);
+		pins[i] = s_Pins[i];
+	}
+	for (int i = 2; i < 4; i++)
+	{
+		pins[i].PinNo = -1;
+		RejectPins(cfg);
+		pins[i] = s_Pins[i];
+		pins[i].PortNo = -1;
+		RejectPins(cfg);
+		pins[i] = s_Pins[i];
+	}
+	cfg.NbIOPins = 2;
+	RejectPins(cfg);
+	cfg.NbIOPins = UART_NB_PINS + 1;
+	RejectPins(cfg);
+	cfg.NbIOPins = 4;
+	std::swap(pins[0], pins[1]);
+	RejectPins(cfg);
+	std::swap(pins[0], pins[1]);
+	// Unconnected entries remain supported when hardware flow is disabled.
+	cfg.FlowControl = UART_FLWCTRL_NONE;
+	pins[0].PinNo = -1;
+	pins[2].PinNo = -1;
+	pins[3].PortNo = -1;
+	assert(UARTInit(&s_Uart[0], &cfg));
+	memcpy(pins, s_Pins, sizeof(s_Pins));
+	cfg.NbIOPins = UART_NB_PINS;
+	for (int i = 4; i < UART_NB_PINS; i++)
+	{
+		pins[i] = {1, 0, IOPINOP_FUNC1, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL};
+	}
+	pins[6].PinDir = IOPINDIR_OUTPUT;
+	// All combinations of DCD, DSR, DTR and RI alternate pads.
+	for (int route = 0; route < 16; route++)
+	{
+		pins[4].PinNo = route & 1 ? 21 : 15;
+		pins[5].PinNo = route & 2 ? 20 : 14;
+		pins[6].PinNo = route & 4 ? 19 : 13;
+		pins[7].PinNo = route & 8 ? 22 : 16;
+		assert(UARTInit(&s_Uart[0], &cfg));
+		for (int i = 4; i < UART_NB_PINS; i++)
+		{
+			pins[i].PinOp = IOPINOP_FUNC2;
+			RejectPins(cfg);
+			pins[i].PinOp = IOPINOP_FUNC1;
+		}
+	}
+	// Individually legal routes must not reuse the same physical pad.
+	pins[0].PortNo = 1;
+	pins[0].PinNo = 14;
+	pins[0].PinOp = IOPINOP_FUNC3;
+	pins[5].PinNo = 14;
+	RejectPins(cfg);
+	pins[0] = s_Pins[0];
+	pins[1].PortNo = 1;
+	pins[1].PinNo = 13;
+	pins[1].PinOp = IOPINOP_FUNC3;
+	pins[6].PinNo = 13;
+	RejectPins(cfg);
+}
+#endif
+
 int main()
 {
 	void *mapped = mmap((void *)0x40000000, 0x200000, PROT_READ | PROT_WRITE,
@@ -379,5 +542,8 @@ int main()
 	assert(mapped != MAP_FAILED);
 	RateTest();
 	DriverTest();
+#ifndef TEST_LPC17
+	PinTest();
+#endif
 	printf("legacy LPC UART (%d instances): PASS\n", LPCUART_DEV_COUNT);
 }

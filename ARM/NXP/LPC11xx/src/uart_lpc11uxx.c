@@ -38,10 +38,81 @@ Modified by          Date              Description
 
 extern uint32_t SystemMainClkFreq;
 
+// UM10462 chapter 7. Keep pin routing in the family adapter.
+static bool Lpc11UARTSignalPin(int Signal, const IOPinCfg_t *pPin)
+{
+	switch (Signal)
+	{
+		case UARTPIN_RX_IDX:
+			return (pPin->PortNo == 0 && pPin->PinNo == 18 && pPin->PinOp == IOPINOP_FUNC1) ||
+				(pPin->PortNo == 1 &&
+				((pPin->PinNo == 14 && pPin->PinOp == IOPINOP_FUNC3) ||
+				((pPin->PinNo == 17 || pPin->PinNo == 26) && pPin->PinOp == IOPINOP_FUNC2)));
+		case UARTPIN_TX_IDX:
+			return (pPin->PortNo == 0 && pPin->PinNo == 19 && pPin->PinOp == IOPINOP_FUNC1) ||
+				(pPin->PortNo == 1 &&
+				((pPin->PinNo == 13 && pPin->PinOp == IOPINOP_FUNC3) ||
+				((pPin->PinNo == 18 || pPin->PinNo == 27) && pPin->PinOp == IOPINOP_FUNC2)));
+		case UARTPIN_CTS_IDX:
+			return pPin->PortNo == 0 && pPin->PinNo == 7 && pPin->PinOp == IOPINOP_FUNC1;
+		case UARTPIN_RTS_IDX:
+			return pPin->PortNo == 0 && pPin->PinNo == 17 && pPin->PinOp == IOPINOP_FUNC1;
+		case UARTPIN_DCD_IDX:
+			return pPin->PortNo == 1 && (pPin->PinNo == 15 || pPin->PinNo == 21) &&
+				pPin->PinOp == IOPINOP_FUNC1;
+		case UARTPIN_DTE_IDX:
+			// The generic DTE slot carries the UART's DSR input.
+			return pPin->PortNo == 1 && (pPin->PinNo == 14 || pPin->PinNo == 20) &&
+				pPin->PinOp == IOPINOP_FUNC1;
+		case UARTPIN_DTR_IDX:
+			return pPin->PortNo == 1 && (pPin->PinNo == 13 || pPin->PinNo == 19) &&
+				pPin->PinOp == IOPINOP_FUNC1;
+		case UARTPIN_RI_IDX:
+			return pPin->PortNo == 1 && (pPin->PinNo == 16 || pPin->PinNo == 22) &&
+				pPin->PinOp == IOPINOP_FUNC1;
+	}
+	return false;
+}
+
 bool LpcUARTConfigValid(const UARTCfg_t *pCfg)
 {
-	return (!pCfg->bIrDAMode || (pCfg->IrDAPulseDiv >= 0 && pCfg->IrDAPulseDiv <= 7)) &&
-		(pCfg->FlowControl != UART_FLWCTRL_HW || pCfg->NbIOPins >= 4);
+	if (pCfg->NbIOPins > UART_NB_PINS ||
+		(pCfg->bIrDAMode && (pCfg->IrDAPulseDiv < 0 || pCfg->IrDAPulseDiv > 7)) ||
+		(pCfg->FlowControl == UART_FLWCTRL_HW && pCfg->NbIOPins < 4))
+	{
+		return false;
+	}
+	const IOPinCfg_t *pins = (const IOPinCfg_t *)pCfg->pIOPinMap;
+	uint32_t used[2] = {0, 0};
+
+	for (int i = 0; i < pCfg->NbIOPins; i++)
+	{
+		const IOPinCfg_t *pin = &pins[i];
+
+		// IOPinConfig ignores negative port/pin entries (unconnected pads).
+		if (pin->PortNo < 0 || pin->PinNo < 0)
+		{
+			if (pCfg->FlowControl == UART_FLWCTRL_HW &&
+				(i == UARTPIN_CTS_IDX || i == UARTPIN_RTS_IDX))
+			{
+				return false;
+			}
+			continue;
+		}
+		if (!Lpc11UARTSignalPin(i, pin))
+		{
+			return false;
+		}
+		uint32_t mask = 1UL << pin->PinNo;
+
+		// Alternate RX/TX routes share pads with some modem signals.
+		if (used[pin->PortNo] & mask)
+		{
+			return false;
+		}
+		used[pin->PortNo] |= mask;
+	}
+	return true;
 }
 
 void LpcUARTClock(int DevNo, bool bOn)

@@ -33,3 +33,27 @@ Host tests do not validate pin muxing, electrical timing, interrupt latency,
 IrDA waveforms, modem handshakes or silicon auto-baud behavior. ARM object
 compilation is a separate check; a full firmware build and board tests are
 still required before claiming hardware validation.
+
+LPC11Uxx pin validation runs before clocks, registers, FIFOs, IRQs or ownership
+are changed. Supplied pins must match their signal's route; duplicate pads
+are rejected. Negative port/pin entries remain unconnected, but hardware flow
+control requires both CTS and RTS. Pin maps contain at most UART_NB_PINS entries.
+The generic DTE slot is the DSR input. Select pads available on the package.
+Routes follow NXP UM10462 chapter 7:
+
+| Signal | Routes |
+| --- | --- |
+| RX | P0.18 FUNC1, P1.14 FUNC3, P1.17 FUNC2, P1.26 FUNC2 |
+| TX | P0.19 FUNC1, P1.13 FUNC3, P1.18 FUNC2, P1.27 FUNC2 |
+| CTS | P0.7 FUNC1 |
+| RTS | P0.17 FUNC1 |
+| DCD | P1.15 FUNC1, P1.21 FUNC1 |
+| DSR | P1.14 FUNC1, P1.20 FUNC1 |
+| DTR | P1.13 FUNC1, P1.19 FUNC1 |
+| RI | P1.16 FUNC1, P1.22 FUNC1 |
+
+Tests cover all RX/TX combinations and modem-route combinations, wrong
+functions, invalid pads, swapped RX/TX, missing hardware-flow pins, oversized
+maps and overlapping data/modem pads. Rejected maps preserve driver state,
+queued bytes, registers and IRQ state and make no pin configuration calls.
+These checks do not replace electrical or hardware handshake validation.
