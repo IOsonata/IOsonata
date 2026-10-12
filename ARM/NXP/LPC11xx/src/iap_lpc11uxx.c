@@ -31,6 +31,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 Modified by          Date              Description
 ----------------------------------------------------------------------------*/
 
+#include "LPC11Uxx.h"
 #include "iap_lpc11uxx.h"
 
 #define IAP_LOCATION 0x1fff1ff1
@@ -43,6 +44,17 @@ extern uint32_t SystemCoreClock;
 IAPENTRY IapEntry = (IAPENTRY)IAP_LOCATION;
 IAPENTRY1 IapEntry1 = (IAPENTRY1)IAP_LOCATION;
 
+// UM10462 section 20.8.7 requires interrupt protection for every IAP call.
+// Preserve an outer critical section, such as DFU prepare plus erase/write.
+static void IapCall(IAP_CMD_STATUS *pCmd, IAP_CMD_STATUS *pRes)
+{
+	uint32_t primask = __get_PRIMASK();
+
+	__disable_irq();
+	IapEntry(pCmd, pRes);
+	__set_PRIMASK(primask);
+}
+
 IAPSTATUS IAPPrepSectWrite(int StartSect, int EndSect)
 {
 	IAP_CMD_STATUS cmd;
@@ -53,7 +65,7 @@ IAPSTATUS IAPPrepSectWrite(int StartSect, int EndSect)
 	cmd.Data[0] = StartSect;
 	cmd.Data[1] = EndSect;
 
-	IapEntry(&cmd, &res);
+	IapCall(&cmd, &res);
 
 	return res.CmdStatus;
 }
@@ -69,7 +81,7 @@ IAPSTATUS IAPCopyRamToFlash(uint8_t *pDst, uint8_t *pSrc, int Size)
 	cmd.Data[2] = Size;
 	cmd.Data[3] = SystemCoreClock / 1000;
 
-	IapEntry(&cmd, &res);
+	IapCall(&cmd, &res);
 
 	return res.CmdStatus;
 }
@@ -84,7 +96,7 @@ IAPSTATUS IAPEraseSector(int StartSect, int EndSect)
 	cmd.Data[1] = EndSect;
 	cmd.Data[2] = SystemCoreClock / 1000;
 
-	IapEntry(&cmd, &res);
+	IapCall(&cmd, &res);
 
 	return res.CmdStatus;
 }
@@ -97,7 +109,7 @@ IAPSTATUS IAPBlankCheck(int StartSect, int EndSect, IAP_CMD_STATUS *pRes)
 	cmd.Data[0] = StartSect;
 	cmd.Data[1] = EndSect;
 
-	IapEntry(&cmd, pRes);
+	IapCall(&cmd, pRes);
 
 	return pRes->CmdStatus;
 }
@@ -108,7 +120,7 @@ IAPSTATUS IAPReadPartId(IAP_CMD_STATUS *pRes)
 
 	cmd.CmdStatus = IAPCMD_READ_PARTID;
 
-	IapEntry(&cmd, pRes);
+	IapCall(&cmd, pRes);
 
 	return pRes->CmdStatus;
 }
@@ -119,7 +131,7 @@ IAPSTATUS IAPReadBootCodeVers(IAP_CMD_STATUS *pRes)
 
 	cmd.CmdStatus = IAPCMD_READ_BOOTCODE_VER;
 
-	IapEntry(&cmd, pRes);
+	IapCall(&cmd, pRes);
 
 	return pRes->CmdStatus;
 }
@@ -133,7 +145,7 @@ IAPSTATUS IAPCompare(uint8_t *pDst, uint8_t *pSrc, int Size, IAP_CMD_STATUS *pRe
 	cmd.Data[1] = (uint32_t)pSrc;
 	cmd.Data[2] = Size;
 
-	IapEntry(&cmd, pRes);
+	IapCall(&cmd, pRes);
 
 	return pRes->CmdStatus;
 }
@@ -145,7 +157,7 @@ IAPSTATUS IAPJumpISP()
 
 	cmd.CmdStatus = IAPCMD_INVOKE_ISP;
 
-	IapEntry(&cmd, &res);
+	IapCall(&cmd, &res);
 
 	return res.CmdStatus;
 }
@@ -156,7 +168,7 @@ IAPSTATUS IAPReadUID(IAP_CMD_STATUS *pRes)
 
 	cmd.CmdStatus = IAPCMD_READ_UID;
 
-	IapEntry(&cmd, pRes);
+	IapCall(&cmd, pRes);
 
 	return pRes->CmdStatus;
 }
@@ -171,7 +183,7 @@ IAPSTATUS IAPErasePage(int StartPage, int EndPage)
 	cmd.Data[1] = EndPage;
 	cmd.Data[2] = SystemCoreClock / 1000;
 
-	IapEntry(&cmd, &res);
+	IapCall(&cmd, &res);
 
 	return res.CmdStatus;
 }
@@ -187,7 +199,7 @@ IAPSTATUS IAPEepromWrite(uint32_t EepAddr, uint8_t *pData, int Size)
 	cmd.Data[2] = Size;
 	cmd.Data[3] = SystemCoreClock / 1000;
 
-	IapEntry(&cmd, &res);
+	IapCall(&cmd, &res);
 
 	return res.CmdStatus;
 }
@@ -203,7 +215,7 @@ IAPSTATUS IAPEepromRead(uint32_t EepAddr, uint8_t *pData, int Size)
 	cmd.Data[2] = Size;
 	cmd.Data[3] = SystemCoreClock / 1000;
 
-	IapEntry(&cmd, &res);
+	IapCall(&cmd, &res);
 
 	return res.CmdStatus;
 }

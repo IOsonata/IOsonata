@@ -81,6 +81,9 @@ typedef struct {
 extern "C" {
 #endif
 
+// Wrappers mask interrupts during the ROM call and restore the prior PRIMASK
+// if it returns. Callers must serialize a prepare plus erase/write sequence.
+// Keep the IAP work area and sufficient stack space available to the ROM.
 IAPSTATUS IAPPrepSectWrite(int StartSect, int EndSect);
 IAPSTATUS IAPCopyRamToFlash(uint8_t *pDst, uint8_t *pSrc, int Size);
 IAPSTATUS IAPEraseSector(int StartSect, int EndSect);
