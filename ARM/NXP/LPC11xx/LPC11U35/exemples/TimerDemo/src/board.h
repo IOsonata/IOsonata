@@ -56,6 +56,7 @@ SOFTWARE.
 #define TIMER_DEMO_INT_PRIO	3
 
 // UART0: RX P2.3 (P0.18), TX P2.4 (P0.19).
+#define TIMER_DEMO_UART		1
 #define UART_DEVNO			0
 #define UART_RX_PORT		0
 #define UART_RX_PIN			18

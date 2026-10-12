@@ -16,9 +16,13 @@ compiler options, to test each device:
 | 2 | CT32B0 | 32 bits |
 | 3 | CT32B1 | 32 bits |
 
-The LED mapping matches the existing LPC11U35 Blinky example. P0.3 toggles
-every 100 ms and P0.4 every 1 s. Trigger 2 runs every 250 ms and is visible
-in the UART output and debugger counters.
+The LED mapping matches the IBK-IDAP-M board and LPC11U35 Blinky example.
+The green LED on P0.23 toggles every 100 ms and the red LED on P0.16 every 1 s.
+Trigger 2 runs every 250 ms and is visible in the UART output and debugger
+counters.
+
+UART output is enabled in both Debug and Release builds. No semihosting
+debugger is required for console output.
 
 Connect a 3.3 V UART adapter RX to P0.19 and connect ground. P0.18 is UART RX.
 Open the terminal at 115200 baud, 8-N-1, without flow control. Expect three
