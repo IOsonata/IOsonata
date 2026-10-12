@@ -51,6 +51,8 @@ static int s_FailPllConnect;
 static int s_StuckDisconnect;
 static unsigned s_ConnectSeen;
 static unsigned s_ConnectWait;
+static uint32_t s_Primask;
+static unsigned s_FeedGuards;
 static const uint32_t s_Rates[] = {
 	20000000, 22000000, 40000000, 42000000, 60000000, 62000000,
 	80000000, 82000000, 99000000, 100000000, 101000000, 102000000,
@@ -62,9 +64,32 @@ static const int s_InvalidInputs[] = {
 extern uint32_t SystemClkFreq;
 extern uint32_t SystemCoreClockSet(uint32_t CoreFreq, int ClkFreq);
 
+uint32_t TestGetPrimask(void)
+{
+	return s_Primask;
+}
+
+void TestDisableIRQ(void)
+{
+	s_Primask = 1;
+}
+
+void TestSetPrimask(uint32_t Mask)
+{
+	assert(s_Primask == 1);
+	assert(s_Regs.PLL0FEED == 0x55 || s_Regs.PLL1FEED == 0x55);
+	s_FeedGuards++;
+	s_Primask = Mask;
+}
+
 LPC_SC_TypeDef *TestSystemRegs(void)
 {
 	uint32_t status = s_Regs.PLL0CFG | ((s_Regs.PLL0CON & 3U) << 24);
+
+	if (s_Regs.PLL0FEED == 0xAA || s_Regs.PLL1FEED == 0xAA)
+	{
+		assert(s_Primask == 1);
+	}
 
 	if (s_FailPllConnect)
 	{
@@ -318,6 +343,27 @@ int main(void)
 	assert(s_Regs.CCLKCFG == 3U);
 	assert(s_Unsafe == 0);
 
+	// Both PLL feed paths preserve enabled and already-disabled IRQ state.
+	for (uint32_t mask = 0; mask <= 1; mask++)
+	{
+		uint32_t status = 7U << 8;
+
+		memset(&s_Regs, 0, sizeof(s_Regs));
+		s_Primask = mask;
+		s_FeedGuards = 0;
+		assert(SystemCoreClockSet(120000000, 4000000) == 120000000);
+		assert(s_Primask == mask);
+		assert(s_FeedGuards == 3);
+
+		memset(&s_Regs, 0, sizeof(s_Regs));
+		s_Regs.CLKSRCSEL = CLKSRCSEL_MAIN;
+		SystemClkFreq = 12000000;
+		memcpy((uint8_t *)&s_Regs + offsetof(LPC_SC_TypeDef, PLL1STAT), &status, sizeof(status));
+		s_FeedGuards = 0;
+		SystemConnectPLL1();
+		assert(s_Primask == mask);
+		assert(s_FeedGuards == 3);
+	}
 	printf("LPC17xx flash timing and oscillator wait: %u errors\n", errors);
 	return errors != 0;
 }

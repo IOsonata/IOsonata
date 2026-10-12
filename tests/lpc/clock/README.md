@@ -210,3 +210,17 @@ cancel the request, retain PLL enable, and report the status-indicated
 bypass or PLL rate. The old connect loop hits the test read-count guard.
 This validates control flow; physical feed timing and clock transitions
 still require hardware testing.
+
+All PLL0 and PLL1 feed pairs in system_LPC17xx.c use a common helper that
+saves PRIMASK, disables maskable interrupts, writes 0xAA then 0x55 through
+the vendor register pointer, and restores PRIMASK. The protected section
+contains only the two feed writes. Polling waits remain outside it.
+This follows the saved-interrupt-state pattern already used by LPC17xx IAP
+and the feed requirement in UM10360 section 4.5.8.
+
+The host fixture detects an unprotected first feed write in the old code.
+Tests exercise both PLL paths with interrupts initially enabled and disabled,
+checking guard calls and exact mask restoration. Target assembly is checked
+for CPSID before the stores and PRIMASK restoration afterward. This change
+protects feed sequencing; it does not correct PLL1 frequency selection or
+its existing unbounded waits, nor simulate hardware IRQ delivery.

@@ -26,6 +26,20 @@ const uint8_t __data_ahb_loc__[16] = {
 uint8_t __data_ahb_start__[24];
 #endif
 
+uint32_t TestGetPrimask(void)
+{
+	return 0;
+}
+
+void TestDisableIRQ(void)
+{
+}
+
+void TestSetPrimask(uint32_t Mask)
+{
+	assert(Mask == 0);
+}
+
 void TestDSB(void)
 {
 	assert(SCB->VTOR == TEST_VECTOR_BASE);

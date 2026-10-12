@@ -20,3 +20,10 @@ void TestISB(void);
 #define SCB (&g_TestScb)
 #define __DSB() TestDSB()
 #define __ISB() TestISB()
+
+uint32_t TestGetPrimask(void);
+void TestDisableIRQ(void);
+void TestSetPrimask(uint32_t Mask);
+#define __get_PRIMASK() TestGetPrimask()
+#define __disable_irq() TestDisableIRQ()
+#define __set_PRIMASK(Mask) TestSetPrimask(Mask)

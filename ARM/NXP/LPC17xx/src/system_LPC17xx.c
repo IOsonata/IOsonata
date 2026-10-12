@@ -64,6 +64,17 @@ extern unsigned char __data_ahb_loc__[] __attribute__((weak));
 extern unsigned char __data_ahb_start__[] __attribute__((weak));
 extern unsigned char __data_ahb_size__ __attribute__((weak));
 
+// No system-control register access may interrupt the two feed writes.
+static void Lpc17PllFeed(volatile uint32_t *pFeed)
+{
+	uint32_t primask = __get_PRIMASK();
+
+	__disable_irq();
+	*pFeed = 0xAA;
+	*pFeed = 0x55;
+	__set_PRIMASK(primask);
+}
+
 uint32_t GetSysClk(void)
 {
 	uint32_t sysclk;
@@ -207,12 +218,10 @@ uint32_t SystemCoreClockSet(uint32_t CoreFreq, int ClkFreq)
 	// MSEL occupies bits 14:0; preserve bit 12 and leave bit 15 clear.
 	temp = ((i & 0xFFU) << 16) | (temp & 0x7FFFU);
 	LPC_SC->PLL0CFG = temp;
-	LPC_SC->PLL0FEED  = 0xAA;
-	LPC_SC->PLL0FEED  = 0x55;
+	Lpc17PllFeed(&LPC_SC->PLL0FEED);
 
 	LPC_SC->PLL0CON   = 0x01;
-	LPC_SC->PLL0FEED  = 0xAA;
-	LPC_SC->PLL0FEED  = 0x55;
+	Lpc17PllFeed(&LPC_SC->PLL0FEED);
 	// Do not connect PLL0 if it fails to report lock.
 	temp = LPC17_PLL_WAIT_MAX;
 	while ((LPC_SC->PLL0STAT & (1U << 26)) == 0U)
@@ -227,8 +236,7 @@ uint32_t SystemCoreClockSet(uint32_t CoreFreq, int ClkFreq)
 	}
 
 	LPC_SC->PLL0CON   = 0x03;
-	LPC_SC->PLL0FEED  = 0xAA;
-	LPC_SC->PLL0FEED  = 0x55;
+	Lpc17PllFeed(&LPC_SC->PLL0FEED);
 	temp = LPC17_PLL_WAIT_MAX;
 	while ((LPC_SC->PLL0STAT & (1U << 25)) == 0U)
 	{
@@ -237,8 +245,7 @@ uint32_t SystemCoreClockSet(uint32_t CoreFreq, int ClkFreq)
 			// Cancel a pending connection, but keep PLL0 enabled in case
 			// the hardware connects late or cannot acknowledge disconnect.
 			LPC_SC->PLL0CON = 0x01;
-			LPC_SC->PLL0FEED = 0xAA;
-			LPC_SC->PLL0FEED = 0x55;
+			Lpc17PllFeed(&LPC_SC->PLL0FEED);
 
 			temp = LPC17_PLL_WAIT_MAX;
 			while ((LPC_SC->PLL0STAT & (1U << 25)) != 0U)
@@ -317,18 +324,15 @@ void SystemConnectPLL1(void)
 	if (val)
 	{
 		LPC_SC->PLL1CFG   = val;
-		LPC_SC->PLL1FEED  = 0xAA;
-		LPC_SC->PLL1FEED  = 0x55;
+		Lpc17PllFeed(&LPC_SC->PLL1FEED);
 
 		LPC_SC->PLL1CON   = 0x01;
-		LPC_SC->PLL1FEED  = 0xAA;
-		LPC_SC->PLL1FEED  = 0x55;
+		Lpc17PllFeed(&LPC_SC->PLL1FEED);
 		/* Wait for PLL1 to lock */
 		while (!(LPC_SC->PLL1STAT & (1<<10)));
 
 		LPC_SC->PLL1CON   = 0x03;
-		LPC_SC->PLL1FEED  = 0xAA;
-		LPC_SC->PLL1FEED  = 0x55;
+		Lpc17PllFeed(&LPC_SC->PLL1FEED);
 		/* Wait for PLL1 to connect */
 		while (!(LPC_SC->PLL1STAT & (1<< 9)));
 	}
