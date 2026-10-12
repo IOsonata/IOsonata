@@ -54,6 +54,8 @@ typedef struct {
 	uint32_t UsbExact;
 } Lpc17ClockConfig_t;
 
+static const uint8_t s_Lpc17PclkDividers[] = {4, 1, 2, 8};
+
 // UM10360 table 26: the only additional multipliers supported for RTC input.
 static const uint16_t s_Lpc17RtcMultipliers[] = {
 	4272, 4395, 4578, 4725, 4807, 5127, 5188, 5400, 5493, 5859,
@@ -100,6 +102,31 @@ static void Lpc17PllFeed(volatile uint32_t *pFeed)
 uint32_t SystemCoreClockGet(void)
 {
 	return SystemCoreClock;
+}
+
+uint32_t SystemPeriphClockGet(int Idx)
+{
+	uint32_t select;
+	uint32_t div;
+
+	if (Idx == LPC17_PCLK_RTC)
+	{
+		return SystemCoreClock / 8U;
+	}
+	// Reserved PCLKSEL fields have no peripheral clock to report.
+	if (Idx < 0 || Idx >= 32 || Idx == 5 || Idx == 9 || Idx == 20 || Idx == 28)
+	{
+		return 0;
+	}
+	select = Idx < 16 ? LPC_SC->PCLKSEL0 : LPC_SC->PCLKSEL1;
+	select = (select >> (2U * ((uint32_t)Idx & 15U))) & 3U;
+	div = s_Lpc17PclkDividers[select];
+	if (select == 3U && Idx >= LPC17_PCLK_CAN1 && Idx <= LPC17_PCLK_ACF)
+	{
+		div = 6;
+	}
+
+	return SystemCoreClock / div;
 }
 
 uint32_t GetSysClk(void)

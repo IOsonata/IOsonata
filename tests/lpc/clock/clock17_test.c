@@ -37,10 +37,45 @@ SOFTWARE.
 #include <string.h>
 #include <sys/mman.h>
 #include "LPC17xx.h"
+#include "coredev/system_core_clock.h"
+#include <limits.h>
 
 extern uint32_t SystemClkFreq;
 uint32_t SystemMicroSecLoopCnt;
 static unsigned s_Errors;
+static const unsigned s_PclkFields[][2] = {
+	{LPC17_PCLK_WDT, 0},
+	{LPC17_PCLK_TIMER0, 1},
+	{LPC17_PCLK_TIMER1, 2},
+	{LPC17_PCLK_UART0, 3},
+	{LPC17_PCLK_UART1, 4},
+	{LPC17_PCLK_PWM1, 6},
+	{LPC17_PCLK_I2C0, 7},
+	{LPC17_PCLK_SPI, 8},
+	{LPC17_PCLK_SSP1, 10},
+	{LPC17_PCLK_DAC, 11},
+	{LPC17_PCLK_ADC, 12},
+	{LPC17_PCLK_CAN1, 13},
+	{LPC17_PCLK_CAN2, 14},
+	{LPC17_PCLK_ACF, 15},
+	{LPC17_PCLK_QEI, 16},
+	{LPC17_PCLK_GPIOINT, 17},
+	{LPC17_PCLK_PCB, 18},
+	{LPC17_PCLK_I2C1, 19},
+	{LPC17_PCLK_SSP0, 21},
+	{LPC17_PCLK_TIMER2, 22},
+	{LPC17_PCLK_TIMER3, 23},
+	{LPC17_PCLK_UART2, 24},
+	{LPC17_PCLK_UART3, 25},
+	{LPC17_PCLK_I2C2, 26},
+	{LPC17_PCLK_I2S, 27},
+	{LPC17_PCLK_RIT, 29},
+	{LPC17_PCLK_SYSCON, 30},
+	{LPC17_PCLK_MCPWM, 31},
+};
+static const unsigned s_PclkDividers[] = {4, 1, 2, 8};
+static const int s_InvalidPclks[] = {INT_MIN, -1, 5, 9, 20, 28, 33, INT_MAX};
+
 
 static void Check(unsigned Source, uint32_t Input, uint32_t Status,
 				  unsigned Div, uint32_t Expected)
@@ -100,6 +135,31 @@ int main(void)
 			Check(CLKSRCSEL_MAIN, 12000000, 0x03000000U | ((n - 1) << 16) | msel,
 				256, expected);
 		}
+	}
+	SystemCoreClock = 96000001;
+	for (unsigned i = 0; i < sizeof(s_PclkFields) / sizeof(s_PclkFields[0]); i++)
+	{
+		unsigned field = s_PclkFields[i][1];
+		unsigned shift = 2U * (field % 16U);
+		volatile uint32_t *reg = field < 16 ? &LPC_SC->PCLKSEL0 : &LPC_SC->PCLKSEL1;
+
+		for (unsigned sel = 0; sel < 4; sel++)
+		{
+			LPC_SC_TypeDef before;
+			unsigned div = sel == 3 && field >= 13 && field <= 15 ? 6 : s_PclkDividers[sel];
+
+			LPC_SC->PCLKSEL0 = 0xAAAAAAAA;
+			LPC_SC->PCLKSEL1 = 0x55555555;
+			*reg = (*reg & ~(3U << shift)) | (sel << shift);
+			memcpy(&before, (const void *)LPC_SC, sizeof(before));
+			assert(SystemPeriphClockGet(s_PclkFields[i][0]) == SystemCoreClock / div);
+			assert(memcmp(&before, (const void *)LPC_SC, sizeof(before)) == 0);
+		}
+	}
+	assert(SystemPeriphClockGet(LPC17_PCLK_RTC) == SystemCoreClock / 8U);
+	for (unsigned i = 0; i < sizeof(s_InvalidPclks) / sizeof(s_InvalidPclks[0]); i++)
+	{
+		assert(SystemPeriphClockGet(s_InvalidPclks[i]) == 0);
 	}
 	printf("LPC17xx clock decoding: %u errors\n", s_Errors);
 	return s_Errors != 0;

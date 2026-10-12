@@ -384,3 +384,21 @@ The existing C/C++ link caller includes the real generic header and calls
 the getter before and after clock regression tests. Previously it fails
 linking with an undefined SystemCoreClockGet. This checks the API linkage
 and reset/updated clock values; it is not a complete TaktOS firmware build.
+
+SystemPeriphClockGet now uses the target's named LPC17_PCLK indices from
+system_LPC17xx.h. Indices 0..31 follow the two-bit fields of PCLKSEL0 and
+PCLKSEL1; reserved indices 5, 9, 20 and 28 return zero. LPC17_PCLK_RTC (32)
+reports the fixed CCLK/8 register-interface clock, not the 32768 Hz oscillator.
+Other negative or out-of-range indices return zero. Rates derive from the
+maintained SystemCoreClock and current PCLKSEL values, irrespective of PCONP
+power gating. This describes configured clocks rather than peripheral
+presence or enable state. Reference: UM10360 section 4.7.3, tables 40..42.
+
+Normal selections decode as CCLK/4, CCLK, CCLK/2 and CCLK/8; CAN1, CAN2 and
+acceptance filtering use CCLK/6 for selection 3. The getter only reads vendor
+CMSIS registers. No generic signature or driver clock configuration changes.
+Tests cover every named field and all four selections, the CAN exception,
+fixed RTC clock, fractional-Hz truncation and invalid/reserved indices. They
+check the full register block remains unchanged. C and C++ callers link
+through the generic header; the previous implementation fails with a missing
+SystemPeriphClockGet symbol.

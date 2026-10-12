@@ -42,6 +42,44 @@ Modified by          Date              Description
 #define CLKSRCSEL_MAIN		1	/* Main oscillator */
 #define CLKSRCSEL_RTC		2	/* Realtime clock oscillator */
 
+/**
+ * LPC17xx indices for SystemPeriphClockGet in coredev/system_core_clock.h.
+ * Values 0..31 follow the two-bit PCLKSEL0/PCLKSEL1 fields; reserved holes
+ * are invalid. RTC is its CCLK/8 register-interface clock, not its oscillator.
+ * These are configured rates, independent of PCONP power gating.
+ */
+typedef enum __Lpc17_Periph_Clock {
+	LPC17_PCLK_WDT = 0,
+	LPC17_PCLK_TIMER0 = 1,
+	LPC17_PCLK_TIMER1 = 2,
+	LPC17_PCLK_UART0 = 3,
+	LPC17_PCLK_UART1 = 4,
+	LPC17_PCLK_PWM1 = 6,
+	LPC17_PCLK_I2C0 = 7,
+	LPC17_PCLK_SPI = 8,
+	LPC17_PCLK_SSP1 = 10,
+	LPC17_PCLK_DAC = 11,
+	LPC17_PCLK_ADC = 12,
+	LPC17_PCLK_CAN1 = 13,
+	LPC17_PCLK_CAN2 = 14,
+	LPC17_PCLK_ACF = 15,
+	LPC17_PCLK_QEI = 16,
+	LPC17_PCLK_GPIOINT = 17,
+	LPC17_PCLK_PCB = 18,
+	LPC17_PCLK_I2C1 = 19,
+	LPC17_PCLK_SSP0 = 21,
+	LPC17_PCLK_TIMER2 = 22,
+	LPC17_PCLK_TIMER3 = 23,
+	LPC17_PCLK_UART2 = 24,
+	LPC17_PCLK_UART3 = 25,
+	LPC17_PCLK_I2C2 = 26,
+	LPC17_PCLK_I2S = 27,
+	LPC17_PCLK_RIT = 29,
+	LPC17_PCLK_SYSCON = 30,
+	LPC17_PCLK_MCPWM = 31,
+	LPC17_PCLK_RTC = 32,
+} LPC17_PCLK;
+
 /* Crystal or Oscillator frequencies in Hz */
 #define OSC_FREQ_12MHZ			(12000000UL)    /* LPCXpresso Oscillator frequency     */
 #define OSC_FREQ_16MHZ			(16000000UL)    /* IMM-LPC1769 Oscillator frequency    */

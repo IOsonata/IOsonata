@@ -22,12 +22,14 @@ int main(void)
 	int result;
 
 	assert(SystemCoreClockGet() == 4000000U);
+	assert(SystemPeriphClockGet(-1) == 0);
 	// Both entry points must link from the public header without local declarations.
 	assert(SystemSetCoreClock(120000000, -1) == 0);
 	assert(SystemCoreClockSet(120000000, 0) == 0);
 
 	result = TestClock17Run();
 	assert(SystemCoreClockGet() == SystemCoreClock);
+	assert(SystemPeriphClockGet(LPC17_PCLK_RTC) == SystemCoreClock / 8U);
 
 	return result;
 }
