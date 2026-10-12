@@ -425,9 +425,13 @@ static void RejectConfig(const UARTCfg_t &Cfg)
 	assert(s_Priority[UART_IRQn] == priority);
 }
 
+#endif
+
 static void PriorityTest()
 {
 	UARTCfg_t cfg = {};
+	int irq = LpcUARTIrq(0);
+	int maxprio = (1U << __NVIC_PRIO_BITS) - 1U;
 
 	cfg.pIOPinMap = s_Pins;
 	cfg.NbIOPins = 4;
@@ -438,33 +442,42 @@ static void PriorityTest()
 	cfg.bIntMode = true;
 	cfg.bFifoBlocking = true;
 	s_Model[0].Polling = true;
-	for (int priority = 0; priority < 4; priority++)
+	for (int priority = 0; priority <= maxprio; priority++)
 	{
 		cfg.IntPrio = priority;
 		assert(UARTInit(&s_Uart[0], &cfg));
-		assert(s_Priority[UART_IRQn] == (uint32_t)priority);
-		assert(s_Irq[UART_IRQn]);
+		assert(s_Priority[irq] == (uint32_t)priority);
+		assert(s_Uart[0].DevIntrf.IntPrio == priority);
+		assert(s_Irq[irq]);
 	}
-	assert(CFifoPutByte(s_Uart[0].hRxFifo, 0xA5));
-	assert(CFifoPutByte(s_Uart[0].hTxFifo, 0x5A));
-	for (int priority : {-1, 4, 7, INT_MIN, INT_MAX})
+	for (int priority : {-1, maxprio + 1, INT_MIN, INT_MAX})
 	{
 		cfg.IntPrio = priority;
-		RejectConfig(cfg);
+		int expected = priority < 0 ? 0 : maxprio;
+
+		assert(UARTInit(&s_Uart[0], &cfg));
+		assert(cfg.IntPrio == priority);
+		assert(s_Uart[0].DevIntrf.IntPrio == expected);
+		assert(s_Priority[irq] == (uint32_t)expected);
+		UARTDisable(&s_Uart[0]);
+		UARTEnable(&s_Uart[0]);
+		assert(s_Irq[irq]);
+		assert(s_Priority[irq] == (uint32_t)expected);
 	}
 	// Polling never programs NVIC priority, even across Disable/Enable.
 	cfg.bIntMode = false;
-	for (int priority : {-1, 4, 7, INT_MIN, INT_MAX})
+	for (int priority : {-1, maxprio + 1, INT_MIN, INT_MAX})
 	{
 		cfg.IntPrio = priority;
 		assert(UARTInit(&s_Uart[0], &cfg));
 		UARTDisable(&s_Uart[0]);
 		UARTEnable(&s_Uart[0]);
-		assert(!s_Irq[UART_IRQn]);
-		assert(s_Priority[UART_IRQn] == 3);
+		assert(!s_Irq[irq]);
+		assert(s_Priority[irq] == (uint32_t)maxprio);
 	}
 }
 
+#ifndef TEST_LPC17
 static void PinTest()
 {
 	IOPinCfg_t pins[UART_NB_PINS];
@@ -587,8 +600,8 @@ int main()
 	assert(mapped != MAP_FAILED);
 	RateTest();
 	DriverTest();
-#ifndef TEST_LPC17
 	PriorityTest();
+#ifndef TEST_LPC17
 	PinTest();
 #endif
 	printf("legacy LPC UART (%d instances): PASS\n", LPCUART_DEV_COUNT);

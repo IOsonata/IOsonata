@@ -58,9 +58,10 @@ maps and overlapping data/modem pads. Rejected maps preserve driver state,
 queued bytes, registers and IRQ state and make no pin configuration calls.
 These checks do not replace electrical or hardware handshake validation.
 
-LPC11Uxx interrupt mode requires IntPrio 0..3, matching its two NVIC priority
-bits. Invalid priorities are rejected before initialization changes state,
-rather than silently truncating in CMSIS (for example, 4 becoming 0). Polling
-mode ignores IntPrio and never programs NVIC priority. Tests cover all four
-valid levels, negative and excessive values, preserved queued data on rejection,
-and polling Disable/Enable with unused out-of-range priorities.
+Interrupt mode selects the nearest implemented NVIC priority: negative values
+become zero and excessive values become the maximum defined by the family's
+__NVIC_PRIO_BITS. LPC11Uxx therefore clamps to 0..3. The effective priority is
+stored in DevIntrf.IntPrio and retained across Disable/Enable; the caller's
+configuration is unchanged. Polling ignores IntPrio and never programs NVIC
+priority. Both family tests cover every valid level and out-of-range values,
+including INT_MIN and INT_MAX.

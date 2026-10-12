@@ -655,6 +655,20 @@ bool UARTInit(UARTDev_t *pDev, const UARTCfg_t *pCfg)
 	pDev->TxDropCnt = 0;
 	pDev->DevIntrf.Type = DEVINTRF_TYPE_UART;
 	pDev->DevIntrf.IntPrio = pCfg->IntPrio;
+	if (pCfg->bIntMode)
+	{
+		// Select the nearest implemented priority instead of NVIC truncation.
+		int maxprio = (1U << __NVIC_PRIO_BITS) - 1U;
+
+		if (pDev->DevIntrf.IntPrio < 0)
+		{
+			pDev->DevIntrf.IntPrio = 0;
+		}
+		else if (pDev->DevIntrf.IntPrio > maxprio)
+		{
+			pDev->DevIntrf.IntPrio = maxprio;
+		}
+	}
 	pDev->DevIntrf.EvtCB = NULL;
 	pDev->DevIntrf.MaxRetry = 0;
 	pDev->DevIntrf.EnCnt = 1;

@@ -77,7 +77,6 @@ static bool Lpc11UARTSignalPin(int Signal, const IOPinCfg_t *pPin)
 bool LpcUARTConfigValid(const UARTCfg_t *pCfg)
 {
 	if (pCfg->NbIOPins > UART_NB_PINS ||
-		(pCfg->bIntMode && (unsigned)pCfg->IntPrio >= (1UL << __NVIC_PRIO_BITS)) ||
 		(pCfg->bIrDAMode && (pCfg->IrDAPulseDiv < 0 || pCfg->IrDAPulseDiv > 7)) ||
 		(pCfg->FlowControl == UART_FLWCTRL_HW && pCfg->NbIOPins < 4))
 	{
