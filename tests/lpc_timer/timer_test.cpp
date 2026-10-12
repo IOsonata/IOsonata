@@ -255,6 +255,19 @@ int main()
 		assert(g_LpcTimer[d].Trig[2].Ticks > 10000000000000000ULL);
 		// Automatic allocation must distinguish exhaustion from valid slot 0.
 		assert(timers[d].Init(cfg));
+		// A free slot is not success when the driver cannot arm it.
+		t.Freq = 0;
+		assert(timers[d].EnableTimerTrigger((uint64_t)1000000,
+			TIMER_TRIG_TYPE_CONTINUOUS) == -1);
+		assert(timers[d].EnableTimerTrigger((uint32_t)1,
+			TIMER_TRIG_TYPE_CONTINUOUS) == -1);
+		assert(timers[d].FindAvailTimerTrigger() == 0);
+		t.Freq = SystemCoreClock;
+		// A successful sub-millisecond period rounds to 0 ms, not failure.
+		assert(timers[d].EnableTimerTrigger((uint32_t)0,
+			TIMER_TRIG_TYPE_CONTINUOUS) == 0);
+		assert(g_LpcTimer[d].Trig[0].bActive);
+		timers[d].DisableTimerTrigger(0);
 		for (int n = 0; n < 3; n++)
 		{
 			assert(timers[d].EnableTimerTrigger((uint64_t)1000000,
