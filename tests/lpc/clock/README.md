@@ -349,3 +349,26 @@ preservation for 100 MHz and 84 MHz CPU targets (the latter has an odd
 48 MHz CCO multiple), an inexact rate, bypass, IRC and RTC. They fail
 against the previous unconditional rounded-divider write. This validates
 register selection; physical USB clock tolerance and operation are untested.
+
+PLL0 settling follows UM10360 section 4.5.6 when FREF=FIN/N is below
+100 kHz or above 20 MHz. In those ranges PLOCK0 can be unreliable, so the
+setter waits for the documented minimum and then requests connection,
+regardless of the lock bit. The normal range retains bounded lock polling.
+Connection acknowledgement remains bounded in both paths.
+
+Before connection the CPU runs at FIN/CpuDiv. The low-reference delay of
+200/FREF seconds therefore needs ceil(200*N/CpuDiv) CPU cycles; the
+high-reference 500 us delay needs ceil(FIN/(2000*CpuDiv)) cycles. A volatile
+countdown with a CMSIS NOP performs at least one cycle per count. Loop
+instructions, flash waits and interrupts add time, making this a conservative
+minimum rather than a calibrated delay. It uses no timer, does not depend on
+stale SystemCoreClock globals and leaves the IRQ mask unchanged. As with
+other clock setters, callers must serialize changes to the clock tree.
+
+The host hook counts iterations while PLL0 is enabled but not connected.
+Cases cover RTC with N=1 and N=2 and a 25 MHz reference, both absent and
+premature lock status, and both IRQ mask states. Counts are 50, 100 and
+4167 respectively for the selected dividers. The previous code fails the
+premature-lock case by skipping the wait. Clock/startup tests pass at O0/O2;
+Cortex-M3 assembly inspection confirms the volatile countdown remains at
+both optimization levels. Physical PLL settling still needs board testing.

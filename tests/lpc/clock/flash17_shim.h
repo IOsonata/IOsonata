@@ -11,3 +11,7 @@ Copyright (c) 2026 I-SYST inc. MIT License.
 LPC_SC_TypeDef *TestSystemRegs(void);
 #undef LPC_SC
 #define LPC_SC TestSystemRegs()
+
+void TestClockWaitCycle(void);
+#undef __NOP
+#define __NOP() TestClockWaitCycle()

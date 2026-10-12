@@ -47,6 +47,8 @@ static unsigned s_OscReadyAfter;
 static unsigned s_EarlyClockChange;
 static unsigned s_PllWait;
 static int s_FailPllLock;
+static int s_UnreliablePllLock;
+static unsigned s_SettleCycles;
 static int s_FailPllConnect;
 static int s_StuckDisconnect;
 static unsigned s_ConnectSeen;
@@ -87,6 +89,11 @@ static const uint32_t s_UsbDividerCases[][3] = {
 	{4000000, 120000000, 7},
 	{32768, 72007680, 7}
 };
+static const uint32_t s_SettleCases[][3] = {
+	{32768, 72007680, 50},
+	{32768, 71999488, 100},
+	{25000000, 100000000, 4167}
+};
 // Independent exhaustive oracle uses the hardware's supported RTC values.
 static const uint16_t s_RtcM[] = {
 	4272, 4395, 4578, 4725, 4807, 5127, 5188, 5400, 5493, 5859,
@@ -123,6 +130,13 @@ void TestSetPrimask(uint32_t Mask)
 	assert(s_Regs.PLL0FEED == 0x55 || s_Regs.PLL1FEED == 0x55);
 	s_FeedGuards++;
 	s_Primask = Mask;
+}
+
+void TestClockWaitCycle(void)
+{
+	assert(s_Regs.PLL0CON == 1);
+	assert(s_Regs.PLL0FEED == 0x55);
+	s_SettleCycles++;
 }
 
 LPC_SC_TypeDef *TestSystemRegs(void)
@@ -239,6 +253,11 @@ LPC_SC_TypeDef *TestSystemRegs(void)
 		{
 			s_Regs.SCS |= 0x40U;
 		}
+	}
+
+	if (s_UnreliablePllLock)
+	{
+		status &= ~(1U << 26);
 	}
 
 	// Model ready status from configuration; analog locking/feed are not modeled.
@@ -372,6 +391,27 @@ int main(void)
 			assert((uint64_t)s_UsbDividerCases[i][0] * 2U * m ==
 				48000000ULL * n * (s_Regs.USBCLKCFG + 1U));
 			assert((s_Regs.USBCLKCFG & 1U) == 1U);
+		}
+	}
+
+	// Unreliable references must wait despite premature lock or absent lock status.
+	for (unsigned i = 0; i < sizeof(s_SettleCases) / sizeof(s_SettleCases[0]); i++)
+	{
+		for (unsigned missing = 0; missing <= 1; missing++)
+		{
+			for (uint32_t mask = 0; mask <= 1; mask++)
+			{
+				memset(&s_Regs, 0, sizeof(s_Regs));
+				s_OscWait = 0;
+				s_OscReadyAfter = 4;
+				s_SettleCycles = 0;
+				s_UnreliablePllLock = missing;
+				s_Primask = mask;
+				assert(SystemCoreClockSet(s_SettleCases[i][1], s_SettleCases[i][0]) == s_SettleCases[i][1]);
+				assert(s_SettleCycles == s_SettleCases[i][2]);
+				assert(s_Primask == mask);
+				s_UnreliablePllLock = 0;
+			}
 		}
 	}
 

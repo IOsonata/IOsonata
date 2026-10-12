@@ -27,3 +27,5 @@ void TestSetPrimask(uint32_t Mask);
 #define __get_PRIMASK() TestGetPrimask()
 #define __disable_irq() TestDisableIRQ()
 #define __set_PRIMASK(Mask) TestSetPrimask(Mask)
+
+#define __NOP() ((void)0)

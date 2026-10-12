@@ -312,16 +312,44 @@ uint32_t SystemCoreClockSet(uint32_t CoreFreq, int ClkFreq)
 
 	LPC_SC->PLL0CON   = 0x01;
 	Lpc17PllFeed(&LPC_SC->PLL0FEED);
-	// Do not connect PLL0 if it fails to report lock.
-	temp = LPC17_PLL_WAIT_MAX;
-	while ((LPC_SC->PLL0STAT & (1U << 26)) == 0U)
+	// PLOCK0 is unreliable outside 100 kHz..20 MHz reference frequency.
+	temp = ((clock.PllCfg >> 16) & 0xFFU) + 1U;
+	if ((uint32_t)ClkFreq < 100000U * temp ||
+		(uint32_t)ClkFreq > 20000000U * temp)
 	{
-		if (--temp == 0U)
-		{
-			// Report the active input/divider instead of the requested PLL rate.
-			SystemCoreClockUpdate();
+		volatile uint32_t wait;
 
-			return 0;
+		// CPU still runs at FIN / CpuDiv. UM10360 4.5.6 requires
+		// 200 / FREF seconds below 100 kHz, or 500 us above 20 MHz.
+		if ((uint32_t)ClkFreq < 100000U * temp)
+		{
+			wait = (200U * temp + clock.CpuDiv - 1U) / clock.CpuDiv;
+		}
+		else
+		{
+			wait = ((uint32_t)ClkFreq + 2000U * clock.CpuDiv - 1U) /
+				(2000U * clock.CpuDiv);
+		}
+		// A volatile decrement consumes at least one CPU cycle per count.
+		// Loop overhead and interrupts only extend this minimum delay.
+		while (wait != 0)
+		{
+			__NOP();
+			wait--;
+		}
+	}
+	else
+	{
+		// Within the reliable range, do not connect without reported lock.
+		temp = LPC17_PLL_WAIT_MAX;
+		while ((LPC_SC->PLL0STAT & (1U << 26)) == 0U)
+		{
+			if (--temp == 0U)
+			{
+				SystemCoreClockUpdate();
+
+				return 0;
+			}
 		}
 	}
 
