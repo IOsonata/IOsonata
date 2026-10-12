@@ -43,10 +43,15 @@ Modified by          Date              Description
 #define CLKSRCSEL_RTC		2	/* Realtime clock oscillator */
 
 /**
- * LPC17xx indices for SystemPeriphClockGet in coredev/system_core_clock.h.
+ * LPC17xx indices for SystemPeriphClockGet/Set in coredev/system_core_clock.h.
  * Values 0..31 follow the two-bit PCLKSEL0/PCLKSEL1 fields; reserved holes
  * are invalid. RTC is its CCLK/8 register-interface clock, not its oscillator.
  * These are configured rates, independent of PCONP power gating.
+ * Set selects the closest supported rate (ties choose the lower rate).
+ * RTC is fixed; Set returns its current rate without changing the CPU clock.
+ * Setting CAN1, CAN2 or ACF updates all three dividers together.
+ * Stop affected peripherals first; drivers may restore their own dividers
+ * during initialization. Serialize peripheral and CPU clock changes.
  */
 typedef enum __Lpc17_Periph_Clock {
 	LPC17_PCLK_WDT = 0,

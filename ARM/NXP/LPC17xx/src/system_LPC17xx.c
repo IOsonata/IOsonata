@@ -129,6 +129,58 @@ uint32_t SystemPeriphClockGet(int Idx)
 	return SystemCoreClock / div;
 }
 
+uint32_t SystemPeriphClockSet(int Idx, uint32_t Freq)
+{
+	uint32_t core = SystemCoreClock;
+	uint32_t bestdiv = 0;
+	uint32_t bestsel = 0;
+	uint64_t besterror = 0;
+	uint32_t mask;
+	uint32_t value;
+	uint32_t primask;
+	volatile uint32_t *reg;
+	bool can = Idx >= LPC17_PCLK_CAN1 && Idx <= LPC17_PCLK_ACF;
+
+	if (Idx == LPC17_PCLK_RTC)
+	{
+		return core / 8U;
+	}
+	if (Idx < 0 || Idx >= 32 || Idx == 5 || Idx == 9 || Idx == 20 || Idx == 28 || core == 0)
+	{
+		return 0;
+	}
+	for (uint32_t sel = 0; sel < 4; sel++)
+	{
+		uint32_t div = can && sel == 3U ? 6U : s_Lpc17PclkDividers[sel];
+		uint64_t target = (uint64_t)Freq * div;
+		uint64_t error = target > core ? target - core : core - target;
+
+		// Compare rational errors before truncating Hz; ties select the slower clock.
+		if (bestdiv == 0 || error * bestdiv < besterror * div ||
+			(error * bestdiv == besterror * div && div > bestdiv))
+		{
+			bestdiv = div;
+			bestsel = sel;
+			besterror = error;
+		}
+	}
+	reg = Idx < 16 ? &LPC_SC->PCLKSEL0 : &LPC_SC->PCLKSEL1;
+	mask = 3U << (2U * ((uint32_t)Idx & 15U));
+	value = bestsel << (2U * ((uint32_t)Idx & 15U));
+	if (can)
+	{
+		// CAN1, CAN2 and acceptance filtering must use the same divider.
+		mask = 0xFC000000U;
+		value = (bestsel << 26) | (bestsel << 28) | (bestsel << 30);
+	}
+	primask = __get_PRIMASK();
+	__disable_irq();
+	*reg = (*reg & ~mask) | value;
+	__set_PRIMASK(primask);
+
+	return core / bestdiv;
+}
+
 uint32_t GetSysClk(void)
 {
 	uint32_t sysclk;

@@ -402,3 +402,22 @@ fixed RTC clock, fractional-Hz truncation and invalid/reserved indices. They
 check the full register block remains unchanged. C and C++ callers link
 through the generic header; the previous implementation fails with a missing
 SystemPeriphClockGet symbol.
+
+SystemPeriphClockSet selects the closest hardware divider for the named
+LPC17_PCLK index, comparing rational error before Hz truncation. Ties select
+the lower rate; zero selects the slowest divider and oversized requests
+select CCLK. A request for the fixed RTC interface returns CCLK/8 without
+changing CPU clocks. Invalid/reserved indices or unknown core frequency
+return zero without register changes.
+
+The read-modify-write preserves unrelated fields and saves/restores PRIMASK.
+Setting any CAN1/CAN2/ACF index updates all three fields in the same write,
+as their dividers must agree. Callers must stop affected peripherals and
+serialize CPU/peripheral clock changes; driver initialization can restore
+its required divider. The setter does not change PCONP or peripheral state.
+
+Tests cover every valid field, all four divisors, exact/inexact/midpoint
+requests, zero and UINT32_MAX, both IRQ mask states, grouped CAN updates,
+fixed RTC behavior, invalid indices and unknown CPU clock. The complete
+register block is compared except for the intended fields. C/C++ linkage
+coverage catches the previously missing SystemPeriphClockSet symbol.

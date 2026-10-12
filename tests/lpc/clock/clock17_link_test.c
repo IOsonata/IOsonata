@@ -23,6 +23,7 @@ int main(void)
 
 	assert(SystemCoreClockGet() == 4000000U);
 	assert(SystemPeriphClockGet(-1) == 0);
+	assert(SystemPeriphClockSet(-1, UINT32_MAX) == 0);
 	// Both entry points must link from the public header without local declarations.
 	assert(SystemSetCoreClock(120000000, -1) == 0);
 	assert(SystemCoreClockSet(120000000, 0) == 0);

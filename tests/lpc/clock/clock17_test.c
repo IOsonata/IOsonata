@@ -43,6 +43,9 @@ SOFTWARE.
 extern uint32_t SystemClkFreq;
 uint32_t SystemMicroSecLoopCnt;
 static unsigned s_Errors;
+static uint32_t s_Primask;
+static const uint32_t s_PclkRequests[] = {0, 1, 12000000, 16000000, 18000000,
+	20000000, 24000000, 36000000, 48000000, 72000000, 96000000, UINT32_MAX};
 static const unsigned s_PclkFields[][2] = {
 	{LPC17_PCLK_WDT, 0},
 	{LPC17_PCLK_TIMER0, 1},
@@ -76,6 +79,22 @@ static const unsigned s_PclkFields[][2] = {
 static const unsigned s_PclkDividers[] = {4, 1, 2, 8};
 static const int s_InvalidPclks[] = {INT_MIN, -1, 5, 9, 20, 28, 33, INT_MAX};
 
+
+uint32_t TestGetPrimask(void)
+{
+	return s_Primask;
+}
+
+void TestDisableIRQ(void)
+{
+	s_Primask = 1;
+}
+
+void TestSetPrimask(uint32_t Mask)
+{
+	assert(s_Primask == 1);
+	s_Primask = Mask;
+}
 
 static void Check(unsigned Source, uint32_t Input, uint32_t Status,
 				  unsigned Div, uint32_t Expected)
@@ -161,6 +180,82 @@ int main(void)
 	{
 		assert(SystemPeriphClockGet(s_InvalidPclks[i]) == 0);
 	}
+	SystemCoreClock = 96000000;
+	for (unsigned i = 0; i < sizeof(s_PclkFields) / sizeof(s_PclkFields[0]); i++)
+	{
+		unsigned field = s_PclkFields[i][1];
+		int can = field >= 13 && field <= 15;
+
+		for (unsigned j = 0; j < sizeof(s_PclkRequests) / sizeof(s_PclkRequests[0]); j++)
+		{
+			for (unsigned irq = 0; irq <= 1; irq++)
+			{
+				LPC_SC_TypeDef before;
+				uint32_t mask = can ? 0xFC000000U : 3U << (2U * (field % 16U));
+				uint32_t rate;
+				uint32_t expected = 0;
+				uint64_t error = UINT64_MAX;
+
+				// Enumerate the four actual rates and prefer the lower rate on ties.
+				for (unsigned sel = 0; sel < 4; sel++)
+				{
+					uint32_t div = can && sel == 3 ? 6 : s_PclkDividers[sel];
+					uint32_t candidate = SystemCoreClock / div;
+					uint64_t diff = candidate > s_PclkRequests[j] ?
+						(uint64_t)candidate - s_PclkRequests[j] : (uint64_t)s_PclkRequests[j] - candidate;
+
+					if (diff < error || (diff == error && candidate < expected))
+					{
+						error = diff;
+						expected = candidate;
+					}
+				}
+				LPC_SC->PCLKSEL0 = 0xAAAAAAAA;
+				LPC_SC->PCLKSEL1 = 0x55555555;
+				memcpy(&before, (const void *)LPC_SC, sizeof(before));
+				s_Primask = irq;
+				rate = SystemPeriphClockSet(s_PclkFields[i][0], s_PclkRequests[j]);
+				assert(rate == expected);
+				assert(SystemPeriphClockGet(s_PclkFields[i][0]) == rate);
+				assert(s_Primask == irq);
+				if (can)
+				{
+					assert(SystemPeriphClockGet(LPC17_PCLK_CAN1) == rate);
+					assert(SystemPeriphClockGet(LPC17_PCLK_CAN2) == rate);
+					assert(SystemPeriphClockGet(LPC17_PCLK_ACF) == rate);
+				}
+				if (field < 16)
+				{
+					assert((LPC_SC->PCLKSEL0 & ~mask) == (before.PCLKSEL0 & ~mask));
+					before.PCLKSEL0 = LPC_SC->PCLKSEL0;
+				}
+				else
+				{
+					assert((LPC_SC->PCLKSEL1 & ~mask) == (before.PCLKSEL1 & ~mask));
+					before.PCLKSEL1 = LPC_SC->PCLKSEL1;
+				}
+				assert(memcmp(&before, (const void *)LPC_SC, sizeof(before)) == 0);
+			}
+		}
+	}
+	{
+		LPC_SC_TypeDef before;
+
+		memcpy(&before, (const void *)LPC_SC, sizeof(before));
+		for (unsigned i = 0; i < sizeof(s_InvalidPclks) / sizeof(s_InvalidPclks[0]); i++)
+		{
+			assert(SystemPeriphClockSet(s_InvalidPclks[i], UINT32_MAX) == 0);
+		}
+		assert(SystemPeriphClockSet(LPC17_PCLK_RTC, 1) == 12000000);
+		assert(SystemPeriphClockSet(LPC17_PCLK_RTC, UINT32_MAX) == 12000000);
+		SystemCoreClock = 0;
+		assert(SystemPeriphClockSet(LPC17_PCLK_UART0, 1000000) == 0);
+		assert(memcmp(&before, (const void *)LPC_SC, sizeof(before)) == 0);
+	}
+	// Fractional midpoint: comparing truncated Hz would choose the wrong divider.
+	SystemCoreClock = 96000006;
+	assert(SystemPeriphClockSet(LPC17_PCLK_UART0, 18000001) == 12000000);
+	assert(((LPC_SC->PCLKSEL0 >> 6) & 3U) == 3U);
 	printf("LPC17xx clock decoding: %u errors\n", s_Errors);
 	return s_Errors != 0;
 }
