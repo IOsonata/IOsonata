@@ -6,7 +6,7 @@ Author : Hoang Nguyen Hoan          Nov. 20, 2011
 Desc   : General I/O pin control implementation specific 
 		 This file must be named iopinctrl.h no matter which target
 
-		 This is LPC11xx implementation
+		 This is LPC17xx implementation
 
 Copyright (c) 2011, I-SYST inc., all rights reserved
 
@@ -45,9 +45,9 @@ Modified by          Date              Description
 static inline void IOPinSetDir(int PortNo, int PinNo, IOPINDIR Dir)
 {
 	if (Dir == IOPINDIR_OUTPUT)
-		LPC_GPIO0[PortNo].FIODIR |= 1L << PinNo;
+		LPC_GPIO0[PortNo].FIODIR |= 1UL << PinNo;
 	else if (Dir == IOPINDIR_INPUT)
-		LPC_GPIO0[PortNo].FIODIR &= ~(1L << PinNo);
+		LPC_GPIO0[PortNo].FIODIR &= ~(1UL << PinNo);
 }
 
 static inline int IOPinRead(int PortNo, int PinNo)
@@ -58,17 +58,17 @@ static inline int IOPinRead(int PortNo, int PinNo)
 
 static inline void IOPinSet(int PortNo, int PinNo)
 {
-	LPC_GPIO0[PortNo].FIOSET = (1 << PinNo);
+	LPC_GPIO0[PortNo].FIOSET = (1UL << PinNo);
 }
 
 static inline void IOPinClear(int PortNo, int PinNo)
 {
-	LPC_GPIO0[PortNo].FIOCLR = (1 << PinNo);
+	LPC_GPIO0[PortNo].FIOCLR = (1UL << PinNo);
 }
 
 static inline void IOPinToggle(int PortNo, int PinNo)
 {
-	LPC_GPIO0[PortNo].FIOPIN = LPC_GPIO0[PortNo].FIOPIN ^ (1 << PinNo);
+	LPC_GPIO0[PortNo].FIOPIN = LPC_GPIO0[PortNo].FIOPIN ^ (1UL << PinNo);
 }
 
 static inline uint32_t IOPinReadPort(int PortNo)
@@ -88,7 +88,7 @@ static inline void IOPinWrite8Port(int PortNo, uint8_t Data)
 
 static inline void IOPinWrite16Port(int PortNo, uint16_t Data)
 {
-	LPC_GPIO0[PortNo].FIOPINL = Data & 0xFF;
+	LPC_GPIO0[PortNo].FIOPINL = Data;
 }
 
 static inline void IOPinWrite32Port(int PortNo, uint32_t Data)

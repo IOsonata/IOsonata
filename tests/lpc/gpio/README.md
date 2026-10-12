@@ -1,6 +1,13 @@
-# LPC11Uxx GPIO checks and pin-map migration
+# LPC GPIO checks and pin-map migration
 
 Run `python3 tests/lpc/gpio/run.py` on Linux with Python 3, gcc and g++.
+The LPC17xx control test checks byte, halfword and word port writes against
+the vendor GPIO register declarations on all five ports. Halfword writes retain
+all 16 supplied bits and preserve the upper 16 pins. P1.31 checks exercise
+unsigned masks in direction, set, clear and toggle helpers. These tests run as
+C and C++ at O0 and O2 with UBSan; mapped memory does not model FIOSET/FIOCLR
+side effects, FIOMASK, pin muxing or electrical behavior.
+
 The real driver is compiled as C and C++ at O0 and O2 with UBSan. Tests map
 peripheral memory using the vendor CMSIS declarations and the UART tests' core
 shim. They check GPIO/IOCON clock enable, UART board muxing, all IOCON addresses,
