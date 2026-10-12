@@ -88,7 +88,6 @@ The internal memory is read memory mapped. Shared helpers:
 | `ARM/ST/src/dfu_stm32.cpp` | STM32F0, F4, L4, L4+, WBA |
 | `ARM/Microchip/SAM4E/src/dfu_sam4e.cpp` | SAM4E (EEFC) |
 | `ARM/Microchip/SAM4L/src/dfu_sam4l.cpp` | SAM4L (FLASHCALW) |
-| `ARM/NXP/LPC11xx/src/dfu_lpc11uxx.cpp` | LPC11U (IAP, RAM vector remap) |
 | `ARM/NXP/LPC17xx/src/dfu_lpc17xx.cpp` | LPC17 (IAP) |
 | `ARM/NXP/LPC546xx/src/dfu_lpc546xx.cpp` | LPC546xx (ROM IAP) |
 | `ARM/Renesas/RE01/src/dfu_re01.cpp` | RE01 (flash sequencer) |
@@ -141,7 +140,6 @@ and application scripts both stop their RAM at `__dfu_flag`.
 | STM32WBA5x | 0x8000000, 48 KB | 464 KB | 472 KB | BLE (no lib project, no UART driver yet) |
 | SAM4E16E | 0x400000, 48 KB | 968 KB | none | wire |
 | SAM4L x2 / x4 / x8 | 0x0, 35 / 48 / 48 KB | 88 / 204 / 460 KB | none | wire |
-| LPC11U35 | 0x0, 36 KB | 24 KB | none | wire |
 | LPC1769 | 0x0, 48 KB | 460 KB | none | wire |
 | LPC54605 | 0x0, 64 KB | 416 KB | none | wire (no UART driver yet) |
 | RE01 1500 KB | 0x0, 64 KB | 1440 KB | none | wire |
@@ -286,3 +284,7 @@ the boot and the SoftDevice.
 | Boot machine code | `tests/dfu/boot_emu*.py`: the cross built `DfuBoot` ELF run in an ARM or RISC-V emulator with a model of the memory controller, per family (Nordic, STM32, SAM4, LPC, Renesas) |
 
 Nothing here has been run on hardware.
+
+LPC11U35 uses its ROM DFU. The software DfuBoot target and slot layouts are
+not provided because of its limited memory budget; applications use
+ARM/NXP/LPC11xx/ldscript/gcc_lpc11u35.ld and start at flash address zero.
