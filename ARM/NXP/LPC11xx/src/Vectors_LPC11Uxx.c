@@ -37,6 +37,7 @@ Modified by          Date              Description
 
 extern unsigned long __StackTop;
 extern void ResetEntry(void);
+extern void __valid_user_code_checksum(void) __attribute__((weak));
 
 void DEF_IRQHandler(void) { while(1); }
 __attribute__((weak, alias("DEF_IRQHandler"))) void NMI_Handler(void);
@@ -86,7 +87,7 @@ void (* const __Vectors[])(void) =
 	0,
 	0,
 	0,
-	(void (*) )0xefffd16d,		// Checksum value
+	__valid_user_code_checksum,	// Checksum of the 7 words above
 	0, 0, 0,
 	SVC_Handler,
 	0,

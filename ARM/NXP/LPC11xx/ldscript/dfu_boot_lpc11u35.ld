@@ -1,8 +1,8 @@
 /* Stage 0 DFU boot, LPC11U35.
  *
  * The boot ROM starts the image at 0 when word 7 of its vector table makes
- * the first eight words sum to zero; the flash programmer writes that word,
- * as for every LPC image.
+ * the first eight words sum to zero; this script calculates that word
+ * from the linked stack top and handler addresses.
  *
  * DfuTgtStart maps RAM over the first 512 bytes before it jumps, so its code
  * has to be above them, which the end of this script checks.
@@ -58,6 +58,11 @@ SECTIONS
 } INSERT BEFORE .bss;
 
 INCLUDE "gcc_arm_flash.ld"
+
+/* Cortex-M0 vector words 4 to 6 are zero. Include the Thumb bit for each
+ * handler, following the LPC546xx linker checksum convention. */
+__valid_user_code_checksum = 0 - (__StackTop + (ResetEntry + 1) +
+								  (NMI_Handler + 1) + (HardFault_Handler + 1));
 
 /* SYSMEMREMAP maps RAM over the first 512 bytes: the code that runs after
  * the remap, the end of DfuTgtStart, has to be above them. */

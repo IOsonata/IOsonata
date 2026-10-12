@@ -27,5 +27,10 @@ MEMORY
 
 INCLUDE "gcc_arm_flash.ld"
 
+/* Cortex-M0 vector words 4 to 6 are zero. Include the Thumb bit for each
+ * handler, following the LPC546xx linker checksum convention. */
+__valid_user_code_checksum = 0 - (__StackTop + (ResetEntry + 1) +
+								  (NMI_Handler + 1) + (HardFault_Handler + 1));
+
 
 
