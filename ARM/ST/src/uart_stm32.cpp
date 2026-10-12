@@ -28,7 +28,8 @@
 		HSI16 for the rates they can make.
 
 		TxData puts the data in the TX CFIFO, then starts TX if it is ready.
-		RxData reads from the RX CFIFO, then moves what the hardware holds.
+		RxData reads from the RX CFIFO, then, without the interrupt, moves
+		what the hardware holds.
 
 		bIntMode false : polling, TxData and RxData move the CFIFO data to and
 		                 from the data register
@@ -204,9 +205,15 @@ SOFTWARE.
 #define ST_UART_DMA_RX_SIZE		256
 #define ST_UART_DMA_CFIFO_SIZE	CFIFO_MEMSIZE(ST_UART_DMA_TX_SIZE)
 #define ST_UART_DMA_RX_CFIFO_SIZE	CFIFO_MEMSIZE(ST_UART_DMA_RX_SIZE)
-// RX DMA ring, power of 2. Moved into the RX CFIFO at half and full ring, on
-// IDLE and by RxData.
+// RX DMA ring, power of 2. Moved into the RX CFIFO at half and full ring and
+// on IDLE, or by RxData without the interrupt.
 #define ST_UART_DMA_RX_RING		64
+// Most bytes TxData and RxData copy to or from a CFIFO with interrupts
+// disabled. Most USARTs have a single RDR, the RX interrupt must read it
+// within one character time or the next character is lost: 480 cycles at
+// 1 Mbaud on a 48 MHz Cortex-M0. With 8 bytes the copy keeps interrupts
+// disabled for at most about 260 cycles there.
+#define ST_UART_COPY_MAX		8
 
 #pragma pack(push, 4)
 
@@ -407,7 +414,11 @@ static void *Stm32UartGetHandle(DevIntrf_t * const pDev);
 // RX DMA runs in circular mode over RxDmaRing, CNDTR gives the write
 // position. Move what it wrote since the last call into the RX CFIFO, as
 // nRFUARTRxDmaEnd does with its DMA buffer. A full FIFO drops the rest.
-// Interrupts disabled. Returns the number of bytes moved.
+// One caller context: the DMA and IDLE interrupts with the interrupt
+// enabled, RxData without it. The bytes are written before they are
+// published, the consumer may read the FIFO at the same time. The DMA
+// copies RDR as is, with 7 data bits the 8th bit is masked here. Returns
+// the number of bytes moved.
 static int Stm32UartDmaRxMove(Stm32UartDev_t * const pDev)
 {
 	UARTDev_t *dev = pDev->pUartDev;
@@ -417,7 +428,7 @@ static int Stm32UartDmaRxMove(Stm32UartDev_t * const pDev)
 	while (pDev->RxDmaRead != write)
 	{
 		int l = (write > pDev->RxDmaRead ? write : ST_UART_DMA_RX_RING) - pDev->RxDmaRead;
-		uint8_t *p = CFifoPutMultiple(dev->hRxFifo, &l);
+		uint8_t *p = CFifoResvMultiple(dev->hRxFifo, &l);
 		if (p == NULL)
 		{
 			dev->RxDropCnt += (write - pDev->RxDmaRead) & (ST_UART_DMA_RX_RING - 1U);
@@ -425,6 +436,14 @@ static int Stm32UartDmaRxMove(Stm32UartDev_t * const pDev)
 			break;
 		}
 		memcpy(p, &pDev->RxDmaRing[pDev->RxDmaRead], l);
+		if (pDev->RxDataMask != 0xFFU)
+		{
+			for (int i = 0; i < l; i++)
+			{
+				p[i] &= pDev->RxDataMask;
+			}
+		}
+		CFifoPutMultiple(dev->hRxFifo, &l);
 		pDev->RxDmaRead = (pDev->RxDmaRead + l) & (ST_UART_DMA_RX_RING - 1U);
 		cnt += l;
 	}
@@ -863,8 +882,8 @@ static bool Stm32UartStartRx(DevIntrf_t * const pDev, uint32_t DevAddr)
 }
 
 // Without the interrupt, RDR goes in the RX CFIFO as the interrupt would put
-// it, while a character is there and the FIFO takes it. Interrupts
-// disabled.
+// it, while a character is there and the FIFO takes it. Called by RxData,
+// the only producer in polling mode.
 static void Stm32UartPollRx(Stm32UartDev_t * const pDev)
 {
 	UARTDev_t *dev = pDev->pUartDev;
@@ -918,7 +937,8 @@ static void Stm32UartPollRx(Stm32UartDev_t * const pDev)
 static int Stm32UartRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int Bufflen)
 {
 	Stm32UartDev_t *dev = (Stm32UartDev_t *)pDev->pDevData;
-	hCFifo_t fifo = dev->pUartDev->hRxFifo;
+	UARTDev_t *udev = dev->pUartDev;
+	hCFifo_t fifo = udev->hRxFifo;
 	int cnt = 0;
 
 	if (pBuff == NULL || Bufflen <= 0)
@@ -926,41 +946,52 @@ static int Stm32UartRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int Bufflen)
 		return 0;
 	}
 
-	// Read from the RX CFIFO first
-	uint32_t state = DisableInterrupt();
-	while (Bufflen > 0)
+	// Read from the RX CFIFO first. CFifoGetMultiple frees the slots before
+	// they are copied, interrupts are disabled until the copy is done so that
+	// the interrupt cannot put over them. In pieces of at most
+	// ST_UART_COPY_MAX bytes to keep the RX interrupt latency short.
+	while (cnt < Bufflen)
 	{
-		int l = Bufflen;
+		int l = Bufflen - cnt < ST_UART_COPY_MAX ? Bufflen - cnt : ST_UART_COPY_MAX;
+		uint32_t state = DisableInterrupt();
 		uint8_t *p = CFifoGetMultiple(fifo, &l);
+		if (p != NULL)
+		{
+			memcpy(pBuff + cnt, p, l);
+		}
+		EnableInterrupt(state);
 		if (p == NULL)
 		{
 			break;
 		}
-		memcpy(pBuff, p, l);
 		cnt += l;
-		pBuff += l;
-		Bufflen -= l;
 	}
-	dev->pUartDev->bRxReady = CFifoUsed(fifo) != 0;
-	EnableInterrupt(state);
 
-	// Then what the hardware received goes in the FIFO for the next read,
-	// as the interrupt would do. DMA: the ring since the last move.
-	// Without the interrupt: RDR.
-#if defined(STM32F030x8)
-	if (pDev->bDma)
+	// Cleared first, then set again if a byte is left. A byte put by the
+	// interrupt in between sets it too.
+	udev->bRxReady = false;
+	if (CFifoUsed(fifo) != 0)
 	{
-		state = DisableInterrupt();
-		Stm32UartDmaRxMove(dev);
-		EnableInterrupt(state);
+		udev->bRxReady = true;
 	}
-	else
-#endif
+
+	// Then, without the interrupt, what the hardware received goes in the
+	// FIFO for the next read, as the interrupt would do. DMA: the ring since
+	// the last move. Otherwise RDR. With the interrupt, the RXNE interrupt or
+	// the DMA half, full and IDLE interrupts do it, they are the only
+	// producer.
 	if (!pDev->bIntEn)
 	{
-		state = DisableInterrupt();
-		Stm32UartPollRx(dev);
-		EnableInterrupt(state);
+#if defined(STM32F030x8)
+		if (pDev->bDma)
+		{
+			Stm32UartDmaRxMove(dev);
+		}
+		else
+#endif
+		{
+			Stm32UartPollRx(dev);
+		}
 	}
 
 	return cnt;
@@ -973,6 +1004,37 @@ static void Stm32UartStopRx(DevIntrf_t * const pDev)
 static bool Stm32UartStartTx(DevIntrf_t * const pDev, uint32_t DevAddr)
 {
 	return true;
+}
+
+// Several bytes into the TX CFIFO. CFifoPutMultiple publishes the slots
+// before they are written, so interrupts are disabled for the copy, in
+// pieces of at most ST_UART_COPY_MAX bytes to keep the RX interrupt latency
+// short. Not inlined in TxData, which keeps the one byte path short.
+// Returns the number of bytes put.
+__attribute__((noinline)) static int Stm32UartTxPut(hCFifo_t const hFifo, uint8_t const *pData, int Datalen)
+{
+	int cnt = 0;
+
+	while (Datalen > 0)
+	{
+		int l = Datalen < ST_UART_COPY_MAX ? Datalen : ST_UART_COPY_MAX;
+		uint32_t state = DisableInterrupt();
+		uint8_t *p = CFifoPutMultiple(hFifo, &l);
+		if (p != NULL)
+		{
+			memcpy(p, pData, l);
+		}
+		EnableInterrupt(state);
+		if (p == NULL)
+		{
+			break;
+		}
+		Datalen -= l;
+		pData += l;
+		cnt += l;
+	}
+
+	return cnt;
 }
 
 static int Stm32UartTxData(DevIntrf_t * const pDev, uint8_t const *pData, int Datalen)
@@ -989,29 +1051,14 @@ static int Stm32UartTxData(DevIntrf_t * const pDev, uint8_t const *pData, int Da
 	}
 
 	// The data goes in the TX CFIFO first. CFifoPutByte writes the byte
-	// before it is published. CFifoPutMultiple publishes the slots before
-	// they are written, so interrupts are disabled for the copy.
+	// before it is published.
 	if (Datalen == 1)
 	{
 		cnt = CFifoPutByte(fifo, *pData) ? 1 : 0;
 	}
 	else
 	{
-		state = DisableInterrupt();
-		while (Datalen > 0)
-		{
-			int l = Datalen;
-			uint8_t *p = CFifoPutMultiple(fifo, &l);
-			if (p == NULL)
-			{
-				break;
-			}
-			memcpy(p, pData, l);
-			Datalen -= l;
-			pData += l;
-			cnt += l;
-		}
-		EnableInterrupt(state);
+		cnt = Stm32UartTxPut(fifo, pData, Datalen);
 	}
 
 	// Then start TX if it is ready. Otherwise the running interrupt or DMA
