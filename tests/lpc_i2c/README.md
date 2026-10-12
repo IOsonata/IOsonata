@@ -21,7 +21,8 @@ an active transaction also leave the current rate unchanged.
 Shared operations are in ARM/NXP/src/i2c_lpc_master.cpp. The family file
 owns clocks, reset and pin validation, and i2c_lpc_target.h accesses the
 vendor CMSIS register type. LPC11Uxx and LPC17xx share the polling master.
-The excluded legacy i2c_lpcxx.c is no longer linked by either library.
+The obsolete i2c_lpcxx.c/.h implementation and custom register map have been
+removed. Project files must use i2c_lpc_master.cpp and the family adapter.
 LPC546xx uses a different Flexcomm
 I2C controller and keeps its existing driver.
 
