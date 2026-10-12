@@ -3,6 +3,8 @@
  */
 #include <assert.h>
 #include <stdint.h>
+#include <stddef.h>
+#include <limits.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/mman.h>
@@ -11,6 +13,144 @@
 #include "ibb_mbedpresso.h"
 
 static const IOPinCfg_t s_UartPins[] = UART_PINS;
+static unsigned s_Priority;
+static bool s_IrqEnabled;
+static unsigned s_CallbackCount[46];
+static bool s_CancelSecond;
+static bool s_RepeatEdge;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+void EINT3_IRQHandler(void);
+#ifdef __cplusplus
+}
+#endif
+
+static void WriteStatus(size_t Offset, uint32_t Value)
+{
+	memcpy((uint8_t *)LPC_GPIOINT + Offset, &Value, sizeof(Value));
+}
+
+static void ApplyClear(void)
+{
+	WriteStatus(offsetof(LPC_GPIOINT_TypeDef, IO0IntStatR), LPC_GPIOINT->IO0IntStatR & ~LPC_GPIOINT->IO0IntClr);
+	WriteStatus(offsetof(LPC_GPIOINT_TypeDef, IO0IntStatF), LPC_GPIOINT->IO0IntStatF & ~LPC_GPIOINT->IO0IntClr);
+	WriteStatus(offsetof(LPC_GPIOINT_TypeDef, IO2IntStatR), LPC_GPIOINT->IO2IntStatR & ~LPC_GPIOINT->IO2IntClr);
+	WriteStatus(offsetof(LPC_GPIOINT_TypeDef, IO2IntStatF), LPC_GPIOINT->IO2IntStatF & ~LPC_GPIOINT->IO2IntClr);
+	LPC_GPIOINT->IO0IntClr = 0;
+	LPC_GPIOINT->IO2IntClr = 0;
+}
+
+void NVIC_SetPriority(IRQn_Type Irq, uint32_t Priority)
+{
+	assert(Irq == EINT3_IRQn);
+	s_Priority = Priority;
+}
+
+void NVIC_EnableIRQ(IRQn_Type Irq)
+{
+	assert(Irq == EINT3_IRQn);
+	s_IrqEnabled = true;
+	ApplyClear();
+}
+
+void NVIC_DisableIRQ(IRQn_Type Irq)
+{
+	assert(Irq == EINT3_IRQn);
+	s_IrqEnabled = false;
+	ApplyClear();
+}
+
+static void PinCallback(int IntNo, void *pContext)
+{
+	assert(pContext == &s_CallbackCount[IntNo]);
+	assert((IntNo < 32 ? LPC_GPIOINT->IO0IntClr : LPC_GPIOINT->IO2IntClr) == (1U << (IntNo % 32)));
+	ApplyClear();
+	s_CallbackCount[IntNo]++;
+	if (s_RepeatEdge && IntNo == 0)
+	{
+		WriteStatus(offsetof(LPC_GPIOINT_TypeDef, IO0IntStatR), 1);
+	}
+	if (s_CancelSecond && IntNo == 0)
+	{
+		IOPinDisableInterrupt(45);
+	}
+}
+
+static void CheckInterrupts(void)
+{
+	unsigned char before[sizeof(LPC_GPIOINT_TypeDef)];
+
+	memset((void *)LPC_GPIOINT, 0, sizeof(LPC_GPIOINT_TypeDef));
+	assert(IOPinAllocateInterrupt(INT_MAX, 0, 0, IOPINSENSE_TOGGLE, PinCallback, &s_CallbackCount[0]) == 0);
+	assert(s_IrqEnabled && s_Priority == 31);
+	assert(IOPinAllocateInterrupt(-1, 2, 13, IOPINSENSE_LOW_TRANSITION, PinCallback, &s_CallbackCount[45]) == 45);
+	assert(s_Priority == 0);
+	memcpy(before, (const void *)LPC_GPIOINT, sizeof(before));
+	assert(!IOPinEnableInterrupt(0, 1, 0, 0, IOPINSENSE_TOGGLE, PinCallback, NULL));
+	assert(!IOPinEnableInterrupt(1, 1, 0, 0, IOPINSENSE_TOGGLE, PinCallback, NULL));
+	assert(IOPinAllocateInterrupt(1, 0, 12, IOPINSENSE_TOGGLE, PinCallback, NULL) == -1);
+	assert(IOPinAllocateInterrupt(1, -1, 0, IOPINSENSE_TOGGLE, PinCallback, NULL) == -1);
+	assert(IOPinAllocateInterrupt(1, 2, 32, IOPINSENSE_TOGGLE, PinCallback, NULL) == -1);
+	assert(IOPinAllocateInterrupt(1, 0, 1, IOPINSENSE_DISABLE, PinCallback, NULL) == -1);
+	assert(IOPinAllocateInterrupt(1, 0, 1, IOPINSENSE_TOGGLE, NULL, NULL) == -1);
+	IOPinDisableInterrupt(INT_MIN);
+	IOPinDisableInterrupt(46);
+	assert(memcmp(before, (const void *)LPC_GPIOINT, sizeof(before)) == 0);
+	WriteStatus(offsetof(LPC_GPIOINT_TypeDef, IO0IntStatR), 1);
+	WriteStatus(offsetof(LPC_GPIOINT_TypeDef, IO0IntStatF), 1);
+	WriteStatus(offsetof(LPC_GPIOINT_TypeDef, IO2IntStatF), 1U << 13);
+	EINT3_IRQHandler();
+	ApplyClear();
+	assert(s_CallbackCount[0] == 1 && s_CallbackCount[45] == 1);
+	EINT3_IRQHandler();
+	assert(s_CallbackCount[0] == 1 && s_CallbackCount[45] == 1);
+	// A new edge arriving during the callback survives for the next dispatch.
+	s_RepeatEdge = true;
+	WriteStatus(offsetof(LPC_GPIOINT_TypeDef, IO0IntStatR), 1);
+	EINT3_IRQHandler();
+	s_RepeatEdge = false;
+	assert(LPC_GPIOINT->IO0IntStatR == 1);
+	EINT3_IRQHandler();
+	assert(s_CallbackCount[0] == 3);
+	// Callback cancellation must suppress a later pending pin in this IRQ.
+	s_CancelSecond = true;
+	WriteStatus(offsetof(LPC_GPIOINT_TypeDef, IO0IntStatR), 1);
+	WriteStatus(offsetof(LPC_GPIOINT_TypeDef, IO2IntStatF), 1U << 13);
+	EINT3_IRQHandler();
+	s_CancelSecond = false;
+	assert(s_CallbackCount[0] == 4 && s_CallbackCount[45] == 1);
+	assert(s_IrqEnabled && s_Priority == 31);
+	IOPinSetSense(0, 0, IOPINSENSE_DISABLE);
+	WriteStatus(offsetof(LPC_GPIOINT_TypeDef, IO0IntStatR), 1);
+	EINT3_IRQHandler();
+	assert(s_CallbackCount[0] == 4);
+	assert(LPC_GPIOINT->IO0IntClr == 1);
+	ApplyClear();
+	assert(IOPinAllocateInterrupt(1, 0, 0, IOPINSENSE_TOGGLE, PinCallback, NULL) == -1);
+	IOPinSetSense(0, 0, IOPINSENSE_HIGH_TRANSITION);
+	WriteStatus(offsetof(LPC_GPIOINT_TypeDef, IO0IntStatR), 1);
+	EINT3_IRQHandler();
+	assert(s_CallbackCount[0] == 5);
+	IOPinDisableInterrupt(0);
+	assert(!s_IrqEnabled);
+	// Every hardware-supported pin has its own callback slot.
+	for (int id = 0; id < 46; id++)
+	{
+		bool valid = id <= 11 || (id >= 15 && id <= 30) || id >= 32;
+		int result = IOPinAllocateInterrupt(7, id < 32 ? 0 : 2, id % 32,
+			IOPINSENSE_TOGGLE, PinCallback, &s_CallbackCount[id]);
+
+		assert(result == (valid ? id : -1));
+	}
+	for (int id = 0; id < 46; id++)
+	{
+		IOPinDisableInterrupt(id);
+	}
+	assert(!s_IrqEnabled);
+}
+
 
 static void CheckSense(void)
 {
@@ -120,6 +260,7 @@ int main(void)
 	assert(mmap((void *)(LPC_GPIOINT_BASE & ~0xFFFUL), 0x1000, PROT_READ | PROT_WRITE,
 		MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0) == (void *)(LPC_GPIOINT_BASE & ~0xFFFUL));
 	CheckSense();
+	CheckInterrupts();
 	CheckMux();
 
 	// Narrow writes must keep every supplied bit and preserve higher pins.

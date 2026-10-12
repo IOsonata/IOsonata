@@ -35,11 +35,21 @@ Modified by          Date              Description
 #include "LPC17xx.h"
 #include "coredev/iopincfg.h"
 
+#define LPC17_GPIO_IRQ_COUNT 46U
+
+typedef struct {
+	IOPinEvtHandler_t Handler;
+	void *pContext;
+	uint32_t Priority;
+} Lpc17GpioHook_t;
+
 typedef struct {
 	volatile uint32_t *pSelect[2];
 	volatile uint32_t *pMode[2];
 	volatile uint32_t *pOpenDrain;
 } Lpc17PinRegs_t;
+
+static Lpc17GpioHook_t s_GpioHook[LPC17_GPIO_IRQ_COUNT];
 
 static const Lpc17PinRegs_t s_PinRegs[] = {
 	{{&LPC_PINCON->PINSEL0, &LPC_PINCON->PINSEL1},
@@ -157,3 +167,194 @@ void IOPinSetSense(int PortNo, int PinNo, IOPINSENSE Sense)
 	}
 	EnableInterrupt(state);
 }
+
+// Fixed IDs follow Port 0 pins, then Port 2 pins starting at 32.
+static bool Lpc17GpioIrqValid(unsigned IntNo)
+{
+	return (IntNo < 32U && ((1UL << IntNo) & 0x7FFF8FFFU) != 0) ||
+		(IntNo >= 32U && IntNo < LPC17_GPIO_IRQ_COUNT);
+}
+
+// Caller holds the interrupt lock. All GPIO callbacks share EINT3.
+static void Lpc17GpioIrqPriority(void)
+{
+	uint32_t priority = (1U << __NVIC_PRIO_BITS);
+
+	for (unsigned i = 0; i < LPC17_GPIO_IRQ_COUNT; i++)
+	{
+		if (s_GpioHook[i].Handler != NULL && s_GpioHook[i].Priority < priority)
+		{
+			priority = s_GpioHook[i].Priority;
+		}
+	}
+	if (priority < (1U << __NVIC_PRIO_BITS))
+	{
+		NVIC_SetPriority(EINT3_IRQn, priority);
+		NVIC_EnableIRQ(EINT3_IRQn);
+	}
+	else
+	{
+		NVIC_DisableIRQ(EINT3_IRQn);
+	}
+}
+
+bool IOPinEnableInterrupt(int IntNo, int IntPrio, uint32_t PortNo, uint32_t PinNo,
+	IOPINSENSE Sense, IOPinEvtHandler_t pEvtCB, void *pCtx)
+{
+	uint32_t state;
+	uint32_t mask;
+	int maxprio = (1U << __NVIC_PRIO_BITS) - 1U;
+
+	if ((PortNo != 0U && PortNo != 2U) || PinNo >= 32U ||
+		!Lpc17GpioIrqValid((unsigned)IntNo) ||
+		(unsigned)IntNo != (PortNo == 0U ? PinNo : 32U + PinNo) ||
+		pEvtCB == NULL || (Sense != IOPINSENSE_HIGH_TRANSITION &&
+		Sense != IOPINSENSE_LOW_TRANSITION && Sense != IOPINSENSE_TOGGLE))
+	{
+		return false;
+	}
+	if (IntPrio < 0)
+	{
+		IntPrio = 0;
+	}
+	else if (IntPrio > maxprio)
+	{
+		IntPrio = maxprio;
+	}
+	state = DisableInterrupt();
+	if (s_GpioHook[IntNo].Handler != NULL)
+	{
+		EnableInterrupt(state);
+		return false;
+	}
+	IOPinSetSense((int)PortNo, (int)PinNo, IOPINSENSE_DISABLE);
+	mask = 1UL << PinNo;
+	if (PortNo == 0U)
+	{
+		LPC_GPIOINT->IO0IntClr = mask;
+	}
+	else
+	{
+		LPC_GPIOINT->IO2IntClr = mask;
+	}
+	s_GpioHook[IntNo].pContext = pCtx;
+	s_GpioHook[IntNo].Priority = (uint32_t)IntPrio;
+	s_GpioHook[IntNo].Handler = pEvtCB;
+	IOPinSetSense((int)PortNo, (int)PinNo, Sense);
+	Lpc17GpioIrqPriority();
+	EnableInterrupt(state);
+
+	return true;
+}
+
+int IOPinAllocateInterrupt(int IntPrio, int PortNo, int PinNo, IOPINSENSE Sense,
+	IOPinEvtHandler_t pEvtCB, void *pCtx)
+{
+	int intno;
+
+	if ((PortNo != 0 && PortNo != 2) || (unsigned)PinNo >= 32U)
+	{
+		return -1;
+	}
+	intno = PortNo == 0 ? PinNo : 32 + PinNo;
+	if (!IOPinEnableInterrupt(intno, IntPrio, (uint32_t)PortNo, (uint32_t)PinNo,
+		Sense, pEvtCB, pCtx))
+	{
+		return -1;
+	}
+
+	return intno;
+}
+
+void IOPinDisableInterrupt(int IntNo)
+{
+	uint32_t state;
+	uint32_t mask;
+
+	if (!Lpc17GpioIrqValid((unsigned)IntNo))
+	{
+		return;
+	}
+	state = DisableInterrupt();
+	if (s_GpioHook[IntNo].Handler != NULL)
+	{
+		mask = 1UL << ((unsigned)IntNo % 32U);
+		IOPinSetSense(IntNo < 32 ? 0 : 2, IntNo % 32, IOPINSENSE_DISABLE);
+		if (IntNo < 32)
+		{
+			LPC_GPIOINT->IO0IntClr = mask;
+		}
+		else
+		{
+			LPC_GPIOINT->IO2IntClr = mask;
+		}
+		s_GpioHook[IntNo].Handler = NULL;
+		s_GpioHook[IntNo].pContext = NULL;
+		Lpc17GpioIrqPriority();
+	}
+	EnableInterrupt(state);
+}
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+// This driver owns EINT3; the separate EINT3 pin function must remain disabled.
+void EINT3_IRQHandler(void)
+{
+	for (unsigned i = 0; i < LPC17_GPIO_IRQ_COUNT; i++)
+	{
+		uint32_t pending;
+		uint32_t rising;
+		uint32_t falling;
+		uint32_t mask;
+		uint32_t state;
+		IOPinEvtHandler_t handler = NULL;
+		void *context = NULL;
+
+		if (!Lpc17GpioIrqValid(i))
+		{
+			continue;
+		}
+		mask = 1UL << (i % 32U);
+		state = DisableInterrupt();
+		if (i < 32U)
+		{
+			rising = LPC_GPIOINT->IO0IntStatR;
+			falling = LPC_GPIOINT->IO0IntStatF;
+			pending = ((rising & LPC_GPIOINT->IO0IntEnR) |
+				(falling & LPC_GPIOINT->IO0IntEnF)) & mask;
+			if (((rising | falling) & mask) != 0)
+			{
+				LPC_GPIOINT->IO0IntClr = mask;
+			}
+		}
+		else
+		{
+			rising = LPC_GPIOINT->IO2IntStatR;
+			falling = LPC_GPIOINT->IO2IntStatF;
+			pending = ((rising & LPC_GPIOINT->IO2IntEnR) |
+				(falling & LPC_GPIOINT->IO2IntEnF)) & mask;
+			if (((rising | falling) & mask) != 0)
+			{
+				LPC_GPIOINT->IO2IntClr = mask;
+			}
+		}
+		if (pending != 0)
+		{
+			handler = s_GpioHook[i].Handler;
+			context = s_GpioHook[i].pContext;
+		}
+		EnableInterrupt(state);
+		// Clear before callback. Read each next pin live so a callback can
+		// disable or reallocate it without receiving an old snapshotted edge.
+		if (handler != NULL)
+		{
+			handler((int)i, context);
+		}
+	}
+}
+
+#ifdef __cplusplus
+}
+#endif

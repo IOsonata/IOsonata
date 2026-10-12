@@ -31,6 +31,20 @@ static const IOPinCfg_t s_Pins[2][4] = {
 };
 uint32_t SystemCoreClock = 120000000;
 
+// Polling SSP initialization must not enable IRQs or set GPIO priorities.
+void NVIC_SetPriority(IRQn_Type Irq, uint32_t Priority)
+{
+	(void)Irq;
+	(void)Priority;
+	assert(false);
+}
+
+void NVIC_EnableIRQ(IRQn_Type Irq)
+{
+	(void)Irq;
+	assert(false);
+}
+
 void NVIC_DisableIRQ(IRQn_Type Irq)
 {
 	s_Disabled |= 1U << (Irq == SSP0_IRQn ? 0 : 1);

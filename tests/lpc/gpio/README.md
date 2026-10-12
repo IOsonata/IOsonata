@@ -102,6 +102,28 @@ availability remains the caller's responsibility. Reserved pins, other ports
 and invalid sense values are ignored. Updates preserve unrelated enable bits
 and pending events under the existing saved-interrupt-state helper. The caller
 configures pin mux/direction separately. This API does not allocate callbacks
-or enable NVIC; LPC17xx callback allocation and dispatch remain unimplemented.
+or enable NVIC; callback registration manages the shared interrupt.
 C/C++ tests cover every pin and mode, invalid inputs and full register-block
 preservation at O0/O2 with UBSan.
+
+LPC17xx GPIO callback registration uses fixed IntNo values: P0.n uses n, and
+P2.n uses 32+n. All 42 supported pins can be registered independently. Explicit
+IOPinEnableInterrupt requires the matching IntNo; allocation returns it. A
+second registration for the same pin fails until disabled. SetSense(DISABLE)
+pauses detection while retaining the registration. Pin mux/direction must be
+configured separately, and package pin availability remains the caller's job.
+
+EINT3 is shared by all GPIO callbacks. The driver selects the most urgent
+registered priority, clamped to 0..31, and disables NVIC only after the last
+registration is released. It owns the EINT3 vector: the separate EINT3 pin
+function and another EINT3 handler must not be enabled alongside this driver.
+Pending GPIO status is cleared before calling a handler. Both edges on one pin
+produce one callback per visit; a new edge during that callback remains pending.
+Each next pin is checked live so callbacks may disable or reallocate other pins.
+Latched status for disabled or unregistered pins is drained without callbacks.
+
+Host tests cover both ports, simultaneous edges, priority clamping and shared
+priority changes, registration collisions, every supported slot, release, pause,
+callback cancellation and edges arriving during callbacks. The mmap fixture
+emulates W1C at callback/NVIC boundaries; it does not model electrical timing
+or interrupt preemption. C/C++ builds exercise the EINT3 symbol at O0/O2.
