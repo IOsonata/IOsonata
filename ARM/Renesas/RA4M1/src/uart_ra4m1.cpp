@@ -99,6 +99,10 @@ SOFTWARE.
 // Most bytes of one TX DMA block, the normal mode count of DMCRA
 #define RA4M1_UART_DMA_MAX			0xFFFF
 
+// Reads of DMSTS while a transfer the channel took before DTE was cleared
+// finishes, a few bus cycles
+#define RA4M1_UART_DMA_HALT_POLLS	100
+
 // Caller of Ra4m1UartRxHw. Without the FIFO it decides when RDR is read.
 typedef enum {
 	RA4M1_UART_RX_POLL,				// Polling, RDR read with RDRF or an error flag
@@ -456,13 +460,24 @@ static void Ra4m1UartDmacStart(void)
 	R_DMA->DMAST = R_DMA_DMAST_DMST_Msk;
 }
 
+// DTE cleared. A transfer the channel already took still finishes, DMSTS.ACT
+// is set until then. DMCRA and the channel settings are stable once it is
+// cleared.
+static void Ra4m1UartDmaHalt(R_DMAC0_Type * const pDma)
+{
+	pDma->DMCNT = 0;
+	for (int i = 0; i < RA4M1_UART_DMA_HALT_POLLS && (pDma->DMSTS & R_DMAC0_DMSTS_ACT_Msk); i++)
+	{
+	}
+}
+
 // Channel stopped and unlinked from the TXI. A request pending in DELSR goes
 // with the link. The bytes of a running block are not released, Enable
 // flushes the TX CFIFO.
 static void Ra4m1UartDmaStop(Ra4m1UartDev_t * const pDev)
 {
 	R_ICU->DELSR[pDev->DevNo] = 0;
-	pDev->pDma->DMCNT = 0;
+	Ra4m1UartDmaHalt(pDev->pDma);
 	pDev->bDmaActive = false;
 	pDev->DmaLen = 0;
 }
@@ -556,7 +571,7 @@ static bool Ra4m1UartDmaTxStart(Ra4m1UartDev_t * const pDev)
 				// All moved, or TDR full and its move gives the next TXI
 				return true;
 			}
-			dma->DMCNT = 0;
+			Ra4m1UartDmaHalt(dma);
 			uint32_t now = dma->DMCRA;
 			if (now == left)
 			{

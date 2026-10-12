@@ -415,10 +415,11 @@ and DMA with a non-blocking FIFO. `UARTSetCtrlLineState` does nothing.
   mode, TXI with the TX FIFO empty, and start a block by setting TIE again, as
   the Renesas FSP does with a transfer instance. SCI2/9 start a
   block from the byte left in TDR, or write its first byte to TDR when TDR is
-  already empty. When the channel moves the last byte of the block during that
-  check, DTE is not set again: in normal mode a count of 0 is a transfer with
-  no end, which would send the memory after the block. RX stays on the
-  interrupt or polling: the SCI has no idle line
+  already empty. For that check the channel is stopped and DMCRA read once
+  DMSTS.ACT is cleared, a transfer the channel already took finishes after DTE
+  is cleared. When the channel moved the last byte of the block, DTE is not set
+  again: in normal mode a count of 0 is a transfer with no end, which would
+  send the memory after the block. RX stays on the interrupt or polling: the SCI has no idle line
   event to move a DMA ring to the RX CFIFO after a short burst. The DMAC module
   (MSTPA22) is started and never stopped by the driver, other drivers may use
   it. UARTInit fails if channel `DevNo` is linked to another event.
@@ -451,13 +452,15 @@ with a model of the SCI, DMAC, module stop, PRCR and ICU registers
 ERI and the DMAC transfer end are edge events that set the IR flag of their
 ICU slot, and the line can move while a handler runs. DMA runs three times,
 with a TXI arriving while DTE is cleared held in DELSR, with it lost, and held
-with the channel taking each request one register access or line step later.
-A count of 0 written with DTE set fails the test. It covers
+with the channel moving each request it took one register access or line step
+later (DMSTS.ACT set until then). A count of 0 written with DTE set, and
+channel settings written during a transfer, fail the test. It covers
 init, rate selection against every register setting, TX and RX in polling,
 interrupt, polled DMA and interrupt DMA mode on the four SCIs, idle time between
 DMA blocks, the end of a block seen late (the line moves up to 60 characters
 between TxData calls, interrupts held off), the last byte of a SCI2/9 block
-moved while the block start checks TDR, an echo loop with bursts, receive
+moved 1 to 3 register accesses after the channel took it, while the block
+start checks TDR and stops the channel, an echo loop with bursts, receive
 errors, overrun, full CFIFOs, callbacks, Disable/Enable and PowerOff. It also
 compiles the driver with GNU Arm for the Cortex-M4. It does not test exact
 timing or the electrical interface.

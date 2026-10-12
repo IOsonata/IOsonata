@@ -149,7 +149,7 @@ typedef struct {
 	uint16_t Tmd, Amd;
 	uint8_t Int, Cnt, Sts;
 	bool bPend;						// Request held in DELSR while DTE is cleared
-	bool bLate;						// Request taken at the next register access or line step
+	uint8_t Late;					// Request taken, moved after this many register accesses, at a line step
 	unsigned Moved;					// Bytes moved
 } DmacModel_t;
 
@@ -160,7 +160,7 @@ static uint32_t s_Delsr[4];
 static uint8_t s_Dmast;
 static uint32_t s_Mstpcra = 0xFFFFFFFFU;
 static bool s_DmaHold;				// A request while DTE is cleared waits in DELSR, otherwise it is lost
-static bool s_DmaLate;				// The channel takes a request one register access or line step later
+static unsigned s_DmaLate;			// Register accesses before the channel moves a request it took, 0 at once
 static bool s_StepAtCra;			// The line moves right after each read of DMCRA
 static bool s_bDmaWrite;			// SCI register written by the DMAC
 static UARTDev_t s_Uart;
@@ -296,7 +296,7 @@ static uint32_t RegRead(const void *pReg, int Id)
 			case DMAREG_AMD: return d.Amd;
 			case DMAREG_OFR: return d.Ofr;
 			case DMAREG_CNT: return d.Cnt;
-			default: return d.Sts;
+			default: return d.Sts | (d.Late ? R_DMAC0_DMSTS_ACT_Msk : 0);
 		}
 	}
 
@@ -386,8 +386,9 @@ static void RegWrite(const void *pReg, int Id, uint32_t Val)
 		DmacModel_t &d = s_Dmac[ch];
 		if (Id != DMAREG_CNT && Id != DMAREG_STS)
 		{
-			// Channel settings are written with DTE cleared
-			CHECK((d.Cnt & R_DMAC0_DMCNT_DTE_Msk) == 0);
+			// Channel settings are written with DTE cleared and no transfer
+			// in progress (DMSTS.ACT)
+			CHECK((d.Cnt & R_DMAC0_DMCNT_DTE_Msk) == 0 && d.Late == 0);
 		}
 		switch (Id)
 		{
@@ -568,26 +569,18 @@ static void RegWrite(const void *pReg, int Id, uint32_t Val)
 	}
 }
 
-// With s_DmaLate, the requests the channels took since the last register access
-// or line step are moved now. A channel stopped meanwhile keeps the request in
-// DELSR or loses it.
-static void DmaLateTake(void)
+// With s_DmaLate, a request a channel took is moved s_DmaLate register accesses
+// later, or at the next line step. It finishes even when DTE was cleared
+// meanwhile, DMSTS.ACT is set until then.
+static void DmaLateTake(bool bStep)
 {
 	for (int ch = 0; ch < 4; ch++)
 	{
 		DmacModel_t &d = s_Dmac[ch];
-		if (!d.bLate)
+		if (d.Late && (bStep || --d.Late == 0))
 		{
-			continue;
-		}
-		d.bLate = false;
-		if ((d.Cnt & R_DMAC0_DMCNT_DTE_Msk) && (s_Dmast & R_DMA_DMAST_DMST_Msk))
-		{
+			d.Late = 0;
 			DmaTransfer(ch);
-		}
-		else if (s_DmaHold)
-		{
-			d.bPend = true;
 		}
 	}
 }
@@ -597,7 +590,7 @@ static void DmaLateTake(void)
 // takes.
 static void AccessDone(void)
 {
-	DmaLateTake();
+	DmaLateTake(false);
 	UpdateIcu();
 	if (s_bInIsr && s_IsrStepEvery && ++s_IsrAccess >= s_IsrStepEvery)
 	{
@@ -697,7 +690,7 @@ static void LineStep(int u)
 	{
 		// One step of all units is one character time
 		s_IsrAccess = 0;
-		DmaLateTake();
+		DmaLateTake(true);
 	}
 	if (s_Mstpcrb & s_MstpBit[u])
 	{
@@ -845,7 +838,20 @@ static void UpdateIcu(void)
 				{
 					if (s_DmaLate)
 					{
-						d.bLate = true;
+						if (d.Late)
+						{
+							// One transfer at a time, the one in progress ends first
+							d.Late = 0;
+							DmaTransfer(ch);
+						}
+						if (d.Cnt & R_DMAC0_DMCNT_DTE_Msk)
+						{
+							d.Late = (uint8_t)s_DmaLate;
+						}
+						else if (s_DmaHold)
+						{
+							d.bPend = true;
+						}
 					}
 					else
 					{
@@ -1491,41 +1497,45 @@ static void TestTxLate(int u, bool bIntMode, int Late, int Chunk)
 }
 
 // SCI2/9 block start: the line moves right after the CPU reads DMCRA and the
-// channel takes the request one access later, so it moves a byte, the last
-// one of a 1 byte block, while the CPU checks TDR. With DMCRA 0, DTE set
-// again would be a transfer with no end (CHECK in the DMCNT write).
+// channel moves the byte 1 to 3 register accesses after it took the request,
+// the last one of a 1 byte block, while the CPU checks TDR and stops the
+// channel. With DMCRA 0, DTE set again would be a transfer with no end (CHECK
+// in the DMCNT write), DMCRA read before the transfer ends is not its count
+// (settings written during a transfer are a CHECK).
 static void TestTxDmaLastByte(void)
 {
 	bool hold = s_DmaHold;
-	bool late = s_DmaLate;
+	unsigned late = s_DmaLate;
 
 	s_DmaHold = true;
-	s_DmaLate = true;
 	for (int u = 2; u < 4; u++)
 	{
 		for (int intmode = 0; intmode < 2; intmode++)
 		{
 			for (unsigned every = 1; every <= 4; every *= 2)
 			{
-				ResetModel();
-				UARTCfg_t cfg = Cfg(u, intmode, true);
-				cfg.pTxMem = NULL;
-				cfg.TxMemSize = 0;
-				CHECK(UARTInit(&s_Uart, &cfg) == true);
-				s_StepAtCra = true;
-				s_StepEvery = every;
-
-				std::vector<uint8_t> d;
-				Pattern(d, 500, (uint8_t)(u + every));
-				SendAll(d.data(), (int)d.size(), 1);
-				Drain(u, d.size());
-				RunLine(4);
-				CHECK(s_Sci[u].Wire == d);
-				CHECK((s_Dmac[u].Cnt & R_DMAC0_DMCNT_DTE_Msk) == 0);
-				if (s_Sci[u].Wire != d)
+				for (s_DmaLate = 1; s_DmaLate <= 3; s_DmaLate++)
 				{
-					printf("  TestTxDmaLastByte unit %d int %d step every %u : %zu of %zu sent\n", u, intmode, every,
-						   s_Sci[u].Wire.size(), d.size());
+					ResetModel();
+					UARTCfg_t cfg = Cfg(u, intmode, true);
+					cfg.pTxMem = NULL;
+					cfg.TxMemSize = 0;
+					CHECK(UARTInit(&s_Uart, &cfg) == true);
+					s_StepAtCra = true;
+					s_StepEvery = every;
+
+					std::vector<uint8_t> d;
+					Pattern(d, 500, (uint8_t)(u + every + s_DmaLate));
+					SendAll(d.data(), (int)d.size(), 1);
+					Drain(u, d.size());
+					RunLine(4);
+					CHECK(s_Sci[u].Wire == d);
+					CHECK((s_Dmac[u].Cnt & R_DMAC0_DMCNT_DTE_Msk) == 0);
+					if (s_Sci[u].Wire != d)
+					{
+						printf("  TestTxDmaLastByte unit %d int %d step every %u late %u : %zu of %zu sent\n", u,
+							   intmode, every, s_DmaLate, s_Sci[u].Wire.size(), d.size());
+					}
 				}
 			}
 		}
@@ -1937,7 +1947,7 @@ int main()
 	{
 		bool dma = run > 0;
 		s_DmaHold = run == 1 || run == 3;
-		s_DmaLate = run == 3;
+		s_DmaLate = run == 3 ? 1 : 0;
 		for (int u = 0; u < 4; u++)
 		{
 			for (int intmode = 0; intmode < 2; intmode++)
@@ -1982,7 +1992,7 @@ int main()
 		}
 	}
 	s_DmaHold = false;
-	s_DmaLate = false;
+	s_DmaLate = 0;
 	TestTxDmaLastByte();
 	TestErrors();
 	TestRxFull();
