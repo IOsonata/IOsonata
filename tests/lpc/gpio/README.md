@@ -129,7 +129,7 @@ emulates W1C at callback/NVIC boundaries; it does not model electrical timing
 or interrupt preemption. C/C++ builds exercise the EINT3 symbol at O0/O2.
 
 LPC17xx IOPinDisable returns a pin to GPIO input, no pull resistor and normal
-(non-open-drain) mode, following the LPC11 cleanup pattern. It does not promise
+(non-open-drain) mode where supported, following the LPC11 cleanup pattern. It does not promise
 to disconnect the input buffer or release an interrupt registration. Callers
 stop peripheral activity and release callbacks separately. Reconfiguration
 restores the desired pin function. Tests cover low/high pin halves, all ports,
@@ -158,3 +158,14 @@ LPC11. There are no general per-pin drive-strength or slew-rate settings.
 These functions supply generic API linkage without claiming hardware support
 or changing the specialized I2C0 pad controls. The C/C++ fixture calls both
 functions and verifies PINCON, including I2CPADCFG, remains unchanged.
+
+LPC17xx P0.27/SDA0 and P0.28/SCL0 are permanently open drain with no internal
+pull resistors; outputs require external pull-ups. Configuration skips their
+reserved PINMODE/PINMODE_OD fields. GPIO/FUNC0 disables the I2C filter and slew
+control through the corresponding I2CPADCFG bit; FUNC1 (I2C0) and FUNC2 (USB OTG
+I2C) enable them. Drive settings remain owned by the I2C driver, and configuring
+one pin preserves the companion pin. IOPinDisable restores GPIO input and GPIO
+pad mode. Tests cover both pins, all 16 initial pad-control combinations, both
+output types, every pull request, GPIO/I2C transitions and complete PINCON
+preservation outside the selected mux/mode fields. Electrical behavior remains
+subject to board testing. See NXP UM10360, PINMODE1, PINMODE_OD0 and I2CPADCFG.

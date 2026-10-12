@@ -89,6 +89,27 @@ void IOPinConfig(int PortNo, int PinNo, int PinOp, IOPINDIR Dir, IOPINRES Resist
 	{
 		LPC_GPIO0[PortNo].FIODIR &= ~mask;
 	}
+	*regs->pSelect[half] = (*regs->pSelect[half] & ~(3UL << shift)) | (func << shift);
+
+	// P0.27/28 are always open drain without internal pulls. Their ordinary
+	// PINMODE/PINMODE_OD fields are reserved (UM10360, tables 86, 91, 99).
+	if (PortNo == 0 && (PinNo == 27 || PinNo == 28))
+	{
+		uint32_t padmode = 1UL << (PinNo == 27 ? 1U : 3U);
+
+		// Both I2C0 (FUNC1) and USB OTG I2C (FUNC2) use the I2C pad mode.
+		// Leave drive strength and the companion pin's controls unchanged.
+		if (func == 1U || func == 2U)
+		{
+			LPC_PINCON->I2CPADCFG &= ~padmode;
+		}
+		else
+		{
+			LPC_PINCON->I2CPADCFG |= padmode;
+		}
+		EnableInterrupt(state);
+		return;
+	}
 	if (Type == IOPINTYPE_OPENDRAIN)
 	{
 		*regs->pOpenDrain |= mask;
@@ -97,7 +118,6 @@ void IOPinConfig(int PortNo, int PinNo, int PinOp, IOPINDIR Dir, IOPINRES Resist
 	{
 		*regs->pOpenDrain &= ~mask;
 	}
-	*regs->pSelect[half] = (*regs->pSelect[half] & ~(3UL << shift)) | (func << shift);
 
 	switch (Resistor)
 	{

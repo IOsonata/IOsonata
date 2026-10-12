@@ -238,6 +238,55 @@ static void CheckBounds(void)
 	}
 }
 
+static void CheckI2cPads(void)
+{
+	const int ops[] = {IOPINOP_GPIO, IOPINOP_FUNC0, IOPINOP_FUNC1, IOPINOP_FUNC2};
+	const IOPINRES pulls[] = {IOPINRES_NONE, IOPINRES_PULLUP, IOPINRES_PULLDOWN, IOPINRES_FOLLOW};
+	const IOPINTYPE types[] = {IOPINTYPE_NORMAL, IOPINTYPE_OPENDRAIN};
+	LPC_PINCON_TypeDef expected;
+
+	for (int pin = 27; pin <= 28; pin++)
+	{
+		uint32_t padbit = pin == 27 ? 2U : 8U;
+		unsigned shift = (unsigned)(pin - 16) * 2U;
+
+		for (unsigned initial = 0; initial < 16; initial++)
+		{
+			for (unsigned op = 0; op < 4; op++)
+			{
+				for (unsigned r = 0; r < 4; r++)
+				{
+					for (unsigned type = 0; type < 2; type++)
+					{
+						memset((void *)LPC_PINCON, 0xA5, sizeof(expected));
+						LPC_PINCON->I2CPADCFG = 0xA5A50000U | initial;
+						memcpy(&expected, (const void *)LPC_PINCON, sizeof(expected));
+						expected.PINSEL1 = (expected.PINSEL1 & ~(3U << shift)) |
+							((op < 2 ? 0U : op - 1U) << shift);
+						if (op < 2)
+						{
+							expected.I2CPADCFG |= padbit;
+						}
+						else
+						{
+							expected.I2CPADCFG &= ~padbit;
+						}
+						IOPinConfig(0, pin, ops[op], IOPINDIR_OUTPUT, pulls[r], types[type]);
+						assert(memcmp(&expected, (const void *)LPC_PINCON, sizeof(expected)) == 0);
+						assert((LPC_GPIO0->FIODIR & (1U << pin)) != 0);
+						// Cleanup restores GPIO pad mode without writing reserved controls.
+						expected.PINSEL1 &= ~(3U << shift);
+						expected.I2CPADCFG |= padbit;
+						IOPinDisable(0, pin);
+						assert(memcmp(&expected, (const void *)LPC_PINCON, sizeof(expected)) == 0);
+						assert((LPC_GPIO0->FIODIR & (1U << pin)) == 0);
+					}
+				}
+			}
+		}
+	}
+}
+
 static void CheckMux(void)
 {
 	const int pins[][2] = {{0, 0}, {0, 15}, {0, 16}, {0, 30},
@@ -335,6 +384,7 @@ int main(void)
 	CheckSense();
 	CheckInterrupts();
 	CheckMux();
+	CheckI2cPads();
 	CheckBounds();
 
 	// Narrow writes must keep every supplied bit and preserve higher pins.
