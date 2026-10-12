@@ -4,7 +4,7 @@
   "cpu": "cortex-m3",
   "fpu": false,
   "fpu_unit": "none",
-  "defines": [],
+  "defines": ["LPC1769"],
   "includes": [
     "${iosonata}/ARM/NXP/LPC17xx/include",
     "${iosonata}/ARM/NXP/LPC17xx/LPC1769/lib/include"

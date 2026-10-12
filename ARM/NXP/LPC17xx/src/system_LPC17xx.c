@@ -155,8 +155,8 @@ static void Lpc17ClockCandidate(Lpc17ClockConfig_t *pBest, uint32_t Request,
 		{
 			return;
 		}
-		mindiv = (uint32_t)((numerator + (uint64_t)CORE_FREQ * N - 1U) /
-			((uint64_t)CORE_FREQ * N));
+		mindiv = (uint32_t)((numerator + (uint64_t)LPC17_MAX_CORE_FREQ * N - 1U) /
+			((uint64_t)LPC17_MAX_CORE_FREQ * N));
 		usb = numerator % (96000000ULL * N) == 0;
 	}
 	div = Request ? (uint32_t)(numerator / ((uint64_t)N * Request)) : 256U;

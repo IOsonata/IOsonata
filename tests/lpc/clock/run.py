@@ -54,9 +54,17 @@ for opt in ['-O0', '-O2']:
         subprocess.run([exe], check=True)
 
 # Compile the LPC17xx source and register fixture as C; link public C/C++ callers.
-for opt in ['-O0', '-O2']:
+variants = [
+    ['-DLPC1769'],
+    ['-DLPC1759', '-DTEST_CLOCK_LIMIT=120000000'],
+    ['-DLPC1768', '-DTEST_CLOCK_LIMIT=100000000'],
+    ['-DLPC1758', '-DTEST_CLOCK_LIMIT=100000000'],
+    ['-DTEST_CLOCK_LIMIT=100000000'],
+    ['-DLPC1769', '-DCORE_FREQ=72000000', '-DTEST_CLOCK_LIMIT=120000000'],
+]
+for opt, variant in [(opt, variant) for opt in ['-O0', '-O2'] for variant in variants]:
     with tempfile.TemporaryDirectory() as tmp:
-        flags = [opt, '-Wall', '-Wextra', '-Werror',
+        flags = [opt, *variant, '-Wall', '-Wextra', '-Werror',
                  '-Wno-sign-compare', '-Wno-unused-but-set-variable',
                  '-fsanitize=undefined', '-fno-sanitize-recover=all',
                  '-ffunction-sections', '-fdata-sections',

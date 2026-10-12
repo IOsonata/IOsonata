@@ -85,6 +85,9 @@ static const uint16_t s_RtcM[] = {
 	16479, 17578, 18127, 18311, 19226, 19775, 20508, 20599, 20874, 21149,
 	21973, 23071, 23438, 23804, 24170
 };
+#ifdef TEST_CLOCK_LIMIT
+static const uint32_t s_LimitRequests[] = {99000000, 100000000, 101000000, 120000000, UINT32_MAX};
+#endif
 static const uint32_t s_ClosestCases[][2] = {
 	{4000000, 0}, {4000000, UINT32_MAX}, {4000000, 12345678},
 	{4000000, 1000000}, {12000000, 12345678}, {25000000, UINT32_MAX},
@@ -277,7 +280,7 @@ static void CheckClosest(uint32_t Input, uint32_t Request)
 	{
 		assert(s_Regs.PLL0CON == 0);
 	}
-	assert(numerator <= (uint64_t)CORE_FREQ * denominator);
+	assert(numerator <= (uint64_t)LPC17_MAX_CORE_FREQ * denominator);
 	assert(SystemCoreClock == numerator / denominator);
 	error = ClockError(numerator, denominator, Request);
 	// Enumerate every divider, unlike the production bracketing search.
@@ -302,7 +305,7 @@ static void CheckClosest(uint32_t Input, uint32_t Request)
 			{
 				uint32_t den = pre * d;
 
-				if (num <= (uint64_t)CORE_FREQ * den)
+				if (num <= (uint64_t)LPC17_MAX_CORE_FREQ * den)
 				{
 					assert(ClockError(num, den, Request) * denominator >= error * den);
 				}
@@ -326,6 +329,20 @@ int main(void)
 		assert(SystemCoreClockSet(request, input) != 0);
 		CheckClosest(input, request);
 	}
+
+
+#ifdef TEST_CLOCK_LIMIT
+	assert(LPC17_MAX_CORE_FREQ == TEST_CLOCK_LIMIT);
+	for (unsigned i = 0; i < sizeof(s_LimitRequests) / sizeof(s_LimitRequests[0]); i++)
+	{
+		uint32_t expected = s_LimitRequests[i] > TEST_CLOCK_LIMIT ? TEST_CLOCK_LIMIT : s_LimitRequests[i];
+
+		memset(&s_Regs, 0, sizeof(s_Regs));
+		assert(SystemCoreClockSet(s_LimitRequests[i], 4000000) == expected);
+	}
+	puts("LPC17xx device speed limit and closest selection: PASS");
+	return 0;
+#endif
 
 	// Invalid physical oscillator inputs must fail before register/global changes.
 	for (unsigned i = 0; i < sizeof(s_InvalidInputs) / sizeof(s_InvalidInputs[0]); i++)

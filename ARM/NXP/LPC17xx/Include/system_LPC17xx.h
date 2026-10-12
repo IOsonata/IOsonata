@@ -46,8 +46,17 @@ Modified by          Date              Description
 #define OSC_FREQ_12MHZ			(12000000UL)    /* LPCXpresso Oscillator frequency     */
 #define OSC_FREQ_16MHZ			(16000000UL)    /* IMM-LPC1769 Oscillator frequency    */
 
-/* Set target core frequence value in Hz */
-#define CORE_FREQ			120000000UL
+/* UM10360: only LPC1759 and LPC1769 support 120 MHz. */
+#if defined(LPC1759) || defined(LPC1769)
+#define LPC17_MAX_CORE_FREQ	120000000UL
+#else
+#define LPC17_MAX_CORE_FREQ	100000000UL
+#endif
+
+/* Startup target may be lower than the device limit. */
+#ifndef CORE_FREQ
+#define CORE_FREQ			LPC17_MAX_CORE_FREQ
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -101,7 +110,7 @@ uint32_t SystemSetCoreClock(uint32_t CoreFreq, int ClkSel);
  * The legacy 4000000 value selects IRC, not a 4 MHz main oscillator.
  * CoreFreq is the requested CPU frequency, distinct from ClkFreq.
  * Selects the closest nominal rate using PLL0 or the divided input,
- * capped at CORE_FREQ. Zero selects the lowest representable rate.
+ * capped at LPC17_MAX_CORE_FREQ. Zero selects the lowest representable rate.
  * The returned integer Hz value truncates any fractional Hz.
  * Stop clock-dependent peripherals before changing the CPU clock.
  * Returns the actual CPU frequency, or zero on failure.

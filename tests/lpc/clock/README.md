@@ -298,8 +298,8 @@ using exact rational error in 64-bit arithmetic. MAIN/IRC candidates use
 M=6..512, RTC candidates use the 65 multipliers from UM10360 table 26, and
 N is limited to 1..32. PLL CCO stays within 275..550 MHz, CPU division is
 1..256 for bypass and constrained by the CPU ceiling for PLL operation.
-The ceiling is the port's existing CORE_FREQ (120 MHz in this configuration);
-this does not add device-specific 100 MHz part selection. Zero selects the
+The ceiling is LPC17_MAX_CORE_FREQ: 120 MHz for LPC1759/LPC1769 builds,
+100 MHz for other or unspecified LPC17xx devices. Zero selects the
 lowest rate rather than disabling the clock. Returned Hz truncates fractions.
 
 For each PLL ratio, only the two divider values bracketing the request need
@@ -317,3 +317,19 @@ inexact requests, 4/12/25 MHz input and RTC. The previous implementation
 fails these cases by selecting an unsupported multiplier. Clock C/C++ tests,
 startup tests and Cortex-M3 assembly compilation pass at O0/O2. Physical
 PLL behavior, including RTC lock timing, remains unvalidated.
+
+The device ceiling is independent of CORE_FREQ, which is the startup target
+and defaults to that ceiling. A lower CORE_FREQ does not restrict later
+rate requests; the selected device's maximum always bounds the PLL search.
+The LPC1769 library and DfuBoot projects define LPC1769 for C and C++ in
+Debug and Release, and the wizard metadata carries the same define. This
+preserves their 120 MHz startup target. Custom builds must select LPC1759
+or LPC1769 explicitly to enable 120 MHz; the unspecified-device fallback
+is 100 MHz. Reference: UM10360 section 4.5.
+
+C/C++ host runs cover LPC1758/LPC1768 at 100 MHz, LPC1759/LPC1769 at 120 MHz,
+no device define, and a 72 MHz startup target with a 120 MHz device ceiling.
+They check boundary and oversized requests plus the exhaustive closest-rate
+oracle at O0/O2 with UBSan. Cortex-M3 assembly compilation covers LPC1768
+and LPC1769 at O0/O2. Project XML/JSON checks confirm device selection;
+full firmware links and hardware validation remain pending.
