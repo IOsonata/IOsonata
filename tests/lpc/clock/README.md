@@ -278,3 +278,19 @@ by changing the divider while PLL0 is still active. Startup tests also begin
 with an active bootloader PLL and acknowledge feeds so initialization must
 complete through the shutdown sequence. Analog timing and feed latching
 remain hardware-validation work.
+
+The LPC17xx public header declares both existing clock entry points with C
+linkage. SystemCoreClockSet takes the physical input frequency in Hz.
+SystemSetCoreClock retains its documented CLKSRCSEL selector argument and
+translates IRC/MAIN/RTC into 4 MHz/16 MHz/32768 Hz before calling the same
+implementation. MAIN uses the existing OSC_FREQ default; other main crystal
+frequencies use SystemCoreClockSet. Unknown selectors return zero without
+changing registers or clock globals. These are target-specific legacy APIs;
+the generic system clock header is unchanged.
+
+The clock fixture no longer supplies its own SystemCoreClockSet declaration.
+Without the fix it fails compilation against the public header. The runner
+compiles production and fixture sources as C, then links C and C++ callers
+at O0/O2 with UBSan. Both public names are called from those callers; the
+fixture checks all three selector mappings and rejects invalid selectors,
+including a frequency accidentally passed in the selector position.

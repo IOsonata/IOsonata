@@ -83,15 +83,27 @@ void SystemCoreClockUpdate (void);
  * @param CoreFreq 	- Core target frequency
  * @param ClkSel	- Clock source selection
  *						CLKSRCSEL_IRC - Internal osc
- *						CLKSRCSEL_MAIN - Main osc
+ *						CLKSRCSEL_MAIN - Main osc, existing 16 MHz default
  *						CLKSRCSEL_RTC -	Realtime osc
  *
  * @return
- * 		Return actual frequency in Hz
+ * 		Return actual frequency in Hz, or zero on failure.
  *
  * @brief	Setup core clock (cclk) & update SystemCoreClock variable
+ * Stop clock-dependent peripherals before changing the CPU clock.
+ * For a different main oscillator frequency, use SystemCoreClockSet.
  */
 uint32_t SystemSetCoreClock(uint32_t CoreFreq, int ClkSel);
+
+/**
+ * Configure the CPU clock using a physical input frequency in Hz.
+ * ClkFreq is 4000000 for IRC, 32768 for RTC, or 1-25 MHz for MAIN.
+ * The legacy 4000000 value selects IRC, not a 4 MHz main oscillator.
+ * CoreFreq is the requested CPU frequency, distinct from ClkFreq.
+ * Stop clock-dependent peripherals before changing the CPU clock.
+ * Returns the actual CPU frequency, or zero on failure.
+ */
+uint32_t SystemCoreClockSet(uint32_t CoreFreq, int ClkFreq);
 
 /**
  * Configure PLL1 for the fixed 48 MHz USB clock.

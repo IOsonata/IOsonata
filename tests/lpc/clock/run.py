@@ -53,18 +53,27 @@ for opt in ['-O0', '-O2']:
                         '-o', exe], check=True)
         subprocess.run([exe], check=True)
 
-# Check safe flash timing before clock writes and the final access time.
+# Compile the LPC17xx source and register fixture as C; link public C/C++ callers.
 for opt in ['-O0', '-O2']:
     with tempfile.TemporaryDirectory() as tmp:
-        exe = str(Path(tmp) / 'flash17_test')
-        subprocess.run(['gcc', '-std=gnu17', opt, '-Wall', '-Wextra', '-Werror',
-                        '-Wno-sign-compare', '-Wno-unused-but-set-variable',
-                        '-fsanitize=undefined', '-fno-sanitize-recover=all',
-                        '-ffunction-sections', '-fdata-sections', '-Wl,--gc-sections',
+        flags = [opt, '-Wall', '-Wextra', '-Werror',
+                 '-Wno-sign-compare', '-Wno-unused-but-set-variable',
+                 '-fsanitize=undefined', '-fno-sanitize-recover=all',
+                 '-ffunction-sections', '-fdata-sections',
+                 '-I' + str(root / 'tests/lpc/uart/shim'),
+                 '-I' + str(root / 'ARM/NXP/LPC17xx/Include')]
+        obj = str(Path(tmp) / 'system17.o')
+        fixture = str(Path(tmp) / 'flash17.o')
+        subprocess.run(['gcc', '-std=gnu17', *flags,
                         '-include', str(root / 'tests/lpc/clock/flash17_shim.h'),
-                        '-I' + str(root / 'tests/lpc/uart/shim'),
-                        '-I' + str(root / 'ARM/NXP/LPC17xx/Include'),
-                        str(root / 'tests/lpc/clock/flash17_test.c'),
-                        str(root / 'ARM/NXP/LPC17xx/src/system_LPC17xx.c'),
-                        '-o', exe], check=True)
-        subprocess.run([exe], check=True)
+                        '-c', str(root / 'ARM/NXP/LPC17xx/src/system_LPC17xx.c'),
+                        '-o', obj], check=True)
+        subprocess.run(['gcc', '-std=gnu17', *flags, '-Dmain=TestClock17Run',
+                        '-c', str(root / 'tests/lpc/clock/flash17_test.c'),
+                        '-o', fixture], check=True)
+        for compiler, standard in [('gcc', '-std=gnu17'), ('g++', '-std=c++17')]:
+            exe = str(Path(tmp) / 'clock17_link_test')
+            subprocess.run([compiler, standard, *flags, '-Wl,--gc-sections',
+                            str(root / 'tests/lpc/clock/clock17_link_test.c'),
+                            obj, fixture, '-o', exe], check=True)
+            subprocess.run([exe], check=True, timeout=10)

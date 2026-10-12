@@ -315,6 +315,28 @@ uint32_t SystemCoreClockSet(uint32_t CoreFreq, int ClkFreq)
 	return SystemCoreClock;
 }
 
+uint32_t SystemSetCoreClock(uint32_t CoreFreq, int ClkSel)
+{
+	int clkfreq;
+
+	switch (ClkSel)
+	{
+		case CLKSRCSEL_IRC:
+			clkfreq = IRC_FREQ;
+			break;
+		case CLKSRCSEL_MAIN:
+			clkfreq = OSC_FREQ;
+			break;
+		case CLKSRCSEL_RTC:
+			clkfreq = RTC_FREQ;
+			break;
+		default:
+			return 0;
+	}
+
+	return SystemCoreClockSet(CoreFreq, clkfreq);
+}
+
 void SystemConnectPLL1(void)
 {
 	uint32_t sysclk = SystemClkFreq;

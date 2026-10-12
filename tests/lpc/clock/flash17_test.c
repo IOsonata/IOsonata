@@ -76,7 +76,6 @@ static const int s_InvalidInputs[] = {
 static const uint32_t s_UsbInputs[] = {12000000, 16000000, 24000000};
 static const uint32_t s_UsbInvalidInputs[] = {0, 32768, 4000000, 10000000, 20000000, 25000000};
 extern uint32_t SystemClkFreq;
-extern uint32_t SystemCoreClockSet(uint32_t CoreFreq, int ClkFreq);
 
 uint32_t TestGetPrimask(void)
 {
@@ -590,6 +589,32 @@ int main(void)
 			}
 			s_CpuStopMode = 0;
 		}
+	}
+	// The legacy API takes selectors, not oscillator frequencies.
+	for (int selector = CLKSRCSEL_IRC; selector <= CLKSRCSEL_RTC; selector++)
+	{
+		uint32_t target = selector == CLKSRCSEL_RTC ? 72007680U : 120000000U;
+
+		memset(&s_Regs, 0, sizeof(s_Regs));
+		s_OscWait = 0;
+		s_OscReadyAfter = 4;
+		assert(SystemSetCoreClock(target, selector) == target);
+		assert(s_Regs.CLKSRCSEL == (uint32_t)selector);
+		assert(SystemClkFreq == (selector == CLKSRCSEL_IRC ? 4000000U :
+			(selector == CLKSRCSEL_MAIN ? 16000000U : 32768U)));
+	}
+	{
+		LPC_SC_TypeDef before;
+		uint32_t core = SystemCoreClock;
+		uint32_t source = SystemClkFreq;
+
+		memcpy(&before, &s_Regs, sizeof(before));
+		assert(SystemSetCoreClock(120000000, -1) == 0);
+		assert(SystemSetCoreClock(120000000, 3) == 0);
+		assert(SystemSetCoreClock(120000000, 16000000) == 0);
+		assert(memcmp(&before, &s_Regs, sizeof(before)) == 0);
+		assert(SystemCoreClock == core);
+		assert(SystemClkFreq == source);
 	}
 	printf("LPC17xx flash timing and oscillator wait: %u errors\n", errors);
 	return errors != 0;
