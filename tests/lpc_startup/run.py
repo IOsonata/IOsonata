@@ -56,8 +56,8 @@ DfuTgtStart:
             assert sum(words) & 0xffffffff == 0, (name, padding, words)
             assert words[4:7] == (0, 0, 0)
             assert all(word & 1 for word in words[1:4])
-            expected_stack = 0x10002000 if name == layouts[0] else 0x10001fe0
-            assert words[0] == expected_stack
+            # Keep the top 32 bytes of SRAM0 available to the IAP ROM.
+            assert words[0] == 0x10001fe0
             origin = 0xa000 if name == layouts[1] else 0
             assert origin + padding <= words[1] < origin + padding + 64
         print(name + ': checksum passed at two handler placements')
