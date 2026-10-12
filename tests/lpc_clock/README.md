@@ -70,3 +70,14 @@ in C and C++, including 24 MHz startup with no USB lock indication required.
 Legacy boolean setters retain their existing crystal/IRC and USB behavior;
 they do not use the board descriptor. The low-power oscillator descriptor is
 not used to program WDTOSCCTRL by this change.
+
+The generic SystemCoreClockSelect entry point uses the same implementation as
+startup, honors g_McuOsc.bUSBClk and updates CoreOsc.Type/Freq only on success.
+OSC_TYPE_RC requires its actual 12 MHz input frequency. Invalid types or inputs
+return false without register changes. A PLL lock failure returns false and
+retains the descriptor; SystemCoreClock reports the actual IRC fallback rate.
+This function selects a physical input and retains the fixed 48 MHz CPU target.
+
+C and C++ callers test generic selection, descriptor updates, invalid-input
+preservation, USB lock failure and successful retry. The previous source fails
+to link these callers because SystemCoreClockSelect was missing.

@@ -308,6 +308,29 @@ clock_failed:
 	return 0;
 }
 
+/**
+ * Select the physical PLL input for the fixed 48 MHz CPU target.
+ * USB follows g_McuOsc.bUSBClk and is disabled for IRC input.
+ * Callers must stop clock-dependent peripherals before changing clocks.
+ * Failure preserves the requested oscillator descriptor. PLL lock failure
+ * leaves the CPU on IRC; SystemCoreClock reports that fallback frequency.
+ */
+bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
+{
+	if (ClkSrc == OSC_TYPE_RC && OscFreq != IRC_FREQ)
+	{
+		return false;
+	}
+	if (Lpc11SetCoreClock(ClkSrc, OscFreq, g_McuOsc.bUSBClk) == 0)
+	{
+		return false;
+	}
+	g_McuOsc.CoreOsc.Type = ClkSrc;
+	g_McuOsc.CoreOsc.Freq = OscFreq;
+
+	return true;
+}
+
 uint32_t SystemCoreClockSet(bool Crystal, int ClkFreq)
 {
 	return Lpc11SetCoreClock(Crystal ? OSC_TYPE_XTAL : OSC_TYPE_RC,
@@ -321,7 +344,7 @@ uint32_t SystemSetCoreClock(bool Crystal, int ClkFreq)
 
 void SystemInit (void)
 {
-	Lpc11SetCoreClock(g_McuOsc.CoreOsc.Type, g_McuOsc.CoreOsc.Freq, g_McuOsc.bUSBClk);
+	SystemCoreClockSelect(g_McuOsc.CoreOsc.Type, g_McuOsc.CoreOsc.Freq);
 	SystemCoreClockUpdate();
 }
 

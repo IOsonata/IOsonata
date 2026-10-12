@@ -193,5 +193,41 @@ int main(void)
 			assert(s_Setters[i](true, 12000000) == 48000000);
 		}
 	}
+	// Generic entry point must link in C/C++, report success and update metadata.
+	g_McuOsc.bUSBClk = false;
+	assert(SystemCoreClockSelect(OSC_TYPE_TCXO, 24000000));
+	assert(GetHighFreqOscType() == OSC_TYPE_TCXO);
+	assert(GetHighFreqOscFreq() == 24000000);
+	assert((LPC_SYSCON->SYSOSCCTRL & 3U) == 3U);
+	assert(SystemCoreClock == 48000000 && LPC_SYSCON->USBCLKDIV == 0);
+	uint8_t before[sizeof(LPC_SYSCON_Type)];
+
+	memcpy(before, regs, sizeof(before));
+	assert(!SystemCoreClockSelect(OSC_TYPE_RC, 4000000));
+	assert(!SystemCoreClockSelect((OSC_TYPE)99, 12000000));
+	assert(!SystemCoreClockSelect(OSC_TYPE_XTAL, 13000000));
+	assert(memcmp(before, regs, sizeof(before)) == 0);
+	assert(GetHighFreqOscType() == OSC_TYPE_TCXO);
+	assert(GetHighFreqOscFreq() == 24000000);
+	assert(SystemCoreClock == 48000000);
+	assert(SystemCoreClockSelect(OSC_TYPE_RC, 12000000));
+	assert(GetHighFreqOscType() == OSC_TYPE_RC);
+	assert(GetHighFreqOscFreq() == 12000000);
+	assert(LPC_SYSCON->SYSPLLCLKSEL == SYSPLLCLKSEL_IRC);
+
+	// A lock failure must not publish an oscillator selection that failed.
+	g_McuOsc.bUSBClk = true;
+	uint32_t unlocked = 0;
+
+	memcpy((char *)regs + offsetof(LPC_SYSCON_Type, USBPLLSTAT), &unlocked, sizeof(unlocked));
+	assert(!SystemCoreClockSelect(OSC_TYPE_XTAL, 16000000));
+	assert(GetHighFreqOscType() == OSC_TYPE_RC);
+	assert(GetHighFreqOscFreq() == 12000000);
+	assert(SystemCoreClock == 12000000);
+	memcpy((char *)regs + offsetof(LPC_SYSCON_Type, USBPLLSTAT), &locked, sizeof(locked));
+	assert(SystemCoreClockSelect(OSC_TYPE_XTAL, 16000000));
+	assert(GetHighFreqOscType() == OSC_TYPE_XTAL);
+	assert(GetHighFreqOscFreq() == 16000000);
+	assert(SystemCoreClock == 48000000 && LPC_SYSCON->USBCLKDIV != 0);
 	puts("LPC11Uxx clock setters, PLL selection and lock recovery: PASS");
 }
