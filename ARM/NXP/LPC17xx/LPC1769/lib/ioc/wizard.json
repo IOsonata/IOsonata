@@ -6,10 +6,10 @@
   "fpu_unit": "none",
   "defines": ["LPC1769"],
   "includes": [
-    "${iosonata}/ARM/NXP/LPC17xx/include",
-    "${iosonata}/ARM/NXP/LPC17xx/LPC1769/lib/include"
+    "${iosonata}/ARM/NXP/include",
+    "${iosonata}/ARM/NXP/LPC17xx/Include"
   ],
-  "linker_script": "${iosonata}/ARM/NXP/LPC17xx/LPC1769/ldscript/gcc_lpc1769.ld",
+  "linker_script": "${iosonata}/ARM/NXP/LPC17xx/ldscript/gcc_lpc1767_9.ld",
   "lib_path": "${iosonata}/ARM/NXP/LPC17xx/LPC1769/lib/ioc/${config}",
   "lib": "IOsonata_LPC1769"
 }
