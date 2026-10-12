@@ -33,9 +33,9 @@ MSB-first, 4-16 bit frames, and GPIO or application-controlled chip selects.
 For frames above 8 bits, buffers contain little-endian two-byte words and must
 have even byte lengths. Both bytes may be unaligned. Receive clocks repeat the
 configured DummyByte in both halves of a wide frame. GPIO chip selects must
-use ordinary GPIO-function-0 pins configured as outputs in the pin map; reset
-and debug pins P0_0 and P0_10..P0_15 are excluded for automatic CS. PinOp still
-uses this older LPC GPIO port's raw mux values.
+use IOPINOP_GPIO and output direction in the pin map. Alternate signal pins
+use IOPINOP_FUNCn for hardware function n. Reset/debug pins may be repurposed
+as GPIO CS, but doing so removes their reset/debug function.
 
 Slave, interrupt, DMA, LSB-first and other physical interfaces are rejected.
 Rate changes during a selected transaction retain the existing rate. A stalled

@@ -127,15 +127,14 @@ bool SPIInit(SPIDev_t *pDev, const SPICfg_t *pCfgData)
 	{
 		const IOPinCfg_t *pin = &pCfgData->pIOPinMap[i];
 
-		if (pin->PortNo < 0 || pin->PortNo > 1 || pin->PinNo < 0 || pin->PinNo > 31)
+		if (!Lpc11GpioValidPin(pin->PortNo, pin->PinNo) ||
+			pin->PinOp < IOPINOP_GPIO || pin->PinOp > IOPINOP_FUNC7)
 		{
 			return false;
 		}
-		// Automatic CS uses ordinary GPIO-function-0 pins. Debug/reset
-		// pins with a different GPIO function are excluded in this port.
+		// Automatic CS is driven by the GPIO helpers.
 		if (i >= SPI_CS_IOPIN_IDX && pCfgData->ChipSel == SPICSEL_AUTO &&
-			(pin->PinOp != 0 || pin->PinDir != IOPINDIR_OUTPUT ||
-			 (pin->PortNo == 0 && (pin->PinNo == 0 || (pin->PinNo >= 10 && pin->PinNo <= 15)))))
+			(pin->PinOp != IOPINOP_GPIO || pin->PinDir != IOPINDIR_OUTPUT))
 		{
 			return false;
 		}

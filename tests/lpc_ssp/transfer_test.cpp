@@ -55,11 +55,11 @@ struct SspModel {
 static SspModel s_Model;
 static SPIDev_t s_Spi;
 static const IOPinCfg_t s_Pins[] = {
-	{0, 6, 2, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
-	{0, 8, 1, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
-	{0, 9, 1, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
-	{0, 2, 0, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
-	{0, 3, 0, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL}
+	{0, 6, IOPINOP_FUNC2, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
+	{0, 8, IOPINOP_FUNC1, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
+	{0, 9, IOPINOP_FUNC1, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
+	{0, 2, IOPINOP_GPIO, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
+	{0, 3, IOPINOP_GPIO, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL}
 };
 uint32_t SystemCoreClock = 48000000;
 uint32_t SystemMainClkFreq = 48000000;
@@ -288,6 +288,24 @@ int main()
 	assert(!SPIInit(&s_Spi, &cfg));
 	cfg.Mode = SPIMODE_MASTER;
 	cfg.BitOrder = SPIDATABIT_LSB;
+	assert(!SPIInit(&s_Spi, &cfg));
+	// Updated GPIO mapping accepts debug pins as GPIO CS and bounds P0 at 23.
+	IOPinCfg_t pins[5];
+	memcpy(pins, s_Pins, sizeof(pins));
+	cfg.pIOPinMap = pins;
+	cfg.BitOrder = SPIDATABIT_MSB;
+	cfg.ChipSel = SPICSEL_AUTO;
+	pins[3].PinNo = 14;
+	Init(cfg);
+	assert(SPITx(&s_Spi, 0, tx, 1) == 1);
+	assert(s_Model.Cs == std::vector<int>({-14, 14}));
+	pins[3].PinNo = 24;
+	assert(!SPIInit(&s_Spi, &cfg));
+	pins[3].PinNo = 2;
+	pins[3].PinOp = IOPINOP_FUNC1;
+	assert(!SPIInit(&s_Spi, &cfg));
+	pins[3].PinOp = IOPINOP_GPIO;
+	pins[0].PinOp = IOPINOP_FUNC8;
 	assert(!SPIInit(&s_Spi, &cfg));
 	puts("Legacy LPC SSP transfer: PASS");
 	munmap(memory, 0x200000);

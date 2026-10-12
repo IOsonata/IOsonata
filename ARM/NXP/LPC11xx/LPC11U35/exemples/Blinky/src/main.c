@@ -41,7 +41,7 @@ SOFTWARE.
 
 #define SWCLK_TCK_PORT				0
 #define SWCLK_TCK_PIN				14
-#define SWCLK_TCK_PINOP				1
+#define SWCLK_TCK_PINOP				IOPINOP_GPIO
 
 int main(void)
 {
@@ -77,3 +77,4 @@ int main(void)
 	}
 	*/
 }
+
