@@ -415,7 +415,10 @@ and DMA with a non-blocking FIFO. `UARTSetCtrlLineState` does nothing.
   mode, TXI with the TX FIFO empty, and start a block by setting TIE again, as
   the Renesas FSP does with a transfer instance. SCI2/9 start a
   block from the byte left in TDR, or write its first byte to TDR when TDR is
-  already empty. RX stays on the interrupt or polling: the SCI has no idle line
+  already empty. When the channel moves the last byte of the block during that
+  check, DTE is not set again: in normal mode a count of 0 is a transfer with
+  no end, which would send the memory after the block. RX stays on the
+  interrupt or polling: the SCI has no idle line
   event to move a DMA ring to the RX CFIFO after a short burst. The DMAC module
   (MSTPA22) is started and never stopped by the driver, other drivers may use
   it. UARTInit fails if channel `DevNo` is linked to another event.
@@ -446,15 +449,18 @@ Host test: `python3 tests/ra4m1/run_uart_validation.py`. It compiles the driver
 with a model of the SCI, DMAC, module stop, PRCR and ICU registers
 (`tests/ra4m1/uart_include`) and the real CFIFO and DeviceIntrf code. RXI, TXI,
 ERI and the DMAC transfer end are edge events that set the IR flag of their
-ICU slot, and the line can move while a handler runs. DMA runs twice, with a
-TXI arriving while DTE is cleared held in DELSR and with it lost. It covers
+ICU slot, and the line can move while a handler runs. DMA runs three times,
+with a TXI arriving while DTE is cleared held in DELSR, with it lost, and held
+with the channel taking each request one register access or line step later.
+A count of 0 written with DTE set fails the test. It covers
 init, rate selection against every register setting, TX and RX in polling,
 interrupt, polled DMA and interrupt DMA mode on the four SCIs, idle time between
 DMA blocks, the end of a block seen late (the line moves up to 60 characters
-between TxData calls, interrupts held off), an echo loop with bursts, receive
-errors, overrun, full CFIFOs,
-callbacks, Disable/Enable and PowerOff. It also compiles the driver with GNU Arm
-for the Cortex-M4. It does not test exact timing or the electrical interface.
+between TxData calls, interrupts held off), the last byte of a SCI2/9 block
+moved while the block start checks TDR, an echo loop with bursts, receive
+errors, overrun, full CFIFOs, callbacks, Disable/Enable and PowerOff. It also
+compiles the driver with GNU Arm for the Cortex-M4. It does not test exact
+timing or the electrical interface.
 
 ## Validation status
 

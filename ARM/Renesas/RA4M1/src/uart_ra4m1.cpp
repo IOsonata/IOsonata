@@ -557,12 +557,19 @@ static bool Ra4m1UartDmaTxStart(Ra4m1UartDev_t * const pDev)
 				return true;
 			}
 			dma->DMCNT = 0;
-			if (dma->DMCRA == left)
+			uint32_t now = dma->DMCRA;
+			if (now == left)
 			{
 				break;
 			}
-			// The channel moved a byte meanwhile
-			dma->DMCNT = R_DMAC0_DMCNT_DTE_Msk;
+			// The channel moved a byte meanwhile. With DMCRA 0 it moved the last
+			// one and ended the block. DTE is not set again then: in normal mode
+			// a count of 0 is a transfer with no end (Renesas FSP r_dmac), the
+			// channel would send the memory after the block.
+			if (now != 0)
+			{
+				dma->DMCNT = R_DMAC0_DMCNT_DTE_Msk;
+			}
 		}
 
 		// TDR empty, channel stopped with bytes left

@@ -149,6 +149,7 @@ typedef struct {
 	uint16_t Tmd, Amd;
 	uint8_t Int, Cnt, Sts;
 	bool bPend;						// Request held in DELSR while DTE is cleared
+	bool bLate;						// Request taken at the next register access or line step
 	unsigned Moved;					// Bytes moved
 } DmacModel_t;
 
@@ -159,6 +160,8 @@ static uint32_t s_Delsr[4];
 static uint8_t s_Dmast;
 static uint32_t s_Mstpcra = 0xFFFFFFFFU;
 static bool s_DmaHold;				// A request while DTE is cleared waits in DELSR, otherwise it is lost
+static bool s_DmaLate;				// The channel takes a request one register access or line step later
+static bool s_StepAtCra;			// The line moves right after each read of DMCRA
 static bool s_bDmaWrite;			// SCI register written by the DMAC
 static UARTDev_t s_Uart;
 
@@ -398,6 +401,8 @@ static void RegWrite(const void *pReg, int Id, uint32_t Val)
 			case DMAREG_OFR: d.Ofr = Val; break;
 			case DMAREG_STS: d.Sts &= (uint8_t)Val; break;
 			default:
+				// Normal mode with a count of 0 transfers with no end, not used
+				CHECK((Val & R_DMAC0_DMCNT_DTE_Msk) == 0 || d.Cra != 0);
 				d.Cnt = (uint8_t)(Val & R_DMAC0_DMCNT_DTE_Msk);
 				if ((d.Cnt & R_DMAC0_DMCNT_DTE_Msk) && d.bPend && (s_Dmast & R_DMA_DMAST_DMST_Msk))
 				{
@@ -563,11 +568,36 @@ static void RegWrite(const void *pReg, int Id, uint32_t Val)
 	}
 }
 
+// With s_DmaLate, the requests the channels took since the last register access
+// or line step are moved now. A channel stopped meanwhile keeps the request in
+// DELSR or loses it.
+static void DmaLateTake(void)
+{
+	for (int ch = 0; ch < 4; ch++)
+	{
+		DmacModel_t &d = s_Dmac[ch];
+		if (!d.bLate)
+		{
+			continue;
+		}
+		d.bLate = false;
+		if ((d.Cnt & R_DMAC0_DMCNT_DTE_Msk) && (s_Dmast & R_DMA_DMAST_DMST_Msk))
+		{
+			DmaTransfer(ch);
+		}
+		else if (s_DmaHold)
+		{
+			d.bPend = true;
+		}
+	}
+}
+
 // Line state after a register access. In the handler the line moves once
 // s_IsrStepEvery accesses are made since the last step, the time the handler
 // takes.
 static void AccessDone(void)
 {
+	DmaLateTake();
 	UpdateIcu();
 	if (s_bInIsr && s_IsrStepEvery && ++s_IsrAccess >= s_IsrStepEvery)
 	{
@@ -583,6 +613,13 @@ uint32_t TestRegRead(const void *pReg, int Id)
 	uint32_t v = RegRead(pReg, Id);
 
 	AccessDone();
+	if (s_StepAtCra && Id == DMAREG_CRA)
+	{
+		for (int u = 0; u < 4; u++)
+		{
+			LineStep(u);
+		}
+	}
 
 	return v;
 }
@@ -660,6 +697,7 @@ static void LineStep(int u)
 	{
 		// One step of all units is one character time
 		s_IsrAccess = 0;
+		DmaLateTake();
 	}
 	if (s_Mstpcrb & s_MstpBit[u])
 	{
@@ -805,7 +843,14 @@ static void UpdateIcu(void)
 				any = true;
 				if ((d.Cnt & R_DMAC0_DMCNT_DTE_Msk) && (s_Dmast & R_DMA_DMAST_DMST_Msk))
 				{
-					DmaTransfer(ch);
+					if (s_DmaLate)
+					{
+						d.bLate = true;
+					}
+					else
+					{
+						DmaTransfer(ch);
+					}
 				}
 				else if (s_DmaHold)
 				{
@@ -1089,6 +1134,7 @@ static void ResetModel(void)
 	s_IsrStepEvery = 0;
 	s_IsrAccess = 0;
 	s_bIrqOff = false;
+	s_StepAtCra = false;
 	s_EvtRx = s_EvtTx = s_EvtLine = 0;
 	s_LastLine = 0;
 	s_RefillLeft = 0;
@@ -1442,6 +1488,51 @@ static void TestTxLate(int u, bool bIntMode, int Late, int Chunk)
 		printf("  TestTxLate unit %d int %d hold %d late %d chunk %d : %zu of %zu sent, DMA moved %u\n", u,
 			   bIntMode, s_DmaHold, Late, Chunk, s_Sci[u].Wire.size(), d.size(), s_Dmac[u].Moved);
 	}
+}
+
+// SCI2/9 block start: the line moves right after the CPU reads DMCRA and the
+// channel takes the request one access later, so it moves a byte, the last
+// one of a 1 byte block, while the CPU checks TDR. With DMCRA 0, DTE set
+// again would be a transfer with no end (CHECK in the DMCNT write).
+static void TestTxDmaLastByte(void)
+{
+	bool hold = s_DmaHold;
+	bool late = s_DmaLate;
+
+	s_DmaHold = true;
+	s_DmaLate = true;
+	for (int u = 2; u < 4; u++)
+	{
+		for (int intmode = 0; intmode < 2; intmode++)
+		{
+			for (unsigned every = 1; every <= 4; every *= 2)
+			{
+				ResetModel();
+				UARTCfg_t cfg = Cfg(u, intmode, true);
+				cfg.pTxMem = NULL;
+				cfg.TxMemSize = 0;
+				CHECK(UARTInit(&s_Uart, &cfg) == true);
+				s_StepAtCra = true;
+				s_StepEvery = every;
+
+				std::vector<uint8_t> d;
+				Pattern(d, 500, (uint8_t)(u + every));
+				SendAll(d.data(), (int)d.size(), 1);
+				Drain(u, d.size());
+				RunLine(4);
+				CHECK(s_Sci[u].Wire == d);
+				CHECK((s_Dmac[u].Cnt & R_DMAC0_DMCNT_DTE_Msk) == 0);
+				if (s_Sci[u].Wire != d)
+				{
+					printf("  TestTxDmaLastByte unit %d int %d step every %u : %zu of %zu sent\n", u, intmode, every,
+						   s_Sci[u].Wire.size(), d.size());
+				}
+			}
+		}
+	}
+	s_StepAtCra = false;
+	s_DmaHold = hold;
+	s_DmaLate = late;
 }
 
 // RX of Len bytes, read Chunk bytes per UARTRx call
@@ -1840,11 +1931,13 @@ int main()
 	TestInit();
 	TestSetRate();
 	// Without DMA, then with DMA for a request made while DTE is cleared held
-	// in DELSR and lost
-	for (int run = 0; run < 3; run++)
+	// in DELSR and lost, then held with the channel taking each request one
+	// register access or line step later
+	for (int run = 0; run < 4; run++)
 	{
 		bool dma = run > 0;
-		s_DmaHold = run == 1;
+		s_DmaHold = run == 1 || run == 3;
+		s_DmaLate = run == 3;
 		for (int u = 0; u < 4; u++)
 		{
 			for (int intmode = 0; intmode < 2; intmode++)
@@ -1889,6 +1982,8 @@ int main()
 		}
 	}
 	s_DmaHold = false;
+	s_DmaLate = false;
+	TestTxDmaLastByte();
 	TestErrors();
 	TestRxFull();
 	TestSevenBit();
