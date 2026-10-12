@@ -112,6 +112,9 @@ uint32_t SystemSetCoreClock(uint32_t CoreFreq, int ClkSel);
  * Selects the closest nominal rate using PLL0 or the divided input,
  * capped at LPC17_MAX_CORE_FREQ. Zero selects the lowest representable rate.
  * The returned integer Hz value truncates any fractional Hz.
+ * USBCLKCFG is updated only for MAIN-driven PLL0 at 288/384/480 MHz;
+ * otherwise it is unchanged. CPU-clock success does not imply USB readiness.
+ * USB also requires an accurate input and at least 18 MHz CPU clock.
  * Stop clock-dependent peripherals before changing the CPU clock.
  * Returns the actual CPU frequency, or zero on failure.
  */

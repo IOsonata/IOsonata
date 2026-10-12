@@ -75,6 +75,18 @@ static const int s_InvalidInputs[] = {
 };
 static const uint32_t s_UsbInputs[] = {12000000, 16000000, 24000000};
 static const uint32_t s_UsbInvalidInputs[] = {0, 32768, 4000000, 10000000, 20000000, 25000000};
+// Input Hz, requested CPU Hz, expected USB divider (7 is the retained sentinel).
+static const uint32_t s_UsbDividerCases[][3] = {
+	{12000000, 72000000, 5},
+	{12000000, 76800000, 7},
+	{12000000, 120000000, 9},
+	{12000000, 100000000, 7},
+	{12000000, 84000000, 7},
+	{12000000, 1000000, 7},
+	{12000000, 12345678, 7},
+	{4000000, 120000000, 7},
+	{32768, 72007680, 7}
+};
 // Independent exhaustive oracle uses the hardware's supported RTC values.
 static const uint16_t s_RtcM[] = {
 	4272, 4395, 4578, 4725, 4807, 5127, 5188, 5400, 5493, 5859,
@@ -343,6 +355,25 @@ int main(void)
 	puts("LPC17xx device speed limit and closest selection: PASS");
 	return 0;
 #endif
+
+	for (unsigned i = 0; i < sizeof(s_UsbDividerCases) / sizeof(s_UsbDividerCases[0]); i++)
+	{
+		memset(&s_Regs, 0, sizeof(s_Regs));
+		s_Regs.USBCLKCFG = i == 1 ? 5U : 7U;
+		s_OscWait = 0;
+		s_OscReadyAfter = 4;
+		assert(SystemCoreClockSet(s_UsbDividerCases[i][1], s_UsbDividerCases[i][0]) != 0);
+		assert(s_Regs.USBCLKCFG == s_UsbDividerCases[i][2]);
+		if (i < 3)
+		{
+			uint32_t m = (s_Regs.PLL0CFG & 32767U) + 1U;
+			uint32_t n = ((s_Regs.PLL0CFG >> 16) & 255U) + 1U;
+
+			assert((uint64_t)s_UsbDividerCases[i][0] * 2U * m ==
+				48000000ULL * n * (s_Regs.USBCLKCFG + 1U));
+			assert((s_Regs.USBCLKCFG & 1U) == 1U);
+		}
+	}
 
 	// Invalid physical oscillator inputs must fail before register/global changes.
 	for (unsigned i = 0; i < sizeof(s_InvalidInputs) / sizeof(s_InvalidInputs[0]); i++)

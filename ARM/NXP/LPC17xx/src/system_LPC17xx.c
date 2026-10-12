@@ -351,9 +351,12 @@ uint32_t SystemCoreClockSet(uint32_t CoreFreq, int ClkFreq)
 		}
 	}
 
-	/* USBCLK divider */
-	temp = (clock.PllFreq / 48000000U) - 1U;
-	LPC_SC->USBCLKCFG = temp & 0xf;
+	// USB needs MAIN input and an even division to exactly 48 MHz.
+	// A rounded CPU rate alone does not establish a usable USB clock.
+	if (clksrcsel == CLKSRCSEL_MAIN && clock.UsbExact)
+	{
+		LPC_SC->USBCLKCFG = clock.PllFreq / 48000000U - 1U;
+	}
 
 clock_ready:
 	SystemCoreClockUpdate();

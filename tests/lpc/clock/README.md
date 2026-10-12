@@ -333,3 +333,19 @@ They check boundary and oversized requests plus the exhaustive closest-rate
 oracle at O0/O2 with UBSan. Cortex-M3 assembly compilation covers LPC1768
 and LPC1769 at O0/O2. Project XML/JSON checks confirm device selection;
 full firmware links and hardware validation remain pending.
+
+CPU clock setup writes USBCLKCFG only when MAIN drives PLL0 at exactly
+288, 384 or 480 MHz, producing divider encodings 5, 7 or 9. The exact-ratio
+flag from selection is checked before integer Hz truncation can hide a
+fractional mismatch. IRC, RTC, bypass and other PLL0 rates retain the
+previous divider. Retaining it does not preserve a valid USB clock after a
+CPU clock change: callers must stop clock-dependent peripherals, and a
+successful CPU-rate return does not indicate USB readiness. USB operation
+also requires suitable oscillator accuracy and CCLK of at least 18 MHz.
+Reference: UM10360 sections 4.7.1/4.7.2 and table 39.
+
+Tests check all three valid dividers and their exact 48 MHz ratios, plus
+preservation for 100 MHz and 84 MHz CPU targets (the latter has an odd
+48 MHz CCO multiple), an inexact rate, bypass, IRC and RTC. They fail
+against the previous unconditional rounded-divider write. This validates
+register selection; physical USB clock tolerance and operation are untested.
