@@ -188,7 +188,8 @@ uint32_t SystemCoreClockSet(uint32_t CoreFreq, int ClkFreq)
 	/* results : i is N, temp is M */
 	i--;
 	temp--;
-	temp = ((i & 0xff) << 16) | (temp & 0xefff);
+	// MSEL occupies bits 14:0; preserve bit 12 and leave bit 15 clear.
+	temp = ((i & 0xFFU) << 16) | (temp & 0x7FFFU);
 	LPC_SC->PLL0CFG = temp;
 	LPC_SC->PLL0FEED  = 0xAA;
 	LPC_SC->PLL0FEED  = 0x55;

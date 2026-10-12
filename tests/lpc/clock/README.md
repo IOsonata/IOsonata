@@ -145,3 +145,13 @@ on that request. Tests also cover 101 MHz and 119 MHz, assert the exact
 M/N and CPU-divider encodings, and check the returned rates and flash
 ordering. These tests retain the ready-status model and do not validate
 physical PLL locking or broaden the setter's supported input constraints.
+
+PLL0CFG encoding now preserves all MSEL bits 14:0 and excludes reserved
+bit 15, matching the corrected status decoder. The setter previously
+cleared bit 12 with 0xEFFF, silently changing supported RTC multipliers.
+Regressions request 72,007,680 Hz and 84,000,768 Hz from the 32,768 Hz RTC,
+checking M=4395 and M=5127 respectively, N=1 and CPU divider=4. Both
+multipliers are listed in UM10360 table 21. The first request fails before
+the fix; both pass afterward at O0/O2 with UBSan. As in the other setter
+tests, lock status is supplied by the fixture. This does not validate RTC
+PLL lock detection, USB clock suitability, or arbitrary rate selection.

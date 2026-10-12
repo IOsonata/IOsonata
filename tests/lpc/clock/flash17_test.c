@@ -147,6 +147,23 @@ int main(void)
 			assert(s_OscWait == delay);
 		}
 	}
+	// UM10360 table 21: supported RTC multipliers with MSEL bit 12 set.
+	memset(&s_Regs, 0, sizeof(s_Regs));
+	s_Regs.FLASHCFG = 0x303AU;
+	s_Unsafe = 0;
+	assert(SystemCoreClockSet(72007680, 32768) == 72007680);
+	assert(s_Regs.PLL0CFG == 4394U);
+	assert(s_Regs.CCLKCFG == 3U);
+	assert(s_Unsafe == 0);
+
+	memset(&s_Regs, 0, sizeof(s_Regs));
+	s_Regs.FLASHCFG = 0x303AU;
+	s_Unsafe = 0;
+	assert(SystemCoreClockSet(84000768, 32768) == 84000768);
+	assert(s_Regs.PLL0CFG == 5126U);
+	assert(s_Regs.CCLKCFG == 3U);
+	assert(s_Unsafe == 0);
+
 	printf("LPC17xx flash timing and oscillator wait: %u errors\n", errors);
 	return errors != 0;
 }
