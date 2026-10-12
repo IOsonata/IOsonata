@@ -35,4 +35,14 @@ SOFTWARE.
 #define IOSONATA_TIMER_LPC_TARGET_H
 #include "LPC11Uxx.h"
 typedef LPC_CTxxBx_Type LpcTimerReg_t;
+
+static inline volatile uint32_t *LpcTimerMatchReg(LpcTimerReg_t *pReg, unsigned Index)
+{
+	return &pReg->MR[Index];
+}
+
+static inline void LpcTimerDisablePwm(LpcTimerReg_t *pReg)
+{
+	pReg->PWMC = 0;
+}
 #endif

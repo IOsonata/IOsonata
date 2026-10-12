@@ -121,7 +121,7 @@ static void LpcTimerArm(LpcTimer_t * const pDev, int TrigNo)
 
 	reg->MCR &= ~mcr;
 	reg->IR = LPC_TIMER_MATCH_FLAG << TrigNo;
-	reg->MR[TrigNo] = (uint32_t)pDev->Trig[TrigNo].Deadline & pDev->CounterMask;
+	*LpcTimerMatchReg(reg, (unsigned)TrigNo) = (uint32_t)pDev->Trig[TrigNo].Deadline & pDev->CounterMask;
 	reg->MCR |= mcr;
 
 	// A deadline that passed while the match register was written would only
@@ -143,7 +143,7 @@ static void LpcTimerResetCounter(LpcTimer_t * const pDev)
 	// also through the async APB bridge.
 	reg->TCR = LPC_TIMER_RESET;
 	(void)reg->TCR;
-	reg->MR[LPC_TIMER_WRAP_MR] = ((pDev->CounterMask >> 1) + 1U);
+	*LpcTimerMatchReg(reg, LPC_TIMER_WRAP_MR) = ((pDev->CounterMask >> 1) + 1U);
 	reg->IR = LPC_TIMER_MATCH_FLAGS;
 	NVIC_ClearPendingIRQ(pDev->IrqNo);
 
@@ -182,8 +182,8 @@ void LpcTimerIrqHandler(LpcTimer_t * const pDev)
 	{
 		// Match 3 alternates between the counter middle and 0, the match at 0
 		// is the wrap.
-		wrap = reg->MR[LPC_TIMER_WRAP_MR] == 0U;
-		reg->MR[LPC_TIMER_WRAP_MR] = (reg->MR[LPC_TIMER_WRAP_MR] +
+		wrap = *LpcTimerMatchReg(reg, LPC_TIMER_WRAP_MR) == 0U;
+		*LpcTimerMatchReg(reg, LPC_TIMER_WRAP_MR) = (*LpcTimerMatchReg(reg, LPC_TIMER_WRAP_MR) +
 										 ((pDev->CounterMask >> 1) + 1U)) & pDev->CounterMask;
 		(void)LpcTimerCount(pDev);
 	}
@@ -552,7 +552,7 @@ bool TimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 	dev->pReg->MCR = LPC_TIMER_MATCH_INT << (LPC_TIMER_WRAP_MR * LPC_TIMER_MCR_BITS);
 	dev->pReg->CCR = 0;
 	dev->pReg->EMR = 0;
-	dev->pReg->PWMC = 0;
+	LpcTimerDisablePwm(dev->pReg);
 
 	if (LpcTimerSetFrequency(pTimer, pCfg->Freq) == 0)
 	{

@@ -1190,6 +1190,26 @@
 			<type>1</type>
 			<locationURI>PARENT-3-PROJECT_LOC/src/spi_lpc17xx.c</locationURI>
 		</link>
+		<link>
+			<name>include/timer_lpc_target.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/Include/timer_lpc_target.h</locationURI>
+		</link>
+		<link>
+			<name>include/timer_lpcxx.h</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/include/timer_lpcxx.h</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/timer_lpc17xx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/timer_lpc17xx.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/timer_lpcxx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/timer_lpcxx.cpp</locationURI>
+		</link>
 	</linkedResources>
 </projectDescription>
 
