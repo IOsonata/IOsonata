@@ -180,5 +180,20 @@ startup time; its timing still needs board validation.
 Tests withhold oscillator readiness for both range selections, verify an
 IRC-started attempt returns without changing its clock selection or globals,
 and then allow a successful retry. A host read-count guard catches the
-previous endless wait. PLL lock/connect waits and reconfiguration of an
-already-running PLL remain separate work.
+previous endless wait. PLL connect waits and reconfiguration of an already-running PLL remain
+separate work.
+
+PLL0 lock polling is also bounded to 1,000,000 status reads. On timeout,
+the setter returns zero before requesting PLL connection or changing the
+USB divider. It refreshes SystemCoreClock and the delay-loop factor from
+the active clock registers. In a startup attempt the CPU therefore stays
+on the selected input through the programmed CPU divider, with safe flash
+timing; it does not report the requested PLL rate. PLL0 remains enabled
+but is not requested as the CPU source. This is not an IRC reset sequence.
+
+Tests withhold lock on IRC and main-oscillator startup paths, check that
+no connect request occurs, and verify the reported bypass rate and retained
+USB divider. The fixture now derives enable/connect status from PLL0CON;
+feed latching and analog timing are still not simulated. The old loop hits
+the read-count guard. Physical lock behavior (especially with RTC input),
+connect timeout handling and live PLL reconfiguration still need work.

@@ -42,6 +42,7 @@ Modified by          Date              Description
 #define IRC_FREQ				(4000000UL)		/* Internal RC freq */
 #define RTC_FREQ				(32768UL)		/* RTC frequency */
 #define LPC17_OSC_WAIT_MAX		1000000U		/* Bounded status reads */
+#define LPC17_PLL_WAIT_MAX		1000000U		/* Bounded status reads */
 
 /* Select system clock oscillator source */
 #define DEF_CLK_SRC			IRC_FREQ
@@ -212,8 +213,18 @@ uint32_t SystemCoreClockSet(uint32_t CoreFreq, int ClkFreq)
 	LPC_SC->PLL0CON   = 0x01;
 	LPC_SC->PLL0FEED  = 0xAA;
 	LPC_SC->PLL0FEED  = 0x55;
-	/* Wait for PLL0 to lock */
-	while (!(LPC_SC->PLL0STAT & (1<<26)));
+	// Do not connect PLL0 if it fails to report lock.
+	temp = LPC17_PLL_WAIT_MAX;
+	while ((LPC_SC->PLL0STAT & (1U << 26)) == 0U)
+	{
+		if (--temp == 0U)
+		{
+			// Report the active input/divider instead of the requested PLL rate.
+			SystemCoreClockUpdate();
+
+			return 0;
+		}
+	}
 
 	LPC_SC->PLL0CON   = 0x03;
 	LPC_SC->PLL0FEED  = 0xAA;

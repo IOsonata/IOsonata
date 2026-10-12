@@ -45,6 +45,8 @@ static unsigned s_Checks;
 static unsigned s_OscWait;
 static unsigned s_OscReadyAfter;
 static unsigned s_EarlyClockChange;
+static unsigned s_PllWait;
+static int s_FailPllLock;
 static const uint32_t s_Rates[] = {
 	20000000, 22000000, 40000000, 42000000, 60000000, 62000000,
 	80000000, 82000000, 99000000, 100000000, 101000000, 102000000,
@@ -58,7 +60,18 @@ extern uint32_t SystemCoreClockSet(uint32_t CoreFreq, int ClkFreq);
 
 LPC_SC_TypeDef *TestSystemRegs(void)
 {
-	uint32_t status = s_Regs.PLL0CFG | (7U << 24);
+	uint32_t status = s_Regs.PLL0CFG | ((s_Regs.PLL0CON & 3U) << 24);
+
+	if (s_FailPllLock && (s_Regs.PLL0CON & 1U) != 0)
+	{
+		s_PllWait++;
+		assert(s_PllWait < 2000000U);
+		assert((s_Regs.PLL0CON & 2U) == 0);
+	}
+	else
+	{
+		status |= 1U << 26;
+	}
 
 	if ((s_Regs.SCS & 0x60U) == 0x20U)
 	{
@@ -216,6 +229,32 @@ int main(void)
 		assert(s_EarlyClockChange == 0);
 		assert(s_Unsafe == 0);
 		assert(SystemClkFreq == input);
+	}
+	// Lock failure leaves the CPU on the selected input through its divider.
+	for (unsigned input = 4000000; input <= 12000000; input += 8000000)
+	{
+		memset(&s_Regs, 0, sizeof(s_Regs));
+		s_Regs.FLASHCFG = 0x303AU;
+		s_Regs.USBCLKCFG = 9;
+		SystemCoreClock = 120000000;
+		SystemMicroSecLoopCnt = 7;
+		s_OscWait = 0;
+		s_OscReadyAfter = 4;
+		s_EarlyClockChange = 0;
+		s_PllWait = 0;
+		s_FailPllLock = 1;
+		s_Unsafe = 0;
+		assert(SystemCoreClockSet(120000000, input) == 0);
+		assert(s_PllWait != 0);
+		assert(s_Regs.PLL0CON == 1);
+		assert(s_Regs.CCLKCFG == 3);
+		assert(s_Regs.USBCLKCFG == 9);
+		assert(s_Regs.FLASHCFG == 0x503AU);
+		assert(SystemCoreClock == input / 4);
+		assert(SystemClkFreq == input);
+		assert(SystemMicroSecLoopCnt == 0);
+		assert(s_Unsafe == 0);
+		s_FailPllLock = 0;
 	}
 	// UM10360 table 21: supported RTC multipliers with MSEL bit 12 set.
 	memset(&s_Regs, 0, sizeof(s_Regs));
