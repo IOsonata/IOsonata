@@ -1019,7 +1019,8 @@ static int Stm32UartRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int Bufflen)
 	// before they are copied, interrupts are disabled until the copy is done
 	// so that the interrupt cannot put over them. In pieces of at most
 	// ST_UART_COPY_MAX bytes to keep the RX interrupt latency short. In
-	// polling mode RDR is read before each piece.
+	// polling mode RDR is read and TDR written before each piece, which keeps
+	// both directions running at the line rate.
 	bool poll = !pDev->bIntEn && !pDev->bDma;
 
 	while (cnt < Bufflen)
@@ -1028,6 +1029,8 @@ static int Stm32UartRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int Bufflen)
 		uint32_t state = DisableInterrupt();
 		if (poll)
 		{
+			Stm32UartPollRx(dev);
+			Stm32UartPollTx(dev);
 			Stm32UartPollRx(dev);
 		}
 		uint8_t *p = CFifoGetMultiple(fifo, &l);
@@ -1087,9 +1090,9 @@ static bool Stm32UartStartTx(DevIntrf_t * const pDev, uint32_t DevAddr)
 // Several bytes into the TX CFIFO. CFifoPutMultiple publishes the slots
 // before they are written, so interrupts are disabled for the copy, in
 // pieces of at most ST_UART_COPY_MAX bytes to keep the RX interrupt latency
-// short. In polling mode RDR is read before each piece and at the end. Not
-// inlined in TxData, which keeps the one byte path short. Returns the number
-// of bytes put.
+// short. In polling mode RDR is read and TDR written before each piece, RDR
+// read again at the end. Not inlined in TxData, which keeps the one byte path
+// short. Returns the number of bytes put.
 __attribute__((noinline)) static int Stm32UartTxPut(Stm32UartDev_t * const pDev, uint8_t const *pData, int Datalen)
 {
 	hCFifo_t fifo = pDev->pUartDev->hTxFifo;
@@ -1102,6 +1105,8 @@ __attribute__((noinline)) static int Stm32UartTxPut(Stm32UartDev_t * const pDev,
 		uint32_t state = DisableInterrupt();
 		if (poll)
 		{
+			Stm32UartPollRx(pDev);
+			Stm32UartPollTx(pDev);
 			Stm32UartPollRx(pDev);
 		}
 		uint8_t *p = CFifoPutMultiple(fifo, &l);
