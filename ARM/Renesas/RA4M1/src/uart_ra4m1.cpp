@@ -16,12 +16,14 @@
 		                 from the SCI
 		bIntMode true  : RXI, TXI and ERI interrupts drain the TX CFIFO and
 		                 fill the RX CFIFO
-		bDMAMode true  : TX DMA sends blocks from the TX CFIFO, DMAC channel
-		                 DevNo activated by the TXI of the SCI. RX as without
-		                 DMA: the SCI has no idle line event to move a DMA
-		                 ring to the RX CFIFO after a short burst. Without
-		                 bIntMode, TxData and RxData retire the finished
-		                 block and start the next one. Needs a blocking FIFO.
+		bDMAMode true  : the CPU fills the SCI while the DMA is idle, TX DMA
+		                 sends the rest in blocks from the TX CFIFO, DMAC
+		                 channel DevNo activated by the TXI of the SCI. RX
+		                 as without DMA: the SCI has no idle line event to
+		                 move a DMA ring to the RX CFIFO after a short burst.
+		                 Without bIntMode, TxData and RxData retire the
+		                 finished block and start the next one. Needs a
+		                 blocking FIFO.
 
 		The SCI clock is PCLKA, read with SystemPeriphClockGet(0).
 
@@ -592,11 +594,32 @@ static bool Ra4m1UartDmaTxStart(Ra4m1UartDev_t * const pDev)
 	}
 }
 
+// TX with the channel idle. The SCI takes what it can from the CPU first, as
+// without DMA: up to 16 bytes in the TX FIFO of SCI0/1, TDR on SCI2/9. That
+// costs no interrupt, an application writing a byte at a time no faster than
+// the line sends that way. A block is started for the rest. Returns false
+// when nothing is left in the TX CFIFO. Interrupts disabled or from an
+// interrupt.
+static bool Ra4m1UartDmaTxKick(Ra4m1UartDev_t * const pDev)
+{
+	if (Ra4m1UartTxHw(pDev) > 0)
+	{
+		// A request left in DELSR while the channel was stopped told that the
+		// SCI had room, the CPU just filled it. Cleared with the link, as the
+		// Renesas FSP r_dmac does, the next one comes when there is room
+		// again.
+		R_ICU->DELSR[pDev->DevNo] = 0;
+		R_ICU->DELSR[pDev->DevNo] = pDev->EvtRxi + 1U;
+	}
+
+	return Ra4m1UartDmaTxStart(pDev);
+}
+
 // A block is done once the channel cleared DTE after its last byte. Its bytes
-// are released and the next block takes what was queued meanwhile. With the
-// FIFO empty TX is ready again and the application is told. From the transfer
-// end interrupt, or from TxData and RxData without bIntMode. Returns false if
-// no block was done.
+// are released and TX goes on with what was queued meanwhile. With the FIFO
+// empty TX is ready again and the application is told. From the transfer end
+// interrupt, or from TxData and RxData without bIntMode. Returns false if no
+// block was done.
 static bool Ra4m1UartDmaService(Ra4m1UartDev_t * const pDev)
 {
 	UARTDev_t *udev = pDev->pUartDev;
@@ -612,7 +635,7 @@ static bool Ra4m1UartDmaService(Ra4m1UartDev_t * const pDev)
 	CFifoRelease(udev->hTxFifo, (int)pDev->DmaLen);
 	pDev->DmaLen = 0;
 
-	if (Ra4m1UartDmaTxStart(pDev))
+	if (Ra4m1UartDmaTxKick(pDev))
 	{
 		return true;
 	}
@@ -649,7 +672,7 @@ static void Ra4m1UartPoll(Ra4m1UartDev_t * const pDev)
 	if (pDev->pUartDev->DevIntrf.bDma)
 	{
 		Ra4m1UartDmaService(pDev);
-		if (pDev->pUartDev->bTxReady && Ra4m1UartDmaTxStart(pDev))
+		if (pDev->pUartDev->bTxReady && Ra4m1UartDmaTxKick(pDev))
 		{
 			pDev->pUartDev->bTxReady = false;
 		}
@@ -984,13 +1007,13 @@ static int Ra4m1UartTxData(DevIntrf_t * const pDev, uint8_t const *pData, int Da
 	}
 	else if (pDev->bDma)
 	{
-		// A DMA block from the FIFO, the transfer end interrupt sends the
-		// rest. Checked again with interrupts disabled, TxData may also be
-		// called from an interrupt.
+		// What the SCI takes now, then a DMA block for the rest, the transfer
+		// end interrupt sends what follows. Checked again with interrupts
+		// disabled, TxData may also be called from an interrupt.
 		if (udev->bTxReady)
 		{
 			uint32_t state = DisableInterrupt();
-			if (udev->bTxReady && Ra4m1UartDmaTxStart(dev))
+			if (udev->bTxReady && Ra4m1UartDmaTxKick(dev))
 			{
 				udev->bTxReady = false;
 			}

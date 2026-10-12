@@ -400,11 +400,14 @@ and DMA with a non-blocking FIFO. `UARTSetCtrlLineState` does nothing.
   whatever the event. TXI is enabled while the TX CFIFO has data, `bTxReady`
   is true when the TX CFIFO is empty. The ICU IR flag of RXI and TXI is cleared
   at the start of the handler, ERI at the end, as the Renesas FSP does.
-- DMA mode (`bDMAMode`): DMAC channel `DevNo` sends TX blocks straight from the
+- DMA mode (`bDMAMode`): while the channel is idle the CPU puts what the SCI
+  takes, as without DMA (TX FIFO of SCI0/1, TDR of SCI2/9), which costs no
+  interrupt. DMAC channel `DevNo` sends the rest in blocks straight from the
   TX CFIFO, one byte to FTDRL or TDR for each TXI, linked in `ICU.DELSR`. A
   block is the first contiguous run of the CFIFO, at most half of it, and its
   bytes are released when the channel is done. The DMAC transfer end interrupt
-  (or TxData and RxData without `bIntMode`) starts the next block. SCI0/1 use
+  (or TxData and RxData without `bIntMode`) fills the SCI again and starts the
+  next block. SCI0/1 use
   TTRG 0 in DMA mode, TXI with the TX FIFO empty, and start a block by setting
   TIE again, as the Renesas FSP does with a transfer instance. SCI2/9 start a
   block from the byte left in TDR, or write its first byte to TDR when TDR is

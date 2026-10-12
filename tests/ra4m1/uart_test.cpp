@@ -1379,10 +1379,10 @@ static void TestTx(int u, bool bIntMode, int Len, int Chunk, bool bDma = false)
 	CHECK(CFifoUsed(s_Uart.hTxFifo) == 0);
 	if (bDma)
 	{
-		// The DMAC moved all but the bytes the CPU writes to TDR to start a
-		// block on SCI2/9
+		// The CPU fills the SCI while the channel is idle, the DMAC moves the
+		// rest
 		CHECK((s_Dmac[u].Cnt & R_DMAC0_DMCNT_DTE_Msk) == 0);
-		CHECK(u < 2 ? s_Dmac[u].Moved == (unsigned)Len : s_Dmac[u].Moved > 0);
+		CHECK(s_Dmac[u].Moved > 0);
 		if (bIntMode)
 		{
 			// The line is idle only while the first UARTTx copies its data,
@@ -1533,6 +1533,63 @@ static void TestLoopbackBursts(int u, bool bIntMode, int Len, unsigned IsrStep, 
 		printf("  TestLoopbackBursts unit %d int %d dma %d hold %d isr step %u seed %u : %zu of %d echoed, lost %u, "
 			   "ovr %u, events lost %u\n", u, bIntMode, bDma, s_DmaHold, IsrStep, Seed, s_Sci[u].Wire.size(), Len,
 			   s_Sci[u].RxLost, s_Uart.RxOvrErrCnt, s_LostEvt - lostevt);
+	}
+}
+
+// Byte mode as exemples/uart/uart_prbs_tx.cpp, one UARTTx call per byte, with
+// the 16 byte default CFIFOs. The line moves one character every StepEvery
+// interrupt points: the application as fast as the line, 2 or 4 times faster.
+// Returns the number of interrupts, the line must never be idle.
+static unsigned TxByteMode(int u, bool bDma, unsigned StepEvery, unsigned IsrStep)
+{
+	ResetModel();
+	UARTCfg_t cfg = Cfg(u, true, bDma);
+	cfg.pTxMem = NULL;
+	cfg.TxMemSize = 0;
+	cfg.pRxMem = NULL;
+	cfg.RxMemSize = 0;
+	CHECK(UARTInit(&s_Uart, &cfg) == true);
+
+	std::vector<uint8_t> d;
+	Pattern(d, 2000, (uint8_t)(StepEvery + u));
+	s_StepEvery = StepEvery;
+	s_IsrStepEvery = IsrStep;
+	unsigned isr = s_IsrCnt;
+	SendAll(d.data(), (int)d.size(), 1);
+	Drain(u, d.size());
+	CHECK(s_Sci[u].Wire == d);
+	CHECK(s_Sci[u].TxGap == 0);
+	if (s_Sci[u].Wire != d || s_Sci[u].TxGap)
+	{
+		printf("  TxByteMode unit %d dma %d hold %d step every %u isr step %u : %zu sent, gaps %u\n", u, bDma,
+			   s_DmaHold, StepEvery, IsrStep, s_Sci[u].Wire.size(), s_Sci[u].TxGap);
+	}
+
+	return s_IsrCnt - isr;
+}
+
+// DMA mode takes no more interrupts than interrupt mode. The CPU fills the SCI
+// while the channel is idle, an application writing a byte at a time no faster
+// than the line takes none.
+static void TestTxByteMode(void)
+{
+	for (int u = 0; u < 4; u++)
+	{
+		for (unsigned every = 1; every <= 4; every *= 2)
+		{
+			for (unsigned isrstep = 0; isrstep <= 8; isrstep += 8)
+			{
+				unsigned irq = TxByteMode(u, false, every, isrstep);
+				unsigned dmairq = TxByteMode(u, true, every, isrstep);
+				CHECK(dmairq <= irq);
+				CHECK(every > 1 || dmairq == 0);
+				if (dmairq > irq || (every == 1 && dmairq))
+				{
+					printf("  TestTxByteMode unit %d hold %d step every %u isr step %u : interrupts %u, with DMA %u\n",
+						   u, s_DmaHold, every, isrstep, irq, dmairq);
+				}
+			}
+		}
 	}
 }
 
@@ -1769,6 +1826,10 @@ int main()
 					}
 				}
 			}
+		}
+		if (dma)
+		{
+			TestTxByteMode();
 		}
 	}
 	s_DmaHold = false;
