@@ -189,6 +189,55 @@ static void CheckSense(void)
 	assert(memcmp(expected, (const void *)LPC_GPIOINT, sizeof(expected)) == 0);
 }
 
+static void CheckBounds(void)
+{
+	const int badports[] = {-1, 5, INT_MIN, INT_MAX};
+	const int badpins[] = {-1, 32, INT_MIN, INT_MAX};
+	unsigned char before[5 * sizeof(LPC_GPIO_TypeDef)];
+
+	memcpy(before, (const void *)LPC_GPIO0, sizeof(before));
+	for (unsigned i = 0; i < sizeof(badports) / sizeof(badports[0]); i++)
+	{
+		int port = badports[i];
+
+		assert(IOPinRead(port, 0) == 0);
+		assert(IOPinReadPort(port) == 0);
+		IOPinSet(port, 0);
+		IOPinClear(port, 0);
+		IOPinWritePort(port, UINT32_MAX);
+		IOPinWrite8Port(port, UINT8_MAX);
+		IOPinWrite16Port(port, UINT16_MAX);
+		IOPinWrite32Port(port, UINT32_MAX);
+	}
+	for (int port = 0; port < 5; port++)
+	{
+		for (unsigned i = 0; i < sizeof(badpins) / sizeof(badpins[0]); i++)
+		{
+			assert(IOPinRead(port, badpins[i]) == 0);
+			IOPinSet(port, badpins[i]);
+			IOPinClear(port, badpins[i]);
+		}
+	}
+	assert(memcmp(before, (const void *)LPC_GPIO0, sizeof(before)) == 0);
+	// Boundary pin accesses still reach only their selected set/clear bit.
+	for (int port = 0; port < 5; port++)
+	{
+		for (int pin = 0; pin < 32; pin++)
+		{
+			uint32_t bit = 1U << pin;
+
+			IOPinSet(port, pin);
+			assert(LPC_GPIO0[port].FIOSET == bit);
+			IOPinClear(port, pin);
+			assert(LPC_GPIO0[port].FIOCLR == bit);
+			IOPinWritePort(port, bit);
+			assert(IOPinRead(port, pin) == 1);
+			IOPinWritePort(port, ~bit);
+			assert(IOPinRead(port, pin) == 0);
+		}
+	}
+}
+
 static void CheckMux(void)
 {
 	const int pins[][2] = {{0, 0}, {0, 15}, {0, 16}, {0, 30},
@@ -282,6 +331,7 @@ int main(void)
 	CheckSense();
 	CheckInterrupts();
 	CheckMux();
+	CheckBounds();
 
 	// Narrow writes must keep every supplied bit and preserve higher pins.
 	for (int port = 0; port < 5; port++)

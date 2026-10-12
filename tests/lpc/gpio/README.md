@@ -145,3 +145,10 @@ The inline-control test asserts masked register access and exact mask restoratio
 for all pin indices on all five ports, both initial interrupt states and both
 toggle levels. It compares the complete vendor GPIO blocks to detect unwanted
 writes. It models critical-section calls, not asynchronous hardware timing.
+
+All LPC17xx inline GPIO reads and writes validate port indices (0..4), and
+single-pin operations validate pin indices (0..31) before shifting. Invalid
+reads return zero and invalid writes leave registers untouched, matching the
+LPC11 convention. These bounds describe register slots, not package pin
+availability. Tests cover negative indices, upper boundaries, INT_MIN/INT_MAX,
+all valid pin indices and existing byte/halfword/full-port write behavior.

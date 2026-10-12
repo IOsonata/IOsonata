@@ -67,18 +67,27 @@ static inline void IOPinSetDir(int PortNo, int PinNo, IOPINDIR Dir)
 
 static inline int IOPinRead(int PortNo, int PinNo)
 {
-
-	return ((LPC_GPIO0[PortNo].FIOPIN >> PinNo ) & 1);
+	if ((unsigned)PortNo >= 5U || (unsigned)PinNo >= 32U)
+	{
+		return 0;
+	}
+	return (int)((LPC_GPIO0[PortNo].FIOPIN >> (unsigned)PinNo) & 1U);
 }
 
 static inline void IOPinSet(int PortNo, int PinNo)
 {
-	LPC_GPIO0[PortNo].FIOSET = (1UL << PinNo);
+	if ((unsigned)PortNo < 5U && (unsigned)PinNo < 32U)
+	{
+		LPC_GPIO0[PortNo].FIOSET = 1UL << (unsigned)PinNo;
+	}
 }
 
 static inline void IOPinClear(int PortNo, int PinNo)
 {
-	LPC_GPIO0[PortNo].FIOCLR = (1UL << PinNo);
+	if ((unsigned)PortNo < 5U && (unsigned)PinNo < 32U)
+	{
+		LPC_GPIO0[PortNo].FIOCLR = 1UL << (unsigned)PinNo;
+	}
 }
 
 static inline void IOPinToggle(int PortNo, int PinNo)
@@ -106,27 +115,36 @@ static inline void IOPinToggle(int PortNo, int PinNo)
 
 static inline uint32_t IOPinReadPort(int PortNo)
 {
-	return LPC_GPIO0[PortNo].FIOPIN;
+	return (unsigned)PortNo < 5U ? LPC_GPIO0[PortNo].FIOPIN : 0U;
 }
 
 static inline void IOPinWritePort(int PortNo, uint32_t Data)
 {
-	LPC_GPIO0[PortNo].FIOPIN = Data;
+	if ((unsigned)PortNo < 5U)
+	{
+		LPC_GPIO0[PortNo].FIOPIN = Data;
+	}
 }
 
 static inline void IOPinWrite8Port(int PortNo, uint8_t Data)
 {
-	LPC_GPIO0[PortNo].FIOPIN0 = Data;
+	if ((unsigned)PortNo < 5U)
+	{
+		LPC_GPIO0[PortNo].FIOPIN0 = Data;
+	}
 }
 
 static inline void IOPinWrite16Port(int PortNo, uint16_t Data)
 {
-	LPC_GPIO0[PortNo].FIOPINL = Data;
+	if ((unsigned)PortNo < 5U)
+	{
+		LPC_GPIO0[PortNo].FIOPINL = Data;
+	}
 }
 
 static inline void IOPinWrite32Port(int PortNo, uint32_t Data)
 {
-	LPC_GPIO0[PortNo].FIOPIN = Data;
+	IOPinWritePort(PortNo, Data);
 }
 
 #endif	// __IOPINCTRL_H__
