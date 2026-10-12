@@ -984,8 +984,11 @@ static void Stm32UartPoll(Stm32UartDev_t * const pDev)
 		return;
 	}
 #endif
+	// RDR checked again after the TDR writes, which can take two
+	// characters
 	Stm32UartPollRx(pDev);
 	Stm32UartPollTx(pDev);
+	Stm32UartPollRx(pDev);
 }
 
 static int Stm32UartRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int Bufflen)
@@ -1198,9 +1201,10 @@ static int Stm32UartTxData(DevIntrf_t * const pDev, uint8_t const *pData, int Da
 			}
 			else
 			{
+				// RDR before and after the TDR writes, the next RxData call
+				// may come later than one character time
+				Stm32UartPollRx(dev);
 				Stm32UartPollTx(dev);
-				// RDR as well, the next RxData call may come later than one
-				// character time
 				Stm32UartPollRx(dev);
 			}
 		}
