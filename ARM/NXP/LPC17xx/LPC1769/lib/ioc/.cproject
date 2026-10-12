@@ -66,7 +66,7 @@
 									<listOptionValue builtIn="false" value="&quot;../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../Include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../CMSIS/Core/Include&quot;"/>
@@ -94,7 +94,7 @@
 									<listOptionValue builtIn="false" value="&quot;../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../Include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../CMSIS/Core/Include&quot;"/>
@@ -140,7 +140,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/coredev/lpc_iap.c|src/usb_hidhost.cpp|src/RTX_Conf_CM.c|src/coredev/i2c_lpcxx.c|src/sdcard.c|src/diskio.c|includex|src/sysstatus_impl.cpp|src/i2c_lpcxx.c|src/converters/adc_device.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/coredev/lpc_iap.c|src/usb_hidhost.cpp|src/RTX_Conf_CM.c|src/sdcard.c|src/diskio.c|includex|src/sysstatus_impl.cpp|src/converters/adc_device.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -210,7 +210,7 @@
 									<listOptionValue builtIn="false" value="&quot;../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../Include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../CMSIS/Core/Include&quot;"/>
@@ -238,7 +238,7 @@
 									<listOptionValue builtIn="false" value="&quot;../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../Include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../CMSIS/Core/Include&quot;"/>
@@ -285,7 +285,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/coredev/lpc_iap.c|src/usb_hidhost.cpp|src/RTX_Conf_CM.c|src/coredev/i2c_lpcxx.c|src/sdcard.c|src/diskio.c|includex|src/sysstatus_impl.cpp|src/i2c_lpcxx.c|src/converters/adc_device.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/coredev/lpc_iap.c|src/usb_hidhost.cpp|src/RTX_Conf_CM.c|src/sdcard.c|src/diskio.c|includex|src/sysstatus_impl.cpp|src/converters/adc_device.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>

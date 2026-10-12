@@ -586,9 +586,9 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/i2c.h</locationURI>
 		</link>
 		<link>
-			<name>include/coredev/i2c_lpcxx.h</name>
+			<name>include/coredev/i2c_lpc_master.h</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/include/i2c_lpcxx.h</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/include/i2c_lpc_master.h</locationURI>
 		</link>
 		<link>
 			<name>include/coredev/iopincfg.h</name>
@@ -901,9 +901,9 @@
 			<locationURI>PARENT-3-PROJECT_LOC/src/i2c_lpc17xx.c</locationURI>
 		</link>
 		<link>
-			<name>src/coredev/i2c_lpcxx.c</name>
+			<name>src/coredev/i2c_lpc_master.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/i2c_lpcxx.c</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/src/i2c_lpc_master.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/coredev/iopincfg.c</name>
@@ -1180,6 +1180,12 @@
 			<type>1</type>
 			<locationURI>PARENT-3-PROJECT_LOC/Include/spi_lpc_target.h</locationURI>
 		</link>
+		<link>
+			<name>include/coredev/i2c_lpc_target.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/Include/i2c_lpc_target.h</locationURI>
+		</link>
 	</linkedResources>
 </projectDescription>
+
 

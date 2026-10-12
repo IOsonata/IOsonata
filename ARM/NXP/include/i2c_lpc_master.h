@@ -60,8 +60,16 @@ typedef struct {
 	bool bError;
 } LpcI2CMaster_t;
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 bool LpcI2CMasterInit(LpcI2CMaster_t *pData, I2CDev_t *pDev, const I2CCfg_t *pCfg);
 void LpcI2CMasterClock(LpcI2CMaster_t *pData, bool Enable);
 void LpcI2CMasterReset(LpcI2CMaster_t *pData);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

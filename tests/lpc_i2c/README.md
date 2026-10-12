@@ -1,4 +1,4 @@
-# LPC11Uxx I2C master
+# LPC11Uxx and LPC17xx I2C master
 
 Run `python3 tests/lpc_i2c/run.py` from the repository root. The tests compile
 the actual family adapter, shared polling master and generic DeviceIntrf
@@ -20,8 +20,9 @@ an active transaction also leave the current rate unchanged.
 
 Shared operations are in ARM/NXP/src/i2c_lpc_master.cpp. The family file
 owns clocks, reset and pin validation, and i2c_lpc_target.h accesses the
-vendor CMSIS register type. The older LPC17xx driver and excluded legacy
-shared C source have not been migrated. LPC546xx uses a different Flexcomm
+vendor CMSIS register type. LPC11Uxx and LPC17xx share the polling master.
+The excluded legacy i2c_lpcxx.c is no longer linked by either library.
+LPC546xx uses a different Flexcomm
 I2C controller and keeps its existing driver.
 
 START and repeated START send the address before returning success. TX counts
@@ -50,3 +51,20 @@ Full firmware linking and physical I2C bus tests remain pending.
 
 Hardware reference: NXP UM10462, chapter 14 (I2C), and chapter 3 (clock/reset).
 https://www.keil.com/dd/docs/datashts/nxp/lpc11uxx/um10462.pdf
+
+LPC17xx supports DevNo 0, 1 and 2 with the same polling restrictions and
+400 kHz maximum. PCLK is SystemCoreClock/4. At 120 MHz core clock the
+slowest rate is approximately 228.89 Hz (reported as 228 Hz).
+Pin maps contain SDA then SCL, port 0, with no pull or pull-up:
+
+| Controller | SDA | SCL | Function | Pad type |
+| --- | --- | --- | --- | --- |
+| I2C0 | P0.27 | P0.28 | FUNC1 | Dedicated open drain |
+| I2C1 | P0.0 or P0.19 | P0.1 or P0.20 | FUNC3 | OPENDRAIN |
+| I2C2 | P0.10 | P0.11 | FUNC2 | OPENDRAIN |
+
+External pull-ups are required. LPC17xx tests run each descriptor separately
+at O0/O2, including clock selection, pad setup and monitor-mode reset.
+They do not validate simultaneous physical transfers on multiple controllers.
+Hardware reference: NXP UM10360, chapter 19 (I2C).
+https://www.pololu.com/file/0J431/user.manual.lpc17xx.pdf

@@ -1,9 +1,9 @@
 /*--------------------------------------------------------------------------
-File   : lpci2c.c
+File   : i2c_lpc17xx.c
 
 Author : Hoang Nguyen Hoan          Nov. 20, 2011
 
-Desc   : I2C implementation on LPC
+Desc   : LPC17xx clocks and pins for the shared LPC I2C polling master
 
 Copyright (c) 2011, I-SYST inc., all rights reserved
 
@@ -31,302 +31,123 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 Modified by          Date              Description
 
 ----------------------------------------------------------------------------*/
-#include <stdlib.h>
-#include <stdio.h>
-#include <string.h>
+#include "i2c_lpc_master.h"
+#include "coredev/interrupt.h"
 
-#include "system_LPC17xx.h"
+#define LPC17_I2C_COUNT	3
 
-#include "i2c_lpcxx.h"
-#include "coredev/iopincfg.h"
-#include "iopinctrl.h"
+static LpcI2CMaster_t s_I2C[LPC17_I2C_COUNT] = {
+	{ .pReg = LPC_I2C0, .MaxRate = 400000U, },
+	{ .pReg = LPC_I2C1, .MaxRate = 400000U, },
+	{ .pReg = LPC_I2C2, .MaxRate = 400000U, },
+};
 
-#define LPCI2C_MAX_INTRF			3			// Max number of I2C interface
+static const uint32_t s_ClockMask[LPC17_I2C_COUNT] = {
+	1U << 7, 1U << 19, 1U << 26,
+};
 
-static LPCI2CDEV g_LpcI2CDev[LPCI2C_MAX_INTRF];
+static const IRQn_Type s_Irq[LPC17_I2C_COUNT] = {
+	I2C0_IRQn, I2C1_IRQn, I2C2_IRQn,
+};
 
-
-bool LpcI2CWaitInt(LPCI2CDEV *pDev, int Timeout)
+void LpcI2CMasterClock(LpcI2CMaster_t *pData, bool Enable)
 {
-	while (!(pDev->pI2CReg->I2CONSET & LPCI2C_I2CONSET_SI) && --Timeout > 0);
-	if (Timeout > 0)
-		return true;
+	int devno = (int)(pData - s_I2C);
+	uint32_t state = DisableInterrupt();
 
-	return false;
-}
-
-I2CSTATUS LpcI2CWaitStatus(LPCI2CDEV *pDev, int Timeout)
-{
-	while ((pDev->pI2CReg->I2STAT & 0xF8) == 0xF8 && --Timeout > 0);
-
-	return (I2CSTATUS)(pDev->pI2CReg->I2STAT & 0xF8);
-}
-
-I2CSTATUS LpcI2CGetStatus(LPCI2CDEV *pDev)
-{
-	return (I2CSTATUS)(pDev->pI2CReg->I2STAT & 0xF8);
-}
-
-
-bool LpcI2CStartCond(LPCI2CDEV *pDev)
-{
-	I2CSTATUS status;
-
-	// Enable I2C engine
-	pDev->pI2CReg->I2CONSET = LPCI2C_I2CONSET_I2EN;
-    while (!(pDev->pI2CReg->I2CONSET & LPCI2C_I2CONSET_I2EN));
-
-    pDev->pI2CReg->I2CONSET = LPCI2C_I2CONSET_STA;
-    pDev->pI2CReg->I2CONCLR = LPCI2C_I2CONCLR_SIC;
-
-	LpcI2CWaitInt(pDev, 100000);
-	pDev->pI2CReg->I2CONCLR = LPCI2C_I2CONCLR_STAC;
-	status = LpcI2CWaitStatus(pDev, 100000);
-	if (status != I2CSTATUS_START_COND && status != I2CSTATUS_RESTART_COND)
-		return false;
-	return true;
-}
-
-void LpcI2CStopCond(LPCI2CDEV *pDev)
-{
-	if (pDev->pI2CReg->I2CONSET & LPCI2C_I2CONSET_STA)
-		pDev->pI2CReg->I2CONCLR = LPCI2C_I2CONCLR_STAC;
-
-	pDev->pI2CReg->I2CONSET = LPCI2C_I2CONSET_STO;
-	pDev->pI2CReg->I2CONCLR = LPCI2C_I2CONCLR_SIC;
-
-	LpcI2CWaitInt(pDev, 100000);
-	//LpcI2CWaitStatus(pDev, 100000);
-
-	// Disable I2C engine
-	pDev->pI2CReg->I2CONCLR = LPCI2C_I2CONCLR_I2ENC;
-}
-
-
-void LpcI2CDisable(DevIntrf_t *pDev)
-{
-	if (pDev && pDev->pDevData)
-		((LPCI2CDEV*)pDev->pDevData)->pI2CReg->I2CONCLR = LPCI2C_I2CONCLR_I2ENC;
-}
-
-void LpcI2CEnable(DevIntrf_t *pDev)
-{
-	if (pDev && pDev->pDevData)
-		((LPCI2CDEV*)pDev->pDevData)->pI2CReg->I2CONSET |= LPCI2C_I2CONSET_I2EN;
-}
-
-uint32_t LpcI2CGetRate(DevIntrf_t *pDev)
-{
-	int rate = 0;
-
-	if (pDev && pDev->pDevData)
-		rate = ((LPCI2CDEV*)pDev->pDevData)->pI2cDev->Cfg.Rate;
-
-	return rate;
-}
-
-uint32_t LpcI2CSetRate(DevIntrf_t *pDev, uint32_t RateHz)
-{
-	if (pDev == NULL || pDev->pDevData == NULL)
-		return 0;
-
-	LPCI2CDEV *dev = (LPCI2CDEV *)pDev->pDevData;
-
-	// our default clock setting PCLK div 4
-	uint32_t clk = (SystemCoreClock >> 2) / RateHz;
-
-	dev->pI2CReg->I2SCLH = clk >> 1;
-	dev->pI2CReg->I2SCLL = clk - dev->pI2CReg->I2SCLH;
-	dev->pI2cDev->Cfg.Rate = RateHz;
-
-	return RateHz;
-}
-
-bool LpcI2CStartRx(DevIntrf_t *pDev, uint32_t DevAddr)
-{
-	if (pDev == NULL || pDev->pDevData == NULL)
-		return false;
-
-	LPCI2CDEV *dev = (LPCI2CDEV *)pDev->pDevData;
-
-	if (LpcI2CStartCond(dev))
+	if (Enable)
 	{
-		// Send I2C address
-		dev->pI2CReg->I2DAT = (DevAddr << 1)| 1;
-		dev->pI2CReg->I2CONCLR = LPCI2C_I2CONCLR_SIC;
-		LpcI2CWaitInt(dev, 100000);
-		if (LpcI2CWaitStatus(dev, 100000) == I2CSTATUS_SLAR_ACK)
-			return true;
-	}
-
-	return false;
-}
-
-// Receive Data only, no Start/Stop condition
-int LpcI2CRxData(DevIntrf_t *pDev, uint8_t *pBuff, int BuffLen)
-{
-	I2CSTATUS status;
-	int rcount = 0;
-	LPCI2CDEV *dev = (LPCI2CDEV *)pDev->pDevData;
-
-	// Start read data
-	while (BuffLen > rcount)
-	{
-		if (rcount < (BuffLen - 1))
-			dev->pI2CReg->I2CONSET = LPCI2C_I2CONSET_AA;
+		LPC_SC->PCONP |= s_ClockMask[devno];
+		// Keep the previous LPC17xx driver's PCLK = CCLK/4 selection.
+		if (devno == 0)
+		{
+			LPC_SC->PCLKSEL0 &= ~(3U << 14);
+			// Standard/fast mode: slew control and glitch filtering enabled.
+			LPC_PINCON->I2CPADCFG &= ~15U;
+		}
 		else
-			dev->pI2CReg->I2CONCLR = LPCI2C_I2CONCLR_AAC;
-		dev->pI2CReg->I2CONCLR = LPCI2C_I2CONCLR_SIC;
+		{
+			uint32_t shift = devno == 1 ? 6U : 20U;
 
-		LpcI2CWaitInt(dev, 100000);
-		*pBuff = dev->pI2CReg->I2DAT;
-		status = LpcI2CWaitStatus(dev, 100000);
-		if (status != I2CSTATUS_RXDATA_ACK && status != I2CSTATUS_RXDATA_NACK)
-			break;
-		pBuff++;
-		rcount++;
+			LPC_SC->PCLKSEL1 &= ~(3U << shift);
+		}
 	}
-
-	return rcount;
-}
-
-// Send Data only, no Start/Stop condition
-int LpcI2CTxData(DevIntrf_t * const pDev, uint8_t const *pData, int DataLen)
-{
-	I2CSTATUS status;
-	int tcount = 0;
-	LPCI2CDEV *dev = (LPCI2CDEV *)pDev->pDevData;
-
-	// Start sending data
-	while (DataLen > 0)
+	else
 	{
-		dev->pI2CReg->I2DAT = *pData;
-		dev->pI2CReg->I2CONCLR = LPCI2C_I2CONCLR_SIC;
-		LpcI2CWaitInt(dev, 100000);
-		status = LpcI2CWaitStatus(dev, 100000);
-		if (status != I2CSTATUS_M_TXDAT_ACK && status != I2CSTATUS_M_TXDAT_NACK)
-			break;
-		pData++;
-		DataLen--;
-		tcount++;
+		LPC_SC->PCONP &= ~s_ClockMask[devno];
 	}
-
-	return tcount;
+	(void)LPC_SC->PCONP;
+	EnableInterrupt(state);
 }
 
-void LpcI2CStopRx(DevIntrf_t *pDev)
+void LpcI2CMasterReset(LpcI2CMaster_t *pData)
 {
-	LpcI2CStopCond((LPCI2CDEV *)pDev->pDevData);
+	int devno = (int)(pData - s_I2C);
+
+	NVIC_DisableIRQ(s_Irq[devno]);
+	// Clearing I2EN resets the bus state and forces STO to zero (UM10360).
+	LpcI2CClearControl(pData->pReg, LPC_I2C_CLEAR);
+	(void)LpcI2CControl(pData->pReg);
+	pData->pReg->MMCTRL = 0;
+	NVIC_ClearPendingIRQ(s_Irq[devno]);
 }
 
-bool LpcI2CStartTx(DevIntrf_t *pDev, uint32_t DevAddr)
+static bool Lpc17I2CPinValid(int DevNo, int Index, const IOPinCfg_t *pPin)
 {
-	if (pDev == NULL || pDev->pDevData == NULL)
-		return false;
-
-	LPCI2CDEV *dev = (LPCI2CDEV *)pDev->pDevData;
-
-	if (LpcI2CStartCond(dev))
-	{
-		if (dev->pI2CReg->I2CONSET & LPCI2C_I2CONSET_STA)
-			dev->pI2CReg->I2CONCLR = LPCI2C_I2CONCLR_STAC;
-
-		// Send I2C address
-
-		dev->pI2CReg->I2DAT = DevAddr << 1;
-		dev->pI2CReg->I2CONCLR = LPCI2C_I2CONCLR_SIC;
-		LpcI2CWaitInt(dev, 1000);
-		if (LpcI2CWaitStatus(dev, 10000) == I2CSTATUS_SLAW_ACK)
-			return true;
-	}
-
-	return false;
-}
-
-void LpcI2CStopTx(DevIntrf_t *pDev)
-{
-	LpcI2CStopCond((LPCI2CDEV *)pDev->pDevData);
-}
-
-bool I2CInit(I2CDev_t *pDev, const I2CCfg_t *pCfgData)
-{
-	if (pDev == NULL || pCfgData == NULL)
+	if (pPin->PortNo != 0 ||
+		(pPin->Res != IOPINRES_NONE && pPin->Res != IOPINRES_PULLUP))
 	{
 		return false;
 	}
-
-	uint32_t clk = (SystemCoreClock >> 2) / pCfgData->Rate;
-
-	// Note : contrary to the user guide.  Pullup resistor is required
-	// for I2C to function properly
-	// Pin selection for SCL
-//	IOPinConfig(pCfgData->SclPortNo, pCfgData->SclPinNo, pCfgData->SclPinOp, IOPINDIR_OUTPUT,
-//				IOPINRES_PULLUP, IOPINTYPE_OPENDRAIN);
-
-	// Pin selection for SDA
-//	IOPinConfig(pCfgData->SdaPortNo, pCfgData->SdaPinNo, pCfgData->SdaPinOp, IOPINDIR_BI,
-//				IOPINRES_PULLUP, IOPINTYPE_OPENDRAIN);
-
-	memcpy(pDev->Cfg.pIOPinMap, pCfgData->pIOPinMap, sizeof(IOPinCfg_t) * pCfgData->NbIOPins);
-
-	// Configure I/O pins
-	IOPinCfg(pCfgData->pIOPinMap, pCfgData->NbIOPins);
-    IOPinSet(pCfgData->pIOPinMap[I2C_SCL_IOPIN_IDX].PortNo, pCfgData->pIOPinMap[I2C_SCL_IOPIN_IDX].PinNo);
-    IOPinSet(pCfgData->pIOPinMap[I2C_SDA_IOPIN_IDX].PortNo, pCfgData->pIOPinMap[I2C_SDA_IOPIN_IDX].PinNo);
-
-	switch (pCfgData->DevNo)
+	if (DevNo == 0)
 	{
-		case 0:
-			LPC_SC->PCONP |= LPC_PCONP_I2C0;
-			LPC_SC->PCLKSEL0 &= ~LPC_PCLKSEL0_I2C0_MASK; // CCLK / 4
-			g_LpcI2CDev[pCfgData->DevNo].pI2CReg = (LPCI2CREG *)LPC_I2C0;
-			//NVIC_DisableIRQ(I2C0_IRQn);
-			break;
-		case 1:
-			LPC_SC->PCONP |= LPC_PCONP_I2C1;
-			LPC_SC->PCLKSEL1 &= ~LPC_PCLKSEL1_I2C1_MASK; // CCLK / 4
-			g_LpcI2CDev[pCfgData->DevNo].pI2CReg = (LPCI2CREG *)LPC_I2C1;
-			//NVIC_DisableIRQ(I2C1_IRQn);
-			break;
-		case 2:
-			LPC_SC->PCONP |= LPC_PCONP_I2C2;
-			LPC_SC->PCLKSEL1 &= ~LPC_PCLKSEL1_I2C2_MASK; // CCLK / 4
-			g_LpcI2CDev[pCfgData->DevNo].pI2CReg = (LPCI2CREG *)LPC_I2C2;
-			//NVIC_DisableIRQ(I2C2_IRQn);
-			break;
+		// I2C0 has dedicated open-drain pads.
+		return pPin->PinNo == 27 + Index && pPin->PinOp == IOPINOP_FUNC1;
 	}
-	g_LpcI2CDev[pCfgData->DevNo].I2CNo = pCfgData->DevNo;
-	g_LpcI2CDev[pCfgData->DevNo].pI2CReg->I2SCLH = clk >> 1;
-	g_LpcI2CDev[pCfgData->DevNo].pI2CReg->I2SCLL = clk - g_LpcI2CDev[pCfgData->DevNo].pI2CReg->I2SCLH;
-
-	g_LpcI2CDev[pCfgData->DevNo].pI2CReg->I2CONCLR = LPCI2C_I2CONCLR_AAC | LPCI2C_I2CONCLR_STAC |
-						 	 	 	 	 	 	 	 LPCI2C_I2CONCLR_STOC | LPCI2C_I2CONCLR_I2ENC;
-	g_LpcI2CDev[pCfgData->DevNo].pI2cDev = pDev;
-
-	pDev->Cfg.Mode = pCfgData->Mode;
-	pDev->Cfg.Rate = pCfgData->Rate;
-	pDev->Cfg.NbSlaveAddr = pCfgData->NbSlaveAddr;
-	memcpy(pDev->Cfg.SlaveAddr, pCfgData->SlaveAddr, pDev->Cfg.NbSlaveAddr * sizeof(uint8_t));
-//	pDev->MaxRetry = pCfgData->MaxRetry;
-
-	pDev->DevIntrf.pDevData = (void*)&g_LpcI2CDev[pCfgData->DevNo];
-
-	pDev->DevIntrf.Disable = LpcI2CDisable;
-	pDev->DevIntrf.Enable = LpcI2CEnable;
-	pDev->DevIntrf.GetRate = LpcI2CGetRate;
-	pDev->DevIntrf.SetRate = LpcI2CSetRate;
-	pDev->DevIntrf.StartRx = LpcI2CStartRx;
-	pDev->DevIntrf.RxData = LpcI2CRxData;
-	pDev->DevIntrf.StopRx = LpcI2CStopRx;
-	pDev->DevIntrf.StartTx = LpcI2CStartTx;
-	pDev->DevIntrf.TxData = LpcI2CTxData;
-	pDev->DevIntrf.StopTx = LpcI2CStopTx;
-	pDev->DevIntrf.Reset = NULL;
-	pDev->DevIntrf.IntPrio = pCfgData->IntPrio;
-	pDev->DevIntrf.EvtCB = pCfgData->EvtCB;
-	pDev->DevIntrf.MaxRetry = pCfgData->MaxRetry;
-	atomic_flag_clear(&pDev->DevIntrf.bBusy);
-
-	return true;
+	if (pPin->Type != IOPINTYPE_OPENDRAIN)
+	{
+		return false;
+	}
+	if (DevNo == 1)
+	{
+		return (pPin->PinNo == Index || pPin->PinNo == 19 + Index) &&
+			pPin->PinOp == IOPINOP_FUNC3;
+	}
+	return pPin->PinNo == 10 + Index && pPin->PinOp == IOPINOP_FUNC2;
 }
 
+bool I2CInit(I2CDev_t *pDev, const I2CCfg_t *pCfg)
+{
+	if (pDev == NULL || pCfg == NULL || pCfg->DevNo < 0 || pCfg->DevNo >= LPC17_I2C_COUNT ||
+		pCfg->Type != I2CTYPE_STANDARD || pCfg->Mode != I2CMODE_MASTER ||
+		pCfg->AddrType != I2CADDR_TYPE_NORMAL || pCfg->bIntEn || pCfg->bDmaEn ||
+		pCfg->Rate == 0 || pCfg->MaxRetry < 0 || SystemCoreClock < 4U ||
+		pCfg->pIOPinMap == NULL || pCfg->NbIOPins != 2)
+	{
+		return false;
+	}
+	for (int i = 0; i < 2; i++)
+	{
+		if (!Lpc17I2CPinValid(pCfg->DevNo, i, &pCfg->pIOPinMap[i]))
+		{
+			return false;
+		}
+	}
+	uint32_t state = DisableInterrupt();
+
+	for (int i = 0; i < LPC17_I2C_COUNT; i++)
+	{
+		if (i != pCfg->DevNo && s_I2C[i].pDev == pDev)
+		{
+			EnableInterrupt(state);
+			return false;
+		}
+	}
+	LpcI2CMaster_t *data = &s_I2C[pCfg->DevNo];
+
+	data->Clock = SystemCoreClock / 4U;
+	bool result = LpcI2CMasterInit(data, pDev, pCfg);
+
+	EnableInterrupt(state);
+	return result;
+}
