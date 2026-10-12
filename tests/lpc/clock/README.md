@@ -238,7 +238,14 @@ uses another source, but this legacy API cannot independently describe the
 main oscillator in that case. The caller must stop USB before setup.
 Tests check all three valid encodings and preservation for invalid inputs,
 including zero, plus IRC/RTC selection and an unready main oscillator.
-PLL1 reconfiguration sequencing remains separate work.
+Before writing PLL1CFG, setup disables and disconnects PLL1 with a protected
+feed and waits for both status bits to clear. This stop wait is bounded to
+1,000,000 status reads. On timeout, setup leaves the old configuration and
+the disable request intact and returns without enabling or reconnecting.
+Host tests start with an active PLL1 and check that configuration changes
+only after shutdown, including a blocked-stop case and both IRQ mask states.
+The regression fails against the previous code's configuration write while
+PLL1 is still active.
 
 PLL1 lock and connection waits are now each bounded to 1,000,000 status
 reads. A timeout writes PLL1CON=0 and performs the protected feed sequence,

@@ -98,7 +98,9 @@ uint32_t SystemSetCoreClock(uint32_t CoreFreq, int ClkSel);
  * Requires MAIN selected and ready, with its 12, 16 or 24 MHz frequency
  * recorded by the clock setup. Other inputs leave PLL1 unchanged.
  * The caller must stop USB before configuring its clock.
- * Lock/connect waits are bounded; timeout disables PLL1 and returns.
+ * Stops PLL1 before changing its configuration. Stop/lock/connect waits
+ * are bounded; stop timeout preserves the configuration and disable request.
+ * Lock/connect timeout requests PLL1 disable and returns.
  */
 void SystemConnectPLL1(void);
 

@@ -301,6 +301,18 @@ void SystemConnectPLL1(void)
 		return;
 	}
 
+	// Configuration may only change after PLL1 is disabled and disconnected.
+	LPC_SC->PLL1CON = 0;
+	Lpc17PllFeed(&LPC_SC->PLL1FEED);
+	wait = LPC17_PLL_WAIT_MAX;
+	while ((LPC_SC->PLL1STAT & (3U << 8)) != 0U)
+	{
+		if (--wait == 0U)
+		{
+			return;
+		}
+	}
+
 	// USB requires 48 MHz. P=2 (PSEL=1) gives a 192 MHz CCO.
 	val = (48000000U / sysclk - 1U) | (1U << 5);
 	LPC_SC->PLL1CFG = val;

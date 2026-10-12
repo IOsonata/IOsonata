@@ -53,7 +53,12 @@ static unsigned s_ConnectSeen;
 static unsigned s_ConnectWait;
 static uint32_t s_Primask;
 static unsigned s_FeedGuards;
-static int s_UsbModel;
+static int s_UsbModel = 1;
+static int s_CheckUsbStop;
+static int s_BlockUsbStop;
+static uint32_t s_UsbPreviousCfg;
+static uint32_t s_UsbPreviousCon;
+static unsigned s_UsbStopWait;
 static unsigned s_UsbFailure;
 static unsigned s_UsbWait;
 static const uint32_t s_Rates[] = {
@@ -110,6 +115,22 @@ LPC_SC_TypeDef *TestSystemRegs(void)
 			if (s_UsbFailure == 2)
 			{
 				usbstatus &= ~(1U << 9);
+			}
+		}
+		if (s_CheckUsbStop)
+		{
+			if (s_Regs.PLL1CFG != s_UsbPreviousCfg)
+			{
+				assert(s_UsbPreviousCon == 0);
+				assert(!s_BlockUsbStop);
+			}
+			s_UsbPreviousCfg = s_Regs.PLL1CFG;
+			s_UsbPreviousCon = s_Regs.PLL1CON;
+			if (s_BlockUsbStop && s_Regs.PLL1CON == 0)
+			{
+				s_UsbStopWait++;
+				assert(s_UsbStopWait < 2000000U);
+				usbstatus |= 3U << 8;
 			}
 		}
 		memcpy((uint8_t *)&s_Regs + offsetof(LPC_SC_TypeDef, PLL1STAT), &usbstatus, sizeof(usbstatus));
@@ -392,7 +413,7 @@ int main(void)
 		s_FeedGuards = 0;
 		SystemConnectPLL1();
 		assert(s_Primask == mask);
-		assert(s_FeedGuards == 3);
+		assert(s_FeedGuards == 4);
 	}
 	// PLL1 needs exactly 48 MHz output and P=2 for its 192 MHz CCO.
 	for (unsigned i = 0; i < sizeof(s_UsbInputs) / sizeof(s_UsbInputs[0]); i++)
@@ -469,6 +490,37 @@ int main(void)
 			assert((s_Regs.PLL1STAT & (7U << 8)) == (7U << 8));
 			assert(s_Primask == failure - 1);
 			s_UsbModel = 0;
+		}
+	}
+	// Reconfigure an already enabled/connected USB PLL only after shutdown.
+	for (unsigned blocked = 0; blocked < 2; blocked++)
+	{
+		for (uint32_t mask = 0; mask <= 1; mask++)
+		{
+			memset(&s_Regs, 0, sizeof(s_Regs));
+			s_Regs.CLKSRCSEL = CLKSRCSEL_MAIN;
+			s_Regs.SCS = 0x60;
+			s_Regs.PLL1CON = 3;
+			s_Regs.PLL1CFG = 0x22;
+			SystemClkFreq = 12000000;
+			s_Primask = mask;
+			s_UsbModel = 1;
+			s_UsbFailure = 0;
+			s_UsbWait = 0;
+			s_CheckUsbStop = 1;
+			s_BlockUsbStop = blocked;
+			s_UsbPreviousCon = s_Regs.PLL1CON;
+			s_UsbPreviousCfg = s_Regs.PLL1CFG;
+			s_UsbStopWait = 0;
+			SystemConnectPLL1();
+			assert(s_Primask == mask);
+			assert(s_Regs.PLL1CFG == (blocked ? 0x22U : 0x23U));
+			assert(s_Regs.PLL1CON == (blocked ? 0U : 3U));
+			if (blocked)
+			{
+				assert(s_UsbStopWait != 0);
+			}
+			s_CheckUsbStop = 0;
 		}
 	}
 	printf("LPC17xx flash timing and oscillator wait: %u errors\n", errors);
