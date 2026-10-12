@@ -178,7 +178,8 @@ uint32_t SystemCoreClockSet(uint32_t CoreFreq, int ClkFreq)
 
 	for (i = 1; i < 33; i++)
 	{
-		int t = pllclk * i;
+		// FCCO * N can exceed 32 bits even for a valid CPU clock.
+		uint64_t t = (uint64_t)pllclk * (uint32_t)i;
 		temp = t / sysclk;
 		if ((t % sysclk) == 0)
 			break;

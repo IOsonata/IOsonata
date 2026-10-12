@@ -137,3 +137,11 @@ and 16 MHz inputs (both range selections), with immediately ready and
 delayed status. It fails if clock changes occur before ready status.
 The existing waits are still unbounded; missing-oscillator/PLL timeout
 recovery remains separate work. Reference: UM10360 chapter 3, table 13.
+
+The PLL multiplier search uses a 64-bit FCCO * N product. A 99 MHz request
+from the 4 MHz IRC needs a 297 MHz CCO, N=8 and M=297: the search product
+is 2,376,000,000, beyond signed 32-bit range. The old setter fails UBSan
+on that request. Tests also cover 101 MHz and 119 MHz, assert the exact
+M/N and CPU-divider encodings, and check the returned rates and flash
+ordering. These tests retain the ready-status model and do not validate
+physical PLL locking or broaden the setter's supported input constraints.

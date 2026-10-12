@@ -46,7 +46,8 @@ static unsigned s_OscReadyAfter;
 static unsigned s_EarlyClockChange;
 static const uint32_t s_Rates[] = {
 	20000000, 22000000, 40000000, 42000000, 60000000, 62000000,
-	80000000, 82000000, 100000000, 102000000, 120000000
+	80000000, 82000000, 99000000, 100000000, 101000000, 102000000,
+	119000000, 120000000
 };
 extern uint32_t SystemCoreClockSet(uint32_t CoreFreq, int ClkFreq);
 
@@ -95,6 +96,21 @@ int main(void)
 		s_Checks = 0;
 		rate = SystemCoreClockSet(s_Rates[i], 4000000);
 		assert(rate == s_Rates[i]);
+		if (rate == 99000000)
+		{
+			assert(s_Regs.PLL0CFG == ((7U << 16) | 296U));
+			assert(s_Regs.CCLKCFG == 2U);
+		}
+		if (rate == 101000000)
+		{
+			assert(s_Regs.PLL0CFG == ((7U << 16) | 302U));
+			assert(s_Regs.CCLKCFG == 2U);
+		}
+		if (rate == 119000000)
+		{
+			assert(s_Regs.PLL0CFG == ((7U << 16) | 356U));
+			assert(s_Regs.CCLKCFG == 2U);
+		}
 		timing = (rate - 1U) / 20000000U;
 		if (timing > 5U)
 		{
