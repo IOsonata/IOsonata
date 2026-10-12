@@ -120,7 +120,7 @@ static volatile uint32_t * const s_PinReg[] = {
 	&LPC_IOCON->PIO1_27,
 	&LPC_IOCON->PIO1_28,
 	&LPC_IOCON->PIO1_29,
-	&LPC_IOCON->PIO1_30,
+	NULL, // Reserved IOCON offset 0xD8; rejected by Lpc11GpioValidPin.
 	&LPC_IOCON->PIO1_31,
 };
 
@@ -265,7 +265,7 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, uint32_t PortNo, uint32_t PinN
 						 IOPINSENSE Sense, IOPinEvtHandler_t pEvtCB, void *pCtx)
 {
 	if ((unsigned)IntNo >= LPC11_PINT_COUNT || PortNo > 1U ||
-		PinNo >= (PortNo == 0U ? 24U : 32U) || pEvtCB == NULL ||
+		PinNo > 31U || !Lpc11GpioValidPin((int)PortNo, (int)PinNo) || pEvtCB == NULL ||
 		(unsigned)IntPrio >= (1UL << __NVIC_PRIO_BITS) ||
 		(Sense != IOPINSENSE_HIGH_TRANSITION && Sense != IOPINSENSE_LOW_TRANSITION &&
 		 Sense != IOPINSENSE_TOGGLE))

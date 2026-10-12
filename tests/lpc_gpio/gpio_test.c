@@ -47,16 +47,20 @@ int main(void)
 		Config(i < 24 ? 0 : 1, i < 24 ? i : i - 24, IOPINOP_GPIO);
 		for (unsigned j = 0; j < 56; j++)
 		{
-			if (j != i)
+			if (j != i || i == 54)
 			{
 				assert(regs[j] == 0x80U);
 			}
+		}
+		if (i == 54)
+		{
+			continue;
 		}
 		unsigned gpiofunc = i == 0 || (i >= 10 && i <= 15) ? 1U : 0U;
 		assert((regs[i] & 7U) == gpiofunc);
 	}
 
-	// P1_27 supports FUNC4; bit 2 must survive, then clear on return to GPIO.
+	// Verify the three-bit mux field; board code must choose a valid function.
 	Config(1, 27, IOPINOP_FUNC4);
 	assert((LPC_IOCON->PIO1_27 & 7U) == 4U);
 	Config(1, 27, IOPINOP_GPIO);
@@ -135,7 +139,7 @@ int main(void)
 	memcpy(iocon, (void *)LPC_IOCON, sizeof(iocon));
 	memcpy(gpio, (void *)LPC_GPIO, sizeof(gpio));
 	uint32_t clocks = LPC_SYSCON->SYSAHBCLKCTRL;
-	const int bad[][2] = {{-1, 0}, {2, 0}, {0, -1}, {0, 24}, {1, 32}};
+	const int bad[][2] = {{-1, 0}, {2, 0}, {0, -1}, {0, 24}, {1, 32}, {1, 30}};
 	for (unsigned i = 0; i < sizeof(bad) / sizeof(bad[0]); i++)
 	{
 		int port = bad[i][0];

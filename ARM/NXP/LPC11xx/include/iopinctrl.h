@@ -41,11 +41,11 @@ Modified by          Date              Description
 #include "LPC11Uxx.h"
 #include "coredev/iopincfg.h"
 
-// Package bonding may expose fewer pins than the controller implements.
+// P1.30 is reserved. Package bonding may expose fewer of the other pins.
 static inline bool Lpc11GpioValidPin(int PortNo, int PinNo)
 {
 	return (PortNo == 0 && (unsigned)PinNo < 24U) ||
-		   (PortNo == 1 && (unsigned)PinNo < 32U);
+		   (PortNo == 1 && (unsigned)PinNo < 32U && PinNo != 30);
 }
 
 static inline void IOPinSetDir(int PortNo, int PinNo, IOPINDIR Dir)

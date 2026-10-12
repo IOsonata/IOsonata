@@ -223,6 +223,11 @@ static void CheckPins()
 	cfg.DevNo = 1;
 	RejectPins(&spi1, cfg);
 	cfg.DevNo = 0;
+	// P1.30 has no pad; rejection must occur before ownership or pin writes.
+	pins[3].PortNo = 1;
+	pins[3].PinNo = 30;
+	RejectPins(&s_Spi, cfg);
+	pins[3] = s_Pins[3];
 	// CS must not remux any bus pin, even with application-controlled CS.
 	for (SPICSEL select : {SPICSEL_AUTO, SPICSEL_MAN})
 	{

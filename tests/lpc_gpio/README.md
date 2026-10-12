@@ -53,7 +53,8 @@ Allocation and hook updates use short interrupt locks; callbacks run after the
 lock is restored. Group/port interrupts and deep-sleep wake configuration are not
 implemented by these functions.
 
-PINTSEL uses selectors 0..23 for port 0 and 24..55 for port 1. The old bundled
+PINTSEL uses selectors 0..23 for port 0 and 24..55 for port 1, except
+reserved P1.30 (selector 54). The old bundled
 CMSIS header incorrectly declared three NVIC priority bits; it now declares two,
 as specified by UM10462 section 6.3. Use priorities 0..3 for LPC11Uxx. The Blinky
 button definitions were updated accordingly.
@@ -67,6 +68,13 @@ callbacks; it does not simulate asynchronous hardware or interrupt latency.
 GPIO, SSP, UART and Cortex-M0 compiler-to-assembly checks pass. Firmware linking,
 Blinky output, UART PRBS output, SPI chip-select timing and ADC/I2C electrical
 behavior still require a target toolchain and board validation.
+
+P1.30 is rejected by GPIO configuration, per-pin control and pin-interrupt
+registration. Its IOCON offset 0xD8 is reserved in UM10462 table 60, despite
+having a PIO1_30 member in the bundled vendor header. The register lookup keeps
+a NULL entry at that offset, preserving P1.31's address. Tests check that the
+reserved slot is untouched, failed interrupt requests consume no channel, and
+SSP initialization rejects P1.30 as a chip select.
 
 Hardware reference: NXP UM10462, chapters 7 (IOCON) and 9 (GPIO),
 https://www.keil.com/dd/docs/datashts/nxp/lpc11uxx/um10462.pdf.

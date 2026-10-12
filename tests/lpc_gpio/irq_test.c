@@ -52,6 +52,10 @@ int main(void)
 	assert(!IOPinEnableInterrupt(0, 0, 0, 0, IOPINSENSE_DISABLE, PinEvent, NULL));
 	assert(!IOPinEnableInterrupt(0, 0, 0, 0, IOPINSENSE_TOGGLE, NULL, NULL));
 	assert(IOPinAllocateInterrupt(0, -1, 0, IOPINSENSE_TOGGLE, PinEvent, NULL) == -1);
+	assert(!IOPinEnableInterrupt(0, 0, 1, 30, IOPINSENSE_TOGGLE, PinEvent, NULL));
+	assert(IOPinAllocateInterrupt(0, 1, 30, IOPINSENSE_TOGGLE, PinEvent, NULL) == -1);
+	IOPinSetSense(1, 30, IOPINSENSE_TOGGLE);
+	assert(LPC_SYSCON->PINTSEL[0] == 0);
 	IOPinDisableInterrupt(0);
 	IOPinDisableInterrupt(8);
 	IOPinSetSense(0, 0, IOPINSENSE_TOGGLE);
