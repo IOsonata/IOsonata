@@ -38,6 +38,8 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "LPC11Uxx.h"
 
 #include "spi_lpcxx.h"
+#include "coredev/interrupt.h"
+#include "iopinctrl.h"
 
 #define LPC11U_SYSAHBCLKCTRL_SSP0_EN		(1 << 11)
 #define LPC11U_SYSAHBCLKCTRL_SSP1_EN		(1 << 18)
@@ -51,79 +53,160 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 extern uint32_t SystemMainClkFreq;
 
 SSPDEV g_SspDev[LPC11U_MAX_SSPDEV] = {
-		{0, 0, LPC_SSP0,},
-		{1, 0, LPC_SSP1,},
+		{0, 0, LPC_SSP0, NULL, false, false, false},
+		{1, 0, LPC_SSP1, NULL, false, false, false},
 };
+
+static void Lpc11SSPReset(DevIntrf_t *pDev)
+{
+	SSPDEV *dev = (SSPDEV *)pDev->pDevData;
+	SPIDev_t *spi = dev->pSpiDev;
+	uint32_t cr0 = dev->pSspReg->CR0;
+	uint32_t cpsr = dev->pSspReg->CPSR;
+	uint32_t reset = dev->DevNo == 0 ? LPC11U_PRESETCTRL_SSP0_RST : LPC11U_PRESETCTRL_SSP1_RST;
+	uint32_t state = DisableInterrupt();
+
+	// Reset aborts outstanding frames and empties both FIFOs.
+	LPC_SYSCON->PRESETCTRL &= ~reset;
+	(void)LPC_SYSCON->PRESETCTRL;
+	LPC_SYSCON->PRESETCTRL |= reset;
+	dev->pSspReg->CR1 = 0;
+	dev->pSspReg->CR0 = cr0;
+	dev->pSspReg->CPSR = cpsr;
+	dev->pSspReg->IMSC = 0;
+	dev->pSspReg->ICR = 3;
+	if (dev->bSelected && spi->Cfg.ChipSel == SPICSEL_AUTO)
+	{
+		const IOPinCfg_t *pin = &spi->Cfg.pIOPinMap[SPI_CS_IOPIN_IDX + spi->CurDevCs];
+
+		IOPinSet(pin->PortNo, pin->PinNo);
+	}
+	dev->bSelected = false;
+	dev->bError = false;
+	spi->CurDevCs = -1;
+	pDev->bTxReady = true;
+	if (dev->bEnabled)
+	{
+		dev->pSspReg->CR1 = LPCSSP_CR1_SSP_EN;
+	}
+	EnableInterrupt(state);
+}
+
+static void Lpc11SSPPowerOff(DevIntrf_t *pDev)
+{
+	SSPDEV *dev = (SSPDEV *)pDev->pDevData;
+	uint32_t clock = dev->DevNo == 0 ? LPC11U_SYSAHBCLKCTRL_SSP0_EN : LPC11U_SYSAHBCLKCTRL_SSP1_EN;
+
+	LpcSSPDisable(pDev);
+	LPC_SYSCON->SYSAHBCLKCTRL &= ~clock;
+}
+
+SPIPHY SPISetPhy(SPIDev_t *pDev, SPIPHY Phy)
+{
+	(void)Phy;
+	return pDev->Cfg.Phy;
+}
 
 bool SPIInit(SPIDev_t *pDev, const SPICfg_t *pCfgData)
 {
 	if (pDev == NULL || pCfgData == NULL || pCfgData->DevNo < 0 ||
-		pCfgData->DevNo >= LPC11U_MAX_SSPDEV || SystemMainClkFreq == 0)
+		pCfgData->DevNo >= LPC11U_MAX_SSPDEV || SystemMainClkFreq == 0 ||
+		pCfgData->Mode != SPIMODE_MASTER || pCfgData->Phy != SPIPHY_NORMAL ||
+		pCfgData->bDmaEn || pCfgData->bIntEn || pCfgData->DataSize < 4 ||
+		pCfgData->DataSize > 16 || pCfgData->BitOrder != SPIDATABIT_MSB ||
+		(pCfgData->ClkPol != SPICLKPOL_HIGH && pCfgData->ClkPol != SPICLKPOL_LOW) ||
+		(pCfgData->DataPhase != SPIDATAPHASE_FIRST_CLK && pCfgData->DataPhase != SPIDATAPHASE_SECOND_CLK) ||
+		(pCfgData->ChipSel != SPICSEL_AUTO && pCfgData->ChipSel != SPICSEL_MAN) ||
+		pCfgData->pIOPinMap == NULL || pCfgData->NbIOPins < SPI_CS_IOPIN_IDX ||
+		(pCfgData->ChipSel == SPICSEL_AUTO && pCfgData->NbIOPins <= SPI_CS_IOPIN_IDX) ||
+		pCfgData->MaxRetry < 0)
 	{
 		return false;
 	}
-	SSPDEV *dev = NULL;
+	for (int i = 0; i < pCfgData->NbIOPins; i++)
+	{
+		const IOPinCfg_t *pin = &pCfgData->pIOPinMap[i];
 
-	IOPinCfg(pCfgData->pIOPinMap, pCfgData->NbIOPins);
+		if (pin->PortNo < 0 || pin->PortNo > 1 || pin->PinNo < 0 || pin->PinNo > 31)
+		{
+			return false;
+		}
+		// Automatic CS uses ordinary GPIO-function-0 pins. Debug/reset
+		// pins with a different GPIO function are excluded in this port.
+		if (i >= SPI_CS_IOPIN_IDX && pCfgData->ChipSel == SPICSEL_AUTO &&
+			(pin->PinOp != 0 || pin->PinDir != IOPINDIR_OUTPUT ||
+			 (pin->PortNo == 0 && (pin->PinNo == 0 || (pin->PinNo >= 10 && pin->PinNo <= 15)))))
+		{
+			return false;
+		}
+	}
+	SSPDEV *dev = &g_SspDev[pCfgData->DevNo];
+	uint32_t state = DisableInterrupt();
 
+	if (dev->bSelected || (dev->pSpiDev != NULL && dev->pSpiDev != pDev) ||
+		g_SspDev[1 - pCfgData->DevNo].pSpiDev == pDev)
+	{
+		EnableInterrupt(state);
+		return false;
+	}
+	dev->pSpiDev = pDev;
+	dev->bEnabled = false;
+	dev->bSelected = false;
+	dev->bError = false;
+	pDev->Cfg = *pCfgData;
+	pDev->FirstRdData = -1;
+	pDev->CurDevCs = -1;
+	pDev->DevIntrf.pDevData = dev;
+	LPC_SYSCON->SYSAHBCLKCTRL |= LPC11U_SYSAHBCLKCTRL_GPIO_EN;
 	if (pCfgData->DevNo == 0)
 	{
-		LPC_SYSCON->PRESETCTRL |= LPC11U_PRESETCTRL_SSP0_RST;
 		LPC_SYSCON->SYSAHBCLKCTRL |= LPC11U_SYSAHBCLKCTRL_SSP0_EN;
-		LPC_SYSCON->SSP0CLKDIV = 1;//0x2;			// Divided by 1
-
-		dev = &g_SspDev[0];
-		dev->pSspReg = LPC_SSP0;
+		LPC_SYSCON->SSP0CLKDIV = 1;
+		NVIC_DisableIRQ(SSP0_IRQn);
 	}
-	else if (pCfgData->DevNo == 1)
+	else
 	{
-		LPC_SYSCON->PRESETCTRL |= LPC11U_PRESETCTRL_SSP1_RST;
 		LPC_SYSCON->SYSAHBCLKCTRL |= LPC11U_SYSAHBCLKCTRL_SSP1_EN;
-		LPC_SYSCON->SSP1CLKDIV = 1;//0x02;			// Divided by 1
-
-		dev = &g_SspDev[1];
-		dev->pSspReg = LPC_SSP1;
+		LPC_SYSCON->SSP1CLKDIV = 1;
+		NVIC_DisableIRQ(SSP1_IRQn);
 	}
-
-	// SSP clocks branch from the main clock before SYSAHBCLKDIV.
 	uint32_t div = pCfgData->DevNo == 0 ? LPC_SYSCON->SSP0CLKDIV : LPC_SYSCON->SSP1CLKDIV;
 
 	dev->PClkFreq = SystemMainClkFreq / (div & 0xFFU);
-	dev->pSspReg->CR1 &= ~LPCSSP_CR1_SSP_EN;
+	Lpc11SSPReset(&pDev->DevIntrf);
+	EnableInterrupt(state);
 
-	uint32_t d = (pCfgData->DataSize - 1);
+	// Preload high before making the GPIO chip selects outputs.
+	if (pCfgData->ChipSel == SPICSEL_AUTO)
+	{
+		for (int i = SPI_CS_IOPIN_IDX; i < pCfgData->NbIOPins; i++)
+		{
+			IOPinSet(pCfgData->pIOPinMap[i].PortNo, pCfgData->pIOPinMap[i].PinNo);
+		}
+	}
+	IOPinCfg(pCfgData->pIOPinMap, pCfgData->NbIOPins);
+	uint32_t cr0 = pCfgData->DataSize - 1U;
+
 	if (pCfgData->DataPhase == SPIDATAPHASE_SECOND_CLK)
-		d |= LPCSSP_CR0_CPHA_SECOND;
-
-	if (pCfgData->ClkPol == SPICLKPOL_HIGH)
-		d |= LPCSSP_CR0_CPOL_HI;
-
-	dev->pSspReg->CR0 = d | LPCSSP_CR0_FRF_SPI;
-
-	d = LPCSSP_CR1_SSP_EN;
-
-	if (pCfgData->Mode == SPIMODE_SLAVE)
 	{
-		d |= LPCSSP_CR1_MS_SLAVE;
+		cr0 |= LPCSSP_CR0_CPHA_SECOND;
 	}
-
-	dev->pSspReg->CR1 = d & ~LPCSSP_CR1_SSP_EN;
+	// Generic HIGH means active high: CPOL=0, idle low.
+	if (pCfgData->ClkPol == SPICLKPOL_LOW)
+	{
+		cr0 |= LPCSSP_CR0_CPOL_HI;
+	}
+	dev->pSspReg->CR0 = cr0;
 	dev->pSspReg->CPSR = 2;
-	/* Enable AHB clock to the GPIO domain. */
-	LPC_SYSCON->SYSAHBCLKCTRL |= LPC11U_SYSAHBCLKCTRL_GPIO_EN;
-	//LPC_SSP1->IMSC = SSPIMSC_RORIM | SSPIMSC_RTIM;
-
-	// Flush RX FIFO
-	while (LpcSSPWaitRxFifo(dev, 2))
-	{
-		(void)dev->pSspReg->DR;
-	}
-
-	dev->pSpiDev = pDev;
-	pDev->DevIntrf.pDevData = (void*)dev;
-	pDev->Cfg = *pCfgData;
 	pDev->DevIntrf.Type = DEVINTRF_TYPE_SPI;
-	pDev->DevIntrf.bDma = pCfgData->bDmaEn;
+	pDev->DevIntrf.bDma = false;
+	pDev->DevIntrf.bIntEn = false;
+	pDev->DevIntrf.bTxReady = true;
+	pDev->DevIntrf.bNoStop = false;
+	pDev->DevIntrf.EnCnt = 1;
+	pDev->DevIntrf.IntPrio = pCfgData->IntPrio;
+	pDev->DevIntrf.EvtCB = pCfgData->EvtCB;
+	pDev->DevIntrf.MaxRetry = pCfgData->MaxRetry;
 	pDev->DevIntrf.Disable = LpcSSPDisable;
 	pDev->DevIntrf.Enable = LpcSSPEnable;
 	pDev->DevIntrf.GetRate = LpcSSPGetRate;
@@ -133,17 +216,13 @@ bool SPIInit(SPIDev_t *pDev, const SPICfg_t *pCfgData)
 	pDev->DevIntrf.StopRx = LpcSSPStopRx;
 	pDev->DevIntrf.StartTx = LpcSSPStartTx;
 	pDev->DevIntrf.TxData = LpcSSPTxData;
+	pDev->DevIntrf.TxSrData = LpcSSPTxData;
 	pDev->DevIntrf.StopTx = LpcSSPStopTx;
-	pDev->DevIntrf.MaxRetry = 0;
+	pDev->DevIntrf.Reset = Lpc11SSPReset;
+	pDev->DevIntrf.PowerOff = Lpc11SSPPowerOff;
+	pDev->DevIntrf.GetHandle = LpcSSPGetHandle;
 	atomic_flag_clear(&pDev->DevIntrf.bBusy);
-
 	LpcSSPSetRate(&pDev->DevIntrf, pCfgData->Rate);
-	dev->pSspReg->CR1 = d;
-
+	LpcSSPEnable(&pDev->DevIntrf);
 	return true;
 }
-
-
-
-
-

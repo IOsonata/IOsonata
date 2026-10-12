@@ -39,4 +39,7 @@ Modified by          Date              Description
 // Use the complete vendor register type, including its access qualifiers.
 typedef LPC_SSP_TypeDef LpcSSPReg_t;
 
+#define LPCSSP_READ(Reg, Field) ((Reg)->Field)
+#define LPCSSP_WRITE(Reg, Field, Value) ((Reg)->Field = (Value))
+
 #endif // __SPI_LPC_TARGET_H__

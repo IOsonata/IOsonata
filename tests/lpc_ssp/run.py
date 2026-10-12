@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run shared legacy SSP rate regressions against both vendor device headers."""
+"""Run legacy SSP rate and polling-transfer regressions."""
 from pathlib import Path
 import subprocess
 import tempfile
@@ -16,4 +16,17 @@ for family, directory, define in [('LPC11xx', 'include', []),
                         '-fsanitize=undefined', '-fno-sanitize-recover=all',
                         *define, *['-I' + str(root / p) for p in includes],
                         str(root / 'tests/lpc_ssp/rate_test.cpp'), '-o', exe], check=True)
+        subprocess.run([exe], check=True)
+
+# Exercise the transfer model in both optimization modes.
+for opt in ['-O0', '-O2']:
+    includes = ['tests/lpc_uart/shim', 'include', 'ARM/NXP/include',
+                'ARM/NXP/LPC11xx/include']
+    with tempfile.TemporaryDirectory() as tmp:
+        exe = str(Path(tmp) / 'transfer_test')
+        subprocess.run(['g++', '-std=c++17', opt, '-Wall', '-Wextra',
+                        '-Wno-missing-field-initializers', '-Wno-unused-parameter',
+                        '-fsanitize=undefined', '-fno-sanitize-recover=all',
+                        *['-I' + str(root / p) for p in includes],
+                        str(root / 'tests/lpc_ssp/transfer_test.cpp'), '-o', exe], check=True)
         subprocess.run([exe], check=True)

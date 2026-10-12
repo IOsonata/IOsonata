@@ -47,6 +47,10 @@ static const IOPinCfg_t s_Pins[3] = {};
 uint32_t SystemCoreClock = 12000000;
 uint32_t SystemMainClkFreq = 48000000;
 
+void NVIC_DisableIRQ(IRQn_Type)
+{
+}
+
 void IOPinConfig(int, int, int, IOPINDIR, IOPINRES, IOPINTYPE)
 {
 }
@@ -141,6 +145,7 @@ int main()
 	SPICfg_t cfg = {};
 	cfg.pIOPinMap = s_Pins;
 	cfg.NbIOPins = 3;
+	cfg.ChipSel = SPICSEL_MAN;
 	cfg.Rate = 1000000;
 	cfg.DataSize = 8;
 	// The unused SSP divider remains zero, as after reset. AHB is slower
@@ -151,10 +156,11 @@ int main()
 	assert(g_SspDev[0].PClkFreq == 48000000);
 	assert(spi.Cfg.Rate == 1000000);
 	assert(LPC_SYSCON->SSP1CLKDIV == 0);
+	SPIDev_t spi1 = {};
 	cfg.DevNo = 1;
 	SetStatus(LPC_SSP1, LPCSSP_SR_TFE);
 	LPC_SYSCON->SSP0CLKDIV = 7;
-	assert(SPIInit(&spi, &cfg));
+	assert(SPIInit(&spi1, &cfg));
 	assert(g_SspDev[1].PClkFreq == 48000000);
 	assert(LPC_SYSCON->SSP0CLKDIV == 7);
 	cfg.DevNo = -1;

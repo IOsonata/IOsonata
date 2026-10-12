@@ -87,14 +87,18 @@ typedef struct {
 	uint32_t	PClkFreq;		// Peripheral clock freq in Hz
 	LpcSSPReg_t	*pSspReg;
 	SPIDev_t		*pSpiDev;		// Pointer to generic SPI dev. data
+	bool bEnabled;
+	bool bSelected;
+	bool bError;
 } SSPDEV;
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-static inline void LpcSSPDisable(DevIntrf_t *pDev) {}
-static inline void LpcSSPEnable(DevIntrf_t *pDev) {}
+void LpcSSPDisable(DevIntrf_t *pDev);
+void LpcSSPEnable(DevIntrf_t *pDev);
+void *LpcSSPGetHandle(DevIntrf_t *pDev);
 
 // Get current data rate in bits/sec (Hz)
 uint32_t LpcSSPGetRate(DevIntrf_t *pDev);
