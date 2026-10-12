@@ -111,7 +111,8 @@ for name in layouts:
             words = struct.unpack('<8I', (tmp / 'image.bin').read_bytes()[:32])
             assert sum(words) & 0xffffffff == 0, (name, padding, words)
             assert all(word & 1 for word in words[1:7])
-            assert words[0] == (0x10008000 if name == layouts[0] else 0x10007fe0)
+            # Keep the IAP ROM workspace out of all LPC17xx application stacks.
+            assert words[0] == 0x10007fe0
             origin = 0xd000 if name == layouts[1] else 0
             assert origin + padding <= words[1] < origin + padding + 64
             if name != 'dfu_boot_lpc1769.ld':

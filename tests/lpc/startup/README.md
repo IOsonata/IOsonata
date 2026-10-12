@@ -56,8 +56,13 @@ LPC17xx checksum tests use two handler placements in each layout, with
 check the first eight words of the whole binary, not merely a separately
 extracted vector section, and verify that the AHB object resides in AHB RAM.
 The normal image starts at zero; the DFU application starts at 0xD000.
-The normal layout retains its existing 0x10008000 stack top; DFU layouts
-reserve the IAP workspace and use 0x10007FE0.
+All LPC17xx layouts reserve local SRAM 0x10007FE0 through 0x10007FFF for
+IAP flash programming and set the stack top to 0x10007FE0. The normal
+layout therefore exposes 32736 bytes of local SRAM, matching the DFU
+layouts. The existing checksum tests check this boundary in every layout.
+NXP UM10360 section 32.3.2.8 specifies the 32-byte workspace and up to
+128 additional bytes used in the caller's stack; application stack sizing
+must allow for that call depth.
 
 As on LPC11U35, older custom linker scripts can still link via the weak
 checksum reference, but must define __valid_user_code_checksum or patch
