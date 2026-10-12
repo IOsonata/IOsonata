@@ -100,6 +100,9 @@ uint32_t SystemSetCoreClock(uint32_t CoreFreq, int ClkSel);
  * ClkFreq is 4000000 for IRC, 32768 for RTC, or 1-25 MHz for MAIN.
  * The legacy 4000000 value selects IRC, not a 4 MHz main oscillator.
  * CoreFreq is the requested CPU frequency, distinct from ClkFreq.
+ * Selects the closest nominal rate using PLL0 or the divided input,
+ * capped at CORE_FREQ. Zero selects the lowest representable rate.
+ * The returned integer Hz value truncates any fractional Hz.
  * Stop clock-dependent peripherals before changing the CPU clock.
  * Returns the actual CPU frequency, or zero on failure.
  */

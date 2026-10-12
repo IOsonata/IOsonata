@@ -44,6 +44,26 @@ Modified by          Date              Description
 #define LPC17_OSC_WAIT_MAX		1000000U		/* Bounded status reads */
 #define LPC17_PLL_WAIT_MAX		1000000U		/* Bounded status reads */
 
+typedef struct {
+	uint64_t Error;
+	uint32_t Denominator;
+	uint32_t PllCfg;
+	uint32_t CpuDiv;
+	uint32_t PllFreq;
+	uint32_t UsbExact;
+} Lpc17ClockConfig_t;
+
+// UM10360 table 26: the only additional multipliers supported for RTC input.
+static const uint16_t s_Lpc17RtcMultipliers[] = {
+	4272, 4395, 4578, 4725, 4807, 5127, 5188, 5400, 5493, 5859,
+	6042, 6075, 6104, 6409, 6592, 6750, 6836, 6866, 6958, 7050,
+	7324, 7425, 7690, 7813, 7935, 8057, 8100, 8545, 8789, 9155,
+	9613, 10254, 10376, 10986, 11719, 12085, 12207, 12817, 13184, 13672,
+	13733, 13916, 14099, 14420, 14648, 15381, 15564, 15625, 15869, 16113,
+	16479, 17578, 18127, 18311, 19226, 19775, 20508, 20599, 20874, 21149,
+	21973, 23071, 23438, 23804, 24170
+};
+
 /* Select system clock oscillator source */
 #define DEF_CLK_SRC			IRC_FREQ
 //#define CLKSRCSEL_VAL		CLKSRCSEL_MAIN
@@ -119,10 +139,87 @@ void SystemCoreClockUpdate (void)
 	SystemMicroSecLoopCnt = SystemCoreClock / 16000000U;
 }
 
+// For one PLL ratio, only the two dividers bracketing the request can win.
+// M=0 considers the unmodified input with PLL0 bypassed.
+static void Lpc17ClockCandidate(Lpc17ClockConfig_t *pBest, uint32_t Request,
+	uint32_t Input, uint32_t M, uint32_t N)
+{
+	uint64_t numerator = M ? (uint64_t)Input * 2U * M : Input;
+	uint32_t mindiv = 1;
+	uint32_t div;
+	uint32_t usb = 0;
+
+	if (M != 0)
+	{
+		if (numerator < 275000000ULL * N || numerator > 550000000ULL * N)
+		{
+			return;
+		}
+		mindiv = (uint32_t)((numerator + (uint64_t)CORE_FREQ * N - 1U) /
+			((uint64_t)CORE_FREQ * N));
+		usb = numerator % (96000000ULL * N) == 0;
+	}
+	div = Request ? (uint32_t)(numerator / ((uint64_t)N * Request)) : 256U;
+	if (div < mindiv)
+	{
+		div = mindiv;
+	}
+	if (div > 256U)
+	{
+		div = 256U;
+	}
+	for (uint32_t end = div < 256U ? div + 1U : div; div <= end; div++)
+	{
+		uint32_t denominator = N * div;
+		uint64_t requested = (uint64_t)Request * denominator;
+		uint64_t error = numerator > requested ? numerator - requested : requested - numerator;
+		uint64_t left = error * pBest->Denominator;
+		uint64_t right = pBest->Error * denominator;
+
+		if (pBest->Denominator == 0 || left < right ||
+			(left == right && usb > pBest->UsbExact))
+		{
+			pBest->Error = error;
+			pBest->Denominator = denominator;
+			pBest->PllCfg = M ? ((N - 1U) << 16) | (M - 1U) : 0;
+			pBest->CpuDiv = div;
+			pBest->PllFreq = M ? (uint32_t)(numerator / N) : 0;
+			pBest->UsbExact = usb;
+		}
+	}
+}
+
+static Lpc17ClockConfig_t Lpc17ClockSelect(uint32_t Request, uint32_t Input)
+{
+	Lpc17ClockConfig_t best = {0};
+
+	Lpc17ClockCandidate(&best, Request, Input, 0, 1);
+	for (uint32_t n = 1; n <= 32; n++)
+	{
+		if (Input == RTC_FREQ)
+		{
+			for (unsigned i = 0; i < sizeof(s_Lpc17RtcMultipliers) /
+				sizeof(s_Lpc17RtcMultipliers[0]); i++)
+			{
+				Lpc17ClockCandidate(&best, Request, Input, s_Lpc17RtcMultipliers[i], n);
+			}
+		}
+		else
+		{
+			for (uint32_t m = 6; m <= 512; m++)
+			{
+				Lpc17ClockCandidate(&best, Request, Input, m, n);
+			}
+		}
+	}
+
+	return best;
+}
+
 uint32_t SystemCoreClockSet(uint32_t CoreFreq, int ClkFreq)
 {
 	uint32_t temp = 0;
-	uint32_t sysclk = ClkFreq;
+	Lpc17ClockConfig_t clock;
 	uint32_t clksrcsel = CLKSRCSEL_IRC;	// Default internal RC
 
 	// ClkFreq describes a physical input, not the requested CPU rate.
@@ -131,6 +228,8 @@ uint32_t SystemCoreClockSet(uint32_t CoreFreq, int ClkFreq)
 	{
 		return 0;
 	}
+
+	clock = Lpc17ClockSelect(CoreFreq, (uint32_t)ClkFreq);
 
 	// Six flash clocks are safe throughout clock-source and divider changes.
 	LPC_SC->FLASHCFG = (LPC_SC->FLASHCFG & ~0xF000U) | 0x5000U;
@@ -200,56 +299,15 @@ uint32_t SystemCoreClockSet(uint32_t CoreFreq, int ClkFreq)
 
 	SystemClkFreq = ClkFreq;
 
-	/* Setting PLL0 */
-
-	/* find CCLKDIV & PLLCLK to get closes match */
-	int32_t cclkdiv = 1;
-	int32_t pllclk = 0;
-	int32_t delta = 0, predelta = CoreFreq;
-	int i;
-
-	for (i = 1; i < 257; i++)
+	LPC_SC->CCLKCFG = clock.CpuDiv - 1U;
+	LPC_SC->CLKSRCSEL = clksrcsel;
+	if (clock.PllFreq == 0)
 	{
-		pllclk = CoreFreq * i;
-		/* pllclk range is 275MHz - 550MHz */
-		if (pllclk < 275000000UL)
-			continue;
-		if (pllclk > 550000000UL)
-			break;
-		/* try to select closest useable frequency for USB clock */
-		delta = CoreFreq - (pllclk / 48000000UL) * 48000000UL / i;
-		if (delta < predelta)
-		{
-			predelta = delta;
-			cclkdiv = i;
-		}
+		// The divided input is closer; leave PLL0 stopped and report bypass.
+		goto clock_ready;
 	}
 
-	pllclk = CoreFreq * cclkdiv;
-
-	/* Set cclk divider */
-	LPC_SC->CCLKCFG = (cclkdiv - 1) & 0xff;
-	LPC_SC->CLKSRCSEL = clksrcsel; //CLKSRCSEL_VAL;
-
-	/* Find M & N value */
-	/* Formula M = (FCCO × N) / (2 × FIN) */
-	sysclk <<= 1;
-
-	for (i = 1; i < 33; i++)
-	{
-		// FCCO * N can exceed 32 bits even for a valid CPU clock.
-		uint64_t t = (uint64_t)pllclk * (uint32_t)i;
-		temp = t / sysclk;
-		if ((t % sysclk) == 0)
-			break;
-	}
-
-	/* results : i is N, temp is M */
-	i--;
-	temp--;
-	// MSEL occupies bits 14:0; preserve bit 12 and leave bit 15 clear.
-	temp = ((i & 0xFFU) << 16) | (temp & 0x7FFFU);
-	LPC_SC->PLL0CFG = temp;
+	LPC_SC->PLL0CFG = clock.PllCfg;
 	Lpc17PllFeed(&LPC_SC->PLL0FEED);
 
 	LPC_SC->PLL0CON   = 0x01;
@@ -294,9 +352,10 @@ uint32_t SystemCoreClockSet(uint32_t CoreFreq, int ClkFreq)
 	}
 
 	/* USBCLK divider */
-	temp = (pllclk / 48000000) - 1;
+	temp = (clock.PllFreq / 48000000U) - 1U;
 	LPC_SC->USBCLKCFG = temp & 0xf;
 
+clock_ready:
 	SystemCoreClockUpdate();
 
 	// Reduce access time only after the resulting CPU clock is known.

@@ -75,6 +75,21 @@ static const int s_InvalidInputs[] = {
 };
 static const uint32_t s_UsbInputs[] = {12000000, 16000000, 24000000};
 static const uint32_t s_UsbInvalidInputs[] = {0, 32768, 4000000, 10000000, 20000000, 25000000};
+// Independent exhaustive oracle uses the hardware's supported RTC values.
+static const uint16_t s_RtcM[] = {
+	4272, 4395, 4578, 4725, 4807, 5127, 5188, 5400, 5493, 5859,
+	6042, 6075, 6104, 6409, 6592, 6750, 6836, 6866, 6958, 7050,
+	7324, 7425, 7690, 7813, 7935, 8057, 8100, 8545, 8789, 9155,
+	9613, 10254, 10376, 10986, 11719, 12085, 12207, 12817, 13184, 13672,
+	13733, 13916, 14099, 14420, 14648, 15381, 15564, 15625, 15869, 16113,
+	16479, 17578, 18127, 18311, 19226, 19775, 20508, 20599, 20874, 21149,
+	21973, 23071, 23438, 23804, 24170
+};
+static const uint32_t s_ClosestCases[][2] = {
+	{4000000, 0}, {4000000, UINT32_MAX}, {4000000, 12345678},
+	{4000000, 1000000}, {12000000, 12345678}, {25000000, UINT32_MAX},
+	{32768, 72000000}, {32768, 1}, {32768, 123456789}
+};
 extern uint32_t SystemClkFreq;
 
 uint32_t TestGetPrimask(void)
@@ -224,9 +239,93 @@ LPC_SC_TypeDef *TestSystemRegs(void)
 	return &s_Regs;
 }
 
+static uint64_t ClockError(uint64_t Numerator, uint32_t Denominator, uint32_t Request)
+{
+	uint64_t target = (uint64_t)Request * Denominator;
+
+	return Numerator > target ? Numerator - target : target - Numerator;
+}
+
+static void CheckClosest(uint32_t Input, uint32_t Request)
+{
+	uint32_t div = (s_Regs.CCLKCFG & 255U) + 1U;
+	uint32_t m = (s_Regs.PLL0CFG & 32767U) + 1U;
+	uint32_t n = ((s_Regs.PLL0CFG >> 16) & 255U) + 1U;
+	uint64_t numerator = Input;
+	uint32_t denominator = div;
+	uint64_t error;
+
+	if (s_Regs.PLL0CON == 3)
+	{
+		int supported = m >= 6 && m <= 512;
+
+		if (Input == 32768)
+		{
+			supported = 0;
+			for (unsigned i = 0; i < sizeof(s_RtcM) / sizeof(s_RtcM[0]); i++)
+			{
+				supported |= m == s_RtcM[i];
+			}
+		}
+		assert(supported && n <= 32);
+		numerator = (uint64_t)Input * 2U * m;
+		denominator *= n;
+		assert(numerator >= 275000000ULL * n);
+		assert(numerator <= 550000000ULL * n);
+	}
+	else
+	{
+		assert(s_Regs.PLL0CON == 0);
+	}
+	assert(numerator <= (uint64_t)CORE_FREQ * denominator);
+	assert(SystemCoreClock == numerator / denominator);
+	error = ClockError(numerator, denominator, Request);
+	// Enumerate every divider, unlike the production bracketing search.
+	for (uint32_t d = 1; d <= 256; d++)
+	{
+		assert(ClockError(Input, d, Request) * denominator >= error * d);
+	}
+	for (uint32_t pre = 1; pre <= 32; pre++)
+	{
+		unsigned count = Input == 32768 ? sizeof(s_RtcM) / sizeof(s_RtcM[0]) : 507;
+
+		for (unsigned i = 0; i < count; i++)
+		{
+			uint32_t mul = Input == 32768 ? s_RtcM[i] : i + 6U;
+			uint64_t num = (uint64_t)Input * 2U * mul;
+
+			if (num < 275000000ULL * pre || num > 550000000ULL * pre)
+			{
+				continue;
+			}
+			for (uint32_t d = 3; d <= 256; d++)
+			{
+				uint32_t den = pre * d;
+
+				if (num <= (uint64_t)CORE_FREQ * den)
+				{
+					assert(ClockError(num, den, Request) * denominator >= error * den);
+				}
+			}
+		}
+	}
+}
+
 int main(void)
 {
 	unsigned errors = 0;
+
+	for (unsigned i = 0; i < sizeof(s_ClosestCases) / sizeof(s_ClosestCases[0]); i++)
+	{
+		uint32_t input = s_ClosestCases[i][0];
+		uint32_t request = s_ClosestCases[i][1];
+
+		memset(&s_Regs, 0, sizeof(s_Regs));
+		s_OscWait = 0;
+		s_OscReadyAfter = 4;
+		assert(SystemCoreClockSet(request, input) != 0);
+		CheckClosest(input, request);
+	}
 
 	// Invalid physical oscillator inputs must fail before register/global changes.
 	for (unsigned i = 0; i < sizeof(s_InvalidInputs) / sizeof(s_InvalidInputs[0]); i++)
@@ -257,18 +356,18 @@ int main(void)
 		assert(rate == s_Rates[i]);
 		if (rate == 99000000)
 		{
-			assert(s_Regs.PLL0CFG == ((7U << 16) | 296U));
-			assert(s_Regs.CCLKCFG == 2U);
+			assert(s_Regs.PLL0CFG == ((1U << 16) | 98U));
+			assert(s_Regs.CCLKCFG == 3U);
 		}
 		if (rate == 101000000)
 		{
-			assert(s_Regs.PLL0CFG == ((7U << 16) | 302U));
-			assert(s_Regs.CCLKCFG == 2U);
+			assert(s_Regs.PLL0CFG == ((1U << 16) | 100U));
+			assert(s_Regs.CCLKCFG == 3U);
 		}
 		if (rate == 119000000)
 		{
-			assert(s_Regs.PLL0CFG == ((7U << 16) | 356U));
-			assert(s_Regs.CCLKCFG == 2U);
+			assert(s_Regs.PLL0CFG == ((1U << 16) | 118U));
+			assert(s_Regs.CCLKCFG == 3U);
 		}
 		timing = (rate - 1U) / 20000000U;
 		if (timing > 5U)

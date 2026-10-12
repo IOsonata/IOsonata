@@ -137,13 +137,11 @@ and 16 MHz inputs (both range selections), with immediately ready and
 delayed status. It fails if clock changes occur before ready status.
 Reference: UM10360 chapter 3, table 13.
 
-The PLL multiplier search uses a 64-bit FCCO * N product. A 99 MHz request
-from the 4 MHz IRC needs a 297 MHz CCO, N=8 and M=297: the search product
-is 2,376,000,000, beyond signed 32-bit range. The old setter fails UBSan
-on that request. Tests also cover 101 MHz and 119 MHz, assert the exact
-M/N and CPU-divider encodings, and check the returned rates and flash
-ordering. These tests retain the ready-status model and do not validate
-physical PLL locking or broaden the setter's supported input constraints.
+The earlier multiplier search overflowed its signed FCCO * N product on
+99/101/119 MHz requests from IRC. These remain regression cases. The new
+selection search uses 64-bit arithmetic and finds exact rates with N=2,
+M=99/101/119 and CPU divider=4, preferring smaller N over the previous N=8
+settings when their frequency errors are equal. Flash ordering is checked.
 
 PLL0CFG encoding now preserves all MSEL bits 14:0 and excludes reserved
 bit 15, matching the corrected status decoder. The setter previously
@@ -294,3 +292,28 @@ compiles production and fixture sources as C, then links C and C++ callers
 at O0/O2 with UBSan. Both public names are called from those callers; the
 fixture checks all three selector mappings and rejects invalid selectors,
 including a frequency accidentally passed in the selector position.
+
+LPC17xx CPU rate selection now compares legal PLL0 ratios and input bypass
+using exact rational error in 64-bit arithmetic. MAIN/IRC candidates use
+M=6..512, RTC candidates use the 65 multipliers from UM10360 table 26, and
+N is limited to 1..32. PLL CCO stays within 275..550 MHz, CPU division is
+1..256 for bypass and constrained by the CPU ceiling for PLL operation.
+The ceiling is the port's existing CORE_FREQ (120 MHz in this configuration);
+this does not add device-specific 100 MHz part selection. Zero selects the
+lowest rate rather than disabling the clock. Returned Hz truncates fractions.
+
+For each PLL ratio, only the two divider values bracketing the request need
+to be checked. Equal-error choices prefer an exact multiple of 96 MHz CCO
+for the existing USB divider path, then retain the first candidate (bypass,
+lower N, lower M). CPU-rate selection alone does not establish USB clock
+suitability: input accuracy and fixed USB requirements still apply. Bypass
+leaves PLL0 stopped and the USB divider unchanged. Flash timing is finalized
+for bypass as well as PLL operation.
+
+The independent host oracle enumerates every legal divider for each supported
+M/N, checks the programmed ratio is legal, and verifies that no candidate
+has smaller rational error. Cases include zero, UINT32_MAX, low rates,
+inexact requests, 4/12/25 MHz input and RTC. The previous implementation
+fails these cases by selecting an unsupported multiplier. Clock C/C++ tests,
+startup tests and Cortex-M3 assembly compilation pass at O0/O2. Physical
+PLL behavior, including RTC lock timing, remains unvalidated.
