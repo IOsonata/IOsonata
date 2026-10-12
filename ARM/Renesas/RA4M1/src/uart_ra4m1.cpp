@@ -154,66 +154,54 @@ static void ReleaseRoutes(Ra4m1UartDev *d)
  * Reading RDR clears RDRF; do NOT clear it again after a new byte could arrive.
  */
 static bool Receive(Ra4m1UartDev *d, uint8_t *data, uint8_t *errors,
-    bool interrupt, bool errorIrq)
+    bool interrupt)
 {
+    uint8_t ssr = d->Regs->SSR;
     *errors = 0U;
 
-    if (!interrupt)
+    // RXI is itself the indication that RDR contains a received byte.
+    // RDRF need not remain set by the time the CPU services RXI.
+    // Polling must still check RDRF before touching RDR.
+    if (!interrupt && (ssr & (SCI_SSR_RDRF | SCI_SSR_ERRORS)) == 0U)
     {
-        uint8_t status = d->Regs->SSR;
-        if ((status & (SCI_SSR_RDRF | SCI_SSR_ERRORS)) == 0U)
-        {
-            return false;
-        }
+        return false;
     }
 
-    // RXI signals a completed reception: read RDR immediately, without
-    // inserting an SSR bus access into the latency-critical receive path.
-    // On ERI, the read precedes sampling and clearing the error flags.
     uint8_t byte = d->Regs->RDR;
+    UARTDEV *u = d->pDev;
 
-    if (errorIrq || !interrupt)
+    if ((ssr & SCI_SSR_ERRORS) != 0U)
     {
-        uint8_t status = d->Regs->SSR;
-        uint8_t flags = status & SCI_SSR_ERRORS;
-        if (flags != 0U)
+        if ((ssr & SCI_SSR_ORER) != 0U)
         {
-            UARTDEV *u = d->pDev;
-            if ((flags & SCI_SSR_ORER) != 0U)
+            ++u->RxOvrErrCnt;
+            *errors |= UART_LINESTATE_OVR;
+        }
+        if ((ssr & SCI_SSR_PER) != 0U)
+        {
+            ++u->ParErrCnt;
+            *errors |= UART_LINESTATE_PARERR;
+        }
+        if ((ssr & SCI_SSR_FER) != 0U)
+        {
+            ++u->FramErrCnt;
+            *errors |= UART_LINESTATE_FRMERR;
+            if ((d->Regs->SPTR & 1U) == 0U)
             {
-                ++u->RxOvrErrCnt;
-                *errors |= UART_LINESTATE_OVR;
+                *errors |= UART_LINESTATE_BRK;
             }
-            if ((flags & SCI_SSR_PER) != 0U)
-            {
-                ++u->ParErrCnt;
-                *errors |= UART_LINESTATE_PARERR;
-            }
-            if ((flags & SCI_SSR_FER) != 0U)
-            {
-                ++u->FramErrCnt;
-                *errors |= UART_LINESTATE_FRMERR;
-                if ((d->Regs->SPTR & 1U) == 0U)
-                {
-                    *errors |= UART_LINESTATE_BRK;
-                }
-            }
-
-            ++u->RxDropCnt;
-            d->Regs->SSR &= (uint8_t)~SCI_SSR_ERRORS;
-            (void)d->Regs->SSR;
-            u->LineState = *errors;
-            return false;
         }
 
-        if (errorIrq)
-        {
-            // An obsolete ERI indication must not enqueue a phantom byte.
-            return false;
-        }
+        ++u->RxDropCnt;
+        // SCI SSR error flags clear by writing zero. Preserve the other
+        // status bits and avoid clearing a newly asserted RX flag.
+        d->Regs->SSR = (uint8_t)~SCI_SSR_ERRORS;
+        (void)d->Regs->SSR;
+        u->LineState = *errors;
+        return false;
     }
 
-    *data = d->pDev->DataBits == 7 ? byte & 0x7FU : byte;
+    *data = u->DataBits == 7 ? byte & 0x7FU : byte;
     return true;
 }
 /* Caller holds PRIMASK. Directly prime TDR rather than toggling TE and adding
@@ -347,7 +335,7 @@ static void UartIrq(int irq, void *ctx)
     bool notify = false;
     if (irq == (int)d->Irq[0] || irq == (int)d->Irq[3]) {
         uint8_t byte;
-        if (Receive(d, &byte, &errors, true, irq == (int)d->Irq[3])) {
+        if (Receive(d, &byte, &errors, true)) {
             uint32_t dropped = u->hRxFifo->DropCnt;
             if (CFifoPutByte(u->hRxFifo, byte))
             {
@@ -429,7 +417,7 @@ static int RxData(DevIntrf_t *p, uint8_t *buffer, int len)
             d->pDev->bRxReady = CFifoUsed(d->pDev->hRxFifo) != 0;
         } else {
             uint8_t errors, byte;
-            bool received = Receive(d, &byte, &errors, false, false);
+            bool received = Receive(d, &byte, &errors, false);
             if (received) buffer[count++] = byte;
             else { EnableInterrupt(state); break; }
         }
@@ -581,7 +569,7 @@ static void Enable(DevIntrf_t *p)
         // Retain configuration/CFifo RX data. Disable does not gate the module.
         if (d->Regs->SSR & (SCI_SSR_RDRF | SCI_SSR_ERRORS)) {
             uint8_t byte, errors;
-            if (Receive(d, &byte, &errors, false, false)) ++d->pDev->RxDropCnt;
+            if (Receive(d, &byte, &errors, false)) ++d->pDev->RxDropCnt;
         }
         ClearRoutes(d);
         d->Enabled = true;
