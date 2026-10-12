@@ -407,9 +407,13 @@ and DMA with a non-blocking FIFO. `UARTSetCtrlLineState` does nothing.
   block is the first contiguous run of the CFIFO, at most half of it, and its
   bytes are released when the channel is done. The DMAC transfer end interrupt
   (or TxData and RxData without `bIntMode`) fills the SCI again and starts the
-  next block. SCI0/1 use
-  TTRG 0 in DMA mode, TXI with the TX FIFO empty, and start a block by setting
-  TIE again, as the Renesas FSP does with a transfer instance. SCI2/9 start a
+  next block. With TX idle TIE is cleared, so TxData then costs about as much
+  as polling without DMA. A TXI that arrived while the channel was stopped can
+  be left pending in `ICU.DELSR`. It is cleared, `DELSR` written 0 then the TXI
+  again as the Renesas FSP r_dmac stops a transfer, after the CPU wrote to the
+  SCI at the end of a block and when TX goes idle. SCI0/1 use TTRG 0 in DMA
+  mode, TXI with the TX FIFO empty, and start a block by setting TIE again, as
+  the Renesas FSP does with a transfer instance. SCI2/9 start a
   block from the byte left in TDR, or write its first byte to TDR when TDR is
   already empty. RX stays on the interrupt or polling: the SCI has no idle line
   event to move a DMA ring to the RX CFIFO after a short burst. The DMAC module
@@ -446,7 +450,9 @@ ICU slot, and the line can move while a handler runs. DMA runs twice, with a
 TXI arriving while DTE is cleared held in DELSR and with it lost. It covers
 init, rate selection against every register setting, TX and RX in polling,
 interrupt, polled DMA and interrupt DMA mode on the four SCIs, idle time between
-DMA blocks, an echo loop with bursts, receive errors, overrun, full CFIFOs,
+DMA blocks, the end of a block seen late (the line moves up to 60 characters
+between TxData calls, interrupts held off), an echo loop with bursts, receive
+errors, overrun, full CFIFOs,
 callbacks, Disable/Enable and PowerOff. It also compiles the driver with GNU Arm
 for the Cortex-M4. It does not test exact timing or the electrical interface.
 

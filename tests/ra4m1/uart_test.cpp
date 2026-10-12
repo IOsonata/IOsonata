@@ -132,6 +132,7 @@ static const int s_EvtRxi[4] = { RA4M1_EVTID_SCI0_RXI, RA4M1_EVTID_SCI1_RXI, RA4
 static uint32_t s_Pclk = 48000000;
 static IcuSlot_t s_Slot[32];
 static bool s_bInIsr;
+static bool s_bIrqOff;			// Interrupts held off by the application
 static unsigned s_IrqPoints;
 static unsigned s_StepEvery;		// Line step every n interrupt points, 0 none
 static unsigned s_IsrStepEvery;		// Line step after n register accesses in the handler, 0 none
@@ -869,7 +870,7 @@ static void UpdateIcu(void)
 
 static void Dispatch(void)
 {
-	if (s_bInIsr)
+	if (s_bInIsr || s_bIrqOff)
 	{
 		return;
 	}
@@ -1087,6 +1088,7 @@ static void ResetModel(void)
 	s_StepEvery = 0;
 	s_IsrStepEvery = 0;
 	s_IsrAccess = 0;
+	s_bIrqOff = false;
 	s_EvtRx = s_EvtTx = s_EvtLine = 0;
 	s_LastLine = 0;
 	s_RefillLeft = 0;
@@ -1398,6 +1400,47 @@ static void TestTx(int u, bool bIntMode, int Len, int Chunk, bool bDma = false)
 			   "DMA moved %u, gaps %u\n", u, bIntMode, bDma, s_DmaHold, Chunk, s_Sci[u].Wire.size(), Len,
 			   s_Sci[u].TxFifo.size(), (s_Sci[u].Scr & TIE) != 0, (s_Sci[u].Flags & B_TDRE) != 0, s_Dmac[u].Moved,
 			   s_Sci[u].TxGap);
+	}
+}
+
+// TX DMA with the end of a block seen late: the line moves Late steps between
+// UARTTx calls, with interrupts held off in interrupt mode. The SCI asks for
+// data while the channel is stopped, with the request held in DELSR it must
+// not move a byte into a full TX FIFO or TDR when the next block is armed.
+static void TestTxLate(int u, bool bIntMode, int Late, int Chunk)
+{
+	ResetModel();
+	UARTCfg_t cfg = Cfg(u, bIntMode, true);
+	if (Chunk < 16)
+	{
+		cfg.pTxMem = NULL;
+		cfg.TxMemSize = 0;
+	}
+	CHECK(UARTInit(&s_Uart, &cfg) == true);
+
+	std::vector<uint8_t> d;
+	Pattern(d, 2000, (uint8_t)(u + Late + Chunk));
+	int sent = 0;
+	for (int guard = 0; sent < (int)d.size() && guard < 100000; guard++)
+	{
+		int l = (int)d.size() - sent < Chunk ? (int)d.size() - sent : Chunk;
+		sent += UARTTx(&s_Uart, d.data() + sent, l);
+		s_bIrqOff = true;
+		RunLine(Late);
+		s_bIrqOff = false;
+		Dispatch();
+	}
+	Drain(u, d.size());
+	RunLine(4);
+
+	CHECK(s_Sci[u].Wire == d);
+	CHECK(s_Uart.bTxReady == true);
+	CHECK((s_Sci[u].Scr & TIE) == 0);
+	CHECK((s_Dmac[u].Cnt & R_DMAC0_DMCNT_DTE_Msk) == 0);
+	if (s_Sci[u].Wire != d)
+	{
+		printf("  TestTxLate unit %d int %d hold %d late %d chunk %d : %zu of %zu sent, DMA moved %u\n", u,
+			   bIntMode, s_DmaHold, Late, Chunk, s_Sci[u].Wire.size(), d.size(), s_Dmac[u].Moved);
 	}
 }
 
@@ -1830,6 +1873,19 @@ int main()
 		if (dma)
 		{
 			TestTxByteMode();
+			for (int u = 0; u < 4; u++)
+			{
+				for (int intmode = 0; intmode < 2; intmode++)
+				{
+					// 60 : the line is idle before each UARTTx call
+					static const int late[] = { 1, 2, 3, 4, 12, 20, 60 };
+					for (int l : late)
+					{
+						TestTxLate(u, intmode, l, 1);
+						TestTxLate(u, intmode, l, 40);
+					}
+				}
+			}
 		}
 	}
 	s_DmaHold = false;
