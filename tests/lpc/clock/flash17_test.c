@@ -32,6 +32,7 @@ SOFTWARE.
 
 ----------------------------------------------------------------------------*/
 #include <assert.h>
+#include <limits.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <string.h>
@@ -49,6 +50,10 @@ static const uint32_t s_Rates[] = {
 	80000000, 82000000, 99000000, 100000000, 101000000, 102000000,
 	119000000, 120000000
 };
+static const int s_InvalidInputs[] = {
+	0, -1, INT_MIN, 1, 32767, 32769, 999999, 25000001, INT_MAX
+};
+extern uint32_t SystemClkFreq;
 extern uint32_t SystemCoreClockSet(uint32_t CoreFreq, int ClkFreq);
 
 LPC_SC_TypeDef *TestSystemRegs(void)
@@ -84,6 +89,22 @@ LPC_SC_TypeDef *TestSystemRegs(void)
 int main(void)
 {
 	unsigned errors = 0;
+
+	// Invalid physical oscillator inputs must fail before register/global changes.
+	for (unsigned i = 0; i < sizeof(s_InvalidInputs) / sizeof(s_InvalidInputs[0]); i++)
+	{
+		LPC_SC_TypeDef before;
+		uint32_t core = SystemCoreClock;
+		uint32_t source = SystemClkFreq;
+		uint32_t delay = SystemMicroSecLoopCnt;
+
+		memcpy(&before, &s_Regs, sizeof(before));
+		assert(SystemCoreClockSet(120000000, s_InvalidInputs[i]) == 0);
+		assert(memcmp(&before, &s_Regs, sizeof(before)) == 0);
+		assert(SystemCoreClock == core);
+		assert(SystemClkFreq == source);
+		assert(SystemMicroSecLoopCnt == delay);
+	}
 
 	for (unsigned i = 0; i < sizeof(s_Rates) / sizeof(s_Rates[0]); i++)
 	{
@@ -146,6 +167,22 @@ int main(void)
 			}
 			assert(s_OscWait == delay);
 		}
+	}
+	// Main oscillator inputs below the IRC rate are not the RTC source.
+	for (unsigned input = 1000000; input <= 3000000; input += 1000000)
+	{
+		memset(&s_Regs, 0, sizeof(s_Regs));
+		s_Regs.FLASHCFG = 0x303AU;
+		s_Unsafe = 0;
+		s_OscWait = 0;
+		s_OscReadyAfter = 4;
+		s_EarlyClockChange = 0;
+		assert(SystemCoreClockSet(120000000, input) == 120000000);
+		assert(s_Regs.CLKSRCSEL == CLKSRCSEL_MAIN);
+		assert(s_Regs.SCS == 0x60U);
+		assert(s_OscWait == 4);
+		assert(s_EarlyClockChange == 0);
+		assert(s_Unsafe == 0);
 	}
 	// UM10360 table 21: supported RTC multipliers with MSEL bit 12 set.
 	memset(&s_Regs, 0, sizeof(s_Regs));

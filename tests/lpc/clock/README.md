@@ -155,3 +155,17 @@ multipliers are listed in UM10360 table 21. The first request fails before
 the fix; both pass afterward at O0/O2 with UBSan. As in the other setter
 tests, lock status is supplied by the fixture. This does not validate RTC
 PLL lock detection, USB clock suitability, or arbitrary rate selection.
+
+The legacy SystemCoreClockSet input-frequency argument is checked before
+any peripheral or clock-global change. Zero, negative values and physical
+inputs outside 1-25 MHz (except the exact 32768 Hz RTC input) return zero.
+The 4 MHz value retains its existing IRC meaning. Other valid main-oscillator
+inputs, including 1, 2 and 3 MHz, select MAIN and wait for readiness rather
+than being mistaken for RTC. These limits describe the physical oscillator,
+not the requested CPU frequency; this change does not reject or clamp CPU
+rate requests. Reference: UM10360 chapter 3, table 13.
+
+Tests check invalid-input preservation, including both signed integer
+extremes, and 120 MHz CPU setup from 1/2/3 MHz main inputs with delayed ready
+status. Existing tests retain 4 MHz IRC, 32768 Hz RTC and 12/16 MHz main
+coverage. The original zero-input call fails UBSan with division by zero.

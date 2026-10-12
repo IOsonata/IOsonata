@@ -112,6 +112,13 @@ uint32_t SystemCoreClockSet(uint32_t CoreFreq, int ClkFreq)
 	uint32_t sysclk = ClkFreq;
 	uint32_t clksrcsel = CLKSRCSEL_IRC;	// Default internal RC
 
+	// ClkFreq describes a physical input, not the requested CPU rate.
+	// The legacy selector uses 4 MHz for IRC and 32768 Hz for RTC.
+	if (ClkFreq != (int)RTC_FREQ && (ClkFreq < 1000000 || ClkFreq > 25000000))
+	{
+		return 0;
+	}
+
 	// Six flash clocks are safe throughout clock-source and divider changes.
 	LPC_SC->FLASHCFG = (LPC_SC->FLASHCFG & ~0xF000U) | 0x5000U;
 
@@ -119,7 +126,7 @@ uint32_t SystemCoreClockSet(uint32_t CoreFreq, int ClkFreq)
 
 	SystemClkFreq = ClkFreq;
 
-	if (ClkFreq > IRC_FREQ)
+	if (ClkFreq != (int)IRC_FREQ && ClkFreq != (int)RTC_FREQ)
 	{
 		// Select MAIN clk source
 		// OSCEN - Oscillator enable
@@ -135,7 +142,7 @@ uint32_t SystemCoreClockSet(uint32_t CoreFreq, int ClkFreq)
 		}
 
 	}
-	else if (ClkFreq < IRC_FREQ)
+	else if (ClkFreq == (int)RTC_FREQ)
 	{
 		clksrcsel = CLKSRCSEL_RTC;
 	}
