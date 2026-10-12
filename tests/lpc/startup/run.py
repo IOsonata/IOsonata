@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check LPC11U35 linker checksum arithmetic using host GNU binutils.
+"""Check LPC linker checksum arithmetic using host GNU binutils.
 
 Synthetic 32-bit vector words model Thumb pointers explicitly. This does not
 validate ARM relocations or execute startup code; see README.md.
@@ -78,3 +78,45 @@ for opt in ['-O0', '-O2']:
                         if line.split()[-1] == 'g_Vectors'), 16)
         assert size == 51 * struct.calcsize('P'), size
         subprocess.run([exe], check=True)
+
+# LPC17xx Cortex-M3 checksum includes all six core exception addresses.
+scripts = root / 'ARM/NXP/LPC17xx/ldscript'
+layouts = ['gcc_lpc1767_9.ld', 'gcc_lpc1767_9_dfu.ld', 'dfu_boot_lpc1769.ld']
+for name in layouts:
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = Path(tmp)
+        script = (scripts / name).read_text()
+        script = re.sub(r'^OUTPUT_FORMAT.*$', '', script, flags=re.M)
+        script = re.sub(r'^GROUP.*$', '', script, flags=re.M)
+        (tmp / 'image.ld').write_text(script)
+        for padding in [512, 1024]:
+            handlers = ['ResetEntry', 'NMI_Handler', 'HardFault_Handler',
+                        'MemManage_Handler', 'BusFault_Handler', 'UsageFault_Handler']
+            asm = '.section .vectors,"a"\n.long __StackTop\n'
+            asm += ''.join('.long ' + h + ' + 1\n' for h in handlers)
+            asm += '.long __valid_user_code_checksum\n'
+            asm += '.section .text,"ax"\n.space ' + str(padding) + '\n.balign 4\n'
+            for index, handler in enumerate(handlers):
+                asm += f'.global {handler}\n{handler}:\n.space {4 * (index + 1)}\n'
+            # AHB initialized data must not displace the vectors from origin.
+            if name != 'dfu_boot_lpc1769.ld':
+                asm += '.section .data.RAMAHB,"aw"\n.global ahb_data\nahb_data:\n.long 0x12345678\n'
+            (tmp / 'vectors.s').write_text(asm)
+            subprocess.run(['as', '--32', 'vectors.s', '-o', 'vectors.o'], cwd=tmp, check=True)
+            subprocess.run(['ld', '-m', 'elf_i386', '-L', str(scripts),
+                            '-L', str(root / 'ARM/ldscript'), '-T', 'image.ld',
+                            '--gc-sections', '-u', 'ahb_data' if name != 'dfu_boot_lpc1769.ld' else 'ResetEntry',
+                            'vectors.o', '-o', 'image.elf'], cwd=tmp, check=True)
+            subprocess.run(['objcopy', '-O', 'binary', 'image.elf', 'image.bin'], cwd=tmp, check=True)
+            words = struct.unpack('<8I', (tmp / 'image.bin').read_bytes()[:32])
+            assert sum(words) & 0xffffffff == 0, (name, padding, words)
+            assert all(word & 1 for word in words[1:7])
+            assert words[0] == (0x10008000 if name == layouts[0] else 0x10007fe0)
+            origin = 0xd000 if name == layouts[1] else 0
+            assert origin + padding <= words[1] < origin + padding + 64
+            if name != 'dfu_boot_lpc1769.ld':
+                symbols = subprocess.check_output(['nm', 'image.elf'], cwd=tmp, text=True)
+                address = int(next(line.split()[0] for line in symbols.splitlines()
+                                   if line.split()[-1] == 'ahb_data'), 16)
+                assert address == 0x2007c000, hex(address)
+        print(name + ': checksum and image origin passed at two handler placements')

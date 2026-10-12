@@ -92,7 +92,14 @@ SECTIONS
 	} > RAMAHB AT > FLASH
    	__data_ahb_loc__ = LOADADDR(.data_RAMAHB);
    	__data_ahb_size__ = SIZEOF(.data_RAMAHB);
-}
+} INSERT AFTER .data;
 
 INCLUDE "gcc_arm_flash.ld"
 
+
+/* Cortex-M3 vector words 1 through 6 contain Thumb handler addresses. */
+__valid_user_code_checksum = 0 - (__StackTop + (ResetEntry + 1) +
+	(NMI_Handler + 1) + (HardFault_Handler + 1) + (MemManage_Handler + 1) +
+	(BusFault_Handler + 1) + (UsageFault_Handler + 1));
+
+ASSERT(ADDR(.ivector) == ORIGIN(FLASH), "LPC vectors must start the image")

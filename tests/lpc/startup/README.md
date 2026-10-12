@@ -44,5 +44,23 @@ USBActivity and CANActivity occupy IRQs 32, 33 and 34. The existing
 PWM_IRQHandler name remains at PWM1_IRQn for compatibility. Host pointer
 width differs from ARM; target assembly separately confirms 204 bytes.
 This test does not execute Cortex-M exception entry or validate board startup.
-LPC17xx still uses a hard-coded checksum and needs programmer checksum
-patching until its linker scripts calculate the checksum.
+All three LPC17xx layouts now calculate word 7 from the stack top and six
+core handler addresses, including their Thumb bits. The vector source uses
+.vectors, matching the common linker's KEEP rule. The normal layout places
+AHB initialized data after .data, as the DFU application layout already does,
+so its flash load image cannot precede the vectors. Each layout asserts that
+.ivector starts at the FLASH origin.
+
+LPC17xx checksum tests use two handler placements in each layout, with
+--gc-sections and initialized AHB data in both application layouts. They
+check the first eight words of the whole binary, not merely a separately
+extracted vector section, and verify that the AHB object resides in AHB RAM.
+The normal image starts at zero; the DFU application starts at 0xD000.
+The normal layout retains its existing 0x10008000 stack top; DFU layouts
+reserve the IAP workspace and use 0x10007FE0.
+
+As on LPC11U35, older custom linker scripts can still link via the weak
+checksum reference, but must define __valid_user_code_checksum or patch
+word 7 before programming. Custom scripts must also retain .vectors.
+An ARM firmware link and power-cycle boot remain required for hardware
+validation.

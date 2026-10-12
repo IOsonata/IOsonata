@@ -37,6 +37,7 @@ Modified by          Date              Description
 
 extern unsigned long __StackTop;
 extern void ResetEntry(void);
+extern void __valid_user_code_checksum(void) __attribute__((weak));
 
 void DEF_IRQHandler(void) { while(1); }
 
@@ -92,7 +93,7 @@ __attribute__((weak, alias("DEF_IRQHandler"))) void CANActivity_IRQHandler(void)
  * overloaded by application function
  *
  */
-__attribute__ ((section(".intvect"), used))
+__attribute__ ((section(".vectors"), used))
 void (* const g_Vectors[])(void) =
 {
 	(void (*)(void))&__StackTop,
@@ -102,7 +103,7 @@ void (* const g_Vectors[])(void) =
 	MemManage_Handler,
 	BusFault_Handler,
 	UsageFault_Handler,
-	(void(*))0xefff4562, // Checksum
+	__valid_user_code_checksum,	// Checksum of the seven words above
 	0, 0, 0,
 	SVC_Handler,
 	DebugMon_Handler,
