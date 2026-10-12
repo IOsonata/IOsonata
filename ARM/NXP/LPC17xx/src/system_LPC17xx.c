@@ -112,6 +112,9 @@ uint32_t SystemCoreClockSet(uint32_t CoreFreq, int ClkFreq)
 	uint32_t sysclk = ClkFreq;
 	uint32_t clksrcsel = CLKSRCSEL_IRC;	// Default internal RC
 
+	// Six flash clocks are safe throughout clock-source and divider changes.
+	LPC_SC->FLASHCFG = (LPC_SC->FLASHCFG & ~0xF000U) | 0x5000U;
+
 	/* Init system clock */
 
 	SystemClkFreq = ClkFreq;
@@ -204,13 +207,18 @@ uint32_t SystemCoreClockSet(uint32_t CoreFreq, int ClkFreq)
 
 	SystemCoreClockUpdate();
 
-	/* Calc Flash accelerator timming */
+	// Reduce access time only after the resulting CPU clock is known.
+	// FLASHTIM is the number of access clocks minus one (UM10360 table 49).
 	temp = 0;
-	if (SystemCoreClock > 20000000)
-		temp = SystemCoreClock / 20000000 - 1;
-	if (temp > 5)
-		temp = 5;
-	LPC_SC->FLASHCFG = (LPC_SC->FLASHCFG & ~0xf000) | (temp << 12);
+	if (SystemCoreClock > 0U)
+	{
+		temp = (SystemCoreClock - 1U) / 20000000U;
+	}
+	if (temp > 5U)
+	{
+		temp = 5U;
+	}
+	LPC_SC->FLASHCFG = (LPC_SC->FLASHCFG & ~0xF000U) | (temp << 12);
 
 	return SystemCoreClock;
 }

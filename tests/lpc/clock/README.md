@@ -109,3 +109,22 @@ flash timing and analog lock behavior are not validated by it.
 Reference: NXP UM10360 revision 2, chapter 4, sections 4.5.5 and 4.5.10,
 and table 21 for the RTC setting.
 https://www.pololu.com/file/0J431/user.manual.lpc17xx.pdf
+
+## LPC17xx flash timing
+
+SystemCoreClockSet selects the safe six-clock flash access time before
+changing a clock source or divider. After reading the resulting CPU rate,
+it selects enough access clocks for that rate, preserving all other
+FLASHCFG bits. Rates above 100 MHz retain the conservative six-clock
+setting; this change does not select the optional five-clock timing of
+LPC1759/LPC1769 at 120 MHz.
+
+The host fixture uses LPC_SC_TypeDef from the vendor header and intercepts
+register-block accesses. It checks that six-clock timing remains in effect
+through clock programming and checks final timing at 20/22, 40/42, 60/62,
+80/82, 100/102 and 120 MHz. The test supplies ready PLL status from the
+configuration; it does not emulate feed latching, oscillator startup or
+physical flash access. Existing PLL selection and switching limitations
+remain separate work. The old code fails both transition ordering and
+between-boundary timing checks. O0/O2 UBSan tests pass after the fix.
+Reference: NXP UM10360 revision 2, chapter 5, table 49.
