@@ -1,9 +1,11 @@
 # LPC11Uxx IAP interrupt protection
 
 Run `python3 tests/lpc_iap/run.py` with host GCC. It builds the production
-LPC11Uxx IAP source at -O0 and -O2 with undefined-behavior checking. The
-vendor device header remains in use; a test CMSIS core header substitutes
-only the CPU intrinsics. The existing IapEntry pointer targets a ROM stub.
+shared LPC IAP source with LPC11XX_SERIES at -O0 and -O2 with
+undefined-behavior checking. Test interrupt helpers model the CMSIS-backed
+production helpers. The test verifies the LPC11 ROM entry address before
+replacing IapEntry with a ROM stub, and includes both old and shared headers
+to check compatible types and the legacy command-name alias.
 
 All twelve wrappers must call ROM with PRIMASK set and restore the original
 mask after success and error returns. Each is checked with interrupts
@@ -20,3 +22,11 @@ workspace and stack. This change does not complete ISP entry preparation.
 Cortex-M0 compilation to assembly passed at -O0 and -O2 using the real
 CMSIS core header. Host tests do not execute ROM or erase/program hardware.
 Hardware IAP and complete firmware link validation remain pending.
+
+LPC11U35 now links ARM/NXP/src/lpc_iap.c in Debug and Release, as LPC54628
+does. The duplicated LPC11xx/src/iap_lpc11uxx.c is removed. Custom build
+projects must make the same source substitution, define LPC11XX_SERIES and
+include ARM/NXP/include. Existing iap_lpc11uxx.h includes and public function
+calls remain valid. Clean/rebuild the library after updating project links.
+Only the original twelve LPC11 commands are exercised here; the shared
+header does not imply that LPC546xx-only commands are supported by LPC11 ROM.

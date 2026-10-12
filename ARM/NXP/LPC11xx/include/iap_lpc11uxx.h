@@ -34,71 +34,11 @@ Modified by          Date              Description
 #ifndef __LPC11UXX_IAP_H__
 #define __LPC11UXX_IAP_H__
 
-#include <stdint.h>
+// Compatibility include for existing LPC11Uxx applications. The common
+// declarations and command structures are shared with the other LPC ports.
+#include "lpc_iap.h"
 
-// **** EEPROM data must be 16 bits aligned for both source and destination
-
-typedef enum {
-	IAPCMD_PREP_SECTOR 		= 50,		// Prepare sector(s) for write operation
-	IAPCMD_CPY_RAM_TO_FLASH	= 51,		// Copy RAM to flash
-	IAPCMD_ERASE_SECT		= 52,		// Erase sector(s)
-	IAPCMD_BLANK_CHECK 		= 53,		// Blank check sector(s)
-	IAPCMD_READ_PARTID		= 54,		// Read Part ID
-	IAPCMD_READ_BOOTCODE_VER= 55, 		// Read Boot code version
-	IAPCMD_COMPARE			= 56,		// Compare
-	IAPCMD_INVOKE_ISP		= 57,		// Reinvoke ISP
-	IAPCMD_READ_UID			= 58,		// Read UID
-	IAPCMD_ERASE_PAGE		= 59,		// Erase page
-	IAPCMD_EEPROM_WRITE		= 61,		// EEPROM Write
-	IAPCMD_EEPROM_READ		= 62,		// EEPROM Read
-} IAPCMD;
-
-typedef enum {
-	IAPSTATUS_SUCCESS,					// Success
-	IAPSTATUS_INVALID_COMMAND,			// Invalid command
-	IAPSTATUS_SRC_ADDR_ERROR,			// Source address is not on a word boundary.
-	IAPSTATUS_DST_ADDR_ERROR,			// Destination address is not on a correct boundary.
-	IAPSTATUS_SRC_ADDR_NOT_MAPPED,		// Source address is not mapped in the memory map.
-	IAPSTATUS_DST_ADDR_NOT_MAPPED,		// Destination address is not mapped in the memory map.
-	IAPSTATUS_COUNT_ERROR,				// Byte count is not multiple of 4 or is not a permitted value.
-	IAPSTATUS_INVALID_SECT,				// Sector number is invalid.
-	IAPSTATUS_SECTOR_NOT_BLANK,			// Sector is not blank.
-	IAPSTATUS_SECTOR_NOT_PREP,			// Command to prepare sector for write operation was not executed.
-	IAPSTATUS_COMPARE_ERROR,			// Source and destination data is not same.
-	IAPSTATUS_BUSY,						// flash programming hardware interface is busy
-} IAPSTATUS;
-
-#pragma pack(push, 4)
-
-typedef struct {
-	uint32_t CmdStatus;			// Command code or Status
-	uint32_t Data[4];
-} IAP_CMD_STATUS;
-
-#pragma pack(pop)
-
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-// Wrappers mask interrupts during the ROM call and restore the prior PRIMASK
-// if it returns. Callers must serialize a prepare plus erase/write sequence.
-// Keep the IAP work area and sufficient stack space available to the ROM.
-IAPSTATUS IAPPrepSectWrite(int StartSect, int EndSect);
-IAPSTATUS IAPCopyRamToFlash(uint8_t *pDst, uint8_t *pSrc, int Size);
-IAPSTATUS IAPEraseSector(int StartSect, int EndSect);
-IAPSTATUS IAPBlankCheck(int StartSect, int EndSect, IAP_CMD_STATUS *pRes);
-IAPSTATUS IAPReadPartId(IAP_CMD_STATUS *pRes);
-IAPSTATUS IAPReadBootCodeVers(IAP_CMD_STATUS *pRes);
-IAPSTATUS IAPCompare(uint8_t *pDst, uint8_t *pSrc, int Size, IAP_CMD_STATUS *pRes);
-IAPSTATUS IAPJumpISP();
-IAPSTATUS IAPReadUID(IAP_CMD_STATUS *pRes);
-IAPSTATUS IAPErasePage(int StartPage, int EndPage);
-IAPSTATUS IAPEepromWrite(uint32_t EepAddr, uint8_t *pData, int Size);
-IAPSTATUS IAPEepromRead(uint32_t EepAddr, uint8_t *pData, int Size);
-
-#ifdef __cplusplus
-}
-#endif
+// Preserve the command name exported by older LPC11Uxx headers.
+#define IAPCMD_CPY_RAM_TO_FLASH IAPCMD_COPY_RAM_TO_FLASH
 
 #endif // __LPC11UXX_IAP_H__ 

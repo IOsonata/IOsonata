@@ -3,6 +3,8 @@
 #include <stdint.h>
 #include <stdio.h>
 #include "iap_lpc11uxx.h"
+#include "lpc_iap.h"
+#include "coredev/interrupt.h"
 
 typedef void (*IAPENTRY)(IAP_CMD_STATUS *, IAP_CMD_STATUS *);
 extern IAPENTRY IapEntry;
@@ -15,20 +17,18 @@ static uint32_t s_Result;
 static uint32_t s_Disables;
 static uint32_t s_Restores;
 
-uint32_t __get_PRIMASK(void)
+uint32_t DisableInterrupt(void)
 {
-	return s_Mask;
-}
+	uint32_t previous = s_Mask;
 
-void __disable_irq(void)
-{
 	s_Mask = 1;
 	s_Disables++;
+	return previous;
 }
 
-void __set_PRIMASK(uint32_t Mask)
+void EnableInterrupt(uint32_t State)
 {
-	s_Mask = Mask;
+	s_Mask = State;
 	s_Restores++;
 }
 
@@ -47,6 +47,9 @@ int main(void)
 	IAPSTATUS status;
 	const uint32_t commands[] = {50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 61, 62};
 
+	assert(IAPCMD_CPY_RAM_TO_FLASH == IAPCMD_COPY_RAM_TO_FLASH);
+	assert(sizeof(IAP_CMD_STATUS) == 20);
+	assert((uintptr_t)IapEntry == 0x1fff1ff1);
 	IapEntry = RomCall;
 	for (uint32_t mask = 0; mask <= 1; mask++)
 	{
