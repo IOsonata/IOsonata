@@ -505,8 +505,11 @@ bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 	{
 		source = CLKSRCSEL_IRC;
 	}
-	else if (ClkSrc == OSC_TYPE_XTAL && OscFreq >= 1000000U && OscFreq <= 25000000U)
+	else if ((ClkSrc == OSC_TYPE_XTAL || ClkSrc == OSC_TYPE_TCXO) &&
+		OscFreq >= 1000000U && OscFreq <= 25000000U)
 	{
+		// XTAL1 external drive uses the same oscillator enable/ready sequence
+		// as a crystal (UM10360 4.3.2); no separate bypass bit is present.
 		source = CLKSRCSEL_MAIN;
 	}
 	else

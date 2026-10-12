@@ -424,13 +424,22 @@ coverage catches the previously missing SystemPeriphClockSet symbol.
 
 LPC17xx startup now uses the application's overridable `g_McuOsc.CoreOsc`.
 The weak default remains the 4 MHz IRC. `SystemCoreClockSelect` supports
-IRC at 4 MHz and main crystals at 1–25 MHz, choosing the closest supported
+IRC at 4 MHz and main crystals or external oscillators at 1–25 MHz, choosing the closest supported
 CPU rate to CORE_FREQ. Explicit selection distinguishes a 4 MHz crystal
 from IRC; the legacy frequency API retains its original interpretation.
-Unsupported types (including TCXO), invalid physical frequencies and hardware
+Unsupported types, invalid physical frequencies and hardware
 timeouts return false. Descriptor type/frequency are updated only on success.
 LowPwrOsc and bUSBClk are not configured by this CPU-only API; USB setup
 still requires the separate legacy API and readiness checks. Callers must
 stop clock-sensitive peripherals before changing the CPU source.
 Tests cover source identity, invalid inputs, oscillator timeout, descriptor
 preservation, closest CPU rates and C/C++ linkage.
+
+`OSC_TYPE_TCXO` selects an externally driven XTAL1 through the main oscillator,
+using the same OSCRANGE, OSCEN and bounded OSCSTAT wait as crystal mode.
+UM10360 section 4.3.2 specifies 100 pF AC coupling and 200-1000 mVrms input
+(280 mV-1.4 V square-wave swing); XTAL2 may remain unconnected. Board hardware
+must meet these requirements; this is not a direct rail-to-rail clock input.
+See https://www.pololu.com/file/0J431/user.manual.lpc17xx.pdf .
+Tests cover external inputs at 1/4/12/15/25 MHz and just above the range-select
+threshold, startup, invalid frequencies, missing-ready timeout and retry.

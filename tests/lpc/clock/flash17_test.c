@@ -75,6 +75,9 @@ static const uint32_t s_Rates[] = {
 	80000000, 82000000, 99000000, 100000000, 101000000, 102000000,
 	119000000, 120000000
 };
+static const uint32_t s_ExternalInputs[] = {
+	1000000, 4000000, 12000000, 15000000, 15000001, 25000000
+};
 static const int s_InvalidInputs[] = {
 	0, -1, INT_MIN, 1, 32767, 32769, 999999, 25000001, INT_MAX
 };
@@ -369,6 +372,29 @@ int main(void)
 	assert(SystemClkFreq == 12000000);
 	CheckClosest(12000000, CORE_FREQ);
 
+	// Externally driven XTAL1 uses MAIN, including at the IRC's nominal rate.
+	for (unsigned i = 0; i < sizeof(s_ExternalInputs) / sizeof(s_ExternalInputs[0]); i++)
+	{
+		memset(&s_Regs, 0, sizeof(s_Regs));
+		s_OscWait = 0;
+		s_OscReadyAfter = 4;
+		assert(SystemCoreClockSelect(OSC_TYPE_TCXO, s_ExternalInputs[i]));
+		assert(s_Regs.CLKSRCSEL == CLKSRCSEL_MAIN);
+		assert((s_Regs.SCS & 0x70U) == (s_ExternalInputs[i] > 15000000U ? 0x70U : 0x60U));
+		assert(g_McuOsc.CoreOsc.Type == OSC_TYPE_TCXO);
+		assert(g_McuOsc.CoreOsc.Freq == s_ExternalInputs[i]);
+		CheckClosest(s_ExternalInputs[i], CORE_FREQ);
+	}
+	memset(&s_Regs, 0, sizeof(s_Regs));
+	s_OscWait = 0;
+	g_McuOsc.CoreOsc.Type = OSC_TYPE_TCXO;
+	g_McuOsc.CoreOsc.Freq = 12000000;
+	SystemInit();
+	assert(s_Regs.CLKSRCSEL == CLKSRCSEL_MAIN);
+	assert(SystemClkFreq == 12000000);
+	assert(g_McuOsc.CoreOsc.Type == OSC_TYPE_TCXO);
+	CheckClosest(12000000, CORE_FREQ);
+
 	// Explicit source selection must distinguish a 4 MHz crystal from IRC.
 	for (unsigned crystal = 0; crystal <= 1; crystal++)
 	{
@@ -389,7 +415,9 @@ int main(void)
 		assert(!SystemCoreClockSelect(OSC_TYPE_RC, 12000000));
 		assert(!SystemCoreClockSelect(OSC_TYPE_XTAL, 32768));
 		assert(!SystemCoreClockSelect(OSC_TYPE_XTAL, UINT32_MAX));
-		assert(!SystemCoreClockSelect(OSC_TYPE_TCXO, 12000000));
+		assert(!SystemCoreClockSelect(OSC_TYPE_TCXO, 999999));
+		assert(!SystemCoreClockSelect(OSC_TYPE_TCXO, 25000001));
+		assert(!SystemCoreClockSelect(OSC_TYPE_TCXO, UINT32_MAX));
 		assert(!SystemCoreClockSelect((OSC_TYPE)99, 4000000));
 		assert(memcmp(&before, &s_Regs, sizeof(before)) == 0);
 		assert(memcmp(&desc, &g_McuOsc, sizeof(desc)) == 0);
@@ -397,6 +425,14 @@ int main(void)
 		s_OscReadyAfter = 0;
 		assert(!SystemCoreClockSelect(OSC_TYPE_XTAL, 12000000));
 		assert(memcmp(&desc, &g_McuOsc, sizeof(desc)) == 0);
+		s_OscWait = 0;
+		assert(!SystemCoreClockSelect(OSC_TYPE_TCXO, 12000000));
+		assert(memcmp(&desc, &g_McuOsc, sizeof(desc)) == 0);
+		assert(s_Regs.CLKSRCSEL == CLKSRCSEL_IRC);
+		s_OscWait = 0;
+		s_OscReadyAfter = 4;
+		assert(SystemCoreClockSelect(OSC_TYPE_TCXO, 12000000));
+		assert(g_McuOsc.CoreOsc.Type == OSC_TYPE_TCXO);
 	}
 
 
