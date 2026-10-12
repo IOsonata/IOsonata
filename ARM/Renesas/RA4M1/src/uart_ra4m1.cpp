@@ -581,7 +581,7 @@ static void Enable(DevIntrf_t *p)
         // Retain configuration/CFifo RX data. Disable does not gate the module.
         if (d->Regs->SSR & (SCI_SSR_RDRF | SCI_SSR_ERRORS)) {
             uint8_t byte, errors;
-            if (Receive(d, &byte, &errors, false)) ++d->pDev->RxDropCnt;
+            if (Receive(d, &byte, &errors, false, false)) ++d->pDev->RxDropCnt;
         }
         ClearRoutes(d);
         d->Enabled = true;
