@@ -5,6 +5,8 @@
 #include <cassert>
 #include <cstdio>
 #include <cstdint>
+#include <climits>
+#include <initializer_list>
 
 #include "LPC546xx.h"
 
@@ -183,9 +185,6 @@ int main()
 	cfg.bTickInt = true;
 	assert(!TimerInit(&t0, &cfg));
 	cfg.bTickInt = false;
-	cfg.IntPrio = 8;
-	assert(!TimerInit(&t0, &cfg));
-	cfg.IntPrio = 2;
 	cfg.DevNo = 5;
 	assert(!TimerInit(&t0, &cfg));
 	assert(TimerGetLowFreqDevCount() == 0 && TimerGetHighFreqDevCount() == 5 && TimerGetHighFreqDevNo() == 0);
@@ -193,6 +192,20 @@ int main()
 	// DevNo 0 is CTIMER3 on the async bridge, 12 MHz FRO, full rate
 	cfg.DevNo = 0;
 	cfg.Freq = 0;
+	int maxprio = (1U << __NVIC_PRIO_BITS) - 1U;
+	for (int priority : {INT_MIN, -1, 0, 1, 2, 3, maxprio, maxprio + 1, INT_MAX})
+	{
+		cfg.IntPrio = priority;
+		uint32_t expected = priority < 0 ? 0U : priority > maxprio ? (uint32_t)maxprio : (uint32_t)priority;
+	
+		assert(TimerInit(&t0, &cfg));
+		assert(cfg.IntPrio == priority);
+		assert(s_NvicPrio[CTIMER3_IRQn] == expected);
+		t0.Disable(&t0);
+		assert(t0.Enable(&t0));
+		assert(s_NvicPrio[CTIMER3_IRQn] == expected);
+	}
+	cfg.IntPrio = 2;
 	assert(TimerInit(&t0, &cfg));
 	s_Dev = &t0;
 	assert(t0.Freq == 12000000 && s_Ct[3].PR == 0);

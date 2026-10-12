@@ -40,7 +40,8 @@ unsupported no-ops.
 Pin interrupts use eight channels (IntNo 0..7), connected to the existing
 FLEX_INT0_IRQHandler through FLEX_INT7_IRQHandler vectors. Configure the pin as
 a digital input first. Explicit registration rejects an occupied channel, invalid
-pins, NULL callbacks, unsupported sense values and priorities outside 0..3.
+pins, NULL callbacks and unsupported sense values. Priorities select the closest
+level in 0..3; negative values become 0 and values above 3 become 3.
 Automatic allocation returns the first free channel or -1. Callbacks receive the
 channel number and caller context in interrupt context.
 
@@ -60,7 +61,7 @@ as specified by UM10462 section 6.3. Use priorities 0..3 for LPC11Uxx. The Blink
 button definitions were updated accordingly.
 
 The interrupt tests check all eight vector names, channel exhaustion/reuse,
-occupied-channel rejection, port boundaries, priority bounds, edge enables,
+occupied-channel rejection, port boundaries, priority clamping (including INT_MIN/INT_MAX), edge enables,
 pause/resume, callback context, release from a callback and a new edge during a
 callback. A host NVIC model applies register set/clear effects at NVIC calls and
 callbacks; it does not simulate asynchronous hardware or interrupt latency.

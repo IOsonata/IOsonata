@@ -266,13 +266,22 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, uint32_t PortNo, uint32_t PinN
 {
 	if ((unsigned)IntNo >= LPC11_PINT_COUNT || PortNo > 1U ||
 		PinNo > 31U || !Lpc11GpioValidPin((int)PortNo, (int)PinNo) || pEvtCB == NULL ||
-		(unsigned)IntPrio >= (1UL << __NVIC_PRIO_BITS) ||
 		(Sense != IOPINSENSE_HIGH_TRANSITION && Sense != IOPINSENSE_LOW_TRANSITION &&
 		 Sense != IOPINSENSE_TOGGLE))
 	{
 		return false;
 	}
 
+	int maxprio = (1U << __NVIC_PRIO_BITS) - 1U;
+
+	if (IntPrio < 0)
+	{
+		IntPrio = 0;
+	}
+	else if (IntPrio > maxprio)
+	{
+		IntPrio = maxprio;
+	}
 	uint32_t state = DisableInterrupt();
 
 	if (s_PintHook[IntNo].Handler != NULL)

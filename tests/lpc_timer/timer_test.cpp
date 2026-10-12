@@ -5,6 +5,8 @@
 #include <cassert>
 #include <cstdio>
 #include <cstdint>
+#include <climits>
+#include <initializer_list>
 
 #include "LPC11Uxx.h"
 
@@ -167,9 +169,6 @@ int main()
 	cfg.EvtHandler = EvtHandler;
 	assert(TimerGetHighFreqDevCount() == 4 && TimerGetLowFreqDevCount() == 0);
 	assert(TimerGetHighFreqDevNo() == 0);
-	cfg.IntPrio = 4;
-	assert(!TimerInit(&other, &cfg));
-	cfg.IntPrio = 3;
 	cfg.DevNo = 4;
 	assert(!TimerInit(&other, &cfg));
 	cfg.DevNo = 0;
@@ -180,6 +179,20 @@ int main()
 	{
 		cfg.DevNo = d;
 		TimerDev_t &t = timers[d];
+		int maxprio = (1U << __NVIC_PRIO_BITS) - 1U;
+		for (int priority : {INT_MIN, -1, 0, 1, 2, 3, maxprio, maxprio + 1, INT_MAX})
+		{
+			cfg.IntPrio = priority;
+			uint32_t expected = priority < 0 ? 0U : priority > maxprio ? (uint32_t)maxprio : (uint32_t)priority;
+		
+			assert(TimerInit(&t, &cfg));
+			assert(cfg.IntPrio == priority);
+			assert(s_NvicPrio[g_LpcTimer[d].IrqNo] == expected);
+			t.Disable(&t);
+			assert(t.Enable(&t));
+			assert(s_NvicPrio[g_LpcTimer[d].IrqNo] == expected);
+		}
+		cfg.IntPrio = 3;
 		assert(TimerInit(&t, &cfg));
 		assert(t.Freq == SystemCoreClock && s_Ct[d].PR == 0);
 		assert(LPC_SYSCON->SYSAHBCLKCTRL & (1U << (7 + d)));

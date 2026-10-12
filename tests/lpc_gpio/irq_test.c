@@ -2,6 +2,7 @@
  * MIT License. Exercises the real driver with vendor peripheral declarations.
  */
 #include <assert.h>
+#include <limits.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/mman.h>
@@ -34,6 +35,7 @@ static void (* const s_Handlers[8])(void) = {
 	FLEX_INT7_IRQHandler
 };
 static int s_Context[8];
+static const int s_Priorities[] = {INT_MIN, -1, 0, 1, 2, 3, 4, INT_MAX};
 
 int main(void)
 {
@@ -44,8 +46,6 @@ int main(void)
 	// Bad requests neither allocate nor access a clock-gated peripheral.
 	assert(!IOPinEnableInterrupt(-1, 0, 0, 0, IOPINSENSE_TOGGLE, PinEvent, NULL));
 	assert(!IOPinEnableInterrupt(8, 0, 0, 0, IOPINSENSE_TOGGLE, PinEvent, NULL));
-	assert(!IOPinEnableInterrupt(0, -1, 0, 0, IOPINSENSE_TOGGLE, PinEvent, NULL));
-	assert(!IOPinEnableInterrupt(0, 4, 0, 0, IOPINSENSE_TOGGLE, PinEvent, NULL));
 	assert(!IOPinEnableInterrupt(0, 0, 0, 24, IOPINSENSE_TOGGLE, PinEvent, NULL));
 	assert(!IOPinEnableInterrupt(0, 0, 1, 32, IOPINSENSE_TOGGLE, PinEvent, NULL));
 	assert(!IOPinEnableInterrupt(0, 0, UINT32_MAX, 0, IOPINSENSE_TOGGLE, PinEvent, NULL));
@@ -130,6 +130,21 @@ int main(void)
 	LPC_GPIO_PIN_INT->IST = 1;
 	FLEX_INT0_IRQHandler();
 	assert(s_CallbackCount == count);
+	for (unsigned i = 0; i < sizeof(s_Priorities) / sizeof(s_Priorities[0]); i++)
+	{
+		int priority = s_Priorities[i];
+		unsigned expected = priority < 0 ? 0U : priority > 3 ? 3U : (unsigned)priority;
+
+		assert(IOPinEnableInterrupt(0, priority, 0, 2, IOPINSENSE_TOGGLE, PinEvent, NULL));
+		assert(s_Priority[0] == expected);
+		IOPinSetSense(0, 2, IOPINSENSE_DISABLE);
+		IOPinSetSense(0, 2, IOPINSENSE_TOGGLE);
+		assert(s_Priority[0] == expected);
+		IOPinDisableInterrupt(0);
+		assert(IOPinAllocateInterrupt(priority, 0, 2, IOPINSENSE_TOGGLE, PinEvent, NULL) == 0);
+		assert(s_Priority[0] == expected);
+		IOPinDisableInterrupt(0);
+	}
 	puts("LPC11Uxx pin interrupt regressions passed");
 	return 0;
 }

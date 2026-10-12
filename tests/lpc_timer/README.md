@@ -32,7 +32,11 @@ minimum programmable trigger period, not a guarantee that a callback can execute
 at that rate. Missed continuous periods are coalesced into one callback.
 
 Only TIMER_CLKSRC_DEFAULT is supported. Tick interrupts and external capture
-triggers are unsupported. LPC11Uxx interrupt priorities are 0 through 3.
+triggers are unsupported. Interrupt priorities select the closest implemented
+NVIC level using the vendor __NVIC_PRIO_BITS: negative values become zero and
+excessive values become the maximum. LPC11Uxx clamps to 0..3 and LPC546xx to
+0..7. The caller configuration is unchanged. Tests cover both bounds, extreme
+integer requests and priority retention across Disable/Enable.
 Disable/Enable pauses and resumes the count. Reset and frequency changes restart
 active trigger periods. A trigger-specific callback takes precedence over the
 generic timer event callback.

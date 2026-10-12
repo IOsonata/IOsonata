@@ -495,8 +495,7 @@ static bool LpcTimerEnableExtTrigger(TimerDev_t * const pTimer, int TrigDevNo, T
 bool TimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 {
 	if (pTimer == NULL || pCfg == NULL || pCfg->DevNo < 0 || pCfg->DevNo >= g_LpcTimerCount ||
-		pCfg->ClkSrc != TIMER_CLKSRC_DEFAULT || pCfg->bTickInt ||
-		pCfg->IntPrio < 0 || pCfg->IntPrio >= (1 << __NVIC_PRIO_BITS))
+		pCfg->ClkSrc != TIMER_CLKSRC_DEFAULT || pCfg->bTickInt)
 	{
 		return false;
 	}
@@ -563,8 +562,19 @@ bool TimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 		return false;
 	}
 
+	int priority = pCfg->IntPrio;
+	int maxprio = (1U << __NVIC_PRIO_BITS) - 1U;
+
+	if (priority < 0)
+	{
+		priority = 0;
+	}
+	else if (priority > maxprio)
+	{
+		priority = maxprio;
+	}
 	NVIC_ClearPendingIRQ(dev->IrqNo);
-	NVIC_SetPriority(dev->IrqNo, pCfg->IntPrio);
+	NVIC_SetPriority(dev->IrqNo, (uint32_t)priority);
 	NVIC_EnableIRQ(dev->IrqNo);
 	dev->pReg->TCR = LPC_TIMER_ENABLE;
 
