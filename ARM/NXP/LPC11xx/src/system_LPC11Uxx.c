@@ -59,51 +59,59 @@ uint32_t SystemCoreClock = 48000000UL;	// System Clock Frequency (Core Clock)
 uint32_t SystemMainClkFreq = IRC_FREQ;		// System clock frequency, reset default IRC
 uint32_t SystemnsDelayFactor = SYSTEM_NSDELAY_CORE_FACTOR;
 
+// Nominal watchdog analog frequencies, UM10462 Table 14. Index zero is undefined.
+static const uint32_t s_WdtOscFreq[] = {
+	0, 600000, 1050000, 1400000,
+	1750000, 2100000, 2400000, 2700000,
+	3000000, 3250000, 3500000, 3750000,
+	4000000, 4200000, 4400000, 4600000,
+};
+
 static inline uint32_t GetSysPllClk(void)
 {
-	if ((LPC_SYSCON->SYSPLLCLKSEL & SYSPLLCLKSEL_MASK) == SYSPLLCLKSEL_SYSOSC)
+	switch (LPC_SYSCON->SYSPLLCLKSEL & SYSPLLCLKSEL_MASK)
+	{
+	case SYSPLLCLKSEL_SYSOSC:
 		return OSC_FREQ;
-	else
+	case SYSPLLCLKSEL_IRC:
 		return IRC_FREQ;
+	default:
+		return 0;
+	}
 }
 
-/*
- * Update SystemCoreClock based on registers values
- */
+/* Update clock frequencies from the selected source and AHB divider. */
 void SystemCoreClockUpdate(void)
 {
-	uint32_t sysclk;
-	uint32_t mainclk = LPC_SYSCON->MAINCLKSEL;
-	int32_t	p = 1, m;
+	uint32_t sysclk = 0;
+	uint32_t mainclk = LPC_SYSCON->MAINCLKSEL & MAINCLKSEL_MASK;
+	uint32_t div = LPC_SYSCON->SYSAHBCLKDIV & 0xffU;
 
-	sysclk = GetSysPllClk();
-
-	switch (mainclk & MAINCLKSEL_MASK)
+	switch (mainclk)
 	{
 	case MAINCLKSEL_PLLIN:
 		sysclk = GetSysPllClk();
 		break;
 	case MAINCLKSEL_PLLOUT:
-		/* PLL is connected */
-		m = (LPC_SYSCON->SYSPLLCTRL & 0x1f) + 1;
-		p = 1 << ((LPC_SYSCON->SYSPLLCTRL >> 5) & 3);
-
-		/* FCCO = (2 × P x M × FIN) */
-		sysclk = GetSysPllClk() * 2 * m * p;
+		// PLL output is FIN * M; P selects the internal CCO frequency.
+		sysclk = GetSysPllClk() * ((LPC_SYSCON->SYSPLLCTRL & 0x1fU) + 1U);
 		break;
 	case MAINCLKSEL_WDT:
-		sysclk = GetSysPllClk();
+	{
+		uint32_t ctrl = LPC_SYSCON->WDTOSCCTRL;
+		uint32_t wdtdiv = 2U * ((ctrl & 0x1fU) + 1U);
+
+		sysclk = s_WdtOscFreq[(ctrl >> 5) & 0xfU] / wdtdiv;
 		break;
+	}
 	case MAINCLKSEL_IRC:
 		sysclk = IRC_FREQ;
+		break;
 	}
 
-	// fclko = fcco /(p << 1);
-	SystemMainClkFreq = sysclk / (p << 1);
-
-	/* adjust to cclk divider */
-	if (LPC_SYSCON->SYSAHBCLKDIV & 0xff)
-		SystemCoreClock = SystemMainClkFreq / (LPC_SYSCON->SYSAHBCLKDIV & 0xff);
+	SystemMainClkFreq = sysclk;
+	// Divider zero disables the system clock; do not retain a stale frequency.
+	SystemCoreClock = div != 0 ? sysclk / div : 0;
 }
 
 uint32_t SystemCoreClockSet(bool Crystal, int ClkFreq)
@@ -238,4 +246,5 @@ uint32_t SystemCoreClockGet()
 {
 	return SystemCoreClock;
 }
+
 
