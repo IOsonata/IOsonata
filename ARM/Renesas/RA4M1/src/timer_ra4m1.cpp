@@ -499,7 +499,7 @@ bool TimerInit(TimerDev_t *t, const TimerCfg_t *cfg)
     uint8_t last=(uint8_t)(first+(agt ? 2U : 7U));
     for (unsigned i=0;i<RA4M1_IELS_CNT+4U;++i) {
         uint32_t event = i < RA4M1_IELS_CNT ?
-            R_ICU->IELSR[i] & 0xFFU : R_DMA->DELSR[i-RA4M1_IELS_CNT] & 0xFFU;
+            R_ICU->IELSR[i] & 0xFFU : R_ICU->DELSR[i-RA4M1_IELS_CNT] & 0xFFU;
         if (event>=first && event<=last) {EnableInterrupt(state);return false;}
     }
     d.No=(uint8_t)cfg->DevNo; d.Agt=agt; d.AgtReg = agt ? s_AgtRegs[d.No] : nullptr;

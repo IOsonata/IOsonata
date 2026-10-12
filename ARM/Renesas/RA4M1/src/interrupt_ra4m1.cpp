@@ -175,7 +175,7 @@ IRQn_Type Ra4m1RegisterIntHandler(uint8_t EvtId, int Prio,
 		}
     }
     for (int i = 0; i < 4; ++i) {
-        if ((R_DMA->DELSR[i] & 0xFFU) == EvtId) {
+        if ((R_ICU->DELSR[i] & 0xFFU) == EvtId) {
             EnableInterrupt(state);
             return (IRQn_Type)-1;
         }

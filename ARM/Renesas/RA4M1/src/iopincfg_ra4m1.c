@@ -259,7 +259,7 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, uint32_t PortNo, uint32_t PinN
             EnableInterrupt(state); return false;
         }
     for (int i = 0; i < 4; ++i)
-        if ((R_DMA->DELSR[i] & RA4M1_IELS_MASK) == event) {
+        if ((R_ICU->DELSR[i] & RA4M1_IELS_MASK) == event) {
             EnableInterrupt(state); return false;
         }
     for (unsigned i = 0; i < sizeof(s_PinIrqMap)/sizeof(s_PinIrqMap[0]); ++i) {
