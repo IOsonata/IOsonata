@@ -35,6 +35,7 @@ Hoan				Feb. 20, 2015	New EHAL
 #include <string.h>
 #include "coredev/iopincfg.h"
 #include "spi_lpcxx.h"
+#include "coredev/interrupt.h"
 
 extern uint32_t SystemCoreClock;
 
@@ -48,25 +49,77 @@ uint32_t LpcSSPGetRate(DevIntrf_t *pDev)
 	return rate;
 }
 
-// Set data rate in bits/sec (Hz)
-// return actual rate
+// SCK = PCLK / (CPSDVSR * (SCR + 1)). CPSDVSR is even, 2..254,
+// and SCR is 0..255. For each prescaler, only the two divisors bracketing
+// the requested rate can be nearest. Zero selects the minimum rate.
 uint32_t LpcSSPSetRate(DevIntrf_t *pDev, uint32_t DataRate)
 {
-	SSPDEV *dev = (SSPDEV *)pDev-> pDevData;
-	int div = dev->pSspReg->CPSR & 0xff;
-	int srate = 0;
+	if (pDev == NULL || pDev->pDevData == NULL)
+	{
+		return 0;
+	}
+	SSPDEV *dev = (SSPDEV *)pDev->pDevData;
 
-	if (div == 0)
-		div = 1;
+	if (dev->pSpiDev == NULL || dev->pSspReg == NULL || dev->PClkFreq == 0)
+	{
+		return 0;
+	}
+	uint32_t bestDiv = 0;
+	uint32_t bestPrescale = 2;
+	uint32_t bestSerial = 1;
+	uint64_t bestError = 0;
 
-	srate = DataRate * div;
-	//srate = ((SystemCoreClock >> 1) + srate) / srate - 1;
-	srate = (dev->PClkFreq + (srate >> 1)) / srate - 1;
-	dev->pSspReg->CR0 &= ~LPCSSP_CR0_SCR_MASK;
-	dev->pSspReg->CR0 |=  srate << 8;
-	dev->pSpiDev->Cfg.Rate = dev->PClkFreq / ((srate + 1)* div);
+	for (uint32_t prescale = 2; prescale <= 254; prescale += 2)
+	{
+		uint64_t ideal = DataRate == 0 ? 256 :
+			dev->PClkFreq / ((uint64_t)DataRate * prescale);
 
-	//printf("srate = %d, vRate = %d, div = %x\n\r", srate, vRate, div);
+		for (uint32_t next = 0; next < 2; next++)
+		{
+			uint64_t serial = ideal + next;
+
+			if (serial < 1)
+			{
+				serial = 1;
+			}
+			if (serial > 256)
+			{
+				serial = 256;
+			}
+			uint32_t div = prescale * (uint32_t)serial;
+			uint64_t target = (uint64_t)DataRate * div;
+			uint64_t error = target > dev->PClkFreq ?
+				target - dev->PClkFreq : dev->PClkFreq - target;
+
+			// Compare exact errors before rounding to integer Hz. Both
+			// divisors are below 65536, so these products fit in 64 bits.
+			if (bestDiv == 0 || error * bestDiv < bestError * div)
+			{
+				bestDiv = div;
+				bestError = error;
+				bestPrescale = prescale;
+				bestSerial = (uint32_t)serial;
+			}
+		}
+	}
+
+	uint32_t state = DisableInterrupt();
+
+	// Keep an in-flight frame and any queued TX frames at their old rate.
+	if ((dev->pSspReg->SR & (LPCSSP_SR_BSY | LPCSSP_SR_TFE)) != LPCSSP_SR_TFE)
+	{
+		EnableInterrupt(state);
+		return dev->pSpiDev->Cfg.Rate;
+	}
+	uint32_t cr1 = dev->pSspReg->CR1;
+
+	dev->pSspReg->CR1 = cr1 & ~LPCSSP_CR1_SSP_EN;
+	dev->pSspReg->CPSR = bestPrescale;
+	dev->pSspReg->CR0 = (dev->pSspReg->CR0 & ~LPCSSP_CR0_SCR_MASK) |
+		((bestSerial - 1U) << 8);
+	dev->pSspReg->CR1 = cr1;
+	dev->pSpiDev->Cfg.Rate = (uint32_t)(((uint64_t)dev->PClkFreq + bestDiv / 2U) / bestDiv);
+	EnableInterrupt(state);
 
 	return dev->pSpiDev->Cfg.Rate;
 }
@@ -253,5 +306,6 @@ bool LpcSSPWaitTxFifo(SSPDEV *pDev, int TimeoutCnt)
 
 	return false;
 }
+
 
 

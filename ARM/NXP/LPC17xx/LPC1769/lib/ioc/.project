@@ -1175,6 +1175,11 @@
 			<type>1</type>
 			<locationURI>PARENT-3-PROJECT_LOC/Include/uart_lpc_target.h</locationURI>
 		</link>
+		<link>
+			<name>include/spi_lpc_target.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/Include/spi_lpc_target.h</locationURI>
+		</link>
 	</linkedResources>
 </projectDescription>
 

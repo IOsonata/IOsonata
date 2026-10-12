@@ -48,13 +48,20 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #define LPC11U_MAX_SSPDEV		2
 
+extern uint32_t SystemMainClkFreq;
+
 SSPDEV g_SspDev[LPC11U_MAX_SSPDEV] = {
-		{0, 0, (LPCSSPREG*)LPC_SSP0,},
-		{1, 0, (LPCSSPREG*)LPC_SSP1,},
+		{0, 0, LPC_SSP0,},
+		{1, 0, LPC_SSP1,},
 };
 
 bool SPIInit(SPIDev_t *pDev, const SPICfg_t *pCfgData)
 {
+	if (pDev == NULL || pCfgData == NULL || pCfgData->DevNo < 0 ||
+		pCfgData->DevNo >= LPC11U_MAX_SSPDEV || SystemMainClkFreq == 0)
+	{
+		return false;
+	}
 	SSPDEV *dev = NULL;
 
 	IOPinCfg(pCfgData->pIOPinMap, pCfgData->NbIOPins);
@@ -66,7 +73,7 @@ bool SPIInit(SPIDev_t *pDev, const SPICfg_t *pCfgData)
 		LPC_SYSCON->SSP0CLKDIV = 1;//0x2;			// Divided by 1
 
 		dev = &g_SspDev[0];
-		dev->pSspReg = (LPCSSPREG*)LPC_SSP0;
+		dev->pSspReg = LPC_SSP0;
 	}
 	else if (pCfgData->DevNo == 1)
 	{
@@ -75,10 +82,14 @@ bool SPIInit(SPIDev_t *pDev, const SPICfg_t *pCfgData)
 		LPC_SYSCON->SSP1CLKDIV = 1;//0x02;			// Divided by 1
 
 		dev = &g_SspDev[1];
-		dev->pSspReg = (LPCSSPREG*)LPC_SSP1;
+		dev->pSspReg = LPC_SSP1;
 	}
 
-	dev->PClkFreq = SystemCoreClock / LPC_SYSCON->SSP1CLKDIV;
+	// SSP clocks branch from the main clock before SYSAHBCLKDIV.
+	uint32_t div = pCfgData->DevNo == 0 ? LPC_SYSCON->SSP0CLKDIV : LPC_SYSCON->SSP1CLKDIV;
+
+	dev->PClkFreq = SystemMainClkFreq / (div & 0xFFU);
+	dev->pSspReg->CR1 &= ~LPCSSP_CR1_SSP_EN;
 
 	uint32_t d = (pCfgData->DataSize - 1);
 	if (pCfgData->DataPhase == SPIDATAPHASE_SECOND_CLK)
@@ -96,7 +107,7 @@ bool SPIInit(SPIDev_t *pDev, const SPICfg_t *pCfgData)
 		d |= LPCSSP_CR1_MS_SLAVE;
 	}
 
-	dev->pSspReg->CR1 = d;
+	dev->pSspReg->CR1 = d & ~LPCSSP_CR1_SSP_EN;
 	dev->pSspReg->CPSR = 2;
 	/* Enable AHB clock to the GPIO domain. */
 	LPC_SYSCON->SYSAHBCLKCTRL |= LPC11U_SYSAHBCLKCTRL_GPIO_EN;
@@ -127,9 +138,11 @@ bool SPIInit(SPIDev_t *pDev, const SPICfg_t *pCfgData)
 	atomic_flag_clear(&pDev->DevIntrf.bBusy);
 
 	LpcSSPSetRate(&pDev->DevIntrf, pCfgData->Rate);
+	dev->pSspReg->CR1 = d;
 
 	return true;
 }
+
 
 
 
