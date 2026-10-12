@@ -16,7 +16,12 @@
 		                 from the SCI
 		bIntMode true  : RXI, TXI and ERI interrupts drain the TX CFIFO and
 		                 fill the RX CFIFO
-		bDMAMode       : not implemented, ignored
+		bDMAMode true  : TX DMA sends blocks from the TX CFIFO, DMAC channel
+		                 DevNo activated by the TXI of the SCI. RX as without
+		                 DMA: the SCI has no idle line event to move a DMA
+		                 ring to the RX CFIFO after a short burst. Without
+		                 bIntMode, TxData and RxData retire the finished
+		                 block and start the next one. Needs a blocking FIFO.
 
 		The SCI clock is PCLKA, read with SystemPeriphClockGet(0).
 
@@ -63,9 +68,12 @@ SOFTWARE.
 
 // FIFO mode. RXI when the RX FIFO holds RX_TRIGGER characters, or with fewer
 // once the line is idle for 1.5 frames (receive data ready, FCR.DRES = 0).
-// TXI when the TX FIFO holds TX_TRIGGER characters or less.
+// TXI when the TX FIFO holds TX_TRIGGER characters or less. With DMA, TXI
+// when it is empty, as the Renesas FSP sets it with a transfer instance: each
+// TXI moves one byte, its write clears TDFE.
 #define RA4M1_SCI_RX_TRIGGER		8
 #define RA4M1_SCI_TX_TRIGGER		8
+#define RA4M1_SCI_TX_TRIGGER_DMA	0
 
 #define RA4M1_SCI_SSR_RXERR			(R_SCI0_SSR_ORER_Msk | R_SCI0_SSR_FER_Msk | R_SCI0_SSR_PER_Msk)
 
@@ -82,6 +90,12 @@ SOFTWARE.
 // Most bytes TxData and RxData copy to or from a CFIFO with interrupts
 // disabled, to keep the RX interrupt latency short
 #define RA4M1_UART_COPY_MAX			8
+
+// DMAC and DTC module stop bit in MSTPCRA
+#define RA4M1_DMAC_MSTP_MASK		(1U << 22)
+
+// Most bytes of one TX DMA block, the normal mode count of DMCRA
+#define RA4M1_UART_DMA_MAX			0xFFFF
 
 // Caller of Ra4m1UartRxHw. Without the FIFO it decides when RDR is read.
 typedef enum {
@@ -105,6 +119,11 @@ typedef struct {
 	IRQn_Type IrqRxi;
 	IRQn_Type IrqTxi;
 	IRQn_Type IrqEri;
+	R_DMAC0_Type *pDma;				// DMAC channel of the TX DMA
+	uint8_t EvtDma;					// ICU event of its transfer end
+	IRQn_Type IrqDma;
+	bool bDmaActive;				// TX DMA block running
+	uint32_t DmaLen;				// TX CFIFO bytes of the running block
 	alignas(4) uint8_t RxFifoMem[RA4M1_UART_CFIFO_MEMSIZE];
 	alignas(4) uint8_t TxFifoMem[RA4M1_UART_CFIFO_MEMSIZE];
 } Ra4m1UartDev_t;
@@ -120,6 +139,9 @@ static Ra4m1UartDev_t s_Ra4m1UartDev[] = {
 		.IrqRxi = (IRQn_Type)-1,
 		.IrqTxi = (IRQn_Type)-1,
 		.IrqEri = (IRQn_Type)-1,
+		.pDma = R_DMAC0,
+		.EvtDma = RA4M1_EVTID_DMAC0_INT,
+		.IrqDma = (IRQn_Type)-1,
 	},
 	{
 		.DevNo = 1,
@@ -130,6 +152,9 @@ static Ra4m1UartDev_t s_Ra4m1UartDev[] = {
 		.IrqRxi = (IRQn_Type)-1,
 		.IrqTxi = (IRQn_Type)-1,
 		.IrqEri = (IRQn_Type)-1,
+		.pDma = R_DMAC1,
+		.EvtDma = RA4M1_EVTID_DMAC1_INT,
+		.IrqDma = (IRQn_Type)-1,
 	},
 	{
 		.DevNo = 2,
@@ -140,6 +165,9 @@ static Ra4m1UartDev_t s_Ra4m1UartDev[] = {
 		.IrqRxi = (IRQn_Type)-1,
 		.IrqTxi = (IRQn_Type)-1,
 		.IrqEri = (IRQn_Type)-1,
+		.pDma = R_DMAC2,
+		.EvtDma = RA4M1_EVTID_DMAC2_INT,
+		.IrqDma = (IRQn_Type)-1,
 	},
 	{
 		.DevNo = 3,
@@ -150,6 +178,9 @@ static Ra4m1UartDev_t s_Ra4m1UartDev[] = {
 		.IrqRxi = (IRQn_Type)-1,
 		.IrqTxi = (IRQn_Type)-1,
 		.IrqEri = (IRQn_Type)-1,
+		.pDma = R_DMAC3,
+		.EvtDma = RA4M1_EVTID_DMAC3_INT,
+		.IrqDma = (IRQn_Type)-1,
 	},
 };
 
@@ -202,7 +233,8 @@ static void Ra4m1UartReleaseIRQs(Ra4m1UartDev_t * const pDev)
 	Ra4m1UnregisterIntHandler(pDev->IrqRxi);
 	Ra4m1UnregisterIntHandler(pDev->IrqTxi);
 	Ra4m1UnregisterIntHandler(pDev->IrqEri);
-	pDev->IrqRxi = pDev->IrqTxi = pDev->IrqEri = (IRQn_Type)-1;
+	Ra4m1UnregisterIntHandler(pDev->IrqDma);
+	pDev->IrqRxi = pDev->IrqTxi = pDev->IrqEri = pDev->IrqDma = (IRQn_Type)-1;
 }
 
 // Received characters into the RX CFIFO. The hardware is read first, a full
@@ -401,14 +433,231 @@ static int Ra4m1UartTxHw(Ra4m1UartDev_t * const pDev)
 	return cnt;
 }
 
+// TX DMA. DMAC channel DevNo moves one byte to FTDRL or TDR for each TXI of
+// the SCI, linked through ICU.DELSR. A block is the first contiguous run of
+// the TX CFIFO, sent in place: its bytes stay in the FIFO, the producer cannot
+// write over them, until the channel has moved all of them. The transfer end
+// interrupt, or TxData and RxData without bIntMode, release them and start
+// the next block.
+
+// DMAC module running and its transfers enabled. Not stopped by this driver,
+// other drivers may use the DMAC or the DTC.
+static void Ra4m1UartDmacStart(void)
+{
+	uint16_t prcr = R_SYSTEM->PRCR & 0xFU;
+
+	R_SYSTEM->PRCR = 0xA500U | prcr | R_SYSTEM_PRCR_PRC1_Msk;
+	R_MSTP->MSTPCRA &= ~RA4M1_DMAC_MSTP_MASK;
+	(void)R_MSTP->MSTPCRA;
+	R_SYSTEM->PRCR = 0xA500U | prcr;
+	R_DMA->DMAST = R_DMA_DMAST_DMST_Msk;
+}
+
+// Channel stopped and unlinked from the TXI. A request pending in DELSR goes
+// with the link. The bytes of a running block are not released, Enable
+// flushes the TX CFIFO.
+static void Ra4m1UartDmaStop(Ra4m1UartDev_t * const pDev)
+{
+	R_ICU->DELSR[pDev->DevNo] = 0;
+	pDev->pDma->DMCNT = 0;
+	pDev->bDmaActive = false;
+	pDev->DmaLen = 0;
+}
+
+// Channel set for TX and linked to the TXI: normal mode, 8 bit, source
+// incremented, destination FTDRL or TDR fixed, transfer end interrupt with
+// bIntMode. Started by Ra4m1UartDmaTxStart.
+static void Ra4m1UartDmaSetup(Ra4m1UartDev_t * const pDev)
+{
+	R_DMAC0_Type *dma = pDev->pDma;
+	R_SCI0_Type *reg = pDev->pReg;
+
+	Ra4m1UartDmaStop(pDev);
+	dma->DMTMD = 1U << R_DMAC0_DMTMD_DCTG_Pos;
+	dma->DMAMD = 2U << R_DMAC0_DMAMD_SM_Pos;
+	dma->DMDAR = pDev->bHwFifo ? (uint32_t)(uintptr_t)&reg->FTDRL : (uint32_t)(uintptr_t)&reg->TDR;
+	dma->DMOFR = 0;
+	dma->DMCRB = 0;
+	dma->DMINT = pDev->pUartDev->DevIntrf.bIntEn ? R_DMAC0_DMINT_DTIE_Msk : 0;
+	dma->DMSTS = 0;
+	R_ICU->DELSR[pDev->DevNo] = pDev->EvtRxi + 1U;
+}
+
+// Start a block with the first contiguous run of the TX CFIFO, at most half
+// of the FIFO: the producer fills the other half meanwhile and the next block
+// is ready when this one ends. Returns false when the FIFO is empty.
+// Interrupts disabled or from an interrupt.
+//
+// SCI0/1: the channel is armed, then TIE is set again. Setting TIE gives a
+// TXI when the TX FIFO is already empty, the Renesas FSP starts its transfers
+// that way, otherwise the TXI comes when the last byte of the previous block
+// leaves the FIFO.
+//
+// SCI2/9: setting TIE gives no TXI, it comes when TDR moves to the shift
+// register. TIE is set first, then the channel is armed for the whole block:
+// the byte left in TDR by the previous block gives the TXI, and a byte the
+// channel writes to an idle line goes on to the shift register at once and
+// gives the next TXI. When TDR is empty with bytes left and the channel
+// stopped, no TXI is coming: the TXI came before the channel was armed, or the
+// line is idle. The request it may have left in DELSR is cleared and the next
+// byte goes to TDR from the CPU, as the Renesas FSP starts a transfer, the
+// channel takes the rest. A block of one byte is written to TDR alone and the
+// next run is taken. That happens at most twice in a row: after a TDR write
+// TDR is full unless the line was idle.
+static bool Ra4m1UartDmaTxStart(Ra4m1UartDev_t * const pDev)
+{
+	R_SCI0_Type *reg = pDev->pReg;
+	R_DMAC0_Type *dma = pDev->pDma;
+	hCFifo_t fifo = pDev->pUartDev->hTxFifo;
+
+	int half = (CFifoUsed(fifo) + CFifoAvail(fifo)) / 2;
+
+	if (half < 1)
+	{
+		half = 1;
+	}
+	if (half > RA4M1_UART_DMA_MAX)
+	{
+		half = RA4M1_UART_DMA_MAX;
+	}
+
+	for (;;)
+	{
+		int cnt = half;
+		uint8_t *p = CFifoPeekMultiple(fifo, &cnt);
+
+		if (p == NULL)
+		{
+			return false;
+		}
+
+		pDev->DmaLen = (uint32_t)cnt;
+		pDev->bDmaActive = true;
+		dma->DMSAR = (uint32_t)(uintptr_t)p;
+		dma->DMCRA = (uint32_t)cnt;
+		// The CFIFO bytes are written before the channel reads them
+		__DSB();
+
+		if (pDev->bHwFifo)
+		{
+			dma->DMCNT = R_DMAC0_DMCNT_DTE_Msk;
+			reg->SCR &= (uint8_t)~R_SCI0_SCR_TIE_Msk;
+			reg->SCR |= R_SCI0_SCR_TIE_Msk;
+
+			return true;
+		}
+
+		reg->SCR |= R_SCI0_SCR_TIE_Msk;
+		dma->DMCNT = R_DMAC0_DMCNT_DTE_Msk;
+
+		uint32_t left;
+		for (;;)
+		{
+			// Time for the channel to take a request pending before DTE was set
+			Ra4m1UartSync(pDev);
+			left = dma->DMCRA;
+			if (left == 0 || (reg->SSR & R_SCI0_SSR_TDRE_Msk) == 0)
+			{
+				// All moved, or TDR full and its move gives the next TXI
+				return true;
+			}
+			dma->DMCNT = 0;
+			if (dma->DMCRA == left)
+			{
+				break;
+			}
+			// The channel moved a byte meanwhile
+			dma->DMCNT = R_DMAC0_DMCNT_DTE_Msk;
+		}
+
+		// TDR empty, channel stopped with bytes left
+		R_ICU->DELSR[pDev->DevNo] = 0;
+		R_ICU->DELSR[pDev->DevNo] = pDev->EvtRxi + 1U;
+
+		uint8_t *q = p + (cnt - (int)left);
+
+		if (left > 1)
+		{
+			dma->DMSAR = (uint32_t)(uintptr_t)(q + 1);
+			dma->DMCRA = left - 1;
+			dma->DMCNT = R_DMAC0_DMCNT_DTE_Msk;
+			reg->TDR = *q;
+
+			return true;
+		}
+		reg->TDR = *q;
+		CFifoRelease(fifo, cnt);
+		pDev->bDmaActive = false;
+		pDev->DmaLen = 0;
+	}
+}
+
+// A block is done once the channel cleared DTE after its last byte. Its bytes
+// are released and the next block takes what was queued meanwhile. With the
+// FIFO empty TX is ready again and the application is told. From the transfer
+// end interrupt, or from TxData and RxData without bIntMode. Returns false if
+// no block was done.
+static bool Ra4m1UartDmaService(Ra4m1UartDev_t * const pDev)
+{
+	UARTDev_t *udev = pDev->pUartDev;
+	R_DMAC0_Type *dma = pDev->pDma;
+
+	if (!pDev->bDmaActive || (dma->DMCNT & R_DMAC0_DMCNT_DTE_Msk))
+	{
+		return false;
+	}
+
+	dma->DMSTS = 0;
+	pDev->bDmaActive = false;
+	CFifoRelease(udev->hTxFifo, (int)pDev->DmaLen);
+	pDev->DmaLen = 0;
+
+	if (Ra4m1UartDmaTxStart(pDev))
+	{
+		return true;
+	}
+
+	// No TXI for the channel while TX is idle
+	pDev->pReg->SCR &= (uint8_t)~R_SCI0_SCR_TIE_Msk;
+	udev->bTxReady = true;
+	if (udev->DevIntrf.bIntEn && udev->EvtCallback)
+	{
+		// Length is the free space in the TX FIFO
+		udev->EvtCallback(udev, UART_EVT_TXREADY, NULL, CFifoAvail(udev->hTxFifo));
+	}
+
+	return true;
+}
+
+// Transfer end of the TX DMA channel, an edge event cleared first
+static void Ra4m1UartDmaIRQHandler(int IntNo, void *pCtx)
+{
+	Ra4m1UartDev_t *dev = (Ra4m1UartDev_t *)pCtx;
+
+	Ra4m1AcknowledgeInt((IRQn_Type)IntNo);
+	Ra4m1UartDmaService(dev);
+}
+
 // Without the interrupt, RxData and TxData move what the hardware holds, in
-// both directions. Interrupts disabled.
+// both directions. With DMA the finished TX block is retired and the next one
+// started. Interrupts disabled.
 static void Ra4m1UartPoll(Ra4m1UartDev_t * const pDev)
 {
 	uint8_t err;
 
 	Ra4m1UartRxHw(pDev, RA4M1_UART_RX_POLL, &err);
-	Ra4m1UartTxHw(pDev);
+	if (pDev->pUartDev->DevIntrf.bDma)
+	{
+		Ra4m1UartDmaService(pDev);
+		if (pDev->pUartDev->bTxReady && Ra4m1UartDmaTxStart(pDev))
+		{
+			pDev->pUartDev->bTxReady = false;
+		}
+	}
+	else
+	{
+		Ra4m1UartTxHw(pDev);
+	}
 }
 
 // RXI, TXI and ERI of one SCI. RX is serviced first whatever the event.
@@ -433,7 +682,8 @@ static void Ra4m1UartIRQHandler(int IntNo, void *pCtx)
 
 	int rxcnt = Ra4m1UartRxHw(dev, IntNo == (int)dev->IrqRxi ? RA4M1_UART_RX_RXI : RA4M1_UART_RX_OTHER, &err);
 
-	if (reg->SCR & R_SCI0_SCR_TIE_Msk)
+	// With DMA, TIE is for the channel and TXI goes to it
+	if (!udev->DevIntrf.bDma && (reg->SCR & R_SCI0_SCR_TIE_Msk))
 	{
 		Ra4m1UartTxHw(dev);
 		if (CFifoUsed(udev->hTxFifo) == 0)
@@ -726,10 +976,26 @@ static int Ra4m1UartTxData(DevIntrf_t * const pDev, uint8_t const *pData, int Da
 	if (!pDev->bIntEn)
 	{
 		// Without the interrupt what the SCI takes now is sent, the next
-		// TxData or RxData call sends the rest
+		// TxData or RxData call sends the rest. With DMA the finished block is
+		// retired and the next one started.
 		uint32_t state = DisableInterrupt();
 		Ra4m1UartPoll(dev);
 		EnableInterrupt(state);
+	}
+	else if (pDev->bDma)
+	{
+		// A DMA block from the FIFO, the transfer end interrupt sends the
+		// rest. Checked again with interrupts disabled, TxData may also be
+		// called from an interrupt.
+		if (udev->bTxReady)
+		{
+			uint32_t state = DisableInterrupt();
+			if (udev->bTxReady && Ra4m1UartDmaTxStart(dev))
+			{
+				udev->bTxReady = false;
+			}
+			EnableInterrupt(state);
+		}
 	}
 	else if (udev->bTxReady)
 	{
@@ -775,8 +1041,15 @@ static void Ra4m1UartStopTx(DevIntrf_t * const pDev)
 static void Ra4m1UartDisable(DevIntrf_t * const pDev)
 {
 	Ra4m1UartDev_t *dev = (Ra4m1UartDev_t *)pDev->pDevData;
+	uint32_t state = DisableInterrupt();
 
 	dev->pReg->SCR = 0;
+	if (pDev->bDma)
+	{
+		Ra4m1UartDmaStop(dev);
+	}
+
+	EnableInterrupt(state);
 }
 
 static void Ra4m1UartEnable(DevIntrf_t * const pDev)
@@ -805,6 +1078,10 @@ static void Ra4m1UartEnable(DevIntrf_t * const pDev)
 	{
 		reg->SSR = (uint8_t)~(status & RA4M1_SCI_SSR_RXERR);
 	}
+	if (pDev->bDma)
+	{
+		Ra4m1UartDmaSetup(dev);
+	}
 
 	// TE and RE set in one write. TXI is enabled by TxData when the TX CFIFO
 	// has data. RIE enables RXI and ERI.
@@ -822,6 +1099,10 @@ static void Ra4m1UartPowerOff(DevIntrf_t * const pDev)
 	uint32_t state = DisableInterrupt();
 
 	dev->pReg->SCR = 0;
+	if (pDev->bDma)
+	{
+		Ra4m1UartDmaStop(dev);
+	}
 	Ra4m1UartReleaseIRQs(dev);
 	IOPinDis(dev->pIOPinMap, dev->NbIOPins);
 	Ra4m1UartModuleStart(dev, false);
@@ -862,8 +1143,10 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	}
 
 	// Asynchronous full duplex without flow control, 7 or 8 data bits,
-	// parity none, odd or even
-	if (pCfg->Mode != UART_MODE_UART || pCfg->Duplex != UART_DUPLEX_FULL || pCfg->bIrDAMode ||
+	// parity none, odd or even. TX DMA reads the TX CFIFO in place, a put on
+	// a full non-blocking FIFO would write over the running block.
+	if ((pCfg->bDMAMode && !pCfg->bFifoBlocking) ||
+		pCfg->Mode != UART_MODE_UART || pCfg->Duplex != UART_DUPLEX_FULL || pCfg->bIrDAMode ||
 		pCfg->FlowControl != UART_FLWCTRL_NONE || (pCfg->DataBits != 7 && pCfg->DataBits != 8) ||
 		(pCfg->Parity != UART_PARITY_NONE && pCfg->Parity != UART_PARITY_ODD &&
 		 pCfg->Parity != UART_PARITY_EVEN) ||
@@ -885,12 +1168,31 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 		return false;
 	}
 
-	// Interrupts of a previous UARTInit
+	// DMAC channel DevNo, free or linked to the TXI of this SCI by an earlier
+	// UARTInit. Linked to another event, another driver uses it.
+	uint32_t dels = R_ICU->DELSR[pCfg->DevNo] & R_ICU_DELSR_DELS_Msk;
+	if (pCfg->bDMAMode && dels != 0 && dels != dev->EvtRxi + 1U)
+	{
+		EnableInterrupt(state);
+
+		return false;
+	}
+
+	// Interrupts and TX DMA of a previous UARTInit. Without DMA the TXI goes
+	// to the CPU again.
 	Ra4m1UartReleaseIRQs(dev);
+	if (dels == dev->EvtRxi + 1U)
+	{
+		Ra4m1UartDmaStop(dev);
+	}
 
 	// Module clock first, register writes before it are ignored
 	Ra4m1UartModuleStart(dev, true);
 	reg->SCR = 0;
+	if (pCfg->bDMAMode)
+	{
+		Ra4m1UartDmacStart();
+	}
 
 	if (pCfg->pRxMem && pCfg->RxMemSize > 0)
 	{
@@ -931,9 +1233,10 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	if (dev->bHwFifo)
 	{
 		// FIFO mode, both FIFOs reset. RSTRG (RTS level) is not used.
+		uint16_t ttrg = pCfg->bDMAMode ? RA4M1_SCI_TX_TRIGGER_DMA : RA4M1_SCI_TX_TRIGGER;
 		reg->FCR = R_SCI0_FCR_FM_Msk | R_SCI0_FCR_RFRST_Msk | R_SCI0_FCR_TFRST_Msk |
 				   (RA4M1_SCI_RX_TRIGGER << R_SCI0_FCR_RTRG_Pos) |
-				   (RA4M1_SCI_TX_TRIGGER << R_SCI0_FCR_TTRG_Pos) | R_SCI0_FCR_RSTRG_Msk;
+				   (ttrg << R_SCI0_FCR_TTRG_Pos) | R_SCI0_FCR_RSTRG_Msk;
 	}
 
 	// TXD held at mark level while TE is cleared
@@ -995,7 +1298,7 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	pDev->TxDropCnt = 0;
 	pDev->DevIntrf.IntPrio = pCfg->IntPrio;
 	pDev->DevIntrf.bIntEn = pCfg->bIntMode;
-	pDev->DevIntrf.bDma = false;
+	pDev->DevIntrf.bDma = pCfg->bDMAMode;
 	pDev->DevIntrf.bTxReady = true;
 	pDev->DevIntrf.bNoStop = false;
 	pDev->DevIntrf.EvtCB = NULL;
@@ -1019,11 +1322,20 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 
 	if (pCfg->bIntMode)
 	{
-		// One handler for RXI, TXI and ERI. TEI is not used.
+		// One handler for RXI, TXI and ERI, TEI is not used. With DMA the TXI
+		// goes to the DMAC channel, whose transfer end has its own handler.
 		dev->IrqRxi = Ra4m1RegisterIntHandler(dev->EvtRxi, pCfg->IntPrio, Ra4m1UartIRQHandler, dev);
-		dev->IrqTxi = Ra4m1RegisterIntHandler(dev->EvtRxi + 1, pCfg->IntPrio, Ra4m1UartIRQHandler, dev);
 		dev->IrqEri = Ra4m1RegisterIntHandler(dev->EvtRxi + 3, pCfg->IntPrio, Ra4m1UartIRQHandler, dev);
-		if (dev->IrqRxi == (IRQn_Type)-1 || dev->IrqTxi == (IRQn_Type)-1 || dev->IrqEri == (IRQn_Type)-1)
+		IRQn_Type irqtx;
+		if (pCfg->bDMAMode)
+		{
+			irqtx = dev->IrqDma = Ra4m1RegisterIntHandler(dev->EvtDma, pCfg->IntPrio, Ra4m1UartDmaIRQHandler, dev);
+		}
+		else
+		{
+			irqtx = dev->IrqTxi = Ra4m1RegisterIntHandler(dev->EvtRxi + 1, pCfg->IntPrio, Ra4m1UartIRQHandler, dev);
+		}
+		if (dev->IrqRxi == (IRQn_Type)-1 || irqtx == (IRQn_Type)-1 || dev->IrqEri == (IRQn_Type)-1)
 		{
 			Ra4m1UartReleaseIRQs(dev);
 			IOPinDis(dev->pIOPinMap, dev->NbIOPins);

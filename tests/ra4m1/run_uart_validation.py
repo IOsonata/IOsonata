@@ -6,8 +6,8 @@ Run: python3 tests/ra4m1/run_uart_validation.py
 uart_test.cpp compiles the driver with the SCI, PRCR, module stop and ICU
 model of tests/ra4m1/uart_include, the real CFIFO and DeviceIntrf code, at
 -O0, -Os, -O2 and with the address and undefined behavior sanitizers. The
-SCI and PRCR bit definitions and the SCI event ids are copied from the RA4M1
-headers into build/uart. When arm-none-eabi-g++ is found, the driver is also
+SCI, DMAC, DELSR and PRCR bit definitions and the SCI and DMAC event ids are
+copied from the RA4M1 headers into build/uart. When arm-none-eabi-g++ is found, the driver is also
 compiled for the Cortex-M4 with the real headers at -O0 and -Os.
 
 The ICU model takes RXI, TXI and ERI as edge events that set the IR flag of
@@ -70,10 +70,10 @@ def main():
 
     cmsis = (TARGET / 'include/R7FA4M1AB.h').read_text()
     header('sci_bits.h', [l for l in cmsis.splitlines()
-                          if re.match(r'\s*#define (R_SCI0_|R_SYSTEM_PRCR_)\w+\s', l)])
+                          if re.match(r'\s*#define (R_SCI0_|R_SYSTEM_PRCR_|R_DMAC0_|R_DMA_DMAST_|R_ICU_DELSR_)\w+\s', l)])
     icu = (TARGET / 'include/interrupt_ra4m1.h').read_text()
     header('evt_ids.h', [l for l in icu.splitlines()
-                         if re.match(r'#define RA4M1_EVTID_SCI\d_\w+\s', l)])
+                         if re.match(r'#define RA4M1_EVTID_(SCI\d_\w+|DMAC\d_INT)\s', l)])
 
     cxx = os.environ.get('CXX') or shutil.which('g++') or shutil.which('clang++')
     cc = os.environ.get('CC') or shutil.which('gcc') or shutil.which('clang')

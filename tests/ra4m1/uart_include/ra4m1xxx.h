@@ -3,9 +3,10 @@
 
 @brief	Host test replacement of ra4m1xxx.h for uart_ra4m1.cpp.
 
-		The SCI, PRCR and MSTPCRB registers are objects whose reads and writes
-		call the SCI model of uart_test.cpp. Bit definitions are the CMSIS
-		ones, copied from R7FA4M1AB.h into sci_bits.h by run_uart_validation.py.
+		The SCI, DMAC, ICU.DELSR, PRCR, MSTPCRA and MSTPCRB registers are
+		objects whose reads and writes call the model of uart_test.cpp. Bit
+		definitions are the CMSIS ones, copied from R7FA4M1AB.h into
+		sci_bits.h by run_uart_validation.py.
 
 @author	Hoang Nguyen Hoan
 @date	Oct. 12, 2026
@@ -55,7 +56,10 @@ enum {
 	SCIREG_SCMR, SCIREG_SEMR, SCIREG_SNFR, SCIREG_SIMR1, SCIREG_SPMR,
 	SCIREG_FTDRL, SCIREG_FRDRHL, SCIREG_MDDR, SCIREG_DCCR, SCIREG_FCR,
 	SCIREG_FDR, SCIREG_SPTR,
-	SYSREG_PRCR, SYSREG_MSTPCRB,
+	SYSREG_PRCR, SYSREG_MSTPCRA, SYSREG_MSTPCRB,
+	DMAREG_SAR, DMAREG_DAR, DMAREG_CRA, DMAREG_CRB, DMAREG_TMD, DMAREG_INT, DMAREG_AMD,
+	DMAREG_OFR, DMAREG_CNT, DMAREG_STS, DMAREG_DMAST,
+	ICUREG_DELSR,
 };
 
 // pReg is the register object, the model finds its unit from the address
@@ -96,12 +100,37 @@ typedef struct {
 } R_SYSTEM_Type;
 
 typedef struct {
+	TestReg<uint32_t, SYSREG_MSTPCRA> MSTPCRA;
 	TestReg<uint32_t, SYSREG_MSTPCRB> MSTPCRB;
 } R_MSTP_Type;
+
+typedef struct {
+	TestReg<uint32_t, DMAREG_SAR> DMSAR;
+	TestReg<uint32_t, DMAREG_DAR> DMDAR;
+	TestReg<uint32_t, DMAREG_CRA> DMCRA;
+	TestReg<uint32_t, DMAREG_CRB> DMCRB;
+	TestReg<uint16_t, DMAREG_TMD> DMTMD;
+	TestReg<uint8_t, DMAREG_INT> DMINT;
+	TestReg<uint16_t, DMAREG_AMD> DMAMD;
+	TestReg<uint32_t, DMAREG_OFR> DMOFR;
+	TestReg<uint8_t, DMAREG_CNT> DMCNT;
+	TestReg<uint8_t, DMAREG_STS> DMSTS;
+} R_DMAC0_Type;
+
+typedef struct {
+	TestReg<uint8_t, DMAREG_DMAST> DMAST;
+} R_DMA_Type;
+
+typedef struct {
+	TestReg<uint32_t, ICUREG_DELSR> DELSR[4];
+} R_ICU_Type;
 
 extern R_SCI0_Type g_TestSci[4];
 extern R_SYSTEM_Type g_TestSystem;
 extern R_MSTP_Type g_TestMstp;
+extern R_DMAC0_Type g_TestDmac[4];
+extern R_DMA_Type g_TestDma;
+extern R_ICU_Type g_TestIcu;
 
 #define R_SCI0		(&g_TestSci[0])
 #define R_SCI1		(&g_TestSci[1])
@@ -109,6 +138,12 @@ extern R_MSTP_Type g_TestMstp;
 #define R_SCI9		(&g_TestSci[3])
 #define R_SYSTEM	(&g_TestSystem)
 #define R_MSTP		(&g_TestMstp)
+#define R_DMAC0		(&g_TestDmac[0])
+#define R_DMAC1		(&g_TestDmac[1])
+#define R_DMAC2		(&g_TestDmac[2])
+#define R_DMAC3		(&g_TestDmac[3])
+#define R_DMA		(&g_TestDma)
+#define R_ICU		(&g_TestIcu)
 
 extern "C" uint32_t SystemCoreClock;
 extern "C" uint32_t SystemPeriphClockGet(int Idx);

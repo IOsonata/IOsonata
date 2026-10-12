@@ -111,6 +111,7 @@ typedef struct {
 	unsigned StaleRdr;				// RDR read without RDRF or an error flag
 	unsigned TxIgnored;				// TDR or FTDRL written with TE cleared
 	unsigned RxLost;				// Characters lost by the receiver
+	unsigned TxGap;					// Steps with the line idle and TX CFIFO bytes waiting
 } SciModel_t;
 
 typedef struct {
@@ -140,9 +141,32 @@ static unsigned s_IsrCnt;
 static int s_PinCfgCnt;
 static int s_PinDisCnt;
 
+// DMAC model. Normal mode, 8 bit, source incremented, destination fixed,
+// activated by the event in ICU.DELSR, the only setting the driver uses.
+typedef struct {
+	uint32_t Sar, Dar, Cra, Crb, Ofr;
+	uint16_t Tmd, Amd;
+	uint8_t Int, Cnt, Sts;
+	bool bPend;						// Request held in DELSR while DTE is cleared
+	unsigned Moved;					// Bytes moved
+} DmacModel_t;
+
+#define DMAC_MSTP_BIT	(1UL << 22)
+
+static DmacModel_t s_Dmac[4];
+static uint32_t s_Delsr[4];
+static uint8_t s_Dmast;
+static uint32_t s_Mstpcra = 0xFFFFFFFFU;
+static bool s_DmaHold;				// A request while DTE is cleared waits in DELSR, otherwise it is lost
+static bool s_bDmaWrite;			// SCI register written by the DMAC
+static UARTDev_t s_Uart;
+
 R_SCI0_Type g_TestSci[4];
 R_SYSTEM_Type g_TestSystem;
 R_MSTP_Type g_TestMstp;
+R_DMAC0_Type g_TestDmac[4];
+R_DMA_Type g_TestDma;
+R_ICU_Type g_TestIcu;
 uint32_t g_TestPrimask;
 uint32_t SystemCoreClock = 48000000;
 
@@ -202,15 +226,74 @@ static int SciUnit(const void *pReg)
 static void LineStep(int u);
 static void UpdateIcu(void);
 
+// Host address of a 32 bit DMAC address register value. The test data and
+// the SCI register objects are in the same 4 GB of the host address space.
+static uintptr_t HostAddr(uint32_t a)
+{
+	return ((uintptr_t)g_TestSci & ~(uintptr_t)0xFFFFFFFFU) | a;
+}
+
+static int DmacUnit(const void *pReg)
+{
+	int ch = (int)(((const char *)pReg - (const char *)g_TestDmac) / (long)sizeof(R_DMAC0_Type));
+
+	CHECK(ch >= 0 && ch < 4);
+	CHECK((s_Mstpcra & DMAC_MSTP_BIT) == 0);
+
+	return ch;
+}
+
+static int DelsrIdx(const void *pReg)
+{
+	int i = (int)(((const char *)pReg - (const char *)g_TestIcu.DELSR) / (long)sizeof(g_TestIcu.DELSR[0]));
+
+	CHECK(i >= 0 && i < 4);
+
+	return i;
+}
+
+static void DmaTransfer(int Ch);
+
 static uint32_t RegRead(const void *pReg, int Id)
 {
 	if (Id == SYSREG_PRCR)
 	{
 		return s_Prcr;
 	}
+	if (Id == SYSREG_MSTPCRA)
+	{
+		return s_Mstpcra;
+	}
 	if (Id == SYSREG_MSTPCRB)
 	{
 		return s_Mstpcrb;
+	}
+	if (Id == ICUREG_DELSR)
+	{
+		int i = DelsrIdx(pReg);
+		return s_Delsr[i] | (s_Dmac[i].bPend ? R_ICU_DELSR_IR_Msk : 0);
+	}
+	if (Id == DMAREG_DMAST)
+	{
+		CHECK((s_Mstpcra & DMAC_MSTP_BIT) == 0);
+		return s_Dmast;
+	}
+	if (Id >= DMAREG_SAR && Id <= DMAREG_STS)
+	{
+		DmacModel_t &d = s_Dmac[DmacUnit(pReg)];
+		switch (Id)
+		{
+			case DMAREG_SAR: return d.Sar;
+			case DMAREG_DAR: return d.Dar;
+			case DMAREG_CRA: return d.Cra;
+			case DMAREG_CRB: return d.Crb;
+			case DMAREG_TMD: return d.Tmd;
+			case DMAREG_INT: return d.Int;
+			case DMAREG_AMD: return d.Amd;
+			case DMAREG_OFR: return d.Ofr;
+			case DMAREG_CNT: return d.Cnt;
+			default: return d.Sts;
+		}
 	}
 
 	SciModel_t &m = s_Sci[SciUnit(pReg)];
@@ -273,6 +356,58 @@ static void RegWrite(const void *pReg, int Id, uint32_t Val)
 		s_Mstpcrb = Val;
 		return;
 	}
+	if (Id == SYSREG_MSTPCRA)
+	{
+		CHECK(s_Prcr & R_SYSTEM_PRCR_PRC1_Msk);
+		s_Mstpcra = Val;
+		return;
+	}
+	if (Id == ICUREG_DELSR)
+	{
+		// A held request goes with the write, IR is written 0
+		int i = DelsrIdx(pReg);
+		s_Delsr[i] = Val & R_ICU_DELSR_DELS_Msk;
+		s_Dmac[i].bPend = false;
+		return;
+	}
+	if (Id == DMAREG_DMAST)
+	{
+		CHECK((s_Mstpcra & DMAC_MSTP_BIT) == 0);
+		s_Dmast = (uint8_t)Val;
+		return;
+	}
+	if (Id >= DMAREG_SAR && Id <= DMAREG_STS)
+	{
+		int ch = DmacUnit(pReg);
+		DmacModel_t &d = s_Dmac[ch];
+		if (Id != DMAREG_CNT && Id != DMAREG_STS)
+		{
+			// Channel settings are written with DTE cleared
+			CHECK((d.Cnt & R_DMAC0_DMCNT_DTE_Msk) == 0);
+		}
+		switch (Id)
+		{
+			case DMAREG_SAR: d.Sar = Val; break;
+			case DMAREG_DAR: d.Dar = Val; break;
+			case DMAREG_CRA: d.Cra = Val; break;
+			case DMAREG_CRB: d.Crb = Val; break;
+			case DMAREG_TMD: d.Tmd = (uint16_t)Val; break;
+			case DMAREG_INT: d.Int = (uint8_t)Val; break;
+			case DMAREG_AMD: d.Amd = (uint16_t)Val; break;
+			case DMAREG_OFR: d.Ofr = Val; break;
+			case DMAREG_STS: d.Sts &= (uint8_t)Val; break;
+			default:
+				d.Cnt = (uint8_t)(Val & R_DMAC0_DMCNT_DTE_Msk);
+				if ((d.Cnt & R_DMAC0_DMCNT_DTE_Msk) && d.bPend && (s_Dmast & R_DMA_DMAST_DMST_Msk))
+				{
+					// The held request is taken
+					d.bPend = false;
+					DmaTransfer(ch);
+				}
+				break;
+		}
+		return;
+	}
 
 	SciModel_t &m = s_Sci[SciUnit(pReg)];
 	bool off = (m.Scr & (TE | RE)) == 0;
@@ -306,6 +441,12 @@ static void RegWrite(const void *pReg, int Id, uint32_t Val)
 		{
 			uint8_t old = m.Scr;
 			m.Scr = v;
+			if (Fifo(m) && (v & TE) && (old & TE) && (v & TIE) && !(old & TIE) && (m.Flags & B_TDRE))
+			{
+				// With the FIFO, TIE set while TDFE is 1 gives a TXI, the
+				// Renesas FSP starts its transfers that way
+				m.bTxiEvt = true;
+			}
 			if ((v & TE) && !(old & TE))
 			{
 				if (!Fifo(m) || m.TxFifo.size() <= TxTrigger(m))
@@ -409,6 +550,11 @@ static void RegWrite(const void *pReg, int Id, uint32_t Val)
 			CHECK(m.TxFifo.size() < 16);
 			m.TxFifo.push_back(v);
 			m.Flags &= ~B_TEND;
+			if (s_bDmaWrite && m.TxFifo.size() > TxTrigger(m))
+			{
+				// A write by the DMAC clears TDFE once above the trigger level
+				m.Flags &= ~B_TDRE;
+			}
 			break;
 		default:
 			CHECK(false);
@@ -554,6 +700,10 @@ static void LineStep(int u)
 		if (m.Tsr < 0)
 		{
 			m.Flags |= B_TEND;
+			if (s_Uart.DevIntrf.pDevData == &s_Ra4m1UartDev[u] && s_Uart.hTxFifo && CFifoUsed(s_Uart.hTxFifo) > 0)
+			{
+				m.TxGap++;
+			}
 		}
 	}
 
@@ -588,14 +738,104 @@ static int SlotUnit(int Slot, int *pKind)
 	return -1;
 }
 
-// IR set by the events of the SCI
+// One byte moved by channel Ch for a request
+static void DmaTransfer(int Ch)
+{
+	DmacModel_t &d = s_Dmac[Ch];
+	int u = -1;
+	int id = 0;
+
+	CHECK((d.Tmd & (R_DMAC0_DMTMD_MD_Msk | R_DMAC0_DMTMD_SZ_Msk | R_DMAC0_DMTMD_DCTG_Msk)) ==
+		  (1U << R_DMAC0_DMTMD_DCTG_Pos));
+	CHECK((d.Amd & (R_DMAC0_DMAMD_SM_Msk | R_DMAC0_DMAMD_DM_Msk)) == (2U << R_DMAC0_DMAMD_SM_Pos));
+	CHECK(d.Cra > 0);
+	for (int i = 0; i < 4; i++)
+	{
+		if (d.Dar == (uint32_t)(uintptr_t)&g_TestSci[i].FTDRL)
+		{
+			u = i;
+			id = SCIREG_FTDRL;
+		}
+		if (d.Dar == (uint32_t)(uintptr_t)&g_TestSci[i].TDR)
+		{
+			u = i;
+			id = SCIREG_TDR;
+		}
+	}
+	CHECK(u >= 0);
+	if (u < 0 || d.Cra == 0)
+	{
+		d.Cnt = 0;
+		return;
+	}
+
+	uint8_t v = *(const uint8_t *)HostAddr(d.Sar);
+
+	s_bDmaWrite = true;
+	RegWrite(&g_TestSci[u], id, v);
+	s_bDmaWrite = false;
+	d.Sar++;
+	d.Moved++;
+	if (--d.Cra == 0)
+	{
+		d.Cnt = 0;
+		d.Sts |= R_DMAC0_DMSTS_DTIF_Msk;
+	}
+}
+
+// IR set by the events of the SCI and the DMAC. A TXI linked to a DMAC channel
+// in DELSR goes to the channel instead.
 static void UpdateIcu(void)
 {
+	// A transfer can give the next TXI, a TDR write to an idle line
+	for (bool any = true; any; )
+	{
+		any = false;
+		for (int u = 0; u < 4; u++)
+		{
+			for (int ch = 0; ch < 4 && s_Sci[u].bTxiEvt; ch++)
+			{
+				if (s_Delsr[ch] != (uint32_t)(s_EvtRxi[u] + 1))
+				{
+					continue;
+				}
+				DmacModel_t &d = s_Dmac[ch];
+				s_Sci[u].bTxiEvt = false;
+				any = true;
+				if ((d.Cnt & R_DMAC0_DMCNT_DTE_Msk) && (s_Dmast & R_DMA_DMAST_DMST_Msk))
+				{
+					DmaTransfer(ch);
+				}
+				else if (s_DmaHold)
+				{
+					d.bPend = true;
+				}
+			}
+		}
+	}
+
 	for (int i = 0; i < 32; i++)
 	{
 		int kind = 0;
 		int u = s_Slot[i].Handler ? SlotUnit(i, &kind) : -1;
+		int ev = s_Slot[i].Evt;
 
+		if (s_Slot[i].Handler && ev >= (int)RA4M1_EVTID_DMAC0_INT && ev <= (int)RA4M1_EVTID_DMAC3_INT)
+		{
+			// Transfer end of a DMAC channel
+			DmacModel_t &d = s_Dmac[ev - RA4M1_EVTID_DMAC0_INT];
+			bool req = (d.Sts & R_DMAC0_DMSTS_DTIF_Msk) && (d.Int & R_DMAC0_DMINT_DTIE_Msk);
+			if (req && !s_Slot[i].bReq)
+			{
+				if (s_Slot[i].bIr)
+				{
+					s_LostEvt++;
+				}
+				s_Slot[i].bIr = true;
+			}
+			s_Slot[i].bReq = req;
+			continue;
+		}
 		if (u < 0)
 		{
 			continue;
@@ -700,6 +940,14 @@ void TestIrqPoint(void)
 
 IRQn_Type Ra4m1RegisterIntHandler(uint8_t EvtId, int Prio, Ra4m1IRQHandler_t pHandler, void *pCtx)
 {
+	for (int i = 0; i < 4; i++)
+	{
+		if (s_Delsr[i] == EvtId)
+		{
+			// Same as the ICU driver : an event linked to a DMAC channel
+			return (IRQn_Type)-1;
+		}
+	}
 	for (int i = 0; i < 32; i++)
 	{
 		if (s_Slot[i].Handler && s_Slot[i].Evt == EvtId)
@@ -762,7 +1010,6 @@ static const IOPinCfg_t s_Pins[2] = {
 alignas(4) static uint8_t s_RxMem[CFIFO_MEMSIZE(256)];
 alignas(4) static uint8_t s_TxMem[CFIFO_MEMSIZE(256)];
 
-static UARTDev_t s_Uart;
 static unsigned s_EvtRx;
 static unsigned s_EvtTx;
 static unsigned s_EvtLine;
@@ -829,6 +1076,13 @@ static void ResetModel(void)
 		s_Slot[i] = IcuSlot_t();
 	}
 	s_Mstpcrb = 0xFFFFFFFFU;
+	s_Mstpcra = 0xFFFFFFFFU;
+	for (int i = 0; i < 4; i++)
+	{
+		s_Dmac[i] = DmacModel_t();
+		s_Delsr[i] = 0;
+	}
+	s_Dmast = 0;
 	s_Prcr = 0;
 	s_StepEvery = 0;
 	s_IsrStepEvery = 0;
@@ -839,7 +1093,7 @@ static void ResetModel(void)
 	memset((void *)&s_Uart, 0, sizeof(s_Uart));
 }
 
-static UARTCfg_t Cfg(int DevNo, bool bIntMode)
+static UARTCfg_t Cfg(int DevNo, bool bIntMode, bool bDma = false)
 {
 	UARTCfg_t cfg = {};
 
@@ -859,7 +1113,7 @@ static UARTCfg_t Cfg(int DevNo, bool bIntMode)
 	cfg.pRxMem = s_RxMem;
 	cfg.TxMemSize = sizeof(s_TxMem);
 	cfg.pTxMem = s_TxMem;
-	cfg.bDMAMode = false;
+	cfg.bDMAMode = bDma;
 	cfg.Duplex = UART_DUPLEX_FULL;
 	cfg.Mode = UART_MODE_UART;
 
@@ -936,11 +1190,12 @@ static void TestInit(void)
 
 	for (int u = 0; u < 4; u++)
 	{
-		for (int intmode = 0; intmode < 2; intmode++)
+		for (int mode = 0; mode < 4; mode++)
 		{
+			bool intmode = mode & 1;
+			bool dma = mode & 2;
 			ResetModel();
-			cfg = Cfg(u, intmode);
-			cfg.bDMAMode = true;
+			cfg = Cfg(u, intmode, dma);
 			cfg.StopBits = 2;
 			cfg.Parity = UART_PARITY_ODD;
 			s_PinCfgCnt = 0;
@@ -953,16 +1208,54 @@ static void TestInit(void)
 				  (R_SCI0_SMR_STOP_Msk | R_SCI0_SMR_PE_Msk | R_SCI0_SMR_PM_Msk));
 			CHECK(m.Scmr == 0xF2);
 			CHECK(s_Uart.Rate == 1000000);
-			CHECK(s_Uart.DevIntrf.bDma == false);
-			CHECK(s_Uart.DevIntrf.bIntEn == (intmode != 0));
+			CHECK(s_Uart.DevIntrf.bDma == dma);
+			CHECK(s_Uart.DevIntrf.bIntEn == intmode);
 			CHECK(s_Uart.DevIntrf.EnCnt == 1);
 			CHECK(s_Uart.bTxReady == true);
 			CHECK(SlotCnt() == (intmode ? 3 : 0));
+			int txslot = -1;
+			for (int i = 0; i < 32; i++)
+			{
+				if (s_Slot[i].Handler && s_Slot[i].Evt == (int)(dma ? RA4M1_EVTID_DMAC0_INT + u : s_EvtRxi[u] + 1))
+				{
+					txslot = i;
+				}
+			}
+			CHECK((txslot >= 0) == intmode);
+			if (dma)
+			{
+				// TXI linked to DMAC channel DevNo, the DMAC running
+				CHECK(s_Delsr[u] == (uint32_t)(s_EvtRxi[u] + 1));
+				CHECK((s_Mstpcra & DMAC_MSTP_BIT) == 0 && (s_Dmast & R_DMA_DMAST_DMST_Msk));
+				CHECK((s_Dmac[u].Int & R_DMAC0_DMINT_DTIE_Msk) == (intmode ? R_DMAC0_DMINT_DTIE_Msk : 0));
+				CHECK(u >= 2 || TxTrigger(m) == 0);
+			}
+			else
+			{
+				CHECK(s_Delsr[u] == 0);
+				CHECK(u >= 2 || TxTrigger(m) == 8);
+			}
 			CHECK(s_PinCfgCnt == 2);
 			CHECK(UARTGetInstance(u) == &s_Uart);
 			CHECK(UARTGetDevHandle(&s_Uart.DevIntrf) == &s_Uart);
 		}
 	}
+
+	// DMA needs a blocking FIFO and a free DMAC channel. Without DMA, a link
+	// left by an earlier UARTInit is removed and TXI goes to the CPU again.
+	ResetModel();
+	cfg = Cfg(1, true, true);
+	cfg.bFifoBlocking = false;
+	CHECK(UARTInit(&s_Uart, &cfg) == false);
+	s_Delsr[1] = RA4M1_EVTID_DMAC0_INT;
+	cfg = Cfg(1, true, true);
+	CHECK(UARTInit(&s_Uart, &cfg) == false);
+	s_Delsr[1] = 0;
+	CHECK(UARTInit(&s_Uart, &cfg) == true);
+	CHECK(s_Delsr[1] == (uint32_t)(s_EvtRxi[1] + 1));
+	cfg = Cfg(1, true);
+	CHECK(UARTInit(&s_Uart, &cfg) == true);
+	CHECK(s_Delsr[1] == 0 && SlotCnt() == 3);
 
 	// A second UARTInit releases the interrupts of the first
 	ResetModel();
@@ -1066,10 +1359,10 @@ static void TestSetRate(void)
 }
 
 // TX of Len bytes, Chunk bytes per UARTTx call
-static void TestTx(int u, bool bIntMode, int Len, int Chunk)
+static void TestTx(int u, bool bIntMode, int Len, int Chunk, bool bDma = false)
 {
 	ResetModel();
-	UARTCfg_t cfg = Cfg(u, bIntMode);
+	UARTCfg_t cfg = Cfg(u, bIntMode, bDma);
 	CHECK(UARTInit(&s_Uart, &cfg) == true);
 
 	std::vector<uint8_t> d;
@@ -1084,19 +1377,35 @@ static void TestTx(int u, bool bIntMode, int Len, int Chunk)
 	CHECK(s_Uart.bTxReady == true);
 	CHECK((s_Sci[u].Scr & TIE) == 0);
 	CHECK(CFifoUsed(s_Uart.hTxFifo) == 0);
-	if (s_Sci[u].Wire != d)
+	if (bDma)
 	{
-		printf("  TestTx unit %d int %d chunk %d : %zu of %d sent, TX FIFO %zu, TIE %d, TDFE %d\n", u, bIntMode, Chunk,
-			   s_Sci[u].Wire.size(), Len, s_Sci[u].TxFifo.size(), (s_Sci[u].Scr & TIE) != 0,
-			   (s_Sci[u].Flags & B_TDRE) != 0);
+		// The DMAC moved all but the bytes the CPU writes to TDR to start a
+		// block on SCI2/9
+		CHECK((s_Dmac[u].Cnt & R_DMAC0_DMCNT_DTE_Msk) == 0);
+		CHECK(u < 2 ? s_Dmac[u].Moved == (unsigned)Len : s_Dmac[u].Moved > 0);
+		if (bIntMode)
+		{
+			// The line is idle only while the first UARTTx copies its data,
+			// a line step every second 8 byte piece. Blocks follow each other
+			// with no idle.
+			int first = Chunk < 256 ? Chunk : 256;
+			CHECK(s_Sci[u].TxGap <= (unsigned)((first + 15) / 16 + 1));
+		}
+	}
+	if (s_Sci[u].Wire != d || (bDma && bIntMode && s_Sci[u].TxGap > (unsigned)(((Chunk < 256 ? Chunk : 256) + 15) / 16 + 1)))
+	{
+		printf("  TestTx unit %d int %d dma %d hold %d chunk %d : %zu of %d sent, TX FIFO %zu, TIE %d, TDFE %d, "
+			   "DMA moved %u, gaps %u\n", u, bIntMode, bDma, s_DmaHold, Chunk, s_Sci[u].Wire.size(), Len,
+			   s_Sci[u].TxFifo.size(), (s_Sci[u].Scr & TIE) != 0, (s_Sci[u].Flags & B_TDRE) != 0, s_Dmac[u].Moved,
+			   s_Sci[u].TxGap);
 	}
 }
 
 // RX of Len bytes, read Chunk bytes per UARTRx call
-static void TestRx(int u, bool bIntMode, int Len, int Chunk)
+static void TestRx(int u, bool bIntMode, int Len, int Chunk, bool bDma = false)
 {
 	ResetModel();
-	UARTCfg_t cfg = Cfg(u, bIntMode);
+	UARTCfg_t cfg = Cfg(u, bIntMode, bDma);
 	CHECK(UARTInit(&s_Uart, &cfg) == true);
 
 	std::vector<uint8_t> d, r;
@@ -1132,10 +1441,10 @@ static void TestRx(int u, bool bIntMode, int Len, int Chunk)
 }
 
 // Echo of Len bytes as exemples/uart/uart_loopback.cpp does it
-static void TestLoopback(int u, bool bIntMode, int Len)
+static void TestLoopback(int u, bool bIntMode, int Len, bool bDma = false)
 {
 	ResetModel();
-	UARTCfg_t cfg = Cfg(u, bIntMode);
+	UARTCfg_t cfg = Cfg(u, bIntMode, bDma);
 	CHECK(UARTInit(&s_Uart, &cfg) == true);
 
 	std::vector<uint8_t> d;
@@ -1164,10 +1473,10 @@ static void TestLoopback(int u, bool bIntMode, int Len)
 // Echo as exemples/uart/uart_loopback.cpp does it, the characters arriving
 // in bursts of 1 to 40 with 0 to 4 idle steps between them. IsrStep : line
 // step after n register accesses in the handler, 0 none.
-static void TestLoopbackBursts(int u, bool bIntMode, int Len, unsigned IsrStep, unsigned Seed)
+static void TestLoopbackBursts(int u, bool bIntMode, int Len, unsigned IsrStep, unsigned Seed, bool bDma = false)
 {
 	ResetModel();
-	UARTCfg_t cfg = Cfg(u, bIntMode);
+	UARTCfg_t cfg = Cfg(u, bIntMode, bDma);
 	CHECK(UARTInit(&s_Uart, &cfg) == true);
 
 	std::vector<uint8_t> d;
@@ -1221,9 +1530,9 @@ static void TestLoopbackBursts(int u, bool bIntMode, int Len, unsigned IsrStep, 
 	}
 	if (s_Sci[u].Wire != d || s_Sci[u].RxLost)
 	{
-		printf("  TestLoopbackBursts unit %d int %d isr step %u seed %u : %zu of %d echoed, lost %u, ovr %u, events lost %u\n",
-			   u, bIntMode, IsrStep, Seed, s_Sci[u].Wire.size(), Len, s_Sci[u].RxLost, s_Uart.RxOvrErrCnt,
-			   s_LostEvt - lostevt);
+		printf("  TestLoopbackBursts unit %d int %d dma %d hold %d isr step %u seed %u : %zu of %d echoed, lost %u, "
+			   "ovr %u, events lost %u\n", u, bIntMode, bDma, s_DmaHold, IsrStep, Seed, s_Sci[u].Wire.size(), Len,
+			   s_Sci[u].RxLost, s_Uart.RxOvrErrCnt, s_LostEvt - lostevt);
 	}
 }
 
@@ -1430,27 +1739,39 @@ int main()
 {
 	TestInit();
 	TestSetRate();
-	for (int u = 0; u < 4; u++)
+	// Without DMA, then with DMA for a request made while DTE is cleared held
+	// in DELSR and lost
+	for (int run = 0; run < 3; run++)
 	{
-		for (int intmode = 0; intmode < 2; intmode++)
+		bool dma = run > 0;
+		s_DmaHold = run == 1;
+		for (int u = 0; u < 4; u++)
 		{
-			TestTx(u, intmode, 1000, 1);
-			TestTx(u, intmode, 1000, 16);
-			TestTx(u, intmode, 1000, 300);
-			TestRx(u, intmode, 1000, 1);
-			TestRx(u, intmode, 1000, 16);
-			TestRx(u, intmode, 1000, 64);
-			TestLoopback(u, intmode, 2000);
-			// Without FIFO, a handler slower than one character overruns RDR
-			for (unsigned isrstep = 0; isrstep < 20; isrstep += (isrstep == 0 && u >= 2) ? 8 : 4)
+			for (int intmode = 0; intmode < 2; intmode++)
 			{
-				for (unsigned seed = 1; seed <= 3; seed++)
+				TestTx(u, intmode, 1000, 1, dma);
+				TestTx(u, intmode, 1000, 16, dma);
+				TestTx(u, intmode, 1000, 300, dma);
+				TestRx(u, intmode, 1000, 1, dma);
+				TestRx(u, intmode, 1000, 16, dma);
+				TestRx(u, intmode, 1000, 64, dma);
+				TestLoopback(u, intmode, 2000, dma);
+				// Without FIFO, a handler slower than one character overruns RDR.
+				// With DMA, TXI goes to the DMAC and only RXI drains the RX FIFO:
+				// with 4 register accesses per character an RXI takes about 7
+				// characters and the 16 byte FIFO overruns. Without DMA the TXI
+				// handler drains it too.
+				for (unsigned isrstep = 0; isrstep < 20; isrstep += (isrstep == 0 && (u >= 2 || dma)) ? 8 : 4)
 				{
-					TestLoopbackBursts(u, intmode, 3000, isrstep, seed);
+					for (unsigned seed = 1; seed <= 3; seed++)
+					{
+						TestLoopbackBursts(u, intmode, 3000, isrstep, seed, dma);
+					}
 				}
 			}
 		}
 	}
+	s_DmaHold = false;
 	TestErrors();
 	TestRxFull();
 	TestSevenBit();

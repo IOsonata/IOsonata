@@ -388,10 +388,9 @@ The pin map is RX then TX, with the PSEL function code of each pin in `PinOp`
 manual, the driver does not check the SCI and pin combination.
 
 Supported: asynchronous full duplex, 7 or 8 data bits, parity none, odd or even,
-1 or 2 stop bits, polling and interrupt mode. UARTInit fails for flow control,
-IrDA, half duplex, synchronous mode, 9 data bits and parity mark or space. DMA is
-not implemented, `bDMAMode` is ignored and `DevIntrf.bDma` is false.
-`UARTSetCtrlLineState` does nothing.
+1 or 2 stop bits, polling, interrupt and TX DMA mode. UARTInit fails for flow
+control, IrDA, half duplex, synchronous mode, 9 data bits, parity mark or space,
+and DMA with a non-blocking FIFO. `UARTSetCtrlLineState` does nothing.
 
 - TxData puts the data in the TX CFIFO, then starts TX if it is ready. RxData
   reads from the RX CFIFO. Copies to and from a CFIFO are done in pieces of at
@@ -399,7 +398,20 @@ not implemented, `bDMAMode` is ignored and `DevIntrf.bDma` is false.
 - Interrupt mode: one handler for RXI, TXI and ERI, registered with
   `Ra4m1RegisterIntHandler` at `IntPrio`. TEI is not used. RX is serviced first
   whatever the event. TXI is enabled while the TX CFIFO has data, `bTxReady`
-  is true when the TX CFIFO is empty.
+  is true when the TX CFIFO is empty. The ICU IR flag of RXI and TXI is cleared
+  at the start of the handler, ERI at the end, as the Renesas FSP does.
+- DMA mode (`bDMAMode`): DMAC channel `DevNo` sends TX blocks straight from the
+  TX CFIFO, one byte to FTDRL or TDR for each TXI, linked in `ICU.DELSR`. A
+  block is the first contiguous run of the CFIFO, at most half of it, and its
+  bytes are released when the channel is done. The DMAC transfer end interrupt
+  (or TxData and RxData without `bIntMode`) starts the next block. SCI0/1 use
+  TTRG 0 in DMA mode, TXI with the TX FIFO empty, and start a block by setting
+  TIE again, as the Renesas FSP does with a transfer instance. SCI2/9 start a
+  block from the byte left in TDR, or write its first byte to TDR when TDR is
+  already empty. RX stays on the interrupt or polling: the SCI has no idle line
+  event to move a DMA ring to the RX CFIFO after a short burst. The DMAC module
+  (MSTPA22) is started and never stopped by the driver, other drivers may use
+  it. UARTInit fails if channel `DevNo` is linked to another event.
 - Polling mode: TxData and RxData move the data between the SCI and the CFIFOs.
   With SCI2 and SCI9 the application must call RxData at least once per
   character time or characters are lost to overrun.
@@ -424,12 +436,16 @@ not implemented, `bDMAMode` is ignored and `DevIntrf.bDma` is false.
   needed after it.
 
 Host test: `python3 tests/ra4m1/run_uart_validation.py`. It compiles the driver
-with a model of the SCI registers, module stop, PRCR and ICU (`tests/ra4m1/uart_include`)
-and the real CFIFO and DeviceIntrf code. It covers init, rate selection against
-every register setting, TX and RX in both modes on the four SCIs, an echo loop,
-receive errors, overrun, full CFIFOs, callbacks, Disable/Enable and PowerOff.
-It also compiles the driver with GNU Arm for the Cortex-M4. It does not test
-timing, the electrical interface or the ICU edge handling.
+with a model of the SCI, DMAC, module stop, PRCR and ICU registers
+(`tests/ra4m1/uart_include`) and the real CFIFO and DeviceIntrf code. RXI, TXI,
+ERI and the DMAC transfer end are edge events that set the IR flag of their
+ICU slot, and the line can move while a handler runs. DMA runs twice, with a
+TXI arriving while DTE is cleared held in DELSR and with it lost. It covers
+init, rate selection against every register setting, TX and RX in polling,
+interrupt, polled DMA and interrupt DMA mode on the four SCIs, idle time between
+DMA blocks, an echo loop with bursts, receive errors, overrun, full CFIFOs,
+callbacks, Disable/Enable and PowerOff. It also compiles the driver with GNU Arm
+for the Cortex-M4. It does not test exact timing or the electrical interface.
 
 ## Validation status
 
