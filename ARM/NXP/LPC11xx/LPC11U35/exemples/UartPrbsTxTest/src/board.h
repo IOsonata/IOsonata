@@ -35,6 +35,10 @@ SOFTWARE.
 #ifndef __BOARD_H__
 #define __BOARD_H__
 
+// This target has no UART DMA implementation.
+#define UART_DMA_MODE			false
+#define UART_INT_MODE			true
+
 #define UART_DEVNO					0
 #define UART_RX_PORT				0
 #define UART_RX_PIN					18
@@ -58,4 +62,5 @@ SOFTWARE.
 
 
 #endif // __BOARD_H__
+
 

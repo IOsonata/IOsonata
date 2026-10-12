@@ -31,308 +31,653 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 Modified by          Date              Description
 
 ----------------------------------------------------------------------------*/
-#include <stdarg.h>
-#include <stdio.h>
-#include <stdbool.h>
-#include <inttypes.h>
+#include <string.h>
+#include <limits.h>
 
-#include "istddef.h"
 #include "uart_lpcxx.h"
+#include "uart_lpc_target.h"
 #include "coredev/interrupt.h"
-#include "idelay.h"
 
-extern uint32_t SystemCoreClock;
-extern uint32_t SystemClkFreq;
+#define LPCUART_FIFO_DEPTH		16
+#define LPCUART_CFIFO_SIZE		CFIFO_MEMSIZE(16)
+#define LPCUART_WAIT_COUNT		100000U
+#define LPCUART_DIV_MAX			65535U
 
-void UARTSetCtrlLineState(UARTDev_t *pDev, uint32_t LineState)
+// One state and pair of default buffers per physical UART.
+typedef struct {
+	UARTDev_t *pUartDev;
+	UARTCfg_t Cfg;
+	bool bEnabled;
+	bool bAutoBaud;
+	uint8_t RxMem[LPCUART_CFIFO_SIZE] __attribute__((aligned(4)));
+	uint8_t TxMem[LPCUART_CFIFO_SIZE] __attribute__((aligned(4)));
+} LpcUartDev_t;
+
+typedef struct {
+	uint32_t Divisor;
+	uint32_t Fraction;
+	uint32_t Rate;
+} LpcUartRate_t;
+
+static LpcUartDev_t s_LpcUartDev[LPCUART_DEV_COUNT];
+
+static LpcUartRate_t LpcUARTRateFind(uint32_t Clock, uint32_t Rate);
+static uint32_t LpcUARTGetRate(DevIntrf_t *pDev);
+static uint32_t LpcUARTSetRate(DevIntrf_t *pDev, uint32_t Rate);
+static int LpcUARTRxData(DevIntrf_t *pDev, uint8_t *pBuff, int BuffLen);
+static int LpcUARTTxData(DevIntrf_t *pDev, const uint8_t *pData, int DataLen);
+static bool LpcUARTStart(DevIntrf_t *pDev, uint32_t DevAddr);
+static void LpcUARTStop(DevIntrf_t *pDev);
+static void LpcUARTEnable(DevIntrf_t *pDev);
+static void LpcUARTDisable(DevIntrf_t *pDev);
+static void LpcUARTReset(DevIntrf_t *pDev);
+static void *LpcUARTGetHandle(DevIntrf_t *pDev);
+static void LpcUARTTxFill(LpcUartDev_t *pDev);
+static uint32_t LpcUARTRxFill(LpcUartDev_t *pDev);
+
+// Fixed 16x sampling. Compare both neighbouring divisors for every legal
+// fraction. DLL must be at least 3 when DLM is zero and DIVADDVAL is nonzero.
+// Compare rational errors without rounding rates or overflowing a product.
+static LpcUartRate_t LpcUARTRateFind(uint32_t Clock, uint32_t Rate)
 {
-	LPCUARTDEV *dev = (LPCUARTDEV*)pDev->DevIntrf.pDevData;
+	LpcUartRate_t result = {0};
+	uint64_t bestWhole = UINT64_MAX;
+	uint64_t bestRem = 0;
+	uint32_t bestDen = 1;
 
-	dev->pUartReg->MCR &= ~3;
-	dev->pUartReg->MCR |= LineState & 3;
-}
-
-uint32_t LpcUARTGetRate(DevIntrf_t *pDev)
-{
-	int rate = 0;
-
-	if (pDev && pDev->pDevData)
-		rate = ((LPCUARTDEV*)pDev->pDevData)->pUartDev->Rate;
-
-	return rate;
-}
-
-#if 0
-int LpcUARTSetRate(DEVINTRF *pDev, int Rate)
-{
-	uint32_t pclk = LpcGetUartClk();//SystemClkFreq  / g_UartClkDiv;// >> 2;
-	uint32_t rate16 = Rate << 4;
-	uint32_t dval, mval;
-	uint32_t dl;
-	LPCUARTDEV *dev = (LPCUARTDEV*)pDev->pDevData;
-
-	if (Rate <= 0)
+	if (Clock == 0 || Rate == 0)
 	{
-		dev->pUartReg->ACR = 7;	// Auto rate
-		return 0;
+		return result;
 	}
 
-	// The fractional is calculated as
-	// (PCLK  % (16 * Baudrate)) / (16 * Baudrate)
-	// Let's make it to be the ratio
-	// DivVal / MulVal
-	//
-	dval = pclk % rate16;
-	mval = rate16;
-	// The PCLK / (16 * Baudrate) is fractional
-	// => dval = pclk % rate16;
-	// mval = rate16;
-	// now mormalize the ratio
-	// dval / mval = 1 / new_mval;
-	// new_mval = mval / dval
-	// new_dval = 1
-	if (dval > 0)
+	for (uint32_t mul = 1; mul <= 15; mul++)
 	{
-		mval = rate16 / dval;
-		dval = 1;
-
-		// in case mval still bigger then 4 bits
-		// no adjustment require
-		if (mval > 15)
-			dval = 0;
-	}
-	dval &= 0xf;
-	mval &= 0xf;
-
-	dl = pclk / (rate16 + rate16 * dval / mval);
-
-	//dl = pclk / rate16;
-
-	dev->pUartReg->LCR |= LPCUART_LCR_DLAB; 	// Enable Divisor Access
-	dev->pUartReg->DLL = dl & 0xff;
-	dev->pUartReg->DLM = (dl >> 8) & 0xff;
-	dev->pUartReg->LCR &= ~LPCUART_LCR_DLAB;	// Disable Divisor Access
-	dev->pUartReg->FDR = dval | (mval << 4);
-
-	// Recalculate actual rate
-	dl <<= 4;	// Mul by 16
-
-	// recalculate real data rate
-	dev->pUartDev->Rate = pclk / (dl + dl * dval / mval);
-
-	uint32_t diff = dev->pUartDev->Rate - Rate;
-	float err = (float)diff * 100.0 / Rate;
-
-	//printf("%d Rate : %d, %d\r\n", pclk, dev->pUartDev->Rate, Rate);
-	return dev->pUartDev->Rate;
-}
-#else
-uint32_t LpcUARTSetRate(DevIntrf_t *pDev, uint32_t Rate)
-{
-	uint32_t pclk = LpcGetUartClk();
-	uint32_t rate16 = Rate << 4;
-	uint32_t dval, mval;
-	uint32_t dl;
-	LPCUARTDEV *dev = (LPCUARTDEV*)pDev->pDevData;
-
-	// Return current rate if out of range
-	if (Rate < 110 || Rate > 3000000)
-		return dev->pUartDev->Rate;
-
-	// The fractional is calculated as
-	// (PCLK  % (16 * Baudrate)) / (16 * Baudrate)
-	// Let's make it to be the ratio
-	// DivVal / MulVal
-	//
-	dval = pclk % rate16;
-	mval = rate16;
-	// The PCLK / (16 * Baudrate) is fractional
-	// => dval = pclk % rate16;
-	// mval = rate16;
-	// now mormalize the ratio
-	// dval / mval = 1 / new_mval;
-	// new_mval = mval / dval
-	// new_dval = 1
-	if (dval > 0)
-	{
-		// Find closest fractional
-		int diff = 0x7FFFFFF;
-		for (uint32_t dv = 1; dv <= 15; dv++)
+		for (uint32_t add = 0; add < mul; add++)
 		{
-			for (uint32_t mv = 1; mv <= 15; mv++)
+			uint64_t num = (uint64_t)Clock * mul;
+			uint32_t scale = 16U * (mul + add);
+			uint32_t min = add == 0 ? 1U : 3U;
+			uint64_t ideal = num / ((uint64_t)Rate * scale);
+
+			for (uint32_t next = 0; next < 2; next++)
 			{
-				uint32_t div = (rate16 + rate16 * dv / mv);
-				uint32_t x = (pclk + (div >> 1)) / div;
-				x <<= 4;
-				// recalculate real data rate
-				div = (x + x * dv / mv);
-				int r = (pclk + (div >> 1)) / div;
-				int rd = Rate < r ? r - Rate : Rate - r;
-				if (rd < diff)
+				uint64_t div = ideal + next;
+
+				if (div < min)
 				{
-					mval = mv;
-					dval = dv;
-					diff = rd;
+					div = min;
+				}
+				if (div > LPCUART_DIV_MAX)
+				{
+					div = LPCUART_DIV_MAX;
+				}
+
+				uint32_t den = scale * (uint32_t)div;
+				uint64_t target = (uint64_t)Rate * den;
+				uint64_t err = num > target ? num - target : target - num;
+				uint64_t whole = err / den;
+				uint64_t rem = err % den;
+
+				if (whole < bestWhole ||
+					(whole == bestWhole && rem * bestDen < bestRem * den))
+				{
+					bestWhole = whole;
+					bestRem = rem;
+					bestDen = den;
+					result.Divisor = (uint32_t)div;
+					result.Fraction = (mul << 4) | add;
+					result.Rate = (uint32_t)((num + den / 2U) / den);
 				}
 			}
 		}
 	}
-	dval &= 0xf;
-	mval &= 0xf;
 
-	int div = (rate16 + rate16 * dval / mval);
-	dl = (pclk + (div >> 1)) / div;
-	//dl = pclk / div;
+	return result;
+}
 
-	rate16 = dl << 4;
-	Rate = pclk / (rate16 + rate16 * dval / mval);
+static uint32_t LpcUARTGetRate(DevIntrf_t *pDev)
+{
+	LpcUartDev_t *dev = (LpcUartDev_t *)pDev->pDevData;
+	int no = dev->Cfg.DevNo;
+	uint32_t state = DisableInterrupt();
 
-	if (Rate == dev->pUartDev->Rate)
-		return dev->pUartDev->Rate;
+	if (dev->bEnabled && dev->bAutoBaud &&
+		(LPCUART_READ(no, ACR) & LPCUART_ACR_START) == 0)
+	{
+		uint32_t lcr = LPCUART_READ(no, LCR);
 
-//	printf("rate = %d\r\n", Rate);
-
-	dev->pUartReg->TER = 0;
-
-	int tout = 10000;
-
-	do {
-		__NOP();
-	} while ((dev->pUartReg->LSR & LPCUART_LSR_THRE) == 0 && tout-- > 0);
-
-	dev->bTxReady = true;
-
-	tout = 10000;
-	uint32_t lcr = dev->pUartReg->LCR & ~LPCUART_LCR_DLAB;
-
-	do {
-		dev->pUartReg->LCR = lcr | LPCUART_LCR_DLAB; 	// Enable Divisor Access
-	} while ((dev->pUartReg->LCR & LPCUART_LCR_DLAB) == 0 && tout-- > 0);
-
-	dev->pUartReg->DLL = dl & 0xff;
-	dev->pUartReg->DLM = (dl >> 8) & 0xff;
-	dev->pUartReg->FDR = dval | (mval << 4);
-
-	tout = 10000;
-	do {
-		dev->pUartReg->LCR = lcr;	// Disable Divisor Access
-	} while ((dev->pUartReg->LCR & LPCUART_LCR_DLAB) && tout-- > 0);
-
-	usDelay(10000);
-
-
-	// Recalculate actual rate
-	dl <<= 4;	// Mul by 16
-
-	// recalculate real data rate
-	dev->pUartDev->Rate = pclk / (dl + dl * dval / mval);
-
-	//uint32_t diff = dev->pUartDev->Rate - Rate;
-	//float err = (float)diff * 100.0 / Rate;
-	//printf("calc Rate : %d\r\n", dev->pUartDev->Rate);
-
-	dev->pUartReg->TER = LPCUART_TER_TXEN;
+		LPCUART_WRITE(no, LCR, lcr | LPCUART_LCR_DLAB);
+		uint32_t div = (LPCUART_READ(no, DLM) << 8) | LPCUART_READ(no, DLL);
+		LPCUART_WRITE(no, LCR, lcr);
+		if (div != 0)
+		{
+			dev->pUartDev->Rate = LpcUARTClockFreq(no) / (16U * div);
+			dev->bAutoBaud = false;
+		}
+	}
+	EnableInterrupt(state);
 
 	return dev->pUartDev->Rate;
 }
-#endif
 
-int LpcUARTRxData(DevIntrf_t *pDev, uint8_t *pBuff, int Bufflen)
+static uint32_t LpcUARTSetRate(DevIntrf_t *pDev, uint32_t Rate)
 {
-	LPCUARTDEV *dev = (LPCUARTDEV*)pDev->pDevData;
-	int cnt = 0;
+	LpcUartDev_t *dev = (LpcUartDev_t *)pDev->pDevData;
+	int no = dev->Cfg.DevNo;
+	LpcUartRate_t rate = LpcUARTRateFind(LpcUARTClockFreq(no), Rate);
+
+	if (Rate != 0 && rate.Divisor == 0)
+	{
+		return 0;
+	}
 
 	uint32_t state = DisableInterrupt();
-	while (Bufflen > 0)
+
+	// Do not change the clock of bytes already queued for transmission.
+	if (!dev->bEnabled || CFifoUsed(dev->pUartDev->hTxFifo) != 0)
 	{
-		int l = Bufflen;
-		uint8_t *p = CFifoGetMultiple(dev->pUartDev->hRxFifo, &l);
-		if (p)
-		{
-			memcpy(pBuff, p, l);
-			Bufflen -= l;
-			pBuff += l;
-			cnt += l;
-		}
-		else
-		{
-			break;
-		}
+		EnableInterrupt(state);
+		return dev->pUartDev->Rate;
+	}
+	uint32_t wait = LPCUART_WAIT_COUNT;
+
+	while ((LPCUART_READ(no, LSR) & LPCUART_LSR_TEMT) == 0 && --wait != 0)
+	{
+	}
+	if (wait == 0)
+	{
+		EnableInterrupt(state);
+		return dev->pUartDev->Rate;
+	}
+
+	uint32_t lcr = LPCUART_READ(no, LCR) & ~LPCUART_LCR_DLAB;
+
+	LPCUART_WRITE(no, ACR, LPCUART_ACR_ABEO_INTCLR | LPCUART_ACR_ABTO_INTCLR);
+	LPCUART_WRITE(no, LCR, lcr | LPCUART_LCR_DLAB);
+	LPCUART_WRITE(no, DLL, Rate == 0 ? 1U : rate.Divisor & 0xFFU);
+	LPCUART_WRITE(no, DLM, Rate == 0 ? 0U : rate.Divisor >> 8);
+	LPCUART_WRITE(no, FDR, Rate == 0 ? 0x10U : rate.Fraction);
+	LPCUART_WRITE(no, LCR, lcr);
+	dev->bAutoBaud = Rate == 0;
+	dev->pUartDev->Rate = rate.Rate;
+	if (dev->bAutoBaud)
+	{
+		LPCUART_WRITE(no, ACR, LPCUART_ACR_START | LPCUART_ACR_AUTORESTART);
 	}
 	EnableInterrupt(state);
 
-	while (Bufflen > 0)
-	{
-		if (!LpcUARTWaitForRxFifo(dev, 1))
-			break;
-		*pBuff = (uint8_t)(dev->pUartReg->RBR & 0xff);
-		Bufflen--;
-		pBuff++;
-		cnt++;
-	}
-
-	return cnt;
+	return rate.Rate;
 }
 
-int LpcUARTTxData(DevIntrf_t * const pDev, const uint8_t *pData, int Datalen)
+// Called with interrupts masked, and only writes when the hardware FIFO
+// is empty. THRE then guarantees room for a complete 16-byte burst.
+static void LpcUARTTxFill(LpcUartDev_t *pDev)
 {
-	LPCUARTDEV *dev = (LPCUARTDEV*)pDev->pDevData;
-	int cnt = 0;
+	int no = pDev->Cfg.DevNo;
+	UARTDev_t *uart = pDev->pUartDev;
 
-	uint32_t state = DisableInterrupt();
-	while (Datalen > 0)
+	if (LPCUART_READ(no, LSR) & LPCUART_LSR_THRE)
 	{
-		int l = Datalen;
-		uint8_t *p = CFifoPutMultiple(dev->pUartDev->hTxFifo, &l);
-		if (p == NULL)
+		for (int i = 0; i < LPCUART_FIFO_DEPTH; i++)
+		{
+			int data = CFifoGetByte(uart->hTxFifo);
+
+			if (data < 0)
+			{
+				break;
+			}
+			LPCUART_WRITE(no, THR, (uint8_t)data);
+		}
+	}
+	uint32_t ier = LPCUART_READ(no, IER);
+	bool pending = CFifoUsed(uart->hTxFifo) != 0 ||
+		(LPCUART_READ(no, LSR) & LPCUART_LSR_THRE) == 0;
+
+	uart->bTxReady = !pending;
+	LPCUART_WRITE(no, IER, pending ? ier | LPCUART_IER_THRE : ier & ~LPCUART_IER_THRE);
+}
+
+// Bound the work even if new bytes arrive continuously. Read RBR even when
+// the software FIFO is full, so a full FIFO cannot pin the CPU in the ISR.
+static uint32_t LpcUARTRxFill(LpcUartDev_t *pDev)
+{
+	UARTDev_t *uart = pDev->pUartDev;
+	int no = pDev->Cfg.DevNo;
+	uint32_t errors = 0;
+
+	for (int i = 0; i < LPCUART_FIFO_DEPTH; i++)
+	{
+		uint32_t lsr = LPCUART_READ(no, LSR);
+
+		if (lsr & LPCUART_LSR_OE)
+		{
+			uart->RxOvrErrCnt++;
+			errors |= UART_LINESTATE_OVR;
+		}
+		if (lsr & LPCUART_LSR_PE)
+		{
+			uart->ParErrCnt++;
+			errors |= UART_LINESTATE_PARERR;
+		}
+		if (lsr & LPCUART_LSR_FE)
+		{
+			uart->FramErrCnt++;
+			errors |= UART_LINESTATE_FRMERR;
+		}
+		if (lsr & LPCUART_LSR_BI)
+		{
+			errors |= UART_LINESTATE_BRK;
+		}
+		if ((lsr & LPCUART_LSR_RDR) == 0)
+		{
 			break;
-		memcpy(p, pData, l);
-		Datalen -= l;
-		pData += l;
-		cnt += l;
+		}
+
+		uint8_t data = LPCUART_READ(no, RBR) & ((1U << uart->DataBits) - 1U);
+		uint32_t dropped = uart->hRxFifo->DropCnt;
+
+		if (!CFifoPutByte(uart->hRxFifo, data))
+		{
+			uart->RxDropCnt++;
+		}
+		uart->RxDropCnt += uart->hRxFifo->DropCnt - dropped;
+	}
+	uart->bRxReady = CFifoUsed(uart->hRxFifo) != 0;
+
+	return errors;
+}
+
+void LpcUARTIrqHandler(int DevNo)
+{
+	if (DevNo < 0 || DevNo >= LPCUART_DEV_COUNT)
+	{
+		return;
+	}
+	LpcUartDev_t *dev = &s_LpcUartDev[DevNo];
+	UARTDev_t *uart = dev->pUartDev;
+
+	if (uart == NULL || !dev->bEnabled || !uart->DevIntrf.bIntEn)
+	{
+		return;
+	}
+	uint32_t state = DisableInterrupt();
+	uint32_t iir = LPCUART_READ(DevNo, IIR);
+	uint32_t id = iir & LPCUART_IIR_ID_MASK;
+	uint32_t errors = 0;
+	bool rx = false;
+	bool tx = false;
+	bool modem = false;
+
+	if ((iir & LPCUART_IIR_STATUS) == 0)
+	{
+		switch (id)
+		{
+			case LPCUART_IIR_ID_RLS:
+			case LPCUART_IIR_ID_RDA:
+			case LPCUART_IIR_ID_CTIMOUT:
+				errors = LpcUARTRxFill(dev);
+				rx = true;
+				break;
+			case LPCUART_IIR_ID_THRE:
+				LpcUARTTxFill(dev);
+				tx = true;
+				break;
+			case LPCUART_IIR_ID_MS:
+				uart->LineState = LpcUARTModemGet(DevNo);
+				modem = true;
+				break;
+		}
 	}
 	EnableInterrupt(state);
-	//while (l < Datalen)
-	if (dev->bTxReady)
+
+	if (uart->EvtCallback != NULL)
 	{
-		if (LpcUARTWaitForTxFifo(dev, 1000))
+		if (errors != 0 || modem)
 		{
-			uint8_t *p = CFifoGet(dev->pUartDev->hTxFifo);
-			if (p)
+			uint32_t line = uart->LineState | errors;
+
+			uart->EvtCallback(uart, UART_EVT_LINESTATE, (uint8_t *)&line, sizeof(line));
+		}
+		if (rx)
+		{
+			UART_EVT evt = id == LPCUART_IIR_ID_CTIMOUT ? UART_EVT_RXTIMEOUT : UART_EVT_RXDATA;
+
+			uart->EvtCallback(uart, evt, NULL, CFifoUsed(uart->hRxFifo));
+		}
+		if (tx)
+		{
+			uart->EvtCallback(uart, UART_EVT_TXREADY, NULL, CFifoAvail(uart->hTxFifo));
+		}
+	}
+}
+
+static int LpcUARTRxData(DevIntrf_t *pDev, uint8_t *pBuff, int BuffLen)
+{
+	LpcUartDev_t *dev = (LpcUartDev_t *)pDev->pDevData;
+	int count = 0;
+
+	if (pBuff == NULL || BuffLen <= 0 || !dev->bEnabled)
+	{
+		return 0;
+	}
+	while (count < BuffLen)
+	{
+		uint32_t state = DisableInterrupt();
+		int data = CFifoGetByte(dev->pUartDev->hRxFifo);
+
+		if (data < 0)
+		{
+			LpcUARTRxFill(dev);
+			data = CFifoGetByte(dev->pUartDev->hRxFifo);
+		}
+		dev->pUartDev->bRxReady = CFifoUsed(dev->pUartDev->hRxFifo) != 0;
+		EnableInterrupt(state);
+		if (data < 0)
+		{
+			break;
+		}
+		pBuff[count++] = (uint8_t)data;
+	}
+
+	return count;
+}
+
+static int LpcUARTTxData(DevIntrf_t *pDev, const uint8_t *pData, int DataLen)
+{
+	LpcUartDev_t *dev = (LpcUartDev_t *)pDev->pDevData;
+	UARTDev_t *uart = dev->pUartDev;
+	int no = dev->Cfg.DevNo;
+	int count = 0;
+
+	if (pData == NULL || DataLen <= 0 || !dev->bEnabled)
+	{
+		return 0;
+	}
+	if (!pDev->bIntEn)
+	{
+		// Polling has no ISR to drain a software queue. Return the bytes
+		// written to hardware, with a bounded wait for each FIFO burst.
+		while (count < DataLen)
+		{
+			uint32_t wait = LPCUART_WAIT_COUNT;
+
+			while ((LPCUART_READ(no, LSR) & LPCUART_LSR_THRE) == 0 && --wait != 0)
 			{
-				dev->bTxReady = false;
-				dev->pUartReg->THR = *p;
+			}
+			if (wait == 0)
+			{
+				break;
+			}
+			for (int i = 0; i < LPCUART_FIFO_DEPTH && count < DataLen; i++)
+			{
+				LPCUART_WRITE(no, THR, pData[count++]);
 			}
 		}
+		return count;
 	}
 
-	return cnt;
-}
-
-bool LpcUARTWaitForRxFifo(LPCUARTDEV *pDev, uint32_t Timeout)
-{
-	do
+	while (count < DataLen)
 	{
-		if (pDev->pUartReg->LSR & LPCUART_LSR_RDR)
-			return true;
-	} while (Timeout-- > 0);
+		uint32_t state = DisableInterrupt();
+		uint32_t dropped = uart->hTxFifo->DropCnt;
+		int len = DataLen - count;
 
-	return false;
+		if (len > LPCUART_FIFO_DEPTH)
+		{
+			len = LPCUART_FIFO_DEPTH;
+		}
+		uint8_t *buff = CFifoPutMultiple(uart->hTxFifo, &len);
+
+		if (buff != NULL)
+		{
+			memcpy(buff, pData + count, len);
+			count += len;
+		}
+
+		uart->TxDropCnt += uart->hTxFifo->DropCnt - dropped;
+		LpcUARTTxFill(dev);
+		EnableInterrupt(state);
+		if (buff == NULL)
+		{
+			break;
+		}
+	}
+
+	return count;
 }
 
-bool LpcUARTWaitForTxFifo(LPCUARTDEV *pDev, uint32_t Timeout)
+static bool LpcUARTStart(DevIntrf_t *pDev, uint32_t DevAddr)
 {
-	do
+	(void)DevAddr;
+	return ((LpcUartDev_t *)pDev->pDevData)->bEnabled;
+}
+
+static void LpcUARTStop(DevIntrf_t *pDev)
+{
+	(void)pDev;
+}
+
+static void LpcUARTDisable(DevIntrf_t *pDev)
+{
+	LpcUartDev_t *dev = (LpcUartDev_t *)pDev->pDevData;
+	int no = dev->Cfg.DevNo;
+	uint32_t state = DisableInterrupt();
+
+	if (dev->bEnabled)
 	{
-		//uint32_t lsr = pDev->pUartReg->LSR & LPCUART_LSR_THRE;
-		if (pDev->pUartReg->LSR & (LPCUART_LSR_TEMT | LPCUART_LSR_THRE))
-			return true;
-	} while (Timeout-- > 0);
-
-	return false;
+		NVIC_DisableIRQ((IRQn_Type)LpcUARTIrq(no));
+		LPCUART_WRITE(no, IER, 0);
+		LPCUART_WRITE(no, TER, 0);
+		LpcUARTClock(no, false);
+		dev->bEnabled = false;
+	}
+	EnableInterrupt(state);
 }
 
-UART_STATUS LpcUARTGetStatus(LPCUARTDEV *pDev)
+static void LpcUARTEnable(DevIntrf_t *pDev)
 {
-	return pDev->pUartReg->LSR;
+	LpcUartDev_t *dev = (LpcUartDev_t *)pDev->pDevData;
+	int no = dev->Cfg.DevNo;
+	uint32_t state = DisableInterrupt();
+
+	LpcUARTClock(no, true);
+	IOPinCfg((const IOPinCfg_t *)dev->Cfg.pIOPinMap, dev->Cfg.NbIOPins);
+	LPCUART_WRITE(no, TER, LPCUART_TER_TXEN);
+	dev->bEnabled = true;
+	if (pDev->bIntEn)
+	{
+		uint32_t ier = LPCUART_IER_RBR | LPCUART_IER_RLS;
+
+		if (dev->Cfg.FlowControl == UART_FLWCTRL_HW)
+		{
+			ier |= LPCUART_IER_MS;
+		}
+		LPCUART_WRITE(no, IER, ier);
+		LpcUARTTxFill(dev);
+		NVIC_ClearPendingIRQ((IRQn_Type)LpcUARTIrq(no));
+		NVIC_SetPriority((IRQn_Type)LpcUARTIrq(no), pDev->IntPrio);
+		NVIC_EnableIRQ((IRQn_Type)LpcUARTIrq(no));
+	}
+	EnableInterrupt(state);
+}
+
+// Clear queued data and errors while retaining the configured line format.
+static void LpcUARTReset(DevIntrf_t *pDev)
+{
+	LpcUartDev_t *dev = (LpcUartDev_t *)pDev->pDevData;
+	uint32_t state = DisableInterrupt();
+	int no = dev->Cfg.DevNo;
+
+	LpcUARTClock(no, true);
+	LPCUART_WRITE(no, FCR, LPCUART_FCR_FIFOEN | LPCUART_FCR_RST_RXFIFO |
+		LPCUART_FCR_RST_TXFIFO | LPCUART_FCR_RX_TRIG8);
+	CFifoFlush(dev->pUartDev->hRxFifo);
+	CFifoFlush(dev->pUartDev->hTxFifo);
+	dev->pUartDev->bRxReady = false;
+	dev->pUartDev->bTxReady = true;
+	dev->pUartDev->RxOvrErrCnt = 0;
+	dev->pUartDev->ParErrCnt = 0;
+	dev->pUartDev->FramErrCnt = 0;
+	dev->pUartDev->RxDropCnt = 0;
+	dev->pUartDev->TxDropCnt = 0;
+	LPCUART_WRITE(no, IER, LPCUART_READ(no, IER) & ~LPCUART_IER_THRE);
+	if (!dev->bEnabled)
+	{
+		LpcUARTClock(no, false);
+	}
+	EnableInterrupt(state);
+}
+
+static void *LpcUARTGetHandle(DevIntrf_t *pDev)
+{
+	return ((LpcUartDev_t *)pDev->pDevData)->pUartDev;
+}
+
+UARTDev_t const *UARTGetInstance(int DevNo)
+{
+	return DevNo >= 0 && DevNo < LPCUART_DEV_COUNT ? s_LpcUartDev[DevNo].pUartDev : NULL;
+}
+
+void UARTSetCtrlLineState(UARTDev_t *pDev, uint32_t LineState)
+{
+	if (pDev == NULL || pDev->DevIntrf.pDevData == NULL)
+	{
+		return;
+	}
+	LpcUartDev_t *dev = (LpcUartDev_t *)pDev->DevIntrf.pDevData;
+	uint32_t state = DisableInterrupt();
+
+	if (dev->bEnabled)
+	{
+		LpcUARTModemSet(dev->Cfg.DevNo, LineState);
+	}
+	EnableInterrupt(state);
+}
+
+bool UARTInit(UARTDev_t *pDev, const UARTCfg_t *pCfg)
+{
+	if (pDev == NULL || pCfg == NULL || pCfg->DevNo < 0 ||
+		pCfg->DevNo >= LPCUART_DEV_COUNT || pCfg->pIOPinMap == NULL ||
+		pCfg->NbIOPins < 2 || pCfg->Rate < 0 || pCfg->bDMAMode ||
+		pCfg->Mode != UART_MODE_UART || pCfg->Duplex != UART_DUPLEX_FULL ||
+		pCfg->DataBits < 5 || pCfg->DataBits > 8 ||
+		pCfg->Parity < UART_PARITY_NONE || pCfg->Parity > UART_PARITY_SPACE ||
+		(pCfg->StopBits != 1 && pCfg->StopBits != 2) ||
+		(pCfg->DataBits == 5 && pCfg->StopBits == 2) ||
+		(pCfg->FlowControl != UART_FLWCTRL_NONE && pCfg->FlowControl != UART_FLWCTRL_HW) ||
+		!LpcUARTConfigValid(pCfg))
+	{
+		return false;
+	}
+	if ((pCfg->pRxMem != NULL && (pCfg->RxMemSize < (int)CFIFO_MEMSIZE(1) ||
+		((uintptr_t)pCfg->pRxMem & 3U) != 0)) ||
+		(pCfg->pTxMem != NULL && (pCfg->TxMemSize < (int)CFIFO_MEMSIZE(1) ||
+		((uintptr_t)pCfg->pTxMem & 3U) != 0)))
+	{
+		return false;
+	}
+	LpcUartDev_t *dev = &s_LpcUartDev[pCfg->DevNo];
+	uint32_t state = DisableInterrupt();
+
+	// Keep the physical instance bound to its object until that object is
+	// reinitialized. A stale object must never operate on another UART.
+	if (dev->pUartDev != NULL && dev->pUartDev != pDev)
+	{
+		EnableInterrupt(state);
+		return false;
+	}
+	for (int i = 0; i < LPCUART_DEV_COUNT; i++)
+	{
+		if (i != pCfg->DevNo && s_LpcUartDev[i].pUartDev == pDev)
+		{
+			EnableInterrupt(state);
+			return false;
+		}
+	}
+	dev->Cfg = *pCfg;
+	dev->pUartDev = pDev;
+	pDev->DevIntrf.pDevData = dev;
+	NVIC_DisableIRQ((IRQn_Type)LpcUARTIrq(pCfg->DevNo));
+	LpcUARTPrepare(pCfg->DevNo);
+	LPCUART_WRITE(pCfg->DevNo, LCR, 0);
+	LPCUART_WRITE(pCfg->DevNo, IER, 0);
+	LPCUART_WRITE(pCfg->DevNo, TER, 0);
+	LPCUART_WRITE(pCfg->DevNo, ACR, 0);
+	LpcUARTConfigure(pCfg->DevNo, pCfg);
+
+	pDev->hRxFifo = CFifoInit(pCfg->pRxMem != NULL ? pCfg->pRxMem : dev->RxMem,
+		pCfg->pRxMem != NULL ? (uint32_t)pCfg->RxMemSize : sizeof(dev->RxMem), 1, pCfg->bFifoBlocking);
+	pDev->hTxFifo = CFifoInit(pCfg->pTxMem != NULL ? pCfg->pTxMem : dev->TxMem,
+		pCfg->pTxMem != NULL ? (uint32_t)pCfg->TxMemSize : sizeof(dev->TxMem), 1, pCfg->bFifoBlocking);
+	LpcUARTReset(&pDev->DevIntrf);
+	LpcUARTClock(pCfg->DevNo, true);
+	dev->bEnabled = true;
+
+	uint32_t lcr = pCfg->DataBits - 5;
+
+	if (pCfg->Parity != UART_PARITY_NONE)
+	{
+		lcr |= LPCUART_LCR_PAR_EN | ((uint32_t)pCfg->Parity << 4);
+	}
+	if (pCfg->StopBits == 2)
+	{
+		lcr |= LPCUART_LCR_STOPBIT_MASK;
+	}
+	LPCUART_WRITE(pCfg->DevNo, LCR, lcr);
+	pDev->Rate = 0;
+	EnableInterrupt(state);
+	uint32_t rate = LpcUARTSetRate(&pDev->DevIntrf, pCfg->Rate);
+
+	if (pCfg->Rate != 0 && rate == 0)
+	{
+		LpcUARTDisable(&pDev->DevIntrf);
+		dev->pUartDev = NULL;
+		pDev->DevIntrf.pDevData = NULL;
+		return false;
+	}
+
+	pDev->Mode = pCfg->Mode;
+	pDev->Duplex = pCfg->Duplex;
+	pDev->DataBits = pCfg->DataBits;
+	pDev->Parity = pCfg->Parity;
+	pDev->StopBits = pCfg->StopBits;
+	pDev->FlowControl = pCfg->FlowControl;
+	pDev->bIrDAMode = pCfg->bIrDAMode;
+	pDev->bIrDAInvert = pCfg->bIrDAInvert;
+	pDev->bIrDAFixPulse = pCfg->bIrDAFixPulse;
+	pDev->IrDAPulseDiv = pCfg->IrDAPulseDiv;
+	pDev->EvtCallback = pCfg->EvtCallback;
+	pDev->LineState = 0;
+	pDev->RxOvrErrCnt = 0;
+	pDev->ParErrCnt = 0;
+	pDev->FramErrCnt = 0;
+	pDev->RxDropCnt = 0;
+	pDev->TxDropCnt = 0;
+	pDev->DevIntrf.Type = DEVINTRF_TYPE_UART;
+	pDev->DevIntrf.IntPrio = pCfg->IntPrio;
+	pDev->DevIntrf.EvtCB = NULL;
+	pDev->DevIntrf.MaxRetry = 0;
+	pDev->DevIntrf.EnCnt = 1;
+	pDev->DevIntrf.bDma = false;
+	pDev->DevIntrf.bIntEn = pCfg->bIntMode;
+	pDev->DevIntrf.bTxReady = true;
+	pDev->DevIntrf.bNoStop = false;
+	pDev->DevIntrf.Disable = LpcUARTDisable;
+	pDev->DevIntrf.Enable = LpcUARTEnable;
+	pDev->DevIntrf.GetRate = LpcUARTGetRate;
+	pDev->DevIntrf.SetRate = LpcUARTSetRate;
+	pDev->DevIntrf.StartRx = LpcUARTStart;
+	pDev->DevIntrf.RxData = LpcUARTRxData;
+	pDev->DevIntrf.StopRx = LpcUARTStop;
+	pDev->DevIntrf.StartTx = LpcUARTStart;
+	pDev->DevIntrf.TxData = LpcUARTTxData;
+	pDev->DevIntrf.StopTx = LpcUARTStop;
+	pDev->DevIntrf.TxSrData = NULL;
+	pDev->DevIntrf.Reset = LpcUARTReset;
+	pDev->DevIntrf.PowerOff = LpcUARTDisable;
+	pDev->DevIntrf.GetHandle = LpcUARTGetHandle;
+	atomic_flag_clear(&pDev->DevIntrf.bBusy);
+	LpcUARTEnable(&pDev->DevIntrf);
+
+	return true;
 }

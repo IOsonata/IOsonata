@@ -31,235 +31,167 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 Modified by          Date              Description
 
 ----------------------------------------------------------------------------*/
-#include "LPC17xx.h"
 #include "uart_lpcxx.h"
-#include "system_LPC17xx.h"
+#include "uart_lpc_target.h"
 
-#define LPC_PCONP_UART0				(1 << 3)
-#define LPC_PCONP_UART1				(1 << 4)
-#define LPC_PCONP_UART2				(1 << 24)
-#define LPC_PCONP_UART3				(1 << 25)
+// PCONP and PCLKSEL fields, in public UART device-number order.
+typedef struct {
+	uint32_t PowerMask;
+	volatile uint32_t *pClockSel;
+	uint32_t ClockShift;
+	IRQn_Type IrqNo;
+} Lpc17Uart_t;
 
-#define LPC_PCLKSEL0_UART0_MASK 	(3 << 6)	// On PCLKSEL0
-#define LPC_PCLKSEL0_UART0_DIV1		(1 << 6)
-#define LPC_PCLKSEL0_UART0_DIV2		(2 << 6)
-#define LPC_PCLKSEL0_UART0_DIV4		(0)
-#define LPC_PCLKSEL0_UART0_DIV8		(3 << 6)
-
-#define LPC_PCLKSEL0_UART1_MASK		(3 << 8)	// On PCLKSEL0
-#define LPC_PCLKSEL0_UART1_DIV1		(1 << 8)
-#define LPC_PCLKSEL0_UART1_DIV2		(2 << 8)
-#define LPC_PCLKSEL0_UART1_DIV4		(0)
-#define LPC_PCLKSEL0_UART1_DIV8		(3 << 8)
-
-#define LPC_PCLKSEL1_UART2_MASK		(3 << 16)	// On PCLKSEL1
-#define LPC_PCLKSEL1_UART2_DIV1		(1 << 16)
-#define LPC_PCLKSEL1_UART2_DIV2		(2 << 16)
-#define LPC_PCLKSEL1_UART2_DIV4		(0)
-#define LPC_PCLKSEL1_UART2_DIV8		(3 << 16)
-
-#define LPC_PCLKSEL1_UART3_MASK		(3 << 18)	// On PCLKSEL1
-#define LPC_PCLKSEL1_UART3_DIV1		(1 << 18)
-#define LPC_PCLKSEL1_UART3_DIV2		(2 << 18)
-#define LPC_PCLKSEL1_UART3_DIV4		(0)
-#define LPC_PCLKSEL1_UART3_DIV8		(3 << 18)
-
-#define LPC17XX_UART_MAX_DEV		4
-
-#define UART_RX_CFIFO_SIZE			16
-#define UART_TX_CFIFO_SIZE			16
-
-#define UART_RX_CFIFO_MEM_SIZE			CFIFO_MEMSIZE(UART_RX_CFIFO_SIZE)
-#define UART_TX_CFIFO_MEM_SIZE			CFIFO_MEMSIZE(UART_TX_CFIFO_SIZE)
-
-uint32_t s_ErrCnt = 0;
-
-uint8_t s_UARTRxFifoMem[UART_RX_CFIFO_MEM_SIZE];
-uint8_t s_UARTTxFifoMem[UART_TX_CFIFO_MEM_SIZE];
-
-LPCUARTDEV g_LpcUartDev[LPC17XX_UART_MAX_DEV] = {
-	{0, (LPCUARTREG*)LPC_UART0, },
-	{1, (LPCUARTREG*)LPC_UART1, },
-	{2, (LPCUARTREG*)LPC_UART2, },
-	{3, (LPCUARTREG*)LPC_UART3, }
+static const Lpc17Uart_t s_Lpc17Uart[] = {
+	{1U << 3, &LPC_SC->PCLKSEL0, 6, UART0_IRQn},
+	{1U << 4, &LPC_SC->PCLKSEL0, 8, UART1_IRQn},
+	{1U << 24, &LPC_SC->PCLKSEL1, 16, UART2_IRQn},
+	{1U << 25, &LPC_SC->PCLKSEL1, 18, UART3_IRQn}
 };
+static const uint8_t s_Lpc17ClockDiv[] = {4, 1, 2, 8};
 
-bool LpcUARTInit(UARTDEV *pDev, const UARTCFG *pCfg)
+bool LpcUARTConfigValid(const UARTCfg_t *pCfg)
 {
-	LPCUARTREG *reg = NULL;
-	int irq = 0;
-
-	if (pCfg == NULL)
-		return false;
-
-	if (pCfg->pIOPinMap == NULL || pCfg->NbIOPins == 0)
-		return false;
-
-	switch (pCfg->DevNo)
-	{
-		case 0:
-	        LPC_SC->PCONP |= LPC_PCONP_UART0;
-	        reg = (LPCUARTREG*)LPC_UART0;
-	        LPC_SC->PCLKSEL0 &= ~LPC_PCLKSEL0_UART0_MASK;	// CCLK/4
-	        irq = UART0_IRQn;
-			break;
-		case 1:
-			LPC_SC->PCONP |= LPC_PCONP_UART1;
-			reg = (LPCUARTREG*)LPC_UART1;
-	        LPC_SC->PCLKSEL0 &= ~LPC_PCLKSEL0_UART1_MASK;	// CCLK/4
-	        irq = UART2_IRQn;
-			break;
-		case 2:
-			LPC_SC->PCONP |= LPC_PCONP_UART2;
-			reg = (LPCUARTREG*)LPC_UART2;
-	        LPC_SC->PCLKSEL1 &= ~LPC_PCLKSEL1_UART2_MASK;	// CCLK/4
-	        irq = UART2_IRQn;
-			break;
-		case 3:
-			LPC_SC->PCONP |= LPC_PCONP_UART3;
-			reg = (LPCUARTREG*)LPC_UART3;
-	        LPC_SC->PCLKSEL1 &= ~LPC_PCLKSEL1_UART3_MASK;	// CCLK/4
-	        irq = UART3_IRQn;
-			break;
-		default:
-			return false;
-	}
-
-	// Configure I/O pins
-	int idx = 0;
-	IOPINCFG *pincfg = (IOPINCFG *)pCfg->pIOPinMap;
-
-	IOPinCfg(pincfg, pCfg->NbIOPins);
-
-	reg->TER = 0;	// Disable Tx
-	reg->IER = 0;	// Disable all interrupts
-	reg->ACR = 0;	// Disable auto baudrate
-
-	// Clear all FIFO
-	reg->FCR = LPCUART_FCR_RST_RXFIFO | LPCUART_FCR_RST_TXFIFO;
-
-	if (pCfg->bDMAMode)
-		reg->FCR |= LPCUART_FCR_DMA_MODE | LPCUART_FCR_RX_TRIG8;
-
-	reg->LCR = (pCfg->DataBits - 5);
-	if (pCfg->Parity != UART_PARITY_NONE)
-	{
-		reg->LCR |= (pCfg->Parity << 4);
-	}
-
-	if (pCfg->StopBits > 1)
-		reg->LCR |= LPCUART_LCR_STOPBIT_MASK;
-
-	reg->ICR = 0;
-	if (pCfg->bIrDAMode)
-	{
-		if (pCfg->bIrDAInvert)
-			reg->ICR |= LPCUART_ICR_IRDAINV;
-		if (pCfg->bIrDAFixPulse)
-			reg->ICR |= LPCUART_ICR_IRDA_FIXPULSE | ((pCfg->IrDAPulseDiv & 7) << 3);
-		reg->ICR |= LPCUART_ICR_IRDAEN;
-	}
-
-	if (pCfg->Rate)
-		pDev->Rate = LpcUARTSetRate(&pDev->DevIntrf, pCfg->Rate);
-	else
-	{
-		// Auto baudrate
-		reg->ACR = 7;
-	}
-
-	if (pCfg->FlowControl == UART_FLWCTRL_HW)
-	{
-//		LPC_GPIO->CLR[pCfg->PinCfg[UARTPIN_CTS_IDX].PortNo] = (1 << pCfg->PinCfg[UARTPIN_CTS_IDX].PinNo);
-//		LPC_GPIO->CLR[pCfg->PinCfg[UARTPIN_RTS_IDX].PortNo] = (1 << pCfg->PinCfg[UARTPIN_RTS_IDX].PinNo);
-		reg->MCR |= (3 << 6);	// Auto CTS/RTS flow control
-
-	}
-	else
-	{
-		reg->MCR &= ~(3 << 6);
-	}
-
-	reg->FCR = LPCUART_FCR_FIFOEN | LPCUART_FCR_RST_RXFIFO | LPCUART_FCR_RST_TXFIFO |
-			   LPCUART_FCR_RX_TRIG8;
-
-	uint32_t val = 0;
-
-	while (reg->LSR & ~(3<<5))
-	{
-		val = reg->RBR;
-	}
-
-	val = reg->IIR;	// Clear interrupts
-	pDev->LineState = 0;
-
-	//LPC_USART->MCR |= (1<<4); // Loopback
-
-	if (pCfg->pRxMem && pCfg->RxMemSize > 0)
-	{
-		pDev->hRxFifo = CFifoInit(pCfg->pRxMem, pCfg->RxMemSize, 1, pCfg->bFifoBlocking);
-	}
-	else
-	{
-		pDev->hRxFifo = CFifoInit(s_UARTRxFifoMem, UART_RX_CFIFO_MEM_SIZE, 1, pCfg->bFifoBlocking);
-	}
-
-	if (pCfg->pTxMem && pCfg->TxMemSize > 0)
-	{
-		pDev->hTxFifo = CFifoInit(pCfg->pTxMem, pCfg->TxMemSize, 1, pCfg->bFifoBlocking);
-	}
-	else
-	{
-		pDev->hTxFifo = CFifoInit(s_UARTTxFifoMem, UART_TX_CFIFO_MEM_SIZE, 1, pCfg->bFifoBlocking);
-	}
-
-	// Start tx
-	reg->TER = LPCUART_TER_TXEN;
-
-
-	pDev->RxOvrErrCnt = 0;
-	pDev->RxDropCnt = 0;
-	pDev->ParErrCnt = 0;
-	pDev->TxDropCnt = 0;
-	pDev->DataBits = pCfg->DataBits;
-	pDev->FlowControl = pCfg->FlowControl;
-	pDev->StopBits = pCfg->StopBits;
-	pDev->bIrDAFixPulse = pCfg->bIrDAFixPulse;
-	pDev->bIrDAInvert = pCfg->bIrDAInvert;
-	pDev->bIrDAMode = pCfg->bIrDAMode;
-	pDev->IrDAPulseDiv = pCfg->IrDAPulseDiv;
-	pDev->Parity = pCfg->Parity;
-	pDev->DevIntrf.bIntEn = pCfg->bIntMode;
-	pDev->DevIntrf.Disable = LpcUARTDisable;
-	pDev->DevIntrf.Enable = LpcUARTEnable;
-	pDev->DevIntrf.GetRate = LpcUARTGetRate;
-	pDev->DevIntrf.SetRate = LpcUARTSetRate;
-	pDev->DevIntrf.StartRx = LpcUARTStartRx;
-	pDev->DevIntrf.RxData = LpcUARTRxData;
-	pDev->DevIntrf.StopRx = LpcUARTStopRx;
-	pDev->DevIntrf.StartTx = LpcUARTStartTx;
-	pDev->DevIntrf.TxData = LpcUARTTxData;
-	pDev->DevIntrf.StopTx = LpcUARTStopTx;
-	pDev->EvtCallback = pCfg->EvtCallback;
-	atomic_flag_clear(&pDev->DevIntrf.bBusy);
-
-	g_LpcUartDev[pCfg->DevNo].bTxReady = true;
-
-	pDev->LineState = 0;
-
-	if (pCfg->bIntMode)
-	{
-		reg->IER = LPCUART_IER_THRE | LPCUART_IER_RBR | LPCUART_IER_RLS | LPCUART_IER_MS | (1<<7);
-		NVIC_ClearPendingIRQ(irq);
-		NVIC_SetPriority(irq, pCfg->IntPrio);
-		NVIC_EnableIRQ(irq);
-	}
-
-
-	return true;
+	return (pCfg->FlowControl != UART_FLWCTRL_HW || (pCfg->DevNo == 1 && pCfg->NbIOPins >= 4)) &&
+		(!pCfg->bIrDAMode || (pCfg->DevNo != 1 && pCfg->IrDAPulseDiv >= 0 && pCfg->IrDAPulseDiv <= 7));
 }
 
+void LpcUARTClock(int DevNo, bool bOn)
+{
+	if (bOn)
+	{
+		LPC_SC->PCONP |= s_Lpc17Uart[DevNo].PowerMask;
+	}
+	else
+	{
+		LPC_SC->PCONP &= ~s_Lpc17Uart[DevNo].PowerMask;
+	}
+}
 
+void LpcUARTPrepare(int DevNo)
+{
+	const Lpc17Uart_t *dev = &s_Lpc17Uart[DevNo];
 
+	LpcUARTClock(DevNo, true);
+	*dev->pClockSel = (*dev->pClockSel & ~(3U << dev->ClockShift)) | (1U << dev->ClockShift);
+}
 
+uint32_t LpcUARTClockFreq(int DevNo)
+{
+	const Lpc17Uart_t *dev = &s_Lpc17Uart[DevNo];
+	uint32_t sel = (*dev->pClockSel >> dev->ClockShift) & 3U;
 
+	return SystemCoreClock / s_Lpc17ClockDiv[sel];
+}
+
+int LpcUARTIrq(int DevNo)
+{
+	return s_Lpc17Uart[DevNo].IrqNo;
+}
+
+void LpcUARTConfigure(int DevNo, const UARTCfg_t *pCfg)
+{
+	if (DevNo == 1)
+	{
+		LPC_UART1->MCR = pCfg->FlowControl == UART_FLWCTRL_HW ?
+			LPCUART_MCR_RTSEN | LPCUART_MCR_CTSEN : 0;
+		LPC_UART1->RS485CTRL = 0;
+	}
+	if (DevNo != 1)
+	{
+		uint32_t icr = 0;
+
+		if (pCfg->bIrDAMode)
+		{
+			icr = LPCUART_ICR_IRDAEN;
+			if (pCfg->bIrDAInvert)
+			{
+				icr |= LPCUART_ICR_IRDAINV;
+			}
+			if (pCfg->bIrDAFixPulse)
+			{
+				icr |= LPCUART_ICR_IRDA_FIXPULSE | ((uint32_t)pCfg->IrDAPulseDiv << 3);
+			}
+		}
+		if (DevNo == 0)
+		{
+			LPC_UART0->ICR = icr;
+		}
+		else if (DevNo == 2)
+		{
+			LPC_UART2->ICR = icr;
+		}
+		else
+		{
+			LPC_UART3->ICR = icr;
+		}
+	}
+}
+
+uint32_t LpcUARTModemGet(int DevNo)
+{
+	if (DevNo != 1)
+	{
+		return 0;
+	}
+	uint32_t msr = LPC_UART1->MSR;
+	uint32_t line = 0;
+
+	if (msr & LPCUART_MSR_CTS)
+	{
+		line |= UART_LINESTATE_CTS;
+	}
+	if (msr & LPCUART_MSR_DSR)
+	{
+		line |= UART_LINESTATE_DSR;
+	}
+	if (msr & LPCUART_MSR_RI)
+	{
+		line |= UART_LINESTATE_RI;
+	}
+	if (msr & LPCUART_MSR_DCD)
+	{
+		line |= UART_LINESTATE_DCD;
+	}
+
+	return line;
+}
+
+void LpcUARTModemSet(int DevNo, uint32_t LineState)
+{
+	if (DevNo != 1)
+	{
+		return;
+	}
+	uint32_t mcr = LPC_UART1->MCR & ~(LPCUART_MCR_DTRCTRL | LPCUART_MCR_RTSCTRL);
+
+	if (LineState & UART_LINESTATE_DTR)
+	{
+		mcr |= LPCUART_MCR_DTRCTRL;
+	}
+	if (LineState & UART_LINESTATE_RTS)
+	{
+		mcr |= LPCUART_MCR_RTSCTRL;
+	}
+	LPC_UART1->MCR = mcr;
+}
+
+void UART0_IRQHandler(void)
+{
+	LpcUARTIrqHandler(0);
+}
+
+void UART1_IRQHandler(void)
+{
+	LpcUARTIrqHandler(1);
+}
+
+void UART2_IRQHandler(void)
+{
+	LpcUARTIrqHandler(2);
+}
+
+void UART3_IRQHandler(void)
+{
+	LpcUARTIrqHandler(3);
+}
