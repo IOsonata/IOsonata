@@ -28,6 +28,7 @@ int main(void)
 	assert((uintptr_t)SystemRamStart() == 0x10000000U);
 	assert(g_McuOsc.CoreOsc.Type == OSC_TYPE_RC);
 	assert(g_McuOsc.CoreOsc.Freq == 4000000U);
+	assert(g_McuOsc.CoreOsc.Accuracy == 123);
 	assert(!SystemCoreClockSelect(OSC_TYPE_RC, 0));
 	assert(SystemCoreClockGet() == 4000000U);
 	assert(SystemPeriphClockGet(-1) == 0);
@@ -37,7 +38,6 @@ int main(void)
 	assert(SystemCoreClockSet(120000000, 0) == 0);
 
 	result = TestClock17Run();
-	assert(g_McuOsc.CoreOsc.Accuracy == 123);
 	assert(SystemCoreClockGet() == SystemCoreClock);
 	assert(SystemPeriphClockGet(LPC17_PCLK_RTC) == SystemCoreClock / 8U);
 

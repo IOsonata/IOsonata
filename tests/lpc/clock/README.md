@@ -460,3 +460,12 @@ calibration describe the fallback clock. Runtime SystemCoreClockSelect still
 returns failure without silently substituting another source. Tests cover
 missing oscillator readiness, PLL lock/connection failure and invalid board
 frequency, followed by a successful external startup.
+
+The weak IRC descriptor and successful startup recovery use the nominal
+1 percent (10000 ppm) IRC accuracy and zero crystal load capacitance. Recovery
+replaces the failed crystal's accuracy and load values; successful external
+startup preserves board-provided values. The data sheet notes that IRC
+accuracy can fall outside 1 percent below 2.7 V; this descriptor is not a
+calibration guarantee. See the LPC176x data sheet, section 8.29.1.1 and the
+internal RC oscillator characteristics:
+https://www.nxp.com/docs/en/data-sheet/LPC1769_68_67_66_65_64_63.pdf

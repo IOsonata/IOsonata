@@ -376,6 +376,8 @@ int main(void)
 		s_ConnectWait = 0;
 		g_McuOsc.CoreOsc.Type = OSC_TYPE_XTAL;
 		g_McuOsc.CoreOsc.Freq = failure == 3 ? 32768 : 12000000;
+		g_McuOsc.CoreOsc.Accuracy = 20;
+		g_McuOsc.CoreOsc.LoadCap = 120;
 		SystemInit();
 		assert(s_Regs.CLKSRCSEL == CLKSRCSEL_IRC);
 		assert(s_Regs.PLL0CON == 0);
@@ -384,6 +386,8 @@ int main(void)
 		assert(SystemClkFreq == 4000000);
 		assert(g_McuOsc.CoreOsc.Type == OSC_TYPE_RC);
 		assert(g_McuOsc.CoreOsc.Freq == 4000000);
+		assert(GetHighFreqOscAcc() == 10000);
+		assert(GetHighFreqLoadCap() == 0);
 		assert((s_Regs.FLASHCFG & 0xF000U) == 0);
 	}
 	s_FailPllLock = 0;
@@ -395,10 +399,14 @@ int main(void)
 	// Startup must consume the descriptor rather than hard-code IRC.
 	g_McuOsc.CoreOsc.Type = OSC_TYPE_XTAL;
 	g_McuOsc.CoreOsc.Freq = 12000000;
+	g_McuOsc.CoreOsc.Accuracy = 20;
+	g_McuOsc.CoreOsc.LoadCap = 120;
 	s_OscReadyAfter = 4;
 	SystemInit();
 	assert(s_Regs.CLKSRCSEL == CLKSRCSEL_MAIN);
 	assert(SystemClkFreq == 12000000);
+	assert(GetHighFreqOscAcc() == 20);
+	assert(GetHighFreqLoadCap() == 120);
 	CheckClosest(12000000, CORE_FREQ);
 
 	// Externally driven XTAL1 uses MAIN, including at the IRC's nominal rate.

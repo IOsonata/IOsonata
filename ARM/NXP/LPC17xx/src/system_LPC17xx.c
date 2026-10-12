@@ -69,7 +69,7 @@ static const uint16_t s_Lpc17RtcMultipliers[] = {
 
 // Preserve the legacy IRC startup unless the application supplies its board descriptor.
 __WEAK McuOsc_t g_McuOsc = {
-	{OSC_TYPE_RC, IRC_FREQ, 0, 0},
+	{OSC_TYPE_RC, IRC_FREQ, 10000, 0},
 	{OSC_TYPE_XTAL, RTC_FREQ, 0, 0},
 	false
 };
@@ -663,6 +663,9 @@ void SystemInit (void)
 		{
 			g_McuOsc.CoreOsc.Type = OSC_TYPE_RC;
 			g_McuOsc.CoreOsc.Freq = IRC_FREQ;
+			// The failed crystal's tolerance and load do not describe the IRC.
+			g_McuOsc.CoreOsc.Accuracy = 10000;
+			g_McuOsc.CoreOsc.LoadCap = 0;
 		}
 	}
 }
