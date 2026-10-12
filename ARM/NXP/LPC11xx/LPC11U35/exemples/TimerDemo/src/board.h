@@ -55,8 +55,6 @@ SOFTWARE.
 #endif
 #define TIMER_DEMO_INT_PRIO	3
 
-// Same RX/TX pins as UartPrbsTxTest, no hardware flow control.
-#define TIMER_DEMO_UART
 // UART0: RX P2.3 (P0.18), TX P2.4 (P0.19).
 #define UART_DEVNO			0
 #define UART_RX_PORT		0

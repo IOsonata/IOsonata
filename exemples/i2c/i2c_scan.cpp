@@ -57,6 +57,7 @@ McuOsc_t g_McuOsc = MCUOSC;
 #define I2C_SCAN_ADDR_FIRST	0x08
 #define I2C_SCAN_ADDR_LAST	0x77
 
+#ifdef UART_RETARGET
 static const IOPinCfg_t s_UartPins[] = {
 	{UART_RX_PORT, UART_RX_PIN, UART_RX_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
 	{UART_TX_PORT, UART_TX_PIN, UART_TX_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
@@ -83,6 +84,7 @@ static const UARTCfg_t s_UartCfg = {
 	.pTxMem = s_UartTxMem,
 	.bDMAMode = false,
 };
+#endif
 
 static const IOPinCfg_t s_I2cPins[] = I2C_PINS;
 
@@ -108,6 +110,7 @@ static I2C s_I2c;
 
 int main()
 {
+#ifdef UART_RETARGET
 	if (s_Uart.Init(s_UartCfg) == false)
 	{
 		while (1);
@@ -115,6 +118,7 @@ int main()
 
 	UARTRetargetEnable(s_Uart, STDOUT_FILENO);
 	setvbuf(stdout, NULL, _IONBF, 0);
+#endif
 
 	printf("\r\nI2C scan, I2C %d\r\n", I2C_DEVNO);
 
