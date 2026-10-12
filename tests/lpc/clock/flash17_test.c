@@ -61,6 +61,10 @@ static uint32_t s_UsbPreviousCon;
 static unsigned s_UsbStopWait;
 static unsigned s_UsbFailure;
 static unsigned s_UsbWait;
+static unsigned s_CpuStopMode;
+static unsigned s_CpuStopWait;
+static uint32_t s_CpuPreviousStatus;
+static int s_CpuStopDone;
 static const uint32_t s_Rates[] = {
 	20000000, 22000000, 40000000, 42000000, 60000000, 62000000,
 	80000000, 82000000, 99000000, 100000000, 101000000, 102000000,
@@ -95,6 +99,29 @@ void TestSetPrimask(uint32_t Mask)
 LPC_SC_TypeDef *TestSystemRegs(void)
 {
 	uint32_t status = s_Regs.PLL0CFG | ((s_Regs.PLL0CON & 3U) << 24);
+
+	if (s_CpuStopMode && !s_CpuStopDone)
+	{
+		if (s_Regs.PLL0CFG != 19U || s_Regs.CCLKCFG != 7U ||
+			s_Regs.CLKSRCSEL != CLKSRCSEL_MAIN)
+		{
+			assert((s_CpuPreviousStatus & (3U << 24)) == 0);
+			assert(s_CpuStopMode == 1);
+			s_CpuStopDone = 1;
+		}
+		else if (s_CpuStopMode == 2)
+		{
+			assert(s_Regs.PLL0CON != 0);
+			status |= 3U << 24;
+		}
+		else if (s_CpuStopMode == 3)
+		{
+			status |= 1U << 24;
+		}
+		s_CpuPreviousStatus = status;
+		s_CpuStopWait++;
+		assert(s_CpuStopWait < 2000000U);
+	}
 
 	if (s_UsbModel)
 	{
@@ -403,7 +430,7 @@ int main(void)
 		s_FeedGuards = 0;
 		assert(SystemCoreClockSet(120000000, 4000000) == 120000000);
 		assert(s_Primask == mask);
-		assert(s_FeedGuards == 3);
+		assert(s_FeedGuards == 4);
 
 		memset(&s_Regs, 0, sizeof(s_Regs));
 		s_Regs.CLKSRCSEL = CLKSRCSEL_MAIN;
@@ -521,6 +548,47 @@ int main(void)
 				assert(s_UsbStopWait != 0);
 			}
 			s_CheckUsbStop = 0;
+		}
+	}
+	// An active CPU PLL must disconnect before disable or configuration changes.
+	for (unsigned mode = 1; mode <= 3; mode++)
+	{
+		for (uint32_t mask = 0; mask <= 1; mask++)
+		{
+			memset(&s_Regs, 0, sizeof(s_Regs));
+			s_Regs.FLASHCFG = 0x503A;
+			s_Regs.CLKSRCSEL = CLKSRCSEL_MAIN;
+			s_Regs.CCLKCFG = 7;
+			s_Regs.PLL0CFG = 19;
+			s_Regs.PLL0CON = 3;
+			s_Regs.USBCLKCFG = 9;
+			SystemClkFreq = 16000000;
+			SystemCoreClock = 80000000;
+			s_Primask = mask;
+			s_CpuStopMode = mode;
+			s_CpuStopWait = 0;
+			s_CpuStopDone = 0;
+			s_CpuPreviousStatus = 3U << 24;
+			assert(SystemCoreClockSet(120000000, 4000000) ==
+				(mode == 1 ? 120000000U : 0U));
+			assert(s_Primask == mask);
+			if (mode == 1)
+			{
+				assert(s_CpuStopDone);
+				assert(SystemClkFreq == 4000000);
+				assert(s_Regs.PLL0CON == 3);
+			}
+			else
+			{
+				assert(!s_CpuStopDone);
+				assert(s_Regs.PLL0CON == (mode == 2 ? 1U : 0U));
+				assert(s_Regs.USBCLKCFG == 9);
+				assert(SystemClkFreq == 16000000);
+				assert(SystemCoreClock == (mode == 2 ? 80000000U : 2000000U));
+				assert(SystemMicroSecLoopCnt == SystemCoreClock / 16000000U);
+				assert(s_Regs.FLASHCFG == 0x503A);
+			}
+			s_CpuStopMode = 0;
 		}
 	}
 	printf("LPC17xx flash timing and oscillator wait: %u errors\n", errors);

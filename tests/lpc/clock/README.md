@@ -180,7 +180,7 @@ startup time; its timing still needs board validation.
 Tests withhold oscillator readiness for both range selections, verify an
 IRC-started attempt returns without changing its clock selection or globals,
 and then allow a successful retry. A host read-count guard catches the
-previous endless wait. Reconfiguration of an already-running PLL remains separate work.
+previous endless wait.
 
 PLL0 lock polling is also bounded to 1,000,000 status reads. On timeout,
 the setter returns zero before requesting PLL connection or changing the
@@ -194,8 +194,8 @@ Tests withhold lock on IRC and main-oscillator startup paths, check that
 no connect request occurs, and verify the reported bypass rate and retained
 USB divider. The fixture now derives enable/connect status from PLL0CON;
 feed latching and analog timing are still not simulated. The old loop hits
-the read-count guard. Physical lock behavior (especially with RTC input),
-live PLL reconfiguration still needs work.
+the read-count guard. Physical lock behavior, especially with RTC input,
+still needs hardware validation.
 
 PLL0 connection polling now has the same read-count bound. On timeout it
 clears the connection request and feeds PLL0, then waits with a bound for
@@ -260,3 +260,21 @@ disable/feed, unchanged CPU clock and USB divider, preserved IRQ mask,
 and successful retry when ready status is allowed. The old unbounded wait
 hits the fixture's read-count guard. Hardware lock/connect transitions,
 feed latching and active-PLL reconfiguration remain unvalidated.
+
+PLL0 setup now follows UM10360 section 4.5.13 when the CPU PLL is already
+active: disconnect and feed, confirm disconnection, disable and feed, then
+confirm shutdown before changing CCLKCFG, CLKSRCSEL or PLL0CFG. Both waits
+are bounded to 1,000,000 status reads. A disconnect timeout keeps PLL0
+enabled; a shutdown timeout leaves the disable request in place. Both
+return zero without changing the old source, divider, PLL configuration,
+SystemClkFreq or USB divider, and refresh SystemCoreClock and its delay
+factor from status. Flash timing stays at six clocks. The caller must stop
+clock-dependent peripherals before changing CPU clocks.
+
+Host cases start at 80 MHz from MAIN and request 120 MHz from IRC. They
+check shutdown before register changes, blocked disconnect, blocked disable,
+actual-rate reporting and both initial IRQ masks. The previous code fails
+by changing the divider while PLL0 is still active. Startup tests also begin
+with an active bootloader PLL and acknowledge feeds so initialization must
+complete through the shutdown sequence. Analog timing and feed latching
+remain hardware-validation work.

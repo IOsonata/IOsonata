@@ -37,7 +37,12 @@ void TestDisableIRQ(void)
 
 void TestSetPrimask(uint32_t Mask)
 {
+	uint32_t status = LPC_SC->PLL0CFG | ((LPC_SC->PLL0CON & 3U) << 24) |
+		(1U << 26);
+
 	assert(Mask == 0);
+	// Reflect fed control bits so startup can acknowledge PLL shutdown.
+	memcpy((uint8_t *)LPC_SC + offsetof(LPC_SC_TypeDef, PLL0STAT), &status, sizeof(status));
 }
 
 void TestDSB(void)
@@ -59,14 +64,18 @@ int main(void)
 
 	assert(mmap((void *)LPC_SC_BASE, 0x1000, PROT_READ | PROT_WRITE,
 		MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0) == (void *)LPC_SC_BASE);
-	// Clock transitions are not simulated: report PLL ready to let the
-	// existing SystemInit complete. This test validates data copying and vector selection.
+	// Start from a bootloader's active PLL. Feed hooks model immediate
+	// shutdown and lock; analog transitions are outside this startup test.
+	LPC_SC->PLL0CFG = 59;
+	LPC_SC->PLL0CON = 3;
+	LPC_SC->CCLKCFG = 3;
 	memcpy((uint8_t *)LPC_SC + offsetof(LPC_SC_TypeDef, PLL0STAT), &status, sizeof(status));
 #ifdef TEST_AHB_DATA
 	memset(__data_ahb_start__, 0xCC, sizeof(__data_ahb_start__));
 #endif
 	SCB->VTOR = 0x123400;
 	SystemInit();
+	assert(SystemCoreClock == CORE_FREQ);
 	assert(SCB->VTOR == TEST_VECTOR_BASE);
 	assert(s_BarrierCount == 2);
 #ifdef TEST_AHB_DATA

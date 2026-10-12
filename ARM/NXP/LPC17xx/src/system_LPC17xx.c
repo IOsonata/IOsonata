@@ -166,6 +166,38 @@ uint32_t SystemCoreClockSet(uint32_t CoreFreq, int ClkFreq)
 	}
 
 
+	// Disconnect the CPU before disabling PLL0 (UM10360 section 4.5.13).
+	if ((LPC_SC->PLL0STAT & (1U << 25)) != 0U ||
+		(LPC_SC->PLL0CON & 2U) != 0U)
+	{
+		LPC_SC->PLL0CON = 1;
+		Lpc17PllFeed(&LPC_SC->PLL0FEED);
+		temp = LPC17_PLL_WAIT_MAX;
+		while ((LPC_SC->PLL0STAT & (1U << 25)) != 0U)
+		{
+			if (--temp == 0U)
+			{
+				// Keep a possibly active CPU clock enabled and report its rate.
+				SystemCoreClockUpdate();
+
+				return 0;
+			}
+		}
+	}
+
+	LPC_SC->PLL0CON = 0;
+	Lpc17PllFeed(&LPC_SC->PLL0FEED);
+	temp = LPC17_PLL_WAIT_MAX;
+	while ((LPC_SC->PLL0STAT & (3U << 24)) != 0U)
+	{
+		if (--temp == 0U)
+		{
+			SystemCoreClockUpdate();
+
+			return 0;
+		}
+	}
+
 	SystemClkFreq = ClkFreq;
 
 	/* Setting PLL0 */
