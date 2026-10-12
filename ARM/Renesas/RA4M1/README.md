@@ -399,7 +399,11 @@ and DMA with a non-blocking FIFO. `UARTSetCtrlLineState` does nothing.
   `Ra4m1RegisterIntHandler` at `IntPrio`. TEI is not used. RX is serviced first
   whatever the event. TXI is enabled while the TX CFIFO has data, `bTxReady`
   is true when the TX CFIFO is empty. The ICU IR flag of RXI and TXI is cleared
-  at the start of the handler, ERI at the end, as the Renesas FSP does.
+  at the start of the handler, ERI at the end, as the Renesas FSP does. SCI2/9
+  have no FIFO: when ERI or TXI read RDR with a receive error, the RXI of that
+  character is cleared and RDR is checked once more for a character that
+  arrived meanwhile. A pending RXI found by the RXI handler is of a new
+  character and is left set.
 - DMA mode (`bDMAMode`): while the channel is idle the CPU puts what the SCI
   takes, as without DMA (TX FIFO of SCI0/1, TDR of SCI2/9), which costs no
   interrupt. DMAC channel `DevNo` sends the rest in blocks straight from the
@@ -460,7 +464,9 @@ interrupt, polled DMA and interrupt DMA mode on the four SCIs, idle time between
 DMA blocks, the end of a block seen late (the line moves up to 60 characters
 between TxData calls, interrupts held off), the last byte of a SCI2/9 block
 moved 1 to 3 register accesses after the channel took it, while the block
-start checks TDR and stops the channel, an echo loop with bursts, receive
+start checks TDR and stops the channel, one SCI2/9 overrun with the next
+character arriving while it is handled (only the overrun character lost),
+an echo loop with bursts, receive
 errors, overrun, full CFIFOs, callbacks, Disable/Enable and PowerOff. It also
 compiles the driver with GNU Arm for the Cortex-M4. It does not test exact
 timing or the electrical interface.

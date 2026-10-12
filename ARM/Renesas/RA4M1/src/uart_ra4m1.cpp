@@ -773,13 +773,22 @@ static void Ra4m1UartIRQHandler(int IntNo, void *pCtx)
 	if (eri || err)
 	{
 		// The error flags are cleared, the ERI request is negated and its ICU
-		// IR flag can be cleared. Without the FIFO, RXI may also be pending
-		// for the character just read with the error.
+		// IR flag can be cleared.
 		Ra4m1UartSync(dev);
 		Ra4m1AcknowledgeInt(dev->IrqEri);
-		if (err && !dev->bHwFifo)
+		if (err && !dev->bHwFifo && IntNo != (int)dev->IrqRxi)
 		{
+			// Without the FIFO, ERI or TXI read RDR with the error, the RXI of
+			// that character may be pending: run again, it would read RDR a
+			// second time. It is cleared and a character that arrived since
+			// is read now. On RXI the pending RXI is of a new character and
+			// stays: cleared, that character would wait in RDR for the next
+			// one to overrun it, and each overrun would lose the next RXI.
+			uint8_t e = 0;
+
 			Ra4m1AcknowledgeInt(dev->IrqRxi);
+			rxcnt += Ra4m1UartRxHw(dev, RA4M1_UART_RX_POLL, &e);
+			err |= e;
 		}
 	}
 

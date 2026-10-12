@@ -162,6 +162,7 @@ static uint32_t s_Mstpcra = 0xFFFFFFFFU;
 static bool s_DmaHold;				// A request while DTE is cleared waits in DELSR, otherwise it is lost
 static unsigned s_DmaLate;			// Register accesses before the channel moves a request it took, 0 at once
 static bool s_StepAtCra;			// The line moves right after each read of DMCRA
+static bool s_StepAtErrClear;		// The line moves right after a write clearing a receive error flag
 static bool s_bDmaWrite;			// SCI register written by the DMAC
 static UARTDev_t s_Uart;
 
@@ -621,6 +622,13 @@ void TestRegWrite(const void *pReg, int Id, uint32_t Val)
 {
 	RegWrite(pReg, Id, Val);
 	AccessDone();
+	if (s_StepAtErrClear && Id == SCIREG_SSR && (~Val & B_RXERR))
+	{
+		for (int u = 0; u < 4; u++)
+		{
+			LineStep(u);
+		}
+	}
 }
 
 // A character on RXD
@@ -1141,6 +1149,7 @@ static void ResetModel(void)
 	s_IsrAccess = 0;
 	s_bIrqOff = false;
 	s_StepAtCra = false;
+	s_StepAtErrClear = false;
 	s_EvtRx = s_EvtTx = s_EvtLine = 0;
 	s_LastLine = 0;
 	s_RefillLeft = 0;
@@ -1543,6 +1552,60 @@ static void TestTxDmaLastByte(void)
 	s_StepAtCra = false;
 	s_DmaHold = hold;
 	s_DmaLate = late;
+}
+
+// SCI2/9, interrupt mode: one overrun while interrupts are held off for two
+// characters, then the next character arrives while that error is handled
+// (the line moves right after the error flags are cleared). Only the
+// character of the overrun is lost: the RXI of the next one is not dropped
+// with the error, which would leave it in RDR for the following one to
+// overrun, and so on.
+static void TestRxOverrunOnce(void)
+{
+	for (int u = 2; u < 4; u++)
+	{
+		for (int dma = 0; dma < 2; dma++)
+		{
+			ResetModel();
+			UARTCfg_t cfg = Cfg(u, true, dma);
+			CHECK(UARTInit(&s_Uart, &cfg) == true);
+
+			std::vector<uint8_t> d;
+			// Fewer than the 256 byte RX CFIFO, read at the end
+			Pattern(d, 200, (uint8_t)(u + dma));
+			for (uint8_t c : d)
+			{
+				s_Sci[u].RxIn.push_back(c);
+			}
+			RunLine(50);
+			s_StepAtErrClear = true;
+			s_bIrqOff = true;
+			RunLine(2);
+			s_bIrqOff = false;
+			Dispatch();
+			RunLine(200);
+			s_StepAtErrClear = false;
+
+			std::vector<uint8_t> r;
+			uint8_t buf[64];
+			int n;
+			while ((n = UARTRx(&s_Uart, buf, sizeof(buf))) > 0)
+			{
+				r.insert(r.end(), buf, buf + n);
+			}
+			std::vector<uint8_t> e = d;
+			e.erase(e.begin() + 51);
+			CHECK(s_Sci[u].RxLost == 1);
+			CHECK(s_Sci[u].StaleRdr == 0);
+			CHECK(s_Uart.RxOvrErrCnt == 1);
+			CHECK(r == e);
+			if (r != e || s_Sci[u].RxLost != 1)
+			{
+				printf("  TestRxOverrunOnce unit %d dma %d : %zu of %zu received, lost %u, overruns %u\n", u, dma,
+					   r.size(), d.size(), s_Sci[u].RxLost, (unsigned)s_Uart.RxOvrErrCnt);
+			}
+		}
+	}
 }
 
 // RX of Len bytes, read Chunk bytes per UARTRx call
@@ -1994,6 +2057,7 @@ int main()
 	s_DmaHold = false;
 	s_DmaLate = 0;
 	TestTxDmaLastByte();
+	TestRxOverrunOnce();
 	TestErrors();
 	TestRxFull();
 	TestSevenBit();
