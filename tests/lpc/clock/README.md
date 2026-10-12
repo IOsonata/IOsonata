@@ -449,3 +449,14 @@ vendor CMSIS `LPC_RAM_BASE` definition (0x10000000). It does not report free
 heap space, the AHB SRAM banks or the application's linked data start.
 The C/C++ linkage fixture checks the address; the previous implementation
 fails to link because the generic function is missing.
+
+If the configured CPU oscillator cannot be selected during SystemInit, LPC17xx
+startup attempts recovery to the undivided 4 MHz IRC with PLL0 stopped. This
+recovery bypasses PLL rate selection so that PLL lock/connection failures do
+not prevent fallback. The existing bounded disconnect/stop checks still apply;
+a stuck active PLL is not forcibly disabled or reported as recovered. On
+success, the core oscillator descriptor type/frequency, CPU clock and delay
+calibration describe the fallback clock. Runtime SystemCoreClockSelect still
+returns failure without silently substituting another source. Tests cover
+missing oscillator readiness, PLL lock/connection failure and invalid board
+frequency, followed by a successful external startup.

@@ -311,7 +311,7 @@ static Lpc17ClockConfig_t Lpc17ClockSelect(uint32_t Request, uint32_t Input)
 	return best;
 }
 
-static uint32_t Lpc17CoreClockSet(uint32_t CoreFreq, int ClkFreq, uint32_t clksrcsel)
+static uint32_t Lpc17CoreClockSet(uint32_t CoreFreq, int ClkFreq, uint32_t clksrcsel, bool UsePll)
 {
 	uint32_t temp = 0;
 	Lpc17ClockConfig_t clock;
@@ -322,7 +322,16 @@ static uint32_t Lpc17CoreClockSet(uint32_t CoreFreq, int ClkFreq, uint32_t clksr
 		return 0;
 	}
 
-	clock = Lpc17ClockSelect(CoreFreq, (uint32_t)ClkFreq);
+	if (UsePll)
+	{
+		clock = Lpc17ClockSelect(CoreFreq, (uint32_t)ClkFreq);
+	}
+	else
+	{
+		// Startup recovery must not depend on a working PLL.
+		memset(&clock, 0, sizeof(clock));
+		clock.CpuDiv = 1;
+	}
 
 	// Six flash clocks are safe throughout clock-source and divider changes.
 	LPC_SC->FLASHCFG = (LPC_SC->FLASHCFG & ~0xF000U) | 0x5000U;
@@ -500,7 +509,7 @@ uint32_t SystemCoreClockSet(uint32_t CoreFreq, int ClkFreq)
 	uint32_t source = ClkFreq == (int)IRC_FREQ ? CLKSRCSEL_IRC :
 		(ClkFreq == (int)RTC_FREQ ? CLKSRCSEL_RTC : CLKSRCSEL_MAIN);
 
-	return Lpc17CoreClockSet(CoreFreq, ClkFreq, source);
+	return Lpc17CoreClockSet(CoreFreq, ClkFreq, source, true);
 }
 
 bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
@@ -523,7 +532,7 @@ bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 		return false;
 	}
 
-	if (Lpc17CoreClockSet(CORE_FREQ, (int)OscFreq, source) == 0)
+	if (Lpc17CoreClockSet(CORE_FREQ, (int)OscFreq, source, true) == 0)
 	{
 		return false;
 	}
@@ -646,6 +655,15 @@ void SystemInit (void)
 		memcpy(__data_ahb_start__, __data_ahb_loc__, ahbsize);
 	}
 
-	SystemCoreClockSelect(g_McuOsc.CoreOsc.Type, g_McuOsc.CoreOsc.Freq);
+	if (SystemCoreClockSelect(g_McuOsc.CoreOsc.Type, g_McuOsc.CoreOsc.Freq) == false)
+	{
+		// Recover from a missing external source or PLL failure on bare IRC.
+		// The shared transition still requires PLL disconnect/stop acknowledgement.
+		if (Lpc17CoreClockSet(IRC_FREQ, IRC_FREQ, CLKSRCSEL_IRC, false) != 0)
+		{
+			g_McuOsc.CoreOsc.Type = OSC_TYPE_RC;
+			g_McuOsc.CoreOsc.Freq = IRC_FREQ;
+		}
+	}
 }
 

@@ -363,6 +363,35 @@ int main(void)
 {
 	unsigned errors = 0;
 
+	// Startup recovery must work even when the PLL cannot lock or connect.
+	for (unsigned failure = 0; failure < 4; failure++)
+	{
+		memset(&s_Regs, 0, sizeof(s_Regs));
+		s_OscWait = 0;
+		s_OscReadyAfter = failure == 0 ? 0 : 4;
+		s_FailPllLock = failure == 1;
+		s_FailPllConnect = failure == 2;
+		s_PllWait = 0;
+		s_ConnectSeen = 0;
+		s_ConnectWait = 0;
+		g_McuOsc.CoreOsc.Type = OSC_TYPE_XTAL;
+		g_McuOsc.CoreOsc.Freq = failure == 3 ? 32768 : 12000000;
+		SystemInit();
+		assert(s_Regs.CLKSRCSEL == CLKSRCSEL_IRC);
+		assert(s_Regs.PLL0CON == 0);
+		assert(s_Regs.CCLKCFG == 0);
+		assert(SystemCoreClock == 4000000);
+		assert(SystemClkFreq == 4000000);
+		assert(g_McuOsc.CoreOsc.Type == OSC_TYPE_RC);
+		assert(g_McuOsc.CoreOsc.Freq == 4000000);
+		assert((s_Regs.FLASHCFG & 0xF000U) == 0);
+	}
+	s_FailPllLock = 0;
+	s_FailPllConnect = 0;
+	s_ConnectSeen = 0;
+	s_OscWait = 0;
+	memset(&s_Regs, 0, sizeof(s_Regs));
+
 	// Startup must consume the descriptor rather than hard-code IRC.
 	g_McuOsc.CoreOsc.Type = OSC_TYPE_XTAL;
 	g_McuOsc.CoreOsc.Freq = 12000000;
