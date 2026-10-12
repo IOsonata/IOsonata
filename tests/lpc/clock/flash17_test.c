@@ -75,6 +75,11 @@ static const uint32_t s_Rates[] = {
 	80000000, 82000000, 99000000, 100000000, 101000000, 102000000,
 	119000000, 120000000
 };
+static const uint32_t s_BypassCases[][2] = {
+	{4000000, 4000000}, {4000000, 2000000},
+	{12000000, 12000000}, {12000000, 6000000},
+	{12000000, 3000000}, {24000000, 24000000}
+};
 static const uint32_t s_ExternalInputs[] = {
 	1000000, 4000000, 12000000, 15000000, 15000001, 25000000
 };
@@ -362,6 +367,24 @@ void TestISB(void)
 int main(void)
 {
 	unsigned errors = 0;
+
+	// Exact input/divider rates must not require PLL lock, even on USB CCO ties.
+	for (unsigned i = 0; i < sizeof(s_BypassCases) / sizeof(s_BypassCases[0]); i++)
+	{
+		memset(&s_Regs, 0, sizeof(s_Regs));
+		s_OscWait = 0;
+		s_OscReadyAfter = 4;
+		s_FailPllLock = 1;
+		s_PllWait = 0;
+		s_Regs.USBCLKCFG = 7;
+		assert(SystemCoreClockSet(s_BypassCases[i][1], s_BypassCases[i][0]) == s_BypassCases[i][1]);
+		assert(s_Regs.PLL0CON == 0);
+		assert(s_Regs.CCLKCFG + 1U == s_BypassCases[i][0] / s_BypassCases[i][1]);
+		assert(s_Regs.USBCLKCFG == 7);
+		assert(s_PllWait == 0);
+		CheckClosest(s_BypassCases[i][0], s_BypassCases[i][1]);
+	}
+	s_FailPllLock = 0;
 
 	// Startup recovery must work even when the PLL cannot lock or connect.
 	for (unsigned failure = 0; failure < 4; failure++)

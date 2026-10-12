@@ -303,9 +303,9 @@ The ceiling is LPC17_MAX_CORE_FREQ: 120 MHz for LPC1759/LPC1769 builds,
 lowest rate rather than disabling the clock. Returned Hz truncates fractions.
 
 For each PLL ratio, only the two divider values bracketing the request need
-to be checked. Equal-error choices prefer an exact multiple of 96 MHz CCO
-for the existing USB divider path, then retain the first candidate (bypass,
-lower N, lower M). CPU-rate selection alone does not establish USB clock
+to be checked. Equal-error choices prefer input bypass. Between PLL choices,
+prefer an exact multiple of 96 MHz CCO for the existing USB divider path,
+then retain the first candidate (lower N, lower M). CPU-rate selection alone does not establish USB clock
 suitability: input accuracy and fixed USB requirements still apply. Bypass
 leaves PLL0 stopped and the USB divider unchanged. Flash timing is finalized
 for bypass as well as PLL operation.
@@ -469,3 +469,9 @@ accuracy can fall outside 1 percent below 2.7 V; this descriptor is not a
 calibration guarantee. See the LPC176x data sheet, section 8.29.1.1 and the
 internal RC oscillator characteristics:
 https://www.nxp.com/docs/en/data-sheet/LPC1769_68_67_66_65_64_63.pdf
+
+Exact input/divider requests at 2/3/4/6/12/24 MHz are tested with PLL lock
+forced to fail. They must still succeed with PLL0 stopped, the expected CPU
+divider and the USB divider unchanged. The previous tie-breaker tries PLL0
+and fails the first request. Existing closest-rate and USB clock cases verify
+that genuinely better PLL choices and PLL-to-PLL tie preferences still work.

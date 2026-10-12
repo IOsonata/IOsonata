@@ -271,8 +271,11 @@ static void Lpc17ClockCandidate(Lpc17ClockConfig_t *pBest, uint32_t Request,
 		uint64_t left = error * pBest->Denominator;
 		uint64_t right = pBest->Error * denominator;
 
+		// Keep an equally accurate bypass choice; it does not need PLL lock.
+		// USB-compatible CCO preference applies only between PLL choices.
 		if (pBest->Denominator == 0 || left < right ||
-			(left == right && usb > pBest->UsbExact))
+			(left == right && pBest->PllFreq != 0 &&
+			(M == 0 || usb > pBest->UsbExact)))
 		{
 			pBest->Error = error;
 			pBest->Denominator = denominator;
