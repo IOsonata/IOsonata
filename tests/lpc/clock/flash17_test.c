@@ -67,7 +67,8 @@ LPC_SC_TypeDef *TestSystemRegs(void)
 			s_EarlyClockChange++;
 		}
 		s_OscWait++;
-		if (s_OscWait >= s_OscReadyAfter)
+		assert(s_OscWait < 2000000U);
+		if (s_OscReadyAfter != 0 && s_OscWait >= s_OscReadyAfter)
 		{
 			s_Regs.SCS |= 0x40U;
 		}
@@ -183,6 +184,38 @@ int main(void)
 		assert(s_OscWait == 4);
 		assert(s_EarlyClockChange == 0);
 		assert(s_Unsafe == 0);
+	}
+	// Missing oscillator: return without selecting it or programming PLL0.
+	for (unsigned input = 12000000; input <= 16000000; input += 4000000)
+	{
+		memset(&s_Regs, 0, sizeof(s_Regs));
+		s_Regs.FLASHCFG = 0x303AU;
+		SystemCoreClock = 4000000;
+		SystemClkFreq = 4000000;
+		SystemMicroSecLoopCnt = 7;
+		s_OscWait = 0;
+		s_OscReadyAfter = 0;
+		s_EarlyClockChange = 0;
+		assert(SystemCoreClockSet(120000000, input) == 0);
+		assert(s_OscWait != 0);
+		assert(s_EarlyClockChange == 0);
+		assert(s_Regs.CLKSRCSEL == CLKSRCSEL_IRC);
+		assert(s_Regs.CCLKCFG == 0);
+		assert(s_Regs.PLL0CFG == 0);
+		assert(s_Regs.PLL0CON == 0);
+		assert(s_Regs.FLASHCFG == 0x503AU);
+		assert(SystemCoreClock == 4000000);
+		assert(SystemClkFreq == 4000000);
+		assert(SystemMicroSecLoopCnt == 7);
+
+		// A later ready indication permits a successful retry.
+		s_OscWait = 0;
+		s_OscReadyAfter = 4;
+		s_Unsafe = 0;
+		assert(SystemCoreClockSet(120000000, input) == 120000000);
+		assert(s_EarlyClockChange == 0);
+		assert(s_Unsafe == 0);
+		assert(SystemClkFreq == input);
 	}
 	// UM10360 table 21: supported RTC multipliers with MSEL bit 12 set.
 	memset(&s_Regs, 0, sizeof(s_Regs));

@@ -41,6 +41,7 @@ Modified by          Date              Description
 #define OSC_FREQ				OSC_FREQ_16MHZ  /* Installed oscillator frequency */
 #define IRC_FREQ				(4000000UL)		/* Internal RC freq */
 #define RTC_FREQ				(32768UL)		/* RTC frequency */
+#define LPC17_OSC_WAIT_MAX		1000000U		/* Bounded status reads */
 
 /* Select system clock oscillator source */
 #define DEF_CLK_SRC			IRC_FREQ
@@ -124,21 +125,26 @@ uint32_t SystemCoreClockSet(uint32_t CoreFreq, int ClkFreq)
 
 	/* Init system clock */
 
-	SystemClkFreq = ClkFreq;
-
 	if (ClkFreq != (int)IRC_FREQ && ClkFreq != (int)RTC_FREQ)
 	{
+		uint32_t wait = LPC17_OSC_WAIT_MAX;
+
 		// Select MAIN clk source
 		// OSCEN - Oscillator enable
 		temp = 0x20;
 		clksrcsel = CLKSRCSEL_MAIN;
-		if (SystemClkFreq > 15000000)
+		if (ClkFreq > 15000000)
 			temp |= 0x10;	/* Oscillator range 15MHz-25MHz */
 
 		LPC_SC->SCS = temp;
 		// OSCSTAT (bit 6) must be set before selecting the main oscillator.
 		while ((LPC_SC->SCS & (1U << 6)) == 0U)
 		{
+			if (--wait == 0U)
+			{
+				// The source/divider/PLL and clock globals have not changed.
+				return 0;
+			}
 		}
 
 	}
@@ -147,6 +153,8 @@ uint32_t SystemCoreClockSet(uint32_t CoreFreq, int ClkFreq)
 		clksrcsel = CLKSRCSEL_RTC;
 	}
 
+
+	SystemClkFreq = ClkFreq;
 
 	/* Setting PLL0 */
 

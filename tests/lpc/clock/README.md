@@ -135,8 +135,7 @@ The previous comparison against 0x50 included enable/range bits and
 skipped the wait with the oscillator enabled. The fixture tests 12 MHz
 and 16 MHz inputs (both range selections), with immediately ready and
 delayed status. It fails if clock changes occur before ready status.
-The existing waits are still unbounded; missing-oscillator/PLL timeout
-recovery remains separate work. Reference: UM10360 chapter 3, table 13.
+Reference: UM10360 chapter 3, table 13.
 
 The PLL multiplier search uses a 64-bit FCCO * N product. A 99 MHz request
 from the 4 MHz IRC needs a 297 MHz CCO, N=8 and M=297: the search product
@@ -169,3 +168,17 @@ Tests check invalid-input preservation, including both signed integer
 extremes, and 120 MHz CPU setup from 1/2/3 MHz main inputs with delayed ready
 status. Existing tests retain 4 MHz IRC, 32768 Hz RTC and 12/16 MHz main
 coverage. The original zero-input call fails UBSan with division by zero.
+
+The main-oscillator wait is bounded to 1,000,000 status reads, following
+the bounded-polling approach in LPC11Uxx startup. If OSCSTAT never arrives,
+the setter returns zero before selecting the input or changing CPU-divider
+and PLL settings. Clock globals retain their previous values. The main
+oscillator remains enabled and flash timing remains at the safe six-clock
+setting, allowing a later retry. This is a read-count bound, not a calibrated
+startup time; its timing still needs board validation.
+
+Tests withhold oscillator readiness for both range selections, verify an
+IRC-started attempt returns without changing its clock selection or globals,
+and then allow a successful retry. A host read-count guard catches the
+previous endless wait. PLL lock/connect waits and reconfiguration of an
+already-running PLL remain separate work.
