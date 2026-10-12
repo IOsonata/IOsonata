@@ -8,6 +8,7 @@
 #include <sys/mman.h>
 #include "iopinctrl.h"
 #include "board.h"
+#include "irq_model.h"
 
 static const IOPinCfg_t s_UartPins[] = UART_PINS;
 
@@ -162,6 +163,7 @@ int main(void)
 	IOPinSetSpeed(0, 2, IOPINSPEED_HIGH);
 	IOPinSetStrength(0, 2, IOPINSTRENGTH_STRONG);
 	IOPinSetSense(0, 2, IOPINSENSE_TOGGLE);
+	(void)PinEvent;
 	puts("LPC11Uxx GPIO regressions passed");
 	return 0;
 }

@@ -34,9 +34,35 @@ Full port writes use PIN, not the per-pin B/W aliases. Narrow writes change the
 low 8/16 output bits with separate CLR/SET writes, preserving upper pins; the
 two writes are not a simultaneous port update. Fast control helpers require a
 previously configured/enabled GPIO clock. IOPinDisable leaves a GPIO input with
-no pull, not a disconnected input buffer. Pin interrupts remain unimplemented
-and registration returns failure. Drive strength, speed and sense setters are
+no pull, not a disconnected input buffer. Drive strength and speed setters are
 unsupported no-ops.
+
+Pin interrupts use eight channels (IntNo 0..7), connected to the existing
+FLEX_INT0_IRQHandler through FLEX_INT7_IRQHandler vectors. Configure the pin as
+a digital input first. Explicit registration rejects an occupied channel, invalid
+pins, NULL callbacks, unsupported sense values and priorities outside 0..3.
+Automatic allocation returns the first free channel or -1. Callbacks receive the
+channel number and caller context in interrupt context.
+
+IOPinSetSense supports rising, falling and both edges. IOPINSENSE_DISABLE pauses
+the registered pin without releasing its channel; another sense value rearms it.
+Changing sense clears stale edge and NVIC pending status. IOPinDisableInterrupt
+masks detection, clears pending status and releases the channel. The ISR clears
+only its channel before the callback, so an edge during the callback is retained.
+Allocation and hook updates use short interrupt locks; callbacks run after the
+lock is restored. Group/port interrupts and deep-sleep wake configuration are not
+implemented by these functions.
+
+PINTSEL uses selectors 0..23 for port 0 and 24..55 for port 1. The old bundled
+CMSIS header incorrectly declared three NVIC priority bits; it now declares two,
+as specified by UM10462 section 6.3. Use priorities 0..3 for LPC11Uxx. The Blinky
+button definitions were updated accordingly.
+
+The interrupt tests check all eight vector names, channel exhaustion/reuse,
+occupied-channel rejection, port boundaries, priority bounds, edge enables,
+pause/resume, callback context, release from a callback and a new edge during a
+callback. A host NVIC model applies register set/clear effects at NVIC calls and
+callbacks; it does not simulate asynchronous hardware or interrupt latency.
 
 GPIO, SSP, UART and Cortex-M0 compiler-to-assembly checks pass. Firmware linking,
 Blinky output, UART PRBS output, SPI chip-select timing and ADC/I2C electrical

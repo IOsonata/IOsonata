@@ -94,7 +94,8 @@ FLEX_INT0_IRQn                = 0,        /*!< All I/O pins can be routed to bel
 /* Processor and Core Peripheral Section */ /* Configuration of the Cortex-M0 Processor and Core Peripherals */
 
 #define __MPU_PRESENT             0         /*!< MPU present or not                    */
-#define __NVIC_PRIO_BITS          3         /*!< Number of Bits used for Priority Levels */
+// UM10462 section 6.3: four programmable priority levels.
+#define __NVIC_PRIO_BITS          2         /*!< Number of Bits used for Priority Levels */
 #define __Vendor_SysTickConfig    0         /*!< Set to 1 if different SysTick Config is used */
 /** @} */ /* End of group Configuration_of_CMSIS */
 

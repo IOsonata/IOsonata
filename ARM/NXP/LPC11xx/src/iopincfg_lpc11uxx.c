@@ -42,6 +42,28 @@ Modified by          Date              Description
 #define IOCON_I2CMODE_MASK	(3UL << 8)
 #define IOCON_OD			(1UL << 10)
 
+#define LPC11_PINT_COUNT		8U
+#define LPC11_PINT_CLOCK		(1UL << 19)
+
+typedef struct {
+	IOPinEvtHandler_t Handler;
+	void *pContext;
+	uint8_t PinSel;
+	IOPINSENSE Sense;
+} Lpc11PintHook_t;
+
+static Lpc11PintHook_t s_PintHook[LPC11_PINT_COUNT];
+static const IRQn_Type s_PintIrq[LPC11_PINT_COUNT] = {
+	FLEX_INT0_IRQn,
+	FLEX_INT1_IRQn,
+	FLEX_INT2_IRQn,
+	FLEX_INT3_IRQn,
+	FLEX_INT4_IRQn,
+	FLEX_INT5_IRQn,
+	FLEX_INT6_IRQn,
+	FLEX_INT7_IRQn
+};
+
 // Named vendor registers: no inferred register layout or nonvolatile access.
 static volatile uint32_t * const s_PinReg[] = {
 	&LPC_IOCON->RESET_PIO0_0,
@@ -193,48 +215,217 @@ void IOPinDisable(int PortNo, int PinNo)
 	IOPinConfig(PortNo, PinNo, IOPINOP_GPIO, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL);
 }
 
-// Pin interrupts are not implemented yet. Never report successful registration.
-void IOPinDisableInterrupt(int IntNo)
+// Caller holds the short interrupt lock. Discard old edges before rearming.
+static void Lpc11PintSetSense(unsigned IntNo, IOPINSENSE Sense)
 {
-	(void)IntNo;
+	uint32_t mask = 1UL << IntNo;
+
+	NVIC_DisableIRQ(s_PintIrq[IntNo]);
+	LPC_GPIO_PIN_INT->CIENR = mask;
+	LPC_GPIO_PIN_INT->CIENF = mask;
+	LPC_GPIO_PIN_INT->ISEL &= ~mask;
+	LPC_GPIO_PIN_INT->IST = mask;
+	NVIC_ClearPendingIRQ(s_PintIrq[IntNo]);
+	s_PintHook[IntNo].Sense = Sense;
+
+	if (Sense == IOPINSENSE_HIGH_TRANSITION || Sense == IOPINSENSE_TOGGLE)
+	{
+		LPC_GPIO_PIN_INT->SIENR = mask;
+	}
+	if (Sense == IOPINSENSE_LOW_TRANSITION || Sense == IOPINSENSE_TOGGLE)
+	{
+		LPC_GPIO_PIN_INT->SIENF = mask;
+	}
+	if (Sense != IOPINSENSE_DISABLE)
+	{
+		NVIC_EnableIRQ(s_PintIrq[IntNo]);
+	}
 }
 
+void IOPinDisableInterrupt(int IntNo)
+{
+	if ((unsigned)IntNo >= LPC11_PINT_COUNT)
+	{
+		return;
+	}
+
+	uint32_t state = DisableInterrupt();
+
+	if (s_PintHook[IntNo].Handler != NULL)
+	{
+		Lpc11PintSetSense((unsigned)IntNo, IOPINSENSE_DISABLE);
+		s_PintHook[IntNo].Handler = NULL;
+		s_PintHook[IntNo].pContext = NULL;
+	}
+	EnableInterrupt(state);
+}
+
+// IntNo selects channel 0..7. Configure the pin's digital input before calling.
 bool IOPinEnableInterrupt(int IntNo, int IntPrio, uint32_t PortNo, uint32_t PinNo,
 						 IOPINSENSE Sense, IOPinEvtHandler_t pEvtCB, void *pCtx)
 {
-	(void)IntNo;
-	(void)IntPrio;
-	(void)PortNo;
-	(void)PinNo;
-	(void)Sense;
-	(void)pEvtCB;
-	(void)pCtx;
-	return false;
+	if ((unsigned)IntNo >= LPC11_PINT_COUNT || PortNo > 1U ||
+		PinNo >= (PortNo == 0U ? 24U : 32U) || pEvtCB == NULL ||
+		(unsigned)IntPrio >= (1UL << __NVIC_PRIO_BITS) ||
+		(Sense != IOPINSENSE_HIGH_TRANSITION && Sense != IOPINSENSE_LOW_TRANSITION &&
+		 Sense != IOPINSENSE_TOGGLE))
+	{
+		return false;
+	}
+
+	uint32_t state = DisableInterrupt();
+
+	if (s_PintHook[IntNo].Handler != NULL)
+	{
+		EnableInterrupt(state);
+		return false;
+	}
+
+	LPC_SYSCON->SYSAHBCLKCTRL |= LPC11_PINT_CLOCK;
+	(void)LPC_SYSCON->SYSAHBCLKCTRL;
+	Lpc11PintSetSense((unsigned)IntNo, IOPINSENSE_DISABLE);
+
+	// LPC11Uxx numbers port 1 pins from 24, unlike LPC546xx's stride of 32.
+	uint32_t sel = PortNo == 0U ? PinNo : 24U + PinNo;
+
+	LPC_SYSCON->PINTSEL[IntNo] = sel;
+	s_PintHook[IntNo].PinSel = (uint8_t)sel;
+	s_PintHook[IntNo].pContext = pCtx;
+	s_PintHook[IntNo].Handler = pEvtCB;
+	NVIC_SetPriority(s_PintIrq[IntNo], (uint32_t)IntPrio);
+	Lpc11PintSetSense((unsigned)IntNo, Sense);
+	EnableInterrupt(state);
+	return true;
 }
 
+// A query only; allocation keeps discovery and registration under one lock.
 int IOPinFindAvailInterrupt(void)
 {
-	return -1;
+	uint32_t state = DisableInterrupt();
+	int intno = -1;
+
+	for (unsigned i = 0; i < LPC11_PINT_COUNT; i++)
+	{
+		if (s_PintHook[i].Handler == NULL)
+		{
+			intno = (int)i;
+			break;
+		}
+	}
+	EnableInterrupt(state);
+	return intno;
 }
 
 int IOPinAllocateInterrupt(int IntPrio, int PortNo, int PinNo, IOPINSENSE Sense,
 						 IOPinEvtHandler_t pEvtCB, void *pCtx)
 {
-	(void)IntPrio;
-	(void)PortNo;
-	(void)PinNo;
-	(void)Sense;
-	(void)pEvtCB;
-	(void)pCtx;
-	return -1;
+	uint32_t state = DisableInterrupt();
+	int intno = IOPinFindAvailInterrupt();
+
+	if (intno >= 0 && !IOPinEnableInterrupt(intno, IntPrio, (uint32_t)PortNo,
+										 (uint32_t)PinNo, Sense, pEvtCB, pCtx))
+	{
+		intno = -1;
+	}
+	EnableInterrupt(state);
+	return intno;
 }
 
+// DISABLE pauses detection without releasing the allocated channel.
 void IOPinSetSense(int PortNo, int PinNo, IOPINSENSE Sense)
 {
-	(void)PortNo;
-	(void)PinNo;
-	(void)Sense;
+	if (!Lpc11GpioValidPin(PortNo, PinNo) ||
+		(Sense != IOPINSENSE_DISABLE && Sense != IOPINSENSE_HIGH_TRANSITION &&
+		 Sense != IOPINSENSE_LOW_TRANSITION && Sense != IOPINSENSE_TOGGLE))
+	{
+		return;
+	}
+
+	uint32_t sel = PortNo == 0 ? (uint32_t)PinNo : 24U + (uint32_t)PinNo;
+	uint32_t state = DisableInterrupt();
+
+	for (unsigned i = 0; i < LPC11_PINT_COUNT; i++)
+	{
+		if (s_PintHook[i].Handler != NULL && s_PintHook[i].PinSel == sel)
+		{
+			Lpc11PintSetSense(i, Sense);
+		}
+	}
+	EnableInterrupt(state);
 }
+
+static void Lpc11PintDispatch(unsigned IntNo)
+{
+	uint32_t mask = 1UL << IntNo;
+	uint32_t state = DisableInterrupt();
+	IOPinEvtHandler_t handler = NULL;
+	void *context = NULL;
+
+	if ((LPC_GPIO_PIN_INT->IST & mask) != 0U)
+	{
+		// Edge mode W1C: acknowledge before callback so a new edge survives.
+		LPC_GPIO_PIN_INT->IST = mask;
+		if (s_PintHook[IntNo].Sense != IOPINSENSE_DISABLE)
+		{
+			handler = s_PintHook[IntNo].Handler;
+			context = s_PintHook[IntNo].pContext;
+		}
+	}
+	EnableInterrupt(state);
+
+	if (handler != NULL)
+	{
+		handler((int)IntNo, context);
+	}
+}
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+void FLEX_INT0_IRQHandler(void)
+{
+	Lpc11PintDispatch(0);
+}
+
+void FLEX_INT1_IRQHandler(void)
+{
+	Lpc11PintDispatch(1);
+}
+
+void FLEX_INT2_IRQHandler(void)
+{
+	Lpc11PintDispatch(2);
+}
+
+void FLEX_INT3_IRQHandler(void)
+{
+	Lpc11PintDispatch(3);
+}
+
+void FLEX_INT4_IRQHandler(void)
+{
+	Lpc11PintDispatch(4);
+}
+
+void FLEX_INT5_IRQHandler(void)
+{
+	Lpc11PintDispatch(5);
+}
+
+void FLEX_INT6_IRQHandler(void)
+{
+	Lpc11PintDispatch(6);
+}
+
+void FLEX_INT7_IRQHandler(void)
+{
+	Lpc11PintDispatch(7);
+}
+
+#ifdef __cplusplus
+}
+#endif
 
 // LPC11Uxx has no general-purpose programmable drive strength or slew rate.
 void IOPinSetStrength(int PortNo, int PinNo, IOPINSTRENGTH Strength)
