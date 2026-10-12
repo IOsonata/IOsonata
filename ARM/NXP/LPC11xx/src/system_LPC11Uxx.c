@@ -198,12 +198,20 @@ uint32_t SystemCoreClockSet(bool Crystal, int ClkFreq)
 	LPC_SYSCON->SYSAHBCLKCTRL |= (1<<16);				// Power-up IOCON
 	LPC_SYSCON->PDRUNCFG     &= ~PDRUNCFG_USBPAD_PD;	// Power-up USB PHY         */
 
-	return fclko;
+	SystemMainClkFreq = fclko;
+	SystemCoreClock = fclko / div;
+
+	return SystemCoreClock;
+}
+
+uint32_t SystemSetCoreClock(bool Crystal, int ClkFreq)
+{
+	return SystemCoreClockSet(Crystal, ClkFreq);
 }
 
 void SystemInit (void)
 {
-	SystemCoreClockSet(true, OSC_FREQ);
+	SystemSetCoreClock(true, OSC_FREQ);
 	SystemCoreClockUpdate();
 }
 

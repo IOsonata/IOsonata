@@ -105,11 +105,18 @@ void SystemInit (void);
  */
 void SystemCoreClockUpdate (void);
 
+// Configure the PLL for the existing 48 MHz startup target.
+// ClkFreq is the crystal input frequency in Hz; IRC uses its fixed 12 MHz.
+// Returns the CPU frequency after the AHB divider and updates the clock globals.
 uint32_t SystemSetCoreClock(bool Crystal, int ClkFreq);
+
+// Retain the name exported by older LPC11Uxx libraries.
+uint32_t SystemCoreClockSet(bool Crystal, int ClkFreq);
 
 #ifdef __cplusplus
 }
 #endif
 
 #endif // __SYSTEM_LPC11UXX_H__
+
 

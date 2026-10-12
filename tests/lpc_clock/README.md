@@ -17,7 +17,14 @@ The old source fails the reset IRC regression by reporting 6 MHz. The fixed
 source passes O0/O2 host runs with UBSan and Cortex-M0 compiler-to-assembly
 checks. Hardware clock measurements and full firmware linking remain pending.
 
-This change corrects frequency reporting only. Oscillator startup, PLL
+The setter linkage test builds the driver as C and links C and C++ callers.
+Both SystemSetCoreClock and the retained SystemCoreClockSet symbol configure
+the existing 48 MHz target and report the CPU rate after the AHB divider.
+The test supplies PLL lock indications; it does not simulate analog startup.
+The original source fails to link a caller of SystemSetCoreClock. The old
+setter also returned the 96 MHz PLL rate for a 48 MHz CPU configuration.
+
+Oscillator startup, PLL
 programming, board oscillator selection and peripheral-clock API completion
 remain separate review items. The system oscillator assumption is still 12 MHz.
 Watchdog frequencies are nominal, not measurements.
