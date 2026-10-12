@@ -164,6 +164,9 @@ static bool s_DmaHold;				// A request while DTE is cleared waits in DELSR, othe
 static unsigned s_DmaLate;			// Register accesses before the channel moves a request it took, 0 at once
 static bool s_StepAtCra;			// The line moves right after each read of DMCRA
 static bool s_StepAtErrClear;		// The line moves right after a write clearing a receive error flag
+static unsigned s_LockStepEvery;	// Line step after n application register accesses with PRIMASK clear, 0 none
+static unsigned s_LockAccess;		// Those accesses since the last step
+static unsigned s_TxLevelInApp;		// Handlers below RXI priority taken there
 static bool s_bDmaWrite;			// SCI register written by the DMAC
 static UARTDev_t s_Uart;
 
@@ -174,6 +177,7 @@ R_DMAC0_Type g_TestDmac[4];
 R_DMA_Type g_TestDma;
 R_ICU_Type g_TestIcu;
 uint32_t g_TestPrimask;
+uint32_t g_TestBasePri;
 uint32_t SystemCoreClock = 48000000;
 
 uint32_t SystemPeriphClockGet(int Idx)
@@ -590,6 +594,8 @@ static void DmaLateTake(bool bStep)
 // Line state after a register access. In the handler the line moves once
 // s_IsrStepEvery accesses are made since the last step, the time the handler
 // takes.
+static int Dispatch(void);
+
 static void AccessDone(void)
 {
 	DmaLateTake(false);
@@ -599,6 +605,21 @@ static void AccessDone(void)
 		for (int u = 0; u < 4; u++)
 		{
 			LineStep(u);
+		}
+	}
+	// Application code with interrupts enabled, or only some locked out by
+	// BASEPRI: the line moves and the interrupts above that level are taken
+	if (!s_bInIsr && g_TestPrimask == 0 && s_LockStepEvery && ++s_LockAccess >= s_LockStepEvery)
+	{
+		s_LockAccess = 0;
+		for (int u = 0; u < 4; u++)
+		{
+			LineStep(u);
+		}
+		int prio = Dispatch();
+		if (prio > (int)s_Uart.DevIntrf.IntPrio)
+		{
+			s_TxLevelInApp++;
 		}
 	}
 }
@@ -928,11 +949,13 @@ static void UpdateIcu(void)
 	}
 }
 
-static void Dispatch(void)
+static int Dispatch(void)
 {
+	int taken = -1;
+
 	if (s_bInIsr || s_bIrqOff)
 	{
-		return;
+		return taken;
 	}
 	UpdateIcu();
 	for (int n = 0; ; n++)
@@ -940,19 +963,25 @@ static void Dispatch(void)
 		int slot = -1;
 		for (int i = 0; i < 32 && slot < 0; i++)
 		{
-			if (s_Slot[i].Handler && s_Slot[i].bIr)
+			// BASEPRI holds off the priority values from its level up
+			if (s_Slot[i].Handler && s_Slot[i].bIr &&
+				(g_TestBasePri == 0 || s_Slot[i].Prio < (int)(g_TestBasePri >> (8 - __NVIC_PRIO_BITS))))
 			{
 				slot = i;
 			}
 		}
 		if (slot < 0)
 		{
-			return;
+			return taken;
 		}
 		if (n >= 200)
 		{
 			CHECK(n < 200);
-			return;
+			return taken;
+		}
+		if (s_Slot[slot].Prio > taken)
+		{
+			taken = s_Slot[slot].Prio;
 		}
 		uint32_t pm = g_TestPrimask;
 		s_bInIsr = true;
@@ -979,6 +1008,14 @@ static void RunLine(int Steps)
 			LineStep(u);
 		}
 		Dispatch();
+	}
+}
+
+void TestBasePriLowered(void)
+{
+	if (g_TestPrimask == 0)
+	{
+		TestIrqPoint();
 	}
 }
 
@@ -1152,6 +1189,10 @@ static void ResetModel(void)
 	s_bIrqOff = false;
 	s_StepAtCra = false;
 	s_StepAtErrClear = false;
+	s_LockStepEvery = 0;
+	s_LockAccess = 0;
+	s_TxLevelInApp = 0;
+	g_TestBasePri = 0;
 	s_EvtRx = s_EvtTx = s_EvtLine = 0;
 	s_LastLine = 0;
 	s_RefillLeft = 0;
@@ -1631,12 +1672,170 @@ static void TestIntPrio(void)
 				CHECK(s_Slot[dev->IrqRxi].Prio == prio);
 				CHECK(s_Slot[dev->IrqEri].Prio == prio);
 				CHECK(tx >= 0 && s_Slot[tx].Prio == txprio);
+				// TxData locks out the TX level only when it is below RXI
+				CHECK(dev->TxBasePri == (txprio != prio ? (uint8_t)(txprio << (8 - __NVIC_PRIO_BITS)) : 0));
 			}
 		}
 	}
 }
 
 // RX of Len bytes, read Chunk bytes per UARTRx call
+// SCI2/9 with the interrupt and DMA. TxData starts a block with only the TX
+// interrupts locked out (BASEPRI), the line moves every LockStep register
+// accesses meanwhile, and at each DMCRA read with LockStep 1, and RXI is taken
+// in the middle of it. With bEcho the
+// receive and TX ready events send the received characters back with the
+// driver TxData, as an application that does not go through DeviceIntrfTx
+// would: TX taken by the application TxData is left to it. The application
+// stream and the received or echoed one each come out whole and in order.
+static std::vector<uint8_t> s_LockRx;
+static std::deque<uint8_t> s_LockEcho;
+static bool s_bLockEcho;
+
+static int LockEvtHandler(UARTDev_t * const pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen)
+{
+	CHECK(g_TestBasePri == 0 || EvtId == UART_EVT_RXDATA || EvtId == UART_EVT_LINESTATE);
+	if (EvtId == UART_EVT_RXDATA || EvtId == UART_EVT_TXREADY)
+	{
+		uint8_t b[16];
+		int n;
+
+		while ((n = pDev->DevIntrf.RxData(&pDev->DevIntrf, b, sizeof(b))) > 0)
+		{
+			s_LockRx.insert(s_LockRx.end(), b, b + n);
+			if (s_bLockEcho)
+			{
+				s_LockEcho.insert(s_LockEcho.end(), b, b + n);
+			}
+		}
+		while (!s_LockEcho.empty())
+		{
+			int l = s_LockEcho.size() < sizeof(b) ? (int)s_LockEcho.size() : (int)sizeof(b);
+			for (int i = 0; i < l; i++)
+			{
+				b[i] = s_LockEcho[i];
+			}
+			n = pDev->DevIntrf.TxData(&pDev->DevIntrf, b, l);
+			if (n <= 0)
+			{
+				break;
+			}
+			s_LockEcho.erase(s_LockEcho.begin(), s_LockEcho.begin() + n);
+		}
+	}
+
+	return 0;
+}
+
+static void TestTxLockPreempt(void)
+{
+	for (int u = 2; u < 4; u++)
+	{
+		for (int hold = 0; hold < 2; hold++)
+		{
+			for (int echo = 0; echo < 2; echo++)
+			{
+				for (unsigned every = 1; every <= 7; every += 2)
+				{
+					ResetModel();
+					s_DmaHold = hold;
+					UARTCfg_t cfg = Cfg(u, true, true);
+					cfg.EvtCallback = LockEvtHandler;
+					CHECK(UARTInit(&s_Uart, &cfg) == true);
+					CHECK(s_Ra4m1UartDev[u].TxBasePri != 0);
+					s_LockRx.clear();
+					s_LockEcho.clear();
+					s_bLockEcho = echo;
+
+					// Application bytes below 0x80, received ones from 0x80 up,
+					// arriving in bursts
+					const int len = 2000;
+					std::vector<uint8_t> a, b;
+					Pattern(a, len, (uint8_t)(u + every));
+					Pattern(b, len, (uint8_t)(u + every + 100));
+					for (int i = 0; i < len; i++)
+					{
+						a[i] &= 0x7F;
+						b[i] |= 0x80;
+					}
+					unsigned x = every * 7 + hold;
+					for (int i = 0; i < len; )
+					{
+						x = x * 1103515245U + 12345U;
+						int burst = 1 + (int)((x >> 16) % 40);
+						for (int k = 0; k < burst && i < len; k++, i++)
+						{
+							s_Sci[u].RxIn.push_back(b[i]);
+						}
+						x = x * 1103515245U + 12345U;
+						for (int k = (int)((x >> 16) % 5); k > 0; k--)
+						{
+							s_Sci[u].RxIn.push_back(C_IDLE);
+						}
+					}
+					s_StepEvery = 5;
+					s_LockStepEvery = every;
+					// The line also moves at each DMCRA read: a block can end while
+					// TxData checks it, its transfer end waits for TxData
+					s_StepAtCra = every == 1;
+
+					size_t total = len + (echo ? len : 0);
+					int sent = 0;
+					int still = 0;
+					size_t last = 0;
+					while ((s_Sci[u].Wire.size() < total || s_LockRx.size() < (size_t)len) && still < 4000)
+					{
+						if (sent < len)
+						{
+							x = x * 1103515245U + 12345U;
+							int l = 1 + (int)((x >> 16) % 23);
+							l = l < len - sent ? l : len - sent;
+							int n = UARTTx(&s_Uart, a.data() + sent, l);
+							CHECK(g_TestBasePri == 0);
+							sent += n;
+							// Pauses that let TX go idle, each TxData then starts it
+							x = x * 1103515245U + 12345U;
+							RunLine(n == 0 ? 1 : (int)((x >> 16) % 24));
+						}
+						else
+						{
+							// TX that went idle in a TxData call gives no TX ready
+							// event, the echo left over is sent from here
+							uint32_t state = DisableInterrupt();
+							LockEvtHandler(&s_Uart, UART_EVT_TXREADY, NULL, 0);
+							EnableInterrupt(state);
+							RunLine(1);
+						}
+						still = s_Sci[u].Wire.size() + s_LockRx.size() == last ? still + 1 : 0;
+						last = s_Sci[u].Wire.size() + s_LockRx.size();
+					}
+					std::vector<uint8_t> wa, wb;
+					for (uint8_t v : s_Sci[u].Wire)
+					{
+						(v & 0x80 ? wb : wa).push_back(v);
+					}
+					CHECK(wa == a);
+					CHECK(s_LockRx == b);
+					CHECK(!echo || wb == b);
+					CHECK(echo || wb.empty());
+					CHECK(s_Sci[u].RxLost == 0);
+					CHECK(s_Uart.RxOvrErrCnt == 0 && s_Uart.RxDropCnt == 0);
+					// No TX handler ran inside TxData
+					CHECK(s_TxLevelInApp == 0);
+					if (wa != a || s_LockRx != b || (echo && wb != b) || s_Sci[u].RxLost || s_TxLevelInApp)
+					{
+						printf("  TestTxLockPreempt unit %d hold %d echo %d lock step %u : sent %zu of %zu, "
+							   "application %zu of %d, received %zu, echoed %zu, lost %u, TX handlers in TxData %u\n",
+							   u, hold, echo, every, s_Sci[u].Wire.size(), total, wa.size(), len, s_LockRx.size(),
+							   wb.size(), s_Sci[u].RxLost, s_TxLevelInApp);
+					}
+				}
+			}
+		}
+	}
+	s_DmaHold = false;
+}
+
 static void TestRx(int u, bool bIntMode, int Len, int Chunk, bool bDma = false)
 {
 	ResetModel();
@@ -2085,6 +2284,7 @@ int main()
 	}
 	s_DmaHold = false;
 	s_DmaLate = 0;
+	TestTxLockPreempt();
 	TestTxDmaLastByte();
 	TestRxOverrunOnce();
 	TestErrors();

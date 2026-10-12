@@ -48,7 +48,38 @@ typedef int IRQn_Type;
 #define __NVIC_PRIO_BITS	4
 
 static inline void __DSB(void) {}
+static inline void __ISB(void) {}
 static inline void __NOP(void) {}
+
+// BASEPRI of the model. Lowering it takes the interrupts it held off, as
+// EnableInterrupt does.
+extern uint32_t g_TestBasePri;
+void TestBasePriLowered(void);
+
+static inline uint32_t __get_BASEPRI(void)
+{
+	return g_TestBasePri;
+}
+
+static inline void __set_BASEPRI(uint32_t Val)
+{
+	bool lower = Val == 0 || (g_TestBasePri != 0 && Val > g_TestBasePri);
+
+	g_TestBasePri = Val & 0xFFU;
+	if (lower)
+	{
+		TestBasePriLowered();
+	}
+}
+
+static inline void __set_BASEPRI_MAX(uint32_t Val)
+{
+	Val &= 0xFFU;
+	if (Val != 0 && (g_TestBasePri == 0 || Val < g_TestBasePri))
+	{
+		g_TestBasePri = Val;
+	}
+}
 
 // Register ids of the model
 enum {

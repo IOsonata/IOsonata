@@ -407,7 +407,11 @@ and DMA with a non-blocking FIFO. `UARTSetCtrlLineState` does nothing.
   them. When ERI reads RDR with a receive error, the RXI of that character is
   cleared and RDR is checked once more for a character that arrived
   meanwhile. A pending RXI found by the RXI handler is of a new character and
-  is left set. Callbacks from RX and TX interrupts can nest on SCI2/9.
+  is left set. Callbacks from RX and TX interrupts can nest on SCI2/9. With
+  DMA, TxData starting a block on SCI2/9 locks out only that lower level with
+  BASEPRI, RXI preempts it. TX is taken by an atomic exchange of `bTxReady`, a
+  TxData from an interrupt finding it taken leaves its bytes in the TX CFIFO to
+  the caller that has it.
 - DMA mode (`bDMAMode`): while the channel is idle the CPU puts what the SCI
   takes, as without DMA (TX FIFO of SCI0/1, TDR of SCI2/9), which costs no
   interrupt. DMAC channel `DevNo` sends the rest in blocks straight from the
@@ -418,23 +422,29 @@ and DMA with a non-blocking FIFO. `UARTSetCtrlLineState` does nothing.
   next block. With TX idle TIE is cleared, so TxData then costs about as much
   as polling without DMA. A TXI that arrived while the channel was stopped can
   be left pending in `ICU.DELSR`. It is cleared, `DELSR` written 0 then the TXI
-  again as the Renesas FSP r_dmac stops a transfer, after the CPU wrote to the
-  SCI at the end of a block and when TX goes idle. SCI0/1 use TTRG 0 in DMA
-  mode, TXI with the TX FIFO empty, and start a block by setting TIE again, as
-  the Renesas FSP does with a transfer instance. SCI2/9 start a
-  block from the byte left in TDR, or write its first byte to TDR when TDR is
-  already empty. For that check the channel is stopped and DMCRA read once
-  DMSTS.ACT is cleared, a transfer the channel already took finishes after DTE
-  is cleared. When the channel moved the last byte of the block, DTE is not set
-  again: in normal mode a count of 0 is a transfer with no end, which would
-  send the memory after the block. RX stays on the interrupt or polling: the SCI has no idle line
+  again as the Renesas FSP r_dmac stops a transfer: on SCI0/1 after the CPU
+  wrote to the SCI at the end of a block and when TX goes idle, on SCI2/9
+  before the channel is armed. SCI0/1 use TTRG 0 in DMA mode, TXI with the TX
+  FIFO empty, and start a block by setting TIE again, as the Renesas FSP does
+  with a transfer instance. SCI2/9: with TDR empty while the shift register
+  sends, the next byte goes to TDR from the CPU at once. With the line idle the
+  channel is armed for the bytes after the first one, TIE is set and the first
+  byte goes to TDR from the CPU, as the Renesas FSP starts a transfer; one or
+  two bytes go from the CPU alone. With TDR full, TIE is set, the channel is
+  armed and TDR read again. Read empty with bytes left, the channel is stopped
+  (a transfer it already took finishes, DMSTS.ACT), DMCRA and TDR are read: TDR
+  full, the channel is armed again; TDR empty, no TXI is coming, the next byte
+  goes to TDR from the CPU and the channel takes the rest. When the channel
+  moved the last byte of the block, DTE is not set again: in normal mode a
+  count of 0 is a transfer with no end, which would send the memory after the
+  block. RX stays on the interrupt or polling: the SCI has no idle line
   event to move a DMA ring to the RX CFIFO after a short burst. The DMAC module
   (MSTPA22) is started and never stopped by the driver, other drivers may use
   it. UARTInit fails if channel `DevNo` is linked to another event.
 - Polling mode: TxData and RxData move the data between the SCI and the CFIFOs.
   With SCI2 and SCI9 the application must call RxData or TxData at least once
-  per character time or characters are lost to overrun. With DMA, RDR is read
-  again after the end of a block and the start of the next one.
+  per character time or characters are lost to overrun. With DMA, RDR is also
+  read at each step of a block start and after it.
 - SCI0 and SCI1 FIFO mode: RXI at 8 received characters, or with fewer once the
   line is idle for 1.5 frames (receive data ready). TXI at 8 or fewer characters
   in the TX FIFO.
@@ -471,6 +481,9 @@ between TxData calls, interrupts held off), the last byte of a SCI2/9 block
 moved 1 to 3 register accesses after the channel took it, while the block
 start checks TDR and stops the channel, one SCI2/9 overrun with the next
 character arriving while it is handled (only the overrun character lost),
+SCI2/9 TxData starting a block with only the TX level locked out (BASEPRI in
+the model) while the line moves and RXI is taken in the middle of it, its
+callback calling TxData too, no TX handler taken inside TxData,
 an echo loop with bursts, receive
 errors, overrun, full CFIFOs, callbacks, Disable/Enable and PowerOff. It also
 compiles the driver with GNU Arm for the Cortex-M4. It does not test exact

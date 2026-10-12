@@ -131,6 +131,7 @@ typedef struct {
 	bool bDmaActive;				// TX DMA block running
 	uint32_t DmaLen;				// TX CFIFO bytes of the running block
 	uint32_t DmaMax;				// Most bytes of a block, half of the TX CFIFO
+	uint8_t TxBasePri;				// BASEPRI locking out the TX interrupts only, 0 none
 	alignas(4) uint8_t RxFifoMem[RA4M1_UART_CFIFO_MEMSIZE];
 	alignas(4) uint8_t TxFifoMem[RA4M1_UART_CFIFO_MEMSIZE];
 } Ra4m1UartDev_t;
@@ -396,6 +397,19 @@ static int Ra4m1UartRxHw(Ra4m1UartDev_t * const pDev, RA4M1_UART_RX Src, uint8_t
 	return cnt;
 }
 
+// Polling. SCI2/9: SSR is read first, RDR is read when it holds a character
+// or an error flag is set. Polling is called often, most of the time with
+// nothing received.
+static inline void Ra4m1UartRxPoll(Ra4m1UartDev_t * const pDev)
+{
+	if (pDev->bHwFifo || (pDev->pReg->SSR & (R_SCI0_SSR_RDRF_Msk | RA4M1_SCI_SSR_RXERR)))
+	{
+		uint8_t err;
+
+		Ra4m1UartRxHw(pDev, RA4M1_UART_RX_POLL, &err);
+	}
+}
+
 // TX CFIFO bytes into the SCI while it has room. Returns the number of bytes
 // moved. Interrupts disabled or from the interrupt.
 static int Ra4m1UartTxHw(Ra4m1UartDev_t * const pDev)
@@ -504,10 +518,20 @@ static void Ra4m1UartDmaSetup(Ra4m1UartDev_t * const pDev)
 	R_ICU->DELSR[pDev->DevNo] = pDev->EvtRxi + 1U;
 }
 
+// The link of the TXI to the channel cleared and set again, as the Renesas FSP
+// r_dmac stops a transfer. A request left in DELSR while the channel was
+// stopped goes with it. It told that the SCI had room, after a CPU write it
+// would move a byte to a full TX FIFO or TDR.
+static void Ra4m1UartDmaReqClear(Ra4m1UartDev_t * const pDev)
+{
+	R_ICU->DELSR[pDev->DevNo] = 0;
+	R_ICU->DELSR[pDev->DevNo] = pDev->EvtRxi + 1U;
+}
+
 // Start a block with the first contiguous run of the TX CFIFO, at most half
 // of the FIFO: the producer fills the other half meanwhile and the next block
 // is ready when this one ends. Returns false when the FIFO is empty.
-// Interrupts disabled or from an interrupt.
+// With Ra4m1UartTxLock or from an interrupt.
 //
 // SCI0/1: the channel is armed, then TIE is set again. Setting TIE gives a
 // TXI when the TX FIFO is already empty, the Renesas FSP starts its transfers
@@ -515,30 +539,93 @@ static void Ra4m1UartDmaSetup(Ra4m1UartDev_t * const pDev)
 // leaves the FIFO.
 //
 // SCI2/9: setting TIE gives no TXI, it comes when TDR moves to the shift
-// register. TIE is set first, then the channel is armed for the whole block:
-// the byte left in TDR by the previous block gives the TXI, and a byte the
-// channel writes to an idle line goes on to the shift register at once and
-// gives the next TXI. When TDR is empty with bytes left and the channel
-// stopped, no TXI is coming: the TXI came before the channel was armed, or the
-// line is idle. The request it may have left in DELSR is cleared and the next
-// byte goes to TDR from the CPU, as the Renesas FSP starts a transfer, the
-// channel takes the rest. A block of one byte is written to TDR alone and the
-// next run is taken. That happens at most twice in a row: after a TDR write
-// TDR is full unless the line was idle.
-static bool Ra4m1UartDmaTxStart(Ra4m1UartDev_t * const pDev)
+// register. The channel is stopped when a block starts.
+//
+// A request left in DELSR by a TXI while the channel was stopped would move a
+// byte to a full TDR, it is cleared before the channel is armed. bStale : one
+// may be left from before the call, TX idle. At the end of a block the last
+// TXI went to the channel, a request comes only from a byte moved since then.
+// Without the interrupt RDR is read at each step, the steps of a block start
+// take about a character time.
+//
+// TDR empty while the shift register sends: the next byte goes to TDR from the
+// CPU at once, the line does not wait for the channel settings.
+//
+// TDR empty, line idle: no TXI comes until TDR is written. As the Renesas FSP
+// starts a transfer, the channel is armed for the bytes after the first one,
+// TIE is set and the first byte goes to TDR from the CPU. Its move to the
+// shift register gives the TXI for the channel. A run of one or two bytes is
+// written to TDR alone, the second one once the first is in the shift
+// register.
+//
+// TDR full: TIE is set, then the channel is armed for the whole run, the move
+// of the byte in TDR gives the TXI. TDR read empty after that means that the
+// move came before TIE was set, or before the channel was armed, or that the
+// channel is moving a byte. The channel is stopped, the byte it took finishes.
+// TDR full then, it is armed again for the rest. TDR empty with bytes left: no
+// TXI is coming, the request is cleared and the next byte goes to TDR from the
+// CPU, the channel takes the rest.
+static bool Ra4m1UartDmaTxStart(Ra4m1UartDev_t * const pDev, bool bStale)
 {
 	R_SCI0_Type *reg = pDev->pReg;
 	R_DMAC0_Type *dma = pDev->pDma;
 	hCFifo_t fifo = pDev->pUartDev->hTxFifo;
+	bool poll = !pDev->pUartDev->DevIntrf.bIntEn;
 
 	for (;;)
 	{
+		uint8_t ssr = 0;
+
+		if (!pDev->bHwFifo)
+		{
+			if (poll)
+			{
+				Ra4m1UartRxPoll(pDev);
+			}
+			ssr = reg->SSR;
+			if ((ssr & (R_SCI0_SSR_TDRE_Msk | R_SCI0_SSR_TEND_Msk)) == R_SCI0_SSR_TDRE_Msk)
+			{
+				int c = CFifoGetByte(fifo);
+
+				if (c < 0)
+				{
+					return false;
+				}
+				reg->TDR = (uint8_t)c;
+				bStale = true;
+				ssr = reg->SSR;
+			}
+		}
+
 		int cnt = (int)pDev->DmaMax;
 		uint8_t *p = CFifoPeekMultiple(fifo, &cnt);
 
 		if (p == NULL)
 		{
 			return false;
+		}
+
+		if (ssr & R_SCI0_SSR_TDRE_Msk)
+		{
+			if (cnt <= 2)
+			{
+				reg->TDR = *p;
+				CFifoRelease(fifo, 1);
+				bStale = true;
+				continue;
+			}
+			Ra4m1UartDmaReqClear(pDev);
+			pDev->DmaLen = (uint32_t)cnt;
+			pDev->bDmaActive = true;
+			dma->DMSAR = (uint32_t)(uintptr_t)(p + 1);
+			dma->DMCRA = (uint32_t)(cnt - 1);
+			// The CFIFO bytes are written before the channel reads them
+			__DSB();
+			dma->DMCNT = R_DMAC0_DMCNT_DTE_Msk;
+			reg->SCR |= R_SCI0_SCR_TIE_Msk;
+			reg->TDR = *p;
+
+			return true;
 		}
 
 		pDev->DmaLen = (uint32_t)cnt;
@@ -557,39 +644,40 @@ static bool Ra4m1UartDmaTxStart(Ra4m1UartDev_t * const pDev)
 			return true;
 		}
 
+		if (bStale)
+		{
+			Ra4m1UartDmaReqClear(pDev);
+		}
 		reg->SCR |= R_SCI0_SCR_TIE_Msk;
 		dma->DMCNT = R_DMAC0_DMCNT_DTE_Msk;
 
 		uint32_t left;
 		for (;;)
 		{
-			// Time for the channel to take a request pending before DTE was set
-			Ra4m1UartSync(pDev);
-			left = dma->DMCRA;
-			if (left == 0 || (reg->SSR & R_SCI0_SSR_TDRE_Msk) == 0)
+			if ((reg->SSR & R_SCI0_SSR_TDRE_Msk) == 0)
 			{
-				// All moved, or TDR full and its move gives the next TXI
+				// TDR full, its move gives the TXI
 				return true;
 			}
 			Ra4m1UartDmaHalt(dma);
-			uint32_t now = dma->DMCRA;
-			if (now == left)
+			left = dma->DMCRA;
+			if (left == 0)
+			{
+				// The channel moved the last byte and ended the block. DTE is
+				// not set again: in normal mode a count of 0 is a transfer with
+				// no end (Renesas FSP r_dmac), the channel would send the memory
+				// after the block. The transfer end comes as for any block.
+				return true;
+			}
+			if (reg->SSR & R_SCI0_SSR_TDRE_Msk)
 			{
 				break;
 			}
-			// The channel moved a byte meanwhile. With DMCRA 0 it moved the last
-			// one and ended the block. DTE is not set again then: in normal mode
-			// a count of 0 is a transfer with no end (Renesas FSP r_dmac), the
-			// channel would send the memory after the block.
-			if (now != 0)
-			{
-				dma->DMCNT = R_DMAC0_DMCNT_DTE_Msk;
-			}
+			dma->DMCNT = R_DMAC0_DMCNT_DTE_Msk;
 		}
 
 		// TDR empty, channel stopped with bytes left
-		R_ICU->DELSR[pDev->DevNo] = 0;
-		R_ICU->DELSR[pDev->DevNo] = pDev->EvtRxi + 1U;
+		Ra4m1UartDmaReqClear(pDev);
 
 		uint8_t *q = p + (cnt - (int)left);
 
@@ -606,21 +694,14 @@ static bool Ra4m1UartDmaTxStart(Ra4m1UartDev_t * const pDev)
 		CFifoRelease(fifo, cnt);
 		pDev->bDmaActive = false;
 		pDev->DmaLen = 0;
+		bStale = true;
 	}
 }
 
-// The link of the TXI to the channel cleared and set again, as the Renesas FSP
-// r_dmac stops a transfer. A request left in DELSR while the channel was
-// stopped goes with it. It told that the SCI had room, after a CPU write it
-// would move a byte to a full TX FIFO or TDR.
-static void Ra4m1UartDmaReqClear(Ra4m1UartDev_t * const pDev)
-{
-	R_ICU->DELSR[pDev->DevNo] = 0;
-	R_ICU->DELSR[pDev->DevNo] = pDev->EvtRxi + 1U;
-}
-
-// TX idle: TIE cleared, no TXI for the channel until the next block, and no
-// request left in DELSR. Interrupts disabled or from an interrupt.
+// TX idle: TIE cleared, no TXI for the channel until the next block. SCI0/1:
+// no request left in DELSR. SCI2/9: a request left by the last TXI is cleared
+// before the channel is armed again (Ra4m1UartDmaTxStart), without waiting
+// here for the TXI to reach DELSR. With Ra4m1UartTxLock or from an interrupt.
 static void Ra4m1UartDmaTxIdle(Ra4m1UartDev_t * const pDev)
 {
 	R_SCI0_Type *reg = pDev->pReg;
@@ -628,19 +709,21 @@ static void Ra4m1UartDmaTxIdle(Ra4m1UartDev_t * const pDev)
 	if (reg->SCR & R_SCI0_SCR_TIE_Msk)
 	{
 		reg->SCR &= (uint8_t)~R_SCI0_SCR_TIE_Msk;
-		// A TXI from before TIE was cleared reaches DELSR first
-		Ra4m1UartSync(pDev);
-		Ra4m1UartDmaReqClear(pDev);
+		if (pDev->bHwFifo)
+		{
+			// A TXI from before TIE was cleared reaches DELSR first
+			Ra4m1UartSync(pDev);
+			Ra4m1UartDmaReqClear(pDev);
+		}
 	}
 }
 
 // TX with the channel idle, from TxData and Poll while TX is ready: TIE is
-// cleared and no request is left in DELSR. The SCI takes what it can from the
-// CPU first, as without DMA: up to 16 bytes in the TX FIFO of SCI0/1, TDR on
-// SCI2/9. An application writing a byte at a time no faster than the line
-// sends that way, at the cost of polling without DMA. A block is started for
-// the rest. Returns false when the TX CFIFO is empty, TX stays idle.
-// Interrupts disabled or from an interrupt.
+// cleared. The SCI takes what it can from the CPU first, as without DMA: up to
+// 16 bytes in the TX FIFO of SCI0/1, TDR on SCI2/9. An application writing a
+// byte at a time no faster than the line sends that way, at the cost of
+// polling without DMA. A block is started for the rest. Returns false when the
+// TX CFIFO is empty, TX stays idle. With Ra4m1UartTxLock or from an interrupt.
 static bool Ra4m1UartDmaTxKick(Ra4m1UartDev_t * const pDev)
 {
 	Ra4m1UartTxHw(pDev);
@@ -648,7 +731,7 @@ static bool Ra4m1UartDmaTxKick(Ra4m1UartDev_t * const pDev)
 	{
 		return false;
 	}
-	if (Ra4m1UartDmaTxStart(pDev))
+	if (Ra4m1UartDmaTxStart(pDev, true))
 	{
 		return true;
 	}
@@ -679,13 +762,14 @@ static bool Ra4m1UartDmaService(Ra4m1UartDev_t * const pDev)
 	pDev->DmaLen = 0;
 
 	// TIE is still set, a TXI since the channel cleared DTE may be in DELSR.
-	// The CPU fills the SCI first, then the request is cleared before the next
-	// block is armed.
-	if (Ra4m1UartTxHw(pDev) > 0)
+	// SCI0/1: the CPU fills the TX FIFO first, then the request is cleared
+	// before the next block is armed. SCI2/9: Ra4m1UartDmaTxStart clears it
+	// before it arms the channel.
+	if (pDev->bHwFifo && Ra4m1UartTxHw(pDev) > 0)
 	{
 		Ra4m1UartDmaReqClear(pDev);
 	}
-	if (CFifoUsed(udev->hTxFifo) != 0 && Ra4m1UartDmaTxStart(pDev))
+	if (CFifoUsed(udev->hTxFifo) != 0 && Ra4m1UartDmaTxStart(pDev, false))
 	{
 		return true;
 	}
@@ -715,9 +799,7 @@ static void Ra4m1UartDmaIRQHandler(int IntNo, void *pCtx)
 // started. Interrupts disabled.
 static void Ra4m1UartPoll(Ra4m1UartDev_t * const pDev)
 {
-	uint8_t err;
-
-	Ra4m1UartRxHw(pDev, RA4M1_UART_RX_POLL, &err);
+	Ra4m1UartRxPoll(pDev);
 	if (pDev->pUartDev->DevIntrf.bDma)
 	{
 		if (pDev->bDmaActive)
@@ -733,7 +815,7 @@ static void Ra4m1UartPoll(Ra4m1UartDev_t * const pDev)
 			// RDR holds one character and the next one comes a character time
 			// later. The end of a block and the start of the next one take
 			// about as long on SCI2/9, RX is read again after them.
-			Ra4m1UartRxHw(pDev, RA4M1_UART_RX_POLL, &err);
+			Ra4m1UartRxPoll(pDev);
 		}
 	}
 	else
@@ -1050,6 +1132,37 @@ __attribute__((noinline)) static int Ra4m1UartTxPut(Ra4m1UartDev_t * const pDev,
 	return cnt;
 }
 
+// TX started from TxData. SCI2/9 with the interrupt: only the TX interrupts,
+// one priority level lower than RXI, are locked out with BASEPRI. Starting a
+// block takes longer than RDR holds a character, RXI preempts it. Interrupts
+// disabled otherwise.
+static uint32_t Ra4m1UartTxLock(Ra4m1UartDev_t * const pDev)
+{
+	if (pDev->TxBasePri == 0)
+	{
+		return DisableInterrupt();
+	}
+
+	uint32_t state = __get_BASEPRI();
+
+	__set_BASEPRI_MAX(pDev->TxBasePri);
+	__ISB();
+
+	return state;
+}
+
+static void Ra4m1UartTxUnlock(Ra4m1UartDev_t * const pDev, uint32_t State)
+{
+	if (pDev->TxBasePri == 0)
+	{
+		EnableInterrupt(State);
+	}
+	else
+	{
+		__set_BASEPRI(State);
+	}
+}
+
 static int Ra4m1UartTxData(DevIntrf_t * const pDev, uint8_t const *pData, int Datalen)
 {
 	Ra4m1UartDev_t *dev = (Ra4m1UartDev_t *)pDev->pDevData;
@@ -1084,16 +1197,30 @@ static int Ra4m1UartTxData(DevIntrf_t * const pDev, uint8_t const *pData, int Da
 	else if (pDev->bDma)
 	{
 		// What the SCI takes now, then a DMA block for the rest, the transfer
-		// end interrupt sends what follows. Checked again with interrupts
-		// disabled, TxData may also be called from an interrupt.
-		if (udev->bTxReady)
+		// end interrupt sends what follows. TxData may also be called from an
+		// interrupt, RXI can preempt this one with SCI2/9: TX is taken by an
+		// atomic exchange of bTxReady first, a caller finding it taken leaves
+		// its bytes to the one that has it. That one looks at the TX CFIFO
+		// again once TX is ready.
+		while (udev->bTxReady)
 		{
-			uint32_t state = DisableInterrupt();
-			if (udev->bTxReady && Ra4m1UartDmaTxKick(dev))
+			if (!__atomic_exchange_n(&udev->bTxReady, false, __ATOMIC_ACQUIRE))
 			{
-				udev->bTxReady = false;
+				break;
 			}
-			EnableInterrupt(state);
+
+			uint32_t state = Ra4m1UartTxLock(dev);
+			bool started = Ra4m1UartDmaTxKick(dev);
+			Ra4m1UartTxUnlock(dev, state);
+			if (started)
+			{
+				break;
+			}
+			udev->bTxReady = true;
+			if (CFifoUsed(udev->hTxFifo) == 0)
+			{
+				break;
+			}
 		}
 	}
 	else if (udev->bTxReady)
@@ -1280,6 +1407,7 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	// Interrupts and TX DMA of a previous UARTInit. Without DMA the TXI goes
 	// to the CPU again.
 	Ra4m1UartReleaseIRQs(dev);
+	dev->TxBasePri = 0;
 	if (dels == dev->EvtRxi + 1U)
 	{
 		Ra4m1UartDmaStop(dev);
@@ -1425,7 +1553,8 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 		// goes to the DMAC channel, whose transfer end has its own handler.
 		// SCI2/9 have no RX FIFO: RDR holds one character, the next one
 		// overruns it a character time later. Their TXI or transfer end runs
-		// one priority level lower so that RXI can preempt it.
+		// one priority level lower so that RXI can preempt it, TxData locks
+		// out that level only when it starts a DMA block.
 		int txprio = pCfg->IntPrio;
 		if (!dev->bHwFifo && txprio < (1 << __NVIC_PRIO_BITS) - 1)
 		{
@@ -1450,6 +1579,10 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 			EnableInterrupt(state);
 
 			return false;
+		}
+		if (txprio != pCfg->IntPrio)
+		{
+			dev->TxBasePri = (uint8_t)(txprio << (8 - __NVIC_PRIO_BITS));
 		}
 	}
 
