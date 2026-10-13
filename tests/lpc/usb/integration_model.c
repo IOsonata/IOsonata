@@ -76,3 +76,9 @@ void TestUsbCable(bool Connected, bool DeviceInterrupt)
 		USB_IRQHandler();
 	}
 }
+
+void TestUsbVbusInterrupt(void)
+{
+	assert(s_VbusHandler != NULL);
+	s_VbusHandler(5, NULL);
+}

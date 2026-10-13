@@ -145,12 +145,15 @@ for opt in ['-O0', '-O2']:
                         *objects, '-o', exe], check=True)
         subprocess.run([exe], check=True, timeout=5)
 
-        # Keep the real CDC class and descriptor builder for notification
-        # packetization; the transport-only fixture above overrides descriptors.
+        # Keep the real CDC class, descriptors and application queue for
+        # enumeration, control requests, notifications, loopback and reconnect.
+        # The transport-only fixture above overrides descriptors and the queue.
         cdc_objects = objects[:-1]
         for index, path in enumerate(['src/usb/usbd_cdc.cpp',
                                       'src/usb/usbd_cdc_desc.cpp',
                                       'src/usb/usbd_epalloc.cpp',
+                                      'src/app_evt_handler.cpp',
+                                      'src/app_run.cpp',
                                       'tests/lpc/usb/cdc_test.cpp']):
             obj = str(tmp / ('cdc_' + str(index) + '.o'))
             subprocess.run(['g++', '-std=gnu++23', opt,

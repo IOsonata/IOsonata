@@ -30,9 +30,18 @@ Run `python3 tests/lpc/usb/run.py`.
   the USB device interrupt, checks state before the application detach event,
   reconnects without reinitialization, and services a latched disconnect after
   VBUS has already returned.
-- A real CDC class fixture sends serial-state notifications as 8+2 bytes,
-  retains the old notification while a new state is pending, starts that new
-  notification from completion, and detaches with the second packet active.
+- A real CDC class fixture reads device/configuration/string descriptors over
+  EP0, including 64-byte replies needing a ZLP and multi-packet descriptors.
+  It checks SET_ADDRESS, SET_CONFIGURATION, GET/SET_LINE_CODING and DTR/RTS,
+  with line coding and port-open state committed only after the status ACK.
+  An 80-byte OUT/IN loopback uses the public UsbdCdc Rx/Tx methods and a
+  blocking packet FIFO, matching the example's backpressure behavior.
+  Serial-state notifications use 8+2 bytes, retain an older notification while
+  a new state is pending, and start the new notification from completion.
+  Detach during the second notification packet closes the port; a GPIO VBUS
+  interrupt then drives re-enumeration, reopening and another loopback without
+  reinitializing the stack. This fixture uses the production application event
+  queue and descriptor builder, with no direct UsbProcess call from the test.
 - Remote-wakeup tests cover the three-frame delay, stale tick rejection,
   duplicate requests, host resume/reset/disconnect cancellation, SOF enable
   changes and preservation of pre-existing clock control. The generic-core
@@ -48,7 +57,9 @@ register reads, vendor types, DMA memory and driver control flow are unchanged.
 The EP0-only fixture models the core's packet continuation/status calls. The
 integration fixture instead uses the real core and minimal static device and
 configuration descriptor overrides, with hardware/ROM access and the application
-queue mocked. It includes the public UsbRemoteWakeup path. These host tests
+queue mocked. It includes the public UsbRemoteWakeup path. The separate CDC
+fixture retains the real descriptors and application queue; only hardware/ROM
+and interrupt delivery are modeled there. These host tests
 do not simulate a USB bus or validate PLL accuracy, NVIC timing or ARM relocations.
 
 ## Current implementation
