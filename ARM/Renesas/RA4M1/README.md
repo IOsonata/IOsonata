@@ -2,14 +2,14 @@
 
 Native MCU port under the existing `ARM/Renesas` tree: system startup, clock
 reporting, Cortex-M4 vectors, normal-boot linker layout, GPIO/pin control, and
-CPU interrupt registration through the ICU, asynchronous SCI UART, AGT/GPT timers, and polling IIC master.
+CPU interrupt registration through the ICU, asynchronous SCI UART, AGT/GPT timers, and IIC master and slave.
 See [TIMER.md](TIMER.md) for timer device mapping and validation limits, and
 [INTERRUPTS.md](INTERRUPTS.md) for the ICU/NVIC routing architecture,
 registration contract, and interrupt-maintenance invariants.
-No board package, Arduino/FSP runtime, USB controller, IIC master-interrupt/DMA,
+No board package, Arduino/FSP runtime, USB controller, IIC DMA/DTC,
 general DTC, or NMI driver is included yet. UART TX uses native DMAC.
-IIC slave interrupt handling is implemented for initial bring-up, not yet
-hardware-validated.
+The IIC master (polling and interrupt) and slave are rewritten and checked
+against a host model of the IIC, not yet hardware-validated.
 
 ## Implementation status (October 13, 2026)
 
@@ -30,7 +30,7 @@ Therefore the log is **functional evidence, not a bound on GPT interrupt
 latency or period accuracy**. For timing measurement, collect timestamps in
 RAM without semihosting inside the measurement loop.
 
-**Not yet confirmed on hardware:** the new IIC master and slave paths, GPIO edge interrupts,
+**Not yet confirmed on hardware:** the rewritten IIC master and slave paths, GPIO edge interrupts,
 other AGT/GPT channels and all six GPT compare routes, long-run rollover/pause/resume,
 stop/start recovery, low-power operation, USB, general DMA/DTC and ELC integration.
 SCI UART is complete and hardware-tested. Apart from the UART test
@@ -64,7 +64,7 @@ The ICU driver is not a replacement for the ARM NVIC.
 Complete the RA4M1 coding-style pass (file headers, declaration placement,
 one statement per line, explicit multi-line control-flow blocks), refresh the
 CMSIS-based host regression models, run production-header Cortex-M4 Debug
-and Release checks, and validate the new IIC master path and GPIO interrupts on hardware.
+and Release checks, and validate the IIC master, IIC slave and GPIO interrupts on hardware.
 No merge into `main` is authorized by this documentation update.
 
 ## IOsonata integration
@@ -93,7 +93,7 @@ the production target/generic headers and `ARM/CMSIS/Core/Include`, never the
 reduced headers in `tests/ra4m1`. CMSIS is taken from the existing repository
 files; no new vendor SDK or submodule is required.
 
-This project builds startup, GPIO, ICU, UART, timer and polling IIC master support. It does not yet compile
+This project builds startup, GPIO, ICU, UART, timer and IIC master and slave support. It does not yet compile
 the generic USB/application subsystem. Future driver
 increments must add their sources to this same project. The
 library does not link an executable or produce a flash image; the application
@@ -301,37 +301,71 @@ RTC, clear backup flags, or take over retained functions. `IOPinDisable` removes
 an owned pin interrupt and returns the pin to input/no-pull; it is not a claim
 of physical pad-power disconnection.
 
-## IIC master
+## IIC master and slave
 
 The native RA4M1 IIC driver exposes **DevNo 0 = IIC0** and **DevNo 1 = IIC1**
-through the existing `coredev/i2c.h` interface. The current increment supports
-standard I2C, 7-bit master polling up to 400 kHz and an initial 7-bit slave
-interrupt path. IIC slave events use the existing READ_RQST, WRITE_RQST and
-COMPLETED callbacks and application-owned buffers. Interrupt master,
-DMA/DTC, SMBus, 10-bit address and Fast-mode Plus requests are rejected.
-Slave request ordering and STOP/repeated-START completion counts require
-hardware validation before this mode is considered complete.
+through the existing `coredev/i2c.h` interface: standard 7-bit I2C up to
+400 kHz as master or as slave. DMA/DTC, SMBus, 10-bit address and Fast-mode
+Plus requests are rejected by `I2CInit`.
+
+Master. One service routine advances the transfer from the IIC flags
+(START, TDRE/TEND, RDRF, NACKF, STOP, arbitration and timeout). Polling mode
+loops on it, interrupt mode (`bIntEn`) calls it from the RXI, TXI, TEI and EEI
+handlers, so both follow the same register sequence, the one of the Renesas
+FSP `r_iic_master`: dummy read of the address phase, WAIT for the last bytes,
+ACKBT set before the final byte, STOP requested before the last read, NACK
+answered with STOP, repeated START with the timeout function off.
+`StartTx`/`StartRx` only record the target. The bus is used by `TxData` and
+`RxData`; a `TxSrData` transfer (the register address of a register-style
+read) keeps the bus and `RxData` issues the repeated START. In interrupt mode
+`TxData` copies up to 64 bytes, returns -1 and the end is reported with
+`DEVINTRF_EVT_COMPLETED` and the byte count, `RxData` returns -1 and fills the
+caller buffer before that event. A transfer that keeps the bus, or one larger
+than 64 bytes, runs to the end inside the call. A NACK returns the number of
+bytes acknowledged. Arbitration loss and the hardware or software timeout
+reset the IIC and end the transfer, so the next one starts clean.
+
+Slave (`bIntEn` required). One to three distinct 7-bit addresses of
+0x08 to 0x77, one per slave address register. The first byte after an address
+match is the address itself and gives the direction. `WRITE_RQST` or
+`READ_RQST` is sent then, and the application installs the buffer with
+`I2CSetWriteRqstBuffer` or `I2CSetReadRqstData`; the pointers are cleared
+before each request, as in the other IOsonata slave backends. The event does
+not carry the address index, so an application using several addresses sets
+the buffer of every index. `READ_RQST` after a repeated START carries the byte
+count of the write that came before. `COMPLETED` carries the byte count at
+STOP, at a repeated START, or on an error. A write beyond the buffer is
+refused with NACK from the byte after the last stored one. A read beyond the
+data returns 0xFF and does not count. After a master NACK the slave does the
+dummy ICDRR read that releases SCL.
 
 IIC uses PCLKB. Bit-rate programming searches CKS/ICBRL/ICBRH values that meet
 the standard/fast-mode minimum SCL low/high periods while keeping the nominal
 rate at or below the requested value. The calculation assumes zero rise/fall
 time, making the programmed timing conservative on the real open-drain bus.
-The digital noise filter is disabled in this first increment so its additional
-clock stages do not make the rate model implicit.
+The digital noise filter is disabled so its additional clock stages do not
+make the rate model implicit. The count offsets used for ICBRL/ICBRH
+(3 with CKS=0, 2 otherwise) are the ones to confirm with a scope.
 
 The valid peripheral pin alternatives are IIC0 SCL on P204/P400/P408 with SDA
 on P401/P407, and IIC1 SCL on P100/P205 with SDA on P101/P206. These require
 PSEL 7, represented by `IOPINOP_FUNC6`. The application still selects one
 legal pair and must provide suitable pull-ups for its bus capacitance and speed.
 
-Normal reads, writes and register-style reads use the generic DeviceIntrf
-transaction API. A register-style read keeps ownership after the prefix write
-and issues the required repeated START. Receive handling performs the RA IIC
-dummy read and programs WAIT/ACKBT before the final bytes. NACK, arbitration
-loss, hardware timeout and software timeout paths are bounded and recover the
-IIC before the next transaction. Reset uses open-drain SCL/SDA, clocks a stuck
-slave up to nine times, emits STOP when possible, and then restores the
-peripheral pin configuration.
+`DeviceIntrfReset` uses open-drain SCL/SDA, clocks a stuck slave up to nine
+times, emits STOP when possible, and then restores the peripheral pin
+configuration.
+
+Validation: `python3 tests/ra4m1/run_i2c_validation.py` runs
+`tests/ra4m1/i2c_test.cpp` against a register and bus model of the IIC, at
+-O0, -Os, -O2 and with the address and undefined behavior sanitizers, and
+compiles the driver for Cortex-M4 with the real headers. The model checks the
+bus sequence (every start, address, byte, acknowledge and stop), the SCL
+hold of WAIT and of a master NACK, ICU edge events with a settable handler
+latency, and stuck-bus, arbitration-loss and stuck-slave recovery. It follows
+the FSP flows and is not the silicon: whether START/STOP/NACKF flags set with
+their interrupt disabled (polling), whether TXI and TEI are edge or level at
+the ICU, and the exact bit-rate offsets are open until the hardware run.
 
 ## ICU and GPIO interrupts
 
