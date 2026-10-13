@@ -39,6 +39,10 @@ models['spi'] = COMMON + r'''
 #endif
 struct Reg { uint32_t CR2=0; } regs[5];
 auto SPI1=&regs[0], SPI2=&regs[1], SPI3=&regs[2], OCTOSPI1=&regs[3], OCTOSPI2=&regs[4], QUADSPI=&regs[3];
+// The device headers define each instance as a macro. STM32L43x/L44x have no SPI2.
+#ifndef STM32L432xx
+#define SPI2 SPI2
+#endif
 using SPI_TypeDef=Reg;
 struct Pin { int PortNo, PinNo; };
 struct SPICFG { int DevNo,Mode; const Pin *pIOPinMap; int NbIOPins; bool bIntEn,bDmaEn; int IntPrio; };
@@ -58,7 +62,11 @@ bool STM32L4xxQuadSPIInit(SPIDEV*,const SPICFG *c) { selected=20+c->DevNo; retur
 int main() {
  SPIDEV dev{}; Pin pin{0,0}; SPICFG c{0,SPIMODE_MASTER,&pin,1,false,false,0};
  for(int i=0;i<STM32L4XX_SPI_MAXDEV;i++) {
-  c.DevNo=i; assert(SPIInit(&dev,&c));
+  c.DevNo=i;
+#ifdef STM32L432xx
+  if(i==1) { int before=pins; assert(!SPIInit(&dev,&c)); assert(pins==before); continue; }
+#endif
+  assert(SPIInit(&dev,&c));
 #ifdef STM32L4S9xx
   assert(selected==(i<3 ? i:10+i));
 #else
@@ -72,7 +80,7 @@ int main() {
    int before=pins; assert(!SPIInit(&dev,&c)); assert(pins==before);
   }
  }
- puts("PASS SPI: ordinary/extended dispatch and refusal before side effects");
+ puts("PASS SPI: ordinary/extended dispatch, absent instance and refusal before side effects");
 }
 '''
 # I2C preflight uses the actual function prefix through the first mutation.
@@ -83,6 +91,9 @@ struct I2C_TypeDef {};
 struct I2CDev_t {};
 struct I2CCfg_t { int DevNo,Mode; bool bIntEn,bDmaEn; };
 constexpr int I2CMODE_MASTER=0;
+struct STM32L4XX_I2CDEV { int DevNo; I2CDev_t *pI2cDev; I2C_TypeDef *pReg; };
+I2C_TypeDef i2cregs[4];
+STM32L4XX_I2CDEV s_STM32L4xxI2CDev[4]={{0,nullptr,&i2cregs[0]},{1,nullptr,&i2cregs[1]},{2,nullptr,&i2cregs[2]},{3,nullptr,&i2cregs[3]}};
 ''' + prefix + 'return true;\n}\n' + r'''
 int main() {
  I2CDev_t dev; I2CCfg_t cfg{0,0,false,false};
@@ -90,8 +101,11 @@ int main() {
  for(int i=-1;i<=4;i++) { cfg.DevNo=i; assert(I2CInit(&dev,&cfg)==(i>=0 && i<4)); }
  cfg.DevNo=0; cfg.Mode=1; assert(!I2CInit(&dev,&cfg)); cfg.Mode=0;
  cfg.bIntEn=true; assert(!I2CInit(&dev,&cfg)); cfg.bIntEn=false;
- cfg.bDmaEn=true; assert(!I2CInit(&dev,&cfg));
- puts("PASS I2C: invalid/unfinished modes rejected before mutation");
+ cfg.bDmaEn=true; assert(!I2CInit(&dev,&cfg)); cfg.bDmaEn=false;
+ // An instance the MCU does not have (I2C2 on STM32L43x/L44x) has no register
+ s_STM32L4xxI2CDev[1].pReg=nullptr; cfg.DevNo=1; assert(!I2CInit(&dev,&cfg));
+ cfg.DevNo=2; assert(I2CInit(&dev,&cfg));
+ puts("PASS I2C: invalid/unfinished modes and absent instance rejected before mutation");
 }
 '''
 s=source('timer_stm32l4x.cpp')
@@ -157,7 +171,7 @@ with tempfile.TemporaryDirectory(prefix='stm32l4-') as directory:
     work=Path(directory)
     for name, code in models.items():
         file=work/(name+'.cpp'); file.write_text('#include <initializer_list>\n'+code)
-        for variant in (['STM32L476xx','STM32L496xx','STM32L4S9xx'] if name=='spi' else ['host']):
+        for variant in (['STM32L432xx','STM32L476xx','STM32L496xx','STM32L4S9xx'] if name=='spi' else ['host']):
             exe=work/(name+'-'+variant)
             subprocess.run(shlex.split(os.environ.get('CXX','g++'))+['-std=c++17','-O2','-g','-fsanitize=undefined','-fno-sanitize-recover=all','-D'+variant,str(file),'-o',str(exe)],check=True)
             subprocess.run([str(exe)],check=True)

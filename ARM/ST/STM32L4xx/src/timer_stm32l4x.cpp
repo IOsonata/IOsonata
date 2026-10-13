@@ -39,20 +39,42 @@ SOFTWARE.
 
 #include "timer_stm32l4x.h"
 
+// A timer the MCU does not have (STM32L43x: TIM3, TIM4, TIM5, TIM8, TIM17)
+// keeps its index with no register.
 STM32L4XX_TimerData_t g_Stm32l4TimerData[STM32L4XX_TIMER_MAXCNT] = {
 	{ 0, {.pLPTimReg = LPTIM1} , 0 },
 	{ 1, {.pLPTimReg = LPTIM2}, 0 },
 	{ 2, {.pTimReg = TIM1}, 0 },
 	{ 3, {.pTimReg = TIM2}, 0 },
+#ifdef TIM3
 	{ 4, {.pTimReg = TIM3}, 0 },
+#else
+	{ 4, {.pTimReg = NULL}, 0 },
+#endif
+#ifdef TIM4
 	{ 5, {.pTimReg = TIM4}, 0 },
+#else
+	{ 5, {.pTimReg = NULL}, 0 },
+#endif
+#ifdef TIM5
 	{ 6, {.pTimReg = TIM5}, 0 },
+#else
+	{ 6, {.pTimReg = NULL}, 0 },
+#endif
 	{ 7, {.pTimReg = TIM6}, 0 },
 	{ 8, {.pTimReg = TIM7}, 0 },
+#ifdef TIM8
 	{ 9, {.pTimReg = TIM8}, 0 },
+#else
+	{ 9, {.pTimReg = NULL}, 0 },
+#endif
 	{ 10, {.pTimReg = TIM15}, 0 },
 	{ 11, {.pTimReg = TIM16}, 0 },
+#ifdef TIM17
 	{ 12, {.pTimReg = TIM17}, 0 },
+#else
+	{ 12, {.pTimReg = NULL}, 0 },
+#endif
 };
 
 bool TimerInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)

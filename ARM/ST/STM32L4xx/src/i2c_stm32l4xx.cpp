@@ -67,7 +67,11 @@ static STM32L4XX_I2CDEV s_STM32L4xxI2CDev[STM32L4XX_I2C_MAXDEV] = {
 		0, NULL, I2C1
 	},
 	{
+#ifdef I2C2
 		1, NULL, I2C2
+#else
+		1, NULL, NULL	// STM32L43x/L44x have no I2C2
+#endif
 	},
 	{
 		2, NULL, I2C3
@@ -471,6 +475,12 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
 		return false;
 	}
 
+	// Instance not present on this MCU
+	if (s_STM32L4xxI2CDev[pCfgData->DevNo].pReg == NULL)
+	{
+		return false;
+	}
+
 	// Only synchronous master transfers are implemented by this port.
 	if (pCfgData->Mode != I2CMODE_MASTER || pCfgData->bIntEn || pCfgData->bDmaEn)
 	{
@@ -574,11 +584,13 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
                 NVIC_SetPriority(I2C1_EV_IRQn, pCfgData->IntPrio);
                 NVIC_EnableIRQ(I2C1_EV_IRQn);
                 break;
+#ifdef I2C2
     	    case 1:
                 NVIC_ClearPendingIRQ(I2C2_EV_IRQn);
                 NVIC_SetPriority(I2C2_EV_IRQn, pCfgData->IntPrio);
                 NVIC_EnableIRQ(I2C2_EV_IRQn);
                 break;
+#endif
     	    case 2:
                 NVIC_ClearPendingIRQ(I2C3_EV_IRQn);
                 NVIC_SetPriority(I2C3_EV_IRQn, pCfgData->IntPrio);
@@ -603,6 +615,7 @@ extern "C" void I2C1_ER_IRQHandler(void)
     NVIC_ClearPendingIRQ(I2C1_ER_IRQn);
 }
 
+#ifdef I2C2
 extern "C" void I2C2_EV_IRQHandler(void)
 {
     NVIC_ClearPendingIRQ(I2C2_EV_IRQn);
@@ -612,6 +625,7 @@ extern "C" void I2C2_ER_IRQHandler(void)
 {
     NVIC_ClearPendingIRQ(I2C2_ER_IRQn);
 }
+#endif
 
 extern "C" void I2C3_EV_IRQHandler()
 {
