@@ -430,7 +430,8 @@ blocks from routines in `.iram.text`, and resets through SWRCR.
 built with LLVM for Renesas RISC-V (19.1.7) for the R9A02G0214CNE on the
 FPB-R9A02G021. It links the same sources as the IOC project `lib/ioc`, with
 the same defines and include directories, `-march` with Zba, Zbb, Zbs, Zicsr
-and Zifencei, C and C++ gnu17.
+and Zifencei, C and C++ gnu17. Debug is built for debugging, Release for code
+size (Optimization Level `codeSize`).
 
 The library sources were compiled with clang 19.1.7 and these settings, and
 the examples linked from them with GNU ld (October 13, 2026); the DFU boot
