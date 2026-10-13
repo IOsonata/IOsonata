@@ -2103,7 +2103,7 @@ static void TestSlave(long Latency)
 	Check(SlotCount() == 4, "slave used %d slots", SlotCount());
 	Check((s_Iic[1].icser & 7U) == 1 && (s_Iic[1].sarl[0] >> 1) == 0x2A, "slave address registers");
 	Check((s_Iic[1].icmr3 & MR3_WAIT) != 0, "slave WAIT not set");
-	Check(s_Iic[1].icier == (IER_RIE | IER_TIE), "idle slave ICIER %02X", s_Iic[1].icier);
+	Check(s_Iic[1].icier == IER_RIE, "idle slave ICIER %02X", s_Iic[1].icier);
 
 	// Write
 	s_SlWrLen = 8;
@@ -2117,7 +2117,7 @@ static void TestSlave(long Latency)
 	Check(memcmp(s_SlWrBuf, wr, 4) == 0, "write 4 data");
 	ExpectEvents("write 4", { { EV_WR, 0 }, { EV_DONE, 4 } });
 	CheckTrace("write 4", "S W2A+ d01+ d02+ d03+ d04+ P");
-	Check(s_Iic[1].icier == (IER_RIE | IER_TIE), "ICIER %02X after stop", s_Iic[1].icier);
+	Check(s_Iic[1].icier == IER_RIE, "ICIER %02X after stop", s_Iic[1].icier);
 	Check((s_Iic[1].icmr3 & MR3_ACKBT) == 0, "ACKBT left set");
 
 	// Write exactly the buffer size, then more

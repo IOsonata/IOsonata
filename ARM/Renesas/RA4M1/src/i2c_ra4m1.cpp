@@ -109,8 +109,11 @@ SOFTWARE.
 									 RA4M1_I2C_IER_NAKIE)
 #define RA4M1_I2C_IER_MASTER		(RA4M1_I2C_IER_BUS | RA4M1_I2C_IER_RIE | \
 									 RA4M1_I2C_IER_TEIE)
-#define RA4M1_I2C_IER_SLAVE_IDLE	(RA4M1_I2C_IER_RIE | RA4M1_I2C_IER_TIE)
-#define RA4M1_I2C_IER_SLAVE_ACTIVE	(RA4M1_I2C_IER_SLAVE_IDLE | RA4M1_I2C_IER_BUS)
+// TIE is only on while the master reads. TDRE is set whenever ICDRT is empty,
+// so an enabled TIE outside a read would keep the transmit event pending.
+#define RA4M1_I2C_IER_SLAVE_IDLE	(RA4M1_I2C_IER_RIE)
+#define RA4M1_I2C_IER_SLAVE_WRITE	(RA4M1_I2C_IER_RIE | RA4M1_I2C_IER_BUS)
+#define RA4M1_I2C_IER_SLAVE_READ	(RA4M1_I2C_IER_RIE | RA4M1_I2C_IER_TIE | RA4M1_I2C_IER_BUS)
 
 // Master transfer states
 typedef enum
@@ -1017,7 +1020,7 @@ static void Ra4m1I2cSlaveEnd(Ra4m1I2cDev_t * const pDev)
 			Ra4m1I2cSlaveComplete(pDev);
 		}
 
-		reg->ICIER = RA4M1_I2C_IER_SLAVE_ACTIVE;
+		reg->ICIER = RA4M1_I2C_IER_SLAVE_WRITE;
 	}
 }
 
@@ -1056,7 +1059,7 @@ static void Ra4m1I2cSlaveAddress(Ra4m1I2cDev_t * const pDev)
 	pDev->bSlaveNack = false;
 	pDev->bSlaveLastReal = false;
 	pDev->SState = read ? RA4M1_I2C_S_READ : RA4M1_I2C_S_WRITE;
-	reg->ICIER = RA4M1_I2C_IER_SLAVE_ACTIVE;
+	reg->ICIER = read ? RA4M1_I2C_IER_SLAVE_READ : RA4M1_I2C_IER_SLAVE_WRITE;
 
 	// The application installs the buffer again for every request.
 	if (read)
@@ -1163,7 +1166,7 @@ static void Ra4m1I2cSlaveService(Ra4m1I2cDev_t * const pDev)
 			// The master ended the read. The dummy read releases SCL.
 			(void)Ra4m1I2cReadData(reg);
 			Ra4m1I2cClearFlags(reg, RA4M1_I2C_SR2_NACKF);
-			reg->ICIER &= (uint8_t)~RA4M1_I2C_IER_NAKIE;
+			reg->ICIER &= (uint8_t)~(RA4M1_I2C_IER_NAKIE | RA4M1_I2C_IER_TIE);
 			pDev->bSlaveNack = true;
 		}
 		else if ((sr & RA4M1_I2C_SR2_TDRE) != 0U)
