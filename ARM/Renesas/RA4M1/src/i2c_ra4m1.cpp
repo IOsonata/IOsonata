@@ -158,7 +158,7 @@ static void Ra4m1I2cModuleStart(Ra4m1I2cDev_t * const pDev, bool bStart)
 	R_SYSTEM->PRCR = 0xA500U | prcr;
 }
 
-static uint32_t Ra4m1I2cTimeout(const Ra4m1I2cDev_t * const pDev)
+static int32_t Ra4m1I2cTimeout(const Ra4m1I2cDev_t * const pDev)
 {
 	uint32_t core = SystemCoreClockGet();
 	uint32_t rate = pDev->pI2cDev->Cfg.Rate;
@@ -168,7 +168,9 @@ static uint32_t Ra4m1I2cTimeout(const Ra4m1I2cDev_t * const pDev)
 		return 1000000U;
 	}
 
-	return core / 20U + (core / rate) * 16U + 256U;
+	uint64_t ticks = (uint64_t)core / 20U + ((uint64_t)core / rate) * 16U + 256U;
+
+	return ticks > INT32_MAX ? INT32_MAX : (int32_t)ticks;
 }
 
 static bool Ra4m1I2cError(const R_IIC0_Type * const pReg)
@@ -204,9 +206,9 @@ static bool Ra4m1I2cCondition(const R_IIC0_Type * const pReg, Ra4m1I2cWait_t Con
 
 static bool Ra4m1I2cWait(Ra4m1I2cDev_t * const pDev, Ra4m1I2cWait_t Cond)
 {
-	uint32_t count = Ra4m1I2cTimeout(pDev);
+	int32_t count = Ra4m1I2cTimeout(pDev);
 
-	while (count > 0U)
+	while (count > 0)
 	{
 		if (Ra4m1I2cError(pDev->pReg))
 		{
@@ -537,11 +539,19 @@ static void Ra4m1I2cConfigure(Ra4m1I2cDev_t * const pDev)
 	reg->ICCR1 = RA4M1_I2C_ICCR1_RESET;
 
 	/* Renesas requires reset acknowledgement before ICE is asserted. */
-	uint32_t count = Ra4m1I2cTimeout(pDev);
+	int32_t count = Ra4m1I2cTimeout(pDev);
 
-	while (reg->ICCR1_b.IICRST == 0U && count > 0U)
+	while (reg->ICCR1_b.IICRST == 0U && --count > 0)
 	{
-		count--;
+		__NOP();
+	}
+
+	if (count <= 0)
+	{
+		/* Never proceed into an unresponsive peripheral reset. */
+		pDev->bError = true;
+		reg->ICCR1 = 0U;
+		return;
 	}
 
 	reg->ICCR1 = RA4M1_I2C_ICCR1_RESET_ENABLE;
@@ -607,9 +617,9 @@ static bool Ra4m1I2cFinish(Ra4m1I2cDev_t * const pDev)
 		}
 
 		reg->ICMR3_b.WAIT = 0U;
-		uint32_t count = Ra4m1I2cTimeout(pDev);
+		int32_t count = Ra4m1I2cTimeout(pDev);
 
-		while (count > 0U)
+		while (count > 0)
 		{
 			if (reg->ICSR2_b.AL != 0U)
 			{
@@ -684,9 +694,9 @@ static bool Ra4m1I2cStart(DevIntrf_t * const pIntrf, uint32_t Addr, bool bRx)
 
 	if (!wasOpen)
 	{
-		uint32_t count = Ra4m1I2cTimeout(dev);
+		int32_t count = Ra4m1I2cTimeout(dev);
 
-		while (reg->ICCR2_b.BBSY != 0U && count > 0U)
+		while (reg->ICCR2_b.BBSY != 0U && count > 0)
 		{
 			count--;
 		}
@@ -911,9 +921,9 @@ static void Ra4m1I2cEnable(DevIntrf_t * const pIntrf)
 static bool Ra4m1I2cSclHigh(Ra4m1I2cDev_t * const pDev,
 	const IOPinCfg_t * const pScl)
 {
-	uint32_t count = Ra4m1I2cTimeout(pDev);
+	int32_t count = Ra4m1I2cTimeout(pDev);
 
-	while (count > 0U)
+	while (count > 0)
 	{
 		if (IOPinRead(pScl->PortNo, pScl->PinNo) != 0)
 		{
@@ -928,14 +938,14 @@ static bool Ra4m1I2cSclHigh(Ra4m1I2cDev_t * const pDev,
 
 static void Ra4m1I2cBusDelay(void)
 {
-	uint32_t count = (SystemCoreClockGet() + 199999U) / 200000U;
+	int32_t count = (int32_t)((SystemCoreClockGet() + 199999U) / 200000U);
 
-	if (count == 0U)
+	if (count == 0)
 	{
-		count = 1U;
+		count = 1;
 	}
 
-	while (count > 0U)
+	while (count > 0)
 	{
 		__NOP();
 		count--;
