@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Link the real LPC11U35 CDC, HID, vendor bulk and composite firmware in Debug and Release.
+"""Link the real LPC11U35 CDC loopback/PRBS, HID, vendor bulk and composite firmware in Debug and Release.
 
 Copyright (c) 2026, I-SYST inc. MIT License.
 Requires an Arm GNU toolchain with newlib-nano and C++23 support.
@@ -22,6 +22,7 @@ SOURCES = [
     'ARM/NXP/LPC11xx/src/iopincfg_lpc11uxx.c',
     'ARM/NXP/LPC11xx/src/usb_lpc11uxx.c',
     'src/cfifo.c',
+    'src/prbs.c',
     'src/device_intrf.cpp',
     'src/app_evt_handler.cpp',
     'src/app_run.cpp',
@@ -44,7 +45,14 @@ EXAMPLES = {
     'cdc': 'UsbCdcLoopback',
     'hid': 'UsbHidLoopback',
     'custom_bulk': 'UsbCustomBulkLoopback',
+    'cdc_prbs': 'UsbCdcPrbsTx',
 }
+
+
+def application_source(kind):
+    if kind == 'cdc_prbs':
+        return 'exemples/usb/usb_cdc_prbs_tx.cpp'
+    return f'exemples/usb/usb_{kind}_loopback.cpp'
 
 
 def project_sources(project):
@@ -69,7 +77,7 @@ def check_project():
     for kind, project_name in EXAMPLES.items():
         example = mcu / 'exemples' / project_name
         linked = project_sources(example / 'ioc/.project')
-        assert ROOT / f'exemples/usb/usb_{kind}_loopback.cpp' in linked
+        assert ROOT / application_source(kind) in linked
         assert example / 'src/board.h' in linked
         for config in ET.parse(example / 'ioc/.cproject').findall('.//configuration'):
             mode = config.get('name')
@@ -99,7 +107,7 @@ def build(prefix, output, mode, kind):
     includes += ['-I' + str(ROOT / 'ARM/NXP/LPC11xx/LPC11U35/exemples' / board_name / 'src')]
     objects = []
     application = ('tests/lpc/usb/firmware/composite_firmware.cpp' if kind == 'composite'
-                   else f'exemples/usb/usb_{kind}_loopback.cpp')
+                   else application_source(kind))
     sources = SOURCES + [application]
     for index, source in enumerate(sources):
         cpp = source.endswith('.cpp')
@@ -165,7 +173,7 @@ def main():
         for kind in [*EXAMPLES, 'composite']:
             for mode in ['Debug', 'Release']:
                 build(args.prefix, output, mode, kind)
-    print('LPC11U35 CDC, HID, vendor bulk and composite ARM firmware links: PASS')
+    print('LPC11U35 CDC loopback/PRBS, HID, vendor bulk and composite ARM firmware links: PASS')
 
 
 if __name__ == '__main__':
