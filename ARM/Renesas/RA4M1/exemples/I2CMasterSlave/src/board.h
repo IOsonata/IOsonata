@@ -3,7 +3,7 @@
 
 @brief	RA4M1 shared I2C master/slave example board configuration.
 
-		SCI0 is kept for the shared example's console. IIC0 uses P401/P400
+		SCI0 is kept for the shared example's console. IIC0 uses P401/P408
 		with PSEL 7. IIC1 uses P206/P205; external pull-ups are required.
 
 @license
@@ -54,13 +54,13 @@ SOFTWARE.
 #define I2C_MASTER_SDA_PIN		1
 #define I2C_MASTER_SDA_PINOP	IOPINOP_FUNC6
 #define I2C_MASTER_SCL_PORT		4
-#define I2C_MASTER_SCL_PIN		0
+#define I2C_MASTER_SCL_PIN		8
 #define I2C_MASTER_SCL_PINOP	IOPINOP_FUNC6
 
 #define I2C_MASTER_DMA_ENABLE	false
 #define I2C_MASTER_INT_ENABLE	false
 
-// Shared master/slave example. Native slave support is not implemented yet.
+// Shared master/slave example: IIC1 uses interrupt callbacks.
 #define I2C_SLAVE_DEVNO		1
 #define I2C_SLAVE_SDA_PORT		2
 #define I2C_SLAVE_SDA_PIN		6
