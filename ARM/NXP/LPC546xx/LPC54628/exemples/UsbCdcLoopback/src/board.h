@@ -37,8 +37,8 @@ SOFTWARE.
 #ifndef __BOARD_H__
 #define __BOARD_H__
 
-// USB0 only. Remote wakeup is not implemented by this port yet.
-#define USB_REMOTE_WAKEUP false
+// USB0 only. The host must enable remote wakeup before it can be requested.
+#define USB_REMOTE_WAKEUP true
 #define USB_PINS { \
 	{0, 22, IOPINOP_FUNC7, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL} \
 }

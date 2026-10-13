@@ -103,3 +103,25 @@ void TestUsbVbusInterrupt(void)
 	assert(s_VbusHandler != NULL);
 	s_VbusHandler(5, NULL);
 }
+
+void TestUsbSuspend(bool Suspended)
+{
+	if (Suspended)
+		USB0->DEVCMDSTAT |= USB_DEVCMDSTAT_DSUS_MASK;
+	else
+		USB0->DEVCMDSTAT &= ~USB_DEVCMDSTAT_DSUS_MASK;
+	USB0->DEVCMDSTAT |= USB_DEVCMDSTAT_DSUS_C_MASK;
+	USB0->INTSTAT |= DEVICE;
+	USB0_IRQHandler();
+}
+
+void TestUsbFrame(void)
+{
+	USB0->INTSTAT |= USB_INTSTAT_FRAME_INT_MASK;
+	USB0_IRQHandler();
+}
+
+unsigned TestUsbWakeCount(void)
+{
+	return s_WakeCount;
+}

@@ -53,7 +53,7 @@ for opt in ['-O0', '-O2']:
             path = tmp / ('usb' + str(index) + '.c')
             path.write_text(code)
             paths.append(str(path))
-        for fixture in ['ep0546_test', 'data_test', 'lifecycle546_test']:
+        for fixture in ['ep0546_test', 'data_test', 'lifecycle546_test', 'wakeup546_test']:
             exe = tmp / fixture
             subprocess.run(['gcc', '-std=gnu11', opt, '-Wall', '-Wextra', '-Werror',
                             '-fsanitize=undefined', '-fno-sanitize-recover=all', '-no-pie',
@@ -91,6 +91,17 @@ for opt in ['-O0', '-O2']:
                         '-Wl,--section-start=.usb_ram=0x40100000', *objects, '-o', exe], check=True)
         for args in [[], ['composite'], ['composite', 'bulk']]:
             subprocess.run([exe, *args], check=True, timeout=5)
+
+        obj = str(tmp / 'integration_test.o')
+        subprocess.run(['g++', '-std=gnu++23', opt, '-fsanitize=undefined',
+                        '-fno-sanitize-recover=all', '-ffunction-sections', '-fdata-sections',
+                        '-DLPC54628_SERIES', *['-I' + str(root / p) for p in includes],
+                        '-c', str(root / 'tests/lpc/usb/integration_test.cpp'), '-o', obj], check=True)
+        exe = str(tmp / 'integration546')
+        subprocess.run(['g++', '-no-pie', '-fsanitize=undefined', '-Wl,--gc-sections',
+                        '-Wl,--section-start=.usb_ram=0x40100000', *objects[:9], obj,
+                        '-o', exe], check=True)
+        subprocess.run([exe], check=True, timeout=5)
 
 # Check the production linker script: retain only referenced USB memory,
 # keep NOLOAD data out of the binary, and reject USB SRAM overflow.

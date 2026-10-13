@@ -342,8 +342,15 @@ Init requires P0.22 FUNC7 VBUS input, no pull, normal type. A GPIO edge queues
 ordinary USB processing even while USB clocks are stopped. The PHY provides
 its pull-up and dedicated DM/DP pads. Other VBUS routes are not supported yet.
 The ROM UID call temporarily powers ROM/OTP and restores their prior state.
-USB1 high-speed, ISO, remote wakeup and low-power suspend are not implemented.
-Configure `bRemoteWakeup=false` and `bLowPowerSuspend=false`.
+USB1 high-speed, ISO and low-power suspend are not implemented.
+Configure `bLowPowerSuspend=false`. Remote wakeup supports normal clock-on
+suspend and retains the generic core's host-permission checks. A request
+discards stale FRAME_INT and waits for three local millisecond edges after
+DSUS, ensuring at least 5 ms of bus idle before requesting resume. It sets
+FORCE_NEEDCLK before clearing DSUS and leaves pulse generation to hardware.
+Resume, reset, cable loss, disconnect, stop and controller faults cancel the
+request and release only clock forcing added by that request. Internal timing
+does not generate application SOF callbacks unless they are enabled.
 
 The LPC54628 host fixtures cover EP0 ordering, all eight data endpoint
 directions, unaligned buffers, multi-packet IN through 65535 bytes, halt/clear,
@@ -353,17 +360,21 @@ against LPC54628 registers. Tests cover startup without VBUS, later attachment,
 enumeration, CDC line coding and notifications, payloads, cable removal and
 reconnect, and repeated configuration while transfers are active. The same
 class tests run against LPC11U35. Both use -O0/-O2 and UBSan.
+Remote-wakeup fixtures check delayed signalling, duplicate requests, stale
+interrupts, clock ownership, cancellation and user SOF changes. The real
+generic-core fixture checks host permission through SET/CLEAR_FEATURE and
+the public UsbRemoteWakeup call for both controllers.
 
 `ARM/NXP/LPC546xx/LPC54628/exemples/UsbCdcLoopback` links the shared CDC loopback
-application. Its board header selects P0.22 and disables remote wakeup in the
-descriptors. The application continues to use the generic USB interfaces and
+application. Its board header selects P0.22 and advertises remote wakeup in
+the descriptors. The loopback does not itself generate wake requests. The application continues to use the generic USB interfaces and
 the 16-entry AppEvt queue; it does not call the controller.
 
 `python3 tests/lpc/usb/link546.py --prefix arm-none-eabi-` checks the managed
 project links, then builds the CDC application and EP0 fixture with real
 startup. It verifies the strong USB0 vector, LPC checksum and 832-byte NOLOAD
 USB RAM allocation. Debug retains semihosting; Release uses nosys. GNU Arm
-13.2.1 produces a CDC image of 48076 bytes flash in Debug and 21628 in Release.
+13.2.1 produces a CDC image of 48396 bytes flash in Debug and 21860 in Release.
 The ten LPC11U35 firmware links also pass after sharing data endpoints; the
 largest composite Debug image uses 56428 of 65536 flash bytes. Earlier size
 measurements above describe earlier builds.

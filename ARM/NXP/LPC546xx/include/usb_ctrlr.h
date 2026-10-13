@@ -5,8 +5,9 @@
 
 USB0 full-speed device with EP0 and four independent IN/OUT bulk or interrupt
 endpoint pairs. Uses the shared LPC full-speed transfer implementation.
-USB1 high-speed, ISO, remote wakeup and low-power suspend are not implemented.
-Configure bRemoteWakeup=false and bLowPowerSuspend=false.
+Remote wakeup uses clock-on suspend; the generic core checks host permission.
+USB1 high-speed, ISO and low-power suspend are not implemented.
+Configure bLowPowerSuspend=false.
 
 Init requires one VBUS entry: P0.22 FUNC7, input, no pull, normal type.
 This route supports GPIO edge detection while USB clocks are stopped. USB0

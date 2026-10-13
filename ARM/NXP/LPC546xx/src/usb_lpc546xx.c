@@ -49,6 +49,8 @@ SOFTWARE.
 
 static bool Lpc546xxUsbControlReady(void);
 static void Lpc546xxUsbControlFault(void);
+static void Lpc546xxUsbWakeCancel(void);
+static void Lpc546xxUsbWakeFrame(void);
 
 static bool s_Prepared;
 static bool s_Closing;
@@ -56,6 +58,9 @@ static bool s_Releasing;
 static bool s_Detached;
 static bool s_Initialized;
 static bool s_SofEnabled;
+static bool s_WakeAddedForce;
+// 0 idle, 1..3 waiting for bus idle, 4 waiting for host resume.
+static int s_WakeFrames;
 static int s_VbusInt = -1;
 static int s_IntPrio;
 static LpcUsbFsEp0_t s_Ep0 = {
@@ -85,6 +90,8 @@ static bool Lpc546xxUsbControlReady(void)
 
 static void Lpc546xxUsbControlFault(void)
 {
+	s_SofEnabled = false;
+	Lpc546xxUsbWakeCancel();
 	s_Ep0.Enabled = false;
 	++s_Ep0.Generation;
 	USB0->INTEN = 0U;
@@ -178,6 +185,7 @@ void UsbCtrlrSetAddress(int DevNo, uint8_t Address)
 static void Lpc546xxUsbBusReset(uint32_t Status, bool Detached)
 {
 	s_Detached = Detached;
+	Lpc546xxUsbWakeCancel();
 	if (!LpcUsbFsEp0Retire(&s_Ep0, 0x3FFU))
 	{
 		Lpc546xxUsbControlFault();
@@ -224,6 +232,8 @@ void USB0_IRQHandler(void)
 			return;
 		}
 		LpcUsbFsEp0Command(&s_Ep0, 0U, 0U, status & LPCUSB_SUSPEND_CHANGE);
+		if ((status & LPCUSB_SUSPEND_CHANGE) != 0U)
+			Lpc546xxUsbWakeCancel();
 		if (!s_Detached && (status & LPCUSB_SUSPEND_CHANGE) != 0U)
 		{
 			UsbCtrlrEvt_t event = {0};
@@ -242,6 +252,7 @@ void USB0_IRQHandler(void)
 		(USB0->INTSTAT & USB0->INTEN & (1U << 30)) != 0U)
 	{
 		USB0->INTSTAT = 1U << 30;
+		Lpc546xxUsbWakeFrame();
 		if (s_SofEnabled)
 		{
 			UsbCtrlrEvt_t event = {0};
@@ -383,11 +394,29 @@ void UsbCtrlrDisconnect(int DevNo)
 	const uint32_t state = DisableInterrupt();
 	if (DevNo == 0 && s_Prepared)
 	{
+		Lpc546xxUsbWakeCancel();
 		LpcUsbFsEp0Command(&s_Ep0, LPCUSB_CONNECT, 0U, 0U);
 	}
 	EnableInterrupt(state);
 }
 
+
+static void Lpc546xxUsbFrameEnable(void)
+{
+	if (s_SofEnabled || (s_WakeFrames > 0 && s_WakeFrames < 4))
+		USB0->INTEN |= USB_INTEN_FRAME_INT_EN_MASK;
+	else
+		USB0->INTEN &= ~USB_INTEN_FRAME_INT_EN_MASK;
+}
+
+static void Lpc546xxUsbWakeCancel(void)
+{
+	s_WakeFrames = 0;
+	if (s_WakeAddedForce)
+		LpcUsbFsEp0Command(&s_Ep0, USB_DEVCMDSTAT_FORCE_NEEDCLK_MASK, 0U, 0U);
+	s_WakeAddedForce = false;
+	Lpc546xxUsbFrameEnable();
+}
 
 void UsbCtrlrSofEnable(int DevNo, bool Enable)
 {
@@ -395,19 +424,61 @@ void UsbCtrlrSofEnable(int DevNo, bool Enable)
 	if (DevNo == 0 && s_Prepared && s_Ep0.Enabled)
 	{
 		s_SofEnabled = Enable;
-		USB0->INTSTAT = 1U << 30;
-		if (Enable)
-			USB0->INTEN |= 1U << 30;
-		else
-			USB0->INTEN &= ~(1U << 30);
+		USB0->INTSTAT = USB_INTSTAT_FRAME_INT_MASK;
+		Lpc546xxUsbFrameEnable();
 	}
 	EnableInterrupt(state);
 }
 
 void UsbCtrlrRemoteWakeup(int DevNo)
 {
-	(void)DevNo;
-	// Remote wakeup is not implemented; configure bRemoteWakeup=false.
+	const uint32_t state = DisableInterrupt();
+	if (DevNo == 0 && Lpc546xxUsbControlReady() && s_Ep0.Enabled &&
+		s_WakeFrames == 0 && UsbCtrlrVbusDetected(0))
+	{
+		const uint32_t status = USB0->DEVCMDSTAT;
+		if ((status & (LPCUSB_CONNECT | USB_DEVCMDSTAT_DSUS_MASK)) ==
+			(LPCUSB_CONNECT | USB_DEVCMDSTAT_DSUS_MASK) &&
+			(status & (LPCUSB_RESET | LPCUSB_CONNECT_CHANGE | LPCUSB_SUSPEND_CHANGE)) == 0U)
+		{
+			// The generic core checks host permission. DSUS proves 3 ms idle;
+			// three fresh 1 ms timer edges add at least 2 ms before signalling.
+			// UM10912 table 817: FRAME_INT runs while VBUS and DCON are set.
+			USB0->INTSTAT = USB_INTSTAT_FRAME_INT_MASK;
+			s_WakeFrames = 3;
+			Lpc546xxUsbFrameEnable();
+		}
+	}
+	EnableInterrupt(state);
+}
+
+static void Lpc546xxUsbWakeFrame(void)
+{
+	if (s_WakeFrames == 0 || s_WakeFrames == 4)
+		return;
+	const uint32_t status = USB0->DEVCMDSTAT;
+	if (!UsbCtrlrVbusDetected(0) ||
+		(status & (LPCUSB_CONNECT | USB_DEVCMDSTAT_DSUS_MASK)) !=
+		(LPCUSB_CONNECT | USB_DEVCMDSTAT_DSUS_MASK) ||
+		(status & (LPCUSB_RESET | LPCUSB_CONNECT_CHANGE | LPCUSB_SUSPEND_CHANGE)) != 0U)
+	{
+		Lpc546xxUsbWakeCancel();
+		return;
+	}
+	if (--s_WakeFrames != 0)
+		return;
+	// Hardware preparation keeps FRO, USB0 clocks and PHY powered during
+	// suspend. UM10912 34.7.6.2 requires FORCE_NEEDCLK before clearing DSUS.
+	s_WakeAddedForce = (status & USB_DEVCMDSTAT_FORCE_NEEDCLK_MASK) == 0U;
+	LpcUsbFsEp0Command(&s_Ep0, 0U, USB_DEVCMDSTAT_FORCE_NEEDCLK_MASK, 0U);
+	__DSB();
+	s_WakeFrames = 4;
+	// Preserve command bits, never acknowledge W1C flags, and leave LPM_SUS
+	// set. Clearing DSUS triggers the controller's timed resume signalling.
+	USB0->DEVCMDSTAT = (USB0->DEVCMDSTAT &
+		(0xFFU | USB_DEVCMDSTAT_FORCE_NEEDCLK_MASK | (1U << 11) | (0x1FU << 12))) |
+		USB_DEVCMDSTAT_LPM_SUS_MASK;
+	Lpc546xxUsbFrameEnable();
 }
 
 size_t UsbCtrlrGetSerial(int DevNo, char *pBuff, size_t BuffLen)

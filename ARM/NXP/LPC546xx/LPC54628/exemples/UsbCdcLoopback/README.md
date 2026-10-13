@@ -17,9 +17,11 @@ python3 Python/uartprbs_lb.py --baud 1000000 --port /dev/cu.usbmodemYOUR_DEVICE
 ```
 
 CDC baud rate is host metadata; it does not set USB bus speed. This port supports
-full-speed bulk and interrupt transfers. USB1 high-speed, ISO, remote wakeup and
-low-power suspend are not implemented. The board header disables remote wakeup
-in the example's descriptors.
+full-speed bulk and interrupt transfers, plus remote wakeup with clocks kept
+on during suspend. The board header advertises remote wakeup; the host must
+enable it before an application can request it through `UsbRemoteWakeup(0)`.
+The loopback application does not generate wake requests on its own. USB1
+high-speed, ISO and low-power suspend are not implemented.
 
 Host register-model tests and ARM Debug/Release links have been checked.
 Physical enumeration, cable behavior and throughput still need board testing.

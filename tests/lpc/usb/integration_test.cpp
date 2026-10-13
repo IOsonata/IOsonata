@@ -4,7 +4,13 @@
 #include <cstring>
 #include "app_evt_handler.h"
 #include "usb/usb_intrf.h"
+#include "usb_mem_lpc_fs.h"
+#if defined(LPC54628_SERIES)
+#include "usb_control_lpc546xx.h"
+#define USB_IRQHandler USB0_IRQHandler
+#else
 #include "usb_hw_lpc11uxx.h"
+#endif
 
 static const uint8_t s_Config[] = {9, 2, 9, 0, 0, 1, 0, 0xA0, 50};
 static const uint8_t s_Device[] = {18, 1, 0, 2, 0, 0, 0, 64, 0x34, 0x12,
@@ -13,7 +19,7 @@ static unsigned s_Queued;
 static unsigned s_DetachEvents;
 
 extern "C" void TestUsbInitialize(void);
-extern "C" Lpc11UsbMemory_t *TestUsbMemory(void);
+extern "C" LpcUsbFsMemory_t *TestUsbMemory(void);
 extern "C" void TestUsbPacketDone(unsigned Physical, unsigned Length);
 extern "C" void TestUsbSetup(const UsbSetupData_t *pSetup);
 extern "C" void TestUsbSuspend(bool Suspended);
@@ -27,7 +33,7 @@ static void CableEvent(int DevNo, UsbEvt_t Event)
 	if (Event != USB_EVT_DETACHED)
 		return;
 	assert(!UsbConfigured(0) && UsbGetAddress(0) == 0);
-	const Lpc11UsbMemory_t *memory = TestUsbMemory();
+	const LpcUsbFsMemory_t *memory = TestUsbMemory();
 	for (unsigned physical = 0; physical < 10; ++physical)
 		assert((memory->Command[2 * physical] & (1U << 31)) == 0);
 	++s_DetachEvents;
@@ -57,7 +63,11 @@ const uint8_t *UsbGetDescriptor(int, uint8_t Type, uint8_t, uint16_t, UsbSpeed_t
 int main()
 {
 	TestUsbInitialize();
+#if defined(LPC54628_SERIES)
+	const IOPinCfg_t pin = {0, 22, IOPINOP_FUNC7, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL};
+#else
 	const IOPinCfg_t pin = {0, 3, IOPINOP_FUNC1, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL};
+#endif
 	UsbCfg_t cfg = {};
 	cfg.Vid = 0x1234;
 	cfg.Pid = 0x5678;
@@ -69,7 +79,7 @@ int main()
 	assert(std::strlen(UsbGetSerial(0)) == 32);
 	assert(UsbEnable(0) && s_Queued != 0);
 	UsbProcess(0); // establish the attached level in the real core
-	Lpc11UsbMemory_t *memory = TestUsbMemory();
+	LpcUsbFsMemory_t *memory = TestUsbMemory();
 	UsbSetupData_t setup = {};
 	setup.bRequest = 5; // SET_ADDRESS stays in the real Chapter 9 engine.
 	setup.wValue = 7;
@@ -189,5 +199,5 @@ int main()
 	assert((memory->Command[6] & (1U << 31)) == 0);
 	UsbDisable(0);
 	assert((memory->Command[4] & (1U << 31)) == 0);
-	std::puts("LPC11Uxx real generic core/interface link, address, FIFO transfers: PASS");
+	std::puts("LPC full-speed real generic core/interface link, address, FIFO transfers: PASS");
 }

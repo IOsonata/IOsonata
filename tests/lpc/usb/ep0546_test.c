@@ -15,10 +15,19 @@ static unsigned s_Count;
 static bool s_AutoSkip = true;
 static bool s_Restart;
 static bool s_Stop;
+static unsigned s_WakeCount;
 
 void TestDeviceWrite(uint32_t Value)
 {
 	const uint32_t old = USB0->DEVCMDSTAT;
+	if ((old & ((1U << 16) | (1U << 17))) == ((1U << 16) | (1U << 17)) &&
+		(Value & (1U << 17)) == 0U)
+	{
+		assert(old & USB_DEVCMDSTAT_FORCE_NEEDCLK_MASK);
+		assert(SYSCON->USB0CLKCTRL & SYSCON_USB0CLKCTRL_AP_FS_DEV_CLK_MASK);
+		assert((SYSCON->PDRUNCFG[0] & SYSCON_PDRUNCFG_PDEN_USB0_PHY_MASK) == 0);
+		++s_WakeCount;
+	}
 	const uint32_t commands = 0x1FAFFU;
 	const uint32_t w1c = SETUP | (7U << 24);
 	if ((old & Value & SETUP) != 0U && s_Memory != NULL)
