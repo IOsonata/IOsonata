@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Link LPC54628 CDC/HID/custom bulk loopback and EP0 bring-up in Debug and Release.
+"""Link LPC54628 CDC/HID/custom bulk loopback plus composite and EP0 firmware.
 
 Copyright (c) 2026, I-SYST inc. MIT License.
 Checks the managed projects and real startup; no hardware is exercised.
@@ -41,7 +41,7 @@ def build(prefix, output, mode, example):
              '-ffunction-sections', '-fdata-sections', '-DLPC54628_SERIES']
     flags += ['-O0', '-g3', '-DDEBUG'] if mode == 'Debug' else ['-Os', '-DNDEBUG']
     includes = ['-I' + str(ROOT / p) for p in timer['INCLUDES']]
-    board = example or 'UsbCdcLoopback'
+    board = example if example in APPLICATIONS else 'UsbCdcLoopback'
     includes += ['-I' + str(ROOT / 'ARM/NXP/LPC546xx/LPC54628/exemples' / board / 'src')]
     objects = []
     for index, source in enumerate(SOURCES):
@@ -64,7 +64,8 @@ int main(void)
 }
 ''')
     if example:
-        main = ROOT / APPLICATIONS[example]
+        main = ROOT / ('tests/lpc/usb/firmware/composite_firmware.cpp'
+                       if example == 'Composite' else APPLICATIONS[example])
     subprocess.run([prefix + ('g++' if example else 'gcc'), *flags, *includes,
                     *(['-std=gnu++23', '-fno-exceptions', '-fno-rtti'] if example else ['-std=gnu17']), '-c', str(main),
                     '-o', str(output / 'main.o')], check=True)
@@ -94,9 +95,19 @@ int main(void)
     if example == 'UsbCustomBulkLoopback':
         demangled = subprocess.check_output([prefix + 'nm', '-C', str(image)], text=True)
         assert 'UsbdBulk::Init(' in demangled
+    if example == 'Composite':
+        demangled = subprocess.check_output([prefix + 'nm', '-C', str(image)], text=True)
+        for name in ['UsbdCdc', 'UsbdHid', 'UsbdBulk']:
+            assert name + '::Init(' in demangled, name + ' initialization discarded'
+        assert 'UsbIntIntrfInit' in addresses
     sections = subprocess.check_output([prefix + 'readelf', '-SW', str(image)], text=True)
     assert re.search(r'\.usb_ram\s+NOBITS\s+40100000\s+\w+\s+000340', sections)
-    print(f'LPC54628 {example or "EP0"} {mode}: {len(data)} bytes flash, 832 bytes USB RAM; USB0 vector: PASS')
+    ram = addresses['__bss_end__'] - addresses['__data_start__']
+    stack = addresses['__StackTop'] - addresses['__StackLimit']
+    assert struct.unpack_from('<I', data)[0] == 0x20010000 - 32
+    assert ram < 64 * 1024 - 32 and stack > 0
+    print(f'LPC54628 {example or "EP0"} {mode}: {len(data)} bytes flash, 832 bytes USB RAM; '
+          f'{ram} bytes main RAM; {stack} bytes linker stack allowance; USB0 vector: PASS')
 
 
 def main():
@@ -120,7 +131,7 @@ def main():
             assert ('--specs=rdimon.specs' in text) == (mode == 'Debug')
     with tempfile.TemporaryDirectory() as tmp:
         for mode in ['Debug', 'Release']:
-            for example in [None, *APPLICATIONS]:
+            for example in [None, *APPLICATIONS, 'Composite']:
                 build(args.prefix, Path(tmp) / mode / (example or 'EP0'), mode, example)
 
 

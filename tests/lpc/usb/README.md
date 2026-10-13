@@ -376,7 +376,7 @@ startup. It verifies the strong USB0 vector, LPC checksum and 832-byte NOLOAD
 USB RAM allocation. Debug retains semihosting; Release uses nosys. GNU Arm
 13.2.1 produces a CDC image of 48396 bytes flash in Debug and 21860 in Release.
 The ten LPC11U35 firmware links also pass after sharing data endpoints; the
-largest composite Debug image uses 56428 of 65536 flash bytes. Earlier size
+largest composite Debug image uses 56424 of 65536 flash bytes. Earlier size
 measurements above describe earlier builds.
 
 Physical enumeration, cable behavior, throughput and suspend/resume still
@@ -413,3 +413,28 @@ UsbdBulk remains linked, bringing the runner to eight firmware links across
 EP0, CDC, HID and custom bulk. Project source links, C++23, semihosting,
 USB0 vector, checksum and 832-byte NOLOAD USB SRAM checks apply to each
 application. Physical enumeration and bulk traffic remain untested.
+
+## LPC54628 composite ARM firmware
+
+`link546.py` now also builds the shared CDC/HID/vendor-bulk composite fixture
+in Debug and Release, using the LPC54628 CDC board header. The fixture uses
+the board oscillator configuration only when one is supplied, so the same
+source still builds for LPC11U35. No separate application implementation or
+controller changes are needed.
+
+The runner checks ten LPC54628 firmware links. The composite must retain all
+three class initializers and the interrupt transport. Each image checks main
+RAM use, positive linker stack allowance and the 32-byte IAP reservation in
+addition to USB SRAM, vectors, checksum and semihosting. The linker stack
+allowance is not a measured runtime high-water mark.
+
+This extends firmware link coverage; the existing host model already checks
+the three classes together, seven data endpoint addresses, transfers and
+reconfiguration. Physical simultaneous traffic remains pending board testing.
+
+With Arm GNU GCC 13.2.1, LPC54628 composite Debug uses 53784 bytes flash,
+4316 bytes main RAM and 832 bytes USB SRAM; Release uses 24484, 3520 and
+832 bytes respectively. Linker stack allowances are 20392 and 20660 bytes.
+The shared LPC11U35 composite also passes both links: Debug uses 56424 bytes
+flash and Release uses 24884 bytes. Debug retains semihosting on both MCUs;
+Release omits it.

@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
 @file	composite_firmware.cpp
 
-@brief	LPC11U35 CDC/HID/bulk composite firmware link fixture.
+@brief	LPC full-speed CDC/HID/bulk composite firmware link fixture.
 
 Uses the real generic classes, event queue and native controller. Small
 caller-owned buffers keep the fixture suitable for the LPC11U35 main RAM.
@@ -40,7 +40,9 @@ SOFTWARE.
 #include "usb/usbd_bulk.h"
 #include "board.h"
 
+#ifdef MCUOSC
 McuOsc_t g_McuOsc = MCUOSC;
+#endif
 
 static const IOPinCfg_t s_Pins[] = USB_PINS;
 static UsbdCdc s_Cdc;
@@ -66,7 +68,7 @@ static const UsbCfg_t s_UsbCfg = {
 	.Pid = 0x0005,
 	.DevVer = 0x0100,
 	.pManufacturer = "I-SYST",
-	.pProduct = "LPC11U35 CDC/HID/bulk link fixture",
+	.pProduct = "LPC CDC/HID/bulk link fixture",
 	.IntPrio = 6,
 	.pIOPinMap = s_Pins,
 	.NbIOPins = sizeof(s_Pins) / sizeof(s_Pins[0]),
