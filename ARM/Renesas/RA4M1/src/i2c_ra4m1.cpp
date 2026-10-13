@@ -90,6 +90,7 @@ SOFTWARE.
 // Other register bits
 #define RA4M1_I2C_CR1_ICE			0x80U
 #define RA4M1_I2C_CR1_IICRST		0x40U
+#define RA4M1_I2C_CR1_SOWP			0x10U
 #define RA4M1_I2C_CR2_BBSY			0x80U
 #define RA4M1_I2C_FER_TMOE			0x01U
 #define RA4M1_I2C_MR3_ACKBT			0x08U
@@ -1588,6 +1589,10 @@ int Ra4m1I2cDump(DevIntrf_t * const pIntrf, char *Buf, int Len)
 		pad[0] = Ra4m1I2cSclPad(dev);
 		dev->pReg->ICCR1 = 0U;
 		pad[1] = Ra4m1I2cSclPad(dev);
+		// Clearing ICE also clears SCLO and SDAO, which would leave the block
+		// driving both lines low. Write them back high with SOWP clear, then
+		// set SOWP again.
+		dev->pReg->ICCR1 = (uint8_t)(RA4M1_I2C_ICCR1_RUN & ~RA4M1_I2C_CR1_SOWP);
 		dev->pReg->ICCR1 = RA4M1_I2C_ICCR1_RUN;
 		pad[2] = Ra4m1I2cSclPad(dev);
 	}
