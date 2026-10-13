@@ -2,9 +2,9 @@
 @file usb_lpc11uxx.c
 @brief LPC11Uxx native USB hardware preparation.
 
-Hardware preparation and EP0 transport. Generic USB owns Chapter 9 and device
-classes. No ROM USB stack is initialized here. Public lifecycle and data
-endpoints remain unfinished; this module cannot connect a device by itself.
+Hardware preparation, lifecycle and EP0 transport. Generic USB owns Chapter 9
+and device classes. No ROM USB stack is initialized here. Data endpoints and
+remote wakeup remain unfinished.
 
 Register sequences: NXP UM10462, chapters 3 and 11. Register declarations
 come from the vendor CMSIS header. Only the DMA memory layout is defined here.
@@ -42,6 +42,8 @@ SOFTWARE.
 #include "LPC11Uxx.h"
 #include "coredev/system_core_clock.h"
 #include "coredev/interrupt.h"
+#include "iopinctrl.h"
+#include "lpc_iap.h"
 #include "usb/usb.h"
 #include "usb_hw_lpc11uxx.h"
 
@@ -63,6 +65,7 @@ SOFTWARE.
 #define LPC11_USB_SUSPEND_CHANGE (1UL << 25)
 #define LPC11_USB_CONNECT_CHANGE (1UL << 24)
 #define LPC11_USB_DEVICE_INTERRUPT (1UL << 31)
+#define LPC11_USB_SOF_INTERRUPT (1UL << 30)
 
 // Maintained by the existing LPC11Uxx clock implementation, including its
 // legacy SystemCoreClockSet entry point (which need not update g_McuOsc).
@@ -92,6 +95,9 @@ static Lpc11UsbMemory_t s_Memory
 static Lpc11UsbEp0State_t s_Ep0;
 static bool s_Prepared;
 static uint32_t s_AddedClocks;
+static bool s_Initialized;
+static int s_VbusInt = -1;
+static int s_IntPrio;
 
 static bool Lpc11UsbRetire(uint32_t Mask);
 
@@ -230,6 +236,171 @@ static void Lpc11UsbCommand(uint32_t Clear, uint32_t Set, uint32_t Ack)
 {
 	LPC_USB->DEVCMDSTAT = ((LPC_USB->DEVCMDSTAT & LPC11_USB_COMMAND_MASK) & ~Clear) |
 		Set | LPC11_USB_NO_WAKE | (Ack & LPC11_USB_STATUS_W1C);
+}
+
+static void Lpc11UsbVbusEvent(int IntNo, void *pContext)
+{
+	(void)IntNo;
+	(void)pContext;
+	// GPIO detection stays live while USB is stopped. DCON_C alone only
+	// reports loss of VBUS and cannot start a board powered without a cable.
+	UsbProcessQue(0);
+}
+
+bool UsbCtrlrInit(int DevNo, const UsbCtrlrCfg_t *pCfg)
+{
+	if (DevNo != 0 || pCfg == NULL || pCfg->bLowPowerSuspend ||
+		pCfg->pIOPinMap == NULL || pCfg->NbIOPins != 1)
+		return false;
+	const IOPinCfg_t *vbus = &pCfg->pIOPinMap[USB_VBUS_PIN_IDX];
+	if (vbus->PortNo != 0 || vbus->PinNo != 3 ||
+		vbus->PinOp != IOPINOP_FUNC1 || vbus->PinDir != IOPINDIR_INPUT ||
+		vbus->Res != IOPINRES_NONE || vbus->Type != IOPINTYPE_NORMAL)
+		return false;
+	const uint32_t state = DisableInterrupt();
+	// A failed retirement still owns SRAM and must not be reinitialized.
+	if (s_Prepared)
+	{
+		EnableInterrupt(state);
+		return false;
+	}
+	s_Initialized = false;
+	if (s_VbusInt >= 0)
+		IOPinDisableInterrupt(s_VbusInt);
+	const int maxprio = (1 << __NVIC_PRIO_BITS) - 1;
+	s_IntPrio = pCfg->IntPrio < 0 ? 0 :
+		(pCfg->IntPrio > maxprio ? maxprio : pCfg->IntPrio);
+	IOPinCfg(vbus, 1);
+	s_VbusInt = IOPinAllocateInterrupt(s_IntPrio, 0, 3, IOPINSENSE_TOGGLE,
+		Lpc11UsbVbusEvent, NULL);
+	s_Initialized = s_VbusInt >= 0;
+	EnableInterrupt(state);
+	return s_Initialized;
+}
+
+bool UsbCtrlrVbusDetected(int DevNo)
+{
+	// UM10462 9.5.3.5: PIN reads the pad even in an alternate function.
+	// No USB register access is needed while its clocks are disabled.
+	return DevNo == 0 && s_Initialized && IOPinRead(0, 3) != 0;
+}
+
+bool UsbCtrlrStart(int DevNo)
+{
+	if (DevNo != 0)
+		return false;
+	const uint32_t state = DisableInterrupt();
+	bool ready = false;
+	if (UsbCtrlrVbusDetected(0))
+	{
+		if (s_Prepared)
+			ready = s_Ep0.Enabled;
+		else if (Lpc11UsbHwPrepare(s_IntPrio) != NULL)
+		{
+			ready = Lpc11UsbEp0Enable();
+			if (ready)
+			{
+				// Fixed MCU soft-connect output (UM10462 table 67), not the
+				// generic pin map's ID entry. DCON remains off until Connect.
+				IOPinConfig(0, 6, IOPINOP_FUNC1, IOPINDIR_OUTPUT,
+					IOPINRES_NONE, IOPINTYPE_NORMAL);
+			}
+			else
+				(void)Lpc11UsbHwRelease();
+		}
+	}
+	EnableInterrupt(state);
+	return ready;
+}
+
+void UsbCtrlrStop(int DevNo)
+{
+	if (DevNo != 0)
+		return;
+	const uint32_t state = DisableInterrupt();
+	// Retry is allowed after a timed-out skip. Release leaves the controller
+	// disconnected and disabled to callers until retirement is confirmed.
+	(void)Lpc11UsbHwRelease();
+	EnableInterrupt(state);
+}
+
+void UsbCtrlrProcess(int DevNo)
+{
+	(void)DevNo;
+	// This port keeps the USB clock running through suspend. VBUS edges
+	// queue the generic process pass; there is no deferred packet processing.
+}
+
+bool UsbCtrlrHighSpeed(int DevNo)
+{
+	(void)DevNo;
+	return false;
+}
+
+void UsbCtrlrIntEnable(int DevNo)
+{
+	const uint32_t state = DisableInterrupt();
+	if (DevNo == 0 && s_Prepared && s_Ep0.Enabled)
+		NVIC_EnableIRQ(USB_IRQn);
+	EnableInterrupt(state);
+}
+
+void UsbCtrlrIntDisable(int DevNo)
+{
+	if (DevNo == 0)
+		NVIC_DisableIRQ(USB_IRQn);
+}
+
+void UsbCtrlrConnect(int DevNo)
+{
+	const uint32_t state = DisableInterrupt();
+	if (DevNo == 0 && s_Prepared && s_Ep0.Enabled && UsbCtrlrVbusDetected(0))
+		Lpc11UsbCommand(0U, LPC11_USB_CONNECT, 0U);
+	EnableInterrupt(state);
+}
+
+void UsbCtrlrDisconnect(int DevNo)
+{
+	const uint32_t state = DisableInterrupt();
+	if (DevNo == 0 && s_Prepared)
+		Lpc11UsbCommand(LPC11_USB_CONNECT, 0U, 0U);
+	EnableInterrupt(state);
+}
+
+void UsbCtrlrSofEnable(int DevNo, bool Enable)
+{
+	const uint32_t state = DisableInterrupt();
+	if (DevNo == 0 && s_Prepared && s_Ep0.Enabled)
+	{
+		LPC_USB->INTSTAT = LPC11_USB_SOF_INTERRUPT;
+		if (Enable)
+			LPC_USB->INTEN |= LPC11_USB_SOF_INTERRUPT;
+		else
+			LPC_USB->INTEN &= ~LPC11_USB_SOF_INTERRUPT;
+	}
+	EnableInterrupt(state);
+}
+
+size_t UsbCtrlrGetSerial(int DevNo, char *pBuff, size_t BuffLen)
+{
+	if (pBuff == NULL || BuffLen == 0U)
+		return 0U;
+	pBuff[0] = '\0';
+	if (DevNo != 0 || BuffLen == 1U)
+		return 0U;
+	IAP_CMD_STATUS result;
+	if (IAPReadUID(&result) != IAPSTATUS_SUCCESS)
+		return 0U;
+	// Four ROM UID words, eight uppercase hexadecimal digits per word.
+	// Usable before Init: the generic core asks for its serial first.
+	const size_t count = BuffLen > 32U ? 32U : BuffLen - 1U;
+	for (size_t i = 0U; i < count; ++i)
+	{
+		const uint8_t digit = (result.Data[i / 8U] >> (28U - (i % 8U) * 4U)) & 15U;
+		pBuff[i] = digit < 10U ? '0' + digit : 'A' + digit - 10;
+	}
+	pBuff[count] = '\0';
+	return count;
 }
 
 static uint32_t Lpc11UsbBufferAddress(unsigned Physical)
@@ -614,6 +785,16 @@ void USB_IRQHandler(void)
 	if (s_Prepared && s_Ep0.Enabled && s_Ep0.Generation == generation &&
 		(LPC_USB->DEVCMDSTAT & LPC11_USB_RESET) == 0U && (pending & 3U) != 0U)
 		Lpc11UsbEp0Interrupt(pending);
+	if (s_Prepared && s_Ep0.Enabled && s_Ep0.Generation == generation &&
+		(LPC_USB->DEVCMDSTAT & LPC11_USB_RESET) == 0U &&
+		(pending & LPC_USB->INTEN & LPC11_USB_SOF_INTERRUPT) != 0U)
+	{
+		LPC_USB->INTSTAT = LPC11_USB_SOF_INTERRUPT;
+		UsbCtrlrEvt_t event = {0};
+		event.Type = USB_CTRLR_EVT_SOF;
+		event.FrameNo = LPC_USB->INFO & 0x7FFU;
+		UsbDevProcessEvent(0, &event);
+	}
 	__DSB();
 	EnableInterrupt(state);
 }

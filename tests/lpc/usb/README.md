@@ -12,6 +12,11 @@ Run `python3 tests/lpc/usb/run.py`.
   zero-length packets/status, SET_ADDRESS timing and cancellation, stalls,
   superseding SETUP, reset, suspend/resume, early status, callback shutdown
   and restart, malformed lengths and a stuck endpoint skip.
+- Lifecycle tests cover validation, GPIO interrupt allocation failure, attach
+  while USB is stopped, repeated start/stop, priority clamping, separate NVIC
+  and soft-connect control, SOF events, UID formatting/truncation and failed
+  retirement followed by retry. Unmapped USB registers catch access before
+  initialization or while starting without VBUS.
 - Host GNU binutils exercise the production linker script's USB SRAM placement,
   NOLOAD behavior, removal when unused, and failure on USB SRAM overflow.
 
@@ -55,7 +60,21 @@ EP0 stall handling. USB_IRQHandler reports SETUP, EP0 completions, reset and
 suspend/resume to the existing generic UsbDevProcessEvent. A cable change
 queues the generic work pass. Descriptor parsing and Chapter 9 remain generic.
 The private Lpc11UsbEp0Enable initializes EP0 and interrupt sources but leaves
-the pull-up and NVIC disabled for the future lifecycle implementation.
+the pull-up and NVIC disabled for the public lifecycle to enable separately.
+
+UsbCtrlrInit requires one pin-map entry: P0.3, IOPINOP_FUNC1, input, no pull,
+normal type. It allocates a GPIO interrupt for both VBUS edges. This interrupt
+stays allocated across Stop so cable insertion can queue the generic process
+pass while USB clocks are off. Reinitialization while stopped releases the old
+pin interrupt; exhaustion of GPIO interrupt slots fails initialization.
+UsbCtrlrStart requires VBUS and valid clocks, prepares EP0, and selects the fixed
+P0.6 FUNC1 USB_CONNECT output. The generic core then enables NVIC and connects
+after its own initialization. Boards need VBUS sensing and the external
+soft-connect switch; configurations without these are not supported yet.
+Stop uses the bounded retirement helper and can be retried after a timeout.
+Low-power suspend requests fail initialization; normal suspend keeps clocks on.
+SOF events carry the hardware frame number. The serial string uses all four
+IAP UID words and is available before initialization, as the generic core needs.
 
 EP0 OUT and SETUP share an interrupt. The handler acknowledges that interrupt
 before checking SETUP and clears old EP0 ACTIVE/STALL state before acknowledging
@@ -64,8 +83,8 @@ old completions to new state. Buffer cancellation uses bounded EPSKIP waits.
 A failed skip disconnects and disables interrupts while retaining DMA storage.
 
 This is still an incomplete controller port. Data endpoint submission,
-callbacks, pin setup and public initialization/start/stop remain unfinished.
-No application can enumerate with these helpers alone.
+callbacks and remote wakeup remain unfinished. The complete generic USB stack
+does not link yet; no application enumeration result is claimed.
 The initial packet storage does not implement ISO transfers. The header's five
 endpoint numbers per direction and ISO limits describe the silicon, not
 completed support or simultaneous buffer capacity.

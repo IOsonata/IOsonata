@@ -6,8 +6,14 @@
 Full-speed device controller with endpoint numbers 0 through 4 in each
 direction. EP0 is control; endpoints 1 through 4 support bulk, interrupt
 and isochronous transfers. These constants describe hardware allocation
-limits, not completed driver support. Hardware preparation and EP0 transport
-are implemented; public lifecycle and data endpoints are still pending.
+limits, not completed driver support. Hardware preparation, lifecycle and EP0
+transport are implemented; data endpoints and remote wakeup are still pending.
+
+Init currently requires one VBUS pin-map entry: P0.3, FUNC1, input, no pull,
+normal type. Start configures the fixed P0.6 FUNC1 USB_CONNECT output for the
+external soft-connect circuit. USB_DM/DP are dedicated pads. Boards without
+VBUS sensing or soft-connect switching are not supported by this lifecycle.
+Low-power suspend must be false; the USB clock remains on during suspend.
 
 The declarations follow the existing IOsonata USB controller interface.
 ROM DFU is independent of this application USB interface.

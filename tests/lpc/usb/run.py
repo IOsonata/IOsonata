@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check LPC11Uxx USB headers, hardware preparation and SRAM placement."""
+"""Check LPC11Uxx USB headers, hardware, EP0, lifecycle and SRAM placement."""
 from pathlib import Path
 import subprocess
 import tempfile
@@ -11,6 +11,7 @@ for compiler, standard in [('gcc', 'c11'), ('g++', 'c++17')]:
         subprocess.run([compiler, '-std=' + standard, '-Wall', '-Wextra',
                         '-Werror', '-I' + str(root / 'include'),
                         '-I' + str(root / 'ARM/NXP/LPC11xx/include'),
+                        '-I' + str(root / 'ARM/NXP/include'),
                         str(root / 'tests/lpc/usb/header_test.c'),
                         '-o', exe], check=True)
         subprocess.run([exe], check=True)
@@ -29,6 +30,7 @@ for opt in ['-O0', '-O2']:
                             '-I' + str(root / 'tests/lpc/usb/shim'),
                             '-I' + str(root / 'include'),
                             '-I' + str(root / 'ARM/NXP/LPC11xx/include'),
+                            '-I' + str(root / 'ARM/NXP/include'),
                             *layout, str(root / 'tests/lpc/usb/hardware_test.c'),
                             str(root / 'ARM/NXP/LPC11xx/src/usb_lpc11uxx.c'),
                             '-o', exe], check=True)
@@ -80,7 +82,7 @@ usb_memory:
         assert (tmp / 'image.bin').stat().st_size < 1024
 print('LPC11U35 USB SRAM placement, NOLOAD, garbage collection and overflow: PASS')
 
-# Give the three side-effect registers their hardware write semantics.
+# Give the four side-effect registers their hardware write semantics.
 # Instrument only MMIO assignments in a temporary copy; keep vendor types,
 # reads, endpoint memory, control flow and callback code unchanged.
 for opt in ['-O0', '-O2']:
@@ -95,15 +97,17 @@ for opt in ['-O0', '-O2']:
                                     lambda m: function + '(' + m[1] + ');', source)
             assert count > 0, reg
         (tmp / 'usb.c').write_text(source)
-        exe = str(tmp / 'ep0_test')
-        subprocess.run(['gcc', '-std=gnu11', opt, '-Wall', '-Wextra', '-Werror',
-                        '-fsanitize=undefined', '-fno-sanitize-recover=all', '-no-pie',
-                        '-ffunction-sections', '-fdata-sections', '-Wl,--gc-sections',
-                        '-Wl,--section-start=.usb_ram=0x20004000',
-                        '-include', str(root / 'tests/lpc/usb/ep0_model.h'),
-                        '-I' + str(root / 'tests/lpc/usb/shim'),
-                        '-I' + str(root / 'include'),
-                        '-I' + str(root / 'ARM/NXP/LPC11xx/include'),
-                        str(root / 'tests/lpc/usb/ep0_test.c'), str(tmp / 'usb.c'),
-                        '-o', exe], check=True)
-        subprocess.run([exe], check=True, timeout=5)
+        for fixture in ['ep0_test', 'lifecycle_test']:
+            exe = str(tmp / fixture)
+            subprocess.run(['gcc', '-std=gnu11', opt, '-Wall', '-Wextra', '-Werror',
+                            '-fsanitize=undefined', '-fno-sanitize-recover=all', '-no-pie',
+                            '-ffunction-sections', '-fdata-sections', '-Wl,--gc-sections',
+                            '-Wl,--section-start=.usb_ram=0x20004000',
+                            '-include', str(root / 'tests/lpc/usb/ep0_model.h'),
+                            '-I' + str(root / 'tests/lpc/usb/shim'),
+                            '-I' + str(root / 'include'),
+                            '-I' + str(root / 'ARM/NXP/LPC11xx/include'),
+                            '-I' + str(root / 'ARM/NXP/include'),
+                            str(root / ('tests/lpc/usb/' + fixture + '.c')), str(tmp / 'usb.c'),
+                            '-o', exe], check=True)
+            subprocess.run([exe], check=True, timeout=5)
