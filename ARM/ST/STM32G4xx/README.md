@@ -37,7 +37,9 @@ base is set to `__Vectors`. SystemInit does not start the LSE.
 
 UART indices are 0 for LPUART1, 1 for USART1, 2 for USART2, 3 for USART3,
 4 for UART4 and 5 for UART5, as on L4. Polling, interrupt and DMA
-(`bDMAMode`, with or without `bIntMode`) on every instance. USART1 to UART5
+(`bDMAMode`, with or without `bIntMode`) on every instance. With a
+non-blocking CFIFO each TX DMA block, at most 32 bytes, is a copy taken out
+of the CFIFO, see `ARM/ST/STM32F0xx/README.md`. USART1 to UART5
 run from PCLK, the driver writes their CCIPR kernel clock selection to 0.
 LPUART1 selects LSE, HSI16 or PCLK1 for the requested rate.
 
@@ -119,7 +121,8 @@ images ran in an instruction set emulator with USART1, DMA1, DMAMUX1, RCC and
 flash models: SystemInit left PLLCFGR at HSI16 / 4 x 85 / 2, 4 wait states and
 boost mode, USART1 BRR 170 at 1 Mbaud; the loopback echoes in order with no
 lost character in polling, interrupt, DMA without interrupts and DMA with
-interrupts, and the PRBS output matches `Prbs8()`. This does not replace a run
-on the board.
+interrupts, and the PRBS output matches `Prbs8()`. With a non-blocking CFIFO
+the loopback echoed 98.4 kB/s in order in both DMA modes. This does not
+replace a run on the board.
 
 References: RM0440 (STM32G4 reference manual), UM2505 (NUCLEO-G474RE).

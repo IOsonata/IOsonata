@@ -37,7 +37,10 @@ CFIFO full is dropped and counted in `RxDropCnt` with a blocking CFIFO
 
 UART DMA (`bDMAMode`, with or without `bIntMode`) sends TX blocks straight
 from the TX CFIFO and receives into a circular ring moved into the RX CFIFO,
-as on the F0 parts. Each channel has its own vector, defined by the UART
+as on the F0 parts. With a non-blocking CFIFO each TX block, at most 32
+bytes, is a copy taken out of the CFIFO, see `ARM/ST/STM32F0xx/README.md`
+(STM32L432 in the emulator at 80 MHz and 1 Mbaud: loopback 96.6 kB/s, 99.0
+with a blocking CFIFO). Each channel has its own vector, defined by the UART
 driver. L476 and L496 select the request in the DMA1 or DMA2 CSELR, L4+ parts
 route it through DMAMUX1 (DMA1 channel n on DMAMUX1 channel n - 1, DMA2
 channel n on channel n + 6). Not tested on hardware.

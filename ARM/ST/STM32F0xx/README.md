@@ -11,7 +11,17 @@ The STM32 UART driver (`ARM/ST/src/uart_stm32.cpp`) runs DMA on USART1 and
 USART2 of the F0 parts, with or without `bIntMode`. TX DMA sends blocks
 straight from the TX CFIFO, a block ends on USART TC. RX DMA runs a 64-byte
 circular ring, moved into the RX CFIFO at half and full ring, on IDLE and by
-`RxData`. DMA mode requires `bFifoBlocking`.
+`RxData`.
+
+With a non-blocking CFIFO (`bFifoBlocking` false) a put on a full CFIFO drops
+its oldest bytes. TX DMA then sends a copy: each block, at most 32 bytes, is
+taken out of the TX CFIFO and copied, so that a put drops only bytes still
+queued, not the block being sent. The copy is made with the line idle, after
+TC of the previous block, mostly with interrupts disabled. In the instruction
+set emulator at 1 Mbaud, UartLoopback with interrupts and DMA echoed
+91 kB/s with a non-blocking CFIFO and 98 kB/s with a blocking one; the
+longest stretch with interrupts disabled grew from 880 to 1790 CPU cycles.
+Not tested on hardware.
 
 | Virtual DevNo | Hardware | TX DMA | RX DMA | Vector | CSELR request |
 |---|---|---|---|---|---|

@@ -1491,11 +1491,6 @@ static void TestDma(int i)
 		return;
 	}
 
-	// DMA needs the blocking FIFO, TX sends from it in place
-	c.bFifoBlocking = false;
-	CHECK(!UARTInit(&u, &c));
-	c.bFifoBlocking = true;
-
 #ifdef SYSCFG_CFGR1_USART1RX_DMA_RMP
 	if (reg == USART1)
 	{
@@ -1699,6 +1694,161 @@ static void TestDma(int i)
 	CHECK(!DmaOn(t.Tx) && u.bTxReady);
 }
 
+// Interrupt mode: TX DMA blocks run to the end, the TC interrupt starts the
+// next one
+static void DmaTxDrain(int i)
+{
+	for (int guard = 0; guard < 1000 && !s_Uart[i].bTxReady && DmaTxRun(i) > 0; guard++)
+	{
+		s_Inst[i].Vector();
+	}
+}
+
+// DMA, blocking and non-blocking CFIFO. Blocking: the block is read in place.
+// Non-blocking: the block is a copy taken out of the FIFO, a put on a full
+// FIFO drops the oldest bytes still in the FIFO, the running block is sent as
+// it was. A full RX FIFO drops its oldest bytes.
+static void TestDmaDrop(int i)
+{
+	TestInst_t &t = s_Inst[i];
+	UARTDev_t &u = s_Uart[i];
+
+	if (t.Tx.pChan == NULL)
+	{
+		return;
+	}
+
+	static uint8_t data[1500];
+	static uint8_t expect[600];
+	for (int k = 0; k < 1500; k++)
+	{
+		data[k] = (uint8_t)(k * 57 + 3);
+	}
+
+	// Blocking: in place from the start of the FIFO, cut to a multiple of 4
+	UARTCfg_t c = Cfg(i, 115200, true, true);
+	CHECK(UARTInit(&u, &c));
+	WireReset(i);
+	CHECK(UARTTx(&u, data, 10) == 10);
+	CHECK(DmaMem(t.Tx, true) == (uint32_t)(uintptr_t)u.hTxFifo->pMemStart && DmaCnt(t.Tx) == 8);
+	DmaTxDrain(i);
+	CHECK(WireIs(i, data, 10));
+
+	c.bFifoBlocking = false;
+	CHECK(UARTInit(&u, &c));
+	CHECK(!CFifoIsBlocking(u.hTxFifo) && !CFifoIsBlocking(u.hRxFifo));
+
+	// The block is out of the FIFO, the DMA reads an aligned copy
+	WireReset(i);
+	s_TxReadyCnt = 0;
+	CHECK(UARTTx(&u, data, 10) == 10);
+	uint32_t mem = DmaMem(t.Tx, true);
+	uintptr_t fbeg = (uintptr_t)u.hTxFifo->pMemStart;
+	uintptr_t fend = fbeg + (uintptr_t)u.hTxFifo->MaxIdxCnt;
+	CHECK(DmaOn(t.Tx) && DmaCnt(t.Tx) == 10 && (mem & 3U) == 0);
+	CHECK(mem + 10 <= fbeg || mem >= fend);
+	CHECK(CFifoUsed(u.hTxFifo) == 0 && !u.bTxReady);
+
+	// The FIFO filled past its size while the block runs: Tx takes all,
+	// the oldest queued bytes are dropped, the block goes out unchanged
+	int size = CFifoAvail(u.hTxFifo);
+	int over = 40;
+	CHECK(size > 64 && size + over <= 600);
+	CHECK(UARTTx(&u, data + 100, size + over) == size + over);
+	CHECK(u.hTxFifo->DropCnt == (uint32_t)over && CFifoUsed(u.hTxFifo) == size);
+	DmaTxDrain(i);
+	memcpy(expect, data, 10);
+	memcpy(expect + 10, data + 100 + over, size);
+	CHECK(WireIs(i, expect, 10 + size));
+	CHECK(u.bTxReady && s_TxReadyCnt == 1);
+	CHECK((Rd(s_Inst[i].pReg->CR1) & USART_CR1_TCIE) == 0);
+
+	// A stream across the FIFO wrap, no drop: at most 32 bytes per block
+	WireReset(i);
+	int sent = 0;
+	for (int guard = 0; guard < 5000 && (sent < 1500 || !u.bTxReady) && Progress(sent + s_WireLen[i]); guard++)
+	{
+		if (sent < 1500)
+		{
+			int l = 1500 - sent < 23 ? 1500 - sent : 23;
+			CHECK(UARTTx(&u, data + sent, l) == l);
+			sent += l;
+		}
+		uint32_t n = DmaOn(t.Tx) ? DmaCnt(t.Tx) : 0;
+		CHECK(n <= 32);
+		if (DmaTxRun(i) > 0)
+		{
+			t.Vector();
+		}
+	}
+	CHECK(WireIs(i, data, 1500));
+	CHECK(u.hTxFifo->DropCnt == (uint32_t)over);
+
+	// Transfer error: the copy not sent is counted
+	WireReset(i);
+	u.TxDropCnt = 0;
+	CHECK(UARTTx(&u, data, 10) == 10);
+	CHECK(DmaCnt(t.Tx) == 10);
+	DmaFlags(t.Tx, F_TE);
+	DmaStopErr(t.Tx);
+	t.Tx.Vector();
+	CHECK(u.TxDropCnt == 10 && u.bTxReady && s_WireLen[i] == 0);
+
+	// RX FIFO full: the oldest bytes are dropped, the newest kept
+	static uint8_t rxd[300];
+	uint8_t got[300];
+	for (int k = 0; k < 300; k++)
+	{
+		rxd[k] = (uint8_t)(k * 13 + 5);
+	}
+	int rsize = CFifoAvail(u.hRxFifo);
+	CHECK(rsize < 300);
+	for (int total = 0; total < 300; total += 25)
+	{
+		DmaRxPut(i, rxd + total, 25, true);
+		RxIdle(i);
+	}
+	CHECK(RxAll(i, got, 300) == rsize && memcmp(got, rxd + 300 - rsize, rsize) == 0);
+	CHECK(u.RxDropCnt == 0 && u.hRxFifo->DropCnt == (uint32_t)(300 - rsize));
+
+	// Polled DMA: TxData and RxData service the channels
+	c.bIntMode = false;
+	CHECK(UARTInit(&u, &c));
+	WireReset(i);
+	sent = 0;
+	int recv = 0, total = 0;
+	for (int guard = 0; guard < 5000 && (sent < 600 || recv < 300 || !u.bTxReady) &&
+		 Progress(sent + recv + total + s_WireLen[i]); guard++)
+	{
+		if (sent < 600)
+		{
+			int l = 600 - sent < 25 ? 600 - sent : 25;
+			CHECK(UARTTx(&u, data + sent, l) == l);
+			sent += l;
+		}
+		if (total < 300)
+		{
+			int l = 300 - total < 19 ? 300 - total : 19;
+			DmaRxPut(i, rxd + total, l, false);
+			total += l;
+		}
+		if (recv < 300)
+		{
+			recv += RxAll(i, got + recv, 300 - recv);
+		}
+		else
+		{
+			// RxData services TX too
+			uint8_t b;
+			CHECK(UARTRx(&u, &b, 1) == 0);
+		}
+		DmaTxRun(i);
+	}
+	CHECK(WireIs(i, data, 600));
+	CHECK(recv == 300 && memcmp(got, rxd, 300) == 0);
+	CHECK(u.hTxFifo->DropCnt == 0 && u.hRxFifo->DropCnt == 0);
+}
+
 // Framing on the first USART, not LPUART
 static void TestFraming(int i)
 {
@@ -1828,6 +1978,7 @@ int main()
 		TestPolling(i);
 		TestInterrupt(i);
 		TestDma(i);
+		TestDmaDrop(i);
 		if (s_Inst[i].bLpuart)
 		{
 			TestLpuart(i);

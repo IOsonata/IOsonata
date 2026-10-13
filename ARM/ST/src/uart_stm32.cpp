@@ -37,9 +37,11 @@
 		                 from the data register
 		bIntMode true  : USART interrupts drain the TX CFIFO and fill the
 		                 RX CFIFO
-		bDMAMode true  : TX DMA sends blocks from the TX CFIFO, circular RX
-		                 DMA ring moved into the RX CFIFO. F0 USART1 and
-		                 USART2, L4, G4, F4 and WBA all instances.
+		bDMAMode true  : TX DMA sends blocks from the TX CFIFO, in place
+		                 with a blocking CFIFO, a copy with a non-blocking
+		                 one. Circular RX DMA ring moved into the RX CFIFO.
+		                 F0 USART1 and USART2, L4, G4, F4 and WBA all
+		                 instances.
 
 @author	Hoang Nguyen Hoan
 @date	Jun. 7, 2019
@@ -347,11 +349,14 @@ typedef struct {
 // RX DMA ring, power of 2. Moved into the RX CFIFO at half and full ring and
 // on IDLE, or by RxData without the interrupt.
 #define ST_UART_DMA_RX_RING		64
-// Most bytes TxData and RxData copy to or from a CFIFO with interrupts
-// disabled. Most USARTs have a single RDR, the RX interrupt must read it
-// within one character time or the next character is lost: 480 cycles at
-// 1 Mbaud on a 48 MHz Cortex-M0. With 8 bytes the copy keeps interrupts
-// disabled for at most about 260 cycles there.
+// Most bytes of a TX DMA block taken out of a non-blocking TX CFIFO, see
+// Stm32UartDmaTxStart. Multiple of 4.
+#define ST_UART_DMA_TX_COPY		32
+// Most bytes the driver copies to or from a CFIFO with interrupts disabled.
+// Most USARTs have a single RDR, the RX interrupt must read it within one
+// character time or the next character is lost: 480 cycles at 1 Mbaud on a
+// 48 MHz Cortex-M0. With 8 bytes the copy keeps interrupts disabled for at
+// most about 260 cycles there.
 #define ST_UART_COPY_MAX		8
 
 #pragma pack(push, 4)
@@ -366,6 +371,7 @@ typedef struct {
 	alignas(4) uint8_t RxDmaRing[ST_UART_DMA_RX_RING];	//!< RX DMA ring
 	alignas(4) uint8_t RxDmaFifoMem[ST_UART_DMA_RX_CFIFO_SIZE];	//!< RX CFIFO memory in DMA mode
 	alignas(4) uint8_t TxDmaFifoMem[ST_UART_DMA_CFIFO_SIZE];	//!< TX CFIFO memory in DMA mode
+	alignas(4) uint8_t TxDmaCopy[ST_UART_DMA_TX_COPY];	//!< TX bytes the DMA sends from a copy, see Stm32UartDmaTxStart
 #endif
 #ifdef ST_DMA_GPDMA
 	uint32_t RxDmaNode[3];			//!< Linked list node of the RX ring, see Stm32DmaLoop
@@ -393,7 +399,6 @@ typedef struct __Stm32_Uart_Dev {
 	uint16_t RxDmaRead;				//!< Ring index of the next byte to move to the RX CFIFO
 	bool DmaActive;					//!< TX DMA transfer running
 	uint32_t TxDmaLength;			//!< TX CFIFO bytes owned by the running transfer
-	alignas(4) uint8_t TxDmaAlign[4];	//!< Bytes up to the next aligned FIFO address
 #endif
 } Stm32UartDev_t;
 
@@ -981,43 +986,97 @@ static void Stm32UartDmaSetup(Stm32UartDev_t * const pDev)
 	}
 }
 
-// Start a DMA block with the first contiguous run of the TX CFIFO, sent in
+// Start a DMA block from the TX CFIFO. The DMA reads from an aligned address.
+// Returns false when the FIFO is empty.
+//
+// Blocking FIFO: the block is the first contiguous run of the FIFO, sent in
 // place. The bytes stay in the FIFO, so the producer cannot write over them,
-// until the block is done. The DMA reads from an aligned address: when the
-// FIFO read position is not aligned, the bytes up to the next aligned
-// address are copied to TxDmaAlign and sent first, the next block continues
-// aligned. A longer block is cut to a multiple of 4 so that the next one
-// starts aligned too, the rest goes in the next block. TC is cleared first
-// so that it is set again by the last character of this block. Returns false
-// when the FIFO is empty.
+// until the block is done. When the FIFO read position is not aligned, the
+// bytes up to the next aligned address are copied to TxDmaCopy and sent
+// first, the next block continues aligned. A longer block is cut to a
+// multiple of 4 so that the next one starts aligned too, the rest goes in the
+// next block.
+//
+// Non-blocking FIFO: a put on a full FIFO drops the oldest bytes and writes
+// over them, the bytes of a block sent in place. The block is taken out of
+// the FIFO and copied to TxDmaCopy, at most ST_UART_DMA_TX_COPY bytes, the
+// DMA sends the copy. A put then drops only bytes still in the FIFO. Each
+// piece is taken and copied with interrupts disabled, the freed bytes cannot
+// be written by TxData from an interrupt before they are copied. Only the TC
+// interrupt calls this with interrupts enabled, from TxData, RxData and the
+// DMA interrupt the whole copy runs with interrupts disabled. The copy is
+// made after TC, with the line idle.
+//
+// TC is cleared first so that it is set again by the last character of this
+// block.
 static bool Stm32UartDmaTxStart(Stm32UartDev_t * const pDev)
 {
-	int cnt = 0xFFFC;
-	uint8_t *p = CFifoPeekMultiple(pDev->pUartDev->hTxFifo, &cnt);
+	hCFifo_t fifo = pDev->pUartDev->hTxFifo;
+	uint8_t *copy = pDev->pMem->TxDmaCopy;
+	uint8_t *p;
+	uint32_t len;
 
-	if (p == NULL)
+	if (CFifoIsBlocking(fifo))
 	{
-		return false;
-	}
+		int cnt = 0xFFFC;
 
-	uint32_t len = (uint32_t)cnt;
-	uint32_t head = (uint32_t)(uintptr_t)p & 3U;
-
-	if (head != 0U)
-	{
-		head = 4U - head;
-		if (len > head)
+		p = CFifoPeekMultiple(fifo, &cnt);
+		if (p == NULL)
 		{
-			len = head;
+			return false;
 		}
-		memcpy(pDev->TxDmaAlign, p, len);
-		p = pDev->TxDmaAlign;
+
+		len = (uint32_t)cnt;
+
+		uint32_t head = (uint32_t)(uintptr_t)p & 3U;
+
+		if (head != 0U)
+		{
+			head = 4U - head;
+			if (len > head)
+			{
+				len = head;
+			}
+			memcpy(copy, p, len);
+			p = copy;
+		}
+		else if (len > 4U && (len & 3U) != 0U)
+		{
+			len &= ~3U;
+		}
+		// Released when the block is done
+		pDev->TxDmaLength = len;
 	}
-	else if (len > 4U && (len & 3U) != 0U)
+	else
 	{
-		len &= ~3U;
+		// In pieces of at most ST_UART_COPY_MAX bytes, a piece also ends
+		// where the FIFO data wraps
+		len = 0;
+		while (len < ST_UART_DMA_TX_COPY)
+		{
+			int cnt = ST_UART_DMA_TX_COPY - len < ST_UART_COPY_MAX ? ST_UART_DMA_TX_COPY - len : ST_UART_COPY_MAX;
+			uint32_t state = DisableInterrupt();
+			uint8_t *s = CFifoGetMultiple(fifo, &cnt);
+
+			if (s != NULL)
+			{
+				memcpy(copy + len, s, cnt);
+			}
+			EnableInterrupt(state);
+			if (s == NULL)
+			{
+				break;
+			}
+			len += (uint32_t)cnt;
+		}
+		if (len == 0U)
+		{
+			return false;
+		}
+		p = copy;
+		// Already out of the FIFO
+		pDev->TxDmaLength = 0;
 	}
-	pDev->TxDmaLength = len;
 	pDev->DmaActive = true;
 	ST_USART_TC_CLEAR(pDev->pReg);
 	if (pDev->pUartDev->DevIntrf.bIntEn)
@@ -1036,8 +1095,8 @@ static bool Stm32UartDmaTxStart(Stm32UartDev_t * const pDev)
 // character has left the line, or when the DMA stopped on a transfer error.
 // The DMA transfer complete flag is not used, it is set as soon as the last
 // byte is in TDR. Holding TX busy until TC lets the bytes queued meanwhile go
-// in the next block. The block bytes are released and the next block takes
-// what was queued. With the FIFO empty TX is ready again and the application
+// in the next block. The block bytes sent in place are released and the next
+// block takes what was queued. With the FIFO empty TX is ready again and the application
 // is told. From the TC and DMA interrupts, or from TxData in polling mode.
 // On GPDMA the count is what is left to read from memory, the channel FIFO
 // may still hold bytes with the count at 0. TC is not set before they are
@@ -1829,8 +1888,7 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 
 	// Select polling, USART interrupt or DMA. DMA is supported only on the
 	// instances with DMA channels in the instance table.
-	if ((pCfg->bDMAMode && !pCfg->bFifoBlocking) ||
-		pCfg->bIrDAMode || pCfg->Mode != UART_MODE_UART ||
+	if (pCfg->bIrDAMode || pCfg->Mode != UART_MODE_UART ||
 		(pCfg->FlowControl != UART_FLWCTRL_NONE && pCfg->FlowControl != UART_FLWCTRL_HW) ||
 		(pCfg->Parity != UART_PARITY_NONE && pCfg->Parity != UART_PARITY_EVEN && pCfg->Parity != UART_PARITY_ODD) ||
 		(pCfg->DataBits != 7 && pCfg->DataBits != 8) ||
