@@ -1770,7 +1770,7 @@ static void TestMasterPolling(void)
 
 	// Register dump text
 	{
-		char txt[200];
+		char txt[320];
 		const int n = Ra4m1I2cDump(&dev.DevIntrf, txt, sizeof(txt));
 
 		Check(n > 0 && n == (int)strlen(txt), "dump length %d", n);

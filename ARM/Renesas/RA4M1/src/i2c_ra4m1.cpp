@@ -179,6 +179,16 @@ typedef struct
 	int PriorCount;			// write count kept over a repeated start
 	bool bSlaveNack;		// master NACK seen while transmitting
 	bool bSlaveLastReal;	// last byte loaded in ICDRT came from the buffer
+
+	// Diagnostic counters, shown by Ra4m1I2cDump()
+	uint16_t DbgIrq;		// interrupt handler entries
+	uint16_t DbgSAddr;		// slave address bytes received
+	uint16_t DbgSRx;		// slave data bytes received
+	uint8_t DbgSSr1;		// ICSR1 at the last slave address byte
+	uint8_t DbgSAddrByte;	// last address byte read by the slave
+	uint8_t DbgMState;		// master state at the last abort
+	uint8_t DbgMSr2;		// master ICSR2 at the last abort
+	uint8_t DbgMSent;		// master bytes loaded at the last abort
 } Ra4m1I2cDev_t;
 
 static Ra4m1I2cDev_t s_Ra4m1I2cDev[RA4M1_I2C_COUNT] = {
@@ -518,6 +528,9 @@ static bool Ra4m1I2cWaitIdle(Ra4m1I2cDev_t * const pDev)
 static void Ra4m1I2cMasterAbort(Ra4m1I2cDev_t * const pDev)
 {
 	pDev->bError = true;
+	pDev->DbgMState = (uint8_t)pDev->MState;
+	pDev->DbgMSr2 = pDev->pReg->ICSR2;
+	pDev->DbgMSent = (uint8_t)pDev->Sent;
 	Ra4m1I2cConfigure(pDev);
 	pDev->MState = RA4M1_I2C_M_DONE;
 }
@@ -1053,6 +1066,10 @@ static void Ra4m1I2cSlaveAddress(Ra4m1I2cDev_t * const pDev)
 	const uint8_t sr1 = reg->ICSR1;
 	const uint8_t addr = reg->ICDRR;
 	const bool read = (addr & 1U) != 0U;
+
+	pDev->DbgSAddr++;
+	pDev->DbgSSr1 = sr1;
+	pDev->DbgSAddrByte = addr;
 	const int prior = pDev->PriorCount;
 	int idx = 0;
 
@@ -1115,6 +1132,8 @@ static void Ra4m1I2cSlaveReceive(Ra4m1I2cDev_t * const pDev)
 	I2CDev_t *i2c = pDev->pI2cDev;
 	const uint8_t value = reg->ICDRR;
 	uint8_t *buf = i2c->pTRBuff[pDev->SlaveIdx];
+
+	pDev->DbgSRx++;
 	const int len = i2c->TRBuffLen[pDev->SlaveIdx];
 
 	if (buf != NULL && pDev->SlaveCount < len)
@@ -1209,6 +1228,7 @@ static void Ra4m1I2cIrqHandler(int IntNo, void *pCtx)
 	Ra4m1I2cDev_t *dev = (Ra4m1I2cDev_t *)pCtx;
 
 	Ra4m1AcknowledgeInt((IRQn_Type)IntNo);
+	dev->DbgIrq++;
 
 	if (dev->pI2cDev == NULL)
 	{
@@ -1481,13 +1501,17 @@ int Ra4m1I2cDump(DevIntrf_t * const pIntrf, char *Buf, int Len)
 	const uint32_t v[] = {
 		SystemPeriphClockGet(1), R_MSTP->MSTPCRB, R_SYSTEM->SCKDIVCR,
 		r->ICCR1, r->ICCR2, r->ICMR1, r->ICMR2, r->ICMR3, r->ICFER,
-		r->ICSER, r->ICIER, r->ICSR1, r->ICSR2, r->ICBRL, r->ICBRH
+		r->ICSER, r->ICIER, r->ICSR1, r->ICSR2, r->ICBRL, r->ICBRH,
+		dev->DbgIrq, dev->DbgSAddr, dev->DbgSRx, dev->DbgSSr1,
+		dev->DbgSAddrByte, dev->DbgMState, dev->DbgMSr2, dev->DbgMSent
 	};
 	const char *name[] = {
 		"pclkb=", " mstpb=", " sckdiv=", " cr1=", " cr2=", " mr1=", " mr2=",
-		" mr3=", " fer=", " ser=", " ier=", " sr1=", " sr2=", " brl=", " brh="
+		" mr3=", " fer=", " ser=", " ier=", " sr1=", " sr2=", " brl=", " brh=",
+		" irq=", " sadr=", " srx=", " ssr1=", " sab=", " mst=", " msr2=", " msent="
 	};
-	const int digits[] = { 8, 8, 8, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2 };
+	const int digits[] = { 8, 8, 8, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+		4, 4, 4, 2, 2, 2, 2, 2 };
 	int pos = 0;
 
 	for (int i = 0; i < (int)(sizeof(v) / sizeof(v[0])); i++)
