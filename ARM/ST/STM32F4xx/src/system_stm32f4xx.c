@@ -63,6 +63,7 @@
 
 
 #include "stm32f4xx.h"
+#include "coredev/system_core_clock.h"
 
 #if !defined  (HSE_VALUE) 
   #define HSE_VALUE    ((uint32_t)25000000) /*!< Default value of the External oscillator in Hz */
@@ -286,6 +287,41 @@ void SystemCoreClockUpdate(void)
   tmp = AHBPrescTable[((RCC->CFGR & RCC_CFGR_HPRE) >> 4)];
   /* HCLK frequency */
   SystemCoreClock >>= tmp;
+}
+
+/**
+  * @brief  Get core clock frequency (HCLK)
+  * @retval SystemCoreClock in Hz, as set by SystemCoreClockUpdate
+  */
+uint32_t SystemCoreClockGet(void)
+{
+  return SystemCoreClock;
+}
+
+/**
+  * @brief  Get peripheral clock frequency, derived from HCLK and the APB
+  *         prescaler
+  * @param  Idx : 0 PCLK1 (APB1), 1 PCLK2 (APB2)
+  * @retval Frequency in Hz, 0 for another Idx
+  */
+uint32_t SystemPeriphClockGet(int Idx)
+{
+  uint32_t ppre;
+
+  if (Idx == 0)
+  {
+    ppre = (RCC->CFGR & RCC_CFGR_PPRE1_Msk) >> RCC_CFGR_PPRE1_Pos;
+  }
+  else if (Idx == 1)
+  {
+    ppre = (RCC->CFGR & RCC_CFGR_PPRE2_Msk) >> RCC_CFGR_PPRE2_Pos;
+  }
+  else
+  {
+    return 0;
+  }
+
+  return SystemCoreClock >> APBPrescTable[ppre];
 }
 
 #if defined (DATA_IN_ExtSRAM) && defined (DATA_IN_ExtSDRAM)
