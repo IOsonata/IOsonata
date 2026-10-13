@@ -424,7 +424,7 @@ static inline bool Ra4m1I2cBusy(const R_IIC0_Type * const pReg)
 }
 
 // Level of the SCL pad (PIDR), for the diagnostic dump.
-static uint8_t Ra4m1I2cSclPad(const Ra4m1I2cDev_t * const pDev)
+static uint8_t Ra4m1I2cSclPadWait(const Ra4m1I2cDev_t * const pDev, int Loops)
 {
 	const I2CCfg_t *cfg = &pDev->pI2cDev->Cfg;
 
@@ -435,12 +435,17 @@ static uint8_t Ra4m1I2cSclPad(const Ra4m1I2cDev_t * const pDev)
 
 	const IOPinCfg_t *scl = &cfg->pIOPinMap[I2C_SCL_IOPIN_IDX];
 
-	for (int i = 0; i < 2000; i++)
+	for (int i = 0; i < Loops; i++)
 	{
 		__NOP();
 	}
 
 	return (R_PFS->PORT[scl->PortNo].PIN[scl->PinNo].PmnPFS & 2U) != 0U ? 1U : 0U;
+}
+
+static uint8_t Ra4m1I2cSclPad(const Ra4m1I2cDev_t * const pDev)
+{
+	return Ra4m1I2cSclPadWait(pDev, 2000);
 }
 
 static void Ra4m1I2cConfigure(Ra4m1I2cDev_t * const pDev)
@@ -1581,12 +1586,14 @@ int Ra4m1I2cDump(DevIntrf_t * const pIntrf, char *Buf, int Len)
 
 	// Pad level with the block enabled, with ICE cleared, and enabled again.
 	// Only when idle, as it briefly disables the block.
-	uint8_t pad[7] = { 0xFFU, 0xFFU, 0xFFU, 0xFFU, 0xFFU, 0xFFU, 0xFFU };
+	uint8_t pad[8] = { 0xFFU, 0xFFU, 0xFFU, 0xFFU, 0xFFU, 0xFFU, 0xFFU, 0xFFU };
 
 	if (!dev->bOpen && !dev->bAsync && dev->MState == RA4M1_I2C_M_IDLE &&
 		dev->SState == RA4M1_I2C_S_IDLE && dev->bEnabled)
 	{
 		pad[0] = Ra4m1I2cSclPad(dev);
+		// Same level after a much longer wait, to see a slow rise.
+		pad[7] = Ra4m1I2cSclPadWait(dev, 400000);
 		dev->pReg->ICCR1 = 0U;
 		pad[1] = Ra4m1I2cSclPad(dev);
 		// Clearing ICE also clears SCLO and SDAO, which would leave the block
@@ -1634,6 +1641,8 @@ int Ra4m1I2cDump(DevIntrf_t * const pIntrf, char *Buf, int Len)
 
 	pos = Ra4m1I2cPutStr(Buf, pos, Len, " padnow=");
 	pos = Ra4m1I2cPutHex(Buf, pos, Len, pad[0], 2);
+	pos = Ra4m1I2cPutStr(Buf, pos, Len, " padlate=");
+	pos = Ra4m1I2cPutHex(Buf, pos, Len, pad[7], 2);
 	pos = Ra4m1I2cPutStr(Buf, pos, Len, " padoff=");
 	pos = Ra4m1I2cPutHex(Buf, pos, Len, pad[1], 2);
 	pos = Ra4m1I2cPutStr(Buf, pos, Len, " padon=");
