@@ -152,6 +152,7 @@ for opt in ['-O0', '-O2']:
         for index, path in enumerate(['src/usb/usbd_cdc.cpp',
                                       'src/usb/usbd_cdc_desc.cpp',
                                       'src/usb/usbd_hid.cpp',
+                                      'src/usb/usbd_bulk.cpp',
                                       'src/usb/usb_int.cpp',
                                       'src/usb/usbd_epalloc.cpp',
                                       'src/app_evt_handler.cpp',
@@ -174,3 +175,5 @@ for opt in ['-O0', '-O2']:
         subprocess.run([exe], check=True, timeout=5)
 
         subprocess.run([exe, "composite"], check=True, timeout=5)
+
+        subprocess.run([exe, "composite", "bulk"], check=True, timeout=5)

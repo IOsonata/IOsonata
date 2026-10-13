@@ -32,6 +32,7 @@ SOURCES = [
     'src/usb/usbd_cdc_desc.cpp',
     'src/usb/usbd_epalloc.cpp',
     'src/usb/usbd_hid.cpp',
+    'src/usb/usbd_bulk.cpp',
     'src/usb/usb_int.cpp',
 ]
 INCLUDES = [
@@ -130,8 +131,8 @@ def build(prefix, output, mode, kind):
     addresses = {name: int(addr, 16) for addr, kind, name in
                  re.findall(r'^([0-9a-fA-F]+)\s+(\w)\s+(\S+)$', symbols, re.M)}
     if kind == 'composite':
-        for class_name in ['UsbdCdc', 'UsbdHid']:
-            assert any(name.startswith('_ZN7' + class_name + '4Init')
+        for class_name in ['UsbdCdc', 'UsbdHid', 'UsbdBulk']:
+            assert any(name.startswith('_ZN' + str(len(class_name)) + class_name + '4Init')
                        for name in addresses), class_name + ' initialization discarded'
         assert 'UsbIntIntrfInit' in addresses
     assert vectors[1] == addresses['ResetEntry'] | 1

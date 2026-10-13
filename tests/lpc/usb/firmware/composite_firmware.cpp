@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
 @file	composite_firmware.cpp
 
-@brief	LPC11U35 CDC/HID composite firmware link fixture.
+@brief	LPC11U35 CDC/HID/bulk composite firmware link fixture.
 
 Uses the real generic classes, event queue and native controller. Small
 caller-owned buffers keep the fixture suitable for the LPC11U35 main RAM.
@@ -37,6 +37,7 @@ SOFTWARE.
 #include "app_evt_handler.h"
 #include "usb/usbd_cdc.h"
 #include "usb/usbd_hid.h"
+#include "usb/usbd_bulk.h"
 #include "board.h"
 
 McuOsc_t g_McuOsc = MCUOSC;
@@ -44,6 +45,9 @@ McuOsc_t g_McuOsc = MCUOSC;
 static const IOPinCfg_t s_Pins[] = USB_PINS;
 static UsbdCdc s_Cdc;
 static UsbdHid s_Hid;
+static UsbdBulk s_Bulk;
+alignas(4) static uint8_t s_BulkRx[USBD_BULK_RXMEM_SIZE(2)];
+alignas(4) static uint8_t s_BulkTx[CFIFO_MEMSIZE(128)];
 static const uint8_t s_ReportDesc[] = {
 	0x06, 0x00, 0xFF, 0x09, 0x01, 0xA1, 0x01,
 	0x75, 0x08, 0x95, 0x40, 0x09, 0x01, 0x81, 0x02,
@@ -62,7 +66,7 @@ static const UsbCfg_t s_UsbCfg = {
 	.Pid = 0x0005,
 	.DevVer = 0x0100,
 	.pManufacturer = "I-SYST",
-	.pProduct = "LPC11U35 CDC/HID link fixture",
+	.pProduct = "LPC11U35 CDC/HID/bulk link fixture",
 	.IntPrio = 6,
 	.pIOPinMap = s_Pins,
 	.NbIOPins = sizeof(s_Pins) / sizeof(s_Pins[0]),
@@ -79,6 +83,14 @@ static const UsbdCdcCfg_t s_CdcCfg = {
 	.TxFifoMemSize = sizeof(s_CdcTx),
 	.pTxFifoMem = s_CdcTx,
 };
+static const UsbdBulkCfg_t s_BulkCfg = {
+	.DevNo = 0,
+	.bBlocking = true,
+	.RxFifoMemSize = sizeof(s_BulkRx),
+	.pRxFifoMem = s_BulkRx,
+	.TxFifoMemSize = sizeof(s_BulkTx),
+	.pTxFifoMem = s_BulkTx,
+};
 static const UsbdHidCfg_t s_HidCfg = {
 	.DevNo = 0,
 	.pReportDesc = s_ReportDesc,
@@ -88,7 +100,7 @@ static const UsbdHidCfg_t s_HidCfg = {
 };
 
 // Preserve unsent bytes when a transport is busy. Each class has its own
-// pending packet; servicing CDC must not prevent HID from making progress.
+// pending packet; servicing one class must not prevent another from making progress.
 static void Echo(DeviceIntrf &Intrf, uint8_t *pBuffer, int &Pending)
 {
 	if (Pending == 0)
@@ -112,20 +124,24 @@ static void Echo(DeviceIntrf &Intrf, uint8_t *pBuffer, int &Pending)
 int main()
 {
 	if (!AppEvtHandlerInit(g_AppEvtHandlerQueMem, sizeof(g_AppEvtHandlerQueMem)) ||
-		!UsbInit(&s_UsbCfg) || !s_Cdc.Init(s_CdcCfg) || !s_Hid.Init(s_HidCfg))
+		!UsbInit(&s_UsbCfg) || !s_Cdc.Init(s_CdcCfg) ||
+		!s_Hid.Init(s_HidCfg) || !s_Bulk.Init(s_BulkCfg))
 	{
 		return -1;
 	}
 	(void)UsbEnable(0);
 	uint8_t cdcPacket[64];
 	uint8_t hidPacket[64];
+	uint8_t bulkPacket[64];
 	int cdcPending = 0;
 	int hidPending = 0;
+	int bulkPending = 0;
 	while (1)
 	{
 		if (!AppEvtHandlerExec())
 			UsbCheckStatus();
 		Echo(s_Cdc, cdcPacket, cdcPending);
 		Echo(s_Hid, hidPacket, hidPending);
+		Echo(s_Bulk, bulkPacket, bulkPending);
 	}
 }

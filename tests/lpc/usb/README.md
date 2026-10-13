@@ -234,12 +234,13 @@ UsbHidLoopback/{Debug,Release} within the --output directory.
 ## Composite ARM firmware
 
 The same `link.py` command also builds `firmware/composite_firmware.cpp` in
-Debug and Release. This fixture registers CDC and HID together, uses the CDC
+Debug and Release. This fixture registers CDC, HID and vendor bulk together, uses the CDC
 example board configuration and services both through DeviceIntrf. It keeps
-separate pending packets when a transport is busy. Both class initializers
+separate pending packets when a transport is busy. All three class initializers
 and the interrupt transport must be present in the linked image.
 
-CDC uses two 64-byte receive slots and a 128-byte transmit FIFO. HID uses one
+CDC and vendor bulk each use two 64-byte receive slots and a 128-byte transmit
+FIFO. HID uses one
 caller-owned report slot per direction. The application event queue holds
 16 events. These smaller CDC buffers explain why composite RAM is lower than
 the standalone CDC example with its 1024-byte transmit FIFO.
@@ -248,8 +249,8 @@ Measured with the same GCC 13.2.1/binutils 2.42 toolchain:
 
 | Build | Flash / 65536 bytes | Main RAM / 8160 bytes | USB SRAM / 2048 bytes | Linker stack allowance |
 | --- | ---: | ---: | ---: | ---: |
-| Debug | 53560 | 3804 | 832 | 1448 |
-| Release | 23464 | 3008 | 832 | 1716 |
+| Debug | 55356 | 4292 | 832 | 1288 |
+| Release | 24420 | 3496 | 832 | 1552 |
 
 Debug retains rdimon semihosting; Release uses nosys. Both pass the production
 linker, vector checksum, USB IRQ and IAP/USB RAM checks. With --output, the
@@ -270,3 +271,13 @@ Control-read OUT status uses the same ordering when it completes before the
 next SETUP. A HID class callback regression checks COMPLETE rather than ABORT
 for the finished read. Transport regressions cover a still-active OUT status
 and an early-terminated read so neither becomes a false successful completion.
+
+
+The LPC11U35 library also links the shared `usbd_bulk.cpp` and its public header.
+The host fixture runs a third configuration with CDC, HID and vendor bulk:
+four interfaces, seven unique data endpoint addresses, and all four available
+non-control IN endpoints allocated. It transfers a 64-byte vendor packet on
+EP4 OUT/IN while a HID IN report remains pending, and repeats after reconnect.
+CDC-only and CDC/HID configurations remain separate regression runs. All three
+run at -O0 and -O2 with UBSan. The composite ARM measurements above now include
+vendor bulk; the standalone CDC and HID firmware sizes are unchanged.

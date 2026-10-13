@@ -1270,5 +1270,15 @@
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usbd_hid.h</locationURI>
 		</link>
+		<link>
+			<name>src/usbd_bulk.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usbd_bulk.cpp</locationURI>
+		</link>
+		<link>
+			<name>include/usb/usbd_bulk.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usbd_bulk.h</locationURI>
+		</link>
 	</linkedResources>
 </projectDescription>

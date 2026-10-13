@@ -18,7 +18,8 @@ Each subfolder also has its own `run.py` and README for focused checks:
 - `startup`: LPC11U35 linker layout and checksum arithmetic.
 - `iap`: LPC11Uxx IAP compatibility and interrupt state.
 - `iap_shared`: shared IAP commands and interrupt state.
-- `usb`: LPC11Uxx controller capabilities and C/C++ header compatibility.
+- `usb`: LPC11Uxx native controller, EP0, lifecycle, CDC/HID/vendor-bulk
+  integration and optional ARM firmware links (`usb/link.py`).
 
 The host suites require Python 3, GCC/G++, and GNU binutils. They use temporary
 build directories and can be launched from any working directory. Register

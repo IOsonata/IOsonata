@@ -5,6 +5,7 @@
 #include "app_evt_handler.h"
 #include "usb/usbd_cdc.h"
 #include "usb/usbd_hid.h"
+#include "usb/usbd_bulk.h"
 #include "usb_hw_lpc11uxx.h"
 
 class TestHid : public UsbdHid {
@@ -19,6 +20,10 @@ public:
 static UsbdCdc s_Cdc;
 static TestHid s_Hid;
 static bool s_Composite;
+static bool s_VendorBulk;
+static UsbdBulk s_Bulk;
+alignas(4) static uint8_t s_BulkRx[USBD_BULK_RXMEM_SIZE(2)];
+alignas(4) static uint8_t s_BulkTx[CFIFO_MEMSIZE(128)];
 static unsigned s_HidTx;
 static const uint8_t s_ReportDesc[] = {
 	0x06, 0x00, 0xFF, 0x09, 0x01, 0xA1, 0x01,
@@ -123,8 +128,9 @@ static void Enumerate(void)
 	assert(UsbGetAddress(0) == 7);
 	assert(ControlRead(0x80, 6, 0x0200, 0, 9, descriptor, sizeof(descriptor)) == 9);
 	const unsigned total = descriptor[2] | (descriptor[3] << 8);
-	assert(total == 9 + sizeof(UsbdCdcDesc_t) + (s_Composite ? sizeof(UsbdHidDesc_t) : 0));
-	assert(descriptor[4] == (s_Composite ? 3 : 2));
+	assert(total == 9 + sizeof(UsbdCdcDesc_t) + (s_Composite ? sizeof(UsbdHidDesc_t) : 0) +
+		(s_VendorBulk ? sizeof(UsbdBulkDesc_t) : 0));
+	assert(descriptor[4] == (s_VendorBulk ? 4 : (s_Composite ? 3 : 2)));
 	assert(ControlRead(0x80, 6, 0x0200, 0, total, descriptor, sizeof(descriptor)) == total);
 	unsigned endpoints = 0;
 	unsigned addresses = 0;
@@ -143,7 +149,7 @@ static void Enumerate(void)
 		addresses |= 1U << physical;
 		assert(mps == (address == (0x80U | cdc->NotifyEpNo) ? 8U : 64U));
 	}
-	assert(endpoints == (s_Composite ? 5 : 3));
+	assert(endpoints == (s_VendorBulk ? 7 : (s_Composite ? 5 : 3)));
 	// A 31-character UTF-16 string is exactly 64 bytes, requiring a ZLP
 	// because the host asked for more. The UID string takes 64+2 bytes.
 	assert(ControlRead(0x80, 6, 0x0301, 0x0409, 255, descriptor, sizeof(descriptor)) == 64);
@@ -206,6 +212,27 @@ static void Loopback(void)
 	assert((memory->Command[2 * (out + 1)] & (1U << 31)) == 0);
 }
 
+static void BulkLoopback(void)
+{
+	if (!s_VendorBulk)
+		return;
+	const UsbdBulkDev_t *bulk = s_Bulk;
+	assert(bulk->EpNo == 4 && bulk->ItfNo == 3);
+	const unsigned out = 2U * bulk->EpNo;
+	uint8_t sent[64];
+	uint8_t received[64];
+	for (unsigned i = 0; i < sizeof(sent); ++i)
+		sent[i] = (uint8_t)(i ^ 0x69);
+	USB_IRQHandler();
+	std::memcpy(TestUsbMemory()->Packet[out], sent, sizeof(sent));
+	TestUsbPacketDone(out, sizeof(sent));
+	assert(s_Bulk.Rx(0, received, sizeof(received)) == sizeof(received));
+	assert(std::memcmp(received, sent, sizeof(sent)) == 0);
+	assert(s_Bulk.Tx(0, received, sizeof(received)) == sizeof(received));
+	assert(std::memcmp(TestUsbMemory()->Packet[out + 1], sent, sizeof(sent)) == 0);
+	TestUsbPacketDone(out + 1, sizeof(sent));
+}
+
 static void HidReports(void)
 {
 	if (!s_Composite)
@@ -249,7 +276,8 @@ static void HidReports(void)
 	assert(std::memcmp(report, received, sizeof(report)) == 0);
 	assert(s_Hid.Tx(0, received, sizeof(received)) == sizeof(received));
 	const unsigned before = s_HidTx;
-	Loopback(); // CDC progresses while the HID IN report is still active.
+	Loopback(); // Other classes progress while the HID IN report is active.
+	BulkLoopback();
 	assert(s_HidTx == before);
 	assert(std::memcmp(TestUsbMemory()->Packet[out + 1], report, sizeof(report)) == 0);
 	TestUsbPacketDone(out + 1, sizeof(report));
@@ -259,6 +287,7 @@ static void HidReports(void)
 int main(int argc, char **)
 {
 	s_Composite = argc > 1;
+	s_VendorBulk = argc > 2;
 	TestUsbInitialize();
 	assert(AppEvtHandlerInit(s_Events, sizeof(s_Events)));
 	const IOPinCfg_t pin = {0, 3, IOPINOP_FUNC1, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL};
@@ -286,6 +315,16 @@ int main(int argc, char **)
 		hidCfg.pTxBuffer = s_HidTxBuffer;
 		hidCfg.EvtCB = HidEvent;
 		assert(s_Hid.Init(hidCfg));
+	}
+	if (s_VendorBulk)
+	{
+		UsbdBulkCfg_t bulkCfg = {};
+		bulkCfg.bBlocking = true;
+		bulkCfg.pRxFifoMem = s_BulkRx;
+		bulkCfg.RxFifoMemSize = sizeof(s_BulkRx);
+		bulkCfg.pTxFifoMem = s_BulkTx;
+		bulkCfg.TxFifoMemSize = sizeof(s_BulkTx);
+		assert(s_Bulk.Init(bulkCfg));
 	}
 	assert(UsbEnable(0));
 	ProcessEvents();
@@ -336,6 +375,8 @@ int main(int argc, char **)
 	HidReports();
 	assert(s_PortOpened == 2 && s_RxEvents == (s_Composite ? 8U : 4U));
 	UsbDisable(0);
+	if (s_VendorBulk)
+		std::puts("LPC11Uxx CDC/HID/vendor bulk, seven endpoint addresses and reconnect: PASS");
 	if (s_Composite)
 		std::puts("LPC11Uxx composite CDC/HID descriptors, reports and reconnect: PASS");
 	std::puts("LPC11Uxx CDC enumeration, line coding, loopback, notifications and reconnect: PASS");
