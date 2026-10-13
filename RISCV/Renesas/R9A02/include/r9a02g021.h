@@ -235,6 +235,7 @@ SOFTWARE.
 #define R9A02_SOPCCR_SOPCMTSF			(1U << 4)
 #define R9A02_SOSCCR_SOSTP				(1U << 0)
 #define R9A02_LOCOCR_LCSTP				(1U << 0)
+#define R9A02_SBYCR_SSBY				(1U << 15)		//!< 1: WFI enters Software Standby (10.2.1)
 
 #define R9A02_PRCR_KEY					0xA500U
 #define R9A02_PRCR_PRC0					(1U << 0)		//!< Clock generation registers
@@ -242,6 +243,9 @@ SOFTWARE.
 #define R9A02_PRCR_PRC3					(1U << 3)		//!< LVD registers
 
 #define R9A02_FLCN_FLDWAITR				R9A02_REG8(R9A02_FLCN_BASE + 0x3FC4)
+#define R9A02_FLCN_FENTRYR				R9A02_REG16(R9A02_FLCN_BASE + 0x3FB0)	//!< Not 0 in P/E mode
+#define R9A02_FLCN_TSCDR				R9A02_REG16(R9A02_FLCN_BASE + 0x0228)	//!< Temperature sensor calibration, 32.2.1
+#define R9A02_TSCDR_CAL140_Msk			0x0FFFU			//!< 12-bit result at Tj 140 C, VCC 3.3 V
 #define R9A02_FLDWAITR_FLDWAIT1			(1U << 0)
 
 // Module stop, manual 10.2.2 to 10.2.5
@@ -355,6 +359,23 @@ typedef struct {
 #define R9A02_IRQCR_IRQMD_LOW			3U
 #define R9A02_IRQCR_FCLKSEL_Pos			4U
 #define R9A02_IRQCR_FLTEN				(1U << 7)
+
+// Software Standby wake-up enables, 12.2.7 and 12.2.8
+#define R9A02_WUPEN0_IRQ(n)				(1UL << (n))	//!< IRQ0 to IRQ7 pins
+#define R9A02_WUPEN0_IWDT				(1UL << 16)
+#define R9A02_WUPEN0_KEY				(1UL << 17)
+#define R9A02_WUPEN0_LVD1				(1UL << 18)
+#define R9A02_WUPEN0_LVD2				(1UL << 19)
+#define R9A02_WUPEN0_RTC				(1UL << 24)
+#define R9A02_WUPEN0_TML32				(1UL << 26)
+#define R9A02_WUPEN1_IICA0				(1UL << 0)
+#define R9A02_WUPEN1_IICA1				(1UL << 1)
+#define R9A02_WUPEN1_UARTA_RX_ENDI0		(1UL << 2)
+#define R9A02_WUPEN1_UARTA_RX_ERI0		(1UL << 3)
+#define R9A02_WUPEN1_UARTA_RX_ENDI1		(1UL << 4)
+#define R9A02_WUPEN1_UARTA_RX_ERI1		(1UL << 5)
+#define R9A02_WUPEN1_COMP_DET0			(1UL << 6)
+#define R9A02_WUPEN1_COMP_DET1			(1UL << 7)
 
 #define R9A02_IELSR_IELS_Msk			0x1FUL
 #define R9A02_IELSR_IR					(1UL << 16)		//!< Write 0 to clear, writing 1 is prohibited
@@ -577,6 +598,7 @@ typedef struct {
 #define R9A02_SAU_SIR_FECT				(1U << 2)
 
 #define R9A02_SAU_SMR_MD0				(1U << 0)		//!< 1: buffer empty interrupt
+#define R9A02_SAU_SMR_MD_SPI			(0U << 1)		//!< MD1[1:0] = 00b, simplified SPI
 #define R9A02_SAU_SMR_MD_UART			(1U << 1)		//!< MD1[1:0] = 01b
 #define R9A02_SAU_SMR_FIXED				(1U << 5)		//!< Bit 5 must be written 1
 #define R9A02_SAU_SMR_SIS0				(1U << 6)		//!< RX level inversion, odd channels
@@ -594,8 +616,107 @@ typedef struct {
 #define R9A02_SAU_SCR_PTC_EVEN			(2U << 8)
 #define R9A02_SAU_SCR_PTC_ODD			(3U << 8)
 #define R9A02_SAU_SCR_EOC				(1U << 10)		//!< Error interrupt enable, odd channels
+#define R9A02_SAU_SCR_DCP_Pos			12U				//!< Simplified SPI data and clock phase
+#define R9A02_SAU_SCR_DCP_Msk			(3U << R9A02_SAU_SCR_DCP_Pos)
+#define R9A02_SAU_SCR_DCP_DATA_EARLY	(1U << 13)		//!< DCP[1], data half a clock early: CPHA = 0
+#define R9A02_SAU_SCR_DCP_CLK_REV		(1U << 12)		//!< DCP[0], clock reversed, SCK idle low: CPOL = 0 (figure 23.3)
 #define R9A02_SAU_SCR_TRXE_RX			(1U << 14)
 #define R9A02_SAU_SCR_TRXE_TX			(2U << 14)
+#define R9A02_SAU_SCR_TRXE_TXRX			(3U << 14)
+
+#define R9A02_SAU_SO_CKO(Ch)			(1U << (8U + (Ch)))	//!< Serial clock output level
+
+// Realtime clock, manual 20.2. Time and alarm registers are BCD.
+
+typedef struct {
+	__IO uint8_t SEC;				//!< 0x00
+	__IO uint8_t MIN;				//!< 0x01
+	__IO uint8_t HOUR;				//!< 0x02
+	__IO uint8_t WEEK;				//!< 0x03 0 Sunday to 6 Saturday
+	__IO uint8_t DAY;				//!< 0x04
+	__IO uint8_t MONTH;				//!< 0x05
+	__IO uint8_t YEAR;				//!< 0x06 00 to 99
+	__IO uint8_t SUBCUD;			//!< 0x07 Time error correction
+	__IO uint8_t ALARMWM;			//!< 0x08 Alarm minute
+	__IO uint8_t ALARMWH;			//!< 0x09 Alarm hour
+	__IO uint8_t ALARMWW;			//!< 0x0A Alarm weekdays, bit n weekday n
+	__IO uint8_t RTCC0;				//!< 0x0B Control 0
+	__IO uint8_t RTCC1;				//!< 0x0C Control 1
+} R9A02_RTC_Type;
+
+#define R9A02_RTC						((R9A02_RTC_Type *)R9A02_RTC_BASE)
+
+#define R9A02_RTCC0_CT_Msk				7U				//!< Fixed-cycle interrupt period
+#define R9A02_RTCC0_CT_HALF_SEC			1U
+#define R9A02_RTCC0_CT_SEC				2U
+#define R9A02_RTCC0_CT_MIN				3U
+#define R9A02_RTCC0_CT_HOUR				4U
+#define R9A02_RTCC0_CT_DAY				5U
+#define R9A02_RTCC0_CT_MONTH			6U
+#define R9A02_RTCC0_AMPM				(1U << 3)		//!< 24-hour
+#define R9A02_RTCC0_RTC128EN			(1U << 4)		//!< 128 Hz count clock
+#define R9A02_RTCC0_RCLOE1				(1U << 5)		//!< 1 Hz output on RTC1HZ
+#define R9A02_RTCC0_RTCE				(1U << 7)		//!< Counting
+
+#define R9A02_RTCC1_RWAIT				(1U << 0)		//!< Counters stopped for access
+#define R9A02_RTCC1_RWST				(1U << 1)		//!< Counters accessible
+#define R9A02_RTCC1_RIFG				(1U << 3)		//!< Fixed-cycle interrupt, write 0 to clear
+#define R9A02_RTCC1_WAFG				(1U << 4)		//!< Alarm match, write 0 to clear
+#define R9A02_RTCC1_WALIE				(1U << 6)		//!< Alarm interrupt
+#define R9A02_RTCC1_WALE				(1U << 7)		//!< Alarm compare
+
+// I2C bus interface IICA, manual 24.2. IICA1 is at IICA0 + 0x100. All
+// registers are 8-bit.
+
+typedef struct {
+	__IO uint8_t IICA;				//!< 0x00 Shift register
+	__I uint8_t IICS;				//!< 0x01 Status, ALD clears on read
+	__IO uint8_t IICF;				//!< 0x02 Flag, read-only while IICE = 1
+	uint8_t RESERVED0[0x7D];
+	__IO uint8_t IICCTL0;			//!< 0x80 Control 0
+	__IO uint8_t IICCTL1;			//!< 0x81 Control 1, write with IICE = 0
+	__IO uint8_t IICWL;				//!< 0x82 SCL low width, write with IICE = 0
+	__IO uint8_t IICWH;				//!< 0x83 SCL high width, write with IICE = 0
+	__IO uint8_t SVA;				//!< 0x84 Own slave address
+	uint8_t RESERVED1[0x7B];
+} R9A02_IICA_Type;
+
+#define R9A02_IICA0						((R9A02_IICA_Type *)R9A02_IICA_BASE)
+#define R9A02_IICA1						((R9A02_IICA_Type *)(R9A02_IICA_BASE + 0x100UL))
+
+#define R9A02_IICS_SPD					(1U << 0)		//!< Stop detected
+#define R9A02_IICS_STD					(1U << 1)		//!< Start detected
+#define R9A02_IICS_ACKD					(1U << 2)		//!< ACK detected
+#define R9A02_IICS_TRC					(1U << 3)		//!< Transmit state
+#define R9A02_IICS_COI					(1U << 4)		//!< Address match
+#define R9A02_IICS_EXC					(1U << 5)		//!< Extension code
+#define R9A02_IICS_ALD					(1U << 6)		//!< Arbitration lost
+#define R9A02_IICS_MSTS					(1U << 7)		//!< Master state
+
+#define R9A02_IICF_IICRSV				(1U << 0)		//!< 1: communication reservation off
+#define R9A02_IICF_STCEN				(1U << 1)		//!< 1: start without a prior stop
+#define R9A02_IICF_IICBSY				(1U << 6)		//!< Bus busy
+#define R9A02_IICF_STCF					(1U << 7)		//!< Start request rejected
+
+#define R9A02_IICCTL0_SPT				(1U << 0)		//!< Stop condition, reads 0
+#define R9A02_IICCTL0_STT				(1U << 1)		//!< Start condition, reads 0
+#define R9A02_IICCTL0_ACKE				(1U << 2)		//!< ACK on reception
+#define R9A02_IICCTL0_WTIM				(1U << 3)		//!< 1: interrupt and stretch at the 9th clock
+#define R9A02_IICCTL0_SPIE				(1U << 4)		//!< Interrupt on stop detection
+#define R9A02_IICCTL0_WREL				(1U << 5)		//!< Release from clock stretch, reads 0
+#define R9A02_IICCTL0_LREL				(1U << 6)		//!< Exit communication, reads 0
+#define R9A02_IICCTL0_IICE				(1U << 7)		//!< Operation enable
+
+#define R9A02_IICCTL1_PRS				(1U << 0)		//!< fMCK = PCLKB / 2, PCLKB above 20 MHz
+#define R9A02_IICCTL1_DFC				(1U << 2)		//!< Digital filter, fast modes only
+#define R9A02_IICCTL1_SMC				(1U << 3)		//!< Fast mode or fast mode plus
+#define R9A02_IICCTL1_DAD				(1U << 4)		//!< SDA level
+#define R9A02_IICCTL1_CLD				(1U << 5)		//!< SCL level
+#define R9A02_IICCTL1_SVADIS			(1U << 6)		//!< All address match
+#define R9A02_IICCTL1_WUP				(1U << 7)		//!< Address match wake-up
+
+#define R9A02_IICA_PCLKB_MAX			32000000UL		//!< Notes of table 8.2
+#define R9A02_IICA_FMCK_MAX				20000000UL		//!< IICCTLn1.PRS, 24.2
 
 // UARTA, manual 25.2
 
@@ -617,6 +738,94 @@ typedef struct {
 } R9A02_UARTA_Type;
 
 #define R9A02_UARTA						((R9A02_UARTA_Type *)R9A02_UARTA_BASE)
+
+#define R9A02_ASIMA0_ISRMA				(1U << 0)		//!< 1: receive error on RX_ENDI
+#define R9A02_ASIMA0_ISSMA				(1U << 1)		//!< 1: TX_ENDI on buffer empty
+#define R9A02_ASIMA0_RXEA				(1U << 5)
+#define R9A02_ASIMA0_TXEA				(1U << 6)
+#define R9A02_ASIMA0_EN					(1U << 7)		//!< Operation clock on
+
+#define R9A02_ASIMA1_ALV				(1U << 0)		//!< Inverted levels
+#define R9A02_ASIMA1_DIR_LSB			(1U << 1)
+#define R9A02_ASIMA1_SL_2BIT			(1U << 2)		//!< Transmit 2 stop bits
+#define R9A02_ASIMA1_CL_5BIT			(0U << 3)
+#define R9A02_ASIMA1_CL_7BIT			(2U << 3)
+#define R9A02_ASIMA1_CL_8BIT			(3U << 3)
+#define R9A02_ASIMA1_PS_ZERO			(1U << 5)		//!< Parity bit 0, not checked
+#define R9A02_ASIMA1_PS_ODD				(2U << 5)
+#define R9A02_ASIMA1_PS_EVEN			(3U << 5)
+
+#define R9A02_ASISA_OVEA				(1U << 0)
+#define R9A02_ASISA_FEA					(1U << 1)
+#define R9A02_ASISA_PEA					(1U << 2)
+#define R9A02_ASISA_ERR_Msk				(R9A02_ASISA_OVEA | R9A02_ASISA_FEA | R9A02_ASISA_PEA)
+#define R9A02_ASISA_TXSFA				(1U << 4)		//!< Shift register transmitting
+#define R9A02_ASISA_TXBFA				(1U << 5)		//!< TXBA holds data
+
+#define R9A02_UTACK_CK_Msk				0x0FU			//!< fSEL / 2^CK, CK 0 to 6
+#define R9A02_UTACK_CK_SUBCLK			0x08U			//!< LOCO or SOSC, 32768 Hz
+#define R9A02_UTACK_CK_MAX				6U
+#define R9A02_UTA0CK_SEL_Pos			4U				//!< fSEL of both channels
+#define R9A02_UTA0CK_SEL_Msk			(3U << R9A02_UTA0CK_SEL_Pos)
+#define R9A02_UTA0CK_SEL_EXTAL			(1U << R9A02_UTA0CK_SEL_Pos)
+#define R9A02_UTA0CK_SEL_HOCO			(2U << R9A02_UTA0CK_SEL_Pos)
+#define R9A02_UTA0CK_SEL_MOCO			(3U << R9A02_UTA0CK_SEL_Pos)
+
+#define R9A02_UARTA_BRGCA_MIN			2U
+#define R9A02_UARTA_RATE_MIN			200U			//!< Table 37.36
+#define R9A02_UARTA_RATE_MAX			153600U
+
+// 12-bit A/D converter ADC12, manual 29.2
+
+typedef struct {
+	__IO uint8_t ADM0;				//!< 0x00 Mode 0
+	__IO uint8_t ADS;				//!< 0x01 Channel select
+	__IO uint8_t ADM1;				//!< 0x02 Mode 1
+	uint8_t RESERVED0[3];
+	__I uint16_t ADCR;				//!< 0x06 Result, same as ADCR0
+	uint8_t RESERVED1[0x88];
+	__IO uint8_t ADM2;				//!< 0x90 Mode 2
+	__IO uint8_t ADUL;				//!< 0x91 Compare upper limit
+	__IO uint8_t ADLL;				//!< 0x92 Compare lower limit
+	__IO uint8_t ADTES;				//!< 0x93 Test
+	uint8_t RESERVED2[0x0C];
+	__I uint16_t ADCRN[4];			//!< 0xA0 Results of scan 0 to 3, 16-bit access
+} R9A02_ADC12_Type;
+
+#define R9A02_ADC12						((R9A02_ADC12_Type *)R9A02_ADC12_BASE)
+
+#define R9A02_ADM0_ADCE					(1U << 0)		//!< Comparator on
+#define R9A02_ADM0_LV_Pos				1U				//!< Operation voltage mode
+#define R9A02_ADM0_LV_NORMAL1			(0U << 1)		//!< Sampling 43 fAD
+#define R9A02_ADM0_LV_NORMAL2			(1U << 1)		//!< Sampling 160 fAD
+#define R9A02_ADM0_FR_Pos				3U				//!< fAD = PCLKB / 2^(5 - FR)
+#define R9A02_ADM0_FR_Msk				(7U << 3)
+#define R9A02_ADM0_FR_DIV1				5U
+#define R9A02_ADM0_ADMD					(1U << 6)		//!< Scan mode
+#define R9A02_ADM0_ADCS					(1U << 7)		//!< Conversion start, clears in one-shot mode
+
+#define R9A02_ADS_ADS_Msk				0x1FU
+#define R9A02_ADS_ADISS					(1U << 7)		//!< Internal input
+#define R9A02_ADS_TEMP					(R9A02_ADS_ADISS | 0U)
+#define R9A02_ADS_VREF					(R9A02_ADS_ADISS | 1U)
+
+#define R9A02_ADM1_ADLSP				(1U << 3)		//!< PCLKB 1 to 4 MHz
+#define R9A02_ADM1_ADSCM				(1U << 5)		//!< One-shot conversion
+
+#define R9A02_ADM2_ADTYP_10BIT			0U
+#define R9A02_ADM2_ADTYP_8BIT			1U
+#define R9A02_ADM2_ADTYP_12BIT			2U
+#define R9A02_ADM2_ADREFM				(1U << 5)		//!< '-' reference AVREFM (P003)
+#define R9A02_ADM2_ADREFP_VCC			(0U << 6)
+#define R9A02_ADM2_ADREFP_AVREFP		(1U << 6)		//!< P002
+#define R9A02_ADM2_ADREFP_INTERNAL		(2U << 6)
+#define R9A02_ADM2_ADREFP_DISCHARGE		(3U << 6)
+
+#define R9A02_ADTES_ZERO_SCALE			2U				//!< Convert the '-' reference
+#define R9A02_ADTES_FULL_SCALE			3U				//!< Convert the '+' reference
+
+#define R9A02_ADC_LV_NORMAL1_SAMPLING	43U				//!< fAD cycles, table 29.3
+#define R9A02_ADC_LV_NORMAL2_SAMPLING	160U
 
 // Timer array unit, manual 18.2
 

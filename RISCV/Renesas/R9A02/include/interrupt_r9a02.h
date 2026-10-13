@@ -101,12 +101,25 @@ void R9a02IrqEntry(void);
 /// 			routed, or no IELSR of its groups is free
 int R9a02RegisterIntHandler(uint8_t EvtId, int Prio, R9a02IRQHandler_t pHandler, void *pCtx);
 
+/// @brief	Route an ICU event to an IELSR without a CPU interrupt.
+///
+/// For a driver that polls: each event sets the IR flag of the IELSR
+/// (R9a02EventFlag), the driver clears it (R9a02EventFlagClear). The CLIC
+/// input stays off. R9a02UnregisterIntHandler removes the route.
+///
+/// @param	EvtId		: R9A02_EVT_xxx event number, manual table 12.4
+///
+/// @return	IELSR number 0 to 31, -1 if the event is not supported, already
+/// 			routed, or no IELSR of its groups is free
+int R9a02RouteEvent(uint8_t EvtId);
+
 /// @brief	Remove an ICU route.
 ///
 /// Stop the peripheral interrupt source first. The IELSR number may be given
 /// to another event afterward.
 ///
-/// @param	IntNo	: IELSR number returned by R9a02RegisterIntHandler
+/// @param	IntNo	: IELSR number returned by R9a02RegisterIntHandler or
+/// 				  R9a02RouteEvent
 void R9a02UnregisterIntHandler(int IntNo);
 
 /// @brief	Drop a pending event of an ICU route.
@@ -118,6 +131,28 @@ void R9a02UnregisterIntHandler(int IntNo);
 ///
 /// @return	true if an event was pending
 bool R9a02ClearPendingInt(int IntNo);
+
+/// @brief	IR flag of a route made by R9a02RouteEvent, set by each event.
+///
+/// @param	IntNo	: IELSR number
+///
+/// @return	true if an event occurred since the last R9a02EventFlagClear
+static inline bool R9a02EventFlag(int IntNo)
+{
+	return (R9A02_ICU->IELSR[IntNo] & R9A02_IELSR_IR) != 0U;
+}
+
+/// @brief	Clear the IR flag of a route made by R9a02RouteEvent.
+///
+/// IR is cleared by writing 0, the event link is written back unchanged.
+/// The event must have ended at least 2 module clock cycles before (12.2.6),
+/// the drivers clear IR just before they start the next transfer.
+///
+/// @param	IntNo	: IELSR number
+static inline void R9a02EventFlagClear(int IntNo)
+{
+	R9A02_ICU->IELSR[IntNo] = R9A02_ICU->IELSR[IntNo] & ~R9A02_IELSR_IR;
+}
 
 /// @brief	Set the handler of the machine timer or machine software interrupt.
 ///

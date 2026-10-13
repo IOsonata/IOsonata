@@ -125,6 +125,40 @@ void R9a02ModuleStop(R9A02_MSTPCR Reg, uint32_t Mask);
 /// @return	true if all modules in Mask are out of the module-stop state
 bool R9a02ModuleRunning(R9A02_MSTPCR Reg, uint32_t Mask);
 
+/// @brief	HOCO frequency, for a peripheral with its own clock (UARTA).
+///
+/// @return	24, 32 or 48 MHz, 0 when the HOCO is stopped or not stable
+uint32_t R9a02HocoClockGet(void);
+
+/// @brief	EXTAL clock frequency set by SystemCoreClockSelect.
+///
+/// @return	Frequency in Hz, 0 when the EXTAL input is off
+uint32_t R9a02ExtalClockGet(void);
+
+/// @brief	Enable or disable an ICU event as a Software Standby wake-up source.
+///
+/// The event must also be routed to the CPU (R9a02RegisterIntHandler).
+///
+/// @param	EvtId	: R9A02_EVT_xxx: PORT_IRQ0 to 7, IWDT, KEY, LVD1, LVD2, RTC,
+/// 				  TML32, IIC0, IIC1, UARTA receive, COMP_DET0, COMP_DET1
+/// @param	bEnable	: true to enable
+///
+/// @return	false if the event cannot end Software Standby
+bool R9a02WakeupSet(uint8_t EvtId, bool bEnable);
+
+/// @brief	Sleep or Software Standby until an interrupt.
+///
+/// Sleep stops the CPU only. Software Standby also stops the HOCO, MOCO,
+/// EXTAL, flash and most peripherals, SOSC, LOCO, RTC and the wake-up
+/// sources of R9a02WakeupSet keep running. The clock settings are the same
+/// after the wake-up. The machine timer cannot end Software Standby.
+///
+/// @param	bStandby	: false for Sleep, true for Software Standby
+///
+/// @return	false when the mode could not be entered (flash P/E, operating
+/// 			mode change in progress)
+bool R9a02LowPowerEnter(bool bStandby);
+
 /// @brief	Busy wait on the CPU cycle counter (mcycle).
 ///
 /// Uses the ICLK frequency read from the clock registers, so it is valid

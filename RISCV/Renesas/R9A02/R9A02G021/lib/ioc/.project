@@ -31,6 +31,26 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>include/adc_r9a02.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/include/adc_r9a02.h</locationURI>
+		</link>
+		<link>
+			<name>include/rtc_r9a02.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/include/rtc_r9a02.h</locationURI>
+		</link>
+		<link>
+			<name>include/sau_r9a02.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/include/sau_r9a02.h</locationURI>
+		</link>
+		<link>
+			<name>include/uarta_r9a02.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/include/uarta_r9a02.h</locationURI>
+		</link>
+		<link>
 			<name>src</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -316,9 +336,39 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>src/converters/adc_r9a02.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/adc_r9a02.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/coredev</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/i2c_r9a02.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/i2c_r9a02.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/rtc_r9a02.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/rtc_r9a02.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/sau_r9a02.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/sau_r9a02.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/spi_r9a02.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/spi_r9a02.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/uarta_r9a02.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/uarta_r9a02.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/crc.c</name>

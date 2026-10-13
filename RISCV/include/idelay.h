@@ -58,10 +58,18 @@ SOFTWARE.
 
 #include "coredev/system_core_clock.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 // These globals are pre-calculated at system startup to reduce overhead
 extern uint32_t SystemCoreClock;
 extern uint64_t SystemCoreClockPeriodns;	// Nanosecond period
 extern uint64_t SystemCoreClockPeriodus;	// Microsecond period
+
+#ifdef __cplusplus
+}
+#endif
 
 /** @addtogroup Utilities
   * @{

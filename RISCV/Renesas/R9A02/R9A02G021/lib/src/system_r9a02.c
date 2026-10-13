@@ -179,6 +179,21 @@ static uint32_t R9a02IclkHz(void)
 	return R9a02SourceHz() >> ick;
 }
 
+uint32_t R9a02HocoClockGet(void)
+{
+	if ((R9A02_SYSC_HOCOCR & R9A02_HOCOCR_HCSTP) || (R9A02_SYSC_OSCSF & R9A02_OSCSF_HOCOSF) == 0U)
+	{
+		return 0U;
+	}
+
+	return R9a02HocoHz();
+}
+
+uint32_t R9a02ExtalClockGet(void)
+{
+	return (R9A02_SYSC_MOSCCR & R9A02_MOSCCR_MOSTP) ? 0U : s_ExtalFreq;
+}
+
 void R9a02DelayUs(uint32_t Us)
 {
 	uint32_t hz = R9a02IclkHz();
@@ -649,7 +664,19 @@ bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 }
 
 // Clock of RTC, TML32, UARTA and REMC (OSMCR.WUTMMCK0, 8.2.18). Change it
-// only while those are stopped.
+// only while those are stopped, a running RTC is stopped first and
+// R9a02RtcInit starts it again. An RTC counting on the SOSC keeps it: the RTC
+// is not reset by a reset other than the power-on reset (table 20.2), the
+// LOCO request of a warm start would stop the calendar. Table 5.3 lists RTCC0
+// as reset by every reset, RTCE then reads 0 and the RTC starts again.
+static void R9a02LfClockRtcStop(void)
+{
+	if (R9A02_RTC->RTCC0 & R9A02_RTCC0_RTCE)
+	{
+		R9A02_RTC->RTCC0 = (uint8_t)(R9A02_RTC->RTCC0 & ~R9A02_RTCC0_RTCE);
+	}
+}
+
 bool SystemLowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 {
 	if (OscFreq != R9A02_LOCO_FREQ || (ClkSrc != OSC_TYPE_RC && ClkSrc != OSC_TYPE_XTAL))
@@ -657,6 +684,12 @@ bool SystemLowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 		g_R9a02StartupError = R9A02_STARTUP_BAD_LF_OSC;
 
 		return false;
+	}
+
+	if (ClkSrc == OSC_TYPE_RC && (R9A02_RTC->RTCC0 & R9A02_RTCC0_RTCE) &&
+		(R9A02_SYSC_OSMCR & R9A02_OSMCR_WUTMMCK0) == 0U && (R9A02_SYSC_SOSCCR & R9A02_SOSCCR_SOSTP) == 0U)
+	{
+		ClkSrc = OSC_TYPE_XTAL;
 	}
 
 	uintptr_t state = DisableInterrupt();
@@ -689,6 +722,7 @@ bool SystemLowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 			}
 			if (ok)
 			{
+				R9a02LfClockRtcStop();
 				R9A02_SYSC_OSMCR = R9A02_OSMCR_WUTMMCK0;
 				ok = R9A02_SYSC_OSMCR == R9A02_OSMCR_WUTMMCK0;
 			}
@@ -709,6 +743,7 @@ bool SystemLowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq)
 		}
 		if (ok && (R9A02_SYSC_OSMCR & R9A02_OSMCR_WUTMMCK0))
 		{
+			R9a02LfClockRtcStop();
 			R9A02_SYSC_OSMCR = 0U;
 			ok = R9A02_SYSC_OSMCR == 0U;
 		}
@@ -794,4 +829,149 @@ void SystemInit(void)
 		"csrs	mstatus, t0\n"
 		"csrsi	mstatus, 8\n"
 		::: "t0", "memory");
+}
+
+// Software Standby wake-up enable bit of an ICU event (table 10.3, 12.2.7,
+// 12.2.8). Returns false for an event that cannot end Software Standby.
+static bool R9a02WakeupBit(uint8_t EvtId, volatile uint32_t **ppReg, uint32_t *pBit)
+{
+	volatile uint32_t *wup0 = &R9A02_ICU->WUPEN0;
+	volatile uint32_t *wup1 = &R9A02_ICU->WUPEN1;
+
+	if (EvtId >= R9A02_EVT_PORT_IRQ0 && EvtId <= R9A02_EVT_PORT_IRQ7)
+	{
+		*ppReg = wup0;
+		*pBit = R9A02_WUPEN0_IRQ(EvtId - R9A02_EVT_PORT_IRQ0);
+
+		return true;
+	}
+
+	switch (EvtId)
+	{
+		case R9A02_EVT_IWDT_NMIUNDF:
+			*ppReg = wup0;
+			*pBit = R9A02_WUPEN0_IWDT;
+			break;
+		case R9A02_EVT_KEY_INTKR:
+			*ppReg = wup0;
+			*pBit = R9A02_WUPEN0_KEY;
+			break;
+		case R9A02_EVT_LVD_LVD1:
+			*ppReg = wup0;
+			*pBit = R9A02_WUPEN0_LVD1;
+			break;
+		case R9A02_EVT_LVD_LVD2:
+			*ppReg = wup0;
+			*pBit = R9A02_WUPEN0_LVD2;
+			break;
+		case R9A02_EVT_RTC_ALM_OR_PRD:
+			*ppReg = wup0;
+			*pBit = R9A02_WUPEN0_RTC;
+			break;
+		case R9A02_EVT_TML32_OUTI:
+			*ppReg = wup0;
+			*pBit = R9A02_WUPEN0_TML32;
+			break;
+		case R9A02_EVT_IIC0_ENDI:
+			*ppReg = wup1;
+			*pBit = R9A02_WUPEN1_IICA0;
+			break;
+		case R9A02_EVT_IIC1_ENDI:
+			*ppReg = wup1;
+			*pBit = R9A02_WUPEN1_IICA1;
+			break;
+		case R9A02_EVT_UARTA_RX_ENDI0:
+			*ppReg = wup1;
+			*pBit = R9A02_WUPEN1_UARTA_RX_ENDI0;
+			break;
+		case R9A02_EVT_UARTA_RX_ERI0:
+			*ppReg = wup1;
+			*pBit = R9A02_WUPEN1_UARTA_RX_ERI0;
+			break;
+		case R9A02_EVT_UARTA_RX_ENDI1:
+			*ppReg = wup1;
+			*pBit = R9A02_WUPEN1_UARTA_RX_ENDI1;
+			break;
+		case R9A02_EVT_UARTA_RX_ERI1:
+			*ppReg = wup1;
+			*pBit = R9A02_WUPEN1_UARTA_RX_ERI1;
+			break;
+		case R9A02_EVT_COMP_DET0:
+			*ppReg = wup1;
+			*pBit = R9A02_WUPEN1_COMP_DET0;
+			break;
+		case R9A02_EVT_COMP_DET1:
+			*ppReg = wup1;
+			*pBit = R9A02_WUPEN1_COMP_DET1;
+			break;
+		default:
+			return false;
+	}
+
+	return true;
+}
+
+bool R9a02WakeupSet(uint8_t EvtId, bool bEnable)
+{
+	volatile uint32_t *reg;
+	uint32_t bit;
+
+	if (!R9a02WakeupBit(EvtId, &reg, &bit))
+	{
+		return false;
+	}
+
+	uintptr_t state = DisableInterrupt();
+
+	*reg = bEnable ? (*reg | bit) : (*reg & ~bit);
+
+	EnableInterrupt(state);
+
+	return true;
+}
+
+// Sleep or Software Standby until an interrupt (10.6, 10.7). SBYCR.SSBY is
+// set back to 0 after the wake-up, it stays 1 otherwise (10.2.1).
+bool R9a02LowPowerEnter(bool bStandby)
+{
+	// No SYSTEM register write during flash P/E (10.9.1)
+	if (R9A02_FLCN_FENTRYR != 0U)
+	{
+		return false;
+	}
+
+	// Software Standby: HOCOSF at 1 for a running HOCO, at 0 for a stopped
+	// one (8.2.8)
+	uint8_t hocosf = (R9A02_SYSC_HOCOCR & R9A02_HOCOCR_HCSTP) ? 0U : R9A02_OSCSF_HOCOSF;
+
+	if ((bStandby && !R9a02Wait8(&R9A02_SYSC_OSCSF, R9A02_OSCSF_HOCOSF, hocosf)) ||
+		!R9a02Wait8(&R9A02_SYSC_OPCCR, R9A02_OPCCR_OPCMTSF, 0U) ||
+		!R9a02Wait8(&R9A02_SYSC_SOPCCR, R9A02_SOPCCR_SOPCMTSF, 0U))
+	{
+		return false;
+	}
+
+	uint16_t sbycr = bStandby ? R9A02_SBYCR_SSBY : 0U;
+	uint16_t prev = R9a02Unprotect(R9A02_PRCR_PRC1);
+
+	if (R9A02_SYSC_SBYCR != sbycr)
+	{
+		R9A02_SYSC_SBYCR = sbycr;
+	}
+	R9a02Protect(prev);
+
+	// The last register write is done before WFI (10.9.5)
+	(void)R9A02_SYSC_SBYCR;
+	(void)R9A02_SYSC_PRCR;
+
+	__asm volatile ("wfi" ::: "memory");
+
+	if (bStandby)
+	{
+		prev = R9a02Unprotect(R9A02_PRCR_PRC1);
+		R9A02_SYSC_SBYCR = 0U;
+		R9a02Protect(prev);
+	}
+
+	return true;
 }

@@ -136,6 +136,19 @@ static inline void EnableInterrupt(uint32_t __primmask)
   }
 #endif
 
+// Core intrinsics named as the Cortex-M CMSIS ones used by the shared code.
+// RISC-V has no event wait, __WFE waits for an interrupt as __WFI does. A
+// vendor header may define them first.
+#ifndef __NOP
+#define __NOP()			__asm volatile ("nop")
+#endif
+#ifndef __WFI
+#define __WFI()			__asm volatile ("wfi" ::: "memory")
+#endif
+#ifndef __WFE
+#define __WFE()			__asm volatile ("wfi" ::: "memory")
+#endif
+
 // Application interrupt priority. RISC-V orders the opposite way from Cortex-M:
 // higher number is more urgent. Generic defaults; the ESP32-C3/C5/C6 interrupt
 // matrix and the Renesas N22 CLIC have different usable ranges, so each vendor

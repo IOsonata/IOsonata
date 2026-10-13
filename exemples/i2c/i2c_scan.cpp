@@ -41,6 +41,7 @@ SOFTWARE.
 ----------------------------------------------------------------------------*/
 #include <stdio.h>
 
+#include "coredev/system_core_clock.h"
 #include "coredev/uart.h"
 #include "coredev/i2c.h"
 #include "stddev.h"
