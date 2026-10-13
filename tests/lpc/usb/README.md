@@ -532,3 +532,20 @@ directions pending together, stale CDFULL, raw status, null output, unavailable
 power/clocks, timeout, late completion and release/prepare recovery at -O0/-O2
 with UBSan. Cortex-M3 -O0/-Os compilation passes. IRQ dispatch and control
 transfer integration remain to be implemented; no board validation was run.
+
+`Lpc17UsbEp0Collect` captures enabled, pending EP0 directions once and obtains
+their SIE status before the future dispatcher invokes callbacks. It captures
+IN before OUT so the dispatcher can consider the observed SETUP status before
+reporting IN completion. It does not itself interpret a captured IN interrupt
+as successful transmission: NAK and SETUP invalidation still require handling.
+Directions absent from the initial snapshot are left pending, and disabled
+or non-control endpoints are untouched. Device summary flags and bus reset
+remain the responsibility of the future top-level ISR.
+
+Both status bytes are published together only after successful collection.
+If the second acknowledgement fails, the first may already have cleared its
+hardware interrupt, but output remains unchanged and the latched SIE fault
+prevents replay. Tests cover all 16 pending/enabled EP0 combinations, IN/OUT
+ordering, an OUT arrival during IN acknowledgement, mask restoration, and
+failure at either acknowledgement. Host -O0/-O2 UBSan tests and Cortex-M3
+-O0/-Os compilation pass. Generic control-transfer dispatch remains unfinished.

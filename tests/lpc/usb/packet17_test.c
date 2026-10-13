@@ -15,17 +15,25 @@ static uint8_t s_Command;
 static bool s_RealizeTimeout;
 static bool s_CommandTimeout;
 static unsigned s_Acks;
+static unsigned s_AckTimeout;
+static uint32_t s_AckOrder;
+static bool s_AckDistinct;
+static bool s_AckArrival;
 
 void TestEndpointClear(uint32_t Value)
 {
 	assert(s_Mask == 1 && (Value == 1U || Value == 2U));
 	assert((LPC_USB->USBDevIntSt & 0x20U) == 0U);
 	++s_Acks;
-	if (!s_CommandTimeout)
+	s_AckOrder = (s_AckOrder << 4) | Value;
+	if (!s_CommandTimeout && s_Acks != s_AckTimeout)
 	{
 		SetReadOnly(&LPC_USB->USBEpIntSt, LPC_USB->USBEpIntSt & ~Value);
-		SetReadOnly(&LPC_USB->USBCmdData, s_Status);
+		SetReadOnly(&LPC_USB->USBCmdData, s_AckDistinct ?
+			(Value == 1U ? 0x6DU : 0x12U) : s_Status);
 		SetReadOnly(&LPC_USB->USBDevIntSt, LPC_USB->USBDevIntSt | 0x20U);
+		if (s_AckArrival && Value == 2U)
+			SetReadOnly(&LPC_USB->USBEpIntSt, LPC_USB->USBEpIntSt | 1U);
 	}
 }
 
@@ -89,6 +97,9 @@ static void Prepare(void)
 int main(void)
 {
 	ClockTests();
+	uint8_t collected[2] = {0xCC, 0xDD};
+	assert(Lpc17UsbEp0Collect(collected) == -1);
+	assert(collected[0] == 0xCC && collected[1] == 0xDD);
 	uint8_t status = 0xCC;
 	assert(!Lpc17UsbEp0Ack(false, &status) && status == 0xCC && s_Acks == 0);
 	assert(!Lpc17UsbEp0Realize());
@@ -119,6 +130,33 @@ int main(void)
 	SetReadOnly(&LPC_USB->USBClkSt, 0x12);
 	s_Status = 0;
 	assert(!Lpc17UsbEp0Realize());
+	assert(Lpc17UsbEp0Collect(0) == -1);
+	s_AckDistinct = true;
+	for (unsigned pending = 0; pending < 4; ++pending)
+	{
+		for (unsigned enabled = 0; enabled < 4; ++enabled)
+		{
+			const unsigned selected = pending & enabled;
+			LPC_USB->USBEpIntEn = enabled | 0x80U;
+			SetReadOnly(&LPC_USB->USBEpIntSt, pending | 0x80U);
+			s_AckOrder = 0;
+			s_Mask = pending & 1U;
+			assert(Lpc17UsbEp0Collect(collected) == (int)selected);
+			assert(collected[0] == ((selected & 1U) ? 0x6D : 0));
+			assert(collected[1] == ((selected & 2U) ? 0x12 : 0));
+			assert(s_AckOrder == (selected == 3U ? 0x21U : selected));
+			assert(LPC_USB->USBEpIntSt == ((pending | 0x80U) & ~selected));
+			assert(s_Mask == (pending & 1U));
+		}
+	}
+	LPC_USB->USBEpIntEn = 3;
+	SetReadOnly(&LPC_USB->USBEpIntSt, 2);
+	s_AckArrival = true;
+	assert(Lpc17UsbEp0Collect(collected) == 2 && LPC_USB->USBEpIntSt == 1);
+	s_AckArrival = false;
+	assert(Lpc17UsbEp0Collect(collected) == 1 && collected[0] == 0x6D);
+	s_AckDistinct = false;
+	LPC_USB->USBEpIntEn = 0;
 	uint8_t data[66];
 	uint8_t source[66];
 	for (unsigned i = 0; i < sizeof(source); ++i)
@@ -185,5 +223,21 @@ int main(void)
 	assert(!Lpc17UsbSieCommand(0));
 	Prepare();
 	assert(Lpc17UsbEp0Realize() && Lpc17UsbEp0Ack(false, &status));
+	for (unsigned failure = 1; failure <= 2; ++failure)
+	{
+		LPC_USB->USBEpIntEn = 0;
+		Prepare();
+		assert(Lpc17UsbEp0Realize());
+		LPC_USB->USBEpIntEn = 3;
+		SetReadOnly(&LPC_USB->USBEpIntSt, 3);
+		s_AckTimeout = s_Acks + failure;
+		collected[0] = 0xCC;
+		collected[1] = 0xDD;
+		s_Mask = failure - 1;
+		assert(Lpc17UsbEp0Collect(collected) == -1);
+		assert(collected[0] == 0xCC && collected[1] == 0xDD);
+		assert(s_Acks == s_AckTimeout && s_Mask == failure - 1);
+		assert(Lpc17UsbEp0Collect(collected) == -1 && s_Acks == s_AckTimeout);
+	}
 	puts("LPC1769 EP0 realization, FIFO, interrupt acknowledgement and timeouts: PASS");
 }

@@ -59,6 +59,12 @@ bool Lpc17UsbEp0Realize(void);
 // pending interrupt, so OUT can also clear STP/PO during overwrite recovery.
 // Output is unchanged on failure; a timeout latches the SIE fault above.
 bool Lpc17UsbEp0Ack(bool In, uint8_t *pStatus);
+// Capture enabled, pending EP0 interrupts once, before dispatching callbacks.
+// Returns physical endpoint mask (OUT=1, IN=2), or -1 on failure. Status[0/1]
+// receives OUT/IN status; absent directions are zero. Output stays unchanged
+// on failure, even if one endpoint was already acknowledged. Do not replay
+// after failure. Caller owns device summary flags and bus-reset handling.
+int Lpc17UsbEp0Collect(uint8_t Status[2]);
 // Caller services/acknowledges endpoint interrupts separately. Read returns
 // packet length, -1 on failure (output unchanged), or -2 for SETUP overwrite.
 // On -2, clear PO with Select Endpoint/Clear Interrupt and read the new SETUP.

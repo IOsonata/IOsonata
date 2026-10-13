@@ -236,6 +236,36 @@ bool Lpc17UsbEp0Ack(bool In, uint8_t *pStatus)
 	return done;
 }
 
+int Lpc17UsbEp0Collect(uint8_t Status[2])
+{
+	if (Status == 0)
+		return -1;
+	const uint32_t state = __get_PRIMASK();
+	__disable_irq();
+	int result = -1;
+	if (Lpc17UsbPacketReady() && s_Ep0Ready)
+	{
+		const uint32_t pending = LPC_USB->USBEpIntSt & LPC_USB->USBEpIntEn & 3U;
+		uint8_t status[2] = {0, 0};
+		// Capture IN before OUT: a new SETUP observed by the OUT select/clear
+		// must be considered before dispatching the captured IN completion.
+		// Never rescan here; directions absent from the snapshot stay pending.
+		bool done = true;
+		if ((pending & 2U) != 0U)
+			done = Lpc17UsbEp0Ack(true, &status[1]);
+		if (done && (pending & 1U) != 0U)
+			done = Lpc17UsbEp0Ack(false, &status[0]);
+		if (done)
+		{
+			Status[0] = status[0];
+			Status[1] = status[1];
+			result = (int)pending;
+		}
+	}
+	__set_PRIMASK(state);
+	return result;
+}
+
 int Lpc17UsbEp0Read(uint8_t *pData, int Capacity)
 {
 	if (Capacity < 0 || (Capacity > 0 && pData == 0))
