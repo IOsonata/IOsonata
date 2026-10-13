@@ -54,7 +54,7 @@
 								<option id="com.renesas.cdt.managedbuild.llvm.core.option.libgen.libstd.applicability.1994238795" superClass="com.renesas.cdt.managedbuild.llvm.core.option.libgen.libstd.applicability" value="true" valueType="boolean"/>
 								<option id="com.renesas.cdt.managedbuild.llvm.riscv.option.libraryType.2068714927" name="Library type" superClass="com.renesas.cdt.managedbuild.llvm.riscv.option.libraryType" value="com.renesas.cdt.managedbuild.llvm.core.option.librarygenerator.settings.libraryType.preBuilt" valueType="enumerated"/>
 							</tool>
-							<tool id="com.renesas.cdt.managedbuild.llvm.riscv.tool.Compiler.1527252609" name="Compiler" superClass="com.renesas.cdt.managedbuild.llvm.riscv.tool.Compiler">
+							<tool id="com.renesas.cdt.managedbuild.llvm.riscv.tool.Compiler.1527252609" name="Compiler" superClass="com.renesas.cdt.managedbuild.llvm.riscv.tool.Compiler" commandLinePattern="${COMMAND} ${FLAGS} -march=rv32imac_zba_zbb_zbs_zicsr_zifencei -mabi=ilp32 ${OUTPUT_FLAG} ${OUTPUT_PREFIX}${OUTPUT} ${INPUTS}">
 								<option id="com.renesas.cdt.managedbuild.llvm.core.option.compiler.source.debugFormat.1119182984" name="Debug format" superClass="com.renesas.cdt.managedbuild.llvm.core.option.compiler.source.debugFormat" useByScannerDiscovery="true" value="com.renesas.cdt.managedbuild.llvm.core.option.debug.debugFormat.Default" valueType="enumerated"/>
 								<option id="com.renesas.cdt.managedbuild.llvm.core.option.compiler.source.optimizationLevel.194414956" name="Optimization Level" superClass="com.renesas.cdt.managedbuild.llvm.core.option.compiler.source.optimizationLevel" useByScannerDiscovery="true" value="com.renesas.cdt.managedbuild.llvm.core.option.optimization.optimizationLevel.debug" valueType="enumerated"/>
 								<option id="com.renesas.cdt.managedbuild.llvm.core.option.compiler.source.std.609444824" name="Language standard" superClass="com.renesas.cdt.managedbuild.llvm.core.option.compiler.source.std" useByScannerDiscovery="true" value="com.renesas.cdt.managedbuild.llvm.core.option.compiler.cpp.gnu17" valueType="enumerated"/>
@@ -69,7 +69,7 @@
 								</option>
 								<inputType id="com.renesas.cdt.managedbuild.llvm.core.inputType.compiler.c.1503294576" superClass="com.renesas.cdt.managedbuild.llvm.core.inputType.compiler.c"/>
 							</tool>
-							<tool id="com.renesas.cdt.managedbuild.llvm.riscv.tool.cpp.compiler.659475492" name="Compiler CPP" superClass="com.renesas.cdt.managedbuild.llvm.riscv.tool.cpp.compiler" commandLinePattern="${COMMAND} ${FLAGS} -fno-exceptions -fno-rtti ${OUTPUT_FLAG} ${OUTPUT_PREFIX}${OUTPUT} ${INPUTS}">
+							<tool id="com.renesas.cdt.managedbuild.llvm.riscv.tool.cpp.compiler.659475492" name="Compiler CPP" superClass="com.renesas.cdt.managedbuild.llvm.riscv.tool.cpp.compiler" commandLinePattern="${COMMAND} ${FLAGS} -march=rv32imac_zba_zbb_zbs_zicsr_zifencei -mabi=ilp32 -fno-exceptions -fno-rtti ${OUTPUT_FLAG} ${OUTPUT_PREFIX}${OUTPUT} ${INPUTS}">
 								<option id="com.renesas.cdt.managedbuild.llvm.core.option.compiler.source.debugFormat.209702210" name="Debug format" superClass="com.renesas.cdt.managedbuild.llvm.core.option.compiler.source.debugFormat" useByScannerDiscovery="true" value="com.renesas.cdt.managedbuild.llvm.core.option.debug.debugFormat.Default" valueType="enumerated"/>
 								<option id="com.renesas.cdt.managedbuild.llvm.core.option.compiler.source.optimizationLevel.680561639" name="Optimization Level" superClass="com.renesas.cdt.managedbuild.llvm.core.option.compiler.source.optimizationLevel" useByScannerDiscovery="true" value="com.renesas.cdt.managedbuild.llvm.core.option.optimization.optimizationLevel.debug" valueType="enumerated"/>
 								<option id="com.renesas.cdt.managedbuild.llvm.core.option.compiler.cpp.language.973699713" name="Language standard" superClass="com.renesas.cdt.managedbuild.llvm.core.option.compiler.cpp.language" useByScannerDiscovery="true" value="com.renesas.cdt.managedbuild.llvm.core.option.compiler.cpp.gnu17" valueType="enumerated"/>
@@ -85,14 +85,14 @@
 								<inputType id="com.renesas.cdt.managedbuild.llvm.core.inputType.compiler.c.867343210" superClass="com.renesas.cdt.managedbuild.llvm.core.inputType.compiler.c"/>
 								<inputType id="com.renesas.cdt.managedbuild.llvm.core.inputType.compiler.cpp.1147151658" superClass="com.renesas.cdt.managedbuild.llvm.core.inputType.compiler.cpp"/>
 							</tool>
-							<tool id="com.renesas.cdt.managedbuild.llvm.riscv.tool.Assembler.1438752342" name="Assembler" superClass="com.renesas.cdt.managedbuild.llvm.riscv.tool.Assembler">
+							<tool id="com.renesas.cdt.managedbuild.llvm.riscv.tool.Assembler.1438752342" name="Assembler" superClass="com.renesas.cdt.managedbuild.llvm.riscv.tool.Assembler" commandLinePattern="${COMMAND} ${FLAGS} -march=rv32imac_zba_zbb_zbs_zicsr_zifencei -mabi=ilp32 ${OUTPUT_FLAG} ${OUTPUT_PREFIX}${OUTPUT} ${INPUTS}">
 								<option id="com.renesas.cdt.managedbuild.llvm.core.option.assembler.source.usepreprocessor.718609758" name="Use preprocessor (-x assembler-with-cpp)" superClass="com.renesas.cdt.managedbuild.llvm.core.option.assembler.source.usepreprocessor"/>
 								<option id="com.renesas.cdt.managedbuild.llvm.core.option.assembler.includes.symbolDefines.778809682" name="Define a symbol (-D)" superClass="com.renesas.cdt.managedbuild.llvm.core.option.assembler.includes.symbolDefines" valueType="definedSymbols" IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false">
 									<listOptionValue builtIn="false" value="R9A02G021"/>
 								</option>
 								<inputType id="com.renesas.cdt.managedbuild.llvm.core.inputType.assembler.1225289530" superClass="com.renesas.cdt.managedbuild.llvm.core.inputType.assembler"/>
 							</tool>
-							<tool id="com.renesas.cdt.managedbuild.llvm.riscv.tool.Linker.12128467" name="Linker" superClass="com.renesas.cdt.managedbuild.llvm.riscv.tool.Linker">
+							<tool id="com.renesas.cdt.managedbuild.llvm.riscv.tool.Linker.12128467" name="Linker" superClass="com.renesas.cdt.managedbuild.llvm.riscv.tool.Linker" commandLinePattern="${COMMAND} ${FLAGS} -march=rv32imac_zba_zbb_zbs_zicsr_zifencei -mabi=ilp32 ${OUTPUT_FLAG} ${OUTPUT_PREFIX}${OUTPUT} ${INPUTS}">
 								<option id="com.renesas.cdt.managedbuild.llvm.core.option.linker.misc.inputsections.839487365" name="Enable garbage collection of unused input sections(-gc-sections)" superClass="com.renesas.cdt.managedbuild.llvm.core.option.linker.misc.inputsections" value="true" valueType="boolean"/>
 								<option id="com.renesas.cdt.managedbuild.llvm.riscv.linker.nostartfiles.1869532622" name="Do not use the standard system startup files when linking" superClass="com.renesas.cdt.managedbuild.llvm.riscv.linker.nostartfiles" value="false" valueType="boolean"/>
 								<option id="com.renesas.cdt.managedbuild.llvm.core.option.linker.source.linkerScript.1456207120" name="Linker script" superClass="com.renesas.cdt.managedbuild.llvm.core.option.linker.source.linkerScript" valueType="stringList" IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false">
@@ -107,7 +107,7 @@
 									<listOptionValue builtIn="false" value="nosys"/>
 								</option>
 							</tool>
-							<tool id="com.renesas.cdt.managedbuild.llvm.riscv.tool.cpp.linker.862567397" name="Linker CPP" superClass="com.renesas.cdt.managedbuild.llvm.riscv.tool.cpp.linker">
+							<tool id="com.renesas.cdt.managedbuild.llvm.riscv.tool.cpp.linker.862567397" name="Linker CPP" superClass="com.renesas.cdt.managedbuild.llvm.riscv.tool.cpp.linker" commandLinePattern="${COMMAND} ${FLAGS} -march=rv32imac_zba_zbb_zbs_zicsr_zifencei -mabi=ilp32 ${OUTPUT_FLAG} ${OUTPUT_PREFIX}${OUTPUT} ${INPUTS}">
 								<option id="com.renesas.cdt.managedbuild.llvm.core.option.linker.misc.inputsections.273985222" name="Enable garbage collection of unused input sections(-gc-sections)" superClass="com.renesas.cdt.managedbuild.llvm.core.option.linker.misc.inputsections" value="true" valueType="boolean"/>
 								<option id="com.renesas.cdt.managedbuild.llvm.riscv.linker.cpp.nostartfiles.304021361" name="Do not use the standard system startup files when linking" superClass="com.renesas.cdt.managedbuild.llvm.riscv.linker.cpp.nostartfiles" value="false" valueType="boolean"/>
 								<option id="com.renesas.cdt.managedbuild.llvm.core.option.linker.source.linkerScript.339897064" name="Linker script" superClass="com.renesas.cdt.managedbuild.llvm.core.option.linker.source.linkerScript" valueType="stringList" IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false">
@@ -190,7 +190,7 @@
 								<option id="com.renesas.cdt.managedbuild.llvm.core.option.libgen.libstd.applicability.1002150876" superClass="com.renesas.cdt.managedbuild.llvm.core.option.libgen.libstd.applicability" value="true" valueType="boolean"/>
 								<option id="com.renesas.cdt.managedbuild.llvm.riscv.option.libraryType.829177106" name="Library type" superClass="com.renesas.cdt.managedbuild.llvm.riscv.option.libraryType" value="com.renesas.cdt.managedbuild.llvm.core.option.librarygenerator.settings.libraryType.preBuilt" valueType="enumerated"/>
 							</tool>
-							<tool id="com.renesas.cdt.managedbuild.llvm.riscv.tool.Compiler.1013453034" name="Compiler" superClass="com.renesas.cdt.managedbuild.llvm.riscv.tool.Compiler">
+							<tool id="com.renesas.cdt.managedbuild.llvm.riscv.tool.Compiler.1013453034" name="Compiler" superClass="com.renesas.cdt.managedbuild.llvm.riscv.tool.Compiler" commandLinePattern="${COMMAND} ${FLAGS} -march=rv32imac_zba_zbb_zbs_zicsr_zifencei -mabi=ilp32 ${OUTPUT_FLAG} ${OUTPUT_PREFIX}${OUTPUT} ${INPUTS}">
 								<option id="com.renesas.cdt.managedbuild.llvm.core.option.compiler.source.optimizationLevel.430007435" name="Optimization Level" superClass="com.renesas.cdt.managedbuild.llvm.core.option.compiler.source.optimizationLevel" useByScannerDiscovery="true" value="com.renesas.cdt.managedbuild.llvm.core.option.optimization.optimizationLevel.codeSize" valueType="enumerated"/>
 								<option id="com.renesas.cdt.managedbuild.llvm.core.option.compiler.source.debugFormat.957181980" name="Debug format" superClass="com.renesas.cdt.managedbuild.llvm.core.option.compiler.source.debugFormat" useByScannerDiscovery="true" value="com.renesas.cdt.managedbuild.llvm.core.option.debug.debugFormat.Default" valueType="enumerated"/>
 								<option id="com.renesas.cdt.managedbuild.llvm.core.option.compiler.source.std.238347813" name="Language standard" superClass="com.renesas.cdt.managedbuild.llvm.core.option.compiler.source.std" useByScannerDiscovery="true" value="com.renesas.cdt.managedbuild.llvm.core.option.compiler.cpp.gnu17" valueType="enumerated"/>
@@ -205,7 +205,7 @@
 								</option>
 								<inputType id="com.renesas.cdt.managedbuild.llvm.core.inputType.compiler.c.1794743649" superClass="com.renesas.cdt.managedbuild.llvm.core.inputType.compiler.c"/>
 							</tool>
-							<tool id="com.renesas.cdt.managedbuild.llvm.riscv.tool.cpp.compiler.562979700" name="Compiler CPP" superClass="com.renesas.cdt.managedbuild.llvm.riscv.tool.cpp.compiler" commandLinePattern="${COMMAND} ${FLAGS} -fno-exceptions -fno-rtti ${OUTPUT_FLAG} ${OUTPUT_PREFIX}${OUTPUT} ${INPUTS}">
+							<tool id="com.renesas.cdt.managedbuild.llvm.riscv.tool.cpp.compiler.562979700" name="Compiler CPP" superClass="com.renesas.cdt.managedbuild.llvm.riscv.tool.cpp.compiler" commandLinePattern="${COMMAND} ${FLAGS} -march=rv32imac_zba_zbb_zbs_zicsr_zifencei -mabi=ilp32 -fno-exceptions -fno-rtti ${OUTPUT_FLAG} ${OUTPUT_PREFIX}${OUTPUT} ${INPUTS}">
 								<option id="com.renesas.cdt.managedbuild.llvm.core.option.compiler.source.optimizationLevel.949746276" name="Optimization Level" superClass="com.renesas.cdt.managedbuild.llvm.core.option.compiler.source.optimizationLevel" useByScannerDiscovery="true" value="com.renesas.cdt.managedbuild.llvm.core.option.optimization.optimizationLevel.codeSize" valueType="enumerated"/>
 								<option id="com.renesas.cdt.managedbuild.llvm.core.option.compiler.source.debugFormat.747703741" name="Debug format" superClass="com.renesas.cdt.managedbuild.llvm.core.option.compiler.source.debugFormat" useByScannerDiscovery="true" value="com.renesas.cdt.managedbuild.llvm.core.option.debug.debugFormat.Default" valueType="enumerated"/>
 								<option id="com.renesas.cdt.managedbuild.llvm.core.option.compiler.cpp.language.1190391069" name="Language standard" superClass="com.renesas.cdt.managedbuild.llvm.core.option.compiler.cpp.language" useByScannerDiscovery="true" value="com.renesas.cdt.managedbuild.llvm.core.option.compiler.cpp.gnu17" valueType="enumerated"/>
@@ -221,14 +221,14 @@
 								<inputType id="com.renesas.cdt.managedbuild.llvm.core.inputType.compiler.c.803373016" superClass="com.renesas.cdt.managedbuild.llvm.core.inputType.compiler.c"/>
 								<inputType id="com.renesas.cdt.managedbuild.llvm.core.inputType.compiler.cpp.2101603398" superClass="com.renesas.cdt.managedbuild.llvm.core.inputType.compiler.cpp"/>
 							</tool>
-							<tool id="com.renesas.cdt.managedbuild.llvm.riscv.tool.Assembler.1402101770" name="Assembler" superClass="com.renesas.cdt.managedbuild.llvm.riscv.tool.Assembler">
+							<tool id="com.renesas.cdt.managedbuild.llvm.riscv.tool.Assembler.1402101770" name="Assembler" superClass="com.renesas.cdt.managedbuild.llvm.riscv.tool.Assembler" commandLinePattern="${COMMAND} ${FLAGS} -march=rv32imac_zba_zbb_zbs_zicsr_zifencei -mabi=ilp32 ${OUTPUT_FLAG} ${OUTPUT_PREFIX}${OUTPUT} ${INPUTS}">
 								<option id="com.renesas.cdt.managedbuild.llvm.core.option.assembler.source.usepreprocessor.1217488972" name="Use preprocessor (-x assembler-with-cpp)" superClass="com.renesas.cdt.managedbuild.llvm.core.option.assembler.source.usepreprocessor"/>
 								<option id="com.renesas.cdt.managedbuild.llvm.core.option.assembler.includes.symbolDefines.228780590" name="Define a symbol (-D)" superClass="com.renesas.cdt.managedbuild.llvm.core.option.assembler.includes.symbolDefines" valueType="definedSymbols" IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false">
 									<listOptionValue builtIn="false" value="R9A02G021"/>
 								</option>
 								<inputType id="com.renesas.cdt.managedbuild.llvm.core.inputType.assembler.1192252789" superClass="com.renesas.cdt.managedbuild.llvm.core.inputType.assembler"/>
 							</tool>
-							<tool id="com.renesas.cdt.managedbuild.llvm.riscv.tool.Linker.1755363744" name="Linker" superClass="com.renesas.cdt.managedbuild.llvm.riscv.tool.Linker">
+							<tool id="com.renesas.cdt.managedbuild.llvm.riscv.tool.Linker.1755363744" name="Linker" superClass="com.renesas.cdt.managedbuild.llvm.riscv.tool.Linker" commandLinePattern="${COMMAND} ${FLAGS} -march=rv32imac_zba_zbb_zbs_zicsr_zifencei -mabi=ilp32 ${OUTPUT_FLAG} ${OUTPUT_PREFIX}${OUTPUT} ${INPUTS}">
 								<option id="com.renesas.cdt.managedbuild.llvm.core.option.linker.misc.inputsections.1364880919" name="Enable garbage collection of unused input sections(-gc-sections)" superClass="com.renesas.cdt.managedbuild.llvm.core.option.linker.misc.inputsections" value="true" valueType="boolean"/>
 								<option id="com.renesas.cdt.managedbuild.llvm.riscv.linker.nostartfiles.1505353029" name="Do not use the standard system startup files when linking" superClass="com.renesas.cdt.managedbuild.llvm.riscv.linker.nostartfiles" value="false" valueType="boolean"/>
 								<option id="com.renesas.cdt.managedbuild.llvm.core.option.linker.source.linkerScript.1630476858" name="Linker script" superClass="com.renesas.cdt.managedbuild.llvm.core.option.linker.source.linkerScript" valueType="stringList" IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false">
@@ -243,7 +243,7 @@
 									<listOptionValue builtIn="false" value="nosys"/>
 								</option>
 							</tool>
-							<tool id="com.renesas.cdt.managedbuild.llvm.riscv.tool.cpp.linker.173431061" name="Linker CPP" superClass="com.renesas.cdt.managedbuild.llvm.riscv.tool.cpp.linker">
+							<tool id="com.renesas.cdt.managedbuild.llvm.riscv.tool.cpp.linker.173431061" name="Linker CPP" superClass="com.renesas.cdt.managedbuild.llvm.riscv.tool.cpp.linker" commandLinePattern="${COMMAND} ${FLAGS} -march=rv32imac_zba_zbb_zbs_zicsr_zifencei -mabi=ilp32 ${OUTPUT_FLAG} ${OUTPUT_PREFIX}${OUTPUT} ${INPUTS}">
 								<option id="com.renesas.cdt.managedbuild.llvm.core.option.linker.misc.inputsections.401152403" name="Enable garbage collection of unused input sections(-gc-sections)" superClass="com.renesas.cdt.managedbuild.llvm.core.option.linker.misc.inputsections" value="true" valueType="boolean"/>
 								<option id="com.renesas.cdt.managedbuild.llvm.riscv.linker.cpp.nostartfiles.2119868119" name="Do not use the standard system startup files when linking" superClass="com.renesas.cdt.managedbuild.llvm.riscv.linker.cpp.nostartfiles" value="false" valueType="boolean"/>
 								<option id="com.renesas.cdt.managedbuild.llvm.core.option.linker.source.linkerScript.1888519012" name="Linker script" superClass="com.renesas.cdt.managedbuild.llvm.core.option.linker.source.linkerScript" valueType="stringList" IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false">

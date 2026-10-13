@@ -21,6 +21,14 @@ and nosys. Select that compiler in e2 studio Toolchain Management. They use
 the native Renesas LLVM managed-build integration for R9A02G0214CNE on the
 FPB-R9A02G021; no Smart Configurator generated startup is required.
 
+The C, C++, assembler and linker command patterns explicitly place
+`-march=rv32imac_zba_zbb_zbs_zicsr_zifencei -mabi=ilp32` after `${FLAGS}`.
+This keeps Zicsr and Zifencei enabled when e2 studio supplies its default
+device architecture without them. The setting applies to both library
+configurations and all examples; `__riscv_zicsr` is supplied by the compiler.
+After updating an imported project, refresh it and clean/rebuild the library
+and example. The build command must contain the explicit architecture above.
+
 The linker-script column below lists the ioc scripts. The e2 projects use
 `llvm_R9A02G021.ld`, or `llvm_dfu_boot_r9a02g021.ld` for DfuBoot. Their memory
 maps and option-setting words match the ioc scripts. They use LLVM runtime
