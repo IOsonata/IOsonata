@@ -44,6 +44,16 @@ MEMORY
 
 __global_pointer$ = ORIGIN(RAM) + 0x800;
 
+/* DTC vector table of dtc_r9a02.cpp, 1 KB aligned. First in IRAM, ahead of
+ * the .iram.text of gcc_riscv_flash.ld, the alignment then costs nothing. */
+SECTIONS
+{
+	.dtc_vector (NOLOAD) : ALIGN(1024)
+	{
+		*(.bss.dtc_vector)
+	} > IRAM
+}
+
 INCLUDE "gcc_riscv_flash.ld"
 
 ASSERT(ADDR(.reset) == __dfu_slot0_start, "reset entry not at the start of slot 0")

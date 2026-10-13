@@ -85,6 +85,12 @@ SOFTWARE.
 
 #define SPI_MASTER_RATE			1000000
 
+// Transfer mode, polling with both false. INT: the receptions run in the
+// SAU1_ENDI0 interrupt. DMA: the DTC receives, with INT in the background,
+// without it the call waits. The transmissions are always polled.
+#define SPI_MASTER_INT_ENABLE	true
+#define SPI_MASTER_DMA_ENABLE	true
+
 #define SPI_LOOPBACK_WIRING		"Connect P103 MOSI (SO20) to P102 MISO (SI20)"
 
 #endif

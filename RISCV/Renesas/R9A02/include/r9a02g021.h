@@ -191,6 +191,11 @@ SOFTWARE.
 #define R9A02_SYSC_HOCOUTCR				R9A02_REG8(R9A02_SYSC_BASE + 0x062)
 #define R9A02_SYSC_OPCCR				R9A02_REG8(R9A02_SYSC_BASE + 0x0A0)
 #define R9A02_SYSC_SOPCCR				R9A02_REG8(R9A02_SYSC_BASE + 0x0AA)
+#define R9A02_SYSC_SNZCR				R9A02_REG8(R9A02_SYSC_BASE + 0x092)
+#define R9A02_SYSC_SNZEDCR0				R9A02_REG8(R9A02_SYSC_BASE + 0x094)
+#define R9A02_SYSC_SNZEDCR1				R9A02_REG8(R9A02_SYSC_BASE + 0x095)
+#define R9A02_SYSC_SNZREQCR0			R9A02_REG32(R9A02_SYSC_BASE + 0x098)
+#define R9A02_SYSC_PSMCR				R9A02_REG8(R9A02_SYSC_BASE + 0x09F)
 #define R9A02_SYSC_RSTSR1				R9A02_REG16(R9A02_SYSC_BASE + 0x0C0)
 #define R9A02_SYSC_PRCR					R9A02_REG16(R9A02_SYSC_BASE + 0x3FE)
 #define R9A02_SYSC_RSTSR0				R9A02_REG8(R9A02_SYSC_BASE + 0x410)
@@ -236,6 +241,24 @@ SOFTWARE.
 #define R9A02_SOSCCR_SOSTP				(1U << 0)
 #define R9A02_LOCOCR_LCSTP				(1U << 0)
 #define R9A02_SBYCR_SSBY				(1U << 15)		//!< 1: WFI enters Software Standby (10.2.1)
+
+// Snooze, manual 10.2.8 to 10.2.11. PRC1 protected, not written in Snooze.
+#define R9A02_SNZCR_SNZDTCEN			(1U << 1)		//!< DTC and SRAM run in Snooze
+#define R9A02_SNZCR_RXD0REQEN			(1U << 2)		//!< RXD0 or SCK00 edge requests Snooze
+#define R9A02_SNZCR_RXD2REQEN			(1U << 3)		//!< RXD2 or SCK20 edge requests Snooze
+#define R9A02_SNZCR_REMC0REQEN			(1U << 4)		//!< RIN0 edge requests Snooze
+#define R9A02_SNZCR_SNZE				(1U << 7)		//!< Snooze enabled
+#define R9A02_SNZEDCR0_DTCZRED			(1U << 1)		//!< Last DTC transfer ends Snooze
+#define R9A02_SNZEDCR0_DTCNZRED			(1U << 2)		//!< Each other DTC transfer ends Snooze
+#define R9A02_SNZEDCR0_ADNCRED			(1U << 3)		//!< ADC12 compare mismatch ends Snooze
+#define R9A02_SNZEDCR1_TMLOIED			(1U << 0)		//!< TML32_OUTI ends Snooze
+#define R9A02_SNZEDCR1_REMCNCRED		(1U << 1)		//!< REMC without interrupt ends Snooze
+#define R9A02_SNZEDCR1_SAU0NCRED		(1U << 4)		//!< SAU0 error without interrupt ends Snooze
+#define R9A02_SNZEDCR1_SAU1NCRED		(1U << 5)		//!< SAU1 error without interrupt ends Snooze
+#define R9A02_SNZREQCR0_IRQ(n)			(1UL << (n))	//!< IRQ0 to IRQ7 pins request Snooze
+#define R9A02_SNZREQCR0_KEY				(1UL << 17)
+#define R9A02_SNZREQCR0_RTC				(1UL << 24)
+#define R9A02_SNZREQCR0_TML32			(1UL << 26)
 
 #define R9A02_PRCR_KEY					0xA500U
 #define R9A02_PRCR_PRC0					(1U << 0)		//!< Clock generation registers
@@ -546,6 +569,8 @@ typedef struct {
 #define R9A02_SNFEN_SNFEN00				(1U << 0)		//!< RxD0 noise filter
 #define R9A02_SNFEN_SNFEN10				(1U << 2)		//!< RxD1 noise filter
 #define R9A02_SNFEN_SNFEN20				(1U << 4)		//!< RxD2 noise filter
+#define R9A02_ISC_ISC43_Msk				(3U << 3)		//!< SPI00 clock source, 0 for UART or I2C on channel 0
+#define R9A02_ISC_ISC76_Msk				(3U << 6)		//!< SPI01 clock source, 0 for UART or I2C on channel 1
 #define R9A02_ULBS_UART0				(1U << 0)		//!< UART0 TX looped back to RX
 #define R9A02_ULBS_UART1				(1U << 1)
 #define R9A02_ULBS_UART2				(1U << 2)
@@ -600,6 +625,7 @@ typedef struct {
 #define R9A02_SAU_SMR_MD0				(1U << 0)		//!< 1: buffer empty interrupt
 #define R9A02_SAU_SMR_MD_SPI			(0U << 1)		//!< MD1[1:0] = 00b, simplified SPI
 #define R9A02_SAU_SMR_MD_UART			(1U << 1)		//!< MD1[1:0] = 01b
+#define R9A02_SAU_SMR_MD_I2C			(2U << 1)		//!< MD1[1:0] = 10b, simplified I2C
 #define R9A02_SAU_SMR_FIXED				(1U << 5)		//!< Bit 5 must be written 1
 #define R9A02_SAU_SMR_SIS0				(1U << 6)		//!< RX level inversion, odd channels
 #define R9A02_SAU_SMR_STS				(1U << 8)		//!< Start on RxD edge, odd channels
@@ -809,12 +835,22 @@ typedef struct {
 #define R9A02_ADS_TEMP					(R9A02_ADS_ADISS | 0U)
 #define R9A02_ADS_VREF					(R9A02_ADS_ADISS | 1U)
 
+#define R9A02_ADM1_ADTRS_TAU0_ENDI1		0U				//!< Hardware trigger source
+#define R9A02_ADM1_ADTRS_RTC			2U
+#define R9A02_ADM1_ADTRS_TML32			3U
+#define R9A02_ADM1_ADTRS_ELC			4U				//!< Event of ELSR8
+#define R9A02_ADM1_ADTRS_Msk			7U
 #define R9A02_ADM1_ADLSP				(1U << 3)		//!< PCLKB 1 to 4 MHz
 #define R9A02_ADM1_ADSCM				(1U << 5)		//!< One-shot conversion
+#define R9A02_ADM1_ADTMD_HW_NOWAIT		(2U << 6)		//!< Hardware trigger, comparator on
+#define R9A02_ADM1_ADTMD_HW_WAIT		(3U << 6)		//!< Hardware trigger, comparator powered at the trigger
+#define R9A02_ADM1_ADTMD_Msk			(3U << 6)
 
 #define R9A02_ADM2_ADTYP_10BIT			0U
 #define R9A02_ADM2_ADTYP_8BIT			1U
 #define R9A02_ADM2_ADTYP_12BIT			2U
+#define R9A02_ADM2_AWC					(1U << 2)		//!< Snooze function
+#define R9A02_ADM2_ADRCK				(1U << 3)		//!< ADC_ENDI outside ADLL to ADUL
 #define R9A02_ADM2_ADREFM				(1U << 5)		//!< '-' reference AVREFM (P003)
 #define R9A02_ADM2_ADREFP_VCC			(0U << 6)
 #define R9A02_ADM2_ADREFP_AVREFP		(1U << 6)		//!< P002
@@ -896,10 +932,84 @@ typedef struct {
 #define R9A02_ITLCSEL0_ISEL_EXTAL		3U
 #define R9A02_ITLCSEL0_ISEL_LOCO_SOSC	4U				//!< Selected by OSMCR.WUTMMCK0
 #define R9A02_ITLCSEL0_ISEL_ELC			5U
+#define R9A02_ITLCSEL0_ISEL_Msk			7U
+#define R9A02_ITLFDIV_FDIV0_Pos			0U				//!< fITL0 / 2^FDIV, 0 to 7
+#define R9A02_ITLFDIV_FDIV1_Pos			4U
+#define R9A02_ITLFDIV_MAX				7U
 #define R9A02_ITLS0_ITF00				(1U << 0)
 #define R9A02_ITLS0_ITF01				(1U << 1)
 #define R9A02_ITLS0_ITF02				(1U << 2)
 #define R9A02_ITLS0_ITF03				(1U << 3)
 #define R9A02_ITLS0_ITF0C				(1U << 4)
+#define R9A02_ITLS0_Msk					0x1FU
+#define R9A02_ITLMKF0_Msk				0x1FU			//!< 1: flag never set
+
+// Data transfer controller, manual 14.2. The transfer information records
+// and the vector table are in SRAM, see dtc_r9a02.h.
+
+typedef struct {
+	__IO uint8_t DTCCR;				//!< 0x00 Control
+	uint8_t RESERVED0[3];
+	__IO uint32_t DTCVBR;			//!< 0x04 Vector table base, 1 KB aligned
+	uint8_t RESERVED1[4];
+	__IO uint8_t DTCST;				//!< 0x0C Module start
+	uint8_t RESERVED2;
+	__I uint16_t DTCSTS;			//!< 0x0E Status
+} R9A02_DTC_Type;
+
+#define R9A02_DTC						((R9A02_DTC_Type *)R9A02_DTC_BASE)
+
+#define R9A02_DTCCR_FIXED				(1U << 3)		//!< Reads 1, write 1
+#define R9A02_DTCCR_RRS					(1U << 4)		//!< Skip the record read for the same vector
+#define R9A02_DTCST_DTCST				(1U << 0)
+#define R9A02_DTCSTS_VECN_Msk			0xFFU			//!< Vector of the active transfer
+#define R9A02_DTCSTS_ACT				(1U << 15)		//!< Transfer in progress
+
+// Event link controller, manual 15.2. ELSRn are 16-bit at 0x10 + 4n.
+
+#define R9A02_ELC_ELCR					R9A02_REG8(R9A02_ELC_BASE + 0x00)
+#define R9A02_ELC_ELSR(n)				R9A02_REG16(R9A02_ELC_BASE + 0x10 + 4U * (n))
+#define R9A02_ELCR_ELCON				(1U << 7)		//!< All event links on
+
+// 8-bit D/A converter DAC8, manual 30.2. Module stop MSTPCRC.MSTPC22 and
+// MSTPCRD.MSTPD20, both set to the same value.
+
+typedef struct {
+	__IO uint16_t DADR[2];			//!< 0x00 Data, channels 0 and 1
+	__IO uint8_t DACR;				//!< 0x04 Control, bits [4:0] write 1
+	__IO uint8_t DADPR;				//!< 0x05 Data placement
+	uint8_t RESERVED0[0x6FA];
+	__IO uint16_t DAEXOUT;			//!< 0x700 Output to the pins
+} R9A02_DAC8_Type;
+
+#define R9A02_DAC8						((R9A02_DAC8_Type *)R9A02_DAC8_BASE)
+
+#define R9A02_DACR_FIXED				0x1FU			//!< Read 1, write 1
+#define R9A02_DACR_DAOE(n)				(1U << (6U + (n)))	//!< Conversion and output of channel n
+#define R9A02_DADPR_DPSEL				(1U << 7)		//!< Data in DADRn [15:8]
+#define R9A02_DAEXOUT_DAEXO(n)			(1U << (6U + (n)))	//!< DAn to the DACOUTn pin
+
+// Comparators CMP, manual 31.2. All registers 8-bit.
+
+typedef struct {
+	__IO uint8_t COMPMDR;			//!< 0x00 Mode
+	__IO uint8_t COMPFIR;			//!< 0x01 Filter and edge
+	__IO uint8_t COMPOCR;			//!< 0x02 Output control
+} R9A02_CMP_Type;
+
+#define R9A02_CMP						((R9A02_CMP_Type *)R9A02_CMP_BASE)
+
+#define R9A02_COMPMDR_CENB(n)			(1U << (4U * (n)))			//!< Comparator n on
+#define R9A02_COMPMDR_CLVL(n)			(1U << (4U * (n) + 1U))		//!< Reference 1.4 V to VCC
+#define R9A02_COMPMDR_CVRF(n)			(1U << (4U * (n) + 2U))		//!< Internal reference (CMP0), DA0 (CMP1)
+#define R9A02_COMPMDR_CMON(n)			(1U << (4U * (n) + 3U))		//!< IVCMPn above the reference
+#define R9A02_COMPFIR_CFCK_Pos(n)		(4U * (n))					//!< Filter sampling, 00 off
+#define R9A02_COMPFIR_CFCK_Msk(n)		(3U << (4U * (n)))
+#define R9A02_COMPFIR_CEPO(n)			(1U << (4U * (n) + 2U))		//!< Falling edge
+#define R9A02_COMPFIR_CEDG(n)			(1U << (4U * (n) + 3U))		//!< Both edges
+#define R9A02_COMPOCR_CIE(n)			(1U << (4U * (n)))			//!< Interrupt request on
+#define R9A02_COMPOCR_COE(n)			(1U << (4U * (n) + 1U))		//!< VCOUTn pin output
+#define R9A02_COMPOCR_COP(n)			(1U << (4U * (n) + 2U))		//!< VCOUTn inverted
+#define R9A02_COMPOCR_SPDMD				(1U << 7)					//!< High-speed mode, both comparators
 
 #endif

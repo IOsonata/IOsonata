@@ -9,7 +9,9 @@ defined, reads the register I2C_SCAN_REG of that device, for example an ID
 register, and prints its value.
 
 Required in board.h : the UART pins for the output, I2C_DEVNO and I2C_PINS,
-the SDA then SCL pin configuration.
+the SDA then SCL pin configuration. Optional: I2C_SCAN_RATE, and
+I2C_SCAN_INT_ENABLE true for a driver that moves the data in the background
+(bIntEn), the register read then ends with DEVINTRF_EVT_COMPLETED.
 
 @author	Hoang Nguyen Hoan
 @date	Oct. 10, 2026
@@ -55,8 +57,15 @@ McuOsc_t g_McuOsc = MCUOSC;
 #define I2C_SCAN_RATE		100000
 #endif
 
+#ifndef I2C_SCAN_INT_ENABLE
+#define I2C_SCAN_INT_ENABLE	false
+#endif
+
 #define I2C_SCAN_ADDR_FIRST	0x08
 #define I2C_SCAN_ADDR_LAST	0x77
+#define I2C_SCAN_WAIT_LOOPS	10000000U
+
+static int I2cEvent(DevIntrf_t * const pDev, DEVINTRF_EVT Evt, uint8_t *pBuffer, int Len);
 
 #ifdef UART_RETARGET
 static const IOPinCfg_t s_UartPins[] = {
@@ -101,13 +110,51 @@ static const I2CCfg_t s_I2cCfg = {
 	.NbSlaveAddr = 0,
 	.SlaveAddr = {0,},
 	.bDmaEn = false,
-	.bIntEn = false,
+	.bIntEn = I2C_SCAN_INT_ENABLE,
 	.IntPrio = IRQ_PRIO_LOW,
-	.EvtCB = NULL,
+	.EvtCB = I2cEvent,
 };
 
 static UART s_Uart;
 static I2C s_I2c;
+static volatile int s_I2cCount = -1;
+
+static int I2cEvent(DevIntrf_t * const pDev, DEVINTRF_EVT Evt, uint8_t *pBuffer, int Len)
+{
+	if (Evt == DEVINTRF_EVT_COMPLETED)
+	{
+		s_I2cCount = Len;
+	}
+
+	return 0;
+}
+
+#ifdef I2C_SCAN_REG_DEVADDR
+// A negative count is a transfer running in the background, its end comes
+// with DEVINTRF_EVT_COMPLETED
+static int I2cWait(int Count)
+{
+	uint32_t n = I2C_SCAN_WAIT_LOOPS;
+
+	if (Count >= 0)
+	{
+		return Count;
+	}
+
+	while (s_I2cCount < 0 && --n > 0U)
+	{
+	}
+
+	if (s_I2cCount < 0)
+	{
+		s_I2c.Reset();
+
+		return 0;
+	}
+
+	return s_I2cCount;
+}
+#endif
 
 int main()
 {
@@ -121,7 +168,7 @@ int main()
 	setvbuf(stdout, NULL, _IONBF, 0);
 #endif
 
-	printf("\r\nI2C scan, I2C %d\r\n", I2C_DEVNO);
+	printf("\r\nI2C scan, I2C %d%s\r\n", I2C_DEVNO, I2C_SCAN_INT_ENABLE ? ", interrupt" : "");
 
 	if (s_I2c.Init(s_I2cCfg) == false)
 	{
@@ -151,7 +198,8 @@ int main()
 	uint8_t reg = I2C_SCAN_REG;
 	uint8_t val = 0;
 
-	if (s_I2c.Read(I2C_SCAN_REG_DEVADDR, &reg, 1, &val, 1) == 1)
+	s_I2cCount = -1;
+	if (I2cWait(s_I2c.Read(I2C_SCAN_REG_DEVADDR, &reg, 1, &val, 1)) == 1)
 	{
 		printf("Device 0x%02X register 0x%02X = 0x%02X\r\n", I2C_SCAN_REG_DEVADDR, reg, val);
 	}

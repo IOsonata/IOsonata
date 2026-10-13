@@ -68,4 +68,13 @@ SOFTWARE.
 	{0, 11, IOPINOP_FUNC6, IOPINDIR_OUTPUT, IOPINRES_PULLUP, IOPINTYPE_OPENDRAIN}, \
 }
 
+// The simplified I2C of the SAU works the same way, for example IIC20,
+// I2C_DEVNO 6: SDA20 P102 as {1, 2, IOPINOP_FUNC16, IOPINDIR_BI,
+// IOPINRES_NONE, IOPINTYPE_OPENDRAIN}, SCL20 P101 as {1, 1, IOPINOP_FUNC16,
+// IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_OPENDRAIN}. PSEL 0x11 (SAU) is
+// IOPINOP_FUNC16. Its slaves must not stretch SCL during a byte.
+
+// true for the data of the register read in the I2C interrupt
+#define I2C_SCAN_INT_ENABLE	false
+
 #endif

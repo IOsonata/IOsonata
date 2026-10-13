@@ -18,7 +18,7 @@ part has the same memories:
     RAM         0x20004000  12 KB    SRAM0 parity area: .data, .bss, heap,
                                      stack
     IRAM        0x20000000  4 KB     SRAM0 ECC area, ECC off after reset:
-                                     .iram.text
+                                     DTC vector table, .iram.text
 
 Copyright (c) 2025, I-SYST, all rights reserved
 ----------------------------------------------------------------------------*/
@@ -56,5 +56,15 @@ RESET_VECTOR = ORIGIN(FLASH);
 __global_pointer$ = ORIGIN(RAM) + 0x800;
 
 INCLUDE "r9a02g021_head.ld"
+
+/* DTC vector table of dtc_r9a02.cpp, 1 KB aligned. First in IRAM, ahead of
+ * the .iram.text of gcc_riscv_flash.ld, the alignment then costs nothing. */
+SECTIONS
+{
+	.dtc_vector (NOLOAD) : ALIGN(1024)
+	{
+		*(.bss.dtc_vector)
+	} > IRAM
+}
 
 INCLUDE "gcc_riscv_flash.ld"

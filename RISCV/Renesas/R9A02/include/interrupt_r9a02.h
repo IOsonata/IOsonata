@@ -27,6 +27,10 @@ handler runs sets IR again and is not lost. For an IRQ pin in low level
 mode IR is cleared after the handler returns, the handler must remove the
 low level first.
 
+A slot can also start the DTC (dtc_r9a02.h): with IELSRn.DTCE = 1 its
+events go to the DTC, the dispatcher does not take them. After the last
+transfer the DTC clears DTCE and the CPU interrupt comes on the slot.
+
 Handlers run in interrupt context and must not block. NMI is not routed
 through this module.
 
@@ -98,7 +102,8 @@ void R9a02IrqEntry(void);
 /// @param	pCtx		: Handler context
 ///
 /// @return	IELSR number 0 to 31, -1 if the event is not supported, already
-/// 			routed, or no IELSR of its groups is free
+/// 			routed, or no IELSR of its groups is free. SYSTEM_SNZREQ starts
+/// 			the DTC only and is refused.
 int R9a02RegisterIntHandler(uint8_t EvtId, int Prio, R9a02IRQHandler_t pHandler, void *pCtx);
 
 /// @brief	Route an ICU event to an IELSR without a CPU interrupt.
@@ -125,12 +130,32 @@ void R9a02UnregisterIntHandler(int IntNo);
 /// @brief	Drop a pending event of an ICU route.
 ///
 /// Clears the IR flag and the CLIC pending bit, for a driver that has just
-/// stopped the peripheral and accounted for the event itself.
+/// stopped the peripheral and accounted for the event itself. DTCE is also
+/// cleared, the slot no longer starts the DTC.
 ///
 /// @param	IntNo	: IELSR number returned by R9a02RegisterIntHandler
 ///
 /// @return	true if an event was pending
 bool R9a02ClearPendingInt(int IntNo);
+
+/// @brief	Event of an ICU route.
+///
+/// @param	IntNo	: IELSR number
+///
+/// @return	R9A02_EVT_xxx event number, 0 when the IELSR is not routed
+uint8_t R9a02IntEvent(int IntNo);
+
+/// @brief	Turn the CLIC input of a route with a handler on or off.
+///
+/// The route stays in place. A driver that waits for some events by polling
+/// the IR flag (R9a02EventFlag) and takes others in its handler turns the
+/// input off for the polled part. Turning it on drops a request latched by
+/// the CLIC while it was off, the IR flag is not changed: clear it before
+/// the peripheral is started (R9a02EventFlagClear).
+///
+/// @param	IntNo	: IELSR number returned by R9a02RegisterIntHandler
+/// @param	bEnable	: true to turn the input on
+void R9a02IntEnable(int IntNo, bool bEnable);
 
 /// @brief	IR flag of a route made by R9a02RouteEvent, set by each event.
 ///
