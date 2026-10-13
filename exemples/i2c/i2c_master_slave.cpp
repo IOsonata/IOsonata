@@ -303,6 +303,9 @@ int main()
 	I2C_DEBUG_DUMP("M init", g_I2CMaster);
 	I2C_DEBUG_DUMP("S init", g_I2CSlave);
 #endif
+#ifdef I2C_DEBUG_PULLUP_STATE
+	I2C_DEBUG_PULLUP_STATE();
+#endif
 	if (!masterOk || !slaveOk)
 	{
 		while (1)

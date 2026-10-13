@@ -112,6 +112,13 @@ SOFTWARE.
 	IOPinConfig(2, 4, IOPINOP_GPIO, IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL); \
 	IOPinConfig(2, 6, IOPINOP_GPIO, IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL); }
 
+// Show what the two spare pull-up pins look like after the I2C init: the PFS
+// word (PCR is bit 4, PDR bit 2, PIDR bit 1) and the level read on the pin.
+#define I2C_DEBUG_PULLUP_STATE() { \
+	printf("pullup P204 pfs=%08x pin=%d  P206 pfs=%08x pin=%d\r\n", \
+		(unsigned int)R_PFS->PORT[2].PIN[4].PmnPFS, IOPinRead(2, 4), \
+		(unsigned int)R_PFS->PORT[2].PIN[6].PmnPFS, IOPinRead(2, 6)); }
+
 #define I2C_DEBUG_PIN_TESTS() { \
 	I2C_DEBUG_PIN_TEST("M SDA", I2C_MASTER_SDA_PORT, I2C_MASTER_SDA_PIN) \
 	I2C_DEBUG_PIN_TEST("M SCL", I2C_MASTER_SCL_PORT, I2C_MASTER_SCL_PIN) \
