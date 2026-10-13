@@ -8,6 +8,7 @@ python3 tests/stm32/run_uart.py
 python3 tests/stm32f0/run_timer.py
 python3 tests/stm32f0/run_timer_arm.py
 python3 tests/stm32f4/run.py
+python3 tests/stm32g4/run.py
 ```
 
 These compile the production drivers against the repository's ST device headers.
@@ -17,13 +18,15 @@ are mapped into the test process. No extra Python packages are required.
 `tests/stm32f0/run.py`: F030x6/x8/xC and F070x6/xB system clock calculation and
 pin-specific EXTI allocation with the shared GPIO driver
 (`ARM/ST/src/iopincfg_stm32.cpp`). `tests/stm32f4/run.py`: F401 startup selects
-the linked vector symbol instead of forcing FLASH_BASE.
+the linked vector symbol instead of forcing FLASH_BASE. `tests/stm32g4/run.py`: G474
+system clock and LPTIM1 timer, see the [G4 port notes](../../ARM/ST/STM32G4xx/README.md).
 
 ## UART
 
 `tests/stm32/run_uart.py` runs the STM32 UART driver shared by all families,
 `ARM/ST/src/uart_stm32.cpp`, for F030x6, F030x8, F030xC, F070x6, F070xB,
-F091xC, L432, L476, L496, L4S9, F401xC, F405, F413 and WBA65, at -O0 and -O2
+F091xC, L432, L476, L496, L4S9, G474, G431, F401xC, F405, F413 and WBA65, at
+-O0 and -O2
 with UBSan. The USART, DMA and RCC pages of the test process are protected:
 each register access of the driver stops, runs as a single step, then a model
 applies its side effects (RDR read clears RXNE and loads the next character,

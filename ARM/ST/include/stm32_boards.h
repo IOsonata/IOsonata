@@ -165,8 +165,8 @@ SOFTWARE.
 #define BOARD_LED_ACTIVE	1
 
 #elif BOARD == NUCLEO_G474RE
-// No IOsonata STM32G4 port yet. DevNo as the UART driver would number the
-// G474 instances: LPUART1 0, USART1 1, USART2 2, USART3 3, UART4 4, UART5 5.
+// STM32G474 library and examples in ARM/ST/STM32G4xx. UART DevNo: LPUART1 0,
+// USART1 1, USART2 2, USART3 3, UART4 4, UART5 5.
 #if !defined(STM32G474xx)
 #error "NUCLEO-G474RE: build an STM32G474 project"
 #endif
