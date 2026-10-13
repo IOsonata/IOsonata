@@ -91,10 +91,12 @@ typedef struct __Lpc11_Usb_Ep0_State {
 typedef struct __Lpc11_Usb_Data_State {
 	UsbCtrlrEpHandler_t Handler;
 	void *pContext;
-	uint8_t *pReceive;
+	uint8_t *pBuffer;
 	uint32_t Generation;
 	uint16_t Mps;
 	uint16_t Length;
+	uint16_t Remaining;
+	uint16_t Transferred;
 	bool Busy;
 	bool Halted;
 } Lpc11UsbDataState_t;
@@ -873,7 +875,7 @@ static void Lpc11UsbForget(uint32_t Mask)
 		ep->Busy = false;
 		ep->Halted = false;
 		ep->Mps = 0U;
-		ep->pReceive = NULL;
+		ep->pBuffer = NULL;
 		++ep->Generation;
 		s_RxReady &= ~(1U << physical);
 		s_Memory.Command[2U * physical] = LPC11_USB_DISABLED;
@@ -925,7 +927,7 @@ bool UsbCtrlrEpOpenData(int DevNo, uint8_t EpNo, bool bIn, uint8_t Type, uint16_
 	ep->Mps = MaxPacketSize;
 	ep->Busy = false;
 	ep->Halted = false;
-	ep->pReceive = NULL;
+	ep->pBuffer = NULL;
 	++ep->Generation;
 	s_Memory.Command[2U * physical] = Lpc11UsbBufferAddress(physical) | LPC11_USB_TOGGLE_RESET;
 	__DMB();
@@ -1003,7 +1005,7 @@ bool UsbCtrlrEpReceive(int DevNo, uint8_t EpNo, uint8_t *pBuffer, uint16_t Capac
 		EnableInterrupt(state);
 		return false;
 	}
-	ep->pReceive = pBuffer;
+	ep->pBuffer = pBuffer;
 	ep->Length = ep->Mps;
 	ep->Busy = true;
 	s_RxReady &= ~(1U << physical);
@@ -1013,6 +1015,16 @@ bool UsbCtrlrEpReceive(int DevNo, uint8_t EpNo, uint8_t *pBuffer, uint16_t Capac
 	return true;
 }
 
+// Stage at most one packet. The rest stays in caller-owned memory until its
+// turn; no extra SRAM or transfer-sized copy is needed in interrupt context.
+static void Lpc11UsbDataStageIn(unsigned Physical)
+{
+	Lpc11UsbDataState_t *ep = &s_Data[Physical - 2U];
+	ep->Length = ep->Remaining < ep->Mps ? ep->Remaining : ep->Mps;
+	if (ep->Length != 0U)
+		memcpy(s_Memory.Packet[Physical], ep->pBuffer, ep->Length);
+}
+
 bool UsbCtrlrEpSend(int DevNo, uint8_t EpNo, uint8_t *pBuffer, uint16_t Length)
 {
 	if (DevNo != 0 || EpNo == 0U || EpNo >= 5U || (Length != 0U && pBuffer == NULL))
@@ -1020,15 +1032,16 @@ bool UsbCtrlrEpSend(int DevNo, uint8_t EpNo, uint8_t *pBuffer, uint16_t Length)
 	const uint32_t state = DisableInterrupt();
 	const unsigned physical = 2U * EpNo + 1U;
 	Lpc11UsbDataState_t *ep = &s_Data[physical - 2U];
-	if (!Lpc11UsbDataCurrent() || ep->Mps == 0U || ep->Busy || Length > ep->Mps)
+	if (!Lpc11UsbDataCurrent() || ep->Mps == 0U || ep->Busy)
 	{
 		EnableInterrupt(state);
 		return false;
 	}
-	if (Length != 0U)
-		memcpy(s_Memory.Packet[physical], pBuffer, Length);
-	ep->Length = Length;
+	ep->pBuffer = pBuffer;
+	ep->Remaining = Length;
+	ep->Transferred = 0U;
 	ep->Busy = true;
+	Lpc11UsbDataStageIn(physical);
 	if (!ep->Halted)
 		Lpc11UsbDataArm(physical);
 	EnableInterrupt(state);
@@ -1043,11 +1056,26 @@ static void Lpc11UsbDataComplete(unsigned Physical, bool Failed)
 	__DMB();
 	const uint16_t remaining = (s_Memory.Command[2U * Physical] >> 16) & 0x3FFU;
 	const bool failed = Failed || remaining > ep->Length || (in && remaining != 0U);
-	const uint16_t length = in ? ep->Length : (failed ? 0 : ep->Length - remaining);
+	if (in && !failed)
+	{
+		ep->Transferred += ep->Length;
+		ep->Remaining -= ep->Length;
+		if (ep->Remaining != 0U)
+		{
+			ep->pBuffer += ep->Length;
+			Lpc11UsbDataStageIn(Physical);
+			// A halt can observe a completed packet before its IRQ. Keep
+			// the next packet queued until clear, without an early callback.
+			if (!ep->Halted)
+				Lpc11UsbDataArm(Physical);
+			return;
+		}
+	}
+	const uint16_t length = in ? ep->Transferred : (failed ? 0 : ep->Length - remaining);
 	if (!in && !failed && length != 0U)
-		memcpy(ep->pReceive, s_Memory.Packet[Physical], length);
+		memcpy(ep->pBuffer, s_Memory.Packet[Physical], length);
 	ep->Busy = false;
-	ep->pReceive = NULL;
+	ep->pBuffer = NULL;
 	s_Memory.Command[2U * Physical] = Lpc11UsbBufferAddress(Physical) |
 		(ep->Halted ? LPC11_USB_STALL : 0U);
 	Lpc11UsbDataNotify(Physical, failed ? USB_CTRLR_EVT_XFER_FAILED : USB_CTRLR_EVT_XFER_CMPL, length);
@@ -1058,8 +1086,8 @@ static void Lpc11UsbDataComplete(unsigned Physical, bool Failed)
 
 // Halt retires an active packet and reports failure, rather than replaying a
 // packet whose ACK may have raced EPSKIP (including a zero-length IN packet).
-// A packet completed before halt is reported normally. Submissions made while
-// halted stay queued in software and start only after CLEAR_FEATURE.
+// A completed packet advances the transfer; any remaining packets wait until
+// CLEAR_FEATURE. Submissions made while halted also stay queued in software.
 static void Lpc11UsbDataHalt(unsigned Physical, bool Halt)
 {
 	Lpc11UsbDataState_t *ep = &s_Data[Physical - 2U];

@@ -144,3 +144,26 @@ for opt in ['-O0', '-O2']:
                         '-Wl,--gc-sections', '-Wl,--section-start=.usb_ram=0x20004000',
                         *objects, '-o', exe], check=True)
         subprocess.run([exe], check=True, timeout=5)
+
+        # Keep the real CDC class and descriptor builder for notification
+        # packetization; the transport-only fixture above overrides descriptors.
+        cdc_objects = objects[:-1]
+        for index, path in enumerate(['src/usb/usbd_cdc.cpp',
+                                      'src/usb/usbd_cdc_desc.cpp',
+                                      'src/usb/usbd_epalloc.cpp',
+                                      'tests/lpc/usb/cdc_test.cpp']):
+            obj = str(tmp / ('cdc_' + str(index) + '.o'))
+            subprocess.run(['g++', '-std=gnu++23', opt,
+                            '-fsanitize=undefined', '-fno-sanitize-recover=all',
+                            '-ffunction-sections', '-fdata-sections',
+                            '-I' + str(root / 'tests/lpc/usb/shim'),
+                            '-I' + str(root / 'include'),
+                            '-I' + str(root / 'ARM/NXP/LPC11xx/include'),
+                            '-I' + str(root / 'ARM/NXP/include'),
+                            '-c', str(root / path), '-o', obj], check=True)
+            cdc_objects.append(obj)
+        exe = str(tmp / 'cdc_test')
+        subprocess.run(['g++', '-no-pie', '-fsanitize=undefined',
+                        '-Wl,--gc-sections', '-Wl,--section-start=.usb_ram=0x20004000',
+                        *cdc_objects, '-o', exe], check=True)
+        subprocess.run([exe], check=True, timeout=5)

@@ -19,7 +19,10 @@ Run `python3 tests/lpc/usb/run.py`.
   initialization or while starting without VBUS.
 - Data tests cover all eight non-control endpoint directions, unaligned caller
   buffers, short packets, ZLPs, direct callback resubmission, close/reopen,
-  cancellation, malformed lengths, halt/clear and failed retirement.
+  cancellation, malformed lengths, halt/clear and failed retirement. IN tests
+  cover multi-packet transfers through 65535 bytes, exact packet multiples
+  without an implicit ZLP, partial progress, callback resubmission and
+  cancellation or halt between packets.
 - A host integration fixture links the production generic USB core, UsbIntrf,
   CFifo and DeviceIntrf to the LPC C driver. It exercises SET_ADDRESS, an
   80-byte TX, a two-packet RX, FIFO backpressure and rearming after reads.
@@ -27,6 +30,9 @@ Run `python3 tests/lpc/usb/run.py`.
   the USB device interrupt, checks state before the application detach event,
   reconnects without reinitialization, and services a latched disconnect after
   VBUS has already returned.
+- A real CDC class fixture sends serial-state notifications as 8+2 bytes,
+  retains the old notification while a new state is pending, starts that new
+  notification from completion, and detaches with the second packet active.
 - Remote-wakeup tests cover the three-frame delay, stale tick rejection,
   duplicate requests, host resume/reset/disconnect cancellation, SOF enable
   changes and preservation of pre-existing clock control. The generic-core
@@ -101,14 +107,17 @@ A failed skip disconnects and disables interrupts while retaining DMA storage.
 Bulk and interrupt endpoints use independent single-buffer command words and
 the existing aligned SRAM packets. OUT stays NAKed until a caller supplies a
 destination. Completion copies received bytes before calling the endpoint
-handler directly; IN copies into SRAM on submission but retains logical caller
-ownership until completion. Initial OUT readiness is requested from IRQ after
+handler directly; IN stages at most one MPS-sized packet in SRAM and advances
+from its interrupt until the entire submitted buffer is sent. The caller must
+keep the source valid and unchanged until completion, failure or cancellation.
+Completion reports the total length once; no trailing ZLP is added implicitly.
+Failure reports only bytes confirmed by earlier packet completions. Initial OUT readiness is requested from IRQ after
 class setup; later completions request the next destination directly.
 Closing, stopping and bus reset retire hardware before cancellation callbacks,
 and block reentrant submissions during cancellation. Bindings survive reset and
 Stop/Start. Halting an active transfer reports XFER_FAILED after retirement,
 avoiding replay when an ACK races EPSKIP. A completion already observed before
-halt is reported normally. New submissions while halted wait for clear, which
+halt advances the transfer normally; any remaining packets wait for clear. New submissions while halted wait for clear, which
 resets the hardware data toggle.
 
 Cable loss uses the same retirement sequence before resetting the generic USB
@@ -180,8 +189,8 @@ Measured with Arm GNU GCC 13.2.1 and binutils 2.42:
 
 | Build | Flash / 65536 bytes | Main RAM / 8160 bytes | USB SRAM / 2048 bytes | Linker stack allowance |
 | --- | ---: | ---: | ---: | ---: |
-| Debug | 48992 | 4444 | 832 | 1236 |
-| Release | 21448 | 3648 | 832 | 1500 |
+| Debug | 49180 | 4476 | 832 | 1224 |
+| Release | 21540 | 3680 | 832 | 1492 |
 
 Main RAM includes initialized data and BSS. The remaining main RAM is divided
 by the existing linker script between heap and stack. The stack allowance is
@@ -189,7 +198,6 @@ not a measured runtime high-water mark. Sizes may change with compiler version.
 The fixture board.h supplies the supported 12 MHz crystal and VBUS pin settings;
 it is not a validated board schematic or a flash-ready example project.
 
-A successful link does not establish USB enumeration or CDC operation. In
-particular, the current single-packet IN submission rejects CDC's 10-byte
-serial-state notification on its 8-byte interrupt endpoint. Multi-packet IN
-submission still needs implementation and testing before claiming CDC support.
+A successful link does not establish USB enumeration or CDC operation on
+hardware. The host CDC fixture checks the 10-byte serial-state notification
+on its 8-byte interrupt endpoint, but physical bus validation is still pending.

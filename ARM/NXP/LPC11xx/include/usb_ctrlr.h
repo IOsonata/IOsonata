@@ -190,7 +190,9 @@ bool UsbCtrlrEpReceive(int DevNo, uint8_t EpNo, uint8_t *pBuffer,
 void UsbCtrlrEpProcessEvent(int DevNo, uint8_t EpNo, bool bIn,
 						 UsbCtrlrEvtType_t Event, uint16_t Value);
 // The source stays owned until completion, failure or cancellation, even though
-// this controller stages bytes in USB SRAM. Zero length submits a ZLP.
+// this controller stages bytes in USB SRAM. IN transfers are split at MPS
+// and report one completion for the total length. No trailing ZLP is added;
+// zero length explicitly submits a ZLP.
 // Halting an active data transfer reports failure after confirmed retirement;
 // submissions accepted while halted wait for CLEAR_FEATURE.
 bool UsbCtrlrEpSend(int DevNo, uint8_t EpNum, uint8_t *pBuffer, uint16_t Length);

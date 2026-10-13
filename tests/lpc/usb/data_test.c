@@ -16,6 +16,7 @@ typedef struct {
 } Owner_t;
 
 static Owner_t s_Owner[10];
+static uint8_t s_LongTransfer[65535];
 
 static void EndpointEvent(UsbCtrlrEvtType_t Event, uint16_t Length, void *pContext)
 {
@@ -84,6 +85,91 @@ static void DataDone(unsigned Physical, unsigned Length)
 	USB_IRQHandler();
 }
 
+static void MultiPacketIn(void)
+{
+	for (unsigned i = 0; i < sizeof(s_LongTransfer); ++i)
+		s_LongTransfer[i] = (uint8_t)i;
+	const unsigned lengths[] = {10, 16, 65, 128, 65535};
+	for (unsigned test = 0; test < sizeof(lengths) / sizeof(lengths[0]); ++test)
+	{
+		OpenEndpoints();
+		UsbCtrlrEpClose(0, 1, true);
+		assert(UsbCtrlrEpOpenData(0, 1, true, INT, 8));
+		const unsigned length = lengths[test];
+		assert(UsbCtrlrEpSend(0, 1, s_LongTransfer, length));
+		for (unsigned offset = 0; offset < length; offset += 8)
+		{
+			const unsigned packet = length - offset < 8 ? length - offset : 8;
+			assert(s_Owner[3].Done == 0);
+			assert(!UsbCtrlrEpSend(0, 1, s_Data, 1));
+			assert(((s_Memory->Command[6] >> 16) & 0x3FF) == packet);
+			assert(memcmp(s_Memory->Packet[3], s_LongTransfer + offset, packet) == 0);
+			DataDone(3, packet);
+		}
+		assert(s_Owner[3].Done == 1 && s_Owner[3].LastLength == length);
+		assert((s_Memory->Command[6] & ACTIVE) == 0); // no implicit ZLP
+		USB_IRQHandler();
+		assert(s_Owner[3].Done == 1);
+	}
+
+	OpenEndpoints();
+	assert(UsbCtrlrEpSend(0, 1, s_LongTransfer + 1, 100));
+	DataDone(3, 64);
+	assert(s_Owner[3].Done == 0);
+	assert(memcmp(s_Memory->Packet[3], s_LongTransfer + 65, 36) == 0);
+	s_Owner[3].Rearm = true;
+	DataDone(3, 36); // reentrant submission only after the full transfer
+	assert(s_Owner[3].Done == 1 && s_Owner[3].LastLength == 100);
+	assert((s_Memory->Command[6] & ACTIVE) != 0);
+	UsbCtrlrEpClose(0, 1, true);
+	assert(s_Owner[3].Cancelled == 1);
+
+	OpenEndpoints();
+	assert(UsbCtrlrEpSend(0, 1, s_LongTransfer, 100));
+	DataDone(3, 64);
+	UsbCtrlrEpClose(0, 1, true);
+	USB_IRQHandler();
+	assert(s_Owner[3].Cancelled == 1 && s_Owner[3].Done == 0);
+	assert(UsbCtrlrEpOpenData(0, 1, true, INT, 8));
+	assert(UsbCtrlrEpSend(0, 1, s_LongTransfer, 10));
+	DataDone(3, 8);
+	DataDone(3, 1); // malformed completion: last packet was not fully sent
+	assert(s_Owner[3].Failed == 1 && s_Owner[3].LastLength == 8);
+	assert((s_Memory->Command[6] & ACTIVE) == 0);
+
+	OpenEndpoints();
+	assert(UsbCtrlrEpSend(0, 1, s_LongTransfer, 100));
+	// First packet ACK arrived, but the endpoint IRQ has not run yet.
+	s_Memory->Command[6] &= ~(ACTIVE | (0x3FFU << 16));
+	LPC_USB->INTSTAT |= 8;
+	UsbCtrlrEpStall(0, 1, true);
+	assert(s_Owner[3].Done == 0 && s_Owner[3].Failed == 0);
+	assert((s_Memory->Command[6] & (ACTIVE | STALL)) == STALL);
+	UsbCtrlrEpClearStall(0, 1, true);
+	assert(memcmp(s_Memory->Packet[3], s_LongTransfer + 64, 36) == 0);
+	DataDone(3, 36);
+	assert(s_Owner[3].Done == 1 && s_Owner[3].LastLength == 100);
+
+	assert(UsbCtrlrEpSend(0, 1, s_LongTransfer, 100));
+	DataDone(3, 64);
+	UsbCtrlrEpStall(0, 1, true); // second packet still active: do not replay
+	assert(s_Owner[3].Failed == 1 && s_Owner[3].LastLength == 64);
+	assert(UsbCtrlrEpSend(0, 1, s_LongTransfer, 100));
+	UsbCtrlrEpClearStall(0, 1, true);
+	DataDone(3, 64);
+	DataDone(3, 36);
+	assert(s_Owner[3].Done == 2 && s_Owner[3].LastLength == 100);
+
+	OpenEndpoints();
+	assert(UsbCtrlrEpSend(0, 1, s_LongTransfer, 100));
+	DataDone(3, 64);
+	LPC_USB->DEVCMDSTAT |= RESET;
+	LPC_USB->INTSTAT |= DEVICE;
+	USB_IRQHandler();
+	assert(s_Owner[3].Cancelled == 1 && s_Owner[3].Done == 0);
+	assert((s_Memory->Command[6] & ACTIVE) == 0);
+}
+
 int main(void)
 {
 	(void)Setup;
@@ -93,6 +179,7 @@ int main(void)
 		MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0) != MAP_FAILED);
 	assert(mmap((void *)LPC_USB_BASE, 4096, PROT_READ | PROT_WRITE,
 		MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0) != MAP_FAILED);
+	MultiPacketIn();
 	OpenEndpoints();
 	assert(!UsbCtrlrEpOpenData(0, 0, true, BULK, 64));
 	assert(!UsbCtrlrEpOpenData(0, 5, true, BULK, 64));
@@ -103,7 +190,7 @@ int main(void)
 	assert(UsbCtrlrIsoTraceSnapshot(0, &trace) == 0 && trace == NULL);
 	assert(!UsbCtrlrEpOpen(0, NULL));
 	assert(!UsbCtrlrEpReceive(0, 1, s_Data, 63));
-	assert(!UsbCtrlrEpSend(0, 1, s_Data, 65));
+	assert(!UsbCtrlrEpSend(0, 1, NULL, 65));
 	USB_IRQHandler(); // deferred initial readiness, no hardware completion
 	for (unsigned physical = 2; physical < 10; ++physical)
 	{
@@ -207,7 +294,8 @@ int main(void)
 	assert(LPC_USB->INTEN == 0);
 
 	OpenEndpoints();
-	assert(UsbCtrlrEpSend(0, 1, s_Data, 8));
+	assert(UsbCtrlrEpSend(0, 1, s_LongTransfer, 100));
+	DataDone(3, 64);
 	s_AutoSkip = false;
 	UsbCtrlrEpCloseAll(0);
 	assert(s_Owner[3].Cancelled == 0 && (s_Memory->Command[6] & ACTIVE) != 0);
