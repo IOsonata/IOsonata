@@ -1581,7 +1581,7 @@ int Ra4m1I2cDump(DevIntrf_t * const pIntrf, char *Buf, int Len)
 
 	// Pad level with the block enabled, with ICE cleared, and enabled again.
 	// Only when idle, as it briefly disables the block.
-	uint8_t pad[3] = { 0xFFU, 0xFFU, 0xFFU };
+	uint8_t pad[4] = { 0xFFU, 0xFFU, 0xFFU, 0xFFU };
 
 	if (!dev->bOpen && !dev->bAsync && dev->MState == RA4M1_I2C_M_IDLE &&
 		dev->SState == RA4M1_I2C_S_IDLE && dev->bEnabled)
@@ -1595,6 +1595,21 @@ int Ra4m1I2cDump(DevIntrf_t * const pIntrf, char *Buf, int Len)
 		dev->pReg->ICCR1 = (uint8_t)(RA4M1_I2C_ICCR1_RUN & ~RA4M1_I2C_CR1_SOWP);
 		dev->pReg->ICCR1 = RA4M1_I2C_ICCR1_RUN;
 		pad[2] = Ra4m1I2cSclPad(dev);
+
+		// With the block enabled, give the SCL pin to the port (GPIO input
+		// with pull-up) and read it, then restore the IIC pin function. A
+		// high level here means the IIC pin function was holding the line low.
+		const I2CCfg_t *pc = &dev->pI2cDev->Cfg;
+
+		if (pc->pIOPinMap != NULL && pc->NbIOPins > I2C_SCL_IOPIN_IDX)
+		{
+			const IOPinCfg_t *sp = &pc->pIOPinMap[I2C_SCL_IOPIN_IDX];
+
+			IOPinConfig(sp->PortNo, sp->PinNo, IOPINOP_GPIO, IOPINDIR_INPUT,
+				IOPINRES_PULLUP, IOPINTYPE_NORMAL);
+			pad[3] = Ra4m1I2cSclPad(dev);
+			Ra4m1I2cPinConfig(pc);
+		}
 	}
 
 	pos = Ra4m1I2cPutStr(Buf, pos, Len, " padnow=");
@@ -1603,6 +1618,8 @@ int Ra4m1I2cDump(DevIntrf_t * const pIntrf, char *Buf, int Len)
 	pos = Ra4m1I2cPutHex(Buf, pos, Len, pad[1], 2);
 	pos = Ra4m1I2cPutStr(Buf, pos, Len, " padon=");
 	pos = Ra4m1I2cPutHex(Buf, pos, Len, pad[2], 2);
+	pos = Ra4m1I2cPutStr(Buf, pos, Len, " padgpio=");
+	pos = Ra4m1I2cPutHex(Buf, pos, Len, pad[3], 2);
 	pos = Ra4m1I2cPutStr(Buf, pos, Len, (r->ICCR1 & 0x02U) ? " scl=1" : " scl=0");
 	pos = Ra4m1I2cPutStr(Buf, pos, Len, (r->ICCR1 & 0x01U) ? " sda=1" : " sda=0");
 
