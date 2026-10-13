@@ -532,17 +532,17 @@ static void Ra4m1I2cConfigure(Ra4m1I2cDev_t * const pDev)
 	reg->ICCR1 = RA4M1_I2C_ICCR1_RESET;
 	reg->ICCR1 = RA4M1_I2C_ICCR1_RESET_ENABLE;
 
-	reg->SARL0 = 0U;
-	reg->SARU0 = 0U;
-	reg->SARL1 = 0U;
-	reg->SARU1 = 0U;
-	reg->SARL2 = 0U;
-	reg->SARU2 = 0U;
+	reg->SAR[0].L = 0U;
+	reg->SAR[0].U = 0U;
+	reg->SAR[1].L = 0U;
+	reg->SAR[1].U = 0U;
+	reg->SAR[2].L = 0U;
+	reg->SAR[2].U = 0U;
 	reg->ICSER = 0U;
 
 	if (pDev->pI2cDev->Cfg.Mode == I2CMODE_SLAVE)
 	{
-		reg->SARL0 = (uint8_t)(pDev->pI2cDev->Cfg.SlaveAddr[0] << 1U);
+		reg->SAR[0].L = (uint8_t)(pDev->pI2cDev->Cfg.SlaveAddr[0] << 1U);
 		reg->ICSER = 1U;
 	}
 
