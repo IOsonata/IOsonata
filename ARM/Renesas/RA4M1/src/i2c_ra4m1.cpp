@@ -1581,7 +1581,7 @@ int Ra4m1I2cDump(DevIntrf_t * const pIntrf, char *Buf, int Len)
 
 	// Pad level with the block enabled, with ICE cleared, and enabled again.
 	// Only when idle, as it briefly disables the block.
-	uint8_t pad[4] = { 0xFFU, 0xFFU, 0xFFU, 0xFFU };
+	uint8_t pad[7] = { 0xFFU, 0xFFU, 0xFFU, 0xFFU, 0xFFU, 0xFFU, 0xFFU };
 
 	if (!dev->bOpen && !dev->bAsync && dev->MState == RA4M1_I2C_M_IDLE &&
 		dev->SState == RA4M1_I2C_S_IDLE && dev->bEnabled)
@@ -1610,6 +1610,26 @@ int Ra4m1I2cDump(DevIntrf_t * const pIntrf, char *Buf, int Len)
 			pad[3] = Ra4m1I2cSclPad(dev);
 			Ra4m1I2cPinConfig(pc);
 		}
+
+		// Pad level with only this block enabled, with both blocks off, and
+		// with only the other block enabled. The other block is restored in
+		// the same way as this one.
+		R_IIC0_Type *other = (dev->pReg == R_IIC0) ? (R_IIC0_Type *)R_IIC1 : R_IIC0;
+		const uint8_t cr1 = RA4M1_I2C_ICCR1_RUN;
+		const uint8_t cr1w = (uint8_t)(RA4M1_I2C_ICCR1_RUN & ~RA4M1_I2C_CR1_SOWP);
+
+		if ((other->ICCR1 & RA4M1_I2C_CR1_ICE) != 0U)
+		{
+			other->ICCR1 = 0U;
+			pad[4] = Ra4m1I2cSclPad(dev);
+			dev->pReg->ICCR1 = 0U;
+			pad[5] = Ra4m1I2cSclPad(dev);
+			other->ICCR1 = cr1w;
+			other->ICCR1 = cr1;
+			pad[6] = Ra4m1I2cSclPad(dev);
+			dev->pReg->ICCR1 = cr1w;
+			dev->pReg->ICCR1 = cr1;
+		}
 	}
 
 	pos = Ra4m1I2cPutStr(Buf, pos, Len, " padnow=");
@@ -1620,6 +1640,12 @@ int Ra4m1I2cDump(DevIntrf_t * const pIntrf, char *Buf, int Len)
 	pos = Ra4m1I2cPutHex(Buf, pos, Len, pad[2], 2);
 	pos = Ra4m1I2cPutStr(Buf, pos, Len, " padgpio=");
 	pos = Ra4m1I2cPutHex(Buf, pos, Len, pad[3], 2);
+	pos = Ra4m1I2cPutStr(Buf, pos, Len, " padself=");
+	pos = Ra4m1I2cPutHex(Buf, pos, Len, pad[4], 2);
+	pos = Ra4m1I2cPutStr(Buf, pos, Len, " padboth0=");
+	pos = Ra4m1I2cPutHex(Buf, pos, Len, pad[5], 2);
+	pos = Ra4m1I2cPutStr(Buf, pos, Len, " padoth=");
+	pos = Ra4m1I2cPutHex(Buf, pos, Len, pad[6], 2);
 	pos = Ra4m1I2cPutStr(Buf, pos, Len, (r->ICCR1 & 0x02U) ? " scl=1" : " scl=0");
 	pos = Ra4m1I2cPutStr(Buf, pos, Len, (r->ICCR1 & 0x01U) ? " sda=1" : " sda=0");
 

@@ -76,7 +76,7 @@ SOFTWARE.
 // Print the IIC register state after each step (RA4M1 diagnostic helper)
 #include "i2c_ra4m1.h"
 #define I2C_DEBUG_DUMP(name, i2c) { \
-	char dbg[400]; \
+	char dbg[512]; \
 	Ra4m1I2cDump(i2c, dbg, sizeof(dbg)); \
 	printf("%s %s\r\n", name, dbg); }
 
