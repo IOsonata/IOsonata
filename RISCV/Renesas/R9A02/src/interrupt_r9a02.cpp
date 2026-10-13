@@ -7,9 +7,16 @@ Allocates the 32 ICU event link registers IELSRn to peripheral events and
 dispatches the CLIC interrupts. See interrupt_r9a02.h.
 
 Event to IELSRn group mapping: R9A02G021 User's Manual R01UH1036EJ0110,
-table 12.7. Only events that table 12.4 lets connect to the CLIC are
-listed. SYSTEM_SNZREQ is DTC only, ELC_SWEVT0 and ELC_SWEVT1 connect to the
-CLIC only after a DTC transfer, they are not listed.
+table 12.7. The events that table 12.4 lets connect to the CLIC are listed,
+and SYSTEM_SNZREQ, which starts the DTC only: it can be routed without a
+handler (R9a02RouteEvent) for the DTC, never to the CPU. ELC_SWEVT0 and
+ELC_SWEVT1 connect to the CLIC only after a DTC transfer, they are not
+listed.
+
+A slot with IELSRn.DTCE = 1 sends its event to the DTC (12.5.4.2). The DTC
+clears DTCE after the last transfer and leaves IR set, the CPU interrupt
+then comes on the same slot. The dispatcher leaves a slot alone while DTCE
+is 1.
 
 @author	Hoang Nguyen Hoan
 @date	Oct. 12, 2026
@@ -67,6 +74,7 @@ static const uint16_t s_R9a02EvtMap[] = {
 	R9A02_EVTMAP(R9A02_EVT_PORT_IRQ7, 7, 0x11),
 	R9A02_EVTMAP(R9A02_EVT_DTC_COMPLETE, 0, 0x02), R9A02_EVTMAP(R9A02_EVT_DTC_COMPLETE, 4, 0x02),
 	R9A02_EVTMAP(R9A02_EVT_ICU_SNZCANCEL, 7, 0x04),
+	R9A02_EVTMAP(R9A02_EVT_SYSTEM_SNZREQ, 2, 0x05), R9A02_EVTMAP(R9A02_EVT_SYSTEM_SNZREQ, 6, 0x05),
 	R9A02_EVTMAP(R9A02_EVT_FCU_FRDYI, 2, 0x02), R9A02_EVTMAP(R9A02_EVT_FCU_FRDYI, 6, 0x02),
 	R9A02_EVTMAP(R9A02_EVT_LVD_LVD1, 0, 0x04), R9A02_EVTMAP(R9A02_EVT_LVD_LVD1, 4, 0x04),
 	R9A02_EVTMAP(R9A02_EVT_LVD_LVD2, 1, 0x04), R9A02_EVTMAP(R9A02_EVT_LVD_LVD2, 5, 0x04),
@@ -177,7 +185,9 @@ static void R9a02ClicOn(uint32_t ClicId, int Prio)
 // without one it stays off and the IR flag is polled.
 static int R9a02IcuRoute(uint8_t EvtId, int Prio, R9a02IRQHandler_t pHandler, void *pCtx)
 {
-	if (Prio < 0 || Prio > (int)R9A02_CLIC_PRIO_MAX || EvtId == 0U || EvtId > R9A02_EVT_MAX)
+	// SYSTEM_SNZREQ starts the DTC only (table 12.7 note 2)
+	if (Prio < 0 || Prio > (int)R9A02_CLIC_PRIO_MAX || EvtId == 0U || EvtId > R9A02_EVT_MAX ||
+		(pHandler != nullptr && EvtId == R9A02_EVT_SYSTEM_SNZREQ))
 	{
 		return -1;
 	}
@@ -299,6 +309,10 @@ bool R9a02ClearPendingInt(int IntNo)
 	{
 		pending = (R9A02_ICU->IELSR[IntNo] & R9A02_IELSR_IR) != 0U ||
 				  CLIC_INT_IP_REG(R9A02_CLIC_CTRL_BASE, clicid) != 0U;
+
+		// DTCE to 0 before IR is cleared (12.2.6)
+		R9A02_ICU->IELSR[IntNo] = hook.Iels;
+		(void)R9A02_ICU->IELSR[IntNo];
 		R9A02_ICU->IELSR[IntNo] = hook.Iels;
 		(void)R9A02_ICU->IELSR[IntNo];
 		ClicClearPending(R9A02_CLIC_CTRL_BASE, clicid);
@@ -307,6 +321,38 @@ bool R9a02ClearPendingInt(int IntNo)
 	EnableInterrupt(state);
 
 	return pending;
+}
+
+uint8_t R9a02IntEvent(int IntNo)
+{
+	return IntNo >= 0 && IntNo < (int)R9A02_ICU_IELSR_CNT ? s_IcuHook[IntNo].EvtId : 0U;
+}
+
+void R9a02IntEnable(int IntNo, bool bEnable)
+{
+	if (IntNo < 0 || IntNo >= (int)R9A02_ICU_IELSR_CNT)
+	{
+		return;
+	}
+
+	uintptr_t state = DisableInterrupt();
+	uint32_t clicid = R9A02_CLIC_ID_IELSR0 + (uint32_t)IntNo;
+
+	if (s_IcuHook[IntNo].Handler != nullptr)
+	{
+		if (bEnable)
+		{
+			// A request latched while the input was off is dropped
+			ClicClearPending(R9A02_CLIC_CTRL_BASE, clicid);
+			CLIC_INT_IE_REG(R9A02_CLIC_CTRL_BASE, clicid) = 1U;
+		}
+		else
+		{
+			CLIC_INT_IE_REG(R9A02_CLIC_CTRL_BASE, clicid) = 0U;
+		}
+	}
+
+	EnableInterrupt(state);
 }
 
 static R9a02IntHook_t *R9a02CoreHook(uint32_t ClicId)
@@ -375,7 +421,7 @@ static void R9a02IcuDispatch(uint32_t Slot)
 	R9a02IntHook_t &hook = s_IcuHook[Slot];
 	uint32_t reg = R9A02_ICU->IELSR[Slot];
 
-	if (hook.Handler == nullptr || (reg & (R9A02_IELSR_IELS_Msk | R9A02_IELSR_DTCE)) != hook.Iels)
+	if (hook.Handler == nullptr || (reg & R9A02_IELSR_IELS_Msk) != hook.Iels)
 	{
 		// No owner, or the route was changed behind this module: stop the input
 		CLIC_INT_IE_REG(R9A02_CLIC_CTRL_BASE, clicid) = 0U;
@@ -384,7 +430,9 @@ static void R9a02IcuDispatch(uint32_t Slot)
 		return;
 	}
 
-	if ((reg & R9A02_IELSR_IR) == 0U)
+	// The DTC owns the event while DTCE is 1, the CPU interrupt follows its
+	// last transfer with DTCE back at 0
+	if ((reg & (R9A02_IELSR_IR | R9A02_IELSR_DTCE)) != R9A02_IELSR_IR)
 	{
 		EnableInterrupt(state);
 

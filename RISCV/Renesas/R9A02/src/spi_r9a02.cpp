@@ -19,16 +19,45 @@ UART2. The channels are claimed through sau_r9a02.cpp, SPIInit fails when the
 UART has them. Which SPIs have pins depends on the package (tables 23.1 to
 23.3).
 
-Master, polling, 7 or 8 bit frames, MSB or LSB first, the four clock modes,
-chip selects on GPIO pins driven by the driver (SPICSEL_AUTO) or by the
-application (SPICSEL_MAN). No slave mode, no 3-wire mode, no interrupt or DMA
-transfer, these fail SPIInit.
+Master, 7 or 8 bit frames, MSB or LSB first, the four clock modes, chip
+selects on GPIO pins driven by the driver (SPICSEL_AUTO) or by the
+application (SPICSEL_MAN). No slave mode and no 3-wire mode, these fail
+SPIInit.
 
 Each byte is written to SDRmn, the transfer end event (SAUm_ENDIn, single
-transfer mode, SMRmn.MD0 = 0) is routed to an IELSR without a CPU interrupt
-and its IR flag is polled, then the received byte is read from SDRmn. The SSR
-flags alone cannot tell a byte waiting to start from a received one in this
-mode (23.3.11).
+transfer mode, SMRmn.MD0 = 0) marks its end, then the received byte is read
+from SDRmn. The SSR flags alone cannot tell a byte waiting to start from a
+received one in this mode (23.3.11).
+
+Transfer modes:
+
+	bIntEn and bDmaEn false: polling. SAUm_ENDIn is routed to an IELSR
+	without a CPU interrupt and its IR flag is polled.
+
+	bIntEn: RxData starts the reception and returns -1. The SAUm_ENDIn
+	interrupt stores each byte and sends the next dummy byte. At the end the
+	chip select and the interface are released (DeviceIntrfStopRx), then the
+	event handler gets DEVINTRF_EVT_COMPLETED with the buffer and the count.
+	Reset cancels a reception in progress, without event.
+
+	bDmaEn: the DTC receives (dtc_r9a02.h). For each SAUm_ENDIn it reads
+	the byte from SDRmn (byte access, as the DTC example of 14.6.1) and
+	writes the next dummy byte (16-bit access, 23.3.8), Len - 1 times. The
+	CPU reads the last byte: the DTC end comes when that byte starts. With
+	bIntEn too this is done in the interrupt and RxData returns -1 as above,
+	without it RxData waits and returns the count. One byte is received as
+	without bDmaEn.
+
+	Transmission is polled in every mode, TxData returns when the bytes are
+	sent and does not keep the caller buffer (DeviceIntrfWrite passes a
+	copy on the stack). The DTC would have to write SDRmn by bytes, which
+	the manual does not describe. With bIntEn, except for the command of a
+	read (bNoStop), TxData then ends as a background transfer: chip select
+	released, DEVINTRF_EVT_COMPLETED, and -1 returned. Every Tx, Rx and
+	Read then ends with one event.
+
+The interrupt runs at IntPrio. Its CLIC input is on only while a reception
+runs in the background, the polled parts use the IR flag.
 
 Transfer clock = fMCK / (2 x (STCLK + 1)), at most PCLKB / 4, PCLKB / 2 for
 SPI00 (23.5). SetRate sets the closest clock and returns it.
@@ -89,17 +118,26 @@ SOFTWARE.
 #include "interrupt_r9a02.h"
 #include "system_r9a02.h"
 #include "sau_r9a02.h"
+#include "dtc_r9a02.h"
 
 #pragma pack(push, 4)
 typedef struct __R9a02_Spi_Dev {
+	R9a02DtcInfo_t Dtc[2];			// Reception records: byte read, dummy write
 	uint8_t Unit;					// SAU unit
 	uint8_t Ch;						// SAU channel
 	uint8_t EvtEnd;					// Transfer end event
 	uint8_t PclkDiv;				// Highest transfer clock is PCLKB / PclkDiv
 	SPIDev_t *pSpiDev;				// Generic SPI device data
-	int IntNo;						// Polled IELSR route, -1 when none
+	int IntNo;						// IELSR route, -1 when none
 	uint32_t ByteLoops;				// Poll loops allowed for one byte
+	uint32_t StartLoops;			// Poll loops in which a byte written to SDRmn starts
+	uint8_t *pRxBuf;				// Reception in progress
+	int RxLen;
+	volatile int RxCnt;
 	uint16_t DataMask;				// 0x7F with 7 bit frames
+	uint16_t Dummy;					// Dummy byte written by the DTC
+	volatile bool bAsync;			// Reception in the background
+	bool bDtcXfer;					// Reception by the DTC
 	bool bEnabled;
 	bool bSelected;
 	bool bError;
@@ -107,12 +145,12 @@ typedef struct __R9a02_Spi_Dev {
 #pragma pack(pop)
 
 static R9a02SpiDev_t s_R9a02SpiDev[] = {
-	{ 0, 0, R9A02_EVT_SAU0_ENDI0, 2, NULL, -1, 0, 0xFF, false, false, false },
-	{ 0, 1, R9A02_EVT_SAU0_ENDI1, 4, NULL, -1, 0, 0xFF, false, false, false },
-	{ 0, 2, R9A02_EVT_SAU0_ENDI2, 4, NULL, -1, 0, 0xFF, false, false, false },
-	{ 0, 3, R9A02_EVT_SAU0_ENDI3, 4, NULL, -1, 0, 0xFF, false, false, false },
-	{ 1, 0, R9A02_EVT_SAU1_ENDI0, 4, NULL, -1, 0, 0xFF, false, false, false },
-	{ 1, 1, R9A02_EVT_SAU1_ENDI1, 4, NULL, -1, 0, 0xFF, false, false, false },
+	{ {}, 0, 0, R9A02_EVT_SAU0_ENDI0, 2, NULL, -1, 0, 0, NULL, 0, 0, 0xFF, 0xFF, false, false, false, false, false },
+	{ {}, 0, 1, R9A02_EVT_SAU0_ENDI1, 4, NULL, -1, 0, 0, NULL, 0, 0, 0xFF, 0xFF, false, false, false, false, false },
+	{ {}, 0, 2, R9A02_EVT_SAU0_ENDI2, 4, NULL, -1, 0, 0, NULL, 0, 0, 0xFF, 0xFF, false, false, false, false, false },
+	{ {}, 0, 3, R9A02_EVT_SAU0_ENDI3, 4, NULL, -1, 0, 0, NULL, 0, 0, 0xFF, 0xFF, false, false, false, false, false },
+	{ {}, 1, 0, R9A02_EVT_SAU1_ENDI0, 4, NULL, -1, 0, 0, NULL, 0, 0, 0xFF, 0xFF, false, false, false, false, false },
+	{ {}, 1, 1, R9A02_EVT_SAU1_ENDI1, 4, NULL, -1, 0, 0, NULL, 0, 0, 0xFF, 0xFF, false, false, false, false, false },
 };
 
 static const int s_NbR9a02SpiDev = sizeof(s_R9a02SpiDev) / sizeof(s_R9a02SpiDev[0]);
@@ -125,12 +163,14 @@ static R9a02SpiDev_t *R9a02SpiHandle(DevIntrf_t * const pIntrf)
 }
 
 // Poll loops for one byte: the byte time in CPU cycles, one or more cycles
-// per loop, plus a margin
-static void R9a02SpiSetTimeout(R9a02SpiDev_t * const pDev)
+// per loop, plus a margin. A byte written to SDRmn starts within a few fMCK
+// cycles, one transfer clock period is allowed.
+static void R9a02SpiSetTimeout(R9a02SpiDev_t * const pDev, uint32_t FmckHz)
 {
 	uint32_t rate = pDev->pSpiDev->Cfg.Rate ? pDev->pSpiDev->Cfg.Rate : 1U;
 
 	pDev->ByteLoops = (SystemCoreClock / rate + 1U) * 8U + 1000U;
+	pDev->StartLoops = SystemCoreClock / rate + (FmckHz ? 4U * (SystemCoreClock / FmckHz) : 0U) + 16U;
 }
 
 // Channel stopped, output disabled, SO and SCK at their idle levels
@@ -214,7 +254,7 @@ static uint32_t R9a02SpiSetRate(DevIntrf_t * const pIntrf, uint32_t Rate)
 		reg->SMR[dev->Ch] = (uint16_t)((reg->SMR[dev->Ch] & ~R9A02_SAU_SMR_CKS) | clk.Cks);
 		reg->SDR[dev->Ch] = clk.Sdr;
 		dev->pSpiDev->Cfg.Rate = best;
-		R9a02SpiSetTimeout(dev);
+		R9a02SpiSetTimeout(dev, clk.FmckHz);
 	}
 
 	if (dev->bEnabled)
@@ -241,6 +281,33 @@ static void R9a02SpiRecover(R9a02SpiDev_t * const pDev)
 	EnableInterrupt(state);
 }
 
+// Background reception stopped without event, the route kept. Returns true
+// when one was running.
+static bool R9a02SpiCancel(R9a02SpiDev_t * const pDev)
+{
+	uintptr_t state = DisableInterrupt();
+	bool running = pDev->bAsync;
+
+	if (pDev->IntNo >= 0 && (running || pDev->bDtcXfer))
+	{
+		R9a02IntEnable(pDev->IntNo, false);
+		if (pDev->bDtcXfer)
+		{
+			R9a02DtcDisable(pDev->IntNo);
+		}
+		R9a02ClearPendingInt(pDev->IntNo);
+
+		// A byte can be on the line, the channel is restarted at the stop
+		pDev->bError = true;
+	}
+	pDev->bAsync = false;
+	pDev->bDtcXfer = false;
+
+	EnableInterrupt(state);
+
+	return running;
+}
+
 static void R9a02SpiStopXfer(DevIntrf_t * const pIntrf)
 {
 	R9a02SpiDev_t *dev = R9a02SpiHandle(pIntrf);
@@ -249,6 +316,8 @@ static void R9a02SpiStopXfer(DevIntrf_t * const pIntrf)
 	{
 		return;
 	}
+
+	R9a02SpiCancel(dev);
 
 	SPIDev_t *spi = dev->pSpiDev;
 	R9A02_SAU_Type *reg = R9a02SauReg(dev->Unit);
@@ -386,14 +455,281 @@ static int R9a02SpiTransfer(DevIntrf_t * const pIntrf, const uint8_t *pTx, uint8
 	return cnt;
 }
 
+// Polled in every mode. With bIntEn, except for the command of a read, it
+// ends as a background transfer: the interface released, the event, then
+// -1, so that every Tx ends with one DEVINTRF_EVT_COMPLETED.
 static int R9a02SpiTxData(DevIntrf_t * const pIntrf, const uint8_t *pData, int Len)
 {
-	return pData ? R9a02SpiTransfer(pIntrf, pData, NULL, Len) : 0;
+	R9a02SpiDev_t *dev = R9a02SpiHandle(pIntrf);
+
+	if (dev == NULL || pData == NULL || Len <= 0 || !dev->bSelected || dev->bError || dev->bAsync)
+	{
+		return 0;
+	}
+
+	int cnt = R9a02SpiTransfer(pIntrf, pData, NULL, Len);
+
+	if (!pIntrf->bIntEn || pIntrf->bNoStop)
+	{
+		return cnt;
+	}
+
+	DeviceIntrfTxComplete(pIntrf);
+
+	if (pIntrf->EvtCB != NULL)
+	{
+		pIntrf->EvtCB(pIntrf, DEVINTRF_EVT_COMPLETED, NULL, cnt);
+	}
+
+	return -1;
+}
+
+// Last byte of a DTC reception. The last DTC transfer wrote its dummy byte,
+// the byte is received when TSF is 0 and BFF is 1 after its start, or when
+// no start is seen in the time a start takes: it was over before. TSF and
+// BFF read the same before the start and after the end (23.3.11).
+static void R9a02SpiDtcLast(R9a02SpiDev_t * const pDev)
+{
+	R9A02_SAU_Type *reg = R9a02SauReg(pDev->Unit);
+	uint32_t ch = pDev->Ch;
+	uint32_t n = pDev->ByteLoops;
+	uint32_t start = pDev->StartLoops;
+	bool started = false;
+	bool done = false;
+
+	while (!done && --n > 0U)
+	{
+		uint16_t ssr = reg->SSR[ch];
+
+		if ((ssr & R9A02_SAU_SSR_TSF) || (ssr & R9A02_SAU_SSR_BFF) == 0U)
+		{
+			started = true;
+		}
+		else if (started || --start == 0U)
+		{
+			done = true;
+		}
+	}
+
+	uint16_t ssr = reg->SSR[ch];
+	uint8_t d = (uint8_t)(reg->SDR[ch] & pDev->DataMask);
+
+	pDev->RxCnt = pDev->RxLen - 1;
+
+	if (ssr & R9A02_SAU_SSR_OVF)
+	{
+		reg->SIR[ch] = R9A02_SAU_SIR_OVCT;
+		pDev->bError = true;
+	}
+	else if (!done)
+	{
+		pDev->bError = true;
+	}
+	else
+	{
+		pDev->pRxBuf[pDev->RxLen - 1] = d;
+		pDev->RxCnt = pDev->RxLen;
+	}
+
+	// The DTC copied SDRmn [7:0], the 8th bit of 7 bit frames is removed
+	if (pDev->DataMask != 0xFFU)
+	{
+		for (int i = 0; i < pDev->RxCnt; i++)
+		{
+			pDev->pRxBuf[i] &= (uint8_t)pDev->DataMask;
+		}
+	}
+
+	// The event of the last byte
+	R9a02ClearPendingInt(pDev->IntNo);
+}
+
+// End of a background reception: the interface is released, then the event
+static void R9a02SpiRxEnd(R9a02SpiDev_t * const pDev)
+{
+	SPIDev_t *spi = pDev->pSpiDev;
+	DevIntrf_t *intrf = &spi->DevIntrf;
+	uint8_t *buf = pDev->pRxBuf;
+	int cnt = pDev->RxCnt;
+
+	R9a02IntEnable(pDev->IntNo, false);
+	pDev->bAsync = false;
+	pDev->bDtcXfer = false;
+
+	if (cnt > 0 && spi->FirstRdData < 0)
+	{
+		spi->FirstRdData = buf[0];
+	}
+
+	DeviceIntrfStopRx(intrf);
+
+	if (intrf->EvtCB != NULL)
+	{
+		intrf->EvtCB(intrf, DEVINTRF_EVT_COMPLETED, buf, cnt);
+	}
+}
+
+// SAUm_ENDIn: one byte received, or the DTC end
+static void R9a02SpiIrqHandler(int IntNo, void *pCtx)
+{
+	R9a02SpiDev_t *dev = (R9a02SpiDev_t *)pCtx;
+
+	if (!dev->bAsync || dev->pSpiDev == NULL)
+	{
+		return;
+	}
+
+	if (dev->bDtcXfer)
+	{
+		R9a02IntEnable(IntNo, false);
+		R9a02SpiDtcLast(dev);
+		R9a02SpiRxEnd(dev);
+
+		return;
+	}
+
+	R9A02_SAU_Type *reg = R9a02SauReg(dev->Unit);
+	uint32_t ch = dev->Ch;
+	uint16_t ssr = reg->SSR[ch];
+	uint8_t d = (uint8_t)(reg->SDR[ch] & dev->DataMask);
+
+	if (ssr & R9A02_SAU_SSR_OVF)
+	{
+		reg->SIR[ch] = R9A02_SAU_SIR_OVCT;
+		dev->bError = true;
+		R9a02SpiRxEnd(dev);
+
+		return;
+	}
+
+	dev->pRxBuf[dev->RxCnt] = d;
+	dev->RxCnt = dev->RxCnt + 1;
+
+	if (dev->RxCnt < dev->RxLen)
+	{
+		reg->SDR[ch] = dev->Dummy;
+
+		return;
+	}
+
+	R9a02SpiRxEnd(dev);
+}
+
+// DTC records: SDRmn [7:0] to the buffer, then the dummy byte to SDRmn
+// (chain), Len - 1 times. The last transfer ends the chain (14.4.6).
+static bool R9a02SpiDtcSetup(R9a02SpiDev_t * const pDev, uint8_t *pBuff, int Len)
+{
+	R9A02_SAU_Type *reg = R9a02SauReg(pDev->Unit);
+	uint32_t sdr = (uint32_t)(uintptr_t)&reg->SDR[pDev->Ch];
+	uint16_t cnt = (uint16_t)(Len - 1);			// 0 is 65536
+	R9a02DtcInfo_t *d = pDev->Dtc;
+
+	d[0].Rsv = 0U;
+	d[0].Mra = R9A02_DTC_MRA_MD_NORMAL | R9A02_DTC_MRA_SZ_BYTE | R9A02_DTC_MRA_SM_FIXED;
+	d[0].Mrb = R9A02_DTC_MRB_CHNE | R9A02_DTC_MRB_DM_INC;
+	d[0].Sar = sdr;
+	d[0].Dar = (uint32_t)(uintptr_t)pBuff;
+	d[0].Crb = 0U;
+	d[0].Cra = cnt;
+
+	d[1].Rsv = 0U;
+	d[1].Mra = R9A02_DTC_MRA_MD_NORMAL | R9A02_DTC_MRA_SZ_HALF | R9A02_DTC_MRA_SM_FIXED;
+	d[1].Mrb = R9A02_DTC_MRB_DM_FIXED;
+	d[1].Sar = (uint32_t)(uintptr_t)&pDev->Dummy;
+	d[1].Dar = sdr;
+	d[1].Crb = 0U;
+	d[1].Cra = cnt;
+
+	return R9a02DtcSet(pDev->IntNo, d);
 }
 
 static int R9a02SpiRxData(DevIntrf_t * const pIntrf, uint8_t *pBuff, int Len)
 {
-	return pBuff ? R9a02SpiTransfer(pIntrf, NULL, pBuff, Len) : 0;
+	R9a02SpiDev_t *dev = R9a02SpiHandle(pIntrf);
+
+	if (dev == NULL || pBuff == NULL || Len <= 0)
+	{
+		return 0;
+	}
+
+	// The DTC counts up to 65536 transfers, one byte is taken by the CPU
+	bool dtc = pIntrf->bDma && Len >= 2 && Len - 1 <= 0x10000;
+
+	if (!dtc && !pIntrf->bIntEn)
+	{
+		return R9a02SpiTransfer(pIntrf, NULL, pBuff, Len);
+	}
+
+	if (!dev->bSelected || dev->bError || dev->bAsync)
+	{
+		return 0;
+	}
+
+	SPIDev_t *spi = dev->pSpiDev;
+	R9A02_SAU_Type *reg = R9a02SauReg(dev->Unit);
+
+	dev->pRxBuf = pBuff;
+	dev->RxLen = Len;
+	dev->RxCnt = 0;
+	dev->Dummy = (uint16_t)(spi->Cfg.DummyByte & dev->DataMask);
+
+	if (dtc && !R9a02SpiDtcSetup(dev, pBuff, Len))
+	{
+		return 0;
+	}
+
+	uintptr_t state = DisableInterrupt();
+
+	dev->bDtcXfer = dtc;
+	dev->bAsync = pIntrf->bIntEn;
+
+	if (dtc)
+	{
+		R9a02DtcEnable(dev->IntNo);
+	}
+	else
+	{
+		R9a02EventFlagClear(dev->IntNo);
+	}
+	if (pIntrf->bIntEn)
+	{
+		R9a02IntEnable(dev->IntNo, true);
+	}
+
+	// First byte by the CPU, the others follow its end
+	reg->SDR[dev->Ch] = dev->Dummy;
+
+	EnableInterrupt(state);
+
+	if (pIntrf->bIntEn)
+	{
+		return -1;
+	}
+
+	// DTC reception, the caller waits for its end, DTCE back at 0
+	uint64_t loops = (uint64_t)dev->ByteLoops * (uint32_t)Len;
+	uint32_t n = loops > 0xFFFFFFFFULL ? 0xFFFFFFFFU : (uint32_t)loops;
+
+	while (R9a02DtcEnabled(dev->IntNo) && --n > 0U)
+	{
+	}
+
+	if (n == 0U)
+	{
+		R9a02SpiCancel(dev);
+
+		return 0;
+	}
+
+	R9a02SpiDtcLast(dev);
+	dev->bDtcXfer = false;
+
+	if (dev->RxCnt > 0 && spi->FirstRdData < 0)
+	{
+		spi->FirstRdData = pBuff[0];
+	}
+
+	return dev->RxCnt;
 }
 
 static void R9a02SpiDisable(DevIntrf_t * const pIntrf)
@@ -405,7 +741,14 @@ static void R9a02SpiDisable(DevIntrf_t * const pIntrf)
 		return;
 	}
 
+	// A background reception stopped here releases the interface
+	bool running = R9a02SpiCancel(dev);
+
 	R9a02SpiStopXfer(pIntrf);
+	if (running)
+	{
+		atomic_flag_clear(&pIntrf->bBusy);
+	}
 
 	uintptr_t state = DisableInterrupt();
 
@@ -439,8 +782,16 @@ static void R9a02SpiReset(DevIntrf_t * const pIntrf)
 
 	if (dev != NULL)
 	{
+		// A background reception is dropped without event and the interface
+		// released, as after a timeout
+		bool running = R9a02SpiCancel(dev);
+
 		R9a02SpiStopXfer(pIntrf);
 		R9a02SpiRecover(dev);
+		if (running)
+		{
+			atomic_flag_clear(&pIntrf->bBusy);
+		}
 	}
 }
 
@@ -460,6 +811,7 @@ static void R9a02SpiPowerOff(DevIntrf_t * const pIntrf)
 	uintptr_t state = DisableInterrupt();
 	SPIDev_t *spi = dev->pSpiDev;
 
+	R9a02DtcClear(dev->IntNo);
 	R9a02UnregisterIntHandler(dev->IntNo);
 	dev->IntNo = -1;
 	IOPinDis(spi->Cfg.pIOPinMap, spi->Cfg.NbIOPins);
@@ -487,7 +839,8 @@ SPIPHY SPISetPhy(SPIDev_t * const pDev, SPIPHY Phy)
 bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfg)
 {
 	if (pDev == NULL || pCfg == NULL || pCfg->DevNo < 0 || pCfg->DevNo >= s_NbR9a02SpiDev ||
-		pCfg->Mode != SPIMODE_MASTER || pCfg->Phy != SPIPHY_NORMAL || pCfg->bIntEn || pCfg->bDmaEn ||
+		pCfg->Mode != SPIMODE_MASTER || pCfg->Phy != SPIPHY_NORMAL ||
+		(pCfg->bIntEn && (pCfg->IntPrio < 0 || pCfg->IntPrio > (int)R9A02_CLIC_PRIO_MAX)) ||
 		(pCfg->DataSize != 7 && pCfg->DataSize != 8) || pCfg->Rate == 0U ||
 		(pCfg->ChipSel != SPICSEL_AUTO && pCfg->ChipSel != SPICSEL_MAN) ||
 		(pCfg->BitOrder != SPIDATABIT_MSB && pCfg->BitOrder != SPIDATABIT_LSB) ||
@@ -550,12 +903,28 @@ bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfg)
 
 	R9a02SpiStop(dev);
 
-	if (dev->IntNo < 0)
+	// Route for the mode: a handler with bIntEn, its CLIC input on only for a
+	// background reception, the IR flag polled otherwise
+	if (dev->IntNo >= 0)
+	{
+		R9a02DtcClear(dev->IntNo);
+		R9a02UnregisterIntHandler(dev->IntNo);
+		dev->IntNo = -1;
+	}
+	if (pCfg->bIntEn)
+	{
+		dev->IntNo = R9a02RegisterIntHandler(dev->EvtEnd, pCfg->IntPrio, R9a02SpiIrqHandler, dev);
+		R9a02IntEnable(dev->IntNo, false);
+	}
+	else
 	{
 		dev->IntNo = R9a02RouteEvent(dev->EvtEnd);
 	}
 	if (dev->IntNo < 0)
 	{
+		dev->pSpiDev = NULL;
+		pDev->DevIntrf.pDevData = NULL;
+		pDev->DevIntrf.EnCnt = 0;
 		R9a02SauRelease(dev->Unit, bit, dev);
 		EnableInterrupt(state);
 
@@ -566,6 +935,8 @@ bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfg)
 	dev->bEnabled = false;
 	dev->bSelected = false;
 	dev->bError = false;
+	dev->bAsync = false;
+	dev->bDtcXfer = false;
 	dev->DataMask = pCfg->DataSize == 7 ? 0x7FU : 0xFFU;
 
 	pDev->Cfg = *pCfg;
@@ -593,6 +964,10 @@ bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfg)
 	reg->SMR[dev->Ch] = (uint16_t)(R9A02_SAU_SMR_FIXED | R9A02_SAU_SMR_MD_SPI);
 	reg->SCR[dev->Ch] = scr;
 
+	// Noise filter of the channel pair off for the simplified SPI (23.3.27),
+	// the UART of the pair cannot run with this channel claimed
+	R9A02_PORGA_SNFEN = (uint8_t)(R9A02_PORGA_SNFEN & ~(1U << ((dev->Unit * 4U + dev->Ch) & ~1U)));
+
 	DevIntrf_t *intrf = &pDev->DevIntrf;
 
 	intrf->pDevData = dev;
@@ -603,6 +978,7 @@ bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfg)
 		dev->IntNo = -1;
 		dev->pSpiDev = NULL;
 		intrf->pDevData = NULL;
+		intrf->EnCnt = 0;
 		R9a02SauRelease(dev->Unit, bit, dev);
 		EnableInterrupt(state);
 
@@ -616,8 +992,8 @@ bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfg)
 	}
 
 	intrf->Type = DEVINTRF_TYPE_SPI;
-	intrf->bDma = false;
-	intrf->bIntEn = false;
+	intrf->bDma = pCfg->bDmaEn;
+	intrf->bIntEn = pCfg->bIntEn;
 	intrf->bTxReady = true;
 	intrf->bNoStop = false;
 	intrf->MaxRetry = pCfg->MaxRetry;

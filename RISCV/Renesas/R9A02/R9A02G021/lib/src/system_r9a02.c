@@ -86,6 +86,17 @@ __attribute__((weak)) McuOsc_t g_McuOsc = {
 // Nominal EXTAL frequency, the registers do not give it
 static uint32_t s_ExtalFreq;
 
+// Snooze set by R9a02SnoozeSet: SNZCR without SNZE, 0 when off
+static uint8_t s_R9a02SnzCr;
+static bool s_bR9a02Snooze;
+static int s_R9a02SnzIntNo = -1;
+static R9a02SnoozeHandler_t s_R9a02SnzHandler;
+static void *s_R9a02SnzCtx;
+
+// Software Standby hooks of the drivers
+static R9a02StandbyHook_t s_R9a02SbyHook[R9A02_STANDBY_HOOK_CNT];
+static void *s_R9a02SbyHookCtx[R9A02_STANDBY_HOOK_CNT];
+
 // PCLKB divider relative to ICLK, as a power of 2, from SystemPeriphClockSet
 static uint8_t s_PclkbShift;
 
@@ -930,8 +941,216 @@ bool R9a02WakeupSet(uint8_t EvtId, bool bEnable)
 	return true;
 }
 
+// ICU_SNZCANCEL: Snooze ended in Normal mode by the SELSR0 event
+static void R9a02SnoozeIrqHandler(int IntNo, void *pCtx)
+{
+	(void)IntNo;
+	(void)pCtx;
+
+	if (s_R9a02SnzHandler != NULL)
+	{
+		s_R9a02SnzHandler(s_R9a02SnzCtx);
+	}
+}
+
+// Events of table 12.4 that end Snooze through SELSR0
+static bool R9a02SnoozeWakeEvt(uint8_t EvtId)
+{
+	switch (EvtId)
+	{
+		case R9A02_EVT_DTC_COMPLETE:
+		case R9A02_EVT_SAU0_ENDI0:
+		case R9A02_EVT_SAU0_ENDI1:
+		case R9A02_EVT_SAU1_ENDI0:
+		case R9A02_EVT_SAU1_ENDI1:
+		case R9A02_EVT_SAU0_INTSRE0:
+		case R9A02_EVT_SAU1_INTSRE2:
+		case R9A02_EVT_REMC_OUTI:
+		case R9A02_EVT_ADC_ENDI:
+		case R9A02_EVT_DOC_DOPCI:
+			return true;
+		default:
+			return false;
+	}
+}
+
+// Snooze registers (10.2.8 to 10.2.11, 12.2.10), written in Normal mode
+// with PRC1 = 1. Turned off first, then the new set up.
+bool R9a02SnoozeSet(const R9a02SnoozeCfg_t *pCfg)
+{
+	uint32_t req = 0;
+	uint8_t snzcr = 0;
+	uint32_t wup = 0;
+
+	if (pCfg != NULL)
+	{
+		uint32_t r = pCfg->Request;
+		uint32_t endmsk = R9A02_SNZEND_DTC_LAST | R9A02_SNZEND_DTC | R9A02_SNZEND_ADC_NOMATCH |
+						  R9A02_SNZEND_TML32 | R9A02_SNZEND_REMC | R9A02_SNZEND_SAU0_ERR | R9A02_SNZEND_SAU1_ERR;
+
+		// One request source (10.8.1)
+		if (r == 0U || (r & (r - 1U)) != 0U || (pCfg->End & ~endmsk) != 0U ||
+			(pCfg->WakeEvt != 0U && !R9a02SnoozeWakeEvt(pCfg->WakeEvt)) ||
+			(pCfg->WakeEvt == R9A02_EVT_DTC_COMPLETE && (pCfg->End & R9A02_SNZEND_DTC_LAST)) ||
+			(pCfg->WakeEvt != 0U && (pCfg->IntPrio < 0 || pCfg->IntPrio > (int)R9A02_CLIC_PRIO_MAX)))
+		{
+			return false;
+		}
+
+		switch (r)
+		{
+			case R9A02_SNZREQ_RXD0:
+				snzcr = R9A02_SNZCR_RXD0REQEN;
+				break;
+			case R9A02_SNZREQ_RXD2:
+				snzcr = R9A02_SNZCR_RXD2REQEN;
+				break;
+			case R9A02_SNZREQ_REMC:
+				snzcr = R9A02_SNZCR_REMC0REQEN;
+				break;
+			case R9A02_SNZREQ_KEY:
+				wup = R9A02_WUPEN0_KEY;
+				req = r;
+				break;
+			case R9A02_SNZREQ_RTC:
+				wup = R9A02_WUPEN0_RTC;
+				req = r;
+				break;
+			case R9A02_SNZREQ_TML32:
+				wup = R9A02_WUPEN0_TML32;
+				req = r;
+				break;
+			default:
+				if (r > R9A02_SNZREQ_IRQ(7))
+				{
+					return false;
+				}
+				wup = r;
+				req = r;
+				break;
+		}
+
+		// The wake-up enable wins over the Snooze request (10.2.11)
+		if (R9A02_ICU->WUPEN0 & wup)
+		{
+			return false;
+		}
+
+		if (pCfg->bDtc)
+		{
+			snzcr |= R9A02_SNZCR_SNZDTCEN;
+		}
+	}
+
+	uintptr_t state = DisableInterrupt();
+	uint16_t prev = R9a02Unprotect(R9A02_PRCR_PRC1);
+
+	R9A02_SYSC_SNZCR = 0U;
+	R9A02_SYSC_SNZREQCR0 = 0U;
+	R9A02_SYSC_SNZEDCR0 = 0U;
+	R9A02_SYSC_SNZEDCR1 = 0U;
+	R9A02_ICU->SELSR0 = 0U;
+	s_bR9a02Snooze = false;
+	s_R9a02SnzCr = 0U;
+
+	if (s_R9a02SnzIntNo >= 0)
+	{
+		R9a02UnregisterIntHandler(s_R9a02SnzIntNo);
+		s_R9a02SnzIntNo = -1;
+	}
+
+	bool ok = true;
+
+	if (pCfg != NULL)
+	{
+		s_R9a02SnzHandler = pCfg->Handler;
+		s_R9a02SnzCtx = pCfg->pCtx;
+
+		if (pCfg->WakeEvt != 0U)
+		{
+			// SELSR0 event to the CPU as ICU_SNZCANCEL (12.7.3)
+			R9A02_ICU->SELSR0 = pCfg->WakeEvt;
+			s_R9a02SnzIntNo = R9a02RegisterIntHandler(R9A02_EVT_ICU_SNZCANCEL, pCfg->IntPrio,
+													  R9a02SnoozeIrqHandler, NULL);
+			ok = s_R9a02SnzIntNo >= 0;
+		}
+
+		if (ok)
+		{
+			R9A02_SYSC_SNZREQCR0 = req;
+			R9A02_SYSC_SNZEDCR0 = (uint8_t)pCfg->End;
+			R9A02_SYSC_SNZEDCR1 = (uint8_t)(pCfg->End >> 8);
+			R9A02_SYSC_SNZCR = snzcr;
+			s_R9a02SnzCr = snzcr;
+			s_bR9a02Snooze = true;
+		}
+		else
+		{
+			R9A02_ICU->SELSR0 = 0U;
+		}
+	}
+
+	R9a02Protect(prev);
+	EnableInterrupt(state);
+
+	return ok;
+}
+
+bool R9a02StandbyHookSet(R9a02StandbyHook_t pHook, void *pCtx, bool bAdd)
+{
+	if (pHook == NULL)
+	{
+		return false;
+	}
+
+	uintptr_t state = DisableInterrupt();
+	int idx = -1;
+
+	for (int i = 0; i < R9A02_STANDBY_HOOK_CNT; i++)
+	{
+		if (s_R9a02SbyHook[i] == pHook && s_R9a02SbyHookCtx[i] == pCtx)
+		{
+			if (!bAdd)
+			{
+				s_R9a02SbyHook[i] = NULL;
+				s_R9a02SbyHookCtx[i] = NULL;
+			}
+			EnableInterrupt(state);
+
+			return true;
+		}
+		if (idx < 0 && s_R9a02SbyHook[i] == NULL)
+		{
+			idx = i;
+		}
+	}
+
+	if (bAdd && idx >= 0)
+	{
+		s_R9a02SbyHook[idx] = pHook;
+		s_R9a02SbyHookCtx[idx] = pCtx;
+	}
+
+	EnableInterrupt(state);
+
+	return !bAdd || idx >= 0;
+}
+
+static void R9a02StandbyHooks(bool bEnter)
+{
+	for (int i = 0; i < R9A02_STANDBY_HOOK_CNT; i++)
+	{
+		if (s_R9a02SbyHook[i] != NULL)
+		{
+			s_R9a02SbyHook[i](bEnter, s_R9a02SbyHookCtx[i]);
+		}
+	}
+}
+
 // Sleep or Software Standby until an interrupt (10.6, 10.7). SBYCR.SSBY is
-// set back to 0 after the wake-up, it stays 1 otherwise (10.2.1).
+// set back to 0 after the wake-up, it stays 1 otherwise (10.2.1). For
+// Software Standby the DTC stops accepting requests (14.9) unless Snooze
+// uses it, and Snooze is enabled when set, both put back after the wake-up.
 bool R9a02LowPowerEnter(bool bStandby)
 {
 	// No SYSTEM register write during flash P/E (10.9.1)
@@ -951,12 +1170,31 @@ bool R9a02LowPowerEnter(bool bStandby)
 		return false;
 	}
 
+	if (bStandby)
+	{
+		R9a02StandbyHooks(true);
+	}
+
 	uint16_t sbycr = bStandby ? R9A02_SBYCR_SSBY : 0U;
+	bool dtc = bStandby && R9a02ModuleRunning(R9A02_MSTPCR_A, R9A02_MSTPCRA_DTC);
+	uint8_t dtcst = dtc ? R9A02_DTC->DTCST : 0U;
+	bool snooze = bStandby && s_bR9a02Snooze;
+
+	if (dtc)
+	{
+		R9A02_DTC->DTCST = (snooze && (s_R9a02SnzCr & R9A02_SNZCR_SNZDTCEN)) ? R9A02_DTCST_DTCST : 0U;
+	}
+
 	uint16_t prev = R9a02Unprotect(R9A02_PRCR_PRC1);
 
 	if (R9A02_SYSC_SBYCR != sbycr)
 	{
 		R9A02_SYSC_SBYCR = sbycr;
+	}
+	if (snooze)
+	{
+		R9A02_SYSC_SNZCR = (uint8_t)(s_R9a02SnzCr | R9A02_SNZCR_SNZE);
+		(void)R9A02_SYSC_SNZCR;
 	}
 	R9a02Protect(prev);
 
@@ -970,7 +1208,20 @@ bool R9a02LowPowerEnter(bool bStandby)
 	{
 		prev = R9a02Unprotect(R9A02_PRCR_PRC1);
 		R9A02_SYSC_SBYCR = 0U;
+
+		// SNZE written 0 after each return to Normal mode (10.2.8)
+		if (snooze)
+		{
+			R9A02_SYSC_SNZCR = s_R9a02SnzCr;
+		}
 		R9a02Protect(prev);
+
+		if (dtc)
+		{
+			R9A02_DTC->DTCST = dtcst;
+		}
+
+		R9a02StandbyHooks(false);
 	}
 
 	return true;
