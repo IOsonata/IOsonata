@@ -193,6 +193,7 @@ typedef struct
 	uint8_t DbgOCr1;		// other IIC unit ICCR1 at the same time
 	uint8_t DbgOSr1;		// other IIC unit ICSR1
 	uint8_t DbgOSr2;		// other IIC unit ICSR2
+	uint8_t DbgSclSeq[3];	// SCL pad level in Configure: ICE=0, in reset, running
 } Ra4m1I2cDev_t;
 
 static Ra4m1I2cDev_t s_Ra4m1I2cDev[RA4M1_I2C_COUNT] = {
@@ -421,6 +422,26 @@ static inline bool Ra4m1I2cBusy(const R_IIC0_Type * const pReg)
 	return (pReg->ICCR2 & RA4M1_I2C_CR2_BBSY) != 0U;
 }
 
+// Level of the SCL pad (PIDR), for the diagnostic dump.
+static uint8_t Ra4m1I2cSclPad(const Ra4m1I2cDev_t * const pDev)
+{
+	const I2CCfg_t *cfg = &pDev->pI2cDev->Cfg;
+
+	if (cfg->pIOPinMap == NULL || cfg->NbIOPins <= I2C_SCL_IOPIN_IDX)
+	{
+		return 0xFFU;
+	}
+
+	const IOPinCfg_t *scl = &cfg->pIOPinMap[I2C_SCL_IOPIN_IDX];
+
+	for (int i = 0; i < 2000; i++)
+	{
+		__NOP();
+	}
+
+	return (R_PFS->PORT[scl->PortNo].PIN[scl->PinNo].PmnPFS & 2U) != 0U ? 1U : 0U;
+}
+
 static void Ra4m1I2cConfigure(Ra4m1I2cDev_t * const pDev)
 {
 	R_IIC0_Type *reg = pDev->pReg;
@@ -431,6 +452,7 @@ static void Ra4m1I2cConfigure(Ra4m1I2cDev_t * const pDev)
 	// in reset, program it, then release reset with SCL/SDA outputs high.
 	reg->ICIER = 0U;
 	reg->ICCR1 = 0U;
+	pDev->DbgSclSeq[0] = Ra4m1I2cSclPad(pDev);
 	reg->ICCR1 = RA4M1_I2C_ICCR1_RESET;
 
 	int32_t count = Ra4m1I2cTimeout(pDev);
@@ -457,6 +479,7 @@ static void Ra4m1I2cConfigure(Ra4m1I2cDev_t * const pDev)
 	}
 
 	reg->ICCR1 = RA4M1_I2C_ICCR1_RESET_ENABLE;
+	pDev->DbgSclSeq[1] = Ra4m1I2cSclPad(pDev);
 
 	for (int i = 0; i < RA4M1_I2C_MAX_SLAVE_ADDR; i++)
 	{
@@ -493,6 +516,7 @@ static void Ra4m1I2cConfigure(Ra4m1I2cDev_t * const pDev)
 	reg->ICFER = slave ? RA4M1_I2C_ICFER_SLAVE : RA4M1_I2C_ICFER_MASTER;
 	Ra4m1I2cClearFlags(reg, RA4M1_I2C_SR2_EVENTS);
 	reg->ICCR1 = RA4M1_I2C_ICCR1_RUN;
+	pDev->DbgSclSeq[2] = Ra4m1I2cSclPad(pDev);
 
 	if (!pDev->bEnabled)
 	{
@@ -1535,16 +1559,17 @@ int Ra4m1I2cDump(DevIntrf_t * const pIntrf, char *Buf, int Len)
 		r->ICSER, r->ICIER, r->ICSR1, r->ICSR2, r->ICBRL, r->ICBRH,
 		dev->DbgIrq, dev->DbgSAddr, dev->DbgSRx, dev->DbgSSr1,
 		dev->DbgSAddrByte, dev->DbgMState, dev->DbgMSr2, dev->DbgMSent,
-		dev->DbgMCr1, dev->DbgOCr1, dev->DbgOSr1, dev->DbgOSr2
+		dev->DbgMCr1, dev->DbgOCr1, dev->DbgOSr1, dev->DbgOSr2,
+		dev->DbgSclSeq[0], dev->DbgSclSeq[1], dev->DbgSclSeq[2]
 	};
 	const char *name[] = {
 		"pclkb=", " mstpb=", " sckdiv=", " cr1=", " cr2=", " mr1=", " mr2=",
 		" mr3=", " fer=", " ser=", " ier=", " sr1=", " sr2=", " brl=", " brh=",
 		" irq=", " sadr=", " srx=", " ssr1=", " sab=", " mst=", " msr2=", " msent=",
-		" mcr1=", " ocr1=", " osr1=", " osr2="
+		" mcr1=", " ocr1=", " osr1=", " osr2=", " padice0=", " padrst=", " padrun="
 	};
 	const int digits[] = { 8, 8, 8, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
-		4, 4, 4, 2, 2, 2, 2, 2, 2, 2, 2, 2 };
+		4, 4, 4, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1, 1 };
 	int pos = 0;
 
 	for (int i = 0; i < (int)(sizeof(v) / sizeof(v[0])); i++)
