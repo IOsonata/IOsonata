@@ -351,6 +351,11 @@ The valid peripheral pin alternatives are IIC0 SCL on P204/P400/P408 with SDA
 on P401/P407, and IIC1 SCL on P100/P205 with SDA on P101/P206. These require
 PSEL 7, represented by `IOPINOP_FUNC6`. The application still selects one
 legal pair and must provide suitable pull-ups for its bus capacitance and speed.
+The driver configures both pins as `IOPINDIR_BI` whatever direction the pin map
+lists. The IIC block controls the pin direction, and the internal pull-up
+(`IOPINRES_PULLUP`) has no effect on a pin with PDR set, which an
+`IOPINDIR_OUTPUT` entry for SCL would produce. The internal pull-up is weak
+(tens of kOhm), so external pull-ups are advised above a few tens of kHz.
 
 `DeviceIntrfReset` uses open-drain SCL/SDA, clocks a stuck slave up to nine
 times, emits STOP when possible, and then restores the peripheral pin

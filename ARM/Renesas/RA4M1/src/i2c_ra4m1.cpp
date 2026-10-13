@@ -1340,6 +1340,26 @@ static void Ra4m1I2cDisable(DevIntrf_t * const pIntrf)
 	dev->bEnabled = false;
 }
 
+// The IIC block controls the direction of its pins. IOPinConfig sets PDR for
+// an output request, and the internal pull-up does not act on a pin with PDR
+// set, so SCL would float. Both pins are therefore configured as BI (PDR
+// clear), whatever direction the pin map lists, and the pull-up stays active.
+static void Ra4m1I2cPinConfig(const I2CCfg_t * const pCfg)
+{
+	if (pCfg->pIOPinMap == NULL)
+	{
+		return;
+	}
+
+	for (int i = 0; i < pCfg->NbIOPins; i++)
+	{
+		const IOPinCfg_t *pin = &pCfg->pIOPinMap[i];
+
+		IOPinConfig(pin->PortNo, pin->PinNo, pin->PinOp, IOPINDIR_BI,
+			pin->Res, pin->Type);
+	}
+}
+
 static void Ra4m1I2cEnable(DevIntrf_t * const pIntrf)
 {
 	Ra4m1I2cDev_t *dev = Ra4m1I2cHandle(pIntrf);
@@ -1349,7 +1369,7 @@ static void Ra4m1I2cEnable(DevIntrf_t * const pIntrf)
 		return;
 	}
 
-	IOPinCfg(dev->pI2cDev->Cfg.pIOPinMap, dev->pI2cDev->Cfg.NbIOPins);
+	Ra4m1I2cPinConfig(&dev->pI2cDev->Cfg);
 	dev->bEnabled = true;
 	Ra4m1I2cConfigure(dev);
 }
@@ -1447,7 +1467,7 @@ static void Ra4m1I2cReset(DevIntrf_t * const pIntrf)
 
 	IOPinSet(sda->PortNo, sda->PinNo);
 	IOPinSet(scl->PortNo, scl->PinNo);
-	IOPinCfg(dev->pI2cDev->Cfg.pIOPinMap, dev->pI2cDev->Cfg.NbIOPins);
+	Ra4m1I2cPinConfig(&dev->pI2cDev->Cfg);
 
 	dev->bEnabled = enabled;
 	Ra4m1I2cConfigure(dev);
@@ -1762,7 +1782,7 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfg)
 		pDev->TRBuffLen[i] = 0;
 	}
 
-	IOPinCfg(pCfg->pIOPinMap, pCfg->NbIOPins);
+	Ra4m1I2cPinConfig(pCfg);
 
 	DevIntrf_t *intrf = &pDev->DevIntrf;
 	intrf->pDevData = dev;

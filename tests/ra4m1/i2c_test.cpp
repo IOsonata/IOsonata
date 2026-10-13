@@ -147,6 +147,11 @@ extern "C" void IOPinDisable(int PortNo, int PinNo)
 extern "C" void IOPinConfig(int PortNo, int PinNo, int PinOp, IOPINDIR Dir, IOPINRES Resistor, IOPINTYPE Type)
 {
 	s_PinGpio[PortNo][PinNo] = PinOp == IOPINOP_GPIO;
+
+	if (PinOp != IOPINOP_GPIO && Dir != IOPINDIR_BI)
+	{
+		Violation("IIC pin configured with an output direction (PDR set)");
+	}
 }
 
 extern "C" int IOPinRead(int PortNo, int PinNo)
