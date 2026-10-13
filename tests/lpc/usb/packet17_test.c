@@ -14,6 +14,20 @@ static uint8_t s_Status;
 static uint8_t s_Command;
 static bool s_RealizeTimeout;
 static bool s_CommandTimeout;
+static unsigned s_Acks;
+
+void TestEndpointClear(uint32_t Value)
+{
+	assert(s_Mask == 1 && (Value == 1U || Value == 2U));
+	assert((LPC_USB->USBDevIntSt & 0x20U) == 0U);
+	++s_Acks;
+	if (!s_CommandTimeout)
+	{
+		SetReadOnly(&LPC_USB->USBEpIntSt, LPC_USB->USBEpIntSt & ~Value);
+		SetReadOnly(&LPC_USB->USBCmdData, s_Status);
+		SetReadOnly(&LPC_USB->USBDevIntSt, LPC_USB->USBDevIntSt | 0x20U);
+	}
+}
 
 void TestSieClear(uint32_t Value)
 {
@@ -75,10 +89,35 @@ static void Prepare(void)
 int main(void)
 {
 	ClockTests();
+	uint8_t status = 0xCC;
+	assert(!Lpc17UsbEp0Ack(false, &status) && status == 0xCC && s_Acks == 0);
 	assert(!Lpc17UsbEp0Realize());
 	assert(!Lpc17UsbEp0Write(0, 0));
 	Prepare();
+	assert(!Lpc17UsbEp0Ack(false, &status) && s_Acks == 0);
 	assert(Lpc17UsbEp0Realize() && s_Realizations == 2);
+	assert(!Lpc17UsbEp0Ack(false, 0) && s_Acks == 0);
+	for (unsigned in = 0; in < 2; ++in)
+	{
+		s_Mask = in;
+		s_Status = in ? 0x12 : 0x6D;
+		SetReadOnly(&LPC_USB->USBEpIntSt, 0x83);
+		SetReadOnly(&LPC_USB->USBDevIntSt, 0x3F);
+		SetReadOnly(&LPC_USB->USBCmdData, 0xCC);
+		assert(Lpc17UsbEp0Ack(in != 0, &status) && status == s_Status);
+		assert(LPC_USB->USBEpIntSt == (0x83U & ~(1U << in)));
+		assert(LPC_USB->USBDevIntSt == 0x3F && s_Mask == in);
+	}
+	SetReadOnly(&LPC_USB->USBEpIntSt, 0);
+	assert(Lpc17UsbEp0Ack(false, &status)); // overwrite recovery without pending IRQ
+	const unsigned acks = s_Acks;
+	LPC_SC->PCONP &= ~(1UL << 31);
+	assert(!Lpc17UsbEp0Ack(false, &status) && s_Acks == acks);
+	LPC_SC->PCONP |= 1UL << 31;
+	SetReadOnly(&LPC_USB->USBClkSt, 0);
+	assert(!Lpc17UsbEp0Ack(false, &status) && s_Acks == acks);
+	SetReadOnly(&LPC_USB->USBClkSt, 0x12);
+	s_Status = 0;
 	assert(!Lpc17UsbEp0Realize());
 	uint8_t data[66];
 	uint8_t source[66];
@@ -132,5 +171,19 @@ int main(void)
 	s_Reads = 0;
 	assert(Lpc17UsbEp0Read(data, 8) == -1 && data[0] == 0xCC);
 	assert(LPC_USB->USBCtrl == 0);
-	puts("LPC1769 EP0 realization, FIFO lengths 0..64, overwrite and timeouts: PASS");
+	Prepare();
+	assert(Lpc17UsbEp0Realize());
+	s_CommandTimeout = true;
+	s_Mask = 0;
+	status = 0xCC;
+	SetReadOnly(&LPC_USB->USBDevIntSt, 0x3F);
+	assert(!Lpc17UsbEp0Ack(false, &status) && status == 0xCC && s_Mask == 0);
+	const unsigned timedout = s_Acks;
+	s_CommandTimeout = false;
+	SetReadOnly(&LPC_USB->USBDevIntSt, 0x3F); // late completion cannot revive SIE
+	assert(!Lpc17UsbEp0Ack(true, &status) && status == 0xCC && s_Acks == timedout);
+	assert(!Lpc17UsbSieCommand(0));
+	Prepare();
+	assert(Lpc17UsbEp0Realize() && Lpc17UsbEp0Ack(false, &status));
+	puts("LPC1769 EP0 realization, FIFO, interrupt acknowledgement and timeouts: PASS");
 }

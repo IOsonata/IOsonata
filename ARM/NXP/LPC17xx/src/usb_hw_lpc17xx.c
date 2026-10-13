@@ -215,6 +215,27 @@ bool Lpc17UsbEp0Realize(void)
 	return ready;
 }
 
+bool Lpc17UsbEp0Ack(bool In, uint8_t *pStatus)
+{
+	if (pStatus == 0)
+		return false;
+	const uint32_t state = __get_PRIMASK();
+	__disable_irq();
+	bool done = false;
+	if (Lpc17UsbPacketReady() && s_Ep0Ready)
+	{
+		// UM10360 11.10.3.3: one endpoint per clear, then consume SIE status.
+		// Also permits clearing OUT STP/PO during SETUP overwrite recovery.
+		LPC_USB->USBDevIntClr = LPC17_USB_CDFULL;
+		LPC_USB->USBEpIntClr = In ? 2U : 1U;
+		done = Lpc17UsbSieWait(LPC17_USB_CDFULL);
+		if (done)
+			*pStatus = (uint8_t)LPC_USB->USBCmdData;
+	}
+	__set_PRIMASK(state);
+	return done;
+}
+
 int Lpc17UsbEp0Read(uint8_t *pData, int Capacity)
 {
 	if (Capacity < 0 || (Capacity > 0 && pData == 0))

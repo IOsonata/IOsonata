@@ -54,6 +54,11 @@ bool Lpc17UsbSieWrite(uint8_t Command, uint8_t Data);
 bool Lpc17UsbSieRead(uint8_t Command, uint8_t *pData);
 // Realize 64-byte control OUT/IN before connection and interrupt enable.
 bool Lpc17UsbEp0Realize(void);
+// Clear one physical EP0 interrupt and return raw SIE endpoint status.
+// In=false selects OUT; In=true selects IN. Does not require an enabled or
+// pending interrupt, so OUT can also clear STP/PO during overwrite recovery.
+// Output is unchanged on failure; a timeout latches the SIE fault above.
+bool Lpc17UsbEp0Ack(bool In, uint8_t *pStatus);
 // Caller services/acknowledges endpoint interrupts separately. Read returns
 // packet length, -1 on failure (output unchanged), or -2 for SETUP overwrite.
 // On -2, clear PO with Select Endpoint/Clear Interrupt and read the new SETUP.

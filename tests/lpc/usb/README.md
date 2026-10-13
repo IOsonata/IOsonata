@@ -487,8 +487,7 @@ command/data sequence preserves PRIMASK, clears only CCEMPTY/CDFULL, and
 uses signed bounded waits. Failed reads leave the caller's byte unchanged.
 A timeout latches failure until release and successful preparation; callers
 must treat device state as unknown and reinitialize it, not replay a failed
-command automatically. These helpers do not implement two-byte SIE reads
-or the endpoint-interrupt select/clear sequence.
+command automatically. These helpers do not implement two-byte SIE reads.
 
 `run17.py` adds -O0/-O2 UBSan checks for phase encoding, command-only/write/read
 ordering, stale flags, unrelated interrupt preservation, missing clocks,
@@ -518,3 +517,18 @@ The packet model checks lengths 0 through 64, ZLP, buffer guards, insufficient
 capacity, SETUP overwrite, busy IN, invalid lengths and realization/FIFO/SIE
 timeouts at -O0/-O2 with UBSan. Cortex-M3 -O0/-Os compilation passes. No generic
 USB controller entry points or enumeration result are claimed yet.
+
+`Lpc17UsbEp0Ack` now performs the endpoint-interrupt select/clear sequence
+from UM10360 section 11.10.3.3. It clears one physical EP0 direction at a time,
+waits for fresh CDFULL, and returns the raw SIE status byte. Other endpoint
+interrupts and unrelated device flags are preserved. It also allows OUT
+STP/PO clearing during overwrite recovery without requiring a pending or
+enabled interrupt. The caller must interpret the returned status before
+processing a packet or reporting completion.
+
+The operation preserves PRIMASK and leaves output unchanged on failure.
+Timeouts use the existing latched SIE fault. The packet model covers both
+directions pending together, stale CDFULL, raw status, null output, unavailable
+power/clocks, timeout, late completion and release/prepare recovery at -O0/-O2
+with UBSan. Cortex-M3 -O0/-Os compilation passes. IRQ dispatch and control
+transfer integration remain to be implemented; no board validation was run.

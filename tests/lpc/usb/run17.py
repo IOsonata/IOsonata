@@ -44,7 +44,8 @@ for opt in ['-O0', '-O2']:
         source = Path(tmp) / 'usb17.c'
         code = (root / 'ARM/NXP/LPC17xx/src/usb_hw_lpc17xx.c').read_text()
         for register, hook in [('USBDevIntClr', 'TestSieClear'), ('USBCmdCode', 'TestSieCode'),
-                               ('USBMaxPSize', 'TestPacketSize'), ('USBTxData', 'TestPacketWrite')]:
+                               ('USBMaxPSize', 'TestPacketSize'), ('USBTxData', 'TestPacketWrite'),
+                               ('USBEpIntClr', 'TestEndpointClear')]:
             code = re.sub(r'LPC_USB->' + register + r' = ([^;]+);',
                           lambda match: hook + '(' + match[1] + ');', code)
         code = code.replace('LPC_USB->USBRxData', 'TestPacketRead()')
