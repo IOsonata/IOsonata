@@ -64,6 +64,7 @@ SOFTWARE.
 
 typedef enum
 {
+	RA4M1_I2C_WAIT_START,
 	RA4M1_I2C_WAIT_TDRE,
 	RA4M1_I2C_WAIT_TEND,
 	RA4M1_I2C_WAIT_RDRF,
@@ -180,6 +181,9 @@ static bool Ra4m1I2cCondition(const R_IIC0_Type * const pReg, Ra4m1I2cWait_t Con
 {
 	switch (Cond)
 	{
+		case RA4M1_I2C_WAIT_START:
+			return pReg->ICSR2_b.START != 0U;
+
 		case RA4M1_I2C_WAIT_TDRE:
 			return pReg->ICSR2_b.TDRE != 0U;
 
@@ -699,7 +703,15 @@ static bool Ra4m1I2cStart(DevIntrf_t * const pIntrf, uint32_t Addr, bool bRx)
 		reg->ICCR2_b.ST = 1U;
 	}
 
-	if (Ra4m1I2cWait(dev, RA4M1_I2C_WAIT_TDRE))
+	/* TDRE may already be set before START has appeared on the bus.
+	 * Wait for the hardware START event before loading the address.
+	 */
+	if (Ra4m1I2cWait(dev, RA4M1_I2C_WAIT_START))
+	{
+		reg->ICSR2_b.START = 0U;
+	}
+
+	if (!dev->bError && Ra4m1I2cWait(dev, RA4M1_I2C_WAIT_TDRE))
 	{
 		reg->ICDRT = (uint8_t)((Addr << 1U) | (bRx ? 1U : 0U));
 
