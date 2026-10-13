@@ -288,6 +288,40 @@ int main(void)
 	assert(s_Events[2].Type == USB_CTRLR_EVT_SETUP);
 	assert((LPC_USB->DEVCMDSTAT & 127U) == 7U);
 
+	// A completed OUT status must precede the next SETUP as well.
+	Fresh();
+	s_ReplyLength = 1;
+	Setup(REPLY_IN, true, 1);
+	InDone();
+	s_Memory->Command[0] &= ~ACTIVE;
+	Setup(NONE, false, 0);
+	assert(s_EventCount == 4);
+	assert(s_Events[2].Type == USB_CTRLR_EVT_XFER_CMPL);
+	assert(s_Events[2].Xfer.EpAddr == 0);
+	assert(s_Events[2].Xfer.Result == USB_CTRLR_XFER_SUCCESS);
+	assert(s_Events[3].Type == USB_CTRLR_EVT_SETUP);
+
+	// SETUP alone does not complete an OUT status that is still active.
+	Fresh();
+	s_ReplyLength = 1;
+	Setup(REPLY_IN, true, 1);
+	InDone();
+	Setup(NONE, false, 0);
+	assert(s_EventCount == 3);
+	assert(s_Events[2].Type == USB_CTRLR_EVT_SETUP);
+
+	// Early control-read termination remains cancelled at the raced status.
+	Fresh();
+	s_ReplyLength = 80;
+	Setup(REPLY_IN, true, 80);
+	LPC_USB->INTSTAT |= 1U;
+	USB_IRQHandler();
+	s_Memory->Command[0] &= ~ACTIVE;
+	Setup(NONE, false, 0);
+	assert(s_EventCount == 3);
+	assert(s_Events[1].Type == USB_CTRLR_EVT_XFER_CMPL);
+	assert(s_Events[1].Xfer.Result == USB_CTRLR_XFER_CANCELLED);
+
 	// Ordinary no-data writes need the same ACK ordering as SET_ADDRESS.
 	Fresh();
 	Setup(NONE, false, 0);

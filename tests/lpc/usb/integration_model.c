@@ -32,12 +32,13 @@ void TestUsbPacketDone(unsigned Physical, unsigned Length)
 	USB_IRQHandler();
 }
 
-void TestUsbStatusAckPending(void)
+void TestUsbStatusAckPending(unsigned Physical)
 {
-	assert((s_Memory->Command[2] & (1U << 31)) != 0U);
-	assert(((s_Memory->Command[2] >> 16) & 0x3FFU) == 0U);
-	s_Memory->Command[2] &= ~(1U << 31);
-	LPC_USB->INTSTAT |= 2U;
+	assert(Physical < 2U);
+	assert((s_Memory->Command[2 * Physical] & (1U << 31)) != 0U);
+	assert(((s_Memory->Command[2 * Physical] >> 16) & 0x3FFU) == 0U);
+	s_Memory->Command[2 * Physical] &= ~(1U << 31);
+	LPC_USB->INTSTAT |= 1U << Physical;
 }
 
 void TestUsbSetup(const UsbSetupData_t *pSetup)

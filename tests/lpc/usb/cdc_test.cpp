@@ -7,8 +7,17 @@
 #include "usb/usbd_hid.h"
 #include "usb_hw_lpc11uxx.h"
 
+class TestHid : public UsbdHid {
+public:
+	unsigned ReadComplete = 0;
+	unsigned ReadAbort = 0;
+
+	bool Control(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
+		uint8_t **ppData, uint16_t *pLength) override;
+};
+
 static UsbdCdc s_Cdc;
-static UsbdHid s_Hid;
+static TestHid s_Hid;
 static bool s_Composite;
 static unsigned s_HidTx;
 static const uint8_t s_ReportDesc[] = {
@@ -29,10 +38,23 @@ alignas(4) static uint8_t s_Tx[CFIFO_MEMSIZE(128)];
 extern "C" void TestUsbInitialize(void);
 extern "C" Lpc11UsbMemory_t *TestUsbMemory(void);
 extern "C" void TestUsbPacketDone(unsigned Physical, unsigned Length);
-extern "C" void TestUsbStatusAckPending(void);
+extern "C" void TestUsbStatusAckPending(unsigned Physical);
 extern "C" void TestUsbSetup(const UsbSetupData_t *pSetup);
 extern "C" void TestUsbCable(bool Connected, bool DeviceInterrupt);
 extern "C" void TestUsbVbusInterrupt(void);
+
+bool TestHid::Control(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
+	uint8_t **ppData, uint16_t *pLength)
+{
+	if (pSetup->bmRequestType == 0xA1 && pSetup->bRequest == USB_HID_REQ_GET_IDLE)
+	{
+		if (Stage == USB_CTRL_COMPLETE)
+			++ReadComplete;
+		if (Stage == USB_CTRL_ABORT)
+			++ReadAbort;
+	}
+	return UsbdHid::Control(pSetup, Stage, ppData, pLength);
+}
 
 static int HidEvent(DevIntrf_t *, DEVINTRF_EVT Event, uint8_t *, int)
 {
@@ -144,7 +166,7 @@ static void OpenPort(void)
 	std::memcpy(TestUsbMemory()->Packet[0], s_LineCoding, sizeof(s_LineCoding));
 	TestUsbPacketDone(0, 7);
 	assert(s_Cdc.LineCoding()->dwDTERate == 115200);
-	TestUsbStatusAckPending(); // ACK and next SETUP share one IRQ
+	TestUsbStatusAckPending(1); // ACK and next SETUP share one IRQ
 	assert(s_Cdc.LineCoding()->dwDTERate == 115200);
 	assert(ControlRead(0xA1, 0x21, 0, cdc->CtrlIfNo, 7, coding, sizeof(coding)) == 7);
 	assert(std::memcmp(coding, s_LineCoding, sizeof(coding)) == 0);
@@ -200,10 +222,21 @@ static void HidReports(void)
 		(uint16_t)hid->ItfNo, 0};
 	TestUsbSetup(&idle);
 	assert(hid->Idle == 0);
-	TestUsbStatusAckPending();
+	TestUsbStatusAckPending(1);
 	assert(ControlRead(0xA1, USB_HID_REQ_GET_IDLE, 0, hid->ItfNo, 1,
 		descriptor, sizeof(descriptor)) == 1);
 	assert(descriptor[0] == 7 && hid->Idle == 7);
+	const unsigned completed = s_Hid.ReadComplete;
+	const unsigned aborted = s_Hid.ReadAbort;
+	const UsbSetupData_t getIdle = {0xA1, USB_HID_REQ_GET_IDLE, 0,
+		(uint16_t)hid->ItfNo, 1};
+	TestUsbSetup(&getIdle);
+	TestUsbPacketDone(1, 1);
+	TestUsbStatusAckPending(0);
+	// The next request must not abort the successfully completed read.
+	assert(ControlRead(0xA1, USB_HID_REQ_GET_IDLE, 0, hid->ItfNo, 1,
+		descriptor, sizeof(descriptor)) == 1);
+	assert(s_Hid.ReadComplete == completed + 2 && s_Hid.ReadAbort == aborted);
 	const unsigned out = 2U * hid->EpNo;
 	uint8_t report[64];
 	uint8_t received[64];

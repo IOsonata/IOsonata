@@ -738,6 +738,19 @@ static void Lpc11UsbEp0Setup(uint32_t Pending)
 		if (!s_Prepared || !s_Ep0.Enabled || s_Ep0.Generation != generation)
 			return;
 	}
+	else if (s_Ep0.StatusOut && s_Ep0.OutBusy &&
+		(Pending & 1U) != 0U && (s_Memory.Command[0] & LPC11_USB_ACTIVE) == 0U)
+	{
+		// OUT status shares the SETUP interrupt. Preserve its completion
+		// before the new request replaces the active class callback.
+		const uint32_t generation = s_Ep0.Generation;
+		__DMB();
+		const bool invalid = ((s_Memory.Command[0] >> 16) & 0x3FFU) != 0U;
+		s_Ep0.OutBusy = false;
+		Lpc11UsbEp0Complete(false, 0U, invalid || s_Ep0.Aborted);
+		if (!s_Prepared || !s_Ep0.Enabled || s_Ep0.Generation != generation)
+			return;
+	}
 	UsbCtrlrEvt_t event = {0};
 	event.Type = USB_CTRLR_EVT_SETUP;
 	__DMB();

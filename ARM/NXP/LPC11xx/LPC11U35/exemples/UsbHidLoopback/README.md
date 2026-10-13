@@ -53,8 +53,8 @@ Measured with Arm GNU GCC 13.2.1 and binutils 2.42:
 
 | Build | Flash / 65536 bytes | Main RAM / 8160 bytes | USB SRAM / 2048 bytes | Linker stack allowance |
 | --- | ---: | ---: | ---: | ---: |
-| Debug | 50976 | 3420 | 832 | 1576 |
-| Release | 22184 | 2624 | 832 | 1844 |
+| Debug | 51136 | 3420 | 832 | 1576 |
+| Release | 22236 | 2624 | 832 | 1844 |
 
 The stack allowance is not a measured runtime high-water mark. Host-model
 CDC/HID tests cover descriptor routing, reports and reconnect; hardware
