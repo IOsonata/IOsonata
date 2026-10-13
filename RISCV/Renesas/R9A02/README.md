@@ -74,6 +74,44 @@ General purpose registers are undefined at reset (manual 2.7.2.1), so
 then jumps to `ResetEntryInit` (`.iram.text`, `.data`, `.bss`, `SystemInit`,
 `SystemCoreClockUpdate`, `_start`).
 
+## Debug
+
+The on-board J-Link OB of the FPB-R9A02G021 connects over 2-wire cJTAG on
+P300 (TCKC) and P301 (TMSC), at 4000 kHz. The debug link answers only right
+after a reset: the first attempt of J-Link fails (`TDO is constant high`), it
+then resets the MCU through the reset pin and connects, so a connection
+restarts the program. At 1000 kHz the attempt after the reset fails as well;
+SWD and JTAG do not connect (J-Link V9.84). The debugger may lose the MCU in
+Software Standby. Keep P300 and P301 free.
+
+Command line:
+
+```
+JLinkGDBServerCL -if cJTAG -device R9A02G021 -speed 4000 -endian little -port 2331 -nogui
+riscv-none-elf-gdb <example>.elf -ex "target extended-remote localhost:2331"
+```
+
+IOcomposer, launch type GDB SEGGER J-Link Debugging. Its Interface choice has
+only SWD and JTAG: `-if cJTAG` at the end of the server options takes the
+place of the `-if jtag` the launch puts first, the server console then shows
+`Target interface: cJTAG`.
+
+| Tab | Setting | Value |
+| --- | --- | --- |
+| Debugger | Device name | `R9A02G021` |
+| Debugger | Interface | JTAG |
+| Debugger | Initial speed | Fixed, 4000 kHz |
+| Debugger | Other options (J-Link GDB Server Setup) | `-singlerun -strict -timeout 0 -nogui -if cJTAG` |
+| Debugger | GDB client executable | `riscv-none-elf-gdb` |
+| Startup | Initial Reset and Halt, Low speed | 4000 kHz |
+| Startup | JTAG/SWD Speed | Fixed, 4000 kHz |
+
+With the Startup speeds left at their defaults (1000 kHz, Auto) the reset
+before the download loses the target: `Target connection lost`, then
+`Verify failed` on each block. e2 studio connects the same way, with its own
+GDB server: cJTAG at 4000 kHz, reset at the start of the connection. OpenOCD
+has not been tried: the probe and its driver must support cJTAG.
+
 ## Clocks
 
 The core runs from MOCO / 16 (500 kHz) at reset. `SystemInit` applies
