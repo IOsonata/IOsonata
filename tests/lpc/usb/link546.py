@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Link LPC54628 CDC/HID/custom bulk loopback plus composite and EP0 firmware.
+"""Link LPC54628 USB examples, composite and EP0 firmware in Debug and Release.
 
 Copyright (c) 2026, I-SYST inc. MIT License.
 Checks the managed projects and real startup; no hardware is exercised.
@@ -22,6 +22,7 @@ SOURCES = timer['SOURCES'] + [
     'ARM/NXP/src/usb_ep0_lpc_fs.c',
     'ARM/NXP/src/usb_data_lpc_fs.c',
     'ARM/NXP/src/lpc_iap.c',
+    'src/prbs.c',
     'src/app_evt_handler.cpp', 'src/app_run.cpp', 'src/app_wait.cpp',
     'src/usb/usb.cpp', 'src/usb/usb_intrf.cpp', 'src/usb/usbd_cdc.cpp',
     'src/usb/usbd_cdc_desc.cpp', 'src/usb/usbd_epalloc.cpp',
@@ -30,6 +31,7 @@ SOURCES = timer['SOURCES'] + [
 
 APPLICATIONS = {
     'UsbCdcLoopback': 'exemples/usb/usb_cdc_loopback.cpp',
+    'UsbCdcPrbsTx': 'exemples/usb/usb_cdc_prbs_tx.cpp',
     'UsbHidLoopback': 'exemples/usb/usb_hid_loopback.cpp',
     'UsbCustomBulkLoopback': 'exemples/usb/usb_custom_bulk_loopback.cpp',
 }
@@ -95,6 +97,8 @@ int main(void)
     if example == 'UsbCustomBulkLoopback':
         demangled = subprocess.check_output([prefix + 'nm', '-C', str(image)], text=True)
         assert 'UsbdBulk::Init(' in demangled
+    if example == 'UsbCdcPrbsTx':
+        assert 'Prbs8' in addresses
     if example == 'Composite':
         demangled = subprocess.check_output([prefix + 'nm', '-C', str(image)], text=True)
         for name in ['UsbdCdc', 'UsbdHid', 'UsbdBulk']:

@@ -438,3 +438,17 @@ With Arm GNU GCC 13.2.1, LPC54628 composite Debug uses 53784 bytes flash,
 The shared LPC11U35 composite also passes both links: Debug uses 56424 bytes
 flash and Release uses 24884 bytes. Debug retains semihosting on both MCUs;
 Release omits it.
+
+## LPC54628 CDC PRBS transmitter
+
+`ARM/NXP/LPC546xx/LPC54628/exemples/UsbCdcPrbsTx` links the shared CDC PRBS
+application with USB0 VBUS on P0.22. It uses a 2048-byte transmit FIFO and
+16-entry AppEvt queue. Its README documents the existing serial PRBS receiver,
+DTR requirement and separate close/reopen and cable-reconnect runs.
+
+`link546.py` builds this application in Debug and Release and checks that the
+PRBS generator is linked. The LPC54628 library project already includes
+`prbs.c`; the firmware runner now compiles it too. This brings the runner to
+twelve links across EP0, CDC loopback, CDC PRBS, HID, custom bulk and composite
+firmware. Debug retains semihosting and Release uses nosys. Physical PRBS
+integrity, throughput and reconnect behavior remain pending board testing.
