@@ -35,14 +35,9 @@ SOFTWARE.
 #include <stdbool.h>
 #include <stdint.h>
 
-// UM10462 figure 20. Two words per physical endpoint, including the
-// EP0 SETUP address at word 1 and the reserved EP0 IN word 3.
-typedef struct __Lpc11_Usb_Memory {
-	volatile uint32_t Command[20];
-	uint8_t Reserved[48];
-	uint8_t Setup[64];
-	uint8_t Packet[10][64];
-} Lpc11UsbMemory_t;
+#include "usb_mem_lpc_fs.h"
+
+typedef LpcUsbFsMemory_t Lpc11UsbMemory_t;
 
 #ifdef __cplusplus
 extern "C" {

@@ -1285,5 +1285,10 @@
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/include/usb_ctrlr_lpc.h</locationURI>
 		</link>
+		<link>
+			<name>include/usb_mem_lpc_fs.h</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/include/usb_mem_lpc_fs.h</locationURI>
+		</link>
 	</linkedResources>
 </projectDescription>

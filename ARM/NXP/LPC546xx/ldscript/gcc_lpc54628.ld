@@ -63,6 +63,7 @@ MEMORY
 	FLASH (rx)	: ORIGIN = 0x00000000, LENGTH = 512K
 	RAM (rwx)	: ORIGIN = 0x20000000, LENGTH = 64K - 32
 	RAM2 (rwx)	: ORIGIN = 0x20010000, LENGTH = 96K - 32
+	USBRAM (rwx)	: ORIGIN = 0x40100000, LENGTH = 8K
 	SRAMX (rwx)	: ORIGIN = 0x04000000, LENGTH = 32K
 }
 
@@ -71,3 +72,14 @@ INCLUDE "gcc_arm_flash.ld"
 __valid_user_code_checksum = 0 - (__StackTop + (ResetEntry + 1) + (NMI_Handler + 1) +
 								  (HardFault_Handler + 1) + (MemManage_Handler + 1) +
 								  (BusFault_Handler + 1) + (UsageFault_Handler + 1));
+
+
+/* USB RAM is clocked by the controller preparation, after startup .bss.
+ * Unused storage is discarded; non-USB applications retain their RAM layout. */
+SECTIONS
+{
+	.usb_ram (NOLOAD) : ALIGN(256)
+	{
+		*(.usb_ram .usb_ram.*)
+	} > USBRAM
+}

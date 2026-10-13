@@ -303,3 +303,33 @@ FIFO transports can accept data while unconfigured; the tests verify that no
 hardware bank is armed and that these bytes are flushed on reconfiguration.
 The direct HID transport refuses a report while unconfigured. Both -O0 and
 -O2 UBSan runs pass; these checks required no production driver change.
+
+## LPC54628 USB0 hardware preparation
+
+`python3 tests/lpc/usb/run546.py` tests the private USB0 preparation and
+release functions with the repository's vendor CMSIS register types. It is
+also run by the USB suite. Both optimization levels exercise the 48/96 MHz
+FRO divider selection, device-mode mux, SRAM layout, interrupt-priority
+clamping, refusal to take over active USB clocks, divider timeout cleanup,
+and refusal to release active endpoint buffers. Invalid SRAM placement is
+checked separately.
+
+`usb_hw_lpc546xx.c` requires an already-calibrated, powered FRO HF output.
+It selects a 48 MHz USB0 clock and enables SOF trim without changing the
+FRO rate. It leaves DEV_EN, DCON and interrupts disabled. The system clock
+owner must keep that source stable until release. USB0 host and USB1 must
+remain unused while this helper owns the shared USB resources.
+
+The shared `LpcUsbFsMemory_t` layout is used by LPC11U35 and LPC54628.
+LPC54628 places its 832-byte allocation in the 8 KB dedicated USB RAM using
+NOLOAD, outside startup .data/.bss. Only the owned allocation is initialized;
+unused USB storage is discarded by the linker.
+
+This is hardware preparation, not a finished USB port. FRO startup integration,
+EP0, data transfers, USB0 IRQ handling and generic-core lifecycle integration
+still need completion. There is no LPC54628 USB application or hardware
+validation claim yet. LPC11U35 USB behavior is unchanged.
+
+Reference sequences: NXP's LPC54628 `CLOCK_EnableUsbfs0DeviceClock` in
+[MCUXpresso SDK](https://github.com/nxp-mcuxpresso/legacy-mcux-sdk/blob/main/devices/LPC54628/drivers/fsl_clock.c),
+and the USB register definitions in `LPC54628.h` / `LPC54628_features.h`.
