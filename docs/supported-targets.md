@@ -263,17 +263,30 @@ The planned L152/Nucleo-64 work is outside the 0.13 support list.
 
 | MCU | Available implementation | Examples and remaining work |
 |---|---|---|
-| [LPC11U35](../ARM/NXP/LPC11xx/LPC11U35/lib/ioc/) | Legacy startup, GPIO, UART, I2C, SSP/SPI and IAP flash code | [Blinky and UART PRBS projects](../ARM/NXP/LPC11xx/LPC11U35/exemples/) are supplied. No target IOsonata Timer implementation; current interface/build compatibility needs verification. The USB source is only an include, not a working USB device driver. |
-| [LPC1769](../ARM/NXP/LPC17xx/LPC1769/lib/ioc/) | Legacy startup, GPIO, UART, I2C and IAP flash code; shared SSP transfer code is linked | [DFU project](../ARM/NXP/LPC17xx/LPC1769/exemples/). No target Timer implementation or MCU-specific SPI initializer; current builds need verification. |
+| [LPC11U35](../ARM/NXP/LPC11xx/LPC11U35/lib/ioc/) | Startup, GPIO/pin interrupts, UART polling/interrupt, polling I2C and SSP/SPI masters, CT16B0/1 and CT32B0/1 timers, IAP and native full-speed USB device | [Examples](../ARM/NXP/LPC11xx/LPC11U35/exemples/): Blinky, TimerDemo, UART loopback/PRBS, I2CScan, SpiLoopback, USB CDC loopback/PRBS, HID and custom bulk. Supported; host-model and selected ARM firmware links pass. Board validation pending. Uses ROM DFU; software DfuBoot was removed. |
+| [LPC1769](../ARM/NXP/LPC17xx/LPC1769/lib/ioc/) | Startup, GPIO/interrupts, UART polling/interrupt, polling I2C and SSP/SPI masters, TIMER0-3 and IAP | [Examples](../ARM/NXP/LPC17xx/LPC1769/exemples/): TimerDemo, UART loopback/PRBS, I2CScan, SpiLoopback and DfuBoot. Supported; host-model coverage and TimerDemo ARM links are documented in [LPC tests](../tests/lpc/README.md). Full board validation pending; the LPC11U35/LPC54628 USB implementation does not cover this controller. |
 | [LPC54605](../ARM/NXP/LPC546xx/LPC54605/lib/ioc/) | Startup, vector, linker and IAP/DFU code | Incomplete GPIO, UART and Timer integration; shared LPC files do not provide a complete LPC54605 port. |
-| [LPC54628](../ARM/NXP/LPC546xx/LPC54628/lib/ioc/) | Startup with the boot ROM vector checksum, core clock at 220 MHz from the system PLL with the core voltage set by the IOsonata clock code (no NXP power library), GPIO, pin interrupts, Flexcomm USART (polling and interrupt), Flexcomm I2C and SPI masters (polling), 5 CTIMER timers with 3 triggers each and IAP | [Blinky, UART PRBS TX, TimerDemo, I2CScan and SpiLoopback projects](../ARM/NXP/LPC546xx/LPC54628/exemples/) for the LPCXpresso54628. Not supplied: UART TX DMA, I2C and SPI slave, interrupt and DMA modes. Host register regressions of the timer, I2C and SPI drivers in [tests/lpc546xx](../tests/lpc546xx/). No hardware result recorded yet. |
+| [LPC54628](../ARM/NXP/LPC546xx/LPC54628/lib/ioc/) | Startup with boot ROM vector checksum, 220 MHz system PLL/core voltage setup, GPIO/pin interrupts, Flexcomm USART polling/interrupt, polling Flexcomm I2C/SPI masters, five CTIMERs with three triggers each, IAP and USB0 full-speed device | [Examples](../ARM/NXP/LPC546xx/LPC54628/exemples/): Blinky, TimerDemo, UART loopback/PRBS, I2CScan, SpiLoopback, USB CDC loopback/PRBS, HID and custom bulk. Supported; [LPC tests](../tests/lpc/README.md) record host models and selected firmware links. UART DMA and I2C/SPI slave, interrupt and DMA modes remain unimplemented. Hardware validation pending. |
 | [ESP32-C3](../RISCV/Espressif/ESP32C/ESP32C3/lib/ioc/) | RISC-V startup, GPIO, UART, clock control and interrupt routing | [Blinky and UART PRBS projects](../RISCV/Espressif/ESP32C/ESP32C3/exemples/). Partial port: no IOsonata Timer driver. The I2C source still contains Nordic register code and is not an ESP32 bus implementation. |
 | [ESP32-C6](../RISCV/Espressif/ESP32C/ESP32C6/lib/ioc/) | Startup, peripheral clock/reset and interrupt-routing code | [Initial examples](../RISCV/Espressif/ESP32C/ESP32C6/exemples/). Incomplete port: no Timer driver; the library also omits shared Espressif GPIO/UART files. |
 | [RP2040](../ARM/RPI/RP20/RP2040/lib/ioc/) | Initial library project and generic sources | Native startup, GPIO, UART and Timer integration is absent. Incomplete port. |
 
-LPC11U35 combines its [SPI initializer](../ARM/NXP/LPC11xx/src/spi_lpc11uxx.c)
-with [shared SSP transfers](../ARM/NXP/src/spi_lpcxx.c). The older LPC sources
-are useful existing implementations, but require current build and API checks.
+The NXP rows were refreshed through [974cde8](https://github.com/IOsonata/IOsonata/commit/974cde87e83293199a3dab15845b2f66ce5c02fc).
+LPC11U35 and LPC1769 share UART, polling I2C/SSP transfer code and timer
+implementation where the hardware matches; family files supply clocks, pins
+and interrupt mappings. LPC54628 uses its Flexcomm drivers.
+
+LPC11U35 and LPC54628 share the full-speed USB EP0 and data endpoint engines.
+Each provides four non-control IN/OUT endpoint pairs for bulk and interrupt
+transfers, with family-specific clocking, VBUS and IRQ handling. Remote wakeup
+supports clock-on suspend; ISO and low-power suspend are not implemented.
+LPC54628 USB1 high-speed and USB host mode are not supported by this port.
+See [USB tests and limits](../tests/lpc/usb/README.md) for generic-core/class
+models, Debug/Release links, memory measurements and remaining board checks.
+
+Remaining NXP work includes physical serial/bus/timer/USB validation, the
+listed missing transfer modes, LPC1769 USB and completing LPC54605 integration.
+LPC54628 results do not establish support for LPC54605.
 ESP32-C3 uses a native [UART driver](../RISCV/Espressif/src/uart_esp32.cpp)
 with separate clock and interrupt modules. Wi-Fi/Bluetooth hardware on an
 Espressif chip does not imply that an IOsonata radio port is supplied here.

@@ -20,7 +20,7 @@ Each subfolder has its own `run.py` and README for focused checks:
 | `startup` | LPC11U35/LPC17xx linker checksums, LPC17xx vectors and AHB startup data |
 | `iap` | LPC11Uxx IAP compatibility and interrupt state |
 | `iap_shared` | Shared IAP commands and interrupt state |
-| `usb` | LPC11Uxx EP0, lifecycle, transfers, CDC/HID/vendor bulk and reconfiguration |
+| `usb` | LPC11Uxx/LPC54628 shared EP0/data transfers, lifecycle, remote wakeup, CDC/HID/vendor bulk and reconfiguration |
 
 The host suites require Python 3, GCC/G++, and GNU binutils. They use temporary
 build directories and can be launched from any working directory. Register
@@ -32,14 +32,16 @@ With Arm GNU tools, newlib-nano and C++23 support:
 
 ```sh
 python3 tests/lpc/usb/link.py
+python3 tests/lpc/usb/link546.py
 python3 tests/lpc/timer/link.py
 python3 tests/lpc/timer/link17.py
 python3 tests/lpc/timer/link546.py
 python3 tests/lpc/usb/link.py --prefix /path/to/bin/arm-none-eabi- --output /tmp/lpc-usb
 ```
 
-This separate command links eight LPC11U35 firmware builds: CDC, HID, vendor
-bulk and a three-class composite, each in Debug and Release. Debug retains
+The USB link commands build ten LPC11U35 images and twelve LPC54628 images.
+Both cover CDC loopback/PRBS, HID, vendor bulk and a three-class composite in
+Debug and Release; LPC54628 also includes an EP0 bring-up fixture. Debug retains
 rdimon semihosting; Release uses nosys. It checks production startup, vector
 checksum, USB IRQ, IAP reservation, USB SRAM placement and example project
 settings. It does not build every optional source in the MCU library project.
@@ -64,6 +66,15 @@ and LPC546xx model results likewise do not establish full board validation.
 
 Implemented modes remain deliberate limits: legacy LPC I2C and SSP are
 polling masters; legacy UART has polling/interrupt operation without DMA;
-LPC11U35 USB has bulk/interrupt endpoints and clock-on suspend, without ISO
-or low-power suspend. LPC11U35 uses ROM DFU; no software DfuBoot is provided.
+LPC11U35 and LPC54628 USB have bulk/interrupt endpoints and remote wakeup
+with clock-on suspend, without ISO or low-power suspend. LPC54628 USB1 and
+USB host mode are unsupported. LPC11U35 uses ROM DFU; no software DfuBoot is provided.
 See each suite README for exact family restrictions and hardware checks.
+
+The USB work through `974cde87e83293199a3dab15845b2f66ce5c02fc` adds the
+LPC54628 shared full-speed controller integration, remote wakeup and CDC
+loopback/PRBS, HID and custom-bulk projects. The combined LPC USB host suite
+passed after the controller changes; all twelve LPC54628 firmware links passed
+after adding PRBS. Both LPC11U35 composite links also passed after sharing the
+fixture. These later checks do not imply a rerun of every peripheral suite or
+a full IOcomposer library build.
