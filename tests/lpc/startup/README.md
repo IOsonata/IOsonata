@@ -15,8 +15,9 @@ The stack check fails if a layout lets the application use that reserved area.
 This checks linker arithmetic and memory layouts, not ARM relocations or
 startup execution. The production vector source was compiled to Cortex-M0
 assembly at -O0 and -O2, confirming the linker checksum is word 7 and the
-reserved words remain zero. A complete ARM link and board boot test are
-still required; the ARM binutils available during this change could not run.
+reserved words remain zero. Complete LPC11U35 ARM firmware links now pass in `tests/lpc/usb/link.py`,
+including production vectors, checksum, IAP reservation and USB IRQ checks.
+A board power-cycle boot test is still required.
 
 The implementation follows the existing LPC54628 linker pattern and NXP's
 [link-time checksum guidance](https://community.nxp.com/t5/LPCXpresso-IDE-FAQs/Creating-an-LPC-valid-image-checksum-directly-in-the-image/m-p/469247).

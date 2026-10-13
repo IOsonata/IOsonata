@@ -15,7 +15,9 @@ they do not authorize using those settings on hardware.
 
 The old source fails the reset IRC regression by reporting 6 MHz. The fixed
 source passes O0/O2 host runs with UBSan and Cortex-M0 compiler-to-assembly
-checks. Hardware clock measurements and full firmware linking remain pending.
+checks. The production LPC11U35 clock source now links in all eight USB firmware
+builds checked by `tests/lpc/usb/link.py`. Hardware clock measurements remain
+pending; linking does not validate oscillator or PLL behavior.
 
 The setter linkage test builds the driver as C and links C and C++ callers.
 Both SystemSetCoreClock and the retained SystemCoreClockSet symbol configure
