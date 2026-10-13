@@ -80,4 +80,25 @@ SOFTWARE.
 	Ra4m1I2cDump(i2c, dbg, sizeof(dbg)); \
 	printf("%s %s\r\n", name, dbg); }
 
+// Read each I2C pin as a plain GPIO input, once with the pull-up and once
+// without, before the I2C drivers take the pins. A pin that reads 0 with the
+// pull-up is held low from outside the MCU.
+#include "iopinctrl.h"
+#define I2C_DEBUG_PIN_TEST(name, port, pin) { \
+	IOPinConfig(port, pin, IOPINOP_GPIO, IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL); \
+	for (volatile int d = 0; d < 200000; d++) {} \
+	int up = IOPinRead(port, pin); \
+	IOPinConfig(port, pin, IOPINOP_GPIO, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL); \
+	for (volatile int d = 0; d < 200000; d++) {} \
+	int nu = IOPinRead(port, pin); \
+	printf("pin %s P%d%02d pullup=%d nopull=%d\r\n", name, port, pin, up, nu); }
+
+#define I2C_DEBUG_PIN_TESTS() { \
+	I2C_DEBUG_PIN_TEST("M SDA", I2C_MASTER_SDA_PORT, I2C_MASTER_SDA_PIN) \
+	I2C_DEBUG_PIN_TEST("M SCL", I2C_MASTER_SCL_PORT, I2C_MASTER_SCL_PIN) \
+	I2C_DEBUG_PIN_TEST("S SDA", I2C_SLAVE_SDA_PORT, I2C_SLAVE_SDA_PIN) \
+	I2C_DEBUG_PIN_TEST("S SCL", I2C_SLAVE_SCL_PORT, I2C_SLAVE_SCL_PIN) \
+	I2C_DEBUG_PIN_TEST("P205 ", 2, 5) \
+	I2C_DEBUG_PIN_TEST("P206 ", 2, 6) }
+
 #endif // __BOARD_H__
