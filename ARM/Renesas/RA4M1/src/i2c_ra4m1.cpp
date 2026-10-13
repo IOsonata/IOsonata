@@ -189,6 +189,10 @@ typedef struct
 	uint8_t DbgMState;		// master state at the last abort
 	uint8_t DbgMSr2;		// master ICSR2 at the last abort
 	uint8_t DbgMSent;		// master bytes loaded at the last abort
+	uint8_t DbgMCr1;		// master ICCR1 at the last abort (SCLI, SDAI)
+	uint8_t DbgOCr1;		// other IIC unit ICCR1 at the same time
+	uint8_t DbgOSr1;		// other IIC unit ICSR1
+	uint8_t DbgOSr2;		// other IIC unit ICSR2
 } Ra4m1I2cDev_t;
 
 static Ra4m1I2cDev_t s_Ra4m1I2cDev[RA4M1_I2C_COUNT] = {
@@ -531,6 +535,13 @@ static void Ra4m1I2cMasterAbort(Ra4m1I2cDev_t * const pDev)
 	pDev->DbgMState = (uint8_t)pDev->MState;
 	pDev->DbgMSr2 = pDev->pReg->ICSR2;
 	pDev->DbgMSent = (uint8_t)pDev->Sent;
+	pDev->DbgMCr1 = pDev->pReg->ICCR1;
+
+	const R_IIC0_Type *other = pDev->DevNo == 0 ? R_IIC1 : R_IIC0;
+
+	pDev->DbgOCr1 = other->ICCR1;
+	pDev->DbgOSr1 = other->ICSR1;
+	pDev->DbgOSr2 = other->ICSR2;
 	Ra4m1I2cConfigure(pDev);
 	pDev->MState = RA4M1_I2C_M_DONE;
 }
@@ -1503,15 +1514,17 @@ int Ra4m1I2cDump(DevIntrf_t * const pIntrf, char *Buf, int Len)
 		r->ICCR1, r->ICCR2, r->ICMR1, r->ICMR2, r->ICMR3, r->ICFER,
 		r->ICSER, r->ICIER, r->ICSR1, r->ICSR2, r->ICBRL, r->ICBRH,
 		dev->DbgIrq, dev->DbgSAddr, dev->DbgSRx, dev->DbgSSr1,
-		dev->DbgSAddrByte, dev->DbgMState, dev->DbgMSr2, dev->DbgMSent
+		dev->DbgSAddrByte, dev->DbgMState, dev->DbgMSr2, dev->DbgMSent,
+		dev->DbgMCr1, dev->DbgOCr1, dev->DbgOSr1, dev->DbgOSr2
 	};
 	const char *name[] = {
 		"pclkb=", " mstpb=", " sckdiv=", " cr1=", " cr2=", " mr1=", " mr2=",
 		" mr3=", " fer=", " ser=", " ier=", " sr1=", " sr2=", " brl=", " brh=",
-		" irq=", " sadr=", " srx=", " ssr1=", " sab=", " mst=", " msr2=", " msent="
+		" irq=", " sadr=", " srx=", " ssr1=", " sab=", " mst=", " msr2=", " msent=",
+		" mcr1=", " ocr1=", " osr1=", " osr2="
 	};
 	const int digits[] = { 8, 8, 8, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
-		4, 4, 4, 2, 2, 2, 2, 2 };
+		4, 4, 4, 2, 2, 2, 2, 2, 2, 2, 2, 2 };
 	int pos = 0;
 
 	for (int i = 0; i < (int)(sizeof(v) / sizeof(v[0])); i++)
