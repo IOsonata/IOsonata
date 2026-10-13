@@ -404,10 +404,10 @@ and DMA with a non-blocking FIFO. `UARTSetCtrlLineState` does nothing.
   character time later. Their RXI and ERI service RX only and run at
   `IntPrio`, TXI and the DMA transfer end service TX only and run one level
   lower (unless `IntPrio` is already the lowest), so that RXI can preempt
-  them. When ERI reads RDR with a receive error, the RXI of that character is
-  cleared and RDR is checked once more for a character that arrived
-  meanwhile. A pending RXI found by the RXI handler is of a new character and
-  is left set. Callbacks from RX and TX interrupts can nest on SCI2/9. SCI2/9
+  them. RDR is read only with RDRF or an error flag set, by any of them:
+  reading RDR clears RDRF, a pending RXI of a character ERI already read finds
+  RDRF cleared and does not read it again. ERI leaves the RXI IR flag as it is.
+  Callbacks from RX and TX interrupts can nest on SCI2/9. SCI2/9
   TX waits for a TXI only with TDR full: the CPU writes TDR while TDRE is set,
   two bytes in a row with the line idle (the first goes on to the shift
   register at once), and TxData sets TIE after filling TDR. The TXI then comes
@@ -485,7 +485,9 @@ DMA blocks, the end of a block seen late (the line moves up to 60 characters
 between TxData calls, interrupts held off), the last byte of a SCI2/9 block
 moved 1 to 3 register accesses after the channel took it, while the block
 start checks TDR and stops the channel, one SCI2/9 overrun with the next
-character arriving while it is handled (only the overrun character lost),
+character arriving while it is handled (only the overrun character lost), a
+SCI2/9 framing error with the next character arriving at each step of the ERI
+handler in turn (received once, no read of RDR without RDRF or an error flag),
 SCI2/9 TxData starting a block with only the TX level locked out (BASEPRI in
 the model) while the line moves and RXI is taken in the middle of it, its
 callback calling TxData too, no TX handler taken inside TxData, the SCI2/9

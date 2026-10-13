@@ -103,13 +103,6 @@ SOFTWARE.
 // finishes, a few bus cycles
 #define RA4M1_UART_DMA_HALT_POLLS	100
 
-// Caller of Ra4m1UartRxHw. Without the FIFO it decides when RDR is read.
-typedef enum {
-	RA4M1_UART_RX_POLL,				// Polling, RDR read with RDRF or an error flag
-	RA4M1_UART_RX_RXI,				// RXI, RDR read, RDRF may already be cleared
-	RA4M1_UART_RX_OTHER,			// ERI or TXI, RDR read only with an error flag
-} RA4M1_UART_RX;
-
 #pragma pack(push, 4)
 typedef struct {
 	int DevNo;
@@ -250,10 +243,10 @@ static void Ra4m1UartReleaseIRQs(Ra4m1UartDev_t * const pDev)
 // error is dropped. Returns the number of characters read from the hardware,
 // pErr the line state errors seen. Interrupts disabled or from the interrupt.
 //
-// Src : caller, it decides when RDR is read without the FIFO. RXI tells that
-// RDR holds a character, RDRF may already be cleared by then. A character read
-// on another interrupt would be put again by its own RXI.
-static int Ra4m1UartRxHw(Ra4m1UartDev_t * const pDev, RA4M1_UART_RX Src, uint8_t *pErr)
+// Without the FIFO RDR is read only with RDRF or an error flag set, whatever
+// the caller. Reading RDR clears RDRF: a pending RXI of a character already
+// read on ERI finds RDRF cleared and does not read the same character again.
+static int Ra4m1UartRxHw(Ra4m1UartDev_t * const pDev, uint8_t *pErr)
 {
 	UARTDev_t *udev = pDev->pUartDev;
 	R_SCI0_Type *reg = pDev->pReg;
@@ -368,7 +361,7 @@ static int Ra4m1UartRxHw(Ra4m1UartDev_t * const pDev, RA4M1_UART_RX Src, uint8_t
 			reg->SSR = (uint8_t)~(status & RA4M1_SCI_SSR_RXERR);
 			cnt = 1;
 		}
-		else if (Src == RA4M1_UART_RX_RXI || (Src == RA4M1_UART_RX_POLL && (status & R_SCI0_SSR_RDRF_Msk)))
+		else if (status & R_SCI0_SSR_RDRF_Msk)
 		{
 			// Reading RDR clears RDRF
 			if (CFifoPutByte(udev->hRxFifo, reg->RDR & pDev->RxDataMask))
@@ -406,7 +399,7 @@ static inline void Ra4m1UartRxPoll(Ra4m1UartDev_t * const pDev)
 	{
 		uint8_t err;
 
-		Ra4m1UartRxHw(pDev, RA4M1_UART_RX_POLL, &err);
+		Ra4m1UartRxHw(pDev, &err);
 	}
 }
 
@@ -803,7 +796,7 @@ static void Ra4m1UartIRQHandler(int IntNo, void *pCtx)
 
 	if (dev->bHwFifo || !txi)
 	{
-		rxcnt = Ra4m1UartRxHw(dev, IntNo == (int)dev->IrqRxi ? RA4M1_UART_RX_RXI : RA4M1_UART_RX_OTHER, &err);
+		rxcnt = Ra4m1UartRxHw(dev, &err);
 	}
 
 	// With DMA, TIE is for the channel and TXI goes to it
@@ -822,23 +815,11 @@ static void Ra4m1UartIRQHandler(int IntNo, void *pCtx)
 	if (eri || err)
 	{
 		// The error flags are cleared, the ERI request is negated and its ICU
-		// IR flag can be cleared.
+		// IR flag can be cleared. The RXI flag is left as it is: a pending RXI
+		// of the character read here finds RDRF cleared, one of a character
+		// received since reads it (Ra4m1UartRxHw).
 		Ra4m1UartSync(dev);
 		Ra4m1AcknowledgeInt(dev->IrqEri);
-		if (err && !dev->bHwFifo && IntNo != (int)dev->IrqRxi)
-		{
-			// Without the FIFO, ERI read RDR with the error, the RXI of that
-			// character may be pending: run again, it would read RDR a second
-			// time. It is cleared and a character that arrived since is read
-			// now. On RXI the pending RXI is of a new character and stays:
-			// cleared, that character would wait in RDR for the next one to
-			// overrun it, and each overrun would lose the next RXI.
-			uint8_t e = 0;
-
-			Ra4m1AcknowledgeInt(dev->IrqRxi);
-			rxcnt += Ra4m1UartRxHw(dev, RA4M1_UART_RX_POLL, &e);
-			err |= e;
-		}
 	}
 
 	if (udev->EvtCallback)

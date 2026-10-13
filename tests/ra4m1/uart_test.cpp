@@ -164,6 +164,8 @@ static bool s_DmaHold;				// A request while DTE is cleared waits in DELSR, othe
 static unsigned s_DmaLate;			// Register accesses before the channel moves a request it took, 0 at once
 static bool s_StepAtCra;			// The line moves right after each read of DMCRA
 static bool s_StepAtErrClear;		// The line moves right after a write clearing a receive error flag
+static unsigned s_StepAtPoint;		// The line moves once, after this register access or ICU flag clear
+static unsigned s_IsrPoints;		// of a handler, counted from its start, 0 none
 static int s_TxiEdge;				// SCI2/9, 1 or 2: a CPU write to TDR with the line idle and TIE set gives
 									// no TXI. 1: TIE set with TDRE 1 gives one (rising edge of TDRE and TIE)
 static unsigned s_LockStepEvery;	// Line step after n application register accesses with PRIMASK clear, 0 none
@@ -606,6 +608,20 @@ static void DmaLateTake(bool bStep)
 // takes.
 static int Dispatch(void);
 
+// s_StepAtPoint: a register access or an ICU flag clear in a handler
+static void IsrPoint(void)
+{
+	if (s_bInIsr && s_StepAtPoint && ++s_IsrPoints == s_StepAtPoint)
+	{
+		s_StepAtPoint = 0;
+		for (int u = 0; u < 4; u++)
+		{
+			LineStep(u);
+		}
+		UpdateIcu();
+	}
+}
+
 static void AccessDone(void)
 {
 	DmaLateTake(false);
@@ -617,6 +633,7 @@ static void AccessDone(void)
 			LineStep(u);
 		}
 	}
+	IsrPoint();
 	// Application code with interrupts enabled, or only some locked out by
 	// BASEPRI: the line moves and the interrupts above that level are taken
 	if (!s_bInIsr && g_TestPrimask == 0 && s_LockStepEvery && ++s_LockAccess >= s_LockStepEvery)
@@ -997,6 +1014,7 @@ static int Dispatch(void)
 		s_bInIsr = true;
 		g_TestPrimask = 1;
 		s_Slot[slot].bAcked = false;
+		s_IsrPoints = 0;
 		s_Slot[slot].Handler(slot, s_Slot[slot].pCtx);
 		if (!s_Slot[slot].bAcked)
 		{
@@ -1095,6 +1113,7 @@ bool Ra4m1AcknowledgeInt(IRQn_Type IrqNo)
 	}
 	s_Slot[IrqNo].bIr = false;
 	s_Slot[IrqNo].bAcked = true;
+	IsrPoint();
 
 	return true;
 }
@@ -1199,6 +1218,8 @@ static void ResetModel(void)
 	s_bIrqOff = false;
 	s_StepAtCra = false;
 	s_StepAtErrClear = false;
+	s_StepAtPoint = 0;
+	s_IsrPoints = 0;
 	s_LockStepEvery = 0;
 	s_LockAccess = 0;
 	s_TxLevelInApp = 0;
@@ -1656,6 +1677,50 @@ static void TestRxOverrunOnce(void)
 			{
 				printf("  TestRxOverrunOnce unit %d dma %d : %zu of %zu received, lost %u, overruns %u\n", u, dma,
 					   r.size(), d.size(), s_Sci[u].RxLost, (unsigned)s_Uart.RxOvrErrCnt);
+			}
+		}
+	}
+}
+
+// SCI2/9, interrupt mode: a character with a framing error, then a good one
+// arriving at each register access or ICU flag clear of the ERI handler in
+// turn. The good character is received once, or lost by the receiver when it
+// arrives before the error flags are cleared. RDR is never read without RDRF or
+// an error flag.
+static void TestRxErrThenChar(void)
+{
+	for (int u = 2; u < 4; u++)
+	{
+		for (int dma = 0; dma < 2; dma++)
+		{
+			for (unsigned pt = 1; pt <= 32; pt++)
+			{
+				ResetModel();
+				UARTCfg_t cfg = Cfg(u, true, dma);
+				CHECK(UARTInit(&s_Uart, &cfg) == true);
+
+				s_Sci[u].RxIn = { (uint16_t)(0x55 | C_FER) };
+				LineStep(u);
+				s_Sci[u].RxIn = { 0x42 };
+				s_StepAtPoint = pt;
+				Dispatch();
+				RunLine(3);
+
+				uint8_t buf[8];
+				int n = UARTRx(&s_Uart, buf, sizeof(buf));
+				bool ok = s_Sci[u].StaleRdr == 0 && s_Uart.FramErrCnt == 1 &&
+						  ((n == 1 && buf[0] == 0x42 && s_Sci[u].RxLost == 0) || (n == 0 && s_Sci[u].RxLost == 1));
+				CHECK(ok);
+				if (!ok)
+				{
+					printf("  TestRxErrThenChar unit %d dma %d point %u : received %d, stale RDR %u, lost %u,",
+						   u, dma, pt, n, s_Sci[u].StaleRdr, s_Sci[u].RxLost);
+					for (int i = 0; i < n; i++)
+					{
+						printf(" %02X", buf[i]);
+					}
+					printf("\n");
+				}
 			}
 		}
 	}
@@ -2301,6 +2366,7 @@ int main()
 	TestTxLockPreempt();
 	TestTxDmaLastByte();
 	TestRxOverrunOnce();
+	TestRxErrThenChar();
 	TestErrors();
 	TestRxFull();
 	TestSevenBit();
