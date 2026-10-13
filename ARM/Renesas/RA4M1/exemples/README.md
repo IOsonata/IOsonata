@@ -48,12 +48,14 @@ R01UH0887EJ0110, Table 19.6; the GPIO/IRQ choices are in chapters 1 and 19.
 All selected pins are present in the port's 40/48/64/100-pin package maps.
 Actual package-pad/connector numbers still depend on the chosen part/hardware.
 
-The shared master/slave example uses **IIC0: P401 = SDA0, P400 = SCL0**, with
+The shared master/slave example uses **IIC0: P401 = SDA0, P408 = SCL0**, with
 `IOPINOP_FUNC6` (PSEL 7), leaving SCI0 available for its console. On the
-EK-RA4M1 these are J2-8 (P401) and J2-37 (P400), the same IIC0 pair used by
-Renesas's EK IIC loopback example. Provide a common ground and external pull-ups
+EK-RA4M1 these are J2-8 (P401) and J2-16 (P408), a short-wire option for master SCL. Provide a common ground and external pull-ups
 sized for the bus voltage, capacitance and selected speed. The example requests 100 kHz with polling master. IIC1 uses P206 = SDA1 and
 P205 = SCL1; connect SDA-to-SDA, SCL-to-SCL and common ground with pull-ups.
+The default master SCL is **P408**, not P400; wiring J2-16 to J2-14
+requires that pin assignment. Check the EK-RA4M1 solder-jumper setting
+for P205 before attempting IIC1 slave operation.
 A first native IIC slave ISR/callback implementation is now present, but its
 address/restart/STOP transitions have not yet been hardware-validated. The
 example is ready for bring-up, not a claimed loopback PASS. The shared
