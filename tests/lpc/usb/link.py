@@ -31,6 +31,8 @@ SOURCES = [
     'src/usb/usbd_cdc.cpp',
     'src/usb/usbd_cdc_desc.cpp',
     'src/usb/usbd_epalloc.cpp',
+    'src/usb/usbd_hid.cpp',
+    'src/usb/usb_int.cpp',
 ]
 INCLUDES = [
     'include', 'ARM/include', 'ARM/CMSIS/Core/Include',

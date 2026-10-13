@@ -170,7 +170,7 @@ The built-in ROM DFU bootloader remains independent; no software DFU is added.
   https://strawberry-linux.com/pub/UM10462.pdf
 
 The hardware source was also compiled to Cortex-M0 Thumb assembly with
-arm-none-eabi-gcc. No full ARM link or board USB test has been run.
+arm-none-eabi-gcc. ARM link results are recorded below; board USB testing is pending.
 
 ## ARM firmware link
 
@@ -214,3 +214,14 @@ the carrier schematic does not verify the module-internal circuit.
 A successful link does not establish USB enumeration or CDC operation on
 hardware. The host CDC fixture checks the 10-byte serial-state notification
 on its 8-byte interrupt endpoint, but physical bus validation is still pending.
+
+The CDC fixture also runs with the shared HID class registered. It verifies
+three interfaces and five unique endpoint addresses, HID report descriptor
+routing and SET_IDLE status-stage commit, 64-byte HID reports while CDC data
+and notifications are active, and both classes after detach/re-enumeration.
+Both CDC-only and composite variants pass at -O0 and -O2 with UBSan.
+
+The library project now links `usbd_hid.cpp` and `usb_int.cpp` and their headers.
+The ARM check compiles these sources into the library archive; the CDC-only
+firmware does not retain HID, so its sizes above are not composite firmware
+measurements. Composite operation has been checked in the host model only.

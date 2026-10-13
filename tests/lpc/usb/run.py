@@ -151,6 +151,8 @@ for opt in ['-O0', '-O2']:
         cdc_objects = objects[:-1]
         for index, path in enumerate(['src/usb/usbd_cdc.cpp',
                                       'src/usb/usbd_cdc_desc.cpp',
+                                      'src/usb/usbd_hid.cpp',
+                                      'src/usb/usb_int.cpp',
                                       'src/usb/usbd_epalloc.cpp',
                                       'src/app_evt_handler.cpp',
                                       'src/app_run.cpp',
@@ -170,3 +172,5 @@ for opt in ['-O0', '-O2']:
                         '-Wl,--gc-sections', '-Wl,--section-start=.usb_ram=0x20004000',
                         *cdc_objects, '-o', exe], check=True)
         subprocess.run([exe], check=True, timeout=5)
+
+        subprocess.run([exe, "composite"], check=True, timeout=5)

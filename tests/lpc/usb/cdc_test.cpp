@@ -4,9 +4,20 @@
 #include <cstring>
 #include "app_evt_handler.h"
 #include "usb/usbd_cdc.h"
+#include "usb/usbd_hid.h"
 #include "usb_hw_lpc11uxx.h"
 
 static UsbdCdc s_Cdc;
+static UsbdHid s_Hid;
+static bool s_Composite;
+static unsigned s_HidTx;
+static const uint8_t s_ReportDesc[] = {
+	0x06, 0x00, 0xFF, 0x09, 0x01, 0xA1, 0x01,
+	0x75, 0x08, 0x95, 0x40, 0x09, 0x01, 0x81, 0x02,
+	0x09, 0x01, 0x91, 0x02, 0xC0
+};
+alignas(4) static uint8_t s_HidRx[USB_INT_INTRF_PKT_BLKSIZE];
+alignas(4) static uint8_t s_HidTxBuffer[USB_INT_INTRF_PKT_BLKSIZE];
 static unsigned s_PortOpened;
 static unsigned s_PortClosed;
 static unsigned s_RxEvents;
@@ -21,6 +32,13 @@ extern "C" void TestUsbPacketDone(unsigned Physical, unsigned Length);
 extern "C" void TestUsbSetup(const UsbSetupData_t *pSetup);
 extern "C" void TestUsbCable(bool Connected, bool DeviceInterrupt);
 extern "C" void TestUsbVbusInterrupt(void);
+
+static int HidEvent(DevIntrf_t *, DEVINTRF_EVT Event, uint8_t *, int)
+{
+	if (Event == DEVINTRF_EVT_TX_FIFO_EMPTY)
+		++s_HidTx;
+	return 0; // Retain reports for foreground Rx().
+}
 
 static void ProcessEvents(void)
 {
@@ -82,9 +100,11 @@ static void Enumerate(void)
 	assert(UsbGetAddress(0) == 7);
 	assert(ControlRead(0x80, 6, 0x0200, 0, 9, descriptor, sizeof(descriptor)) == 9);
 	const unsigned total = descriptor[2] | (descriptor[3] << 8);
-	assert(total == 9 + sizeof(UsbdCdcDesc_t) && descriptor[4] == 2);
+	assert(total == 9 + sizeof(UsbdCdcDesc_t) + (s_Composite ? sizeof(UsbdHidDesc_t) : 0));
+	assert(descriptor[4] == (s_Composite ? 3 : 2));
 	assert(ControlRead(0x80, 6, 0x0200, 0, total, descriptor, sizeof(descriptor)) == total);
 	unsigned endpoints = 0;
+	unsigned addresses = 0;
 	for (unsigned offset = 0; offset < total; offset += descriptor[offset])
 	{
 		assert(descriptor[offset] >= 2 && offset + descriptor[offset] <= total);
@@ -92,9 +112,15 @@ static void Enumerate(void)
 			continue;
 		++endpoints;
 		const unsigned mps = descriptor[offset + 4] | (descriptor[offset + 5] << 8);
-		assert(mps == (descriptor[offset + 3] == INT ? 8U : 64U));
+		const UsbdCdcDev_t *cdc = s_Cdc;
+		const unsigned address = descriptor[offset + 2];
+		const unsigned ep = address & 0x0F;
+		const unsigned physical = 2 * ep + ((address >> 7) & 1);
+		assert(ep > 0 && ep <= 4 && (addresses & (1U << physical)) == 0);
+		addresses |= 1U << physical;
+		assert(mps == (address == (0x80U | cdc->NotifyEpNo) ? 8U : 64U));
 	}
-	assert(endpoints == 3);
+	assert(endpoints == (s_Composite ? 5 : 3));
 	// A 31-character UTF-16 string is exactly 64 bytes, requiring a ZLP
 	// because the host asked for more. The UID string takes 64+2 bytes.
 	assert(ControlRead(0x80, 6, 0x0301, 0x0409, 255, descriptor, sizeof(descriptor)) == 64);
@@ -145,15 +171,57 @@ static void Loopback(void)
 	assert(s_Cdc.Rx(0, received, sizeof(received)) == 80);
 	assert(std::memcmp(sent, received, sizeof(sent)) == 0);
 	assert(s_Cdc.Tx(0, received, sizeof(received)) == 80);
-	assert(std::memcmp(memory->Packet[out + 1], sent, 64) == 0);
-	TestUsbPacketDone(out + 1, 64);
-	assert(std::memcmp(memory->Packet[out + 1], sent + 64, 16) == 0);
-	TestUsbPacketDone(out + 1, 16);
+	for (unsigned offset = 0; offset < sizeof(sent);)
+	{
+		const unsigned packet = (memory->Command[2 * (out + 1)] >> 16) & 0x3FF;
+		assert(packet > 0 && packet <= 64 && offset + packet <= sizeof(sent));
+		assert(std::memcmp(memory->Packet[out + 1], sent + offset, packet) == 0);
+		TestUsbPacketDone(out + 1, packet);
+		offset += packet;
+	}
 	assert((memory->Command[2 * (out + 1)] & (1U << 31)) == 0);
 }
 
-int main()
+static void HidReports(void)
 {
+	if (!s_Composite)
+		return;
+	const UsbdHidDev_t *hid = s_Hid;
+	const UsbdCdcDev_t *cdc = s_Cdc;
+	assert(hid->Configured && hid->ItfNo != cdc->CtrlIfNo);
+	assert(hid->EpNo != cdc->DataEpNo && hid->EpNo != cdc->NotifyEpNo);
+	uint8_t descriptor[64];
+	assert(ControlRead(0x81, 6, 0x2200, hid->ItfNo, 64,
+		descriptor, sizeof(descriptor)) == sizeof(s_ReportDesc));
+	assert(std::memcmp(descriptor, s_ReportDesc, sizeof(s_ReportDesc)) == 0);
+	const UsbSetupData_t idle = {0x21, USB_HID_REQ_SET_IDLE, 7U << 8,
+		(uint16_t)hid->ItfNo, 0};
+	TestUsbSetup(&idle);
+	assert(hid->Idle == 0);
+	TestUsbPacketDone(1, 0);
+	assert(hid->Idle == 7);
+	const unsigned out = 2U * hid->EpNo;
+	uint8_t report[64];
+	uint8_t received[64];
+	for (unsigned i = 0; i < sizeof(report); ++i)
+		report[i] = (uint8_t)(i ^ 0x3C);
+	USB_IRQHandler();
+	std::memcpy(TestUsbMemory()->Packet[out], report, sizeof(report));
+	TestUsbPacketDone(out, sizeof(report));
+	assert(s_Hid.Rx(0, received, sizeof(received)) == sizeof(received));
+	assert(std::memcmp(report, received, sizeof(report)) == 0);
+	assert(s_Hid.Tx(0, received, sizeof(received)) == sizeof(received));
+	const unsigned before = s_HidTx;
+	Loopback(); // CDC progresses while the HID IN report is still active.
+	assert(s_HidTx == before);
+	assert(std::memcmp(TestUsbMemory()->Packet[out + 1], report, sizeof(report)) == 0);
+	TestUsbPacketDone(out + 1, sizeof(report));
+	assert(s_HidTx == before + 1);
+}
+
+int main(int argc, char **)
+{
+	s_Composite = argc > 1;
 	TestUsbInitialize();
 	assert(AppEvtHandlerInit(s_Events, sizeof(s_Events)));
 	const IOPinCfg_t pin = {0, 3, IOPINOP_FUNC1, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL};
@@ -172,12 +240,23 @@ int main()
 	cdcCfg.TxFifoMemSize = sizeof(s_Tx);
 	cdcCfg.EvtCB = CdcEvent;
 	assert(s_Cdc.Init(cdcCfg));
+	if (s_Composite)
+	{
+		UsbdHidCfg_t hidCfg = {};
+		hidCfg.pReportDesc = s_ReportDesc;
+		hidCfg.ReportDescLength = sizeof(s_ReportDesc);
+		hidCfg.pRxBuffer = s_HidRx;
+		hidCfg.pTxBuffer = s_HidTxBuffer;
+		hidCfg.EvtCB = HidEvent;
+		assert(s_Hid.Init(hidCfg));
+	}
 	assert(UsbEnable(0));
 	ProcessEvents();
 	Enumerate();
 	OpenPort();
 	Loopback();
-	assert(s_PortOpened == 1 && s_RxEvents == 2);
+	HidReports();
+	assert(s_PortOpened == 1 && s_RxEvents == (s_Composite ? 4U : 2U));
 	UsbdCdcDev_t *cdc = s_Cdc;
 	Lpc11UsbMemory_t *memory = TestUsbMemory();
 	const unsigned physical = 2U * cdc->NotifyEpNo + 1U;
@@ -208,6 +287,7 @@ int main()
 	TestUsbCable(false, true);
 	ProcessEvents();
 	assert(!UsbConfigured(0) && !cdc->SerialStateActive);
+	assert(!s_Composite || !static_cast<UsbdHidDev_t *>(s_Hid)->Configured);
 	assert((memory->Command[2 * physical] & (1U << 31)) == 0);
 	assert(s_PortClosed == 1 && !s_Cdc.IsPortOpen());
 	TestUsbCable(true, false);
@@ -216,7 +296,10 @@ int main()
 	Enumerate();
 	OpenPort();
 	Loopback();
-	assert(s_PortOpened == 2 && s_RxEvents == 4);
+	HidReports();
+	assert(s_PortOpened == 2 && s_RxEvents == (s_Composite ? 8U : 4U));
 	UsbDisable(0);
+	if (s_Composite)
+		std::puts("LPC11Uxx composite CDC/HID descriptors, reports and reconnect: PASS");
 	std::puts("LPC11Uxx CDC enumeration, line coding, loopback, notifications and reconnect: PASS");
 }
