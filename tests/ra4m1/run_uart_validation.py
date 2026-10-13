@@ -13,7 +13,9 @@ compiled for the Cortex-M4 with the real headers at -O0 and -Os.
 The ICU model takes RXI, TXI and ERI as edge events that set the IR flag of
 their slot, as the handler order of the Renesas FSP assumes, and the line can
 move while the handler runs. BASEPRI holds off the handlers from its level up,
-handlers above it can be taken in the application code it covers. Not hardware validation: no exact timing, no
+handlers above it can be taken in the application code it covers. SCI2/9
+tests run again with no TXI from a CPU write to TDR with the line idle and
+TIE set. Not hardware validation: no exact timing, no
 electrical test.
 
 MIT License

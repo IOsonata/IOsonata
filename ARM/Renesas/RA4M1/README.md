@@ -407,7 +407,14 @@ and DMA with a non-blocking FIFO. `UARTSetCtrlLineState` does nothing.
   them. When ERI reads RDR with a receive error, the RXI of that character is
   cleared and RDR is checked once more for a character that arrived
   meanwhile. A pending RXI found by the RXI handler is of a new character and
-  is left set. Callbacks from RX and TX interrupts can nest on SCI2/9. With
+  is left set. Callbacks from RX and TX interrupts can nest on SCI2/9. SCI2/9
+  TX waits for a TXI only with TDR full: the CPU writes TDR while TDRE is set,
+  two bytes in a row with the line idle (the first goes on to the shift
+  register at once), and TxData sets TIE after filling TDR. The TXI then comes
+  from the move of a full TDR at the end of a character. On the EK-RA4M1 the
+  SCI2 interrupt mode loopback stopped with TIE set, TDR empty, the line idle
+  and no IR flag: the TXI after a CPU write to an idle line with TIE already
+  set did not come. With
   DMA, TxData starting a block on SCI2/9 locks out only that lower level with
   BASEPRI, RXI preempts it. TX is taken by an atomic exchange of `bTxReady`, a
   TxData from an interrupt finding it taken leaves its bytes in the TX CFIFO to
@@ -426,15 +433,13 @@ and DMA with a non-blocking FIFO. `UARTSetCtrlLineState` does nothing.
   wrote to the SCI at the end of a block and when TX goes idle, on SCI2/9
   before the channel is armed. SCI0/1 use TTRG 0 in DMA mode, TXI with the TX
   FIFO empty, and start a block by setting TIE again, as the Renesas FSP does
-  with a transfer instance. SCI2/9: with TDR empty while the shift register
-  sends, the next byte goes to TDR from the CPU at once. With the line idle the
-  channel is armed for the bytes after the first one, TIE is set and the first
-  byte goes to TDR from the CPU, as the Renesas FSP starts a transfer; one or
-  two bytes go from the CPU alone. With TDR full, TIE is set, the channel is
-  armed and TDR read again. Read empty with bytes left, the channel is stopped
-  (a transfer it already took finishes, DMSTS.ACT), DMCRA and TDR are read: TDR
-  full, the channel is armed again; TDR empty, no TXI is coming, the next byte
-  goes to TDR from the CPU and the channel takes the rest. When the channel
+  with a transfer instance. SCI2/9: the CPU fills TDR as in interrupt mode,
+  then TIE is set and the channel armed for the rest with TDR full, its move
+  gives the TXI for the channel. TDR is read again: read empty with bytes left,
+  the channel is stopped (a transfer it already took finishes, DMSTS.ACT),
+  DMCRA and TDR are read: TDR full, the channel is armed again; TDR empty, no
+  TXI is coming, the bytes the channel moved are released and the CPU fills
+  TDR again. When the channel
   moved the last byte of the block, DTE is not set again: in normal mode a
   count of 0 is a transfer with no end, which would send the memory after the
   block. RX stays on the interrupt or polling: the SCI has no idle line
@@ -483,7 +488,9 @@ start checks TDR and stops the channel, one SCI2/9 overrun with the next
 character arriving while it is handled (only the overrun character lost),
 SCI2/9 TxData starting a block with only the TX level locked out (BASEPRI in
 the model) while the line moves and RXI is taken in the middle of it, its
-callback calling TxData too, no TX handler taken inside TxData,
+callback calling TxData too, no TX handler taken inside TxData, the SCI2/9
+tests again without a TXI from a CPU write to an idle line with TIE set (with
+and without a TXI when TIE is set with TDRE set),
 an echo loop with bursts, receive
 errors, overrun, full CFIFOs, callbacks, Disable/Enable and PowerOff. It also
 compiles the driver with GNU Arm for the Cortex-M4. It does not test exact

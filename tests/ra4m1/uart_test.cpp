@@ -164,6 +164,8 @@ static bool s_DmaHold;				// A request while DTE is cleared waits in DELSR, othe
 static unsigned s_DmaLate;			// Register accesses before the channel moves a request it took, 0 at once
 static bool s_StepAtCra;			// The line moves right after each read of DMCRA
 static bool s_StepAtErrClear;		// The line moves right after a write clearing a receive error flag
+static int s_TxiEdge;				// SCI2/9, 1 or 2: a CPU write to TDR with the line idle and TIE set gives
+									// no TXI. 1: TIE set with TDRE 1 gives one (rising edge of TDRE and TIE)
 static unsigned s_LockStepEvery;	// Line step after n application register accesses with PRIMASK clear, 0 none
 static unsigned s_LockAccess;		// Those accesses since the last step
 static unsigned s_TxLevelInApp;		// Handlers below RXI priority taken there
@@ -454,7 +456,7 @@ static void RegWrite(const void *pReg, int Id, uint32_t Val)
 		{
 			uint8_t old = m.Scr;
 			m.Scr = v;
-			if (Fifo(m) && (v & TE) && (old & TE) && (v & TIE) && !(old & TIE) && (m.Flags & B_TDRE))
+			if ((Fifo(m) || s_TxiEdge == 1) && (v & TE) && (old & TE) && (v & TIE) && !(old & TIE) && (m.Flags & B_TDRE))
 			{
 				// With the FIFO, TIE set while TDFE is 1 gives a TXI, the
 				// Renesas FSP starts its transfers that way
@@ -545,7 +547,15 @@ static void RegWrite(const void *pReg, int Id, uint32_t Val)
 			{
 				// Line idle, TDR goes to the shift register right away
 				m.Tsr = v;
-				SetTxFlag(m);
+				if (s_TxiEdge && !s_bDmaWrite && (m.Scr & TIE))
+				{
+					// TDRE low too short for an edge
+					m.Flags |= B_TDRE;
+				}
+				else
+				{
+					SetTxFlag(m);
+				}
 			}
 			else
 			{
@@ -2233,12 +2243,15 @@ int main()
 	TestIntPrio();
 	// Without DMA, then with DMA for a request made while DTE is cleared held
 	// in DELSR and lost, then held with the channel taking each request one
-	// register access or line step later
-	for (int run = 0; run < 4; run++)
+	// register access or line step later. Runs 4 to 7, without DMA and with
+	// DMA (held): no SCI2/9 TXI from a CPU write to an idle line with TIE
+	// set, with (4, 5) and without (6, 7) a TXI when TIE is set with TDRE 1.
+	for (int run = 0; run < 8; run++)
 	{
-		bool dma = run > 0;
-		s_DmaHold = run == 1 || run == 3;
+		bool dma = run > 0 && run != 4 && run != 6;
+		s_DmaHold = run == 1 || run == 3 || run == 5 || run == 7;
 		s_DmaLate = run == 3 ? 1 : 0;
+		s_TxiEdge = run >= 6 ? 2 : run >= 4 ? 1 : 0;
 		for (int u = 0; u < 4; u++)
 		{
 			for (int intmode = 0; intmode < 2; intmode++)
@@ -2284,6 +2297,7 @@ int main()
 	}
 	s_DmaHold = false;
 	s_DmaLate = 0;
+	s_TxiEdge = 0;
 	TestTxLockPreempt();
 	TestTxDmaLastByte();
 	TestRxOverrunOnce();
