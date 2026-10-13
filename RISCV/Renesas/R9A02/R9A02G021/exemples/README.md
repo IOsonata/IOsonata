@@ -37,6 +37,9 @@ maps and option-setting words match the ioc scripts. They use LLVM runtime
 libraries and `llvm_riscv_flash.ld` sections accepted by LLD. The e2 library's
 `start_llvm.c` runs C/C++ initializers and main after `ResetEntryInit` has
 initialized RAM and the MCU. The executable names remain `<example>.elf`.
+The linker Entry point field is empty: `llvm_riscv_flash.ld` already declares
+`ENTRY(ResetEntry)`. A bare `ResetEntry` in that field is passed to clang as
+an input filename and causes a "no such file or directory" error.
 
 | Directory | Shared application source | Linker script | Setting |
 | --- | --- | --- | --- |

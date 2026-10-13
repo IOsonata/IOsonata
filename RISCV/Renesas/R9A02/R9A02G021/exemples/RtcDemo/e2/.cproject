@@ -98,7 +98,7 @@
 								<option id="com.renesas.cdt.managedbuild.llvm.core.option.linker.source.linkerScript.1539133448" name="Linker script" superClass="com.renesas.cdt.managedbuild.llvm.core.option.linker.source.linkerScript" valueType="stringList" IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false">
 									<listOptionValue builtIn="false" value="&quot;../../../../../ldscript/llvm_R9A02G021.ld&quot;"/>
 								</option>
-								<option id="com.renesas.cdt.managedbuild.llvm.core.option.linker.entrypoint.24984084" name="Entry point:" superClass="com.renesas.cdt.managedbuild.llvm.core.option.linker.entrypoint" valueType="string" value="ResetEntry"/>
+								<option id="com.renesas.cdt.managedbuild.llvm.core.option.linker.entrypoint.24984084" name="Entry point:" superClass="com.renesas.cdt.managedbuild.llvm.core.option.linker.entrypoint" valueType="string" value=""/>
 								<option id="com.renesas.cdt.managedbuild.llvm.riscv.linker.option.archiveSearchDirectories.2039255168" name="Archive search directories (-L)" superClass="com.renesas.cdt.managedbuild.llvm.riscv.linker.option.archiveSearchDirectories" valueType="stringList" IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false">
 									<listOptionValue builtIn="false" value="&quot;../../../../lib/e2/Debug&quot;"/>
 								</option>
@@ -113,7 +113,7 @@
 								<option id="com.renesas.cdt.managedbuild.llvm.core.option.linker.source.linkerScript.458335573" name="Linker script" superClass="com.renesas.cdt.managedbuild.llvm.core.option.linker.source.linkerScript" valueType="stringList" IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false">
 									<listOptionValue builtIn="false" value="&quot;../../../../../ldscript/llvm_R9A02G021.ld&quot;"/>
 								</option>
-								<option id="com.renesas.cdt.managedbuild.llvm.core.option.linker.entrypoint.241511718" name="Entry point:" superClass="com.renesas.cdt.managedbuild.llvm.core.option.linker.entrypoint" valueType="string" value="ResetEntry"/>
+								<option id="com.renesas.cdt.managedbuild.llvm.core.option.linker.entrypoint.241511718" name="Entry point:" superClass="com.renesas.cdt.managedbuild.llvm.core.option.linker.entrypoint" valueType="string" value=""/>
 								<option id="com.renesas.cdt.managedbuild.llvm.riscv.linker.cpp.option.archiveSearchDirectories.1582825929" name="Archive search directories (-L)" superClass="com.renesas.cdt.managedbuild.llvm.riscv.linker.cpp.option.archiveSearchDirectories" valueType="stringList" IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false">
 									<listOptionValue builtIn="false" value="&quot;../../../../lib/e2/Debug&quot;"/>
 								</option>
@@ -234,7 +234,7 @@
 								<option id="com.renesas.cdt.managedbuild.llvm.core.option.linker.source.linkerScript.851190745" name="Linker script" superClass="com.renesas.cdt.managedbuild.llvm.core.option.linker.source.linkerScript" valueType="stringList" IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false">
 									<listOptionValue builtIn="false" value="&quot;../../../../../ldscript/llvm_R9A02G021.ld&quot;"/>
 								</option>
-								<option id="com.renesas.cdt.managedbuild.llvm.core.option.linker.entrypoint.1821796930" name="Entry point:" superClass="com.renesas.cdt.managedbuild.llvm.core.option.linker.entrypoint" valueType="string" value="ResetEntry"/>
+								<option id="com.renesas.cdt.managedbuild.llvm.core.option.linker.entrypoint.1821796930" name="Entry point:" superClass="com.renesas.cdt.managedbuild.llvm.core.option.linker.entrypoint" valueType="string" value=""/>
 								<option id="com.renesas.cdt.managedbuild.llvm.riscv.linker.option.archiveSearchDirectories.657958535" name="Archive search directories (-L)" superClass="com.renesas.cdt.managedbuild.llvm.riscv.linker.option.archiveSearchDirectories" valueType="stringList" IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false">
 									<listOptionValue builtIn="false" value="&quot;../../../../lib/e2/Release&quot;"/>
 								</option>
@@ -249,7 +249,7 @@
 								<option id="com.renesas.cdt.managedbuild.llvm.core.option.linker.source.linkerScript.1779007402" name="Linker script" superClass="com.renesas.cdt.managedbuild.llvm.core.option.linker.source.linkerScript" valueType="stringList" IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false">
 									<listOptionValue builtIn="false" value="&quot;../../../../../ldscript/llvm_R9A02G021.ld&quot;"/>
 								</option>
-								<option id="com.renesas.cdt.managedbuild.llvm.core.option.linker.entrypoint.618525655" name="Entry point:" superClass="com.renesas.cdt.managedbuild.llvm.core.option.linker.entrypoint" valueType="string" value="ResetEntry"/>
+								<option id="com.renesas.cdt.managedbuild.llvm.core.option.linker.entrypoint.618525655" name="Entry point:" superClass="com.renesas.cdt.managedbuild.llvm.core.option.linker.entrypoint" valueType="string" value=""/>
 								<option id="com.renesas.cdt.managedbuild.llvm.riscv.linker.cpp.option.archiveSearchDirectories.1610335732" name="Archive search directories (-L)" superClass="com.renesas.cdt.managedbuild.llvm.riscv.linker.cpp.option.archiveSearchDirectories" valueType="stringList" IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false">
 									<listOptionValue builtIn="false" value="&quot;../../../../lib/e2/Release&quot;"/>
 								</option>
