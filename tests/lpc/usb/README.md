@@ -400,3 +400,16 @@ and interrupt transport remain linked. All images use the production startup
 and linker script, including the USB0 vector, checksum and 832-byte NOLOAD
 USB SRAM checks. Debug keeps semihosting and Release uses nosys.
 Hardware enumeration and report traffic still require board testing.
+
+## LPC54628 custom bulk application
+
+`ARM/NXP/LPC546xx/LPC54628/exemples/UsbCustomBulkLoopback` links the shared
+vendor-bulk loopback application with USB0 VBUS on P0.22. Its README documents
+the existing PyUSB payload and reconfiguration checks. Remote wakeup and
+low-power suspend are disabled in this application.
+
+`link546.py` also builds this example in Debug and Release and checks that
+UsbdBulk remains linked, bringing the runner to eight firmware links across
+EP0, CDC, HID and custom bulk. Project source links, C++23, semihosting,
+USB0 vector, checksum and 832-byte NOLOAD USB SRAM checks apply to each
+application. Physical enumeration and bulk traffic remain untested.

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Link LPC54628 CDC/HID loopback and EP0 bring-up in Debug and Release.
+"""Link LPC54628 CDC/HID/custom bulk loopback and EP0 bring-up in Debug and Release.
 
 Copyright (c) 2026, I-SYST inc. MIT License.
 Checks the managed projects and real startup; no hardware is exercised.
@@ -31,6 +31,7 @@ SOURCES = timer['SOURCES'] + [
 APPLICATIONS = {
     'UsbCdcLoopback': 'exemples/usb/usb_cdc_loopback.cpp',
     'UsbHidLoopback': 'exemples/usb/usb_hid_loopback.cpp',
+    'UsbCustomBulkLoopback': 'exemples/usb/usb_custom_bulk_loopback.cpp',
 }
 
 
@@ -90,6 +91,9 @@ int main(void)
     if example == 'UsbHidLoopback':
         demangled = subprocess.check_output([prefix + 'nm', '-C', str(image)], text=True)
         assert 'UsbdHid::Init(' in demangled and 'UsbIntIntrfInit' in addresses
+    if example == 'UsbCustomBulkLoopback':
+        demangled = subprocess.check_output([prefix + 'nm', '-C', str(image)], text=True)
+        assert 'UsbdBulk::Init(' in demangled
     sections = subprocess.check_output([prefix + 'readelf', '-SW', str(image)], text=True)
     assert re.search(r'\.usb_ram\s+NOBITS\s+40100000\s+\w+\s+000340', sections)
     print(f'LPC54628 {example or "EP0"} {mode}: {len(data)} bytes flash, 832 bytes USB RAM; USB0 vector: PASS')
