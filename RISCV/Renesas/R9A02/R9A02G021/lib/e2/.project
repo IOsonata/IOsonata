@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <projectDescription>
-	<name>IOsonata_R9A02G021</name>
-	<comment></comment>
+	<name>IOsonata_R9A02G021_e2</name>
+	<comment/>
 	<projects>
 	</projects>
 	<buildSpec>
@@ -981,11 +981,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/agm_icm20948DMP.h</locationURI>
 		</link>
 		<link>
-			<name>include/sensors/agm_icm456x_ak09940.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/agm_icm456x_ak09940.h</locationURI>
-		</link>
-		<link>
 			<name>include/sensors/agm_invn_icm20948.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/agm_invn_icm20948.h</locationURI>
@@ -1339,11 +1334,6 @@
 			<name>src/display/eink_intrf.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/display/eink_intrf.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/display/eink_vb3300.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/display/eink_vb3300.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/display/fonts</name>
@@ -1959,6 +1949,11 @@
 			<name>src/display/fonts/FreeSerif/FreeSerifIta8pt.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/display/fonts/FreeSerif/FreeSerifIta8pt.c</locationURI>
+		</link>
+		<link>
+			<name>src/start_llvm.c</name>
+			<type>1</type>
+			<locationURI>PARENT-1-PROJECT_LOC/src/start_llvm.c</locationURI>
 		</link>
 	</linkedResources>
 </projectDescription>

@@ -1,10 +1,32 @@
 # R9A02G021 examples
 
-Import the library project `../lib/ioc` (`IOsonata_R9A02G021`), then the
-example's `ioc` directory with **Existing Projects into Workspace**. Build the
-library configuration (Debug or Release) before the example: the example
-links that configuration's archive. All projects use RV32IMAC with Zba, Zbb,
-Zbs, Zicsr and Zifencei, ilp32 ABI, GNU C17 and C++23, newlib-nano with nosys.
+Each example has an `ioc` project and a native Renesas e2 studio `e2` project.
+Import the library and examples with **Existing Projects into Workspace**,
+leaving **Copy projects into workspace** unchecked so relative source links
+continue to resolve inside the repository.
+
+| IDE | Library directory and project | Example directory and project |
+| --- | --- | --- |
+| IOcomposer, xPack GCC | `../lib/ioc`, `IOsonata_R9A02G021` | `<example>/ioc`, `<example>` |
+| e2 studio, Renesas LLVM | `../lib/e2`, `IOsonata_R9A02G021_e2` | `<example>/e2`, `<example>_e2` |
+
+Build the same library configuration (Debug or Release) before the example.
+The e2 projects link only `lib/e2/Debug` or `lib/e2/Release`; GCC and LLVM
+archives must not be mixed. Project references name the e2 library.
+
+Both use RV32IMAC with Zba, Zbb, Zbs, Zicsr and Zifencei and the ilp32 ABI.
+The ioc projects use GNU C17/C++23 and newlib-nano with nosys. The e2 projects
+use LLVM for Renesas RISC-V 19.1.7.202501, GNU C17/C++17, its prebuilt runtime
+and nosys. Select that compiler in e2 studio Toolchain Management. They use
+the native Renesas LLVM managed-build integration for R9A02G0214CNE on the
+FPB-R9A02G021; no Smart Configurator generated startup is required.
+
+The linker-script column below lists the ioc scripts. The e2 projects use
+`llvm_R9A02G021.ld`, or `llvm_dfu_boot_r9a02g021.ld` for DfuBoot. Their memory
+maps and option-setting words match the ioc scripts. They use LLVM runtime
+libraries and `llvm_riscv_flash.ld` sections accepted by LLD. The e2 library's
+`start_llvm.c` runs C/C++ initializers and main after `ResetEntryInit` has
+initialized RAM and the MCU. The executable names remain `<example>.elf`.
 
 | Directory | Shared application source | Linker script | Setting |
 | --- | --- | --- | --- |
@@ -166,3 +188,14 @@ SpiLoopback 29.6, SpiMasterSlave 30.3, I2CScan 31.5, ADCDemo 34.3, RtcDemo
 of the 36864 of its region.
 I2CInit links the SAU simplified I2C with the IICA. None has been run on the
 board yet.
+
+The fourteen e2 examples compile and link from the command line with LLVM
+for Renesas RISC-V 19.1.7.202501 in Release (`-Os`). Thirteen also link in
+Debug (`-Og`); DfuBoot Debug overflows its 36 KB boot region. DfuBoot Release
+uses 35238 bytes of text and data. These checks compiled the 61 library
+source files needed by the examples, including the LLVM runtime entry,
+with the projects' defines, include paths and target settings. The XML,
+source links, library paths and linker-script paths were also checked.
+Import and managed build inside e2 studio, the remaining library modules
+and on-board execution have not been tested in this environment.
+

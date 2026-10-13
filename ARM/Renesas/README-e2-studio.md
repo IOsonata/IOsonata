@@ -12,7 +12,9 @@ links and Debug/Release settings from the corresponding `ioc` configurations.
   UartPrbsTxTest, I2CMasterDemo, SPIMasterDemo, PulseTrain and
   UartSlipPrbsRxTest example projects.
 - Existing `RISCV/Renesas/R9A02/R9A02G021/lib/e2` is separate and uses
-  its own RISC-V toolchain.
+  its own native Renesas LLVM RISC-V toolchain. All fourteen R9A02G021
+  examples also have `e2` projects; see the
+  [R9A02G021 instructions](../../RISCV/Renesas/R9A02/R9A02G021/exemples/README.md).
 
 Import the `lib/e2` project and desired example `e2` projects with
 **File > Import > Existing Projects into Workspace**. Install an e2 studio
@@ -31,3 +33,4 @@ These are **portable CDT import configurations**, not projects generated
 by Renesas FSP/Smart Configurator. They have not been compiled inside licensed
 or separately installed e2 studio, and executable/debugger/device-pack setup
 must be validated with the installed IDE and the target hardware.
+

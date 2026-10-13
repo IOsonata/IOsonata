@@ -457,12 +457,23 @@ blocks from routines in `.iram.text`, and resets through SWRCR.
 
 ## e2 studio
 
-`R9A02G021/lib/e2` is the library as an e2 studio project, `IOsonata_R9A02G021`,
+`R9A02G021/lib/e2` is the library as an e2 studio project, `IOsonata_R9A02G021_e2`,
 built with LLVM for Renesas RISC-V (19.1.7) for the R9A02G0214CNE on the
 FPB-R9A02G021. It links the same sources as the IOC project `lib/ioc`, with
 the same defines and include directories, `-march` with Zba, Zbb, Zbs, Zicsr
 and Zifencei, C and C++ gnu17. Debug is built for debugging, Release for code
 size (Optimization Level `codeSize`).
+
+All fourteen examples have native LLVM projects in their `e2` directories,
+named `<example>_e2`. Build the matching Debug or Release library before the
+example. The archive keeps the name `libIOsonata_R9A02G021.a`, in `lib/e2`;
+the `_e2` project names allow these projects to coexist with `ioc` projects.
+The library has one Debug and one Release configuration. Its LLVM-only
+`start_llvm.c` runs the C/C++ initializers and main without clearing the RAM
+that `ResetEntryInit` and `SystemInit` have already initialized. The examples
+use the LLVM linker scripts, the same flash/RAM layout and option-setting
+words, and LLVM's runtime libraries. See the examples README for import
+instructions and native LLVM build results.
 
 The library sources were compiled with clang 19.1.7 and these settings, and
 the examples linked from them with GNU ld (October 13, 2026); the DFU boot
