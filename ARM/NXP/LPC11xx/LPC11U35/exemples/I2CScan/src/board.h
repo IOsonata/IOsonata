@@ -58,6 +58,10 @@ SOFTWARE.
 
 // Same UART pins as UartPrbsTxTest; output at 115200 baud, no flow control.
 // UART0: RX P2.3 (P0.18), TX P2.4 (P0.19).
+#ifndef DEBUG
+#define UART_RETARGET
+#endif
+
 #define UART_DEVNO			0
 #define UART_RX_PORT		0
 #define UART_RX_PIN			18
