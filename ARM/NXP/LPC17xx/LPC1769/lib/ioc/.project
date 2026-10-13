@@ -1215,5 +1215,20 @@
 			<type>1</type>
 			<locationURI>PARENT-3-PROJECT_LOC/Include/usb_hw_lpc17xx.h</locationURI>
 		</link>
+		<link>
+			<name>src/usb_control_lpc17xx.c</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/usb_control_lpc17xx.c</locationURI>
+		</link>
+		<link>
+			<name>include/usb_control_lpc17xx.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/Include/usb_control_lpc17xx.h</locationURI>
+		</link>
+		<link>
+			<name>include/usb_ctrlr_lpc.h</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/include/usb_ctrlr_lpc.h</locationURI>
+		</link>
 	</linkedResources>
 </projectDescription>

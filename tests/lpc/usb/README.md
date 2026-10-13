@@ -549,3 +549,39 @@ prevents replay. Tests cover all 16 pending/enabled EP0 combinations, IN/OUT
 ordering, an OUT arrival during IN acknowledgement, mask restoration, and
 failure at either acknowledgement. Host -O0/-O2 UBSan tests and Cortex-M3
 -O0/-Os compilation pass. Generic control-transfer dispatch remains unfinished.
+
+
+LPC1769 private control event dispatch
+-------------------------------------
+
+`usb_control_lpc17xx.c` uses the shared LPC `UsbCtrlrEvt_t` definitions and
+calls Event directly in interrupt context, following the existing LPC ports.
+The generic USB core still owns Chapter 9 requests, descriptors and classes.
+The private module handles SETUP, bounded 64-byte IN submissions, OUT data,
+status stages, control stalls and software reset. Its fixed OUT packet buffer
+is valid only during the callback. The LPC1769 library project links the new
+source/header and the existing shared event header.
+
+SETUP replaces the old transfer, including an unacknowledged control-read ZLP.
+An acknowledged status IN completes the preceding request first, even if a
+new SETUP arrives after collection. NAK or full-buffer indications never
+complete IN. FIFO overwrite defers delivery until the next interrupt handles
+the newer SETUP. A callback that resets/disables the controller prevents
+remaining events from the old generation. Failed SIE/FIFO operations disable
+software control state and call Fault; the owning controller must stop and
+reinitialize hardware. Software reset alone does not retire hardware buffers.
+
+The controller initializer must disable control NAK interrupts. This module
+does not yet implement early control-write termination through an IN NAK.
+Controller initialization, bus events, address handling and the top-level IRQ
+entry still need integration before enumeration can be tested. The event
+module is not a complete `UsbCtrlr*` implementation.
+
+`control17_test.c` checks SETUP replacement, packet-size limiting, callback
+resubmission, multi-packet OUT, simultaneous IN/OUT, coalesced status/SETUP,
+SETUP arriving after capture, data ZLP cancellation, malformed SETUP stalls,
+overwrite recovery, callback reset, NAK/full filtering and fault suppression.
+It uses real shared event types and vendor CMSIS registers, mocking only the
+private FIFO/SIE operations. `run17.py` runs it at -O0/-O2 with UBSan alongside
+the existing hardware-operation models. The new module also compiles for
+Cortex-M3 at -O0/-Os. These checks are not a full firmware link or board test.
