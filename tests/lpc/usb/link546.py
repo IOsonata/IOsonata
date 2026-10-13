@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Link LPC54628 CDC loopback and EP0 bring-up in Debug and Release.
+"""Link LPC54628 CDC/HID loopback and EP0 bring-up in Debug and Release.
 
 Copyright (c) 2026, I-SYST inc. MIT License.
 Checks the managed projects and real startup; no hardware is exercised.
@@ -28,14 +28,20 @@ SOURCES = timer['SOURCES'] + [
     'src/usb/usbd_hid.cpp', 'src/usb/usbd_bulk.cpp', 'src/usb/usb_int.cpp',
 ]
 
+APPLICATIONS = {
+    'UsbCdcLoopback': 'exemples/usb/usb_cdc_loopback.cpp',
+    'UsbHidLoopback': 'exemples/usb/usb_hid_loopback.cpp',
+}
 
-def build(prefix, output, mode, cdc):
+
+def build(prefix, output, mode, example):
     output.mkdir(parents=True, exist_ok=True)
     flags = ['-mcpu=cortex-m4', '-mthumb', '-mfpu=fpv4-sp-d16', '-mfloat-abi=hard',
              '-ffunction-sections', '-fdata-sections', '-DLPC54628_SERIES']
     flags += ['-O0', '-g3', '-DDEBUG'] if mode == 'Debug' else ['-Os', '-DNDEBUG']
     includes = ['-I' + str(ROOT / p) for p in timer['INCLUDES']]
-    includes += ['-I' + str(ROOT / 'ARM/NXP/LPC546xx/LPC54628/exemples/UsbCdcLoopback/src')]
+    board = example or 'UsbCdcLoopback'
+    includes += ['-I' + str(ROOT / 'ARM/NXP/LPC546xx/LPC54628/exemples' / board / 'src')]
     objects = []
     for index, source in enumerate(SOURCES):
         cpp = source.endswith('.cpp')
@@ -56,21 +62,21 @@ int main(void)
     return Lpc546xxUsbControlPrepare(6, Event) ? 0 : 1;
 }
 ''')
-    if cdc:
-        main = ROOT / 'exemples/usb/usb_cdc_loopback.cpp'
-    subprocess.run([prefix + ('g++' if cdc else 'gcc'), *flags, *includes,
-                    *(['-std=gnu++23', '-fno-exceptions', '-fno-rtti'] if cdc else ['-std=gnu17']), '-c', str(main),
+    if example:
+        main = ROOT / APPLICATIONS[example]
+    subprocess.run([prefix + ('g++' if example else 'gcc'), *flags, *includes,
+                    *(['-std=gnu++23', '-fno-exceptions', '-fno-rtti'] if example else ['-std=gnu17']), '-c', str(main),
                     '-o', str(output / 'main.o')], check=True)
     archive = output / 'libIOsonata_LPC54628.a'
     subprocess.run([prefix + 'ar', 'rcs', str(archive), *objects], check=True)
-    image = output / 'ep0.elf'
+    image = output / ((example or 'ep0') + '.elf')
     subprocess.run([prefix + 'g++', *flags, '--specs=nano.specs',
                     '--specs=' + ('rdimon' if mode == 'Debug' else 'nosys') + '.specs',
                     '-L' + str(ROOT / 'ARM/ldscript'),
                     '-T' + str(ROOT / 'ARM/NXP/LPC546xx/ldscript/gcc_lpc54628.ld'),
                     '-Wl,--gc-sections', str(output / 'main.o'), str(archive),
                     '-o', str(image)], check=True)
-    binary = output / 'ep0.bin'
+    binary = image.with_suffix('.bin')
     subprocess.run([prefix + 'objcopy', '-O', 'binary', str(image), str(binary)], check=True)
     data = binary.read_bytes()
     assert len(data) <= 512 * 1024
@@ -81,9 +87,12 @@ int main(void)
     assert ('initialise_monitor_handles' in addresses) == (mode == 'Debug')
     assert re.search(r'^[0-9a-fA-F]+ T USB0_IRQHandler$', symbols, re.M)
     assert struct.unpack_from('<I', data, (16 + 28) * 4)[0] == addresses['USB0_IRQHandler'] | 1
+    if example == 'UsbHidLoopback':
+        demangled = subprocess.check_output([prefix + 'nm', '-C', str(image)], text=True)
+        assert 'UsbdHid::Init(' in demangled and 'UsbIntIntrfInit' in addresses
     sections = subprocess.check_output([prefix + 'readelf', '-SW', str(image)], text=True)
     assert re.search(r'\.usb_ram\s+NOBITS\s+40100000\s+\w+\s+000340', sections)
-    print(f'LPC54628 {"CDC" if cdc else "EP0"} {mode}: {len(data)} bytes flash, 832 bytes USB RAM; USB0 vector: PASS')
+    print(f'LPC54628 {example or "EP0"} {mode}: {len(data)} bytes flash, 832 bytes USB RAM; USB0 vector: PASS')
 
 
 def main():
@@ -93,21 +102,22 @@ def main():
     linked = timer['project_sources'](ROOT / 'ARM/NXP/LPC546xx/LPC54628/lib/ioc/.project')
     for source in SOURCES:
         assert (ROOT / source).resolve() in linked, source
-    example = ROOT / 'ARM/NXP/LPC546xx/LPC54628/exemples/UsbCdcLoopback'
-    linked = timer['project_sources'](example / 'ioc/.project')
-    assert ROOT / 'exemples/usb/usb_cdc_loopback.cpp' in linked
-    assert example / 'src/board.h' in linked
-    for config in ET.parse(example / 'ioc/.cproject').findall('.//configuration'):
-        mode = config.get('name')
-        text = ET.tostring(config, encoding='unicode')
-        assert '.cortex-m4' in text and '.fpv4spd16' in text and '.hard' in text
-        assert '.gnucpp23' in text
-        assert '--specs=' + ('rdimon' if mode == 'Debug' else 'nosys') + '.specs' in text
-        assert ('--specs=rdimon.specs' in text) == (mode == 'Debug')
+    for name, source in APPLICATIONS.items():
+        example = ROOT / 'ARM/NXP/LPC546xx/LPC54628/exemples' / name
+        linked = timer['project_sources'](example / 'ioc/.project')
+        assert ROOT / source in linked
+        assert example / 'src/board.h' in linked
+        for config in ET.parse(example / 'ioc/.cproject').findall('.//configuration'):
+            mode = config.get('name')
+            text = ET.tostring(config, encoding='unicode')
+            assert '.cortex-m4' in text and '.fpv4spd16' in text and '.hard' in text
+            assert '.gnucpp23' in text
+            assert '--specs=' + ('rdimon' if mode == 'Debug' else 'nosys') + '.specs' in text
+            assert ('--specs=rdimon.specs' in text) == (mode == 'Debug')
     with tempfile.TemporaryDirectory() as tmp:
         for mode in ['Debug', 'Release']:
-            for cdc in [False, True]:
-                build(args.prefix, Path(tmp) / (mode + str(cdc)), mode, cdc)
+            for example in [None, *APPLICATIONS]:
+                build(args.prefix, Path(tmp) / mode / (example or 'EP0'), mode, example)
 
 
 if __name__ == '__main__':

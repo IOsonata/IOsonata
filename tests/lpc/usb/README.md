@@ -385,3 +385,18 @@ require board testing. Host register models do not establish hardware results.
 Reference sequences: NXP's LPC54628 `CLOCK_EnableUsbfs0DeviceClock` in
 [MCUXpresso SDK](https://github.com/nxp-mcuxpresso/legacy-mcux-sdk/blob/main/devices/LPC54628/drivers/fsl_clock.c),
 and the USB register definitions in `LPC54628.h` / `LPC54628_features.h`.
+
+## LPC54628 HID application
+
+`ARM/NXP/LPC546xx/LPC54628/exemples/UsbHidLoopback` links the shared HID
+loopback application with the same USB0 wiring as the CDC project. It echoes
+64-byte reports through the generic HID class and interrupt transport. Its
+README documents the existing `Python/usb_hid_loopback.py` hardware check.
+Remote wakeup and low-power suspend are disabled in this application.
+
+`link546.py` now builds EP0, CDC and HID in Debug and Release, checks both
+example project source links and settings, and verifies that the HID class
+and interrupt transport remain linked. All images use the production startup
+and linker script, including the USB0 vector, checksum and 832-byte NOLOAD
+USB SRAM checks. Debug keeps semihosting and Release uses nosys.
+Hardware enumeration and report traffic still require board testing.
