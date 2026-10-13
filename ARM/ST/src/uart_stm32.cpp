@@ -38,7 +38,7 @@
 		                 RX CFIFO
 		bDMAMode true  : TX DMA sends blocks from the TX CFIFO, circular RX
 		                 DMA ring moved into the RX CFIFO. F0 USART1 and
-		                 USART2, L4 and F4 all instances.
+		                 USART2, L4, F4 and WBA all instances.
 
 @author	Hoang Nguyen Hoan
 @date	Jun. 7, 2019
@@ -254,16 +254,23 @@ SOFTWARE.
 //   DMA2 channel n on channel n + 6).
 // - streams with a group of 6 flags each in LISR or HISR, the request is the
 //   channel number in CR (F2, F4, F7).
+// - GPDMA channels with their own flags in CSR, any request on any channel,
+//   selected in CTR2 (WBA). No circular mode, the RX ring is a linked list
+//   node loading the same block again.
 // Which channel or stream serves an instance is family data, from the DMA
 // request tables of the reference manuals, in the instance table. A family
 // without that data has no DMA, UARTInit refuses bDMAMode.
-#if defined(STM32F0) || defined(STM32L4) || defined(STM32F4)
+#if defined(STM32F0) || defined(STM32L4) || defined(STM32F4) || defined(STM32WBA)
 #define ST_UART_DMA
 #if defined(DMA_SxCR_CHSEL)
 #define ST_DMA_STREAM
 typedef DMA_Stream_TypeDef StDmaChan_t;
 #else
+// Also the name of the GPDMA channel registers
 typedef DMA_Channel_TypeDef StDmaChan_t;
+#if defined(DMA_CTR2_REQSEL)
+#define ST_DMA_GPDMA
+#endif
 #endif
 #endif
 
@@ -284,16 +291,17 @@ typedef DMA_Channel_TypeDef StDmaChan_t;
 #define ST_DMA_REQ(Csel, Mux)	(Csel)
 #endif
 
-// Reads of a stream EN bit while it finishes the transfer it took
+// Reads of a stream EN bit, or of a GPDMA channel IDLEF flag, while it
+// finishes the transfer it took
 #define ST_DMA_STOP_POLLS		1000
 
 #pragma pack(push, 4)
 /// One DMA channel or stream of an instance
 typedef struct {
 	StDmaChan_t *pChan;				//!< Channel or stream, NULL none
-	DMA_TypeDef *pDma;				//!< Controller, holds the flags
-	uint8_t Idx;					//!< Channel number - 1, or stream number
-	uint8_t Req;					//!< Request, see ST_DMA_REQ, or stream channel number
+	DMA_TypeDef *pDma;				//!< Controller, holds the flags except on GPDMA
+	uint8_t Idx;					//!< Channel number - 1, stream number or GPDMA channel number
+	uint8_t Req;					//!< Request, see ST_DMA_REQ, stream channel number or GPDMA request
 	IRQn_Type IrqNo;				//!< Interrupt of the channel or stream
 } Stm32UartDma_t;
 #pragma pack(pop)
@@ -345,6 +353,9 @@ typedef struct {
 	alignas(4) uint8_t RxDmaRing[ST_UART_DMA_RX_RING];	//!< RX DMA ring
 	alignas(4) uint8_t RxDmaFifoMem[ST_UART_DMA_RX_CFIFO_SIZE];	//!< RX CFIFO memory in DMA mode
 	alignas(4) uint8_t TxDmaFifoMem[ST_UART_DMA_CFIFO_SIZE];	//!< TX CFIFO memory in DMA mode
+#endif
+#ifdef ST_DMA_GPDMA
+	uint32_t RxDmaNode[3];			//!< Linked list node of the RX ring, see Stm32DmaLoop
 #endif
 } Stm32UartMem_t;
 
@@ -417,6 +428,9 @@ static Stm32UartDev_t s_Stm32UartDev[] = {
 #if defined(STM32L4)
 		.RxDma = { DMA2_Channel7, DMA2, 6, ST_DMA_REQ(4, 34), DMA2_Channel7_IRQn },
 		.TxDma = { DMA2_Channel6, DMA2, 5, ST_DMA_REQ(4, 35), DMA2_Channel6_IRQn },
+#elif defined(STM32WBA)
+		.RxDma = { GPDMA1_Channel4, GPDMA1, 4, 15, GPDMA1_Channel4_IRQn },
+		.TxDma = { GPDMA1_Channel5, GPDMA1, 5, 16, GPDMA1_Channel5_IRQn },
 #endif
 	},
 #endif
@@ -440,6 +454,9 @@ static Stm32UartDev_t s_Stm32UartDev[] = {
 #elif defined(STM32F4)
 		.RxDma = { DMA2_Stream5, DMA2, 5, 4, DMA2_Stream5_IRQn },
 		.TxDma = { DMA2_Stream7, DMA2, 7, 4, DMA2_Stream7_IRQn },
+#elif defined(STM32WBA)
+		.RxDma = { GPDMA1_Channel0, GPDMA1, 0, 11, GPDMA1_Channel0_IRQn },
+		.TxDma = { GPDMA1_Channel1, GPDMA1, 1, 12, GPDMA1_Channel1_IRQn },
 #endif
 	},
 #ifdef USART2
@@ -463,6 +480,9 @@ static Stm32UartDev_t s_Stm32UartDev[] = {
 #elif defined(STM32F4)
 		.RxDma = { DMA1_Stream5, DMA1, 5, 4, DMA1_Stream5_IRQn },
 		.TxDma = { DMA1_Stream6, DMA1, 6, 4, DMA1_Stream6_IRQn },
+#elif defined(STM32WBA)
+		.RxDma = { GPDMA1_Channel2, GPDMA1, 2, 13, GPDMA1_Channel2_IRQn },
+		.TxDma = { GPDMA1_Channel3, GPDMA1, 3, 14, GPDMA1_Channel3_IRQn },
 #endif
 	},
 #endif
@@ -484,6 +504,9 @@ static Stm32UartDev_t s_Stm32UartDev[] = {
 #elif defined(STM32F4)
 		.RxDma = { DMA1_Stream1, DMA1, 1, 4, DMA1_Stream1_IRQn },
 		.TxDma = { DMA1_Stream3, DMA1, 3, 4, DMA1_Stream3_IRQn },
+#elif defined(STM32WBA)
+		.RxDma = { GPDMA1_Channel6, GPDMA1, 6, 65, GPDMA1_Channel6_IRQn },
+		.TxDma = { GPDMA1_Channel7, GPDMA1, 7, 66, GPDMA1_Channel7_IRQn },
 #endif
 	},
 #endif
@@ -607,11 +630,17 @@ static const uint8_t s_StDmaFlagPos[4] = { 0, 6, 16, 22 };
 // TC, HT and TE of a channel or stream, as ST_DMA_TC, ST_DMA_HT, ST_DMA_TE
 static inline uint32_t Stm32DmaFlags(const Stm32UartDma_t *pDma)
 {
-#ifdef ST_DMA_STREAM
+#if defined(ST_DMA_STREAM)
 	uint32_t isr = (pDma->Idx < 4 ? pDma->pDma->LISR : pDma->pDma->HISR) >> s_StDmaFlagPos[pDma->Idx & 3U];
 
 	// Stream group: TE bit 3, HT bit 4, TC bit 5
 	return (isr & ST_DMA_TE) | ((isr >> 2) & ST_DMA_HT) | ((isr >> 4) & ST_DMA_TC);
+#elif defined(ST_DMA_GPDMA)
+	uint32_t csr = pDma->pChan->CSR;
+
+	// A link or user setting error stops the channel as a transfer error does
+	return ((csr & DMA_CSR_TCF) ? ST_DMA_TC : 0U) | ((csr & DMA_CSR_HTF) ? ST_DMA_HT : 0U) |
+		   ((csr & (DMA_CSR_DTEF | DMA_CSR_ULEF | DMA_CSR_USEF)) ? ST_DMA_TE : 0U);
 #else
 	return (pDma->pDma->ISR >> (pDma->Idx * 4U)) & (ST_DMA_TC | ST_DMA_HT | ST_DMA_TE);
 #endif
@@ -620,7 +649,7 @@ static inline uint32_t Stm32DmaFlags(const Stm32UartDma_t *pDma)
 // All flags of a channel or stream cleared
 static inline void Stm32DmaClear(const Stm32UartDma_t *pDma)
 {
-#ifdef ST_DMA_STREAM
+#if defined(ST_DMA_STREAM)
 	// FE, DME, TE, HT and TC
 	uint32_t clr = 0x3DU << s_StDmaFlagPos[pDma->Idx & 3U];
 
@@ -632,16 +661,24 @@ static inline void Stm32DmaClear(const Stm32UartDma_t *pDma)
 	{
 		pDma->pDma->HIFCR = clr;
 	}
+#elif defined(ST_DMA_GPDMA)
+	pDma->pChan->CFCR = DMA_CFCR_TCF | DMA_CFCR_HTF | DMA_CFCR_DTEF | DMA_CFCR_ULEF | DMA_CFCR_USEF |
+						DMA_CFCR_SUSPF | DMA_CFCR_TOF;
 #else
 	pDma->pDma->IFCR = DMA_IFCR_CGIF1 << (pDma->Idx * 4U);
 #endif
 }
 
-// Transfers left
+// Transfers left. On GPDMA, the bytes left to read from the source: the
+// channel FIFO may hold a few read bytes not yet written. A peripheral to
+// memory byte is written a few bus cycles after it is read, a memory to
+// peripheral byte when the peripheral requests it.
 static inline uint32_t Stm32DmaCount(const Stm32UartDma_t *pDma)
 {
-#ifdef ST_DMA_STREAM
+#if defined(ST_DMA_STREAM)
 	return pDma->pChan->NDTR;
+#elif defined(ST_DMA_GPDMA)
+	return pDma->pChan->CBR1 & DMA_CBR1_BNDT;
 #else
 	return pDma->pChan->CNDTR;
 #endif
@@ -656,26 +693,47 @@ static inline void Stm32DmaEnable(const Stm32UartDma_t *pDma)
 #endif
 }
 
-// EN cleared, or with All the whole control register. A stream finishes the
-// transfer it took first and EN reads 1 until then.
+// EN cleared, or with All the whole set up. A stream finishes the transfer
+// it took first and EN reads 1 until then. A GPDMA channel ignores EN written
+// 0: a running one is suspended, which also waits for the transfer it took,
+// then reset, which clears EN and empties its FIFO.
 static void Stm32DmaDisable(const Stm32UartDma_t *pDma, bool All)
 {
-#ifdef ST_DMA_STREAM
+#if defined(ST_DMA_STREAM)
 	pDma->pChan->CR = All ? 0U : pDma->pChan->CR & ~DMA_SxCR_EN;
 	for (int i = 0; i < ST_DMA_STOP_POLLS && (pDma->pChan->CR & DMA_SxCR_EN); i++)
 	{
+	}
+#elif defined(ST_DMA_GPDMA)
+	StDmaChan_t *ch = pDma->pChan;
+
+	if (ch->CCR & DMA_CCR_EN)
+	{
+		ch->CCR |= DMA_CCR_SUSP;
+		for (int i = 0; i < ST_DMA_STOP_POLLS && (ch->CSR & DMA_CSR_IDLEF) == 0U; i++)
+		{
+		}
+		ch->CCR = (ch->CCR & ~(DMA_CCR_EN | DMA_CCR_SUSP)) | DMA_CCR_RESET;
+	}
+	if (All)
+	{
+		ch->CCR = 0;
+		ch->CTR1 = 0;
+		ch->CTR2 = 0;
 	}
 #else
 	pDma->pChan->CCR = All ? 0U : pDma->pChan->CCR & ~DMA_CCR_EN;
 #endif
 }
 
-// Control register not 0: the channel or stream is set up, by this driver or
-// another one
+// Set up, by this driver or another one: control register not 0, on GPDMA
+// the transfer registers too
 static inline bool Stm32DmaInUse(const Stm32UartDma_t *pDma)
 {
-#ifdef ST_DMA_STREAM
+#if defined(ST_DMA_STREAM)
 	return pDma->pChan->CR != 0U;
+#elif defined(ST_DMA_GPDMA)
+	return (pDma->pChan->CCR | pDma->pChan->CTR1 | pDma->pChan->CTR2) != 0U;
 #else
 	return pDma->pChan->CCR != 0U;
 #endif
@@ -683,14 +741,15 @@ static inline bool Stm32DmaInUse(const Stm32UartDma_t *pDma)
 
 // Channel or stream stopped and set up, not enabled: 8 bit, memory address
 // incremented, peripheral register pPeriph fixed. Ints : ST_DMA_TC, ST_DMA_HT
-// and ST_DMA_TE interrupts. A stream takes its request here, in CR.
+// and ST_DMA_TE interrupts. A stream or a GPDMA channel takes its request
+// here. GPDMA has no circular mode, see Stm32DmaLoop.
 static void Stm32DmaConfig(const Stm32UartDma_t *pDma, volatile void *pPeriph, bool bTx, bool bCirc, uint32_t Ints)
 {
 	StDmaChan_t *ch = pDma->pChan;
 
 	Stm32DmaDisable(pDma, true);
 	Stm32DmaClear(pDma);
-#ifdef ST_DMA_STREAM
+#if defined(ST_DMA_STREAM)
 	ch->PAR = (uint32_t)(uintptr_t)pPeriph;
 	// Direct mode, no stream FIFO
 	ch->FCR = 0;
@@ -698,6 +757,25 @@ static void Stm32DmaConfig(const Stm32UartDma_t *pDma, volatile void *pPeriph, b
 			 (bTx ? DMA_SxCR_DIR_0 : 0U) | (bCirc ? DMA_SxCR_CIRC : 0U) |
 			 ((Ints & ST_DMA_TC) ? DMA_SxCR_TCIE : 0U) | ((Ints & ST_DMA_HT) ? DMA_SxCR_HTIE : 0U) |
 			 ((Ints & ST_DMA_TE) ? DMA_SxCR_TEIE : 0U);
+#elif defined(ST_DMA_GPDMA)
+	// Single byte transfers, port 0 for both sides and the linked list. The
+	// peripheral drives the request: the destination for TX, the source for
+	// RX.
+	(void)bCirc;
+	ch->CTR1 = bTx ? DMA_CTR1_SINC : DMA_CTR1_DINC;
+	ch->CTR2 = ((uint32_t)pDma->Req << DMA_CTR2_REQSEL_Pos) | (bTx ? DMA_CTR2_DREQ : 0U);
+	ch->CBR1 = 0;
+	ch->CLLR = 0;
+	if (bTx)
+	{
+		ch->CDAR = (uint32_t)(uintptr_t)pPeriph;
+	}
+	else
+	{
+		ch->CSAR = (uint32_t)(uintptr_t)pPeriph;
+	}
+	ch->CCR = ((Ints & ST_DMA_TC) ? DMA_CCR_TCIE : 0U) | ((Ints & ST_DMA_HT) ? DMA_CCR_HTIE : 0U) |
+			  ((Ints & ST_DMA_TE) ? DMA_CCR_DTEIE | DMA_CCR_ULEIE | DMA_CCR_USEIE : 0U);
 #else
 	ch->CPAR = (uint32_t)(uintptr_t)pPeriph;
 	ch->CCR = DMA_CCR_MINC | (bTx ? DMA_CCR_DIR : 0U) | (bCirc ? DMA_CCR_CIRC : 0U) |
@@ -709,23 +787,60 @@ static void Stm32DmaConfig(const Stm32UartDma_t *pDma, volatile void *pPeriph, b
 // Memory address and count, with the channel or stream not enabled
 static inline void Stm32DmaSetMem(const Stm32UartDma_t *pDma, const void *pMem, uint32_t Cnt)
 {
-#ifdef ST_DMA_STREAM
+#if defined(ST_DMA_STREAM)
 	pDma->pChan->M0AR = (uint32_t)(uintptr_t)pMem;
 	pDma->pChan->NDTR = Cnt;
+#elif defined(ST_DMA_GPDMA)
+	// Memory is the source with the destination request, TX
+	if (pDma->pChan->CTR2 & DMA_CTR2_DREQ)
+	{
+		pDma->pChan->CSAR = (uint32_t)(uintptr_t)pMem;
+	}
+	else
+	{
+		pDma->pChan->CDAR = (uint32_t)(uintptr_t)pMem;
+	}
+	pDma->pChan->CBR1 = Cnt;
 #else
 	pDma->pChan->CMAR = (uint32_t)(uintptr_t)pMem;
 	pDma->pChan->CNDTR = Cnt;
 #endif
 }
 
+#ifdef ST_DMA_GPDMA
+// Circular mode of a GPDMA RX channel. At the end of each block the channel
+// loads a linked list node with the count, the destination address and the
+// node address again, then runs the same block. The node holds the words of
+// the update bits set, in register order: CBR1, CDAR, CLLR. It must be in
+// RAM the channel can read, 4 byte aligned. The block itself is set up by
+// Stm32DmaSetMem first.
+static void Stm32DmaLoop(const Stm32UartDma_t *pDma, uint32_t *pNode)
+{
+	StDmaChan_t *ch = pDma->pChan;
+	uint32_t addr = (uint32_t)(uintptr_t)pNode;
+	uint32_t llr = DMA_CLLR_UB1 | DMA_CLLR_UDA | DMA_CLLR_ULL | (addr & DMA_CLLR_LA);
+
+	pNode[0] = ch->CBR1;
+	pNode[1] = ch->CDAR;
+	pNode[2] = llr;
+	ch->CLBAR = addr & DMA_CLBAR_LBA;
+	ch->CLLR = llr;
+}
+#endif
+
 // Controller clock on and the request routed to the channel: DMAMUX1 or
-// CSELR. Fixed on the F0 parts without CSELR, in CR for a stream.
+// CSELR. Fixed on the F0 parts without CSELR, in CR for a stream, in CTR2
+// for a GPDMA channel.
 static void Stm32DmaRoute(const Stm32UartDma_t *pDma)
 {
 #if defined(RCC_AHBENR_DMA1EN)
 	// The F0 table uses DMA1 only
 	RCC->AHBENR |= RCC_AHBENR_DMA1EN;
 	(void)RCC->AHBENR;
+#elif defined(RCC_AHB1ENR_GPDMA1EN)
+	// The WBA table uses GPDMA1 only
+	RCC->AHB1ENR |= RCC_AHB1ENR_GPDMA1EN;
+	(void)RCC->AHB1ENR;
 #else
 	RCC->AHB1ENR |= pDma->pDma == DMA1 ? RCC_AHB1ENR_DMA1EN : RCC_AHB1ENR_DMA2EN;
 #ifdef RCC_AHB1ENR_DMAMUX1EN
@@ -817,6 +932,9 @@ static void Stm32UartDmaSetup(Stm32UartDev_t * const pDev)
 
 	Stm32DmaConfig(&pDev->RxDma, &ST_USART_RDR(reg), false, true, intmode ? ST_DMA_HT | ST_DMA_TC : 0U);
 	Stm32DmaSetMem(&pDev->RxDma, pDev->pMem->RxDmaRing, ST_UART_DMA_RX_RING);
+#ifdef ST_DMA_GPDMA
+	Stm32DmaLoop(&pDev->RxDma, pDev->pMem->RxDmaNode);
+#endif
 	Stm32DmaEnable(&pDev->RxDma);
 	pDev->RxDmaRead = 0;
 
@@ -890,7 +1008,11 @@ static bool Stm32UartDmaTxStart(Stm32UartDev_t * const pDev)
 // in the next block. The block bytes are released and the next block takes
 // what was queued. With the FIFO empty TX is ready again and the application
 // is told. From the TC and DMA interrupts, or from TxData in polling mode.
-// Returns false if no block was done.
+// On GPDMA the count is what is left to read from memory, the channel FIFO
+// may still hold bytes with the count at 0. TC is not set before they are
+// written: the USART requests the next byte as soon as TDR is empty, a
+// character time before TC. An error writing them stops the channel with the
+// count at 0, TE is checked then too. Returns false if no block was done.
 static bool Stm32UartDmaService(Stm32UartDev_t * const pDev)
 {
 	UARTDev_t *dev = pDev->pUartDev;
@@ -907,7 +1029,8 @@ static bool Stm32UartDmaService(Stm32UartDev_t * const pDev)
 			return false;
 		}
 	}
-	else if ((ST_USART_ISR(pDev->pReg) & ST_USART_ISR_TC) == 0U)
+	else if ((ST_USART_ISR(pDev->pReg) & ST_USART_ISR_TC) == 0U &&
+			 (Stm32DmaFlags(&pDev->TxDma) & ST_DMA_TE) == 0U)
 	{
 		return false;
 	}
@@ -2081,6 +2204,54 @@ extern "C" void DMA2_Stream7_IRQHandler()
 {
 	Stm32UartDmaVector(&s_Stm32UartDev[ST_USART1_IDX]);
 }
+#elif defined(STM32WBA)
+// GPDMA1 takes any request on any channel. Two channels for each instance:
+// USART1 0 and 1, USART2 2 and 3, LPUART1 4 and 5, USART3 6 and 7.
+extern "C" void GPDMA1_Channel0_IRQHandler()
+{
+	Stm32UartDmaVector(&s_Stm32UartDev[ST_USART1_IDX]);
+}
+
+extern "C" void GPDMA1_Channel1_IRQHandler()
+{
+	Stm32UartDmaVector(&s_Stm32UartDev[ST_USART1_IDX]);
+}
+
+#ifdef USART2
+extern "C" void GPDMA1_Channel2_IRQHandler()
+{
+	Stm32UartDmaVector(&s_Stm32UartDev[ST_USART2_IDX]);
+}
+
+extern "C" void GPDMA1_Channel3_IRQHandler()
+{
+	Stm32UartDmaVector(&s_Stm32UartDev[ST_USART2_IDX]);
+}
+#endif
+
+#ifdef LPUART1
+extern "C" void GPDMA1_Channel4_IRQHandler()
+{
+	Stm32UartDmaVector(&s_Stm32UartDev[ST_LPUART1_IDX]);
+}
+
+extern "C" void GPDMA1_Channel5_IRQHandler()
+{
+	Stm32UartDmaVector(&s_Stm32UartDev[ST_LPUART1_IDX]);
+}
+#endif
+
+#ifdef USART3
+extern "C" void GPDMA1_Channel6_IRQHandler()
+{
+	Stm32UartDmaVector(&s_Stm32UartDev[ST_USART3_IDX]);
+}
+
+extern "C" void GPDMA1_Channel7_IRQHandler()
+{
+	Stm32UartDmaVector(&s_Stm32UartDev[ST_USART3_IDX]);
+}
+#endif
 #endif
 
 void UARTSetCtrlLineState(UARTDev_t * const pDev, uint32_t LineState)

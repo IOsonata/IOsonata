@@ -16,6 +16,30 @@ are retained solely for WBA5x devices and must **not** be used for WBA65.
 - `ldscript/gcc_stm32wba5xxx.ld`: *1 MB / 128 KB* WBA5x-specific memory
   layout with reserved NVM regions; not a universal WBA linker script.
 
+## UART
+
+The WBA65 library links the shared STM32 UART driver,
+`ARM/ST/src/uart_stm32.cpp`. UART indices are 0 for LPUART1, 1 for USART1,
+2 for USART2 and 3 for USART3. USART1 to USART3 run from PCLK2 or PCLK1, the
+driver writes their CCIPR1 kernel clock selection to 0. LPUART1 is on APB7 and
+selects LSE, HSI16 or PCLK7 for the requested rate. `SystemPeriphClockGet` in
+`src/system_stm32wbaxx.c` reads the APB1, APB2 and APB7 prescalers.
+
+Polling, interrupt and DMA (`bDMAMode`, with or without `bIntMode`) are
+supported. GPDMA1 takes any request on any channel; the driver uses two
+channels for each instance and defines their vectors. GPDMA has no circular
+mode, the RX ring is a linked list node that loads the same block again at
+the end of each block. The driver leaves the GPDMA1 security and privilege
+settings at their reset value, which suits a device with TrustZone disabled
+(TZEN = 0). Not tested on hardware.
+
+| DevNo | Hardware | RX DMA | TX DMA | Requests RX, TX |
+|---|---|---|---|---|
+| 0 | LPUART1 | GPDMA1 channel 4 | GPDMA1 channel 5 | 15, 16 |
+| 1 | USART1 | GPDMA1 channel 0 | GPDMA1 channel 1 | 11, 12 |
+| 2 | USART2 | GPDMA1 channel 2 | GPDMA1 channel 3 | 13, 14 |
+| 3 | USART3 | GPDMA1 channel 6 | GPDMA1 channel 7 | 65, 66 |
+
 ## STM32CubeWBA dependency
 
 Use an ST STM32CubeWBA distribution matched to the selected device and BLE
