@@ -4,9 +4,8 @@
 @brief	RA4M1 shared I2C master/slave example board configuration.
 
 		SCI0 on P410/P411 is the console. IIC0 uses P401/P408 with PSEL 7.
-		IIC1 uses SDA on P101 and SCL on P205 with PSEL 7. On the EK-RA4M1 P205
-		reaches header J2-14 only with solder bridge E12 closed. P100 was
-		tried for SCL1 and reads low at idle on that board.
+		IIC1 uses P101/P100 with PSEL 7. These two IIC1 pins avoid P205, which
+		reaches the EK-RA4M1 header only with solder bridge E12 closed.
 
 @license
 
@@ -67,8 +66,8 @@ SOFTWARE.
 #define I2C_SLAVE_SDA_PORT		1
 #define I2C_SLAVE_SDA_PIN		1
 #define I2C_SLAVE_SDA_PINOP	IOPINOP_FUNC6
-#define I2C_SLAVE_SCL_PORT		2
-#define I2C_SLAVE_SCL_PIN		5
+#define I2C_SLAVE_SCL_PORT		1
+#define I2C_SLAVE_SCL_PIN		0
 #define I2C_SLAVE_SCL_PINOP	IOPINOP_FUNC6
 
 #define I2C_SLAVE_DMA_ENABLE	false

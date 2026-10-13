@@ -52,12 +52,11 @@ The shared master/slave example uses **IIC0: P401 = SDA0, P408 = SCL0**, with
 `IOPINOP_FUNC6` (PSEL 7), leaving SCI0 available for its console. On the
 EK-RA4M1 these are J2-8 (P401) and J2-16 (P408), a short-wire option for master SCL. Provide a common ground and external pull-ups
 sized for the bus voltage, capacitance and selected speed. The example requests 100 kHz with polling master. IIC1 uses P101 = SDA1 and
-P205 = SCL1; connect SDA-to-SDA, SCL-to-SCL and common ground with pull-ups.
-On the EK-RA4M1 these are J3-8 (P101, also PMOD A pin 2) and J2-14 (P205).
-P205 reaches J2-14 only with solder bridge E12 closed, and E15 (TSCAP
-capacitor) can be opened to unload the clock line. P100, the other IIC1 SCL
-pin, read low at idle on the EK-RA4M1 with nothing connected to it. The
-console of this example is SCI0 on P410 (RX) and P411 (TX).
+P100 = SCL1; connect SDA-to-SDA, SCL-to-SCL and common ground with pull-ups.
+On the EK-RA4M1 these are J3-8 (P101, also PMOD A pin 2) and J1-1 (P100, also
+PMOD A pin 3). The console of this example is SCI0 on P410 (RX) and P411 (TX).
+P205 is not used for IIC1 here: it reaches J2-14 only with solder bridge E12
+closed, which the board does not have by default.
 A first native IIC slave ISR/callback implementation is now present, but its
 address/restart/STOP transitions have not yet been hardware-validated. The
 example is ready for bring-up, not a claimed loopback PASS. The shared
