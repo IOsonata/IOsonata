@@ -14,6 +14,7 @@ Zbs, Zicsr and Zifencei, ilp32 ABI, GNU C17 and C++23, newlib-nano with nosys.
 | `UartPrbsTxTest` | `exemples/uart/uart_prbs_tx.cpp` | `gcc_R9A02G021.ld` | UART0, 115200 8N1, interrupt mode |
 | `UartaLoopback` | `exemples/uart/uart_loopback.cpp` | `gcc_R9A02G021.ld` | UARTA1 (DevNo 4), 115200 8N1, interrupt mode, linker option `-Wl,-u,R9a02UartaInit` |
 | `SpiLoopback` | `exemples/spi/spi_loopback.cpp` | `gcc_R9A02G021.ld` | SPI20 (DevNo 4) at 1 MHz, the four modes, interrupt and DTC reception, console on UART0 |
+| `SpiMasterSlave` | `exemples/spi/spi_master_slave.cpp` | `gcc_R9A02G021.ld` | SPI20 master (DevNo 4) at 1 MHz wired to the SPI21 slave (DevNo 5), the four modes, DTC on both, console on UART0 |
 | `I2CScan` | `exemples/i2c/i2c_scan.cpp` | `gcc_R9A02G021.ld` | IICA1 (DevNo 1) at 100 kHz, HOCO 32 MHz, console on UART0 |
 | `ADCDemo` | `src/adc_demo.cpp` (this port) | `gcc_R9A02G021.ld` | ANI2, ANI3, internal reference, temperature sensor, console on UART0 |
 | `RtcDemo` | `src/rtc_demo.cpp` (this port) | `gcc_R9A02G021.ld` | RTC on the 32.768 kHz crystal, Software Standby, console on UART0 |
@@ -49,6 +50,9 @@ was not available here: check them against the board schematic.
 | UartaLoopback | RxDA1, TxDA1 | P008, P403 | `IOPINOP_FUNC5` (PSEL 0x06) |
 | SpiLoopback | SCK20, SI20 (MISO), SO20 (MOSI) | P101, P102, P103 | `IOPINOP_FUNC16` |
 | SpiLoopback | Chip select | P104 | GPIO |
+| SpiMasterSlave | Master as SpiLoopback | P101 to P104 | As SpiLoopback |
+| SpiMasterSlave | Slave SCK21, SI21 (MOSI), SO21 (MISO) | P204, P205, P206 | `IOPINOP_FUNC16` |
+| SpiMasterSlave | Slave chip select, IRQ2 | P202 | GPIO input |
 | I2CScan | SDAA1, SCLA1 | P010, P011 | `IOPINOP_FUNC6` (PSEL 0x07), open drain |
 | ADCDemo | ANI2, ANI3 (A2, A3) | P400, P401 | `IOPINOP_FUNC31` (analog) |
 | AnalogDemo | DACOUT1, IVCMP0, wired together | P001, P106 | Analog, set by the drivers |
@@ -92,6 +96,14 @@ pattern with PASS or FAIL, then `SPI master loopback PASS`. `board.h` sets
 `SPI_MASTER_INT_ENABLE` and `SPI_MASTER_DMA_ENABLE`: the receptions run in
 the background with the DTC. Set both false for polling, or only DMA for the
 DTC with the call waiting.
+
+**SpiMasterSlave:** wire P101 to P204 (SCK), P103 to P205 (MOSI), P206 to
+P102 (MISO) and P104 to P202 (chip select). The console shows, for each mode,
+frames of 1, 16 and 129 bytes sent and received by the master, with PASS or
+FAIL, then `SPI master/slave loopback PASS`. The slave takes its buffers at
+`DEVINTRF_EVT_STATECHG` and reports each frame at the chip select rising
+edge. `SPI_SLAVE_DMA_ENABLE false` in `board.h` tests the slave with one
+interrupt per byte; its interrupt priority is above the master's.
 
 **I2CScan:** connect I2C devices with pull-ups to P010 (SDA) and P011 (SCL).
 The console lists the addresses that answer. The core clock is the HOCO at
@@ -146,11 +158,11 @@ links with `gcc_R9A02G021_dfu.ld`.
 
 ## Status
 
-All thirteen examples build and link with xPack riscv-none-elf-gcc 15.2.0
-(October 13, 2026). Sizes at -Os (text + data, KB of 1000 bytes): Blinky
-11.8, TimerDemo 19.8, UartLoopback 15.0, UartPrbsTxTest 15.0, UartaLoopback
-18.6, SpiLoopback 26.8, I2CScan 31.5, ADCDemo 34.3, RtcDemo 24.9, AnalogDemo
-29.3, AdcSnoozeDemo 38.4, SelfTest 62.4, DfuBoot 36576 bytes of the 36864 of
-its region.
+All fourteen examples build and link with xPack riscv-none-elf-gcc 15.2.0
+(October 13, 2026). Sizes at -Os (text + data, KB of 1000 bytes): Blinky 11.8,
+TimerDemo 19.8, UartLoopback 15.0, UartPrbsTxTest 15.0, UartaLoopback 18.6,
+SpiLoopback 29.6, SpiMasterSlave 30.3, I2CScan 31.5, ADCDemo 34.3, RtcDemo
+24.9, AnalogDemo 29.3, AdcSnoozeDemo 38.4, SelfTest 65.3, DfuBoot 36576 bytes
+of the 36864 of its region.
 I2CInit links the SAU simplified I2C with the IICA. None has been run on the
 board yet.

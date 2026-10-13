@@ -21,7 +21,7 @@ the TAU and the machine timer.
 | SAU channel and prescaler sharing | `src/sau_r9a02.cpp`, `include/sau_r9a02.h` | Built |
 | UART (SAU UART0 to UART2), polling and interrupt | `src/uart_r9a02.cpp` | Built |
 | UART (UARTA0, UARTA1), polling and interrupt | `src/uarta_r9a02.cpp`, `include/uarta_r9a02.h` | Built |
-| SPI master (SAU simplified SPI), polling, interrupt, DTC reception | `src/spi_r9a02.cpp` | Built |
+| SPI (SAU simplified SPI): master with polling, interrupt and DTC reception, slave with interrupt and DTC | `src/spi_r9a02.cpp` | Built, slave emulated (`tests/r9a02`) |
 | I2C master (IICA0, IICA1), polling and interrupt | `src/i2c_r9a02.cpp`, `include/i2c_r9a02.h` | Built |
 | I2C master (SAU simplified I2C IIC00 to IIC21), polling and interrupt | `src/i2c_sau_r9a02.cpp` | Built |
 | ADC (ADC12, 10 pins, temperature sensor, internal reference, scan, continuous, hardware trigger, window, Snooze) | `src/adc_r9a02.cpp`, `include/adc_r9a02.h` | Built |
@@ -37,7 +37,7 @@ the TAU and the machine timer.
 
 Built with xPack riscv-none-elf-gcc 15.2.0, `-march=rv32imac_zba_zbb_zbs_zicsr_zifencei -mabi=ilp32`.
 The register use of the drivers was checked against the manual. Nothing has
-been run on hardware yet. Not implemented: SPI slave, SPI transmission by the
+been run on hardware yet. Not implemented: SPI master transmission by the
 DTC, the DTC for I2C (the CPU acts at each byte), UART transfers by the DTC,
 SAU UART and SPI reception in Snooze, TML32 8-bit channels and capture,
 REMC, KINT, DOC, CRC, TRNG.
@@ -229,11 +229,12 @@ DFU boot): link the application with `-Wl,-u,R9a02UartaInit` (the
 ## SPI
 
 `SPICfg_t.DevNo` 0 to 5 is SPI00, SPI01, SPI10, SPI11, SPI20, SPI21 (SAU0
-channels 0 to 3, SAU1 channels 0 and 1). Master only, 7 or 8 bit frames, MSB
-or LSB first, the four clock modes, chip selects on GPIO pins
-(`SPICSEL_AUTO` or `SPICSEL_MAN`). Pins: SCK and MOSI `IOPINOP_FUNC16`
-outputs, MISO `IOPINOP_FUNC16` input, chip selects `IOPINOP_GPIO` outputs;
-other settings fail SPIInit, as do slave and 3-wire modes. Rate at most
+channels 0 to 3, SAU1 channels 0 and 1). Master or slave, 7 or 8 bit frames,
+MSB or LSB first, the four clock modes; 3-wire mode fails SPIInit.
+
+Master: chip selects on GPIO pins (`SPICSEL_AUTO` or `SPICSEL_MAN`). Pins:
+SCK and MOSI `IOPINOP_FUNC16` outputs, MISO `IOPINOP_FUNC16` input, chip
+selects `IOPINOP_GPIO` outputs; other settings fail SPIInit. Rate at most
 PCLKB / 2 for SPI00, PCLKB / 4 for the others; the electrical limit depends
 on VCC (tables 37.32 and 37.33): SPI00 at most 12 MHz from 2.7 V.
 
@@ -246,11 +247,40 @@ Transfer modes:
 | `bDmaEn` | The DTC moves Len - 1 bytes, the CPU the last one; with `bIntEn` in the background, without it the call waits | As above |
 
 The DTC reads SDRmn by bytes, as the DTC example of the manual (14.6.1),
-and writes the dummy bytes by 16 bits; transmission by the DTC would need
-byte writes to SDRmn, which the manual does not describe. The command of a
-read (`TxSrData`) is always polled. Reset cancels a reception in progress.
+and writes the dummy bytes by 16 bits; SDRmn is written by 16 bits only
+(23.3.8). The command of a read (`TxSrData`) is always polled. Reset cancels
+a reception in progress.
 
-On the FPB board SPI20 is on P101 (SCK20), P102 (SI20) and P103 (SO20).
+Slave: the SAU has no slave select input, the chip select is a GPIO input on
+an IRQ pin (IRQ0 to IRQ7) and its rising edge ends a frame. Pins: SCK and
+MOSI `IOPINOP_FUNC16` inputs, MISO `IOPINOP_FUNC16` output, chip select
+`IOPINOP_GPIO` input, exactly these four. `bIntEn` and `SPICSEL_AUTO` are
+required, `bDmaEn` needs 8 bit frames. The IOsonata slave sequence:
+`DEVINTRF_EVT_STATECHG` before each frame, where the handler gives the
+buffers (`SetSlaveRxBuffer`, `SetSlaveTxData`, index 0), then at the chip
+select rising edge `DEVINTRF_EVT_COMPLETED` with the receive buffer and the
+byte count, -1 on an overrun, a frame longer than the receive buffer, or a
+chip select already low when the frame was prepared. The dummy byte follows
+the transmit data.
+
+- The channel runs in continuous mode with transmit bytes 0 and 1 loaded
+  while the chip select is high, so the master can clock at once. MISO is
+  driven all the time and every SCK edge counts: the bus is point to point,
+  SCK idle while the chip select is high.
+- Without `bDmaEn` each byte has its interrupt, within one byte time. With
+  it the DTC moves each byte: the received byte to the buffer, the transmit
+  byte through a 16-bit stage to SDRmn. A DTC run ends with the receive
+  buffer or the transmit data, the CPU starts the next one within one byte
+  time.
+- Rate is the highest SCK of the master: at most fMCK / 8 with fMCK above
+  16 MHz, fMCK / 6 below (table 37.34, VCC 2.7 V or more). fMCK is the
+  highest operation clock of the unit, 24 MHz from PCLKB 48 MHz, so 3 MHz.
+- The SAU and chip select interrupts run at `IntPrio`; an interrupt at the
+  same or a higher level that lasts a byte time makes the slave late.
+
+On the FPB board SPI20 is on P101 (SCK20), P102 (SI20) and P103 (SO20), SPI21
+on P204 (SCK21), P205 (SI21) and P206 (SO21). The SpiMasterSlave example
+wires them together.
 
 ## I2C
 
@@ -330,8 +360,9 @@ IELSR slot (16-byte `R9a02DtcInfo_t`, in SRAM), `R9a02DtcEnable` turns the
 slot over to the DTC (IELSRn.DTCE), `R9a02DtcDisable` back to the CPU. The
 vector table is the `.bss.dtc_vector` section, placed first in IRAM by the
 R9A02 linker scripts (1 KB alignment). Records are re-read at each transfer
-(DTCCR.RRS = 0). `MRB.DISEL = 1` is not supported. Users: the SPI reception
-(`bDmaEn`) and the TML32 interval flag (MODE_DTC, MODE_SNOOZE).
+(DTCCR.RRS = 0). `MRB.DISEL = 1` is not supported. Users: the SPI master
+reception and slave transfers (`bDmaEn`) and the TML32 interval flag
+(MODE_DTC, MODE_SNOOZE).
 
 `include/elc_r9a02.h`: `R9a02ElcLink(Dest, EvtId)` links an event to the A/D
 converter start, a port group, a DAC8 channel or the TML32. The ELC module
