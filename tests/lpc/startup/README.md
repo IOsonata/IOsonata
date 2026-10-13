@@ -68,8 +68,9 @@ must allow for that call depth.
 As on LPC11U35, older custom linker scripts can still link via the weak
 checksum reference, but must define __valid_user_code_checksum or patch
 word 7 before programming. Custom scripts must also retain .vectors.
-An ARM firmware link and power-cycle boot remain required for hardware
-validation.
+LPC1769 TimerDemo ARM links now pass through `tests/lpc/timer/link17.py`,
+including production reset entry, checksum and timer vector checks. A
+power-cycle boot remains required for hardware validation.
 
 LPC17xx exports __Vectors as an alias of the existing g_Vectors table,
 matching the symbol referenced by ARM/src/ResetEntry.c. The host vector

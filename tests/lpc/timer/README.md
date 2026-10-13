@@ -71,8 +71,8 @@ and pause/resume. Mapped memory models reset at NVIC synchronization and supplie
 interrupt flags explicitly; it does not simulate electrical timing or preemption.
 The existing LPC11Uxx/LPC546xx behavioral suites exercise continuous triggers
 and delayed interrupt handling in the unchanged shared algorithm. RTC, RIT and
-PWM peripherals are not included in this adapter. Full linking and board tests
-remain pending; use the common timer_demo.cpp with DevNo 0..3 for bring-up.
+PWM peripherals are not included in this adapter. LPC1769 TimerDemo links now pass as recorded below. Board tests remain
+pending; use the common timer_demo.cpp with DevNo 0..3 for bring-up.
 
 
 ## LPC11U35 TimerDemo ARM link
@@ -108,3 +108,34 @@ TimerDemo/{Debug,Release} in the --output directory. This checks firmware
 linkage, not execution of startup, LED periods or UART output on a board.
 It also does not compile every optional library source. Physical LPC11U35
 validation remains pending.
+
+
+## LPC1769 TimerDemo ARM link
+
+```
+python3 tests/lpc/timer/link17.py
+python3 tests/lpc/timer/link17.py --prefix /path/to/bin/arm-none-eabi- --output /tmp/lpc17-timer
+```
+
+This check builds the shared TimerDemo with the LPC1769 board header, actual
+Cortex-M3 startup, LPC17xx clock/GPIO code and shared/family timer and UART
+implementations. The archive follows the library project's exclusion of the
+older shared IAP source. It is a focused firmware link, not a full library build.
+
+Checks cover TimerInit, all four timer IRQ vector bindings, the __Vectors alias,
+reset entry, the LPC image checksum, the 32-byte IAP reservation and project
+source links. Debug retains rdimon monitor initialization; Release has no
+semihosting and retains UARTRetargetEnable. The link would fail on duplicate
+SystemRamStart or missing TimerInit, the earlier TimerDemo linker errors.
+
+Measured with GCC 13.2.1, binutils 2.42 and the v7-m/nofp newlib-nano runtime:
+
+| Build | Flash / 524288 bytes | Local RAM / 32736 bytes | Linker stack allowance |
+| --- | ---: | ---: | ---: |
+| Debug | 24476 | 2472 | 10084 |
+| Release | 22304 | 3224 | 9836 |
+
+The additional AHB RAM is not included in the local RAM column. This example
+does not exercise initialized AHB objects. Stack values are linker allowances,
+not measured runtime usage. Board boot, timer periods and UART console output
+remain to be validated on hardware.
