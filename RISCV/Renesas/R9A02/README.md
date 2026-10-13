@@ -18,13 +18,22 @@ the TAU and the machine timer.
 | Clocks, module stop, delay | `R9A02G021/lib/src/system_r9a02.c`, `include/system_r9a02.h` | Built |
 | Trap, CLIC vector table, ICU event routing | `R9A02G021/lib/src/Vectors_R9A02.c`, `src/interrupt_r9a02.cpp`, `include/interrupt_r9a02.h` | Built |
 | GPIO, pin functions, IRQ0 to IRQ7 pin interrupts | `src/iopincfg_r9a02.c`, `include/iopinctrl.h` | Built |
+| SAU channel and prescaler sharing | `src/sau_r9a02.cpp`, `include/sau_r9a02.h` | Built |
 | UART (SAU UART0 to UART2), polling and interrupt | `src/uart_r9a02.cpp` | Built |
+| UART (UARTA0, UARTA1), polling and interrupt | `src/uarta_r9a02.cpp`, `include/uarta_r9a02.h` | Built |
+| SPI master (SAU simplified SPI), polling | `src/spi_r9a02.cpp` | Built |
+| I2C master (IICA0, IICA1), polling | `src/i2c_r9a02.cpp` | Built |
+| ADC (ADC12, 10 pins, temperature sensor, internal reference) | `src/adc_r9a02.cpp`, `include/adc_r9a02.h` | Built |
+| RTC (calendar, fixed-cycle interrupt, alarm) | `src/rtc_r9a02.cpp`, `include/rtc_r9a02.h` | Built |
+| Sleep, Software Standby, wake-up sources | `R9A02G021/lib/src/system_r9a02.c`, `include/system_r9a02.h` | Built |
 | Timers (machine timer, TAU channels 0 to 7) | `src/timer_r9a02.cpp`, `include/timer_r9a02.h` | Built |
-| DFU flash target | `src/dfu_r9a02.cpp` | Built, boot linked |
+| DFU flash target | `src/dfu_r9a02.cpp` | Built, boot linked, boot emulated |
 
 Built with xPack riscv-none-elf-gcc 15.2.0, `-march=rv32imac_zba_zbb_zbs_zicsr_zifencei -mabi=ilp32`.
-Nothing has been run on hardware yet. Not implemented: UARTA, IICA, SAU SPI
-and I2C, TML32, RTC, ADC, DAC, DTC, low power modes.
+The register use of the drivers was checked against the manual. Nothing has
+been run on hardware yet. Not implemented: SAU simplified I2C, SPI slave,
+interrupt and DMA transfers for SPI, I2C and ADC scan, TML32, DAC8,
+comparator, DTC, ELC, Snooze mode.
 
 ## Memory layout
 
@@ -82,8 +91,19 @@ otherwise. Flash wait states are set above 32 MHz. An unsupported setting
 stops startup: `g_R9a02StartupError` holds the reason (`R9a02StartupError_t`)
 and the CPU waits in a `wfi` loop, where a debugger can read it.
 
-PCLKB, the clock of SAU and TAU, defaults to ICLK.
-`SystemPeriphClockSet(0, Freq)` picks the closest PCLKB not above ICLK.
+PCLKB, the clock of SAU, TAU, IICA and ADC12, defaults to ICLK.
+`SystemPeriphClockSet(0, Freq)` picks the closest PCLKB not above ICLK. The
+drivers compute their rates from PCLKB at Init and SetRate: change PCLKB with
+the SAU (UART, SPI), IICA and ADC drivers powered off and initialize them
+again (SPSm note 1, 23.3.1). The IICA needs PCLKB at 32 MHz or lower, with
+clock supply type B (OFS1.ICSATS = 0) PCLKB is ICLK, so the core clock is
+lowered for it (HOCO 32 MHz).
+
+The RTC, UARTA and TML32 clock is the low frequency clock: `OSC_TYPE_XTAL`
+selects the SOSC, which the RTC calendar needs, `OSC_TYPE_RC` the LOCO. The
+selection stops a running RTC that is on the other clock (OSMCR note 2). A
+calendar counting on the SOSC is kept through a reset other than power-on,
+a LOCO request at the warm start then keeps the SOSC.
 
 ## Interrupts
 
@@ -102,6 +122,14 @@ interrupt and returns the slot number (or -1). Drivers keep the slot number
 for `R9a02UnregisterIntHandler` and `R9a02ClearPendingInt`. The ICU IR flag
 is cleared before the handler, except for a low-level pin IRQ, cleared after.
 `R9a02RegisterCoreIntHandler` does the same for MSIP and MTIP.
+
+`R9a02RouteEvent(EvtId)` routes an event to an IELSR slot with its CLIC
+interrupt off. The polling drivers read its IR flag with `R9a02EventFlag` and
+clear it with `R9a02EventFlagClear`: the SAU SPI end of transfer, the IICA
+end of byte, the ADC end of conversion and the UARTA reception without
+interrupt, none of which has a status flag that tells it alone. The manual
+describes polling with the CLIC pending bit instead (12.5.3), IR set with the
+CLIC interrupt off is to confirm on hardware.
 
 Priority `Prio` is 0 to 15 (`cliccfg.nlbits` = 4), higher is more urgent, as
 the RISC-V section of `coredev/interrupt.h` defines (`IRQ_PRIO_LOWEST` 1 to
@@ -124,23 +152,117 @@ pin must be one of that line's pins (P108 is IRQ4 for example).
 The pin masks follow the package. `R9A02_PACKAGE_PINS` defaults to 48;
 define 32, 24 or 16 for the smaller parts.
 
+## SAU sharing
+
+UART and SPI both run on the SAU channels. `sau_r9a02.cpp` keeps which
+driver owns each channel and starts the unit clock on the first claim:
+SPIInit fails on a channel the UART has, and the reverse. The two operation
+clocks of a unit, CKm0 and CKm1 (prescaler SPSm), are shared: a channel takes
+the closest rate a free prescaler gives, or one already used by a running
+channel, the rate is then set with STCLK only. SPSm is written only while no
+channel of the unit runs.
+
+| SAU0 channel | 0 | 1 | 2 | 3 |
+| --- | --- | --- | --- | --- |
+| UART | UART0 TX | UART0 RX | UART1 TX | UART1 RX |
+| SPI | SPI00 | SPI01 | SPI10 | SPI11 |
+
+| SAU1 channel | 0 | 1 |
+| --- | --- | --- |
+| UART | UART2 TX | UART2 RX |
+| SPI | SPI20 | SPI21 |
+
 ## UART
 
-| DevNo | Channels | SAU clock |
+| DevNo | Device | Pins on the 48-pin package |
 | --- | --- | --- |
-| 0 | UART0, SAU0 channels 0 (TX) and 1 (RX) | CK00 |
-| 1 | UART1, SAU0 channels 2 and 3 | CK01 |
-| 2 | UART2, SAU1 channels 0 and 1 | CK10 |
+| 0 | UART0, SAU0 channels 0 (TX) and 1 (RX) | TxD0 P100 or P302, RxD0 P301 or P303 |
+| 1 | UART1, SAU0 channels 2 and 3 | TxD1 P001, RxD1 P000 |
+| 2 | UART2, SAU1 channels 0 and 1 | TxD2 P103, RxD2 P102 |
+| 3 | UARTA0 | TxDA0 P009, RxDA0 P010 |
+| 4 | UARTA1 | TxDA1 P403, RxDA1 P008 |
 
-Rate: fMCK / (2 x (STCLK + 1)), fMCK = PCLKB / 2^n, at most 32 MHz.
-`UARTSetRate` returns the closest rate. UART0 and UART1 are on the same unit:
-the prescaler register SPS0 is not written while a channel of the unit runs,
-the rate of the second one opened is then set with STCLK only. Data 7 or 8 bits, parity none, even, odd or space (mark is
-rejected), 1 or 2 stop bits, no flow control, no DMA. Interrupt mode uses
-the IOsonata CFIFO, the TX interrupt runs one level below `IntPrio` so that
-the RX interrupt can preempt it.
+SAU UART rate: fMCK / (2 x (STCLK + 1)), fMCK = PCLKB / 2^n, at most 32 MHz.
+`UARTSetRate` returns the closest rate. Data 7 or 8 bits, parity none, even,
+odd or space (mark is rejected), 1 or 2 stop bits, no flow control, no DMA.
+Interrupt mode uses the IOsonata CFIFO, the TX interrupt runs one level below
+`IntPrio` so that the RX interrupt can preempt it.
 
-UARTA is not implemented.
+UARTA: its clock is the HOCO (or EXTAL), not PCLKB, and is common to both
+channels. Rate fSEL / 2^CK / (2 x k), 200 to 153600 bps as characterized;
+UARTInit fails for a rate outside these limits or more than 2 % away from the
+closest one, below about 1500 bps with the HOCO at 48 MHz. Data 5, 7 or 8
+bits, same parity and stop bit choices. Without interrupts RX_ENDI is polled
+through `R9a02RouteEvent`, the UARTA has no receive data flag.
+
+UARTA is linked only on request, so that images without it stay small (the
+DFU boot): link the application with `-Wl,-u,R9a02UartaInit` (the
+`UartaLoopback` example does), or call `R9a02UartaInit` directly. Without it
+`UARTInit` fails for DevNo 3 and 4.
+
+## SPI
+
+`SPICfg_t.DevNo` 0 to 5 is SPI00, SPI01, SPI10, SPI11, SPI20, SPI21 (SAU0
+channels 0 to 3, SAU1 channels 0 and 1). Master only, polling, 7 or 8 bit
+frames, MSB or LSB first, the four clock modes, chip selects on GPIO pins
+(`SPICSEL_AUTO` or `SPICSEL_MAN`). Pins: SCK and MOSI `IOPINOP_FUNC16`
+outputs, MISO `IOPINOP_FUNC16` input, chip selects `IOPINOP_GPIO` outputs;
+other settings fail SPIInit, as do slave, 3-wire, interrupt and DMA modes.
+Rate at most PCLKB / 2 for SPI00, PCLKB / 4 for the others; the electrical
+limit depends on VCC (tables 37.32 and 37.33): SPI00 at most 12 MHz from
+2.7 V. Each byte waits for the SAU end of transfer event (`R9a02RouteEvent`).
+
+On the FPB board SPI20 is on P101 (SCK20), P102 (SI20) and P103 (SO20).
+
+## I2C
+
+`I2CCfg_t.DevNo` 0 is IICA0 (SCLA0 P302 or P102, SDAA0 P303 or P103), 1 is
+IICA1 (SCLA1 P011, SDAA1 P010). Master, polling, 7-bit addresses, standard,
+fast and fast plus modes, `IOPINOP_FUNC6` open-drain pins with external
+pull-ups. PCLKB must be 1 to 32 MHz (I2CInit fails otherwise), fast mode
+needs 3.5 MHz and fast plus 10 MHz. The IICA is enabled only with both lines
+high: a bus held low is first cleared by 9 clocks on SCL as a GPIO and a
+stop. In master reception the last byte is not acknowledged before a stop
+or a restart.
+
+## ADC
+
+`AdcR9a02` (`include/adc_r9a02.h`) is an `AdcDevice`. `AdcChanCfg_t.Chan` is a
+logical channel 0 to 7, `PinP.PinNo` the input: ANI number (0 to 5, 16 to
+19), `R9A02_ADC_INPUT_TEMP` or `R9A02_ADC_INPUT_VREF`. Single ended, one
+reference, VCC or AVREFP (P002), 8, 10 or 12 bits, one-shot select mode,
+software trigger. `AcqTime` selects the conversion clock and normal mode 1 or
+2 over all open channels, the internal inputs get the 5 us they need. Polling
+or interrupt (`DEV_EVT_DATA_RDY` at the end of the channels). `Calibrate`
+measures zero and full scale (ADTES) and corrects the results.
+
+The temperature sensor calibration point is `R9A02_FLCN_TSCDR` (CAL140, the
+result at 140 C and VCC 3.3 V, without ADTES correction): see the ADCDemo
+example. The manual gives ANI18 and ANI19 on P105 and P106 in the pin tables
+and swapped in table 29.12; the driver follows the pin tables, to confirm on
+hardware. P105 is also on the FPB Arduino header as A1.
+
+## RTC
+
+`include/rtc_r9a02.h`: `R9a02RtcInit(Handler, Ctx, IntPrio, bWakeup)`, then
+`R9a02RtcSetTime`, `R9a02RtcGetTime` (`struct tm`, 2000 to 2099, 24-hour),
+`R9a02RtcSetPeriod` (0.5 s to one month) and `R9a02RtcSetAlarm` (weekdays,
+hour, minute). The calendar counts only on the 32.768 kHz crystal (low
+frequency clock `OSC_TYPE_XTAL`); on the LOCO only the fixed-cycle interrupt
+works. An RTC already counting is kept by `R9a02RtcInit` after a reset other
+than power-on. With the alarm enabled the counters are read or written only
+with the 1 s fixed-cycle interrupt, from its event (20.2.2).
+
+## Low power
+
+`R9a02LowPowerEnter(bStandby)` enters Sleep (`false`) or Software Standby
+(`true`) with WFI and returns after the wake-up, the clocks as before.
+`R9a02WakeupSet(EvtId, bEnable)` enables the ICU events that end Software
+Standby (IRQ0 to 7, RTC, TML32, IICA, UARTA reception, LVD, KEY, IWDT,
+comparators); the event must also be routed with `R9a02RegisterIntHandler`.
+The machine timer and the SAU cannot end Software Standby. `AdcR9a02::Disable`
+leaves the ADC ready for it. Before Software Standby the application waits
+for its UART transmissions to end: the SAU and UARTA clocks stop.
 
 ## Timers
 
@@ -166,11 +288,28 @@ mode (manual 19.2).
 `ldscript/dfu_layout_r9a02g021.ld`: boot 0x0 to 0x8FFF, record 0x9000 to
 0x9FFF, application slot 0 0xA000 to 0x1FFFF, recovery flag at 0x20006FF0.
 `dfu_boot_r9a02g021.ld` links the boot (with HEAD), `gcc_R9A02G021_dfu.ld`
-an application for slot 0. The boot fits only when built with -Os (35.1 KB
-of 36 KB); the Debug configuration at -O0 does not fit.
+an application for slot 0. The boot fits only when built with -Os (36560 of
+36864 bytes); the Debug configuration at -O0 does not fit. UARTA is not
+linked into it (see UART).
 
 `dfu_r9a02.cpp` programs the code flash in 8-byte units and erases 2 KB
 blocks from routines in `.iram.text`, and resets through SWRCR.
+
+## e2 studio
+
+`R9A02G021/lib/e2` is the library as an e2 studio project, `IOsonata_R9A02G021`,
+built with LLVM for Renesas RISC-V (19.1.7) for the R9A02G0214CNE on the
+FPB-R9A02G021. It links the same sources as the IOC project `lib/ioc`, with
+the same defines and include directories, `-march` with Zba, Zbb, Zbs, Zicsr
+and Zifencei, C and C++ gnu17. `src/CppRuntimeOverload.cpp` is left out: clang
+rejects its `throw()` on `operator new`, the toolchain runtime provides the
+operators.
+
+The library sources were compiled with clang 19.1.7 and these settings, and
+the examples linked from them with GNU ld (October 12, 2026); the DFU boot
+then passes the emulator tests. Do not mix objects of the two compilers: GCC
+for riscv-none-elf makes `uint32_t` an `unsigned long`, clang an
+`unsigned int`, so C++ functions taking one get different symbol names.
 
 ## Examples
 

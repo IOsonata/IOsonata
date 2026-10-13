@@ -1,5 +1,5 @@
 /**-------------------------------------------------------------------------
-@file	rtc_demo.cpp
+@example	rtc_demo.cpp
 
 @brief	RTC and low power demo on the FPB-R9A02G021
 

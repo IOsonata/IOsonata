@@ -6,11 +6,12 @@
 R9A02G021 User's Manual R01UH1036EJ0110, chapter 23. Each UART uses two SAU
 channels, the even one transmits, the odd one receives:
 
-	DevNo 0 : UART0, SAU0 channels 0 and 1, clock CK00, TxD0 and RxD0
-	DevNo 1 : UART1, SAU0 channels 2 and 3, clock CK01, TxD1 and RxD1
-	DevNo 2 : UART2, SAU1 channels 0 and 1, clock CK10, TxD2 and RxD2
+	DevNo 0 : UART0, SAU0 channels 0 and 1, TxD0 and RxD0
+	DevNo 1 : UART1, SAU0 channels 2 and 3, TxD1 and RxD1
+	DevNo 2 : UART2, SAU1 channels 0 and 1, TxD2 and RxD2
 
-UARTA (UARTA0, UARTA1) is not handled by this driver.
+DevNo 3 and 4, UARTA0 and UARTA1, are handed to uarta_r9a02.cpp when the
+application links it (uarta_r9a02.h).
 
 Format: 7 or 8 data bits, no, odd, even or space (0) parity, 1 or 2 stop
 bits, LSB first, no flow control, no DMA. Unsupported settings fail
@@ -18,9 +19,11 @@ UARTInit.
 
 Rate: fMCK = PCLKB / 2^PRS (PRS 0 to 15, fMCK at most 32 MHz, table 23.5),
 rate = fMCK / (2 * (STCLK + 1)), STCLK 2 to 127. SetRate sets the closest
-rate and returns it. The prescaler SPSm is shared by the channels of a unit
-and is not changed while another channel of the unit runs, the rate is then
-set with STCLK only.
+rate and returns it. The operation clock is chosen by sau_r9a02.cpp: the
+prescaler SPSm is shared by the channels of a unit and is not changed while
+another channel of the unit runs or uses it, the rate is then set with STCLK
+only. The UART claims its two channels there, a channel cannot be used by the
+UART and the SPI at the same time.
 
 The SAU has a one character buffer each way. With interrupts, transmit uses
 the buffer empty interrupt (SMR.MD0 = 1), receive the transfer end
@@ -69,6 +72,8 @@ SOFTWARE.
 #include "coredev/interrupt.h"
 #include "interrupt_r9a02.h"
 #include "system_r9a02.h"
+#include "sau_r9a02.h"
+#include "uarta_r9a02.h"
 
 // Default CFIFO size when the configuration gives no memory
 #ifndef R9A02_UART_CFIFO_SIZE
@@ -80,20 +85,22 @@ SOFTWARE.
 // disabled, to keep the RX interrupt latency short
 #define R9A02_UART_COPY_MAX			8
 
-#define R9A02_SAU_FMCK_MAX			32000000UL	//!< Table 23.5
-#define R9A02_SAU_PRS_MAX			15U
-#define R9A02_SAU_STCLK_MAX			127U
 #define R9A02_SAU_SIR_ALL			(R9A02_SAU_SIR_OVCT | R9A02_SAU_SIR_PECT | R9A02_SAU_SIR_FECT)
+
+// UARTA is referenced weakly, it is linked only when the application asks for
+// it (uarta_r9a02.h) and stays out of the images that do not use it, the DFU
+// boot among them. Without it DevNo 3 and 4 fail UARTInit.
+bool R9a02UartaInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg) __attribute__((weak));
+UARTDev_t const *R9a02UartaGetInstance(int Chan) __attribute__((weak));
 
 #pragma pack(push, 4)
 typedef struct {
 	int DevNo;
 	R9A02_SAU_Type *pReg;
+	uint8_t Unit;					// SAU unit
 	uint8_t TxCh;					// Transmit channel, receive is TxCh + 1
-	uint8_t Ck;						// Operation clock, 0 : CKm0, 1 : CKm1
 	uint8_t SnfenMask;				// RxD noise filter bit in SNFEN
 	uint8_t UlbsMask;				// Loopback bit in ULBS
-	uint32_t MstpMask;				// SAU module stop bit in MSTPCRB
 	uint8_t EvtTx;					// ICU events
 	uint8_t EvtRx;
 	uint8_t EvtErr;
@@ -115,14 +122,18 @@ static R9a02UartDev_t s_R9a02UartDev[] = {
 	{
 		.DevNo = 0,
 		.pReg = R9A02_SAU0,
+		.Unit = 0,
 		.TxCh = 0,
-		.Ck = 0,
 		.SnfenMask = R9A02_SNFEN_SNFEN00,
 		.UlbsMask = R9A02_ULBS_UART0,
-		.MstpMask = R9A02_MSTPCRB_SAU0,
 		.EvtTx = R9A02_EVT_SAU0_ENDI0,
 		.EvtRx = R9A02_EVT_SAU0_ENDI1,
 		.EvtErr = R9A02_EVT_SAU0_INTSRE0,
+		.RxDataMask = 0xFF,
+		.FmckHz = 0,
+		.pUartDev = NULL,
+		.pIOPinMap = NULL,
+		.NbIOPins = 0,
 		.IntTx = -1,
 		.IntRx = -1,
 		.IntErr = -1,
@@ -130,14 +141,18 @@ static R9a02UartDev_t s_R9a02UartDev[] = {
 	{
 		.DevNo = 1,
 		.pReg = R9A02_SAU0,
+		.Unit = 0,
 		.TxCh = 2,
-		.Ck = 1,
 		.SnfenMask = R9A02_SNFEN_SNFEN10,
 		.UlbsMask = R9A02_ULBS_UART1,
-		.MstpMask = R9A02_MSTPCRB_SAU0,
 		.EvtTx = R9A02_EVT_SAU0_ENDI2,
 		.EvtRx = R9A02_EVT_SAU0_ENDI3,
 		.EvtErr = R9A02_EVT_SAU0_INTSRE1,
+		.RxDataMask = 0xFF,
+		.FmckHz = 0,
+		.pUartDev = NULL,
+		.pIOPinMap = NULL,
+		.NbIOPins = 0,
 		.IntTx = -1,
 		.IntRx = -1,
 		.IntErr = -1,
@@ -145,14 +160,18 @@ static R9a02UartDev_t s_R9a02UartDev[] = {
 	{
 		.DevNo = 2,
 		.pReg = R9A02_SAU1,
+		.Unit = 1,
 		.TxCh = 0,
-		.Ck = 0,
 		.SnfenMask = R9A02_SNFEN_SNFEN20,
 		.UlbsMask = R9A02_ULBS_UART2,
-		.MstpMask = R9A02_MSTPCRB_SAU1,
 		.EvtTx = R9A02_EVT_SAU1_ENDI0,
 		.EvtRx = R9A02_EVT_SAU1_ENDI1,
 		.EvtErr = R9A02_EVT_SAU1_INTSRE2,
+		.RxDataMask = 0xFF,
+		.FmckHz = 0,
+		.pUartDev = NULL,
+		.pIOPinMap = NULL,
+		.NbIOPins = 0,
 		.IntTx = -1,
 		.IntRx = -1,
 		.IntErr = -1,
@@ -163,6 +182,7 @@ static const int s_NbR9a02UartDev = sizeof(s_R9a02UartDev) / sizeof(s_R9a02UartD
 
 static_assert(sizeof(s_R9a02UartFifoMem) / sizeof(s_R9a02UartFifoMem[0]) == sizeof(s_R9a02UartDev) / sizeof(s_R9a02UartDev[0]),
 			  "One default CFIFO memory per UART");
+static_assert(sizeof(s_R9a02UartDev) / sizeof(s_R9a02UartDev[0]) == R9A02_UART_SAU_CNT, "SAU UART DevNo 0 to 2");
 
 static void R9a02UartReleaseInts(R9a02UartDev_t * const pDev)
 {
@@ -362,82 +382,39 @@ static uint32_t R9a02UartSetRate(DevIntrf_t * const pDev, uint32_t Rate)
 {
 	R9a02UartDev_t *dev = (R9a02UartDev_t *)pDev->pDevData;
 	R9A02_SAU_Type *reg = dev->pReg;
-	uint32_t pclk = SystemPeriphClockGet(0);
+	uint16_t chmsk = (uint16_t)(3U << dev->TxCh);
+	R9a02SauClk_t clk;
 
-	if (Rate == 0U || pclk == 0U)
+	if (Rate == 0U)
 	{
 		return 0;
 	}
 
 	uintptr_t state = DisableInterrupt();
-	uint16_t chmsk = (uint16_t)(3U << dev->TxCh);
-	uint32_t shift = dev->Ck ? R9A02_SAU_SPS_PRS1_Pos : R9A02_SAU_SPS_PRS0_Pos;
-	uint16_t sps = reg->SPS;
-	uint32_t curprs = (sps >> shift) & R9A02_SAU_SPS_PRS_Msk;
-	bool fixedprs = (reg->SE & ~chmsk) != 0U;
-	uint32_t best = 0;
-	uint32_t besterr = UINT32_MAX;
-	uint32_t bestprs = curprs;
-	uint32_t bestdiv = 0;
 
-	for (uint32_t prs = 0; prs <= R9A02_SAU_PRS_MAX; prs++)
-	{
-		uint32_t fmck = pclk >> prs;
-
-		if ((fixedprs && prs != curprs) || fmck > R9A02_SAU_FMCK_MAX)
-		{
-			continue;
-		}
-
-		// STCLK + 1, rounded, from 3 to 128
-		uint32_t div = (fmck + Rate) / (2U * Rate);
-
-		if (div < R9A02_SAU_SDR_STCLK_UART_MIN + 1U)
-		{
-			div = R9A02_SAU_SDR_STCLK_UART_MIN + 1U;
-		}
-		if (div > R9A02_SAU_STCLK_MAX + 1U)
-		{
-			div = R9A02_SAU_STCLK_MAX + 1U;
-		}
-
-		uint32_t actual = (fmck + div) / (2U * div);
-		uint32_t e = actual > Rate ? actual - Rate : Rate - actual;
-
-		if (e < besterr)
-		{
-			besterr = e;
-			best = actual;
-			bestprs = prs;
-			bestdiv = div;
-		}
-	}
-
-	if (best == 0U)
-	{
-		EnableInterrupt(state);
-
-		return 0;
-	}
-
-	// STCLK and SPS are written with the channels stopped
+	// SPS, SMR and STCLK are written with the channels stopped
 	bool running = (reg->SE & chmsk) != 0U;
 
 	if (running)
 	{
 		reg->ST = chmsk;
 	}
-	if (!fixedprs)
+
+	// Rate = fMCK / (2 x (STCLK + 1)), STCLK from 2 (23.3.8). Both channels
+	// use the same operation clock (table 23.86).
+	uint32_t best = R9a02SauSetRate(dev->Unit, chmsk, Rate, R9A02_SAU_SDR_STCLK_UART_MIN + 1U,
+									UINT32_MAX, &clk);
+
+	if (best != 0U)
 	{
-		reg->SPS = (uint16_t)((sps & ~(R9A02_SAU_SPS_PRS_Msk << shift)) | (bestprs << shift));
+		for (uint32_t ch = dev->TxCh; ch < dev->TxCh + 2U; ch++)
+		{
+			reg->SMR[ch] = (uint16_t)((reg->SMR[ch] & ~R9A02_SAU_SMR_CKS) | clk.Cks);
+			reg->SDR[ch] = clk.Sdr;
+		}
+		dev->FmckHz = clk.FmckHz;
+		dev->pUartDev->Rate = (int)best;
 	}
-
-	uint16_t sdr = (uint16_t)((bestdiv - 1U) << R9A02_SAU_SDR_STCLK_Pos);
-
-	reg->SDR[dev->TxCh] = sdr;
-	reg->SDR[dev->TxCh + 1] = sdr;
-	dev->FmckHz = pclk >> bestprs;
-	dev->pUartDev->Rate = (int)best;
 
 	if (running)
 	{
@@ -637,10 +614,7 @@ static void R9a02UartPowerOff(DevIntrf_t * const pDev)
 	R9a02UartStop(dev);
 	R9a02UartReleaseInts(dev);
 	IOPinDis(dev->pIOPinMap, dev->NbIOPins);
-	if (dev->pReg->SE == 0U)
-	{
-		R9a02ModuleStop(R9A02_MSTPCR_B, dev->MstpMask);
-	}
+	R9a02SauRelease(dev->Unit, (uint16_t)(3U << dev->TxCh), dev);
 
 	EnableInterrupt(state);
 }
@@ -652,6 +626,11 @@ static void *R9a02UartGetHandle(DevIntrf_t * const pDev)
 
 UARTDev_t const *UARTGetInstance(int DevNo)
 {
+	if (DevNo >= R9A02_UART_SAU_CNT)
+	{
+		return R9a02UartaGetInstance != NULL ? R9a02UartaGetInstance(DevNo - R9A02_UART_SAU_CNT) : NULL;
+	}
+
 	return DevNo >= 0 && DevNo < s_NbR9a02UartDev ? s_R9a02UartDev[DevNo].pUartDev : NULL;
 }
 
@@ -665,6 +644,11 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	if (pDev == NULL || pCfg == NULL || pCfg->pIOPinMap == NULL || pCfg->NbIOPins < 2)
 	{
 		return false;
+	}
+
+	if (pCfg->DevNo >= R9A02_UART_SAU_CNT && pCfg->DevNo < R9A02_UART_DEV_CNT)
+	{
+		return R9a02UartaInit != NULL && R9a02UartaInit(pDev, pCfg);
 	}
 
 	if (pCfg->DevNo < 0 || pCfg->DevNo >= s_NbR9a02UartDev)
@@ -706,9 +690,12 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	uint16_t chmsk = (uint16_t)(3U << dev->TxCh);
 	uintptr_t state = DisableInterrupt();
 
-	// An instance running for another UART object is not taken over
-	if (dev->pUartDev != NULL && dev->pUartDev != pDev && R9a02ModuleRunning(R9A02_MSTPCR_B, dev->MstpMask) &&
-		(reg->SE & chmsk))
+	// The claim fails when another driver, the SPI, has one of the channels.
+	// It also starts the SAU module clock, register writes before it are
+	// ignored. An instance running for another UART object is not taken
+	// over, the channels then stay claimed by this instance.
+	if (!R9a02SauClaim(dev->Unit, chmsk, dev) ||
+		(dev->pUartDev != NULL && dev->pUartDev != pDev && (reg->SE & chmsk)))
 	{
 		EnableInterrupt(state);
 
@@ -716,9 +703,6 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	}
 
 	R9a02UartReleaseInts(dev);
-
-	// Module clock first, register writes before it are ignored
-	R9a02ModuleStart(R9A02_MSTPCR_B, dev->MstpMask);
 	R9a02UartStop(dev);
 
 	if (pCfg->pRxMem && pCfg->RxMemSize > 0)
@@ -741,6 +725,7 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 
 	if (pDev->hRxFifo == NULL || pDev->hTxFifo == NULL)
 	{
+		R9a02SauRelease(dev->Unit, chmsk, dev);
 		EnableInterrupt(state);
 
 		return false;
@@ -753,13 +738,12 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	dev->RxDataMask = pCfg->DataBits == 7 ? 0x7FU : 0xFFU;
 
 	// Mode and format, written with the channels stopped (23.3.2 to 23.3.7).
-	// Both channels use the same operation clock (table 23.86).
-	uint16_t cks = dev->Ck ? R9A02_SAU_SMR_CKS : 0U;
+	// The operation clock, SMR.CKS, is set by R9a02UartSetRate.
 	uint16_t fmt = (uint16_t)(R9A02_SAU_SCR_DIR_LSB | ptc |
 							  (pCfg->DataBits == 7 ? R9A02_SAU_SCR_DLS_7BIT : R9A02_SAU_SCR_DLS_8BIT));
 
-	reg->SMR[dev->TxCh] = (uint16_t)(cks | R9A02_SAU_SMR_FIXED | R9A02_SAU_SMR_MD_UART | R9A02_SAU_SMR_MD0);
-	reg->SMR[dev->TxCh + 1] = (uint16_t)(cks | R9A02_SAU_SMR_FIXED | R9A02_SAU_SMR_MD_UART | R9A02_SAU_SMR_STS);
+	reg->SMR[dev->TxCh] = (uint16_t)(R9A02_SAU_SMR_FIXED | R9A02_SAU_SMR_MD_UART | R9A02_SAU_SMR_MD0);
+	reg->SMR[dev->TxCh + 1] = (uint16_t)(R9A02_SAU_SMR_FIXED | R9A02_SAU_SMR_MD_UART | R9A02_SAU_SMR_STS);
 	reg->SCR[dev->TxCh] = (uint16_t)(R9A02_SAU_SCR_TRXE_TX | fmt |
 									 (pCfg->StopBits == 2 ? R9A02_SAU_SCR_SLC_2BIT : R9A02_SAU_SCR_SLC_1BIT));
 	reg->SCR[dev->TxCh + 1] = (uint16_t)(R9A02_SAU_SCR_TRXE_RX | fmt | R9A02_SAU_SCR_SLC_1BIT |
@@ -772,10 +756,7 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 
 	if (R9a02UartSetRate(&pDev->DevIntrf, (uint32_t)pCfg->Rate) == 0U)
 	{
-		if (reg->SE == 0U)
-		{
-			R9a02ModuleStop(R9A02_MSTPCR_B, dev->MstpMask);
-		}
+		R9a02SauRelease(dev->Unit, chmsk, dev);
 		EnableInterrupt(state);
 
 		return false;
@@ -839,10 +820,7 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 		{
 			R9a02UartReleaseInts(dev);
 			IOPinDis(dev->pIOPinMap, dev->NbIOPins);
-			if (reg->SE == 0U)
-			{
-				R9a02ModuleStop(R9A02_MSTPCR_B, dev->MstpMask);
-			}
+			R9a02SauRelease(dev->Unit, chmsk, dev);
 			EnableInterrupt(state);
 
 			return false;

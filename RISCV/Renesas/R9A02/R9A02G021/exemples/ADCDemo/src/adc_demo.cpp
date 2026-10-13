@@ -1,5 +1,5 @@
 /**-------------------------------------------------------------------------
-@file	adc_demo.cpp
+@example	adc_demo.cpp
 
 @brief	ADC12 demo on the FPB-R9A02G021
 

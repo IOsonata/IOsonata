@@ -173,10 +173,11 @@ static void R9a02ClicOn(uint32_t ClicId, int Prio)
 	ClicEnableSlotRaw(R9A02_CLIC_CTRL_BASE, ClicId, CLIC_INT_ATTR_SHV_Msk, R9a02ClicCtl(Prio));
 }
 
-int R9a02RegisterIntHandler(uint8_t EvtId, int Prio, R9a02IRQHandler_t pHandler, void *pCtx)
+// IELSR route of an event. With a handler the CLIC input is enabled at Prio,
+// without one it stays off and the IR flag is polled.
+static int R9a02IcuRoute(uint8_t EvtId, int Prio, R9a02IRQHandler_t pHandler, void *pCtx)
 {
-	if (pHandler == nullptr || Prio < 0 || Prio > (int)R9A02_CLIC_PRIO_MAX || EvtId == 0U ||
-		EvtId > R9A02_EVT_MAX)
+	if (Prio < 0 || Prio > (int)R9A02_CLIC_PRIO_MAX || EvtId == 0U || EvtId > R9A02_EVT_MAX)
 	{
 		return -1;
 	}
@@ -197,7 +198,7 @@ int R9a02RegisterIntHandler(uint8_t EvtId, int Prio, R9a02IRQHandler_t pHandler,
 			return -1;
 		}
 
-		if (slot < 0 && s_IcuHook[i].Handler == nullptr && iels == 0U &&
+		if (slot < 0 && s_IcuHook[i].EvtId == 0U && iels == 0U &&
 			R9a02EventIels(EvtId, group) != 0U &&
 			CLIC_INT_IE_REG(R9A02_CLIC_CTRL_BASE, R9A02_CLIC_ID_IELSR0 + i) == 0U &&
 			g_R9a02VectorTable[R9A02_CLIC_ID_IELSR0 + i] == R9a02IrqEntry)
@@ -224,7 +225,10 @@ int R9a02RegisterIntHandler(uint8_t EvtId, int Prio, R9a02IRQHandler_t pHandler,
 	hook.Generation++;
 
 	// Manual 12.5.1: CLIC enable, then the event link
-	R9a02ClicOn(clicid, Prio);
+	if (pHandler != nullptr)
+	{
+		R9a02ClicOn(clicid, Prio);
+	}
 	R9A02_ICU->IELSR[slot] = iels;
 
 	if ((R9A02_ICU->IELSR[slot] & (R9A02_IELSR_IELS_Msk | R9A02_IELSR_DTCE)) != iels)
@@ -243,6 +247,16 @@ int R9a02RegisterIntHandler(uint8_t EvtId, int Prio, R9a02IRQHandler_t pHandler,
 	return slot;
 }
 
+int R9a02RegisterIntHandler(uint8_t EvtId, int Prio, R9a02IRQHandler_t pHandler, void *pCtx)
+{
+	return pHandler != nullptr ? R9a02IcuRoute(EvtId, Prio, pHandler, pCtx) : -1;
+}
+
+int R9a02RouteEvent(uint8_t EvtId)
+{
+	return R9a02IcuRoute(EvtId, 0, nullptr, nullptr);
+}
+
 void R9a02UnregisterIntHandler(int IntNo)
 {
 	if (IntNo < 0 || IntNo >= (int)R9A02_ICU_IELSR_CNT)
@@ -253,7 +267,7 @@ void R9a02UnregisterIntHandler(int IntNo)
 	uintptr_t state = DisableInterrupt();
 	R9a02IntHook_t &hook = s_IcuHook[IntNo];
 
-	if (hook.Handler != nullptr)
+	if (hook.EvtId != 0U)
 	{
 		// Manual 12.5.2: event link and IR off, then the CLIC input
 		R9A02_ICU->IELSR[IntNo] = 0U;
@@ -281,7 +295,7 @@ bool R9a02ClearPendingInt(int IntNo)
 	uint32_t clicid = R9A02_CLIC_ID_IELSR0 + (uint32_t)IntNo;
 	bool pending = false;
 
-	if (hook.Handler != nullptr)
+	if (hook.EvtId != 0U)
 	{
 		pending = (R9A02_ICU->IELSR[IntNo] & R9A02_IELSR_IR) != 0U ||
 				  CLIC_INT_IP_REG(R9A02_CLIC_CTRL_BASE, clicid) != 0U;
