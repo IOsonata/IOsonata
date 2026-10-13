@@ -2,14 +2,16 @@
 
 Native MCU port under the existing `ARM/Renesas` tree: system startup, clock
 reporting, Cortex-M4 vectors, normal-boot linker layout, GPIO/pin control, and
-CPU interrupt registration through the ICU, asynchronous SCI UART, and AGT/GPT timers.
+CPU interrupt registration through the ICU, asynchronous SCI UART, AGT/GPT timers, and polling IIC master.
 See [TIMER.md](TIMER.md) for timer device mapping and validation limits, and
 [INTERRUPTS.md](INTERRUPTS.md) for the ICU/NVIC routing architecture,
 registration contract, and interrupt-maintenance invariants.
-No board package, Arduino/FSP runtime, USB controller, DMA/DTC, or NMI
-driver is included yet.
+No board package, Arduino/FSP runtime, USB controller, IIC master-interrupt/DMA,
+general DTC, or NMI driver is included yet. UART TX uses native DMAC.
+IIC slave interrupt handling is implemented for initial bring-up, not yet
+hardware-validated.
 
-## Implementation status (October 11, 2026)
+## Implementation status (October 13, 2026)
 
 Target: `prerelease_0.13`. The RA4M1 register-access migration uses Renesas
 CMSIS peripheral structures rather than handwritten base addresses and
@@ -28,10 +30,10 @@ Therefore the log is **functional evidence, not a bound on GPT interrupt
 latency or period accuracy**. For timing measurement, collect timestamps in
 RAM without semihosting inside the measurement loop.
 
-**Not yet confirmed on hardware:** SCI UART polling/interrupt throughput,
-GPIO edge interrupts, other AGT/GPT channels and all six GPT compare routes,
-long-run rollover/pause/resume, stop/start recovery, low-power operation,
-USB, DMA/DTC and ELC integration. Apart from the UART test
+**Not yet confirmed on hardware:** the new IIC master and slave paths, GPIO edge interrupts,
+other AGT/GPT channels and all six GPT compare routes, long-run rollover/pause/resume,
+stop/start recovery, low-power operation, USB, general DMA/DTC and ELC integration.
+SCI UART is complete and hardware-tested. Apart from the UART test
 (`run_uart_validation.py`, see SCI UART), the host-register-model test runners
 under `tests/ra4m1` predate the CMSIS migration and require updates;
 the old published model assertion counts are not post-migration results.
@@ -62,7 +64,7 @@ The ICU driver is not a replacement for the ARM NVIC.
 Complete the RA4M1 coding-style pass (file headers, declaration placement,
 one statement per line, explicit multi-line control-flow blocks), refresh the
 CMSIS-based host regression models, run production-header Cortex-M4 Debug
-and Release checks, and validate SCI UART and GPIO interrupts on hardware.
+and Release checks, and validate the new IIC master path and GPIO interrupts on hardware.
 No merge into `main` is authorized by this documentation update.
 
 ## IOsonata integration
@@ -91,7 +93,7 @@ the production target/generic headers and `ARM/CMSIS/Core/Include`, never the
 reduced headers in `tests/ra4m1`. CMSIS is taken from the existing repository
 files; no new vendor SDK or submodule is required.
 
-This project builds startup, GPIO, ICU, UART and timer support. It does not yet compile
+This project builds startup, GPIO, ICU, UART, timer and polling IIC master support. It does not yet compile
 the generic USB/application subsystem. Future driver
 increments must add their sources to this same project. The
 library does not link an executable or produce a flash image; the application
@@ -110,8 +112,9 @@ Compile `.c` sources as C11 or later and `.cpp` sources as C++11 or later:
 - `ARM/Renesas/RA4M1/src/interrupt_ra4m1.cpp`
 - `ARM/Renesas/RA4M1/src/iopincfg_ra4m1.c`
 - `ARM/Renesas/RA4M1/src/uart_ra4m1.cpp`
+- `ARM/Renesas/RA4M1/src/i2c_ra4m1.cpp`
 - `ARM/Renesas/RA4M1/src/timer_ra4m1.cpp`
-- `src/cfifo.c`, `src/device_intrf.cpp`, `src/coredev/uart.cpp`, `src/coredev/timer.cpp` (existing, unchanged)
+- `src/cfifo.c`, `src/device_intrf.cpp`, `src/coredev/uart.cpp`, `src/coredev/i2c.cpp`, `src/coredev/timer.cpp` (existing, unchanged)
 
 Use the RA4M1 `include` directory, IOsonata `include` and `ARM/include`, and the
 project's existing CMSIS Core include directory. Link with
@@ -124,10 +127,10 @@ library through the existing ResetEntry reference to `__Vectors`.
 
 The wrapper `ra4m1xxx.h` supplies the CMSIS core configuration, the
 32 ICU slot IRQ numbers, and includes the Renesas vendor device header
-`include/R7FA4M1AB.h`. Production startup, GPIO/PFS, ICU, AGT/GPT and SCI
+`include/R7FA4M1AB.h`. Production startup, GPIO/PFS, ICU, AGT/GPT, SCI and IIC
 drivers access the vendor peripheral structures and register members directly
 (`R_SYSTEM`, `R_PORTn`, `R_PFS`, `R_ICU`, `R_AGTn`, `R_GPTn`, `R_SCIn`).
-The old private register-map headers `ra4m1_ioregs.h`,
+The old private register-map headers `ra4m1_startup_regs.h`, `ra4m1_ioregs.h`,
 `ra4m1_timer_regs.h` and `ra4m1_uart_regs.h` were removed. Pin/package
 capability masks and peripheral control-bit values remain MCU-specific data,
 not alternative register-address maps. No FSP runtime or vendor driver is used.
@@ -297,6 +300,38 @@ It restores the previous power-switch/protection state and does not reset the
 RTC, clear backup flags, or take over retained functions. `IOPinDisable` removes
 an owned pin interrupt and returns the pin to input/no-pull; it is not a claim
 of physical pad-power disconnection.
+
+## IIC master
+
+The native RA4M1 IIC driver exposes **DevNo 0 = IIC0** and **DevNo 1 = IIC1**
+through the existing `coredev/i2c.h` interface. The current increment supports
+standard I2C, 7-bit master polling up to 400 kHz and an initial 7-bit slave
+interrupt path. IIC slave events use the existing READ_RQST, WRITE_RQST and
+COMPLETED callbacks and application-owned buffers. Interrupt master,
+DMA/DTC, SMBus, 10-bit address and Fast-mode Plus requests are rejected.
+Slave request ordering and STOP/repeated-START completion counts require
+hardware validation before this mode is considered complete.
+
+IIC uses PCLKB. Bit-rate programming searches CKS/ICBRL/ICBRH values that meet
+the standard/fast-mode minimum SCL low/high periods while keeping the nominal
+rate at or below the requested value. The calculation assumes zero rise/fall
+time, making the programmed timing conservative on the real open-drain bus.
+The digital noise filter is disabled in this first increment so its additional
+clock stages do not make the rate model implicit.
+
+The valid peripheral pin alternatives are IIC0 SCL on P204/P400/P408 with SDA
+on P401/P407, and IIC1 SCL on P100/P205 with SDA on P101/P206. These require
+PSEL 7, represented by `IOPINOP_FUNC6`. The application still selects one
+legal pair and must provide suitable pull-ups for its bus capacitance and speed.
+
+Normal reads, writes and register-style reads use the generic DeviceIntrf
+transaction API. A register-style read keeps ownership after the prefix write
+and issues the required repeated START. Receive handling performs the RA IIC
+dummy read and programs WAIT/ACKBT before the final bytes. NACK, arbitration
+loss, hardware timeout and software timeout paths are bounded and recover the
+IIC before the next transaction. Reset uses open-drain SCL/SDA, clocks a stuck
+slave up to nine times, emits STOP when possible, and then restores the
+peripheral pin configuration.
 
 ## ICU and GPIO interrupts
 

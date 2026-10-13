@@ -41,5 +41,23 @@ int main()
     assert(pins[1].PortNo == 1 && pins[1].PinNo == 1 && pins[1].PinOp == 4);
     assert(UART_NO == 0 && UART_DEVNO == 0 && !UART_DMA_MODE);
 #endif
+#ifdef I2C_MASTER_DEVNO
+    static_assert(I2C_MASTER_DEVNO == 0, "IIC0 example");
+    static_assert(I2C_MASTER_SDA_PINOP == IOPINOP_FUNC6, "SDA0 PSEL 7");
+    static_assert(I2C_MASTER_SCL_PINOP == IOPINOP_FUNC6, "SCL0 PSEL 7");
+    assert(I2C_MASTER_SDA_PORT == 4 && I2C_MASTER_SDA_PIN == 1);
+    assert(I2C_MASTER_SCL_PORT == 4 && I2C_MASTER_SCL_PIN == 8);
+    assert(Ra4m1PinValid(I2C_MASTER_SDA_PORT, I2C_MASTER_SDA_PIN));
+    assert(Ra4m1PinValid(I2C_MASTER_SCL_PORT, I2C_MASTER_SCL_PIN));
+    assert(!I2C_MASTER_DMA_ENABLE && !I2C_MASTER_INT_ENABLE);
+    static_assert(I2C_SLAVE_DEVNO == 1, "IIC1 slave");
+    static_assert(I2C_SLAVE_SDA_PINOP == IOPINOP_FUNC6, "SDA1 PSEL 7");
+    static_assert(I2C_SLAVE_SCL_PINOP == IOPINOP_FUNC6, "SCL1 PSEL 7");
+    assert(I2C_SLAVE_SDA_PORT == 2 && I2C_SLAVE_SDA_PIN == 6);
+    assert(I2C_SLAVE_SCL_PORT == 2 && I2C_SLAVE_SCL_PIN == 5);
+    assert(Ra4m1PinValid(I2C_SLAVE_SDA_PORT, I2C_SLAVE_SDA_PIN));
+    assert(Ra4m1PinValid(I2C_SLAVE_SCL_PORT, I2C_SLAVE_SCL_PIN));
+    assert(!I2C_SLAVE_DMA_ENABLE && I2C_SLAVE_INT_ENABLE);
+#endif
     printf("PASS: example pin map, %d-pin package\n", RA4M1_PACKAGE_PINS);
 }
