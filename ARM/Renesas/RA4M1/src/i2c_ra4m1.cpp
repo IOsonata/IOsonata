@@ -159,6 +159,7 @@ typedef struct
 	bool bRxDir;			// current transfer direction
 	bool bStopReq;			// issue STOP at the end of the transfer
 	bool bAsync;			// interrupt driven, completion by callback
+	bool bRestart;			// transfer started with a repeated START
 	bool bAddrPhase;		// address byte not yet acknowledged
 	bool bNack;				// a NACK ended the transfer
 	bool bError;			// timeout, arbitration loss or bus failure
@@ -252,7 +253,8 @@ static int32_t Ra4m1I2cTimeout(const Ra4m1I2cDev_t * const pDev)
 		return 1000000;
 	}
 
-	uint64_t ticks = (uint64_t)core / 20U + ((uint64_t)core / rate) * 16U + 256U;
+	// About 64 byte times of polling passes without progress
+	uint64_t ticks = ((uint64_t)core / rate) * 64U + 256U;
 
 	return ticks > INT32_MAX ? INT32_MAX : (int32_t)ticks;
 }
@@ -554,8 +556,11 @@ static void Ra4m1I2cMasterService(Ra4m1I2cDev_t * const pDev)
 	switch (pDev->MState)
 	{
 		case RA4M1_I2C_M_START:
-			// TDRE can be set before the START went out, so wait for START.
-			if ((sr & RA4M1_I2C_SR2_START) != 0U && (sr & RA4M1_I2C_SR2_TDRE) != 0U)
+			// TDRE can be set before the START went out, so wait for the
+			// START flag. After a plain START, BBSY also says it went out.
+			if (((sr & RA4M1_I2C_SR2_START) != 0U ||
+				 (!pDev->bRestart && Ra4m1I2cBusy(reg))) &&
+				(sr & RA4M1_I2C_SR2_TDRE) != 0U)
 			{
 				Ra4m1I2cClearFlags(reg, RA4M1_I2C_SR2_START);
 				reg->ICDRT = (uint8_t)((pDev->Addr << 1U) | (pDev->bRxDir ? 1U : 0U));
@@ -676,6 +681,7 @@ static bool Ra4m1I2cMasterBegin(Ra4m1I2cDev_t * const pDev, bool bRx,
 	}
 
 	pDev->bRxDir = bRx;
+	pDev->bRestart = restart;
 	pDev->bStopReq = bStop;
 	pDev->bAsync = bAsync;
 	pDev->bAddrPhase = true;
@@ -688,10 +694,10 @@ static bool Ra4m1I2cMasterBegin(Ra4m1I2cDev_t * const pDev, bool bRx,
 	Ra4m1I2cClearFlags(reg, RA4M1_I2C_SR2_EVENTS);
 	pDev->MState = RA4M1_I2C_M_START;
 
-	if (bAsync)
-	{
-		reg->ICIER = RA4M1_I2C_IER_MASTER;
-	}
+	// The enable bits are set in polling mode too. With no ICU route they
+	// raise nothing, and the START, STOP and NACK flags are then certain to
+	// follow the bus.
+	reg->ICIER = RA4M1_I2C_IER_MASTER;
 
 	if (restart)
 	{
@@ -746,6 +752,7 @@ static int Ra4m1I2cMasterResult(Ra4m1I2cDev_t * const pDev)
 	}
 
 	pDev->bAsync = false;
+	pDev->pReg->ICIER = 0U;
 
 	return count;
 }
@@ -791,6 +798,8 @@ static void Ra4m1I2cMasterRelease(Ra4m1I2cDev_t * const pDev)
 	{
 		pDev->MState = RA4M1_I2C_M_IDLE;
 	}
+
+	reg->ICIER = 0U;
 }
 
 static void Ra4m1I2cStop(DevIntrf_t * const pIntrf)

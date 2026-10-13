@@ -624,6 +624,7 @@ static void MasterRun(Iic_t &u)
 	{
 		case PH_START:
 			BusStartCond(u.bRestart);
+			u.iccr2 |= M_BBSY;
 			u.icsr2 |= SR2_START;
 			u.icsr2 &= (uint8_t)~SR2_TEND;
 			u.icsr2 |= SR2_TDRE;
@@ -745,13 +746,13 @@ static void MasterWriteCr2(Iic_t &u, uint8_t v)
 
 	if (v & 0x02U)
 	{
-		if (u.iccr2 & M_BBSY)
+		if ((u.iccr2 & M_BBSY) || u.ph != PH_IDLE)
 		{
 			Violation("ST on a busy bus");
 		}
 		else
 		{
-			u.iccr2 |= M_BBSY | M_MST | M_TRS;
+			u.iccr2 |= M_MST | M_TRS;
 			u.ph = PH_START;
 			u.due = s_Tick + COND_TICKS;
 			u.bRestart = false;
