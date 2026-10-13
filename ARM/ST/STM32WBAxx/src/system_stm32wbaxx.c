@@ -34,6 +34,7 @@ SOFTWARE.
 #include <stdint.h>
 #include "stm32wbaxx.h"
 #include "system_stm32wbaxx.h"
+#include "coredev/system_core_clock.h"
 
 extern void (* const __Vectors[])(void);
 
@@ -41,6 +42,15 @@ uint32_t SystemCoreClock = 16000000U;
 const uint8_t AHBPrescTable[8] = {0U, 0U, 0U, 0U, 1U, 2U, 3U, 4U};
 const uint8_t APBPrescTable[8] = {0U, 0U, 0U, 0U, 1U, 2U, 3U, 4U};
 const uint8_t AHB5PrescTable[8] = {1U, 1U, 1U, 1U, 2U, 3U, 4U, 6U};
+
+/* Overload in the application firmware to describe the board oscillators.
+ * The clock setup below runs from HSI16 and does not start the LSE.
+ */
+__WEAK McuOsc_t g_McuOsc = {
+    {OSC_TYPE_RC, 16000000, 20},
+    {OSC_TYPE_RC, 32000, 20},
+    false
+};
 
 void SystemInit(void)
 {
@@ -58,4 +68,35 @@ void SystemInit(void)
 void SystemCoreClockUpdate(void)
 {
     SystemCoreClock = 16000000U;
+}
+
+/* Core clock frequency (HCLK1) in Hz */
+uint32_t SystemCoreClockGet(void)
+{
+    return SystemCoreClock;
+}
+
+/* Peripheral clock frequency in Hz, HCLK1 divided by the APB prescaler.
+ * Idx : 0 PCLK1 (APB1), 1 PCLK2 (APB2), 2 PCLK7 (APB7). 0 for another Idx.
+ */
+uint32_t SystemPeriphClockGet(int Idx)
+{
+    uint32_t ppre;
+
+    switch (Idx)
+    {
+        case 0:
+            ppre = (RCC->CFGR2 & RCC_CFGR2_PPRE1_Msk) >> RCC_CFGR2_PPRE1_Pos;
+            break;
+        case 1:
+            ppre = (RCC->CFGR2 & RCC_CFGR2_PPRE2_Msk) >> RCC_CFGR2_PPRE2_Pos;
+            break;
+        case 2:
+            ppre = (RCC->CFGR3 & RCC_CFGR3_PPRE7_Msk) >> RCC_CFGR3_PPRE7_Pos;
+            break;
+        default:
+            return 0;
+    }
+
+    return SystemCoreClock >> APBPrescTable[ppre];
 }

@@ -22,6 +22,7 @@
 		F030x8 : 0 USART1, 1 USART2
 		F401   : 0 USART1, 1 USART2, 2 USART6
 		L4     : 0 LPUART1, 1 USART1, 2 USART2, 3 USART3, 4 UART4, 5 UART5
+		WBA65  : 0 LPUART1, 1 USART1, 2 USART2, 3 USART3
 
 		USART kernel clock is PCLK, read with SystemPeriphClockGet. UARTInit
 		writes the selection field where the part has one. LPUART1 runs from
@@ -38,8 +39,6 @@
 		bDMAMode true  : TX DMA sends blocks from the TX CFIFO, circular RX
 		                 DMA ring moved into the RX CFIFO. F0 USART1 and
 		                 USART2, L4 and F4 all instances.
-
-		Not mapped yet: the RCC names of WBA.
 
 @author	Hoang Nguyen Hoan
 @date	Jun. 7, 2019
@@ -153,9 +152,9 @@ SOFTWARE.
 #define ST_USART_CR1_M0			USART_CR1_M
 #endif
 
-// RCC register holding the APB1 clock enables, split in two on L4. The reset
-// bit of a peripheral has the same position as its enable bit.
-#if defined(RCC_APB1ENR1_PWREN)
+// RCC register holding the APB1 clock enables, split in two on L4 and WBA.
+// The reset bit of a peripheral has the same position as its enable bit.
+#if defined(RCC_APB1ENR1_PWREN) || defined(RCC_APB1ENR1_TIM2EN)
 #define ST_RCC_APB1ENR			APB1ENR1
 #define ST_RCC_APB1RSTR			APB1RSTR1
 #define ST_RCC_APB1EN(Inst)		RCC_APB1ENR1_##Inst##EN
@@ -168,11 +167,17 @@ SOFTWARE.
 #endif
 
 // SystemPeriphClockGet index of the APB2 instances. Parts with a single APB
-// prescaler have one PCLK.
-#ifdef RCC_CFGR_PPRE2
+// prescaler have one PCLK. WBA has its prescalers in CFGR2 and LPUART1 on
+// APB7, index 2.
+#if defined(RCC_CFGR_PPRE2) || defined(RCC_CFGR2_PPRE2)
 #define ST_PCLK_APB2			1
 #else
 #define ST_PCLK_APB2			0
+#endif
+#ifdef RCC_CFGR3_PPRE7
+#define ST_PCLK_LPUART1			2
+#else
+#define ST_PCLK_LPUART1			0
 #endif
 
 // USART kernel clock selection field of each instance, 0 selects PCLK. A
@@ -194,6 +199,15 @@ SOFTWARE.
 #ifdef RCC_CCIPR_UART5SEL
 #define ST_RCC_UART5SEL			RCC_CCIPR_UART5SEL
 #endif
+#elif defined(RCC_CCIPR1_USART1SEL)
+#define ST_RCC_USARTSELR		CCIPR1
+#define ST_RCC_USART1SEL		RCC_CCIPR1_USART1SEL
+#ifdef RCC_CCIPR1_USART2SEL
+#define ST_RCC_USART2SEL		RCC_CCIPR1_USART2SEL
+#endif
+#ifdef RCC_CCIPR1_USART3SEL
+#define ST_RCC_USART3SEL		RCC_CCIPR1_USART3SEL
+#endif
 #elif defined(RCC_CFGR3_USART1SW)
 #define ST_RCC_USARTSELR		CFGR3
 #define ST_RCC_USART1SEL		RCC_CFGR3_USART1SW
@@ -212,6 +226,12 @@ SOFTWARE.
 #define ST_RCC_LPUART1EN		RCC_APB1ENR2_LPUART1EN
 #define ST_RCC_LPUART1SELR		CCIPR
 #define ST_RCC_LPUART1SEL_Pos	RCC_CCIPR_LPUART1SEL_Pos
+#elif defined(LPUART1) && defined(RCC_APB7ENR_LPUART1EN)
+#define ST_RCC_LPUART1ENR		APB7ENR
+#define ST_RCC_LPUART1RSTR		APB7RSTR
+#define ST_RCC_LPUART1EN		RCC_APB7ENR_LPUART1EN
+#define ST_RCC_LPUART1SELR		CCIPR3
+#define ST_RCC_LPUART1SEL_Pos	RCC_CCIPR3_LPUART1SEL_Pos
 #elif defined(LPUART1)
 #error "uart_stm32.cpp: LPUART1 RCC names not mapped"
 #endif
@@ -393,7 +413,7 @@ static Stm32UartDev_t s_Stm32UartDev[] = {
 		.pRccEnReg = &RCC->ST_RCC_LPUART1ENR,
 		.pRccRstReg = &RCC->ST_RCC_LPUART1RSTR,
 		.RccMask = ST_RCC_LPUART1EN,
-		.PclkIdx = 0,
+		.PclkIdx = ST_PCLK_LPUART1,
 #if defined(STM32L4)
 		.RxDma = { DMA2_Channel7, DMA2, 6, ST_DMA_REQ(4, 34), DMA2_Channel7_IRQn },
 		.TxDma = { DMA2_Channel6, DMA2, 5, ST_DMA_REQ(4, 35), DMA2_Channel6_IRQn },
