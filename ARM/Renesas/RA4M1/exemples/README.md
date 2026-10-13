@@ -54,8 +54,9 @@ EK-RA4M1 these are J2-8 (P401) and J2-37 (P400), the same IIC0 pair used by
 Renesas's EK IIC loopback example. Provide a common ground and external pull-ups
 sized for the bus voltage, capacitance and selected speed. The example requests 100 kHz with polling master. IIC1 uses P206 = SDA1 and
 P205 = SCL1; connect SDA-to-SDA, SCL-to-SCL and common ground with pull-ups.
-The native slave implementation is still missing, so the example currently
-fails its slave initialization and **cannot yet pass loopback**. The shared
+A first native IIC slave ISR/callback implementation is now present, but its
+address/restart/STOP transitions have not yet been hardware-validated. The
+example is ready for bring-up, not a claimed loopback PASS. The shared
 example remains unchanged; the target address is 0x22. This concrete example pin pair requires a
 64- or 100-pin RA4M1 package; the driver itself also accepts the other legal IIC
 pin alternatives documented in ../README.md.
@@ -108,9 +109,9 @@ A rejected period is reported as a failure, not silently accepted. These are
 ordinary `TimerCfg_t` device/frequency choices within the same project.
 
 **I2CMasterSlave:** reuses the shared master/slave loopback program. It requests
-IIC0 as polling master and IIC1 as interrupt slave at 100 kHz. The slave path
-is not implemented yet: initialization will fail until the RA4M1 driver
-supports slave callbacks and transfers. No hardware PASS is claimed.
+IIC0 as polling master and IIC1 as interrupt slave at 100 kHz. The slave uses ICU RXI/TXI/TEI/EEI and the standard IOsonata
+READ_RQST, WRITE_RQST and COMPLETED callbacks. The first ISR implementation
+is not yet verified on the EK-RA4M1; no hardware PASS is claimed.
 
 **UartLoopback:** open a serial terminal at 115200 8N1, without flow control.
 The firmware writes `UART Loopback Test` at startup and echoes received bytes.
@@ -148,7 +149,7 @@ A Timer DevNo 3 (GPT1) run produced callbacks from four compare triggers at
 100, 1000, 250 and 500 ms. The printed periods are not reliable jitter
 measurements because the run used J-Link `rdimon` semihosting; acquire timing
 samples in RAM or use a nonblocking logging path before measuring latency.
-SCI UART is now complete and hardware-tested. The new IIC master example,
+SCI UART is complete and hardware-tested. The new IIC master/slave loopback,
 GPIO edge interrupts and the remaining untested timer channels still require
 hardware validation.
 
