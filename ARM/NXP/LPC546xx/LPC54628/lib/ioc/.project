@@ -181,9 +181,9 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/intelhex.h</locationURI>
 		</link>
 		<link>
-			<name>include/interrupt.h</name>
+			<name>include/coredev/interrupt.h</name>
 			<type>1</type>
-			<locationURI>PARENT-5-PROJECT_LOC/include/interrupt.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/interrupt.h</locationURI>
 		</link>
 		<link>
 			<name>include/isha1.h</name>
@@ -521,11 +521,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/converters/adc_device.h</locationURI>
 		</link>
 		<link>
-			<name>include/converters/adc_hx711.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/converters/adc_hx711.h</locationURI>
-		</link>
-		<link>
 			<name>include/converters/adc_ltc2495.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/converters/adc_ltc2495.h</locationURI>
@@ -559,11 +554,6 @@
 			<name>include/coredev/pdm.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/pdm.h</locationURI>
-		</link>
-		<link>
-			<name>include/coredev/shared_irq.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/shared_irq.h</locationURI>
 		</link>
 		<link>
 			<name>include/coredev/spi.h</name>
@@ -684,11 +674,6 @@
 			<name>include/sensors/accel_h3lis331dl.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/accel_h3lis331dl.h</locationURI>
-		</link>
-		<link>
-			<name>include/sensors/accel_lis2dh12.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/accel_lis2dh12.h</locationURI>
 		</link>
 		<link>
 			<name>include/sensors/accel_sensor.h</name>
