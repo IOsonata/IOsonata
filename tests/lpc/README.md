@@ -34,6 +34,7 @@ With Arm GNU tools, newlib-nano and C++23 support:
 python3 tests/lpc/usb/link.py
 python3 tests/lpc/timer/link.py
 python3 tests/lpc/timer/link17.py
+python3 tests/lpc/timer/link546.py
 python3 tests/lpc/usb/link.py --prefix /path/to/bin/arm-none-eabi- --output /tmp/lpc-usb
 ```
 
@@ -45,6 +46,8 @@ settings. It does not build every optional source in the MCU library project.
 The separate timer command links the actual LPC11U35 TimerDemo in Debug and
 Release, checks real timer handlers and verifies that USB storage is absent.
 The link17 command checks LPC1769 TimerDemo with Cortex-M3 startup and runtime.
+The link546 command checks LPC54628 TimerDemo with Cortex-M4 hard-float startup
+and runtime, including Debug semihosting and Release UART selection.
 Memory measurements and detailed coverage are in `usb/README.md` and
 `timer/README.md`.
 

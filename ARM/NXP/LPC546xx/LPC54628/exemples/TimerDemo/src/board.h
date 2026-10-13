@@ -55,7 +55,9 @@ SOFTWARE.
 #define TIMER_DEMO_INT_PRIO	2
 
 // Output on the LPC-Link2 VCOM, Flexcomm 0, P0_29 RXD and P0_30 TXD
+#ifndef DEBUG
 #define TIMER_DEMO_UART
+#endif
 #define UART_DEVNO			0
 #define UART_RX_PORT		0
 #define UART_RX_PIN			29

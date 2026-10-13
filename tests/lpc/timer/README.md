@@ -49,8 +49,8 @@ arithmetic. The LPC546xx suite covers its existing numbering, clocks and trigger
 
 Validation performed: host tests and ARM compiler-to-assembly checks of the
 shared driver, family adapters and generic C++ wrapper using real vendor headers
-for LPC11U35 and LPC54628. LPC11U35 TimerDemo firmware links now pass as recorded below; LPC54628
-full firmware linking and physical-board timing tests remain pending. For board validation, use `exemples/timer/timer_demo.cpp` with
+for LPC11U35 and LPC54628. TimerDemo firmware links for all three families now pass as recorded below;
+physical-board timing tests remain pending. For board validation, use `exemples/timer/timer_demo.cpp` with
 TIMER_DEMO_INT_PRIO set to 3 for LPC11U35; exercise all four devices and check the
 output periods with a scope, including timer pause/resume and counter rollover.
 
@@ -139,3 +139,35 @@ The additional AHB RAM is not included in the local RAM column. This example
 does not exercise initialized AHB objects. Stack values are linker allowances,
 not measured runtime usage. Board boot, timer periods and UART console output
 remain to be validated on hardware.
+
+
+## LPC54628 TimerDemo ARM link
+
+```
+python3 tests/lpc/timer/link546.py
+python3 tests/lpc/timer/link546.py --prefix /path/to/bin/arm-none-eabi- --output /tmp/lpc546-timer
+```
+
+This check follows the existing LPC11U35/LPC1769 firmware checks. It builds the
+shared TimerDemo with the LPCXpresso54628 board header, production startup,
+clock/GPIO code, shared timer implementation and Flexcomm UART support, then
+links the library archive with gcc_lpc54628.ld. It checks project source links,
+C++23, Cortex-M4 hard-float settings and the final ELF hard-float attribute.
+
+The check found and corrected the example's Debug nosys setting and unconditional
+UART retargeting. Debug now uses rdimon semihosting; Release uses nosys and the
+board's UART console. Symbol checks verify both selections. Other checks cover
+TimerInit, all five CTIMER vector bindings, reset entry, LPC image checksum and
+the 32-byte SRAM0 IAP reservation.
+
+Measured with GCC 13.2.1, binutils 2.42 and v7e-m+fp/hard newlib-nano:
+
+| Build | Flash / 524288 bytes | SRAM0 / 65504 bytes | Linker stack allowance |
+| --- | ---: | ---: | ---: |
+| Debug | 25072 | 2160 | 21112 |
+| Release | 22200 | 3488 | 20668 |
+
+This is a focused firmware link, not a build of every optional library source.
+The example does not exercise initialized SRAM1-3 or SRAMX objects. Stack values
+are linker allowances, not measured runtime usage. Hardware startup, timer
+periods and UART console output remain to be validated on a board.
