@@ -32,6 +32,7 @@ With Arm GNU tools, newlib-nano and C++23 support:
 
 ```sh
 python3 tests/lpc/usb/link.py
+python3 tests/lpc/timer/link.py
 python3 tests/lpc/usb/link.py --prefix /path/to/bin/arm-none-eabi- --output /tmp/lpc-usb
 ```
 
@@ -40,7 +41,10 @@ bulk and a three-class composite, each in Debug and Release. Debug retains
 rdimon semihosting; Release uses nosys. It checks production startup, vector
 checksum, USB IRQ, IAP reservation, USB SRAM placement and example project
 settings. It does not build every optional source in the MCU library project.
-Memory measurements and detailed coverage are in `usb/README.md`.
+The separate timer command links the actual LPC11U35 TimerDemo in Debug and
+Release, checks real timer handlers and verifies that USB storage is absent.
+Memory measurements and detailed coverage are in `usb/README.md` and
+`timer/README.md`.
 
 ## Validation status
 

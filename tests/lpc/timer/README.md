@@ -49,8 +49,8 @@ arithmetic. The LPC546xx suite covers its existing numbering, clocks and trigger
 
 Validation performed: host tests and ARM compiler-to-assembly checks of the
 shared driver, family adapters and generic C++ wrapper using real vendor headers
-for LPC11U35 and LPC54628. Full firmware linking and physical-board timing tests
-remain pending. For board validation, use `exemples/timer/timer_demo.cpp` with
+for LPC11U35 and LPC54628. LPC11U35 TimerDemo firmware links now pass as recorded below; LPC54628
+full firmware linking and physical-board timing tests remain pending. For board validation, use `exemples/timer/timer_demo.cpp` with
 TIMER_DEMO_INT_PRIO set to 3 for LPC11U35; exercise all four devices and check the
 output periods with a scope, including timer pause/resume and counter rollover.
 
@@ -73,3 +73,38 @@ The existing LPC11Uxx/LPC546xx behavioral suites exercise continuous triggers
 and delayed interrupt handling in the unchanged shared algorithm. RTC, RIT and
 PWM peripherals are not included in this adapter. Full linking and board tests
 remain pending; use the common timer_demo.cpp with DevNo 0..3 for bring-up.
+
+
+## LPC11U35 TimerDemo ARM link
+
+With Arm GNU tools and newlib-nano installed:
+
+```
+python3 tests/lpc/timer/link.py
+python3 tests/lpc/timer/link.py --prefix /path/to/bin/arm-none-eabi- --output /tmp/lpc-timer
+```
+
+The check compiles the actual shared TimerDemo application with its LPC11U35
+board header, startup, shared/family timer drivers and UART console support.
+It archives library objects before linking against the production linker
+script, and verifies that all required sources appear in the library project.
+C++20 matches the existing TimerDemo project settings.
+
+Debug uses -O0 and rdimon semihosting; Release uses -Os and nosys with the
+board's UART console enabled. The check verifies TimerInit, all four timer
+IRQ vector bindings, reset entry, checksum and the 32-byte IAP reservation.
+USB objects are included in the archive to check that the timer application
+retains neither the native USB driver nor the USB SRAM section.
+
+Measured with GCC 13.2.1 and binutils 2.42:
+
+| Build | Flash / 65536 bytes | Main RAM / 8160 bytes | USB SRAM | Linker stack allowance |
+| --- | ---: | ---: | ---: | ---: |
+| Debug | 24232 | 2016 | 0 | 2044 |
+| Release | 22576 | 2240 | 0 | 1972 |
+
+The stack allowance is not measured runtime usage. Retained files are under
+TimerDemo/{Debug,Release} in the --output directory. This checks firmware
+linkage, not execution of startup, LED periods or UART output on a board.
+It also does not compile every optional library source. Physical LPC11U35
+validation remains pending.
