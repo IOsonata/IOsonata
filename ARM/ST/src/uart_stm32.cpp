@@ -23,9 +23,9 @@
 		F401   : 0 USART1, 1 USART2, 2 USART6
 		L4     : 0 LPUART1, 1 USART1, 2 USART2, 3 USART3, 4 UART4, 5 UART5
 
-		USART kernel clock is PCLK, the reset value of its selection field,
-		read with SystemPeriphClockGet. LPUART1 runs from the LSE crystal or
-		HSI16 for the rates they can make.
+		USART kernel clock is PCLK, read with SystemPeriphClockGet. UARTInit
+		writes the selection field where the part has one. LPUART1 runs from
+		the LSE crystal or HSI16 for the rates they can make.
 
 		TxData puts the data in the TX CFIFO, then starts TX if it is ready.
 		RxData reads from the RX CFIFO. Without the interrupt, TxData and
@@ -160,6 +160,36 @@ SOFTWARE.
 #define ST_PCLK_APB2			0
 #endif
 
+// USART kernel clock selection field of each instance, 0 selects PCLK. A
+// peripheral reset does not clear it, boot code or an application may have
+// selected another clock. Instances without one (F1, F2, F4, most F0 USART2
+// and up) run from PCLK.
+#if defined(RCC_CCIPR_USART1SEL)
+#define ST_RCC_USARTSELR		CCIPR
+#define ST_RCC_USART1SEL		RCC_CCIPR_USART1SEL
+#ifdef RCC_CCIPR_USART2SEL
+#define ST_RCC_USART2SEL		RCC_CCIPR_USART2SEL
+#endif
+#ifdef RCC_CCIPR_USART3SEL
+#define ST_RCC_USART3SEL		RCC_CCIPR_USART3SEL
+#endif
+#ifdef RCC_CCIPR_UART4SEL
+#define ST_RCC_UART4SEL			RCC_CCIPR_UART4SEL
+#endif
+#ifdef RCC_CCIPR_UART5SEL
+#define ST_RCC_UART5SEL			RCC_CCIPR_UART5SEL
+#endif
+#elif defined(RCC_CFGR3_USART1SW)
+#define ST_RCC_USARTSELR		CFGR3
+#define ST_RCC_USART1SEL		RCC_CFGR3_USART1SW
+#ifdef RCC_CFGR3_USART2SW
+#define ST_RCC_USART2SEL		RCC_CFGR3_USART2SW
+#endif
+#ifdef RCC_CFGR3_USART3SW
+#define ST_RCC_USART3SEL		RCC_CFGR3_USART3SW
+#endif
+#endif
+
 // LPUART1 clock enable and kernel clock selection
 #if defined(LPUART1) && defined(RCC_APB1ENR2_LPUART1EN)
 #define ST_RCC_LPUART1ENR		APB1ENR2
@@ -225,6 +255,8 @@ typedef struct __Stm32_Uart_Dev {
 	volatile uint32_t *pRccRstReg;	//!< RCC reset register
 	uint32_t RccMask;				//!< Enable bit, also the reset bit
 	int PclkIdx;					//!< SystemPeriphClockGet index of the instance bus
+	volatile uint32_t *pClkSelReg;	//!< RCC kernel clock selection register, NULL none
+	uint32_t ClkSelMask;			//!< Selection field, written 0 for PCLK
 	UARTDev_t *pUartDev;			//!< Pointer to generic UART dev. data
 	const IOPinCfg_t *pIOPinMap;	//!< Pins configured again by Enable
 	int NbIOPins;					//!< Number of pins in pIOPinMap
@@ -297,6 +329,10 @@ static Stm32UartDev_t s_Stm32UartDev[] = {
 		.pRccRstReg = &RCC->APB2RSTR,
 		.RccMask = RCC_APB2ENR_USART1EN,
 		.PclkIdx = ST_PCLK_APB2,
+#ifdef ST_RCC_USART1SEL
+		.pClkSelReg = &RCC->ST_RCC_USARTSELR,
+		.ClkSelMask = ST_RCC_USART1SEL,
+#endif
 #if defined(STM32F030x8)
 		.pRxDma = DMA1_Channel3,
 		.RxDmaShift = 8,
@@ -313,6 +349,10 @@ static Stm32UartDev_t s_Stm32UartDev[] = {
 		.pRccRstReg = &RCC->ST_RCC_APB1RSTR,
 		.RccMask = ST_RCC_APB1EN(USART2),
 		.PclkIdx = 0,
+#ifdef ST_RCC_USART2SEL
+		.pClkSelReg = &RCC->ST_RCC_USARTSELR,
+		.ClkSelMask = ST_RCC_USART2SEL,
+#endif
 #if defined(STM32F030x8)
 		.pRxDma = DMA1_Channel5,
 		.RxDmaShift = 16,
@@ -330,6 +370,10 @@ static Stm32UartDev_t s_Stm32UartDev[] = {
 		.pRccRstReg = &RCC->ST_RCC_APB1RSTR,
 		.RccMask = ST_RCC_APB1EN(USART3),
 		.PclkIdx = 0,
+#ifdef ST_RCC_USART3SEL
+		.pClkSelReg = &RCC->ST_RCC_USARTSELR,
+		.ClkSelMask = ST_RCC_USART3SEL,
+#endif
 	},
 #endif
 #ifdef USART4
@@ -350,6 +394,10 @@ static Stm32UartDev_t s_Stm32UartDev[] = {
 		.pRccRstReg = &RCC->ST_RCC_APB1RSTR,
 		.RccMask = ST_RCC_APB1EN(UART4),
 		.PclkIdx = 0,
+#ifdef ST_RCC_UART4SEL
+		.pClkSelReg = &RCC->ST_RCC_USARTSELR,
+		.ClkSelMask = ST_RCC_UART4SEL,
+#endif
 	},
 #endif
 #ifdef USART5
@@ -370,6 +418,10 @@ static Stm32UartDev_t s_Stm32UartDev[] = {
 		.pRccRstReg = &RCC->ST_RCC_APB1RSTR,
 		.RccMask = ST_RCC_APB1EN(UART5),
 		.PclkIdx = 0,
+#ifdef ST_RCC_UART5SEL
+		.pClkSelReg = &RCC->ST_RCC_USARTSELR,
+		.ClkSelMask = ST_RCC_UART5SEL,
+#endif
 	},
 #endif
 #ifdef USART6
@@ -1391,6 +1443,13 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 
 	// All USART registers at their reset value, UE cleared.
 	Stm32UartReset(&pDev->DevIntrf);
+
+	// Kernel clock PCLK, the rate is computed from it. LPUART1 selects its
+	// clock in Stm32UartSetRate.
+	if (dev->pClkSelReg != NULL)
+	{
+		*dev->pClkSelReg &= ~dev->ClkSelMask;
+	}
 
 	if (pCfg->pRxMem && pCfg->RxMemSize > 0)
 	{
