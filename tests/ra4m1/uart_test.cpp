@@ -112,6 +112,7 @@ typedef struct {
 	unsigned TxIgnored;				// TDR or FTDRL written with TE cleared
 	unsigned RxLost;				// Characters lost by the receiver
 	unsigned TxGap;					// Steps with the line idle and TX CFIFO bytes waiting
+	unsigned IdleMove;				// Register accesses until TDR goes on to the idle shift register
 } SciModel_t;
 
 typedef struct {
@@ -166,8 +167,11 @@ static bool s_StepAtCra;			// The line moves right after each read of DMCRA
 static bool s_StepAtErrClear;		// The line moves right after a write clearing a receive error flag
 static unsigned s_StepAtPoint;		// The line moves once, after this register access or ICU flag clear
 static unsigned s_IsrPoints;		// of a handler, counted from its start, 0 none
+static unsigned s_IdleMoveLate;		// A CPU write to TDR with the line idle goes on to the shift
+									// register this many register accesses later, 0 at once
 static int s_TxiEdge;				// SCI2/9, 1 or 2: a CPU write to TDR with the line idle and TIE set gives
-									// no TXI. 1: TIE set with TDRE 1 gives one (rising edge of TDRE and TIE)
+									// no TXI to the CPU, the DMAC gets it. 1: TIE set with TDRE 1 gives one
+									// (rising edge of TDRE and TIE)
 static unsigned s_LockStepEvery;	// Line step after n application register accesses with PRIMASK clear, 0 none
 static unsigned s_LockAccess;		// Those accesses since the last step
 static unsigned s_TxLevelInApp;		// Handlers below RXI priority taken there
@@ -235,6 +239,20 @@ static int SciUnit(const void *pReg)
 	CHECK((s_Mstpcrb & s_MstpBit[u]) == 0);
 
 	return u;
+}
+
+// TXI of the SCI linked to a DMAC channel in DELSR
+static bool TxiToDmac(int u)
+{
+	for (int ch = 0; ch < 4; ch++)
+	{
+		if (s_Delsr[ch] == (uint32_t)(s_EvtRxi[u] + 1))
+		{
+			return true;
+		}
+	}
+
+	return false;
 }
 
 static void LineStep(int u);
@@ -545,13 +563,22 @@ static void RegWrite(const void *pReg, int Id, uint32_t Val)
 			}
 			CHECK(m.Flags & B_TDRE);
 			m.Flags &= ~(B_TDRE | B_TEND);
-			if (m.Tsr < 0)
+			if (m.Tsr < 0 && s_IdleMoveLate && !s_bDmaWrite)
+			{
+				// Line idle, TDR goes to the shift register a little later
+				m.Tdr = v;
+				m.bTdrFull = true;
+				m.IdleMove = s_IdleMoveLate;
+			}
+			else if (m.Tsr < 0)
 			{
 				// Line idle, TDR goes to the shift register right away
 				m.Tsr = v;
-				if (s_TxiEdge && !s_bDmaWrite && (m.Scr & TIE))
+				if (s_TxiEdge && !s_bDmaWrite && (m.Scr & TIE) && !TxiToDmac(SciUnit(pReg)))
 				{
-					// TDRE low too short for an edge
+					// TDRE low too short for an edge. On the EK-RA4M1 SCI2 the
+					// DMAC got that TXI, UartLoopback interrupt DMA started its
+					// blocks that way and ran without a stop.
 					m.Flags |= B_TDRE;
 				}
 				else
@@ -622,9 +649,18 @@ static void IsrPoint(void)
 	}
 }
 
+static void IdleMoveDone(SciModel_t &m);
+
 static void AccessDone(void)
 {
 	DmaLateTake(false);
+	for (int u = 0; u < 4; u++)
+	{
+		if (s_Sci[u].IdleMove && --s_Sci[u].IdleMove == 0)
+		{
+			IdleMoveDone(s_Sci[u]);
+		}
+	}
 	UpdateIcu();
 	if (s_bInIsr && s_IsrStepEvery && ++s_IsrAccess >= s_IsrStepEvery)
 	{
@@ -739,9 +775,29 @@ static void Arrive(SciModel_t &m, uint16_t c)
 	}
 }
 
+// TDR written to an idle line goes on to the shift register, s_IdleMoveLate
+// register accesses after the write. Its TXI comes. Such a move together with
+// no TXI after a CPU write to an idle line (s_TxiEdge) stops SCI2/9 interrupt
+// mode, which ran without a stop on the EK-RA4M1: the two are run separately.
+static void IdleMoveDone(SciModel_t &m)
+{
+	m.IdleMove = 0;
+	if (m.Tsr < 0 && m.bTdrFull)
+	{
+		m.Tsr = m.Tdr;
+		m.bTdrFull = false;
+		SetTxFlag(m);
+	}
+}
+
 static void LineStep(int u)
 {
 	SciModel_t &m = s_Sci[u];
+
+	if (m.IdleMove)
+	{
+		IdleMoveDone(m);
+	}
 
 	if (u == 0)
 	{
@@ -2308,15 +2364,18 @@ int main()
 	TestIntPrio();
 	// Without DMA, then with DMA for a request made while DTE is cleared held
 	// in DELSR and lost, then held with the channel taking each request one
-	// register access or line step later. Runs 4 to 7, without DMA and with
-	// DMA (held): no SCI2/9 TXI from a CPU write to an idle line with TIE
-	// set, with (4, 5) and without (6, 7) a TXI when TIE is set with TDRE 1.
-	for (int run = 0; run < 8; run++)
+	// register access or line step later. Runs 4 to 9, without DMA and with
+	// DMA (held). Runs 4 to 7: no SCI2/9 TXI to the CPU from a CPU write to an
+	// idle line with TIE set, with (4, 5) and without (6, 7) a TXI when TIE is
+	// set with TDRE 1. Runs 8 and 9: a CPU write to an idle line goes on to
+	// the shift register 3 register accesses later.
+	for (int run = 0; run < 10; run++)
 	{
-		bool dma = run > 0 && run != 4 && run != 6;
-		s_DmaHold = run == 1 || run == 3 || run == 5 || run == 7;
+		bool dma = run > 0 && run != 4 && run != 6 && run != 8;
+		s_DmaHold = run == 1 || run == 3 || run == 5 || run == 7 || run == 9;
 		s_DmaLate = run == 3 ? 1 : 0;
-		s_TxiEdge = run >= 6 ? 2 : run >= 4 ? 1 : 0;
+		s_TxiEdge = run >= 8 ? 0 : run >= 6 ? 2 : run >= 4 ? 1 : 0;
+		s_IdleMoveLate = run >= 8 ? 3 : 0;
 		for (int u = 0; u < 4; u++)
 		{
 			for (int intmode = 0; intmode < 2; intmode++)
@@ -2363,6 +2422,7 @@ int main()
 	s_DmaHold = false;
 	s_DmaLate = 0;
 	s_TxiEdge = 0;
+	s_IdleMoveLate = 0;
 	TestTxLockPreempt();
 	TestTxDmaLastByte();
 	TestRxOverrunOnce();

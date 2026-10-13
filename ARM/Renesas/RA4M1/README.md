@@ -433,9 +433,19 @@ and DMA with a non-blocking FIFO. `UARTSetCtrlLineState` does nothing.
   wrote to the SCI at the end of a block and when TX goes idle, on SCI2/9
   before the channel is armed. SCI0/1 use TTRG 0 in DMA mode, TXI with the TX
   FIFO empty, and start a block by setting TIE again, as the Renesas FSP does
-  with a transfer instance. SCI2/9: the CPU fills TDR as in interrupt mode,
-  then TIE is set and the channel armed for the rest with TDR full, its move
-  gives the TXI for the channel. TDR is read again: read empty with bytes left,
+  with a transfer instance. SCI2/9 with the line idle (TDRE and TEND set) and
+  more than one byte: the channel is armed for the bytes after the first, TIE
+  is set, then the CPU writes the first byte to TDR, as the Renesas FSP starts
+  a transfer without the FIFO. The move of that byte to the shift register
+  gives the TXI for the channel. On the EK-RA4M1 SCI2 the channel got that TXI
+  (UartLoopback interrupt DMA started its blocks that way after each late
+  transfer end, without a stop), the CPU did not always in interrupt mode.
+  With the first byte written by the CPU before arming, its move could come
+  before the request was cleared and each such block went through the TDR
+  empty path below: short blocks, about 74 kB/s instead of 96 in that
+  loopback. Otherwise the CPU fills TDR as in interrupt mode, then TIE is set
+  and the channel armed for the rest with TDR full, its move gives the TXI for
+  the channel. TDR is read again: read empty with bytes left,
   the channel is stopped (a transfer it already took finishes, DMSTS.ACT),
   DMCRA and TDR are read: TDR full, the channel is armed again; TDR empty, no
   TXI is coming, the bytes the channel moved are released and the CPU fills
@@ -491,8 +501,10 @@ handler in turn (received once, no read of RDR without RDRF or an error flag),
 SCI2/9 TxData starting a block with only the TX level locked out (BASEPRI in
 the model) while the line moves and RXI is taken in the middle of it, its
 callback calling TxData too, no TX handler taken inside TxData, the SCI2/9
-tests again without a TXI from a CPU write to an idle line with TIE set (with
-and without a TXI when TIE is set with TDRE set),
+tests again without a TXI to the CPU from a CPU write to an idle line with TIE
+set (the DMAC gets it; with and without a TXI when TIE is set with TDRE set),
+and again with such a write going on to the shift register 3 register accesses
+later,
 an echo loop with bursts, receive
 errors, overrun, full CFIFOs, callbacks, Disable/Enable and PowerOff. It also
 compiles the driver with GNU Arm for the Cortex-M4. It does not test exact

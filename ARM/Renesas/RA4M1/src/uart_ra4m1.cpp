@@ -403,6 +403,37 @@ static inline void Ra4m1UartRxPoll(Ra4m1UartDev_t * const pDev)
 	}
 }
 
+// SCI2/9: TX CFIFO bytes into TDR while TDRE is set. Ssr : SSR just read.
+// Returns the number of bytes written.
+//
+// Writing TDR clears TDRE, TXI comes when TDR moves to the shift register at
+// the end of the character being sent. With the line idle the byte goes on to
+// the shift register at once and TDRE is set again: the next byte is written
+// too, TDR is full. A TXI is not expected from a write to an idle line: on the
+// EK-RA4M1 SCI2, with TIE already set, it did not come (TX stopped with TIE
+// set, TDR empty, TEND set, no IR flag). TXI is waited for only with TDR full
+// and the shift register sending.
+static inline __attribute__((always_inline)) int Ra4m1UartTdrFill(Ra4m1UartDev_t * const pDev, uint8_t Ssr)
+{
+	R_SCI0_Type *reg = pDev->pReg;
+	hCFifo_t fifo = pDev->pUartDev->hTxFifo;
+	int cnt = 0;
+
+	while (Ssr & R_SCI0_SSR_TDRE_Msk)
+	{
+		int c = CFifoGetByte(fifo);
+		if (c < 0)
+		{
+			break;
+		}
+		reg->TDR = (uint8_t)c;
+		cnt++;
+		Ssr = reg->SSR;
+	}
+
+	return cnt;
+}
+
 // TX CFIFO bytes into the SCI while it has room. Returns the number of bytes
 // moved. Interrupts disabled or from the interrupt.
 static int Ra4m1UartTxHw(Ra4m1UartDev_t * const pDev)
@@ -434,24 +465,7 @@ static int Ra4m1UartTxHw(Ra4m1UartDev_t * const pDev)
 	}
 	else
 	{
-		// Writing TDR clears TDRE, TXI comes when TDR moves to the shift
-		// register at the end of the character being sent. With the line
-		// idle the byte goes on to the shift register at once and TDRE is
-		// set again: the next byte is written too, TDR is full. A TXI is not
-		// expected from a write to an idle line: on the EK-RA4M1 SCI2, with
-		// TIE already set, it did not come (TX stopped with TIE set, TDR
-		// empty, TEND set, no IR flag). TXI is waited for only with TDR
-		// full and the shift register sending.
-		while (reg->SSR & R_SCI0_SSR_TDRE_Msk)
-		{
-			int c = CFifoGetByte(fifo);
-			if (c < 0)
-			{
-				break;
-			}
-			reg->TDR = (uint8_t)c;
-			cnt++;
-		}
+		cnt = Ra4m1UartTdrFill(pDev, reg->SSR);
 	}
 
 	return cnt;
@@ -542,22 +556,33 @@ static void Ra4m1UartDmaReqClear(Ra4m1UartDev_t * const pDev)
 // leaves the FIFO.
 //
 // SCI2/9: TXI comes when TDR moves to the shift register. The channel is
-// stopped when a block starts. While TDR is empty the CPU fills it
-// (Ra4m1UartTxHw), two bytes in a row when the line is idle, so that the
+// stopped when a block starts. A request left in DELSR by a TXI while the
+// channel was stopped would move a byte to a full TDR, it is cleared before
+// the channel is armed.
+//
+// Line idle (TDRE and TEND set) with more than one byte: the channel is armed
+// for the run after its first byte, TIE is set, then the CPU writes the first
+// byte, as the Renesas FSP starts a transfer without the FIFO. Its move to the
+// shift register gives the TXI for the channel. On the EK-RA4M1 SCI2 the
+// channel got that TXI: UartLoopback in interrupt DMA mode started its blocks
+// that way after each late transfer end and ran without a stop. The CPU did
+// not always get it in interrupt mode (Ra4m1UartTdrFill). With the first byte
+// written before the channel is armed, its move to the shift register can
+// come before the request clear: the block then goes through the TDR empty
+// path below, short blocks and line gaps.
+//
+// Otherwise, while TDR is empty the CPU fills it (Ra4m1UartTdrFill) so that the
 // channel is armed with TDR full: the move of that byte at the end of the
-// character being sent gives the TXI for the channel, TXI is not expected
-// from a write to an idle line (Ra4m1UartTxHw). A request left in DELSR by a
-// TXI while the channel was stopped would move a byte to a full TDR, it is
-// cleared before the channel is armed. bStale : one may be left from before
-// the call, TX idle. At the end of a block the last TXI went to the channel,
-// a request comes only from a byte moved since then. TIE is set, then the
-// channel armed for the run. TDR read empty after that means that the move
-// came before TIE was set, or before the channel was armed, or that the
-// channel is moving a byte. The channel is stopped, the byte it took
-// finishes. TDR full then, it is armed again for the rest. TDR empty: no TXI
-// is coming, the bytes the channel moved are released and the CPU fills TDR
-// again. Without the interrupt RDR is read at each step, the steps of a block
-// start take about a character time.
+// character being sent gives the TXI for the channel. bStale : a request may
+// be left from before the call, TX idle. At the end of a block the last TXI
+// went to the channel, a request comes only from a byte moved since then.
+// TIE is set, then the channel armed for the run. TDR read empty after that
+// means that the move came before TIE was set, or before the channel was
+// armed, or that the channel is moving a byte. The channel is stopped, the
+// byte it took finishes. TDR full then, it is armed again for the rest. TDR
+// empty: no TXI is coming, the bytes the channel moved are released and the
+// CPU fills TDR again. Without the interrupt RDR is read at each step, the
+// steps of a block start take about a character time.
 static bool Ra4m1UartDmaTxStart(Ra4m1UartDev_t * const pDev, bool bStale)
 {
 	R_SCI0_Type *reg = pDev->pReg;
@@ -573,7 +598,35 @@ static bool Ra4m1UartDmaTxStart(Ra4m1UartDev_t * const pDev, bool bStale)
 			{
 				Ra4m1UartRxPoll(pDev);
 			}
-			if (Ra4m1UartTxHw(pDev) > 0)
+			uint8_t ssr = reg->SSR;
+
+			if ((ssr & (R_SCI0_SSR_TDRE_Msk | R_SCI0_SSR_TEND_Msk)) ==
+				(R_SCI0_SSR_TDRE_Msk | R_SCI0_SSR_TEND_Msk))
+			{
+				int cnt = (int)pDev->DmaMax;
+				uint8_t *p = CFifoPeekMultiple(fifo, &cnt);
+
+				if (p == NULL)
+				{
+					return false;
+				}
+				if (cnt > 1)
+				{
+					Ra4m1UartDmaReqClear(pDev);
+					pDev->DmaLen = (uint32_t)cnt;
+					pDev->bDmaActive = true;
+					dma->DMSAR = (uint32_t)(uintptr_t)(p + 1);
+					dma->DMCRA = (uint32_t)(cnt - 1);
+					// The CFIFO bytes are written before the channel reads them
+					__DSB();
+					dma->DMCNT = R_DMAC0_DMCNT_DTE_Msk;
+					reg->SCR |= R_SCI0_SCR_TIE_Msk;
+					reg->TDR = *p;
+
+					return true;
+				}
+			}
+			if (Ra4m1UartTdrFill(pDev, ssr) > 0)
 			{
 				bStale = true;
 			}
@@ -1180,7 +1233,7 @@ static int Ra4m1UartTxData(DevIntrf_t * const pDev, uint8_t const *pData, int Da
 				// TDR is filled first, TIE is set only with bytes left and TDR
 				// full: the TXI waited for comes from the move of a full TDR at
 				// the end of a character, not from a write to an idle line
-				// (Ra4m1UartTxHw). TDR read empty after TIE was set: it moved
+				// (Ra4m1UartTdrFill). TDR read empty after TIE was set: it moved
 				// meanwhile, maybe before TIE was set, it is filled again.
 				bool tie = false;
 
