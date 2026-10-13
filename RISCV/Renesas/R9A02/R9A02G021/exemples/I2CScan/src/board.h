@@ -40,7 +40,8 @@ SOFTWARE.
 // set to 32 MHz. SystemInit runs PCLKB at the core clock.
 #define MCUOSC	{ {OSC_TYPE_RC, 32000000, 0, 0}, {OSC_TYPE_RC, 32768, 0, 0}, false }
 
-// SAU UART0 on the on-board J-Link OB virtual COM port (J5 and J6 at 2-3):
+// SAU UART0 on the on-board J-Link OB virtual COM port, R31 and R33 fitted
+// and E56 closed (board defaults):
 // TxD0_B P302, RxD0_B P303. PSEL 0x11 (SAU) is IOPINOP_FUNC16.
 // Configure RX before TX in the pin map.
 #define UART_DEVNO			0

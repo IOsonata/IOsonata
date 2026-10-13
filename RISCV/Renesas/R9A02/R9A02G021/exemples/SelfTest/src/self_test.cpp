@@ -28,7 +28,7 @@ prints PASS, FAIL or SKIP for each test with the values measured:
 	12	Comparator 0 wake-up from Software Standby (table 10.2 note 7 against
 		tables 10.3 and 12.4), P106 touched to GND by hand
 
-Wiring (board.h): P001 to P106, A2 (P400) to GND, A3 (P401) to 3.3 V.
+Wiring (board.h): P001 to P106, A0 (P400) to GND, A1 (P401) to 3.3 V.
 Console on UART0, the J-Link OB virtual COM port, 115200 8N1. Test 12 enters
 Software Standby, the debugger may lose the target there.
 
@@ -836,7 +836,7 @@ static SELFTEST_RES TestAdcScan(void)
 	}
 	if (v[0] > 120 || v[1] < 4096 - 120)
 	{
-		printf("  A2 to GND and A3 to 3.3 V not wired\r\n");
+		printf("  A0 to GND and A1 to 3.3 V not wired\r\n");
 
 		return SELFTEST_SKIP;
 	}
@@ -1107,7 +1107,7 @@ static SELFTEST_RES TestAdcWindow(void)
 	if (rmax >= 16)
 	{
 		AdcCloseAll();
-		printf("  A2 not at GND\r\n");
+		printf("  A0 not at GND\r\n");
 
 		return SELFTEST_SKIP;
 	}
@@ -1293,7 +1293,7 @@ int main()
 	setvbuf(stdout, NULL, _IONBF, 0);
 
 	printf("\r\nR9A02G021 self-test\r\n");
-	printf("Wiring: P001 to P106, A2 (P400) to GND, A3 (P401) to 3.3 V\r\n");
+	printf("Wiring: P001 to P106, A0 (P400) to GND, A1 (P401) to 3.3 V\r\n");
 
 	if (s_Mtimer.Init(s_MtimerCfg) == false || s_Adc.Init(s_AdcCfg) == false || s_Dac.Init(s_DacCfg) == false ||
 		s_Dac.OpenChannel(0, true) == false || s_Dac.OpenChannel(1, true) == false)

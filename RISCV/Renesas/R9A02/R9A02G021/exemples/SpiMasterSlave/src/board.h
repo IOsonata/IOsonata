@@ -8,8 +8,9 @@ SPI20 is the master, SPI21 the slave, both on SAU1. Wiring:
 	P103 (SO20)		to P205 (SI21)		MOSI
 	P206 (SO21)		to P102 (SI20)		MISO
 	P104 (GPIO)		to P202 (IRQ2_C)	chip select
-P101 to P104 are on the Arduino header, P202 and P204 to P206 on the Pmod
-connectors: check the pins against the board schematic.
+Connectors (FPB-R9A02G021 user's manual): P101, P102, P103 on Pmod 1 J13-4,
+J13-3, J13-2 and Arduino D13, D12, D11; P104 Arduino D6 (J11-7); P204, P205,
+P206 Pmod 1 J13-8, J13-9, J13-10; P202 Pmod 2 J14-7.
 
 @author	Hoang Nguyen Hoan
 @date	Oct. 13, 2026
@@ -48,7 +49,8 @@ SOFTWARE.
 // low frequency clock. The slave operation clock is then 24 MHz, its SCK at
 // most 3 MHz.
 
-// SAU UART0 on the on-board J-Link OB virtual COM port (J5 and J6 at 2-3):
+// SAU UART0 on the on-board J-Link OB virtual COM port, R31 and R33 fitted
+// and E56 closed (board defaults):
 // TxD0_B P302, RxD0_B P303. PSEL 0x11 (SAU) is IOPINOP_FUNC16.
 // Configure RX before TX in the pin map.
 #define UART_DEVNO			0

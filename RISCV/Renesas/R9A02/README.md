@@ -410,7 +410,8 @@ The temperature sensor calibration point is `R9A02_FLCN_TSCDR` (CAL140, the
 result at 140 C and VCC 3.3 V, without ADTES correction): see the ADCDemo
 example. The manual gives ANI18 and ANI19 on P105 and P106 in the pin tables
 and swapped in table 29.12; the driver follows the pin tables, to confirm on
-hardware (SelfTest test 9). P105 is also on the FPB Arduino header as A1.
+hardware (SelfTest test 9). On the FPB board P105 is Arduino A4 (ANI18),
+P106 A5 (ANI19), as the board user's manual gives.
 
 ## RTC
 

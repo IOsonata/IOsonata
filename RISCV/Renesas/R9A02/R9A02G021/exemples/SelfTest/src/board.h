@@ -5,7 +5,7 @@
 
 Wiring:
 	P001 (DACOUT1) to P106 (IVCMP0, ANI19)	tests 9, 10 and 12
-	A2 (P400) to GND, A3 (P401) to 3.3 V	tests 8 and 11
+	A0 (P400) to GND, A1 (P401) to 3.3 V	tests 8 and 11
 Nothing on P101 to P104 (SPI20, test 6, MISO pulled up).
 
 @author	Hoang Nguyen Hoan
@@ -60,7 +60,8 @@ SOFTWARE.
 	{LED2_PORT, LED2_PIN, LED2_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL}, \
 }
 
-// SAU UART0 on the on-board J-Link OB virtual COM port (J5 and J6 at 2-3):
+// SAU UART0 on the on-board J-Link OB virtual COM port, R31 and R33 fitted
+// and E56 closed (board defaults):
 // TxD0_B P302, RxD0_B P303. PSEL 0x11 (SAU) is IOPINOP_FUNC16.
 // Configure RX before TX in the pin map.
 #define UART_DEVNO			0

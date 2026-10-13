@@ -55,7 +55,8 @@ SOFTWARE.
 	{LED2_PORT, LED2_PIN, LED2_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL}, \
 }
 
-// SAU UART0 on the on-board J-Link OB virtual COM port (J5 and J6 at 2-3):
+// SAU UART0 on the on-board J-Link OB virtual COM port, R31 and R33 fitted
+// and E56 closed (board defaults):
 // TxD0_B P302, RxD0_B P303. PSEL 0x11 (SAU) is IOPINOP_FUNC16.
 // Configure RX before TX in the pin map.
 #define UART_DEVNO			0
@@ -74,8 +75,8 @@ SOFTWARE.
 
 #define UART_BAUDRATE		115200
 
-// Inputs converted, ANI numbers: ANI2 (P400) and ANI3 (P401), Arduino A2
-// and A3
+// Inputs converted, ANI numbers: ANI2 (P400) and ANI3 (P401), Arduino A0
+// and A1
 #define ADC_DEMO_IN0		2
 #define ADC_DEMO_IN1		3
 
