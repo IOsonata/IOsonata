@@ -97,7 +97,7 @@ for opt in ['-O0', '-O2']:
                                     lambda m: function + '(' + m[1] + ');', source)
             assert count > 0, reg
         (tmp / 'usb.c').write_text(source)
-        for fixture in ['ep0_test', 'lifecycle_test', 'data_test']:
+        for fixture in ['ep0_test', 'lifecycle_test', 'data_test', 'wakeup_test']:
             exe = str(tmp / fixture)
             subprocess.run(['gcc', '-std=gnu11', opt, '-Wall', '-Wextra', '-Werror',
                             '-fsanitize=undefined', '-fno-sanitize-recover=all', '-no-pie',
@@ -114,7 +114,7 @@ for opt in ['-O0', '-O2']:
 
         # Link the real generic USB core, interface, FIFO and DeviceIntrf with
         # the C controller. Only hardware/ROM and the application queue are
-        # mocked. Remote wakeup is not called by this supported-mode fixture.
+        # mocked. Host remote-wakeup permission is exercised through Chapter 9.
         sources = [
             (root / 'tests/lpc/usb/integration_model.c', 'gcc'),
             (tmp / 'usb.c', 'gcc'),

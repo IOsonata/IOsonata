@@ -23,6 +23,10 @@ Run `python3 tests/lpc/usb/run.py`.
 - A host integration fixture links the production generic USB core, UsbIntrf,
   CFifo and DeviceIntrf to the LPC C driver. It exercises SET_ADDRESS, an
   80-byte TX, a two-packet RX, FIFO backpressure and rearming after reads.
+- Remote-wakeup tests cover the three-frame delay, stale tick rejection,
+  duplicate requests, host resume/reset/disconnect cancellation, SOF enable
+  changes and preservation of pre-existing clock control. The generic-core
+  fixture also checks SET/CLEAR_FEATURE and refusal without host permission.
 - Host GNU binutils exercise the production linker script's USB SRAM placement,
   NOLOAD behavior, removal when unused, and failure on USB SRAM overflow.
 
@@ -32,9 +36,9 @@ DEVCMDSTAT, INTSTAT, INTSETSTAT and EPSKIP assignments in a temporary source
 copy. Test write functions implement W1C, set-interrupt and skip completion;
 register reads, vendor types, DMA memory and driver control flow are unchanged.
 The EP0-only fixture models the core's packet continuation/status calls. The
-integration fixture instead uses the real core and a minimal static descriptor
-override, with hardware/ROM access and the application queue mocked. It does
-not call remote wakeup, which remains undefined in this port. These host tests
+integration fixture instead uses the real core and minimal static device and
+configuration descriptor overrides, with hardware/ROM access and the application
+queue mocked. It includes the public UsbRemoteWakeup path. These host tests
 do not simulate a USB bus or validate PLL accuracy, NVIC timing or ARM relocations.
 
 ## Current implementation
@@ -103,11 +107,22 @@ avoiding replay when an ACK races EPSKIP. A completion already observed before
 halt is reported normally. New submissions while halted wait for clear, which
 resets the hardware data toggle.
 
-Remote wakeup and low-power suspend remain unfinished. ISO calls return false
+Remote wakeup keeps the normal clock-on suspend mode. DSUS indicates at least
+3 ms of bus idle. A wake request discards the old local FRAME_INT and waits for
+three millisecond timer edges, guaranteeing at least another 2 ms before
+signalling. This timer is described in UM10462 table 205; it is not a count of
+SOF packets received from the suspended host. No busy wait or application timer
+is used. Resume, reset, disconnect and stop cancel pending wake requests.
+The driver forces AP_CLK before the explicit DSUS=0 write and restores only
+the bit it added on resume/cancellation. It leaves the resume waveform to the
+controller and never reports a host resume merely because a request was made.
+Internal timing interrupts do not produce generic SOF callbacks unless enabled.
+
+Low-power suspend remains unfinished. ISO calls return false
 and the header advertises no ISO support; the 1023-byte constant records only
 the silicon limit. No application enumeration or hardware throughput result is
-claimed. A firmware that calls UsbRemoteWakeup still requires its controller
-implementation; the host integration test exercises the supported path only.
+claimed. The host model checks register sequencing and tick counts, not physical
+resume pulse duration, bus timing or suspended current consumption.
 
 The implementation follows the existing Nordic/SAM4L separation: generic USB
 owns descriptors and control requests, while the controller handles hardware.

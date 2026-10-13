@@ -6,13 +6,18 @@
 #include "usb/usb_intrf.h"
 #include "usb_hw_lpc11uxx.h"
 
-static const uint8_t s_Config[] = {9, 2, 9, 0, 0, 1, 0, 0x80, 50};
+static const uint8_t s_Config[] = {9, 2, 9, 0, 0, 1, 0, 0xA0, 50};
+static const uint8_t s_Device[] = {18, 1, 0, 2, 0, 0, 0, 64, 0x34, 0x12,
+	0x78, 0x56, 0, 1, 0, 0, 0, 1};
 static unsigned s_Queued;
 
 extern "C" void TestUsbInitialize(void);
 extern "C" Lpc11UsbMemory_t *TestUsbMemory(void);
 extern "C" void TestUsbPacketDone(unsigned Physical, unsigned Length);
 extern "C" void TestUsbSetup(const UsbSetupData_t *pSetup);
+extern "C" void TestUsbSuspend(bool Suspended);
+extern "C" void TestUsbFrame(void);
+extern "C" unsigned TestUsbWakeCount(void);
 
 extern "C" bool AppEvtHandlerQue(uint32_t, void *, AppEvtHandler_t)
 {
@@ -24,6 +29,11 @@ extern "C" bool AppEvtHandlerQue(uint32_t, void *, AppEvtHandler_t)
 // configuration through the generic core's supported descriptor override.
 const uint8_t *UsbGetDescriptor(int, uint8_t Type, uint8_t, uint16_t, UsbSpeed_t, uint16_t *pLength)
 {
+	if (Type == USB_DESCTYPE_DEVICE)
+	{
+		*pLength = sizeof(s_Device);
+		return s_Device;
+	}
 	if (Type != USB_DESCTYPE_CONFIGURATION)
 		return nullptr;
 	*pLength = sizeof(s_Config);
@@ -39,6 +49,7 @@ int main()
 	cfg.Pid = 0x5678;
 	cfg.pIOPinMap = &pin;
 	cfg.NbIOPins = 1;
+	cfg.bRemoteWakeup = true;
 	assert(UsbInit(&cfg));
 	assert(std::strlen(UsbGetSerial(0)) == 32);
 	assert(UsbEnable(0) && s_Queued != 0);
@@ -50,6 +61,36 @@ int main()
 	assert(UsbGetAddress(0) == 0);
 	TestUsbPacketDone(1, 0);
 	assert(UsbGetAddress(0) == 7);
+	setup.bRequest = 9; // SET_CONFIGURATION
+	setup.wValue = 1;
+	TestUsbSetup(&setup);
+	TestUsbPacketDone(1, 0);
+	assert(UsbGetConfiguration(0) == 1);
+	TestUsbSuspend(true);
+	assert(UsbSuspended(0) && !UsbRemoteWakeup(0)); // host has not permitted it
+	TestUsbFrame();
+	assert(TestUsbWakeCount() == 0);
+	TestUsbSuspend(false);
+	setup.bRequest = 3; // SET_FEATURE DEVICE_REMOTE_WAKEUP
+	TestUsbSetup(&setup);
+	TestUsbPacketDone(1, 0);
+	assert(UsbRemoteWakeupEnabled(0));
+	assert(!UsbRemoteWakeup(0)); // permission alone does not mean suspended
+	TestUsbSuspend(true);
+	assert(UsbRemoteWakeup(0));
+	TestUsbFrame();
+	TestUsbFrame();
+	assert(TestUsbWakeCount() == 0);
+	TestUsbFrame();
+	assert(TestUsbWakeCount() == 1);
+	TestUsbSuspend(false);
+	assert(!UsbSuspended(0));
+	setup.bRequest = 1; // CLEAR_FEATURE
+	TestUsbSetup(&setup);
+	TestUsbPacketDone(1, 0);
+	TestUsbSuspend(true);
+	assert(!UsbRemoteWakeupEnabled(0) && !UsbRemoteWakeup(0));
+	TestUsbSuspend(false);
 
 	alignas(4) uint8_t rx[CFIFO_TOTAL_MEMSIZE(2, USB_INTRF_PKT_BLKSIZE(64))];
 	alignas(4) uint8_t tx[CFIFO_TOTAL_MEMSIZE(160, 1)];

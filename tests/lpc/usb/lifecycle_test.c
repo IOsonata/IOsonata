@@ -19,6 +19,8 @@ static uint16_t s_Frame;
 #endif
 static bool s_NoPinSlot;
 static bool s_UidFailure;
+static bool s_AllowRemoteWake;
+static unsigned s_WakeCount;
 
 void NVIC_EnableIRQ(IRQn_Type Irq)
 {
@@ -81,7 +83,13 @@ void TestDeviceWrite(uint32_t Value)
 	const uint32_t w1c = (1U << 8) | (7U << 24);
 	const uint32_t old = LPC_USB->DEVCMDSTAT;
 	// Lifecycle operations must never request remote wakeup.
-	assert((Value & ((1U << 17) | (1U << 19))) == ((1U << 17) | (1U << 19)));
+	assert((Value & (1U << 19)) != 0U);
+	if ((Value & (1U << 17)) == 0U)
+	{
+		assert(s_AllowRemoteWake && (LPC_SYSCON->USBCLKCTRL & 1U) != 0U);
+		if ((old & ((1U << 16) | (1U << 17))) == ((1U << 16) | (1U << 17)))
+			++s_WakeCount;
+	}
 	LPC_USB->DEVCMDSTAT = (old & ~(commands | w1c)) |
 		(Value & commands) | (old & w1c & ~Value);
 }

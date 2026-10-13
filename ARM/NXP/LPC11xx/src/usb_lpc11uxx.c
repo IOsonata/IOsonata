@@ -4,7 +4,7 @@
 
 Hardware preparation, lifecycle, EP0 and bulk/interrupt transport. Generic USB
 owns Chapter 9 and device classes. No ROM USB stack is initialized here.
-ISO, low-power suspend and remote wakeup are not implemented.
+ISO and low-power suspend are not implemented.
 
 Register sequences: NXP UM10462, chapters 3 and 11. Register declarations
 come from the vendor CMSIS header. Only the DMA memory layout is defined here.
@@ -113,10 +113,15 @@ static int s_IntPrio;
 static Lpc11UsbDataState_t s_Data[8];
 static uint32_t s_RxReady;
 static bool s_Closing;
+static bool s_SofEnabled;
+static bool s_WakeAddedClock;
+// 0 idle, 1..3 waiting for the minimum bus-idle time, 4 signalling resume.
+static uint8_t s_WakeFrames;
 
 static bool Lpc11UsbRetire(uint32_t Mask);
 static void Lpc11UsbForget(uint32_t Mask);
 static void Lpc11UsbDataHalt(unsigned Physical, bool Halt);
+static void Lpc11UsbWakeCancel(void);
 
 _Static_assert(offsetof(Lpc11UsbMemory_t, Setup) == 128, "SETUP alignment");
 _Static_assert(offsetof(Lpc11UsbMemory_t, Packet) == 192, "packet alignment");
@@ -235,6 +240,8 @@ bool Lpc11UsbHwRelease(void)
 	++s_Ep0.Generation;
 	if (!s_Prepared)
 		return true;
+	s_SofEnabled = false;
+	Lpc11UsbWakeCancel();
 	NVIC_DisableIRQ(USB_IRQn);
 	LPC_USB->INTEN = 0U;
 	// Disconnect but leave DEV_EN set until outstanding buffers retire.
@@ -385,8 +392,76 @@ void UsbCtrlrDisconnect(int DevNo)
 {
 	const uint32_t state = DisableInterrupt();
 	if (DevNo == 0 && s_Prepared)
+	{
+		Lpc11UsbWakeCancel();
 		Lpc11UsbCommand(LPC11_USB_CONNECT, 0U, 0U);
+	}
 	EnableInterrupt(state);
+}
+
+static void Lpc11UsbFrameEnable(void)
+{
+	if (s_SofEnabled || (s_WakeFrames != 0U && s_WakeFrames < 4U))
+		LPC_USB->INTEN |= LPC11_USB_SOF_INTERRUPT;
+	else
+		LPC_USB->INTEN &= ~LPC11_USB_SOF_INTERRUPT;
+}
+
+static void Lpc11UsbWakeCancel(void)
+{
+	s_WakeFrames = 0U;
+	if (s_WakeAddedClock)
+		LPC_SYSCON->USBCLKCTRL &= ~1U;
+	s_WakeAddedClock = false;
+	Lpc11UsbFrameEnable();
+}
+
+void UsbCtrlrRemoteWakeup(int DevNo)
+{
+	const uint32_t state = DisableInterrupt();
+	if (DevNo == 0 && s_Prepared && s_Ep0.Enabled && !s_Closing &&
+		s_WakeFrames == 0U && UsbCtrlrVbusDetected(0))
+	{
+		const uint32_t status = LPC_USB->DEVCMDSTAT;
+		if ((status & (LPC11_USB_CONNECT | (1U << 17))) ==
+			(LPC11_USB_CONNECT | (1U << 17)) &&
+			(status & (LPC11_USB_RESET | LPC11_USB_CONNECT_CHANGE)) == 0U)
+		{
+			// The generic core checks host permission. DSUS proves 3 ms
+			// idle, not the required 5 ms. UM10462 table 205 FRAME_INT is
+			// a local millisecond timer, including suspend with PLL_ON=1.
+			// Discard an old tick, then three edges give at least 2 ms.
+			LPC_USB->INTSTAT = LPC11_USB_SOF_INTERRUPT;
+			s_WakeFrames = 3U;
+			Lpc11UsbFrameEnable();
+		}
+	}
+	EnableInterrupt(state);
+}
+
+static void Lpc11UsbWakeFrame(void)
+{
+	if (s_WakeFrames == 0U || s_WakeFrames == 4U)
+		return;
+	const uint32_t status = LPC_USB->DEVCMDSTAT;
+	if (!UsbCtrlrVbusDetected(0) ||
+		(status & (LPC11_USB_CONNECT | (1U << 17))) !=
+		(LPC11_USB_CONNECT | (1U << 17)) ||
+		(status & (LPC11_USB_RESET | LPC11_USB_CONNECT_CHANGE | LPC11_USB_SUSPEND_CHANGE)) != 0U)
+	{
+		Lpc11UsbWakeCancel();
+		return;
+	}
+	if (--s_WakeFrames != 0U)
+		return;
+	// Clocks remain powered throughout suspend in this mode. Follow 11.7.6.2:
+	// force need_clock before writing DSUS=0; release our force on resume.
+	s_WakeAddedClock = (LPC_SYSCON->USBCLKCTRL & 1U) == 0U;
+	LPC_SYSCON->USBCLKCTRL |= 1U;
+	__DSB();
+	s_WakeFrames = 4U;
+	LPC_USB->DEVCMDSTAT = (LPC_USB->DEVCMDSTAT & LPC11_USB_COMMAND_MASK) | (1U << 19);
+	Lpc11UsbFrameEnable();
 }
 
 void UsbCtrlrSofEnable(int DevNo, bool Enable)
@@ -394,11 +469,9 @@ void UsbCtrlrSofEnable(int DevNo, bool Enable)
 	const uint32_t state = DisableInterrupt();
 	if (DevNo == 0 && s_Prepared && s_Ep0.Enabled)
 	{
+		s_SofEnabled = Enable;
 		LPC_USB->INTSTAT = LPC11_USB_SOF_INTERRUPT;
-		if (Enable)
-			LPC_USB->INTEN |= LPC11_USB_SOF_INTERRUPT;
-		else
-			LPC_USB->INTEN &= ~LPC11_USB_SOF_INTERRUPT;
+		Lpc11UsbFrameEnable();
 	}
 	EnableInterrupt(state);
 }
@@ -463,6 +536,8 @@ static void Lpc11UsbEp0Fault(void)
 	// Retain DMA storage on a failed skip. Stop bus/IRQ activity without
 	// pretending the hardware has returned ownership of an active buffer.
 	s_Ep0.Enabled = false;
+	s_SofEnabled = false;
+	Lpc11UsbWakeCancel();
 	++s_Ep0.Generation;
 	NVIC_DisableIRQ(USB_IRQn);
 	LPC_USB->INTEN = 0U;
@@ -1094,6 +1169,7 @@ void USB_IRQHandler(void)
 		LPC_USB->INTSTAT = LPC11_USB_DEVICE_INTERRUPT;
 		if ((status & LPC11_USB_RESET) != 0U)
 		{
+			Lpc11UsbWakeCancel();
 			LPC_USB->INTSTAT = 0x3FFU;
 			if (!Lpc11UsbRetire(0x3FFU))
 				Lpc11UsbEp0Fault();
@@ -1120,6 +1196,8 @@ void USB_IRQHandler(void)
 			return;
 		}
 		Lpc11UsbHwAckStatus(status & (LPC11_USB_CONNECT_CHANGE | LPC11_USB_SUSPEND_CHANGE));
+		if ((status & (LPC11_USB_CONNECT_CHANGE | LPC11_USB_SUSPEND_CHANGE)) != 0U)
+			Lpc11UsbWakeCancel();
 		if ((status & LPC11_USB_CONNECT_CHANGE) != 0U)
 			UsbProcessQue(0);
 		if ((status & LPC11_USB_SUSPEND_CHANGE) != 0U)
@@ -1137,13 +1215,17 @@ void USB_IRQHandler(void)
 		Lpc11UsbDataInterrupt(physical);
 	if (s_Prepared && s_Ep0.Enabled && s_Ep0.Generation == generation &&
 		(LPC_USB->DEVCMDSTAT & LPC11_USB_RESET) == 0U &&
-		(pending & LPC_USB->INTEN & LPC11_USB_SOF_INTERRUPT) != 0U)
+		(LPC_USB->INTSTAT & LPC_USB->INTEN & LPC11_USB_SOF_INTERRUPT) != 0U)
 	{
 		LPC_USB->INTSTAT = LPC11_USB_SOF_INTERRUPT;
-		UsbCtrlrEvt_t event = {0};
-		event.Type = USB_CTRLR_EVT_SOF;
-		event.FrameNo = LPC_USB->INFO & 0x7FFU;
-		UsbDevProcessEvent(0, &event);
+		Lpc11UsbWakeFrame();
+		if (s_SofEnabled)
+		{
+			UsbCtrlrEvt_t event = {0};
+			event.Type = USB_CTRLR_EVT_SOF;
+			event.FrameNo = LPC_USB->INFO & 0x7FFU;
+			UsbDevProcessEvent(0, &event);
+		}
 	}
 	__DSB();
 	EnableInterrupt(state);

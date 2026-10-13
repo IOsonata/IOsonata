@@ -13,6 +13,7 @@ void TestUsbInitialize(void)
 	Defaults();
 	s_Memory = (void *)0x20004000;
 	s_CompleteSkip = true;
+	s_AllowRemoteWake = true;
 	LPC_GPIO->PIN[0] = 1U << 3;
 }
 
@@ -37,4 +38,26 @@ void TestUsbSetup(const UsbSetupData_t *pSetup)
 	LPC_USB->DEVCMDSTAT |= 1U << 8;
 	LPC_USB->INTSTAT |= 1U;
 	USB_IRQHandler();
+}
+
+void TestUsbSuspend(bool Suspended)
+{
+	if (Suspended)
+		LPC_USB->DEVCMDSTAT |= 1U << 17;
+	else
+		LPC_USB->DEVCMDSTAT &= ~(1U << 17);
+	LPC_USB->DEVCMDSTAT |= 1U << 25;
+	LPC_USB->INTSTAT |= 1U << 31;
+	USB_IRQHandler();
+}
+
+void TestUsbFrame(void)
+{
+	LPC_USB->INTSTAT |= 1U << 30;
+	USB_IRQHandler();
+}
+
+unsigned TestUsbWakeCount(void)
+{
+	return s_WakeCount;
 }

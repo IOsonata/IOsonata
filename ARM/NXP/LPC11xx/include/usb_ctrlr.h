@@ -7,7 +7,8 @@ Full-speed device controller with endpoint numbers 0 through 4 in each
 direction. EP0 is control; endpoints 1 through 4 implement bulk and interrupt
 transfers with a 64-byte packet buffer per direction. The silicon ISO packet
 limit is recorded below, but USB_ISO_SUPPORTED and its masks are zero because
-this driver does not implement ISO. Remote wakeup is still pending.
+this driver does not implement ISO. Remote wakeup uses the normal clock-on
+suspend mode; the generic core owns host permission checks.
 
 Init currently requires one VBUS pin-map entry: P0.3, FUNC1, input, no pull,
 normal type. Start configures the fixed P0.6 FUNC1 USB_CONNECT output for the
