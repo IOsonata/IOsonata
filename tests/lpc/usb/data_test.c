@@ -1,6 +1,16 @@
-/* LPC11Uxx bulk/interrupt regression. MIT License, I-SYST, 2026. */
+/* LPC full-speed bulk/interrupt regression. MIT License, I-SYST, 2026. */
+#if defined(LPC54628_SERIES)
+#define LPC546_USB_EP0_FIXTURE_ONLY
+#include "ep0546_test.c"
+#define LPC_USB USB0
+#define USB_IRQHandler USB0_IRQHandler
+#define s_EventCount s_Count
+#define STALL (1U << 29)
+static uint8_t s_Data[128];
+#else
 #define LPC11_USB_EP0_FIXTURE_ONLY
 #include "ep0_test.c"
+#endif
 
 typedef struct {
 	unsigned Physical;
@@ -172,6 +182,13 @@ static void MultiPacketIn(void)
 
 int main(void)
 {
+#if defined(LPC54628_SERIES)
+	(void)Setup;
+	(void)Done;
+	Map(SYSCON_BASE);
+	Map(USB0_BASE);
+	Map(USBFSH_BASE);
+#else
 	(void)Setup;
 	(void)InDone;
 	(void)OutDone;
@@ -179,6 +196,7 @@ int main(void)
 		MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0) != MAP_FAILED);
 	assert(mmap((void *)LPC_USB_BASE, 4096, PROT_READ | PROT_WRITE,
 		MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0) != MAP_FAILED);
+#endif
 	MultiPacketIn();
 	OpenEndpoints();
 	assert(!UsbCtrlrEpOpenData(0, 0, true, BULK, 64));
@@ -303,6 +321,6 @@ int main(void)
 	s_AutoSkip = true;
 	UsbCtrlrStop(0);
 	assert(s_Owner[3].Cancelled == 1);
-	puts("LPC11Uxx bulk/interrupt ownership, callbacks, halt and reset: PASS");
+	puts("LPC full-speed bulk/interrupt ownership, callbacks, halt and reset: PASS");
 	return 0;
 }

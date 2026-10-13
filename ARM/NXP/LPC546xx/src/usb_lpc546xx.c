@@ -1,6 +1,6 @@
 /**-------------------------------------------------------------------------
 @file usb_lpc546xx.c
-@brief Private LPC546xx USB0 control transfers and interrupt handling.
+@brief LPC546xx USB0 full-speed lifecycle and interrupt handling.
 
 @author Hoang Nguyen Hoan
 @date Oct. 13, 2026
@@ -33,6 +33,10 @@ SOFTWARE.
 #include "usb_control_lpc546xx.h"
 #include "usb_ep0_lpc_fs.h"
 #include "usb_hw_lpc546xx.h"
+#include "usb_data_lpc_fs.h"
+#include "usb/usb.h"
+#include "iopinctrl.h"
+#include "lpc_iap.h"
 
 #define LPCUSB_DEVICE (1UL << 31)
 #define LPCUSB_RESET (1UL << 26)
@@ -48,15 +52,35 @@ static void Lpc546xxUsbControlFault(void);
 
 static bool s_Prepared;
 static bool s_Closing;
+static bool s_Releasing;
+static bool s_Detached;
+static bool s_Initialized;
+static bool s_SofEnabled;
+static int s_VbusInt = -1;
+static int s_IntPrio;
 static LpcUsbFsEp0_t s_Ep0 = {
 	.pReg = USB0,
 	.Ready = Lpc546xxUsbControlReady,
 	.Fault = Lpc546xxUsbControlFault,
 };
 
+static LpcUsbFsData_t s_Data = {
+	.pEp0 = &s_Ep0,
+	.pPrepared = &s_Prepared,
+	.pClosing = &s_Closing,
+	.Irq = USB0_IRQn,
+};
+
+static void Lpc546xxUsbBusReset(uint32_t Status, bool Detached);
+
+LpcUsbFsData_t *LpcUsbFsDataContext(void)
+{
+	return &s_Data;
+}
+
 static bool Lpc546xxUsbControlReady(void)
 {
-	return s_Prepared && !s_Closing;
+	return s_Prepared && !s_Closing && !s_Detached;
 }
 
 static void Lpc546xxUsbControlFault(void)
@@ -72,7 +96,7 @@ static void Lpc546xxUsbControlFault(void)
 bool Lpc546xxUsbControlPrepare(int IntPrio, void (*Event)(const UsbCtrlrEvt_t *))
 {
 	const uint32_t state = DisableInterrupt();
-	if (s_Prepared || Event == NULL)
+	if (s_Prepared || s_Releasing || Event == NULL)
 	{
 		EnableInterrupt(state);
 		return false;
@@ -87,6 +111,8 @@ bool Lpc546xxUsbControlPrepare(int IntPrio, void (*Event)(const UsbCtrlrEvt_t *)
 	s_Ep0.Event = Event;
 	s_Prepared = true;
 	s_Closing = false;
+	s_Detached = false;
+	s_SofEnabled = false;
 	LpcUsbFsEp0Reset(&s_Ep0);
 	USB0->INTSTAT = 0xC00003FFU;
 	LpcUsbFsEp0Command(&s_Ep0, 0x7FU | LPCUSB_NAK_CONTROL,
@@ -99,18 +125,27 @@ bool Lpc546xxUsbControlPrepare(int IntPrio, void (*Event)(const UsbCtrlrEvt_t *)
 bool Lpc546xxUsbControlRelease(void)
 {
 	const uint32_t state = DisableInterrupt();
+	if (s_Releasing || (s_Closing && s_Ep0.Enabled))
+	{
+		EnableInterrupt(state);
+		return false;
+	}
 	if (!s_Prepared)
 	{
 		EnableInterrupt(state);
 		return true;
 	}
+	s_Releasing = true;
 	s_Closing = true;
+	s_SofEnabled = false;
 	Lpc546xxUsbControlFault();
 	if (!LpcUsbFsEp0Retire(&s_Ep0, 0x3FFU))
 	{
+		s_Releasing = false;
 		EnableInterrupt(state);
 		return false;
 	}
+	LpcUsbFsDataForget(0x3FCU);
 	LpcUsbFsEp0Command(&s_Ep0, LPCUSB_ENABLE | LPCUSB_NAK_CONTROL, 0U, 0U);
 	const bool released = Lpc546xxUsbHwRelease();
 	if (released)
@@ -120,6 +155,7 @@ bool Lpc546xxUsbControlRelease(void)
 		s_Ep0.pMemory = NULL;
 		s_Ep0.Event = NULL;
 	}
+	s_Releasing = false;
 	EnableInterrupt(state);
 	return released;
 }
@@ -139,25 +175,21 @@ void UsbCtrlrSetAddress(int DevNo, uint8_t Address)
 	LpcUsbFsEp0SetAddress(&s_Ep0, DevNo, Address);
 }
 
-void UsbCtrlrEpStall(int DevNo, uint8_t EpNo, bool bIn)
+static void Lpc546xxUsbBusReset(uint32_t Status, bool Detached)
 {
-	(void)bIn;
-	if (DevNo == 0 && EpNo == 0U)
-		LpcUsbFsEp0Stall(&s_Ep0);
-}
-
-static void Lpc546xxUsbBusReset(uint32_t Status)
-{
+	s_Detached = Detached;
 	if (!LpcUsbFsEp0Retire(&s_Ep0, 0x3FFU))
 	{
 		Lpc546xxUsbControlFault();
 		return;
 	}
+	LpcUsbFsDataForget(0x3FCU);
+	USB0->INTEN &= ~0x3FCU;
 	LpcUsbFsEp0Reset(&s_Ep0);
 	USB0->INTSTAT = 0x3FFU;
 	// A SETUP following bus reset must survive this interrupt. Cable loss
 	// instead discards the old request, even if VBUS has returned already.
-	const bool clearSetup = (Status & LPCUSB_RESET) == 0U;
+	const bool clearSetup = Detached || (Status & LPCUSB_RESET) == 0U;
 	LpcUsbFsEp0Command(&s_Ep0, 0x7FU | LPCUSB_NAK_CONTROL, 0U,
 		(Status & (LPCUSB_RESET | LPCUSB_CONNECT_CHANGE | LPCUSB_SUSPEND_CHANGE)) |
 		(clearSetup ? LPCUSB_SETUP : 0U));
@@ -184,13 +216,15 @@ void USB0_IRQHandler(void)
 		USB0->INTSTAT = LPCUSB_DEVICE;
 		if ((status & (LPCUSB_RESET | LPCUSB_CONNECT_CHANGE)) != 0U)
 		{
-			Lpc546xxUsbBusReset(status);
+			Lpc546xxUsbBusReset(status, s_Initialized && !UsbCtrlrVbusDetected(0));
+			if (s_Initialized && (status & LPCUSB_CONNECT_CHANGE) != 0U)
+				UsbProcessQue(0);
 			__DSB();
 			EnableInterrupt(state);
 			return;
 		}
 		LpcUsbFsEp0Command(&s_Ep0, 0U, 0U, status & LPCUSB_SUSPEND_CHANGE);
-		if ((status & LPCUSB_SUSPEND_CHANGE) != 0U)
+		if (!s_Detached && (status & LPCUSB_SUSPEND_CHANGE) != 0U)
 		{
 			UsbCtrlrEvt_t event = {0};
 			event.Type = (status & (1U << 17)) != 0U ?
@@ -201,6 +235,212 @@ void USB0_IRQHandler(void)
 	if (Lpc546xxUsbControlReady() && s_Ep0.Enabled && s_Ep0.Generation == generation &&
 		(USB0->DEVCMDSTAT & LPCUSB_RESET) == 0U && (pending & 3U) != 0U)
 		LpcUsbFsEp0Interrupt(&s_Ep0, pending);
+	for (unsigned physical = 2U; physical < 10U && LpcUsbFsDataCurrent(); ++physical)
+		LpcUsbFsDataInterrupt(physical);
+	if (Lpc546xxUsbControlReady() && s_Ep0.Enabled && s_Ep0.Generation == generation &&
+		(USB0->DEVCMDSTAT & LPCUSB_RESET) == 0U &&
+		(USB0->INTSTAT & USB0->INTEN & (1U << 30)) != 0U)
+	{
+		USB0->INTSTAT = 1U << 30;
+		if (s_SofEnabled)
+		{
+			UsbCtrlrEvt_t event = {0};
+			event.Type = USB_CTRLR_EVT_SOF;
+			event.FrameNo = USB0->INFO & 0x7FFU;
+			s_Ep0.Event(&event);
+		}
+	}
 	__DSB();
 	EnableInterrupt(state);
 }
+
+static void Lpc546xxUsbControlEvent(const UsbCtrlrEvt_t *pEvent)
+{
+	UsbDevProcessEvent(0, pEvent);
+}
+
+static void Lpc546xxUsbVbusEvent(int IntNo, void *pContext)
+{
+	(void)IntNo;
+	(void)pContext;
+	// GPIO detection stays live while USB is stopped. DCON_C alone only
+	// reports loss of VBUS and cannot start a board powered without a cable.
+	UsbProcessQue(0);
+}
+
+bool UsbCtrlrInit(int DevNo, const UsbCtrlrCfg_t *pCfg)
+{
+	if (DevNo != 0 || pCfg == NULL || pCfg->bLowPowerSuspend ||
+		pCfg->pIOPinMap == NULL || pCfg->NbIOPins != 1)
+		return false;
+	const IOPinCfg_t *vbus = &pCfg->pIOPinMap[USB_VBUS_PIN_IDX];
+	if (vbus->PortNo != 0 || vbus->PinNo != 22 ||
+		vbus->PinOp != IOPINOP_FUNC7 || vbus->PinDir != IOPINDIR_INPUT ||
+		vbus->Res != IOPINRES_NONE || vbus->Type != IOPINTYPE_NORMAL)
+		return false;
+	const uint32_t state = DisableInterrupt();
+	// A failed retirement still owns SRAM and must not be reinitialized.
+	if (s_Prepared || s_Closing || s_Releasing)
+	{
+		EnableInterrupt(state);
+		return false;
+	}
+	s_Initialized = false;
+	LpcUsbFsDataInit();
+	if (s_VbusInt >= 0)
+		IOPinDisableInterrupt(s_VbusInt);
+	const int maxprio = (1 << __NVIC_PRIO_BITS) - 1;
+	s_IntPrio = pCfg->IntPrio < 0 ? 0 :
+		(pCfg->IntPrio > maxprio ? maxprio : pCfg->IntPrio);
+	IOPinCfg(vbus, 1);
+	s_VbusInt = IOPinAllocateInterrupt(s_IntPrio, 0, 22, IOPINSENSE_TOGGLE,
+		Lpc546xxUsbVbusEvent, NULL);
+	s_Initialized = s_VbusInt >= 0;
+	EnableInterrupt(state);
+	return s_Initialized;
+}
+
+bool UsbCtrlrVbusDetected(int DevNo)
+{
+	// GPIO reads the pad while USB clocks are disabled.
+	// No USB register access is needed while its clocks are disabled.
+	return DevNo == 0 && s_Initialized && IOPinRead(0, 22) != 0;
+}
+
+bool UsbCtrlrStart(int DevNo)
+{
+	if (DevNo != 0 || s_Closing)
+		return false;
+	const uint32_t state = DisableInterrupt();
+	bool ready = false;
+	if (UsbCtrlrVbusDetected(0))
+	{
+		if (s_Prepared)
+			ready = s_Ep0.Enabled;
+		else
+			ready = Lpc546xxUsbControlPrepare(s_IntPrio, Lpc546xxUsbControlEvent);
+	}
+	EnableInterrupt(state);
+	return ready;
+}
+
+void UsbCtrlrStop(int DevNo)
+{
+	if (DevNo != 0)
+		return;
+	const uint32_t state = DisableInterrupt();
+	// Retry is allowed after a timed-out skip. Release leaves the controller
+	// disconnected and disabled to callers until retirement is confirmed.
+	(void)Lpc546xxUsbControlRelease();
+	EnableInterrupt(state);
+}
+
+void UsbCtrlrProcess(int DevNo)
+{
+	if (DevNo != 0)
+		return;
+	const uint32_t state = DisableInterrupt();
+	if (s_Prepared && s_Ep0.Enabled && !s_Closing && s_Initialized)
+	{
+		if (UsbCtrlrVbusDetected(0))
+			s_Detached = false;
+		else if (!s_Detached)
+			Lpc546xxUsbBusReset(USB0->DEVCMDSTAT, true);
+	}
+	EnableInterrupt(state);
+}
+
+bool UsbCtrlrHighSpeed(int DevNo)
+{
+	(void)DevNo;
+	return false;
+}
+
+void UsbCtrlrIntEnable(int DevNo)
+{
+	const uint32_t state = DisableInterrupt();
+	if (DevNo == 0 && s_Prepared && s_Ep0.Enabled)
+		NVIC_EnableIRQ(USB0_IRQn);
+	EnableInterrupt(state);
+}
+
+void UsbCtrlrIntDisable(int DevNo)
+{
+	if (DevNo == 0)
+		NVIC_DisableIRQ(USB0_IRQn);
+}
+
+void UsbCtrlrConnect(int DevNo)
+{
+	const uint32_t state = DisableInterrupt();
+	if (DevNo == 0 && s_Prepared && s_Ep0.Enabled && UsbCtrlrVbusDetected(0))
+		LpcUsbFsEp0Command(&s_Ep0, 0U, LPCUSB_CONNECT, 0U);
+	EnableInterrupt(state);
+}
+
+void UsbCtrlrDisconnect(int DevNo)
+{
+	const uint32_t state = DisableInterrupt();
+	if (DevNo == 0 && s_Prepared)
+	{
+		LpcUsbFsEp0Command(&s_Ep0, LPCUSB_CONNECT, 0U, 0U);
+	}
+	EnableInterrupt(state);
+}
+
+
+void UsbCtrlrSofEnable(int DevNo, bool Enable)
+{
+	const uint32_t state = DisableInterrupt();
+	if (DevNo == 0 && s_Prepared && s_Ep0.Enabled)
+	{
+		s_SofEnabled = Enable;
+		USB0->INTSTAT = 1U << 30;
+		if (Enable)
+			USB0->INTEN |= 1U << 30;
+		else
+			USB0->INTEN &= ~(1U << 30);
+	}
+	EnableInterrupt(state);
+}
+
+void UsbCtrlrRemoteWakeup(int DevNo)
+{
+	(void)DevNo;
+	// Remote wakeup is not implemented; configure bRemoteWakeup=false.
+}
+
+size_t UsbCtrlrGetSerial(int DevNo, char *pBuff, size_t BuffLen)
+{
+	if (pBuff == NULL || BuffLen == 0U)
+		return 0U;
+	pBuff[0] = '\0';
+	if (DevNo != 0 || BuffLen == 1U)
+		return 0U;
+	IAP_CMD_STATUS result;
+	const uint32_t state = DisableInterrupt();
+	const uint32_t powerMask = SYSCON_PDRUNCFG_PDEN_ROM_MASK | SYSCON_PDRUNCFG_PDEN_VD6_MASK;
+	const uint32_t poweredDown = SYSCON->PDRUNCFG[0] & powerMask;
+	const uint32_t addedClock = SYSCON_AHBCLKCTRL_ROM_MASK & ~SYSCON->AHBCLKCTRL[0];
+	SYSCON->PDRUNCFGCLR[0] = powerMask;
+	SYSCON->AHBCLKCTRLSET[0] = addedClock;
+	__DSB();
+	const IAPSTATUS status = IAPReadUID(&result);
+	SYSCON->AHBCLKCTRLCLR[0] = addedClock;
+	SYSCON->PDRUNCFGSET[0] = poweredDown;
+	__DSB();
+	EnableInterrupt(state);
+	if (status != IAPSTATUS_SUCCESS)
+		return 0U;
+	// Four ROM UID words, eight uppercase hexadecimal digits per word.
+	// Usable before Init: the generic core asks for its serial first.
+	const size_t count = BuffLen > 32U ? 32U : BuffLen - 1U;
+	for (size_t i = 0U; i < count; ++i)
+	{
+		const uint8_t digit = (result.Data[i / 8U] >> (28U - (i % 8U) * 4U)) & 15U;
+		pBuff[i] = digit < 10U ? '0' + digit : 'A' + digit - 10;
+	}
+	pBuff[count] = '\0';
+	return count;
+}
+

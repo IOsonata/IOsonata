@@ -39,7 +39,7 @@ extern "C" {
 #endif
 
 // Private port bring-up: prepare EP0 and its event sink. Leaves DCON and NVIC
-// disabled. Generic USB initialization and data endpoints are not provided yet.
+// disabled. Used by UsbCtrlrStart; applications use the generic USB API.
 bool Lpc546xxUsbControlPrepare(int IntPrio, void (*Event)(const UsbCtrlrEvt_t *));
 // Disconnect and retire DMA before returning clocks/storage. Failure retains
 // ownership; the caller may retry after the controller completes the skip.

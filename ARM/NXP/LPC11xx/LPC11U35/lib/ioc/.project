@@ -1305,5 +1305,15 @@
 			<type>1</type>
 			<locationURI>PARENT-3-PROJECT_LOC/include/usb_lpc_fs_target.h</locationURI>
 		</link>
+		<link>
+			<name>src/usb_data_lpc_fs.c</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/usb_data_lpc_fs.c</locationURI>
+		</link>
+		<link>
+			<name>include/usb_data_lpc_fs.h</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/include/usb_data_lpc_fs.h</locationURI>
+		</link>
 	</linkedResources>
 </projectDescription>

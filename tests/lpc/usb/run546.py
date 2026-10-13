@@ -42,25 +42,55 @@ for opt in ['-O0', '-O2']:
         paths = []
         for index, code in enumerate([source,
                 (root / 'ARM/NXP/LPC546xx/src/usb_lpc546xx.c').read_text(),
-                (root / 'ARM/NXP/src/usb_ep0_lpc_fs.c').read_text()]):
+                (root / 'ARM/NXP/src/usb_ep0_lpc_fs.c').read_text(),
+                (root / 'ARM/NXP/src/usb_data_lpc_fs.c').read_text()]):
             for reg, function in [('DEVCMDSTAT', 'TestDeviceWrite'),
                                   ('INTSTAT', 'TestInterruptWrite'),
                                   ('INTSETSTAT', 'TestInterruptSet'),
                                   ('EPSKIP', 'TestSkipWrite')]:
-                code = re.sub(r'(?:USB0|pEp0->pReg)->' + reg + r'\s*=\s*([^;]+);',
+                code = re.sub(r'(?:USB0|pEp0->pReg|pData->pEp0->pReg)->' + reg + r'\s*=\s*([^;]+);',
                               lambda m: function + '(' + m[1] + ');', code)
             path = tmp / ('usb' + str(index) + '.c')
             path.write_text(code)
             paths.append(str(path))
-        exe = tmp / 'ep0546'
-        subprocess.run(['gcc', '-std=gnu11', opt, '-Wall', '-Wextra', '-Werror',
-                        '-fsanitize=undefined', '-fno-sanitize-recover=all', '-no-pie',
-                        '-DLPC54628_SERIES', '-Wl,--section-start=.usb_ram=0x40100000',
-                        '-include', str(root / 'tests/lpc/usb/ep0_model.h'),
-                        *['-I' + str(root / p) for p in includes],
-                        *paths, str(root / 'tests/lpc/usb/ep0546_test.c'),
-                        '-o', str(exe)], check=True)
-        subprocess.run([str(exe)], check=True, timeout=5)
+        for fixture in ['ep0546_test', 'data_test', 'lifecycle546_test']:
+            exe = tmp / fixture
+            subprocess.run(['gcc', '-std=gnu11', opt, '-Wall', '-Wextra', '-Werror',
+                            '-fsanitize=undefined', '-fno-sanitize-recover=all', '-no-pie',
+                            '-ffunction-sections', '-fdata-sections', '-Wl,--gc-sections',
+                            '-DLPC54628_SERIES', '-Wl,--section-start=.usb_ram=0x40100000',
+                            '-include', str(root / 'tests/lpc/usb/ep0_model.h'),
+                            *['-I' + str(root / p) for p in includes],
+                            *paths, str(root / ('tests/lpc/usb/' + fixture + '.c')),
+                            '-o', str(exe)], check=True)
+            subprocess.run([str(exe)], check=True, timeout=5)
+
+        # Real generic core, AppEvt queue, CDC, HID and vendor bulk classes.
+        sources = [(path, 'gcc') for path in paths] + [
+            (str(root / 'tests/lpc/usb/integration546_model.c'), 'gcc'),
+            (str(root / 'src/cfifo.c'), 'gcc'),
+        ] + [(str(root / path), 'g++') for path in [
+            'src/device_intrf.cpp', 'src/usb/usb.cpp', 'src/usb/usb_intrf.cpp',
+            'src/usb/usbd_cdc.cpp', 'src/usb/usbd_cdc_desc.cpp',
+            'src/usb/usbd_hid.cpp', 'src/usb/usbd_bulk.cpp', 'src/usb/usb_int.cpp',
+            'src/usb/usbd_epalloc.cpp', 'src/app_evt_handler.cpp', 'src/app_run.cpp',
+            'tests/lpc/usb/cdc_test.cpp',
+        ]]
+        objects = []
+        for index, (path, compiler) in enumerate(sources):
+            obj = str(tmp / ('class_' + str(index) + '.o'))
+            objects.append(obj)
+            subprocess.run([compiler, '-std=' + ('gnu11' if compiler == 'gcc' else 'gnu++23'),
+                            opt, '-fsanitize=undefined', '-fno-sanitize-recover=all',
+                            '-ffunction-sections', '-fdata-sections', '-DLPC54628_SERIES',
+                            '-include', str(root / 'tests/lpc/usb/ep0_model.h'),
+                            *['-I' + str(root / p) for p in includes],
+                            '-c', path, '-o', obj], check=True)
+        exe = str(tmp / 'cdc546')
+        subprocess.run(['g++', '-no-pie', '-fsanitize=undefined', '-Wl,--gc-sections',
+                        '-Wl,--section-start=.usb_ram=0x40100000', *objects, '-o', exe], check=True)
+        for args in [[], ['composite'], ['composite', 'bulk']]:
+            subprocess.run([exe, *args], check=True, timeout=5)
 
 # Check the production linker script: retain only referenced USB memory,
 # keep NOLOAD data out of the binary, and reject USB SRAM overflow.

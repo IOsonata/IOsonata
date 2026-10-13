@@ -1,4 +1,4 @@
-/* LPC11Uxx real CDC enumeration, control and data regression. MIT License, I-SYST, 2026. */
+/* LPC full-speed real CDC enumeration, control and data regression. MIT License, I-SYST, 2026. */
 #include <cassert>
 #include <cstdio>
 #include <cstring>
@@ -6,7 +6,13 @@
 #include "usb/usbd_cdc.h"
 #include "usb/usbd_hid.h"
 #include "usb/usbd_bulk.h"
+#include "usb_mem_lpc_fs.h"
+#if defined(LPC54628_SERIES)
+#include "usb_control_lpc546xx.h"
+#define USB_IRQHandler USB0_IRQHandler
+#else
 #include "usb_hw_lpc11uxx.h"
+#endif
 
 class TestHid : public UsbdHid {
 public:
@@ -41,7 +47,7 @@ alignas(4) static uint8_t s_Rx[USB_INTRF_RXMEM_SIZE(2, 64)];
 alignas(4) static uint8_t s_Tx[CFIFO_MEMSIZE(128)];
 
 extern "C" void TestUsbInitialize(void);
-extern "C" Lpc11UsbMemory_t *TestUsbMemory(void);
+extern "C" LpcUsbFsMemory_t *TestUsbMemory(void);
 extern "C" void TestUsbPacketDone(unsigned Physical, unsigned Length);
 extern "C" void TestUsbStatusAckPending(unsigned Physical);
 extern "C" void TestUsbSetup(const UsbSetupData_t *pSetup);
@@ -95,7 +101,7 @@ static unsigned ControlRead(uint8_t Type, uint8_t Request, uint16_t Value,
 {
 	const UsbSetupData_t setup = {Type, Request, Value, Index, Length};
 	TestUsbSetup(&setup);
-	Lpc11UsbMemory_t *memory = TestUsbMemory();
+	LpcUsbFsMemory_t *memory = TestUsbMemory();
 	unsigned count = 0;
 	unsigned packets = 0;
 	while ((memory->Command[2] & (1U << 31)) != 0)
@@ -187,7 +193,7 @@ static void OpenPort(void)
 static void Loopback(void)
 {
 	const UsbdCdcDev_t *cdc = s_Cdc;
-	Lpc11UsbMemory_t *memory = TestUsbMemory();
+	LpcUsbFsMemory_t *memory = TestUsbMemory();
 	const unsigned out = 2U * cdc->DataEpNo;
 	uint8_t sent[80];
 	uint8_t received[80];
@@ -348,7 +354,7 @@ static void Reconfigure(void)
 		if (s_VendorBulk)
 			assert(bulk->pData->Mps == 64);
 	}
-	std::puts("LPC11Uxx active-transfer unconfigure/reconfigure and repeated configuration: PASS");
+	std::puts("LPC full-speed active-transfer unconfigure/reconfigure and repeated configuration: PASS");
 }
 
 int main(int argc, char **)
@@ -357,7 +363,11 @@ int main(int argc, char **)
 	s_VendorBulk = argc > 2;
 	TestUsbInitialize();
 	assert(AppEvtHandlerInit(s_Events, sizeof(s_Events)));
+	#if defined(LPC54628_SERIES)
+	const IOPinCfg_t pin = {0, 22, IOPINOP_FUNC7, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL};
+#else
 	const IOPinCfg_t pin = {0, 3, IOPINOP_FUNC1, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL};
+#endif
 	UsbCfg_t cfg = {};
 	cfg.Vid = 0x1234;
 	cfg.Pid = 0x5678;
@@ -393,6 +403,13 @@ int main(int argc, char **)
 		bulkCfg.TxFifoMemSize = sizeof(s_BulkTx);
 		assert(s_Bulk.Init(bulkCfg));
 	}
+	TestUsbCable(false, false);
+	assert(!UsbEnable(0));
+	ProcessEvents();
+	assert(!UsbConfigured(0));
+	TestUsbCable(true, false);
+	TestUsbVbusInterrupt();
+	ProcessEvents();
 	assert(UsbEnable(0));
 	ProcessEvents();
 	Enumerate();
@@ -401,7 +418,7 @@ int main(int argc, char **)
 	HidReports();
 	assert(s_PortOpened == 1 && s_RxEvents == (s_Composite ? 4U : 2U));
 	UsbdCdcDev_t *cdc = s_Cdc;
-	Lpc11UsbMemory_t *memory = TestUsbMemory();
+	LpcUsbFsMemory_t *memory = TestUsbMemory();
 	const unsigned physical = 2U * cdc->NotifyEpNo + 1U;
 	const uint8_t header[] = {0xA1, 0x20, 0, 0, cdc->CtrlIfNo, 0, 2, 0};
 	assert(cdc->SerialStateActive && !cdc->SerialStatePending);
@@ -444,8 +461,8 @@ int main(int argc, char **)
 	Reconfigure();
 	UsbDisable(0);
 	if (s_VendorBulk)
-		std::puts("LPC11Uxx CDC/HID/vendor bulk, seven endpoint addresses and reconnect: PASS");
+		std::puts("LPC full-speed CDC/HID/vendor bulk, seven endpoint addresses and reconnect: PASS");
 	if (s_Composite)
-		std::puts("LPC11Uxx composite CDC/HID descriptors, reports and reconnect: PASS");
-	std::puts("LPC11Uxx CDC enumeration, line coding, loopback, notifications and reconnect: PASS");
+		std::puts("LPC full-speed composite CDC/HID descriptors, reports and reconnect: PASS");
+	std::puts("LPC full-speed CDC enumeration, line coding, loopback, notifications and reconnect: PASS");
 }

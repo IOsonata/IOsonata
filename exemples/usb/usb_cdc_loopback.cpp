@@ -124,7 +124,11 @@ static const UsbCfg_t s_UsbCfg = {
 	.DeviceSubClass = 2U,
 	.DeviceProtocol = 1U,
 	.bSelfPowered = false,
+#ifdef USB_REMOTE_WAKEUP
+	.bRemoteWakeup = USB_REMOTE_WAKEUP,
+#else
 	.bRemoteWakeup = true,
+#endif
 	.bLowPowerSuspend = false,
 	.MaxPower = 100,
 	.EvtHandler = nullptr,

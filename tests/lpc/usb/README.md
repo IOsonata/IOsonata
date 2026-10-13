@@ -330,35 +330,46 @@ LPC54628 places its 832-byte allocation in the 8 KB dedicated USB RAM using
 NOLOAD, outside startup .data/.bss. Only the owned allocation is initialized;
 unused USB storage is discarded by the linker.
 
-The port also provides EP0 and USB0 IRQ handling through the private
-`Lpc546xxUsbControlPrepare` / `Lpc546xxUsbControlRelease` functions. Prepare
-enables the controller and EP0 interrupts while leaving NVIC and the USB
-pull-up disabled. The supplied event sink receives SETUP, transfer completion,
-reset, suspend and resume events. This is for controller integration, not an
-application API. Generic-core initialization, cable-driven attach/detach,
-data endpoints, and remote wakeup still need completion. There is no LPC54628
-USB application or board-validation claim yet.
+The LPC54628 port now integrates with the generic USB core and provides EP0,
+four bulk/interrupt endpoint pairs, direct endpoint callbacks in the USB0 ISR,
+SOF events, and VBUS-driven start/stop and reconnect. `usb_ep0_lpc_fs.c` and
+`usb_data_lpc_fs.c` are compiled by both LPC11U35 and LPC54628. Their clocking,
+pin setup and IRQ entry points remain family-specific. Public controller APIs
+are unchanged. Cancellation callbacks run only after DMA retirement; a failed
+skip keeps memory and clocks owned until Stop can safely retry.
 
-LPC11U35 and LPC54628 now compile the same `usb_ep0_lpc_fs.c` control-transfer
-state machine against their vendor CMSIS register types. Clocking, memory
-ownership, lifecycle and IRQ entry points remain in the family source files.
-The public LPC11U35 controller API is unchanged. Both managed library projects
-include the shared source and the correct family register-type header.
+Init requires P0.22 FUNC7 VBUS input, no pull, normal type. A GPIO edge queues
+ordinary USB processing even while USB clocks are stopped. The PHY provides
+its pull-up and dedicated DM/DP pads. Other VBUS routes are not supported yet.
+The ROM UID call temporarily powers ROM/OTP and restores their prior state.
+USB1 high-speed, ISO, remote wakeup and low-power suspend are not implemented.
+Configure `bRemoteWakeup=false` and `bLowPowerSuspend=false`.
 
-The LPC54628 host fixture covers control IN/OUT, address status acknowledgment
-and supersession, stalls, reset/SETUP ordering, cable-loss cancellation,
-suspend/resume, callback release/reinitialization, and bounded skip failure
-with retained DMA ownership. These run at -O0 and -O2 with UBSan alongside
-the existing LPC11U35 transport and generic-core/class regressions.
+The LPC54628 host fixtures cover EP0 ordering, all eight data endpoint
+directions, unaligned buffers, multi-packet IN through 65535 bytes, halt/clear,
+reset, reentrant callbacks, bounded skip failure and retained ownership.
+The real generic core, AppEvt queue and CDC/HID/vendor-bulk classes also run
+against LPC54628 registers. Tests cover startup without VBUS, later attachment,
+enumeration, CDC line coding and notifications, payloads, cable removal and
+reconnect, and repeated configuration while transfers are active. The same
+class tests run against LPC11U35. Both use -O0/-O2 and UBSan.
 
-`python3 tests/lpc/usb/link546.py --prefix arm-none-eabi-` links an EP0 bring-up
-fixture with real startup, checks the strong USB0 IRQ vector and LPC checksum,
-and verifies 832 bytes of NOLOAD USB RAM. Debug retains semihosting; Release
-uses nosys. The fixture does not connect or enumerate a device. With GNU Arm
-13.2.1 it uses 16060 bytes flash in Debug and 6592 in Release. The ten LPC11U35
-firmware links also pass after sharing EP0; the largest composite Debug image
-uses 55936 of 65536 flash bytes. Earlier size measurements above describe the
-builds before this extraction.
+`ARM/NXP/LPC546xx/LPC54628/exemples/UsbCdcLoopback` links the shared CDC loopback
+application. Its board header selects P0.22 and disables remote wakeup in the
+descriptors. The application continues to use the generic USB interfaces and
+the 16-entry AppEvt queue; it does not call the controller.
+
+`python3 tests/lpc/usb/link546.py --prefix arm-none-eabi-` checks the managed
+project links, then builds the CDC application and EP0 fixture with real
+startup. It verifies the strong USB0 vector, LPC checksum and 832-byte NOLOAD
+USB RAM allocation. Debug retains semihosting; Release uses nosys. GNU Arm
+13.2.1 produces a CDC image of 48076 bytes flash in Debug and 21628 in Release.
+The ten LPC11U35 firmware links also pass after sharing data endpoints; the
+largest composite Debug image uses 56428 of 65536 flash bytes. Earlier size
+measurements above describe earlier builds.
+
+Physical enumeration, cable behavior, throughput and suspend/resume still
+require board testing. Host register models do not establish hardware results.
 
 Reference sequences: NXP's LPC54628 `CLOCK_EnableUsbfs0DeviceClock` in
 [MCUXpresso SDK](https://github.com/nxp-mcuxpresso/legacy-mcux-sdk/blob/main/devices/LPC54628/drivers/fsl_clock.c),

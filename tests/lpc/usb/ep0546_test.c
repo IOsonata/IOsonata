@@ -55,6 +55,19 @@ void TestSkipWrite(uint32_t Value)
 	}
 }
 
+void NVIC_SetPendingIRQ(IRQn_Type Irq)
+{
+	assert(Irq == USB0_IRQn);
+}
+
+#ifndef LPC546_USB_INTEGRATION
+void UsbProcessQue(int DevNo)
+{
+	assert(DevNo == 0);
+}
+
+#endif
+
 static void Event(const UsbCtrlrEvt_t *pEvent)
 {
 	assert(s_Count < 32);
@@ -106,6 +119,7 @@ static void Done(bool In, unsigned Remaining)
 	USB0_IRQHandler();
 }
 
+#ifndef LPC546_USB_EP0_FIXTURE_ONLY
 int main(void)
 {
 	Map(SYSCON_BASE);
@@ -224,3 +238,5 @@ int main(void)
 	puts("LPC546xx EP0, reset, IRQ ordering and DMA ownership: PASS");
 	return 0;
 }
+
+#endif
