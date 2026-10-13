@@ -39,6 +39,10 @@ SOFTWARE.
 #define __BOARD_H__
 
 // Output on the LPC-Link2 VCOM, Flexcomm 0, P0_29 RXD and P0_30 TXD
+#ifndef DEBUG
+#define UART_RETARGET
+#endif
+
 #define UART_DEVNO			0
 #define UART_RX_PORT		0
 #define UART_RX_PIN			29
