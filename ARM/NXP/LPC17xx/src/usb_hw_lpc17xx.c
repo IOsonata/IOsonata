@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
 @file	usb_hw_lpc17xx.c
 
-@brief	Private LPC17xx USB clock validation and exclusive power ownership.
+@brief	Private LPC17xx USB clock, SIE and EP0 FIFO operations.
 
 @author	Hoang Nguyen Hoan
 @date	Oct. 12, 2026
@@ -42,6 +42,7 @@ SOFTWARE.
 
 static bool s_Prepared;
 static bool s_SieFault;
+static bool s_Ep0Ready;
 
 static bool Lpc17UsbClockValid(uint32_t MainHz)
 {
@@ -88,6 +89,7 @@ bool Lpc17UsbHwPrepare(uint32_t MainHz)
 		{
 			s_Prepared = true;
 			s_SieFault = false;
+			s_Ep0Ready = false;
 		}
 		else
 		{
@@ -111,6 +113,7 @@ bool Lpc17UsbHwRelease(void)
 		LPC_USB->USBClkCtrl = 0U;
 		LPC_SC->PCONP &= ~LPC17_USB_POWER;
 		s_Prepared = false;
+		s_Ep0Ready = false;
 		released = true;
 	}
 	__set_PRIMASK(state);
@@ -177,4 +180,113 @@ bool Lpc17UsbSieRead(uint8_t Command, uint8_t *pData)
 	if (pData == 0)
 		return false;
 	return Lpc17UsbSieTransfer(Command, 0x200U, pData);
+}
+
+static bool Lpc17UsbPacketReady(void)
+{
+	return s_Prepared && !s_SieFault &&
+		(LPC_SC->PCONP & LPC17_USB_POWER) != 0U &&
+		(LPC_USB->USBClkSt & LPC17_USB_CLOCKS) == LPC17_USB_CLOCKS;
+}
+
+bool Lpc17UsbEp0Realize(void)
+{
+	const uint32_t state = __get_PRIMASK();
+	__disable_irq();
+	bool ready = false;
+	// Realization reallocates endpoint RAM. Only use before enabling traffic.
+	if (Lpc17UsbPacketReady() && !s_Ep0Ready &&
+		(LPC_USB->USBReEp & ~3U) == 0U && LPC_USB->USBDevIntEn == 0U &&
+		LPC_USB->USBEpIntEn == 0U && LPC_USB->USBEpDMASt == 0U)
+	{
+		ready = true;
+		for (unsigned ep = 0; ep < 2U && ready; ++ep)
+		{
+			LPC_USB->USBDevIntClr = 1U << 8;
+			LPC_USB->USBReEp |= 1U << ep;
+			LPC_USB->USBEpInd = ep;
+			LPC_USB->USBMaxPSize = 64U;
+			ready = Lpc17UsbSieWait(1U << 8);
+			LPC_USB->USBDevIntClr = 1U << 8;
+		}
+		s_Ep0Ready = ready;
+	}
+	__set_PRIMASK(state);
+	return ready;
+}
+
+int Lpc17UsbEp0Read(uint8_t *pData, int Capacity)
+{
+	if (Capacity < 0 || (Capacity > 0 && pData == 0))
+		return -1;
+	const uint32_t state = __get_PRIMASK();
+	__disable_irq();
+	int result = -1;
+	uint8_t packet[64];
+	if (Lpc17UsbPacketReady() && s_Ep0Ready)
+	{
+		LPC_USB->USBCtrl = 1U;
+		int wait = LPC17_USB_WAIT;
+		while ((LPC_USB->USBRxPLen & (1U << 11)) == 0U && --wait > 0)
+		{
+		}
+		const unsigned length = LPC_USB->USBRxPLen & 0x3FFU;
+		if (wait == 0 || length > 64U)
+			s_SieFault = true;
+		else if (length <= (unsigned)Capacity)
+		{
+			for (unsigned offset = 0; offset < length; offset += 4U)
+			{
+				const uint32_t word = LPC_USB->USBRxData;
+				for (unsigned byte = 0; byte < 4U && offset + byte < length; ++byte)
+					packet[offset + byte] = (uint8_t)(word >> (8U * byte));
+			}
+			LPC_USB->USBCtrl = 0U;
+			uint8_t status;
+			if (Lpc17UsbSieCommand(0U) && Lpc17UsbSieRead(0xF2U, &status))
+			{
+				// SETUP can overwrite EP0 during CPU reads. Never publish that data.
+				if ((status & 1U) != 0U)
+					result = -2;
+				else
+				{
+					for (unsigned i = 0; i < length; ++i)
+						pData[i] = packet[i];
+					result = (int)length;
+				}
+			}
+		}
+		// Includes ZLP and insufficient capacity: RD_EN must not remain set.
+		LPC_USB->USBCtrl = 0U;
+	}
+	__set_PRIMASK(state);
+	return result;
+}
+
+bool Lpc17UsbEp0Write(const uint8_t *pData, int Length)
+{
+	if (Length < 0 || Length > 64 || (Length > 0 && pData == 0))
+		return false;
+	const uint32_t state = __get_PRIMASK();
+	__disable_irq();
+	bool done = false;
+	uint8_t status;
+	if (Lpc17UsbPacketReady() && s_Ep0Ready &&
+		Lpc17UsbSieRead(1U, &status) && (status & 3U) == 0U)
+	{
+		LPC_USB->USBCtrl = 2U;
+		LPC_USB->USBTxPLen = (uint32_t)Length;
+		for (int offset = 0; offset < Length; offset += 4)
+		{
+			uint32_t word = 0U;
+			for (int byte = 0; byte < 4 && offset + byte < Length; ++byte)
+				word |= (uint32_t)pData[offset + byte] << (8U * byte);
+			LPC_USB->USBTxData = word;
+		}
+		// Explicitly clear WR_EN, also for a zero-length packet.
+		LPC_USB->USBCtrl = 0U;
+		done = Lpc17UsbSieCommand(1U) && Lpc17UsbSieCommand(0xFAU);
+	}
+	__set_PRIMASK(state);
+	return done;
 }

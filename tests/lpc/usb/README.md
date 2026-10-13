@@ -459,7 +459,7 @@ integrity, throughput and reconnect behavior remain pending board testing.
 `usb_hw_lpc17xx.c`, using vendor `LPC_SC_TypeDef` and `LPC_USB_TypeDef`
 register declarations. The main USB host suite also invokes it. This is the
 initial LPC1769 USB support, not a usable generic USB device driver. Pins,
-EP0, endpoint transfers and lifecycle integration remain to be added.
+EP0 IRQ/control stages, data endpoints and lifecycle integration remain to be added.
 
 Preparation accepts the board's main oscillator frequency and validates the
 existing PLL0 or PLL1 status for exactly 48 MHz. It requires a ready main
@@ -497,3 +497,24 @@ mask restoration. Temporary source instrumentation models only W1C and
 USBCmdCode writes; vendor register reads and driver control flow are retained.
 The updated source also compiles for Cortex-M3 at -O0/-Os. Enumeration and
 hardware SIE timing remain untested.
+
+LPC1769 now has private 64-byte EP0 OUT/IN realization and CPU FIFO helpers.
+Realization must run while disconnected, before enabling endpoint interrupts;
+it cannot be used to resize a live controller. Reads stage at most 64 bytes
+and publish them only after Clear Buffer confirms that no SETUP overwrote
+the packet. Return -2 tells the future IRQ layer to clear PO and read the new
+SETUP; no unbounded retry loop runs here. Insufficient destination capacity
+leaves the packet queued. Writes refuse full/stalled IN buffers and validate
+a single packet after copying it. Validation does not mean host acknowledgement;
+a later SETUP may invalidate the packet.
+
+Packet helpers preserve PRIMASK, explicitly clear FIFO access mode (including
+zero-length packets), and handle unaligned buffers and final partial words
+without word overreads. Realization and packet-ready timeouts latch controller
+failure through the existing SIE fault state. The caller must retire endpoints
+before the existing guarded power release.
+
+The packet model checks lengths 0 through 64, ZLP, buffer guards, insufficient
+capacity, SETUP overwrite, busy IN, invalid lengths and realization/FIFO/SIE
+timeouts at -O0/-O2 with UBSan. Cortex-M3 -O0/-Os compilation passes. No generic
+USB controller entry points or enumeration result are claimed yet.

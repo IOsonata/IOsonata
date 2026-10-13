@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
 @file	usb_hw_lpc17xx.h
 
-@brief	Private LPC17xx USB clock preparation; no endpoint or pin setup.
+@brief	Private LPC17xx USB clock, SIE and EP0 FIFO helpers.
 
 @author	Hoang Nguyen Hoan
 @date	Oct. 12, 2026
@@ -52,6 +52,16 @@ bool Lpc17UsbHwRelease(void);
 bool Lpc17UsbSieCommand(uint8_t Command);
 bool Lpc17UsbSieWrite(uint8_t Command, uint8_t Data);
 bool Lpc17UsbSieRead(uint8_t Command, uint8_t *pData);
+// Realize 64-byte control OUT/IN before connection and interrupt enable.
+bool Lpc17UsbEp0Realize(void);
+// Caller services/acknowledges endpoint interrupts separately. Read returns
+// packet length, -1 on failure (output unchanged), or -2 for SETUP overwrite.
+// On -2, clear PO with Select Endpoint/Clear Interrupt and read the new SETUP.
+// Insufficient capacity leaves the packet queued. Zero length accepts NULL.
+int Lpc17UsbEp0Read(uint8_t *pData, int Capacity);
+// True means buffer validation completed, not host acknowledgement. A new
+// SETUP can invalidate an IN packet; the future IRQ layer handles that abort.
+bool Lpc17UsbEp0Write(const uint8_t *pData, int Length);
 #ifdef __cplusplus
 }
 #endif
