@@ -26,6 +26,8 @@ The C, C++, assembler and linker command patterns explicitly place
 This keeps Zicsr and Zifencei enabled when e2 studio supplies its default
 device architecture without them. The setting applies to both library
 configurations and all examples; `__riscv_zicsr` is supplied by the compiler.
+The C, C++ and assembler patterns also include `-c` to produce object files;
+linking is performed only by the separate linker step.
 After updating an imported project, refresh it and clean/rebuild the library
 and example. The build command must contain the explicit architecture above.
 
