@@ -56,6 +56,11 @@ void SystemInit(void)
 {
     /* WBA65 reset runs from HSI16. Do not change clock mux, flash latency,
        TrustZone or peripheral ownership until the MCU clock port is present. */
+#if (__FPU_PRESENT == 1) && (__FPU_USED == 1)
+    /* The library is built for the FPU (hard float ABI). Enable CP10 and CP11
+       before any floating point instruction runs. */
+    SCB->CPACR |= ((3UL << 20U) | (3UL << 22U));
+#endif
     SCB->VTOR = (uint32_t)__Vectors;
     __DSB();
     __ISB();
