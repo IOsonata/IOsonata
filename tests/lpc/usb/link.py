@@ -21,6 +21,7 @@ SOURCES = [
     'ARM/NXP/LPC11xx/src/system_LPC11Uxx.c',
     'ARM/NXP/LPC11xx/src/iopincfg_lpc11uxx.c',
     'ARM/NXP/LPC11xx/src/usb_lpc11uxx.c',
+    'ARM/NXP/src/usb_ep0_lpc_fs.c',
     'src/cfifo.c',
     'src/prbs.c',
     'src/device_intrf.cpp',

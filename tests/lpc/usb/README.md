@@ -330,10 +330,35 @@ LPC54628 places its 832-byte allocation in the 8 KB dedicated USB RAM using
 NOLOAD, outside startup .data/.bss. Only the owned allocation is initialized;
 unused USB storage is discarded by the linker.
 
-This is hardware preparation, not a finished USB port. EP0, data transfers,
-USB0 IRQ handling and generic-core lifecycle integration
-still need completion. There is no LPC54628 USB application or hardware
-validation claim yet. LPC11U35 USB behavior is unchanged.
+The port also provides EP0 and USB0 IRQ handling through the private
+`Lpc546xxUsbControlPrepare` / `Lpc546xxUsbControlRelease` functions. Prepare
+enables the controller and EP0 interrupts while leaving NVIC and the USB
+pull-up disabled. The supplied event sink receives SETUP, transfer completion,
+reset, suspend and resume events. This is for controller integration, not an
+application API. Generic-core initialization, cable-driven attach/detach,
+data endpoints, and remote wakeup still need completion. There is no LPC54628
+USB application or board-validation claim yet.
+
+LPC11U35 and LPC54628 now compile the same `usb_ep0_lpc_fs.c` control-transfer
+state machine against their vendor CMSIS register types. Clocking, memory
+ownership, lifecycle and IRQ entry points remain in the family source files.
+The public LPC11U35 controller API is unchanged. Both managed library projects
+include the shared source and the correct family register-type header.
+
+The LPC54628 host fixture covers control IN/OUT, address status acknowledgment
+and supersession, stalls, reset/SETUP ordering, cable-loss cancellation,
+suspend/resume, callback release/reinitialization, and bounded skip failure
+with retained DMA ownership. These run at -O0 and -O2 with UBSan alongside
+the existing LPC11U35 transport and generic-core/class regressions.
+
+`python3 tests/lpc/usb/link546.py --prefix arm-none-eabi-` links an EP0 bring-up
+fixture with real startup, checks the strong USB0 IRQ vector and LPC checksum,
+and verifies 832 bytes of NOLOAD USB RAM. Debug retains semihosting; Release
+uses nosys. The fixture does not connect or enumerate a device. With GNU Arm
+13.2.1 it uses 16060 bytes flash in Debug and 6592 in Release. The ten LPC11U35
+firmware links also pass after sharing EP0; the largest composite Debug image
+uses 55936 of 65536 flash bytes. Earlier size measurements above describe the
+builds before this extraction.
 
 Reference sequences: NXP's LPC54628 `CLOCK_EnableUsbfs0DeviceClock` in
 [MCUXpresso SDK](https://github.com/nxp-mcuxpresso/legacy-mcux-sdk/blob/main/devices/LPC54628/drivers/fsl_clock.c),

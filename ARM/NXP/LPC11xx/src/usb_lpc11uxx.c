@@ -46,6 +46,7 @@ SOFTWARE.
 #include "lpc_iap.h"
 #include "usb/usb.h"
 #include "usb_hw_lpc11uxx.h"
+#include "usb_ep0_lpc_fs.h"
 
 #define LPC11_USB_AHB_CLOCKS ((1UL << 14) | (1UL << 27))
 #define LPC11_USB_ENABLE (1UL << 7)
@@ -72,22 +73,6 @@ SOFTWARE.
 // legacy SystemCoreClockSet entry point (which need not update g_McuOsc).
 extern uint32_t SystemMainClkFreq;
 
-typedef struct __Lpc11_Usb_Ep0_State {
-	uint32_t Generation;
-	uint16_t RemainingOut;
-	uint16_t InLength;
-	uint16_t OutLength;
-	uint8_t OldAddress;
-	bool Enabled;
-	bool InBusy;
-	bool OutBusy;
-	bool DirectionIn;
-	bool StatusOut;
-	bool Halted;
-	bool Aborted;
-	bool AddressPending;
-} Lpc11UsbEp0State_t;
-
 typedef struct __Lpc11_Usb_Data_State {
 	UsbCtrlrEpHandler_t Handler;
 	void *pContext;
@@ -106,7 +91,16 @@ typedef struct __Lpc11_Usb_Data_State {
 static Lpc11UsbMemory_t s_Memory
 	__attribute__((section(".usb_ram"), aligned(256)));
 
-static Lpc11UsbEp0State_t s_Ep0;
+static bool Lpc11UsbControlReady(void);
+static void Lpc11UsbEp0Fault(void);
+static void Lpc11UsbControlEvent(const UsbCtrlrEvt_t *pEvent);
+
+static LpcUsbFsEp0_t s_Ep0 = {
+	.pReg = LPC_USB,
+	.pMemory = &s_Memory,
+	.Ready = Lpc11UsbControlReady,
+	.Fault = Lpc11UsbEp0Fault,
+};
 static bool s_Prepared;
 static uint32_t s_AddedClocks;
 static bool s_Initialized;
@@ -266,8 +260,7 @@ bool Lpc11UsbHwRelease(void)
 
 static void Lpc11UsbCommand(uint32_t Clear, uint32_t Set, uint32_t Ack)
 {
-	LPC_USB->DEVCMDSTAT = ((LPC_USB->DEVCMDSTAT & LPC11_USB_COMMAND_MASK) & ~Clear) |
-		Set | LPC11_USB_NO_WAKE | (Ack & LPC11_USB_STATUS_W1C);
+	LpcUsbFsEp0Command(&s_Ep0, Clear, Set, Ack);
 }
 
 static void Lpc11UsbVbusEvent(int IntNo, void *pContext)
@@ -513,35 +506,12 @@ size_t UsbCtrlrGetSerial(int DevNo, char *pBuff, size_t BuffLen)
 
 static uint32_t Lpc11UsbBufferAddress(unsigned Physical)
 {
-	return ((uint32_t)(uintptr_t)s_Memory.Packet[Physical] >> 6) & 0xFFFFU;
+	return LpcUsbFsEp0BufferAddress(&s_Ep0, Physical);
 }
 
 static bool Lpc11UsbRetire(uint32_t Mask)
 {
-	uint32_t active = 0U;
-	for (unsigned physical = 0U; physical < 10U; ++physical)
-	{
-		if ((Mask & (1U << physical)) != 0U &&
-			(s_Memory.Command[physical * 2U] & LPC11_USB_ACTIVE) != 0U)
-			active |= 1U << physical;
-	}
-	if (active != 0U)
-		LPC_USB->EPSKIP = active;
-	__DSB();
-	uint32_t count = LPC11_USB_WAIT_COUNT;
-	while ((LPC_USB->EPSKIP & Mask) != 0U)
-	{
-		if (--count == 0U)
-			return false;
-	}
-	__DMB();
-	for (unsigned physical = 0U; physical < 10U; ++physical)
-	{
-		if ((Mask & (1U << physical)) != 0U &&
-			(s_Memory.Command[physical * 2U] & LPC11_USB_ACTIVE) != 0U)
-			return false;
-	}
-	return true;
+	return LpcUsbFsEp0Retire(&s_Ep0, Mask);
 }
 
 static void Lpc11UsbEp0Fault(void)
@@ -557,17 +527,6 @@ static void Lpc11UsbEp0Fault(void)
 	Lpc11UsbCommand(LPC11_USB_CONNECT | LPC11_USB_NAK_CONTROL, 0U, 0U);
 }
 
-static void Lpc11UsbEp0Reset(void)
-{
-	const uint32_t generation = s_Ep0.Generation + 1U;
-	memset(&s_Ep0, 0, sizeof(s_Ep0));
-	s_Ep0.Generation = generation;
-	s_Ep0.Enabled = true;
-	s_Memory.Command[0] = Lpc11UsbBufferAddress(0U);
-	s_Memory.Command[2] = Lpc11UsbBufferAddress(1U);
-	__DMB();
-}
-
 bool Lpc11UsbEp0Enable(void)
 {
 	if (!s_Prepared || s_Ep0.Enabled)
@@ -579,7 +538,8 @@ bool Lpc11UsbEp0Enable(void)
 		EnableInterrupt(state);
 		return false;
 	}
-	Lpc11UsbEp0Reset();
+	s_Ep0.Event = Lpc11UsbControlEvent;
+	LpcUsbFsEp0Reset(&s_Ep0);
 	LPC_USB->INTSTAT = LPC11_USB_INTERRUPTS;
 	Lpc11UsbCommand(0x7FU | LPC11_USB_NAK_CONTROL,
 		LPC11_USB_ENABLE, LPC11_USB_STATUS_W1C);
@@ -588,96 +548,19 @@ bool Lpc11UsbEp0Enable(void)
 	return true;
 }
 
-static bool Lpc11UsbEp0Current(void)
-{
-	return s_Prepared && s_Ep0.Enabled && !s_Closing && !s_Detached && !s_Ep0.Halted &&
-		(LPC_USB->DEVCMDSTAT & (LPC11_USB_SETUP | LPC11_USB_RESET)) == 0U;
-}
-
-static void Lpc11UsbEp0ArmOut(uint16_t Length)
-{
-	s_Ep0.OutLength = Length;
-	s_Ep0.OutBusy = true;
-	__DMB();
-	s_Memory.Command[0] = Lpc11UsbBufferAddress(0U) |
-		((uint32_t)Length << 16) | LPC11_USB_ACTIVE;
-}
-
 int UsbCtrlrEp0Send(int DevNo, uint8_t *pBuffer, int Length)
 {
-	if (DevNo != 0 || Length < 0 || (Length != 0 && pBuffer == NULL))
-		return -1;
-	const uint32_t state = DisableInterrupt();
-	if (!Lpc11UsbEp0Current() || s_Ep0.InBusy ||
-		(s_Memory.Command[2] & LPC11_USB_ACTIVE) != 0U)
-	{
-		EnableInterrupt(state);
-		return -1;
-	}
-	const uint16_t length = Length > 64 ? 64U : (uint16_t)Length;
-	if (length != 0U)
-		memcpy(s_Memory.Packet[1], pBuffer, length);
-	if (!Lpc11UsbEp0Current())
-	{
-		EnableInterrupt(state);
-		return -1;
-	}
-	s_Ep0.InLength = length;
-	s_Ep0.InBusy = true;
-	LPC_USB->INTSTAT = 2U;
-	__DMB();
-	s_Memory.Command[2] = Lpc11UsbBufferAddress(1U) |
-		((uint32_t)length << 16) | LPC11_USB_ACTIVE;
-	EnableInterrupt(state);
-	return length;
+	return LpcUsbFsEp0Send(&s_Ep0, DevNo, pBuffer, Length);
 }
 
 bool UsbCtrlrEp0Status(int DevNo, uint8_t EpAddr)
 {
-	if (DevNo != 0 || (EpAddr != 0U && EpAddr != 0x80U))
-		return false;
-	const uint32_t state = DisableInterrupt();
-	if (!Lpc11UsbEp0Current())
-	{
-		EnableInterrupt(state);
-		return false;
-	}
-	bool accepted = false;
-	if (EpAddr == 0x80U && !s_Ep0.OutBusy)
-	{
-		accepted = UsbCtrlrEp0Send(0, NULL, 0) == 0;
-		if (accepted)
-		{
-			s_Ep0.RemainingOut = 0U;
-			Lpc11UsbCommand(LPC11_USB_NAK_CONTROL, 0U, 0U);
-		}
-	}
-	else if (EpAddr == 0U && !s_Ep0.OutBusy && !s_Ep0.InBusy &&
-		(s_Memory.Command[0] & LPC11_USB_ACTIVE) == 0U)
-	{
-		s_Ep0.StatusOut = true;
-		Lpc11UsbCommand(LPC11_USB_NAK_CONTROL, 0U, 0U);
-		Lpc11UsbEp0ArmOut(0U);
-		accepted = true;
-	}
-	EnableInterrupt(state);
-	return accepted;
+	return LpcUsbFsEp0Status(&s_Ep0, DevNo, EpAddr);
 }
 
 void UsbCtrlrSetAddress(int DevNo, uint8_t Address)
 {
-	if (DevNo != 0 || Address > 127U)
-		return;
-	const uint32_t state = DisableInterrupt();
-	if (Lpc11UsbEp0Current())
-	{
-		// UM10462 table 197: program BEFORE the SET_ADDRESS status phase.
-		if (!s_Ep0.AddressPending)
-			s_Ep0.OldAddress = LPC_USB->DEVCMDSTAT & 0x7FU;
-		s_Ep0.AddressPending = true;
-		Lpc11UsbCommand(0x7FU, Address, 0U);
-	}
-	EnableInterrupt(state);
+	LpcUsbFsEp0SetAddress(&s_Ep0, DevNo, Address);
 }
 
 void UsbCtrlrEpStall(int DevNo, uint8_t EpNo, bool bIn)
@@ -691,174 +574,8 @@ void UsbCtrlrEpStall(int DevNo, uint8_t EpNo, bool bIn)
 		EnableInterrupt(state);
 		return;
 	}
-	if (Lpc11UsbEp0Current())
-	{
-		if (!Lpc11UsbRetire(3U))
-			Lpc11UsbEp0Fault();
-		else if (Lpc11UsbEp0Current())
-		{
-			s_Ep0.InBusy = false;
-			s_Ep0.OutBusy = false;
-			s_Ep0.Halted = true;
-			s_Ep0.RemainingOut = 0U;
-			Lpc11UsbCommand(LPC11_USB_NAK_CONTROL, 0U, 0U);
-			s_Memory.Command[0] = Lpc11UsbBufferAddress(0U) | LPC11_USB_STALL;
-			s_Memory.Command[2] = Lpc11UsbBufferAddress(1U) | LPC11_USB_STALL;
-			LPC_USB->INTSTAT = 2U;
-		}
-	}
+	LpcUsbFsEp0Stall(&s_Ep0);
 	EnableInterrupt(state);
-}
-
-static void Lpc11UsbEp0Complete(bool In, uint16_t Length, bool Cancelled)
-{
-	UsbCtrlrEvt_t event = {0};
-	event.Type = USB_CTRLR_EVT_XFER_CMPL;
-	event.Xfer.EpAddr = In ? 0x80U : 0U;
-	event.Xfer.Length = Length;
-	event.Xfer.Result = Cancelled ? USB_CTRLR_XFER_CANCELLED : USB_CTRLR_XFER_SUCCESS;
-	event.Xfer.pBuffer = In ? NULL : s_Memory.Packet[0];
-	UsbDevProcessEvent(0, &event);
-}
-
-static void Lpc11UsbEp0Setup(uint32_t Pending)
-{
-	// A new SETUP can share an IRQ with the preceding control-write status
-	// ACK. Complete it first so acknowledged class requests are committed
-	// before the generic core starts the new request. A control-read data
-	// ZLP is not a status ACK and must not take this path.
-	if (!s_Ep0.DirectionIn && s_Ep0.RemainingOut == 0U &&
-		s_Ep0.InBusy && s_Ep0.InLength == 0U &&
-		(Pending & 2U) != 0U && (s_Memory.Command[2] & LPC11_USB_ACTIVE) == 0U)
-	{
-		const uint32_t generation = s_Ep0.Generation;
-		s_Ep0.AddressPending = false;
-		s_Ep0.InBusy = false;
-		Lpc11UsbEp0Complete(true, 0U, s_Ep0.Aborted);
-		if (!s_Prepared || !s_Ep0.Enabled || s_Ep0.Generation != generation)
-			return;
-	}
-	else if (s_Ep0.StatusOut && s_Ep0.OutBusy &&
-		(Pending & 1U) != 0U && (s_Memory.Command[0] & LPC11_USB_ACTIVE) == 0U)
-	{
-		// OUT status shares the SETUP interrupt. Preserve its completion
-		// before the new request replaces the active class callback.
-		const uint32_t generation = s_Ep0.Generation;
-		__DMB();
-		const bool invalid = ((s_Memory.Command[0] >> 16) & 0x3FFU) != 0U;
-		s_Ep0.OutBusy = false;
-		Lpc11UsbEp0Complete(false, 0U, invalid || s_Ep0.Aborted);
-		if (!s_Prepared || !s_Ep0.Enabled || s_Ep0.Generation != generation)
-			return;
-	}
-	UsbCtrlrEvt_t event = {0};
-	event.Type = USB_CTRLR_EVT_SETUP;
-	__DMB();
-	memcpy(&event.Setup, s_Memory.Setup, sizeof(event.Setup));
-	if (s_Ep0.AddressPending)
-		Lpc11UsbCommand(0x7FU, s_Ep0.OldAddress, 0U);
-	// Figure 21 explicitly requires clearing both EP0 ACTIVE/STALL words
-	// while SETUP holds IN/OUT NAKed, BEFORE acknowledging SETUP. Hardware
-	// resets both control data toggles to DATA1 on reception of SETUP.
-	Lpc11UsbEp0Reset();
-	s_Ep0.DirectionIn = (event.Setup.bmRequestType & 0x80U) != 0U;
-	s_Ep0.RemainingOut = s_Ep0.DirectionIn ? 0U : event.Setup.wLength;
-	LPC_USB->INTSTAT = 2U;
-	Lpc11UsbCommand(LPC11_USB_NAK_CONTROL,
-		s_Ep0.DirectionIn ? (1U << 14) :
-		(s_Ep0.RemainingOut != 0U ? (1U << 15) : 0U), LPC11_USB_SETUP);
-	const uint32_t generation = s_Ep0.Generation;
-	UsbDevProcessEvent(0, &event);
-	if (Lpc11UsbEp0Current() && s_Ep0.Generation == generation &&
-		s_Ep0.RemainingOut != 0U && !s_Ep0.OutBusy)
-		Lpc11UsbEp0ArmOut(64U);
-}
-
-static void Lpc11UsbEp0Interrupt(uint32_t Pending)
-{
-	// EP0 OUT shares its interrupt with SETUP. Acknowledge BEFORE reading
-	// SETUP, once only. A SETUP arriving afterward keeps its new interrupt;
-	// one arriving before this write is handled by the following status read.
-	LPC_USB->INTSTAT = Pending & 3U;
-	if ((LPC_USB->DEVCMDSTAT & LPC11_USB_SETUP) != 0U)
-	{
-		Lpc11UsbEp0Setup(Pending);
-		return;
-	}
-	if (!Lpc11UsbEp0Current())
-		return;
-	const uint32_t generation = s_Ep0.Generation;
-	// IN completion first: the generic callback may arm status OUT. A NAK
-	// interrupt already latched for that OUT must not complete the new bank.
-	if ((Pending & 2U) != 0U)
-	{
-		if (s_Ep0.InBusy && (s_Memory.Command[2] & LPC11_USB_ACTIVE) == 0U)
-		{
-			const uint16_t length = s_Ep0.InLength;
-			s_Ep0.InBusy = false;
-			if (s_Ep0.AddressPending && length == 0U)
-				s_Ep0.AddressPending = false;
-			Lpc11UsbEp0Complete(true, length, s_Ep0.Aborted);
-		}
-		else if (!s_Ep0.InBusy && s_Ep0.RemainingOut != 0U &&
-			!((Pending & 1U) != 0U && s_Ep0.OutBusy &&
-			  (s_Memory.Command[0] & LPC11_USB_ACTIVE) == 0U))
-		{
-			// Host ends a control write early. Retire OUT before acknowledging
-			// its IN status request. Notify the core after the status ACK.
-			if (!Lpc11UsbRetire(1U))
-			{
-				Lpc11UsbEp0Fault();
-				return;
-			}
-			if (!Lpc11UsbEp0Current())
-				return;
-			s_Ep0.OutBusy = false;
-			s_Ep0.RemainingOut = 0U;
-			s_Ep0.Aborted = true;
-			Lpc11UsbCommand(LPC11_USB_NAK_CONTROL, 0U, 0U);
-			(void)UsbCtrlrEp0Send(0, NULL, 0);
-		}
-	}
-	if (!Lpc11UsbEp0Current() || s_Ep0.Generation != generation)
-		return;
-	if ((Pending & 1U) != 0U)
-	{
-		if (s_Ep0.OutBusy && (s_Memory.Command[0] & LPC11_USB_ACTIVE) == 0U)
-		{
-			__DMB();
-			const uint16_t remaining = (s_Memory.Command[0] >> 16) & 0x3FFU;
-			const uint16_t length = remaining <= s_Ep0.OutLength ?
-				(uint16_t)(s_Ep0.OutLength - remaining) : 0U;
-			const bool invalid = remaining > s_Ep0.OutLength ||
-				(!s_Ep0.StatusOut && length > s_Ep0.RemainingOut);
-			s_Ep0.OutBusy = false;
-			if (!invalid && !s_Ep0.StatusOut)
-				s_Ep0.RemainingOut -= length;
-			if (invalid || length < 64U)
-				s_Ep0.RemainingOut = 0U;
-			Lpc11UsbEp0Complete(false, length, invalid || s_Ep0.Aborted);
-			if (Lpc11UsbEp0Current() && s_Ep0.Generation == generation &&
-				s_Ep0.RemainingOut != 0U && !s_Ep0.OutBusy)
-				Lpc11UsbEp0ArmOut(64U);
-		}
-		else if (!s_Ep0.OutBusy && s_Ep0.DirectionIn && !s_Ep0.StatusOut)
-		{
-			// Premature OUT status aborts an unfinished control read.
-			if (!Lpc11UsbRetire(2U))
-			{
-				Lpc11UsbEp0Fault();
-				return;
-			}
-			if (!Lpc11UsbEp0Current())
-				return;
-			s_Ep0.InBusy = false;
-			s_Ep0.Aborted = true;
-			s_Ep0.StatusOut = true;
-			Lpc11UsbCommand(LPC11_USB_NAK_CONTROL, 0U, 0U);
-			Lpc11UsbEp0ArmOut(0U);
-		}
-	}
 }
 
 // The controller owns only aligned USB SRAM. Caller payloads can have any
@@ -1223,7 +940,7 @@ static void Lpc11UsbBusReset(uint32_t Status, bool Detached)
 	}
 	Lpc11UsbForget(0x3FCU);
 	LPC_USB->INTEN &= ~0x3FCU;
-	Lpc11UsbEp0Reset();
+	LpcUsbFsEp0Reset(&s_Ep0);
 	for (unsigned physical = 2U; physical < 10U; ++physical)
 	{
 		s_Memory.Command[physical * 2U] = LPC11_USB_DISABLED;
@@ -1288,7 +1005,7 @@ void USB_IRQHandler(void)
 	}
 	if (s_Prepared && s_Ep0.Enabled && !s_Detached && s_Ep0.Generation == generation &&
 		(LPC_USB->DEVCMDSTAT & LPC11_USB_RESET) == 0U && (pending & 3U) != 0U)
-		Lpc11UsbEp0Interrupt(pending);
+		LpcUsbFsEp0Interrupt(&s_Ep0, pending);
 	for (unsigned physical = 2U; physical < 10U && Lpc11UsbDataCurrent(); ++physical)
 		Lpc11UsbDataInterrupt(physical);
 	if (s_Prepared && s_Ep0.Enabled && !s_Detached && s_Ep0.Generation == generation &&
@@ -1307,4 +1024,14 @@ void USB_IRQHandler(void)
 	}
 	__DSB();
 	EnableInterrupt(state);
+}
+
+static bool Lpc11UsbControlReady(void)
+{
+	return s_Prepared && !s_Closing && !s_Detached;
+}
+
+static void Lpc11UsbControlEvent(const UsbCtrlrEvt_t *pEvent)
+{
+	UsbDevProcessEvent(0, pEvent);
 }

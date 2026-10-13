@@ -33,6 +33,7 @@ for opt in ['-O0', '-O2']:
                             '-I' + str(root / 'ARM/NXP/include'),
                             *layout, str(root / 'tests/lpc/usb/hardware_test.c'),
                             str(root / 'ARM/NXP/LPC11xx/src/usb_lpc11uxx.c'),
+                            str(root / 'ARM/NXP/src/usb_ep0_lpc_fs.c'),
                             '-o', exe], check=True)
             subprocess.run([exe], check=True, timeout=5)
 
@@ -88,15 +89,20 @@ print('LPC11U35 USB SRAM placement, NOLOAD, garbage collection and overflow: PAS
 for opt in ['-O0', '-O2']:
     with tempfile.TemporaryDirectory() as tmp:
         tmp = Path(tmp)
-        source = (root / 'ARM/NXP/LPC11xx/src/usb_lpc11uxx.c').read_text()
+        sources = [(root / 'ARM/NXP/LPC11xx/src/usb_lpc11uxx.c').read_text(),
+                   (root / 'ARM/NXP/src/usb_ep0_lpc_fs.c').read_text()]
         for reg, function in [('DEVCMDSTAT', 'TestDeviceWrite'),
                               ('INTSTAT', 'TestInterruptWrite'),
                               ('INTSETSTAT', 'TestInterruptSet'),
                               ('EPSKIP', 'TestSkipWrite')]:
-            source, count = re.subn(r'LPC_USB->' + reg + r'\s*=\s*([^;]+);',
-                                    lambda m: function + '(' + m[1] + ');', source)
-            assert count > 0, reg
-        (tmp / 'usb.c').write_text(source)
+            total = 0
+            for index, source in enumerate(sources):
+                sources[index], count = re.subn(r'(?:LPC_USB|pEp0->pReg)->' + reg + r'\s*=\s*([^;]+);',
+                                               lambda m: function + '(' + m[1] + ');', source)
+                total += count
+            assert total > 0, reg
+        (tmp / 'usb.c').write_text(sources[0])
+        (tmp / 'ep0.c').write_text(sources[1])
         for fixture in ['ep0_test', 'lifecycle_test', 'data_test', 'wakeup_test']:
             exe = str(tmp / fixture)
             subprocess.run(['gcc', '-std=gnu11', opt, '-Wall', '-Wextra', '-Werror',
@@ -108,7 +114,7 @@ for opt in ['-O0', '-O2']:
                             '-I' + str(root / 'include'),
                             '-I' + str(root / 'ARM/NXP/LPC11xx/include'),
                             '-I' + str(root / 'ARM/NXP/include'),
-                            str(root / ('tests/lpc/usb/' + fixture + '.c')), str(tmp / 'usb.c'),
+                            str(root / ('tests/lpc/usb/' + fixture + '.c')), str(tmp / 'usb.c'), str(tmp / 'ep0.c'),
                             '-o', exe], check=True)
             subprocess.run([exe], check=True, timeout=5)
 
@@ -118,6 +124,7 @@ for opt in ['-O0', '-O2']:
         sources = [
             (root / 'tests/lpc/usb/integration_model.c', 'gcc'),
             (tmp / 'usb.c', 'gcc'),
+            (tmp / 'ep0.c', 'gcc'),
             (root / 'src/cfifo.c', 'gcc'),
             (root / 'src/device_intrf.cpp', 'g++'),
             (root / 'src/usb/usb.cpp', 'g++'),
@@ -136,7 +143,7 @@ for opt in ['-O0', '-O2']:
                     '-I' + str(root / 'include'),
                     '-I' + str(root / 'ARM/NXP/LPC11xx/include'),
                     '-I' + str(root / 'ARM/NXP/include')]
-            if path == tmp / 'usb.c':
+            if path in [tmp / 'usb.c', tmp / 'ep0.c']:
                 args += ['-include', str(root / 'tests/lpc/usb/ep0_model.h')]
             subprocess.run([*args, '-c', str(path), '-o', obj], check=True)
         exe = str(tmp / 'integration_test')

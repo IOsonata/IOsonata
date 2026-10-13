@@ -35,6 +35,33 @@ for opt in ['-O0', '-O2']:
                             '-o', str(exe)], check=True)
             subprocess.run([str(exe)], check=True, timeout=5)
 
+# Run both production layers with W1C and endpoint-skip hardware semantics.
+for opt in ['-O0', '-O2']:
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = Path(tmp)
+        paths = []
+        for index, code in enumerate([source,
+                (root / 'ARM/NXP/LPC546xx/src/usb_lpc546xx.c').read_text(),
+                (root / 'ARM/NXP/src/usb_ep0_lpc_fs.c').read_text()]):
+            for reg, function in [('DEVCMDSTAT', 'TestDeviceWrite'),
+                                  ('INTSTAT', 'TestInterruptWrite'),
+                                  ('INTSETSTAT', 'TestInterruptSet'),
+                                  ('EPSKIP', 'TestSkipWrite')]:
+                code = re.sub(r'(?:USB0|pEp0->pReg)->' + reg + r'\s*=\s*([^;]+);',
+                              lambda m: function + '(' + m[1] + ');', code)
+            path = tmp / ('usb' + str(index) + '.c')
+            path.write_text(code)
+            paths.append(str(path))
+        exe = tmp / 'ep0546'
+        subprocess.run(['gcc', '-std=gnu11', opt, '-Wall', '-Wextra', '-Werror',
+                        '-fsanitize=undefined', '-fno-sanitize-recover=all', '-no-pie',
+                        '-DLPC54628_SERIES', '-Wl,--section-start=.usb_ram=0x40100000',
+                        '-include', str(root / 'tests/lpc/usb/ep0_model.h'),
+                        *['-I' + str(root / p) for p in includes],
+                        *paths, str(root / 'tests/lpc/usb/ep0546_test.c'),
+                        '-o', str(exe)], check=True)
+        subprocess.run([str(exe)], check=True, timeout=5)
+
 # Check the production linker script: retain only referenced USB memory,
 # keep NOLOAD data out of the binary, and reject USB SRAM overflow.
 with tempfile.TemporaryDirectory() as tmp:
