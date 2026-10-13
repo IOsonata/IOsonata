@@ -42,6 +42,33 @@ settings at their reset value, which suits a device with TrustZone disabled
 | 2 | USART2 | GPDMA1 channel 2 | GPDMA1 channel 3 | 13, 14 |
 | 3 | USART3 | GPDMA1 channel 6 | GPDMA1 channel 7 | 65, 66 |
 
+## Timer
+
+`src/timer_lptim_stm32wbaxx.cpp` implements the Timer driver on the two low
+power timers: DevNo 0 is LPTIM1 (APB7, CCIPR3 LPTIM1SEL), DevNo 1 is LPTIM2
+(APB1, CCIPR1 LPTIM2SEL). `TimerGetLowFreqDevCount` returns 2, the
+general purpose TIM are not implemented and `TimerGetHighFreqDevCount`
+returns 0.
+
+Each LPTIM counts 0 to 0xFFFF, extended to 64 bits in software, and has two
+compare triggers, CCR1 and CCR2, single shot or continuous. A continuous
+trigger is scheduled one period after its previous compare value, so it does
+not drift with the interrupt latency. Clock: LSI (`TIMER_CLKSRC_LFRC`,
+32 kHz, 250 Hz with the LSI1 prescaler), LSE (`TIMER_CLKSRC_LFXTAL`, crystal,
+or bypass when `g_McuOsc.LowPwrOsc` is `OSC_TYPE_TCXO`; LSESYS is enabled for
+the peripherals) or HSI16. `TIMER_CLKSRC_DEFAULT` takes LSI or LSE from
+`g_McuOsc.LowPwrOsc`. The LSI and LSE bits are in the backup domain: the
+driver enables the PWR clock and sets `PWR_DBPR` DBP. The frequency is the
+closest of the kernel clock divided by 1 to 128.
+
+This LPTIM takes CFGR writes with the timer disabled and DIER, ARR, CCR1 and
+CCR2 writes with the timer enabled, each confirmed by DIEROK, ARROK, CMP1OK
+or CMP2OK; the waits are bounded and a write not confirmed makes `TimerInit`,
+`Enable` or `EnableTrigger` fail. DIER is written right after ENABLE, as in
+the ST HAL, and written again if DIEROK does not come. External trigger is
+not supported. Not tested on hardware; `STM32WBA65/exemples/TimerDemo` is the
+test project.
+
 ## STM32CubeWBA dependency
 
 Use an ST STM32CubeWBA distribution matched to the selected device and BLE
@@ -63,6 +90,7 @@ CMSIS startup/system implementation are required. The presence of
    table and interrupt dispatch using the existing IOsonata MCU pattern.
 2. Implement and test MCU-owned GPIO/pinmux, UART and Timer drivers using
    the target reference manual and the correct STM32WBA device definitions.
+   GPIO, UART and the LPTIM timer are implemented, not tested on hardware.
 3. Bind the existing BLE adapter to a pinned STM32CubeWBA release, resolve the
    ACI and link-layer dependencies, and verify controller/stack bring-up.
 4. Create an MCU library project and small bring-up applications with

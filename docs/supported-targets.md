@@ -203,7 +203,7 @@ entire series.
 | [STM32F030x8](../ARM/ST/STM32F0xx/STM32F030x8/lib/ioc/) | GPIO/EXTI, UART with interrupt/FIFO and TX DMA, TIM6/14/16/17/15/3/1 | [Examples](../ARM/ST/STM32F0xx/STM32F030x8/exemples/README.md): UART loopback/PRBS/SLIP, TaktOS UART, timer triggers, pulse trains, software crypto and DFU image verification | Supported; hardware validated. Native I2C/SPI/ADC drivers are not supplied by this port. |
 | STM32F401xC | Startup, vector and linker files | Library project | Incomplete: target GPIO, UART and Timer drivers are missing. |
 | STM32F301x8, STM32F302x8 | Vector files | No complete MCU application project | Incomplete startup and peripheral ports. |
-| [STM32WBA65](../ARM/ST/STM32WBAxx/STM32WBA65/lib/ioc/) | Startup, GPIO/EXTI, UART with GPDMA | [Examples](../ARM/ST/STM32WBAxx/STM32WBA65/exemples/): UART loopback and PRBS for the STM32WBA65I-DK1 | Incomplete: no Timer driver; the Bluetooth adapter is not integrated. Not tested on hardware. |
+| [STM32WBA65](../ARM/ST/STM32WBAxx/STM32WBA65/lib/ioc/) | Startup, GPIO/EXTI, UART with GPDMA, Timer on LPTIM1 and LPTIM2 | [Examples](../ARM/ST/STM32WBAxx/STM32WBA65/exemples/): UART loopback, PRBS and TimerDemo for the STM32WBA65I-DK1 | Incomplete: the Bluetooth adapter is not integrated. Not tested on hardware. |
 | STM32L152 | Planned | Planned after 0.13 | Outside the 0.13 support list. |
 
 The L4 [I2C](../ARM/ST/STM32L4xx/src/i2c_stm32l4xx.cpp) driver supports polling

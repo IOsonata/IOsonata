@@ -9,6 +9,7 @@ python3 tests/stm32f0/run_timer.py
 python3 tests/stm32f0/run_timer_arm.py
 python3 tests/stm32f4/run.py
 python3 tests/stm32g4/run.py
+python3 tests/stm32wba/run.py
 ```
 
 These compile the production drivers against the repository's ST device headers.
@@ -20,6 +21,8 @@ pin-specific EXTI allocation with the shared GPIO driver
 (`ARM/ST/src/iopincfg_stm32.cpp`). `tests/stm32f4/run.py`: F401 startup selects
 the linked vector symbol instead of forcing FLASH_BASE. `tests/stm32g4/run.py`: G474
 system clock and LPTIM1 timer, see the [G4 port notes](../../ARM/ST/STM32G4xx/README.md).
+`tests/stm32wba/run.py`: WBA65 LPTIM1 and LPTIM2 timer, see the
+[WBA notes](../../ARM/ST/STM32WBAxx/README.md).
 
 ## UART
 

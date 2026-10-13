@@ -11,20 +11,21 @@ layout requires a separate library configuration.
 ## Integration status
 
 The IOC library includes IOsonata `ResetEntry.c`, the WBA65 interrupt
-vector table, a shared HSI16 system initializer, shared GPIO configuration
-and the shared STM32 UART driver (`ARM/ST/src/uart_stm32.cpp`). The vector
+vector table, a shared HSI16 system initializer, shared GPIO configuration,
+the shared STM32 UART driver (`ARM/ST/src/uart_stm32.cpp`) and the LPTIM
+timer driver (`../src/timer_lptim_stm32wbaxx.cpp`). The vector
 table follows STM32WBA65xx interrupt order. The library is built for the FPU
 with the hard float ABI; the system initializer enables CP10 and CP11 and
 installs the vector base, but does not configure PLLs, flash latency or
 TrustZone.
 
-**The MCU port is not complete.** The UART example projects below build and
-link. Outstanding work:
+**The MCU port is not complete.** The UART and timer example projects below
+build and link. Outstanding work:
 
 - Verify startup and vector placement on hardware with the chosen security
   configuration
 - Implement live RCC clock-frequency decoding before changing from HSI16
-- Verify EXTI interrupt routing/dispatch on hardware and implement the Timer driver
+- Verify EXTI interrupt routing/dispatch and the LPTIM timer on hardware
 - Validate the application linker script against STM32WBA65 flash/SRAM banks
   and the configured secure/nonsecure partitions
 - Integrate and test the STM32CubeWBA radio middleware
@@ -66,6 +67,42 @@ IOcomposer. The four images were run in an instruction set emulator with a
 USART2 and GPDMA1 model at 1 Mbaud: the loopback echoes in order with no lost
 character, and the PRBS output matches `Prbs8()`. This does not replace a
 hardware run on the Discovery Kit.
+
+## Timer example project
+
+`exemples/TimerDemo` (`exemples/timer/timer_demo.cpp`) links
+`IOsonata_STM32WBA65` from `lib/ioc` in the same Debug or Release
+configuration and uses `ldscript/gcc_stm32wba65_i.ld`. Build the library
+first. `src/board.h` selects `#define BOARD STM32WBA65I_DK1`: Timer DevNo 0,
+LPTIM1, from the LSI at 32 kHz (`TIMER_DEMO_DEVNO 1` for LPTIM2), trigger 0
+every 100 ms toggles LD6 (PD8), trigger 1 every 1 s toggles LD5 (PD9). The
+demo prints on the first ST-LINK virtual COM port, USART1 DevNo 1, RX PA8 and
+TX PB12, AF7, 115200 8N1, interrupt mode. It links `nosys`, not semihosting.
+Expected output:
+
+```
+Timer 0 trigger 0: 100 ms
+Timer 0 trigger 1: 1000 ms
+Count = 100 ms, T0 = 100093 us, T1 = 0 us
+Count = 200 ms, T0 = 100000 us, T1 = 0 us
+...
+Count = 1002 ms, T0 = 100000 us, T1 = 1001250 us
+```
+
+The first periods count from the start of the timer; the next ones are
+100000 and 1000000 us at 32 kHz.
+
+Validation: the library and the project were built in Debug and Release
+from their `.project` and `.cproject` settings with arm-none-eabi-gcc 13.2.1,
+outside IOcomposer. The images ran 3.3 s in an instruction set emulator
+with an LPTIM1, LPTIM2, RCC and USART1 model that flags the LPTIM register
+writes the reference manual does not allow (CFGR with the timer enabled;
+DIER, ARR, CCR1, CCR2 with it disabled or before the previous write is
+confirmed) and backup domain writes without DBP: no violation, the output
+above, the counter extended across its wrap at 2.048 s, LPTIM2 and the LSE
+crystal as well. With the first write after ENABLE lost, the DIER write made
+again starts the timer. `tests/stm32wba/run.py` runs the driver source on
+the host with the device header. This does not replace a hardware run.
 
 The application linker layouts are now provided in `ldscript/`:
 
