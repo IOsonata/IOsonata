@@ -159,6 +159,13 @@ preempts a lower one. Exceptions go to the weak `R9a02ExceptionHandler`
 selects the analog function. There is no pull-down. SAU input pins get
 NCODR = 1 as the manual requires.
 
+A pin can have several analog functions at once: P000 is ANI16, DACOUT0 and
+IVREF0, P001 ANI17 and DACOUT1, P106 ANI19 and IVCMP0. The A/D converter,
+DAC8 and comparator drivers take their pins with `R9a02AnalogPinUse`
+(`iopinctrl.h`): a pin is analog from its first user and released when the
+last one stops, so closing an A/D channel does not cut a DAC8 output or a
+comparator input on the same pin.
+
 `IOPinEnableInterrupt(IntNo, ...)`: `IntNo` is the IRQ line, 0 to 7, and the
 pin must be one of that line's pins (P108 is IRQ4 for example).
 `IOPinAllocateInterrupt` finds the line from the pin.
@@ -410,7 +417,7 @@ at 48 MHz; ask for a lower frequency for long periods (46875 Hz for up to
 `ldscript/dfu_layout_r9a02g021.ld`: boot 0x0 to 0x8FFF, record 0x9000 to
 0x9FFF, application slot 0 0xA000 to 0x1FFFF, recovery flag at 0x20006FF0.
 `dfu_boot_r9a02g021.ld` links the boot (with HEAD), `gcc_R9A02G021_dfu.ld`
-an application for slot 0. The boot fits only when built with -Os (36578 of
+an application for slot 0. The boot fits only when built with -Os (36576 of
 36864 bytes); the Debug configuration at -O0 does not fit. UARTA is not
 linked into it (see UART).
 

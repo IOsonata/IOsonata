@@ -75,6 +75,7 @@ SOFTWARE.
 
 #include "r9a02g021.h"
 #include "coredev/iopincfg.h"
+#include "iopinctrl.h"
 #include "coredev/interrupt.h"
 #include "converters/analog_comp.h"
 #include "interrupt_r9a02.h"
@@ -301,10 +302,10 @@ static void R9a02CmpPowerOff(AnalogCompDev_t *pDev)
 	R9a02WakeupSet(cmp->EvtId, false);
 	R9a02UnregisterIntHandler(cmp->IntNo);
 	cmp->IntNo = -1;
-	IOPinDisable(cmp->Input.Port, cmp->Input.Pin);
+	R9a02AnalogPinUse(cmp->Input.Port, cmp->Input.Pin, false);
 	if ((cmp->Mdr & R9A02_COMPMDR_CVRF(R9a02CmpNo(cmp))) == 0U)
 	{
-		IOPinDisable(cmp->Ref.Port, cmp->Ref.Pin);
+		R9a02AnalogPinUse(cmp->Ref.Port, cmp->Ref.Pin, false);
 	}
 	cmp->pDev = NULL;
 	cmp->bStarted = false;
@@ -443,11 +444,12 @@ static bool R9a02CmpInit(AnalogCompDev_t *pDev, const AnalogCompCfg_t *pCfg)
 
 	EnableInterrupt(state);
 
-	// Analog pins (table 31.1 step 2)
-	IOPinConfig(cmp->Input.Port, cmp->Input.Pin, IOPINOP_FUNC31, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL);
+	// Analog pins (table 31.1 step 2), shared with the A/D converter and
+	// DAC8 (P000, P106)
+	R9a02AnalogPinUse(cmp->Input.Port, cmp->Input.Pin, true);
 	if (pCfg->RefSrc == 1)
 	{
-		IOPinConfig(cmp->Ref.Port, cmp->Ref.Pin, IOPINOP_FUNC31, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL);
+		R9a02AnalogPinUse(cmp->Ref.Port, cmp->Ref.Pin, true);
 	}
 
 	if (!R9a02CmpOn(cmp))

@@ -58,6 +58,7 @@ SOFTWARE.
 #include "interrupt_r9a02.h"
 
 #define R9A02_IRQ_LINE_CNT		8
+#define R9A02_ANALOG_PIN_CNT	8			// Analog pins are pins 0 to 7 of their port
 
 // PSEL codes that exist on this part, manual 16.6
 #define R9A02_PSEL_VALID_MSK	((1UL << R9A02_PSEL_UARTA) | (1UL << R9A02_PSEL_IICA) | \
@@ -91,6 +92,9 @@ static const uint16_t s_R9a02PinIrqMap[] = {
 };
 
 static R9a02PinHook_t s_R9a02PinHook[R9A02_IRQ_LINE_CNT];
+
+// Users of the analog function of each pin, R9a02AnalogPinUse
+static uint8_t s_R9a02AnalogUse[R9A02_PORT_COUNT][R9A02_ANALOG_PIN_CNT];
 
 static int R9a02PinIrq(int PortNo, int PinNo)
 {
@@ -262,6 +266,38 @@ void IOPinDisable(int PortNo, int PinNo)
 	}
 
 	EnableInterrupt(state);
+}
+
+bool R9a02AnalogPinUse(int PortNo, int PinNo, bool bUse)
+{
+	if (!R9a02PinValid(PortNo, PinNo) || !R9a02PinAnalog(PortNo, PinNo))
+	{
+		return false;
+	}
+
+	uintptr_t state = DisableInterrupt();
+	uint8_t *cnt = &s_R9a02AnalogUse[PortNo][PinNo];
+
+	if (bUse)
+	{
+		IOPinConfig(PortNo, PinNo, IOPINOP_FUNC31, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL);
+		if (*cnt < 0xFFU)
+		{
+			*cnt = (uint8_t)(*cnt + 1U);
+		}
+	}
+	else if (*cnt > 0U)
+	{
+		*cnt = (uint8_t)(*cnt - 1U);
+		if (*cnt == 0U)
+		{
+			IOPinDisable(PortNo, PinNo);
+		}
+	}
+
+	EnableInterrupt(state);
+
+	return true;
 }
 
 static void R9a02PinCallback(int IntNo, void *pCtx)

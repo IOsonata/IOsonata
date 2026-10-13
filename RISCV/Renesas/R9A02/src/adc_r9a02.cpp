@@ -76,6 +76,7 @@ SOFTWARE.
 #include "r9a02g021.h"
 #include "cfifo.h"
 #include "coredev/iopincfg.h"
+#include "iopinctrl.h"
 #include "coredev/interrupt.h"
 #include "coredev/system_core_clock.h"
 #include "coredev/timer.h"
@@ -730,7 +731,16 @@ bool AdcR9a02::Init(const AdcCfg_t &Cfg, Timer * const pTimer, DeviceIntrf * con
 
 	if (vIntNo >= 0)
 	{
+		// Initialized before: its pins released, they can be shared
 		StopConversion();
+		for (int i = 0; i < R9A02_ADC_MAX_CHAN; i++)
+		{
+			CloseChannel(i);
+		}
+		if ((vAdm2 & R9A02_ADM2_ADREFP_DISCHARGE) == R9A02_ADM2_ADREFP_AVREFP)
+		{
+			R9a02AnalogPinUse(0, 2, false);
+		}
 	}
 	R9a02StandbyHookSet(R9a02AdcStandbyHook, this, false);
 
@@ -793,7 +803,7 @@ bool AdcR9a02::Init(const AdcCfg_t &Cfg, Timer * const pTimer, DeviceIntrf * con
 	if (Cfg.pRefVolt[0].Type == ADC_REFVOLT_TYPE_EXTERNAL)
 	{
 		// AVREFP on P002 as analog input (29.3.5)
-		IOPinConfig(0, 2, IOPINOP_FUNC31, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL);
+		R9a02AnalogPinUse(0, 2, true);
 		vAdm2 = R9A02_ADM2_ADREFP_AVREFP;
 	}
 	else
@@ -960,6 +970,17 @@ bool AdcR9a02::OpenChannel(const AdcChanCfg_t * const pChanCfg, int NbChan)
 		const AdcChanCfg_t *c = &pChanCfg[i];
 		int in = c->PinP.PinNo;
 
+		// A channel open before: the pin of its input released
+		if (vAds[c->Chan] != R9A02_ADC_CLOSED && (vAds[c->Chan] & R9A02_ADS_ADISS) == 0U)
+		{
+			const R9a02AniPin_t *p = R9a02AdcAniPin(vAds[c->Chan]);
+
+			if (p != NULL)
+			{
+				R9a02AnalogPinUse(p->Port, p->Pin, false);
+			}
+		}
+
 		if (in == R9A02_ADC_INPUT_TEMP)
 		{
 			vAds[c->Chan] = R9A02_ADS_TEMP;
@@ -972,7 +993,7 @@ bool AdcR9a02::OpenChannel(const AdcChanCfg_t * const pChanCfg, int NbChan)
 		{
 			const R9a02AniPin_t *p = R9a02AdcAniPin(in);
 
-			IOPinConfig(p->Port, p->Pin, IOPINOP_FUNC31, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL);
+			R9a02AnalogPinUse(p->Port, p->Pin, true);
 			vAds[c->Chan] = (uint8_t)in;
 		}
 		vAcqNs[c->Chan] = chacq[c->Chan];
@@ -1007,7 +1028,7 @@ void AdcR9a02::CloseChannel(int Chan)
 
 		if (p != NULL)
 		{
-			IOPinDisable(p->Port, p->Pin);
+			R9a02AnalogPinUse(p->Port, p->Pin, false);
 		}
 	}
 
@@ -1435,7 +1456,7 @@ void AdcR9a02::PowerOff()
 
 	if ((vAdm2 & R9A02_ADM2_ADREFP_DISCHARGE) == R9A02_ADM2_ADREFP_AVREFP)
 	{
-		IOPinDisable(0, 2);
+		R9a02AnalogPinUse(0, 2, false);
 	}
 
 	uintptr_t state = DisableInterrupt();

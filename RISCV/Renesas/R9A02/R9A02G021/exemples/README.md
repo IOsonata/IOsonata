@@ -149,8 +149,8 @@ links with `gcc_R9A02G021_dfu.ld`.
 All thirteen examples build and link with xPack riscv-none-elf-gcc 15.2.0
 (October 13, 2026). Sizes at -Os (text + data, KB of 1000 bytes): Blinky
 11.8, TimerDemo 19.8, UartLoopback 15.0, UartPrbsTxTest 15.0, UartaLoopback
-18.6, SpiLoopback 26.8, I2CScan 31.5, ADCDemo 34.0, RtcDemo 24.9, AnalogDemo
-29.1, AdcSnoozeDemo 38.2, SelfTest 62.1, DfuBoot 36578 bytes of the 36864 of
+18.6, SpiLoopback 26.8, I2CScan 31.5, ADCDemo 34.3, RtcDemo 24.9, AnalogDemo
+29.3, AdcSnoozeDemo 38.4, SelfTest 62.4, DfuBoot 36576 bytes of the 36864 of
 its region.
 I2CInit links the SAU simplified I2C with the IICA. None has been run on the
 board yet.

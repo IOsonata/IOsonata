@@ -43,6 +43,7 @@ SOFTWARE.
 
 #include "r9a02g021.h"
 #include "coredev/iopincfg.h"
+#include "iopinctrl.h"
 #include "coredev/interrupt.h"
 #include "system_r9a02.h"
 #include "elc_r9a02.h"
@@ -91,6 +92,10 @@ bool R9a02DacOpen(int Chan, bool bPinOut, const void *pOwner)
 	}
 
 	bool first = s_R9a02DacOwner[0] == NULL && s_R9a02DacOwner[1] == NULL;
+	uint16_t pin = (uint16_t)R9A02_DAEXOUT_DAEXO(Chan);
+
+	// Open again by its owner: the pin already used or not
+	bool was = s_R9a02DacOwner[Chan] == pOwner && (R9A02_DAC8->DAEXOUT & pin) != 0U;
 
 	if (first)
 	{
@@ -102,17 +107,23 @@ bool R9a02DacOpen(int Chan, bool bPinOut, const void *pOwner)
 	s_R9a02DacOwner[Chan] = pOwner;
 
 	R9A02_DAC8_Type *reg = R9A02_DAC8;
-	uint16_t pin = (uint16_t)R9A02_DAEXOUT_DAEXO(Chan);
 
 	reg->DADR[Chan] = 0U;
 	if (bPinOut)
 	{
-		IOPinConfig(0, s_R9a02DacPin[Chan], IOPINOP_FUNC31, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL);
+		if (!was)
+		{
+			R9a02AnalogPinUse(0, s_R9a02DacPin[Chan], true);
+		}
 		reg->DAEXOUT = (uint16_t)(reg->DAEXOUT | pin);
 	}
 	else
 	{
 		reg->DAEXOUT = (uint16_t)(reg->DAEXOUT & ~pin);
+		if (was)
+		{
+			R9a02AnalogPinUse(0, s_R9a02DacPin[Chan], false);
+		}
 	}
 	reg->DACR = (uint8_t)((reg->DACR & (R9A02_DACR_DAOE(0) | R9A02_DACR_DAOE(1))) | R9A02_DACR_FIXED |
 						  R9A02_DACR_DAOE(Chan));
@@ -138,7 +149,7 @@ void R9a02DacClose(int Chan, const void *pOwner)
 	reg->DAEXOUT = (uint16_t)(reg->DAEXOUT & ~R9A02_DAEXOUT_DAEXO(Chan));
 	if (pin)
 	{
-		IOPinDisable(0, s_R9a02DacPin[Chan]);
+		R9a02AnalogPinUse(0, s_R9a02DacPin[Chan], false);
 	}
 	s_R9a02DacOwner[Chan] = NULL;
 

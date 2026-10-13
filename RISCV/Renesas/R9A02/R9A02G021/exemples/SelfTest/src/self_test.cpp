@@ -421,14 +421,6 @@ static void AdcCloseAll(void)
 	}
 }
 
-// CloseChannel releases the pin, DACOUT0 and DACOUT1 are its ANI16 and
-// ANI17: both back to analog for the DAC8 outputs
-static void DacPins(void)
-{
-	IOPinConfig(0, 0, IOPINOP_FUNC31, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL);
-	IOPinConfig(0, 1, IOPINOP_FUNC31, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL);
-}
-
 // The UART stops in Software Standby, its output ends first
 static void UartWaitIdle(void)
 {
@@ -810,8 +802,8 @@ static SELFTEST_RES TestDacAdc(void)
 		}
 	}
 
+	// DACOUT0 and DACOUT1 stay analog for the DAC8 (R9a02AnalogPinUse)
 	AdcCloseAll();
-	DacPins();
 
 	return res;
 }
@@ -889,12 +881,15 @@ static int AniStep(int Ani, bool *pOk)
 	int mv[2] = { 0, 0 };
 
 	*pOk = false;
+	R9a02AnalogPinUse(1, 5, true);
+	R9a02AnalogPinUse(1, 6, true);
 	if (s_Adc.OpenChannel(&ch, 1) == false)
 	{
+		R9a02AnalogPinUse(1, 5, false);
+		R9a02AnalogPinUse(1, 6, false);
+
 		return 0;
 	}
-	IOPinConfig(1, 5, IOPINOP_FUNC31, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL);
-	IOPinConfig(1, 6, IOPINOP_FUNC31, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL);
 
 	*pOk = true;
 	for (int i = 0; i < 2; i++)
@@ -915,8 +910,8 @@ static int AniStep(int Ani, bool *pOk)
 	}
 
 	AdcCloseAll();
-	IOPinDisable(1, 5);
-	IOPinDisable(1, 6);
+	R9a02AnalogPinUse(1, 5, false);
+	R9a02AnalogPinUse(1, 6, false);
 
 	return mv[1] - mv[0];
 }
@@ -1050,7 +1045,6 @@ static SELFTEST_RES TestComp(void)
 	uint8_t ref = 78;
 
 	s_Dac.WriteCode(0, ref);
-	DacPins();
 	cfg.RefSrc = 1;
 	cfg.CompVolt = ref * SELFTEST_VCC_MV / 256;
 	if (CompSweep(cfg, &up, &down) == false)
@@ -1059,7 +1053,6 @@ static SELFTEST_RES TestComp(void)
 
 		return SELFTEST_FAIL;
 	}
-	DacPins();
 	printf("  IVREF0 at DAC0 code %u: above at DAC1 code %d, below at %d\r\n", ref, up, down);
 	// Both DAC8 channels 3 LSB, offset 40 mV
 	if (up < 0 || Diff(up, ref) > 10 || down < 0 || up - down > 4)

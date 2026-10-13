@@ -247,4 +247,28 @@ static inline __attribute__((always_inline)) void IOPinWritePort(int PortNo, uin
 	}
 }
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/// @brief	Use the analog function of a pin, shared by its drivers.
+///
+/// A pin can be an A/D input, a D/A output and a comparator input or
+/// reference at the same time: P000 is ANI16, DACOUT0 and IVREF0, P001 ANI17
+/// and DACOUT1, P106 ANI19 and IVCMP0. The A/D converter, DAC8 and comparator
+/// drivers call it with bUse true when they start using a pin and false when
+/// they stop: the pin is analog from the first use and released (IOPinDisable)
+/// at the last one.
+///
+/// @param	PortNo	: Port number
+/// @param	PinNo	: Pin number
+/// @param	bUse	: true when a user starts, false when it stops
+///
+/// @return	false if the pin has no analog function
+bool R9a02AnalogPinUse(int PortNo, int PinNo, bool bUse);
+
+#ifdef __cplusplus
+}
+#endif
+
 #endif
