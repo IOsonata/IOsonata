@@ -652,6 +652,9 @@ typedef struct {
 
 #define R9A02_SAU_SO_CKO(Ch)			(1U << (8U + (Ch)))	//!< Serial clock output level
 
+#define R9A02_SAU_SSC_SWC				(1U << 0)		//!< Reception in Snooze (23.3.25)
+#define R9A02_SAU_SSC_SSEC				(1U << 1)		//!< No error interrupt in Snooze
+
 // Realtime clock, manual 20.2. Time and alarm registers are BCD.
 
 typedef struct {

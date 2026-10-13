@@ -168,6 +168,9 @@ SOFTWARE.
 #include "dtc_r9a02.h"
 
 #define R9A02_SPI_SLAVE_DTC_MAX		0x10000U	// Transfers of one DTC run, CRA 0 is 65536
+#define R9A02_SPI_SNZ_RATE_MAX		500000U		// Slave reception in Snooze (23.5.7)
+
+struct __R9a02_Spi_Snz_Ops;
 
 #pragma pack(push, 4)
 typedef struct __R9a02_Spi_Dev {
@@ -201,19 +204,38 @@ typedef struct __R9a02_Spi_Dev {
 	uint16_t Stage;					// Slave transmit byte for the 16-bit DTC write
 	uint8_t TxDummy;				// Slave dummy byte, DTC source
 	uint8_t Sink;					// Slave DTC destination of bytes without buffer
+	const struct __R9a02_Spi_Snz_Ops *pSnz;	// Slave reception in Snooze set up, NULL when not
 } R9a02SpiDev_t;
+
+// Slave reception in Snooze, reached through R9a02SpiDev_t.pSnz, which only
+// R9a02SpiSnooze sets: an image that does not call it does not link this
+// code and its data. Resume returns false when the channel is not set for
+// Snooze.
+typedef struct __R9a02_Spi_Snz_Ops {
+	bool (*Resume)(R9a02SpiDev_t * const pDev, bool bByte);
+	void (*Off)(R9a02SpiDev_t * const pDev);
+} R9a02SpiSnzOps_t;
+
+// State of the reception in Snooze. Snooze has one request source (10.8.1),
+// so one SPI at a time.
+typedef struct {
+	R9a02SpiDev_t *pDev;			// SPI set up
+	volatile bool bArmed;			// Channel set for Snooze, SSCm.SWC = 1
+} R9a02SpiSnz_t;
 #pragma pack(pop)
 
 static R9a02SpiDev_t s_R9a02SpiDev[] = {
-	{ {}, 0, 0, R9A02_EVT_SAU0_ENDI0, 2, NULL, -1, 0, 0, NULL, 0, 0, 0xFF, 0xFF, false, false, false, false, false, false, false, -1, NULL, 0, 0, 0, 0, 0, 0 },
-	{ {}, 0, 1, R9A02_EVT_SAU0_ENDI1, 4, NULL, -1, 0, 0, NULL, 0, 0, 0xFF, 0xFF, false, false, false, false, false, false, false, -1, NULL, 0, 0, 0, 0, 0, 0 },
-	{ {}, 0, 2, R9A02_EVT_SAU0_ENDI2, 4, NULL, -1, 0, 0, NULL, 0, 0, 0xFF, 0xFF, false, false, false, false, false, false, false, -1, NULL, 0, 0, 0, 0, 0, 0 },
-	{ {}, 0, 3, R9A02_EVT_SAU0_ENDI3, 4, NULL, -1, 0, 0, NULL, 0, 0, 0xFF, 0xFF, false, false, false, false, false, false, false, -1, NULL, 0, 0, 0, 0, 0, 0 },
-	{ {}, 1, 0, R9A02_EVT_SAU1_ENDI0, 4, NULL, -1, 0, 0, NULL, 0, 0, 0xFF, 0xFF, false, false, false, false, false, false, false, -1, NULL, 0, 0, 0, 0, 0, 0 },
-	{ {}, 1, 1, R9A02_EVT_SAU1_ENDI1, 4, NULL, -1, 0, 0, NULL, 0, 0, 0xFF, 0xFF, false, false, false, false, false, false, false, -1, NULL, 0, 0, 0, 0, 0, 0 },
+	{ {}, 0, 0, R9A02_EVT_SAU0_ENDI0, 2, NULL, -1, 0, 0, NULL, 0, 0, 0xFF, 0xFF, false, false, false, false, false, false, false, -1, NULL, 0, 0, 0, 0, 0, 0, NULL },
+	{ {}, 0, 1, R9A02_EVT_SAU0_ENDI1, 4, NULL, -1, 0, 0, NULL, 0, 0, 0xFF, 0xFF, false, false, false, false, false, false, false, -1, NULL, 0, 0, 0, 0, 0, 0, NULL },
+	{ {}, 0, 2, R9A02_EVT_SAU0_ENDI2, 4, NULL, -1, 0, 0, NULL, 0, 0, 0xFF, 0xFF, false, false, false, false, false, false, false, -1, NULL, 0, 0, 0, 0, 0, 0, NULL },
+	{ {}, 0, 3, R9A02_EVT_SAU0_ENDI3, 4, NULL, -1, 0, 0, NULL, 0, 0, 0xFF, 0xFF, false, false, false, false, false, false, false, -1, NULL, 0, 0, 0, 0, 0, 0, NULL },
+	{ {}, 1, 0, R9A02_EVT_SAU1_ENDI0, 4, NULL, -1, 0, 0, NULL, 0, 0, 0xFF, 0xFF, false, false, false, false, false, false, false, -1, NULL, 0, 0, 0, 0, 0, 0, NULL },
+	{ {}, 1, 1, R9A02_EVT_SAU1_ENDI1, 4, NULL, -1, 0, 0, NULL, 0, 0, 0xFF, 0xFF, false, false, false, false, false, false, false, -1, NULL, 0, 0, 0, 0, 0, 0, NULL },
 };
 
 static const int s_NbR9a02SpiDev = sizeof(s_R9a02SpiDev) / sizeof(s_R9a02SpiDev[0]);
+
+static R9a02SpiSnz_t s_R9a02SpiSnz;
 
 static R9a02SpiDev_t *R9a02SpiHandle(DevIntrf_t * const pIntrf)
 {
@@ -313,7 +335,7 @@ static uint32_t R9a02SpiSetRate(DevIntrf_t * const pIntrf, uint32_t Rate)
 	// Slave: the highest SCK of the master, checked against fMCK
 	if (dev->bSlave)
 	{
-		if (Rate > R9a02SpiSlaveMaxRate(dev->FmckHz))
+		if (Rate > R9a02SpiSlaveMaxRate(dev->FmckHz) || (dev->pSnz != NULL && Rate > R9A02_SPI_SNZ_RATE_MAX))
 		{
 			return 0;
 		}
@@ -757,10 +779,49 @@ static void R9a02SpiSlaveAdd(R9a02SpiDev_t * const pDev, uint32_t Cnt)
 	pDev->RxCnt = Cnt > (uint32_t)(INT_MAX - n) ? INT_MAX : n + (int)Cnt;
 }
 
-// Slave next frame. The event handler gives the buffers, then the channel
-// starts with transmit bytes 0 and 1: byte 0 goes to the shift register at
-// once, with the first buffer empty event, which is no byte, byte 1 waits
-// in SDRmn (figures 23.25 and 23.26).
+// Slave channel started at byte RxCnt of the frame, interrupts disabled by
+// the caller: transmit byte RxCnt goes to the shift register at once, with
+// the first buffer empty event, which is no byte, byte RxCnt + 1 waits in
+// SDRmn (figures 23.25 and 23.26).
+static void R9a02SpiSlaveRun(R9a02SpiDev_t * const pDev)
+{
+	R9A02_SAU_Type *reg = R9a02SauReg(pDev->Unit);
+	uint32_t ch = pDev->Ch;
+	uint16_t bit = (uint16_t)(1U << ch);
+	int idx = pDev->RxCnt;
+
+	pDev->SegLen = 0U;
+
+	reg->ST = bit;
+	reg->SIR[ch] = R9A02_SAU_SIR_OVCT;
+	reg->SS = bit;
+	reg->SDR[ch] = R9a02SpiSlaveTx(pDev, idx);
+
+	uint32_t n = pDev->StartLoops;
+
+	while ((reg->SSR[ch] & R9A02_SAU_SSR_BFF) && --n > 0U)
+	{
+	}
+
+	// First byte still in SDRmn: the second write would replace it
+	if (n == 0U)
+	{
+		pDev->bError = true;
+	}
+
+	reg->SDR[ch] = R9a02SpiSlaveTx(pDev, idx + 1);
+
+	R9a02ClearPendingInt(pDev->IntNo);
+	if (pDev->pSpiDev->DevIntrf.bDma)
+	{
+		R9a02SpiSlaveDtcRun(pDev);
+		R9a02DtcEnable(pDev->IntNo);
+	}
+	R9a02IntEnable(pDev->IntNo, true);
+}
+
+// Slave next frame: the event handler gives the buffers, then the channel
+// starts at byte 0
 static void R9a02SpiSlaveArm(R9a02SpiDev_t * const pDev)
 {
 	SPIDev_t *spi = pDev->pSpiDev;
@@ -779,9 +840,6 @@ static void R9a02SpiSlaveArm(R9a02SpiDev_t * const pDev)
 		return;
 	}
 
-	R9A02_SAU_Type *reg = R9a02SauReg(pDev->Unit);
-	uint32_t ch = pDev->Ch;
-	uint16_t bit = (uint16_t)(1U << ch);
 	const IOPinCfg_t *cs = &spi->Cfg.pIOPinMap[SPI_CS_IOPIN_IDX];
 	uintptr_t state = DisableInterrupt();
 
@@ -790,35 +848,9 @@ static void R9a02SpiSlaveArm(R9a02SpiDev_t * const pDev)
 	pDev->pTxBuf = spi->pTxData[0];
 	pDev->TxLen = pDev->pTxBuf != NULL && spi->TxDataLen[0] > 0 ? spi->TxDataLen[0] : 0;
 	pDev->RxCnt = 0;
-	pDev->SegLen = 0U;
 	pDev->bError = false;
 
-	reg->ST = bit;
-	reg->SIR[ch] = R9A02_SAU_SIR_OVCT;
-	reg->SS = bit;
-	reg->SDR[ch] = R9a02SpiSlaveTx(pDev, 0);
-
-	uint32_t n = pDev->StartLoops;
-
-	while ((reg->SSR[ch] & R9A02_SAU_SSR_BFF) && --n > 0U)
-	{
-	}
-
-	// Byte 0 still in SDRmn: the second write would replace it
-	if (n == 0U)
-	{
-		pDev->bError = true;
-	}
-
-	reg->SDR[ch] = R9a02SpiSlaveTx(pDev, 1);
-
-	R9a02ClearPendingInt(pDev->IntNo);
-	if (intrf->bDma)
-	{
-		R9a02SpiSlaveDtcRun(pDev);
-		R9a02DtcEnable(pDev->IntNo);
-	}
-	R9a02IntEnable(pDev->IntNo, true);
+	R9a02SpiSlaveRun(pDev);
 
 	// A frame that started before this point lost its first bits
 	if (IOPinRead(cs->PortNo, cs->PinNo) == 0)
@@ -897,9 +929,15 @@ static void R9a02SpiSlaveCollect(R9a02SpiDev_t * const pDev)
 	R9a02ClearPendingInt(intno);
 }
 
-// Slave stopped without event, the frame in progress is dropped
+// Slave stopped without event, the frame in progress is dropped. A channel
+// set for Snooze goes back to normal operation first.
 static void R9a02SpiSlaveStop(R9a02SpiDev_t * const pDev)
 {
+	if (pDev->pSnz != NULL)
+	{
+		pDev->pSnz->Resume(pDev, false);
+	}
+
 	uintptr_t state = DisableInterrupt();
 
 	pDev->bArmed = false;
@@ -930,6 +968,13 @@ static void R9a02SpiSlaveCsIrq(int IntNo, void *pCtx)
 	DevIntrf_t *intrf = &dev->pSpiDev->DevIntrf;
 	R9A02_SAU_Type *reg = R9a02SauReg(dev->Unit);
 	uint32_t ch = dev->Ch;
+
+	// Still set for Snooze: no byte was received, back to normal operation
+	if (dev->pSnz != NULL)
+	{
+		dev->pSnz->Resume(dev, false);
+	}
+
 	uintptr_t state = DisableInterrupt();
 
 	R9a02SpiSlaveCollect(dev);
@@ -972,6 +1017,12 @@ static void R9a02SpiSlaveCsIrq(int IntNo, void *pCtx)
 // the IR clear of R9a02DtcEnable is dropped, the next byte then sets OVF.
 static void R9a02SpiSlaveIrq(R9a02SpiDev_t * const pDev)
 {
+	// The first byte of a frame received in Snooze
+	if (pDev->pSnz != NULL && pDev->pSnz->Resume(pDev, true))
+	{
+		return;
+	}
+
 	if (!pDev->bArmed)
 	{
 		return;
@@ -1289,6 +1340,11 @@ static void R9a02SpiPowerOff(DevIntrf_t * const pIntrf)
 		return;
 	}
 
+	if (dev->pSnz != NULL)
+	{
+		dev->pSnz->Off(dev);
+	}
+
 	R9a02SpiDisable(pIntrf);
 
 	uintptr_t state = DisableInterrupt();
@@ -1362,6 +1418,195 @@ static bool R9a02SpiSlaveClock(R9a02SpiDev_t * const pDev)
 	// A byte written to SDRmn goes to the shift register in a few fMCK
 	// cycles
 	pDev->StartLoops = 8U * (SystemCoreClock / clk.FmckHz + 1U) + 64U;
+
+	return true;
+}
+
+// Slave back from Snooze to normal operation (figure 23.28 steps 8 to 11),
+// interrupts disabled. With bByte the first byte of the frame is read while
+// SSCm.SWC is still 1 (figure 23.27 note 1), the frame goes on from byte 1;
+// without it the frame starts at byte 0. A byte event left by the Snooze
+// counts as bByte. Returns false when the channel is not set for Snooze.
+static bool R9a02SpiSnzResume(R9a02SpiDev_t * const pDev, bool bByte)
+{
+	R9a02SpiSnz_t *snz = &s_R9a02SpiSnz;
+	uintptr_t state = DisableInterrupt();
+
+	if (!snz->bArmed || snz->pDev != pDev)
+	{
+		EnableInterrupt(state);
+
+		return false;
+	}
+
+	R9A02_SAU_Type *reg = R9a02SauReg(pDev->Unit);
+	uint32_t ch = pDev->Ch;
+	uint8_t d = (uint8_t)(reg->SDR[ch] & pDev->DataMask);
+
+	if (!bByte && R9a02EventFlag(pDev->IntNo))
+	{
+		bByte = true;
+	}
+
+	reg->ST = (uint16_t)(1U << ch);
+	reg->SSC = 0U;
+	reg->SCR[ch] = (uint16_t)(reg->SCR[ch] | R9A02_SAU_SCR_TRXE_TXRX);
+	reg->SMR[ch] = (uint16_t)(reg->SMR[ch] | R9A02_SAU_SMR_MD0);
+	snz->bArmed = false;
+
+	if (bByte)
+	{
+		if (pDev->RxLen > 0)
+		{
+			pDev->pRxBuf[0] = d;
+		}
+		pDev->RxCnt = 1;
+	}
+
+	R9a02SpiSlaveRun(pDev);
+
+	EnableInterrupt(state);
+
+	return true;
+}
+
+// Snooze ended by the reception end (SELSR0, R9a02SnoozeSet)
+static void R9a02SpiSnzWake(void *pCtx)
+{
+	R9a02SpiSnzResume((R9a02SpiDev_t *)pCtx, true);
+}
+
+// Software Standby hook of the slave reception in Snooze. Before WFI, a
+// slave ready for a frame with the chip select high is set for Snooze
+// (figure 23.28 steps 1 to 3): slave reception (TRXE = 01b) in single
+// transfer mode (MD0 = 0, transfer end event), STCLK at 0, SWC = 1. After
+// the wake-up, a slave still set for Snooze received nothing and goes back
+// to normal operation.
+static void R9a02SpiSnzHook(bool bEnter, void *pCtx)
+{
+	R9a02SpiDev_t *dev = (R9a02SpiDev_t *)pCtx;
+	R9a02SpiSnz_t *snz = &s_R9a02SpiSnz;
+
+	if (!bEnter)
+	{
+		R9a02SpiSnzResume(dev, false);
+
+		return;
+	}
+
+	const IOPinCfg_t *cs = &dev->pSpiDev->Cfg.pIOPinMap[SPI_CS_IOPIN_IDX];
+
+	// A slave ready for a frame, whose Snooze set up is still the current one
+	if (dev->pSnz == NULL || !dev->bEnabled || !dev->bArmed || IOPinRead(cs->PortNo, cs->PinNo) == 0 ||
+		!R9a02SnoozeIsSet(R9a02SpiSnzWake, dev))
+	{
+		return;
+	}
+
+	R9A02_SAU_Type *reg = R9a02SauReg(dev->Unit);
+	uint32_t ch = dev->Ch;
+	uintptr_t state = DisableInterrupt();
+
+	R9a02IntEnable(dev->IntNo, false);
+	R9a02DtcDisable(dev->IntNo);
+	reg->ST = (uint16_t)(1U << ch);
+	reg->SCR[ch] = (uint16_t)((reg->SCR[ch] & ~R9A02_SAU_SCR_TRXE_TXRX) | R9A02_SAU_SCR_TRXE_RX);
+	reg->SMR[ch] = (uint16_t)(reg->SMR[ch] & ~R9A02_SAU_SMR_MD0);
+	reg->SIR[ch] = R9A02_SAU_SIR_OVCT;
+	(void)reg->SDR[ch];
+	dev->RxCnt = 0;
+	dev->SegLen = 0U;
+	reg->SSC = R9A02_SAU_SSC_SWC;
+	snz->bArmed = true;
+	R9a02ClearPendingInt(dev->IntNo);
+	R9a02IntEnable(dev->IntNo, true);
+	reg->SS = (uint16_t)(1U << ch);
+
+	EnableInterrupt(state);
+}
+
+// Snooze set up of the slave removed, the slave back to normal operation
+// when it was set for Snooze. The Snooze registers are cleared only when the
+// set up is still the slave's.
+static void R9a02SpiSnoozeOff(R9a02SpiDev_t * const pDev)
+{
+	R9a02StandbyHookSet(R9a02SpiSnzHook, pDev, false);
+	if (R9a02SnoozeIsSet(R9a02SpiSnzWake, pDev))
+	{
+		R9a02SnoozeSet(NULL);
+	}
+	R9a02SpiSnzResume(pDev, false);
+	pDev->pSnz = NULL;
+	if (s_R9a02SpiSnz.pDev == pDev)
+	{
+		s_R9a02SpiSnz.pDev = NULL;
+	}
+}
+
+static const R9a02SpiSnzOps_t s_R9a02SpiSnzOps = {
+	R9a02SpiSnzResume,
+	R9a02SpiSnoozeOff,
+};
+
+bool R9a02SpiSnooze(DevIntrf_t * const pDev, bool bEnable)
+{
+	R9a02SpiDev_t *dev = pDev != NULL && pDev->Type == DEVINTRF_TYPE_SPI ? R9a02SpiHandle(pDev) : NULL;
+
+	if (dev == NULL)
+	{
+		return false;
+	}
+
+	if (!bEnable)
+	{
+		if (dev->pSnz != NULL)
+		{
+			dev->pSnz->Off(dev);
+		}
+
+		return true;
+	}
+
+	// SPI00 and SPI20 slaves, at most 0.5 Mbps, PCLKB the HOCO or the MOCO
+	// (23.3.25, 23.5.7)
+	if (!dev->bSlave || dev->Ch != 0U || dev->pSpiDev->Cfg.Rate > R9A02_SPI_SNZ_RATE_MAX ||
+		R9a02SauSnoozeSrcHz() == 0U)
+	{
+		return false;
+	}
+
+	// One SPI at a time: the other one is turned off
+	R9a02SpiDev_t *prev = s_R9a02SpiSnz.pDev;
+
+	if (prev != NULL && prev != dev && prev->pSnz != NULL)
+	{
+		prev->pSnz->Off(prev);
+	}
+
+	R9a02SnoozeCfg_t cfg = {
+		.Request = dev->Unit ? R9A02_SNZREQ_RXD2 : R9A02_SNZREQ_RXD0,
+		.End = 0U,
+		.WakeEvt = dev->EvtEnd,
+		.bDtc = pDev->bDma,
+		.Handler = R9a02SpiSnzWake,
+		.pCtx = dev,
+		.IntPrio = pDev->IntPrio,
+	};
+
+	if (!R9a02StandbyHookSet(R9a02SpiSnzHook, dev, true))
+	{
+		return false;
+	}
+	if (!R9a02SnoozeSet(&cfg))
+	{
+		R9a02StandbyHookSet(R9a02SpiSnzHook, dev, false);
+
+		return false;
+	}
+
+	s_R9a02SpiSnz.pDev = dev;
+	s_R9a02SpiSnz.bArmed = false;
+	dev->pSnz = &s_R9a02SpiSnzOps;
 
 	return true;
 }
@@ -1455,7 +1700,12 @@ bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfg)
 
 	R9A02_SAU_Type *reg = R9a02SauReg(dev->Unit);
 
-	// A slave of a previous SPIInit stops without event
+	// A slave of a previous SPIInit stops without event, its Snooze set up
+	// removed
+	if (dev->pSnz != NULL)
+	{
+		dev->pSnz->Off(dev);
+	}
 	if (dev->bSlave)
 	{
 		dev->bEnabled = false;

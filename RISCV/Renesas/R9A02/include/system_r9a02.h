@@ -202,13 +202,27 @@ bool R9a02WakeupSet(uint8_t EvtId, bool bEnable);
 /// The request source must not also be a wake-up source (WUPENx, 10.8.1),
 /// and the DTC end (DTC_COMPLETE) cannot both wake up and end Snooze. The
 /// peripherals are set up by their drivers: R9a02Tml32Init MODE_SNOOZE for
-/// the TML32 request, AdcR9a02::Snooze for the A/D converter.
+/// the TML32 request, AdcR9a02::Snooze for the A/D converter,
+/// R9a02UartSnooze and R9a02SpiSnooze (sau_r9a02.h) for a SAU reception. The
+/// WakeEvt interrupt is on only during the Software Standby of
+/// R9a02LowPowerEnter.
 ///
 /// @param	pCfg	: Configuration, NULL turns Snooze off
 ///
 /// @return	false if the configuration is not valid or the wake-up event
 /// 			cannot be routed
 bool R9a02SnoozeSet(const R9a02SnoozeCfg_t *pCfg);
+
+/// @brief	Whether the Snooze set up is the one of this wake-up handler.
+///
+/// A driver that sets up Snooze checks with it that the set up is still its
+/// own, not replaced by another R9a02SnoozeSet, before it uses or removes it.
+///
+/// @param	Handler	: R9a02SnoozeCfg_t.Handler of the set up
+/// @param	pCtx	: R9a02SnoozeCfg_t.pCtx of the set up
+///
+/// @return	true when Snooze is set up with this Handler and pCtx
+bool R9a02SnoozeIsSet(R9a02SnoozeHandler_t Handler, void *pCtx);
 
 /// @brief	Add or remove a Software Standby hook.
 ///

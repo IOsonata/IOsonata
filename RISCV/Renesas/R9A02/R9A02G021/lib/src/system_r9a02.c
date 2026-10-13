@@ -1073,6 +1073,11 @@ bool R9a02SnoozeSet(const R9a02SnoozeCfg_t *pCfg)
 			s_R9a02SnzIntNo = R9a02RegisterIntHandler(R9A02_EVT_ICU_SNZCANCEL, pCfg->IntPrio,
 													  R9a02SnoozeIrqHandler, NULL);
 			ok = s_R9a02SnzIntNo >= 0;
+
+			// On only for the time of a Software Standby (R9a02LowPowerEnter):
+			// whether the event also reaches ICU_SNZCANCEL in Normal mode is
+			// not given by 12.2.10
+			R9a02IntEnable(s_R9a02SnzIntNo, false);
 		}
 
 		if (ok)
@@ -1094,6 +1099,11 @@ bool R9a02SnoozeSet(const R9a02SnoozeCfg_t *pCfg)
 	EnableInterrupt(state);
 
 	return ok;
+}
+
+bool R9a02SnoozeIsSet(R9a02SnoozeHandler_t Handler, void *pCtx)
+{
+	return s_bR9a02Snooze && s_R9a02SnzHandler == Handler && s_R9a02SnzCtx == pCtx;
 }
 
 bool R9a02StandbyHookSet(R9a02StandbyHook_t pHook, void *pCtx, bool bAdd)
@@ -1151,6 +1161,8 @@ static void R9a02StandbyHooks(bool bEnter)
 // set back to 0 after the wake-up, it stays 1 otherwise (10.2.1). For
 // Software Standby the DTC stops accepting requests (14.9) unless Snooze
 // uses it, and Snooze is enabled when set, both put back after the wake-up.
+// The Snooze wake-up interrupt (ICU_SNZCANCEL) is on from after the hooks
+// to the wake-up, a request left from Normal mode dropped first.
 bool R9a02LowPowerEnter(bool bStandby)
 {
 	// No SYSTEM register write during flash P/E (10.9.1)
@@ -1179,6 +1191,13 @@ bool R9a02LowPowerEnter(bool bStandby)
 	bool dtc = bStandby && R9a02ModuleRunning(R9A02_MSTPCR_A, R9A02_MSTPCRA_DTC);
 	uint8_t dtcst = dtc ? R9A02_DTC->DTCST : 0U;
 	bool snooze = bStandby && s_bR9a02Snooze;
+	int snzint = snooze ? s_R9a02SnzIntNo : -1;
+
+	if (snzint >= 0)
+	{
+		R9a02ClearPendingInt(snzint);
+		R9a02IntEnable(snzint, true);
+	}
 
 	if (dtc)
 	{
@@ -1219,6 +1238,13 @@ bool R9a02LowPowerEnter(bool bStandby)
 		if (dtc)
 		{
 			R9A02_DTC->DTCST = dtcst;
+		}
+
+		// Unless a wake-up interrupt turned Snooze off, the slot is then free
+		// or another one's, a new set up has it off
+		if (snzint >= 0 && snzint == s_R9a02SnzIntNo)
+		{
+			R9a02IntEnable(snzint, false);
 		}
 
 		R9a02StandbyHooks(false);

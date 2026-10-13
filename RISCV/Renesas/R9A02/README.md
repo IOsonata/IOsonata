@@ -19,9 +19,9 @@ the TAU and the machine timer.
 | Trap, CLIC vector table, ICU event routing | `R9A02G021/lib/src/Vectors_R9A02.c`, `src/interrupt_r9a02.cpp`, `include/interrupt_r9a02.h` | Built |
 | GPIO, pin functions, IRQ0 to IRQ7 pin interrupts | `src/iopincfg_r9a02.c`, `include/iopinctrl.h` | Built |
 | SAU channel and prescaler sharing | `src/sau_r9a02.cpp`, `include/sau_r9a02.h` | Built |
-| UART (SAU UART0 to UART2), polling and interrupt | `src/uart_r9a02.cpp` | Built |
+| UART (SAU UART0 to UART2), polling and interrupt, reception in Snooze (UART0, UART2) | `src/uart_r9a02.cpp` | Built, Snooze emulated (`tests/r9a02`) |
 | UART (UARTA0, UARTA1), polling and interrupt | `src/uarta_r9a02.cpp`, `include/uarta_r9a02.h` | Built |
-| SPI (SAU simplified SPI): master with polling, interrupt and DTC reception, slave with interrupt and DTC | `src/spi_r9a02.cpp` | Built, slave emulated (`tests/r9a02`) |
+| SPI (SAU simplified SPI): master with polling, interrupt and DTC reception, slave with interrupt and DTC, slave reception in Snooze (SPI00, SPI20) | `src/spi_r9a02.cpp` | Built, slave and Snooze emulated (`tests/r9a02`) |
 | I2C master (IICA0, IICA1), polling and interrupt | `src/i2c_r9a02.cpp`, `include/i2c_r9a02.h` | Built |
 | I2C master (SAU simplified I2C IIC00 to IIC21), polling and interrupt | `src/i2c_sau_r9a02.cpp` | Built |
 | ADC (ADC12, 10 pins, temperature sensor, internal reference, scan, continuous, hardware trigger, window, Snooze) | `src/adc_r9a02.cpp`, `include/adc_r9a02.h` | Built |
@@ -39,8 +39,7 @@ Built with xPack riscv-none-elf-gcc 15.2.0, `-march=rv32imac_zba_zbb_zbs_zicsr_z
 The register use of the drivers was checked against the manual. Nothing has
 been run on hardware yet. Not implemented: SPI master transmission by the
 DTC, the DTC for I2C (the CPU acts at each byte), UART transfers by the DTC,
-SAU UART and SPI reception in Snooze, TML32 8-bit channels and capture,
-REMC, KINT, DOC, CRC, TRNG.
+TML32 8-bit channels and capture, REMC, KINT, DOC, CRC, TRNG.
 
 ## Memory layout
 
@@ -226,6 +225,25 @@ DFU boot): link the application with `-Wl,-u,R9a02UartaInit` (the
 `UartaLoopback` example does), or call `R9a02UartaInit` directly. Without it
 `UARTInit` fails for DevNo 3 and 4.
 
+Reception in Snooze (23.6.3): `R9a02UartSnooze(pDev, true)` (`sau_r9a02.h`)
+for UART0 or UART2 after `UARTInit` with `bIntMode`, at 4800 or 9600 bps,
+PCLKB the HOCO at 24 or 32 MHz without divider, EXTAL stopped; it returns
+false otherwise. The UART then runs on the operation clock of table 23.95
+(PCLKB / 2^5 at 4800, / 2^4 at 9600), the closest STCLK in normal operation
+(9615 or 4807.7 bps), the STCLK of the table in Snooze. The TX CFIFO is sent
+before the channels stop, at the enabling and at each Software Standby. In
+Software Standby a start bit on RxD starts Snooze and the character is
+received without the CPU: a good one wakes it, the Snooze end interrupt puts
+it in the RX CFIFO and the UART back in normal operation (figure 23.41 steps
+10 to 12), then `UART_EVT_RXDATA`; one with an error sends the MCU back to
+Software Standby. A character that follows before the receive channel is
+restarted, right after the wake-up, is lost, and so is one that ends while the
+MCU enters Software Standby (the next one wakes it): the sender waits for an
+answer, or repeats. One UART at a time, and it replaces any other Snooze set
+up (`R9a02SnoozeSet`); once another set up replaces it, the UART stays in
+normal operation until `R9a02UartSnooze(pDev, false)`. Not linked into an
+image that does not call it. The UartSnoozeDemo example uses it.
+
 ## SPI
 
 `SPICfg_t.DevNo` 0 to 5 is SPI00, SPI01, SPI10, SPI11, SPI20, SPI21 (SAU0
@@ -277,6 +295,20 @@ the transmit data.
   highest operation clock of the unit, 24 MHz from PCLKB 48 MHz, so 3 MHz.
 - The SAU and chip select interrupts run at `IntPrio`; an interrupt at the
   same or a higher level that lasts a byte time makes the slave late.
+
+Slave reception in Snooze (23.5.7): `R9a02SpiSnooze(pDev, true)`
+(`sau_r9a02.h`) for a slave on SPI00 (DevNo 0) or SPI20 (DevNo 4), `Rate` at
+most 500 kHz, PCLKB the HOCO or the MOCO, EXTAL stopped; it returns false
+otherwise. At the Software Standby entry, with the chip select high, the
+channel is set to receive only. The first SCK edge starts Snooze, byte 0 is
+received without the CPU (MISO stays at its idle level) and its end wakes
+the CPU, which takes over the frame from byte 1 as in normal operation.
+The master leaves time for the wake-up after byte 0 (Software Standby to
+Normal, table 37.21, plus the interrupt) before it clocks byte 1, and does
+not expect data from the slave in byte 0. `SetRate` above 500 kHz fails
+while it is enabled. One SPI at a time, and it replaces any other Snooze set
+up; once another set up replaces it, the slave stays in normal operation.
+Not linked into an image that does not call it.
 
 On the FPB board SPI20 is on P101 (SCK20), P102 (SI20) and P103 (SO20), SPI21
 on P204 (SCK21), P205 (SI21) and P206 (SO21). The SpiMasterSlave example
@@ -414,15 +446,20 @@ stops accepting requests for Software Standby (DTCST = 0) unless Snooze uses
 it. `R9a02StandbyHookSet` lets a driver act just before and after Software
 Standby (the A/D converter in Snooze sets ADM2.AWC there).
 
-Snooze (`R9a02SnoozeSet`): in Software Standby the request source (an IRQ
-pin, KEY, RTC, TML32, RXD0, RXD2, RIN0, one at a time) starts Snooze, the
-peripherals that work in it run without the CPU. `End` sends the MCU back
-to Software Standby (A/D result outside the window, DTC, TML32, SAU or REMC
-end), `WakeEvt` wakes the CPU through SELSR0 (A/D end, DTC end, SAU end or
-error, REMC, DOC). Snooze is enabled for each Software Standby of
-`R9a02LowPowerEnter`. The AdcSnoozeDemo example converts in Snooze at each
-TML32 interval and wakes the CPU above a voltage (manual 10.8.4). The SAU
-UART and SPI reception in Snooze are not supported by the drivers.
+Snooze (`R9a02SnoozeSet`): in Software Standby the request source (an IRQ pin,
+KEY, RTC, TML32, RXD0, RXD2, RIN0, one at a time) starts Snooze, the
+peripherals that work in it run without the CPU. `End` sends the MCU back to
+Software Standby (A/D result outside the window, DTC, TML32, SAU or REMC end),
+`WakeEvt` wakes the CPU through SELSR0 (A/D end, DTC end, SAU end or error,
+REMC, DOC). Snooze is enabled for each Software Standby of
+`R9a02LowPowerEnter`, the `WakeEvt` interrupt (ICU_SNZCANCEL) is on only for
+the time of it, a request left from Normal mode dropped: 12.2.10 does not say
+whether the event also reaches it in Normal mode. A driver checks with
+`R9a02SnoozeIsSet` that the set up is still its own. The AdcSnoozeDemo example
+converts in Snooze at each TML32 interval and wakes the CPU above a voltage
+(manual 10.8.4). The UART and SPI drivers set up their own Snooze for a
+reception (see UART and SPI), the UartSnoozeDemo example sleeps until a
+character arrives.
 
 ## Timers
 
@@ -448,7 +485,7 @@ at 48 MHz; ask for a lower frequency for long periods (46875 Hz for up to
 `ldscript/dfu_layout_r9a02g021.ld`: boot 0x0 to 0x8FFF, record 0x9000 to
 0x9FFF, application slot 0 0xA000 to 0x1FFFF, recovery flag at 0x20006FF0.
 `dfu_boot_r9a02g021.ld` links the boot (with HEAD), `gcc_R9A02G021_dfu.ld`
-an application for slot 0. The boot fits only when built with -Os (36576 of
+an application for slot 0. The boot fits only when built with -Os (36724 of
 36864 bytes); the Debug configuration at -O0 does not fit. UARTA is not
 linked into it (see UART).
 

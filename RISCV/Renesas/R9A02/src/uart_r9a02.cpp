@@ -35,6 +35,19 @@ reads the receive buffer when called.
 Pins: PinOp R9A02_PSEL_SAU (IOPINOP_FUNC16). IOPinConfig puts the RX pin in
 input mode with NCODR = 1 (16.5.1). The RxD noise filter (SNFEN) is on.
 
+Reception in Snooze, UART0 and UART2 (23.6.3), with R9a02UartSnooze
+(sau_r9a02.h). The UART then runs on the operation clock of table 23.95,
+PCLKB / 2^5 at 4800 and PCLKB / 2^4 at 9600, so that only STCLK of the
+receive channel changes for Snooze and no other channel of the unit is
+touched. A Software Standby hook sets the receive channel for Snooze just
+before WFI (figure 23.41 steps 1 to 3: SCRm1.EOC = 1 and SSCm.SSEC = 1, an
+error sends the MCU back to Software Standby). The character that ends
+Snooze wakes the CPU through SELSR0 (R9a02SnoozeSet), its interrupt reads
+it while SSCm.SWC is still 1 (figure 23.37 note 1) and puts the channel
+back in normal operation (steps 10 to 12), the hook does it after a
+wake-up by another source. The transmit channel stays stopped in Software
+Standby, after the TX CFIFO was sent.
+
 @author	Hoang Nguyen Hoan
 @date	May 12, 2026
 
@@ -93,6 +106,8 @@ SOFTWARE.
 bool R9a02UartaInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg) __attribute__((weak));
 UARTDev_t const *R9a02UartaGetInstance(int Chan) __attribute__((weak));
 
+struct __R9a02_Uart_Snz_Ops;
+
 #pragma pack(push, 4)
 typedef struct {
 	int DevNo;
@@ -112,11 +127,31 @@ typedef struct {
 	int IntTx;						// IELSR numbers, -1 when not routed
 	int IntRx;
 	int IntErr;
+	const struct __R9a02_Uart_Snz_Ops *pSnz;	// Reception in Snooze set up, NULL when not
 } R9a02UartDev_t;
+
+// Reception in Snooze, reached through R9a02UartDev_t.pSnz, which only
+// R9a02UartSnooze sets: an image that does not call it does not link this
+// code and its data, the DFU boot among them.
+typedef struct __R9a02_Uart_Snz_Ops {
+	bool (*Clock)(R9a02UartDev_t * const pDev, uint32_t Rate);
+	void (*Off)(R9a02UartDev_t * const pDev);
+} R9a02UartSnzOps_t;
+
+// State of the reception in Snooze. Snooze has one request source (10.8.1),
+// so one UART at a time.
+typedef struct {
+	R9a02UartDev_t *pDev;			// UART set up
+	uint16_t SdrNormal;				// Receive channel SDR, STCLK in normal operation
+	uint16_t SdrSnz;				// and in Snooze (table 23.95)
+	volatile bool bArmed;			// Receive channel set for Snooze, SSCm.SWC = 1
+} R9a02UartSnz_t;
 #pragma pack(pop)
 
 // Default CFIFO memory, RX then TX, of each UART
 alignas(4) static uint8_t s_R9a02UartFifoMem[3][2][R9A02_UART_CFIFO_MEMSIZE];
+
+static R9a02UartSnz_t s_R9a02UartSnz;
 
 static R9a02UartDev_t s_R9a02UartDev[] = {
 	{
@@ -137,6 +172,7 @@ static R9a02UartDev_t s_R9a02UartDev[] = {
 		.IntTx = -1,
 		.IntRx = -1,
 		.IntErr = -1,
+		.pSnz = NULL,
 	},
 	{
 		.DevNo = 1,
@@ -156,6 +192,7 @@ static R9a02UartDev_t s_R9a02UartDev[] = {
 		.IntTx = -1,
 		.IntRx = -1,
 		.IntErr = -1,
+		.pSnz = NULL,
 	},
 	{
 		.DevNo = 2,
@@ -175,6 +212,7 @@ static R9a02UartDev_t s_R9a02UartDev[] = {
 		.IntTx = -1,
 		.IntRx = -1,
 		.IntErr = -1,
+		.pSnz = NULL,
 	},
 };
 
@@ -280,13 +318,14 @@ static int R9a02UartRxHw(R9a02UartDev_t * const pDev, uint8_t *pErr)
 }
 
 // Next byte of the TX CFIFO into SDR. SDR takes a byte only when empty, a
-// write with BFF set is lost (23.3.11). Returns 1 when a byte was written, 0
-// when the CFIFO is empty, -1 when SDR is full.
+// write with BFF set is lost (23.3.11), a stopped channel takes none: the
+// bytes wait in the CFIFO. Returns 1 when a byte was written, 0 when the
+// CFIFO is empty, -1 when SDR is full or the channel stopped.
 static int R9a02UartTxHw(R9a02UartDev_t * const pDev)
 {
 	R9A02_SAU_Type *reg = pDev->pReg;
 
-	if (reg->SSR[pDev->TxCh] & R9A02_SAU_SSR_BFF)
+	if ((reg->SSR[pDev->TxCh] & R9A02_SAU_SSR_BFF) || (reg->SE & (1U << pDev->TxCh)) == 0U)
 	{
 		return -1;
 	}
@@ -328,6 +367,114 @@ static void R9a02UartTxDrain(R9a02UartDev_t * const pDev)
 		{
 			break;
 		}
+	}
+}
+
+// After the channels stopped and started again: SDR lost what it held and
+// no buffer empty interrupt follows, the next byte of the TX CFIFO starts
+// the transmission again. Called with interrupts disabled.
+static void R9a02UartTxResume(R9a02UartDev_t * const pDev)
+{
+	UARTDev_t *udev = pDev->pUartDev;
+
+	if (udev->DevIntrf.bIntEn)
+	{
+		udev->bTxReady = R9a02UartTxHw(pDev) <= 0;
+	}
+}
+
+// The TX CFIFO sent and the last character out, before the channels stop.
+// At most the time of the bytes queued and two more, counted in CPU cycles:
+// when the TX interrupt cannot run (interrupts disabled, or a call from an
+// interrupt at its level or above) the CFIFO does not empty and the wait
+// ends there.
+static void R9a02UartTxWait(R9a02UartDev_t * const pDev)
+{
+	UARTDev_t *udev = pDev->pUartDev;
+	R9A02_SAU_Type *reg = pDev->pReg;
+	uint32_t rate = udev->Rate > 0 ? (uint32_t)udev->Rate : 1U;
+	uint32_t limit = (SystemCoreClock / rate + 1U) * 12U * ((uint32_t)CFifoUsed(udev->hTxFifo) + 2U);
+	uint32_t start;
+
+	__asm volatile ("csrr %0, mcycle" : "=r"(start));
+
+	while (((reg->SSR[pDev->TxCh] & R9A02_SAU_SSR_TSF) || !udev->bTxReady) &&
+		   (reg->SE & (1U << pDev->TxCh)) != 0U)
+	{
+		uint32_t now;
+
+		__asm volatile ("csrr %0, mcycle" : "=r"(now));
+		if ((uint32_t)(now - start) >= limit)
+		{
+			break;
+		}
+	}
+}
+
+// Receive channel back to normal operation, figure 23.41 steps 10 to 12:
+// stopped, SWC and SSEC at 0, normal STCLK, both channels started again
+// unless the UART was disabled meanwhile. Its interrupts are back on
+// without the requests left from Snooze. Called with interrupts disabled.
+static void R9a02UartSnzRestore(R9a02UartDev_t * const pDev)
+{
+	R9a02UartSnz_t *snz = &s_R9a02UartSnz;
+	R9A02_SAU_Type *reg = pDev->pReg;
+	uint32_t rx = pDev->TxCh + 1U;
+	bool run = (reg->SE & (1U << rx)) != 0U;
+
+	reg->ST = (uint16_t)(1U << rx);
+	reg->SSC = 0U;
+	reg->SDR[rx] = snz->SdrNormal;
+	snz->bArmed = false;
+
+	R9a02ClearPendingInt(pDev->IntRx);
+	R9a02ClearPendingInt(pDev->IntErr);
+	R9a02IntEnable(pDev->IntRx, true);
+	R9a02IntEnable(pDev->IntErr, true);
+
+	if (run)
+	{
+		R9a02UartStart(pDev);
+		R9a02UartTxResume(pDev);
+	}
+}
+
+// Snooze ended by the reception end (SELSR0, R9a02SnoozeSet). The
+// character is read while SSCm.SWC is still 1 (figure 23.37 note 1): its
+// error flags are not set (SSEC = 1) and with SWC = 1 the manual does not
+// say that BFF follows, the reception end alone tells that it is there.
+// The receive channel goes back to normal operation at once, for the next
+// character, before UART_EVT_RXDATA.
+static void R9a02UartSnzWake(void *pCtx)
+{
+	R9a02UartDev_t *dev = (R9a02UartDev_t *)pCtx;
+	R9a02UartSnz_t *snz = &s_R9a02UartSnz;
+	UARTDev_t *udev = dev->pUartDev;
+	uintptr_t state = DisableInterrupt();
+	bool put = false;
+
+	if (snz->bArmed && snz->pDev == dev)
+	{
+		uint8_t d = (uint8_t)(dev->pReg->SDR[dev->TxCh + 1U] & dev->RxDataMask);
+
+		R9a02UartSnzRestore(dev);
+
+		put = CFifoPutByte(udev->hRxFifo, d);
+		if (put)
+		{
+			udev->bRxReady = true;
+		}
+		else
+		{
+			udev->RxDropCnt++;
+		}
+	}
+
+	EnableInterrupt(state);
+
+	if (put && udev->EvtCallback)
+	{
+		udev->EvtCallback(udev, UART_EVT_RXDATA, NULL, CFifoUsed(udev->hRxFifo));
 	}
 }
 
@@ -378,6 +525,80 @@ static uint32_t R9a02UartGetRate(DevIntrf_t * const pDev)
 	return ((R9a02UartDev_t *)pDev->pDevData)->pUartDev->Rate;
 }
 
+// Operation clock of table 23.95 for reception in Snooze: PCLKB the HOCO at
+// 24 or 32 MHz without divider, fMCK = PCLKB / 2^5 at 4800, PCLKB / 2^4 at
+// 9600, STCLK 79 or 106 in Snooze. In normal operation the STCLK closest to
+// the rate (9615 and 4807.7 bps). The TX CFIFO is sent first, the channels
+// are stopped and started again when they ran.
+static bool R9a02UartSnoozeClock(R9a02UartDev_t * const pDev, uint32_t Rate)
+{
+	uint32_t src = R9a02SauSnoozeSrcHz();
+
+	// The rate kept by the driver is the one set, 9615 for 9600: 2 % around
+	// 4800 and 9600 selects them
+	if (Rate >= 4704U && Rate <= 4896U)
+	{
+		Rate = 4800U;
+	}
+	else if (Rate >= 9408U && Rate <= 9792U)
+	{
+		Rate = 9600U;
+	}
+	else
+	{
+		return false;
+	}
+
+	if ((R9A02_SYSC_SCKSCR & R9A02_SCKSCR_CKSEL_Msk) != R9A02_SCKSCR_HOCO || SystemPeriphClockGet(0) != src ||
+		(src != 24000000UL && src != 32000000UL))
+	{
+		return false;
+	}
+
+	R9A02_SAU_Type *reg = pDev->pReg;
+	uint16_t chmsk = (uint16_t)(3U << pDev->TxCh);
+	R9a02SauClk_t clk;
+
+	R9a02UartTxWait(pDev);
+
+	uintptr_t state = DisableInterrupt();
+	bool running = (reg->SE & chmsk) != 0U;
+
+	if (running)
+	{
+		reg->ST = chmsk;
+	}
+
+	bool ok = R9a02SauSetPrs(pDev->Unit, chmsk, Rate == 4800U ? 5U : 4U, &clk);
+
+	if (ok)
+	{
+		uint32_t div = (clk.FmckHz + Rate) / (2U * Rate);
+
+		R9a02UartSnz_t *snz = &s_R9a02UartSnz;
+
+		snz->SdrNormal = (uint16_t)((div - 1U) << R9A02_SAU_SDR_STCLK_Pos);
+		snz->SdrSnz = (uint16_t)((src == 32000000UL ? 106U : 79U) << R9A02_SAU_SDR_STCLK_Pos);
+		for (uint32_t ch = pDev->TxCh; ch < pDev->TxCh + 2U; ch++)
+		{
+			reg->SMR[ch] = (uint16_t)((reg->SMR[ch] & ~R9A02_SAU_SMR_CKS) | clk.Cks);
+			reg->SDR[ch] = snz->SdrNormal;
+		}
+		pDev->FmckHz = clk.FmckHz;
+		pDev->pUartDev->Rate = (int)(clk.FmckHz / (2U * div));
+	}
+
+	if (running)
+	{
+		R9a02UartStart(pDev);
+		R9a02UartTxResume(pDev);
+	}
+
+	EnableInterrupt(state);
+
+	return ok;
+}
+
 static uint32_t R9a02UartSetRate(DevIntrf_t * const pDev, uint32_t Rate)
 {
 	R9a02UartDev_t *dev = (R9a02UartDev_t *)pDev->pDevData;
@@ -388,6 +609,12 @@ static uint32_t R9a02UartSetRate(DevIntrf_t * const pDev, uint32_t Rate)
 	if (Rate == 0U)
 	{
 		return 0;
+	}
+
+	// With reception in Snooze the rate stays on the clock of table 23.95
+	if (dev->pSnz != NULL)
+	{
+		return dev->pSnz->Clock(dev, Rate) ? (uint32_t)dev->pUartDev->Rate : 0U;
 	}
 
 	uintptr_t state = DisableInterrupt();
@@ -419,6 +646,7 @@ static uint32_t R9a02UartSetRate(DevIntrf_t * const pDev, uint32_t Rate)
 	if (running)
 	{
 		R9a02UartStart(dev);
+		R9a02UartTxResume(dev);
 	}
 
 	EnableInterrupt(state);
@@ -571,6 +799,211 @@ static void R9a02UartStopTx(DevIntrf_t * const pDev)
 {
 }
 
+// Software Standby hook of the reception in Snooze. Before WFI, figure 23.41
+// steps 1 to 3: the transmission and a reception in progress end, both
+// channels stop, the error flags are cleared and SDR read (SSEC note of
+// 23.6.3), Snooze STCLK, SWC and SSEC, then the receive channel starts. Its
+// interrupts stay off while it is set for Snooze, the Snooze end interrupt
+// takes the character. After a wake-up by another source, steps 10 to 12.
+static void R9a02UartSnzHook(bool bEnter, void *pCtx)
+{
+	R9a02UartDev_t *dev = (R9a02UartDev_t *)pCtx;
+	R9a02UartSnz_t *snz = &s_R9a02UartSnz;
+	R9A02_SAU_Type *reg = dev->pReg;
+	uint32_t rx = dev->TxCh + 1U;
+	uint16_t rxbit = (uint16_t)(1U << rx);
+
+	if (!bEnter)
+	{
+		uintptr_t state = DisableInterrupt();
+
+		if (snz->bArmed && snz->pDev == dev)
+		{
+			R9a02UartSnzRestore(dev);
+		}
+
+		EnableInterrupt(state);
+
+		return;
+	}
+
+	// Only for an enabled UART whose Snooze set up is still the current one
+	if (dev->pSnz == NULL || (reg->SE & rxbit) == 0U || !R9a02SnoozeIsSet(R9a02UartSnzWake, dev))
+	{
+		return;
+	}
+
+	R9a02UartTxWait(dev);
+
+	uint32_t rate = dev->pUartDev->Rate > 0 ? (uint32_t)dev->pUartDev->Rate : 1U;
+	uint32_t n = (SystemCoreClock / rate + 1U) * 24U + 1000U;
+
+	while ((reg->SSR[rx] & R9A02_SAU_SSR_TSF) && --n > 0U)
+	{
+	}
+
+	uintptr_t state = DisableInterrupt();
+	uint8_t err = 0;
+
+	// Checked again: an interrupt during the waits may have turned Snooze
+	// off or disabled the UART
+	if (dev->pSnz == NULL || (reg->SE & rxbit) == 0U || !R9a02SnoozeIsSet(R9a02UartSnzWake, dev))
+	{
+		EnableInterrupt(state);
+
+		return;
+	}
+
+	// A character already received goes to the RX CFIFO first, its pending
+	// interrupt is dropped so that it is not taken for the character of the
+	// Snooze
+	int cnt = R9a02UartRxHw(dev, &err);
+
+	R9a02IntEnable(dev->IntRx, false);
+	R9a02IntEnable(dev->IntErr, false);
+	R9a02ClearPendingInt(dev->IntRx);
+	R9a02ClearPendingInt(dev->IntErr);
+
+	reg->ST = (uint16_t)(3U << dev->TxCh);
+	reg->SIR[rx] = R9A02_SAU_SIR_ALL;
+	(void)reg->SDR[rx];
+	reg->SDR[rx] = snz->SdrSnz;
+	reg->SSC = R9A02_SAU_SSC_SWC | R9A02_SAU_SSC_SSEC;
+	snz->bArmed = true;
+	reg->SS = rxbit;
+
+	EnableInterrupt(state);
+
+	// An answer sent from here waits in the TX CFIFO until the wake-up
+	UARTDev_t *udev = dev->pUartDev;
+
+	if (udev->EvtCallback != NULL)
+	{
+		if (err)
+		{
+			udev->EvtCallback(udev, UART_EVT_LINESTATE, &err, 1);
+		}
+		if (cnt > 0)
+		{
+			udev->EvtCallback(udev, UART_EVT_RXDATA, NULL, CFifoUsed(udev->hRxFifo));
+		}
+	}
+}
+
+// Snooze set up of the UART removed, the receive channel back to normal
+// operation when it was set for Snooze. The Snooze registers are cleared
+// only when the set up is still the UART's.
+static void R9a02UartSnoozeOff(R9a02UartDev_t * const pDev)
+{
+	R9a02UartSnz_t *snz = &s_R9a02UartSnz;
+	uintptr_t state = DisableInterrupt();
+
+	if (snz->bArmed && snz->pDev == pDev)
+	{
+		R9a02UartSnzRestore(pDev);
+	}
+
+	EnableInterrupt(state);
+
+	R9a02StandbyHookSet(R9a02UartSnzHook, pDev, false);
+	if (R9a02SnoozeIsSet(R9a02UartSnzWake, pDev))
+	{
+		R9a02SnoozeSet(NULL);
+	}
+	pDev->pSnz = NULL;
+	if (snz->pDev == pDev)
+	{
+		snz->pDev = NULL;
+	}
+}
+
+static const R9a02UartSnzOps_t s_R9a02UartSnzOps = {
+	R9a02UartSnoozeClock,
+	R9a02UartSnoozeOff,
+};
+
+bool R9a02UartSnooze(DevIntrf_t * const pDev, bool bEnable)
+{
+	if (pDev == NULL || pDev->Type != DEVINTRF_TYPE_UART)
+	{
+		return false;
+	}
+
+	R9a02UartDev_t *dev = NULL;
+
+	// A SAU UART, not a UARTA
+	for (int i = 0; i < s_NbR9a02UartDev; i++)
+	{
+		if (pDev->pDevData == &s_R9a02UartDev[i] && s_R9a02UartDev[i].pUartDev != NULL &&
+			&s_R9a02UartDev[i].pUartDev->DevIntrf == pDev)
+		{
+			dev = &s_R9a02UartDev[i];
+		}
+	}
+
+	if (dev == NULL)
+	{
+		return false;
+	}
+
+	if (!bEnable)
+	{
+		if (dev->pSnz != NULL)
+		{
+			dev->pSnz->Off(dev);
+		}
+
+		return true;
+	}
+
+	// UART0 and UART2 only, receive interrupt
+	if ((dev->DevNo != 0 && dev->DevNo != 2) || !pDev->bIntEn)
+	{
+		return false;
+	}
+
+	// One UART at a time: the other one is turned off
+	R9a02UartDev_t *prev = s_R9a02UartSnz.pDev;
+
+	if (prev != NULL && prev != dev && prev->pSnz != NULL)
+	{
+		prev->pSnz->Off(prev);
+	}
+
+	// Clock of table 23.95
+	if (!R9a02UartSnoozeClock(dev, (uint32_t)dev->pUartDev->Rate))
+	{
+		return false;
+	}
+
+	R9a02SnoozeCfg_t cfg = {
+		.Request = dev->Unit ? R9A02_SNZREQ_RXD2 : R9A02_SNZREQ_RXD0,
+		.End = (uint16_t)(dev->Unit ? R9A02_SNZEND_SAU1_ERR : R9A02_SNZEND_SAU0_ERR),
+		.WakeEvt = dev->EvtRx,
+		.bDtc = false,
+		.Handler = R9a02UartSnzWake,
+		.pCtx = dev,
+		.IntPrio = pDev->IntPrio,
+	};
+
+	if (!R9a02StandbyHookSet(R9a02UartSnzHook, dev, true))
+	{
+		return false;
+	}
+	if (!R9a02SnoozeSet(&cfg))
+	{
+		R9a02StandbyHookSet(R9a02UartSnzHook, dev, false);
+
+		return false;
+	}
+
+	s_R9a02UartSnz.pDev = dev;
+	s_R9a02UartSnz.bArmed = false;
+	dev->pSnz = &s_R9a02UartSnzOps;
+
+	return true;
+}
+
 // Channels stopped. Registers, pins and CFIFOs are kept, Enable restarts the
 // UART.
 static void R9a02UartDisable(DevIntrf_t * const pDev)
@@ -609,6 +1042,12 @@ static void R9a02UartEnable(DevIntrf_t * const pDev)
 static void R9a02UartPowerOff(DevIntrf_t * const pDev)
 {
 	R9a02UartDev_t *dev = (R9a02UartDev_t *)pDev->pDevData;
+
+	if (dev->pSnz != NULL)
+	{
+		dev->pSnz->Off(dev);
+	}
+
 	uintptr_t state = DisableInterrupt();
 
 	R9a02UartStop(dev);
@@ -702,6 +1141,11 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 		return false;
 	}
 
+	// A Snooze set up of a previous UARTInit is removed
+	if (dev->pSnz != NULL)
+	{
+		dev->pSnz->Off(dev);
+	}
 	R9a02UartReleaseInts(dev);
 	R9a02UartStop(dev);
 

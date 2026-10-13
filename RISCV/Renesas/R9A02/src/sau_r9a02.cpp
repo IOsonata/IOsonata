@@ -265,3 +265,93 @@ uint32_t R9a02SauSetRate(uint32_t Unit, uint16_t ChMask, uint32_t Rate, uint32_t
 
 	return best;
 }
+
+bool R9a02SauSetPrs(uint32_t Unit, uint16_t ChMask, uint32_t Prs, R9a02SauClk_t *pClk)
+{
+	uint32_t pclk = SystemPeriphClockGet(0);
+
+	if (Unit >= R9A02_SAU_UNIT_CNT || pClk == NULL || ChMask == 0U || Prs > R9A02_SAU_PRS_MAX ||
+		pclk == 0U || (pclk >> Prs) > R9A02_SAU_FMCK_MAX)
+	{
+		return false;
+	}
+
+	R9a02SauUnit_t *unit = &s_R9a02SauUnit[Unit];
+	R9A02_SAU_Type *reg = R9a02SauReg(Unit);
+	uintptr_t state = DisableInterrupt();
+	uint16_t sps = reg->SPS;
+	bool othersrun = (reg->SE & (uint16_t)~ChMask) != 0U;
+	int found = R9A02_SAU_NO_CK;
+	bool keep = false;
+
+	// A clock already at Prs first, then one whose prescaler can change
+	for (uint32_t ck = 0; ck < 2U && !keep; ck++)
+	{
+		uint32_t shift = ck ? R9A02_SAU_SPS_PRS1_Pos : R9A02_SAU_SPS_PRS0_Pos;
+		bool locked = othersrun;
+
+		for (uint32_t ch = 0; ch < R9A02_SAU_CHAN_CNT; ch++)
+		{
+			if ((ChMask & (1U << ch)) == 0U && unit->pOwner[ch] != NULL && unit->Ck[ch] == (int8_t)ck)
+			{
+				locked = true;
+			}
+		}
+
+		if (((sps >> shift) & R9A02_SAU_SPS_PRS_Msk) == Prs)
+		{
+			found = (int)ck;
+			keep = true;
+		}
+		else if (!locked && found == R9A02_SAU_NO_CK)
+		{
+			found = (int)ck;
+		}
+	}
+
+	if (found != R9A02_SAU_NO_CK)
+	{
+		uint32_t shift = found ? R9A02_SAU_SPS_PRS1_Pos : R9A02_SAU_SPS_PRS0_Pos;
+
+		if (!keep)
+		{
+			reg->SPS = (uint16_t)((sps & ~(R9A02_SAU_SPS_PRS_Msk << shift)) | (Prs << shift));
+		}
+
+		for (uint32_t ch = 0; ch < R9A02_SAU_CHAN_CNT; ch++)
+		{
+			if (ChMask & (1U << ch))
+			{
+				unit->Ck[ch] = (int8_t)found;
+			}
+		}
+
+		pClk->Cks = found ? R9A02_SAU_SMR_CKS : 0U;
+		pClk->Sdr = 0U;
+		pClk->FmckHz = pclk >> Prs;
+	}
+
+	EnableInterrupt(state);
+
+	return found != R9A02_SAU_NO_CK;
+}
+
+// CPU and PCLKB from the HOCO or the MOCO, EXTAL stopped (23.3.25, table
+// 10.2 note 1)
+uint32_t R9a02SauSnoozeSrcHz(void)
+{
+	if (R9a02ExtalClockGet() != 0U)
+	{
+		return 0U;
+	}
+
+	switch (R9A02_SYSC_SCKSCR & R9A02_SCKSCR_CKSEL_Msk)
+	{
+		case R9A02_SCKSCR_HOCO:
+			return R9a02HocoClockGet();
+		case R9A02_SCKSCR_MOCO:
+			return R9A02_MOCO_FREQ;
+		default:
+			return 0U;
+	}
+}
