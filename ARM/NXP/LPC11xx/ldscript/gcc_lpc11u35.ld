@@ -26,6 +26,17 @@ MEMORY
   	RAM3 (rwx) : ORIGIN = 0x20004000, LENGTH = 2K
 }
 
+/* USB DMA storage must not be cleared by ResetEntry before USBRAM is clocked.
+ * The controller initializes this optional section after enabling its clock.
+ * Region placement also makes overflow a link error. */
+SECTIONS
+{
+	.usb_ram (NOLOAD) : ALIGN(256)
+	{
+		*(.usb_ram .usb_ram.*)
+	} > RAM3
+}
+
 INCLUDE "gcc_arm_flash.ld"
 
 /* Cortex-M0 vector words 4 to 6 are zero. Include the Thumb bit for each

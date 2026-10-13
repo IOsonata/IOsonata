@@ -1181,6 +1181,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/storage/stdfs_littlefs.cpp</locationURI>
 		</link>
 		<link>
+			<name>include/usb_hw_lpc11uxx.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/include/usb_hw_lpc11uxx.h</locationURI>
+		</link>
+		<link>
 			<name>include/usb_ctrlr.h</name>
 			<type>1</type>
 			<locationURI>PARENT-3-PROJECT_LOC/include/usb_ctrlr.h</locationURI>
