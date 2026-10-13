@@ -6,8 +6,10 @@ CPU interrupt registration through the ICU, asynchronous SCI UART, AGT/GPT timer
 See [TIMER.md](TIMER.md) for timer device mapping and validation limits, and
 [INTERRUPTS.md](INTERRUPTS.md) for the ICU/NVIC routing architecture,
 registration contract, and interrupt-maintenance invariants.
-No board package, Arduino/FSP runtime, USB controller, IIC interrupt/DMA/slave,
-general DTC, or NMI driver is included yet. UART TX uses the native DMAC path.
+No board package, Arduino/FSP runtime, USB controller, IIC master-interrupt/DMA,
+general DTC, or NMI driver is included yet. UART TX uses native DMAC.
+IIC slave interrupt handling is implemented for initial bring-up, not yet
+hardware-validated.
 
 ## Implementation status (October 13, 2026)
 
@@ -28,7 +30,7 @@ Therefore the log is **functional evidence, not a bound on GPT interrupt
 latency or period accuracy**. For timing measurement, collect timestamps in
 RAM without semihosting inside the measurement loop.
 
-**Not yet confirmed on hardware:** the new IIC master path, GPIO edge interrupts,
+**Not yet confirmed on hardware:** the new IIC master and slave paths, GPIO edge interrupts,
 other AGT/GPT channels and all six GPT compare routes, long-run rollover/pause/resume,
 stop/start recovery, low-power operation, USB, general DMA/DTC and ELC integration.
 SCI UART is complete and hardware-tested. Apart from the UART test
@@ -302,10 +304,13 @@ of physical pad-power disconnection.
 ## IIC master
 
 The native RA4M1 IIC driver exposes **DevNo 0 = IIC0** and **DevNo 1 = IIC1**
-through the existing `coredev/i2c.h` interface. The initial increment supports
-standard I2C, 7-bit master operation and synchronous polling transfers up to
-400 kHz. Interrupt, DMA/DTC, slave, SMBus, 10-bit address and Fast-mode Plus
-requests are rejected before taking ownership of the peripheral.
+through the existing `coredev/i2c.h` interface. The current increment supports
+standard I2C, 7-bit master polling up to 400 kHz and an initial 7-bit slave
+interrupt path. IIC slave events use the existing READ_RQST, WRITE_RQST and
+COMPLETED callbacks and application-owned buffers. Interrupt master,
+DMA/DTC, SMBus, 10-bit address and Fast-mode Plus requests are rejected.
+Slave request ordering and STOP/repeated-START completion counts require
+hardware validation before this mode is considered complete.
 
 IIC uses PCLKB. Bit-rate programming searches CKS/ICBRL/ICBRH values that meet
 the standard/fast-mode minimum SCL low/high periods while keeping the nominal
