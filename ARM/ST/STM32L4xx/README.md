@@ -101,6 +101,18 @@ optimization levels; the alternative system_stm32l4plus.c compiles for L4S9
 checks with staged headers,
 not complete IOC library/application links or on-board tests.
 
+UART hardware run on 32L476GDISCOVERY: the STM32L476 examples UartLoopback
+(`exemples/uart/uart_loopback.cpp`) and UartPrbsTxTest
+(`exemples/uart/uart_prbs_tx.cpp`) use USART2, DevNo 2, on PD5 TX and PD6 RX,
+AF7. The STM32L476 library leaves out the old `src/sysstatus.c`, which no
+longer compiles with the current `sysstatus.h`. The library and these two
+examples were built for Debug and Release from their `.project` and
+`.cproject` settings with GNU Arm 13.2, outside IOcomposer. The other L476
+examples still name `stm32l476xx.ld`, which is not in `ldscript/`
+(`gcc_stm32l476xx.ld` is), and their board files pair DevNo 1 with the USART2
+pins and PinOp `0x72`, which the GPIO driver does not take as AF7. The L496
+and L4S9 libraries still build `src/sysstatus.c`.
+
 For a new release-candidate run, record the project, MCU/board, revision,
 toolchain and exercised modes alongside the existing hardware-validation
 record. Validate changes affecting clocks, GPIO, UART or LPTIM on the relevant
