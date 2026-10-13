@@ -291,6 +291,10 @@ int main()
 	bool masterOk = g_I2CMaster.Init(s_I2cCfgMaster);
 	bool slaveOk = g_I2CSlave.Init(s_I2cCfgSlave);
 	printf("I2C init master=%d slave=%d\r\n", masterOk, slaveOk);
+#ifdef I2C_DEBUG_DUMP
+	I2C_DEBUG_DUMP("M init", g_I2CMaster);
+	I2C_DEBUG_DUMP("S init", g_I2CSlave);
+#endif
 	if (!masterOk || !slaveOk)
 	{
 		while (1)
@@ -314,6 +318,10 @@ int main()
 		c = total >= 1 ? total - 1 : 0;
 	}
 	printf("Write %d/%d bytes at offset %d\r\n", c, (int)sizeof(wr), offset);
+#ifdef I2C_DEBUG_DUMP
+	I2C_DEBUG_DUMP("M write", g_I2CMaster);
+	I2C_DEBUG_DUMP("S write", g_I2CSlave);
+#endif
 	const bool writeOk = c == (int)sizeof(wr);
 
 	memset(buff, 0xFF, sizeof(buff));

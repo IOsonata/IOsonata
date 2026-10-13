@@ -60,6 +60,7 @@ SOFTWARE.
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "i2c_ra4m1.h"
 
 #include <string>
 #include <vector>
@@ -1077,11 +1078,16 @@ static uint32_t s_Mstpcrb = 0xFFFFFFFFU;
 
 static uint32_t SysRead(int Id)
 {
-	return Id == SYSREG_PRCR ? s_Prcr : s_Mstpcrb;
+	return Id == SYSREG_PRCR ? s_Prcr : Id == SYSREG_SCKDIVCR ? 0x01000100U : s_Mstpcrb;
 }
 
 static void SysWrite(int Id, uint32_t Val)
 {
+	if (Id == SYSREG_SCKDIVCR)
+	{
+		return;
+	}
+
 	if (Id == SYSREG_PRCR)
 	{
 		if ((Val & 0xFF00U) != 0xA500U)
@@ -1760,6 +1766,18 @@ static void TestMasterPolling(void)
 
 		Check(n == 2, "write with BBSY left set returned %d", n);
 		CheckTrace("bbsy", "S W50+ d03+ d04+ P");
+	}
+
+	// Register dump text
+	{
+		char txt[200];
+		const int n = Ra4m1I2cDump(&dev.DevIntrf, txt, sizeof(txt));
+
+		Check(n > 0 && n == (int)strlen(txt), "dump length %d", n);
+		Check(strstr(txt, " cr1=9") != NULL, "dump has no cr1: %s", txt);
+		Check(strstr(txt, " fer=77") != NULL, "dump has no fer=77: %s", txt);
+		char small[8];
+		Check(Ra4m1I2cDump(&dev.DevIntrf, small, sizeof(small)) < 8, "dump overran");
 	}
 
 	// Still usable after the errors

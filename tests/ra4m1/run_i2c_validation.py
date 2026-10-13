@@ -77,7 +77,7 @@ def main():
     if not cxx:
         raise SystemExit('A host C++ compiler is required.')
 
-    inc = ['-I' + str(HERE / 'i2c_include'), '-I' + str(BUILD), '-I' + str(ROOT / 'include')]
+    inc = ['-I' + str(HERE / 'i2c_include'), '-I' + str(BUILD), '-I' + str(ROOT / 'include'), '-I' + str(ROOT / 'ARM/Renesas/RA4M1/include')]
     warn = ['-Wall', '-Wextra', '-Wno-unused-parameter', '-Wno-missing-field-initializers', '-Werror']
     modes = [('O0', ['-O0']), ('Os', ['-Os']), ('O2', ['-O2']),
              ('sanitized', ['-O1', '-g', '-fsanitize=address,undefined',

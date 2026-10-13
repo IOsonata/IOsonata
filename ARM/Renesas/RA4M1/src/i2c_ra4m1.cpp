@@ -53,6 +53,7 @@ SOFTWARE.
 #include "coredev/system_core_clock.h"
 #include "iopinctrl.h"
 #include "interrupt_ra4m1.h"
+#include "i2c_ra4m1.h"
 
 #define RA4M1_I2C_COUNT				2
 #define RA4M1_I2C_MAX_RATE			400000U
@@ -1445,6 +1446,61 @@ static void Ra4m1I2cPowerOff(DevIntrf_t * const pIntrf)
 	pIntrf->pDevData = NULL;
 	pIntrf->EnCnt = 0;
 	EnableInterrupt(state);
+}
+
+static int Ra4m1I2cPutHex(char *p, int pos, int len, uint32_t v, int digits)
+{
+	for (int i = digits - 1; i >= 0 && pos < len - 1; i--)
+	{
+		p[pos++] = "0123456789abcdef"[(v >> (i * 4)) & 0xFU];
+	}
+
+	return pos;
+}
+
+static int Ra4m1I2cPutStr(char *p, int pos, int len, const char *s)
+{
+	while (*s != 0 && pos < len - 1)
+	{
+		p[pos++] = *s++;
+	}
+
+	return pos;
+}
+
+int Ra4m1I2cDump(DevIntrf_t * const pIntrf, char *Buf, int Len)
+{
+	Ra4m1I2cDev_t *dev = Ra4m1I2cHandle(pIntrf);
+
+	if (dev == NULL || Buf == NULL || Len < 2)
+	{
+		return 0;
+	}
+
+	const R_IIC0_Type *r = dev->pReg;
+	const uint32_t v[] = {
+		SystemPeriphClockGet(1), R_MSTP->MSTPCRB, R_SYSTEM->SCKDIVCR,
+		r->ICCR1, r->ICCR2, r->ICMR1, r->ICMR2, r->ICMR3, r->ICFER,
+		r->ICSER, r->ICIER, r->ICSR1, r->ICSR2, r->ICBRL, r->ICBRH
+	};
+	const char *name[] = {
+		"pclkb=", " mstpb=", " sckdiv=", " cr1=", " cr2=", " mr1=", " mr2=",
+		" mr3=", " fer=", " ser=", " ier=", " sr1=", " sr2=", " brl=", " brh="
+	};
+	const int digits[] = { 8, 8, 8, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2 };
+	int pos = 0;
+
+	for (int i = 0; i < (int)(sizeof(v) / sizeof(v[0])); i++)
+	{
+		pos = Ra4m1I2cPutStr(Buf, pos, Len, name[i]);
+		pos = Ra4m1I2cPutHex(Buf, pos, Len, v[i], digits[i]);
+	}
+
+	pos = Ra4m1I2cPutStr(Buf, pos, Len, (r->ICCR1 & 0x02U) ? " scl=1" : " scl=0");
+	pos = Ra4m1I2cPutStr(Buf, pos, Len, (r->ICCR1 & 0x01U) ? " sda=1" : " sda=0");
+	Buf[pos] = 0;
+
+	return pos;
 }
 
 static void *Ra4m1I2cGetHandle(DevIntrf_t * const pIntrf)

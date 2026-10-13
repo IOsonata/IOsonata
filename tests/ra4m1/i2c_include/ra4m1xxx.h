@@ -54,7 +54,7 @@ enum {
 	IICREG_ICFER, IICREG_ICSER, IICREG_ICIER, IICREG_ICSR1, IICREG_ICSR2,
 	IICREG_SARL, IICREG_SARU, IICREG_ICBRL, IICREG_ICBRH, IICREG_ICDRT,
 	IICREG_ICDRR,
-	SYSREG_PRCR, SYSREG_MSTPCRB,
+	SYSREG_PRCR, SYSREG_MSTPCRB, SYSREG_SCKDIVCR,
 };
 
 // pReg is the register object, the model finds its unit from the address
@@ -94,6 +94,7 @@ typedef struct {
 
 typedef struct {
 	TestReg<uint16_t, SYSREG_PRCR> PRCR;
+	TestReg<uint32_t, SYSREG_SCKDIVCR> SCKDIVCR;
 } R_SYSTEM_Type;
 
 typedef struct {
