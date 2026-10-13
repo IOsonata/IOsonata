@@ -292,3 +292,14 @@ same checks as CDC and HID. The runner now checks eight firmware builds;
 retained vendor-bulk images are under UsbCustomBulkLoopback/{Debug,Release}.
 See the example README for the existing PyUSB loopback and reconfiguration
 commands. These host hardware commands have not been run against a board.
+
+
+The CDC, CDC/HID and CDC/HID/vendor-bulk fixtures each repeat four configuration
+cycles while OUT destinations and IN transfers are active. They alternate
+SET_CONFIGURATION(0) followed by (1), and repeated SET_CONFIGURATION(1).
+Checks cover endpoint retirement, unchanged device address, CDC close/reopen
+notifications, and clean payloads from all enabled classes afterward.
+FIFO transports can accept data while unconfigured; the tests verify that no
+hardware bank is armed and that these bytes are flushed on reconfiguration.
+The direct HID transport refuses a report while unconfigured. Both -O0 and
+-O2 UBSan runs pass; these checks required no production driver change.

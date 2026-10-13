@@ -284,6 +284,73 @@ static void HidReports(void)
 	assert(s_HidTx == before + 1);
 }
 
+static void Reconfigure(void)
+{
+	const UsbdCdcDev_t *cdc = s_Cdc;
+	const UsbdHidDev_t *hid = s_Hid;
+	const UsbdBulkDev_t *bulk = s_Bulk;
+	uint8_t oldPacket[64];
+	uint8_t newPacket[64];
+	std::memset(oldPacket, 0xD3, sizeof(oldPacket));
+	std::memset(newPacket, 0x6C, sizeof(newPacket));
+	const unsigned closed = s_PortClosed;
+	const unsigned opened = s_PortOpened;
+	for (unsigned pass = 0; pass < 4; ++pass)
+	{
+		USB_IRQHandler(); // Arm all configured OUT destinations.
+		assert(s_Cdc.Tx(0, oldPacket, sizeof(oldPacket)) == sizeof(oldPacket));
+		if (s_Composite)
+			assert(s_Hid.Tx(0, oldPacket, sizeof(oldPacket)) == sizeof(oldPacket));
+		if (s_VendorBulk)
+			assert(s_Bulk.Tx(0, oldPacket, sizeof(oldPacket)) == sizeof(oldPacket));
+		assert((TestUsbMemory()->Command[2 * (2 * cdc->DataEpNo + 1)] & (1U << 31)) != 0);
+
+		// Alternate explicit unconfigure/reconfigure and repeated selection
+		// of configuration 1. Every old IN packet is still awaiting its ACK.
+		if ((pass & 1U) == 0)
+		{
+			const UsbSetupData_t clear = {0, USB_REQ_SET_CONFIGURATION, 0, 0, 0};
+			TestUsbSetup(&clear);
+			TestUsbPacketDone(1, 0);
+			assert(!UsbConfigured(0));
+			for (unsigned physical = 2; physical < 10; ++physical)
+				assert((TestUsbMemory()->Command[2 * physical] & (1U << 31)) == 0);
+			// FIFO transports may accept bytes while unconfigured, but must
+			// not arm hardware. Selecting the next configuration flushes them.
+			assert(s_Cdc.Tx(0, newPacket, sizeof(newPacket)) == sizeof(newPacket));
+			if (s_Composite)
+				assert(s_Hid.Tx(0, newPacket, sizeof(newPacket)) == 0);
+			if (s_VendorBulk)
+				assert(s_Bulk.Tx(0, newPacket, sizeof(newPacket)) == sizeof(newPacket));
+			for (unsigned physical = 2; physical < 10; ++physical)
+				assert((TestUsbMemory()->Command[2 * physical] & (1U << 31)) == 0);
+		}
+		const UsbSetupData_t select = {0, USB_REQ_SET_CONFIGURATION, 1, 0, 0};
+		TestUsbSetup(&select);
+		TestUsbPacketDone(1, 0);
+		assert(UsbConfigured(0) && !s_Cdc.IsPortOpen());
+		assert(UsbGetAddress(0) == 7);
+		assert(s_PortClosed == closed + pass + 1);
+		const UsbSetupData_t open = {0x21, 0x22, 3, cdc->CtrlIfNo, 0};
+		TestUsbSetup(&open);
+		TestUsbPacketDone(1, 0);
+		assert(s_Cdc.IsPortOpen() && s_PortOpened == opened + pass + 1);
+		Loopback(); // Old queued bytes must not precede the new echo.
+		BulkLoopback();
+		if (s_Composite)
+		{
+			assert(s_Hid.Tx(0, newPacket, sizeof(newPacket)) == sizeof(newPacket));
+			const unsigned physical = 2U * hid->EpNo + 1;
+			assert(std::memcmp(TestUsbMemory()->Packet[physical], newPacket, sizeof(newPacket)) == 0);
+			TestUsbPacketDone(physical, sizeof(newPacket));
+			assert(hid->Configured);
+		}
+		if (s_VendorBulk)
+			assert(bulk->pData->Mps == 64);
+	}
+	std::puts("LPC11Uxx active-transfer unconfigure/reconfigure and repeated configuration: PASS");
+}
+
 int main(int argc, char **)
 {
 	s_Composite = argc > 1;
@@ -374,6 +441,7 @@ int main(int argc, char **)
 	Loopback();
 	HidReports();
 	assert(s_PortOpened == 2 && s_RxEvents == (s_Composite ? 8U : 4U));
+	Reconfigure();
 	UsbDisable(0);
 	if (s_VendorBulk)
 		std::puts("LPC11Uxx CDC/HID/vendor bulk, seven endpoint addresses and reconnect: PASS");
