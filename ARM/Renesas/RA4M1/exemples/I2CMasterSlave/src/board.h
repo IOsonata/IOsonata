@@ -101,6 +101,17 @@ SOFTWARE.
 	int up = IOPinRead(port, pin); \
 	printf("pin %s P%d%02d pullup=%d nopull=%d\r\n", name, port, pin, up, nu); }
 
+// The IIC block does not use the internal pull-up of its own pins, and the
+// board has no pull-up on them. Use two spare pins in GPIO input mode with
+// their internal pull-up as the pull-up source, each wired with a jumper to
+// the I2C line:
+//   P204 (J1-5) to the SCL wire (P408 / P100)
+//   P206 (J1-3) to the SDA wire (P401 / P101)
+// Each is about a 50k pull-up, so the rise time is slow. Test only.
+#define I2C_DEBUG_PULLUP_PINS() { \
+	IOPinConfig(2, 4, IOPINOP_GPIO, IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL); \
+	IOPinConfig(2, 6, IOPINOP_GPIO, IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL); }
+
 #define I2C_DEBUG_PIN_TESTS() { \
 	I2C_DEBUG_PIN_TEST("M SDA", I2C_MASTER_SDA_PORT, I2C_MASTER_SDA_PIN) \
 	I2C_DEBUG_PIN_TEST("M SCL", I2C_MASTER_SCL_PORT, I2C_MASTER_SCL_PIN) \

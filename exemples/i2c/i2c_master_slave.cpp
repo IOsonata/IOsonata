@@ -292,6 +292,10 @@ int main()
 	I2C_DEBUG_PIN_TESTS();
 #endif
 
+#ifdef I2C_DEBUG_PULLUP_PINS
+	I2C_DEBUG_PULLUP_PINS();
+#endif
+
 	bool masterOk = g_I2CMaster.Init(s_I2cCfgMaster);
 	bool slaveOk = g_I2CSlave.Init(s_I2cCfgSlave);
 	printf("I2C init master=%d slave=%d\r\n", masterOk, slaveOk);
