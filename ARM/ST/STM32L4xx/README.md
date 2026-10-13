@@ -23,6 +23,25 @@ framing and nine-bit payload requests fail before device state is changed.
 When the receive FIFO is full, the ISR consumes and counts the dropped byte;
 foreground reads drain only the software FIFO.
 
+UART DMA (`bDMAMode`, with or without `bIntMode`) sends TX blocks straight
+from the TX CFIFO and receives into a circular ring moved into the RX CFIFO,
+as on the F0 parts. Each channel has its own vector, defined by the UART
+driver. L476 and L496 select the request in the DMA1 or DMA2 CSELR, L4+ parts
+route it through DMAMUX1 (DMA1 channel n on DMAMUX1 channel n - 1, DMA2
+channel n on channel n + 6). Not tested on hardware.
+
+| DevNo | Hardware | TX DMA | RX DMA | CSELR | DMAMUX1 TX, RX |
+|---|---|---|---|---|---|
+| 0 | LPUART1 | DMA2 channel 6 | DMA2 channel 7 | 4 | 35, 34 |
+| 1 | USART1 | DMA1 channel 4 | DMA1 channel 5 | 2 | 25, 24 |
+| 2 | USART2 | DMA1 channel 7 | DMA1 channel 6 | 2 | 27, 26 |
+| 3 | USART3 | DMA1 channel 2 | DMA1 channel 3 | 2 | 29, 28 |
+| 4 | UART4 | DMA2 channel 3 | DMA2 channel 5 | 2 | 31, 30 |
+| 5 | UART5 | DMA2 channel 1 | DMA2 channel 2 | 2 | 33, 32 |
+
+The DMAMUX1 numbers are those of the L4R and L4S; the L4P and L4Q use one
+more.
+
 SPI indices 0-2 select SPI1-3. On L476/L496, index 3 selects QUADSPI.
 On L4S9, indices 3 and 4 select OCTOSPI1 and OCTOSPI2. Extended SPI
 controllers currently accept polling master configurations only; interrupt,

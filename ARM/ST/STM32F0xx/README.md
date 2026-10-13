@@ -7,44 +7,27 @@ UART supports polling, FIFO interrupts and optional TX DMA.
 
 ## UART DMA
 
-Set both `bIntMode` and `bDMAMode` to true for TX DMA on STM32F030x8.
-RX remains interrupt driven. Other F0 variants still reject DMA requests.
+The STM32 UART driver (`ARM/ST/src/uart_stm32.cpp`) runs DMA on USART1 and
+USART2 of the F0 parts, with or without `bIntMode`. TX DMA sends blocks
+straight from the TX CFIFO, a block ends on USART TC. RX DMA runs a 64-byte
+circular ring, moved into the RX CFIFO at half and full ring, on IDLE and by
+`RxData`. DMA mode requires `bFifoBlocking`.
 
-| Virtual DevNo | Hardware | TX DMA channel | IRQ |
-|---|---|---|---|
-| 0 | USART1 | DMA1 channel 2 | DMA1_Channel2_3 |
-| 1 | USART2 | DMA1 channel 4 | DMA1_Channel4_5 |
+| Virtual DevNo | Hardware | TX DMA | RX DMA | Vector | CSELR request |
+|---|---|---|---|---|---|
+| 0 | USART1 | DMA1 channel 2 | DMA1 channel 3 | DMA1_Channel2_3 | 8 |
+| 1 | USART2 | DMA1 channel 4 | DMA1 channel 5 | DMA1_Channel4_5 | 9 |
 
-An idle TX copies directly into a fixed 16-byte DMA buffer. Writes arriving
-while DMA is active use the TX FIFO; completion interrupts copy one contiguous
-FIFO span and start the next burst. DMA addresses are configured once. The
-USART DMA request stays enabled while the disabled channel gates idle requests. A positive `Tx()` return counts accepted bytes; the caller
-may reuse its buffer immediately. FIFO blocking/drop behavior is unchanged.
-DMA transfer errors discard the unsent part of that burst, add its remaining
-byte count to `UARTDev_t::TxDropCnt`, and continue with queued bytes.
-Disable and reset stop DMA before touching the USART. Enable flushes queued TX
-data, as in interrupt-only mode. Reinitialization also stops any prior burst.
-A rate change is rejected while a DMA burst is active.
+F030x4 to x8 and F070 have fixed requests; the USART1 remap bits of
+SYSCFG_CFGR1 are cleared. F030xC and F09x select the request in CSELR. On F09x
+the vectors are shared with DMA2 and with DMA1 channels 6 and 7, which the
+driver does not use. The driver defines these two vectors, and the channels
+belong to the UART while DMA is configured. Initialization refuses a TX
+channel already configured by another user. The other F0 USARTs refuse DMA.
 
-These channels are reserved while UART DMA is configured. Initialization refuses
-a channel already configured by another user. Do not repurpose a channel or
-its IRQ while the UART owns it. Channels 3 and 5 share the vectors but are not
-handled by this driver; adding another DMA peripheral requires shared dispatch.
-The driver does not reset or gate off the whole DMA controller.
-
-`UartPrbsTest/src/board.h` enables DMA. The shared byte-at-a-time PRBS source is
-unchanged. For the 1 Mbaud comparison, build with `UART_BAUDRATE=1000000` and use
-the same baud rate in `Python/uartprbs_rx.py`. The example's default remains
-115200 baud. Rebuild both the MCU library and application.
-
-`python3 tests/stm32f0/uart_dma_test.py` checks FIFO wrap, backpressure, caller
-buffer reuse, both USARTs, RX during TX, transfer errors and lifecycle handling.
-These are host register tests. The first DMA implementation measured about
-41.3 kB/s at 1 Mbaud on the maintainer's board, below the interrupt-only result
-of 56.7 kB/s. The revised transfer path removes the idle FIFO round trip,
-repeated address setup and extra FIFO probing. The maintainer confirmed the
-revised Release build at approximately 81.0 kB/s at 1 Mbaud, with zero drops
-in the supplied PRBS receiver output. See [PR 77](https://github.com/IOsonata/IOsonata/pull/77).
+Hardware, STM32F030x8 on the STM32F0308-DISCO, FTDI, 1 Mbaud (maintainer):
+UartLoopback 95-96 kB/s with interrupt and DMA, 94-95 kB/s polled DMA, 0
+errors; PRBS TX at line rate in both DMA modes.
 
 ## Peripheral timers
 
