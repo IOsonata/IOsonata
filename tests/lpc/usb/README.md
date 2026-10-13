@@ -182,11 +182,11 @@ python3 tests/lpc/usb/link.py --prefix /path/to/bin/arm-none-eabi- --output /tmp
 ```
 
 This separate check needs newlib-nano and C++23 support. It compiles the real
-`exemples/usb/usb_cdc_loopback.cpp`, generic USB/CDC, event queue, GPIO, IAP,
+the shared CDC and HID loopback examples, generic USB classes, event queue, GPIO, IAP,
 Cortex-M0 atomic helpers and startup. Library objects are archived before the
 application is linked against the production LPC11U35 linker script. Required
 sources must also be linked into the LPC11U35 IOcomposer library project.
-It checks the CDC firmware's dependencies, not compilation of every optional
+It checks the CDC and HID firmware dependencies, not compilation of every optional
 peripheral and device driver in that library project.
 
 Debug uses -O0 and rdimon semihosting; Release uses -Os and nosys. Both use
@@ -206,7 +206,7 @@ Measured with Arm GNU GCC 13.2.1 and binutils 2.42:
 Main RAM includes initialized data and BSS. The remaining main RAM is divided
 by the existing linker script between heap and stack. The stack allowance is
 not a measured runtime high-water mark. Sizes may change with compiler version.
-The check now compiles the UsbCdcLoopback example board.h and checks its
+The check compiles each example board.h and checks its
 IOcomposer source links, C++23 setting and Debug/Release semihosting options.
 See that example's README for the documented module clock and wiring requirements;
 the carrier schematic does not verify the module-internal circuit.
@@ -222,6 +222,10 @@ and notifications are active, and both classes after detach/re-enumeration.
 Both CDC-only and composite variants pass at -O0 and -O2 with UBSan.
 
 The library project now links `usbd_hid.cpp` and `usb_int.cpp` and their headers.
-The ARM check compiles these sources into the library archive; the CDC-only
-firmware does not retain HID, so its sizes above are not composite firmware
-measurements. Composite operation has been checked in the host model only.
+The ARM check now links a separate UsbHidLoopback firmware that retains HID:
+Debug uses 50956 bytes flash, 3420 bytes main RAM and 1576 bytes linker stack;
+Release uses 22180 bytes flash, 2624 bytes main RAM and 1844 bytes linker stack.
+Both use 832 bytes USB SRAM. These are standalone HID measurements, not
+composite firmware measurements. Composite operation has been checked in the
+host model only. Retained files are under UsbCdcLoopback/{Debug,Release} and
+UsbHidLoopback/{Debug,Release} within the --output directory.
