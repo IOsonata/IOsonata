@@ -1751,6 +1751,17 @@ static void TestMasterPolling(void)
 		s_Trace.clear();
 	}
 
+	// BBSY left set before the first transfer is cleared by a reset
+	{
+		s_Iic[0].iccr2 |= M_BBSY;
+
+		const uint8_t d[2] = { 3, 4 };
+		const int n = I2CTx(&dev, 0x50, (uint8_t *)d, 2);
+
+		Check(n == 2, "write with BBSY left set returned %d", n);
+		CheckTrace("bbsy", "S W50+ d03+ d04+ P");
+	}
+
 	// Still usable after the errors
 	{
 		const uint8_t d[2] = { 9, 8 };

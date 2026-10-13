@@ -62,7 +62,7 @@ SOFTWARE.
 #define RA4M1_I2C_ICMR1_BASE		0x08U
 #define RA4M1_I2C_ICMR2_MASTER		0x04U
 #define RA4M1_I2C_ICMR2_SLAVE		0x06U
-#define RA4M1_I2C_ICFER_MASTER		0x57U
+#define RA4M1_I2C_ICFER_MASTER		0x77U
 #define RA4M1_I2C_ICFER_SLAVE		0x5DU
 #define RA4M1_I2C_ICCR1_RESET		0x40U
 #define RA4M1_I2C_ICCR1_RESET_ENABLE	0xC0U
@@ -493,6 +493,27 @@ static void Ra4m1I2cConfigure(Ra4m1I2cDev_t * const pDev)
 // Master
 // ---------------------------------------------------------------------------
 
+// Wait for the bus free time. BBSY can stay set after noise on the lines
+// while the pins were being configured, so one reset of the block is tried
+// before giving up. A bus that is really held still reads busy afterwards.
+static bool Ra4m1I2cWaitIdle(Ra4m1I2cDev_t * const pDev)
+{
+	R_IIC0_Type *reg = pDev->pReg;
+	int32_t count = Ra4m1I2cTimeout(pDev);
+
+	while (Ra4m1I2cBusy(reg) && count > 0)
+	{
+		count--;
+	}
+
+	if (Ra4m1I2cBusy(reg))
+	{
+		Ra4m1I2cConfigure(pDev);
+	}
+
+	return !Ra4m1I2cBusy(reg);
+}
+
 static void Ra4m1I2cMasterAbort(Ra4m1I2cDev_t * const pDev)
 {
 	pDev->bError = true;
@@ -665,19 +686,9 @@ static bool Ra4m1I2cMasterBegin(Ra4m1I2cDev_t * const pDev, bool bRx,
 	R_IIC0_Type *reg = pDev->pReg;
 	const bool restart = pDev->MState == RA4M1_I2C_M_HELD;
 
-	if (!restart)
+	if (!restart && !Ra4m1I2cWaitIdle(pDev))
 	{
-		int32_t count = Ra4m1I2cTimeout(pDev);
-
-		while (Ra4m1I2cBusy(reg) && count > 0)
-		{
-			count--;
-		}
-
-		if (Ra4m1I2cBusy(reg))
-		{
-			return false;
-		}
+		return false;
 	}
 
 	pDev->bRxDir = bRx;
@@ -832,8 +843,8 @@ static bool Ra4m1I2cStart(DevIntrf_t * const pIntrf, uint32_t Addr, bool bRx)
 		return false;
 	}
 
-	if (!dev->bOpen && Ra4m1I2cBusy(dev->pReg) &&
-		dev->MState != RA4M1_I2C_M_HELD)
+	if (!dev->bOpen && dev->MState != RA4M1_I2C_M_HELD &&
+		!Ra4m1I2cWaitIdle(dev))
 	{
 		return false;
 	}
