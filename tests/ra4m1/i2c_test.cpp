@@ -99,6 +99,7 @@ static void Check(bool Cond, const char *pFmt, ...)
 // ---------------------------------------------------------------------------
 
 R_IIC0_Type g_TestIic[2];
+R_PFS_Type g_TestPfs;
 R_SYSTEM_Type g_TestSystem;
 R_MSTP_Type g_TestMstp;
 uint32_t g_TestPrimask;
@@ -1770,12 +1771,14 @@ static void TestMasterPolling(void)
 
 	// Register dump text
 	{
-		char txt[320];
+		char txt[400];
 		const int n = Ra4m1I2cDump(&dev.DevIntrf, txt, sizeof(txt));
 
 		Check(n > 0 && n == (int)strlen(txt), "dump length %d", n);
 		Check(strstr(txt, " cr1=9") != NULL, "dump has no cr1: %s", txt);
 		Check(strstr(txt, " fer=77") != NULL, "dump has no fer=77: %s", txt);
+		Check(strstr(txt, " sdapfs=") != NULL && strstr(txt, " sclpfs=") != NULL,
+			"dump has no pin registers: %s", txt);
 		char small[8];
 		Check(Ra4m1I2cDump(&dev.DevIntrf, small, sizeof(small)) < 8, "dump overran");
 	}

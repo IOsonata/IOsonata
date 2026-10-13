@@ -1535,6 +1535,32 @@ int Ra4m1I2cDump(DevIntrf_t * const pIntrf, char *Buf, int Len)
 
 	pos = Ra4m1I2cPutStr(Buf, pos, Len, (r->ICCR1 & 0x02U) ? " scl=1" : " scl=0");
 	pos = Ra4m1I2cPutStr(Buf, pos, Len, (r->ICCR1 & 0x01U) ? " sda=1" : " sda=0");
+
+	// Pin function select registers of the two pins, to show what the pin
+	// configuration really wrote (PSEL in bits 28:24, PMR bit 16, PCR bit 4,
+	// NCODR bit 6, PDR bit 2).
+	const I2CCfg_t *cfg = &dev->pI2cDev->Cfg;
+
+	if (cfg->pIOPinMap != NULL && cfg->NbIOPins > I2C_SCL_IOPIN_IDX)
+	{
+		const IOPinCfg_t *sda = &cfg->pIOPinMap[I2C_SDA_IOPIN_IDX];
+		const IOPinCfg_t *scl = &cfg->pIOPinMap[I2C_SCL_IOPIN_IDX];
+
+		if (Ra4m1PinValid(sda->PortNo, sda->PinNo))
+		{
+			pos = Ra4m1I2cPutStr(Buf, pos, Len, " sdapfs=");
+			pos = Ra4m1I2cPutHex(Buf, pos, Len,
+				R_PFS->PORT[sda->PortNo].PIN[sda->PinNo].PmnPFS, 8);
+		}
+
+		if (Ra4m1PinValid(scl->PortNo, scl->PinNo))
+		{
+			pos = Ra4m1I2cPutStr(Buf, pos, Len, " sclpfs=");
+			pos = Ra4m1I2cPutHex(Buf, pos, Len,
+				R_PFS->PORT[scl->PortNo].PIN[scl->PinNo].PmnPFS, 8);
+		}
+	}
+
 	Buf[pos] = 0;
 
 	return pos;

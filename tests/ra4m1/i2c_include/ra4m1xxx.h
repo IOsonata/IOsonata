@@ -102,12 +102,22 @@ typedef struct {
 } R_MSTP_Type;
 
 extern R_IIC0_Type g_TestIic[2];
+typedef struct {
+	struct {
+		struct {
+			volatile uint32_t PmnPFS;
+		} PIN[16];
+	} PORT[10];
+} R_PFS_Type;
+
 extern R_SYSTEM_Type g_TestSystem;
+extern R_PFS_Type g_TestPfs;
 extern R_MSTP_Type g_TestMstp;
 
 #define R_IIC0		(&g_TestIic[0])
 #define R_IIC1		(&g_TestIic[1])
 #define R_SYSTEM	(&g_TestSystem)
+#define R_PFS		(&g_TestPfs)
 #define R_MSTP		(&g_TestMstp)
 
 #endif
