@@ -15,6 +15,13 @@ static unsigned s_Cleared;
 static uint32_t s_Priority;
 static bool s_CompleteSkip;
 static Lpc11UsbMemory_t *s_Memory;
+static unsigned s_Pended;
+
+void NVIC_SetPendingIRQ(IRQn_Type Irq)
+{
+	assert(Irq == USB_IRQn);
+	++s_Pended;
+}
 
 uint32_t SystemCoreClockGet(void) { return s_CoreClock; }
 void NVIC_DisableIRQ(IRQn_Type Irq)

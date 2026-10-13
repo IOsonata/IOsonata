@@ -4,10 +4,10 @@
 @brief	LPC11Uxx USB device controller interface.
 
 Full-speed device controller with endpoint numbers 0 through 4 in each
-direction. EP0 is control; endpoints 1 through 4 support bulk, interrupt
-and isochronous transfers. These constants describe hardware allocation
-limits, not completed driver support. Hardware preparation, lifecycle and EP0
-transport are implemented; data endpoints and remote wakeup are still pending.
+direction. EP0 is control; endpoints 1 through 4 implement bulk and interrupt
+transfers with a 64-byte packet buffer per direction. The silicon ISO packet
+limit is recorded below, but USB_ISO_SUPPORTED and its masks are zero because
+this driver does not implement ISO. Remote wakeup is still pending.
 
 Init currently requires one VBUS pin-map entry: P0.3, FUNC1, input, no pull,
 normal type. Start configures the fixed P0.6 FUNC1 USB_CONNECT output for the
@@ -73,9 +73,9 @@ enum {
 	USB_CTRLR0_BULK_PKT_LEN_MAX = 64,
 	USB_CTRLR0_INT_PKT_LEN_MAX = 64,
 	USB_CTRLR0_ISO_PKT_LEN_MAX = 1023,
-	USB_ISO_SUPPORTED_0 = 1,
-	USB_ISO_EPIN_MASK_0 = 0x001EU,
-	USB_ISO_EPOUT_MASK_0 = 0x001EU,
+	USB_ISO_SUPPORTED_0 = 0,
+	USB_ISO_EPIN_MASK_0 = 0,
+	USB_ISO_EPOUT_MASK_0 = 0,
 };
 
 #define USB_EPIN_CNT(CtrlrNo) \
@@ -188,8 +188,10 @@ bool UsbCtrlrEpReceive(int DevNo, uint8_t EpNo, uint8_t *pBuffer,
 						  uint16_t Capacity);
 void UsbCtrlrEpProcessEvent(int DevNo, uint8_t EpNo, bool bIn,
 						 UsbCtrlrEvtType_t Event, uint16_t Value);
-// The source stays owned until completion or cancellation. Zero length
-// submits a ZLP. Only EP0 copies its source before returning.
+// The source stays owned until completion, failure or cancellation, even though
+// this controller stages bytes in USB SRAM. Zero length submits a ZLP.
+// Halting an active data transfer reports failure after confirmed retirement;
+// submissions accepted while halted wait for CLEAR_FEATURE.
 bool UsbCtrlrEpSend(int DevNo, uint8_t EpNum, uint8_t *pBuffer, uint16_t Length);
 int UsbCtrlrEp0Send(int DevNo, uint8_t *pBuffer, int Length);
 bool UsbCtrlrEp0Status(int DevNo, uint8_t EpAddr);

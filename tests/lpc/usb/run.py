@@ -97,7 +97,7 @@ for opt in ['-O0', '-O2']:
                                     lambda m: function + '(' + m[1] + ');', source)
             assert count > 0, reg
         (tmp / 'usb.c').write_text(source)
-        for fixture in ['ep0_test', 'lifecycle_test']:
+        for fixture in ['ep0_test', 'lifecycle_test', 'data_test']:
             exe = str(tmp / fixture)
             subprocess.run(['gcc', '-std=gnu11', opt, '-Wall', '-Wextra', '-Werror',
                             '-fsanitize=undefined', '-fno-sanitize-recover=all', '-no-pie',
@@ -111,3 +111,36 @@ for opt in ['-O0', '-O2']:
                             str(root / ('tests/lpc/usb/' + fixture + '.c')), str(tmp / 'usb.c'),
                             '-o', exe], check=True)
             subprocess.run([exe], check=True, timeout=5)
+
+        # Link the real generic USB core, interface, FIFO and DeviceIntrf with
+        # the C controller. Only hardware/ROM and the application queue are
+        # mocked. Remote wakeup is not called by this supported-mode fixture.
+        sources = [
+            (root / 'tests/lpc/usb/integration_model.c', 'gcc'),
+            (tmp / 'usb.c', 'gcc'),
+            (root / 'src/cfifo.c', 'gcc'),
+            (root / 'src/device_intrf.cpp', 'g++'),
+            (root / 'src/usb/usb.cpp', 'g++'),
+            (root / 'src/usb/usb_intrf.cpp', 'g++'),
+            (root / 'tests/lpc/usb/integration_test.cpp', 'g++'),
+        ]
+        objects = []
+        for index, (path, compiler) in enumerate(sources):
+            obj = str(tmp / ('integration_' + str(index) + '.o'))
+            objects.append(obj)
+            standard = 'gnu11' if compiler == 'gcc' else 'gnu++23'
+            args = [compiler, '-std=' + standard, opt,
+                    '-fsanitize=undefined', '-fno-sanitize-recover=all',
+                    '-ffunction-sections', '-fdata-sections',
+                    '-I' + str(root / 'tests/lpc/usb/shim'),
+                    '-I' + str(root / 'include'),
+                    '-I' + str(root / 'ARM/NXP/LPC11xx/include'),
+                    '-I' + str(root / 'ARM/NXP/include')]
+            if path == tmp / 'usb.c':
+                args += ['-include', str(root / 'tests/lpc/usb/ep0_model.h')]
+            subprocess.run([*args, '-c', str(path), '-o', obj], check=True)
+        exe = str(tmp / 'integration_test')
+        subprocess.run(['g++', '-no-pie', '-fsanitize=undefined',
+                        '-Wl,--gc-sections', '-Wl,--section-start=.usb_ram=0x20004000',
+                        *objects, '-o', exe], check=True)
+        subprocess.run([exe], check=True, timeout=5)

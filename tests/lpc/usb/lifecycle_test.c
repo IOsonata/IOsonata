@@ -9,10 +9,14 @@ static IOPinEvtHandler_t s_VbusHandler;
 static unsigned s_PinCalls;
 static unsigned s_PinReleases;
 static unsigned s_IrqEnables;
+#ifndef LPC11_USB_INTEGRATION
 static unsigned s_ProcessCalls;
 static unsigned s_SofCalls;
+#endif
 static unsigned s_UidCalls;
+#ifndef LPC11_USB_INTEGRATION
 static uint16_t s_Frame;
+#endif
 static bool s_NoPinSlot;
 static bool s_UidFailure;
 
@@ -56,6 +60,7 @@ IAPSTATUS IAPReadUID(IAP_CMD_STATUS *pResult)
 	return s_UidFailure ? IAPSTATUS_BUSY : IAPSTATUS_SUCCESS;
 }
 
+#ifndef LPC11_USB_INTEGRATION
 void UsbProcessQue(int DevNo)
 {
 	assert(DevNo == 0);
@@ -68,6 +73,7 @@ void UsbDevProcessEvent(int DevNo, const UsbCtrlrEvt_t *pEvt)
 	s_Frame = pEvt->FrameNo;
 	++s_SofCalls;
 }
+#endif
 
 void TestDeviceWrite(uint32_t Value)
 {
@@ -95,6 +101,7 @@ void TestSkipWrite(uint32_t Value)
 	LPC_USB->EPSKIP = Value;
 }
 
+#ifndef LPC11_USB_INTEGRATION
 int main(void)
 {
 	char serial[40];
@@ -214,3 +221,4 @@ int main(void)
 	puts("LPC11Uxx USB lifecycle, VBUS, SOF and UID: PASS");
 	return 0;
 }
+#endif

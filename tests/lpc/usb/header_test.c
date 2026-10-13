@@ -12,9 +12,9 @@ int main(void)
 	assert(USB_EPIN_CNT(0) == 5);
 	assert(USB_EPOUT_CNT(0) == 5);
 	assert(!USB_HIGHSPEED_CAPABLE(0));
-	assert(USB_ISO_SUPPORTED(0));
-	assert(USB_ISO_EPIN_MASK(0) == 0x1EU);
-	assert(USB_ISO_EPOUT_MASK(0) == 0x1EU);
+	assert(!USB_ISO_SUPPORTED(0));
+	assert(USB_ISO_EPIN_MASK(0) == 0);
+	assert(USB_ISO_EPOUT_MASK(0) == 0);
 	assert(USB_CTRLR_PKT_LEN_MAX(0, CONTROL) == 64);
 	assert(USB_CTRLR_PKT_LEN_MAX(0, BULK) == 64);
 	assert(USB_CTRLR_PKT_LEN_MAX(0, INT) == 64);

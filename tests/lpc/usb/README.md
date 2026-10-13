@@ -17,6 +17,12 @@ Run `python3 tests/lpc/usb/run.py`.
   and soft-connect control, SOF events, UID formatting/truncation and failed
   retirement followed by retry. Unmapped USB registers catch access before
   initialization or while starting without VBUS.
+- Data tests cover all eight non-control endpoint directions, unaligned caller
+  buffers, short packets, ZLPs, direct callback resubmission, close/reopen,
+  cancellation, malformed lengths, halt/clear and failed retirement.
+- A host integration fixture links the production generic USB core, UsbIntrf,
+  CFifo and DeviceIntrf to the LPC C driver. It exercises SET_ADDRESS, an
+  80-byte TX, a two-packet RX, FIFO backpressure and rearming after reads.
 - Host GNU binutils exercise the production linker script's USB SRAM placement,
   NOLOAD behavior, removal when unused, and failure on USB SRAM overflow.
 
@@ -25,9 +31,11 @@ simulate W1C register semantics. For EP0 tests, the runner instruments only
 DEVCMDSTAT, INTSTAT, INTSETSTAT and EPSKIP assignments in a temporary source
 copy. Test write functions implement W1C, set-interrupt and skip completion;
 register reads, vendor types, DMA memory and driver control flow are unchanged.
-The event callback models the generic core's packet continuation/status calls.
-These are controller tests, not a complete generic-stack link or a USB bus
-simulation. They do not validate PLL accuracy, NVIC timing or ARM relocations.
+The EP0-only fixture models the core's packet continuation/status calls. The
+integration fixture instead uses the real core and a minimal static descriptor
+override, with hardware/ROM access and the application queue mocked. It does
+not call remote wakeup, which remains undefined in this port. These host tests
+do not simulate a USB bus or validate PLL accuracy, NVIC timing or ARM relocations.
 
 ## Current implementation
 
@@ -82,12 +90,24 @@ the SETUP status. Generation checks prevent callback stop/restart from applying
 old completions to new state. Buffer cancellation uses bounded EPSKIP waits.
 A failed skip disconnects and disables interrupts while retaining DMA storage.
 
-This is still an incomplete controller port. Data endpoint submission,
-callbacks and remote wakeup remain unfinished. The complete generic USB stack
-does not link yet; no application enumeration result is claimed.
-The initial packet storage does not implement ISO transfers. The header's five
-endpoint numbers per direction and ISO limits describe the silicon, not
-completed support or simultaneous buffer capacity.
+Bulk and interrupt endpoints use independent single-buffer command words and
+the existing aligned SRAM packets. OUT stays NAKed until a caller supplies a
+destination. Completion copies received bytes before calling the endpoint
+handler directly; IN copies into SRAM on submission but retains logical caller
+ownership until completion. Initial OUT readiness is requested from IRQ after
+class setup; later completions request the next destination directly.
+Closing, stopping and bus reset retire hardware before cancellation callbacks,
+and block reentrant submissions during cancellation. Bindings survive reset and
+Stop/Start. Halting an active transfer reports XFER_FAILED after retirement,
+avoiding replay when an ACK races EPSKIP. A completion already observed before
+halt is reported normally. New submissions while halted wait for clear, which
+resets the hardware data toggle.
+
+Remote wakeup and low-power suspend remain unfinished. ISO calls return false
+and the header advertises no ISO support; the 1023-byte constant records only
+the silicon limit. No application enumeration or hardware throughput result is
+claimed. A firmware that calls UsbRemoteWakeup still requires its controller
+implementation; the host integration test exercises the supported path only.
 
 The implementation follows the existing Nordic/SAM4L separation: generic USB
 owns descriptors and control requests, while the controller handles hardware.

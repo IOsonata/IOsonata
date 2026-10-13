@@ -1,10 +1,10 @@
 /**-------------------------------------------------------------------------
 @file usb_lpc11uxx.c
-@brief LPC11Uxx native USB hardware preparation.
+@brief LPC11Uxx native full-speed USB device controller.
 
-Hardware preparation, lifecycle and EP0 transport. Generic USB owns Chapter 9
-and device classes. No ROM USB stack is initialized here. Data endpoints and
-remote wakeup remain unfinished.
+Hardware preparation, lifecycle, EP0 and bulk/interrupt transport. Generic USB
+owns Chapter 9 and device classes. No ROM USB stack is initialized here.
+ISO, low-power suspend and remote wakeup are not implemented.
 
 Register sequences: NXP UM10462, chapters 3 and 11. Register declarations
 come from the vendor CMSIS header. Only the DMA memory layout is defined here.
@@ -66,6 +66,7 @@ SOFTWARE.
 #define LPC11_USB_CONNECT_CHANGE (1UL << 24)
 #define LPC11_USB_DEVICE_INTERRUPT (1UL << 31)
 #define LPC11_USB_SOF_INTERRUPT (1UL << 30)
+#define LPC11_USB_TOGGLE_RESET (1UL << 28)
 
 // Maintained by the existing LPC11Uxx clock implementation, including its
 // legacy SystemCoreClockSet entry point (which need not update g_McuOsc).
@@ -87,6 +88,17 @@ typedef struct __Lpc11_Usb_Ep0_State {
 	bool AddressPending;
 } Lpc11UsbEp0State_t;
 
+typedef struct __Lpc11_Usb_Data_State {
+	UsbCtrlrEpHandler_t Handler;
+	void *pContext;
+	uint8_t *pReceive;
+	uint32_t Generation;
+	uint16_t Mps;
+	uint16_t Length;
+	bool Busy;
+	bool Halted;
+} Lpc11UsbDataState_t;
+
 // NOLOAD: initialized explicitly only AFTER the USB SRAM clock is enabled.
 // No KEEP in the linker script: a non-USB program pays no memory cost.
 static Lpc11UsbMemory_t s_Memory
@@ -98,8 +110,13 @@ static uint32_t s_AddedClocks;
 static bool s_Initialized;
 static int s_VbusInt = -1;
 static int s_IntPrio;
+static Lpc11UsbDataState_t s_Data[8];
+static uint32_t s_RxReady;
+static bool s_Closing;
 
 static bool Lpc11UsbRetire(uint32_t Mask);
+static void Lpc11UsbForget(uint32_t Mask);
+static void Lpc11UsbDataHalt(unsigned Physical, bool Halt);
 
 _Static_assert(offsetof(Lpc11UsbMemory_t, Setup) == 128, "SETUP alignment");
 _Static_assert(offsetof(Lpc11UsbMemory_t, Packet) == 192, "packet alignment");
@@ -212,6 +229,8 @@ Lpc11UsbMemory_t *Lpc11UsbHwPrepare(int IntPrio)
 
 bool Lpc11UsbHwRelease(void)
 {
+	if (s_Closing)
+		return false;
 	s_Ep0.Enabled = false;
 	++s_Ep0.Generation;
 	if (!s_Prepared)
@@ -223,6 +242,7 @@ bool Lpc11UsbHwRelease(void)
 		(LPC11_USB_ENABLE | 0x7FU)) | LPC11_USB_PLL_ON | LPC11_USB_NO_WAKE;
 	if (!Lpc11UsbRetire(0x3FFU))
 		return false;
+	Lpc11UsbForget(0x3FCU);
 	LPC_USB->DEVCMDSTAT = LPC11_USB_NO_WAKE | LPC11_USB_STATUS_W1C;
 	LPC_USB->INTSTAT = LPC11_USB_INTERRUPTS;
 	__DSB();
@@ -259,12 +279,14 @@ bool UsbCtrlrInit(int DevNo, const UsbCtrlrCfg_t *pCfg)
 		return false;
 	const uint32_t state = DisableInterrupt();
 	// A failed retirement still owns SRAM and must not be reinitialized.
-	if (s_Prepared)
+	if (s_Prepared || s_Closing)
 	{
 		EnableInterrupt(state);
 		return false;
 	}
 	s_Initialized = false;
+	memset(s_Data, 0, sizeof(s_Data));
+	s_RxReady = 0U;
 	if (s_VbusInt >= 0)
 		IOPinDisableInterrupt(s_VbusInt);
 	const int maxprio = (1 << __NVIC_PRIO_BITS) - 1;
@@ -287,7 +309,7 @@ bool UsbCtrlrVbusDetected(int DevNo)
 
 bool UsbCtrlrStart(int DevNo)
 {
-	if (DevNo != 0)
+	if (DevNo != 0 || s_Closing)
 		return false;
 	const uint32_t state = DisableInterrupt();
 	bool ready = false;
@@ -480,7 +502,7 @@ bool Lpc11UsbEp0Enable(void)
 
 static bool Lpc11UsbEp0Current(void)
 {
-	return s_Prepared && s_Ep0.Enabled && !s_Ep0.Halted &&
+	return s_Prepared && s_Ep0.Enabled && !s_Closing && !s_Ep0.Halted &&
 		(LPC_USB->DEVCMDSTAT & (LPC11_USB_SETUP | LPC11_USB_RESET)) == 0U;
 }
 
@@ -572,11 +594,15 @@ void UsbCtrlrSetAddress(int DevNo, uint8_t Address)
 
 void UsbCtrlrEpStall(int DevNo, uint8_t EpNo, bool bIn)
 {
-	(void)bIn;
-	// Data endpoints will be added with their transfer ownership state.
-	if (DevNo != 0 || EpNo != 0U)
+	if (DevNo != 0 || EpNo >= 5U || s_Closing)
 		return;
 	const uint32_t state = DisableInterrupt();
+	if (EpNo != 0U)
+	{
+		Lpc11UsbDataHalt(2U * EpNo + bIn, true);
+		EnableInterrupt(state);
+		return;
+	}
 	if (Lpc11UsbEp0Current())
 	{
 		if (!Lpc11UsbRetire(3U))
@@ -732,6 +758,326 @@ static void Lpc11UsbEp0Interrupt(uint32_t Pending)
 	}
 }
 
+// The controller owns only aligned USB SRAM. Caller payloads can have any
+// alignment; a successful submission remains owned until its callback.
+static bool Lpc11UsbDataCurrent(void)
+{
+	return s_Prepared && s_Ep0.Enabled && !s_Closing &&
+		(LPC_USB->DEVCMDSTAT & LPC11_USB_RESET) == 0U;
+}
+
+static void Lpc11UsbDataNotify(unsigned Physical, UsbCtrlrEvtType_t Event, uint16_t Length)
+{
+	Lpc11UsbDataState_t *ep = &s_Data[Physical - 2U];
+	if (ep->Handler != NULL)
+		ep->Handler(Event, Length, ep->pContext);
+}
+
+// Called only after retirement. Block all reentrant submissions while returning
+// buffers to their owners; keep registrations across reset and Stop/Start.
+static void Lpc11UsbForget(uint32_t Mask)
+{
+	s_Closing = true;
+	for (unsigned physical = 2U; physical < 10U; ++physical)
+	{
+		if ((Mask & (1U << physical)) == 0U)
+			continue;
+		Lpc11UsbDataState_t *ep = &s_Data[physical - 2U];
+		const bool busy = ep->Busy;
+		ep->Busy = false;
+		ep->Halted = false;
+		ep->Mps = 0U;
+		ep->pReceive = NULL;
+		++ep->Generation;
+		s_RxReady &= ~(1U << physical);
+		s_Memory.Command[2U * physical] = LPC11_USB_DISABLED;
+		if (busy)
+			Lpc11UsbDataNotify(physical, USB_CTRLR_EVT_CANCEL, 0U);
+	}
+	s_Closing = false;
+}
+
+void UsbCtrlrEpBind(int DevNo, uint8_t EpNo, bool bIn, bool bBlocking,
+	UsbCtrlrEpHandler_t Handler, void *pContext)
+{
+	(void)bBlocking;
+	if (DevNo != 0 || EpNo == 0U || EpNo >= 5U)
+		return;
+	const uint32_t state = DisableInterrupt();
+	const unsigned physical = 2U * EpNo + bIn;
+	Lpc11UsbDataState_t *ep = &s_Data[physical - 2U];
+	// Never replace the owner of an accepted transfer.
+	if (!s_Closing && !ep->Busy)
+	{
+		ep->Handler = Handler;
+		ep->pContext = pContext;
+		++ep->Generation;
+		if (Lpc11UsbDataCurrent() && !bIn && ep->Mps != 0U && !ep->Halted && Handler != NULL)
+		{
+			s_RxReady |= 1U << physical;
+			NVIC_SetPendingIRQ(USB_IRQn);
+		}
+	}
+	EnableInterrupt(state);
+}
+
+bool UsbCtrlrEpOpenData(int DevNo, uint8_t EpNo, bool bIn, uint8_t Type, uint16_t MaxPacketSize)
+{
+	if (DevNo != 0 || EpNo == 0U || EpNo >= 5U || (Type != BULK && Type != INT) ||
+		MaxPacketSize == 0U || MaxPacketSize > 64U ||
+		(Type == BULK && MaxPacketSize != 8U && MaxPacketSize != 16U &&
+		 MaxPacketSize != 32U && MaxPacketSize != 64U))
+		return false;
+	const uint32_t state = DisableInterrupt();
+	const unsigned physical = 2U * EpNo + bIn;
+	Lpc11UsbDataState_t *ep = &s_Data[physical - 2U];
+	if (!Lpc11UsbDataCurrent() || ep->Mps != 0U)
+	{
+		EnableInterrupt(state);
+		return false;
+	}
+	ep->Mps = MaxPacketSize;
+	ep->Busy = false;
+	ep->Halted = false;
+	ep->pReceive = NULL;
+	++ep->Generation;
+	s_Memory.Command[2U * physical] = Lpc11UsbBufferAddress(physical) | LPC11_USB_TOGGLE_RESET;
+	__DMB();
+	LPC_USB->INTSTAT = 1U << physical;
+	LPC_USB->INTEN |= 1U << physical;
+	if (!bIn)
+	{
+		// Initial destination request runs in IRQ after class configuration.
+		s_RxReady |= 1U << physical;
+		NVIC_SetPendingIRQ(USB_IRQn);
+	}
+	EnableInterrupt(state);
+	return true;
+}
+
+bool UsbCtrlrEpOpen(int DevNo, const UsbEndPointDesc_t *pDesc)
+{
+	if (pDesc == NULL || (pDesc->bEndpointAddress & 0x70U) != 0U)
+		return false;
+	return UsbCtrlrEpOpenData(DevNo, pDesc->bEndpointAddress & 15U,
+		(pDesc->bEndpointAddress & 0x80U) != 0U, pDesc->bmAttributes & 3U, pDesc->wMaxPacketSize);
+}
+
+static void Lpc11UsbDataClose(uint32_t Mask)
+{
+	if (!s_Prepared || s_Closing)
+		return;
+	if (!Lpc11UsbRetire(Mask))
+	{
+		Lpc11UsbEp0Fault();
+		return;
+	}
+	LPC_USB->INTEN &= ~Mask;
+	LPC_USB->INTSTAT = Mask;
+	Lpc11UsbForget(Mask);
+}
+
+void UsbCtrlrEpClose(int DevNo, uint8_t EpNo, bool bIn)
+{
+	if (DevNo != 0 || EpNo == 0U || EpNo >= 5U)
+		return;
+	const uint32_t state = DisableInterrupt();
+	Lpc11UsbDataClose(1U << (2U * EpNo + bIn));
+	EnableInterrupt(state);
+}
+
+void UsbCtrlrEpCloseAll(int DevNo)
+{
+	if (DevNo != 0)
+		return;
+	const uint32_t state = DisableInterrupt();
+	Lpc11UsbDataClose(0x3FCU);
+	EnableInterrupt(state);
+}
+
+static void Lpc11UsbDataArm(unsigned Physical)
+{
+	Lpc11UsbDataState_t *ep = &s_Data[Physical - 2U];
+	const uint32_t toggle = s_Memory.Command[2U * Physical] & LPC11_USB_TOGGLE_RESET;
+	LPC_USB->INTSTAT = 1U << Physical;
+	__DMB();
+	s_Memory.Command[2U * Physical] = Lpc11UsbBufferAddress(Physical) |
+		toggle | ((uint32_t)ep->Length << 16) | LPC11_USB_ACTIVE;
+}
+
+bool UsbCtrlrEpReceive(int DevNo, uint8_t EpNo, uint8_t *pBuffer, uint16_t Capacity)
+{
+	if (DevNo != 0 || EpNo == 0U || EpNo >= 5U || pBuffer == NULL)
+		return false;
+	const uint32_t state = DisableInterrupt();
+	const unsigned physical = 2U * EpNo;
+	Lpc11UsbDataState_t *ep = &s_Data[physical - 2U];
+	if (!Lpc11UsbDataCurrent() || ep->Mps == 0U || ep->Busy || Capacity < ep->Mps)
+	{
+		EnableInterrupt(state);
+		return false;
+	}
+	ep->pReceive = pBuffer;
+	ep->Length = ep->Mps;
+	ep->Busy = true;
+	s_RxReady &= ~(1U << physical);
+	if (!ep->Halted)
+		Lpc11UsbDataArm(physical);
+	EnableInterrupt(state);
+	return true;
+}
+
+bool UsbCtrlrEpSend(int DevNo, uint8_t EpNo, uint8_t *pBuffer, uint16_t Length)
+{
+	if (DevNo != 0 || EpNo == 0U || EpNo >= 5U || (Length != 0U && pBuffer == NULL))
+		return false;
+	const uint32_t state = DisableInterrupt();
+	const unsigned physical = 2U * EpNo + 1U;
+	Lpc11UsbDataState_t *ep = &s_Data[physical - 2U];
+	if (!Lpc11UsbDataCurrent() || ep->Mps == 0U || ep->Busy || Length > ep->Mps)
+	{
+		EnableInterrupt(state);
+		return false;
+	}
+	if (Length != 0U)
+		memcpy(s_Memory.Packet[physical], pBuffer, Length);
+	ep->Length = Length;
+	ep->Busy = true;
+	if (!ep->Halted)
+		Lpc11UsbDataArm(physical);
+	EnableInterrupt(state);
+	return true;
+}
+
+static void Lpc11UsbDataComplete(unsigned Physical, bool Failed)
+{
+	Lpc11UsbDataState_t *ep = &s_Data[Physical - 2U];
+	const bool in = (Physical & 1U) != 0U;
+	const uint32_t generation = ep->Generation;
+	__DMB();
+	const uint16_t remaining = (s_Memory.Command[2U * Physical] >> 16) & 0x3FFU;
+	const bool failed = Failed || remaining > ep->Length || (in && remaining != 0U);
+	const uint16_t length = in ? ep->Length : (failed ? 0 : ep->Length - remaining);
+	if (!in && !failed && length != 0U)
+		memcpy(ep->pReceive, s_Memory.Packet[Physical], length);
+	ep->Busy = false;
+	ep->pReceive = NULL;
+	s_Memory.Command[2U * Physical] = Lpc11UsbBufferAddress(Physical) |
+		(ep->Halted ? LPC11_USB_STALL : 0U);
+	Lpc11UsbDataNotify(Physical, failed ? USB_CTRLR_EVT_XFER_FAILED : USB_CTRLR_EVT_XFER_CMPL, length);
+	if (Lpc11UsbDataCurrent() && !in && ep->Generation == generation &&
+		ep->Mps != 0U && !ep->Busy && !ep->Halted)
+		Lpc11UsbDataNotify(Physical, USB_CTRLR_EVT_DRDY, 0U);
+}
+
+// Halt retires an active packet and reports failure, rather than replaying a
+// packet whose ACK may have raced EPSKIP (including a zero-length IN packet).
+// A packet completed before halt is reported normally. Submissions made while
+// halted stay queued in software and start only after CLEAR_FEATURE.
+static void Lpc11UsbDataHalt(unsigned Physical, bool Halt)
+{
+	Lpc11UsbDataState_t *ep = &s_Data[Physical - 2U];
+	if (!Lpc11UsbDataCurrent() || ep->Mps == 0U || (Halt && ep->Halted))
+		return;
+	const bool wasHalted = ep->Halted;
+	const bool active = (s_Memory.Command[2U * Physical] & LPC11_USB_ACTIVE) != 0U;
+	if (!Lpc11UsbRetire(1U << Physical))
+	{
+		Lpc11UsbEp0Fault();
+		return;
+	}
+	ep->Halted = true;
+	LPC_USB->INTSTAT = 1U << Physical;
+	++ep->Generation;
+	const uint32_t generation = ep->Generation;
+	if (ep->Busy && !wasHalted)
+		Lpc11UsbDataComplete(Physical, active);
+	if (!Lpc11UsbDataCurrent() || ep->Generation != generation || ep->Mps == 0U)
+		return;
+	ep->Halted = Halt;
+	s_Memory.Command[2U * Physical] = Lpc11UsbBufferAddress(Physical) |
+		(Halt ? LPC11_USB_STALL : LPC11_USB_TOGGLE_RESET);
+	__DMB();
+	if (!Halt && ep->Busy)
+		Lpc11UsbDataArm(Physical);
+	else if (!Halt && (Physical & 1U) == 0U)
+	{
+		s_RxReady |= 1U << Physical;
+		NVIC_SetPendingIRQ(USB_IRQn);
+	}
+}
+
+void UsbCtrlrEpClearStall(int DevNo, uint8_t EpNo, bool bIn)
+{
+	if (DevNo != 0 || EpNo == 0U || EpNo >= 5U)
+		return;
+	const uint32_t state = DisableInterrupt();
+	Lpc11UsbDataHalt(2U * EpNo + bIn, false);
+	EnableInterrupt(state);
+}
+
+void UsbCtrlrEpProcessEvent(int DevNo, uint8_t EpNo, bool bIn, UsbCtrlrEvtType_t Event, uint16_t Value)
+{
+	if (DevNo != 0 || EpNo == 0U || EpNo >= 5U)
+		return;
+	const uint32_t state = DisableInterrupt();
+	const unsigned physical = 2U * EpNo + bIn;
+	if (Lpc11UsbDataCurrent() && s_Data[physical - 2U].Mps != 0U)
+		Lpc11UsbDataNotify(physical, Event, Value);
+	EnableInterrupt(state);
+}
+
+static void Lpc11UsbDataInterrupt(unsigned Physical)
+{
+	Lpc11UsbDataState_t *ep = &s_Data[Physical - 2U];
+	const uint32_t mask = 1U << Physical;
+	if ((LPC_USB->INTSTAT & LPC_USB->INTEN & mask) != 0U)
+	{
+		LPC_USB->INTSTAT = mask;
+		if (ep->Mps != 0U && ep->Busy && !ep->Halted &&
+			(s_Memory.Command[2U * Physical] & LPC11_USB_ACTIVE) == 0U)
+			Lpc11UsbDataComplete(Physical, false);
+	}
+	if (Lpc11UsbDataCurrent() && (s_RxReady & mask) != 0U)
+	{
+		s_RxReady &= ~mask;
+		if (ep->Mps != 0U && !ep->Busy && !ep->Halted)
+			Lpc11UsbDataNotify(Physical, USB_CTRLR_EVT_DRDY, 0U);
+	}
+}
+
+bool UsbCtrlrIsoInit(int DevNo)
+{
+	(void)DevNo;
+	return false;
+}
+
+bool UsbCtrlrIsoOpen(int DevNo, uint8_t EpNo, bool bIn, uint16_t MaxPacketSize)
+{
+	(void)DevNo;
+	(void)EpNo;
+	(void)bIn;
+	(void)MaxPacketSize;
+	return false;
+}
+
+bool UsbCtrlrIsoSend(int DevNo, uint8_t EpNo, uint8_t *pBuffer, uint16_t Length)
+{
+	(void)DevNo;
+	(void)EpNo;
+	(void)pBuffer;
+	(void)Length;
+	return false;
+}
+
+uint16_t UsbCtrlrIsoTraceSnapshot(int DevNo, uint8_t **ppData)
+{
+	(void)DevNo;
+	if (ppData != NULL)
+		*ppData = NULL;
+	return 0U;
+}
+
 void USB_IRQHandler(void)
 {
 	const uint32_t state = DisableInterrupt();
@@ -753,6 +1099,8 @@ void USB_IRQHandler(void)
 				Lpc11UsbEp0Fault();
 			else
 			{
+				Lpc11UsbForget(0x3FCU);
+				LPC_USB->INTEN &= ~0x3FCU;
 				Lpc11UsbEp0Reset();
 				for (unsigned physical = 2U; physical < 10U; ++physical)
 				{
@@ -785,6 +1133,8 @@ void USB_IRQHandler(void)
 	if (s_Prepared && s_Ep0.Enabled && s_Ep0.Generation == generation &&
 		(LPC_USB->DEVCMDSTAT & LPC11_USB_RESET) == 0U && (pending & 3U) != 0U)
 		Lpc11UsbEp0Interrupt(pending);
+	for (unsigned physical = 2U; physical < 10U && Lpc11UsbDataCurrent(); ++physical)
+		Lpc11UsbDataInterrupt(physical);
 	if (s_Prepared && s_Ep0.Enabled && s_Ep0.Generation == generation &&
 		(LPC_USB->DEVCMDSTAT & LPC11_USB_RESET) == 0U &&
 		(pending & LPC_USB->INTEN & LPC11_USB_SOF_INTERRUPT) != 0U)

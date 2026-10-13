@@ -216,6 +216,7 @@ static void Fresh(void)
 		s_Data[byte] = byte;
 }
 
+#ifndef LPC11_USB_EP0_FIXTURE_ONLY
 int main(void)
 {
 	assert(mmap((void *)LPC_SYSCON_BASE, 4096, PROT_READ | PROT_WRITE,
@@ -402,3 +403,4 @@ int main(void)
 	puts("LPC11Uxx EP0 and USB IRQ model: PASS");
 	return 0;
 }
+#endif
