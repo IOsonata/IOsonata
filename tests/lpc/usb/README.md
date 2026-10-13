@@ -672,3 +672,37 @@ sources, power-off and PRIMASK restoration. All host tests pass at -O0/-O2
 with UBSan; the new IRQ source compiles for Cortex-M3 at -O0/-Os and exports
 the strong handler symbol. Public controller lifecycle wrappers, pin/NVIC
 configuration and a complete firmware link still remain before board testing.
+
+LPC1769 public EP0 lifecycle and firmware link
+--------------------------------------------
+
+`usb_lpc17xx.c` now implements the public controller lifecycle and EP0 wrappers.
+The target `usb_ctrlr.h` advertises one IN/OUT endpoint (EP0) and rejects data
+and ISO endpoint operations. Init validates the fixed pin map and clamps IRQ
+priority to the supported range. Start validates the existing USB clock using
+the board oscillator descriptor, initializes EP0, binds the IRQ and sets device
+interrupt masks. Connect enables SoftConnect only with VBUS present. Stop
+disables IRQs, disconnects using the GPIO latch, unbinds and releases the owned
+CPU-mode endpoint resources. Fault handling queues generic USB processing;
+the application still uses AppRun and does not call controller operations.
+
+This stage requires VBUS P1.30 FUNC2, DP P0.29 FUNC1, DM P0.30 FUNC1, and an
+external active-low pull-up switch on SoftConnect P2.9 FUNC1. The pin order is
+documented in `usb_ctrlr.h`. VBUS must be present at startup: P1.30 has no GPIO
+edge interrupt and automatic reattachment is not implemented. The existing
+system clock must supply a valid 48 MHz USB clock; the controller does not
+retune it. Remote wake, SOF, low-power suspend and data endpoints are unsupported.
+Supply a serial string explicitly; ROM UID conversion is not implemented here.
+
+`firmware/ep017_firmware.cpp` registers a vendor interface with no data
+endpoints, using the real generic USB core and a 16-entry AppEvt queue. Vendor
+request 0xC0/1 returns an eight-byte identity. Its 16 MHz oscillator descriptor
+and pin map are build-fixture assumptions to verify against the actual board.
+
+Run `python3 tests/lpc/usb/link17.py --prefix arm-none-eabi-` to link both modes.
+The script checks library source links, LPC vector checksum, USB IRQ vector,
+archive extraction and semihosting selection. Debug uses rdimon; Release uses
+nosys. Measured text/data/bss: Debug 31600/472/2676, Release 13508/84/2172 bytes.
+`run17.py` also checks public lifecycle start/stop, missing VBUS, priority clamp,
+pin ownership and initialization/SIE failure cleanup at -O0/-O2 with UBSan.
+These are successful firmware links and host tests, not hardware enumeration.
