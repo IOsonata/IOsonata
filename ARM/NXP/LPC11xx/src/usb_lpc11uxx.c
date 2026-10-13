@@ -723,16 +723,18 @@ static void Lpc11UsbEp0Complete(bool In, uint16_t Length, bool Cancelled)
 
 static void Lpc11UsbEp0Setup(uint32_t Pending)
 {
-	// A new SETUP can be observed together with the preceding address
-	// status ACK. Commit that ACK to the generic core before aborting the
-	// old control state; otherwise the next SET_CONFIGURATION sees address 0.
-	if (s_Ep0.AddressPending && s_Ep0.InBusy && s_Ep0.InLength == 0U &&
+	// A new SETUP can share an IRQ with the preceding control-write status
+	// ACK. Complete it first so acknowledged class requests are committed
+	// before the generic core starts the new request. A control-read data
+	// ZLP is not a status ACK and must not take this path.
+	if (!s_Ep0.DirectionIn && s_Ep0.RemainingOut == 0U &&
+		s_Ep0.InBusy && s_Ep0.InLength == 0U &&
 		(Pending & 2U) != 0U && (s_Memory.Command[2] & LPC11_USB_ACTIVE) == 0U)
 	{
 		const uint32_t generation = s_Ep0.Generation;
 		s_Ep0.AddressPending = false;
 		s_Ep0.InBusy = false;
-		Lpc11UsbEp0Complete(true, 0U, false);
+		Lpc11UsbEp0Complete(true, 0U, s_Ep0.Aborted);
 		if (!s_Prepared || !s_Ep0.Enabled || s_Ep0.Generation != generation)
 			return;
 	}

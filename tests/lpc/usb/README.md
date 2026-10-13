@@ -200,8 +200,8 @@ Measured with Arm GNU GCC 13.2.1 and binutils 2.42:
 
 | Build | Flash / 65536 bytes | Main RAM / 8160 bytes | USB SRAM / 2048 bytes | Linker stack allowance |
 | --- | ---: | ---: | ---: | ---: |
-| Debug | 49180 | 4476 | 832 | 1224 |
-| Release | 21540 | 3680 | 832 | 1492 |
+| Debug | 49200 | 4476 | 832 | 1224 |
+| Release | 21544 | 3680 | 832 | 1492 |
 
 Main RAM includes initialized data and BSS. The remaining main RAM is divided
 by the existing linker script between heap and stack. The stack allowance is
@@ -223,8 +223,8 @@ Both CDC-only and composite variants pass at -O0 and -O2 with UBSan.
 
 The library project now links `usbd_hid.cpp` and `usb_int.cpp` and their headers.
 The ARM check now links a separate UsbHidLoopback firmware that retains HID:
-Debug uses 50956 bytes flash, 3420 bytes main RAM and 1576 bytes linker stack;
-Release uses 22180 bytes flash, 2624 bytes main RAM and 1844 bytes linker stack.
+Debug uses 50976 bytes flash, 3420 bytes main RAM and 1576 bytes linker stack;
+Release uses 22184 bytes flash, 2624 bytes main RAM and 1844 bytes linker stack.
 Both use 832 bytes USB SRAM. These are standalone HID measurements, not
 composite firmware measurements. Composite operation has been checked in the
 host model only. Retained files are under UsbCdcLoopback/{Debug,Release} and
@@ -248,11 +248,20 @@ Measured with the same GCC 13.2.1/binutils 2.42 toolchain:
 
 | Build | Flash / 65536 bytes | Main RAM / 8160 bytes | USB SRAM / 2048 bytes | Linker stack allowance |
 | --- | ---: | ---: | ---: | ---: |
-| Debug | 53380 | 3804 | 832 | 1448 |
-| Release | 23408 | 3008 | 832 | 1716 |
+| Debug | 53400 | 3804 | 832 | 1448 |
+| Release | 23412 | 3008 | 832 | 1716 |
 
 Debug retains rdimon semihosting; Release uses nosys. Both pass the production
 linker, vector checksum, USB IRQ and IAP/USB RAM checks. With --output, the
 images are retained under Composite/{Debug,Release}. This is a link fixture
 with demo USB identifiers, not a hardware-validated example. Stack usage,
 physical enumeration and concurrent report/serial traffic remain unmeasured.
+
+
+EP0 status completion is delivered before a new SETUP when both share an IRQ.
+The regression reproduces an acknowledged CDC SET_LINE_CODING immediately
+followed by GET_LINE_CODING, and HID SET_IDLE followed by GET_IDLE. Previously,
+only SET_ADDRESS preserved this completion, so class requests could lose an
+acknowledged update. Transport tests also check that an active status packet
+or a control-read data ZLP does not falsely commit the old request, and that
+an early-terminated control write remains cancelled.

@@ -59,7 +59,7 @@ Debug and Release against the production linker script. It also checks the
 example's source links and semihosting settings. This is a command-line link
 check, not a full IOcomposer library build or physical USB test.
 
-With GCC 13.2.1, Debug uses 49180 bytes flash and 4476 bytes main RAM; Release
-uses 21540 bytes flash and 3680 bytes main RAM. Both use 832 bytes USB SRAM.
+With GCC 13.2.1, Debug uses 49200 bytes flash and 4476 bytes main RAM; Release
+uses 21544 bytes flash and 3680 bytes main RAM. Both use 832 bytes USB SRAM.
 Physical enumeration and throughput remain untested while the board is being
 replaced. The host models cover enumeration, CDC requests, data and reconnect.

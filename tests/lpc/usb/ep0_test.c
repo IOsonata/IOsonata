@@ -288,6 +288,46 @@ int main(void)
 	assert(s_Events[2].Type == USB_CTRLR_EVT_SETUP);
 	assert((LPC_USB->DEVCMDSTAT & 127U) == 7U);
 
+	// Ordinary no-data writes need the same ACK ordering as SET_ADDRESS.
+	Fresh();
+	Setup(NONE, false, 0);
+	assert(UsbCtrlrEp0Status(0, 0x80));
+	s_Memory->Command[2] &= ~ACTIVE;
+	LPC_USB->INTSTAT |= 2U;
+	Setup(NONE, false, 0);
+	assert(s_EventCount == 3);
+	assert(s_Events[1].Type == USB_CTRLR_EVT_XFER_CMPL);
+	assert(s_Events[1].Xfer.Result == USB_CTRLR_XFER_SUCCESS);
+
+	// A latched IN interrupt with ACTIVE still set is not a status ACK.
+	Fresh();
+	Setup(NONE, false, 0);
+	assert(UsbCtrlrEp0Status(0, 0x80));
+	LPC_USB->INTSTAT |= 2U;
+	Setup(NONE, false, 0);
+	assert(s_EventCount == 2);
+
+	// A completed data-stage ZLP must not commit a control-read request.
+	Fresh();
+	s_ReplyLength = 0;
+	Setup(REPLY_IN, true, 64);
+	s_Memory->Command[2] &= ~ACTIVE;
+	LPC_USB->INTSTAT |= 2U;
+	Setup(NONE, false, 0);
+	assert(s_EventCount == 2);
+
+	// Preserve cancellation when the host ended a control write early.
+	Fresh();
+	Setup(RECEIVE_OUT, false, 80);
+	LPC_USB->INTSTAT |= 2U;
+	USB_IRQHandler();
+	s_Memory->Command[2] &= ~ACTIVE;
+	LPC_USB->INTSTAT |= 2U;
+	Setup(NONE, false, 0);
+	assert(s_EventCount == 3);
+	assert(s_Events[1].Type == USB_CTRLR_EVT_XFER_CMPL);
+	assert(s_Events[1].Xfer.Result == USB_CTRLR_XFER_CANCELLED);
+
 	Fresh();
 	Setup(REJECT, false, 0);
 	assert((s_Memory->Command[0] & STALL) != 0U);
