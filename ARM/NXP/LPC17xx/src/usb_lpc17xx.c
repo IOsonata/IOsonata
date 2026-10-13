@@ -35,6 +35,7 @@ SOFTWARE.
 #include "coredev/interrupt.h"
 #include "coredev/system_core_clock.h"
 #include "iopinctrl.h"
+#include "lpc_iap.h"
 #include "usb/usb.h"
 #include "usb_hw_lpc17xx.h"
 #include "usb_control_lpc17xx.h"
@@ -349,11 +350,24 @@ uint16_t UsbCtrlrIsoTraceSnapshot(int DevNo, uint8_t **ppData)
 		*ppData = NULL;
 	return 0;
 }
-size_t UsbCtrlrGetSerial(int DevNo, char *pBuffer, size_t Length)
+size_t UsbCtrlrGetSerial(int DevNo, char *pBuff, size_t BuffLen)
 {
-	(void)DevNo;
-	// Bring-up application supplies its serial string explicitly.
-	if (pBuffer != NULL && Length != 0)
-		pBuffer[0] = 0;
-	return 0;
+	if (pBuff == NULL || BuffLen == 0U)
+		return 0U;
+	pBuff[0] = '\0';
+	if (DevNo != 0 || BuffLen == 1U)
+		return 0U;
+	IAP_CMD_STATUS result;
+	if (IAPReadUID(&result) != IAPSTATUS_SUCCESS)
+		return 0U;
+	// Four ROM UID words, eight uppercase hexadecimal digits per word.
+	// Usable before Init: the generic core asks for its serial first.
+	const size_t count = BuffLen > 32U ? 32U : BuffLen - 1U;
+	for (size_t i = 0U; i < count; ++i)
+	{
+		const uint8_t digit = (result.Data[i / 8U] >> (28U - (i % 8U) * 4U)) & 15U;
+		pBuff[i] = digit < 10U ? '0' + digit : 'A' + digit - 10;
+	}
+	pBuff[count] = '\0';
+	return count;
 }

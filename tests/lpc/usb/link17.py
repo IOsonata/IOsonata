@@ -15,6 +15,7 @@ SOURCES = timer['SOURCES'] + [
     'ARM/NXP/LPC17xx/src/usb_control_lpc17xx.c',
     'ARM/NXP/LPC17xx/src/usb_irq_lpc17xx.c',
     'ARM/NXP/LPC17xx/src/usb_lpc17xx.c',
+    'ARM/NXP/src/lpc_iap.c',
     'src/usb/usb.cpp', 'src/app_evt_handler.cpp', 'src/app_run.cpp', 'src/app_wait.cpp',
 ]
 
@@ -52,7 +53,7 @@ def build(prefix, directory, debug):
     assert struct.unpack_from('<I', data, 40 * 4)[0] == addresses['USB_IRQHandler'] | 1
     assert re.search(r'^\w+ T USB_IRQHandler$', symbols, re.M)
     assert ('initialise_monitor_handles' in addresses) == debug
-    for name in ['UsbInit', 'UsbEnable', 'UsbDevProcessEvent', 'UsbCtrlrStart', 'Lpc17UsbControlInterrupt']:
+    for name in ['IAPReadUID', 'IapEntry', 'UsbInit', 'UsbEnable', 'UsbDevProcessEvent', 'UsbCtrlrStart', 'Lpc17UsbControlInterrupt']:
         assert name in addresses, name
     subprocess.run([prefix + 'size', str(image)], check=True)
 

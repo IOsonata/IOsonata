@@ -144,7 +144,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/coredev/lpc_iap.c|src/usb_hidhost.cpp|src/RTX_Conf_CM.c|src/sdcard.c|src/diskio.c|includex|src/sysstatus_impl.cpp|src/converters/adc_device.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/usb_hidhost.cpp|src/RTX_Conf_CM.c|src/sdcard.c|src/diskio.c|includex|src/sysstatus_impl.cpp|src/converters/adc_device.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -293,7 +293,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/coredev/lpc_iap.c|src/usb_hidhost.cpp|src/RTX_Conf_CM.c|src/sdcard.c|src/diskio.c|includex|src/sysstatus_impl.cpp|src/converters/adc_device.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/usb_hidhost.cpp|src/RTX_Conf_CM.c|src/sdcard.c|src/diskio.c|includex|src/sysstatus_impl.cpp|src/converters/adc_device.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>

@@ -692,7 +692,7 @@ documented in `usb_ctrlr.h`. VBUS must be present at startup: P1.30 has no GPIO
 edge interrupt and automatic reattachment is not implemented. The existing
 system clock must supply a valid 48 MHz USB clock; the controller does not
 retune it. Remote wake, SOF, low-power suspend and data endpoints are unsupported.
-Supply a serial string explicitly; ROM UID conversion is not implemented here.
+The default serial string comes from the ROM unique ID through shared LPC IAP.
 
 `firmware/ep017_firmware.cpp` registers a vendor interface with no data
 endpoints, using the real generic USB core and a 16-entry AppEvt queue. Vendor
@@ -702,7 +702,25 @@ and pin map are build-fixture assumptions to verify against the actual board.
 Run `python3 tests/lpc/usb/link17.py --prefix arm-none-eabi-` to link both modes.
 The script checks library source links, LPC vector checksum, USB IRQ vector,
 archive extraction and semihosting selection. Debug uses rdimon; Release uses
-nosys. Measured text/data/bss: Debug 31600/472/2676, Release 13508/84/2172 bytes.
+nosys. Measured text/data/bss: Debug 31896/476/2676, Release 13636/88/2172 bytes.
 `run17.py` also checks public lifecycle start/stop, missing VBUS, priority clamp,
 pin ownership and initialization/SIE failure cleanup at -O0/-O2 with UBSan.
 These are successful firmware links and host tests, not hardware enumeration.
+
+LPC1769 ROM UID serial
+---------------------
+
+`UsbCtrlrGetSerial` follows the LPC11U35 format: four ROM UID words rendered
+as 32 uppercase hexadecimal digits. It works before controller initialization,
+terminates truncated output, and returns an empty string on ROM failure or an
+invalid controller number. LPC1769 selects the shared IAP entry at 0x1FFF1FF1;
+the shared helper masks interrupts and restores the caller's prior state.
+Both library configurations now compile their existing linked `lpc_iap.c`.
+
+The firmware fixture leaves `pSerial` null to use generic USB serial generation.
+The lifecycle test links the actual shared IAP implementation, replaces only
+its ROM entry, and verifies command 58, word ordering, all buffer capacities
+from zero through 39, invalid arguments, ROM failure and interrupt restoration.
+Serial tests run before peripheral memory is mapped. Full Debug/Release links
+also require the IAP symbols. These checks do not validate ROM execution on a
+physical LPC1769 board or extend support to other IAP commands.

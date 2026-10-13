@@ -35,7 +35,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "lpc_iap.h"
 #include "coredev/interrupt.h"
 
-#ifdef LPC11XX_SERIES
+#if defined(LPC11XX_SERIES) || defined(LPC1769)
 #define IAP_LOCATION 0x1fff1ff1
 #elif defined(LPC54605_SERIES) || defined(LPC54628_SERIES)
 #define IAP_LOCATION 0x03000205

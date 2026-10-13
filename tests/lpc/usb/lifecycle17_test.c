@@ -1,6 +1,8 @@
 /* LPC1769 public USB lifecycle regression. MIT License, I-SYST, 2026. */
 #include <assert.h>
 #include <stdio.h>
+#include <string.h>
+#include "lpc_iap.h"
 #include <sys/mman.h>
 #include "usb/usb.h"
 #include "usb_control_lpc17xx.h"
@@ -8,6 +10,10 @@
 #include "LPC17xx.h"
 
 McuOsc_t g_McuOsc = {{OSC_TYPE_XTAL, 16000000, 0, 0}, {0}, false};
+typedef void (*IAPENTRY)(IAP_CMD_STATUS *, IAP_CMD_STATUS *);
+extern IAPENTRY IapEntry;
+static unsigned s_UidCalls;
+static bool s_UidFail;
 static uint32_t s_Mask;
 static unsigned s_Priority;
 static unsigned s_PinWrites;
@@ -25,6 +31,53 @@ static const IOPinCfg_t s_Pins[] = {
 	{0, 30, IOPINOP_FUNC1, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
 	{2, 9, IOPINOP_FUNC1, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
 };
+static void ReadUid(IAP_CMD_STATUS *pCommand, IAP_CMD_STATUS *pResult)
+{
+	assert(s_Mask == 1 && pCommand->CmdStatus == 58);
+	++s_UidCalls;
+	pResult->CmdStatus = s_UidFail ? IAPSTATUS_BUSY : IAPSTATUS_SUCCESS;
+	pResult->Data[0] = 0x01234567;
+	pResult->Data[1] = 0x89ABCDEF;
+	pResult->Data[2] = 0x00000000;
+	pResult->Data[3] = 0xFFFFFFFF;
+}
+static void SerialTest(void)
+{
+	char buffer[40];
+	const char *expected = "0123456789ABCDEF00000000FFFFFFFF";
+
+	assert((uintptr_t)IapEntry == 0x1FFF1FF1);
+	IapEntry = ReadUid;
+	assert(UsbCtrlrGetSerial(0, NULL, 40) == 0 && s_UidCalls == 0);
+	for (unsigned mask = 0; mask <= 1; ++mask)
+	{
+		s_Mask = mask;
+		for (size_t length = 0; length < sizeof(buffer); ++length)
+		{
+			memset(buffer, '?', sizeof(buffer));
+			size_t count = length > 32 ? 32 : length ? length - 1 : 0;
+			s_UidCalls = 0;
+			assert(UsbCtrlrGetSerial(0, buffer, length) == count);
+			assert(s_UidCalls == (length > 1) && s_Mask == mask);
+			assert(memcmp(buffer, expected, count) == 0);
+			if (length != 0)
+				assert(buffer[count] == 0);
+			for (size_t i = length ? count + 1 : 0; i < sizeof(buffer); ++i)
+				assert(buffer[i] == '?');
+		}
+		s_UidCalls = 0;
+		assert(UsbCtrlrGetSerial(-1, buffer, sizeof(buffer)) == 0 && buffer[0] == 0);
+		assert(UsbCtrlrGetSerial(1, buffer, sizeof(buffer)) == 0 && s_UidCalls == 0);
+		s_UidFail = true;
+		memset(buffer, '?', sizeof(buffer));
+		assert(UsbCtrlrGetSerial(0, buffer, sizeof(buffer)) == 0);
+		assert(buffer[0] == 0 && buffer[1] == '?' && s_Mask == mask);
+		s_UidFail = false;
+	}
+	s_Mask = 0;
+	assert(s_PinWrites == 0 && !s_Prepared);
+	puts("LPC1769 ROM UID serial, truncation, failure and interrupt restoration: PASS");
+}
 uint32_t TestGetPrimask(void)
 {
 	return s_Mask;
@@ -117,6 +170,8 @@ void UsbDisable(int DevNo)
 }
 int main(void)
 {
+	// No peripheral mappings or controller initialization are needed for UID.
+	SerialTest();
 	assert(mmap((void *)0x5000C000, 4096, 3, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED,
 		-1, 0) == (void *)0x5000C000);
 	assert(mmap((void *)0x400FC000, 4096, 3, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED,
