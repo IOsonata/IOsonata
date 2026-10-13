@@ -19,6 +19,7 @@ Zbs, Zicsr and Zifencei, ilp32 ABI, GNU C17 and C++23, newlib-nano with nosys.
 | `RtcDemo` | `src/rtc_demo.cpp` (this port) | `gcc_R9A02G021.ld` | RTC on the 32.768 kHz crystal, Software Standby, console on UART0 |
 | `AnalogDemo` | `src/analog_demo.cpp` (this port) | `gcc_R9A02G021.ld` | TML32 interval, DAC8 channel 1 ramp, comparator 0 on the internal reference, console on UART0 |
 | `AdcSnoozeDemo` | `src/adc_snooze_demo.cpp` (this port) | `gcc_R9A02G021.ld` | ANI2 converted in Snooze every 100 ms, TML32, DTC, ELC, wake-up above 1.65 V, console on UART0 |
+| `SelfTest` | `src/self_test.cpp` (this port) | `gcc_R9A02G021.ld` | Hardware self-test, 12 tests with PASS, FAIL or SKIP, console on UART0 |
 | `DfuBoot` | `exemples/dfu/dfu_boot_main.cpp`, `dfu_boot_key.c` | `dfu_boot_r9a02g021.ld` | UART0, button P108 |
 
 Application sources are linked resources, not copies. Each example's
@@ -52,6 +53,9 @@ was not available here: check them against the board schematic.
 | ADCDemo | ANI2, ANI3 (A2, A3) | P400, P401 | `IOPINOP_FUNC31` (analog) |
 | AnalogDemo | DACOUT1, IVCMP0, wired together | P001, P106 | Analog, set by the drivers |
 | AdcSnoozeDemo | ANI2 (A2) | P400 | `IOPINOP_FUNC31` (analog) |
+| SelfTest | DACOUT1, IVCMP0, wired together | P001, P106 | Analog, set by the drivers |
+| SelfTest | ANI2 (A2) to GND, ANI3 (A3) to 3.3 V | P400, P401 | `IOPINOP_FUNC31` (analog) |
+| SelfTest | SPI20, nothing connected | P101 to P104 | As SpiLoopback |
 
 The library clock default is kept in every example: HOCO 48 MHz core clock,
 LOCO low frequency clock. `board.h` shows how to select the 32.768 kHz crystal
@@ -110,6 +114,19 @@ toggles LED1 and waits one second before the next Software Standby. Below
 1.65 V nothing is printed and the current stays low. The debugger connection
 may be lost in Software Standby.
 
+**SelfTest:** wire P001 to P106, A2 to GND and A3 to 3.3 V, terminal on the
+virtual COM port. The firmware runs 12 tests and prints the values measured
+and PASS, FAIL or SKIP for each, then the counts; LED1 stays on without a
+failure, LED2 lights on a failure. The tests settle what the manual leaves
+open: the ICU flag with the CLIC input off (polling drivers), the TML32
+interval formula and 32-bit mode, the DTC with the CLIC, the end of an SPI
+reception by the DTC, DAC8 and A/D on shared pins, the A/D scan mode, ANI18
+and ANI19, comparator 0 references, the A/D compare window at ADLL. Test 12
+enters Software Standby and asks to touch P106 to GND within 15 s (the DAC8
+output has 9 kOhm, a short is safe), then whether it was done;
+`SELFTEST_CMP_WAKE false` in `board.h` leaves it out. A SKIP names the
+missing wire.
+
 **ADCDemo:** every second the console shows the voltage of A2 and A3, the
 internal reference with the VCC it gives, and the die temperature from the
 factory calibration point. LED1 toggles. `ADC_DEMO_INT_ENABLE` in `board.h`
@@ -129,10 +146,11 @@ links with `gcc_R9A02G021_dfu.ld`.
 
 ## Status
 
-All twelve examples build and link with xPack riscv-none-elf-gcc 15.2.0
+All thirteen examples build and link with xPack riscv-none-elf-gcc 15.2.0
 (October 13, 2026). Sizes at -Os (text + data, KB of 1000 bytes): Blinky
 11.8, TimerDemo 19.8, UartLoopback 15.0, UartPrbsTxTest 15.0, UartaLoopback
 18.6, SpiLoopback 26.8, I2CScan 31.5, ADCDemo 34.0, RtcDemo 24.9, AnalogDemo
-29.1, AdcSnoozeDemo 38.2, DfuBoot 36578 bytes of the 36864 of its region.
+29.1, AdcSnoozeDemo 38.2, SelfTest 62.1, DfuBoot 36578 bytes of the 36864 of
+its region.
 I2CInit links the SAU simplified I2C with the IICA. None has been run on the
 board yet.

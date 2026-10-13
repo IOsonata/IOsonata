@@ -136,7 +136,7 @@ clear it with `R9a02EventFlagClear`: the SAU SPI end of transfer, the IICA
 end of byte, the ADC end of conversion and the UARTA reception without
 interrupt, none of which has a status flag that tells it alone. The manual
 describes polling with the CLIC pending bit instead (12.5.3), IR set with the
-CLIC interrupt off is to confirm on hardware.
+CLIC interrupt off is to confirm on hardware (SelfTest test 1).
 
 A driver that polls some events and takes others in its handler turns the
 CLIC input of its route off and on with `R9a02IntEnable`: the SPI and I2C
@@ -303,7 +303,7 @@ The temperature sensor calibration point is `R9A02_FLCN_TSCDR` (CAL140, the
 result at 140 C and VCC 3.3 V, without ADTES correction): see the ADCDemo
 example. The manual gives ANI18 and ANI19 on P105 and P106 in the pin tables
 and swapped in table 29.12; the driver follows the pin tables, to confirm on
-hardware. P105 is also on the FPB Arduino header as A1.
+hardware (SelfTest test 9). P105 is also on the FPB Arduino header as A1.
 
 ## RTC
 
@@ -433,4 +433,9 @@ for riscv-none-elf makes `uint32_t` an `unsigned long`, clang an
 
 ## Examples
 
-See [R9A02G021/exemples/README.md](R9A02G021/exemples/README.md).
+See [R9A02G021/exemples/README.md](R9A02G021/exemples/README.md). The
+SelfTest example checks on the board the points the manual leaves open or
+the port assumed (polling with the CLIC input off, the TML32 interval
+formula, the DTC and the CLIC, the end of an SPI reception by the DTC, ANI18
+and ANI19, the A/D compare window at ADLL, comparator wake-up from Software
+Standby) and prints PASS, FAIL or SKIP for each: run it first on a new board.
