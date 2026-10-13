@@ -28,6 +28,16 @@ static bool s_SendCallback;
 static unsigned s_AddressWrites;
 static uint8_t s_AddressData;
 static uint8_t s_EventAddress[8];
+static bool s_ResetFailure;
+static unsigned s_BusResets;
+
+bool Lpc17UsbBusReset(void)
+{
+	assert(s_Mask == 1 && !s_Control.Enabled && !s_Control.InBusy);
+	++s_BusResets;
+	s_Pending = 0; // stale endpoint completions retired by hardware helper
+	return !s_ResetFailure;
+}
 
 uint32_t TestGetPrimask(void)
 {
@@ -115,6 +125,8 @@ static void Reset(void)
 	s_Faults = 0;
 	s_Stalls = 0;
 	s_AddressWrites = 0;
+	s_ResetFailure = false;
+	s_BusResets = 0;
 	s_Current = 0;
 	s_Pending = 0;
 	s_Status[0] = 0;
@@ -312,5 +324,25 @@ int main(void)
 	s_FailRead = true;
 	assert(Lpc17UsbControlSend(&s_Control, NULL, 0) == -1 && s_Faults == 1);
 	AddressTests();
+	Reset();
+	assert(Lpc17UsbControlSetAddress(&s_Control, 9));
+	assert(Lpc17UsbControlStatus(&s_Control, 0x80));
+	s_Pending = 2;
+	s_Mask = 1;
+	Lpc17UsbControlBusReset(&s_Control);
+	assert(s_Mask == 1 && s_BusResets == 1 && s_Events == 1);
+	assert(s_Event[0].Type == USB_CTRLR_EVT_RESET && s_EventAddress[0] == 0);
+	assert(!s_Control.AddressPending && !s_Control.InBusy && s_Control.Enabled);
+	Lpc17UsbControlInterrupt(&s_Control);
+	assert(s_Events == 1); // no old status completion after RESET
+	s_ResetCallback = true;
+	Lpc17UsbControlBusReset(&s_Control);
+	assert(!s_Control.Enabled && s_Events == 2);
+	Lpc17UsbControlBusReset(&s_Control);
+	assert(s_BusResets == 2);
+	Reset();
+	s_ResetFailure = true;
+	Lpc17UsbControlBusReset(&s_Control);
+	assert(s_Faults == 1 && s_Events == 0 && !s_Control.Enabled);
 	puts("LPC1769 control events, address status/abort, callback reset and faults: PASS");
 }

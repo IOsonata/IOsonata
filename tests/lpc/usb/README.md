@@ -624,3 +624,24 @@ unrelated-flag preservation and timeout handling. `run17.py` passes at -O0/-O2
 with UBSan; the hardware source compiles for Cortex-M3 at -O0/-Os. Full IRQ
 wiring, reset recovery and firmware enumeration remain unfinished and untested
 on hardware.
+
+`Lpc17UsbBusReset` restores EP0 only after the caller has captured an RST bus
+event. It temporarily masks device/endpoint interrupts, retires stale EP0
+interrupts (which hardware bus reset does not clear), realizes 64-byte EP0,
+restores the no-NAK clock mode and clears control stalls. On success it restores
+the previous interrupt enables without clearing events arriving during
+restoration. This CPU-only path requires DMA off and no enabled data endpoints.
+If the first SETUP is already buffered when recovery begins, it faults instead
+of resizing live RAM and silently losing that request. Fault recovery still
+requires the owning controller to disconnect and reinitialize.
+
+`Lpc17UsbControlBusReset` first invalidates the old software transfer and
+address state, then performs hardware recovery. It emits the shared RESET
+event only on success. Failure calls Fault with software state disabled.
+The top-level bus IRQ must invoke it before dispatching endpoint interrupts.
+
+Tests cover repeated reset, mask restoration, stale completion retirement,
+events during endpoint realization, SIE/realization timeout, delayed SETUP,
+address reset, callback disable and failure without a RESET notification.
+Host -O0/-O2 UBSan checks and both sources' Cortex-M3 -O0/-Os compilation pass.
+Top-level IRQ wiring and hardware enumeration remain outstanding.

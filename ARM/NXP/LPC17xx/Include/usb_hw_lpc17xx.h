@@ -63,6 +63,10 @@ bool Lpc17UsbDeviceInit(void);
 // Returns 1 for status, 0 if none, -1 on failure. Output changes only on 1.
 // Raw status contains CON/CON_CH/SUS/SUS_CH/RST; caller handles reset first.
 int Lpc17UsbDeviceStatus(uint8_t *pStatus);
+// Only after Get Device Status reports RST: retire stale EP0 interrupts and
+// restore 64-byte EP0. This CPU-only path requires DMA off and no data EPs.
+// Failure leaves device/endpoint interrupts disabled and latches the fault.
+bool Lpc17UsbBusReset(void);
 // Clear one physical EP0 interrupt and return raw SIE endpoint status.
 // In=false selects OUT; In=true selects IN. Does not require an enabled or
 // pending interrupt, so OUT can also clear STP/PO during overwrite recovery.

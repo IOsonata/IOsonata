@@ -271,6 +271,50 @@ bool Lpc17UsbDeviceInit(void)
 	return done;
 }
 
+bool Lpc17UsbBusReset(void)
+{
+	const uint32_t state = __get_PRIMASK();
+	__disable_irq();
+	bool done = false;
+	if (s_Prepared && (LPC_SC->PCONP & LPC17_USB_POWER) != 0U &&
+		(LPC_USB->USBClkSt & LPC17_USB_CLOCKS) == LPC17_USB_CLOCKS)
+	{
+		const uint32_t deviceEnable = LPC_USB->USBDevIntEn;
+		const uint32_t endpointEnable = LPC_USB->USBEpIntEn;
+		LPC_USB->USBDevIntEn = 0U;
+		LPC_USB->USBEpIntEn = 0U;
+		uint8_t outStatus;
+		uint8_t inStatus;
+		// Bus reset clears FIFO contents, but not endpoint interrupt status.
+		// Retire old completions before rebuilding the software generation.
+		done = !s_SieFault && s_Ep0Ready &&
+			LPC_USB->USBEpDMASt == 0U && LPC_USB->USBDMAIntEn == 0U &&
+			(LPC_USB->USBReEp & ~3U) == 0U && (endpointEnable & ~3U) == 0U &&
+			Lpc17UsbEp0Ack(false, &outStatus) && Lpc17UsbEp0Ack(true, &inStatus);
+		// If service was delayed past the first SETUP, do not resize live RAM
+		// or silently discard that request. Force controller reinitialization.
+		done = done && (outStatus & 5U) == 0U;
+		s_Ep0Ready = false;
+		if (done)
+			done = Lpc17UsbEp0Realize() && Lpc17UsbSieWrite(0xF3U, 1U) &&
+				Lpc17UsbSieWrite(0x40U, 0U) && Lpc17UsbSieWrite(0x41U, 0U);
+		if (done)
+		{
+			// Address/configuration were reset by the SIE. Do not reconnect or
+			// acknowledge endpoint events arriving during the restoration.
+			LPC_USB->USBEpIntEn = endpointEnable;
+			LPC_USB->USBDevIntEn = deviceEnable;
+		}
+		else
+		{
+			s_Ep0Ready = false;
+			s_SieFault = true;
+		}
+	}
+	__set_PRIMASK(state);
+	return done;
+}
+
 int Lpc17UsbDeviceStatus(uint8_t *pStatus)
 {
 	if (pStatus == 0)

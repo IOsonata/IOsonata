@@ -59,6 +59,9 @@ extern "C" {
 // Reset software state to address zero, after the caller resets hardware.
 // The caller services bus reset first and disables control NAK interrupts.
 void Lpc17UsbControlReset(Lpc17UsbControl_t *pControl, bool Enable);
+// Service confirmed hardware RST before endpoint dispatch. Emits RESET only
+// after EP0 recovery succeeds; failures disable software state and call Fault.
+void Lpc17UsbControlBusReset(Lpc17UsbControl_t *pControl);
 int Lpc17UsbControlSend(Lpc17UsbControl_t *pControl, const uint8_t *pData, int Length);
 bool Lpc17UsbControlStatus(Lpc17UsbControl_t *pControl, uint8_t EpAddr);
 // Program the SIE address before status IN; hardware applies it after status.

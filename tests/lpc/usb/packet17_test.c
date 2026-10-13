@@ -26,6 +26,7 @@ static unsigned s_CodeCount;
 static unsigned s_DropCode;
 static bool s_BusTrace;
 static bool s_BusArrival;
+static bool s_ResetArrival;
 
 void TestEndpointClear(uint32_t Value)
 {
@@ -84,6 +85,8 @@ void TestPacketSize(uint32_t Value)
 {
 	assert(Value == 64 && s_Mask == 1);
 	++s_Realizations;
+	if (s_ResetArrival)
+		SetReadOnly(&LPC_USB->USBEpIntSt, LPC_USB->USBEpIntSt | 1U);
 	if (!s_RealizeTimeout)
 		SetReadOnly(&LPC_USB->USBDevIntSt, LPC_USB->USBDevIntSt | 0x100U);
 }
@@ -167,6 +170,50 @@ static void DeviceTests(void)
 	s_AckTimeout = 0;
 	Prepare();
 	assert(Lpc17UsbDeviceInit());
+}
+
+static void BusResetTests(void)
+{
+	s_Status = 2; // hardware leaves control endpoints stalled on bus reset
+	for (unsigned mask = 0; mask < 2; ++mask)
+	{
+		LPC_USB->USBDevIntEn = 0x0C;
+		LPC_USB->USBEpIntEn = 3;
+		SetReadOnly(&LPC_USB->USBEpIntSt, 3);
+		s_ResetArrival = true;
+		s_Mask = mask;
+		const unsigned realized = s_Realizations;
+		assert(Lpc17UsbBusReset() && s_Mask == mask);
+		assert(s_Realizations == realized + 2);
+		assert(LPC_USB->USBEpIntSt == 1); // event during restoration survives
+		assert(LPC_USB->USBDevIntEn == 0x0C && LPC_USB->USBEpIntEn == 3);
+		s_ResetArrival = false;
+	}
+	for (unsigned phase = 1; phase <= 6; ++phase)
+	{
+		LPC_USB->USBDevIntEn = 0;
+		LPC_USB->USBEpIntEn = 0;
+		Prepare();
+		assert(Lpc17UsbDeviceInit());
+		LPC_USB->USBDevIntEn = 0x0C;
+		LPC_USB->USBEpIntEn = 3;
+		s_DropCode = s_CodeCount + phase;
+		assert(!Lpc17UsbBusReset());
+		assert(LPC_USB->USBDevIntEn == 0 && LPC_USB->USBEpIntEn == 0);
+		assert(!Lpc17UsbEp0Write(0, 0));
+	}
+	s_DropCode = 0;
+	Prepare();
+	assert(Lpc17UsbDeviceInit());
+	s_Status = 5; // delayed reset handling must not discard the first SETUP
+	assert(!Lpc17UsbBusReset() && !Lpc17UsbEp0Write(0, 0));
+	Prepare();
+	assert(Lpc17UsbDeviceInit());
+	s_RealizeTimeout = true;
+	assert(!Lpc17UsbBusReset());
+	s_RealizeTimeout = false;
+	Prepare();
+	assert(Lpc17UsbDeviceInit() && Lpc17UsbBusReset());
 }
 
 int main(void)
@@ -315,5 +362,6 @@ int main(void)
 		assert(Lpc17UsbEp0Collect(collected) == -1 && s_Acks == s_AckTimeout);
 	}
 	DeviceTests();
+	BusResetTests();
 	puts("LPC1769 device init, bus status, EP0 FIFO, interrupts and timeouts: PASS");
 }

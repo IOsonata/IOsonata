@@ -65,6 +65,26 @@ static void Lpc17UsbControlFault(Lpc17UsbControl_t *pControl)
 	pControl->Fault();
 }
 
+void Lpc17UsbControlBusReset(Lpc17UsbControl_t *pControl)
+{
+	const uint32_t state = __get_PRIMASK();
+	__disable_irq();
+	if (pControl->Enabled)
+	{
+		Lpc17UsbControlReset(pControl, false);
+		if (Lpc17UsbBusReset())
+		{
+			Lpc17UsbControlReset(pControl, true);
+			UsbCtrlrEvt_t event = {0};
+			event.Type = USB_CTRLR_EVT_RESET;
+			pControl->Event(&event);
+		}
+		else
+			pControl->Fault();
+	}
+	__set_PRIMASK(state);
+}
+
 // A SETUP or bus state change can arrive while PRIMASK is held. Leave it for
 // the ISR before submitting or reporting another packet for the old request.
 static bool Lpc17UsbControlCurrent(Lpc17UsbControl_t *pControl)
