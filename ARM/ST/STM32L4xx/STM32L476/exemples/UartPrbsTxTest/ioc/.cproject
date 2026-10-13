@@ -52,6 +52,7 @@
 									<listOptionValue builtIn="false" value="../../src"/>
 									<listOptionValue builtIn="false" value="../../../../lib/include"/>
 									<listOptionValue builtIn="false" value="../../../../../include"/>
+									<listOptionValue builtIn="false" value="../../../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../../../CMSIS/Core/Include"/>
@@ -67,6 +68,7 @@
 									<listOptionValue builtIn="false" value="../../src"/>
 									<listOptionValue builtIn="false" value="../../../../lib/include"/>
 									<listOptionValue builtIn="false" value="../../../../../include"/>
+									<listOptionValue builtIn="false" value="../../../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../../../CMSIS/Core/Include"/>
@@ -181,6 +183,7 @@
 									<listOptionValue builtIn="false" value="../../src"/>
 									<listOptionValue builtIn="false" value="../../../../lib/include"/>
 									<listOptionValue builtIn="false" value="../../../../../include"/>
+									<listOptionValue builtIn="false" value="../../../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../../../CMSIS/Core/Include"/>
@@ -196,6 +199,7 @@
 									<listOptionValue builtIn="false" value="../../src"/>
 									<listOptionValue builtIn="false" value="../../../../lib/include"/>
 									<listOptionValue builtIn="false" value="../../../../../include"/>
+									<listOptionValue builtIn="false" value="../../../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../../../CMSIS/Core/Include"/>

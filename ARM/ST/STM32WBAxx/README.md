@@ -88,6 +88,10 @@ flash/RAM layout; do not assume every WBA65 has the maximum memory.
 
 For STM32WBA65I-DK1, use the WBA65 device header and board-local pin
 assignments in examples; no Discovery Kit wiring belongs in the MCU library.
+The example board.h selects the board pin map of `ARM/ST/include/stm32_boards.h`
+with `#define BOARD STM32WBA65I_DK1`: USART1 (DevNo 1) PA8 RX / PB12 TX to the
+ST-LINK virtual COM port, USART2 (DevNo 2) on Arduino D0 PA11 / D1 PA12, LD6
+green PD8 and LD5 red PD9 (active low). The library does not include it.
 The Discovery Kit has STLINK-V3EC (including USB virtual COM), OLED display,
 three LEDs and joystick, enabling startup, UART, GPIO and interactive BLE
 security validation. Board support must not be confused with the NUCLEO kit.

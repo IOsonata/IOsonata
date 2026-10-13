@@ -101,12 +101,16 @@ optimization levels; the alternative system_stm32l4plus.c compiles for L4S9
 checks with staged headers,
 not complete IOC library/application links or on-board tests.
 
-UART hardware run on 32L476GDISCOVERY: the STM32L476 examples UartLoopback
+UART hardware run: the STM32L476 examples UartLoopback
 (`exemples/uart/uart_loopback.cpp`) and UartPrbsTxTest
-(`exemples/uart/uart_prbs_tx.cpp`) use USART2, DevNo 2, on PD5 TX and PD6 RX,
-AF7. The STM32L476 library leaves out the old `src/sysstatus.c`, which no
-longer compiles with the current `sysstatus.h`. The library and these two
-examples were built for Debug and Release from their `.project` and
+(`exemples/uart/uart_prbs_tx.cpp`) select their board with `#define BOARD` in
+`board.h`, from the pin maps of `ARM/ST/include/stm32_boards.h`. The project
+builds for B_L475E_IOT01A (the default, STM32L475VG: UART4, DevNo 4, on
+Arduino D0 PA1 and D1 PA0, AF8; ST-LINK virtual COM port on USART1 PB6/PB7)
+and STM32L476G_DISCO (USART2, DevNo 2, on PD5 TX and PD6 RX, AF7, also the
+virtual COM port). The STM32L476 library leaves out the old `src/sysstatus.c`,
+which no longer compiles with the current `sysstatus.h`. The library and these
+two examples were built for Debug and Release from their `.project` and
 `.cproject` settings with GNU Arm 13.2, outside IOcomposer. The other L476
 examples still name `stm32l476xx.ld`, which is not in `ldscript/`
 (`gcc_stm32l476xx.ld` is), and their board files pair DevNo 1 with the USART2
