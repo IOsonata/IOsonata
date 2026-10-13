@@ -80,17 +80,25 @@ SOFTWARE.
 	Ra4m1I2cDump(i2c, dbg, sizeof(dbg)); \
 	printf("%s %s\r\n", name, dbg); }
 
-// Read each I2C pin as a plain GPIO input, once with the pull-up and once
-// without, before the I2C drivers take the pins. A pin that reads 0 with the
-// pull-up is held low from outside the MCU.
+// Read each I2C pin as a plain GPIO input before the I2C drivers take the
+// pins. The pin is first driven low to discharge it, then read as an input
+// without pull-up (nopull=1 means something outside the MCU pulls it up),
+// then driven low again and read with the internal pull-up. A pin that reads
+// 0 with the pull-up is held low from outside the MCU.
 #include "iopinctrl.h"
 #define I2C_DEBUG_PIN_TEST(name, port, pin) { \
-	IOPinConfig(port, pin, IOPINOP_GPIO, IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL); \
+	IOPinConfig(port, pin, IOPINOP_GPIO, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL); \
+	IOPinClear(port, pin); \
 	for (volatile int d = 0; d < 200000; d++) {} \
-	int up = IOPinRead(port, pin); \
 	IOPinConfig(port, pin, IOPINOP_GPIO, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL); \
 	for (volatile int d = 0; d < 200000; d++) {} \
 	int nu = IOPinRead(port, pin); \
+	IOPinConfig(port, pin, IOPINOP_GPIO, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL); \
+	IOPinClear(port, pin); \
+	for (volatile int d = 0; d < 200000; d++) {} \
+	IOPinConfig(port, pin, IOPINOP_GPIO, IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL); \
+	for (volatile int d = 0; d < 200000; d++) {} \
+	int up = IOPinRead(port, pin); \
 	printf("pin %s P%d%02d pullup=%d nopull=%d\r\n", name, port, pin, up, nu); }
 
 #define I2C_DEBUG_PIN_TESTS() { \
