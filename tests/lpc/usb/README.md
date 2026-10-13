@@ -281,3 +281,14 @@ EP4 OUT/IN while a HID IN report remains pending, and repeats after reconnect.
 CDC-only and CDC/HID configurations remain separate regression runs. All three
 run at -O0 and -O2 with UBSan. The composite ARM measurements above now include
 vendor bulk; the standalone CDC and HID firmware sizes are unchanged.
+
+
+The ARM runner also builds the standalone UsbCustomBulkLoopback IOcomposer
+example using its board header and the shared vendor-bulk application. Debug
+uses 47580 bytes flash, 4448 bytes main RAM and 1236 bytes linker stack;
+Release uses 20964 bytes flash, 3652 bytes main RAM and 1500 bytes linker stack.
+Both use 832 bytes USB SRAM. Project links and semihosting options receive the
+same checks as CDC and HID. The runner now checks eight firmware builds;
+retained vendor-bulk images are under UsbCustomBulkLoopback/{Debug,Release}.
+See the example README for the existing PyUSB loopback and reconfiguration
+commands. These host hardware commands have not been run against a board.

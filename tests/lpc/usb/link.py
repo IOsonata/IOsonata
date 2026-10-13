@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Link the real LPC11U35 CDC, HID and composite firmware in Debug and Release.
+"""Link the real LPC11U35 CDC, HID, vendor bulk and composite firmware in Debug and Release.
 
 Copyright (c) 2026, I-SYST inc. MIT License.
 Requires an Arm GNU toolchain with newlib-nano and C++23 support.
@@ -40,7 +40,11 @@ INCLUDES = [
     'ARM/NXP/include', 'ARM/NXP/LPC11xx/include',
 ]
 
-EXAMPLES = {'cdc': 'UsbCdcLoopback', 'hid': 'UsbHidLoopback'}
+EXAMPLES = {
+    'cdc': 'UsbCdcLoopback',
+    'hid': 'UsbHidLoopback',
+    'custom_bulk': 'UsbCustomBulkLoopback',
+}
 
 
 def project_sources(project):
@@ -161,7 +165,7 @@ def main():
         for kind in [*EXAMPLES, 'composite']:
             for mode in ['Debug', 'Release']:
                 build(args.prefix, output, mode, kind)
-    print('LPC11U35 CDC, HID and composite ARM firmware links: PASS')
+    print('LPC11U35 CDC, HID, vendor bulk and composite ARM firmware links: PASS')
 
 
 if __name__ == '__main__':
