@@ -151,3 +151,45 @@ The built-in ROM DFU bootloader remains independent; no software DFU is added.
 
 The hardware source was also compiled to Cortex-M0 Thumb assembly with
 arm-none-eabi-gcc. No full ARM link or board USB test has been run.
+
+## ARM firmware link
+
+With Arm GNU tools on PATH, run:
+
+```
+python3 tests/lpc/usb/link.py
+python3 tests/lpc/usb/link.py --prefix /path/to/bin/arm-none-eabi- --output /tmp/lpc-usb-link
+```
+
+This separate check needs newlib-nano and C++23 support. It compiles the real
+`exemples/usb/usb_cdc_loopback.cpp`, generic USB/CDC, event queue, GPIO, IAP,
+Cortex-M0 atomic helpers and startup. Library objects are archived before the
+application is linked against the production LPC11U35 linker script. Required
+sources must also be linked into the LPC11U35 IOcomposer library project.
+It checks the CDC firmware's dependencies, not compilation of every optional
+peripheral and device driver in that library project.
+
+Debug uses -O0 and rdimon semihosting; Release uses -Os and nosys. Both use
+newlib-nano, section garbage collection, no exceptions and no RTTI. The check
+verifies the first eight vector words sum to zero, the initial stack respects
+the 32-byte IAP reservation, the real USB IRQ is linked, and 832 bytes of USB
+DMA storage remain NOLOAD at 0x20004000. Debug must retain monitor initialization;
+Release must omit it. ELF, map and binary files are retained only with --output.
+
+Measured with Arm GNU GCC 13.2.1 and binutils 2.42:
+
+| Build | Flash / 65536 bytes | Main RAM / 8160 bytes | USB SRAM / 2048 bytes | Linker stack allowance |
+| --- | ---: | ---: | ---: | ---: |
+| Debug | 48992 | 4444 | 832 | 1236 |
+| Release | 21448 | 3648 | 832 | 1500 |
+
+Main RAM includes initialized data and BSS. The remaining main RAM is divided
+by the existing linker script between heap and stack. The stack allowance is
+not a measured runtime high-water mark. Sizes may change with compiler version.
+The fixture board.h supplies the supported 12 MHz crystal and VBUS pin settings;
+it is not a validated board schematic or a flash-ready example project.
+
+A successful link does not establish USB enumeration or CDC operation. In
+particular, the current single-packet IN submission rejects CDC's 10-byte
+serial-state notification on its 8-byte interrupt endpoint. Multi-packet IN
+submission still needs implementation and testing before claiming CDC support.
