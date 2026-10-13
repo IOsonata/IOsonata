@@ -301,9 +301,7 @@ blocks from routines in `.iram.text`, and resets through SWRCR.
 built with LLVM for Renesas RISC-V (19.1.7) for the R9A02G0214CNE on the
 FPB-R9A02G021. It links the same sources as the IOC project `lib/ioc`, with
 the same defines and include directories, `-march` with Zba, Zbb, Zbs, Zicsr
-and Zifencei, C and C++ gnu17. `src/CppRuntimeOverload.cpp` is left out: clang
-rejects its `throw()` on `operator new`, the toolchain runtime provides the
-operators.
+and Zifencei, C and C++ gnu17.
 
 The library sources were compiled with clang 19.1.7 and these settings, and
 the examples linked from them with GNU ld (October 12, 2026); the DFU boot

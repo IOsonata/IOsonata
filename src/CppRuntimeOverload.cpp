@@ -43,12 +43,14 @@ Modified by          Date              Description
 // for operator delete by every C++ firmware, would keep the whole
 // allocator linked. With no malloc symbol the weak reference stays null
 // and the allocator is discarded unless an application uses new.
-void* operator new[](size_t count ) throw()
+// The exception specifications are those of the declarations every
+// translation unit sees (<new>), clang rejects others.
+void* operator new[](size_t count )
 {
 	return _malloc_r(_REENT, count);
 }
 
-void *operator new(size_t size) throw()
+void *operator new(size_t size)
 {
 	return _malloc_r(_REENT, size);
 }
@@ -58,11 +60,11 @@ void *operator new(size_t size) throw()
 // firmware are static, so both forms resolve here and keep newlib's free
 // and malloc out of the link. The sized form is the one the deleting
 // destructor calls since C++14.
-void operator delete(void *) throw()
+void operator delete(void *) noexcept
 {
 }
 
-void operator delete(void *, size_t) throw()
+void operator delete(void *, size_t) noexcept
 {
 }
 
