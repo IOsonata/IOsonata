@@ -560,7 +560,7 @@ static void Ra4m1I2cConfigure(Ra4m1I2cDev_t * const pDev)
 		0x5DU : RA4M1_I2C_ICFER_MASTER;
 	reg->ICFER_b.NFE = 0U;
 	reg->ICIER = pDev->pI2cDev->Cfg.Mode == I2CMODE_SLAVE && pDev->bEnabled ?
-		0xBEU : 0U;
+		0xBFU : 0U;
 	Ra4m1I2cClearStatus(reg);
 	reg->ICCR1 = RA4M1_I2C_ICCR1_RUN;
 
@@ -1019,7 +1019,7 @@ static uint32_t Ra4m1I2cSetRate(DevIntrf_t * const pIntrf, uint32_t Rate)
 {
 	Ra4m1I2cDev_t *dev = Ra4m1I2cHandle(pIntrf);
 
-	if (dev == NULL || dev->bOpen)
+	if (dev == NULL || dev->bOpen || dev->bActive)
 	{
 		return 0U;
 	}
@@ -1207,8 +1207,12 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfg)
 		!Ra4m1I2cSlaveRegister(dev, pCfg->IntPrio))
 	{
 		dev->bEnabled = false;
+		dev->pReg->ICIER = 0U;
+		dev->pReg->ICCR1_b.ICE = 0U;
+		IOPinDis(pCfg->pIOPinMap, pCfg->NbIOPins);
 		dev->pI2cDev = NULL;
 		intrf->pDevData = NULL;
+		intrf->EnCnt = 0;
 		Ra4m1I2cModuleStart(dev, false);
 		return false;
 	}
