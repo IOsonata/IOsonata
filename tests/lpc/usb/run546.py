@@ -16,7 +16,10 @@ source = (root / 'ARM/NXP/LPC546xx/src/usb_hw_lpc546xx.c').read_text()
 source, count = re.subn(r'SYSCON->USB0CLKDIV = ([^;]+);',
                         r'TestUsbDivider(\1);', source)
 assert count == 2
-source = '#include <stdint.h>\nvoid TestUsbDivider(uint32_t);\n' + source
+assert source.count('((void (*)(uint32_t))LPCUSB_FRO_ROM_ENTRY)(frequency);') == 1
+source = source.replace('((void (*)(uint32_t))LPCUSB_FRO_ROM_ENTRY)(frequency);',
+                        'TestFroSetup(frequency);')
+source = '#include <stdint.h>\nvoid TestUsbDivider(uint32_t);\nvoid TestFroSetup(uint32_t);\n' + source
 for opt in ['-O0', '-O2']:
     for good_layout in [True, False]:
         with tempfile.TemporaryDirectory() as tmp:

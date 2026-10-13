@@ -42,7 +42,11 @@ SOFTWARE.
 #define LPCUSB_STATUS (USB_DEVCMDSTAT_SETUP_MASK | USB_DEVCMDSTAT_DCON_C_MASK | \
 	USB_DEVCMDSTAT_DSUS_C_MASK | USB_DEVCMDSTAT_DRES_C_MASK)
 #define LPCUSB_INTERRUPTS (USB_EPSKIP_SKIP_MASK | USB_INTSTAT_FRAME_INT_MASK | USB_INTSTAT_DEV_INT_MASK)
-#define LPCUSB_POWER (SYSCON_PDRUNCFG_PDEN_USB_RAM_MASK | SYSCON_PDRUNCFG_PDEN_USB0_PHY_MASK)
+#define LPCUSB_POWER (SYSCON_PDRUNCFG_PDEN_USB_RAM_MASK | SYSCON_PDRUNCFG_PDEN_USB0_PHY_MASK | \
+	SYSCON_PDRUNCFG_PDEN_FRO_MASK)
+#define LPCUSB_ROM_POWER (SYSCON_PDRUNCFG_PDEN_ROM_MASK | SYSCON_PDRUNCFG_PDEN_VD6_MASK)
+#define LPCUSB_FRO_ROM_ENTRY 0x030091DFU
+#define LPCUSB_FRO_CONTROL (SYSCON_FROCTRL_USBCLKADJ_MASK | SYSCON_FROCTRL_HSPDCLK_MASK)
 #define LPCUSB_OTHER_CLOCKS (SYSCON_AHBCLKCTRL_USB1H_MASK | SYSCON_AHBCLKCTRL_USB1D_MASK | \
 	SYSCON_AHBCLKCTRL_USB0HMR_MASK | SYSCON_AHBCLKCTRL_USB0HSL_MASK)
 // Reserved FROCTRL bits excluded by NXP's LPC54628 CLOCK_EnableUsbfs0DeviceClock.
@@ -57,7 +61,7 @@ static uint32_t s_OldClockSelect;
 static uint32_t s_OldClockDivide;
 static uint32_t s_OldClockControl;
 static uint32_t s_OldPortMode;
-static uint32_t s_OldFroAdjust;
+static uint32_t s_OldFroControl;
 
 _Static_assert(offsetof(LpcUsbFsMemory_t, Setup) == 128, "SETUP alignment");
 _Static_assert(offsetof(LpcUsbFsMemory_t, Packet) == 192, "packet alignment");
@@ -74,11 +78,47 @@ static void Lpc546xxUsbRestore(void)
 	SYSCON->USB0CLKCTRL = s_OldClockControl;
 	SYSCON->USB0CLKSEL = s_OldClockSelect;
 	SYSCON->USB0CLKDIV = s_OldClockDivide;
-	// Retain the live oscillator trim; restore only ownership of SOF adjustment.
+	// Retain the calibrated trim; restore the HF output and SOF adjustment.
 	SYSCON->FROCTRL = (SYSCON->FROCTRL & ~(LPCUSB_FRO_RESERVED |
-		SYSCON_FROCTRL_USBCLKADJ_MASK)) | s_OldFroAdjust;
+		LPCUSB_FRO_CONTROL)) | s_OldFroControl;
 	SYSCON->PDRUNCFGSET[0] = s_AddedPower;
 	__DSB();
+}
+
+// NXP LPC54628 CLOCK_SetupFROClocking uses this ROM calibration entry.
+// Keep the selected 48/96 MHz rate; do not switch the CPU clock or PLL.
+static bool Lpc546xxUsbFroStart(uint32_t Fro)
+{
+	if ((s_AddedPower & SYSCON_PDRUNCFG_PDEN_FRO_MASK) == 0U &&
+		(Fro & SYSCON_FROCTRL_HSPDCLK_MASK) != 0U)
+	{
+		return true;
+	}
+	uint32_t romPower = SYSCON->PDRUNCFG[0] & LPCUSB_ROM_POWER;
+	uint32_t romClock = SYSCON_AHBCLKCTRL_ROM_MASK & ~SYSCON->AHBCLKCTRL[0];
+	uint32_t frequency = (Fro & SYSCON_FROCTRL_SEL_MASK) != 0U ? 96000000U : 48000000U;
+
+	// The ROM calibration reads OTP on VD6. Both must be powered and the
+	// ROM AHB clock enabled before the call, with interrupts masked.
+	SYSCON->PDRUNCFGCLR[0] = LPCUSB_ROM_POWER | SYSCON_PDRUNCFG_PDEN_FRO_MASK;
+	SYSCON->AHBCLKCTRLSET[0] = SYSCON_AHBCLKCTRL_ROM_MASK;
+	__DSB();
+	((void (*)(uint32_t))LPCUSB_FRO_ROM_ENTRY)(frequency);
+	__DSB();
+	SYSCON->AHBCLKCTRLCLR[0] = romClock;
+	SYSCON->PDRUNCFGSET[0] = romPower;
+	__DSB();
+
+	uint32_t ready = SYSCON->FROCTRL;
+
+	if ((ready & SYSCON_FROCTRL_HSPDCLK_MASK) == 0U ||
+		(ready & SYSCON_FROCTRL_SEL_MASK) != (Fro & SYSCON_FROCTRL_SEL_MASK))
+	{
+		SYSCON->FROCTRL = Fro & ~LPCUSB_FRO_RESERVED;
+		return false;
+	}
+	SYSCON->FROCTRL = (ready & ~LPCUSB_FRO_RESERVED) | SYSCON_FROCTRL_WRTRIM_MASK;
+	return true;
 }
 
 LpcUsbFsMemory_t *Lpc546xxUsbHwPrepare(int IntPrio)
@@ -93,9 +133,7 @@ LpcUsbFsMemory_t *Lpc546xxUsbHwPrepare(int IntPrio)
 		address > FSL_FEATURE_USB_USB_RAM_BASE_ADDRESS + FSL_FEATURE_USB_USB_RAM - sizeof(s_Memory) ||
 		(address & 255U) != 0U ||
 		(SYSCON->AHBCLKCTRL[1] & SYSCON_AHBCLKCTRL_USB0D_MASK) != 0U ||
-		(SYSCON->AHBCLKCTRL[2] & LPCUSB_OTHER_CLOCKS) != 0U ||
-		(SYSCON->PDRUNCFG[0] & SYSCON_PDRUNCFG_PDEN_FRO_MASK) != 0U ||
-		(fro & SYSCON_FROCTRL_HSPDCLK_MASK) == 0U)
+		(SYSCON->AHBCLKCTRL[2] & LPCUSB_OTHER_CLOCKS) != 0U)
 	{
 		EnableInterrupt(state);
 		return NULL;
@@ -106,7 +144,7 @@ LpcUsbFsMemory_t *Lpc546xxUsbHwPrepare(int IntPrio)
 	s_OldClockSelect = SYSCON->USB0CLKSEL;
 	s_OldClockDivide = SYSCON->USB0CLKDIV;
 	s_OldClockControl = SYSCON->USB0CLKCTRL;
-	s_OldFroAdjust = fro & SYSCON_FROCTRL_USBCLKADJ_MASK;
+	s_OldFroControl = fro & LPCUSB_FRO_CONTROL;
 
 	SYSCON->AHBCLKCTRLSET[2] = SYSCON_AHBCLKCTRL_USB0HSL_MASK;
 	__DSB();
@@ -117,6 +155,14 @@ LpcUsbFsMemory_t *Lpc546xxUsbHwPrepare(int IntPrio)
 	SYSCON->AHBCLKCTRLCLR[2] = SYSCON_AHBCLKCTRL_USB0HSL_MASK;
 	__DSB();
 
+	if (!Lpc546xxUsbFroStart(fro))
+	{
+		Lpc546xxUsbRestore();
+		EnableInterrupt(state);
+		return NULL;
+	}
+	// ROM may have updated calibration. Never write back the pre-call trim.
+	fro = SYSCON->FROCTRL;
 	SYSCON->PDRUNCFGCLR[0] = LPCUSB_POWER;
 	SYSCON->FROCTRL = (fro & ~LPCUSB_FRO_RESERVED) | SYSCON_FROCTRL_USBCLKADJ_MASK;
 	SYSCON->USB0CLKSEL = SYSCON_USB0CLKSEL_SEL(0);

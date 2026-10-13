@@ -39,9 +39,10 @@ SOFTWARE.
 extern "C" {
 #endif
 
-// Requires a calibrated, powered FRO HF output at 48 or 96 MHz. Selects
-// a 48 MHz USB clock and enables SOF trim. The system clock owner must not
-// change the FRO while USB owns it. No host or USB1 controller may be active.
+// Starts and calibrates the FRO HF output through ROM if it is off, keeping
+// the selected 48/96 MHz rate. Selects a 48 MHz USB clock and enables SOF trim.
+// The system clock owner must not change the FRO while USB owns it.
+// No host or USB1 controller may be active.
 // Returns storage with DEV_EN, DCON, USB interrupts and NVIC disabled.
 // Does not initialize the generic USB core or connect to the host.
 LpcUsbFsMemory_t *Lpc546xxUsbHwPrepare(int IntPrio);

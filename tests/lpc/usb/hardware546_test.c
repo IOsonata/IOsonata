@@ -42,6 +42,8 @@ static uint32_t s_Priority;
 static bool s_Enabled;
 static bool s_DividerStuck;
 static unsigned s_Waits;
+static unsigned s_FroCalls;
+static bool s_FroFail;
 
 void __DSB(void)
 {
@@ -77,6 +79,21 @@ void __NOP(void)
 void TestUsbDivider(uint32_t Value)
 {
 	SYSCON->USB0CLKDIV = Value | (s_DividerStuck ? SYSCON_USB0CLKDIV_REQFLAG_MASK : 0);
+}
+
+void TestFroSetup(uint32_t Frequency)
+{
+	assert(g_IrqMasked == 1);
+	assert(SYSCON->AHBCLKCTRL[0] & SYSCON_AHBCLKCTRL_ROM_MASK);
+	assert((SYSCON->PDRUNCFG[0] & (SYSCON_PDRUNCFG_PDEN_ROM_MASK |
+		SYSCON_PDRUNCFG_PDEN_VD6_MASK | SYSCON_PDRUNCFG_PDEN_FRO_MASK)) == 0);
+	assert(Frequency == 48000000U || Frequency == 96000000U);
+	s_FroCalls++;
+	if (!s_FroFail)
+	{
+		SYSCON->FROCTRL = SYSCON_FROCTRL_HSPDCLK_MASK | SYSCON_FROCTRL_WRTRIM_MASK |
+			(Frequency == 96000000U ? SYSCON_FROCTRL_SEL_MASK : 0U) | 0x2345;
+	}
 }
 
 void NVIC_DisableIRQ(IRQn_Type Irq)
@@ -116,6 +133,8 @@ static void Reset(void)
 	USBFSH->PORTMODE = USBFSH_PORTMODE_ID_EN_MASK;
 	s_DividerStuck = false;
 	s_Waits = 0;
+	s_FroCalls = 0;
+	s_FroFail = false;
 	g_IrqMasked = 0;
 }
 
@@ -132,12 +151,65 @@ int main(void)
 	puts("LPC546xx USB rejects misplaced DMA storage: PASS");
 	return 0;
 #endif
+// Normal boot has FRO 12 MHz active and HF output off. Also cover
+	// an externally clocked system with the entire FRO powered down.
+	for (int high = 0; high < 2; high++)
+	{
+		for (int poweredDown = 0; poweredDown < 2; poweredDown++)
+		{
+			Reset();
+			SYSCON->MAINCLKSELA = 1;
+			SYSCON->MAINCLKSELB = 2;
+			SYSCON->SYSPLLCTRL = 0x123456;
+			SYSCON->FROCTRL = (high ? SYSCON_FROCTRL_SEL_MASK : 0) | 0x1234;
+			SYSCON->PDRUNCFG[0] |= SYSCON_PDRUNCFG_PDEN_ROM_MASK | SYSCON_PDRUNCFG_PDEN_VD6_MASK;
+			if (poweredDown)
+			{
+				SYSCON->PDRUNCFG[0] |= SYSCON_PDRUNCFG_PDEN_FRO_MASK;
+			}
+			uint32_t power = SYSCON->PDRUNCFG[0];
+
+			assert(Lpc546xxUsbHwPrepare(6) != NULL);
+			assert(s_FroCalls == 1);
+			assert(SYSCON->AHBCLKCTRL[0] == 0);
+			assert((SYSCON->PDRUNCFG[0] & (SYSCON_PDRUNCFG_PDEN_ROM_MASK |
+				SYSCON_PDRUNCFG_PDEN_VD6_MASK)) == (SYSCON_PDRUNCFG_PDEN_ROM_MASK |
+				SYSCON_PDRUNCFG_PDEN_VD6_MASK));
+			assert((SYSCON->FROCTRL & SYSCON_FROCTRL_TRIM_MASK) == 0x2345);
+			assert(SYSCON->USB0CLKDIV == (uint32_t)high);
+			assert(Lpc546xxUsbHwRelease());
+			assert(SYSCON->PDRUNCFG[0] == power);
+			assert((SYSCON->FROCTRL & SYSCON_FROCTRL_HSPDCLK_MASK) == 0);
+			assert((SYSCON->FROCTRL & SYSCON_FROCTRL_TRIM_MASK) == 0x2345);
+			assert(SYSCON->MAINCLKSELA == 1 && SYSCON->MAINCLKSELB == 2);
+			assert(SYSCON->SYSPLLCTRL == 0x123456);
+			assert(g_IrqMasked == 0);
+		}
+	}
+	Reset();
 	SYSCON->FROCTRL &= ~SYSCON_FROCTRL_HSPDCLK_MASK;
+	SYSCON->AHBCLKCTRL[0] = SYSCON_AHBCLKCTRL_ROM_MASK;
+	assert(Lpc546xxUsbHwPrepare(6) != NULL);
+	assert(s_FroCalls == 1);
+	assert(Lpc546xxUsbHwRelease());
+	assert(SYSCON->AHBCLKCTRL[0] == SYSCON_AHBCLKCTRL_ROM_MASK);
+	assert((SYSCON->PDRUNCFG[0] & (SYSCON_PDRUNCFG_PDEN_ROM_MASK | SYSCON_PDRUNCFG_PDEN_VD6_MASK)) == 0);
+	Reset();
+	SYSCON->FROCTRL &= ~SYSCON_FROCTRL_HSPDCLK_MASK;
+	s_FroFail = true;
 	assert(Lpc546xxUsbHwPrepare(6) == NULL);
-	SYSCON->FROCTRL |= SYSCON_FROCTRL_HSPDCLK_MASK;
-	SYSCON->PDRUNCFG[0] |= SYSCON_PDRUNCFG_PDEN_FRO_MASK;
+	assert(s_FroCalls == 1);
+	assert(SYSCON->FROCTRL == 0x1234);
+	assert(SYSCON->AHBCLKCTRL[0] == 0 && SYSCON->AHBCLKCTRL[1] == 0 && SYSCON->AHBCLKCTRL[2] == 0);
+	assert(g_IrqMasked == 0);
+	Reset();
+	SYSCON->FROCTRL &= ~SYSCON_FROCTRL_HSPDCLK_MASK;
+	s_DividerStuck = true;
 	assert(Lpc546xxUsbHwPrepare(6) == NULL);
-	SYSCON->PDRUNCFG[0] &= ~SYSCON_PDRUNCFG_PDEN_FRO_MASK;
+	assert(s_FroCalls == 1);
+	assert((SYSCON->FROCTRL & SYSCON_FROCTRL_HSPDCLK_MASK) == 0);
+	assert(SYSCON->AHBCLKCTRL[0] == 0);
+	Reset();
 	SYSCON->AHBCLKCTRL[1] = SYSCON_AHBCLKCTRL_USB0D_MASK;
 	assert(Lpc546xxUsbHwPrepare(6) == NULL);
 	SYSCON->AHBCLKCTRL[1] = 0;
@@ -170,6 +242,7 @@ int main(void)
 		LpcUsbFsMemory_t *mem = Lpc546xxUsbHwPrepare(high ? 100 : -1);
 
 		assert(mem != NULL);
+		assert(s_FroCalls == 0);
 		assert(s_Priority == (high ? (1U << __NVIC_PRIO_BITS) - 1U : 0U));
 		assert(!s_Enabled && USB0->INTEN == 0);
 		assert((USB0->DEVCMDSTAT & (USB_DEVCMDSTAT_DEV_EN_MASK | USB_DEVCMDSTAT_DCON_MASK)) == 0);
@@ -205,6 +278,6 @@ int main(void)
 		assert(Lpc546xxUsbHwRelease());
 		assert(g_IrqMasked == 0);
 	}
-	puts("LPC546xx USB clocks, SRAM, ownership, priority clamp and bounded failure cleanup: PASS");
+	puts("LPC546xx USB FRO startup, clocks, SRAM, ownership and bounded failure cleanup: PASS");
 	return 0;
 }

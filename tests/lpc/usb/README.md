@@ -311,12 +311,17 @@ release functions with the repository's vendor CMSIS register types. It is
 also run by the USB suite. Both optimization levels exercise the 48/96 MHz
 FRO divider selection, device-mode mux, SRAM layout, interrupt-priority
 clamping, refusal to take over active USB clocks, divider timeout cleanup,
-and refusal to release active endpoint buffers. Invalid SRAM placement is
+and refusal to release active endpoint buffers. ROM calls are modeled to
+check normal-boot FRO startup, prior ROM/OTP power preservation, calibration
+readback failure, and cleanup after a subsequent divider timeout. Invalid SRAM placement is
 checked separately.
 
-`usb_hw_lpc546xx.c` requires an already-calibrated, powered FRO HF output.
-It selects a 48 MHz USB0 clock and enables SOF trim without changing the
-FRO rate. It leaves DEV_EN, DCON and interrupts disabled. The system clock
+`usb_hw_lpc546xx.c` calibrates and starts the FRO HF output through the NXP
+ROM entry when it is off. The existing 48/96 MHz selection is preserved,
+and an already-running HF output is reused. ROM/OTP power and the ROM clock
+are enabled only around calibration and restored afterward. It selects a
+48 MHz USB0 clock and enables SOF trim without switching the CPU clock or
+PLL. It leaves DEV_EN, DCON and interrupts disabled. The system clock
 owner must keep that source stable until release. USB0 host and USB1 must
 remain unused while this helper owns the shared USB resources.
 
@@ -325,8 +330,8 @@ LPC54628 places its 832-byte allocation in the 8 KB dedicated USB RAM using
 NOLOAD, outside startup .data/.bss. Only the owned allocation is initialized;
 unused USB storage is discarded by the linker.
 
-This is hardware preparation, not a finished USB port. FRO startup integration,
-EP0, data transfers, USB0 IRQ handling and generic-core lifecycle integration
+This is hardware preparation, not a finished USB port. EP0, data transfers,
+USB0 IRQ handling and generic-core lifecycle integration
 still need completion. There is no LPC54628 USB application or hardware
 validation claim yet. LPC11U35 USB behavior is unchanged.
 
