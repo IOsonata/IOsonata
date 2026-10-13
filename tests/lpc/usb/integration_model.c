@@ -61,3 +61,18 @@ unsigned TestUsbWakeCount(void)
 {
 	return s_WakeCount;
 }
+
+void TestUsbCable(bool Connected, bool DeviceInterrupt)
+{
+	LPC_GPIO->PIN[0] = Connected ? 1U << 3 : 0U;
+	if (Connected)
+		LPC_USB->DEVCMDSTAT |= 1U << 28;
+	else
+		LPC_USB->DEVCMDSTAT &= ~(1U << 28);
+	if (DeviceInterrupt)
+	{
+		LPC_USB->DEVCMDSTAT |= 1U << 24;
+		LPC_USB->INTSTAT |= (1U << 31) | 0x3FFU;
+		USB_IRQHandler();
+	}
+}

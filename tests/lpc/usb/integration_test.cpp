@@ -10,6 +10,7 @@ static const uint8_t s_Config[] = {9, 2, 9, 0, 0, 1, 0, 0xA0, 50};
 static const uint8_t s_Device[] = {18, 1, 0, 2, 0, 0, 0, 64, 0x34, 0x12,
 	0x78, 0x56, 0, 1, 0, 0, 0, 1};
 static unsigned s_Queued;
+static unsigned s_DetachEvents;
 
 extern "C" void TestUsbInitialize(void);
 extern "C" Lpc11UsbMemory_t *TestUsbMemory(void);
@@ -18,6 +19,19 @@ extern "C" void TestUsbSetup(const UsbSetupData_t *pSetup);
 extern "C" void TestUsbSuspend(bool Suspended);
 extern "C" void TestUsbFrame(void);
 extern "C" unsigned TestUsbWakeCount(void);
+extern "C" void TestUsbCable(bool Connected, bool DeviceInterrupt);
+
+static void CableEvent(int DevNo, UsbEvt_t Event)
+{
+	assert(DevNo == 0);
+	if (Event != USB_EVT_DETACHED)
+		return;
+	assert(!UsbConfigured(0) && UsbGetAddress(0) == 0);
+	const Lpc11UsbMemory_t *memory = TestUsbMemory();
+	for (unsigned physical = 0; physical < 10; ++physical)
+		assert((memory->Command[2 * physical] & (1U << 31)) == 0);
+	++s_DetachEvents;
+}
 
 extern "C" bool AppEvtHandlerQue(uint32_t, void *, AppEvtHandler_t)
 {
@@ -50,9 +64,11 @@ int main()
 	cfg.pIOPinMap = &pin;
 	cfg.NbIOPins = 1;
 	cfg.bRemoteWakeup = true;
+	cfg.EvtHandler = CableEvent;
 	assert(UsbInit(&cfg));
 	assert(std::strlen(UsbGetSerial(0)) == 32);
 	assert(UsbEnable(0) && s_Queued != 0);
+	UsbProcess(0); // establish the attached level in the real core
 	Lpc11UsbMemory_t *memory = TestUsbMemory();
 	UsbSetupData_t setup = {};
 	setup.bRequest = 5; // SET_ADDRESS stays in the real Chapter 9 engine.
@@ -129,6 +145,48 @@ int main()
 	assert(intrf.DevIntrf.RxData(&intrf.DevIntrf, received, sizeof(received)) == 80);
 	assert(std::memcmp(received, payload, sizeof(payload)) == 0);
 	assert((memory->Command[4] & (1U << 31)) != 0 && intrf.RxPending == 0);
+	for (unsigned path = 0; path < 2; ++path)
+	{
+		assert(intrf.DevIntrf.TxData(&intrf.DevIntrf, payload, 64) == 64);
+		setup = {};
+		setup.bmRequestType = 0x80;
+		setup.bRequest = 0; // GET_STATUS still pending when the cable falls
+		setup.wLength = 2;
+		TestUsbSetup(&setup);
+		assert((memory->Command[2] & (1U << 31)) != 0);
+		TestUsbCable(false, path != 0); // GPIO process path and device IRQ path
+		UsbProcess(0);
+		assert(s_DetachEvents == path + 1);
+		assert(!UsbConfigured(0) && !UsbSuspended(0));
+		assert(!UsbCtrlrEpSend(0, 1, payload, 8));
+		assert(!UsbCtrlrEpReceive(0, 1, received, sizeof(received)));
+		UsbProcess(0); // repeated low level must not notify twice
+		TestUsbCable(false, true); // delayed debounced interrupt
+		UsbProcess(0);
+		assert(s_DetachEvents == path + 1);
+		TestUsbCable(true, false);
+		UsbProcess(0);
+		setup = {};
+		setup.bRequest = 5;
+		setup.wValue = 7;
+		TestUsbSetup(&setup);
+		TestUsbPacketDone(1, 0);
+		setup.bRequest = 9;
+		setup.wValue = 1;
+		TestUsbSetup(&setup);
+		TestUsbPacketDone(1, 0);
+		assert(UsbConfigured(0));
+		assert(UsbCtrlrEpOpenData(0, 1, false, BULK, 64));
+		assert(UsbCtrlrEpOpenData(0, 1, true, BULK, 64));
+		assert(UsbIntrfConfigure(&intrf, 64));
+		USB_IRQHandler();
+	}
+	assert(intrf.DevIntrf.TxData(&intrf.DevIntrf, payload, 64) == 64);
+	TestUsbCable(true, true); // latched VBUS loss serviced after reattachment
+	UsbProcess(0);
+	assert(!UsbConfigured(0) && UsbGetAddress(0) == 0 && s_DetachEvents == 2);
+	assert((memory->Command[4] & (1U << 31)) == 0);
+	assert((memory->Command[6] & (1U << 31)) == 0);
 	UsbDisable(0);
 	assert((memory->Command[4] & (1U << 31)) == 0);
 	std::puts("LPC11Uxx real generic core/interface link, address, FIFO transfers: PASS");

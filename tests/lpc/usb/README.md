@@ -23,6 +23,10 @@ Run `python3 tests/lpc/usb/run.py`.
 - A host integration fixture links the production generic USB core, UsbIntrf,
   CFifo and DeviceIntrf to the LPC C driver. It exercises SET_ADDRESS, an
   80-byte TX, a two-packet RX, FIFO backpressure and rearming after reads.
+  It also unplugs during EP0/IN/OUT traffic through both GPIO processing and
+  the USB device interrupt, checks state before the application detach event,
+  reconnects without reinitialization, and services a latched disconnect after
+  VBUS has already returned.
 - Remote-wakeup tests cover the three-frame delay, stale tick rejection,
   duplicate requests, host resume/reset/disconnect cancellation, SOF enable
   changes and preservation of pre-existing clock control. The generic-core
@@ -106,6 +110,15 @@ Stop/Start. Halting an active transfer reports XFER_FAILED after retirement,
 avoiding replay when an ACK races EPSKIP. A completion already observed before
 halt is reported normally. New submissions while halted wait for clear, which
 resets the hardware data toggle.
+
+Cable loss uses the same retirement sequence before resetting the generic USB
+configuration and notifying application code of detach. The GPIO process pass
+handles loss before the debounced device interrupt arrives. Repeated low-level
+checks do not reset classes again. A latched DCON_C still invalidates old
+transfers when VBUS is already high by the time the interrupt is serviced.
+The controller stays prepared for reconnection; no application restart is
+required. Failed retirement follows the existing disconnected fault path and
+retains DMA ownership.
 
 Remote wakeup keeps the normal clock-on suspend mode. DSUS indicates at least
 3 ms of bus idle. A wake request discards the old local FRAME_INT and waits for

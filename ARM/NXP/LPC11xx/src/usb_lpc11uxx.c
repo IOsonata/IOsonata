@@ -113,6 +113,7 @@ static int s_IntPrio;
 static Lpc11UsbDataState_t s_Data[8];
 static uint32_t s_RxReady;
 static bool s_Closing;
+static bool s_Detached;
 static bool s_SofEnabled;
 static bool s_WakeAddedClock;
 // 0 idle, 1..3 waiting for the minimum bus-idle time, 4 signalling resume.
@@ -122,6 +123,7 @@ static bool Lpc11UsbRetire(uint32_t Mask);
 static void Lpc11UsbForget(uint32_t Mask);
 static void Lpc11UsbDataHalt(unsigned Physical, bool Halt);
 static void Lpc11UsbWakeCancel(void);
+static void Lpc11UsbBusReset(uint32_t Status, bool Detached);
 
 _Static_assert(offsetof(Lpc11UsbMemory_t, Setup) == 128, "SETUP alignment");
 _Static_assert(offsetof(Lpc11UsbMemory_t, Packet) == 192, "packet alignment");
@@ -228,6 +230,7 @@ Lpc11UsbMemory_t *Lpc11UsbHwPrepare(int IntPrio)
 	NVIC_SetPriority(USB_IRQn, IntPrio < 0 ? 0U :
 		(IntPrio > maxprio ? (uint32_t)maxprio : (uint32_t)IntPrio));
 	s_AddedClocks = LPC11_USB_AHB_CLOCKS & ~clocks;
+	s_Detached = false;
 	s_Prepared = true;
 	return &s_Memory;
 }
@@ -355,9 +358,17 @@ void UsbCtrlrStop(int DevNo)
 
 void UsbCtrlrProcess(int DevNo)
 {
-	(void)DevNo;
-	// This port keeps the USB clock running through suspend. VBUS edges
-	// queue the generic process pass; there is no deferred packet processing.
+	if (DevNo != 0)
+		return;
+	const uint32_t state = DisableInterrupt();
+	if (s_Prepared && s_Ep0.Enabled && !s_Closing && s_Initialized)
+	{
+		if (UsbCtrlrVbusDetected(0))
+			s_Detached = false;
+		else if (!s_Detached)
+			Lpc11UsbBusReset(LPC_USB->DEVCMDSTAT, true);
+	}
+	EnableInterrupt(state);
 }
 
 bool UsbCtrlrHighSpeed(int DevNo)
@@ -419,7 +430,7 @@ static void Lpc11UsbWakeCancel(void)
 void UsbCtrlrRemoteWakeup(int DevNo)
 {
 	const uint32_t state = DisableInterrupt();
-	if (DevNo == 0 && s_Prepared && s_Ep0.Enabled && !s_Closing &&
+	if (DevNo == 0 && s_Prepared && s_Ep0.Enabled && !s_Closing && !s_Detached &&
 		s_WakeFrames == 0U && UsbCtrlrVbusDetected(0))
 	{
 		const uint32_t status = LPC_USB->DEVCMDSTAT;
@@ -577,7 +588,7 @@ bool Lpc11UsbEp0Enable(void)
 
 static bool Lpc11UsbEp0Current(void)
 {
-	return s_Prepared && s_Ep0.Enabled && !s_Closing && !s_Ep0.Halted &&
+	return s_Prepared && s_Ep0.Enabled && !s_Closing && !s_Detached && !s_Ep0.Halted &&
 		(LPC_USB->DEVCMDSTAT & (LPC11_USB_SETUP | LPC11_USB_RESET)) == 0U;
 }
 
@@ -837,7 +848,7 @@ static void Lpc11UsbEp0Interrupt(uint32_t Pending)
 // alignment; a successful submission remains owned until its callback.
 static bool Lpc11UsbDataCurrent(void)
 {
-	return s_Prepared && s_Ep0.Enabled && !s_Closing &&
+	return s_Prepared && s_Ep0.Enabled && !s_Closing && !s_Detached &&
 		(LPC_USB->DEVCMDSTAT & LPC11_USB_RESET) == 0U;
 }
 
@@ -1153,6 +1164,39 @@ uint16_t UsbCtrlrIsoTraceSnapshot(int DevNo, uint8_t **ppData)
 	return 0U;
 }
 
+// Reset and cable loss share the ownership sequence. Do not reset the generic
+// classes until every DMA bank is retired and its owner has been notified.
+static void Lpc11UsbBusReset(uint32_t Status, bool Detached)
+{
+	// Only a real bus reset can leave a new host SETUP to process. Cable
+	// loss invalidates the old request even if VBUS has already returned.
+	const bool clearSetup = Detached || (Status & LPC11_USB_RESET) == 0U;
+	s_Detached = Detached;
+	Lpc11UsbWakeCancel();
+	if (!Lpc11UsbRetire(0x3FFU))
+	{
+		Lpc11UsbEp0Fault();
+		return;
+	}
+	Lpc11UsbForget(0x3FCU);
+	LPC_USB->INTEN &= ~0x3FCU;
+	Lpc11UsbEp0Reset();
+	for (unsigned physical = 2U; physical < 10U; ++physical)
+	{
+		s_Memory.Command[physical * 2U] = LPC11_USB_DISABLED;
+		s_Memory.Command[physical * 2U + 1U] = LPC11_USB_DISABLED;
+	}
+	LPC_USB->INTSTAT = 0x3FFU;
+	Lpc11UsbCommand(0x7FU | LPC11_USB_NAK_CONTROL, 0U,
+		(Status & (LPC11_USB_RESET | LPC11_USB_CONNECT_CHANGE | LPC11_USB_SUSPEND_CHANGE)) |
+		(clearSetup ? LPC11_USB_SETUP : 0U));
+	if (!clearSetup && (LPC_USB->DEVCMDSTAT & LPC11_USB_SETUP) != 0U)
+		LPC_USB->INTSETSTAT = 1U;
+	UsbCtrlrEvt_t event = {0};
+	event.Type = USB_CTRLR_EVT_RESET;
+	UsbDevProcessEvent(0, &event);
+}
+
 void USB_IRQHandler(void)
 {
 	const uint32_t state = DisableInterrupt();
@@ -1169,28 +1213,19 @@ void USB_IRQHandler(void)
 		LPC_USB->INTSTAT = LPC11_USB_DEVICE_INTERRUPT;
 		if ((status & LPC11_USB_RESET) != 0U)
 		{
-			Lpc11UsbWakeCancel();
-			LPC_USB->INTSTAT = 0x3FFU;
-			if (!Lpc11UsbRetire(0x3FFU))
-				Lpc11UsbEp0Fault();
+			Lpc11UsbBusReset(status, s_Initialized && !UsbCtrlrVbusDetected(0));
+			__DSB();
+			EnableInterrupt(state);
+			return;
+		}
+		if ((status & LPC11_USB_CONNECT_CHANGE) != 0U && s_Initialized)
+		{
+			// DCON_C records VBUS loss, even if the cable is back by now.
+			if (!s_Detached)
+				Lpc11UsbBusReset(status, !UsbCtrlrVbusDetected(0));
 			else
-			{
-				Lpc11UsbForget(0x3FCU);
-				LPC_USB->INTEN &= ~0x3FCU;
-				Lpc11UsbEp0Reset();
-				for (unsigned physical = 2U; physical < 10U; ++physical)
-				{
-					s_Memory.Command[physical * 2U] = LPC11_USB_DISABLED;
-					s_Memory.Command[physical * 2U + 1U] = LPC11_USB_DISABLED;
-				}
-				Lpc11UsbCommand(0x7FU | LPC11_USB_NAK_CONTROL, 0U,
-					status & (LPC11_USB_RESET | LPC11_USB_CONNECT_CHANGE | LPC11_USB_SUSPEND_CHANGE));
-				if ((LPC_USB->DEVCMDSTAT & LPC11_USB_SETUP) != 0U)
-					LPC_USB->INTSETSTAT = 1U;
-				UsbCtrlrEvt_t event = {0};
-				event.Type = USB_CTRLR_EVT_RESET;
-				UsbDevProcessEvent(0, &event);
-			}
+				Lpc11UsbHwAckStatus(status & (LPC11_USB_CONNECT_CHANGE | LPC11_USB_SUSPEND_CHANGE));
+			UsbProcessQue(0);
 			__DSB();
 			EnableInterrupt(state);
 			return;
@@ -1200,7 +1235,7 @@ void USB_IRQHandler(void)
 			Lpc11UsbWakeCancel();
 		if ((status & LPC11_USB_CONNECT_CHANGE) != 0U)
 			UsbProcessQue(0);
-		if ((status & LPC11_USB_SUSPEND_CHANGE) != 0U)
+		if (!s_Detached && (status & LPC11_USB_SUSPEND_CHANGE) != 0U)
 		{
 			UsbCtrlrEvt_t event = {0};
 			event.Type = (status & (1U << 17)) != 0U ?
@@ -1208,12 +1243,12 @@ void USB_IRQHandler(void)
 			UsbDevProcessEvent(0, &event);
 		}
 	}
-	if (s_Prepared && s_Ep0.Enabled && s_Ep0.Generation == generation &&
+	if (s_Prepared && s_Ep0.Enabled && !s_Detached && s_Ep0.Generation == generation &&
 		(LPC_USB->DEVCMDSTAT & LPC11_USB_RESET) == 0U && (pending & 3U) != 0U)
 		Lpc11UsbEp0Interrupt(pending);
 	for (unsigned physical = 2U; physical < 10U && Lpc11UsbDataCurrent(); ++physical)
 		Lpc11UsbDataInterrupt(physical);
-	if (s_Prepared && s_Ep0.Enabled && s_Ep0.Generation == generation &&
+	if (s_Prepared && s_Ep0.Enabled && !s_Detached && s_Ep0.Generation == generation &&
 		(LPC_USB->DEVCMDSTAT & LPC11_USB_RESET) == 0U &&
 		(LPC_USB->INTSTAT & LPC_USB->INTEN & LPC11_USB_SOF_INTERRUPT) != 0U)
 	{
