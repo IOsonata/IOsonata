@@ -236,6 +236,62 @@ bool Lpc17UsbEp0Ack(bool In, uint8_t *pStatus)
 	return done;
 }
 
+bool Lpc17UsbDeviceInit(void)
+{
+	const uint32_t state = __get_PRIMASK();
+	__disable_irq();
+	bool done = false;
+	if (Lpc17UsbPacketReady() && !s_Ep0Ready &&
+		(LPC_USB->USBReEp & ~3U) == 0U && LPC_USB->USBEpDMASt == 0U &&
+		LPC_USB->USBDevIntEn == 0U && LPC_USB->USBEpIntEn == 0U &&
+		LPC_USB->USBDMAIntEn == 0U)
+	{
+		uint8_t status;
+		// UM10360 11.13: keep SoftConnect inactive until the ISR is ready.
+		done = Lpc17UsbSieWrite(0xFEU, 0U) && Lpc17UsbEp0Realize() &&
+			Lpc17UsbSieWrite(0xF3U, 1U) && // always clocked, no NAK IRQs
+			Lpc17UsbSieWrite(0xD8U, 0U) && // unconfigured
+			Lpc17UsbSieWrite(0xD0U, 0x80U) && // address zero, device enabled
+			Lpc17UsbSieWrite(0x40U, 0U) && Lpc17UsbSieWrite(0x41U, 0U) &&
+			Lpc17UsbEp0Ack(false, &status) && Lpc17UsbEp0Ack(true, &status);
+		if (done)
+		{
+			LPC_USB->USBEpIntPri = 0U;
+			LPC_USB->USBDevIntPri = 0U;
+			// Only EP0 is owned here. Do not consume other endpoint events.
+			LPC_USB->USBDevIntClr = LPC17_USB_CCEMPTY | LPC17_USB_CDFULL | (1U << 8);
+		}
+		else
+		{
+			s_Ep0Ready = false;
+			s_SieFault = true;
+		}
+	}
+	__set_PRIMASK(state);
+	return done;
+}
+
+int Lpc17UsbDeviceStatus(uint8_t *pStatus)
+{
+	if (pStatus == 0)
+		return -1;
+	const uint32_t state = __get_PRIMASK();
+	__disable_irq();
+	int result = -1;
+	if (Lpc17UsbPacketReady())
+	{
+		result = 0;
+		if ((LPC_USB->USBDevIntSt & (1U << 3)) != 0U)
+		{
+			// UM10360 11.12.7: clear DEV_STAT BEFORE Get Device Status.
+			LPC_USB->USBDevIntClr = 1U << 3;
+			result = Lpc17UsbSieRead(0xFEU, pStatus) ? 1 : -1;
+		}
+	}
+	__set_PRIMASK(state);
+	return result;
+}
+
 int Lpc17UsbEp0Collect(uint8_t Status[2])
 {
 	if (Status == 0)

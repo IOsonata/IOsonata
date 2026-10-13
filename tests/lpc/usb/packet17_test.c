@@ -19,6 +19,13 @@ static unsigned s_AckTimeout;
 static uint32_t s_AckOrder;
 static bool s_AckDistinct;
 static bool s_AckArrival;
+static bool s_InitTrace;
+static unsigned s_InitWrites;
+static uint16_t s_InitData[6];
+static unsigned s_CodeCount;
+static unsigned s_DropCode;
+static bool s_BusTrace;
+static bool s_BusArrival;
 
 void TestEndpointClear(uint32_t Value)
 {
@@ -39,13 +46,16 @@ void TestEndpointClear(uint32_t Value)
 
 void TestSieClear(uint32_t Value)
 {
-	assert(s_Mask == 1 && (Value & ~0x130U) == 0);
+	assert(s_Mask == 1 && (Value & ~0x138U) == 0);
 	SetReadOnly(&LPC_USB->USBDevIntSt, LPC_USB->USBDevIntSt & ~Value);
 }
 void TestSieCode(uint32_t Value)
 {
 	assert(s_Mask == 1);
 	const unsigned phase = Value & 0xFF00U;
+	++s_CodeCount;
+	if (s_CodeCount == s_DropCode)
+		s_CommandTimeout = true;
 	if (phase == 0x500U)
 	{
 		s_Command = (uint8_t)(Value >> 16);
@@ -53,12 +63,21 @@ void TestSieCode(uint32_t Value)
 			++s_Validations;
 		if (s_Command == 0xF2)
 			++s_Clears;
+		if (s_BusTrace)
+			assert(s_Command == 0xFE && (LPC_USB->USBDevIntSt & 8U) == 0U);
+	}
+	if (s_InitTrace && phase == 0x100U)
+	{
+		assert(s_InitWrites < 6);
+		s_InitData[s_InitWrites++] = ((uint16_t)s_Command << 8) | (uint8_t)(Value >> 16);
 	}
 	if (!s_CommandTimeout)
 	{
 		SetReadOnly(&LPC_USB->USBDevIntSt, LPC_USB->USBDevIntSt |
 			(phase == 0x200U ? 0x20U : 0x10U));
 		SetReadOnly(&LPC_USB->USBCmdData, s_Status);
+		if (s_BusArrival && phase == 0x200U)
+			SetReadOnly(&LPC_USB->USBDevIntSt, LPC_USB->USBDevIntSt | 8U);
 	}
 }
 void TestPacketSize(uint32_t Value)
@@ -94,6 +113,62 @@ static void Prepare(void)
 	s_CommandTimeout = false;
 	s_Status = 0;
 }
+static void DeviceTests(void)
+{
+	LPC_USB->USBEpIntEn = 0;
+	s_AckTimeout = 0;
+	Prepare();
+	LPC_USB->USBDMAIntEn = 1;
+	const unsigned codes = s_CodeCount;
+	assert(!Lpc17UsbDeviceInit() && s_CodeCount == codes);
+	LPC_USB->USBDMAIntEn = 0;
+	s_InitTrace = true;
+	s_InitWrites = 0;
+	s_Mask = 0;
+	assert(Lpc17UsbDeviceInit() && s_Mask == 0);
+	s_InitTrace = false;
+	const uint16_t expected[] = {0xFE00, 0xF301, 0xD800, 0xD080, 0x4000, 0x4100};
+	assert(s_InitWrites == 6 && memcmp(expected, s_InitData, sizeof(expected)) == 0);
+	assert(LPC_USB->USBEpIntEn == 0 && LPC_USB->USBDevIntEn == 0);
+	assert(LPC_USB->USBEpIntPri == 0 && LPC_USB->USBDevIntPri == 0);
+	assert(!Lpc17UsbDeviceInit());
+	uint8_t status = 0xCC;
+	SetReadOnly(&LPC_USB->USBDevIntSt, 0x200);
+	assert(Lpc17UsbDeviceStatus(&status) == 0 && status == 0xCC);
+	assert(Lpc17UsbDeviceStatus(0) == -1);
+	s_BusTrace = true;
+	s_BusArrival = true;
+	s_Status = 0x1F;
+	s_Mask = 1;
+	SetReadOnly(&LPC_USB->USBDevIntSt, 0x208);
+	assert(Lpc17UsbDeviceStatus(&status) == 1 && status == 0x1F && s_Mask == 1);
+	assert((LPC_USB->USBDevIntSt & 0x208) == 0x208); // new event survives read
+	s_BusArrival = false;
+	s_CommandTimeout = true;
+	status = 0xCC;
+	assert(Lpc17UsbDeviceStatus(&status) == -1 && status == 0xCC);
+	assert(!Lpc17UsbEp0Write(0, 0));
+	s_BusTrace = false;
+	for (unsigned phase = 1; phase <= 12; ++phase)
+	{
+		Prepare();
+		s_DropCode = s_CodeCount + phase;
+		assert(!Lpc17UsbDeviceInit());
+		assert(LPC_USB->USBEpIntEn == 0 && LPC_USB->USBDevIntEn == 0);
+		assert(!Lpc17UsbEp0Write(0, 0));
+	}
+	s_DropCode = 0;
+	for (unsigned ack = 1; ack <= 2; ++ack)
+	{
+		Prepare();
+		s_AckTimeout = s_Acks + ack;
+		assert(!Lpc17UsbDeviceInit() && !Lpc17UsbEp0Write(0, 0));
+	}
+	s_AckTimeout = 0;
+	Prepare();
+	assert(Lpc17UsbDeviceInit());
+}
+
 int main(void)
 {
 	ClockTests();
@@ -239,5 +314,6 @@ int main(void)
 		assert(s_Acks == s_AckTimeout && s_Mask == failure - 1);
 		assert(Lpc17UsbEp0Collect(collected) == -1 && s_Acks == s_AckTimeout);
 	}
-	puts("LPC1769 EP0 realization, FIFO, interrupt acknowledgement and timeouts: PASS");
+	DeviceTests();
+	puts("LPC1769 device init, bus status, EP0 FIFO, interrupts and timeouts: PASS");
 }

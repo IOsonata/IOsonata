@@ -601,3 +601,26 @@ reset, interrupt-mask preservation and SIE failure during programming or
 restoration. `run17.py` passes at -O0/-O2 with UBSan; Cortex-M3 compilation
 passes at -O0/-Os. Public controller wrappers, initialization and bus IRQ
 handling remain to be connected. Address timing still needs board validation.
+
+`Lpc17UsbDeviceInit` now initializes a prepared, exclusively owned block:
+SoftConnect inactive, 64-byte EP0, always-on USB clock mode with NAK interrupts
+disabled, unconfigured device, address zero with DEV_EN set, and cleared EP0
+stall/interrupt state. It refuses prior EP0 realization, enabled interrupts,
+DMA or realized data endpoints. It leaves all interrupt enables unchanged at
+zero. Board pin configuration, NVIC setup and connection remain the caller's
+responsibility. A partial initialization failure latches the existing fault
+and prevents packet operations until release/preparation and reinitialization.
+
+`Lpc17UsbDeviceStatus` captures a pending bus-status byte using the UM10360
+11.12.7 ordering: clear DEV_STAT first, then read SIE command 0xFE. It leaves
+output unchanged on no event or failure, preserves unrelated flags, and does
+not clear a newly arriving DEV_STAT after the read. The caller must handle bus
+reset before endpoint traffic; this helper does not itself dispatch bus events.
+
+The register model validates initialization command order/data, refusal and
+repeat guards, failure at all twelve command/data phases and both endpoint
+acknowledgements, bus-status ordering, an event arriving during the read,
+unrelated-flag preservation and timeout handling. `run17.py` passes at -O0/-O2
+with UBSan; the hardware source compiles for Cortex-M3 at -O0/-Os. Full IRQ
+wiring, reset recovery and firmware enumeration remain unfinished and untested
+on hardware.

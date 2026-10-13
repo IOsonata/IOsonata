@@ -54,6 +54,15 @@ bool Lpc17UsbSieWrite(uint8_t Command, uint8_t Data);
 bool Lpc17UsbSieRead(uint8_t Command, uint8_t *pData);
 // Realize 64-byte control OUT/IN before connection and interrupt enable.
 bool Lpc17UsbEp0Realize(void);
+// Initialize an exclusively owned, prepared block while disconnected.
+// Requires no prior EP0 realization, enabled interrupts, DMA or data endpoints.
+// Leaves address zero, 64-byte EP0, NAK interrupts off and all IRQ enables off.
+// The caller supplies pin setup, NVIC configuration and later connection.
+bool Lpc17UsbDeviceInit(void);
+// Read one pending DEV_STAT event after clearing its device interrupt flag.
+// Returns 1 for status, 0 if none, -1 on failure. Output changes only on 1.
+// Raw status contains CON/CON_CH/SUS/SUS_CH/RST; caller handles reset first.
+int Lpc17UsbDeviceStatus(uint8_t *pStatus);
 // Clear one physical EP0 interrupt and return raw SIE endpoint status.
 // In=false selects OUT; In=true selects IN. Does not require an enabled or
 // pending interrupt, so OUT can also clear STP/PO during overwrite recovery.
