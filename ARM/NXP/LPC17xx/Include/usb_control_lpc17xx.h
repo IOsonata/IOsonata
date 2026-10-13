@@ -39,6 +39,9 @@ typedef struct __Lpc17_Usb_Control {
 	uint32_t Generation;
 	uint16_t RemainingOut;
 	uint16_t InLength;
+	uint8_t Address;
+	uint8_t PendingAddress;
+	bool AddressPending;
 	bool Enabled;
 	bool InBusy;
 	bool StatusIn;
@@ -53,11 +56,14 @@ typedef struct __Lpc17_Usb_Control {
 extern "C" {
 #endif
 // Zero-initialize the object and assign Event/Fault before enabling it.
-// Reset software state only, after the caller resets/retires hardware EP0.
+// Reset software state to address zero, after the caller resets hardware.
 // The caller services bus reset first and disables control NAK interrupts.
 void Lpc17UsbControlReset(Lpc17UsbControl_t *pControl, bool Enable);
 int Lpc17UsbControlSend(Lpc17UsbControl_t *pControl, const uint8_t *pData, int Length);
 bool Lpc17UsbControlStatus(Lpc17UsbControl_t *pControl, uint8_t EpAddr);
+// Program the SIE address before status IN; hardware applies it after status.
+// Confirm software address only on the acknowledged status interrupt.
+bool Lpc17UsbControlSetAddress(Lpc17UsbControl_t *pControl, uint8_t Address);
 void Lpc17UsbControlStall(Lpc17UsbControl_t *pControl);
 // Called in USB interrupt context. No callbacks are queued. OUT event bytes
 // are valid only during Event. One pending snapshot is serviced per call.

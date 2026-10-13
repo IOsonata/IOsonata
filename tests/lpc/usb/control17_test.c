@@ -25,6 +25,9 @@ static bool s_FailWrite;
 static bool s_ResetCallback;
 static bool s_ArmStatus;
 static bool s_SendCallback;
+static unsigned s_AddressWrites;
+static uint8_t s_AddressData;
+static uint8_t s_EventAddress[8];
 
 uint32_t TestGetPrimask(void)
 {
@@ -41,6 +44,7 @@ void TestSetPrimask(uint32_t State)
 static void Event(const UsbCtrlrEvt_t *pEvent)
 {
 	assert(s_Mask == 1 && s_Events < 8);
+	s_EventAddress[s_Events] = s_Control.Address;
 	s_Event[s_Events++] = *pEvent;
 	if (pEvent->Type == USB_CTRLR_EVT_XFER_CMPL && pEvent->Xfer.pBuffer != NULL)
 		memcpy(s_Received, pEvent->Xfer.pBuffer, pEvent->Xfer.Length);
@@ -64,8 +68,18 @@ bool Lpc17UsbSieRead(uint8_t Command, uint8_t *pData)
 }
 bool Lpc17UsbSieWrite(uint8_t Command, uint8_t Data)
 {
-	assert((Command == 0x40 || Command == 0x41) && Data == 1 && s_Mask == 1);
-	++s_Stalls;
+	assert(s_Mask == 1);
+	if (Command == 0xD0)
+	{
+		assert((Data & 0x80U) != 0U);
+		++s_AddressWrites;
+		s_AddressData = Data;
+	}
+	else
+	{
+		assert((Command == 0x40 || Command == 0x41) && Data == 1);
+		++s_Stalls;
+	}
 	return !s_FailWrite;
 }
 bool Lpc17UsbEp0Ack(bool In, uint8_t *pStatus)
@@ -100,6 +114,7 @@ static void Reset(void)
 	s_Events = 0;
 	s_Faults = 0;
 	s_Stalls = 0;
+	s_AddressWrites = 0;
 	s_Current = 0;
 	s_Pending = 0;
 	s_Status[0] = 0;
@@ -124,6 +139,58 @@ static void Setup(bool In, uint16_t Length)
 	s_Pending |= 1;
 	Lpc17UsbControlInterrupt(&s_Control);
 }
+static void AddressTests(void)
+{
+	Reset();
+	Setup(false, 0);
+	assert(!Lpc17UsbControlSetAddress(&s_Control, 128) && s_AddressWrites == 0);
+	assert(Lpc17UsbControlSetAddress(&s_Control, 7));
+	assert(s_AddressData == 0x87 && s_Control.Address == 0 && s_Control.AddressPending);
+	assert(Lpc17UsbControlStatus(&s_Control, 0x80));
+	assert(!Lpc17UsbControlSetAddress(&s_Control, 8) && s_AddressWrites == 1);
+	s_Pending = 2;
+	s_Status[1] = 0x10;
+	Lpc17UsbControlInterrupt(&s_Control);
+	assert(s_Control.Address == 0 && s_Control.AddressPending);
+	s_Pending = 2;
+	s_Status[1] = 0;
+	Lpc17UsbControlInterrupt(&s_Control);
+	assert(s_Control.Address == 7 && !s_Control.AddressPending && s_EventAddress[1] == 7);
+	Setup(false, 0);
+	assert(s_Control.Address == 7);
+	assert(Lpc17UsbControlSetAddress(&s_Control, 12));
+	assert(Lpc17UsbControlStatus(&s_Control, 0x80));
+	Setup(true, 8); // unacknowledged status aborted at the old address
+	assert(s_AddressData == 0x87 && s_AddressWrites == 3);
+	assert(s_Control.Address == 7 && !s_Control.AddressPending);
+	assert(!Lpc17UsbControlSetAddress(&s_Control, 9));
+	Setup(false, 0);
+	assert(Lpc17UsbControlSetAddress(&s_Control, 127));
+	assert(Lpc17UsbControlStatus(&s_Control, 0x80));
+	s_Pending = 2;
+	Setup(false, 0); // acknowledged address must survive coalesced SETUP
+	assert(s_Control.Address == 127 && !s_Control.AddressPending);
+	assert(s_AddressWrites == 4 && s_EventAddress[5] == 127);
+	assert(Lpc17UsbControlSetAddress(&s_Control, 0));
+	assert(s_AddressData == 0x80);
+	Lpc17UsbControlStall(&s_Control);
+	assert(s_AddressData == 0xFF && s_Control.Address == 127 && !s_Control.AddressPending);
+	assert(s_Stalls == 2 && s_Mask == 0);
+	Reset();
+	assert(s_Control.Address == 0 && !s_Control.AddressPending);
+	s_Current = 4;
+	assert(!Lpc17UsbControlSetAddress(&s_Control, 1) && s_AddressWrites == 0);
+	s_Current = 0;
+	s_Mask = 1;
+	s_FailWrite = true;
+	assert(!Lpc17UsbControlSetAddress(&s_Control, 1) && s_Faults == 1 && s_Mask == 1);
+	Reset();
+	assert(Lpc17UsbControlSetAddress(&s_Control, 1));
+	s_FailWrite = true;
+	Setup(false, 0); // restoration failure must stop dispatch
+	assert(s_Faults == 1 && s_Events == 0 && !s_Control.Enabled);
+}
+
 int main(void)
 {
 	assert(mmap((void *)0x5000C000, 4096, PROT_READ | PROT_WRITE,
@@ -244,5 +311,6 @@ int main(void)
 	Reset();
 	s_FailRead = true;
 	assert(Lpc17UsbControlSend(&s_Control, NULL, 0) == -1 && s_Faults == 1);
-	puts("LPC1769 control SETUP, IN/OUT events, callback reset, overwrite and faults: PASS");
+	AddressTests();
+	puts("LPC1769 control events, address status/abort, callback reset and faults: PASS");
 }

@@ -47,6 +47,9 @@ void Lpc17UsbControlReset(Lpc17UsbControl_t *pControl, bool Enable)
 	++pControl->Generation;
 	pControl->RemainingOut = 0;
 	pControl->InLength = 0;
+	pControl->Address = 0;
+	pControl->PendingAddress = 0;
+	pControl->AddressPending = false;
 	pControl->Enabled = Enable && pControl->Event != NULL && pControl->Fault != NULL;
 	pControl->InBusy = false;
 	pControl->StatusIn = false;
@@ -76,6 +79,45 @@ static bool Lpc17UsbControlCurrent(Lpc17UsbControl_t *pControl)
 		return false;
 	}
 	return (status & (LPC17_EP_SETUP | LPC17_EP_OVERWRITE)) == 0U;
+}
+
+bool Lpc17UsbControlSetAddress(Lpc17UsbControl_t *pControl, uint8_t Address)
+{
+	if (Address > 127U)
+		return false;
+	const uint32_t state = __get_PRIMASK();
+	__disable_irq();
+	bool accepted = false;
+	if (!pControl->InBusy && !pControl->StatusOut && !pControl->DirectionIn &&
+		pControl->RemainingOut == 0U && Lpc17UsbControlCurrent(pControl))
+	{
+		// UM10360 11.12.1: DEV_EN stays set, including for address zero.
+		if (Lpc17UsbSieWrite(0xD0U, Address | 0x80U))
+		{
+			pControl->PendingAddress = Address;
+			pControl->AddressPending = true;
+			accepted = true;
+		}
+		else
+			Lpc17UsbControlFault(pControl);
+	}
+	__set_PRIMASK(state);
+	return accepted;
+}
+
+static bool Lpc17UsbControlCancelAddress(Lpc17UsbControl_t *pControl)
+{
+	if (pControl->AddressPending)
+	{
+		// Do not let an aborted request change address at a later status stage.
+		if (!Lpc17UsbSieWrite(0xD0U, pControl->Address | 0x80U))
+		{
+			Lpc17UsbControlFault(pControl);
+			return false;
+		}
+		pControl->AddressPending = false;
+	}
+	return true;
 }
 
 int Lpc17UsbControlSend(Lpc17UsbControl_t *pControl, const uint8_t *pData, int Length)
@@ -132,7 +174,7 @@ void Lpc17UsbControlStall(Lpc17UsbControl_t *pControl)
 {
 	const uint32_t state = __get_PRIMASK();
 	__disable_irq();
-	if (Lpc17UsbControlCurrent(pControl))
+	if (Lpc17UsbControlCurrent(pControl) && Lpc17UsbControlCancelAddress(pControl))
 	{
 		pControl->Halted = true;
 		pControl->InBusy = false;
@@ -178,6 +220,11 @@ static void Lpc17UsbControlDispatch(Lpc17UsbControl_t *pControl)
 	// Control NAK interrupts must be disabled by the controller initializer.
 	if (inDone && pControl->StatusIn)
 	{
+		if (pControl->AddressPending)
+		{
+			pControl->Address = pControl->PendingAddress;
+			pControl->AddressPending = false;
+		}
 		pControl->InBusy = false;
 		pControl->StatusIn = false;
 		inDone = false;
@@ -212,7 +259,11 @@ static void Lpc17UsbControlDispatch(Lpc17UsbControl_t *pControl)
 		UsbCtrlrEvt_t event = {0};
 		event.Type = USB_CTRLR_EVT_SETUP;
 		memcpy(&event.Setup, packet, sizeof(event.Setup));
+		if (!Lpc17UsbControlCancelAddress(pControl))
+			return;
+		const uint8_t address = pControl->Address;
 		Lpc17UsbControlReset(pControl, true);
+		pControl->Address = address;
 		pControl->DirectionIn = (event.Setup.bmRequestType & 0x80U) != 0U;
 		pControl->RemainingOut = pControl->DirectionIn ? 0 : event.Setup.wLength;
 		pControl->Event(&event);

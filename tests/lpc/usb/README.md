@@ -585,3 +585,19 @@ It uses real shared event types and vendor CMSIS registers, mocking only the
 private FIFO/SIE operations. `run17.py` runs it at -O0/-O2 with UBSan alongside
 the existing hardware-operation models. The new module also compiles for
 Cortex-M3 at -O0/-Os. These checks are not a full firmware link or board test.
+
+The private control module now provides `Lpc17UsbControlSetAddress`. Following
+UM10360 section 11.12.1, it writes SIE command 0xD0 before status IN, with DEV_EN
+set even for address zero. The hardware defers the address change until status;
+software confirms the address before delivering the acknowledged status event.
+A new SETUP or stall restores the previously confirmed address if the status
+was not acknowledged. A coalesced status acknowledgement and SETUP preserves
+the newly confirmed address. Software bus reset returns address tracking to
+zero and must accompany hardware reset; ordinary SETUP retains the address.
+
+Address tests cover 0/127, rejection of 128, DEV_EN encoding, pending status,
+NAK rejection, coalesced SETUP, interrupted status, stall restoration, software
+reset, interrupt-mask preservation and SIE failure during programming or
+restoration. `run17.py` passes at -O0/-O2 with UBSan; Cortex-M3 compilation
+passes at -O0/-Os. Public controller wrappers, initialization and bus IRQ
+handling remain to be connected. Address timing still needs board validation.
