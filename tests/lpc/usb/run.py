@@ -189,6 +189,8 @@ for opt in ['-O0', '-O2']:
 
         subprocess.run([exe, "composite", "bulk"], check=True, timeout=5)
 
-# LPC546xx USB0 hardware preparation; the transport port is still in progress.
+# Additional LPC USB controller models.
 import sys
 subprocess.run([sys.executable, str(root / "tests/lpc/usb/run546.py")], check=True)
+
+subprocess.run([sys.executable, str(root / "tests/lpc/usb/run17.py")], check=True)

@@ -452,3 +452,31 @@ PRBS generator is linked. The LPC54628 library project already includes
 twelve links across EP0, CDC loopback, CDC PRBS, HID, custom bulk and composite
 firmware. Debug retains semihosting and Release uses nosys. Physical PRBS
 integrity, throughput and reconnect behavior remain pending board testing.
+
+## LPC1769 USB hardware preparation
+
+`python3 tests/lpc/usb/run17.py` tests the new private clock/power helper,
+`usb_hw_lpc17xx.c`, using vendor `LPC_SC_TypeDef` and `LPC_USB_TypeDef`
+register declarations. The main USB host suite also invokes it. This is the
+first LPC1769 USB step, not a usable generic USB device driver. SIE commands,
+pins, EP0, endpoint transfers and lifecycle integration remain to be added.
+
+Preparation accepts the board's main oscillator frequency and validates the
+existing PLL0 or PLL1 status for exactly 48 MHz. It requires a ready main
+oscillator and SystemCoreClock of at least 18 MHz; the clock owner must keep
+these settings stable. It does not reprogram PLLs. An already-powered USB
+block is refused to avoid taking over host, OTG or another device user.
+It powers USB, enables device/AHB clocks and polls their ready bits with a
+signed bounded counter. Timeout removes its clock/power request. Interrupt
+mask and unrelated PCONP bits are preserved. Release refuses enabled endpoint,
+DMA or interrupt state; it does not cancel transfers or disconnect a device.
+
+Host tests pass at -O0/-O2 with UBSan for PLL selection, exact rate, PLL lock,
+PLL1 CCO range, oscillator readiness, low core speed, clock timeout, exclusive
+ownership and guarded release. The production helper compiles for Cortex-M3
+at -O0/-Os with Arm GNU 13.2.1. These are not firmware links or board tests.
+The LPC1769 library project includes the helper and its private header.
+
+Reference: NXP UM10360 revision 2, chapters 4 and 11, particularly the USB
+clock control and initialization sequence:
+https://www.pololu.com/file/0J431/user.manual.lpc17xx.pdf
