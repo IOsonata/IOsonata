@@ -50,6 +50,7 @@ SOFTWARE.
 #include "coredev/interrupt.h"
 #include "coredev/system_core_clock.h"
 #include "iopinctrl.h"
+#include "interrupt_ra4m1.h"
 
 #define RA4M1_I2C_COUNT				2
 #define RA4M1_I2C_MAX_RATE			400000U
@@ -83,6 +84,14 @@ typedef struct
 	bool bActive;
 	bool bRx;
 	bool bError;
+	bool bSlaveTx;
+	bool bSlaveAddressRead;
+	bool bSlaveRequest;
+	int SlaveCount;
+	IRQn_Type IrqRxi;
+	IRQn_Type IrqTxi;
+	IRQn_Type IrqTei;
+	IRQn_Type IrqEei;
 } Ra4m1I2cDev_t;
 
 static Ra4m1I2cDev_t s_Ra4m1I2cDev[RA4M1_I2C_COUNT] = {
@@ -90,11 +99,19 @@ static Ra4m1I2cDev_t s_Ra4m1I2cDev[RA4M1_I2C_COUNT] = {
 		.DevNo = 0,
 		.pReg = R_IIC0,
 		.MstpMask = (1UL << 9),
+		.IrqRxi = (IRQn_Type)-1,
+		.IrqTxi = (IRQn_Type)-1,
+		.IrqTei = (IRQn_Type)-1,
+		.IrqEei = (IRQn_Type)-1,
 	},
 	{
 		.DevNo = 1,
 		.pReg = R_IIC1,
 		.MstpMask = (1UL << 8),
+		.IrqRxi = (IRQn_Type)-1,
+		.IrqTxi = (IRQn_Type)-1,
+		.IrqTei = (IRQn_Type)-1,
+		.IrqEei = (IRQn_Type)-1,
 	},
 };
 
@@ -303,6 +320,206 @@ static void Ra4m1I2cClearStatus(R_IIC0_Type * const pReg)
 	pReg->ICSR2_b.START = 0U;
 }
 
+
+/* Each IIC slave has its own four ICU event routes. Callbacks run in ISR
+ * context, exactly like the other IOsonata I2C slave backends.
+ */
+static void Ra4m1I2cSlaveFinish(Ra4m1I2cDev_t * const pDev)
+{
+	if (!pDev->bActive)
+	{
+		return;
+	}
+
+	I2CDev_t *i2c = pDev->pI2cDev;
+	int count = pDev->SlaveCount;
+
+	pDev->bActive = false;
+	pDev->bSlaveRequest = false;
+	pDev->SlaveCount = 0;
+
+	if (i2c->DevIntrf.EvtCB != NULL)
+	{
+		i2c->DevIntrf.EvtCB(&i2c->DevIntrf, DEVINTRF_EVT_COMPLETED, NULL, count);
+	}
+}
+
+static void Ra4m1I2cSlaveRequest(Ra4m1I2cDev_t * const pDev, bool bRead)
+{
+	I2CDev_t *i2c = pDev->pI2cDev;
+	const int previousCount = pDev->bActive && !pDev->bSlaveTx ?
+		pDev->SlaveCount : 0;
+
+	if (pDev->bActive && pDev->bSlaveTx && i2c->DevIntrf.EvtCB != NULL)
+	{
+		i2c->DevIntrf.EvtCB(&i2c->DevIntrf,
+			DEVINTRF_EVT_COMPLETED, NULL, pDev->SlaveCount);
+	}
+
+	pDev->bActive = true;
+	pDev->bSlaveTx = bRead;
+	pDev->bSlaveRequest = true;
+	pDev->SlaveCount = 0;
+
+	/* The callback installs the application's read or write buffer through
+	 * the existing I2CSetReadRqstData/I2CSetWriteRqstBuffer interface.
+	 * A repeated START carries the preceding write count into READ_RQST.
+	 */
+	if (i2c->DevIntrf.EvtCB != NULL)
+	{
+		i2c->DevIntrf.EvtCB(&i2c->DevIntrf,
+			bRead ? DEVINTRF_EVT_READ_RQST : DEVINTRF_EVT_WRITE_RQST,
+			NULL, bRead ? previousCount : 0);
+	}
+}
+
+static void Ra4m1I2cSlaveIrqHandler(int IntNo, void *pCtx)
+{
+	Ra4m1I2cDev_t *dev = (Ra4m1I2cDev_t *)pCtx;
+	I2CDev_t *i2c = dev->pI2cDev;
+	R_IIC0_Type *reg = dev->pReg;
+
+	if (i2c == NULL || !dev->bEnabled || i2c->Cfg.Mode != I2CMODE_SLAVE)
+	{
+		return;
+	}
+
+	if (reg->ICSR2_b.TMOF || reg->ICSR2_b.AL)
+	{
+		Ra4m1I2cSlaveFinish(dev);
+		Ra4m1I2cClearStatus(reg);
+		Ra4m1I2cAck(dev, false);
+		return;
+	}
+
+	if (IntNo == dev->IrqRxi)
+	{
+		/* The first RXI after address recognition contains the address,
+		 * not application payload. Reading ICDRR releases the next byte.
+		 */
+		uint8_t value = reg->ICDRR;
+
+		if (!dev->bSlaveRequest)
+		{
+			Ra4m1I2cSlaveRequest(dev, false);
+		}
+		else if (!dev->bSlaveTx && i2c->pTRBuff[0] != NULL &&
+			dev->SlaveCount < i2c->TRBuffLen[0])
+		{
+			i2c->pTRBuff[0][dev->SlaveCount++] = value;
+		}
+		else if (!dev->bSlaveTx)
+		{
+			Ra4m1I2cAck(dev, true);
+		}
+
+		(void)reg->ICSR2;
+		__DSB();
+		Ra4m1AcknowledgeInt((IRQn_Type)IntNo);
+		return;
+	}
+
+	if (IntNo == dev->IrqTxi)
+	{
+		if (!dev->bSlaveRequest || !dev->bSlaveTx)
+		{
+			Ra4m1I2cSlaveRequest(dev, true);
+		}
+
+		uint8_t value = 0xFFU;
+
+		if (i2c->pRRData[0] != NULL && dev->SlaveCount < i2c->RRDataLen[0])
+		{
+			value = i2c->pRRData[0][dev->SlaveCount++];
+		}
+
+		reg->ICDRT = value;
+		(void)reg->ICSR2;
+		__DSB();
+		Ra4m1AcknowledgeInt((IRQn_Type)IntNo);
+		return;
+	}
+
+	if (IntNo == dev->IrqEei)
+	{
+		const bool stop = reg->ICSR2_b.STOP != 0U;
+		const bool nack = reg->ICSR2_b.NACKF != 0U;
+
+		if (stop)
+		{
+			reg->ICSR2_b.STOP = 0U;
+			Ra4m1I2cSlaveFinish(dev);
+		}
+
+		if (nack)
+		{
+			reg->ICSR2_b.NACKF = 0U;
+			Ra4m1I2cAck(dev, false);
+		}
+
+		if (reg->ICSR2_b.START)
+		{
+			reg->ICSR2_b.START = 0U;
+		}
+
+		(void)reg->ICSR2;
+		__DSB();
+		Ra4m1AcknowledgeInt((IRQn_Type)IntNo);
+		return;
+	}
+
+	/* TEI has no transfer to retire independently: the transaction ends
+	 * on STOP or a repeated START. Clear its pending event.
+	 */
+	(void)reg->ICSR2;
+	__DSB();
+	Ra4m1AcknowledgeInt((IRQn_Type)IntNo);
+}
+
+static void Ra4m1I2cSlaveUnregister(Ra4m1I2cDev_t * const pDev)
+{
+	Ra4m1UnregisterIntHandler(pDev->IrqRxi);
+	Ra4m1UnregisterIntHandler(pDev->IrqTxi);
+	Ra4m1UnregisterIntHandler(pDev->IrqTei);
+	Ra4m1UnregisterIntHandler(pDev->IrqEei);
+	pDev->IrqRxi = (IRQn_Type)-1;
+	pDev->IrqTxi = (IRQn_Type)-1;
+	pDev->IrqTei = (IRQn_Type)-1;
+	pDev->IrqEei = (IRQn_Type)-1;
+}
+
+static bool Ra4m1I2cSlaveRegister(Ra4m1I2cDev_t * const pDev, int Priority)
+{
+	uint8_t event = pDev->DevNo == 0 ?
+		RA4M1_EVTID_IIC0_RXI : RA4M1_EVTID_IIC1_RXI;
+
+	pDev->IrqRxi = Ra4m1RegisterIntHandler(
+		event, Priority, Ra4m1I2cSlaveIrqHandler, pDev);
+	if (pDev->IrqRxi >= 0)
+	{
+		pDev->IrqTxi = Ra4m1RegisterIntHandler(
+			event + 1U, Priority, Ra4m1I2cSlaveIrqHandler, pDev);
+	}
+	if (pDev->IrqTxi >= 0)
+	{
+		pDev->IrqTei = Ra4m1RegisterIntHandler(
+			event + 2U, Priority, Ra4m1I2cSlaveIrqHandler, pDev);
+	}
+	if (pDev->IrqTei >= 0)
+	{
+		pDev->IrqEei = Ra4m1RegisterIntHandler(
+			event + 3U, Priority, Ra4m1I2cSlaveIrqHandler, pDev);
+	}
+
+	if (pDev->IrqEei < 0)
+	{
+		Ra4m1I2cSlaveUnregister(pDev);
+		return false;
+	}
+
+	return true;
+}
+
 static void Ra4m1I2cConfigure(Ra4m1I2cDev_t * const pDev)
 {
 	R_IIC0_Type *reg = pDev->pReg;
@@ -323,6 +540,12 @@ static void Ra4m1I2cConfigure(Ra4m1I2cDev_t * const pDev)
 	reg->SARU2 = 0U;
 	reg->ICSER = 0U;
 
+	if (pDev->pI2cDev->Cfg.Mode == I2CMODE_SLAVE)
+	{
+		reg->SARL0 = (uint8_t)(pDev->pI2cDev->Cfg.SlaveAddr[0] << 1U);
+		reg->ICSER = 1U;
+	}
+
 	reg->ICBRL = (uint8_t)(RA4M1_I2C_ICBR_RESERVED | pDev->Brl);
 	reg->ICBRH = (uint8_t)(RA4M1_I2C_ICBR_RESERVED | pDev->Brh);
 	reg->ICMR1 = RA4M1_I2C_ICMR1_BASE;
@@ -333,9 +556,11 @@ static void Ra4m1I2cConfigure(Ra4m1I2cDev_t * const pDev)
 	/* Use the standard FSP master-function baseline, but disable the digital
 	 * noise filter so the timing model above is exact and conservative.
 	 */
-	reg->ICFER = RA4M1_I2C_ICFER_MASTER;
+	reg->ICFER = pDev->pI2cDev->Cfg.Mode == I2CMODE_SLAVE ?
+		0x5DU : RA4M1_I2C_ICFER_MASTER;
 	reg->ICFER_b.NFE = 0U;
-	reg->ICIER = 0U;
+	reg->ICIER = pDev->pI2cDev->Cfg.Mode == I2CMODE_SLAVE && pDev->bEnabled ?
+		0xBEU : 0U;
 	Ra4m1I2cClearStatus(reg);
 	reg->ICCR1 = RA4M1_I2C_ICCR1_RUN;
 
@@ -345,6 +570,9 @@ static void Ra4m1I2cConfigure(Ra4m1I2cDev_t * const pDev)
 	}
 
 	pDev->bActive = false;
+	pDev->bSlaveTx = false;
+	pDev->bSlaveRequest = false;
+	pDev->SlaveCount = 0;
 }
 
 static bool Ra4m1I2cFinish(Ra4m1I2cDev_t * const pDev)
@@ -630,7 +858,15 @@ static void Ra4m1I2cDisable(DevIntrf_t * const pIntrf)
 		return;
 	}
 
-	Ra4m1I2cStop(pIntrf);
+	if (dev->pI2cDev->Cfg.Mode == I2CMODE_SLAVE)
+	{
+		dev->pReg->ICIER = 0U;
+		Ra4m1I2cSlaveFinish(dev);
+	}
+	else
+	{
+		Ra4m1I2cStop(pIntrf);
+	}
 	dev->pReg->ICCR1_b.ICE = 0U;
 	dev->bEnabled = false;
 }
@@ -751,6 +987,10 @@ static void Ra4m1I2cPowerOff(DevIntrf_t * const pIntrf)
 	}
 
 	Ra4m1I2cDisable(pIntrf);
+	if (dev->pI2cDev->Cfg.Mode == I2CMODE_SLAVE)
+	{
+		Ra4m1I2cSlaveUnregister(dev);
+	}
 	IOPinDis(dev->pI2cDev->Cfg.pIOPinMap, dev->pI2cDev->Cfg.NbIOPins);
 
 	uint32_t state = DisableInterrupt();
@@ -867,9 +1107,12 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfg)
 
 	if (pCfg->DevNo < 0 || pCfg->DevNo >= RA4M1_I2C_COUNT ||
 		pCfg->Type != I2CTYPE_STANDARD ||
-		pCfg->Mode != I2CMODE_MASTER ||
+		(pCfg->Mode != I2CMODE_MASTER && pCfg->Mode != I2CMODE_SLAVE) ||
+		(pCfg->Mode == I2CMODE_SLAVE &&
+		 (!pCfg->bIntEn || pCfg->NbSlaveAddr != 1 ||
+		  pCfg->SlaveAddr[0] < 0x08U || pCfg->SlaveAddr[0] > 0x77U)) ||
 		pCfg->AddrType != I2CADDR_TYPE_NORMAL ||
-		pCfg->bIntEn ||
+		(pCfg->Mode == I2CMODE_MASTER && pCfg->bIntEn) ||
 		pCfg->bDmaEn ||
 		pCfg->pIOPinMap == NULL ||
 		pCfg->NbIOPins != 2 ||
@@ -914,6 +1157,9 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfg)
 	dev->bActive = false;
 	dev->bRx = false;
 	dev->bError = false;
+	dev->bSlaveTx = false;
+	dev->bSlaveRequest = false;
+	dev->SlaveCount = 0;
 	Ra4m1I2cModuleStart(dev, true);
 	EnableInterrupt(state);
 
@@ -935,7 +1181,7 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfg)
 	intrf->Type = DEVINTRF_TYPE_I2C;
 	intrf->EnCnt = 1;
 	intrf->bDma = false;
-	intrf->bIntEn = false;
+	intrf->bIntEn = pCfg->bIntEn;
 	intrf->bTxReady = true;
 	intrf->bNoStop = false;
 	intrf->MaxRetry = pCfg->MaxRetry;
@@ -957,7 +1203,16 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfg)
 	intrf->TxSrData = Ra4m1I2cTx;
 	atomic_flag_clear(&intrf->bBusy);
 
-	Ra4m1I2cConfigure(dev);
+	if (pCfg->Mode == I2CMODE_SLAVE &&
+		!Ra4m1I2cSlaveRegister(dev, pCfg->IntPrio))
+	{
+		dev->bEnabled = false;
+		dev->pI2cDev = NULL;
+		intrf->pDevData = NULL;
+		Ra4m1I2cModuleStart(dev, false);
+		return false;
+	}
 
+	Ra4m1I2cConfigure(dev);
 	return true;
 }
