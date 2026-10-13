@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Focused production-function regressions; host models do not validate bus timing."""
+"""Focused production-function regressions; host models do not validate bus timing.
+
+Clock and LPTIM. The UART driver is tested by tests/stm32/run_uart.py.
+"""
 from pathlib import Path
 import re, subprocess, tempfile, os, shlex
 ROOT = Path(__file__).resolve().parents[2]
@@ -11,7 +14,7 @@ def function(s, name):
         depth += (s[b]=='{')-(s[b]=='}'); b+=1
     return s[m.start():b]
 header=(BASE/'include/stm32l476xx.h').read_text()
-prefixes=['RCC_PLLCFGR_PLL','RCC_CFGR_SWS','RCC_CR_MSI','RCC_CSR_MSI','RCC_APB1ENR1_LPTIM1','RCC_APB1ENR2_LPTIM2','RCC_APB1SMENR1_LPTIM1','RCC_APB1SMENR2_LPTIM2','LPTIM_CR_','LPTIM_IER_','USART_ISR_','USART_CR1_','USART_CR2_STOP']
+prefixes=['RCC_PLLCFGR_PLL','RCC_CFGR_SWS','RCC_CR_MSI','RCC_CSR_MSI','RCC_APB1ENR1_LPTIM1','RCC_APB1ENR2_LPTIM2','RCC_APB1SMENR1_LPTIM1','RCC_APB1SMENR2_LPTIM2','LPTIM_CR_','LPTIM_IER_']
 macros='\n'.join(l for l in header.splitlines() if l.startswith('#define ') and any(l.split()[1].startswith(p) for p in prefixes))
 common='#include <cstdint>\n#include <cassert>\n#include <cstdio>\n#include <cstring>\n#include <algorithm>\n'+macros+'\n'
 models={}
@@ -61,48 +64,6 @@ int main(){TimerDev_t timers[2]={{0},{1}};for(int i=0;i<2;i++){
   assert(Stm32l4LptEnable(&timers[i]));
  }
 }puts("PASS LPTIM: both devices restore overflow interrupt across repeated enable cycles");}
-'''
-s=(BASE/'src/uart_stm32l4xx.cpp').read_text()
-a=s.index('\t// Hardware word length');b=s.index('\n\t// Swap',a)
-models['framing']=common+r'''
-enum {UART_PARITY_NONE,UART_PARITY_EVEN,UART_PARITY_ODD};
-struct Config {int DataBits,Parity,StopBits;};struct Reg {uint32_t CR1,CR2;};
-void frame(Reg *reg,Config *pCfg){
-'''+s[a:b]+r'''
-}
-int main(){for(int bits=7;bits<=8;bits++)for(int parity=0;parity<3;parity++)for(int stop=1;stop<=2;stop++){
- Reg reg{0xffffffff,0xffffffff};Config cfg{bits,parity,stop};frame(&reg,&cfg);
- assert(!!(reg.CR1&USART_CR1_PCE)==(parity!=0));assert(!!(reg.CR1&USART_CR1_PS)==(parity==2));
- unsigned length=bits+(parity!=0);assert(!!(reg.CR1&USART_CR1_M0)==(length==9));
- assert(!!(reg.CR1&(1u<<28))==(length==7));assert((reg.CR2&USART_CR2_STOP_Msk)==(stop==2?USART_CR2_STOP_1:0));
- assert((reg.CR2&~USART_CR2_STOP_Msk)==(0xffffffff&~USART_CR2_STOP_Msk));
-}puts("PASS UART framing: 7/8 payload bits, none/even/odd parity, 1/2 stops");}
-'''
-models['rx']=common+r'''
-struct Fifo {uint8_t bytes[2];int used=0;};
-uint8_t *CFifoPut(Fifo *f){return f->used==2?nullptr:&f->bytes[f->used++];}
-uint8_t *CFifoGet(Fifo *){return nullptr;}
-uint8_t *CFifoGetMultiple(Fifo *f,int *n){if(!f->used)return nullptr;*n=std::min(*n,f->used);f->used-=*n;return f->bytes;}
-int CFifoUsed(Fifo *f){return f->used;}
-struct Reg;
-struct DataReg {Reg *reg;uint8_t value=0;int reads=0;operator uint16_t();};
-struct Reg {uint32_t ISR=0,ICR=0,TDR=0;DataReg RDR{this};};
-DataReg::operator uint16_t(){reads++;reg->ISR&=~USART_ISR_RXNE;return value;}
-struct UARTDev_t {Fifo *hRxFifo,*hTxFifo;bool bRxReady=false,bTxReady=false;int DataBits=8;void (*EvtCallback)(UARTDev_t*,int,void*,int)=nullptr;};
-struct STM32L4X_UARTDEV {UARTDev_t *pUartDev;Reg *pReg;int RxDropCnt=0,ErrCnt=0;uint32_t ErrFlag=0;};
-struct DevIntrf_t {void *pDevData;};
-constexpr int STM32L4X_UART_HWFIFO_SIZE=8,UART_EVT_RXDATA=0,UART_EVT_TXREADY=1,UART_EVT_RXTIMEOUT=2;
-uint32_t DisableInterrupt(){return 0;}void EnableInterrupt(uint32_t){}
-'''+function(s,'UART_IRQHandler')+'\n'+function(s,'STM32L4xUARTRxData')+r'''
-int main(){Fifo rx{},tx{};Reg reg{};UARTDev_t uart{&rx,&tx};STM32L4X_UARTDEV dev{&uart,&reg};DevIntrf_t intrf{&dev};
- for(int i=0;i<3;i++){reg.RDR.value=10+i;reg.ISR=USART_ISR_RXNE;UART_IRQHandler(&dev);}
- assert(dev.RxDropCnt==1);assert(reg.RDR.reads==3);assert(uart.bRxReady);
- uint8_t out[4]{};assert(STM32L4xUARTRxData(&intrf,out,4)==2);assert(out[0]==10&&out[1]==11);
- assert(!uart.bRxReady);assert(STM32L4xUARTRxData(&intrf,out,4)==0);assert(reg.RDR.reads==3);
- uart.DataBits=7;reg.RDR.value=0xff;reg.ISR=USART_ISR_RXNE;UART_IRQHandler(&dev);
- assert(STM32L4xUARTRxData(&intrf,out,4)==1);assert(out[0]==0x7f);assert(reg.RDR.reads==4);
- puts("PASS UART RX: full FIFO drops once, no stale RDR replay, seven-bit masking");
-}
 '''
 with tempfile.TemporaryDirectory(prefix='stm32l4-runtime-') as d:
     for name,code in models.items():

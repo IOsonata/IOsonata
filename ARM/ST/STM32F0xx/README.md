@@ -3,7 +3,7 @@
 STM32F030x8 implements the minimum supported MCU set: startup, GPIO, UART
 and timer. Other F030 memory variants are not covered by the new timer driver.
 GPIO includes pin configuration, digital I/O and pin-specific EXTI allocation.
-UART supports polling, FIFO interrupts and optional TX DMA.
+UART supports polling, FIFO interrupts and DMA.
 
 ## UART DMA
 
@@ -122,12 +122,14 @@ From the repository root:
 
 ```sh
 python3 tests/stm32f0/run.py
+python3 tests/stm32/run_uart.py
 python3 tests/stm32f0/run_timer.py
 python3 tests/stm32f0/run_timer_arm.py
 ```
 
-The existing host startup/UART/GPIO regressions pass for F030x6/x8/xC and
-F070x6/xB. New host models compile the production timer implementation and
+The host clock and EXTI regressions pass for F030x6/x8/xC and F070x6/xB.
+The UART test runs the shared driver for F030x6/x8/xC, F070x6/xB and F091xC,
+see [tests/stm32f0/README.md](../../../tests/stm32f0/README.md). New host models compile the production timer implementation and
 vector wrappers with the ST register definitions and UBSan. They exercise all
 seven devices and trigger channels, clocks, overflow, long compares, lifecycle,
 callback cancellation and TIM17 override refusal. They do not simulate APB

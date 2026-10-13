@@ -2,7 +2,8 @@
 """Compile production function bodies against focused host register/dispatch models.
 
 This checks virtual-device routing and unsupported-mode refusal, not peripheral
-bus timing, a complete firmware build, or hardware operation.
+bus timing, a complete firmware build, or hardware operation. The UART driver,
+ARM/ST/src/uart_stm32.cpp, is tested by tests/stm32/run_uart.py.
 """
 from pathlib import Path
 import os
@@ -23,75 +24,11 @@ def function(text, name):
         end += 1
     return text[match.start():end]
 def table(text, name):
-    start = text.index('static STM32L4X_UARTDEV '+name) if name.startswith('s_Stm') else text.index('STM32L4XX_SPIDev_t '+name)
+    start = text.index('STM32L4XX_SPIDev_t '+name)
     end = text.index('\n};', start) + 3
     return text[start:end]
 COMMON = '#include <cassert>\n#include <cstdint>\n#include <cstdio>\n#include <cstring>\n'
 models = {}
-u = source('uart_stm32l4xx.cpp')
-models['uart'] = COMMON + r'''
-struct Reg { uint32_t CR1=0, CR2=0; } regs[6];
-auto LPUART1=&regs[0], USART1=&regs[1], USART2=&regs[2], USART3=&regs[3], UART4=&regs[4], UART5=&regs[5];
-struct IOPinCfg_t { int PortNo, PinNo; };
-struct UARTDev { int hTxFifo=0; bool bTxReady=false; };
-struct STM32L4X_UARTDEV { int DevNo; Reg *pReg; UARTDev *pUartDev=nullptr; unsigned ErrCnt=0,RxTimeoutCnt=0,RxDropCnt=0; const IOPinCfg_t *pIOPinMap=nullptr; int NbPins=0; };
-struct DevIntrf_t { void *pDevData; int bBusy=0; };
-struct Rcc { uint32_t APB2ENR=0, APB1ENR1=0, APB1ENR2=0, APB2RSTR=0, APB1RSTR1=0, APB1RSTR2=0, CCIPR=0; } rcc;
-auto RCC=&rcc;
-constexpr uint32_t RCC_APB2ENR_USART1EN=1u<<14, RCC_APB1ENR1_USART2EN=1u<<17, RCC_APB1ENR2_LPUART1EN=1;
-constexpr uint32_t RCC_APB1ENR1_USART3EN=1u<<18, RCC_APB1ENR1_UART4EN=1u<<19, RCC_APB1ENR1_UART5EN=1u<<20;
-constexpr uint32_t RCC_APB2RSTR_USART1RST=1u<<14, RCC_APB1RSTR1_USART2RST=1u<<17, RCC_APB1RSTR2_LPUART1RST=1;
-constexpr uint32_t RCC_CCIPR_USART1SEL_Msk=3, RCC_CCIPR_LPUART1SEL_Msk=3u<<10;
-constexpr uint32_t USART_CR1_UE=1, USART_CR1_RE=4, USART_CR1_TE=8, USART_CR2_RTOEN=1u<<23;
-constexpr int IOPINSPEED_TURBO=0;
-enum { LPUART1_IRQn, USART1_IRQn, USART2_IRQn, USART3_IRQn, UART4_IRQn, UART5_IRQn };
-int selected=-1, cleared=-1, enabled=-1, priority=-1;
-void UART_IRQHandler(STM32L4X_UARTDEV *p) { selected=int(p->pReg-regs); }
-void NVIC_ClearPendingIRQ(int irq) { cleared=irq; }
-void NVIC_SetPriority(int irq,int) { priority=irq; }
-void NVIC_EnableIRQ(int irq) { enabled=irq; }
-void IOPinDis(const IOPinCfg_t*,int) {}
-void IOPinCfg(const IOPinCfg_t*,int) {}
-void IOPinSetSpeed(int,int,int) {}
-void CFifoFlush(int) {}
-void atomic_flag_clear(int*) {}
-Rcc resetSnapshot;
-void usDelay(int) { resetSnapshot=rcc; }
-''' + table(u, 's_Stm32l4xUartDev') + '\n'
-for name in ['USART1','USART2','USART3','UART4','UART5','LPUART1']:
-    models['uart'] += function(u,name+'_IRQHandler')+'\n'
-for name in ['Disable','Enable','PowerOff','Reset']:
-    models['uart'] += function(u,'STM32L4xUART'+name)+'\n'
-# Exercise the actual IRQ-selection switch in UARTInit, without simulating FIFOs.
-start = u.index('switch (devno)', u.index('if (pCfg->bIntMode)'))
-# Match the switch itself using balanced braces.
-i=u.index('{',start); d=1; end=i+1
-while d:
-    d+=(u[end]=='{')-(u[end]=='}'); end+=1
-models['uart'] += 'void init_irq(int devno) { struct { int IntPrio; } cfg{3}; auto pCfg=&cfg; '+u[start:end]+'}\n'
-models['uart'] += r'''
-int main() {
- void (*irqs[])()={LPUART1_IRQHandler,USART1_IRQHandler,USART2_IRQHandler,USART3_IRQHandler,UART4_IRQHandler,UART5_IRQHandler};
- UARTDev devs[6];
- for(int i=0;i<6;i++) {
-  auto &entry=s_Stm32l4xUartDev[i]; entry.pUartDev=&devs[i]; DevIntrf_t dev{&entry};
-  irqs[i](); assert(selected==i && cleared==i);
-  init_irq(i); assert(enabled==i && priority==i && cleared==i);
-  rcc={}; STM32L4xUARTReset(&dev);
-  uint32_t a=i==1 ? (1u<<14):0, b=i>=2 ? (1u<<(17+i-2)):0, c=i==0 ? 1:0;
-  assert(resetSnapshot.APB2RSTR==a && resetSnapshot.APB1RSTR1==b && resetSnapshot.APB1RSTR2==c);
-  assert(rcc.APB2RSTR==0 && rcc.APB1RSTR1==0 && rcc.APB1RSTR2==0);
-  STM32L4xUARTEnable(&dev);
-  assert(rcc.APB2ENR==a && rcc.APB1ENR1==b && rcc.APB1ENR2==c);
-  STM32L4xUARTDisable(&dev); assert(!(rcc.APB2ENR|rcc.APB1ENR1|rcc.APB1ENR2));
-  STM32L4xUARTEnable(&dev); rcc.CCIPR=0xfff;
-  STM32L4xUARTPowerOff(&dev);
-  assert(rcc.CCIPR==(0xfffu & ~(3u<<(i==0 ? 10:2*(i-1)))));
-  assert(!(rcc.APB2ENR|rcc.APB1ENR1|rcc.APB1ENR2));
- }
- puts("PASS UART: six IRQ, NVIC, reset and clock mappings");
-}
-'''
 s = source('spi_stm32l4xx.cpp')
 models['spi'] = COMMON + r'''
 #define STM32L4XX_SPI_DEV_COUNT 3
