@@ -35,12 +35,11 @@ SOURCES = [
 INCLUDES = [
     'include', 'ARM/include', 'ARM/CMSIS/Core/Include',
     'ARM/NXP/include', 'ARM/NXP/LPC11xx/include',
-    'tests/lpc/usb/firmware',
+    'ARM/NXP/LPC11xx/LPC11U35/exemples/UsbCdcLoopback/src',
 ]
 
 
-def check_project():
-    project = ROOT / 'ARM/NXP/LPC11xx/LPC11U35/lib/ioc/.project'
+def project_sources(project):
     linked = set()
     names = set()
     for link in ET.parse(project).findall('.//link'):
@@ -51,8 +50,32 @@ def check_project():
         match = re.fullmatch(r'PARENT-(\d+)-PROJECT_LOC/(.*)', uri)
         if match:
             linked.add((project.parent.parents[int(match[1]) - 1] / match[2]).resolve())
+    return linked
+
+
+def check_project():
+    mcu = ROOT / 'ARM/NXP/LPC11xx/LPC11U35'
+    linked = project_sources(mcu / 'lib/ioc/.project')
     for source in SOURCES:
         assert (ROOT / source).resolve() in linked, 'Missing library project link: ' + source
+    example = mcu / 'exemples/UsbCdcLoopback'
+    linked = project_sources(example / 'ioc/.project')
+    assert ROOT / 'exemples/usb/usb_cdc_loopback.cpp' in linked
+    assert example / 'src/board.h' in linked
+    for config in ET.parse(example / 'ioc/.cproject').findall('.//configuration'):
+        mode = config.get('name')
+        specs = 'rdimon' if mode == 'Debug' else 'nosys'
+        for tool in config.findall('.//tool'):
+            name = tool.get('superClass', '')
+            options = {option.get('superClass').split('.option.', 1)[-1]: option
+                       for option in tool.findall('option')}
+            if name.endswith('.cpp.compiler'):
+                assert options['cpp.compiler.std'].get('value').endswith('.gnucpp23')
+            if name.endswith(('.c.linker', '.cpp.linker')):
+                kind = 'cpp' if name.endswith('.cpp.linker') else 'c'
+                flags = options[kind + '.linker.other'].get('value')
+                assert '--specs=' + specs + '.specs' in flags
+                assert ('rdimon' in flags) == (mode == 'Debug')
 
 
 def build(prefix, output, mode):

@@ -1,10 +1,11 @@
 /**-------------------------------------------------------------------------
 @file	board.h
 
-@brief	LPC11U35 USB firmware link fixture
+@brief	LPC11U35 USB CDC loopback board configuration
 
-Clock and pin configuration used only to link the generic CDC example.
-Physical board wiring and USB operation require separate validation.
+USB configuration for the LPC11U35 native device driver. The IBK-IDAP-M
+carrier connects J1 to the IDAP-M module; see the example README for the
+required module clock and internal USB connections.
 
 @author	Hoang Nguyen Hoan
 @date	Oct. 12, 2026
@@ -34,13 +35,14 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ----------------------------------------------------------------------------*/
-#ifndef __LPC11_USB_LINK_BOARD_H__
-#define __LPC11_USB_LINK_BOARD_H__
+#ifndef __BOARD_H__
+#define __BOARD_H__
 
 #include "coredev/system_core_clock.h"
 
-// Link fixture only: these are the controller's supported clock/pin settings,
-// not a verified board schematic or a hardware-ready example project.
+// Match the LPC11U35 port default: external 12 MHz crystal, USB clock enabled.
+// The module must route VBUS to P0.3 and soft-connect control to P0.6.
+// The driver configures the fixed P0.6 USB_CONNECT function separately.
 #define MCUOSC { \
 	{OSC_TYPE_XTAL, 12000000, 20}, \
 	{OSC_TYPE_RC, 4000000, 20}, \

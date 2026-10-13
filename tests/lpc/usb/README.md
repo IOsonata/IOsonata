@@ -206,8 +206,10 @@ Measured with Arm GNU GCC 13.2.1 and binutils 2.42:
 Main RAM includes initialized data and BSS. The remaining main RAM is divided
 by the existing linker script between heap and stack. The stack allowance is
 not a measured runtime high-water mark. Sizes may change with compiler version.
-The fixture board.h supplies the supported 12 MHz crystal and VBUS pin settings;
-it is not a validated board schematic or a flash-ready example project.
+The check now compiles the UsbCdcLoopback example board.h and checks its
+IOcomposer source links, C++23 setting and Debug/Release semihosting options.
+See that example's README for the documented module clock and wiring requirements;
+the carrier schematic does not verify the module-internal circuit.
 
 A successful link does not establish USB enumeration or CDC operation on
 hardware. The host CDC fixture checks the 10-byte serial-state notification
