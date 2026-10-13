@@ -15,11 +15,16 @@ An MCU needs startup, GPIO, UART and timer support to be considered supported.
 Peripheral source files and project metadata alone do not establish this.
 Hardware validation is recorded separately from implementation coverage.
 
+STM32L432 (STM32L432KC on the NUCLEO-L432KC) has a library project and two
+UART example projects built from the same L4 sources (2026-10-13). It is not
+tested on hardware yet; see the STM32L432 paragraph under Validation.
+
 ## Virtual device numbers
 
 UART indices are 0 for LPUART1, 1 for USART1, 2 for USART2, 3 for USART3,
 4 for UART4 and 5 for UART5. IRQ selection, reset and clock control use this
-mapping. These indices are not hardware instance numbers.
+mapping. These indices are not hardware instance numbers. The STM32L432 has
+LPUART1, USART1 and USART2 only; indices 3 to 5 fail initialization.
 
 UART supports seven or eight data bits, none/even/odd parity and one or
 two stop bits on every instance, LPUART1 included, in polling, interrupt or
@@ -49,8 +54,9 @@ channel n on channel n + 6). Not tested on hardware.
 The DMAMUX1 numbers are those of the L4R and L4S; the L4P and L4Q use one
 more.
 
-SPI indices 0-2 select SPI1-3. On L476/L496, index 3 selects QUADSPI.
-On L4S9, indices 3 and 4 select OCTOSPI1 and OCTOSPI2. Extended SPI
+SPI indices 0-2 select SPI1-3. On L432/L476/L496, index 3 selects QUADSPI.
+On L4S9, indices 3 and 4 select OCTOSPI1 and OCTOSPI2. The L432 has no SPI2:
+index 1 fails initialization. Extended SPI
 controllers currently accept polling master configurations only; interrupt,
 DMA and slave requests fail initialization.
 
@@ -63,7 +69,9 @@ registers; the high-frequency timer availability count is zero.
 
 I2C currently accepts polling master configurations only. Slave, interrupt
 and DMA requests return false before changing the device or hardware state.
-L4S9 I2C4 uses virtual index 3.
+L4S9 I2C4 uses virtual index 3. The L432 has no I2C2: index 1 fails
+initialization, I2C1 and I2C3 keep indices 0 and 2. The timer table has no
+register for TIM3, TIM4, TIM5, TIM8 and TIM17 on the L432.
 
 These restrictions identify unsupported modes within the hardware-validated
 ports. Hardware validation does not imply that every optional mode is implemented.
@@ -79,8 +87,10 @@ python3 tests/stm32/run_uart.py
 
 `tests/stm32l4/run.py` compiles extracted production function bodies against
 small register and dispatch models, with UBSan. It covers SPI versus
-extended-controller dispatch, OSPI clock masks and prescaler limits, I2C
-configuration refusal, and TIM refusal while preserving LPTIM dispatch. It
+extended-controller dispatch (L432, L476, L496 and L4S9), OSPI clock masks
+and prescaler limits, I2C configuration refusal, the refusal of an instance
+the MCU does not have (SPI2 and I2C2 on the L432), and TIM refusal while
+preserving LPTIM dispatch. It
 also covers direct/PLL clock sources and MSI range selection in both startup
 files, and restoring LPTIM overflow interrupts across disable/enable cycles.
 It does not simulate the complete I2C, SPI or timer hardware.
@@ -116,6 +126,31 @@ examples still name `stm32l476xx.ld`, which is not in `ldscript/`
 (`gcc_stm32l476xx.ld` is), and their board files pair DevNo 1 with the USART2
 pins and PinOp `0x72`, which the GPIO driver does not take as AF7. The L496
 and L4S9 libraries still build `src/sysstatus.c`.
+
+STM32L432: `STM32L432/lib/ioc` has the Debug, Release, Debug_FPU and
+Release_FPU configurations of the L476 library. It adds the STM32L432xx
+vector table, `STM32L432/lib/src/Vector_STM32L432xx.c`, and
+`ldscript/gcc_stm32l432xx.ld`: 240 KB of the 256 KB flash for the image, two
+8 KB storage partitions above it, 48 KB SRAM1 as RAM and the 16 KB SRAM2 at
+0x10000000 as RAM2. SystemInit runs the core at 80 MHz from the MSI PLL, with
+PCLK1 and PCLK2 at 40 MHz, and starts the 32.768 kHz LSE crystal by default
+(`g_McuOsc`), waiting for it to run. The I2C, SPI and timer sources leave out
+the instances the L432 does not have; the code generated for the L476, L496
+and L4S9 differs only by the new check in I2CInit and SPIInit.
+
+The STM32L432 examples UartLoopback and UartPrbsTxTest select NUCLEO_L432KC
+in `board.h`: USART1, DevNo 1, on Arduino Nano D0 PA10 RX and D1 PA9 TX, AF7.
+The ST-LINK virtual COM port is USART2, DevNo 2, RX PA15 AF3 and TX PA2 AF7.
+Like the L476 examples they link `rdimon` semihosting and use the example
+defaults at 1 Mbaud: interrupts without DMA for the loopback, DMA without
+interrupts for PRBS TX. The library in its four configurations and both
+examples in Debug and Release were built from their `.project` and `.cproject`
+settings with GNU Arm 13.2, outside IOcomposer; all 99 vector table entries
+match the STM32L432xx interrupt list. The images ran in an instruction set
+emulator with USART1, DMA1 (channels 4 and 5, CSELR request 2) and RCC models:
+the loopback echoes in order with no lost character in polling, interrupt,
+DMA without interrupts and DMA with interrupts, and the PRBS output matches
+`Prbs8()`. This does not replace a run on the board.
 
 For a new release-candidate run, record the project, MCU/board, revision,
 toolchain and exercised modes alongside the existing hardware-validation
