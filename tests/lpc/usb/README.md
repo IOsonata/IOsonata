@@ -458,8 +458,8 @@ integrity, throughput and reconnect behavior remain pending board testing.
 `python3 tests/lpc/usb/run17.py` tests the new private clock/power helper,
 `usb_hw_lpc17xx.c`, using vendor `LPC_SC_TypeDef` and `LPC_USB_TypeDef`
 register declarations. The main USB host suite also invokes it. This is the
-first LPC1769 USB step, not a usable generic USB device driver. SIE commands,
-pins, EP0, endpoint transfers and lifecycle integration remain to be added.
+initial LPC1769 USB support, not a usable generic USB device driver. Pins,
+EP0, endpoint transfers and lifecycle integration remain to be added.
 
 Preparation accepts the board's main oscillator frequency and validates the
 existing PLL0 or PLL1 status for exactly 48 MHz. It requires a ready main
@@ -480,3 +480,20 @@ The LPC1769 library project includes the helper and its private header.
 Reference: NXP UM10360 revision 2, chapters 4 and 11, particularly the USB
 clock control and initialization sequence:
 https://www.pololu.com/file/0J431/user.manual.lpc17xx.pdf
+
+The private LPC1769 helper now supplies command-only, one-byte write and
+one-byte read SIE operations using UM10360 section 11.12. The complete
+command/data sequence preserves PRIMASK, clears only CCEMPTY/CDFULL, and
+uses signed bounded waits. Failed reads leave the caller's byte unchanged.
+A timeout latches failure until release and successful preparation; callers
+must treat device state as unknown and reinitialize it, not replay a failed
+command automatically. These helpers do not implement two-byte SIE reads
+or the endpoint-interrupt select/clear sequence.
+
+`run17.py` adds -O0/-O2 UBSan checks for phase encoding, command-only/write/read
+ordering, stale flags, unrelated interrupt preservation, missing clocks,
+null output, command/data timeouts, late completion rejection and interrupt
+mask restoration. Temporary source instrumentation models only W1C and
+USBCmdCode writes; vendor register reads and driver control flow are retained.
+The updated source also compiles for Cortex-M3 at -O0/-Os. Enumeration and
+hardware SIE timing remain untested.

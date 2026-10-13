@@ -77,4 +77,5 @@ int main(void)
 	assert(!Lpc17UsbHwPrepare(12000000));
 	assert(LPC_SC->PCONP == 8 && s_Mask == 1);
 	puts("LPC1769 USB PLL validation, power ownership and clock timeout: PASS");
+	return 0;
 }

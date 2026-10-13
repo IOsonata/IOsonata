@@ -37,8 +37,11 @@ SOFTWARE.
 #define LPC17_USB_POWER (1UL << 31)
 #define LPC17_USB_CLOCKS 0x12U
 #define LPC17_USB_WAIT 100000
+#define LPC17_USB_CCEMPTY (1U << 4)
+#define LPC17_USB_CDFULL (1U << 5)
 
 static bool s_Prepared;
+static bool s_SieFault;
 
 static bool Lpc17UsbClockValid(uint32_t MainHz)
 {
@@ -82,7 +85,10 @@ bool Lpc17UsbHwPrepare(uint32_t MainHz)
 		}
 		ready = wait > 0;
 		if (ready)
+		{
 			s_Prepared = true;
+			s_SieFault = false;
+		}
 		else
 		{
 			LPC_USB->USBClkCtrl = 0U;
@@ -109,4 +115,66 @@ bool Lpc17UsbHwRelease(void)
 	}
 	__set_PRIMASK(state);
 	return released;
+}
+
+// Caller holds PRIMASK for the entire command/data sequence. These completion
+// flags belong to this polling path and must not be consumed by the USB ISR.
+static bool Lpc17UsbSieWait(uint32_t Flag)
+{
+	int wait = LPC17_USB_WAIT;
+	while ((LPC_USB->USBDevIntSt & Flag) == 0U && --wait > 0)
+	{
+	}
+	if (wait == 0)
+	{
+		s_SieFault = true;
+		return false;
+	}
+	return true;
+}
+
+static bool Lpc17UsbSieTransfer(uint8_t Command, uint32_t Phase, uint8_t *pData)
+{
+	const uint32_t state = __get_PRIMASK();
+	__disable_irq();
+	bool done = false;
+	if (s_Prepared && !s_SieFault &&
+		(LPC_SC->PCONP & LPC17_USB_POWER) != 0U &&
+		(LPC_USB->USBClkSt & LPC17_USB_CLOCKS) == LPC17_USB_CLOCKS)
+	{
+		// UM10360 11.12: command phase first, followed by optional data.
+		// Clear only the command handshake flags, leaving bus/endpoint events.
+		LPC_USB->USBDevIntClr = LPC17_USB_CCEMPTY | LPC17_USB_CDFULL;
+		LPC_USB->USBCmdCode = ((uint32_t)Command << 16) | 0x500U;
+		done = Lpc17UsbSieWait(LPC17_USB_CCEMPTY);
+		if (done && Phase != 0U)
+		{
+			const uint32_t flag = Phase == 0x200U ? LPC17_USB_CDFULL : LPC17_USB_CCEMPTY;
+			const uint8_t value = Phase == 0x200U ? Command : *pData;
+			LPC_USB->USBDevIntClr = flag;
+			LPC_USB->USBCmdCode = ((uint32_t)value << 16) | Phase;
+			done = Lpc17UsbSieWait(flag);
+			if (done && Phase == 0x200U)
+				*pData = (uint8_t)LPC_USB->USBCmdData;
+		}
+	}
+	__set_PRIMASK(state);
+	return done;
+}
+
+bool Lpc17UsbSieCommand(uint8_t Command)
+{
+	return Lpc17UsbSieTransfer(Command, 0U, 0);
+}
+
+bool Lpc17UsbSieWrite(uint8_t Command, uint8_t Data)
+{
+	return Lpc17UsbSieTransfer(Command, 0x100U, &Data);
+}
+
+bool Lpc17UsbSieRead(uint8_t Command, uint8_t *pData)
+{
+	if (pData == 0)
+		return false;
+	return Lpc17UsbSieTransfer(Command, 0x200U, pData);
 }

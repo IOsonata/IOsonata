@@ -44,6 +44,14 @@ extern "C" {
 bool Lpc17UsbHwPrepare(uint32_t MainHz);
 // Refuses release while endpoint, interrupt or DMA state remains enabled.
 bool Lpc17UsbHwRelease(void);
+// Private SIE operations for commands with zero or one data byte. Read output
+// is unchanged on failure. Entire command/data sequences preserve PRIMASK.
+// A timeout blocks further commands until release and successful preparation;
+// the caller must treat controller state as unknown and reinitialize it.
+// The USB ISR must leave CCEMPTY/CDFULL to these polling operations.
+bool Lpc17UsbSieCommand(uint8_t Command);
+bool Lpc17UsbSieWrite(uint8_t Command, uint8_t Data);
+bool Lpc17UsbSieRead(uint8_t Command, uint8_t *pData);
 #ifdef __cplusplus
 }
 #endif
