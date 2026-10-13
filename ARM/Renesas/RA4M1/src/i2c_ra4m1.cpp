@@ -1578,6 +1578,26 @@ int Ra4m1I2cDump(DevIntrf_t * const pIntrf, char *Buf, int Len)
 		pos = Ra4m1I2cPutHex(Buf, pos, Len, v[i], digits[i]);
 	}
 
+	// Pad level with the block enabled, with ICE cleared, and enabled again.
+	// Only when idle, as it briefly disables the block.
+	uint8_t pad[3] = { 0xFFU, 0xFFU, 0xFFU };
+
+	if (!dev->bOpen && !dev->bAsync && dev->MState == RA4M1_I2C_M_IDLE &&
+		dev->SState == RA4M1_I2C_S_IDLE && dev->bEnabled)
+	{
+		pad[0] = Ra4m1I2cSclPad(dev);
+		dev->pReg->ICCR1 = 0U;
+		pad[1] = Ra4m1I2cSclPad(dev);
+		dev->pReg->ICCR1 = RA4M1_I2C_ICCR1_RUN;
+		pad[2] = Ra4m1I2cSclPad(dev);
+	}
+
+	pos = Ra4m1I2cPutStr(Buf, pos, Len, " padnow=");
+	pos = Ra4m1I2cPutHex(Buf, pos, Len, pad[0], 2);
+	pos = Ra4m1I2cPutStr(Buf, pos, Len, " padoff=");
+	pos = Ra4m1I2cPutHex(Buf, pos, Len, pad[1], 2);
+	pos = Ra4m1I2cPutStr(Buf, pos, Len, " padon=");
+	pos = Ra4m1I2cPutHex(Buf, pos, Len, pad[2], 2);
 	pos = Ra4m1I2cPutStr(Buf, pos, Len, (r->ICCR1 & 0x02U) ? " scl=1" : " scl=0");
 	pos = Ra4m1I2cPutStr(Buf, pos, Len, (r->ICCR1 & 0x01U) ? " sda=1" : " sda=0");
 
