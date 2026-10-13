@@ -57,6 +57,7 @@ SOFTWARE.
 #define RA4M1_I2C_ICBR_RESERVED		0xE0U
 #define RA4M1_I2C_ICMR1_BASE			0x08U
 #define RA4M1_I2C_ICMR2_BASE			0x04U
+#define RA4M1_I2C_ICMR2_SLAVE		0x06U
 #define RA4M1_I2C_ICFER_MASTER		0x77U
 #define RA4M1_I2C_ICCR1_RESET			0x40U
 #define RA4M1_I2C_ICCR1_RESET_ENABLE	0xC0U
@@ -534,6 +535,15 @@ static void Ra4m1I2cConfigure(Ra4m1I2cDev_t * const pDev)
 	 */
 	reg->ICCR1 = 0U;
 	reg->ICCR1 = RA4M1_I2C_ICCR1_RESET;
+
+	/* Renesas requires reset acknowledgement before ICE is asserted. */
+	uint32_t count = Ra4m1I2cTimeout(pDev);
+
+	while (reg->ICCR1_b.IICRST == 0U && count > 0U)
+	{
+		count--;
+	}
+
 	reg->ICCR1 = RA4M1_I2C_ICCR1_RESET_ENABLE;
 
 	reg->SAR[0].L = 0U;
@@ -554,7 +564,8 @@ static void Ra4m1I2cConfigure(Ra4m1I2cDev_t * const pDev)
 	reg->ICBRH = (uint8_t)(RA4M1_I2C_ICBR_RESERVED | pDev->Brh);
 	reg->ICMR1 = RA4M1_I2C_ICMR1_BASE;
 	reg->ICMR1_b.CKS = pDev->Cks;
-	reg->ICMR2 = RA4M1_I2C_ICMR2_BASE;
+	reg->ICMR2 = pDev->pI2cDev->Cfg.Mode == I2CMODE_SLAVE ?
+		RA4M1_I2C_ICMR2_SLAVE : RA4M1_I2C_ICMR2_BASE;
 	reg->ICMR3 = 0U;
 
 	/* Use the standard FSP master-function baseline, but disable the digital
