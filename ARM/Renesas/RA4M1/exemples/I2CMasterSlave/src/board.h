@@ -1,10 +1,10 @@
 /**-------------------------------------------------------------------------
 @file	board.h
 
-@brief	RA4M1 I2C master example configuration.
+@brief	RA4M1 shared I2C master/slave example board configuration.
 
 		SCI0 is kept for the shared example's console. IIC0 uses P401/P400
-		with PSEL 7. External I2C pull-ups are required for a production bus.
+		with PSEL 7. IIC1 uses P206/P205; external pull-ups are required.
 
 @license
 
@@ -59,5 +59,17 @@ SOFTWARE.
 
 #define I2C_MASTER_DMA_ENABLE	false
 #define I2C_MASTER_INT_ENABLE	false
+
+// Shared master/slave example. Native slave support is not implemented yet.
+#define I2C_SLAVE_DEVNO		1
+#define I2C_SLAVE_SDA_PORT		2
+#define I2C_SLAVE_SDA_PIN		6
+#define I2C_SLAVE_SDA_PINOP	IOPINOP_FUNC6
+#define I2C_SLAVE_SCL_PORT		2
+#define I2C_SLAVE_SCL_PIN		5
+#define I2C_SLAVE_SCL_PINOP	IOPINOP_FUNC6
+
+#define I2C_SLAVE_DMA_ENABLE	false
+#define I2C_SLAVE_INT_ENABLE	true
 
 #endif // __BOARD_H__

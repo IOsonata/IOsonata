@@ -7,7 +7,7 @@ Release configuration before building the example; the example links that
 configuration's archive. All projects use Cortex-M4 Thumb, FPv4-SP-D16,
 hard-float ABI, GNU C17/C++23 and the native `gcc_ra4m1.ld` normal-boot layout.
 The application project names remain `Blinky`, `TimerDemo`, `UartLoopback`,
-`UartPrbsTxTest`, and `I2CMasterDemo`; the MCU is identified by its directory and library, not an
+`UartPrbsTxTest`, and `I2CMasterSlave`; the MCU is identified by its directory and library, not an
 application-name suffix. Remove the old suffixed workspace entries before
 reimporting these projects, without deleting their files from disk.
 
@@ -17,7 +17,7 @@ reimporting these projects, without deleting their files from disk.
 | `TimerDemo` | `TimerDemo` | `exemples/timer/timer_demo.cpp` | Timer DevNo 0, default count frequency, triggers according to device capability |
 | `UartLoopback` | `UartLoopback` | `exemples/uart/uart_loopback.cpp` | SCI0, 115200 8N1, interrupt mode, no DMA |
 | `UartPrbsTxTest` | `UartPrbsTxTest` | `exemples/uart/uart_prbs_tx.cpp` | SCI0, 115200 8N1, polling with TX DMA |
-| `I2CMasterDemo` | `I2CMasterDemo` | `exemples/i2c/i2c_master_demo.cpp` | IIC0, 100 kHz, 7-bit master, polling |
+| `I2CMasterSlave` | `I2CMasterSlave` | `exemples/i2c/i2c_master_slave.cpp` | IIC0, 100 kHz, 7-bit master, polling |
 
 The PRBS project additionally links unchanged `src/prbs.c`. Every application
 source is an IOC linked resource; none is copied into the MCU example directory.
@@ -48,14 +48,15 @@ R01UH0887EJ0110, Table 19.6; the GPIO/IRQ choices are in chapters 1 and 19.
 All selected pins are present in the port's 40/48/64/100-pin package maps.
 Actual package-pad/connector numbers still depend on the chosen part/hardware.
 
-The I2C master example uses **IIC0: P401 = SDA0, P400 = SCL0**, with
+The shared master/slave example uses **IIC0: P401 = SDA0, P400 = SCL0**, with
 `IOPINOP_FUNC6` (PSEL 7), leaving SCI0 available for its console. On the
 EK-RA4M1 these are J2-8 (P401) and J2-37 (P400), the same IIC0 pair used by
 Renesas's EK IIC loopback example. Provide a common ground and external pull-ups
-sized for the bus voltage, capacitance and selected speed. The example requests
-100 kHz and explicitly disables I2C interrupt and DMA modes. Its target address
-remains the shared example's 0x22; connect a compatible slave before treating
-transfer counts as a hardware pass. This concrete example pin pair requires a
+sized for the bus voltage, capacitance and selected speed. The example requests 100 kHz with polling master. IIC1 uses P206 = SDA1 and
+P205 = SCL1; connect SDA-to-SDA, SCL-to-SCL and common ground with pull-ups.
+The native slave implementation is still missing, so the example currently
+fails its slave initialization and **cannot yet pass loopback**. The shared
+example remains unchanged; the target address is 0x22. This concrete example pin pair requires a
 64- or 100-pin RA4M1 package; the driver itself also accepts the other legal IIC
 pin alternatives documented in ../README.md.
 
@@ -106,10 +107,10 @@ request (for example, `TIMER_FREQ=10000`, checked against the returned rate).
 A rejected period is reported as a failure, not silently accepted. These are
 ordinary `TimerCfg_t` device/frequency choices within the same project.
 
-**I2CMasterDemo:** initializes IIC0 in polling master mode at 100 kHz. It performs
-plain transmit/receive and repeated-start register reads against 7-bit address 0x22.
-The project is a master-side bring-up test; the target slave and its data protocol
-must be provided externally.
+**I2CMasterSlave:** reuses the shared master/slave loopback program. It requests
+IIC0 as polling master and IIC1 as interrupt slave at 100 kHz. The slave path
+is not implemented yet: initialization will fail until the RA4M1 driver
+supports slave callbacks and transfers. No hardware PASS is claimed.
 
 **UartLoopback:** open a serial terminal at 115200 8N1, without flow control.
 The firmware writes `UART Loopback Test` at startup and echoes received bytes.
@@ -164,7 +165,7 @@ python3 tests/ra4m1/run_example_validation.py
 python3 tests/ra4m1/run_timer_validation.py
 ```
 
-The first command checks the five IOC projects and runs 96 host builds/tests
+The first command checks the five IOC project definitions and runs 96 host builds/tests
 of the shared timer/UART examples. It builds the same timer application with
 all ten logical device numbers (0-9) by overriding only `TIMER_DEVNO`, and checks
 C API and C++ API selections, O0/Os/O2, and fatal AddressSanitizer/UndefinedBehaviorSanitizer. It exercises init-failure
@@ -173,7 +174,7 @@ handling, one/four-trigger selection, trigger-failure cleanup, callback values,
 retries. It uses **simplified API wrappers and CMSIS definitions**. It does not test
 the production C++ wrapper or execute code on the MCU. The timer API double exercises device
 selection and callback handling, not hardware period limits; those are tested
-separately in `timer_model.cpp`. Blinky and I2CMasterDemo are linked unchanged and receive project/pin-map
+separately in `timer_model.cpp`. Blinky and I2CMasterSlave are linked unchanged and receive project/pin-map
 checks, not execution tests in this suite.
 
 Use `--metadata-only` for project checks without Clang++, and
