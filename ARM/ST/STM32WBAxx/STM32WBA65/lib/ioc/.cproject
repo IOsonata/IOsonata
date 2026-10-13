@@ -130,7 +130,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/usb/usb_hidhost.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/usb/usb_hidhost.cpp|src/sysstatus.c|src/sysstatus_impl.cpp|src/bluetooth/bt_adv_stm32wba.cpp|src/bluetooth/bt_app_stm32wba.cpp|src/bluetooth/bt_gap_stm32wba.cpp|src/bluetooth/bt_gatt_stm32wba.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -266,7 +266,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/usb/usb_hidhost.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/usb/usb_hidhost.cpp|src/sysstatus.c|src/sysstatus_impl.cpp|src/bluetooth/bt_adv_stm32wba.cpp|src/bluetooth/bt_app_stm32wba.cpp|src/bluetooth/bt_gap_stm32wba.cpp|src/bluetooth/bt_gatt_stm32wba.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>

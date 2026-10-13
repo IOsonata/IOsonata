@@ -31,7 +31,9 @@ channels for each instance and defines their vectors. GPDMA has no circular
 mode, the RX ring is a linked list node that loads the same block again at
 the end of each block. The driver leaves the GPDMA1 security and privilege
 settings at their reset value, which suits a device with TrustZone disabled
-(TZEN = 0). Not tested on hardware.
+(TZEN = 0). Not tested on hardware. The STM32WBA65I-DK1 test projects are
+`STM32WBA65/exemples/UartLoopback` and `UartPrbsTxTest`, described in
+`STM32WBA65/README.md`.
 
 | DevNo | Hardware | RX DMA | TX DMA | Requests RX, TX |
 |---|---|---|---|---|
