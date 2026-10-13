@@ -410,7 +410,7 @@ at 48 MHz; ask for a lower frequency for long periods (46875 Hz for up to
 `ldscript/dfu_layout_r9a02g021.ld`: boot 0x0 to 0x8FFF, record 0x9000 to
 0x9FFF, application slot 0 0xA000 to 0x1FFFF, recovery flag at 0x20006FF0.
 `dfu_boot_r9a02g021.ld` links the boot (with HEAD), `gcc_R9A02G021_dfu.ld`
-an application for slot 0. The boot fits only when built with -Os (36574 of
+an application for slot 0. The boot fits only when built with -Os (36578 of
 36864 bytes); the Debug configuration at -O0 does not fit. UARTA is not
 linked into it (see UART).
 

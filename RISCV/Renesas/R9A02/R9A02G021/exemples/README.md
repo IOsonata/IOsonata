@@ -72,7 +72,7 @@ so only the 100 ms period is used. For a TAU channel, set `TIMER_DEVNO` to 1 to
 1.37 ms and the trigger is rejected.
 
 **UartLoopback:** terminal at 115200 8N1, no flow control, on the J-Link OB
-virtual COM port. The firmware sends `UART Loopback Test` and echoes what it
+virtual COM port. The firmware prints nothing by itself, it echoes what it
 receives.
 
 **UartPrbsTxTest:** sends the `Prbs8` sequence at 115200 8N1, starting with
@@ -133,6 +133,6 @@ All twelve examples build and link with xPack riscv-none-elf-gcc 15.2.0
 (October 13, 2026). Sizes at -Os (text + data, KB of 1000 bytes): Blinky
 11.8, TimerDemo 19.8, UartLoopback 15.0, UartPrbsTxTest 15.0, UartaLoopback
 18.6, SpiLoopback 26.8, I2CScan 31.5, ADCDemo 34.0, RtcDemo 24.9, AnalogDemo
-29.1, AdcSnoozeDemo 38.2, DfuBoot 36574 bytes of the 36864 of its region.
+29.1, AdcSnoozeDemo 38.2, DfuBoot 36578 bytes of the 36864 of its region.
 I2CInit links the SAU simplified I2C with the IICA. None has been run on the
 board yet.
