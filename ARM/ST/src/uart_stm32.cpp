@@ -22,6 +22,7 @@
 		F030x8 : 0 USART1, 1 USART2
 		F401   : 0 USART1, 1 USART2, 2 USART6
 		L4     : 0 LPUART1, 1 USART1, 2 USART2, 3 USART3, 4 UART4, 5 UART5
+		G474   : 0 LPUART1, 1 USART1, 2 USART2, 3 USART3, 4 UART4, 5 UART5
 		WBA65  : 0 LPUART1, 1 USART1, 2 USART2, 3 USART3
 
 		USART kernel clock is PCLK, read with SystemPeriphClockGet. UARTInit
@@ -38,7 +39,7 @@
 		                 RX CFIFO
 		bDMAMode true  : TX DMA sends blocks from the TX CFIFO, circular RX
 		                 DMA ring moved into the RX CFIFO. F0 USART1 and
-		                 USART2, L4, F4 and WBA all instances.
+		                 USART2, L4, G4, F4 and WBA all instances.
 
 @author	Hoang Nguyen Hoan
 @date	Jun. 7, 2019
@@ -248,10 +249,10 @@ SOFTWARE.
 
 // DMA. The driver moves TX blocks from the TX CFIFO and runs RX in a
 // circular ring, the same way on every family. The controller differs:
-// - channels with a group of 4 flags each in ISR and IFCR (F0, L4). The
+// - channels with a group of 4 flags each in ISR and IFCR (F0, L4, G4). The
 //   request is fixed (F030x4 to x8, F070), selected in CSELR (F030xC, F09x,
-//   L4) or routed by DMAMUX1 (L4+, DMA1 channel n on DMAMUX1 channel n - 1,
-//   DMA2 channel n on channel n + 6).
+//   L4) or routed by DMAMUX1 (L4+ and G4, DMA1 channel n on DMAMUX1 channel
+//   n - 1, DMA2 channel n on the DMAMUX1 channel after the DMA1 ones).
 // - streams with a group of 6 flags each in LISR or HISR, the request is the
 //   channel number in CR (F2, F4, F7).
 // - GPDMA channels with their own flags in CSR, any request on any channel,
@@ -260,7 +261,7 @@ SOFTWARE.
 // Which channel or stream serves an instance is family data, from the DMA
 // request tables of the reference manuals, in the instance table. A family
 // without that data has no DMA, UARTInit refuses bDMAMode.
-#if defined(STM32F0) || defined(STM32L4) || defined(STM32F4) || defined(STM32WBA)
+#if defined(STM32F0) || defined(STM32L4) || defined(STM32G4) || defined(STM32F4) || defined(STM32WBA)
 #define ST_UART_DMA
 #if defined(DMA_SxCR_CHSEL)
 #define ST_DMA_STREAM
@@ -289,6 +290,18 @@ typedef DMA_Channel_TypeDef StDmaChan_t;
 #define ST_DMA_REQ(Csel, Mux)	(Mux)
 #else
 #define ST_DMA_REQ(Csel, Mux)	(Csel)
+#endif
+
+#ifdef DMAMUX1
+// DMAMUX1 channel of DMA2 channel 1: the number of DMA1 channels, 8 on the
+// G47x and G48x, 7 on L4+, 6 on the G43x
+#if defined(DMA1_Channel8)
+#define ST_DMAMUX_DMA2_CH		8U
+#elif defined(DMA1_Channel7)
+#define ST_DMAMUX_DMA2_CH		7U
+#else
+#define ST_DMAMUX_DMA2_CH		6U
+#endif
 #endif
 
 // Reads of a stream EN bit, or of a GPDMA channel IDLEF flag, while it
@@ -428,6 +441,9 @@ static Stm32UartDev_t s_Stm32UartDev[] = {
 #if defined(STM32L4)
 		.RxDma = { DMA2_Channel7, DMA2, 6, ST_DMA_REQ(4, 34), DMA2_Channel7_IRQn },
 		.TxDma = { DMA2_Channel6, DMA2, 5, ST_DMA_REQ(4, 35), DMA2_Channel6_IRQn },
+#elif defined(STM32G4)
+		.RxDma = { DMA2_Channel5, DMA2, 4, 34, DMA2_Channel5_IRQn },
+		.TxDma = { DMA2_Channel6, DMA2, 5, 35, DMA2_Channel6_IRQn },
 #elif defined(STM32WBA)
 		.RxDma = { GPDMA1_Channel4, GPDMA1, 4, 15, GPDMA1_Channel4_IRQn },
 		.TxDma = { GPDMA1_Channel5, GPDMA1, 5, 16, GPDMA1_Channel5_IRQn },
@@ -451,6 +467,9 @@ static Stm32UartDev_t s_Stm32UartDev[] = {
 #elif defined(STM32L4)
 		.RxDma = { DMA1_Channel5, DMA1, 4, ST_DMA_REQ(2, 24), DMA1_Channel5_IRQn },
 		.TxDma = { DMA1_Channel4, DMA1, 3, ST_DMA_REQ(2, 25), DMA1_Channel4_IRQn },
+#elif defined(STM32G4)
+		.RxDma = { DMA1_Channel1, DMA1, 0, 24, DMA1_Channel1_IRQn },
+		.TxDma = { DMA1_Channel2, DMA1, 1, 25, DMA1_Channel2_IRQn },
 #elif defined(STM32F4)
 		.RxDma = { DMA2_Stream5, DMA2, 5, 4, DMA2_Stream5_IRQn },
 		.TxDma = { DMA2_Stream7, DMA2, 7, 4, DMA2_Stream7_IRQn },
@@ -477,6 +496,9 @@ static Stm32UartDev_t s_Stm32UartDev[] = {
 #elif defined(STM32L4)
 		.RxDma = { DMA1_Channel6, DMA1, 5, ST_DMA_REQ(2, 26), DMA1_Channel6_IRQn },
 		.TxDma = { DMA1_Channel7, DMA1, 6, ST_DMA_REQ(2, 27), DMA1_Channel7_IRQn },
+#elif defined(STM32G4)
+		.RxDma = { DMA1_Channel3, DMA1, 2, 26, DMA1_Channel3_IRQn },
+		.TxDma = { DMA1_Channel4, DMA1, 3, 27, DMA1_Channel4_IRQn },
 #elif defined(STM32F4)
 		.RxDma = { DMA1_Stream5, DMA1, 5, 4, DMA1_Stream5_IRQn },
 		.TxDma = { DMA1_Stream6, DMA1, 6, 4, DMA1_Stream6_IRQn },
@@ -501,6 +523,9 @@ static Stm32UartDev_t s_Stm32UartDev[] = {
 #if defined(STM32L4)
 		.RxDma = { DMA1_Channel3, DMA1, 2, ST_DMA_REQ(2, 28), DMA1_Channel3_IRQn },
 		.TxDma = { DMA1_Channel2, DMA1, 1, ST_DMA_REQ(2, 29), DMA1_Channel2_IRQn },
+#elif defined(STM32G4)
+		.RxDma = { DMA1_Channel5, DMA1, 4, 28, DMA1_Channel5_IRQn },
+		.TxDma = { DMA1_Channel6, DMA1, 5, 29, DMA1_Channel6_IRQn },
 #elif defined(STM32F4)
 		.RxDma = { DMA1_Stream1, DMA1, 1, 4, DMA1_Stream1_IRQn },
 		.TxDma = { DMA1_Stream3, DMA1, 3, 4, DMA1_Stream3_IRQn },
@@ -535,6 +560,9 @@ static Stm32UartDev_t s_Stm32UartDev[] = {
 #if defined(STM32L4)
 		.RxDma = { DMA2_Channel5, DMA2, 4, ST_DMA_REQ(2, 30), DMA2_Channel5_IRQn },
 		.TxDma = { DMA2_Channel3, DMA2, 2, ST_DMA_REQ(2, 31), DMA2_Channel3_IRQn },
+#elif defined(STM32G4)
+		.RxDma = { DMA2_Channel1, DMA2, 0, 30, DMA2_Channel1_IRQn },
+		.TxDma = { DMA2_Channel2, DMA2, 1, 31, DMA2_Channel2_IRQn },
 #elif defined(STM32F4)
 		.RxDma = { DMA1_Stream2, DMA1, 2, 4, DMA1_Stream2_IRQn },
 		.TxDma = { DMA1_Stream4, DMA1, 4, 4, DMA1_Stream4_IRQn },
@@ -566,6 +594,9 @@ static Stm32UartDev_t s_Stm32UartDev[] = {
 #if defined(STM32L4)
 		.RxDma = { DMA2_Channel2, DMA2, 1, ST_DMA_REQ(2, 32), DMA2_Channel2_IRQn },
 		.TxDma = { DMA2_Channel1, DMA2, 0, ST_DMA_REQ(2, 33), DMA2_Channel1_IRQn },
+#elif defined(STM32G4)
+		.RxDma = { DMA2_Channel3, DMA2, 2, 32, DMA2_Channel3_IRQn },
+		.TxDma = { DMA2_Channel4, DMA2, 3, 33, DMA2_Channel4_IRQn },
 #elif defined(STM32F4)
 		.RxDma = { DMA1_Stream0, DMA1, 0, 4, DMA1_Stream0_IRQn },
 #ifdef DMA_SxCR_CHSEL_3
@@ -852,7 +883,7 @@ static void Stm32DmaRoute(const Stm32UartDma_t *pDma)
 	uint32_t pos = pDma->Idx * 4U;
 
 #if defined(DMAMUX1)
-	DMAMUX1_Channel0[pDma->Idx + (pDma->pDma == DMA1 ? 0U : 7U)].CCR = pDma->Req;
+	DMAMUX1_Channel0[pDma->Idx + (pDma->pDma == DMA1 ? 0U : ST_DMAMUX_DMA2_CH)].CCR = pDma->Req;
 	(void)pos;
 #elif defined(DMA1_CSELR)
 	DMA_Request_TypeDef *sel = pDma->pDma == DMA1 ? DMA1_CSELR : DMA2_CSELR;
@@ -2136,6 +2167,80 @@ extern "C" void DMA2_Channel7_IRQHandler()
 {
 	Stm32UartDmaVector(&s_Stm32UartDev[ST_LPUART1_IDX]);
 }
+#elif defined(STM32G4)
+// DMAMUX1 routes any request to any channel. Two channels for each instance,
+// the six the smallest G4 parts have on each controller: USART1 DMA1 1 and
+// 2, USART2 DMA1 3 and 4, USART3 DMA1 5 and 6, UART4 DMA2 1 and 2, UART5
+// DMA2 3 and 4, LPUART1 DMA2 5 and 6.
+extern "C" void DMA1_Channel1_IRQHandler()
+{
+	Stm32UartDmaVector(&s_Stm32UartDev[ST_USART1_IDX]);
+}
+
+extern "C" void DMA1_Channel2_IRQHandler()
+{
+	Stm32UartDmaVector(&s_Stm32UartDev[ST_USART1_IDX]);
+}
+
+#ifdef USART2
+extern "C" void DMA1_Channel3_IRQHandler()
+{
+	Stm32UartDmaVector(&s_Stm32UartDev[ST_USART2_IDX]);
+}
+
+extern "C" void DMA1_Channel4_IRQHandler()
+{
+	Stm32UartDmaVector(&s_Stm32UartDev[ST_USART2_IDX]);
+}
+#endif
+
+#ifdef USART3
+extern "C" void DMA1_Channel5_IRQHandler()
+{
+	Stm32UartDmaVector(&s_Stm32UartDev[ST_USART3_IDX]);
+}
+
+extern "C" void DMA1_Channel6_IRQHandler()
+{
+	Stm32UartDmaVector(&s_Stm32UartDev[ST_USART3_IDX]);
+}
+#endif
+
+#ifdef UART4
+extern "C" void DMA2_Channel1_IRQHandler()
+{
+	Stm32UartDmaVector(&s_Stm32UartDev[ST_UART4_IDX]);
+}
+
+extern "C" void DMA2_Channel2_IRQHandler()
+{
+	Stm32UartDmaVector(&s_Stm32UartDev[ST_UART4_IDX]);
+}
+#endif
+
+#ifdef UART5
+extern "C" void DMA2_Channel3_IRQHandler()
+{
+	Stm32UartDmaVector(&s_Stm32UartDev[ST_UART5_IDX]);
+}
+
+extern "C" void DMA2_Channel4_IRQHandler()
+{
+	Stm32UartDmaVector(&s_Stm32UartDev[ST_UART5_IDX]);
+}
+#endif
+
+#ifdef LPUART1
+extern "C" void DMA2_Channel5_IRQHandler()
+{
+	Stm32UartDmaVector(&s_Stm32UartDev[ST_LPUART1_IDX]);
+}
+
+extern "C" void DMA2_Channel6_IRQHandler()
+{
+	Stm32UartDmaVector(&s_Stm32UartDev[ST_LPUART1_IDX]);
+}
+#endif
 #elif defined(STM32F4)
 #ifdef UART5
 extern "C" void DMA1_Stream0_IRQHandler()

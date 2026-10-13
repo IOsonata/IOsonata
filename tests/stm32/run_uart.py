@@ -60,6 +60,8 @@ PARTS = [
     ('STM32L476xx', 'STM32L4xx', 'cortex-m4', ['-mfloat-abi=hard', '-mfpu=fpv4-sp-d16']),
     ('STM32L496xx', 'STM32L4xx', 'cortex-m4', ['-mfloat-abi=hard', '-mfpu=fpv4-sp-d16']),
     ('STM32L4S9xx', 'STM32L4xx', 'cortex-m4', ['-mfloat-abi=hard', '-mfpu=fpv4-sp-d16']),
+    ('STM32G474xx', 'STM32G4xx', 'cortex-m4', ['-mfloat-abi=hard', '-mfpu=fpv4-sp-d16']),
+    ('STM32G431xx', 'STM32G4xx', 'cortex-m4', ['-mfloat-abi=hard', '-mfpu=fpv4-sp-d16']),
     ('STM32F401xC', 'STM32F4xx', 'cortex-m4', ['-mfloat-abi=hard', '-mfpu=fpv4-sp-d16']),
     ('STM32F405xx', 'STM32F4xx', 'cortex-m4', ['-mfloat-abi=hard', '-mfpu=fpv4-sp-d16']),
     ('STM32F413xx', 'STM32F4xx', 'cortex-m4', ['-mfloat-abi=hard', '-mfpu=fpv4-sp-d16']),

@@ -122,7 +122,7 @@ static bool Stm32GpioEnableClock(int PortNo)
 	RCC->AHB1ENR |= mask;
 	(void)RCC->AHB1ENR;
 
-#elif defined(IOSONATA_STM32_L4) || defined(IOSONATA_STM32_WBA)
+#elif defined(IOSONATA_STM32_L4) || defined(IOSONATA_STM32_G4) || defined(IOSONATA_STM32_WBA)
 	uint32_t mask = 0U;
 
 	switch (PortNo)
@@ -274,7 +274,7 @@ static uint32_t Stm32ExtiPending(void)
 {
 #if defined(IOSONATA_STM32_WBA)
 	return (EXTI->RPR1 | EXTI->FPR1) & EXTI->IMR1;
-#elif defined(IOSONATA_STM32_L4)
+#elif defined(IOSONATA_STM32_L4) || defined(IOSONATA_STM32_G4)
 	return EXTI->PR1 & EXTI->IMR1;
 #else
 	return EXTI->PR & EXTI->IMR;
@@ -286,7 +286,7 @@ static void Stm32ExtiClear(uint32_t Mask)
 #if defined(IOSONATA_STM32_WBA)
 	EXTI->RPR1 = Mask;
 	EXTI->FPR1 = Mask;
-#elif defined(IOSONATA_STM32_L4)
+#elif defined(IOSONATA_STM32_L4) || defined(IOSONATA_STM32_G4)
 	EXTI->PR1 = Mask;
 #else
 	EXTI->PR = Mask;
@@ -295,7 +295,7 @@ static void Stm32ExtiClear(uint32_t Mask)
 
 static void Stm32ExtiMask(uint32_t Mask, bool Enable)
 {
-#if defined(IOSONATA_STM32_WBA) || defined(IOSONATA_STM32_L4)
+#if defined(IOSONATA_STM32_WBA) || defined(IOSONATA_STM32_L4) || defined(IOSONATA_STM32_G4)
 	if (Enable)
 	{
 		EXTI->IMR1 |= Mask;
@@ -323,7 +323,7 @@ static void Stm32ExtiEdges(uint32_t Mask, IOPINSENSE Sense)
 	uint32_t falling = (Sense == IOPINSENSE_LOW_TRANSITION ||
 						Sense == IOPINSENSE_TOGGLE) ? Mask : 0U;
 
-#if defined(IOSONATA_STM32_WBA) || defined(IOSONATA_STM32_L4)
+#if defined(IOSONATA_STM32_WBA) || defined(IOSONATA_STM32_L4) || defined(IOSONATA_STM32_G4)
 	EXTI->RTSR1 = (EXTI->RTSR1 & ~Mask) | rising;
 	EXTI->FTSR1 = (EXTI->FTSR1 & ~Mask) | falling;
 #else
@@ -502,7 +502,7 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, uint32_t PortNo,
 #if defined(IOSONATA_STM32_F0)
 	RCC->APB2ENR |= RCC_APB2ENR_SYSCFGCOMPEN;
 	(void)RCC->APB2ENR;
-#elif defined(IOSONATA_STM32_F4) || defined(IOSONATA_STM32_L4)
+#elif defined(IOSONATA_STM32_F4) || defined(IOSONATA_STM32_L4) || defined(IOSONATA_STM32_G4)
 	RCC->APB2ENR |= RCC_APB2ENR_SYSCFGEN;
 	(void)RCC->APB2ENR;
 #endif

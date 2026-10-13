@@ -65,6 +65,13 @@ SOFTWARE.
 #define IOSONATA_STM32_L4		1
 #include "stm32l4xx.h"
 
+#elif defined(STM32G411xB) || defined(STM32G411xC) || defined(STM32G414xx) || defined(STM32G431xx) || \
+	defined(STM32G441xx) || defined(STM32G471xx) || defined(STM32G473xx) || defined(STM32G474xx) || \
+	defined(STM32G483xx) || defined(STM32G484xx) || defined(STM32G491xx) || defined(STM32G4A1xx) || \
+	defined(STM32GBK1CB) || defined(STM32G4)
+#define IOSONATA_STM32_G4		1
+#include "stm32g4xx.h"
+
 #elif defined(STM32WB10xx) || defined(STM32WB15xx) || defined(STM32WB30xx) || defined(STM32WB35xx) || \
 	defined(STM32WB50xx) || defined(STM32WB55xx) || defined(STM32WB5Mxx) || defined(STM32WB)
 #define IOSONATA_STM32_WB		1

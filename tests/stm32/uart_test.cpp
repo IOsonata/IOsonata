@@ -191,6 +191,7 @@ void USART6_IRQHandler(void);
 void LPUART1_IRQHandler(void);
 void DMA1_Channel2_3_IRQHandler(void);
 void DMA1_Channel4_5_IRQHandler(void);
+void DMA1_Channel1_IRQHandler(void);
 void DMA1_Channel2_IRQHandler(void);
 void DMA1_Channel3_IRQHandler(void);
 void DMA1_Channel4_IRQHandler(void);
@@ -200,6 +201,7 @@ void DMA1_Channel7_IRQHandler(void);
 void DMA2_Channel1_IRQHandler(void);
 void DMA2_Channel2_IRQHandler(void);
 void DMA2_Channel3_IRQHandler(void);
+void DMA2_Channel4_IRQHandler(void);
 void DMA2_Channel5_IRQHandler(void);
 void DMA2_Channel6_IRQHandler(void);
 void DMA2_Channel7_IRQHandler(void);
@@ -349,6 +351,56 @@ static void BuildInst(void)
 		t.SelMsk = RCC_CCIPR_UART5SEL;
 		t.Rx = TDMA(DMA2_Channel2, DMA2, 1, L4REQ(2, 32), DMA2_Channel2_IRQn, DMA2_Channel2_IRQHandler);
 		t.Tx = TDMA(DMA2_Channel1, DMA2, 0, L4REQ(2, 33), DMA2_Channel1_IRQn, DMA2_Channel1_IRQHandler);
+	}
+#endif
+
+#elif defined(STM32G4)
+	// DMA1 and DMA2 channels 1 to 6 routed by DMAMUX1, request numbers of RM0440
+	{
+		TestInst_t &t = AddInst("LPUART1", LPUART1, LPUART1_IRQHandler, LPUART1_IRQn, &RCC->APB1ENR2, &RCC->APB1RSTR2, RCC_APB1ENR2_LPUART1EN, 0);
+		t.bLpuart = true;
+		t.pSelReg = &RCC->CCIPR;
+		t.SelMsk = RCC_CCIPR_LPUART1SEL;
+		t.Rx = TDMA(DMA2_Channel5, DMA2, 4, 34, DMA2_Channel5_IRQn, DMA2_Channel5_IRQHandler);
+		t.Tx = TDMA(DMA2_Channel6, DMA2, 5, 35, DMA2_Channel6_IRQn, DMA2_Channel6_IRQHandler);
+	}
+	{
+		TestInst_t &t = AddInst("USART1", USART1, USART1_IRQHandler, USART1_IRQn, &RCC->APB2ENR, &RCC->APB2RSTR, RCC_APB2ENR_USART1EN, 1);
+		t.pSelReg = &RCC->CCIPR;
+		t.SelMsk = RCC_CCIPR_USART1SEL;
+		t.Rx = TDMA(DMA1_Channel1, DMA1, 0, 24, DMA1_Channel1_IRQn, DMA1_Channel1_IRQHandler);
+		t.Tx = TDMA(DMA1_Channel2, DMA1, 1, 25, DMA1_Channel2_IRQn, DMA1_Channel2_IRQHandler);
+	}
+	{
+		TestInst_t &t = AddInst("USART2", USART2, USART2_IRQHandler, USART2_IRQn, &RCC->APB1ENR1, &RCC->APB1RSTR1, RCC_APB1ENR1_USART2EN, 0);
+		t.pSelReg = &RCC->CCIPR;
+		t.SelMsk = RCC_CCIPR_USART2SEL;
+		t.Rx = TDMA(DMA1_Channel3, DMA1, 2, 26, DMA1_Channel3_IRQn, DMA1_Channel3_IRQHandler);
+		t.Tx = TDMA(DMA1_Channel4, DMA1, 3, 27, DMA1_Channel4_IRQn, DMA1_Channel4_IRQHandler);
+	}
+	{
+		TestInst_t &t = AddInst("USART3", USART3, USART3_IRQHandler, USART3_IRQn, &RCC->APB1ENR1, &RCC->APB1RSTR1, RCC_APB1ENR1_USART3EN, 0);
+		t.pSelReg = &RCC->CCIPR;
+		t.SelMsk = RCC_CCIPR_USART3SEL;
+		t.Rx = TDMA(DMA1_Channel5, DMA1, 4, 28, DMA1_Channel5_IRQn, DMA1_Channel5_IRQHandler);
+		t.Tx = TDMA(DMA1_Channel6, DMA1, 5, 29, DMA1_Channel6_IRQn, DMA1_Channel6_IRQHandler);
+	}
+#ifdef UART4
+	{
+		TestInst_t &t = AddInst("UART4", UART4, UART4_IRQHandler, UART4_IRQn, &RCC->APB1ENR1, &RCC->APB1RSTR1, RCC_APB1ENR1_UART4EN, 0);
+		t.pSelReg = &RCC->CCIPR;
+		t.SelMsk = RCC_CCIPR_UART4SEL;
+		t.Rx = TDMA(DMA2_Channel1, DMA2, 0, 30, DMA2_Channel1_IRQn, DMA2_Channel1_IRQHandler);
+		t.Tx = TDMA(DMA2_Channel2, DMA2, 1, 31, DMA2_Channel2_IRQn, DMA2_Channel2_IRQHandler);
+	}
+#endif
+#ifdef UART5
+	{
+		TestInst_t &t = AddInst("UART5", UART5, UART5_IRQHandler, UART5_IRQn, &RCC->APB1ENR1, &RCC->APB1RSTR1, RCC_APB1ENR1_UART5EN, 0);
+		t.pSelReg = &RCC->CCIPR;
+		t.SelMsk = RCC_CCIPR_UART5SEL;
+		t.Rx = TDMA(DMA2_Channel3, DMA2, 2, 32, DMA2_Channel3_IRQn, DMA2_Channel3_IRQHandler);
+		t.Tx = TDMA(DMA2_Channel4, DMA2, 3, 33, DMA2_Channel4_IRQn, DMA2_Channel4_IRQHandler);
 	}
 #endif
 
@@ -1041,7 +1093,15 @@ static void DmaRoute(const TestDma_t &d, bool bTx)
 	CHECK(((Rd(Ch(d)->CCR) & DMA_CCR_DIR) != 0) == bTx);
 	CHECK((Rd(Ch(d)->CCR) & DMA_CCR_MINC) != 0);
 #if defined(DMAMUX1)
+	// DMA2 channel 1 is on the DMAMUX1 channel after the DMA1 ones, RM0432
+	// and RM0440
+#if defined(DMA1_Channel8)
+	uint32_t n = d.Idx + ((DMA_TypeDef *)d.pCtl == DMA1 ? 0U : 8U);
+#elif defined(DMA1_Channel7)
 	uint32_t n = d.Idx + ((DMA_TypeDef *)d.pCtl == DMA1 ? 0U : 7U);
+#else
+	uint32_t n = d.Idx + ((DMA_TypeDef *)d.pCtl == DMA1 ? 0U : 6U);
+#endif
 	CHECK((Rd(DMAMUX1_Channel0[n].CCR) & DMAMUX_CxCR_DMAREQ_ID) == (uint32_t)d.Req);
 #elif defined(DMA1_CSELR)
 	DMA_Request_TypeDef *sel = (DMA_TypeDef *)d.pCtl == DMA1 ? DMA1_CSELR : DMA2_CSELR;
