@@ -8,13 +8,21 @@ Run `python3 tests/lpc/usb/run.py`.
   invalid clocks without hardware changes, dedicated/main PLL clock paths,
   minimum AHB frequency, priority clamping, refusal of a live controller,
   endpoint-list initialization, W1C write masks and bounded EPSKIP shutdown.
+- An EP0 model exercises multi-packet IN/OUT, copied IN sources, short OUT,
+  zero-length packets/status, SET_ADDRESS timing and cancellation, stalls,
+  superseding SETUP, reset, suspend/resume, early status, callback shutdown
+  and restart, malformed lengths and a stuck endpoint skip.
 - Host GNU binutils exercise the production linker script's USB SRAM placement,
   NOLOAD behavior, removal when unused, and failure on USB SRAM overflow.
 
-The register fixture records W1C write values; ordinary mapped RAM does not
-simulate W1C register semantics. A core-barrier hook can complete EPSKIP or
-leave it stuck to exercise the timeout. These tests do not simulate USB bus
-transactions, PLL accuracy, NVIC timing or ARM relocations.
+The preparation fixture records W1C write values; ordinary mapped RAM does not
+simulate W1C register semantics. For EP0 tests, the runner instruments only
+DEVCMDSTAT, INTSTAT, INTSETSTAT and EPSKIP assignments in a temporary source
+copy. Test write functions implement W1C, set-interrupt and skip completion;
+register reads, vendor types, DMA memory and driver control flow are unchanged.
+The event callback models the generic core's packet continuation/status calls.
+These are controller tests, not a complete generic-stack link or a USB bus
+simulation. They do not validate PLL accuracy, NVIC timing or ARM relocations.
 
 ## Current implementation
 
@@ -27,7 +35,7 @@ Preparation requires a working external system oscillator and clock state
 maintained by the LPC11Uxx SystemInit/clock setters. It checks a nominal 48 MHz
 USB clock, PLL lock/power and at least 16 MHz AHB before accessing USB registers.
 The physical oscillator's USB accuracy remains a board requirement. It does
-not reprogram PLLs, configure board pins or enable USB bus traffic.
+not reprogram PLLs, configure board pins or connect to the host.
 
 The linker places 832 bytes in the 2 KB USB SRAM at 0x20004000: the 80-byte
 endpoint list, alignment padding, SETUP storage and ten 64-byte packet buffers.
@@ -42,9 +50,22 @@ ownership on an unconfirmed stop. Only clocks added by preparation are removed
 on success. The status acknowledgment helper writes only requested W1C bits
 and cannot accidentally generate remote wakeup.
 
-This is still an incomplete controller port. EP0, data submission, endpoint
-callbacks, USB_IRQHandler, pin setup and the public UsbCtrlr entry points remain
-to be implemented. No application can enumerate with these helpers alone.
+EP0 now supplies UsbCtrlrEp0Send, UsbCtrlrEp0Status, UsbCtrlrSetAddress and
+EP0 stall handling. USB_IRQHandler reports SETUP, EP0 completions, reset and
+suspend/resume to the existing generic UsbDevProcessEvent. A cable change
+queues the generic work pass. Descriptor parsing and Chapter 9 remain generic.
+The private Lpc11UsbEp0Enable initializes EP0 and interrupt sources but leaves
+the pull-up and NVIC disabled for the future lifecycle implementation.
+
+EP0 OUT and SETUP share an interrupt. The handler acknowledges that interrupt
+before checking SETUP and clears old EP0 ACTIVE/STALL state before acknowledging
+the SETUP status. Generation checks prevent callback stop/restart from applying
+old completions to new state. Buffer cancellation uses bounded EPSKIP waits.
+A failed skip disconnects and disables interrupts while retaining DMA storage.
+
+This is still an incomplete controller port. Data endpoint submission,
+callbacks, pin setup and public initialization/start/stop remain unfinished.
+No application can enumerate with these helpers alone.
 The initial packet storage does not implement ISO transfers. The header's five
 endpoint numbers per direction and ISO limits describe the silicon, not
 completed support or simultaneous buffer capacity.

@@ -25,6 +25,7 @@ for opt in ['-O0', '-O2']:
             layout = ['-Wl,--section-start=.usb_ram=0x20004000'] if valid_layout else ['-DTEST_BAD_LAYOUT']
             subprocess.run(['gcc', '-std=gnu11', opt, '-Wall', '-Wextra', '-Werror',
                             '-fsanitize=undefined', '-fno-sanitize-recover=all', '-no-pie',
+                            '-ffunction-sections', '-fdata-sections', '-Wl,--gc-sections',
                             '-I' + str(root / 'tests/lpc/usb/shim'),
                             '-I' + str(root / 'include'),
                             '-I' + str(root / 'ARM/NXP/LPC11xx/include'),
@@ -78,3 +79,31 @@ usb_memory:
         subprocess.run(['objcopy', '-O', 'binary', 'image.elf', 'image.bin'], cwd=tmp, check=True)
         assert (tmp / 'image.bin').stat().st_size < 1024
 print('LPC11U35 USB SRAM placement, NOLOAD, garbage collection and overflow: PASS')
+
+# Give the three side-effect registers their hardware write semantics.
+# Instrument only MMIO assignments in a temporary copy; keep vendor types,
+# reads, endpoint memory, control flow and callback code unchanged.
+for opt in ['-O0', '-O2']:
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = Path(tmp)
+        source = (root / 'ARM/NXP/LPC11xx/src/usb_lpc11uxx.c').read_text()
+        for reg, function in [('DEVCMDSTAT', 'TestDeviceWrite'),
+                              ('INTSTAT', 'TestInterruptWrite'),
+                              ('INTSETSTAT', 'TestInterruptSet'),
+                              ('EPSKIP', 'TestSkipWrite')]:
+            source, count = re.subn(r'LPC_USB->' + reg + r'\s*=\s*([^;]+);',
+                                    lambda m: function + '(' + m[1] + ');', source)
+            assert count > 0, reg
+        (tmp / 'usb.c').write_text(source)
+        exe = str(tmp / 'ep0_test')
+        subprocess.run(['gcc', '-std=gnu11', opt, '-Wall', '-Wextra', '-Werror',
+                        '-fsanitize=undefined', '-fno-sanitize-recover=all', '-no-pie',
+                        '-ffunction-sections', '-fdata-sections', '-Wl,--gc-sections',
+                        '-Wl,--section-start=.usb_ram=0x20004000',
+                        '-include', str(root / 'tests/lpc/usb/ep0_model.h'),
+                        '-I' + str(root / 'tests/lpc/usb/shim'),
+                        '-I' + str(root / 'include'),
+                        '-I' + str(root / 'ARM/NXP/LPC11xx/include'),
+                        str(root / 'tests/lpc/usb/ep0_test.c'), str(tmp / 'usb.c'),
+                        '-o', exe], check=True)
+        subprocess.run([exe], check=True, timeout=5)

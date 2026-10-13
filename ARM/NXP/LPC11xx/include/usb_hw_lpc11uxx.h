@@ -64,6 +64,12 @@ bool Lpc11UsbHwRelease(void);
 // never generate remote wakeup as a side effect. Requires prepared hardware.
 void Lpc11UsbHwAckStatus(uint32_t Flags);
 
+// Enable EP0 and bus-event interrupt sources after hardware preparation.
+// Leaves DCON and NVIC off. The controller lifecycle must configure board
+// pins and connect only after the generic core and classes are initialized.
+bool Lpc11UsbEp0Enable(void);
+void USB_IRQHandler(void);
+
 #ifdef __cplusplus
 }
 #endif

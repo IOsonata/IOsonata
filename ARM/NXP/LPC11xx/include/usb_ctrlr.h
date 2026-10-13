@@ -6,7 +6,8 @@
 Full-speed device controller with endpoint numbers 0 through 4 in each
 direction. EP0 is control; endpoints 1 through 4 support bulk, interrupt
 and isochronous transfers. These constants describe hardware allocation
-limits, not completed driver support. Controller implementation is pending.
+limits, not completed driver support. Hardware preparation and EP0 transport
+are implemented; public lifecycle and data endpoints are still pending.
 
 The declarations follow the existing IOsonata USB controller interface.
 ROM DFU is independent of this application USB interface.
