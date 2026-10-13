@@ -1230,5 +1230,10 @@
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/include/usb_ctrlr_lpc.h</locationURI>
 		</link>
+		<link>
+			<name>src/usb_irq_lpc17xx.c</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/usb_irq_lpc17xx.c</locationURI>
+		</link>
 	</linkedResources>
 </projectDescription>

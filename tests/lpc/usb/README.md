@@ -645,3 +645,30 @@ events during endpoint realization, SIE/realization timeout, delayed SETUP,
 address reset, callback disable and failure without a RESET notification.
 Host -O0/-O2 UBSan checks and both sources' Cortex-M3 -O0/-Os compilation pass.
 Top-level IRQ wiring and hardware enumeration remain outstanding.
+
+`usb_irq_lpc17xx.c` now supplies the strong `USB_IRQHandler` referenced by
+the LPC1769 vector table. `Lpc17UsbIrqBind` installs the initialized control
+object before IRQ enable; unbind only after disabling hardware/NVIC interrupts.
+Referencing the bind function also brings this IRQ object into a static-library
+link. The library project includes the source.
+
+The handler services DEV_STAT first. Reset recovers EP0 and ends the current
+IRQ without dispatching the pre-reset endpoint snapshot. Suspend/resume use
+the existing direct event callback. Callback disable, unbind or generation
+change prevents further dispatch. VBUS loss and status-read failure mask
+device/endpoint interrupts, disable software state and call Fault; the owner
+must disconnect/stop and arrange reinitialization. This is currently EP0-only,
+with slow routing and no DMA/SOF support.
+
+Endpoint summary is cleared only after all endpoint flags are clear, followed
+by a recheck that restores the summary if an endpoint arrived across the W1C
+write. There is no drain loop. CCEMPTY/CDFULL stay owned by the SIE polling
+operations. Enabled unsupported device sources cause a stop instead of an
+unhandled interrupt storm.
+
+`irq17_test.c` covers reset priority, suspend/resume, callback shutdown,
+summary-clear arrival, remaining endpoints, VBUS loss, read failure, unsupported
+sources, power-off and PRIMASK restoration. All host tests pass at -O0/-O2
+with UBSan; the new IRQ source compiles for Cortex-M3 at -O0/-Os and exports
+the strong handler symbol. Public controller lifecycle wrappers, pin/NVIC
+configuration and a complete firmware link still remain before board testing.

@@ -55,6 +55,11 @@ typedef struct __Lpc17_Usb_Control {
 #ifdef __cplusplus
 extern "C" {
 #endif
+// Bind before enabling the USB NVIC/device IRQs; unbind after disabling them.
+// The object must remain alive while bound. Only EP0 slow IRQs and DEV_STAT
+// are supported. Fault must stop/disconnect hardware, including on VBUS loss.
+bool Lpc17UsbIrqBind(Lpc17UsbControl_t *pControl);
+void Lpc17UsbIrqUnbind(void);
 // Zero-initialize the object and assign Event/Fault before enabling it.
 // Reset software state to address zero, after the caller resets hardware.
 // The caller services bus reset first and disables control NAK interrupts.
