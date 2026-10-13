@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Link the real LPC11U35 CDC and HID loopback firmware in Debug and Release.
+"""Link the real LPC11U35 CDC, HID and composite firmware in Debug and Release.
 
 Copyright (c) 2026, I-SYST inc. MIT License.
 Requires an Arm GNU toolchain with newlib-nano and C++23 support.
@@ -83,15 +83,19 @@ def check_project():
 
 
 def build(prefix, output, mode, kind):
-    directory = output / EXAMPLES[kind] / mode
+    project_name = EXAMPLES.get(kind, 'Composite')
+    board_name = EXAMPLES.get(kind, 'UsbCdcLoopback')
+    directory = output / project_name / mode
     directory.mkdir(parents=True, exist_ok=True)
     flags = ['-mcpu=cortex-m0', '-mthumb', '-fsigned-char',
              '-ffunction-sections', '-fdata-sections', '-DLPC11XX_SERIES']
     flags += ['-O0', '-g3', '-DDEBUG'] if mode == 'Debug' else ['-Os', '-DNDEBUG']
     includes = ['-I' + str(ROOT / path) for path in INCLUDES]
-    includes += ['-I' + str(ROOT / 'ARM/NXP/LPC11xx/LPC11U35/exemples' / EXAMPLES[kind] / 'src')]
+    includes += ['-I' + str(ROOT / 'ARM/NXP/LPC11xx/LPC11U35/exemples' / board_name / 'src')]
     objects = []
-    sources = SOURCES + [f'exemples/usb/usb_{kind}_loopback.cpp']
+    application = ('tests/lpc/usb/firmware/composite_firmware.cpp' if kind == 'composite'
+                   else f'exemples/usb/usb_{kind}_loopback.cpp')
+    sources = SOURCES + [application]
     for index, source in enumerate(sources):
         cpp = source.endswith('.cpp')
         compiler = prefix + ('g++' if cpp else 'gcc')
@@ -125,6 +129,11 @@ def build(prefix, output, mode, kind):
     symbols = subprocess.check_output([prefix + 'nm', str(image)], text=True)
     addresses = {name: int(addr, 16) for addr, kind, name in
                  re.findall(r'^([0-9a-fA-F]+)\s+(\w)\s+(\S+)$', symbols, re.M)}
+    if kind == 'composite':
+        for class_name in ['UsbdCdc', 'UsbdHid']:
+            assert any(name.startswith('_ZN7' + class_name + '4Init')
+                       for name in addresses), class_name + ' initialization discarded'
+        assert 'UsbIntIntrfInit' in addresses
     assert vectors[1] == addresses['ResetEntry'] | 1
     assert ('initialise_monitor_handles' in addresses) == (mode == 'Debug')
     # A weak default ISR must not silently stand in for the USB controller.
@@ -136,7 +145,7 @@ def build(prefix, output, mode, kind):
     ram = addresses['__bss_end__'] - addresses['__data_start__']
     stack = addresses['__StackTop'] - addresses['__StackLimit']
     assert ram < 8 * 1024 - 32 and stack > 0
-    print(f'{EXAMPLES[kind]} {mode}: flash {len(data)} / 65536 bytes; main RAM {ram} / 8160 bytes; '
+    print(f'{project_name} {mode}: flash {len(data)} / 65536 bytes; main RAM {ram} / 8160 bytes; '
           f'USB SRAM 832 / 2048 bytes; linker stack allowance {stack} bytes', flush=True)
 
 
@@ -148,10 +157,10 @@ def main():
     check_project()
     with tempfile.TemporaryDirectory(prefix='lpc11-usb-link-') as temporary:
         output = args.output.resolve() if args.output else Path(temporary)
-        for kind in EXAMPLES:
+        for kind in [*EXAMPLES, 'composite']:
             for mode in ['Debug', 'Release']:
                 build(args.prefix, output, mode, kind)
-    print('LPC11U35 CDC and HID ARM firmware links: PASS')
+    print('LPC11U35 CDC, HID and composite ARM firmware links: PASS')
 
 
 if __name__ == '__main__':

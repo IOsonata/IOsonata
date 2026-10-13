@@ -229,3 +229,30 @@ Both use 832 bytes USB SRAM. These are standalone HID measurements, not
 composite firmware measurements. Composite operation has been checked in the
 host model only. Retained files are under UsbCdcLoopback/{Debug,Release} and
 UsbHidLoopback/{Debug,Release} within the --output directory.
+
+
+## Composite ARM firmware
+
+The same `link.py` command also builds `firmware/composite_firmware.cpp` in
+Debug and Release. This fixture registers CDC and HID together, uses the CDC
+example board configuration and services both through DeviceIntrf. It keeps
+separate pending packets when a transport is busy. Both class initializers
+and the interrupt transport must be present in the linked image.
+
+CDC uses two 64-byte receive slots and a 128-byte transmit FIFO. HID uses one
+caller-owned report slot per direction. The application event queue holds
+16 events. These smaller CDC buffers explain why composite RAM is lower than
+the standalone CDC example with its 1024-byte transmit FIFO.
+
+Measured with the same GCC 13.2.1/binutils 2.42 toolchain:
+
+| Build | Flash / 65536 bytes | Main RAM / 8160 bytes | USB SRAM / 2048 bytes | Linker stack allowance |
+| --- | ---: | ---: | ---: | ---: |
+| Debug | 53380 | 3804 | 832 | 1448 |
+| Release | 23408 | 3008 | 832 | 1716 |
+
+Debug retains rdimon semihosting; Release uses nosys. Both pass the production
+linker, vector checksum, USB IRQ and IAP/USB RAM checks. With --output, the
+images are retained under Composite/{Debug,Release}. This is a link fixture
+with demo USB identifiers, not a hardware-validated example. Stack usage,
+physical enumeration and concurrent report/serial traffic remain unmeasured.
