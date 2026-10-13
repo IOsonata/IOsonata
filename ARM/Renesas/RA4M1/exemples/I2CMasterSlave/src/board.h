@@ -3,8 +3,9 @@
 
 @brief	RA4M1 shared I2C master/slave example board configuration.
 
-		SCI0 is kept for the shared example's console. IIC0 uses P401/P408
-		with PSEL 7. IIC1 uses P206/P205; external pull-ups are required.
+		SCI0 on P410/P411 is the console. IIC0 uses P401/P408 with PSEL 7.
+		IIC1 uses P101/P100 with PSEL 7. These two IIC1 pins avoid P205, which
+		reaches the EK-RA4M1 header only with solder bridge E12 closed.
 
 @license
 
@@ -37,11 +38,11 @@ SOFTWARE.
 #include "coredev/iopincfg.h"
 
 #define UART_DEVNO				0
-#define UART_RX_PORT			1
-#define UART_RX_PIN				0
+#define UART_RX_PORT			4
+#define UART_RX_PIN				10
 #define UART_RX_PINOP			IOPINOP_FUNC3
-#define UART_TX_PORT			1
-#define UART_TX_PIN				1
+#define UART_TX_PORT			4
+#define UART_TX_PIN				11
 #define UART_TX_PINOP			IOPINOP_FUNC3
 
 #define UART_PINS				{ \
@@ -62,11 +63,11 @@ SOFTWARE.
 
 // Shared master/slave example: IIC1 uses interrupt callbacks.
 #define I2C_SLAVE_DEVNO		1
-#define I2C_SLAVE_SDA_PORT		2
-#define I2C_SLAVE_SDA_PIN		6
+#define I2C_SLAVE_SDA_PORT		1
+#define I2C_SLAVE_SDA_PIN		1
 #define I2C_SLAVE_SDA_PINOP	IOPINOP_FUNC6
-#define I2C_SLAVE_SCL_PORT		2
-#define I2C_SLAVE_SCL_PIN		5
+#define I2C_SLAVE_SCL_PORT		1
+#define I2C_SLAVE_SCL_PIN		0
 #define I2C_SLAVE_SCL_PINOP	IOPINOP_FUNC6
 
 #define I2C_SLAVE_DMA_ENABLE	false
