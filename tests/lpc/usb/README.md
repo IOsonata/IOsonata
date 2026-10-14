@@ -906,3 +906,20 @@ rdimon semihosting and Release uses nosys. Only one CDC instance is covered;
 the allocator does not account for LPC1769 fixed endpoint types for arbitrary
 composite layouts. Physical enumeration, notifications and binary loopback
 remain pending. The example README includes a packet-boundary host check.
+
+
+LPC1769 shared HID loopback example
+----------------------------------
+
+`LPC1769/exemples/UsbHidLoopback` links the existing shared HID application,
+which now runs its initialized 16-entry event queue through AppRun. One vendor
+HID interface uses interrupt OUT/IN EP1. The MCU library project now includes
+usb_int.cpp and usbd_hid.cpp. No controller or class implementation changes
+are needed for this standalone example.
+
+`link17.py` links EP0, CDC and HID firmware in Debug and Release and checks the
+HID/interrupt class symbols. GNU Arm 13.2.1 HID text/data/bss are
+53480/456/4552 bytes in Debug and 23816/152/4064 in Release. LPC11U35 and LPC54628 shared HID
+Debug/Release links also pass after the AppRun change. These are build results;
+physical enumeration and report transfers are pending. Use the existing
+Python/usb_hid_loopback.py host check when a board is available.
