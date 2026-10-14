@@ -4,7 +4,7 @@
 @brief	RA4M1 shared I2C master/slave example board configuration.
 
 		SCI0 on P410/P411 is the console. Renesas EK-RA4M1 reference pin
-		layout: IIC1 master on P206/P100 and IIC0 slave on P401/P408.
+		layout: IIC1 master on P206/P100 and IIC0 slave on P401/P400.
 
 @license
 
@@ -71,89 +71,5 @@ SOFTWARE.
 
 #define I2C_SLAVE_DMA_ENABLE	false
 #define I2C_SLAVE_INT_ENABLE	true
-
-// Print the IIC register state after each step (RA4M1 diagnostic helper)
-#include "i2c_ra4m1.h"
-#include "ra4m1xxx.h"
-#define I2C_DEBUG_DUMP(name, i2c) { \
-	char dbg[640]; \
-	Ra4m1I2cDump(i2c, dbg, sizeof(dbg)); \
-	printf("%s %s\r\n", name, dbg); }
-
-// The existing I2C_DEBUG_DUMP outputs the peripheral-mode ICCR1 SCLI/SDAI
-// and PFS values immediately after Init, enabling a direct comparison.
-
-// Read-only SCL sampling after both IIC units are initialized.
-// Capture changes that a single ICCR1 dump could miss.
-#define I2C_DEBUG_SCL_SAMPLES() \
-{ \
-	int masterHigh = 0; \
-	int slaveHigh = 0; \
-	int bothHigh = 0; \
-	for (int i = 0; i < 256; i++) \
-	{ \
-		bool mh = (R_IIC1->ICCR1 & 0x02U) != 0U; \
-		bool sh = (R_IIC0->ICCR1 & 0x02U) != 0U; \
-		masterHigh += mh ? 1 : 0; \
-		slaveHigh += sh ? 1 : 0; \
-		bothHigh += (mh && sh) ? 1 : 0; \
-		for (int delay = 0; delay < 256; delay++) \
-		{ \
-			__NOP(); \
-		} \
-	} \
-	printf("SCL idle samples master_high=%d/256 slave_high=%d/256 both_high=%d/256\r\n", \
-		masterHigh, slaveHigh, bothHigh); \
-}
-
-// Isolation test: disable only IIC0's peripheral drive, sample the line,
-// then restore the saved controller state before the example transfers.
-// There is no active transaction at this point.
-#define I2C_DEBUG_SLAVE_ICE_TEST() \
-{ \
-	const uint8_t cr1 = R_IIC0->ICCR1; \
-	const uint8_t ier = R_IIC0->ICIER; \
-	R_IIC0->ICIER = 0U; \
-	R_IIC0->ICCR1 = (uint8_t)(cr1 & (uint8_t)~0x80U); \
-	__DSB(); \
-	for (int i = 0; i < 256; i++) \
-	{ \
-		__NOP(); \
-	} \
-	const uint8_t masterOff = R_IIC1->ICCR1; \
-	const uint8_t slaveOff = R_IIC0->ICCR1; \
-	R_IIC0->ICCR1 = cr1; \
-	R_IIC0->ICIER = ier; \
-	__DSB(); \
-	for (int i = 0; i < 256; i++) \
-	{ \
-		__NOP(); \
-	} \
-	printf("IIC0 ICE isolation M_off=%02x S_off=%02x M_on=%02x S_on=%02x\r\n", \
-		masterOff, slaveOff, R_IIC1->ICCR1, R_IIC0->ICCR1); \
-}
-
-// Isolate slave address recognition while keeping ICE and peripheral mux on.
-// Restore the original slave address-enable register before the transfer.
-#define I2C_DEBUG_SLAVE_ICSER_TEST() \
-{ \
-	const uint8_t ser = R_IIC0->ICSER; \
-	R_IIC0->ICSER = 0U; \
-	__DSB(); \
-	for (int i = 0; i < 256; i++) \
-	{ \
-		__NOP(); \
-	} \
-	const uint8_t masterNoMatch = R_IIC1->ICCR1; \
-	const uint8_t slaveNoMatch = R_IIC0->ICCR1; \
-	R_IIC0->ICSER = ser; \
-	__DSB(); \
-	for (int i = 0; i < 256; i++) \
-	{ \
-		__NOP(); \
-	} \
-	printf("IIC0 ICSER isolation M_off=%02x S_off=%02x M_on=%02x S_on=%02x\r\n", \
-		masterNoMatch, slaveNoMatch, R_IIC1->ICCR1, R_IIC0->ICCR1); \
-}
 
 #endif // __BOARD_H__
