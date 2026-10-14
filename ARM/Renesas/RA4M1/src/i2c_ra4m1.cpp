@@ -510,10 +510,11 @@ static void Ra4m1I2cConfigure(Ra4m1I2cDev_t * const pDev)
 	reg->ICMR1 = (uint8_t)(RA4M1_I2C_ICMR1_BASE | (pDev->Cks << 4U));
 	reg->ICMR2 = slave ? RA4M1_I2C_ICMR2_SLAVE : RA4M1_I2C_ICMR2_MASTER;
 
-	// Slave: WAIT holds SCL low after the ninth clock until ICDRR is read,
-	// which gives the handler time to answer. Master: WAIT is only used for
-	// the last bytes of a receive.
-	reg->ICMR3 = RA4M1_I2C_MR3_ACKWP | (slave ? RA4M1_I2C_MR3_WAIT : 0U);
+	// Do not request slave clock stretching before address reception.
+	// Renesas configures WAIT as an optional clock-stretching feature. In the
+	// loopback bring-up, leave WAIT clear to distinguish clock stretching from
+	// an external SCL-low condition. Master RX configures WAIT as needed.
+	reg->ICMR3 = RA4M1_I2C_MR3_ACKWP;
 	Ra4m1I2cAck(reg, false);
 
 	reg->ICFER = slave ? RA4M1_I2C_ICFER_SLAVE : RA4M1_I2C_ICFER_MASTER;
