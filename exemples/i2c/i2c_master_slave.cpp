@@ -297,6 +297,12 @@ int main()
 #endif
 
 	bool masterOk = g_I2CMaster.Init(s_I2cCfgMaster);
+#ifdef I2C_DEBUG_DUMP
+	if (masterOk)
+	{
+		I2C_DEBUG_DUMP("M before S init", g_I2CMaster);
+	}
+#endif
 	bool slaveOk = g_I2CSlave.Init(s_I2cCfgSlave);
 	printf("I2C init master=%d slave=%d\r\n", masterOk, slaveOk);
 #ifdef I2C_DEBUG_DUMP
