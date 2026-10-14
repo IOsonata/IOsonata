@@ -1889,5 +1889,27 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfg)
 
 	Ra4m1I2cConfigure(dev);
 
+	if (dev->bError || (dev->pReg->ICCR1 & RA4M1_I2C_CR1_ICE) == 0U)
+	{
+		dev->pReg->ICIER = 0U;
+		Ra4m1I2cIceOff(dev->pReg);
+
+		if (dev->bRegistered)
+		{
+			Ra4m1I2cUnregister(dev);
+		}
+
+		IOPinDis(pCfg->pIOPinMap, pCfg->NbIOPins);
+		dev->bEnabled = false;
+		dev->pI2cDev = NULL;
+		intrf->pDevData = NULL;
+		intrf->EnCnt = 0;
+
+		uint32_t irqState = DisableInterrupt();
+		Ra4m1I2cModuleStart(dev, false);
+		EnableInterrupt(irqState);
+		return false;
+	}
+
 	return true;
 }
