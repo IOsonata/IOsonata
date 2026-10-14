@@ -1,14 +1,15 @@
 /**-------------------------------------------------------------------------
-@file	ep017_firmware.cpp
+@file	usb_ep0_demo.cpp
 
-@brief	LPC1769 EP0-only vendor interface link fixture.
+@brief	LPC1769 EP0-only USB device example.
 
 Uses the real generic core, event queue and LPC1769 controller. The vendor
 interface has no data endpoints; request 0xC0/1 reads an eight-byte identity.
-This is a build fixture, not a hardware-validated example.
+Set the oscillator and USB wiring in board.h before use.
+Hardware validation is pending.
 
 @author	Hoang Nguyen Hoan
-@date	Sep. 10, 2026
+@date	Oct. 14, 2026
 
 @license
 
@@ -37,25 +38,21 @@ SOFTWARE.
 #include "app_evt_handler.h"
 #include "coredev/system_core_clock.h"
 #include "usb/usb.h"
+#include "board.h"
 
-class Ep0Test : public UsbDeviceClass {
+class Ep0Test : public UsbDeviceClass
+{
 public:
 	bool Control(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
 			uint8_t **ppData, uint16_t *pLength) override;
 };
 
-McuOsc_t g_McuOsc = {{OSC_TYPE_XTAL, 16000000, 20, 0},
-	{OSC_TYPE_XTAL, 32768, 20, 0}, false};
+McuOsc_t g_McuOsc = MCUOSC;
 alignas(4) uint8_t g_AppEvtHandlerQueMem[APPEVT_HANDLER_QUE_MEMSIZE(16)];
 static Ep0Test s_Class;
 static uint8_t s_Reply[] = {0x4C, 0x50, 0x43, 0x31, 0x37, 0x36, 0x39, 0};
 static const uint8_t s_Descriptor[] = {9, 4, 0, 0, 0, 0xFF, 0, 0, 0};
-static const IOPinCfg_t s_Pins[] = {
-	{1, 30, IOPINOP_FUNC2, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
-	{0, 29, IOPINOP_FUNC1, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
-	{0, 30, IOPINOP_FUNC1, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
-	{2, 9, IOPINOP_FUNC1, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
-};
+static const IOPinCfg_t s_Pins[] = USB_PINS_MAP;
 static const UsbCfg_t s_Config = {
 	.DevNo = 0,
 	.Mode = USB_MODE_DEVICE,
@@ -63,11 +60,11 @@ static const UsbCfg_t s_Config = {
 	.Pid = 0x0005,
 	.DevVer = 0x0100,
 	.pManufacturer = "I-SYST",
-	.pProduct = "LPC1769 EP0 bring-up",
+	.pProduct = "LPC1769 EP0 Demo",
 	.pSerial = nullptr,
 	.IntPrio = 6,
 	.pIOPinMap = s_Pins,
-	.NbIOPins = 4,
+	.NbIOPins = sizeof(s_Pins) / sizeof(s_Pins[0]),
 	.MaxPower = 100,
 };
 bool Ep0Test::Control(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,

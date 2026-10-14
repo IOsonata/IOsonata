@@ -7,8 +7,11 @@ import runpy
 import struct
 import subprocess
 import tempfile
+import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[3]
+EXAMPLE = ROOT / 'ARM/NXP/LPC17xx/LPC1769/exemples/UsbEp0Demo'
+APPLICATION = EXAMPLE / 'src/usb_ep0_demo.cpp'
 timer = runpy.run_path(str(ROOT / 'tests/lpc/timer/link17.py'))
 SOURCES = timer['SOURCES'] + [
     'ARM/NXP/LPC17xx/src/usb_hw_lpc17xx.c',
@@ -25,8 +28,9 @@ def build(prefix, directory, debug):
     flags = ['-mcpu=cortex-m3', '-mthumb', '-DLPC1769', '-ffunction-sections', '-fdata-sections']
     flags += ['-O0', '-g3', '-DDEBUG'] if debug else ['-Os', '-DNDEBUG']
     includes = ['-I' + str(ROOT / p) for p in timer['INCLUDES']]
+    includes.append('-I' + str(EXAMPLE / 'src'))
     objects = []
-    for index, source in enumerate(SOURCES + ['tests/lpc/usb/firmware/ep017_firmware.cpp']):
+    for index, source in enumerate(SOURCES + [str(APPLICATION)]):
         cpp = source.endswith('.cpp')
         obj = directory / f'{index}.o'
         language = ['-std=gnu++20', '-fno-exceptions', '-fno-rtti'] if cpp else ['-std=gnu17']
@@ -65,6 +69,20 @@ if __name__ == '__main__':
     linked = timer['project_sources'](ROOT / 'ARM/NXP/LPC17xx/LPC1769/lib/ioc/.project')
     for source in SOURCES:
         assert (ROOT / source).resolve() in linked, source
+    app_links = timer['project_sources'](EXAMPLE / 'ioc/.project')
+    assert app_links == {APPLICATION, EXAMPLE / 'src/board.h'}
+    for config in ET.parse(EXAMPLE / 'ioc/.cproject').findall('.//configuration'):
+        mode = config.get('name')
+        assert mode in ['Debug', 'Release']
+        specs = 'rdimon' if mode == 'Debug' else 'nosys'
+        for tool in config.findall('.//tool'):
+            if tool.get('superClass', '').endswith(('.c.linker', '.cpp.linker')):
+                options = [option for option in tool.findall('option')
+                           if option.get('superClass', '').endswith('.linker.other')]
+                assert len(options) == 1
+                flags = options[0].get('value')
+                assert '--specs=' + specs + '.specs' in flags
+                assert ('rdimon' in flags) == (mode == 'Debug')
     with tempfile.TemporaryDirectory() as tmp:
         for debug in [True, False]:
             build(args.prefix, Path(tmp) / ('Debug' if debug else 'Release'), debug)
