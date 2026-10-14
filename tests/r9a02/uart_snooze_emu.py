@@ -1201,6 +1201,43 @@ call("EmuUartPowerOff")
 si("g_DmaMode", 0)
 si("g_FifoBlocking", 0)
 
+# Polling DMA normally leaves accepted writes to the TX completion route.
+# With CPU interrupts masked, a full blocking FIFO must still poll and
+# restart DTC. RX must still be sampled on accepted writes while TX is busy.
+si("g_DevNo", 0)
+si("g_PollMode", 1)
+si("g_DmaMode", 1)
+si("g_FifoBlocking", 1)
+check("masked DMA polling init", call("EmuUartInit", 1000000) == 1)
+masked_irqs = [0]
+def mask_poll_call(u, addr, size, data):
+    u.reg_write(UC_RISCV_REG_MSTATUS, 0)
+def count_masked_irq(u, addr, size, data):
+    masked_irqs[0] += 1
+hooks = [uc.hook_add(UC_HOOK_CODE, mask_poll_call, begin=S(name), end=S(name))
+         for name in ("EmuUartTx", "EmuUartRx")]
+hooks.append(uc.hook_add(UC_HOOK_CODE, count_masked_irq,
+                         begin=S("R9a02IrqDispatch"), end=S("R9a02IrqDispatch")))
+ua.tx.clear()
+before = dtc_runs[0]
+for _ in range(80):
+    check("masked DMA polling accepts", call("EmuUartTx", 1) == 1)
+rx_char(0xA5)
+check("masked DMA polling accepts with RX", call("EmuUartTx", 1) == 1)
+check("masked DMA polling receives during TX", rx_all() == [0xA5])
+for _ in range(64):
+    rx_all()
+check("masked DMA polling order", ua.tx == [0x30] * 81, str(ua.tx))
+check("masked DMA polling uses DTC", dtc_runs[0] > before)
+check("masked DMA polling no CPU IRQ", masked_irqs[0] == 0)
+check("masked DMA polling preserves mask", uc.reg_read(UC_RISCV_REG_MSTATUS) & 8 == 0)
+for h in hooks:
+    uc.hook_del(h)
+call("EmuUartPowerOff")
+si("g_PollMode", 0)
+si("g_DmaMode", 0)
+si("g_FifoBlocking", 0)
+
 # UARTA without DMA preserves byte interrupt and polling operation.
 PCLK[0] = HOCO[0] = 48000000
 for devno in (3, 4):
@@ -1221,6 +1258,28 @@ for devno in (3, 4):
         call("EmuUartPowerOff")
 si("g_DevNo", 0)
 si("g_PollMode", 0)
+
+# Byte IRQ mode also gives an isolated startup byte time to accumulate
+# successors. Restore buffer-empty service for the queued bytes.
+si("g_FifoBlocking", 1)
+check("byte IRQ startup init", call("EmuUartInit", 1000000) == 1)
+HOLD_TX[0] = True
+ua.tx.clear()
+callbacks = gi("g_TxEvt")
+call("EmuUartTx", 1)
+deliver(idle=False)
+check("byte IRQ startup waits for transfer end", bget(SAU, 0x090, 2) & 1 == 0)
+check("byte IRQ startup no early callback", gi("g_TxEvt") == callbacks)
+call("EmuUartTx", 4)
+HOLD_TX[0] = False
+tx_step()
+deliver(idle=False)
+check("byte IRQ startup restores buffer empty", bget(SAU, 0x090, 2) & 1 == 1)
+deliver()
+check("byte IRQ startup order", ua.tx == TXPAT(1) + TXPAT(4), str(ua.tx))
+check("byte IRQ startup drained callback", gi("g_TxEvt") == callbacks + 1)
+call("EmuUartPowerOff")
+si("g_FifoBlocking", 0)
 
 # Byte interrupt mode also reports ready once the entire queue has drained.
 for devno in (0, 3, 4):

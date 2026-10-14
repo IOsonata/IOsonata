@@ -19,7 +19,7 @@ the TAU and the machine timer.
 | Trap, CLIC vector table, ICU event routing | `R9A02G021/lib/src/Vectors_R9A02.c`, `src/interrupt_r9a02.cpp`, `include/interrupt_r9a02.h` | Built |
 | GPIO, pin functions, IRQ0 to IRQ7 pin interrupts | `src/iopincfg_r9a02.c`, `include/iopinctrl.h` | Built |
 | SAU channel and prescaler sharing | `src/sau_r9a02.cpp`, `include/sau_r9a02.h` | Built |
-| UART (SAU UART0 to UART2), polling, interrupt and DTC TX, reception in Snooze (UART0, UART2) | `src/uart_r9a02.cpp` | Release polling TX at line rate; IRQ/DTC performance correction awaits hardware; Snooze emulated (`tests/r9a02`) |
+| UART (SAU UART0 to UART2), polling, interrupt and DTC TX, reception in Snooze (UART0, UART2) | `src/uart_r9a02.cpp` | Release polling and IRQ/DTC TX at line rate; one IRQ/DTC loss observed, other modes await performance rerun; Snooze emulated (`tests/r9a02`) |
 | UART (UARTA0, UARTA1), polling, interrupt and DTC TX | `src/uarta_r9a02.cpp`, `include/uarta_r9a02.h` | Built, DTC emulated (`tests/r9a02`) |
 | SPI (SAU simplified SPI): master with polling, interrupt and DTC reception, slave with interrupt and DTC, slave reception in Snooze (SPI00, SPI20) | `src/spi_r9a02.cpp` | Built, slave and Snooze emulated (`tests/r9a02`) |
 | I2C master (IICA0, IICA1), polling and interrupt | `src/i2c_r9a02.cpp`, `include/i2c_r9a02.h` | Built |
@@ -37,10 +37,11 @@ the TAU and the machine timer.
 
 Built with xPack riscv-none-elf-gcc 15.2.0, `-march=rv32imac_zba_zbb_zbs_zicsr_zifencei -mabi=ilp32`.
 The register use of the drivers was checked against the manual. UART0 Release
-polling TX has run at line rate on hardware. IRQ and DTC TX have hardware
-measurements below line rate; the scheduling correction has build/emulator
-validation and awaits a hardware rerun (see UART). Not implemented: SPI master transmission by the
-DTC, the DTC for I2C (the CPU acts at each byte), UART reception by the DTC,
+polling TX and interrupt-on/DTC-on TX have run at line rate on hardware.
+The latter run reported one three-byte loss after initially clean reports.
+Polling/DTC and byte-IRQ TX remain below line rate; their next scheduling
+correction has build/emulator validation and awaits a hardware rerun (see UART).
+Not implemented: SPI master transmission by the DTC, the DTC for I2C (the CPU acts at each byte), UART reception by the DTC,
 TML32 8-bit channels and capture, REMC, KINT, DOC, CRC, TRNG.
 
 ## Memory layout
@@ -281,43 +282,47 @@ short-burst delivery, data-bit masking and line-error reporting.
 
 The DTC source must be enabled in the CLIC (manual 14.5), so the TX completion
 route is enabled even when `bIntMode` is false. It chains blocks without
-application callbacks in that mode. With `bIntMode` false, `TxData` and
-`RxData` also service pending TX completion events; RX still needs polling. Disable and
-PowerOff stop DTC access before stopping the UART; Enable discards the old TX
+application callbacks in that mode. With `bIntMode` false, RX is polled on
+each `TxData` and `RxData` call.
+An accepted single-byte write to a busy blocking FIFO leaves TX to its
+completion interrupt. A full FIFO, non-blocking FIFO, or pending RX causes
+`TxData` to poll both directions; `RxData` also services pending TX events.
+Thus a full blocking FIFO can make progress with CPU interrupts masked.
+Disable and PowerOff stop DTC access before stopping the UART; Enable discards the old TX
 queue and DMA staging. A rate change retains staged bytes not yet written to
 the UART, subject to the existing SAU behavior of stopping an in-flight frame.
 Snooze drains TX before stopping the channels and resumes after wake-up.
 
-Hardware evidence (2026-10-14): `UartPrbsTxTest`, Release, byte mode,
-1,000,000 baud, 8N1, UART0 through J-Link VCOM, after the first scheduling
-correction and flash prefetch enable (commit `bf44b8f8`):
+Hardware evidence (2026-10-14): `UartPrbsTxTest`, library and application
+Release, byte mode, 1,000,000 baud, 8N1, UART0 through J-Link VCOM:
 
-| Interrupts | DMA | Steady received bytes/s |
-|------------|-----|------------------------|
-| Off | Off | About 100,017 |
-| On | Off | About 92,142 |
-| On | On | About 86,498 |
-| Off | On | About 87,445 |
+| Interrupts | DMA | Revision | Steady received bytes/s |
+|------------|-----|----------|------------------------|
+| Off | Off | `bf44b8f8` (earlier run) | About 100,017 |
+| On | Off | `de89b598` | About 94,311 |
+| On | On | `de89b598` | About 100,017 |
+| Off | On | `de89b598` | About 86,026 |
 
-Both DMA-off excerpts have no error counters. With DMA on, the counters
-remain at drop 20/out-of-frame 10 with interrupts off and drop 4/out-of-frame
-1 with interrupts on. Their cause is not isolated. Previously, IRQ TX reached
-about 75,730 bytes/s and DTC TX about 48,500 to 48,800 bytes/s (`051467e8`).
+The interrupt-on/DMA-on run reached line rate. After initially clean
+reports, its counters changed to drop 1, lost 1 (3 bytes), recovered 1 and
+then remained flat. The cause of this loss during the run is not isolated. The byte-IRQ excerpt has flat drop 1 and
+out-of-frame 1 counters. The polling/DMA excerpt has no error counters.
+The polling/DMA-off result is from the earlier run and was not repeated in
+this batch.
 
-At `7856bcbe`, the following interrupt-on/DMA-on run reached about 85,726
-bytes/s, with flat drop 2/out-of-frame 1 counters. This regressed from the
-previous 86,498 bytes/s despite a shorter emulated block handoff.
+Earlier interrupt-on/DMA-on results were about 86,498 bytes/s at `bf44b8f8`
+and 85,726 bytes/s at `7856bcbe`. At `de89b598`, transfer-end notification for
+an isolated SAU byte allowed following bytes to accumulate for a DMA block.
+Queued blocks still use buffer-empty events for continuous transfer.
 
-That revision stages DMA data before the buffer-empty boundary, avoids
-duplicate pending-event cleanup, and selects separate SAU byte and DMA TX
-entries at initialization. The subsequent correction changes the isolated
-SAU byte to transfer-end notification: an immediate buffer-empty interrupt
-could retire it before following bytes accumulated for DMA. Queued blocks
-still use buffer-empty events for continuous transfer. Figure 23.33 permits
-the MD0 change during operation; the driver sets it before the next write.
-Release and Debug emulator checks pass. Updated hardware throughput and
-long-run integrity remain unverified. Rerun the same primary Release test
-in all four modes, then `UartLoopback` for RX.
+The next correction also starts an isolated byte in byte-IRQ mode with
+transfer-end notification, restoring buffer-empty service for queued data.
+Polling/DMA avoids full TX/RX service after every accepted byte while the
+blocking FIFO is busy, retaining polling when full or RX needs service.
+Release and Debug checks cover masked-IRQ progress, RX during TX, byte
+ordering and the switch between transfer-end and buffer-empty events.
+Updated hardware results and long-run integrity remain unverified. Rerun
+the primary Release test, then `UartLoopback` for RX.
 Keep the shared test configuration unchanged when comparing MCUs; Debug is
 for development debugging.
 

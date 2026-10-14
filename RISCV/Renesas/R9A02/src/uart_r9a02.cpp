@@ -25,9 +25,10 @@ another channel of the unit runs or uses it, the rate is then set with STCLK
 only. The UART claims its two channels there, a channel cannot be used by the
 UART and the SPI at the same time.
 
-The SAU has a one character buffer each way. With interrupts, transmit uses
-the buffer empty interrupt (SMR.MD0 = 1), receive the transfer end
-interrupt and the error interrupt (SCR.EOC = 1). The transmit interrupt
+The SAU has a one character buffer each way. With interrupts, an isolated
+transmit byte uses transfer end to let following bytes accumulate. Queued
+transmission uses buffer empty (SMR.MD0 = 1). Receive uses transfer end
+and the error interrupt (SCR.EOC = 1). The transmit interrupt
 runs one level below IntPrio so that the receive interrupt can preempt it.
 Without interrupts, TxData and RxData service both directions without
 waiting for a character on the wire. The application keeps calling them
@@ -370,8 +371,8 @@ static inline __attribute__((always_inline)) int R9a02UartTxHw(R9a02UartDev_t * 
 
 	if (bTransferEnd)
 	{
-		// Let bytes accumulate during this character before starting the
-		// next DMA block, as the STM32 TC path does. MD0 may change while
+		// Let bytes accumulate during this character before servicing
+		// the next data, as the STM32 TC path does. MD0 may change while
 		// running (figure 23.33); set it before writing this character.
 		reg->SMR[ch] = (uint16_t)(reg->SMR[ch] & ~R9A02_SAU_SMR_MD0);
 	}
@@ -457,8 +458,8 @@ static void R9a02UartTxDma(R9a02UartDev_t * const pDev)
 
 // Called only when TX is idle, after its CPU event, or after Stop. Single
 // bytes use the register directly with transfer-end notification; queued
-// bursts use the DTC and buffer-empty events. The running transfer owns
-// the FIFO until it drains, as in STM32 and SAM4L.
+// bursts use buffer-empty events and, when selected, the DTC. The running
+// transfer owns the FIFO until it drains, as in STM32 and SAM4L.
 static inline __attribute__((always_inline)) void R9a02UartTxKick(R9a02UartDev_t * const pDev, bool bDma)
 {
 	UARTDev_t *udev = pDev->pUartDev;
@@ -470,7 +471,9 @@ static inline __attribute__((always_inline)) void R9a02UartTxKick(R9a02UartDev_t
 	}
 	else
 	{
-		int cnt = R9a02UartTxHw(pDev, bDma);
+		// An isolated byte waits until transfer end so the producer can
+		// queue its successor. Bursts continue on buffer-empty events.
+		int cnt = R9a02UartTxHw(pDev, bDma || CFifoUsed(udev->hTxFifo) == 1);
 
 		if (cnt >= 0)
 		{
@@ -680,6 +683,12 @@ static void R9a02UartTxIRQHandler(int IntNo, void *pCtx)
 	R9a02UartDev_t *dev = (R9a02UartDev_t *)pCtx;
 	UARTDev_t *udev = dev->pUartDev;
 	uintptr_t state = DisableInterrupt();
+
+	// The isolated startup byte used transfer end. Subsequent bytes
+	// fill SDR ahead of the shift register through buffer-empty events.
+	R9A02_SAU_Type *reg = dev->pReg;
+
+	reg->SMR[dev->TxCh] = (uint16_t)(reg->SMR[dev->TxCh] | R9A02_SAU_SMR_MD0);
 
 	int cnt = R9a02UartTxHw(dev);
 
@@ -1009,10 +1018,19 @@ static inline __attribute__((always_inline)) int R9a02UartTxDataMode(DevIntrf_t 
 
 	if (!pDev->bIntEn)
 	{
-		uintptr_t state = DisableInterrupt();
+		// DTC completion has a CPU route even in polling mode. Accepted
+		// writes to a busy blocking FIFO leave TX to that route, just as
+		// in interrupt mode. A full FIFO still polls, so a masked TX IRQ
+		// cannot prevent progress. Non-blocking FIFOs always poll since
+		// their puts never report full. Check RX on every call.
+		if (!bDma || udev->bTxReady || cnt == 0 || !CFifoIsBlocking(udev->hTxFifo) ||
+			(dev->pReg->SSR[dev->TxCh + 1U] & (R9A02_SAU_SSR_BFF | R9A02_SAU_SSR_ERR_Msk)))
+		{
+			uintptr_t state = DisableInterrupt();
 
-		R9a02UartPoll(dev);
-		EnableInterrupt(state);
+			R9a02UartPoll(dev);
+			EnableInterrupt(state);
+		}
 	}
 	else if (udev->bTxReady)
 	{

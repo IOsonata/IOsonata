@@ -51,9 +51,11 @@ blocking/non-blocking FIFOs:
   enqueues while TX is busy. Queued bytes become real DTC blocks; active
   descriptors stay unchanged by subsequent enqueues. TX-ready callbacks occur
   once the queue drains in both byte-interrupt and DMA operation.
-- SAU sends an isolated CPU byte with transfer-end notification. Immediate
-  interrupt delivery must not retire it before following bytes accumulate.
-  The queued DTC block restores buffer-empty notification.
+- SAU starts an isolated byte with transfer-end notification in byte-IRQ
+  and DMA modes. Immediate interrupt delivery must not retire it before
+  following bytes accumulate. Queued data restores buffer-empty service.
+- Polling/DMA with a blocking FIFO progresses while CPU interrupts remain
+  masked, including full-FIFO retries. TX calls still service pending RX.
 - After DTC completion, the next block is staged while the last byte still
   occupies the transmit buffer. Reusing the freed FIFO space cannot overwrite
   that block. The following buffer-empty event arms the staged data in order.
@@ -74,10 +76,10 @@ acknowledgement behavior.
 The unchanged `UartPrbsTxTest` source was linked with all four interrupt/DMA
 selections, and `UartLoopback` was linked, in both Release and Debug using the
 same LLVM toolchain. Build and emulator results do not establish hardware
-throughput. The port README records the maintainer's four-mode measurements
-at `bf44b8f8` and the interrupt-on/DMA-on regression at `7856bcbe`.
-The subsequent single-byte transfer-end change still awaits hardware
-measurements.
+throughput. The port README records the maintainer's measurements through
+`de89b598`: interrupt-on/DMA-on reached line rate with one three-byte loss
+reported during the run. Polling/DMA and byte-IRQ remain below line rate;
+their subsequent scheduling changes await hardware measurements.
 
 ## SPI slave (2026-10-13)
 
