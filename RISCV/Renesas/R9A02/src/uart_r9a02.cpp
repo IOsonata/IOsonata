@@ -14,7 +14,7 @@ DevNo 3 and 4, UARTA0 and UARTA1, are handed to uarta_r9a02.cpp when the
 application links it (uarta_r9a02.h).
 
 Format: 7 or 8 data bits, no, odd, even or space (0) parity, 1 or 2 stop
-bits, LSB first, no flow control, no DMA. Unsupported settings fail
+bits, LSB first, no flow control. Unsupported settings fail
 UARTInit.
 
 Rate: fMCK = PCLKB / 2^PRS (PRS 0 to 15, fMCK at most 32 MHz, table 23.5),
@@ -32,6 +32,13 @@ runs one level below IntPrio so that the receive interrupt can preempt it.
 Without interrupts, TxData and RxData service both directions without
 waiting for a character on the wire. The application keeps calling them
 while queued bytes remain, as with the STM32 polling implementation.
+
+bDMAMode selects DTC transmit in private blocks, as in the SAM4L port.
+RX retains the interrupt/polling path, including per-character errors and
+short-burst callbacks. The DTC writes SDR by halfwords; the CPU starts each
+block, then the buffer-empty events transfer its remaining characters.
+The TX completion route is enabled in the CLIC also with bIntMode false
+(manual 14.5); in that mode it chains blocks without application callbacks.
 
 Pins: PinOp R9A02_PSEL_SAU (IOPINOP_FUNC16). IOPinConfig puts the RX pin in
 input mode with NCODR = 1 (16.5.1). The RxD noise filter (SNFEN) is on.
@@ -86,6 +93,7 @@ SOFTWARE.
 #include "coredev/uart.h"
 #include "coredev/interrupt.h"
 #include "interrupt_r9a02.h"
+#include "dtc_r9a02.h"
 #include "system_r9a02.h"
 #include "sau_r9a02.h"
 #include "uarta_r9a02.h"
@@ -99,6 +107,9 @@ SOFTWARE.
 // Most bytes TxData and RxData copy to or from a CFIFO with interrupts
 // disabled, to keep the RX interrupt latency short
 #define R9A02_UART_COPY_MAX			8
+
+// Private TX staging, as in SAM4L. SDR requires halfword writes (23.3.8).
+#define R9A02_UART_DMA_SIZE			16
 
 #define R9A02_SAU_SIR_ALL			(R9A02_SAU_SIR_OVCT | R9A02_SAU_SIR_PECT | R9A02_SAU_SIR_FECT)
 
@@ -130,6 +141,8 @@ typedef struct {
 	int IntRx;
 	int IntErr;
 	const struct __R9a02_Uart_Snz_Ops *pSnz;	// Reception in Snooze set up, NULL when not
+	R9a02DtcInfo_t TxDtc;
+	uint16_t TxDmaMem[R9A02_UART_DMA_SIZE];
 } R9a02UartDev_t;
 
 // Reception in Snooze, reached through R9a02UartDev_t.pSnz, which only
@@ -226,6 +239,8 @@ static_assert(sizeof(s_R9a02UartDev) / sizeof(s_R9a02UartDev[0]) == R9A02_UART_S
 
 static void R9a02UartReleaseInts(R9a02UartDev_t * const pDev)
 {
+	R9a02DtcClear(pDev->IntTx);
+	pDev->TxDtc.Cra = 0U;
 	R9a02UnregisterIntHandler(pDev->IntTx);
 	R9a02UnregisterIntHandler(pDev->IntRx);
 	R9a02UnregisterIntHandler(pDev->IntErr);
@@ -241,6 +256,10 @@ static void R9a02UartStop(R9a02UartDev_t * const pDev)
 	R9A02_SAU_Type *reg = pDev->pReg;
 	uint16_t txbit = (uint16_t)(1U << pDev->TxCh);
 
+	if (pDev->IntTx >= 0 && pDev->pUartDev->DevIntrf.bDma)
+	{
+		R9a02DtcDisable(pDev->IntTx);
+	}
 	reg->ST = (uint16_t)(3U << pDev->TxCh);
 	reg->SOE = (uint16_t)(reg->SOE & ~txbit);
 	reg->SO = (uint16_t)(reg->SO | txbit);
@@ -350,6 +369,70 @@ static inline __attribute__((always_inline)) int R9a02UartTxHw(R9a02UartDev_t * 
 	return 1;
 }
 
+// DTC drains a private block; CFIFO storage may be reused immediately.
+// A normal transfer ends when its last halfword enters SDR, not on wire
+// completion. If SDR is still full, leave the next buffer-empty request to
+// the CPU. Arming at that point could lose the event while DTCE is set.
+// Called with interrupts disabled, from TxData, polling or the TX handler.
+static void R9a02UartTxDma(R9a02UartDev_t * const pDev)
+{
+	UARTDev_t *udev = pDev->pUartDev;
+	R9A02_SAU_Type *reg = pDev->pReg;
+	volatile R9a02DtcInfo_t *info = &pDev->TxDtc;
+
+	if (R9a02DtcEnabled(pDev->IntTx) || (reg->SE & (1U << pDev->TxCh)) == 0U)
+	{
+		return;
+	}
+	if (reg->SSR[pDev->TxCh] & R9A02_SAU_SSR_BFF)
+	{
+		return;
+	}
+
+	if (info->Cra == 0U)
+	{
+		int cnt = 0;
+
+		while (cnt < R9A02_UART_DMA_SIZE)
+		{
+			int len = R9A02_UART_DMA_SIZE - cnt;
+			uint8_t *p = CFifoGetMultiple(udev->hTxFifo, &len);
+
+			if (p == NULL)
+			{
+				break;
+			}
+			for (int i = 0; i < len; i++)
+			{
+				pDev->TxDmaMem[cnt + i] = p[i];
+			}
+			cnt += len;
+		}
+		if (cnt == 0)
+		{
+			udev->bTxReady = true;
+
+			return;
+		}
+		info->Sar = (uint32_t)(uintptr_t)pDev->TxDmaMem;
+		info->Cra = (uint16_t)cnt;
+	}
+
+	uint16_t first = *(const uint16_t *)(uintptr_t)info->Sar;
+
+	info->Sar = info->Sar + sizeof(uint16_t);
+	info->Cra = info->Cra - 1U;
+	udev->bTxReady = false;
+	// Clear an old CPU request before arming. SDR is empty and stays empty
+	// until the first write below; that write supplies the first DTC event.
+	R9a02ClearPendingInt(pDev->IntTx);
+	if (info->Cra != 0U)
+	{
+		R9a02DtcEnable(pDev->IntTx);
+	}
+	reg->SDR[pDev->TxCh] = first;
+}
+
 // Without interrupts, service both directions as the handlers would. Fill
 // the shift register and SDR when ready, but never wait for a character on
 // the wire. Read RX between TX writes so full duplex reception keeps going.
@@ -358,6 +441,12 @@ static void R9a02UartPoll(R9a02UartDev_t * const pDev)
 	uint8_t err = 0;
 
 	R9a02UartRxHw(pDev, &err);
+	if (pDev->pUartDev->DevIntrf.bDma)
+	{
+		R9a02UartTxDma(pDev);
+
+		return;
+	}
 	for (int i = 0; i < 2; i++)
 	{
 		if (R9a02UartTxHw(pDev) <= 0)
@@ -375,7 +464,11 @@ static void R9a02UartTxResume(R9a02UartDev_t * const pDev)
 {
 	UARTDev_t *udev = pDev->pUartDev;
 
-	if (udev->DevIntrf.bIntEn)
+	if (udev->DevIntrf.bDma)
+	{
+		R9a02UartTxDma(pDev);
+	}
+	else if (udev->DevIntrf.bIntEn)
 	{
 		udev->bTxReady = R9a02UartTxHw(pDev) <= 0;
 	}
@@ -391,7 +484,9 @@ static void R9a02UartTxWait(R9a02UartDev_t * const pDev)
 	UARTDev_t *udev = pDev->pUartDev;
 	R9A02_SAU_Type *reg = pDev->pReg;
 	uint32_t rate = udev->Rate > 0 ? (uint32_t)udev->Rate : 1U;
-	uint32_t limit = (SystemCoreClock / rate + 1U) * 12U * ((uint32_t)CFifoUsed(udev->hTxFifo) + 2U);
+	uint32_t staged = udev->DevIntrf.bDma ? R9A02_UART_DMA_SIZE : 0U;
+	uint32_t limit = (SystemCoreClock / rate + 1U) * 12U *
+					 ((uint32_t)CFifoUsed(udev->hTxFifo) + staged + 2U);
 	uint32_t start;
 
 	__asm volatile ("csrr %0, mcycle" : "=r"(start));
@@ -401,6 +496,13 @@ static void R9a02UartTxWait(R9a02UartDev_t * const pDev)
 	{
 		uint32_t now;
 
+		if (udev->DevIntrf.bDma)
+		{
+			uintptr_t state = DisableInterrupt();
+
+			R9a02UartTxDma(pDev);
+			EnableInterrupt(state);
+		}
 		__asm volatile ("csrr %0, mcycle" : "=r"(now));
 		if ((uint32_t)(now - start) >= limit)
 		{
@@ -504,7 +606,11 @@ static void R9a02UartTxIRQHandler(int IntNo, void *pCtx)
 	UARTDev_t *udev = dev->pUartDev;
 	uintptr_t state = DisableInterrupt();
 
-	if (R9a02UartTxHw(dev) == 0)
+	if (udev->DevIntrf.bDma)
+	{
+		R9a02UartTxDma(dev);
+	}
+	else if (R9a02UartTxHw(dev) == 0)
 	{
 		// TX CFIFO empty, TxData starts the next transmission
 		udev->bTxReady = true;
@@ -512,7 +618,7 @@ static void R9a02UartTxIRQHandler(int IntNo, void *pCtx)
 
 	EnableInterrupt(state);
 
-	if (udev->EvtCallback)
+	if (udev->DevIntrf.bIntEn && udev->EvtCallback)
 	{
 		udev->EvtCallback(udev, UART_EVT_TXREADY, NULL, CFifoAvail(udev->hTxFifo));
 	}
@@ -818,6 +924,13 @@ static int R9a02UartTxData(DevIntrf_t * const pDev, uint8_t const *pData, int Da
 		R9a02UartPoll(dev);
 		EnableInterrupt(state);
 	}
+	else if (pDev->bDma)
+	{
+		uintptr_t state = DisableInterrupt();
+
+		R9a02UartTxDma(dev);
+		EnableInterrupt(state);
+	}
 	else if (udev->bTxReady)
 	{
 		// The first byte starts the transmission, the buffer empty interrupt
@@ -1068,10 +1181,11 @@ static void R9a02UartEnable(DevIntrf_t * const pDev)
 	udev->RxDropCnt = 0;
 	udev->TxDropCnt = 0;
 
+	R9a02UartStop(dev);
+	dev->TxDtc.Cra = 0U;
 	CFifoFlush(udev->hTxFifo);
 	udev->bTxReady = true;
 
-	R9a02UartStop(dev);
 	R9a02UartStart(dev);
 
 	EnableInterrupt(state);
@@ -1135,11 +1249,11 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 		return false;
 	}
 
-	if (pCfg->bDMAMode || pCfg->Mode != UART_MODE_UART || pCfg->Duplex != UART_DUPLEX_FULL ||
+	if (pCfg->Mode != UART_MODE_UART || pCfg->Duplex != UART_DUPLEX_FULL ||
 		pCfg->bIrDAMode || pCfg->FlowControl != UART_FLWCTRL_NONE ||
 		(pCfg->DataBits != 7 && pCfg->DataBits != 8) || pCfg->Parity == UART_PARITY_MARK ||
 		(pCfg->StopBits != 1 && pCfg->StopBits != 2) || pCfg->Rate <= 0 ||
-		(pCfg->bIntMode && (pCfg->IntPrio < 0 || pCfg->IntPrio > (int)R9A02_CLIC_PRIO_MAX)))
+		((pCfg->bIntMode || pCfg->bDMAMode) && (pCfg->IntPrio < 0 || pCfg->IntPrio > (int)R9A02_CLIC_PRIO_MAX)))
 	{
 		return false;
 	}
@@ -1275,7 +1389,7 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	pDev->TxDropCnt = 0;
 	pDev->DevIntrf.IntPrio = pCfg->IntPrio;
 	pDev->DevIntrf.bIntEn = pCfg->bIntMode;
-	pDev->DevIntrf.bDma = false;
+	pDev->DevIntrf.bDma = pCfg->bDMAMode;
 	pDev->DevIntrf.bTxReady = true;
 	pDev->DevIntrf.bNoStop = false;
 	pDev->DevIntrf.EvtCB = NULL;
@@ -1304,16 +1418,30 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 		dev->IntRx = R9a02RegisterIntHandler(dev->EvtRx, pCfg->IntPrio, R9a02UartRxIRQHandler, dev);
 		dev->IntErr = R9a02RegisterIntHandler(dev->EvtErr, pCfg->IntPrio, R9a02UartRxIRQHandler, dev);
 		dev->IntTx = R9a02RegisterIntHandler(dev->EvtTx, txprio, R9a02UartTxIRQHandler, dev);
+	}
+	else if (pCfg->bDMAMode)
+	{
+		// The DTC activation source must be enabled in the CLIC (14.5).
+		dev->IntTx = R9a02RegisterIntHandler(dev->EvtTx, pCfg->IntPrio, R9a02UartTxIRQHandler, dev);
+	}
 
-		if (dev->IntRx < 0 || dev->IntErr < 0 || dev->IntTx < 0)
-		{
-			R9a02UartReleaseInts(dev);
-			IOPinDis(dev->pIOPinMap, dev->NbIOPins);
-			R9a02SauRelease(dev->Unit, chmsk, dev);
-			EnableInterrupt(state);
+	bool ok = !pCfg->bIntMode || (dev->IntRx >= 0 && dev->IntErr >= 0 && dev->IntTx >= 0);
 
-			return false;
-		}
+	if (pCfg->bDMAMode)
+	{
+		memset(&dev->TxDtc, 0, sizeof(dev->TxDtc));
+		dev->TxDtc.Mra = R9A02_DTC_MRA_MD_NORMAL | R9A02_DTC_MRA_SZ_HALF | R9A02_DTC_MRA_SM_INC;
+		dev->TxDtc.Dar = (uint32_t)(uintptr_t)&reg->SDR[dev->TxCh];
+		ok = ok && R9a02DtcSet(dev->IntTx, &dev->TxDtc);
+	}
+	if (!ok)
+	{
+		R9a02UartReleaseInts(dev);
+		IOPinDis(dev->pIOPinMap, dev->NbIOPins);
+		R9a02SauRelease(dev->Unit, chmsk, dev);
+		EnableInterrupt(state);
+
+		return false;
 	}
 
 	R9a02UartEnable(&pDev->DevIntrf);

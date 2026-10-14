@@ -1,6 +1,6 @@
 # R9A02G021 port checks
 
-Two emulator checks of the SAU drivers. Each script builds a fixture with the
+Emulator checks of the SAU drivers and UARTA. Each script builds a fixture with the
 port's sources for RV32IMAC (no Zba, Zbb or Zbs, which unicorn does not
 decode), runs it on unicorn and models the peripherals as the manual
 describes them: the SAU channels, the ICU IR and DTCE flags, the CLIC input
@@ -20,6 +20,39 @@ python3 tests/r9a02/build_spi_slave_emu.py --tool-prefix /path/to/bin/riscv-none
 Needs xPack riscv-none-elf-gcc, unicorn 2.1 and pyelftools. The objects go to
 `tests/r9a02/build`. Each script prints PASS and exits with 0, or lists the
 failed checks and exits with 1.
+
+The UART check also supports LLVM for Renesas RISC-V and Debug builds:
+
+```sh
+python3 tests/r9a02/build_uart_snooze_emu.py --llvm --tool-prefix /path/to/llvm-for-renesas-riscv/bin/
+python3 tests/r9a02/build_uart_snooze_emu.py --llvm --tool-prefix /path/to/llvm-for-renesas-riscv/bin/ --debug
+```
+
+Release (`-Os`) and Debug (`-O0`) UART checks passed with LLVM 19.1.7.202501
+on 2026-10-14. These check code and modeled register behavior, not timing or
+electrical behavior. Hardware performance uses Release `UartPrbsTxTest`
+first, then `UartLoopback` for RX, with the same configuration across MCUs.
+
+## UART DTC transmit (2026-10-14)
+
+The UART fixture includes `dtc_r9a02.cpp` and `uarta_r9a02.cpp`. The model
+executes the DTC records through their bus access widths, requires DTCST and
+the CLIC input enabled, and raises the completion event on the last transfer.
+It checks SAU UART0 and both UARTA channels with polling/interrupt RX and
+blocking/non-blocking FIFOs:
+
+- Exact TX order for single bytes, blocks, FIFO wrapping and backpressure;
+  private DMA storage remains intact when a non-blocking FIFO overwrites data.
+- Autonomous DTC transfers without CPU handlers, followed by block chaining;
+  SAU halfword writes and UARTA byte writes, including a full transmit buffer
+  at DTC completion and delayed CPU handling.
+- Short RX bursts, RX callbacks, parity-error discard, seven-bit masking and
+  full duplex traffic during DTC TX.
+- Disable/Enable with an active transfer, active reinitialization, rate changes
+  preserving the staged tail, PowerOff cleanup, setup failure and retry,
+  default FIFOs, and TX draining around SAU Snooze entry and wake-up.
+
+RX uses the existing CPU path, as in the SAM4L port. RX DMA is not implemented.
 
 ## SPI slave (2026-10-13)
 
@@ -90,3 +123,4 @@ The Snooze model takes the character in SDR at the end of its reception and
 no error flag (SSEC = 1); the error case of figure 23.41 (back to Software
 Standby without the CPU) is hardware only and is to confirm on the board
 with the UartSnoozeDemo example.
+

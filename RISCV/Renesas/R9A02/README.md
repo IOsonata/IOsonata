@@ -19,8 +19,8 @@ the TAU and the machine timer.
 | Trap, CLIC vector table, ICU event routing | `R9A02G021/lib/src/Vectors_R9A02.c`, `src/interrupt_r9a02.cpp`, `include/interrupt_r9a02.h` | Built |
 | GPIO, pin functions, IRQ0 to IRQ7 pin interrupts | `src/iopincfg_r9a02.c`, `include/iopinctrl.h` | Built |
 | SAU channel and prescaler sharing | `src/sau_r9a02.cpp`, `include/sau_r9a02.h` | Built |
-| UART (SAU UART0 to UART2), polling and interrupt, reception in Snooze (UART0, UART2) | `src/uart_r9a02.cpp` | Built, Snooze emulated (`tests/r9a02`) |
-| UART (UARTA0, UARTA1), polling and interrupt | `src/uarta_r9a02.cpp`, `include/uarta_r9a02.h` | Built |
+| UART (SAU UART0 to UART2), polling, interrupt and DTC TX, reception in Snooze (UART0, UART2) | `src/uart_r9a02.cpp` | Release TX at line rate on hardware; DTC and Snooze emulated (`tests/r9a02`) |
+| UART (UARTA0, UARTA1), polling, interrupt and DTC TX | `src/uarta_r9a02.cpp`, `include/uarta_r9a02.h` | Built, DTC emulated (`tests/r9a02`) |
 | SPI (SAU simplified SPI): master with polling, interrupt and DTC reception, slave with interrupt and DTC, slave reception in Snooze (SPI00, SPI20) | `src/spi_r9a02.cpp` | Built, slave and Snooze emulated (`tests/r9a02`) |
 | I2C master (IICA0, IICA1), polling and interrupt | `src/i2c_r9a02.cpp`, `include/i2c_r9a02.h` | Built |
 | I2C master (SAU simplified I2C IIC00 to IIC21), polling and interrupt | `src/i2c_sau_r9a02.cpp` | Built |
@@ -36,9 +36,10 @@ the TAU and the machine timer.
 | DFU flash target | `src/dfu_r9a02.cpp` | Built, boot linked, boot emulated |
 
 Built with xPack riscv-none-elf-gcc 15.2.0, `-march=rv32imac_zba_zbb_zbs_zicsr_zifencei -mabi=ilp32`.
-The register use of the drivers was checked against the manual. Nothing has
-been run on hardware yet. Not implemented: SPI master transmission by the
-DTC, the DTC for I2C (the CPU acts at each byte), UART transfers by the DTC,
+The register use of the drivers was checked against the manual. UART0 Release
+TX has run at line rate on hardware; UART DTC has build/emulator validation
+only. Not implemented: SPI master transmission by the
+DTC, the DTC for I2C (the CPU acts at each byte), UART reception by the DTC,
 TML32 8-bit channels and capture, REMC, KINT, DOC, CRC, TRNG.
 
 ## Memory layout
@@ -247,7 +248,7 @@ The SPI and I2C drivers turn off the noise filter of their channel pair
 
 SAU UART rate: fMCK / (2 x (STCLK + 1)), fMCK = PCLKB / 2^n, at most 32 MHz.
 `UARTSetRate` returns the closest rate. Data 7 or 8 bits, parity none, even,
-odd or space (mark is rejected), 1 or 2 stop bits, no flow control, no DMA.
+odd or space (mark is rejected), 1 or 2 stop bits, no flow control.
 Interrupt mode uses the IOsonata CFIFO, the TX interrupt runs one level below
 `IntPrio` so that the RX interrupt can preempt it.
 
@@ -257,6 +258,32 @@ UARTInit fails for a rate outside these limits or more than 2 % away from the
 closest one, below about 1500 bps with the HOCO at 48 MHz. Data 5, 7 or 8
 bits, same parity and stop bit choices. Without interrupts RX_ENDI is polled
 through `R9a02RouteEvent`, the UARTA has no receive data flag.
+
+`bDMAMode` enables DTC TX on DevNo 0 to 4. It follows the Microchip SAM4L
+UART pattern: copy up to 16 bytes from the TX CFIFO into private storage,
+start the block, and chain queued blocks on completion. SAU uses halfword
+storage and writes because SDR requires 16-bit access; UARTA uses bytes.
+The caller may reuse accepted data immediately, including with a non-blocking
+FIFO. A positive TX return counts bytes accepted, not bytes already on wire.
+RX remains interrupt driven or polled according to `bIntMode`, with immediate
+short-burst delivery, data-bit masking and line-error reporting.
+
+The DTC source must be enabled in the CLIC (manual 14.5), so the TX completion
+route is enabled even when `bIntMode` is false. It chains blocks without
+application callbacks in that mode. `TxData` and `RxData` also service TX
+completion; RX still needs polling when `bIntMode` is false. Disable and
+PowerOff stop DTC access before stopping the UART; Enable discards the old TX
+queue and DMA staging. A rate change retains staged bytes not yet written to
+the UART, subject to the existing SAU behavior of stopping an in-flight frame.
+Snooze drains TX before stopping the channels and resumes after wake-up.
+
+Hardware evidence (2026-10-14): `UartPrbsTxTest`, Release, byte mode,
+1,000,000 baud, 8N1, polling, DMA off, reached about 100,000 bytes/s on UART0
+through J-Link VCOM. This establishes TX throughput, not a clean long-run
+integrity result; occasional discontinuities are still unisolated. DTC TX
+needs the same primary Release test, then `UartLoopback` for RX. Keep the
+shared test configuration unchanged when comparing MCUs; Debug is for
+development debugging.
 
 UARTA is linked only on request, so that images without it stay small (the
 DFU boot): link the application with `-Wl,-u,R9a02UartaInit` (the
@@ -431,8 +458,8 @@ IELSR slot (16-byte `R9a02DtcInfo_t`, in SRAM), `R9a02DtcEnable` turns the
 slot over to the DTC (IELSRn.DTCE), `R9a02DtcDisable` back to the CPU. The
 vector table is the `.bss.dtc_vector` section, placed first in IRAM by the
 R9A02 linker scripts (1 KB alignment). Records are re-read at each transfer
-(DTCCR.RRS = 0). `MRB.DISEL = 1` is not supported. Users: the SPI master
-reception and slave transfers (`bDmaEn`) and the TML32 interval flag
+(DTCCR.RRS = 0). `MRB.DISEL = 1` is not supported. Users: UART TX
+(`bDMAMode`), the SPI master reception and slave transfers (`bDmaEn`), and the TML32 interval flag
 (MODE_DTC, MODE_SNOOZE).
 
 `include/elc_r9a02.h`: `R9a02ElcLink(Dest, EvtId)` links an event to the A/D
@@ -565,3 +592,4 @@ the port assumed (polling with the CLIC input off, the TML32 interval
 formula, the DTC and the CLIC, the end of an SPI reception by the DTC, ANI18
 and ANI19, the A/D compare window at ADLL, comparator wake-up from Software
 Standby) and prints PASS, FAIL or SKIP for each: run it first on a new board.
+

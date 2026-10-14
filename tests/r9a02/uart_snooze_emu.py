@@ -67,9 +67,10 @@ for a, d in segs:
 uc.mem_map(0xE0000000, 0x100000, UC_PROT_ALL)
 uc.mem_map(0xE2000000, 0x10000, UC_PROT_ALL)
 
-ICU, PORT, SAU = 0x40006000, 0x40040000, 0x40094000
-MM = (ICU, PORT, SAU)
-plain = [(0x40000000, ICU), (ICU + 0x1000, PORT), (PORT + 0x1000, SAU), (SAU + 0x1000, 0x41000000)]
+ICU, PORT, SAU, UARTA = 0x40006000, 0x40040000, 0x40094000, 0x40096000
+MM = (ICU, PORT, SAU, UARTA)
+plain = [(0x40000000, ICU), (ICU + 0x1000, PORT), (PORT + 0x1000, SAU),
+         (SAU + 0x1000, UARTA), (UARTA + 0x1000, 0x41000000)]
 for lo, hi in plain:
     uc.mem_map(lo, hi - lo, UC_PROT_ALL)
 
@@ -167,6 +168,7 @@ class Uart:
         s.sdr = 0
         s.bff = False
         s.ovf = False
+        s.err = 0
         s.tx = []
         s.shifting = False
         s.shift = 0
@@ -176,6 +178,7 @@ class Uart:
         s.snz = 0
         s.snz_set = []
 ua = Uart()
+uarta = [Uart(), Uart()]
 HOLD_TX = [False]       # force the bounded TX wait to expire
 TX_STATUS_READS = [0]
 
@@ -189,6 +192,15 @@ RX_ON_TX_STEP = []      # full duplex peer: one RX byte per TX character
 def tx_step():
     if HOLD_TX[0]:
         return
+    for ch, a in enumerate(uarta):
+        if a.shifting:
+            a.tx.append(a.shift)
+            if a.txbff:
+                a.shift = a.txsdr
+                a.txbff = False
+                uart_event(0x5D + ch * 3)
+            else:
+                a.shifting = False
     if ua.shifting:
         ua.tx.append(ua.shift)
         if RX_ON_TX_STEP:
@@ -243,7 +255,7 @@ def sau_read(off, size):
             # hook sets the channel for Snooze
             rx_char(INJECT_RX[0])
             INJECT_RX[0] = None
-        return (0x20 if ua.bff else 0) | (1 if ua.ovf else 0)
+        return (0x20 if ua.bff else 0) | (1 if ua.ovf else 0) | ua.err
     if off == 0x0A0:
         return (1 if ua.running[0] else 0) | (2 if ua.running[1] else 0)
     return bget(SAU, off, size)
@@ -254,6 +266,7 @@ def sau_write(off, size, v):
         bset(SAU, off, size, (v & ~protected) | (bget(SAU, off, size) & protected))
         return
     if off == 0x000:
+        assert size == 2, "SDR transmit writes must be halfwords"
         if not ua.running[0]:
             bset(SAU, off, 2, v)
         elif ua.txbff:
@@ -274,6 +287,7 @@ def sau_write(off, size, v):
     if off == 0x08A:
         if v & 1:
             ua.ovf = False
+        ua.err &= ~v
         return
     if off in (0x0A2, 0x0A4):
         for ch in (0, 1):
@@ -316,7 +330,59 @@ def rx_char(c):
         event(slot_of(EVT_SNZCANCEL))
     return True
 
-MODEL = {ICU: (icu_read, icu_write), PORT: (port_read, port_write), SAU: (sau_read, sau_write)}
+# UARTA: TXBA and shift register, buffer-empty TX_ENDI, RX_ENDI even on
+# receive errors (ISRMA = 1). There is no RX-ready status bit.
+def uarta_read(off, size):
+    assert size == 1
+    if off < 16:
+        ch, reg = divmod(off, 8)
+        a = uarta[ch]
+        if reg == 1:
+            a.bff = False
+            return a.sdr
+        if reg == 5:
+            poll_step()
+            poll_point()
+            return (0x20 if a.txbff else 0) | (0x10 if a.shifting else 0) | a.err
+    return bget(UARTA, off, size)
+
+def uarta_write(off, size, v):
+    assert size == 1
+    if off < 16:
+        ch, reg = divmod(off, 8)
+        a = uarta[ch]
+        if reg == 0:
+            assert a.running[0], "TXBA written while disabled"
+            assert not a.txbff, "TXBA written while full"
+            if not a.shifting:
+                a.shifting = True
+                a.shift = v
+                uart_event(0x5D + ch * 3)
+            else:
+                a.txsdr = v
+                a.txbff = True
+            return
+        if reg == 2:
+            if not v & 0x40:
+                a.shifting = a.txbff = False
+            a.running = [bool(v & 0x40), bool(v & 0x20)]
+        if reg == 6:
+            a.err &= ~v
+    bset(UARTA, off, size, v)
+
+def uarta_rx(ch, c, err=0):
+    a = uarta[ch]
+    assert a.running[1]
+    a.err |= err
+    if a.bff:
+        a.err |= 1
+    else:
+        a.sdr = c
+        a.bff = True
+    uart_event(0x5E + ch * 3)
+
+MODEL = {ICU: (icu_read, icu_write), PORT: (port_read, port_write), SAU: (sau_read, sau_write),
+         UARTA: (uarta_read, uarta_write)}
 for b, (r, w) in MODEL.items():
     uc.mmio_map(b, 0x1000, lambda u, o, sz, d, r=r: r(o, sz), None,
                 lambda u, o, sz, v, d, w=w: w(o, sz, v), None)
@@ -336,6 +402,8 @@ def bus_write(a, size, v):
 # ---- DTC ----
 dtc_runs = [0]
 def dtc_run(slot):
+    assert bus_read(0x4000540C, 1) & 1, "DTC activation while DTCST is stopped"
+    assert clic_ie(slot), "DTC activation source must be enabled in CLIC (14.5)"
     vbr = bus_read(0x40005404, 4)
     rec = bus_read(vbr + 4 * slot, 4)
     if rec == 0:
@@ -515,7 +583,7 @@ def deliver(first=None, limit=2000, idle=True):
         for _ in range(limit):
             p = pending()
             if not p:
-                if idle and ua.shifting:
+                if idle and (ua.shifting or any(a.shifting for a in uarta)):
                     tx_step()
                     continue
                 return
@@ -867,6 +935,208 @@ check("polling peer exhausted", not RX_ON_TX_STEP)
 call("EmuUartPowerOff")
 si("g_PollMode", 0)
 si("g_FifoBlocking", 0)
+
+# DTC transmit uses the same CFIFO contract, with RX still serviced by the
+# CPU. Exercise both event delivery and polling, including UARTA byte access.
+PCLK[0] = HOCO[0] = 48000000
+si("g_DmaMode", 1)
+for devno in (0, 3, 4):
+    si("g_DevNo", devno)
+    a = ua if devno == 0 else uarta[devno - 3]
+    txevt = EVT_TX if devno == 0 else 0x5D + (devno - 3) * 3
+    rate = 1000000 if devno == 0 else 115200
+    def receive(c, err=0):
+        if devno == 0:
+            ua.err = err
+            rx_char(c)
+        else:
+            uarta_rx(devno - 3, c, err)
+    for poll in (0, 1):
+        si("g_PollMode", poll)
+        for blocking in (0, 1):
+            si("g_FifoBlocking", blocking)
+            tag = "DTC DevNo %d poll %d blocking %d" % (devno, poll, blocking)
+            check(tag + " init", call("EmuUartInit", rate) == 1)
+            txevents = gi("g_TxEvt")
+            txslot = slot_of(txevt)
+            check(tag + " route", txslot is not None and clic_ie(txslot))
+            for n in (1, 2, 16, 32, 7, 31):
+                a.tx.clear()
+                before = dtc_runs[0]
+                check(tag + " accepted %d" % n, call("EmuUartTx", n) == n)
+                for _ in range(80):
+                    tx_step()
+                    if poll:
+                        rx_all()
+                    else:
+                        deliver(idle=False)
+                check(tag + " wire %d" % n, a.tx == TXPAT(n), str(a.tx))
+                check(tag + " DTC used %d" % n, n == 1 or dtc_runs[0] > before)
+                check(tag + " completed %d" % n, not icu.dtce[txslot])
+            # No CPU handler runs during a block. This distinguishes DTC
+            # movement from the old byte interrupt path.
+            check(tag + " autonomous init", call("EmuUartInit", rate) == 1)
+            HOLD_TX[0] = True
+            a.tx.clear()
+            before = dtc_runs[0]
+            block = 8 if poll else 16
+            call("EmuUartTx", block)
+            HOLD_TX[0] = False
+            for _ in range(18):
+                tx_step()
+            check(tag + " autonomous block", a.tx == TXPAT(block) and dtc_runs[0] - before == block - 1,
+                  "%s transfers %d" % (a.tx, dtc_runs[0] - before))
+            deliver(idle=False)
+            # One-character RX burst must be available immediately; line
+            # errors remain visible while DTC transmits.
+            evt0 = gi("g_RxEvt")
+            receive(0xA5)
+            deliver(idle=False)
+            check(tag + " short RX", rx_all() == [0xA5])
+            check(tag + " RX callback", gi("g_RxEvt") == evt0 + (0 if poll else 1))
+            err0 = gi("g_LineEvt")
+            receive(0xF3, 4)  # parity error
+            deliver(idle=False)
+            check(tag + " parity discarded", rx_all() == [])
+            check(tag + " error callback", gi("g_LineEvt") == err0 + (0 if poll else 1))
+            a.tx.clear()
+            call("EmuUartTx", 32)
+            received = []
+            for c in range(32):
+                receive(0x80 + c)
+                tx_step()
+                deliver(idle=False)
+                received.extend(rx_all())
+            deliver()
+            check(tag + " full duplex TX", a.tx == TXPAT(32), str(a.tx))
+            check(tag + " full duplex RX", received == list(range(0x80, 0xA0)), str(received))
+            # Rate changes retain staged bytes not yet written to hardware.
+            # SAU stops its current character; UARTA drains its two registers.
+            a.tx.clear()
+            HOLD_TX[0] = True
+            call("EmuUartTx", 24)
+            HOLD_TX[0] = False
+            check(tag + " active rate change", call("EmuUartRate", rate) > 0)
+            for _ in range(50):
+                tx_step()
+                deliver(idle=False)
+                if poll:
+                    rx_all()
+            check(tag + " rate retains staged tail", a.tx[-22:] == TXPAT(24)[-22:], str(a.tx))
+            # Hold the line, overwrite/reject queued data, then let DMA
+            # finish. Its already copied block must remain intact.
+            HOLD_TX[0] = True
+            a.tx.clear()
+            check(tag + " first block", call("EmuUartTx", block) == block)
+            check(tag + " queued block", call("EmuUartTx", 32) == 32)
+            n = call("EmuUartTx", 8)
+            check(tag + " full FIFO policy", n == (0 if blocking else 8), str(n))
+            HOLD_TX[0] = False
+            for _ in range(100):
+                tx_step()
+                if poll:
+                    rx_all()
+                else:
+                    deliver(idle=False)
+            expected = TXPAT(block) + (TXPAT(32) if blocking else TXPAT(32)[8:] + TXPAT(8))
+            check(tag + " private block protected", a.tx == expected, str(a.tx))
+            # Stop while the DTC owns the route; no later write may reach
+            # a stopped UART. Enable discards the old transmit queue.
+            HOLD_TX[0] = True
+            call("EmuUartTx", 24)
+            check(tag + " active before disable", icu.dtce[txslot])
+            call("EmuUartDisable")
+            check(tag + " disabled DTC", not icu.dtce[txslot] and not a.running[0])
+            HOLD_TX[0] = False
+            call("EmuUartEnable")
+            a.tx.clear()
+            call("EmuUartTx", 3)
+            for _ in range(20):
+                tx_step()
+                if poll:
+                    rx_all()
+                else:
+                    deliver(idle=False)
+            check(tag + " enable flushes old DMA", a.tx == TXPAT(3), str(a.tx))
+            # Reinitializing an active instance also relinquishes the old
+            # DTC record before rebuilding the route and CFIFOs.
+            HOLD_TX[0] = True
+            call("EmuUartTx", 16)
+            check(tag + " reinit", call("EmuUartInit", rate) == 1)
+            check(tag + " reinit disabled DTC", not icu.dtce[slot_of(txevt)])
+            HOLD_TX[0] = False
+            call("EmuUartPowerOff")
+            check(tag + " route released", slot_of(txevt) is None and not any(icu.dtce))
+            check(tag + " TX callbacks", gi("g_TxEvt") == txevents if poll else gi("g_TxEvt") > txevents)
+    # The default 16-byte CFIFO also works; format masking remains in RX.
+    si("g_DefaultFifo", 1)
+    si("g_FifoBlocking", 1)
+    si("g_PollMode", 0)
+    si("g_DataBits", 7)
+    check("DTC default FIFO init %d" % devno, call("EmuUartInit", rate) == 1)
+    a.tx.clear()
+    check("DTC default FIFO accept %d" % devno, call("EmuUartTx", 16) == 16)
+    deliver()
+    check("DTC default FIFO wire %d" % devno, a.tx == TXPAT(16), str(a.tx))
+    receive(0xE5)
+    deliver()
+    check("DTC RX mask %d" % devno, rx_all() == [0x65])
+    call("EmuUartPowerOff")
+    si("g_DefaultFifo", 0)
+    si("g_DataBits", 0)
+    # A DTC setup failure must unwind every route and allow a clean retry.
+    def fail_dtc_setup(u, addr, size, ud):
+        u.reg_write(UC_RISCV_REG_A0, 0)
+        u.reg_write(UC_RISCV_REG_PC, u.reg_read(UC_RISCV_REG_RA))
+    h = uc.hook_add(UC_HOOK_CODE, fail_dtc_setup, begin=S("R9a02DtcSet"), end=S("R9a02DtcSet"))
+    check("DTC setup failure %d" % devno, call("EmuUartInit", rate) == 0)
+    check("DTC failure releases route %d" % devno, slot_of(txevt) is None and not any(icu.dtce))
+    uc.hook_del(h)
+    check("DTC retry %d" % devno, call("EmuUartInit", rate) == 1)
+    call("EmuUartPowerOff")
+
+# DMA drains before Snooze entry and resumes after the receive wake-up.
+si("g_DevNo", 0)
+PCLK[0] = HOCO[0] = 32000000
+check("DTC Snooze init", call("EmuUartInit", 9600) == 1)
+ua.tx.clear()
+cut0 = ua.cut
+call("EmuUartTx", 24)
+check("DTC Snooze enable", call("EmuUartSnooze", 1) == 1)
+check("DTC Snooze drains before clock", ua.tx == TXPAT(24) and ua.cut == cut0, str(ua.tx))
+ua.tx.clear()
+call("EmuUartTx", 24)
+standby(lambda: rx_char(0xA5))
+check("DTC Snooze drains before standby", ua.tx == TXPAT(24) and ua.cut == cut0, str(ua.tx))
+check("DTC Snooze RX", rx_all() == [0xA5])
+ua.tx.clear()
+call("EmuUartTx", 24)
+deliver()
+check("DTC after Snooze", ua.tx == TXPAT(24), str(ua.tx))
+call("EmuUartPowerOff")
+si("g_DmaMode", 0)
+si("g_FifoBlocking", 0)
+
+# UARTA without DMA preserves byte interrupt and polling operation.
+PCLK[0] = HOCO[0] = 48000000
+for devno in (3, 4):
+    si("g_DevNo", devno)
+    a = uarta[devno - 3]
+    for poll in (0, 1):
+        si("g_PollMode", poll)
+        tag = "UARTA no DMA %d poll %d" % (devno, poll)
+        check(tag + " init", call("EmuUartInit", 115200) == 1)
+        a.tx.clear()
+        check(tag + " TX accepted", call("EmuUartTx", 24) == 24)
+        call("EmuUartRate", 115200)
+        deliver()
+        check(tag + " TX rate change", a.tx == TXPAT(24), str(a.tx))
+        uarta_rx(devno - 3, 0xA5)
+        deliver()
+        check(tag + " RX", rx_all() == [0xA5])
+        call("EmuUartPowerOff")
+si("g_DevNo", 0)
+si("g_PollMode", 0)
 
 check("no anomalies", not anomalies, str(anomalies[:4]))
 print("Snooze characters", ua.snz, "lost", icu.lost, "TX bytes cut", ua.cut)
