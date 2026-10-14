@@ -1402,6 +1402,10 @@ static void Ra4m1I2cPinConfig(const I2CCfg_t * const pCfg)
 	{
 		const IOPinCfg_t *pin = &pCfg->pIOPinMap[i];
 
+		// Release open-drain lines before switching the pad to IIC mode.
+		// The PFS driver preserves PODR, so a reset-low output latch must
+		// not be carried into an active master SCL output.
+		IOPinSet(pin->PortNo, pin->PinNo);
 		IOPinConfig(pin->PortNo, pin->PinNo, pin->PinOp, pin->PinDir,
 			pin->Res, pin->Type);
 	}
