@@ -21,6 +21,10 @@
 #   - ICU IELSR and the Software Standby machinery as in spi_slave_emu.py.
 #     SNZ_CANCEL_NORMAL: the SELSR0 event also reaches ICU_SNZCANCEL in
 #     Normal mode (12.2.10 does not say).
+#   - TX idle level: POSR/PORR update the PFS output latch (16.2.3), ST
+#     retains SO (23.3.15), and SO writes are ignored while SOE is set
+#     (23.3.19). A character starts low and ends high; individual data
+#     bits and electrical behavior are not modeled.
 #
 # Needs unicorn 2.1 and pyelftools, firmware without Zba, Zbb and Zbs.
 #
@@ -120,6 +124,7 @@ def event(slot):
 
 # ---- PORT: P202 is the chip select input ----
 cs = [1]
+tx_gpio_low = []
 def port_read(off, size):
     if off < 0xA0 and off % 0x20 == 4 and size == 4:
         port = off // 0x20
@@ -131,6 +136,19 @@ def port_read(off, size):
 
 def port_write(off, size, v):
     bset(PORT, off, size, v)
+    if off < 0xA0 and off % 0x20 == 8 and size == 4:
+        # PCNTR3: POSR in bits 15:0, PORR in bits 31:16.
+        for pin in range(16):
+            pfs = 0x800 + (off // 0x20) * 0x40 + pin * 4
+            latch = bget(PORT, pfs, 4)
+            if v & (1 << pin):
+                latch |= 1
+            if v & (1 << (pin + 16)):
+                latch &= ~1
+            bset(PORT, pfs, 4, latch)
+    if off == 0x8C8 and size == 4 and (v & 0x10005) == 4:
+        # P302: PMR=0, PDR=1, PODR=0 actively drives low.
+        tx_gpio_low.append(v)
 
 # ---- SAU0 channels 0 (TX) and 1 (RX), UART0 ----
 EVT_TX, EVT_RX, EVT_SNZCANCEL = 0x3B, 0x3C, 0x0B
@@ -152,8 +170,16 @@ class Uart:
         s.snz = 0
         s.snz_set = []
 ua = Uart()
+HOLD_TX = [False]       # force the bounded TX wait to expire
+
+def tx_level(high):
+    if bget(SAU, 0xAA, 2) & 1:
+        so = bget(SAU, 0xA8, 2)
+        bset(SAU, 0xA8, 2, (so | 1) if high else (so & ~1))
 
 def tx_step():
+    if HOLD_TX[0]:
+        return
     if ua.shifting:
         ua.tx.append(ua.shift)
         if ua.txbff:
@@ -162,6 +188,7 @@ def tx_step():
             event(slot_of(EVT_TX))
         else:
             ua.shifting = False
+            tx_level(True)
 
 DEPTH = [0]
 IRQ_REQ = [False]
@@ -210,6 +237,10 @@ def sau_read(off, size):
     return bget(SAU, off, size)
 
 def sau_write(off, size, v):
+    if off == 0x0A8:
+        protected = bget(SAU, 0xAA, 2) & 0xF
+        bset(SAU, off, size, (v & ~protected) | (bget(SAU, off, size) & protected))
+        return
     if off == 0x000:
         if not ua.running[0]:
             bset(SAU, off, 2, v)
@@ -218,6 +249,7 @@ def sau_write(off, size, v):
         elif not ua.shifting:
             ua.shifting = True
             ua.shift = v & 0xFF
+            tx_level(False)
             event(slot_of(EVT_TX))
         else:
             ua.txsdr = v & 0xFF
@@ -507,6 +539,34 @@ def normal(prs, stclk):
 random.seed(2)
 TXPAT = lambda n: [0x30 + i for i in range(n)]
 SNZC = lambda: slot_of(EVT_SNZCANCEL)
+
+# Initialization must not drive a low pulse while P302 passes through GPIO.
+check("idle init", call("EmuUartInit", 9600) == 1)
+check("no GPIO low during init", not tx_gpio_low, str([hex(v) for v in tx_gpio_low]))
+check("idle high after init", bget(SAU, 0xA8, 2) & 1)
+# One character, stopped during its start bit by a rate change. No queued
+# character can hide a low output by completing after the restart.
+check("rate test tx", call("EmuUartTx", 1) == 1 and ua.shifting)
+check("start bit low", not (bget(SAU, 0xA8, 2) & 1))
+check("rate test change", call("EmuUartRate", 9600) > 0)
+check("idle high after rate change", bget(SAU, 0xA8, 2) & 1)
+deliver()
+# Snooze clock changes and entry also restore idle if the TX wait expires.
+call("EmuUartTx", 1)
+HOLD_TX[0] = True
+check("timeout Snooze enable", call("EmuUartSnooze", 1) == 1)
+check("idle high after Snooze clock timeout", bget(SAU, 0xA8, 2) & 1)
+HOLD_TX[0] = False
+deliver()
+call("EmuUartTx", 1)
+HOLD_TX[0] = True
+seen = []
+standby(lambda: seen.append(bget(SAU, 0xA8, 2) & 1))
+check("idle high during Snooze after timeout", seen == [1], str(seen))
+check("idle high after Snooze timeout", bget(SAU, 0xA8, 2) & 1)
+HOLD_TX[0] = False
+deliver()
+call("EmuUartPowerOff")
 
 for hoco, rate, prs, stclk, snzstclk in ((32000000, 9600, 4, 103, 106), (32000000, 4800, 5, 103, 106),
                                          (24000000, 9600, 4, 77, 79), (24000000, 4800, 5, 77, 79)):

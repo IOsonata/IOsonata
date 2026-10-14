@@ -81,6 +81,7 @@ SOFTWARE.
 
 #include "r9a02g021.h"
 #include "coredev/iopincfg.h"
+#include "iopinctrl.h"
 #include "coredev/uart.h"
 #include "coredev/interrupt.h"
 #include "interrupt_r9a02.h"
@@ -232,7 +233,8 @@ static void R9a02UartReleaseInts(R9a02UartDev_t * const pDev)
 	pDev->IntErr = -1;
 }
 
-// Both channels stopped, TxD held at the idle level by SO (23.6.1)
+// Both channels stopped, TxD held at the idle level by SO (23.6.1).
+// ST retains the pin level; clear SOE before writing SO (23.3.15, 23.3.19).
 static void R9a02UartStop(R9a02UartDev_t * const pDev)
 {
 	R9A02_SAU_Type *reg = pDev->pReg;
@@ -566,7 +568,7 @@ static bool R9a02UartSnoozeClock(R9a02UartDev_t * const pDev, uint32_t Rate)
 
 	if (running)
 	{
-		reg->ST = chmsk;
+		R9a02UartStop(pDev);
 	}
 
 	bool ok = R9a02SauSetPrs(pDev->Unit, chmsk, Rate == 4800U ? 5U : 4U, &clk);
@@ -624,7 +626,7 @@ static uint32_t R9a02UartSetRate(DevIntrf_t * const pDev, uint32_t Rate)
 
 	if (running)
 	{
-		reg->ST = chmsk;
+		R9a02UartStop(dev);
 	}
 
 	// Rate = fMCK / (2 x (STCLK + 1)), STCLK from 2 (23.3.8). Both channels
@@ -864,7 +866,7 @@ static void R9a02UartSnzHook(bool bEnter, void *pCtx)
 	R9a02ClearPendingInt(dev->IntRx);
 	R9a02ClearPendingInt(dev->IntErr);
 
-	reg->ST = (uint16_t)(3U << dev->TxCh);
+	R9a02UartStop(dev);
 	reg->SIR[rx] = R9A02_SAU_SIR_ALL;
 	(void)reg->SDR[rx];
 	reg->SDR[rx] = snz->SdrSnz;
@@ -1206,6 +1208,11 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 		return false;
 	}
 
+	// Pin configuration passes through GPIO output before selecting SAU.
+	// Preload the idle level so the reset PODR value cannot drive TX low.
+	const IOPinCfg_t *txpin = &dev->pIOPinMap[UARTPIN_TX_IDX];
+
+	IOPinSet(txpin->PortNo, txpin->PinNo);
 	IOPinCfg(dev->pIOPinMap, dev->NbIOPins);
 
 	pDev->DevIntrf.Type = DEVINTRF_TYPE_UART;
