@@ -901,7 +901,7 @@ usbd_cdc and usbd_cdc_desc. No shared USB implementation changes are required.
 
 `link17.py` builds both EP0 and CDC examples in both configurations and checks
 class/data symbol extraction. GNU Arm 13.2.1 CDC text/data/bss are
-51732/456/5680 bytes in Debug and 23164/152/5192 in Release. Debug retains
+51856/456/5680 bytes in Debug and 23224/152/5192 in Release. Debug retains
 rdimon semihosting and Release uses nosys. Only one CDC instance is covered;
 the allocator does not account for LPC1769 fixed endpoint types for arbitrary
 composite layouts. Physical enumeration, notifications and binary loopback
@@ -953,3 +953,20 @@ CFifo filled all 1024 TX slots, verified a further write returned zero with
 no drops, drained the original bytes in order and accepted data afterward.
 Debug/Release CDC firmware links pass with unchanged sizes. Physical slow-host
 loopback remains untested.
+
+
+Shared LPC1769 CDC loopback application
+--------------------------------------
+
+The LPC1769 IOC project now links exemples/usb/usb_cdc_loopback.cpp, and the
+local application copy is removed. The shared source uses AppRun with echo
+work in AppCheckStatus, retaining partial writes and the no-overwrite FIFO
+policy. Its existing greeting and product string are used; the LPC1769 host
+check consumes the greeting before comparing binary payloads. Board settings
+retain remote wake disabled. No generic USB class or controller APIs change.
+
+LPC1769 Debug/Release CDC text/data/bss are 51856/456/5680 and
+23224/152/5192 bytes. Hardware transfers remain pending.
+
+Shared CDC Debug/Release links also pass on LPC11U35 and LPC54628 after
+the AppRun conversion.

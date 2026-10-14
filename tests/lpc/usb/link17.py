@@ -12,7 +12,7 @@ import xml.etree.ElementTree as ET
 ROOT = Path(__file__).resolve().parents[3]
 EXAMPLE = ROOT / 'ARM/NXP/LPC17xx/LPC1769/exemples/UsbEp0Demo'
 EXAMPLES = [(EXAMPLE, 'usb_ep0_demo.cpp'),
-            (EXAMPLE.parent / 'UsbCdcLoopback', 'usb_cdc_loopback.cpp'),
+            (EXAMPLE.parent / 'UsbCdcLoopback', str(ROOT / 'exemples/usb/usb_cdc_loopback.cpp')),
             (EXAMPLE.parent / 'UsbHidLoopback', str(ROOT / 'exemples/usb/usb_hid_loopback.cpp')),
             (EXAMPLE.parent / 'UsbCdcPrbsTx', str(ROOT / 'exemples/usb/usb_cdc_prbs_tx.cpp'))]
 timer = runpy.run_path(str(ROOT / 'tests/lpc/timer/link17.py'))

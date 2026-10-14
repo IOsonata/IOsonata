@@ -38,6 +38,8 @@ SOFTWARE.
 #ifndef __BOARD_H__
 #define __BOARD_H__
 
+#include "coredev/system_core_clock.h"
+
 // Assumes an external 16 MHz crystal. Match this to the physical board.
 // USB requires a valid 48 MHz clock; IRC-only operation is unsupported.
 #define MCUOSC { \
@@ -48,11 +50,13 @@ SOFTWARE.
 
 // Fixed LPC1769 USB functions: VBUS, DP, DM, active-low SoftConnect.
 // P2.9 must drive the board's external D+ pull-up switching circuit.
-#define USB_PINS_MAP { \
+#define USB_PINS { \
 	{1, 30, IOPINOP_FUNC2, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL}, \
 	{0, 29, IOPINOP_FUNC1, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL}, \
 	{0, 30, IOPINOP_FUNC1, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL}, \
 	{2, 9, IOPINOP_FUNC1, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL}, \
 }
+
+#define USB_REMOTE_WAKEUP false
 
 #endif

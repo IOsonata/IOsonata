@@ -15,7 +15,7 @@ USB device controller.
 
 USB RX/TX packet progress is interrupt driven. Deferred endpoint work, attach,
 detach and class housekeeping are queued by the USB stack in the application
-event queue, which the main loop runs with AppEvtHandlerExec.
+event queue, which AppRun services between AppCheckStatus calls.
 
 @author	Hoang Nguyen Hoan
 @date	Aug. 28, 2026
@@ -138,6 +138,9 @@ static const UsbCfg_t s_UsbCfg = {
 // the application sends and receives through the object rather than the C
 // interface.
 UsbdCdc g_Cdc;
+static uint8_t s_Buffer[BUFFER_SIZE];
+static int s_Pending;
+static int s_Offset;
 
 static int CdcEvtHandler(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId,
 						 uint8_t *pBuffer, int Len)
@@ -171,59 +174,43 @@ static int CdcEvtHandler(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId,
 	return 0;
 }
 
+bool AppCheckStatus(void)
+{
+	UsbCheckStatus();
+	if (!g_Cdc.IsPortOpen())
+	{
+		s_Pending = 0;
+		s_Offset = 0;
+		return !AppEvtHandlerPending();
+	}
+	if (s_Pending == 0)
+	{
+		s_Pending = g_Cdc.Rx(0, s_Buffer, sizeof(s_Buffer));
+		s_Offset = 0;
+		if (s_Pending <= 0)
+		{
+			s_Pending = 0;
+			return !AppEvtHandlerPending();
+		}
+	}
+	const int sent = g_Cdc.Tx(0, &s_Buffer[s_Offset], s_Pending);
+	if (sent > 0)
+	{
+		s_Offset += sent;
+		s_Pending -= sent;
+	}
+	// Drain queued RX data and retry unsent bytes without overwriting them.
+	return false;
+}
+
 int main()
 {
-	uint8_t buff[BUFFER_SIZE];
-
-	if (AppEvtHandlerInit(g_AppEvtHandlerQueMem, sizeof(g_AppEvtHandlerQueMem)) == false ||
-		UsbInit(&s_UsbCfg) == false)
+	if (!AppEvtHandlerInit(g_AppEvtHandlerQueMem, sizeof(g_AppEvtHandlerQueMem)) ||
+		!UsbInit(&s_UsbCfg) || !g_Cdc.Init(s_CdcCfg))
 	{
 		return -1;
 	}
-
-	if (g_Cdc.Init(s_CdcCfg) == false)
-	{
-		return -1;
-	}
-
-
-	// A board on a battery starts with no cable in it, so this failing is
-	// not an error. UsbProcess notices the attach and comes back to it.
-	UsbEnable(USB_DEVNO);
-
-	int pending = 0;
-	int offset = 0;
-
-	while (1)
-	{
-	    if (AppEvtHandlerExec() == false)
-	    {
-	    	UsbCheckStatus();
-	    }
-
-	    if (pending > 0)
-	    {
-	        int n = g_Cdc.Tx(0, &buff[offset], pending);
-
-	        //printf("Tx %d\n", n);
-	        if (n > 0)
-	        {
-	            offset += n;
-	            pending -= n;
-	        }
-
-	        continue;
-	    }
-
-	    int l = g_Cdc.Rx(0, buff, sizeof(buff));
-
-	    if (l > 0)
-	    {
-	    	//printf("Rx %d\n", l);
-	        pending = l;
-	        offset = 0;
-	    }
-	}
-
+	(void)UsbEnable(USB_DEVNO);
+	AppRun();
 	return 0;
 }

@@ -4,11 +4,12 @@ Import `ioc` and `../../lib/ioc` into IOcomposer. Build `IOsonata_LPC1769`
 first, then `UsbCdcLoopback`, using matching configurations. Debug defaults to
 rdimon semihosting; enable it in the debugger. Release uses nosys.
 
-This example uses the generic `UsbdCdc` class with one CDC ACM port, a 16-entry
+The project links the shared `exemples/usb/usb_cdc_loopback.cpp` application.
+It uses the generic `UsbdCdc` class with one CDC ACM port, a 16-entry
 application event queue and `AppRun`. `AppCheckStatus` echoes received bytes
 using `Rx`/`Tx`, retaining partial writes. FIFO `bBlocking = true` prevents
-overwriting unread data; it does not make `Tx` wait for USB hardware. No banner or diagnostic
-text is sent on the data port. The application does not call controller APIs.
+overwriting unread data; it does not make `Tx` wait for USB hardware. The shared
+example sends its greeting when the host asserts DTR. The application does not call controller APIs.
 The single CDC instance uses interrupt IN EP1 and bulk IN/OUT EP2. Multiple
 CDC instances are not covered: LPC1769 has fixed endpoint types, and the
 generic allocator does not select endpoints by transfer type.
@@ -30,7 +31,7 @@ USB VBUS must be present at startup. Automatic attach after startup and
 reattachment after unplugging are not implemented; reset with USB attached.
 Remote wake and low-power suspend are disabled. Board wiring is unverified.
 VID/PID 1209:0001 are existing demo values; use appropriate IDs for distribution.
-The serial string comes from the MCU ROM unique ID.
+The product string is `IOsonata CDC Loopback`; the serial comes from the ROM UID.
 
 ## Host check
 
@@ -44,7 +45,8 @@ import serial
 with serial.Serial("/dev/cu.usbmodemXXXX", 115200,
                    timeout=2, write_timeout=2) as port:
     port.dtr = True
-    port.reset_input_buffer()
+    greeting = b"\r\nIOsonata USB CDC Loopback\r\n"
+    assert port.read(len(greeting)) == greeting
     for length in (1, 7, 8, 9, 63, 64, 65, 127, 128, 129, 1024):
         payload = bytes((i * 37 + length) & 255 for i in range(length))
         assert port.write(payload) == length
@@ -69,5 +71,5 @@ sources in Debug and Release. It verifies IOC source links, semihosting,
 vector checksum, the USB IRQ and extraction of the CDC data path. This is a
 command-line firmware build, not a full IOcomposer build or hardware test.
 
-GNU Arm 13.2.1 text/data/bss: Debug 51732/456/5680 bytes;
-Release 23164/152/5192 bytes. Both firmware links pass. Hardware testing is pending.
+GNU Arm 13.2.1 text/data/bss: Debug 51856/456/5680 bytes;
+Release 23224/152/5192 bytes. Both firmware links pass. Hardware testing is pending.

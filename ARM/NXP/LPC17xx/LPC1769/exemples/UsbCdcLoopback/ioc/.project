@@ -38,7 +38,7 @@
 		<link>
 			<name>src/usb_cdc_loopback.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-1-PROJECT_LOC/src/usb_cdc_loopback.cpp</locationURI>
+			<locationURI>PARENT-7-PROJECT_LOC/exemples/usb/usb_cdc_loopback.cpp</locationURI>
 		</link>
 	</linkedResources>
 </projectDescription>
