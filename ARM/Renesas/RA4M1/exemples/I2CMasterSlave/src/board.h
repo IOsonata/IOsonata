@@ -101,10 +101,8 @@ SOFTWARE.
 	int up = IOPinRead(port, pin); \
 	printf("pin %s P%d%02d pullup=%d nopull=%d\r\n", name, port, pin, up, nu); }
 
-// Test only: after the failed write, hold the slave block in reset (ICE and
-// IICRST set) and repeat the write. Then change the settings of the slave SCL
-// pin in IIC mode one way at a time and repeat it. A trace that reaches state
-// 07 means the master was not blocked with that setting.
+// Test only: repeat the master write with a changed setting and print the
+// dumps. A trace that reaches state 07 means the master was not blocked.
 #define I2C_DEBUG_TRY(name, stmt) { \
 	stmt; \
 	uint8_t tryOff = 4; \
@@ -113,14 +111,21 @@ SOFTWARE.
 	printf("try %s write=%d\r\n", name, tryCnt); \
 	I2C_DEBUG_DUMP("M try", g_I2CMaster); \
 	I2C_DEBUG_DUMP("S try", g_I2CSlave); }
-#define I2C_DEBUG_SCL_CFG(dir, res, type) \
-	IOPinConfig(I2C_SLAVE_SCL_PORT, I2C_SLAVE_SCL_PIN, I2C_SLAVE_SCL_PINOP, dir, res, type)
+// Give one master pin to the port with its pull-up on and read what the slave
+// IIC block (held in reset, pins in IIC mode) sees on that line through its own
+// ICCR1 input bit. A 1 means a port pull-up raises the line and the slave pin
+// in IIC mode does not hold it low. A 0 means the slave pin holds it low.
+#define I2C_DEBUG_LINE_TEST(name, port, pin, bit) { \
+	IOPinConfig(port, pin, IOPINOP_GPIO, IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL); \
+	for (volatile int d = 0; d < 2000; d++) {} \
+	int lineShort = (R_IIC1->ICCR1 >> bit) & 1; \
+	for (volatile int d = 0; d < 2000000; d++) {} \
+	int lineLong = (R_IIC1->ICCR1 >> bit) & 1; \
+	printf("line %s seen by slave block: short=%d long=%d\r\n", name, lineShort, lineLong); }
 #define I2C_DEBUG_SLAVE_POKES() { \
-	I2C_DEBUG_TRY("slave in reset", R_IIC1->ICCR1 = 0xC0U) \
-	I2C_DEBUG_TRY("SCL dir out, pullup, od", I2C_DEBUG_SCL_CFG(IOPINDIR_OUTPUT, IOPINRES_PULLUP, IOPINTYPE_OPENDRAIN)) \
-	I2C_DEBUG_TRY("SCL bi, no pullup, od", I2C_DEBUG_SCL_CFG(IOPINDIR_BI, IOPINRES_NONE, IOPINTYPE_OPENDRAIN)) \
-	I2C_DEBUG_TRY("SCL bi, pullup, no od", I2C_DEBUG_SCL_CFG(IOPINDIR_BI, IOPINRES_PULLUP, IOPINTYPE_NORMAL)) \
-	I2C_DEBUG_TRY("SCL out, no pullup, od", I2C_DEBUG_SCL_CFG(IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_OPENDRAIN)) }
+	R_IIC1->ICCR1 = 0xC0U; \
+	I2C_DEBUG_LINE_TEST("SCL via P408 port pull-up", I2C_MASTER_SCL_PORT, I2C_MASTER_SCL_PIN, 1) \
+	I2C_DEBUG_LINE_TEST("SDA via P401 port pull-up", I2C_MASTER_SDA_PORT, I2C_MASTER_SDA_PIN, 0) }
 
 // The IIC block does not use the internal pull-up of its own pins, and the
 // board has no pull-up on them. Use two spare pins in GPIO input mode with
