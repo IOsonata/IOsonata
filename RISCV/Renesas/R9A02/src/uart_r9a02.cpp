@@ -351,8 +351,10 @@ static inline __attribute__((always_inline)) int R9a02UartRxHw(R9a02UartDev_t * 
 static inline __attribute__((always_inline)) int R9a02UartTxHw(R9a02UartDev_t * const pDev)
 {
 	R9A02_SAU_Type *reg = pDev->pReg;
+	uint32_t ch = pDev->TxCh;
+	volatile uint16_t *sdr = &reg->SDR[ch];
 
-	if ((reg->SSR[pDev->TxCh] & R9A02_SAU_SSR_BFF) || (reg->SE & (1U << pDev->TxCh)) == 0U)
+	if ((reg->SSR[ch] & R9A02_SAU_SSR_BFF) || (reg->SE & (1U << ch)) == 0U)
 	{
 		return -1;
 	}
@@ -364,15 +366,16 @@ static inline __attribute__((always_inline)) int R9a02UartTxHw(R9a02UartDev_t * 
 		return 0;
 	}
 
-	reg->SDR[pDev->TxCh] = (uint8_t)c;
+	*sdr = (uint8_t)c;
 
 	return 1;
 }
 
 // DTC drains a private block; CFIFO storage may be reused immediately.
 // A normal transfer ends when its last halfword enters SDR, not on wire
-// completion. If SDR is still full, leave the next buffer-empty request to
-// the CPU. Arming at that point could lose the event while DTCE is set.
+// completion. Stage the next block while that byte is still transmitting,
+// then leave the buffer-empty request to the CPU to arm it. Arming while
+// SDR is full could lose an event while DTCE is set.
 // Called with interrupts disabled, from TxData, polling or the TX handler.
 static void R9a02UartTxDma(R9a02UartDev_t * const pDev)
 {
@@ -384,11 +387,6 @@ static void R9a02UartTxDma(R9a02UartDev_t * const pDev)
 	{
 		return;
 	}
-	if (reg->SSR[pDev->TxCh] & R9A02_SAU_SSR_BFF)
-	{
-		return;
-	}
-
 	if (info->Cra == 0U)
 	{
 		int cnt = 0;
@@ -410,25 +408,36 @@ static void R9a02UartTxDma(R9a02UartDev_t * const pDev)
 		}
 		if (cnt == 0)
 		{
-			udev->bTxReady = true;
+			// Ready still means SDR is available, not just an empty CFIFO.
+			if ((reg->SSR[pDev->TxCh] & R9A02_SAU_SSR_BFF) == 0U)
+			{
+				udev->bTxReady = true;
+			}
 
 			return;
 		}
 		info->Sar = (uint32_t)(uintptr_t)pDev->TxDmaMem;
 		info->Cra = (uint16_t)cnt;
 	}
+	udev->bTxReady = false;
+	if (reg->SSR[pDev->TxCh] & R9A02_SAU_SSR_BFF)
+	{
+		return;
+	}
 
 	uint16_t first = *(const uint16_t *)(uintptr_t)info->Sar;
 
 	info->Sar = info->Sar + sizeof(uint16_t);
 	info->Cra = info->Cra - 1U;
-	udev->bTxReady = false;
-	// Clear an old CPU request before arming. SDR is empty and stays empty
-	// until the first write below; that write supplies the first DTC event.
-	R9a02ClearPendingInt(pDev->IntTx);
+	// SDR stays empty until the first write below. DtcEnable clears the old
+	// CPU request before arming; do not repeat full route cleanup here.
 	if (info->Cra != 0U)
 	{
 		R9a02DtcEnable(pDev->IntTx);
+	}
+	else
+	{
+		R9a02EventFlagClear(pDev->IntTx);
 	}
 	reg->SDR[pDev->TxCh] = first;
 }
@@ -436,11 +445,11 @@ static void R9a02UartTxDma(R9a02UartDev_t * const pDev)
 // Called only when TX is idle, after its CPU event, or after Stop. Single
 // bytes use the register directly; queued bursts use the DTC. The running
 // transfer owns the FIFO until it drains, as in STM32 and SAM4L.
-static inline __attribute__((always_inline)) void R9a02UartTxKick(R9a02UartDev_t * const pDev)
+static inline __attribute__((always_inline)) void R9a02UartTxKick(R9a02UartDev_t * const pDev, bool bDma)
 {
 	UARTDev_t *udev = pDev->pUartDev;
 
-	if (udev->DevIntrf.bDma &&
+	if (bDma &&
 		(((volatile R9a02DtcInfo_t *)&pDev->TxDtc)->Cra != 0U || CFifoUsed(udev->hTxFifo) > 1))
 	{
 		R9a02UartTxDma(pDev);
@@ -470,7 +479,7 @@ static inline __attribute__((always_inline)) void R9a02UartTxDmaPoll(R9a02UartDe
 		}
 		R9a02EventFlagClear(pDev->IntTx);
 	}
-	R9a02UartTxKick(pDev);
+	R9a02UartTxKick(pDev, true);
 }
 
 // Without interrupts, service both directions as the handlers would. Fill
@@ -506,7 +515,7 @@ static void R9a02UartTxResume(R9a02UartDev_t * const pDev)
 
 	if (udev->DevIntrf.bDma)
 	{
-		R9a02UartTxKick(pDev);
+		R9a02UartTxKick(pDev, true);
 	}
 	else if (udev->DevIntrf.bIntEn)
 	{
@@ -639,18 +648,49 @@ static void R9a02UartRxIRQHandler(int IntNo, void *pCtx)
 	}
 }
 
-// Transmit buffer empty interrupt: the byte in SDR went to the shift register
+// The callback is outside the byte path, so its call state is not saved
+// around every SDR write.
+__attribute__((noinline)) static void R9a02UartTxNotify(UARTDev_t * const pDev)
+{
+	if (pDev->DevIntrf.bIntEn && pDev->EvtCallback)
+	{
+		pDev->EvtCallback(pDev, UART_EVT_TXREADY, NULL, CFifoAvail(pDev->hTxFifo));
+	}
+}
+
+// Byte service has no DMA selection or descriptor state. Keep the hardware
+// guards: a higher-priority RX callback can stop or restart TX after the
+// dispatcher acknowledges this event and before this handler runs.
 static void R9a02UartTxIRQHandler(int IntNo, void *pCtx)
 {
 	R9a02UartDev_t *dev = (R9a02UartDev_t *)pCtx;
 	UARTDev_t *udev = dev->pUartDev;
 	uintptr_t state = DisableInterrupt();
 
-	R9a02UartTxKick(dev);
+	int cnt = R9a02UartTxHw(dev);
+
+	if (cnt >= 0)
+	{
+		udev->bTxReady = cnt == 0;
+	}
+	EnableInterrupt(state);
+
+	if (cnt == 0 && udev->bTxReady)
+	{
+		R9a02UartTxNotify(udev);
+	}
+}
+
+static void R9a02UartTxDmaIRQHandler(int IntNo, void *pCtx)
+{
+	R9a02UartDev_t *dev = (R9a02UartDev_t *)pCtx;
+	UARTDev_t *udev = dev->pUartDev;
+	uintptr_t state = DisableInterrupt();
+
+	R9a02UartTxKick(dev, true);
 
 	EnableInterrupt(state);
 
-	// Like STM32, report ready when the queue drains, not for every byte.
 	if (udev->bTxReady && udev->DevIntrf.bIntEn && udev->EvtCallback)
 	{
 		udev->EvtCallback(udev, UART_EVT_TXREADY, NULL, CFifoAvail(udev->hTxFifo));
@@ -928,7 +968,10 @@ __attribute__((noinline)) static int R9a02UartTxPut(R9a02UartDev_t * const pDev,
 	return cnt;
 }
 
-static int R9a02UartTxData(DevIntrf_t * const pDev, uint8_t const *pData, int Datalen)
+// Init selects the byte or DMA entry. Compile the same enqueue logic with
+// a fixed mode so byte writes do not carry DMA calls and their saved state.
+static inline __attribute__((always_inline)) int R9a02UartTxDataMode(DevIntrf_t * const pDev,
+		uint8_t const *pData, int Datalen, bool bDma)
 {
 	R9a02UartDev_t *dev = (R9a02UartDev_t *)pDev->pDevData;
 	UARTDev_t *udev = dev->pUartDev;
@@ -959,19 +1002,26 @@ static int R9a02UartTxData(DevIntrf_t * const pDev, uint8_t const *pData, int Da
 	}
 	else if (udev->bTxReady)
 	{
-		// The first byte starts the transmission, the buffer empty interrupt
-		// sends the rest. Checked again with interrupts disabled, TxData may
-		// also be called from an interrupt.
 		uintptr_t state = DisableInterrupt();
 
 		if (udev->bTxReady)
 		{
-			R9a02UartTxKick(dev);
+			R9a02UartTxKick(dev, bDma);
 		}
 		EnableInterrupt(state);
 	}
 
 	return cnt;
+}
+
+static int R9a02UartTxData(DevIntrf_t * const pDev, uint8_t const *pData, int Datalen)
+{
+	return R9a02UartTxDataMode(pDev, pData, Datalen, false);
+}
+
+static int R9a02UartTxDmaData(DevIntrf_t * const pDev, uint8_t const *pData, int Datalen)
+{
+	return R9a02UartTxDataMode(pDev, pData, Datalen, true);
 }
 
 static void R9a02UartStopTx(DevIntrf_t * const pDev)
@@ -1430,7 +1480,7 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	pDev->DevIntrf.RxData = R9a02UartRxData;
 	pDev->DevIntrf.StopRx = R9a02UartStopRx;
 	pDev->DevIntrf.StartTx = R9a02UartStartTx;
-	pDev->DevIntrf.TxData = R9a02UartTxData;
+	pDev->DevIntrf.TxData = pCfg->bDMAMode ? R9a02UartTxDmaData : R9a02UartTxData;
 	pDev->DevIntrf.StopTx = R9a02UartStopTx;
 	pDev->DevIntrf.MaxRetry = UART_RETRY_MAX;
 	pDev->DevIntrf.PowerOff = R9a02UartPowerOff;
@@ -1443,12 +1493,13 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 
 		dev->IntRx = R9a02RegisterIntHandler(dev->EvtRx, pCfg->IntPrio, R9a02UartRxIRQHandler, dev);
 		dev->IntErr = R9a02RegisterIntHandler(dev->EvtErr, pCfg->IntPrio, R9a02UartRxIRQHandler, dev);
-		dev->IntTx = R9a02RegisterIntHandler(dev->EvtTx, txprio, R9a02UartTxIRQHandler, dev);
+		dev->IntTx = R9a02RegisterIntHandler(dev->EvtTx, txprio,
+				pCfg->bDMAMode ? R9a02UartTxDmaIRQHandler : R9a02UartTxIRQHandler, dev);
 	}
 	else if (pCfg->bDMAMode)
 	{
 		// The DTC activation source must be enabled in the CLIC (14.5).
-		dev->IntTx = R9a02RegisterIntHandler(dev->EvtTx, pCfg->IntPrio, R9a02UartTxIRQHandler, dev);
+		dev->IntTx = R9a02RegisterIntHandler(dev->EvtTx, pCfg->IntPrio, R9a02UartTxDmaIRQHandler, dev);
 	}
 
 	bool ok = !pCfg->bIntMode || (dev->IntRx >= 0 && dev->IntErr >= 0 && dev->IntTx >= 0);

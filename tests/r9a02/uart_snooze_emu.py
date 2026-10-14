@@ -966,7 +966,7 @@ for devno in (0, 3, 4):
             dma_calls = [0]
             def count_dma(u, addr, size, ud):
                 dma_calls[0] += 1
-            dma_name = "~R9a02UartTxDma" if devno == 0 else "~R9a02UartaTxDma"
+            dma_name = "~R9a02UartTxDmaP" if devno == 0 else "~R9a02UartaTxDmaP"
             h = uc.hook_add(UC_HOOK_CODE, count_dma, begin=S(dma_name), end=S(dma_name))
             HOLD_TX[0] = True
             a.tx.clear()
@@ -1006,6 +1006,30 @@ for devno in (0, 3, 4):
                     deliver(idle=False)
             check(tag + " queued block order", a.tx == TXPAT(16) + [0x30] * 8, str(a.tx))
             check(tag + " callback after queue drains", gi("g_TxEvt") == callbacks + (0 if poll else 1))
+            # DTC completion leaves its last byte in the hardware buffer.
+            # Copy the next block now, before that buffer empties, so the
+            # next CPU event only arms it. Accepted FIFO space is reusable.
+            HOLD_TX[0] = True
+            a.tx.clear()
+            initial = 8 if poll else 16
+            call("EmuUartTx", initial)
+            call("EmuUartTx", 16)
+            HOLD_TX[0] = False
+            while icu.dtce[txslot]:
+                tx_step()
+            check(tag + " last DMA byte still buffered", a.txbff)
+            HOLD_TX[0] = True
+            deliver(idle=False)
+            check(tag + " next block staged before empty", bus_read(rec + 14, 2) == 16 and not icu.dtce[txslot])
+            staged_sar = bus_read(rec + 4, 4)
+            check(tag + " staging releases FIFO", call("EmuUartTx", 32) == 32)
+            HOLD_TX[0] = False
+            tx_step()
+            deliver(idle=False)
+            check(tag + " buffer-empty arms staged block", icu.dtce[txslot] and bus_read(rec + 14, 2) == 15
+                  and bus_read(rec + 4, 4) == staged_sar + (2 if devno == 0 else 1))
+            deliver()
+            check(tag + " staged block survives FIFO reuse", a.tx == TXPAT(initial) + TXPAT(16) + TXPAT(32), str(a.tx))
             for n in (1, 2, 16, 32, 7, 31):
                 a.tx.clear()
                 before = dtc_runs[0]

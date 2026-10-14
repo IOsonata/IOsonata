@@ -288,8 +288,8 @@ static int R9a02UartaTxHw(R9a02UartaDev_t * const pDev, bool bCheckFull)
 
 // SAM4L pattern: copy a CFIFO block into private DMA storage, then chain
 // another on completion. UARTA permits byte writes to TXBA (25.2.6).
-// The last DTC byte may still occupy TXBA: its next buffer-empty event must
-// reach the CPU before a new block is armed, to avoid losing that event.
+// Prepare the next block while the last DTC byte still occupies TXBA. Its
+// buffer-empty event must reach the CPU before the new block is armed.
 // Called with interrupts disabled.
 static void R9a02UartaTxDma(R9a02UartaDev_t * const pDev)
 {
@@ -298,10 +298,6 @@ static void R9a02UartaTxDma(R9a02UartaDev_t * const pDev)
 	volatile R9a02DtcInfo_t *info = &pDev->TxDtc;
 
 	if (R9a02DtcEnabled(pDev->IntTx) || (reg->ASIMA0 & R9A02_ASIMA0_TXEA) == 0U)
-	{
-		return;
-	}
-	if (reg->ASISA & R9A02_ASISA_TXBFA)
 	{
 		return;
 	}
@@ -323,23 +319,34 @@ static void R9a02UartaTxDma(R9a02UartaDev_t * const pDev)
 		}
 		if (cnt == 0)
 		{
-			udev->bTxReady = true;
+			if ((reg->ASISA & R9A02_ASISA_TXBFA) == 0U)
+			{
+				udev->bTxReady = true;
+			}
 
 			return;
 		}
 		info->Sar = (uint32_t)(uintptr_t)pDev->TxDmaMem;
 		info->Cra = (uint16_t)cnt;
 	}
+	udev->bTxReady = false;
+	if (reg->ASISA & R9A02_ASISA_TXBFA)
+	{
+		return;
+	}
 
 	uint8_t first = *(const uint8_t *)(uintptr_t)info->Sar;
 
 	info->Sar = info->Sar + 1U;
 	info->Cra = info->Cra - 1U;
-	udev->bTxReady = false;
-	R9a02ClearPendingInt(pDev->IntTx);
+	// DtcEnable already clears the old CPU request before arming.
 	if (info->Cra != 0U)
 	{
 		R9a02DtcEnable(pDev->IntTx);
+	}
+	else
+	{
+		R9a02EventFlagClear(pDev->IntTx);
 	}
 	reg->TXBA = first;
 }

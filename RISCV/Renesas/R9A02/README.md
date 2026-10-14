@@ -263,7 +263,10 @@ through `R9a02RouteEvent`, the UARTA has no receive data flag.
 
 `bDMAMode` enables DTC TX on DevNo 0 to 4. It follows the Microchip SAM4L
 UART pattern: copy up to 16 bytes from the TX CFIFO into private storage,
-start the block, and chain queued blocks on completion. SAU uses halfword
+start the block, and chain queued blocks on completion. When the DTC finishes
+and its last byte still occupies the transmit buffer, the CPU stages the
+next queued block immediately. The following buffer-empty event arms that
+prepared block without another copy. SAU uses halfword
 storage and writes because SDR requires 16-bit access; UARTA uses bytes.
 An idle one-byte write goes directly to the UART register. While a transfer
 is active, `TxData` only adds to the CFIFO; its TX event starts the next byte
@@ -284,23 +287,28 @@ the UART, subject to the existing SAU behavior of stopping an in-flight frame.
 Snooze drains TX before stopping the channels and resumes after wake-up.
 
 Hardware evidence (2026-10-14): `UartPrbsTxTest`, Release, byte mode,
-1,000,000 baud, 8N1, UART0 through J-Link VCOM, before the TX scheduling
-correction (commit `051467e8`):
+1,000,000 baud, 8N1, UART0 through J-Link VCOM, after the first scheduling
+correction and flash prefetch enable (commit `bf44b8f8`):
 
 | Interrupts | DMA | Steady received bytes/s |
 |------------|-----|------------------------|
-| Off | Off | About 100,037 |
-| On | Off | About 75,717 to 75,731 |
-| On | On | About 48,476 to 48,493 |
-| Off | On | About 48,797 |
+| Off | Off | About 100,017 |
+| On | Off | About 92,142 |
+| On | On | About 86,498 |
+| Off | On | About 87,445 |
 
-The polling/DMA-off excerpt has no error counters. Other excerpts have flat
-drop/out-of-frame counters, except one IRQ/DMA run with none shown. Their
-cause is not isolated. The scheduling correction removes repeated DMA service
-on busy enqueues, single-byte descriptor setup and per-byte TX callbacks, and
-reduces pulse IRQ dispatch overhead. Release and Debug emulator checks pass;
-updated hardware throughput and long-run integrity remain unverified. Rerun
-the same primary Release test in all four modes, then `UartLoopback` for RX.
+Both DMA-off excerpts have no error counters. With DMA on, the counters
+remain at drop 20/out-of-frame 10 with interrupts off and drop 4/out-of-frame
+1 with interrupts on. Their cause is not isolated. Previously, IRQ TX reached
+about 75,730 bytes/s and DTC TX about 48,500 to 48,800 bytes/s (`051467e8`).
+
+The next correction stages DMA data before the buffer-empty boundary, avoids
+duplicate pending-event cleanup, and selects separate SAU byte and DMA TX
+entries at initialization. The byte IRQ keeps the full-buffer and stopped
+channel checks but carries no DMA selection or descriptor state. Release
+and Debug emulator checks pass. Updated hardware throughput and long-run
+integrity remain unverified. Rerun the same primary Release test in all four
+modes, then `UartLoopback` for RX.
 Keep the shared test configuration unchanged when comparing MCUs; Debug is
 for development debugging.
 

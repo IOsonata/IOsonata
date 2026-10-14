@@ -51,6 +51,9 @@ blocking/non-blocking FIFOs:
   enqueues while TX is busy. Queued bytes become real DTC blocks; active
   descriptors stay unchanged by subsequent enqueues. TX-ready callbacks occur
   once the queue drains in both byte-interrupt and DMA operation.
+- After DTC completion, the next block is staged while the last byte still
+  occupies the transmit buffer. Reusing the freed FIFO space cannot overwrite
+  that block. The following buffer-empty event arms the staged data in order.
 - Short RX bursts, RX callbacks, parity-error discard, seven-bit masking and
   full duplex traffic during DTC TX.
 - Disable/Enable with an active transfer, active reinitialization, rate changes
@@ -69,7 +72,8 @@ The unchanged `UartPrbsTxTest` source was linked with all four interrupt/DMA
 selections, and `UartLoopback` was linked, in both Release and Debug using the
 same LLVM toolchain. Build and emulator results do not establish hardware
 throughput. The port README records the maintainer's four-mode measurements
-before the TX scheduling correction; updated hardware measurements are pending.
+at `bf44b8f8`; the subsequent DMA handoff and byte IRQ changes still await
+hardware measurements.
 
 ## SPI slave (2026-10-13)
 
