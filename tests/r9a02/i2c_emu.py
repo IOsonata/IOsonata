@@ -83,8 +83,9 @@ uc.mem_map(0xE0000000, 0x100000, UC_PROT_ALL)
 uc.mem_map(0xE2000000, 0x10000, UC_PROT_ALL)
 
 ICU, PORT, MSTP, IICA, SAU = 0x40006000, 0x40040000, 0x40047000, 0x40093000, 0x40094000
-MM = (ICU, PORT, MSTP, IICA, SAU)
-plain = [(0x40000000, ICU), (ICU + 0x1000, PORT), (PORT + 0x1000, MSTP), (MSTP + 0x1000, IICA),
+ELC = 0x40041000
+MM = (ICU, PORT, ELC, MSTP, IICA, SAU)
+plain = [(0x40000000, ICU), (ICU + 0x1000, PORT), (ELC + 0x1000, MSTP), (MSTP + 0x1000, IICA),
          (SAU + 0x1000, 0x41000000)]
 for lo, hi in plain:
     uc.mem_map(lo, hi - lo, UC_PROT_ALL)
@@ -104,16 +105,18 @@ def note(msg):
 # ---- ICU ----
 icu_ir = [False] * 32
 icu_iels = [0] * 32
+icu_dtce = [False] * 32
 
 def icu_read(off, size):
     if 0x300 <= off < 0x380:
         n = (off - 0x300) // 4
-        return icu_iels[n] | (IR if icu_ir[n] else 0)
+        return icu_iels[n] | (IR if icu_ir[n] else 0) | (DTCE if icu_dtce[n] else 0)
     return bget(ICU, off, size)
 
 def icu_write(off, size, v):
     if 0x300 <= off < 0x380:
         n = (off - 0x300) // 4
+        icu_dtce[n] = bool(v & DTCE)
         icu_iels[n] = v & 0x1F
         icu_ir[n] = icu_ir[n] and bool(v & IR)
         return
@@ -132,12 +135,14 @@ def event(evt):
         note("event 0x%02X without route" % evt)
         return
     icu_ir[n] = True
+    if icu_dtce[n]:
+        dtc_run(n)
 
 def clic_ie(n):
     return uc.mem_read(0xE2001000 + 4 * (19 + n) + 1, 1)[0] != 0
 
 def pending():
-    return [n for n in range(32) if icu_ir[n] and clic_ie(n)]
+    return [n for n in range(32) if icu_ir[n] and not icu_dtce[n] and clic_ie(n)]
 
 # ---- MSTP ----
 for o in (0, 4, 8):
@@ -1119,7 +1124,63 @@ def sau_write(off, size, v):
         return
     bset(SAU, off, size, v)
 
-MODEL = {ICU: (icu_read, icu_write), PORT: (port_read, port_write), MSTP: (mstp_read, mstp_write),
+# ---- ELC software event and DTC byte transfers (12.7, 14.4, 15.2.2) ----
+dtc_moves = []
+dtc_tx = []
+dtc_drop = [False]
+
+def elc_read(off, size):
+    if off in (2, 4):
+        return bget(ELC, off, size) | 0x80
+    return bget(ELC, off, size)
+
+def elc_write(off, size, v):
+    assert not bget(MSTP, 4, 4) & (1 << 14), "ELC write in module stop"
+    if off in (2, 4):
+        if v & 0x80:
+            return
+        if v & 1:
+            assert bget(ELC, off, 1) & 0x40, "software event before WE"
+            if not dtc_drop[0]:
+                event(0x39 + (off - 2) // 2)
+        bset(ELC, off, size, v & 0x40)
+        return
+    bset(ELC, off, size, v)
+
+def bus_read(a, size):
+    for b in MM:
+        if b <= a < b + 0x1000:
+            return MODEL[b][0](a - b, size)
+    return int.from_bytes(uc.mem_read(a, size), "little")
+
+def bus_write(a, size, v):
+    for b in MM:
+        if b <= a < b + 0x1000:
+            return MODEL[b][1](a - b, size, v)
+    uc.mem_write(a, v.to_bytes(size, "little"))
+
+def dtc_run(slot):
+    assert bus_read(0x4000540C, 1) & 1, "DTCST stopped"
+    assert clic_ie(slot), "DTC source CLIC input disabled"
+    rec = bus_read(bus_read(0x40005404, 4) + 4 * slot, 4)
+    assert rec and rec % 4 == 0 and (0x20000000 <= rec < 0x20001000 or 0x20004000 <= rec < 0x20007000)
+    mrb, mra = bus_read(rec + 2, 1), bus_read(rec + 3, 1)
+    src, dst = bus_read(rec + 4, 4), bus_read(rec + 8, 4)
+    assert mrb == mra == 0 and bus_read(rec + 14, 2) == 1, "expected normal byte transfer"
+    value = bus_read(src, 1)
+    # The DTC bus write ends before IICA clocks the byte. Defer master
+    # clocks until the CPU can service slave interrupts; this bit-level
+    # model otherwise runs an entire byte synchronously in a register write.
+    if dst in (IICA, IICA + 0x100) and IICAS[(dst - IICA) >> 8].msts:
+        dtc_tx.append((dst, value))
+    else:
+        bus_write(dst, 1, value)
+    bus_write(rec + 14, 2, 0)
+    dtc_moves.append((src, dst, value))
+    icu_dtce[slot] = False
+    icu_ir[slot] = True
+
+MODEL = {ELC: (elc_read, elc_write), ICU: (icu_read, icu_write), PORT: (port_read, port_write), MSTP: (mstp_read, mstp_write),
          IICA: (iica_read, iica_write), SAU: (sau_read, sau_write)}
 
 def mmio_r(r):
@@ -1214,9 +1275,15 @@ def run_isr(n):
             uc.reg_write(r, v)
 
 def take_interrupts(top=False):
+    if (top or uc.reg_read(UC_RISCV_REG_MSTATUS) & 8) and dtc_tx:
+        dst, value = dtc_tx.pop(0)
+        bus_write(dst, 1, value)
     if not top and DEPTH[0] == 0:
         return
     for _ in range(2000):
+        if (top or uc.reg_read(UC_RISCV_REG_MSTATUS) & 8) and dtc_tx:
+            dst, value = dtc_tx.pop(0)
+            bus_write(dst, 1, value)
         if True not in icu_ir:
             return
         n = best_pending()
@@ -1605,6 +1672,108 @@ for req in (False, True):
                 u.no_pdr = False
         check("IICA1-IICA0 %s %s anomalies" % ("PDR" if req else "", "int" if intr else "poll"),
               len(anom) == n0, "; ".join(sorted(set(anom[n0:]))[:6]))
+for master_dma, slave_dma in ((1, 0), (0, 1), (1, 1)):
+    si("g_MasterDma", master_dma)
+    si("g_SlaveDma", slave_dma)
+    for intr in (False, True):
+        n0 = len(anom)
+        start = len(dtc_moves)
+        label = "DMA master=%d slave=%d int=%d" % (master_dma, slave_dma, intr)
+        run_ms(intr, label)
+        moves = dtc_moves[start:]
+        for instance, enabled in ((0, slave_dma), (1, master_dma)):
+            reg = IICA + 0x100 * instance
+            check(label + " RX DMA %d" % instance, any(src == reg for src, dst, v in moves) == bool(enabled))
+            check(label + " TX DMA %d" % instance, any(dst == reg for src, dst, v in moves) == bool(enabled))
+        check(label + " no active DMA", not any(icu_dtce) and not dtc_tx)
+        check(label + " routes released", slot_of(0x39) is None and slot_of(0x3A) is None)
+        check(label + " anomalies", len(anom) == n0, "; ".join(sorted(set(anom[n0:]))[:8]))
+# A slave DMA failure releases SCL and reports only stored/sent bytes.
+wire([MS_BUS])
+make_slaves(MS_BUS)
+si("g_MasterDma", 0)
+si("g_SlaveDma", 1)
+check("slave DMA failure init", op("EmuI2cSlaveInit", SLV, 100000, 1, 1) > 0)
+check("slave DMA failure master", op("EmuI2cInit", 1, 100000, 0) > 0)
+si("g_SlvWrLen", 32)
+si("g_SlvRdLen", 32)
+uc.mem_write(S("g_SlvWr"), bytes([0xCC] * 32))
+uc.mem_write(S("g_TxBuf"), b"\x04\xAA\xBB")
+slv_clear()
+dtc_drop[0] = True
+r = op("EmuI2cTx", SLV, 3)
+check("slave DMA RX failure buffer", uc.mem_read(S("g_SlvWr"), 32) == bytes([0xCC] * 32))
+check("slave DMA RX failure event", (EV_CP, 0) in slv_events())
+check("slave DMA RX failure cleanup", idle(MS_BUS) and not any(icu_dtce))
+slv_clear()
+r = op("EmuI2cRx", SLV, 2)
+check("slave DMA TX failure event", (EV_CP, 0) in slv_events())
+check("slave DMA TX failure cleanup", idle(MS_BUS) and not any(icu_dtce))
+dtc_drop[0] = False
+uc.mem_write(S("g_SlvMem"), bytes(range(32)))
+r = op("EmuI2cRead", SLV, 4, 2)
+check("slave DMA failure recovery", r == 2 and uc.mem_read(S("g_RxBuf"), 2) == b"\x04\x05")
+op("EmuI2cPowerOff")
+op("EmuI2cSlavePowerOff")
+
+# Missing software event: bounded failure, no stale descriptor or bus lock,
+# and a later transaction works again. Exercise both master completion modes.
+wire([IICA_BUS, SAU_BUS])
+for intr in (False, True):
+    make_slaves(IICA_BUS)
+    si("g_MasterDma", 1)
+    check("DMA timeout init", op("EmuI2cInit", 1, 100000, int(intr)) > 0)
+    uc.mem_write(S("g_TxBuf"), b"\x10\xAA")
+    start = len(dtc_moves)
+    dtc_drop[0] = True
+    r = op("EmuI2cTx", 0x68, 2)
+    check("DMA TX timeout count", mcount(intr, r) == 0)
+    check("DMA TX timeout cleanup", not any(icu_dtce) and idle(IICA_BUS))
+    uc.mem_write(S("g_RxBuf"), b"\xCC\xCC")
+    r = op("EmuI2cRx", 0x68, 2)
+    check("DMA RX timeout count", mcount(intr, r) == 0)
+    check("DMA RX timeout buffer", uc.mem_read(S("g_RxBuf"), 2) == b"\xCC\xCC")
+    check("DMA RX timeout cleanup", not any(icu_dtce) and idle(IICA_BUS))
+    check("DMA timeout did not move bytes", len(dtc_moves) == start)
+    dtc_drop[0] = False
+    r = op("EmuI2cRead", 0x68, 0x75, 1)
+    check("DMA after timeout", mcount(intr, r) == 1 and uc.mem_read(S("g_RxBuf"), 1) == b"\x71")
+    for length in (1, 31, 32, 33, 64):
+        payload = bytes(range(length))
+        uc.mem_write(S("g_TxBuf"), payload)
+        start = len(dtc_moves)
+        r = op("EmuI2cTx", 0x68, length)
+        check("DMA TX length %d" % length, mcount(intr, r) == length and len(dtc_moves) - start == length)
+        check("DMA TX payload %d" % length, [v for src, dst, v in dtc_moves[start:]] == list(payload))
+        uc.mem_write(S("g_RxBuf"), bytes([0xCC] * 64))
+        guard_before = uc.mem_read(S("g_RxBuf") - 1, 1)
+        guard_after = uc.mem_read(S("g_RxBuf") + length, 1)
+        start = len(dtc_moves)
+        r = op("EmuI2cRx", 0x68, length)
+        check("DMA RX length %d" % length, mcount(intr, r) == length and len(dtc_moves) - start == length)
+        check("DMA RX guards %d" % length, uc.mem_read(S("g_RxBuf") - 1, 1) == guard_before and
+              uc.mem_read(S("g_RxBuf") + length, 1) == guard_after)
+    # Reinitialize the same object in both directions, and then free it.
+    for mode in (0, 1):
+        si("g_MasterDma", mode)
+        check("DMA reinit", op("EmuI2cInit", 1, 100000, int(intr)) > 0)
+        check("DMA reinit route", (slot_of(0x3A) is not None) == bool(mode))
+    op("EmuI2cPowerOff")
+    check("DMA poweroff vector", not any(uc.mem_read(S("~s_R9a02DtcVector"), 128)))
+
+# An event owned by another client must not be stolen; a failed init must
+# leave no IICA route, and retry after the event is released must succeed.
+si("g_MasterDma", 1)
+reserved = op("R9a02RouteEvent", 0x3A)
+check("DMA event reserved", reserved >= 0)
+check("DMA event conflict", op("EmuI2cInit", 1, 100000, 0) == 0)
+check("DMA conflict cleanup", slot_of(EVT_IIC1) is None and slot_of(0x3A) == reserved)
+op("R9a02UnregisterIntHandler", reserved)
+check("DMA conflict retry", op("EmuI2cInit", 1, 100000, 0) > 0)
+op("EmuI2cPowerOff")
+si("g_MasterDma", 0)
+si("g_SlaveDma", 0)
+print("DTC payload transfers %d" % len(dtc_moves))
 wire([IICA_BUS, SAU_BUS])
 
 for lsb in (False, True):

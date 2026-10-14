@@ -256,3 +256,53 @@ master start allowed on the slave, the master widths used by the slave
 LREL right after IICE, which only matters when the bus changes between the
 idle check and IICE. The 9 master mutations of the I2C master section still
 fail the check.
+
+
+## IICA DMA payload transfers (2026-10-14)
+
+IICA0 and IICA1 now accept `bDmaEn` for master and slave TX/RX. The DTC
+moves payload bytes between memory and IICA through a software event:
+`ELC_SWEVT0` for IICA0 and `ELC_SWEVT1` for IICA1, each with its own ICU
+slot and static descriptor. These software events must not be linked to
+other peripherals while the corresponding IICA uses DMA. Init fails if
+its software event cannot be reserved; PowerOff and reinitialization
+release the descriptor and route.
+
+The CPU still handles every IICA protocol event. IICn_ENDI is shared by
+address, data and STOP, so the driver checks ACKD, sets ACKE for the next
+receive byte, and handles slave requests before triggering the byte move.
+This preserves NACK counts and variable-length slave transactions. It is
+DMA-assisted data movement, not autonomous block transfer or a throughput
+optimization. `bIntEn` still selects polling or background master
+completion; the slave still requires `bIntEn = true`. SAU simplified I2C
+DMA remains unsupported.
+
+The I2C emulator now executes the DTC descriptor, models ELSEGR write
+protection, and checks the DTCST/CLIC requirements. Master IICA bus clocks
+are deferred until after the DTC register write completes, so a slave CPU
+can service clock stretching. Checks cover:
+
+- DMA on master only, slave only, and both, with polling and interrupt
+  master completion; the existing scan, loopback, NACK, short-buffer,
+  restart, extension-code, rate and lifecycle checks run for these modes.
+- Actual TX and RX DTC byte movement, lengths 1, 31, 32, 33 and 64,
+  payload order and RX buffer boundaries.
+- Missing software events on master and slave, partial completion,
+  unchanged RX storage on failure, released bus/DTC, and successful retry.
+- Reinitialization between DMA and CPU modes, event ownership conflicts,
+  and release of vector entries and routes on PowerOff.
+
+Run with GCC using the existing command, or with LLVM:
+
+```sh
+python3 tests/r9a02/build_i2c_emu.py --llvm --tool-prefix /path/to/llvm-for-renesas-riscv/bin/
+python3 tests/r9a02/build_i2c_emu.py --llvm --tool-prefix /path/to/llvm-for-renesas-riscv/bin/ --debug
+```
+
+Release (`-Os`) and Debug (`-O0`) checks passed with LLVM 19.1.7.202501.
+The I2CMasterSlave example also compiled and linked in Debug and Release
+with the current example-required library sources and LLVM project flags.
+The maintainer's earlier hardware result validates the DMA-off loopback;
+this DMA implementation still needs the same test on hardware. The
+`I2CMasterSlave` example already defaults both DMA enables to true, with
+master interrupts off and slave interrupts on. Its configuration is kept.

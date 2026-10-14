@@ -18,8 +18,12 @@ not stretch SCL.
 With bIntEn the data of a transfer go in the background, the call returns -1
 and DEVINTRF_EVT_COMPLETED marks the end. A transmission is copied first, up
 to R9A02_I2C_TX_COPY_SIZE bytes, a longer one is done in the call and ends
-the same way. bDmaEn fails I2CInit: the CPU acts at each byte (ACK check,
-NACK of the last received byte), which the DTC cannot do.
+the same way. On IICA0/1, bDmaEn uses software-triggered DTC transfers for
+payload bytes, in master and slave modes. The CPU still services each byte
+for ACK/NACK and protocol decisions. Completion semantics are unchanged.
+IICA0 reserves ELC_SWEVT0 and IICA1 ELC_SWEVT1, plus one ICU slot each;
+these software events must not be linked elsewhere while DMA is enabled.
+The SAU simplified I2C still rejects bDmaEn.
 
 @author	Hoang Nguyen Hoan
 @date	Oct. 13, 2026

@@ -62,13 +62,14 @@ alignas(1024) static uint32_t s_R9a02DtcVector[R9A02_DTC_VECTOR_CNT] __attribute
 static bool s_bR9a02DtcStarted = false;
 
 // Events marked "Invoke DTC" in table 12.4, except those table 12.7 gives as
-// CPU interrupts only (TAU). ELC_SWEVT0 and ELC_SWEVT1 are not routed by
-// interrupt_r9a02.cpp.
+// CPU interrupts only (TAU). Software events complete through the DTC
+// before their CLIC interrupt (table 12.4).
 static const uint8_t s_R9a02DtcEvt[] = {
 	R9A02_EVT_PORT_IRQ0, R9A02_EVT_PORT_IRQ1, R9A02_EVT_PORT_IRQ2, R9A02_EVT_PORT_IRQ3,
 	R9A02_EVT_PORT_IRQ4, R9A02_EVT_PORT_IRQ5, R9A02_EVT_PORT_IRQ6, R9A02_EVT_PORT_IRQ7,
 	R9A02_EVT_SYSTEM_SNZREQ, R9A02_EVT_IIC0_ENDI, R9A02_EVT_IIC1_ENDI,
 	R9A02_EVT_IOPORT_GROUP1, R9A02_EVT_IOPORT_GROUP2,
+	R9A02_EVT_ELC_SWEVT0, R9A02_EVT_ELC_SWEVT1,
 	R9A02_EVT_SAU0_ENDI0, R9A02_EVT_SAU0_ENDI1, R9A02_EVT_SAU0_ENDI2, R9A02_EVT_SAU0_ENDI3,
 	R9A02_EVT_SAU1_ENDI0, R9A02_EVT_SAU1_ENDI1,
 	R9A02_EVT_TML32_OUTI, R9A02_EVT_REMC_OUTI,

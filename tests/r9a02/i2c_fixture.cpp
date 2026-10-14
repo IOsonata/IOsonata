@@ -56,6 +56,8 @@ volatile int g_EvtLen;
 // Slave: memory, write buffer, lengths given at the requests (-1: none),
 // events as (EvtId << 16) | Len
 I2C g_I2cSlave;
+volatile int g_MasterDma;
+volatile int g_SlaveDma;
 uint8_t g_SlvMem[SLAVE_MEM_SIZE];
 uint8_t g_SlvWr[SLAVE_MEM_SIZE];
 volatile int g_SlvWrLen = SLAVE_MEM_SIZE;
@@ -170,7 +172,7 @@ extern "C" int EmuI2cInit(int DevNo, int Rate, int bIntEn)
 	cfg.Rate = (uint32_t)Rate;
 	cfg.MaxRetry = 0;
 	cfg.AddrType = I2CADDR_TYPE_NORMAL;
-	cfg.bDmaEn = false;
+	cfg.bDmaEn = g_MasterDma != 0;
 	cfg.bIntEn = bIntEn != 0;
 	cfg.IntPrio = 3;
 	cfg.EvtCB = Evt;
@@ -292,7 +294,7 @@ extern "C" int EmuI2cSlaveInit(int Addr, int Rate, int NbAddr, int bIntEn)
 	cfg.NbSlaveAddr = NbAddr;
 	cfg.SlaveAddr[0] = (uint8_t)Addr;
 	cfg.SlaveAddr[1] = (uint8_t)(Addr + 1);
-	cfg.bDmaEn = false;
+	cfg.bDmaEn = g_SlaveDma != 0;
 	cfg.bIntEn = bIntEn != 0;
 	cfg.IntPrio = 7;
 	cfg.EvtCB = SlaveEvt;

@@ -41,9 +41,16 @@ Transfer modes:
 	interrupt, the IICA waits for the bus to be free (at most about 50 ms
 	with a slave holding SCL low).
 
-	bDmaEn fails I2CInit: the CPU has to act at each byte, the ACK of a
-	transmitted byte is checked before the next one and ACKE is cleared
-	before the last received byte, the DTC can do neither.
+	bDmaEn: DTC moves each payload byte between memory and IICA. The CPU
+	still handles each byte's protocol event: checks ACKD before TX, sets
+	ACKE before RX, and distinguishes slave address, data and STOP events.
+	After these decisions, ELSEGR triggers a one-byte normal DTC transfer.
+	IICA0 reserves ELC_SWEVT0, IICA1 ELC_SWEVT1 and each needs one extra ICU
+	slot. Do not link these software events elsewhere while DMA is enabled.
+	The transfer completes before the caller's buffer can be released.
+	bIntEn still selects synchronous or background master completion; a
+	slave requires interrupts. This is DMA-assisted data movement, not an
+	autonomous block transfer or a reduction in per-byte CPU service.
 
 Slave (I2CMODE_SLAVE, 24.4.16 (3), figures 24.21 and 24.22): bIntEn and one
 address, SlaveAddr[0] 0x08 to 0x77 in SVA, NbSlaveAddr 1, slave index 0 of
@@ -144,7 +151,9 @@ SOFTWARE.
 #include "interrupt_r9a02.h"
 #include "system_r9a02.h"
 #include "i2c_r9a02.h"
+#include "dtc_r9a02.h"
 
+#define R9A02_I2C_DTC_LOOPS		1024U		//!< One peripheral bus transfer
 #define R9A02_I2C_FM_MAX			400000UL
 #define R9A02_I2C_FMP_MAX			1000000UL
 #define R9A02_I2C_FM_PCLKB_MIN		3500000UL	//!< 24.2, table 37.38
@@ -193,16 +202,18 @@ typedef struct __R9a02_I2c_Dev {
 	int SlaveCount;					// Slave: bytes of the phase
 	bool bSlaveReal;				// Slave: the byte sent comes from the read data
 	bool bSlaveNack;				// Slave: the master ended its read
+	int DmaIntNo;					// Software event route, -1 without DMA
+	R9a02DtcInfo_t DmaInfo;		// Static, one byte, normal mode
 } R9a02I2cDev_t;
 #pragma pack(pop)
 
 static R9a02I2cDev_t s_R9a02I2cDev[R9A02_I2C_IICA_CNT] = {
 	{ R9A02_IICA0, R9A02_MSTPCRB_IICA0, R9A02_EVT_IIC0_ENDI, NULL, -1, 0, 0, 0, 0,
 	  false, false, false, false, false, false, false, false, NULL, 0, 0, {}, R9A02_I2C_S_IDLE, 0, false,
-	  false },
+	  false, -1, {} },
 	{ R9A02_IICA1, R9A02_MSTPCRB_IICA1, R9A02_EVT_IIC1_ENDI, NULL, -1, 0, 0, 0, 0,
 	  false, false, false, false, false, false, false, false, NULL, 0, 0, {}, R9A02_I2C_S_IDLE, 0, false,
-	  false },
+	  false, -1, {} },
 };
 
 static const int s_NbR9a02I2cDev = sizeof(s_R9a02I2cDev) / sizeof(s_R9a02I2cDev[0]);
@@ -212,6 +223,93 @@ static R9a02I2cDev_t *R9a02I2cHandle(DevIntrf_t * const pIntrf)
 	R9a02I2cDev_t *dev = pIntrf ? (R9a02I2cDev_t *)pIntrf->pDevData : NULL;
 
 	return dev && dev->pI2cDev && &dev->pI2cDev->DevIntrf == pIntrf ? dev : NULL;
+}
+
+// Software events reach the CPU only at DTC completion. The byte helper
+// masks CPU interrupts while it polls that completion; this handler also
+// disables the input if a completion arrives after a timed out transfer.
+static void R9a02I2cDmaIrqHandler(int IntNo, void *pCtx)
+{
+	R9a02IntEnable(IntNo, false);
+}
+
+static void R9a02I2cDmaRelease(R9a02I2cDev_t * const pDev)
+{
+	if (pDev->DmaIntNo < 0)
+	{
+		return;
+	}
+
+	R9a02IntEnable(pDev->DmaIntNo, false);
+	R9a02DtcClear(pDev->DmaIntNo);
+	R9a02UnregisterIntHandler(pDev->DmaIntNo);
+	pDev->DmaIntNo = -1;
+}
+
+// IICn_ENDI is shared by data, address, NACK and STOP. Starting a block DTC
+// directly from that event would move bytes before checking the protocol.
+// Use the dedicated software event after the check instead (15.2.2).
+// Only the memory/peripheral byte transfer is masked, not the bus clocks.
+static bool R9a02I2cMoveByte(R9a02I2cDev_t * const pDev, const volatile uint8_t *pSrc,
+							volatile uint8_t *pDst)
+{
+	uintptr_t state;
+	uint32_t loops = R9A02_I2C_DTC_LOOPS;
+	unsigned int sw;
+	bool running;
+	bool ok;
+
+	if (pDev->DmaIntNo < 0)
+	{
+		*pDst = *pSrc;
+
+		return true;
+	}
+
+	state = DisableInterrupt();
+	sw = pDev->EvtEnd == R9A02_EVT_IIC0_ENDI ? 0U : 1U;
+	running = R9a02ModuleRunning(R9A02_MSTPCR_C, R9A02_MSTPCRC_ELC);
+	if (!running)
+	{
+		R9a02ModuleStart(R9A02_MSTPCR_C, R9A02_MSTPCRC_ELC);
+	}
+
+	pDev->DmaInfo.Sar = (uint32_t)(uintptr_t)pSrc;
+	pDev->DmaInfo.Dar = (uint32_t)(uintptr_t)pDst;
+	pDev->DmaInfo.Cra = 1U;
+	ok = R9a02DtcEnable(pDev->DmaIntNo);
+	if (ok)
+	{
+		// The CLIC input must be enabled for DTC activation even when MIE
+		// is clear (14.5). No ELSRn link or change to ELCR is needed: the
+		// software event is routed directly to the ICU.
+		R9a02IntEnable(pDev->DmaIntNo, true);
+		R9A02_ELC_ELSEGR(sw) = 0U;
+		R9A02_ELC_ELSEGR(sw) = R9A02_ELSEGR_WE;
+		R9A02_ELC_ELSEGR(sw) = R9A02_ELSEGR_WE | R9A02_ELSEGR_SEG;
+		while (R9a02DtcEnabled(pDev->DmaIntNo) && --loops > 0U)
+		{
+		}
+	}
+
+	R9a02IntEnable(pDev->DmaIntNo, false);
+	R9a02DtcDisable(pDev->DmaIntNo);
+	__asm volatile ("fence rw, rw" ::: "memory");
+	ok = ok && *(volatile uint16_t *)&pDev->DmaInfo.Cra == 0U;
+	R9A02_ELC_ELSEGR(sw) = 0U;
+	if (!running)
+	{
+		R9a02ModuleStop(R9A02_MSTPCR_C, R9A02_MSTPCRC_ELC);
+	}
+	if (!ok)
+	{
+		// No byte moved: the IICA is still at its clock stretch. The
+		// normal NACK/STOP sequence can release the bus.
+		pDev->bError = true;
+	}
+	EnableInterrupt(state);
+
+	return ok;
 }
 
 // Mode, fMCK and widths of a transfer clock. Above the fast mode plus limit,
@@ -726,28 +824,33 @@ static bool R9a02I2cStartRx(DevIntrf_t * const pIntrf, uint32_t Addr)
 static int R9a02I2cTxPoll(DevIntrf_t * const pIntrf, const uint8_t *pData, int Len)
 {
 	R9a02I2cDev_t *dev = R9a02I2cHandle(pIntrf);
+	R9A02_IICA_Type *reg;
+	int cnt = 0;
+	uint8_t st;
 
 	if (dev == NULL || !dev->bOpen || !dev->bActive || dev->bRx || dev->bError || pData == NULL || Len <= 0)
 	{
 		return 0;
 	}
 
-	R9A02_IICA_Type *reg = dev->pReg;
-	int cnt = 0;
+	reg = dev->pReg;
 
 	pIntrf->bTxReady = false;
 
 	while (cnt < Len)
 	{
 		R9a02EventFlagClear(dev->IntNo);
-		reg->IICA = pData[cnt];
+		if (!R9a02I2cMoveByte(dev, &pData[cnt], &reg->IICA))
+		{
+			break;
+		}
 
 		if (!R9a02I2cWaitEvent(dev))
 		{
 			break;
 		}
 
-		uint8_t st = R9a02I2cStatus(dev);
+		st = R9a02I2cStatus(dev);
 
 		if (dev->bError || (st & R9A02_IICS_ACKD) == 0U)
 		{
@@ -768,6 +871,9 @@ static int R9a02I2cTxPoll(DevIntrf_t * const pIntrf, const uint8_t *pData, int L
 static int R9a02I2cRxPoll(DevIntrf_t * const pIntrf, uint8_t *pBuff, int Len)
 {
 	R9a02I2cDev_t *dev = R9a02I2cHandle(pIntrf);
+	R9A02_IICA_Type *reg;
+	int cnt = 0;
+	uint8_t ctl0;
 
 	if (dev == NULL || !dev->bOpen || !dev->bActive || !dev->bRx || dev->bError || dev->bNacked ||
 		pBuff == NULL || Len <= 0)
@@ -775,12 +881,11 @@ static int R9a02I2cRxPoll(DevIntrf_t * const pIntrf, uint8_t *pBuff, int Len)
 		return 0;
 	}
 
-	R9A02_IICA_Type *reg = dev->pReg;
-	int cnt = 0;
+	reg = dev->pReg;
 
 	while (cnt < Len)
 	{
-		uint8_t ctl0 = R9A02_IICCTL0_IICE | R9A02_IICCTL0_WTIM;
+		ctl0 = R9A02_IICCTL0_IICE | R9A02_IICCTL0_WTIM;
 
 		if (cnt + 1 < Len)
 		{
@@ -802,7 +907,11 @@ static int R9a02I2cRxPoll(DevIntrf_t * const pIntrf, uint8_t *pBuff, int Len)
 			break;
 		}
 
-		pBuff[cnt++] = reg->IICA;
+		if (!R9a02I2cMoveByte(dev, &reg->IICA, &pBuff[cnt]))
+		{
+			break;
+		}
+		cnt++;
 	}
 
 	dev->bNacked = cnt == Len;
@@ -840,25 +949,27 @@ static void R9a02I2cAsyncEnd(R9a02I2cDev_t * const pDev)
 static void R9a02I2cIrqHandler(int IntNo, void *pCtx)
 {
 	R9a02I2cDev_t *dev = (R9a02I2cDev_t *)pCtx;
+	R9A02_IICA_Type *reg;
+	uint8_t st;
+	uint8_t ctl0;
 
 	if (!dev->bAsync || dev->pI2cDev == NULL)
 	{
 		return;
 	}
 
-	R9A02_IICA_Type *reg = dev->pReg;
-	uint8_t st = R9a02I2cStatus(dev);
+	reg = dev->pReg;
+	st = R9a02I2cStatus(dev);
 
 	if (dev->bRx)
 	{
-		if (!dev->bError)
+		if (!dev->bError && R9a02I2cMoveByte(dev, &reg->IICA, &dev->pRxBuf[dev->XferCnt]))
 		{
-			dev->pRxBuf[dev->XferCnt] = reg->IICA;
 			dev->XferCnt = dev->XferCnt + 1;
 
 			if (dev->XferCnt < dev->XferLen)
 			{
-				uint8_t ctl0 = R9A02_IICCTL0_IICE | R9A02_IICCTL0_WTIM;
+				ctl0 = R9A02_IICCTL0_IICE | R9A02_IICCTL0_WTIM;
 
 				if (dev->XferCnt + 1 < dev->XferLen)
 				{
@@ -878,10 +989,9 @@ static void R9a02I2cIrqHandler(int IntNo, void *pCtx)
 		{
 			dev->XferCnt = dev->XferCnt + 1;
 
-			if (dev->XferCnt < dev->XferLen)
+			if (dev->XferCnt < dev->XferLen &&
+				R9a02I2cMoveByte(dev, &dev->TxBuf[dev->XferCnt], &reg->IICA))
 			{
-				reg->IICA = dev->TxBuf[dev->XferCnt];
-
 				return;
 			}
 		}
@@ -897,12 +1007,15 @@ static void R9a02I2cIrqHandler(int IntNo, void *pCtx)
 static int R9a02I2cTxData(DevIntrf_t * const pIntrf, const uint8_t *pData, int Len)
 {
 	R9a02I2cDev_t *dev = R9a02I2cHandle(pIntrf);
+	uintptr_t state;
+	int i;
+	int cnt;
 
 	if (dev != NULL && pIntrf->bIntEn && !pIntrf->bNoStop && pData != NULL && Len > 0 &&
 		Len <= R9A02_I2C_TX_COPY_SIZE && dev->bOpen && dev->bActive && !dev->bRx && !dev->bError &&
 		!dev->bAsync)
 	{
-		for (int i = 0; i < Len; i++)
+		for (i = 0; i < Len; i++)
 		{
 			dev->TxBuf[i] = pData[i];
 		}
@@ -910,12 +1023,15 @@ static int R9a02I2cTxData(DevIntrf_t * const pIntrf, const uint8_t *pData, int L
 		dev->XferCnt = 0;
 		pIntrf->bTxReady = false;
 
-		uintptr_t state = DisableInterrupt();
+		state = DisableInterrupt();
 
 		dev->bAsync = true;
 		R9a02EventFlagClear(dev->IntNo);
 		R9a02IntEnable(dev->IntNo, true);
-		dev->pReg->IICA = dev->TxBuf[0];
+		if (!R9a02I2cMoveByte(dev, &dev->TxBuf[0], &dev->pReg->IICA))
+		{
+			R9a02I2cAsyncEnd(dev);
+		}
 
 		EnableInterrupt(state);
 
@@ -931,7 +1047,7 @@ static int R9a02I2cTxData(DevIntrf_t * const pIntrf, const uint8_t *pData, int L
 
 	// With bIntEn it ends as a background transfer: stop and release, the
 	// event with the bytes acknowledged, -1
-	int cnt = R9a02I2cTxPoll(pIntrf, pData, Len);
+	cnt = R9a02I2cTxPoll(pIntrf, pData, Len);
 
 	DeviceIntrfTxComplete(pIntrf);
 
@@ -1033,16 +1149,22 @@ static void R9a02I2cSlaveTxNext(R9a02I2cDev_t * const pDev)
 {
 	I2CDev_t *i2c = pDev->pI2cDev;
 	const uint8_t *data = i2c->pRRData[0];
+	uint8_t fill = 0xFFU;
+	const uint8_t *src = &fill;
 
 	if (data != NULL && pDev->SlaveCount < i2c->RRDataLen[0])
 	{
 		pDev->bSlaveReal = true;
-		pDev->pReg->IICA = data[pDev->SlaveCount];
+		src = &data[pDev->SlaveCount];
 	}
 	else
 	{
 		pDev->bSlaveReal = false;
-		pDev->pReg->IICA = 0xFFU;
+	}
+	if (!R9a02I2cMoveByte(pDev, src, &pDev->pReg->IICA))
+	{
+		pDev->pReg->IICCTL0 |= R9A02_IICCTL0_LREL;
+		R9a02I2cSlaveEnd(pDev);
 	}
 }
 
@@ -1101,14 +1223,20 @@ static void R9a02I2cSlaveAddress(R9a02I2cDev_t * const pDev, bool bTx)
 static void R9a02I2cSlaveIrqHandler(int IntNo, void *pCtx)
 {
 	R9a02I2cDev_t *dev = (R9a02I2cDev_t *)pCtx;
+	R9A02_IICA_Type *reg;
+	I2CDev_t *i2c;
+	uint8_t *buf;
+	uint8_t st;
+	uint8_t drop;
+	bool fits;
 
 	if (dev->pI2cDev == NULL || !dev->bEnabled)
 	{
 		return;
 	}
 
-	R9A02_IICA_Type *reg = dev->pReg;
-	uint8_t st = reg->IICS;
+	reg = dev->pReg;
+	st = reg->IICS;
 
 	if ((st & R9A02_IICS_COI) == 0U)
 	{
@@ -1145,14 +1273,20 @@ static void R9a02I2cSlaveIrqHandler(int IntNo, void *pCtx)
 
 	if (dev->SState == R9A02_I2C_S_RX)
 	{
-		I2CDev_t *i2c = dev->pI2cDev;
-		uint8_t *buf = i2c->pTRBuff[0];
-		uint8_t d = reg->IICA;
+		i2c = dev->pI2cDev;
+		buf = i2c->pTRBuff[0];
+		fits = buf != NULL && dev->SlaveCount < i2c->TRBuffLen[0];
 
-		// A byte that did not fit was not acknowledged and is dropped
-		if (buf != NULL && dev->SlaveCount < i2c->TRBuffLen[0])
+		// A byte that did not fit was not acknowledged and is dropped.
+		if (!R9a02I2cMoveByte(dev, &reg->IICA, fits ? &buf[dev->SlaveCount] : &drop))
 		{
-			buf[dev->SlaveCount] = d;
+			reg->IICCTL0 |= R9A02_IICCTL0_LREL;
+			R9a02I2cSlaveEnd(dev);
+
+			return;
+		}
+		if (fits)
+		{
 			dev->SlaveCount = dev->SlaveCount + 1;
 		}
 		R9a02I2cSlaveRxNext(dev);
@@ -1296,6 +1430,7 @@ static void R9a02I2cReset(DevIntrf_t * const pIntrf)
 static void R9a02I2cPowerOff(DevIntrf_t * const pIntrf)
 {
 	R9a02I2cDev_t *dev = R9a02I2cHandle(pIntrf);
+	uintptr_t state;
 
 	if (dev == NULL)
 	{
@@ -1304,8 +1439,9 @@ static void R9a02I2cPowerOff(DevIntrf_t * const pIntrf)
 
 	R9a02I2cDisable(pIntrf);
 
-	uintptr_t state = DisableInterrupt();
+	state = DisableInterrupt();
 
+	R9a02I2cDmaRelease(dev);
 	R9a02UnregisterIntHandler(dev->IntNo);
 	dev->IntNo = -1;
 	IOPinDis(dev->pI2cDev->Cfg.pIOPinMap, 2);
@@ -1339,6 +1475,18 @@ bool R9a02I2cIicaUses(const I2CDev_t *pDev, int DevNo)
 
 bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfg)
 {
+	R9a02I2cDev_t *dev;
+	DevIntrf_t *intrf;
+	const IOPinCfg_t *pin;
+	uintptr_t state;
+	uint8_t ctl1;
+	uint8_t wl;
+	uint8_t wh;
+	uint32_t actual;
+	int i;
+	bool slave;
+	bool ok;
+
 	if (pDev == NULL || pCfg == NULL)
 	{
 		return false;
@@ -1349,11 +1497,11 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfg)
 		return R9a02I2cSauInit(pDev, pCfg);
 	}
 
-	bool slave = pCfg->Mode == I2CMODE_SLAVE;
+	slave = pCfg->Mode == I2CMODE_SLAVE;
 
 	if (pCfg->DevNo < 0 || pCfg->DevNo >= s_NbR9a02I2cDev ||
 		pCfg->Type != I2CTYPE_STANDARD || (pCfg->Mode != I2CMODE_MASTER && !slave) ||
-		pCfg->AddrType != I2CADDR_TYPE_NORMAL || pCfg->bDmaEn ||
+		pCfg->AddrType != I2CADDR_TYPE_NORMAL ||
 		(pCfg->bIntEn && (pCfg->IntPrio < 0 || pCfg->IntPrio > (int)R9A02_CLIC_PRIO_MAX)) ||
 		pCfg->pIOPinMap == NULL || pCfg->NbIOPins != 2 || pCfg->MaxRetry < 0)
 	{
@@ -1367,9 +1515,9 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfg)
 		return false;
 	}
 
-	for (int i = 0; i < 2; i++)
+	for (i = 0; i < 2; i++)
 	{
-		const IOPinCfg_t *pin = &pCfg->pIOPinMap[i];
+		pin = &pCfg->pIOPinMap[i];
 
 		if (!R9a02PinValid(pin->PortNo, pin->PinNo) || pin->PinOp != R9A02_PSEL_IICA ||
 			pin->Type != IOPINTYPE_OPENDRAIN || pin->Res == IOPINRES_PULLDOWN)
@@ -1384,18 +1532,13 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfg)
 		return false;
 	}
 
-	uint8_t ctl1;
-	uint8_t wl;
-	uint8_t wh;
-	uint32_t actual;
-
 	if (!R9a02I2cRate(pCfg->Rate, slave, &ctl1, &wl, &wh, &actual))
 	{
 		return false;
 	}
 
-	R9a02I2cDev_t *dev = &s_R9a02I2cDev[pCfg->DevNo];
-	uintptr_t state = DisableInterrupt();
+	dev = &s_R9a02I2cDev[pCfg->DevNo];
+	state = DisableInterrupt();
 
 	// An instance in use by another I2C object is not taken over, an I2C
 	// object is not used for two instances
@@ -1407,9 +1550,17 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfg)
 		return false;
 	}
 
+	// Reinitialization must leave no live peripheral behind if a new
+	// route cannot be allocated.
+	if (dev->pI2cDev == pDev)
+	{
+		R9a02I2cPowerOff(&pDev->DevIntrf);
+	}
+
 	// Route for the mode: a handler with bIntEn, its CLIC input on only for
 	// the data in the background, the IR flag polled otherwise. The slave
 	// handler takes every event.
+	R9a02I2cDmaRelease(dev);
 	if (dev->IntNo >= 0)
 	{
 		R9a02UnregisterIntHandler(dev->IntNo);
@@ -1438,6 +1589,26 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfg)
 		return false;
 	}
 
+	if (pCfg->bDmaEn)
+	{
+		dev->DmaIntNo = R9a02RegisterIntHandler(pCfg->DevNo == 0 ? R9A02_EVT_ELC_SWEVT0 :
+				R9A02_EVT_ELC_SWEVT1, 0, R9a02I2cDmaIrqHandler, dev);
+		R9a02IntEnable(dev->DmaIntNo, false);
+		dev->DmaInfo = {};
+		if (dev->DmaIntNo < 0 || !R9a02DtcSet(dev->DmaIntNo, &dev->DmaInfo))
+		{
+			R9a02I2cDmaRelease(dev);
+			R9a02UnregisterIntHandler(dev->IntNo);
+			dev->IntNo = -1;
+			dev->pI2cDev = NULL;
+			pDev->DevIntrf.pDevData = NULL;
+			pDev->DevIntrf.EnCnt = 0;
+			EnableInterrupt(state);
+
+			return false;
+		}
+	}
+
 	// Module clock first, register writes before it are ignored
 	R9a02ModuleStart(R9A02_MSTPCR_B, dev->MstpMask);
 
@@ -1454,11 +1625,11 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfg)
 	dev->bAsync = false;
 	R9a02I2cSetLoops(dev);
 
-	DevIntrf_t *intrf = &pDev->DevIntrf;
+	intrf = &pDev->DevIntrf;
 
 	intrf->pDevData = dev;
 	intrf->Type = DEVINTRF_TYPE_I2C;
-	intrf->bDma = false;
+	intrf->bDma = pCfg->bDmaEn;
 	intrf->bIntEn = pCfg->bIntEn;
 	intrf->bTxReady = true;
 	intrf->bNoStop = false;
@@ -1482,7 +1653,7 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfg)
 	intrf->EnCnt = 1;
 	atomic_flag_clear(&intrf->bBusy);
 
-	bool ok = R9a02I2cConfigure(dev);
+	ok = R9a02I2cConfigure(dev);
 
 	EnableInterrupt(state);
 

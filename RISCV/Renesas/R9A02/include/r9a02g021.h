@@ -973,6 +973,9 @@ typedef struct {
 // Event link controller, manual 15.2. ELSRn are 16-bit at 0x10 + 4n.
 
 #define R9A02_ELC_ELCR					R9A02_REG8(R9A02_ELC_BASE + 0x00)
+#define R9A02_ELC_ELSEGR(n)				R9A02_REG8(R9A02_ELC_BASE + 0x02 + 2U * (n))
+#define R9A02_ELSEGR_WE					(1U << 6)
+#define R9A02_ELSEGR_SEG					(1U << 0)
 #define R9A02_ELC_ELSR(n)				R9A02_REG16(R9A02_ELC_BASE + 0x10 + 4U * (n))
 #define R9A02_ELCR_ELCON				(1U << 7)		//!< All event links on
 

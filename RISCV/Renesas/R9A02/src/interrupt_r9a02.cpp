@@ -10,8 +10,7 @@ Event to IELSRn group mapping: R9A02G021 User's Manual R01UH1036EJ0110,
 table 12.7. The events that table 12.4 lets connect to the CLIC are listed,
 and SYSTEM_SNZREQ, which starts the DTC only: it can be routed without a
 handler (R9a02RouteEvent) for the DTC, never to the CPU. ELC_SWEVT0 and
-ELC_SWEVT1 connect to the CLIC only after a DTC transfer, they are not
-listed.
+ELC_SWEVT1 connect to the CLIC only after a DTC transfer.
 
 A slot with IELSRn.DTCE = 1 sends its event to the DTC (12.5.4.2). The DTC
 clears DTCE after the last transfer and leaves IR set, the CPU interrupt
@@ -83,6 +82,8 @@ static const uint16_t s_R9a02EvtMap[] = {
 	R9A02_EVTMAP(R9A02_EVT_RTC_ALM_OR_PRD, 1, 0x05), R9A02_EVTMAP(R9A02_EVT_RTC_ALM_OR_PRD, 5, 0x05),
 	R9A02_EVTMAP(R9A02_EVT_IIC0_ENDI, 0, 0x0B),
 	R9A02_EVTMAP(R9A02_EVT_IIC1_ENDI, 1, 0x0B),
+	R9A02_EVTMAP(R9A02_EVT_ELC_SWEVT0, 1, 0x0D),
+	R9A02_EVTMAP(R9A02_EVT_ELC_SWEVT1, 5, 0x0C),
 	R9A02_EVTMAP(R9A02_EVT_KEY_INTKR, 3, 0x0C), R9A02_EVTMAP(R9A02_EVT_KEY_INTKR, 7, 0x0C),
 	R9A02_EVTMAP(R9A02_EVT_CAC_FERRI, 2, 0x10),
 	R9A02_EVTMAP(R9A02_EVT_CAC_MENDI, 3, 0x10),
