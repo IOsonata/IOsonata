@@ -194,8 +194,9 @@ void SCM_HSE_WaitUntilReady(void)
  * @brief	Start HSE32 and select the radio sleep timer clock.
  *
  * The link layer reads the sleep timer clock source and stops when it is not
- * set. LSE is used when the project asks for a crystal low power oscillator,
- * otherwise LSI1 is used.
+ * set. LSE is used when the project asks for a crystal low power oscillator
+ * and it starts,
+ * otherwise LSI1 is used. LSI1 is less accurate, which limits connections.
  */
 void BtWbaPlatformInit(void)
 {
@@ -206,6 +207,8 @@ void BtWbaPlatformInit(void)
 
 	SET_BIT(PWR->DBPR, PWR_DBPR_DBP);
 
+	bool bLse = false;
+
 	if (g_McuOsc.LowPwrOsc.Type != OSC_TYPE_RC)
 	{
 		SET_BIT(RCC->BDCR1, RCC_BDCR1_LSEON);
@@ -213,10 +216,21 @@ void BtWbaPlatformInit(void)
 		{
 			n--;
 		}
+		bLse = (RCC->BDCR1 & RCC_BDCR1_LSERDY) != 0U;
+		if (bLse == false)
+		{
+			// No crystal answered, use the internal oscillator.
+			CLEAR_BIT(RCC->BDCR1, RCC_BDCR1_LSEON);
+		}
+	}
+
+	if (bLse)
+	{
 		src = RCC_BDCR1_RADIOSTSEL_0;
 	}
 	else
 	{
+		n = BT_WBA_HSE_POLL_MAX;
 		SET_BIT(RCC->BDCR1, RCC_BDCR1_LSI1ON);
 		while ((RCC->BDCR1 & RCC_BDCR1_LSI1RDY) == 0U && n > 0U)
 		{

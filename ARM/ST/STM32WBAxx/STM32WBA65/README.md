@@ -364,3 +364,19 @@ confirmation against UM3462.
 
 Still to do: ADC based temperature, use of the AES peripheral, and the
 hardware test of the stack, RNG, timer and sequencer code.
+
+## First hardware test of BleAdvertiser
+
+1. Build the library project, then BleAdvertiser (Debug), flash the DK1 through
+   the ST-LINK.
+2. Open the first virtual COM port at 115200 baud. The example prints the
+   `BleStack_Init` result and advertising state through SysLog.
+3. A phone scanner (nRF Connect or similar) should show the advertiser with
+   manufacturer data that increments on the advertising timeout.
+4. The sleep clock is LSI1 by default (`g_McuOsc` is RC). To use the 32.768 kHz
+   crystal, define `MCU_OSC` in `board.h` as
+   `{{OSC_TYPE_XTAL, 32000000, 20}, {OSC_TYPE_XTAL, 32768, 20}, false}`. If the
+   crystal does not start, `BtWbaPlatformInit` falls back to LSI1.
+5. If nothing is advertised, check in this order: HSE32 ready (`RCC->CR`),
+   `RCC->BDCR1` RADIOSTSEL not zero, the RNG answering, and that the RADIO and
+   HASH vectors are reached.
