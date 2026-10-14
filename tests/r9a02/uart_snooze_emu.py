@@ -5,8 +5,9 @@
 #
 # The script sends the characters. It models what the manual describes:
 #   - SAU UART transmit channel: SDR goes to the shift register when it is
-#     empty, with the buffer empty event; BFF while SDR waits, TSF while a
-#     character is sent. Stopping the channel loses both, starting it clears
+#     empty, with the buffer empty event when SMR.MD0 = 1. With MD0 = 0,
+#     transfer end raises the event instead. BFF while SDR waits, TSF while
+#     a character is sent. Stopping the channel loses both, starting it clears
 #     BFF. A character ends each time the firmware polls SSR outside an
 #     interrupt, or when the harness waits; interrupts pending are taken at
 #     a poll when the firmware has them enabled.
@@ -208,10 +209,13 @@ def tx_step():
         if ua.txbff:
             ua.shift = ua.txsdr
             ua.txbff = False
-            uart_event(EVT_TX)
+            if bget(SAU, 0x090, 2) & 1:
+                uart_event(EVT_TX)
         else:
             ua.shifting = False
             tx_level(True)
+        if not bget(SAU, 0x090, 2) & 1:
+            uart_event(EVT_TX)
 
 DEPTH = [0]
 IRQ_REQ = [False]
@@ -275,7 +279,8 @@ def sau_write(off, size, v):
             ua.shifting = True
             ua.shift = v & 0xFF
             tx_level(False)
-            uart_event(EVT_TX)
+            if bget(SAU, 0x090, 2) & 1:
+                uart_event(EVT_TX)
         else:
             ua.txsdr = v & 0xFF
             ua.txbff = True
@@ -973,6 +978,13 @@ for devno in (0, 3, 4):
             before = dtc_runs[0]
             for _ in range(9):
                 check(tag + " byte accepted", call("EmuUartTx", 1) == 1)
+                if devno == 0:
+                    # An immediate buffer-empty IRQ used to retire each
+                    # isolated byte before the producer could queue more.
+                    # A single CPU byte now notifies at transfer end.
+                    deliver(idle=False)
+                    check(tag + " no premature byte event", not icu.ir[txslot] and gi("g_TxEvt") == txevents)
+                    check(tag + " single byte uses transfer end", bget(SAU, 0x090, 2) & 1 == 0)
             check(tag + " byte enqueue avoids DMA setup", dma_calls[0] == 0)
             HOLD_TX[0] = False
             for _ in range(24):
@@ -983,6 +995,8 @@ for devno in (0, 3, 4):
                     deliver(idle=False)
             check(tag + " byte producer wire", a.tx == [0x30] * 9, str(a.tx))
             check(tag + " queued bytes use DTC", dtc_runs[0] > before)
+            if devno == 0:
+                check(tag + " queued block restores buffer empty", bget(SAU, 0x090, 2) & 1 == 1)
             # New data must not re-enter DMA service or alter the active
             # descriptor. The existing transfer drains it in FIFO order.
             HOLD_TX[0] = True

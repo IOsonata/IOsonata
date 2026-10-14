@@ -268,9 +268,11 @@ and its last byte still occupies the transmit buffer, the CPU stages the
 next queued block immediately. The following buffer-empty event arms that
 prepared block without another copy. SAU uses halfword
 storage and writes because SDR requires 16-bit access; UARTA uses bytes.
-An idle one-byte write goes directly to the UART register. While a transfer
-is active, `TxData` only adds to the CFIFO; its TX event starts the next byte
-or queued DMA block. This avoids descriptor setup for each byte of a byte-mode
+An idle one-byte write goes directly to the UART register. SAU requests its
+transfer-end event, allowing following bytes to accumulate before selecting
+the next block, as in STM32's TC path. DMA blocks use buffer-empty events.
+While a transfer is active, `TxData` only adds to the CFIFO; its TX event
+starts the next byte or queued DMA block. This avoids descriptor setup for each byte of a byte-mode
 producer. `UART_EVT_TXREADY` is reported when the queue drains, as in STM32.
 The caller may reuse accepted data immediately, including with a non-blocking
 FIFO. A positive TX return counts bytes accepted, not bytes already on wire.
@@ -302,13 +304,20 @@ remain at drop 20/out-of-frame 10 with interrupts off and drop 4/out-of-frame
 1 with interrupts on. Their cause is not isolated. Previously, IRQ TX reached
 about 75,730 bytes/s and DTC TX about 48,500 to 48,800 bytes/s (`051467e8`).
 
-The next correction stages DMA data before the buffer-empty boundary, avoids
+At `7856bcbe`, the following interrupt-on/DMA-on run reached about 85,726
+bytes/s, with flat drop 2/out-of-frame 1 counters. This regressed from the
+previous 86,498 bytes/s despite a shorter emulated block handoff.
+
+That revision stages DMA data before the buffer-empty boundary, avoids
 duplicate pending-event cleanup, and selects separate SAU byte and DMA TX
-entries at initialization. The byte IRQ keeps the full-buffer and stopped
-channel checks but carries no DMA selection or descriptor state. Release
-and Debug emulator checks pass. Updated hardware throughput and long-run
-integrity remain unverified. Rerun the same primary Release test in all four
-modes, then `UartLoopback` for RX.
+entries at initialization. The subsequent correction changes the isolated
+SAU byte to transfer-end notification: an immediate buffer-empty interrupt
+could retire it before following bytes accumulated for DMA. Queued blocks
+still use buffer-empty events for continuous transfer. Figure 23.33 permits
+the MD0 change during operation; the driver sets it before the next write.
+Release and Debug emulator checks pass. Updated hardware throughput and
+long-run integrity remain unverified. Rerun the same primary Release test
+in all four modes, then `UartLoopback` for RX.
 Keep the shared test configuration unchanged when comparing MCUs; Debug is
 for development debugging.
 

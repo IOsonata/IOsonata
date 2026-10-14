@@ -37,6 +37,8 @@ bDMAMode selects DTC transmit in private blocks, as in the SAM4L port.
 RX retains the interrupt/polling path, including per-character errors and
 short-burst callbacks. The DTC writes SDR by halfwords; the CPU starts each
 block, then the buffer-empty events transfer its remaining characters.
+An isolated CPU byte uses transfer end instead, allowing the producer to
+queue more bytes before the next block is selected, as in the STM32 TC path.
 The TX completion route is enabled in the CLIC also with bIntMode false
 (manual 14.5); in that mode it chains blocks without application callbacks.
 
@@ -348,7 +350,7 @@ static inline __attribute__((always_inline)) int R9a02UartRxHw(R9a02UartDev_t * 
 // write with BFF set is lost (23.3.11), a stopped channel takes none: the
 // bytes wait in the CFIFO. Returns 1 when a byte was written, 0 when the
 // CFIFO is empty, -1 when SDR is full or the channel stopped.
-static inline __attribute__((always_inline)) int R9a02UartTxHw(R9a02UartDev_t * const pDev)
+static inline __attribute__((always_inline)) int R9a02UartTxHw(R9a02UartDev_t * const pDev, bool bTransferEnd = false)
 {
 	R9A02_SAU_Type *reg = pDev->pReg;
 	uint32_t ch = pDev->TxCh;
@@ -366,6 +368,13 @@ static inline __attribute__((always_inline)) int R9a02UartTxHw(R9a02UartDev_t * 
 		return 0;
 	}
 
+	if (bTransferEnd)
+	{
+		// Let bytes accumulate during this character before starting the
+		// next DMA block, as the STM32 TC path does. MD0 may change while
+		// running (figure 23.33); set it before writing this character.
+		reg->SMR[ch] = (uint16_t)(reg->SMR[ch] & ~R9A02_SAU_SMR_MD0);
+	}
 	*sdr = (uint8_t)c;
 
 	return 1;
@@ -425,6 +434,10 @@ static void R9a02UartTxDma(R9a02UartDev_t * const pDev)
 		return;
 	}
 
+	// Blocks use buffer-empty requests so the DTC fills SDR while the
+	// preceding character is shifting. A lone CPU byte used transfer end.
+	reg->SMR[pDev->TxCh] = (uint16_t)(reg->SMR[pDev->TxCh] | R9A02_SAU_SMR_MD0);
+
 	uint16_t first = *(const uint16_t *)(uintptr_t)info->Sar;
 
 	info->Sar = info->Sar + sizeof(uint16_t);
@@ -443,8 +456,9 @@ static void R9a02UartTxDma(R9a02UartDev_t * const pDev)
 }
 
 // Called only when TX is idle, after its CPU event, or after Stop. Single
-// bytes use the register directly; queued bursts use the DTC. The running
-// transfer owns the FIFO until it drains, as in STM32 and SAM4L.
+// bytes use the register directly with transfer-end notification; queued
+// bursts use the DTC and buffer-empty events. The running transfer owns
+// the FIFO until it drains, as in STM32 and SAM4L.
 static inline __attribute__((always_inline)) void R9a02UartTxKick(R9a02UartDev_t * const pDev, bool bDma)
 {
 	UARTDev_t *udev = pDev->pUartDev;
@@ -456,7 +470,7 @@ static inline __attribute__((always_inline)) void R9a02UartTxKick(R9a02UartDev_t
 	}
 	else
 	{
-		int cnt = R9a02UartTxHw(pDev);
+		int cnt = R9a02UartTxHw(pDev, bDma);
 
 		if (cnt >= 0)
 		{
