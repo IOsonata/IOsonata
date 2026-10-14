@@ -49,7 +49,7 @@ SOFTWARE.
 
 #include "ble_types.h"
 #include "ble_std.h"
-#include "ble.h"
+#include "ble_core.h"
 #include "ble_gap_aci.h"
 #include "ble_hci_le.h"
 
@@ -645,7 +645,7 @@ bool BtGapScanStart(uint8_t * const pBuff, uint16_t Len)
 	(void)pBuff;	// ST stack reports results via HCI events, not a buffer
 	(void)Len;
 
-	uint8_t ret = aci_gap_start_observation_procedure(
+	uint8_t ret = aci_gap_start_observation_proc(
 		s_GapWba.ScanInterval,
 		s_GapWba.ScanWindow,
 		s_GapWba.ScanType,
@@ -668,7 +668,7 @@ bool BtGapScanNext(uint8_t * const pBuff, uint16_t Len)
 
 void BtGapScanStop(void)
 {
-	(void)aci_gap_terminate_gap_procedure(GAP_OBSERVATION_PROC);
+	(void)aci_gap_terminate_gap_proc(GAP_OBSERVATION_PROC);
 }
 
 // Strong override of the weak generic BtGapConnSecGet. The ST host owns link
