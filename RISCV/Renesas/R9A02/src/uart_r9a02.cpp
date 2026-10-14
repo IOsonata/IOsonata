@@ -800,12 +800,11 @@ static int R9a02UartTxData(DevIntrf_t * const pDev, uint8_t const *pData, int Da
 		return 0;
 	}
 
-	if (Datalen <= R9A02_UART_COPY_MAX)
+	// Keep the one-byte producer short, as in the STM32 port. Buffer
+	// copies use TxPut so their loop state is not saved for every byte.
+	if (Datalen == 1)
 	{
-		while (cnt < Datalen && CFifoPutByte(udev->hTxFifo, pData[cnt]))
-		{
-			cnt++;
-		}
+		cnt = CFifoPutByte(udev->hTxFifo, *pData) ? 1 : 0;
 	}
 	else
 	{
