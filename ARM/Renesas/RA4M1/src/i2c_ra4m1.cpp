@@ -1407,14 +1407,13 @@ static void Ra4m1I2cPinConfig(const I2CCfg_t * const pCfg)
 		// The PFS driver preserves PODR, so a reset-low output latch must
 		// not be carried into an active master SCL output.
 		IOPinSet(pin->PortNo, pin->PinNo);
-
-		// An IIC slave must not enable its GPIO output driver on SCL.
-		// The peripheral controls clock stretching; the input pull-up must
-		// remain effective when the slave is idle.
-		IOPINDIR dir = pCfg->Mode == I2CMODE_SLAVE ?
-			IOPINDIR_BI : pin->PinDir;
-
-		IOPinConfig(pin->PortNo, pin->PinNo, pin->PinOp, dir,
+		// RA4M1 IIC bus needs a high idle level. Request the internal
+		// pull-up for both SDA and SCL. The IIC block drives the pad by
+		// itself, and the pull-up does not act while PDR is set, so PDR is
+		// kept clear whatever direction the pin map lists (the loopback log
+		// showed SCLI low at idle for an IOPINDIR_OUTPUT SCL entry while the
+		// SDA entry with PDR clear read high).
+		IOPinConfig(pin->PortNo, pin->PinNo, pin->PinOp, IOPINDIR_BI,
 			IOPINRES_PULLUP, pin->Type);
 	}
 }
