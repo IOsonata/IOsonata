@@ -1587,10 +1587,30 @@ int Ra4m1I2cDump(DevIntrf_t * const pIntrf, char *Buf, int Len)
 	// Pad level with the block enabled, with ICE cleared, and enabled again.
 	// Only when idle, as it briefly disables the block.
 	uint8_t pad[8] = { 0xFFU, 0xFFU, 0xFFU, 0xFFU, 0xFFU, 0xFFU, 0xFFU, 0xFFU };
+	uint8_t irqt = 0xFFU;
 
 	if (!dev->bOpen && !dev->bAsync && dev->MState == RA4M1_I2C_M_IDLE &&
 		dev->SState == RA4M1_I2C_S_IDLE && dev->bEnabled)
 	{
+		// Interrupt route test for a registered slave: with the STOP flag
+		// latched, enable the STOP interrupt for a moment. irqt is the number
+		// of handler entries that caused (0xFF when the test did not run).
+		if (dev->bRegistered && (dev->pReg->ICSR2 & RA4M1_I2C_SR2_STOP) != 0U)
+		{
+			const uint8_t ier = dev->pReg->ICIER;
+			const uint16_t before = dev->DbgIrq;
+
+			dev->pReg->ICIER = (uint8_t)(ier | RA4M1_I2C_IER_SPIE);
+
+			for (int i = 0; i < 20000; i++)
+			{
+				__NOP();
+			}
+
+			dev->pReg->ICIER = ier;
+			irqt = (uint8_t)(dev->DbgIrq - before);
+		}
+
 		pad[0] = Ra4m1I2cSclPad(dev);
 		// Same level after a much longer wait, to see a slow rise.
 		pad[7] = Ra4m1I2cSclPadWait(dev, 400000);
@@ -1639,6 +1659,8 @@ int Ra4m1I2cDump(DevIntrf_t * const pIntrf, char *Buf, int Len)
 		}
 	}
 
+	pos = Ra4m1I2cPutStr(Buf, pos, Len, " irqt=");
+	pos = Ra4m1I2cPutHex(Buf, pos, Len, irqt, 2);
 	pos = Ra4m1I2cPutStr(Buf, pos, Len, " padnow=");
 	pos = Ra4m1I2cPutHex(Buf, pos, Len, pad[0], 2);
 	pos = Ra4m1I2cPutStr(Buf, pos, Len, " padlate=");
