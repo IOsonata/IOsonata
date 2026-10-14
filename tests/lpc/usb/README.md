@@ -701,7 +701,7 @@ and pin map are build-fixture assumptions to verify against the actual board.
 Run `python3 tests/lpc/usb/link17.py --prefix arm-none-eabi-` to link both modes.
 The script checks library source links, LPC vector checksum, USB IRQ vector,
 archive extraction and semihosting selection. Debug uses rdimon; Release uses
-nosys. Measured text/data/bss: Debug 37888/476/4060, Release 16952/88/3560 bytes.
+nosys. Measured text/data/bss: Debug 37896/476/4060, Release 16952/88/3560 bytes.
 `run17.py` also checks public lifecycle start/stop, missing VBUS, priority clamp,
 pin ownership and initialization/SIE failure cleanup at -O0/-O2 with UBSan.
 These are successful firmware links and host tests, not hardware enumeration.
@@ -901,7 +901,7 @@ usbd_cdc and usbd_cdc_desc. No shared USB implementation changes are required.
 
 `link17.py` builds both EP0 and CDC examples in both configurations and checks
 class/data symbol extraction. GNU Arm 13.2.1 CDC text/data/bss are
-51948/456/5680 bytes in Debug and 23288/152/5192 in Release. Debug retains
+51956/456/5680 bytes in Debug and 23288/152/5192 in Release. Debug retains
 rdimon semihosting and Release uses nosys. Only one CDC instance is covered;
 the allocator does not account for LPC1769 fixed endpoint types for arbitrary
 composite layouts. Physical enumeration, notifications and binary loopback
@@ -919,7 +919,7 @@ are needed for this standalone example.
 
 `link17.py` links EP0, CDC and HID firmware in Debug and Release and checks the
 HID/interrupt class symbols. GNU Arm 13.2.1 HID text/data/bss are
-53572/456/4552 bytes in Debug and 23880/152/4064 in Release. LPC11U35 and LPC54628 shared HID
+53580/456/4552 bytes in Debug and 23880/152/4064 in Release. LPC11U35 and LPC54628 shared HID
 Debug/Release links also pass after the AppRun change. These are build results;
 physical enumeration and report transfers are pending. Use the existing
 Python/usb_hid_loopback.py host check when a board is available.
@@ -935,7 +935,7 @@ servicing queued events between TX attempts. Both buffered and BYTE_MODE
 operation keep the existing PRBS ordering. The event queue has 16 entries.
 
 All eight LPC1769 EP0/CDC/HID/PRBS Debug/Release links pass. PRBS text/data/bss
-are 51884/460/6656 bytes in Debug and 23272/156/6168 in Release with GNU Arm
+are 51892/460/6656 bytes in Debug and 23272/156/6168 in Release with GNU Arm
 13.2.1. Shared PRBS Debug/Release links also pass on LPC11U35 and LPC54628;
 LPC1769 BYTE_MODE compiles with warnings as errors. These checks do not
 establish hardware throughput or PRBS integrity. The example README provides
@@ -965,7 +965,7 @@ policy. Its existing greeting and product string are used; the LPC1769 host
 check consumes the greeting before comparing binary payloads. Board settings
 retain remote wake disabled. No generic USB class or controller APIs change.
 
-LPC1769 Debug/Release CDC text/data/bss are 51948/456/5680 and
+LPC1769 Debug/Release CDC text/data/bss are 51956/456/5680 and
 23288/152/5192 bytes. Hardware transfers remain pending.
 
 Shared CDC Debug/Release links also pass on LPC11U35 and LPC54628 after
@@ -987,3 +987,18 @@ no endpoint-status write, disabled control/IRQ state, disconnect and exactly
 one deferred cancellation. All LPC1769 host regressions pass at O0/O2 with
 UBSan; warnings-as-errors Cortex-M3 compilation and all eight Debug/Release
 USB firmware links pass. Hardware validation remains pending.
+
+
+LPC1769 close versus pending bus event
+-------------------------------------
+
+Single-endpoint close and close-all now use the same state-change guard as
+halt/clear-halt. A pending bus event on an active controller takes the fault
+path instead of silently skipping close while class reconfiguration proceeds.
+The fault disables control/IRQs and disconnects; deferred stop retires hardware
+before cancelling accepted buffers. Closing an already-closed endpoint or an
+invalid controller remains a no-op.
+
+Lifecycle regressions cover all four operations with a pending bus event,
+including retained ownership and exactly one cancellation after stop. Host
+O0/O2 UBSan tests and Cortex-M3 warnings-as-errors compilation pass.

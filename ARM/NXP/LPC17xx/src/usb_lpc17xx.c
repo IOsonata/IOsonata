@@ -81,6 +81,20 @@ static bool Lpc17UsbDataReady(void)
 		(LPC_USB->USBDevIntSt & 8U) == 0U;
 }
 
+// Halt and close APIs cannot report failure. Abort control processing if a
+// bus event prevents applying the change, before the core acknowledges it.
+static bool Lpc17UsbDataChangeReady(void)
+{
+	if (!s_Prepared || !s_Control.Enabled || s_Closing || s_Faulted)
+		return false;
+	if ((LPC_USB->USBDevIntSt & 8U) != 0U)
+	{
+		Lpc17UsbFault();
+		return false;
+	}
+	return true;
+}
+
 static void Lpc17UsbDataKick(uint8_t EpNo)
 {
 	if (Lpc17UsbDataReady())
@@ -343,14 +357,7 @@ static void Lpc17UsbHalt(int DevNo, uint8_t EpNo, bool In, bool Halt)
 	if (ep == NULL)
 		return;
 	const uint32_t state = DisableInterrupt();
-	// The public halt API cannot report failure. A bus event racing SETUP
-	// must abort control processing rather than acknowledge an unapplied halt.
-	if (ep->Enabled && s_Prepared && s_Control.Enabled && !s_Closing &&
-		!s_Faulted && (LPC_USB->USBDevIntSt & 8U) != 0U)
-	{
-		Lpc17UsbFault();
-	}
-	else if (Lpc17UsbDataReady() && ep->Enabled)
+	if (ep->Enabled && Lpc17UsbDataChangeReady())
 	{
 		const uint32_t bit = 1UL << (EpNo * 2U + (In ? 1U : 0U));
 		LPC_USB->USBEpIntEn &= ~bit;
@@ -384,7 +391,7 @@ void UsbCtrlrEpClose(int DevNo, uint8_t EpNo, bool In)
 	if (ep == NULL)
 		return;
 	const uint32_t state = DisableInterrupt();
-	if (Lpc17UsbDataReady() && ep->Enabled)
+	if (ep->Enabled && Lpc17UsbDataChangeReady())
 	{
 		s_Closing = true;
 		LPC_USB->USBEpIntEn &= ~(1UL << (EpNo * 2U + (In ? 1U : 0U)));
@@ -401,7 +408,7 @@ void UsbCtrlrEpCloseAll(int DevNo)
 	if (DevNo != 0)
 		return;
 	const uint32_t state = DisableInterrupt();
-	if (Lpc17UsbDataReady())
+	if (Lpc17UsbDataChangeReady())
 	{
 		s_Closing = true;
 		LPC_USB->USBEpIntEn &= 3U;

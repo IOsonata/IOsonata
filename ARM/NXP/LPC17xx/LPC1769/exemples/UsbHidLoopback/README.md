@@ -51,5 +51,5 @@ vector checksum and extraction of the HID class, interrupt transport and USB
 IRQ. These command-line builds do not replace an IOcomposer or hardware test.
 Physical enumeration and report transfers remain pending.
 
-GNU Arm 13.2.1 text/data/bss: Debug 53572/456/4552 bytes;
+GNU Arm 13.2.1 text/data/bss: Debug 53580/456/4552 bytes;
 Release 23880/152/4064 bytes. Both links pass.

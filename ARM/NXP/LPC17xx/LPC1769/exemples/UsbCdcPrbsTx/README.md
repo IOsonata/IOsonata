@@ -53,5 +53,5 @@ and semihosting selection. This is a command-line build rather than a complete
 IOcomposer build. Physical enumeration, throughput and PRBS integrity remain
 pending hardware tests; no throughput result is claimed.
 
-GNU Arm 13.2.1 text/data/bss: Debug 51884/460/6656 bytes;
+GNU Arm 13.2.1 text/data/bss: Debug 51892/460/6656 bytes;
 Release 23272/156/6168 bytes. Both links pass.

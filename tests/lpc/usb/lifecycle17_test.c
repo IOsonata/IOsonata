@@ -321,7 +321,7 @@ int main(void)
 	UsbCtrlrProcess(0);
 	assert(s_Cancelled == 4 && !s_pData[3].Busy);
 	s_StatusFail = false;
-	for (unsigned clear = 0; clear < 2; ++clear)
+	for (unsigned operation = 0; operation < 4; ++operation)
 	{
 		assert(UsbCtrlrStart(0));
 		assert(UsbCtrlrEpOpenData(0, 2, true, BULK, 64));
@@ -329,10 +329,17 @@ int main(void)
 		const unsigned statuses = s_StatusWrites;
 		const unsigned cancelled = s_Cancelled;
 		*(volatile uint32_t *)&LPC_USB->USBDevIntSt = 8;
-		if (clear)
-			UsbCtrlrEpClearStall(0, 2, true);
-		else
+		UsbCtrlrEpClose(0, 5, true); // Already closed: no controller change.
+		UsbCtrlrEpCloseAll(1);
+		assert(s_pControl->Enabled && s_StatusWrites == statuses);
+		if (operation == 0)
 			UsbCtrlrEpStall(0, 2, true);
+		else if (operation == 1)
+			UsbCtrlrEpClearStall(0, 2, true);
+		else if (operation == 2)
+			UsbCtrlrEpClose(0, 2, true);
+		else
+			UsbCtrlrEpCloseAll(0);
 		assert(!s_pControl->Enabled && !s_Irq);
 		assert(s_StatusWrites == statuses && s_pData[3].Busy);
 		assert(s_Cancelled == cancelled && s_ConnectMux == IOPINOP_GPIO);
