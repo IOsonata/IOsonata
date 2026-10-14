@@ -122,10 +122,23 @@ SOFTWARE.
 	for (volatile int d = 0; d < 2000000; d++) {} \
 	int lineLong = (R_IIC1->ICCR1 >> bit) & 1; \
 	printf("line %s seen by slave block: short=%d long=%d\r\n", name, lineShort, lineLong); }
+// Same line, but the master pin is a port output set to open drain and left
+// released (PODR=1, PDR=1, NCODR=1), with the pull-up bit on. This is the
+// electrical state of an IIC pin that is not pulling the line low.
+#define I2C_DEBUG_LINE_TEST_OD(name, port, pin, bit) { \
+	IOPinConfig(port, pin, IOPINOP_GPIO, IOPINDIR_OUTPUT, IOPINRES_PULLUP, IOPINTYPE_OPENDRAIN); \
+	IOPinSet(port, pin); \
+	for (volatile int d = 0; d < 2000; d++) {} \
+	int odShort = (R_IIC1->ICCR1 >> bit) & 1; \
+	for (volatile int d = 0; d < 2000000; d++) {} \
+	int odLong = (R_IIC1->ICCR1 >> bit) & 1; \
+	printf("line %s seen by slave block: short=%d long=%d\r\n", name, odShort, odLong); }
 #define I2C_DEBUG_SLAVE_POKES() { \
 	R_IIC1->ICCR1 = 0xC0U; \
 	I2C_DEBUG_LINE_TEST("SCL via P408 port pull-up", I2C_MASTER_SCL_PORT, I2C_MASTER_SCL_PIN, 1) \
-	I2C_DEBUG_LINE_TEST("SDA via P401 port pull-up", I2C_MASTER_SDA_PORT, I2C_MASTER_SDA_PIN, 0) }
+	I2C_DEBUG_LINE_TEST("SDA via P401 port pull-up", I2C_MASTER_SDA_PORT, I2C_MASTER_SDA_PIN, 0) \
+	I2C_DEBUG_LINE_TEST_OD("SCL via P408 open-drain output, pull-up bit", I2C_MASTER_SCL_PORT, I2C_MASTER_SCL_PIN, 1) \
+	I2C_DEBUG_LINE_TEST_OD("SDA via P401 open-drain output, pull-up bit", I2C_MASTER_SDA_PORT, I2C_MASTER_SDA_PIN, 0) }
 
 // The IIC block does not use the internal pull-up of its own pins, and the
 // board has no pull-up on them. Use two spare pins in GPIO input mode with
