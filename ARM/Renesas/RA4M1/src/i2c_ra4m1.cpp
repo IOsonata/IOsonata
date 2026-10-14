@@ -1406,8 +1406,10 @@ static void Ra4m1I2cPinConfig(const I2CCfg_t * const pCfg)
 		// The PFS driver preserves PODR, so a reset-low output latch must
 		// not be carried into an active master SCL output.
 		IOPinSet(pin->PortNo, pin->PinNo);
+		// RA4M1 IIC bus needs a high idle level. Always request the
+		// internal pull-up for both SDA and SCL in peripheral mode.
 		IOPinConfig(pin->PortNo, pin->PinNo, pin->PinOp, pin->PinDir,
-			pin->Res, pin->Type);
+			IOPINRES_PULLUP, pin->Type);
 	}
 }
 
