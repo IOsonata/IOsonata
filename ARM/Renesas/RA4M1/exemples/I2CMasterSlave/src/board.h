@@ -73,6 +73,9 @@ SOFTWARE.
 #define I2C_SLAVE_DMA_ENABLE	false
 #define I2C_SLAVE_INT_ENABLE	true
 
+// Test only: turn the slave block off before the master write
+#define I2C_DEBUG_SLAVE_OFF
+
 // Print the IIC register state after each step (RA4M1 diagnostic helper)
 #include "i2c_ra4m1.h"
 #define I2C_DEBUG_DUMP(name, i2c) { \

@@ -317,6 +317,11 @@ int main()
 	memset(s_WriteRqstData, 0, sizeof(s_WriteRqstData));
 	memset(buff, 0xFF, sizeof(buff));
 
+#ifdef I2C_DEBUG_SLAVE_OFF
+	// Test only: with the slave block off nobody answers, so the master is
+	// expected to report a NACK. It shows whether the slave side holds SCL low.
+	g_I2CSlave.Disable();
+#endif
 	s_MasterCompleted = false;
 	s_MasterCount = 0;
 	int c = g_I2CMaster.Write(I2C_SLAVE_ADDR, &offset, 1, wr, sizeof(wr));
