@@ -320,6 +320,26 @@ int main(void)
 	assert(s_Cancelled == 3 && s_pData[3].Busy && !s_pControl->Enabled);
 	UsbCtrlrProcess(0);
 	assert(s_Cancelled == 4 && !s_pData[3].Busy);
+	s_StatusFail = false;
+	for (unsigned clear = 0; clear < 2; ++clear)
+	{
+		assert(UsbCtrlrStart(0));
+		assert(UsbCtrlrEpOpenData(0, 2, true, BULK, 64));
+		assert(UsbCtrlrEpSend(0, 2, NULL, 0));
+		const unsigned statuses = s_StatusWrites;
+		const unsigned cancelled = s_Cancelled;
+		*(volatile uint32_t *)&LPC_USB->USBDevIntSt = 8;
+		if (clear)
+			UsbCtrlrEpClearStall(0, 2, true);
+		else
+			UsbCtrlrEpStall(0, 2, true);
+		assert(!s_pControl->Enabled && !s_Irq);
+		assert(s_StatusWrites == statuses && s_pData[3].Busy);
+		assert(s_Cancelled == cancelled && s_ConnectMux == IOPINOP_GPIO);
+		UsbCtrlrProcess(0);
+		assert(s_Cancelled == cancelled + 1 && !s_pData[3].Busy);
+		*(volatile uint32_t *)&LPC_USB->USBDevIntSt = 0;
+	}
 	puts("LPC1769 public data open/close, halt/clear, stop and fault retirement: PASS");
 	puts("LPC1769 public lifecycle, pin ownership, priority clamp and failure cleanup: PASS");
 }

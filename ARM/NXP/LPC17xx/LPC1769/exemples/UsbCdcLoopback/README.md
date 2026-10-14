@@ -71,5 +71,5 @@ sources in Debug and Release. It verifies IOC source links, semihosting,
 vector checksum, the USB IRQ and extraction of the CDC data path. This is a
 command-line firmware build, not a full IOcomposer build or hardware test.
 
-GNU Arm 13.2.1 text/data/bss: Debug 51856/456/5680 bytes;
-Release 23224/152/5192 bytes. Both firmware links pass. Hardware testing is pending.
+GNU Arm 13.2.1 text/data/bss: Debug 51948/456/5680 bytes;
+Release 23288/152/5192 bytes. Both firmware links pass. Hardware testing is pending.

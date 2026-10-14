@@ -61,6 +61,6 @@ are also unsupported. There is no Windows vendor-interface driver supplied.
 `python3 tests/lpc/usb/link17.py --prefix arm-none-eabi-` builds this application
 against the real MCU library sources in Debug and Release. It checks project
 source links and semihosting options, vector checksum, USB IRQ vector and ROM
-IAP linkage. GNU Arm 13.2.1 links pass: text/data/bss are 37796/476/4060 bytes
-in Debug and 16888/88/3560 bytes in Release. Physical-board enumeration and the
+IAP linkage. GNU Arm 13.2.1 links pass: text/data/bss are 37888/476/4060 bytes
+in Debug and 16952/88/3560 bytes in Release. Physical-board enumeration and the
 host check above have not been run.

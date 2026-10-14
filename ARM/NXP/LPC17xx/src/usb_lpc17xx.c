@@ -343,7 +343,14 @@ static void Lpc17UsbHalt(int DevNo, uint8_t EpNo, bool In, bool Halt)
 	if (ep == NULL)
 		return;
 	const uint32_t state = DisableInterrupt();
-	if (Lpc17UsbDataReady() && ep->Enabled)
+	// The public halt API cannot report failure. A bus event racing SETUP
+	// must abort control processing rather than acknowledge an unapplied halt.
+	if (ep->Enabled && s_Prepared && s_Control.Enabled && !s_Closing &&
+		!s_Faulted && (LPC_USB->USBDevIntSt & 8U) != 0U)
+	{
+		Lpc17UsbFault();
+	}
+	else if (Lpc17UsbDataReady() && ep->Enabled)
 	{
 		const uint32_t bit = 1UL << (EpNo * 2U + (In ? 1U : 0U));
 		LPC_USB->USBEpIntEn &= ~bit;
