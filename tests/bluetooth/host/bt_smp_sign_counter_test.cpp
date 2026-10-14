@@ -369,6 +369,12 @@ void TestRepeatedAttemptSuccessPreservesIdentityPenalty()
 
 	// Pairing then reveals a stable identity and the bond is installed before
 	// the success notification. The one-second penalty must migrate, not vanish.
+	// An identity address is distributed together with the IRK, and the bond
+	// resolves a connection by identity only when it holds one.
+	for (size_t i = 0; i < sizeof(s_Keys.Irk); ++i)
+	{
+		s_Keys.Irk[i] = static_cast<uint8_t>(0xA0U + i);
+	}
 	s_Keys.IdAddrType = BTADDR_TYPE_RAND;
 	std::memcpy(s_Keys.IdAddr, identity, sizeof(identity));
 	AddBond();

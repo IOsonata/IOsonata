@@ -1233,6 +1233,16 @@ extern "C" bool BtSmpBonded(uint16_t)
 	return false;
 }
 
+// The pairing attempt penalty lives in the bond layer, which this harness does
+// not link. Every attempt is allowed and the outcome is not recorded.
+extern "C" bool BtSmpPairingAttemptAllowed(uint16_t, uint32_t)
+{
+	return true;
+}
+
+extern "C" void BtSmpPairingAttemptFailed(uint16_t, uint32_t) {}
+extern "C" void BtSmpPairingAttemptSucceeded(uint16_t) {}
+
 extern "C" void BtSmpBondCccdSave(uint16_t, uint16_t, uint16_t) {}
 extern "C" uint8_t BtSmpBondCccdGet(uint16_t, uint16_t *, uint16_t *, uint8_t)
 {

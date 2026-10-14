@@ -242,7 +242,8 @@ for name, path, stubs in [
 #define BTAPP_STATE_UNKNOWN 0
 #define CONFIG_NRF_SDH_BLE_TOTAL_LINK_COUNT 1
 #define BLE_CONN_HANDLE_INVALID 65535
-static struct { int State; } g_BtAppData = {0};
+static struct { int State; bool bSecInit; } g_BtAppData = {0, false};
+static void BtSecBmCheckStatus() {}
 static uint16_t s_SecurePendingHdl[1] = {BLE_CONN_HANDLE_INVALID};
 static void BtLescCheckStatus() {}
 static void SecurePendingQue() {}
@@ -255,7 +256,7 @@ static void BLE_RESUME_FLOW_PROCESS_Callback() {}
 	source = (ROOT / path).read_text()
 	code = COMMON + stubs + '\nextern "C" void BtAppCheckStatus(void);\n'
 	code += '\n'.join(re.findall(
-		r'^extern[^\n]*void Bt(?:DfuSmp|Lesc)CheckStatus[^\n]*weak[^\n]*;',
+		r'^extern[^\n]*void Bt(?:DfuSmp|Lesc|SecSd)CheckStatus[^\n]*weak[^\n]*;',
 		source, re.M)) + '\n'
 	code += function(source.replace('__attribute__((weak)) ', ''), 'BtAppCheckStatus')
 	code += r'''

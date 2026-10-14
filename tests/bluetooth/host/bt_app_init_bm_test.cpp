@@ -3,6 +3,7 @@
 #include <cstring>
 
 #include "bluetooth/bt_app.h"
+#include "bluetooth/bt_smp.h"
 #include "bluetooth/services/bt_dis.h"
 #include "bt_test_harness.h"
 
@@ -26,6 +27,7 @@ enum FailPoint {
 	FAIL_DIS_SERVICE,
 	FAIL_DIS_VALUE,
 	FAIL_SECURITY,
+	FAIL_CRYPTO,
 	FAIL_ADVERTISING,
 };
 
@@ -260,10 +262,53 @@ extern "C" bool BtEvtQue(uint32_t, void *, BtEvtQueHandler_t)
 
 static void on_conn_params_evt(const struct ble_conn_params_evt *) {}
 
-static uint32_t BtAppPeerMngrInit(BTGAP_SECTYPE, uint8_t, bool)
+// Stand-ins for what BtAppSecInit uses from the S145 stack, the BM security
+// manager and the crypto engines. The parameters handed to BtSecBmInit are
+// kept so a test can check what a configuration produces.
+struct ble_gap_sec_kdist_t {
+	uint8_t enc : 1;
+	uint8_t id : 1;
+	uint8_t sign : 1;
+	uint8_t link : 1;
+};
+
+struct ble_gap_sec_params_t {
+	uint8_t bond : 1;
+	uint8_t mitm : 1;
+	uint8_t lesc : 1;
+	uint8_t keypress : 1;
+	uint8_t oob : 1;
+	uint8_t io_caps : 3;
+	uint8_t min_key_size;
+	uint8_t max_key_size;
+	ble_gap_sec_kdist_t kdist_own;
+	ble_gap_sec_kdist_t kdist_peer;
+};
+
+enum {
+	BLE_GAP_IO_CAPS_DISPLAY_ONLY = 0,
+	BLE_GAP_IO_CAPS_DISPLAY_YESNO = 1,
+	BLE_GAP_IO_CAPS_KEYBOARD_ONLY = 2,
+	BLE_GAP_IO_CAPS_NONE = 3,
+	BLE_GAP_IO_CAPS_KEYBOARD_DISPLAY = 4
+};
+
+struct Ba414ep {
+	bool Init(void *, void *) { return s_FailPoint != FAIL_CRYPTO; }
+};
+
+static ble_gap_sec_params_t s_LastSecParams;
+static void *CracenIntrfInstance(void) { return nullptr; }
+static void *CryptoRngNrfInstance(void) { return nullptr; }
+static void BtLescSetCryptoEngine(void *) {}
+static void BtAppOobPeerDataHandler(void) {}
+static void BtLescOobPeerHandlerSet(void (*)(void)) {}
+
+static bool BtSecBmInit(const ble_gap_sec_params_t *pParams)
 {
 	Record(CALL_SECURITY);
-	return s_FailPoint == FAIL_SECURITY ? NRF_ERROR_INTERNAL : NRF_SUCCESS;
+	s_LastSecParams = *pParams;
+	return s_FailPoint != FAIL_SECURITY;
 }
 
 #include "generated/bt_app_bm_init.inc"
@@ -375,6 +420,29 @@ int main()
 		BT_CHECK(ctx, !BtAppInit(&cfg));
 		BT_CHECK(ctx, CallSeen(CALL_SECURITY));
 		BT_CHECK(ctx, !CallSeen(CALL_TX_POWER));
+	});
+
+	ctx.Run("security parameters follow the configuration", [&]() {
+		ResetHarness();
+		BtAppCfg_t cfg = MakeCfg();
+		BT_CHECK(ctx, BtAppInit(&cfg));
+		BT_CHECK(ctx, s_LastSecParams.bond == 1);
+		BT_CHECK(ctx, s_LastSecParams.mitm == 1);
+		BT_CHECK(ctx, s_LastSecParams.lesc == 1);
+		BT_CHECK(ctx, s_LastSecParams.io_caps == BLE_GAP_IO_CAPS_DISPLAY_YESNO);
+		BT_CHECK(ctx, s_LastSecParams.min_key_size == BT_SMP_CFG_MIN_ENC_KEY_SIZE);
+		BT_CHECK(ctx, s_LastSecParams.max_key_size == BT_SMP_MAX_ENC_KEY_SIZE);
+		BT_CHECK(ctx, s_LastSecParams.kdist_own.enc == 1 && s_LastSecParams.kdist_own.id == 1);
+		BT_CHECK(ctx, s_LastSecParams.kdist_own.sign == 1 && s_LastSecParams.kdist_peer.sign == 1);
+	});
+
+	ctx.Run("crypto engine failure stops security setup", [&]() {
+		ResetHarness();
+		s_FailPoint = FAIL_CRYPTO;
+		BtAppCfg_t cfg = MakeCfg();
+		BT_CHECK(ctx, !BtAppInit(&cfg));
+		BT_CHECK(ctx, !CallSeen(CALL_SECURITY));
+		BT_CHECK(ctx, !CallSeen(CALL_ADVERTISING));
 	});
 
 	return ctx.Finish();

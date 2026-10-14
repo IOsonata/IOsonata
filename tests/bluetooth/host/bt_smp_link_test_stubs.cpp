@@ -200,6 +200,27 @@ bool BtSmpBonded(uint16_t ConnHdl)
 	return false;
 }
 
+// The pairing attempt penalty lives in the bond layer, which this harness does
+// not link. Every attempt is allowed and the outcome is not recorded.
+bool BtSmpPairingAttemptAllowed(uint16_t ConnHdl, uint32_t Now)
+{
+	(void)ConnHdl;
+	(void)Now;
+
+	return true;
+}
+
+void BtSmpPairingAttemptFailed(uint16_t ConnHdl, uint32_t Now)
+{
+	(void)ConnHdl;
+	(void)Now;
+}
+
+void BtSmpPairingAttemptSucceeded(uint16_t ConnHdl)
+{
+	(void)ConnHdl;
+}
+
 void BtSmpBondLoad(void)
 {
 }

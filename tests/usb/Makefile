@@ -7,7 +7,8 @@ OPT ?= -O1
 
 # hostport supplies usb_ctrlr.h, the header every real port provides.
 CPPFLAGS += -I$(ROOT)/include -Ihostport
-USB_EXAMPLE_CPPFLAGS = $(CPPFLAGS) -Iexample_hostport
+# interrupt.h defines the IRQ_PRIO_* levels for ARM and RISC-V, not for a host.
+USB_EXAMPLE_CPPFLAGS = $(CPPFLAGS) -Iexample_hostport -DIRQ_PRIO_LOW=0
 
 CFLAGS ?= -std=gnu17 -Wall -Wextra -Werror -Wshadow -Wundef
 CXXFLAGS ?= $(OPT) -g
