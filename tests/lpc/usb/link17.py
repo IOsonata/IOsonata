@@ -18,6 +18,7 @@ SOURCES = timer['SOURCES'] + [
     'ARM/NXP/LPC17xx/src/usb_control_lpc17xx.c',
     'ARM/NXP/LPC17xx/src/usb_irq_lpc17xx.c',
     'ARM/NXP/LPC17xx/src/usb_lpc17xx.c',
+    'ARM/NXP/LPC17xx/src/usb_data_lpc17xx.c',
     'ARM/NXP/src/lpc_iap.c',
     'src/usb/usb.cpp', 'src/app_evt_handler.cpp', 'src/app_run.cpp', 'src/app_wait.cpp',
 ]

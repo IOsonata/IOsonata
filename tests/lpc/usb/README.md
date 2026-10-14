@@ -813,3 +813,34 @@ arguments, DMA/FIFO conflicts, bus arrival after the first acknowledgement,
 and timeout at either acknowledgement of a two-endpoint batch. Tests pass at
 -O0/-O2 with UBSan. Cortex-M3 warning-clean compilation and Debug/Release links
 pass. Transfer-state dispatch and public lifecycle integration remain pending.
+
+LPC1769 CPU data-transfer state
+------------------------------
+
+`usb_data_lpc17xx.c` adds caller-owned endpoint state using the existing LPC
+endpoint callback type. IN stages one packet, waits for its acknowledged
+interrupt, then stages the next. Completion reports the total transfer length
+once. Explicit length zero sends one ZLP; exact multiples of MPS do not append
+another packet. Only one IN packet is outstanding, avoiding ambiguous counts
+when multiple hardware completions share one interrupt bit.
+
+OUT dispatch requests a destination with DRDY when needed, reads one packet,
+and reports XFER_CMPL. Receive only reserves the buffer and requests a later
+IRQ pass; it never completes inline. This preserves the generic UsbIntrf
+submission bookkeeping. A subsequent pass checks for a second buffered OUT
+packet. No software data-ready flag or extra payload buffer is allocated.
+
+The owner supplies Ready, Fault and Kick operations. Kick must schedule, not
+call dispatch inline. IRQ dispatch uses endpoint generations captured before
+callbacks so a stale snapshot cannot complete a replacement IN transfer.
+Fault must stop hardware before Forget returns accepted buffers with CANCEL.
+Forget preserves bindings, disables the endpoint and rejects reentrant work
+through the owner's closing state. Halt/clear-halt handling remains pending.
+
+`data17_test.c` mocks FIFO access and checks IN lengths 0, 1, 63, 64, 65, 128
+and 129; exact packet bytes; NAK/stale-event rejection; callback resubmission;
+OUT backpressure, ZLP and deferred completion; callback shutdown; and initial
+or continuation failures. -O0/-O2 UBSan runs pass, as do warning-clean Cortex-M3
+compilation and Debug/Release EP0 links. The library project includes the new
+module. It is not yet connected to public endpoint operations or USB_IRQHandler;
+public data support remains disabled until lifecycle and IRQ integration.
