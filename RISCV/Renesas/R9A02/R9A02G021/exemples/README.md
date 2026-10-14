@@ -51,6 +51,7 @@ an input filename and causes a "no such file or directory" error.
 | `SpiLoopback` | `exemples/spi/spi_loopback.cpp` | `gcc_R9A02G021.ld` | SPI20 (DevNo 4) at 1 MHz, the four modes, interrupt and DTC reception, console on UART0 |
 | `SpiMasterSlave` | `exemples/spi/spi_master_slave.cpp` | `gcc_R9A02G021.ld` | SPI20 master (DevNo 4) at 1 MHz wired to the SPI21 slave (DevNo 5), the four modes, DTC on both, console on UART0 |
 | `I2CScan` | `exemples/i2c/i2c_scan.cpp` | `gcc_R9A02G021.ld` | IICA1 (DevNo 1) at 100 kHz, HOCO 32 MHz, console on UART0 |
+| `I2CMasterSlave` | `exemples/i2c/i2c_master_slave.cpp` | `gcc_R9A02G021.ld` | IICA1 master (DevNo 1) at 100 kHz wired to the IICA0 slave (DevNo 0) at 0x22, HOCO 32 MHz, console on UART0 at 1 Mbaud |
 | `ADCDemo` | `src/adc_demo.cpp` (this port) | `gcc_R9A02G021.ld` | ANI2, ANI3, internal reference, temperature sensor, console on UART0 |
 | `RtcDemo` | `src/rtc_demo.cpp` (this port) | `gcc_R9A02G021.ld` | RTC on the 32.768 kHz crystal, Software Standby, console on UART0 |
 | `AnalogDemo` | `src/analog_demo.cpp` (this port) | `gcc_R9A02G021.ld` | TML32 interval, DAC8 channel 1 ramp, comparator 0 on the internal reference, console on UART0 |
@@ -89,6 +90,8 @@ was not available here: check them against the board schematic.
 | SpiMasterSlave | Slave SCK21, SI21 (MOSI), SO21 (MISO) | P204, P205, P206 | `IOPINOP_FUNC16` |
 | SpiMasterSlave | Slave chip select, IRQ2 | P202 | GPIO input |
 | I2CScan | SDAA1, SCLA1 | P010, P011 | `IOPINOP_FUNC6` (PSEL 0x07), open drain |
+| I2CMasterSlave | Master SDAA1, SCLA1 | P010, P011 | As I2CScan |
+| I2CMasterSlave | Slave SDAA0_B, SCLA0_B | P103, P102 | `IOPINOP_FUNC6` (PSEL 0x07), open drain |
 | ADCDemo | ANI2, ANI3 (A2, A3) | P400, P401 | `IOPINOP_FUNC31` (analog) |
 | AnalogDemo | DACOUT1, IVCMP0, wired together | P001, P106 | Analog, set by the drivers |
 | AdcSnoozeDemo | ANI2 (A2) | P400 | `IOPINOP_FUNC31` (analog) |
@@ -146,6 +149,16 @@ The console lists the addresses that answer. The core clock is the HOCO at
 reads the register of `I2C_SCAN_REG_DEVADDR` in the interrupt. `board.h`
 gives the pin map for the SAU simplified I2C IIC20 (DevNo 6, P101 SCL, P102
 SDA).
+
+**I2CMasterSlave:** wire P010 to P103 (SDA) and P011 to P102 (SCL), with a
+pull-up from each line to 3.3 V (4.7 kOhm for example); the internal pull-ups
+are off once the IICA pins are in output mode. The console, Release
+configuration (`NDEBUG`) at 1,000,000 baud, shows the init result of both
+I2C, the write of 8 bytes at offset 4 of the slave memory, their read back
+with a restart, then a read of 4 bytes without command that continues at
+offset 12 (`0c 0d 0e 0f`), and `I2C master/slave loopback PASS`. The master
+is polled; `I2C_MASTER_INT_ENABLE true` in `board.h` moves its data to the
+interrupt, whose priority stays below the slave's.
 
 **AnalogDemo:** wire P001 to P106. The TML32 (LOCO) steps DAC8 channel 1 every
 20 ms, a ramp from 0 to VCC in about 2.6 s. Comparator 0 compares it with its

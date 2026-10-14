@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
 @file	i2c_r9a02.h
 
-@brief	R9A02G021 I2C master, IICA and SAU simplified I2C
+@brief	R9A02G021 I2C, IICA master and slave, SAU simplified I2C master
 
 coredev/i2c.h implementation. I2CCfg_t.DevNo selects the hardware:
 
@@ -9,10 +9,11 @@ coredev/i2c.h implementation. I2CCfg_t.DevNo selects the hardware:
 	DevNo 2 to 7  : SAU simplified I2C IIC00, IIC01, IIC10, IIC11, IIC20,
 					IIC21 (i2c_sau_r9a02.cpp)
 
-Both are master only with 7-bit addresses. The IICA follows the I2C bus
-specification, clock stretching and arbitration included. The simplified I2C
-has no clock stretching during a byte, no arbitration and no bus busy
-detection: one master, slaves that do not stretch SCL.
+7-bit addresses. The IICA is master or slave and follows the I2C bus
+specification, clock stretching and arbitration included; the slave works in
+its interrupt. The simplified I2C is master only, without clock stretching
+during a byte, arbitration and bus busy detection: one master, slaves that do
+not stretch SCL.
 
 With bIntEn the data of a transfer go in the background, the call returns -1
 and DEVINTRF_EVT_COMPLETED marks the end. A transmission is copied first, up

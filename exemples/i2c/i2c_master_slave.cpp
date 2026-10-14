@@ -48,6 +48,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ----------------------------------------------------------------------------*/
 
+#include "coredev/system_core_clock.h"
 #include "coredev/i2c.h"
 #include "coredev/uart.h"
 #include "stddev.h"
@@ -71,6 +72,14 @@ McuOsc_t g_McuOsc = MCUOSC;
 
 #ifndef I2C_SLAVE_INT_ENABLE
 #define I2C_SLAVE_INT_ENABLE true
+#endif
+
+#ifndef I2C_MASTER_INT_PRIO
+#define I2C_MASTER_INT_PRIO 7
+#endif
+
+#ifndef I2C_SLAVE_INT_PRIO
+#define I2C_SLAVE_INT_PRIO 7
 #endif
 
 //int nRFUartEvthandler(UARTDEV *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);
@@ -130,7 +139,7 @@ static const I2CCfg_t s_I2cCfgMaster = {
 	.SlaveAddr = {0,},		// Slave addresses
 	.bDmaEn = I2C_MASTER_DMA_ENABLE,
 	.bIntEn = I2C_MASTER_INT_ENABLE,
-	.IntPrio = 7,			// Interrupt prio
+	.IntPrio = I2C_MASTER_INT_PRIO,	// Interrupt prio
 	.EvtCB = I2CMasterIntrfHandler		// Event callback
 };
 
@@ -183,7 +192,7 @@ static const I2CCfg_t s_I2cCfgSlave = {
 	.SlaveAddr = {I2C_SLAVE_ADDR,},// + 1,I2C_SLAVE_ADDR},		// Slave addresses
 	.bDmaEn = I2C_SLAVE_DMA_ENABLE,			// DMA mode enable
 	.bIntEn = I2C_SLAVE_INT_ENABLE,						// Interrupt enable
-	.IntPrio = 7,						// Interrupt priority
+	.IntPrio = I2C_SLAVE_INT_PRIO,		// Interrupt priority
 	.EvtCB = I2CSlaveIntrfHandler		// Event callback
 };
 
@@ -320,7 +329,15 @@ int main()
 	const bool writeOk = c == (int)sizeof(wr);
 
 	memset(buff, 0xFF, sizeof(buff));
+	s_MasterCompleted = false;
+	s_MasterCount = 0;
 	c = g_I2CMaster.Read(I2C_SLAVE_ADDR, &offset, 1, buff, sizeof(wr));
+	if (c < 0)
+	{
+		// Reception completed in the background, the count comes with the
+		// callback as for Rx below
+		c = WaitMasterComplete(10000000);
+	}
 	printf("Read %d/%d bytes at offset %d:", c, (int)sizeof(wr), offset);
 	for (int i = 0; i < c; ++i)
 		printf(" %02x", buff[i]);
