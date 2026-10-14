@@ -102,10 +102,9 @@ SOFTWARE.
 	printf("pin %s P%d%02d pullup=%d nopull=%d\r\n", name, port, pin, up, nu); }
 
 // Test only: after the failed write, hold the slave block in reset (ICE and
-// IICRST set, its pins still in IIC mode) and repeat the write. Then give the
-// slave pins back to the port as inputs with pull-up, still with the block in
-// reset, and repeat it. A trace that reaches state 07 means the master was not
-// blocked.
+// IICRST set) and repeat the write. Then change the settings of the slave SCL
+// pin in IIC mode one way at a time and repeat it. A trace that reaches state
+// 07 means the master was not blocked with that setting.
 #define I2C_DEBUG_TRY(name, stmt) { \
 	stmt; \
 	uint8_t tryOff = 4; \
@@ -114,10 +113,14 @@ SOFTWARE.
 	printf("try %s write=%d\r\n", name, tryCnt); \
 	I2C_DEBUG_DUMP("M try", g_I2CMaster); \
 	I2C_DEBUG_DUMP("S try", g_I2CSlave); }
+#define I2C_DEBUG_SCL_CFG(dir, res, type) \
+	IOPinConfig(I2C_SLAVE_SCL_PORT, I2C_SLAVE_SCL_PIN, I2C_SLAVE_SCL_PINOP, dir, res, type)
 #define I2C_DEBUG_SLAVE_POKES() { \
 	I2C_DEBUG_TRY("slave in reset", R_IIC1->ICCR1 = 0xC0U) \
-	I2C_DEBUG_TRY("slave pins to port", (IOPinConfig(I2C_SLAVE_SCL_PORT, I2C_SLAVE_SCL_PIN, IOPINOP_GPIO, IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL), \
-		IOPinConfig(I2C_SLAVE_SDA_PORT, I2C_SLAVE_SDA_PIN, IOPINOP_GPIO, IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL))) }
+	I2C_DEBUG_TRY("SCL dir out, pullup, od", I2C_DEBUG_SCL_CFG(IOPINDIR_OUTPUT, IOPINRES_PULLUP, IOPINTYPE_OPENDRAIN)) \
+	I2C_DEBUG_TRY("SCL bi, no pullup, od", I2C_DEBUG_SCL_CFG(IOPINDIR_BI, IOPINRES_NONE, IOPINTYPE_OPENDRAIN)) \
+	I2C_DEBUG_TRY("SCL bi, pullup, no od", I2C_DEBUG_SCL_CFG(IOPINDIR_BI, IOPINRES_PULLUP, IOPINTYPE_NORMAL)) \
+	I2C_DEBUG_TRY("SCL out, no pullup, od", I2C_DEBUG_SCL_CFG(IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_OPENDRAIN)) }
 
 // The IIC block does not use the internal pull-up of its own pins, and the
 // board has no pull-up on them. Use two spare pins in GPIO input mode with
