@@ -888,3 +888,21 @@ rearming, failed-close ownership, bit-31 status commands, pending startup events
 and bounded status timeouts. All LPC1769 USB host tests pass at -O0/-O2 with
 UBSan. The EP0 example links in Debug and Release; a class/data example and
 physical-board enumeration and transfers remain to be validated.
+
+
+LPC1769 CDC loopback example
+---------------------------
+
+`LPC1769/exemples/UsbCdcLoopback` supplies an importable IOC project, board
+configuration and AppRun-based application using the existing generic CDC
+class. It explicitly initializes the 16-entry event queue and uses nonblocking
+Rx/Tx in AppCheckStatus. The library project now links usb_intrf, usbd_epalloc,
+usbd_cdc and usbd_cdc_desc. No shared USB implementation changes are required.
+
+`link17.py` builds both EP0 and CDC examples in both configurations and checks
+class/data symbol extraction. GNU Arm 13.2.1 CDC text/data/bss are
+51732/456/5680 bytes in Debug and 23164/152/5192 in Release. Debug retains
+rdimon semihosting and Release uses nosys. Only one CDC instance is covered;
+the allocator does not account for LPC1769 fixed endpoint types for arbitrary
+composite layouts. Physical enumeration, notifications and binary loopback
+remain pending. The example README includes a packet-boundary host check.

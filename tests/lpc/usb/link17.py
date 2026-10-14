@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""LPC1769 public EP0 firmware links. MIT License, I-SYST, 2026."""
+"""LPC1769 EP0 and CDC firmware links. MIT License, I-SYST, 2026."""
 from pathlib import Path
 import argparse
 import re
@@ -11,7 +11,8 @@ import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[3]
 EXAMPLE = ROOT / 'ARM/NXP/LPC17xx/LPC1769/exemples/UsbEp0Demo'
-APPLICATION = EXAMPLE / 'src/usb_ep0_demo.cpp'
+EXAMPLES = [(EXAMPLE, 'usb_ep0_demo.cpp'),
+            (EXAMPLE.parent / 'UsbCdcLoopback', 'usb_cdc_loopback.cpp')]
 timer = runpy.run_path(str(ROOT / 'tests/lpc/timer/link17.py'))
 SOURCES = timer['SOURCES'] + [
     'ARM/NXP/LPC17xx/src/usb_hw_lpc17xx.c',
@@ -20,18 +21,21 @@ SOURCES = timer['SOURCES'] + [
     'ARM/NXP/LPC17xx/src/usb_lpc17xx.c',
     'ARM/NXP/LPC17xx/src/usb_data_lpc17xx.c',
     'ARM/NXP/src/lpc_iap.c',
+    'src/usb/usb_intrf.cpp', 'src/usb/usbd_epalloc.cpp',
+    'src/usb/usbd_cdc.cpp', 'src/usb/usbd_cdc_desc.cpp',
     'src/usb/usb.cpp', 'src/app_evt_handler.cpp', 'src/app_run.cpp', 'src/app_wait.cpp',
 ]
 
 
-def build(prefix, directory, debug):
+def build(prefix, directory, debug, example, source_name):
+    application = example / "src" / source_name
     directory.mkdir(parents=True, exist_ok=True)
     flags = ['-mcpu=cortex-m3', '-mthumb', '-DLPC1769', '-ffunction-sections', '-fdata-sections']
     flags += ['-O0', '-g3', '-DDEBUG'] if debug else ['-Os', '-DNDEBUG']
     includes = ['-I' + str(ROOT / p) for p in timer['INCLUDES']]
-    includes.append('-I' + str(EXAMPLE / 'src'))
+    includes.append('-I' + str(example / 'src'))
     objects = []
-    for index, source in enumerate(SOURCES + [str(APPLICATION)]):
+    for index, source in enumerate(SOURCES + [str(application)]):
         cpp = source.endswith('.cpp')
         obj = directory / f'{index}.o'
         language = ['-std=gnu++20', '-fno-exceptions', '-fno-rtti'] if cpp else ['-std=gnu17']
@@ -40,7 +44,7 @@ def build(prefix, directory, debug):
         objects.append(str(obj))
     archive = directory / 'libIOsonata_LPC1769.a'
     subprocess.run([prefix + 'ar', 'rcs', str(archive), *objects[:-1]], check=True)
-    image = directory / 'ep0.elf'
+    image = directory / (example.name + '.elf')
     subprocess.run([prefix + 'g++', *flags, '--specs=nano.specs',
                     '--specs=' + ('rdimon' if debug else 'nosys') + '.specs',
                     '-L' + str(ROOT / 'ARM/ldscript'),
@@ -60,6 +64,12 @@ def build(prefix, directory, debug):
     assert ('initialise_monitor_handles' in addresses) == debug
     for name in ['IAPReadUID', 'IapEntry', 'UsbInit', 'UsbEnable', 'UsbDevProcessEvent', 'UsbCtrlrStart', 'Lpc17UsbControlInterrupt']:
         assert name in addresses, name
+    if example.name == 'UsbCdcLoopback':
+        demangled = subprocess.check_output([prefix + 'nm', '-C', str(image)], text=True)
+        assert 'UsbdEpAlloc(' in demangled
+        assert 'UsbdCdc::SelectConfig(' in demangled
+        for name in ['UsbCtrlrEpSend', 'UsbCtrlrEpReceive', 'Lpc17UsbDataDispatch']:
+            assert name in addresses, name
     subprocess.run([prefix + 'size', str(image)], check=True)
 
 
@@ -70,21 +80,24 @@ if __name__ == '__main__':
     linked = timer['project_sources'](ROOT / 'ARM/NXP/LPC17xx/LPC1769/lib/ioc/.project')
     for source in SOURCES:
         assert (ROOT / source).resolve() in linked, source
-    app_links = timer['project_sources'](EXAMPLE / 'ioc/.project')
-    assert app_links == {APPLICATION, EXAMPLE / 'src/board.h'}
-    for config in ET.parse(EXAMPLE / 'ioc/.cproject').findall('.//configuration'):
-        mode = config.get('name')
-        assert mode in ['Debug', 'Release']
-        specs = 'rdimon' if mode == 'Debug' else 'nosys'
-        for tool in config.findall('.//tool'):
-            if tool.get('superClass', '').endswith(('.c.linker', '.cpp.linker')):
-                options = [option for option in tool.findall('option')
-                           if option.get('superClass', '').endswith('.linker.other')]
-                assert len(options) == 1
-                flags = options[0].get('value')
-                assert '--specs=' + specs + '.specs' in flags
-                assert ('rdimon' in flags) == (mode == 'Debug')
+    for example, source_name in EXAMPLES:
+        app_links = timer['project_sources'](example / 'ioc/.project')
+        assert app_links == {example / 'src' / source_name, example / 'src/board.h'}
+        for config in ET.parse(example / 'ioc/.cproject').findall('.//configuration'):
+            mode = config.get('name')
+            assert mode in ['Debug', 'Release']
+            specs = 'rdimon' if mode == 'Debug' else 'nosys'
+            for tool in config.findall('.//tool'):
+                if tool.get('superClass', '').endswith(('.c.linker', '.cpp.linker')):
+                    options = [option for option in tool.findall('option')
+                               if option.get('superClass', '').endswith('.linker.other')]
+                    assert len(options) == 1
+                    flags = options[0].get('value')
+                    assert '--specs=' + specs + '.specs' in flags
+                    assert ('rdimon' in flags) == (mode == 'Debug')
     with tempfile.TemporaryDirectory() as tmp:
         for debug in [True, False]:
-            build(args.prefix, Path(tmp) / ('Debug' if debug else 'Release'), debug)
-    print('LPC1769 EP0 public firmware Debug/Release links: PASS')
+            for example, source_name in EXAMPLES:
+                build(args.prefix, Path(tmp) / example.name / ('Debug' if debug else 'Release'),
+                      debug, example, source_name)
+    print('LPC1769 EP0 and CDC firmware Debug/Release links: PASS')

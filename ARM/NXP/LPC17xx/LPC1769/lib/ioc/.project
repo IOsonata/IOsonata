@@ -1285,5 +1285,25 @@
 			<type>1</type>
 			<locationURI>PARENT-3-PROJECT_LOC/Include/usb_data_lpc17xx.h</locationURI>
 		</link>
+		<link>
+			<name>src/usb/usb_intrf.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usb_intrf.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/usb/usbd_epalloc.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usbd_epalloc.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/usb/usbd_cdc.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usbd_cdc.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/usb/usbd_cdc_desc.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usbd_cdc_desc.cpp</locationURI>
+		</link>
 	</linkedResources>
 </projectDescription>
