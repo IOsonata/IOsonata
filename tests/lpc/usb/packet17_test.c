@@ -5,6 +5,9 @@
 #include <string.h>
 
 static unsigned s_Realizations;
+static uint32_t s_ExpectedSize = 64;
+static uint32_t s_ExpectedPhysical;
+static bool s_DataRealize;
 static unsigned s_Reads;
 static unsigned s_Writes;
 static unsigned s_Validations;
@@ -83,7 +86,13 @@ void TestSieCode(uint32_t Value)
 }
 void TestPacketSize(uint32_t Value)
 {
-	assert(Value == 64 && s_Mask == 1);
+	assert(Value == s_ExpectedSize && s_Mask == 1);
+	if (s_DataRealize)
+	{
+		assert(LPC_USB->USBEpInd == s_ExpectedPhysical);
+		assert((LPC_USB->USBReEp & (1UL << s_ExpectedPhysical)) != 0);
+		assert((LPC_USB->USBDevIntSt & 0x100U) == 0);
+	}
 	++s_Realizations;
 	if (s_ResetArrival)
 		SetReadOnly(&LPC_USB->USBEpIntSt, LPC_USB->USBEpIntSt | 1U);
@@ -214,6 +223,107 @@ static void BusResetTests(void)
 	s_RealizeTimeout = false;
 	Prepare();
 	assert(Lpc17UsbDeviceInit() && Lpc17UsbBusReset());
+}
+
+static void DataRealizeTests(void)
+{
+	LPC_USB->USBDevIntEn = 0;
+	LPC_USB->USBEpIntEn = 0;
+	Prepare();
+	assert(!Lpc17UsbDataRealize(1, false, 3, 64));
+	assert(Lpc17UsbDeviceInit());
+	s_DataRealize = true;
+	// Enumerate logical endpoints, transfer types and packet-size boundaries.
+	const uint16_t bulkMask = 0xC924;
+	const uint16_t intMask = 0x2492;
+	for (unsigned ep = 0; ep <= 16; ++ep)
+	{
+		for (unsigned type = 0; type <= 4; ++type)
+		{
+			for (unsigned size = 0; size <= 65; ++size)
+			{
+				for (unsigned in = 0; in <= 1; ++in)
+				{
+					bool expected = ep < 16 && size > 0 && size <= 64 &&
+						((type == 3 && (intMask & (1U << ep)) != 0) ||
+						(type == 2 && (bulkMask & (1U << ep)) != 0 &&
+						(size == 8 || size == 16 || size == 32 || size == 64)));
+					LPC_USB->USBReEp = 3;
+					SetReadOnly(&LPC_USB->USBDevIntSt, 0x10C);
+					s_ExpectedSize = size;
+					s_ExpectedPhysical = ep * 2 + in;
+					s_Mask = in;
+					const unsigned count = s_Realizations;
+					assert(Lpc17UsbDataRealize(ep, in != 0, type, size) == expected);
+					assert(s_Mask == in && s_Realizations == count + expected);
+					assert(LPC_USB->USBReEp == (expected ? 3U | (1UL << s_ExpectedPhysical) : 3U));
+					assert(LPC_USB->USBDevIntSt == (expected ? 0xCU : 0x10CU));
+				}
+			}
+		}
+	}
+	LPC_USB->USBReEp = 3;
+	s_ExpectedSize = 64;
+	// All supported directions fit together, including physical endpoint 31.
+	for (unsigned ep = 1; ep < 16; ++ep)
+	{
+		unsigned type = (intMask & (1U << ep)) != 0 ? 3 : 2;
+		if (((intMask | bulkMask) & (1U << ep)) == 0)
+			continue;
+		for (unsigned in = 0; in <= 1; ++in)
+		{
+			s_ExpectedPhysical = ep * 2 + in;
+			assert(Lpc17UsbDataRealize(ep, in != 0, type, 64));
+			const unsigned count = s_Realizations;
+			assert(!Lpc17UsbDataRealize(ep, in != 0, type, 64));
+			assert(s_Realizations == count);
+		}
+	}
+	assert(LPC_USB->USBReEp == 0xFCF3CF3FU);
+	LPC_USB->USBReEp = 3;
+	const unsigned count = s_Realizations;
+	LPC_USB->USBDevIntEn = 8;
+	assert(!Lpc17UsbDataRealize(1, false, 3, 64));
+	LPC_USB->USBDevIntEn = 0;
+	LPC_USB->USBEpIntEn = 3;
+	assert(!Lpc17UsbDataRealize(1, false, 3, 64));
+	LPC_USB->USBEpIntEn = 0;
+	SetReadOnly(&LPC_USB->USBEpDMASt, 4);
+	assert(!Lpc17UsbDataRealize(1, false, 3, 64));
+	SetReadOnly(&LPC_USB->USBEpDMASt, 0);
+	LPC_USB->USBDMAIntEn = 1;
+	assert(!Lpc17UsbDataRealize(1, false, 3, 64));
+	LPC_USB->USBDMAIntEn = 0;
+	LPC_USB->USBCtrl = 1;
+	assert(!Lpc17UsbDataRealize(1, false, 3, 64));
+	LPC_USB->USBCtrl = 0;
+	LPC_USB->USBReEp = 0x43; // ISO memory ownership is unsupported.
+	assert(!Lpc17UsbDataRealize(1, false, 3, 64));
+	LPC_USB->USBReEp = 1;
+	assert(!Lpc17UsbDataRealize(1, false, 3, 64));
+	LPC_USB->USBReEp = 3;
+	LPC_SC->PCONP &= ~(1UL << 31);
+	assert(!Lpc17UsbDataRealize(1, false, 3, 64));
+	LPC_SC->PCONP |= 1UL << 31;
+	SetReadOnly(&LPC_USB->USBClkSt, 0);
+	assert(!Lpc17UsbDataRealize(1, false, 3, 64));
+	SetReadOnly(&LPC_USB->USBClkSt, 0x12);
+	assert(!Lpc17UsbDataRealize(255, false, 3, 64));
+	assert(!Lpc17UsbDataRealize(1, false, 255, 64));
+	assert(!Lpc17UsbDataRealize(1, false, 3, 65535));
+	assert(s_Realizations == count && LPC_USB->USBReEp == 3);
+	s_ExpectedPhysical = 2;
+	s_RealizeTimeout = true;
+	assert(!Lpc17UsbDataRealize(1, false, 3, 64));
+	assert(LPC_USB->USBReEp == 7); // Unknown RAM state is retained on timeout.
+	s_RealizeTimeout = false;
+	SetReadOnly(&LPC_USB->USBDevIntSt, 0x100);
+	assert(!Lpc17UsbDataRealize(2, false, 2, 64));
+	assert(!Lpc17UsbEp0Write(0, 0));
+	s_DataRealize = false;
+	Prepare();
+	assert(Lpc17UsbDeviceInit());
+	puts("LPC1769 bulk/interrupt realization, fixed types, sizes and timeout recovery: PASS");
 }
 
 int main(void)
@@ -363,5 +473,6 @@ int main(void)
 	}
 	DeviceTests();
 	BusResetTests();
+	DataRealizeTests();
 	puts("LPC1769 device init, bus status, EP0 FIFO, interrupts and timeouts: PASS");
 }

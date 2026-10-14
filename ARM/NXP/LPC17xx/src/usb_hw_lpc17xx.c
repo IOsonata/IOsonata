@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
 @file	usb_hw_lpc17xx.c
 
-@brief	Private LPC17xx USB clock, SIE and EP0 FIFO operations.
+@brief	Private LPC17xx USB clocks, SIE, endpoint realization and EP0 FIFO.
 
 @author	Hoang Nguyen Hoan
 @date	Oct. 12, 2026
@@ -210,6 +210,42 @@ bool Lpc17UsbEp0Realize(void)
 			LPC_USB->USBDevIntClr = 1U << 8;
 		}
 		s_Ep0Ready = ready;
+	}
+	__set_PRIMASK(state);
+	return ready;
+}
+
+bool Lpc17UsbDataRealize(uint8_t EpNo, bool In, uint8_t Type, uint16_t Size)
+{
+	// UM10360 Table 185: EP15 is bulk, unlike the other multiples of three.
+	if (EpNo == 0U || EpNo > 15U || Size == 0U || Size > 64U)
+		return false;
+	const bool bulk = EpNo % 3U == 2U || EpNo == 15U;
+	const bool interrupt = EpNo % 3U == 1U;
+	if ((Type != 2U || !bulk ||
+		(Size != 8U && Size != 16U && Size != 32U && Size != 64U)) &&
+		(Type != 3U || !interrupt))
+		return false;
+	const uint32_t physical = (uint32_t)EpNo * 2U + (In ? 1U : 0U);
+	const uint32_t bit = 1UL << physical;
+	const uint32_t state = __get_PRIMASK();
+	__disable_irq();
+	bool ready = false;
+	// All supported bulk/interrupt directions at 64 bytes plus EP0 and the
+	// pointer table use at most 2576 of 4096 EP_RAM bytes. Exclude ISO RAM.
+	if (Lpc17UsbPacketReady() && s_Ep0Ready &&
+		(LPC_USB->USBReEp & 3U) == 3U &&
+		(LPC_USB->USBReEp & (~0xFCF3CF3FUL | bit)) == 0U &&
+		LPC_USB->USBDevIntEn == 0U && LPC_USB->USBEpIntEn == 0U &&
+		LPC_USB->USBEpDMASt == 0U && LPC_USB->USBDMAIntEn == 0U &&
+		LPC_USB->USBCtrl == 0U)
+	{
+		LPC_USB->USBDevIntClr = 1U << 8;
+		LPC_USB->USBReEp |= bit;
+		LPC_USB->USBEpInd = physical;
+		LPC_USB->USBMaxPSize = Size;
+		ready = Lpc17UsbSieWait(1U << 8);
+		LPC_USB->USBDevIntClr = 1U << 8;
 	}
 	__set_PRIMASK(state);
 	return ready;

@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
 @file	usb_hw_lpc17xx.h
 
-@brief	Private LPC17xx USB clock, SIE and EP0 FIFO helpers.
+@brief	Private LPC17xx USB clocks, SIE, endpoint realization and EP0 FIFO.
 
 @author	Hoang Nguyen Hoan
 @date	Oct. 12, 2026
@@ -54,6 +54,14 @@ bool Lpc17UsbSieWrite(uint8_t Command, uint8_t Data);
 bool Lpc17UsbSieRead(uint8_t Command, uint8_t *pData);
 // Realize 64-byte control OUT/IN before connection and interrupt enable.
 bool Lpc17UsbEp0Realize(void);
+// Realize one bulk (Type=2) or interrupt (Type=3) direction while traffic is
+// quiescent. EpNo is a logical number, not an endpoint address. Requires EP0
+// ready, all interrupt/DMA enables off and only bulk/interrupt data endpoints
+// already realized. Refuses duplicate realization and unsupported sizes/types.
+// Caller keeps the device disconnected or unconfigured throughout the batch.
+// Does not enable the endpoint, clear its status, configure the device or arm
+// transfers. A realization timeout latches the fault until release/prepare.
+bool Lpc17UsbDataRealize(uint8_t EpNo, bool In, uint8_t Type, uint16_t Size);
 // Initialize an exclusively owned, prepared block while disconnected.
 // Requires no prior EP0 realization, enabled interrupts, DMA or data endpoints.
 // Leaves address zero, 64-byte EP0, NAK interrupts off and all IRQ enables off.

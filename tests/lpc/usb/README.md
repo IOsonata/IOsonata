@@ -735,3 +735,29 @@ example's `board.h`. The example README gives the wiring assumptions and a
 PyUSB control-request check. `link17.py` now compiles the actual example and
 checks its project source links and linker options. Hardware validation is
 still pending; the driver remains EP0-only.
+
+LPC1769 bulk and interrupt endpoint realization
+----------------------------------------------
+
+The private `Lpc17UsbDataRealize` helper follows UM10360 Table 185 and section
+11.10.4. Interrupt endpoint numbers are 1, 4, 7, 10 and 13, with packet sizes
+1..64. Bulk endpoint numbers are 2, 5, 8, 11, 14 and 15, with packet sizes
+8, 16, 32 or 64. Each direction maps to its own physical endpoint; EP15 IN
+uses bit 31. ISO and EP0 are excluded from this helper.
+
+Realization requires initialized EP0, all device/endpoint/DMA interrupt enables
+off, DMA off and no CPU FIFO operation. The caller must keep the device
+unconfigured or disconnected for the batch. Duplicate directions and existing
+ISO realization are refused. All supported bulk/interrupt directions at maximum
+size, EP0 and the endpoint pointer table fit in 2576 of the 4096 EP_RAM bytes.
+Only EP_RLZED is cleared; other device events remain pending. A bounded signed
+wait latches the existing SIE fault on timeout, retaining uncertain hardware
+state until the controller is stopped and prepared again.
+
+The register-model test enumerates endpoint/type/size combinations in both
+directions, realizes every supported direction together, and checks active
+interrupt/DMA/FIFO rejection, missing EP0, clock/power loss, invalid arguments,
+stale completion flags, duplicate realization and timeout recovery. Tests pass
+at -O0/-O2 with UBSan. This is a private preparation step: public endpoint counts
+remain EP0-only until data FIFO operations, IRQ dispatch and lifecycle handling
+are implemented. No data-transfer or hardware-enumeration claim is made.
