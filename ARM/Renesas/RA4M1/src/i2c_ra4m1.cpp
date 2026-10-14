@@ -115,6 +115,7 @@ SOFTWARE.
 // so an enabled TIE outside a read would keep the transmit event pending.
 #define RA4M1_I2C_IER_SLAVE_IDLE	(RA4M1_I2C_IER_RIE)
 #define RA4M1_I2C_IER_SLAVE_WRITE	(RA4M1_I2C_IER_RIE | RA4M1_I2C_IER_BUS)
+#define RA4M1_I2C_TRACE_MAX		10
 #define RA4M1_I2C_IER_SLAVE_READ	(RA4M1_I2C_IER_RIE | RA4M1_I2C_IER_TIE | RA4M1_I2C_IER_BUS)
 
 // Master transfer states
@@ -194,7 +195,8 @@ typedef struct
 	uint8_t DbgOCr1;		// other IIC unit ICCR1 at the same time
 	uint8_t DbgOSr1;		// other IIC unit ICSR1
 	uint8_t DbgOSr2;		// other IIC unit ICSR2
-	uint8_t DbgSclSeq[3];	// SCL pad level in Configure: ICE=0, in reset, running
+	uint8_t DbgTrCnt;		// entries in DbgTr
+	uint8_t DbgTr[RA4M1_I2C_TRACE_MAX][5];	// state, ICSR2, ICCR1, other ICCR1, other ICSR2
 } Ra4m1I2cDev_t;
 
 static Ra4m1I2cDev_t s_Ra4m1I2cDev[RA4M1_I2C_COUNT] = {
@@ -423,29 +425,22 @@ static inline bool Ra4m1I2cBusy(const R_IIC0_Type * const pReg)
 	return (pReg->ICCR2 & RA4M1_I2C_CR2_BBSY) != 0U;
 }
 
-// Level of the SCL pad (PIDR), for the diagnostic dump.
-static uint8_t Ra4m1I2cSclPadWait(const Ra4m1I2cDev_t * const pDev, int Loops)
+// Record the master state and the line state seen by both IIC blocks.
+static void Ra4m1I2cTrace(Ra4m1I2cDev_t * const pDev)
 {
-	const I2CCfg_t *cfg = &pDev->pI2cDev->Cfg;
-
-	if (cfg->pIOPinMap == NULL || cfg->NbIOPins <= I2C_SCL_IOPIN_IDX)
+	if (pDev->DbgTrCnt >= RA4M1_I2C_TRACE_MAX)
 	{
-		return 0xFFU;
+		return;
 	}
 
-	const IOPinCfg_t *scl = &cfg->pIOPinMap[I2C_SCL_IOPIN_IDX];
+	const R_IIC0_Type *other = pDev->DevNo == 0 ? R_IIC1 : R_IIC0;
+	uint8_t *e = pDev->DbgTr[pDev->DbgTrCnt++];
 
-	for (int i = 0; i < Loops; i++)
-	{
-		__NOP();
-	}
-
-	return (R_PFS->PORT[scl->PortNo].PIN[scl->PinNo].PmnPFS & 2U) != 0U ? 1U : 0U;
-}
-
-static uint8_t Ra4m1I2cSclPad(const Ra4m1I2cDev_t * const pDev)
-{
-	return Ra4m1I2cSclPadWait(pDev, 2000);
+	e[0] = (uint8_t)pDev->MState;
+	e[1] = pDev->pReg->ICSR2;
+	e[2] = pDev->pReg->ICCR1;
+	e[3] = other->ICCR1;
+	e[4] = other->ICSR2;
 }
 
 static void Ra4m1I2cConfigure(Ra4m1I2cDev_t * const pDev)
@@ -458,7 +453,6 @@ static void Ra4m1I2cConfigure(Ra4m1I2cDev_t * const pDev)
 	// in reset, program it, then release reset with SCL/SDA outputs high.
 	reg->ICIER = 0U;
 	reg->ICCR1 = 0U;
-	pDev->DbgSclSeq[0] = Ra4m1I2cSclPad(pDev);
 	reg->ICCR1 = RA4M1_I2C_ICCR1_RESET;
 
 	int32_t count = Ra4m1I2cTimeout(pDev);
@@ -485,7 +479,6 @@ static void Ra4m1I2cConfigure(Ra4m1I2cDev_t * const pDev)
 	}
 
 	reg->ICCR1 = RA4M1_I2C_ICCR1_RESET_ENABLE;
-	pDev->DbgSclSeq[1] = Ra4m1I2cSclPad(pDev);
 
 	for (int i = 0; i < RA4M1_I2C_MAX_SLAVE_ADDR; i++)
 	{
@@ -522,7 +515,6 @@ static void Ra4m1I2cConfigure(Ra4m1I2cDev_t * const pDev)
 	reg->ICFER = slave ? RA4M1_I2C_ICFER_SLAVE : RA4M1_I2C_ICFER_MASTER;
 	Ra4m1I2cClearFlags(reg, RA4M1_I2C_SR2_EVENTS);
 	reg->ICCR1 = RA4M1_I2C_ICCR1_RUN;
-	pDev->DbgSclSeq[2] = Ra4m1I2cSclPad(pDev);
 
 	if (!pDev->bEnabled)
 	{
@@ -759,6 +751,8 @@ static bool Ra4m1I2cMasterBegin(Ra4m1I2cDev_t * const pDev, bool bRx,
 
 	Ra4m1I2cClearFlags(reg, RA4M1_I2C_SR2_EVENTS);
 	pDev->MState = RA4M1_I2C_M_START;
+	pDev->DbgTrCnt = 0;
+	Ra4m1I2cTrace(pDev);
 
 	// The enable bits are set in polling mode too. With no ICU route they
 	// raise nothing, and the START, STOP and NACK flags are then certain to
@@ -795,6 +789,7 @@ static void Ra4m1I2cMasterRun(Ra4m1I2cDev_t * const pDev)
 
 		if (pDev->MState != last || pDev->Sent != lastSent || pDev->Count != lastCount)
 		{
+			Ra4m1I2cTrace(pDev);
 			last = pDev->MState;
 			lastSent = pDev->Sent;
 			lastCount = pDev->Count;
@@ -802,6 +797,7 @@ static void Ra4m1I2cMasterRun(Ra4m1I2cDev_t * const pDev)
 		}
 		else if (--left <= 0)
 		{
+			Ra4m1I2cTrace(pDev);
 			Ra4m1I2cMasterAbort(pDev);
 		}
 	}
@@ -1565,17 +1561,16 @@ int Ra4m1I2cDump(DevIntrf_t * const pIntrf, char *Buf, int Len)
 		r->ICSER, r->ICIER, r->ICSR1, r->ICSR2, r->ICBRL, r->ICBRH,
 		dev->DbgIrq, dev->DbgSAddr, dev->DbgSRx, dev->DbgSSr1,
 		dev->DbgSAddrByte, dev->DbgMState, dev->DbgMSr2, dev->DbgMSent,
-		dev->DbgMCr1, dev->DbgOCr1, dev->DbgOSr1, dev->DbgOSr2,
-		dev->DbgSclSeq[0], dev->DbgSclSeq[1], dev->DbgSclSeq[2]
+		dev->DbgMCr1, dev->DbgOCr1, dev->DbgOSr1, dev->DbgOSr2
 	};
 	const char *name[] = {
 		"pclkb=", " mstpb=", " sckdiv=", " cr1=", " cr2=", " mr1=", " mr2=",
 		" mr3=", " fer=", " ser=", " ier=", " sr1=", " sr2=", " brl=", " brh=",
 		" irq=", " sadr=", " srx=", " ssr1=", " sab=", " mst=", " msr2=", " msent=",
-		" mcr1=", " ocr1=", " osr1=", " osr2=", " padice0=", " padrst=", " padrun="
+		" mcr1=", " ocr1=", " osr1=", " osr2="
 	};
 	const int digits[] = { 8, 8, 8, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
-		4, 4, 4, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1, 1 };
+		4, 4, 4, 2, 2, 2, 2, 2, 2, 2, 2, 2 };
 	int pos = 0;
 
 	for (int i = 0; i < (int)(sizeof(v) / sizeof(v[0])); i++)
@@ -1584,101 +1579,45 @@ int Ra4m1I2cDump(DevIntrf_t * const pIntrf, char *Buf, int Len)
 		pos = Ra4m1I2cPutHex(Buf, pos, Len, v[i], digits[i]);
 	}
 
-	// Pad level with the block enabled, with ICE cleared, and enabled again.
-	// Only when idle, as it briefly disables the block.
-	uint8_t pad[8] = { 0xFFU, 0xFFU, 0xFFU, 0xFFU, 0xFFU, 0xFFU, 0xFFU, 0xFFU };
+	// Interrupt route test for a registered idle slave: with the STOP flag
+	// latched, enable the STOP interrupt for a moment. irqt is the number of
+	// handler entries that caused (0xFF when the test did not run).
 	uint8_t irqt = 0xFFU;
 
-	if (!dev->bOpen && !dev->bAsync && dev->MState == RA4M1_I2C_M_IDLE &&
-		dev->SState == RA4M1_I2C_S_IDLE && dev->bEnabled)
+	if (dev->bRegistered && !dev->bAsync && dev->SState == RA4M1_I2C_S_IDLE &&
+		dev->bEnabled && (dev->pReg->ICSR2 & RA4M1_I2C_SR2_STOP) != 0U)
 	{
-		// Interrupt route test for a registered slave: with the STOP flag
-		// latched, enable the STOP interrupt for a moment. irqt is the number
-		// of handler entries that caused (0xFF when the test did not run).
-		if (dev->bRegistered && (dev->pReg->ICSR2 & RA4M1_I2C_SR2_STOP) != 0U)
+		const uint8_t ier = dev->pReg->ICIER;
+		const uint16_t before = dev->DbgIrq;
+
+		dev->pReg->ICIER = (uint8_t)(ier | RA4M1_I2C_IER_SPIE);
+
+		for (int i = 0; i < 20000; i++)
 		{
-			const uint8_t ier = dev->pReg->ICIER;
-			const uint16_t before = dev->DbgIrq;
-
-			dev->pReg->ICIER = (uint8_t)(ier | RA4M1_I2C_IER_SPIE);
-
-			for (int i = 0; i < 20000; i++)
-			{
-				__NOP();
-			}
-
-			dev->pReg->ICIER = ier;
-			irqt = (uint8_t)(dev->DbgIrq - before);
+			__NOP();
 		}
 
-		pad[0] = Ra4m1I2cSclPad(dev);
-		// Same level after a much longer wait, to see a slow rise.
-		pad[7] = Ra4m1I2cSclPadWait(dev, 400000);
-		dev->pReg->ICCR1 = 0U;
-		pad[1] = Ra4m1I2cSclPad(dev);
-		// Clearing ICE also clears SCLO and SDAO, which would leave the block
-		// driving both lines low. Write them back high with SOWP clear, then
-		// set SOWP again.
-		dev->pReg->ICCR1 = (uint8_t)(RA4M1_I2C_ICCR1_RUN & ~RA4M1_I2C_CR1_SOWP);
-		dev->pReg->ICCR1 = RA4M1_I2C_ICCR1_RUN;
-		pad[2] = Ra4m1I2cSclPad(dev);
-
-		// With the block enabled, give the SCL pin to the port (GPIO input
-		// with pull-up) and read it, then restore the IIC pin function. A
-		// high level here means the IIC pin function was holding the line low.
-		const I2CCfg_t *pc = &dev->pI2cDev->Cfg;
-
-		if (pc->pIOPinMap != NULL && pc->NbIOPins > I2C_SCL_IOPIN_IDX)
-		{
-			const IOPinCfg_t *sp = &pc->pIOPinMap[I2C_SCL_IOPIN_IDX];
-
-			IOPinConfig(sp->PortNo, sp->PinNo, IOPINOP_GPIO, IOPINDIR_INPUT,
-				IOPINRES_PULLUP, IOPINTYPE_NORMAL);
-			pad[3] = Ra4m1I2cSclPad(dev);
-			Ra4m1I2cPinConfig(pc);
-		}
-
-		// Pad level with only this block enabled, with both blocks off, and
-		// with only the other block enabled. The other block is restored in
-		// the same way as this one.
-		R_IIC0_Type *other = (dev->pReg == R_IIC0) ? (R_IIC0_Type *)R_IIC1 : R_IIC0;
-		const uint8_t cr1 = RA4M1_I2C_ICCR1_RUN;
-		const uint8_t cr1w = (uint8_t)(RA4M1_I2C_ICCR1_RUN & ~RA4M1_I2C_CR1_SOWP);
-
-		if ((other->ICCR1 & RA4M1_I2C_CR1_ICE) != 0U)
-		{
-			other->ICCR1 = 0U;
-			pad[4] = Ra4m1I2cSclPad(dev);
-			dev->pReg->ICCR1 = 0U;
-			pad[5] = Ra4m1I2cSclPad(dev);
-			other->ICCR1 = cr1w;
-			other->ICCR1 = cr1;
-			pad[6] = Ra4m1I2cSclPad(dev);
-			dev->pReg->ICCR1 = cr1w;
-			dev->pReg->ICCR1 = cr1;
-		}
+		dev->pReg->ICIER = ier;
+		irqt = (uint8_t)(dev->DbgIrq - before);
 	}
 
 	pos = Ra4m1I2cPutStr(Buf, pos, Len, " irqt=");
 	pos = Ra4m1I2cPutHex(Buf, pos, Len, irqt, 2);
-	pos = Ra4m1I2cPutStr(Buf, pos, Len, " padnow=");
-	pos = Ra4m1I2cPutHex(Buf, pos, Len, pad[0], 2);
-	pos = Ra4m1I2cPutStr(Buf, pos, Len, " padlate=");
-	pos = Ra4m1I2cPutHex(Buf, pos, Len, pad[7], 2);
-	pos = Ra4m1I2cPutStr(Buf, pos, Len, " padoff=");
-	pos = Ra4m1I2cPutHex(Buf, pos, Len, pad[1], 2);
-	pos = Ra4m1I2cPutStr(Buf, pos, Len, " padon=");
-	pos = Ra4m1I2cPutHex(Buf, pos, Len, pad[2], 2);
-	pos = Ra4m1I2cPutStr(Buf, pos, Len, " padgpio=");
-	pos = Ra4m1I2cPutHex(Buf, pos, Len, pad[3], 2);
-	pos = Ra4m1I2cPutStr(Buf, pos, Len, " padself=");
-	pos = Ra4m1I2cPutHex(Buf, pos, Len, pad[4], 2);
-	pos = Ra4m1I2cPutStr(Buf, pos, Len, " padboth0=");
-	pos = Ra4m1I2cPutHex(Buf, pos, Len, pad[5], 2);
-	pos = Ra4m1I2cPutStr(Buf, pos, Len, " padoth=");
-	pos = Ra4m1I2cPutHex(Buf, pos, Len, pad[6], 2);
 	pos = Ra4m1I2cPutStr(Buf, pos, Len, (r->ICCR1 & 0x02U) ? " scl=1" : " scl=0");
 	pos = Ra4m1I2cPutStr(Buf, pos, Len, (r->ICCR1 & 0x01U) ? " sda=1" : " sda=0");
+
+	// Trace of the last master transfer: state, ICSR2, ICCR1, then ICCR1 and
+	// ICSR2 of the other IIC unit.
+	pos = Ra4m1I2cPutStr(Buf, pos, Len, " tr=");
+
+	for (int i = 0; i < dev->DbgTrCnt; i++)
+	{
+		for (int j = 0; j < 5; j++)
+		{
+			pos = Ra4m1I2cPutHex(Buf, pos, Len, dev->DbgTr[i][j], 2);
+			pos = Ra4m1I2cPutStr(Buf, pos, Len, j < 4 ? ":" : " ");
+		}
+	}
 
 	// Pin function select registers of the two pins, to show what the pin
 	// configuration really wrote (PSEL in bits 28:24, PMR bit 16, PCR bit 4,
