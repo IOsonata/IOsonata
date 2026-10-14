@@ -11,22 +11,23 @@ layout requires a separate library configuration.
 ## Integration status
 
 The IOC library includes IOsonata `ResetEntry.c`, the WBA65 interrupt
-vector table, a shared HSI16 system initializer, shared GPIO configuration,
+vector table, a shared system initializer with the 100 MHz clock setup,
+shared GPIO configuration,
 the shared STM32 UART driver (`ARM/ST/src/uart_stm32.cpp`) and the shared
 STM32 timer driver (`ARM/ST/src/timer_stm32.cpp`, `timer_lptim_stm32.cpp`,
 `timer_tim_stm32.cpp`). The vector table follows STM32WBA65xx interrupt
 order; its timer vectors are weak aliases of `Stm32TimerVector`, which runs
 the timer driver when the application uses it. The library is built for the FPU
-with the hard float ABI; the system initializer enables CP10 and CP11 and
-installs the vector base, but does not configure PLLs, flash latency or
-TrustZone.
+with the hard float ABI; the system initializer enables CP10 and CP11,
+installs the vector base and sets the core clock (see Core clock below). It
+does not configure TrustZone.
 
 **The MCU port is not complete.** The UART and timer example projects below
 build and link. Outstanding work:
 
 - Verify startup and vector placement on hardware with the chosen security
   configuration
-- Implement live RCC clock-frequency decoding before changing from HSI16
+- Check the core clock setup on hardware (PLL lock, 100 MHz, flash wait states)
 - Verify EXTI interrupt routing/dispatch and the timers on hardware
 - Validate the application linker script against STM32WBA65 flash/SRAM banks
   and the configured secure/nonsecure partitions
@@ -53,8 +54,8 @@ DevNo 2, RX PA11 on Arduino D0 and TX PA12 on D1, AF3. UM3462 also names these
 pins as the second ST-LINK virtual COM port. For USART1 on the first ST-LINK
 virtual COM port (RX PA8, TX PB12) use `BOARD_VCP_DEVNO` and `BOARD_VCP_PINS`.
 
-Both run at 1 Mbaud, 8N1, from HSI16. A character takes 160 CPU cycles at
-16 MHz, so UartLoopback sets `UART_DMA_MODE` in its board.h and runs with
+Both run at 1 Mbaud, 8N1, from the 100 MHz core clock. A character takes 100
+CPU cycles, so UartLoopback sets `UART_DMA_MODE` in its board.h and runs with
 interrupts and DMA: RX on GPDMA1 channel 2 with the linked list ring, TX on
 channel 3. UartPrbsTxTest uses the example defaults, DMA without interrupts,
 one character per transfer (`BYTE_MODE`), starting with 0xFF followed by
@@ -69,6 +70,39 @@ IOcomposer. The four images were run in an instruction set emulator with a
 USART2 and GPDMA1 model at 1 Mbaud: the loopback echoes in order with no lost
 character, and the PRBS output matches `Prbs8()`. This does not replace a
 hardware run on the Discovery Kit.
+
+## Core clock
+
+`SystemInit` (`ARM/ST/STM32WBAxx/src/system_stm32wbaxx.c`, run by ResetEntry)
+sets the core clock to 100 MHz from PLL1R, following `HAL_RCC_OscConfig` and
+`HAL_RCC_ClockConfig` of the ST HAL:
+
+1. HSI16 with PLL1 off and the bus dividers cleared, the reset state.
+2. HSE32 is started when `g_McuOsc.CoreOsc` is `OSC_TYPE_XTAL` or
+   `OSC_TYPE_TCXO` at 32000000 Hz. If it does not start, `g_McuOsc` is set
+   back to the internal RC and HSI16 is used. The default `g_McuOsc` is the
+   internal RC, so the default source is HSI16. The DK1 has a 32 MHz crystal;
+   an application overrides `g_McuOsc` to use it. The HSE trimming register is
+   left at its reset value.
+3. The dividers are searched for the highest PLL1R up to 100 MHz with the PLL
+   input at 4 to 16 MHz and the VCO at 128 to 544 MHz, the lowest VCO for a tie.
+   Both sources give 100 MHz: M 4, N 25, R 2 from HSE32 (VCO 200 MHz), M 2, N 25,
+   R 2 from HSI16.
+4. Voltage scaling range 1 (above 16 MHz), then the flash wait states (0 up to
+   32 MHz, 1 up to 64, 2 up to 96, 3 up to 100), then PLL1 on.
+5. The switch goes through the PLL1R two step divider as the ST HAL does, then
+   the divider is released. HCLK, PCLK1, PCLK2 and PCLK7 are not divided.
+
+If PLL1 does not lock the clock stays on HSI16. `SystemCoreClockUpdate` decodes
+the RCC registers. `SystemCoreClockSelect(OSC_TYPE_RC, 0)` or
+`SystemCoreClockSelect(OSC_TYPE_XTAL, 32000000)` runs the setup again.
+`SystemPeriphClockSet` sets the APB prescalers, index 0 PCLK1, 1 PCLK2, 2 PCLK7.
+
+Validation: `tests/stm32wba/run_clock.py` runs the setup in an instruction set
+emulator with a model of the RCC, PWR and flash registers that checks the order
+of the steps, the PLL limits, the flash wait states against the frequency, the
+switch rules of the PLL1R divider and the fall back when HSE does not start (28
+checks). It does not model lock time. Not tested on hardware.
 
 ## Timer example project
 
@@ -138,7 +172,7 @@ https://github.com/STMicroelectronics/STM32CubeWBA
 
 `ARM/ST/STM32WBAxx/src/i2c_stm32wba.cpp` drives the I2C v2 peripheral as a
 polling master. DevNo 0 to 3 select I2C1, I2C2, I2C3 and I2C4. I2C3 is on
-APB7, the others on APB1. The kernel clock is HSI16. The timing register is
+APB7, the others on APB1. The kernel clock is PCLK. The timing register is
 computed from the requested rate (100 kHz, 400 kHz, 1 MHz), and the reported
 rate is never above the request. An address probe in StartTx returns false
 when the device does not acknowledge, as `i2c_scan.cpp` expects. Transfers
@@ -192,9 +226,8 @@ The WBA65 device header is `../include/stm32wba65xx.h` in this repository.
 The library and example include paths find it before the STM32CubeWBA paths.
 The library build needs the `external/Fusion` checkout made by the IOsonata
 installer for `att_xiot_fusion.cpp`; STM32CubeWBA is needed only for the
-excluded Bluetooth adapter sources. The shared initial system module runs from
-the 16 MHz reset HSI clock; clock configuration beyond that is not yet
-supported.
+excluded Bluetooth adapter sources. The shared system module sets the core
+clock to 100 MHz, see Core clock.
 
 The existing `gcc_arm_flash.ld` calls IOsonata `ResetEntry` and places
 `__Vectors` in `.ivector`. Do not link the STM32CubeWBA GCC startup module
@@ -251,5 +284,5 @@ the commit, toolchain version and Debug or Release.
 5. Note what differs from the emulator runs: first character timing after
    reset, the GPDMA ring across block ends, and the LSE start time.
 
-The clock stays at HSI16 (16 MHz). The 100 MHz PLL setup is not part of this
-port yet.
+The core clock is 100 MHz from PLL1 (see Core clock). Check that a UART at
+1 Mbaud and the I2C and SPI rates come out as the examples print.

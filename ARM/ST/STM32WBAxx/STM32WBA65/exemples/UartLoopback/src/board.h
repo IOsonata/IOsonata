@@ -51,7 +51,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define UART_DEVNO			BOARD_UART_DEVNO
 #define UART_PINS			BOARD_UART_PINS
 
-// The core runs from HSI16. At the 1 Mbaud default a character takes 160 CPU
+// The core runs at 100 MHz. At the 1 Mbaud default a character takes 100 CPU
 // cycles, the interrupt only RX path can miss characters. Receive with GPDMA.
 #define UART_DMA_MODE		true
 

@@ -564,6 +564,10 @@ def main():
     e = log.of(11, 'I2C3')
     expect(e[-1] == ('P',) and ('S', 0x50, 'W', 3) in e, f'I2C3 events {e}')
 
+    # 12 100 MHz bus clock
+    expect(80000 <= res[20] <= 100000 and 340000 <= res[21] <= 400000 and 800000 <= res[22] <= 1000000 and res[23] == 2,
+           f'100 MHz clock results {res[20:24]}')
+
     # TIMINGR values against the reference manual limits
     t1 = [t for t, _ in i2c1.timings]
     expect(len(t1) >= 4, f'TIMINGR writes {len(t1)}')
@@ -572,6 +576,12 @@ def main():
         timing_check('I2C1', FCPU, t1[1], 0, 340000, 400000, res[12], errors)
         timing_check('I2C1', FCPU, t1[2], 0, 800000, 1000000, res[13], errors)
         timing_check('I2C1', FCPU, t1[3], 0, 80000, 100000, res[14], errors)
+    if len(t1) >= 7:
+        timing_check('I2C1', 100_000_000, t1[-3], 0, 80000, 100000, res[20], errors)
+        timing_check('I2C1', 100_000_000, t1[-2], 0, 340000, 400000, res[21], errors)
+        timing_check('I2C1', 100_000_000, t1[-1], 0, 800000, 1000000, res[22], errors)
+    else:
+        expect(False, f'TIMINGR writes at 100 MHz: {len(t1)}')
     t3 = [t for t, _ in i2c3.timings]
     expect(len(t3) == 1, f'I2C3 TIMINGR writes {len(t3)}')
     if t3:

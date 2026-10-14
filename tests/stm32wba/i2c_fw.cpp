@@ -54,6 +54,7 @@ SOFTWARE.
 extern "C" volatile int32_t g_I2cTestResult[I2C_TEST_MAX_RESULT];
 extern "C" volatile uint8_t g_I2cTestRx[512];
 extern "C" volatile uint32_t g_I2cTestDone;
+extern "C" uint32_t SystemCoreClock;
 
 extern "C" void I2cTestMark(int Id) __attribute__((noinline));
 extern "C" void I2cTestDoneHook(void) __attribute__((noinline));
@@ -178,7 +179,16 @@ extern "C" int main(void)
 	g_I2cTestResult[r++] = (int32_t)I2CGetRate(&s_I2c3);
 	g_I2cTestResult[r++] = I2CTx(&s_I2c3, 0x50, s_Tx, 3);
 
+	// 12 : 100 MHz bus clock, the clock of the PLL setup
 	I2cTestMark(12);
+	SystemCoreClock = 100000000;
+	I2CCfg_t cfg100 = MakeCfg(0, s_I2c1Pins, 100000);
+	g_I2cTestResult[r++] = I2CInit(&s_I2c1, &cfg100) ? (int32_t)I2CGetRate(&s_I2c1) : -1;
+	g_I2cTestResult[r++] = (int32_t)I2CSetRate(&s_I2c1, 400000);
+	g_I2cTestResult[r++] = (int32_t)I2CSetRate(&s_I2c1, 1000000);
+	g_I2cTestResult[r++] = I2CTx(&s_I2c1, 0x50, s_Tx, 2);
+
+	I2cTestMark(13);
 	g_I2cTestResult[I2C_TEST_MAX_RESULT - 1] = r;
 	g_I2cTestDone = 1;
 	I2cTestDoneHook();
