@@ -1579,30 +1579,8 @@ int Ra4m1I2cDump(DevIntrf_t * const pIntrf, char *Buf, int Len)
 		pos = Ra4m1I2cPutHex(Buf, pos, Len, v[i], digits[i]);
 	}
 
-	// Interrupt route test for a registered idle slave: with the STOP flag
-	// latched, enable the STOP interrupt for a moment. irqt is the number of
-	// handler entries that caused (0xFF when the test did not run).
-	uint8_t irqt = 0xFFU;
-
-	if (dev->bRegistered && !dev->bAsync && dev->SState == RA4M1_I2C_S_IDLE &&
-		dev->bEnabled && (dev->pReg->ICSR2 & RA4M1_I2C_SR2_STOP) != 0U)
-	{
-		const uint8_t ier = dev->pReg->ICIER;
-		const uint16_t before = dev->DbgIrq;
-
-		dev->pReg->ICIER = (uint8_t)(ier | RA4M1_I2C_IER_SPIE);
-
-		for (int i = 0; i < 20000; i++)
-		{
-			__NOP();
-		}
-
-		dev->pReg->ICIER = ier;
-		irqt = (uint8_t)(dev->DbgIrq - before);
-	}
-
-	pos = Ra4m1I2cPutStr(Buf, pos, Len, " irqt=");
-	pos = Ra4m1I2cPutHex(Buf, pos, Len, irqt, 2);
+	// Dumping registers must not change interrupt enable state or dispatch ISRs.
+	pos = Ra4m1I2cPutStr(Buf, pos, Len, " irqt=--");
 	pos = Ra4m1I2cPutStr(Buf, pos, Len, (r->ICCR1 & 0x02U) ? " scl=1" : " scl=0");
 	pos = Ra4m1I2cPutStr(Buf, pos, Len, (r->ICCR1 & 0x01U) ? " sda=1" : " sda=0");
 
