@@ -113,7 +113,7 @@ SOFTWARE.
 									 RA4M1_I2C_IER_TEIE)
 // TIE is only on while the master reads. TDRE is set whenever ICDRT is empty,
 // so an enabled TIE outside a read would keep the transmit event pending.
-#define RA4M1_I2C_IER_SLAVE_IDLE	(RA4M1_I2C_IER_RIE | RA4M1_I2C_IER_SPIE | \
+#define RA4M1_I2C_IER_SLAVE_IDLE	(RA4M1_I2C_IER_RIE | \
 									 RA4M1_I2C_IER_TMOIE | RA4M1_I2C_IER_ALIE)
 #define RA4M1_I2C_IER_SLAVE_WRITE	(RA4M1_I2C_IER_RIE | RA4M1_I2C_IER_BUS)
 #define RA4M1_I2C_TRACE_MAX		10
