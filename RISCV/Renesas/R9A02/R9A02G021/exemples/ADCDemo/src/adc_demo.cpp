@@ -179,13 +179,28 @@ static float TempDegC(float Vs)
 
 int main()
 {
+	AdcData_t data[ADC_DEMO_CHAN_CNT];
+	int mv[ADC_DEMO_CHAN_CNT];
+	int cnt;
+	float vref;
+	float temp;
+	int vcc;
+	int t10;
+	int t10abs;
+	int i;
+
 	IOPinCfg(s_Leds, s_NbLeds);
 
 	if (s_Uart.Init(s_UartCfg) == false)
 	{
-		while (1) __WFE();
+		while (1)
+		{
+			__WFE();
+		}
 	}
+#ifdef NDEBUG
 	UARTRetargetEnable(s_Uart, STDOUT_FILENO);
+#endif
 	setvbuf(stdout, NULL, _IONBF, 0);
 
 	printf("\r\nADC12 demo, %s mode\r\n", ADC_DEMO_INT_ENABLE ? "interrupt" : "polling");
@@ -193,21 +208,29 @@ int main()
 	if (s_Adc.Init(s_AdcCfg) == false)
 	{
 		printf("ADC init failed\r\n");
-		while (1) __WFE();
+		while (1)
+		{
+			__WFE();
+		}
 	}
 
 	if (s_Adc.OpenChannel(s_AdcChanCfg, sizeof(s_AdcChanCfg) / sizeof(AdcChanCfg_t)) == false)
 	{
 		printf("ADC channel config failed\r\n");
-		while (1) __WFE();
+		while (1)
+		{
+			__WFE();
+		}
 	}
 
 	printf("TSCDR CAL140 %u\r\n", (unsigned)(R9A02_FLCN_TSCDR & R9A02_TSCDR_CAL140_Msk));
 
 	while (1)
 	{
-		AdcData_t data[ADC_DEMO_CHAN_CNT];
-		int mv[ADC_DEMO_CHAN_CNT] = { 0, };
+		for (i = 0; i < ADC_DEMO_CHAN_CNT; i++)
+		{
+			mv[i] = 0;
+		}
 
 		s_bAdcDone = false;
 
@@ -222,11 +245,11 @@ int main()
 			{
 			}
 
-			int cnt = s_Adc.Read(data, ADC_DEMO_CHAN_CNT);
-			float vref = 0.0f;
-			float temp = 0.0f;
+			cnt = s_Adc.Read(data, ADC_DEMO_CHAN_CNT);
+			vref = 0.0f;
+			temp = 0.0f;
 
-			for (int i = 0; i < cnt; i++)
+			for (i = 0; i < cnt; i++)
 			{
 				if (data[i].Chan >= 0 && data[i].Chan < ADC_DEMO_CHAN_CNT)
 				{
@@ -243,9 +266,9 @@ int main()
 			}
 
 			// VCC = VREF typical x VCC assumed / VREF measured
-			int vcc = vref > 0.0f ? ToMilli(ADC_DEMO_VREF_TYP * ADC_DEMO_VCC / vref) : 0;
-			int t10 = (int)(temp * 10.0f + (temp < 0.0f ? -0.5f : 0.5f));
-			int t10abs = t10 < 0 ? -t10 : t10;
+			vcc = vref > 0.0f ? ToMilli(ADC_DEMO_VREF_TYP * ADC_DEMO_VCC / vref) : 0;
+			t10 = (int)(temp * 10.0f + (temp < 0.0f ? -0.5f : 0.5f));
+			t10abs = t10 < 0 ? -t10 : t10;
 
 			printf("IN0 %d mV, IN1 %d mV, VREF %d mV (VCC about %d mV), TEMP %d mV %s%d.%d C\r\n",
 				   mv[ADC_DEMO_CHAN_IN0], mv[ADC_DEMO_CHAN_IN1], mv[ADC_DEMO_CHAN_VREF], vcc,

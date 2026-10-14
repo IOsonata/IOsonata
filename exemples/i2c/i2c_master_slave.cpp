@@ -148,26 +148,6 @@ I2C g_I2CMaster;
 static std::atomic<bool> s_MasterCompleted(false);
 static std::atomic<int> s_MasterCount(0);
 
-static int I2CMasterIntrfHandler(DevIntrf_t * const pDev,
-	DEVINTRF_EVT EvtId, uint8_t *pBuffer, int Len)
-{
-	if (EvtId == DEVINTRF_EVT_COMPLETED)
-	{
-		s_MasterCount = Len;
-		s_MasterCompleted = true;
-	}
-	return 0;
-}
-
-static int WaitMasterComplete(int Timeout)
-{
-	while (!s_MasterCompleted && --Timeout > 0)
-	{
-		// Interrupt completion updates the atomic state.
-	}
-	return s_MasterCompleted ? (int)s_MasterCount : -1;
-}
-
 //********** I2C Slave **********
 
 #define I2C_SLAVE_ADDR			0x22
@@ -204,8 +184,30 @@ static uint8_t s_WriteRqstData[I2C_BUFF_SIZE];
 static bool s_bWriteRqst = false;
 static int s_Offset = 0;
 
+static int I2CMasterIntrfHandler(DevIntrf_t * const pDev,
+	DEVINTRF_EVT EvtId, uint8_t *pBuffer, int Len)
+{
+	if (EvtId == DEVINTRF_EVT_COMPLETED)
+	{
+		s_MasterCount = Len;
+		s_MasterCompleted = true;
+	}
+	return 0;
+}
+
+static int WaitMasterComplete(int Timeout)
+{
+	while (!s_MasterCompleted && --Timeout > 0)
+	{
+		// Interrupt completion updates the atomic state.
+	}
+	return s_MasterCompleted ? (int)s_MasterCount : -1;
+}
+
 int I2CSlaveIntrfHandler(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId, uint8_t *pBuffer, int Len)
 {
+	int n;
+
 	switch (EvtId)
 	{
 		case DEVINTRF_EVT_READ_RQST:
@@ -247,7 +249,7 @@ int I2CSlaveIntrfHandler(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId, uint8_t *p
 				// Write data completed. Byte 0 is the slave-memory offset.
 				if (Len > 1 && s_WriteRqstData[0] < I2C_BUFF_SIZE)
 				{
-					int n = Len - 1;
+					n = Len - 1;
 					if (n > I2C_BUFF_SIZE - s_WriteRqstData[0])
 						n = I2C_BUFF_SIZE - s_WriteRqstData[0];
 					memcpy(&s_ReadRqstData[s_WriteRqstData[0]], &s_WriteRqstData[1], n);
@@ -286,6 +288,16 @@ void HardwareInit()
 
 int main()
 {
+	const uint8_t expectedRx[4] = { 0x0C, 0x0D, 0x0E, 0x0F };
+	uint8_t rx[4] = { 0xFF, 0xFF, 0xFF, 0xFF };
+	bool masterOk;
+	bool slaveOk;
+	int c;
+	int total;
+	bool writeOk;
+	bool pass;
+	int rc;
+	int i;
 	uint8_t buff[I2C_BUFF_SIZE];
 	uint8_t wr[8] = { 0xA0, 0xA1, 0xA2, 0xA3, 0xA4, 0xA5, 0xA6, 0xA7 };
 	uint8_t offset = 4;
@@ -297,10 +309,8 @@ int main()
 	printf("I2C slave  DMA=%d INT=%d\r\n",
 		s_I2cCfgSlave.bDmaEn, s_I2cCfgSlave.bIntEn);
 
-
-
-	bool masterOk = g_I2CMaster.Init(s_I2cCfgMaster);
-	bool slaveOk = g_I2CSlave.Init(s_I2cCfgSlave);
+	masterOk = g_I2CMaster.Init(s_I2cCfgMaster);
+	slaveOk = g_I2CSlave.Init(s_I2cCfgSlave);
 	printf("I2C init master=%d slave=%d\r\n", masterOk, slaveOk);
 
 	if (!masterOk || !slaveOk)
@@ -309,24 +319,24 @@ int main()
 			__WFE();
 	}
 
-	for (int i = 0; i < I2C_BUFF_SIZE; ++i)
+	for (i = 0; i < I2C_BUFF_SIZE; ++i)
 		s_ReadRqstData[i] = (uint8_t)i;
 	memset(s_WriteRqstData, 0, sizeof(s_WriteRqstData));
 	memset(buff, 0xFF, sizeof(buff));
 
 	s_MasterCompleted = false;
 	s_MasterCount = 0;
-	int c = g_I2CMaster.Write(I2C_SLAVE_ADDR, &offset, 1, wr, sizeof(wr));
+	c = g_I2CMaster.Write(I2C_SLAVE_ADDR, &offset, 1, wr, sizeof(wr));
 	if (s_I2cCfgMaster.bIntEn)
 	{
 		// DeviceIntrfWrite() converts the target TxData() async -1 return
 		// into 0 after subtracting the address-command length. In interrupt
 		// mode completion must therefore be taken from the callback.
-		const int total = WaitMasterComplete(10000000);
+		total = WaitMasterComplete(10000000);
 		c = total >= 1 ? total - 1 : 0;
 	}
 	printf("Write %d/%d bytes at offset %d\r\n", c, (int)sizeof(wr), offset);
-	const bool writeOk = c == (int)sizeof(wr);
+	writeOk = c == (int)sizeof(wr);
 
 	memset(buff, 0xFF, sizeof(buff));
 	s_MasterCompleted = false;
@@ -339,11 +349,11 @@ int main()
 		c = WaitMasterComplete(10000000);
 	}
 	printf("Read %d/%d bytes at offset %d:", c, (int)sizeof(wr), offset);
-	for (int i = 0; i < c; ++i)
+	for (i = 0; i < c; ++i)
 		printf(" %02x", buff[i]);
 	printf("\r\n");
 
-	bool pass = writeOk && c == (int)sizeof(wr) &&
+	pass = writeOk && c == (int)sizeof(wr) &&
 		memcmp(buff, wr, sizeof(wr)) == 0;
 
 	if (pass)
@@ -351,18 +361,16 @@ int main()
 		// The register-style read above validates the SAM4L CMDR/NCMDR
 		// repeated-start path. Exercise the ordinary RX path for the selected
 		// transfer engine too.
-		const uint8_t expectedRx[4] = { 0x0C, 0x0D, 0x0E, 0x0F };
-		uint8_t rx[4] = { 0xFF, 0xFF, 0xFF, 0xFF };
 		s_MasterCompleted = false;
 		s_MasterCount = 0;
-		int rc = g_I2CMaster.Rx(I2C_SLAVE_ADDR, rx, sizeof(rx));
+		rc = g_I2CMaster.Rx(I2C_SLAVE_ADDR, rx, sizeof(rx));
 		if (rc < 0)
 			rc = WaitMasterComplete(10000000);
 		printf("%s RX %d/%d bytes:",
 			s_I2cCfgMaster.bDmaEn ? "DMA" :
 				(s_I2cCfgMaster.bIntEn ? "Interrupt" : "Polling"),
 			rc, (int)sizeof(rx));
-		for (int i = 0; i < rc && i < (int)sizeof(rx); ++i)
+		for (i = 0; i < rc && i < (int)sizeof(rx); ++i)
 			printf(" %02x", rx[i]);
 		printf("\r\n");
 		pass = rc == (int)sizeof(rx) &&

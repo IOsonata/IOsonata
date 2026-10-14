@@ -129,11 +129,16 @@ void But3Handler(int IntNo, void *pCtx)
 
 int main()
 {
+	int i;
+#if defined(BUTTON_PINS_MAP) && 0
+	uint8_t but;
+#endif
+
 	// Configure Leds
 	IOPinCfg(s_Leds, s_NbLeds);
 
 	// Clear all leds
-	for (int i = 0; i < s_NbLeds; i++)
+	for (i = 0; i < s_NbLeds; i++)
 	{
 		IOPinSet(s_Leds[i].PortNo, s_Leds[i].PinNo);
 	}
@@ -153,9 +158,9 @@ int main()
 #endif
 
 #if 0
-	uint8_t but = 0;
+	but = 0;
 
-	for (int i = 0; i < s_NbButtons; i++)
+	for (i = 0; i < s_NbButtons; i++)
 	{
 		but |= 1 << s_Buttons[i].PinNo;
 
@@ -169,7 +174,7 @@ int main()
 
 #endif
 
-	int i = 0;
+	i = 0;
 
 	// Loop until button pressed
 	while (g_bBut1Pressed == false)

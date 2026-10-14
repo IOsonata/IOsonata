@@ -112,7 +112,6 @@ static const UARTCfg_t s_UartCfg = {
 UART g_Uart;
 
 
-
 static const IOPinCfg_t s_MasterPins[] = {
 	{SPI_MASTER_SCK_PORT, SPI_MASTER_SCK_PIN,
 	 SPI_MASTER_SOFTWARE ? IOPINOP_GPIO : SPI_MASTER_SCK_PINOP,
@@ -150,6 +149,35 @@ SPI g_SpiSlave;
 void SpiMasterSlaveDiagnostics(void) __attribute__((weak));
 
 static int SlaveEvent(DevIntrf_t * const pDev, DEVINTRF_EVT Event,
+					 uint8_t *pBuffer, int Length);
+
+static const SPICfg_t s_SlaveCfg = {
+	SPI_SLAVE_DEVNO, SPIPHY_NORMAL, SPIMODE_SLAVE,
+	s_SlavePins, sizeof(s_SlavePins) / sizeof(IOPinCfg_t),
+	100000, 8, 0, SPIDATABIT_MSB,
+	SPIDATAPHASE_FIRST_CLK, SPICLKPOL_HIGH, SPICSEL_AUTO,
+	SPI_SLAVE_DMA_ENABLE, SPI_SLAVE_INT_ENABLE, SPI_SLAVE_INT_PRIO, 0xFF, SlaveEvent
+};
+
+static volatile bool s_MasterDone;
+static volatile int s_MasterCount;
+static int MasterEvent(DevIntrf_t * const, DEVINTRF_EVT Event, uint8_t *, int Length);
+
+static const SPICfg_t s_MasterCfg = {
+	SPI_MASTER_DEVNO, SPIPHY_NORMAL, SPIMODE_MASTER,
+	s_MasterPins, sizeof(s_MasterPins) / sizeof(IOPinCfg_t),
+	SPI_MASTER_RATE, 8, 0, SPIDATABIT_MSB,
+	SPIDATAPHASE_FIRST_CLK, SPICLKPOL_HIGH, SPICSEL_AUTO,
+	!SPI_MASTER_SOFTWARE && SPI_MASTER_DMA_ENABLE,
+	!SPI_MASTER_SOFTWARE && SPI_MASTER_INT_ENABLE, SPI_MASTER_INT_PRIO, 0xFF, MasterEvent
+};
+#if SPI_MASTER_SOFTWARE
+SPISoft g_SpiMaster;
+#else
+SPI g_SpiMaster;
+#endif
+
+static int SlaveEvent(DevIntrf_t * const pDev, DEVINTRF_EVT Event,
 					 uint8_t *pBuffer, int Length)
 {
 	(void)pDev;
@@ -171,16 +199,6 @@ static int SlaveEvent(DevIntrf_t * const pDev, DEVINTRF_EVT Event,
 	return 0;
 }
 
-static const SPICfg_t s_SlaveCfg = {
-	SPI_SLAVE_DEVNO, SPIPHY_NORMAL, SPIMODE_SLAVE,
-	s_SlavePins, sizeof(s_SlavePins) / sizeof(IOPinCfg_t),
-	100000, 8, 0, SPIDATABIT_MSB,
-	SPIDATAPHASE_FIRST_CLK, SPICLKPOL_HIGH, SPICSEL_AUTO,
-	SPI_SLAVE_DMA_ENABLE, SPI_SLAVE_INT_ENABLE, SPI_SLAVE_INT_PRIO, 0xFF, SlaveEvent
-};
-
-static volatile bool s_MasterDone;
-static volatile int s_MasterCount;
 static int MasterEvent(DevIntrf_t * const, DEVINTRF_EVT Event, uint8_t *, int Length)
 {
 	if (Event == DEVINTRF_EVT_COMPLETED)
@@ -191,56 +209,53 @@ static int MasterEvent(DevIntrf_t * const, DEVINTRF_EVT Event, uint8_t *, int Le
 	return 0;
 }
 
-static const SPICfg_t s_MasterCfg = {
-	SPI_MASTER_DEVNO, SPIPHY_NORMAL, SPIMODE_MASTER,
-	s_MasterPins, sizeof(s_MasterPins) / sizeof(IOPinCfg_t),
-	SPI_MASTER_RATE, 8, 0, SPIDATABIT_MSB,
-	SPIDATAPHASE_FIRST_CLK, SPICLKPOL_HIGH, SPICSEL_AUTO,
-	!SPI_MASTER_SOFTWARE && SPI_MASTER_DMA_ENABLE,
-	!SPI_MASTER_SOFTWARE && SPI_MASTER_INT_ENABLE, SPI_MASTER_INT_PRIO, 0xFF, MasterEvent
-};
-#if SPI_MASTER_SOFTWARE
-SPISoft g_SpiMaster;
-#else
-SPI g_SpiMaster;
-#endif
-
 static bool Frame(int Length, uint8_t Seed, bool Receive = false)
 {
-	uint8_t masterRx[129] = {};
-	s_Done = false;
-	const unsigned before = s_Completions;
-	const unsigned armsBefore = s_Arms;
+	unsigned before;
+	unsigned armsBefore;
 	uint8_t masterTx[129];
-	for (int i = 0; i < Length; ++i)
+	int count;
+	bool checkRx;
+	uint8_t slaveSeed;
+	const char *label;
+	uint32_t timeout;
+	bool pass;
+	int mismatch;
+	int i;
+	uint8_t masterRx[129] = {};
+
+	s_Done = false;
+	before = s_Completions;
+	armsBefore = s_Arms;
+	for (i = 0; i < Length; ++i)
 		masterTx[i] = static_cast<uint8_t>(Seed + i);
 	s_MasterDone = false;
 #if SPI_MASTER_SOFTWARE
 	(void)Receive;
-	int count = g_SpiMaster.Transfer(0, masterTx, masterRx, Length);
-	const bool checkRx = true;
-	const uint8_t slaveSeed = Seed;
-	const char *label = "Full duplex";
+	count = g_SpiMaster.Transfer(0, masterTx, masterRx, Length);
+	checkRx = true;
+	slaveSeed = Seed;
+	label = "Full duplex";
 #else
-	int count = Receive ? g_SpiMaster.Rx(0, masterRx, Length) :
+	count = Receive ? g_SpiMaster.Rx(0, masterRx, Length) :
 		g_SpiMaster.Tx(0, masterTx, Length);
 	if (count < 0)
 	{
-		uint32_t timeout = 1000000U;
+		timeout = 1000000U;
 		while (!s_MasterDone && --timeout != 0U)
 			__NOP();
 		count = s_MasterDone ? s_MasterCount : 0;
 	}
-	const bool checkRx = Receive;
-	const uint8_t slaveSeed = Receive ? s_MasterCfg.DummyByte : Seed;
-	const char *label = Receive ? "Master RX" : "Master TX";
+	checkRx = Receive;
+	slaveSeed = Receive ? s_MasterCfg.DummyByte : Seed;
+	label = Receive ? "Master RX" : "Master TX";
 #endif
-	uint32_t timeout = 1000000U;
+	timeout = 1000000U;
 	while (!s_Done && --timeout != 0U)
 		__NOP();
-	bool pass = count == Length && s_Done && s_Completions == before + 1 && s_Count == Length;
-	int mismatch = -1;
-	for (int i = 0; i < Length; ++i)
+	pass = count == Length && s_Done && s_Completions == before + 1 && s_Count == Length;
+	mismatch = -1;
+	for (i = 0; i < Length; ++i)
 		if ((checkRx && masterRx[i] != s_SlaveTx[i]) ||
 			s_SlaveRx[i] != (uint8_t)(slaveSeed + (SPI_MASTER_SOFTWARE || !Receive ? i : 0)))
 		{
@@ -269,6 +284,15 @@ static bool Frame(int Length, uint8_t Seed, bool Receive = false)
 
 int main()
 {
+	const int lengths[] = {1, 16, 129};
+	bool pass;
+	SPICfg_t cfg;
+	SPICfg_t masterCfg;
+	const DevIntrf_t *intrf;
+	int mode;
+	unsigned i;
+	unsigned n;
+
 	g_Uart.Init(s_UartCfg);
 #ifdef NDEBUG
 	UARTRetargetEnable(g_Uart, STDIN_FILENO);
@@ -283,15 +307,14 @@ int main()
 #ifdef SPI_LOOPBACK_WIRING
 	printf("%s\r\n", SPI_LOOPBACK_WIRING);
 #endif
-	bool pass = true;
-	const int lengths[] = {1, 16, 129};
-	for (int mode = 0; mode < 4; ++mode)
+	pass = true;
+	for (mode = 0; mode < 4; ++mode)
 	{
 
-		SPICfg_t cfg = s_SlaveCfg;
+		cfg = s_SlaveCfg;
 		cfg.ClkPol = (mode & 2) ? SPICLKPOL_LOW : SPICLKPOL_HIGH;
 		cfg.DataPhase = (mode & 1) ? SPIDATAPHASE_SECOND_CLK : SPIDATAPHASE_FIRST_CLK;
-		SPICfg_t masterCfg = s_MasterCfg;
+		masterCfg = s_MasterCfg;
 		masterCfg.ClkPol = cfg.ClkPol;
 		masterCfg.DataPhase = cfg.DataPhase;
 		if (!g_SpiMaster.Init(masterCfg))
@@ -301,7 +324,7 @@ int main()
 			break;
 		}
 		s_FrameLength = sizeof(s_SlaveRx);
-		for (unsigned i = 0; i < sizeof(s_SlaveTx); ++i)
+		for (i = 0; i < sizeof(s_SlaveTx); ++i)
 			s_SlaveTx[i] = static_cast<uint8_t>(0xA0 ^ i);
 		if (!g_SpiSlave.Init(cfg))
 		{
@@ -311,12 +334,12 @@ int main()
 		}
 		if (mode == 0)
 		{
-			const DevIntrf_t *intrf = static_cast<DevIntrf_t *>(g_SpiSlave);
+			intrf = static_cast<DevIntrf_t *>(g_SpiSlave);
 			printf("SPI slave effective DMA=%d INT=%d\r\n", intrf->bDma, intrf->bIntEn);
 		}
 		printf("SPI mode=%d bits=8 rate=%lu Hz%s\r\n", mode,
 			(unsigned long)g_SpiMaster.Rate(), SPI_MASTER_SOFTWARE ? " (nominal software rate)" : "");
-		for (unsigned n = 0; n < sizeof(lengths) / sizeof(lengths[0]); ++n)
+		for (n = 0; n < sizeof(lengths) / sizeof(lengths[0]); ++n)
 		{
 			s_FrameLength = lengths[n];
 			memset(s_SlaveRx, 0, sizeof(s_SlaveRx));

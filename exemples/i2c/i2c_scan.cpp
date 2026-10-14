@@ -158,13 +158,22 @@ static int I2cWait(int Count)
 
 int main()
 {
+	int found;
+	int addr;
+#ifdef I2C_SCAN_REG_DEVADDR
+	uint8_t reg = I2C_SCAN_REG;
+	uint8_t val = 0;
+#endif
+
 #ifdef UART_RETARGET
 	if (s_Uart.Init(s_UartCfg) == false)
 	{
 		while (1);
 	}
 
+#ifdef NDEBUG
 	UARTRetargetEnable(s_Uart, STDOUT_FILENO);
+#endif
 	setvbuf(stdout, NULL, _IONBF, 0);
 #endif
 
@@ -179,9 +188,9 @@ int main()
 
 	printf("Rate %lu Hz\r\n", (unsigned long)s_I2c.Rate());
 
-	int found = 0;
+	found = 0;
 
-	for (int addr = I2C_SCAN_ADDR_FIRST; addr <= I2C_SCAN_ADDR_LAST; addr++)
+	for (addr = I2C_SCAN_ADDR_FIRST; addr <= I2C_SCAN_ADDR_LAST; addr++)
 	{
 		// The START with the address is acknowledged by a device at it
 		if (s_I2c.StartTx(addr))
@@ -195,9 +204,6 @@ int main()
 	printf("%d devices found\r\n", found);
 
 #ifdef I2C_SCAN_REG_DEVADDR
-	uint8_t reg = I2C_SCAN_REG;
-	uint8_t val = 0;
-
 	s_I2cCount = -1;
 	if (I2cWait(s_I2c.Read(I2C_SCAN_REG_DEVADDR, &reg, 1, &val, 1)) == 1)
 	{

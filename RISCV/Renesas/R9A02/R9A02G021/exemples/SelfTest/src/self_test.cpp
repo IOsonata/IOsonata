@@ -344,7 +344,9 @@ static void End(SELFTEST_RES Res)
 // IELSR of an event route, -1 when none
 static int FindSlot(uint8_t EvtId)
 {
-	for (int i = 0; i < (int)R9A02_ICU_IELSR_CNT; i++)
+	int i;
+
+	for (i = 0; i < (int)R9A02_ICU_IELSR_CNT; i++)
 	{
 		if (R9a02IntEvent(i) == EvtId)
 		{
@@ -375,9 +377,12 @@ static AdcChanCfg_t AdcChan(int Chan, int Ani)
 // channels in pRaw, -1 for a channel without result.
 static int AdcConvert(int *pRaw, int Cnt)
 {
+	uint64_t end;
+	int n;
+	int i;
 	AdcData_t d[R9A02_ADC_MAX_CHAN];
 
-	for (int i = 0; i < Cnt; i++)
+	for (i = 0; i < Cnt; i++)
 	{
 		pRaw[i] = -1;
 	}
@@ -388,7 +393,7 @@ static int AdcConvert(int *pRaw, int Cnt)
 		return 0;
 	}
 
-	uint64_t end = Mtime() + MsTicks(20);
+	end = Mtime() + MsTicks(20);
 
 	while (s_AdcEvt == 0 && Mtime() < end)
 	{
@@ -400,9 +405,9 @@ static int AdcConvert(int *pRaw, int Cnt)
 		s_Adc.StopConversion();
 	}
 
-	int n = s_Adc.Read(d, R9A02_ADC_MAX_CHAN);
+	n = s_Adc.Read(d, R9A02_ADC_MAX_CHAN);
 
-	for (int i = 0; i < n; i++)
+	for (i = 0; i < n; i++)
 	{
 		if (d[i].Chan >= 0 && d[i].Chan < Cnt)
 		{
@@ -415,7 +420,9 @@ static int AdcConvert(int *pRaw, int Cnt)
 
 static void AdcCloseAll(void)
 {
-	for (int i = 0; i < R9A02_ADC_MAX_CHAN; i++)
+	int i;
+
+	for (i = 0; i < R9A02_ADC_MAX_CHAN; i++)
 	{
 		s_Adc.CloseChannel(i);
 	}
@@ -452,6 +459,10 @@ static int KeyGet(uint32_t Ms)
 
 static SELFTEST_RES TestIcuPoll(void)
 {
+	int n;
+	bool ir;
+	uint8_t ip;
+	uint8_t itls;
 	R9a02Tml32Cfg_t cfg = s_Tml32Base;
 
 	cfg.IntPrio = IRQ_PRIO_LOW;
@@ -462,7 +473,7 @@ static SELFTEST_RES TestIcuPoll(void)
 		return SELFTEST_FAIL;
 	}
 
-	int n = FindSlot(R9A02_EVT_TML32_OUTI);
+	n = FindSlot(R9A02_EVT_TML32_OUTI);
 
 	if (n < 0)
 	{
@@ -480,9 +491,9 @@ static SELFTEST_RES TestIcuPoll(void)
 	R9a02Tml32Start();
 	msDelay(3);
 
-	bool ir = R9a02EventFlag(n);
-	uint8_t ip = ClicPending(n);
-	uint8_t itls = R9A02_TML32->ITLS0;
+	ir = R9a02EventFlag(n);
+	ip = ClicPending(n);
+	itls = R9A02_TML32->ITLS0;
 
 	R9a02ClearPendingInt(n);
 	R9a02Tml32PowerOff();
@@ -510,6 +521,19 @@ static SELFTEST_RES TestIcuPoll(void)
 // mcycle (HOCO)
 static SELFTEST_RES TestTml32Period(R9A02_TML32_CLK Clk, uint64_t nsPeriod, uint32_t Cnt, bool b32)
 {
+	R9A02_TML32_Type *reg;
+	uint8_t ctl;
+	uint8_t div;
+	uint32_t cmp;
+	uint64_t ns;
+	bool m32;
+	uint64_t end;
+	uint64_t meas;
+	uint64_t unit;
+	uint64_t exp;
+	uint64_t less;
+	uint64_t more;
+	int err;
 	R9a02Tml32Cfg_t cfg = s_Tml32Base;
 	bool lf = Clk == R9A02_TML32_CLK_LF;
 
@@ -531,19 +555,19 @@ static SELFTEST_RES TestTml32Period(R9A02_TML32_CLK Clk, uint64_t nsPeriod, uint
 		return SELFTEST_FAIL;
 	}
 
-	R9A02_TML32_Type *reg = R9A02_TML32;
-	uint8_t ctl = reg->ITLCTL0;
-	uint8_t div = (uint8_t)((reg->ITLFDIV00 >> R9A02_ITLFDIV_FDIV0_Pos) & 7U);
-	uint32_t cmp = reg->ITLCMP00;
-	uint64_t ns = R9a02Tml32Period();
-	bool m32 = (ctl & (R9A02_ITLCTL0_MD_16BIT | R9A02_ITLCTL0_MD_32BIT)) == R9A02_ITLCTL0_MD_32BIT;
+	reg = R9A02_TML32;
+	ctl = reg->ITLCTL0;
+	div = (uint8_t)((reg->ITLFDIV00 >> R9A02_ITLFDIV_FDIV0_Pos) & 7U);
+	cmp = reg->ITLCMP00;
+	ns = R9a02Tml32Period();
+	m32 = (ctl & (R9A02_ITLCTL0_MD_16BIT | R9A02_ITLCTL0_MD_32BIT)) == R9A02_ITLCTL0_MD_32BIT;
 
 	if (m32)
 	{
 		cmp |= (uint32_t)reg->ITLCMP01 << 16;
 	}
 
-	uint64_t end = Mtime() + MsTicks((uint32_t)(nsPeriod * (Cnt + 8U) / 1000000ULL) + 20U);
+	end = Mtime() + MsTicks((uint32_t)(nsPeriod * (Cnt + 8U) / 1000000ULL) + 20U);
 
 	while (s_TmlCnt < s_TmlLast && Mtime() < end)
 	{
@@ -567,15 +591,15 @@ static SELFTEST_RES TestTml32Period(R9A02_TML32_CLK Clk, uint64_t nsPeriod, uint
 		return SELFTEST_FAIL;
 	}
 
-	uint64_t meas = s_TmlStamp[1] - s_TmlStamp[0];
+	meas = s_TmlStamp[1] - s_TmlStamp[0];
 
 	if (lf)
 	{
 		// Same oscillator: exact count of LOCO cycles per interval
-		uint64_t unit = 1ULL << div;
-		uint64_t exp = ((uint64_t)cmp + 1U) * unit * Cnt;
-		uint64_t less = (uint64_t)cmp * unit * Cnt;
-		uint64_t more = ((uint64_t)cmp + 2U) * unit * Cnt;
+		unit = 1ULL << div;
+		exp = ((uint64_t)cmp + 1U) * unit * Cnt;
+		less = (uint64_t)cmp * unit * Cnt;
+		more = ((uint64_t)cmp + 2U) * unit * Cnt;
 
 		printf("  %lu intervals: %lu machine timer ticks, (ITLCMP + 1) x 2^div gives %lu\r\n",
 			   (unsigned long)Cnt, (unsigned long)meas, (unsigned long)exp);
@@ -597,8 +621,8 @@ static SELFTEST_RES TestTml32Period(R9A02_TML32_CLK Clk, uint64_t nsPeriod, uint
 	}
 
 	// HOCO against ICLK: the period the driver computed, within 0.1 %
-	uint64_t exp = (ns * SystemCoreClock * Cnt + 500000000ULL) / 1000000000ULL;
-	int err = (int)(((int64_t)meas - (int64_t)exp) * 1000000LL / (int64_t)exp);
+	exp = (ns * SystemCoreClock * Cnt + 500000000ULL) / 1000000000ULL;
+	err = (int)(((int64_t)meas - (int64_t)exp) * 1000000LL / (int64_t)exp);
 
 	printf("  %lu intervals: %lu cycles, %lu expected, %d ppm\r\n", (unsigned long)Cnt, (unsigned long)meas,
 		   (unsigned long)exp, err);
@@ -608,6 +632,14 @@ static SELFTEST_RES TestTml32Period(R9A02_TML32_CLK Clk, uint64_t nsPeriod, uint
 
 static SELFTEST_RES TestDtcRepeat(void)
 {
+	int n;
+	uint32_t set;
+	uint32_t total;
+	uint64_t end;
+	bool dtce;
+	bool ir;
+	uint8_t ip;
+	uint8_t itls;
 	R9a02Tml32Cfg_t cfg = s_Tml32Base;
 
 	cfg.Mode = R9A02_TML32_MODE_DTC;
@@ -618,7 +650,7 @@ static SELFTEST_RES TestDtcRepeat(void)
 		return SELFTEST_FAIL;
 	}
 
-	int n = FindSlot(R9A02_EVT_TML32_OUTI);
+	n = FindSlot(R9A02_EVT_TML32_OUTI);
 
 	if (n < 0)
 	{
@@ -631,9 +663,9 @@ static SELFTEST_RES TestDtcRepeat(void)
 	msDelay(3);
 	CLIC_INT_IP_REG(R9A02_CLIC_CTRL_BASE, R9A02_CLIC_ID_IELSR0 + n) = 0U;
 
-	uint32_t set = 0;
-	uint32_t total = 0;
-	uint64_t end = Mtime() + MsTicks(20);
+	set = 0;
+	total = 0;
+	end = Mtime() + MsTicks(20);
 
 	while (Mtime() < end)
 	{
@@ -644,15 +676,15 @@ static SELFTEST_RES TestDtcRepeat(void)
 		total++;
 	}
 
-	bool dtce = R9a02DtcEnabled(n);
-	bool ir = R9a02EventFlag(n);
-	uint8_t ip = ClicPending(n);
+	dtce = R9a02DtcEnabled(n);
+	ir = R9a02EventFlag(n);
+	ip = ClicPending(n);
 
 	// The slot back to the CPU, nothing clears the flag now
 	R9a02DtcDisable(n);
 	msDelay(3);
 
-	uint8_t itls = R9A02_TML32->ITLS0;
+	itls = R9A02_TML32->ITLS0;
 
 	R9a02Tml32PowerOff();
 
@@ -685,15 +717,27 @@ static SELFTEST_RES TestDtcRepeat(void)
 
 static SELFTEST_RES TestSpiDtc(void)
 {
+	SPICfg_t cfg;
+	uint32_t rate;
+	int cnt;
+	uint64_t end;
+	uint16_t ssr;
+	uint16_t ssr2;
+	int ff;
+	bool left;
+	bool ok;
+	size_t r;
+	int i;
+	int k;
 	static const uint32_t rates[] = { 6000000, 1000000, 100000 };
 	SELFTEST_RES res = SELFTEST_PASS;
 	bool late = false;
 
-	for (size_t r = 0; r < sizeof(rates) / sizeof(rates[0]); r++)
+	for (r = 0; r < sizeof(rates) / sizeof(rates[0]); r++)
 	{
-		for (int i = 0; i < 2; i++)
+		for (i = 0; i < 2; i++)
 		{
-			SPICfg_t cfg = s_SpiCfg;
+			cfg = s_SpiCfg;
 
 			cfg.Rate = rates[r];
 			cfg.bIntEn = i != 0;
@@ -705,17 +749,17 @@ static SELFTEST_RES TestSpiDtc(void)
 				continue;
 			}
 
-			uint32_t rate = s_Spi.Rate();
+			rate = s_Spi.Rate();
 
 			memset(s_SpiBuf, 0, sizeof(s_SpiBuf));
 			s_bSpiDone = false;
 			s_SpiCount = 0;
 
-			int cnt = s_Spi.Rx(0, s_SpiBuf, SELFTEST_SPI_LEN);
+			cnt = s_Spi.Rx(0, s_SpiBuf, SELFTEST_SPI_LEN);
 
 			if (cnt < 0)
 			{
-				uint64_t end = Mtime() + MsTicks(50);
+				end = Mtime() + MsTicks(50);
 
 				while (s_bSpiDone == false && Mtime() < end)
 				{
@@ -723,15 +767,15 @@ static SELFTEST_RES TestSpiDtc(void)
 				cnt = s_bSpiDone ? s_SpiCount : -1;
 			}
 
-			uint16_t ssr = R9A02_SAU1->SSR[0];
+			ssr = R9A02_SAU1->SSR[0];
 
 			// Three byte times for a late last byte to land in SDR20
 			usDelay(24000000U / (rate ? rate : 1U) + 10U);
 
-			uint16_t ssr2 = R9A02_SAU1->SSR[0];
-			int ff = 0;
+			ssr2 = R9A02_SAU1->SSR[0];
+			ff = 0;
 
-			for (int k = 0; k < SELFTEST_SPI_LEN; k++)
+			for (k = 0; k < SELFTEST_SPI_LEN; k++)
 			{
 				if (s_SpiBuf[k] == 0xFFU)
 				{
@@ -739,8 +783,8 @@ static SELFTEST_RES TestSpiDtc(void)
 				}
 			}
 
-			bool left = (ssr2 & (R9A02_SAU_SSR_BFF | R9A02_SAU_SSR_TSF | R9A02_SAU_SSR_OVF)) != 0U;
-			bool ok = cnt == SELFTEST_SPI_LEN && ff == SELFTEST_SPI_LEN && !left;
+			left = (ssr2 & (R9A02_SAU_SSR_BFF | R9A02_SAU_SSR_TSF | R9A02_SAU_SSR_OVF)) != 0U;
+			ok = cnt == SELFTEST_SPI_LEN && ff == SELFTEST_SPI_LEN && !left;
 
 			printf("  %lu Hz, DTC%s: %d bytes, %d at 0xFF, SSR20 0x%04X then 0x%04X%s\r\n", (unsigned long)rate,
 				   cfg.bIntEn ? " and interrupt" : ", call waits", cnt, ff, ssr, ssr2, ok ? "" : ", wrong");
@@ -770,6 +814,11 @@ static SELFTEST_RES TestSpiDtc(void)
 
 static SELFTEST_RES TestDacAdc(void)
 {
+	uint8_t c0;
+	uint8_t c1;
+	int raw[2];
+	bool ok;
+	size_t i;
 	static const uint8_t codes[] = { 32, 128, 224 };
 	AdcChanCfg_t ch[2] = { AdcChan(0, 16), AdcChan(1, 17) };
 	SELFTEST_RES res = SELFTEST_PASS;
@@ -781,18 +830,17 @@ static SELFTEST_RES TestDacAdc(void)
 		return SELFTEST_FAIL;
 	}
 
-	for (size_t i = 0; i < sizeof(codes); i++)
+	for (i = 0; i < sizeof(codes); i++)
 	{
-		uint8_t c0 = codes[i];
-		uint8_t c1 = (uint8_t)(255U - c0);
-		int raw[2];
+		c0 = codes[i];
+		c1 = (uint8_t)(255U - c0);
 
 		s_Dac.WriteCode(0, c0);
 		s_Dac.WriteCode(1, c1);
 		usDelay(100);
 		AdcConvert(raw, 2);
 
-		bool ok = Diff(raw[0], c0 * 16) <= SELFTEST_DAC_ADC_LIM && Diff(raw[1], c1 * 16) <= SELFTEST_DAC_ADC_LIM;
+		ok = Diff(raw[0], c0 * 16) <= SELFTEST_DAC_ADC_LIM && Diff(raw[1], c1 * 16) <= SELFTEST_DAC_ADC_LIM;
 
 		printf("  DAC0 %3u: ANI16 %4d (%4d), DAC1 %3u: ANI17 %4d (%4d)%s\r\n", c0, raw[0], c0 * 16, c1, raw[1],
 			   c1 * 16, ok ? "" : ", wrong");
@@ -810,6 +858,8 @@ static SELFTEST_RES TestDacAdc(void)
 
 static SELFTEST_RES TestAdcScan(void)
 {
+	AdcChanCfg_t scan[4];
+	bool admd;
 	AdcChanCfg_t sel[2] = { AdcChan(0, 2), AdcChan(1, 3) };
 	int v[2];
 	int s1[4];
@@ -841,7 +891,10 @@ static SELFTEST_RES TestAdcScan(void)
 		return SELFTEST_SKIP;
 	}
 
-	AdcChanCfg_t scan[4] = { AdcChan(0, 0), AdcChan(1, 1), AdcChan(2, 2), AdcChan(3, 3) };
+	scan[0] = AdcChan(0, 0);
+	scan[1] = AdcChan(1, 1);
+	scan[2] = AdcChan(2, 2);
+	scan[3] = AdcChan(3, 3);
 
 	if (s_Adc.OpenChannel(scan, 4) == false)
 	{
@@ -855,7 +908,7 @@ static SELFTEST_RES TestAdcScan(void)
 	AdcConvert(s1, 4);
 	AdcConvert(s2, 4);
 
-	bool admd = (R9A02_ADC12->ADM0 & R9A02_ADM0_ADMD) != 0U;
+	admd = (R9A02_ADC12->ADM0 & R9A02_ADM0_ADMD) != 0U;
 
 	AdcCloseAll();
 
@@ -877,6 +930,9 @@ static SELFTEST_RES TestAdcScan(void)
 // 192. P105 and P106 are both analog during it.
 static int AniStep(int Ani, bool *pOk)
 {
+	int raw;
+	int i;
+	int k;
 	AdcChanCfg_t ch = AdcChan(0, Ani);
 	int mv[2] = { 0, 0 };
 
@@ -892,13 +948,13 @@ static int AniStep(int Ani, bool *pOk)
 	}
 
 	*pOk = true;
-	for (int i = 0; i < 2; i++)
+	for (i = 0; i < 2; i++)
 	{
-		int raw = -1;
+		raw = -1;
 
 		s_Dac.WriteCode(1, i ? 192 : 64);
 		usDelay(100);
-		for (int k = 0; k < 3; k++)
+		for (k = 0; k < 3; k++)
 		{
 			AdcConvert(&raw, 1);
 		}
@@ -963,6 +1019,8 @@ static SELFTEST_RES TestAni1819(void)
 // DAC1 codes at which comparator 0 goes above, then below, its reference
 static bool CompSweep(const AnalogCompCfg_t &Cfg, int *pUp, int *pDown)
 {
+	int c;
+
 	*pUp = -1;
 	*pDown = -1;
 
@@ -984,7 +1042,7 @@ static bool CompSweep(const AnalogCompCfg_t &Cfg, int *pUp, int *pDown)
 	usDelay(100);
 	s_CompEvt = 0;
 
-	for (int c = 0; c < 256 && *pUp < 0; c++)
+	for (c = 0; c < 256 && *pUp < 0; c++)
 	{
 		s_Dac.WriteCode(1, (uint8_t)c);
 		usDelay(20);
@@ -995,7 +1053,7 @@ static bool CompSweep(const AnalogCompCfg_t &Cfg, int *pUp, int *pDown)
 	}
 
 	s_CompEvt = 0;
-	for (int c = *pUp; c >= 0 && *pDown < 0; c--)
+	for (c = *pUp; c >= 0 && *pDown < 0; c--)
 	{
 		s_Dac.WriteCode(1, (uint8_t)c);
 		usDelay(20);
@@ -1012,6 +1070,14 @@ static bool CompSweep(const AnalogCompCfg_t &Cfg, int *pUp, int *pDown)
 
 static SELFTEST_RES TestComp(void)
 {
+	SELFTEST_RES res;
+	AnalogCompCfg_t cfg;
+	int up;
+	int down;
+	int lo;
+	int hi;
+	uint8_t ref;
+
 	if (s_bWireP106 == false)
 	{
 		printf("  P001 to P106 not wired (test 9)\r\n");
@@ -1019,15 +1085,13 @@ static SELFTEST_RES TestComp(void)
 		return SELFTEST_SKIP;
 	}
 
-	SELFTEST_RES res = SELFTEST_PASS;
-	AnalogCompCfg_t cfg = s_CompBase;
-	int up;
-	int down;
+	res = SELFTEST_PASS;
+	cfg = s_CompBase;
 
 	// Internal reference 1.34 to 1.54 V, offset 40 mV (table 2.50), DAC8 3
 	// LSB (table 2.51): codes 97 to 126 at 3.3 V
-	int lo = (1340 - 40) * 256 / SELFTEST_VCC_MV - 3;
-	int hi = ((1540 + 40) * 256 + SELFTEST_VCC_MV - 1) / SELFTEST_VCC_MV + 3;
+	lo = (1340 - 40) * 256 / SELFTEST_VCC_MV - 3;
+	hi = ((1540 + 40) * 256 + SELFTEST_VCC_MV - 1) / SELFTEST_VCC_MV + 3;
 
 	if (CompSweep(cfg, &up, &down) == false)
 	{
@@ -1042,7 +1106,7 @@ static SELFTEST_RES TestComp(void)
 	}
 
 	// IVREF0 (P000) driven by DAC0, range 0 to VCC - 1.4 V
-	uint8_t ref = 78;
+	ref = 78;
 
 	s_Dac.WriteCode(0, ref);
 	cfg.RefSrc = 1;
@@ -1071,6 +1135,16 @@ static float WinVolt(int Code)
 
 static SELFTEST_RES TestAdcWindow(void)
 {
+	int raw;
+	R9a02Tml32Cfg_t cfg;
+	SELFTEST_RES res;
+	bool adll;
+	const SelfTestWin_t *w;
+	int cnt;
+	bool evt;
+	bool steady;
+	int k;
+	size_t i;
 	AdcChanCfg_t ch = AdcChan(0, 2);
 	int rmax = -1;
 
@@ -1083,10 +1157,8 @@ static SELFTEST_RES TestAdcWindow(void)
 		return SELFTEST_FAIL;
 	}
 
-	for (int k = 0; k < 8; k++)
+	for (k = 0; k < 8; k++)
 	{
-		int raw;
-
 		AdcConvert(&raw, 1);
 		rmax = raw > rmax ? raw : rmax;
 		if (raw < 0)
@@ -1112,7 +1184,7 @@ static SELFTEST_RES TestAdcWindow(void)
 		return SELFTEST_SKIP;
 	}
 
-	R9a02Tml32Cfg_t cfg = s_Tml32Base;
+	cfg = s_Tml32Base;
 
 	cfg.Mode = R9A02_TML32_MODE_DTC;
 	if (R9a02Tml32Init(&cfg) == false || s_Adc.Trigger(R9A02_ADC_TRIG_TML32) == false)
@@ -1124,12 +1196,12 @@ static SELFTEST_RES TestAdcWindow(void)
 		return SELFTEST_FAIL;
 	}
 
-	SELFTEST_RES res = SELFTEST_PASS;
-	bool adll = true;
+	res = SELFTEST_PASS;
+	adll = true;
 
-	for (size_t i = 0; i < sizeof(s_Win) / sizeof(s_Win[0]); i++)
+	for (i = 0; i < sizeof(s_Win) / sizeof(s_Win[0]); i++)
 	{
-		const SelfTestWin_t *w = &s_Win[i];
+		w = &s_Win[i];
 
 		if (s_Adc.Window(WinVolt(w->Adll), WinVolt(255), w->bOutside) == false)
 		{
@@ -1143,9 +1215,9 @@ static SELFTEST_RES TestAdcWindow(void)
 		msDelay(SELFTEST_WIN_TRIG);
 		s_Adc.StopConversion();
 
-		int cnt = s_AdcEvt;
-		bool evt = cnt >= SELFTEST_WIN_TRIG / 2;
-		bool steady = evt || cnt == 0;
+		cnt = s_AdcEvt;
+		evt = cnt >= SELFTEST_WIN_TRIG / 2;
+		steady = evt || cnt == 0;
 
 		printf("  ADRCK %d, ADLL %u, ADUL 255: %2d ADC_ENDI, %s expected%s\r\n", w->bOutside ? 1 : 0, w->Adll, cnt,
 			   w->bEvt ? "some" : "none", !steady ? ", unsteady" : evt != w->bEvt ? ", wrong" : "");
@@ -1181,6 +1253,12 @@ static SELFTEST_RES TestAdcWindow(void)
 }
 static SELFTEST_RES TestCompWake(void)
 {
+	R9a02Tml32Cfg_t cfg;
+	bool sby;
+	int by;
+	uint8_t c;
+	int k;
+
 	if (s_bWireP106 == false)
 	{
 		printf("  P001 to P106 not wired (test 9)\r\n");
@@ -1188,7 +1266,7 @@ static SELFTEST_RES TestCompWake(void)
 		return SELFTEST_SKIP;
 	}
 
-	R9a02Tml32Cfg_t cfg = s_Tml32Base;
+	cfg = s_Tml32Base;
 
 	// P106 above the reference: DAC1 at VCC through its 9 kOhm, safe to short
 	s_Dac.WriteCode(1, 255);
@@ -1233,11 +1311,11 @@ static SELFTEST_RES TestCompWake(void)
 
 	// A/D converter ready for Software Standby
 	s_Adc.Disable();
-	bool sby = R9a02LowPowerEnter(true);
+	sby = R9a02LowPowerEnter(true);
 	usDelay(100);
 	s_Adc.Enable();
 
-	int by = s_WakeBy;
+	by = s_WakeBy;
 
 	R9a02WakeupSet(R9A02_EVT_COMP_DET0, false);
 	R9a02Tml32PowerOff();
@@ -1261,13 +1339,11 @@ static SELFTEST_RES TestCompWake(void)
 	printf("  Woken up by the 15 s time-out. Was P106 touched to GND (y/n)?\r\n");
 
 	// Characters typed during Software Standby are dropped
-	uint8_t c;
-
 	while (s_Uart.Rx(&c, 1) > 0)
 	{
 	}
 
-	int k = KeyGet(30000);
+	k = KeyGet(30000);
 
 	if (k == 'y' || k == 'Y')
 	{
@@ -1287,9 +1363,14 @@ int main()
 
 	if (s_Uart.Init(s_UartCfg) == false)
 	{
-		while (1) __WFE();
+		while (1)
+		{
+			__WFE();
+		}
 	}
+#ifdef NDEBUG
 	UARTRetargetEnable(s_Uart, STDOUT_FILENO);
+#endif
 	setvbuf(stdout, NULL, _IONBF, 0);
 
 	printf("\r\nR9A02G021 self-test\r\n");
@@ -1299,7 +1380,10 @@ int main()
 		s_Dac.OpenChannel(0, true) == false || s_Dac.OpenChannel(1, true) == false)
 	{
 		printf("Machine timer, A/D or D/A init failed\r\n");
-		while (1) __WFE();
+		while (1)
+		{
+			__WFE();
+		}
 	}
 
 	Begin(1, "ICU flag of a route with its CLIC input off");

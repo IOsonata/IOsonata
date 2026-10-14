@@ -120,6 +120,8 @@ UARTDev_t g_UartDev;
 UART g_Uart;
 #endif
 
+volatile bool g_UartInitOk = false;
+
 int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen)
 {
 	(void)pDev;
@@ -139,10 +141,17 @@ int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int Buf
 	return 0;
 }
 
-volatile bool g_UartInitOk = false;
-
 int main()
 {
+	uint8_t d = 0xff;
+#ifndef BYTE_MODE
+	uint8_t buff[TEST_BUFSIZE];
+	uint8_t *p;
+	int i;
+	int len;
+	int l;
+#endif
+
 #ifdef DEMO_C
 	g_UartInitOk = UARTInit(&g_UartDev, &s_UartCfg);
 	//UARTprintf(&g_UartDev, "UART PRBS Test\n\r");
@@ -150,12 +159,10 @@ int main()
 	g_UartInitOk = g_Uart.Init(s_UartCfg);
 	//g_Uart.printf("UART PRBS Test\n\r");
 #endif
-	if (!g_UartInitOk) return 1;
-
-	uint8_t d = 0xff;
-#ifndef BYTE_MODE
-	uint8_t buff[TEST_BUFSIZE];
-#endif
+	if (!g_UartInitOk)
+	{
+		return 1;
+	}
 
 	while (1)
 	{
@@ -171,19 +178,19 @@ int main()
 		}
 #else
 		// Demo transfer buffer
-		for (int i = 0; i < TEST_BUFSIZE; i++)
+		for (i = 0; i < TEST_BUFSIZE; i++)
 		{
 			d = Prbs8(d);
 			buff[i] = d;
 		}
-		int len = TEST_BUFSIZE;
-		uint8_t *p = buff;
+		len = TEST_BUFSIZE;
+		p = buff;
 		while (len > 0)
 		{
 #ifdef DEMO_C
-			int l = UARTTx(&g_UartDev, p, len);
+			l = UARTTx(&g_UartDev, p, len);
 #else
-			int l = g_Uart.Tx(p, len);
+			l = g_Uart.Tx(p, len);
 #endif
 			len -= l;
 			p += l;

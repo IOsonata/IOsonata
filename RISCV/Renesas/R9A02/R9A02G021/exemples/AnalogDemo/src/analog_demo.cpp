@@ -159,13 +159,22 @@ static void Fail(const char *pMsg)
 
 int main()
 {
+	uintptr_t state;
+	int evt;
+	uint8_t code;
+
 	IOPinCfg(s_Leds, s_NbLeds);
 
 	if (s_Uart.Init(s_UartCfg) == false)
 	{
-		while (1) __WFE();
+		while (1)
+		{
+			__WFE();
+		}
 	}
+#ifdef NDEBUG
 	UARTRetargetEnable(s_Uart, STDOUT_FILENO);
+#endif
 	setvbuf(stdout, NULL, _IONBF, 0);
 
 	printf("\r\nDAC8, comparator and TML32 demo, wire P001 to P106\r\n");
@@ -193,9 +202,9 @@ int main()
 	{
 		__WFE();
 
-		uintptr_t state = DisableInterrupt();
-		int evt = s_CompEvt;
-		uint8_t code = s_CompCode;
+		state = DisableInterrupt();
+		evt = s_CompEvt;
+		code = s_CompCode;
 
 		s_CompEvt = 0;
 		EnableInterrupt(state);

@@ -25,8 +25,11 @@ Debug enables semihosting and leaves `NDEBUG` undefined. These RISC-V
 toolchains call the library `semihost`, the equivalent of Arm `rdimon`:
 GCC uses `--specs=semihost.specs`, and both toolchains link `libsemihost`
 with `--whole-archive` / `--no-whole-archive` so its syscalls replace the
-weak startup stubs. The runtime constructor initializes the host streams.
-Run Debug with debugger semihosting enabled.
+weak startup stubs. The e2 linker command places this library before the
+application libraries to avoid extracting the UART syscall implementation.
+The runtime constructor initializes the host streams. Run Debug with
+debugger semihosting enabled; the examples enable UART console retargeting
+only in Release.
 
 Release uses nosys without semihosting and defines `NDEBUG` in the C and
 C++ compiler settings of both the examples and the matching library.
@@ -118,7 +121,8 @@ fitted on the board with `MCUOSC`.
 
 **Blinky:** the LEDs are on after start, each one goes off for 250 ms in turn.
 Pressing S1 stops the sequence (`g_bBut1Pressed`). The shared example prints
-from the button handler; no console is configured, the output is dropped.
+from the button handler through semihosting in Debug. No UART console is
+configured, so that output is dropped in Release.
 
 **TimerDemo:** see `g_TimerInitOk`, `g_TriggerPeriod[]`, `g_Period[]` and
 `g_TriggerCount[]` in the debugger. LED1 toggles on trigger 0. DevNo 0 (machine
@@ -211,28 +215,27 @@ Sleep instead. The debugger connection may be lost in Software Standby.
 
 **DfuBoot:** stage 0 boot for the layout of `ldscript/dfu_layout_r9a02g021.ld`
 (boot 36 KB, record 4 KB, application slot from 0xA000). Build the Release
-configuration: at -O0 (Debug) the boot does not fit in 36 KB. The Debug
-configuration defines `DFU_BOOT_ALLOW_UNSIGNED`. An application for the slot
-links with `gcc_R9A02G021_dfu.ld`.
+configuration for deployment; the current LLVM size limitation is recorded
+below. The Debug configuration defines `DFU_BOOT_ALLOW_UNSIGNED`.
+An application for the slot links with `gcc_R9A02G021_dfu.ld`.
 
 ## Status
 
-All fourteen examples build and link with xPack riscv-none-elf-gcc 15.2.0
-(October 13, 2026). Sizes at -Os (text + data, KB of 1000 bytes): Blinky 11.8,
-TimerDemo 19.8, UartLoopback 15.0, UartPrbsTxTest 15.0, UartaLoopback 18.6,
-SpiLoopback 29.6, SpiMasterSlave 30.3, I2CScan 31.5, ADCDemo 34.3, RtcDemo
-24.9, AnalogDemo 29.3, AdcSnoozeDemo 38.4, SelfTest 65.3, DfuBoot 36576 bytes
-of the 36864 of its region.
-I2CInit links the SAU simplified I2C with the IICA. None has been run on the
-board yet.
+On October 14, 2026, all fifteen current examples compiled from the command
+line with LLVM for Renesas RISC-V 19.1.7.202501 in Debug (`-Og`) and Release
+(`-Os`). Fourteen linked in each configuration. DfuBoot exceeded its 36 KB
+boot region by 12112 bytes in Debug and 1836 bytes in Release. Its Release
+main function's generated code is identical before and after the declaration
+cleanup; resolving the boot-image size requires separate work.
 
-The fourteen e2 examples compile and link from the command line with LLVM
-for Renesas RISC-V 19.1.7.202501 in Release (`-Os`). Thirteen also link in
-Debug (`-Og`); DfuBoot Debug overflows its 36 KB boot region. DfuBoot Release
-uses 35238 bytes of text and data. These checks compiled the 61 library
-source files needed by the examples, including the LLVM runtime entry,
-with the projects' defines, include paths and target settings. The XML,
-source links, library paths and linker-script paths were also checked.
-Import and managed build inside e2 studio, the remaining library modules
-and on-board execution have not been tested in this environment.
+These checks compiled the 61 library source files needed by the examples,
+including the LLVM runtime entry, with the projects' defines, include paths
+and target settings. All fourteen linked Debug images contain the
+semihosting initializer; none of the Release images does. Compiler AST
+checks confirmed that active local declarations are grouped at function
+entry in both configurations. The project XML and configuration settings
+were also checked.
+
+The xPack GCC builds, IDE import and managed builds, remaining library
+modules and on-board execution were not repeated for these changes.
 

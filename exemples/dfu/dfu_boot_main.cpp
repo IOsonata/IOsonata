@@ -349,9 +349,11 @@ static void DfuBootLinkRun(void)
 static bool DfuBootButton(void)
 {
 #if defined(DFU_BUT_PORT) && defined(DFU_BUT_PIN)
+	int i;
+
 	IOPinConfig(DFU_BUT_PORT, DFU_BUT_PIN, 0, IOPINDIR_INPUT, IOPINRES_PULLUP,
 				IOPINTYPE_NORMAL);
-	for (int i = 0; i < 1000; i++)
+	for (i = 0; i < 1000; i++)
 	{
 		__asm volatile("nop");
 	}
@@ -427,6 +429,8 @@ int main()
 		.bVerifySlot0 = true,
 		.bAllowNoRec = DFU_BOOT_NO_REC,
 	};
+	DfuLayout_t lay;
+	DfuMgrCfg_t mcfg;
 
 	if (DfuBootButton() == false)
 	{
@@ -436,8 +440,7 @@ int main()
 	}
 
 	// Recovery: straight into slot 0, the record last.
-	DfuLayout_t lay;
-	DfuMgrCfg_t mcfg = {
+	mcfg = {
 		.pStore = &s_Slot0,
 		.bDirect = true,
 		.bManifestOnly = DFU_PROTO == DFU_PROTO_WIRE,
