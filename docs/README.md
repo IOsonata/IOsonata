@@ -27,7 +27,10 @@ The book remains useful for the object-design model and historical background, b
 ## Release preparation
 
 [0.13 changes and migration notes](releases/0.13.md) record the release scope,
-API migration requirements and maintainer-provided validation results.
+API migration requirements and maintainer-provided validation results. The
+current checkpoint separates recent port work and pending checks from older
+hardware reports. See the [NXP port baseline](../ARM/NXP/README.md) for LPC
+modes, example builds and remaining board validation.
 
 ## Architecture
 

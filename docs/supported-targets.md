@@ -6,11 +6,11 @@ family in IOsonata, with extensive Bluetooth, peripheral, sensor, storage and
 RTOS application support. STM32F0, STM32L4 and SAM4LC also have established
 hardware use. Each family section describes what its ports actually provide.
 
-Reviewed against `prerelease_0.13` at
-[`c505b73`](https://github.com/IOsonata/IOsonata/commit/c505b732e03277445cb01e33d2a38f344934d6bc):
-all 30 MCU IOcomposer library projects, their source selections, target drivers
-and representative application projects. Source-only and planned targets are
-listed separately. Hardware results retain their original scope below.
+The initial inventory at `c505b73` was updated for the prerelease work through
+[`a0d9865f`](https://github.com/IOsonata/IOsonata/commit/a0d9865fe629e624c8c8c233503c3f18a77c6a7c).
+The current updates reconcile the target port notes, projects and recorded
+validation; they are not a fresh build of every MCU library. Hardware results
+retain their original scope below.
 
 ## Reading the tables
 
@@ -139,7 +139,7 @@ all SDK integrations were rebuilt for 0.13.
 
 | MCU | Implemented peripherals | Application examples | Status and validation |
 |---|---|---|---|
-| [RA4M1](../ARM/Renesas/RA4M1/README.md) | Startup, GPIO, ICU interrupt routing, SCI UART polling/interrupt operation, AGT0/1 and GPT0-7 timers | [Examples](../ARM/Renesas/RA4M1/exemples/): Blinky, TimerDemo, UART loopback and PRBS | Supported; register models and ARM layout checks are documented. Hardware validation is pending. USB and DMA/DTC are not implemented. |
+| [RA4M1](../ARM/Renesas/RA4M1/README.md) | Startup, GPIO, ICU interrupt routing, SCI UART polling/interrupt and TX DMAC, AGT0/1 and GPT0-7 timers, IIC master/slave | [Examples](../ARM/Renesas/RA4M1/exemples/): Blinky, TimerDemo, UART loopback/PRBS and I2CMasterSlave | Supported; EK-RA4M1 startup/GPIO, timer callbacks and SCI UART have maintainer-confirmed hardware results. IIC hardware validation remains pending. USB and IIC DMA/DTC are not implemented; UART TX DMAC is separate. |
 | [RE01 1500 KB](../ARM/Renesas/RE01/RE01_1500KB/lib/ioc/) | Startup, GPIO, interrupt routing, SCI UART, AGT0/1, cascaded TMR0/1 and GPT0-5, polling RIIC0/1 I2C master and SPI0/1 master | [Examples](../ARM/Renesas/RE01/RE01_1500KB/exemples/README.md): UART/SLIP, TaktOS UART, timers, pulse trains, I2C and SPI | Supported; DBN/CFB/CFP compile/link/layout and register-model results are documented. Hardware validation is pending. |
 | [R9A02G021](../RISCV/Renesas/R9A02/README.md) | Startup, GPIO, CLIC/ICU interrupts, UART, SPI and I2C masters, ADC, DAC8, comparators, DTC, ELC, timers, RTC, low power and DFU | [Examples](../RISCV/Renesas/R9A02/R9A02G021/exemples/README.md): Blinky, timers, UART, SPI, I2C, ADC, analog, RTC, Snooze, self-test and DFU boot | Supported; GCC and clang builds, DFU boot emulated. Hardware validation is pending. |
 
@@ -201,7 +201,7 @@ entire series.
 | [STM32L432](../ARM/ST/STM32L4xx/STM32L432/lib/ioc/) | GPIO/EXTI, UART (polling, interrupt, DMA), I2C1/I2C3, SPI1/SPI3, QSPI and LPTIM1/2 from the L4 sources | [Examples](../ARM/ST/STM32L4xx/STM32L432/exemples/): UART loopback and PRBS for the NUCLEO-L432KC | Library and examples build; emulator run of the UART examples. Not tested on hardware. |
 | [STM32G474](../ARM/ST/STM32G4xx/STM32G474/lib/ioc/) | Startup at 170 MHz, GPIO/EXTI, UART (polling, interrupt, DMA through DMAMUX1) and LPTIM1 | [Examples](../ARM/ST/STM32G4xx/STM32G474/exemples/): UART loopback and PRBS for the NUCLEO-G474RE | Library and examples build; host tests and emulator run of the UART examples. Not tested on hardware. No I2C, SPI or TIM driver; see the [G4 port notes](../ARM/ST/STM32G4xx/README.md). |
 | [STM32F030x8](../ARM/ST/STM32F0xx/STM32F030x8/lib/ioc/) | GPIO/EXTI, UART with interrupt/FIFO and TX DMA, TIM6/14/16/17/15/3/1 | [Examples](../ARM/ST/STM32F0xx/STM32F030x8/exemples/README.md): UART loopback/PRBS/SLIP, TaktOS UART, timer triggers, pulse trains, software crypto and DFU image verification | Supported; hardware validated. Native I2C/SPI/ADC drivers are not supplied by this port. |
-| STM32F401xC | Startup, vector and linker files | Library project | Incomplete: target GPIO, UART and Timer drivers are missing. |
+| [STM32F401xC](../ARM/ST/STM32F4xx/STM32F401/STM32F401xc/lib/ioc/) | Startup, vector/linker files, shared STM32 GPIO/EXTI and UART | Library project links the shared GPIO and UART drivers | Partial port: target IOsonata Timer integration and hardware validation remain outstanding. |
 | STM32F301x8, STM32F302x8 | Vector files | No complete MCU application project | Incomplete startup and peripheral ports. |
 | [STM32WBA65](../ARM/ST/STM32WBAxx/STM32WBA65/lib/ioc/) | Startup, GPIO/EXTI, UART with GPDMA, Timer on LPTIM1 and LPTIM2 | [Examples](../ARM/ST/STM32WBAxx/STM32WBA65/exemples/): UART loopback, PRBS and TimerDemo for the STM32WBA65I-DK1 | Incomplete: the Bluetooth adapter is not integrated. Not tested on hardware. |
 | STM32L152 | Planned | Planned after 0.13 | Outside the 0.13 support list. |
@@ -263,15 +263,15 @@ The planned L152/Nucleo-64 work is outside the 0.13 support list.
 
 | MCU | Available implementation | Examples and remaining work |
 |---|---|---|
-| [LPC11U35](../ARM/NXP/LPC11xx/LPC11U35/lib/ioc/) | Startup, GPIO/pin interrupts, UART polling/interrupt, polling I2C and SSP/SPI masters, CT16B0/1 and CT32B0/1 timers, IAP and native full-speed USB device | [Examples](../ARM/NXP/LPC11xx/LPC11U35/exemples/): Blinky, TimerDemo, UART loopback/PRBS, I2CScan, SpiLoopback, USB CDC loopback/PRBS, HID and custom bulk. Supported; host-model and selected ARM firmware links pass. Board validation pending. Uses ROM DFU; software DfuBoot was removed. |
-| [LPC1769](../ARM/NXP/LPC17xx/LPC1769/lib/ioc/) | Startup, GPIO/interrupts, UART polling/interrupt, polling I2C and SSP/SPI masters, TIMER0-3 and IAP | [Examples](../ARM/NXP/LPC17xx/LPC1769/exemples/): TimerDemo, UART loopback/PRBS, I2CScan, SpiLoopback and DfuBoot. Supported; host-model coverage and TimerDemo ARM links are documented in [LPC tests](../tests/lpc/README.md). Full board validation pending; the LPC11U35/LPC54628 USB implementation does not cover this controller. |
+| [LPC11U35](../ARM/NXP/LPC11xx/LPC11U35/lib/ioc/) | Startup, GPIO/pin interrupts, UART polling/interrupt, polling I2C and SSP/SPI masters, CT16B0/1 and CT32B0/1 timers, IAP and native full-speed USB device | [Examples](../ARM/NXP/LPC11xx/LPC11U35/exemples/): Blinky, TimerDemo, UART loopback/PRBS, I2CScan, SpiLoopback, USB CDC loopback/PRBS, HID, custom bulk and CDC/HID/bulk composite. Supported; host-model and selected ARM firmware links pass. Board validation pending. Uses ROM DFU; software DfuBoot was removed. |
+| [LPC1769](../ARM/NXP/LPC17xx/LPC1769/lib/ioc/) | Startup, GPIO/interrupts, UART polling/interrupt, polling I2C and SSP/SPI masters, TIMER0-3, IAP and native full-speed USB device | [Examples](../ARM/NXP/LPC17xx/LPC1769/exemples/): TimerDemo, UART loopback/PRBS, I2CScan, SpiLoopback, USB EP0, CDC loopback/PRBS, HID, custom bulk and composite; existing DfuBoot. Supported; host models and selected Debug/Release links pass. Hardware validation pending. USB needs VBUS present at startup; reset after cable reattachment. |
 | [LPC54605](../ARM/NXP/LPC546xx/LPC54605/lib/ioc/) | Startup, vector, linker and IAP/DFU code | Incomplete GPIO, UART and Timer integration; shared LPC files do not provide a complete LPC54605 port. |
-| [LPC54628](../ARM/NXP/LPC546xx/LPC54628/lib/ioc/) | Startup with boot ROM vector checksum, 220 MHz system PLL/core voltage setup, GPIO/pin interrupts, Flexcomm USART polling/interrupt, polling Flexcomm I2C/SPI masters, five CTIMERs with three triggers each, IAP and USB0 full-speed device | [Examples](../ARM/NXP/LPC546xx/LPC54628/exemples/): Blinky, TimerDemo, UART loopback/PRBS, I2CScan, SpiLoopback, USB CDC loopback/PRBS, HID and custom bulk. Supported; [LPC tests](../tests/lpc/README.md) record host models and selected firmware links. UART DMA and I2C/SPI slave, interrupt and DMA modes remain unimplemented. Hardware validation pending. |
+| [LPC54628](../ARM/NXP/LPC546xx/LPC54628/lib/ioc/) | Startup with boot ROM vector checksum, 220 MHz system PLL/core voltage setup, GPIO/pin interrupts, Flexcomm USART polling/interrupt, polling Flexcomm I2C/SPI masters, five CTIMERs with three triggers each, IAP and USB0 full-speed device | [Examples](../ARM/NXP/LPC546xx/LPC54628/exemples/): Blinky, TimerDemo, UART loopback/PRBS, I2CScan, SpiLoopback, USB CDC loopback/PRBS, HID, custom bulk and CDC/HID/bulk composite. Supported; [LPC tests](../tests/lpc/README.md) record host models and selected firmware links. UART DMA and I2C/SPI slave, interrupt and DMA modes remain unimplemented. Hardware validation pending. |
 | [ESP32-C3](../RISCV/Espressif/ESP32C/ESP32C3/lib/ioc/) | RISC-V startup, GPIO, UART, clock control and interrupt routing | [Blinky and UART PRBS projects](../RISCV/Espressif/ESP32C/ESP32C3/exemples/). Partial port: no IOsonata Timer driver. The I2C source still contains Nordic register code and is not an ESP32 bus implementation. |
 | [ESP32-C6](../RISCV/Espressif/ESP32C/ESP32C6/lib/ioc/) | Startup, peripheral clock/reset and interrupt-routing code | [Initial examples](../RISCV/Espressif/ESP32C/ESP32C6/exemples/). Incomplete port: no Timer driver; the library also omits shared Espressif GPIO/UART files. |
 | [RP2040](../ARM/RPI/RP20/RP2040/lib/ioc/) | Initial library project and generic sources | Native startup, GPIO, UART and Timer integration is absent. Incomplete port. |
 
-The NXP rows were refreshed through [974cde8](https://github.com/IOsonata/IOsonata/commit/974cde87e83293199a3dab15845b2f66ce5c02fc).
+The [NXP port notes](../ARM/NXP/README.md) describe the supported baseline.
 LPC11U35 and LPC1769 share UART, polling I2C/SSP transfer code and timer
 implementation where the hardware matches; family files supply clocks, pins
 and interrupt mappings. LPC54628 uses its Flexcomm drivers.
@@ -284,8 +284,16 @@ LPC54628 USB1 high-speed and USB host mode are not supported by this port.
 See [USB tests and limits](../tests/lpc/usb/README.md) for generic-core/class
 models, Debug/Release links, memory measurements and remaining board checks.
 
+LPC1769 uses a separate SIE/CPU USB driver. Its fixed endpoint types are
+honored by the shared class allocator. CDC, HID, vendor bulk and their composite
+example are integrated; USB DMA, ISO, remote wake and automatic cable
+reattachment are unsupported. All three MCUs have composite loopback projects.
+The recorded completion pass covers 11 LPC host suites and 58 selected-source
+firmware links (34 USB, 18 UART/SPI/I2C and six TimerDemo), not every optional
+library source. Debug uses rdimon semihosting; Release uses nosys.
+
 Remaining NXP work includes physical serial/bus/timer/USB validation, the
-listed missing transfer modes, LPC1769 USB and completing LPC54605 integration.
+listed missing transfer modes and completing LPC54605 integration.
 LPC54628 results do not establish support for LPC54605.
 ESP32-C3 uses a native [UART driver](../RISCV/Espressif/src/uart_esp32.cpp)
 with separate clock and interrupt modules. Wi-Fi/Bluetooth hardware on an
@@ -310,9 +318,11 @@ the review commit or that every project passed both IOC build profiles.
 | SAM4LC8C | SAM4L8 Xplained Pro | Startup, LED GPIO, UART, AST/TC timers, I2C, SPI, CDC loopback, ISO and manual suspend/wake | Hardware validated, confirmed 2026-10-08. See [timer results](../tests/sam4l/README.md) and [USB results](releases/0.13.md#sam4l-usb-port). |
 | STM32F030x8 | STM32F0308-DISCO | Hardware validated: startup, GPIO, UART and timers; later UART TX DMA PRBS | Maintainer-confirmed validation. Detailed recorded timer runs cover TIM6/TIM16; coverage of additional modes is tracked separately. |
 | STM32L476, STM32L496, STM32L4S9 | Maintainer's existing projects | Hardware validated and used in projects | Confirmed by the maintainer on 2026-10-08; board names and per-project configurations were not supplied in this confirmation. |
+| RA4M1 | EK-RA4M1 | Blinky, TimerDemo callbacks and SCI UART | Maintainer-confirmed board results; semihosting affected timer timestamps. IIC and other optional modes are not covered. |
 
-For RA4M1 and RE01, retain the model/compiler/linker results in their
-port notes without relabeling them as physical tests. STM32L4 has separate
+RA4M1 has separate maintainer-confirmed startup/GPIO, timer and UART hardware
+results; IIC remains unvalidated. For RE01, retain the model/compiler/linker
+results in its port notes without relabeling them as physical tests. STM32L4 has separate
 maintainer-confirmed hardware validation and project use. An unrecorded hardware
 result is unknown, not proof that the port fails.
 

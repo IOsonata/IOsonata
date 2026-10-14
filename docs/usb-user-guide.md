@@ -103,6 +103,40 @@ backpressure, repeated CDC open/close, unplug/replug while EDBG remains powered,
 and host suspend/resume. For TaktOS, also check that `g_UsbTaktOSHeartbeat`
 advances during traffic.
 
+### NXP LPC
+
+LPC11U35, LPC1769 and LPC54628 provide `UsbCdcLoopback`, `UsbCdcPrbsTx`,
+`UsbHidLoopback`, `UsbCustomBulkLoopback` and `UsbCompositeLoopback` projects.
+Build the MCU library and the application's `ioc` project in the same
+configuration. Debug uses rdimon semihosting; Release uses nosys.
+
+The composite application uses one CDC function, HID and vendor bulk, with
+shared source in
+[usb_composite_loopback.cpp](../exemples/usb/usb_composite_loopback.cpp).
+Its PyUSB/libusb runner claims all interfaces and interleaves payload checks:
+
+```sh
+python3 Python/usb_composite_loopback.py --cycles 100 --reconfigure
+```
+
+Use `--serial` when multiple matching boards are attached. The runner needs
+permission to claim CDC, HID and vendor interfaces; a kernel driver must be
+releasable on the host. It checks integrity and repeated configuration, not
+throughput. This is a smaller composition than the Nordic CDC/HID/INT/ISO
+stress workload.
+
+LPC11U35 and LPC54628 share the full-speed EP0/data implementation; LPC1769
+uses its separate SIE/CPU driver. The generic allocator selects endpoints
+compatible with each class's transfer type. LPC1769 requires VBUS at startup,
+the board's SoftConnect circuit and a valid USB clock; reset after cable
+reattachment. Automatic reattachment and remote wake are unsupported there.
+LPC11U35/LPC54628 support remote wake with clocks kept on during suspend.
+ISO, USB host and low-power suspend are outside this LPC baseline.
+
+Host models and selected Debug/Release links pass; physical board testing
+remains pending. See [NXP port notes](../ARM/NXP/README.md) and
+[LPC USB validation](../tests/lpc/usb/README.md) for memory use and limits.
+
 ## Common application lifecycle
 
 Include the generic USB header and the selected device-class header. Keep the
@@ -504,7 +538,9 @@ detach the kernel mass-storage driver.
 
 ### A device does not reappear after reconnect
 
-Keep the queue running and rediscover the host device path. Serial ports
+Check the target's cable support first: LPC1769 currently requires a reset
+with VBUS present after reattachment. On ports with automatic reattachment,
+keep the queue running and rediscover the host device path. Serial ports
 and BSD disk numbers are host-assigned and can change. For MSC, removal of VBUS
 reloads a removable medium; a logical eject without VBUS removal intentionally
 keeps it not-ready until the host sends a load request.
