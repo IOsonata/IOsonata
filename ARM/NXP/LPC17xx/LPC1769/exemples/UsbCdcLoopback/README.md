@@ -6,7 +6,8 @@ rdimon semihosting; enable it in the debugger. Release uses nosys.
 
 This example uses the generic `UsbdCdc` class with one CDC ACM port, a 16-entry
 application event queue and `AppRun`. `AppCheckStatus` echoes received bytes
-using nonblocking `Rx`/`Tx`, retaining partial writes. No banner or diagnostic
+using `Rx`/`Tx`, retaining partial writes. FIFO `bBlocking = true` prevents
+overwriting unread data; it does not make `Tx` wait for USB hardware. No banner or diagnostic
 text is sent on the data port. The application does not call controller APIs.
 The single CDC instance uses interrupt IN EP1 and bulk IN/OUT EP2. Multiple
 CDC instances are not covered: LPC1769 has fixed endpoint types, and the

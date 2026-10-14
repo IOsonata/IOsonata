@@ -52,7 +52,8 @@ static UsbdCdc s_Cdc;
 static const IOPinCfg_t s_Pins[] = USB_PINS_MAP;
 static const UsbdCdcCfg_t s_CdcConfig = {
 	.DevNo = 0,
-	.bBlocking = false,
+	// Refuse new bytes when full; Tx still returns immediately for retry.
+	.bBlocking = true,
 	.RxFifoMemSize = sizeof(s_RxMemory),
 	.pRxFifoMem = s_RxMemory,
 	.TxFifoMemSize = sizeof(s_TxMemory),

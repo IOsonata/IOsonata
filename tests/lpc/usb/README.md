@@ -940,3 +940,16 @@ are 51792/460/6656 bytes in Debug and 23208/156/6168 in Release with GNU Arm
 LPC1769 BYTE_MODE compiles with warnings as errors. These checks do not
 establish hardware throughput or PRBS integrity. The example README provides
 the existing uartprbs_rx.py receiver command for board testing.
+
+
+LPC1769 CDC loopback FIFO policy
+-------------------------------
+
+The local CDC loopback config now sets bBlocking=true. In CFifo this means
+refusing new data when full, not waiting for hardware. The former false
+setting allowed the oldest queued data to be discarded and defeated the
+application's partial-write retry. A focused check using the production
+CFifo filled all 1024 TX slots, verified a further write returned zero with
+no drops, drained the original bytes in order and accepted data afterward.
+Debug/Release CDC firmware links pass with unchanged sizes. Physical slow-host
+loopback remains untested.
