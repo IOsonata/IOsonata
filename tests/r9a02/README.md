@@ -85,8 +85,11 @@ with instruction-scheduled peripheral events; loopback exercises real DTC
 transfers in both DMA modes. These are ordering checks, not a cycle model or
 a hardware throughput measurement. The port README records line-rate PRBS
 TX in all four modes across the tested revisions, isolated losses in the
-two DMA captures, and clean loopback except with interrupt-off/DMA-on.
-Hardware confirmation of the polling/DMA RX-service correction is pending.
+two DMA captures, and clean loopback in all four modes across the recorded
+runs. The UART0 interrupt-off/DMA-on hardware rerun after `7b28c9c` reports
+19 clean samples at about 66 kB/s, confirming the RX-service correction in
+that capture. The earlier isolated transmit-only PRBS losses remain unresolved;
+UARTA hardware validation is still pending.
 
 ## SPI slave (2026-10-13)
 

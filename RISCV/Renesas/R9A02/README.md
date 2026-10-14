@@ -19,7 +19,7 @@ the TAU and the machine timer.
 | Trap, CLIC vector table, ICU event routing | `R9A02G021/lib/src/Vectors_R9A02.c`, `src/interrupt_r9a02.cpp`, `include/interrupt_r9a02.h` | Built |
 | GPIO, pin functions, IRQ0 to IRQ7 pin interrupts | `src/iopincfg_r9a02.c`, `include/iopinctrl.h` | Built |
 | SAU channel and prescaler sharing | `src/sau_r9a02.cpp`, `include/sau_r9a02.h` | Built |
-| UART (SAU UART0 to UART2), polling, interrupt and DTC TX, reception in Snooze (UART0, UART2) | `src/uart_r9a02.cpp` | UART0 Release PRBS TX at line rate in all four modes; loopback clean except polling/DTC, whose RX-service fix awaits a rerun; Snooze emulated (`tests/r9a02`) |
+| UART (SAU UART0 to UART2), polling, interrupt and DTC TX, reception in Snooze (UART0, UART2) | `src/uart_r9a02.cpp` | UART0 Release PRBS TX at line rate and clean loopback in all four modes across recorded runs; earlier isolated PRBS losses unresolved; Snooze emulated (`tests/r9a02`) |
 | UART (UARTA0, UARTA1), polling, interrupt and DTC TX | `src/uarta_r9a02.cpp`, `include/uarta_r9a02.h` | Built, DTC emulated (`tests/r9a02`) |
 | SPI (SAU simplified SPI): master with polling, interrupt and DTC reception, slave with interrupt and DTC, slave reception in Snooze (SPI00, SPI20) | `src/spi_r9a02.cpp` | Built, slave and Snooze emulated (`tests/r9a02`) |
 | I2C master (IICA0, IICA1), polling and interrupt; slave with interrupt | `src/i2c_r9a02.cpp`, `include/i2c_r9a02.h` | Built, master and slave emulated (`tests/r9a02`) |
@@ -41,8 +41,9 @@ TX has reached line rate on hardware in all four interrupt/DTC configurations,
 across the revisions recorded below. The latest byte-IRQ capture is clean.
 The DTC captures reported isolated three-byte and four-byte losses during
 their runs; their cause remains unresolved (see UART).
-Loopback is clean in three modes. Polling/DTC has sustained loss; its TX
-completion handler now services RX as well, with hardware verification pending.
+All four loopback configurations now have clean hardware captures. The
+polling/DTC rerun after `7b28c9c` reports about 66,000 bytes/s with zero
+errors; the sustained loss seen before the RX-service fix is absent.
 Not implemented: SPI master transmission by the DTC, the DTC for I2C (the CPU acts at each byte), UART reception by the DTC,
 TML32 8-bit channels and capture, REMC, KINT, DOC, CRC, TRNG.
 
@@ -356,8 +357,16 @@ foreground polling resumes. SAU and UARTA now service RX before and after
 TX work, without enabling RX interrupts or application callbacks in polling
 mode. Existing RX error handling and FIFO policy are retained. The new
 interleaving checks fail on the old driver and pass with the correction in
-Release and Debug. The sustained hardware loss still needs a rerun of
-interrupt-off/DMA-on loopback to confirm it is resolved.
+Release and Debug.
+
+Hardware confirmation after `7b28c9c` (2026-10-14), same Release loopback
+configuration, interrupt off and DMA on: all 19 supplied reports have
+errors 0, with RX rates from 65,924.42 to 66,030.23 bytes/s (about 66 kB/s).
+No lost-byte counter is reported. The user stopped the run with Ctrl-C.
+This confirms the sustained polling/DMA loopback loss is resolved in this
+capture. Together with the earlier three clean modes, all four UART0
+loopback configurations have clean hardware evidence. It does not resolve
+the isolated losses from the earlier transmit-only PRBS captures.
 
 UARTA is linked only on request, so that images without it stay small (the
 DFU boot): link the application with `-Wl,-u,R9a02UartaInit` (the
