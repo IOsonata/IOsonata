@@ -74,6 +74,7 @@ SOFTWARE.
 
 // Print the IIC register state after each step (RA4M1 diagnostic helper)
 #include "i2c_ra4m1.h"
+#include "ra4m1xxx.h"
 #define I2C_DEBUG_DUMP(name, i2c) { \
 	char dbg[640]; \
 	Ra4m1I2cDump(i2c, dbg, sizeof(dbg)); \
@@ -96,7 +97,7 @@ SOFTWARE.
 		masterHigh += mh ? 1 : 0; \
 		slaveHigh += sh ? 1 : 0; \
 		bothHigh += (mh && sh) ? 1 : 0; \
-		for (volatile int delay = 0; delay < 256; delay++) \
+		for (int delay = 0; delay < 256; delay++) \
 		{ \
 			__NOP(); \
 		} \
