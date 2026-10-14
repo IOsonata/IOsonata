@@ -73,6 +73,15 @@ bool Lpc17UsbDataRealize(uint8_t EpNo, bool In, uint8_t Type, uint16_t Size);
 // Hardware timeouts/invalid RX data latch the fault until release/prepare.
 int Lpc17UsbDataRead(uint8_t EpNo, uint8_t *pData, int Capacity);
 bool Lpc17UsbDataWrite(uint8_t EpNo, const uint8_t *pData, int Length);
+// Capture one enabled/pending data-endpoint interrupt snapshot. Mask uses
+// physical endpoint bits; Status[0..31] uses physical indices (absent = zero).
+// Each interrupt is cleared separately and its SIE status consumed before the
+// next clear. New arrivals outside the snapshot stay pending. EP0 and device
+// summary flags are untouched. Requires realized bulk/interrupt CPU endpoints.
+// False leaves outputs unchanged, even after partial acknowledgement: do not
+// replay the snapshot. The owner must handle a pending bus event or stop on
+// fault. A timeout latches the SIE fault. No callbacks run in this helper.
+bool Lpc17UsbDataCollect(uint32_t *pMask, uint8_t Status[32]);
 // Initialize an exclusively owned, prepared block while disconnected.
 // Requires no prior EP0 realization, enabled interrupts, DMA or data endpoints.
 // Leaves address zero, 64-byte EP0, NAK interrupts off and all IRQ enables off.

@@ -251,6 +251,18 @@ bool Lpc17UsbDataRealize(uint8_t EpNo, bool In, uint8_t Type, uint16_t Size)
 	return ready;
 }
 
+// Caller holds PRIMASK and validates the endpoint. SIE allows only one
+// physical endpoint clear at a time, followed by consuming its status byte.
+static bool Lpc17UsbEndpointAck(unsigned Physical, uint8_t *pStatus)
+{
+	LPC_USB->USBDevIntClr = LPC17_USB_CDFULL;
+	LPC_USB->USBEpIntClr = 1UL << Physical;
+	if (!Lpc17UsbSieWait(LPC17_USB_CDFULL))
+		return false;
+	*pStatus = (uint8_t)LPC_USB->USBCmdData;
+	return true;
+}
+
 bool Lpc17UsbEp0Ack(bool In, uint8_t *pStatus)
 {
 	if (pStatus == 0)
@@ -262,11 +274,41 @@ bool Lpc17UsbEp0Ack(bool In, uint8_t *pStatus)
 	{
 		// UM10360 11.10.3.3: one endpoint per clear, then consume SIE status.
 		// Also permits clearing OUT STP/PO during SETUP overwrite recovery.
-		LPC_USB->USBDevIntClr = LPC17_USB_CDFULL;
-		LPC_USB->USBEpIntClr = In ? 2U : 1U;
-		done = Lpc17UsbSieWait(LPC17_USB_CDFULL);
+		done = Lpc17UsbEndpointAck(In ? 1U : 0U, pStatus);
+	}
+	__set_PRIMASK(state);
+	return done;
+}
+
+bool Lpc17UsbDataCollect(uint32_t *pMask, uint8_t Status[32])
+{
+	if (pMask == 0 || Status == 0)
+		return false;
+	const uint32_t state = __get_PRIMASK();
+	__disable_irq();
+	bool done = false;
+	if (Lpc17UsbPacketReady() && s_Ep0Ready &&
+		LPC_USB->USBEpDMASt == 0U && LPC_USB->USBDMAIntEn == 0U &&
+		LPC_USB->USBCtrl == 0U && (LPC_USB->USBDevIntSt & 8U) == 0U)
+	{
+		const uint32_t enabled = LPC_USB->USBEpIntEn & ~3U;
+		const uint32_t pending = LPC_USB->USBEpIntSt & enabled;
+		uint8_t status[32] = {0};
+		done = (enabled & ~0xFCF3CF3FUL) == 0U &&
+			(enabled & ~LPC_USB->USBReEp) == 0U;
+		for (unsigned physical = 2; physical < 32U && done; ++physical)
+		{
+			if ((pending & (1UL << physical)) != 0U)
+				done = (LPC_USB->USBDevIntSt & 8U) == 0U &&
+					Lpc17UsbEndpointAck(physical, &status[physical]);
+		}
+		done = done && (LPC_USB->USBDevIntSt & 8U) == 0U;
 		if (done)
-			*pStatus = (uint8_t)LPC_USB->USBCmdData;
+		{
+			for (unsigned physical = 0; physical < 32U; ++physical)
+				Status[physical] = status[physical];
+			*pMask = pending;
+		}
 	}
 	__set_PRIMASK(state);
 	return done;

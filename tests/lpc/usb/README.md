@@ -702,7 +702,7 @@ and pin map are build-fixture assumptions to verify against the actual board.
 Run `python3 tests/lpc/usb/link17.py --prefix arm-none-eabi-` to link both modes.
 The script checks library source links, LPC vector checksum, USB IRQ vector,
 archive extraction and semihosting selection. Debug uses rdimon; Release uses
-nosys. Measured text/data/bss: Debug 31892/476/2676, Release 13632/88/2172 bytes.
+nosys. Measured text/data/bss: Debug 31936/476/2676, Release 13636/88/2172 bytes.
 `run17.py` also checks public lifecycle start/stop, missing VBUS, priority clamp,
 pin ownership and initialization/SIE failure cleanup at -O0/-O2 with UBSan.
 These are successful firmware links and host tests, not hardware enumeration.
@@ -788,3 +788,28 @@ timeout. -O0/-O2 UBSan host tests and Debug/Release EP0 example links pass.
 Cortex-M3 compilation passes with -Wall -Wextra -Werror. Public data endpoints
 remain disabled pending IRQ, transfer-state and lifecycle integration. No board
 data-transfer test has been run.
+
+LPC1769 data-endpoint interrupt capture
+-------------------------------------
+
+`Lpc17UsbDataCollect` captures one enabled/pending physical-endpoint mask and
+its raw SIE status bytes. It shares the single-endpoint acknowledge operation
+with EP0. Each clear is followed by a bounded CDFULL wait and status read before
+the next clear, following UM10360 section 11.10.3.3. The unsigned mask supports
+physical endpoint 31. EP0 events, masked endpoint events and device summary
+flags remain untouched. Interrupts arriving outside the initial snapshot wait
+for the next call; the helper never drains in a loop.
+
+Outputs are published only after every acknowledgement succeeds. A partial
+failure leaves outputs unchanged and must not be replayed. Pending bus events
+abort capture so the owner can service reset/disconnect; a hardware timeout
+latches the existing SIE fault. Unrealized/ISO endpoints, DMA and active FIFO
+operations are rejected. This helper runs no callbacks and does not yet enable
+data endpoints in the public controller or IRQ dispatcher.
+
+The host register model checks pending/enable intersections, distinct status
+bytes, bit 31, masked and EP0 preservation, reasserted/new interrupts, invalid
+arguments, DMA/FIFO conflicts, bus arrival after the first acknowledgement,
+and timeout at either acknowledgement of a two-endpoint batch. Tests pass at
+-O0/-O2 with UBSan. Cortex-M3 warning-clean compilation and Debug/Release links
+pass. Transfer-state dispatch and public lifecycle integration remain pending.

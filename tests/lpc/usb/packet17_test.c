@@ -5,6 +5,11 @@
 #include <string.h>
 
 static unsigned s_Realizations;
+static bool s_DataAck;
+static bool s_DataAckBus;
+static uint32_t s_DataAckArrival;
+static uint32_t s_DataAckSeen;
+static uint8_t s_DataAckStatus[32];
 static uint32_t s_MaxSizes[32];
 static unsigned s_DataLogical;
 static unsigned s_Selected;
@@ -38,16 +43,33 @@ static bool s_ResetArrival;
 
 void TestEndpointClear(uint32_t Value)
 {
-	assert(s_Mask == 1 && (Value == 1U || Value == 2U));
+	assert(s_Mask == 1 && Value != 0 && (Value & (Value - 1U)) == 0);
+	if (!s_DataAck)
+		assert(Value == 1U || Value == 2U);
 	assert((LPC_USB->USBDevIntSt & 0x20U) == 0U);
 	++s_Acks;
 	s_AckOrder = (s_AckOrder << 4) | Value;
+	if (s_DataAck)
+	{
+		assert((s_DataAckSeen & Value) == 0);
+		s_DataAckSeen |= Value;
+	}
 	if (!s_CommandTimeout && s_Acks != s_AckTimeout)
 	{
 		SetReadOnly(&LPC_USB->USBEpIntSt, LPC_USB->USBEpIntSt & ~Value);
 		SetReadOnly(&LPC_USB->USBCmdData, s_AckDistinct ?
 			(Value == 1U ? 0x6DU : 0x12U) : s_Status);
 		SetReadOnly(&LPC_USB->USBDevIntSt, LPC_USB->USBDevIntSt | 0x20U);
+		if (s_DataAck)
+		{
+			unsigned physical = 0;
+			while ((Value >> physical) != 1U)
+				++physical;
+			SetReadOnly(&LPC_USB->USBCmdData, s_DataAckStatus[physical]);
+			SetReadOnly(&LPC_USB->USBEpIntSt, LPC_USB->USBEpIntSt | s_DataAckArrival);
+			if (s_DataAckBus)
+				SetReadOnly(&LPC_USB->USBDevIntSt, LPC_USB->USBDevIntSt | 8U);
+		}
 		if (s_AckArrival && Value == 2U)
 			SetReadOnly(&LPC_USB->USBEpIntSt, LPC_USB->USBEpIntSt | 1U);
 	}
@@ -490,6 +512,109 @@ static void DataFifoTests(void)
 	puts("LPC1769 data FIFO sizes, double-buffer flags, ZLP, bus events and failure paths: PASS");
 }
 
+static void DataCollectTests(void)
+{
+	uint32_t mask;
+	uint8_t status[32];
+	DataFifoPrepare(15, 64);
+	s_DataFifo = false;
+	assert(Lpc17UsbDataRealize(1, false, 3, 64));
+	assert(Lpc17UsbDataRealize(1, true, 3, 64));
+	s_DataAck = true;
+	for (unsigned i = 0; i < 32; ++i)
+		s_DataAckStatus[i] = 0x80U | i;
+	const uint32_t patterns[] = {0, 4, 8, 0x40000000, 0x80000000, 0xC000000C};
+	for (unsigned p = 0; p < 6; ++p)
+	{
+		for (unsigned e = 0; e < 6; ++e)
+		{
+			LPC_USB->USBEpIntEn = patterns[e] | 3;
+			SetReadOnly(&LPC_USB->USBEpIntSt, patterns[p] | 3 | 0x100);
+			SetReadOnly(&LPC_USB->USBDevIntSt, 0x34);
+			s_DataAckSeen = 0;
+			s_Mask = e & 1;
+			memset(status, 0xCC, sizeof(status));
+			mask = 0xDEADBEEF;
+			assert(Lpc17UsbDataCollect(&mask, status));
+			assert(mask == (patterns[p] & patterns[e]) && s_DataAckSeen == mask);
+			assert(LPC_USB->USBEpIntSt == ((patterns[p] | 3 | 0x100) & ~mask));
+			assert(LPC_USB->USBDevIntSt == 0x34 && s_Mask == (e & 1));
+			for (unsigned i = 0; i < 32; ++i)
+				assert(status[i] == ((mask & (1UL << i)) ? s_DataAckStatus[i] : 0));
+		}
+	}
+	LPC_USB->USBEpIntEn = 0xC000000C;
+	SetReadOnly(&LPC_USB->USBEpIntSt, 4);
+	s_DataAckSeen = 0;
+	s_DataAckArrival = 0x80000004; // Reasserted current and new endpoint.
+	assert(Lpc17UsbDataCollect(&mask, status) && mask == 4);
+	assert(LPC_USB->USBEpIntSt == 0x80000004 && s_DataAckSeen == 4);
+	s_DataAckArrival = 0;
+	s_DataAckSeen = 0;
+	assert(Lpc17UsbDataCollect(&mask, status) && mask == 0x80000004);
+	assert(LPC_USB->USBEpIntSt == 0);
+	unsigned acks = s_Acks;
+	mask = 0xDEADBEEF;
+	memset(status, 0xCC, sizeof(status));
+	assert(!Lpc17UsbDataCollect(NULL, status));
+	assert(!Lpc17UsbDataCollect(&mask, NULL));
+	LPC_USB->USBEpIntEn = 0x40; // ISO is unsupported.
+	assert(!Lpc17UsbDataCollect(&mask, status));
+	LPC_USB->USBEpIntEn = 0x10; // Bulk, but not realized.
+	assert(!Lpc17UsbDataCollect(&mask, status));
+	LPC_USB->USBEpIntEn = 4;
+	SetReadOnly(&LPC_USB->USBEpDMASt, 4);
+	assert(!Lpc17UsbDataCollect(&mask, status));
+	SetReadOnly(&LPC_USB->USBEpDMASt, 0);
+	LPC_USB->USBDMAIntEn = 1;
+	assert(!Lpc17UsbDataCollect(&mask, status));
+	LPC_USB->USBDMAIntEn = 0;
+	LPC_USB->USBCtrl = 1;
+	assert(!Lpc17UsbDataCollect(&mask, status));
+	LPC_USB->USBCtrl = 0;
+	SetReadOnly(&LPC_USB->USBDevIntSt, 8);
+	assert(!Lpc17UsbDataCollect(&mask, status));
+	SetReadOnly(&LPC_USB->USBDevIntSt, 4);
+	assert(s_Acks == acks && mask == 0xDEADBEEF);
+	for (unsigned i = 0; i < 32; ++i)
+		assert(status[i] == 0xCC);
+	// Bus event after the first acknowledgement aborts publication.
+	LPC_USB->USBEpIntEn = 12;
+	SetReadOnly(&LPC_USB->USBEpIntSt, 12);
+	s_DataAckSeen = 0;
+	s_DataAckBus = true;
+	assert(!Lpc17UsbDataCollect(&mask, status));
+	assert(s_DataAckSeen == 4 && LPC_USB->USBEpIntSt == 8);
+	assert(mask == 0xDEADBEEF && status[2] == 0xCC);
+	s_DataAckBus = false;
+	// Each possible timeout leaves outputs untouched and prevents replay.
+	for (unsigned failure = 1; failure <= 2; ++failure)
+	{
+		s_DataAck = false;
+		DataFifoPrepare(15, 64);
+		s_DataFifo = false;
+		s_DataAck = true;
+		LPC_USB->USBEpIntEn = 0xC0000000;
+		SetReadOnly(&LPC_USB->USBEpIntSt, 0xC0000000);
+		s_DataAckSeen = 0;
+		s_AckTimeout = s_Acks + failure;
+		s_Mask = failure - 1;
+		assert(!Lpc17UsbDataCollect(&mask, status));
+		assert(s_Mask == failure - 1 && s_Acks == s_AckTimeout);
+		assert(mask == 0xDEADBEEF);
+		for (unsigned i = 0; i < 32; ++i)
+			assert(status[i] == 0xCC);
+		acks = s_Acks;
+		SetReadOnly(&LPC_USB->USBDevIntSt, 0x24);
+		assert(!Lpc17UsbDataCollect(&mask, status) && s_Acks == acks);
+		s_AckTimeout = 0;
+	}
+	s_DataAck = false;
+	DataFifoPrepare(15, 64);
+	s_DataFifo = false;
+	puts("LPC1769 data IRQ snapshot, bit 31, arrival races and partial failure: PASS");
+}
+
 int main(void)
 {
 	ClockTests();
@@ -639,5 +764,6 @@ int main(void)
 	BusResetTests();
 	DataRealizeTests();
 	DataFifoTests();
+	DataCollectTests();
 	puts("LPC1769 device init, bus status, EP0 FIFO, interrupts and timeouts: PASS");
 }
