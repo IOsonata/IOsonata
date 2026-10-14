@@ -288,42 +288,11 @@ int main()
 	printf("I2C slave  DMA=%d INT=%d\r\n",
 		s_I2cCfgSlave.bDmaEn, s_I2cCfgSlave.bIntEn);
 
-#ifdef I2C_DEBUG_PIN_TESTS
-	I2C_DEBUG_PIN_TESTS();
-#endif
 
-#ifdef I2C_DEBUG_PULLUP_PINS
-	I2C_DEBUG_PULLUP_PINS();
-#endif
 
 	bool masterOk = g_I2CMaster.Init(s_I2cCfgMaster);
-#ifdef I2C_DEBUG_DUMP
-	if (masterOk)
-	{
-		I2C_DEBUG_DUMP("M before S init", g_I2CMaster);
-	}
-#endif
 	bool slaveOk = g_I2CSlave.Init(s_I2cCfgSlave);
 	printf("I2C init master=%d slave=%d\r\n", masterOk, slaveOk);
-#ifdef I2C_DEBUG_DUMP
-	I2C_DEBUG_DUMP("M init", g_I2CMaster);
-	I2C_DEBUG_DUMP("S init", g_I2CSlave);
-#endif
-#ifdef I2C_DEBUG_SCL_SAMPLES
-	I2C_DEBUG_SCL_SAMPLES();
-#endif
-#ifdef I2C_DEBUG_SLAVE_ICE_TEST
-	I2C_DEBUG_SLAVE_ICE_TEST();
-#endif
-#ifdef I2C_DEBUG_SLAVE_ICSER_TEST
-	I2C_DEBUG_SLAVE_ICSER_TEST();
-#endif
-#ifdef I2C_DEBUG_PULLUP_STATE
-	I2C_DEBUG_PULLUP_STATE();
-#endif
-#ifdef I2C_DEBUG_JUMPER_TEST
-	I2C_DEBUG_JUMPER_TEST();
-#endif
 
 	if (!masterOk || !slaveOk)
 	{
@@ -336,11 +305,6 @@ int main()
 	memset(s_WriteRqstData, 0, sizeof(s_WriteRqstData));
 	memset(buff, 0xFF, sizeof(buff));
 
-#ifdef I2C_DEBUG_SLAVE_OFF
-	// Test only: with the slave block off nobody answers, so the master is
-	// expected to report a NACK. It shows whether the slave side holds SCL low.
-	g_I2CSlave.Disable();
-#endif
 	s_MasterCompleted = false;
 	s_MasterCount = 0;
 	int c = g_I2CMaster.Write(I2C_SLAVE_ADDR, &offset, 1, wr, sizeof(wr));
@@ -353,13 +317,6 @@ int main()
 		c = total >= 1 ? total - 1 : 0;
 	}
 	printf("Write %d/%d bytes at offset %d\r\n", c, (int)sizeof(wr), offset);
-#ifdef I2C_DEBUG_DUMP
-	I2C_DEBUG_DUMP("M write", g_I2CMaster);
-	I2C_DEBUG_DUMP("S write", g_I2CSlave);
-#endif
-#ifdef I2C_DEBUG_SLAVE_POKES
-	I2C_DEBUG_SLAVE_POKES();
-#endif
 	const bool writeOk = c == (int)sizeof(wr);
 
 	memset(buff, 0xFF, sizeof(buff));
