@@ -125,6 +125,28 @@ SOFTWARE.
 	I2C_DEBUG_TRY("SCLE off", R_IIC1->ICFER &= (uint8_t)~0x40U) \
 	I2C_DEBUG_TRY("TMOE off", R_IIC1->ICFER &= (uint8_t)~0x01U) }
 
+// Test only: drive the two spare pins low, then high, and read what the master
+// IIC block sees on SCL (ICCR1 bit 1) and SDA (bit 0). Then release them as
+// pull-up inputs and read again after a short and a long wait. This shows
+// whether the jumpers are on the I2C wires and how fast a pull-up raises them.
+#define I2C_DEBUG_JUMPER_LINE(name, pin, bit) { \
+	IOPinConfig(2, pin, IOPINOP_GPIO, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL); \
+	IOPinClear(2, pin); \
+	for (volatile int d = 0; d < 20000; d++) {} \
+	int jLo = (R_IIC0->ICCR1 >> bit) & 1; \
+	IOPinSet(2, pin); \
+	for (volatile int d = 0; d < 20000; d++) {} \
+	int jHi = (R_IIC0->ICCR1 >> bit) & 1; \
+	IOPinConfig(2, pin, IOPINOP_GPIO, IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL); \
+	for (volatile int d = 0; d < 2000; d++) {} \
+	int jP1 = (R_IIC0->ICCR1 >> bit) & 1; \
+	for (volatile int d = 0; d < 2000000; d++) {} \
+	int jP2 = (R_IIC0->ICCR1 >> bit) & 1; \
+	printf("jumper %s low=%d high=%d pullup_short=%d pullup_long=%d\r\n", name, jLo, jHi, jP1, jP2); }
+#define I2C_DEBUG_JUMPER_TEST() { \
+	I2C_DEBUG_JUMPER_LINE("P204 SCL", 4, 1) \
+	I2C_DEBUG_JUMPER_LINE("P206 SDA", 6, 0) }
+
 #define I2C_DEBUG_PULLUP_PINS() { \
 	IOPinConfig(2, 4, IOPINOP_GPIO, IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL); \
 	IOPinConfig(2, 6, IOPINOP_GPIO, IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL); }
