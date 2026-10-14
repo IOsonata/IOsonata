@@ -10,7 +10,7 @@ machine mode only, with a CLIC and a 64-bit machine timer. The peripherals
 are not the RA2 set: there is no SCI, AGT or GPT. UART is the SAU, timers are
 the TAU and the machine timer.
 
-## Status (October 13, 2026)
+## Status (October 14, 2026)
 
 | Function | Files | State |
 | --- | --- | --- |
@@ -19,7 +19,7 @@ the TAU and the machine timer.
 | Trap, CLIC vector table, ICU event routing | `R9A02G021/lib/src/Vectors_R9A02.c`, `src/interrupt_r9a02.cpp`, `include/interrupt_r9a02.h` | Built |
 | GPIO, pin functions, IRQ0 to IRQ7 pin interrupts | `src/iopincfg_r9a02.c`, `include/iopinctrl.h` | Built |
 | SAU channel and prescaler sharing | `src/sau_r9a02.cpp`, `include/sau_r9a02.h` | Built |
-| UART (SAU UART0 to UART2), polling, interrupt and DTC TX, reception in Snooze (UART0, UART2) | `src/uart_r9a02.cpp` | Release polling and IRQ/DTC TX at line rate; one IRQ/DTC loss observed, other modes await performance rerun; Snooze emulated (`tests/r9a02`) |
+| UART (SAU UART0 to UART2), polling, interrupt and DTC TX, reception in Snooze (UART0, UART2) | `src/uart_r9a02.cpp` | UART0 Release TX at line rate in all four interrupt/DTC modes; isolated losses in both DTC modes; Snooze emulated (`tests/r9a02`) |
 | UART (UARTA0, UARTA1), polling, interrupt and DTC TX | `src/uarta_r9a02.cpp`, `include/uarta_r9a02.h` | Built, DTC emulated (`tests/r9a02`) |
 | SPI (SAU simplified SPI): master with polling, interrupt and DTC reception, slave with interrupt and DTC, slave reception in Snooze (SPI00, SPI20) | `src/spi_r9a02.cpp` | Built, slave and Snooze emulated (`tests/r9a02`) |
 | I2C master (IICA0, IICA1), polling and interrupt | `src/i2c_r9a02.cpp`, `include/i2c_r9a02.h` | Built |
@@ -37,10 +37,10 @@ the TAU and the machine timer.
 
 Built with xPack riscv-none-elf-gcc 15.2.0, `-march=rv32imac_zba_zbb_zbs_zicsr_zifencei -mabi=ilp32`.
 The register use of the drivers was checked against the manual. UART0 Release
-polling TX and interrupt-on/DTC-on TX have run at line rate on hardware.
-The latter run reported one three-byte loss after initially clean reports.
-Polling/DTC and byte-IRQ TX remain below line rate; their next scheduling
-correction has build/emulator validation and awaits a hardware rerun (see UART).
+TX has reached line rate on hardware in all four interrupt/DTC configurations,
+across the revisions recorded below. The latest byte-IRQ capture is clean.
+The DTC captures reported isolated three-byte and four-byte losses during
+their runs; their cause remains unresolved (see UART).
 Not implemented: SPI master transmission by the DTC, the DTC for I2C (the CPU acts at each byte), UART reception by the DTC,
 TML32 8-bit channels and capture, REMC, KINT, DOC, CRC, TRNG.
 
@@ -296,33 +296,39 @@ Snooze drains TX before stopping the channels and resumes after wake-up.
 Hardware evidence (2026-10-14): `UartPrbsTxTest`, library and application
 Release, byte mode, 1,000,000 baud, 8N1, UART0 through J-Link VCOM:
 
-| Interrupts | DMA | Revision | Steady received bytes/s |
-|------------|-----|----------|------------------------|
-| Off | Off | `bf44b8f8` (earlier run) | About 100,017 |
-| On | Off | `de89b598` | About 94,311 |
-| On | On | `de89b598` | About 100,017 |
-| Off | On | `de89b598` | About 86,026 |
+| Interrupts | DMA | Revision | Last reported average bytes/s | Integrity in supplied capture |
+|------------|-----|----------|-------------------------------|-------------------------------|
+| Off | Off | `bf44b8f8` (earlier run) | 100,016.46 | No errors reported |
+| On | Off | `81992b8` | 100,012.83 | No errors reported |
+| On | On | `de89b598` (earlier run) | 100,017.46 | One discontinuity, estimated 3 bytes lost, recovered |
+| Off | On | `81992b8` | 100,004.76 | One discontinuity, estimated 4 bytes lost, recovered |
 
-The interrupt-on/DMA-on run reached line rate. After initially clean
-reports, its counters changed to drop 1, lost 1 (3 bytes), recovered 1 and
-then remained flat. The cause of this loss during the run is not isolated. The byte-IRQ excerpt has flat drop 1 and
-out-of-frame 1 counters. The polling/DMA excerpt has no error counters.
-The polling/DMA-off result is from the earlier run and was not repeated in
-this batch.
+All four modes have demonstrated the 100,000-byte/s payload rate of
+1 Mbaud, 8N1. The latest rerun covers interrupt-on/DMA-off and
+interrupt-off/DMA-on after `81992b8`; the other two rows are earlier runs.
+
+The latest interrupt-on/DMA-off capture has no reported errors across its
+30 supplied reports. In interrupt-off/DMA-on, the first 22 supplied reports
+are clean, then the counters change to drop 1, lost 1 (4 bytes), recovered 1
+and remain flat through the last report. The earlier interrupt-on/DMA-on
+capture likewise records drop 1, lost 1 (3 bytes), recovered 1 after clean
+reports. These losses occurred during the runs. The logs do not locate
+the loss between MCU TX, J-Link VCOM and the host, so DTC data integrity
+remains unresolved despite line-rate throughput.
 
 Earlier interrupt-on/DMA-on results were about 86,498 bytes/s at `bf44b8f8`
 and 85,726 bytes/s at `7856bcbe`. At `de89b598`, transfer-end notification for
 an isolated SAU byte allowed following bytes to accumulate for a DMA block.
 Queued blocks still use buffer-empty events for continuous transfer.
 
-The next correction also starts an isolated byte in byte-IRQ mode with
+At `81992b8`, an isolated byte in byte-IRQ mode also starts with
 transfer-end notification, restoring buffer-empty service for queued data.
 Polling/DMA avoids full TX/RX service after every accepted byte while the
 blocking FIFO is busy, retaining polling when full or RX needs service.
 Release and Debug checks cover masked-IRQ progress, RX during TX, byte
 ordering and the switch between transfer-end and buffer-empty events.
-Updated hardware results and long-run integrity remain unverified. Rerun
-the primary Release test, then `UartLoopback` for RX.
+The hardware rerun now confirms line-rate TX for byte-IRQ and polling/DMA.
+Long-run integrity remains unresolved; `UartLoopback` RX validation is pending.
 Keep the shared test configuration unchanged when comparing MCUs; Debug is
 for development debugging.
 
