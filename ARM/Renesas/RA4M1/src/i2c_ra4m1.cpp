@@ -1388,10 +1388,9 @@ static void Ra4m1I2cDisable(DevIntrf_t * const pIntrf)
 	dev->bEnabled = false;
 }
 
-// The IIC block controls the direction of its pins. IOPinConfig sets PDR for
-// an output request, and the internal pull-up does not act on a pin with PDR
-// set, so SCL would float. Both pins are therefore configured as BI (PDR
-// clear), whatever direction the pin map lists, and the pull-up stays active.
+// The peripheral owns SCL/SDA when PMR is enabled. Respect the pin
+// directions requested by the common IOsonata example instead of forcing
+// both lines to input (PDR=0), which can prevent master SCL drive.
 static void Ra4m1I2cPinConfig(const I2CCfg_t * const pCfg)
 {
 	if (pCfg->pIOPinMap == NULL)
@@ -1403,7 +1402,7 @@ static void Ra4m1I2cPinConfig(const I2CCfg_t * const pCfg)
 	{
 		const IOPinCfg_t *pin = &pCfg->pIOPinMap[i];
 
-		IOPinConfig(pin->PortNo, pin->PinNo, pin->PinOp, IOPINDIR_BI,
+		IOPinConfig(pin->PortNo, pin->PinNo, pin->PinOp, pin->PinDir,
 			pin->Res, pin->Type);
 	}
 }
