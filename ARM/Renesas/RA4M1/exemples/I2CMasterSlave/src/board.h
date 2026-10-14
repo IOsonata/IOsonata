@@ -4,7 +4,7 @@
 @brief	RA4M1 shared I2C master/slave example board configuration.
 
 		SCI0 on P410/P411 is the console. Renesas EK-RA4M1 reference pin
-		layout: IIC1 master on P206/P100 and IIC0 slave on P401/P400.
+		layout: IIC1 master on P206/P100 and IIC0 slave on P401/P408.
 
 @license
 
@@ -66,7 +66,7 @@ SOFTWARE.
 #define I2C_SLAVE_SDA_PIN		1
 #define I2C_SLAVE_SDA_PINOP	IOPINOP_FUNC6
 #define I2C_SLAVE_SCL_PORT		4
-#define I2C_SLAVE_SCL_PIN		0
+#define I2C_SLAVE_SCL_PIN		8
 #define I2C_SLAVE_SCL_PINOP	IOPINOP_FUNC6
 
 #define I2C_SLAVE_DMA_ENABLE	false
