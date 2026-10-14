@@ -510,6 +510,7 @@ static void R9a02UartPoll(R9a02UartDev_t * const pDev)
 	if (pDev->pUartDev->DevIntrf.bDma)
 	{
 		R9a02UartTxDmaPoll(pDev);
+		R9a02UartRxHw(pDev, &err);
 
 		return;
 	}
@@ -709,8 +710,22 @@ static void R9a02UartTxDmaIRQHandler(int IntNo, void *pCtx)
 	R9a02UartDev_t *dev = (R9a02UartDev_t *)pCtx;
 	UARTDev_t *udev = dev->pUartDev;
 	uintptr_t state = DisableInterrupt();
+	uint8_t err = 0;
+
+	// This IRQ also runs with bIntMode false. Service the one-byte RX
+	// buffer around TX work, as in the polling path; foreground polling
+	// cannot run while the next DMA block is staged here.
+	if (!udev->DevIntrf.bIntEn)
+	{
+		R9a02UartRxHw(dev, &err);
+	}
 
 	R9a02UartTxKick(dev, true);
+
+	if (!udev->DevIntrf.bIntEn)
+	{
+		R9a02UartRxHw(dev, &err);
+	}
 
 	EnableInterrupt(state);
 

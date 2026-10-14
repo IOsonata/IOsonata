@@ -19,7 +19,7 @@ the TAU and the machine timer.
 | Trap, CLIC vector table, ICU event routing | `R9A02G021/lib/src/Vectors_R9A02.c`, `src/interrupt_r9a02.cpp`, `include/interrupt_r9a02.h` | Built |
 | GPIO, pin functions, IRQ0 to IRQ7 pin interrupts | `src/iopincfg_r9a02.c`, `include/iopinctrl.h` | Built |
 | SAU channel and prescaler sharing | `src/sau_r9a02.cpp`, `include/sau_r9a02.h` | Built |
-| UART (SAU UART0 to UART2), polling, interrupt and DTC TX, reception in Snooze (UART0, UART2) | `src/uart_r9a02.cpp` | UART0 Release TX at line rate in all four interrupt/DTC modes; isolated losses in both DTC modes; Snooze emulated (`tests/r9a02`) |
+| UART (SAU UART0 to UART2), polling, interrupt and DTC TX, reception in Snooze (UART0, UART2) | `src/uart_r9a02.cpp` | UART0 Release PRBS TX at line rate in all four modes; loopback clean except polling/DTC, whose RX-service fix awaits a rerun; Snooze emulated (`tests/r9a02`) |
 | UART (UARTA0, UARTA1), polling, interrupt and DTC TX | `src/uarta_r9a02.cpp`, `include/uarta_r9a02.h` | Built, DTC emulated (`tests/r9a02`) |
 | SPI (SAU simplified SPI): master with polling, interrupt and DTC reception, slave with interrupt and DTC, slave reception in Snooze (SPI00, SPI20) | `src/spi_r9a02.cpp` | Built, slave and Snooze emulated (`tests/r9a02`) |
 | I2C master (IICA0, IICA1), polling and interrupt; slave with interrupt | `src/i2c_r9a02.cpp`, `include/i2c_r9a02.h` | Built, master and slave emulated (`tests/r9a02`) |
@@ -41,6 +41,8 @@ TX has reached line rate on hardware in all four interrupt/DTC configurations,
 across the revisions recorded below. The latest byte-IRQ capture is clean.
 The DTC captures reported isolated three-byte and four-byte losses during
 their runs; their cause remains unresolved (see UART).
+Loopback is clean in three modes. Polling/DTC has sustained loss; its TX
+completion handler now services RX as well, with hardware verification pending.
 Not implemented: SPI master transmission by the DTC, the DTC for I2C (the CPU acts at each byte), UART reception by the DTC,
 TML32 8-bit channels and capture, REMC, KINT, DOC, CRC, TRNG.
 
@@ -283,7 +285,10 @@ short-burst delivery, data-bit masking and line-error reporting.
 The DTC source must be enabled in the CLIC (manual 14.5), so the TX completion
 route is enabled even when `bIntMode` is false. It chains blocks without
 application callbacks in that mode. With `bIntMode` false, RX is polled on
-each `TxData` and `RxData` call.
+each `TxData` and `RxData` call and before and after TX completion work in
+that mandatory interrupt. This keeps a pending RX byte from waiting in the
+one-byte hardware buffer while the CPU stages the next TX block. Foreground
+DMA service also checks RX after TX work, as in the STM32 polling path.
 An accepted single-byte write to a busy blocking FIFO leaves TX to its
 completion interrupt. A full FIFO, non-blocking FIFO, or pending RX causes
 `TxData` to poll both directions; `RxData` also services pending TX events.
@@ -328,9 +333,31 @@ blocking FIFO is busy, retaining polling when full or RX needs service.
 Release and Debug checks cover masked-IRQ progress, RX during TX, byte
 ordering and the switch between transfer-end and buffer-empty events.
 The hardware rerun now confirms line-rate TX for byte-IRQ and polling/DMA.
-Long-run integrity remains unresolved; `UartLoopback` RX validation is pending.
+Long-run PRBS integrity remains unresolved.
 Keep the shared test configuration unchanged when comparing MCUs; Debug is
 for development debugging.
+
+Follow-up loopback evidence (2026-10-14): unchanged `UartLoopback` and
+`Python/uartprbs_lb.py`, Release, 1,000,000 baud, UART0 through J-Link VCOM.
+These captures precede the RX-service correction described below.
+
+| Interrupts | DMA | Typical reported RX bytes/s | Integrity in supplied capture |
+|------------|-----|-----------------------------|-------------------------------|
+| On | Off | About 65,900 | No errors reported |
+| Off | Off | About 66,300 | No errors reported |
+| Off | On | About 64,600 | Sustained loss; final report errors 36,783, lost 36,789 |
+| On | On | About 65,900 | No errors reported |
+
+The polling/DMA loss is distinct from the earlier isolated PRBS TX losses.
+The TX completion interrupt was delaying foreground RX polling without
+servicing RX itself. The regression check reproduces overrun when a byte
+arrives before or during DMA staging and the next character arrives before
+foreground polling resumes. SAU and UARTA now service RX before and after
+TX work, without enabling RX interrupts or application callbacks in polling
+mode. Existing RX error handling and FIFO policy are retained. The new
+interleaving checks fail on the old driver and pass with the correction in
+Release and Debug. The sustained hardware loss still needs a rerun of
+interrupt-off/DMA-on loopback to confirm it is resolved.
 
 UARTA is linked only on request, so that images without it stay small (the
 DFU boot): link the application with `-Wl,-u,R9a02UartaInit` (the

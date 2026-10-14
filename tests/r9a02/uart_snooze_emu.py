@@ -1094,6 +1094,48 @@ for devno in (0, 3, 4):
             deliver()
             check(tag + " full duplex TX", a.tx == TXPAT(32), str(a.tx))
             check(tag + " full duplex RX", received == list(range(0x80, 0xA0)), str(received))
+            # TX completion still interrupts foreground RX polling when
+            # bIntMode is false. A received byte must not sit in the one-byte
+            # hardware buffer throughout staging and return to foreground.
+            # Exercise an arrival before the handler and during its copy.
+            if poll:
+                for during_copy in (False, True):
+                    check(tag + " RX during completion init", call("EmuUartInit", rate) == 1)
+                    HOLD_TX[0] = True
+                    a.tx.clear()
+                    call("EmuUartTx", 8)
+                    call("EmuUartTx", 16)
+                    HOLD_TX[0] = False
+                    while icu.dtce[txslot]:
+                        tx_step()
+                    HOLD_TX[0] = True
+                    callbacks = (gi("g_RxEvt"), gi("g_LineEvt"), gi("g_TxEvt"))
+                    injected = []
+                    if during_copy:
+                        def inject_copy_rx(u, access, addr, size, value, data):
+                            if not injected:
+                                receive(0xA5)
+                                injected.append(True)
+                        # TxDmaMem immediately follows the 16-byte record.
+                        h = uc.hook_add(UC_HOOK_MEM_WRITE, inject_copy_rx,
+                                        begin=rec + 16, end=rec + 31)
+                    else:
+                        receive(0xA5)
+                    deliver(idle=False)
+                    if during_copy:
+                        uc.hook_del(h)
+                        check(tag + " RX injected during staging", bool(injected))
+                    check(tag + " RX serviced by TX completion " + str(during_copy), not a.bff)
+                    # Next character ends before foreground polling resumes.
+                    receive(0x5A)
+                    check(tag + " no RX overrun at TX completion " + str(during_copy),
+                          not a.ovf and not (a.err & 1))
+                    check(tag + " RX completion order " + str(during_copy), rx_all() == [0xA5, 0x5A])
+                    check(tag + " polling completion has no callbacks",
+                          (gi("g_RxEvt"), gi("g_LineEvt"), gi("g_TxEvt")) == callbacks)
+                    HOLD_TX[0] = False
+                    deliver()
+                    check(tag + " RX service preserves TX", a.tx == TXPAT(8) + TXPAT(16), str(a.tx))
             # Rate changes retain staged bytes not yet written to hardware.
             # SAU stops its current character; UARTA drains its two registers.
             a.tx.clear()

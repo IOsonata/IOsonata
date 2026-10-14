@@ -456,7 +456,20 @@ static void R9a02UartaTxIRQHandler(int IntNo, void *pCtx)
 	UARTDev_t *udev = dev->pUartDev;
 	uintptr_t state = DisableInterrupt();
 
+	// DTC completion interrupts foreground polling even with bIntMode
+	// false. Empty RXBA before staging TX and take any byte received while
+	// staging before returning to the application. No polling callbacks.
+	if (!udev->DevIntrf.bIntEn)
+	{
+		R9a02UartaRxPoll(dev);
+	}
+
 	R9a02UartaTxKick(dev);
+
+	if (!udev->DevIntrf.bIntEn)
+	{
+		R9a02UartaRxPoll(dev);
+	}
 
 	EnableInterrupt(state);
 
@@ -620,6 +633,7 @@ static int R9a02UartaRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int Bufflen
 			if (pDev->bDma)
 			{
 				R9a02UartaTxDmaPoll(dev);
+				R9a02UartaRxPoll(dev);
 			}
 		}
 
@@ -715,6 +729,7 @@ static int R9a02UartaTxData(DevIntrf_t * const pDev, uint8_t const *pData, int D
 
 		R9a02UartaRxPoll(dev);
 		R9a02UartaTxDmaPoll(dev);
+		R9a02UartaRxPoll(dev);
 		EnableInterrupt(state);
 	}
 	else if (!pDev->bIntEn)

@@ -61,6 +61,11 @@ blocking/non-blocking FIFOs:
   that block. The following buffer-empty event arms the staged data in order.
 - Short RX bursts, RX callbacks, parity-error discard, seven-bit masking and
   full duplex traffic during DTC TX.
+- With polling RX, arrivals before and during the mandatory TX completion
+  interrupt must reach the RX FIFO before the next character arrives and
+  foreground polling resumes. SAU UART0 and both UARTA channels retain both
+  bytes in order, report no overrun and make no application callbacks, with
+  either FIFO policy. These checks fail on the earlier TX-only handler.
 - Disable/Enable with an active transfer, active reinitialization, rate changes
   preserving the staged tail, PowerOff cleanup, setup failure and retry,
   default FIFOs, and TX draining around SAU Snooze entry and wake-up.
@@ -73,13 +78,15 @@ preservation of a new pending event when a handler replaces its route. These
 cover the pulse dispatch shortcut used by UART without changing level-pin
 acknowledgement behavior.
 
-The unchanged `UartPrbsTxTest` source was linked with all four interrupt/DMA
-selections, and `UartLoopback` was linked, in both Release and Debug using the
-same LLVM toolchain. Build and emulator results do not establish hardware
-throughput. The port README records the maintainer's measurements through
-`de89b598`: interrupt-on/DMA-on reached line rate with one three-byte loss
-reported during the run. Polling/DMA and byte-IRQ remain below line rate;
-their subsequent scheduling changes await hardware measurements.
+The unchanged `UartPrbsTxTest` and `UartLoopback` sources were linked with
+all four interrupt/DMA selections in both Release and Debug using the same
+LLVM toolchain. The Release examples also preserve 2,048 bytes in sequence
+with instruction-scheduled peripheral events; loopback exercises real DTC
+transfers in both DMA modes. These are ordering checks, not a cycle model or
+a hardware throughput measurement. The port README records line-rate PRBS
+TX in all four modes across the tested revisions, isolated losses in the
+two DMA captures, and clean loopback except with interrupt-off/DMA-on.
+Hardware confirmation of the polling/DMA RX-service correction is pending.
 
 ## SPI slave (2026-10-13)
 
