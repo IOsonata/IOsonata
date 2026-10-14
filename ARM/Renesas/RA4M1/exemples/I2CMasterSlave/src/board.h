@@ -73,9 +73,6 @@ SOFTWARE.
 #define I2C_SLAVE_DMA_ENABLE	false
 #define I2C_SLAVE_INT_ENABLE	true
 
-// Test only: turn the slave block off before the master write
-#define I2C_DEBUG_SLAVE_OFF
-
 // Print the IIC register state after each step (RA4M1 diagnostic helper)
 #include "i2c_ra4m1.h"
 #define I2C_DEBUG_DUMP(name, i2c) { \
@@ -111,6 +108,23 @@ SOFTWARE.
 //   P204 (J1-5) to the SCL wire (P408 / P100)
 //   P206 (J1-3) to the SDA wire (P401 / P101)
 // Each is about a 50k pull-up, so the rise time is slow. Test only.
+// Test only: after the failed write, change one slave register at a time
+// (the changes add up) and repeat the write. The first step that gives a
+// write count of 8 names the setting that held SCL low.
+#define I2C_DEBUG_TRY(name, stmt) { \
+	stmt; \
+	uint8_t tryOff = 4; \
+	uint8_t tryData[8] = { 0, 1, 2, 3, 4, 5, 6, 7 }; \
+	int tryCnt = g_I2CMaster.Write(I2C_SLAVE_ADDR, &tryOff, 1, tryData, 8); \
+	printf("try %s write=%d\r\n", name, tryCnt); \
+	I2C_DEBUG_DUMP("M try", g_I2CMaster); \
+	I2C_DEBUG_DUMP("S try", g_I2CSlave); }
+#define I2C_DEBUG_SLAVE_POKES() { \
+	I2C_DEBUG_TRY("WAIT off", R_IIC1->ICMR3 &= (uint8_t)~0x40U) \
+	I2C_DEBUG_TRY("TXI on", R_IIC1->ICIER |= 0x80U) \
+	I2C_DEBUG_TRY("SCLE off", R_IIC1->ICFER &= (uint8_t)~0x40U) \
+	I2C_DEBUG_TRY("TMOE off", R_IIC1->ICFER &= (uint8_t)~0x01U) }
+
 #define I2C_DEBUG_PULLUP_PINS() { \
 	IOPinConfig(2, 4, IOPINOP_GPIO, IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL); \
 	IOPinConfig(2, 6, IOPINOP_GPIO, IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL); }

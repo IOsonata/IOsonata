@@ -338,6 +338,9 @@ int main()
 	I2C_DEBUG_DUMP("M write", g_I2CMaster);
 	I2C_DEBUG_DUMP("S write", g_I2CSlave);
 #endif
+#ifdef I2C_DEBUG_SLAVE_POKES
+	I2C_DEBUG_SLAVE_POKES();
+#endif
 	const bool writeOk = c == (int)sizeof(wr);
 
 	memset(buff, 0xFF, sizeof(buff));
