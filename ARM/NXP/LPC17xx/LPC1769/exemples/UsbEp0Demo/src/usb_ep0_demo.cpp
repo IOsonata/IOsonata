@@ -81,7 +81,8 @@ bool Ep0Test::Control(const UsbSetupData_t *pSetup, UsbCtrlStage_t Stage,
 }
 int main(void)
 {
-	if (!UsbInit(&s_Config) || !UsbClassRegister(0, &s_Class, 0, 1, 0, 0) ||
+	if (!AppEvtHandlerInit(g_AppEvtHandlerQueMem, sizeof(g_AppEvtHandlerQueMem)) ||
+		!UsbInit(&s_Config) || !UsbClassRegister(0, &s_Class, 0, 1, 0, 0) ||
 		!UsbDescRegister(0, &s_Class, s_Descriptor, sizeof(s_Descriptor), nullptr) ||
 		!UsbEnable(0))
 		return 1;

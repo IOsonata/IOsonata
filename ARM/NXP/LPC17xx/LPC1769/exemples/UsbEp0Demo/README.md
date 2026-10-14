@@ -4,7 +4,9 @@ Import `ioc` and `../../lib/ioc` into IOcomposer. Build `IOsonata_LPC1769`,
 then `UsbEp0Demo` using the same configuration. Debug defaults to semihosting;
 enable semihosting in the debugger. Release uses nosys without semihosting.
 The application has no console output. It uses the generic USB core and
-`AppRun` with a 16-entry application event queue.
+`AppRun` with a 16-entry application event queue explicitly initialized before
+USB initialization. Replacing the queue array alone leaves the library default
+capacity in use.
 
 ## Board setup
 
@@ -59,6 +61,6 @@ are also unsupported. There is no Windows vendor-interface driver supplied.
 `python3 tests/lpc/usb/link17.py --prefix arm-none-eabi-` builds this application
 against the real MCU library sources in Debug and Release. It checks project
 source links and semihosting options, vector checksum, USB IRQ vector and ROM
-IAP linkage. GNU Arm 13.2.1 links pass: text/data/bss are 37772/476/4060 bytes
-in Debug and 16872/88/3560 bytes in Release. Physical-board enumeration and the
+IAP linkage. GNU Arm 13.2.1 links pass: text/data/bss are 37796/476/4060 bytes
+in Debug and 16888/88/3560 bytes in Release. Physical-board enumeration and the
 host check above have not been run.

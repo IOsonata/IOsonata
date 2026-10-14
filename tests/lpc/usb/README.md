@@ -701,7 +701,7 @@ and pin map are build-fixture assumptions to verify against the actual board.
 Run `python3 tests/lpc/usb/link17.py --prefix arm-none-eabi-` to link both modes.
 The script checks library source links, LPC vector checksum, USB IRQ vector,
 archive extraction and semihosting selection. Debug uses rdimon; Release uses
-nosys. Measured text/data/bss: Debug 37772/476/4060, Release 16872/88/3560 bytes.
+nosys. Measured text/data/bss: Debug 37796/476/4060, Release 16888/88/3560 bytes.
 `run17.py` also checks public lifecycle start/stop, missing VBUS, priority clamp,
 pin ownership and initialization/SIE failure cleanup at -O0/-O2 with UBSan.
 These are successful firmware links and host tests, not hardware enumeration.
