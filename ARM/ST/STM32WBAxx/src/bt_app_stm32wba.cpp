@@ -60,27 +60,19 @@ SOFTWARE.
 #include "stm32wbaxx.h"
 #include "stm32wbaxx_hal.h"
 
-// STM32CubeWBA BLE middleware. Names are stable across 1.3.x / 1.4.x.
-#include "ble_types.h"
-#include "ble_std.h"
-#include "ble_gap_aci.h"
-#include "ble_gatt_aci.h"
-#include "ble_hal_aci.h"
-#include "ble_events.h"
-#include "ble_hci_le.h"
-#include "ble_vs_codes.h"
-#include "host_stack_if.h"
-#include "blestack.h"
-#include "ble_bufsize.h"
-#include "ll_sys.h"
-#include "ll_sys_if.h"
-#include "bpka.h"
-#include "scm.h"
-#include "stm32_timer.h"
+// STM32CubeWBA BLE middleware, release 1.9.0 (WPAN middleware commit
+// e66bb629). The project provides the Target files of the Cube reference
+// application (bleplat.c, linklayer_plat.c, ll_sys_if.c, bpka.c, power_table.c)
+// and its app_conf.h set. host_stack_if.c is not used: BleStackCB_Process and
+// HostStack_Process are defined here and run the host stack from the
+// Bluetooth event queue.
+#include "bt_wba_stack.h"
+#include "stm32wbaxx_ll_system.h"
 
 #include "istddef.h"
 #include "idelay.h"
 #include "coredev/iopincfg.h"
+#include "coredev/timer.h"
 #include "iopinctrl.h"
 #include "bluetooth/bt_uuid.h"
 #include "bluetooth/bt_app.h"
@@ -171,55 +163,64 @@ static BtAppWbaData_t s_WbaData = {
 	.bStackInited     = false,
 };
 
-// Set while the HCI event drain is in the queue, so that it is queued once
-static volatile bool s_bHciUserEvtQueued = false;
-static volatile bool s_bHciUserEvtOwed = false;
+// DIVC and MAX are used by ble_bufsize.h. The Cube projects take them from
+// utilities_common.h.
+#ifndef DIVC
+#define DIVC(x, y)						(((x) + (y) - 1) / (y))
+#endif
+#ifndef MAX
+#define MAX(x, y)						(((x) > (y)) ? (x) : (y))
+#endif
+
 // Set while the host work is in the queue, so that it is queued once
 static volatile bool s_bBleHostQueued = false;
 static volatile bool s_bBleHostOwed = false;
+// Set while the event drain is in the queue, so that it is queued once
+static volatile bool s_bEvtDrainQueued = false;
+static volatile bool s_bEvtDrainOwed = false;
 
-// Drain queued HCI events to registered callbacks. ST exposes
-// hci_user_evt_proc() which walks the event queue and invokes the user
-// callback per event.
-static void HciUserEvt(uint32_t Evt, void *pCtx)
-{
-	(void)Evt;
-	(void)pCtx;
+// HCI events from the host stack. BLECB_Indication runs inside
+// BleStack_Process and no stack function may be called from there, so each
+// event is copied here and handled later from the Bluetooth event queue. A slot
+// holds the packet as the stack gives it: packet type, event code, parameter
+// length, parameters.
+#ifndef BT_APP_WBA_EVT_SLOTS
+#define BT_APP_WBA_EVT_SLOTS			8
+#endif
+#define BT_APP_WBA_EVT_MAXLEN			(3 + 255)
 
-	s_bHciUserEvtQueued = false;
-	hci_user_evt_proc();
-}
+typedef struct __Bt_App_Wba_Evt {
+	uint16_t	Len;
+	uint8_t		Data[BT_APP_WBA_EVT_MAXLEN];
+} BtAppWbaEvt_t;
 
-// Let the BLE host stack process its pending work. Drives the internal state
-// machines that issue ACI commands and forward events.
+static BtAppWbaEvt_t s_EvtRing[BT_APP_WBA_EVT_SLOTS];
+static volatile uint8_t s_EvtHead = 0;		// next slot to write
+static volatile uint8_t s_EvtTail = 0;		// next slot to read
+static volatile uint8_t s_EvtCnt = 0;
+
+static BtWbaEvtFlow_t BtAppHciEvtHandler(void *pPayload);
+extern "C" void BleStackCB_Process(void);
+
+// Let the BLE host stack process its pending work. It runs the state machines
+// that issue the ACI commands and forwards the events to BLECB_Indication.
 static void BleHostEvt(uint32_t Evt, void *pCtx)
 {
 	(void)Evt;
 	(void)pCtx;
 
 	s_bBleHostQueued = false;
-	BleStack_Process();
-}
-
-// HCI user-event indication. ST's BLE stack calls this from IRQ context
-// when an event is queued.
-extern "C" void hci_notify_asynch_evt(void *pdata)
-{
-	(void)pdata;
-
-	if (s_bHciUserEvtQueued == false)
+	if (BleStack_Process() == 0)
 	{
-		s_bHciUserEvtQueued = true;
-		s_bHciUserEvtOwed = BtEvtQue(0, nullptr, HciUserEvt) == false;
-		if (s_bHciUserEvtOwed)
-		{
-			s_bHciUserEvtQueued = false;
-		}
+		// The stack has more to do
+		BleStackCB_Process();
 	}
 }
 
-// BLE host scheduler hook - the stack calls this when the host needs CPU.
-extern "C" void BLE_RESUME_FLOW_PROCESS_Callback(void)
+// Host stack request, from the ACI wrappers (BLE_WRAP_POSTPROC) and from the
+// link layer. Can come from interrupt context. Replaces the version in the Cube
+// host_stack_if.c, which uses the Cube sequencer.
+extern "C" void BleStackCB_Process(void)
 {
 	if (s_bBleHostQueued == false)
 	{
@@ -232,17 +233,101 @@ extern "C" void BLE_RESUME_FLOW_PROCESS_Callback(void)
 	}
 }
 
+// Host stack processing request from the link layer.
+extern "C" void HostStack_Process(void)
+{
+	BleStackCB_Process();
+}
+
+// Handle the queued events. Runs from the Bluetooth event queue, outside
+// BleStack_Process.
+static void BtAppEvtDrain(uint32_t Evt, void *pCtx)
+{
+	(void)Evt;
+	(void)pCtx;
+
+	s_bEvtDrainQueued = false;
+
+	bool bFreed = false;
+
+	while (s_EvtCnt > 0)
+	{
+		BtWbaEventRouterRun(s_EvtRing[s_EvtTail].Data);
+		s_EvtTail = (uint8_t)((s_EvtTail + 1) % BT_APP_WBA_EVT_SLOTS);
+		__disable_irq();
+		s_EvtCnt--;
+		__enable_irq();
+		bFreed = true;
+	}
+
+	if (bFreed)
+	{
+		// A refused indication stays in the stack until it runs again
+		BleStackCB_Process();
+	}
+}
+
+static void BtAppEvtDrainQue(void)
+{
+	if (s_bEvtDrainQueued == false)
+	{
+		s_bEvtDrainQueued = true;
+		s_bEvtDrainOwed = BtEvtQue(0, nullptr, BtAppEvtDrain) == false;
+		if (s_bEvtDrainOwed)
+		{
+			s_bEvtDrainQueued = false;
+		}
+	}
+}
+
+// Event indication from the host stack, called inside BleStack_Process. ACL
+// data is not used by this port. Returns a failure when the ring is full and
+// the stack offers the event again after the next BleStackCB_Process.
+extern "C" uint8_t BLECB_Indication(const uint8_t *pData, uint16_t Length,
+									   const uint8_t *pExtData, uint16_t ExtLength)
+{
+	(void)pExtData;
+	(void)ExtLength;
+
+	if (pData[0] != HCI_EVENT_PKT_TYPE)
+	{
+		return BLE_STATUS_SUCCESS;
+	}
+
+	if (s_EvtCnt >= BT_APP_WBA_EVT_SLOTS || Length < 3 ||
+		Length > BT_APP_WBA_EVT_MAXLEN)
+	{
+		return BLE_STATUS_FAILED;
+	}
+
+	BtAppWbaEvt_t *pEvt = &s_EvtRing[s_EvtHead];
+
+	pEvt->Len = Length;
+	memcpy(pEvt->Data, pData, Length);
+	s_EvtHead = (uint8_t)((s_EvtHead + 1) % BT_APP_WBA_EVT_SLOTS);
+	__disable_irq();
+	s_EvtCnt++;
+	__enable_irq();
+
+	BtAppEvtDrainQue();
+
+	return BLE_STATUS_SUCCESS;
+}
+
+static void BtAppTickQue(void);
+
 extern void BtDfuSmpCheckStatus(void) __attribute__((weak));
 
 void BtAppCheckStatus(void)
 {
-	if (s_bHciUserEvtOwed)
+	BtAppTickQue();
+	if (s_bEvtDrainOwed)
 	{
-		hci_notify_asynch_evt(nullptr);
+		BtAppEvtDrainQue();
 	}
 	if (s_bBleHostOwed)
 	{
-		BLE_RESUME_FLOW_PROCESS_Callback();
+		BleStackCB_Process();
 	}
 	if (BtDfuSmpCheckStatus != nullptr)
 	{
@@ -605,11 +690,160 @@ static void BtAppOobPeerDataPush(uint16_t ConnHdl, uint8_t AddrType,
 // default that called WbaPasskeyReject arrives at the same place, since
 // BtSmpPasskeyReply routes an out of range passkey there.
 
+// A link was created: LE Connection Complete or LE Enhanced Connection Complete
+static void BtAppWbaConnected(uint8_t Status, uint16_t ConnHdl, uint8_t Role,
+							  uint8_t PeerAddrType, uint8_t *pPeerAddr)
+{
+	if (Status == BLE_STATUS_SUCCESS)
+	{
+		// Own address not stamped: SMP runs in the ST host, not
+		// the IOsonata toolbox, so the record is left for the
+		// BtSmpLocalAddrGet fallback.
+		BtDevice_t *pPeer = BtPeerConnected(ConnHdl,
+		                   Role,
+		                   PeerAddrType,
+		                   pPeerAddr,
+		                   0, NULL);
+
+		if (Role == BT_CONN_ROLE_PERIPHERAL)
+		{
+			// A connectable advertising set stops after creating this
+			// link. Update the local set state before deciding whether
+			// another peripheral link may be accepted.
+			BtAdvWbaConnected();
+		}
+
+		if (pPeer == nullptr)
+		{
+			// BtPeerConnected already routes rejection through
+			// BtPeerConnectionRejected, which terminates the link.
+			return;
+		}
+
+		g_BtAppData.State = BTAPP_STATE_CONNECTED;
+		BtAppConnLedOn();
+		BtAppEvtConnected(ConnHdl);
+
+		// The link starts at the default ATT MTU of 23. Ask for the larger one
+		// the application configured. The server answer raises the link MTU, see
+		// ACI_ATT_EXCHANGE_MTU_RESP below.
+		if (g_BtAppData.AppDevice.Conn.MaxMtu > GATT_MTU_SIZE_DEFAULT)
+		{
+			(void)aci_gatt_exchange_config(ConnHdl);
+		}
+
+		// Secure link setup. ST owns the SMP exchange and emits
+		// ACI_GAP_PAIRING_COMPLETE, which surfaces below as
+		// BtAppEvtSecured. A central starts pairing directly; a
+		// peripheral asks the central with a Security Request.
+		if (g_BtAppData.AppDevice.bSecure)
+		{
+			// Only a LESC link configured for OOB may claim the
+			// single staged peer OOB set.
+			if (s_WbaData.bOobEnabled)
+			{
+				BtAppOobPeerDataPush(ConnHdl,
+				                     PeerAddrType,
+				                     pPeerAddr);
+			}
+
+			switch (Role)
+			{
+				case BT_CONN_ROLE_CENTRAL:
+					aci_gap_send_pairing_req(ConnHdl, 0);
+					break;
+
+				case BT_CONN_ROLE_PERIPHERAL:
+					aci_gap_peripheral_security_req(ConnHdl);
+					break;
+
+				default:
+					break;
+			}
+		}
+
+		if (Role == BT_CONN_ROLE_PERIPHERAL)
+		{
+			BtAdvStart();
+		}
+	}
+}
+
+// LE Advertising Report, wire layout: number of reports, then per report
+// event type, address type, address, data length, data, RSSI. The stack sends
+// one report per event.
+static void BtAppWbaScanReport(const uint8_t *pData, size_t Len)
+{
+	if (g_BtAppData.bScan == false || Len < 12)
+	{
+		return;
+	}
+
+	uint8_t nb = pData[0];
+	size_t pos = 1;
+
+	for (uint8_t i = 0; i < nb; i++)
+	{
+		if (pos + 9 > Len)
+		{
+			return;
+		}
+
+		uint8_t addrType = pData[pos + 1];
+		uint8_t addr[6];
+		uint8_t advLen = pData[pos + 8];
+
+		memcpy(addr, &pData[pos + 2], 6);
+		if (pos + 9 + advLen + 1 > Len)
+		{
+			return;
+		}
+
+		int8_t rssi = (int8_t)pData[pos + 9 + advLen];
+
+		if (BtAppScanReport(rssi, addrType, addr, advLen,
+							(uint8_t *)&pData[pos + 9]) == false)
+		{
+			BtAppScanStop();
+			return;
+		}
+		pos += 9 + advLen + 1;
+	}
+}
+
+// LE Extended Advertising Report. The stack sends one report per event.
+static void BtAppWbaExtScanReport(const uint8_t *pData, size_t Len)
+{
+	if (g_BtAppData.bScan == false ||
+		Len < offsetof(hci_le_extended_advertising_report_event_rp0, Data))
+	{
+		return;
+	}
+
+	const hci_le_extended_advertising_report_event_rp0 *p =
+		(const hci_le_extended_advertising_report_event_rp0 *)pData;
+
+	if (offsetof(hci_le_extended_advertising_report_event_rp0, Data) +
+		p->Data_Length > Len)
+	{
+		return;
+	}
+
+	uint8_t addr[6];
+
+	memcpy(addr, p->Address, 6);
+	if (BtAppScanReport((int8_t)p->RSSI, p->Address_Type, addr, p->Data_Length,
+						(uint8_t *)p->Data) == false)
+	{
+		BtAppScanStop();
+	}
+}
+
 // HCI event callback registered with the stack. ST's stack invokes this
 // for every HCI / vendor event; we route by type to the appropriate
 // handler. Adv-report events go to the scan path (handled in
 // bt_scan_stm32wba.cpp via a separately registered observer).
-static SVCCTL_UserEvtFlowStatus_t BtAppHciEvtHandler(void *pPayload)
+static BtWbaEvtFlow_t BtAppHciEvtHandler(void *pPayload)
 {
 	hci_event_pckt *pEvtPkt = (hci_event_pckt *)((hci_uart_pckt *)pPayload)->data;
 
@@ -679,76 +913,28 @@ static SVCCTL_UserEvtFlowStatus_t BtAppHciEvtHandler(void *pPayload)
 				{
 					hci_le_connection_complete_event_rp0 *p =
 						(hci_le_connection_complete_event_rp0 *)pMeta->data;
-					if (p->Status == BLE_STATUS_SUCCESS)
-					{
-						// Own address not stamped: SMP runs in the ST host, not
-						// the IOsonata toolbox, so the record is left for the
-						// BtSmpLocalAddrGet fallback.
-						BtDevice_t *pPeer = BtPeerConnected(p->Connection_Handle,
-						                   p->Role,
-						                   p->Peer_Address_Type,
-						                   p->Peer_Address,
-						                   0, NULL);
+					BtAppWbaConnected(p->Status, p->Connection_Handle, p->Role,
+									  p->Peer_Address_Type, p->Peer_Address);
+					break;
+				}
 
-						if (p->Role == BT_CONN_ROLE_PERIPHERAL)
-						{
-							// A connectable advertising set stops after creating this
-							// link. Update the local set state before deciding whether
-							// another peripheral link may be accepted.
-							BtAdvWbaConnected();
-						}
-
-						if (pPeer == nullptr)
-						{
-							// BtPeerConnected already routes rejection through
-							// BtPeerConnectionRejected, which terminates the link.
-							break;
-						}
-
-						g_BtAppData.State = BTAPP_STATE_CONNECTED;
-						BtAppConnLedOn();
-						BtAppEvtConnected(p->Connection_Handle);
-
-						// Secure link setup. ST owns the SMP exchange and emits
-						// ACI_GAP_PAIRING_COMPLETE, which surfaces below as
-						// BtAppEvtSecured. A central starts pairing directly; a
-						// peripheral asks the central with a Security Request.
-						if (g_BtAppData.AppDevice.bSecure)
-						{
-							// Only a LESC link configured for OOB may claim the
-							// single staged peer OOB set.
-							if (s_WbaData.bOobEnabled)
-							{
-								BtAppOobPeerDataPush(p->Connection_Handle,
-								                     p->Peer_Address_Type,
-								                     p->Peer_Address);
-							}
-
-							switch (p->Role)
-							{
-								case BT_CONN_ROLE_CENTRAL:
-									aci_gap_send_pairing_req(p->Connection_Handle, 0);
-									break;
-
-								case BT_CONN_ROLE_PERIPHERAL:
-									aci_gap_slave_security_req(p->Connection_Handle);
-									break;
-
-								default:
-									break;
-							}
-						}
-
-						if (p->Role == BT_CONN_ROLE_PERIPHERAL)
-						{
-							BtAdvStart();
-						}
-					}
+				case HCI_LE_ENHANCED_CONNECTION_COMPLETE_SUBEVT_CODE:
+				{
+					// Sent instead of LE Connection Complete when the stack has
+					// both unmasked, which is the case with privacy on.
+					hci_le_enhanced_connection_complete_event_rp0 *p =
+						(hci_le_enhanced_connection_complete_event_rp0 *)pMeta->data;
+					BtAppWbaConnected(p->Status, p->Connection_Handle, p->Role,
+									  p->Peer_Address_Type, p->Peer_Address);
 					break;
 				}
 
 				case HCI_LE_ADVERTISING_REPORT_SUBEVT_CODE:
-					// Adv reports handled by the scan path.
+					BtAppWbaScanReport(pMeta->data, (size_t)pEvtPkt->plen - 1);
+					break;
+
+				case HCI_LE_EXTENDED_ADVERTISING_REPORT_SUBEVT_CODE:
+					BtAppWbaExtScanReport(pMeta->data, (size_t)pEvtPkt->plen - 1);
 					break;
 
 				case HCI_LE_CONNECTION_UPDATE_COMPLETE_SUBEVT_CODE:
@@ -777,6 +963,28 @@ static SVCCTL_UserEvtFlowStatus_t BtAppHciEvtHandler(void *pPayload)
 				case ACI_ATT_FIND_INFO_RESP_VSEVT_CODE:
 					WbaDiscDesc((aci_att_find_info_resp_event_rp0 *)pAci->data);
 					break;
+
+				case ACI_ATT_EXCHANGE_MTU_RESP_VSEVT_CODE:
+				{
+					aci_att_exchange_mtu_resp_event_rp0 *pMtu =
+						(aci_att_exchange_mtu_resp_event_rp0 *)pAci->data;
+					BtDevice_t *pPeer = BtPeerFindByHdl(pMtu->Connection_Handle);
+
+					if (pPeer != nullptr)
+					{
+						uint16_t mtu = pMtu->Server_RX_MTU;
+
+						if (mtu > g_BtAppData.AppDevice.Conn.MaxMtu)
+						{
+							mtu = g_BtAppData.AppDevice.Conn.MaxMtu;
+						}
+						if (mtu >= GATT_MTU_SIZE_DEFAULT)
+						{
+							pPeer->Conn.MaxMtu = mtu;
+						}
+					}
+					break;
+				}
 
 				case ACI_GATT_PROC_COMPLETE_VSEVT_CODE:
 					WbaDiscProcComplete((aci_gatt_proc_complete_event_rp0 *)pAci->data);
@@ -889,7 +1097,7 @@ static SVCCTL_UserEvtFlowStatus_t BtAppHciEvtHandler(void *pPayload)
 			break;
 	}
 
-	return SVCCTL_UserEvtFlowEnable;
+	return BTWBA_EVT_FLOW_ENABLE;
 }
 
 // --- Stack sizing ---
@@ -959,6 +1167,105 @@ uint16_t BtSmpBondWbaCacheInit(uint64_t *pCache, uint16_t MaxWords)
 	return 0;
 }
 
+// PA level of aci_hal_set_tx_power_level, from the STM32WBA BLE Wireless
+// Interface Annex: output power at the IC pin in tenths of dBm, index is the
+// PA level 0x00 to 0x23.
+static const int16_t s_PaLevelTenthDbm[] = {
+	-204, -204, -204, -204, -204, -204, -194, -183, -173, -164,
+	-154, -143, -133, -123, -114, -104, -95, -84, -75, -65,
+	-54, -45, -35, -24, -15, -3, 9, 23, 28, 39,
+	48, 56, 69, 75, 85, 100
+};
+
+// Closest PA level for a power in dBm. A request outside the range of the
+// radio selects the first or last level.
+static uint8_t BtAppWbaPaLevel(int8_t Dbm)
+{
+	int target = (int)Dbm * 10;
+	uint8_t best = 0;
+	int bestDiff = 10000;
+
+	for (uint8_t i = 0; i < sizeof(s_PaLevelTenthDbm) / sizeof(s_PaLevelTenthDbm[0]); i++)
+	{
+		int d = target - s_PaLevelTenthDbm[i];
+
+		if (d < 0)
+		{
+			d = -d;
+		}
+		if (d < bestDiff)
+		{
+			bestDiff = d;
+			best = i;
+		}
+	}
+
+	return best;
+}
+
+// Device identity. The application overrides this to give its own public
+// address and keys: pAddr is the public address, little endian, pIr and pEr
+// are the 16 byte identity and encryption roots. The default derives all three
+// from the 64 bit unique ID of the chip, so each chip has its own address, but
+// the keys are not secret. A product that pairs with bonding should override
+// this with keys of its own.
+extern "C" __attribute__((weak))
+void BtAppWbaIdentityGet(uint8_t *pAddr, uint8_t *pIr, uint8_t *pEr)
+{
+	uint32_t udn = LL_FLASH_GetUDN();
+	uint32_t devid = LL_FLASH_GetDeviceID();
+	uint32_t company = LL_FLASH_GetSTCompanyID();
+
+	// Layout of the Cube reference application: company ID in the upper three
+	// bytes, device ID, then the last 16 bits of the unique device number. A
+	// chip without a unique number gets the fixed ST default address.
+	if (udn != 0xFFFFFFFFUL)
+	{
+		pAddr[0] = (uint8_t)udn;
+		pAddr[1] = (uint8_t)(udn >> 8);
+		pAddr[2] = (uint8_t)devid;
+		pAddr[3] = (uint8_t)company;
+		pAddr[4] = (uint8_t)(company >> 8);
+		pAddr[5] = (uint8_t)(company >> 16);
+	}
+	else
+	{
+		pAddr[0] = 0;
+		pAddr[1] = 0;
+		pAddr[2] = 0;
+		pAddr[3] = 0xE1;
+		pAddr[4] = 0x80;
+		pAddr[5] = 0;
+	}
+
+	uint32_t seed = udn ^ (devid << 24) ^ (company << 7) ^ 0x6C078965UL;
+
+	for (int i = 0; i < 16; i++)
+	{
+		seed = seed * 1664525UL + 1013904223UL;
+		pIr[i] = (uint8_t)(seed >> 24);
+		seed = seed * 1664525UL + 1013904223UL;
+		pEr[i] = (uint8_t)(seed >> 24);
+	}
+}
+
+static void BtAppWbaIdentitySet(void)
+{
+	uint8_t addr[CONFIG_DATA_PUBLIC_ADDRESS_LEN];
+	uint8_t ir[CONFIG_DATA_IR_LEN];
+	uint8_t er[CONFIG_DATA_ER_LEN];
+
+	BtAppWbaIdentityGet(addr, ir, er);
+
+	aci_hal_write_config_data(CONFIG_DATA_PUBLIC_ADDRESS_OFFSET,
+							  CONFIG_DATA_PUBLIC_ADDRESS_LEN, addr);
+	aci_hal_write_config_data(CONFIG_DATA_IR_OFFSET, CONFIG_DATA_IR_LEN, ir);
+	aci_hal_write_config_data(CONFIG_DATA_ER_OFFSET, CONFIG_DATA_ER_LEN, er);
+
+	memset(ir, 0, sizeof(ir));
+	memset(er, 0, sizeof(er));
+}
+
 // --- Public API ---
 
 bool BtAppStackInit(const BtAppCfg_t *pCfg)
@@ -968,14 +1275,10 @@ bool BtAppStackInit(const BtAppCfg_t *pCfg)
 		return true;
 	}
 
-	// System Clock Manager - registers the BLE radio domain so SCM picks
-	// the right clocks when the radio is active.
-	scm_init();
-
-	// Link Layer hardware setup. ll_sys_thread_init runs the radio task,
-	// ll_sys_dependencies_init wires RNG/AES/PKA into the link layer.
-	ll_sys_thread_init();
-	ll_sys_dependencies_init();
+	// The system clock is set by SystemInit (system_stm32wbaxx.c), so the Cube
+	// System Clock Manager is not used: build the project with CFG_SCM_SUPPORTED
+	// set to 0. The radio needs HSE32, select it with g_McuOsc. The link layer
+	// is started by BleStack_Init through the Target files of the project.
 
 	// Public-key accelerator for LESC pairing. Safe to init even if SMP
 	// isn't enabled; the stack just won't use it.
@@ -1025,14 +1328,18 @@ bool BtAppStackInit(const BtAppCfg_t *pCfg)
 		return false;
 	}
 
-	// Register the central HCI event handler with the SVCCTL dispatcher.
+	// Register the central HCI event handler behind the event router.
 	BtWbaEventRouterRegister(BtAppHciEvtHandler);
 
-	// Set TX power if requested. ACI value is -128..+127 dBm (signed
-	// int8), but the stack rounds to the closest supported level.
+	// Device identity: public address and the identity and encryption roots.
+	// The stack is reset by BleStack_Init, so they are written after it.
+	BtAppWbaIdentitySet();
+
+	// TX power in dBm, mapped to the closest PA level of the stack. Zero keeps
+	// the stack default, which is the maximum level.
 	if (pCfg->TxPower != 0)
 	{
-		aci_hal_set_tx_power_level(0, (uint8_t)pCfg->TxPower);
+		aci_hal_set_tx_power_level(0, BtAppWbaPaLevel(pCfg->TxPower));
 	}
 
 	s_WbaData.bStackInited = true;
@@ -1160,7 +1467,7 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 	// Populate generic app data from cfg.
 	g_BtAppData.AppDevice.Conn.Role = pCfg->Role;
 	g_BtAppData.AdvHdl          = 0;	// WBA stack manages adv internally
-	g_BtAppData.bExtAdv         = pCfg->bExtAdv;
+	g_BtAppData.bExtAdv         = false;	// decided by the advertising encoder
 	g_BtAppData.ConnLedPort     = pCfg->ConnLedPort;
 	g_BtAppData.ConnLedPin      = pCfg->ConnLedPin;
 	g_BtAppData.ConnLedActLevel = pCfg->ConnLedActLevel;
@@ -1319,31 +1626,20 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 	return true;
 }
 
-// Millisecond clock for the generic SMP/GATT transaction timeouts, overriding
-// the weak BtSmpMsTick/BtGattMsTick defaults. Sourced from the STM32 HAL tick
-// (HAL_GetTick, milliseconds since boot). Declared in bt_smp.h / bt_gatt.h, so
-// no linkage specifier is needed here.
-uint32_t BtSmpMsTick(void)
-{
-	return HAL_GetTick();
-}
+// Application tick: the millisecond clock of the SMP and GATT transaction
+// timeouts and their one second check. It is the timer device and not the Timer
+// class, the same as the Nordic port. DevNo 1 is the second low power timer
+// (LPTIM2), see timer_stm32.h.
+static TimerDev_t s_BtAppTimer;
 
-uint32_t BtGattMsTick(void)
-{
-	return HAL_GetTick();
-}
+enum {
+	BT_APP_TICK_IDLE,
+	BT_APP_TICK_PENDING,
+	BT_APP_TICK_QUEUED,
+};
 
-// Spec-strict indication transaction timeout: Core Vol 3 Part F 3.3.3 requires
-// closing the bearer, so terminate the link. Overrides the generic weak
-// default that only clears the outstanding-indication flag.
-void BtGattIndicationTimeout(uint16_t ConnHdl)
-{
-	aci_gap_terminate(ConnHdl, 0x13);	// remote user terminated connection
-}
-
-// Set while the timeout check is in the queue, so that it is queued once
-static volatile bool s_bBtAppTickQueued = false;
-static UTIL_TIMER_Object_t s_BtAppTickTimer;
+// Keep a refused timer event pending until the Bluetooth queue has room.
+static volatile uint8_t s_BtAppTickState = BT_APP_TICK_IDLE;
 
 // Checks that need time to pass, queued once per second by the timer:
 // connection parameter requests that have come due and the indication
@@ -1354,38 +1650,85 @@ static void BtAppTickEvt(uint32_t Evt, void *pCtx)
 	(void)Evt;
 	(void)pCtx;
 
-	s_bBtAppTickQueued = false;
+	s_BtAppTickState = BT_APP_TICK_IDLE;
 	BtGapWbaConnParamProcess();
 	BtGattIndicationTimeoutCheck();
 }
 
-// Timer server callback, interrupt context
-static void BtAppTickTimerHandler(void *pCtx)
+static void BtAppTickQue(void)
 {
-	(void)pCtx;
-
-	if (s_bBtAppTickQueued == false)
+	if (s_BtAppTickState == BT_APP_TICK_PENDING)
 	{
-		s_bBtAppTickQueued = true;
+		s_BtAppTickState = BT_APP_TICK_QUEUED;
 		if (BtEvtQue(0, nullptr, BtAppTickEvt) == false)
 		{
-			s_bBtAppTickQueued = false;
+			s_BtAppTickState = BT_APP_TICK_PENDING;
 		}
 	}
 }
 
-// Start the periodic timeout check. Uses the STM32 timer server, which the
-// application initializes (UTIL_TIMER_Init), as in the STM32CubeWBA templates.
+// Timer trigger, interrupt context
+static void BtAppTimerHandler(TimerDev_t *pTimer, uint32_t Evt)
+{
+	(void)pTimer;
+
+	if (Evt & TIMER_EVT_TRIGGER(0))
+	{
+		if (s_BtAppTickState == BT_APP_TICK_IDLE)
+		{
+			s_BtAppTickState = BT_APP_TICK_PENDING;
+		}
+		BtAppTickQue();
+	}
+}
+
+static const TimerCfg_t s_BtAppTimerCfg = {
+	.DevNo = 1,
+	.ClkSrc = TIMER_CLKSRC_DEFAULT,
+	.Freq = 0,			// 0 => Default frequency
+	.IntPrio = 6,
+	.EvtHandler = BtAppTimerHandler
+};
+
+// Millisecond clock for the generic SMP/GATT transaction timeouts, overriding
+// the weak BtSmpMsTick/BtGattMsTick defaults. Declared in bt_smp.h / bt_gatt.h,
+// so no linkage specifier is needed here.
+uint32_t BtSmpMsTick(void)
+{
+	if (s_BtAppTimer.GetTickCount == nullptr)
+	{
+		// Timer not started
+		return 0;
+	}
+
+	return TimerGetMilisecond(&s_BtAppTimer);
+}
+
+uint32_t BtGattMsTick(void)
+{
+	return BtSmpMsTick();
+}
+
+// Spec-strict indication transaction timeout: Core Vol 3 Part F 3.3.3 requires
+// closing the bearer, so terminate the link. Overrides the generic weak
+// default that only clears the outstanding-indication flag.
+void BtGattIndicationTimeout(uint16_t ConnHdl)
+{
+	aci_gap_terminate(ConnHdl, 0x13);	// remote user terminated connection
+}
+
+// Start the periodic timeout check.
 static bool BtAppTickStart(void)
 {
-	if (UTIL_TIMER_Create(&s_BtAppTickTimer, BT_APP_TICK_PERIOD_MS,
-						  UTIL_TIMER_PERIODIC, BtAppTickTimerHandler,
-						  nullptr) != UTIL_TIMER_OK)
+	if (TimerInit(&s_BtAppTimer, &s_BtAppTimerCfg) == false)
 	{
 		return false;
 	}
 
-	return UTIL_TIMER_Start(&s_BtAppTickTimer) == UTIL_TIMER_OK;
+	msTimerEnableTrigger(&s_BtAppTimer, 0, BT_APP_TICK_PERIOD_MS,
+						 TIMER_TRIG_TYPE_CONTINUOUS, nullptr, nullptr);
+
+	return true;
 }
 
 // BtAppNotify/BtAppIndicate, their Conn and All forms are the shared weak
@@ -1727,7 +2070,8 @@ bool BtAppEnableNotify(uint16_t ConnHandle, uint16_t CccdHandle)
 
 	// Write 0x0001 to the CCCD to enable notifications.
 	uint8_t cccd[2] = { 0x01, 0x00 };
-	uint8_t ret = aci_gatt_write_without_resp(ConnHandle, CccdHandle,
-	                                          sizeof(cccd), cccd);
+	// A CCCD is written with a Write Request, the server answers.
+	uint8_t ret = aci_gatt_write_char_value(ConnHandle, CccdHandle,
+	                                        sizeof(cccd), cccd);
 	return ret == BLE_STATUS_SUCCESS;
 }

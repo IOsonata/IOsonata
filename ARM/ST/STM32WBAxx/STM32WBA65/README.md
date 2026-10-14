@@ -248,11 +248,54 @@ STM32CubeWBA remains the source for CMSIS, HAL, and `Utilities/tim_serv`.
 Use a WPAN revision compatible with the selected STM32CubeWBA version;
 ST documents component compatibility in STM32CubeWBA release notes.
 
-`host_stack_if.h` and `ll_sys_if.h` belong to the CubeWBA
-target-specific BLE application configuration, not the standalone
-middleware root. Their integration, and linking the BLE binary libraries,
-remain outstanding. The adapter sources that include `stm32wbaxx_hal.h`
-are excluded from the IOC configurations.
+## Bluetooth adapter status
+
+The adapter sources `bt_{app,adv,scan,gap,gatt,smp_bond,pds}_stm32wba.cpp`
+compile with `-Wall` and no warnings against STM32CubeWBA 1.9.0 and the WPAN
+middleware commit e66bb629 (the revision that release uses). They are not yet
+built into a firmware image and nothing was run on hardware.
+
+The stack headers have no `extern "C"` guard, so the adapter includes them
+through `include/bt_wba_stack.h`.
+
+How the adapter works with the 1.9.0 stack:
+
+- The host stack hands events to `BLECB_Indication`. The adapter copies each
+  event into a ring of 8 slots and handles it from the Bluetooth event queue
+  (`BtEvtQue`), because no stack function may be called from inside
+  `BleStack_Process`.
+- `BleStackCB_Process` and `HostStack_Process` are defined in `bt_app_stm32wba.cpp`
+  and run `BleStack_Process` from the event queue. Do not build the Cube
+  `host_stack_if.c`.
+- The 1 second timeout check and the millisecond clock use LPTIM2 (Timer DevNo 1)
+  through the IOsonata timer driver. The Cube timer server and the System Clock
+  Manager are not used.
+- `BtAppCfg_t::TxPower` is in dBm and is mapped to the closest PA level of the
+  table in the STM32WBA BLE Wireless Interface document.
+- The public address, identity root and encryption root are written to the
+  stack at start. The default (`BtAppWbaIdentityGet`, weak) derives them from the
+  chip unique number, so each chip has its own address, but the two keys are not
+  secret. An application that bonds should override it.
+- LE Enhanced Connection Complete, advertising reports and extended advertising
+  reports are handled. A central or peripheral with `MaxMtu` above 23 starts the
+  ATT MTU exchange.
+
+Still to do before a Bluetooth example can run:
+
+- The project provides the Cube platform sources of a WBA65 BLE application:
+  `STM32_WPAN/Target/{bleplat,linklayer_plat,ll_sys_if,bpka,power_table}.c`,
+  `ble_wrap.c` from the stack include directory, and the modules they use
+  (sequencer, advanced memory manager, RNG, flash manager, log, `baes`). These
+  need a project configuration (`app_conf.h`, `common_wpan_conf.h`,
+  `CFG_SCM_SUPPORTED` set to 0) and link the BLE stack library
+  (`stm32wba_ble_stack_*.a`) and the link layer library.
+- HSE32 must run for the radio: set `g_McuOsc` to a 32 MHz crystal (see Core
+  clock). The HSE trim is not set.
+- `BLEPLAT_NvmStore` is defined twice: in the Cube `bleplat.c` (flash through
+  the Cube flash manager) and in `bt_smp_bond_stm32wba.cpp` (IOsonata PDS). The
+  project needs one of them. The IOsonata one keeps bonds in the same store as
+  the rest of the IOsonata settings, so the project copy of `bleplat.c` should
+  drop its version.
 
 ## GPIO consolidation
 

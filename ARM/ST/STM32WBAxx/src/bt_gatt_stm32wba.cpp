@@ -19,11 +19,7 @@ BtGattSrvcAdd in bt_gatt.cpp is weak; this strong override replaces it on WBA.
 
 #include "stm32wbaxx.h"
 #include "stm32wbaxx_hal.h"
-#include "ble_types.h"
-#include "ble_std.h"
-#include "ble_defs.h"
-#include "ble_gatt_aci.h"
-#include "ble_events.h"
+#include "bt_wba_stack.h"
 
 #include "bluetooth/bt_gatt.h"
 #include "bluetooth/bt_att.h"
@@ -309,21 +305,45 @@ bool BtGattCharIndicate(uint16_t ConnHdl, BtGattChar_t *pChar,
 	return true;
 }
 
-void BtGattWbaNotificationComplete(uint16_t ConnHdl, uint16_t AttrHdl)
+// The head of the send queue of a link is the notification waiting for its
+// completion event.
+static bool BtGattWbaNotificationHead(BtDevice_t *pConn, uint16_t AttrHdl)
 {
-	BtDevice_t *pConn = BtPeerFindByHdl(ConnHdl);
 	if (pConn == nullptr || pConn->TxPendCount == 0)
 	{
-		return;
+		return false;
 	}
 
 	auto *pPend = &pConn->TxPend[pConn->TxPendHead];
 	BtGattChar_t *pChar = (BtGattChar_t *)pPend->pChar;
-	if (pChar == nullptr || pPend->Remain != 1 ||
-		(AttrHdl != pChar->Hdl && AttrHdl != pChar->ValHdl))
+
+	return pChar != nullptr && pPend->Remain == 1 &&
+		(AttrHdl == pChar->Hdl || AttrHdl == pChar->ValHdl);
+}
+
+// ConnHdl is BT_CONN_HDL_INVALID when the event does not name the link, which
+// is the case of the ACI notification complete event of the CubeWBA 1.9.0 stack.
+// The first link whose head of the send queue is the attribute completes.
+void BtGattWbaNotificationComplete(uint16_t ConnHdl, uint16_t AttrHdl)
+{
+	if (ConnHdl != BT_CONN_HDL_INVALID)
 	{
+		if (BtGattWbaNotificationHead(BtPeerFindByHdl(ConnHdl), AttrHdl))
+		{
+			BtGattSendCompleted(ConnHdl, 1);
+		}
 		return;
 	}
 
-	BtGattSendCompleted(ConnHdl, 1);
+	for (uint16_t i = 0; i < BtPeerCount(); i++)
+	{
+		BtDevice_t *pConn = BtPeerSlot(i);
+
+		if (pConn != nullptr && pConn->Conn.Hdl != BT_CONN_HDL_INVALID &&
+			BtGattWbaNotificationHead(pConn, AttrHdl))
+		{
+			BtGattSendCompleted(pConn->Conn.Hdl, 1);
+			return;
+		}
+	}
 }

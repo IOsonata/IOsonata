@@ -47,11 +47,7 @@ SOFTWARE.
 #include "stm32wbaxx.h"
 #include "stm32wbaxx_hal.h"
 
-#include "ble_types.h"
-#include "ble_std.h"
-#include "ble_core.h"
-#include "ble_gap_aci.h"
-#include "ble_hci_le.h"
+#include "bt_wba_stack.h"
 
 #include "istddef.h"
 #include "bluetooth/bt_app.h"
@@ -325,7 +321,7 @@ static void BtGapWbaConnParamRetry(BtGapWbaConnParamLink_t *pLink)
 		return;
 	}
 
-	pLink->DueTime = HAL_GetTick() + BT_GAP_WBA_CONN_PARAMS_NEXT_DELAY_MS;
+	pLink->DueTime = BtGattMsTick() + BT_GAP_WBA_CONN_PARAMS_NEXT_DELAY_MS;
 }
 
 static void BtGapWbaConnParamIssue(BtGapWbaConnParamLink_t *pLink)
@@ -369,7 +365,7 @@ static void BtGapWbaConnParamIssue(BtGapWbaConnParamLink_t *pLink)
 	{
 		pLink->bAwaitingComplete = true;
 		// Also bounds a lost L2CAP response or HCI completion event.
-		pLink->DueTime = HAL_GetTick() + BT_GAP_WBA_CONN_PARAMS_NEXT_DELAY_MS;
+		pLink->DueTime = BtGattMsTick() + BT_GAP_WBA_CONN_PARAMS_NEXT_DELAY_MS;
 	}
 	else
 	{
@@ -386,7 +382,7 @@ void BtGapWbaConnParamProcess(void)
 		return;
 	}
 
-	uint32_t now = HAL_GetTick();
+	uint32_t now = BtGattMsTick();
 	for (size_t i = 0; i < CFG_BLE_NUM_LINK; i++)
 	{
 		BtGapWbaConnParamLink_t *pLink = &s_ConnParamLink[i];
@@ -435,7 +431,7 @@ void BtGapWbaConnParamsConnected(uint16_t ConnHdl, uint8_t Role,
 	BtGapWbaConnParamClear(pLink);
 	pLink->ConnHdl = ConnHdl;
 	pLink->Role = Role;
-	pLink->DueTime = HAL_GetTick() + BT_GAP_WBA_CONN_PARAMS_FIRST_DELAY_MS;
+	pLink->DueTime = BtGattMsTick() + BT_GAP_WBA_CONN_PARAMS_FIRST_DELAY_MS;
 }
 
 void BtGapWbaConnParamsDisconnected(uint16_t ConnHdl)

@@ -1,4 +1,4 @@
-# STM32WBA MCU port — STM32WBA65 priority
+# STM32WBA MCU port - STM32WBA65 priority
 
 IOsonata currently contains the STM32WBA Bluetooth ACI adapter and linker
 scripts, but **not** a complete standalone STM32WBA MCU port. The hardware bring-up target is **STM32WBA65**. The target board is **STM32WBA65I-DK1 Discovery Kit**, with the
@@ -12,7 +12,9 @@ are retained solely for WBA5x devices and must **not** be used for WBA65.
 - `include/stm32wbaxx.h` and `include/system_stm32wbaxx.h`:
   ST-compatible entry headers; these do **not** contain the device register map.
 - `src/bt_{app,adv,scan,gap,gatt,smp_bond,pds}_stm32wba.cpp` and
-  `src/bt_wba_event_router.h`: initial ST BLE middleware integration.
+  `include/bt_wba_event_router.h`, `include/bt_wba_stack.h`: ST BLE middleware
+  integration, compile checked against STM32CubeWBA 1.9.0, see
+  `STM32WBA65/README.md`.
 - `ldscript/gcc_stm32wba5xxx.ld`: *1 MB / 128 KB* WBA5x-specific memory
   layout with reserved NVM regions; not a universal WBA linker script.
 
