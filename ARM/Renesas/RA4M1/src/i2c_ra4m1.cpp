@@ -53,7 +53,6 @@ SOFTWARE.
 #include "coredev/system_core_clock.h"
 #include "iopinctrl.h"
 #include "interrupt_ra4m1.h"
-#include "i2c_ra4m1.h"
 
 #define RA4M1_I2C_COUNT				2
 #define RA4M1_I2C_MAX_RATE			400000U
@@ -116,8 +115,6 @@ SOFTWARE.
 #define RA4M1_I2C_IER_SLAVE_IDLE	(RA4M1_I2C_IER_RIE | \
 									 RA4M1_I2C_IER_TMOIE | RA4M1_I2C_IER_ALIE)
 #define RA4M1_I2C_IER_SLAVE_WRITE	(RA4M1_I2C_IER_RIE | RA4M1_I2C_IER_BUS)
-#define RA4M1_I2C_TRACE_MAX		10
-#define RA4M1_I2C_IRQ_TRACE_MAX	12
 #define RA4M1_I2C_IER_SLAVE_READ	(RA4M1_I2C_IER_RIE | RA4M1_I2C_IER_TIE | RA4M1_I2C_IER_BUS)
 
 // Master transfer states
@@ -184,24 +181,6 @@ typedef struct
 	bool bSlaveNack;		// master NACK seen while transmitting
 	bool bSlaveLastReal;	// last byte loaded in ICDRT came from the buffer
 
-	// Diagnostic counters, shown by Ra4m1I2cDump()
-	uint16_t DbgIrq;		// interrupt handler entries
-	uint16_t DbgSAddr;		// slave address bytes received
-	uint16_t DbgSRx;		// slave data bytes received
-	uint8_t DbgSSr1;		// ICSR1 at the last slave address byte
-	uint8_t DbgSAddrByte;	// last address byte read by the slave
-	uint8_t DbgMState;		// master state at the last abort
-	uint8_t DbgMSr2;		// master ICSR2 at the last abort
-	uint8_t DbgMSent;		// master bytes loaded at the last abort
-	uint8_t DbgMCr1;		// master ICCR1 at the last abort (SCLI, SDAI)
-	uint8_t DbgOCr1;		// other IIC unit ICCR1 at the same time
-	uint8_t DbgOSr1;		// other IIC unit ICSR1
-	uint8_t DbgOSr2;		// other IIC unit ICSR2
-	uint8_t DbgSlaveInit[3];	// IIC1 ICCR1 after module start, slave pin setup, slave IIC enable
-	uint8_t DbgTrCnt;		// entries in DbgTr
-	uint8_t DbgTr[RA4M1_I2C_TRACE_MAX][5];	// state, ICSR2, ICCR1, other ICCR1, other ICSR2
-	uint8_t DbgIrqTraceCount;
-	uint8_t DbgIrqTrace[RA4M1_I2C_IRQ_TRACE_MAX][6];	// source, ICSR1, ICSR2, ICCR1, ICIER, slave state
 } Ra4m1I2cDev_t;
 
 static Ra4m1I2cDev_t s_Ra4m1I2cDev[RA4M1_I2C_COUNT] = {
@@ -430,24 +409,6 @@ static inline bool Ra4m1I2cBusy(const R_IIC0_Type * const pReg)
 	return (pReg->ICCR2 & RA4M1_I2C_CR2_BBSY) != 0U;
 }
 
-// Record the master state and the line state seen by both IIC blocks.
-static void Ra4m1I2cTrace(Ra4m1I2cDev_t * const pDev)
-{
-	if (pDev->DbgTrCnt >= RA4M1_I2C_TRACE_MAX)
-	{
-		return;
-	}
-
-	const R_IIC0_Type *other = pDev->DevNo == 0 ? R_IIC1 : R_IIC0;
-	uint8_t *e = pDev->DbgTr[pDev->DbgTrCnt++];
-
-	e[0] = (uint8_t)pDev->MState;
-	e[1] = pDev->pReg->ICSR2;
-	e[2] = pDev->pReg->ICCR1;
-	e[3] = other->ICCR1;
-	e[4] = other->ICSR2;
-}
-
 static void Ra4m1I2cConfigure(Ra4m1I2cDev_t * const pDev)
 {
 	R_IIC0_Type *reg = pDev->pReg;
@@ -560,16 +521,6 @@ static bool Ra4m1I2cWaitIdle(Ra4m1I2cDev_t * const pDev)
 static void Ra4m1I2cMasterAbort(Ra4m1I2cDev_t * const pDev)
 {
 	pDev->bError = true;
-	pDev->DbgMState = (uint8_t)pDev->MState;
-	pDev->DbgMSr2 = pDev->pReg->ICSR2;
-	pDev->DbgMSent = (uint8_t)pDev->Sent;
-	pDev->DbgMCr1 = pDev->pReg->ICCR1;
-
-	const R_IIC0_Type *other = pDev->DevNo == 0 ? R_IIC1 : R_IIC0;
-
-	pDev->DbgOCr1 = other->ICCR1;
-	pDev->DbgOSr1 = other->ICSR1;
-	pDev->DbgOSr2 = other->ICSR2;
 	Ra4m1I2cConfigure(pDev);
 	pDev->MState = RA4M1_I2C_M_DONE;
 }
@@ -757,8 +708,6 @@ static bool Ra4m1I2cMasterBegin(Ra4m1I2cDev_t * const pDev, bool bRx,
 
 	Ra4m1I2cClearFlags(reg, RA4M1_I2C_SR2_EVENTS);
 	pDev->MState = RA4M1_I2C_M_START;
-	pDev->DbgTrCnt = 0;
-	Ra4m1I2cTrace(pDev);
 
 	// The enable bits are set in polling mode too. With no ICU route they
 	// raise nothing, and the START, STOP and NACK flags are then certain to
@@ -795,7 +744,6 @@ static void Ra4m1I2cMasterRun(Ra4m1I2cDev_t * const pDev)
 
 		if (pDev->MState != last || pDev->Sent != lastSent || pDev->Count != lastCount)
 		{
-			Ra4m1I2cTrace(pDev);
 			last = pDev->MState;
 			lastSent = pDev->Sent;
 			lastCount = pDev->Count;
@@ -803,7 +751,6 @@ static void Ra4m1I2cMasterRun(Ra4m1I2cDev_t * const pDev)
 		}
 		else if (--left <= 0)
 		{
-			Ra4m1I2cTrace(pDev);
 			Ra4m1I2cMasterAbort(pDev);
 		}
 	}
@@ -1110,9 +1057,6 @@ static void Ra4m1I2cSlaveAddress(Ra4m1I2cDev_t * const pDev)
 	const uint8_t addr = reg->ICDRR;
 	const bool read = (addr & 1U) != 0U;
 
-	pDev->DbgSAddr++;
-	pDev->DbgSSr1 = sr1;
-	pDev->DbgSAddrByte = addr;
 	const int prior = pDev->PriorCount;
 	int idx = 0;
 
@@ -1176,7 +1120,6 @@ static void Ra4m1I2cSlaveReceive(Ra4m1I2cDev_t * const pDev)
 	const uint8_t value = reg->ICDRR;
 	uint8_t *buf = i2c->pTRBuff[pDev->SlaveIdx];
 
-	pDev->DbgSRx++;
 	const int len = i2c->TRBuffLen[pDev->SlaveIdx];
 
 	if (buf != NULL && pDev->SlaveCount < len)
@@ -1270,26 +1213,7 @@ static void Ra4m1I2cIrqHandler(int IntNo, void *pCtx)
 {
 	Ra4m1I2cDev_t *dev = (Ra4m1I2cDev_t *)pCtx;
 
-	/* Capture the actual RXI/TXI/TEI/EEI event and register state before
-	 * acknowledging the ICU event or reading ICDRR. Never print in an ISR.
-	 */
-	if (dev->pI2cDev != NULL &&
-		dev->pI2cDev->Cfg.Mode == I2CMODE_SLAVE &&
-		dev->DbgIrqTraceCount < RA4M1_I2C_IRQ_TRACE_MAX)
-	{
-		uint8_t *entry = dev->DbgIrqTrace[dev->DbgIrqTraceCount++];
-		entry[0] = IntNo == dev->IrqRxi ? 0U :
-			IntNo == dev->IrqTxi ? 1U :
-			IntNo == dev->IrqTei ? 2U : 3U;
-		entry[1] = dev->pReg->ICSR1;
-		entry[2] = dev->pReg->ICSR2;
-		entry[3] = dev->pReg->ICCR1;
-		entry[4] = dev->pReg->ICIER;
-		entry[5] = (uint8_t)dev->SState;
-	}
-
 	Ra4m1AcknowledgeInt((IRQn_Type)IntNo);
-	dev->DbgIrq++;
 
 	if (dev->pI2cDev == NULL)
 	{
@@ -1558,128 +1482,6 @@ static void Ra4m1I2cPowerOff(DevIntrf_t * const pIntrf)
 	EnableInterrupt(state);
 }
 
-static int Ra4m1I2cPutHex(char *p, int pos, int len, uint32_t v, int digits)
-{
-	for (int i = digits - 1; i >= 0 && pos < len - 1; i--)
-	{
-		p[pos++] = "0123456789abcdef"[(v >> (i * 4)) & 0xFU];
-	}
-
-	return pos;
-}
-
-static int Ra4m1I2cPutStr(char *p, int pos, int len, const char *s)
-{
-	while (*s != 0 && pos < len - 1)
-	{
-		p[pos++] = *s++;
-	}
-
-	return pos;
-}
-
-int Ra4m1I2cDump(DevIntrf_t * const pIntrf, char *Buf, int Len)
-{
-	Ra4m1I2cDev_t *dev = Ra4m1I2cHandle(pIntrf);
-
-	if (dev == NULL || Buf == NULL || Len < 2)
-	{
-		return 0;
-	}
-
-	const R_IIC0_Type *r = dev->pReg;
-	const uint32_t v[] = {
-		SystemPeriphClockGet(1), R_MSTP->MSTPCRB, R_SYSTEM->SCKDIVCR,
-		r->ICCR1, r->ICCR2, r->ICMR1, r->ICMR2, r->ICMR3, r->ICFER,
-		r->ICSER, r->ICIER, r->ICSR1, r->ICSR2, r->ICBRL, r->ICBRH,
-		dev->DbgIrq, dev->DbgSAddr, dev->DbgSRx, dev->DbgSSr1,
-		dev->DbgSAddrByte, dev->DbgMState, dev->DbgMSr2, dev->DbgMSent,
-		dev->DbgMCr1, dev->DbgOCr1, dev->DbgOSr1, dev->DbgOSr2
-	};
-	const char *name[] = {
-		"pclkb=", " mstpb=", " sckdiv=", " cr1=", " cr2=", " mr1=", " mr2=",
-		" mr3=", " fer=", " ser=", " ier=", " sr1=", " sr2=", " brl=", " brh=",
-		" irq=", " sadr=", " srx=", " ssr1=", " sab=", " mst=", " msr2=", " msent=",
-		" mcr1=", " ocr1=", " osr1=", " osr2="
-	};
-	const int digits[] = { 8, 8, 8, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
-		4, 4, 4, 2, 2, 2, 2, 2, 2, 2, 2, 2 };
-	int pos = 0;
-
-	for (int i = 0; i < (int)(sizeof(v) / sizeof(v[0])); i++)
-	{
-		pos = Ra4m1I2cPutStr(Buf, pos, Len, name[i]);
-		pos = Ra4m1I2cPutHex(Buf, pos, Len, v[i], digits[i]);
-	}
-
-	pos = Ra4m1I2cPutStr(Buf, pos, Len, " si=");
-	for (int i = 0; i < 3; i++)
-	{
-		pos = Ra4m1I2cPutHex(Buf, pos, Len, dev->DbgSlaveInit[i], 2);
-		pos = Ra4m1I2cPutStr(Buf, pos, Len, i < 2 ? ":" : "");
-	}
-
-	// Dumping registers must not change interrupt enable state or dispatch ISRs.
-	pos = Ra4m1I2cPutStr(Buf, pos, Len, " irqt=--");
-	pos = Ra4m1I2cPutStr(Buf, pos, Len, (r->ICCR1 & 0x02U) ? " scl=1" : " scl=0");
-	pos = Ra4m1I2cPutStr(Buf, pos, Len, (r->ICCR1 & 0x01U) ? " sda=1" : " sda=0");
-
-	// Trace of the last master transfer: state, ICSR2, ICCR1, then ICCR1 and
-	// ICSR2 of the other IIC unit.
-	pos = Ra4m1I2cPutStr(Buf, pos, Len, " tr=");
-
-	for (int i = 0; i < dev->DbgTrCnt; i++)
-	{
-		for (int j = 0; j < 5; j++)
-		{
-			pos = Ra4m1I2cPutHex(Buf, pos, Len, dev->DbgTr[i][j], 2);
-			pos = Ra4m1I2cPutStr(Buf, pos, Len, j < 4 ? ":" : " ");
-		}
-	}
-
-	// Slave IRQ entry snapshots: event (0 RXI, 1 TXI, 2 TEI, 3 EEI),
-	// ICSR1, ICSR2, ICCR1, ICIER and slave state. Capped to 12 events.
-	pos = Ra4m1I2cPutStr(Buf, pos, Len, " sit=");
-
-	for (int i = 0; i < dev->DbgIrqTraceCount; i++)
-	{
-		for (int j = 0; j < 6; j++)
-		{
-			pos = Ra4m1I2cPutHex(Buf, pos, Len, dev->DbgIrqTrace[i][j], 2);
-			pos = Ra4m1I2cPutStr(Buf, pos, Len, j < 5 ? ":" : " ");
-		}
-	}
-
-	// Pin function select registers of the two pins, to show what the pin
-	// configuration really wrote (PSEL in bits 28:24, PMR bit 16, PCR bit 4,
-	// NCODR bit 6, PDR bit 2).
-	const I2CCfg_t *cfg = &dev->pI2cDev->Cfg;
-
-	if (cfg->pIOPinMap != NULL && cfg->NbIOPins > I2C_SCL_IOPIN_IDX)
-	{
-		const IOPinCfg_t *sda = &cfg->pIOPinMap[I2C_SDA_IOPIN_IDX];
-		const IOPinCfg_t *scl = &cfg->pIOPinMap[I2C_SCL_IOPIN_IDX];
-
-		if (Ra4m1PinValid(sda->PortNo, sda->PinNo))
-		{
-			pos = Ra4m1I2cPutStr(Buf, pos, Len, " sdapfs=");
-			pos = Ra4m1I2cPutHex(Buf, pos, Len,
-				R_PFS->PORT[sda->PortNo].PIN[sda->PinNo].PmnPFS, 8);
-		}
-
-		if (Ra4m1PinValid(scl->PortNo, scl->PinNo))
-		{
-			pos = Ra4m1I2cPutStr(Buf, pos, Len, " sclpfs=");
-			pos = Ra4m1I2cPutHex(Buf, pos, Len,
-				R_PFS->PORT[scl->PortNo].PIN[scl->PinNo].PmnPFS, 8);
-		}
-	}
-
-	Buf[pos] = 0;
-
-	return pos;
-}
-
 static void *Ra4m1I2cGetHandle(DevIntrf_t * const pIntrf)
 {
 	Ra4m1I2cDev_t *dev = Ra4m1I2cHandle(pIntrf);
@@ -1876,17 +1678,7 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfg)
 		pDev->TRBuffLen[i] = 0;
 	}
 
-	if (pCfg->Mode == I2CMODE_SLAVE)
-	{
-		dev->DbgSlaveInit[0] = R_IIC1->ICCR1;
-	}
-
 	Ra4m1I2cPinConfig(pCfg);
-
-	if (pCfg->Mode == I2CMODE_SLAVE)
-	{
-		dev->DbgSlaveInit[1] = R_IIC1->ICCR1;
-	}
 
 	DevIntrf_t *intrf = &pDev->DevIntrf;
 	intrf->pDevData = dev;
@@ -1929,11 +1721,6 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfg)
 	}
 
 	Ra4m1I2cConfigure(dev);
-
-	if (pCfg->Mode == I2CMODE_SLAVE)
-	{
-		dev->DbgSlaveInit[2] = R_IIC1->ICCR1;
-	}
 
 	if (dev->bError || (dev->pReg->ICCR1 & RA4M1_I2C_CR1_ICE) == 0U)
 	{
