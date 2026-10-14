@@ -134,6 +134,28 @@ not in the library.
 References: STM32WBA6 reference manual RM0515 and STM32CubeWBA:
 https://github.com/STMicroelectronics/STM32CubeWBA
 
+## I2C master and example project
+
+`ARM/ST/STM32WBAxx/src/i2c_stm32wba.cpp` drives the I2C v2 peripheral as a
+polling master. DevNo 0 to 3 select I2C1, I2C2, I2C3 and I2C4. I2C3 is on
+APB7, the others on APB1. The kernel clock is HSI16. The timing register is
+computed from the requested rate (100 kHz, 400 kHz, 1 MHz), and the reported
+rate is never above the request. An address probe in StartTx returns false
+when the device does not acknowledge, as `i2c_scan.cpp` expects. Transfers
+longer than 255 bytes use RELOAD. Error handling follows the ST HAL
+(`I2C_IsErrorOccurred`, `I2C_Flush_TXDR`).
+
+Limits: master mode only, interrupt mode and DMA are refused at init, 7 bit
+addresses only.
+
+`exemples/I2CScan` (`exemples/i2c/i2c_scan.cpp`) scans the bus on the board
+I2C of `STM32WBA65I_DK1`: SDA PB1, SCL PB2, AF4 (Arduino D14 and D15). These
+pins come from the Zephyr board data and must be confirmed against UM3462 on
+the board. The scan result is printed on USART2 through the UART retarget.
+
+Validation: the driver is checked by `tests/stm32wba/run_i2c.py` in an
+instruction set emulator with an I2C model (39 checks). Not tested on hardware.
+
 ## Build dependency
 
 The WBA65 device header is `../include/stm32wba65xx.h` in this repository.
