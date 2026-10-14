@@ -59,10 +59,4 @@ SOFTWARE.
 	{UART_TX_PORT, UART_TX_PIN, UART_TX_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL}, \
 }
 
-#define UART_BAUDRATE		115200
-
-// The SAU UART port uses interrupts and CFIFOs; DMA is not supported.
-#define UART_INT_MODE		true
-#define UART_DMA_MODE		false
-
 #endif

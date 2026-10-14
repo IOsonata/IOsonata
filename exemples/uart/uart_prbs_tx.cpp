@@ -64,7 +64,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define UART_INT_MODE false
 #endif
 #ifndef UART_DMA_MODE
-#define UART_DMA_MODE true
+#define UART_DMA_MODE false
 #endif
 
 #ifdef MCUOSC
