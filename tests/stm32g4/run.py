@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
-"""STM32G4 host test of the system clock and LPTIM1 timer sources.
+"""STM32G4 host test of the system clock source.
 
 Run: python3 tests/stm32g4/run.py
 
-g4_test.cpp runs ARM/ST/STM32G4xx/src/system_stm32g4xx.c and
-ARM/ST/STM32G4xx/src/timer_lptim_stm32g4xx.cpp with the ST STM32G474 device
-header and the host core header of tests/stm32/shim, at -O0 and -O2 with the
-undefined behavior sanitizer. Peripheral registers are plain memory mapped at
-their addresses. Linux only.
+g4_test.cpp runs ARM/ST/STM32G4xx/src/system_stm32g4xx.c with the ST
+STM32G474 device header and the host core header of tests/stm32/shim, at -O0
+and -O2 with the undefined behavior sanitizer. Peripheral registers are plain
+memory mapped at their addresses. Linux only. The timer driver, shared by the
+STM32 families, is tested by tests/stm32/run_timer.py.
 
-When arm-none-eabi-g++ is found, both sources are also compiled for the
+When arm-none-eabi-g++ is found, the source is also compiled for the
 STM32G474 at -O0 and -Os, warnings as errors.
 
 Not hardware validation: no timing, no electrical test.
@@ -46,7 +46,6 @@ import tempfile
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 SYSTEM = ROOT / 'ARM/ST/STM32G4xx/src/system_stm32g4xx.c'
-LPTIM = ROOT / 'ARM/ST/STM32G4xx/src/timer_lptim_stm32g4xx.cpp'
 
 
 def run(args):
@@ -73,7 +72,7 @@ def main():
             for label, flags in (('O0', ['-O0']), ('O2', ['-O2'])):
                 opt = ['-DSTM32G474xx', *flags, '-g', '-fsanitize=undefined', '-fno-sanitize-recover=all']
                 objs = []
-                for src, lang in ((SYSTEM, 'c'), (LPTIM, 'c++'), (HERE / 'g4_test.cpp', 'c++')):
+                for src, lang in ((SYSTEM, 'c'), (HERE / 'g4_test.cpp', 'c++')):
                     obj = tmp / f'{label}_{src.stem}.o'
                     if lang == 'c':
                         run([cc, '-std=gnu17', *opt, *inc, '-c', src, '-o', obj])
@@ -91,12 +90,12 @@ def main():
                '-I' + str(ROOT / 'ARM/ST/STM32G4xx/include')]
         with tempfile.TemporaryDirectory(prefix='stm32g4-arm-') as tmp:
             for label in ('O0', 'Os'):
-                for src in (SYSTEM, LPTIM):
+                for src in (SYSTEM,):
                     lang = ['-x', 'c', '-std=gnu17'] if src.suffix == '.c' else ['-std=gnu++23', '-fno-exceptions', '-fno-rtti']
                     run([arm, '-mcpu=cortex-m4', '-mthumb', '-mfloat-abi=hard', '-mfpu=fpv4-sp-d16', '-DSTM32G474xx',
                          f'-{label}', *lang, '-Wall', '-Werror', '-ffunction-sections', '-fdata-sections', *inc,
                          '-c', src, '-o', Path(tmp) / f'{src.stem}_{label}.o'])
-        print('GNU Arm compile of the G4 system and LPTIM sources at -O0 and -Os: PASS')
+        print('GNU Arm compile of the G4 system source at -O0 and -Os: PASS')
     else:
         print('NOT RUN: arm-none-eabi-g++ not found, no Arm compile')
     print('STM32G4 checks complete. Hardware not tested.')

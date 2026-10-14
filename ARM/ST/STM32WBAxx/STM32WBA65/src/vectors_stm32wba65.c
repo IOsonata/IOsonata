@@ -42,6 +42,23 @@ void Default_Handler(void)
     for (;;) { __NOP(); }
 }
 
+// Timer vectors. With the timer driver linked (TimerInit), Stm32TimerVector
+// runs Stm32TimerIRQHandler for the interrupt being serviced, the exception
+// number in SCB ICSR VECTACTIVE less 16. TimerInit refuses a timer whose
+// vector is replaced by an application handler.
+__attribute__((weak)) void Stm32TimerIRQHandler(int IrqNo);
+void Stm32TimerVector(void)
+{
+    if (Stm32TimerIRQHandler)
+    {
+        Stm32TimerIRQHandler((int)(*(volatile uint32_t *)0xE000ED04 & 0x1FFU) - 16);
+    }
+    else
+    {
+        Default_Handler();
+    }
+}
+
 void NMI_Handler(void) __attribute__((weak, alias("Default_Handler")));
 void HardFault_Handler(void) __attribute__((weak, alias("Default_Handler")));
 void MemManage_Handler(void) __attribute__((weak, alias("Default_Handler")));
@@ -90,21 +107,21 @@ void GPDMA1_Channel5_IRQHandler(void) __attribute__((weak, alias("Default_Handle
 void GPDMA1_Channel6_IRQHandler(void) __attribute__((weak, alias("Default_Handler")));
 void GPDMA1_Channel7_IRQHandler(void) __attribute__((weak, alias("Default_Handler")));
 void TIM1_BRK_IRQHandler(void) __attribute__((weak, alias("Default_Handler")));
-void TIM1_UP_IRQHandler(void) __attribute__((weak, alias("Default_Handler")));
+void TIM1_UP_IRQHandler(void) __attribute__((weak, alias("Stm32TimerVector")));
 void TIM1_TRG_COM_IRQHandler(void) __attribute__((weak, alias("Default_Handler")));
-void TIM1_CC_IRQHandler(void) __attribute__((weak, alias("Default_Handler")));
-void TIM2_IRQHandler(void) __attribute__((weak, alias("Default_Handler")));
-void TIM3_IRQHandler(void) __attribute__((weak, alias("Default_Handler")));
+void TIM1_CC_IRQHandler(void) __attribute__((weak, alias("Stm32TimerVector")));
+void TIM2_IRQHandler(void) __attribute__((weak, alias("Stm32TimerVector")));
+void TIM3_IRQHandler(void) __attribute__((weak, alias("Stm32TimerVector")));
 void I2C1_EV_IRQHandler(void) __attribute__((weak, alias("Default_Handler")));
 void I2C1_ER_IRQHandler(void) __attribute__((weak, alias("Default_Handler")));
 void SPI1_IRQHandler(void) __attribute__((weak, alias("Default_Handler")));
 void USART1_IRQHandler(void) __attribute__((weak, alias("Default_Handler")));
 void USART2_IRQHandler(void) __attribute__((weak, alias("Default_Handler")));
 void LPUART1_IRQHandler(void) __attribute__((weak, alias("Default_Handler")));
-void LPTIM1_IRQHandler(void) __attribute__((weak, alias("Default_Handler")));
-void LPTIM2_IRQHandler(void) __attribute__((weak, alias("Default_Handler")));
-void TIM16_IRQHandler(void) __attribute__((weak, alias("Default_Handler")));
-void TIM17_IRQHandler(void) __attribute__((weak, alias("Default_Handler")));
+void LPTIM1_IRQHandler(void) __attribute__((weak, alias("Stm32TimerVector")));
+void LPTIM2_IRQHandler(void) __attribute__((weak, alias("Stm32TimerVector")));
+void TIM16_IRQHandler(void) __attribute__((weak, alias("Stm32TimerVector")));
+void TIM17_IRQHandler(void) __attribute__((weak, alias("Stm32TimerVector")));
 void COMP_IRQHandler(void) __attribute__((weak, alias("Default_Handler")));
 void I2C3_EV_IRQHandler(void) __attribute__((weak, alias("Default_Handler")));
 void I2C3_ER_IRQHandler(void) __attribute__((weak, alias("Default_Handler")));
@@ -124,7 +141,7 @@ void HSEM_IRQHandler(void) __attribute__((weak, alias("Default_Handler")));
 void HSEM_S_IRQHandler(void) __attribute__((weak, alias("Default_Handler")));
 void WKUP_S_IRQHandler(void) __attribute__((weak, alias("Default_Handler")));
 void RCC_AUDIOSYNC_IRQHandler(void) __attribute__((weak, alias("Default_Handler")));
-void TIM4_IRQHandler(void) __attribute__((weak, alias("Default_Handler")));
+void TIM4_IRQHandler(void) __attribute__((weak, alias("Stm32TimerVector")));
 void I2C2_EV_IRQHandler(void) __attribute__((weak, alias("Default_Handler")));
 void I2C2_ER_IRQHandler(void) __attribute__((weak, alias("Default_Handler")));
 void SPI2_IRQHandler(void) __attribute__((weak, alias("Default_Handler")));

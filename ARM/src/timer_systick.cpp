@@ -5,7 +5,7 @@
 
 Implements the TimerDev_t interface on top of the systick.h Land-layer
 primitives. Follows the same structure as all IOsonata MCU port timer
-implementations (timer_lf_nrfx.cpp, timer_lptim_stm32l4xx.cpp, etc.):
+implementations (timer_lf_nrfx.cpp, timer_lptim_stm32.cpp, etc.):
 
   - Static private data  (SysTick_TimerData_t)
   - Static functions     (one per TimerDev_t function pointer)

@@ -1,7 +1,7 @@
 # STM32F030x8 port
 
 STM32F030x8 implements the minimum supported MCU set: startup, GPIO, UART
-and timer. Other F030 memory variants are not covered by the new timer driver.
+and timer. The timer driver is the one shared by the STM32 families.
 GPIO includes pin configuration, digital I/O and pin-specific EXTI allocation.
 UART supports polling, FIFO interrupts and DMA.
 
@@ -41,13 +41,16 @@ errors; PRBS TX at line rate in both DMA modes.
 
 ## Peripheral timers
 
-All seven TIM peripherals are implemented through the standard C and C++ Timer
-interfaces. Virtual numbering follows the low-power/low-frequency to
-high-power/high-frequency convention. This MCU has no LPTIM peripheral; these TIM
-peripherals all use the APB timer clock, with simpler timers ordered first.
-The low-frequency device count is 0, high-frequency count is 7, and the first
-high-frequency virtual index is 0. The order within that group is a device-table
-ordering, not a measured power ranking.
+The library builds the STM32 timer driver shared by the families:
+`ARM/ST/src/timer_stm32.cpp` (TimerInit), `ARM/ST/src/timer_tim_stm32.cpp`
+(TIM) and `ARM/ST/include/timer_stm32.h`. All seven TIM peripherals are
+implemented through the standard C and C++ Timer interfaces. Virtual numbering
+follows the low-power/low-frequency to high-power/high-frequency convention.
+This MCU has no LPTIM peripheral; these TIM peripherals all use the APB timer
+clock, with simpler timers ordered first. The low-frequency device count is 0,
+high-frequency count is 7, and the first high-frequency virtual index is 0.
+The order within that group is a device-table ordering, not a measured power
+ranking.
 
 | Virtual DevNo | Hardware | Trigger count | Implementation |
 |---|---|---:|---|
@@ -66,10 +69,12 @@ Each timer provides:
 
 - APB clock/prescaler calculation, including the APB timer x2 rule;
 - a 64-bit software-extended count with pending-overflow compensation;
-- periodic and single-shot triggers, either a trigger callback or timer event;
+- periodic and single-shot triggers; a trigger callback, when given, runs
+  first, then the timer event handler gets the trigger event;
 - pause/resume preserving count and pending events;
 - reset and frequency changes that restart active trigger periods;
-- independent clock gates and IRQ routing, and rejection of occupied devices.
+- independent clock enables and IRQ routing, and rejection of a timer counting
+  without the driver or whose vector an application handler replaced.
 
 Use `TIMER_CLKSRC_DEFAULT`; no independent oscillator is selected. `Freq = 0`
 selects the maximum clock rate. Other requests select a rounded, clamped
@@ -97,16 +102,20 @@ counter frequency. These are internal timer interrupts, not RTOS ticks.
 The maintainer reports STM32F030x8 use in the TaktOS benchmark. Its
 [STM32F0308 platform](https://github.com/IOsonata/TaktOS/tree/main/KVB/Targets/STM32F0308)
 uses SysTick for kernel timing and TIM17 for its IRQ probe. This is existing
-platform evidence, not an on-board result for the new peripheral timer driver.
+platform evidence, not an on-board result for the peripheral timer driver.
 
-Vector wrappers dispatch weakly to the timer driver only when it is linked.
-Application IRQ overrides remain valid. Initialization rejects a timer whose
-IRQ handler is overridden or already enabled. Thus the benchmark can retain
-its TIM17 probe while using another timer; virtual timer 3 cannot be claimed
-at the same time. Both TIM1 IRQs must belong to this driver. Do not replace an
-IRQ handler or repurpose a peripheral after initializing it through Timer.
-Timer handles and callback contexts must outlive the timer; disabling pauses
-it and does not transfer ownership to another handle.
+The timer vectors of `lib/src/Vectors_STM32F030x8.c` are weak aliases of
+`Stm32TimerVector`, which calls the weak `Stm32TimerIRQHandler` of the timer
+driver with the interrupt number from SCB ICSR, or the default handler when
+the driver is not linked. An application handler replaces the alias of its
+vector. TimerInit refuses a timer whose vector does not point to
+`Stm32TimerVector`, or that counts without the driver. Thus the benchmark can
+retain its TIM17 probe while using another timer; virtual timer 3 cannot be
+claimed at the same time. Both TIM1 vectors must belong to the driver. Do not
+replace an IRQ handler or repurpose a peripheral after initializing it through
+Timer. Timer handles and callback contexts must outlive the timer. TimerInit
+with another handle takes the timer from the first one, whose calls then do
+nothing; a handle initialized on another timer releases the timer it had.
 
 ## Examples and validation
 
@@ -133,35 +142,35 @@ From the repository root:
 ```sh
 python3 tests/stm32f0/run.py
 python3 tests/stm32/run_uart.py
-python3 tests/stm32f0/run_timer.py
-python3 tests/stm32f0/run_timer_arm.py
+python3 tests/stm32/run_timer.py
 ```
 
 The host clock and EXTI regressions pass for F030x6/x8/xC and F070x6/xB.
 The UART test runs the shared driver for F030x6/x8/xC, F070x6/xB and F091xC,
-see [tests/stm32f0/README.md](../../../tests/stm32f0/README.md). New host models compile the production timer implementation and
-vector wrappers with the ST register definitions and UBSan. They exercise all
-seven devices and trigger channels, clocks, overflow, long compares, lifecycle,
-callback cancellation and TIM17 override refusal. They do not simulate APB
-bus latency or instruction-level interrupt preemption.
-
-Arm GNU 14.3.1 Cortex-M0 checks at -O0 and -Os compile the driver and vectors
-and link archive smoke images with timer use, application SysTick/TIM17
-handlers, and SysTick-only use. The last image does not pull in TimerInit.
-These smoke images are not the full TaktOS benchmark or IOC library build.
-TimerDemo also passed complete application links at -O0/-Os with Arm GNU
-14.3.1 using the required library sources, including UART retargeting.
+see [tests/stm32f0/README.md](../../../tests/stm32f0/README.md).
+`tests/stm32/run_timer.py` runs the shared timer driver with a TIM register
+model for F030x8, F072xB and the parts of the other families: every timer
+and trigger channel, clocks, overflow, long compares, lifecycle, callback
+cancellation, a vector replaced by an application handler, the vector file
+aliases. It does not simulate APB bus latency or instruction-level interrupt
+preemption. Arm GNU checks compile the driver for every F0 device header at
+-O0 and -Os and link F030x8 images: SysTick only (TimerInit not linked),
+timer use, and an application TIM3_IRQHandler with timer use.
 
 On 2026-10-08 the maintainer confirmed startup, LED GPIO, USART1 UART
-output/retargeting, TIM6 (DevNo 0) and TIM16 (DevNo 2) on STM32F0308-DISCO.
-TIM6 reported 115 consecutive 100000 us intervals over 11.5 seconds through
-UART. Semihosting caused the earlier timing variation. A missing level-shifter
-supply caused the temporary UART output failure.
+output/retargeting, TIM6 (DevNo 0) and TIM16 (DevNo 2) on STM32F0308-DISCO
+with the F030x8 timer driver this shared driver replaces. TIM6 reported 115
+consecutive 100000 us intervals over 11.5 seconds through UART. Semihosting
+caused the earlier timing variation. A missing level-shifter supply caused
+the temporary UART output failure.
 
-This completes the minimum MCU port. The successful hardware runs did not
-record an exact flashed revision, build profile or complete tool versions.
-TIM14, TIM17, TIM15, TIM3 and TIM1 still need board tests; the existing host
-checks do not establish their hardware timing.
+The successful hardware runs did not record an exact flashed revision, build
+profile or complete tool versions. The shared driver is not yet tested on the
+board. TimerDemo, built for each of the seven timers, ran 3.3 s in an
+instruction set emulator with TIM, RCC and USART1 models: trigger 0 every
+100 ms on each timer, trigger 1 every 1 s on TIM15, triggers 1 to 3 every 1 s,
+250 ms and 500 ms on TIM3 and TIM1, the TIM1 compare interrupt on its own
+vector. TIM14, TIM17, TIM15, TIM3 and TIM1 still need board tests.
 
 Register behavior was checked against ST RM0360 Rev 5, clock-tree rules and
 timer chapters 13-17. Board pins follow ST UM1658 / 32F0308DISCOVERY.

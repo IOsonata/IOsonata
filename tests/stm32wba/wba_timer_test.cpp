@@ -1,10 +1,11 @@
 /**-------------------------------------------------------------------------
 @file	wba_timer_test.cpp
 
-@brief	Host test of the STM32WBA LPTIM1 and LPTIM2 timer source.
+@brief	Host test of the STM32WBA LPTIM1 and LPTIM2 timers.
 
-Runs ARM/ST/STM32WBAxx/src/timer_lptim_stm32wbaxx.cpp with the ST
-STM32WBA65 device header. The peripheral address ranges are mapped as plain
+Runs the shared STM32 timer driver, ARM/ST/src/timer_lptim_stm32.cpp with
+TimerInit (timer_stm32.cpp) and the TIM driver, with the ST STM32WBA65
+device header. The TIM are tested by tests/stm32/timer_tim_test.cpp. The peripheral address ranges are mapped as plain
 memory: the test sets the oscillator ready flags, the LPTIM write done flags,
 status and counter itself, and calls the LPTIM interrupt handlers. Register
 values only, no timing. The order of the LPTIM register writes is checked by
@@ -51,9 +52,26 @@ uint32_t SystemCoreClock = 16000000;
 McuOsc_t g_McuOsc = { { OSC_TYPE_RC, 16000000, 20 }, { OSC_TYPE_RC, 32000, 20 }, false };
 
 extern "C" {
-void LPTIM1_IRQHandler(void);
-void LPTIM2_IRQHandler(void);
+uint32_t SystemPeriphClockGet(int Idx)
+{
+	return SystemCoreClock;
 }
+
+// The vector file function, called through Stm32TimerIRQHandler by the test
+void Stm32TimerVector(void)
+{
+}
+
+void Stm32TimerIRQHandler(int IrqNo);
+}
+
+#define TEST_VEC4		Stm32TimerVector, Stm32TimerVector, Stm32TimerVector, Stm32TimerVector
+#define TEST_VEC16		TEST_VEC4, TEST_VEC4, TEST_VEC4, TEST_VEC4
+#define TEST_VEC64		TEST_VEC16, TEST_VEC16, TEST_VEC16, TEST_VEC16
+
+// Vector table, the timer vectors aliased to Stm32TimerVector as in
+// vectors_stm32wba65.c
+extern "C" void (* const __Vectors[256])(void) = { TEST_VEC64, TEST_VEC64, TEST_VEC64, TEST_VEC64 };
 
 static int s_Fail;
 static int s_Checks;
@@ -124,14 +142,8 @@ static void LptIrq(LPTIM_TypeDef *pReg, uint32_t Flags, uint32_t Cnt)
 	pReg->CNT = Cnt;
 	pReg->ISR = Flags | OK_ALL;
 	s_Evt = 0;
-	if (pReg == LPTIM1)
-	{
-		LPTIM1_IRQHandler();
-	}
-	else
-	{
-		LPTIM2_IRQHandler();
-	}
+	// Stm32TimerVector of the vector file
+	Stm32TimerIRQHandler(pReg == LPTIM1 ? LPTIM1_IRQn : LPTIM2_IRQn);
 	pReg->ISR = OK_ALL;
 }
 
@@ -159,14 +171,16 @@ static void TestInit(void)
 	LptReset();
 	RCC->BDCR1 = RCC_BDCR1_LSI1RDY;
 
-	// LPTIM1 and LPTIM2 only
+	// DevNo 0 LPTIM1, 1 LPTIM2, then the six TIM, which take no LSI
 	cfg.DevNo = 2;
+	CHECK(TimerInit(&t, &cfg) == false);
+	cfg.DevNo = 8;
 	CHECK(TimerInit(&t, &cfg) == false);
 	cfg.DevNo = -1;
 	CHECK(TimerInit(&t, &cfg) == false);
 	CHECK(TimerInit(nullptr, &cfg) == false);
 	CHECK(TimerInit(&t, nullptr) == false);
-	CHECK(TimerGetLowFreqDevCount() == 2 && TimerGetHighFreqDevCount() == 0 && TimerGetHighFreqDevNo() == 2);
+	CHECK(TimerGetLowFreqDevCount() == 2 && TimerGetHighFreqDevCount() == 6 && TimerGetHighFreqDevNo() == 2);
 	CHECK(RCC->APB7ENR == 0 && RCC->APB1ENR2 == 0);
 	cfg.DevNo = 0;
 

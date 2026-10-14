@@ -44,6 +44,23 @@ extern char Image$$ER_ZI$$Base[];
 extern char Image$$ARM_LIB_STACK$$ZI$$Base[];
 
 void DEF_IRQHandler(void) { while(1); }
+
+// Timer vectors. With the timer driver linked (TimerInit), Stm32TimerVector
+// runs Stm32TimerIRQHandler for the interrupt being serviced, the exception
+// number in SCB ICSR VECTACTIVE less 16. TimerInit refuses a timer whose
+// vector is replaced by an application handler.
+__attribute__((weak)) void Stm32TimerIRQHandler(int IrqNo);
+void Stm32TimerVector(void)
+{
+	if (Stm32TimerIRQHandler)
+	{
+		Stm32TimerIRQHandler((int)(*(volatile uint32_t *)0xE000ED04 & 0x1FFU) - 16);
+	}
+	else
+	{
+		DEF_IRQHandler();
+	}
+}
 __attribute__((weak, alias("DEF_IRQHandler"))) void NMI_Handler(void);
 __attribute__((weak/*, alias("DEF_IRQHandler")*/)) void HardFault_Handler(void) { while(1); }
 __attribute__((weak, alias("DEF_IRQHandler"))) void MemManage_Handler(void);
@@ -77,13 +94,13 @@ __attribute__((weak, alias("DEF_IRQHandler"))) void CAN1_RX0_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void CAN1_RX1_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void CAN1_SCE_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void EXTI9_5_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void TIM1_BRK_TIM15_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void TIM1_UP_TIM16_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void TIM1_TRG_COM_TIM17_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void TIM1_CC_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void TIM2_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void TIM3_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void TIM4_IRQHandler(void);
+__attribute__((weak, alias("Stm32TimerVector"))) void TIM1_BRK_TIM15_IRQHandler(void);
+__attribute__((weak, alias("Stm32TimerVector"))) void TIM1_UP_TIM16_IRQHandler(void);
+__attribute__((weak, alias("Stm32TimerVector"))) void TIM1_TRG_COM_TIM17_IRQHandler(void);
+__attribute__((weak, alias("Stm32TimerVector"))) void TIM1_CC_IRQHandler(void);
+__attribute__((weak, alias("Stm32TimerVector"))) void TIM2_IRQHandler(void);
+__attribute__((weak, alias("Stm32TimerVector"))) void TIM3_IRQHandler(void);
+__attribute__((weak, alias("Stm32TimerVector"))) void TIM4_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void I2C1_EV_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void I2C1_ER_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void I2C2_EV_IRQHandler(void);
@@ -97,18 +114,18 @@ __attribute__((weak, alias("DEF_IRQHandler"))) void EXTI15_10_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void RTC_Alarm_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void DFSDM1_FLT3_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void TIM8_BRK_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void TIM8_UP_IRQHandler(void);
+__attribute__((weak, alias("Stm32TimerVector"))) void TIM8_UP_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void TIM8_TRG_COM_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void TIM8_CC_IRQHandler(void);
+__attribute__((weak, alias("Stm32TimerVector"))) void TIM8_CC_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void ADC3_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void FMC_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void SDMMC1_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void TIM5_IRQHandler(void);
+__attribute__((weak, alias("Stm32TimerVector"))) void TIM5_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void SPI3_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void UART4_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void UART5_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void TIM6_DAC_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void TIM7_IRQHandler(void);
+__attribute__((weak, alias("Stm32TimerVector"))) void TIM6_DAC_IRQHandler(void);
+__attribute__((weak, alias("Stm32TimerVector"))) void TIM7_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void DMA2_Channel1_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void DMA2_Channel2_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void DMA2_Channel3_IRQHandler(void);
@@ -118,8 +135,8 @@ __attribute__((weak, alias("DEF_IRQHandler"))) void DFSDM1_FLT0_IRQHandler(void)
 __attribute__((weak, alias("DEF_IRQHandler"))) void DFSDM1_FLT1_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void DFSDM1_FLT2_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void COMP_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void LPTIM1_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void LPTIM2_IRQHandler(void);
+__attribute__((weak, alias("Stm32TimerVector"))) void LPTIM1_IRQHandler(void);
+__attribute__((weak, alias("Stm32TimerVector"))) void LPTIM2_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void OTG_FS_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void DMA2_Channel6_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void DMA2_Channel7_IRQHandler(void);

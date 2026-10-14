@@ -188,22 +188,25 @@ that endpoint budget. USB host mode is unsupported. See the
 ## STM32 MCU support
 
 The table describes the current source. L4 review evidence is recorded at
-[b2eea8c](https://github.com/IOsonata/IOsonata/commit/b2eea8c4450b371eefffab77ce92aa70f4dc7ea4);
-F030x8 now includes all seven peripheral TIM drivers.
+[b2eea8c](https://github.com/IOsonata/IOsonata/commit/b2eea8c4450b371eefffab77ce92aa70f4dc7ea4).
+The STM32 timer driver in `ARM/ST/src` (`timer_stm32.cpp`,
+`timer_lptim_stm32.cpp`, `timer_tim_stm32.cpp`) serves F030x8, F401xC, the L4
+parts, G474 and WBA65 since 2026-10-14; it replaced the F030x8, L4, G4 and WBA
+timer sources.
 Only the named MCUs are covered; support does not extend automatically to their
 entire series.
 
 | MCU | Implemented peripherals | Application examples | Status and validation |
 |---|---|---|---|
-| [STM32L476](../ARM/ST/STM32L4xx/STM32L476/lib/ioc/) | GPIO/EXTI, interrupt-driven UART, I2C, SPI, QSPI and LPTIM1/2 | [Examples](../ARM/ST/STM32L4xx/STM32L476/exemples/): EEPROM, flash memory, motion sensors, SPI master/slave, UART PRBS/SLIP and timers | Supported; hardware validated and used in existing projects. |
-| [STM32L496](../ARM/ST/STM32L4xx/STM32L496/lib/ioc/) | GPIO/EXTI, interrupt-driven UART, I2C, SPI, QSPI and LPTIM1/2 | [Examples](../ARM/ST/STM32L4xx/STM32L496/exemples/): flash memory, motion sensors, SPI master/slave, UART PRBS/SLIP and timers | Supported; hardware validated and used in existing projects. |
-| [STM32L4S9](../ARM/ST/STM32L4xx/STM32L4S9/lib/ioc/) | GPIO/EXTI, interrupt-driven UART, I2C, SPI, OSPI and LPTIM1/2 | [Examples](../ARM/ST/STM32L4xx/STM32L4S9/exemples/): EEPROM, flash memory, SPI master/slave, UART PRBS/SLIP and timers | Supported; hardware validated and used in existing projects. |
-| [STM32L432](../ARM/ST/STM32L4xx/STM32L432/lib/ioc/) | GPIO/EXTI, UART (polling, interrupt, DMA), I2C1/I2C3, SPI1/SPI3, QSPI and LPTIM1/2 from the L4 sources | [Examples](../ARM/ST/STM32L4xx/STM32L432/exemples/): UART loopback and PRBS for the NUCLEO-L432KC | Library and examples build; emulator run of the UART examples. Not tested on hardware. |
-| [STM32G474](../ARM/ST/STM32G4xx/STM32G474/lib/ioc/) | Startup at 170 MHz, GPIO/EXTI, UART (polling, interrupt, DMA through DMAMUX1) and LPTIM1 | [Examples](../ARM/ST/STM32G4xx/STM32G474/exemples/): UART loopback and PRBS for the NUCLEO-G474RE | Library and examples build; host tests and emulator run of the UART examples. Not tested on hardware. No I2C, SPI or TIM driver; see the [G4 port notes](../ARM/ST/STM32G4xx/README.md). |
+| [STM32L476](../ARM/ST/STM32L4xx/STM32L476/lib/ioc/) | GPIO/EXTI, interrupt-driven UART, I2C, SPI, QSPI, LPTIM1/2 and TIM | [Examples](../ARM/ST/STM32L4xx/STM32L476/exemples/): EEPROM, flash memory, motion sensors, SPI master/slave, UART PRBS/SLIP and timers | Supported; hardware validated and used in existing projects. The shared timer driver is not yet tested on hardware. |
+| [STM32L496](../ARM/ST/STM32L4xx/STM32L496/lib/ioc/) | GPIO/EXTI, interrupt-driven UART, I2C, SPI, QSPI, LPTIM1/2 and TIM | [Examples](../ARM/ST/STM32L4xx/STM32L496/exemples/): flash memory, motion sensors, SPI master/slave, UART PRBS/SLIP and timers | Supported; hardware validated and used in existing projects. The shared timer driver is not yet tested on hardware. |
+| [STM32L4S9](../ARM/ST/STM32L4xx/STM32L4S9/lib/ioc/) | GPIO/EXTI, interrupt-driven UART, I2C, SPI, OSPI, LPTIM1/2 and TIM | [Examples](../ARM/ST/STM32L4xx/STM32L4S9/exemples/): EEPROM, flash memory, SPI master/slave, UART PRBS/SLIP and timers | Supported; hardware validated and used in existing projects. The shared timer driver is not yet tested on hardware. |
+| [STM32L432](../ARM/ST/STM32L4xx/STM32L432/lib/ioc/) | GPIO/EXTI, UART (polling, interrupt, DMA), I2C1/I2C3, SPI1/SPI3 and QSPI from the L4 sources, LPTIM1/2 and TIM | [Examples](../ARM/ST/STM32L4xx/STM32L432/exemples/): UART loopback, PRBS and TimerDemo for the NUCLEO-L432KC | Library and examples build; emulator run of the UART examples and TimerDemo. Not tested on hardware. |
+| [STM32G474](../ARM/ST/STM32G4xx/STM32G474/lib/ioc/) | Startup at 170 MHz, GPIO/EXTI, UART (polling, interrupt, DMA through DMAMUX1), LPTIM1 and TIM | [Examples](../ARM/ST/STM32G4xx/STM32G474/exemples/): UART loopback, PRBS and TimerDemo for the NUCLEO-G474RE | Library and examples build; host tests and emulator run of the UART examples and TimerDemo. Not tested on hardware. No I2C or SPI driver; see the [G4 port notes](../ARM/ST/STM32G4xx/README.md). |
 | [STM32F030x8](../ARM/ST/STM32F0xx/STM32F030x8/lib/ioc/) | GPIO/EXTI, UART with interrupt/FIFO and TX DMA, TIM6/14/16/17/15/3/1 | [Examples](../ARM/ST/STM32F0xx/STM32F030x8/exemples/README.md): UART loopback/PRBS/SLIP, TaktOS UART, timer triggers, pulse trains, software crypto and DFU image verification | Supported; hardware validated. Native I2C/SPI/ADC drivers are not supplied by this port. |
-| [STM32F401xC](../ARM/ST/STM32F4xx/STM32F401/STM32F401xc/lib/ioc/) | Startup, vector/linker files, shared STM32 GPIO/EXTI and UART | Library project links the shared GPIO and UART drivers | Partial port: target IOsonata Timer integration and hardware validation remain outstanding. |
+| [STM32F401xC](../ARM/ST/STM32F4xx/STM32F401/STM32F401xc/lib/ioc/) | Startup, vector/linker files, shared STM32 GPIO/EXTI, UART and timer (TIM9/10/11/2/3/4/5/1) | Library project links the shared GPIO, UART and timer drivers; no example project | Partial port: library builds; host tests of the UART and timer drivers. Hardware validation remains outstanding. |
 | STM32F301x8, STM32F302x8 | Vector files | No complete MCU application project | Incomplete startup and peripheral ports. |
-| [STM32WBA65](../ARM/ST/STM32WBAxx/STM32WBA65/lib/ioc/) | Startup, GPIO/EXTI, UART with GPDMA, Timer on LPTIM1 and LPTIM2 | [Examples](../ARM/ST/STM32WBAxx/STM32WBA65/exemples/): UART loopback, PRBS and TimerDemo for the STM32WBA65I-DK1 | Incomplete: the Bluetooth adapter is not integrated. Not tested on hardware. |
+| [STM32WBA65](../ARM/ST/STM32WBAxx/STM32WBA65/lib/ioc/) | Startup, GPIO/EXTI, UART with GPDMA, LPTIM1/2 and TIM | [Examples](../ARM/ST/STM32WBAxx/STM32WBA65/exemples/): UART loopback, PRBS and TimerDemo for the STM32WBA65I-DK1 | Incomplete: the Bluetooth adapter is not integrated. Not tested on hardware. |
 | STM32L152 | Planned | Planned after 0.13 | Outside the 0.13 support list. |
 
 The L4 [I2C](../ARM/ST/STM32L4xx/src/i2c_stm32l4xx.cpp) driver supports polling
@@ -217,7 +220,7 @@ use the portable memory and sensor drivers already shown in the examples.
 L4 UART virtual devices 0-5 support seven/eight payload bits, none/even/odd
 parity and one/two stop bits. LPUART1 cannot use seven payload bits without
 parity; nine-bit payloads are unsupported. Timers use LPTIM1/2 at virtual
-indices 0/1; general-purpose TIM indices remain unimplemented. See the
+indices 0/1, then the TIM, from TIM6 to TIM8. See the
 [L4 port notes](../ARM/ST/STM32L4xx/README.md) for mappings and mode restrictions.
 
 ### STM32 validation evidence
@@ -234,13 +237,14 @@ LPTIM disable/enable, and virtual-device dispatch. Twenty additional ARM
 translation-unit builds passed using Arm GNU 14.3.1 at `-O0` and `-Os`:
 startup, UART and LPTIM for all three MCUs, plus the alternative L4+ startup
 source for L4S9. These are compilation and host-model results, not complete
-IOC library/application links or hardware tests.
+IOC library/application links or hardware tests. The L4 LPTIM source of that
+review was replaced by the shared STM32 timer driver on 2026-10-14.
 
 F030x8 has existing maintainer-reported use in TaktOS benchmarks. That evidence
 is separate from the peripheral timer tests: the benchmark uses
-SysTick for kernel timing and TIM17 as an IRQ probe. The new timers pass host
-register tests and Cortex-M0 archive-link smoke checks, including strong
-SysTick/TIM17 overrides. See the [F030x8 port notes](../ARM/ST/STM32F0xx/README.md)
+SysTick for kernel timing and TIM17 as an IRQ probe. The shared timer driver
+passes host register tests (`tests/stm32/run_timer.py`) and Cortex-M0
+archive-link checks, including application SysTick and TIM handlers. See the [F030x8 port notes](../ARM/ST/STM32F0xx/README.md)
 for virtual ordering, capabilities and remaining board checks. The
 [F030x8 example index](../ARM/ST/STM32F0xx/STM32F030x8/exemples/README.md)
 lists the target projects and separates peripheral examples from software-only
@@ -256,7 +260,9 @@ The implementation was merged in [PR 75](https://github.com/IOsonata/IOsonata/pu
 The exact flashed revision, successful build profile and complete tool versions
 were not recorded with these runs. This is maintainer hardware evidence for
 those functions, not a test of every mode or all seven timers. TIM14, TIM17,
-TIM15, TIM3 and TIM1 still need hardware coverage.
+TIM15, TIM3 and TIM1 still need hardware coverage. These runs used the F030x8
+timer source that the shared STM32 timer driver replaced on 2026-10-14; the
+shared driver needs the TIM6 and TIM16 runs again.
 The planned L152/Nucleo-64 work is outside the 0.13 support list.
 
 ## NXP, Espressif and Raspberry Pi
@@ -316,8 +322,8 @@ the review commit or that every project passed both IOC build profiles.
 | nRF9160 revision 1 | GNSS probe, modem library `3.5.0-cellular-44ef973ed31b`, firmware `mfw_nrf9160_1.2.8` | GNSS | Maintainer output on 2026-10-09: every GNSS setting refused with `EOPNOTSUPP`; the modem library reports that firmware 1.3.4 or newer is needed; the start returns but no position data arrives. GNSS is not available on revision 1. |
 | nRF9161 (nRF91x1 port) | `LteUdpTaktOS` | LTE-M registration and UDP transfer with TaktOS | Maintainer confirmed the same successful registration and UDP echo on 2026-10-08. Modem firmware version was not supplied; GNSS and network endurance were not reported. |
 | SAM4LC8C | SAM4L8 Xplained Pro | Startup, LED GPIO, UART, AST/TC timers, I2C, SPI, CDC loopback, ISO and manual suspend/wake | Hardware validated, confirmed 2026-10-08. See [timer results](../tests/sam4l/README.md) and [USB results](releases/0.13.md#sam4l-usb-port). |
-| STM32F030x8 | STM32F0308-DISCO | Hardware validated: startup, GPIO, UART and timers; later UART TX DMA PRBS | Maintainer-confirmed validation. Detailed recorded timer runs cover TIM6/TIM16; coverage of additional modes is tracked separately. |
-| STM32L476, STM32L496, STM32L4S9 | Maintainer's existing projects | Hardware validated and used in projects | Confirmed by the maintainer on 2026-10-08; board names and per-project configurations were not supplied in this confirmation. |
+| STM32F030x8 | STM32F0308-DISCO | Hardware validated: startup, GPIO, UART and timers; later UART TX DMA PRBS | Maintainer-confirmed validation. Detailed recorded timer runs cover TIM6/TIM16 with the F030x8 timer source replaced on 2026-10-14; coverage of additional modes is tracked separately. |
+| STM32L476, STM32L496, STM32L4S9 | Maintainer's existing projects | Hardware validated and used in projects | Confirmed by the maintainer on 2026-10-08, with the L4 timer source replaced on 2026-10-14; board names and per-project configurations were not supplied in this confirmation. |
 | RA4M1 | EK-RA4M1 | Blinky, TimerDemo callbacks and SCI UART | Maintainer-confirmed board results; semihosting affected timer timestamps. IIC and other optional modes are not covered. |
 
 RA4M1 has separate maintainer-confirmed startup/GPIO, timer and UART hardware

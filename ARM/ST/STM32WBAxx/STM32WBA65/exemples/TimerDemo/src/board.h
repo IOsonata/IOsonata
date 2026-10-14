@@ -48,11 +48,15 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 // LD6 green PD8 toggles on trigger 0, LD5 red PD9 on trigger 1
 #define LED_PINS_MAP		BOARD_LED_PINS
 
-// Timer DevNo 0 LPTIM1, 1 LPTIM2. The default clock is the LSI, 32 kHz, at
-// the highest frequency. Two compare triggers: 100 ms and 1 s.
+// Timer DevNo 0 LPTIM1, 1 LPTIM2, 2 TIM16, 3 TIM17, 4 TIM2, 5 TIM3, 6 TIM4,
+// 7 TIM1. An LPTIM runs from the LSI (g_McuOsc default), 32 kHz, with two
+// compare triggers: 100 ms and 1 s. A TIM runs from the APB timer clock at
+// 100 kHz, with up to 4 triggers: 100 ms, 1 s, 250 ms, 500 ms.
 #ifndef TIMER_DEMO_DEVNO
 #define TIMER_DEMO_DEVNO	0
 #endif
+// 100 kHz on a TIM. An LPTIM takes the closest frequency it makes, 32 kHz.
+#define TIMER_DEMO_FREQ		100000
 
 // Output on the first ST-LINK virtual COM port, 115200 8N1: USART1 (DevNo 1)
 // RX PA8, TX PB12, AF7, the BOARD_VCP_PINS of stm32_boards.h

@@ -44,11 +44,12 @@ settings at their reset value, which suits a device with TrustZone disabled
 
 ## Timer
 
-`src/timer_lptim_stm32wbaxx.cpp` implements the Timer driver on the two low
-power timers: DevNo 0 is LPTIM1 (APB7, CCIPR3 LPTIM1SEL), DevNo 1 is LPTIM2
-(APB1, CCIPR1 LPTIM2SEL). `TimerGetLowFreqDevCount` returns 2, the
-general purpose TIM are not implemented and `TimerGetHighFreqDevCount`
-returns 0.
+The WBA65 library builds the STM32 timer driver shared with the other
+families: `ARM/ST/src/timer_stm32.cpp` (TimerInit), `timer_lptim_stm32.cpp`
+(LPTIM) and `timer_tim_stm32.cpp` (TIM), see `ARM/ST/include/timer_stm32.h`.
+DevNo 0 is LPTIM1 (APB7, CCIPR3 LPTIM1SEL), DevNo 1 LPTIM2 (APB1, CCIPR1
+LPTIM2SEL), then 2 TIM16, 3 TIM17, 4 TIM2, 5 TIM3, 6 TIM4, 7 TIM1.
+`TimerGetLowFreqDevCount` returns 2, `TimerGetHighFreqDevCount` 6.
 
 Each LPTIM counts 0 to 0xFFFF, extended to 64 bits in software, and has two
 compare triggers, CCR1 and CCR2, single shot or continuous. A continuous
@@ -65,9 +66,15 @@ This LPTIM takes CFGR writes with the timer disabled and DIER, ARR, CCR1 and
 CCR2 writes with the timer enabled, each confirmed by DIEROK, ARROK, CMP1OK
 or CMP2OK; the waits are bounded and a write not confirmed makes `TimerInit`,
 `Enable` or `EnableTrigger` fail. DIER is written right after ENABLE, as in
-the ST HAL, and written again if DIEROK does not come. External trigger is
-not supported. Not tested on hardware; `STM32WBA65/exemples/TimerDemo` is the
-test project.
+the ST HAL, and written again if DIEROK does not come.
+
+The TIM count at the APB timer clock divided by 1 to 65536,
+`TIMER_CLKSRC_DEFAULT` only, with their compare channels as triggers: 1 on
+TIM16 and TIM17, 4 on TIM1 to TIM4. External trigger and the tick interrupt
+are not supported. The timer vectors of `STM32WBA65/src/vectors_stm32wba65.c`
+are weak aliases of `Stm32TimerVector`; TimerInit refuses a timer whose
+vector is replaced by an application handler. Not tested on hardware;
+`STM32WBA65/exemples/TimerDemo` is the test project.
 
 ## STM32CubeWBA dependency
 
@@ -90,7 +97,7 @@ CMSIS startup/system implementation are required. The presence of
    table and interrupt dispatch using the existing IOsonata MCU pattern.
 2. Implement and test MCU-owned GPIO/pinmux, UART and Timer drivers using
    the target reference manual and the correct STM32WBA device definitions.
-   GPIO, UART and the LPTIM timer are implemented, not tested on hardware.
+   GPIO, UART and the timers are implemented, not tested on hardware.
 3. Bind the existing BLE adapter to a pinned STM32CubeWBA release, resolve the
    ACI and link-layer dependencies, and verify controller/stack bring-up.
 4. Create an MCU library project and small bring-up applications with

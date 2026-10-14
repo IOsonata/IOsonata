@@ -1,13 +1,12 @@
 /**-------------------------------------------------------------------------
 @file	g4_test.cpp
 
-@brief	Host test of the STM32G4 system clock and LPTIM1 timer sources.
+@brief	Host test of the STM32G4 system clock source.
 
-Runs ARM/ST/STM32G4xx/src/system_stm32g4xx.c and
-ARM/ST/STM32G4xx/src/timer_lptim_stm32g4xx.cpp with the ST STM32G474 device
+Runs ARM/ST/STM32G4xx/src/system_stm32g4xx.c with the ST STM32G474 device
 header. The peripheral address range is mapped as plain memory: the test
-sets the ready flags and the LPTIM status and counter itself, and calls the
-LPTIM1 interrupt handler. Register values only, no timing.
+sets the ready flags itself. Register values only, no timing. The timer
+driver is tested by tests/stm32/run_timer.py.
 
 @author	Hoang Nguyen Hoan
 @date	October 13, 2026
@@ -43,7 +42,6 @@ SOFTWARE.
 #include <sys/mman.h>
 
 #include "stm32g4xx.h"
-#include "coredev/timer.h"
 #include "coredev/system_core_clock.h"
 
 TestScb_t g_TestScb;
@@ -52,7 +50,6 @@ extern "C" {
 // Const has internal linkage in C++ without extern
 extern void (* const __Vectors[4])(void);
 void (* const __Vectors[4])(void) = {};
-void LPTIM1_IRQHandler(void);
 bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq);
 uint32_t SystemPeriphClockSet(int Idx, uint32_t Freq);
 }
@@ -197,190 +194,6 @@ static void TestClock(void)
 	CHECK(SystemPeriphClockSet(2, 40000000) == 0);
 }
 
-// ---- LPTIM1 -----------------------------------------------------------------
-
-static uint32_t s_Evt;
-static int s_EvtCnt;
-static int s_TrigCnt;
-
-static void EvtHandler(TimerDev_t * const pTimer, uint32_t Evt)
-{
-	s_Evt |= Evt;
-	s_EvtCnt++;
-}
-
-static void TrigHandler(TimerDev_t * const pTimer, int TrigNo, void * const pContext)
-{
-	s_TrigCnt++;
-}
-
-static void LptReset(void)
-{
-	memset((void *)LPTIM1, 0, sizeof(LPTIM_TypeDef));
-	memset((void *)RCC, 0, sizeof(RCC_TypeDef));
-	memset((void *)PWR, 0, sizeof(PWR_TypeDef));
-	// ARR and CMP writes taken at once
-	LPTIM1->ISR = LPTIM_ISR_ARROK | LPTIM_ISR_CMPOK;
-	memset(s_NvicEn, 0, sizeof(s_NvicEn));
-}
-
-// LPTIM status with the write done flags, as the hardware keeps them set
-static void LptIrq(uint32_t Flags, uint32_t Cnt)
-{
-	LPTIM1->CNT = Cnt;
-	LPTIM1->ISR = Flags | LPTIM_ISR_ARROK | LPTIM_ISR_CMPOK;
-	LPTIM1_IRQHandler();
-	LPTIM1->ISR = LPTIM_ISR_ARROK | LPTIM_ISR_CMPOK;
-}
-
-static uint32_t Sel(void)
-{
-	return (RCC->CCIPR & RCC_CCIPR_LPTIM1SEL) >> RCC_CCIPR_LPTIM1SEL_Pos;
-}
-
-static void TestLptim(void)
-{
-	TimerDev_t t;
-	TimerCfg_t cfg = { 0, TIMER_CLKSRC_LFRC, 32000, 5, EvtHandler };
-
-	// Only LPTIM1
-	memset(&t, 0, sizeof(t));
-	LptReset();
-	RCC->CSR = RCC_CSR_LSIRDY;
-	cfg.DevNo = 1;
-	CHECK(TimerInit(&t, &cfg) == false);
-	cfg.DevNo = -1;
-	CHECK(TimerInit(&t, &cfg) == false);
-	CHECK(TimerInit(nullptr, &cfg) == false);
-	CHECK(TimerInit(&t, nullptr) == false);
-	CHECK(TimerGetLowFreqDevCount() == 1 && TimerGetHighFreqDevCount() == 0 && TimerGetHighFreqDevNo() == 1);
-	cfg.DevNo = 0;
-
-	// LSI 32 kHz
-	CHECK(TimerInit(&t, &cfg));
-	CHECK(Sel() == 1);
-	CHECK((RCC->CSR & RCC_CSR_LSION) != 0);
-	CHECK((RCC->APB1ENR1 & RCC_APB1ENR1_LPTIM1EN) != 0);
-	CHECK(t.Freq == 32000);
-	CHECK(t.nsPeriod == 31250);
-	CHECK((LPTIM1->CFGR & LPTIM_CFGR_PRESC) == 0);
-	CHECK(LPTIM1->IER == (LPTIM_IER_ARRMIE | LPTIM_IER_CMPMIE));
-	CHECK(LPTIM1->CR == (LPTIM_CR_ENABLE | LPTIM_CR_CNTSTRT));
-	CHECK(LPTIM1->ARR == 0xFFFF);
-	CHECK(s_NvicEn[LPTIM1_IRQn] && s_NvicPrio[LPTIM1_IRQn] == 5);
-
-	// LSI never ready
-	LptReset();
-	CHECK(TimerInit(&t, &cfg) == false);
-
-	// HSI16 and the closest prescaler
-	static const struct { uint32_t Req, Got, Presc; } hf[] = {
-		{ 0, 16000000, 0 }, { 16000000, 16000000, 0 }, { 20000000, 16000000, 0 }, { 1000000, 1000000, 4 },
-		{ 3000000, 4000000, 2 }, { 100, 125000, 7 } };
-	for (auto &h : hf)
-	{
-		LptReset();
-		RCC->CR = RCC_CR_HSIRDY;
-		cfg.ClkSrc = TIMER_CLKSRC_HFRC;
-		cfg.Freq = h.Req;
-		CHECK(TimerInit(&t, &cfg));
-		CHECK(Sel() == 2);
-		CHECK(t.Freq == h.Got);
-		CHECK(((LPTIM1->CFGR & LPTIM_CFGR_PRESC) >> LPTIM_CFGR_PRESC_Pos) == h.Presc);
-	}
-
-	// Default clock from g_McuOsc: LSE crystal, then LSI
-	LptReset();
-	RCC->BDCR = RCC_BDCR_LSERDY;
-	cfg.ClkSrc = TIMER_CLKSRC_DEFAULT;
-	cfg.Freq = 0;
-	g_McuOsc.LowPwrOsc.Type = OSC_TYPE_XTAL;
-	CHECK(TimerInit(&t, &cfg));
-	CHECK(Sel() == 3 && t.Freq == 32768);
-	LptReset();
-	RCC->CSR = RCC_CSR_LSIRDY;
-	g_McuOsc.LowPwrOsc.Type = OSC_TYPE_RC;
-	CHECK(TimerInit(&t, &cfg));
-	CHECK(Sel() == 1 && t.Freq == 32000);
-
-	// LSE crystal started with backup domain access, refused when it does
-	// not start
-	LptReset();
-	cfg.ClkSrc = TIMER_CLKSRC_LFXTAL;
-	CHECK(TimerInit(&t, &cfg) == false);
-	CHECK((PWR->CR1 & PWR_CR1_DBP) != 0);
-	CHECK((RCC->BDCR & RCC_BDCR_LSEON) == 0);
-
-	// Tick count and overflow
-	LptReset();
-	RCC->CSR = RCC_CSR_LSIRDY;
-	cfg.ClkSrc = TIMER_CLKSRC_LFRC;
-	cfg.Freq = 32000;
-	CHECK(TimerInit(&t, &cfg));
-	LPTIM1->CNT = 100;
-	CHECK(t.GetTickCount(&t) == 100);
-	s_Evt = 0;
-	s_EvtCnt = 0;
-	LptIrq(LPTIM_ISR_ARRM, 5);
-	CHECK(t.Rollover == 0x10000 && (s_Evt & TIMER_EVT_COUNTER_OVR) && s_EvtCnt == 1);
-	CHECK(t.GetTickCount(&t) == 0x10005);
-	// Wrapped, the interrupt not taken yet
-	LPTIM1->ISR |= LPTIM_ISR_ARRM;
-	LPTIM1->CNT = 3;
-	CHECK(t.GetTickCount(&t) == 0x20003);
-	LPTIM1->CNT = 0xFFF0;
-	CHECK(t.GetTickCount(&t) == 0x1FFF0);
-	LPTIM1->ISR &= ~LPTIM_ISR_ARRM;
-
-	// Compare trigger, 10 ms at 32 kHz is 320 counts
-	CHECK(t.GetMaxTrigger(&t) == 1);
-	CHECK(t.FindAvailTrigger(&t) == 0);
-	LPTIM1->CNT = 1000;
-	CHECK(t.EnableTrigger(&t, 0, 10000000ULL, TIMER_TRIG_TYPE_CONTINUOUS, TrigHandler, nullptr) == 10000000ULL);
-	CHECK(LPTIM1->CMP == 1320);
-	CHECK(t.FindAvailTrigger(&t) == -1);
-	s_Evt = 0;
-	s_TrigCnt = 0;
-	LptIrq(LPTIM_ISR_CMPM, 1321);
-	CHECK(s_TrigCnt == 1 && (s_Evt & TIMER_EVT_TRIGGER(0)));
-	CHECK(LPTIM1->CMP == 1641);
-	// Compare wraps at 16 bits
-	LptIrq(LPTIM_ISR_CMPM, 0xFF00);
-	CHECK(LPTIM1->CMP == ((0xFF00 + 320) & 0xFFFF));
-	CHECK(s_TrigCnt == 2);
-
-	// Disabled trigger: no callback, no trigger event
-	t.DisableTrigger(&t, 0);
-	s_Evt = 0;
-	LptIrq(LPTIM_ISR_CMPM, 2000);
-	CHECK(s_TrigCnt == 2 && (s_Evt & TIMER_EVT_TRIGGER(0)) == 0);
-
-	// Single shot
-	CHECK(t.EnableTrigger(&t, 0, 10000000ULL, TIMER_TRIG_TYPE_SINGLE, TrigHandler, nullptr) != 0);
-	LptIrq(LPTIM_ISR_CMPM, 2400);
-	LptIrq(LPTIM_ISR_CMPM, 2720);
-	CHECK(s_TrigCnt == 3);
-
-	// Out of the 16 bits compare range, wrong trigger number
-	CHECK(t.EnableTrigger(&t, 0, 31250ULL * 2, TIMER_TRIG_TYPE_SINGLE, TrigHandler, nullptr) == 0);
-	CHECK(t.EnableTrigger(&t, 0, 31250ULL * 0x10000, TIMER_TRIG_TYPE_SINGLE, TrigHandler, nullptr) == 0);
-	CHECK(t.EnableTrigger(&t, 1, 10000000ULL, TIMER_TRIG_TYPE_SINGLE, TrigHandler, nullptr) == 0);
-	CHECK(t.EnableExtTrigger(&t, 0, TIMER_EXTTRIG_SENSE_HIGH_TRANSITION) == false);
-
-	// New frequency restarts the counter
-	CHECK(t.SetFrequency(&t, 8000) == 8000);
-	CHECK(((LPTIM1->CFGR & LPTIM_CFGR_PRESC) >> LPTIM_CFGR_PRESC_Pos) == 2);
-	CHECK(t.Rollover == 0 && t.nsPeriod == 125000);
-	CHECK(LPTIM1->CR == (LPTIM_CR_ENABLE | LPTIM_CR_CNTSTRT));
-
-	// Disable and enable
-	t.Disable(&t);
-	CHECK(LPTIM1->CR == 0 && (RCC->APB1ENR1 & RCC_APB1ENR1_LPTIM1EN) == 0 && !s_NvicEn[LPTIM1_IRQn]);
-	CHECK(t.Enable(&t));
-	CHECK(LPTIM1->CR == (LPTIM_CR_ENABLE | LPTIM_CR_CNTSTRT) && (RCC->APB1ENR1 & RCC_APB1ENR1_LPTIM1EN));
-	CHECK(LPTIM1->IER == (LPTIM_IER_ARRMIE | LPTIM_IER_CMPMIE) && s_NvicEn[LPTIM1_IRQn]);
-}
-
 int main()
 {
 	void *p = mmap((void *)0x40000000, 0x30000, PROT_READ | PROT_WRITE,
@@ -393,7 +206,6 @@ int main()
 	}
 
 	TestClock();
-	TestLptim();
 
 	printf("%d checks, %d failures\n", s_Checks, s_Fail);
 

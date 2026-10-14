@@ -12,9 +12,11 @@ layout requires a separate library configuration.
 
 The IOC library includes IOsonata `ResetEntry.c`, the WBA65 interrupt
 vector table, a shared HSI16 system initializer, shared GPIO configuration,
-the shared STM32 UART driver (`ARM/ST/src/uart_stm32.cpp`) and the LPTIM
-timer driver (`../src/timer_lptim_stm32wbaxx.cpp`). The vector
-table follows STM32WBA65xx interrupt order. The library is built for the FPU
+the shared STM32 UART driver (`ARM/ST/src/uart_stm32.cpp`) and the shared
+STM32 timer driver (`ARM/ST/src/timer_stm32.cpp`, `timer_lptim_stm32.cpp`,
+`timer_tim_stm32.cpp`). The vector table follows STM32WBA65xx interrupt
+order; its timer vectors are weak aliases of `Stm32TimerVector`, which runs
+the timer driver when the application uses it. The library is built for the FPU
 with the hard float ABI; the system initializer enables CP10 and CP11 and
 installs the vector base, but does not configure PLLs, flash latency or
 TrustZone.
@@ -25,7 +27,7 @@ build and link. Outstanding work:
 - Verify startup and vector placement on hardware with the chosen security
   configuration
 - Implement live RCC clock-frequency decoding before changing from HSI16
-- Verify EXTI interrupt routing/dispatch and the LPTIM timer on hardware
+- Verify EXTI interrupt routing/dispatch and the timers on hardware
 - Validate the application linker script against STM32WBA65 flash/SRAM banks
   and the configured secure/nonsecure partitions
 - Integrate and test the STM32CubeWBA radio middleware
@@ -74,8 +76,9 @@ hardware run on the Discovery Kit.
 `IOsonata_STM32WBA65` from `lib/ioc` in the same Debug or Release
 configuration and uses `ldscript/gcc_stm32wba65_i.ld`. Build the library
 first. `src/board.h` selects `#define BOARD STM32WBA65I_DK1`: Timer DevNo 0,
-LPTIM1, from the LSI at 32 kHz (`TIMER_DEMO_DEVNO 1` for LPTIM2), trigger 0
-every 100 ms toggles LD6 (PD8), trigger 1 every 1 s toggles LD5 (PD9). The
+LPTIM1, from the LSI at 32 kHz (`TIMER_DEMO_DEVNO` 1 for LPTIM2, 2 to 7 for
+TIM16, TIM17, TIM2, TIM3, TIM4 and TIM1 at 100 kHz), trigger 0 every 100 ms
+toggles LD6 (PD8), trigger 1 every 1 s toggles LD5 (PD9). The
 demo prints on the first ST-LINK virtual COM port, USART1 DevNo 1, RX PA8 and
 TX PB12, AF7, 115200 8N1, interrupt mode. It links `nosys`, not semihosting.
 Expected output:
@@ -101,8 +104,11 @@ DIER, ARR, CCR1, CCR2 with it disabled or before the previous write is
 confirmed) and backup domain writes without DBP: no violation, the output
 above, the counter extended across its wrap at 2.048 s, LPTIM2 and the LSE
 crystal as well. With the first write after ENABLE lost, the DIER write made
-again starts the timer. `tests/stm32wba/run.py` runs the driver source on
-the host with the device header. This does not replace a hardware run.
+again starts the timer. The same runs were made with the shared timer
+driver, where the LPTIM vectors reach the driver through `Stm32TimerVector`.
+`tests/stm32wba/run.py` runs the LPTIM driver source on the host with the
+device header, `tests/stm32/run_timer.py` the TIM with a register model. The
+TIM were not run in the emulator. This does not replace a hardware run.
 
 The application linker layouts are now provided in `ldscript/`:
 

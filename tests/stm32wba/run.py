@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
-"""STM32WBA host test of the LPTIM1 and LPTIM2 timer source.
+"""STM32WBA host test of the LPTIM1 and LPTIM2 timers.
 
 Run: python3 tests/stm32wba/run.py
 
-wba_timer_test.cpp runs ARM/ST/STM32WBAxx/src/timer_lptim_stm32wbaxx.cpp
-with the ST STM32WBA65 device header and the host core header of
-tests/stm32/shim, at -O0 and -O2 with the undefined behavior sanitizer.
-Peripheral registers are plain memory mapped at their addresses. Linux only.
+wba_timer_test.cpp runs the shared STM32 timer driver (ARM/ST/src
+timer_stm32.cpp, timer_lptim_stm32.cpp, timer_tim_stm32.cpp) with the ST
+STM32WBA65 device header and the host core header of tests/stm32/shim, at
+-O0 and -O2 with the undefined behavior sanitizer. Peripheral registers are
+plain memory mapped at their addresses. Linux only.
 
-When arm-none-eabi-g++ is found, the source is also compiled for the
-STM32WBA65 at -O0 and -Os, warnings as errors.
+When arm-none-eabi-g++ is found, the sources are also compiled for the
+STM32WBA65 at -O0 and -Os, warnings as errors. tests/stm32/run_timer.py
+compiles them for every STM32 part.
 
 Not hardware validation: no timing, no electrical test.
 
@@ -44,7 +46,7 @@ import tempfile
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
-LPTIM = ROOT / 'ARM/ST/STM32WBAxx/src/timer_lptim_stm32wbaxx.cpp'
+TIMER = [ROOT / 'ARM/ST/src' / f for f in ('timer_stm32.cpp', 'timer_lptim_stm32.cpp', 'timer_tim_stm32.cpp')]
 
 
 def run(args):
@@ -71,7 +73,7 @@ def main():
             for label, flags in (('O0', ['-O0']), ('O2', ['-O2'])):
                 opt = ['-DSTM32WBA65xx', *flags, '-g', '-fsanitize=undefined', '-fno-sanitize-recover=all']
                 objs = []
-                for src, lang in ((LPTIM, 'c++'), (HERE / 'wba_timer_test.cpp', 'c++')):
+                for src, lang in [(f, 'c++') for f in TIMER] + [(HERE / 'wba_timer_test.cpp', 'c++')]:
                     obj = tmp / f'{label}_{src.stem}.o'
                     if lang == 'c':
                         run([cc, '-std=gnu17', *opt, *inc, '-c', src, '-o', obj])
@@ -89,12 +91,12 @@ def main():
                '-I' + str(ROOT / 'ARM/ST/STM32WBAxx/include')]
         with tempfile.TemporaryDirectory(prefix='stm32wba-arm-') as tmp:
             for label in ('O0', 'Os'):
-                for src in (LPTIM,):
+                for src in TIMER:
                     lang = ['-x', 'c', '-std=gnu17'] if src.suffix == '.c' else ['-std=gnu++23', '-fno-exceptions', '-fno-rtti']
                     run([arm, '-mcpu=cortex-m33', '-mthumb', '-mfloat-abi=hard', '-mfpu=fpv5-sp-d16', '-DSTM32WBA65xx',
                          f'-{label}', *lang, '-Wall', '-Werror', '-ffunction-sections', '-fdata-sections', *inc,
                          '-c', src, '-o', Path(tmp) / f'{src.stem}_{label}.o'])
-        print('GNU Arm compile of the WBA LPTIM source at -O0 and -Os: PASS')
+        print('GNU Arm compile of the timer sources for the WBA65 at -O0 and -Os: PASS')
     else:
         print('NOT RUN: arm-none-eabi-g++ not found, no Arm compile')
     print('STM32WBA checks complete. Hardware not tested.')

@@ -1,12 +1,14 @@
 # STM32L4 port status
 
 STM32L476, STM32L496 and STM32L4S9 are supported at the minimum MCU level:
-startup, GPIO, UART and LPTIM1/2 are implemented. Library projects
+startup, GPIO, UART and timers are implemented. Library projects
 exist for each MCU. The maintainer confirms these STM32L4 ports are hardware
 validated and used in existing projects (2026-10-08). The UART was then the
-L4 copy `src/uart_stm32l4xx.cpp`. The libraries now build the STM32 UART
-driver shared with the other families, `ARM/ST/src/uart_stm32.cpp`, and the
-L4 copy is removed; the shared driver has not been run on L4 hardware yet.
+L4 copy `src/uart_stm32l4xx.cpp` and the timer the L4 LPTIM copy
+`src/timer_lptim_stm32l4xx.cpp`. The libraries now build the STM32 UART and
+timer drivers shared with the other families, `ARM/ST/src/uart_stm32.cpp` and
+`ARM/ST/src/timer_*stm32.cpp`, and the L4 copies are removed; the shared
+drivers have not been run on L4 hardware yet.
 The automated checks
 below describe the scope of the recent source review; they do not mean the
 ports lack hardware validation. See the
@@ -63,18 +65,50 @@ index 1 fails initialization. Extended SPI
 controllers currently accept polling master configurations only; interrupt,
 DMA and slave requests fail initialization.
 
-## Timer and I2C limits
+## Timer
 
-Timer indices 0 and 1 select the existing LPTIM1 and LPTIM2 implementation.
-General-purpose TIM indices remain reserved but are not implemented.
-Their initialization returns false without publishing an instance or changing
-registers; the high-frequency timer availability count is zero.
+The libraries build the STM32 timer driver: `ARM/ST/src/timer_stm32.cpp`
+(TimerInit), `timer_lptim_stm32.cpp` (LPTIM) and `timer_tim_stm32.cpp` (TIM),
+described in `ARM/ST/include/timer_stm32.h`. Timer DevNo are virtual
+indices, the LPTIM first (`TimerGetLowFreqDevCount` 2), then the TIM from the
+basic timers to the advanced timers:
+
+| DevNo | L476, L496, L4S9 | L432 | Triggers |
+|---|---|---|---|
+| 0 | LPTIM1 | LPTIM1 | 1 |
+| 1 | LPTIM2 | LPTIM2 | 1 |
+| 2 | TIM6 | TIM6 | 1, the counter period |
+| 3 | TIM7 | TIM7 | 1, the counter period |
+| 4 | TIM16 | TIM16 | 1 |
+| 5 | TIM17 | TIM15 | 1 (TIM17), 2 (TIM15) |
+| 6 | TIM15 | TIM2 | 2 (TIM15), 4 (TIM2) |
+| 7 | TIM2 | TIM1 | 4 |
+| 8 to 12 | TIM3, TIM4, TIM5, TIM1, TIM8 | | 4 |
+
+An LPTIM counts at its kernel clock, LSI, LSE (crystal or bypass with
+`OSC_TYPE_TCXO`) or HSI16, divided by 1 to 128, 16 bits extended to 64 in
+software; one compare trigger (CMP). CFGR and IER are written with the timer
+disabled, ARR and CMP with the timer enabled, confirmed by ARROK and CMPOK.
+A continuous trigger is scheduled one period after its previous compare
+value. A TIM counts at the APB timer clock divided by 1 to 65536,
+`TIMER_CLKSRC_DEFAULT` only; its triggers are its compare channels, a
+deadline longer than the counter period is kept in software. External
+trigger and the tick interrupt are not supported. The old L4 LPTIM driver
+also took an external trigger; no IOsonata code used it, it wrote CFGR with
+the timer enabled, and its timeout mode restarts the counter of the 64 bits
+count.
+
+The timer vectors of the vector file are weak aliases of
+`Stm32TimerVector`: TimerInit refuses a timer whose vector is replaced by an
+application handler (TIM6 shares its vector with the DAC). The details are
+in `ARM/ST/STM32F0xx/README.md` and `ARM/ST/include/timer_stm32.h`.
+
+## I2C limits
 
 I2C currently accepts polling master configurations only. Slave, interrupt
 and DMA requests return false before changing the device or hardware state.
 L4S9 I2C4 uses virtual index 3. The L432 has no I2C2: index 1 fails
-initialization, I2C1 and I2C3 keep indices 0 and 2. The timer table has no
-register for TIM3, TIM4, TIM5, TIM8 and TIM17 on the L432.
+initialization, I2C1 and I2C3 keep indices 0 and 2.
 
 These restrictions identify unsupported modes within the hardware-validated
 ports. Hardware validation does not imply that every optional mode is implemented.
@@ -86,17 +120,21 @@ Run the focused host regressions from the repository root:
 ```sh
 python3 tests/stm32l4/run.py
 python3 tests/stm32/run_uart.py
+python3 tests/stm32/run_timer.py
 ```
 
 `tests/stm32l4/run.py` compiles extracted production function bodies against
 small register and dispatch models, with UBSan. It covers SPI versus
 extended-controller dispatch (L432, L476, L496 and L4S9), OSPI clock masks
-and prescaler limits, I2C configuration refusal, the refusal of an instance
-the MCU does not have (SPI2 and I2C2 on the L432), and TIM refusal while
-preserving LPTIM dispatch. It
+and prescaler limits, I2C configuration refusal, and the refusal of an
+instance the MCU does not have (SPI2 and I2C2 on the L432). It
 also covers direct/PLL clock sources and MSI range selection in both startup
-files, and restoring LPTIM overflow interrupts across disable/enable cycles.
-It does not simulate the complete I2C, SPI or timer hardware.
+files. It does not simulate the complete I2C or SPI hardware.
+
+`tests/stm32/run_timer.py` runs the shared timer driver: the TIM with a
+register model and the LPTIM with plain memory registers, for L432, L476,
+L496 (TIM) and L4S9, and checks the timer vectors of each vector file, see
+[tests/stm32f0/README.md](../../../tests/stm32f0/README.md).
 
 `tests/stm32/run_uart.py` runs the shared UART driver with the L432, L476,
 L496 and L4S9 device headers and a model of the USART, DMA and RCC registers:
@@ -105,10 +143,10 @@ polling, interrupt and DMA transfers, the CSELR and DMAMUX1 requests, RX
 errors and LPUART1 clock selection. See
 [tests/stm32f0/README.md](../../../tests/stm32f0/README.md).
 
-The changed SPI, I2C, timer-dispatch and TIM translation units compile
+The changed SPI and I2C translation units compile
 for L476, L496 and L4S9 with Arm GNU 14.3.1, GNU C++17, Cortex-M4 hard-float,
 no exceptions/RTTI, at -O0 and -Os. The changed OSPI translation unit also
-compiles for L4S9. Startup and LPTIM compile for all three targets at both
+compiles for L4S9. Startup compiles for all three targets at both
 optimization levels; the alternative system_stm32l4plus.c compiles for L4S9
 (the L4S9 project uses system_stm32l4xx.c). These are source compilation
 checks with staged headers,
@@ -125,10 +163,35 @@ virtual COM port). The STM32L476 library leaves out the old `src/sysstatus.c`,
 which no longer compiles with the current `sysstatus.h`. The library and these
 two examples were built for Debug and Release from their `.project` and
 `.cproject` settings with GNU Arm 13.2, outside IOcomposer. The other L476
-examples still name `stm32l476xx.ld`, which is not in `ldscript/`
-(`gcc_stm32l476xx.ld` is), and their board files pair DevNo 1 with the USART2
-pins and PinOp `0x72`, which the GPIO driver does not take as AF7. The L496
-and L4S9 libraries still build `src/sysstatus.c`.
+examples, except TimerDemo, still name `stm32l476xx.ld`, which is not in
+`ldscript/` (`gcc_stm32l476xx.ld` is), and their board files pair DevNo 1
+with the USART2 pins and PinOp `0x72`, which the GPIO driver does not take as
+AF7. The L496 and L4S9 libraries still build `src/sysstatus.c`, which does
+not compile; the libraries build without it.
+
+Timer hardware run: TimerDemo (`exemples/timer/timer_demo.cpp`), in
+`STM32L476/exemples/TimerDemo` for B_L475E_IOT01A and
+`STM32L432/exemples/TimerDemo` for NUCLEO_L432KC. Output on the ST-LINK
+virtual COM port at 115200 8N1 (USART1 PB7/PB6 on the B-L475E-IOT01A,
+USART2 PA15/PA2 on the NUCLEO-L432KC), the first LED toggles on trigger 0.
+`TIMER_DEMO_DEVNO` in `board.h` selects the timer, LPTIM1 by default, from
+the LSE crystal; the TIM run at 100 kHz. Expected output, LPTIM1:
+
+```
+Timer 0 trigger 0: 100 ms
+Count = 100 ms, T0 = 100097 us
+Count = 200 ms, T0 = 100006 us
+...
+```
+
+100 ms is 3277 ticks of the LSE, 100.006 ms. A four channel TIM prints
+triggers 0 to 3 (100 ms, 1 s, 250 ms, 500 ms) and their periods. The
+STM32L496 and STM32L4S9 TimerDemo projects keep their board files, without
+UART output. The four TimerDemo projects build for Debug and Release; in an
+instruction set emulator with LPTIM, TIM, RCC and UART models the L432 image
+runs each of its eight timers and the L476 image LPTIM1, LPTIM2, TIM6, TIM17,
+TIM5, TIM1 and TIM8 for 3.3 s, with the expected periods and no LPTIM write
+order violation. Not tested on the boards.
 
 STM32L432: `STM32L432/lib/ioc` has the Debug, Release, Debug_FPU and
 Release_FPU configurations of the L476 library. It adds the STM32L432xx
@@ -157,5 +220,5 @@ DMA without interrupts and DMA with interrupts, and the PRBS output matches
 
 For a new release-candidate run, record the project, MCU/board, revision,
 toolchain and exercised modes alongside the existing hardware-validation
-record. Validate changes affecting clocks, GPIO, UART or LPTIM on the relevant
-project; optional peripheral modes retain their documented limits.
+record. Validate changes affecting clocks, GPIO, UART or timers on the
+relevant project; optional peripheral modes retain their documented limits.

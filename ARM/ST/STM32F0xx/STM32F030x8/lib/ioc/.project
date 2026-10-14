@@ -886,6 +886,16 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/timer.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/coredev/timer_stm32.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/ARM/ST/src/timer_stm32.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/timer_tim_stm32.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/ARM/ST/src/timer_tim_stm32.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/coredev/uart.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/uart.cpp</locationURI>
@@ -1134,11 +1144,6 @@
 			<name>src/storage/stdfs_littlefs.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/storage/stdfs_littlefs.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/coredev/timer_stm32f030x8.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/src/timer_stm32f030x8.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/crypto/crypto_softaes.cpp</name>

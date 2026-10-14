@@ -2375,7 +2375,13 @@
                 <name>$PROJ_DIR$\..\..\..\..\..\..\src\coredev\timer.cpp</name>
             </file>
             <file>
-                <name>$PROJ_DIR$\..\..\..\src\timer_lptim_stm32l4xx.cpp</name>
+                <name>$PROJ_DIR$\..\..\..\..\src\timer_stm32.cpp</name>
+            </file>
+            <file>
+                <name>$PROJ_DIR$\..\..\..\..\src\timer_lptim_stm32.cpp</name>
+            </file>
+            <file>
+                <name>$PROJ_DIR$\..\..\..\..\src\timer_tim_stm32.cpp</name>
             </file>
             <file>
                 <name>$PROJ_DIR$\..\..\..\..\..\..\src\coredev\uart.c</name>

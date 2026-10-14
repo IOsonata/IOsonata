@@ -5,8 +5,7 @@ Run from a Linux checkout with GCC, G++ and Python 3:
 ```
 python3 tests/stm32f0/run.py
 python3 tests/stm32/run_uart.py
-python3 tests/stm32f0/run_timer.py
-python3 tests/stm32f0/run_timer_arm.py
+python3 tests/stm32/run_timer.py
 python3 tests/stm32f4/run.py
 python3 tests/stm32g4/run.py
 python3 tests/stm32wba/run.py
@@ -20,9 +19,9 @@ are mapped into the test process. No extra Python packages are required.
 pin-specific EXTI allocation with the shared GPIO driver
 (`ARM/ST/src/iopincfg_stm32.cpp`). `tests/stm32f4/run.py`: F401 startup selects
 the linked vector symbol instead of forcing FLASH_BASE. `tests/stm32g4/run.py`: G474
-system clock and LPTIM1 timer, see the [G4 port notes](../../ARM/ST/STM32G4xx/README.md).
-`tests/stm32wba/run.py`: WBA65 LPTIM1 and LPTIM2 timer, see the
-[WBA notes](../../ARM/ST/STM32WBAxx/README.md).
+system clock, see the [G4 port notes](../../ARM/ST/STM32G4xx/README.md).
+`tests/stm32wba/run.py`: WBA65 LPTIM1 and LPTIM2 with the shared timer
+driver, see the [WBA notes](../../ARM/ST/STM32WBAxx/README.md).
 
 ## UART
 
@@ -53,6 +52,39 @@ each part at -O0 and -Os with warnings as errors.
 
 Not a timing test: no baud accuracy, throughput, interrupt preemption or DMA bus
 timing. Hardware validation remains required.
+
+## Timer
+
+`tests/stm32/run_timer.py` runs the STM32 timer driver shared by all families,
+`ARM/ST/src/timer_stm32.cpp`, `timer_lptim_stm32.cpp` and `timer_tim_stm32.cpp`.
+
+`tests/stm32/timer_tim_test.cpp` runs TimerInit and the TIM driver with a
+model of the TIM registers (CNT wrap on read, SR clear by writing 0) for
+F030x8, F072xB, F401xC, F446, L432, L476, L496, L4S9, G474 and WBA65, at -O0
+and -O2 with UBSan: the DevNo order of `ARM/ST/include/timer_stm32.h`, RCC
+enable and reset bits, timer clock from PCLK, the NVIC number of each vector,
+DevNo and IntPrio refusal, the four compare triggers of a TIM with the counter
+wrapping between two reads, deadlines past 65536 ticks, a late interrupt,
+trigger disable, frequency change, the basic timer period, the vectors shared
+by two timers and the move of a TimerDev_t to another timer. A second build
+puts an application handler on one timer vector: TimerInit refuses the timers
+on that vector.
+
+`tests/stm32/timer_lptim_test.cpp` runs the LPTIM of L432, L476, L4S9 and
+G474 with the registers as plain memory at their addresses: clock selection
+and prescaler, ARR and CMP write order with ARROK and CMPOK, tick count
+across the counter wrap, continuous and single triggers, Disable and Enable.
+The WBA LPTIM is run by `tests/stm32wba/run.py`.
+
+The runner then checks that the vector file of each library aliases the timer
+vectors of its part to `Stm32TimerVector`. With arm-none-eabi-g++ found, the
+three sources are compiled for every F0, F4, L4, G4 and WBA device that
+`stm32.h` selects, at -O0 and -Os with warnings as errors, and F030x8, L476
+and WBA65 images are linked from the driver archive: without TimerInit the
+timer driver is not linked, with an application TIM3 handler the alias is
+replaced.
+
+Not a timing test. Hardware validation remains required.
 
 ## Other checks
 

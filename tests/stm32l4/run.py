@@ -3,7 +3,8 @@
 
 This checks virtual-device routing and unsupported-mode refusal, not peripheral
 bus timing, a complete firmware build, or hardware operation. The UART driver,
-ARM/ST/src/uart_stm32.cpp, is tested by tests/stm32/run_uart.py.
+ARM/ST/src/uart_stm32.cpp, is tested by tests/stm32/run_uart.py, the timer
+driver, ARM/ST/src timer_*stm32.cpp, by tests/stm32/run_timer.py.
 """
 from pathlib import Path
 import os
@@ -106,24 +107,6 @@ int main() {
  s_STM32L4xxI2CDev[1].pReg=nullptr; cfg.DevNo=1; assert(!I2CInit(&dev,&cfg));
  cfg.DevNo=2; assert(I2CInit(&dev,&cfg));
  puts("PASS I2C: invalid/unfinished modes and absent instance rejected before mutation");
-}
-'''
-s=source('timer_stm32l4x.cpp')
-models['timer']=COMMON+r'''
-#define STM32L4XX_LPTIM_CNT 2
-#define STM32L4XX_TIMER_MAXCNT 13
-struct TimerDev_t { int sentinel=123; }; struct TimerCfg_t { int DevNo; };
-struct STM32L4XX_TimerData_t { TimerDev_t *pTimer=nullptr; } g_Stm32l4TimerData[13];
-int chosen=-1;
-bool Stm32l4LPTimInit(STM32L4XX_TimerData_t *p,const TimerCfg_t *c) { chosen=c->DevNo; return true; }
-''' + function(source('timer_tim_stm32l4xx.cpp'),'Stm32l4TimInit')+'\n'+function(s,'TimerInit')+'\n'+function(s,'TimerGetHighFreqDevCount')+r'''
-int main() {
- TimerDev_t timer;
- for(int i=-1;i<=13;i++) { TimerCfg_t c{i}; assert(TimerInit(&timer,&c)==(i>=0 && i<2)); }
- for(int i=2;i<13;i++) assert(!g_Stm32l4TimerData[i].pTimer);
- assert(chosen==1 && timer.sentinel==123 && TimerGetHighFreqDevCount()==0);
- assert(!Stm32l4TimInit(nullptr,nullptr)); assert(!TimerInit(nullptr,nullptr));
- puts("PASS timer: LPTIM dispatch preserved, TIM refusal without publication");
 }
 '''
 s=source('octospi_stm32l4xx.cpp')
