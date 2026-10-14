@@ -11,6 +11,9 @@ static bool s_WriteFail;
 static bool s_AutoReceive;
 static bool s_StopOnReady;
 static bool s_Rearm;
+static bool s_CloseOnComplete;
+static bool s_ReopenOnComplete;
+static unsigned s_Reads;
 static unsigned s_Faults;
 static unsigned s_Writes;
 static unsigned s_Kicks;
@@ -69,6 +72,7 @@ bool Lpc17UsbDataWrite(uint8_t EpNo, const uint8_t *pData, int Length)
 int Lpc17UsbDataRead(uint8_t EpNo, uint8_t *pData, int Capacity)
 {
 	assert(s_Mask == 1 && EpNo == s_Ep.EpNo && Capacity == s_Ep.Mps);
+	++s_Reads;
 	if (s_ReadLength > Capacity)
 		return -1;
 	if (s_ReadLength > 0)
@@ -98,10 +102,26 @@ static void Event(UsbCtrlrEvtType_t Type, uint16_t Length, void *pContext)
 		assert(!s_Ep.Busy && s_Ep.pBuffer == NULL);
 		++s_Completions;
 		s_CompleteLength = Length;
-		if (s_Rearm)
+		if (s_CloseOnComplete)
+		{
+			const uint8_t ep = s_Ep.EpNo;
+			const uint16_t mps = s_Ep.Mps;
+			Lpc17UsbDataForget(&s_Ep);
+			if (s_ReopenOnComplete)
+			{
+				assert(Lpc17UsbDataOpen(&s_Ep, ep, false, mps));
+				assert(Lpc17UsbDataReceive(&s_Ep, s_Output, sizeof(s_Output)));
+			}
+		}
+		else if (s_Rearm)
 		{
 			s_Rearm = false;
-			assert(Lpc17UsbDataSend(&s_Ep, s_Buffer, 1));
+			unsigned reads = s_Reads;
+			if (s_Ep.In)
+				assert(Lpc17UsbDataSend(&s_Ep, s_Buffer, 1));
+			else
+				assert(Lpc17UsbDataReceive(&s_Ep, s_Output, sizeof(s_Output)));
+			assert(s_Reads == reads); // the next packet is deferred
 		}
 	}
 	else
@@ -124,6 +144,9 @@ static void OpenEndpoint(uint8_t EpNo, bool In, uint16_t Mps)
 	s_AutoReceive = false;
 	s_StopOnReady = false;
 	s_Rearm = false;
+	s_CloseOnComplete = false;
+	s_ReopenOnComplete = false;
+	s_Reads = 0;
 	s_Writes = 0;
 	s_SentLength = 0;
 	s_Completions = 0;
@@ -184,6 +207,60 @@ static void ReceiveBoundsTests(void)
 		}
 	}
 	puts("LPC1769 all bulk/interrupt OUT endpoints, logical MPS and buffer bounds: PASS");
+}
+
+static void ReceiveCallbackTests(void)
+{
+	const uint8_t endpoints[] = {1, 2, 13, 15};
+	for (unsigned index = 0; index < sizeof(endpoints); ++index)
+	{
+		for (unsigned mask = 0; mask < 2; ++mask)
+		{
+			OpenEndpoint(endpoints[index], false, 8);
+			s_Mask = mask;
+			s_AutoReceive = true;
+			s_Rearm = true;
+			s_ReadLength = 8;
+			memset(s_Output, 0xCC, sizeof(s_Output));
+			Lpc17UsbDataDispatch(&s_Ep, s_Ep.Generation, 1);
+			assert(s_Requests == 1 && s_Reads == 1 && s_Completions == 1);
+			assert(s_Ep.Busy && s_Ep.pBuffer == s_Output && s_Mask == mask);
+			// No full buffer: the synthetic IRQ must not complete queued RX.
+			Lpc17UsbDataDispatch(&s_Ep, s_Ep.Generation, 0);
+			assert(s_Ep.Busy && s_Reads == 1 && s_Completions == 1);
+			// A second packet completes on the next dispatch, without DRDY.
+			s_ReadLength = 0;
+			Lpc17UsbDataDispatch(&s_Ep, s_Ep.Generation, 1);
+			assert(!s_Ep.Busy && s_Reads == 2 && s_Completions == 2);
+			assert(s_Requests == 1 && s_CompleteLength == 0 && s_Mask == mask);
+			for (unsigned i = 0; i < sizeof(s_Output); ++i)
+				assert(s_Output[i] == (i < 8 ? 0xA5 : 0xCC));
+			// Callback retirement must suppress the old dispatch's final kick.
+			for (unsigned reopen = 0; reopen < 2; ++reopen)
+			{
+				OpenEndpoint(endpoints[index], false, 8);
+				s_CloseOnComplete = true;
+				s_ReopenOnComplete = reopen != 0;
+				s_ReadLength = 1;
+				assert(Lpc17UsbDataReceive(&s_Ep, s_Output, sizeof(s_Output)));
+				uint32_t generation = s_Ep.Generation;
+				unsigned kicks = s_Kicks;
+				Lpc17UsbDataDispatch(&s_Ep, generation, 1);
+				assert(s_Completions == 1 && s_Cancels == 0 && s_Reads == 1);
+				assert(s_Kicks == kicks + reopen && s_Mask == mask);
+				assert(s_Ep.Enabled == (reopen != 0) && s_Ep.Busy == (reopen != 0));
+				Lpc17UsbDataDispatch(&s_Ep, generation, 1);
+				assert(s_Reads == 1 && s_Completions == 1 && s_Kicks == kicks + reopen);
+				if (reopen)
+				{
+					s_CloseOnComplete = false;
+					Lpc17UsbDataDispatch(&s_Ep, s_Ep.Generation, 1);
+					assert(s_Reads == 2 && s_Completions == 2 && !s_Ep.Busy);
+				}
+			}
+		}
+	}
+	puts("LPC1769 OUT callback rearm, deferred packets and callback retirement: PASS");
 }
 
 int main(void)
@@ -270,5 +347,6 @@ int main(void)
 	assert(s_Cancels == 1);
 	assert(s_Faults == 4);
 	ReceiveBoundsTests();
+	ReceiveCallbackTests();
 	puts("LPC1769 data transfer segmentation, callbacks, reentrancy and retirement: PASS");
 }

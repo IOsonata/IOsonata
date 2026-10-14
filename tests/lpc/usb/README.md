@@ -841,7 +841,12 @@ OUT backpressure, ZLP and deferred completion; callback shutdown; and initial
 or continuation failures. OUT buffer-bound checks cover every supported endpoint,
 every legal logical MPS, all packet lengths through that MPS, undersized caller
 buffers and oversized packets with a larger caller buffer. Guard bytes and
-PRIMASK are checked on success and rejection. The register model separately
+PRIMASK are checked on success and rejection. Completion callbacks also rearm
+OUT reception, close endpoints and close/reopen endpoints. These checks verify
+that queued reception waits for a later dispatch, an empty synthetic interrupt
+does not complete it, and old dispatch generations cannot read or kick a
+replacement endpoint. Bulk and interrupt endpoints at low and high indices are
+covered with interrupts initially enabled and disabled. The register model separately
 checks that a packet exceeding caller capacity leaves the destination untouched
 and remains available for a subsequent read, with hardware RAM reserved at 64
 bytes. -O0/-O2 UBSan runs pass, as do warning-clean Cortex-M3
