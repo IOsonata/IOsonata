@@ -5,3 +5,4 @@ void TestPacketSize(uint32_t Value);
 void TestEndpointClear(uint32_t Value);
 void TestPacketWrite(uint32_t Value);
 uint32_t TestPacketRead(void);
+uint32_t TestPacketMaxSize(void);

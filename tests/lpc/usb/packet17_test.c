@@ -5,6 +5,11 @@
 #include <string.h>
 
 static unsigned s_Realizations;
+static uint32_t s_MaxSizes[32];
+static unsigned s_DataLogical;
+static unsigned s_Selected;
+static bool s_DataFifo;
+static bool s_DataBusArrival;
 static uint32_t s_ExpectedSize = 64;
 static uint32_t s_ExpectedPhysical;
 static bool s_DataRealize;
@@ -63,6 +68,13 @@ void TestSieCode(uint32_t Value)
 	if (phase == 0x500U)
 	{
 		s_Command = (uint8_t)(Value >> 16);
+		if (s_Command < 32)
+			s_Selected = s_Command;
+		if (s_DataFifo && (s_Command == 0xFA || s_Command == 0xF2))
+		{
+			assert(LPC_USB->USBCtrl == 0);
+			assert(s_Selected == s_DataLogical * 2 + (s_Command == 0xFA));
+		}
 		if (s_Command == 0xFA)
 			++s_Validations;
 		if (s_Command == 0xF2)
@@ -94,23 +106,31 @@ void TestPacketSize(uint32_t Value)
 		assert((LPC_USB->USBDevIntSt & 0x100U) == 0);
 	}
 	++s_Realizations;
+	s_MaxSizes[LPC_USB->USBEpInd] = Value;
 	if (s_ResetArrival)
 		SetReadOnly(&LPC_USB->USBEpIntSt, LPC_USB->USBEpIntSt | 1U);
 	if (!s_RealizeTimeout)
 		SetReadOnly(&LPC_USB->USBDevIntSt, LPC_USB->USBDevIntSt | 0x100U);
 }
+uint32_t TestPacketMaxSize(void)
+{
+	assert(s_Mask == 1 && LPC_USB->USBEpInd < 32);
+	return s_MaxSizes[LPC_USB->USBEpInd];
+}
 void TestPacketWrite(uint32_t Value)
 {
-	assert(s_Writes < 16 && LPC_USB->USBCtrl == 2 && s_Mask == 1);
+	assert(s_Writes < 16 && LPC_USB->USBCtrl == ((s_DataFifo ? s_DataLogical << 2 : 0) | 2U) && s_Mask == 1);
 	s_TxWords[s_Writes++] = Value;
 }
 uint32_t TestPacketRead(void)
 {
-	assert(s_Reads < 16 && LPC_USB->USBCtrl == 1 && s_Mask == 1);
+	assert(s_Reads < 16 && LPC_USB->USBCtrl == ((s_DataFifo ? s_DataLogical << 2 : 0) | 1U) && s_Mask == 1);
 	uint32_t word = 0;
 	for (unsigned i = 0; i < 4; ++i)
 		word |= (s_Reads * 4 + i) << (8 * i);
 	++s_Reads;
+	if (s_DataBusArrival)
+		SetReadOnly(&LPC_USB->USBDevIntSt, LPC_USB->USBDevIntSt | 8U);
 	return word;
 }
 static void Prepare(void)
@@ -326,6 +346,150 @@ static void DataRealizeTests(void)
 	puts("LPC1769 bulk/interrupt realization, fixed types, sizes and timeout recovery: PASS");
 }
 
+static void DataFifoPrepare(unsigned EpNo, unsigned Size)
+{
+	s_DataFifo = false;
+	s_DataRealize = false;
+	s_ExpectedSize = 64;
+	LPC_USB->USBDevIntEn = 0;
+	LPC_USB->USBEpIntEn = 0;
+	SetReadOnly(&LPC_USB->USBDevIntSt, 0);
+	Prepare();
+	assert(Lpc17UsbDeviceInit());
+	s_ExpectedSize = Size;
+	unsigned type = EpNo % 3 == 1 ? 3 : 2;
+	assert(Lpc17UsbDataRealize(EpNo, false, type, Size));
+	assert(Lpc17UsbDataRealize(EpNo, true, type, Size));
+	s_DataFifo = true;
+	s_DataLogical = EpNo;
+	s_Reads = 0;
+	s_Writes = 0;
+}
+
+static void DataFifoTests(void)
+{
+	uint8_t output[66];
+	uint8_t input[66];
+	for (unsigned i = 0; i < sizeof(input); ++i)
+		input[i] = i;
+	// Both hardware types, low/high indices, short packets, tails and ZLPs.
+	const unsigned endpoints[] = {1, 2, 13, 15};
+	for (unsigned index = 0; index < 4; ++index)
+	{
+		unsigned ep = endpoints[index];
+		DataFifoPrepare(ep, 64);
+		for (int length = 0; length <= 64; ++length)
+		{
+			s_Mask = length & 1;
+			s_Reads = 0;
+			s_Writes = 0;
+			s_Status = 0x21; // OUT has one of its buffers full.
+			SetReadOnly(&LPC_USB->USBRxPLen, 0xC00U | length);
+			SetReadOnly(&LPC_USB->USBEpIntSt, 0xFFFFFFFF);
+			SetReadOnly(&LPC_USB->USBDevIntSt, 4);
+			memset(output, 0xCC, sizeof(output));
+			unsigned clears = s_Clears;
+			assert(Lpc17UsbDataRead(ep, output + 1, length) == length);
+			assert(s_Reads == (unsigned)(length + 3) / 4 && s_Clears == clears + 1);
+			assert(output[0] == 0xCC && output[length + 1] == 0xCC);
+			for (int i = 0; i < length; ++i)
+				assert(output[i + 1] == i);
+			s_Status = ep % 3 == 1 ? 0 : 0x40; // IN has a free buffer.
+			unsigned validations = s_Validations;
+			assert(Lpc17UsbDataWrite(ep, input + 1, length));
+			assert(s_Writes == (unsigned)(length + 3) / 4 && s_Validations == validations + 1);
+			for (int i = 0; i < length; ++i)
+				assert((uint8_t)(s_TxWords[i / 4] >> (8 * (i % 4))) == input[i + 1]);
+			if (length % 4 != 0)
+				assert((s_TxWords[length / 4] >> ((length % 4) * 8)) == 0);
+			assert(LPC_USB->USBCtrl == 0 && s_Mask == (unsigned)(length & 1));
+			assert(LPC_USB->USBEpIntSt == 0xFFFFFFFF && (LPC_USB->USBDevIntSt & 4) != 0);
+		}
+	}
+	DataFifoPrepare(2, 8);
+	s_Status = 0;
+	assert(!Lpc17UsbDataWrite(2, input, 9));
+	assert(Lpc17UsbDataRead(2, output, 64) == -2 && s_Reads == 0);
+	s_Status = 0x61; // Both IN buffers full.
+	assert(!Lpc17UsbDataWrite(2, input, 8) && s_Writes == 0);
+	s_Status = 2;
+	assert(!Lpc17UsbDataWrite(2, input, 8));
+	assert(Lpc17UsbDataRead(2, output, 64) == -1);
+	s_Status = 1;
+	SetReadOnly(&LPC_USB->USBRxPLen, 0xC08);
+	unsigned clears = s_Clears;
+	assert(Lpc17UsbDataRead(2, output, 7) == -1 && s_Reads == 0 && s_Clears == clears);
+	assert(LPC_USB->USBCtrl == 0);
+	assert(Lpc17UsbDataRead(2, NULL, 1) == -1);
+	assert(Lpc17UsbDataRead(2, output, -1) == -1);
+	assert(!Lpc17UsbDataWrite(2, NULL, 1));
+	assert(!Lpc17UsbDataWrite(2, input, -1));
+	assert(!Lpc17UsbDataWrite(2, input, 65));
+	const unsigned invalid[] = {0, 1, 3, 16, 255};
+	for (unsigned i = 0; i < 5; ++i)
+	{
+		assert(!Lpc17UsbDataWrite(invalid[i], input, 1));
+		assert(Lpc17UsbDataRead(invalid[i], output, 64) == -1);
+	}
+	SetReadOnly(&LPC_USB->USBEpDMASt, 16);
+	assert(!Lpc17UsbDataWrite(2, input, 1));
+	assert(Lpc17UsbDataRead(2, output, 64) == -1);
+	SetReadOnly(&LPC_USB->USBEpDMASt, 0);
+	SetReadOnly(&LPC_USB->USBDevIntSt, 8);
+	assert(!Lpc17UsbDataWrite(2, input, 1));
+	assert(Lpc17UsbDataRead(2, output, 64) == -1);
+	SetReadOnly(&LPC_USB->USBDevIntSt, 0);
+	LPC_USB->USBCtrl = 2;
+	assert(Lpc17UsbDataRead(2, output, 64) == -1 && LPC_USB->USBCtrl == 2);
+	LPC_USB->USBCtrl = 0;
+	SetReadOnly(&LPC_USB->USBRxPLen, 0xC00);
+	assert(Lpc17UsbDataRead(2, NULL, 0) == 0);
+	s_Status = 0;
+	assert(Lpc17UsbDataWrite(2, NULL, 0));
+	// RX timeout, bad DV and a packet larger than the realized MPS all fault.
+	const uint32_t invalidRx[] = {0, 0x808, 0xC09};
+	for (unsigned i = 0; i < 3; ++i)
+	{
+		DataFifoPrepare(2, 8);
+		s_Status = 1;
+		SetReadOnly(&LPC_USB->USBRxPLen, invalidRx[i]);
+		memset(output, 0xCC, sizeof(output));
+		assert(Lpc17UsbDataRead(2, output + 1, 64) == -1);
+		assert(output[1] == 0xCC && LPC_USB->USBCtrl == 0);
+		s_Status = 0;
+		assert(!Lpc17UsbDataWrite(2, input, 1));
+	}
+	// Fault every command phase: select/read status, reselect, clear/validate.
+	for (unsigned phase = 1; phase <= 4; ++phase)
+	{
+		DataFifoPrepare(2, 8);
+		s_Status = 1;
+		SetReadOnly(&LPC_USB->USBRxPLen, 0xC08);
+		memset(output, 0xCC, sizeof(output));
+		s_DropCode = s_CodeCount + phase;
+		assert(Lpc17UsbDataRead(2, output + 1, 8) == -1 && output[1] == 0xCC);
+		assert(LPC_USB->USBCtrl == 0);
+		s_DropCode = 0;
+		DataFifoPrepare(2, 8);
+		s_Status = 0;
+		s_DropCode = s_CodeCount + phase;
+		assert(!Lpc17UsbDataWrite(2, input, 8) && LPC_USB->USBCtrl == 0);
+		s_DropCode = 0;
+	}
+	DataFifoPrepare(2, 8);
+	s_Status = 1;
+	SetReadOnly(&LPC_USB->USBRxPLen, 0xC08);
+	memset(output, 0xCC, sizeof(output));
+	s_DataBusArrival = true;
+	clears = s_Clears;
+	assert(Lpc17UsbDataRead(2, output + 1, 8) == -1 && output[1] == 0xCC);
+	assert(s_Clears == clears && LPC_USB->USBCtrl == 0);
+	s_DataBusArrival = false;
+	s_DataFifo = false;
+	s_ExpectedSize = 64;
+	puts("LPC1769 data FIFO sizes, double-buffer flags, ZLP, bus events and failure paths: PASS");
+}
+
 int main(void)
 {
 	ClockTests();
@@ -474,5 +638,6 @@ int main(void)
 	DeviceTests();
 	BusResetTests();
 	DataRealizeTests();
+	DataFifoTests();
 	puts("LPC1769 device init, bus status, EP0 FIFO, interrupts and timeouts: PASS");
 }

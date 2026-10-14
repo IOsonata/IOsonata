@@ -761,3 +761,30 @@ stale completion flags, duplicate realization and timeout recovery. Tests pass
 at -O0/-O2 with UBSan. This is a private preparation step: public endpoint counts
 remain EP0-only until data FIFO operations, IRQ dispatch and lifecycle handling
 are implemented. No data-transfer or hardware-enumeration claim is made.
+
+LPC1769 bulk and interrupt CPU FIFO access
+-----------------------------------------
+
+Private `Lpc17UsbDataRead` and `Lpc17UsbDataWrite` transfer one packet through
+USB registers, using each realized direction's indexed hardware maximum packet
+size. They preserve PRIMASK, reject EP0/ISO/unrealized endpoints and DMA/FIFO
+conflicts, and leave endpoint interrupts for the future data IRQ dispatcher.
+The SIE full/empty flag handles bulk double buffers: OUT is readable when either
+buffer is full, while IN is writable when either buffer is empty. Successful
+write means buffer validation, not host acknowledgement.
+
+OUT reads return -2 for an empty endpoint and -1 on failure. Packet data is
+staged in a 64-byte local buffer and published only after successful clearing.
+Insufficient caller capacity leaves the packet queued. Invalid RX data, packets
+larger than MPS and hardware timeouts latch the controller fault. Both helpers
+handle zero-length packets and unaligned byte buffers, clear their FIFO enable
+on exit, and defer to a pending bus event. A bus event during the copy prevents
+successful completion and leaves that event pending.
+
+The register model covers endpoints 1, 2, 13 and 15, lengths 0..64, short tails,
+MPS enforcement, full/empty/stalled endpoints, DMA/FIFO conflicts, invalid
+arguments, RX validity, bus-event interruption and every SIE command phase's
+timeout. -O0/-O2 UBSan host tests and Debug/Release EP0 example links pass.
+Cortex-M3 compilation passes with -Wall -Wextra -Werror. Public data endpoints
+remain disabled pending IRQ, transfer-state and lifecycle integration. No board
+data-transfer test has been run.

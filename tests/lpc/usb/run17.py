@@ -49,6 +49,7 @@ for opt in ['-O0', '-O2']:
             code = re.sub(r'LPC_USB->' + register + r' = ([^;]+);',
                           lambda match: hook + '(' + match[1] + ');', code)
         code = code.replace('LPC_USB->USBRxData', 'TestPacketRead()')
+        code = code.replace('LPC_USB->USBMaxPSize', 'TestPacketMaxSize()')
         source.write_text(code)
         exe = str(Path(tmp) / 'sie17')
         subprocess.run(['gcc', '-std=gnu17', opt, '-Wall', '-Wextra', '-Werror',

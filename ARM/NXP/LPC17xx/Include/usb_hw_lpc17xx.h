@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
 @file	usb_hw_lpc17xx.h
 
-@brief	Private LPC17xx USB clocks, SIE, endpoint realization and EP0 FIFO.
+@brief	Private LPC17xx USB clocks, SIE, endpoint realization and CPU FIFOs.
 
 @author	Hoang Nguyen Hoan
 @date	Oct. 12, 2026
@@ -62,6 +62,17 @@ bool Lpc17UsbEp0Realize(void);
 // Does not enable the endpoint, clear its status, configure the device or arm
 // transfers. A realization timeout latches the fault until release/prepare.
 bool Lpc17UsbDataRealize(uint8_t EpNo, bool In, uint8_t Type, uint16_t Size);
+// CPU-mode single-packet access to realized bulk/interrupt directions. Uses
+// each direction's hardware MPS; never accesses EP0 or ISO. Caller owns IRQ
+// acknowledgement and endpoint enable/status. Both preserve PRIMASK and leave
+// device/endpoint events pending. No operation starts during a bus event.
+// Read returns packet length, -2 if empty, or -1 on failure. Output remains
+// unchanged on failure; insufficient capacity leaves the packet queued.
+// Write returns true after validation, not host acknowledgement. Full/stalled
+// endpoints return false without writing FIFO data. NULL is allowed for ZLP.
+// Hardware timeouts/invalid RX data latch the fault until release/prepare.
+int Lpc17UsbDataRead(uint8_t EpNo, uint8_t *pData, int Capacity);
+bool Lpc17UsbDataWrite(uint8_t EpNo, const uint8_t *pData, int Length);
 // Initialize an exclusively owned, prepared block while disconnected.
 // Requires no prior EP0 realization, enabled interrupts, DMA or data endpoints.
 // Leaves address zero, 64-byte EP0, NAK interrupts off and all IRQ enables off.

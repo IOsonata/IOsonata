@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
 @file	usb_hw_lpc17xx.c
 
-@brief	Private LPC17xx USB clocks, SIE, endpoint realization and EP0 FIFO.
+@brief	Private LPC17xx USB clocks, SIE, endpoint realization and CPU FIFOs.
 
 @author	Hoang Nguyen Hoan
 @date	Oct. 12, 2026
@@ -473,6 +473,110 @@ bool Lpc17UsbEp0Write(const uint8_t *pData, int Length)
 		// Explicitly clear WR_EN, also for a zero-length packet.
 		LPC_USB->USBCtrl = 0U;
 		done = Lpc17UsbSieCommand(1U) && Lpc17UsbSieCommand(0xFAU);
+	}
+	__set_PRIMASK(state);
+	return done;
+}
+
+// Called with PRIMASK held. Read the indexed hardware MPS instead of keeping
+// a second endpoint-size table that could survive a hardware bus reset.
+static unsigned Lpc17UsbDataSize(uint8_t EpNo, bool In)
+{
+	if (EpNo == 0U || EpNo > 15U || (EpNo % 3U == 0U && EpNo != 15U))
+		return 0U;
+	const unsigned physical = (unsigned)EpNo * 2U + (In ? 1U : 0U);
+	if (!Lpc17UsbPacketReady() || !s_Ep0Ready ||
+		(LPC_USB->USBReEp & (1UL << physical)) == 0U ||
+		LPC_USB->USBEpDMASt != 0U || LPC_USB->USBDMAIntEn != 0U ||
+		LPC_USB->USBCtrl != 0U || (LPC_USB->USBDevIntSt & 8U) != 0U)
+		return 0U;
+	LPC_USB->USBEpInd = physical;
+	const unsigned size = LPC_USB->USBMaxPSize;
+	if (size == 0U || size > 64U || (EpNo % 3U != 1U &&
+		(size != 8U && size != 16U && size != 32U && size != 64U)))
+		return 0U;
+	return size;
+}
+
+int Lpc17UsbDataRead(uint8_t EpNo, uint8_t *pData, int Capacity)
+{
+	if (Capacity < 0 || (Capacity > 0 && pData == 0))
+		return -1;
+	const uint32_t state = __get_PRIMASK();
+	__disable_irq();
+	int result = -1;
+	const unsigned size = Lpc17UsbDataSize(EpNo, false);
+	uint8_t status;
+	uint8_t packet[64];
+	if (size != 0U && Lpc17UsbSieRead(EpNo * 2U, &status) && (status & 2U) == 0U)
+	{
+		// FE is OR of both OUT buffer-full bits: consume one packet per call.
+		if ((status & 1U) == 0U)
+			result = -2;
+		else
+		{
+			LPC_USB->USBCtrl = ((uint32_t)EpNo << 2) | 1U;
+			int wait = LPC17_USB_WAIT;
+			while ((LPC_USB->USBRxPLen & (1U << 11)) == 0U && --wait > 0)
+			{
+			}
+			const uint32_t info = LPC_USB->USBRxPLen;
+			const unsigned length = info & 0x3FFU;
+			if (wait == 0 || length > size || (info & (1U << 10)) == 0U)
+				s_SieFault = true;
+			else if (length <= (unsigned)Capacity)
+			{
+				for (unsigned offset = 0; offset < length; offset += 4U)
+				{
+					const uint32_t word = LPC_USB->USBRxData;
+					for (unsigned byte = 0; byte < 4U && offset + byte < length; ++byte)
+						packet[offset + byte] = (uint8_t)(word >> (8U * byte));
+				}
+				LPC_USB->USBCtrl = 0U;
+				// A reset invalidates the packet even if the FIFO read completed.
+				if (Lpc17UsbDataSize(EpNo, false) != 0U &&
+					Lpc17UsbSieCommand(EpNo * 2U) && Lpc17UsbSieCommand(0xF2U) &&
+					(LPC_USB->USBDevIntSt & 8U) == 0U)
+				{
+					for (unsigned i = 0; i < length; ++i)
+						pData[i] = packet[i];
+					result = (int)length;
+				}
+			}
+			LPC_USB->USBCtrl = 0U;
+		}
+	}
+	__set_PRIMASK(state);
+	return result;
+}
+
+bool Lpc17UsbDataWrite(uint8_t EpNo, const uint8_t *pData, int Length)
+{
+	if (Length < 0 || Length > 64 || (Length > 0 && pData == 0))
+		return false;
+	const uint32_t state = __get_PRIMASK();
+	__disable_irq();
+	bool done = false;
+	const unsigned size = Lpc17UsbDataSize(EpNo, true);
+	uint8_t status;
+	const uint8_t physical = EpNo * 2U + 1U;
+	// FE is AND of both IN buffer-full bits: either free buffer may be used.
+	if (size != 0U && (unsigned)Length <= size &&
+		Lpc17UsbSieRead(physical, &status) && (status & 3U) == 0U)
+	{
+		LPC_USB->USBCtrl = ((uint32_t)EpNo << 2) | 2U;
+		LPC_USB->USBTxPLen = (uint32_t)Length;
+		for (int offset = 0; offset < Length; offset += 4)
+		{
+			uint32_t word = 0U;
+			for (int byte = 0; byte < 4 && offset + byte < Length; ++byte)
+				word |= (uint32_t)pData[offset + byte] << (8U * byte);
+			LPC_USB->USBTxData = word;
+		}
+		LPC_USB->USBCtrl = 0U;
+		done = Lpc17UsbDataSize(EpNo, true) != 0U &&
+			Lpc17UsbSieCommand(physical) && Lpc17UsbSieCommand(0xFAU) &&
+			(LPC_USB->USBDevIntSt & 8U) == 0U;
 	}
 	__set_PRIMASK(state);
 	return done;
