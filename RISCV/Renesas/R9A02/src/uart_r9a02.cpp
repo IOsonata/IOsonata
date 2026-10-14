@@ -29,8 +29,9 @@ The SAU has a one character buffer each way. With interrupts, transmit uses
 the buffer empty interrupt (SMR.MD0 = 1), receive the transfer end
 interrupt and the error interrupt (SCR.EOC = 1). The transmit interrupt
 runs one level below IntPrio so that the receive interrupt can preempt it.
-Without interrupts, TxData waits for each character to go out and RxData
-reads the receive buffer when called.
+Without interrupts, TxData and RxData service both directions without
+waiting for a character on the wire. The application keeps calling them
+while queued bytes remain, as with the STM32 polling implementation.
 
 Pins: PinOp R9A02_PSEL_SAU (IOPINOP_FUNC16). IOPinConfig puts the RX pin in
 input mode with NCODR = 1 (16.5.1). The RxD noise filter (SNFEN) is on.
@@ -262,18 +263,11 @@ static void R9a02UartStart(R9a02UartDev_t * const pDev)
 // The receive buffer, with its error flags (23.6.5). Data first, then the
 // flags read and cleared with the value read. A framing error restarts the
 // receive channel. Returns the number of bytes put in the RX CFIFO.
-static int R9a02UartRxHw(R9a02UartDev_t * const pDev, uint8_t *pErr)
+static int R9a02UartRxRead(R9a02UartDev_t * const pDev, uint8_t *pErr)
 {
 	UARTDev_t *udev = pDev->pUartDev;
 	R9A02_SAU_Type *reg = pDev->pReg;
 	uint32_t ch = pDev->TxCh + 1U;
-	uint16_t ssr = reg->SSR[ch];
-
-	if ((ssr & (R9A02_SAU_SSR_BFF | R9A02_SAU_SSR_ERR_Msk)) == 0U)
-	{
-		return 0;
-	}
-
 	uint16_t d = reg->SDR[ch];
 	uint16_t err = reg->SSR[ch] & R9A02_SAU_SSR_ERR_Msk;
 
@@ -319,6 +313,18 @@ static int R9a02UartRxHw(R9a02UartDev_t * const pDev, uint8_t *pErr)
 	return 0;
 }
 
+// The empty check stays inline in the streaming path, as in the STM32 port.
+// Error handling and FIFO insertion are only entered when RX needs service.
+static inline __attribute__((always_inline)) int R9a02UartRxHw(R9a02UartDev_t * const pDev, uint8_t *pErr)
+{
+	if ((pDev->pReg->SSR[pDev->TxCh + 1U] & (R9A02_SAU_SSR_BFF | R9A02_SAU_SSR_ERR_Msk)) == 0U)
+	{
+		return 0;
+	}
+
+	return R9a02UartRxRead(pDev, pErr);
+}
+
 // Next byte of the TX CFIFO into SDR. SDR takes a byte only when empty, a
 // write with BFF set is lost (23.3.11), a stopped channel takes none: the
 // bytes wait in the CFIFO. Returns 1 when a byte was written, 0 when the
@@ -344,31 +350,21 @@ static inline __attribute__((always_inline)) int R9a02UartTxHw(R9a02UartDev_t * 
 	return 1;
 }
 
-// Without interrupts, everything in the TX CFIFO is sent now. Each byte waits
-// at most two character times for SDR.
-static void R9a02UartTxDrain(R9a02UartDev_t * const pDev)
+// Without interrupts, service both directions as the handlers would. Fill
+// the shift register and SDR when ready, but never wait for a character on
+// the wire. Read RX between TX writes so full duplex reception keeps going.
+static void R9a02UartPoll(R9a02UartDev_t * const pDev)
 {
-	R9A02_SAU_Type *reg = pDev->pReg;
-	UARTDev_t *udev = pDev->pUartDev;
-	uint32_t rate = udev->Rate > 0 ? (uint32_t)udev->Rate : 1U;
-	uint32_t timeout = (SystemCoreClock / rate + 1U) * 24U + 1000U;
+	uint8_t err = 0;
 
-	if ((reg->SE & (1U << pDev->TxCh)) == 0U)
+	R9a02UartRxHw(pDev, &err);
+	for (int i = 0; i < 2; i++)
 	{
-		return;
-	}
-
-	while (CFifoUsed(udev->hTxFifo) > 0)
-	{
-		uint32_t n = timeout;
-
-		while ((reg->SSR[pDev->TxCh] & R9A02_SAU_SSR_BFF) && --n > 0U)
-		{
-		}
-		if (n == 0U || R9a02UartTxHw(pDev) <= 0)
+		if (R9a02UartTxHw(pDev) <= 0)
 		{
 			break;
 		}
+		R9a02UartRxHw(pDev, &err);
 	}
 }
 
@@ -677,7 +673,7 @@ static int R9a02UartRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int Bufflen)
 
 	// A blocking FIFO keeps the inspected bytes until the copy is released,
 	// so RX can interrupt the copy. A non-blocking producer can overwrite
-	// old bytes: keep its copy protected. Polling reads the hardware first.
+	// old bytes: keep its copy protected. Polling services both directions.
 	while (cnt < Bufflen)
 	{
 		int l = Bufflen - cnt < R9A02_UART_COPY_MAX ? Bufflen - cnt : R9A02_UART_COPY_MAX;
@@ -690,9 +686,7 @@ static int R9a02UartRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int Bufflen)
 
 		if (poll)
 		{
-			uint8_t err = 0;
-
-			R9a02UartRxHw(dev, &err);
+			R9a02UartPoll(dev);
 		}
 
 		uint8_t *p = held ? CFifoPeekMultiple(fifo, &l) : CFifoGetMultiple(fifo, &l);
@@ -715,6 +709,14 @@ static int R9a02UartRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int Bufflen)
 			break;
 		}
 		cnt += l;
+	}
+
+	if (poll)
+	{
+		uintptr_t state = DisableInterrupt();
+
+		R9a02UartPoll(dev);
+		EnableInterrupt(state);
 	}
 
 	// Cleared first, then set again if a byte is left. A byte put by the
@@ -743,7 +745,8 @@ static bool R9a02UartStartTx(DevIntrf_t * const pDev, uint32_t DevAddr)
 __attribute__((noinline)) static int R9a02UartTxPut(R9a02UartDev_t * const pDev, uint8_t const *pData, int Datalen)
 {
 	hCFifo_t fifo = pDev->pUartDev->hTxFifo;
-	bool held = pDev->pUartDev->DevIntrf.bIntEn && CFifoIsBlocking(fifo);
+	bool poll = !pDev->pUartDev->DevIntrf.bIntEn;
+	bool held = !poll && CFifoIsBlocking(fifo);
 	int cnt = 0;
 
 	while (Datalen > 0)
@@ -754,6 +757,10 @@ __attribute__((noinline)) static int R9a02UartTxPut(R9a02UartDev_t * const pDev,
 		if (!held)
 		{
 			state = DisableInterrupt();
+		}
+		if (poll)
+		{
+			R9a02UartPoll(pDev);
 		}
 		uint8_t *p = held ? CFifoResvMultiple(fifo, &l) : CFifoPutMultiple(fifo, &l);
 
@@ -807,7 +814,10 @@ static int R9a02UartTxData(DevIntrf_t * const pDev, uint8_t const *pData, int Da
 
 	if (!pDev->bIntEn)
 	{
-		R9a02UartTxDrain(dev);
+		uintptr_t state = DisableInterrupt();
+
+		R9a02UartPoll(dev);
+		EnableInterrupt(state);
 	}
 	else if (udev->bTxReady)
 	{

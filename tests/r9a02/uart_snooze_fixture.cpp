@@ -3,7 +3,7 @@
 
 @brief	R9A02G021 UART reception in Snooze, emulator firmware
 
-UART0 (DevNo 0) on P302 (TxD0_B) and P303 (RxD0_B), interrupt mode.
+UART0 (DevNo 0) on P302 (TxD0_B) and P303 (RxD0_B), interrupt or polling mode.
 uart_snooze_emu.py loads it, calls the Emu functions, sends the characters
 and delivers the interrupts through R9a02IrqDispatch. main only waits.
 
@@ -48,6 +48,7 @@ uint8_t g_RxBuf[32];
 volatile int g_RxEvt;
 volatile int g_CbMode;			// UART_EVT_RXDATA: 1 echo, 2 Snooze off, 3 Disable
 volatile int g_FifoBlocking;		// 0 drops oldest when full, 1 refuses new data
+volatile int g_PollMode;			// 0 interrupts, 1 polling
 
 static const R9a02SnoozeCfg_t s_OtherSnz = {
 	.Request = R9A02_SNZREQ_IRQ(3),
@@ -93,7 +94,7 @@ static int Evt(UARTDev_t * const pDev, UART_EVT EvtId, uint8_t *pBuffer, int Buf
 	return 0;
 }
 
-// UART0 at Rate, 8N1, interrupt mode. Returns 1 when UARTInit succeeds.
+// UART0 at Rate, 8N1. Returns 1 when UARTInit succeeds.
 extern "C" int EmuUartInit(int Rate)
 {
 	UARTCfg_t cfg;
@@ -107,7 +108,7 @@ extern "C" int EmuUartInit(int Rate)
 	cfg.Parity = UART_PARITY_NONE;
 	cfg.StopBits = 1;
 	cfg.FlowControl = UART_FLWCTRL_NONE;
-	cfg.bIntMode = true;
+	cfg.bIntMode = g_PollMode == 0;
 	cfg.IntPrio = 6;
 	cfg.EvtCallback = Evt;
 	cfg.bFifoBlocking = g_FifoBlocking != 0;

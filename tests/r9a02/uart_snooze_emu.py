@@ -122,6 +122,12 @@ def event(slot):
     else:
         icu.ir[slot] = True
 
+def uart_event(evt):
+    # In polling mode UART events have no ICU route.
+    slot = slot_of(evt)
+    if slot is not None:
+        event(slot)
+
 # ---- PORT: P202 is the chip select input ----
 cs = [1]
 tx_gpio_low = []
@@ -171,21 +177,26 @@ class Uart:
         s.snz_set = []
 ua = Uart()
 HOLD_TX = [False]       # force the bounded TX wait to expire
+TX_STATUS_READS = [0]
 
 def tx_level(high):
     if bget(SAU, 0xAA, 2) & 1:
         so = bget(SAU, 0xA8, 2)
         bset(SAU, 0xA8, 2, (so | 1) if high else (so & ~1))
 
+RX_ON_TX_STEP = []      # full duplex peer: one RX byte per TX character
+
 def tx_step():
     if HOLD_TX[0]:
         return
     if ua.shifting:
         ua.tx.append(ua.shift)
+        if RX_ON_TX_STEP:
+            rx_char(RX_ON_TX_STEP.pop(0))
         if ua.txbff:
             ua.shift = ua.txsdr
             ua.txbff = False
-            event(slot_of(EVT_TX))
+            uart_event(EVT_TX)
         else:
             ua.shifting = False
             tx_level(True)
@@ -220,6 +231,7 @@ def sau_read(off, size):
             ua.bff = False
         return v
     if off == 0x080:
+        TX_STATUS_READS[0] += 1
         poll_step()
         poll_point()
         return (0x20 if ua.txbff else 0) | (0x40 if ua.shifting else 0)
@@ -250,7 +262,7 @@ def sau_write(off, size, v):
             ua.shifting = True
             ua.shift = v & 0xFF
             tx_level(False)
-            event(slot_of(EVT_TX))
+            uart_event(EVT_TX)
         else:
             ua.txsdr = v & 0xFF
             ua.txbff = True
@@ -299,7 +311,7 @@ def rx_char(c):
         ua.ovf = True
     ua.sdr = c
     ua.bff = True
-    event(slot_of(EVT_RX))
+    uart_event(EVT_RX)
     if SNZ_CANCEL_NORMAL[0] and bget(ICU, 0x200, 2) == EVT_RX:
         event(slot_of(EVT_SNZCANCEL))
     return True
@@ -822,6 +834,38 @@ HOLD_TX[0] = False
 deliver()
 check("blocking TX backpressure data", ua.tx == TXPAT(32) + TXPAT(2), str(ua.tx))
 call("EmuUartPowerOff")
+si("g_FifoBlocking", 0)
+
+# Polling keeps both directions progressing without waiting for TX on wire.
+si("g_PollMode", 1)
+si("g_FifoBlocking", 1)
+check("polling init", call("EmuUartInit", 1000000) == 1)
+HOLD_TX[0] = True
+ua.tx.clear()
+poll_start = TX_STATUS_READS[0]
+check("polling queues burst", call("EmuUartTx", 24) == 24)
+check("polling does not wait for TX", TX_STATUS_READS[0] - poll_start <= 10,
+      str(TX_STATUS_READS[0] - poll_start))
+check("polling holds hardware", ua.shifting and ua.txbff)
+HOLD_TX[0] = False
+received = []
+for c in range(24):
+    rx_char(0x80 + c)
+    received.extend(rx_all())
+check("polling full duplex RX", received == list(range(0x80, 0x98)), str(received))
+check("polling RX calls drain TX", ua.tx == TXPAT(24), str(ua.tx))
+check("polling duplex init", call("EmuUartInit", 1000000) == 1)
+ua.tx.clear()
+RX_ON_TX_STEP[:] = range(0xA0, 0xB8)
+check("polling duplex queues burst", call("EmuUartTx", 24) == 24)
+received = []
+for i in range(24):
+    received.extend(rx_all())
+check("polling duplex wire TX", ua.tx == TXPAT(24), str(ua.tx))
+check("polling services RX during TX", received == list(range(0xA0, 0xB8)), str(received))
+check("polling peer exhausted", not RX_ON_TX_STEP)
+call("EmuUartPowerOff")
+si("g_PollMode", 0)
 si("g_FifoBlocking", 0)
 
 check("no anomalies", not anomalies, str(anomalies[:4]))
