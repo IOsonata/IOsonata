@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""LPC1769 EP0, CDC and HID firmware links. MIT License, I-SYST, 2026."""
+"""LPC1769 EP0, CDC, HID and PRBS firmware links. MIT License, I-SYST, 2026."""
 from pathlib import Path
 import argparse
 import re
@@ -13,7 +13,8 @@ ROOT = Path(__file__).resolve().parents[3]
 EXAMPLE = ROOT / 'ARM/NXP/LPC17xx/LPC1769/exemples/UsbEp0Demo'
 EXAMPLES = [(EXAMPLE, 'usb_ep0_demo.cpp'),
             (EXAMPLE.parent / 'UsbCdcLoopback', 'usb_cdc_loopback.cpp'),
-            (EXAMPLE.parent / 'UsbHidLoopback', str(ROOT / 'exemples/usb/usb_hid_loopback.cpp'))]
+            (EXAMPLE.parent / 'UsbHidLoopback', str(ROOT / 'exemples/usb/usb_hid_loopback.cpp')),
+            (EXAMPLE.parent / 'UsbCdcPrbsTx', str(ROOT / 'exemples/usb/usb_cdc_prbs_tx.cpp'))]
 timer = runpy.run_path(str(ROOT / 'tests/lpc/timer/link17.py'))
 SOURCES = timer['SOURCES'] + [
     'ARM/NXP/LPC17xx/src/usb_hw_lpc17xx.c',
@@ -22,6 +23,7 @@ SOURCES = timer['SOURCES'] + [
     'ARM/NXP/LPC17xx/src/usb_lpc17xx.c',
     'ARM/NXP/LPC17xx/src/usb_data_lpc17xx.c',
     'ARM/NXP/src/lpc_iap.c',
+    'src/prbs.c',
     'src/usb/usb_int.cpp', 'src/usb/usbd_hid.cpp',
     'src/usb/usb_intrf.cpp', 'src/usb/usbd_epalloc.cpp',
     'src/usb/usbd_cdc.cpp', 'src/usb/usbd_cdc_desc.cpp',
@@ -66,12 +68,15 @@ def build(prefix, directory, debug, example, source_name):
     assert ('initialise_monitor_handles' in addresses) == debug
     for name in ['IAPReadUID', 'IapEntry', 'UsbInit', 'UsbEnable', 'UsbDevProcessEvent', 'UsbCtrlrStart', 'Lpc17UsbControlInterrupt']:
         assert name in addresses, name
-    if example.name == 'UsbCdcLoopback':
+    if example.name in ['UsbCdcLoopback', 'UsbCdcPrbsTx']:
         demangled = subprocess.check_output([prefix + 'nm', '-C', str(image)], text=True)
         assert 'UsbdEpAlloc(' in demangled
         assert 'UsbdCdc::SelectConfig(' in demangled
         for name in ['UsbCtrlrEpSend', 'UsbCtrlrEpReceive', 'Lpc17UsbDataDispatch']:
             assert name in addresses, name
+    if example.name == 'UsbCdcPrbsTx':
+        assert 'Prbs8' in addresses
+        assert 'AppRun' in addresses
     if example.name == 'UsbHidLoopback':
         demangled = subprocess.check_output([prefix + 'nm', '-C', str(image)], text=True)
         assert 'UsbdHid::SelectConfig(' in demangled
@@ -108,4 +113,4 @@ if __name__ == '__main__':
             for example, source_name in EXAMPLES:
                 build(args.prefix, Path(tmp) / example.name / ('Debug' if debug else 'Release'),
                       debug, example, source_name)
-    print('LPC1769 EP0, CDC and HID firmware Debug/Release links: PASS')
+    print('LPC1769 EP0, CDC, HID and PRBS firmware Debug/Release links: PASS')

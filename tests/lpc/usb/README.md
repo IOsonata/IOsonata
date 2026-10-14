@@ -923,3 +923,20 @@ HID/interrupt class symbols. GNU Arm 13.2.1 HID text/data/bss are
 Debug/Release links also pass after the AppRun change. These are build results;
 physical enumeration and report transfers are pending. Use the existing
 Python/usb_hid_loopback.py host check when a board is available.
+
+
+LPC1769 shared CDC PRBS transmit example
+--------------------------------------
+
+`LPC1769/exemples/UsbCdcPrbsTx` links the shared PRBS application with the
+LPC1769 USB pins and remote wake disabled. The shared application now uses
+AppRun and AppCheckStatus, retaining unsent bytes across partial writes and
+servicing queued events between TX attempts. Both buffered and BYTE_MODE
+operation keep the existing PRBS ordering. The event queue has 16 entries.
+
+All eight LPC1769 EP0/CDC/HID/PRBS Debug/Release links pass. PRBS text/data/bss
+are 51792/460/6656 bytes in Debug and 23208/156/6168 in Release with GNU Arm
+13.2.1. Shared PRBS Debug/Release links also pass on LPC11U35 and LPC54628;
+LPC1769 BYTE_MODE compiles with warnings as errors. These checks do not
+establish hardware throughput or PRBS integrity. The example README provides
+the existing uartprbs_rx.py receiver command for board testing.

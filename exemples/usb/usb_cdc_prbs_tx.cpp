@@ -18,8 +18,8 @@ Tx follows the same model as UART: the application only fills the Tx CFifo.
 The first write that finds Tx idle starts the endpoint with whatever data is
 available, and every completion interrupt sends whatever has accumulated
 since, until the FIFO comes up empty. The deferred USB work runs from the
-application event queue, so the loop runs it while it waits for attach, port
-open or FIFO space.
+application event queue through AppRun. AppCheckStatus fills the TX FIFO
+while the port is open and preserves bytes across partial writes.
 
 @author	Hoang Nguyen Hoan
 @date	Aug. 28, 2026
@@ -130,7 +130,11 @@ static const UsbCfg_t s_UsbCfg = {
 	.DeviceSubClass = 2U,
 	.DeviceProtocol = 1U,
 	.bSelfPowered = false,
+#ifdef USB_REMOTE_WAKEUP
+	.bRemoteWakeup = USB_REMOTE_WAKEUP,
+#else
 	.bRemoteWakeup = true,
+#endif
 	.bLowPowerSuspend = false,
 	.MaxPower = 100,
 	.EvtHandler = nullptr,
@@ -140,85 +144,57 @@ static const UsbCfg_t s_UsbCfg = {
 // the application sends through the object rather than the C interface.
 UsbdCdc g_Cdc;
 
+static uint8_t s_Prbs = 0xFF;
+#ifndef BYTE_MODE
+static uint8_t s_Buffer[TEST_BUFSIZE];
+static int s_Pending;
+static int s_Offset;
+#endif
+
+bool AppCheckStatus(void)
+{
+	UsbCheckStatus();
+	if (!g_Cdc.IsPortOpen())
+	{
+#ifndef BYTE_MODE
+		s_Pending = 0;
+		s_Offset = 0;
+#endif
+		return !AppEvtHandlerPending();
+	}
+#ifdef BYTE_MODE
+	if (g_Cdc.Tx(0, &s_Prbs, 1) > 0)
+		s_Prbs = Prbs8(s_Prbs);
+#else
+	if (s_Pending == 0)
+	{
+		for (int i = 0; i < TEST_BUFSIZE; ++i)
+		{
+			s_Prbs = Prbs8(s_Prbs);
+			s_Buffer[i] = s_Prbs;
+		}
+		s_Pending = TEST_BUFSIZE;
+		s_Offset = 0;
+	}
+	const int sent = g_Cdc.Tx(0, &s_Buffer[s_Offset], s_Pending);
+	if (sent > 0)
+	{
+		s_Offset += sent;
+		s_Pending -= sent;
+	}
+#endif
+	// This throughput test stays active while DTR is asserted.
+	return false;
+}
+
 int main()
 {
-	uint8_t d = 0xff;
-#ifndef BYTE_MODE
-	uint8_t buff[TEST_BUFSIZE];
-#endif
-
-	if (AppEvtHandlerInit(g_AppEvtHandlerQueMem, sizeof(g_AppEvtHandlerQueMem)) == false ||
-		UsbInit(&s_UsbCfg) == false)
+	if (!AppEvtHandlerInit(g_AppEvtHandlerQueMem, sizeof(g_AppEvtHandlerQueMem)) ||
+		!UsbInit(&s_UsbCfg) || !g_Cdc.Init(s_CdcCfg))
 	{
 		return -1;
 	}
-
-	if (g_Cdc.Init(s_CdcCfg) == false)
-	{
-		return -1;
-	}
-
-
-	// A board on a battery starts with no cable in it, so this failing is
-	// not an error. UsbProcess notices the attach and comes back to it.
-	UsbEnable(USB_DEVNO);
-
-	while (1)
-	{
-		if (g_Cdc.IsPortOpen() == false)
-		{
-			AppEvtHandlerExec();
-			continue;
-		}
-
-#ifdef BYTE_MODE
-		// Demo transfer byte by byte. The value advances only when the octet
-		// was accepted into the FIFO. Process deferred completions only when
-		// backpressure prevents this byte from entering the FIFO.
-		if (g_Cdc.Tx(0, &d, 1) > 0)
-		{
-			d = Prbs8(d);
-		}
-		else
-		{
-			AppEvtHandlerExec();
-		}
-#else
-		// Preserve the existing buffered-mode event-processing behavior for a
-		// separate measurement.
-		AppEvtHandlerExec();
-
-		// Demo transfer buffer
-		for (int i = 0; i < TEST_BUFSIZE; i++)
-		{
-			d = Prbs8(d);
-			buff[i] = d;
-		}
-
-		int len = TEST_BUFSIZE;
-		uint8_t *p = buff;
-
-		while (len > 0)
-		{
-			int l = g_Cdc.Tx(0, p, len);
-
-			if (l > 0)
-			{
-				len -= l;
-				p += l;
-			}
-			else
-			{
-				AppEvtHandlerExec();
-			}
-
-			if (g_Cdc.IsPortOpen() == false)
-			{
-				break;
-			}
-		}
-#endif
-	}
-
+	(void)UsbEnable(USB_DEVNO);
+	AppRun();
 	return 0;
 }
