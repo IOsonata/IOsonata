@@ -323,7 +323,7 @@ static int R9a02UartRxHw(R9a02UartDev_t * const pDev, uint8_t *pErr)
 // write with BFF set is lost (23.3.11), a stopped channel takes none: the
 // bytes wait in the CFIFO. Returns 1 when a byte was written, 0 when the
 // CFIFO is empty, -1 when SDR is full or the channel stopped.
-static int R9a02UartTxHw(R9a02UartDev_t * const pDev)
+static inline __attribute__((always_inline)) int R9a02UartTxHw(R9a02UartDev_t * const pDev)
 {
 	R9A02_SAU_Type *reg = pDev->pReg;
 
@@ -332,14 +332,14 @@ static int R9a02UartTxHw(R9a02UartDev_t * const pDev)
 		return -1;
 	}
 
-	uint8_t *p = CFifoGet(pDev->pUartDev->hTxFifo);
+	int c = CFifoGetByte(pDev->pUartDev->hTxFifo);
 
-	if (p == NULL)
+	if (c < 0)
 	{
 		return 0;
 	}
 
-	reg->SDR[pDev->TxCh] = *p;
+	reg->SDR[pDev->TxCh] = (uint8_t)c;
 
 	return 1;
 }
@@ -667,6 +667,7 @@ static int R9a02UartRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int Bufflen)
 	UARTDev_t *udev = dev->pUartDev;
 	hCFifo_t fifo = udev->hRxFifo;
 	bool poll = !pDev->bIntEn;
+	bool held = !poll && CFifoIsBlocking(fifo);
 	int cnt = 0;
 
 	if (pBuff == NULL || Bufflen <= 0)
@@ -674,13 +675,18 @@ static int R9a02UartRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int Bufflen)
 		return 0;
 	}
 
-	// CFifoGetMultiple frees the slots before they are copied, interrupts
-	// are disabled until the copy is done so that the interrupt cannot put
-	// over them. Without interrupts the receive buffer is read first.
+	// A blocking FIFO keeps the inspected bytes until the copy is released,
+	// so RX can interrupt the copy. A non-blocking producer can overwrite
+	// old bytes: keep its copy protected. Polling reads the hardware first.
 	while (cnt < Bufflen)
 	{
 		int l = Bufflen - cnt < R9A02_UART_COPY_MAX ? Bufflen - cnt : R9A02_UART_COPY_MAX;
-		uintptr_t state = DisableInterrupt();
+		uintptr_t state = 0;
+
+		if (!held)
+		{
+			state = DisableInterrupt();
+		}
 
 		if (poll)
 		{
@@ -689,13 +695,20 @@ static int R9a02UartRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int Bufflen)
 			R9a02UartRxHw(dev, &err);
 		}
 
-		uint8_t *p = CFifoGetMultiple(fifo, &l);
+		uint8_t *p = held ? CFifoPeekMultiple(fifo, &l) : CFifoGetMultiple(fifo, &l);
 
 		if (p != NULL)
 		{
 			memcpy(pBuff + cnt, p, l);
+			if (held)
+			{
+				CFifoRelease(fifo, l);
+			}
 		}
-		EnableInterrupt(state);
+		if (!held)
+		{
+			EnableInterrupt(state);
+		}
 
 		if (p == NULL)
 		{
@@ -724,25 +737,38 @@ static bool R9a02UartStartTx(DevIntrf_t * const pDev, uint32_t DevAddr)
 	return true;
 }
 
-// Several bytes into the TX CFIFO. CFifoPutMultiple publishes the slots
-// before they are written, so interrupts are disabled for the copy, in pieces
-// of at most R9A02_UART_COPY_MAX bytes. Returns the number of bytes put.
+// Reserve, fill, then publish a blocking FIFO span. DeviceIntrf serializes
+// the producer; the TX interrupt cannot read it before publication. Polling
+// and non-blocking FIFOs keep the protected, short-copy path.
 __attribute__((noinline)) static int R9a02UartTxPut(R9a02UartDev_t * const pDev, uint8_t const *pData, int Datalen)
 {
 	hCFifo_t fifo = pDev->pUartDev->hTxFifo;
+	bool held = pDev->pUartDev->DevIntrf.bIntEn && CFifoIsBlocking(fifo);
 	int cnt = 0;
 
 	while (Datalen > 0)
 	{
-		int l = Datalen < R9A02_UART_COPY_MAX ? Datalen : R9A02_UART_COPY_MAX;
-		uintptr_t state = DisableInterrupt();
-		uint8_t *p = CFifoPutMultiple(fifo, &l);
+		int l = held || Datalen < R9A02_UART_COPY_MAX ? Datalen : R9A02_UART_COPY_MAX;
+		uintptr_t state = 0;
+
+		if (!held)
+		{
+			state = DisableInterrupt();
+		}
+		uint8_t *p = held ? CFifoResvMultiple(fifo, &l) : CFifoPutMultiple(fifo, &l);
 
 		if (p != NULL)
 		{
 			memcpy(p, pData, l);
+			if (held)
+			{
+				CFifoPutMultiple(fifo, &l);
+			}
 		}
-		EnableInterrupt(state);
+		if (!held)
+		{
+			EnableInterrupt(state);
+		}
 
 		if (p == NULL)
 		{
@@ -767,9 +793,12 @@ static int R9a02UartTxData(DevIntrf_t * const pDev, uint8_t const *pData, int Da
 		return 0;
 	}
 
-	if (Datalen == 1)
+	if (Datalen <= R9A02_UART_COPY_MAX)
 	{
-		cnt = CFifoPutByte(udev->hTxFifo, *pData) ? 1 : 0;
+		while (cnt < Datalen && CFifoPutByte(udev->hTxFifo, pData[cnt]))
+		{
+			cnt++;
+		}
 	}
 	else
 	{

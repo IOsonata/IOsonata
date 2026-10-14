@@ -517,6 +517,28 @@ def deliver(first=None, limit=2000, idle=True):
         DEPTH[0] -= 1
 
 # ---- checks ----
+# Interrupt on the first data write of a bulk copy, before it is complete.
+# -1 delivers an already pending TX interrupt; a byte injects RX as well.
+COPY_IRQ = [None]
+copy_irq_seen = []
+def hook_copy_irq(u, access, addr, size, value, ud):
+    if COPY_IRQ[0] is None:
+        return
+    c = COPY_IRQ[0]
+    # RV32 CFifo header is 32 bytes; the fixture holds 32 data bytes.
+    target = S("~s_TxMem") + 32 if c < 0 else S("g_RxBuf")
+    if not target <= addr < target + 32:
+        return
+    COPY_IRQ[0] = None
+    enabled = bool(u.reg_read(UC_RISCV_REG_MSTATUS) & 8)
+    copy_irq_seen.append(enabled)
+    if enabled:
+        if c >= 0:
+            rx_char(c)
+        IRQ_REQ[0] = True
+        u.emu_stop()
+uc.hook_add(UC_HOOK_MEM_WRITE, hook_copy_irq, begin=0x20000000, end=0x2003FFFF)
+
 fails = []
 def check(name, cond, info=""):
     if not cond:
@@ -747,6 +769,60 @@ call("EmuUartPowerOff")
 seen = []
 standby(lambda: seen.append(bget(SAU, 0xB8, 2)))
 check("power off: no Snooze", seen == [0] and uc.mem_read(SNZCR, 1)[0] == 0)
+
+# Blocking FIFOs use reserve/publish and peek/release while interrupts run.
+si("g_FifoBlocking", 1)
+PCLK[0] = HOCO[0] = 48000000
+check("blocking init", call("EmuUartInit", 1000000) == 1)
+for n in (1, 4, 8, 16, 24, 32, 7, 31):
+    data = [(i + n) & 0xFF for i in range(n)]
+    for c in data:
+        rx_char(c)
+        deliver(idle=False)
+    check("blocking RX wrap %d" % n, rx_all() == data)
+    ua.tx.clear()
+    check("blocking TX queue %d" % n, call("EmuUartTx", n) == n)
+    deliver()
+    check("blocking TX wrap %d" % n, ua.tx == TXPAT(n), str(ua.tx))
+
+# TX ISR runs during the copy. It must not see the reserved, incomplete span.
+ua.tx.clear()
+call("EmuUartTx", 1)
+copy_irq_seen.clear()
+COPY_IRQ[0] = -1
+check("blocking TX interrupted copy accepted", call("EmuUartTx", 16) == 16)
+check("blocking TX copy interruptible", copy_irq_seen == [True], str(copy_irq_seen))
+deliver()
+check("blocking TX publishes after copy", ua.tx == TXPAT(1) + TXPAT(16), str(ua.tx))
+
+# RX ISR appends while the application copies a span; the old data remains
+# owned by the reader until CFifoRelease, including at a wrap boundary.
+for n in (13, 24, 32):
+    data = [(0x80 + i) & 0xFF for i in range(n)]
+    for c in data:
+        rx_char(c)
+        deliver(idle=False)
+    copy_irq_seen.clear()
+    COPY_IRQ[0] = 0xE5
+    got = rx_all()
+    check("blocking RX copy interruptible %d" % n, copy_irq_seen == [True], str(copy_irq_seen))
+    # A full blocking FIFO refuses the arriving byte, preserving all old data.
+    expected = data if n == 32 else data + [0xE5]
+    check("blocking RX keeps copied data %d" % n, got == expected, str(got))
+
+# A full blocking TX FIFO returns a partial count; nothing accepted is lost.
+HOLD_TX[0] = True
+ua.tx.clear()
+check("blocking fill TX", call("EmuUartTx", 32) == 32)
+deliver(idle=False)
+n = call("EmuUartTx", 16)
+check("blocking TX partial", n == 2, str(n))
+check("blocking TX full", call("EmuUartTx", 8) == 0)
+HOLD_TX[0] = False
+deliver()
+check("blocking TX backpressure data", ua.tx == TXPAT(32) + TXPAT(2), str(ua.tx))
+call("EmuUartPowerOff")
+si("g_FifoBlocking", 0)
 
 check("no anomalies", not anomalies, str(anomalies[:4]))
 print("Snooze characters", ua.snz, "lost", icu.lost, "TX bytes cut", ua.cut)

@@ -47,6 +47,7 @@ UART g_Uart;
 uint8_t g_RxBuf[32];
 volatile int g_RxEvt;
 volatile int g_CbMode;			// UART_EVT_RXDATA: 1 echo, 2 Snooze off, 3 Disable
+volatile int g_FifoBlocking;		// 0 drops oldest when full, 1 refuses new data
 
 static const R9a02SnoozeCfg_t s_OtherSnz = {
 	.Request = R9A02_SNZREQ_IRQ(3),
@@ -109,7 +110,7 @@ extern "C" int EmuUartInit(int Rate)
 	cfg.bIntMode = true;
 	cfg.IntPrio = 6;
 	cfg.EvtCallback = Evt;
-	cfg.bFifoBlocking = false;
+	cfg.bFifoBlocking = g_FifoBlocking != 0;
 	cfg.RxMemSize = EMU_FIFO_SIZE;
 	cfg.pRxMem = s_RxMem;
 	cfg.TxMemSize = EMU_FIFO_SIZE;
