@@ -106,4 +106,31 @@ SOFTWARE.
 		masterHigh, slaveHigh, bothHigh); \
 }
 
+// Isolation test: disable only IIC0's peripheral drive, sample the line,
+// then restore the saved controller state before the example transfers.
+// There is no active transaction at this point.
+#define I2C_DEBUG_SLAVE_ICE_TEST() \
+{ \
+	const uint8_t cr1 = R_IIC0->ICCR1; \
+	const uint8_t ier = R_IIC0->ICIER; \
+	R_IIC0->ICIER = 0U; \
+	R_IIC0->ICCR1 = (uint8_t)(cr1 & (uint8_t)~0x80U); \
+	__DSB(); \
+	for (int i = 0; i < 256; i++) \
+	{ \
+		__NOP(); \
+	} \
+	const uint8_t masterOff = R_IIC1->ICCR1; \
+	const uint8_t slaveOff = R_IIC0->ICCR1; \
+	R_IIC0->ICCR1 = cr1; \
+	R_IIC0->ICIER = ier; \
+	__DSB(); \
+	for (int i = 0; i < 256; i++) \
+	{ \
+		__NOP(); \
+	} \
+	printf("IIC0 ICE isolation M_off=%02x S_off=%02x M_on=%02x S_on=%02x\r\n", \
+		masterOff, slaveOff, R_IIC1->ICCR1, R_IIC0->ICCR1); \
+}
+
 #endif // __BOARD_H__
