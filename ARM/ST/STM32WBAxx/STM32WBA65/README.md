@@ -122,7 +122,7 @@ reservation before flashing. These linker scripts are not evidence of a
 successful boot or a working BLE stack.
 
 The shared GPIO implementation now supports input, output, alternate functions,
-pull resistors, output type, pin speed, and atomic BSRR set/clear. GPIO EXTI0–EXTI15 now route callbacks by pin number; interrupt allocation uses
+pull resistors, output type, pin speed, and atomic BSRR set/clear. GPIO EXTI0-EXTI15 now route callbacks by pin number; interrupt allocation uses
 the fixed EXTI line matching that pin, and a line cannot be assigned to two
 ports simultaneously. This implementation has not been hardware-validated.
 GPIO register writes and peripheral clocks have not been hardware tested.
@@ -155,6 +155,36 @@ the board. The scan result is printed on USART2 through the UART retarget.
 
 Validation: the driver is checked by `tests/stm32wba/run_i2c.py` in an
 instruction set emulator with an I2C model (39 checks). Not tested on hardware.
+
+## SPI master and example project
+
+`ARM/ST/STM32WBAxx/src/spi_stm32wba.cpp` drives the SPI v2 peripheral (CFG1,
+CFG2, TSIZE) as a polling master, full duplex. DevNo 0 to 2 select SPI1, SPI2
+and SPI3. SPI3 is on APB7, SPI1 on APB2, SPI2 on APB1. The kernel clock is
+PCLK. The rate is the closest the MBR divider gives (2 to 256), and the rate
+set is returned. The data size is 4 to 16 bits, one byte per item up to 8 bits
+and two bytes per item above.
+
+Each TxData or RxData call is one hardware transfer, in chunks of up to 65535
+items, as `HAL_SPI_TransmitReceive` does. The chip select is a GPIO of the pin
+map (index `SPI_CS_IOPIN_IDX` and up), low from StartTx or StartRx to StopTx
+or StopRx, so it stays low between the command and the data of a read. With
+`SPICSEL_MAN`, or no chip select pin in the map, the application drives it.
+Receive clocks out `DummyByte`.
+
+Limits: master only, `SPIPHY_NORMAL` only, interrupt and DMA are refused at
+init.
+
+`exemples/SPILoopback` (`exemples/spi/spi_loopback.cpp`) runs the four SPI
+modes with MOSI wired to MISO on the DK1 header: SCK PB4, MISO PB3, MOSI PA15,
+AF5 (Arduino D13, D12, D11), chip select PA12 as a GPIO. The result is printed
+on USART1, the first ST-LINK virtual COM port. The pins come from the Zephyr
+board data and must be confirmed against UM3462 on the board.
+
+Validation: `tests/stm32wba/run_spi.py` runs the driver in an instruction set
+emulator with a model of the SPI v2 registers and the chip select pins (46
+checks, including a receive FIFO overrun check and the 70000 byte chunking).
+Not tested on hardware.
 
 ## Build dependency
 

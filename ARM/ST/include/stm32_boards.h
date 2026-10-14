@@ -21,6 +21,10 @@
 							LED_LOGIC_LOW)
 		BOARD_BUT_PINS		user button and its BOARD_BUT1_SENSE, when the
 							board has a button read as a GPIO
+		BOARD_I2C_DEVNO		I2C instance and its SDA and SCL pins on the
+		BOARD_I2C_PINS		Arduino header, where defined
+		BOARD_SPI_DEVNO		SPI instance with BOARD_SPI_SCK, _MISO, _MOSI and
+							_CS _PORT, _PIN and _PINOP, where defined
 
 		DevNo is the position of the instance in the table of the STM32 UART
 		driver, ARM/ST/src/uart_stm32.cpp, counting only the instances of the
@@ -228,6 +232,21 @@ SOFTWARE.
 // I2C1 (DevNo 0) on the Arduino D14 SDA PB1 and D15 SCL PB2, AF4
 #define BOARD_I2C_DEVNO		0
 #define BOARD_I2C_PINS		STM32_BOARD_I2C(IOPORTB, 1, IOPINOP_FUNC4, IOPORTB, 2, IOPINOP_FUNC4)
+// SPI1 (DevNo 0) on the Arduino header, AF5: SCK PB4, MISO PB3, MOSI PA15.
+// The chip select is a GPIO driven by the driver, PA12 (Arduino D10).
+#define BOARD_SPI_DEVNO		0
+#define BOARD_SPI_SCK_PORT	IOPORTB
+#define BOARD_SPI_SCK_PIN	4
+#define BOARD_SPI_SCK_PINOP	IOPINOP_FUNC5
+#define BOARD_SPI_MISO_PORT	IOPORTB
+#define BOARD_SPI_MISO_PIN	3
+#define BOARD_SPI_MISO_PINOP	IOPINOP_FUNC5
+#define BOARD_SPI_MOSI_PORT	IOPORTA
+#define BOARD_SPI_MOSI_PIN	15
+#define BOARD_SPI_MOSI_PINOP	IOPINOP_FUNC5
+#define BOARD_SPI_CS_PORT	IOPORTA
+#define BOARD_SPI_CS_PIN	12
+#define BOARD_SPI_CS_PINOP	IOPINOP_GPIO
 // LD6 green PD8, LD5 red PD9
 #define BOARD_LED_PINS		{ STM32_BOARD_LED(IOPORTD, 8), STM32_BOARD_LED(IOPORTD, 9), }
 #define BOARD_LED_ACTIVE	0
