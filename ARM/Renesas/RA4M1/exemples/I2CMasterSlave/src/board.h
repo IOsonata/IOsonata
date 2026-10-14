@@ -108,4 +108,27 @@ static inline void Ra4m1I2cPullupProbe(const char *pName, int PortNo, int PinNo)
 // The existing I2C_DEBUG_DUMP outputs the peripheral-mode ICCR1 SCLI/SDAI
 // and PFS values immediately after Init, enabling a direct comparison.
 
+// Read-only SCL sampling after both IIC units are initialized.
+// Capture changes that a single ICCR1 dump could miss.
+#define I2C_DEBUG_SCL_SAMPLES() \
+{ \
+	int masterHigh = 0; \
+	int slaveHigh = 0; \
+	int bothHigh = 0; \
+	for (int i = 0; i < 256; i++) \
+	{ \
+		bool mh = (R_IIC1->ICCR1 & 0x02U) != 0U; \
+		bool sh = (R_IIC0->ICCR1 & 0x02U) != 0U; \
+		masterHigh += mh ? 1 : 0; \
+		slaveHigh += sh ? 1 : 0; \
+		bothHigh += (mh && sh) ? 1 : 0; \
+		for (volatile int delay = 0; delay < 256; delay++) \
+		{ \
+			__NOP(); \
+		} \
+	} \
+	printf("SCL idle samples master_high=%d/256 slave_high=%d/256 both_high=%d/256\r\n", \
+		masterHigh, slaveHigh, bothHigh); \
+}
+
 #endif // __BOARD_H__
