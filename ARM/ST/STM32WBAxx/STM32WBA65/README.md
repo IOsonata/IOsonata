@@ -181,3 +181,23 @@ RTSR1/FTSR1 select edges, IMR1 masks lines, RPR1/FPR1 report and clear
 pending edges, and EXTI->EXTICR[] selects the GPIO port. No inferred register
 offsets or replacement peripheral structures are used. This path still
 requires hardware regression testing on STM32WBA65I-DK1.
+
+## Bring-up checklist for the STM32WBA65I-DK1
+
+Order of the first runs on the board. Each step uses a project above and a
+debugger with semihosting enabled (ST-LINK on the kit). Record the result with
+the commit, toolchain version and Debug or Release.
+
+1. Confirm the option bytes: TZEN = 0 (TrustZone off), flash bank layout, and
+   the `I` memory variant (2 MB flash, 512 KB SRAM) of `gcc_stm32wba65_i.ld`.
+   The unit marking STM32WBA65RIV7 matches the `I` script.
+2. `TimerDemo` with `TIMER_DEMO_DEVNO` 0: LED toggles and the log shows
+   100 ms and 1000 ms periods from the LSI. Then devices 1 to 7.
+3. `UartLoopback` on USART2 (Arduino D0 and D1) with a USB serial adapter, then
+   on USART1 through the ST-LINK virtual COM port (RX PA8, TX PB12).
+4. `UartPrbsTxTest`: compare the received stream with `Prbs8()`.
+5. Note what differs from the emulator runs: first character timing after
+   reset, the GPDMA ring across block ends, and the LSE start time.
+
+The clock stays at HSI16 (16 MHz). The 100 MHz PLL setup is not part of this
+port yet.
