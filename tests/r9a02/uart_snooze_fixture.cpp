@@ -38,6 +38,7 @@ SOFTWARE.
 #include <string.h>
 #include "coredev/iopincfg.h"
 #include "coredev/uart.h"
+#include "interrupt_r9a02.h"
 #include "sau_r9a02.h"
 #include "system_r9a02.h"
 #include "uarta_r9a02.h"
@@ -56,6 +57,10 @@ volatile int g_DefaultFifo;
 volatile int g_DataBits;			// 0 uses 8 bits
 volatile int g_TxEvt;
 volatile int g_LineEvt;
+volatile int g_IrqSlot = -1;
+volatile int g_IrqMode;			// 1 replace route in handler, 2 unregister
+volatile int g_IrqCalls;
+volatile int g_IrqSeen;
 
 static const R9a02SnoozeCfg_t s_OtherSnz = {
 	.Request = R9A02_SNZREQ_IRQ(3),
@@ -85,6 +90,38 @@ static const IOPinCfg_t s_UartaPins[2][2] = {
 		{4, 3, IOPINOP_FUNC5, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
 	},
 };
+
+static void IrqEvt(int IntNo, void *pCtx)
+{
+	g_IrqCalls = g_IrqCalls + 1;
+	g_IrqSeen = (R9A02_ICU->IELSR[IntNo] & R9A02_IELSR_IR) != 0U;
+	if (g_IrqMode != 0)
+	{
+		R9a02UnregisterIntHandler(IntNo);
+		g_IrqSlot = -1;
+		if (g_IrqMode == 1)
+		{
+			g_IrqSlot = R9a02RegisterIntHandler(R9A02_EVT_PORT_IRQ2, 6, IrqEvt, NULL);
+		}
+		g_IrqMode = 0;
+	}
+}
+
+extern "C" int EmuIrqInit(int bLevel)
+{
+	R9A02_ICU->IRQCR[2] = bLevel ? R9A02_IRQCR_IRQMD_LOW : R9A02_IRQCR_IRQMD_FALLING;
+	g_IrqSlot = R9a02RegisterIntHandler(R9A02_EVT_PORT_IRQ2, 6, IrqEvt, NULL);
+
+	return g_IrqSlot;
+}
+
+extern "C" int EmuIrqRelease(void)
+{
+	R9a02UnregisterIntHandler(g_IrqSlot);
+	g_IrqSlot = -1;
+
+	return 1;
+}
 
 static int Evt(UARTDev_t * const pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen)
 {

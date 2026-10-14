@@ -414,6 +414,28 @@ void R9a02UnregisterCoreIntHandler(uint32_t ClicId)
 	EnableInterrupt(state);
 }
 
+// Level pins are acknowledged after the owner has handled the level. Keep
+// this return path separate so pulse events can tail-call their handler
+// without saving a hook, generation and register address across every IRQ.
+__attribute__((noinline)) static void R9a02IcuLevelDispatch(uint32_t Slot, uintptr_t State)
+{
+	R9a02IntHook_t &hook = s_IcuHook[Slot];
+	R9a02IRQHandler_t handler = hook.Handler;
+	void *ctx = hook.pCtx;
+	uint32_t generation = hook.Generation;
+
+	EnableInterrupt(State);
+	handler((int)Slot, ctx);
+
+	State = DisableInterrupt();
+	if (hook.Generation == generation)
+	{
+		R9A02_ICU->IELSR[Slot] = hook.Iels;
+		(void)R9A02_ICU->IELSR[Slot];
+	}
+	EnableInterrupt(State);
+}
+
 static void R9a02IcuDispatch(uint32_t Slot)
 {
 	uint32_t clicid = R9A02_CLIC_ID_IELSR0 + Slot;
@@ -442,31 +464,23 @@ static void R9a02IcuDispatch(uint32_t Slot)
 	bool level = hook.EvtId <= R9A02_EVT_PORT_IRQ7 &&
 				 (R9A02_ICU->IRQCR[hook.EvtId - R9A02_EVT_PORT_IRQ0] & R9A02_IRQCR_IRQMD_Msk) == R9A02_IRQCR_IRQMD_LOW;
 
-	if (!level)
+	if (level)
 	{
-		// Pulse event: clear IR now, a new event sets it again
-		R9A02_ICU->IELSR[Slot] = hook.Iels;
-		(void)R9A02_ICU->IELSR[Slot];
+		R9a02IcuLevelDispatch(Slot, state);
+
+		return;
 	}
 
+	// Pulse event: clear IR now, a new event sets it again. There is no
+	// post-handler work, including when the handler unregisters its route.
+	R9A02_ICU->IELSR[Slot] = hook.Iels;
+	(void)R9A02_ICU->IELSR[Slot];
 	R9a02IRQHandler_t handler = hook.Handler;
 	void *ctx = hook.pCtx;
-	uint32_t generation = hook.Generation;
 
 	EnableInterrupt(state);
 
 	handler((int)Slot, ctx);
-
-	if (level)
-	{
-		state = DisableInterrupt();
-		if (hook.Generation == generation)
-		{
-			R9A02_ICU->IELSR[Slot] = hook.Iels;
-			(void)R9A02_ICU->IELSR[Slot];
-		}
-		EnableInterrupt(state);
-	}
 }
 
 void R9a02IrqDispatch(uint32_t ClicId)
@@ -495,3 +509,4 @@ void R9a02IrqDispatch(uint32_t ClicId)
 		handler((int)ClicId, ctx);
 	}
 }
+

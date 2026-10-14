@@ -433,6 +433,46 @@ static void R9a02UartTxDma(R9a02UartDev_t * const pDev)
 	reg->SDR[pDev->TxCh] = first;
 }
 
+// Called only when TX is idle, after its CPU event, or after Stop. Single
+// bytes use the register directly; queued bursts use the DTC. The running
+// transfer owns the FIFO until it drains, as in STM32 and SAM4L.
+static inline __attribute__((always_inline)) void R9a02UartTxKick(R9a02UartDev_t * const pDev)
+{
+	UARTDev_t *udev = pDev->pUartDev;
+
+	if (udev->DevIntrf.bDma &&
+		(((volatile R9a02DtcInfo_t *)&pDev->TxDtc)->Cra != 0U || CFifoUsed(udev->hTxFifo) > 1))
+	{
+		R9a02UartTxDma(pDev);
+	}
+	else
+	{
+		int cnt = R9a02UartTxHw(pDev);
+
+		if (cnt >= 0)
+		{
+			udev->bTxReady = cnt == 0;
+		}
+	}
+}
+
+// Poll completion only when a CPU event is pending. DTCE protects a live
+// block even if its IR is briefly set during a DTC activation.
+static inline __attribute__((always_inline)) void R9a02UartTxDmaPoll(R9a02UartDev_t * const pDev)
+{
+	if (!pDev->pUartDev->bTxReady)
+	{
+		uint32_t evt = R9A02_ICU->IELSR[pDev->IntTx];
+
+		if ((evt & (R9A02_IELSR_IR | R9A02_IELSR_DTCE)) != R9A02_IELSR_IR)
+		{
+			return;
+		}
+		R9a02EventFlagClear(pDev->IntTx);
+	}
+	R9a02UartTxKick(pDev);
+}
+
 // Without interrupts, service both directions as the handlers would. Fill
 // the shift register and SDR when ready, but never wait for a character on
 // the wire. Read RX between TX writes so full duplex reception keeps going.
@@ -443,7 +483,7 @@ static void R9a02UartPoll(R9a02UartDev_t * const pDev)
 	R9a02UartRxHw(pDev, &err);
 	if (pDev->pUartDev->DevIntrf.bDma)
 	{
-		R9a02UartTxDma(pDev);
+		R9a02UartTxDmaPoll(pDev);
 
 		return;
 	}
@@ -466,7 +506,7 @@ static void R9a02UartTxResume(R9a02UartDev_t * const pDev)
 
 	if (udev->DevIntrf.bDma)
 	{
-		R9a02UartTxDma(pDev);
+		R9a02UartTxKick(pDev);
 	}
 	else if (udev->DevIntrf.bIntEn)
 	{
@@ -606,19 +646,12 @@ static void R9a02UartTxIRQHandler(int IntNo, void *pCtx)
 	UARTDev_t *udev = dev->pUartDev;
 	uintptr_t state = DisableInterrupt();
 
-	if (udev->DevIntrf.bDma)
-	{
-		R9a02UartTxDma(dev);
-	}
-	else if (R9a02UartTxHw(dev) == 0)
-	{
-		// TX CFIFO empty, TxData starts the next transmission
-		udev->bTxReady = true;
-	}
+	R9a02UartTxKick(dev);
 
 	EnableInterrupt(state);
 
-	if (udev->DevIntrf.bIntEn && udev->EvtCallback)
+	// Like STM32, report ready when the queue drains, not for every byte.
+	if (udev->bTxReady && udev->DevIntrf.bIntEn && udev->EvtCallback)
 	{
 		udev->EvtCallback(udev, UART_EVT_TXREADY, NULL, CFifoAvail(udev->hTxFifo));
 	}
@@ -924,13 +957,6 @@ static int R9a02UartTxData(DevIntrf_t * const pDev, uint8_t const *pData, int Da
 		R9a02UartPoll(dev);
 		EnableInterrupt(state);
 	}
-	else if (pDev->bDma)
-	{
-		uintptr_t state = DisableInterrupt();
-
-		R9a02UartTxDma(dev);
-		EnableInterrupt(state);
-	}
 	else if (udev->bTxReady)
 	{
 		// The first byte starts the transmission, the buffer empty interrupt
@@ -938,9 +964,9 @@ static int R9a02UartTxData(DevIntrf_t * const pDev, uint8_t const *pData, int Da
 		// also be called from an interrupt.
 		uintptr_t state = DisableInterrupt();
 
-		if (udev->bTxReady && R9a02UartTxHw(dev) > 0)
+		if (udev->bTxReady)
 		{
-			udev->bTxReady = false;
+			R9a02UartTxKick(dev);
 		}
 		EnableInterrupt(state);
 	}

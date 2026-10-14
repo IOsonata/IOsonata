@@ -960,6 +960,52 @@ for devno in (0, 3, 4):
             txevents = gi("g_TxEvt")
             txslot = slot_of(txevt)
             check(tag + " route", txslot is not None and clic_ie(txslot))
+            # The byte producer only enqueues while TX is busy. Its first
+            # byte bypasses descriptor setup; the accumulated queue still
+            # becomes a real autonomous DTC burst on the next TX event.
+            dma_calls = [0]
+            def count_dma(u, addr, size, ud):
+                dma_calls[0] += 1
+            dma_name = "~R9a02UartTxDma" if devno == 0 else "~R9a02UartaTxDma"
+            h = uc.hook_add(UC_HOOK_CODE, count_dma, begin=S(dma_name), end=S(dma_name))
+            HOLD_TX[0] = True
+            a.tx.clear()
+            before = dtc_runs[0]
+            for _ in range(9):
+                check(tag + " byte accepted", call("EmuUartTx", 1) == 1)
+            check(tag + " byte enqueue avoids DMA setup", dma_calls[0] == 0)
+            HOLD_TX[0] = False
+            for _ in range(24):
+                tx_step()
+                if poll:
+                    rx_all()
+                else:
+                    deliver(idle=False)
+            check(tag + " byte producer wire", a.tx == [0x30] * 9, str(a.tx))
+            check(tag + " queued bytes use DTC", dtc_runs[0] > before)
+            # New data must not re-enter DMA service or alter the active
+            # descriptor. The existing transfer drains it in FIFO order.
+            HOLD_TX[0] = True
+            a.tx.clear()
+            call("EmuUartTx", 16)
+            rec = bus_read(bus_read(0x40005404, 4) + 4 * txslot, 4)
+            record = bytes(uc.mem_read(rec, 16))
+            calls = dma_calls[0]
+            for _ in range(8):
+                call("EmuUartTx", 1)
+            check(tag + " active descriptor unchanged", bytes(uc.mem_read(rec, 16)) == record)
+            check(tag + " busy enqueue avoids DMA service", dma_calls[0] == calls)
+            uc.hook_del(h)
+            HOLD_TX[0] = False
+            callbacks = gi("g_TxEvt")
+            for _ in range(48):
+                tx_step()
+                if poll:
+                    rx_all()
+                else:
+                    deliver(idle=False)
+            check(tag + " queued block order", a.tx == TXPAT(16) + [0x30] * 8, str(a.tx))
+            check(tag + " callback after queue drains", gi("g_TxEvt") == callbacks + (0 if poll else 1))
             for n in (1, 2, 16, 32, 7, 31):
                 a.tx.clear()
                 before = dtc_runs[0]
@@ -1137,6 +1183,58 @@ for devno in (3, 4):
         call("EmuUartPowerOff")
 si("g_DevNo", 0)
 si("g_PollMode", 0)
+
+# Byte interrupt mode also reports ready once the entire queue has drained.
+for devno in (0, 3, 4):
+    si("g_DevNo", devno)
+    a = ua if devno == 0 else uarta[devno - 3]
+    check("IRQ callback init %d" % devno, call("EmuUartInit", 115200) == 1)
+    HOLD_TX[0] = True
+    a.tx.clear()
+    callbacks = gi("g_TxEvt")
+    call("EmuUartTx", 24)
+    deliver(idle=False)
+    check("IRQ no per-byte callback %d" % devno, gi("g_TxEvt") == callbacks)
+    HOLD_TX[0] = False
+    deliver()
+    check("IRQ queue order %d" % devno, a.tx == TXPAT(24), str(a.tx))
+    check("IRQ drained callback %d" % devno, gi("g_TxEvt") == callbacks + 1)
+    call("EmuUartPowerOff")
+
+# The pulse dispatch shortcut must preserve acknowledgement order, DTC
+# ownership and the generation check when a level handler replaces itself.
+REQUEUE = [False]
+def hook_requeue(u, access, addr, size, value, ud):
+    if REQUEUE[0] and value < 32:
+        icu.ir[value] = True
+        REQUEUE[0] = False
+h = uc.hook_add(UC_HOOK_MEM_WRITE, hook_requeue, begin=S("g_IrqSlot"), end=S("g_IrqSlot") + 3)
+for level in (0, 1):
+    slot = call("EmuIrqInit", level)
+    check("IRQ route", 0 <= slot < 32)
+    calls = gi("g_IrqCalls")
+    icu.ir[slot] = True
+    icu.dtce[slot] = True
+    call("R9a02IrqDispatch", 19 + slot)
+    check("IRQ leaves DTC owner", gi("g_IrqCalls") == calls and icu.ir[slot] and icu.dtce[slot])
+    icu.dtce[slot] = False
+    call("R9a02IrqDispatch", 19 + slot)
+    check("IRQ ack order %d" % level, gi("g_IrqSeen") == level and not icu.ir[slot])
+    check("IRQ called once", gi("g_IrqCalls") == calls + 1)
+    si("g_IrqMode", 1)
+    REQUEUE[0] = True
+    event(slot)
+    call("R9a02IrqDispatch", 19 + slot)
+    check("IRQ replaced same slot", gi("g_IrqSlot") == slot)
+    check("IRQ new event preserved %d" % level, not REQUEUE[0] and icu.ir[slot] and clic_ie(slot))
+    call("R9a02IrqDispatch", 19 + slot)
+    check("IRQ new owner delivered", gi("g_IrqCalls") == calls + 3 and not icu.ir[slot])
+    si("g_IrqMode", 2)
+    event(slot)
+    call("R9a02IrqDispatch", 19 + slot)
+    check("IRQ unregister stays released", icu.iels[slot] == 0 and not clic_ie(slot))
+    call("EmuIrqRelease")
+uc.hook_del(h)
 
 check("no anomalies", not anomalies, str(anomalies[:4]))
 print("Snooze characters", ua.snz, "lost", icu.lost, "TX bytes cut", ua.cut)

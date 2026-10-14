@@ -344,6 +344,43 @@ static void R9a02UartaTxDma(R9a02UartaDev_t * const pDev)
 	reg->TXBA = first;
 }
 
+// Idle/event service only. One byte needs no DMA descriptor setup; queued
+// bursts use private DTC storage. A running transfer owns FIFO consumption.
+static inline __attribute__((always_inline)) void R9a02UartaTxKick(R9a02UartaDev_t * const pDev)
+{
+	UARTDev_t *udev = pDev->pUartDev;
+
+	if (udev->DevIntrf.bDma &&
+		(((volatile R9a02DtcInfo_t *)&pDev->TxDtc)->Cra != 0U || CFifoUsed(udev->hTxFifo) > 1))
+	{
+		R9a02UartaTxDma(pDev);
+	}
+	else if (pDev->pReg->ASIMA0 & R9A02_ASIMA0_TXEA)
+	{
+		int cnt = R9a02UartaTxHw(pDev, true);
+
+		if (cnt >= 0)
+		{
+			udev->bTxReady = cnt == 0;
+		}
+	}
+}
+
+static inline __attribute__((always_inline)) void R9a02UartaTxDmaPoll(R9a02UartaDev_t * const pDev)
+{
+	if (!pDev->pUartDev->bTxReady)
+	{
+		uint32_t evt = R9A02_ICU->IELSR[pDev->IntTx];
+
+		if ((evt & (R9A02_IELSR_IR | R9A02_IELSR_DTCE)) != R9A02_IELSR_IR)
+		{
+			return;
+		}
+		R9a02EventFlagClear(pDev->IntTx);
+	}
+	R9a02UartaTxKick(pDev);
+}
+
 // Without interrupts, everything in the TX CFIFO is sent now. Each byte waits
 // at most two character times for TXBAn (table 25.6).
 static void R9a02UartaTxDrain(R9a02UartaDev_t * const pDev)
@@ -412,19 +449,11 @@ static void R9a02UartaTxIRQHandler(int IntNo, void *pCtx)
 	UARTDev_t *udev = dev->pUartDev;
 	uintptr_t state = DisableInterrupt();
 
-	if (udev->DevIntrf.bDma)
-	{
-		R9a02UartaTxDma(dev);
-	}
-	else if (R9a02UartaTxHw(dev, false) == 0)
-	{
-		// TX CFIFO empty, TxData starts the next transmission
-		udev->bTxReady = true;
-	}
+	R9a02UartaTxKick(dev);
 
 	EnableInterrupt(state);
 
-	if (udev->DevIntrf.bIntEn && udev->EvtCallback)
+	if (udev->bTxReady && udev->DevIntrf.bIntEn && udev->EvtCallback)
 	{
 		udev->EvtCallback(udev, UART_EVT_TXREADY, NULL, CFifoAvail(udev->hTxFifo));
 	}
@@ -543,7 +572,7 @@ static uint32_t R9a02UartaSetRate(DevIntrf_t * const pDev, uint32_t Rate)
 		R9a02UartaStart(dev);
 		if (pDev->bDma)
 		{
-			R9a02UartaTxDma(dev);
+			R9a02UartaTxKick(dev);
 		}
 	}
 
@@ -583,7 +612,7 @@ static int R9a02UartaRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int Bufflen
 			R9a02UartaRxPoll(dev);
 			if (pDev->bDma)
 			{
-				R9a02UartaTxDma(dev);
+				R9a02UartaTxDmaPoll(dev);
 			}
 		}
 
@@ -673,15 +702,12 @@ static int R9a02UartaTxData(DevIntrf_t * const pDev, uint8_t const *pData, int D
 		cnt = R9a02UartaTxPut(dev, pData, Datalen);
 	}
 
-	if (pDev->bDma)
+	if (!pDev->bIntEn && pDev->bDma)
 	{
 		uintptr_t state = DisableInterrupt();
 
-		if (!pDev->bIntEn)
-		{
-			R9a02UartaRxPoll(dev);
-		}
-		R9a02UartaTxDma(dev);
+		R9a02UartaRxPoll(dev);
+		R9a02UartaTxDmaPoll(dev);
 		EnableInterrupt(state);
 	}
 	else if (!pDev->bIntEn)
@@ -695,9 +721,9 @@ static int R9a02UartaTxData(DevIntrf_t * const pDev, uint8_t const *pData, int D
 		// interrupt.
 		uintptr_t state = DisableInterrupt();
 
-		if (udev->bTxReady && R9a02UartaTxHw(dev, true) > 0)
+		if (udev->bTxReady)
 		{
-			udev->bTxReady = false;
+			R9a02UartaTxKick(dev);
 		}
 		EnableInterrupt(state);
 	}

@@ -1,6 +1,6 @@
 # R9A02G021 port checks
 
-Emulator checks of the SAU and IICA drivers. Each script builds a fixture with the
+Emulator checks of the SAU, UARTA and IICA drivers. Each script builds a fixture with the
 port's sources for RV32IMAC (no Zba, Zbb or Zbs, which unicorn does not
 decode), runs it on unicorn and models the peripherals as the manual
 describes them: the SAU channels, the ICU IR and DTCE flags, the CLIC input
@@ -21,6 +21,55 @@ python3 tests/r9a02/build_spi_slave_emu.py --tool-prefix /path/to/bin/riscv-none
 Needs xPack riscv-none-elf-gcc, unicorn 2.1 and pyelftools. The objects go to
 `tests/r9a02/build`. Each script prints PASS and exits with 0, or lists the
 failed checks and exits with 1.
+
+The UART check also supports LLVM for Renesas RISC-V and Debug builds:
+
+```sh
+python3 tests/r9a02/build_uart_snooze_emu.py --llvm --tool-prefix /path/to/llvm-for-renesas-riscv/bin/
+python3 tests/r9a02/build_uart_snooze_emu.py --llvm --tool-prefix /path/to/llvm-for-renesas-riscv/bin/ --debug
+```
+
+Release (`-Os`) and Debug (`-O0`) UART checks passed with LLVM 19.1.7.202501
+on 2026-10-14. These check code and modeled register behavior, not timing or
+electrical behavior. Hardware performance uses Release `UartPrbsTxTest`
+first, then `UartLoopback` for RX, with the same configuration across MCUs.
+
+## UART DTC transmit (2026-10-14)
+
+The UART fixture includes `dtc_r9a02.cpp` and `uarta_r9a02.cpp`. The model
+executes the DTC records through their bus access widths, requires DTCST and
+the CLIC input enabled, and raises the completion event on the last transfer.
+It checks SAU UART0 and both UARTA channels with polling/interrupt RX and
+blocking/non-blocking FIFOs:
+
+- Exact TX order for single bytes, blocks, FIFO wrapping and backpressure;
+  private DMA storage remains intact when a non-blocking FIFO overwrites data.
+- Autonomous DTC transfers without CPU handlers, followed by block chaining;
+  SAU halfword writes and UARTA byte writes, including a full transmit buffer
+  at DTC completion and delayed CPU handling.
+- A one-byte producer bypasses descriptor setup for an idle byte and only
+  enqueues while TX is busy. Queued bytes become real DTC blocks; active
+  descriptors stay unchanged by subsequent enqueues. TX-ready callbacks occur
+  once the queue drains in both byte-interrupt and DMA operation.
+- Short RX bursts, RX callbacks, parity-error discard, seven-bit masking and
+  full duplex traffic during DTC TX.
+- Disable/Enable with an active transfer, active reinitialization, rate changes
+  preserving the staged tail, PowerOff cleanup, setup failure and retry,
+  default FIFOs, and TX draining around SAU Snooze entry and wake-up.
+
+RX uses the existing CPU path, as in the SAM4L port. RX DMA is not implemented.
+
+The IRQ checks also verify pulse acknowledgement before the callback, level
+acknowledgement after it, no CPU dispatch while the DTC owns the event, and
+preservation of a new pending event when a handler replaces its route. These
+cover the pulse dispatch shortcut used by UART without changing level-pin
+acknowledgement behavior.
+
+The unchanged `UartPrbsTxTest` source was linked with all four interrupt/DMA
+selections, and `UartLoopback` was linked, in both Release and Debug using the
+same LLVM toolchain. Build and emulator results do not establish hardware
+throughput. The port README records the maintainer's four-mode measurements
+before the TX scheduling correction; updated hardware measurements are pending.
 
 ## SPI slave (2026-10-13)
 

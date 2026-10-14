@@ -41,7 +41,7 @@ for i, source in enumerate(sources):
 elf = out / 'uart_snooze.elf'
 exports = ['EmuUartInit', 'EmuUartSnooze', 'EmuStandby', 'EmuUartRx', 'EmuUartRate', 'EmuUartTx',
            'EmuUartEnable', 'EmuUartDisable', 'EmuOtherSnooze', 'EmuUartPowerOff', 'R9a02IrqDispatch',
-           'SystemPeriphClockGet', 'R9a02HocoClockGet']
+           'SystemPeriphClockGet', 'R9a02HocoClockGet', 'EmuIrqInit', 'EmuIrqRelease']
 linker = args.tool_prefix + ('clang++' if args.llvm else 'g++')
 specs = [] if args.llvm else ['--specs=nano.specs', '--specs=nosys.specs']
 script = 'llvm_R9A02G021.ld' if args.llvm else 'gcc_R9A02G021.ld'
