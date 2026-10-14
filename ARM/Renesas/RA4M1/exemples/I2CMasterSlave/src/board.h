@@ -79,8 +79,33 @@ SOFTWARE.
 	Ra4m1I2cDump(i2c, dbg, sizeof(dbg)); \
 	printf("%s %s\r\n", name, dbg); }
 
-// Keep diagnostics read-only after IIC initialization. GPIO pin probes,
-// jumper tests, and slave pokes alter the PFS/PMR ownership of IIC pins and
-// must not run from the shared transfer example.
+// GPIO-mode pull-up test runs before I2C.Init(). The shared example already
+// calls I2C_DEBUG_PIN_TESTS before either controller owns the pins.
+// Do not drive the bus low or modify PFS after initialization.
+#include "iopinctrl.h"
+
+static inline void Ra4m1I2cPullupProbe(const char *pName, int PortNo, int PinNo)
+{
+	IOPinConfig(PortNo, PinNo, IOPINOP_GPIO, IOPINDIR_INPUT,
+		IOPINRES_NONE, IOPINTYPE_NORMAL);
+	const int noPull = IOPinRead(PortNo, PinNo);
+	const uint32_t noPullPfs = R_PFS->PORT[PortNo].PIN[PinNo].PmnPFS;
+
+	IOPinConfig(PortNo, PinNo, IOPINOP_GPIO, IOPINDIR_INPUT,
+		IOPINRES_PULLUP, IOPINTYPE_NORMAL);
+	const int pullUp = IOPinRead(PortNo, PinNo);
+	const uint32_t pullUpPfs = R_PFS->PORT[PortNo].PIN[PinNo].PmnPFS;
+
+	printf("pullup %s P%d%02d gpio_nopull=%d pfs=%08lx gpio_pullup=%d pfs=%08lx\\r\\n",
+		pName, PortNo, PinNo, noPull, (unsigned long)noPullPfs,
+		pullUp, (unsigned long)pullUpPfs);
+}
+
+#define I2C_DEBUG_PIN_TESTS() \\
+	Ra4m1I2cPullupProbe("master SCL", I2C_MASTER_SCL_PORT, I2C_MASTER_SCL_PIN); \\
+	Ra4m1I2cPullupProbe("master SDA", I2C_MASTER_SDA_PORT, I2C_MASTER_SDA_PIN)
+
+// The existing I2C_DEBUG_DUMP outputs the peripheral-mode ICCR1 SCLI/SDAI
+// and PFS values immediately after Init, enabling a direct comparison.
 
 #endif // __BOARD_H__
