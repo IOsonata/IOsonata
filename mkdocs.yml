@@ -1,5 +1,35 @@
 site_name: "IOSonata Documentation"
 
+nav:
+  - Home: index.md
+  - Getting started: getting-started.md
+  - Quick reference: quick-reference.md
+  - Supported targets: supported-targets.md
+  - Release notes:
+      - "0.13": releases/0.13.md
+  - User guides:
+      - Bluetooth: bluetooth-user-guide.md
+      - USB: usb-user-guide.md
+      - USB on nRF54LM20: usb-nrf54lm20x.md
+      - NVM: nvm-user-guide.md
+      - Buzzer: buzzer.md
+      - Software SPI: spi_soft.md
+  - Architecture:
+      - Overview: architecture/README.md
+      - Bluetooth: architecture/bluetooth.md
+      - USB: architecture/usb.md
+      - Device composition: architecture/device-composition.md
+      - Device interface notes: architecture/devintrf-implementer-notes.md
+      - DFU: architecture/dfu.md
+      - DFU wire format: architecture/dfu_wire.md
+      - NVM: architecture/nvm.md
+      - IOcomposer workflow: architecture/iocomposer-workflow.md
+  - Reference:
+      - Classes: class.md
+      - Functions: functions.md
+      - Dependencies: dependencies.md
+      - FAQ: FAQ.md
+
 theme:
   name: material
 
