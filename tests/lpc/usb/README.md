@@ -285,8 +285,8 @@ vendor bulk; the standalone CDC and HID firmware sizes are unchanged.
 
 The ARM runner also builds the standalone UsbCustomBulkLoopback IOcomposer
 example using its board header and the shared vendor-bulk application. Debug
-uses 47580 bytes flash, 4448 bytes main RAM and 1236 bytes linker stack;
-Release uses 20964 bytes flash, 3652 bytes main RAM and 1500 bytes linker stack.
+uses 48696 bytes flash, 4552 bytes main RAM and 1200 bytes linker stack;
+Release uses 21448 bytes flash, 3760 bytes main RAM and 1464 bytes linker stack.
 Both use 832 bytes USB SRAM. Project links and semihosting options receive the
 same checks as CDC and HID. The runner now checks eight firmware builds;
 retained vendor-bulk images are under UsbCustomBulkLoopback/{Debug,Release}.
@@ -1013,3 +1013,20 @@ invalid controller remains a no-op.
 Lifecycle regressions cover all four operations with a pending bus event,
 including retained ownership and exactly one cancellation after stop. Host
 O0/O2 UBSan tests and Cortex-M3 warnings-as-errors compilation pass.
+
+Shared custom bulk AppRun conversion
+-----------------------------------
+
+The custom bulk loopback now follows the shared CDC example's AppRun and
+AppCheckStatus pattern. USB status is checked between queued events. Partial
+writes remain in application storage until the TX FIFO accepts them; queued
+RX packets continue draining before idle wait. The event queue stays at 16.
+LPC11U35 and LPC54628 Debug/Release links pass with GNU Arm 13.2.1, including
+Debug semihosting and Release nosys checks. LPC54628 uses 46816/21340 bytes
+flash and 4544/3748 bytes main RAM (Debug/Release), with 832 bytes USB SRAM.
+Physical traffic and sleep/wakeup validation remain pending.
+
+This does not add a custom bulk project for LPC1769. The generic endpoint
+allocator currently chooses endpoint 1 for a standalone bulk pair, but that
+endpoint is interrupt-only on LPC1769. Transfer-type-aware allocation is
+needed before adding that application or arbitrary composite layouts there.

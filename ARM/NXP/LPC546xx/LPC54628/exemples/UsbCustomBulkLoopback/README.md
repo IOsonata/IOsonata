@@ -37,3 +37,7 @@ in Debug and Release against the production linker script. It checks the USB0
 vector, vector checksum, semihosting selection and USB SRAM. This is not a full
 IOcomposer library build. Physical enumeration, transfers and throughput remain
 pending board testing.
+
+The shared application uses AppRun and AppCheckStatus with the 16-entry event
+queue. It checks USB status while idle, retains partial TX writes under FIFO
+backpressure, and waits only when no application data or queued event remains.

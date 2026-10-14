@@ -10,7 +10,8 @@ and registers them with the generic USB layer when it is initialized.
 
 The custom interface uses USB class 0xFF. Subclass and protocol are left at
 zero so an application can define its own protocol on top of the bulk data
-path. The loop below simply returns every byte received from the host.
+path. AppRun services deferred USB events; AppCheckStatus returns received
+bytes and retains partial writes until the transmit FIFO accepts them.
 
 @author	Hoang Nguyen Hoan
 @date	Sep. 6, 2026
@@ -71,6 +72,9 @@ alignas(4) static uint8_t s_RxFifoMem[CUSTOM_RXFIFO_MEMSIZE];
 alignas(4) static uint8_t s_TxFifoMem[CUSTOM_TXFIFO_MEMSIZE];
 
 static UsbdBulk s_CustomBulk;
+static uint8_t s_Buffer[LOOPBACK_BUFFER_SIZE];
+static int s_Pending;
+static int s_Offset;
 
 static const UsbdBulkCfg_t s_BulkCfg = {
 	.DevNo = USB_DEVNO,
@@ -122,9 +126,31 @@ static const UsbCfg_t s_UsbCfg = {
 	.EvtHandler = nullptr,
 };
 
+bool AppCheckStatus(void)
+{
+	UsbCheckStatus();
+	if (s_Pending == 0)
+	{
+		s_Pending = s_CustomBulk.RxData(s_Buffer, sizeof(s_Buffer));
+		s_Offset = 0;
+		if (s_Pending <= 0)
+		{
+			s_Pending = 0;
+			return !AppEvtHandlerPending();
+		}
+	}
+	const int sent = s_CustomBulk.TxData(&s_Buffer[s_Offset], s_Pending);
+	if (sent > 0)
+	{
+		s_Offset += sent;
+		s_Pending -= sent;
+	}
+	// Drain queued RX packets and retry bytes held by TX backpressure.
+	return false;
+}
+
 int main()
 {
-	uint8_t buffer[LOOPBACK_BUFFER_SIZE];
 
 	if (!AppEvtHandlerInit(g_AppEvtHandlerQueMem, sizeof(g_AppEvtHandlerQueMem)) ||
 		!UsbInit(&s_UsbCfg))
@@ -143,31 +169,7 @@ int main()
 	// when VBUS appears, so a false result here is not fatal.
 	(void)UsbEnable(USB_DEVNO);
 
-	int pending = 0;
-	int offset = 0;
-
-	while (1)
-	{
-		AppEvtHandlerExec();
-
-		if (pending > 0)
-		{
-			int n = s_CustomBulk.TxData(&buffer[offset], pending);
-			if (n > 0)
-			{
-				offset += n;
-				pending -= n;
-			}
-			continue;
-		}
-
-		int len = s_CustomBulk.RxData(buffer, sizeof(buffer));
-		if (len > 0)
-		{
-			pending = len;
-			offset = 0;
-		}
-	}
+	AppRun();
 
 	return 0;
 }

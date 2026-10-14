@@ -58,7 +58,11 @@ Measured with Arm GNU GCC 13.2.1 and binutils 2.42:
 
 | Build | Flash / 65536 bytes | Main RAM / 8160 bytes | USB SRAM / 2048 bytes | Linker stack allowance |
 | --- | ---: | ---: | ---: | ---: |
-| Debug | 47580 | 4448 | 832 | 1236 |
-| Release | 20964 | 3652 | 832 | 1500 |
+| Debug | 48696 | 4552 | 832 | 1200 |
+| Release | 21448 | 3760 | 832 | 1464 |
 
 The stack allowance is not a measured runtime high-water mark.
+
+The shared application uses AppRun and AppCheckStatus with the 16-entry event
+queue. It checks USB status while idle, retains partial TX writes under FIFO
+backpressure, and waits only when no application data or queued event remains.
