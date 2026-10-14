@@ -275,7 +275,7 @@ See the [TaktOS on-target benchmark results](https://github.com/IOsonata/TaktOS#
 | Same HAL binary across RTOSes | Usually no | Zephyr-integrated | **Bare metal, TaktOS, FreeRTOS, ThreadX** |
 | Device Tree required | No | Yes | **No** |
 | Official build requires CMake | Varies | Yes | **No** |
-| Startup and application entry | Application-defined | Framework initializes the kernel and devices before application entry | **Application-defined** |
+| Startup and application entry | Application-defined | Framework initializes the kernel and devices before application entry | MCU port provides startup; standard `main()` application entry |
 
 ---
 
