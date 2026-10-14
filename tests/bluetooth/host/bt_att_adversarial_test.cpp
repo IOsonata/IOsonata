@@ -554,9 +554,8 @@ void TestOversizeRequestRejected()
 
 } // namespace
 
-extern "C" {
 
-BtDevice_t *BtPeerFindByHdl(uint16_t Hdl)
+extern "C" BtDevice_t *BtPeerFindByHdl(uint16_t Hdl)
 {
 	if (!s_PeerEnabled || Hdl != kConnHdl)
 	{
@@ -565,42 +564,41 @@ BtDevice_t *BtPeerFindByHdl(uint16_t Hdl)
 	return &s_Peer;
 }
 
-bool BtGapConnSecGet(uint16_t, BtConnSec_t *)
+extern "C" bool BtGapConnSecGet(uint16_t, BtConnSec_t *)
 {
 	return false;
 }
 
-uint16_t BtGattCccdGet(uint16_t, uint16_t)
+extern "C" uint16_t BtGattCccdGet(uint16_t, uint16_t)
 {
 	return 0;
 }
 
-uint8_t BtGattCccdValueError(BtGattChar_t *, uint16_t)
+extern "C" uint8_t BtGattCccdValueError(BtGattChar_t *, uint16_t)
 {
 	return s_CccdValueErr;
 }
 
-bool BtGattCccdSet(uint16_t, uint16_t, uint16_t)
+extern "C" bool BtGattCccdSet(uint16_t, uint16_t, uint16_t)
 {
 	s_CccdSetCount++;
 	return s_CccdSetResult;
 }
 
-void BtGattClientNotified(uint16_t, uint16_t, uint8_t *, uint16_t)
+extern "C" void BtGattClientNotified(uint16_t, uint16_t, uint8_t *, uint16_t)
 {
 }
 
-void BtGattHandleValueConfirm(uint16_t)
+extern "C" void BtGattHandleValueConfirm(uint16_t)
 {
 	s_ConfirmCount++;
 }
 
-bool BtSmpSignVerify(uint16_t, const uint8_t *, size_t, const uint8_t *)
+extern "C" bool BtSmpSignVerify(uint16_t, const uint8_t *, size_t, const uint8_t *)
 {
 	return s_SignatureValid;
 }
 
-} // extern "C"
 
 int main()
 {

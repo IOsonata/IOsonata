@@ -226,4 +226,4 @@ void LpcUARTIrqHandler(int DevNo);
 }
 #endif
 
-#endif // __LPCUART_H__
+#endif

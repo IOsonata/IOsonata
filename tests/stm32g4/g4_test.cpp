@@ -46,13 +46,11 @@ SOFTWARE.
 
 TestScb_t g_TestScb;
 
-extern "C" {
 // Const has internal linkage in C++ without extern
-extern void (* const __Vectors[4])(void);
-void (* const __Vectors[4])(void) = {};
-bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq);
-uint32_t SystemPeriphClockSet(int Idx, uint32_t Freq);
-}
+extern "C" void (* const __Vectors[4])(void);
+extern "C" void (* const __Vectors[4])(void) = {};
+extern "C" bool SystemCoreClockSelect(OSC_TYPE ClkSrc, uint32_t OscFreq);
+extern "C" uint32_t SystemPeriphClockSet(int Idx, uint32_t Freq);
 
 static int s_Fail;
 static int s_Checks;

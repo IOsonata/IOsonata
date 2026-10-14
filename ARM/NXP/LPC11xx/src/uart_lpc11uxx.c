@@ -61,7 +61,7 @@ static bool Lpc11UARTSignalPin(int Signal, const IOPinCfg_t *pPin)
 			return pPin->PortNo == 1 && (pPin->PinNo == 15 || pPin->PinNo == 21) &&
 				pPin->PinOp == IOPINOP_FUNC1;
 		case UARTPIN_DTE_IDX:
-			// The generic DTE slot carries the UART's DSR input.
+			// The generic DTE slot holds the UART's DSR input.
 			return pPin->PortNo == 1 && (pPin->PinNo == 14 || pPin->PinNo == 20) &&
 				pPin->PinOp == IOPINOP_FUNC1;
 		case UARTPIN_DTR_IDX:

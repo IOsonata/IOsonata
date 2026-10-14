@@ -599,7 +599,7 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
     	}
     }
 
-    reg->CR1 = I2C_CR1_PE;
+	reg->CR1 = I2C_CR1_PE;
 	reg->ICR = 0x3F38;
 
 	return true;

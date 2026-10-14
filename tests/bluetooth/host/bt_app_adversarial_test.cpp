@@ -155,11 +155,10 @@ void TestUnstorableValueIsNotTransmitted()
 
 } // namespace
 
-extern "C" {
 
 // The All forms walk the peer pool rather than copying handles into a fixed
 // local array, so the stub pool has to expose slots.
-BtDevice_t *BtPeerSlot(uint16_t Idx)
+extern "C" BtDevice_t *BtPeerSlot(uint16_t Idx)
 {
 	static BtDevice_t s_Slots[kLinkCount];
 	static bool s_Init = false;
@@ -176,12 +175,12 @@ BtDevice_t *BtPeerSlot(uint16_t Idx)
 	return Idx < kLinkCount ? &s_Slots[Idx] : nullptr;
 }
 
-uint16_t BtPeerCount(void)
+extern "C" uint16_t BtPeerCount(void)
 {
 	return (uint16_t)kLinkCount;
 }
 
-size_t BtPeerGetConnectedHandles(uint16_t *pHdl, size_t MaxCount)
+extern "C" size_t BtPeerGetConnectedHandles(uint16_t *pHdl, size_t MaxCount)
 {
 	size_t count = kLinkCount < MaxCount ? kLinkCount : MaxCount;
 	if (pHdl != nullptr)
@@ -194,7 +193,7 @@ size_t BtPeerGetConnectedHandles(uint16_t *pHdl, size_t MaxCount)
 	return count;
 }
 
-BtDevice_t *BtPeerGetActive(void)
+extern "C" BtDevice_t *BtPeerGetActive(void)
 {
 	return nullptr;
 }
@@ -202,7 +201,7 @@ BtDevice_t *BtPeerGetActive(void)
 // The same refusals as the real one in bt_gatt.cpp: no characteristic, data
 // promised but not given, a characteristic never registered, no storage to
 // write through, and more than the storage holds.
-bool BtGattCharSetValue(BtGattChar_t *pChar, void * const pVal, size_t Len)
+extern "C" bool BtGattCharSetValue(BtGattChar_t *pChar, void * const pVal, size_t Len)
 {
 	if (pChar == nullptr || (Len > 0 && pVal == nullptr) ||
 		pChar->ValHdl == BT_ATT_HANDLE_INVALID || pChar->pValue == nullptr ||
@@ -223,7 +222,7 @@ bool BtGattCharSetValue(BtGattChar_t *pChar, void * const pVal, size_t Len)
 	return true;
 }
 
-bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *,
+extern "C" bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *,
 					  void * const, size_t)
 {
 	if (s_NotifyCount < kLinkCount)
@@ -233,7 +232,7 @@ bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *,
 	return true;
 }
 
-bool BtGattCharIndicate(uint16_t ConnHdl, BtGattChar_t *,
+extern "C" bool BtGattCharIndicate(uint16_t ConnHdl, BtGattChar_t *,
 						void * const, size_t)
 {
 	if (s_IndicateCount < kLinkCount)
@@ -243,7 +242,7 @@ bool BtGattCharIndicate(uint16_t ConnHdl, BtGattChar_t *,
 	return true;
 }
 
-void BtAppDisconnectConn(uint16_t ConnHdl)
+extern "C" void BtAppDisconnectConn(uint16_t ConnHdl)
 {
 	if (s_DisconnectCount < kLinkCount)
 	{
@@ -251,7 +250,6 @@ void BtAppDisconnectConn(uint16_t ConnHdl)
 	}
 }
 
-} // extern "C"
 
 int main()
 {

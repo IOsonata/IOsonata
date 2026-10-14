@@ -38,4 +38,4 @@ void TestNvic(int Op, int IrqNo, uint32_t Prio);
 #define NVIC_SetPriority(n, p)		TestNvic(3, (int)(n), (uint32_t)(p))
 #define NVIC_SetPendingIRQ(n)		TestNvic(4, (int)(n), 0)
 
-#endif // __TEST_CORE_H__
+#endif

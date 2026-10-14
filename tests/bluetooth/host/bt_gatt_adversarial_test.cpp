@@ -284,30 +284,29 @@ void TestFullCompletionQueueRejectsSend()
 
 } // namespace
 
-extern "C" {
 
-BtDevice_t *BtPeerFindByHdl(uint16_t Hdl)
+extern "C" BtDevice_t *BtPeerFindByHdl(uint16_t Hdl)
 {
 	return Hdl == kConnHdl ? &s_Peer : nullptr;
 }
 
 // Connection support of the port, started by the first service add.
-bool BtAppConnInit(void)
+extern "C" bool BtAppConnInit(void)
 {
 	return true;
 }
 
-uint16_t BtPeerCount(void)
+extern "C" uint16_t BtPeerCount(void)
 {
 	return 1;
 }
 
-BtDevice_t *BtPeerSlot(uint16_t Idx)
+extern "C" BtDevice_t *BtPeerSlot(uint16_t Idx)
 {
 	return Idx == 0 ? &s_Peer : nullptr;
 }
 
-size_t BtPeerGetConnectedHandles(uint16_t *pHdl, size_t MaxCount)
+extern "C" size_t BtPeerGetConnectedHandles(uint16_t *pHdl, size_t MaxCount)
 {
 	if (pHdl != nullptr && MaxCount > 0)
 	{
@@ -317,30 +316,30 @@ size_t BtPeerGetConnectedHandles(uint16_t *pHdl, size_t MaxCount)
 	return 0;
 }
 
-void BtSmpBondCccdSave(uint16_t, uint16_t, uint16_t)
+extern "C" void BtSmpBondCccdSave(uint16_t, uint16_t, uint16_t)
 {
 }
 
-uint8_t BtSmpBondCccdGet(uint16_t, uint16_t *, uint16_t *, uint8_t)
+extern "C" uint8_t BtSmpBondCccdGet(uint16_t, uint16_t *, uint16_t *, uint8_t)
 {
 	return 0;
 }
 
-bool BtSmpSignVerify(uint16_t, const uint8_t *, size_t, const uint8_t *)
+extern "C" bool BtSmpSignVerify(uint16_t, const uint8_t *, size_t, const uint8_t *)
 {
 	return false;
 }
 
-bool BtGapConnSecGet(uint16_t, BtConnSec_t *)
+extern "C" bool BtGapConnSecGet(uint16_t, BtConnSec_t *)
 {
 	return false;
 }
 
-void BtGattSrvcEvtHandler(BtGattSrvc_t * const, uint32_t, void * const)
+extern "C" void BtGattSrvcEvtHandler(BtGattSrvc_t * const, uint32_t, void * const)
 {
 }
 
-uint32_t BtHciSendAcl(BtHciDevice_t * const,
+extern "C" uint32_t BtHciSendAcl(BtHciDevice_t * const,
 					  BtHciACLDataPacket_t * const pPacket)
 {
 	s_HciPacketCount++;
@@ -355,11 +354,10 @@ uint32_t BtHciSendAcl(BtHciDevice_t * const,
 			(uint32_t)pPacket->Hdr.Len + sizeof(pPacket->Hdr) : 1;
 }
 
-void BtGattClientNotified(uint16_t, uint16_t, uint8_t *, uint16_t)
+extern "C" void BtGattClientNotified(uint16_t, uint16_t, uint8_t *, uint16_t)
 {
 }
 
-} // extern "C"
 
 int main()
 {

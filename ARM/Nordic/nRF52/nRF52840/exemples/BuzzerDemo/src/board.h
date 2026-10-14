@@ -135,5 +135,5 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define TONE_PIN			26
 #endif
 
-#endif // __BOARD_H__
+#endif
 

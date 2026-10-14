@@ -4,8 +4,8 @@
 @brief	SAM4LS C-package example I2C master/slave loopback wiring.
 
 Connect the two independent SAM4L TWI instances:
-  PB14 (TWIMS3 TWD, master SDA)  <-> PB00 (TWIMS1 TWD, slave SDA)
-  PB15 (TWIMS3 TWCK, master SCL) <-> PB01 (TWIMS1 TWCK, slave SCL)
+	PB14 (TWIMS3 TWD, master SDA)  <-> PB00 (TWIMS1 TWD, slave SDA)
+	PB15 (TWIMS3 TWCK, master SCL) <-> PB01 (TWIMS1 TWCK, slave SCL)
 
 The master side enables pull-ups through the existing shared example pin
 configuration. External I2C pull-ups can also be used.
@@ -53,4 +53,4 @@ configuration. External I2C pull-ups can also be used.
 #define I2C_SLAVE_DMA_ENABLE	true
 #define I2C_SLAVE_INT_ENABLE	true
 
-#endif // __BOARD_H__
+#endif

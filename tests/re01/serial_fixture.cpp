@@ -29,12 +29,11 @@ static const IOPinCfg_t s_I2cPins[2][2] = {
 	 {3, 1, 15, IOPINDIR_BI, IOPINRES_PULLUP, IOPINTYPE_OPENDRAIN}},
 };
 
-extern "C" {
 uint8_t SerialTx[130];
 uint8_t SerialRx[130];
 
 // Bus 0/1 = SPI0/1, bus 2/3 = I2C0/1. Options are fixture-only flags.
-int SerialInit(unsigned Bus, uint32_t Rate, unsigned Options)
+extern "C" int SerialInit(unsigned Bus, uint32_t Rate, unsigned Options)
 {
 	if (Bus >= 4)
 		return 0;
@@ -73,7 +72,7 @@ int SerialInit(unsigned Bus, uint32_t Rate, unsigned Options)
 	return I2CInit(&s_I2c[no], &s_I2cCfg[no]);
 }
 
-int SerialCall(unsigned Bus, unsigned Op, uint32_t Arg, unsigned Len)
+extern "C" int SerialCall(unsigned Bus, unsigned Op, uint32_t Arg, unsigned Len)
 {
 	unsigned no = Bus & 1;
 	DevIntrf_t *dev = Bus < 2 ? &s_Spi[no].DevIntrf : &s_I2c[no].DevIntrf;
@@ -145,7 +144,7 @@ int SerialCall(unsigned Bus, unsigned Op, uint32_t Arg, unsigned Len)
 	return -99;
 }
 
-int SerialCppProbe(unsigned Bus)
+extern "C" int SerialCppProbe(unsigned Bus)
 {
 	if (Bus == 0)
 	{
@@ -166,5 +165,4 @@ int SerialCppProbe(unsigned Bus)
 	return n;
 }
 
-int main(void) { for (;;) {} }
-}
+extern "C" int main(void) { for (;;) {} }

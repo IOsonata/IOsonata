@@ -45,7 +45,7 @@ SOFTWARE.
 // library that reports __cpp_lib_stdatomic_h has it; on an older library the
 // same include resolves to the C header, whose global atomic_* types then
 // clash with std:: under the using-directive below once anything drags
-// <atomic> in. Gate on the library, not on the language version.
+// <atomic> in. Key it on the library, not on the language version.
 #if __has_include(<version>)
 	#include <version>
 #endif

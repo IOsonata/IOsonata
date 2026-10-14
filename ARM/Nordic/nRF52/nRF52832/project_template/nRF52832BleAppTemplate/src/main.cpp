@@ -134,7 +134,7 @@ int main()
 {
     BtAppInit(&s_BtAppCfg);
 
-    AppRun();
+	AppRun();
 
 	return 0;
 }

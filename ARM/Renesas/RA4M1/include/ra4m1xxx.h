@@ -7,7 +7,7 @@
 
 MIT License
 
-Copyright (c) 2026 I-SYST inc. All rights reserved.
+Copyright (c) 2026, I-SYST inc., all rights reserved
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -33,10 +33,9 @@ SOFTWARE.
 
 #include <stdint.h>
 
-/* RA4M1 has 32 configurable ICU event links, not fixed peripheral vectors.
- * Event selection belongs to the interrupt/peripheral driver, as on RE01.
- * This initial header describes the core, not the complete peripheral set.
- */
+// RA4M1 has 32 configurable ICU event links, not fixed peripheral vectors.
+// Event selection belongs to the interrupt/peripheral driver, as on RE01.
+// This initial header describes the core, not the complete peripheral set.
 typedef enum IRQn {
 	NonMaskableInt_IRQn = -14,
 	HardFault_IRQn      = -13,
@@ -83,7 +82,7 @@ typedef enum IRQn {
 
 #ifdef __GNUC__
 #ifndef __PROGRAM_START
-#define __PROGRAM_START          /* IOsonata owns ResetEntry, not CMSIS CRT. */
+#define __PROGRAM_START          // IOsonata owns ResetEntry, not CMSIS CRT.
 #endif
 #endif
 #include "R7FA4M1AB.h"
@@ -96,4 +95,4 @@ typedef enum IRQn {
 #define RA4M1_RAM_SIZE            0x00008000UL
 
 #include "system_ra4m1.h"
-#endif /* __RA4M1XXX_H__ */
+#endif

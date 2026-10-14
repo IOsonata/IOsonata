@@ -708,7 +708,7 @@ uint32_t clkRate = 0;
                     clkRate = CLK_FRO_12MHZ;
                     break;
                 case 0x01: /* CLKIN Source (clk_in) */
-                    clkRate = Lpc546xxClkInFreq();
+					clkRate = Lpc546xxClkInFreq();
                     break;
                 case 0x02: /* Watchdog oscillator (wdt_clk) */
                     clkRate = getWdtOscFreq();
@@ -732,7 +732,7 @@ uint32_t clkRate = 0;
                     clkRate = CLK_FRO_12MHZ;
                     break;
                 case 0x01: /* CLKIN Source (clk_in) */
-                    clkRate = Lpc546xxClkInFreq();
+					clkRate = Lpc546xxClkInFreq();
                     break;
                 case 0x02: /* Watchdog oscillator (wdt_clk) */
                     clkRate = getWdtOscFreq();

@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: MIT
- * Copyright (c) 2026 I-SYST inc. All rights reserved.
+ * Copyright (c) 2026, I-SYST inc., all rights reserved
  */
 #ifndef __SPI_SOFT_H__
 #define __SPI_SOFT_H__

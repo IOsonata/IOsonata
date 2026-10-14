@@ -41,7 +41,7 @@
 
 MIT License
 
-Copyright (c) 2026 I-SYST inc. All rights reserved.
+Copyright (c) 2026, I-SYST inc., all rights reserved
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -227,4 +227,4 @@ SOFTWARE.
 #error "stm32_boards.h: BOARD is not one of the boards listed"
 #endif
 
-#endif // __STM32_BOARDS_H__
+#endif

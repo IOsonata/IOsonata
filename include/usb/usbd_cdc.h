@@ -202,4 +202,4 @@ private:
 
 /** @} End of group USBD */
 
-#endif	// __USBD_CDC_H__
+#endif

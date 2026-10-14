@@ -578,13 +578,13 @@ int main()
 {
     HardwareInit();
 
-    BtAppInit(&s_BtDevCfg);
+	BtAppInit(&s_BtDevCfg);
 
 #ifdef USE_TIMER_UPDATE
 	g_Timer.EnableTimerTrigger(0, 500UL, TIMER_TRIG_TYPE_CONTINUOUS);
 #endif
 
-    AppRun();
+	AppRun();
 
 	return 0;
 }

@@ -160,7 +160,7 @@ void (* const __Vectors[])(void) = {
 	SysTick_Handler,
 
 // STM32L432 specific
-    WWDG_IRQHandler,					// Window WatchDog
+	WWDG_IRQHandler,					// Window WatchDog
 	PVD_PVM_IRQHandler,
 	TAMP_STAMP_IRQHandler,
 	RTC_WKUP_IRQHandler,

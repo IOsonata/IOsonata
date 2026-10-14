@@ -22,4 +22,4 @@ static inline void EnableInterrupt(uint32_t State)
 	g_TestIrqState = State;
 }
 
-#endif // __TEST_INTERRUPT_H__
+#endif

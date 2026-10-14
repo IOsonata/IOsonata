@@ -7,7 +7,7 @@
 
 MIT License
 
-Copyright (c) 2026 I-SYST inc. All rights reserved.
+Copyright (c) 2026, I-SYST inc., all rights reserved
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -34,11 +34,10 @@ SOFTWARE.
 #include <stdint.h>
 #include "coredev/system_core_clock.h"
 
-/* Startup configuration, overridable in the library build. Oscillator type
- * and frequency remain in the application's strong g_McuOsc definition.
- * MOSC wait code 9 is 262144 MOCO cycles (nominally 32.768 ms), NOT crystal
- * cycles. A crystal that needs longer settling needs additional validation.
- */
+// Startup configuration, overridable in the library build. Oscillator type
+// and frequency remain in the application's strong g_McuOsc definition.
+// MOSC wait code 9 is 262144 MOCO cycles (nominally 32.768 ms), NOT crystal
+// cycles. A crystal that needs longer settling needs additional validation.
 #ifndef RA4M1_MOSC_WAIT
 #define RA4M1_MOSC_WAIT           9U
 #endif
@@ -52,18 +51,16 @@ SOFTWARE.
 #define RA4M1_STARTUP_TIMEOUT     1000000UL
 #endif
 
-/* Generic nsDelay's empirical divisor. This initial value is not calibrated
- * on RA4M1; do not use nsDelay for clock-startup or protocol timing here.
- */
+// Generic nsDelay's empirical divisor. This initial value is not calibrated
+// on RA4M1; do not use nsDelay for clock-startup or protocol timing here.
 #ifndef RA4M1_NSDELAY_FACTOR
 #define RA4M1_NSDELAY_FACTOR      27UL
 #endif
 
-/* The normal boot image auto-starts the 24 MHz HOCO. Reset execution remains
- * MOCO /16; SystemInit changes HOCO frequency only after leaving low-voltage
- * mode. WDT and IWDT do not auto-start. Security MPU remains disabled.
- * Options are kept with the vectors and placed by gcc_ra4m1.ld.
- */
+// The normal boot image auto-starts the 24 MHz HOCO. Reset execution remains
+// MOCO /16; SystemInit changes HOCO frequency only after leaving low-voltage
+// mode. WDT and IWDT do not auto-start. Security MPU remains disabled.
+// Options are kept with the vectors and placed by gcc_ra4m1.ld.
 #define RA4M1_OFS0_VALUE          0xFFFFFFFFUL
 #define RA4M1_OFS1_VALUE          0xFFFF8EFFUL
 
@@ -90,16 +87,16 @@ extern "C" {
 
 extern uint32_t SystemCoreClock;
 extern uint32_t SystemnsDelayFactor;
-/* Inspect this value if startup stops before main. */
+// Inspect this value if startup stops before main.
 extern volatile uint32_t g_Ra4m1StartupError;
 
 void SystemInit(void);
 void SystemCoreClockUpdate(void);
-/* PCLK indices: 0 = A, 1 = B, 2 = C, 3 = D. */
+// PCLK indices: 0 = A, 1 = B, 2 = C, 3 = D.
 uint32_t SystemFlashClockGet(void);
 uint32_t SystemUsbClockGet(void);
 
 #ifdef __cplusplus
 }
 #endif
-#endif /* __SYSTEM_RA4M1_H__ */
+#endif

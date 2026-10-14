@@ -17,11 +17,10 @@
 
 // Externals bt_gatt.cpp reaches for. Only the CCCD paths are driven here, so
 // the peer pool is a single stub link and the rest are inert.
-extern "C" {
 
 static BtDevice_t s_StubPeer;
 
-BtDevice_t *BtPeerFindByHdl(uint16_t Hdl)
+extern "C" BtDevice_t *BtPeerFindByHdl(uint16_t Hdl)
 {
 	if (s_StubPeer.Conn.Hdl != Hdl)
 	{
@@ -30,9 +29,9 @@ BtDevice_t *BtPeerFindByHdl(uint16_t Hdl)
 	return &s_StubPeer;
 }
 
-uint16_t BtPeerCount(void) { return 1; }
-BtDevice_t *BtPeerSlot(uint16_t Idx) { return Idx == 0 ? &s_StubPeer : nullptr; }
-size_t BtPeerGetConnectedHandles(uint16_t *pHdl, size_t MaxCount)
+extern "C" uint16_t BtPeerCount(void) { return 1; }
+extern "C" BtDevice_t *BtPeerSlot(uint16_t Idx) { return Idx == 0 ? &s_StubPeer : nullptr; }
+extern "C" size_t BtPeerGetConnectedHandles(uint16_t *pHdl, size_t MaxCount)
 {
 	if (pHdl == nullptr || MaxCount < 1)
 	{
@@ -42,18 +41,17 @@ size_t BtPeerGetConnectedHandles(uint16_t *pHdl, size_t MaxCount)
 	return 1;
 }
 
-void BtSmpBondCccdSave(uint16_t, uint16_t, uint16_t) {}
-uint8_t BtSmpBondCccdGet(uint16_t, uint16_t *, uint16_t *, uint8_t) { return 0; }
+extern "C" void BtSmpBondCccdSave(uint16_t, uint16_t, uint16_t) {}
+extern "C" uint8_t BtSmpBondCccdGet(uint16_t, uint16_t *, uint16_t *, uint8_t) { return 0; }
 
-BtAttDBEntry_t *BtAttDBAddEntry(BtUuid16_t *, int) { return nullptr; }
-BtAttDBEntry_t *BtAttDBFindHandle(uint16_t) { return nullptr; }
-void BtAttDBMark(BtAttDBMark_t *) {}
-void BtAttDBUnwind(const BtAttDBMark_t *) {}
-int BtUuidAddBase(uint8_t const [16]) { return 0; }
-void BtGattSrvcEvtHandler(BtGattSrvc_t * const, uint32_t, void * const) {}
-uint32_t BtHciSendAcl(BtHciDevice_t * const, BtHciACLDataPacket_t * const) { return 0; }
+extern "C" BtAttDBEntry_t *BtAttDBAddEntry(BtUuid16_t *, int) { return nullptr; }
+extern "C" BtAttDBEntry_t *BtAttDBFindHandle(uint16_t) { return nullptr; }
+extern "C" void BtAttDBMark(BtAttDBMark_t *) {}
+extern "C" void BtAttDBUnwind(const BtAttDBMark_t *) {}
+extern "C" int BtUuidAddBase(uint8_t const [16]) { return 0; }
+extern "C" void BtGattSrvcEvtHandler(BtGattSrvc_t * const, uint32_t, void * const) {}
+extern "C" uint32_t BtHciSendAcl(BtHciDevice_t * const, BtHciACLDataPacket_t * const) { return 0; }
 
-} // extern "C"
 
 namespace {
 

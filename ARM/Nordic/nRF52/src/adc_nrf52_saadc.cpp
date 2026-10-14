@@ -165,7 +165,7 @@ extern "C" void SAADC_IRQHandler()
         NRF_SAADC->EVENTS_DONE = 0;
         NRF_SAADC->EVENTS_END = 0;
 
-        if (s_AdcnRF52DevData.pDevObj != NULL &&
+		if (s_AdcnRF52DevData.pDevObj != NULL &&
         	s_AdcnRF52DevData.pDevObj->Mode() == ADC_CONV_MODE_CONTINUOUS)
         	NRF_SAADC->TASKS_START = 1;
 	}

@@ -5,13 +5,11 @@
 #include "coredev/shared_intrf.h"
 #include "iopinctrl.h"
 #include <stddef.h>
-extern "C" {
 uint32_t SystemCoreClock = 128000000;
 uint32_t SystemMicroSecLoopCnt = 0;
-void IOPinConfig(int, int, int, IOPINDIR, IOPINRES, IOPINTYPE) {}
-void IOPinDisable(int, int) {}
-NRF_GPIO_Type *nRFGpioGetReg(int) { return NRF_P1_S; }
-}
+extern "C" void IOPinConfig(int, int, int, IOPINDIR, IOPINRES, IOPINTYPE) {}
+extern "C" void IOPinDisable(int, int) {}
+extern "C" NRF_GPIO_Type *nRFGpioGetReg(int) { return NRF_P1_S; }
 #include "../../ARM/Nordic/src/i2c_nrfx.cpp"
 #include "../../ARM/Nordic/src/spi_nrfx.cpp"
 #include "../../ARM/Nordic/src/shared_intrf_nrfx.cpp"

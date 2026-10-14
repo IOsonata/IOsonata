@@ -1653,16 +1653,16 @@ bool BtAppInit(const BtAppCfg_t *pCfg)//, bool bEraseBond)
 
     BtAppInitUserData();
 
-    // The security module (IOsonata bond/security state, LESC, ECDH engine) is linked and
-    // started only when the application calls BtAppSecInit, normally from
-    // BtAppInitUserData above. A configuration that asks for security without
-    // starting it must not run unprotected.
-    if (pCfg->SecType != BTGAP_SECTYPE_NONE && g_BtAppData.bSecInit == false)
-    {
+	// The security module (IOsonata bond/security state, LESC, ECDH engine) is linked and
+	// started only when the application calls BtAppSecInit, normally from
+	// BtAppInitUserData above. A configuration that asks for security without
+	// starting it must not run unprotected.
+	if (pCfg->SecType != BTGAP_SECTYPE_NONE && g_BtAppData.bSecInit == false)
+	{
     	DEBUG_PRINTF("BtAppInit FAIL: SecType=%d but BtAppSecInit was not called\r\n",
     				 (int)pCfg->SecType);
     	return false;
-    }
+	}
 
     g_BtAppData.AppDevice.bSecure = pCfg->SecType != BTGAP_SECTYPE_NONE;
 
@@ -1699,14 +1699,14 @@ bool BtAppInit(const BtAppCfg_t *pCfg)//, bool bEraseBond)
 
     g_BtAppData.State = BTAPP_STATE_INITIALIZED;
 
-    // Advertising starts here and not from the event queue: an application
-    // interrupt can fill the queue before the application runs it.
-    if (g_BtAppData.AppDevice.Conn.Role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER))
+	// Advertising starts here and not from the event queue: an application
+	// interrupt can fill the queue before the application runs it.
+	if (g_BtAppData.AppDevice.Conn.Role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER))
     {
     	BtAdvStart();
     }
 
-    return true;
+	return true;
 }
 
 

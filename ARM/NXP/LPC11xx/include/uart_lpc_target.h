@@ -41,4 +41,4 @@ Modified by          Date              Description
 #define LPCUART_READ(DevNo, Reg)		((void)(DevNo), LPC_USART->Reg)
 #define LPCUART_WRITE(DevNo, Reg, Value)	((void)(DevNo), LPC_USART->Reg = (Value))
 
-#endif // __UART_LPC_TARGET_H__
+#endif

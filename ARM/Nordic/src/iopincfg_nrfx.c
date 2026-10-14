@@ -292,8 +292,8 @@ void IOPinDisableInterrupt(int IntNo)
     if (IntNo >= IOPIN_MAX_INT)
         return;
 
-    // A negative IntNo is the port event, the last entry
-    NRF_GPIOTE_Type *gpiotereg = nRFGpioteGetReg(s_GpIOSenseEvt[IntNo < 0 ? IOPIN_MAX_INT : IntNo].PortPinNo >> 8);
+	// A negative IntNo is the port event, the last entry
+	NRF_GPIOTE_Type *gpiotereg = nRFGpioteGetReg(s_GpIOSenseEvt[IntNo < 0 ? IOPIN_MAX_INT : IntNo].PortPinNo >> 8);
 
     if (IntNo < 0)
     {
@@ -801,8 +801,8 @@ void __WEAK GPIOTE_IRQHandler(void)
 	}
 	if (NRF_GPIOTE_NS->EVENTS_PORT)
 	{
-        if (s_pGpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB)
-            s_pGpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB(-1, s_pGpIOSenseEvt[IOPIN_MAX_INT].pCtx);
+		if (s_pGpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB)
+			s_pGpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB(-1, s_pGpIOSenseEvt[IOPIN_MAX_INT].pCtx);
 	    NRF_GPIOTE_NS->EVENTS_PORT = 0;
 	    //NRF_GPIO->LATCH = 0xFFFFFFFF;	// Clear detect latch
 	}
@@ -829,8 +829,8 @@ void __WEAK GPIOTE0_IRQHandler(void)
 	}
 	if (NRF_GPIOTE0_S->EVENTS_PORT)
 	{
-        if (s_pGpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB)
-            s_pGpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB(-1, s_pGpIOSenseEvt[IOPIN_MAX_INT].pCtx);
+		if (s_pGpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB)
+			s_pGpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB(-1, s_pGpIOSenseEvt[IOPIN_MAX_INT].pCtx);
 	    NRF_GPIOTE0_S->EVENTS_PORT = 0;
 	    //NRF_GPIO->LATCH = 0xFFFFFFFF;	// Clear detect latch
 	}
@@ -857,8 +857,8 @@ void __WEAK GPIOTE1_IRQHandler(void)
 	}
 	if (NRF_GPIOTE1_NS->EVENTS_PORT)
 	{
-        if (s_pGpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB)
-            s_pGpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB(-1, s_pGpIOSenseEvt[IOPIN_MAX_INT].pCtx);
+		if (s_pGpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB)
+			s_pGpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB(-1, s_pGpIOSenseEvt[IOPIN_MAX_INT].pCtx);
 	    NRF_GPIOTE1_NS->EVENTS_PORT = 0;
 	    //NRF_GPIO->LATCH = 0xFFFFFFFF;	// Clear detect latch
 	}
@@ -888,8 +888,8 @@ void __WEAK GPIOTE20_0_IRQHandler(void)
 
 	if (NRF_GPIOTE20_NS->EVENTS_PORT[0].NONSECURE)
 	{
-        if (s_pGpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB)
-            s_pGpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB(-1, s_pGpIOSenseEvt[IOPIN_MAX_INT].pCtx);
+		if (s_pGpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB)
+			s_pGpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB(-1, s_pGpIOSenseEvt[IOPIN_MAX_INT].pCtx);
 
         NRF_GPIOTE20_NS->EVENTS_PORT[0].NONSECURE = 0;
 		NRF_P1_NS->LATCH = 0xFFFFFFFF;
@@ -920,8 +920,8 @@ void __WEAK GPIOTE20_1_IRQHandler(void)
 
 	if (NRF_GPIOTE20_S->EVENTS_PORT[0].SECURE)
 	{
-        if (s_pGpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB)
-            s_pGpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB(-1, s_pGpIOSenseEvt[IOPIN_MAX_INT].pCtx);
+		if (s_pGpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB)
+			s_pGpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB(-1, s_pGpIOSenseEvt[IOPIN_MAX_INT].pCtx);
 
         NRF_GPIOTE20_S->EVENTS_PORT[0].SECURE = 0;
 		NRF_P1_S->LATCH = 0xFFFFFFFF;
@@ -949,8 +949,8 @@ void __WEAK GPIOTE30_0_IRQHandler(void)
 
 	if (NRF_GPIOTE30_NS->EVENTS_PORT[0].NONSECURE)
 	{
-        if (s_pGpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB)
-            s_pGpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB(-1, s_pGpIOSenseEvt[IOPIN_MAX_INT].pCtx);
+		if (s_pGpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB)
+			s_pGpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB(-1, s_pGpIOSenseEvt[IOPIN_MAX_INT].pCtx);
 
         NRF_GPIOTE30_NS->EVENTS_PORT[0].NONSECURE = 0;
 		NRF_P0_NS->LATCH = 0xFFFFFFFF;
@@ -978,8 +978,8 @@ void __WEAK GPIOTE30_1_IRQHandler(void)
 
 	if (NRF_GPIOTE30_S->EVENTS_PORT[0].SECURE)
 	{
-        if (s_pGpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB)
-            s_pGpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB(-1, s_pGpIOSenseEvt[IOPIN_MAX_INT].pCtx);
+		if (s_pGpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB)
+			s_pGpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB(-1, s_pGpIOSenseEvt[IOPIN_MAX_INT].pCtx);
 
         NRF_GPIOTE30_S->EVENTS_PORT[0].SECURE = 0;
 		NRF_P0_S->LATCH = 0xFFFFFFFF;
@@ -1006,8 +1006,8 @@ void __WEAK GPIOTE_IRQHandler(void)
 	}
 	if (NRF_GPIOTE->EVENTS_PORT)
 	{
-        if (s_pGpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB)
-            s_pGpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB(-1, s_pGpIOSenseEvt[IOPIN_MAX_INT].pCtx);
+		if (s_pGpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB)
+			s_pGpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB(-1, s_pGpIOSenseEvt[IOPIN_MAX_INT].pCtx);
 	    NRF_GPIOTE->EVENTS_PORT = 0;
 #ifdef NRF52_SERIES
 	    NRF_GPIO->LATCH = 0xFFFFFFFF;	// Clear detect latch

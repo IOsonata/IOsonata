@@ -60,7 +60,7 @@ static const UsbPkt_t *BtHciUsbTxHead(BtHciUsbDev_t *pHci);
 static const uint8_t s_BtHciUsbScoMps[BT_HCI_USB_SCO_ALT_COUNT] = {
 	9U, 17U, 25U, 33U, 49U, 63U,
 };
-// Largest SCO frame any alternate carries; RxData buffer size.
+// Largest SCO frame any alternate can send; RxData buffer size.
 #define BT_HCI_USB_SCO_FRAME_MAX		63U
 
 static uint8_t *BtHciUsbCommandBuffer(BtHciUsbDev_t *pHci)

@@ -66,9 +66,8 @@ static bool ValueEquals(BtGattChar_t *pChar, const void *pData, size_t Len)
 
 } // namespace
 
-extern "C" {
 
-bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)
+extern "C" bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)
 {
 	if (pSrvc == nullptr || s_ServiceCount >= 4)
 	{
@@ -78,7 +77,7 @@ bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)
 	return true;
 }
 
-bool BtGattCharSetValue(BtGattChar_t *pChar, void * const pVal, size_t Len)
+extern "C" bool BtGattCharSetValue(BtGattChar_t *pChar, void * const pVal, size_t Len)
 {
 	// Model strict vendor APIs: the buffer itself must be valid even when the
 	// semantic value length is zero.
@@ -101,7 +100,7 @@ bool BtGattCharSetValue(BtGattChar_t *pChar, void * const pVal, size_t Len)
 	return true;
 }
 
-bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *pChar,
+extern "C" bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *pChar,
 						  void * const pVal, size_t Len)
 {
 	if (pChar == nullptr || (Len > 0 && pVal == nullptr) || Len > sizeof(s_NotifyData))
@@ -119,7 +118,6 @@ bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *pChar,
 	return true;
 }
 
-} // extern "C"
 
 int main()
 {

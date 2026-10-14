@@ -1,8 +1,40 @@
-/* Shared STM32 USB device-controller API.
- * USB controller implementation is selected by MCU family.
- * Target definitions below provide compile-time controller capabilities.
- * Applications use the same IOsonata USB stack regardless of STM32 USB IP.
- */
+/**-------------------------------------------------------------------------
+@file	usb_ctrlr.h
+
+@brief	Shared STM32 USB device-controller API.
+
+The USB controller implementation is selected by MCU family. The target
+definitions below provide the compile-time controller capabilities. Applications
+use the same IOsonata USB stack regardless of the STM32 USB IP.
+
+@author	Hoang Nguyen Hoan
+@date	Oct. 14, 2026
+
+@license
+
+MIT License
+
+Copyright (c) 2026, I-SYST inc., all rights reserved
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+----------------------------------------------------------------------------*/
 #ifndef __STM32_USB_CTRLR_H__
 #define __STM32_USB_CTRLR_H__
 #include <stdbool.h>
@@ -10,9 +42,13 @@
 #include <stdint.h>
 #include "coredev/iopincfg.h"
 #include "usb/usb_def.h"
-/* Peripheral capability values are compile-time allocation bounds.
- * A controller driver must still be implemented for the selected USB IP.
- */
+
+/** @addtogroup USB
+  * @{
+  */
+
+// Peripheral capability values are compile-time allocation bounds.
+// A controller driver must still be implemented for the selected USB IP.
 typedef enum __Usb_Ctrlr_Trans_Type {
 	CONTROL = USB_ENDPATT_TRANS_CONTROL,
 	ISO = USB_ENDPATT_TRANS_ISO,
@@ -21,54 +57,53 @@ typedef enum __Usb_Ctrlr_Trans_Type {
 } UsbCtrlrTransType_t;
 
 #if defined(STM32WBA65xx)
-/* STM32WBA65: USB OTG HS, integrated HS PHY, nine endpoint numbers. */
+// STM32WBA65: USB OTG HS, integrated HS PHY, nine endpoint numbers.
 enum {
-    USB_CTRLR_CNT = 1,
-    USB_HIGHSPEED_CAPABLE_0 = 1,
-    USB_EPIN_CNT_0 = 9,
-    USB_EPOUT_CNT_0 = 9,
-    USB_CTRLR0_CONTROL_PKT_LEN_MAX = 64,
-    USB_CTRLR0_BULK_PKT_LEN_MAX = 512,
-    USB_CTRLR0_INT_PKT_LEN_MAX = 1024,
-    USB_CTRLR0_ISO_PKT_LEN_MAX = 1024,
-    USB_ISO_SUPPORTED_0 = 1,
-    USB_ISO_EPIN_MASK_0 = 0x01FEU,
-    USB_ISO_EPOUT_MASK_0 = 0x01FEU,
+	USB_CTRLR_CNT = 1,
+	USB_HIGHSPEED_CAPABLE_0 = 1,
+	USB_EPIN_CNT_0 = 9,
+	USB_EPOUT_CNT_0 = 9,
+	USB_CTRLR0_CONTROL_PKT_LEN_MAX = 64,
+	USB_CTRLR0_BULK_PKT_LEN_MAX = 512,
+	USB_CTRLR0_INT_PKT_LEN_MAX = 1024,
+	USB_CTRLR0_ISO_PKT_LEN_MAX = 1024,
+	USB_ISO_SUPPORTED_0 = 1,
+	USB_ISO_EPIN_MASK_0 = 0x01FEU,
+	USB_ISO_EPOUT_MASK_0 = 0x01FEU,
 };
 #elif defined(STM32F401xC) || defined(STM32F401xE)
-/* STM32F401: USB OTG FS, four endpoint numbers including EP0. */
+// STM32F401: USB OTG FS, four endpoint numbers including EP0.
 enum {
-    USB_CTRLR_CNT = 1,
-    USB_HIGHSPEED_CAPABLE_0 = 0,
-    USB_EPIN_CNT_0 = 4,
-    USB_EPOUT_CNT_0 = 4,
-    USB_CTRLR0_CONTROL_PKT_LEN_MAX = 64,
-    USB_CTRLR0_BULK_PKT_LEN_MAX = 64,
-    USB_CTRLR0_INT_PKT_LEN_MAX = 64,
-    USB_CTRLR0_ISO_PKT_LEN_MAX = 1023,
-    USB_ISO_SUPPORTED_0 = 1,
-    USB_ISO_EPIN_MASK_0 = 0x000EU,
-    USB_ISO_EPOUT_MASK_0 = 0x000EU,
+	USB_CTRLR_CNT = 1,
+	USB_HIGHSPEED_CAPABLE_0 = 0,
+	USB_EPIN_CNT_0 = 4,
+	USB_EPOUT_CNT_0 = 4,
+	USB_CTRLR0_CONTROL_PKT_LEN_MAX = 64,
+	USB_CTRLR0_BULK_PKT_LEN_MAX = 64,
+	USB_CTRLR0_INT_PKT_LEN_MAX = 64,
+	USB_CTRLR0_ISO_PKT_LEN_MAX = 1023,
+	USB_ISO_SUPPORTED_0 = 1,
+	USB_ISO_EPIN_MASK_0 = 0x000EU,
+	USB_ISO_EPOUT_MASK_0 = 0x000EU,
 };
 #elif defined(STM32L476xx) || defined(STM32L496xx)
-/* STM32L476/L496: USB OTG FS, six bidirectional endpoint numbers.
- * USB endpoint size constants represent full-speed packet limits.
- */
+// STM32L476/L496: USB OTG FS, six bidirectional endpoint numbers.
+// USB endpoint size constants represent full-speed packet limits.
 enum {
-    USB_CTRLR_CNT = 1,
-    USB_HIGHSPEED_CAPABLE_0 = 0,
-    USB_EPIN_CNT_0 = 6,
-    USB_EPOUT_CNT_0 = 6,
-    USB_CTRLR0_CONTROL_PKT_LEN_MAX = 64,
-    USB_CTRLR0_BULK_PKT_LEN_MAX = 64,
-    USB_CTRLR0_INT_PKT_LEN_MAX = 64,
-    USB_CTRLR0_ISO_PKT_LEN_MAX = 1023,
-    USB_ISO_SUPPORTED_0 = 1,
-    USB_ISO_EPIN_MASK_0 = 0x003EU,
-    USB_ISO_EPOUT_MASK_0 = 0x003EU,
+	USB_CTRLR_CNT = 1,
+	USB_HIGHSPEED_CAPABLE_0 = 0,
+	USB_EPIN_CNT_0 = 6,
+	USB_EPOUT_CNT_0 = 6,
+	USB_CTRLR0_CONTROL_PKT_LEN_MAX = 64,
+	USB_CTRLR0_BULK_PKT_LEN_MAX = 64,
+	USB_CTRLR0_INT_PKT_LEN_MAX = 64,
+	USB_CTRLR0_ISO_PKT_LEN_MAX = 1023,
+	USB_ISO_SUPPORTED_0 = 1,
+	USB_ISO_EPIN_MASK_0 = 0x003EU,
+	USB_ISO_EPOUT_MASK_0 = 0x003EU,
 };
 #elif defined(STM32F030x8)
-/* STM32F030x8 has no USB peripheral; reject USB stack inclusion. */
+// STM32F030x8 has no USB peripheral; reject USB stack inclusion.
 #error "STM32F030x8 does not contain a USB device controller"
 #else
 #error "STM32 USB capabilities not defined for this MCU variant"
@@ -166,7 +201,7 @@ bool UsbCtrlrInit(int DevNo, const UsbCtrlrCfg_t *pCfg);
 bool UsbCtrlrStart(int DevNo);
 void UsbCtrlrStop(int DevNo);
 void UsbCtrlrProcess(int DevNo);
-// VBUS detection uses the STM32STM32 OTG controller and board pin mapping.
+// VBUS detection uses the STM32 OTG controller and board pin mapping.
 bool UsbCtrlrVbusDetected(int DevNo);
 bool UsbCtrlrHighSpeed(int DevNo);
 void UsbCtrlrIntEnable(int DevNo);
@@ -195,7 +230,7 @@ bool UsbCtrlrEp0Status(int DevNo, uint8_t EpAddr);
 void UsbCtrlrEpStall(int DevNo, uint8_t EpNo, bool bIn);
 void UsbCtrlrEpClearStall(int DevNo, uint8_t EpNo, bool bIn);
 size_t UsbCtrlrGetSerial(int DevNo, char *pBuff, size_t BuffLen);
-// ISO endpoints require the STM32STM32 controller's HS FIFO implementation.
+// ISO endpoints require the STM32 controller's HS FIFO implementation.
 bool UsbCtrlrIsoInit(int DevNo);
 bool UsbCtrlrIsoOpen(int DevNo, uint8_t EpNo, bool bIn, uint16_t MaxPacketSize);
 bool UsbCtrlrIsoSend(int DevNo, uint8_t EpNum, uint8_t *pBuffer, uint16_t Length);
@@ -205,4 +240,6 @@ uint16_t UsbCtrlrIsoTraceSnapshot(int DevNo, uint8_t **ppData);
 }
 #endif
 
-#endif // __STM32_USB_CTRLR_H__
+/** @} End of group USB */
+
+#endif

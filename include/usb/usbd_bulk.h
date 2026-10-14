@@ -167,4 +167,4 @@ private:
 
 /** @} End of group USBD */
 
-#endif	// __USBD_BULK_H__
+#endif

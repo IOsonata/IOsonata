@@ -7,7 +7,7 @@
 
 MIT License
 
-Copyright (c) 2026 I-SYST inc. All rights reserved.
+Copyright (c) 2026, I-SYST inc., all rights reserved
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -48,12 +48,11 @@ __attribute__((weak, alias("DEF_IRQHandler"))) void SVC_Handler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void DebugMon_Handler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void PendSV_Handler(void);
 
-/* Keep IOsonata's overridable SysTick default; startup does not start it. */
+// Keep IOsonata's overridable SysTick default; startup does not start it.
 __attribute__((weak)) void SysTick_Handler(void) {}
 
-/* Defined by interrupt_ra4m1.cpp, as in the RE01 port. Keep these references
- * strong so static-library extraction cannot select local weak trap aliases.
- */
+// Defined by interrupt_ra4m1.cpp, as in the RE01 port. Keep these references
+// strong so static-library extraction cannot select local weak trap aliases.
 extern void IEL0_IRQHandler(void);
 extern void IEL1_IRQHandler(void);
 extern void IEL2_IRQHandler(void);
@@ -136,10 +135,9 @@ void (* const __Vectors[RA4M1_VECTOR_COUNT])(void) = {
 	IEL31_IRQHandler,
 };
 
-/* Normal boot options: OFS0, OFS1, then the security-MPU option area.
- * Do not emit access-window or debugger-ID configuration at 0x01010000.
- * The linker reserves all bytes through 0x43B, including reserved padding.
- */
+// Normal boot options: OFS0, OFS1, then the security-MPU option area.
+// Do not emit access-window or debugger-ID configuration at 0x01010000.
+// The linker reserves all bytes through 0x43B, including reserved padding.
 __attribute__((section(".option_setting"), used, aligned(4)))
 const uint32_t g_Ra4m1OptionSetting[15] = {
 	RA4M1_OFS0_VALUE,

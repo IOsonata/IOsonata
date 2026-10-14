@@ -79,7 +79,7 @@ SOFTWARE.
 
 #elif defined(STM32WBA) || defined(STM32WBA50xx) || defined(STM32WBA52xx) || defined(STM32WBA54xx) || \
 	defined(STM32WBA55xx) || defined(STM32WBA5Mxx) || defined(STM32WBA6xx) || \
-    defined(STM32WBA62xx) || defined(STM32WBA63xx) || defined(STM32WBA64xx) || defined(STM32WBA65xx) || defined(STM32WBA6Mxx)
+	defined(STM32WBA62xx) || defined(STM32WBA63xx) || defined(STM32WBA64xx) || defined(STM32WBA65xx) || defined(STM32WBA6Mxx)
 #define IOSONATA_STM32_WBA		1
 #include "stm32wbaxx.h"
 

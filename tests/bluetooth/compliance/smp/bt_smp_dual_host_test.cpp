@@ -1075,9 +1075,8 @@ static void TestOobDirectionsAndFailures(Context &ctx)
 
 } // namespace
 
-extern "C" {
 
-void CryptoSecureWipe(void *pData, size_t Len)
+extern "C" void CryptoSecureWipe(void *pData, size_t Len)
 {
 	volatile uint8_t *p = static_cast<volatile uint8_t *>(pData);
 	while (Len-- != 0)
@@ -1086,24 +1085,24 @@ void CryptoSecureWipe(void *pData, size_t Len)
 	}
 }
 
-BtDevice_t *BtPeerFindByHdl(uint16_t ConnHdl)
+extern "C" BtDevice_t *BtPeerFindByHdl(uint16_t ConnHdl)
 {
 	return s_pWorker != nullptr && s_pWorker->Peer.Conn.Hdl == ConnHdl ?
 		&s_pWorker->Peer : nullptr;
 }
 
-uint8_t BtPeerRole(uint16_t ConnHdl)
+extern "C" uint8_t BtPeerRole(uint16_t ConnHdl)
 {
 	BtDevice_t *pPeer = BtPeerFindByHdl(ConnHdl);
 	return pPeer != nullptr ? pPeer->Conn.Role : BT_CONN_ROLE_UNKNOWN;
 }
 
-uint16_t BtPeerActiveHdl(void)
+extern "C" uint16_t BtPeerActiveHdl(void)
 {
 	return s_pWorker != nullptr ? s_pWorker->Peer.Conn.Hdl : BT_CONN_HDL_INVALID;
 }
 
-bool BtGapConnSecGet(uint16_t ConnHdl, BtConnSec_t *pSec)
+extern "C" bool BtGapConnSecGet(uint16_t ConnHdl, BtConnSec_t *pSec)
 {
 	BtDevice_t *pPeer = BtPeerFindByHdl(ConnHdl);
 	if (pPeer == nullptr || pSec == nullptr)
@@ -1114,7 +1113,7 @@ bool BtGapConnSecGet(uint16_t ConnHdl, BtConnSec_t *pSec)
 	return true;
 }
 
-void BtGapConnSecSet(uint16_t ConnHdl, const BtConnSec_t *pSec)
+extern "C" void BtGapConnSecSet(uint16_t ConnHdl, const BtConnSec_t *pSec)
 {
 	BtDevice_t *pPeer = BtPeerFindByHdl(ConnHdl);
 	if (pPeer != nullptr && pSec != nullptr)
@@ -1124,7 +1123,7 @@ void BtGapConnSecSet(uint16_t ConnHdl, const BtConnSec_t *pSec)
 	}
 }
 
-uint32_t BtHciSendAcl(BtHciDevice_t * const, BtHciACLDataPacket_t * const pAcl)
+extern "C" uint32_t BtHciSendAcl(BtHciDevice_t * const, BtHciACLDataPacket_t * const pAcl)
 {
 	if (pAcl == nullptr || pAcl->Hdr.Len < sizeof(BtL2CapHdr_t))
 	{
@@ -1143,7 +1142,7 @@ uint32_t BtHciSendAcl(BtHciDevice_t * const, BtHciACLDataPacket_t * const pAcl)
 	return static_cast<uint32_t>(sizeof(BtHciACLDataPacketHdr_t) + pAcl->Hdr.Len);
 }
 
-void BtSmpHciEnableEncryption(BtHciDevice_t * const, uint16_t,
+extern "C" void BtSmpHciEnableEncryption(BtHciDevice_t * const, uint16_t,
 	uint64_t Rand, uint16_t Ediv, const uint8_t Ltk[16])
 {
 	uint8_t data[26] = {};
@@ -1154,32 +1153,32 @@ void BtSmpHciEnableEncryption(BtHciDevice_t * const, uint16_t,
 	WorkerEmit(WIRE_EVT_ENABLE_ENCRYPTION, 0, 0, data, sizeof(data));
 }
 
-void BtSmpHciLtkReply(BtHciDevice_t * const, uint16_t, const uint8_t Ltk[16])
+extern "C" void BtSmpHciLtkReply(BtHciDevice_t * const, uint16_t, const uint8_t Ltk[16])
 {
 	WorkerEmit(WIRE_EVT_LTK_REPLY, 0, 0, Ltk, 16);
 }
 
-void BtSmpHciLtkNegReply(BtHciDevice_t * const, uint16_t)
+extern "C" void BtSmpHciLtkNegReply(BtHciDevice_t * const, uint16_t)
 {
 	WorkerEmit(WIRE_EVT_LTK_NEG_REPLY, 0, 0, nullptr, 0);
 }
 
-void BtSmpNumericComparison(uint16_t, uint32_t Value)
+extern "C" void BtSmpNumericComparison(uint16_t, uint32_t Value)
 {
 	WorkerEmit(WIRE_EVT_NUMERIC, 0, Value, nullptr, 0);
 }
 
-void BtSmpPasskeyDisplay(uint16_t, uint32_t Passkey)
+extern "C" void BtSmpPasskeyDisplay(uint16_t, uint32_t Passkey)
 {
 	WorkerEmit(WIRE_EVT_PASSKEY_DISPLAY, 0, Passkey, nullptr, 0);
 }
 
-void BtSmpPasskeyRequest(uint16_t)
+extern "C" void BtSmpPasskeyRequest(uint16_t)
 {
 	WorkerEmit(WIRE_EVT_PASSKEY_REQUEST, 0, 0, nullptr, 0);
 }
 
-void BtSmpPairingComplete(uint16_t, bool Success, const BtSmpKeys_t *pKeys)
+extern "C" void BtSmpPairingComplete(uint16_t, bool Success, const BtSmpKeys_t *pKeys)
 {
 	uint8_t data[3] = {};
 	if (pKeys != nullptr)
@@ -1192,7 +1191,7 @@ void BtSmpPairingComplete(uint16_t, bool Success, const BtSmpKeys_t *pKeys)
 		data, sizeof(data));
 }
 
-void BtSmpLocalAddrGet(uint8_t *pType, uint8_t pAddr[6])
+extern "C" void BtSmpLocalAddrGet(uint8_t *pType, uint8_t pAddr[6])
 {
 	if (s_pWorker != nullptr)
 	{
@@ -1206,7 +1205,7 @@ void BtSmpLocalAddrGet(uint8_t *pType, uint8_t pAddr[6])
 	}
 }
 
-bool BtSmpLocalIrkGet(uint8_t Irk[16])
+extern "C" bool BtSmpLocalIrkGet(uint8_t Irk[16])
 {
 	if (s_pWorker == nullptr || Irk == nullptr)
 	{
@@ -1216,31 +1215,30 @@ bool BtSmpLocalIrkGet(uint8_t Irk[16])
 	return true;
 }
 
-void BtSmpBondLoad(void) {}
-void BtSmpBondSave(int, const void *, size_t) {}
-void BtSmpBondErase(void) {}
-void BtSmpLocalIdSave(void) {}
-size_t BtSmpLocalIdRecordSize(void) { return 0; }
-size_t BtSmpLocalIdSerialize(void *, size_t) { return 0; }
-bool BtSmpLocalIdRestore(const void *, size_t) { return false; }
+extern "C" void BtSmpBondLoad(void) {}
+extern "C" void BtSmpBondSave(int, const void *, size_t) {}
+extern "C" void BtSmpBondErase(void) {}
+extern "C" void BtSmpLocalIdSave(void) {}
+extern "C" size_t BtSmpLocalIdRecordSize(void) { return 0; }
+extern "C" size_t BtSmpLocalIdSerialize(void *, size_t) { return 0; }
+extern "C" bool BtSmpLocalIdRestore(const void *, size_t) { return false; }
 
-bool BtSmpBondKeysLookup(uint16_t, uint64_t, uint16_t, BtSmpKeys_t *)
+extern "C" bool BtSmpBondKeysLookup(uint16_t, uint64_t, uint16_t, BtSmpKeys_t *)
 {
 	return false;
 }
 
-bool BtSmpBonded(uint16_t)
+extern "C" bool BtSmpBonded(uint16_t)
 {
 	return false;
 }
 
-void BtSmpBondCccdSave(uint16_t, uint16_t, uint16_t) {}
-uint8_t BtSmpBondCccdGet(uint16_t, uint16_t *, uint16_t *, uint8_t)
+extern "C" void BtSmpBondCccdSave(uint16_t, uint16_t, uint16_t) {}
+extern "C" uint8_t BtSmpBondCccdGet(uint16_t, uint16_t *, uint16_t *, uint8_t)
 {
 	return 0;
 }
 
-} // extern "C"
 
 int main()
 {

@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: MIT
- * Copyright (c) 2026 I-SYST inc. All rights reserved.
+ * Copyright (c) 2026, I-SYST inc., all rights reserved
  * Portable GPIO SPI master using IOsonata GPIO, delay and DeviceIntrf hooks.
  */
 #include <limits.h>

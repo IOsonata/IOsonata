@@ -55,6 +55,11 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #ifndef UART_BAUDRATE
 #define UART_BAUDRATE 		1000000
 #endif
+// Default 1 stop bit. A port under bring-up may set 2 in board.h: the extra idle
+// bit per character lets a receiver started mid-stream find the frame.
+#ifndef UART_STOPBITS
+#define UART_STOPBITS 1
+#endif
 #ifndef UART_INT_MODE
 #define UART_INT_MODE false
 #endif
@@ -86,9 +91,7 @@ static const UARTCfg_t s_UartCfg = {
 	.Rate = UART_BAUDRATE,
 	.DataBits = 8,
 	.Parity = UART_PARITY_NONE,
-	// 2 stop bits add an idle bit per character, which lets a receiver started
-	// mid-stream find the frame. nRF51 and nRF52832 send 1 stop bit only.
-	.StopBits = 1,
+	.StopBits = UART_STOPBITS,
 	.FlowControl = UART_FLWCTRL_NONE,
 	.bIntMode = UART_INT_MODE,
 	.IntPrio = IRQ_PRIO_NORMAL,

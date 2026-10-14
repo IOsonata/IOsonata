@@ -418,8 +418,8 @@ void nRFUsbdIsoSofMark(void);
 void nRFUsbdDmaStartLocked(volatile uint32_t *pTask,
 	volatile uint32_t *pEnd);
 
-#endif // USBD_PRESENT
+#endif
 
 /** @} End of group USB */
 
-#endif	// __USB_CTRLR_H__
+#endif

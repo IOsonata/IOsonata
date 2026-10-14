@@ -11,11 +11,11 @@
                                set TX power and BD address.
             - BtAppInit:       populate g_BtAppData, init GAP/GATT, register
                                user services, init DIS, init advertising.
-            - Stack callbacks (hci_notify_asynch_evt, BLE_RESUME_FLOW):
-                               queue the HCI event drain and the host work
-                               with BtEvtQue. A 1 s timer queues the
-                               timeout checks. Advertising starts from the
-                               first queued event.
+	- Stack callbacks (hci_notify_asynch_evt, BLE_RESUME_FLOW):
+		       queue the HCI event drain and the host work
+		       with BtEvtQue. A 1 s timer queues the
+		       timeout checks. Advertising starts from the
+		       first queued event.
             - on_conn_params_evt: callback for the connection-update
                                    procedure handled in bt_cp_stm32wba.cpp.
             - BtAppNotify, BtAppDisconnect, BtAppGapDeviceNameSet,

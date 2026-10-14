@@ -7,7 +7,7 @@
 
 MIT License
 
-Copyright (c) 2026 I-SYST inc. All rights reserved.
+Copyright (c) 2026, I-SYST inc., all rights reserved
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -31,11 +31,10 @@ SOFTWARE.
 #ifndef RA4M1_STARTUP_REGS_H
 #define RA4M1_STARTUP_REGS_H
 
-/* Native bootstrap subset, not a replacement for a full vendor device header.
- * Register access widths and addresses are from chapters 8, 10, 12, 13, 44
- * of the RA4M1 hardware manual. In particular PLLCCR2 is BYTE-wide at E02B.
- * Test accessors model these exact addresses; production is direct volatile IO.
- */
+// Native bootstrap subset, not a replacement for a full vendor device header.
+// Register access widths and addresses are from chapters 8, 10, 12, 13, 44
+// of the RA4M1 hardware manual. In particular PLLCCR2 is BYTE-wide at E02B.
+// Test accessors model these exact addresses; production is direct volatile IO.
 #ifndef RA4M1_RD8
 #define RA4M1_RD8(a)        (*(volatile const uint8_t *)(uintptr_t)(a))
 #define RA4M1_WR8(a, v)     (*(volatile uint8_t *)(uintptr_t)(a) = (uint8_t)(v))
@@ -45,7 +44,7 @@ SOFTWARE.
 #define RA4M1_WR32(a, v)    (*(volatile uint32_t *)(uintptr_t)(a) = (uint32_t)(v))
 #endif
 
-/* Renesas TN-RA*-A0083A: HOCOCR2 is SYSC base + 0x037. */
+// Renesas TN-RA*-A0083A: HOCOCR2 is SYSC base + 0x037.
 #define RA4M1_HOCOCR2       0x4001E037UL
 #define RA4M1_SCKDIVCR      0x4001E020UL
 #define RA4M1_SCKSCR        0x4001E026UL

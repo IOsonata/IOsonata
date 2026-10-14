@@ -130,5 +130,5 @@ protected:
 
 /** @} End of group USBD */
 
-#endif	// __USB_INT_H__
+#endif
 

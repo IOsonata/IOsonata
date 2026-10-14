@@ -32,7 +32,7 @@ extern "C" {
 #endif
 void IOPinConfig(int,int,int,IOPINDIR,IOPINRES,IOPINTYPE);
 static inline void IOPinCfg(const IOPINCFG *p, int n) {
- for (int i=0;i<n;++i) IOPinConfig(p[i].PortNo,p[i].PinNo,p[i].PinOp,p[i].PinDir,p[i].Res,p[i].Type);
+	for (int i=0;i<n;++i) IOPinConfig(p[i].PortNo,p[i].PinNo,p[i].PinOp,p[i].PinDir,p[i].Res,p[i].Type);
 }
 void IOPinDisable(int,int);
 void IOPinDisableInterrupt(int);

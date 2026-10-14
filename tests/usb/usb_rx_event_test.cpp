@@ -35,20 +35,20 @@ static unsigned s_EventCount;
 static int s_Fail;
 
 #define CHECK(c) do { if (!(c)) { \
-    printf("FAIL %s:%d  %s\n", __FILE__, __LINE__, #c); s_Fail++; \
+	printf("FAIL %s:%d  %s\n", __FILE__, __LINE__, #c); s_Fail++; \
 } } while (0)
 
 static int AppEvent(DevIntrf_t * const, DEVINTRF_EVT Event,
-                    uint8_t *, int Length)
+					uint8_t *, int Length)
 {
-    if (s_EventCount < EVENT_LOG_SIZE)
-        s_EventLog[s_EventCount++] = Event;
+	if (s_EventCount < EVENT_LOG_SIZE)
+		s_EventLog[s_EventCount++] = Event;
 
-    if (Event == DEVINTRF_EVT_RX_DATA) s_RxDataEvent++;
-    if (Event == DEVINTRF_EVT_RX_FIFO_FULL) s_RxFullEvent++;
-    if (Event == DEVINTRF_EVT_TX_FIFO_EMPTY) s_TxEmptyEvent++;
-    if (Event == DEVINTRF_EVT_TX_TIMEOUT) s_TxTimeoutEvent++;
-    return Length;
+	if (Event == DEVINTRF_EVT_RX_DATA) s_RxDataEvent++;
+	if (Event == DEVINTRF_EVT_RX_FIFO_FULL) s_RxFullEvent++;
+	if (Event == DEVINTRF_EVT_TX_FIFO_EMPTY) s_TxEmptyEvent++;
+	if (Event == DEVINTRF_EVT_TX_TIMEOUT) s_TxTimeoutEvent++;
+	return Length;
 }
 
 static void ReceiveDma(void)
@@ -61,11 +61,10 @@ static void ReceiveDma(void)
 	}
 }
 
-extern "C" {
-bool UsbCtrlrInit(int, const UsbCtrlrCfg_t *) { return true; }
-bool UsbCtrlrStart(int) { return true; }
-void UsbCtrlrStop(int) {}
-void UsbCtrlrProcess(int)
+extern "C" bool UsbCtrlrInit(int, const UsbCtrlrCfg_t *) { return true; }
+extern "C" bool UsbCtrlrStart(int) { return true; }
+extern "C" void UsbCtrlrStop(int) {}
+extern "C" void UsbCtrlrProcess(int)
 {
 	AppEvtHandlerExec();
 	if (s_HwOutReady && !s_OutDma && s_OutHandler != nullptr)
@@ -74,43 +73,43 @@ void UsbCtrlrProcess(int)
 	}
 	ReceiveDma();
 }
-bool UsbCtrlrVbusDetected(int) { return true; }
-bool UsbCtrlrHighSpeed(int) { return false; }
-void UsbCtrlrIntEnable(int) {}
-void UsbCtrlrIntDisable(int) {}
-void UsbCtrlrConnect(int) {}
-void UsbCtrlrDisconnect(int) {}
-void UsbCtrlrRemoteWakeup(int) {}
-void UsbCtrlrSofEnable(int, bool) {}
-void UsbCtrlrSetAddress(int, uint8_t) {}
-bool UsbCtrlrEpOpen(int, const UsbEndPointDesc_t *) { return true; }
-void UsbCtrlrEpClose(int, uint8_t, bool) {}
-void UsbCtrlrEpCloseAll(int) {}
-void UsbCtrlrEpStall(int, uint8_t, bool) {}
-void UsbCtrlrEpClearStall(int, uint8_t, bool) {}
-size_t UsbCtrlrGetSerial(int, char *p, size_t n) { if (n) p[0] = 0; return 0; }
+extern "C" bool UsbCtrlrVbusDetected(int) { return true; }
+extern "C" bool UsbCtrlrHighSpeed(int) { return false; }
+extern "C" void UsbCtrlrIntEnable(int) {}
+extern "C" void UsbCtrlrIntDisable(int) {}
+extern "C" void UsbCtrlrConnect(int) {}
+extern "C" void UsbCtrlrDisconnect(int) {}
+extern "C" void UsbCtrlrRemoteWakeup(int) {}
+extern "C" void UsbCtrlrSofEnable(int, bool) {}
+extern "C" void UsbCtrlrSetAddress(int, uint8_t) {}
+extern "C" bool UsbCtrlrEpOpen(int, const UsbEndPointDesc_t *) { return true; }
+extern "C" void UsbCtrlrEpClose(int, uint8_t, bool) {}
+extern "C" void UsbCtrlrEpCloseAll(int) {}
+extern "C" void UsbCtrlrEpStall(int, uint8_t, bool) {}
+extern "C" void UsbCtrlrEpClearStall(int, uint8_t, bool) {}
+extern "C" size_t UsbCtrlrGetSerial(int, char *p, size_t n) { if (n) p[0] = 0; return 0; }
 
-void UsbCtrlrEpBind(int, uint8_t, bool bIn, bool Blocking,
-                        UsbCtrlrEpHandler_t Handler, void *pContext)
+extern "C" void UsbCtrlrEpBind(int, uint8_t, bool bIn, bool Blocking,
+						UsbCtrlrEpHandler_t Handler, void *pContext)
 {
-    if (bIn)
-    {
-        s_InBuffer = nullptr;
-        CHECK(s_InHandler == nullptr);
-        s_InHandler = Handler;
-        s_InContext = pContext;
-    }
-    else
-    {
-        s_OutBuffer = nullptr;
-        CHECK(s_OutHandler == nullptr);
-        s_OutHandler = Handler;
-        s_OutContext = pContext;
-        s_OutBlocking = Blocking;
-    }
+	if (bIn)
+	{
+		s_InBuffer = nullptr;
+		CHECK(s_InHandler == nullptr);
+		s_InHandler = Handler;
+		s_InContext = pContext;
+	}
+	else
+	{
+		s_OutBuffer = nullptr;
+		CHECK(s_OutHandler == nullptr);
+		s_OutHandler = Handler;
+		s_OutContext = pContext;
+		s_OutBlocking = Blocking;
+	}
 }
 
-bool UsbCtrlrEpReceive(int, uint8_t, uint8_t *pBuffer, uint16_t Capacity)
+extern "C" bool UsbCtrlrEpReceive(int, uint8_t, uint8_t *pBuffer, uint16_t Capacity)
 {
 	if (!s_HwOutReady || s_OutDma || pBuffer == nullptr || Capacity == 0U) return false;
 	s_OutBuffer = pBuffer;
@@ -118,7 +117,7 @@ bool UsbCtrlrEpReceive(int, uint8_t, uint8_t *pBuffer, uint16_t Capacity)
 	return s_OutDma;
 }
 
-bool UsbCtrlrEpSend(int, uint8_t EpNum, uint8_t *pBuffer, uint16_t Length)
+extern "C" bool UsbCtrlrEpSend(int, uint8_t EpNum, uint8_t *pBuffer, uint16_t Length)
 {
 	if ((EpNum & 0x80U) != 0U) return false;
 	if (s_InDma) return false;
@@ -129,7 +128,6 @@ bool UsbCtrlrEpSend(int, uint8_t EpNum, uint8_t *pBuffer, uint16_t Length)
 	return true;
 }
 
-}
 
 alignas(4) static uint8_t s_RxMem[USB_INTRF_RXMEM_SIZE(RX_SLOTS, BUFFER_SIZE)];
 alignas(4) static uint8_t s_TxMem[CFIFO_MEMSIZE(256)];
@@ -138,297 +136,297 @@ static UsbDevIntrf_t s_Intrf;
 
 static bool Setup(bool Blocking)
 {
-    CHECK(AppEvtHandlerInit(nullptr, 0));
-    memset(&s_Intrf, 0, sizeof(s_Intrf));
-    memset(s_HwOut, 0, sizeof(s_HwOut));
-    memset(s_EventLog, 0, sizeof(s_EventLog));
-    s_OutBuffer = nullptr;
-    s_InBuffer = nullptr;
-    s_OutHandler = nullptr;
-    s_InHandler = nullptr;
-    s_OutContext = nullptr;
-    s_InContext = nullptr;
-    s_HwOutReady = false;
-    s_OutBlocking = true;
-    s_OutDma = false;
-    s_OutDmaBuf = nullptr;
-    s_InDma = false;
-    s_HwOutLength = 0;
-    s_InLength = 0;
-    s_OutSubmit = 0;
-    s_InSubmit = 0;
-    s_RxDataEvent = 0;
-    s_RxFullEvent = 0;
-    s_TxEmptyEvent = 0;
-    s_TxTimeoutEvent = 0;
-    s_EventCount = 0U;
+	CHECK(AppEvtHandlerInit(nullptr, 0));
+	memset(&s_Intrf, 0, sizeof(s_Intrf));
+	memset(s_HwOut, 0, sizeof(s_HwOut));
+	memset(s_EventLog, 0, sizeof(s_EventLog));
+	s_OutBuffer = nullptr;
+	s_InBuffer = nullptr;
+	s_OutHandler = nullptr;
+	s_InHandler = nullptr;
+	s_OutContext = nullptr;
+	s_InContext = nullptr;
+	s_HwOutReady = false;
+	s_OutBlocking = true;
+	s_OutDma = false;
+	s_OutDmaBuf = nullptr;
+	s_InDma = false;
+	s_HwOutLength = 0;
+	s_InLength = 0;
+	s_OutSubmit = 0;
+	s_InSubmit = 0;
+	s_RxDataEvent = 0;
+	s_RxFullEvent = 0;
+	s_TxEmptyEvent = 0;
+	s_TxTimeoutEvent = 0;
+	s_EventCount = 0U;
 
-    UsbIntrfCfg_t cfg = {};
-    cfg.DevNo = 0;
-    cfg.EpNo = EP_NO;
-    cfg.bBlocking = Blocking;
-    cfg.RxFifoMemSize = sizeof(s_RxMem);
-    cfg.pRxFifoMem = s_RxMem;
-    cfg.TxFifoMemSize = sizeof(s_TxMem);
-    cfg.pTxFifoMem = s_TxMem;
-    cfg.TxFifoBlkSize = 1U;
-    cfg.BufferSize = BUFFER_SIZE;
-    cfg.pTxBuffer = s_TxDma;
-    cfg.EvtCB = AppEvent;
+	UsbIntrfCfg_t cfg = {};
+	cfg.DevNo = 0;
+	cfg.EpNo = EP_NO;
+	cfg.bBlocking = Blocking;
+	cfg.RxFifoMemSize = sizeof(s_RxMem);
+	cfg.pRxFifoMem = s_RxMem;
+	cfg.TxFifoMemSize = sizeof(s_TxMem);
+	cfg.pTxFifoMem = s_TxMem;
+	cfg.TxFifoBlkSize = 1U;
+	cfg.BufferSize = BUFFER_SIZE;
+	cfg.pTxBuffer = s_TxDma;
+	cfg.EvtCB = AppEvent;
 
-    return UsbIntrfInit(&s_Intrf, &cfg) &&
-           UsbIntrfConfigure(&s_Intrf, MPS);
+	return UsbIntrfInit(&s_Intrf, &cfg) &&
+		   UsbIntrfConfigure(&s_Intrf, MPS);
 }
 
 static bool Drdy(const uint8_t *pData, uint16_t Length, bool Notify = false)
 {
-    (void)Notify;
-    CHECK(!s_HwOutReady);
-    if (s_HwOutReady || Length > sizeof(s_HwOut)) return false;
-    if (Length > 0) memcpy(s_HwOut, pData, Length);
-    s_HwOutLength = Length;
-    s_HwOutReady = true;
-    // Each ready packet requests a destination through DRDY.
-    // The owner submits that destination with UsbCtrlrEpReceive.
-    if (!s_OutDma)
-    {
-        s_OutHandler(USB_CTRLR_EVT_DRDY,
-                     Length, s_OutContext);
-    }
-    ReceiveDma();
-    return s_OutDma;
+	(void)Notify;
+	CHECK(!s_HwOutReady);
+	if (s_HwOutReady || Length > sizeof(s_HwOut)) return false;
+	if (Length > 0) memcpy(s_HwOut, pData, Length);
+	s_HwOutLength = Length;
+	s_HwOutReady = true;
+	// Each ready packet requests a destination through DRDY.
+	// The owner submits that destination with UsbCtrlrEpReceive.
+	if (!s_OutDma)
+	{
+		s_OutHandler(USB_CTRLR_EVT_DRDY,
+					 Length, s_OutContext);
+	}
+	ReceiveDma();
+	return s_OutDma;
 }
 
 // The OUT DMA destination is a block of the RX FIFO memory.
 static bool InRxFifo(const uint8_t *p)
 {
-    return p != nullptr && p > s_RxMem && p < s_RxMem + sizeof(s_RxMem);
+	return p != nullptr && p > s_RxMem && p < s_RxMem + sizeof(s_RxMem);
 }
 
 static void CompleteOut(void)
 {
-    CHECK(s_HwOutReady && s_OutDma);
-    CHECK(InRxFifo(s_OutDmaBuf));
-    if (!s_HwOutReady || !s_OutDma) return;
-    if (s_HwOutLength > 0)
-        memcpy(s_OutDmaBuf, s_HwOut, s_HwOutLength);
-    uint16_t len = s_HwOutLength;
-    s_HwOutReady = false;
-    s_OutDma = false;
-    s_OutBuffer = nullptr;
-    s_OutHandler(USB_CTRLR_EVT_XFER_CMPL,
-                 len, s_OutContext);
+	CHECK(s_HwOutReady && s_OutDma);
+	CHECK(InRxFifo(s_OutDmaBuf));
+	if (!s_HwOutReady || !s_OutDma) return;
+	if (s_HwOutLength > 0)
+		memcpy(s_OutDmaBuf, s_HwOut, s_HwOutLength);
+	uint16_t len = s_HwOutLength;
+	s_HwOutReady = false;
+	s_OutDma = false;
+	s_OutBuffer = nullptr;
+	s_OutHandler(USB_CTRLR_EVT_XFER_CMPL,
+				 len, s_OutContext);
 }
 
 static void Deliver(const uint8_t *pData, uint16_t Length)
 {
-    CHECK(Drdy(pData, Length));
-    if (s_OutDma) CompleteOut();
+	CHECK(Drdy(pData, Length));
+	if (s_OutDma) CompleteOut();
 }
 
 static void TestNoPreArm(void)
 {
-    CHECK(Setup(true));
-    CHECK(s_OutBuffer == nullptr);
-    CHECK(s_InBuffer == nullptr);
-    CHECK(s_OutSubmit == 0);
-    CHECK(!s_OutDma);
+	CHECK(Setup(true));
+	CHECK(s_OutBuffer == nullptr);
+	CHECK(s_InBuffer == nullptr);
+	CHECK(s_OutSubmit == 0);
+	CHECK(!s_OutDma);
 
-    const uint8_t p[] = {1,2,3};
-    CHECK(Drdy(p, sizeof(p)));
-    CHECK(s_OutDma && s_RxDataEvent == 0);
-    CHECK(CFifoUsed(s_Intrf.hRxFifo) == 0);
-    CompleteOut();
-    CHECK(s_OutSubmit == 1);
-    CHECK(!s_OutDma);
-    CHECK(CFifoUsed(s_Intrf.hRxFifo) == 1);
-    CHECK(s_RxDataEvent == 1);
-    CHECK(s_RxFullEvent == 0);
+	const uint8_t p[] = {1,2,3};
+	CHECK(Drdy(p, sizeof(p)));
+	CHECK(s_OutDma && s_RxDataEvent == 0);
+	CHECK(CFifoUsed(s_Intrf.hRxFifo) == 0);
+	CompleteOut();
+	CHECK(s_OutSubmit == 1);
+	CHECK(!s_OutDma);
+	CHECK(CFifoUsed(s_Intrf.hRxFifo) == 1);
+	CHECK(s_RxDataEvent == 1);
+	CHECK(s_RxFullEvent == 0);
 
-    uint8_t out[3] = {};
-    CHECK(DeviceIntrfRxData(&s_Intrf.DevIntrf, out, sizeof(out)) == 3);
-    CHECK(memcmp(out, p, sizeof(p)) == 0);
-    // Draining data without a pending DRDY never submits another RX DMA.
-    CHECK(s_OutSubmit == 1);
+	uint8_t out[3] = {};
+	CHECK(DeviceIntrfRxData(&s_Intrf.DevIntrf, out, sizeof(out)) == 3);
+	CHECK(memcmp(out, p, sizeof(p)) == 0);
+	// Draining data without a pending DRDY never submits another RX DMA.
+	CHECK(s_OutSubmit == 1);
 }
 
 static void TestBlocking(bool FullEvents)
 {
-    CHECK(Setup(true));
-    uint8_t p[8] = {};
-    for (unsigned i = 0; i < RX_SLOTS; i++)
-    {
-        p[0] = (uint8_t)i;
-        Deliver(p, sizeof(p));
-    }
-    CHECK(CFifoAvail(s_Intrf.hRxFifo) == 0);
-    CHECK(s_OutSubmit == (int)RX_SLOTS);
-    CHECK(s_RxDataEvent == (int)RX_SLOTS);
-    CHECK(s_RxFullEvent == 1);
-    CHECK(s_EventCount >= 2U);
-    if (s_EventCount >= 2U)
-    {
-        CHECK(s_EventLog[s_EventCount - 2U] == DEVINTRF_EVT_RX_FIFO_FULL);
-        CHECK(s_EventLog[s_EventCount - 1U] == DEVINTRF_EVT_RX_DATA);
-    }
+	CHECK(Setup(true));
+	uint8_t p[8] = {};
+	for (unsigned i = 0; i < RX_SLOTS; i++)
+	{
+		p[0] = (uint8_t)i;
+		Deliver(p, sizeof(p));
+	}
+	CHECK(CFifoAvail(s_Intrf.hRxFifo) == 0);
+	CHECK(s_OutSubmit == (int)RX_SLOTS);
+	CHECK(s_RxDataEvent == (int)RX_SLOTS);
+	CHECK(s_RxFullEvent == 1);
+	CHECK(s_EventCount >= 2U);
+	if (s_EventCount >= 2U)
+	{
+		CHECK(s_EventLog[s_EventCount - 2U] == DEVINTRF_EVT_RX_FIFO_FULL);
+		CHECK(s_EventLog[s_EventCount - 1U] == DEVINTRF_EVT_RX_DATA);
+	}
 
-    uint8_t pending[8] = {0xA5};
-    if (FullEvents)
-        while (AppEvtHandlerQue(0U, nullptr, [](uint32_t, void *) {})) {}
-    CHECK(!Drdy(pending, sizeof(pending)));
-    CHECK(s_HwOutReady);
-    CHECK(!s_OutDma);
-    CHECK(s_Intrf.RxPending);
-    CHECK(s_OutSubmit == (int)RX_SLOTS);
-    CHECK(s_RxDataEvent == (int)RX_SLOTS);
-    CHECK(s_RxFullEvent == 1);
+	uint8_t pending[8] = {0xA5};
+	if (FullEvents)
+		while (AppEvtHandlerQue(0U, nullptr, [](uint32_t, void *) {})) {}
+	CHECK(!Drdy(pending, sizeof(pending)));
+	CHECK(s_HwOutReady);
+	CHECK(!s_OutDma);
+	CHECK(s_Intrf.RxPending);
+	CHECK(s_OutSubmit == (int)RX_SLOTS);
+	CHECK(s_RxDataEvent == (int)RX_SLOTS);
+	CHECK(s_RxFullEvent == 1);
 
-    uint8_t out[8] = {};
-    CHECK(DeviceIntrfRxData(&s_Intrf.DevIntrf, out, sizeof(out)) == 8);
-    CHECK(out[0] == 0);
-    // RxData submits the waiting packet as soon as a block is free.
-    CHECK(s_OutDma && !s_Intrf.RxPending);
-    CHECK(s_OutSubmit == (int)RX_SLOTS + 1);
-    UsbCtrlrProcess(0);
-    CHECK(s_OutSubmit == (int)RX_SLOTS + 1);
+	uint8_t out[8] = {};
+	CHECK(DeviceIntrfRxData(&s_Intrf.DevIntrf, out, sizeof(out)) == 8);
+	CHECK(out[0] == 0);
+	// RxData submits the waiting packet as soon as a block is free.
+	CHECK(s_OutDma && !s_Intrf.RxPending);
+	CHECK(s_OutSubmit == (int)RX_SLOTS + 1);
+	UsbCtrlrProcess(0);
+	CHECK(s_OutSubmit == (int)RX_SLOTS + 1);
 
-    CompleteOut();
-    CHECK(CFifoUsed(s_Intrf.hRxFifo) == (int)RX_SLOTS);
-    CHECK(s_RxDataEvent == (int)RX_SLOTS + 1);
-    CHECK(s_RxFullEvent == 2);
+	CompleteOut();
+	CHECK(CFifoUsed(s_Intrf.hRxFifo) == (int)RX_SLOTS);
+	CHECK(s_RxDataEvent == (int)RX_SLOTS + 1);
+	CHECK(s_RxFullEvent == 2);
 }
 
 static void TestNonBlocking(bool Notify)
 {
-    CHECK(Setup(false));
-    CHECK(!CFifoIsBlocking(s_Intrf.hRxFifo));
-    uint8_t p[8] = {};
-    for (unsigned i = 0; i < RX_SLOTS; i++)
-    {
-        p[0] = (uint8_t)i;
-        Deliver(p, sizeof(p));
-    }
-    CHECK(CFifoAvail(s_Intrf.hRxFifo) == 0);
-    CHECK(s_RxFullEvent == 1);
-    CHECK(s_RxDataEvent == (int)RX_SLOTS);
-    CHECK(s_EventCount >= 2U);
-    if (s_EventCount >= 2U)
-    {
-        CHECK(s_EventLog[s_EventCount - 2U] == DEVINTRF_EVT_RX_FIFO_FULL);
-        CHECK(s_EventLog[s_EventCount - 1U] == DEVINTRF_EVT_RX_DATA);
-    }
+	CHECK(Setup(false));
+	CHECK(!CFifoIsBlocking(s_Intrf.hRxFifo));
+	uint8_t p[8] = {};
+	for (unsigned i = 0; i < RX_SLOTS; i++)
+	{
+		p[0] = (uint8_t)i;
+		Deliver(p, sizeof(p));
+	}
+	CHECK(CFifoAvail(s_Intrf.hRxFifo) == 0);
+	CHECK(s_RxFullEvent == 1);
+	CHECK(s_RxDataEvent == (int)RX_SLOTS);
+	CHECK(s_EventCount >= 2U);
+	if (s_EventCount >= 2U)
+	{
+		CHECK(s_EventLog[s_EventCount - 2U] == DEVINTRF_EVT_RX_FIFO_FULL);
+		CHECK(s_EventLog[s_EventCount - 1U] == DEVINTRF_EVT_RX_DATA);
+	}
 
-    uint8_t newest[8] = {0xA6};
-    CHECK(Drdy(newest, sizeof(newest), Notify));
-    CHECK(s_OutDma);
-    CHECK(!s_Intrf.RxPending);
-    CHECK(s_OutSubmit == (int)RX_SLOTS + 1);
-    CompleteOut();
-    CHECK(CFifoUsed(s_Intrf.hRxFifo) == (int)RX_SLOTS);
-    CHECK(s_RxFullEvent == 2);
-    CHECK(s_RxDataEvent == (int)RX_SLOTS + 1);
+	uint8_t newest[8] = {0xA6};
+	CHECK(Drdy(newest, sizeof(newest), Notify));
+	CHECK(s_OutDma);
+	CHECK(!s_Intrf.RxPending);
+	CHECK(s_OutSubmit == (int)RX_SLOTS + 1);
+	CompleteOut();
+	CHECK(CFifoUsed(s_Intrf.hRxFifo) == (int)RX_SLOTS);
+	CHECK(s_RxFullEvent == 2);
+	CHECK(s_RxDataEvent == (int)RX_SLOTS + 1);
 
-    uint8_t out[RX_SLOTS * 8] = {};
-    CHECK(DeviceIntrfRxData(&s_Intrf.DevIntrf, out, sizeof(out)) ==
-          (int)sizeof(out));
-    CHECK(out[0] == 1U);
-    CHECK(out[8] == 2U);
-    CHECK(out[16] == 3U);
-    CHECK(out[24] == 0xA6U);
+	uint8_t out[RX_SLOTS * 8] = {};
+	CHECK(DeviceIntrfRxData(&s_Intrf.DevIntrf, out, sizeof(out)) ==
+		  (int)sizeof(out));
+	CHECK(out[0] == 1U);
+	CHECK(out[8] == 2U);
+	CHECK(out[16] == 3U);
+	CHECK(out[24] == 0xA6U);
 }
 
 static void TestCancelIsNotCompletion(void)
 {
-    CHECK(Setup(true));
-    uint8_t data[MPS + 3U];
-    for (unsigned i = 0; i < sizeof(data); i++) data[i] = (uint8_t)i;
+	CHECK(Setup(true));
+	uint8_t data[MPS + 3U];
+	for (unsigned i = 0; i < sizeof(data); i++) data[i] = (uint8_t)i;
 
-    CHECK(DeviceIntrfTxData(&s_Intrf.DevIntrf, data, sizeof(data)) ==
-          (int)sizeof(data));
-    CHECK(s_InDma && s_InSubmit == 1);
-    const int queued = CFifoUsed(s_Intrf.hTxFifo);
-    CHECK(queued == (int)sizeof(data));
+	CHECK(DeviceIntrfTxData(&s_Intrf.DevIntrf, data, sizeof(data)) ==
+		  (int)sizeof(data));
+	CHECK(s_InDma && s_InSubmit == 1);
+	const int queued = CFifoUsed(s_Intrf.hTxFifo);
+	CHECK(queued == (int)sizeof(data));
 
-    // The controller has cancelled the active transfer before delivering CANCEL.
-    s_InDma = false;
-    s_InHandler(USB_CTRLR_EVT_CANCEL,
-                MPS, s_InContext);
-    CHECK(!s_InDma);
-    CHECK(s_InSubmit == 1);
-    CHECK(CFifoUsed(s_Intrf.hTxFifo) == queued);
-    CHECK(s_TxEmptyEvent == 0);
-    CHECK(s_TxTimeoutEvent == 0);
+	// The controller has cancelled the active transfer before delivering CANCEL.
+	s_InDma = false;
+	s_InHandler(USB_CTRLR_EVT_CANCEL,
+				MPS, s_InContext);
+	CHECK(!s_InDma);
+	CHECK(s_InSubmit == 1);
+	CHECK(CFifoUsed(s_Intrf.hTxFifo) == queued);
+	CHECK(s_TxEmptyEvent == 0);
+	CHECK(s_TxTimeoutEvent == 0);
 
-    CHECK(Setup(true));
-    const uint8_t p[] = {4,5,6,7};
-    CHECK(Drdy(p, sizeof(p)));
-    CHECK(s_OutDma);
-    s_OutDma = false;
-    s_HwOutReady = false;
-    s_OutBuffer = nullptr;
-    s_OutHandler(USB_CTRLR_EVT_CANCEL,
-                 0U, s_OutContext);
-    CHECK(CFifoUsed(s_Intrf.hRxFifo) == 0);
-    CHECK(!s_Intrf.RxPending);
-    CHECK(s_RxDataEvent == 0);
-    CHECK(s_RxFullEvent == 0);
+	CHECK(Setup(true));
+	const uint8_t p[] = {4,5,6,7};
+	CHECK(Drdy(p, sizeof(p)));
+	CHECK(s_OutDma);
+	s_OutDma = false;
+	s_HwOutReady = false;
+	s_OutBuffer = nullptr;
+	s_OutHandler(USB_CTRLR_EVT_CANCEL,
+				 0U, s_OutContext);
+	CHECK(CFifoUsed(s_Intrf.hRxFifo) == 0);
+	CHECK(!s_Intrf.RxPending);
+	CHECK(s_RxDataEvent == 0);
+	CHECK(s_RxFullEvent == 0);
 }
 
 static void TestDisableDoesNotGateController(void)
 {
-    CHECK(Setup(true));
-    DeviceIntrfDisable(&s_Intrf.DevIntrf);
+	CHECK(Setup(true));
+	DeviceIntrfDisable(&s_Intrf.DevIntrf);
 
-    const uint8_t p[] = {9,8,7};
-    CHECK(Drdy(p, sizeof(p)));
-    CHECK(!s_Intrf.RxPending);
-    CHECK(s_OutDma);
-    CompleteOut();
+	const uint8_t p[] = {9,8,7};
+	CHECK(Drdy(p, sizeof(p)));
+	CHECK(!s_Intrf.RxPending);
+	CHECK(s_OutDma);
+	CompleteOut();
 
-    DeviceIntrfEnable(&s_Intrf.DevIntrf);
-    uint8_t out[3] = {};
-    CHECK(DeviceIntrfRxData(&s_Intrf.DevIntrf, out, sizeof(out)) == 3);
-    CHECK(memcmp(out, p, sizeof(p)) == 0);
+	DeviceIntrfEnable(&s_Intrf.DevIntrf);
+	uint8_t out[3] = {};
+	CHECK(DeviceIntrfRxData(&s_Intrf.DevIntrf, out, sizeof(out)) == 3);
+	CHECK(memcmp(out, p, sizeof(p)) == 0);
 }
 
 static void TestTxStillChains(void)
 {
-    CHECK(Setup(true));
-    uint8_t data[MPS + 3U];
-    for (unsigned i = 0; i < sizeof(data); i++) data[i] = (uint8_t)i;
+	CHECK(Setup(true));
+	uint8_t data[MPS + 3U];
+	for (unsigned i = 0; i < sizeof(data); i++) data[i] = (uint8_t)i;
 
-    CHECK(DeviceIntrfTxData(&s_Intrf.DevIntrf, data, sizeof(data)) ==
-          (int)sizeof(data));
-    CHECK(s_InDma && s_InLength == MPS && s_InSubmit == 1);
-    CHECK(memcmp(s_InBuffer, data, MPS) == 0);
+	CHECK(DeviceIntrfTxData(&s_Intrf.DevIntrf, data, sizeof(data)) ==
+		  (int)sizeof(data));
+	CHECK(s_InDma && s_InLength == MPS && s_InSubmit == 1);
+	CHECK(memcmp(s_InBuffer, data, MPS) == 0);
 
-    s_InDma = false;
-    s_InHandler(USB_CTRLR_EVT_XFER_CMPL,
-                MPS, s_InContext);
-    CHECK(s_InDma && s_InLength == 3U && s_InSubmit == 2);
-    CHECK(memcmp(s_InBuffer, data + MPS, 3U) == 0);
+	s_InDma = false;
+	s_InHandler(USB_CTRLR_EVT_XFER_CMPL,
+				MPS, s_InContext);
+	CHECK(s_InDma && s_InLength == 3U && s_InSubmit == 2);
+	CHECK(memcmp(s_InBuffer, data + MPS, 3U) == 0);
 
-    s_InDma = false;
-    s_InHandler(USB_CTRLR_EVT_XFER_CMPL,
-                3U, s_InContext);
-    CHECK(!s_InDma);
-    CHECK(s_TxEmptyEvent == 1);
+	s_InDma = false;
+	s_InHandler(USB_CTRLR_EVT_XFER_CMPL,
+				3U, s_InContext);
+	CHECK(!s_InDma);
+	CHECK(s_TxEmptyEvent == 1);
 }
 
 int main(void)
 {
-    TestNoPreArm();
-    TestBlocking(false);
-    TestBlocking(true);
-    TestNonBlocking(false);
-    TestNonBlocking(true);
-    TestCancelIsNotCompletion();
-    TestDisableDoesNotGateController();
-    TestTxStillChains();
+	TestNoPreArm();
+	TestBlocking(false);
+	TestBlocking(true);
+	TestNonBlocking(false);
+	TestNonBlocking(true);
+	TestCancelIsNotCompletion();
+	TestDisableDoesNotGateController();
+	TestTxStillChains();
 
-    printf("%s\n", s_Fail == 0 ? "usb_rx_event_test: PASS" :
-                                 "usb_rx_event_test: FAIL");
-    return s_Fail == 0 ? 0 : 1;
+	printf("%s\n", s_Fail == 0 ? "usb_rx_event_test: PASS" :
+								 "usb_rx_event_test: FAIL");
+	return s_Fail == 0 ? 0 : 1;
 }
 
 // The process event of the USB core is not part of this test.

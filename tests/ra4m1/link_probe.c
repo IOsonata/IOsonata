@@ -8,18 +8,18 @@ uint32_t SystemMicroSecLoopCnt = 1;
 volatile uint32_t probe_data = 0x12345678;
 volatile uint32_t probe_bss;
 __attribute__((section(".fastrun"),noinline)) uint32_t probe_ram(void) {return probe_data;}
-/* Strong override must replace exactly external IRQ11's weak alias. */
+// Strong override must replace exactly external IRQ11's weak alias.
 void IEL11_IRQHandler(void) {probe_bss++;}
 __attribute__((section(".AppStart"))) void ResetEntry(void)
 {
- /* Keep all IOsonata ResetEntry linker contract symbols observable. */
- probe_bss=(uint32_t)(uintptr_t)&__data_loc__+(uint32_t)(uintptr_t)&__data_start__+
-           (uint32_t)(uintptr_t)&__data_size__+(uint32_t)(uintptr_t)&__bss_start__+
-           (uint32_t)(uintptr_t)&__bss_size__;
- SystemInit();
- SystemCoreClockUpdate();
- /* Link only: no application board or electrical assumptions are exercised. */
- IOPinConfig(1, 0, IOPINOP_GPIO, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL);
- IOPinSetDir(1, 0, IOPINDIR_INPUT);
- for(;;){probe_bss=probe_ram();}
+	// Keep all IOsonata ResetEntry linker contract symbols observable.
+	probe_bss=(uint32_t)(uintptr_t)&__data_loc__+(uint32_t)(uintptr_t)&__data_start__+
+											(uint32_t)(uintptr_t)&__data_size__+(uint32_t)(uintptr_t)&__bss_start__+
+											(uint32_t)(uintptr_t)&__bss_size__;
+	SystemInit();
+	SystemCoreClockUpdate();
+	// Link only: no application board or electrical assumptions are exercised.
+	IOPinConfig(1, 0, IOPINOP_GPIO, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL);
+	IOPinSetDir(1, 0, IOPINDIR_INPUT);
+	for(;;){probe_bss=probe_ram();}
 }

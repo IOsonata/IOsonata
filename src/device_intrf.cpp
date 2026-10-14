@@ -167,7 +167,7 @@ int DeviceIntrfRead(DevIntrf_t * const pDev, uint32_t DevAddr, const uint8_t *pA
 int DeviceIntrfWrite(DevIntrf_t * const pDev, uint32_t DevAddr, const uint8_t *pAdCmd, int AdCmdLen,
                   	 const uint8_t *pData, int DataLen)
 {
-    int txlen = AdCmdLen;
+	int txlen = AdCmdLen;
 
     if (pAdCmd == NULL || (AdCmdLen + DataLen) <= 0)
         return 0;
@@ -201,8 +201,8 @@ int DeviceIntrfWrite(DevIntrf_t * const pDev, uint32_t DevAddr, const uint8_t *p
 		return 0;
 	}
 
-    int count = DeviceIntrfTx(pDev, DevAddr, d, txlen);
-    return count >= AdCmdLen ? count - AdCmdLen : 0;
+	int count = DeviceIntrfTx(pDev, DevAddr, d, txlen);
+	return count >= AdCmdLen ? count - AdCmdLen : 0;
 }
 
 // Enable and disable: one copy here instead of one inlined into every
@@ -222,5 +222,5 @@ void DeviceIntrfEnable(DevIntrf_t * const pDev) {
 //	if (atomic_exchange(&pDev->EnCnt, pDev->EnCnt + 1) == 1)	{
 	if (atomic_fetch_add(&pDev->EnCnt, 1) == 0) {
     	pDev->Enable(pDev);
-    }
+	}
 }

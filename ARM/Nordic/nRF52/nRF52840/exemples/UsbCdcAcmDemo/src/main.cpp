@@ -640,7 +640,7 @@ int main(void)
 
     UsbInit();
 
-    g_UsbIntrf.Init(s_IntrfCfg);
+	g_UsbIntrf.Init(s_IntrfCfg);
 
 
     while (1)

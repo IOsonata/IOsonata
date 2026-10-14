@@ -9,7 +9,7 @@ clocking follow Renesas re-driver-package, r_spi_cmsis_api.c.
 
 @license
 MIT License
-Copyright (c) 2026 I-SYST inc. All rights reserved.
+Copyright (c) 2026, I-SYST inc., all rights reserved
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

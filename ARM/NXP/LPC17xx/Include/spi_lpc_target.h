@@ -42,4 +42,4 @@ typedef LPC_SSP_TypeDef LpcSSPReg_t;
 #define LPCSSP_READ(Reg, Field) ((Reg)->Field)
 #define LPCSSP_WRITE(Reg, Field, Value) ((Reg)->Field = (Value))
 
-#endif // __SPI_LPC_TARGET_H__
+#endif

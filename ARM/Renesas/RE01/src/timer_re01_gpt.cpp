@@ -4,7 +4,7 @@
 
 MIT License
 
-Copyright (c) 2026 I-SYST inc. All rights reserved.
+Copyright (c) 2026, I-SYST inc., all rights reserved
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -313,9 +313,9 @@ bool Re01GptInit(RE01_TimerData_t * const dev, const TimerCfg_t * const pCfg)
 	dev->BaseFreq = SystemPeriphClockGet(0); // PCLKA = ICLK; register bus uses PCLKB.
 	if (dev->BaseFreq == 0) return false;
 
-	uint32_t gate = dev->DevNo < RE01_TIMER_GPT_DEVNO + 2 ?
+	uint32_t clkmask = dev->DevNo < RE01_TIMER_GPT_DEVNO + 2 ?
 		MSTP_MSTPCRD_MSTPD5_Msk : MSTP_MSTPCRD_MSTPD6_Msk;
-	MSTP->MSTPCRD &= ~gate;
+	MSTP->MSTPCRD &= ~clkmask;
 	GPT320_Type *reg = dev->pGptReg;
 	reg->GTWP = 0xA500UL;
 	reg->GTCR = 0;

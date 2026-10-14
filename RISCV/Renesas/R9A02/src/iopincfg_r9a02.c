@@ -15,7 +15,7 @@ on this part.
 
 Hardware rules applied by IOPinConfig:
 - An SAU pin configured as input gets NCODR = 1, the SAU output buffer of a
-  data pin is on in input mode and NCODR = 1 puts it in Hi-Z (16.5.1).
+	data pin is on in input mode and NCODR = 1 puts it in Hi-Z (16.5.1).
 - There is no pull-down. IOPINRES_PULLDOWN is refused.
 - P002, P003, P006, P007, P200, P400, P401 have no open-drain output.
 - P200 is input only.

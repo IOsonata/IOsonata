@@ -568,7 +568,6 @@ void TestLinkProceduresWithoutDevice()
 
 } // namespace
 
-extern "C" {
 
 static void TestConnectStartsConnSupport(void);
 
@@ -578,13 +577,13 @@ BtAppData_t g_BtAppData;
 static bool s_ConnInitResult = true;
 static int s_ConnInitCalls = 0;
 
-bool BtAppConnInit(void)
+extern "C" bool BtAppConnInit(void)
 {
 	s_ConnInitCalls++;
 	return s_ConnInitResult;
 }
 
-void BtSmpLocalAddrGet(uint8_t *pType, uint8_t pAddr[6])
+extern "C" void BtSmpLocalAddrGet(uint8_t *pType, uint8_t pAddr[6])
 {
 	*pType = s_LocalType;
 	std::memcpy(pAddr, s_LocalAddr, 6);
@@ -616,7 +615,6 @@ static void TestConnectStartsConnSupport(void)
 	CHECK(s_CmdCount > 0);
 }
 
-} // extern "C"
 
 int main()
 {

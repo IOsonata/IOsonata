@@ -282,40 +282,39 @@ void TestUuid32ExpandsTo128()
 
 } // namespace
 
-extern "C" {
 
-BtDevice_t *BtPeerFindByHdl(uint16_t Hdl)
+extern "C" BtDevice_t *BtPeerFindByHdl(uint16_t Hdl)
 {
 	return Hdl == kConnHdl ? &s_Peer : nullptr;
 }
 
-uint16_t BtPeerCount(void)
+extern "C" uint16_t BtPeerCount(void)
 {
 	return 1;
 }
 
-BtDevice_t *BtPeerSlot(uint16_t Idx)
+extern "C" BtDevice_t *BtPeerSlot(uint16_t Idx)
 {
 	return Idx == 0 ? &s_Peer : nullptr;
 }
 
-bool BtGattTxPendReserve(uint16_t, BtGattChar_t *, uint16_t)
+extern "C" bool BtGattTxPendReserve(uint16_t, BtGattChar_t *, uint16_t)
 {
 	++s_ReserveCount;
 	return s_ReserveOk;
 }
 
-void BtGattTxPendRelease(uint16_t)
+extern "C" void BtGattTxPendRelease(uint16_t)
 {
 	++s_ReleaseCount;
 }
 
-uint32_t BtGattMsTick(void)
+extern "C" uint32_t BtGattMsTick(void)
 {
 	return s_Now;
 }
 
-uint32_t BtHciSendAcl(BtHciDevice_t *, BtHciACLDataPacket_t *pAcl)
+extern "C" uint32_t BtHciSendAcl(BtHciDevice_t *, BtHciACLDataPacket_t *pAcl)
 {
 	if (!s_SendOk)
 	{
@@ -328,14 +327,13 @@ uint32_t BtHciSendAcl(BtHciDevice_t *, BtHciACLDataPacket_t *pAcl)
 	return len;
 }
 
-uint16_t BtAttGetMtu(void)
+extern "C" uint16_t BtAttGetMtu(void)
 {
 	return 247;
 }
 
-void BtDeviceDiscovered(BtDevice_t *) {}
+extern "C" void BtDeviceDiscovered(BtDevice_t *) {}
 
-} // extern "C"
 
 int main()
 {

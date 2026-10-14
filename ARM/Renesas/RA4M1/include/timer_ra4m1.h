@@ -7,7 +7,7 @@
 
 MIT License
 
-Copyright (c) 2026 I-SYST inc. All rights reserved.
+Copyright (c) 2026, I-SYST inc., all rights reserved
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -34,20 +34,20 @@ SOFTWARE.
 #define RA4M1_TIMER_AGT_COUNT 2
 #define RA4M1_TIMER_GPT_COUNT 8
 #define RA4M1_TIMER_COUNT 10
-/* DevNo 0/1 = AGT0/1; DevNo 2..9 = GPT0..7. */
+// DevNo 0/1 = AGT0/1; DevNo 2..9 = GPT0..7.
 typedef enum {
-    RA4M1_TIMER_OK,
-    RA4M1_TIMER_CLOCK_ERROR,
-    RA4M1_TIMER_ACCESS_ERROR,
-    RA4M1_TIMER_STOP_TIMEOUT,
-    RA4M1_TIMER_START_TIMEOUT,
-    RA4M1_TIMER_COMPARE_ERROR,
-    RA4M1_TIMER_IRQ_ERROR
+	RA4M1_TIMER_OK,
+	RA4M1_TIMER_CLOCK_ERROR,
+	RA4M1_TIMER_ACCESS_ERROR,
+	RA4M1_TIMER_STOP_TIMEOUT,
+	RA4M1_TIMER_START_TIMEOUT,
+	RA4M1_TIMER_COMPARE_ERROR,
+	RA4M1_TIMER_IRQ_ERROR
 } Ra4m1TimerError_t;
 #ifdef __cplusplus
 extern "C" {
 #endif
-/* Last hardware failure for each device; successful reset clears it. */
+// Last hardware failure for each device; successful reset clears it.
 extern volatile uint32_t g_Ra4m1TimerError[RA4M1_TIMER_COUNT];
 #ifdef __cplusplus
 }

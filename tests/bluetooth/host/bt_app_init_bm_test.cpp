@@ -127,62 +127,61 @@ static bool CallSeen(CallId Id)
 
 BtAppData_t g_BtAppData = {};
 
-extern "C" {
 
-bool BtPeerInit(uint8_t *, size_t)
+extern "C" bool BtPeerInit(uint8_t *, size_t)
 {
 	Record(CALL_PEER_POOL);
 	return s_FailPoint != FAIL_PEER_POOL;
 }
 
 // BtAppInit checks the requested link count against the pool slot count.
-uint16_t BtPeerCount(void)
+extern "C" uint16_t BtPeerCount(void)
 {
 	return 1;
 }
 
-void BtPeerLongWrInit(uint8_t *, size_t)
+extern "C" void BtPeerLongWrInit(uint8_t *, size_t)
 {
 	Record(CALL_LONG_WRITE);
 }
 
-void BtAppConnLedOff(void) {}
-void IOPinConfig(int, int, int, IOPINDIR, IOPINRES, IOPINTYPE) {}
+extern "C" void BtAppConnLedOff(void) {}
+extern "C" void IOPinConfig(int, int, int, IOPINDIR, IOPINRES, IOPINTYPE) {}
 
-bool BtAppStackInit(const BtAppCfg_t *)
+extern "C" bool BtAppStackInit(const BtAppCfg_t *)
 {
 	Record(CALL_STACK);
 	return s_FailPoint != FAIL_STACK;
 }
 
-uint32_t sd_ble_gap_appearance_set(uint16_t)
+extern "C" uint32_t sd_ble_gap_appearance_set(uint16_t)
 {
 	Record(CALL_APPEARANCE);
 	return NRF_SUCCESS;
 }
 
-bool BtGapInit(const BtGapCfg_t *)
+extern "C" bool BtGapInit(const BtGapCfg_t *)
 {
 	Record(CALL_GAP);
 	return s_FailPoint != FAIL_GAP_INIT;
 }
 
-void BtGapSetDevName(const char *)
+extern "C" void BtGapSetDevName(const char *)
 {
 	Record(CALL_NAME);
 }
 
-void ble_conn_params_evt_handler_set(void (*)(const struct ble_conn_params_evt *))
+extern "C" void ble_conn_params_evt_handler_set(void (*)(const struct ble_conn_params_evt *))
 {
 	Record(CALL_CONN_PARAMS);
 }
 
-void BtAppInitUserServices(void)
+extern "C" void BtAppInitUserServices(void)
 {
 	Record(CALL_USER_SERVICES);
 }
 
-void BtAppInitUserData(void)
+extern "C" void BtAppInitUserData(void)
 {
 	Record(CALL_USER_DATA);
 
@@ -193,7 +192,7 @@ void BtAppInitUserData(void)
 	}
 }
 
-bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)
+extern "C" bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)
 {
 	Record(CALL_DIS_SERVICE);
 	if (s_FailPoint == FAIL_DIS_SERVICE || pSrvc == nullptr)
@@ -207,7 +206,7 @@ bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)
 	return true;
 }
 
-bool BtGattCharSetValue(BtGattChar_t *pChar, void * const pVal, size_t Len)
+extern "C" bool BtGattCharSetValue(BtGattChar_t *pChar, void * const pVal, size_t Len)
 {
 	Record(CALL_DIS_VALUE);
 	const int index = s_DisValueCount++;
@@ -230,35 +229,34 @@ bool BtGattCharSetValue(BtGattChar_t *pChar, void * const pVal, size_t Len)
 	return true;
 }
 
-bool BtAppAdvInit(const BtAppCfg_t *)
+extern "C" bool BtAppAdvInit(const BtAppCfg_t *)
 {
 	Record(CALL_ADVERTISING);
 	return s_FailPoint != FAIL_ADVERTISING;
 }
 
-uint32_t sd_ble_gap_tx_power_set(uint8_t, uint8_t, int8_t)
+extern "C" uint32_t sd_ble_gap_tx_power_set(uint8_t, uint8_t, int8_t)
 {
 	Record(CALL_TX_POWER);
 	return NRF_SUCCESS;
 }
 
-int8_t GetValidTxPower(int Value)
+extern "C" int8_t GetValidTxPower(int Value)
 {
 	return (int8_t)Value;
 }
 
 // BtAppInit starts advertising as its last step
-void BtAdvStart(void)
+extern "C" void BtAdvStart(void)
 {
 	Record(CALL_ADV_START);
 }
 
-bool BtEvtQue(uint32_t, void *, BtEvtQueHandler_t)
+extern "C" bool BtEvtQue(uint32_t, void *, BtEvtQueHandler_t)
 {
 	return true;
 }
 
-} // extern "C"
 
 static void on_conn_params_evt(const struct ble_conn_params_evt *) {}
 

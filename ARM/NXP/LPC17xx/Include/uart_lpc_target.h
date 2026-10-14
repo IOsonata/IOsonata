@@ -64,4 +64,4 @@ Modified by          Date              Description
 		} \
 	} while (0)
 
-#endif // __UART_LPC_TARGET_H__
+#endif

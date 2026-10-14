@@ -425,19 +425,18 @@ void TestRepeatedAttemptSaturationPreservesPenalty()
 
 } // namespace
 
-extern "C" {
 
-BtDevice_t *BtPeerFindByHdl(uint16_t Hdl)
+extern "C" BtDevice_t *BtPeerFindByHdl(uint16_t Hdl)
 {
 	return Hdl == kConnHdl ? &s_Peer : nullptr;
 }
 
-bool BtSmpRpaResolve(const uint8_t[16], const uint8_t[6])
+extern "C" bool BtSmpRpaResolve(const uint8_t[16], const uint8_t[6])
 {
 	return false;
 }
 
-void BtSmpSignMac(const uint8_t Csrk[16], const uint8_t *pMsg,
+extern "C" void BtSmpSignMac(const uint8_t Csrk[16], const uint8_t *pMsg,
 				  size_t Len, uint8_t Mac[8])
 {
 	uint32_t a = 0x811C9DC5U;
@@ -459,7 +458,7 @@ void BtSmpSignMac(const uint8_t Csrk[16], const uint8_t *pMsg,
 	PutLe32(Mac + 4, b);
 }
 
-void CryptoSecureWipe(void *pData, size_t Len)
+extern "C" void CryptoSecureWipe(void *pData, size_t Len)
 {
 	volatile uint8_t *p = static_cast<volatile uint8_t *>(pData);
 	while (Len-- > 0)
@@ -468,7 +467,7 @@ void CryptoSecureWipe(void *pData, size_t Len)
 	}
 }
 
-void BtSmpBondSave(int Slot, const void *pBond, size_t Len)
+extern "C" void BtSmpBondSave(int Slot, const void *pBond, size_t Len)
 {
 	s_SaveCount++;
 	s_LastSlot = Slot;
@@ -484,13 +483,12 @@ void BtSmpBondSave(int Slot, const void *pBond, size_t Len)
 	}
 }
 
-void BtSmpBondErase(void)
+extern "C" void BtSmpBondErase(void)
 {
 	// Simulated power cycles clear RAM through BtSmpBondClearAll while the test
 	// keeps a copied committed record for the subsequent restore.
 }
 
-} // extern "C"
 
 int main()
 {

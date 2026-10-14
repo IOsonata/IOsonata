@@ -18,29 +18,27 @@
 
 // bt_gatt.cpp and bt_att.cpp are both linked in, so only the layers outside
 // them need stubbing.
-extern "C" {
 
 static BtDevice_t s_StubPeer;
 
-BtDevice_t *BtPeerFindByHdl(uint16_t) { return nullptr; }
-uint16_t BtPeerCount(void) { return 1; }
-BtDevice_t *BtPeerSlot(uint16_t Idx) { return Idx == 0 ? &s_StubPeer : nullptr; }
-size_t BtPeerGetConnectedHandles(uint16_t *, size_t) { return 0; }
+extern "C" BtDevice_t *BtPeerFindByHdl(uint16_t) { return nullptr; }
+extern "C" uint16_t BtPeerCount(void) { return 1; }
+extern "C" BtDevice_t *BtPeerSlot(uint16_t Idx) { return Idx == 0 ? &s_StubPeer : nullptr; }
+extern "C" size_t BtPeerGetConnectedHandles(uint16_t *, size_t) { return 0; }
 
-void BtSmpBondCccdSave(uint16_t, uint16_t, uint16_t) {}
-uint8_t BtSmpBondCccdGet(uint16_t, uint16_t *, uint16_t *, uint8_t) { return 0; }
-bool BtSmpSignVerify(uint16_t, const uint8_t *, size_t, const uint8_t *) { return false; }
-bool BtGapConnSecGet(uint16_t, BtConnSec_t *) { return false; }
-void BtGattSrvcEvtHandler(BtGattSrvc_t * const, uint32_t, void * const) {}
-uint32_t BtHciSendAcl(BtHciDevice_t * const, BtHciACLDataPacket_t * const) { return 0; }
-void BtGattClientNotified(uint16_t, uint16_t, uint8_t *, uint16_t) {}
+extern "C" void BtSmpBondCccdSave(uint16_t, uint16_t, uint16_t) {}
+extern "C" uint8_t BtSmpBondCccdGet(uint16_t, uint16_t *, uint16_t *, uint8_t) { return 0; }
+extern "C" bool BtSmpSignVerify(uint16_t, const uint8_t *, size_t, const uint8_t *) { return false; }
+extern "C" bool BtGapConnSecGet(uint16_t, BtConnSec_t *) { return false; }
+extern "C" void BtGattSrvcEvtHandler(BtGattSrvc_t * const, uint32_t, void * const) {}
+extern "C" uint32_t BtHciSendAcl(BtHciDevice_t * const, BtHciACLDataPacket_t * const) { return 0; }
+extern "C" void BtGattClientNotified(uint16_t, uint16_t, uint8_t *, uint16_t) {}
 
 // Connection support of the port, which the first service add starts.
 static bool s_ConnInitResult = true;
 static int s_ConnInitCalls = 0;
-bool BtAppConnInit(void) { s_ConnInitCalls++; return s_ConnInitResult; }
+extern "C" bool BtAppConnInit(void) { s_ConnInitCalls++; return s_ConnInitResult; }
 
-} // extern "C"
 
 namespace {
 

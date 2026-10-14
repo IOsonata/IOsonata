@@ -55,4 +55,4 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 // cycles, the interrupt only RX path can miss characters. Receive with GPDMA.
 #define UART_DMA_MODE		true
 
-#endif // __BOARD_H__
+#endif

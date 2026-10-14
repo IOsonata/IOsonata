@@ -334,9 +334,8 @@ void BtDfuSmpTxReady(void)
 }
 
 // Stubs for the layers below bt_gatt.cpp.
-extern "C" {
 
-uint32_t BtHciSendAcl(BtHciDevice_t * const, BtHciACLDataPacket_t * const pAcl)
+extern "C" uint32_t BtHciSendAcl(BtHciDevice_t * const, BtHciACLDataPacket_t * const pAcl)
 {
 	if (s_SendResult == 0)
 	{
@@ -348,11 +347,10 @@ uint32_t BtHciSendAcl(BtHciDevice_t * const, BtHciACLDataPacket_t * const pAcl)
 	return (uint32_t)pAcl->Hdr.Len + sizeof(BtHciACLDataPacketHdr_t);
 }
 
-void BtGattSrvcEvtHandler(BtGattSrvc_t * const, uint32_t, void * const) {}
-uint8_t BtSmpBondCccdGet(uint16_t, uint16_t *, uint16_t *, uint8_t) { return 0; }
-void BtSmpBondCccdSave(uint16_t, uint16_t, uint16_t) {}
+extern "C" void BtGattSrvcEvtHandler(BtGattSrvc_t * const, uint32_t, void * const) {}
+extern "C" uint8_t BtSmpBondCccdGet(uint16_t, uint16_t *, uint16_t *, uint8_t) { return 0; }
+extern "C" void BtSmpBondCccdSave(uint16_t, uint16_t, uint16_t) {}
 
-} // extern "C"
 
 int main()
 {

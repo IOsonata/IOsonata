@@ -202,4 +202,4 @@ uint16_t UsbCtrlrIsoTraceSnapshot(int DevNo, uint8_t **ppData);
 }
 #endif
 
-#endif // __USB_CTRLR_H__
+#endif

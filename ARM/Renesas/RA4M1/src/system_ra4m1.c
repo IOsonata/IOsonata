@@ -3,7 +3,7 @@
 @brief  Native IOsonata RA4M1 system startup. No FSP or board initialization.
 
 MIT License
-Copyright (c) 2026 I-SYST inc. All rights reserved.
+Copyright (c) 2026, I-SYST inc., all rights reserved
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -55,9 +55,8 @@ SOFTWARE.
 
 #define RA4M1_USB_SCKE       0x0400U
 
-/* Reset is MOCO /16, not HOCO. ResetEntry initializes this storage before
- * calling SystemInit, including an application's strong g_McuOsc override.
- */
+// Reset is MOCO /16, not HOCO. ResetEntry initializes this storage before
+// calling SystemInit, including an application's strong g_McuOsc override.
 uint32_t SystemCoreClock = 500000UL;
 uint32_t SystemnsDelayFactor = RA4M1_NSDELAY_FACTOR;
 volatile uint32_t g_Ra4m1StartupError;
@@ -70,9 +69,8 @@ __WEAK McuOsc_t g_McuOsc = {
 	false
 };
 
-/* Only an external oscillator's frequency is not recoverable from registers.
- * Keep its configured nominal frequency independently of the selected source.
- */
+// Only an external oscillator's frequency is not recoverable from registers.
+// Keep its configured nominal frequency independently of the selected source.
 static uint32_t s_MainOscFreq;
 
 typedef struct __Ra4m1_Clock_Plan {
@@ -104,11 +102,10 @@ static bool Ra4m1Wait16(volatile const uint16_t *Register, uint16_t Mask, uint16
 	return false;
 }
 
-/* Conservative minimum wait: each iteration includes a volatile decrement
- * and a NOP. No dependency on SysTick, interrupts, calibrated nsDelay, or FPU.
- * This is deliberately a lower-bound delay, not a microsecond time service.
- * Only called with ICLK <= 48 MHz (or reset MOCO /16).
- */
+// Conservative minimum wait: each iteration includes a volatile decrement
+// and a NOP. No dependency on SysTick, interrupts, calibrated nsDelay, or FPU.
+// This is deliberately a lower-bound delay, not a microsecond time service.
+// Only called with ICLK <= 48 MHz (or reset MOCO /16).
 static void Ra4m1DelayUs(uint32_t Us)
 {
 #ifdef RA4M1_TEST_DELAY_US
@@ -146,9 +143,8 @@ static uint32_t Ra4m1PllHz(uint32_t Input, uint8_t Control)
 	return freq >= 24000000UL && freq <= 64000000UL ? freq : 0U;
 }
 
-/* Prefer /2, then /4; all arithmetic stays within uint32_t. RA4M1 has an
- * output divider in PLLCCR2, NOT the RE01 PLL input-divider arrangement.
- */
+// Prefer /2, then /4; all arithmetic stays within uint32_t. RA4M1 has an
+// output divider in PLLCCR2, NOT the RE01 PLL input-divider arrangement.
 static bool Ra4m1Pll48(uint32_t Input, uint8_t *pControl)
 {
 	if (Input < 4000000UL || Input > 12500000UL)
@@ -200,10 +196,9 @@ static bool Ra4m1MakePlan(OSC_TYPE Type, uint32_t Freq, bool Usb,
 
 	if (Usb && plan.SourceHz != 48000000UL)
 		return false;
-	/* Fast plan: ICLK/PCLKA/C/D = 48 MHz; PCLKB/FCLK = 24 MHz.
-	 * Bits [18:16], although reserved, must mirror PCKB[2:0].
-	 * At <=32 MHz all clock domains can use the undivided source.
-	 */
+	// Fast plan: ICLK/PCLKA/C/D = 48 MHz; PCLKB/FCLK = 24 MHz.
+	// Bits [18:16], although reserved, must mirror PCKB[2:0].
+	// At <=32 MHz all clock domains can use the undivided source.
 	plan.Dividers = plan.SourceHz > 32000000UL ? RA4M1_FAST_DIV : RA4M1_SLOW_DIV;
 	plan.FlashWait = plan.SourceHz > 32000000UL ? 1U : 0U;
 	*pPlan = plan;
@@ -241,7 +236,7 @@ static bool Ra4m1StartHoco(uint8_t Config)
 			return false;
 		if (R_SYSTEM->HOCOCR2 == Config)
 		{
-			/* RA4M1 changes HOCOWTCR only at 64 MHz. */
+			// RA4M1 changes HOCOWTCR only at 64 MHz.
 			return true;
 		}
 		R_SYSTEM->HOCOCR =  1U;
@@ -250,7 +245,7 @@ static bool Ra4m1StartHoco(uint8_t Config)
 		!Ra4m1Wait8(&R_SYSTEM->OSCSF, RA4M1_OSCSF_HOCO, 0U))
 		return false;
 	R_SYSTEM->HOCOCR2 =  Config;
-	/* RA4M1 FSP only programs HOCOWTCR for 64 MHz, to 6. */
+	// RA4M1 FSP only programs HOCOWTCR for 64 MHz, to 6.
 	if (Config == 0x28U)
 	{
 		R_SYSTEM->HOCOWTCR =  6U;
@@ -268,7 +263,7 @@ static bool Ra4m1StartMain(OSC_TYPE Type, uint32_t Freq)
 	const uint8_t config = Type == OSC_TYPE_TCXO ? 0x40U :
 						  (Freq <= 10000000UL ? 0x08U : 0U);
 	const uint8_t wait = Type == OSC_TYPE_TCXO ? 0U : RA4M1_MOSC_WAIT;
-	/* CPU is on MOCO. Stop PLL before changing its input oscillator. */
+	// CPU is on MOCO. Stop PLL before changing its input oscillator.
 	R_SYSTEM->PLLCR =  1U;
 	if (!Ra4m1Wait8(&R_SYSTEM->PLLCR, 1U, 1U) ||
 		!Ra4m1Wait8(&R_SYSTEM->OSCSF, RA4M1_OSCSF_PLL, 0U))
@@ -288,10 +283,9 @@ static bool Ra4m1StartMain(OSC_TYPE Type, uint32_t Freq)
 		Ra4m1Wait8(&R_SYSTEM->OSCSF, RA4M1_OSCSF_MOSC, RA4M1_OSCSF_MOSC);
 }
 
-/* Caller has interrupts masked, peripherals/DMA quiesced, and USB SCKE=0.
- * Low-frequency system-clock / Subosc-mode transitions are not part of this
- * initial port. Refuse them rather than changing their backup-clock policy.
- */
+// Caller has interrupts masked, peripherals/DMA quiesced, and USB SCKE=0.
+// Low-frequency system-clock / Subosc-mode transitions are not part of this
+// initial port. Refuse them rather than changing their backup-clock policy.
 static Ra4m1StartupError_t Ra4m1ApplyPlan(const Ra4m1ClockPlan_t *pPlan,
 									   OSC_TYPE Type, uint32_t Freq, bool Usb)
 {
@@ -306,10 +300,9 @@ static Ra4m1StartupError_t Ra4m1ApplyPlan(const Ra4m1ClockPlan_t *pPlan,
 	if (!Ra4m1Wait8(&R_SYSTEM->OPCCR, RA4M1_MODE_BUSY, 0U))
 		return RA4M1_STARTUP_POWER_MODE;
 
-	/* In low-voltage mode HOCO must remain running. The emitted option word
-	 * ensures this from reset; tolerate an existing image with HOCO stopped
-	 * only by enabling its valid configured oscillator before changing mode.
-	 */
+	// In low-voltage mode HOCO must remain running. The emitted option word
+	// ensures this from reset; tolerate an existing image with HOCO stopped
+	// only by enabling its valid configured oscillator before changing mode.
 	if ((R_SYSTEM->OPCCR & 3U) == 2U &&
 		(R_SYSTEM->HOCOCR & 1U) != 0U)
 	{
@@ -324,9 +317,8 @@ static Ra4m1StartupError_t Ra4m1ApplyPlan(const Ra4m1ClockPlan_t *pPlan,
 	R_FCACHE->FCACHEE =  0U;
 	if (!Ra4m1Wait16(&R_FCACHE->FCACHEE, 1U, 0U))
 		return RA4M1_STARTUP_FLASH;
-	/* Down-divide the current source before selecting MOCO: no transient
-	 * overclock even when the previous CPU source was an external PLL.
-	 */
+	// Down-divide the current source before selecting MOCO: no transient
+	// overclock even when the previous CPU source was an external PLL.
 	if (!Ra4m1SetDividers(RA4M1_RESET_DIV))
 		return RA4M1_STARTUP_CLOCK;
 	R_SYSTEM->MOCOCR =  0U;
@@ -339,7 +331,7 @@ static Ra4m1StartupError_t Ra4m1ApplyPlan(const Ra4m1ClockPlan_t *pPlan,
 	R_SYSTEM->OPCCR =  0U;
 	if (!Ra4m1Wait8(&R_SYSTEM->OPCCR, 0x13U, 0U))
 		return RA4M1_STARTUP_POWER_MODE;
-	/* CPU is 500 kHz, cache disabled, power mode is now High-speed. */
+	// CPU is 500 kHz, cache disabled, power mode is now High-speed.
 	R_SYSTEM->MEMWAIT =  pPlan->FlashWait;
 	if (R_SYSTEM->MEMWAIT != pPlan->FlashWait)
 		return RA4M1_STARTUP_FLASH;
@@ -358,7 +350,7 @@ static Ra4m1StartupError_t Ra4m1ApplyPlan(const Ra4m1ClockPlan_t *pPlan,
 			R_SYSTEM->PLLCCR2 =  pPlan->Pll;
 			if (R_SYSTEM->PLLCCR2 != pPlan->Pll)
 				return RA4M1_STARTUP_PLL;
-			Ra4m1DelayUs(2U); /* PLLMUL-to-PLL-start minimum is 1 us. */
+			Ra4m1DelayUs(2U); // PLLMUL-to-PLL-start minimum is 1 us.
 			R_SYSTEM->PLLCR =  0U;
 			if (!Ra4m1Wait8(&R_SYSTEM->PLLCR, 1U, 0U) ||
 				!Ra4m1Wait8(&R_SYSTEM->OSCSF, RA4M1_OSCSF_PLL, RA4M1_OSCSF_PLL))
@@ -391,9 +383,8 @@ static uint32_t Ra4m1SourceHz(uint8_t Source)
 	const uint8_t ready = R_SYSTEM->OSCSF;
 	if ((R_SYSTEM->OSTDSR & 1U) != 0U)
 	{
-		/* OSTDF redirects MOSC to MOCO without a software selector write.
-		 * A failed PLL input leaves the PLL free-running: its rate is unknown.
-		 */
+		// OSTDF redirects MOSC to MOCO without a software selector write.
+		// A failed PLL input leaves the PLL free-running: its rate is unknown.
 		if (Source == RA4M1_CK_MOSC)
 			return RA4M1_MOCO_HZ;
 		if (Source == RA4M1_CK_PLL)
@@ -436,7 +427,7 @@ static uint32_t Ra4m1DividedClock(unsigned Shift)
 
 void SystemCoreClockUpdate(void)
 {
-	/* Read/report only: never change flash timing in a clock query. */
+	// Read/report only: never change flash timing in a clock query.
 	SystemCoreClock = Ra4m1DividedClock(24U);
 }
 
@@ -518,13 +509,12 @@ bool SystemLowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t Freq)
 			ok = Ra4m1Wait8(&R_SYSTEM->LOCOCR, 1U, 0U);
 		}
 		if (ok)
-			Ra4m1DelayUs(100U); /* LOCO has no oscillator-ready flag. */
+			Ra4m1DelayUs(100U); // LOCO has no oscillator-ready flag.
 	}
 	else if (ok)
 	{
-		/* Preserve a running sub-clock and the retained RTC. Its consumers
-		 * choose LOCO/SOSC themselves; SystemInit does not reset the RTC.
-		 */
+		// Preserve a running sub-clock and the retained RTC. Its consumers
+		// choose LOCO/SOSC themselves; SystemInit does not reset the RTC.
 		if ((R_SYSTEM->SOSCCR & 1U) != 0U)
 		{
 			R_SYSTEM->SOMCR =  RA4M1_SOSC_DRIVE;
@@ -552,18 +542,16 @@ bool SystemLowFreqClockSelect(OSC_TYPE ClkSrc, uint32_t Freq)
 
 uint32_t SystemPeriphClockSet(int Idx, uint32_t Freq)
 {
-	/* No independent runtime bus-divider policy in this initial port. Return
-	 * failure for a change, not a fictitious successful frequency setting.
-	 */
+	// No independent runtime bus-divider policy in this initial port. Return
+	// failure for a change, not a fictitious successful frequency setting.
 	const uint32_t actual = SystemPeriphClockGet(Idx);
 	return Freq == actual ? actual : 0U;
 }
 
 void SystemOscInit(void)
 {
-	/* Oscillator configuration is performed by SystemInit/clock selectors.
-	 * RA4M1 has no software-programmable crystal load capacitance here.
-	 */
+	// Oscillator configuration is performed by SystemInit/clock selectors.
+	// RA4M1 has no software-programmable crystal load capacitance here.
 }
 
 static void Ra4m1StartupStop(Ra4m1StartupError_t Error)
@@ -578,12 +566,12 @@ void SystemInit(void)
 	const uint32_t state = DisableInterrupt();
 	g_Ra4m1StartupError = RA4M1_STARTUP_OK;
 	SCB->VTOR = (uint32_t)(uintptr_t)__Vectors;
-	/* Enable CP10/CP11 before any application/RTOS floating-point use. */
+	// Enable CP10/CP11 before any application/RTOS floating-point use.
 	SCB->CPACR |= 0x00F00000UL;
 	__DSB();
 	__ISB();
 
-	/* Cold-start baseline only. No fixed peripheral-to-vector assignments. */
+	// Cold-start baseline only. No fixed peripheral-to-vector assignments.
 	for (unsigned i = 0U; i < RA4M1_IRQ_COUNT; ++i)
 	{
 		NVIC_DisableIRQ((IRQn_Type)i);

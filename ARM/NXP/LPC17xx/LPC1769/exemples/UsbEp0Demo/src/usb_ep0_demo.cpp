@@ -1,5 +1,5 @@
 /**-------------------------------------------------------------------------
-@file	usb_ep0_demo.cpp
+@example	usb_ep0_demo.cpp
 
 @brief	LPC1769 EP0-only USB device example.
 

@@ -199,4 +199,4 @@ private:
 
 /** @} End of group USBD */
 
-#endif	// __USB_ISO_H__
+#endif

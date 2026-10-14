@@ -74,4 +74,4 @@ void UsbdCdcIntrfTxKick(UsbdCdcDevIntrf_t *pIntrf);
 }
 #endif
 
-#endif	// __USBD_CDC_INTRF_H__
+#endif

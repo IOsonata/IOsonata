@@ -73,9 +73,8 @@ void SetLinks(const uint16_t *pHdl, size_t Count)
 
 // The layers below bt_app.cpp, stubbed so the walk over links is what is
 // under test rather than the GATT send itself.
-extern "C" {
 
-BtDevice_t *BtPeerSlot(uint16_t Idx)
+extern "C" BtDevice_t *BtPeerSlot(uint16_t Idx)
 {
 	static BtDevice_t s_Slots[8];
 
@@ -89,12 +88,12 @@ BtDevice_t *BtPeerSlot(uint16_t Idx)
 	return &s_Slots[Idx];
 }
 
-uint16_t BtPeerCount(void)
+extern "C" uint16_t BtPeerCount(void)
 {
 	return (uint16_t)s_LinkCount;
 }
 
-size_t BtPeerGetConnectedHandles(uint16_t *pHdl, size_t MaxCount)
+extern "C" size_t BtPeerGetConnectedHandles(uint16_t *pHdl, size_t MaxCount)
 {
 	size_t n = s_LinkCount < MaxCount ? s_LinkCount : MaxCount;
 	for (size_t i = 0; i < n; i++)
@@ -104,12 +103,12 @@ size_t BtPeerGetConnectedHandles(uint16_t *pHdl, size_t MaxCount)
 	return n;
 }
 
-BtDevice_t *BtPeerGetActive(void) { return nullptr; }
+extern "C" BtDevice_t *BtPeerGetActive(void) { return nullptr; }
 
 // The same refusals as the real one in bt_gatt.cpp. An always-true stub would
 // make the give-up branch in every send path here unreachable, and that branch
 // is the rule that a value the characteristic cannot store is never sent.
-bool BtGattCharSetValue(BtGattChar_t *pChar, void * const pVal, size_t Len)
+extern "C" bool BtGattCharSetValue(BtGattChar_t *pChar, void * const pVal, size_t Len)
 {
 	if (pChar == nullptr || (Len > 0 && pVal == nullptr) ||
 		pChar->ValHdl == BT_ATT_HANDLE_INVALID || pChar->pValue == nullptr ||
@@ -129,7 +128,7 @@ bool BtGattCharSetValue(BtGattChar_t *pChar, void * const pVal, size_t Len)
 	return true;
 }
 
-bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *, void * const, size_t)
+extern "C" bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *, void * const, size_t)
 {
 	if (s_NotifyCount < kMaxCall)
 	{
@@ -138,7 +137,7 @@ bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *, void * const, size_t)
 	return ConnHdl != s_RefuseHdl;
 }
 
-bool BtGattCharIndicate(uint16_t ConnHdl, BtGattChar_t *, void * const, size_t)
+extern "C" bool BtGattCharIndicate(uint16_t ConnHdl, BtGattChar_t *, void * const, size_t)
 {
 	if (s_IndicateCount < kMaxCall)
 	{
@@ -147,7 +146,7 @@ bool BtGattCharIndicate(uint16_t ConnHdl, BtGattChar_t *, void * const, size_t)
 	return ConnHdl != s_RefuseHdl;
 }
 
-void BtAppDisconnectConn(uint16_t ConnHdl)
+extern "C" void BtAppDisconnectConn(uint16_t ConnHdl)
 {
 	if (s_DisconnectCount < kMaxCall)
 	{
@@ -155,7 +154,6 @@ void BtAppDisconnectConn(uint16_t ConnHdl)
 	}
 }
 
-} // extern "C"
 
 namespace {
 

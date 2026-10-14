@@ -220,63 +220,61 @@ void TestDroppedReassemblyCannotBecomeComplete()
 
 } // namespace
 
-extern "C" {
 
-uint32_t BtAttProcessReq(uint16_t, BtAttReqRsp_t * const, int,
+extern "C" uint32_t BtAttProcessReq(uint16_t, BtAttReqRsp_t * const, int,
 						 BtAttReqRsp_t * const)
 {
 	return 0;
 }
 
-void BtAttProcessRsp(uint16_t, BtAttReqRsp_t * const, int)
+extern "C" void BtAttProcessRsp(uint16_t, BtAttReqRsp_t * const, int)
 {
 }
 
-uint32_t BtL2CapProcessSignal(BtHciDevice_t * const, uint16_t,
+extern "C" uint32_t BtL2CapProcessSignal(BtHciDevice_t * const, uint16_t,
 							  BtL2CapPdu_t const * const, uint16_t,
 							  BtL2CapPdu_t * const)
 {
 	return 0;
 }
 
-void BtProcessSmpData(BtHciDevice_t * const, uint16_t,
+extern "C" void BtProcessSmpData(BtHciDevice_t * const, uint16_t,
 					  BtL2CapSmp_t * const, size_t)
 {
 }
 
-void BtSmpProcessLtkRequest(BtHciDevice_t * const, uint16_t, uint64_t, uint16_t)
+extern "C" void BtSmpProcessLtkRequest(BtHciDevice_t * const, uint16_t, uint64_t, uint16_t)
 {
 }
 
-void BtSmpLocalPubKeyReady(BtHciDevice_t * const, uint8_t,
+extern "C" void BtSmpLocalPubKeyReady(BtHciDevice_t * const, uint8_t,
 						   const uint8_t *, const uint8_t *)
 {
 }
 
-void BtSmpDhKeyReady(BtHciDevice_t * const, uint8_t, const uint8_t *)
+extern "C" void BtSmpDhKeyReady(BtHciDevice_t * const, uint8_t, const uint8_t *)
 {
 }
 
-void BtSmpEncryptionChanged(BtHciDevice_t * const, uint16_t, uint8_t, uint8_t)
+extern "C" void BtSmpEncryptionChanged(BtHciDevice_t * const, uint16_t, uint8_t, uint8_t)
 {
 }
 
-void BtSmpDisconnected(uint16_t)
+extern "C" void BtSmpDisconnected(uint16_t)
 {
 }
 
-SysLog_t *SysLogGet(void)
+extern "C" SysLog_t *SysLogGet(void)
 {
 	static SysLog_t log = {};
 	return &log;
 }
 
-int SysLogPrintf(SysLog_t * const, const char *, ...)
+extern "C" int SysLogPrintf(SysLog_t * const, const char *, ...)
 {
 	return 0;
 }
 
-} // extern "C"
 
 // The host reaches SMP only through the table BtSmpInit registers. This
 // test stands in for SMP, so it registers its own entry points.

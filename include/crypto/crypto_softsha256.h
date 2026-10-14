@@ -54,7 +54,7 @@ SOFTWARE.
 
 /// @brief	Software SHA-256 engine implementing HashEngine alone.
 ///
-/// Stateless beyond the Device lifecycle: the one-shot Hash carries no state
+/// Stateless beyond the Device lifecycle: the one-shot Hash keeps no state
 /// between calls; streaming digests live in caller-provided context storage
 /// of HashCtxSize() bytes, so one engine object serves any number of messages
 /// and interleaved streams. For a boot loader, which needs the digest and

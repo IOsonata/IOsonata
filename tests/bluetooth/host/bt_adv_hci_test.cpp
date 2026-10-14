@@ -447,17 +447,15 @@ void TestCodingSelectionHostFeatureBit()
 
 } // namespace
 
-extern "C" {
 
 BtAppData_t g_BtAppData;
 
-void BtSmpLocalAddrGet(uint8_t *pType, uint8_t pAddr[6])
+extern "C" void BtSmpLocalAddrGet(uint8_t *pType, uint8_t pAddr[6])
 {
 	*pType = s_LocalType;
 	std::memcpy(pAddr, s_LocalAddr, 6);
 }
 
-} // extern "C"
 
 int main()
 {

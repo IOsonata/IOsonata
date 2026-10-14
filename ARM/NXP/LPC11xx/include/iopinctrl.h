@@ -136,4 +136,4 @@ static inline void IOPinWrite32Port(int PortNo, uint32_t Data)
 	IOPinWritePort(PortNo, Data);
 }
 
-#endif // __IOPINCTRL_H__
+#endif

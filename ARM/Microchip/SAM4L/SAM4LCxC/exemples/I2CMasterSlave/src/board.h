@@ -4,8 +4,8 @@
 @brief	SAM4L8 Xplained Pro I2C master/slave loopback wiring.
 
 Connect the two independent SAM4L TWI instances on EXT4:
-  PB14 (TWIMS3 TWD, master SDA)  <-> PB00 (TWIMS1 TWD, slave SDA)
-  PB15 (TWIMS3 TWCK, master SCL) <-> PB01 (TWIMS1 TWCK, slave SCL)
+	PB14 (TWIMS3 TWD, master SDA)  <-> PB00 (TWIMS1 TWD, slave SDA)
+	PB15 (TWIMS3 TWCK, master SCL) <-> PB01 (TWIMS1 TWCK, slave SCL)
 
 TWIMS0 on PA23/PA24 is deliberately not used here because those pins are also
 wired to the on-board EDBG DGI TWI interface.
@@ -55,4 +55,4 @@ configuration. External I2C pull-ups can also be used.
 #define I2C_SLAVE_DMA_ENABLE	true
 #define I2C_SLAVE_INT_ENABLE	true
 
-#endif // __BOARD_H__
+#endif

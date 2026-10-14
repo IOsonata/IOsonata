@@ -93,15 +93,14 @@ static void ReceiveDma(void)
 	}
 }
 
-extern "C" {
-const UsbCfg_t *UsbGetCfg(int DevNo)
+extern "C" const UsbCfg_t *UsbGetCfg(int DevNo)
 {
 	return DevNo == 0 ? &s_UsbCfg : nullptr;
 }
 
-bool UsbCtrlrHighSpeed(int) { return false; }
+extern "C" bool UsbCtrlrHighSpeed(int) { return false; }
 
-bool UsbCtrlrEpOpen(int, const UsbEndPointDesc_t *pDesc)
+extern "C" bool UsbCtrlrEpOpen(int, const UsbEndPointDesc_t *pDesc)
 {
 	if (pDesc == nullptr || s_OpenCount >= 2)
 		return false;
@@ -109,7 +108,7 @@ bool UsbCtrlrEpOpen(int, const UsbEndPointDesc_t *pDesc)
 	return true;
 }
 
-void UsbCtrlrEpClose(int, uint8_t, bool bIn) {
+extern "C" void UsbCtrlrEpClose(int, uint8_t, bool bIn) {
 	s_CloseCount++;
 	s_OpenCount = 0;
 	if (bIn)
@@ -125,7 +124,7 @@ void UsbCtrlrEpClose(int, uint8_t, bool bIn) {
 	}
 }
 
-void UsbCtrlrEpBind(int, uint8_t, bool bIn, bool,
+extern "C" void UsbCtrlrEpBind(int, uint8_t, bool bIn, bool,
 	UsbCtrlrEpHandler_t Handler, void *pContext)
 {
 	if (bIn)
@@ -142,7 +141,7 @@ void UsbCtrlrEpBind(int, uint8_t, bool bIn, bool,
 	}
 }
 
-bool UsbCtrlrEpReceive(int, uint8_t, uint8_t *pBuffer, uint16_t Capacity)
+extern "C" bool UsbCtrlrEpReceive(int, uint8_t, uint8_t *pBuffer, uint16_t Capacity)
 {
 	if (!s_OutReady || s_OutDma || pBuffer == nullptr || Capacity == 0U) return false;
 	s_OutBuffer = pBuffer;
@@ -150,7 +149,7 @@ bool UsbCtrlrEpReceive(int, uint8_t, uint8_t *pBuffer, uint16_t Capacity)
 	return s_OutDma;
 }
 
-bool UsbCtrlrEpSend(int, uint8_t EpNum, uint8_t *pBuffer, uint16_t Length)
+extern "C" bool UsbCtrlrEpSend(int, uint8_t EpNum, uint8_t *pBuffer, uint16_t Length)
 {
 	if ((EpNum & 0x80U) != 0U) return false;
 	if (s_HaltIn || s_InBusy) return false;
@@ -161,7 +160,7 @@ bool UsbCtrlrEpSend(int, uint8_t EpNum, uint8_t *pBuffer, uint16_t Length)
 }
 
 
-bool UsbEpSetHalt(int DevNo, uint8_t EpNo, bool bIn, bool Halt)
+extern "C" bool UsbEpSetHalt(int DevNo, uint8_t EpNo, bool bIn, bool Halt)
 {
 	if (DevNo != 0 || EpNo != EP_NO)
 		return false;
@@ -172,10 +171,9 @@ bool UsbEpSetHalt(int DevNo, uint8_t EpNo, bool bIn, bool Halt)
 	return true;
 }
 
-bool UsbEpHalted(int DevNo, uint8_t EpNo, bool bIn)
+extern "C" bool UsbEpHalted(int DevNo, uint8_t EpNo, bool bIn)
 {
 	return DevNo == 0 && EpNo == EP_NO && (bIn ? s_HaltIn : s_HaltOut);
-}
 }
 
 bool UsbClassRegister(int DevNo, UsbDeviceClass *pClass,

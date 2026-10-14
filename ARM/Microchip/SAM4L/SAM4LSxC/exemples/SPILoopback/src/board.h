@@ -80,5 +80,5 @@ SOFTWARE.
 #define UART_RTS_PIN				-1
 #define UART_RTS_PINOP				IOPINOP_GPIO
 
-#endif // __BOARD_H__
+#endif
 

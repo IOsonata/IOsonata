@@ -28,28 +28,27 @@ static long s_Packets;
 static long s_Bytes;
 static long s_Zlp;
 
-extern "C" {
-bool UsbCtrlrInit(int, const UsbCtrlrCfg_t *) { return true; }
-bool UsbCtrlrStart(int) { return true; }
-void UsbCtrlrStop(int) {}
-void UsbCtrlrProcess(int) {}
-bool UsbCtrlrVbusDetected(int) { return true; }
-bool UsbCtrlrHighSpeed(int) { return false; }
-void UsbCtrlrIntEnable(int) {}
-void UsbCtrlrIntDisable(int) {}
-void UsbCtrlrConnect(int) {}
-void UsbCtrlrDisconnect(int) {}
-void UsbCtrlrRemoteWakeup(int) {}
-void UsbCtrlrSofEnable(int, bool) {}
-void UsbCtrlrSetAddress(int, uint8_t) {}
-bool UsbCtrlrEpOpen(int, const UsbEndPointDesc_t *) { return true; }
-void UsbCtrlrEpClose(int, uint8_t, bool) {}
-void UsbCtrlrEpCloseAll(int) {}
-void UsbCtrlrEpStall(int, uint8_t, bool) {}
-void UsbCtrlrEpClearStall(int, uint8_t, bool) {}
-size_t UsbCtrlrGetSerial(int, char *p, size_t n) { if (n) p[0] = 0; return 0; }
+extern "C" bool UsbCtrlrInit(int, const UsbCtrlrCfg_t *) { return true; }
+extern "C" bool UsbCtrlrStart(int) { return true; }
+extern "C" void UsbCtrlrStop(int) {}
+extern "C" void UsbCtrlrProcess(int) {}
+extern "C" bool UsbCtrlrVbusDetected(int) { return true; }
+extern "C" bool UsbCtrlrHighSpeed(int) { return false; }
+extern "C" void UsbCtrlrIntEnable(int) {}
+extern "C" void UsbCtrlrIntDisable(int) {}
+extern "C" void UsbCtrlrConnect(int) {}
+extern "C" void UsbCtrlrDisconnect(int) {}
+extern "C" void UsbCtrlrRemoteWakeup(int) {}
+extern "C" void UsbCtrlrSofEnable(int, bool) {}
+extern "C" void UsbCtrlrSetAddress(int, uint8_t) {}
+extern "C" bool UsbCtrlrEpOpen(int, const UsbEndPointDesc_t *) { return true; }
+extern "C" void UsbCtrlrEpClose(int, uint8_t, bool) {}
+extern "C" void UsbCtrlrEpCloseAll(int) {}
+extern "C" void UsbCtrlrEpStall(int, uint8_t, bool) {}
+extern "C" void UsbCtrlrEpClearStall(int, uint8_t, bool) {}
+extern "C" size_t UsbCtrlrGetSerial(int, char *p, size_t n) { if (n) p[0] = 0; return 0; }
 
-void UsbCtrlrEpBind(int, uint8_t, bool bIn, bool,
+extern "C" void UsbCtrlrEpBind(int, uint8_t, bool bIn, bool,
 						UsbCtrlrEpHandler_t Handler, void *pContext)
 {
 	if (bIn)
@@ -65,13 +64,13 @@ void UsbCtrlrEpBind(int, uint8_t, bool bIn, bool,
 	return;
 }
 
-bool UsbCtrlrEpReceive(int, uint8_t, uint8_t *pBuffer, uint16_t Capacity)
+extern "C" bool UsbCtrlrEpReceive(int, uint8_t, uint8_t *pBuffer, uint16_t Capacity)
 {
 	if (s_OutBuf != nullptr || pBuffer == nullptr || Capacity == 0U) return false;
 	s_OutBuf = pBuffer;
 	return true;
 }
-bool UsbCtrlrEpSend(int, uint8_t, uint8_t *pBuffer, uint16_t Len)
+extern "C" bool UsbCtrlrEpSend(int, uint8_t, uint8_t *pBuffer, uint16_t Len)
 {
 	s_InBuf = pBuffer;
 	s_InLen = Len;
@@ -80,7 +79,6 @@ bool UsbCtrlrEpSend(int, uint8_t, uint8_t *pBuffer, uint16_t Len)
 	s_Bytes += Len;
 	if (Len == 0U) { s_Zlp++; }
 	return true;
-}
 }
 
 alignas(4) static uint8_t s_RxMem[USB_INTRF_RXMEM_SIZE(SLOTS, BUFFER_SIZE)];

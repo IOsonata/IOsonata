@@ -79,7 +79,7 @@ extern "C" {
 #define USBCLKSEL_PLLOUT		0
 #define USBCLKSEL_MAINCLK		1
 
-extern uint32_t SystemCoreClock;     /*!< System Clock Frequency (Core Clock)  */
+extern uint32_t SystemCoreClock;     // !< System Clock Frequency (Core Clock)
 extern const uint32_t g_iVectorSize;
 
 
@@ -122,6 +122,6 @@ uint32_t SystemCoreClockSet(bool Crystal, int ClkFreq);
 }
 #endif
 
-#endif // __SYSTEM_LPC11UXX_H__
+#endif
 
 

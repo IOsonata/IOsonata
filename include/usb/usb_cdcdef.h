@@ -387,4 +387,4 @@ typedef struct __USB_Direct_Line_Management_Functional_Descriptor {
 
 /** @} end group USB */
 
-#endif	// __USB_CDCDEF_H__
+#endif

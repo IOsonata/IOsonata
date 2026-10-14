@@ -338,26 +338,26 @@ static void RxTask(void * pvParameter)
     }
 }
 
-/* Runs the Bluetooth work as its messages arrive, forever. */
+// Runs the Bluetooth work as its messages arrive, forever.
 static void BleTask(void * pvParameter)
 {
-    (void)pvParameter;
+	(void)pvParameter;
 
-    while (1)
-    {
-        BleWork_t work;
+	while (1)
+	{
+		BleWork_t work;
 
-        if (xQueueReceive(g_BleWorkQue, &work, 0) != pdPASS)
-        {
-            // Queue empty: queue again the work it refused, then wait
-            BtAppCheckStatus();
-            if (xQueueReceive(g_BleWorkQue, &work, portMAX_DELAY) != pdPASS)
-            {
-                continue;
-            }
-        }
-        work.Handler(work.EvtId, work.pCtx);
-    }
+		if (xQueueReceive(g_BleWorkQue, &work, 0) != pdPASS)
+		{
+			// Queue empty: queue again the work it refused, then wait
+			BtAppCheckStatus();
+			if (xQueueReceive(g_BleWorkQue, &work, portMAX_DELAY) != pdPASS)
+			{
+				continue;
+			}
+		}
+		work.Handler(work.EvtId, work.pCtx);
+	}
 }
 
 
@@ -398,12 +398,12 @@ int main()
 {
     HardwareInit();
 
-    // The Bluetooth work queue exists before BtAppInit queues its first work
-    g_BleWorkQue = xQueueCreate(BLE_WORK_QUE_SIZE, sizeof(BleWork_t));
-    if (g_BleWorkQue == NULL)
-    {
-        APP_ERROR_HANDLER(NRF_ERROR_NO_MEM);
-    }
+	// The Bluetooth work queue exists before BtAppInit queues its first work
+	g_BleWorkQue = xQueueCreate(BLE_WORK_QUE_SIZE, sizeof(BleWork_t));
+	if (g_BleWorkQue == NULL)
+	{
+		APP_ERROR_HANDLER(NRF_ERROR_NO_MEM);
+	}
 
     BtAppInit(&s_BleAppCfg);//, true);
 

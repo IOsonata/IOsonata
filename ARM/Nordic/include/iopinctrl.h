@@ -283,4 +283,4 @@ static inline __attribute__((always_inline)) void IOPinWritePort(int PortNo, uin
 }
 #endif
 
-#endif	// __IOPINCTRL_H__
+#endif

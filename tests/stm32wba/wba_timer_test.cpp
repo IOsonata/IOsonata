@@ -51,19 +51,17 @@ SOFTWARE.
 uint32_t SystemCoreClock = 16000000;
 McuOsc_t g_McuOsc = { { OSC_TYPE_RC, 16000000, 20 }, { OSC_TYPE_RC, 32000, 20 }, false };
 
-extern "C" {
-uint32_t SystemPeriphClockGet(int Idx)
+extern "C" uint32_t SystemPeriphClockGet(int Idx)
 {
 	return SystemCoreClock;
 }
 
 // The vector file function, called through Stm32TimerIRQHandler by the test
-void Stm32TimerVector(void)
+extern "C" void Stm32TimerVector(void)
 {
 }
 
-void Stm32TimerIRQHandler(int IrqNo);
-}
+extern "C" void Stm32TimerIRQHandler(int IrqNo);
 
 #define TEST_VEC4		Stm32TimerVector, Stm32TimerVector, Stm32TimerVector, Stm32TimerVector
 #define TEST_VEC16		TEST_VEC4, TEST_VEC4, TEST_VEC4, TEST_VEC4

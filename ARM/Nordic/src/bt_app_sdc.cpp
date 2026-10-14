@@ -1008,14 +1008,14 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 	}
 	s_bBtAppInitDone = true;
 
-    g_BtAppData.State = BTAPP_STATE_INITIALIZED;
+	g_BtAppData.State = BTAPP_STATE_INITIALIZED;
 
-    // Advertising starts here and not from the event queue: an application
-    // interrupt can fill the queue before the application runs it.
-    if (g_BtAppData.AppDevice.Conn.Role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER))
-    {
+	// Advertising starts here and not from the event queue: an application
+	// interrupt can fill the queue before the application runs it.
+	if (g_BtAppData.AppDevice.Conn.Role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER))
+	{
     	BtAdvStart();
-    }
+	}
 
 	return true;
 }

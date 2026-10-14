@@ -10,9 +10,9 @@ WS2812 single-wire serial protocol (one bit approximately 1.25 us, encoded by th
 ratio of high-time to low-time).
 
 WS2812B timing (datasheet, +/-150 ns tolerance):
-  T0H approximately 0.4  us   |  T0L approximately 0.85 us   ('0' bit)
-  T1H approximately 0.8  us   |  T1L approximately 0.45 us   ('1' bit)
-  RES > 50   us low                  (latch)
+	T0H approximately 0.4  us   |  T0L approximately 0.85 us   ('0' bit)
+	T1H approximately 0.8  us   |  T1L approximately 0.45 us   ('1' bit)
+	RES > 50   us low                  (latch)
 
 CPU clock: 80 MHz (ESP32C3 default in IOsonata).  12.5 ns / cycle.
 NOP counts below were chosen to land each pulse near the centre of its
@@ -63,7 +63,7 @@ SOFTWARE.
 #include "idelay.h"
 #include "coredev/iopincfg.h"
 
-/*--- ESP32-C3 GPIO output set/clear (TRM Rev 0.4 §6) ---*/
+/*--- ESP32-C3 GPIO output set/clear (TRM Rev 0.4 section 6) ---*/
 #define GPIO_OUT_W1TS_REG       (*(volatile uint32_t *)(0x60004008UL))
 #define GPIO_OUT_W1TC_REG       (*(volatile uint32_t *)(0x6000400CUL))
 
@@ -73,7 +73,7 @@ SOFTWARE.
 /*-----------------------------------------------------------------------
  * Bit-bang macros.  Each WS_BIT_x emits the high then low pulse for one
  * bit, with NOP counts calibrated for 80 MHz.  These are MACROS, not
- * inline functions, so there's no call/ret overhead between bits — the
+ * inline functions, so there's no call/ret overhead between bits - the
  * compiler emits the store + nop block + store + nop block back to back.
  *
  * Tuning notes (re-tune if you change the CPU frequency):
@@ -108,7 +108,7 @@ SOFTWARE.
  * Send 24 bits (G,R,B) MSB-first.  Loop is unrolled to keep timing
  * predictable at -O0.
  *
- * NOTE: this bit-bang is timing-critical — an IRQ firing in the middle
+ * NOTE: this bit-bang is timing-critical - an IRQ firing in the middle
  * of a pulse will stretch it past tolerance and the LED will get
  * garbled colour.  SystemInit() already cleared MIE in mstatus and
  * disabled all CPU interrupt lines (INTERRUPT_CORE0_CPU_INT_ENABLE_REG
@@ -159,7 +159,7 @@ static void ws2812_send_pixel(uint8_t r, uint8_t g, uint8_t b)
 static void delay_ms(uint32_t ms)
 {
     /* At 80 MHz, -O0, the inner loop (load i, compare, branch, increment,
-     * store) takes ~5-6 cycles per iteration → ~13000 iterations per ms. */
+     * store) takes ~5-6 cycles per iteration -> ~13000 iterations per ms. */
     volatile uint32_t i;
     while (ms--) {
         for (i = 0; i < 13000UL; i++) { /* spin */ }
