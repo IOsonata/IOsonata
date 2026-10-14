@@ -702,7 +702,7 @@ and pin map are build-fixture assumptions to verify against the actual board.
 Run `python3 tests/lpc/usb/link17.py --prefix arm-none-eabi-` to link both modes.
 The script checks library source links, LPC vector checksum, USB IRQ vector,
 archive extraction and semihosting selection. Debug uses rdimon; Release uses
-nosys. Measured text/data/bss: Debug 31936/476/2676, Release 13636/88/2172 bytes.
+nosys. Measured text/data/bss: Debug 35152/476/2680, Release 15296/88/2176 bytes.
 `run17.py` also checks public lifecycle start/stop, missing VBUS, priority clamp,
 pin ownership and initialization/SIE failure cleanup at -O0/-O2 with UBSan.
 These are successful firmware links and host tests, not hardware enumeration.
@@ -844,3 +844,27 @@ or continuation failures. -O0/-O2 UBSan runs pass, as do warning-clean Cortex-M3
 compilation and Debug/Release EP0 links. The library project includes the new
 module. It is not yet connected to public endpoint operations or USB_IRQHandler;
 public data support remains disabled until lifecycle and IRQ integration.
+
+LPC1769 IRQ connection for data transfers
+----------------------------------------
+
+`Lpc17UsbIrqBindData` optionally binds a caller-owned array of 30 physical data
+endpoint states after control binding and before interrupt enable. Unbind
+clears both bindings. After EP0 service, USB_IRQHandler captures data generations
+and SIE statuses, then calls the transfer dispatcher. Callbacks that close,
+rearm, stop or unbind cannot complete another endpoint from an obsolete
+snapshot. OUT rescheduling uses a later IRQ pass. Device events retain priority;
+unsupported IRQs and partially failed data capture stop the controller.
+
+Confirmed bus reset must have retired data RAM and DMA before accepted buffers
+are cancelled. The handler masks data IRQs and disables control submissions
+while returning buffers, then restores EP0 and emits generic RESET. A callback
+that stops or unbinds aborts that sequence. Stale data endpoint interrupt flags
+are acknowledged individually during hardware reset recovery; otherwise their
+slow-interrupt summary could remain asserted indefinitely.
+
+Host tests cover data dispatch through bit 31, callback rearming/unbinding,
+new bus events, capture failure, invalid ownership, reset cancellation and
+stale endpoint IRQ cleanup. -O0/-O2 UBSan tests and Debug/Release links pass.
+The public lifecycle does not bind the array yet: public open/close, halt and
+reset integration remains required before advertising bulk/interrupt support.

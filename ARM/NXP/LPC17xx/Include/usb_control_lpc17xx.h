@@ -56,8 +56,10 @@ typedef struct __Lpc17_Usb_Control {
 extern "C" {
 #endif
 // Bind before enabling the USB NVIC/device IRQs; unbind after disabling them.
-// The object must remain alive while bound. Only EP0 slow IRQs and DEV_STAT
-// are supported. Fault must stop/disconnect hardware, including on VBUS loss.
+// The object must remain alive while bound. EP0 slow IRQs and DEV_STAT are
+// supported; data slow IRQs require a separate Lpc17UsbIrqBindData binding.
+// Fault must stop/disconnect hardware, including on VBUS loss, and retire
+// data endpoints before returning their buffers through Lpc17UsbDataForget.
 bool Lpc17UsbIrqBind(Lpc17UsbControl_t *pControl);
 void Lpc17UsbIrqUnbind(void);
 // Zero-initialize the object and assign Event/Fault before enabling it.

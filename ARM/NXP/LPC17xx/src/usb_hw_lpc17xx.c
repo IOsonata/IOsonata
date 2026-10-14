@@ -349,6 +349,19 @@ bool Lpc17UsbDeviceInit(void)
 	return done;
 }
 
+static bool Lpc17UsbResetDataInterrupts(void)
+{
+	const uint32_t pending = LPC_USB->USBEpIntSt & ~3U;
+	uint8_t status;
+	for (unsigned physical = 2; physical < 32U; ++physical)
+	{
+		if ((pending & (1UL << physical)) != 0U &&
+			!Lpc17UsbEndpointAck(physical, &status))
+			return false;
+	}
+	return true;
+}
+
 bool Lpc17UsbBusReset(void)
 {
 	const uint32_t state = __get_PRIMASK();
@@ -368,6 +381,7 @@ bool Lpc17UsbBusReset(void)
 		done = !s_SieFault && s_Ep0Ready &&
 			LPC_USB->USBEpDMASt == 0U && LPC_USB->USBDMAIntEn == 0U &&
 			(LPC_USB->USBReEp & ~3U) == 0U && (endpointEnable & ~3U) == 0U &&
+			Lpc17UsbResetDataInterrupts() &&
 			Lpc17UsbEp0Ack(false, &outStatus) && Lpc17UsbEp0Ack(true, &inStatus);
 		// If service was delayed past the first SETUP, do not resize live RAM
 		// or silently discard that request. Force controller reinitialization.

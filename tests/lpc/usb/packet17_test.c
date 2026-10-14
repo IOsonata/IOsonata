@@ -612,6 +612,23 @@ static void DataCollectTests(void)
 	s_DataAck = false;
 	DataFifoPrepare(15, 64);
 	s_DataFifo = false;
+	// Model hardware RST retiring data RAM but retaining endpoint IRQ flags.
+	LPC_USB->USBReEp = 3;
+	LPC_USB->USBEpIntEn = 3;
+	LPC_USB->USBDevIntEn = 12;
+	SetReadOnly(&LPC_USB->USBEpIntSt, 0x80000007);
+	s_DataAck = true;
+	s_DataAckSeen = 0;
+	assert(Lpc17UsbBusReset());
+	assert(s_DataAckSeen == 0x80000007 && LPC_USB->USBEpIntSt == 0);
+	assert(LPC_USB->USBEpIntEn == 3 && LPC_USB->USBDevIntEn == 12);
+	SetReadOnly(&LPC_USB->USBEpIntSt, 0x80000004);
+	s_DataAckSeen = 0;
+	s_AckTimeout = s_Acks + 1;
+	assert(!Lpc17UsbBusReset());
+	assert(LPC_USB->USBEpIntEn == 0 && LPC_USB->USBDevIntEn == 0);
+	s_AckTimeout = 0;
+	s_DataAck = false;
 	puts("LPC1769 data IRQ snapshot, bit 31, arrival races and partial failure: PASS");
 }
 

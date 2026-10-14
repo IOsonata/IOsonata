@@ -34,8 +34,10 @@ SOFTWARE.
 #include "LPC17xx.h"
 #include "usb_hw_lpc17xx.h"
 #include "usb_control_lpc17xx.h"
+#include "usb_data_lpc17xx.h"
 
 static Lpc17UsbControl_t *s_pControl;
+static Lpc17UsbDataEndpoint_t *s_pData;
 
 bool Lpc17UsbIrqBind(Lpc17UsbControl_t *pControl)
 {
@@ -49,11 +51,24 @@ bool Lpc17UsbIrqBind(Lpc17UsbControl_t *pControl)
 	return accepted;
 }
 
+bool Lpc17UsbIrqBindData(Lpc17UsbDataEndpoint_t Endpoint[30])
+{
+	const uint32_t state = __get_PRIMASK();
+	__disable_irq();
+	const bool accepted = s_pControl != NULL && s_pControl->Enabled &&
+		s_pData == NULL && Endpoint != NULL;
+	if (accepted)
+		s_pData = Endpoint;
+	__set_PRIMASK(state);
+	return accepted;
+}
+
 void Lpc17UsbIrqUnbind(void)
 {
 	const uint32_t state = __get_PRIMASK();
 	__disable_irq();
 	s_pControl = NULL;
+	s_pData = NULL;
 	__set_PRIMASK(state);
 }
 
@@ -78,6 +93,50 @@ static void Lpc17UsbIrqSummary(void)
 	}
 }
 
+static void Lpc17UsbIrqData(Lpc17UsbControl_t *pControl)
+{
+	Lpc17UsbDataEndpoint_t *data = s_pData;
+	if (data == NULL)
+		return;
+	const uint32_t controlGeneration = pControl->Generation;
+	uint32_t generations[30];
+	uint8_t status[32];
+	uint32_t pending;
+	const uint32_t enabled = LPC_USB->USBEpIntEn & ~3U;
+	for (unsigned i = 0; i < 30U; ++i)
+	{
+		generations[i] = data[i].Generation;
+		if ((enabled & (1UL << (i + 2U))) != 0U &&
+			(!data[i].Enabled || data[i].EpNo != (i + 2U) / 2U ||
+			data[i].In != ((i & 1U) != 0U)))
+		{
+			Lpc17UsbIrqStop(pControl);
+			return;
+		}
+	}
+	if (!Lpc17UsbDataCollect(&pending, status))
+	{
+		// Partial acknowledgements cannot be replayed, including if a bus
+		// event interrupted capture. Disconnect rather than lose ownership.
+		Lpc17UsbIrqStop(pControl);
+		return;
+	}
+	for (unsigned i = 0; i < 30U; ++i)
+	{
+		if (s_pControl != pControl || s_pData != data || !pControl->Enabled ||
+			pControl->Generation != controlGeneration)
+			return;
+		if ((LPC_USB->USBDevIntSt & 8U) != 0U)
+		{
+			Lpc17UsbIrqStop(pControl);
+			return;
+		}
+		if ((pending & (1UL << (i + 2U))) != 0U &&
+			data[i].Generation == generations[i])
+			Lpc17UsbDataDispatch(&data[i], generations[i], status[i + 2U]);
+	}
+}
+
 void USB_IRQHandler(void)
 {
 	const uint32_t state = __get_PRIMASK();
@@ -90,8 +149,9 @@ void USB_IRQHandler(void)
 		return;
 	}
 	const uint32_t pending = LPC_USB->USBDevIntSt & LPC_USB->USBDevIntEn;
-	// This stage supports EP0 in CPU mode and DEV_STAT, with slow routing.
-	if ((pending & ~0x0CU) != 0U || (LPC_USB->USBEpIntEn & ~3U) != 0U)
+	// CPU-mode control/data endpoints use slow routing; ISO stays disabled.
+	if ((pending & ~0x0CU) != 0U ||
+		(LPC_USB->USBEpIntEn & ~(s_pData != NULL ? 0xFCF3CF3FU : 3U)) != 0U)
 	{
 		Lpc17UsbIrqStop(pControl);
 		__set_PRIMASK(state);
@@ -110,6 +170,32 @@ void USB_IRQHandler(void)
 		}
 		if (result > 0 && (status & 0x10U) != 0U)
 		{
+			if (s_pData != NULL)
+			{
+				// Hardware RST must have retired all data FIFO resources.
+				if ((LPC_USB->USBReEp & ~3U) != 0U || LPC_USB->USBEpDMASt != 0U ||
+					LPC_USB->USBDMAIntEn != 0U)
+				{
+					Lpc17UsbIrqStop(pControl);
+					__set_PRIMASK(state);
+					return;
+				}
+				Lpc17UsbDataEndpoint_t *data = s_pData;
+				const uint32_t generation = pControl->Generation;
+				LPC_USB->USBEpIntEn &= 3U;
+				pControl->Enabled = false;
+				for (unsigned i = 0; i < 30U; ++i)
+				{
+					Lpc17UsbDataForget(&data[i]);
+					if (s_pControl != pControl || s_pData != data ||
+						pControl->Generation != generation)
+					{
+						__set_PRIMASK(state);
+						return;
+					}
+				}
+				pControl->Enabled = true;
+			}
 			Lpc17UsbControlBusReset(pControl);
 			if (s_pControl == pControl && pControl->Enabled)
 				Lpc17UsbIrqSummary();
@@ -133,6 +219,8 @@ void USB_IRQHandler(void)
 	if ((pending & 4U) != 0U)
 	{
 		Lpc17UsbControlInterrupt(pControl);
+		if (s_pControl == pControl && pControl->Enabled)
+			Lpc17UsbIrqData(pControl);
 		if (s_pControl == pControl && pControl->Enabled)
 			Lpc17UsbIrqSummary();
 	}

@@ -56,6 +56,11 @@ typedef struct __Lpc17_Usb_Data_Endpoint {
 #ifdef __cplusplus
 extern "C" {
 #endif
+// Optional IRQ binding, after binding control and before enabling interrupts.
+// Array has 30 entries indexed by physical endpoint minus two. It must remain
+// alive until Lpc17UsbIrqUnbind, which clears both control and data bindings.
+// Owner's Ready must reject work while the bound control object is disabled.
+bool Lpc17UsbIrqBindData(Lpc17UsbDataEndpoint_t Endpoint[30]);
 // Zero-initialize and assign callbacks before Open. The owner realizes and
 // enables hardware first. Ready rejects bus events and shutdown. Halt handling is not wired yet.
 // Kick requests a later OUT IRQ pass; it must not invoke Dispatch inline.
