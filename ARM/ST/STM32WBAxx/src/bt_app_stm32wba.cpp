@@ -1323,6 +1323,8 @@ bool BtAppStackInit(const BtAppCfg_t *pCfg)
 	init.attMtu = CFG_BLE_ATT_MTU_MAX;
 	init.options = CFG_BLE_OPTIONS;
 
+	BtWbaPlatformInit();
+
 	uint8_t ret = BleStack_Init(&init);
 	if (ret != BLE_STATUS_SUCCESS)
 	{

@@ -327,10 +327,36 @@ Build notes found while linking these with the adapter:
 - Set `CFG_SCM_SUPPORTED` to 0 in `app_conf.h`.
 - Link with `--gc-sections` and function sections.
 
-With this set, the unresolved symbols left after linking the adapter and the two
-libraries are the IOsonata ones and the C++ runtime. No firmware image has been
-built, no example project exists yet, and nothing was run on hardware.
+The platform file also provides the `RADIO_IRQHandler` and `HASH_IRQHandler`
+vectors the link layer uses (HASH is the software low priority radio
+interrupt), and `BtWbaPlatformInit()`. It starts HSE32 and selects the radio
+sleep timer clock before `BleStack_Init`: LSE when `g_McuOsc.LowPwrOsc.Type`
+is not `OSC_TYPE_RC`, LSI1 otherwise. Without it the link layer stops on a
+missing sleep clock source.
 
-Still to do: a WBA65 Bluetooth example project with the `app_conf.h` and
-`common_wpan_conf.h` for the sources above, ADC based temperature, and use of the
-AES peripheral.
+## Bluetooth example project
+
+`exemples/BleAdvertiser/ioc` is the IOcomposer project for
+`exemples/bluetooth/ble_advertiser.cpp`. It links the adapter sources, the
+platform file, the Cube sources listed above, the NVM sources and the two stack
+libraries, with the Cube trees found through the `external` folder (see
+External middleware checkout). Notes:
+
+- `src/app_conf.h`, `common_wpan_conf.h`, `utilities_conf.h`,
+  `stm32wbaxx_hal_conf.h`, `app_common.h` and `stm32_rtos.h` come from ST's
+  BLE_p2pServer, with `CFG_SCM_SUPPORTED` 0, temperature calibration 0 and
+  logging 0.
+- `src/bleplat_wrap.c` renames the Cube `BLEPLAT_NvmStore` and includes
+  `bleplat.c`, so no per file compiler option is needed.
+- The project defines `STM32WBA65xx`, `BLE_LL` and `IOSONATA_STM32_WBA`. Do not
+  define `USE_HAL_DRIVER` for the application, `stm32wbaxx.h` would then pull in
+  the HAL and its macros clash with the IOsonata UART names.
+- `-include cmsis_compiler.h` is set for C sources only.
+
+Both Debug and Release configurations compile and link with arm-none-eabi
+(Release about 234 KB code, 83 KB RAM). No test was run on hardware. The DK1 pin
+choices for I2C (PB1, PB2 AF4) and SPI (PB4, PB3, PA15 AF5, CS PA12) come from
+Zephyr data and still need confirmation against UM3462.
+
+Still to do: ADC based temperature, use of the AES peripheral, and the
+hardware test of the stack, RNG, timer and sequencer code.

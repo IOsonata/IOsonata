@@ -254,6 +254,7 @@ static void BtAppTickQue() {}
 static void BtAppEvtDrainQue() {}
 extern "C" void BleStackCB_Process(void) {}
 extern "C" void BtWbaPlatformRetry(void) {}
+extern "C" void BtWbaPlatformInit(void) {}
 ''')]:
 	source = (ROOT / path).read_text()
 	code = COMMON + stubs + '\nextern "C" void BtAppCheckStatus(void);\n'

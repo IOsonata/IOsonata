@@ -103,7 +103,15 @@ SOFTWARE.
 
 #define ST_FLASH_CR_PG			FLASH_NSCR1_PG
 #define ST_FLASH_CR_PER			FLASH_NSCR1_PER
+// Mass erase bits. The WBA6x has two banks with one bit each, the other parts
+// have a single bit.
+#if defined(FLASH_NSCR1_MER2)
+#define ST_FLASH_CR_MER			(FLASH_NSCR1_MER1 | FLASH_NSCR1_MER2)
+#elif defined(FLASH_NSCR1_MER1)
+#define ST_FLASH_CR_MER			FLASH_NSCR1_MER1
+#else
 #define ST_FLASH_CR_MER			FLASH_NSCR1_MER
+#endif
 #define ST_FLASH_CR_PNB_Pos		FLASH_NSCR1_PNB_Pos
 #define ST_FLASH_CR_PNB_Msk		FLASH_NSCR1_PNB_Msk
 #define ST_FLASH_CR_STRT		FLASH_NSCR1_STRT

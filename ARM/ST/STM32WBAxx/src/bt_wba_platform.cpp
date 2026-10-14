@@ -17,7 +17,8 @@ power_table.c and the PKA controller:
 - HW_RNG_Get and the RNG clock requests: RNG peripheral, polled.
 - BAES_*: the IOsonata CryptoSoftAes engine (ECB, CMAC and CCM).
 - PKA controller hooks: queue, semaphore and interrupt handler.
-- HSE32 wait, system clock manager entries, debug signals: small functions.
+- Link layer interrupts (RADIO and HASH vectors), HSE32 wait, system clock
+  manager entries, debug signals: small functions.
 
 Known limits:
 - The temperature used by the link layer for radio calibration is fixed at 25
@@ -56,6 +57,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "stm32wbaxx.h"
 
+#include "app_conf.h"
 #include "bt_wba_stack.h"
 
 extern "C" {
@@ -67,6 +69,7 @@ extern "C" {
 #include "crypto/crypto_softaes.h"
 #include "bluetooth/bt_app.h"
 
+#include "coredev/system_core_clock.h"
 #include "bt_wba_platform.h"
 
 // Defined by the port in bt_app_stm32wba.cpp: runs the host stack
@@ -185,6 +188,44 @@ void SCM_HSE_WaitUntilReady(void)
 	{
 		n--;
 	}
+}
+
+/**
+ * @brief	Start HSE32 and select the radio sleep timer clock.
+ *
+ * The link layer reads the sleep timer clock source and stops when it is not
+ * set. LSE is used when the project asks for a crystal low power oscillator,
+ * otherwise LSI1 is used.
+ */
+void BtWbaPlatformInit(void)
+{
+	uint32_t n = BT_WBA_HSE_POLL_MAX;
+	uint32_t src;
+
+	SCM_HSE_WaitUntilReady();
+
+	SET_BIT(PWR->DBPR, PWR_DBPR_DBP);
+
+	if (g_McuOsc.LowPwrOsc.Type != OSC_TYPE_RC)
+	{
+		SET_BIT(RCC->BDCR1, RCC_BDCR1_LSEON);
+		while ((RCC->BDCR1 & RCC_BDCR1_LSERDY) == 0U && n > 0U)
+		{
+			n--;
+		}
+		src = RCC_BDCR1_RADIOSTSEL_0;
+	}
+	else
+	{
+		SET_BIT(RCC->BDCR1, RCC_BDCR1_LSI1ON);
+		while ((RCC->BDCR1 & RCC_BDCR1_LSI1RDY) == 0U && n > 0U)
+		{
+			n--;
+		}
+		src = RCC_BDCR1_RADIOSTSEL_1;
+	}
+
+	MODIFY_REG(RCC->BDCR1, RCC_BDCR1_RADIOSTSEL, src);
 }
 
 void scm_notifyradiostate(uint32_t State)
@@ -823,6 +864,52 @@ extern "C" void PKA_IRQHandler(void)
 		PKACTRL_EndOfProcessCb();
 	}
 }
+
+//----------------------------------------------------------------------------
+// Link layer interrupts. The vector table of the IOsonata system module has
+// weak entries for them. The callbacks are set by LINKLAYER_PLAT_SetupRadioIT
+// and LINKLAYER_PLAT_SetupSwLowIT in linklayer_plat.c.
+//----------------------------------------------------------------------------
+
+extern "C" {
+
+extern void (*radio_callback)(void);
+extern void (*low_isr_callback)(void);
+extern volatile uint8_t radio_sw_low_isr_is_running_high_prio;
+
+void RADIO_IRQHandler(void)
+{
+	if (radio_callback != nullptr)
+	{
+		radio_callback();
+	}
+
+	CLEAR_BIT(RCC->RADIOENR, RCC_RADIOENR_STRADIOCLKON);
+	__ISB();
+}
+
+// Software low priority radio interrupt. It runs on the HASH vector.
+void HASH_IRQHandler(void)
+{
+	// Block nested calls
+	NVIC_DisableIRQ((IRQn_Type)RADIO_SW_LOW_INTR_NUM);
+
+	if (low_isr_callback != nullptr)
+	{
+		low_isr_callback();
+	}
+
+	// A request made at high priority is done, back to the low priority
+	if (radio_sw_low_isr_is_running_high_prio != 0)
+	{
+		NVIC_SetPriority((IRQn_Type)RADIO_SW_LOW_INTR_NUM, RADIO_INTR_PRIO_LOW);
+		radio_sw_low_isr_is_running_high_prio = 0;
+	}
+
+	NVIC_EnableIRQ((IRQn_Type)RADIO_SW_LOW_INTR_NUM);
+}
+
+} // extern "C"
 
 //----------------------------------------------------------------------------
 // Work that did not fit in the event queue is offered again from here.

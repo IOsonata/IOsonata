@@ -43,6 +43,9 @@ extern "C" {
 /// the same place that retries the other owed work.
 void BtWbaPlatformRetry(void);
 
+/// Start HSE32 and select the radio sleep timer clock. Call before BleStack_Init.
+void BtWbaPlatformInit(void);
+
 #ifdef __cplusplus
 }
 #endif
