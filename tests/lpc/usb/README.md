@@ -838,7 +838,13 @@ through the owner's closing state. Halt/clear-halt handling is now connected thr
 `data17_test.c` mocks FIFO access and checks IN lengths 0, 1, 63, 64, 65, 128
 and 129; exact packet bytes; NAK/stale-event rejection; callback resubmission;
 OUT backpressure, ZLP and deferred completion; callback shutdown; and initial
-or continuation failures. -O0/-O2 UBSan runs pass, as do warning-clean Cortex-M3
+or continuation failures. OUT buffer-bound checks cover every supported endpoint,
+every legal logical MPS, all packet lengths through that MPS, undersized caller
+buffers and oversized packets with a larger caller buffer. Guard bytes and
+PRIMASK are checked on success and rejection. The register model separately
+checks that a packet exceeding caller capacity leaves the destination untouched
+and remains available for a subsequent read, with hardware RAM reserved at 64
+bytes. -O0/-O2 UBSan runs pass, as do warning-clean Cortex-M3
 compilation and Debug/Release EP0 links. The library project includes the new
 module. It is connected to public endpoint operations and USB_IRQHandler.
 

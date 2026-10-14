@@ -428,6 +428,32 @@ static void DataFifoTests(void)
 			assert(LPC_USB->USBEpIntSt == 0xFFFFFFFF && (LPC_USB->USBDevIntSt & 4) != 0);
 		}
 	}
+	// Public endpoints reserve 64 bytes even when their logical MPS is smaller.
+	// A capacity failure must neither publish bytes nor consume the packet.
+	for (unsigned index = 0; index < 4; ++index)
+	{
+		unsigned ep = endpoints[index];
+		DataFifoPrepare(ep, 64);
+		for (unsigned capacity = 1; capacity < 64; ++capacity)
+		{
+			s_Mask = capacity & 1;
+			s_Status = 1;
+			s_Reads = 0;
+			SetReadOnly(&LPC_USB->USBRxPLen, 0xC00U | (capacity + 1));
+			memset(output, 0xCC, sizeof(output));
+			unsigned clears = s_Clears;
+			assert(Lpc17UsbDataRead(ep, output + 1, capacity) == -1);
+			assert(s_Reads == 0 && s_Clears == clears && LPC_USB->USBCtrl == 0);
+			assert(s_Mask == (capacity & 1));
+			for (unsigned i = 0; i < sizeof(output); ++i)
+				assert(output[i] == 0xCC);
+			assert(Lpc17UsbDataRead(ep, output + 1, capacity + 1) == (int)capacity + 1);
+			assert(s_Clears == clears + 1);
+			assert(output[0] == 0xCC && output[capacity + 2] == 0xCC);
+			for (unsigned i = 0; i <= capacity; ++i)
+				assert(output[i + 1] == i);
+		}
+	}
 	DataFifoPrepare(2, 8);
 	s_Status = 0;
 	assert(!Lpc17UsbDataWrite(2, input, 9));

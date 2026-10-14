@@ -51,12 +51,12 @@ static void Fault(void)
 }
 static void Kick(uint8_t EpNo)
 {
-	assert(s_Mask == 1 && EpNo == 2);
+	assert(s_Mask == 1 && EpNo == s_Ep.EpNo);
 	++s_Kicks;
 }
 bool Lpc17UsbDataWrite(uint8_t EpNo, const uint8_t *pData, int Length)
 {
-	assert(s_Mask == 1 && EpNo == 2 && Length <= 64);
+	assert(s_Mask == 1 && EpNo == s_Ep.EpNo && Length <= 64);
 	++s_Writes;
 	s_LastWrite = Length;
 	if (s_WriteFail)
@@ -68,7 +68,9 @@ bool Lpc17UsbDataWrite(uint8_t EpNo, const uint8_t *pData, int Length)
 }
 int Lpc17UsbDataRead(uint8_t EpNo, uint8_t *pData, int Capacity)
 {
-	assert(s_Mask == 1 && EpNo == 2 && Capacity == 64);
+	assert(s_Mask == 1 && EpNo == s_Ep.EpNo && Capacity == s_Ep.Mps);
+	if (s_ReadLength > Capacity)
+		return -1;
 	if (s_ReadLength > 0)
 		memset(pData, 0xA5, s_ReadLength);
 	return s_ReadLength;
@@ -109,7 +111,7 @@ static void Event(UsbCtrlrEvtType_t Type, uint16_t Length, void *pContext)
 		assert(!Lpc17UsbDataSend(&s_Ep, s_Buffer, 1));
 	}
 }
-static void Open(bool In)
+static void OpenEndpoint(uint8_t EpNo, bool In, uint16_t Mps)
 {
 	memset(&s_Ep, 0, sizeof(s_Ep));
 	s_Ep.Handler = Event;
@@ -131,9 +133,59 @@ static void Open(bool In)
 	assert(!Lpc17UsbDataOpen(&s_Ep, 0, In, 64));
 	assert(!Lpc17UsbDataOpen(&s_Ep, 3, In, 64));
 	assert(!Lpc17UsbDataOpen(&s_Ep, 2, In, 63));
-	assert(Lpc17UsbDataOpen(&s_Ep, 2, In, 64));
-	assert(!Lpc17UsbDataOpen(&s_Ep, 2, In, 64));
+	assert(Lpc17UsbDataOpen(&s_Ep, EpNo, In, Mps));
+	assert(!Lpc17UsbDataOpen(&s_Ep, EpNo, In, Mps));
 }
+static void Open(bool In)
+{
+	OpenEndpoint(2, In, 64);
+}
+
+static void ReceiveBoundsTests(void)
+{
+	uint8_t output[66];
+	for (unsigned ep = 1; ep < 16; ++ep)
+	{
+		if (ep % 3 == 0 && ep != 15)
+			continue;
+		for (unsigned mps = 1; mps <= 64; ++mps)
+		{
+			if (ep % 3 != 1 && mps != 8 && mps != 16 && mps != 32 && mps != 64)
+				continue;
+			for (unsigned mask = 0; mask < 2; ++mask)
+			{
+				OpenEndpoint(ep, false, mps);
+				s_Mask = mask;
+				assert(!Lpc17UsbDataReceive(&s_Ep, output + 1, mps - 1));
+				assert(!s_Ep.Busy && s_Kicks == 0 && s_Mask == mask);
+				for (unsigned length = 0; length <= mps; ++length)
+				{
+					memset(output, 0xCC, sizeof(output));
+					s_ReadLength = length;
+					assert(Lpc17UsbDataReceive(&s_Ep, output + 1, mps));
+					Lpc17UsbDataDispatch(&s_Ep, s_Ep.Generation, 1);
+					assert(s_Completions == length + 1 && s_CompleteLength == length);
+					assert(!s_Ep.Busy && s_Mask == mask);
+					for (unsigned i = 0; i < sizeof(output); ++i)
+						assert(output[i] == (i > 0 && i <= length ? 0xA5 : 0xCC));
+				}
+				// Even a larger caller buffer must not relax the logical MPS.
+				memset(output, 0xCC, sizeof(output));
+				s_ReadLength = mps + 1;
+				unsigned faults = s_Faults;
+				assert(Lpc17UsbDataReceive(&s_Ep, output + 1, 64));
+				Lpc17UsbDataDispatch(&s_Ep, s_Ep.Generation, 1);
+				assert(s_Faults == faults + 1 && s_Cancels == 1);
+				assert(s_Completions == mps + 1 && !s_Ep.Busy && !s_Ep.Enabled);
+				assert(s_Mask == mask);
+				for (unsigned i = 0; i < sizeof(output); ++i)
+					assert(output[i] == 0xCC);
+			}
+		}
+	}
+	puts("LPC1769 all bulk/interrupt OUT endpoints, logical MPS and buffer bounds: PASS");
+}
+
 int main(void)
 {
 	for (unsigned i = 0; i < sizeof(s_Buffer); ++i)
@@ -217,5 +269,6 @@ int main(void)
 	Lpc17UsbDataForget(&s_Ep);
 	assert(s_Cancels == 1);
 	assert(s_Faults == 4);
+	ReceiveBoundsTests();
 	puts("LPC1769 data transfer segmentation, callbacks, reentrancy and retirement: PASS");
 }
