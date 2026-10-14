@@ -133,4 +133,27 @@ SOFTWARE.
 		masterOff, slaveOff, R_IIC1->ICCR1, R_IIC0->ICCR1); \
 }
 
+// Isolate slave address recognition while keeping ICE and peripheral mux on.
+// Restore the original slave address-enable register before the transfer.
+#define I2C_DEBUG_SLAVE_ICSER_TEST() \
+{ \
+	const uint8_t ser = R_IIC0->ICSER; \
+	R_IIC0->ICSER = 0U; \
+	__DSB(); \
+	for (int i = 0; i < 256; i++) \
+	{ \
+		__NOP(); \
+	} \
+	const uint8_t masterNoMatch = R_IIC1->ICCR1; \
+	const uint8_t slaveNoMatch = R_IIC0->ICCR1; \
+	R_IIC0->ICSER = ser; \
+	__DSB(); \
+	for (int i = 0; i < 256; i++) \
+	{ \
+		__NOP(); \
+	} \
+	printf("IIC0 ICSER isolation M_off=%02x S_off=%02x M_on=%02x S_on=%02x\r\n", \
+		masterNoMatch, slaveNoMatch, R_IIC1->ICCR1, R_IIC0->ICCR1); \
+}
+
 #endif // __BOARD_H__
