@@ -34,7 +34,9 @@ for i, source in enumerate(sources):
     objects.append(obj)
 elf = out / 'i2c.elf'
 exports = ['EmuI2cInit', 'EmuI2cProbe', 'EmuI2cProbeRx', 'EmuI2cWrite', 'EmuI2cRead', 'EmuI2cRx', 'EmuI2cTx', 'EmuI2cReset',
-           'EmuI2cRate', 'EmuI2cPowerOff', 'R9a02IrqDispatch', 'SystemPeriphClockGet']
+           'EmuI2cRate', 'EmuI2cPowerOff', 'EmuI2cRestartOther', 'EmuI2cSlaveInit', 'EmuI2cSlaveRate',
+           'EmuI2cSlaveReset', 'EmuI2cSlaveDisable', 'EmuI2cSlaveEnable', 'EmuI2cSlavePowerOff',
+           'EmuI2cSlaveAsMaster', 'R9a02IrqDispatch', 'SystemPeriphClockGet']
 subprocess.run([args.tool_prefix + 'g++', *arch, '--specs=nano.specs', '--specs=nosys.specs',
                 '-Wl,--gc-sections', *['-Wl,--undefined=' + name for name in exports],
                 '-L' + str(root / port / 'ldscript'), '-L' + str(root / 'RISCV/ldscript'),

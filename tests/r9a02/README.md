@@ -187,3 +187,62 @@ SO keeps the last data bit after the ACK slot of a SAU transmission or goes
 to 1. What the model cannot decide (the IICA pin direction, the SAU restart,
 SCL as CMOS or open drain, a slave stretching SCL) is for the I2CScan
 example on the board.
+
+## I2C slave (2026-10-14)
+
+`i2c_fixture.cpp` also sets up IICA0 (DevNo 0, P103 SDA, P102 SCL) as a
+slave at 0x22 with the event handler of `exemples/i2c/i2c_master_slave.cpp`,
+and `i2c_emu.py` wires it to the IICA1 master as the I2CMasterSlave example,
+with the 0x50 and 0x68 devices on the same bus. The IICA model acts as a
+slave when it is not master (24.4.4, table 24.2, 24.4.11, figures 24.29 to
+24.38): its address acknowledged whatever ACKE, the event and the SCL
+stretch at the 9th clock of the address and of each data byte, ACK of a
+received byte from ACKE set before it, IICA written to send, the master ACK
+in ACKD, WREL, which with TRC = 1 clears TRC and releases SDA; an extension
+code raises the event and stretches at the 8th clock and is acknowledged only
+with ACKE; another address after a restart raises the event at the 9th clock
+without stretch; LREL; the stop event with SPIE. A master finding SCL held by
+a slave stretch lets the CPU take its pending interrupts; when none releases
+SCL it is an anomaly.
+
+Interrupts are taken during the firmware: an event with its CLIC input on is
+taken after the register access that follows it when mstatus.MIE is 1 and its
+level is above the level running, as with the trap entry of
+`Vectors_R9A02.c`, which sets MIE again. The handler runs nested on the
+stack in use (unicorn 2 allows `emu_start` in a hook), the registers are
+restored after it.
+
+Checks, master polled and with `bIntEn` (master priority 3, slave 7), with
+and without PDR = 1 for the IICA outputs:
+
+- Slave I2CInit: IICWL and IICWH of 24.3.2 (2) (76 and 85 at fMCK 16 MHz
+  for 100 and 50 kHz, 21 and 20 at 400 kHz), IICCTL1, SVA, IICCTL0 = IICE,
+  WTIM, SPIE, both pins in output mode. Refused: polling, two addresses, 0x05
+  and 0x78, a bus held low (the module is stopped again).
+- The I2CScan scan finds 0x22, 0x50 and 0x68. The sequence of the example:
+  8 bytes written at offset 4, read back with a restart, 4 bytes read without
+  command at offset 12, with the slave events WRITE_RQST, READ_RQST with the
+  count written before the restart, COMPLETED with the count.
+- A write longer than the slave buffer (the first byte that does not fit is
+  not acknowledged), no buffer given, a read past the data (0xFF, not
+  counted), extension codes and the general call after a write left ACKE at
+  1 (not acknowledged, no event), a restart from the slave to another device
+  and back, stop events taken late, at the 2nd clock of the next address
+  (SPD 0, STD 1, COI 0: the transfer is reported, the address still
+  answered), a master call on the slave object (no start on the bus), 400
+  kHz, Reset, Disable and Enable, PowerOff.
+- The rules of the manual on the way, also for the slave: IICA written and
+  WREL only in its clock stretch, a transmission not ended by WREL while the
+  master reads, not continued after the master NACK.
+
+Driver mutations that make the check fail (15 of 16): data never
+acknowledged, data acknowledged past the buffer, bytes stored past the
+buffer, WREL instead of IICA at a read address, IICA written after the
+master NACK, no LREL after an extension code, LREL when not addressed
+without an extension code, the transmitted count not kept, the write count
+lost at a restart, SPIE off, SVA not shifted, IICE set on a busy bus, a
+master start allowed on the slave, the master widths used by the slave
+(seen at 50 kHz), no end of the transfer when not addressed. Not seen: the
+LREL right after IICE, which only matters when the bus changes between the
+idle check and IICE. The 9 master mutations of the I2C master section still
+fail the check.

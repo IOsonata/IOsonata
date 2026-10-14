@@ -22,7 +22,7 @@ the TAU and the machine timer.
 | UART (SAU UART0 to UART2), polling, interrupt and DTC TX, reception in Snooze (UART0, UART2) | `src/uart_r9a02.cpp` | UART0 Release TX at line rate in all four interrupt/DTC modes; isolated losses in both DTC modes; Snooze emulated (`tests/r9a02`) |
 | UART (UARTA0, UARTA1), polling, interrupt and DTC TX | `src/uarta_r9a02.cpp`, `include/uarta_r9a02.h` | Built, DTC emulated (`tests/r9a02`) |
 | SPI (SAU simplified SPI): master with polling, interrupt and DTC reception, slave with interrupt and DTC, slave reception in Snooze (SPI00, SPI20) | `src/spi_r9a02.cpp` | Built, slave and Snooze emulated (`tests/r9a02`) |
-| I2C master (IICA0, IICA1), polling and interrupt | `src/i2c_r9a02.cpp`, `include/i2c_r9a02.h` | Built |
+| I2C master (IICA0, IICA1), polling and interrupt; slave with interrupt | `src/i2c_r9a02.cpp`, `include/i2c_r9a02.h` | Built, master and slave emulated (`tests/r9a02`) |
 | I2C master (SAU simplified I2C IIC00 to IIC21), polling and interrupt | `src/i2c_sau_r9a02.cpp` | Built |
 | ADC (ADC12, 10 pins, temperature sensor, internal reference, scan, continuous, hardware trigger, window, Snooze) | `src/adc_r9a02.cpp`, `include/adc_r9a02.h` | Built |
 | RTC (calendar, fixed-cycle interrupt, alarm) | `src/rtc_r9a02.cpp`, `include/rtc_r9a02.h` | Built |
@@ -429,13 +429,36 @@ wires them together.
 ## I2C
 
 `I2CCfg_t.DevNo` 0 is IICA0 (SCLA0 P302 or P102, SDAA0 P303 or P103), 1 is
-IICA1 (SCLA1 P011, SDAA1 P010). Master, 7-bit addresses, standard, fast and
-fast plus modes, `IOPINOP_FUNC6` open-drain pins with external pull-ups.
+IICA1 (SCLA1 P011, SDAA1 P010). Master or slave, 7-bit addresses, standard,
+fast and fast plus modes, `IOPINOP_FUNC6` open-drain pins with external
+pull-ups (the internal pull-ups are off in output mode, 16.2.5).
 Once the IICA is enabled both pins are set in output mode, whatever direction
 the pin map gives (24.2.9). PCLKB must be 1 to 32 MHz (I2CInit fails otherwise), fast mode needs 3.5 MHz
 and fast plus 10 MHz. The IICA is enabled only with both lines high: a bus
 held low is first cleared by 9 clocks on SCL as a GPIO and a stop. In master
 reception the last byte is not acknowledged before a stop or a restart.
+
+Slave (`I2CMODE_SLAVE`, 24.4.16): `bIntEn` and one address, `NbSlaveAddr` 1,
+`SlaveAddr[0]` 0x08 to 0x77, `Rate` for the mode (digital filter, IICWL and
+IICWH of 24.3.2 (2)). The IICA acknowledges its address, then stretches SCL
+after each byte until the interrupt handles it. The events follow the other
+IOsonata slaves (RA4M1, SAM4L), slave index 0:
+`DEVINTRF_EVT_WRITE_RQST` (give the buffer with `SetWriteRqstBuffer`),
+`DEVINTRF_EVT_READ_RQST` with the count of the bytes written before a
+restart (give the data with `SetReadRqstData`), `DEVINTRF_EVT_COMPLETED` at
+the stop, or at a restart that ends a read or goes to another device, with
+the bytes received or sent from the data. A byte that does not fit the
+buffer is not acknowledged; past the data the slave sends 0xFF. Extension
+codes and the general call are not acknowledged. The master must allow
+clock stretching after each byte: an IICA master does, the SAU simplified
+I2C does not. The slave handler must run within about 8 clock periods after
+a stop, before the master ends the address of its next transfer; later the
+stop and that address are reported as one restart. With master and slave on
+the same MCU, set the slave interrupt priority above the master's: the
+master interrupt waits for the stop condition, which the slave releases. The
+slave does not clock the bus to recover it: I2CInit fails when the bus does
+not become free, Reset tries again. The I2CMasterSlave example wires IICA1
+to IICA0.
 
 DevNo 2 to 7 are the SAU simplified I2C IIC00, IIC01, IIC10, IIC11, IIC20,
 IIC21 (`i2c_sau_r9a02.cpp`): one master, no clock stretching during a byte,
