@@ -117,6 +117,7 @@ SOFTWARE.
 									 RA4M1_I2C_IER_TMOIE | RA4M1_I2C_IER_ALIE)
 #define RA4M1_I2C_IER_SLAVE_WRITE	(RA4M1_I2C_IER_RIE | RA4M1_I2C_IER_BUS)
 #define RA4M1_I2C_TRACE_MAX		10
+#define RA4M1_I2C_IRQ_TRACE_MAX	12
 #define RA4M1_I2C_IER_SLAVE_READ	(RA4M1_I2C_IER_RIE | RA4M1_I2C_IER_TIE | RA4M1_I2C_IER_BUS)
 
 // Master transfer states
@@ -198,6 +199,8 @@ typedef struct
 	uint8_t DbgOSr2;		// other IIC unit ICSR2
 	uint8_t DbgTrCnt;		// entries in DbgTr
 	uint8_t DbgTr[RA4M1_I2C_TRACE_MAX][5];	// state, ICSR2, ICCR1, other ICCR1, other ICSR2
+	uint8_t DbgIrqTraceCount;
+	uint8_t DbgIrqTrace[RA4M1_I2C_IRQ_TRACE_MAX][6];	// source, ICSR1, ICSR2, ICCR1, ICIER, slave state
 } Ra4m1I2cDev_t;
 
 static Ra4m1I2cDev_t s_Ra4m1I2cDev[RA4M1_I2C_COUNT] = {
@@ -1265,6 +1268,24 @@ static void Ra4m1I2cIrqHandler(int IntNo, void *pCtx)
 {
 	Ra4m1I2cDev_t *dev = (Ra4m1I2cDev_t *)pCtx;
 
+	/* Capture the actual RXI/TXI/TEI/EEI event and register state before
+	 * acknowledging the ICU event or reading ICDRR. Never print in an ISR.
+	 */
+	if (dev->pI2cDev != NULL &&
+		dev->pI2cDev->Cfg.Mode == I2CMODE_SLAVE &&
+		dev->DbgIrqTraceCount < RA4M1_I2C_IRQ_TRACE_MAX)
+	{
+		uint8_t *entry = dev->DbgIrqTrace[dev->DbgIrqTraceCount++];
+		entry[0] = IntNo == dev->IrqRxi ? 0U :
+			IntNo == dev->IrqTxi ? 1U :
+			IntNo == dev->IrqTei ? 2U : 3U;
+		entry[1] = dev->pReg->ICSR1;
+		entry[2] = dev->pReg->ICSR2;
+		entry[3] = dev->pReg->ICCR1;
+		entry[4] = dev->pReg->ICIER;
+		entry[5] = (uint8_t)dev->SState;
+	}
+
 	Ra4m1AcknowledgeInt((IRQn_Type)IntNo);
 	dev->DbgIrq++;
 
@@ -1595,6 +1616,19 @@ int Ra4m1I2cDump(DevIntrf_t * const pIntrf, char *Buf, int Len)
 		{
 			pos = Ra4m1I2cPutHex(Buf, pos, Len, dev->DbgTr[i][j], 2);
 			pos = Ra4m1I2cPutStr(Buf, pos, Len, j < 4 ? ":" : " ");
+		}
+	}
+
+	// Slave IRQ entry snapshots: event (0 RXI, 1 TXI, 2 TEI, 3 EEI),
+	// ICSR1, ICSR2, ICCR1, ICIER and slave state. Capped to 12 events.
+	pos = Ra4m1I2cPutStr(Buf, pos, Len, " sit=");
+
+	for (int i = 0; i < dev->DbgIrqTraceCount; i++)
+	{
+		for (int j = 0; j < 6; j++)
+		{
+			pos = Ra4m1I2cPutHex(Buf, pos, Len, dev->DbgIrqTrace[i][j], 2);
+			pos = Ra4m1I2cPutStr(Buf, pos, Len, j < 5 ? ":" : " ");
 		}
 	}
 
