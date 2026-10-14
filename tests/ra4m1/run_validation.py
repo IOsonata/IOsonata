@@ -105,8 +105,9 @@ def check_ioc():
     assert source_names == {'src/ResetEntry.c', 'src/system_ra4m1.c',
                             'src/vectors_ra4m1.c', 'src/iopincfg_ra4m1.c',
                             'src/interrupt_ra4m1.cpp', 'src/uart_ra4m1.cpp',
-                            'src/timer_ra4m1.cpp', 'src/timer.cpp',
-                            'src/cfifo.c', 'src/device_intrf.cpp', 'src/uart.cpp'}
+                            'src/i2c_ra4m1.cpp', 'src/timer_ra4m1.cpp',
+                            'src/timer.cpp', 'src/cfifo.c', 'src/device_intrf.cpp',
+                            'src/uart.cpp', 'src/i2c.cpp'}
     cxml = ET.parse(project/'.cproject').getroot()
     configs = cxml.findall('.//cconfiguration')
     assert len(configs) == 2
@@ -129,7 +130,7 @@ def check_ioc():
     wizard = json.loads((project/'wizard.json').read_text())
     assert wizard['lib'] == 'IOsonata_RA4M1' and wizard['mcu'] == 'RA4M1'
     assert wizard['lib_path'] == '${iosonata}/ARM/Renesas/RA4M1/lib/ioc/${config}'
-    print('PASS: IOC XML, eleven linked sources, target links, hard-float configurations and wizard metadata')
+    print('PASS: IOC XML, thirteen linked sources, target links, hard-float configurations and wizard metadata')
 
 
 def main():

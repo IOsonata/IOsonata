@@ -106,6 +106,8 @@ SECTIONS {
 	.rodata : ALIGN(4) 
 	{ 
 		*(.rodata .rodata.* .rodata1)
+		/* Small constants, -msmall-data-limit */
+		*(.srodata .srodata.*)
 	} > FLASH
 
 	/* Optional executable-RAM code section.
@@ -193,6 +195,11 @@ SECTIONS {
 
 		*(.jcr)
 
+		/* Small data, -msmall-data-limit, reached through gp. Here it is
+		 * copied from flash with the rest of .data. */
+		*(.sdata .sdata.* .gnu.linkonce.s.*)
+
+		. = ALIGN(4);
 		/* All data end */
 		__data_end__ = .;
 
@@ -228,12 +235,14 @@ SECTIONS {
 		__heap_start__ = __end__;
 		_pvHeapStart = .;
 		KEEP(*(.heap*))
-
-		__heap_size__ = LENGTH(RAM) * 2 / 3;
-		__HeapSize = __heap_size__;
-		__heap_end__ = __heap_start__ + __heap_size__;
-		__HeapLimit = __HeapBase + __HeapSize;
 	} > RAM
+
+	/* Two thirds of the RAM left after the static data, as gcc_arm_flash.ld.
+	 * Outside .heap so that they are byte counts, not section relative. */
+	__heap_size__ = ((__StackTop - __heap_start__) * 2 / 3) & ~3;
+	__HeapSize = __heap_size__;
+	__heap_end__ = __heap_start__ + __heap_size__;
+	__HeapLimit = __HeapBase + __HeapSize;
 
 	/* .stack_dummy section doesn't contains any symbols. It is only
 	 * used for linker to calculate size of stack sections, and assign

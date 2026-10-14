@@ -578,7 +578,7 @@
 		<link>
 			<name>include/coredev/iopinctrl.h</name>
 			<type>1</type>
-			<locationURI>PARENT-1-PROJECT_LOC/include/iopinctrl.h</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/include/iopinctrl.h</locationURI>
 		</link>
 		<link>
 			<name>include/coredev/pdm.h</name>
@@ -661,9 +661,9 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/motion/mpu9250_dmpmap.h</locationURI>
 		</link>
 		<link>
-			<name>include/miscdev/buzzer.h</name>
+			<name>include/audio/buzzer.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/miscdev/buzzer.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/include/audio/buzzer.h</locationURI>
 		</link>
 		<link>
 			<name>include/miscdev/led.h</name>
@@ -876,11 +876,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/i2c.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/coredev/iopincfg_stm32f0x.c</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/src/iopincfg_stm32f0x.c</locationURI>
-		</link>
-		<link>
 			<name>src/coredev/spi.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/spi.cpp</locationURI>
@@ -891,14 +886,24 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/timer.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/coredev/timer_stm32.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/ARM/ST/src/timer_stm32.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/timer_tim_stm32.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/ARM/ST/src/timer_tim_stm32.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/coredev/uart.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/uart.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/coredev/uart_stm32f0x.cpp</name>
+			<name>src/coredev/uart_stm32.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/src/uart_stm32f0x.cpp</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/ARM/ST/src/uart_stm32.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/motion/att.cpp</name>
@@ -916,9 +921,9 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/motion/mot_mpu9250.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/miscdev/buzzer.cpp</name>
+			<name>src/audio/buzzer.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/miscdev/buzzer.cpp</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/src/audio/buzzer.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/miscdev/led_apa102.cpp</name>
@@ -1141,11 +1146,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/storage/stdfs_littlefs.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/coredev/timer_stm32f030x8.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/src/timer_stm32f030x8.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/crypto/crypto_softaes.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_softaes.cpp</locationURI>
@@ -1154,6 +1154,11 @@
 			<name>src/crypto/crypto_softrng.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_softrng.cpp</locationURI>
+		</link>
+			<link>
+			<name>src/iopincfg_stm32.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/iopincfg_stm32.cpp</locationURI>
 		</link>
 	</linkedResources>
 </projectDescription>

@@ -41,6 +41,8 @@ SOFTWARE.
 
 #include "coredev/uart.h"
 #include "coredev/system_core_clock.h"
+#include "coredev/iopincfg.h"
+
 #include "board.h"
 
 //#define DEMO_C
@@ -51,16 +53,20 @@ SOFTWARE.
 #ifndef UART_BAUDRATE
 #define UART_BAUDRATE 1000000
 #endif
+
 #ifndef UART_INT_MODE
 #define UART_INT_MODE true
 #endif
 #ifndef UART_DMA_MODE
-#define UART_DMA_MODE true
+#define UART_DMA_MODE false
 #endif
+
 
 #ifdef MCUOSC
 McuOsc_t g_McuOsc = MCUOSC;
 #endif
+
+#define UARTFIFOSIZE CFIFO_MEMSIZE(256)
 
 #ifdef UARTFIFOSIZE
 alignas(4) static uint8_t s_UartRxFifo[UARTFIFOSIZE];
@@ -69,11 +75,13 @@ alignas(4) static uint8_t s_UartTxFifo[UARTFIFOSIZE];
 
 // This defines the s_UartPortPins map and pin count.
 // See board.h for target device specific definitions
-static const UART_PORTPINS;
+static const IOPinCfg_t s_UartPortPins[] = UART_PINS;
+#define UART_PORTPIN_COUNT (sizeof(s_UartPortPins) / sizeof(s_UartPortPins[0]))
+
 
 // UART configuration data
 const UARTCfg_t g_UartCfg = {
-	.DevNo = UART_NO,
+	.DevNo = UART_DEVNO,
 	.pIOPinMap = s_UartPortPins,
 	.NbIOPins = UART_PORTPIN_COUNT,
 	.Rate = UART_BAUDRATE,
@@ -125,11 +133,6 @@ int main()
 	g_UartInitOk = g_Uart.Init(g_UartCfg);
 #endif
 	if (!g_UartInitOk) return 1;
-#ifdef DEMO_C
-	UARTprintf(&g_UartDev, "UART Loopback Test\r\n");
-#else
-	g_Uart.printf("UART Loopback Test\r\n");
-#endif
 
 	int pending = 0;
 	int offset = 0;

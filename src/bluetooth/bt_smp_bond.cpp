@@ -75,8 +75,44 @@ SOFTWARE.
 #endif
 
 #define BT_SMP_BOND_RECORD_MAGIC		0x424D5053U	// "SMPB" little-endian
-#define BT_SMP_BOND_RECORD_VERSION_OLD	1U
-#define BT_SMP_BOND_RECORD_VERSION		2U
+#define BT_SMP_BOND_RECORD_VERSION_V1	1U
+#define BT_SMP_BOND_RECORD_VERSION_V2	2U
+#define BT_SMP_BOND_RECORD_VERSION		3U
+
+// Versions 1 and 2 predate the second legacy LTK direction. Keep their exact
+// target-ABI layout here so an installed 0.13 prerelease can migrate its bond
+// records instead of forcing every peer to pair again.
+typedef struct __Bt_Smp_Keys_V2 {
+	uint8_t  Ltk[16];
+	uint8_t  Irk[16];
+	uint8_t  Csrk[16];
+	uint64_t Rand;
+	uint16_t Ediv;
+	uint8_t  EncKeySize;
+	uint8_t  IdAddrType;
+	uint8_t  IdAddr[6];
+	bool     bAuthenticated;
+	bool     bSc;
+	bool     bValid;
+} BtSmpKeysV2_t;
+
+typedef struct __Bt_Smp_Bond_V2 {
+	bool		bValid;
+	uint8_t		PeerAddrType;
+	uint8_t		PeerAddr[6];
+	BtSmpKeysV2_t Keys;
+	uint8_t		NbCccd;
+	BtGattCccdState_t Cccd[BT_GATT_CCCD_STATE_MAX];
+	uint32_t	SignCounter;
+} BtSmpBondV2_t;
+
+typedef struct __Bt_Smp_Bond_Record_V2 {
+	uint32_t	Magic;
+	uint16_t	Version;
+	uint16_t	Length;
+	uint32_t	Crc;
+	BtSmpBondV2_t Bond;
+} BtSmpBondRecordV2_t;
 
 typedef struct __Bt_Smp_Bond {
 	bool		bValid;			//!< Slot in use
@@ -165,6 +201,20 @@ static uint32_t BtSmpBondCrc32(const void *pData, size_t Len)
 	return ~crc;
 }
 
+static bool BtSmpBondKeyPresent(const uint8_t Key[16])
+{
+	if (Key == nullptr)
+	{
+		return false;
+	}
+	uint8_t nz = 0;
+	for (int i = 0; i < 16; i++)
+	{
+		nz |= Key[i];
+	}
+	return nz != 0;
+}
+
 static bool BtSmpBondHasCsrk(const BtSmpBond_t *pBond)
 {
 	if (pBond == nullptr)
@@ -249,6 +299,12 @@ int BtSmpBondSlotCount(void)
 size_t BtSmpBondRecordSize(void)
 {
 	return sizeof(BtSmpBondRecord_t);
+}
+
+bool BtSmpBondRecordSizeValid(size_t Len)
+{
+	return Len == sizeof(BtSmpBondRecord_t) ||
+		   Len == sizeof(BtSmpBondRecordV2_t);
 }
 
 // Build one coherent slot image. The deferred persistence path can run from a
@@ -396,42 +452,104 @@ static bool BtSmpBondFieldsValid(const BtSmpBond_t *p)
 		p->Keys.EncKeySize <= BT_SMP_MAX_ENC_KEY_SIZE;
 }
 
+static bool BtSmpBondFieldsV2Valid(const BtSmpBondV2_t *p)
+{
+	return p != nullptr && p->bValid && p->Keys.bValid &&
+		p->NbCccd <= BT_GATT_CCCD_STATE_MAX &&
+		p->PeerAddrType <= BTADDR_TYPE_RANDOM_STATIC &&
+		p->Keys.EncKeySize >= BT_SMP_CFG_MIN_ENC_KEY_SIZE &&
+		p->Keys.EncKeySize <= BT_SMP_MAX_ENC_KEY_SIZE;
+}
+
+static void BtSmpBondV2Convert(BtSmpBond_t *pDst, const BtSmpBondV2_t *pSrc)
+{
+	memset(pDst, 0, sizeof(*pDst));
+	pDst->bValid = pSrc->bValid;
+	pDst->PeerAddrType = pSrc->PeerAddrType;
+	memcpy(pDst->PeerAddr, pSrc->PeerAddr, sizeof(pDst->PeerAddr));
+	memcpy(pDst->Keys.Ltk, pSrc->Keys.Ltk, sizeof(pDst->Keys.Ltk));
+	memcpy(pDst->Keys.Irk, pSrc->Keys.Irk, sizeof(pDst->Keys.Irk));
+	memcpy(pDst->Keys.Csrk, pSrc->Keys.Csrk, sizeof(pDst->Keys.Csrk));
+	pDst->Keys.Rand = pSrc->Keys.Rand;
+	pDst->Keys.Ediv = pSrc->Keys.Ediv;
+	pDst->Keys.EncKeySize = pSrc->Keys.EncKeySize;
+	pDst->Keys.IdAddrType = pSrc->Keys.IdAddrType;
+	memcpy(pDst->Keys.IdAddr, pSrc->Keys.IdAddr, sizeof(pDst->Keys.IdAddr));
+	pDst->Keys.bAuthenticated = pSrc->Keys.bAuthenticated;
+	pDst->Keys.bSc = pSrc->Keys.bSc;
+	pDst->Keys.bValid = pSrc->Keys.bValid;
+	pDst->NbCccd = pSrc->NbCccd;
+	memcpy(pDst->Cccd, pSrc->Cccd, sizeof(pDst->Cccd));
+	pDst->SignCounter = pSrc->SignCounter;
+}
+
 void BtSmpBondRestore(int Slot, const void *pBond, size_t Len)
 {
 	if (Slot < 0 || Slot >= BT_SMP_BOND_MAX || pBond == nullptr ||
-		Len != sizeof(BtSmpBondRecord_t))
+		!BtSmpBondRecordSizeValid(Len))
 	{
 		return;
 	}
 
 	BtSmpBondTableAttach();
 
-	BtSmpBondRecord_t record;
-	memcpy(&record, pBond, sizeof(record));
-	uint32_t savedCrc = record.Crc;
-	record.Crc = 0U;
-	bool versionValid = record.Version == BT_SMP_BOND_RECORD_VERSION ||
-		record.Version == BT_SMP_BOND_RECORD_VERSION_OLD;
-	bool valid = record.Magic == BT_SMP_BOND_RECORD_MAGIC && versionValid &&
-		record.Length == sizeof(record) &&
-		savedCrc == BtSmpBondCrc32(&record, sizeof(record)) &&
-		BtSmpBondFieldsValid(&record.Bond);
-	bool migrate = valid && record.Version == BT_SMP_BOND_RECORD_VERSION_OLD;
-	bool persist = false;
+	BtSmpBond_t restored;
+	memset(&restored, 0, sizeof(restored));
+	bool valid = false;
+	bool migrate = false;
+	bool retireCsrk = false;
 
+	if (Len == sizeof(BtSmpBondRecord_t))
+	{
+		BtSmpBondRecord_t record;
+		memcpy(&record, pBond, sizeof(record));
+		uint32_t savedCrc = record.Crc;
+		record.Crc = 0U;
+		valid = record.Magic == BT_SMP_BOND_RECORD_MAGIC &&
+			record.Version == BT_SMP_BOND_RECORD_VERSION &&
+			record.Length == sizeof(record) &&
+			savedCrc == BtSmpBondCrc32(&record, sizeof(record)) &&
+			BtSmpBondFieldsValid(&record.Bond);
+		if (valid)
+		{
+			restored = record.Bond;
+		}
+		CryptoSecureWipe(&record, sizeof(record));
+	}
+	else
+	{
+		BtSmpBondRecordV2_t record;
+		memcpy(&record, pBond, sizeof(record));
+		uint32_t savedCrc = record.Crc;
+		record.Crc = 0U;
+		bool oldVersion = record.Version == BT_SMP_BOND_RECORD_VERSION_V1 ||
+			record.Version == BT_SMP_BOND_RECORD_VERSION_V2;
+		valid = record.Magic == BT_SMP_BOND_RECORD_MAGIC && oldVersion &&
+			record.Length == sizeof(record) &&
+			savedCrc == BtSmpBondCrc32(&record, sizeof(record)) &&
+			BtSmpBondFieldsV2Valid(&record.Bond);
+		if (valid)
+		{
+			BtSmpBondV2Convert(&restored, &record.Bond);
+			migrate = true;
+			retireCsrk = record.Version == BT_SMP_BOND_RECORD_VERSION_V1;
+		}
+		CryptoSecureWipe(&record, sizeof(record));
+	}
+
+	bool persist = false;
 	uint32_t state = BtSmpBondTableEnter();
 	memset(&s_pBtSmpBondTable[Slot], 0, sizeof(s_pBtSmpBondTable[Slot]));
 	BtSmpSignStateReset(Slot, 0U, 0U);
 
 	if (valid)
 	{
-		memcpy(&s_pBtSmpBondTable[Slot], &record.Bond, sizeof(record.Bond));
+		memcpy(&s_pBtSmpBondTable[Slot], &restored, sizeof(restored));
 
-		if (migrate)
+		if (retireCsrk)
 		{
 			CryptoSecureWipe(s_pBtSmpBondTable[Slot].Keys.Csrk, 16);
 			s_pBtSmpBondTable[Slot].SignCounter = 0U;
-			persist = true;
 		}
 		else
 		{
@@ -439,10 +557,10 @@ void BtSmpBondRestore(int Slot, const void *pBond, size_t Len)
 			BtSmpSignStateReset(Slot, high, high);
 			persist = BtSmpSignCounterPrepare(Slot);
 		}
+		persist = persist || migrate;
 	}
 	BtSmpBondTableExit(state);
-
-	CryptoSecureWipe(&record, sizeof(record));
+	CryptoSecureWipe(&restored, sizeof(restored));
 
 	if (persist)
 	{
@@ -491,6 +609,70 @@ static bool BtSmpAddrIdentityType(uint8_t AddrType, const uint8_t Addr[6],
 	}
 
 	return false;
+}
+
+bool BtSmpBondIdentityGet(int Slot, uint8_t *pAddrType, uint8_t Addr[6],
+						 uint8_t Irk[16])
+{
+	if (Slot < 0 || Slot >= BT_SMP_BOND_MAX || pAddrType == nullptr ||
+		Addr == nullptr || Irk == nullptr || s_pBtSmpBondTable == nullptr)
+	{
+		return false;
+	}
+
+	uint32_t state = BtSmpBondTableEnter();
+	const BtSmpBond_t *pBond = &s_pBtSmpBondTable[Slot];
+	bool valid = pBond->bValid && BtSmpBondHasIrk(pBond);
+	uint8_t addrType = 0;
+	uint8_t addr[6] = {};
+	uint8_t irk[16] = {};
+
+	if (valid)
+	{
+		uint8_t identityType;
+		uint8_t idNonzero = 0;
+		uint8_t peerNonzero = 0;
+		for (int i = 0; i < 6; i++)
+		{
+			idNonzero |= pBond->Keys.IdAddr[i];
+			peerNonzero |= pBond->PeerAddr[i];
+		}
+		if (idNonzero != 0 &&
+			BtSmpAddrIdentityType(pBond->Keys.IdAddrType,
+								  pBond->Keys.IdAddr, &identityType))
+		{
+			addrType = identityType;
+			memcpy(addr, pBond->Keys.IdAddr, sizeof(addr));
+		}
+		else if (peerNonzero != 0 &&
+			BtSmpAddrIdentityType(pBond->PeerAddrType,
+									 pBond->PeerAddr, &identityType))
+		{
+			addrType = identityType;
+			memcpy(addr, pBond->PeerAddr, sizeof(addr));
+		}
+		else
+		{
+			valid = false;
+		}
+		if (valid)
+		{
+			memcpy(irk, pBond->Keys.Irk, sizeof(irk));
+		}
+	}
+	BtSmpBondTableExit(state);
+
+	if (!valid)
+	{
+		CryptoSecureWipe(irk, sizeof(irk));
+		return false;
+	}
+
+	*pAddrType = addrType;
+	memcpy(Addr, addr, sizeof(addr));
+	memcpy(Irk, irk, sizeof(irk));
+	CryptoSecureWipe(irk, sizeof(irk));
+	return true;
 }
 
 static int BtSmpBondFindByAddr(uint8_t AddrType, const uint8_t Addr[6])
@@ -564,12 +746,15 @@ static int BtSmpBondFind(uint16_t ConnHdl, uint64_t Rand, uint16_t Ediv)
 
 	if (Ediv != 0U || Rand != 0U)
 	{
+		// A controller LTK request names the LTK this device distributed
+		// while it was the peripheral. The peer-distributed tuple is used
+		// when this device later acts as the central and starts encryption.
 		for (int i = 0; i < BT_SMP_BOND_MAX; i++)
 		{
 			if (s_pBtSmpBondTable[i].bValid &&
 				!s_pBtSmpBondTable[i].Keys.bSc &&
-				s_pBtSmpBondTable[i].Keys.Ediv == Ediv &&
-				s_pBtSmpBondTable[i].Keys.Rand == Rand)
+				s_pBtSmpBondTable[i].Keys.LocalEdiv == Ediv &&
+				s_pBtSmpBondTable[i].Keys.LocalRand == Rand)
 			{
 				return i;
 			}
@@ -580,6 +765,294 @@ static int BtSmpBondFind(uint16_t ConnHdl, uint64_t Rand, uint16_t Ediv)
 	BtDevice_t *pPeer = BtPeerFindByHdl(ConnHdl);
 	return pPeer != nullptr ?
 		BtSmpBondFindByAddr(pPeer->Conn.PeerAddrType, pPeer->Conn.PeerAddr) : -1;
+}
+
+// ---------------------------------------------------------------------------
+// Repeated pairing attempts (Core Vol 3 Part H 2.3.6)
+// ---------------------------------------------------------------------------
+// The Core rule is claimant/identity scoped, not connection-handle scoped.
+// Keep the backoff in RAM across disconnects. This deliberately is not written
+// to NVM: an unauthenticated radio peer must not be able to consume flash
+// endurance by intentionally failing pairing.
+
+typedef struct __Bt_Smp_Repeat_Entry {
+	bool InUse;
+	uint8_t AddrType;
+	uint8_t Addr[6];
+	uint8_t Level;			//!< exponent for the next failed pairing
+	uint32_t LastFailure;
+	uint32_t NextAllowed;
+} BtSmpRepeatEntry_t;
+
+static BtSmpRepeatEntry_t s_BtSmpRepeat[BT_SMP_REPEAT_TRACK_MAX];
+// Used only when every exact identity slot still has an active penalty. This
+// prevents address churn from evicting a claimant that is inside its required
+// waiting interval. It is intentionally shared: saturation is already an
+// attack condition, so fail closed briefly rather than weaken an existing
+// identity penalty.
+static BtSmpRepeatEntry_t s_BtSmpRepeatOverflow;
+
+static bool BtSmpTimeBefore(uint32_t Now, uint32_t Deadline)
+{
+	return (int32_t)(Now - Deadline) < 0;
+}
+
+static bool BtSmpRepeatAddrZero(const uint8_t Addr[6])
+{
+	uint8_t v = 0;
+	for (int i = 0; i < 6; i++) { v |= Addr[i]; }
+	return v == 0;
+}
+
+static uint32_t BtSmpRepeatWait(uint8_t Level)
+{
+	uint32_t wait = BT_SMP_REPEAT_MIN_WAIT_MS;
+	while (Level-- != 0U && wait < BT_SMP_REPEAT_MAX_WAIT_MS)
+	{
+		if (wait > BT_SMP_REPEAT_MAX_WAIT_MS / 2U)
+		{
+			return BT_SMP_REPEAT_MAX_WAIT_MS;
+		}
+		wait *= 2U;
+	}
+	return wait > BT_SMP_REPEAT_MAX_WAIT_MS ? BT_SMP_REPEAT_MAX_WAIT_MS : wait;
+}
+
+// Reduce the future penalty exponentially after quiet periods. The current
+// deadline is never extended by maintenance; with the default one-hour decay
+// and one-hour maximum it has already expired before the first decay step.
+static void BtSmpRepeatDecay(BtSmpRepeatEntry_t *p, uint32_t Now)
+{
+	if (p == nullptr || !p->InUse || p->Level == 0U)
+	{
+		return;
+	}
+
+	uint32_t quiet = Now - p->LastFailure;
+	uint32_t steps = quiet / BT_SMP_REPEAT_DECAY_MS;
+	if (steps == 0U)
+	{
+		return;
+	}
+
+	uint8_t dec = steps > p->Level ? p->Level : (uint8_t)steps;
+	p->Level = (uint8_t)(p->Level - dec);
+	p->LastFailure += (uint32_t)dec * BT_SMP_REPEAT_DECAY_MS;
+}
+
+// Caller holds the bond/attempt lock. A known RPA is resolved by the bond
+// table. Once an identity address was distributed use that stable identity,
+// so a later connection on a different RPA reaches the same penalty.
+static void BtSmpRepeatNormalizeLocked(uint8_t *pType, uint8_t Addr[6])
+{
+	int slot = BtSmpBondFindByAddr(*pType, Addr);
+	if (slot < 0 || s_pBtSmpBondTable == nullptr)
+	{
+		return;
+	}
+
+	const BtSmpBond_t *pBond = &s_pBtSmpBondTable[slot];
+	uint8_t idType;
+	if (!BtSmpRepeatAddrZero(pBond->Keys.IdAddr) &&
+		BtSmpAddrIdentityType(pBond->Keys.IdAddrType, pBond->Keys.IdAddr, &idType))
+	{
+		*pType = idType;
+		memcpy(Addr, pBond->Keys.IdAddr, 6);
+	}
+	else if (BtSmpAddrIdentityType(pBond->PeerAddrType, pBond->PeerAddr, &idType))
+	{
+		*pType = idType;
+		memcpy(Addr, pBond->PeerAddr, 6);
+	}
+}
+
+static bool BtSmpRepeatRawIdentity(uint16_t ConnHdl, uint8_t *pType, uint8_t Addr[6])
+{
+	BtDevice_t *pPeer = BtPeerFindByHdl(ConnHdl);
+	if (pPeer == nullptr || pType == nullptr || Addr == nullptr)
+	{
+		return false;
+	}
+	*pType = pPeer->Conn.PeerAddrType;
+	memcpy(Addr, pPeer->Conn.PeerAddr, 6);
+	return true;
+}
+
+static int BtSmpRepeatFind(uint8_t Type, const uint8_t Addr[6])
+{
+	for (int i = 0; i < BT_SMP_REPEAT_TRACK_MAX; i++)
+	{
+		if (s_BtSmpRepeat[i].InUse && s_BtSmpRepeat[i].AddrType == Type &&
+			memcmp(s_BtSmpRepeat[i].Addr, Addr, 6) == 0)
+		{
+			return i;
+		}
+	}
+	return -1;
+}
+
+static void BtSmpRepeatRecordFailure(BtSmpRepeatEntry_t *p, uint32_t Now)
+{
+	BtSmpRepeatDecay(p, Now);
+	uint32_t wait = BtSmpRepeatWait(p->Level);
+	p->LastFailure = Now;
+	p->NextAllowed = Now + wait;
+
+	if (p->Level != 0xFFU)
+	{
+		uint8_t next = (uint8_t)(p->Level + 1U);
+		if (BtSmpRepeatWait(next) > wait)
+		{
+			p->Level = next;
+		}
+	}
+}
+
+bool BtSmpPairingAttemptAllowed(uint16_t ConnHdl, uint32_t Now)
+{
+	uint8_t type;
+	uint8_t addr[6];
+	if (!BtSmpRepeatRawIdentity(ConnHdl, &type, addr))
+	{
+		return false;
+	}
+
+	uint32_t state = BtSmpBondTableEnter();
+	BtSmpRepeatNormalizeLocked(&type, addr);
+	int i = BtSmpRepeatFind(type, addr);
+	bool allowed;
+	if (i >= 0)
+	{
+		BtSmpRepeatDecay(&s_BtSmpRepeat[i], Now);
+		allowed = !BtSmpTimeBefore(Now, s_BtSmpRepeat[i].NextAllowed);
+	}
+	else
+	{
+		BtSmpRepeatDecay(&s_BtSmpRepeatOverflow, Now);
+		allowed = !s_BtSmpRepeatOverflow.InUse ||
+			!BtSmpTimeBefore(Now, s_BtSmpRepeatOverflow.NextAllowed);
+	}
+	BtSmpBondTableExit(state);
+	return allowed;
+}
+
+void BtSmpPairingAttemptFailed(uint16_t ConnHdl, uint32_t Now)
+{
+	uint8_t type;
+	uint8_t addr[6];
+	if (!BtSmpRepeatRawIdentity(ConnHdl, &type, addr))
+	{
+		return;
+	}
+
+	uint32_t state = BtSmpBondTableEnter();
+	BtSmpRepeatNormalizeLocked(&type, addr);
+	int i = BtSmpRepeatFind(type, addr);
+	if (i < 0)
+	{
+		// Never evict a claimant whose waiting interval is still active. A
+		// different-address attacker could otherwise cycle through the bounded
+		// table and erase its own earlier penalty. Prefer a free slot, then the
+		// oldest expired slot.
+		uint32_t oldestAge = 0;
+		int victim = -1;
+		for (int n = 0; n < BT_SMP_REPEAT_TRACK_MAX; n++)
+		{
+			if (!s_BtSmpRepeat[n].InUse)
+			{
+				victim = n;
+				break;
+			}
+
+			BtSmpRepeatDecay(&s_BtSmpRepeat[n], Now);
+			if (!BtSmpTimeBefore(Now, s_BtSmpRepeat[n].NextAllowed))
+			{
+				uint32_t age = Now - s_BtSmpRepeat[n].LastFailure;
+				if (victim < 0 || age > oldestAge)
+				{
+					victim = n;
+					oldestAge = age;
+				}
+			}
+		}
+
+		if (victim < 0)
+		{
+			if (!s_BtSmpRepeatOverflow.InUse)
+			{
+				memset(&s_BtSmpRepeatOverflow, 0, sizeof(s_BtSmpRepeatOverflow));
+				s_BtSmpRepeatOverflow.InUse = true;
+			}
+			BtSmpRepeatRecordFailure(&s_BtSmpRepeatOverflow, Now);
+			BtSmpBondTableExit(state);
+			return;
+		}
+
+		i = victim;
+		memset(&s_BtSmpRepeat[i], 0, sizeof(s_BtSmpRepeat[i]));
+		s_BtSmpRepeat[i].InUse = true;
+		s_BtSmpRepeat[i].AddrType = type;
+		memcpy(s_BtSmpRepeat[i].Addr, addr, 6);
+	}
+
+	BtSmpRepeatRecordFailure(&s_BtSmpRepeat[i], Now);
+	BtSmpBondTableExit(state);
+}
+
+void BtSmpPairingAttemptSucceeded(uint16_t ConnHdl)
+{
+	uint8_t type;
+	uint8_t addr[6];
+	if (!BtSmpRepeatRawIdentity(ConnHdl, &type, addr))
+	{
+		return;
+	}
+
+	uint8_t rawType = type;
+	uint8_t rawAddr[6];
+	memcpy(rawAddr, addr, 6);
+
+	uint32_t state = BtSmpBondTableEnter();
+	BtSmpRepeatNormalizeLocked(&type, addr);
+
+	// Success does not erase the history. Core Vol 3 Part H 2.3.6 requires
+	// the waiting interval to decrease exponentially only after a period with
+	// no new failures. A successful attempt may, however, reveal the claimant's
+	// stable identity (IRK / identity address). Move the existing raw-address
+	// penalty to that identity so an RPA change cannot bypass the history.
+	if (rawType != type || memcmp(rawAddr, addr, 6) != 0)
+	{
+		int raw = BtSmpRepeatFind(rawType, rawAddr);
+		int normalized = BtSmpRepeatFind(type, addr);
+
+		if (raw >= 0 && normalized < 0)
+		{
+			s_BtSmpRepeat[raw].AddrType = type;
+			memcpy(s_BtSmpRepeat[raw].Addr, addr, 6);
+		}
+		else if (raw >= 0 && normalized >= 0 && raw != normalized)
+		{
+			// Both names already have history. Keep the stronger history on
+			// the stable identity. At equal level the more recent failure is
+			// stricter for the subsequent quiet-time decay.
+			BtSmpRepeatEntry_t *pRaw = &s_BtSmpRepeat[raw];
+			BtSmpRepeatEntry_t *pNorm = &s_BtSmpRepeat[normalized];
+			if (pRaw->Level > pNorm->Level ||
+				(pRaw->Level == pNorm->Level &&
+				 (int32_t)(pRaw->LastFailure - pNorm->LastFailure) > 0))
+			{
+				uint8_t idType = pNorm->AddrType;
+				uint8_t idAddr[6];
+				memcpy(idAddr, pNorm->Addr, 6);
+				*pNorm = *pRaw;
+				pNorm->AddrType = idType;
+				memcpy(pNorm->Addr, idAddr, 6);
+			}
+			memset(pRaw, 0, sizeof(*pRaw));
+		}
+	}
+
+	BtSmpBondTableExit(state);
 }
 
 static int BtSmpBondAllocSlot(void)
@@ -790,18 +1263,38 @@ bool BtSmpBondLtkLookup(uint16_t ConnHdl, uint64_t Rand,
 	{
 		return false;
 	}
+
 	BtSmpKeys_t keys;
 	bool found = BtSmpBondKeysLookup(ConnHdl, Rand, Ediv, &keys);
+	bool usable = false;
 	if (found)
 	{
-		memcpy(Ltk, keys.Ltk, 16);
+		if (keys.bSc)
+		{
+			// Secure Connections has one derived LTK and a zero master id.
+			if (Rand == 0U && Ediv == 0U &&
+				BtSmpBondKeyPresent(keys.Ltk))
+			{
+				memcpy(Ltk, keys.Ltk, 16);
+				usable = true;
+			}
+		}
+		else if (keys.LocalRand == Rand && keys.LocalEdiv == Ediv &&
+				 BtSmpBondKeyPresent(keys.LocalLtk))
+		{
+			// Controller LTK requests arrive when this device is the
+			// peripheral, so answer with the LTK this device distributed.
+			memcpy(Ltk, keys.LocalLtk, 16);
+			usable = true;
+		}
 	}
-	else
+
+	if (!usable)
 	{
 		CryptoSecureWipe(Ltk, 16);
 	}
 	CryptoSecureWipe(&keys, sizeof(keys));
-	return found;
+	return usable;
 }
 
 static bool BtSmpBondedImpl(uint16_t ConnHdl)

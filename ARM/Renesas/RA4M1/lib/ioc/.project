@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <projectDescription>
 	<name>IOsonata_RA4M1</name>
-	<comment>Native RA4M1 startup, GPIO, ICU, UART and timer library; no board or FSP runtime dependency.</comment>
+	<comment>Native RA4M1 startup, GPIO, ICU, UART, timer and I2C library; no board or FSP runtime dependency.</comment>
 	<projects/>
 	<buildSpec>
 		<buildCommand>
@@ -78,16 +78,6 @@
 			<locationURI>PARENT-2-PROJECT_LOC/src/vectors_ra4m1.c</locationURI>
 		</link>
 		<link>
-			<name>src/ra4m1_startup_regs.h</name>
-			<type>1</type>
-			<locationURI>PARENT-2-PROJECT_LOC/src/ra4m1_startup_regs.h</locationURI>
-		</link>
-		<link>
-			<name>include/ra4m1_ioregs.h</name>
-			<type>1</type>
-			<locationURI>PARENT-2-PROJECT_LOC/include/ra4m1_ioregs.h</locationURI>
-		</link>
-		<link>
 			<name>include/iopinctrl.h</name>
 			<type>1</type>
 			<locationURI>PARENT-2-PROJECT_LOC/include/iopinctrl.h</locationURI>
@@ -113,14 +103,9 @@
 			<locationURI>PARENT-2-PROJECT_LOC/src/uart_ra4m1.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/ra4m1_uart_regs.h</name>
+			<name>src/i2c_ra4m1.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-2-PROJECT_LOC/src/ra4m1_uart_regs.h</locationURI>
-		</link>
-		<link>
-			<name>src/ra4m1_uart_baud.h</name>
-			<type>1</type>
-			<locationURI>PARENT-2-PROJECT_LOC/src/ra4m1_uart_baud.h</locationURI>
+			<locationURI>PARENT-2-PROJECT_LOC/src/i2c_ra4m1.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/cfifo.c</name>
@@ -138,14 +123,14 @@
 			<locationURI>PARENT-5-PROJECT_LOC/src/coredev/uart.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/i2c.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/src/coredev/i2c.cpp</locationURI>
+		</link>
+		<link>
 			<name>include/timer_ra4m1.h</name>
 			<type>1</type>
 			<locationURI>PARENT-2-PROJECT_LOC/include/timer_ra4m1.h</locationURI>
-		</link>
-		<link>
-			<name>src/ra4m1_timer_regs.h</name>
-			<type>1</type>
-			<locationURI>PARENT-2-PROJECT_LOC/src/ra4m1_timer_regs.h</locationURI>
 		</link>
 		<link>
 			<name>src/timer_ra4m1.cpp</name>

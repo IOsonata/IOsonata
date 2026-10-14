@@ -33,10 +33,11 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ----------------------------------------------------------------------------*/
 
 #include "lpc_iap.h"
+#include "coredev/interrupt.h"
 
-#ifdef LPC11XX_SERIES
+#if defined(LPC11XX_SERIES) || defined(LPC1769)
 #define IAP_LOCATION 0x1fff1ff1
-#elif defined(LPC54605_SERIES)
+#elif defined(LPC54605_SERIES) || defined(LPC54628_SERIES)
 #define IAP_LOCATION 0x03000205
 #endif
 
@@ -48,18 +49,34 @@ extern uint32_t SystemCoreClock;
 IAPENTRY IapEntry = (IAPENTRY)IAP_LOCATION;
 //IAPENTRY1 IapEntry1 = (IAPENTRY1)IAP_LOCATION;
 
+// Keep ROM calls protected while preserving a caller's outer critical section.
+static void IapCall(IAP_CMD_STATUS *pCmd, IAP_CMD_STATUS *pRes)
+{
+	uint32_t state = DisableInterrupt();
+
+	IapEntry(pCmd, pRes);
+	EnableInterrupt(state);
+}
+
 IAPSTATUS IAPReadFactorySettings(uint32_t RegAddr, uint32_t *pBuff)
 {
 	IAP_CMD_STATUS cmd;
 	IAP_CMD_STATUS res;
 
+	if (pBuff == 0)
+	{
+		return IAPSTATUS_PARAM_ERROR;
+	}
 
 	cmd.CmdStatus = IAPCMD_READ_FACTORY_SETTINGS;
 	cmd.Data[0] = RegAddr;
 	cmd.Data[1] = (uint32_t)pBuff;
 
-	IapEntry(&cmd, &res);
-	*pBuff = res.Data[0];
+	IapCall(&cmd, &res);
+	if (res.CmdStatus == IAPSTATUS_SUCCESS)
+	{
+		*pBuff = res.Data[0];
+	}
 
 	return res.CmdStatus;
 }
@@ -74,7 +91,7 @@ IAPSTATUS IAPPrepSectWrite(int StartSect, int EndSect)
 	cmd.Data[0] = StartSect;
 	cmd.Data[1] = EndSect;
 
-	IapEntry(&cmd, &res);
+	IapCall(&cmd, &res);
 
 	return res.CmdStatus;
 }
@@ -90,7 +107,7 @@ IAPSTATUS IAPCopyRamToFlash(uint8_t *pDst, uint8_t *pSrc, int Size)
 	cmd.Data[2] = Size;
 	cmd.Data[3] = SystemCoreClock / 1000;
 
-	IapEntry(&cmd, &res);
+	IapCall(&cmd, &res);
 
 	return res.CmdStatus;
 }
@@ -105,7 +122,7 @@ IAPSTATUS IAPEraseSector(int StartSect, int EndSect)
 	cmd.Data[1] = EndSect;
 	cmd.Data[2] = SystemCoreClock / 1000;
 
-	IapEntry(&cmd, &res);
+	IapCall(&cmd, &res);
 
 	return res.CmdStatus;
 }
@@ -114,11 +131,16 @@ IAPSTATUS IAPBlankCheck(int StartSect, int EndSect, IAP_CMD_STATUS *pRes)
 {
 	IAP_CMD_STATUS cmd;
 
+	if (pRes == 0)
+	{
+		return IAPSTATUS_PARAM_ERROR;
+	}
+
 	cmd.CmdStatus = IAPCMD_BLANK_CHECK;
 	cmd.Data[0] = StartSect;
 	cmd.Data[1] = EndSect;
 
-	IapEntry(&cmd, pRes);
+	IapCall(&cmd, pRes);
 
 	return pRes->CmdStatus;
 }
@@ -127,9 +149,14 @@ IAPSTATUS IAPReadPartId(IAP_CMD_STATUS *pRes)
 {
 	IAP_CMD_STATUS cmd;
 
+	if (pRes == 0)
+	{
+		return IAPSTATUS_PARAM_ERROR;
+	}
+
 	cmd.CmdStatus = IAPCMD_READ_PARTID;
 
-	IapEntry(&cmd, pRes);
+	IapCall(&cmd, pRes);
 
 	return pRes->CmdStatus;
 }
@@ -138,9 +165,14 @@ IAPSTATUS IAPReadBootCodeVers(IAP_CMD_STATUS *pRes)
 {
 	IAP_CMD_STATUS cmd;
 
+	if (pRes == 0)
+	{
+		return IAPSTATUS_PARAM_ERROR;
+	}
+
 	cmd.CmdStatus = IAPCMD_READ_BOOTCODE_VER;
 
-	IapEntry(&cmd, pRes);
+	IapCall(&cmd, pRes);
 
 	return pRes->CmdStatus;
 }
@@ -149,12 +181,17 @@ IAPSTATUS IAPCompare(uint8_t *pDst, uint8_t *pSrc, int Size, IAP_CMD_STATUS *pRe
 {
 	IAP_CMD_STATUS cmd;
 
+	if (pRes == 0)
+	{
+		return IAPSTATUS_PARAM_ERROR;
+	}
+
 	cmd.CmdStatus = IAPCMD_COMPARE;
 	cmd.Data[0] = (uint32_t)pDst;
 	cmd.Data[1] = (uint32_t)pSrc;
 	cmd.Data[2] = Size;
 
-	IapEntry(&cmd, pRes);
+	IapCall(&cmd, pRes);
 
 	return pRes->CmdStatus;
 }
@@ -166,7 +203,7 @@ IAPSTATUS IAPJumpISP()
 
 	cmd.CmdStatus = IAPCMD_INVOKE_ISP;
 
-	IapEntry(&cmd, &res);
+	IapCall(&cmd, &res);
 
 	return res.CmdStatus;
 }
@@ -175,9 +212,14 @@ IAPSTATUS IAPReadUID(IAP_CMD_STATUS *pRes)
 {
 	IAP_CMD_STATUS cmd;
 
+	if (pRes == 0)
+	{
+		return IAPSTATUS_PARAM_ERROR;
+	}
+
 	cmd.CmdStatus = IAPCMD_READ_UID;
 
-	IapEntry(&cmd, pRes);
+	IapCall(&cmd, pRes);
 
 	return pRes->CmdStatus;
 }
@@ -192,7 +234,7 @@ IAPSTATUS IAPErasePage(int StartPage, int EndPage)
 	cmd.Data[1] = EndPage;
 	cmd.Data[2] = SystemCoreClock / 1000;
 
-	IapEntry(&cmd, &res);
+	IapCall(&cmd, &res);
 
 	return res.CmdStatus;
 }
@@ -208,7 +250,7 @@ IAPSTATUS IAPEepromWrite(uint32_t EepAddr, uint8_t *pData, int Size)
 	cmd.Data[2] = Size;
 	cmd.Data[3] = SystemCoreClock / 1000;
 
-	IapEntry(&cmd, &res);
+	IapCall(&cmd, &res);
 
 	return res.CmdStatus;
 }
@@ -224,7 +266,28 @@ IAPSTATUS IAPEepromRead(uint32_t EepAddr, uint8_t *pData, int Size)
 	cmd.Data[2] = Size;
 	cmd.Data[3] = SystemCoreClock / 1000;
 
-	IapEntry(&cmd, &res);
+	IapCall(&cmd, &res);
+
+	return res.CmdStatus;
+}
+
+IAPSTATUS IAPEepromWritePage(uint32_t PageNo, uint8_t *pData)
+{
+	IAP_CMD_STATUS cmd;
+	IAP_CMD_STATUS res;
+
+	if (pData == 0)
+	{
+		return IAPSTATUS_PARAM_ERROR;
+	}
+
+	cmd.CmdStatus = IAPCMD_EEPROM_WRITE_PAGE;
+	cmd.Data[0] = PageNo;
+	cmd.Data[1] = (uint32_t)pData;
+	cmd.Data[2] = SystemCoreClock / 1000;
+	cmd.Data[3] = 0;
+
+	IapCall(&cmd, &res);
 
 	return res.CmdStatus;
 }
@@ -234,23 +297,46 @@ IAPSTATUS IAPReadFlashSignature(uint32_t *pSig)
 	IAP_CMD_STATUS cmd;
 	IAP_CMD_STATUS res;
 
+	if (pSig == 0)
+	{
+		return IAPSTATUS_PARAM_ERROR;
+	}
+
 	cmd.CmdStatus = IAPCMD_READ_FLASH_SIG;
 
-	IapEntry(&cmd, &res);
-	*pSig = res.Data[0];
+	IapCall(&cmd, &res);
+	if (res.CmdStatus == IAPSTATUS_SUCCESS)
+	{
+		*pSig = res.Data[0];
+	}
 
 	return res.CmdStatus;
 }
 
-IAPSTATUS IAPReadFlashExtSignature(uint32_t StartPage, uint32_t EndPage, uint32_t NumOfState, uint32_t *pSig)
+IAPSTATUS IAPReadExtFlashSignature(uint32_t StartAddr, uint32_t EndAddr, uint32_t NbState, uint32_t *pSig)
 {
 	IAP_CMD_STATUS cmd;
 	IAP_CMD_STATUS res;
 
-	cmd.CmdStatus = IAPCMD_READ_FLASH_EXTSIG;
+	if (pSig == 0)
+	{
+		return IAPSTATUS_PARAM_ERROR;
+	}
 
-	IapEntry(&cmd, &res);
-	*pSig = res.Data[0];
+	cmd.CmdStatus = IAPCMD_READ_FLASH_EXTSIG;
+	cmd.Data[0] = StartAddr;
+	cmd.Data[1] = EndAddr;
+	cmd.Data[2] = NbState;
+	cmd.Data[3] = 0;
+
+	IapCall(&cmd, &res);
+	if (res.CmdStatus == IAPSTATUS_SUCCESS)
+	{
+		for (unsigned i = 0; i < 4; i++)
+		{
+			pSig[i] = res.Data[i];
+		}
+	}
 
 	return res.CmdStatus;
 }

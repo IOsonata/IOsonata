@@ -275,7 +275,7 @@ See the [TaktOS on-target benchmark results](https://github.com/IOsonata/TaktOS#
 | Same HAL binary across RTOSes | Usually no | Zephyr-integrated | **Bare metal, TaktOS, FreeRTOS, ThreadX** |
 | Device Tree required | No | Yes | **No** |
 | Official build requires CMake | Varies | Yes | **No** |
-| Startup and application entry | Application-defined | Framework initializes the kernel and devices before application entry | **Application-defined** |
+| Startup and application entry | Application-defined | Framework initializes the kernel and devices before application entry | MCU port provides startup; standard `main()` application entry |
 
 ---
 
@@ -292,9 +292,11 @@ IOsonata includes generic and target-specific implementations across:
 - USB and host-side interfaces
 - bare-metal, TaktOS, FreeRTOS and ThreadX applications
 
-An MCU is supported when startup, GPIO, UART and a timer driver are implemented.
-Optional peripheral capabilities and hardware validation are recorded separately.
-See [Supported Targets](docs/supported-targets.md) for the current matrix.
+Nordic ports are IOsonata's most developed and most complete MCU family, with
+extensive Bluetooth, peripheral, sensor, storage and RTOS examples. STM32F0,
+STM32L4 and SAM4LC also have established hardware use.
+[Supported MCUs](docs/supported-targets.md) describes each target's implemented
+peripherals, application examples, validation and remaining work.
 
 ---
 
@@ -304,8 +306,8 @@ IOsonata is developed and validated on I-SYST reference hardware as well as vend
 
 | Platform | MCU / role | IOsonata use |
 |---|---|---|
-| [BLYST Nano](https://www.i-syst.com/products/blyst-nano) / IDK-BLYST-NANO | nRF52832 Cortex-M4F | Primary BLE, UART, sensor and low-power baseline |
-| BLYSTL15 | nRF54L15 Cortex-M33 | nRF54L and `sdk-nrf-bm` bare-metal baseline |
+| [BLYST Nano](https://www.i-syst.com/products/blyst-nano) / IDK-BLYST-NANO | nRF52832 Cortex-M4F | BLE, UART, sensor and low-power application development |
+| BLYSTL15 | nRF54L15 Cortex-M33 | nRF54L Bluetooth, `sdk-nrf-bm` and RTOS development |
 | BLUEIO-TAG-EVIM | nRF52832 with environmental and motion sensors | Bluetooth and multi-sensor reference platform |
 | [IDAP-Link](https://www.i-syst.com/products/idap-link) | CMSIS-DAP SWD/JTAG probe with USB-UART bridge | Flashing, debugging and serial output |
 | CS-BLYST-06 / IBK-NRF52840 | nRF52832 / nRF52840 breakout boards | MCU bring-up and peripheral development |
@@ -319,13 +321,14 @@ IOsonata is developed and validated on I-SYST reference hardware as well as vend
 | nRF52840 | Bare-metal and TaktOS composite USB endurance |
 | nRF54LM20 | Bare-metal and TaktOS high-speed composite USB endurance |
 | SAM4LC8C | Hardware validated on SAM4L8 Xplained Pro: startup, GPIO, UART, AST/TC timers, I2C, SPI, CDC, ISO and manual suspend/wake |
+| RA4M1 | EK-RA4M1 startup/GPIO, timer callbacks and SCI UART; IIC hardware validation remains pending |
 | STM32F030x8 | Hardware validated on STM32F0308-DISCO; startup, GPIO, USART1, TIM6/TIM16 and UART DMA PRBS |
 | STM32L476 / STM32L496 / STM32L4S9 | Hardware validated and used in existing projects, confirmed by the maintainer |
 
 These are function-specific maintainer results, not a claim that every
 peripheral or the latest commit has passed hardware validation.
-[Supported MCUs](docs/supported-targets.md) records core-driver coverage,
-project integration gaps, model/build evidence and hardware scope.
+[Supported MCUs](docs/supported-targets.md) records peripheral coverage, examples,
+project integration, build results and hardware scope.
 [0.13 release notes](docs/releases/0.13.md) retain the detailed USB measurements.
 
 
@@ -452,11 +455,12 @@ In IOcomposer:
 Generic reusable examples are under [`exemples/`](exemples/). Buildable MCU projects are under each target's `exemples/` directory.
 
 See [Getting Started](docs/getting-started.md), the
-[Quick Reference](docs/quick-reference.md) and the
+[Quick Reference](docs/quick-reference.md), the
+[Buzzer User Guide](docs/buzzer.md) and the
 [USB User Guide](docs/usb-user-guide.md) for additional workflows.
 
 See [0.13 changes and migration notes](docs/releases/0.13.md) for the upcoming
-USB and memory-footprint release.
+USB, MCU-port, Bluetooth and memory-footprint release.
 
 ---
 

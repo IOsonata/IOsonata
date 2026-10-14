@@ -362,7 +362,9 @@ static bool UsbdCdcInitInternal(UsbdCdcDev_t * const pCdc,
 	UsbdEpAllocReq_t req = {};
 	req.InterfaceCount = 2U;
 	req.BidirectionalCount = 1U;
+	req.BidirectionalType = USB_ENDPATT_TRANS_BULK;
 	req.InCount = 1U;
+	req.InType = USB_ENDPATT_TRANS_INT;
 
 	// The allocator fills each requested result before returning success.
 	UsbdEpAllocRes_t alloc;

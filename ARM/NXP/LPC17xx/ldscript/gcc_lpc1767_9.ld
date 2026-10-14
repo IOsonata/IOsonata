@@ -51,7 +51,8 @@ GROUP( -lstdc++ -lgcc -lc)
 MEMORY
 {
    FLASH (rx)  : ORIGIN = 0x00000000, LENGTH = 512K
-   RAM (rwx) : ORIGIN = 0x10000000, LENGTH = 32K
+   /* UM10360 section 32.3.2.8: reserve the top 32 bytes for IAP. */
+   RAM (rwx) : ORIGIN = 0x10000000, LENGTH = 32K - 32
    RAMAHB (rwx) : ORIGIN = 0x2007c000, LENGTH = 32K
    /* The AHB sram is divided into 2 regions of 16KB*/
    RAMAHB0 (rwx) : ORIGIN = 0x2007c000, LENGTH = 16K	/* Bank 0 */
@@ -92,7 +93,14 @@ SECTIONS
 	} > RAMAHB AT > FLASH
    	__data_ahb_loc__ = LOADADDR(.data_RAMAHB);
    	__data_ahb_size__ = SIZEOF(.data_RAMAHB);
-}
+} INSERT AFTER .data;
 
 INCLUDE "gcc_arm_flash.ld"
 
+
+/* Cortex-M3 vector words 1 through 6 contain Thumb handler addresses. */
+__valid_user_code_checksum = 0 - (__StackTop + (ResetEntry + 1) +
+	(NMI_Handler + 1) + (HardFault_Handler + 1) + (MemManage_Handler + 1) +
+	(BusFault_Handler + 1) + (UsageFault_Handler + 1));
+
+ASSERT(ADDR(.ivector) == ORIGIN(FLASH), "LPC vectors must start the image")

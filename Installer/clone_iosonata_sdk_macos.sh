@@ -180,6 +180,7 @@ repos=(
   "https://github.com/lwip-tcpip/lwip.git"
   "https://github.com/hathach/tinyusb.git"
   "https://github.com/Mbed-TLS/TF-PSA-Crypto.git"
+  "https://github.com/STMicroelectronics/stm32-mw-wpan.git"
 )
 
 for repo in "${repos[@]}"; do

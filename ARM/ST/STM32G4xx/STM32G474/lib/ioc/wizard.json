@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "mcu": "STM32G474",
+  "cpu": "cortex-m4",
+  "fpu": true,
+  "fpu_unit": "fpv4spd16",
+  "defines": [
+    "STM32G474xx"
+  ],
+  "includes": [
+    "${iosonata}/ARM/ST/include",
+    "${iosonata}/ARM/ST/STM32G4xx/include",
+    "${iosonata}/ARM/ST/STM32G4xx/STM32G474/lib/include"
+  ],
+  "linker_script": "${iosonata}/ARM/ST/STM32G4xx/ldscript/gcc_stm32g474xx.ld",
+  "lib_path": "${iosonata}/ARM/ST/STM32G4xx/STM32G474/lib/ioc/${config}",
+  "lib": "IOsonata_STM32G474"
+}

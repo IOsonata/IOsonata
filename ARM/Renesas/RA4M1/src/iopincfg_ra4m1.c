@@ -31,12 +31,7 @@ SOFTWARE.
 #include <stddef.h>
 #include "iopinctrl.h"
 #include "interrupt_ra4m1.h"
-#include "ra4m1_startup_regs.h"
 
-#define RA4M1_VBTCR1    0x4001E41FUL
-#define RA4M1_VBTSR     0x4001E4B1UL
-#define RA4M1_VBTICTLR  0x4001E4BBUL
-#define RA4M1_VBTOCTLR  0x4001E4BCUL
 #ifndef RA4M1_IO_READY_POLLS
 #define RA4M1_IO_READY_POLLS 1000000UL
 #endif
@@ -79,11 +74,11 @@ static bool Ra4m1PinCanConfigure(int PortNo, int PinNo)
 {
     if (!Ra4m1PinValid(PortNo, PinNo) || PortNo == 9) return false;
     if (PortNo == 2) {
-        if ((PinNo == 12 || PinNo == 13) && !(RA4M1_RD8(RA4M1_MOSCCR) & 1U)) return false;
-        if ((PinNo == 14 || PinNo == 15) && !(RA4M1_RD8(RA4M1_SOSCCR) & 1U)) return false;
+        if ((PinNo == 12 || PinNo == 13) && !(R_SYSTEM->MOSCCR & 1U)) return false;
+        if ((PinNo == 14 || PinNo == 15) && !(R_SYSTEM->SOSCCR & 1U)) return false;
     }
     if (PortNo >= 1 && PortNo <= 4) {
-        uint32_t elc = RA4M1_RD32(RA4M1_PCNTR4(PortNo));
+        uint32_t elc = Ra4m1PortRegs(PortNo)->PCNTR4;
         if ((elc | (elc >> 16)) & (1UL << PinNo)) return false;
     }
     return true;
@@ -98,23 +93,34 @@ static bool Ra4m1AnalogPin(int PortNo, int PinNo)
  */
 static bool Ra4m1PfsWrite(int PortNo, int PinNo, uint32_t Value)
 {
-    uint8_t pwpr = RA4M1_RD8(RA4M1_PWPR);
-    RA4M1_WR8(RA4M1_PWPR, pwpr & (uint8_t)~RA4M1_PWPR_B0WI);
-    RA4M1_WR8(RA4M1_PWPR, RA4M1_PWPR_PFSWE);
-    uint32_t addr = RA4M1_PFS(PortNo, PinNo);
-    uint32_t old = RA4M1_RD32(addr) & ~RA4M1_PFS_PIDR;
+    uint8_t pwpr = R_PMISC->PWPR;
+    R_PMISC->PWPR = pwpr & (uint8_t)~RA4M1_PWPR_B0WI;
+    R_PMISC->PWPR = RA4M1_PWPR_PFSWE;
+    volatile uint32_t * const pfs = &R_PFS->PORT[PortNo].PIN[PinNo].PmnPFS;
+    uint32_t old = (*pfs) & ~RA4M1_PFS_PIDR;
     /* Changing PSEL/ASEL must occur while PMR is zero. Preserve the current
      * latch while disconnecting the peripheral; configure the new value next.
      */
     bool muxChange = ((old ^ Value) & (RA4M1_PFS_PSEL | RA4M1_PFS_ASEL | RA4M1_PFS_PMR)) != 0;
-    if (muxChange) {
-        if (old & RA4M1_PFS_PMR) RA4M1_WR32(addr, old & ~RA4M1_PFS_PMR);
-        RA4M1_WR32(addr, Value & ~(RA4M1_PFS_PIDR | RA4M1_PFS_PMR));
-        if (Value & RA4M1_PFS_PMR) RA4M1_WR32(addr, Value & ~RA4M1_PFS_PIDR);
-    } else RA4M1_WR32(addr, Value & ~RA4M1_PFS_PIDR);
-    RA4M1_WR8(RA4M1_PWPR, pwpr & (uint8_t)~RA4M1_PWPR_B0WI);
-    RA4M1_WR8(RA4M1_PWPR, pwpr);
-    return (RA4M1_RD32(addr) & ~RA4M1_PFS_PIDR) == (Value & ~RA4M1_PFS_PIDR);
+    if (muxChange)
+    {
+        if (old & RA4M1_PFS_PMR)
+        {
+            *pfs = old & ~RA4M1_PFS_PMR;
+        }
+        *pfs = Value & ~(RA4M1_PFS_PIDR | RA4M1_PFS_PMR);
+        if (Value & RA4M1_PFS_PMR)
+        {
+            *pfs = Value & ~RA4M1_PFS_PIDR;
+        }
+    }
+    else
+    {
+        *pfs = Value & ~RA4M1_PFS_PIDR;
+    }
+    R_PMISC->PWPR = pwpr & (uint8_t)~RA4M1_PWPR_B0WI;
+    R_PMISC->PWPR = pwpr;
+    return ((*pfs) & ~RA4M1_PFS_PIDR) == (Value & ~RA4M1_PFS_PIDR);
 }
 
 /* Do not reset the backup domain or commandeer retained RTC/VBATWIO pins.
@@ -124,20 +130,20 @@ static bool Ra4m1PfsWrite(int PortNo, int PinNo, uint32_t Value)
 static bool Ra4m1PinBufferReady(int PortNo, int PinNo)
 {
     if (PortNo != 4 || PinNo < 2 || PinNo > 4) return true;
-    uint16_t prcr = RA4M1_RD16(RA4M1_PRCR) & 0xFU;
-    uint8_t vbt = RA4M1_RD8(RA4M1_VBTCR1) & 1U;
-    RA4M1_WR16(RA4M1_PRCR, RA4M1_PRCR_KEY | prcr | RA4M1_PRCR_PRC1);
-    RA4M1_WR8(RA4M1_VBTCR1, 1U);
+    uint16_t prcr = R_SYSTEM->PRCR & 0xFU;
+    uint8_t vbt = R_SYSTEM->VBTCR1 & 1U;
+    R_SYSTEM->PRCR =  0xA500U | prcr | 0x02U;
+    R_SYSTEM->VBTCR1 =  1U;
     bool ready = false;
     for (uint32_t i = 0; i < RA4M1_IO_READY_POLLS; ++i) {
-        if ((RA4M1_RD8(RA4M1_VBTCR1) & 1U) && (RA4M1_RD8(RA4M1_VBTSR) & 0x10U)) { ready = true; break; }
+        if ((R_SYSTEM->VBTCR1 & 1U) && (R_SYSTEM->VBTSR & 0x10U)) { ready = true; break; }
     }
     if (ready) {
         uint32_t mask = 1UL << (PinNo - 2);
-        ready = ((RA4M1_RD8(RA4M1_VBTICTLR) | RA4M1_RD8(RA4M1_VBTOCTLR)) & mask) == 0U;
+        ready = ((R_SYSTEM->VBTICTLR | R_SYSTEM->VBTOCTLR) & mask) == 0U;
     }
-    RA4M1_WR8(RA4M1_VBTCR1, vbt);
-    RA4M1_WR16(RA4M1_PRCR, RA4M1_PRCR_KEY | prcr);
+    R_SYSTEM->VBTCR1 =  vbt;
+    R_SYSTEM->PRCR =  0xA500U | prcr;
     return ready;
 }
 
@@ -170,7 +176,7 @@ void IOPinConfig(int PortNo, int PinNo, int PinOp, IOPINDIR Dir,
     if (!Ra4m1PinCanConfigure(PortNo, PinNo) || !Ra4m1PinBufferReady(PortNo, PinNo)) {
         EnableInterrupt(state); return;
     }
-    uint32_t old = RA4M1_RD32(RA4M1_PFS(PortNo, PinNo));
+    uint32_t old = R_PFS->PORT[PortNo].PIN[PinNo].PmnPFS;
     /* Configuration is not an implicit interrupt release. Leave an active
      * pin alone; explicit IOPinDisableInterrupt owns that teardown.
      */
@@ -192,7 +198,7 @@ void IOPinSetDir(int PortNo, int PinNo, IOPINDIR Dir)
     if (!Ra4m1PinValid(PortNo, PinNo) ||
         (Dir != IOPINDIR_INPUT && Dir != IOPINDIR_OUTPUT)) return;
     uint32_t state = DisableInterrupt();
-    uint32_t value = RA4M1_RD32(RA4M1_PFS(PortNo, PinNo));
+    uint32_t value = R_PFS->PORT[PortNo].PIN[PinNo].PmnPFS;
     if (!Ra4m1PinCanConfigure(PortNo, PinNo) ||
         (value & (RA4M1_PFS_PMR | RA4M1_PFS_ASEL | RA4M1_PFS_ISEL)) ||
         (Dir == IOPINDIR_OUTPUT && !(Ra4m1OutputMask(PortNo) & (1UL << PinNo))) ||
@@ -211,7 +217,7 @@ void IOPinDisable(int PortNo, int PinNo)
     int line = Ra4m1PinIrq(PortNo, PinNo);
     if (line >= 0 && s_PinHook[line].Handler && s_PinHook[line].Pin == PortNo*16+PinNo)
         IOPinDisableInterrupt(line);
-    uint32_t value = RA4M1_RD32(RA4M1_PFS(PortNo, PinNo));
+    uint32_t value = R_PFS->PORT[PortNo].PIN[PinNo].PmnPFS;
     if (!(value & RA4M1_PFS_ISEL) && Ra4m1PinBufferReady(PortNo, PinNo))
         Ra4m1PfsWrite(PortNo, PinNo, value & RA4M1_PFS_PODR);
     EnableInterrupt(state);
@@ -239,48 +245,48 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, uint32_t PortNo, uint32_t PinN
         (unsigned)IntPrio >= (1UL << __NVIC_PRIO_BITS) ||
         Sense < IOPINSENSE_LOW_TRANSITION || Sense > IOPINSENSE_TOGGLE) return false;
     uint32_t state = DisableInterrupt();
-    uint32_t addr = RA4M1_PFS(PortNo, PinNo);
-    uint32_t old = RA4M1_RD32(addr);
+    volatile uint32_t * const pfs = &R_PFS->PORT[PortNo].PIN[PinNo].PmnPFS;
+    uint32_t old = (*pfs);
     if (s_PinHook[IntNo].Handler || !Ra4m1PinCanConfigure(PortNo, PinNo) ||
         (old & (RA4M1_PFS_ASEL | RA4M1_PFS_PDR | RA4M1_PFS_PMR | RA4M1_PFS_ISEL)) ||
-        (RA4M1_RD32(RA4M1_WUPEN) & (1UL << IntNo))) {
+        (R_ICU->WUPEN & (1UL << IntNo))) {
         EnableInterrupt(state); return false;
     }
     uint32_t event = (uint32_t)IntNo + 1U;
     /* IRQCR may not change while any CPU/DTC/DMAC/wake route is present. */
     for (int i = 0; i < RA4M1_IELS_CNT; ++i)
-        if ((RA4M1_RD32(RA4M1_IELSR(i)) & RA4M1_IELS_MASK) == event) {
+        if ((R_ICU->IELSR[i] & RA4M1_IELS_MASK) == event) {
             EnableInterrupt(state); return false;
         }
     for (int i = 0; i < 4; ++i)
-        if ((RA4M1_RD32(RA4M1_DELSR(i)) & RA4M1_IELS_MASK) == event) {
+        if ((R_ICU->DELSR[i] & RA4M1_IELS_MASK) == event) {
             EnableInterrupt(state); return false;
         }
     for (unsigned i = 0; i < sizeof(s_PinIrqMap)/sizeof(s_PinIrqMap[0]); ++i) {
         unsigned pin = s_PinIrqMap[i] & 0xFFU;
         if ((s_PinIrqMap[i] >> 8) == IntNo && Ra4m1PinValid(pin >> 4, pin & 15U) &&
-            (RA4M1_RD32(RA4M1_PFS(pin >> 4, pin & 15U)) & RA4M1_PFS_ISEL)) {
+            (R_PFS->PORT[pin >> 4].PIN[pin & 15U].PmnPFS & RA4M1_PFS_ISEL)) {
             EnableInterrupt(state); return false;
         }
     }
     if (!Ra4m1PinBufferReady(PortNo, PinNo)) { EnableInterrupt(state); return false; }
-    uint8_t oldcr = RA4M1_RD8(RA4M1_IRQCR(IntNo));
-    RA4M1_WR8(RA4M1_IRQCR(IntNo), oldcr & 0x33U); // disable filter before changing mode
-    RA4M1_WR8(RA4M1_IRQCR(IntNo), (uint8_t)(Sense - IOPINSENSE_LOW_TRANSITION));
+    uint8_t oldcr = R_ICU->IRQCR[IntNo];
+    R_ICU->IRQCR[IntNo] = oldcr & 0x33U; // disable filter before changing mode
+    R_ICU->IRQCR[IntNo] = (uint8_t)(Sense - IOPINSENSE_LOW_TRANSITION);
     Ra4m1PinHook *hook = &s_PinHook[IntNo];
     hook->pCtx = pCtx;
     hook->Pin = (uint8_t)(PortNo * 16U + PinNo);
     hook->Handler = pEvtCB;
-    bool configured = RA4M1_RD8(RA4M1_IRQCR(IntNo)) ==
+    bool configured = R_ICU->IRQCR[IntNo] ==
         (uint8_t)(Sense - IOPINSENSE_LOW_TRANSITION);
     if (configured) configured = Ra4m1PfsWrite(PortNo, PinNo, old | RA4M1_PFS_ISEL);
-    (void)RA4M1_RD32(addr);
+    (void)(*pfs);
     __DSB();
     IRQn_Type irq = configured ? Ra4m1RegisterIntHandler((uint8_t)event,
         IntPrio, Ra4m1PinCallback, hook) : (IRQn_Type)-1;
     if (irq == (IRQn_Type)-1) {
         Ra4m1PfsWrite(PortNo, PinNo, old);
-        RA4M1_WR8(RA4M1_IRQCR(IntNo), oldcr);
+        R_ICU->IRQCR[IntNo] = oldcr;
         hook->Handler = NULL;
         hook->pCtx = NULL;
         EnableInterrupt(state);
@@ -309,7 +315,7 @@ void IOPinDisableInterrupt(int IntNo)
          * system's low-power WUPEN policy. Neither is modified here.
          */
         unsigned port = hook->Pin >> 4, pin = hook->Pin & 15U;
-        Ra4m1PfsWrite(port, pin, RA4M1_RD32(RA4M1_PFS(port, pin)) & ~RA4M1_PFS_ISEL);
+        Ra4m1PfsWrite(port, pin, R_PFS->PORT[port].PIN[pin].PmnPFS & ~RA4M1_PFS_ISEL);
         __DSB();
         Ra4m1UnregisterIntHandler(hook->Irq);
         hook->Handler = NULL;
@@ -328,13 +334,13 @@ void IOPinSetSense(int PortNo, int PinNo, IOPINSENSE Sense)
      */
     uint32_t state = DisableInterrupt();
     if (Ra4m1PinCanConfigure(PortNo, PinNo) && Ra4m1PinBufferReady(PortNo, PinNo)) {
-        uint32_t value = RA4M1_RD32(RA4M1_PFS(PortNo, PinNo));
+        uint32_t value = R_PFS->PORT[PortNo].PIN[PinNo].PmnPFS;
         if (!(value & RA4M1_PFS_ASEL)) {
             value &= ~(RA4M1_PFS_EOF | RA4M1_PFS_EOR);
             if (Sense == IOPINSENSE_LOW_TRANSITION || Sense == IOPINSENSE_TOGGLE) value |= RA4M1_PFS_EOF;
             if (Sense == IOPINSENSE_HIGH_TRANSITION || Sense == IOPINSENSE_TOGGLE) value |= RA4M1_PFS_EOR;
             Ra4m1PfsWrite(PortNo, PinNo, value);
-            (void)RA4M1_RD32(RA4M1_PFS(PortNo, PinNo));
+            (void)R_PFS->PORT[PortNo].PIN[PinNo].PmnPFS;
             __DSB();
         }
     }
@@ -348,7 +354,7 @@ void IOPinSetStrength(int PortNo, int PinNo, IOPINSTRENGTH Strength)
     uint32_t state = DisableInterrupt();
     if (Ra4m1PinCanConfigure(PortNo, PinNo) &&
         (Ra4m1OutputMask(PortNo) & (1UL << PinNo)) && Ra4m1PinBufferReady(PortNo, PinNo)) {
-        uint32_t value = RA4M1_RD32(RA4M1_PFS(PortNo, PinNo));
+        uint32_t value = R_PFS->PORT[PortNo].PIN[PinNo].PmnPFS;
         if (!(value & RA4M1_PFS_ASEL)) {
             value &= ~(RA4M1_PFS_DSCR | RA4M1_PFS_DSCR1);
             if (Strength == IOPINSTRENGTH_STRONG) value |= RA4M1_PFS_DSCR;

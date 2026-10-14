@@ -1,16 +1,16 @@
 /*--------------------------------------------------------------------------
 Application with DFU, Renesas R9A02G021.
 
-Same as gcc_R9A02G021.ld with FLASH cut down to slot 0 and RAM stopped
-short of the recovery request word, from the layout the stage 0 boot
-shares. An image that outgrows slot 0 fails to link.
+Same memories as gcc_R9A02G021.ld with FLASH cut down to slot 0 and RAM
+stopped short of the recovery request word, from the layout the stage 0
+boot shares. An image that outgrows slot 0 fails to link.
 
 RESET_VECTOR is the start of slot 0: the .reset section, ResetEntry, is the
 first thing in the image, and that is where the boot jumps (DfuTgtStart).
+The CLIC vector table and the trap entries follow it in .ivector.
 
-The option setting memory belongs to the boot image, so the .ofs.* words
-of system_r9a02.c are dropped here: they would also put 0x0100A150 in the
-binary that gets signed.
+The option-setting memory belongs to the boot image (r9a02g021_head.ld), so
+nothing here is placed at 0x400 or 0x800.
 ----------------------------------------------------------------------------*/
 
 OUTPUT_ARCH( "riscv" )
@@ -36,27 +36,22 @@ RESET_VECTOR = __dfu_slot0_start;
 
 MEMORY
 {
-    FLASH         (rx)  : ORIGIN = __dfu_slot0_start, LENGTH = __dfu_slot0_end - __dfu_slot0_start
-    DATA_FLASH    (r)   : ORIGIN = 0x40100000, LENGTH = 0x00001000   /* 4 KiB   */
-    E2S_TRACE_BUF (rw)  : ORIGIN = 0x20000000, LENGTH = 0x00000400   /* 1 KiB   */
-
-    /* The e2studio trace buffer requires 0x400 bytes of RAM starting at
-     * address 0x20000000.  Those have been allocated above.  If trace is
-     * not used, the application can reclaim those 0x400 bytes by changing
-     * the RAM ORIGIN below to 0x20000000, increasing LENGTH by 0x400, and
-     * removing the E2S_TRACE_BUF definition above.
-     */
-    RAM           (rwx) : ORIGIN = 0x20000400, LENGTH = __dfu_flag - 0x20000400
-    QSPI_FLASH    (rx)  : ORIGIN = 0x60000000, LENGTH = 0x08000000   /* 128 MiB */
+	FLASH         (rx)  : ORIGIN = __dfu_slot0_start, LENGTH = __dfu_slot0_end - __dfu_slot0_start
+	DATA_FLASH    (r)   : ORIGIN = 0x40100000, LENGTH = 0x00001000
+	RAM           (rwx) : ORIGIN = 0x20004000, LENGTH = __dfu_flag - 0x20004000
+	IRAM          (rwx) : ORIGIN = 0x20000000, LENGTH = 0x00001000
 }
 
-__global_pointer$ = ORIGIN(RAM) + LENGTH(RAM) / 2;
+__global_pointer$ = ORIGIN(RAM) + 0x800;
 
-REGION_ALIAS("IRAM", RAM);
-
+/* DTC vector table of dtc_r9a02.cpp, 1 KB aligned. First in IRAM, ahead of
+ * the .iram.text of gcc_riscv_flash.ld, the alignment then costs nothing. */
 SECTIONS
 {
-    /DISCARD/ : { *(.ofs.*) }
+	.dtc_vector (NOLOAD) : ALIGN(1024)
+	{
+		*(.bss.dtc_vector)
+	} > IRAM
 }
 
 INCLUDE "gcc_riscv_flash.ld"

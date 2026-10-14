@@ -23,6 +23,7 @@ EXAMPLES = {
     'TimerDemo': ('exemples/timer/timer_demo.cpp', 1),
     'UartLoopback': ('exemples/uart/uart_loopback.cpp', 2),
     'UartPrbsTxTest': ('exemples/uart/uart_prbs_tx.cpp', 3),
+    'I2CMasterSlave': ('exemples/i2c/i2c_master_slave.cpp', 0),
 }
 PREFIX = 'ilg.gnuarmeclipse.managedbuild.cross.option.'
 
@@ -119,7 +120,8 @@ def models():
     common = [compiler, '-std=c++23', '-Wall', '-Wextra', '-Werror',
               '-Wno-missing-field-initializers', '-DRA4M1_HOST_TEST', *inc]
     for name in EXAMPLES:
-        for package in (40, 48, 64, 100):
+        packages = (64, 100) if name == 'I2CMasterSlave' else (40, 48, 64, 100)
+        for package in packages:
             output = BUILD / f'{name}_pins_{package}'
             run([*common, '-O2', '-DRA4M1_PACKAGE_PINS='+str(package),
                  '-I'+str(TARGET/'exemples'/name/'src'), HERE/'example_pin_probe.cpp',

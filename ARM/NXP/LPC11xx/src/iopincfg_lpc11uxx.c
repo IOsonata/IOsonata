@@ -1,5 +1,5 @@
 /*--------------------------------------------------------------------------
-File   : lpc11Uxx_iopincfg.c
+File   : iopincfg_lpc11uxx.c
 
 Author : Hoang Nguyen Hoan          Oct. 25, 2014
 
@@ -32,193 +32,421 @@ Modified by          Date              Description
 
 ----------------------------------------------------------------------------*/
 
-#include <stdio.h>
-#include "LPC11Uxx.h"
+#include "iopinctrl.h"
 
-#include "coredev/iopincfg.h"
+#define IOCON_FUNC_MASK		7UL
+#define IOCON_MODE_MASK		(3UL << 3)
+#define IOCON_HYS			(1UL << 5)
+#define IOCON_INV			(1UL << 6)
+#define IOCON_ADMODE		(1UL << 7)
+#define IOCON_I2CMODE_MASK	(3UL << 8)
+#define IOCON_OD			(1UL << 10)
 
-// I/O Pin configuration bits definitions
-#define IOCON_PIN_FUNCTION			0
-#define IOCON_PIN_FUNCTION_MASK		3
-#define IOCON_PIN_MODE				3
-#define IOCON_PIN_MODE_MASK			3
-#define IOCON_PIN_OPENDRAIN			10
-#define IOCON_PIN_HYS				5
+#define LPC11_PINT_COUNT		8U
+#define LPC11_PINT_CLOCK		(1UL << 19)
 
-static uint32_t g_PinPortOffset[3] = {
-	0, 0x60, 0xf0
+typedef struct {
+	IOPinEvtHandler_t Handler;
+	void *pContext;
+	uint8_t PinSel;
+	IOPINSENSE Sense;
+} Lpc11PintHook_t;
+
+static Lpc11PintHook_t s_PintHook[LPC11_PINT_COUNT];
+static const IRQn_Type s_PintIrq[LPC11_PINT_COUNT] = {
+	FLEX_INT0_IRQn,
+	FLEX_INT1_IRQn,
+	FLEX_INT2_IRQn,
+	FLEX_INT3_IRQn,
+	FLEX_INT4_IRQn,
+	FLEX_INT5_IRQn,
+	FLEX_INT6_IRQn,
+	FLEX_INT7_IRQn
 };
 
-/*
- * Configure individual I/O pin
- *
- * @Param 	PortNo	: Port number
- * 			PinNo  	: Pin number
- * 			PinOp	: Pin function index from 0. MCU dependent
- * 			Dir     : I/O direction
- *			Res 	: Resistor config
- *			Type	: I/O type
- *
- */
+// Named vendor registers: no inferred register layout or nonvolatile access.
+static volatile uint32_t * const s_PinReg[] = {
+	&LPC_IOCON->RESET_PIO0_0,
+	&LPC_IOCON->PIO0_1,
+	&LPC_IOCON->PIO0_2,
+	&LPC_IOCON->PIO0_3,
+	&LPC_IOCON->PIO0_4,
+	&LPC_IOCON->PIO0_5,
+	&LPC_IOCON->PIO0_6,
+	&LPC_IOCON->PIO0_7,
+	&LPC_IOCON->PIO0_8,
+	&LPC_IOCON->PIO0_9,
+	&LPC_IOCON->SWCLK_PIO0_10,
+	&LPC_IOCON->TDI_PIO0_11,
+	&LPC_IOCON->TMS_PIO0_12,
+	&LPC_IOCON->TDO_PIO0_13,
+	&LPC_IOCON->TRST_PIO0_14,
+	&LPC_IOCON->SWDIO_PIO0_15,
+	&LPC_IOCON->PIO0_16,
+	&LPC_IOCON->PIO0_17,
+	&LPC_IOCON->PIO0_18,
+	&LPC_IOCON->PIO0_19,
+	&LPC_IOCON->PIO0_20,
+	&LPC_IOCON->PIO0_21,
+	&LPC_IOCON->PIO0_22,
+	&LPC_IOCON->PIO0_23,
+	&LPC_IOCON->PIO1_0,
+	&LPC_IOCON->PIO1_1,
+	&LPC_IOCON->PIO1_2,
+	&LPC_IOCON->PIO1_3,
+	&LPC_IOCON->PIO1_4,
+	&LPC_IOCON->PIO1_5,
+	&LPC_IOCON->PIO1_6,
+	&LPC_IOCON->PIO1_7,
+	&LPC_IOCON->PIO1_8,
+	&LPC_IOCON->PIO1_9,
+	&LPC_IOCON->PIO1_10,
+	&LPC_IOCON->PIO1_11,
+	&LPC_IOCON->PIO1_12,
+	&LPC_IOCON->PIO1_13,
+	&LPC_IOCON->PIO1_14,
+	&LPC_IOCON->PIO1_15,
+	&LPC_IOCON->PIO1_16,
+	&LPC_IOCON->PIO1_17,
+	&LPC_IOCON->PIO1_18,
+	&LPC_IOCON->PIO1_19,
+	&LPC_IOCON->PIO1_20,
+	&LPC_IOCON->PIO1_21,
+	&LPC_IOCON->PIO1_22,
+	&LPC_IOCON->PIO1_23,
+	&LPC_IOCON->PIO1_24,
+	&LPC_IOCON->PIO1_25,
+	&LPC_IOCON->PIO1_26,
+	&LPC_IOCON->PIO1_27,
+	&LPC_IOCON->PIO1_28,
+	&LPC_IOCON->PIO1_29,
+	NULL, // Reserved IOCON offset 0xD8; rejected by Lpc11GpioValidPin.
+	&LPC_IOCON->PIO1_31,
+};
+
+// IOPINOP_GPIO selects GPIO even on reset/debug pins. FUNCn selects FUNC n.
 void IOPinConfig(int PortNo, int PinNo, int PinOp, IOPINDIR Dir, IOPINRES Resistor, IOPINTYPE Type)
 {
-	if (PortNo < 0 || PinNo < 0)
-		return;
-
-	uint32_t *pincfgreg = (uint32_t *)((uint32_t)LPC_IOCON  + g_PinPortOffset[PortNo]);
-
-	// Configure direction
-	if (Dir == IOPINDIR_OUTPUT)
-		LPC_GPIO->DIR[PortNo] |= (1 << PinNo);
-	else
-		LPC_GPIO->DIR[PortNo] &= ~(1 << PinNo);
-
-	pincfgreg += PinNo;
-
-	// Configure open drain
-	*pincfgreg &= ~(1 << IOCON_PIN_OPENDRAIN);
-	if (Type == IOPINTYPE_OPENDRAIN)
-		*pincfgreg |= (1 << IOCON_PIN_OPENDRAIN);
-
-	// Configure pin function
-	*pincfgreg &= ~(3 << IOCON_PIN_FUNCTION);
-	*pincfgreg |= (PinOp & 3) << IOCON_PIN_FUNCTION;
-
-	// Configure pin resistor
-	int rmode = 0;
-	switch (Resistor)
+	if (!Lpc11GpioValidPin(PortNo, PinNo) || PinOp < IOPINOP_GPIO || PinOp > IOPINOP_FUNC7)
 	{
-		case IOPINRES_NONE:
-			rmode = 0;
-			break;
-		case IOPINRES_PULLUP:
-			rmode = 2;
-			break;
-		case IOPINRES_PULLDOWN:
-			rmode = 1;
-			break;
-		case IOPINRES_FOLLOW:
-			rmode = 3;
-			break;
+		return;
 	}
-	*pincfgreg &= ~(3 << IOCON_PIN_MODE);
-	*pincfgreg |= (rmode & 3) << IOCON_PIN_MODE;
-	*pincfgreg |= 1 << IOCON_PIN_HYS;
+
+	uint32_t func = PinOp == IOPINOP_GPIO ? 0U : (uint32_t)(PinOp - IOPINOP_FUNC0);
+	int analogfunc = -1;
+	bool i2c = PortNo == 0 && (PinNo == 4 || PinNo == 5);
+	volatile uint32_t *reg = s_PinReg[PortNo == 0 ? PinNo : 24 + PinNo];
+
+	if (PortNo == 0)
+	{
+		if (PinOp == IOPINOP_GPIO && (PinNo == 0 || (PinNo >= 10 && PinNo <= 15)))
+		{
+			func = 1U;
+		}
+		if (PinNo >= 11 && PinNo <= 15)
+		{
+			analogfunc = 2;
+		}
+		else if (PinNo == 16 || PinNo == 22 || PinNo == 23)
+		{
+			analogfunc = 1;
+		}
+	}
+
+	uint32_t state = DisableInterrupt();
+
+	LPC_SYSCON->SYSAHBCLKCTRL |= (1UL << 6) | (1UL << 16);
+	(void)LPC_SYSCON->SYSAHBCLKCTRL;
+
+	uint32_t value = (*reg & ~IOCON_FUNC_MASK) | func;
+
+	if (i2c)
+	{
+		// P0_4/5 are true open drain, with no programmable pulls/HYS/OD.
+		// GPIO uses standard I/O mode; peripheral mode uses standard/fast I2C.
+		value &= ~IOCON_I2CMODE_MASK;
+		if (func == 0U)
+		{
+			value |= 1UL << 8;
+		}
+	}
+	else
+	{
+		value &= ~(IOCON_MODE_MASK | IOCON_HYS | IOCON_INV | IOCON_OD);
+		if ((int)func != analogfunc)
+		{
+			value |= IOCON_HYS;
+			if (Resistor == IOPINRES_PULLUP)
+			{
+				value |= 2UL << 3;
+			}
+			else if (Resistor == IOPINRES_PULLDOWN)
+			{
+				value |= 1UL << 3;
+			}
+			else if (Resistor == IOPINRES_FOLLOW)
+			{
+				value |= 3UL << 3;
+			}
+			if (Type == IOPINTYPE_OPENDRAIN)
+			{
+				value |= IOCON_OD;
+			}
+		}
+		if (analogfunc >= 0)
+		{
+			value &= ~IOCON_ADMODE;
+			if ((int)func != analogfunc)
+			{
+				value |= IOCON_ADMODE;
+			}
+		}
+	}
+
+	// Set direction before connecting the selected function to the pad.
+	IOPinSetDir(PortNo, PinNo, (int)func == analogfunc ? IOPINDIR_INPUT : Dir);
+	*reg = value;
+	EnableInterrupt(state);
 }
 
-/**
- * @brief	Disable I/O pin
- *
- * Some hardware such as low power mcu allow I/O pin to be disconnected
- * in order to save power. There is no enable function. Reconfigure the
- * I/O pin to re-enable it.
- *
- * @param	PortNo 	: Port number
- * @param	PinNo	: Pin Number
- */
+// These pads cannot all disconnect their input buffer. Leave GPIO input/no pull.
 void IOPinDisable(int PortNo, int PinNo)
 {
-	if (PortNo == -1 || PinNo == -1)
-		return;
-
+	IOPinConfig(PortNo, PinNo, IOPINOP_GPIO, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL);
 }
 
-/**
- * @brief	Disable I/O pin sense interrupt
- *
- * @param	IntNo : Interrupt number to disable
- */
+// Caller holds the short interrupt lock. Discard old edges before rearming.
+static void Lpc11PintSetSense(unsigned IntNo, IOPINSENSE Sense)
+{
+	uint32_t mask = 1UL << IntNo;
+
+	NVIC_DisableIRQ(s_PintIrq[IntNo]);
+	LPC_GPIO_PIN_INT->CIENR = mask;
+	LPC_GPIO_PIN_INT->CIENF = mask;
+	LPC_GPIO_PIN_INT->ISEL &= ~mask;
+	LPC_GPIO_PIN_INT->IST = mask;
+	NVIC_ClearPendingIRQ(s_PintIrq[IntNo]);
+	s_PintHook[IntNo].Sense = Sense;
+
+	if (Sense == IOPINSENSE_HIGH_TRANSITION || Sense == IOPINSENSE_TOGGLE)
+	{
+		LPC_GPIO_PIN_INT->SIENR = mask;
+	}
+	if (Sense == IOPINSENSE_LOW_TRANSITION || Sense == IOPINSENSE_TOGGLE)
+	{
+		LPC_GPIO_PIN_INT->SIENF = mask;
+	}
+	if (Sense != IOPINSENSE_DISABLE)
+	{
+		NVIC_EnableIRQ(s_PintIrq[IntNo]);
+	}
+}
+
 void IOPinDisableInterrupt(int IntNo)
 {
-}
-
-/**
- * @brief Enable I/O pin sensing interrupt event
- *
- * Generate an interrupt when I/O sense a state change.
- * The IntNo (interrupt number) parameter is processor dependent. Some is
- * directly the hardware interrupt number other is just an index in an array
- *
- * STM32 : IntNo must be same as PinNo.  It is directly related to hardware.
- *
- * @param	IntNo	: Interrupt number. -1 for port event interrupt
- * 			IntPrio : Interrupt priority
- * 			PortNo  : Port number (up to 32 ports)
- * 			PinNo   : Pin number (up to 32 pins)
- * 			Sense   : Sense type of event on the I/O pin
- * 			pEvtCB	: Pointer to callback function when event occurs
- * 			pCtx	: Pointer to context data to be pass to the handler function
- */
-bool IOPinEnableInterrupt(int IntNo, int IntPrio, uint32_t PortNo, uint32_t PinNo, IOPINSENSE Sense, IOPinEvtHandler_t pEvtCB, void *pCtx)
-{
-    return true;
-}
-
-int IOPinFindAvailInterrupt()
-{
-	return -1;
-}
-
-/**
- * @brief	Allocate I/O pin sensing interrupt event
- *
- * Generate an interrupt when I/O sense a state change. This function will automatically
- * allocate available interrupt number to use for the pin.
- * The IntNo (interrupt number) parameter is processor dependent. Some is
- * directly the hardware interrupt number other is just an index in an array
- *
- *
- * @Param	IntPrio : Interrupt priority
- * @Param	PortNo  : Port number (up to 32 ports)
- * @Param	PinNo   : Pin number (up to 32 pins)
- * @Param	Sense   : Sense type of event on the I/O pin
- * @Param	pEvtCB	: Pointer to callback function when event occurs
- *
- * @return	Interrupt number on success
- * 			-1 on failure.
- */
-int IOPinAllocateInterrupt(int IntPrio, int PortNo, int PinNo, IOPINSENSE Sense, IOPinEvtHandler_t pEvtCB, void *pCtx)
-{
-	int intno = IOPinFindAvailInterrupt();
-
-	if (intno >= 0)
+	if ((unsigned)IntNo >= LPC11_PINT_COUNT)
 	{
-		bool res = IOPinEnableInterrupt(intno, IntPrio, PortNo, PinNo, Sense, pEvtCB, pCtx);
-		if (res == true)
-			return intno;
+		return;
 	}
 
-	return -1;
+	uint32_t state = DisableInterrupt();
+
+	if (s_PintHook[IntNo].Handler != NULL)
+	{
+		Lpc11PintSetSense((unsigned)IntNo, IOPINSENSE_DISABLE);
+		s_PintHook[IntNo].Handler = NULL;
+		s_PintHook[IntNo].pContext = NULL;
+	}
+	EnableInterrupt(state);
 }
 
-/**
- * @brief Set I/O pin sensing option
- *
- * Some hardware allow pin sensing to wake up or active other subsystem without
- * requiring enabling interrupts. This requires the I/O already configured
- *
- * @param	PortNo : Port number (up to 32 ports)
- * 			PinNo   : Pin number (up to 32 pins)
- * 			Sense   : Sense type of event on the I/O pin
- */
+// IntNo selects channel 0..7. Configure the pin's digital input before calling.
+bool IOPinEnableInterrupt(int IntNo, int IntPrio, uint32_t PortNo, uint32_t PinNo,
+						 IOPINSENSE Sense, IOPinEvtHandler_t pEvtCB, void *pCtx)
+{
+	if ((unsigned)IntNo >= LPC11_PINT_COUNT || PortNo > 1U ||
+		PinNo > 31U || !Lpc11GpioValidPin((int)PortNo, (int)PinNo) || pEvtCB == NULL ||
+		(Sense != IOPINSENSE_HIGH_TRANSITION && Sense != IOPINSENSE_LOW_TRANSITION &&
+		 Sense != IOPINSENSE_TOGGLE))
+	{
+		return false;
+	}
+
+	int maxprio = (1U << __NVIC_PRIO_BITS) - 1U;
+
+	if (IntPrio < 0)
+	{
+		IntPrio = 0;
+	}
+	else if (IntPrio > maxprio)
+	{
+		IntPrio = maxprio;
+	}
+	uint32_t state = DisableInterrupt();
+
+	if (s_PintHook[IntNo].Handler != NULL)
+	{
+		EnableInterrupt(state);
+		return false;
+	}
+
+	LPC_SYSCON->SYSAHBCLKCTRL |= LPC11_PINT_CLOCK;
+	(void)LPC_SYSCON->SYSAHBCLKCTRL;
+	Lpc11PintSetSense((unsigned)IntNo, IOPINSENSE_DISABLE);
+
+	// LPC11Uxx numbers port 1 pins from 24, unlike LPC546xx's stride of 32.
+	uint32_t sel = PortNo == 0U ? PinNo : 24U + PinNo;
+
+	LPC_SYSCON->PINTSEL[IntNo] = sel;
+	s_PintHook[IntNo].PinSel = (uint8_t)sel;
+	s_PintHook[IntNo].pContext = pCtx;
+	s_PintHook[IntNo].Handler = pEvtCB;
+	NVIC_SetPriority(s_PintIrq[IntNo], (uint32_t)IntPrio);
+	Lpc11PintSetSense((unsigned)IntNo, Sense);
+	EnableInterrupt(state);
+	return true;
+}
+
+// A query only; allocation keeps discovery and registration under one lock.
+int IOPinFindAvailInterrupt(void)
+{
+	uint32_t state = DisableInterrupt();
+	int intno = -1;
+
+	for (unsigned i = 0; i < LPC11_PINT_COUNT; i++)
+	{
+		if (s_PintHook[i].Handler == NULL)
+		{
+			intno = (int)i;
+			break;
+		}
+	}
+	EnableInterrupt(state);
+	return intno;
+}
+
+int IOPinAllocateInterrupt(int IntPrio, int PortNo, int PinNo, IOPINSENSE Sense,
+						 IOPinEvtHandler_t pEvtCB, void *pCtx)
+{
+	uint32_t state = DisableInterrupt();
+	int intno = IOPinFindAvailInterrupt();
+
+	if (intno >= 0 && !IOPinEnableInterrupt(intno, IntPrio, (uint32_t)PortNo,
+										 (uint32_t)PinNo, Sense, pEvtCB, pCtx))
+	{
+		intno = -1;
+	}
+	EnableInterrupt(state);
+	return intno;
+}
+
+// DISABLE pauses detection without releasing the allocated channel.
 void IOPinSetSense(int PortNo, int PinNo, IOPINSENSE Sense)
 {
-	// Pin sense is not avail on this STM32.  It only sets in interrupt
+	if (!Lpc11GpioValidPin(PortNo, PinNo) ||
+		(Sense != IOPINSENSE_DISABLE && Sense != IOPINSENSE_HIGH_TRANSITION &&
+		 Sense != IOPINSENSE_LOW_TRANSITION && Sense != IOPINSENSE_TOGGLE))
+	{
+		return;
+	}
+
+	uint32_t sel = PortNo == 0 ? (uint32_t)PinNo : 24U + (uint32_t)PinNo;
+	uint32_t state = DisableInterrupt();
+
+	for (unsigned i = 0; i < LPC11_PINT_COUNT; i++)
+	{
+		if (s_PintHook[i].Handler != NULL && s_PintHook[i].PinSel == sel)
+		{
+			Lpc11PintSetSense(i, Sense);
+		}
+	}
+	EnableInterrupt(state);
 }
 
-/**
- * @brief Set I/O pin drive strength option
- *
- * Some hardware allow setting pin drive strength. This requires the I/O already configured
- *
- * @param	PortNo 	: Port number (up to 32 ports)
- * 			PinNo  	: Pin number (up to 32 pins)
- * 			Strength: Pin drive strength
- */
+static void Lpc11PintDispatch(unsigned IntNo)
+{
+	uint32_t mask = 1UL << IntNo;
+	uint32_t state = DisableInterrupt();
+	IOPinEvtHandler_t handler = NULL;
+	void *context = NULL;
+
+	if ((LPC_GPIO_PIN_INT->IST & mask) != 0U)
+	{
+		// Edge mode W1C: acknowledge before callback so a new edge survives.
+		LPC_GPIO_PIN_INT->IST = mask;
+		if (s_PintHook[IntNo].Sense != IOPINSENSE_DISABLE)
+		{
+			handler = s_PintHook[IntNo].Handler;
+			context = s_PintHook[IntNo].pContext;
+		}
+	}
+	EnableInterrupt(state);
+
+	if (handler != NULL)
+	{
+		handler((int)IntNo, context);
+	}
+}
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+void FLEX_INT0_IRQHandler(void)
+{
+	Lpc11PintDispatch(0);
+}
+
+void FLEX_INT1_IRQHandler(void)
+{
+	Lpc11PintDispatch(1);
+}
+
+void FLEX_INT2_IRQHandler(void)
+{
+	Lpc11PintDispatch(2);
+}
+
+void FLEX_INT3_IRQHandler(void)
+{
+	Lpc11PintDispatch(3);
+}
+
+void FLEX_INT4_IRQHandler(void)
+{
+	Lpc11PintDispatch(4);
+}
+
+void FLEX_INT5_IRQHandler(void)
+{
+	Lpc11PintDispatch(5);
+}
+
+void FLEX_INT6_IRQHandler(void)
+{
+	Lpc11PintDispatch(6);
+}
+
+void FLEX_INT7_IRQHandler(void)
+{
+	Lpc11PintDispatch(7);
+}
+
+#ifdef __cplusplus
+}
+#endif
+
+// LPC11Uxx has no general-purpose programmable drive strength or slew rate.
 void IOPinSetStrength(int PortNo, int PinNo, IOPINSTRENGTH Strength)
 {
-	// Not available on this STM32
+	(void)PortNo;
+	(void)PinNo;
+	(void)Strength;
 }
 
-
-
+void IOPinSetSpeed(int PortNo, int PinNo, IOPINSPEED Speed)
+{
+	(void)PortNo;
+	(void)PinNo;
+	(void)Speed;
+}

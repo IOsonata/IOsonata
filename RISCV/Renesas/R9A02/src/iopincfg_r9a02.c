@@ -1,46 +1,33 @@
 /**-------------------------------------------------------------------------
 @file	iopincfg_r9a02.c
 
-@brief	I/O pin configuration for Renesas R9A02G021 (RISC-V Andes N22).
+@brief	I/O pin configuration for the Renesas R9A02G021
 
-Implements the IOsonata coredev/iopincfg.h interface against the
-RA-family IOPORT/PFS hardware.  See r9a02g021.h for the PFS field
-positions and the PWPR unlock sequence.
+Implements coredev/iopincfg.h with the PmnPFS registers, R9A02G021 User's
+Manual R01UH1036EJ0110 chapter 16, and the IRQ0 to IRQ7 pin interrupts
+through the ICU, chapter 12.
 
-PFS write protect sequence used by every function that touches PmnPFS:
+PinOp is the PSEL code of manual 16.6: IOPINOP_GPIO for a general I/O,
+the R9A02_PSEL_xxx value for a peripheral (R9A02_PSEL_SAU is 0x11, which is
+IOPINOP_FUNC16), IOPINOP_FUNC31 for the analog function (ASEL). The caller
+picks the code from the pin tables, IOPinConfig checks that the code exists
+on this part.
 
-   PMISC->PWPR = 0x00;     // clear B0WI (PFSWE-write disable)
-   PMISC->PWPR = 0x40;     // set PFSWE
-   ... write any PmnPFS register ...
-   PMISC->PWPR = 0x00;     // clear PFSWE again
-   PMISC->PWPR = 0x80;     // set B0WI to relock against accidental PFS writes
+Hardware rules applied by IOPinConfig:
+- An SAU pin configured as input gets NCODR = 1, the SAU output buffer of a
+  data pin is on in input mode and NCODR = 1 puts it in Hi-Z (16.5.1).
+- There is no pull-down. IOPINRES_PULLDOWN is refused.
+- P002, P003, P006, P007, P200, P400, P401 have no open-drain output.
+- P200 is input only.
 
-The two-step relock at the end is intentional: writing 0x80 with PFSWE
-already cleared is what RA-family HW manuals describe as the recommended
-"return to protected" state.
-
-Scope of this initial bring-up:
-   - IOPinConfig   : full PFS configuration (GPIO / peripheral / analog,
-                     pull-up, open-drain, direction).
-   - IOPinDisable  : clears the PFS, returning the pin to its reset state.
-   - IOPinSetStrength / IOPinSetSpeed : drive-strength control via PFS.DSCR.
-   - IOPinSetSense : edge select via PFS.EOFR / PFS.ISEL (ICU routing is
-                     left to the user until the R9A02 vector / ICU layer
-                     is brought up).
-
-External-interrupt allocation/dispatch (IOPinEnableInterrupt and
-IOPinAllocateInterrupt) requires the R9A02 ICU IELSR/IRQCR programming
-which is not part of IOPORT.  Those functions currently return false /
--1 with a TODO marker; once the R9A02 vectors / interrupt_r9a02.c
-layer lands the ICU side can be wired in here without touching the
-PFS code below.
+Unsupported requests leave the pin unchanged.
 
 @author	Hoang Nguyen Hoan
 @date	May. 11, 2026
 
 @license
 
-MIT
+MIT License
 
 Copyright (c) 2026, I-SYST inc., all rights reserved
 
@@ -63,323 +50,429 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ----------------------------------------------------------------------------*/
-
 #include <stdint.h>
 #include <stdbool.h>
 #include <stddef.h>
 
-#include "r9a02g021.h"
-#include "coredev/iopincfg.h"
+#include "iopinctrl.h"
+#include "interrupt_r9a02.h"
 
-/*---------------------------------------------------------------------------
- * Internal helpers
- *--------------------------------------------------------------------------*/
+#define R9A02_IRQ_LINE_CNT		8
+#define R9A02_ANALOG_PIN_CNT	8			// Analog pins are pins 0 to 7 of their port
 
-static inline bool R9A02IsValidPortPin(int PortNo, int PinNo)
+// PSEL codes that exist on this part, manual 16.6
+#define R9A02_PSEL_VALID_MSK	((1UL << R9A02_PSEL_UARTA) | (1UL << R9A02_PSEL_IICA) | \
+								 (1UL << R9A02_PSEL_CLKOUT_CMP) | (1UL << R9A02_PSEL_CAC) | \
+								 (1UL << R9A02_PSEL_REMC) | (1UL << R9A02_PSEL_SAU) | \
+								 (1UL << R9A02_PSEL_KINT) | (1UL << R9A02_PSEL_TAU) | \
+								 (1UL << R9A02_PSEL_RTC))
+
+#define R9A02_PFS_PIN_MSK		(R9A02_PFS_PODR | R9A02_PFS_PDR | R9A02_PFS_PCR | R9A02_PFS_NCODR | \
+								 R9A02_PFS_DSCR_Msk | R9A02_PFS_EOFR_Msk | R9A02_PFS_ISEL | \
+								 R9A02_PFS_ASEL | R9A02_PFS_PMR | R9A02_PFS_PSEL_Msk)
+
+typedef struct __R9a02_Pin_Hook {
+	IOPinEvtHandler_t Handler;
+	void *pCtx;
+	int IntNo;					//!< IELSR number from R9a02RegisterIntHandler
+	uint8_t Pin;				//!< (port << 4) | pin, valid while Handler is set
+} R9a02PinHook_t;
+
+// IRQ pins of the 48-pin part, manual tables 16.6 to 16.9, packed
+// (IRQ << 8) | (port << 4) | pin
+static const uint16_t s_R9a02PinIrqMap[] = {
+	0x030,						// IRQ0_A P300
+	0x131,						// IRQ1_A P301
+	0x212, 0x233, 0x222,		// IRQ2_A P102, IRQ2_B P303, IRQ2_C P202
+	0x307, 0x332, 0x321,		// IRQ3_A P007, IRQ3_B P302, IRQ3_C P201
+	0x406, 0x418,				// IRQ4_A P006, IRQ4_B P108
+	0x501, 0x519,				// IRQ5_A P001, IRQ5_B P109
+	0x600, 0x61B, 0x610,		// IRQ6_A P000, IRQ6_B P111, IRQ6_C P100
+	0x703, 0x71A, 0x711,		// IRQ7_A P003, IRQ7_B P110, IRQ7_C P101
+};
+
+static R9a02PinHook_t s_R9a02PinHook[R9A02_IRQ_LINE_CNT];
+
+// Users of the analog function of each pin, R9a02AnalogPinUse
+static uint8_t s_R9a02AnalogUse[R9A02_PORT_COUNT][R9A02_ANALOG_PIN_CNT];
+
+static int R9a02PinIrq(int PortNo, int PinNo)
 {
-    return (PortNo >= 0)
-        && ((uint32_t)PortNo < R9A02_MAX_PORT)
-        && (PinNo >= 0)
-        && ((uint32_t)PinNo < R9A02_PINS_PER_PORT);
+	if (!R9a02PinValid(PortNo, PinNo))
+	{
+		return -1;
+	}
+
+	unsigned pin = ((unsigned)PortNo << 4) | (unsigned)PinNo;
+
+	for (size_t i = 0; i < sizeof(s_R9a02PinIrqMap) / sizeof(s_R9a02PinIrqMap[0]); i++)
+	{
+		if ((s_R9a02PinIrqMap[i] & 0xFFU) == pin)
+		{
+			return s_R9a02PinIrqMap[i] >> 8;
+		}
+	}
+
+	return -1;
 }
 
-static inline void R9A02PfsUnlock(void)
+static bool R9a02PinAnalog(int PortNo, int PinNo)
 {
-    /* B0WI must be cleared first; otherwise the write that sets PFSWE
-     * is silently dropped.  These two writes do *not* fold into one
-     * because PWPR latches B0WI/PFSWE independently per write. */
-    PMISC->PWPR = 0U;
-    PMISC->PWPR = R9A02_PMISC_PWPR_PFSWE_Msk;       /* PFSWE = 1, B0WI = 0 */
+	static const uint16_t s_Analog[R9A02_PORT_COUNT] = { 0x00CF, 0x00F0, 0, 0, 0x0003 };
+
+	return (s_Analog[PortNo] & (1U << (unsigned)PinNo)) != 0U;
 }
 
-static inline void R9A02PfsLock(void)
+static bool R9a02PinOpenDrain(int PortNo, int PinNo)
 {
-    PMISC->PWPR = 0U;                                /* PFSWE = 0          */
-    PMISC->PWPR = R9A02_PMISC_PWPR_B0WI_Msk;         /* B0WI  = 1 (relock) */
+	static const uint16_t s_OpenDrain[R9A02_PORT_COUNT] = { 0x0F03, 0x0FFF, 0x00FE, 0x00FF, 0x000C };
+
+	return (s_OpenDrain[PortNo] & (1U << (unsigned)PinNo)) != 0U;
 }
 
-static inline void R9A02PfsWrite(int PortNo, int PinNo, uint32_t Value)
+// Caller disables interrupts. PSEL and ASEL change only while PMR is 0
+// (16.5.3). Keeps the PWPR state of the caller.
+static bool R9a02PfsWrite(int PortNo, int PinNo, uint32_t Value)
 {
-    *R9A02_PFS_REG_ADDR(PortNo, PinNo) = Value;
+	uint8_t pwpr = R9A02_PFS_PWPR;
+
+	R9A02_PFS_PWPR = 0U;
+	R9A02_PFS_PWPR = R9A02_PWPR_PFSWE;
+
+	volatile uint32_t *pfs = &R9A02_PFS(PortNo, PinNo);
+	uint32_t old = *pfs & R9A02_PFS_PIN_MSK;
+
+	Value &= R9A02_PFS_PIN_MSK;
+
+	if ((old ^ Value) & (R9A02_PFS_PSEL_Msk | R9A02_PFS_ASEL | R9A02_PFS_PMR))
+	{
+		if (old & R9A02_PFS_PMR)
+		{
+			*pfs = old & ~R9A02_PFS_PMR;
+		}
+		*pfs = Value & ~R9A02_PFS_PMR;
+	}
+	*pfs = Value;
+
+	bool ok = (*pfs & R9A02_PFS_PIN_MSK & ~R9A02_PFS_PODR) == (Value & ~R9A02_PFS_PODR);
+
+	R9A02_PFS_PWPR = 0U;
+	R9A02_PFS_PWPR = (pwpr & R9A02_PWPR_PFSWE) ? R9A02_PWPR_PFSWE : R9A02_PWPR_B0WI;
+
+	return ok;
 }
 
-static inline uint32_t R9A02PfsRead(int PortNo, int PinNo)
+void IOPinConfig(int PortNo, int PinNo, int PinOp, IOPINDIR Dir, IOPINRES Resistor, IOPINTYPE Type)
 {
-    return *R9A02_PFS_REG_ADDR(PortNo, PinNo);
+	if (!R9a02PinValid(PortNo, PinNo) || PinOp < IOPINOP_GPIO || PinOp > IOPINOP_FUNC31 ||
+		(Dir != IOPINDIR_INPUT && Dir != IOPINDIR_OUTPUT && Dir != IOPINDIR_BI) ||
+		(Resistor != IOPINRES_NONE && Resistor != IOPINRES_PULLUP) ||
+		(Type != IOPINTYPE_NORMAL && Type != IOPINTYPE_OPENDRAIN))
+	{
+		return;
+	}
+
+	bool analog = PinOp == IOPINOP_FUNC31;
+	bool inonly = PortNo == 2 && PinNo == 0;
+
+	if (analog && (!R9a02PinAnalog(PortNo, PinNo) || Dir != IOPINDIR_INPUT ||
+		Resistor != IOPINRES_NONE || Type != IOPINTYPE_NORMAL))
+	{
+		return;
+	}
+
+	if (inonly && (PinOp != IOPINOP_GPIO || Dir != IOPINDIR_INPUT || Resistor != IOPINRES_NONE ||
+		Type != IOPINTYPE_NORMAL))
+	{
+		return;
+	}
+
+	if (!analog && PinOp != IOPINOP_GPIO && (R9A02_PSEL_VALID_MSK & (1UL << (unsigned)PinOp)) == 0U)
+	{
+		return;
+	}
+
+	bool sauin = PinOp == R9A02_PSEL_SAU && Dir == IOPINDIR_INPUT;
+
+	if ((Type == IOPINTYPE_OPENDRAIN || sauin) && !R9a02PinOpenDrain(PortNo, PinNo))
+	{
+		return;
+	}
+
+	uintptr_t state = DisableInterrupt();
+	uint32_t old = R9A02_PFS(PortNo, PinNo);
+
+	// Configuration does not release a pin interrupt, IOPinDisableInterrupt does
+	if (old & R9A02_PFS_ISEL)
+	{
+		EnableInterrupt(state);
+
+		return;
+	}
+
+	uint32_t val = old & R9A02_PFS_PODR;
+
+	if (analog)
+	{
+		val = R9A02_PFS_ASEL;
+	}
+	else
+	{
+		if (Dir == IOPINDIR_OUTPUT)
+		{
+			val |= R9A02_PFS_PDR;
+		}
+		if (PinOp != IOPINOP_GPIO)
+		{
+			val |= ((uint32_t)PinOp << R9A02_PFS_PSEL_Pos) | R9A02_PFS_PMR;
+		}
+		if (Resistor == IOPINRES_PULLUP)
+		{
+			val |= R9A02_PFS_PCR;
+		}
+		if (Type == IOPINTYPE_OPENDRAIN || sauin)
+		{
+			val |= R9A02_PFS_NCODR;
+		}
+	}
+
+	R9a02PfsWrite(PortNo, PinNo, val);
+
+	EnableInterrupt(state);
 }
 
-/*---------------------------------------------------------------------------
- * Drive-strength helpers (PFS.DSCR field is 2 bits, 0..3 = low..high).
- *
- * The RA-family hardware manual lists three classes of pad: standard,
- * 5 V tolerant, and high-current.  Not every pin honours every DSCR
- * value -- pins without a high-drive option silently latch the lower
- * value.  Mapping IOPINSTRENGTH_STRONG to the maximum field value
- * is the simplest portable choice and is what FSP also does.
- *--------------------------------------------------------------------------*/
-static inline uint32_t R9A02DscrFromStrength(IOPINSTRENGTH Strength)
-{
-    return (Strength == IOPINSTRENGTH_STRONG) ? 3UL : 0UL;
-}
-
-static inline uint32_t R9A02DscrFromSpeed(IOPINSPEED Speed)
-{
-    switch (Speed)
-    {
-        case IOPINSPEED_LOW:        return 0UL;
-        case IOPINSPEED_MEDIUM:     return 1UL;
-        case IOPINSPEED_HIGH:       return 2UL;
-        case IOPINSPEED_TURBO:      return 3UL;
-        default:                    return 0UL;
-    }
-}
-
-static uint32_t R9A02EofrFromSense(IOPINSENSE Sense)
-{
-    switch (Sense)
-    {
-        case IOPINSENSE_LOW_TRANSITION:     return R9A02_PFS_EOFR_FALLING;
-        case IOPINSENSE_HIGH_TRANSITION:    return R9A02_PFS_EOFR_RISING;
-        case IOPINSENSE_TOGGLE:             return R9A02_PFS_EOFR_BOTH;
-        case IOPINSENSE_DISABLE:
-        default:                            return 0UL;
-    }
-}
-
-/*---------------------------------------------------------------------------
- * IOPinConfig
- *
- * PinOp interpretation on R9A02G021:
- *
- *   IOPINOP_GPIO  (0)         plain GPIO, PMR = 0, PSEL not used.
- *   IOPINOP_FUNCn (1..31)     peripheral function: PMR = 1,
- *                             PSEL[28:24] = (n - 1).
- *                             E.g. UART0 RXD on most parts is PSEL = 4 ->
- *                             use IOPINOP_FUNC5 (since IOPINOP_FUNCn maps
- *                             to PSEL = n - 1).
- *   IOPINOP_FUNC31            interpreted as analog input (ASEL = 1).
- *                             Note: the RA-family also offers ASEL for
- *                             analog comparator pads regardless of PSEL.
- *
- * Order of register writes follows the RA-family bring-up convention:
- *   1. PWPR unlock.
- *   2. Single 32-bit PFS write with everything composed in software.
- *      Writing the entire PFS in one transaction (vs. RMW) avoids
- *      intermediate states where the pin briefly drives garbage onto
- *      a peripheral pad.
- *   3. PWPR relock.
- *--------------------------------------------------------------------------*/
-void IOPinConfig(int PortNo, int PinNo, int PinOp,
-                 IOPINDIR Dir, IOPINRES Resistor, IOPINTYPE Type)
-{
-    if (!R9A02IsValidPortPin(PortNo, PinNo))
-    {
-        return;
-    }
-
-    uint32_t pfs = 0U;
-
-    /* Function selection. */
-    if (PinOp == IOPINOP_GPIO)
-    {
-        /* Plain GPIO: PMR = 0.  Direction set below. */
-    }
-    else if (PinOp == IOPINOP_FUNC31)
-    {
-        /* Analog: ASEL = 1, no PMR.  Direction/pull bits left at 0,
-         * matching how FSP configures analog pads. */
-        pfs |= R9A02_PFS_ASEL_Msk;
-        Resistor = IOPINRES_NONE;       /* pull-up nonsensical on analog  */
-        Dir      = IOPINDIR_INPUT;
-    }
-    else if ((PinOp >= IOPINOP_FUNC0) && (PinOp < IOPINOP_FUNC31))
-    {
-        /* Peripheral function index n maps to PSEL = (n - IOPINOP_FUNC0). */
-        uint32_t psel = (uint32_t)(PinOp - IOPINOP_FUNC0);
-        pfs |= R9A02_PFS_PMR_Msk
-             | ((psel << R9A02_PFS_PSEL_Pos) & R9A02_PFS_PSEL_Msk);
-    }
-    else
-    {
-        return;     /* unknown PinOp -- leave pin untouched */
-    }
-
-    /* Direction.  Renesas treats "direction = output" as PDR = 1.  For
-     * peripheral mode (PMR = 1) PDR is overridden by the peripheral,
-     * so setting it here is harmless. */
-    if ((Dir == IOPINDIR_OUTPUT) || (Dir == IOPINDIR_BI))
-    {
-        pfs |= R9A02_PFS_PDR_Msk;
-    }
-
-    /* Pull resistor.  R9A02G021 only has a pull-up control bit (PCR);
-     * pull-down is not supported.  Per the RA family rules the pull-up
-     * is only effective when the pin is configured as input. */
-    if ((Resistor == IOPINRES_PULLUP) || (Resistor == IOPINRES_FOLLOW))
-    {
-        pfs |= R9A02_PFS_PCR_Msk;
-    }
-    else if (Resistor == IOPINRES_PULLDOWN)
-    {
-        /* No hardware pull-down on R9A02G021.  Caller intent is honoured
-         * by leaving PCR clear; we do not error out so portable code that
-         * specifies PULLDOWN still gets a functional (resistor-less) pin
-         * instead of being silently disabled. */
-    }
-
-    /* Output type.  Renesas calls N-channel open drain "NCODR".  Used
-     * only when the pin is actively driving (output / bidirectional);
-     * harmless on inputs.  Pure P-channel open drain is not supported
-     * on R9A02G021. */
-    if (Type == IOPINTYPE_OPENDRAIN)
-    {
-        pfs |= R9A02_PFS_NCODR_Msk;
-    }
-
-    /* Default drive strength: medium (1).  IOPinSetStrength / IOPinSetSpeed
-     * lets the application override later without touching the rest of the
-     * PFS. */
-    pfs |= (1UL << R9A02_PFS_DSCR_Pos);
-
-    R9A02PfsUnlock();
-    R9A02PfsWrite(PortNo, PinNo, pfs);
-    R9A02PfsLock();
-}
-
-/*---------------------------------------------------------------------------
- * IOPinDisable - return the pin to its (mostly) reset state.
- *
- * Writing 0 to PmnPFS clears PMR/ASEL/ISEL/PSEL/PDR/PCR/NCODR/DSCR, which
- * puts the pin back into input-mode GPIO with no pulls and minimum drive.
- * That matches the IOsonata "disable" contract (low-power, disconnected).
- *--------------------------------------------------------------------------*/
 void IOPinDisable(int PortNo, int PinNo)
 {
-    if (!R9A02IsValidPortPin(PortNo, PinNo))
-    {
-        return;
-    }
+	if (!R9a02PinValid(PortNo, PinNo))
+	{
+		return;
+	}
 
-    R9A02PfsUnlock();
-    R9A02PfsWrite(PortNo, PinNo, 0U);
-    R9A02PfsLock();
+	uintptr_t state = DisableInterrupt();
+	int line = R9a02PinIrq(PortNo, PinNo);
+
+	if (line >= 0 && s_R9a02PinHook[line].Handler != NULL &&
+		s_R9a02PinHook[line].Pin == (((unsigned)PortNo << 4) | (unsigned)PinNo))
+	{
+		IOPinDisableInterrupt(line);
+	}
+
+	uint32_t val = R9A02_PFS(PortNo, PinNo);
+
+	if ((val & R9A02_PFS_ISEL) == 0U)
+	{
+		// Input, no pull-up, no function, output latch kept
+		R9a02PfsWrite(PortNo, PinNo, val & R9A02_PFS_PODR);
+	}
+
+	EnableInterrupt(state);
 }
 
-/*---------------------------------------------------------------------------
- * IOPinSetSense - program PFS.EOFR + ISEL.
- *
- * This sets up the edge-detect circuit on the pad but does NOT touch the
- * R9A02 ICU.  Routing the resulting event into an NVIC/CLIC slot is the
- * responsibility of the (not-yet-implemented) R9A02 interrupt layer.
- *--------------------------------------------------------------------------*/
-void IOPinSetSense(int PortNo, int PinNo, IOPINSENSE Sense)
+bool R9a02AnalogPinUse(int PortNo, int PinNo, bool bUse)
 {
-    if (!R9A02IsValidPortPin(PortNo, PinNo))
-    {
-        return;
-    }
+	if (!R9a02PinValid(PortNo, PinNo) || !R9a02PinAnalog(PortNo, PinNo))
+	{
+		return false;
+	}
 
-    uint32_t pfs = R9A02PfsRead(PortNo, PinNo);
-    pfs &= ~(R9A02_PFS_EOFR_Msk | R9A02_PFS_ISEL_Msk);
+	uintptr_t state = DisableInterrupt();
+	uint8_t *cnt = &s_R9a02AnalogUse[PortNo][PinNo];
 
-    if (Sense != IOPINSENSE_DISABLE)
-    {
-        pfs |= R9A02EofrFromSense(Sense) | R9A02_PFS_ISEL_Msk;
-    }
+	if (bUse)
+	{
+		IOPinConfig(PortNo, PinNo, IOPINOP_FUNC31, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL);
+		if (*cnt < 0xFFU)
+		{
+			*cnt = (uint8_t)(*cnt + 1U);
+		}
+	}
+	else if (*cnt > 0U)
+	{
+		*cnt = (uint8_t)(*cnt - 1U);
+		if (*cnt == 0U)
+		{
+			IOPinDisable(PortNo, PinNo);
+		}
+	}
 
-    R9A02PfsUnlock();
-    R9A02PfsWrite(PortNo, PinNo, pfs);
-    R9A02PfsLock();
+	EnableInterrupt(state);
+
+	return true;
 }
 
-void IOPinSetStrength(int PortNo, int PinNo, IOPINSTRENGTH Strength)
+static void R9a02PinCallback(int IntNo, void *pCtx)
 {
-    if (!R9A02IsValidPortPin(PortNo, PinNo))
-    {
-        return;
-    }
+	R9a02PinHook_t *hook = (R9a02PinHook_t *)pCtx;
+	uintptr_t state = DisableInterrupt();
+	IOPinEvtHandler_t handler = hook->IntNo == IntNo ? hook->Handler : NULL;
+	void *ctx = hook->pCtx;
+	int line = (int)(hook - s_R9a02PinHook);
 
-    uint32_t pfs = R9A02PfsRead(PortNo, PinNo);
-    pfs &= ~R9A02_PFS_DSCR_Msk;
-    pfs |= (R9A02DscrFromStrength(Strength) << R9A02_PFS_DSCR_Pos);
+	EnableInterrupt(state);
 
-    R9A02PfsUnlock();
-    R9A02PfsWrite(PortNo, PinNo, pfs);
-    R9A02PfsLock();
+	if (handler != NULL)
+	{
+		handler(line, ctx);
+	}
 }
 
-void IOPinSetSpeed(int PortNo, int PinNo, IOPINSPEED Speed)
+// IntNo is the IRQ line 0 to 7 of the pin. Edge sense only, the IRQCR low
+// level mode has no IOPINSENSE value.
+bool IOPinEnableInterrupt(int IntNo, int IntPrio, uint32_t PortNo, uint32_t PinNo, IOPINSENSE Sense,
+						  IOPinEvtHandler_t pEvtCB, void *pCtx)
 {
-    if (!R9A02IsValidPortPin(PortNo, PinNo))
-    {
-        return;
-    }
+	if ((unsigned)IntNo >= R9A02_IRQ_LINE_CNT || PortNo >= R9A02_PORT_COUNT || PinNo >= R9A02_PORT_PIN_COUNT ||
+		R9a02PinIrq((int)PortNo, (int)PinNo) != IntNo || pEvtCB == NULL ||
+		IntPrio < 0 || IntPrio > (int)R9A02_CLIC_PRIO_MAX ||
+		Sense < IOPINSENSE_LOW_TRANSITION || Sense > IOPINSENSE_TOGGLE)
+	{
+		return false;
+	}
 
-    uint32_t pfs = R9A02PfsRead(PortNo, PinNo);
-    pfs &= ~R9A02_PFS_DSCR_Msk;
-    pfs |= (R9A02DscrFromSpeed(Speed) << R9A02_PFS_DSCR_Pos);
+	uintptr_t state = DisableInterrupt();
+	uint32_t old = R9A02_PFS(PortNo, PinNo);
 
-    R9A02PfsUnlock();
-    R9A02PfsWrite(PortNo, PinNo, pfs);
-    R9A02PfsLock();
+	if (s_R9a02PinHook[IntNo].Handler != NULL ||
+		(old & (R9A02_PFS_ASEL | R9A02_PFS_PDR | R9A02_PFS_PMR | R9A02_PFS_ISEL)))
+	{
+		EnableInterrupt(state);
+
+		return false;
+	}
+
+	// One pin per IRQ line (16.2.5 ISEL)
+	for (size_t i = 0; i < sizeof(s_R9a02PinIrqMap) / sizeof(s_R9a02PinIrqMap[0]); i++)
+	{
+		unsigned p = s_R9a02PinIrqMap[i] & 0xFFU;
+
+		if ((s_R9a02PinIrqMap[i] >> 8) == (unsigned)IntNo && R9a02PinValid((int)(p >> 4), (int)(p & 15U)) &&
+			(R9A02_PFS(p >> 4, p & 15U) & R9A02_PFS_ISEL))
+		{
+			EnableInterrupt(state);
+
+			return false;
+		}
+	}
+
+	// Manual 12.5.6: filter off, detection mode, then the pin and the link
+	uint8_t irqmd = Sense == IOPINSENSE_LOW_TRANSITION ? R9A02_IRQCR_IRQMD_FALLING :
+					Sense == IOPINSENSE_HIGH_TRANSITION ? R9A02_IRQCR_IRQMD_RISING : R9A02_IRQCR_IRQMD_BOTH;
+	uint8_t oldcr = R9A02_ICU->IRQCR[IntNo];
+
+	R9A02_ICU->IRQCR[IntNo] = oldcr & (uint8_t)~R9A02_IRQCR_FLTEN;
+	R9A02_ICU->IRQCR[IntNo] = irqmd;
+
+	R9a02PinHook_t *hook = &s_R9a02PinHook[IntNo];
+
+	hook->pCtx = pCtx;
+	hook->Pin = (uint8_t)((PortNo << 4) | PinNo);
+	hook->IntNo = -1;
+	hook->Handler = pEvtCB;
+
+	bool ok = R9A02_ICU->IRQCR[IntNo] == irqmd && R9a02PfsWrite((int)PortNo, (int)PinNo, old | R9A02_PFS_ISEL);
+	int intno = ok ? R9a02RegisterIntHandler((uint8_t)(R9A02_EVT_PORT_IRQ0 + IntNo), IntPrio, R9a02PinCallback, hook) : -1;
+
+	if (intno < 0)
+	{
+		R9a02PfsWrite((int)PortNo, (int)PinNo, old);
+		R9A02_ICU->IRQCR[IntNo] = oldcr;
+		hook->Handler = NULL;
+		hook->pCtx = NULL;
+		EnableInterrupt(state);
+
+		return false;
+	}
+
+	hook->IntNo = intno;
+	EnableInterrupt(state);
+
+	return true;
 }
 
-/*---------------------------------------------------------------------------
- * External pin interrupt allocation / dispatch.
- *
- * R9A02G021 routes pad edge events through the ICU IELSR table to a
- * CLIC interrupt.  Allocating an ICU slot and an interrupt handler
- * requires the R9A02 vector / interrupt management layer, which is
- * out of scope for the IOPORT driver and not yet present in this port.
- *
- * The functions below are wired to PFS.EOFR / ISEL (via IOPinSetSense)
- * so the pad-level edge-detect path is functional once the ICU side
- * is in place.  Until then, they return false / -1 to make sure
- * callers cannot assume an interrupt has been hooked.
- *
- * TODO(R9A02 ICU): implement Re9a02RegisterIntHandler equivalent and
- *                  wire IOPinEnableInterrupt to allocate an IELSR slot.
- *--------------------------------------------------------------------------*/
+int IOPinAllocateInterrupt(int IntPrio, int PortNo, int PinNo, IOPINSENSE Sense, IOPinEvtHandler_t pEvtCB, void *pCtx)
+{
+	int line = R9a02PinIrq(PortNo, PinNo);
+
+	if (line < 0)
+	{
+		return -1;
+	}
+
+	return IOPinEnableInterrupt(line, IntPrio, (uint32_t)PortNo, (uint32_t)PinNo, Sense, pEvtCB, pCtx) ? line : -1;
+}
+
 void IOPinDisableInterrupt(int IntNo)
 {
-    (void)IntNo;
-    /* No-op: nothing has been enabled yet because IOPinEnableInterrupt
-     * currently returns false.  Once the ICU layer is in place this
-     * will free the corresponding IELSR slot. */
+	if ((unsigned)IntNo >= R9A02_IRQ_LINE_CNT)
+	{
+		return;
+	}
+
+	uintptr_t state = DisableInterrupt();
+	R9a02PinHook_t *hook = &s_R9a02PinHook[IntNo];
+
+	if (hook->Handler != NULL)
+	{
+		int port = hook->Pin >> 4;
+		int pin = hook->Pin & 15;
+
+		R9a02UnregisterIntHandler(hook->IntNo);
+		R9a02PfsWrite(port, pin, R9A02_PFS(port, pin) & ~R9A02_PFS_ISEL);
+		hook->Handler = NULL;
+		hook->pCtx = NULL;
+		hook->IntNo = -1;
+	}
+
+	EnableInterrupt(state);
 }
 
-bool IOPinEnableInterrupt(int IntNo, int IntPrio,
-                          uint32_t PortNo, uint32_t PinNo,
-                          IOPINSENSE Sense,
-                          IOPinEvtHandler_t pEvtCB, void *pCtx)
+// Port group input edge for the ELC (IOPORT_GROUP1, IOPORT_GROUP2), ports 1
+// and 2 only (16.2.5 EOFR). Routing the group event is up to its user.
+void IOPinSetSense(int PortNo, int PinNo, IOPINSENSE Sense)
 {
-    (void)IntNo;
-    (void)IntPrio;
-    (void)pEvtCB;
-    (void)pCtx;
+	if (!R9a02PinValid(PortNo, PinNo) || PortNo < 1 || PortNo > 2 ||
+		Sense < IOPINSENSE_DISABLE || Sense > IOPINSENSE_TOGGLE)
+	{
+		return;
+	}
 
-    /* Program the pad-level edge detect so wake-from-sleep via DEEPCUT
-     * still works even before the ICU side is finalized. */
-    if (R9A02IsValidPortPin((int)PortNo, (int)PinNo))
-    {
-        IOPinSetSense((int)PortNo, (int)PinNo, Sense);
-    }
+	uintptr_t state = DisableInterrupt();
+	uint32_t val = R9A02_PFS(PortNo, PinNo);
 
-    return false;       /* no full IRQ wiring yet */
+	if ((val & R9A02_PFS_ASEL) == 0U)
+	{
+		val &= ~R9A02_PFS_EOFR_Msk;
+		if (Sense == IOPINSENSE_LOW_TRANSITION)
+		{
+			val |= R9A02_PFS_EOFR_FALLING;
+		}
+		else if (Sense == IOPINSENSE_HIGH_TRANSITION)
+		{
+			val |= R9A02_PFS_EOFR_RISING;
+		}
+		else if (Sense == IOPINSENSE_TOGGLE)
+		{
+			val |= R9A02_PFS_EOFR_BOTH;
+		}
+		R9a02PfsWrite(PortNo, PinNo, val);
+	}
+
+	EnableInterrupt(state);
 }
 
-int IOPinAllocateInterrupt(int IntPrio, int PortNo, int PinNo,
-                           IOPINSENSE Sense,
-                           IOPinEvtHandler_t pEvtCB, void *pCtx)
+// No drive strength control on this part. DSCR of P100, P302 and P303 is a
+// constant current sink mode enabled through CCDE (16.2.8), not a strength.
+void IOPinSetStrength(int PortNo, int PinNo, IOPINSTRENGTH Strength)
 {
-    (void)IntPrio;
-    (void)pEvtCB;
-    (void)pCtx;
+	(void)PortNo;
+	(void)PinNo;
+	(void)Strength;
+}
 
-    if (R9A02IsValidPortPin(PortNo, PinNo))
-    {
-        IOPinSetSense(PortNo, PinNo, Sense);
-    }
-
-    return -1;          /* no ICU slot allocated */
+// No slew rate control on this part
+void IOPinSetSpeed(int PortNo, int PinNo, IOPINSPEED Speed)
+{
+	(void)PortNo;
+	(void)PinNo;
+	(void)Speed;
 }

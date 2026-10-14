@@ -66,6 +66,21 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>src/nRF5_SDK/libraries/atomic</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/libraries/atomic_fifo</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/libraries/balloc</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>src/nRF5_SDK/nano-pb</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -376,6 +391,31 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>src/nRF5_SDK/libraries/experimental_section_vars</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/libraries/scheduler</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/libraries/sha256</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/libraries/util</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/micro-ecc</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>src/nRF5_SDK/nrfx/drivers/src/nrfx_uart.c</name>
 			<type>1</type>
 			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/modules/nrfx/drivers/src/nrfx_uart.c</locationURI>
@@ -416,9 +456,59 @@
 			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/crypto/backend/nrf_sw/nrf_sw_backend_hash.h</locationURI>
 		</link>
 		<link>
+			<name>src/nRF5_SDK/libraries/balloc/nrf_balloc.c</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/balloc/nrf_balloc.c</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/libraries/atomic/nrf_atomic.c</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/atomic/nrf_atomic.c</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/libraries/atomic_fifo/nrf_atfifo.c</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/atomic_fifo/nrf_atfifo.c</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/libraries/experimental_section_vars/nrf_section_iter.c</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/experimental_section_vars/nrf_section_iter.c</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/libraries/scheduler/app_scheduler.c</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/scheduler/app_scheduler.c</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/libraries/sha256/sha256.c</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/sha256/sha256.c</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/libraries/util/app_util_platform.c</name>
+			<type>1</type>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/components/libraries/util/app_util_platform.c</locationURI>
+		</link>
+		<link>
+			<name>src/nRF5_SDK/micro-ecc/uECC.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/micro-ecc/uECC.c</locationURI>
+		</link>
+		<link>
+			<name>src/iosonata_dfu_public_key.c</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/src/iosonata_dfu_public_key.c</locationURI>
+		</link>
+		<link>
 			<name>src/nRF5_SDK/nrfx/drivers/src/prs/nrfx_prs.c</name>
 			<type>1</type>
 			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK/modules/nrfx/drivers/src/prs/nrfx_prs.c</locationURI>
+		</link>
+		<link>
+			<name>src/nrf_dfu_serial_uarte.c</name>
+			<type>1</type>
+			<locationURI>PARENT-1-PROJECT_LOC/src/nrf_dfu_serial_uarte.c</locationURI>
 		</link>
 	</linkedResources>
 </projectDescription>

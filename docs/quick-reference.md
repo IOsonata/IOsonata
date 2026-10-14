@@ -202,6 +202,7 @@ Supported probes depend on the target configuration and can include IDAP-Link, J
 | UART throughput | `UartPrbsTxTest` / `exemples/uart/uart_prbs_tx.cpp` |
 | I2C master | `I2CMasterDemo` / `exemples/i2c/i2c_master_demo.cpp` |
 | SPI master | `SPIMasterDemo` / `exemples/spi/spi_master_demo.cpp` |
+| Buzzer melody/effects | `BuzzerDemo` / `exemples/audio/buzzer_demo.cpp` |
 | USB CDC ACM | `UsbCdcLoopback` / `exemples/usb/usb_cdc_loopback.cpp` |
 | USB custom Bulk | `UsbCustomBulkLoopback` / `exemples/usb/usb_custom_bulk_loopback.cpp` |
 | USB HID | `UsbHidLoopback` / `exemples/usb/usb_hid_loopback.cpp` |
@@ -212,6 +213,37 @@ Supported probes depend on the target configuration and can include IDAP-Link, J
 | TaktOS integration | `UartBleTaktOS`, `UartPrbsTxTestTaktOS` |
 | NVM/storage | projects using `exemples/storage/` |
 | Motion/environment sensors | `MotionSensorDemo`, `TPHDemo` |
+
+### Buzzer melody and effects
+
+The buzzer is an audio-layer device built on the generic PWM peripheral.
+Keep the PWM pin in the application's `board.h`; melody code uses notes,
+musical lengths and tempo rather than application frequency/tick calculations:
+
+```cpp
+#include "audio/buzzer.h"
+
+using Note = BuzzerPitch;
+using Length = BuzzerDuration;
+
+static const BuzzerNote_t melody[] = {
+    {Note::C5, Length::Quarter},
+    {Note::E5, Length::DottedQuarter},
+    {Note::Rest, Length::Eighth},
+    {Note::G5, Length::Half}
+};
+
+BuzzerPlayer player;
+player.Init(&buzzer, &timer);
+player.Play(melody, 4, 120);
+player.Process();
+
+player.Play(BuzzerEffect::Chirp);
+```
+
+Call `Process()` from the main loop or one worker thread, not from the timer
+ISR. See the [Buzzer User Guide](buzzer.md) for custom sweeps/fades, repeats,
+volume restoration and timer requirements.
 
 USB device examples currently target the nRF52840 native USB controller. See
 the [USB User Guide](usb-user-guide.md) for initialization, host dependencies and test
@@ -273,5 +305,6 @@ Check power, cable, SWD/JTAG wiring, probe firmware and selected target configur
 - [DeviceIntrf implementer notes](architecture/devintrf-implementer-notes.md)
 - [Device composition](architecture/device-composition.md)
 - [Getting started](getting-started.md)
+- [Buzzer User Guide](buzzer.md)
 - [Dependencies](dependencies.md)
 - [Supported targets](supported-targets.md)

@@ -40,6 +40,7 @@ SOFTWARE.
 #include "istddef.h"
 #include "bluetooth/bt_att.h"
 #include "bluetooth/bt_gatt.h"
+#include "bluetooth/bt_gap.h"
 #include "bluetooth/bt_dev.h"
 #include "bluetooth/bt_peer.h"
 #include "bluetooth/bt_smp.h"
@@ -771,15 +772,104 @@ __attribute__((weak)) bool BtAttLinkAuthorized(uint16_t ConnHdl,
 	return true;
 }
 
-// Compatibility hook for ports/apps that already enforce security externally.
-// Return 0 to allow access, or an ATT error code such as INSUF_ENCRYPT.
+// Enforce service/characteristic security in the ATT core itself. This must
+// never be a permissive weak stub: when linked from a static library a weak
+// definition can satisfy references before a stronger adapter object is pulled.
+// Platform-specific implementations may override this default.
 __attribute__((weak)) uint8_t BtAttAccessSecurityError(uint16_t ConnHdl,
 													  BtAttDBEntry_t *pEntry,
 													  bool bRead)
 {
-	(void)ConnHdl;
-	(void)pEntry;
-	(void)bRead;
+	if (pEntry == nullptr)
+	{
+		return BT_ATT_ERROR_INVALID_HANDLE;
+	}
+
+	BtGattChar_t *pChar = nullptr;
+	if (pEntry->TypeUuid.BaseIdx != 0)
+	{
+		pChar = ((BtAttCharValue_t *)pEntry->Data)->pChar;
+	}
+	else if (pEntry->TypeUuid.Uuid ==
+			BT_UUID_DESCRIPTOR_CLIENT_CHARACTERISTIC_CONFIGURATION)
+	{
+		pChar = ((BtDescClientCharConfig_t *)pEntry->Data)->pChar;
+	}
+	else if (pEntry->TypeUuid.Uuid ==
+			BT_UUID_DESCRIPTOR_CHARACTERISTIC_USER_DESCRIPTION)
+	{
+		pChar = ((BtDescCharUserDesc_t *)pEntry->Data)->pChar;
+	}
+	else if (pEntry->TypeUuid.Uuid != BT_UUID_DECLARATIONS_PRIMARY_SERVICE &&
+			 pEntry->TypeUuid.Uuid != BT_UUID_DECLARATIONS_SECONDARY_SERVICE &&
+			 pEntry->TypeUuid.Uuid != BT_UUID_DECLARATIONS_INCLUDE &&
+			 pEntry->TypeUuid.Uuid != BT_UUID_DECLARATIONS_CHARACTERISTIC &&
+			 pEntry->TypeUuid.Uuid != BT_UUID_DESCRIPTOR_CHARACTERISTIC_EXTENDED_PROPERTIES &&
+			 pEntry->TypeUuid.Uuid != BT_UUID_DESCRIPTOR_SERVER_CHARACTERISTIC_CONFIGURATION)
+	{
+		pChar = ((BtAttCharValue_t *)pEntry->Data)->pChar;
+	}
+	if (pChar == nullptr)
+	{
+		return 0; // Public service declarations and metadata.
+	}
+
+	uint8_t type = pChar->SecType;
+	if (type == BT_GAP_SECTYPE_NONE && pChar->pSrvc != nullptr)
+	{
+		type = pChar->pSrvc->SecType;
+	}
+	if (type == BT_GAP_SECTYPE_NONE)
+	{
+		return 0;
+	}
+
+	// Signed writes have their own signature verification in ATT. Never
+	// permit unencrypted ordinary writes through this exception.
+	if (!bRead && (type == BT_GAP_SECTYPE_SIGNED_NO_MITM ||
+				 type == BT_GAP_SECTYPE_SIGNED_MITM) &&
+		(pChar->Property & BT_GATT_CHAR_PROP_AUTH_SIGNED) != 0 &&
+		(pChar->Property & (BT_GATT_CHAR_PROP_WRITE |
+						BT_GATT_CHAR_PROP_WRITE_WORESP)) == 0)
+	{
+		return 0;
+	}
+
+	BtConnSec_t sec = {};
+	(void)BtGapConnSecGet(ConnHdl, &sec);
+	uint8_t required = BT_GAP_SEC_LEVEL_ENC_UNAUTH;
+	bool scRequired = false;
+	switch (type)
+	{
+		case BT_GAP_SECTYPE_STATICKEY_NO_MITM:
+			break;
+		case BT_GAP_SECTYPE_STATICKEY_MITM:
+			required = BT_GAP_SEC_LEVEL_ENC_AUTH;
+			break;
+		case BT_GAP_SECTYPE_LESC_MITM:
+		case BT_GAP_SECTYPE_SIGNED_MITM:
+			required = BT_GAP_SEC_LEVEL_LESC_AUTH;
+			scRequired = true;
+			break;
+		case BT_GAP_SECTYPE_SIGNED_NO_MITM:
+			scRequired = true;
+			break;
+		default:
+			return BT_ATT_ERROR_INSUF_AUTHEN;
+	}
+	if (sec.Level == BT_GAP_SEC_LEVEL_NONE)
+	{
+		return BT_ATT_ERROR_INSUF_ENCRYPT;
+	}
+	if (sec.KeySize != 0 && sec.KeySize < 7)
+	{
+		return BT_ATT_ERROR_ENCRYPT_KEY_TOO_SHORT;
+	}
+	if (sec.Level < required ||
+		(scRequired && (sec.Flags & BT_GAP_SEC_FLAG_SC) == 0))
+	{
+		return BT_ATT_ERROR_INSUF_AUTHEN;
+	}
 	return 0;
 }
 

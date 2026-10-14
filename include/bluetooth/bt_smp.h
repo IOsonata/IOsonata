@@ -151,12 +151,40 @@ SOFTWARE.
 #define BT_SMP_TIMEOUT_MS							30000
 #endif
 
-/// Lock a link after this many failed pairing attempts within one connection
-/// (Core Vol 3 Part H 2.3.6, repeated attempts). Further attempts are refused
-/// until the link disconnects. Cross-connection exponential back-off needs
-/// persistent state and is left to the platform.
+/// Fast per-connection lockout. The identity-scoped repeated-attempt policy
+/// below is normative; this local counter is defense in depth so one connection
+/// cannot burn CPU continuously between identity-policy checks.
 #ifndef BT_SMP_MAX_PAIR_ATTEMPTS
 #define BT_SMP_MAX_PAIR_ATTEMPTS					3
+#endif
+
+/// Repeated-attempt policy (Core Vol 3 Part H 2.3.6).
+///
+/// The verifier waits after a failed pairing before initiating or responding to
+/// the same claimant again. Each failure doubles the interval up to the cap.
+/// After a quiet period the exponent is reduced one step; repeated quiet periods
+/// therefore reduce the future waiting interval exponentially to the minimum.
+///
+/// These are local policy values, not protocol fields. State is kept in RAM so
+/// an unauthenticated peer cannot force flash wear merely by failing pairing.
+#ifndef BT_SMP_REPEAT_MIN_WAIT_MS
+#define BT_SMP_REPEAT_MIN_WAIT_MS				1000U
+#endif
+#ifndef BT_SMP_REPEAT_MAX_WAIT_MS
+#define BT_SMP_REPEAT_MAX_WAIT_MS				3600000U
+#endif
+#ifndef BT_SMP_REPEAT_DECAY_MS
+#define BT_SMP_REPEAT_DECAY_MS					3600000U
+#endif
+#ifndef BT_SMP_REPEAT_TRACK_MAX
+#define BT_SMP_REPEAT_TRACK_MAX					8
+#endif
+
+#if BT_SMP_REPEAT_MIN_WAIT_MS == 0 || \
+	BT_SMP_REPEAT_MAX_WAIT_MS < BT_SMP_REPEAT_MIN_WAIT_MS || \
+	BT_SMP_REPEAT_MAX_WAIT_MS >= 0x80000000U || \
+	BT_SMP_REPEAT_DECAY_MS == 0 || BT_SMP_REPEAT_TRACK_MAX == 0
+#error "Invalid Bluetooth repeated-attempt policy"
 #endif
 
 /// SMP pairing phase. Drives the per-link state machine in bt_smp.cpp.
@@ -182,11 +210,14 @@ typedef enum __Bt_Smp_State {
 /// Per-link security key material. For bonded peers it is the record the
 /// application persists and reloads on reconnect.
 typedef struct __Bt_Smp_Keys {
-	uint8_t  Ltk[16];				//!< Long Term Key
+	uint8_t  Ltk[16];				//!< Peer-distributed legacy LTK; for SC, the shared derived LTK
 	uint8_t  Irk[16];				//!< Identity Resolving Key (peer)
 	uint8_t  Csrk[16];				//!< Connection Signature Resolving Key (peer)
-	uint64_t Rand;					//!< LTK Rand (legacy; 0 for SC)
-	uint16_t Ediv;					//!< LTK EDIV (legacy; 0 for SC)
+	uint64_t Rand;					//!< Peer-distributed LTK Rand (legacy; 0 for SC)
+	uint16_t Ediv;					//!< Peer-distributed LTK EDIV (legacy; 0 for SC)
+	uint8_t  LocalLtk[16];			//!< LTK distributed by this device for legacy role reversal
+	uint64_t LocalRand;				//!< Local-distributed LTK Rand (legacy only)
+	uint16_t LocalEdiv;				//!< Local-distributed LTK EDIV (legacy only)
 	uint8_t  EncKeySize;			//!< Negotiated encryption key size, bytes
 	uint8_t  IdAddrType;			//!< Peer identity address type
 	uint8_t  IdAddr[6];				//!< Peer identity address
@@ -400,6 +431,25 @@ void BtSmpStartPairing(uint16_t ConnHdl);
 void BtSmpDisconnected(uint16_t ConnHdl);
 
 /**
+ * @brief	Check the Core repeated-attempt waiting interval for this claimant.
+ *
+ * A bonded RPA is normalized to its distributed identity; otherwise the live
+ * peer address is used. The state survives disconnect/reconnect in RAM.
+ * Now is the port's monotonic millisecond counter.
+ */
+bool BtSmpPairingAttemptAllowed(uint16_t ConnHdl, uint32_t Now);
+
+/** Record a failed pairing and start or exponentially increase its wait. */
+void BtSmpPairingAttemptFailed(uint16_t ConnHdl, uint32_t Now);
+
+/**
+ * A successful pairing may reveal a stable peer identity. Migrate any
+ * raw-address attempt history to that identity, but do not reset the penalty:
+ * Core Vol 3 Part H 2.3.6 decreases it only through failure-free time.
+ */
+void BtSmpPairingAttemptSucceeded(uint16_t ConnHdl);
+
+/**
  * @brief	Millisecond tick for the SMP pairing timeout (Core Vol 3 Part H 3.4).
  *
  * Weak default returns 0, so the timeout is inert on ports that do not supply a
@@ -468,10 +518,22 @@ bool BtSmpInit(KeyAgreeEngine *pEcdh, CipherEngine *pAes, RngEngine *pRng);
 /// Connections bit is forced set; this build does not pair with legacy.
 void BtSmpAuthConfig(uint8_t IoCaps, uint8_t AuthReq);
 
+// Application-facing synchronous security decisions. IOsonata completes the
+// protocol transaction; applications must not invoke SMP reply primitives.
+// Implement only the callbacks required by the chosen SecExchg capabilities.
+// Defaults fail closed. These run in Bluetooth event context and must return
+// promptly; never block waiting for console input or another event.
+// Return 1 to approve, 0 to reject, -1 for asynchronous user interaction.
+// A pending decision is completed with BtAppPairDecision().
+int BtAppPairConfirm(uint16_t ConnHdl, uint32_t Number);
+void BtAppPairDecision(uint16_t ConnHdl, bool Confirm);
+bool BtAppPasskeyShow(uint16_t ConnHdl, uint32_t Passkey);
+uint32_t BtAppPasskeyInput(uint16_t ConnHdl);
+
 /// Numeric Comparison user interaction. The SMP core calls this when a pairing
 /// selects the Numeric Comparison model: display Value (a 6 digit number) and
-/// ask the user whether it matches the value shown on the peer, then resume by
-/// calling BtSmpNumericComparisonReply. The library provides a weak default
+/// ask the user whether it matches the value shown on the peer, and return the decision through BtAppPairConfirm.
+/// The library performs the protocol reply. The library provides a weak default
 /// that rejects the pairing; an application advertising DisplayYesNo or
 /// KeyboardDisplay overrides it with a strong definition.
 void BtSmpNumericComparison(uint16_t ConnHdl, uint32_t Value);
@@ -714,8 +776,19 @@ void BtSmpBondErase(void);
  */
 int    BtSmpBondSlotCount(void);
 size_t BtSmpBondRecordSize(void);
+bool   BtSmpBondRecordSizeValid(size_t Len);
 void   BtSmpBondRestore(int Slot, const void *pBond, size_t Len);
 size_t BtSmpBondSerialize(int Slot, void *pBuff, size_t BuffLen);
+
+/**
+ * @brief Copy the stable peer identity stored in one bond-table slot.
+ *
+ * Returns only identities containing a nonzero IRK and a public or random
+ * static identity address. Vendor-host ports use this to program their
+ * resolving list after the generic bond store is loaded.
+ */
+bool BtSmpBondIdentityGet(int Slot, uint8_t *pAddrType, uint8_t Addr[6],
+						 uint8_t Irk[16]);
 
 /**
  * @brief	Get the device's stable local identity IRK.
@@ -733,6 +806,14 @@ size_t BtSmpBondSerialize(int Slot, void *pBuff, size_t BuffLen);
  *			and no identity exists yet.
  */
 bool BtSmpLocalIrkGet(uint8_t Irk[16]);
+
+/**
+ * @brief Adopt a stable local IRK supplied by a vendor host/controller.
+ *
+ * The key is persisted through BtSmpLocalIdSave exactly like a locally
+ * generated identity. All-zero keys are refused.
+ */
+bool BtSmpLocalIrkSet(const uint8_t Irk[16]);
 
 /**
  * Local identity persistence hooks. Same division of labour as the bond

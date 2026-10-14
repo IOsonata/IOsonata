@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 # Run the cross built stage 0 boot (ARM machine code) of an NXP LPC target in
-# unicorn, with the IAP ROM modelled in Python: LPC11U35 (Cortex-M0, 4 KB
-# sectors, SYSMEMREMAP start) and LPC1769 (Cortex-M3, 4 KB then 32 KB
-# sectors, VTOR start).
+# unicorn, with the IAP ROM modelled in Python: LPC1769 (Cortex-M3,
+# 4 KB then 32 KB sectors, VTOR start).
 #
-# boot_emu_lpc.py 11u35|1769 <boot.elf> [scenario]
+# boot_emu_lpc.py 1769 <boot.elf> [scenario]
 #
 # These layouts have no slot 1: an image reaches slot 0 over the UART in
 # recovery. The flash is prepared here the way a finished upload leaves it,
@@ -24,8 +23,6 @@
 # before an erase or a copy, the copy arguments (256 byte destination, word
 # aligned RAM source, count), that the clock argument is SystemCoreClock in
 # kHz, and that nothing but the ROM would touch the top 32 bytes of RAM.
-# On LPC11U35 the USB SRAM counts as unclocked until SYSAHBCLKCTRL enables it,
-# and no code may run in the first 512 bytes once SYSMEMREMAP maps RAM there.
 # The unused RAM is filled with a pattern to find the deepest stack use.
 #
 # Needs unicorn, pyelftools and imgtool.
@@ -40,13 +37,7 @@ SCEN = sys.argv[3] if len(sys.argv) > 3 else "good"
 KEY = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                    "../../exemples/dfu/dfu_dev_key.pem")
 
-if T == "11u35":
-    FLASH = 0x10000
-    SECTORS = [(i * 0x1000, 0x1000) for i in range(16)]
-    RAM, RAMSZ = 0x10000000, 0x2000
-    UART = 0x40008000
-    CORE = "LPC11U35"
-elif T == "1769":
+if T == "1769":
     FLASH = 0x80000
     SECTORS = [(i * 0x1000, 0x1000) for i in range(16)] + \
               [(0x10000 + i * 0x8000, 0x8000) for i in range(14)]
@@ -54,7 +45,7 @@ elif T == "1769":
     UART = 0x4000C000
     CORE = "LPC1769"
 else:
-    sys.exit("target: 11u35 or 1769")
+    sys.exit("target: 1769")
 
 IAP_TOP = RAM + RAMSZ - 32          # ROM work area, 32 bytes
 IAP_ENTRY = 0x1FFF1FF0
@@ -200,19 +191,6 @@ def hook_ram_w(uc, access, addr, size, value, ud):
         errors.append("write 0x%x in the IAP area, pc 0x%x" %
                       (addr, uc.reg_read(UC_ARM_REG_PC)))
 
-# LPC11U USB SRAM: clocked by SYSAHBCLKCTRL bit 27, off at reset.
-def hook_usbram(uc, access, addr, size, value, ud):
-    if T == "11u35" and not rd32(0x40048080) & (1 << 27):
-        errors.append("USB SRAM 0x%x with its clock off, pc 0x%x" %
-                      (addr, uc.reg_read(UC_ARM_REG_PC)))
-
-# LPC11U SYSMEMREMAP user RAM mode maps SRAM0 over the first 512 bytes:
-# boot code there must not run once it is set.
-def hook_remap(uc, addr, size, ud):
-    if T == "11u35" and rd32(0x40048000) == 1:
-        errors.append("code at 0x%x run with RAM mapped at 0" % addr)
-        uc.emu_stop()
-
 class Recovery(Exception):
     pass
 
@@ -221,8 +199,6 @@ def hook_uart_w(uc, access, addr, size, value, ud):
 
 def hook_periph_r(uc, access, addr, size, value, ud):
     # PLL status registers polled by SystemInit read as locked.
-    if T == "11u35" and addr in (0x4004800C, 0x40048014):
-        uc.mem_write(addr, struct.pack("<I", 1))
     if T == "1769" and addr == 0x400FC088:
         con = rd32(0x400FC080)
         uc.mem_write(addr, struct.pack("<I", ((con & 3) << 24) |
@@ -240,9 +216,6 @@ def hook_intr(uc, intno, ud):
 
 uc.hook_add(UC_HOOK_CODE, hook_iap, begin=IAP_ENTRY, end=IAP_ENTRY)
 uc.hook_add(UC_HOOK_MEM_WRITE, hook_ram_w, begin=IAP_TOP, end=RAM + RAMSZ - 1)
-uc.hook_add(UC_HOOK_MEM_READ | UC_HOOK_MEM_WRITE, hook_usbram,
-            begin=0x20004000, end=0x200047FF)
-uc.hook_add(UC_HOOK_CODE, hook_remap, begin=0, end=0x1FF)
 uc.hook_add(UC_HOOK_MEM_WRITE, hook_uart_w, begin=UART, end=UART + 0xFFF)
 uc.hook_add(UC_HOOK_MEM_READ, hook_periph_r, begin=0x40000000, end=0x5FFFFFFF)
 uc.hook_add(UC_HOOK_MEM_WRITE, hook_scs_w, begin=0xE000E000, end=0xE000EFFF)
@@ -271,7 +244,7 @@ print("target %s, scenario %s" % (CORE, SCEN))
 ok = True
 if SCEN == "iap":
     ok = outcome == "main"
-    base = SLOT0 + 0x1000 if T == "11u35" else 0x10000
+    base = 0x10000
     checks = []
     checks.append(("erase unit at slot 0", call("DfuTgtEraseUnit", SLOT0),
                    0x1000 if SLOT0 < 0x10000 else 0x8000))
@@ -306,20 +279,11 @@ else:
     pc = uc.reg_read(UC_ARM_REG_PC)
     sp = uc.reg_read(UC_ARM_REG_SP)
     print("  outcome %s, pc 0x%x, sp 0x%x" % (outcome, pc, sp))
-    if T == "11u35":
-        remap = rd32(0x40048000)
-        vec = bytes(uc.mem_read(RAM, 192))
-        print("  SYSMEMREMAP %d, RAM vectors %s, MAINCLKSEL %d" %
-              (remap, "= slot 0" if vec == payload[:192] else "differ",
-               rd32(0x40048070)))
-        started = outcome == "start" and sp == app_sp and remap == 1 and \
-                  vec == payload[:192] and rd32(0x40048070) == 0
-    else:
-        vtor = rd32(0xE000ED08)
-        print("  VTOR 0x%x, PLL0CON %d, CLKSRCSEL %d" %
-              (vtor, rd32(0x400FC080), rd32(0x400FC10C)))
-        started = outcome == "start" and sp == app_sp and vtor == SLOT0 and \
-                  rd32(0x400FC080) == 0
+    vtor = rd32(0xE000ED08)
+    print("  VTOR 0x%x, PLL0CON %d, CLKSRCSEL %d" %
+          (vtor, rd32(0x400FC080), rd32(0x400FC10C)))
+    started = outcome == "start" and sp == app_sp and vtor == SLOT0 and \
+              rd32(0x400FC080) == 0
     ok = started if SCEN == "good" else outcome == "recovery"
 
 low = STACK_TOP

@@ -519,6 +519,7 @@ static void SmpFailAndLock(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 						   BtSmpLink_t *pLink, uint8_t Reason)
 {
 	SmpSendFailed(pDev, ConnHdl, Reason);
+	BtSmpPairingAttemptFailed(ConnHdl, BtSmpMsTick());
 	SmpAbortPairing(pLink);
 	pLink->Ctx.bLocked = true;
 	BtSmpPairingComplete(ConnHdl, false, nullptr);
@@ -534,6 +535,7 @@ static void SmpAbortOffPhase(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 							 BtSmpLink_t *pLink)
 {
 	SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_UNSPECIFIED);
+	BtSmpPairingAttemptFailed(ConnHdl, BtSmpMsTick());
 	SmpAbortPairing(pLink);
 	BtSmpPairingComplete(ConnHdl, false, nullptr);
 }
@@ -557,6 +559,7 @@ static void SmpFailAndDropAttempt(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 								  BtSmpLink_t *pLink, uint8_t Reason)
 {
 	SmpSendFailed(pDev, ConnHdl, Reason);
+	BtSmpPairingAttemptFailed(ConnHdl, BtSmpMsTick());
 
 	if (pLink == nullptr || pLink->Ctx.State == BT_SMP_STATE_IDLE ||
 		pLink->Ctx.State == BT_SMP_STATE_DONE)
@@ -1235,6 +1238,7 @@ static void SmpHandlePairingReq(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 		DEBUG_PRINTF("SMP reject PairingReq, reserved field iocaps=%d oob=%d\r\n",
 				  pReq->IOCaps, pReq->OOBFlag);
 		SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_INVALID_PARAMS);
+		BtSmpPairingAttemptFailed(ConnHdl, BtSmpMsTick());
 		SmpAbortPairing(pLink);
 		return;
 	}
@@ -1250,6 +1254,7 @@ static void SmpHandlePairingReq(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 				  pReq->MaxKeySize, BT_SMP_CFG_MIN_ENC_KEY_SIZE,
 				  BT_SMP_MAX_ENC_KEY_SIZE);
 		SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_ENC_KEY_SIZE);
+		BtSmpPairingAttemptFailed(ConnHdl, BtSmpMsTick());
 		SmpAbortPairing(pLink);
 		return;
 	}
@@ -1271,6 +1276,7 @@ static void SmpHandlePairingReq(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 		DEBUG_PRINTF("SMP reject legacy (peer auth=0x%02x), require SC\r\n",
 				  pReq->AuthReq);
 		SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_AUTHEN_REQUIREMENTS);
+		BtSmpPairingAttemptFailed(ConnHdl, BtSmpMsTick());
 		SmpAbortPairing(pLink);
 		return;
 	}
@@ -1295,6 +1301,7 @@ static void SmpHandlePairingReq(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 	{
 		DEBUG_PRINTF("SMP reject PairingReq, peer claims OOB but no local set\r\n");
 		SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_OOB_NOT_AVAILABLE);
+		BtSmpPairingAttemptFailed(ConnHdl, BtSmpMsTick());
 		SmpAbortPairing(pLink);
 		return;
 	}
@@ -1303,6 +1310,7 @@ static void SmpHandlePairingReq(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 	{
 		DEBUG_PRINTF("SMP reject PairingReq, OOB model but context load failed\r\n");
 		SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_OOB_NOT_AVAILABLE);
+		BtSmpPairingAttemptFailed(ConnHdl, BtSmpMsTick());
 		SmpAbortPairing(pLink);
 		return;
 	}
@@ -1316,6 +1324,7 @@ static void SmpHandlePairingReq(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 		// Unknown model; fail closed rather than continuing to a link
 		// the peer would treat as authenticated.
 		SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_AUTHEN_REQUIREMENTS);
+		BtSmpPairingAttemptFailed(ConnHdl, BtSmpMsTick());
 		SmpAbortPairing(pLink);
 		return;
 	}
@@ -1332,6 +1341,7 @@ static void SmpHandlePairingReq(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 		if (rc == BT_SMP_CRYPTO_FAIL)
 		{
 			SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_OOB_NOT_AVAILABLE);
+			BtSmpPairingAttemptFailed(ConnHdl, BtSmpMsTick());
 			SmpAbortPairing(pLink);
 		}
 	}
@@ -1439,6 +1449,7 @@ static void SmpHandlePairingRsp(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 		pRsp->OOBFlag > BT_SMP_OOB_AUTH_PRESENT)
 	{
 		SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_INVALID_PARAMS);
+		BtSmpPairingAttemptFailed(ConnHdl, BtSmpMsTick());
 		SmpAbortPairing(pLink);
 		return;
 	}
@@ -1450,6 +1461,7 @@ static void SmpHandlePairingRsp(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 		pRsp->MaxKeySize > BT_SMP_MAX_ENC_KEY_SIZE)
 	{
 		SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_ENC_KEY_SIZE);
+		BtSmpPairingAttemptFailed(ConnHdl, BtSmpMsTick());
 		SmpAbortPairing(pLink);
 		return;
 	}
@@ -1458,6 +1470,7 @@ static void SmpHandlePairingRsp(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 	if (!(pRsp->AuthReq & BT_SMP_AUTHREQ_SC))
 	{
 		SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_AUTHEN_REQUIREMENTS);
+		BtSmpPairingAttemptFailed(ConnHdl, BtSmpMsTick());
 		SmpAbortPairing(pLink);
 		return;
 	}
@@ -1483,6 +1496,7 @@ static void SmpHandlePairingRsp(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 		!SmpOobLocalReady(pLink))
 	{
 		SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_OOB_NOT_AVAILABLE);
+		BtSmpPairingAttemptFailed(ConnHdl, BtSmpMsTick());
 		SmpAbortPairing(pLink);
 		return;
 	}
@@ -1491,6 +1505,7 @@ static void SmpHandlePairingRsp(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 	{
 		DEBUG_PRINTF("SMP reject PairingReq, OOB model but context load failed\r\n");
 		SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_OOB_NOT_AVAILABLE);
+		BtSmpPairingAttemptFailed(ConnHdl, BtSmpMsTick());
 		SmpAbortPairing(pLink);
 		return;
 	}
@@ -1504,6 +1519,7 @@ static void SmpHandlePairingRsp(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 		// Unknown model; fail closed rather than continuing to a link
 		// the peer would treat as authenticated.
 		SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_AUTHEN_REQUIREMENTS);
+		BtSmpPairingAttemptFailed(ConnHdl, BtSmpMsTick());
 		SmpAbortPairing(pLink);
 		return;
 	}
@@ -1517,6 +1533,7 @@ static void SmpHandlePairingRsp(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 		if (SmpLocalKeyGen(pDev, pLink) != BT_SMP_CRYPTO_OK)
 		{
 			SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_OOB_NOT_AVAILABLE);
+			BtSmpPairingAttemptFailed(ConnHdl, BtSmpMsTick());
 			SmpAbortPairing(pLink);
 			return;
 		}
@@ -1550,6 +1567,7 @@ static void SmpHandlePublicKey(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 		if (SmpStartDhKey(pDev, pLink) == false)
 		{
 			SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_DHKEY_CHECK_FAILED);
+			BtSmpPairingAttemptFailed(ConnHdl, BtSmpMsTick());
 			SmpAbortPairing(pLink);
 		}
 		return;
@@ -1558,6 +1576,7 @@ static void SmpHandlePublicKey(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 	if (!SmpTryStartDhKey(pDev, pLink, ConnHdl))
 	{
 		SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_DHKEY_CHECK_FAILED);
+		BtSmpPairingAttemptFailed(ConnHdl, BtSmpMsTick());
 		SmpAbortPairing(pLink);
 	}
 }
@@ -1846,6 +1865,7 @@ static void SmpPasskeyHandleRandom(BtHciDevice_t * const pDev, BtSmpLink_t *pLin
 		{
 			SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_CONFIRM_VALUE_FAILED);
 			SmpAuthFailCount(pLink);
+			BtSmpPairingAttemptFailed(ConnHdl, BtSmpMsTick());
 			SmpAbortPairing(pLink);
 			return;
 		}
@@ -1871,6 +1891,7 @@ static void SmpPasskeyHandleRandom(BtHciDevice_t * const pDev, BtSmpLink_t *pLin
 	{
 		SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_CONFIRM_VALUE_FAILED);
 		SmpAuthFailCount(pLink);
+		BtSmpPairingAttemptFailed(ConnHdl, BtSmpMsTick());
 		SmpAbortPairing(pLink);
 		return;
 	}
@@ -2061,6 +2082,7 @@ static void SmpHandlePairingRandom(BtHciDevice_t * const pDev, BtSmpLink_t *pLin
 			{
 				SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_CONFIRM_VALUE_FAILED);
 				SmpAuthFailCount(pLink);
+				BtSmpPairingAttemptFailed(ConnHdl, BtSmpMsTick());
 				SmpAbortPairing(pLink);
 				return;
 			}
@@ -2195,6 +2217,7 @@ static void SmpHandlePairingRandom(BtHciDevice_t * const pDev, BtSmpLink_t *pLin
 	{
 		SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_CONFIRM_VALUE_FAILED);
 		SmpAuthFailCount(pLink);
+		BtSmpPairingAttemptFailed(ConnHdl, BtSmpMsTick());
 		SmpAbortPairing(pLink);
 		return;
 	}
@@ -2251,6 +2274,7 @@ static void SmpHandleDhKeyCheck(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 		{
 			SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_DHKEY_CHECK_FAILED);
 			SmpAuthFailCount(pLink);
+			BtSmpPairingAttemptFailed(ConnHdl, BtSmpMsTick());
 			SmpAbortPairing(pLink);
 			return;
 		}
@@ -2309,6 +2333,7 @@ static void SmpHandleDhKeyCheck(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 		{
 			SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_DHKEY_CHECK_FAILED);
 			SmpAuthFailCount(pLink);
+			BtSmpPairingAttemptFailed(ConnHdl, BtSmpMsTick());
 			SmpAbortPairing(pLink);
 			return;
 		}
@@ -2321,6 +2346,7 @@ static void SmpHandleDhKeyCheck(BtHciDevice_t * const pDev, BtSmpLink_t *pLink,
 #else
 		SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_DHKEY_CHECK_FAILED);
 		SmpAuthFailCount(pLink);
+		BtSmpPairingAttemptFailed(ConnHdl, BtSmpMsTick());
 		SmpAbortPairing(pLink);
 		return;
 #endif
@@ -2412,6 +2438,7 @@ static void SmpKeyDistReceived(BtSmpLink_t *pLink, uint8_t KeyBit)
 	if (pLink->Ctx.KeyDistExp == 0)
 	{
 		pLink->Ctx.State = BT_SMP_STATE_DONE;
+		BtSmpPairingAttemptSucceeded(pLink->ConnHdl);
 		BtSmpPairingComplete(pLink->ConnHdl, true, &pLink->Keys);
 	}
 }
@@ -2447,7 +2474,6 @@ void BtProcessSmpData(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 	// further SMP is accepted until it disconnects (Core Vol 3 Part H 3.4/2.3.6).
 	if (pLink->Ctx.bLocked)
 	{
-		SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_REPEATED_ATTEMPTS);
 		return;
 	}
 
@@ -2546,6 +2572,10 @@ void BtProcessSmpData(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 	switch (pSmp->Code)
 	{
 		case BT_SMP_CODE_PAIRING_REQ:
+			if (!BtSmpPairingAttemptAllowed(ConnHdl, BtSmpMsTick()))
+			{
+				return;
+			}
 			// A Pairing Request travels central to peripheral only (Vol 3
 			// Part H 3.5.1). A central receiving one answers Pairing Failed
 			// with Command Not Supported. Gated only when the link role is
@@ -2690,6 +2720,7 @@ void BtProcessSmpData(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 			if (pLink->Ctx.State != BT_SMP_STATE_IDLE)
 			{
 				SmpAbortPairing(pLink);
+				BtSmpPairingAttemptFailed(ConnHdl, BtSmpMsTick());
 				pLink->Ctx.FailCount++;
 				if (pLink->Ctx.FailCount >= BT_SMP_MAX_PAIR_ATTEMPTS)
 				{
@@ -2701,6 +2732,10 @@ void BtProcessSmpData(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 		}
 
 		case BT_SMP_CODE_PAIRING_SECURITY_REQ:
+			if (!BtSmpPairingAttemptAllowed(ConnHdl, BtSmpMsTick()))
+			{
+				break;
+			}
 			// A Security Request travels peripheral to central only (Vol 3
 			// Part H 3.6.7 / 2.4.6). A peripheral receiving one answers
 			// Pairing Failed with Command Not Supported (S1). Gated only when
@@ -2774,6 +2809,7 @@ void BtSmpLocalPubKeyReady(BtHciDevice_t * const pDev, uint8_t Status,
 		if (Status != 0 || pKeyX == nullptr || pKeyY == nullptr)
 		{
 			SmpSendFailed(pDev, pLink->ConnHdl, BT_SMP_ERR_UNSPECIFIED);
+			BtSmpPairingAttemptFailed(pLink->ConnHdl, BtSmpMsTick());
 			SmpAbortPairing(pLink);
 			continue;
 		}
@@ -2796,6 +2832,7 @@ void BtSmpLocalPubKeyReady(BtHciDevice_t * const pDev, uint8_t Status,
 		if (!SmpTryStartDhKey(pDev, pLink, pLink->ConnHdl))
 		{
 			SmpSendFailed(pDev, pLink->ConnHdl, BT_SMP_ERR_DHKEY_CHECK_FAILED);
+			BtSmpPairingAttemptFailed(pLink->ConnHdl, BtSmpMsTick());
 			SmpAbortPairing(pLink);
 		}
 	} while (false);
@@ -2817,6 +2854,7 @@ void BtSmpDhKeyReady(BtHciDevice_t * const pDev, uint8_t Status, const uint8_t *
 		if (Status != 0 || pDhKey == nullptr)
 		{
 			SmpSendFailed(pDev, pLink->ConnHdl, BT_SMP_ERR_DHKEY_CHECK_FAILED);
+			BtSmpPairingAttemptFailed(pLink->ConnHdl, BtSmpMsTick());
 			SmpAbortPairing(pLink);
 			continue;
 		}
@@ -2843,6 +2881,7 @@ void BtSmpDhKeyReady(BtHciDevice_t * const pDev, uint8_t Status, const uint8_t *
 				if (!SmpF4(peerX, peerX, pLink->Ctx.OobPeerRand, 0, c))
 				{
 					SmpSendFailed(s_pSmpActiveDev, pLink->ConnHdl, BT_SMP_ERR_UNSPECIFIED);
+					BtSmpPairingAttemptFailed(pLink->ConnHdl, BtSmpMsTick());
 					SmpAbortPairing(pLink);
 					continue;
 				}
@@ -2850,6 +2889,7 @@ void BtSmpDhKeyReady(BtHciDevice_t * const pDev, uint8_t Status, const uint8_t *
 				{
 					SmpSendFailed(pDev, pLink->ConnHdl, BT_SMP_ERR_CONFIRM_VALUE_FAILED);
 					SmpAuthFailCount(pLink);
+					BtSmpPairingAttemptFailed(pLink->ConnHdl, BtSmpMsTick());
 					SmpAbortPairing(pLink);
 					continue;
 				}
@@ -2858,6 +2898,7 @@ void BtSmpDhKeyReady(BtHciDevice_t * const pDev, uint8_t Status, const uint8_t *
 			if (!BtSmpCryptoRand(pLink->Ctx.LocalRand, 16))
 			{
 				SmpSendFailed(pDev, pLink->ConnHdl, BT_SMP_ERR_UNSPECIFIED);
+				BtSmpPairingAttemptFailed(pLink->ConnHdl, BtSmpMsTick());
 				SmpAbortPairing(pLink);
 				continue;
 			}
@@ -2883,6 +2924,7 @@ void BtSmpDhKeyReady(BtHciDevice_t * const pDev, uint8_t Status, const uint8_t *
 			if (!BtSmpCryptoRand(pLink->Ctx.LocalRand, 16))
 			{
 				SmpSendFailed(pDev, pLink->ConnHdl, BT_SMP_ERR_UNSPECIFIED);
+				BtSmpPairingAttemptFailed(pLink->ConnHdl, BtSmpMsTick());
 				SmpAbortPairing(pLink);
 				continue;
 			}
@@ -2897,6 +2939,7 @@ void BtSmpDhKeyReady(BtHciDevice_t * const pDev, uint8_t Status, const uint8_t *
 		if (!BtSmpCryptoRand(pLink->Ctx.LocalRand, 16))
 		{
 			SmpSendFailed(pDev, pLink->ConnHdl, BT_SMP_ERR_UNSPECIFIED);
+			BtSmpPairingAttemptFailed(pLink->ConnHdl, BtSmpMsTick());
 			SmpAbortPairing(pLink);
 			continue;
 		}
@@ -2911,6 +2954,7 @@ void BtSmpDhKeyReady(BtHciDevice_t * const pDev, uint8_t Status, const uint8_t *
 		if (!SmpF4(localX, peerX, pLink->Ctx.LocalRand, 0, cf.Value))
 		{
 			SmpSendFailed(s_pSmpActiveDev, pLink->ConnHdl, BT_SMP_ERR_UNSPECIFIED);
+			BtSmpPairingAttemptFailed(pLink->ConnHdl, BtSmpMsTick());
 			SmpAbortPairing(pLink);
 			continue;
 		}
@@ -2923,6 +2967,7 @@ void BtSmpDhKeyReady(BtHciDevice_t * const pDev, uint8_t Status, const uint8_t *
 			if (!SmpF4(localX, peerX, pLink->Ctx.LocalRand, 0, cb2))
 			{
 				SmpSendFailed(s_pSmpActiveDev, pLink->ConnHdl, BT_SMP_ERR_UNSPECIFIED);
+				BtSmpPairingAttemptFailed(pLink->ConnHdl, BtSmpMsTick());
 				SmpAbortPairing(pLink);
 				continue;
 			}
@@ -3224,6 +3269,7 @@ void BtSmpEncryptionChanged(BtHciDevice_t * const pDev, uint16_t ConnHdl,
 		{
 			// No peer keys expected: the record is already complete.
 			pLink->Ctx.State = BT_SMP_STATE_DONE;
+			BtSmpPairingAttemptSucceeded(ConnHdl);
 			BtSmpPairingComplete(ConnHdl, true, &pLink->Keys);
 		}
 	}
@@ -3800,10 +3846,38 @@ void BtSmpAuthConfig(uint8_t IoCaps, uint8_t AuthReq)
 // no application display there is no way to perform the user check, so reject.
 // An application advertising DisplayYesNo / KeyboardDisplay overrides this with
 // a strong definition that displays Value and later calls the reply function.
+__attribute__((weak)) int BtAppPairConfirm(uint16_t ConnHdl, uint32_t Number)
+{
+	(void)ConnHdl;
+	(void)Number;
+	return false;
+}
+
+__attribute__((weak)) bool BtAppPasskeyShow(uint16_t ConnHdl, uint32_t Passkey)
+{
+	(void)ConnHdl;
+	(void)Passkey;
+	return false;
+}
+
+__attribute__((weak)) uint32_t BtAppPasskeyInput(uint16_t ConnHdl)
+{
+	(void)ConnHdl;
+	return BT_SMP_PASSKEY_INVALID;
+}
+
+void BtAppPairDecision(uint16_t ConnHdl, bool Confirm)
+{
+	BtSmpNumericComparisonReply(ConnHdl, Confirm);
+}
+
 __attribute__((weak)) void BtSmpNumericComparison(uint16_t ConnHdl, uint32_t Value)
 {
-	(void)Value;
-	BtSmpNumericComparisonReply(ConnHdl, false);
+	int decision = BtAppPairConfirm(ConnHdl, Value);
+	if (decision >= 0)
+	{
+		BtAppPairDecision(ConnHdl, decision != 0);
+	}
 }
 
 // Resume a Numeric Comparison pairing after the user has compared the value
@@ -3835,6 +3909,7 @@ void BtSmpNumericComparisonReply(uint16_t ConnHdl, bool Confirm)
 	if (!Confirm)
 	{
 		SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_NUMERIC_COMPARISON_FAILED);
+		BtSmpPairingAttemptFailed(ConnHdl, BtSmpMsTick());
 		SmpAbortPairing(pLink);
 		return;
 	}
@@ -3908,8 +3983,10 @@ void BtSmpNumericComparisonReply(uint16_t ConnHdl, bool Confirm)
 // An application advertising a display overrides this with a strong definition.
 __attribute__((weak)) void BtSmpPasskeyDisplay(uint16_t ConnHdl, uint32_t Passkey)
 {
-	(void)Passkey;
-	BtSmpPasskeyReply(ConnHdl, BT_SMP_PASSKEY_INVALID);
+	if (!BtAppPasskeyShow(ConnHdl, Passkey))
+	{
+		BtSmpPasskeyReply(ConnHdl, BT_SMP_PASSKEY_INVALID);
+	}
 }
 
 // Weak default for the Passkey Entry request. The inputting device must obtain
@@ -3918,7 +3995,7 @@ __attribute__((weak)) void BtSmpPasskeyDisplay(uint16_t ConnHdl, uint32_t Passke
 // a strong definition that prompts the user and calls BtSmpPasskeyReply.
 __attribute__((weak)) void BtSmpPasskeyRequest(uint16_t ConnHdl)
 {
-	BtSmpPasskeyReply(ConnHdl, BT_SMP_PASSKEY_INVALID);
+	BtSmpPasskeyReply(ConnHdl, BtAppPasskeyInput(ConnHdl));
 }
 
 // Resume a Passkey Entry pairing after the user has entered the value shown on
@@ -3948,6 +4025,7 @@ void BtSmpPasskeyReply(uint16_t ConnHdl, uint32_t Passkey)
 	if (Passkey > 999999u)
 	{
 		SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_PASSKEY_ENTRY_FAILED);
+		BtSmpPairingAttemptFailed(ConnHdl, BtSmpMsTick());
 		SmpAbortPairing(pLink);
 		return;
 	}
@@ -3985,6 +4063,11 @@ void BtSmpPasskeyReply(uint16_t ConnHdl, uint32_t Passkey)
 __attribute__((weak))
 void BtSmpRequestSecurity(uint16_t ConnHdl)
 {
+	if (!BtSmpPairingAttemptAllowed(ConnHdl, BtSmpMsTick()))
+	{
+		return;
+	}
+
 	BtDevice_t *pPeer = BtPeerFindByHdl(ConnHdl);
 	if (pPeer == nullptr || pPeer->pHciDev == nullptr)
 	{
@@ -4055,11 +4138,23 @@ void BtSmpStartPairing(uint16_t ConnHdl)
 	// completes it.
 	if (BtSmpBondKeysLookup(ConnHdl, 0U, 0U, &pLink->Keys))
 	{
-		pLink->Ctx.bInitiator = true;
-		pLink->Ctx.State = BT_SMP_STATE_DONE;
-		DEBUG_PRINTF("SMP central reconnect, encrypt from bond\r\n");
-		BtSmpHciEnableEncryption(pDev, ConnHdl, pLink->Keys.Rand,
-								 pLink->Keys.Ediv, pLink->Keys.Ltk);
+		// Central encryption needs the peer-distributed LTK (or the common SC
+		// LTK). A legacy record holding only our locally distributed LTK remains
+		// a valid bond for the opposite role, but cannot encrypt from this role.
+		if (SmpKeyPresent(pLink->Keys.Ltk, sizeof(pLink->Keys.Ltk)))
+		{
+			pLink->Ctx.bInitiator = true;
+			pLink->Ctx.State = BT_SMP_STATE_DONE;
+			DEBUG_PRINTF("SMP central reconnect, encrypt from bond\r\n");
+			BtSmpHciEnableEncryption(pDev, ConnHdl, pLink->Keys.Rand,
+									 pLink->Keys.Ediv, pLink->Keys.Ltk);
+			return;
+		}
+		CryptoSecureWipe(&pLink->Keys, sizeof(pLink->Keys));
+	}
+
+	if (!BtSmpPairingAttemptAllowed(ConnHdl, BtSmpMsTick()))
+	{
 		return;
 	}
 
@@ -4102,6 +4197,7 @@ void BtSmpStartPairing(uint16_t ConnHdl)
 	if (rc == BT_SMP_CRYPTO_FAIL)
 	{
 		SmpSendFailed(pDev, ConnHdl, BT_SMP_ERR_UNSPECIFIED);
+		BtSmpPairingAttemptFailed(ConnHdl, BtSmpMsTick());
 		SmpAbortPairing(pLink);
 	}
 }
@@ -4197,6 +4293,7 @@ void BtSmpTimeoutCheck(void)
 					  pLink->ConnHdl);
 			pLink->Ctx.KeyDistExp = 0;
 			pLink->Ctx.State = BT_SMP_STATE_DONE;
+			BtSmpPairingAttemptSucceeded(pLink->ConnHdl);
 			BtSmpPairingComplete(pLink->ConnHdl, true, &pLink->Keys);
 		}
 	}
@@ -4451,6 +4548,33 @@ bool BtSmpLocalIdRestore(const void *pRec, size_t Len)
 	s_SmpLocalId.bValid = true;
 	CryptoSecureWipe(&rec, sizeof(rec));
 
+	return true;
+}
+
+bool BtSmpLocalIrkSet(const uint8_t Irk[16])
+{
+	if (Irk == nullptr)
+	{
+		return false;
+	}
+
+	uint8_t nonzero = 0;
+	for (int i = 0; i < 16; i++)
+	{
+		nonzero |= Irk[i];
+	}
+	if (nonzero == 0)
+	{
+		return false;
+	}
+	if (s_SmpLocalId.bValid && memcmp(s_SmpLocalId.Irk, Irk, 16) == 0)
+	{
+		return true;
+	}
+
+	memcpy(s_SmpLocalId.Irk, Irk, 16);
+	s_SmpLocalId.bValid = true;
+	BtSmpLocalIdSave();
 	return true;
 }
 

@@ -15,10 +15,10 @@
 #define UART_INT_PRIO 2
 #define UART_RX_PORT 0
 #define UART_RX_PIN 10
-#define UART_RX_PINOP 0x12
+#define UART_RX_PINOP IOPINOP_FUNC1
 #define UART_TX_PORT 0
 #define UART_TX_PIN 9
-#define UART_TX_PINOP 0x12
+#define UART_TX_PINOP IOPINOP_FUNC1
 #define UART_CTS_PORT -1
 #define UART_CTS_PIN -1
 #define UART_CTS_PINOP 0

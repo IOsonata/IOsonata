@@ -105,11 +105,23 @@ void SystemInit (void);
  */
 void SystemCoreClockUpdate (void);
 
+// Configure the PLL for the existing 48 MHz startup target.
+// ClkFreq is the crystal input frequency in Hz; IRC uses its fixed 12 MHz.
+// Returns the CPU frequency after the AHB divider and updates the clock globals.
+// Returns zero without register changes if the crystal input cannot produce
+// the fixed 48 MHz CPU/USB target within the PLL limits.
+// Stop clock-dependent peripherals (including USB) before calling. Successful
+// IRC operation leaves USB disabled. PLL lock failure returns zero with the
+// CPU on the 12 MHz IRC and USB disabled; reinitialize peripherals after retry.
 uint32_t SystemSetCoreClock(bool Crystal, int ClkFreq);
+
+// Retain the name exported by older LPC11Uxx libraries.
+uint32_t SystemCoreClockSet(bool Crystal, int ClkFreq);
 
 #ifdef __cplusplus
 }
 #endif
 
 #endif // __SYSTEM_LPC11UXX_H__
+
 

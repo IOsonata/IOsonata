@@ -47,16 +47,62 @@ SOFTWARE.
 #include <stdint.h>
 
 #include "cfifo.h"
+#ifndef __GCC_HAVE_SYNC_COMPARE_AND_SWAP_4
+#include "coredev/interrupt.h"
+#endif
 
 #define CFIFO_ATOMIC_STORE(p, v, order) \
 	__atomic_store_n((p), (v), (order))
 #define CFIFO_ATOMIC_LOAD(p, order) \
 	__atomic_load_n((p), (order))
+#ifdef __GCC_HAVE_SYNC_COMPARE_AND_SWAP_4
+// Native 32-bit compare and swap (LDREX/STREX, RISC-V A extension, host).
+// The compiler inlines it.
 #define CFIFO_ATOMIC_CAS_WEAK(p, expected, desired, success, failure) \
 	__atomic_compare_exchange_n((p), (expected), (desired), true, \
 		(success), (failure))
 #define CFIFO_ATOMIC_FETCH_ADD(p, v, order) \
 	__atomic_fetch_add((p), (v), (order))
+#else
+// No native 32-bit compare and swap (Cortex-M0/M0+/M1, RISC-V without the
+// A extension). The compiler would call __atomic_compare_exchange_4 and
+// __atomic_fetch_add_4. Do the same read, compare and write inline with
+// interrupts masked instead. Single core only, like the library call.
+static inline bool cfifo_cas(uint32_t *p, uint32_t *pExpected, uint32_t Desired)
+{
+	uint32_t state = DisableInterrupt();
+	uint32_t cur = *(volatile uint32_t *)p;
+	bool res = cur == *pExpected;
+
+	if (res)
+	{
+		*(volatile uint32_t *)p = Desired;
+	}
+	else
+	{
+		*pExpected = cur;
+	}
+	EnableInterrupt(state);
+
+	return res;
+}
+
+static inline uint32_t cfifo_fetch_add(uint32_t *p, uint32_t Val)
+{
+	uint32_t state = DisableInterrupt();
+	uint32_t old = *(volatile uint32_t *)p;
+
+	*(volatile uint32_t *)p = old + Val;
+	EnableInterrupt(state);
+
+	return old;
+}
+
+#define CFIFO_ATOMIC_CAS_WEAK(p, expected, desired, success, failure) \
+	cfifo_cas((p), (expected), (desired))
+#define CFIFO_ATOMIC_FETCH_ADD(p, v, order) \
+	cfifo_fetch_add((p), (v))
+#endif
 
 static inline uint32_t cfifo_slot(const CFifo_t *pFifo, uint32_t Idx)
 {
@@ -221,7 +267,10 @@ uint8_t *CFifoGetMultiple(hCFifo_t const pFifo, int *pCnt)
 	return cfifo_addr(pFifo, cfifo_slot(pFifo, getIdx));
 }
 
-static uint8_t *cfifo_reserve(hCFifo_t const pFifo, bool bPublish)
+// Next block for the producer, for Resv and Put alike. A full blocking FIFO
+// returns NULL. A full non-blocking FIFO drops the oldest block, so the
+// producer always gets a block.
+static uint8_t *cfifo_reserve(hCFifo_t const pFifo)
 {
 	if (pFifo == NULL)
 	{
@@ -235,7 +284,7 @@ static uint8_t *cfifo_reserve(hCFifo_t const pFifo, bool bPublish)
 
 	if (used >= max)
 	{
-		if (!bPublish || pFifo->bBlocking)
+		if (pFifo->bBlocking)
 		{
 			return NULL;
 		}
@@ -253,11 +302,13 @@ static uint8_t *cfifo_reserve(hCFifo_t const pFifo, bool bPublish)
 
 uint8_t *CFifoResv(hCFifo_t const pFifo)
 {
-	return cfifo_reserve(pFifo, false);
+	return cfifo_reserve(pFifo);
 }
 
-static uint8_t *cfifo_reserve_multiple(hCFifo_t const pFifo, int *pCnt,
-		bool bPublish)
+// Consecutive blocks for the producer, for ResvMultiple and PutMultiple alike.
+// A full blocking FIFO returns NULL. A full non-blocking FIFO drops up to
+// *pCnt of the oldest blocks, so the producer always gets at least one.
+static uint8_t *cfifo_reserve_multiple(hCFifo_t const pFifo, int *pCnt)
 {
 	if (pFifo == NULL || *pCnt <= 0)
 	{
@@ -273,7 +324,7 @@ static uint8_t *cfifo_reserve_multiple(hCFifo_t const pFifo, int *pCnt,
 
 	if (avail == 0U)
 	{
-		if (!bPublish || pFifo->bBlocking)
+		if (pFifo->bBlocking)
 		{
 			*pCnt = 0;
 			return NULL;
@@ -320,13 +371,13 @@ uint8_t *CFifoResvMultiple(hCFifo_t const pFifo, int *pCnt)
 	{
 		return CFifoResv(pFifo);
 	}
-	return cfifo_reserve_multiple(pFifo, pCnt, false);
+	return cfifo_reserve_multiple(pFifo, pCnt);
 }
 
-// Put permits dropping when full, then publishes. Only one producer owns PutIdx.
+// Reserve, then publish. Only one producer owns PutIdx.
 uint8_t *CFifoPut(hCFifo_t const pFifo)
 {
-	uint8_t *p = cfifo_reserve(pFifo, true);
+	uint8_t *p = cfifo_reserve(pFifo);
 	if (p != NULL)
 	{
 		CFIFO_ATOMIC_STORE(&pFifo->PutIdx,
@@ -344,7 +395,7 @@ uint8_t *CFifoPutMultiple(hCFifo_t const pFifo, int *pCnt)
 		return CFifoPut(pFifo);
 	}
 
-	uint8_t *p = cfifo_reserve_multiple(pFifo, pCnt, true);
+	uint8_t *p = cfifo_reserve_multiple(pFifo, pCnt);
 	if (p != NULL)
 	{
 		CFIFO_ATOMIC_STORE(&pFifo->PutIdx,

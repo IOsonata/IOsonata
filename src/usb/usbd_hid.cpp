@@ -368,6 +368,7 @@ static bool UsbdHidInitInternal(UsbdHidDev_t *pHid,
 	UsbdEpAllocReq_t req = {};
 	req.InterfaceCount = 1U;
 	req.BidirectionalCount = 1U;
+	req.BidirectionalType = USB_ENDPATT_TRANS_INT;
 
 	// The allocator fills each requested result before returning success.
 	UsbdEpAllocRes_t alloc;

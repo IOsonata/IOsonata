@@ -6,7 +6,7 @@ Author : Hoang Nguyen Hoan          Nov. 20, 2011
 Desc   : General I/O pin control implementation specific 
 		 This file must be named iopinctrl.h no matter which target
 
-		 This is LPC11xx implementation
+		 This is LPC17xx implementation
 
 Copyright (c) 2011, I-SYST inc., all rights reserved
 
@@ -44,56 +44,107 @@ Modified by          Date              Description
 
 static inline void IOPinSetDir(int PortNo, int PinNo, IOPINDIR Dir)
 {
+	uint32_t state;
+	uint32_t mask;
+
+	if ((unsigned)PortNo >= 5U || (unsigned)PinNo >= 32U ||
+		(Dir != IOPINDIR_OUTPUT && Dir != IOPINDIR_INPUT))
+	{
+		return;
+	}
+	mask = 1UL << (unsigned)PinNo;
+	state = DisableInterrupt();
 	if (Dir == IOPINDIR_OUTPUT)
-		LPC_GPIO0[PortNo].FIODIR |= 1L << PinNo;
-	else if (Dir == IOPINDIR_INPUT)
-		LPC_GPIO0[PortNo].FIODIR &= ~(1L << PinNo);
+	{
+		LPC_GPIO0[PortNo].FIODIR |= mask;
+	}
+	else
+	{
+		LPC_GPIO0[PortNo].FIODIR &= ~mask;
+	}
+	EnableInterrupt(state);
 }
 
 static inline int IOPinRead(int PortNo, int PinNo)
 {
-
-	return ((LPC_GPIO0[PortNo].FIOPIN >> PinNo ) & 1);
+	if ((unsigned)PortNo >= 5U || (unsigned)PinNo >= 32U)
+	{
+		return 0;
+	}
+	return (int)((LPC_GPIO0[PortNo].FIOPIN >> (unsigned)PinNo) & 1U);
 }
 
 static inline void IOPinSet(int PortNo, int PinNo)
 {
-	LPC_GPIO0[PortNo].FIOSET = (1 << PinNo);
+	if ((unsigned)PortNo < 5U && (unsigned)PinNo < 32U)
+	{
+		LPC_GPIO0[PortNo].FIOSET = 1UL << (unsigned)PinNo;
+	}
 }
 
 static inline void IOPinClear(int PortNo, int PinNo)
 {
-	LPC_GPIO0[PortNo].FIOCLR = (1 << PinNo);
+	if ((unsigned)PortNo < 5U && (unsigned)PinNo < 32U)
+	{
+		LPC_GPIO0[PortNo].FIOCLR = 1UL << (unsigned)PinNo;
+	}
 }
 
 static inline void IOPinToggle(int PortNo, int PinNo)
 {
-	LPC_GPIO0[PortNo].FIOPIN = LPC_GPIO0[PortNo].FIOPIN ^ (1 << PinNo);
+	uint32_t state;
+	uint32_t mask;
+
+	if ((unsigned)PortNo >= 5U || (unsigned)PinNo >= 32U)
+	{
+		return;
+	}
+	mask = 1UL << (unsigned)PinNo;
+	state = DisableInterrupt();
+	// Change only the selected output; never write back unrelated pad levels.
+	if ((LPC_GPIO0[PortNo].FIOPIN & mask) != 0)
+	{
+		LPC_GPIO0[PortNo].FIOCLR = mask;
+	}
+	else
+	{
+		LPC_GPIO0[PortNo].FIOSET = mask;
+	}
+	EnableInterrupt(state);
 }
 
 static inline uint32_t IOPinReadPort(int PortNo)
 {
-	return LPC_GPIO0[PortNo].FIOPIN;
+	return (unsigned)PortNo < 5U ? LPC_GPIO0[PortNo].FIOPIN : 0U;
 }
 
 static inline void IOPinWritePort(int PortNo, uint32_t Data)
 {
-	LPC_GPIO0[PortNo].FIOPIN = Data;
+	if ((unsigned)PortNo < 5U)
+	{
+		LPC_GPIO0[PortNo].FIOPIN = Data;
+	}
 }
 
 static inline void IOPinWrite8Port(int PortNo, uint8_t Data)
 {
-	LPC_GPIO0[PortNo].FIOPIN0 = Data;
+	if ((unsigned)PortNo < 5U)
+	{
+		LPC_GPIO0[PortNo].FIOPIN0 = Data;
+	}
 }
 
 static inline void IOPinWrite16Port(int PortNo, uint16_t Data)
 {
-	LPC_GPIO0[PortNo].FIOPINL = Data & 0xFF;
+	if ((unsigned)PortNo < 5U)
+	{
+		LPC_GPIO0[PortNo].FIOPINL = Data;
+	}
 }
 
 static inline void IOPinWrite32Port(int PortNo, uint32_t Data)
 {
-	LPC_GPIO0[PortNo].FIOPIN = Data;
+	IOPinWritePort(PortNo, Data);
 }
 
 #endif	// __IOPINCTRL_H__

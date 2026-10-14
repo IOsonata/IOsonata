@@ -1,48 +1,34 @@
 /**-------------------------------------------------------------------------
 @file	Vectors_R9A02.c
 
-@brief	CLIC vector table for the Renesas R9A02G021 (Andes N22 RISC-V).
+@brief	R9A02G021 trap entry, CLIC vector table and NMI entry
 
-The R9A02G021 interrupt controller (ICU) connects up to 32 software-routed
-peripheral interrupt slots to the Andes N22 CLIC.  Each slot is configured
-at runtime by writing the desired Event Link Source ID to ICU->IELSR[n];
-the corresponding handler is named IELSR<n>_IRQHandler and is weakly
-aliased to DEF_IRQHandler so a driver can override it by defining a
-non-weak function with the same name.
+R9A02G021 User's Manual R01UH1036EJ0110, 2.5.3, 2.7.2.3 and 12.3.1.
 
-Vector table layout (64 entries, 4 bytes each = 256 bytes, naturally
-power-of-two aligned for CLIC mtvt):
+mtvec (CLIC mode) points to R9a02TrapEntry: exceptions, and any interrupt
+taken without hardware vectoring. mtvt points to g_R9a02VectorTable, 51
+entries indexed by CLIC ID. Every CLIC input is hardware vectored
+(clicintattr.shv = 1), so the CLIC clears its pending bit on entry.
 
-    [0..31]   RISC-V exception cause handlers   (mcause 0..31 non-interrupt)
-    [32..63]  R9A02G021 ICU peripheral slots    (IELSR0_IRQHandler ... IELSR31_IRQHandler)
+The table entries are weak aliases of R9a02IrqEntry, which saves the caller
+saved registers, mepc and mcause, re-enables mstatus.MIE so a higher level
+can preempt, and calls R9a02IrqDispatch with the CLIC ID. An application
+can replace an entry with its own function of the same name, built with
+__attribute__((interrupt)). interrupt_r9a02.cpp then leaves that input
+alone.
 
-This table is self-contained -- the exception handlers are defined here
-rather than pulled from a shared file, so the Renesas R9A02 tree has no
-build-time dependency on the Espressif tree.
+The table and the entries go in .vectors sections: the normal boot linker
+script places them in the first 2 KB of the code flash around the option
+setting memory, the DFU application script after its reset entry.
 
-Installing the table:
-  - Andes N22 CLIC vectored mode uses mtvt (CSR 0x307) for the table base
-    and mtvec[1:0] = 11b to enable vectored dispatch.
-  - Application or library calls VectorInstall_R9A02() after SystemInit()
-    to enable hardware vectoring.  Direct (non-vectored) mtvec mode keeps
-    working without this call -- traps still land in the default trap
-    handler installed by SystemInit().
-
-Routing a peripheral event to a CLIC slot:
-  ICU->IELSR[5] = R9A02_EVENT_SCI0_RXI;        // wire SCI0 RX to slot 5
-  void IELSR5_IRQHandler(void) { ... }         // user-supplied handler
-
-Reference: R9A02G021 User's Manual: Hardware (R01UH1059EJ) section on ICU
-and CLIC; AndeStar V5 Privileged Architecture Manual for mtvt/mintstatus.
-
-@author	Nguyen Hoan Hoang
+@author	Hoang Nguyen Hoan
 @date	May 12, 2026
 
 @license
 
 MIT License
 
-Copyright (c) 2026 I-SYST inc. All rights reserved.
+Copyright (c) 2026, I-SYST inc., all rights reserved
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -63,216 +49,292 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ----------------------------------------------------------------------------*/
-
 #include <stdint.h>
 
-/*===========================================================================
- * Default trap / IRQ handler
- *
- * Weak so application or board code can replace with a diagnostic handler
- * that reads mcause, mepc, mtval and reports the fault before halting.
- *==========================================================================*/
-__attribute__((weak, used))
-void DEF_IRQHandler(void)
+#include "r9a02g021.h"
+#include "clic.h"
+#include "interrupt_r9a02.h"
+
+// Last exception seen by the default handler, for the debugger
+static volatile uint32_t s_ExcCause;
+static volatile uintptr_t s_ExcEpc;
+static volatile uintptr_t s_ExcTval;
+
+void R9a02TrapEntry(void);
+void R9a02NmiEntry(void);
+
+// Exceptions, and interrupts without hardware vectoring. The CLIC does not
+// clear the pending bit of a non vectored interrupt, the entry clears it.
+__attribute__((naked, aligned(64), section(".vectors.text.trap")))
+void R9a02TrapEntry(void)
 {
-    while (1)
-    {
-        __asm volatile ("nop");
-    }
+	__asm volatile (
+		"addi	sp, sp, -80\n"
+		"sw		ra, 0(sp)\n"
+		"sw		t0, 4(sp)\n"
+		"sw		t1, 8(sp)\n"
+		"sw		t2, 12(sp)\n"
+		"sw		a0, 16(sp)\n"
+		"sw		a1, 20(sp)\n"
+		"sw		a2, 24(sp)\n"
+		"sw		a3, 28(sp)\n"
+		"sw		a4, 32(sp)\n"
+		"sw		a5, 36(sp)\n"
+		"sw		a6, 40(sp)\n"
+		"sw		a7, 44(sp)\n"
+		"sw		t3, 48(sp)\n"
+		"sw		t4, 52(sp)\n"
+		"sw		t5, 56(sp)\n"
+		"sw		t6, 60(sp)\n"
+		"csrr	a0, mcause\n"
+		"bltz	a0, 1f\n"
+		"csrr	a1, mepc\n"
+		"csrr	a2, mtval\n"
+		"call	R9a02ExceptionHandler\n"
+		"csrw	mepc, a0\n"
+		"j		2f\n"
+		"1:\n"
+		"andi	a0, a0, 0x3FF\n"
+		"slli	t0, a0, 2\n"
+		"li		t1, %0\n"
+		"add	t0, t0, t1\n"
+		"sb		zero, 0(t0)\n"
+		"call	R9a02IrqDispatch\n"
+		"2:\n"
+		"lw		ra, 0(sp)\n"
+		"lw		t0, 4(sp)\n"
+		"lw		t1, 8(sp)\n"
+		"lw		t2, 12(sp)\n"
+		"lw		a0, 16(sp)\n"
+		"lw		a1, 20(sp)\n"
+		"lw		a2, 24(sp)\n"
+		"lw		a3, 28(sp)\n"
+		"lw		a4, 32(sp)\n"
+		"lw		a5, 36(sp)\n"
+		"lw		a6, 40(sp)\n"
+		"lw		a7, 44(sp)\n"
+		"lw		t3, 48(sp)\n"
+		"lw		t4, 52(sp)\n"
+		"lw		t5, 56(sp)\n"
+		"lw		t6, 60(sp)\n"
+		"addi	sp, sp, 80\n"
+		"mret\n"
+		:: "i"(R9A02_CLIC_CTRL_BASE)
+	);
 }
 
-/*===========================================================================
- * RISC-V synchronous exception handlers (mcause 0..31, interrupt=0)
- *
- * Cause assignments per RISC-V Privileged Specification.
- *==========================================================================*/
-
-__attribute__((weak, alias("DEF_IRQHandler"))) void InstrAddrMisalign_Handler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void InstrAccessFault_Handler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IllegalInstr_Handler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void Breakpoint_Handler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void LoadAddrMisalign_Handler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void LoadAccessFault_Handler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void StoreAddrMisalign_Handler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void StoreAccessFault_Handler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void ECallU_Handler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void ECallS_Handler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void Reserved10_Handler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void ECallM_Handler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void InstrPageFault_Handler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void LoadPageFault_Handler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void Reserved14_Handler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void StorePageFault_Handler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void Reserved16_Handler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void Reserved17_Handler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void Reserved18_Handler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void Reserved19_Handler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void Reserved20_Handler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void Reserved21_Handler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void Reserved22_Handler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void Reserved23_Handler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void Reserved24_Handler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void Reserved25_Handler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void Reserved26_Handler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void Reserved27_Handler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void Reserved28_Handler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void Reserved29_Handler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void Reserved30_Handler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void Reserved31_Handler(void);
-
-/*===========================================================================
- * R9A02G021 ICU peripheral interrupt slots (IELSR0..IELSR31)
- *
- * Routed by writing R9A02_EVENT_* IDs into R9A02_ICU->IELSR[n].  Override
- * a slot by defining a non-weak function with the matching name.
- *==========================================================================*/
-
-__attribute__((weak, alias("DEF_IRQHandler"))) void IELSR0_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IELSR1_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IELSR2_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IELSR3_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IELSR4_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IELSR5_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IELSR6_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IELSR7_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IELSR8_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IELSR9_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IELSR10_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IELSR11_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IELSR12_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IELSR13_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IELSR14_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IELSR15_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IELSR16_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IELSR17_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IELSR18_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IELSR19_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IELSR20_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IELSR21_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IELSR22_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IELSR23_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IELSR24_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IELSR25_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IELSR26_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IELSR27_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IELSR28_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IELSR29_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IELSR30_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void IELSR31_IRQHandler(void);
-
-/*===========================================================================
- * NMI -- separate from CLIC table, dispatched via the dedicated NMI vector
- *==========================================================================*/
-__attribute__((weak, alias("DEF_IRQHandler"))) void NMI_Handler(void);
-
-/*===========================================================================
- * Vector table -- 64 function pointers, 256 bytes, naturally pow-2 aligned.
- *
- * Placed in its own section so the linker script can locate it via
- * .vectors and the application can install its address into mtvt.
- *==========================================================================*/
-typedef void (*VectorFn_t)(void);
-
-__attribute__((section(".vectors"), aligned(256), used, retain))
-const VectorFn_t g_R9A02_VectorTable[64] =
+// Hardware vectored interrupts. mepc and mcause are saved before MIE is set
+// again: mret restores the previous level from mcause.mpil.
+__attribute__((naked, aligned(4), section(".vectors.text.irq")))
+void R9a02IrqEntry(void)
 {
-    /* RISC-V exception cause handlers [0..31] */
-    [0]  = InstrAddrMisalign_Handler,
-    [1]  = InstrAccessFault_Handler,
-    [2]  = IllegalInstr_Handler,
-    [3]  = Breakpoint_Handler,
-    [4]  = LoadAddrMisalign_Handler,
-    [5]  = LoadAccessFault_Handler,
-    [6]  = StoreAddrMisalign_Handler,
-    [7]  = StoreAccessFault_Handler,
-    [8]  = ECallU_Handler,
-    [9]  = ECallS_Handler,
-    [10] = Reserved10_Handler,
-    [11] = ECallM_Handler,
-    [12] = InstrPageFault_Handler,
-    [13] = LoadPageFault_Handler,
-    [14] = Reserved14_Handler,
-    [15] = StorePageFault_Handler,
-    [16] = Reserved16_Handler,
-    [17] = Reserved17_Handler,
-    [18] = Reserved18_Handler,
-    [19] = Reserved19_Handler,
-    [20] = Reserved20_Handler,
-    [21] = Reserved21_Handler,
-    [22] = Reserved22_Handler,
-    [23] = Reserved23_Handler,
-    [24] = Reserved24_Handler,
-    [25] = Reserved25_Handler,
-    [26] = Reserved26_Handler,
-    [27] = Reserved27_Handler,
-    [28] = Reserved28_Handler,
-    [29] = Reserved29_Handler,
-    [30] = Reserved30_Handler,
-    [31] = Reserved31_Handler,
+	__asm volatile (
+		"addi	sp, sp, -80\n"
+		"sw		ra, 0(sp)\n"
+		"sw		t0, 4(sp)\n"
+		"sw		t1, 8(sp)\n"
+		"sw		t2, 12(sp)\n"
+		"sw		a0, 16(sp)\n"
+		"sw		a1, 20(sp)\n"
+		"sw		a2, 24(sp)\n"
+		"sw		a3, 28(sp)\n"
+		"sw		a4, 32(sp)\n"
+		"sw		a5, 36(sp)\n"
+		"sw		a6, 40(sp)\n"
+		"sw		a7, 44(sp)\n"
+		"sw		t3, 48(sp)\n"
+		"sw		t4, 52(sp)\n"
+		"sw		t5, 56(sp)\n"
+		"sw		t6, 60(sp)\n"
+		"csrr	t0, mepc\n"
+		"csrr	t1, mcause\n"
+		"sw		t0, 64(sp)\n"
+		"sw		t1, 68(sp)\n"
+		"andi	a0, t1, 0x3FF\n"
+		"csrsi	mstatus, 8\n"
+		"call	R9a02IrqDispatch\n"
+		"csrci	mstatus, 8\n"
+		"lw		t0, 64(sp)\n"
+		"lw		t1, 68(sp)\n"
+		"csrw	mepc, t0\n"
+		"csrw	mcause, t1\n"
+		"lw		ra, 0(sp)\n"
+		"lw		t0, 4(sp)\n"
+		"lw		t1, 8(sp)\n"
+		"lw		t2, 12(sp)\n"
+		"lw		a0, 16(sp)\n"
+		"lw		a1, 20(sp)\n"
+		"lw		a2, 24(sp)\n"
+		"lw		a3, 28(sp)\n"
+		"lw		a4, 32(sp)\n"
+		"lw		a5, 36(sp)\n"
+		"lw		a6, 40(sp)\n"
+		"lw		a7, 44(sp)\n"
+		"lw		t3, 48(sp)\n"
+		"lw		t4, 52(sp)\n"
+		"lw		t5, 56(sp)\n"
+		"lw		t6, 60(sp)\n"
+		"addi	sp, sp, 80\n"
+		"mret\n"
+	);
+}
 
-    /* R9A02G021 ICU peripheral slots [32..63] -- mapped to IELSR[0..31] */
-    [32] = IELSR0_IRQHandler,
-    [33] = IELSR1_IRQHandler,
-    [34] = IELSR2_IRQHandler,
-    [35] = IELSR3_IRQHandler,
-    [36] = IELSR4_IRQHandler,
-    [37] = IELSR5_IRQHandler,
-    [38] = IELSR6_IRQHandler,
-    [39] = IELSR7_IRQHandler,
-    [40] = IELSR8_IRQHandler,
-    [41] = IELSR9_IRQHandler,
-    [42] = IELSR10_IRQHandler,
-    [43] = IELSR11_IRQHandler,
-    [44] = IELSR12_IRQHandler,
-    [45] = IELSR13_IRQHandler,
-    [46] = IELSR14_IRQHandler,
-    [47] = IELSR15_IRQHandler,
-    [48] = IELSR16_IRQHandler,
-    [49] = IELSR17_IRQHandler,
-    [50] = IELSR18_IRQHandler,
-    [51] = IELSR19_IRQHandler,
-    [52] = IELSR20_IRQHandler,
-    [53] = IELSR21_IRQHandler,
-    [54] = IELSR22_IRQHandler,
-    [55] = IELSR23_IRQHandler,
-    [56] = IELSR24_IRQHandler,
-    [57] = IELSR25_IRQHandler,
-    [58] = IELSR26_IRQHandler,
-    [59] = IELSR27_IRQHandler,
-    [60] = IELSR28_IRQHandler,
-    [61] = IELSR29_IRQHandler,
-    [62] = IELSR30_IRQHandler,
-    [63] = IELSR31_IRQHandler,
+// NMIADDR needs 64-byte alignment (2.5.8.3). The NMI does not return.
+__attribute__((naked, aligned(64), section(".vectors.text.nmi")))
+void R9a02NmiEntry(void)
+{
+	__asm volatile (
+		"call	R9a02NmiHandler\n"
+		"1:\n"
+		"j		1b\n"
+	);
+}
+
+void MSIP_IRQHandler(void) __attribute__((weak, alias("R9a02IrqEntry")));
+void MTIP_IRQHandler(void) __attribute__((weak, alias("R9a02IrqEntry")));
+void IELSR0_IRQHandler(void) __attribute__((weak, alias("R9a02IrqEntry")));
+void IELSR1_IRQHandler(void) __attribute__((weak, alias("R9a02IrqEntry")));
+void IELSR2_IRQHandler(void) __attribute__((weak, alias("R9a02IrqEntry")));
+void IELSR3_IRQHandler(void) __attribute__((weak, alias("R9a02IrqEntry")));
+void IELSR4_IRQHandler(void) __attribute__((weak, alias("R9a02IrqEntry")));
+void IELSR5_IRQHandler(void) __attribute__((weak, alias("R9a02IrqEntry")));
+void IELSR6_IRQHandler(void) __attribute__((weak, alias("R9a02IrqEntry")));
+void IELSR7_IRQHandler(void) __attribute__((weak, alias("R9a02IrqEntry")));
+void IELSR8_IRQHandler(void) __attribute__((weak, alias("R9a02IrqEntry")));
+void IELSR9_IRQHandler(void) __attribute__((weak, alias("R9a02IrqEntry")));
+void IELSR10_IRQHandler(void) __attribute__((weak, alias("R9a02IrqEntry")));
+void IELSR11_IRQHandler(void) __attribute__((weak, alias("R9a02IrqEntry")));
+void IELSR12_IRQHandler(void) __attribute__((weak, alias("R9a02IrqEntry")));
+void IELSR13_IRQHandler(void) __attribute__((weak, alias("R9a02IrqEntry")));
+void IELSR14_IRQHandler(void) __attribute__((weak, alias("R9a02IrqEntry")));
+void IELSR15_IRQHandler(void) __attribute__((weak, alias("R9a02IrqEntry")));
+void IELSR16_IRQHandler(void) __attribute__((weak, alias("R9a02IrqEntry")));
+void IELSR17_IRQHandler(void) __attribute__((weak, alias("R9a02IrqEntry")));
+void IELSR18_IRQHandler(void) __attribute__((weak, alias("R9a02IrqEntry")));
+void IELSR19_IRQHandler(void) __attribute__((weak, alias("R9a02IrqEntry")));
+void IELSR20_IRQHandler(void) __attribute__((weak, alias("R9a02IrqEntry")));
+void IELSR21_IRQHandler(void) __attribute__((weak, alias("R9a02IrqEntry")));
+void IELSR22_IRQHandler(void) __attribute__((weak, alias("R9a02IrqEntry")));
+void IELSR23_IRQHandler(void) __attribute__((weak, alias("R9a02IrqEntry")));
+void IELSR24_IRQHandler(void) __attribute__((weak, alias("R9a02IrqEntry")));
+void IELSR25_IRQHandler(void) __attribute__((weak, alias("R9a02IrqEntry")));
+void IELSR26_IRQHandler(void) __attribute__((weak, alias("R9a02IrqEntry")));
+void IELSR27_IRQHandler(void) __attribute__((weak, alias("R9a02IrqEntry")));
+void IELSR28_IRQHandler(void) __attribute__((weak, alias("R9a02IrqEntry")));
+void IELSR29_IRQHandler(void) __attribute__((weak, alias("R9a02IrqEntry")));
+void IELSR30_IRQHandler(void) __attribute__((weak, alias("R9a02IrqEntry")));
+void IELSR31_IRQHandler(void) __attribute__((weak, alias("R9a02IrqEntry")));
+
+// Manual table 12.3. Reserved IDs point to the common entry, the dispatcher
+// disables an input it does not know.
+__attribute__((section(".vectors.table"), aligned(64), used))
+const R9a02Vector_t g_R9a02VectorTable[R9A02_CLIC_INT_COUNT] = {
+	R9a02IrqEntry,			// 0 reserved
+	R9a02IrqEntry,			// 1 reserved
+	R9a02IrqEntry,			// 2 reserved
+	MSIP_IRQHandler,		// 3 machine software interrupt
+	R9a02IrqEntry,			// 4 reserved
+	R9a02IrqEntry,			// 5 reserved
+	R9a02IrqEntry,			// 6 reserved
+	MTIP_IRQHandler,		// 7 machine timer interrupt
+	R9a02IrqEntry,			// 8 reserved
+	R9a02IrqEntry,			// 9 reserved
+	R9a02IrqEntry,			// 10 reserved
+	R9a02IrqEntry,			// 11 reserved
+	R9a02IrqEntry,			// 12 reserved
+	R9a02IrqEntry,			// 13 reserved
+	R9a02IrqEntry,			// 14 reserved
+	R9a02IrqEntry,			// 15 reserved
+	R9a02IrqEntry,			// 16 reserved
+	R9a02IrqEntry,			// 17 reserved
+	R9a02IrqEntry,			// 18 reserved
+	IELSR0_IRQHandler,		// 19
+	IELSR1_IRQHandler,		// 20
+	IELSR2_IRQHandler,		// 21
+	IELSR3_IRQHandler,		// 22
+	IELSR4_IRQHandler,		// 23
+	IELSR5_IRQHandler,		// 24
+	IELSR6_IRQHandler,		// 25
+	IELSR7_IRQHandler,		// 26
+	IELSR8_IRQHandler,		// 27
+	IELSR9_IRQHandler,		// 28
+	IELSR10_IRQHandler,		// 29
+	IELSR11_IRQHandler,		// 30
+	IELSR12_IRQHandler,		// 31
+	IELSR13_IRQHandler,		// 32
+	IELSR14_IRQHandler,		// 33
+	IELSR15_IRQHandler,		// 34
+	IELSR16_IRQHandler,		// 35
+	IELSR17_IRQHandler,		// 36
+	IELSR18_IRQHandler,		// 37
+	IELSR19_IRQHandler,		// 38
+	IELSR20_IRQHandler,		// 39
+	IELSR21_IRQHandler,		// 40
+	IELSR22_IRQHandler,		// 41
+	IELSR23_IRQHandler,		// 42
+	IELSR24_IRQHandler,		// 43
+	IELSR25_IRQHandler,		// 44
+	IELSR26_IRQHandler,		// 45
+	IELSR27_IRQHandler,		// 46
+	IELSR28_IRQHandler,		// 47
+	IELSR29_IRQHandler,		// 48
+	IELSR30_IRQHandler,		// 49
+	IELSR31_IRQHandler,		// 50
 };
 
-/*===========================================================================
- * VectorInstall_R9A02
- *
- * Switch the Andes N22 CLIC into vectored mode and point it at the table
- * above.  Call AFTER SystemInit() (which installs a direct-mode trap
- * handler) when the application wants hardware vectoring.
- *
- * Andes N22 CLIC convention:
- *   - mtvt  (CSR 0x307) holds the table base
- *   - mtvec[1:0] = 11b enables vectored dispatch for non-CLIC mode
- *     interrupts; CLIC interrupts read mtvt directly
- *
- * Leave in direct mode by not calling this function -- the trap handler
- * installed by SystemInit() then catches every fault.
- *==========================================================================*/
-#define R9A02_CSR_MTVT          0x307U  /* Andes CLIC table base CSR */
-
-void VectorInstall_R9A02(void)
+__attribute__((weak))
+uintptr_t R9a02ExceptionHandler(uint32_t Cause, uintptr_t Epc, uintptr_t Tval)
 {
-    uintptr_t base = (uintptr_t)&g_R9A02_VectorTable[0];
+	s_ExcCause = Cause;
+	s_ExcEpc = Epc;
+	s_ExcTval = Tval;
 
-    /* CSRW mtvt, base -- write directly (CSR number hard-coded as imm12). */
-    __asm volatile ("csrw 0x307, %0" : : "r"(base) : "memory");
+	for (;;)
+	{
+		__asm volatile ("nop");
+	}
 
-    /* mtvec: keep the existing handler base but set vectored-mode bits.
-     * Read-modify-write so we don't change the base set by SystemInit(). */
-    uintptr_t tvec;
-    __asm volatile ("csrr %0, mtvec" : "=r"(tvec));
-    tvec = (tvec & ~(uintptr_t)0x3U) | 0x3U;    /* mode = 11b */
-    __asm volatile ("csrw mtvec, %0" : : "r"(tvec) : "memory");
+	return Epc;
+}
+
+__attribute__((weak))
+void R9a02NmiHandler(void)
+{
+	for (;;)
+	{
+		__asm volatile ("nop");
+	}
+}
+
+void R9a02TrapInit(void)
+{
+	uintptr_t base = R9A02_CLIC_CTRL_BASE;
+	uint8_t ctl = ClicCtlFromLevel(0U, R9A02_CLIC_NLBITS);
+
+	for (uint32_t i = 0; i < R9A02_CLIC_INT_COUNT; i++)
+	{
+		CLIC_INT_IE_REG(base, i) = 0U;
+		CLIC_INT_ATTR_REG(base, i) = CLIC_INT_ATTR_SHV_Msk;
+		CLIC_INT_CTL_REG(base, i) = ctl;
+		CLIC_INT_IP_REG(base, i) = 0U;
+	}
+
+	for (uint32_t i = 0; i < R9A02_ICU_IELSR_CNT; i++)
+	{
+		// Writing 0 also clears IR
+		R9A02_ICU->IELSR[i] = 0U;
+	}
+
+	R9A02_CLIC_CLICCFG = (uint8_t)(R9A02_CLIC_NLBITS << R9A02_CLICCFG_NLBITS_Pos);
+
+	// mintthresh 0x347, mtvt 0x307. mtvec mode bits 11b select CLIC mode.
+	__asm volatile (
+		"csrw	0x347, zero\n"
+		"csrw	0x307, %0\n"
+		"csrw	mtvec, %1\n"
+		:: "r"((uintptr_t)g_R9a02VectorTable), "r"((uintptr_t)R9a02TrapEntry | 3U)
+		: "memory"
+	);
+
+	R9A02_CPU_AUX_NMIADDR = (uint32_t)(uintptr_t)R9a02NmiEntry;
 }

@@ -23,6 +23,11 @@ Systems: GPS L1 C/A, QZSS L1 C/A, and Galileo E1 on the modem firmware that
 has it (nRF91x1). FixInterval is 0, 1, or 10 to 65535 s, FixTimeout up to
 65535 s. One receiver: a second instance takes it over.
 
+Modem firmware: on the nRF9160 the Modem library takes GNSS requests from
+modem firmware 1.3.4 on, and Init refuses an older one. Revision 1 of the
+nRF9160 runs at most firmware 1.2.8, so it has no GNSS; LTE works there. Any
+nRF91x1 firmware has GNSS.
+
 @author	Hoang Nguyen Hoan
 @date	Oct. 8, 2026
 
@@ -101,6 +106,7 @@ private:
 	bool GnssCmd(uint8_t Cmd, uint32_t Param, int ParamLen);
 	bool AtCmd(const char *pCmd);
 	bool AtRead(const char *pCmd, const char *pPrefix, int *pVal, int NbVal);
+	bool FwSupported();
 
 	struct nrf_modem_gnss_sv vSv[NRF_MODEM_GNSS_MAX_SATELLITES];	// Satellites of the last
 																	// update, written in the

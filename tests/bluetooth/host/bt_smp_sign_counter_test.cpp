@@ -86,6 +86,7 @@ void ResetHarness(bool AutoComplete)
 	for (size_t i = 0; i < sizeof(s_Keys.Ltk); ++i)
 	{
 		s_Keys.Ltk[i] = static_cast<uint8_t>(0x40U + i);
+		s_Keys.LocalLtk[i] = static_cast<uint8_t>(0x60U + i);
 		s_Keys.Csrk[i] = static_cast<uint8_t>(0x80U + i);
 	}
 	s_Keys.EncKeySize = 16;
@@ -106,6 +107,15 @@ void ResetHarness(bool AutoComplete)
 void AddBond()
 {
 	BtSmpBondAdd(kConnHdl, &s_Keys);
+}
+
+void SetPeerAddr(uint8_t Base)
+{
+	s_Peer.Conn.PeerAddrType = BTADDR_TYPE_PUBLIC;
+	for (size_t i = 0; i < sizeof(s_Peer.Conn.PeerAddr); ++i)
+	{
+		s_Peer.Conn.PeerAddr[i] = static_cast<uint8_t>(Base + i);
+	}
 }
 
 bool VerifyCounter(uint32_t Counter, bool ValidMac = true)
@@ -208,36 +218,59 @@ void TestFailedReservationStaysClosed()
 	BT_CHECK(s_Test, VerifyCounter(0));
 }
 
-void TestVersionOneRetiresUncertainCsrk()
+void TestDirectionalLegacyLtk()
 {
 	ResetHarness(true);
+	s_Keys.bSc = false;
+	s_Keys.Ediv = 0x1122;
+	s_Keys.Rand = UINT64_C(0x0102030405060708);
+	s_Keys.LocalEdiv = 0x3344;
+	s_Keys.LocalRand = UINT64_C(0x1112131415161718);
 	AddBond();
 
-	uint8_t legacy[sizeof(s_LastRecord)];
-	size_t legacyLen = s_LastRecordLen;
-	std::memcpy(legacy, s_LastRecord, legacyLen);
-
-	// Header layout is fixed: magic[0..3], version[4..5], length[6..7],
-	// CRC[8..11]. Version 1 used the same record size but persisted an exact
-	// receive counter asynchronously, so its CSRK cannot remain replay-safe.
-	legacy[4] = 1;
-	legacy[5] = 0;
-	std::memset(&legacy[8], 0, 4);
-	PutLe32(&legacy[8], Crc32(legacy, legacyLen));
-
-	BtSmpBondClearAll();
-	s_AutoComplete = true;
-	s_SaveCount = 0;
-	BtSmpBondRestore(0, legacy, legacyLen);
+	uint8_t ltk[16] = {};
+	BT_CHECK(s_Test, BtSmpBondLtkLookup(kConnHdl, s_Keys.LocalRand,
+									 s_Keys.LocalEdiv, ltk));
+	BT_CHECK(s_Test, std::memcmp(ltk, s_Keys.LocalLtk, sizeof(ltk)) == 0);
+	BT_CHECK(s_Test, !BtSmpBondLtkLookup(kConnHdl, s_Keys.Rand,
+									  s_Keys.Ediv, ltk));
 
 	BtSmpKeys_t restored = {};
 	BT_CHECK(s_Test, BtSmpBondKeysLookup(kConnHdl, 0, 0, &restored));
 	BT_CHECK(s_Test, std::memcmp(restored.Ltk, s_Keys.Ltk,
 								sizeof(restored.Ltk)) == 0);
-	BT_CHECK(s_Test, AllZero(restored.Csrk, sizeof(restored.Csrk)));
-	BT_CHECK(s_Test, !VerifyCounter(0));
-	BT_CHECK(s_Test, s_SaveCount == 1);
-	BT_CHECK(s_Test, s_LastRecord[4] == 2 && s_LastRecord[5] == 0);
+	BT_CHECK(s_Test, std::memcmp(restored.LocalLtk, s_Keys.LocalLtk,
+								sizeof(restored.LocalLtk)) == 0);
+	BT_CHECK(s_Test, restored.LocalRand == s_Keys.LocalRand);
+	BT_CHECK(s_Test, restored.LocalEdiv == s_Keys.LocalEdiv);
+}
+
+void TestLegacyLocalOnlyLtkBond()
+{
+	ResetHarness(true);
+	s_Keys.bSc = false;
+
+	// The peer did not distribute an LTK. The local LTK is still a complete
+	// legacy bond for reconnects where this device is the peripheral.
+	std::memset(s_Keys.Ltk, 0, sizeof(s_Keys.Ltk));
+	s_Keys.Ediv = 0;
+	s_Keys.Rand = 0;
+	s_Keys.LocalEdiv = 0x7788;
+	s_Keys.LocalRand = UINT64_C(0x2122232425262728);
+	AddBond();
+
+	BtSmpKeys_t restored = {};
+	BT_CHECK(s_Test, BtSmpBondKeysLookup(kConnHdl, 0, 0, &restored));
+	BT_CHECK(s_Test, !AllZero(restored.LocalLtk, sizeof(restored.LocalLtk)));
+	BT_CHECK(s_Test, AllZero(restored.Ltk, sizeof(restored.Ltk)));
+
+	uint8_t ltk[16] = {};
+	BT_CHECK(s_Test, BtSmpBondLtkLookup(kConnHdl, s_Keys.LocalRand,
+									 s_Keys.LocalEdiv, ltk));
+	BT_CHECK(s_Test, std::memcmp(ltk, s_Keys.LocalLtk, sizeof(ltk)) == 0);
+
+	// A zero master id does not turn a legacy local-only record into an SC key.
+	BT_CHECK(s_Test, !BtSmpBondLtkLookup(kConnHdl, 0, 0, ltk));
 }
 
 void TestResolvedIdentityLookup()
@@ -274,6 +307,120 @@ void TestResolvedIdentityLookup()
 	BT_CHECK(s_Test, BtSmpBondKeysLookup(kConnHdl, 0, 0, &restored));
 	BT_CHECK(s_Test, std::memcmp(restored.Ltk, s_Keys.Ltk,
 								sizeof(restored.Ltk)) == 0);
+}
+
+void TestRepeatedAttemptBackoff()
+{
+	ResetHarness(true);
+	SetPeerAddr(0x90);
+
+	BT_CHECK(s_Test, BtSmpPairingAttemptAllowed(kConnHdl, 100U));
+	BtSmpPairingAttemptFailed(kConnHdl, 100U);
+	BT_CHECK(s_Test, !BtSmpPairingAttemptAllowed(kConnHdl, 1099U));
+	BT_CHECK(s_Test, BtSmpPairingAttemptAllowed(kConnHdl, 1100U));
+
+	BtSmpPairingAttemptFailed(kConnHdl, 1100U);
+	BT_CHECK(s_Test, !BtSmpPairingAttemptAllowed(kConnHdl, 3099U));
+	BT_CHECK(s_Test, BtSmpPairingAttemptAllowed(kConnHdl, 3100U));
+
+	BtSmpPairingAttemptFailed(kConnHdl, 4000U);
+	BT_CHECK(s_Test, !BtSmpPairingAttemptAllowed(kConnHdl, 7999U));
+
+	// A success is not a SIG-defined reset. The penalty decreases only through
+	// the quiet-time exponential decay.
+	BtSmpPairingAttemptSucceeded(kConnHdl);
+	BT_CHECK(s_Test, !BtSmpPairingAttemptAllowed(kConnHdl, 4001U));
+	BT_CHECK(s_Test, BtSmpPairingAttemptAllowed(kConnHdl, 8000U));
+
+	// The next failure therefore uses the next exponential interval (8 s).
+	BtSmpPairingAttemptFailed(kConnHdl, 8000U);
+	BT_CHECK(s_Test, !BtSmpPairingAttemptAllowed(kConnHdl, 15999U));
+	BT_CHECK(s_Test, BtSmpPairingAttemptAllowed(kConnHdl, 16000U));
+}
+
+void TestRepeatedAttemptDecay()
+{
+	ResetHarness(true);
+	SetPeerAddr(0xA0);
+
+	const uint32_t base = 100000U;
+	BtSmpPairingAttemptFailed(kConnHdl, base);
+	BtSmpPairingAttemptFailed(kConnHdl, base + 1000U);
+
+	uint32_t quiet = base + 1000U + BT_SMP_REPEAT_DECAY_MS;
+	BT_CHECK(s_Test, BtSmpPairingAttemptAllowed(kConnHdl, quiet));
+	BtSmpPairingAttemptFailed(kConnHdl, quiet);
+	BT_CHECK(s_Test, !BtSmpPairingAttemptAllowed(kConnHdl, quiet + 1999U));
+	BT_CHECK(s_Test, BtSmpPairingAttemptAllowed(kConnHdl, quiet + 2000U));
+
+}
+
+void TestRepeatedAttemptSuccessPreservesIdentityPenalty()
+{
+	ResetHarness(true);
+
+	const uint8_t raw[6] = { 0x21, 0x32, 0x43, 0x54, 0x65, 0x46 };
+	const uint8_t identity[6] = { 0x31, 0x42, 0x53, 0x64, 0x75, 0xC6 };
+	s_Peer.Conn.PeerAddrType = BTADDR_TYPE_RAND;
+	std::memcpy(s_Peer.Conn.PeerAddr, raw, sizeof(raw));
+
+	const uint32_t base = 3U * BT_SMP_REPEAT_DECAY_MS + 300000U;
+	BtSmpPairingAttemptFailed(kConnHdl, base);
+
+	// Pairing then reveals a stable identity and the bond is installed before
+	// the success notification. The one-second penalty must migrate, not vanish.
+	s_Keys.IdAddrType = BTADDR_TYPE_RAND;
+	std::memcpy(s_Keys.IdAddr, identity, sizeof(identity));
+	AddBond();
+	BtSmpPairingAttemptSucceeded(kConnHdl);
+
+	s_Peer.Conn.PeerAddrType = BTADDR_TYPE_RANDOM_STATIC;
+	std::memcpy(s_Peer.Conn.PeerAddr, identity, sizeof(identity));
+	BT_CHECK(s_Test, !BtSmpPairingAttemptAllowed(kConnHdl, base + 500U));
+	BT_CHECK(s_Test, BtSmpPairingAttemptAllowed(kConnHdl, base + 1000U));
+}
+
+void TestRepeatedAttemptSaturationPreservesPenalty()
+{
+	ResetHarness(true);
+	const uint32_t base = 4U * BT_SMP_REPEAT_DECAY_MS + 400000U;
+
+	uint8_t firstAddr[6] = {};
+	for (unsigned n = 0; n < BT_SMP_REPEAT_TRACK_MAX; ++n)
+	{
+		for (unsigned i = 0; i < sizeof(s_Peer.Conn.PeerAddr); ++i)
+		{
+			s_Peer.Conn.PeerAddr[i] = static_cast<uint8_t>(n * 17U + i + 1U);
+		}
+		if (n == 0)
+		{
+			std::memcpy(firstAddr, s_Peer.Conn.PeerAddr, sizeof(firstAddr));
+		}
+		BT_CHECK(s_Test, BtSmpPairingAttemptAllowed(kConnHdl, base + n));
+		BtSmpPairingAttemptFailed(kConnHdl, base + n);
+	}
+
+	// All exact slots are still inside their one-second wait. An untracked
+	// claimant may make one attempt, but its failure goes into the overflow
+	// guard; it must not evict one of the exact active penalties.
+	for (unsigned i = 0; i < sizeof(s_Peer.Conn.PeerAddr); ++i)
+	{
+		s_Peer.Conn.PeerAddr[i] = static_cast<uint8_t>(0xD0U + i);
+	}
+	BT_CHECK(s_Test, BtSmpPairingAttemptAllowed(kConnHdl, base + 400U));
+	BtSmpPairingAttemptFailed(kConnHdl, base + 400U);
+
+	std::memcpy(s_Peer.Conn.PeerAddr, firstAddr, sizeof(firstAddr));
+	BT_CHECK(s_Test, !BtSmpPairingAttemptAllowed(kConnHdl, base + 500U));
+
+	// A second untracked identity is also held briefly while the exact table is
+	// saturated. This is fail-closed behavior under an address-churn attack.
+	for (unsigned i = 0; i < sizeof(s_Peer.Conn.PeerAddr); ++i)
+	{
+		s_Peer.Conn.PeerAddr[i] = static_cast<uint8_t>(0xE0U + i);
+	}
+	BT_CHECK(s_Test, !BtSmpPairingAttemptAllowed(kConnHdl, base + 500U));
+	BT_CHECK(s_Test, BtSmpPairingAttemptAllowed(kConnHdl, base + 1400U));
 }
 
 } // namespace
@@ -355,9 +502,19 @@ int main()
 			   TestRefillBlocksAtOldBoundary);
 	s_Test.Run("failed reservation stays closed",
 			   TestFailedReservationStaysClosed);
-	s_Test.Run("version one retires uncertain CSRK",
-			   TestVersionOneRetiresUncertainCsrk);
+	s_Test.Run("legacy bond keeps both LTK directions",
+			   TestDirectionalLegacyLtk);
+	s_Test.Run("legacy local-only LTK bond stays usable",
+			   TestLegacyLocalOnlyLtkBond);
 	s_Test.Run("resolved identity finds restored bond",
 			   TestResolvedIdentityLookup);
+	s_Test.Run("repeated attempts back off exponentially",
+			   TestRepeatedAttemptBackoff);
+	s_Test.Run("repeated-attempt penalty decays",
+			   TestRepeatedAttemptDecay);
+	s_Test.Run("successful pairing preserves identity-scoped penalty",
+			   TestRepeatedAttemptSuccessPreservesIdentityPenalty);
+	s_Test.Run("repeated-attempt saturation preserves active penalties",
+			   TestRepeatedAttemptSaturationPreservesPenalty);
 	return s_Test.Finish();
 }

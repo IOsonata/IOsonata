@@ -68,6 +68,14 @@ McuOsc_t g_McuOsc = MCUOSC;
 #ifndef SPI_SLAVE_INT_ENABLE
 #define SPI_SLAVE_INT_ENABLE true
 #endif
+// Interrupt priorities. A slave that takes each byte in its interrupt may
+// need a higher priority than the master interrupt on the same MCU.
+#ifndef SPI_MASTER_INT_PRIO
+#define SPI_MASTER_INT_PRIO 6
+#endif
+#ifndef SPI_SLAVE_INT_PRIO
+#define SPI_SLAVE_INT_PRIO 6
+#endif
 
 #define FIFOSIZE			CFIFO_MEMSIZE(256)
 
@@ -168,7 +176,7 @@ static const SPICfg_t s_SlaveCfg = {
 	s_SlavePins, sizeof(s_SlavePins) / sizeof(IOPinCfg_t),
 	100000, 8, 0, SPIDATABIT_MSB,
 	SPIDATAPHASE_FIRST_CLK, SPICLKPOL_HIGH, SPICSEL_AUTO,
-	SPI_SLAVE_DMA_ENABLE, SPI_SLAVE_INT_ENABLE, 6, 0xFF, SlaveEvent
+	SPI_SLAVE_DMA_ENABLE, SPI_SLAVE_INT_ENABLE, SPI_SLAVE_INT_PRIO, 0xFF, SlaveEvent
 };
 
 static volatile bool s_MasterDone;
@@ -189,7 +197,7 @@ static const SPICfg_t s_MasterCfg = {
 	SPI_MASTER_RATE, 8, 0, SPIDATABIT_MSB,
 	SPIDATAPHASE_FIRST_CLK, SPICLKPOL_HIGH, SPICSEL_AUTO,
 	!SPI_MASTER_SOFTWARE && SPI_MASTER_DMA_ENABLE,
-	!SPI_MASTER_SOFTWARE && SPI_MASTER_INT_ENABLE, 6, 0xFF, MasterEvent
+	!SPI_MASTER_SOFTWARE && SPI_MASTER_INT_ENABLE, SPI_MASTER_INT_PRIO, 0xFF, MasterEvent
 };
 #if SPI_MASTER_SOFTWARE
 SPISoft g_SpiMaster;

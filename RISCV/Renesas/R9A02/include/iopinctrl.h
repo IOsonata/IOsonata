@@ -1,33 +1,21 @@
 /**-------------------------------------------------------------------------
 @file	iopinctrl.h
 
-@brief	General I/O pin control for Renesas R9A02G021 (RISC-V Andes N22).
+@brief	General I/O pin control for the Renesas R9A02G021
 
-This file MUST be named iopinctrl.h regardless of target -- it is the
-target-specific half of the IOsonata GPIO abstraction.  The other half,
-iopincfg.h in coredev/, contains the portable data types (IOPINDIR, etc.)
-and the declaration of IOPinConfig() (implemented in iopincfg_r9a02.c).
+Target half of the IOsonata GPIO abstraction, coredev/iopincfg.h holds the
+portable half. IOPinConfig and the pin interrupt functions are in
+iopincfg_r9a02.c.
 
-GPIO peripheral notes (R9A02G021 Group Hardware Manual / RA-family TRM):
+I/O port registers, R9A02G021 User's Manual R01UH1036EJ0110, 16.2:
+PCNTR1 is PDR [15:0] and PODR [31:16], PCNTR2 is PIDR [15:0], PCNTR3 is
+POSR [15:0] and PORR [31:16]. Writing 1 to a POSR or PORR bit sets or
+clears that pin only, so IOPinSet and IOPinClear are atomic.
 
-  - Each port has a 32-bit PCNTR1 register: high 16 bits = direction
-    (PDR), low 16 bits = output data (PODR).  RMW on PCNTR1 is the
-    simple way to change one pin's direction; not atomic with respect
-    to interrupts touching the same port.
-  - Atomic set/clear is provided through PCNTR3: writing 1 to bit n of
-    POSR (low 16 bits) sets pin n; writing 1 to bit n of PORR (high
-    16 bits, accessed as the high half-word of PCNTR3) clears it.
-    POSR/PORR are write-only; reading PCNTR3 returns 0.
-  - For atomic toggle the only sane option is to read the current
-    PODR shadow from PCNTR1, then issue a single POSR or PORR write.
-    A direct XOR against PODR is *not* atomic across interrupts and
-    is intentionally avoided here.
-  - PIDR (input data) is in PCNTR2; reading PCNTR1.PODR reflects what
-    is being DRIVEN, not the actual pad level.
-
-The macros R9A02_PORT(n), PORT0, PORT1, ..., PORT9 and the PORT0_Type
-register block (PCNTR1, PCNTR2, PCNTR3, plus the PODR/PDR/PIDR/POSR/PORR
-half-word aliases) are defined in r9a02g021.h.
+Pin numbering is the MCU port and pin: P302 is port 3, pin 2. The pins that
+exist depend on the package, R9A02_PACKAGE_PINS selects it (48, 32, 24 or
+16, default 48 for the FPB-R9A02G021). P200 is input only. Functions here
+ignore a pin that does not exist.
 
 @author	Hoang Nguyen Hoan
 @date	May. 11, 2026
@@ -36,7 +24,7 @@ half-word aliases) are defined in r9a02g021.h.
 
 MIT License
 
-Copyright (c) 2026 I-SYST inc. All rights reserved.
+Copyright (c) 2026, I-SYST inc., all rights reserved
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -61,166 +49,226 @@ SOFTWARE.
 #define __IOPINCTRL_H__
 
 #include <stdint.h>
+#include <stdbool.h>
 
 #include "r9a02g021.h"
 #include "coredev/iopincfg.h"
+#include "coredev/interrupt.h"
+
+#ifndef R9A02_PACKAGE_PINS
+#define R9A02_PACKAGE_PINS		48
+#endif
+
+// Pins of each port by package, manual tables 16.6 to 16.10
+static inline uint32_t R9a02PortMask(int PortNo)
+{
+#if R9A02_PACKAGE_PINS == 48
+	static const uint16_t masks[R9A02_PORT_COUNT] = {
+		R9A02_PORT0_PIN_MSK, R9A02_PORT1_PIN_MSK, R9A02_PORT2_PIN_MSK, R9A02_PORT3_PIN_MSK, R9A02_PORT4_PIN_MSK
+	};
+#elif R9A02_PACKAGE_PINS == 32
+	static const uint16_t masks[R9A02_PORT_COUNT] = { 0x00CF, 0x0FFF, 0x000F, 0x000F, 0 };
+#elif R9A02_PACKAGE_PINS == 24
+	static const uint16_t masks[R9A02_PORT_COUNT] = { 0x000F, 0x00FF, 0x0009, 0x000F, 0 };
+#elif R9A02_PACKAGE_PINS == 16
+	static const uint16_t masks[R9A02_PORT_COUNT] = { 0x000F, 0x0081, 0x0009, 0x000F, 0 };
+#else
+#error "R9A02_PACKAGE_PINS must be 48, 32, 24 or 16"
+#endif
+
+	return (unsigned)PortNo < R9A02_PORT_COUNT ? masks[PortNo] : 0U;
+}
+
+static inline bool R9a02PinValid(int PortNo, int PinNo)
+{
+	return (unsigned)PinNo < R9A02_PORT_PIN_COUNT && (R9a02PortMask(PortNo) & (1UL << (unsigned)PinNo)) != 0U;
+}
+
+// Pins that can drive an output, P200 is input only
+static inline uint32_t R9a02OutputMask(int PortNo)
+{
+	uint32_t mask = R9a02PortMask(PortNo);
+
+	return PortNo == 2 ? mask & ~1UL : mask;
+}
+
+/**
+ * @brief	Set GPIO pin direction.
+ *
+ * Writes the PDR half of PCNTR1 only, pull-up and function settings stay.
+ * Configure the pin with IOPinConfig first.
+ *
+ * @param	PortNo	: Port number
+ * @param	PinNo	: Pin number
+ * @param	Dir		: IOPINDIR_INPUT or IOPINDIR_OUTPUT
+ */
+static inline __attribute__((always_inline)) void IOPinSetDir(int PortNo, int PinNo, IOPINDIR Dir)
+{
+	if (!R9a02PinValid(PortNo, PinNo) || (Dir != IOPINDIR_INPUT && Dir != IOPINDIR_OUTPUT))
+	{
+		return;
+	}
+
+	uint16_t bit = (uint16_t)(1U << (unsigned)PinNo);
+
+	if (Dir == IOPINDIR_OUTPUT && (R9a02OutputMask(PortNo) & bit) == 0U)
+	{
+		return;
+	}
+
+	R9A02_PORT_Type *reg = R9A02_PORT(PortNo);
+	uintptr_t state = DisableInterrupt();
+
+	if (Dir == IOPINDIR_OUTPUT)
+	{
+		reg->PDR = (uint16_t)(reg->PDR | bit);
+	}
+	else
+	{
+		reg->PDR = (uint16_t)(reg->PDR & ~bit);
+	}
+
+	EnableInterrupt(state);
+}
+
+/**
+ * @brief	Read pin state (PIDR).
+ *
+ * @param	PortNo	: Port number
+ * @param	PinNo	: Pin number
+ *
+ * @return	1 if the pin is high, 0 if low
+ */
+static inline __attribute__((always_inline)) int IOPinRead(int PortNo, int PinNo)
+{
+	if (!R9a02PinValid(PortNo, PinNo))
+	{
+		return 0;
+	}
+
+	return (int)((R9A02_PORT(PortNo)->PCNTR2 >> (unsigned)PinNo) & 1U);
+}
+
+/**
+ * @brief	Drive pin high through POSR.
+ *
+ * @param	PortNo	: Port number
+ * @param	PinNo	: Pin number
+ */
+static inline __attribute__((always_inline)) void IOPinSet(int PortNo, int PinNo)
+{
+	if (R9a02PinValid(PortNo, PinNo))
+	{
+		uint32_t bit = (1UL << (unsigned)PinNo) & R9a02OutputMask(PortNo);
+
+		if (bit)
+		{
+			R9A02_PORT(PortNo)->PCNTR3 = bit;
+		}
+	}
+}
+
+/**
+ * @brief	Drive pin low through PORR.
+ *
+ * @param	PortNo	: Port number
+ * @param	PinNo	: Pin number
+ */
+static inline __attribute__((always_inline)) void IOPinClear(int PortNo, int PinNo)
+{
+	if (R9a02PinValid(PortNo, PinNo))
+	{
+		uint32_t bit = (1UL << (unsigned)PinNo) & R9a02OutputMask(PortNo);
+
+		if (bit)
+		{
+			R9A02_PORT(PortNo)->PCNTR3 = bit << 16;
+		}
+	}
+}
+
+/**
+ * @brief	Toggle pin output.
+ *
+ * Reads PODR and writes POSR or PORR with interrupts disabled.
+ *
+ * @param	PortNo	: Port number
+ * @param	PinNo	: Pin number
+ */
+static inline __attribute__((always_inline)) void IOPinToggle(int PortNo, int PinNo)
+{
+	if (!R9a02PinValid(PortNo, PinNo))
+	{
+		return;
+	}
+
+	uint32_t bit = (1UL << (unsigned)PinNo) & R9a02OutputMask(PortNo);
+
+	if (bit)
+	{
+		R9A02_PORT_Type *reg = R9A02_PORT(PortNo);
+		uintptr_t state = DisableInterrupt();
+
+		reg->PCNTR3 = ((reg->PCNTR1 >> 16) & bit) ? bit << 16 : bit;
+		EnableInterrupt(state);
+	}
+}
+
+/**
+ * @brief	Read all pins of a port (PIDR).
+ *
+ * @param	PortNo	: Port number
+ *
+ * @return	Pin states, bit n is pin n. Pins that do not exist read 0.
+ */
+static inline __attribute__((always_inline)) uint32_t IOPinReadPort(int PortNo)
+{
+	uint32_t mask = R9a02PortMask(PortNo);
+
+	return mask ? R9A02_PORT(PortNo)->PCNTR2 & mask : 0U;
+}
+
+/**
+ * @brief	Write all output pins of a port.
+ *
+ * Every output pin of the port takes the level of its bit in Data, through
+ * POSR and PORR in one write.
+ *
+ * @param	PortNo	: Port number
+ * @param	Data	: Pin levels, bit n is pin n
+ */
+static inline __attribute__((always_inline)) void IOPinWritePort(int PortNo, uint32_t Data)
+{
+	uint32_t mask = R9a02OutputMask(PortNo);
+
+	if (mask)
+	{
+		R9A02_PORT(PortNo)->PCNTR3 = (Data & mask) | ((~Data & mask) << 16);
+	}
+}
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/**
- * @brief	Set GPIO pin direction without altering other configuration.
- *
- * Fast direction switch through PCNTR1.PDR.  Does not touch PFS, so pull
- * resistors and drive strength are preserved.  Use IOPinConfig() (in
- * iopincfg_r9a02.c) for full pin setup the first time.
- *
- * RMW on the 16-bit PDR half-word; not atomic across interrupts that may
- * also be reconfiguring direction on the same port.
- *
- * @param	PortNo  : Port number (0..R9A02_MAX_PORT-1)
- * @param	PinNo   : Pin number (0..R9A02_PINS_PER_PORT-1)
- * @param	Dir     : IOPINDIR_OUTPUT or IOPINDIR_INPUT
- */
-static inline __attribute__((always_inline))
-void IOPinSetDir(int PortNo, int PinNo, IOPINDIR Dir)
-{
-	R9A02_PORT_Type *reg = R9A02_PORT(PortNo);
-	uint16_t mask = (uint16_t)(1U << (unsigned)PinNo);
-
-	if (Dir == IOPINDIR_OUTPUT)
-	{
-		reg->PDR = (uint16_t)(reg->PDR | mask);
-	}
-	else
-	{
-		reg->PDR = (uint16_t)(reg->PDR & ~mask);
-	}
-}
-
-/**
- * @brief	Read current pin state from the pad input register (PIDR).
- *
- * Reflects the actual pad level, not what the output latch is driving.
- *
- * @param	PortNo  : Port number
- * @param	PinNo   : Pin number
- *
- * @return	1 if the pin is high, 0 if low
- */
-static inline __attribute__((always_inline))
-int IOPinRead(int PortNo, int PinNo)
-{
-	R9A02_PORT_Type *reg = R9A02_PORT(PortNo);
-	return (int)((reg->PIDR >> (unsigned)PinNo) & 1U);
-}
-
-/**
- * @brief	Drive pin to logic 1 (high).
- *
- * Uses POSR (write-1-to-set) -- atomic single-pin operation, safe from
- * ISR context concurrent with other pins on the same port.
- *
- * @param	PortNo  : Port number
- * @param	PinNo   : Pin number
- */
-static inline __attribute__((always_inline))
-void IOPinSet(int PortNo, int PinNo)
-{
-	R9A02_PORT_Type *reg = R9A02_PORT(PortNo);
-	reg->POSR = (uint16_t)(1U << (unsigned)PinNo);
-}
-
-/**
- * @brief	Drive pin to logic 0 (low).
- *
- * Uses PORR (write-1-to-clear) -- atomic single-pin operation, safe from
- * ISR context concurrent with other pins on the same port.
- *
- * @param	PortNo  : Port number
- * @param	PinNo   : Pin number
- */
-static inline __attribute__((always_inline))
-void IOPinClear(int PortNo, int PinNo)
-{
-	R9A02_PORT_Type *reg = R9A02_PORT(PortNo);
-	reg->PORR = (uint16_t)(1U << (unsigned)PinNo);
-}
-
-/**
- * @brief	Toggle pin output state.
- *
- * Reads PODR (output latch in PCNTR1, NOT the input pad in PCNTR2) to see
- * what is currently being driven, then issues a single atomic POSR or PORR
- * write.  Only the one bit for PinNo is touched, so concurrent access to
- * other pins from interrupt context is safe.
- *
- * Note: this is not atomic in the read-decide-write sense -- if another
- * context toggles the same pin between the read and the write, the result
- * is undefined.  RA-family IOPORT has no single-instruction XOR primitive,
- * so this is the best you can do without disabling interrupts.
- *
- * @param	PortNo  : Port number
- * @param	PinNo   : Pin number
- */
-static inline __attribute__((always_inline))
-void IOPinToggle(int PortNo, int PinNo)
-{
-	R9A02_PORT_Type *reg = R9A02_PORT(PortNo);
-	uint16_t mask = (uint16_t)(1U << (unsigned)PinNo);
-
-	if (reg->PODR & mask)
-	{
-		reg->PORR = mask;       /* currently high -- drive low */
-	}
-	else
-	{
-		reg->POSR = mask;       /* currently low  -- drive high */
-	}
-}
-
-/**
- * @brief	Read all pins on a port (input data).
- *
- * Returns PIDR (16 bits, sampled pad state).  Bits beyond the populated
- * pins on a given package read as 0.
- *
- * @param	PortNo  : Port number
- *
- * @return	Bit field of input pin states
- */
-static inline __attribute__((always_inline))
-uint32_t IOPinReadPort(int PortNo)
-{
-	R9A02_PORT_Type *reg = R9A02_PORT(PortNo);
-	return (uint32_t)reg->PIDR;
-}
-
-/**
- * @brief	Write the entire output port at once.
- *
- * Drives every output pin in PODR to the level in Data.  Pins configured as
- * inputs are unaffected at the pad regardless of what is written.  Bits
- * beyond pin 15 are ignored (PODR is a 16-bit register).
- *
- * IMPORTANT: this is a "whole-port" semantic.  Pins NOT set in Data are
- * driven LOW, including pins not currently meant to change.  If you only
- * want to touch one pin atomically, use IOPinSet / IOPinClear instead --
- * those go through POSR/PORR and leave the rest of the port alone.
- *
- * @param	PortNo  : Port number
- * @param	Data    : Desired pin state bit-field (bit n = desired level on pin n)
- */
-static inline __attribute__((always_inline))
-void IOPinWritePort(int PortNo, uint32_t Data)
-{
-	R9A02_PORT_Type *reg = R9A02_PORT(PortNo);
-	reg->PODR = (uint16_t)(Data & 0xFFFFU);
-}
+/// @brief	Use the analog function of a pin, shared by its drivers.
+///
+/// A pin can be an A/D input, a D/A output and a comparator input or
+/// reference at the same time: P000 is ANI16, DACOUT0 and IVREF0, P001 ANI17
+/// and DACOUT1, P106 ANI19 and IVCMP0. The A/D converter, DAC8 and comparator
+/// drivers call it with bUse true when they start using a pin and false when
+/// they stop: the pin is analog from the first use and released (IOPinDisable)
+/// at the last one.
+///
+/// @param	PortNo	: Port number
+/// @param	PinNo	: Pin number
+/// @param	bUse	: true when a user starts, false when it stops
+///
+/// @return	false if the pin has no analog function
+bool R9a02AnalogPinUse(int PortNo, int PinNo, bool bUse);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif	// __IOPINCTRL_H__
+#endif

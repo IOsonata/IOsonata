@@ -221,10 +221,7 @@ int main()
 		return -1;
 	}
 	(void)UsbEnable(USB_DEVNO);
-	while (1)
-	{
-		AppEvtHandlerExec();
-	}
+	AppRun();
 	return 0;
 }
 

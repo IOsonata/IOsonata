@@ -3,6 +3,16 @@
 #define TEST_CORE_CM4_H
 #include <stdint.h>
 #include <stddef.h>
+/* CMSIS register access qualifiers used by the Renesas device header. */
+#ifndef __I
+#define __I volatile const
+#endif
+#ifndef __O
+#define __O volatile
+#endif
+#ifndef __IO
+#define __IO volatile
+#endif
 #ifdef __cplusplus
 #define TEST_STATIC_ASSERT static_assert
 #else

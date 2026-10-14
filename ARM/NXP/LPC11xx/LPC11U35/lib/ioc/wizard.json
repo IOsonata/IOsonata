@@ -6,10 +6,10 @@
   "fpu_unit": "none",
   "defines": [],
   "includes": [
-    "${iosonata}/ARM/NXP/LPC11xx/include",
-    "${iosonata}/ARM/NXP/LPC11xx/LPC11U35/lib/include"
+    "${iosonata}/ARM/NXP/include",
+    "${iosonata}/ARM/NXP/LPC11xx/include"
   ],
-  "linker_script": "${iosonata}/ARM/NXP/LPC11xx/LPC11U35/ldscript/gcc_lpc11u35.ld",
+  "linker_script": "${iosonata}/ARM/NXP/LPC11xx/ldscript/gcc_lpc11u35.ld",
   "lib_path": "${iosonata}/ARM/NXP/LPC11xx/LPC11U35/lib/ioc/${config}",
   "lib": "IOsonata_LPC11U35"
 }

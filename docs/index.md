@@ -2,6 +2,7 @@
 
 Start with the [documentation index](README.md),
 [Getting Started](getting-started.md), or the
+[Buzzer User Guide](buzzer.md), or
 [USB User Guide](usb-user-guide.md), or
 [Bluetooth User Guide](bluetooth-user-guide.md), or
 [NVM User Guide](nvm-user-guide.md).

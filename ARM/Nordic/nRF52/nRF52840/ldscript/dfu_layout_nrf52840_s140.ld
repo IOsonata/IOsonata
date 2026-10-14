@@ -9,8 +9,7 @@
  *   0x001000 - 0x026FFF  S140
  *   0x027000 - 0x08AFFF  slot 0, application   400 KB
  *   0x08B000 - 0x0F0FFF  slot 1, upload        408 KB, trailer at the end
- *   0x0F1000 - 0x0F1FFF  NVM0, peer manager      4 KB
- *   0x0F2000 - 0x0F2FFF  NVM1, application       4 KB
+ *   0x0F1000 - 0x0F2FFF  NVM0, bond store        8 KB
  *   0x0F3000 - 0x0F3FFF  record of slot 0        4 KB
  *   0x0F4000 - 0x0FFFFF  stage 0 boot           48 KB, UICR.NRFFW[0]
  *
@@ -31,8 +30,7 @@ __dfu_slot0_end		= 0x0008B000;
 __dfu_slot1_start	= 0x0008B000;
 __dfu_slot1_end		= 0x000F1000;
 __dfu_nvm0_start	= 0x000F1000;
-__dfu_nvm1_start	= 0x000F2000;
-__dfu_nvm_size		= 0x00001000;
+__dfu_nvm_size		= 0x00002000;
 __dfu_rec_start		= 0x000F3000;
 __dfu_rec_end		= 0x000F4000;
 __dfu_boot_start	= 0x000F4000;

@@ -46,11 +46,38 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "spi_nrfx.h"
 
+#ifdef NRF54L_SERIES
+#define NRFX_SPI_RX(reg) ((reg)->DMA.RX)
+#define NRFX_SPI_TX(reg) ((reg)->DMA.TX)
+#define NRFX_SPI_ENDRX(reg) ((reg)->EVENTS_DMA.RX.END)
+#define NRFX_SPI_ENDTX(reg) ((reg)->EVENTS_DMA.TX.END)
+#else
+#define NRFX_SPI_RX(reg) ((reg)->RXD)
+#define NRFX_SPI_TX(reg) ((reg)->TXD)
+#define NRFX_SPI_ENDRX(reg) ((reg)->EVENTS_ENDRX)
+#define NRFX_SPI_ENDTX(reg) ((reg)->EVENTS_ENDTX)
+#endif
+
+#ifdef NRF54L_SERIES
+#define NRFX_SPI_RX_LIST 0
+#define NRFX_SPI_TX_LIST 0
+#define NRFX_SPIS_RX_INT SPIS_INTENSET_DMARXEND_Msk
+#define NRFX_SPIM_RX_INT SPIM_INTENSET_DMARXEND_Msk
+#define NRFX_SPIM_TX_INT SPIM_INTENSET_DMATXEND_Msk
+#else
+#define NRFX_SPI_RX_LIST (SPIM_RXD_LIST_LIST_ArrayList << SPIM_RXD_LIST_LIST_Pos)
+#define NRFX_SPI_TX_LIST (SPIM_TXD_LIST_LIST_ArrayList << SPIM_TXD_LIST_LIST_Pos)
+#define NRFX_SPIS_RX_INT SPIS_INTENSET_ENDRX_Msk
+#define NRFX_SPIM_RX_INT SPIM_INTENSET_ENDRX_Msk
+#define NRFX_SPIM_TX_INT SPIM_INTENSET_ENDTX_Msk
+#endif
+
 #define NRFSPI_TIMEOUT			100000
 
 bool nRFxQSPIInit(SPIDev_t * const pDev);
 //void SPIIrqHandler(int DevNo, DevIntrf_t * const pDev);
 
+#ifndef NRF54L_SERIES
 alignas(4) static const nRFSpiFreq_t s_nRFxSPIFreq[] = {
 #ifdef SPIM_PRESENT
 		{125000, SPIM_FREQUENCY_FREQUENCY_K125},
@@ -77,8 +104,20 @@ alignas(4) static const nRFSpiFreq_t s_nRFxSPIFreq[] = {
 
 static const int s_NbnRFxSPIFreq = sizeof(s_nRFxSPIFreq) / sizeof(nRFSpiFreq_t);
 
+#endif
+
 alignas(4) nRFSpiDev_t g_nRFxSPIDev[NRFX_SPI_MAXDEV] = {
-#if defined(NRF91_SERIES) || defined(NRF53_SERIES)
+#ifdef NRF54L_SERIES
+	{ 0, NULL, NRF_SPIM30_S },
+	{ 1, NULL, NRF_SPIM20_S },
+	{ 2, NULL, NRF_SPIM21_S },
+	{ 3, NULL, NRF_SPIM22_S },
+	{ 4, NULL, NRF_SPIM00_S },
+#if defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
+	{ 5, NULL, NRF_SPIM23_S },
+	{ 6, NULL, NRF_SPIM24_S },
+#endif
+#elif defined(NRF91_SERIES) || defined(NRF53_SERIES)
 #ifdef NRF5340_XXAA_NETWORK
 	{
 		0, NULL, (NRF_SPIM_Type*)NRF_SPIM0_NS_BASE,
@@ -131,6 +170,15 @@ alignas(4) nRFSpiDev_t g_nRFxSPIDev[NRFX_SPI_MAXDEV] = {
 
 static const int s_NbnRFxSPIDev = sizeof(g_nRFxSPIDev) / sizeof(nRFSpiDev_t);
 
+#ifdef NRF54L_SERIES
+// Allow at least one CPU cycle per polling iteration for the wire time.
+static uint32_t nRFxSPIDmaTimeout(int Length, uint32_t Rate)
+{
+	uint64_t cycles = (uint64_t)SystemCoreClock * Length * 8 / Rate + NRFSPI_TIMEOUT;
+	return cycles > INT32_MAX ? INT32_MAX : (uint32_t)cycles;
+}
+#endif
+
 #ifdef SPIM_PRESENT
 bool nRFxSPIWaitDMA(nRFSpiDev_t * const pDev, uint32_t Timeout)
 {
@@ -143,6 +191,16 @@ bool nRFxSPIWaitDMA(nRFSpiDev_t * const pDev, uint32_t Timeout)
 			return true;
 		}
 	} while (Timeout-- > 0);
+
+#ifdef NRF54L_SERIES
+	// Finish or abort DMA before the caller can reuse its buffer.
+	pDev->pDmaReg->EVENTS_STOPPED = 0;
+	pDev->pDmaReg->TASKS_STOP = 1;
+	Timeout = NRFSPI_TIMEOUT;
+	while (!pDev->pDmaReg->EVENTS_STOPPED && Timeout-- > 0);
+	if (!pDev->pDmaReg->EVENTS_STOPPED)
+		pDev->pDmaReg->ENABLE = 0;
+#endif
 
 	return false;
 }
@@ -169,9 +227,9 @@ bool nRFxSPIWaitRX(nRFSpiDev_t * const pDev, uint32_t Timeout)
 	uint32_t val = 0;
 
 	do {
-		if (pDev->pDmaReg->EVENTS_ENDRX)
+		if (NRFX_SPI_ENDRX(pDev->pDmaReg))
 		{
-			pDev->pDmaReg->EVENTS_ENDRX = 0; // clear event
+			NRFX_SPI_ENDRX(pDev->pDmaReg) = 0; // clear event
 			return true;
 		}
 	} while (Timeout-- > 0);
@@ -195,6 +253,27 @@ static uint32_t nRFxSPIGetRate(DevIntrf_t * const pDev)
 uint32_t nRFxSPISetRate(DevIntrf_t * const pDev, uint32_t Rate)
 {
 	nRFSpiDev_t *dev = (nRFSpiDev_t *)pDev->pDevData;
+#ifdef NRF54L_SERIES
+	const uint32_t clock = (dev->DevNo == 4 ? SPIM00_CORE_FREQUENCY :
+		SPIM20_CORE_FREQUENCY) * 1000000U;
+	const uint32_t first = dev->DevNo == 4 ? SPIM00_PRESCALER_DIVISOR_RANGE_MIN :
+		SPIM20_PRESCALER_DIVISOR_RANGE_MIN;
+	uint32_t divisor = first;
+	uint32_t error = UINT32_MAX;
+	for (uint32_t d = first; d <= SPIM20_PRESCALER_DIVISOR_RANGE_MAX; d += 2)
+	{
+		uint32_t freq = clock / d;
+		uint32_t diff = freq > Rate ? freq - Rate : Rate - freq;
+		if (diff < error)
+		{
+			error = diff;
+			divisor = d;
+		}
+	}
+	dev->pSpiDev->Cfg.Rate = clock / divisor;
+	if (dev->pSpiDev->Cfg.Mode == SPIMODE_MASTER)
+		dev->pDmaReg->PRESCALER = divisor;
+#else
 	uint32_t regval = 0;
 
 
@@ -211,6 +290,8 @@ uint32_t nRFxSPISetRate(DevIntrf_t * const pDev, uint32_t Rate)
 	dev->pReg->FREQUENCY = regval;
 #else
 	dev->pDmaReg->FREQUENCY = regval;
+#endif
+
 #endif
 
 	return dev->pSpiDev->Cfg.Rate;
@@ -265,6 +346,9 @@ void nRFxSPIPowerOff(DevIntrf_t * const pDev)
 	nRFSpiDev_t *dev = (nRFSpiDev_t *)pDev->pDevData;
 
 	// Undocumented Power down.  Nordic Bug with DMA causing high current consumption
+#ifdef NRF54L_SERIES
+	nRFxSPIDisable(pDev);
+#else
 #ifdef SPIM_PRESENT
 	*(volatile uint32_t *)((uint32_t)dev->pDmaReg + 0xFFC);
 	*(volatile uint32_t *)((uint32_t)dev->pDmaReg + 0xFFC) = 1;
@@ -273,6 +357,7 @@ void nRFxSPIPowerOff(DevIntrf_t * const pDev)
 	*(volatile uint32_t *)((uint32_t)dev->pReg + 0xFFC);
 	*(volatile uint32_t *)((uint32_t)dev->pReg + 0xFFC) = 1;
 	*(volatile uint32_t *)((uint32_t)dev->pReg + 0xFFC) = 0;
+#endif
 #endif
 
 //	if (dev->pSpiDev->Cfg.NbIOPins > 3)
@@ -362,16 +447,16 @@ int nRFxSPIRxDataDma(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 	int cnt = 0;
 
 #ifdef SPIM_PRESENT
-	dev->pDmaReg->TXD.PTR = 0;
-	dev->pDmaReg->TXD.MAXCNT = 0;
-	dev->pDmaReg->TXD.LIST = 0;
+	NRFX_SPI_TX(dev->pDmaReg).PTR = 0;
+	NRFX_SPI_TX(dev->pDmaReg).MAXCNT = 0;
+	NRFX_SPI_TX(dev->pDmaReg).LIST = 0;
 #ifdef NRF52_SERIES
 	// Anomaly 109
 	if (BuffLen < 2)
 	{
-		dev->pDmaReg->RXD.MAXCNT = 0;
-		dev->pDmaReg->RXD.PTR = 0;
-		dev->pDmaReg->RXD.LIST = 0;
+		NRFX_SPI_RX(dev->pDmaReg).MAXCNT = 0;
+		NRFX_SPI_RX(dev->pDmaReg).PTR = 0;
+		NRFX_SPI_RX(dev->pDmaReg).LIST = 0;
 		dev->pDmaReg->EVENTS_STARTED = 0;
 		dev->pDmaReg->TASKS_START = 1;
 		while (dev->pDmaReg->EVENTS_STARTED == 0);
@@ -379,22 +464,38 @@ int nRFxSPIRxDataDma(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 	}
 #endif
 
-	dev->pDmaReg->RXD.PTR = (uint32_t)pBuff;
-	dev->pDmaReg->RXD.LIST = SPIM_RXD_LIST_LIST_ArrayList << SPIM_RXD_LIST_LIST_Pos;
+	NRFX_SPI_RX(dev->pDmaReg).PTR = (uint32_t)pBuff;
+	NRFX_SPI_RX(dev->pDmaReg).LIST = NRFX_SPI_RX_LIST;
 
 	while (BuffLen > 0)
 	{
 		int l = min(BuffLen, NRFX_SPI_DMA_MAXCNT);
+#ifdef NRF54L_SERIES
+		uint32_t timeout = nRFxSPIDmaTimeout(l, dev->pSpiDev->Cfg.Rate);
+#else
+		uint32_t timeout = NRFSPI_TIMEOUT;
+#endif
 
-		dev->pDmaReg->RXD.MAXCNT = l;
+#ifdef NRF54L_SERIES
+		NRFX_SPI_RX(dev->pDmaReg).PTR = (uint32_t)pBuff;
+#endif
+		NRFX_SPI_RX(dev->pDmaReg).MAXCNT = l;
 		dev->pDmaReg->EVENTS_END = 0;
-		dev->pDmaReg->EVENTS_ENDRX = 0;
+		NRFX_SPI_ENDRX(dev->pDmaReg) = 0;
 		dev->pDmaReg->TASKS_START = 1;
 
-		if (nRFxSPIWaitRX(dev, NRFSPI_TIMEOUT) == false)
+#ifdef NRF54L_SERIES
+		if (nRFxSPIWaitDMA(dev, timeout) == false)
+#else
+		if (nRFxSPIWaitRX(dev, timeout) == false)
+#endif
 			break;
 
-		l = dev->pDmaReg->RXD.AMOUNT;
+		l = NRFX_SPI_RX(dev->pDmaReg).AMOUNT;
+#ifdef NRF54L_SERIES
+		if (l <= 0)
+			break;
+#endif
 		BuffLen -= l;
 		pBuff += l;
 		cnt += l;
@@ -501,40 +602,52 @@ int nRFxSPITxDataDma(DevIntrf_t * const pDev, const uint8_t *pData, int DataLen)
 	int cnt = 0;
 
 #ifdef SPIM_PRESENT
-	dev->pDmaReg->RXD.PTR = 0;
-	dev->pDmaReg->RXD.MAXCNT = 0;
-	dev->pDmaReg->RXD.LIST = 0;
+	NRFX_SPI_RX(dev->pDmaReg).PTR = 0;
+	NRFX_SPI_RX(dev->pDmaReg).MAXCNT = 0;
+	NRFX_SPI_RX(dev->pDmaReg).LIST = 0;
 
 #ifdef NRF52_SERIES
 	// Anomaly 109
 	if (DataLen < 2)
 	{
-		dev->pDmaReg->TXD.MAXCNT = 0;
-		dev->pDmaReg->TXD.PTR = 0;
-		dev->pDmaReg->TXD.LIST = 0;
+		NRFX_SPI_TX(dev->pDmaReg).MAXCNT = 0;
+		NRFX_SPI_TX(dev->pDmaReg).PTR = 0;
+		NRFX_SPI_TX(dev->pDmaReg).LIST = 0;
 		dev->pDmaReg->EVENTS_STARTED = 0;
 		dev->pDmaReg->TASKS_START = 1;
 		while (dev->pDmaReg->EVENTS_STARTED == 0);
 		dev->pDmaReg->EVENTS_STARTED = 0;
 	}
 #endif
-	dev->pDmaReg->TXD.PTR = (uint32_t)pData;
-	dev->pDmaReg->TXD.LIST = SPIM_TXD_LIST_LIST_ArrayList << SPIM_TXD_LIST_LIST_Pos;
+	NRFX_SPI_TX(dev->pDmaReg).PTR = (uint32_t)pData;
+	NRFX_SPI_TX(dev->pDmaReg).LIST = NRFX_SPI_TX_LIST;
 
 	while (DataLen > 0)
 	{
 		int l = min(DataLen, NRFX_SPI_DMA_MAXCNT);
-		dev->pDmaReg->TXD.MAXCNT = l;
+#ifdef NRF54L_SERIES
+		uint32_t timeout = nRFxSPIDmaTimeout(l, dev->pSpiDev->Cfg.Rate);
+#else
+		uint32_t timeout = NRFSPI_TIMEOUT;
+#endif
+#ifdef NRF54L_SERIES
+		NRFX_SPI_TX(dev->pDmaReg).PTR = (uint32_t)pData;
+#endif
+		NRFX_SPI_TX(dev->pDmaReg).MAXCNT = l;
 		dev->pDmaReg->EVENTS_END = 0;
-		dev->pDmaReg->EVENTS_ENDTX = 0;
+		NRFX_SPI_ENDTX(dev->pDmaReg) = 0;
 		dev->pDmaReg->TASKS_START = 1;
 
-		if (nRFxSPIWaitDMA(dev, NRFSPI_TIMEOUT) == false)
+		if (nRFxSPIWaitDMA(dev, timeout) == false)
 		{
 			break;
 		}
 
-		l = dev->pDmaReg->TXD.AMOUNT;
+		l = NRFX_SPI_TX(dev->pDmaReg).AMOUNT;
+#ifdef NRF54L_SERIES
+		if (l <= 0)
+			break;
+#endif
 		DataLen -= l;
 		pData += l;
 		cnt += l;
@@ -585,13 +698,13 @@ void SPI_IRQHandler(int DevNo, DevIntrf_t * const pDev)//DevIntrf_t * const pDev
 
 	if (dev->pSpiDev->Cfg.Mode == SPIMODE_SLAVE)
 	{
-		if (dev->pDmaSReg->EVENTS_ENDRX)
+		if (NRFX_SPI_ENDRX(dev->pDmaSReg))
 		{
 			if (dev->pSpiDev->DevIntrf.EvtCB)
 			{
 				dev->pSpiDev->DevIntrf.EvtCB(&dev->pSpiDev->DevIntrf, DEVINTRF_EVT_RX_FIFO_FULL, NULL, 0);
 			}
-			dev->pDmaSReg->EVENTS_ENDRX = 0;
+			NRFX_SPI_ENDRX(dev->pDmaSReg) = 0;
 			dev->pDmaSReg->STATUS = dev->pDmaSReg->STATUS;
 		}
 
@@ -600,7 +713,7 @@ void SPI_IRQHandler(int DevNo, DevIntrf_t * const pDev)//DevIntrf_t * const pDev
 			if (dev->pSpiDev->DevIntrf.EvtCB)
 			{
 #ifdef SPIM_PRESENT
-				dev->pSpiDev->DevIntrf.EvtCB(&dev->pSpiDev->DevIntrf, DEVINTRF_EVT_COMPLETED, (uint8_t*)dev->pDmaSReg->RXD.PTR, dev->pDmaSReg->RXD.AMOUNT);
+				dev->pSpiDev->DevIntrf.EvtCB(&dev->pSpiDev->DevIntrf, DEVINTRF_EVT_COMPLETED, (uint8_t*)NRFX_SPI_RX(dev->pDmaSReg).PTR, NRFX_SPI_RX(dev->pDmaSReg).AMOUNT);
 #else
 				dev->pSpiDev->DevIntrf.EvtCB(&dev->pSpiDev->DevIntrf, DEVINTRF_EVT_COMPLETED, (uint8_t*)dev->pDmaSReg->RXDPTR, dev->pDmaSReg->AMOUNTRX);
 #endif
@@ -617,10 +730,18 @@ void SPI_IRQHandler(int DevNo, DevIntrf_t * const pDev)//DevIntrf_t * const pDev
 			dev->pDmaSReg->STATUS = dev->pDmaSReg->STATUS;
 
 #ifdef SPIM_PRESENT
-			dev->pDmaSReg->RXD.PTR = (uint32_t)dev->pSpiDev->pRxBuff[0];
-			dev->pDmaSReg->RXD.MAXCNT = dev->pSpiDev->RxBuffLen[0];
-			dev->pDmaSReg->TXD.PTR = (uint32_t)dev->pSpiDev->pTxData[0];
-			dev->pDmaSReg->TXD.MAXCNT = dev->pSpiDev->TxDataLen[0];
+			NRFX_SPI_RX(dev->pDmaSReg).PTR = (uint32_t)dev->pSpiDev->pRxBuff[0];
+#ifdef NRF54L_SERIES
+			NRFX_SPI_RX(dev->pDmaSReg).MAXCNT = min(max(dev->pSpiDev->RxBuffLen[0], 0), NRFX_SPI_DMA_MAXCNT);
+#else
+			NRFX_SPI_RX(dev->pDmaSReg).MAXCNT = dev->pSpiDev->RxBuffLen[0];
+#endif
+			NRFX_SPI_TX(dev->pDmaSReg).PTR = (uint32_t)dev->pSpiDev->pTxData[0];
+#ifdef NRF54L_SERIES
+			NRFX_SPI_TX(dev->pDmaSReg).MAXCNT = min(max(dev->pSpiDev->TxDataLen[0], 0), NRFX_SPI_DMA_MAXCNT);
+#else
+			NRFX_SPI_TX(dev->pDmaSReg).MAXCNT = dev->pSpiDev->TxDataLen[0];
+#endif
 #else
 			dev->pDmaSReg->RXDPTR = (uint32_t)dev->pSpiDev->pRxBuff[0];
 			dev->pDmaSReg->MAXRX = dev->pSpiDev->RxBuffLen[0];
@@ -643,13 +764,13 @@ void SPI_IRQHandler(int DevNo, DevIntrf_t * const pDev)//DevIntrf_t * const pDev
 				dev->pDmaReg->EVENTS_STOPPED = 0;
 			}
 
-			if (dev->pDmaReg->EVENTS_ENDRX)
+			if (NRFX_SPI_ENDRX(dev->pDmaReg))
 			{
-				dev->pDmaReg->EVENTS_ENDRX = 0;
+				NRFX_SPI_ENDRX(dev->pDmaReg) = 0;
 			}
-			if (dev->pDmaReg->EVENTS_ENDTX)
+			if (NRFX_SPI_ENDTX(dev->pDmaReg))
 			{
-				dev->pDmaReg->EVENTS_ENDTX = 0;
+				NRFX_SPI_ENDTX(dev->pDmaReg) = 0;
 			}
 			if (dev->pDmaReg->EVENTS_END)
 			{
@@ -733,8 +854,13 @@ static bool nRFxSPIInit(SPIDev_t * const pDev)
 #endif
 
 	// Force power on in case it was powered off previously
+#ifndef NRF54L_SERIES
 	*(volatile uint32_t *)((uint32_t)reg + 0xFFC);
 	*(volatile uint32_t *)((uint32_t)reg + 0xFFC) = 1;
+#else
+	reg->ENABLE = 0;
+	reg->INTENCLR = 0xFFFFFFFF;
+#endif
 
 	// Configure I/O pins
 	IOPinCfg(pDev->Cfg.pIOPinMap, pDev->Cfg.NbIOPins);
@@ -862,14 +988,14 @@ static bool nRFxSPIInit(SPIDev_t * const pDev)
 #endif
 		sreg->ORC = 0xFF;
 		sreg->STATUS = sreg->STATUS;
-		sreg->EVENTS_ENDRX = 0;
+		NRFX_SPI_ENDRX(sreg) = 0;
 		sreg->EVENTS_END = 0;
 		sreg->EVENTS_ACQUIRED = 0;
 		sreg->DEF = 0xFF;
 		sreg->SHORTS = (SPIS_SHORTS_END_ACQUIRE_Enabled << SPIS_SHORTS_END_ACQUIRE_Pos);
 
 		inten = (SPIS_INTENSET_ACQUIRED_Enabled << SPIS_INTENSET_ACQUIRED_Pos) |
-				(SPIS_INTENSET_ENDRX_Enabled << SPIS_INTENSET_ENDRX_Pos) |
+				NRFX_SPIS_RX_INT |
 				(SPIS_INTENSET_END_Enabled << SPIS_INTENSET_END_Pos);
 		reg->ENABLE =  (SPIS_ENABLE_ENABLE_Enabled << SPIS_ENABLE_ENABLE_Pos);
 		sreg->TASKS_ACQUIRE = 1;	// Active event to update rx/tx buffer
@@ -883,11 +1009,15 @@ static bool nRFxSPIInit(SPIDev_t * const pDev)
 
 		if (pDev->DevIntrf.bDma)
 		{
+#ifdef NRF54L_SERIES
+			reg->ORC = pDev->Cfg.DummyByte;
+#else
 			reg->ORC = 0xFF;
+#endif
 			reg->ENABLE = (SPIM_ENABLE_ENABLE_Enabled << SPIM_ENABLE_ENABLE_Pos);
 	        if (pDev->DevIntrf.bIntEn == true)
 	        {
-	        	inten = reg->INTENSET = SPIM_INTENSET_ENDRX_Msk | SPIM_INTENSET_ENDTX_Msk |
+	        	inten = reg->INTENSET = NRFX_SPIM_RX_INT | NRFX_SPIM_TX_INT |
 	        							SPIM_INTENSET_END_Msk | SPIM_INTENSET_STOPPED_Msk;
 	        }
 		}
@@ -941,6 +1071,13 @@ bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfgData)
 		return false;
 	}
 
+#ifdef NRF54L_SERIES
+	if (pCfgData->pIOPinMap == NULL || pCfgData->DataSize != 8 ||
+		((pCfgData->Mode == SPIMODE_SLAVE || pCfgData->ChipSel == SPICSEL_AUTO) && pCfgData->NbIOPins < 4) ||
+		(pCfgData->Mode == SPIMODE_MASTER && pCfgData->bIntEn))
+		return false;
+#endif
+
 	pDev->Cfg = *pCfgData;
 	g_nRFxSPIDev[pCfgData->DevNo].pSpiDev  = pDev;
 	g_nRFxSPIDev[pCfgData->DevNo].RxBufflen = 0;
@@ -981,7 +1118,45 @@ bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfgData)
 
     	switch (pCfgData->DevNo)
     	{
-#if defined(NRF52805_XXAA) || defined(NRF52810_XXAA)
+#ifdef NRF54L_SERIES
+			case 0:
+				NVIC_ClearPendingIRQ(SERIAL30_IRQn);
+				NVIC_SetPriority(SERIAL30_IRQn, pCfgData->IntPrio);
+				NVIC_EnableIRQ(SERIAL30_IRQn);
+				break;
+			case 1:
+				NVIC_ClearPendingIRQ(SERIAL20_IRQn);
+				NVIC_SetPriority(SERIAL20_IRQn, pCfgData->IntPrio);
+				NVIC_EnableIRQ(SERIAL20_IRQn);
+				break;
+			case 2:
+				NVIC_ClearPendingIRQ(SERIAL21_IRQn);
+				NVIC_SetPriority(SERIAL21_IRQn, pCfgData->IntPrio);
+				NVIC_EnableIRQ(SERIAL21_IRQn);
+				break;
+			case 3:
+				NVIC_ClearPendingIRQ(SERIAL22_IRQn);
+				NVIC_SetPriority(SERIAL22_IRQn, pCfgData->IntPrio);
+				NVIC_EnableIRQ(SERIAL22_IRQn);
+				break;
+			case 4:
+				NVIC_ClearPendingIRQ(SERIAL00_IRQn);
+				NVIC_SetPriority(SERIAL00_IRQn, pCfgData->IntPrio);
+				NVIC_EnableIRQ(SERIAL00_IRQn);
+				break;
+#if defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
+			case 5:
+				NVIC_ClearPendingIRQ(SERIAL23_IRQn);
+				NVIC_SetPriority(SERIAL23_IRQn, pCfgData->IntPrio);
+				NVIC_EnableIRQ(SERIAL23_IRQn);
+				break;
+			case 6:
+				NVIC_ClearPendingIRQ(SERIAL24_IRQn);
+				NVIC_SetPriority(SERIAL24_IRQn, pCfgData->IntPrio);
+				NVIC_EnableIRQ(SERIAL24_IRQn);
+				break;
+#endif
+#elif defined(NRF52805_XXAA) || defined(NRF52810_XXAA)
 			case 0:
 				NVIC_ClearPendingIRQ(SPIM0_SPIS0_SPI0_IRQn);
 				NVIC_SetPriority(SPIM0_SPIS0_SPI0_IRQn, pCfgData->IntPrio);

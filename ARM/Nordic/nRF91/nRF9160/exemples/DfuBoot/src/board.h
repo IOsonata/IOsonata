@@ -40,36 +40,37 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "blueio_board.h"
 
-#define NORDIC_DK
+// Board selection, define one:
+//	NRF9160_DK		nRF9160 DK, UART0 on the interface MCU VCOM0
+//	NORDIC_THINGY91	Nordic Thingy:91, UART0 on the first USB serial port of
+//					its nRF52840 running the Connectivity Bridge firmware
+#define NRF9160_DK
+//#define NORDIC_THINGY91
 
-#define UART_DEVNO				0
-
-#ifdef NORDIC_DK
+// UART0, the DFU transport
+#define UART_DEVNO			0
 #define UART_RX_PORT		0
-#define UART_RX_PIN			28
 #define UART_RX_PINOP		1
 #define UART_TX_PORT		0
-#define UART_TX_PIN			29
 #define UART_TX_PINOP		1
 #define UART_CTS_PORT		0
-#define UART_CTS_PIN		26
 #define UART_CTS_PINOP		1
 #define UART_RTS_PORT		0
-#define UART_RTS_PIN		27
 #define UART_RTS_PINOP		1
+
+#if defined(NORDIC_THINGY91)
+// P0.19, P0.18, P0.21 and P0.20, to UART0 of the nRF52840
+#define UART_RX_PIN			19
+#define UART_TX_PIN			18
+#define UART_CTS_PIN		21
+#define UART_RTS_PIN		20
+#elif defined(NRF9160_DK)
+#define UART_RX_PIN			28
+#define UART_TX_PIN			29
+#define UART_CTS_PIN		26
+#define UART_RTS_PIN		27
 #else
-#define UART_RX_PORT		BLUEIO_UART_RX_PORT
-#define UART_RX_PIN			BLUEIO_UART_RX_PIN
-#define UART_RX_PINOP		BLUEIO_UART_RX_PINOP
-#define UART_TX_PORT		BLUEIO_UART_TX_PORT
-#define UART_TX_PIN			BLUEIO_UART_TX_PIN
-#define UART_TX_PINOP		BLUEIO_UART_TX_PINOP
-#define UART_CTS_PORT		BLUEIO_UART_CTS_PORT
-#define UART_CTS_PIN		BLUEIO_UART_CTS_PIN
-#define UART_CTS_PINOP		BLUEIO_UART_CTS_PINOP
-#define UART_RTS_PORT		BLUEIO_UART_RTS_PORT
-#define UART_RTS_PIN		BLUEIO_UART_RTS_PIN
-#define UART_RTS_PINOP		BLUEIO_UART_RTS_PINOP
+#error "Select the board: NRF9160_DK or NORDIC_THINGY91"
 #endif
 
 #define UART_PINS			{ \
@@ -78,4 +79,4 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 	{UART_CTS_PORT, UART_CTS_PIN, UART_CTS_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},\
 	{UART_RTS_PORT, UART_RTS_PIN, UART_RTS_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},}
 
-#endif // __BOARD_H__
+#endif

@@ -3,7 +3,7 @@
 # model of their flash sequencer:
 #
 #   re01    RE01 1500KB, Cortex-M0+, FACI commands (dfu_re01.cpp)
-#   r9a02   R9A02G021, RISC-V, low power flash sequencer (dfu_r9a02.cpp)
+#   r9a02   R9A02G021, RISC-V, flash sequencer FLCN (dfu_r9a02.cpp)
 #
 # boot_emu_renesas.py re01|r9a02 <boot.elf> <signed app.bin> [scenario]
 #
@@ -33,7 +33,9 @@
 # P/E mode, that a program lands on erased memory, and the mode entry keys.
 #
 # SystemInit is skipped (clock setup), everything else runs as built.
-# Needs unicorn and pyelftools.
+# Needs unicorn and pyelftools. unicorn 2.1 does not decode Zba, Zbb and Zbs:
+# for r9a02 build the library and the boot with
+# -march=rv32imac_zicsr_zifencei -mabi=ilp32.
 import sys, struct
 from unicorn import *
 from unicorn.arm_const import *
@@ -47,7 +49,7 @@ RV = T == "r9a02"
 if T == "re01":
     FLASH, RAM, RAMSZ, WU = 0x180000, 0x20000000, 0x40000, 256
 elif RV:
-    FLASH, RAM, RAMSZ, WU = 0x40000, 0x20000000, 0x8000, 4
+    FLASH, RAM, RAMSZ, WU = 0x20000, 0x20000000, 0x8000, 8
 else:
     sys.exit("target: re01 or r9a02")
 UNIT = max(16, WU)                  # DfuStateUnit
@@ -117,6 +119,11 @@ uc.mem_map(0x01000000, 0x20000, UC_PROT_ALL)     # option setting area
 uc.mem_map(RAM, 0x40000, UC_PROT_ALL)
 uc.mem_map(0x40000000, 0x01000000, UC_PROT_ALL)  # peripherals
 uc.mem_map(0xE0000000, 0x100000, UC_PROT_ALL)    # SCS / CLIC
+if RV:
+    # Port inputs high (PCNTR2.PIDR of ports 0 to 4): the pulled up recovery
+    # button of the board, S1 on P108, is released.
+    for n in range(5):
+        uc.mem_write(0x40040000 + 0x20 * n + 4, struct.pack("<I", 0xFFFF))
 
 errors = []
 ev = {"erase": 0, "program": 0, "pe": 0}
@@ -285,7 +292,7 @@ def re01_r(uc, access, addr, size, value, ud):
         uc.mem_write(FASTAT, bytes([0x10 if st["err"] & (1 << 14) else 0]))
 
 # ---------------------------------------------------------------------------
-# R9A02: low power flash sequencer at 0x407EC000
+# R9A02: flash sequencer FLCN at 0x407EC000 (R01UH1036EJ0110 chapter 35)
 # ---------------------------------------------------------------------------
 FLP = 0x407EC000
 lp = {"fpr": 0, "fpmcr": 0x08, "seq": [], "frdy": 0, "fisr": 0}
@@ -336,9 +343,10 @@ def r9_w(uc, access, addr, size, value, ud):
                 errors.append("command with FASR not user area")
             s = rd16(0x110) << 16 | rd16(0x108)
             if cmd == 0x01:
-                if s % 4:
+                if s % 8:
                     errors.append("program at 0x%x" % s)
-                data = struct.pack("<HH", rd16(0x130), rd16(0x138))
+                data = struct.pack("<HHHH", rd16(0x130), rd16(0x138),
+                                   rd16(0x140), rd16(0x144))
                 program(s, data, 0x02)
             elif cmd == 0x04:
                 e = rd16(0x120) << 16 | rd16(0x118)
@@ -359,7 +367,7 @@ def r9_r(uc, access, addr, size, value, ud):
     off = addr - FLP
     if off == 0x12C:
         uc.mem_write(addr, bytes([0x40 if lp["frdy"] else 0]))
-    elif off == 0x1F0:
+    elif off == 0x128:
         uc.mem_write(addr, struct.pack("<H", st["err"]))
     elif off == 0x3FB0:
         uc.mem_write(addr, struct.pack("<H", 1 if st["pe"] else 0))
@@ -422,8 +430,10 @@ else:
 def run_from_reset():
     at_main[0] = False
     if RV:
-        # ResetEntry pushes before it sets sp, so give it one.
-        uc.reg_write(UC_RISCV_REG_SP, sym["__StackTop"])
+        # Registers are undefined at reset: ResetEntry must set gp and sp
+        # before it uses them, an early push faults here.
+        uc.reg_write(UC_RISCV_REG_SP, 0xDEAD0000)
+        uc.reg_write(UC_RISCV_REG_GP, 0xDEAD0000)
         uc.reg_write(UC_RISCV_REG_MSTATUS, 0)
         uc.emu_start(sym["__dfu_boot_start"], app_entry, timeout=1_800_000_000)
     else:

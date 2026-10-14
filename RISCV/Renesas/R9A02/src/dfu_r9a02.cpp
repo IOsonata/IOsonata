@@ -2,18 +2,18 @@
 @file	dfu_r9a02.cpp
 
 @brief	DFU target layer for Renesas R9A02G021 (RISC-V): code flash through the
-		low power flash sequencer.
+		flash sequencer.
 
 The code flash is programmed and erased with the sequencer in code flash
 P/E mode, during which it cannot be read: that code runs from RAM, the data
-word is read before the mode change and machine interrupts are off. The
+is read before the mode change and machine interrupts are off. The
 application starts at its reset entry, the first word of slot 0.
 
-Not confirmed from the repository: r9a02g021.h gives only the base of the
-flash sequencer, so its register map and sequence are taken from the RA2
-low power flash (MF4) at the same base; the 2 KB block, the 4 byte program
-unit, the sequencer clock being the core clock, and the watchdog reset.
-Every status error or timeout makes the call fail.
+Registers and sequence: R9A02G021 User's Manual R01UH1036EJ0110, chapter 35
+(FLCN at 0x407EC000), timing from 37.9.1. 2 KB erase block, 8 byte program
+unit, the sequencer clock is ICLK (FISR.PCKA). Every status error or timeout
+makes the call fail. DfuTgtReset uses the software reset request of the
+CPU (SWRCR, 2.5.8.2).
 
 @author	Hoang Nguyen Hoan
 @date	Sep. 21, 2026
@@ -55,18 +55,11 @@ extern "C" uint32_t SystemCoreClock;
   */
 
 // ---------------------------------------------------------------------------
-// Code flash through the low power flash sequencer (FACI_LP, R9A02_FACI_LP_BASE)
-//
-// r9a02g021.h gives the block base only. The register offsets, key values,
-// mode sequence, command codes and status bits below are those of the RA2
-// low power flash of version MF4 (RA2E1, which r9a02g021.h names as the
-// closest RA sibling), where the same block sits at the same base. The
-// only offset the repository itself uses is FLDWAITR at 0x3FC4
-// (system_r9a02.c), which matches that map.
+// Code flash through the flash sequencer (FLCN, manual 35.3)
 // ---------------------------------------------------------------------------
 
-#define DFU_TGT_FLP_REG8(Off)		(*(volatile uint8_t *)(R9A02_FACI_LP_BASE + (Off)))
-#define DFU_TGT_FLP_REG16(Off)		(*(volatile uint16_t *)(R9A02_FACI_LP_BASE + (Off)))
+#define DFU_TGT_FLP_REG8(Off)		(*(volatile uint8_t *)(R9A02_FLCN_BASE + (Off)))
+#define DFU_TGT_FLP_REG16(Off)		(*(volatile uint16_t *)(R9A02_FLCN_BASE + (Off)))
 
 #define DFU_TGT_FPMCR				DFU_TGT_FLP_REG8(0x100)
 #define DFU_TGT_FASR				DFU_TGT_FLP_REG8(0x104)
@@ -76,12 +69,14 @@ extern "C" uint32_t SystemCoreClock;
 #define DFU_TGT_FEARL				DFU_TGT_FLP_REG16(0x118)
 #define DFU_TGT_FEARH				DFU_TGT_FLP_REG16(0x120)
 #define DFU_TGT_FRESETR				DFU_TGT_FLP_REG8(0x124)
+#define DFU_TGT_FSTATR00			DFU_TGT_FLP_REG16(0x128)
 #define DFU_TGT_FSTATR1				DFU_TGT_FLP_REG8(0x12C)
 #define DFU_TGT_FWBL0				DFU_TGT_FLP_REG16(0x130)
 #define DFU_TGT_FWBH0				DFU_TGT_FLP_REG16(0x138)
+#define DFU_TGT_FWBL1				DFU_TGT_FLP_REG16(0x140)
+#define DFU_TGT_FWBH1				DFU_TGT_FLP_REG16(0x144)
 #define DFU_TGT_FPR					DFU_TGT_FLP_REG8(0x180)
 #define DFU_TGT_FISR				DFU_TGT_FLP_REG8(0x1D8)
-#define DFU_TGT_FSTATR2				DFU_TGT_FLP_REG16(0x1F0)
 #define DFU_TGT_FENTRYR				DFU_TGT_FLP_REG16(0x3FB0)
 #define DFU_TGT_PFBER				DFU_TGT_FLP_REG8(0x3FC8)
 
@@ -96,29 +91,37 @@ extern "C" uint32_t SystemCoreClock;
 #define DFU_TGT_FCR_ERASE			0x84U
 
 #define DFU_TGT_FSTATR1_FRDY		0x40U
-#define DFU_TGT_FSTATR2_ERERR		0x01U
-#define DFU_TGT_FSTATR2_PRGERR		0x02U
-#define DFU_TGT_FSTATR2_ILGLERR		0x10U
+#define DFU_TGT_FSTATR00_ERERR		0x01U
+#define DFU_TGT_FSTATR00_PRGERR		0x02U
+#define DFU_TGT_FSTATR00_ILGLERR	0x10U
 
-// 2 KB blocks, programmed 4 bytes at a time, from 0.
-#define DFU_TGT_WR_UNIT				4U
-#define DFU_TGT_ERASE_UNIT			0x800U
-#define DFU_TGT_CF_END				R9A02_FLASH_SIZE_MAX
+// 2 KB blocks, programmed 8 bytes at a time, from 0.
+#define DFU_TGT_WR_UNIT				8U
+#define DFU_TGT_ERASE_UNIT			R9A02_FLASH_BLOCK_SIZE
+#define DFU_TGT_CF_END				R9A02_FLASH_SIZE
 
-// Waits, in microseconds: mode change settling (tDIS, tMS), then the
-// command limits with margin (block erase 355 ms, 4 byte program 1.4 ms).
-#define DFU_TGT_TDIS_US				3U
+// Waits, in microseconds: mode change settling, then the command limits
+// with margin (2 KB erase 282 ms, 8 byte program 843 us). For the entry in
+// code flash P/E mode the manual gives tMS (15 us) in the FPMCR description
+// and tDIS (2 us) in figure 35.16: the longer one is used for both changes.
 #define DFU_TGT_TMS_US				16U
 #define DFU_TGT_ERASE_US			710000UL
 #define DFU_TGT_PROGRAM_US			3000UL
 #define DFU_TGT_MODE_US				1000UL
 
-// Highest core clock of the part (HOCO 48 MHz).
+// Core clock range for P/E (notes of table 8.2, table 35.4): 1 MHz to the
+// highest core clock of the part (HOCO 48 MHz). At 4 MHz or less only whole
+// MHz values can be given to FISR.PCKA.
+#define DFU_TGT_HZ_MIN				1000000UL
+#define DFU_TGT_HZ_WHOLE_MAX		4000000UL
 #define DFU_TGT_MHZ_MAX				48U
 
 // Everything that runs while the code flash is in P/E mode is in RAM, in
 // .iram.text, which ResetEntry copies before main.
 #define DFU_TGT_RAMFUNC		__attribute__((section(".iram.text.dfu"), noinline))
+
+// PFBER value before P/E mode, restored after it
+static uint8_t s_DfuTgtPfber;
 
 // Busy wait, about one loop per 4 clocks or more.
 DFU_TGT_RAMFUNC static void DfuTgtDelay(uint32_t Us, uint32_t Mhz)
@@ -158,11 +161,12 @@ DFU_TGT_RAMFUNC static bool DfuTgtWaitFrdy(uint8_t State, uint32_t Us,
 DFU_TGT_RAMFUNC static bool DfuTgtPeEnter(uint32_t Mhz)
 {
 	// Prefetch buffer off while the contents change.
+	s_DfuTgtPfber = DFU_TGT_PFBER;
 	DFU_TGT_PFBER = 0;
 
 	DFU_TGT_FENTRYR = DFU_TGT_FENTRYR_CF_PE;
 	DfuTgtFpmcr(DFU_TGT_FPMCR_CF_PE);
-	DfuTgtDelay(DFU_TGT_TDIS_US, Mhz);
+	DfuTgtDelay(DFU_TGT_TMS_US, Mhz);
 
 	if (DFU_TGT_FENTRYR != (DFU_TGT_FENTRYR_CF_PE & 0xFFU))
 	{
@@ -193,7 +197,7 @@ DFU_TGT_RAMFUNC static bool DfuTgtPeExit(uint32_t Mhz)
 		}
 	}
 
-	DFU_TGT_PFBER = 1;
+	DFU_TGT_PFBER = s_DfuTgtPfber;
 
 	return true;
 }
@@ -211,7 +215,7 @@ DFU_TGT_RAMFUNC static bool DfuTgtCmd(uint8_t Cmd, uint16_t ErrMask,
 	DFU_TGT_FCR = 0;
 
 	ok = DfuTgtWaitFrdy(0, DFU_TGT_MODE_US, Mhz) && ok &&
-		 (DFU_TGT_FSTATR2 & ErrMask) == 0;
+		 (DFU_TGT_FSTATR00 & ErrMask) == 0;
 
 	if (ok == false)
 	{
@@ -223,10 +227,11 @@ DFU_TGT_RAMFUNC static bool DfuTgtCmd(uint8_t Cmd, uint16_t ErrMask,
 }
 
 // Erase the 2 KB block at Addr.
-DFU_TGT_RAMFUNC static bool DfuTgtRamErase(uint32_t Addr, uint32_t Data,
-										   uint32_t Mhz)
+DFU_TGT_RAMFUNC static bool DfuTgtRamErase(uint32_t Addr, uint32_t DataLo,
+										   uint32_t DataHi, uint32_t Mhz)
 {
-	(void)Data;
+	(void)DataLo;
+	(void)DataHi;
 
 	bool ok = DfuTgtPeEnter(Mhz);
 
@@ -239,16 +244,16 @@ DFU_TGT_RAMFUNC static bool DfuTgtRamErase(uint32_t Addr, uint32_t Data,
 		DFU_TGT_FEARH = (uint16_t)(end >> 16);
 		DFU_TGT_FEARL = (uint16_t)end;
 		ok = DfuTgtCmd(DFU_TGT_FCR_ERASE,
-					   DFU_TGT_FSTATR2_ERERR | DFU_TGT_FSTATR2_ILGLERR,
+					   DFU_TGT_FSTATR00_ERERR | DFU_TGT_FSTATR00_ILGLERR,
 					   DFU_TGT_ERASE_US, Mhz);
 	}
 
 	return DfuTgtPeExit(Mhz) && ok;
 }
 
-// Program the word Data at Addr.
-DFU_TGT_RAMFUNC static bool DfuTgtRamProgram(uint32_t Addr, uint32_t Data,
-											 uint32_t Mhz)
+// Program the 8 bytes DataHi:DataLo at Addr.
+DFU_TGT_RAMFUNC static bool DfuTgtRamProgram(uint32_t Addr, uint32_t DataLo,
+											 uint32_t DataHi, uint32_t Mhz)
 {
 	bool ok = DfuTgtPeEnter(Mhz);
 
@@ -256,10 +261,12 @@ DFU_TGT_RAMFUNC static bool DfuTgtRamProgram(uint32_t Addr, uint32_t Data,
 	{
 		DFU_TGT_FSARH = (uint16_t)(Addr >> 16);
 		DFU_TGT_FSARL = (uint16_t)Addr;
-		DFU_TGT_FWBL0 = (uint16_t)Data;
-		DFU_TGT_FWBH0 = (uint16_t)(Data >> 16);
+		DFU_TGT_FWBL0 = (uint16_t)DataLo;
+		DFU_TGT_FWBH0 = (uint16_t)(DataLo >> 16);
+		DFU_TGT_FWBL1 = (uint16_t)DataHi;
+		DFU_TGT_FWBH1 = (uint16_t)(DataHi >> 16);
 		ok = DfuTgtCmd(DFU_TGT_FCR_PROGRAM,
-					   DFU_TGT_FSTATR2_PRGERR | DFU_TGT_FSTATR2_ILGLERR,
+					   DFU_TGT_FSTATR00_PRGERR | DFU_TGT_FSTATR00_ILGLERR,
 					   DFU_TGT_PROGRAM_US, Mhz);
 	}
 
@@ -268,22 +275,25 @@ DFU_TGT_RAMFUNC static bool DfuTgtRamProgram(uint32_t Addr, uint32_t Data,
 
 // The trap vector and every handler are in the code flash, so machine
 // interrupts are off while it is in P/E mode.
-static bool DfuTgtRun(bool (*pFunc)(uint32_t, uint32_t, uint32_t),
-					  uint32_t Addr, uint32_t Data)
+static bool DfuTgtRun(bool (*pFunc)(uint32_t, uint32_t, uint32_t, uint32_t),
+					  uint32_t Addr, uint32_t DataLo, uint32_t DataHi)
 {
-	uint32_t mhz = (SystemCoreClock + 999999UL) / 1000000UL;
+	uint32_t hz = SystemCoreClock;
+	uint32_t mhz = (hz + 999999UL) / 1000000UL;
 	uint32_t mstatus;
 
 	// The sequencer clock setting and the waits come from it: refuse a core
-	// clock the part cannot run at rather than program with a wrong one.
-	if (mhz == 0 || mhz > DFU_TGT_MHZ_MAX)
+	// clock that FISR.PCKA cannot be set for rather than program with a
+	// wrong one. Above 4 MHz PCKA is the frequency rounded up.
+	if (hz < DFU_TGT_HZ_MIN || mhz > DFU_TGT_MHZ_MAX ||
+		(hz <= DFU_TGT_HZ_WHOLE_MAX && (hz % 1000000UL) != 0U))
 	{
 		return false;
 	}
 
 	__asm volatile("csrrci %0, mstatus, 8" : "=r" (mstatus) :: "memory");
 
-	bool ok = pFunc(Addr, Data, mhz);
+	bool ok = pFunc(Addr, DataLo, DataHi, mhz);
 
 	__asm volatile("fence rw, rw" ::: "memory");
 	if (mstatus & 8U)
@@ -315,7 +325,7 @@ bool DfuTgtErase(uintptr_t Addr)
 		return false;
 	}
 
-	return DfuTgtRun(DfuTgtRamErase, (uint32_t)Addr, 0);
+	return DfuTgtRun(DfuTgtRamErase, (uint32_t)Addr, 0, 0);
 }
 
 bool DfuTgtWrite(uintptr_t Addr, const void *pData, uint32_t Len)
@@ -328,14 +338,16 @@ bool DfuTgtWrite(uintptr_t Addr, const void *pData, uint32_t Len)
 
 	const uint8_t *p = (const uint8_t *)pData;
 
-	for (uint32_t o = 0; o < Len; o += 4, p += 4)
+	for (uint32_t o = 0; o < Len; o += DFU_TGT_WR_UNIT, p += DFU_TGT_WR_UNIT)
 	{
 		// Read here, before P/E mode: the source may be anywhere, the code
-		// flash included, and unaligned. The word then goes in a register.
-		uint32_t w = (uint32_t)p[0] | ((uint32_t)p[1] << 8) |
-					 ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
+		// flash included, and unaligned. The words then go in registers.
+		uint32_t lo = (uint32_t)p[0] | ((uint32_t)p[1] << 8) |
+					  ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
+		uint32_t hi = (uint32_t)p[4] | ((uint32_t)p[5] << 8) |
+					  ((uint32_t)p[6] << 16) | ((uint32_t)p[7] << 24);
 
-		if (DfuTgtRun(DfuTgtRamProgram, (uint32_t)(Addr + o), w) == false)
+		if (DfuTgtRun(DfuTgtRamProgram, (uint32_t)(Addr + o), lo, hi) == false)
 		{
 			return false;
 		}
@@ -362,23 +374,12 @@ void DfuTgtStart(uintptr_t RunAddr)
 	DfuRvStart(RunAddr);
 }
 
-// WDT, RA2 register layout at R9A02_WDT_BASE.
-#define DFU_TGT_WDTRR		(*(volatile uint8_t *)(R9A02_WDT_BASE + 0x00))
-#define DFU_TGT_WDTCR		(*(volatile uint16_t *)(R9A02_WDT_BASE + 0x02))
-#define DFU_TGT_WDTRCR		(*(volatile uint8_t *)(R9A02_WDT_BASE + 0x06))
-
-// No software reset request is known on this core, so the watchdog makes
-// one: register start mode (OFS0 as erased), shortest timeout, no window,
-// reset on expiry. If the watchdog already runs, from OFS0 or the
-// application, it resets the part the same way once it stops being fed.
+// System reset through the software reset request of the CPU (2.5.8.2)
 void DfuTgtReset(void)
 {
 	DfuRvQuiesce();
 
-	DFU_TGT_WDTCR = 0x3310U;	// Window 0 - 100 %, PCLKB / 4, 1024 cycles
-	DFU_TGT_WDTRCR = 0x80U;		// Reset on underflow or refresh error
-	DFU_TGT_WDTRR = 0x00U;		// Start
-	DFU_TGT_WDTRR = 0xFFU;
+	R9A02_CPU_AUX_SWRCR = R9A02_SWRCR_SYSRESETREQ;
 
 	for (;;)
 	{

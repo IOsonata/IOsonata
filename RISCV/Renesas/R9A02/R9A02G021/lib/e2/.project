@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <projectDescription>
-	<name>IOsonata_R9A02G201</name>
-	<comment></comment>
+	<name>IOsonata_R9A02G021_e2</name>
+	<comment/>
 	<projects>
 	</projects>
 	<buildSpec>
@@ -26,6 +26,61 @@
 	</natures>
 	<linkedResources>
 		<link>
+			<name>include</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>include/adc_r9a02.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/include/adc_r9a02.h</locationURI>
+		</link>
+		<link>
+			<name>include/dac_r9a02.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/include/dac_r9a02.h</locationURI>
+		</link>
+		<link>
+			<name>include/dtc_r9a02.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/include/dtc_r9a02.h</locationURI>
+		</link>
+		<link>
+			<name>include/elc_r9a02.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/include/elc_r9a02.h</locationURI>
+		</link>
+		<link>
+			<name>include/i2c_r9a02.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/include/i2c_r9a02.h</locationURI>
+		</link>
+		<link>
+			<name>include/rtc_r9a02.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/include/rtc_r9a02.h</locationURI>
+		</link>
+		<link>
+			<name>include/sau_r9a02.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/include/sau_r9a02.h</locationURI>
+		</link>
+		<link>
+			<name>include/tml32_r9a02.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/include/tml32_r9a02.h</locationURI>
+		</link>
+		<link>
+			<name>include/uarta_r9a02.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/include/uarta_r9a02.h</locationURI>
+		</link>
+		<link>
+			<name>src</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>include/app_evt_handler.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/app_evt_handler.h</locationURI>
@@ -46,14 +101,19 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/blueio_types.h</locationURI>
 		</link>
 		<link>
-			<name>include/bluetooth</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
+			<name>include/cbor.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/cbor.h</locationURI>
 		</link>
 		<link>
 			<name>include/cfifo.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/cfifo.h</locationURI>
+		</link>
+		<link>
+			<name>include/cli</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
 			<name>include/converters</name>
@@ -76,6 +136,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/crc.h</locationURI>
 		</link>
 		<link>
+			<name>include/crypto</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>include/device bridge.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/device%20bridge.h</locationURI>
@@ -89,6 +154,11 @@
 			<name>include/device_intrf.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/device_intrf.h</locationURI>
+		</link>
+		<link>
+			<name>include/dfu</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
 			<name>include/display</name>
@@ -111,14 +181,19 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/iatomic.h</locationURI>
 		</link>
 		<link>
-			<name>include/motion</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
 			<name>include/intelhex.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/intelhex.h</locationURI>
+		</link>
+		<link>
+			<name>include/interrupt_r9a02.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/include/interrupt_r9a02.h</locationURI>
+		</link>
+		<link>
+			<name>include/iopinctrl.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/include/iopinctrl.h</locationURI>
 		</link>
 		<link>
 			<name>include/iosonata_types.h</name>
@@ -151,6 +226,11 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>include/motion</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>include/prbs.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/prbs.h</locationURI>
@@ -161,14 +241,14 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/pulse_train.h</locationURI>
 		</link>
 		<link>
-			<name>include/coredev/pwm.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/pwm.h</locationURI>
-		</link>
-		<link>
 			<name>include/pwrmgnt</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>include/r9a02g021.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/include/r9a02g021.h</locationURI>
 		</link>
 		<link>
 			<name>include/sensors</name>
@@ -206,6 +286,16 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/sysstatusdef.h</locationURI>
 		</link>
 		<link>
+			<name>include/system_r9a02.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/include/system_r9a02.h</locationURI>
+		</link>
+		<link>
+			<name>include/timer_r9a02.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/include/timer_r9a02.h</locationURI>
+		</link>
+		<link>
 			<name>include/utf8.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/utf8.h</locationURI>
@@ -226,6 +316,11 @@
 			<locationURI>PARENT-5-PROJECT_LOC/src/ResetEntry.c</locationURI>
 		</link>
 		<link>
+			<name>src/Vectors_R9A02.c</name>
+			<type>1</type>
+			<locationURI>PARENT-1-PROJECT_LOC/src/Vectors_R9A02.c</locationURI>
+		</link>
+		<link>
 			<name>src/app_evt_handler.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/app_evt_handler.cpp</locationURI>
@@ -236,9 +331,19 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/app_run.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/audio</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>src/base64.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/base64.c</locationURI>
+		</link>
+		<link>
+			<name>src/cbor.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/cbor.c</locationURI>
 		</link>
 		<link>
 			<name>src/cfifo.c</name>
@@ -246,9 +351,29 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/cfifo.c</locationURI>
 		</link>
 		<link>
+			<name>src/cli</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>src/converters</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/converters/adc_r9a02.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/adc_r9a02.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/converters/analog_comp_r9a02.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/analog_comp_r9a02.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/converters/dac_r9a02.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/dac_r9a02.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/coredev</name>
@@ -256,9 +381,59 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>src/coredev/dtc_r9a02.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/dtc_r9a02.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/elc_r9a02.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/elc_r9a02.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/i2c_r9a02.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/i2c_r9a02.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/i2c_sau_r9a02.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/i2c_sau_r9a02.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/rtc_r9a02.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/rtc_r9a02.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/sau_r9a02.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/sau_r9a02.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/spi_r9a02.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/spi_r9a02.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/tml32_r9a02.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/tml32_r9a02.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/uarta_r9a02.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/uarta_r9a02.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/crc.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/crc.c</locationURI>
+		</link>
+		<link>
+			<name>src/crypto</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
 			<name>src/device.cpp</name>
@@ -269,6 +444,11 @@
 			<name>src/device_intrf.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/device_intrf.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/dfu</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
 			<name>src/display</name>
@@ -289,11 +469,6 @@
 			<name>src/i-syst_logo_color_320x153_big.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/i-syst_logo_color_320x153_big.c</locationURI>
-		</link>
-		<link>
-			<name>src/motion</name>
-			<type>2</type>
-			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
 			<name>src/intelhex.c</name>
@@ -331,7 +506,17 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/md5.c</locationURI>
 		</link>
 		<link>
+			<name>src/micro-ecc</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
 			<name>src/miscdev</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/motion</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
@@ -381,6 +566,16 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/sysstatus.c</locationURI>
 		</link>
 		<link>
+			<name>src/sysstatus_impl.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/sysstatus_impl.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/system_r9a02.c</name>
+			<type>1</type>
+			<locationURI>PARENT-1-PROJECT_LOC/src/system_r9a02.c</locationURI>
+		</link>
+		<link>
 			<name>src/uart_retarget.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/uart_retarget.c</locationURI>
@@ -411,89 +606,14 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/audio/audiodev_pdm.h</locationURI>
 		</link>
 		<link>
-			<name>include/bluetooth/blueio_blesrvc.h</name>
+			<name>include/audio/buzzer.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/blueio_blesrvc.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/include/audio/buzzer.h</locationURI>
 		</link>
 		<link>
-			<name>include/bluetooth/bt_adv.h</name>
+			<name>include/cli/icli.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_adv.h</locationURI>
-		</link>
-		<link>
-			<name>include/bluetooth/bt_app.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_app.h</locationURI>
-		</link>
-		<link>
-			<name>include/bluetooth/bt_appearance.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_appearance.h</locationURI>
-		</link>
-		<link>
-			<name>include/bluetooth/bt_att.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_att.h</locationURI>
-		</link>
-		<link>
-			<name>include/bluetooth/bt_ctlr.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_ctlr.h</locationURI>
-		</link>
-		<link>
-			<name>include/bluetooth/bt_dev.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_dev.h</locationURI>
-		</link>
-		<link>
-			<name>include/bluetooth/bt_gap.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_gap.h</locationURI>
-		</link>
-		<link>
-			<name>include/bluetooth/bt_gatt.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_gatt.h</locationURI>
-		</link>
-		<link>
-			<name>include/bluetooth/bt_hci.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_hci.h</locationURI>
-		</link>
-		<link>
-			<name>include/bluetooth/bt_hcievt.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_hcievt.h</locationURI>
-		</link>
-		<link>
-			<name>include/bluetooth/bt_intrf.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_intrf.h</locationURI>
-		</link>
-		<link>
-			<name>include/bluetooth/bt_l2cap.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_l2cap.h</locationURI>
-		</link>
-		<link>
-			<name>include/bluetooth/bt_scan.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_scan.h</locationURI>
-		</link>
-		<link>
-			<name>include/bluetooth/bt_sdp.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_sdp.h</locationURI>
-		</link>
-		<link>
-			<name>include/bluetooth/bt_smp.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_smp.h</locationURI>
-		</link>
-		<link>
-			<name>include/bluetooth/bt_uuid.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_uuid.h</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/include/cli/icli.h</locationURI>
 		</link>
 		<link>
 			<name>include/converters/adc_device.h</name>
@@ -531,6 +651,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/i2s.h</locationURI>
 		</link>
 		<link>
+			<name>include/coredev/idelay.h</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/include/idelay.h</locationURI>
+		</link>
+		<link>
 			<name>include/coredev/interrupt.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/interrupt.h</locationURI>
@@ -544,6 +669,11 @@
 			<name>include/coredev/pdm.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/pdm.h</locationURI>
+		</link>
+		<link>
+			<name>include/coredev/pwm.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/pwm.h</locationURI>
 		</link>
 		<link>
 			<name>include/coredev/shared_intrf.h</name>
@@ -569,6 +699,51 @@
 			<name>include/coredev/uart.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/uart.h</locationURI>
+		</link>
+		<link>
+			<name>include/crypto/crypto_softsha256.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/crypto_softsha256.h</locationURI>
+		</link>
+		<link>
+			<name>include/crypto/crypto_uecc.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/crypto_uecc.h</locationURI>
+		</link>
+		<link>
+			<name>include/crypto/icrypto.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/icrypto.h</locationURI>
+		</link>
+		<link>
+			<name>include/dfu/dfu_boot.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/dfu/dfu_boot.h</locationURI>
+		</link>
+		<link>
+			<name>include/dfu/dfu_image.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/dfu/dfu_image.h</locationURI>
+		</link>
+		<link>
+			<name>include/dfu/dfu_serial.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/dfu/dfu_serial.h</locationURI>
+		</link>
+		<link>
+			<name>include/dfu/dfu_smp.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/dfu/dfu_smp.h</locationURI>
+		</link>
+		<link>
+			<name>include/dfu/dfu_target.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/dfu/dfu_target.h</locationURI>
+		</link>
+		<link>
+			<name>include/dfu/dfu_writer.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/dfu/dfu_writer.h</locationURI>
 		</link>
 		<link>
 			<name>include/display/display.h</name>
@@ -636,59 +811,9 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/display/igfx.h</locationURI>
 		</link>
 		<link>
-			<name>include/motion/icm20948_img_dmp3a.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/motion/icm20948_img_dmp3a.h</locationURI>
-		</link>
-		<link>
-			<name>include/motion/att.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/motion/att.h</locationURI>
-		</link>
-		<link>
-			<name>include/motion/mot_icm20948.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/motion/mot_icm20948.h</locationURI>
-		</link>
-		<link>
-			<name>include/motion/mot_invn_icm20948.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/motion/mot_invn_icm20948.h</locationURI>
-		</link>
-		<link>
-			<name>include/motion/mot_mpu9250.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/motion/mot_mpu9250.h</locationURI>
-		</link>
-		<link>
-			<name>include/motion/att_vqf.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/motion/att_vqf.h</locationURI>
-		</link>
-		<link>
-			<name>include/motion/att_xiot_fusion.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/motion/att_xiot_fusion.h</locationURI>
-		</link>
-		<link>
-			<name>include/motion/mpu9250_dmpkey.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/motion/mpu9250_dmpkey.h</locationURI>
-		</link>
-		<link>
-			<name>include/motion/mpu9250_dmpmap.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/motion/mpu9250_dmpmap.h</locationURI>
-		</link>
-		<link>
 			<name>include/miscdev/button.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/miscdev/button.h</locationURI>
-		</link>
-		<link>
-			<name>include/miscdev/buzzer.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/miscdev/buzzer.h</locationURI>
 		</link>
 		<link>
 			<name>include/miscdev/led.h</name>
@@ -724,6 +849,51 @@
 			<name>include/miscdev/tca6424a.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/miscdev/tca6424a.h</locationURI>
+		</link>
+		<link>
+			<name>include/motion/att.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/motion/att.h</locationURI>
+		</link>
+		<link>
+			<name>include/motion/att_vqf.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/motion/att_vqf.h</locationURI>
+		</link>
+		<link>
+			<name>include/motion/att_xiot_fusion.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/motion/att_xiot_fusion.h</locationURI>
+		</link>
+		<link>
+			<name>include/motion/icm20948_img_dmp3a.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/motion/icm20948_img_dmp3a.h</locationURI>
+		</link>
+		<link>
+			<name>include/motion/mot_icm20948.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/motion/mot_icm20948.h</locationURI>
+		</link>
+		<link>
+			<name>include/motion/mot_invn_icm20948.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/motion/mot_invn_icm20948.h</locationURI>
+		</link>
+		<link>
+			<name>include/motion/mot_mpu9250.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/motion/mot_mpu9250.h</locationURI>
+		</link>
+		<link>
+			<name>include/motion/mpu9250_dmpkey.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/motion/mpu9250_dmpkey.h</locationURI>
+		</link>
+		<link>
+			<name>include/motion/mpu9250_dmpmap.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/motion/mpu9250_dmpmap.h</locationURI>
 		</link>
 		<link>
 			<name>include/pwrmgnt/fg_lc709203f.h</name>
@@ -809,11 +979,6 @@
 			<name>include/sensors/agm_icm20948DMP.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/agm_icm20948DMP.h</locationURI>
-		</link>
-		<link>
-			<name>include/sensors/agm_icm456x_ak09940.h</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/agm_icm456x_ak09940.h</locationURI>
 		</link>
 		<link>
 			<name>include/sensors/agm_invn_icm20948.h</name>
@@ -996,6 +1161,16 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/sys/dirent.h</locationURI>
 		</link>
 		<link>
+			<name>src/audio/buzzer.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/audio/buzzer.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/cli/icli.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/cli/icli.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/converters/adc_ltc2495.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/converters/adc_ltc2495.cpp</locationURI>
@@ -1009,6 +1184,11 @@
 			<name>src/coredev/i2c.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/i2c.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/interrupt_r9a02.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/interrupt_r9a02.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/coredev/iopincfg_r9a02.c</name>
@@ -1031,9 +1211,79 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/timer.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/coredev/timer_r9a02.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/timer_r9a02.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/coredev/uart.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/uart.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/uart_r9a02.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/uart_r9a02.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/crypto_p256.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_p256.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/crypto_softsha256.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_softsha256.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/crypto_uecc.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_uecc.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/dfu/dfu_boot.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/dfu/dfu_boot.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/dfu/dfu_image.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/dfu/dfu_image.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/dfu/dfu_layout.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/dfu/dfu_layout.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/dfu/dfu_mgr.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/dfu/dfu_mgr.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/dfu/dfu_r9a02.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/RISCV/Renesas/R9A02/src/dfu_r9a02.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/dfu/dfu_serial.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/dfu/dfu_serial.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/dfu/dfu_smp.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/dfu/dfu_smp.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/dfu/dfu_wire.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/dfu/dfu_wire.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/dfu/dfu_writer.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/dfu/dfu_writer.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/display/display.cpp</name>
@@ -1096,44 +1346,24 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/display/igfx.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/motion/att.cpp</name>
+			<name>src/micro-ecc/uECC.c</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/motion/att.cpp</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/micro-ecc/uECC.c</locationURI>
 		</link>
 		<link>
-			<name>src/motion/mot_icm20948.cpp</name>
+			<name>src/micro-ecc/uECC.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/motion/mot_icm20948.cpp</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/micro-ecc/uECC.h</locationURI>
 		</link>
 		<link>
-			<name>src/motion/mot_invn_icm20948.cpp</name>
+			<name>src/micro-ecc/uECC_vli.h</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/motion/mot_invn_icm20948.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/motion/mot_mpu9250.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/motion/mot_mpu9250.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/motion/att_vqf.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/motion/att_vqf.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/motion/att_xiot_fusion.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/motion/att_xiot_fusion.cpp</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/micro-ecc/uECC_vli.h</locationURI>
 		</link>
 		<link>
 			<name>src/miscdev/button.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/miscdev/button.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/miscdev/buzzer.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/miscdev/buzzer.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/miscdev/led_apa102.cpp</name>
@@ -1169,6 +1399,36 @@
 			<name>src/miscdev/modem.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/miscdev/modem.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/motion/att.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/motion/att.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/motion/att_vqf.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/motion/att_vqf.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/motion/att_xiot_fusion.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/motion/att_xiot_fusion.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/motion/mot_icm20948.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/motion/mot_icm20948.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/motion/mot_invn_icm20948.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/motion/mot_invn_icm20948.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/motion/mot_mpu9250.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/motion/mot_mpu9250.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/pwrmgnt/fg_lc709203f.cpp</name>
@@ -1239,11 +1499,6 @@
 			<name>src/sensors/agm_icm20948.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/agm_icm20948.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/sensors/agm_invn_icm20948.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/agm_invn_icm20948.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/sensors/agm_mpu9250.cpp</name>
@@ -1376,11 +1631,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/storage/stdfs_littlefs.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/display/fonts/CREDITS</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/display/fonts/CREDITS</locationURI>
-		</link>
-		<link>
 			<name>src/display/fonts/FreeMono</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -1394,11 +1644,6 @@
 			<name>src/display/fonts/FreeSerif</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
-		</link>
-		<link>
-			<name>src/display/fonts/SIL-License.txt</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/display/fonts/SIL-License.txt</locationURI>
 		</link>
 		<link>
 			<name>src/display/fonts/syst5x7.c</name>
@@ -1704,6 +1949,11 @@
 			<name>src/display/fonts/FreeSerif/FreeSerifIta8pt.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/display/fonts/FreeSerif/FreeSerifIta8pt.c</locationURI>
+		</link>
+		<link>
+			<name>src/start_llvm.c</name>
+			<type>1</type>
+			<locationURI>PARENT-1-PROJECT_LOC/src/start_llvm.c</locationURI>
 		</link>
 	</linkedResources>
 </projectDescription>

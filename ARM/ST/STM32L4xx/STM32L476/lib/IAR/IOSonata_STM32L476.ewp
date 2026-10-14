@@ -2156,10 +2156,13 @@
             </file>
         </group>
         <group>
-            <name>miscdev</name>
+            <name>audio</name>
             <file>
-                <name>$PROJ_DIR$\..\..\..\..\..\..\include\miscdev\buzzer.h</name>
+                <name>$PROJ_DIR$\..\..\..\..\..\..\include\audio\buzzer.h</name>
             </file>
+        </group>
+        <group>
+            <name>miscdev</name>
             <file>
                 <name>$PROJ_DIR$\..\..\..\..\..\..\include\miscdev\led.h</name>
             </file>
@@ -2358,8 +2361,9 @@
             <file>
                 <name>$PROJ_DIR$\..\..\..\..\..\..\src\coredev\i2c.cpp</name>
             </file>
+            
             <file>
-                <name>$PROJ_DIR$\..\..\..\src\iopincfg_stm32l4xx.c</name>
+                <name>$PROJ_DIR$\..\..\..\..\src\iopincfg_stm32.cpp</name>
             </file>
             <file>
                 <name>$PROJ_DIR$\..\..\..\..\..\..\src\coredev\spi.cpp</name>
@@ -2371,13 +2375,19 @@
                 <name>$PROJ_DIR$\..\..\..\..\..\..\src\coredev\timer.cpp</name>
             </file>
             <file>
-                <name>$PROJ_DIR$\..\..\..\src\timer_lptim_stm32l4xx.cpp</name>
+                <name>$PROJ_DIR$\..\..\..\..\src\timer_stm32.cpp</name>
+            </file>
+            <file>
+                <name>$PROJ_DIR$\..\..\..\..\src\timer_lptim_stm32.cpp</name>
+            </file>
+            <file>
+                <name>$PROJ_DIR$\..\..\..\..\src\timer_tim_stm32.cpp</name>
             </file>
             <file>
                 <name>$PROJ_DIR$\..\..\..\..\..\..\src\coredev\uart.c</name>
             </file>
             <file>
-                <name>$PROJ_DIR$\..\..\..\src\uart_stm32l4xx.cpp</name>
+                <name>$PROJ_DIR$\..\..\..\..\src\uart_stm32.cpp</name>
             </file>
         </group>
         <group>
@@ -2393,10 +2403,13 @@
             </file>
         </group>
         <group>
-            <name>miscdev</name>
+            <name>audio</name>
             <file>
-                <name>$PROJ_DIR$\..\..\..\..\..\..\src\miscdev\buzzer.cpp</name>
+                <name>$PROJ_DIR$\..\..\..\..\..\..\src\audio\buzzer.cpp</name>
             </file>
+        </group>
+        <group>
+            <name>miscdev</name>
             <file>
                 <name>$PROJ_DIR$\..\..\..\..\..\..\src\miscdev\led_apa102.cpp</name>
             </file>

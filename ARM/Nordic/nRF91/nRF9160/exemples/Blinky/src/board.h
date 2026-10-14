@@ -41,7 +41,51 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "blueio_board.h"
 
-// Nordic DK
+// Board selection, define one:
+//	NRF9160_DK		nRF9160 DK
+//	NORDIC_THINGY91	Nordic Thingy:91
+#define NRF9160_DK
+//#define NORDIC_THINGY91
+
+#if defined(NORDIC_THINGY91)
+// Button, active low
+#define BUT1_PORT		0
+#define BUT1_PIN		26
+#define BUT1_PINOP		0
+#define BUT1_SENSE		IOPINSENSE_LOW_TRANSITION
+#define BUT1_SENSE_INT	0
+#define BUT1_INT_PRIO	6
+
+// Lightwell RGB LED, red, green and blue, active high
+#define LED1_PORT		0
+#define LED1_PIN		29
+#define LED1_PINOP		0
+
+#define LED2_PORT		0
+#define LED2_PIN		30
+#define LED2_PINOP		0
+
+#define LED3_PORT		0
+#define LED3_PIN		31
+#define LED3_PINOP		0
+
+#define BUTTON_PINS_MAP		{ \
+	{BUT1_PORT, BUT1_PIN, BUT1_PINOP, IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL}, \
+}
+
+#define LED_PINS_MAP	{ \
+	{LED1_PORT, LED1_PIN, LED1_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL}, \
+	{LED2_PORT, LED2_PIN, LED2_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL}, \
+	{LED3_PORT, LED3_PIN, LED3_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL}, \
+}
+
+// The LED pins only: the other pins of the Thingy:91 run its sensors, the
+// UARTs to the nRF52840 and the nRF52840 reset (P0.10)
+#define PULSE_TRAIN_PINS_MAP	{ \
+	{0, 29, 0}, {0, 30, 0}, {0, 31, 0}, \
+}
+
+#elif defined(NRF9160_DK)
 // Button 1
 #define BUT1_PORT		0
 #define BUT1_PIN		6
@@ -96,4 +140,9 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 	{1, 8, 0}, {1, 9, 0}, {1, 10, 0}, {1, 11, 0}, {1, 12, 0}, {1, 13, 0}, {1, 14, 0}, {1, 15, 0}, \
 }
 
-#endif // __BOARD_H__
+#else
+#error "Select the board: NRF9160_DK or NORDIC_THINGY91"
+#endif
+
+#endif
+

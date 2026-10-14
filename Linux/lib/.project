@@ -396,9 +396,9 @@
 			<locationURI>PARENT-2-PROJECT_LOC/include/converters/dac_device.h</locationURI>
 		</link>
 		<link>
-			<name>include/miscdev/buzzer.h</name>
+			<name>include/audio/buzzer.h</name>
 			<type>1</type>
-			<locationURI>PARENT-2-PROJECT_LOC/include/miscdev/buzzer.h</locationURI>
+			<locationURI>PARENT-2-PROJECT_LOC/include/audio/buzzer.h</locationURI>
 		</link>
 		<link>
 			<name>include/miscdev/ledmx.h</name>

@@ -272,7 +272,7 @@
             <file>$PROJ_DIR$\..\..\..\..\..\..\include\coredev\i2c.h</file>
             <file>$PROJ_DIR$\..\..\..\..\..\..\include\coredev\uart.h</file>
             <file>$PROJ_DIR$\..\..\..\..\..\..\include\imu\mpu9250_dmpkey.h</file>
-            <file>$PROJ_DIR$\..\..\..\..\..\..\include\miscdev\buzzer.h</file>
+            <file>$PROJ_DIR$\..\..\..\..\..\..\include\audio\buzzer.h</file>
             <file>$PROJ_DIR$\..\..\..\..\..\..\include\miscdev\led.h</file>
             <file>$PROJ_DIR$\..\..\..\..\..\..\include\coredev\pdm.h</file>
             <file>$PROJ_DIR$\..\..\..\..\..\..\include\imu\mpu9250_dmpmap.h</file>
@@ -346,7 +346,7 @@
             <file>$PROJ_DIR$\..\..\..\..\..\..\src\imu\imu_mpu9250.cpp</file>
             <file>$PROJ_DIR$\..\..\..\..\..\..\src\imu\imu_invn_icm20948.cpp</file>
             <file>$PROJ_DIR$\..\..\..\..\..\..\src\miscdev\ledmxfont.c</file>
-            <file>$PROJ_DIR$\..\..\..\..\..\..\src\miscdev\buzzer.cpp</file>
+            <file>$PROJ_DIR$\..\..\..\..\..\..\src\audio\buzzer.cpp</file>
             <file>$PROJ_DIR$\..\..\..\..\..\..\..\external\nRF5_SDK\components\ble\peer_manager\peer_id.c</file>
             <file>$PROJ_DIR$\..\..\..\..\..\..\..\external\nRF5_SDK\components\ble\peer_manager\peer_manager.c</file>
             <file>$PROJ_DIR$\..\..\..\..\..\..\..\external\nRF5_SDK\components\ble\peer_manager\peer_manager_handler.c</file>
@@ -1628,7 +1628,7 @@
             </inputs>
         </file>
         <file>
-            <name>$PROJ_DIR$\..\..\..\..\..\..\src\miscdev\buzzer.cpp</name>
+            <name>$PROJ_DIR$\..\..\..\..\..\..\src\audio\buzzer.cpp</name>
             <outputs>
                 <tool>
                     <name>ICCARM</name>

@@ -42,6 +42,14 @@ SOFTWARE.
 #include <stdint.h>
 #include <stdbool.h>
 
+// The byte put, byte get and release are on the transfer path: keep them
+// inlined in every caller.
+#if defined(__GNUC__)
+#define CFIFO_INLINE		static inline __attribute__((always_inline))
+#else
+#define CFIFO_INLINE		static inline
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -93,9 +101,9 @@ typedef CFifo_t* hCFifo_t;
  * @param	BlkSize 		: Block size in bytes
  * @param   bBlocking  		: Behavior when FIFO is full.\n
  *                    			false - Old data will be pushed out to make place
- *                            		for new data. Put always succeed\n
- *                    			true  - New data will not be pushed in. Put will
- *                    					return fail.
+ *                            		for new data. Put and Resv always succeed\n
+ *                    			true  - New data will not be pushed in. Put and
+ *                    					Resv will return fail.
  *
  * 	@return CFifo Handle
  */
@@ -104,8 +112,9 @@ hCFifo_t CFifoInit(uint8_t * const pMemBlk, uint32_t TotalMemSize, uint32_t BlkS
 /**
  * @brief	Inspect the next FIFO block without consuming it.
  *
- * The returned pointer remains owned by the FIFO. A later non-blocking put may
- * overwrite it when the FIFO is full, so callers must not retain the pointer.
+ * The returned pointer remains owned by the FIFO. A later non-blocking put or
+ * reserve may overwrite it when the FIFO is full, so callers must not retain
+ * the pointer.
  * This is intended for checking a block header before deciding whether to
  * consume the block with CFifoGet().
  *
@@ -185,8 +194,10 @@ uint8_t *CFifoPutMultiple(hCFifo_t const hFifo, int *pCnt);
  * until the producer publishes it with CFifoPut, which returns this same
  * block. Lets a DMA fill the block in place before it is published.
  * Single producer only: two callers reserving at once receive the same block.
- * A full FIFO returns NULL in either mode, leaving existing data untouched.
- * CFifoPut still discards the oldest block when the FIFO is non-blocking.
+ * Full FIFO, same as CFifoPut: blocking returns NULL, non-blocking drops the
+ * oldest block and returns the freed one. The block stays dropped even if the
+ * reservation is never published. Reserving again before publishing returns
+ * the same block without dropping another.
  *
  * @param	hFifo : CFIFO handle
  *
@@ -200,7 +211,9 @@ uint8_t *CFifoResv(hCFifo_t const hFifo);
  * Put-side counterpart of CFifoPeekMultiple. Reserve the most that could be
  * written, fill some or all of it, then publish the count actually written
  * with CFifoPutMultiple, which returns this same address. Single producer only.
- * A full FIFO returns NULL in either mode without discarding data.
+ * Full FIFO, same as CFifoPutMultiple: blocking returns NULL, non-blocking
+ * drops up to *pCnt of the oldest blocks and returns the freed ones. Dropped
+ * blocks stay dropped when fewer are published.
  *
  * @param	hFifo : CFIFO handle
  * @param	pCnt  : Number of blocks wanted\n
@@ -253,6 +266,134 @@ static inline uint32_t CFifoBlockSize(hCFifo_t const hFifo) { return hFifo->BlkS
  * 			wait, false when a full FIFO pushes out the oldest data instead
  */
 static inline bool CFifoIsBlocking(hCFifo_t const hFifo) { return hFifo->bBlocking; }
+
+/**
+ * @brief	Put one byte. One producer.
+ *
+ * For a FIFO of 1-byte blocks. The byte is written before PutIdx is advanced,
+ * so the consumer never reads a block that is not written yet and the caller
+ * does not need to disable interrupts. A full blocking FIFO refuses the byte.
+ * A full non-blocking FIFO drops the oldest block first, as CFifoPut does.
+ *
+ * @param	hFifo : CFIFO handle
+ * @param	Data  : Byte to put
+ *
+ * @return	true - byte put\n
+ * 			false - FIFO full, blocking FIFO
+ */
+CFIFO_INLINE bool CFifoPutByte(hCFifo_t const hFifo, uint8_t Data)
+{
+	if (hFifo == NULL)
+	{
+		return false;
+	}
+
+	uint32_t max = (uint32_t)hFifo->MaxIdxCnt;
+	uint32_t put = __atomic_load_n(&hFifo->PutIdx, __ATOMIC_RELAXED);
+
+	if (put - __atomic_load_n(&hFifo->GetIdx, __ATOMIC_ACQUIRE) >= max)
+	{
+		if (hFifo->bBlocking)
+		{
+			return false;
+		}
+		if (CFifoGet(hFifo) != NULL)
+		{
+			// Only the producer counts drops
+			__atomic_store_n(&hFifo->DropCnt,
+				__atomic_load_n(&hFifo->DropCnt, __ATOMIC_RELAXED) + 1U,
+				__ATOMIC_RELAXED);
+		}
+	}
+	hFifo->pMemStart[hFifo->Mask != 0U ? (put & hFifo->Mask) : (put % max)] = Data;
+	__atomic_store_n(&hFifo->PutIdx, put + 1U, __ATOMIC_RELEASE);
+
+	return true;
+}
+
+/**
+ * @brief	Get one byte. One consumer.
+ *
+ * For a FIFO of 1-byte blocks. In a blocking FIFO only the consumer moves
+ * GetIdx: the byte is read first, then GetIdx is advanced. A non-blocking
+ * FIFO goes through CFifoGet because its producer may drop the oldest block
+ * at the same time.
+ *
+ * @param	hFifo : CFIFO handle
+ *
+ * @return	The byte, or -1 when the FIFO is empty
+ */
+CFIFO_INLINE int CFifoGetByte(hCFifo_t const hFifo)
+{
+	if (hFifo == NULL)
+	{
+		return -1;
+	}
+	if (!hFifo->bBlocking)
+	{
+		uint8_t *p = CFifoGet(hFifo);
+
+		return p != NULL ? *p : -1;
+	}
+
+	uint32_t get = __atomic_load_n(&hFifo->GetIdx, __ATOMIC_RELAXED);
+
+	if (get == __atomic_load_n(&hFifo->PutIdx, __ATOMIC_ACQUIRE))
+	{
+		return -1;
+	}
+
+	uint32_t max = (uint32_t)hFifo->MaxIdxCnt;
+	int c = hFifo->pMemStart[hFifo->Mask != 0U ? (get & hFifo->Mask) : (get % max)];
+
+	__atomic_store_n(&hFifo->GetIdx, get + 1U, __ATOMIC_RELEASE);
+
+	return c;
+}
+
+/**
+ * @brief	Release blocks read in place. One consumer.
+ *
+ * Frees Cnt blocks returned by CFifoPeekMultiple once their content is no
+ * longer needed, for example after a DMA transfer from the FIFO memory.
+ * Never releases more than the used blocks. A non-blocking FIFO goes through
+ * CFifoGetMultiple because its producer may drop the oldest blocks at the
+ * same time.
+ *
+ * @param	hFifo : CFIFO handle
+ * @param	Cnt   : Number of blocks to release
+ */
+CFIFO_INLINE void CFifoRelease(hCFifo_t const hFifo, int Cnt)
+{
+	if (hFifo == NULL || Cnt <= 0)
+	{
+		return;
+	}
+	if (!hFifo->bBlocking)
+	{
+		while (Cnt > 0)
+		{
+			// Stops at the end of the FIFO memory, the rest from the start
+			int l = Cnt;
+
+			if (CFifoGetMultiple(hFifo, &l) == NULL)
+			{
+				break;
+			}
+			Cnt -= l;
+		}
+		return;
+	}
+
+	uint32_t get = __atomic_load_n(&hFifo->GetIdx, __ATOMIC_RELAXED);
+	uint32_t used = __atomic_load_n(&hFifo->PutIdx, __ATOMIC_RELAXED) - get;
+
+	if ((uint32_t)Cnt > used)
+	{
+		Cnt = (int)used;
+	}
+	__atomic_store_n(&hFifo->GetIdx, get + (uint32_t)Cnt, __ATOMIC_RELEASE);
+}
 
 #ifdef __cplusplus
 }

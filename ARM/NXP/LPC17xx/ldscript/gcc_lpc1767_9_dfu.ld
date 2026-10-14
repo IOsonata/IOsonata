@@ -5,9 +5,8 @@
  * the layout the stage 0 boot shares. An image that outgrows slot 0 fails to
  * link.
  *
- * .data_RAMAHB goes after .data here, not first as in gcc_lpc1767_9.ld: its
- * load image in FLASH would otherwise come before the vector table, which
- * has to be at the start of slot 0.
+ * .data_RAMAHB goes after .data so its load image cannot precede the
+ * vector table at the start of slot 0.
  */
 
 OUTPUT_FORMAT ("elf32-littlearm", "elf32-bigarm", "elf32-littlearm")
@@ -56,3 +55,10 @@ SECTIONS
 } INSERT AFTER .data;
 
 INCLUDE "gcc_arm_flash.ld"
+
+/* Cortex-M3 vector words 1 through 6 contain Thumb handler addresses. */
+__valid_user_code_checksum = 0 - (__StackTop + (ResetEntry + 1) +
+	(NMI_Handler + 1) + (HardFault_Handler + 1) + (MemManage_Handler + 1) +
+	(BusFault_Handler + 1) + (UsageFault_Handler + 1));
+
+ASSERT(ADDR(.ivector) == ORIGIN(FLASH), "LPC vectors must start the image")

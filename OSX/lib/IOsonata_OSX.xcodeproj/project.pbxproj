@@ -212,6 +212,7 @@
 				406FC6FF233A00C400106BCA /* coredev */,
 				406FC706233A00C400106BCA /* diskio_flash.h */,
 				406FC707233A00C400106BCA /* convutil.h */,
+				CF611F3A0000000000000001 /* audio */,
 				406FC708233A00C400106BCA /* miscdev */,
 				406FC711233A00C400106BCA /* utf8cvt.h */,
 				406FC715233A00C400106BCA /* intelhex.h */,
@@ -247,6 +248,14 @@
 			path = coredev;
 			sourceTree = "<group>";
 		};
+		CF611F3A0000000000000001 /* audio */ = {
+			isa = PBXGroup;
+			children = (
+				406FC70F233A00C400106BCA /* buzzer.h */,
+			);
+			path = audio;
+			sourceTree = "<group>";
+		};
 		406FC708233A00C400106BCA /* miscdev */ = {
 			isa = PBXGroup;
 			children = (
@@ -256,7 +265,6 @@
 				406FC70C233A00C400106BCA /* ledmx.h */,
 				406FC70D233A00C400106BCA /* led.h */,
 				406FC70E233A00C400106BCA /* led_ncp5623b.h */,
-				406FC70F233A00C400106BCA /* buzzer.h */,
 				406FC710233A00C400106BCA /* tca6424a.h */,
 			);
 			path = miscdev;

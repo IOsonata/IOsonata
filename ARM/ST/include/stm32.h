@@ -9,17 +9,32 @@
 
 		This is not a HAL header. It only selects the CMSIS register definitions.
 
-		Supported IOsonata STM32 families:
-			STM32F0xx
-			STM32F4xx
-			STM32L4xx / STM32L4+
-			STM32WBxx
-			STM32WBAxx
-
 @author	Hoang Nguyen Hoan
-@date	Jul 2026
+@date	July 2026
 
-@license MIT, (c) 2026 I-SYST.
+@license
+
+MIT License
+
+Copyright (c) 2026, I-SYST inc., all rights reserved
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 ----------------------------------------------------------------------------*/
 #ifndef __IOSONATA_STM32_H__
 #define __IOSONATA_STM32_H__
@@ -50,13 +65,21 @@
 #define IOSONATA_STM32_L4		1
 #include "stm32l4xx.h"
 
+#elif defined(STM32G411xB) || defined(STM32G411xC) || defined(STM32G414xx) || defined(STM32G431xx) || \
+	defined(STM32G441xx) || defined(STM32G471xx) || defined(STM32G473xx) || defined(STM32G474xx) || \
+	defined(STM32G483xx) || defined(STM32G484xx) || defined(STM32G491xx) || defined(STM32G4A1xx) || \
+	defined(STM32GBK1CB) || defined(STM32G4)
+#define IOSONATA_STM32_G4		1
+#include "stm32g4xx.h"
+
 #elif defined(STM32WB10xx) || defined(STM32WB15xx) || defined(STM32WB30xx) || defined(STM32WB35xx) || \
 	defined(STM32WB50xx) || defined(STM32WB55xx) || defined(STM32WB5Mxx) || defined(STM32WB)
 #define IOSONATA_STM32_WB		1
 #include "stm32wbxx.h"
 
 #elif defined(STM32WBA) || defined(STM32WBA50xx) || defined(STM32WBA52xx) || defined(STM32WBA54xx) || \
-	defined(STM32WBA55xx) || defined(STM32WBA5Mxx) || defined(STM32WBA6xx)
+	defined(STM32WBA55xx) || defined(STM32WBA5Mxx) || defined(STM32WBA6xx) || \
+    defined(STM32WBA62xx) || defined(STM32WBA63xx) || defined(STM32WBA64xx) || defined(STM32WBA65xx) || defined(STM32WBA6Mxx)
 #define IOSONATA_STM32_WBA		1
 #include "stm32wbaxx.h"
 

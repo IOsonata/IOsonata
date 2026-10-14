@@ -36,7 +36,7 @@ SOFTWARE.
 ----------------------------------------------------------------------------*/
 #include <stdint.h>
 #include <string.h>
-#include <stdatomic.h>
+#include <atomic>
 #include <new>
 
 #include "crypto/crypto_uecc.h"
@@ -55,7 +55,7 @@ static void UeccWipe(void *pData, size_t Len)
 	}
 }
 
-static atomic_flag s_UeccBusy = ATOMIC_FLAG_INIT;
+static std::atomic_flag s_UeccBusy = ATOMIC_FLAG_INIT;
 static RngEngine *s_pActiveRng;
 static uECC_RNG_Function s_PreviousRng;
 static CRYPTO_STATUS s_UeccRngStatus;
@@ -73,7 +73,7 @@ static int UeccRngAdapter(uint8_t *pDest, unsigned Size)
 
 static CRYPTO_STATUS UeccBegin(RngEngine *pRng, bool bNeedRng)
 {
-	if (atomic_flag_test_and_set(&s_UeccBusy))
+	if (std::atomic_flag_test_and_set(&s_UeccBusy))
 	{
 		return CRYPTO_STATUS_BUSY;
 	}
@@ -82,7 +82,7 @@ static CRYPTO_STATUS UeccBegin(RngEngine *pRng, bool bNeedRng)
 	if (bNeedRng && (pRng == nullptr || !pRng->IsSecure()))
 	{
 		s_PreviousRng = nullptr;
-		atomic_flag_clear(&s_UeccBusy);
+		std::atomic_flag_clear(&s_UeccBusy);
 		return CRYPTO_STATUS_UNSUPPORTED;
 	}
 
@@ -99,7 +99,7 @@ static CRYPTO_STATUS UeccEnd(void)
 	s_PreviousRng = nullptr;
 	s_pActiveRng = nullptr;
 	s_UeccRngStatus = CRYPTO_STATUS_OK;
-	atomic_flag_clear(&s_UeccBusy);
+	std::atomic_flag_clear(&s_UeccBusy);
 	return status;
 }
 

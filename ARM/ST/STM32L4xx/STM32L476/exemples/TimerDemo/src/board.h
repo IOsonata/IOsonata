@@ -39,45 +39,37 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #ifndef __BOARD_H__
 #define __BOARD_H__
 
-// *** STM32L476G-DISCO
-// LED4
-#define LED1_PORT		1
-#define LED1_PIN		2
-#define LED1_PINOP		0
+// Board, one of the names in stm32_boards.h. This STM32L476 project builds for
+// STM32L476G_DISCO and B_L475E_IOT01A (STM32L475VG).
+#define BOARD				B_L475E_IOT01A
 
-// LED5
-#define LED2_PORT		4
-#define LED2_PIN		8
-#define LED2_PINOP		0
+#include "stm32_boards.h"
 
-#define LED_PINS_MAP	{ \
-	{LED1_PORT, LED1_PIN, LED1_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL}, \
-	{LED2_PORT, LED2_PIN, LED2_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL}, \
-}
+// LD1 green PA5 toggles on trigger 0, LD2 green PB14 on trigger 1
+#define LED_PINS_MAP		BOARD_LED_PINS
 
-// *** STM32L476G-DISCO
-#define UART_DEVNO			1
-#define UART_RX_PORT		3
-#define UART_RX_PIN			6
-#define UART_RX_PINOP		(0x72)
+// Timer DevNo 0 LPTIM1, 1 LPTIM2, 2 TIM6, 3 TIM7, 4 TIM16, 5 TIM17, 6 TIM15,
+// 7 TIM2, 8 TIM3, 9 TIM4, 10 TIM5, 11 TIM1, 12 TIM8. An LPTIM runs from the
+// LSE (g_McuOsc default) at the highest frequency, 32768 Hz, one compare
+// trigger: 100 ms. A TIM runs from the APB timer clock at 100 kHz, with up
+// to 4 triggers: 100 ms, 1 s, 250 ms, 500 ms.
+#ifndef TIMER_DEMO_DEVNO
+#define TIMER_DEMO_DEVNO	0
+#endif
+// 100 kHz on a TIM: the trigger of the basic timers TIM6 and TIM7 is one
+// counter period, 65536 ticks at most. An LPTIM takes the closest frequency
+// it makes, 32768 Hz.
+#define TIMER_DEMO_FREQ		100000
 
-#define UART_TX_PORT		3
-#define UART_TX_PIN			5
-#define UART_TX_PINOP		(0x72)
-
-#define UART_CTS_PORT		-1
-#define UART_CTS_PIN		-1
-#define UART_CTS_PINOP		0
-#define UART_RTS_PORT		-1
-#define UART_RTS_PIN		-1
-#define UART_RTS_PINOP		0
-
-#define UART_PINS			{ \
-	{UART_RX_PORT, UART_RX_PIN, UART_RX_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},\
-	{UART_TX_PORT, UART_TX_PIN, UART_TX_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},\
-	{UART_CTS_PORT, UART_CTS_PIN, UART_CTS_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},\
-	{UART_RTS_PORT, UART_RTS_PIN, UART_RTS_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},\
-}
+// Output on the ST-LINK virtual COM port, 115200 8N1: USART1 (DevNo 1) RX
+// PB7, TX PB6, AF7, the BOARD_VCP_PINS of stm32_boards.h
+#define TIMER_DEMO_UART
+#define UART_DEVNO			BOARD_VCP_DEVNO
+#define UART_RX_PORT		IOPORTB
+#define UART_RX_PIN			7
+#define UART_RX_PINOP		IOPINOP_FUNC7
+#define UART_TX_PORT		IOPORTB
+#define UART_TX_PIN			6
+#define UART_TX_PINOP		IOPINOP_FUNC7
 
 #endif // __BOARD_H__
-

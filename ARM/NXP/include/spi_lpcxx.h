@@ -39,6 +39,7 @@ Hoan				Feb. 20, 2015	New EHAL
 #include <string.h>
 
 #include "coredev/spi.h"
+#include "spi_lpc_target.h"
 
 #define LPC_PCLKSEL1_SSP0_MASK	(3 << 10)	// On PCLKSEL1
 #define LPC_PCLKSEL1_SSP0_DIV1	(1 << 10)
@@ -81,32 +82,23 @@ Hoan				Feb. 20, 2015	New EHAL
 #define LPCSSP_SR_BSY 			0x10	// Busy. This bit is 1 if it is currently sending/receiving a frame
 										// and/or the Tx FIFO is not empty
 
-typedef struct {                  		/*!< (@ 0x40040000) SSP0 Structure         */
-	volatile uint32_t CR0;             	/*!< (@ 0x40040000) Control Register 0. Selects the serial clock rate, bus type, and data size. */
-	volatile uint32_t CR1;              /*!< (@ 0x40040004) Control Register 1. Selects master/slave and other modes. */
-	volatile uint32_t DR;				/*!< (@ 0x40040008) Data Register. Writes fill the transmit FIFO, and reads empty the receive FIFO. */
-	volatile uint32_t SR;             	/*!< (@ 0x4004000C) Status Register        */
-	volatile uint32_t CPSR;           	/*!< (@ 0x40040010) Clock Prescale Register */
-	volatile uint32_t IMSC;         	/*!< (@ 0x40040014) Interrupt Mask Set and Clear Register */
-	volatile uint32_t RIS;              /*!< (@ 0x40040018) Raw Interrupt Status Register */
-	volatile uint32_t MIS;              /*!< (@ 0x4004001C) Masked Interrupt Status Register */
-	volatile uint32_t ICR;              /*!< (@ 0x40040020) SSPICR Interrupt Clear Register */
-} LPCSSPREG;
-
-
 typedef struct {
 	int 		DevNo;			// SSP device number
 	uint32_t	PClkFreq;		// Peripheral clock freq in Hz
-	LPCSSPREG 	*pSspReg;
+	LpcSSPReg_t	*pSspReg;
 	SPIDev_t		*pSpiDev;		// Pointer to generic SPI dev. data
+	bool bEnabled;
+	bool bSelected;
+	bool bError;
 } SSPDEV;
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-static inline void LpcSSPDisable(DevIntrf_t *pDev) {}
-static inline void LpcSSPEnable(DevIntrf_t *pDev) {}
+void LpcSSPDisable(DevIntrf_t *pDev);
+void LpcSSPEnable(DevIntrf_t *pDev);
+void *LpcSSPGetHandle(DevIntrf_t *pDev);
 
 // Get current data rate in bits/sec (Hz)
 uint32_t LpcSSPGetRate(DevIntrf_t *pDev);
@@ -141,4 +133,5 @@ bool LpcSSPWaitTxFifo(SSPDEV *pDev, int TimeoutCnt);
 #endif // __cplusplus
 
 #endif // __LPCSSP_H__
+
 

@@ -49,8 +49,14 @@ SOFTWARE.
 #define GNSS_NRF91_PERIOD_MAX		65535U
 #define GNSS_NRF91_TIMEOUT_MAX		65535U
 
-// Longest response of AT%XSYSTEMMODE? and AT+CFUN?
+// Longest response of AT%XSYSTEMMODE?, AT+CFUN? and AT+CGMR
 #define GNSS_NRF91_RESP_LEN			64
+
+// nRF9160 modem firmware: the Modem library takes GNSS requests from 1.3.4 on
+#define GNSS_NRF91_FW_NRF9160		"mfw_nrf9160_"
+#define GNSS_NRF91_FW_MIN			((1U << 16) | (3U << 8) | 4U)
+#define GNSS_NRF91_FW_FIELDS		3
+#define GNSS_NRF91_FW_FIELD_MAX		255
 
 // Fields of %XSYSTEMMODE: LTE-M, NB-IoT, GNSS, LTE preference
 #define GNSS_NRF91_SYSMODE_FIELDS	4
@@ -145,6 +151,47 @@ bool GnssNrf91::AtRead(const char *pCmd, const char *pPrefix, int *pVal, int NbV
 	return true;
 }
 
+// false for an nRF9160 modem firmware older than 1.3.4. Revision 1 of the
+// nRF9160 runs at most 1.2.8: the Modem library refuses its GNSS settings and
+// no position data arrives. Other firmware, nRF91x1 and nRF9151, passes.
+bool GnssNrf91::FwSupported()
+{
+	char resp[GNSS_NRF91_RESP_LEN];
+	const char *cmd = "AT+CGMR";
+
+	if (vpIntrf->Read(MODEM_IPC_ADDR_AT, (const uint8_t *)cmd, (int)strlen(cmd), (uint8_t *)resp,
+					  sizeof(resp)) <= 0)
+	{
+		return false;
+	}
+
+	char *p = strstr(resp, GNSS_NRF91_FW_NRF9160);
+
+	if (p == nullptr)
+	{
+		return true;
+	}
+	p += strlen(GNSS_NRF91_FW_NRF9160);
+
+	uint32_t ver = 0;
+
+	for (int i = 0; i < GNSS_NRF91_FW_FIELDS; i++)
+	{
+		char *e;
+		long v = strtol(p, &e, 10);
+
+		// A version written another way is left to the receiver commands
+		if (e == p || v < 0 || v > GNSS_NRF91_FW_FIELD_MAX || (i < GNSS_NRF91_FW_FIELDS - 1 && *e != '.'))
+		{
+			return true;
+		}
+		ver = (ver << 8) | (uint32_t)v;
+		p = e + 1;
+	}
+
+	return ver >= GNSS_NRF91_FW_MIN;
+}
+
 bool GnssNrf91::Init(const GnssCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer)
 {
 	uint32_t sys = Cfg.SysMask;
@@ -165,6 +212,11 @@ bool GnssNrf91::Init(const GnssCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * c
 	}
 
 	Valid(false);
+
+	if (FwSupported() == false)
+	{
+		return false;
+	}
 
 	// GNSS in the system mode: added while the modem is off, required when
 	// it runs
@@ -241,9 +293,11 @@ bool GnssNrf91::Enable()
 	// leaves the receiver to be stopped before it starts again.
 	(void)GnssCmd(MODEM_IPC_GNSS_STOP, 0, 0);
 
+	// The fix retry limits a single or a periodic fix, it has no effect on
+	// a fix every second
 	if (AtCmd("AT+CFUN=31") == false ||
 		(mask != 0 && GnssCmd(MODEM_IPC_GNSS_SIGNAL, mask, 1) == false) ||
-		GnssCmd(MODEM_IPC_GNSS_FIX_RETRY, vCfg.FixTimeout, 2) == false ||
+		(vCfg.FixInterval != 1 && GnssCmd(MODEM_IPC_GNSS_FIX_RETRY, vCfg.FixTimeout, 2) == false) ||
 		GnssCmd(MODEM_IPC_GNSS_FIX_INTERVAL, vCfg.FixInterval, 2) == false ||
 		GnssCmd(MODEM_IPC_GNSS_START, 0, 0) == false)
 	{

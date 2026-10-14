@@ -40,6 +40,23 @@ extern unsigned long __StackTop;
 extern void ResetEntry(void);
 
 void DEF_IRQHandler(void) { while(1); }
+
+// Timer vectors. With the timer driver linked (TimerInit), Stm32TimerVector
+// runs Stm32TimerIRQHandler for the interrupt being serviced, the exception
+// number in SCB ICSR VECTACTIVE less 16. TimerInit refuses a timer whose
+// vector is replaced by an application handler.
+__attribute__((weak)) void Stm32TimerIRQHandler(int IrqNo);
+void Stm32TimerVector(void)
+{
+	if (Stm32TimerIRQHandler)
+	{
+		Stm32TimerIRQHandler((int)(*(volatile uint32_t *)0xE000ED04 & 0x1FFU) - 16);
+	}
+	else
+	{
+		DEF_IRQHandler();
+	}
+}
 __attribute__((weak, alias("DEF_IRQHandler"))) void NMI_Handler(void);
 __attribute__((weak/*, alias("DEF_IRQHandler")*/)) void HardFault_Handler(void) { while(1); }
 __attribute__((weak, alias("DEF_IRQHandler"))) void SVC_Handler(void);
@@ -56,72 +73,20 @@ __attribute__((weak, alias("DEF_IRQHandler"))) void DMA1_Channel1_IRQHandler(voi
 __attribute__((weak, alias("DEF_IRQHandler"))) void DMA1_Channel2_3_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void DMA1_Channel4_5_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void ADC1_IRQHandler(void);
-
-
-
-
-
-
-
-
+__attribute__((weak, alias("Stm32TimerVector"))) void TIM1_BRK_UP_TRG_COM_IRQHandler(void);
+__attribute__((weak, alias("Stm32TimerVector"))) void TIM1_CC_IRQHandler(void);
+__attribute__((weak, alias("Stm32TimerVector"))) void TIM3_IRQHandler(void);
+__attribute__((weak, alias("Stm32TimerVector"))) void TIM6_IRQHandler(void);
+__attribute__((weak, alias("Stm32TimerVector"))) void TIM14_IRQHandler(void);
+__attribute__((weak, alias("Stm32TimerVector"))) void TIM15_IRQHandler(void);
+__attribute__((weak, alias("Stm32TimerVector"))) void TIM16_IRQHandler(void);
+__attribute__((weak, alias("Stm32TimerVector"))) void TIM17_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void I2C1_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void I2C2_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void SPI1_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void SPI2_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void USART1_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void USART2_IRQHandler(void);
-
-// Weak dispatch reference does not pull the timer backend into applications
-// that only use SysTick. Strong application IRQ handlers remain overridable.
-extern void STM32F030TimerIRQHandler(int DevNo) __attribute__((weak));
-void STM32F030_TIM6_IRQHandler(void)
-{
-	if (STM32F030TimerIRQHandler) STM32F030TimerIRQHandler(0);
-	else DEF_IRQHandler();
-}
-__attribute__((weak, alias("STM32F030_TIM6_IRQHandler"))) void TIM6_IRQHandler(void);
-void STM32F030_TIM14_IRQHandler(void)
-{
-	if (STM32F030TimerIRQHandler) STM32F030TimerIRQHandler(1);
-	else DEF_IRQHandler();
-}
-__attribute__((weak, alias("STM32F030_TIM14_IRQHandler"))) void TIM14_IRQHandler(void);
-void STM32F030_TIM16_IRQHandler(void)
-{
-	if (STM32F030TimerIRQHandler) STM32F030TimerIRQHandler(2);
-	else DEF_IRQHandler();
-}
-__attribute__((weak, alias("STM32F030_TIM16_IRQHandler"))) void TIM16_IRQHandler(void);
-void STM32F030_TIM17_IRQHandler(void)
-{
-	if (STM32F030TimerIRQHandler) STM32F030TimerIRQHandler(3);
-	else DEF_IRQHandler();
-}
-__attribute__((weak, alias("STM32F030_TIM17_IRQHandler"))) void TIM17_IRQHandler(void);
-void STM32F030_TIM15_IRQHandler(void)
-{
-	if (STM32F030TimerIRQHandler) STM32F030TimerIRQHandler(4);
-	else DEF_IRQHandler();
-}
-__attribute__((weak, alias("STM32F030_TIM15_IRQHandler"))) void TIM15_IRQHandler(void);
-void STM32F030_TIM3_IRQHandler(void)
-{
-	if (STM32F030TimerIRQHandler) STM32F030TimerIRQHandler(5);
-	else DEF_IRQHandler();
-}
-__attribute__((weak, alias("STM32F030_TIM3_IRQHandler"))) void TIM3_IRQHandler(void);
-void STM32F030_TIM1_BRK_UP_TRG_COM_IRQHandler(void)
-{
-	if (STM32F030TimerIRQHandler) STM32F030TimerIRQHandler(6);
-	else DEF_IRQHandler();
-}
-__attribute__((weak, alias("STM32F030_TIM1_BRK_UP_TRG_COM_IRQHandler"))) void TIM1_BRK_UP_TRG_COM_IRQHandler(void);
-void STM32F030_TIM1_CC_IRQHandler(void)
-{
-	if (STM32F030TimerIRQHandler) STM32F030TimerIRQHandler(6);
-	else DEF_IRQHandler();
-}
-__attribute__((weak, alias("STM32F030_TIM1_CC_IRQHandler"))) void TIM1_CC_IRQHandler(void);
 
 /**
  * This interrupt vector is by default located in FLASH. Though it can not be

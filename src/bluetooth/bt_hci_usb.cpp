@@ -371,17 +371,16 @@ static bool BtHciUsbSetInterface(BtHciUsbDev_t *pHci,
 		{
 			return false;
 		}
-		if (Alt == pHci->HciAlt)
-		{
-			return true;
-		}
-		if (pHci->ScoAlt != 0U)
+		if (Alt != pHci->HciAlt && pHci->ScoAlt != 0U)
 		{
 			return false;
 		}
 
 		const uint8_t oldAlt = pHci->HciAlt;
 		const uint32_t state = DisableInterrupt();
+		// SET_INTERFACE resets endpoint state even when the alternate is
+		// unchanged. Reopen to reset hardware toggles and restart retained
+		// packets from their headers when the host opens a new session.
 		// Close may synchronously cancel an endpoint on some controllers.
 		// Keep callbacks and writers out until the new endpoints are ready.
 		pHci->Configured = false;
@@ -1640,7 +1639,9 @@ static bool BtHciUsbInitInternal(BtHciUsbDev_t * const pHci,
 	UsbdEpAllocReq_t req = {};
 	req.InterfaceCount = 2U;
 	req.BidirectionalCount = 1U;
+	req.BidirectionalType = USB_ENDPATT_TRANS_BULK;
 	req.InCount = 1U;
+	req.InType = USB_ENDPATT_TRANS_INT;
 
 	UsbdEpAllocRes_t alloc = {};
 	uint8_t scoEp = 0U;
@@ -1757,4 +1758,6 @@ void BtHciUsb::Reset()
 {
 	BtHciUsbReset(&vBtHciUsb);
 }
+
+
 

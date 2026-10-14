@@ -161,6 +161,36 @@
 			<locationURI>PARENT-7-PROJECT_LOC/src/device_intrf.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/coredev</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/uart.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/src/coredev/uart.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/uart_stm32.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/src/uart_stm32.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/timer.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/src/coredev/timer.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/timer_stm32.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/src/timer_stm32.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/timer_tim_stm32.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/src/timer_tim_stm32.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/slip_intrf.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/src/slip_intrf.cpp</locationURI>
@@ -235,5 +265,7 @@
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/ARM/src/iatomic.c</locationURI>
 		</link>
+			<link><name>include/iopinctrl.h</name><type>1</type><locationURI>PARENT-5-PROJECT_LOC/include/iopinctrl.h</locationURI></link>
+			<link><name>src/iopincfg_stm32.cpp</name><type>1</type><locationURI>PARENT-5-PROJECT_LOC/src/iopincfg_stm32.cpp</locationURI></link>
 	</linkedResources>
 </projectDescription>

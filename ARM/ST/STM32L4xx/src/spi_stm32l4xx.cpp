@@ -46,12 +46,23 @@ bool STM32L4xxOctoSPIInit(SPIDev_t * const pDev, const SPICFG *pCfgData);
 bool STM32L4xxQuadSPIInit(SPIDev_t * const pDev, const SPICFG *pCfgData);
 #endif
 
+// SPI2 and SPI3 have adjacent enable and reset bits, the code shifts from the
+// SPI2 bit. STM32L43x/L44x have no SPI2 and their header does not name it.
+#ifndef RCC_APB1ENR1_SPI2EN
+#define RCC_APB1ENR1_SPI2EN			(RCC_APB1ENR1_SPI3EN >> 1)
+#define RCC_APB1RSTR1_SPI2RST		(RCC_APB1RSTR1_SPI3RST >> 1)
+#endif
+
 STM32L4XX_SPIDev_t s_STM32L4xxSPIDev[STM32L4XX_SPI_MAXDEV] = {
 	{
 		.DevNo = 0, .pSpiDev = NULL, .pReg = SPI1
 	},
 	{
+#ifdef SPI2
 		.DevNo = 1, .pSpiDev = NULL, .pReg = SPI2
+#else
+		.DevNo = 1, .pSpiDev = NULL, .pReg = NULL	// STM32L43x/L44x have no SPI2
+#endif
 	},
 	{
 		.DevNo = 2, .pSpiDev = NULL, .pReg = SPI3
@@ -636,6 +647,12 @@ bool SPIInit(SPIDEV * const pDev, const SPICFG *pCfgData)
 		return false;
 	}
 
+	// Instance not present on this MCU
+	if (s_STM32L4xxSPIDev[pCfgData->DevNo].pReg == NULL)
+	{
+		return false;
+	}
+
 	if (pCfgData->DevNo >= STM32L4XX_SPI_DEV_COUNT &&
 		(pCfgData->Mode != SPIMODE_MASTER || pCfgData->bIntEn || pCfgData->bDmaEn))
 	{
@@ -690,11 +707,13 @@ bool SPIInit(SPIDEV * const pDev, const SPICFG *pCfgData)
                 NVIC_SetPriority(SPI1_IRQn, pCfgData->IntPrio);
                 NVIC_EnableIRQ(SPI1_IRQn);
                 break;
+#ifdef SPI2
     	    case 1:
                 NVIC_ClearPendingIRQ(SPI2_IRQn);
                 NVIC_SetPriority(SPI2_IRQn, pCfgData->IntPrio);
                 NVIC_EnableIRQ(SPI2_IRQn);
                 break;
+#endif
     	    case 2:
                 NVIC_ClearPendingIRQ(SPI3_IRQn);
                 NVIC_SetPriority(SPI3_IRQn, pCfgData->IntPrio);
@@ -730,11 +749,13 @@ extern "C" void SPI1_IRQHandler(void)
     NVIC_ClearPendingIRQ(SPI1_IRQn);
 }
 
+#ifdef SPI2
 extern "C" void SPI2_IRQHandler(void)
 {
 	SPIIrqHandler(1);
     NVIC_ClearPendingIRQ(SPI2_IRQn);
 }
+#endif
 
 extern "C" void SPI3_IRQHandler(void)
 {

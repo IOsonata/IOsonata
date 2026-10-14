@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "mcu": "LPC54628",
+  "cpu": "cortex-m4",
+  "fpu": true,
+  "fpu_unit": "fpv4spd16",
+  "defines": [
+    "LPC54628_SERIES"
+  ],
+  "includes": [
+    "${iosonata}/ARM/NXP/include",
+    "${iosonata}/ARM/NXP/LPC546xx/include",
+    "${iosonata}/ARM/NXP/LPC546xx/LPC54628/lib/include"
+  ],
+  "linker_script": "${iosonata}/ARM/NXP/LPC546xx/ldscript/gcc_lpc54628.ld",
+  "lib_path": "${iosonata}/ARM/NXP/LPC546xx/LPC54628/lib/ioc/${config}",
+  "lib": "IOsonata_LPC54628"
+}

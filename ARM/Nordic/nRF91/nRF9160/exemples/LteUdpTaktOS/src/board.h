@@ -2,8 +2,11 @@
 @example	board.h
 
 @brief	Board specific definitions, LTE UDP with TaktOS on the nRF9160 DK
+or the Nordic Thingy:91
 
-The console is the nRF9160 UART0 on the interface MCU VCOM port.
+The console is the nRF9160 UART0, the SysLog output: on the nRF9160 DK the
+interface MCU VCOM0 port, on the Thingy:91 the first USB serial port of its
+nRF52840. Select the board below.
 
 @author	Hoang Nguyen Hoan
 @date	Oct. 6, 2026
@@ -38,13 +41,40 @@ SOFTWARE.
 
 #include "coredev/iopincfg.h"
 
-// Console, UART0 to the interface MCU (VCOM0)
+// UDP echo server, see lte_udp.cpp. No release assistance: the echo comes
+// back after the send, and modem firmware 1.2.x has no AT%RAI.
+#define LTE_UDP_HOST		"echo.u-blox.com"
+#define LTE_UDP_PORT		7
+#define LTE_UDP_RAI			0
+
+// LTE-M only: modem firmware 1.2.x runs one of LTE-M and NB-IoT at a time,
+// both at once needs 1.3.0 or later
+#define LTE_UDP_RAT			LTE_RAT_LTEM
+#define LTE_UDP_RAT_PREF	LTE_RAT_NONE
+
+// Board selection, define one:
+//	NRF9160_DK		nRF9160 DK, console on the interface MCU VCOM0
+//	NORDIC_THINGY91	Nordic Thingy:91, console on the first USB serial port of
+//					its nRF52840 running the Connectivity Bridge firmware
+#define NRF9160_DK
+//#define NORDIC_THINGY91
+
+// Console, UART0, the SysLog output
 #define UART_DEVNO			0
 #define UART_RX_PORT		0
-#define UART_RX_PIN			28
 #define UART_RX_PINOP		1
 #define UART_TX_PORT		0
-#define UART_TX_PIN			29
 #define UART_TX_PINOP		1
+
+#if defined(NORDIC_THINGY91)
+// P0.19 and P0.18, to UART0 of the nRF52840
+#define UART_RX_PIN			19
+#define UART_TX_PIN			18
+#elif defined(NRF9160_DK)
+#define UART_RX_PIN			28
+#define UART_TX_PIN			29
+#else
+#error "Select the board: NRF9160_DK or NORDIC_THINGY91"
+#endif
 
 #endif

@@ -49,8 +49,6 @@ SOFTWARE.
 #include "ble_dis.h"
 #include "nrf_ble_gatt.h"
 #include "app_util_platform.h"
-#include "fds.h"
-#include "nrf_fstorage.h"
 #include "nrf_sdh.h"
 #include "nrf_sdh_soc.h"
 #include "nrf_sdh_ble.h"
@@ -703,7 +701,7 @@ static void BtAppConnParamInit(void)
 	}
 }
 
-// Peer Manager event handling, the SMP user interaction bridge and the LESC
+// SoftDevice security event handling, the SMP user interaction bridge and the LESC
 // OOB data handling are in bt_sec_nrf52.cpp. That object is linked only when
 // the application calls BtAppSecInit.
 
@@ -727,7 +725,7 @@ static void BtAppNrf52ConnEvt(ble_evt_t const * p_ble_evt, void *p_context)
 	ble_gap_evt_t const * p_gap_evt = &p_ble_evt->evt.gap_evt;
 	uint16_t role = ble_conn_state_role(p_ble_evt->evt.gap_evt.conn_handle);
 
-	// The LESC module receives BLE events through the peer_manager path:
+	// The LESC module receives BLE events through the security path:
 	// sm_ble_evt_handler (bt_sec_sd.cpp) forwards every event to BtLescOnBleEvt
 	// as its single delivery point. Calling it here as well would deliver each
 	// event twice and run sd_ble_gap_lesc_oob_data_set twice on an OOB DHKey
@@ -779,7 +777,7 @@ static void BtAppNrf52ConnEvt(ble_evt_t const * p_ble_evt, void *p_context)
 			DEBUG_PRINTF("SEC: EVT_CONN_SEC_UPDATE sm=%d lv=%d ks=%d\r\n",
 					pcs->sec_mode.sm, pcs->sec_mode.lv, pcs->encr_key_size);
 			// Capture the negotiated encryption key size for BtGapConnSecGet.
-			// pm_conn_sec_status_get does not report key size; this event does.
+			// Capture the negotiated key size from this event.
 			BtDevice_t *pdev = BtPeerFindByHdl(p_ble_evt->evt.gap_evt.conn_handle);
 			if (pdev != nullptr)
 			{
@@ -821,8 +819,8 @@ static void BtAppNrf52ConnEvt(ble_evt_t const * p_ble_evt, void *p_context)
 
         	// If a secure SecType was configured, security is requested on
         	// the link by the security observer in bt_sec_nrf52.cpp
-        	// (pm_conn_secure -> sd_ble_gap_authenticate). It runs after this
-        	// dispatcher and after the Peer Manager have seen the event.
+        	// (BtSecSdSecure -> sd_ble_gap_authenticate). It runs after this
+        	// dispatcher has created the peer record.
 
         	BtAppEvtConnected(p_ble_evt->evt.gap_evt.conn_handle);
 		}
@@ -1089,20 +1087,6 @@ void BtGattInit(void)
     }
 }
 
-/**@brief Function for handling File Data Storage events.
- *
- * @param[in] p_evt  Peer Manager event.
- * @param[in] cmd
- */
-static void fds_evt_handler(fds_evt_t const * const p_fds_evt)
-{
-    if (p_fds_evt->id == FDS_EVT_GC)
-    {
-//        printf("GC completed");
-    }
-}
-
-
 void BtDisInit(const BtAppCfg_t *pCfg)
 {
     ble_dis_init_t   dis_init;
@@ -1347,6 +1331,11 @@ const static TimerCfg_t s_BtAppNrf52TimerCfg = {
 // along with the low frequency one.
 static TimerDev_t s_BtAppNrf52Timer;
 
+// Security is optional. Weak references keep the direct SoftDevice security
+// adapter and its PDS bond store out of open-link applications.
+extern void BtSecSdPoll(void) __attribute__((weak));
+extern void BtSecSdCheckStatus(void) __attribute__((weak));
+
 // Set while the timeout check is in the queue, so that it is queued once
 static volatile bool s_bBtAppNrf52TickQueued = false;
 
@@ -1365,6 +1354,10 @@ static void BtAppNrf52TickEvt(uint32_t Evt, void *pCtx)
 	if (s_pBtAppNrf52Conn != nullptr)
 	{
 		s_pBtAppNrf52Conn->Tick();
+	}
+	if (BtSecSdPoll != nullptr)
+	{
+		BtSecSdPoll();
 	}
 }
 
@@ -1660,7 +1653,7 @@ bool BtAppInit(const BtAppCfg_t *pCfg)//, bool bEraseBond)
 
     BtAppInitUserData();
 
-    // The security module (Peer Manager, LESC, ECDH engine) is linked and
+    // The security module (IOsonata bond/security state, LESC, ECDH engine) is linked and
     // started only when the application calls BtAppSecInit, normally from
     // BtAppInitUserData above. A configuration that asks for security without
     // starting it must not run unprotected.
@@ -1793,6 +1786,10 @@ void BtAppCheckStatus(void)
 	{
 		BtLescCheckStatus();
 	}
+	if (BtSecSdCheckStatus != nullptr)
+	{
+		BtSecSdCheckStatus();
+	}
 	if (BtDfuSmpCheckStatus != nullptr)
 	{
 		BtDfuSmpCheckStatus();
@@ -1826,7 +1823,7 @@ static void BtAppSDDispatch(void)
 // We need this here in order for the Linker to keep the nrf_sdh_soc.c
 // which is require for Softdevice to function properly
 // Create section set "sdh_soc_observers".
-// This is needed for FSTORAGE event to work.
+// This also delivers the SoftDevice flash completion events used by NvmIntrf.
 extern "C" void nrf_sdh_soc_evts_poll(void * p_context);
 
 NRF_SDH_STACK_OBSERVER(m_nrf_sdh_soc_evts_poll, NRF_SDH_SOC_STACK_OBSERVER_PRIO) = {

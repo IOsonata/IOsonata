@@ -93,6 +93,14 @@ typedef struct {
 extern "C" {
 #endif
 
+// All wrappers mask interrupts for each ROM call and restore the caller's
+// prior state on return. Callers still serialize multi-call operations such
+// as prepare plus erase/write and provide the required ROM workspace/stack.
+// Wrappers accepting IAP_CMD_STATUS *pRes require a result buffer; null returns
+// PARAM_ERROR without calling ROM or changing interrupt state.
+
+// Write the factory value only on ROM success. On error the output is unchanged;
+// a null output returns PARAM_ERROR without calling ROM.
 IAPSTATUS IAPReadFactorySettings(uint32_t RegAddr, uint32_t *pBuff);
 IAPSTATUS IAPPrepSectWrite(int StartSect, int EndSect);
 IAPSTATUS IAPCopyRamToFlash(uint8_t *pDst, uint8_t *pSrc, int Size);
@@ -106,8 +114,18 @@ IAPSTATUS IAPReadUID(IAP_CMD_STATUS *pRes);
 IAPSTATUS IAPErasePage(int StartPage, int EndPage);
 IAPSTATUS IAPEepromWrite(uint32_t EepAddr, uint8_t *pData, int Size);
 IAPSTATUS IAPEepromRead(uint32_t EepAddr, uint8_t *pData, int Size);
+// Write one 32-bit signature on success. On ROM error the output is unchanged;
+// a null output returns PARAM_ERROR without calling ROM.
 IAPSTATUS IAPReadFlashSignature(uint32_t *pSig);
-IAPSTATUS IAPReadExtFlashSignature(uint32_t StartPage, uint32_t EndPage, uint32_t NbState, uint32_t *pSig);
+// LPC546xx command 73: StartAddr and EndAddr are flash addresses, not page
+// indices. NbState uses the FLASHCFG.FLASHTIM encoding. pSig must hold four
+// uint32_t words (128-bit signature, least significant word first).
+// On ROM error the output is unchanged; a null output returns PARAM_ERROR.
+IAPSTATUS IAPReadExtFlashSignature(uint32_t StartAddr, uint32_t EndAddr, uint32_t NbState, uint32_t *pSig);
+// LPC546xx command 81 writes one complete EEPROM page (128 bytes).
+// pData must point to a readable page buffer. SystemCoreClock supplies the
+// timing in kHz; callers must keep it current.
+// A null source returns PARAM_ERROR; other ROM status codes pass through.
 IAPSTATUS IAPEepromWritePage(uint32_t PageNo, uint8_t *pData);
 //IAPSTATUS IAPEepromRead(uint32_t PageNo, uint8_t *pBuff);
 

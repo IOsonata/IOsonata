@@ -1,60 +1,56 @@
 # STM32F030x8 port
 
 STM32F030x8 implements the minimum supported MCU set: startup, GPIO, UART
-and timer. Other F030 memory variants are not covered by the new timer driver.
+and timer. The timer driver is the one shared by the STM32 families.
 GPIO includes pin configuration, digital I/O and pin-specific EXTI allocation.
-UART supports polling, FIFO interrupts and optional TX DMA.
+UART supports polling, FIFO interrupts and DMA.
 
 ## UART DMA
 
-Set both `bIntMode` and `bDMAMode` to true for TX DMA on STM32F030x8.
-RX remains interrupt driven. Other F0 variants still reject DMA requests.
+The STM32 UART driver (`ARM/ST/src/uart_stm32.cpp`) runs DMA on USART1 and
+USART2 of the F0 parts, with or without `bIntMode`. TX DMA sends blocks
+straight from the TX CFIFO, a block ends on USART TC. RX DMA runs a 64-byte
+circular ring, moved into the RX CFIFO at half and full ring, on IDLE and by
+`RxData`.
 
-| Virtual DevNo | Hardware | TX DMA channel | IRQ |
-|---|---|---|---|
-| 0 | USART1 | DMA1 channel 2 | DMA1_Channel2_3 |
-| 1 | USART2 | DMA1 channel 4 | DMA1_Channel4_5 |
+With a non-blocking CFIFO (`bFifoBlocking` false) a put on a full CFIFO drops
+its oldest bytes. TX DMA then sends a copy: each block, at most 32 bytes, is
+taken out of the TX CFIFO and copied, so that a put drops only bytes still
+queued, not the block being sent. The copy is made with the line idle, after
+TC of the previous block, mostly with interrupts disabled. In the instruction
+set emulator at 1 Mbaud, UartLoopback with interrupts and DMA echoed
+91 kB/s with a non-blocking CFIFO and 98 kB/s with a blocking one; the
+longest stretch with interrupts disabled grew from 880 to 1790 CPU cycles.
+Not tested on hardware.
 
-An idle TX copies directly into a fixed 16-byte DMA buffer. Writes arriving
-while DMA is active use the TX FIFO; completion interrupts copy one contiguous
-FIFO span and start the next burst. DMA addresses are configured once. The
-USART DMA request stays enabled while the disabled channel gates idle requests. A positive `Tx()` return counts accepted bytes; the caller
-may reuse its buffer immediately. FIFO blocking/drop behavior is unchanged.
-DMA transfer errors discard the unsent part of that burst, add its remaining
-byte count to `UARTDev_t::TxDropCnt`, and continue with queued bytes.
-Disable and reset stop DMA before touching the USART. Enable flushes queued TX
-data, as in interrupt-only mode. Reinitialization also stops any prior burst.
-A rate change is rejected while a DMA burst is active.
+| Virtual DevNo | Hardware | TX DMA | RX DMA | Vector | CSELR request |
+|---|---|---|---|---|---|
+| 0 | USART1 | DMA1 channel 2 | DMA1 channel 3 | DMA1_Channel2_3 | 8 |
+| 1 | USART2 | DMA1 channel 4 | DMA1 channel 5 | DMA1_Channel4_5 | 9 |
 
-These channels are reserved while UART DMA is configured. Initialization refuses
-a channel already configured by another user. Do not repurpose a channel or
-its IRQ while the UART owns it. Channels 3 and 5 share the vectors but are not
-handled by this driver; adding another DMA peripheral requires shared dispatch.
-The driver does not reset or gate off the whole DMA controller.
+F030x4 to x8 and F070 have fixed requests; the USART1 remap bits of
+SYSCFG_CFGR1 are cleared. F030xC and F09x select the request in CSELR. On F09x
+the vectors are shared with DMA2 and with DMA1 channels 6 and 7, which the
+driver does not use. The driver defines these two vectors, and the channels
+belong to the UART while DMA is configured. Initialization refuses a TX
+channel already configured by another user. The other F0 USARTs refuse DMA.
 
-`UartPrbsTest/src/board.h` enables DMA. The shared byte-at-a-time PRBS source is
-unchanged. For the 1 Mbaud comparison, build with `UART_BAUDRATE=1000000` and use
-the same baud rate in `Python/uartprbs_rx.py`. The example's default remains
-115200 baud. Rebuild both the MCU library and application.
-
-`python3 tests/stm32f0/uart_dma_test.py` checks FIFO wrap, backpressure, caller
-buffer reuse, both USARTs, RX during TX, transfer errors and lifecycle handling.
-These are host register tests. The first DMA implementation measured about
-41.3 kB/s at 1 Mbaud on the maintainer's board, below the interrupt-only result
-of 56.7 kB/s. The revised transfer path removes the idle FIFO round trip,
-repeated address setup and extra FIFO probing. The maintainer confirmed the
-revised Release build at approximately 81.0 kB/s at 1 Mbaud, with zero drops
-in the supplied PRBS receiver output. See [PR 77](https://github.com/IOsonata/IOsonata/pull/77).
+Hardware, STM32F030x8 on the STM32F0308-DISCO, FTDI, 1 Mbaud (maintainer):
+UartLoopback 95-96 kB/s with interrupt and DMA, 94-95 kB/s polled DMA, 0
+errors; PRBS TX at line rate in both DMA modes.
 
 ## Peripheral timers
 
-All seven TIM peripherals are implemented through the standard C and C++ Timer
-interfaces. Virtual numbering follows the low-power/low-frequency to
-high-power/high-frequency convention. This MCU has no LPTIM peripheral; these TIM
-peripherals all use the APB timer clock, with simpler timers ordered first.
-The low-frequency device count is 0, high-frequency count is 7, and the first
-high-frequency virtual index is 0. The order within that group is a device-table
-ordering, not a measured power ranking.
+The library builds the STM32 timer driver shared by the families:
+`ARM/ST/src/timer_stm32.cpp` (TimerInit), `ARM/ST/src/timer_tim_stm32.cpp`
+(TIM) and `ARM/ST/include/timer_stm32.h`. All seven TIM peripherals are
+implemented through the standard C and C++ Timer interfaces. Virtual numbering
+follows the low-power/low-frequency to high-power/high-frequency convention.
+This MCU has no LPTIM peripheral; these TIM peripherals all use the APB timer
+clock, with simpler timers ordered first. The low-frequency device count is 0,
+high-frequency count is 7, and the first high-frequency virtual index is 0.
+The order within that group is a device-table ordering, not a measured power
+ranking.
 
 | Virtual DevNo | Hardware | Trigger count | Implementation |
 |---|---|---:|---|
@@ -73,10 +69,12 @@ Each timer provides:
 
 - APB clock/prescaler calculation, including the APB timer x2 rule;
 - a 64-bit software-extended count with pending-overflow compensation;
-- periodic and single-shot triggers, either a trigger callback or timer event;
+- periodic and single-shot triggers; a trigger callback, when given, runs
+  first, then the timer event handler gets the trigger event;
 - pause/resume preserving count and pending events;
 - reset and frequency changes that restart active trigger periods;
-- independent clock gates and IRQ routing, and rejection of occupied devices.
+- independent clock enables and IRQ routing, and rejection of a timer counting
+  without the driver or whose vector an application handler replaced.
 
 Use `TIMER_CLKSRC_DEFAULT`; no independent oscillator is selected. `Freq = 0`
 selects the maximum clock rate. Other requests select a rounded, clamped
@@ -104,16 +102,20 @@ counter frequency. These are internal timer interrupts, not RTOS ticks.
 The maintainer reports STM32F030x8 use in the TaktOS benchmark. Its
 [STM32F0308 platform](https://github.com/IOsonata/TaktOS/tree/main/KVB/Targets/STM32F0308)
 uses SysTick for kernel timing and TIM17 for its IRQ probe. This is existing
-platform evidence, not an on-board result for the new peripheral timer driver.
+platform evidence, not an on-board result for the peripheral timer driver.
 
-Vector wrappers dispatch weakly to the timer driver only when it is linked.
-Application IRQ overrides remain valid. Initialization rejects a timer whose
-IRQ handler is overridden or already enabled. Thus the benchmark can retain
-its TIM17 probe while using another timer; virtual timer 3 cannot be claimed
-at the same time. Both TIM1 IRQs must belong to this driver. Do not replace an
-IRQ handler or repurpose a peripheral after initializing it through Timer.
-Timer handles and callback contexts must outlive the timer; disabling pauses
-it and does not transfer ownership to another handle.
+The timer vectors of `lib/src/Vectors_STM32F030x8.c` are weak aliases of
+`Stm32TimerVector`, which calls the weak `Stm32TimerIRQHandler` of the timer
+driver with the interrupt number from SCB ICSR, or the default handler when
+the driver is not linked. An application handler replaces the alias of its
+vector. TimerInit refuses a timer whose vector does not point to
+`Stm32TimerVector`, or that counts without the driver. Thus the benchmark can
+retain its TIM17 probe while using another timer; virtual timer 3 cannot be
+claimed at the same time. Both TIM1 vectors must belong to the driver. Do not
+replace an IRQ handler or repurpose a peripheral after initializing it through
+Timer. Timer handles and callback contexts must outlive the timer. TimerInit
+with another handle takes the timer from the first one, whose calls then do
+nothing; a handle initialized on another timer releases the timer it had.
 
 ## Examples and validation
 
@@ -139,34 +141,36 @@ From the repository root:
 
 ```sh
 python3 tests/stm32f0/run.py
-python3 tests/stm32f0/run_timer.py
-python3 tests/stm32f0/run_timer_arm.py
+python3 tests/stm32/run_uart.py
+python3 tests/stm32/run_timer.py
 ```
 
-The existing host startup/UART/GPIO regressions pass for F030x6/x8/xC and
-F070x6/xB. New host models compile the production timer implementation and
-vector wrappers with the ST register definitions and UBSan. They exercise all
-seven devices and trigger channels, clocks, overflow, long compares, lifecycle,
-callback cancellation and TIM17 override refusal. They do not simulate APB
-bus latency or instruction-level interrupt preemption.
-
-Arm GNU 14.3.1 Cortex-M0 checks at -O0 and -Os compile the driver and vectors
-and link archive smoke images with timer use, application SysTick/TIM17
-handlers, and SysTick-only use. The last image does not pull in TimerInit.
-These smoke images are not the full TaktOS benchmark or IOC library build.
-TimerDemo also passed complete application links at -O0/-Os with Arm GNU
-14.3.1 using the required library sources, including UART retargeting.
+The host clock and EXTI regressions pass for F030x6/x8/xC and F070x6/xB.
+The UART test runs the shared driver for F030x6/x8/xC, F070x6/xB and F091xC,
+see [tests/stm32f0/README.md](../../../tests/stm32f0/README.md).
+`tests/stm32/run_timer.py` runs the shared timer driver with a TIM register
+model for F030x8, F072xB and the parts of the other families: every timer
+and trigger channel, clocks, overflow, long compares, lifecycle, callback
+cancellation, a vector replaced by an application handler, the vector file
+aliases. It does not simulate APB bus latency or instruction-level interrupt
+preemption. Arm GNU checks compile the driver for every F0 device header at
+-O0 and -Os and link F030x8 images: SysTick only (TimerInit not linked),
+timer use, and an application TIM3_IRQHandler with timer use.
 
 On 2026-10-08 the maintainer confirmed startup, LED GPIO, USART1 UART
-output/retargeting, TIM6 (DevNo 0) and TIM16 (DevNo 2) on STM32F0308-DISCO.
-TIM6 reported 115 consecutive 100000 us intervals over 11.5 seconds through
-UART. Semihosting caused the earlier timing variation. A missing level-shifter
-supply caused the temporary UART output failure.
+output/retargeting, TIM6 (DevNo 0) and TIM16 (DevNo 2) on STM32F0308-DISCO
+with the F030x8 timer driver this shared driver replaces. TIM6 reported 115
+consecutive 100000 us intervals over 11.5 seconds through UART. Semihosting
+caused the earlier timing variation. A missing level-shifter supply caused
+the temporary UART output failure.
 
-This completes the minimum MCU port. The successful hardware runs did not
-record an exact flashed revision, build profile or complete tool versions.
-TIM14, TIM17, TIM15, TIM3 and TIM1 still need board tests; the existing host
-checks do not establish their hardware timing.
+The successful hardware runs did not record an exact flashed revision, build
+profile or complete tool versions. The shared driver is not yet tested on the
+board. TimerDemo, built for each of the seven timers, ran 3.3 s in an
+instruction set emulator with TIM, RCC and USART1 models: trigger 0 every
+100 ms on each timer, trigger 1 every 1 s on TIM15, triggers 1 to 3 every 1 s,
+250 ms and 500 ms on TIM3 and TIM1, the TIM1 compare interrupt on its own
+vector. TIM14, TIM17, TIM15, TIM3 and TIM1 still need board tests.
 
 Register behavior was checked against ST RM0360 Rev 5, clock-tree rules and
 timer chapters 13-17. Board pins follow ST UM1658 / 32F0308DISCOVERY.

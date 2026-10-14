@@ -38,9 +38,14 @@ int Timer::EnableTimerTrigger(uint64_t nsPeriod, TIMER_TRIG_TYPE Type, TimerTrig
 {
 	int idx = FindAvailTimerTrigger();
 	if (idx < 0)
-		return 0;
+	{
+		return -1;
+	}
 
-	EnableTimerTrigger(idx, nsPeriod, Type, Handler, pContext);
+	if (EnableTimerTrigger(idx, nsPeriod, Type, Handler, pContext) == 0)
+	{
+		return -1;
+	}
 
 	return idx;
 }
@@ -49,9 +54,17 @@ int Timer::EnableTimerTrigger(uint32_t msPeriod, TIMER_TRIG_TYPE Type, TimerTrig
 {
 	int idx = FindAvailTimerTrigger();
 	if (idx < 0)
-		return 0;
+	{
+		return -1;
+	}
 
-	EnableTimerTrigger(idx, msPeriod, Type, Handler, pContext);
+	// Check the nanosecond result before rounding a valid short period to ms.
+	uint64_t nsPeriod = (uint64_t)msPeriod * 1000000ULL;
+
+	if (EnableTimerTrigger(idx, nsPeriod, Type, Handler, pContext) == 0)
+	{
+		return -1;
+	}
 
 	return idx;
 }

@@ -1,0 +1,84 @@
+/**-------------------------------------------------------------------------
+@file	board.h
+
+@brief	UART USB bridge on the nRF54LM20 DK
+
+The bridge connects the nRF54LM20 USB port to one of the two debugger serial
+ports of the DK, so the debugger port and the nRF54LM20 USB port talk to each
+other. UART_DEVNO selects the debugger serial port.
+
+@author	Hoang Nguyen Hoan
+@date	Oct. 9, 2026
+
+@license
+
+MIT License
+
+Copyright (c) 2026, I-SYST inc., all rights reserved
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+----------------------------------------------------------------------------*/
+#ifndef __BOARD_H__
+#define __BOARD_H__
+
+#include "coredev/iopincfg.h"
+
+// Nordic nRF54LM20 DK (PCA10184)
+
+#ifndef UART_DEVNO
+#define UART_DEVNO			1
+#endif
+
+// Start rate. The host sets the rate it wants when it opens the port.
+#define UART_RATE			115200
+
+// Debugger serial port 0: UARTE30 on P0.
+#if UART_DEVNO == 0
+
+#define UART_RX_PORT		0
+#define UART_RX_PIN			7
+#define UART_RX_PINOP		1
+
+#define UART_TX_PORT		0
+#define UART_TX_PIN			6
+#define UART_TX_PINOP		1
+
+// Debugger serial port 1: UARTE20 on P1.
+#elif UART_DEVNO == 1
+
+#define UART_RX_PORT		1
+#define UART_RX_PIN			17
+#define UART_RX_PINOP		1
+
+#define UART_TX_PORT		1
+#define UART_TX_PIN			16
+#define UART_TX_PINOP		1
+
+#else
+#error "Select UART_DEVNO 0 or 1 for a DevKit virtual serial port"
+#endif
+
+// RX pulled up so a peer in reset or powered off does not read as data
+#define UART_PINS	{ \
+	{UART_RX_PORT, UART_RX_PIN, UART_RX_PINOP, IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL}, \
+	{UART_TX_PORT, UART_TX_PIN, UART_TX_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL}, \
+}
+
+#endif

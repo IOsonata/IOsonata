@@ -35,19 +35,27 @@ SOFTWARE.
 #ifndef __BOARD_H__
 #define __BOARD_H__
 
+// IBK-IDAP-M revision 0, schematic 03-2021-04 (2021-04-25).
+
+// This target has no UART DMA implementation.
+#define UART_DMA_MODE			false
+#define UART_INT_MODE			true
+
+// UART0: RX P2.3 (P0.18), TX P2.4 (P0.19).
+// CTS P3.10 (P0.7), RTS P2.2 (P0.17).
 #define UART_DEVNO					0
 #define UART_RX_PORT				0
 #define UART_RX_PIN					18
-#define UART_RX_PINOP				1
+#define UART_RX_PINOP				IOPINOP_FUNC1
 #define UART_TX_PORT				0
 #define UART_TX_PIN					19
-#define UART_TX_PINOP				1
+#define UART_TX_PINOP				IOPINOP_FUNC1
 #define UART_CTS_PORT				0
 #define UART_CTS_PIN				7
-#define UART_CTS_PINOP				1
+#define UART_CTS_PINOP				IOPINOP_FUNC1
 #define UART_RTS_PORT				0
 #define UART_RTS_PIN				17
-#define UART_RTS_PINOP				1
+#define UART_RTS_PINOP				IOPINOP_FUNC1
 
 #define UART_PINS			{ \
 	{UART_RX_PORT, UART_RX_PIN, UART_RX_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},\
@@ -58,4 +66,5 @@ SOFTWARE.
 
 
 #endif // __BOARD_H__
+
 

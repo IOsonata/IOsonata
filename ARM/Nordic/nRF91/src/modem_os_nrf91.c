@@ -483,7 +483,7 @@ void nrf_modem_os_log(int level, const char *fmt, ...)
 	(void)level;
 
 	if (s_nRF91ModemOs.pCfg == NULL || s_nRF91ModemOs.pCfg->pLog == NULL ||
-		SysLogVPrintf == NULL)
+		SysLogVPrintf == NULL || SysLogPrintf == NULL)
 	{
 		return;
 	}
@@ -493,6 +493,9 @@ void nrf_modem_os_log(int level, const char *fmt, ...)
 	va_start(args, fmt);
 	(void)SysLogVPrintf(s_nRF91ModemOs.pCfg->pLog, fmt, args);
 	va_end(args);
+
+	// The library messages have no line end
+	(void)SysLogPrintf(s_nRF91ModemOs.pCfg->pLog, "\r\n");
 }
 
 void nrf_modem_os_logdump(int level, const char *str, const void *data, size_t len)

@@ -2,10 +2,70 @@
 
 Native MCU port under the existing `ARM/Renesas` tree: system startup, clock
 reporting, Cortex-M4 vectors, normal-boot linker layout, GPIO/pin control, and
-CPU interrupt registration through the ICU, asynchronous SCI UART, and AGT/GPT timers.
-See [TIMER.md](TIMER.md) for timer device mapping, operation and validation limits.
-No board package, Arduino/FSP runtime, USB controller, DMA/DTC, or NMI
-driver is included yet.
+CPU interrupt registration through the ICU, asynchronous SCI UART, AGT/GPT timers, and IIC master and slave.
+See [TIMER.md](TIMER.md) for timer device mapping and validation limits, and
+[INTERRUPTS.md](INTERRUPTS.md) for the ICU/NVIC routing architecture,
+registration contract, and interrupt-maintenance invariants.
+No board package, Arduino/FSP runtime, USB controller, IIC DMA/DTC,
+general DTC, or NMI driver is included yet. UART TX uses native DMAC.
+The IIC master (polling and interrupt) and slave are rewritten and checked
+against a host model of the IIC, not yet hardware-validated.
+
+## Implementation status (October 13, 2026)
+
+Target: `prerelease_0.13`. The RA4M1 register-access migration uses Renesas
+CMSIS peripheral structures rather than handwritten base addresses and
+register-offset wrappers. The existing IOsonata interfaces remain unchanged.
+This is an MCU-level implementation, not an EK-RA4M1 board support package.
+
+The user has confirmed successful firmware compilation and execution on an
+EK-RA4M1: **Blinky PASS** (startup and GPIO output) and **TimerDemo PASS**
+(initialization and timer callback operation). A subsequent hardware log
+exercised Timer DevNo 3 (GPT1), with four compare callbacks configured for
+100 ms, 1000 ms, 250 ms and 500 ms. All four generated callbacks; sustained
+T0/T1/T2 measured intervals largely matched their requested periods.
+The printed T3 callback intervals varied; the test used J-Link `rdimon`
+semihosting, which can halt the CPU and distort callback timestamps.
+Therefore the log is **functional evidence, not a bound on GPT interrupt
+latency or period accuracy**. For timing measurement, collect timestamps in
+RAM without semihosting inside the measurement loop.
+
+**Not yet confirmed on hardware:** the rewritten IIC master and slave paths, GPIO edge interrupts,
+other AGT/GPT channels and all six GPT compare routes, long-run rollover/pause/resume,
+stop/start recovery, low-power operation, USB, general DMA/DTC and ELC integration.
+SCI UART is complete and hardware-tested. Apart from the UART test
+(`run_uart_validation.py`, see SCI UART), the host-register-model test runners
+under `tests/ra4m1` predate the CMSIS migration and require updates;
+the old published model assertion counts are not post-migration results.
+Neither a complete automated production-header compiler matrix nor updated
+host regression results are claimed here.
+
+### Interrupt architecture
+
+The Cortex-M4 vector table has **16 ARM-defined system positions** (the first
+stores the initial MSP) followed by **32 external NVIC vectors** IRQ0..IRQ31.
+Renesas ICU `IELSR[0..31]` selects which peripheral event feeds each external
+NVIC slot. The NVIC positions and independent priorities are fixed; their
+peripheral event sources are programmable. Thus the peripheral events do
+**not** all share one interrupt.
+
+`interrupt_ra4m1.cpp` implements the shared **ICU registration and routing
+infrastructure**: it selects an unused CPU slot, assigns its event ID, installs
+a callback/context, sets NVIC priority, dispatches the corresponding
+`IELn_IRQHandler`, acknowledges the ICU request and releases routes.
+`vectors_ra4m1.c` supplies the hardware vector table. One timer overflow
+event and each enabled GPT compare event may consume separate CPU slots;
+Timer DevNo 3 with four compare triggers can use five slots. GPIO's fixed
+external pin IRQ *line* is distinct from the dynamically allocated NVIC slot.
+The ICU driver is not a replacement for the ARM NVIC.
+
+### Remaining engineering work
+
+Complete the RA4M1 coding-style pass (file headers, declaration placement,
+one statement per line, explicit multi-line control-flow blocks), refresh the
+CMSIS-based host regression models, run production-header Cortex-M4 Debug
+and Release checks, and validate the IIC master, IIC slave and GPIO interrupts on hardware.
+No merge into `main` is authorized by this documentation update.
 
 ## IOsonata integration
 
@@ -33,7 +93,7 @@ the production target/generic headers and `ARM/CMSIS/Core/Include`, never the
 reduced headers in `tests/ra4m1`. CMSIS is taken from the existing repository
 files; no new vendor SDK or submodule is required.
 
-This project builds startup, GPIO, ICU, UART and timer support. It does not yet compile
+This project builds startup, GPIO, ICU, UART, timer and IIC master and slave support. It does not yet compile
 the generic USB/application subsystem. Future driver
 increments must add their sources to this same project. The
 library does not link an executable or produce a flash image; the application
@@ -52,8 +112,9 @@ Compile `.c` sources as C11 or later and `.cpp` sources as C++11 or later:
 - `ARM/Renesas/RA4M1/src/interrupt_ra4m1.cpp`
 - `ARM/Renesas/RA4M1/src/iopincfg_ra4m1.c`
 - `ARM/Renesas/RA4M1/src/uart_ra4m1.cpp`
+- `ARM/Renesas/RA4M1/src/i2c_ra4m1.cpp`
 - `ARM/Renesas/RA4M1/src/timer_ra4m1.cpp`
-- `src/cfifo.c`, `src/device_intrf.cpp`, `src/coredev/uart.cpp`, `src/coredev/timer.cpp` (existing, unchanged)
+- `src/cfifo.c`, `src/device_intrf.cpp`, `src/coredev/uart.cpp`, `src/coredev/i2c.cpp`, `src/coredev/timer.cpp` (existing, unchanged)
 
 Use the RA4M1 `include` directory, IOsonata `include` and `ARM/include`, and the
 project's existing CMSIS Core include directory. Link with
@@ -64,13 +125,16 @@ use `-mfpu=fpv4-sp-d16` and the same `-mfloat-abi` in the application and every
 linked library. Compile the vector object directly, or retain it from the
 library through the existing ResetEntry reference to `__Vectors`.
 
-The wrapper `ra4m1xxx.h` supplies the CMSIS core configuration and the 32 ICU
-slot IRQ numbers. `src/ra4m1_startup_regs.h` is explicitly a **private startup
-register subset**, not a complete Renesas device header. `ra4m1_ioregs.h`
-adds the GPIO/ICU subset used by this port. These keep the implementation
-independent of FSP configuration headers. Other peripheral definitions remain
-work for subsequent increments. Do not include both this core wrapper and an
-unrelated complete vendor device header in the same translation unit.
+The wrapper `ra4m1xxx.h` supplies the CMSIS core configuration, the
+32 ICU slot IRQ numbers, and includes the Renesas vendor device header
+`include/R7FA4M1AB.h`. Production startup, GPIO/PFS, ICU, AGT/GPT, SCI and IIC
+drivers access the vendor peripheral structures and register members directly
+(`R_SYSTEM`, `R_PORTn`, `R_PFS`, `R_ICU`, `R_AGTn`, `R_GPTn`, `R_SCIn`).
+The old private register-map headers `ra4m1_startup_regs.h`, `ra4m1_ioregs.h`,
+`ra4m1_timer_regs.h` and `ra4m1_uart_regs.h` were removed. Pin/package
+capability masks and peripheral control-bit values remain MCU-specific data,
+not alternative register-address maps. No FSP runtime or vendor driver is used.
+The Renesas header retains its vendor licensing.
 
 The shared ResetEntry copies `.data` (including `.fastrun`), clears `.bss`,
 calls SystemInit, updates the clock information, and enters its existing runtime
@@ -103,7 +167,7 @@ Expected default successful-startup state:
 | `FCACHEE` | `1`, after completed invalidation |
 | `IELSR[0..31]` | `0` (unassigned) |
 
-**The default 48 MHz operating point requires VCC of 2.7–5.5 V.** This initial
+**The default 48 MHz operating point requires VCC of 2.7-5.5 V.** This initial
 startup deliberately uses High-speed mode, not automatic supply-voltage
 measurement or low-voltage power optimization. The hardware's wider supply
 range does not permit 48 MHz across that entire range.
@@ -121,8 +185,8 @@ Core RC descriptors accept 8 MHz (MOCO), and 24, 32, or 48 MHz (HOCO).
 A 64 MHz CPU request is rejected; the decoder can nevertheless identify the
 64 MHz HOCO encoding if it reads an externally established configuration.
 
-Main crystal/external-clock descriptors accept 1–20 MHz. Startup uses an exact
-48 MHz PLL solution when the input is 4–12.5 MHz and a legal integer multiplier
+Main crystal/external-clock descriptors accept 1-20 MHz. Startup uses an exact
+48 MHz PLL solution when the input is 4-12.5 MHz and a legal integer multiplier
 and output divider exist. Otherwise it uses the main oscillator directly.
 Examples: 4, 6, 8, and 12 MHz can supply the 48 MHz PLL plan; 16 MHz cannot use
 this PLL input range and is therefore used directly. PLLCCR2 is an **8-bit**
@@ -237,6 +301,77 @@ RTC, clear backup flags, or take over retained functions. `IOPinDisable` removes
 an owned pin interrupt and returns the pin to input/no-pull; it is not a claim
 of physical pad-power disconnection.
 
+## IIC master and slave
+
+The native RA4M1 IIC driver exposes **DevNo 0 = IIC0** and **DevNo 1 = IIC1**
+through the existing `coredev/i2c.h` interface: standard 7-bit I2C up to
+400 kHz as master or as slave. DMA/DTC, SMBus, 10-bit address and Fast-mode
+Plus requests are rejected by `I2CInit`.
+
+Master. One service routine advances the transfer from the IIC flags
+(START, TDRE/TEND, RDRF, NACKF, STOP, arbitration and timeout). Polling mode
+loops on it, interrupt mode (`bIntEn`) calls it from the RXI, TXI, TEI and EEI
+handlers, so both follow the same register sequence, the one of the Renesas
+FSP `r_iic_master`: dummy read of the address phase, WAIT for the last bytes,
+ACKBT set before the final byte, STOP requested before the last read, NACK
+answered with STOP, repeated START with the timeout function off.
+`StartTx`/`StartRx` only record the target. The bus is used by `TxData` and
+`RxData`; a `TxSrData` transfer (the register address of a register-style
+read) keeps the bus and `RxData` issues the repeated START. In interrupt mode
+`TxData` copies up to 64 bytes, returns -1 and the end is reported with
+`DEVINTRF_EVT_COMPLETED` and the byte count, `RxData` returns -1 and fills the
+caller buffer before that event. A transfer that keeps the bus, or one larger
+than 64 bytes, runs to the end inside the call. A NACK returns the number of
+bytes acknowledged. Arbitration loss and the hardware or software timeout
+reset the IIC and end the transfer, so the next one starts clean.
+
+Slave (`bIntEn` required). One to three distinct 7-bit addresses of
+0x08 to 0x77, one per slave address register. The first byte after an address
+match is the address itself and gives the direction. `WRITE_RQST` or
+`READ_RQST` is sent then, and the application installs the buffer with
+`I2CSetWriteRqstBuffer` or `I2CSetReadRqstData`; the pointers are cleared
+before each request, as in the other IOsonata slave backends. The event does
+not carry the address index, so an application using several addresses sets
+the buffer of every index. `READ_RQST` after a repeated START carries the byte
+count of the write that came before. `COMPLETED` carries the byte count at
+STOP, at a repeated START, or on an error. A write beyond the buffer is
+refused with NACK from the byte after the last stored one. A read beyond the
+data returns 0xFF and does not count. After a master NACK the slave does the
+dummy ICDRR read that releases SCL.
+
+IIC uses PCLKB. Bit-rate programming searches CKS/ICBRL/ICBRH values that meet
+the standard/fast-mode minimum SCL low/high periods while keeping the nominal
+rate at or below the requested value. The calculation assumes zero rise/fall
+time, making the programmed timing conservative on the real open-drain bus.
+The digital noise filter is disabled so its additional clock stages do not
+make the rate model implicit. The count offsets used for ICBRL/ICBRH
+(3 with CKS=0, 2 otherwise) are the ones to confirm with a scope.
+
+The valid peripheral pin alternatives are IIC0 SCL on P204/P400/P408 with SDA
+on P401/P407, and IIC1 SCL on P100/P205 with SDA on P101/P206. These require
+PSEL 7, represented by `IOPINOP_FUNC6`. The application still selects one
+legal pair and must provide suitable pull-ups for its bus capacitance and speed.
+The driver configures both pins as `IOPINDIR_BI` whatever direction the pin map
+lists. The IIC block controls the pin direction, and the internal pull-up
+(`IOPINRES_PULLUP`) has no effect on a pin with PDR set, which an
+`IOPINDIR_OUTPUT` entry for SCL would produce. The internal pull-up is weak
+(tens of kOhm), so external pull-ups are advised above a few tens of kHz.
+
+`DeviceIntrfReset` uses open-drain SCL/SDA, clocks a stuck slave up to nine
+times, emits STOP when possible, and then restores the peripheral pin
+configuration.
+
+Validation: `python3 tests/ra4m1/run_i2c_validation.py` runs
+`tests/ra4m1/i2c_test.cpp` against a register and bus model of the IIC, at
+-O0, -Os, -O2 and with the address and undefined behavior sanitizers, and
+compiles the driver for Cortex-M4 with the real headers. The model checks the
+bus sequence (every start, address, byte, acknowledge and stop), the SCL
+hold of WAIT and of a master NACK, ICU edge events with a settable handler
+latency, and stuck-bus, arbitration-loss and stuck-slave recovery. It follows
+the FSP flows and is not the silicon: whether START/STOP/NACKF flags set with
+their interrupt disabled (polling), whether TXI and TEI are edge or level at
+the ICU, and the exact bit-rate offsets are open until the hardware run.
+
 ## ICU and GPIO interrupts
 
 `Ra4m1RegisterIntHandler` / `Ra4m1UnregisterIntHandler` follow the existing RE01
@@ -272,7 +407,7 @@ activation/acknowledgement rules.
 `IOPinEnableInterrupt(IntNo, ...)` strictly validates the fixed hardware line
 against the pin. `IOPinAllocateInterrupt(...)` finds that line and returns it;
 `IOPinDisableInterrupt(...)` accepts the returned line. The GPIO callback receives
-this **fixed GPIO line**, not its dynamically allocated CPU slot. Lines 0–12, 14,
+this **fixed GPIO line**, not its dynamically allocated CPU slot. Lines 0-12, 14,
 and 15 are supported where bonded; there is no IRQ13. The complete group map is:
 
 | IRQ line | MCU pins |
@@ -301,7 +436,7 @@ another pin's interrupt. Existing WUPEN routes are not commandeered. GPIO
 interrupt registration does not change low-power wake policy.
 
 Like RE01, `IOPinSetSense` configures port-group EOF/EOR events, not the IRQCR
-mode of a registered pin interrupt. It applies to ports 1–4 and requires the
+mode of a registered pin interrupt. It applies to ports 1-4 and requires the
 consumer to disconnect its ELC route while changing sense. General ELC consumers
 remain outside this increment.
 
@@ -312,90 +447,142 @@ aliases. Strong application vector overrides are still supported.
 
 ## SCI UART
 
-The native `uart_ra4m1.cpp` implements the existing `UARTDEV`, `UARTCfg_t`,
-`DevIntrf_t`, and `CFifo` interfaces. There is no second UART API, queue or FSP
-runtime. Device numbering follows the compact RE01 convention:
+`uart_ra4m1.cpp` implements the IOsonata UART (`UARTDev_t`, `UARTCfg_t`,
+`DevIntrf_t` and the CFIFOs) with the same structure as the other UART drivers.
 
-| `UARTCfg_t.DevNo` | Hardware SCI | Clock | Module-stop bit |
+| `UARTCfg_t.DevNo` | SCI | Hardware FIFO | Module stop bit |
 | --- | --- | --- | --- |
-| 0 | SCI0 | PCLKA | MSTPB31 |
-| 1 | SCI1 | PCLKA | MSTPB30 |
-| 2 | SCI2 | PCLKA | MSTPB29 |
-| 3 | SCI9 | PCLKA | MSTPB22 |
+| 0 | SCI0 | 16 bytes RX and TX | MSTPB31 |
+| 1 | SCI1 | 16 bytes RX and TX | MSTPB30 |
+| 2 | SCI2 | none, RDR and TDR | MSTPB29 |
+| 3 | SCI9 | none, RDR and TDR | MSTPB22 |
 
-Supply exactly two `IOPINCFG` entries in the usual **RX, TX** order. Pin functions
-are the application's MCU pin-map choices, not a board default. RX must be input,
-TX output, and each present pin must specify its valid SCI peripheral PSEL code
-using the target's `IOPINOP_FUNCn` convention. The caller must select the correct
-per-SCI/per-pin combination from the hardware manual; the generic pin configurator
-does not resolve that mapping. To omit RX or TX, use `PortNo=PinNo=-1` in its
-array slot. At least one direction must be present.
+The pin map is RX then TX, with the PSEL function code of each pin in `PinOp`
+(`IOPINOP_FUNCn`). The pin map is selected by the application from the hardware
+manual, the driver does not check the SCI and pin combination.
 
-This increment supports asynchronous full-duplex UART, 7/8 data bits, no/odd/even
-parity, and one/two stop bits. Both polling and interrupt mode are implemented.
-Unsupported requests fail initialization: DMA, IrDA, hardware/software flow
-control, half-duplex, synchronous/network mode, 9-bit data and automatic baud.
-`UARTSetCtrlLineState` does not drive modem lines or transmit break in this
-increment. Framing, parity, overrun and received-break indications are reported
-through the existing counters/line-state callback; damaged bytes are discarded.
+Supported: asynchronous full duplex, 7 or 8 data bits, parity none, odd or even,
+1 or 2 stop bits, polling, interrupt and TX DMA mode. UARTInit fails for flow
+control, IrDA, half duplex, synchronous mode, 9 data bits, parity mark or space,
+and DMA with a non-blocking FIFO. `UARTSetCtrlLineState` does nothing.
 
-SCI0/1 hardware FIFOs are disabled deliberately, giving all four channels the
-same non-FIFO register path. Each direction has a default 16-byte software FIFO,
-overridable at library build with `RA4M1_UART_FIFO_SIZE`, or with the existing
-caller-supplied, word-aligned FIFO memory in `UARTCfg_t`. Memory sizes include
-`sizeof(CFifo_t)`. `bFifoBlocking=true` refuses insertion when full; RX still
-drains the hardware and counts dropped new bytes, rather than blocking an ISR.
-`false` retains the existing CFifo push-out policy and counts evicted bytes.
-There is no hardware receive backpressure without flow control.
+- TxData puts the data in the TX CFIFO, then starts TX if it is ready. RxData
+  reads from the RX CFIFO. Copies to and from a CFIFO are done in pieces of at
+  most 8 bytes with interrupts disabled.
+- Interrupt mode: one handler for RXI, TXI and ERI, registered with
+  `Ra4m1RegisterIntHandler` at `IntPrio`. TEI is not used. RX is serviced first
+  whatever the event. TXI is enabled while the TX CFIFO has data, `bTxReady`
+  is true when the TX CFIFO is empty. The ICU IR flag of RXI and TXI is cleared
+  at the start of the handler, ERI at the end, as the Renesas FSP does. SCI2/9
+  have no FIFO: RDR holds one character and the next one overruns it a
+  character time later. Their RXI and ERI service RX only and run at
+  `IntPrio`, TXI and the DMA transfer end service TX only and run one level
+  lower (unless `IntPrio` is already the lowest), so that RXI can preempt
+  them. RDR is read only with RDRF or an error flag set, by any of them:
+  reading RDR clears RDRF, a pending RXI of a character ERI already read finds
+  RDRF cleared and does not read it again. ERI leaves the RXI IR flag as it is.
+  Callbacks from RX and TX interrupts can nest on SCI2/9. SCI2/9
+  TX waits for a TXI only with TDR full: the CPU writes TDR while TDRE is set,
+  two bytes in a row with the line idle (the first goes on to the shift
+  register at once), and TxData sets TIE after filling TDR. The TXI then comes
+  from the move of a full TDR at the end of a character. On the EK-RA4M1 the
+  SCI2 interrupt mode loopback stopped with TIE set, TDR empty, the line idle
+  and no IR flag: the TXI after a CPU write to an idle line with TIE already
+  set did not come. With
+  DMA, TxData starting a block on SCI2/9 locks out only that lower level with
+  BASEPRI, RXI preempts it. TX is taken by an atomic exchange of `bTxReady`, a
+  TxData from an interrupt finding it taken leaves its bytes in the TX CFIFO to
+  the caller that has it.
+- DMA mode (`bDMAMode`): while the channel is idle the CPU puts what the SCI
+  takes, as without DMA (TX FIFO of SCI0/1, TDR of SCI2/9), which costs no
+  interrupt. DMAC channel `DevNo` sends the rest in blocks straight from the
+  TX CFIFO, one byte to FTDRL or TDR for each TXI, linked in `ICU.DELSR`. A
+  block is the first contiguous run of the CFIFO, at most half of it, and its
+  bytes are released when the channel is done. The DMAC transfer end interrupt
+  (or TxData and RxData without `bIntMode`) fills the SCI again and starts the
+  next block. With TX idle TIE is cleared, so TxData then costs about as much
+  as polling without DMA. A TXI that arrived while the channel was stopped can
+  be left pending in `ICU.DELSR`. It is cleared, `DELSR` written 0 then the TXI
+  again as the Renesas FSP r_dmac stops a transfer: on SCI0/1 after the CPU
+  wrote to the SCI at the end of a block and when TX goes idle, on SCI2/9
+  before the channel is armed. SCI0/1 use TTRG 0 in DMA mode, TXI with the TX
+  FIFO empty, and start a block by setting TIE again, as the Renesas FSP does
+  with a transfer instance. SCI2/9 with the line idle (TDRE and TEND set) and
+  more than one byte: the channel is armed for the bytes after the first, TIE
+  is set, then the CPU writes the first byte to TDR, as the Renesas FSP starts
+  a transfer without the FIFO. The move of that byte to the shift register
+  gives the TXI for the channel. On the EK-RA4M1 SCI2 the channel got that TXI
+  (UartLoopback interrupt DMA started its blocks that way after each late
+  transfer end, without a stop), the CPU did not always in interrupt mode.
+  With the first byte written by the CPU before arming, its move could come
+  before the request was cleared and each such block went through the TDR
+  empty path below: short blocks, about 74 kB/s instead of 96 in that
+  loopback. Otherwise the CPU fills TDR as in interrupt mode, then TIE is set
+  and the channel armed for the rest with TDR full, its move gives the TXI for
+  the channel. TDR is read again: read empty with bytes left,
+  the channel is stopped (a transfer it already took finishes, DMSTS.ACT),
+  DMCRA and TDR are read: TDR full, the channel is armed again; TDR empty, no
+  TXI is coming, the bytes the channel moved are released and the CPU fills
+  TDR again. When the channel
+  moved the last byte of the block, DTE is not set again: in normal mode a
+  count of 0 is a transfer with no end, which would send the memory after the
+  block. RX stays on the interrupt or polling: the SCI has no idle line
+  event to move a DMA ring to the RX CFIFO after a short burst. The DMAC module
+  (MSTPA22) is started and never stopped by the driver, other drivers may use
+  it. UARTInit fails if channel `DevNo` is linked to another event.
+- Polling mode: TxData and RxData move the data between the SCI and the CFIFOs.
+  With SCI2 and SCI9 the application must call RxData or TxData at least once
+  per character time or characters are lost to overrun. With DMA, RDR is also
+  read at each step of a block start and after it.
+- SCI0 and SCI1 FIFO mode: RXI at 8 received characters, or with fewer once the
+  line is idle for 1.5 frames (receive data ready). TXI at 8 or fewer characters
+  in the TX FIFO.
+- Characters with a framing or parity error are dropped and counted
+  (`FramErrCnt`, `ParErrCnt`, `RxDropCnt`). Overruns are counted in
+  `RxOvrErrCnt`, the characters already received are kept. The line state
+  callback gets the error bits, with `UART_LINESTATE_BRK` when RXD is still low
+  after a framing error. A full blocking RX CFIFO drops the new character
+  (`RxDropCnt`), a full non-blocking one drops the oldest.
+- The default CFIFO is 16 bytes (`RA4M1_UART_CFIFO_SIZE`), `pRxMem` and `pTxMem`
+  in `UARTCfg_t` give larger ones.
+- Rate: PCLKA from `SystemPeriphClockGet(0)`. SetRate sets and returns the
+  closest rate the SCI makes (BRR, CKS, SEMR base clock and MDDR modulation). A
+  running UART is stopped for one bit time while the rate changes. 0 returns 0,
+  there is no automatic rate.
+- Disable clears TE and RE. Enable flushes the TX CFIFO, resets the hardware
+  FIFOs and the error counters, the RX CFIFO is kept. PowerOff releases the
+  interrupts, disconnects the pins and stops the SCI module, a new UARTInit is
+  needed after it.
 
-Interrupt TX copies accepted bytes into CFifo and primes TDR directly. TXI feeds
-subsequent bytes; TEI marks final wire completion. Queuing during an in-flight
-final byte re-arms TXI. `UART_EVT_TXREADY` is delivered when a full FIFO gains
-space and when transmission drains; its length is the available FIFO space.
-RX callbacks carry a null buffer and the queued byte count. Application callbacks
-run outside newly acquired PRIMASK sections and may queue more data. The SCI
-source is negated/synchronized and the ICU route acknowledged before application
-code; a callback-time arrival is not cleared on dispatcher exit. Code/context
-must remain valid until an already active callback returns after higher-priority
-preemption, as with ICU interrupt registration.
-
-Polling allocates no ICU slots and writes accepted bytes directly to TDR, never
-leaving accepted data in an undriven software TX queue. Reads return currently
-available data; writes have a bounded retry count. Both modes can return a partial
-byte count. The caller must retry the unaccepted suffix. Polling completion flags
-are sampled on API return, not updated asynchronously without interrupts.
-
-Baud selection uses PCLKA from `SystemPeriphClockGet(0)`, integer BRR/CKS and
-optional MDDR modulation. The returned `Rate` is the rounded nominal hardware
-rate, not the requested value or a measurement of oscillator accuracy. The
-planner considers the supported sampling modes and rejects nominal divisor
-error above `RA4M1_UART_MAX_ERROR_PPM` (default 20,000 = 2%). Include oscillator
-and peer-clock tolerance in the application's total error budget. The legal
-clock/divisor range is not a throughput guarantee for the non-FIFO ISR path.
-
-`UARTSetRate` requires `UARTDisable` and a quiesced peer first; it returns zero
-without changing a running interface. Changing system clocks also requires
-quiescing UART, then setting its rate again before enabling. Disable aborts
-in-flight TX and discards/counts queued TX while retaining RX FIFO data, register
-configuration and module clock. Bytes already in the hardware pipeline may be
-truncated; their exact wire progress is not counted as a known byte drop. Enable
-restores operation without full initialization. Reset also flushes RX. PowerOff
-releases ICU routes, restores prior pin configuration, gates the SCI module and
-requires full UARTInit for reuse. Duplicate channel/device ownership, overlapping
-RX/TX FIFO memory, invalid modes and partial initialization failures are rejected.
-
-Run `python3 tests/ra4m1/run_uart_validation.py` from the repository root for the
-UART model and the existing startup/GPIO/ICU regression suite. The UART test
-executes the actual UART, GPIO and ICU sources, but its CMSIS and UART/DevIntrf
-headers are simplified for the tests. Its default standalone run uses a CFifo test
-double. In a full checkout, the runner additionally builds against the unchanged
-production `src/cfifo.c`. The model checks register access sizes, frame/baud
-configuration, all four SCI channels, FIFO overflow, partial transfers, TX restart,
-callback-time RX, callback rearming/release, disable/rate/reset, allocation and
-write failure cleanup, and simultaneous independent channel ownership. It does
-not prove the production C++ ABI, interrupt latency, maximum sustainable baud or
-physical serial operation. IOC uses production headers and the shared sources,
-never these test shims.
+Host test: `python3 tests/ra4m1/run_uart_validation.py`. It compiles the driver
+with a model of the SCI, DMAC, module stop, PRCR and ICU registers
+(`tests/ra4m1/uart_include`) and the real CFIFO and DeviceIntrf code. RXI, TXI,
+ERI and the DMAC transfer end are edge events that set the IR flag of their
+ICU slot, and the line can move while a handler runs. DMA runs three times,
+with a TXI arriving while DTE is cleared held in DELSR, with it lost, and held
+with the channel moving each request it took one register access or line step
+later (DMSTS.ACT set until then). A count of 0 written with DTE set, and
+channel settings written during a transfer, fail the test. It covers
+init, rate selection against every register setting, TX and RX in polling,
+interrupt, polled DMA and interrupt DMA mode on the four SCIs, idle time between
+DMA blocks, the end of a block seen late (the line moves up to 60 characters
+between TxData calls, interrupts held off), the last byte of a SCI2/9 block
+moved 1 to 3 register accesses after the channel took it, while the block
+start checks TDR and stops the channel, one SCI2/9 overrun with the next
+character arriving while it is handled (only the overrun character lost), a
+SCI2/9 framing error with the next character arriving at each step of the ERI
+handler in turn (received once, no read of RDR without RDRF or an error flag),
+SCI2/9 TxData starting a block with only the TX level locked out (BASEPRI in
+the model) while the line moves and RXI is taken in the middle of it, its
+callback calling TxData too, no TX handler taken inside TxData, the SCI2/9
+tests again without a TXI to the CPU from a CPU write to an idle line with TIE
+set (the DMAC gets it; with and without a TXI when TIE is set with TDRE set),
+and again with such a write going on to the shift register 3 register accesses
+later,
+an echo loop with bursts, receive
+errors, overrun, full CFIFOs, callbacks, Disable/Enable and PowerOff. It also
+compiles the driver with GNU Arm for the Cortex-M4. It does not test exact
+timing or the electrical interface.
 
 ## Validation status
 
@@ -439,3 +626,4 @@ IOsonata `main` at `eef99dc82cb3936e5c0f796563a3a58104e50ead`.
 UART hardware basis: the same Rev.1.10 manual, chapter 28 (SCI), chapter 10
 (module stop) and section 13.3 (interrupt request handling). Renesas FSP
 `v6.6.0` `r_sci_uart.c` was a secondary sequencing cross-check only.
+

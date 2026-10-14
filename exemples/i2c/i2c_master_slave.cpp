@@ -166,8 +166,8 @@ static int WaitMasterComplete(int Timeout)
 int I2CSlaveIntrfHandler(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId, uint8_t *pBuffer, int BufferLen);
 
 static const IOPinCfg_t s_I2cSlavePins[] = {
-	{I2C_SLAVE_SDA_PORT, I2C_SLAVE_SDA_PIN, I2C_SLAVE_SDA_PINOP, IOPINDIR_BI, IOPINRES_NONE, IOPINTYPE_OPENDRAIN},		// SDA
-	{I2C_SLAVE_SCL_PORT, I2C_SLAVE_SCL_PIN, I2C_SLAVE_SCL_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_OPENDRAIN},	// SCL
+	{I2C_SLAVE_SDA_PORT, I2C_SLAVE_SDA_PIN, I2C_SLAVE_SDA_PINOP, IOPINDIR_BI, IOPINRES_PULLUP, IOPINTYPE_OPENDRAIN},		// SDA
+	{I2C_SLAVE_SCL_PORT, I2C_SLAVE_SCL_PIN, I2C_SLAVE_SCL_PINOP, IOPINDIR_OUTPUT, IOPINRES_PULLUP, IOPINTYPE_OPENDRAIN},	// SCL
 };
 
 static const I2CCfg_t s_I2cCfgSlave = {
@@ -288,9 +288,12 @@ int main()
 	printf("I2C slave  DMA=%d INT=%d\r\n",
 		s_I2cCfgSlave.bDmaEn, s_I2cCfgSlave.bIntEn);
 
+
+
 	bool masterOk = g_I2CMaster.Init(s_I2cCfgMaster);
 	bool slaveOk = g_I2CSlave.Init(s_I2cCfgSlave);
 	printf("I2C init master=%d slave=%d\r\n", masterOk, slaveOk);
+
 	if (!masterOk || !slaveOk)
 	{
 		while (1)

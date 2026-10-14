@@ -81,18 +81,12 @@ typedef enum IRQn {
 	IEL31_IRQn = 31,
 } IRQn_Type;
 
-#define __CM4_REV                 0x0001U
-#define __MPU_PRESENT             1U
-#define __FPU_PRESENT             1U
-#define __NVIC_PRIO_BITS          4U
-#define __Vendor_SysTickConfig    0U
-
 #ifdef __GNUC__
 #ifndef __PROGRAM_START
 #define __PROGRAM_START          /* IOsonata owns ResetEntry, not CMSIS CRT. */
 #endif
 #endif
-#include "core_cm4.h"
+#include "R7FA4M1AB.h"
 
 #define RA4M1_IRQ_COUNT           32U
 #define RA4M1_VECTOR_COUNT        (16U + RA4M1_IRQ_COUNT)

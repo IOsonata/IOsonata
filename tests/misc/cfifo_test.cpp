@@ -468,8 +468,8 @@ static void TestResv(void)
 	CHECK(CFifoResv(h) == nullptr);
 	CHECK(CFifoUsed(h) == (int)POW2_SLOTS);
 
-	// A full non-blocking FIFO cannot reserve without destroying the oldest
-	// block. Leave it intact; an ordinary Put still drops as before.
+	// Non-blocking and full: Resv drops the oldest block like Put and never
+	// returns NULL. Put after Resv publishes that block without another drop.
 	hCFifo_t nb = CFifoInit(s_OddMem, sizeof(s_OddMem), BLK, false);
 	if (nb == nullptr) { CHECK(false); return; }
 
@@ -479,17 +479,29 @@ static void TestResv(void)
 		if (q != nullptr) { FillBlock(q, (uint8_t)i); }
 	}
 	const uint32_t dropBefore = nb->DropCnt;
-	CHECK(CFifoResv(nb) == nullptr);
-	CHECK(CFifoUsed(nb) == (int)ODD_SLOTS);
-	CHECK(nb->DropCnt == dropBefore);
-	CHECK(CFifoPeek(nb) != nullptr && BlockIs(CFifoPeek(nb), 0U));
-	CHECK(CFifoPut(nb) != nullptr);
+	uint8_t *nr = CFifoResv(nb);
+	CHECK(nr != nullptr);
+	CHECK(CFifoUsed(nb) == (int)ODD_SLOTS - 1);
+	CHECK(nb->DropCnt == dropBefore + 1U);
+	CHECK(CFifoPeek(nb) != nullptr && BlockIs(CFifoPeek(nb), 1U));
+	// Reserving again before publishing: same block, no second drop.
+	CHECK(CFifoResv(nb) == nr);
+	CHECK(nb->DropCnt == dropBefore + 1U);
+	if (nr != nullptr) { FillBlock(nr, 0x77U); }
+	CHECK(CFifoPut(nb) == nr);
 	CHECK(CFifoUsed(nb) == (int)ODD_SLOTS);
 	CHECK(nb->DropCnt == dropBefore + 1U);
+	for (unsigned i = 1; i < ODD_SLOTS; i++)
+	{
+		g = CFifoGet(nb);
+		CHECK(g != nullptr && BlockIs(g, (uint8_t)i));
+	}
 	g = CFifoGet(nb);
-	CHECK(g != nullptr && BlockIs(g, 1U));
+	CHECK(g == nr && BlockIs(g, 0x77U));
+	CHECK(CFifoUsed(nb) == 0);
 
-	// The multiple-block reservation also preserves a full non-blocking FIFO.
+	// Multiple, non-blocking and full: ResvMultiple drops the oldest blocks
+	// it needs like PutMultiple. Publishing fewer leaves the rest free.
 	CFifoFlush(nb);
 	for (unsigned i = 0; i < ODD_SLOTS; i++)
 	{
@@ -498,15 +510,23 @@ static void TestResv(void)
 	}
 	const uint32_t multipleDropBefore = nb->DropCnt;
 	int fullCount = 3;
-	CHECK(CFifoResvMultiple(nb, &fullCount) == nullptr && fullCount == 0);
-	CHECK(CFifoUsed(nb) == (int)ODD_SLOTS);
-	CHECK(nb->DropCnt == multipleDropBefore);
-	CHECK(CFifoPeek(nb) != nullptr && BlockIs(CFifoPeek(nb), 0U));
-	fullCount = 3;
-	CHECK(CFifoPutMultiple(nb, &fullCount) != nullptr && fullCount == 3);
+	uint8_t *mr = CFifoResvMultiple(nb, &fullCount);
+	CHECK(mr != nullptr && fullCount == 3);
+	CHECK(CFifoUsed(nb) == (int)ODD_SLOTS - 3);
 	CHECK(nb->DropCnt == multipleDropBefore + 3U);
+	CHECK(CFifoPeek(nb) != nullptr && BlockIs(CFifoPeek(nb), 3U));
+	if (mr != nullptr) { FillBlock(mr, 0x60U); }
+	fullCount = 1;
+	CHECK(CFifoPutMultiple(nb, &fullCount) == mr && fullCount == 1);
+	CHECK(nb->DropCnt == multipleDropBefore + 3U);
+	CHECK(CFifoUsed(nb) == (int)ODD_SLOTS - 2);
 	g = CFifoGet(nb);
 	CHECK(g != nullptr && BlockIs(g, 3U));
+	g = CFifoGet(nb);
+	CHECK(g != nullptr && BlockIs(g, 4U));
+	g = CFifoGet(nb);
+	CHECK(g == mr && BlockIs(g, 0x60U));
+	CHECK(CFifoUsed(nb) == 0);
 
 	// Multiple: reserve the most that fits, publish fewer. The run stops at
 	// the wrap exactly as PutMultiple does, and PutMultiple returns the same
