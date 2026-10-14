@@ -21,7 +21,8 @@ must provide a valid 48 MHz USB clock.
 Connect USB before reset. Automatic attachment after startup and reattachment
 after unplugging are not implemented; reset with USB attached. Remote wake
 and low-power suspend are disabled. One CDC instance uses interrupt IN EP1
-and bulk IN/OUT EP2. Arbitrary composite layouts are not covered.
+and bulk IN/OUT EP2. The allocator also handles fixed endpoint types in the
+CDC/HID/vendor-bulk UsbCompositeLoopback application.
 
 ## Host check
 
@@ -53,5 +54,5 @@ and semihosting selection. This is a command-line build rather than a complete
 IOcomposer build. Physical enumeration, throughput and PRBS integrity remain
 pending hardware tests; no throughput result is claimed.
 
-GNU Arm 13.2.1 text/data/bss: Debug 51892/460/6656 bytes;
-Release 23272/156/6168 bytes. Both links pass.
+GNU Arm 13.2.1 text/data/bss: Debug 52148/460/6656 bytes;
+Release 23332/156/6168 bytes. Both links pass.

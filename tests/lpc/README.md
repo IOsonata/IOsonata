@@ -20,7 +20,7 @@ Each subfolder has its own `run.py` and README for focused checks:
 | `startup` | LPC11U35/LPC17xx linker checksums, LPC17xx vectors and AHB startup data |
 | `iap` | LPC11Uxx IAP compatibility and interrupt state |
 | `iap_shared` | Shared IAP commands and interrupt state |
-| `usb` | LPC11Uxx/LPC54628 shared EP0/data transfers, lifecycle, remote wakeup, CDC/HID/vendor bulk and reconfiguration |
+| `usb` | LPC11Uxx/LPC54628 shared controller and LPC1769 SIE/CPU controller; EP0/data, lifecycle, class allocation, CDC/HID/vendor bulk and reconfiguration |
 
 The host suites require Python 3, GCC/G++, and GNU binutils. They use temporary
 build directories and can be launched from any working directory. Register
@@ -33,15 +33,16 @@ With Arm GNU tools, newlib-nano and C++23 support:
 ```sh
 python3 tests/lpc/usb/link.py
 python3 tests/lpc/usb/link546.py
+python3 tests/lpc/usb/link17.py
 python3 tests/lpc/timer/link.py
 python3 tests/lpc/timer/link17.py
 python3 tests/lpc/timer/link546.py
 python3 tests/lpc/usb/link.py --prefix /path/to/bin/arm-none-eabi- --output /tmp/lpc-usb
 ```
 
-The USB link commands build ten LPC11U35 images and twelve LPC54628 images.
-Both cover CDC loopback/PRBS, HID, vendor bulk and a three-class composite in
-Debug and Release; LPC54628 also includes an EP0 bring-up fixture. Debug retains
+The USB link commands build ten LPC11U35, twelve LPC1769 and twelve LPC54628 images.
+All cover CDC loopback/PRBS, HID, vendor bulk and a three-class composite in
+Debug and Release; LPC1769 and LPC54628 also include an EP0 bring-up image. Debug retains
 rdimon semihosting; Release uses nosys. It checks production startup, vector
 checksum, USB IRQ, IAP reservation, USB SRAM placement and example project
 settings. It does not build every optional source in the MCU library project.
@@ -55,26 +56,23 @@ Memory measurements and detailed coverage are in `usb/README.md` and
 
 ## Validation status
 
-On October 13, 2026, all 11 host suites passed together using the LPC sources
-at `46937def8bb27362b116fb4188a7d74b5a25aef2`. The eight LPC11U35 ARM links
-also pass with GCC 13.2.1 and binutils 2.42, as recorded in the USB suite.
+The completion pass on 2026-10-14 UTC passed all 11 host suites and 58 firmware
+links: 34 USB, 18 UART/SPI/I2C and 6 TimerDemo. Generic USB core, bulk, HID, MSC and HCI USB
+regressions also passed after adding transfer-type-aware endpoint allocation.
+LPC1769 integration now exercises the actual generic classes and public driver
+in every CDC/HID/bulk registration order, plus endpoint exhaustion.
 
-LPC11U35 board validation remains pending while the board is being replaced.
-A host-model pass does not establish physical UART/SPI/I2C timing, USB
-enumeration or throughput, interrupt latency, or runtime stack usage. LPC17xx
-and LPC546xx model results likewise do not establish full board validation.
+Run the peripheral firmware links with:
 
-Implemented modes remain deliberate limits: legacy LPC I2C and SSP are
-polling masters; legacy UART has polling/interrupt operation without DMA;
-LPC11U35 and LPC54628 USB have bulk/interrupt endpoints and remote wakeup
-with clock-on suspend, without ISO or low-power suspend. LPC54628 USB1 and
-USB host mode are unsupported. LPC11U35 uses ROM DFU; no software DfuBoot is provided.
-See each suite README for exact family restrictions and hardware checks.
+```sh
+python3 tests/lpc/peripheral_link.py
+```
 
-The USB work through `974cde87e83293199a3dab15845b2f66ce5c02fc` adds the
-LPC54628 shared full-speed controller integration, remote wakeup and CDC
-loopback/PRBS, HID and custom-bulk projects. The combined LPC USB host suite
-passed after the controller changes; all twelve LPC54628 firmware links passed
-after adding PRBS. Both LPC11U35 composite links also passed after sharing the
-fixture. These later checks do not imply a rerun of every peripheral suite or
-a full IOcomposer library build.
+Use `--target 11`, `--target 17` or `--target 546` to select one MCU, and
+`--prefix` to select an installed GNU Arm toolchain. The shared composite
+application now has managed projects for all three MCUs. LPC1769 additionally
+has the custom-bulk project that was blocked by fixed endpoint types.
+
+See `ARM/NXP/README.md` for the supported modes and explicit limits. Hardware
+validation remains pending; the LPC11U35 board is being replaced. Host checks
+do not validate electrical timing, USB enumeration/throughput or stack usage.

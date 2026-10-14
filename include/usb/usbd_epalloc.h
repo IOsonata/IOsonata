@@ -55,6 +55,9 @@ typedef struct __Usbd_EpAlloc_Req {
 	uint8_t OutCount;
 	uint16_t FixedInMask;		//!< Controller-constrained IN endpoints
 	uint16_t FixedOutMask;		//!< Controller-constrained OUT endpoints
+	uint8_t BidirectionalType;	//!< USB_ENDPATT_TRANS_*; zero keeps legacy unrestricted placement
+	uint8_t InType;				//!< Transfer type for allocated IN-only endpoints
+	uint8_t OutType;				//!< Transfer type for allocated OUT-only endpoints
 } UsbdEpAllocReq_t;
 
 /// What the allocator assigned : concrete interface and endpoint numbers

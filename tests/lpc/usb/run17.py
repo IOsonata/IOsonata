@@ -132,3 +132,37 @@ for opt in ['-O0', '-O2']:
                         str(root / 'ARM/NXP/LPC17xx/src/usb_data_lpc17xx.c'),
                         '-o', exe], check=True)
         subprocess.run([exe], check=True, timeout=5)
+
+
+# Real generic classes/core plus the public LPC1769 driver and transfer state.
+# Only hardware FIFO, SIE and EP0 handshakes are replaced by the model.
+for opt in ['-O0', '-O2']:
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = Path(tmp)
+        flags = [opt, '-Wall', '-Wextra', '-Werror', '-Wno-missing-field-initializers',
+                 '-ffunction-sections', '-fdata-sections', '-DLPC1769',
+                 '-fsanitize=undefined', '-fno-sanitize-recover=all',
+                 '-include', str(root / 'tests/lpc/usb/lifecycle17_shim.h')]
+        includes = ['-I' + str(root / p) for p in ['tests/lpc/uart/shim',
+                    'ARM/NXP/LPC17xx/Include', 'ARM/NXP/include', 'include']]
+        sources = ['tests/lpc/usb/integration17_model.c', 'tests/lpc/usb/classes17_test.cpp',
+                   'ARM/NXP/LPC17xx/src/usb_lpc17xx.c',
+                   'ARM/NXP/LPC17xx/src/usb_data_lpc17xx.c',
+                   'src/usb/usb.cpp', 'src/usb/usb_intrf.cpp', 'src/usb/usb_int.cpp',
+                   'src/usb/usbd_cdc.cpp', 'src/usb/usbd_cdc_desc.cpp',
+                   'src/usb/usbd_hid.cpp', 'src/usb/usbd_bulk.cpp',
+                   'src/usb/usbd_epalloc.cpp', 'src/device_intrf.cpp',
+                   'src/app_evt_handler.cpp', 'src/cfifo.c']
+        objects = []
+        for index, source in enumerate(sources):
+            cpp = source.endswith('.cpp')
+            obj = tmp / f'{index}.o'
+            subprocess.run(['g++' if cpp else 'gcc',
+                            '-std=gnu++20' if cpp else '-std=gnu17',
+                            *([] if cpp else ['-Wno-pointer-to-int-cast']),
+                            *flags, *includes, '-c', str(root / source), '-o', str(obj)], check=True)
+            objects.append(str(obj))
+        exe = str(tmp / 'classes17')
+        subprocess.run(['g++', *flags, '-Wl,--gc-sections', *objects, '-o', exe], check=True)
+        for order in range(8):
+            subprocess.run([exe, str(order)], check=True, timeout=10)

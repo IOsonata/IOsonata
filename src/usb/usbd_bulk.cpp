@@ -197,6 +197,7 @@ static bool UsbdBulkInitInternal(UsbdBulkDev_t * const pBulk,
 	UsbdEpAllocReq_t req = {};
 	req.InterfaceCount = 1U;
 	req.BidirectionalCount = 1U;
+	req.BidirectionalType = USB_ENDPATT_TRANS_BULK;
 
 	// The allocator fills each requested result before returning success.
 	UsbdEpAllocRes_t alloc;

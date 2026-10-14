@@ -34,6 +34,7 @@ APPLICATIONS = {
     'UsbCdcPrbsTx': 'exemples/usb/usb_cdc_prbs_tx.cpp',
     'UsbHidLoopback': 'exemples/usb/usb_hid_loopback.cpp',
     'UsbCustomBulkLoopback': 'exemples/usb/usb_custom_bulk_loopback.cpp',
+    'UsbCompositeLoopback': 'exemples/usb/usb_composite_loopback.cpp',
 }
 
 
@@ -99,7 +100,7 @@ int main(void)
         assert 'UsbdBulk::Init(' in demangled
     if example == 'UsbCdcPrbsTx':
         assert 'Prbs8' in addresses
-    if example == 'Composite':
+    if example in ['Composite', 'UsbCompositeLoopback']:
         demangled = subprocess.check_output([prefix + 'nm', '-C', str(image)], text=True)
         for name in ['UsbdCdc', 'UsbdHid', 'UsbdBulk']:
             assert name + '::Init(' in demangled, name + ' initialization discarded'
@@ -135,7 +136,7 @@ def main():
             assert ('--specs=rdimon.specs' in text) == (mode == 'Debug')
     with tempfile.TemporaryDirectory() as tmp:
         for mode in ['Debug', 'Release']:
-            for example in [None, *APPLICATIONS, 'Composite']:
+            for example in [None, *APPLICATIONS]:
                 build(args.prefix, Path(tmp) / mode / (example or 'EP0'), mode, example)
 
 

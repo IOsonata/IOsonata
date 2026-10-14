@@ -10,9 +10,9 @@ application event queue and `AppRun`. `AppCheckStatus` echoes received bytes
 using `Rx`/`Tx`, retaining partial writes. FIFO `bBlocking = true` prevents
 overwriting unread data; it does not make `Tx` wait for USB hardware. The shared
 example sends its greeting when the host asserts DTR. The application does not call controller APIs.
-The single CDC instance uses interrupt IN EP1 and bulk IN/OUT EP2. Multiple
-CDC instances are not covered: LPC1769 has fixed endpoint types, and the
-generic allocator does not select endpoints by transfer type.
+The single CDC instance uses interrupt IN EP1 and bulk IN/OUT EP2. The generic
+allocator now respects LPC1769 fixed endpoint types. See UsbCompositeLoopback
+for the integrated CDC/HID/vendor-bulk application.
 
 ## Board setup
 
@@ -71,5 +71,5 @@ sources in Debug and Release. It verifies IOC source links, semihosting,
 vector checksum, the USB IRQ and extraction of the CDC data path. This is a
 command-line firmware build, not a full IOcomposer build or hardware test.
 
-GNU Arm 13.2.1 text/data/bss: Debug 51956/456/5680 bytes;
-Release 23288/152/5192 bytes. Both firmware links pass. Hardware testing is pending.
+GNU Arm 13.2.1 text/data/bss: Debug 52212/456/5680 bytes;
+Release 23348/152/5192 bytes. Both firmware links pass. Hardware testing is pending.

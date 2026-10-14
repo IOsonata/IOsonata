@@ -1,3 +1,75 @@
+# Current LPC USB validation
+
+The supported full-speed CDC/HID/vendor-bulk example set is complete for
+LPC11U35, LPC1769 and LPC54628, including shared composite loopback projects.
+The commands below passed with GNU Arm 13.2.1. Debug uses semihosting; Release
+uses nosys. There are 34 firmware links: 10 LPC11U35, 12 LPC1769, 12 LPC54628.
+
+```sh
+python3 tests/lpc/usb/run.py
+python3 tests/lpc/usb/link.py
+python3 tests/lpc/usb/link17.py
+python3 tests/lpc/usb/link546.py
+```
+
+LPC1769 allocation now filters each requested endpoint direction by transfer
+type. CDC requests interrupt IN plus bulk IN/OUT; HID requests interrupt
+IN/OUT; vendor bulk requests bulk IN/OUT. Flexible controllers retain their
+existing allocation order. The real generic core/classes and LPC1769 public
+data driver pass all six class initialization orders, byte transfers through
+129 bytes, halt/clear-halt and repeated configuration. Separate tests exhaust
+all legal bulk/interrupt pairs and reject unsupported ISO. FIFO/SIE/EP0
+handshakes are modeled in this integration test; the existing register and
+EP0 suites test those operations independently. Host checks run at -O0/-O2
+with UBSan. They do not establish physical USB validation.
+
+Current firmware sizes follow. LPC11U35/LPC54628 also reserve 832 bytes in
+dedicated USB SRAM. LPC1769 reserves hardware endpoint RAM separately; these
+RAM columns describe the main RAM image, not runtime stack usage.
+
+| MCU | Application | Mode | Flash bytes | Main RAM bytes |
+| --- | --- | --- | ---: | ---: |
+| LPC11U35 | UsbCdcLoopback | Debug | 50596 | 4580 |
+| LPC11U35 | UsbCdcLoopback | Release | 22112 | 3788 |
+| LPC11U35 | UsbHidLoopback | Debug | 52312 | 3452 |
+| LPC11U35 | UsbHidLoopback | Release | 22752 | 2660 |
+| LPC11U35 | UsbCustomBulkLoopback | Debug | 48728 | 4552 |
+| LPC11U35 | UsbCustomBulkLoopback | Release | 21460 | 3760 |
+| LPC11U35 | UsbCdcPrbsTx | Debug | 50532 | 5560 |
+| LPC11U35 | UsbCdcPrbsTx | Release | 22080 | 4768 |
+| LPC11U35 | UsbCompositeLoopback | Debug | 56756 | 4528 |
+| LPC11U35 | UsbCompositeLoopback | Release | 25004 | 3736 |
+| LPC54628 | EP0 | Debug | 30064 | 2792 |
+| LPC54628 | UsbCdcLoopback | Debug | 48524 | 4572 |
+| LPC54628 | UsbCdcPrbsTx | Debug | 48464 | 5552 |
+| LPC54628 | UsbHidLoopback | Debug | 50152 | 3444 |
+| LPC54628 | UsbCustomBulkLoopback | Debug | 46880 | 4544 |
+| LPC54628 | UsbCompositeLoopback | Debug | 54104 | 4520 |
+| LPC54628 | EP0 | Release | 13316 | 1896 |
+| LPC54628 | UsbCdcLoopback | Release | 21912 | 3776 |
+| LPC54628 | UsbCdcPrbsTx | Release | 21900 | 4756 |
+| LPC54628 | UsbHidLoopback | Release | 22504 | 2648 |
+| LPC54628 | UsbCustomBulkLoopback | Release | 21352 | 3748 |
+| LPC54628 | UsbCompositeLoopback | Release | 24608 | 3724 |
+| LPC1769 | UsbEp0Demo | Debug | 38372 | 4536 |
+| LPC1769 | UsbCdcLoopback | Debug | 52668 | 6136 |
+| LPC1769 | UsbHidLoopback | Debug | 54288 | 5008 |
+| LPC1769 | UsbCdcPrbsTx | Debug | 52608 | 7116 |
+| LPC1769 | UsbCustomBulkLoopback | Debug | 51000 | 6108 |
+| LPC1769 | UsbCompositeLoopback | Debug | 58232 | 6084 |
+| LPC1769 | UsbEp0Demo | Release | 17040 | 3648 |
+| LPC1769 | UsbCdcLoopback | Release | 23500 | 5344 |
+| LPC1769 | UsbHidLoopback | Release | 24088 | 4216 |
+| LPC1769 | UsbCdcPrbsTx | Release | 23488 | 6324 |
+| LPC1769 | UsbCustomBulkLoopback | Release | 22944 | 5316 |
+| LPC1769 | UsbCompositeLoopback | Release | 26200 | 5292 |
+
+The sections below record the development history and earlier measurements;
+the table above is the current complete build result. Refer to
+`ARM/NXP/README.md` for supported modes and the board validation boundary.
+
+---
+
 # LPC11Uxx USB checks
 
 Run `python3 tests/lpc/usb/run.py`.
@@ -914,8 +986,7 @@ usbd_cdc and usbd_cdc_desc. No shared USB implementation changes are required.
 class/data symbol extraction. GNU Arm 13.2.1 CDC text/data/bss are
 51956/456/5680 bytes in Debug and 23288/152/5192 in Release. Debug retains
 rdimon semihosting and Release uses nosys. Only one CDC instance is covered;
-the allocator does not account for LPC1769 fixed endpoint types for arbitrary
-composite layouts. Physical enumeration, notifications and binary loopback
+the allocator now accounts for LPC1769 fixed bulk/interrupt endpoint types. Physical enumeration, notifications and binary loopback
 remain pending. The example README includes a packet-boundary host check.
 
 
@@ -1026,7 +1097,5 @@ Debug semihosting and Release nosys checks. LPC54628 uses 46816/21340 bytes
 flash and 4544/3748 bytes main RAM (Debug/Release), with 832 bytes USB SRAM.
 Physical traffic and sleep/wakeup validation remain pending.
 
-This does not add a custom bulk project for LPC1769. The generic endpoint
-allocator currently chooses endpoint 1 for a standalone bulk pair, but that
-endpoint is interrupt-only on LPC1769. Transfer-type-aware allocation is
-needed before adding that application or arbitrary composite layouts there.
+The later completion pass adds transfer-type-aware allocation and LPC1769
+custom bulk/composite projects. See the current validation summary above.

@@ -1315,5 +1315,10 @@
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usbd_hid.cpp</locationURI>
 		</link>
+		<link>
+			<name>src/usb/usbd_bulk.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usbd_bulk.cpp</locationURI>
+		</link>
 	</linkedResources>
 </projectDescription>

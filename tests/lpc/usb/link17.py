@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""LPC1769 EP0, CDC, HID and PRBS firmware links. MIT License, I-SYST, 2026."""
+"""LPC1769 EP0, CDC, HID, PRBS, vendor bulk and composite firmware links. MIT License, I-SYST, 2026."""
 from pathlib import Path
 import argparse
 import re
@@ -14,7 +14,9 @@ EXAMPLE = ROOT / 'ARM/NXP/LPC17xx/LPC1769/exemples/UsbEp0Demo'
 EXAMPLES = [(EXAMPLE, 'usb_ep0_demo.cpp'),
             (EXAMPLE.parent / 'UsbCdcLoopback', str(ROOT / 'exemples/usb/usb_cdc_loopback.cpp')),
             (EXAMPLE.parent / 'UsbHidLoopback', str(ROOT / 'exemples/usb/usb_hid_loopback.cpp')),
-            (EXAMPLE.parent / 'UsbCdcPrbsTx', str(ROOT / 'exemples/usb/usb_cdc_prbs_tx.cpp'))]
+            (EXAMPLE.parent / 'UsbCdcPrbsTx', str(ROOT / 'exemples/usb/usb_cdc_prbs_tx.cpp')),
+            (EXAMPLE.parent / 'UsbCustomBulkLoopback', str(ROOT / 'exemples/usb/usb_custom_bulk_loopback.cpp')),
+            (EXAMPLE.parent / 'UsbCompositeLoopback', str(ROOT / 'exemples/usb/usb_composite_loopback.cpp'))]
 timer = runpy.run_path(str(ROOT / 'tests/lpc/timer/link17.py'))
 SOURCES = timer['SOURCES'] + [
     'ARM/NXP/LPC17xx/src/usb_hw_lpc17xx.c',
@@ -24,7 +26,7 @@ SOURCES = timer['SOURCES'] + [
     'ARM/NXP/LPC17xx/src/usb_data_lpc17xx.c',
     'ARM/NXP/src/lpc_iap.c',
     'src/prbs.c',
-    'src/usb/usb_int.cpp', 'src/usb/usbd_hid.cpp',
+    'src/usb/usb_int.cpp', 'src/usb/usbd_hid.cpp', 'src/usb/usbd_bulk.cpp',
     'src/usb/usb_intrf.cpp', 'src/usb/usbd_epalloc.cpp',
     'src/usb/usbd_cdc.cpp', 'src/usb/usbd_cdc_desc.cpp',
     'src/usb/usb.cpp', 'src/app_evt_handler.cpp', 'src/app_run.cpp', 'src/app_wait.cpp',
@@ -83,6 +85,13 @@ def build(prefix, directory, debug, example, source_name):
         assert 'UsbIntIntrfOpen' in demangled
         assert 'Lpc17UsbDataDispatch' in addresses
         assert 'AppRun' in addresses
+    if example.name in ['UsbCustomBulkLoopback', 'UsbCompositeLoopback']:
+        demangled = subprocess.check_output([prefix + 'nm', '-C', str(image)], text=True)
+        assert 'UsbdBulk::Init(' in demangled
+        assert 'AppRun' in addresses
+        assert 'Lpc17UsbDataDispatch' in addresses
+        if example.name == 'UsbCompositeLoopback':
+            assert 'UsbdHid::Init(' in demangled and 'UsbdCdc::Init(' in demangled
     subprocess.run([prefix + 'size', str(image)], check=True)
 
 
@@ -113,4 +122,4 @@ if __name__ == '__main__':
             for example, source_name in EXAMPLES:
                 build(args.prefix, Path(tmp) / example.name / ('Debug' if debug else 'Release'),
                       debug, example, source_name)
-    print('LPC1769 EP0, CDC, HID and PRBS firmware Debug/Release links: PASS')
+    print('LPC1769 EP0, CDC, HID, PRBS, vendor bulk and composite firmware Debug/Release links: PASS')

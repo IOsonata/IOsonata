@@ -20,9 +20,9 @@ The system must supply a valid 48 MHz USB clock.
 
 VBUS must be present at startup. Automatic attach and reattach after unplugging
 are not implemented; reset with USB attached. Remote wake and low-power suspend
-are disabled. This example uses one HID interface; arbitrary composite endpoint
-allocation is not supported by the generic allocator on fixed-type LPC1769
-endpoints.
+are disabled. This example uses one HID interface. The allocator now respects
+LPC1769 fixed endpoint types; see UsbCompositeLoopback for a shared composite
+application.
 
 ## Host check
 
@@ -51,5 +51,5 @@ vector checksum and extraction of the HID class, interrupt transport and USB
 IRQ. These command-line builds do not replace an IOcomposer or hardware test.
 Physical enumeration and report transfers remain pending.
 
-GNU Arm 13.2.1 text/data/bss: Debug 53580/456/4552 bytes;
-Release 23880/152/4064 bytes. Both links pass.
+GNU Arm 13.2.1 text/data/bss: Debug 53832/456/4552 bytes;
+Release 23936/152/4064 bytes. Both links pass.

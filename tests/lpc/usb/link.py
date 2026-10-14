@@ -48,6 +48,7 @@ EXAMPLES = {
     'hid': 'UsbHidLoopback',
     'custom_bulk': 'UsbCustomBulkLoopback',
     'cdc_prbs': 'UsbCdcPrbsTx',
+    'composite': 'UsbCompositeLoopback',
 }
 
 
@@ -108,8 +109,7 @@ def build(prefix, output, mode, kind):
     includes = ['-I' + str(ROOT / path) for path in INCLUDES]
     includes += ['-I' + str(ROOT / 'ARM/NXP/LPC11xx/LPC11U35/exemples' / board_name / 'src')]
     objects = []
-    application = ('tests/lpc/usb/firmware/composite_firmware.cpp' if kind == 'composite'
-                   else application_source(kind))
+    application = application_source(kind)
     sources = SOURCES + [application]
     for index, source in enumerate(sources):
         cpp = source.endswith('.cpp')
@@ -172,7 +172,7 @@ def main():
     check_project()
     with tempfile.TemporaryDirectory(prefix='lpc11-usb-link-') as temporary:
         output = args.output.resolve() if args.output else Path(temporary)
-        for kind in [*EXAMPLES, 'composite']:
+        for kind in EXAMPLES:
             for mode in ['Debug', 'Release']:
                 build(args.prefix, output, mode, kind)
     print('LPC11U35 CDC loopback/PRBS, HID, vendor bulk and composite ARM firmware links: PASS')

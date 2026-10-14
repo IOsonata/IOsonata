@@ -58,8 +58,8 @@ Measured with Arm GNU GCC 13.2.1 and binutils 2.42:
 
 | Build | Flash / 65536 bytes | Main RAM / 8160 bytes | USB SRAM / 2048 bytes | Linker stack allowance |
 | --- | ---: | ---: | ---: | ---: |
-| Debug | 48696 | 4552 | 832 | 1200 |
-| Release | 21448 | 3760 | 832 | 1464 |
+| Debug | 48728 | 4552 | 832 | 1200 |
+| Release | 21460 | 3760 | 832 | 1464 |
 
 The stack allowance is not a measured runtime high-water mark.
 

@@ -13,6 +13,10 @@ typedef struct {
 	volatile uint32_t VTOR;
 } TestScb_t;
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 extern TestScb_t g_TestScb;
 void TestDSB(void);
 void TestISB(void);
@@ -29,3 +33,7 @@ void TestSetPrimask(uint32_t Mask);
 #define __set_PRIMASK(Mask) TestSetPrimask(Mask)
 
 #define __NOP() ((void)0)
+
+#ifdef __cplusplus
+}
+#endif

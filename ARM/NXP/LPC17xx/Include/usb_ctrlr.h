@@ -45,7 +45,7 @@ SOFTWARE.
 
 #include "usb_ctrlr_lpc.h"
 
-// Counts span the fixed hardware numbering; Open rejects unsupported types.
+// Counts span the fixed hardware numbering; allocation masks select legal types.
 // Counts include EP0; each endpoint number has independent IN and OUT.
 enum {
 	USB_CTRLR_CNT = 1,
@@ -79,6 +79,15 @@ enum {
 	 (TransType) == ISO ? USB_CTRLR0_ISO_PKT_LEN_MAX : \
 	 (TransType) == BULK ? USB_CTRLR0_BULK_PKT_LEN_MAX : \
 	 (TransType) == INT ? USB_CTRLR0_INT_PKT_LEN_MAX : 0)
+
+// Logical endpoint numbers, identical capabilities in both directions.
+#define USB_EPIN_TYPE_MASK(CtrlrNo, TransType) \
+	((CtrlrNo) != 0 ? 0U : \
+	 (TransType) == BULK ? 0xC924U : \
+	 (TransType) == INT ? 0x2492U : \
+	 (TransType) == CONTROL ? 1U : 0U)
+#define USB_EPOUT_TYPE_MASK(CtrlrNo, TransType) \
+	USB_EPIN_TYPE_MASK(CtrlrNo, TransType)
 
 #define USB_CTRLR_ISO_INIT(DevNo) UsbCtrlrIsoInit(DevNo)
 

@@ -1090,6 +1090,7 @@ static bool UsbdMscInitInternal(UsbdMscDev_t *pMsc,
 	UsbdEpAllocReq_t req = {};
 	req.InterfaceCount = 1U;
 	req.BidirectionalCount = 1U;
+	req.BidirectionalType = USB_ENDPATT_TRANS_BULK;
 	UsbdEpAllocRes_t alloc = {};
 	if (!UsbdEpAlloc(pMsc->DevNo, &req, pClass, &alloc))
 	{
@@ -1230,4 +1231,5 @@ void UsbdMsc::Process(void)
 {
 	UsbdMscProcessInternal(&vUsbdMsc);
 }
+
 

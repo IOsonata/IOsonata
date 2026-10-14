@@ -42,6 +42,15 @@ SOFTWARE.
 
 #include "usb/usbd_epalloc.h"
 
+// Ports with fixed endpoint types provide these masks. Flexible controllers
+// retain the existing allocation order, bounded by their endpoint counts.
+#ifndef USB_EPIN_TYPE_MASK
+#define USB_EPIN_TYPE_MASK(DevNo, Type) 0xFFFEU
+#endif
+#ifndef USB_EPOUT_TYPE_MASK
+#define USB_EPOUT_TYPE_MASK(DevNo, Type) 0xFFFEU
+#endif
+
 typedef struct __Usbd_EpAlloc_State {
 	int DevNo;
 	const UsbdEpAllocReq_t *pReq;
@@ -54,6 +63,13 @@ typedef struct __Usbd_EpAlloc_State {
 	uint32_t Mask[3];		//!< Working masks, indexed by allocation phase
 } UsbdEpAllocState_t;
 
+enum
+{
+	EPALLOC_OUT,
+	EPALLOC_PAIR,
+	EPALLOC_IN,
+};
+
 static void EpAllocStore(uint8_t *pEp, unsigned Count, uint32_t Mask)
 {
 	while (Count-- != 0U)
@@ -62,13 +78,6 @@ static void EpAllocStore(uint8_t *pEp, unsigned Count, uint32_t Mask)
 		Mask &= Mask - 1U;
 	}
 }
-
-enum
-{
-	EPALLOC_OUT,
-	EPALLOC_PAIR,
-	EPALLOC_IN,
-};
 
 static bool EpAllocTry(UsbdEpAllocState_t *pState, unsigned Phase,
 					   unsigned Needed, unsigned StartEp)
@@ -104,26 +113,34 @@ static bool EpAllocTry(UsbdEpAllocState_t *pState, unsigned Phase,
 
 	unsigned limit;
 	uint32_t used;
+	uint32_t allowed;
 	if (Phase == EPALLOC_IN)
 	{
 		limit = pState->InLimit;
 		used = inmask;
+		allowed = pState->pReq->InType == 0U ? 0xFFFEU :
+			USB_EPIN_TYPE_MASK(pState->DevNo, pState->pReq->InType);
 	}
 	else if (Phase == EPALLOC_PAIR)
 	{
 		limit = pState->PairLimit;
 		used = inmask | outmask;
+		allowed = pState->pReq->BidirectionalType == 0U ? 0xFFFEU :
+			USB_EPIN_TYPE_MASK(pState->DevNo, pState->pReq->BidirectionalType) &
+			USB_EPOUT_TYPE_MASK(pState->DevNo, pState->pReq->BidirectionalType);
 	}
 	else
 	{
 		limit = pState->OutLimit;
 		used = pairmask | outmask;
+		allowed = pState->pReq->OutType == 0U ? 0xFFFEU :
+			USB_EPOUT_TYPE_MASK(pState->DevNo, pState->pReq->OutType);
 	}
 
 	for (unsigned ep = StartEp; ep < limit; ep++)
 	{
 		const uint32_t bit = 1UL << ep;
-		if ((used & bit) != 0U)
+		if ((used & bit) != 0U || (allowed & bit) == 0U)
 		{
 			continue;
 		}

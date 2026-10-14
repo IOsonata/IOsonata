@@ -1639,7 +1639,9 @@ static bool BtHciUsbInitInternal(BtHciUsbDev_t * const pHci,
 	UsbdEpAllocReq_t req = {};
 	req.InterfaceCount = 2U;
 	req.BidirectionalCount = 1U;
+	req.BidirectionalType = USB_ENDPATT_TRANS_BULK;
 	req.InCount = 1U;
+	req.InType = USB_ENDPATT_TRANS_INT;
 
 	UsbdEpAllocRes_t alloc = {};
 	uint8_t scoEp = 0U;
@@ -1756,5 +1758,6 @@ void BtHciUsb::Reset()
 {
 	BtHciUsbReset(&vBtHciUsb);
 }
+
 
 
