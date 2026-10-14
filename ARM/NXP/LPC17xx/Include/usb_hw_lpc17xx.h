@@ -82,6 +82,12 @@ bool Lpc17UsbDataWrite(uint8_t EpNo, const uint8_t *pData, int Length);
 // replay the snapshot. The owner must handle a pending bus event or stop on
 // fault. A timeout latches the SIE fault. No callbacks run in this helper.
 bool Lpc17UsbDataCollect(uint32_t *pMask, uint8_t Status[32]);
+// Set enabled (0), halted (1), or disabled (0x20) status on a realized data
+// endpoint, flush/reset its FIFO and acknowledge its stale interrupt. The
+// caller masks this endpoint interrupt first. No RAM realization is changed.
+// Initializing permits pending bus events only for disabling freshly realized
+// endpoints with all device/endpoint IRQ enables off, before data traffic.
+bool Lpc17UsbDataSetStatus(uint8_t EpNo, bool In, uint8_t Status, bool Initializing);
 // Initialize an exclusively owned, prepared block while disconnected.
 // Requires no prior EP0 realization, enabled interrupts, DMA or data endpoints.
 // Leaves address zero, 64-byte EP0, NAK interrupts off and all IRQ enables off.

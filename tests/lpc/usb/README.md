@@ -657,8 +657,7 @@ IRQ without dispatching the pre-reset endpoint snapshot. Suspend/resume use
 the existing direct event callback. Callback disable, unbind or generation
 change prevents further dispatch. VBUS loss and status-read failure mask
 device/endpoint interrupts, disable software state and call Fault; the owner
-must disconnect/stop and arrange reinitialization. This is currently EP0-only,
-with slow routing and no DMA/SOF support.
+must disconnect/stop and arrange reinitialization. The controller uses slow interrupt routing without DMA/SOF support.
 
 Endpoint summary is cleared only after all endpoint flags are clear, followed
 by a recheck that restores the summary if an endpoint arrived across the W1C
@@ -677,8 +676,8 @@ LPC1769 public EP0 lifecycle and firmware link
 --------------------------------------------
 
 `usb_lpc17xx.c` now implements the public controller lifecycle and EP0 wrappers.
-The target `usb_ctrlr.h` advertises one IN/OUT endpoint (EP0) and rejects data
-and ISO endpoint operations. Init validates the fixed pin map and clamps IRQ
+The target `usb_ctrlr.h` advertises the hardware endpoint-number range;
+bulk and interrupt directions are now connected as described below. ISO is unsupported. Init validates the fixed pin map and clamps IRQ
 priority to the supported range. Start validates the existing USB clock using
 the board oscillator descriptor, initializes EP0, binds the IRQ and sets device
 interrupt masks. Connect enables SoftConnect only with VBUS present. Stop
@@ -691,7 +690,7 @@ external active-low pull-up switch on SoftConnect P2.9 FUNC1. The pin order is
 documented in `usb_ctrlr.h`. VBUS must be present at startup: P1.30 has no GPIO
 edge interrupt and automatic reattachment is not implemented. The existing
 system clock must supply a valid 48 MHz USB clock; the controller does not
-retune it. Remote wake, SOF, low-power suspend and data endpoints are unsupported.
+retune it. Remote wake, SOF and low-power suspend are unsupported.
 The default serial string comes from the ROM unique ID through shared LPC IAP.
 
 `ARM/NXP/LPC17xx/LPC1769/exemples/UsbEp0Demo/src/usb_ep0_demo.cpp` registers a vendor interface with no data
@@ -702,7 +701,7 @@ and pin map are build-fixture assumptions to verify against the actual board.
 Run `python3 tests/lpc/usb/link17.py --prefix arm-none-eabi-` to link both modes.
 The script checks library source links, LPC vector checksum, USB IRQ vector,
 archive extraction and semihosting selection. Debug uses rdimon; Release uses
-nosys. Measured text/data/bss: Debug 35152/476/2680, Release 15296/88/2176 bytes.
+nosys. Measured text/data/bss: Debug 37772/476/4060, Release 16872/88/3560 bytes.
 `run17.py` also checks public lifecycle start/stop, missing VBUS, priority clamp,
 pin ownership and initialization/SIE failure cleanup at -O0/-O2 with UBSan.
 These are successful firmware links and host tests, not hardware enumeration.
@@ -734,7 +733,7 @@ semihosting and Release nosys. Oscillator and USB pin definitions are in the
 example's `board.h`. The example README gives the wiring assumptions and a
 PyUSB control-request check. `link17.py` now compiles the actual example and
 checks its project source links and linker options. Hardware validation is
-still pending; the driver remains EP0-only.
+still pending; this example exercises EP0 only.
 
 LPC1769 bulk and interrupt endpoint realization
 ----------------------------------------------
@@ -758,9 +757,8 @@ The register-model test enumerates endpoint/type/size combinations in both
 directions, realizes every supported direction together, and checks active
 interrupt/DMA/FIFO rejection, missing EP0, clock/power loss, invalid arguments,
 stale completion flags, duplicate realization and timeout recovery. Tests pass
-at -O0/-O2 with UBSan. This is a private preparation step: public endpoint counts
-remain EP0-only until data FIFO operations, IRQ dispatch and lifecycle handling
-are implemented. No data-transfer or hardware-enumeration claim is made.
+at -O0/-O2 with UBSan. The public lifecycle now uses this preparation step before connection and
+after bus reset. Hardware enumeration and data transfers remain unverified.
 
 LPC1769 bulk and interrupt CPU FIFO access
 -----------------------------------------
@@ -835,15 +833,14 @@ call dispatch inline. IRQ dispatch uses endpoint generations captured before
 callbacks so a stale snapshot cannot complete a replacement IN transfer.
 Fault must stop hardware before Forget returns accepted buffers with CANCEL.
 Forget preserves bindings, disables the endpoint and rejects reentrant work
-through the owner's closing state. Halt/clear-halt handling remains pending.
+through the owner's closing state. Halt/clear-halt handling is now connected through the public lifecycle.
 
 `data17_test.c` mocks FIFO access and checks IN lengths 0, 1, 63, 64, 65, 128
 and 129; exact packet bytes; NAK/stale-event rejection; callback resubmission;
 OUT backpressure, ZLP and deferred completion; callback shutdown; and initial
 or continuation failures. -O0/-O2 UBSan runs pass, as do warning-clean Cortex-M3
 compilation and Debug/Release EP0 links. The library project includes the new
-module. It is not yet connected to public endpoint operations or USB_IRQHandler;
-public data support remains disabled until lifecycle and IRQ integration.
+module. It is connected to public endpoint operations and USB_IRQHandler.
 
 LPC1769 IRQ connection for data transfers
 ----------------------------------------
@@ -866,5 +863,28 @@ slow-interrupt summary could remain asserted indefinitely.
 Host tests cover data dispatch through bit 31, callback rearming/unbinding,
 new bus events, capture failure, invalid ownership, reset cancellation and
 stale endpoint IRQ cleanup. -O0/-O2 UBSan tests and Debug/Release links pass.
-The public lifecycle does not bind the array yet: public open/close, halt and
-reset integration remains required before advertising bulk/interrupt support.
+The public lifecycle now binds the array and handles open/close, halt and reset.
+
+
+LPC1769 public bulk and interrupt lifecycle
+-----------------------------------------
+
+Public open, close, bind, send, receive, stall and clear-stall operations now
+use the private transfer state and IRQ dispatcher. Each supported direction
+reserves 64 bytes per hardware packet during disconnected startup or bus reset;
+logical packet sizes retain their fixed-type validation. Open and close do not
+reallocate live endpoint RAM. ISO, DMA, SOF and remote wake remain unsupported.
+
+Endpoint status changes mask the selected endpoint IRQ, flush/reset its FIFO
+through SIE, and acknowledge its old IRQ before enabling dispatch. Initialization
+preserves pending bus events while all interrupt sources are masked. Halting
+fails an active transfer; submissions while halted remain queued until clear.
+Clear-stall also resets an already-unstalled endpoint. Close/stop return accepted
+buffers only after hardware retirement, including deferred cleanup after faults.
+Callbacks retain the existing direct interrupt-context behavior.
+
+Host tests cover public lifecycle transitions, repeated clear-stall with callback
+rearming, failed-close ownership, bit-31 status commands, pending startup events
+and bounded status timeouts. All LPC1769 USB host tests pass at -O0/-O2 with
+UBSan. The EP0 example links in Debug and Release; a class/data example and
+physical-board enumeration and transfers remain to be validated.

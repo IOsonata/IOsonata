@@ -112,6 +112,7 @@ for opt in ['-O0', '-O2']:
                         '-I' + str(root / 'include'),
                         str(root / 'tests/lpc/usb/lifecycle17_test.c'),
                         str(root / 'ARM/NXP/LPC17xx/src/usb_lpc17xx.c'),
+                        str(root / 'ARM/NXP/LPC17xx/src/usb_data_lpc17xx.c'),
                         str(root / 'ARM/NXP/src/lpc_iap.c'),
                         '-o', exe], check=True)
         subprocess.run([exe], check=True, timeout=5)

@@ -8,12 +8,21 @@
 #include "usb_control_lpc17xx.h"
 #include "coredev/system_core_clock.h"
 #include "LPC17xx.h"
+#include "usb_data_lpc17xx.h"
 
 McuOsc_t g_McuOsc = {{OSC_TYPE_XTAL, 16000000, 0, 0}, {0}, false};
 typedef void (*IAPENTRY)(IAP_CMD_STATUS *, IAP_CMD_STATUS *);
 extern IAPENTRY IapEntry;
 static unsigned s_UidCalls;
 static bool s_UidFail;
+static Lpc17UsbDataEndpoint_t *s_pData;
+static unsigned s_Realized;
+static unsigned s_StatusWrites;
+static unsigned s_Failed;
+static unsigned s_Cancelled;
+static unsigned s_Kicks;
+static bool s_StatusFail;
+static bool s_RearmFailed;
 static uint32_t s_Mask;
 static unsigned s_Priority;
 static unsigned s_PinWrites;
@@ -90,6 +99,64 @@ void TestSetPrimask(uint32_t State)
 {
 	s_Mask = State;
 }
+void NVIC_SetPendingIRQ(IRQn_Type Irq)
+{
+	assert(Irq == USB_IRQn);
+	++s_Kicks;
+}
+bool Lpc17UsbDataRealize(uint8_t EpNo, bool In, uint8_t Type, uint16_t Size)
+{
+	assert(EpNo > 0 && EpNo < 16 && Size == 64);
+	assert(Type == (EpNo % 3 == 1 ? INT : BULK));
+	assert(LPC_USB->USBDevIntEn == 0 && LPC_USB->USBEpIntEn == 0);
+	LPC_USB->USBReEp |= 1UL << (EpNo * 2 + In);
+	++s_Realized;
+	return true;
+}
+bool Lpc17UsbDataSetStatus(uint8_t EpNo, bool In, uint8_t Status, bool Initializing)
+{
+	assert((LPC_USB->USBEpIntEn & (1UL << (EpNo * 2 + In))) == 0);
+	assert(Status == 0 || Status == 1 || Status == 0x20);
+	if (Initializing)
+		assert(Status == 0x20 && LPC_USB->USBEpIntEn == 0 && LPC_USB->USBDevIntEn == 0);
+	++s_StatusWrites;
+	return !s_StatusFail;
+}
+bool Lpc17UsbIrqBindData(Lpc17UsbDataEndpoint_t Endpoint[30])
+{
+	assert(s_Bound);
+	s_pData = Endpoint;
+	return true;
+}
+bool Lpc17UsbDataWrite(uint8_t EpNo, const uint8_t *pData, int Length)
+{
+	assert(EpNo == 2 && Length <= 64 && (pData != NULL || Length == 0));
+	return true;
+}
+int Lpc17UsbDataRead(uint8_t EpNo, uint8_t *pData, int Capacity)
+{
+	(void)EpNo;
+	(void)pData;
+	(void)Capacity;
+	return -2;
+}
+static void DataEvent(UsbCtrlrEvtType_t Event, uint16_t Length, void *pContext)
+{
+	(void)Length;
+	assert(pContext == s_pData);
+	if (Event == USB_CTRLR_EVT_XFER_FAILED)
+		{
+		++s_Failed;
+		if (s_RearmFailed)
+			assert(UsbCtrlrEpSend(0, 2, NULL, 0));
+	}
+	else
+	{
+		assert(Event == USB_CTRLR_EVT_CANCEL);
+		++s_Cancelled;
+		assert(!UsbCtrlrEpSend(0, 2, NULL, 0));
+	}
+}
 void NVIC_ClearPendingIRQ(IRQn_Type Irq)
 {
 	assert(Irq == USB_IRQn);
@@ -135,8 +202,12 @@ bool Lpc17UsbHwRelease(void)
 }
 bool Lpc17UsbSieWrite(uint8_t Command, uint8_t Data)
 {
-	assert(Command == 0xFE && Data <= 1);
+	assert((Command == 0xFE || Command == 0xD8) && Data <= 1);
 	return !s_SieFail;
+}
+void Lpc17UsbControlStall(Lpc17UsbControl_t *pControl)
+{
+	pControl->Halted = true;
 }
 void Lpc17UsbControlReset(Lpc17UsbControl_t *pControl, bool Enable)
 {
@@ -209,6 +280,46 @@ int main(void)
 	assert(UsbCtrlrInit(0, &config));
 	s_SieFail = false;
 	assert(UsbCtrlrStart(0) && s_Priority == 0);
+	assert(s_Realized >= 22);
+	UsbCtrlrEpBind(0, 2, true, false, DataEvent, s_pData);
+	assert(!UsbCtrlrEpOpenData(0, 1, true, BULK, 64));
+	assert(!UsbCtrlrEpOpenData(0, 3, true, BULK, 64));
+	assert(!UsbCtrlrEpOpenData(0, 2, true, BULK, 7));
+	assert(UsbCtrlrEpOpenData(0, 2, true, BULK, 64));
+	assert(!UsbCtrlrEpOpenData(0, 2, true, BULK, 64));
+	assert(UsbCtrlrEpOpenData(0, 1, false, INT, 13));
+	assert((LPC_USB->USBEpIntEn & 0x24) == 0x24);
+	assert(UsbCtrlrEpSend(0, 2, NULL, 0));
+	UsbCtrlrEpStall(0, 2, true);
+	assert(s_Failed == 1 && s_pData[3].Halted && !s_pData[3].Busy);
+	assert(UsbCtrlrEpSend(0, 2, NULL, 0));
+	UsbCtrlrEpClearStall(0, 2, true);
+	assert(!s_pData[3].Halted && s_pData[3].Busy);
+	s_RearmFailed = true;
+	const unsigned writes = s_StatusWrites;
+	UsbCtrlrEpClearStall(0, 2, true);
+	assert(s_StatusWrites == writes + 1 && s_Failed == 2);
+	assert(!s_pData[3].Halted && s_pData[3].Busy);
+	s_RearmFailed = false;
+	UsbCtrlrEpClose(0, 2, true);
+	assert(s_Cancelled == 1 && !s_pData[3].Enabled);
+	assert((LPC_USB->USBEpIntEn & 0x20) == 0);
+	assert(UsbCtrlrEpOpenData(0, 2, true, BULK, 8));
+	assert(UsbCtrlrEpSend(0, 2, NULL, 0));
+	UsbCtrlrEpCloseAll(0);
+	assert(s_Cancelled == 2 && LPC_USB->USBEpIntEn == 3);
+	assert(UsbCtrlrEpOpenData(0, 2, true, BULK, 64));
+	assert(UsbCtrlrEpSend(0, 2, NULL, 0));
 	UsbCtrlrStop(0);
+	assert(s_Cancelled == 3 && !s_pData[3].Enabled);
+	assert(UsbCtrlrStart(0));
+	assert(UsbCtrlrEpOpenData(0, 2, true, BULK, 64));
+	assert(UsbCtrlrEpSend(0, 2, NULL, 0));
+	s_StatusFail = true;
+	UsbCtrlrEpClose(0, 2, true);
+	assert(s_Cancelled == 3 && s_pData[3].Busy && !s_pControl->Enabled);
+	UsbCtrlrProcess(0);
+	assert(s_Cancelled == 4 && !s_pData[3].Busy);
+	puts("LPC1769 public data open/close, halt/clear, stop and fault retirement: PASS");
 	puts("LPC1769 public lifecycle, pin ownership, priority clamp and failure cleanup: PASS");
 }

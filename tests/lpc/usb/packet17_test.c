@@ -632,6 +632,42 @@ static void DataCollectTests(void)
 	puts("LPC1769 data IRQ snapshot, bit 31, arrival races and partial failure: PASS");
 }
 
+static void DataStatusTests(void)
+{
+	DataFifoPrepare(15, 64);
+	s_DataFifo = false;
+	s_DataAck = true;
+	s_InitTrace = true;
+	s_InitWrites = 0;
+	for (unsigned i = 0; i < 3; ++i)
+	{
+		const uint8_t status = i == 2 ? 0x20 : i;
+		s_DataAckSeen = 0;
+		assert(Lpc17UsbDataSetStatus(15, true, status, false));
+		assert(s_DataAckSeen == 0x80000000U);
+		assert(s_InitData[i] == (0x5F00U | status));
+	}
+	LPC_USB->USBEpIntEn = 0x80000000U;
+	assert(!Lpc17UsbDataSetStatus(15, true, 0, false));
+	LPC_USB->USBEpIntEn = 0;
+	SetReadOnly(&LPC_USB->USBDevIntSt, 8);
+	assert(!Lpc17UsbDataSetStatus(15, true, 0x20, false));
+	assert(!Lpc17UsbDataSetStatus(15, true, 0, true));
+	s_DataAckSeen = 0;
+	assert(Lpc17UsbDataSetStatus(15, true, 0x20, true));
+	assert((LPC_USB->USBDevIntSt & 8U) != 0);
+	assert(s_InitWrites == 4);
+	s_InitTrace = false;
+	SetReadOnly(&LPC_USB->USBDevIntSt, 0);
+	s_DataAckSeen = 0;
+	s_AckTimeout = s_Acks + 1;
+	assert(!Lpc17UsbDataSetStatus(15, true, 1, false));
+	s_AckTimeout = 0;
+	assert(!Lpc17UsbDataSetStatus(15, true, 0, false));
+	s_DataAck = false;
+	puts("LPC1769 data endpoint status, startup bus preservation and timeout: PASS");
+}
+
 int main(void)
 {
 	ClockTests();
@@ -782,5 +818,6 @@ int main(void)
 	DataRealizeTests();
 	DataFifoTests();
 	DataCollectTests();
+	DataStatusTests();
 	puts("LPC1769 device init, bus status, EP0 FIFO, interrupts and timeouts: PASS");
 }

@@ -637,3 +637,27 @@ bool Lpc17UsbDataWrite(uint8_t EpNo, const uint8_t *pData, int Length)
 	__set_PRIMASK(state);
 	return done;
 }
+
+bool Lpc17UsbDataSetStatus(uint8_t EpNo, bool In, uint8_t Status, bool Initializing)
+{
+	if (EpNo == 0U || EpNo > 15U || (EpNo % 3U == 0U && EpNo != 15U) ||
+		(Status != 0U && Status != 1U && Status != 0x20U))
+		return false;
+	const uint32_t state = __get_PRIMASK();
+	__disable_irq();
+	bool done = false;
+	const unsigned physical = (unsigned)EpNo * 2U + (In ? 1U : 0U);
+	uint8_t ignored;
+	if (Lpc17UsbPacketReady() && s_Ep0Ready &&
+		(LPC_USB->USBReEp & (1UL << physical)) != 0U &&
+		LPC_USB->USBEpDMASt == 0U && LPC_USB->USBDMAIntEn == 0U && LPC_USB->USBCtrl == 0U &&
+		(LPC_USB->USBEpIntEn & (1UL << physical)) == 0U &&
+		(Initializing ? (Status == 0x20U && LPC_USB->USBDevIntEn == 0U &&
+		 LPC_USB->USBEpIntEn == 0U) : (LPC_USB->USBDevIntSt & 8U) == 0U))
+		done = Lpc17UsbSieWrite(0x40U + physical, Status) &&
+			Lpc17UsbEndpointAck(physical, &ignored) &&
+			(LPC_USB->USBReEp & (1UL << physical)) != 0U &&
+			(Initializing || (LPC_USB->USBDevIntSt & 8U) == 0U);
+	__set_PRIMASK(state);
+	return done;
+}

@@ -51,6 +51,7 @@ typedef struct __Lpc17_Usb_Data_Endpoint {
 	bool In;
 	bool Enabled;
 	bool Busy;
+	bool Halted;
 } Lpc17UsbDataEndpoint_t;
 
 #ifdef __cplusplus
@@ -62,13 +63,16 @@ extern "C" {
 // Owner's Ready must reject work while the bound control object is disabled.
 bool Lpc17UsbIrqBindData(Lpc17UsbDataEndpoint_t Endpoint[30]);
 // Zero-initialize and assign callbacks before Open. The owner realizes and
-// enables hardware first. Ready rejects bus events and shutdown. Halt handling is not wired yet.
+// enables hardware first. Ready rejects bus events and shutdown.
 // Kick requests a later OUT IRQ pass; it must not invoke Dispatch inline.
 // Fault must stop hardware before returning accepted buffers through Forget.
 bool Lpc17UsbDataOpen(Lpc17UsbDataEndpoint_t *pEp, uint8_t EpNo, bool In, uint16_t Mps);
 // Caller must retire hardware first and block all reentrant Open/submissions
 // through Ready during shutdown. Preserves callback bindings; emits CANCEL.
 void Lpc17UsbDataForget(Lpc17UsbDataEndpoint_t *pEp);
+// Owner flushes hardware and masks the endpoint IRQ before this operation.
+// Active work reports FAILED on halt; new submissions while halted wait.
+void Lpc17UsbDataHalt(Lpc17UsbDataEndpoint_t *pEp, bool Halt);
 // IN stages one packet at a time, completes once for the total length, and
 // sends a ZLP only when explicitly requested with Length=0.
 bool Lpc17UsbDataSend(Lpc17UsbDataEndpoint_t *pEp, uint8_t *pBuffer, uint16_t Length);

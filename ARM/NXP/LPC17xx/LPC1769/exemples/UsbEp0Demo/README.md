@@ -50,8 +50,8 @@ else:
     raise RuntimeError("LPC1769 EP0 Demo was not found")
 ```
 
-This checks control requests only. CDC, HID and bulk data transfers are not
-implemented by the LPC1769 driver yet. SOF, remote wake and low-power suspend
+This checks control requests only. The driver now exposes bulk and interrupt
+endpoints, but this example does not exercise CDC, HID or bulk data transfers. SOF, remote wake and low-power suspend
 are also unsupported. There is no Windows vendor-interface driver supplied.
 
 ## Validation
@@ -59,6 +59,6 @@ are also unsupported. There is no Windows vendor-interface driver supplied.
 `python3 tests/lpc/usb/link17.py --prefix arm-none-eabi-` builds this application
 against the real MCU library sources in Debug and Release. It checks project
 source links and semihosting options, vector checksum, USB IRQ vector and ROM
-IAP linkage. GNU Arm 13.2.1 links pass: text/data/bss are 35152/476/2680 bytes
-in Debug and 15296/88/2176 bytes in Release. Physical-board enumeration and the
+IAP linkage. GNU Arm 13.2.1 links pass: text/data/bss are 37772/476/4060 bytes
+in Debug and 16872/88/3560 bytes in Release. Physical-board enumeration and the
 host check above have not been run.

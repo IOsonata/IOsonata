@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
 @file	usb_lpc17xx.c
 
-@brief	LPC1769 EP0-only public USB controller lifecycle.
+@brief	LPC1769 full-speed USB controller lifecycle.
 
 @author	Hoang Nguyen Hoan
 @date	Oct. 12, 2026
@@ -39,7 +39,10 @@ SOFTWARE.
 #include "usb/usb.h"
 #include "usb_hw_lpc17xx.h"
 #include "usb_control_lpc17xx.h"
+#include "usb_data_lpc17xx.h"
 
+static bool s_Closing;
+static Lpc17UsbDataEndpoint_t s_Data[30];
 static bool s_Initialized;
 static bool s_Prepared;
 static bool s_Faulted;
@@ -72,8 +75,61 @@ static void Lpc17UsbFault(void)
 	UsbProcessQue(0);
 }
 
+static bool Lpc17UsbDataReady(void)
+{
+	return s_Prepared && s_Control.Enabled && !s_Closing && !s_Faulted &&
+		(LPC_USB->USBDevIntSt & 8U) == 0U;
+}
+
+static void Lpc17UsbDataKick(uint8_t EpNo)
+{
+	if (Lpc17UsbDataReady())
+	{
+		LPC_USB->USBEpIntSet = 1UL << (EpNo * 2U);
+		LPC_USB->USBDevIntSet = 4U;
+		NVIC_SetPendingIRQ(USB_IRQn);
+	}
+}
+
+static bool Lpc17UsbPrepareData(void)
+{
+	const uint32_t deviceEnable = LPC_USB->USBDevIntEn;
+	const uint32_t endpointEnable = LPC_USB->USBEpIntEn;
+	LPC_USB->USBDevIntEn = 0U;
+	LPC_USB->USBEpIntEn = 0U;
+	bool ready = true;
+	// Reserve fixed 64-byte hardware buffers before any data traffic. Logical
+	// MPS remains per endpoint; later opens never relocate live endpoint RAM.
+	for (unsigned ep = 1; ep < 16U && ready; ++ep)
+	{
+		if (ep % 3U == 0U && ep != 15U)
+			continue;
+		for (unsigned in = 0; in < 2U && ready; ++in)
+			ready = Lpc17UsbDataRealize(ep, in != 0, ep % 3U == 1U ? INT : BULK, 64) &&
+				Lpc17UsbDataSetStatus(ep, in != 0, 0x20, true);
+	}
+	if (ready)
+	{
+		LPC_USB->USBEpIntEn = endpointEnable;
+		LPC_USB->USBDevIntEn = deviceEnable;
+	}
+	return ready;
+}
+
+static Lpc17UsbDataEndpoint_t *Lpc17UsbEndpoint(int DevNo, uint8_t EpNo, bool In)
+{
+	if (DevNo != 0 || EpNo == 0 || EpNo > 15 || (EpNo % 3 == 0 && EpNo != 15))
+		return NULL;
+	return &s_Data[EpNo * 2U + (In ? 1U : 0U) - 2U];
+}
+
 static void Lpc17UsbEvent(const UsbCtrlrEvt_t *pEvent)
 {
+	if (pEvent->Type == USB_CTRLR_EVT_RESET && !Lpc17UsbPrepareData())
+	{
+		Lpc17UsbFault();
+		return;
+	}
 	UsbDevProcessEvent(0, pEvent);
 }
 
@@ -102,6 +158,12 @@ bool UsbCtrlrInit(int DevNo, const UsbCtrlrCfg_t *pCfg)
 	NVIC_DisableIRQ(USB_IRQn);
 	Lpc17UsbDisconnectPin();
 	IOPinCfg(s_Pins, 3);
+	for (unsigned i = 0; i < 30U; ++i)
+	{
+		s_Data[i].Ready = Lpc17UsbDataReady;
+		s_Data[i].Fault = Lpc17UsbFault;
+		s_Data[i].Kick = Lpc17UsbDataKick;
+	}
 	s_Control.Event = Lpc17UsbEvent;
 	s_Control.Fault = Lpc17UsbFault;
 	s_Initialized = true;
@@ -117,7 +179,7 @@ bool UsbCtrlrVbusDetected(int DevNo)
 
 bool UsbCtrlrStart(int DevNo)
 {
-	if (DevNo != 0 || !UsbCtrlrVbusDetected(0))
+	if (DevNo != 0 || s_Closing || !UsbCtrlrVbusDetected(0))
 		return false;
 	const uint32_t state = DisableInterrupt();
 	if (s_Prepared)
@@ -130,12 +192,14 @@ bool UsbCtrlrStart(int DevNo)
 	if (ready)
 	{
 		s_Prepared = true;
-		ready = Lpc17UsbDeviceInit();
+		ready = Lpc17UsbDeviceInit() && Lpc17UsbPrepareData();
 		if (ready)
 		{
 			Lpc17UsbControlReset(&s_Control, true);
 			ready = Lpc17UsbIrqBind(&s_Control);
 			s_Bound = ready;
+			if (ready)
+				ready = Lpc17UsbIrqBindData(s_Data);
 		}
 		if (ready)
 		{
@@ -154,9 +218,10 @@ bool UsbCtrlrStart(int DevNo)
 
 void UsbCtrlrStop(int DevNo)
 {
-	if (DevNo != 0 || !s_Initialized)
+	if (DevNo != 0 || !s_Initialized || s_Closing)
 		return;
 	const uint32_t state = DisableInterrupt();
+	s_Closing = true;
 	NVIC_DisableIRQ(USB_IRQn);
 	Lpc17UsbDisconnectPin();
 	if (s_Bound)
@@ -176,6 +241,12 @@ void UsbCtrlrStop(int DevNo)
 				s_Prepared = false;
 		}
 	}
+	if (!s_Prepared)
+	{
+		for (unsigned i = 0; i < 30U; ++i)
+			Lpc17UsbDataForget(&s_Data[i]);
+	}
+	s_Closing = false;
 	NVIC_ClearPendingIRQ(USB_IRQn);
 	EnableInterrupt(state);
 }
@@ -238,75 +309,145 @@ void UsbCtrlrSetAddress(int DevNo, uint8_t Address)
 }
 bool UsbCtrlrEpOpen(int DevNo, const UsbEndPointDesc_t *pDesc)
 {
-	return DevNo == 0 && pDesc != NULL && s_Control.Enabled &&
-		(pDesc->bEndpointAddress & 0x7FU) == 0U &&
-		pDesc->bmAttributes == USB_ENDPATT_TRANS_CONTROL && pDesc->wMaxPacketSize == 64;
+	if (pDesc == NULL || (pDesc->bEndpointAddress & 0x70U) != 0U)
+		return false;
+	if ((pDesc->bEndpointAddress & 15U) == 0U)
+		return DevNo == 0 && s_Control.Enabled &&
+			pDesc->bmAttributes == USB_ENDPATT_TRANS_CONTROL && pDesc->wMaxPacketSize == 64;
+	return UsbCtrlrEpOpenData(DevNo, pDesc->bEndpointAddress & 15U,
+		(pDesc->bEndpointAddress & 0x80U) != 0U, pDesc->bmAttributes & 3U, pDesc->wMaxPacketSize);
 }
+
 bool UsbCtrlrEpOpenData(int DevNo, uint8_t EpNo, bool In, uint8_t Type, uint16_t Size)
 {
-	(void)DevNo;
-	(void)EpNo;
-	(void)In;
-	(void)Type;
-	(void)Size;
-	return false;
+	Lpc17UsbDataEndpoint_t *ep = Lpc17UsbEndpoint(DevNo, EpNo, In);
+	if (ep == NULL || Type != (EpNo % 3U == 1U ? INT : BULK))
+		return false;
+	const uint32_t state = DisableInterrupt();
+	bool ready = Lpc17UsbDataOpen(ep, EpNo, In, Size);
+	if (ready)
+	{
+		ready = Lpc17UsbDataSetStatus(EpNo, In, 0, false) && Lpc17UsbSieWrite(0xD8, 1);
+		if (ready)
+			LPC_USB->USBEpIntEn |= 1UL << (EpNo * 2U + (In ? 1U : 0U));
+		else
+			Lpc17UsbFault();
+	}
+	EnableInterrupt(state);
+	return ready;
 }
+
+static void Lpc17UsbHalt(int DevNo, uint8_t EpNo, bool In, bool Halt)
+{
+	Lpc17UsbDataEndpoint_t *ep = Lpc17UsbEndpoint(DevNo, EpNo, In);
+	if (ep == NULL)
+		return;
+	const uint32_t state = DisableInterrupt();
+	if (Lpc17UsbDataReady() && ep->Enabled)
+	{
+		const uint32_t bit = 1UL << (EpNo * 2U + (In ? 1U : 0U));
+		LPC_USB->USBEpIntEn &= ~bit;
+		if (Lpc17UsbDataSetStatus(EpNo, In, Halt ? 1 : 0, false))
+		{
+			Lpc17UsbDataHalt(ep, Halt);
+			if (Lpc17UsbDataReady() && ep->Enabled)
+				LPC_USB->USBEpIntEn |= bit;
+		}
+		else
+			Lpc17UsbFault();
+	}
+	EnableInterrupt(state);
+}
+
 void UsbCtrlrEpStall(int DevNo, uint8_t EpNo, bool In)
 {
-	(void)In;
 	if (DevNo == 0 && EpNo == 0)
 		Lpc17UsbControlStall(&s_Control);
+	else
+		Lpc17UsbHalt(DevNo, EpNo, In, true);
 }
 void UsbCtrlrEpClearStall(int DevNo, uint8_t EpNo, bool In)
 {
-	// EP0 stall is cleared by the next SETUP, not endpoint CLEAR_FEATURE.
-	(void)DevNo;
-	(void)EpNo;
-	(void)In;
+	Lpc17UsbHalt(DevNo, EpNo, In, false);
 }
+
 void UsbCtrlrEpClose(int DevNo, uint8_t EpNo, bool In)
 {
-	(void)DevNo;
-	(void)EpNo;
-	(void)In;
+	Lpc17UsbDataEndpoint_t *ep = Lpc17UsbEndpoint(DevNo, EpNo, In);
+	if (ep == NULL)
+		return;
+	const uint32_t state = DisableInterrupt();
+	if (Lpc17UsbDataReady() && ep->Enabled)
+	{
+		s_Closing = true;
+		LPC_USB->USBEpIntEn &= ~(1UL << (EpNo * 2U + (In ? 1U : 0U)));
+		if (Lpc17UsbDataSetStatus(EpNo, In, 0x20, false))
+			Lpc17UsbDataForget(ep);
+		else
+			Lpc17UsbFault();
+		s_Closing = false;
+	}
+	EnableInterrupt(state);
 }
 void UsbCtrlrEpCloseAll(int DevNo)
 {
-	(void)DevNo;
+	if (DevNo != 0)
+		return;
+	const uint32_t state = DisableInterrupt();
+	if (Lpc17UsbDataReady())
+	{
+		s_Closing = true;
+		LPC_USB->USBEpIntEn &= 3U;
+		bool ready = Lpc17UsbSieWrite(0xD8, 0);
+		for (unsigned i = 0; i < 30U && ready; ++i)
+		{
+			if (s_Data[i].Enabled)
+				ready = Lpc17UsbDataSetStatus(s_Data[i].EpNo, s_Data[i].In, 0x20, false);
+		}
+		if (ready)
+		{
+			for (unsigned i = 0; i < 30U; ++i)
+				Lpc17UsbDataForget(&s_Data[i]);
+		}
+		else
+			Lpc17UsbFault();
+		s_Closing = false;
+	}
+	EnableInterrupt(state);
 }
 void UsbCtrlrEpBind(int DevNo, uint8_t EpNo, bool In, bool Blocking,
 		UsbCtrlrEpHandler_t Handler, void *pContext)
 {
-	(void)DevNo;
-	(void)EpNo;
-	(void)In;
 	(void)Blocking;
-	(void)Handler;
-	(void)pContext;
+	Lpc17UsbDataEndpoint_t *ep = Lpc17UsbEndpoint(DevNo, EpNo, In);
+	if (ep == NULL)
+		return;
+	const uint32_t state = DisableInterrupt();
+	if (!s_Closing && !ep->Busy)
+	{
+		ep->Handler = Handler;
+		ep->pContext = pContext;
+		++ep->Generation;
+		if (!In && ep->Enabled && !ep->Halted)
+			Lpc17UsbDataKick(EpNo);
+	}
+	EnableInterrupt(state);
 }
 bool UsbCtrlrEpReceive(int DevNo, uint8_t EpNo, uint8_t *pBuffer, uint16_t Length)
 {
-	(void)DevNo;
-	(void)EpNo;
-	(void)pBuffer;
-	(void)Length;
-	return false;
+	return Lpc17UsbDataReceive(Lpc17UsbEndpoint(DevNo, EpNo, false), pBuffer, Length);
 }
 bool UsbCtrlrEpSend(int DevNo, uint8_t EpNo, uint8_t *pBuffer, uint16_t Length)
 {
-	(void)DevNo;
-	(void)EpNo;
-	(void)pBuffer;
-	(void)Length;
-	return false;
+	return Lpc17UsbDataSend(Lpc17UsbEndpoint(DevNo, EpNo, true), pBuffer, Length);
 }
 void UsbCtrlrEpProcessEvent(int DevNo, uint8_t EpNo, bool In, UsbCtrlrEvtType_t Event, uint16_t Value)
 {
-	(void)DevNo;
-	(void)EpNo;
-	(void)In;
-	(void)Event;
-	(void)Value;
+	Lpc17UsbDataEndpoint_t *ep = Lpc17UsbEndpoint(DevNo, EpNo, In);
+	const uint32_t state = DisableInterrupt();
+	if (ep != NULL && Lpc17UsbDataReady() && ep->Enabled && ep->Handler != NULL)
+		ep->Handler(Event, Value, ep->pContext);
+	EnableInterrupt(state);
 }
 bool UsbCtrlrHighSpeed(int DevNo)
 {

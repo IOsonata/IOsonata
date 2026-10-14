@@ -62,6 +62,7 @@ bool Lpc17UsbDataOpen(Lpc17UsbDataEndpoint_t *pEp, uint8_t EpNo, bool In, uint16
 		pEp->Mps = Mps;
 		pEp->pBuffer = NULL;
 		pEp->Enabled = true;
+		pEp->Halted = false;
 		++pEp->Generation;
 	}
 	EnableInterrupt(state);
@@ -76,6 +77,7 @@ void Lpc17UsbDataForget(Lpc17UsbDataEndpoint_t *pEp)
 	const bool busy = pEp->Busy;
 	pEp->Enabled = false;
 	pEp->Busy = false;
+	pEp->Halted = false;
 	pEp->pBuffer = NULL;
 	pEp->Mps = 0;
 	pEp->Remaining = 0;
@@ -104,7 +106,7 @@ bool Lpc17UsbDataSend(Lpc17UsbDataEndpoint_t *pEp, uint8_t *pBuffer, uint16_t Le
 		pEp->pBuffer = pBuffer;
 		pEp->Remaining = Length;
 		pEp->Transferred = 0;
-		accepted = Lpc17UsbDataStage(pEp);
+		accepted = pEp->Halted || Lpc17UsbDataStage(pEp);
 		if (accepted)
 		{
 			pEp->Busy = true;
@@ -130,7 +132,8 @@ bool Lpc17UsbDataReceive(Lpc17UsbDataEndpoint_t *pEp, uint8_t *pBuffer, uint16_t
 	{
 		pEp->pBuffer = pBuffer;
 		pEp->Busy = true;
-		pEp->Kick(pEp->EpNo);
+		if (!pEp->Halted)
+			pEp->Kick(pEp->EpNo);
 	}
 	EnableInterrupt(state);
 	return accepted;
@@ -139,7 +142,7 @@ bool Lpc17UsbDataReceive(Lpc17UsbDataEndpoint_t *pEp, uint8_t *pBuffer, uint16_t
 void Lpc17UsbDataDispatch(Lpc17UsbDataEndpoint_t *pEp, uint32_t Generation, uint8_t Status)
 {
 	const uint32_t state = DisableInterrupt();
-	if (!Lpc17UsbDataCurrent(pEp) || pEp->Generation != Generation)
+	if (!Lpc17UsbDataCurrent(pEp) || pEp->Halted || pEp->Generation != Generation)
 	{
 		EnableInterrupt(state);
 		return;
@@ -190,6 +193,39 @@ void Lpc17UsbDataDispatch(Lpc17UsbDataEndpoint_t *pEp, uint32_t Generation, uint
 			}
 			else if (length != -2)
 				pEp->Fault();
+		}
+	}
+	EnableInterrupt(state);
+}
+
+void Lpc17UsbDataHalt(Lpc17UsbDataEndpoint_t *pEp, bool Halt)
+{
+	const uint32_t state = DisableInterrupt();
+	if (Lpc17UsbDataCurrent(pEp))
+	{
+		const bool wasHalted = pEp->Halted;
+		pEp->Halted = Halt;
+		const uint32_t generation = ++pEp->Generation;
+		if (pEp->Busy && !wasHalted)
+		{
+			const uint16_t length = pEp->In ? pEp->Transferred : 0;
+			pEp->Busy = false;
+			pEp->pBuffer = NULL;
+			Lpc17UsbDataNotify(pEp, USB_CTRLR_EVT_XFER_FAILED, length);
+		}
+		if (Lpc17UsbDataCurrent(pEp) && pEp->Generation == generation)
+		{
+			pEp->Halted = Halt;
+			if (!Halt)
+			{
+				if (pEp->In && pEp->Busy)
+				{
+					if (!Lpc17UsbDataStage(pEp))
+						pEp->Fault();
+				}
+				else if (!pEp->In)
+					pEp->Kick(pEp->EpNo);
+			}
 		}
 	}
 	EnableInterrupt(state);
