@@ -266,10 +266,12 @@ SOFTWARE.
 #define R9A02_PRCR_PRC3					(1U << 3)		//!< LVD registers
 
 #define R9A02_FLCN_FLDWAITR				R9A02_REG8(R9A02_FLCN_BASE + 0x3FC4)
+#define R9A02_FLCN_PFBER				R9A02_REG8(R9A02_FLCN_BASE + 0x3FC8)	//!< 35.3.2
 #define R9A02_FLCN_FENTRYR				R9A02_REG16(R9A02_FLCN_BASE + 0x3FB0)	//!< Not 0 in P/E mode
 #define R9A02_FLCN_TSCDR				R9A02_REG16(R9A02_FLCN_BASE + 0x0228)	//!< Temperature sensor calibration, 32.2.1
 #define R9A02_TSCDR_CAL140_Msk			0x0FFFU			//!< 12-bit result at Tj 140 C, VCC 3.3 V
 #define R9A02_FLDWAITR_FLDWAIT1			(1U << 0)
+#define R9A02_PFBER_PFBE				(1U << 0)		//!< Code flash prefetch buffer on (35.4)
 
 // Module stop, manual 10.2.2 to 10.2.5
 // Write 1 to every reserved bit. MSTPCRA is in SYSC, B to D in MSTP.

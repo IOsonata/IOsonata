@@ -13,7 +13,8 @@ the source, and the subsystem clock from g_McuOsc.LowPwrOsc. See
 system_r9a02.h for the supported oscillators.
 
 Operating power mode: high-speed above 24 MHz, middle-speed otherwise. The
-code flash needs one wait cycle (MEMWAIT, FLDWAITR) above 32 MHz. With the
+code flash needs one wait cycle (MEMWAIT, FLDWAITR) above 32 MHz, its
+instruction prefetch buffer (PFBER) is turned on at startup. With the
 internal clock supply type B (OFS1.ICSATS = 0) ICLK and PCLKB are always
 equal and HOCO 48 MHz is not allowed (6.2.2).
 
@@ -824,6 +825,10 @@ void SystemInit(void)
 	R9a02TrapInit();
 
 	R9a02UnusedCircuitInit();
+
+	// Instruction prefetch from the code flash (35.4), off after reset. The
+	// DFU turns it off while it programs the flash.
+	R9A02_FLCN_PFBER = R9A02_PFBER_PFBE;
 
 	SystemOscInit();
 	if (g_R9a02StartupError != R9A02_STARTUP_OK)

@@ -1,6 +1,6 @@
 # R9A02G021 port checks
 
-Emulator checks of the SAU drivers and UARTA. Each script builds a fixture with the
+Emulator checks of the SAU and IICA drivers. Each script builds a fixture with the
 port's sources for RV32IMAC (no Zba, Zbb or Zbs, which unicorn does not
 decode), runs it on unicorn and models the peripherals as the manual
 describes them: the SAU channels, the ICU IR and DTCE flags, the CLIC input
@@ -14,45 +14,13 @@ not, the Snooze end also setting the IR of the SAU route or not.
 ```sh
 python3 tests/r9a02/build_spi_slave_emu.py
 python3 tests/r9a02/build_uart_snooze_emu.py
+python3 tests/r9a02/build_i2c_emu.py
 python3 tests/r9a02/build_spi_slave_emu.py --tool-prefix /path/to/bin/riscv-none-elf-
 ```
 
 Needs xPack riscv-none-elf-gcc, unicorn 2.1 and pyelftools. The objects go to
 `tests/r9a02/build`. Each script prints PASS and exits with 0, or lists the
 failed checks and exits with 1.
-
-The UART check also supports LLVM for Renesas RISC-V and Debug builds:
-
-```sh
-python3 tests/r9a02/build_uart_snooze_emu.py --llvm --tool-prefix /path/to/llvm-for-renesas-riscv/bin/
-python3 tests/r9a02/build_uart_snooze_emu.py --llvm --tool-prefix /path/to/llvm-for-renesas-riscv/bin/ --debug
-```
-
-Release (`-Os`) and Debug (`-O0`) UART checks passed with LLVM 19.1.7.202501
-on 2026-10-14. These check code and modeled register behavior, not timing or
-electrical behavior. Hardware performance uses Release `UartPrbsTxTest`
-first, then `UartLoopback` for RX, with the same configuration across MCUs.
-
-## UART DTC transmit (2026-10-14)
-
-The UART fixture includes `dtc_r9a02.cpp` and `uarta_r9a02.cpp`. The model
-executes the DTC records through their bus access widths, requires DTCST and
-the CLIC input enabled, and raises the completion event on the last transfer.
-It checks SAU UART0 and both UARTA channels with polling/interrupt RX and
-blocking/non-blocking FIFOs:
-
-- Exact TX order for single bytes, blocks, FIFO wrapping and backpressure;
-  private DMA storage remains intact when a non-blocking FIFO overwrites data.
-- Autonomous DTC transfers without CPU handlers, followed by block chaining;
-  SAU halfword writes and UARTA byte writes, including a full transmit buffer
-  at DTC completion and delayed CPU handling.
-- Short RX bursts, RX callbacks, parity-error discard, seven-bit masking and
-  full duplex traffic during DTC TX.
-- Disable/Enable with an active transfer, active reinitialization, rate changes
-  preserving the staged tail, PowerOff cleanup, setup failure and retry,
-  default FIFOs, and TX draining around SAU Snooze entry and wake-up.
-
-RX uses the existing CPU path, as in the SAM4L port. RX DMA is not implemented.
 
 ## SPI slave (2026-10-13)
 
@@ -124,3 +92,39 @@ no error flag (SSEC = 1); the error case of figure 23.41 (back to Software
 Standby without the CPU) is hardware only and is to confirm on the board
 with the UartSnoozeDemo example.
 
+## I2C master (2026-10-14)
+
+`build_i2c_emu.py` builds `i2c_fixture.cpp` with the IICA, SAU simplified
+I2C, SAU, ICU, pin and DeviceIntrf sources, then runs `i2c_emu.py`. The two
+buses, IICA1 (P010, P011) and IIC20 (P102, P101), are modeled bit by bit:
+each line is the wired AND of the GPIO, the controller and the slaves, and
+two slave devices (0x50, 0x68) decode START, STOP, address, data and ACK
+from the line changes. The IICA follows 24.2 to 24.4 (STT, address and data
+in IICA, events at the 9th or 8th clock with WTIM, ACK from ACKE, WREL, SPT,
+IICBSY, STCF, LREL, pins low while IICE = 0), the SAU 23.8 (SO and CKO under
+software control, 8 clocks and the ACK clock per SDR write, PEF on a NACK,
+the ACK driven in reception while SOE = 1). It checks, polling and with
+`bIntEn`:
+
+- I2CInit, the IICA widths and IICCTL1 of 24.3.2, both IICA pins in output
+  mode, the scan of the I2CScan example (only 0x50 and 0x68 answer), a
+  start and stop in the read direction without data (one byte read without
+  ACK first), register reads of 1, 2 and 4 bytes with a restart and the last
+  byte not acknowledged, a register write, a reception without command, a
+  data byte not acknowledged, an absent device, a slave holding SDA low
+  cleared by Reset, a rate change to 400 kHz, PowerOff. Every operation
+  leaves both lines high; with `bIntEn` each Rx, Tx and Read with data ends
+  with one `DEVINTRF_EVT_COMPLETED`.
+- The rules of the manual on the way: IICE set with both lines high, ACKE,
+  WTIM and SPIE changed only with IICE = 0 or in a clock stretch, IICF and
+  IICCTLn1 written with IICE = 0, IICA written only in a transmission
+  stretch, no stop or restart after an acknowledged received byte or before
+  the first one, SAU SCR and SMR written with the channel stopped, SO and CKO
+  written only while software controls them.
+
+Where the manual leaves a choice both readings are run: the IICA drives a
+pin only in output mode (PDR = 1, 24.2.9 and figure 24.16) or whatever PDR;
+SO keeps the last data bit after the ACK slot of a SAU transmission or goes
+to 1. What the model cannot decide (the IICA pin direction, the SAU restart,
+SCL as CMOS or open drain, a slave stretching SCL) is for the I2CScan
+example on the board.

@@ -62,7 +62,9 @@ reception the last byte is not acknowledged before a stop or a restart
 
 Pins: PinOp R9A02_PSEL_IICA (IOPINOP_FUNC6), type IOPINTYPE_OPENDRAIN, external
 pull-ups. The pins are GPIO inputs whenever IICE = 0, the IICA drives them low
-in peripheral mode while it is off (24.2.9).
+in peripheral mode while it is off (24.2.9). Once IICE = 1 both are set in
+output mode, N-ch open drain, whatever direction the pin map gives (24.2.9,
+figure 24.16).
 
 @author	Hoang Nguyen Hoan
 @date	Oct. 12, 2026
@@ -359,7 +361,15 @@ static bool R9a02I2cConfigure(R9a02I2cDev_t * const pDev)
 	if (pDev->bEnabled && ok)
 	{
 		reg->IICCTL0 = R9A02_IICCTL0_IICE | R9A02_IICCTL0_WTIM;
-		IOPinCfg(pins, 2);
+
+		// Both pins from input to output mode with IICE = 1 (24.2.9, figure
+		// 24.16), open drain. SDA given as input or bidirectional in the pin
+		// map would leave the IICA unable to pull it low.
+		for (int i = I2C_SDA_IOPIN_IDX; i <= I2C_SCL_IOPIN_IDX; i++)
+		{
+			IOPinConfig(pins[i].PortNo, pins[i].PinNo, pins[i].PinOp, IOPINDIR_OUTPUT, pins[i].Res,
+						IOPINTYPE_OPENDRAIN);
+		}
 	}
 
 	if (pDev->IntNo >= 0)
