@@ -306,9 +306,7 @@ int main()
 #ifdef I2C_DEBUG_PULLUP_STATE
 	I2C_DEBUG_PULLUP_STATE();
 #endif
-#ifdef I2C_DEBUG_JUMPER_TEST
-	I2C_DEBUG_JUMPER_TEST();
-#endif
+
 	if (!masterOk || !slaveOk)
 	{
 		while (1)

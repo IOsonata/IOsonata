@@ -101,16 +101,10 @@ SOFTWARE.
 	int up = IOPinRead(port, pin); \
 	printf("pin %s P%d%02d pullup=%d nopull=%d\r\n", name, port, pin, up, nu); }
 
-// The IIC block does not use the internal pull-up of its own pins, and the
-// board has no pull-up on them. Use two spare pins in GPIO input mode with
-// their internal pull-up as the pull-up source, each wired with a jumper to
-// the I2C line:
-//   P204 (J1-5) to the SCL wire (P408 / P100)
-//   P206 (J1-3) to the SDA wire (P401 / P101)
-// Each is about a 50k pull-up, so the rise time is slow. Test only.
-// Test only: after the failed write, change one slave register at a time
-// (the changes add up) and repeat the write. The first step that gives a
-// write count of 8 names the setting that held SCL low.
+// Test only: after the failed write, hold the slave block in reset (ICE and
+// IICRST set, pins still in IIC mode) and repeat the write, then switch the
+// slave block off and repeat it. A write that gets a NACK (write=0 with the
+// trace reaching state 07) means the master was not blocked.
 #define I2C_DEBUG_TRY(name, stmt) { \
 	stmt; \
 	uint8_t tryOff = 4; \
@@ -120,33 +114,16 @@ SOFTWARE.
 	I2C_DEBUG_DUMP("M try", g_I2CMaster); \
 	I2C_DEBUG_DUMP("S try", g_I2CSlave); }
 #define I2C_DEBUG_SLAVE_POKES() { \
-	I2C_DEBUG_TRY("WAIT off", R_IIC1->ICMR3 &= (uint8_t)~0x40U) \
-	I2C_DEBUG_TRY("TXI on", R_IIC1->ICIER |= 0x80U) \
-	I2C_DEBUG_TRY("SCLE off", R_IIC1->ICFER &= (uint8_t)~0x40U) \
-	I2C_DEBUG_TRY("TMOE off", R_IIC1->ICFER &= (uint8_t)~0x01U) }
+	I2C_DEBUG_TRY("slave in reset", R_IIC1->ICCR1 = 0xC0U) \
+	I2C_DEBUG_TRY("slave ICE off", R_IIC1->ICCR1 = 0U) }
 
-// Test only: drive the two spare pins low, then high, and read what the master
-// IIC block sees on SCL (ICCR1 bit 1) and SDA (bit 0). Then release them as
-// pull-up inputs and read again after a short and a long wait. This shows
-// whether the jumpers are on the I2C wires and how fast a pull-up raises them.
-#define I2C_DEBUG_JUMPER_LINE(name, pin, bit) { \
-	IOPinConfig(2, pin, IOPINOP_GPIO, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL); \
-	IOPinClear(2, pin); \
-	for (volatile int d = 0; d < 20000; d++) {} \
-	int jLo = (R_IIC0->ICCR1 >> bit) & 1; \
-	IOPinSet(2, pin); \
-	for (volatile int d = 0; d < 20000; d++) {} \
-	int jHi = (R_IIC0->ICCR1 >> bit) & 1; \
-	IOPinConfig(2, pin, IOPINOP_GPIO, IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL); \
-	for (volatile int d = 0; d < 2000; d++) {} \
-	int jP1 = (R_IIC0->ICCR1 >> bit) & 1; \
-	for (volatile int d = 0; d < 2000000; d++) {} \
-	int jP2 = (R_IIC0->ICCR1 >> bit) & 1; \
-	printf("jumper %s low=%d high=%d pullup_short=%d pullup_long=%d\r\n", name, jLo, jHi, jP1, jP2); }
-#define I2C_DEBUG_JUMPER_TEST() { \
-	I2C_DEBUG_JUMPER_LINE("P204 SCL", 4, 1) \
-	I2C_DEBUG_JUMPER_LINE("P206 SDA", 6, 0) }
-
+// The IIC block does not use the internal pull-up of its own pins, and the
+// board has no pull-up on them. Use two spare pins in GPIO input mode with
+// their internal pull-up as the pull-up source, each wired with a jumper to
+// the I2C line:
+//   P204 (J1-5) to the SCL wire (P408 / P100)
+//   P206 (J1-3) to the SDA wire (P401 / P101)
+// Each is about a 50k pull-up, so the rise time is slow. Test only.
 #define I2C_DEBUG_PULLUP_PINS() { \
 	IOPinConfig(2, 4, IOPINOP_GPIO, IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL); \
 	IOPinConfig(2, 6, IOPINOP_GPIO, IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL); }
