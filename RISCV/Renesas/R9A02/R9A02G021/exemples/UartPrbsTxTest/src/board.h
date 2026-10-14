@@ -61,4 +61,8 @@ SOFTWARE.
 
 #define UART_BAUDRATE		115200
 
+// The SAU UART port uses interrupts and CFIFOs; DMA is not supported.
+#define UART_INT_MODE		true
+#define UART_DMA_MODE		false
+
 #endif
