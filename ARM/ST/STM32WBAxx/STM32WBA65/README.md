@@ -184,8 +184,8 @@ addresses only.
 
 `exemples/I2CScan` (`exemples/i2c/i2c_scan.cpp`) scans the bus on the board
 I2C of `STM32WBA65I_DK1`: SDA PB1, SCL PB2, AF4 (Arduino D14 and D15). These
-pins come from the Zephyr board data and must be confirmed against UM3462 on
-the board. The scan result is printed on USART2 through the UART retarget.
+pins match the ST board support package for the DK1 (I2C1, SCL PB2, SDA PB1,
+AF4). The scan result is printed on USART2 through the UART retarget.
 
 Validation: the driver is checked by `tests/stm32wba/run_i2c.py` in an
 instruction set emulator with an I2C model (39 checks). Not tested on hardware.
@@ -212,8 +212,11 @@ init.
 `exemples/SPILoopback` (`exemples/spi/spi_loopback.cpp`) runs the four SPI
 modes with MOSI wired to MISO on the DK1 header: SCK PB4, MISO PB3, MOSI PA15,
 AF5 (Arduino D13, D12, D11), chip select PA12 as a GPIO. The result is printed
-on USART1, the first ST-LINK virtual COM port. The pins come from the Zephyr
-board data and must be confirmed against UM3462 on the board.
+on USART1, the first ST-LINK virtual COM port (PA8 RX, PB12 TX, AF7, which
+matches the ST board support package). The SPI pins come from the Zephyr board
+data and are not confirmed: the ST support package only uses SPI3 (SCK PA0,
+MISO PA1, MOSI PB8, AF6), which is wired to the on-board LCD and EEPROM.
+Confirm the header routing against UM3462 before wiring.
 
 Validation: `tests/stm32wba/run_spi.py` runs the driver in an instruction set
 emulator with a model of the SPI v2 registers and the chip select pins (46
@@ -354,9 +357,10 @@ External middleware checkout). Notes:
 - `-include cmsis_compiler.h` is set for C sources only.
 
 Both Debug and Release configurations compile and link with arm-none-eabi
-(Release about 234 KB code, 83 KB RAM). No test was run on hardware. The DK1 pin
-choices for I2C (PB1, PB2 AF4) and SPI (PB4, PB3, PA15 AF5, CS PA12) come from
-Zephyr data and still need confirmation against UM3462.
+(Release about 234 KB code, 83 KB RAM). No test was run on hardware. The DK1 I2C
+pins (PB1, PB2 AF4) and the VCP pins match the ST board support package. The SPI
+header pins (PB4, PB3, PA15 AF5, CS PA12) come from Zephyr data and still need
+confirmation against UM3462.
 
 Still to do: ADC based temperature, use of the AES peripheral, and the
 hardware test of the stack, RNG, timer and sequencer code.
