@@ -67,6 +67,7 @@ SOFTWARE.
 // HostStack_Process are defined here and run the host stack from the
 // Bluetooth event queue.
 #include "bt_wba_stack.h"
+#include "bt_wba_platform.h"
 #include "stm32wbaxx_ll_system.h"
 
 #include "istddef.h"
@@ -329,6 +330,7 @@ void BtAppCheckStatus(void)
 	{
 		BleStackCB_Process();
 	}
+	BtWbaPlatformRetry();
 	if (BtDfuSmpCheckStatus != nullptr)
 	{
 		BtDfuSmpCheckStatus();
@@ -1282,7 +1284,7 @@ bool BtAppStackInit(const BtAppCfg_t *pCfg)
 
 	// Public-key accelerator for LESC pairing. Safe to init even if SMP
 	// isn't enabled; the stack just won't use it.
-	BPKA_Reset();
+	PKACTRL_Reset();
 
 	// The bond store mounts and preloads the stack's NVM cache before the
 	// stack initializes, because BleStack_init_t takes the preloaded word

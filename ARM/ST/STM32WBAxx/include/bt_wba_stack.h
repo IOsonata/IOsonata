@@ -45,7 +45,8 @@ extern "C" {
 #include "ble_events.h"
 #include "ble_bufsize.h"
 #include "blestack.h"
-#include "bpka.h"
+#include "bleplat.h"
+#include "pka_ctrl.h"
 
 #ifdef __cplusplus
 }

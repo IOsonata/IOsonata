@@ -249,9 +249,11 @@ static void BtLescCheckStatus() {}
 static void SecurePendingQue() {}
 '''),
 		('stm32wba', 'ARM/ST/STM32WBAxx/src/bt_app_stm32wba.cpp', r'''
-static bool s_bHciUserEvtOwed, s_bBleHostOwed;
-static void hci_notify_asynch_evt(void *) {}
-static void BLE_RESUME_FLOW_PROCESS_Callback() {}
+static bool s_bEvtDrainOwed, s_bBleHostOwed;
+static void BtAppTickQue() {}
+static void BtAppEvtDrainQue() {}
+extern "C" void BleStackCB_Process(void) {}
+extern "C" void BtWbaPlatformRetry(void) {}
 ''')]:
 	source = (ROOT / path).read_text()
 	code = COMMON + stubs + '\nextern "C" void BtAppCheckStatus(void);\n'

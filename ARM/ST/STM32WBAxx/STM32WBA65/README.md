@@ -280,52 +280,57 @@ How the adapter works with the 1.9.0 stack:
   reports are handled. A central or peripheral with `MaxMtu` above 23 starts the
   ATT MTU exchange.
 
-Still to do before a Bluetooth example can run:
+Platform layer under the stack:
 
-- The project provides the Cube platform sources of a WBA65 BLE application:
-  `STM32_WPAN/Target/{bleplat,linklayer_plat,ll_sys_if,bpka,power_table}.c`,
-  `ble_wrap.c` from the stack include directory, and the modules they use
-  (sequencer, advanced memory manager, RNG, flash manager, log, `baes`). These
-  need a project configuration (`app_conf.h`, `common_wpan_conf.h`,
-  `CFG_SCM_SUPPORTED` set to 0) and link the BLE stack library
-  (`stm32wba_ble_stack_*.a`) and the link layer library.
-- HSE32 must run for the radio: set `g_McuOsc` to a 32 MHz crystal (see Core
-  clock). The HSE trim is not set.
-- `BLEPLAT_NvmStore` is defined twice: in the Cube `bleplat.c` (flash through
-  the Cube flash manager) and in `bt_smp_bond_stm32wba.cpp` (IOsonata PDS). The
-  project needs one of them. The IOsonata one keeps bonds in the same store as
-  the rest of the IOsonata settings, so the project copy of `bleplat.c` should
-  drop its version.
+`src/bt_wba_platform.cpp` supplies the functions that the stack and the link
+layer library call, so a build does not need the Cube HAL, sequencer, timer
+server, RTC, memory manager or flash manager:
 
-## GPIO consolidation
+- `HAL_NVIC_*` and the radio baseband clock: NVIC and RCC registers.
+- `UTIL_SEQ_RegTask` and `UTIL_SEQ_SetTask`: the tasks run from `BtEvtQue`.
+- `BLE_TIMER_Start` and `BLE_TIMER_Stop`: 8 software slots on one LPTIM1 trigger
+  (Timer DevNo 0). The expiry callbacks run from `BtEvtQue`.
+- `HW_RNG_Get` and the RNG clock requests: RNG peripheral, HSI16 kernel clock,
+  polled.
+- `BAES_*`: the IOsonata `CryptoSoftAes` engine. Only ECB encrypt, CMAC and CCM
+  are provided, which is what the stack calls. The host test vectors (FIPS-197,
+  RFC 4493 and RFC 3610 packet vector 1) pass.
+- PKA controller hooks (`PKACTRL_CB_Process`, mutex, semaphore, `PKA_IRQHandler`).
+- `SCM_HSE_WaitUntilReady`, `scm_*` and the link layer debug signals.
 
-All STM32 IOC libraries now use `ARM/ST/src/iopincfg_stm32.cpp` for
-GPIO register configuration, RCC port enabling, and EXTI callback dispatch.
-No family `gpio_stm32*.c` translation units are linked. F0, F4, and L4 EXTI
-paths select their ST CMSIS register definitions at compile time.
+Limits: the temperature given to the link layer for radio calibration is fixed
+at 25 degrees C (set `USE_TEMPERATURE_BASED_RADIO_CALIBRATION` to 0 in
+`app_conf.h`, then it is not used). AES is software. The RNG, timer, sequencer
+and PKA hook code has only been compiled and linked, not run.
 
-STM32WBA65 EXTI is implemented with the STM32CubeWBA CMSIS EXTI_TypeDef:
-RTSR1/FTSR1 select edges, IMR1 masks lines, RPR1/FPR1 report and clear
-pending edges, and EXTI->EXTICR[] selects the GPIO port. No inferred register
-offsets or replacement peripheral structures are used. This path still
-requires hardware regression testing on STM32WBA65I-DK1.
+Cube sources that remain in a Bluetooth build (all from the STM32CubeWBA 1.9.0
+package and the WPAN middleware commit e66bb629):
 
-## Bring-up checklist for the STM32WBA65I-DK1
+- Project Target files `bleplat.c` (it includes `ble_wrap.c`, so do not compile
+  that one), `linklayer_plat.c`, `ll_sys_if.c`, `power_table.c`. Take them from
+  the BLE only project (BLE_p2pServer), not from the audio projects.
+- `link_layer/ll_sys/src/ll_sys_startup.c`, `ll_sys_intf.c`, `ll_sys_cs.c`,
+  `ll_sys_dp_slp.c`.
+- `Projects/Common/WPAN/Modules/pka_ctrl.c` and
+  `Interfaces/hw_pka.c`, `hw_pka_p256.c`.
+- Libraries `ble/stack/lib/stm32wba_ble_stack_basic_plus.a` and
+  `link_layer/ll_cmd_lib/lib/WBA6_LinkLayer_BLE_Basic_Plus_lib.a`.
 
-Order of the first runs on the board. Each step uses a project above and a
-debugger with semihosting enabled (ST-LINK on the kit). Record the result with
-the commit, toolchain version and Debug or Release.
+Build notes found while linking these with the adapter:
 
-1. Confirm the option bytes: TZEN = 0 (TrustZone off), flash bank layout, and
-   the `I` memory variant (2 MB flash, 512 KB SRAM) of `gcc_stm32wba65_i.ld`.
-   The unit marking STM32WBA65RIV7 matches the `I` script.
-2. `TimerDemo` with `TIMER_DEMO_DEVNO` 0: LED toggles and the log shows
-   100 ms and 1000 ms periods from the LSI. Then devices 1 to 7.
-3. `UartLoopback` on USART2 (Arduino D0 and D1) with a USB serial adapter, then
-   on USART1 through the ST-LINK virtual COM port (RX PA8, TX PB12).
-4. `UartPrbsTxTest`: compare the received stream with `Prbs8()`.
-5. Note what differs from the emulator runs: first character timing after
-   reset, the GPDMA ring across block ends, and the LSE start time.
+- Define `BLE_LL` for the link layer sources, or `ll_sys_ble_cntrl_init` is not
+  compiled.
+- The `bleplat.c` copy of `BLEPLAT_NvmStore` clashes with the adapter. Compile
+  `bleplat.c` with `-DBLEPLAT_NvmStore=BleplatNvmStoreCube`.
+- `bleplat.c` and `ble_wrap.c` need `-include cmsis_compiler.h` for
+  `__PACKED_STRUCT`.
+- Set `CFG_SCM_SUPPORTED` to 0 in `app_conf.h`.
+- Link with `--gc-sections` and function sections.
 
-The core clock is 100 MHz from PLL1 (see Core clock). Check that a UART at
-1 Mbaud and the I2C and SPI rates come out as the examples print.
+With this set, the unresolved symbols left after linking the adapter and the two
+libraries are the IOsonata ones and the C++ runtime. No firmware image has been
+built, no example project exists yet, and nothing was run on hardware.
+
+Still to do: a WBA65 Bluetooth example project with the `app_conf.h` and
+`common_wpan_conf.h` for the sources above, ADC based temperature, and use of the
+AES peripheral.
