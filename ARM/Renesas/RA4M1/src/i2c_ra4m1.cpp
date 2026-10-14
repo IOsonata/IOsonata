@@ -197,6 +197,7 @@ typedef struct
 	uint8_t DbgOCr1;		// other IIC unit ICCR1 at the same time
 	uint8_t DbgOSr1;		// other IIC unit ICSR1
 	uint8_t DbgOSr2;		// other IIC unit ICSR2
+	uint8_t DbgSlaveInit[3];	// IIC1 ICCR1 after module start, slave pin setup, slave IIC enable
 	uint8_t DbgTrCnt;		// entries in DbgTr
 	uint8_t DbgTr[RA4M1_I2C_TRACE_MAX][5];	// state, ICSR2, ICCR1, other ICCR1, other ICSR2
 	uint8_t DbgIrqTraceCount;
@@ -1611,6 +1612,13 @@ int Ra4m1I2cDump(DevIntrf_t * const pIntrf, char *Buf, int Len)
 		pos = Ra4m1I2cPutHex(Buf, pos, Len, v[i], digits[i]);
 	}
 
+	pos = Ra4m1I2cPutStr(Buf, pos, Len, " si=");
+	for (int i = 0; i < 3; i++)
+	{
+		pos = Ra4m1I2cPutHex(Buf, pos, Len, dev->DbgSlaveInit[i], 2);
+		pos = Ra4m1I2cPutStr(Buf, pos, Len, i < 2 ? ":" : "");
+	}
+
 	// Dumping registers must not change interrupt enable state or dispatch ISRs.
 	pos = Ra4m1I2cPutStr(Buf, pos, Len, " irqt=--");
 	pos = Ra4m1I2cPutStr(Buf, pos, Len, (r->ICCR1 & 0x02U) ? " scl=1" : " scl=0");
@@ -1868,7 +1876,17 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfg)
 		pDev->TRBuffLen[i] = 0;
 	}
 
+	if (pCfg->Mode == I2CMODE_SLAVE)
+	{
+		dev->DbgSlaveInit[0] = R_IIC1->ICCR1;
+	}
+
 	Ra4m1I2cPinConfig(pCfg);
+
+	if (pCfg->Mode == I2CMODE_SLAVE)
+	{
+		dev->DbgSlaveInit[1] = R_IIC1->ICCR1;
+	}
 
 	DevIntrf_t *intrf = &pDev->DevIntrf;
 	intrf->pDevData = dev;
@@ -1911,6 +1929,11 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfg)
 	}
 
 	Ra4m1I2cConfigure(dev);
+
+	if (pCfg->Mode == I2CMODE_SLAVE)
+	{
+		dev->DbgSlaveInit[2] = R_IIC1->ICCR1;
+	}
 
 	if (dev->bError || (dev->pReg->ICCR1 & RA4M1_I2C_CR1_ICE) == 0U)
 	{
