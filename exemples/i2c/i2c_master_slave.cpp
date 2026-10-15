@@ -314,6 +314,8 @@ int main()
 		s_I2cCfgSlave.bDmaEn, s_I2cCfgSlave.bIntEn);
 
 	masterOk = g_I2CMaster.Init(s_I2cCfgMaster);
+	if (I2cMasterSlaveDiagnostics != nullptr)
+		I2cMasterSlaveDiagnostics("after master init, slave not started");
 	slaveOk = g_I2CSlave.Init(s_I2cCfgSlave);
 	printf("I2C init master=%d slave=%d\r\n", masterOk, slaveOk);
 	if (I2cMasterSlaveDiagnostics != nullptr)

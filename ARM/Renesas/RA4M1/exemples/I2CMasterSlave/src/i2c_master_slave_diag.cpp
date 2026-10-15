@@ -33,6 +33,13 @@ static void DumpUnit(const char *pName, int DevNo)
 	Ra4m1I2cTrace_t rec;
 	uint32_t cnt = Ra4m1I2cTraceCount(DevNo);
 
+	// MSTPCRB bit 9 is IIC0 and bit 8 is IIC1, a stopped unit is not read
+	if (R_MSTP->MSTPCRB & (1UL << (DevNo == 0 ? 9 : 8)))
+	{
+		printf("%s IIC%d: module stopped\r\n", pName, DevNo);
+		return;
+	}
+
 	// ICSR2 is read once here, a read does not clear its flags
 	printf("%s IIC%d: ICCR1=%02x ICCR2=%02x ICSR2=%02x ICFER=%02x ICMR1=%02x ICMR2=%02x ICMR3=%02x ICIER=%02x ICSER=%02x SAR0=%02x ICBR=%02x/%02x\r\n",
 		pName, DevNo, reg->ICCR1, reg->ICCR2, reg->ICSR2, reg->ICFER, reg->ICMR1,
