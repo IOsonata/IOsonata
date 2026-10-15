@@ -54,6 +54,10 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "stddev.h"
 #include "board.h"
 
+// Optional target-test diagnostic implementation, outside board configuration.
+// Called after Init and after a failed run.
+void I2cMasterSlaveDiagnostics(const char *pWhen) __attribute__((weak));
+
 #ifdef MCUOSC
 McuOsc_t g_McuOsc = MCUOSC;
 #endif
@@ -312,6 +316,8 @@ int main()
 	masterOk = g_I2CMaster.Init(s_I2cCfgMaster);
 	slaveOk = g_I2CSlave.Init(s_I2cCfgSlave);
 	printf("I2C init master=%d slave=%d\r\n", masterOk, slaveOk);
+	if (I2cMasterSlaveDiagnostics != nullptr)
+		I2cMasterSlaveDiagnostics("after init");
 #ifdef I2C_PINS_STRONG_DRIVE
 	// Optional board test: raise the output drive of the bus pins after Init
 	if (I2C_PINS_STRONG_DRIVE)
@@ -390,6 +396,8 @@ int main()
 			printf("Expected RX 4/4 bytes: 0c 0d 0e 0f\r\n");
 	}
 
+	if (!pass && I2cMasterSlaveDiagnostics != nullptr)
+		I2cMasterSlaveDiagnostics("after failure");
 	printf("I2C master/slave loopback %s\r\n", pass ? "PASS" : "FAIL");
 
 	while (1)

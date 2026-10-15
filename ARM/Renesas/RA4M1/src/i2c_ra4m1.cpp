@@ -53,6 +53,7 @@ SOFTWARE.
 #include "coredev/system_core_clock.h"
 #include "iopinctrl.h"
 #include "interrupt_ra4m1.h"
+#include "i2c_ra4m1.h"
 
 #define RA4M1_I2C_COUNT				2
 #define RA4M1_I2C_MAX_RATE			400000U
@@ -182,6 +183,71 @@ typedef struct
 	bool bSlaveLastReal;	// last byte loaded in ICDRT came from the buffer
 
 } Ra4m1I2cDev_t;
+
+#if RA4M1_I2C_TRACE
+static Ra4m1I2cTrace_t s_Ra4m1I2cTrace[RA4M1_I2C_COUNT][RA4M1_I2C_TRACE_DEPTH];
+static uint32_t s_Ra4m1I2cTraceCnt[RA4M1_I2C_COUNT];
+
+static void Ra4m1I2cTrace(const Ra4m1I2cDev_t * const pDev, uint8_t Code, uint8_t Info)
+{
+	const R_IIC0_Type *reg = pDev->pReg;
+	uint32_t n = s_Ra4m1I2cTraceCnt[pDev->DevNo]++;
+	Ra4m1I2cTrace_t *rec = &s_Ra4m1I2cTrace[pDev->DevNo][n % RA4M1_I2C_TRACE_DEPTH];
+
+	rec->Seq = n + 1U;
+	rec->Code = Code;
+	rec->Info = Info;
+	rec->MState = (uint8_t)pDev->MState;
+	rec->ICCR1 = reg->ICCR1;
+	rec->ICCR2 = reg->ICCR2;
+	rec->ICSR2 = reg->ICSR2;
+	rec->ICFER = reg->ICFER;
+	rec->ICMR3 = reg->ICMR3;
+	rec->ICIER = reg->ICIER;
+	rec->ICSER = reg->ICSER;
+}
+
+uint32_t Ra4m1I2cTraceCount(int DevNo)
+{
+	return (DevNo >= 0 && DevNo < RA4M1_I2C_COUNT) ? s_Ra4m1I2cTraceCnt[DevNo] : 0U;
+}
+
+bool Ra4m1I2cTraceGet(int DevNo, uint32_t Idx, Ra4m1I2cTrace_t *pRec)
+{
+	if (DevNo < 0 || DevNo >= RA4M1_I2C_COUNT || pRec == NULL)
+	{
+		return false;
+	}
+
+	uint32_t cnt = s_Ra4m1I2cTraceCnt[DevNo];
+	uint32_t first = cnt > RA4M1_I2C_TRACE_DEPTH ? cnt - RA4M1_I2C_TRACE_DEPTH : 0U;
+
+	if (Idx >= cnt - first)
+	{
+		return false;
+	}
+
+	*pRec = s_Ra4m1I2cTrace[DevNo][(first + Idx) % RA4M1_I2C_TRACE_DEPTH];
+
+	return true;
+}
+#else
+#define Ra4m1I2cTrace(pDev, Code, Info)		((void)0)
+
+uint32_t Ra4m1I2cTraceCount(int DevNo)
+{
+	(void)DevNo;
+	return 0U;
+}
+
+bool Ra4m1I2cTraceGet(int DevNo, uint32_t Idx, Ra4m1I2cTrace_t *pRec)
+{
+	(void)DevNo;
+	(void)Idx;
+	(void)pRec;
+	return false;
+}
+#endif
 
 static Ra4m1I2cDev_t s_Ra4m1I2cDev[RA4M1_I2C_COUNT] = {
 	{
@@ -491,6 +557,8 @@ static void Ra4m1I2cConfigure(Ra4m1I2cDev_t * const pDev)
 	{
 		reg->ICIER = RA4M1_I2C_IER_SLAVE_IDLE;
 	}
+
+	Ra4m1I2cTrace(pDev, RA4M1_I2C_TR_CONFIG, 0U);
 }
 
 // ---------------------------------------------------------------------------
@@ -512,14 +580,24 @@ static bool Ra4m1I2cWaitIdle(Ra4m1I2cDev_t * const pDev)
 
 	if (Ra4m1I2cBusy(reg))
 	{
+		Ra4m1I2cTrace(pDev, RA4M1_I2C_TR_IDLE_BUSY, 0U);
 		Ra4m1I2cConfigure(pDev);
 	}
 
-	return !Ra4m1I2cBusy(reg);
+	if (Ra4m1I2cBusy(reg))
+	{
+		Ra4m1I2cTrace(pDev, RA4M1_I2C_TR_IDLE_FAIL, 0U);
+
+		return false;
+	}
+
+	return true;
 }
 
-static void Ra4m1I2cMasterAbort(Ra4m1I2cDev_t * const pDev)
+static void Ra4m1I2cMasterAbort(Ra4m1I2cDev_t * const pDev, uint8_t Why)
 {
+	Ra4m1I2cTrace(pDev, RA4M1_I2C_TR_ABORT, Why);
+	(void)Why;
 	pDev->bError = true;
 	Ra4m1I2cConfigure(pDev);
 	pDev->MState = RA4M1_I2C_M_DONE;
@@ -547,7 +625,7 @@ static void Ra4m1I2cMasterService(Ra4m1I2cDev_t * const pDev)
 
 	if ((sr & (RA4M1_I2C_SR2_TMOF | RA4M1_I2C_SR2_AL)) != 0U)
 	{
-		Ra4m1I2cMasterAbort(pDev);
+		Ra4m1I2cMasterAbort(pDev, 1U);
 		return;
 	}
 
@@ -571,6 +649,7 @@ static void Ra4m1I2cMasterService(Ra4m1I2cDev_t * const pDev)
 	{
 		// The slave refused the address or a data byte. With the master
 		// still owning the bus a STOP is required to release it.
+		Ra4m1I2cTrace(pDev, RA4M1_I2C_TR_NACK, (uint8_t)pDev->Sent);
 		Ra4m1I2cClearFlags(reg, RA4M1_I2C_SR2_NACKF);
 		pDev->bNack = true;
 		reg->ICCR2 = RA4M1_I2C_ICCR2_SP;
@@ -708,6 +787,7 @@ static bool Ra4m1I2cMasterBegin(Ra4m1I2cDev_t * const pDev, bool bRx,
 
 	Ra4m1I2cClearFlags(reg, RA4M1_I2C_SR2_EVENTS);
 	pDev->MState = RA4M1_I2C_M_START;
+	Ra4m1I2cTrace(pDev, RA4M1_I2C_TR_BEGIN, (uint8_t)((bRx ? 1U : 0U) | (restart ? 2U : 0U)));
 
 	// The enable bits are set in polling mode too. With no ICU route they
 	// raise nothing, and the START, STOP and NACK flags are then certain to
@@ -751,7 +831,7 @@ static void Ra4m1I2cMasterRun(Ra4m1I2cDev_t * const pDev)
 		}
 		else if (--left <= 0)
 		{
-			Ra4m1I2cMasterAbort(pDev);
+			Ra4m1I2cMasterAbort(pDev, 2U);
 		}
 	}
 }
@@ -844,6 +924,15 @@ static bool Ra4m1I2cStart(DevIntrf_t * const pIntrf, uint32_t Addr, bool bRx)
 	if (dev == NULL || !dev->bEnabled || Addr > 0x7FU ||
 		dev->pI2cDev->Cfg.Mode != I2CMODE_MASTER)
 	{
+#if RA4M1_I2C_TRACE
+		if (dev != NULL)
+		{
+			Ra4m1I2cTrace(dev, RA4M1_I2C_TR_START_REFUSED,
+				(uint8_t)((dev->bEnabled ? 0U : RA4M1_I2C_INFO_NOT_ENABLED) |
+				(Addr > 0x7FU ? RA4M1_I2C_INFO_BAD_ADDR : 0U) |
+				(dev->pI2cDev->Cfg.Mode != I2CMODE_MASTER ? RA4M1_I2C_INFO_NOT_MASTER : 0U)));
+		}
+#endif
 		return false;
 	}
 
@@ -877,6 +966,16 @@ static int Ra4m1I2cTx(DevIntrf_t * const pIntrf, const uint8_t *pData, int Len)
 	if (dev == NULL || !dev->bOpen || dev->bRxDir || dev->bAsync ||
 		pData == NULL || Len <= 0)
 	{
+#if RA4M1_I2C_TRACE
+		if (dev != NULL)
+		{
+			Ra4m1I2cTrace(dev, RA4M1_I2C_TR_TX_REFUSED,
+				(uint8_t)((dev->bOpen ? 0U : RA4M1_I2C_INFO_NOT_OPEN) |
+				(dev->bRxDir ? RA4M1_I2C_INFO_WRONG_DIR : 0U) |
+				(dev->bAsync ? RA4M1_I2C_INFO_ASYNC_BUSY : 0U) |
+				((pData == NULL || Len <= 0) ? RA4M1_I2C_INFO_BAD_ARG : 0U)));
+		}
+#endif
 		return 0;
 	}
 
@@ -925,6 +1024,16 @@ static int Ra4m1I2cRx(DevIntrf_t * const pIntrf, uint8_t *pBuff, int Len)
 	if (dev == NULL || !dev->bOpen || !dev->bRxDir || dev->bAsync ||
 		pBuff == NULL || Len <= 0)
 	{
+#if RA4M1_I2C_TRACE
+		if (dev != NULL)
+		{
+			Ra4m1I2cTrace(dev, RA4M1_I2C_TR_RX_REFUSED,
+				(uint8_t)((dev->bOpen ? 0U : RA4M1_I2C_INFO_NOT_OPEN) |
+				(dev->bRxDir ? 0U : RA4M1_I2C_INFO_WRONG_DIR) |
+				(dev->bAsync ? RA4M1_I2C_INFO_ASYNC_BUSY : 0U) |
+				((pBuff == NULL || Len <= 0) ? RA4M1_I2C_INFO_BAD_ARG : 0U)));
+		}
+#endif
 		return 0;
 	}
 
