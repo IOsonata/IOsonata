@@ -120,6 +120,8 @@ static UART s_Uart;
 static DacR9a02 s_Dac;
 static AnalogComp s_Comp;
 static volatile uint8_t s_DacCode = 0;
+static volatile uint32_t s_Tml32Ticks = 0;
+static volatile uint32_t s_CompEvents = 0;
 static volatile int s_CompEvt = 0;			// 1 above, -1 below, 0 none
 static volatile uint8_t s_CompCode = 0;
 
@@ -128,12 +130,14 @@ static void Tml32Handler(void *pCtx)
 	uint8_t code = (uint8_t)(s_DacCode + ANALOG_DEMO_STEP);
 
 	s_DacCode = code;
+	s_Tml32Ticks++;
 	s_Dac.WriteCode(ANALOG_DEMO_DAC_CHAN, code);
 }
 
 static void CompHandler(AnalogCompDev_t *pDev, ANALOG_COMP_EVT Evt)
 {
 	s_CompCode = s_DacCode;
+	s_CompEvents++;
 
 	if (Evt == ANALOG_COMP_EVT_HIGHER)
 	{
@@ -162,6 +166,9 @@ int main()
 	uintptr_t state;
 	int evt;
 	uint8_t code;
+	uint8_t dacCode;
+	uint32_t ticks;
+	uint32_t compEvents;
 
 	IOPinCfg(s_Leds, s_NbLeds);
 
@@ -200,14 +207,20 @@ int main()
 
 	while (1)
 	{
-		__WFE();
+		msDelay(1000);
 
 		state = DisableInterrupt();
 		evt = s_CompEvt;
 		code = s_CompCode;
+		dacCode = s_DacCode;
+		ticks = s_Tml32Ticks;
+		compEvents = s_CompEvents;
 
 		s_CompEvt = 0;
 		EnableInterrupt(state);
+
+		printf("TML32 ticks %lu, DAC code %u, comparator events %lu\r\n",
+			   (unsigned long)ticks, (unsigned)dacCode, (unsigned long)compEvents);
 
 		if (evt != 0)
 		{
