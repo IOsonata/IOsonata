@@ -21,7 +21,7 @@ the TAU and the machine timer.
 | SAU channel and prescaler sharing | `src/sau_r9a02.cpp`, `include/sau_r9a02.h` | Built |
 | UART (SAU UART0 to UART2), polling, interrupt and DTC TX, reception in Snooze (UART0, UART2) | `src/uart_r9a02.cpp` | UART0 Release PRBS TX at line rate and clean loopback in all four modes across recorded runs; earlier isolated PRBS losses unresolved; Snooze emulated (`tests/r9a02`) |
 | UART (UARTA0, UARTA1), polling, interrupt and DTC TX | `src/uarta_r9a02.cpp`, `include/uarta_r9a02.h` | Built, DTC emulated (`tests/r9a02`) |
-| SPI (SAU simplified SPI): master with polling, interrupt and DTC reception, slave with interrupt and DTC, slave reception in Snooze (SPI00, SPI20) | `src/spi_r9a02.cpp` | Hardware loopback passed in modes 0-3 at 1 MHz, 8 bits, with DMA on both ends and with polling master/interrupt slave; Snooze emulated |
+| SPI (SAU simplified SPI): master with polling, interrupt and DTC reception, slave with interrupt and DTC, slave reception in Snooze (SPI00, SPI20) | `src/spi_r9a02.cpp` | Hardware loopback passed in modes 0-3 at 1 MHz, 8 bits: DMA on both ends, or DMA off with polling/interrupt master and interrupt slave; Snooze emulated |
 | I2C master (IICA0, IICA1), polling and interrupt; slave with interrupt; DTC payload transfers in both | `src/i2c_r9a02.cpp`, `include/i2c_r9a02.h` | Hardware loopback PASS without DMA, and with DMA on both ends for polling and interrupt master completion; emulated (`tests/r9a02`) |
 | I2C master (SAU simplified I2C IIC00 to IIC21), polling and interrupt | `src/i2c_sau_r9a02.cpp` | Built |
 | ADC (ADC12, 10 pins, temperature sensor, internal reference, scan, continuous, hardware trigger, window, Snooze) | `src/adc_r9a02.cpp`, `include/adc_r9a02.h` | Built |
@@ -481,15 +481,16 @@ transfer-end events and a one-byte TX offset in both CPU and DTC paths.
 Debug/Release builds and the corrected register model pass.
 
 The hardware reruns after `2c03bf7` pass all four modes at 1 MHz, 8 bits,
-in both configurations below:
+in all three configurations below:
 
 | Master DMA | Master INT | Slave DMA | Slave INT | Result |
 | --- | --- | --- | --- | --- |
 | 1 | 1 | 1 | 1 | PASS |
 | 0 | 0 | 0 | 1 | PASS |
+| 0 | 1 | 0 | 1 | PASS |
 
 Every 1-, 16- and 129-byte master TX/RX check passes, including repeated
-transfers and short frames followed by long frames. Both runs end with
+transfers and short frames followed by long frames. All three runs end with
 `SPI master/slave loopback PASS`. This validates the CPHA=1 transfer-end
 correction for DMA and CPU slave service with these master configurations.
 Other interrupt/DMA combinations, maximum gap-free rate and Snooze still

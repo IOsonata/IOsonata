@@ -155,7 +155,7 @@ their Debug and Release LLVM project flags. The hardware capture after
 `fb41374` passes mode 0 but reports RX=0 for the first mode 1 byte. The
 reruns after `2c03bf7` now pass every TX/RX check in modes 0-3 at 1 MHz,
 8 bits, with master DMA=1 INT=1 and slave DMA=1 INT=1, and with master
-DMA=0 INT=0 and slave DMA=0 INT=1. Both include 1-, 16- and 129-byte
+DMA=0 INT=0 or INT=1 and slave DMA=0 INT=1. All three include 1-, 16- and 129-byte
 frames and short-to-long transitions, ending with `SPI master/slave
 loopback PASS`. These validate the transfer-end correction for DMA and
 CPU slave service with those master configurations. Build type was not

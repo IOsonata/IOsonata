@@ -170,9 +170,9 @@ master and slave DMA=1 INT=1. After the initial-event fix (`fb41374`), mode
 leaves the final byte in the shifter when SCK stops. Modes 1 and 3 now use
 transfer-end service, with CPU/DTC reads and writes at byte end. Emulator
 checks pass. Hardware reruns after `2c03bf7` also pass every TX/RX check
-in modes 0-3 at 1 MHz, 8 bits, in both configurations: master DMA=1 INT=1
-with slave DMA=1 INT=1, and master DMA=0 INT=0 with slave DMA=0 INT=1.
-Both include 1-, 16- and 129-byte frames and short-to-long transitions,
+in modes 0-3 at 1 MHz, 8 bits: master DMA=1 INT=1 with slave DMA=1 INT=1,
+and master DMA=0 with INT=0 or INT=1 and slave DMA=0 INT=1.
+All three include 1-, 16- and 129-byte frames and short-to-long transitions,
 ending with `SPI master/slave loopback PASS`. Build type was not reported;
 other interrupt/DMA combinations still need hardware validation.
 
