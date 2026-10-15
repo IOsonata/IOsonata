@@ -3,9 +3,10 @@
 
 @brief	R9A02G021 SPI master/slave timeout diagnostics
 
-Called by the shared example only after a completion timeout. Read the GPIO
-configuration and input views, SAU state and interrupt routes without
-changing them. Do not read SDR: that would consume received data.
+Called by the shared example only after a completion timeout. First read
+the GPIO, SAU and interrupt state without consuming received data. Then
+stop both SPI interfaces and check the connections as GPIO, followed by
+the chip-select rising-edge interrupt. The failed SPI test is not resumed.
 
 @author	Hoang Nguyen Hoan
 @date	Oct. 14, 2026
@@ -37,11 +38,113 @@ SOFTWARE.
 ----------------------------------------------------------------------------*/
 #include <stdio.h>
 
+#include "coredev/spi.h"
 #include "iopinctrl.h"
 #include "interrupt_r9a02.h"
 #include "sau_r9a02.h"
+#include "system_r9a02.h"
 #include "clic.h"
 #include "board.h"
+
+typedef struct __Spi_Diag_Connection {
+	const char *pName;
+	int OutPort;
+	int OutPin;
+	int InPort;
+	int InPin;
+} SpiDiagConnection_t;
+
+static const SpiDiagConnection_t s_Connections[] = {
+	{"SCK", SPI_MASTER_SCK_PORT, SPI_MASTER_SCK_PIN, SPI_SLAVE_SCK_PORT, SPI_SLAVE_SCK_PIN},
+	{"MOSI", SPI_MASTER_MOSI_PORT, SPI_MASTER_MOSI_PIN, SPI_SLAVE_MOSI_PORT, SPI_SLAVE_MOSI_PIN},
+	{"MISO", SPI_SLAVE_MISO_PORT, SPI_SLAVE_MISO_PIN, SPI_MASTER_MISO_PORT, SPI_MASTER_MISO_PIN},
+	{"CS", SPI_MASTER_CS_PORT, SPI_MASTER_CS_PIN, SPI_SLAVE_CS_PORT, SPI_SLAVE_CS_PIN},
+};
+
+static volatile unsigned s_CsIrqCount;
+
+extern SPI g_SpiMaster;
+extern SPI g_SpiSlave;
+
+static void SpiCsEvent(int IntNo, void *pCtx)
+{
+	(void)IntNo;
+	(void)pCtx;
+	s_CsIrqCount = s_CsIrqCount + 1U;
+}
+
+static void SpiGpioDiagnostics(void)
+{
+	const SpiDiagConnection_t *connection;
+	unsigned i;
+	unsigned before;
+	unsigned count;
+	int outLow;
+	int inLow;
+	int outHigh;
+	int inHigh;
+	int line;
+	bool pass;
+
+	// Release both channels and the SPI slave's CS interrupt before changing
+	// pin functions. Every connection retains its normal signal direction.
+	g_SpiMaster.PowerOff();
+	g_SpiSlave.PowerOff();
+	printf("SPI stopped; GPIO connection and CS interrupt checks\r\n");
+	for (i = 0; i < sizeof(s_Connections) / sizeof(s_Connections[0]); i++)
+	{
+		connection = &s_Connections[i];
+		IOPinConfig(connection->InPort, connection->InPin, IOPINOP_GPIO,
+			IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL);
+		IOPinSet(connection->OutPort, connection->OutPin);
+		IOPinConfig(connection->OutPort, connection->OutPin, IOPINOP_GPIO,
+			IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL);
+		IOPinClear(connection->OutPort, connection->OutPin);
+		R9a02DelayUs(1000);
+		outLow = IOPinRead(connection->OutPort, connection->OutPin);
+		inLow = IOPinRead(connection->InPort, connection->InPin);
+		IOPinSet(connection->OutPort, connection->OutPin);
+		R9a02DelayUs(1000);
+		outHigh = IOPinRead(connection->OutPort, connection->OutPin);
+		inHigh = IOPinRead(connection->InPort, connection->InPin);
+		pass = outLow == 0 && inLow == 0 && outHigh == 1 && inHigh == 1;
+		printf("GPIO %s P%d%02d->P%d%02d low=%d/%d high=%d/%d %s\r\n",
+			connection->pName, connection->OutPort, connection->OutPin,
+			connection->InPort, connection->InPin, outLow, inLow, outHigh, inHigh,
+			pass ? "PASS" : "FAIL");
+	}
+
+	s_CsIrqCount = 0;
+	line = IOPinAllocateInterrupt(SPI_SLAVE_INT_PRIO, SPI_SLAVE_CS_PORT,
+		SPI_SLAVE_CS_PIN, IOPINSENSE_HIGH_TRANSITION, SpiCsEvent, NULL);
+	if (line >= 0)
+	{
+		IOPinClear(SPI_MASTER_CS_PORT, SPI_MASTER_CS_PIN);
+		R9a02DelayUs(1000);
+		outLow = IOPinRead(SPI_MASTER_CS_PORT, SPI_MASTER_CS_PIN);
+		inLow = IOPinRead(SPI_SLAVE_CS_PORT, SPI_SLAVE_CS_PIN);
+		before = s_CsIrqCount;
+		IOPinSet(SPI_MASTER_CS_PORT, SPI_MASTER_CS_PIN);
+		R9a02DelayUs(1000);
+		outHigh = IOPinRead(SPI_MASTER_CS_PORT, SPI_MASTER_CS_PIN);
+		inHigh = IOPinRead(SPI_SLAVE_CS_PORT, SPI_SLAVE_CS_PIN);
+		count = s_CsIrqCount - before;
+		IOPinDisableInterrupt(line);
+		pass = outLow == 0 && inLow == 0 && outHigh == 1 && inHigh == 1 && count == 1;
+		printf("GPIO CS IRQ%d low=%d/%d high=%d/%d rising callbacks=%u %s\r\n",
+			line, outLow, inLow, outHigh, inHigh, count, pass ? "PASS" : "FAIL");
+	}
+	else
+	{
+		printf("GPIO CS interrupt allocation FAIL\r\n");
+	}
+	for (i = 0; i < sizeof(s_Connections) / sizeof(s_Connections[0]); i++)
+	{
+		connection = &s_Connections[i];
+		IOPinDisable(connection->OutPort, connection->OutPin);
+		IOPinDisable(connection->InPort, connection->InPin);
+	}
+}
 
 static void SpiCsDiagnostics(const char *pName, int Port, int Pin)
 {
@@ -69,9 +172,10 @@ void SpiMasterSlaveDiagnostics(void)
 	uint8_t event;
 
 	__asm volatile ("csrr %0, mstatus" : "=r" (status));
-	printf("SPI timeout MSTATUS=%08lx PWPR=%02x PRWCNTR=%02x IRQCR2=%02x\r\n",
+	// PRWCNTR is write-only; a read does not report the wait setting.
+	printf("SPI timeout MSTATUS=%08lx PWPR=%02x IRQCR2=%02x\r\n",
 		(unsigned long)status, (unsigned)R9A02_PFS_PWPR,
-		(unsigned)R9A02_PFS_PRWCNTR, (unsigned)R9A02_ICU->IRQCR[2]);
+		(unsigned)R9A02_ICU->IRQCR[2]);
 	SpiCsDiagnostics("Master", SPI_MASTER_CS_PORT, SPI_MASTER_CS_PIN);
 	SpiCsDiagnostics("Slave", SPI_SLAVE_CS_PORT, SPI_SLAVE_CS_PIN);
 	printf("SPI master pins PFS SCK=%08lx MISO=%08lx MOSI=%08lx\r\n",
@@ -103,4 +207,5 @@ void SpiMasterSlaveDiagnostics(void)
 			(unsigned)CLIC_INT_IP_REG(R9A02_CLIC_CTRL_BASE, clic),
 			(unsigned)CLIC_INT_CTL_REG(R9A02_CLIC_CTRL_BASE, clic));
 	}
+	SpiGpioDiagnostics();
 }

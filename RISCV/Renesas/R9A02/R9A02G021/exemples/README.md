@@ -162,8 +162,13 @@ On a slave completion timeout, the R9A02 example prints the CS pin
 configuration, GPIO input registers, SAU1 status and ICU/CLIC routes through
 the shared example's `SpiMasterSlaveDiagnostics` hook. P202 should show
 `pullup=1 IRQ=1 output=0 peripheral=0`; P104 should be a GPIO output.
-The diagnostic source is linked by both projects, runs only after timeout,
-and does not change configuration or read the receive data register.
+The diagnostic source is linked by both projects and runs only after timeout.
+After printing the registers, it powers off both SPI interfaces, tests each
+connection as GPIO in its normal direction, and checks the CS rising-edge
+interrupt. Each pair should report `low=0/0 high=1/1`; the interrupt check
+should report one rising callback. It then releases the pins. The original
+SPI failure remains a failure; these checks isolate GPIO and IRQ operation
+from the SAU configuration. The write-only PRWCNTR is not read.
 
 **I2CScan:** connect I2C devices with pull-ups to P010 (SDA) and P011 (SCL).
 The console lists the addresses that answer. The core clock is the HOCO at
