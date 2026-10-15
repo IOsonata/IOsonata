@@ -856,6 +856,46 @@ static SELFTEST_RES TestDacAdc(void)
 	return res;
 }
 
+// External DACOUT1 readback using the independent ANI2 pin.
+static void TestDacExternal(void)
+{
+	static const uint8_t codes[] = { 0, 32, 64, 128, 192, 255 };
+	AdcChanCfg_t ch = AdcChan(0, 2);
+	int raw[1];
+	int expected;
+	int mv;
+	size_t i;
+
+	printf("DACOUT1 P001 to ANI2 P400 diagnostic\r\n");
+	if (s_Adc.OpenChannel(&ch, 1) == false)
+	{
+		printf("ANI2 open failed\r\n");
+		return;
+	}
+
+	for (i = 0; i < sizeof(codes); i++)
+	{
+		if (s_Dac.WriteCode(1, codes[i]) == false)
+		{
+			printf("DAC1 write failed at code %u\r\n", codes[i]);
+			break;
+		}
+		usDelay(1000);
+		AdcConvert(raw, 1);
+		AdcConvert(raw, 1);
+		expected = (int)codes[i] * 16;
+		if (raw[0] < 0)
+		{
+			printf("DAC1 %3u: ANI2 no ADC result\r\n", codes[i]);
+			continue;
+		}
+		mv = raw[0] * SELFTEST_VCC_MV / 4095;
+		printf("DAC1 %3u: ANI2 %4d raw, %4d mV (nominal %4d raw)\r\n",
+			   codes[i], raw[0], mv, expected);
+	}
+	AdcCloseAll();
+}
+
 static SELFTEST_RES TestAdcScan(void)
 {
 	AdcChanCfg_t scan[4];
@@ -1374,7 +1414,11 @@ int main()
 	setvbuf(stdout, NULL, _IONBF, 0);
 
 	printf("\r\nR9A02G021 self-test\r\n");
+	#if SELFTEST_DAC_EXT_DIAG
+	printf("Wiring: P001 to P400 (ANI2), P401 to 3.3 V; P106 disconnected\r\n");
+#else
 	printf("Wiring: P001 to P106, A0 (P400) to GND, A1 (P401) to 3.3 V\r\n");
+#endif
 
 	if (s_Mtimer.Init(s_MtimerCfg) == false || s_Adc.Init(s_AdcCfg) == false || s_Dac.Init(s_DacCfg) == false ||
 		s_Dac.OpenChannel(0, true) == false || s_Dac.OpenChannel(1, true) == false)
@@ -1386,6 +1430,13 @@ int main()
 		}
 	}
 
+#if SELFTEST_DAC_EXT_DIAG
+	TestDacExternal();
+	while (1)
+	{
+		__WFE();
+	}
+#else
 	Begin(1, "ICU flag of a route with its CLIC input off");
 	End(TestIcuPoll());
 
@@ -1446,6 +1497,8 @@ int main()
 	{
 		__WFE();
 	}
+
+#endif
 
 	return 0;
 }

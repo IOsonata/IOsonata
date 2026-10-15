@@ -3,7 +3,9 @@
 
 @brief	R9A02G021 hardware self-test on the FPB-R9A02G021
 
-Wiring:
+Wiring (SELFTEST_DAC_EXT_DIAG true):
+	P001 (DACOUT1) to P400 (ANI2), P401 to 3.3 V, P106 disconnected.
+Normal self-test wiring (set diagnostic mode false):
 	P001 (DACOUT1) to P106 (IVCMP0, ANI19)	tests 9, 10 and 12
 	A0 (P400) to GND, A1 (P401) to 3.3 V	tests 8 and 11
 Nothing on P101 to P104 (SPI20, test 6, MISO pulled up).
@@ -92,6 +94,9 @@ SOFTWARE.
 
 // VCC of the board in mV, the reference of the A/D and D/A converters
 #define SELFTEST_VCC_MV		3300
+
+// Diagnostic mode: P001 DACOUT1 to P400 ANI2; normal self-test when false.
+#define SELFTEST_DAC_EXT_DIAG	true
 
 // Test 12 asks to touch P106 to GND while the MCU is in Software Standby,
 // false to leave it out
