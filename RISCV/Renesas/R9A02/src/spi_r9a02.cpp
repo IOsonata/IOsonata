@@ -89,8 +89,11 @@ bit frames; other settings fail SPIInit.
 
 	- The channel runs in continuous mode (SMRmn.MD0 = 1, buffer empty
 	  event) on the SCK input (CCS = 1). It is started while the chip
-	  select is high: transmit byte 0 goes to the shift register at once,
-	  byte 1 waits in SDRmn (figures 23.25 and 23.26). At the end of each
+	  select is high. With CPHA = 0, transmit byte 0 goes to the shift
+	  register at once and byte 1 waits in SDRmn. With CPHA = 1, byte 0
+	  waits for the first SCK edge. Its buffer empty interrupt queues byte
+	  1 without reading or counting received data (figures 23.25 and 23.26).
+	  The DTC is enabled only after this initial event. At the end of each
 	  byte the next one moves to the shift register and the byte received
 	  to SDRmn, then SAUm_ENDIn: the byte is read and the one after the next
 	  is written. Late by a byte or more, the SAU sets OVF (23.3.11) at the
@@ -107,7 +110,9 @@ bit frames; other settings fail SPIInit.
 	  frame longer than the receive buffer, or a chip select already low
 	  when the frame was prepared. Then the next frame is prepared, the
 	  master keeps the chip select high for the time these two events take.
-	- Without bDmaEn, one interrupt per byte. With bDmaEn the DTC moves
+	- CPHA = 1 needs its initial buffer empty interrupt within one byte
+	  time. Without bDmaEn, subsequent interrupts service each byte. With
+	  bDmaEn the DTC moves
 	  each byte: SDRmn [7:0] to the buffer (byte read as in 14.6.1), the
 	  transmit byte to a 16-bit stage, the stage to SDRmn by 16 bits
 	  (23.3.8). A DTC run ends with the receive buffer or the transmit
@@ -196,6 +201,7 @@ typedef struct __R9a02_Spi_Dev {
 	bool bError;
 	bool bSlave;					// SPIMODE_SLAVE
 	volatile bool bArmed;			// Slave ready for a frame
+	bool bFirst;					// Slave waiting for the initial buffer empty event
 	int8_t CsLine;					// Slave chip select IRQ line, -1 when none
 	const uint8_t *pTxBuf;			// Slave transmit data of the frame
 	int TxLen;
@@ -225,12 +231,12 @@ typedef struct {
 #pragma pack(pop)
 
 static R9a02SpiDev_t s_R9a02SpiDev[] = {
-	{ {}, 0, 0, R9A02_EVT_SAU0_ENDI0, 2, NULL, -1, 0, 0, NULL, 0, 0, 0xFF, 0xFF, false, false, false, false, false, false, false, -1, NULL, 0, 0, 0, 0, 0, 0, NULL },
-	{ {}, 0, 1, R9A02_EVT_SAU0_ENDI1, 4, NULL, -1, 0, 0, NULL, 0, 0, 0xFF, 0xFF, false, false, false, false, false, false, false, -1, NULL, 0, 0, 0, 0, 0, 0, NULL },
-	{ {}, 0, 2, R9A02_EVT_SAU0_ENDI2, 4, NULL, -1, 0, 0, NULL, 0, 0, 0xFF, 0xFF, false, false, false, false, false, false, false, -1, NULL, 0, 0, 0, 0, 0, 0, NULL },
-	{ {}, 0, 3, R9A02_EVT_SAU0_ENDI3, 4, NULL, -1, 0, 0, NULL, 0, 0, 0xFF, 0xFF, false, false, false, false, false, false, false, -1, NULL, 0, 0, 0, 0, 0, 0, NULL },
-	{ {}, 1, 0, R9A02_EVT_SAU1_ENDI0, 4, NULL, -1, 0, 0, NULL, 0, 0, 0xFF, 0xFF, false, false, false, false, false, false, false, -1, NULL, 0, 0, 0, 0, 0, 0, NULL },
-	{ {}, 1, 1, R9A02_EVT_SAU1_ENDI1, 4, NULL, -1, 0, 0, NULL, 0, 0, 0xFF, 0xFF, false, false, false, false, false, false, false, -1, NULL, 0, 0, 0, 0, 0, 0, NULL },
+	{ {}, 0, 0, R9A02_EVT_SAU0_ENDI0, 2, NULL, -1, 0, 0, NULL, 0, 0, 0xFF, 0xFF, false, false, false, false, false, false, false, false, -1, NULL, 0, 0, 0, 0, 0, 0, NULL },
+	{ {}, 0, 1, R9A02_EVT_SAU0_ENDI1, 4, NULL, -1, 0, 0, NULL, 0, 0, 0xFF, 0xFF, false, false, false, false, false, false, false, false, -1, NULL, 0, 0, 0, 0, 0, 0, NULL },
+	{ {}, 0, 2, R9A02_EVT_SAU0_ENDI2, 4, NULL, -1, 0, 0, NULL, 0, 0, 0xFF, 0xFF, false, false, false, false, false, false, false, false, -1, NULL, 0, 0, 0, 0, 0, 0, NULL },
+	{ {}, 0, 3, R9A02_EVT_SAU0_ENDI3, 4, NULL, -1, 0, 0, NULL, 0, 0, 0xFF, 0xFF, false, false, false, false, false, false, false, false, -1, NULL, 0, 0, 0, 0, 0, 0, NULL },
+	{ {}, 1, 0, R9A02_EVT_SAU1_ENDI0, 4, NULL, -1, 0, 0, NULL, 0, 0, 0xFF, 0xFF, false, false, false, false, false, false, false, false, -1, NULL, 0, 0, 0, 0, 0, 0, NULL },
+	{ {}, 1, 1, R9A02_EVT_SAU1_ENDI1, 4, NULL, -1, 0, 0, NULL, 0, 0, 0xFF, 0xFF, false, false, false, false, false, false, false, false, -1, NULL, 0, 0, 0, 0, 0, 0, NULL },
 };
 
 static const int s_NbR9a02SpiDev = sizeof(s_R9a02SpiDev) / sizeof(s_R9a02SpiDev[0]);
@@ -780,24 +786,33 @@ static void R9a02SpiSlaveAdd(R9a02SpiDev_t * const pDev, uint32_t Cnt)
 }
 
 // Slave channel started at byte RxCnt of the frame, interrupts disabled by
-// the caller: transmit byte RxCnt goes to the shift register at once, with
-// the first buffer empty event, which is no byte, byte RxCnt + 1 waits in
-// SDRmn (figures 23.25 and 23.26).
+// the caller. CPHA = 0 loads the shifter immediately, then byte RxCnt + 1
+// is queued. CPHA = 1 waits for SCK: leave byte RxCnt in SDRmn and let the
+// initial buffer empty interrupt queue the next one. Neither initial event
+// represents received data (figures 23.25 and 23.26).
 static void R9a02SpiSlaveRun(R9a02SpiDev_t * const pDev)
 {
 	R9A02_SAU_Type *reg = R9a02SauReg(pDev->Unit);
 	uint32_t ch = pDev->Ch;
 	uint16_t bit = (uint16_t)(1U << ch);
 	int idx = pDev->RxCnt;
+	uint32_t n = pDev->StartLoops;
 
 	pDev->SegLen = 0U;
+	pDev->bFirst = (reg->SCR[ch] & R9A02_SAU_SCR_DCP_DATA_EARLY) == 0U;
 
 	reg->ST = bit;
 	reg->SIR[ch] = R9A02_SAU_SIR_OVCT;
+	R9a02ClearPendingInt(pDev->IntNo);
 	reg->SS = bit;
 	reg->SDR[ch] = R9a02SpiSlaveTx(pDev, idx);
 
-	uint32_t n = pDev->StartLoops;
+	if (pDev->bFirst)
+	{
+		R9a02IntEnable(pDev->IntNo, true);
+
+		return;
+	}
 
 	while ((reg->SSR[ch] & R9A02_SAU_SSR_BFF) && --n > 0U)
 	{
@@ -807,6 +822,8 @@ static void R9a02SpiSlaveRun(R9a02SpiDev_t * const pDev)
 	if (n == 0U)
 	{
 		pDev->bError = true;
+
+		return;
 	}
 
 	reg->SDR[ch] = R9a02SpiSlaveTx(pDev, idx + 1);
@@ -867,7 +884,13 @@ static void R9a02SpiSlaveArm(R9a02SpiDev_t * const pDev)
 // last byte when the CPU has not taken it yet
 static void R9a02SpiSlaveCollect(R9a02SpiDev_t * const pDev)
 {
+	R9A02_SAU_Type *reg = R9a02SauReg(pDev->Unit);
 	int intno = pDev->IntNo;
+	uint32_t n = pDev->StartLoops;
+	uint32_t left = 0U;
+	bool running;
+	uint8_t d;
+	int cnt;
 
 	R9a02IntEnable(intno, false);
 
@@ -876,18 +899,13 @@ static void R9a02SpiSlaveCollect(R9a02SpiDev_t * const pDev)
 		// A request the DTC has not started yet goes through first: IR at 1
 		// with DTCE at 1. IR stays at 1 after the last transfer of a run,
 		// DTCE is then 0.
-		uint32_t n = pDev->StartLoops;
-
 		while (R9a02DtcEnabled(intno) && R9a02EventFlag(intno) && --n > 0U)
 		{
 		}
 
-		bool running = R9a02DtcEnabled(intno);
-		bool ended = !running && pDev->SegLen != 0U;
+		running = R9a02DtcEnabled(intno);
 
 		R9a02DtcDisable(intno);
-
-		uint32_t left = 0U;
 
 		if (running)
 		{
@@ -899,31 +917,25 @@ static void R9a02SpiSlaveCollect(R9a02SpiDev_t * const pDev)
 		}
 		R9a02SpiSlaveAdd(pDev, pDev->SegLen - left);
 		pDev->SegLen = 0U;
-
-		// A run ended and its interrupt was not taken: IR at 1 dropped the
-		// event of a byte after it (table 12.8 note 2), with no overrun when
-		// it was the last one. That byte is then in SDRmn: reading received
-		// data clears BFF, reading transmit data does not (23.3.11, figure
-		// 23.25 note 2).
-		if (ended)
-		{
-			R9A02_SAU_Type *reg = R9a02SauReg(pDev->Unit);
-			uint8_t d = (uint8_t)(reg->SDR[pDev->Ch] & pDev->DataMask);
-			int cnt = pDev->RxCnt;
-
-			if ((reg->SSR[pDev->Ch] & R9A02_SAU_SSR_BFF) == 0U && cnt < INT_MAX)
-			{
-				if (cnt < pDev->RxLen)
-				{
-					pDev->pRxBuf[cnt] = d;
-				}
-				pDev->RxCnt = cnt + 1;
-			}
-		}
 	}
-	else if (R9a02EventFlag(intno))
+
+	// Take an unread final byte, including one whose event was lost behind
+	// a DTC end. A pending initial buffer empty event is not a received byte.
+	// Reading received data clears BFF; reading queued transmit data leaves
+	// it set (23.3.11, figure 23.25 note 2). Check both sides of the read so
+	// an empty buffer is not counted. Do not queue more data after CS rose.
+	if (reg->SSR[pDev->Ch] & R9A02_SAU_SSR_BFF)
 	{
-		R9a02SpiSlaveByte(pDev);
+		d = (uint8_t)(reg->SDR[pDev->Ch] & pDev->DataMask);
+		cnt = pDev->RxCnt;
+		if ((reg->SSR[pDev->Ch] & R9A02_SAU_SSR_BFF) == 0U && cnt < INT_MAX)
+		{
+			if (cnt < pDev->RxLen)
+			{
+				pDev->pRxBuf[cnt] = d;
+			}
+			pDev->RxCnt = cnt + 1;
+		}
 	}
 
 	R9a02ClearPendingInt(intno);
@@ -1017,6 +1029,10 @@ static void R9a02SpiSlaveCsIrq(int IntNo, void *pCtx)
 // the IR clear of R9a02DtcEnable is dropped, the next byte then sets OVF.
 static void R9a02SpiSlaveIrq(R9a02SpiDev_t * const pDev)
 {
+	R9A02_SAU_Type *reg = R9a02SauReg(pDev->Unit);
+	uintptr_t state;
+	int idx = pDev->RxCnt;
+
 	// The first byte of a frame received in Snooze
 	if (pDev->pSnz != NULL && pDev->pSnz->Resume(pDev, true))
 	{
@@ -1028,14 +1044,26 @@ static void R9a02SpiSlaveIrq(R9a02SpiDev_t * const pDev)
 		return;
 	}
 
-	if (!pDev->pSpiDev->DevIntrf.bDma)
+	if (pDev->bFirst)
+	{
+		// CPHA = 1: the first SCK edge only loaded the first transmit byte.
+		// No received byte is available yet, and the DTC must not read SDRmn.
+		pDev->bFirst = false;
+		reg->SDR[pDev->Ch] = R9a02SpiSlaveTx(pDev, idx < INT_MAX ? idx + 1 : INT_MAX);
+	}
+	else if (!pDev->pSpiDev->DevIntrf.bDma)
 	{
 		R9a02SpiSlaveByte(pDev);
 
 		return;
 	}
 
-	uintptr_t state = DisableInterrupt();
+	if (!pDev->pSpiDev->DevIntrf.bDma)
+	{
+		return;
+	}
+
+	state = DisableInterrupt();
 
 	R9a02SpiSlaveAdd(pDev, pDev->SegLen);
 	pDev->SegLen = 0U;

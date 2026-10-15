@@ -21,7 +21,7 @@ the TAU and the machine timer.
 | SAU channel and prescaler sharing | `src/sau_r9a02.cpp`, `include/sau_r9a02.h` | Built |
 | UART (SAU UART0 to UART2), polling, interrupt and DTC TX, reception in Snooze (UART0, UART2) | `src/uart_r9a02.cpp` | UART0 Release PRBS TX at line rate and clean loopback in all four modes across recorded runs; earlier isolated PRBS losses unresolved; Snooze emulated (`tests/r9a02`) |
 | UART (UARTA0, UARTA1), polling, interrupt and DTC TX | `src/uarta_r9a02.cpp`, `include/uarta_r9a02.h` | Built, DTC emulated (`tests/r9a02`) |
-| SPI (SAU simplified SPI): master with polling, interrupt and DTC reception, slave with interrupt and DTC, slave reception in Snooze (SPI00, SPI20) | `src/spi_r9a02.cpp` | Built, slave and Snooze emulated (`tests/r9a02`) |
+| SPI (SAU simplified SPI): master with polling, interrupt and DTC reception, slave with interrupt and DTC, slave reception in Snooze (SPI00, SPI20) | `src/spi_r9a02.cpp` | Mode 0 hardware loopback passed with DMA/INT on; CPHA=1 fix built and emulated, hardware rerun pending; Snooze emulated |
 | I2C master (IICA0, IICA1), polling and interrupt; slave with interrupt; DTC payload transfers in both | `src/i2c_r9a02.cpp`, `include/i2c_r9a02.h` | Hardware loopback PASS without DMA, and with DMA on both ends for polling and interrupt master completion; emulated (`tests/r9a02`) |
 | I2C master (SAU simplified I2C IIC00 to IIC21), polling and interrupt | `src/i2c_sau_r9a02.cpp` | Built |
 | ADC (ADC12, 10 pins, temperature sensor, internal reference, scan, continuous, hardware trigger, window, Snooze) | `src/adc_r9a02.cpp`, `include/adc_r9a02.h` | Built |
@@ -429,10 +429,13 @@ byte count, -1 on an overrun, a frame longer than the receive buffer, or a
 chip select already low when the frame was prepared. The dummy byte follows
 the transmit data.
 
-- The channel runs in continuous mode with transmit bytes 0 and 1 loaded
-  while the chip select is high, so the master can clock at once. MISO is
-  driven all the time and every SCK edge counts: the bus is point to point,
-  SCK idle while the chip select is high.
+- The channel runs in continuous mode. With CPHA=0, transmit byte 0 is in
+  the shifter and byte 1 in SDRmn while CS is high. With CPHA=1 (modes 1
+  and 3), byte 0 waits in SDRmn for the first SCK edge. The initial
+  buffer-empty interrupt queues byte 1 without counting a received byte;
+  only then is the DTC enabled. This interrupt must run within one byte
+  time. MISO is driven all the time and every SCK edge counts: the bus is
+  point to point, SCK idle while the chip select is high.
 - Without `bDmaEn` each byte has its interrupt, within one byte time. With
   it the DTC moves each byte: the received byte to the buffer, the transmit
   byte through a 16-bit stage to SDRmn. A DTC run ends with the receive
@@ -461,6 +464,17 @@ Not linked into an image that does not call it.
 On the FPB board SPI20 is on P101 (SCK20), P102 (SI20) and P103 (SO20), SPI21
 on P204 (SCK21), P205 (SI21) and P206 (SO21). The SpiMasterSlave example
 wires them together.
+
+The October 15, 2026 hardware capture with master DMA=1 INT=1 and slave
+DMA=1 INT=1 passes all mode 0 transfers at 1 MHz, 8 bits: 1, 16 and 129
+bytes in both directions, including short frames followed by long frames.
+CS uses P109-to-P201 (J13-1 to J13-7). Mode 1 then fails on its first byte
+with slave RX=-1 and data a1 instead of 30. The driver had waited for the
+first buffer load before SCK, overwritten transmit byte 0 on timeout, and
+enabled RX DMA for the initial buffer-empty event. The CPHA=1 start now
+waits for that event without polling or overwriting the first byte.
+Debug/Release builds and the corrected register model pass; modes 1 to 3
+still require hardware validation. The capture did not identify build type.
 
 ## I2C
 

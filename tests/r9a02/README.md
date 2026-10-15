@@ -119,11 +119,33 @@ external SPI master of SPI21 and of SPI20. It checks:
   select interrupt comes first; another Snooze set up replacing it (not set
   for Snooze, kept when the slave's is turned off); Snooze turned off.
 
-The model is the reading of the manual that the driver follows: the first
-buffer empty event right after the first SDR write, BFF kept when SDR holds
-transmit data, and the Snooze reception of byte 0 (23.5.7) are to confirm on
-the board, the first two with the SpiMasterSlave example, the third with an
-external master.
+The first buffer-empty event is phase-dependent. CPHA=0 loads the first
+SDR write immediately; CPHA=1 waits for the first SCK edge. The earlier
+model incorrectly used the immediate load for all modes. The corrected
+model reproduces the old driver's mode 1/3 failure: transmit byte 0 is
+overwritten before SCK and the initial buffer-empty event is counted as RX.
+The driver now queues byte 1 in that initial interrupt, without reading RX,
+and enables the DTC afterward. At CS rising, only an SDR read that clears
+an initially set BFF counts as an unread received byte.
+
+Checks also cover empty frames, a partial first byte with its initial
+interrupt serviced or still pending when CS rises, unchanged receive
+storage at the initial event, and a final byte interrupt held pending for
+both SAU-first and CS-first dispatch. The corrected model fails the old
+driver. Release (`-Os`) and Debug (`-O0`) pass with LLVM 19.1.7.202501:
+
+```sh
+python3 tests/r9a02/build_spi_slave_emu.py --llvm --tool-prefix /path/to/llvm-for-renesas-riscv/bin/
+python3 tests/r9a02/build_spi_slave_emu.py --llvm --debug --tool-prefix /path/to/llvm-for-renesas-riscv/bin/
+```
+
+These checks model register order, not individual SCK edges or interrupt
+latency. The library and SpiMasterSlave example also compile and link with
+their Debug and Release LLVM project flags. Hardware now confirms mode 0
+at 1 MHz with master and slave DMA=1 INT=1, including 1-, 16- and 129-byte
+transfers. Mode 1 failed before this correction; its rerun and modes 2/3
+remain pending. Snooze reception of byte 0 (23.5.7) still needs an external
+master on the board.
 
 ## UART reception in Snooze (2026-10-13)
 

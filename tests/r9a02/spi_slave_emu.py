@@ -4,8 +4,9 @@
 #
 # The script is the external master. It models what the manual describes:
 #   - SAU slave channel in continuous mode (23.5.6, figures 23.25 and 23.26):
-#     after SS the first SDR write goes to the shift register at once with a
-#     buffer empty event; at the end of each byte the transmit byte waiting
+#     after SS, CPHA=0 loads the first SDR write into the shift register;
+#     CPHA=1 waits for the first SCK edge. Both raise an initial buffer-empty
+#     event without received data. At each byte boundary the transmit byte waiting
 #     in SDR goes to the shift register and the received byte to SDR, then
 #     the event. Reading received data clears BFF, reading transmit data does
 #     not. OVF on a write with BFF at 1, on received data overwritten, on a
@@ -14,7 +15,8 @@
 #     at 1 is lost (table 12.8 note 2). DTCE at 1 gives the events to the DTC.
 #   - DTC: normal mode chains (table 14.3) with write back; when the counter
 #     of the last record ends, DTCE goes to 0 and IR stays at 1.
-# Interrupts are delivered by calling R9a02IrqDispatch, at byte boundaries.
+# Interrupts are delivered through R9a02IrqDispatch at the first clock edge
+# and byte boundaries. This is a register-order model, not a cycle model.
 # What the model assumes is to confirm on the board (SpiMasterSlave).
 #
 # Needs unicorn 2.1 and pyelftools. unicorn does not decode Zba, Zbb and
@@ -195,7 +197,7 @@ def sau_write(off, size, v):
         m.sdr = v & 0xFF
         m.isrx = False
         m.bff = True
-        if m.shift is None:
+        if m.shift is None and not second_edge(ch):
             m.shift = m.sdr
             m.bff = False
             sl_event(ch)
@@ -218,7 +220,19 @@ def sau_write(off, size, v):
 def snooze_on(ch):
     return ch == 0 and bget(SAU, U1 + 0xB8, 2) & 1
 
-def clock(mosi, ch=None):
+def second_edge(ch):
+    return not (bget(SAU, U1 + 0x98 + 2 * ch, 2) & 0x2000)
+
+def first_edge(ch, service=True):
+    m = SL[ch]
+    if m.shift is None and second_edge(ch) and m.bff and not m.isrx:
+        m.shift = m.sdr
+        m.bff = False
+        sl_event(ch)
+        if service:
+            deliver()
+
+def clock(mosi, ch=None, service_start=True):
     ch = CH if ch is None else ch
     m = SL[ch]
     if not m.running:
@@ -239,6 +253,7 @@ def clock(mosi, ch=None):
         if bget(ICU, 0x200, 2) == EVT_ENDI[ch]:
             event(slot_of(EVT_SNZCANCEL))
         return 0xFF
+    first_edge(ch, service_start)
     if m.shift is None:
         m.ovf = True
         out = 0xFF
@@ -453,7 +468,7 @@ def run_frames(label, rxlen, txlen, lengths, first=None):
         done = gi("g_Done")
         mosi = [random.randrange(256) for _ in range(n)]
         uc.mem_write(S("g_Rx"), b"\x00" * 128)
-        miso = frame(mosi, first)
+        miso = frame(mosi, first, late={n - 1} if first is not None else None)
         cnt = gi("g_Count")
         rx = bytes(uc.mem_read(S("g_Rx"), 128))
         exp_cnt = -1 if (rxlen > 0 and n > rxlen) else n
@@ -485,11 +500,31 @@ check("rate above refused", call("EmuRate", 3100000) == 0)
 check("master Tx refused", call("EmuMasterTx") == 0)
 check("arms after init", gi("g_Arms") >= 1)
 
-lengths = [1, 2, 3, 4, 16, 61, 62, 63, 64, 65, 70, 128]
+lengths = [0, 1, 2, 3, 4, 16, 61, 62, 63, 64, 65, 70, 128]
 for dma in (1, 0):
     for mode in range(4):
         check("init dma%d mode%d" % (dma, mode), call("EmuInit", dma, mode, 1000000) == 1)
         label = "dma%d m%d" % (dma, mode)
+        if mode & 1:
+            for service in (True, False):
+                tx = setbufs(64, 64, 1)
+                call("EmuReset")
+                endi = slot_of(EVT_SAU1_ENDI1)
+                check(label + " first TX waits for SCK", sl.shift is None and sl.bff and sl.sdr == tx[0])
+                check(label + " no initial RX request", not icu.ir[endi] and not icu.dtce[endi])
+                cs[0] = 0
+                first_edge(CH, service)
+                check(label + " first byte preserved", sl.shift == tx[0])
+                check(label + " initial event does not store RX", bytes(uc.mem_read(S("g_Rx"), 64)) == bytes(64))
+                if service:
+                    check(label + " second TX queued", sl.bff and not sl.isrx and sl.sdr == tx[1])
+                    check(label + " DTC starts after initial event", icu.dtce[endi] == bool(dma))
+                # A partial byte is not counted, even when its initial IRQ
+                # is still pending when the CS interrupt runs first.
+                cs[0] = 1
+                event(slot_of(EVT_PORT_IRQ2))
+                deliver(EVT_PORT_IRQ2)
+                check(label + " partial first byte count", gi("g_Count") == 0)
         run_frames(label, 64, 64, lengths)
         run_frames(label + " cs-first", 64, 64, [1, 16, 63, 64], first=EVT_PORT_IRQ2)
         run_frames(label + " sau-first", 64, 64, [1, 16, 63, 64], first=EVT_SAU1_ENDI1)
