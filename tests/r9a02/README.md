@@ -151,12 +151,16 @@ These checks model first-edge and byte-end register ordering, not cycle
 timing or interrupt latency. CPHA=1 requires time between bytes to read RX
 and load TX, by CPU or DTC. Maximum gap-free throughput is not validated.
 The library and SpiMasterSlave example also compile and link with
-their Debug and Release LLVM project flags. Hardware now confirms mode 0
-at 1 MHz with master and slave DMA=1 INT=1, including 1-, 16- and 129-byte
-transfers. The subsequent capture after `fb41374` still passes mode 0 but
-reports RX=0 for the first mode 1 byte. Hardware validation of the
-transfer-end correction and modes 2/3 remains pending. Snooze reception of
-byte 0 (23.5.7) still needs an external master on the board.
+their Debug and Release LLVM project flags. The hardware capture after
+`fb41374` passes mode 0 but reports RX=0 for the first mode 1 byte. The
+reruns after `2c03bf7` now pass every TX/RX check in modes 0-3 at 1 MHz,
+8 bits, with master DMA=1 INT=1 and slave DMA=1 INT=1, and with master
+DMA=0 INT=0 and slave DMA=0 INT=1. Both include 1-, 16- and 129-byte
+frames and short-to-long transitions, ending with `SPI master/slave
+loopback PASS`. These validate the transfer-end correction for DMA and
+CPU slave service with those master configurations. Build type was not
+reported. Other interrupt/DMA combinations and Snooze reception of byte 0
+(23.5.7) still need hardware validation.
 
 ## UART reception in Snooze (2026-10-13)
 
