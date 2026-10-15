@@ -481,16 +481,17 @@ transfer-end events and a one-byte TX offset in both CPU and DTC paths.
 Debug/Release builds and the corrected register model pass.
 
 The hardware reruns after `2c03bf7` pass all four modes at 1 MHz, 8 bits,
-in all three configurations below:
+in all four configurations below:
 
 | Master DMA | Master INT | Slave DMA | Slave INT | Result |
 | --- | --- | --- | --- | --- |
 | 1 | 1 | 1 | 1 | PASS |
+| 1 | 0 | 1 | 1 | PASS |
 | 0 | 0 | 0 | 1 | PASS |
 | 0 | 1 | 0 | 1 | PASS |
 
 Every 1-, 16- and 129-byte master TX/RX check passes, including repeated
-transfers and short frames followed by long frames. All three runs end with
+transfers and short frames followed by long frames. All four runs end with
 `SPI master/slave loopback PASS`. This validates the CPHA=1 transfer-end
 correction for DMA and CPU slave service with these master configurations.
 The captures did not identify build type.
@@ -504,8 +505,11 @@ DTC to write the next dummy byte immediately after reading the previous
 byte. The interrupt slave must read RX and load TX between bytes in
 CPHA=1 (23.5.6, figure 23.23). This failure is consistent with insufficient
 inter-byte time for CPU slave service; the register model does not measure
-that timing. Master DMA=1 INT=0 with slave DMA=1 INT=1 remains the next
-hardware check. Do not count the mixed configuration as validated. Other
+that timing. The follow-up with master DMA=1 INT=0 and slave DMA=1 INT=1
+passes every check in modes 0-3, including the previously failing 16-byte
+master RX. This validates master DMA with polled completion when the slave
+also uses DMA and supports the slave-service timing explanation for the
+mixed failure. Do not count the mixed configuration as validated. Other
 combinations, maximum gap-free rate and Snooze still need hardware tests.
 
 ## I2C

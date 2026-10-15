@@ -170,9 +170,9 @@ master and slave DMA=1 INT=1. After the initial-event fix (`fb41374`), mode
 leaves the final byte in the shifter when SCK stops. Modes 1 and 3 now use
 transfer-end service, with CPU/DTC reads and writes at byte end. Emulator
 checks pass. Hardware reruns after `2c03bf7` also pass every TX/RX check
-in modes 0-3 at 1 MHz, 8 bits: master DMA=1 INT=1 with slave DMA=1 INT=1,
-and master DMA=0 with INT=0 or INT=1 and slave DMA=0 INT=1.
-All three include 1-, 16- and 129-byte frames and short-to-long transitions,
+in modes 0-3 at 1 MHz, 8 bits: master DMA=1 with INT=0 or INT=1 and slave
+DMA=1 INT=1, and master DMA=0 with INT=0 or INT=1 and slave DMA=0 INT=1.
+All four include 1-, 16- and 129-byte frames and short-to-long transitions,
 ending with `SPI master/slave loopback PASS`. Build type was not reported;
 the other combinations are recorded separately below.
 
@@ -182,9 +182,11 @@ With master DMA=1 INT=0 and slave DMA=0 INT=1, mode 0 passes but the mode 1
 with CPU slave service. CPHA=1 needs the next slave TX byte loaded before
 the next byte starts; the result is consistent with too little inter-byte
 time for its ISR. The passing TX checks are CPU-polled even when master
-DMA is enabled. To isolate completion with master interrupts off, keep
-master DMA=1 INT=0 and set `SPI_SLAVE_DMA_ENABLE true`, leaving slave
-interrupts enabled. That configuration still needs a hardware result.
+DMA is enabled. The follow-up keeps master DMA=1 INT=0 and enables slave
+DMA=1 INT=1: every check passes in modes 0-3. This validates master DMA
+with polled completion when the slave also uses DMA. The mixed failure
+remains a separate limit; other flag combinations and maximum gap-free
+rate still need hardware validation.
 
 The console shows, for each mode,
 frames of 1, 16 and 129 bytes sent and received by the master, with PASS or

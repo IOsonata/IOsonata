@@ -154,10 +154,11 @@ The library and SpiMasterSlave example also compile and link with
 their Debug and Release LLVM project flags. The hardware capture after
 `fb41374` passes mode 0 but reports RX=0 for the first mode 1 byte. The
 reruns after `2c03bf7` now pass every TX/RX check in modes 0-3 at 1 MHz,
-8 bits, with master DMA=1 INT=1 and slave DMA=1 INT=1, and with master
-DMA=0 INT=0 or INT=1 and slave DMA=0 INT=1. All three include 1-, 16- and 129-byte
-frames and short-to-long transitions, ending with `SPI master/slave
-loopback PASS`. These validate the transfer-end correction for DMA and
+8 bits, with master DMA=1 INT=0 or INT=1 and slave DMA=1 INT=1, and with
+master DMA=0 INT=0 or INT=1 and slave DMA=0 INT=1. All four include 1-,
+16- and 129-byte frames and short-to-long transitions. Each run ends with
+`SPI master/slave loopback PASS`. These validate the transfer-end correction
+for DMA and
 CPU slave service with those master configurations. Build type was not
 reported.
 
@@ -169,8 +170,12 @@ DTC. This is consistent with insufficient inter-byte time for the CPHA=1
 slave ISR to read RX and load TX. The emulator dispatches CPU service at
 explicit points and cannot establish whether that service fits the actual
 master gap. Its PASS does not validate this mixed hardware configuration.
-Master DMA=1 INT=0 with slave DMA=1 INT=1, other untested combinations and
-Snooze reception of byte 0 (23.5.7) still need hardware validation.
+The follow-up with master DMA=1 INT=0 and slave DMA=1 INT=1 passes all
+four modes and every tested length, including the 16-byte master RX that
+failed with CPU slave service. This validates polled master DMA completion
+with a DMA slave and supports the timing explanation for the mixed failure.
+Other untested combinations and Snooze reception of byte 0 (23.5.7) still
+need hardware validation.
 
 ## UART reception in Snooze (2026-10-13)
 
