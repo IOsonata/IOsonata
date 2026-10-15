@@ -253,7 +253,11 @@ Standby; every 100 ms the TML32 starts Snooze, the conversion of A2 runs
 without the CPU. At 1.65 V or more the CPU wakes up, prints the voltage,
 toggles LED1 and waits one second before the next Software Standby. Below
 1.65 V nothing is printed and the current stays low. The debugger connection
-may be lost in Software Standby.
+may be lost in Software Standby. A hardware run with P400 grounded printed
+only the startup banner; applying 3.3 V produced repeated 3299 mV readings.
+An earlier accidental RESET-pin contact explains repeated banners in a prior
+capture. The return-to-GND transition and independent DTC/ELC transfer counts
+were not captured.
 
 **SelfTest:** wire P001 to P106, A2 to GND and A3 to 3.3 V, terminal on the
 virtual COM port. The firmware runs 12 tests and prints the values measured

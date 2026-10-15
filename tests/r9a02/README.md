@@ -454,3 +454,19 @@ DAC1 ramp, comparator reference configuration and both-edge event callbacks.
 This does not validate DAC1's unloaded voltage accuracy. Earlier external
 ANI2 measurements across codes 0 to 255 gave approximately 1.675 to
 3.295 V with R23 installed, matching a heavily pull-up-loaded DAC output.
+
+## AdcSnoozeDemo hardware validation (2026-10-15)
+
+FPB-R9A02G021 AdcSnoozeDemo was run with ANI2/P400 first firmly at GND,
+then switched to board 3.3 V. At GND the UART printed only the startup banner
+and no above-threshold values. Applying 3.3 V produced repeated stable
+3299 mV readings after a first transitional value. The software threshold
+was 1650 mV; TML32 Snooze interval was configured for 100 ms.
+
+An earlier capture included additional banners; the tester reported accidental
+contact with the RESET pin next to the 3.3 V connection. Treat those banners
+as explained by the physical test setup, not a demonstrated firmware fault.
+Intermediate values (1700-2627 mV) occurred while moving the jumper; the
+final return-to-GND condition was not independently captured. This validates
+observed quiet below-threshold behavior and repeated high-input reporting,
+but not power consumption or independent internal DTC/ELC transaction counts.

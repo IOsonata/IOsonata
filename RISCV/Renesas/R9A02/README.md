@@ -24,14 +24,14 @@ the TAU and the machine timer.
 | SPI (SAU simplified SPI): master with polling, interrupt and DTC reception, slave with interrupt and DTC, slave reception in Snooze (SPI00, SPI20) | `src/spi_r9a02.cpp` | Hardware loopback passed in modes 0-3 at 1 MHz, 8 bits: DMA on both ends, or DMA off with polling/interrupt master and interrupt slave; Snooze emulated |
 | I2C master (IICA0, IICA1), polling and interrupt; slave with interrupt; DTC payload transfers in both | `src/i2c_r9a02.cpp`, `include/i2c_r9a02.h` | Hardware loopback PASS without DMA, and with DMA on both ends for polling and interrupt master completion; emulated (`tests/r9a02`) |
 | I2C master (SAU simplified I2C IIC00 to IIC21), polling and interrupt | `src/i2c_sau_r9a02.cpp` | Built |
-| ADC (ADC12, 10 pins, temperature sensor, internal reference, scan, continuous, hardware trigger, window, Snooze) | `src/adc_r9a02.cpp`, `include/adc_r9a02.h` | Built; polling and interrupt single-round conversion hardware validated on ANI2/ANI3, VREF and temperature |
+| ADC (ADC12, 10 pins, temperature sensor, internal reference, scan, continuous, hardware trigger, window, Snooze) | `src/adc_r9a02.cpp`, `include/adc_r9a02.h` | Built; polling and interrupt single-round conversion hardware validated on ANI2/ANI3, VREF and temperature; AdcSnoozeDemo low/high input behavior validated |
 | RTC (calendar, fixed-cycle interrupt, alarm) | `src/rtc_r9a02.cpp`, `include/rtc_r9a02.h` | Built; SOSC calendar, periodic interrupt, Sleep and Software Standby wake, periodic interrupts and repeated alarms hardware validated |
 | DTC (data transfer controller) | `src/dtc_r9a02.cpp`, `include/dtc_r9a02.h` | Built |
 | ELC (event link controller) | `src/elc_r9a02.cpp`, `include/elc_r9a02.h` | Built |
 | TML32 (32-bit interval timer) | `src/tml32_r9a02.cpp`, `include/tml32_r9a02.h` | Built; 19989 us DAC ramp scheduling hardware validated |
 | DAC8 (2 channels) | `src/dac_r9a02.cpp`, `include/dac_r9a02.h` | Built; DAC1 ramp and DAC0 comparator reference hardware validated on R23-loaded board |
 | Comparators (CMP0, CMP1) | `src/analog_comp_r9a02.cpp` | Built; CMP0 both-edge interrupts hardware validated with IVREF0 |
-| Sleep, Software Standby, wake-up sources, Snooze | `R9A02G021/lib/src/system_r9a02.c`, `include/system_r9a02.h` | Built |
+| Sleep, Software Standby, wake-up sources, Snooze | `R9A02G021/lib/src/system_r9a02.c`, `include/system_r9a02.h` | Built; RTC Software Standby wake and AdcSnoozeDemo threshold wake hardware validated |
 | Timers (machine timer, TAU channels 0 to 7) | `src/timer_r9a02.cpp`, `include/timer_r9a02.h` | Built; machine timer, TAU0 and TAU7 100 ms continuous callbacks hardware validated |
 | DFU flash target | `src/dfu_r9a02.cpp` | Built, boot linked, boot emulated |
 
