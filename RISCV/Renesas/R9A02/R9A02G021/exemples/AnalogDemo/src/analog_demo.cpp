@@ -3,15 +3,15 @@
 
 @brief	DAC8, comparator and TML32 demo on the FPB-R9A02G021
 
-The TML32 interval interrupt, counting the LOCO, steps DAC8 channel 1 up by
-ANALOG_DEMO_STEP every ANALOG_DEMO_PERIOD_MS: a ramp from 0 to VCC on
-DACOUT1 (P001) that starts again from 0. Comparator 0 compares IVCMP0 (P106)
-with its internal reference, 1.44 V typical (1.34 to 1.54 V). With P001
-wired to P106 the comparator reports each crossing of the reference: the code
-of the DAC at that time is printed with its voltage, about 1440 mV going up,
-and LED2 shows the comparator output.
+TML32 steps DAC8 channel 1 on P001, connected to CMP0 input P106.
+The FPB external pull-up R23 shifts the DAC1 voltage range upward; its
+minimum is approximately VCC/2, so CMP0's 1.44 V internal reference cannot
+be crossed. DAC0 on P000 drives CMP0's external IVREF0 reference instead.
+The DAC0 reference code is selected to put its voltage inside the measured
+DAC1 range; comparator events indicate each crossing. LED2 indicates state.
 
-The internal reference needs VCC 2.94 V or more, DAC8 2.7 V or more.
+Keep P001 to P106 wired; P000 uses its on-chip DAC0/IVREF0 connection.
+Do not treat the raw DAC1 code as the physical output voltage on this board.
 
 @author	Hoang Nguyen Hoan
 @date	Oct. 13, 2026
@@ -104,9 +104,9 @@ static const R9a02Tml32Cfg_t s_Tml32Cfg = {
 static const AnalogCompCfg_t s_CompCfg = {
 	.DevNo = ANALOG_DEMO_COMP_DEVNO,
 	.Mode = ANALOG_COMP_MODE_CONTINUOUS,
-	.RefSrc = 0,
+	.RefSrc = 1,
 	.RefVolt = ANALOG_DEMO_VCC_MV,
-	.CompVolt = 0,
+	.CompVolt = ANALOG_DEMO_REF_CODE * ANALOG_DEMO_VCC_MV / 256,
 	.AnalogIn = 0,
 	.bHystersys = false,
 	.IntPrio = IRQ_PRIO_NORMAL,
@@ -186,8 +186,10 @@ int main()
 	setvbuf(stdout, NULL, _IONBF, 0);
 
 	printf("\r\nDAC8, comparator and TML32 demo, wire P001 to P106\r\n");
+	printf("CMP0 IVREF0 driven by DAC0 P000, code %d\r\n", ANALOG_DEMO_REF_CODE);
 
-	if (s_Dac.Init(s_DacCfg) == false || s_Dac.OpenChannel(ANALOG_DEMO_DAC_CHAN, true) == false)
+	if (s_Dac.Init(s_DacCfg) == false || s_Dac.OpenChannel(ANALOG_DEMO_DAC_CHAN, true) == false ||
+		s_Dac.OpenChannel(0, true) == false || s_Dac.WriteCode(0, ANALOG_DEMO_REF_CODE) == false)
 	{
 		Fail("DAC init failed");
 	}
@@ -225,8 +227,7 @@ int main()
 
 		if (evt != 0)
 		{
-			printf("%s at code %u, %d mV\r\n", evt > 0 ? "Above" : "Below", (unsigned)code,
-				   (int)code * ANALOG_DEMO_VCC_MV / 256);
+			printf("%s at DAC1 code %u\r\n", evt > 0 ? "Above" : "Below", (unsigned)code);
 			IOPinToggle(s_Leds[0].PortNo, s_Leds[0].PinNo);
 		}
 	}
