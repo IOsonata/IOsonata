@@ -44,6 +44,7 @@ SOFTWARE.
 #include <stdio.h>
 #include <stdint.h>
 
+#include "idelay.h"
 #include "coredev/uart.h"
 #include "coredev/iopincfg.h"
 #include "coredev/interrupt.h"
