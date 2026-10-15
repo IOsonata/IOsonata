@@ -314,7 +314,14 @@ int main()
 		s_I2cCfgSlave.bDmaEn, s_I2cCfgSlave.bIntEn);
 
 	masterOk = g_I2CMaster.Init(s_I2cCfgMaster);
+#ifdef I2C_SLAVE_SKIP_INIT
+	// Board test: leave the slave unit stopped to exercise the master alone.
+	// The master then sees no ACK, which is the expected result.
+	slaveOk = true;
+	printf("I2C slave not started\r\n");
+#else
 	slaveOk = g_I2CSlave.Init(s_I2cCfgSlave);
+#endif
 	printf("I2C init master=%d slave=%d\r\n", masterOk, slaveOk);
 #ifdef I2C_PINS_STRONG_DRIVE
 	// Optional board test: raise the output drive of the bus pins after Init

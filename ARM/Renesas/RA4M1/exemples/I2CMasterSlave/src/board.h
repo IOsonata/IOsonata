@@ -75,6 +75,10 @@ SOFTWARE.
 // after Init. Off: it changes pin settings after the IIC is programmed.
 #define I2C_PINS_STRONG_DRIVE	false
 
+// Board test: uncomment to leave the slave unit stopped. The master write
+// should then end with a NACK trace event instead of a stalled clock.
+//#define I2C_SLAVE_SKIP_INIT
+
 #define I2C_SLAVE_DMA_ENABLE	false
 #define I2C_SLAVE_INT_ENABLE	true
 
