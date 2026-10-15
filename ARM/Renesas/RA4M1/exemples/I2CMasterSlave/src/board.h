@@ -69,6 +69,10 @@ SOFTWARE.
 #define I2C_SLAVE_SCL_PIN		0
 #define I2C_SLAVE_SCL_PINOP	IOPINOP_FUNC6
 
+// Board test: set to true to raise the output drive of the four bus pins
+// after Init. It does not change the pull-up resistance.
+#define I2C_PINS_STRONG_DRIVE	true
+
 #define I2C_SLAVE_DMA_ENABLE	false
 #define I2C_SLAVE_INT_ENABLE	true
 

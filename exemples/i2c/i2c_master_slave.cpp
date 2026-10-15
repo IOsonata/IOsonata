@@ -312,6 +312,17 @@ int main()
 	masterOk = g_I2CMaster.Init(s_I2cCfgMaster);
 	slaveOk = g_I2CSlave.Init(s_I2cCfgSlave);
 	printf("I2C init master=%d slave=%d\r\n", masterOk, slaveOk);
+#ifdef I2C_PINS_STRONG_DRIVE
+	// Optional board test: raise the output drive of the bus pins after Init
+	if (I2C_PINS_STRONG_DRIVE)
+	{
+		IOPinSetStrength(I2C_MASTER_SDA_PORT, I2C_MASTER_SDA_PIN, IOPINSTRENGTH_STRONG);
+		IOPinSetStrength(I2C_MASTER_SCL_PORT, I2C_MASTER_SCL_PIN, IOPINSTRENGTH_STRONG);
+		IOPinSetStrength(I2C_SLAVE_SDA_PORT, I2C_SLAVE_SDA_PIN, IOPINSTRENGTH_STRONG);
+		IOPinSetStrength(I2C_SLAVE_SCL_PORT, I2C_SLAVE_SCL_PIN, IOPINSTRENGTH_STRONG);
+		printf("I2C pins strong drive\r\n");
+	}
+#endif
 
 	if (!masterOk || !slaveOk)
 	{
