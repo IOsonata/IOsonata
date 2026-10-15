@@ -25,7 +25,7 @@ the TAU and the machine timer.
 | I2C master (IICA0, IICA1), polling and interrupt; slave with interrupt; DTC payload transfers in both | `src/i2c_r9a02.cpp`, `include/i2c_r9a02.h` | Hardware loopback PASS without DMA, and with DMA on both ends for polling and interrupt master completion; emulated (`tests/r9a02`) |
 | I2C master (SAU simplified I2C IIC00 to IIC21), polling and interrupt | `src/i2c_sau_r9a02.cpp` | Built |
 | ADC (ADC12, 10 pins, temperature sensor, internal reference, scan, continuous, hardware trigger, window, Snooze) | `src/adc_r9a02.cpp`, `include/adc_r9a02.h` | Built; polling and interrupt single-round conversion hardware validated on ANI2/ANI3, VREF and temperature |
-| RTC (calendar, fixed-cycle interrupt, alarm) | `src/rtc_r9a02.cpp`, `include/rtc_r9a02.h` | Built; SOSC calendar, periodic interrupt, Software Standby wake and two consecutive alarms hardware validated |
+| RTC (calendar, fixed-cycle interrupt, alarm) | `src/rtc_r9a02.cpp`, `include/rtc_r9a02.h` | Built; SOSC calendar, periodic interrupt, Sleep and Software Standby wake, periodic interrupts and repeated alarms hardware validated |
 | DTC (data transfer controller) | `src/dtc_r9a02.cpp`, `include/dtc_r9a02.h` | Built |
 | ELC (event link controller) | `src/elc_r9a02.cpp`, `include/elc_r9a02.h` | Built |
 | TML32 (32-bit interval timer) | `src/tml32_r9a02.cpp`, `include/tml32_r9a02.h` | Built |
@@ -642,8 +642,9 @@ Both alarms printed `Alarm, next in 2 min set`; periodic output continued
 after the second alarm through 23:31:10. The firmware used Software Standby
 between events. J-Link sometimes reports 0xDEADBEEF while debugging this
 mode, but the UART log demonstrates continued operation; this debugger issue
-is not classified as a confirmed firmware fault. Absolute RTC accuracy and
-long-duration retention remain untested. See `tests/r9a02/README.md`.
+is not classified as a confirmed firmware fault. A separate Sleep-mode run produced every second from 23:39:01 through
+23:44:52, including alarms at 23:41:00 and 23:43:00 with successful
+rearming. Absolute RTC accuracy and power-cycle retention remain untested. See `tests/r9a02/README.md`.
 
 ## DTC and ELC
 

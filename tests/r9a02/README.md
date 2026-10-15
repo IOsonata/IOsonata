@@ -431,5 +431,10 @@ single earlier observation as unresolved rather than claiming a driver fault.
 J-Link sometimes loses execution context in Software Standby and reports
 PC 0xDEADBEEF. The continuing UART output is evidence that firmware can
 continue running after such an indication; it is not proof of a CPU fault.
-Sleep-only operation, oscillator accuracy, long-term timekeeping, and
-power-cycle retention are not established by these captures.
+A separate RtcDemo hardware run with `RTC_DEMO_STANDBY=false` validated
+ordinary Sleep: the console showed every second from 23:39:01 through
+23:44:52, with alarm events at 23:41:00 and 23:43:00, both rearmed
+successfully. No timestamp gaps occurred in that capture. These observations
+validate RTC operation and repeated alarms in both Sleep and Software
+Standby for the configurations tested. Absolute oscillator accuracy and
+power-cycle retention remain untested.
