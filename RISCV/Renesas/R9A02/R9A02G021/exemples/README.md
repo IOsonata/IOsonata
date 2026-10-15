@@ -125,13 +125,17 @@ Pressing S1 stops the sequence (`g_bBut1Pressed`). The shared example prints
 from the button handler through semihosting in Debug. No UART console is
 configured, so that output is dropped in Release.
 
-**TimerDemo:** see `g_TimerInitOk`, `g_TriggerPeriod[]`, `g_Period[]` and
+**TimerDemo:** Release prints on the J-Link OB virtual COM port at 115200 8N1,
+no flow control; Debug keeps semihosted `printf`. The first line reports the
+accepted trigger period and subsequent lines report `Count` and `T0`. Also
+see `g_TimerInitOk`, `g_TriggerPeriod[]`, `g_Period[]` and
 `g_TriggerCount[]` in the debugger. LED1 toggles on trigger 0. DevNo 0 (machine
 timer, 32768 Hz) and DevNo 1 to 8 (TAU channels 0 to 7) each have one trigger,
 so only the 100 ms period is used. For a TAU channel, set `TIMER_DEVNO` to 1 to
 8 and `TIMER_FREQ` to a frequency that holds 100 ms in 16 bits, for example
 46875 (PCLKB 48 MHz / 1024); the default frequency (PCLKB) gives at most
-1.37 ms and the trigger is rejected.
+1.37 ms and the trigger is rejected. The 100 ms request is about 100006 us on
+the 32768 Hz machine timer and about 100011 us at 46875 Hz.
 
 **UartLoopback:** terminal at 115200 8N1, no flow control, on the J-Link OB
 virtual COM port. The firmware prints nothing by itself, it echoes what it

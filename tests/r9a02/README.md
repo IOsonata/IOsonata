@@ -363,3 +363,39 @@ and reported `I2C master/slave loopback PASS`. The two DMA runs label the
 last transfer `DMA RX`. Build type was not included in the hardware logs.
 The `I2CMasterSlave` example defaults both DMA enables to true, with master
 interrupts off and slave interrupts on. Its configuration is kept.
+
+## Timer hardware validation (pending)
+
+The generic Timer contract, the R9A02 timer implementation and the shared
+TimerDemo have been reviewed together. The port exposes the machine timer as
+DevNo 0 and TAU0 to TAU7 as DevNo 1 to 8. The source and project builds are
+not a substitute for hardware timing: the current R9A02 register models do
+not validate timer clock accuracy, CLIC service latency or long-running count
+extension.
+
+Use the TimerDemo Release configuration for the hardware run. Release defines
+`NDEBUG`, has no semihosting, and the R9A02 board file enables the existing
+high-level UART console on UART0 through the J-Link OB virtual COM port at
+115200 8N1. Debug keeps semihosting. The UART console is only an observation
+path; this test does not reopen UART validation.
+
+Run at least these timer selections:
+
+| DevNo | Hardware | TIMER_FREQ | Expected 100 ms trigger |
+| --- | --- | ---: | ---: |
+| 0 | Machine timer, LOCO 32768 Hz | 0 | about 100006 us |
+| 1 | TAU0 | 46875 | about 100011 us |
+| 8 | TAU7 | 46875 | about 100011 us |
+
+For each run, require `g_TimerInitOk == true`, a nonzero accepted trigger
+period, monotonically increasing `Count`, continuing trigger callbacks and
+LED1 toggles. Let the run cover dozens of periods so counter extension and
+interrupt service are exercised. The reported `T0` should remain near the
+accepted trigger period; record the observed range rather than inferring
+accuracy from the register model.
+
+Record the exact build configuration and console capture. If all three
+selections pass, the minimum timer baseline is hardware validated at both the
+low-frequency endpoint and the first/last TAU channels. Additional frequency,
+single-shot, disable/enable/reset and long-duration tests can then extend the
+coverage without changing that baseline claim.

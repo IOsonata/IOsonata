@@ -32,7 +32,7 @@ the TAU and the machine timer.
 | DAC8 (2 channels) | `src/dac_r9a02.cpp`, `include/dac_r9a02.h` | Built |
 | Comparators (CMP0, CMP1) | `src/analog_comp_r9a02.cpp` | Built |
 | Sleep, Software Standby, wake-up sources, Snooze | `R9A02G021/lib/src/system_r9a02.c`, `include/system_r9a02.h` | Built |
-| Timers (machine timer, TAU channels 0 to 7) | `src/timer_r9a02.cpp`, `include/timer_r9a02.h` | Built |
+| Timers (machine timer, TAU channels 0 to 7) | `src/timer_r9a02.cpp`, `include/timer_r9a02.h` | Built; hardware validation pending |
 | DFU flash target | `src/dfu_r9a02.cpp` | Built, boot linked, boot emulated |
 
 Built with xPack riscv-none-elf-gcc 15.2.0, `-march=rv32imac_zba_zbb_zbs_zicsr_zifencei -mabi=ilp32`.
