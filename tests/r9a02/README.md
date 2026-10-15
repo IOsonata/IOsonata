@@ -390,3 +390,27 @@ reset, and other TAU channels remain unvalidated on hardware.
 TimerDemo Release enables high-level UART output through the J-Link OB
 virtual COM port (UART0, 115200 8N1) with no semihosting; Debug uses
 semihosting. The UART console is an observation path only.
+
+## ADC12 hardware validation (2026-10-14)
+
+FPB-R9A02G021 ADCDemo used ANI2 (P400, Arduino A0) wired to GND and ANI3
+(P401, Arduino A1) wired to board 3.3 V. Both runs used 12-bit conversions,
+VCC as the ADC reference, and one measurement set per second. The build type
+was not explicitly included in the supplied console captures.
+
+| Mode | Complete sets | IN0 | IN1 | Internal VREF | Estimated VCC | Temperature | Result |
+| --- | ---: | --- | --- | --- | --- | --- | --- |
+| Polling | 29 | 1-2 mV | 3299 mV | 1441-1449 mV | 3349-3366 mV | 27.2-27.7 C | PASS |
+| ADC_ENDI interrupt | 18 | 0 mV | 3299 mV | 1441-1450 mV | 3345-3366 mV | 27.0-27.7 C | PASS |
+
+Both runs reported factory temperature calibration code CAL140 = 792.
+All recorded measurement sets completed; inputs stayed near their wired
+rails and the internal readings were plausible and stable. The VCC estimate
+uses a typical internal reference value and the temperature conversion
+assumes 3.3 V, so neither is an independent precision measurement.
+
+These captures validate repeated software-triggered select-mode ADC12
+conversions with polling and ADC_ENDI interrupt completion, including
+external inputs, internal reference and temperature sensor. Scan mode,
+continuous conversion, hardware triggers, compare window, calibration,
+Snooze and other ANI pin mappings are not hardware validated by these runs.

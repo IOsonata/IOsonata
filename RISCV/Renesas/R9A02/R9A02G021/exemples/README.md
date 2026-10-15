@@ -273,6 +273,12 @@ internal reference with the VCC it gives, and the die temperature from the
 factory calibration point. LED1 toggles. `ADC_DEMO_INT_ENABLE` in `board.h`
 selects the interrupt mode.
 
+FPB hardware validation (October 14, 2026): the ADCDemo polling run passed
+29 consecutive conversion rounds and the ADC_ENDI interrupt run passed 18.
+With A0/P400 connected to GND and A1/P401 to 3.3 V, IN0 read 0-2 mV
+and IN1 read 3299 mV; internal VREF and temperature were stable.
+Hardware-triggered, scan, continuous and Snooze ADC modes remain untested.
+
 **RtcDemo:** the 32.768 kHz crystal is the low frequency clock. The RTC
 wakes the MCU from Software Standby every second: the console shows the date
 and time (the build time after a power-on reset) and LED1 toggles. An alarm

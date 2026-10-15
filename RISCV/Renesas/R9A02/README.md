@@ -24,7 +24,7 @@ the TAU and the machine timer.
 | SPI (SAU simplified SPI): master with polling, interrupt and DTC reception, slave with interrupt and DTC, slave reception in Snooze (SPI00, SPI20) | `src/spi_r9a02.cpp` | Hardware loopback passed in modes 0-3 at 1 MHz, 8 bits: DMA on both ends, or DMA off with polling/interrupt master and interrupt slave; Snooze emulated |
 | I2C master (IICA0, IICA1), polling and interrupt; slave with interrupt; DTC payload transfers in both | `src/i2c_r9a02.cpp`, `include/i2c_r9a02.h` | Hardware loopback PASS without DMA, and with DMA on both ends for polling and interrupt master completion; emulated (`tests/r9a02`) |
 | I2C master (SAU simplified I2C IIC00 to IIC21), polling and interrupt | `src/i2c_sau_r9a02.cpp` | Built |
-| ADC (ADC12, 10 pins, temperature sensor, internal reference, scan, continuous, hardware trigger, window, Snooze) | `src/adc_r9a02.cpp`, `include/adc_r9a02.h` | Built |
+| ADC (ADC12, 10 pins, temperature sensor, internal reference, scan, continuous, hardware trigger, window, Snooze) | `src/adc_r9a02.cpp`, `include/adc_r9a02.h` | Built; polling and interrupt single-round conversion hardware validated on ANI2/ANI3, VREF and temperature |
 | RTC (calendar, fixed-cycle interrupt, alarm) | `src/rtc_r9a02.cpp`, `include/rtc_r9a02.h` | Built |
 | DTC (data transfer controller) | `src/dtc_r9a02.cpp`, `include/dtc_r9a02.h` | Built |
 | ELC (event link controller) | `src/elc_r9a02.cpp`, `include/elc_r9a02.h` | Built |
@@ -617,6 +617,13 @@ example. The manual gives ANI18 and ANI19 on P105 and P106 in the pin tables
 and swapped in table 29.12; the driver follows the pin tables, to confirm on
 hardware (SelfTest test 9). On the FPB board P105 is Arduino A4 (ANI18),
 P106 A5 (ANI19), as the board user's manual gives.
+
+FPB-R9A02G021 ADCDemo hardware tests on October 14, 2026 passed
+29 polling and 18 interrupt-mode conversion rounds at 12-bit resolution,
+with ANI2/P400 tied to GND and ANI3/P401 tied to 3.3 V. The grounded input
+reported 0 to 2 mV, the supply input 3299 mV, and internal VREF and
+factory-calibrated temperature were stable and plausible. See
+`tests/r9a02/README.md` for measured ranges and untested ADC features.
 
 ## RTC
 
