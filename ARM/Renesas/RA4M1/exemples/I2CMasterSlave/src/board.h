@@ -66,7 +66,7 @@ SOFTWARE.
 #define I2C_SLAVE_SDA_PIN		1
 #define I2C_SLAVE_SDA_PINOP	IOPINOP_FUNC6
 #define I2C_SLAVE_SCL_PORT		4
-#define I2C_SLAVE_SCL_PIN		0
+#define I2C_SLAVE_SCL_PIN		8
 #define I2C_SLAVE_SCL_PINOP	IOPINOP_FUNC6
 
 // Board test: set to true to raise the output drive of the four bus pins
