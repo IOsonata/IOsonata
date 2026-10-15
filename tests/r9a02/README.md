@@ -438,3 +438,19 @@ successfully. No timestamp gaps occurred in that capture. These observations
 validate RTC operation and repeated alarms in both Sleep and Software
 Standby for the configurations tested. Absolute oscillator accuracy and
 power-cycle retention remain untested.
+
+## AnalogDemo hardware validation (2026-10-15)
+
+FPB-R9A02G021 AnalogDemo in the supplied console capture uses TML32 LOCO
+interval 19989 us with DAC1 code increment 2 every tick. DACOUT1 P001 is
+wired to comparator input P106. Board resistor R23 externally pulls P001
+toward 3.3 V, so DAC1 output cannot cross the comparator's original 1.44 V
+internal reference. The updated example drives CMP0 IVREF0 from DAC0 P000
+at code 192 instead. The log records 1216 TML32 ticks and 18 comparator
+events, with rising transitions reported at DAC1 code 192 and falling
+transitions at the DAC1 wrap to code 0. Hardware PASS for TML32 scheduling,
+DAC1 ramp, comparator reference configuration and both-edge event callbacks.
+
+This does not validate DAC1's unloaded voltage accuracy. Earlier external
+ANI2 measurements across codes 0 to 255 gave approximately 1.675 to
+3.295 V with R23 installed, matching a heavily pull-up-loaded DAC output.

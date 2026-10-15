@@ -28,9 +28,9 @@ the TAU and the machine timer.
 | RTC (calendar, fixed-cycle interrupt, alarm) | `src/rtc_r9a02.cpp`, `include/rtc_r9a02.h` | Built; SOSC calendar, periodic interrupt, Sleep and Software Standby wake, periodic interrupts and repeated alarms hardware validated |
 | DTC (data transfer controller) | `src/dtc_r9a02.cpp`, `include/dtc_r9a02.h` | Built |
 | ELC (event link controller) | `src/elc_r9a02.cpp`, `include/elc_r9a02.h` | Built |
-| TML32 (32-bit interval timer) | `src/tml32_r9a02.cpp`, `include/tml32_r9a02.h` | Built |
-| DAC8 (2 channels) | `src/dac_r9a02.cpp`, `include/dac_r9a02.h` | Built |
-| Comparators (CMP0, CMP1) | `src/analog_comp_r9a02.cpp` | Built |
+| TML32 (32-bit interval timer) | `src/tml32_r9a02.cpp`, `include/tml32_r9a02.h` | Built; 19989 us DAC ramp scheduling hardware validated |
+| DAC8 (2 channels) | `src/dac_r9a02.cpp`, `include/dac_r9a02.h` | Built; DAC1 ramp and DAC0 comparator reference hardware validated on R23-loaded board |
+| Comparators (CMP0, CMP1) | `src/analog_comp_r9a02.cpp` | Built; CMP0 both-edge interrupts hardware validated with IVREF0 |
 | Sleep, Software Standby, wake-up sources, Snooze | `R9A02G021/lib/src/system_r9a02.c`, `include/system_r9a02.h` | Built |
 | Timers (machine timer, TAU channels 0 to 7) | `src/timer_r9a02.cpp`, `include/timer_r9a02.h` | Built; machine timer, TAU0 and TAU7 100 ms continuous callbacks hardware validated |
 | DFU flash target | `src/dfu_r9a02.cpp` | Built, boot linked, boot emulated |
