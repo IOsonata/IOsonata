@@ -61,9 +61,9 @@ SOFTWARE.
 #define RA4M1_I2C_TXBUF_SIZE		64
 #define RA4M1_I2C_ICBR_RESERVED		0xE0U
 #define RA4M1_I2C_ICMR1_BASE		0x08U
-#define RA4M1_I2C_ICMR2_MASTER		0x04U
+#define RA4M1_I2C_ICMR2_MASTER		0x06U
 #define RA4M1_I2C_ICMR2_SLAVE		0x06U
-#define RA4M1_I2C_ICFER_MASTER		0x77U
+#define RA4M1_I2C_ICFER_MASTER		0x7AU
 #define RA4M1_I2C_ICFER_SLAVE		0x5DU
 
 // ICCR2 request bits. They are set with a read-modify-write so that MST and
@@ -91,6 +91,7 @@ SOFTWARE.
 #define RA4M1_I2C_CR1_SOWP			0x10U
 #define RA4M1_I2C_CR2_BBSY			0x80U
 #define RA4M1_I2C_FER_TMOE			0x01U
+#define RA4M1_I2C_MR3_NF2			0x01U
 #define RA4M1_I2C_MR3_ACKBT			0x08U
 #define RA4M1_I2C_MR3_ACKWP			0x10U
 #define RA4M1_I2C_MR3_WAIT			0x40U
@@ -371,14 +372,15 @@ static bool Ra4m1I2cRate(uint32_t Rate, uint8_t *pCks, uint8_t *pBrl,
 	uint8_t bestBrl = 0U;
 	uint8_t bestBrh = 0U;
 
-	// SCLE is enabled and NFE is disabled. With CKS=0 the IIC adds three
-	// IIC-phi clocks to each programmed high/low count, with a divided
-	// IIC-phi it adds two. Rise and fall time are treated as zero, a real
-	// open-drain bus only lengthens the period, so the result is at or below
-	// the requested rate and never violates the low/high minima.
+	// The master runs with SCLE and NFE enabled and two noise filter stages.
+	// With CKS=0 the IIC adds five IIC-phi clocks to each programmed high/low
+	// count, with a divided IIC-phi it adds four. Rise and fall time are
+	// treated as zero, a real open-drain bus only lengthens the period, so the
+	// result is at or below the requested rate and never violates the low/high
+	// minima.
 	for (uint8_t cks = 0U; cks < 8U; cks++)
 	{
-		uint32_t offset = cks == 0U ? 3U : 2U;
+		uint32_t offset = cks == 0U ? 5U : 4U;
 		uint32_t divider = 1UL << cks;
 
 		for (uint8_t brl = 0U; brl < 32U; brl++)
@@ -462,18 +464,6 @@ static inline void Ra4m1I2cSetWait(R_IIC0_Type * const pReg, bool bWait)
 	else
 	{
 		pReg->ICMR3 &= (uint8_t)~RA4M1_I2C_MR3_WAIT;
-	}
-}
-
-static inline void Ra4m1I2cSetTimeout(R_IIC0_Type * const pReg, bool bOn)
-{
-	if (bOn)
-	{
-		pReg->ICFER |= RA4M1_I2C_FER_TMOE;
-	}
-	else
-	{
-		pReg->ICFER &= (uint8_t)~RA4M1_I2C_FER_TMOE;
 	}
 }
 
@@ -563,7 +553,8 @@ static void Ra4m1I2cConfigure(Ra4m1I2cDev_t * const pDev)
 	// Renesas configures WAIT as an optional clock-stretching feature. In the
 	// loopback bring-up, leave WAIT clear to distinguish clock stretching from
 	// an external SCL-low condition. Master RX configures WAIT as needed.
-	reg->ICMR3 = RA4M1_I2C_MR3_ACKWP;
+	// Two noise filter stages, as the RE01 driver on the same IIC block.
+	reg->ICMR3 = RA4M1_I2C_MR3_NF2 | RA4M1_I2C_MR3_ACKWP;
 	Ra4m1I2cAck(reg, false);
 
 	reg->ICFER = slave ? RA4M1_I2C_ICFER_SLAVE : RA4M1_I2C_ICFER_MASTER;
@@ -658,7 +649,6 @@ static void Ra4m1I2cMasterService(Ra4m1I2cDev_t * const pDev)
 				RA4M1_I2C_SR2_START);
 			Ra4m1I2cSetWait(reg, false);
 			Ra4m1I2cAck(reg, false);
-			Ra4m1I2cSetTimeout(reg, true);
 			pDev->MState = RA4M1_I2C_M_DONE;
 		}
 
@@ -816,13 +806,10 @@ static bool Ra4m1I2cMasterBegin(Ra4m1I2cDev_t * const pDev, bool bRx,
 
 	if (restart)
 	{
-		// The timeout function is off over a repeated start (vendor flow).
-		Ra4m1I2cSetTimeout(reg, false);
 		reg->ICCR2 |= RA4M1_I2C_ICCR2_RS;
 	}
 	else
 	{
-		Ra4m1I2cSetTimeout(reg, true);
 		reg->ICCR2 |= RA4M1_I2C_ICCR2_ST;
 	}
 
