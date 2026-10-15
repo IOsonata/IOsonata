@@ -158,6 +158,13 @@ FAIL, then `SPI master/slave loopback PASS`. The slave takes its buffers at
 edge. `SPI_SLAVE_DMA_ENABLE false` in `board.h` tests the slave with one
 interrupt per byte; its interrupt priority is above the master's.
 
+On a slave completion timeout, the R9A02 example prints the CS pin
+configuration, GPIO input registers, SAU1 status and ICU/CLIC routes through
+the shared example's `SpiMasterSlaveDiagnostics` hook. P202 should show
+`pullup=1 IRQ=1 output=0 peripheral=0`; P104 should be a GPIO output.
+The diagnostic source is linked by both projects, runs only after timeout,
+and does not change configuration or read the receive data register.
+
 **I2CScan:** connect I2C devices with pull-ups to P010 (SDA) and P011 (SCL).
 The console lists the addresses that answer. The core clock is the HOCO at
 32 MHz, the IICA needs PCLKB at 32 MHz or lower. `I2C_SCAN_INT_ENABLE true`
