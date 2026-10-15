@@ -50,7 +50,7 @@ SOFTWARE.
 }
 
 // Master on IIC0, slave on IIC1. Wiring: SDA P401 (J2-8) to P206 (J1-3),
-// SCL P408 (J2-16) to P100 (J1-1).
+// SCL P408 (J2-16) to P205 (J2-14, trace-cut jumper).
 #define I2C_MASTER_DEVNO		0
 #define I2C_MASTER_SDA_PORT		4
 #define I2C_MASTER_SDA_PIN		1
@@ -67,8 +67,8 @@ SOFTWARE.
 #define I2C_SLAVE_SDA_PORT		2
 #define I2C_SLAVE_SDA_PIN		6
 #define I2C_SLAVE_SDA_PINOP	IOPINOP_FUNC6
-#define I2C_SLAVE_SCL_PORT		1
-#define I2C_SLAVE_SCL_PIN		0
+#define I2C_SLAVE_SCL_PORT		2
+#define I2C_SLAVE_SCL_PIN		5
 #define I2C_SLAVE_SCL_PINOP	IOPINOP_FUNC6
 
 // Board test: set to true to raise the output drive of the four bus pins

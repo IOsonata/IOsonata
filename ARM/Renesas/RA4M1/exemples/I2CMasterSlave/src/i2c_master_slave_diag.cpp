@@ -50,9 +50,10 @@ static void DumpUnit(const char *pName, int DevNo)
 
 	for (uint32_t i = 0; Ra4m1I2cTraceGet(DevNo, i, &rec); ++i)
 	{
-		printf("  #%lu %s info=%02x mstate=%u CR1=%02x CR2=%02x SR2=%02x FER=%02x MR3=%02x IER=%02x SER=%02x\r\n",
+		printf("  #%lu %s info=%02x mstate=%u CR1=%02x CR2=%02x SR2=%02x FER=%02x MR3=%02x IER=%02x SER=%02x peer CR1=%02x SR1=%02x SR2=%02x IER=%02x\r\n",
 			(unsigned long)rec.Seq, TraceName(rec.Code), rec.Info, rec.MState, rec.ICCR1,
-			rec.ICCR2, rec.ICSR2, rec.ICFER, rec.ICMR3, rec.ICIER, rec.ICSER);
+			rec.ICCR2, rec.ICSR2, rec.ICFER, rec.ICMR3, rec.ICIER, rec.ICSER,
+			rec.PeerCR1, rec.PeerSR1, rec.PeerSR2, rec.PeerIER);
 	}
 	if (cnt == 0U)
 		printf("  no trace events\r\n");

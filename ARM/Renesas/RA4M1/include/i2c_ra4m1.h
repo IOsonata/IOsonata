@@ -42,7 +42,7 @@ SOFTWARE.
 #define RA4M1_I2C_TRACE				1
 #endif
 
-#define RA4M1_I2C_TRACE_DEPTH		16
+#define RA4M1_I2C_TRACE_DEPTH		64
 
 // Trace codes
 #define RA4M1_I2C_TR_CONFIG			1	// Configure done (registers after it)
@@ -78,6 +78,10 @@ typedef struct
 	uint8_t ICMR3;
 	uint8_t ICIER;
 	uint8_t ICSER;
+	uint8_t PeerCR1;	// other unit ICCR1, 0 when its module is stopped
+	uint8_t PeerSR1;	// other unit ICSR1
+	uint8_t PeerSR2;	// other unit ICSR2
+	uint8_t PeerIER;	// other unit ICIER
 } Ra4m1I2cTrace_t;
 
 #ifdef __cplusplus
