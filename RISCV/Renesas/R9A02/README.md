@@ -22,7 +22,7 @@ the TAU and the machine timer.
 | UART (SAU UART0 to UART2), polling, interrupt and DTC TX, reception in Snooze (UART0, UART2) | `src/uart_r9a02.cpp` | UART0 Release PRBS TX at line rate and clean loopback in all four modes across recorded runs; earlier isolated PRBS losses unresolved; Snooze emulated (`tests/r9a02`) |
 | UART (UARTA0, UARTA1), polling, interrupt and DTC TX | `src/uarta_r9a02.cpp`, `include/uarta_r9a02.h` | Built, DTC emulated (`tests/r9a02`) |
 | SPI (SAU simplified SPI): master with polling, interrupt and DTC reception, slave with interrupt and DTC, slave reception in Snooze (SPI00, SPI20) | `src/spi_r9a02.cpp` | Built, slave and Snooze emulated (`tests/r9a02`) |
-| I2C master (IICA0, IICA1), polling and interrupt; slave with interrupt | `src/i2c_r9a02.cpp`, `include/i2c_r9a02.h` | Built, master and slave emulated (`tests/r9a02`) |
+| I2C master (IICA0, IICA1), polling and interrupt; slave with interrupt; DTC payload transfers in both | `src/i2c_r9a02.cpp`, `include/i2c_r9a02.h` | Hardware loopback PASS without DMA, and with DMA on both ends for polling and interrupt master completion; emulated (`tests/r9a02`) |
 | I2C master (SAU simplified I2C IIC00 to IIC21), polling and interrupt | `src/i2c_sau_r9a02.cpp` | Built |
 | ADC (ADC12, 10 pins, temperature sensor, internal reference, scan, continuous, hardware trigger, window, Snooze) | `src/adc_r9a02.cpp`, `include/adc_r9a02.h` | Built |
 | RTC (calendar, fixed-cycle interrupt, alarm) | `src/rtc_r9a02.cpp`, `include/rtc_r9a02.h` | Built |
@@ -44,7 +44,7 @@ their runs; their cause remains unresolved (see UART).
 All four loopback configurations now have clean hardware captures. The
 polling/DTC rerun after `7b28c9c` reports about 66,000 bytes/s with zero
 errors; the sustained loss seen before the RX-service fix is absent.
-Not implemented: SPI master transmission by the DTC, the DTC for I2C (the CPU acts at each byte), UART reception by the DTC,
+Not implemented: SPI master transmission by the DTC, the DTC for SAU simplified I2C, UART reception by the DTC,
 TML32 8-bit channels and capture, REMC, KINT, DOC, CRC, TRNG.
 
 ## Memory layout
@@ -508,9 +508,30 @@ With `bIntEn` the data of Rx, and of Tx up to `R9A02_I2C_TX_COPY_SIZE` bytes
 (32, copied), go in the end of byte interrupt; a longer Tx is polled in the
 call. Both end with the stop, the release and one `DEVINTRF_EVT_COMPLETED`,
 the call returns -1. A NACK ends the transfer with the bytes acknowledged.
-The start, the address and the command of a read are polled. `bDmaEn` fails
-I2CInit: the ACK of each byte and the NACK of the last received one need the
-CPU.
+The start, the address and the command of a read are polled.
+
+On IICA0 and IICA1, `bDmaEn` moves TX/RX payload bytes through the DTC.
+The CPU still handles each protocol event, checks ACKD and selects ACKE;
+this is DMA-assisted byte movement, not autonomous block DMA. IICA0
+reserves ELC_SWEVT0, IICA1 ELC_SWEVT1, each with an additional ICU slot.
+Do not link those software events elsewhere while the instance uses DMA.
+`bIntEn` still selects polling or background master completion, and the
+slave still requires interrupts. SAU simplified I2C rejects `bDmaEn`.
+
+Hardware validation on FPB-R9A02G021, October 14, 2026, using
+`I2CMasterSlave` (IICA1 master, IICA0 slave):
+
+| Master DMA | Master INT | Slave DMA | Slave INT | Result |
+| --- | --- | --- | --- | --- |
+| 0 | 0 | 0 | 1 | PASS |
+| 1 | 1 | 1 | 1 | PASS |
+| 1 | 0 | 1 | 1 | PASS |
+
+Each run initialized both devices, wrote 8/8 bytes at offset 4, read back
+`a0 a1 a2 a3 a4 a5 a6 a7`, then received 4/4 bytes `0c 0d 0e 0f`.
+The DMA runs report `DMA RX 4/4 bytes` and `I2C master/slave loopback PASS`.
+These results cover the listed configurations; build type was not included
+in the hardware logs.
 
 ## ADC
 
@@ -566,7 +587,8 @@ slot over to the DTC (IELSRn.DTCE), `R9a02DtcDisable` back to the CPU. The
 vector table is the `.bss.dtc_vector` section, placed first in IRAM by the
 R9A02 linker scripts (1 KB alignment). Records are re-read at each transfer
 (DTCCR.RRS = 0). `MRB.DISEL = 1` is not supported. Users: UART TX
-(`bDMAMode`), the SPI master reception and slave transfers (`bDmaEn`), and the TML32 interval flag
+(`bDMAMode`), SPI master reception and slave transfers (`bDmaEn`), IICA
+master/slave payload transfers (`bDmaEn`), and the TML32 interval flag
 (MODE_DTC, MODE_SNOOZE).
 
 `include/elc_r9a02.h`: `R9a02ElcLink(Dest, EvtId)` links an event to the A/D

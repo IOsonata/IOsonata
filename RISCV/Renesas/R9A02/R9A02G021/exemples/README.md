@@ -171,9 +171,15 @@ are off once the IICA pins are in output mode. The console, Release
 configuration (`NDEBUG`) at 1,000,000 baud, shows the init result of both
 I2C, the write of 8 bytes at offset 4 of the slave memory, their read back
 with a restart, then a read of 4 bytes without command that continues at
-offset 12 (`0c 0d 0e 0f`), and `I2C master/slave loopback PASS`. The master
-is polled; `I2C_MASTER_INT_ENABLE true` in `board.h` moves its data to the
-interrupt, whose priority stays below the slave's.
+offset 12 (`0c 0d 0e 0f`), and `I2C master/slave loopback PASS`. Both DMA
+switches default to true in the shared example. The master waits for
+completion by default; `I2C_MASTER_INT_ENABLE true` enables background
+completion. The slave requires interrupts. DTC moves payload bytes while
+the CPU continues to handle the IICA protocol at each byte.
+
+Hardware PASS on October 14, 2026: master DMA=0 INT=0 with slave DMA=0
+INT=1, and master DMA=1 with either INT=0 or INT=1 with slave DMA=1 INT=1.
+Each run passed the 8-byte write/read and the final 4-byte receive.
 
 **AnalogDemo:** wire P001 to P106. The TML32 (LOCO) steps DAC8 channel 1 every
 20 ms, a ramp from 0 to VCC in about 2.6 s. Comparator 0 compares it with its

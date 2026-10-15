@@ -302,7 +302,12 @@ python3 tests/r9a02/build_i2c_emu.py --llvm --tool-prefix /path/to/llvm-for-rene
 Release (`-Os`) and Debug (`-O0`) checks passed with LLVM 19.1.7.202501.
 The I2CMasterSlave example also compiled and linked in Debug and Release
 with the current example-required library sources and LLVM project flags.
-The maintainer's earlier hardware result validates the DMA-off loopback;
-this DMA implementation still needs the same test on hardware. The
-`I2CMasterSlave` example already defaults both DMA enables to true, with
-master interrupts off and slave interrupts on. Its configuration is kept.
+The maintainer's hardware runs on October 14, 2026 now validate the
+DMA-off loopback (master DMA=0 INT=0, slave DMA=0 INT=1) and both DMA
+completion modes (master DMA=1 INT=0 and INT=1, slave DMA=1 INT=1).
+All three runs initialized both devices, wrote 8/8 bytes at offset 4,
+read back `a0 a1 a2 a3 a4 a5 a6 a7`, received 4/4 bytes `0c 0d 0e 0f`,
+and reported `I2C master/slave loopback PASS`. The two DMA runs label the
+last transfer `DMA RX`. Build type was not included in the hardware logs.
+The `I2CMasterSlave` example defaults both DMA enables to true, with master
+interrupts off and slave interrupts on. Its configuration is kept.

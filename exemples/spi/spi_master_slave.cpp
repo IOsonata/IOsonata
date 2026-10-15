@@ -291,6 +291,7 @@ int main()
 {
 	const int lengths[] = {1, 16, 129};
 	bool pass;
+	bool shown;
 	SPICfg_t cfg;
 	SPICfg_t masterCfg;
 	const DevIntrf_t *intrf;
@@ -313,7 +314,7 @@ int main()
 	printf("%s\r\n", SPI_LOOPBACK_WIRING);
 #endif
 	pass = true;
-	bool shown = false;
+	shown = false;
 	for (mode = 0; mode < 4; ++mode)
 	{
 		if ((SPI_TEST_MODE_MASK & (1 << mode)) == 0)
