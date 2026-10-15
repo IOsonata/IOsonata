@@ -493,8 +493,20 @@ Every 1-, 16- and 129-byte master TX/RX check passes, including repeated
 transfers and short frames followed by long frames. All three runs end with
 `SPI master/slave loopback PASS`. This validates the CPHA=1 transfer-end
 correction for DMA and CPU slave service with these master configurations.
-Other interrupt/DMA combinations, maximum gap-free rate and Snooze still
-require hardware validation. The captures did not identify build type.
+The captures did not identify build type.
+
+A subsequent mixed configuration, master DMA=1 INT=0 with slave DMA=0
+INT=1, passes all mode 0 checks but fails the mode 1 16-byte master RX:
+slave RX=-1, master RX[1]=0xFF instead of 0xA1. The mode 1 one-byte RX
+and preceding 16-byte TX checks pass. Modes 2 and 3 are not reached.
+Master TX is CPU-polled even with DMA selected; multibyte master RX uses
+DTC to write the next dummy byte immediately after reading the previous
+byte. The interrupt slave must read RX and load TX between bytes in
+CPHA=1 (23.5.6, figure 23.23). This failure is consistent with insufficient
+inter-byte time for CPU slave service; the register model does not measure
+that timing. Master DMA=1 INT=0 with slave DMA=1 INT=1 remains the next
+hardware check. Do not count the mixed configuration as validated. Other
+combinations, maximum gap-free rate and Snooze still need hardware tests.
 
 ## I2C
 

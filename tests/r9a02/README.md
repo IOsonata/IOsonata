@@ -159,8 +159,18 @@ DMA=0 INT=0 or INT=1 and slave DMA=0 INT=1. All three include 1-, 16- and 129-by
 frames and short-to-long transitions, ending with `SPI master/slave
 loopback PASS`. These validate the transfer-end correction for DMA and
 CPU slave service with those master configurations. Build type was not
-reported. Other interrupt/DMA combinations and Snooze reception of byte 0
-(23.5.7) still need hardware validation.
+reported.
+
+The subsequent master DMA=1 INT=0, slave DMA=0 INT=1 capture passes mode 0
+but fails the mode 1 16-byte master RX, with slave RX=-1 and master byte 1
+0xFF instead of 0xA1. Modes 2 and 3 are not reached. The CPU-polled TX and
+one-byte RX checks pass; multibyte master RX starts subsequent bytes by
+DTC. This is consistent with insufficient inter-byte time for the CPHA=1
+slave ISR to read RX and load TX. The emulator dispatches CPU service at
+explicit points and cannot establish whether that service fits the actual
+master gap. Its PASS does not validate this mixed hardware configuration.
+Master DMA=1 INT=0 with slave DMA=1 INT=1, other untested combinations and
+Snooze reception of byte 0 (23.5.7) still need hardware validation.
 
 ## UART reception in Snooze (2026-10-13)
 

@@ -174,7 +174,17 @@ in modes 0-3 at 1 MHz, 8 bits: master DMA=1 INT=1 with slave DMA=1 INT=1,
 and master DMA=0 with INT=0 or INT=1 and slave DMA=0 INT=1.
 All three include 1-, 16- and 129-byte frames and short-to-long transitions,
 ending with `SPI master/slave loopback PASS`. Build type was not reported;
-other interrupt/DMA combinations still need hardware validation.
+the other combinations are recorded separately below.
+
+With master DMA=1 INT=0 and slave DMA=0 INT=1, mode 0 passes but the mode 1
+16-byte master RX fails: slave RX=-1 and master byte 1 is 0xFF rather than
+0xA1. Modes 2 and 3 are not reached. This mixes DTC-clocked master reads
+with CPU slave service. CPHA=1 needs the next slave TX byte loaded before
+the next byte starts; the result is consistent with too little inter-byte
+time for its ISR. The passing TX checks are CPU-polled even when master
+DMA is enabled. To isolate completion with master interrupts off, keep
+master DMA=1 INT=0 and set `SPI_SLAVE_DMA_ENABLE true`, leaving slave
+interrupts enabled. That configuration still needs a hardware result.
 
 The console shows, for each mode,
 frames of 1, 16 and 129 bytes sent and received by the master, with PASS or
