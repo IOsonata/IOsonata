@@ -116,11 +116,8 @@ SOFTWARE.
 
 #define R9A02_SAU_SIR_ALL			(R9A02_SAU_SIR_OVCT | R9A02_SAU_SIR_PECT | R9A02_SAU_SIR_FECT)
 
-// UARTA is referenced weakly, it is linked only when the application asks for
-// it (uarta_r9a02.h) and stays out of the images that do not use it, the DFU
-// boot among them. Without it DevNo 3 and 4 fail UARTInit.
-bool R9a02UartaInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg) __attribute__((weak));
-UARTDev_t const *R9a02UartaGetInstance(int Chan) __attribute__((weak));
+// UARTA is a normal part of the MCU UART port. DevNo selects the hardware
+// implementation; no application linker options are required.
 
 struct __R9a02_Uart_Snz_Ops;
 
@@ -1344,7 +1341,7 @@ UARTDev_t const *UARTGetInstance(int DevNo)
 {
 	if (DevNo >= R9A02_UART_SAU_CNT)
 	{
-		return R9a02UartaGetInstance != NULL ? R9a02UartaGetInstance(DevNo - R9A02_UART_SAU_CNT) : NULL;
+		return DevNo < R9A02_UART_DEV_CNT ? R9a02UartaGetInstance(DevNo - R9A02_UART_SAU_CNT) : NULL;
 	}
 
 	return DevNo >= 0 && DevNo < s_NbR9a02UartDev ? s_R9a02UartDev[DevNo].pUartDev : NULL;
@@ -1364,7 +1361,7 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 
 	if (pCfg->DevNo >= R9A02_UART_SAU_CNT && pCfg->DevNo < R9A02_UART_DEV_CNT)
 	{
-		return R9a02UartaInit != NULL && R9a02UartaInit(pDev, pCfg);
+		return R9a02UartaInit(pDev, pCfg);
 	}
 
 	if (pCfg->DevNo < 0 || pCfg->DevNo >= s_NbR9a02UartDev)
