@@ -32,7 +32,7 @@ the TAU and the machine timer.
 | DAC8 (2 channels) | `src/dac_r9a02.cpp`, `include/dac_r9a02.h` | Built |
 | Comparators (CMP0, CMP1) | `src/analog_comp_r9a02.cpp` | Built |
 | Sleep, Software Standby, wake-up sources, Snooze | `R9A02G021/lib/src/system_r9a02.c`, `include/system_r9a02.h` | Built |
-| Timers (machine timer, TAU channels 0 to 7) | `src/timer_r9a02.cpp`, `include/timer_r9a02.h` | Built; hardware validation pending |
+| Timers (machine timer, TAU channels 0 to 7) | `src/timer_r9a02.cpp`, `include/timer_r9a02.h` | Built; machine timer, TAU0 and TAU7 100 ms continuous callbacks hardware validated |
 | DFU flash target | `src/dfu_r9a02.cpp` | Built, boot linked, boot emulated |
 
 Built with xPack riscv-none-elf-gcc 15.2.0, `-march=rv32imac_zba_zbb_zbs_zicsr_zifencei -mabi=ilp32`.
@@ -724,6 +724,12 @@ already set. Freq 0 selects PCLKB, where a 16-bit period is at most 1.37 ms
 at 48 MHz; ask for a lower frequency for long periods (46875 Hz for up to
 1.39 s). TML32 is not a timer device: it has no readable count (manual
 19.2), see TML32.
+
+The FPB hardware TimerDemo runs reported stable intervals of 100006 us for
+machine timer DevNo 0 (11 callbacks) and 100010 us for TAU0/TAU7 DevNo 1/8
+(18 callbacks each). These runs exercise continuous 100 ms callbacks only;
+the build type was not included in the captures. Remaining timer modes and
+channels are not yet hardware validated. See `tests/r9a02/README.md`.
 
 ## DFU
 

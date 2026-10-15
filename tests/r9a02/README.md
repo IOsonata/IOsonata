@@ -364,38 +364,29 @@ last transfer `DMA RX`. Build type was not included in the hardware logs.
 The `I2CMasterSlave` example defaults both DMA enables to true, with master
 interrupts off and slave interrupts on. Its configuration is kept.
 
-## Timer hardware validation (pending)
+## Timer hardware validation (2026-10-14)
 
-The generic Timer contract, the R9A02 timer implementation and the shared
-TimerDemo have been reviewed together. The port exposes the machine timer as
-DevNo 0 and TAU0 to TAU7 as DevNo 1 to 8. The source and project builds are
-not a substitute for hardware timing: the current R9A02 register models do
-not validate timer clock accuracy, CLIC service latency or long-running count
-extension.
+FPB-R9A02G021 TimerDemo hardware console captures validate the machine timer
+and first/last TAU channels with continuous 100 ms trigger 0:
 
-Use the TimerDemo Release configuration for the hardware run. Release defines
-`NDEBUG`, has no semihosting, and the R9A02 board file enables the existing
-high-level UART console on UART0 through the J-Link OB virtual COM port at
-115200 8N1. Debug keeps semihosting. The UART console is only an observation
-path; this test does not reopen UART validation.
+| DevNo | Peripheral | TIMER_FREQ | Reported T0 | Consecutive callbacks | Result |
+| --- | --- | ---: | ---: | ---: | --- |
+| 0 | Machine timer, LOCO 32768 Hz | 0 | 100006 us | 11 | PASS |
+| 1 | TAU0 | 46875 | 100010 us | 18 | PASS |
+| 8 | TAU7 | 46875 | 100010 us | 18 | PASS |
 
-Run at least these timer selections:
+Every reported interval was identical within its capture. `Count` advanced
+by 100 ms every callback: from 100 to 1100 ms for DevNo 0, and from 100 to
+1800 ms for DevNo 1 and 8. The captures show no missed callbacks or
+unexpected interval changes. LED behavior was not explicitly reported.
+The build configuration was not stated in the supplied hardware logs.
 
-| DevNo | Hardware | TIMER_FREQ | Expected 100 ms trigger |
-| --- | --- | ---: | ---: |
-| 0 | Machine timer, LOCO 32768 Hz | 0 | about 100006 us |
-| 1 | TAU0 | 46875 | about 100011 us |
-| 8 | TAU7 | 46875 | about 100011 us |
+These results validate 100 ms continuous timer callbacks and software
+elapsed-time reporting for the three selected devices, not absolute oscillator
+accuracy, worst-case interrupt latency, every TAU channel, or long-duration
+counter extension. Frequency changes, single-shot callbacks, disable/enable,
+reset, and other TAU channels remain unvalidated on hardware.
 
-For each run, require `g_TimerInitOk == true`, a nonzero accepted trigger
-period, monotonically increasing `Count`, continuing trigger callbacks and
-LED1 toggles. Let the run cover dozens of periods so counter extension and
-interrupt service are exercised. The reported `T0` should remain near the
-accepted trigger period; record the observed range rather than inferring
-accuracy from the register model.
-
-Record the exact build configuration and console capture. If all three
-selections pass, the minimum timer baseline is hardware validated at both the
-low-frequency endpoint and the first/last TAU channels. Additional frequency,
-single-shot, disable/enable/reset and long-duration tests can then extend the
-coverage without changing that baseline claim.
+TimerDemo Release enables high-level UART output through the J-Link OB
+virtual COM port (UART0, 115200 8N1) with no semihosting; Debug uses
+semihosting. The UART console is an observation path only.

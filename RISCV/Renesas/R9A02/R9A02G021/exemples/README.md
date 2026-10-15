@@ -137,6 +137,11 @@ so only the 100 ms period is used. For a TAU channel, set `TIMER_DEVNO` to 1 to
 1.37 ms and the trigger is rejected. The 100 ms request is about 100006 us on
 the 32768 Hz machine timer and about 100011 us at 46875 Hz.
 
+FPB TimerDemo hardware results: DevNo 0 reported 100006 us for 11 callbacks;
+DevNo 1 (TAU0) and DevNo 8 (TAU7) reported 100010 us for 18 callbacks
+each, all with steady 100 ms `Count` steps. All three continuous-trigger
+runs PASS. Other timer modes and channels remain untested on hardware.
+
 **UartLoopback:** terminal at 115200 8N1, no flow control, on the J-Link OB
 virtual COM port. The firmware prints nothing by itself, it echoes what it
 receives.
