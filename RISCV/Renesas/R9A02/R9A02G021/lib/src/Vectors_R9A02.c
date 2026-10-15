@@ -282,7 +282,7 @@ const R9a02Vector_t g_R9a02VectorTable[R9A02_CLIC_INT_COUNT] = {
 	IELSR31_IRQHandler,		// 50
 };
 
-__attribute__((weak))
+__attribute__((weak, used, externally_visible))
 uintptr_t R9a02ExceptionHandler(uint32_t Cause, uintptr_t Epc, uintptr_t Tval)
 {
 	s_ExcCause = Cause;
@@ -297,7 +297,7 @@ uintptr_t R9a02ExceptionHandler(uint32_t Cause, uintptr_t Epc, uintptr_t Tval)
 	return Epc;
 }
 
-__attribute__((weak))
+__attribute__((weak, used, externally_visible))
 void R9a02NmiHandler(void)
 {
 	for (;;)

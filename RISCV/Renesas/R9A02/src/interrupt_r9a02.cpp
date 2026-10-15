@@ -484,6 +484,7 @@ static void R9a02IcuDispatch(uint32_t Slot)
 	handler((int)Slot, ctx);
 }
 
+__attribute__((used, externally_visible))
 void R9a02IrqDispatch(uint32_t ClicId)
 {
 	if (ClicId >= R9A02_CLIC_ID_IELSR0 && ClicId < R9A02_CLIC_INT_COUNT)
