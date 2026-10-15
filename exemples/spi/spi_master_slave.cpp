@@ -332,6 +332,7 @@ int main()
 			pass = false;
 			break;
 		}
+		printf("SPI master init OK\r\n");
 		s_FrameLength = sizeof(s_SlaveRx);
 		for (i = 0; i < sizeof(s_SlaveTx); ++i)
 			s_SlaveTx[i] = static_cast<uint8_t>(0xA0 ^ i);
@@ -341,6 +342,7 @@ int main()
 			pass = false;
 			break;
 		}
+		printf("SPI slave init OK\r\n");
 		if (!shown)
 		{
 			shown = true;
