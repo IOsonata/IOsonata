@@ -108,6 +108,11 @@
 			<locationURI>PARENT-2-PROJECT_LOC/src/i2c_ra4m1.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/spi_ra4m1.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-2-PROJECT_LOC/src/spi_ra4m1.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/cfifo.c</name>
 			<type>1</type>
 			<locationURI>PARENT-5-PROJECT_LOC/src/cfifo.c</locationURI>
@@ -126,6 +131,11 @@
 			<name>src/i2c.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-5-PROJECT_LOC/src/coredev/i2c.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/spi.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/src/coredev/spi.cpp</locationURI>
 		</link>
 		<link>
 			<name>include/timer_ra4m1.h</name>
