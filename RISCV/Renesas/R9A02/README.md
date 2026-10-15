@@ -429,18 +429,20 @@ byte count, -1 on an overrun, a frame longer than the receive buffer, or a
 chip select already low when the frame was prepared. The dummy byte follows
 the transmit data.
 
-- The channel runs in continuous mode. With CPHA=0, transmit byte 0 is in
-  the shifter and byte 1 in SDRmn while CS is high. With CPHA=1 (modes 1
-  and 3), byte 0 waits in SDRmn for the first SCK edge. The initial
-  buffer-empty interrupt queues byte 1 without counting a received byte;
-  only then is the DTC enabled. This interrupt must run within one byte
-  time. MISO is driven all the time and every SCK edge counts: the bus is
-  point to point, SCK idle while the chip select is high.
-- Without `bDmaEn` each byte has its interrupt, within one byte time. With
-  it the DTC moves each byte: the received byte to the buffer, the transmit
-  byte through a 16-bit stage to SDRmn. A DTC run ends with the receive
-  buffer or the transmit data, the CPU starts the next one within one byte
-  time.
+- CPHA=0 uses continuous mode: transmit byte 0 is in the shifter and byte
+  1 in SDRmn while CS is high. Each buffer-empty event reads RX and queues
+  the byte after the next. CPHA=1 (modes 1 and 3) uses transfer-end events:
+  only byte 0 is preloaded, then each byte end reads RX and loads the next
+  TX byte. This makes the final received byte available without another
+  SCK edge. The master must leave enough time between bytes for this
+  read/write service. MISO is always driven and every SCK edge counts:
+  the bus is point to point, SCK idle while CS is high.
+- Without `bDmaEn` the CPU handles each byte. With it the DTC moves the
+  received byte to the buffer and the transmit byte through a 16-bit stage
+  to SDRmn. A DTC run ends with the receive buffer or transmit data, then
+  the CPU starts the next run. CPHA=0 allows one byte time to queue TX;
+  CPHA=1 must load TX before the next byte starts and prepare the next DTC
+  run before that byte ends. A register model cannot validate these times.
 - Rate is the highest SCK of the master: at most fMCK / 8 with fMCK above
   16 MHz, fMCK / 6 below (table 37.34, VCC 2.7 V or more). fMCK is the
   highest operation clock of the unit, 24 MHz from PCLKB 48 MHz, so 3 MHz.
@@ -471,10 +473,13 @@ bytes in both directions, including short frames followed by long frames.
 CS uses P109-to-P201 (J13-1 to J13-7). Mode 1 then fails on its first byte
 with slave RX=-1 and data a1 instead of 30. The driver had waited for the
 first buffer load before SCK, overwritten transmit byte 0 on timeout, and
-enabled RX DMA for the initial buffer-empty event. The CPHA=1 start now
-waits for that event without polling or overwriting the first byte.
+enabled RX DMA for the initial buffer-empty event. The first correction
+(`fb41374`) removed that overwrite; the next hardware capture still passes
+mode 0 but reports RX=0 on the first mode 1 byte. In continuous mode that
+final RX byte waits in the shifter for another SCK edge. CPHA=1 now uses
+transfer-end events and a one-byte TX offset in both CPU and DTC paths.
 Debug/Release builds and the corrected register model pass; modes 1 to 3
-still require hardware validation. The capture did not identify build type.
+still require hardware validation. The captures did not identify build type.
 
 ## I2C
 

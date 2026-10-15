@@ -87,17 +87,16 @@ inputs, MISO (SO) IOPINOP_FUNC16 output, chip select IOPINOP_GPIO input,
 exactly these four. bIntEn and SPICSEL_AUTO are required, bDmaEn needs 8
 bit frames; other settings fail SPIInit.
 
-	- The channel runs in continuous mode (SMRmn.MD0 = 1, buffer empty
-	  event) on the SCK input (CCS = 1). It is started while the chip
-	  select is high. With CPHA = 0, transmit byte 0 goes to the shift
-	  register at once and byte 1 waits in SDRmn. With CPHA = 1, byte 0
-	  waits for the first SCK edge. Its buffer empty interrupt queues byte
-	  1 without reading or counting received data (figures 23.25 and 23.26).
-	  The DTC is enabled only after this initial event. At the end of each
-	  byte the next one moves to the shift register and the byte received
-	  to SDRmn, then SAUm_ENDIn: the byte is read and the one after the next
-	  is written. Late by a byte or more, the SAU sets OVF (23.3.11) at the
-	  next byte.
+	- CPHA = 0 uses continuous mode (SMRmn.MD0 = 1, buffer empty event).
+	  While CS is high, transmit byte 0 goes to the shifter and byte 1
+	  waits in SDRmn. Each event reads a received byte and queues the byte
+	  after the next (figures 23.25 and 23.26).
+	- CPHA = 1 uses single mode (MD0 = 0, transfer end event, figure 23.23).
+	  Only byte 0 is loaded before SCK. At each byte end the CPU or DTC
+	  reads RX and writes the next TX byte. Continuous mode would leave
+	  the final RX byte in the shifter until another SCK edge, and the
+	  variable frame length is not known before CS rises. The master must
+	  leave time between bytes for the CPU or DTC to load the next TX byte.
 	- The MISO output is driven all the time and the channel takes every
 	  SCK edge: the bus is point to point, the master clocks SCK only with
 	  the chip select low.
@@ -110,13 +109,12 @@ bit frames; other settings fail SPIInit.
 	  frame longer than the receive buffer, or a chip select already low
 	  when the frame was prepared. Then the next frame is prepared, the
 	  master keeps the chip select high for the time these two events take.
-	- CPHA = 1 needs its initial buffer empty interrupt within one byte
-	  time. Without bDmaEn, subsequent interrupts service each byte. With
-	  bDmaEn the DTC moves
+	- Without bDmaEn, one interrupt services each byte. With bDmaEn the DTC moves
 	  each byte: SDRmn [7:0] to the buffer (byte read as in 14.6.1), the
 	  transmit byte to a 16-bit stage, the stage to SDRmn by 16 bits
 	  (23.3.8). A DTC run ends with the receive buffer or the transmit
-	  data, the CPU then starts the next run within one byte time. The
+	  data, the CPU then starts the next run. CPHA = 0 allows one byte time;
+	  CPHA = 1 needs the next run ready before the next byte ends. The
 	  event of a byte that ends before is dropped (table 12.8 note 2): the
 	  next byte sets OVF, or at the end of the frame the byte is read from
 	  SDRmn.
@@ -201,7 +199,7 @@ typedef struct __R9a02_Spi_Dev {
 	bool bError;
 	bool bSlave;					// SPIMODE_SLAVE
 	volatile bool bArmed;			// Slave ready for a frame
-	bool bFirst;					// Slave waiting for the initial buffer empty event
+	uint8_t TxAhead;				// Slave TX offset from RX: single 1, continuous 2
 	int8_t CsLine;					// Slave chip select IRQ line, -1 when none
 	const uint8_t *pTxBuf;			// Slave transmit data of the frame
 	int TxLen;
@@ -231,12 +229,12 @@ typedef struct {
 #pragma pack(pop)
 
 static R9a02SpiDev_t s_R9a02SpiDev[] = {
-	{ {}, 0, 0, R9A02_EVT_SAU0_ENDI0, 2, NULL, -1, 0, 0, NULL, 0, 0, 0xFF, 0xFF, false, false, false, false, false, false, false, false, -1, NULL, 0, 0, 0, 0, 0, 0, NULL },
-	{ {}, 0, 1, R9A02_EVT_SAU0_ENDI1, 4, NULL, -1, 0, 0, NULL, 0, 0, 0xFF, 0xFF, false, false, false, false, false, false, false, false, -1, NULL, 0, 0, 0, 0, 0, 0, NULL },
-	{ {}, 0, 2, R9A02_EVT_SAU0_ENDI2, 4, NULL, -1, 0, 0, NULL, 0, 0, 0xFF, 0xFF, false, false, false, false, false, false, false, false, -1, NULL, 0, 0, 0, 0, 0, 0, NULL },
-	{ {}, 0, 3, R9A02_EVT_SAU0_ENDI3, 4, NULL, -1, 0, 0, NULL, 0, 0, 0xFF, 0xFF, false, false, false, false, false, false, false, false, -1, NULL, 0, 0, 0, 0, 0, 0, NULL },
-	{ {}, 1, 0, R9A02_EVT_SAU1_ENDI0, 4, NULL, -1, 0, 0, NULL, 0, 0, 0xFF, 0xFF, false, false, false, false, false, false, false, false, -1, NULL, 0, 0, 0, 0, 0, 0, NULL },
-	{ {}, 1, 1, R9A02_EVT_SAU1_ENDI1, 4, NULL, -1, 0, 0, NULL, 0, 0, 0xFF, 0xFF, false, false, false, false, false, false, false, false, -1, NULL, 0, 0, 0, 0, 0, 0, NULL },
+	{ {}, 0, 0, R9A02_EVT_SAU0_ENDI0, 2, NULL, -1, 0, 0, NULL, 0, 0, 0xFF, 0xFF, false, false, false, false, false, false, false, 0, -1, NULL, 0, 0, 0, 0, 0, 0, NULL },
+	{ {}, 0, 1, R9A02_EVT_SAU0_ENDI1, 4, NULL, -1, 0, 0, NULL, 0, 0, 0xFF, 0xFF, false, false, false, false, false, false, false, 0, -1, NULL, 0, 0, 0, 0, 0, 0, NULL },
+	{ {}, 0, 2, R9A02_EVT_SAU0_ENDI2, 4, NULL, -1, 0, 0, NULL, 0, 0, 0xFF, 0xFF, false, false, false, false, false, false, false, 0, -1, NULL, 0, 0, 0, 0, 0, 0, NULL },
+	{ {}, 0, 3, R9A02_EVT_SAU0_ENDI3, 4, NULL, -1, 0, 0, NULL, 0, 0, 0xFF, 0xFF, false, false, false, false, false, false, false, 0, -1, NULL, 0, 0, 0, 0, 0, 0, NULL },
+	{ {}, 1, 0, R9A02_EVT_SAU1_ENDI0, 4, NULL, -1, 0, 0, NULL, 0, 0, 0xFF, 0xFF, false, false, false, false, false, false, false, 0, -1, NULL, 0, 0, 0, 0, 0, 0, NULL },
+	{ {}, 1, 1, R9A02_EVT_SAU1_ENDI1, 4, NULL, -1, 0, 0, NULL, 0, 0, 0xFF, 0xFF, false, false, false, false, false, false, false, 0, -1, NULL, 0, 0, 0, 0, 0, 0, NULL },
 };
 
 static const int s_NbR9a02SpiDev = sizeof(s_R9a02SpiDev) / sizeof(s_R9a02SpiDev[0]);
@@ -687,14 +685,15 @@ static inline uint16_t R9a02SpiSlaveTx(const R9a02SpiDev_t * const pDev, int Idx
 	return Idx < pDev->TxLen ? (uint16_t)(pDev->pTxBuf[Idx] & pDev->DataMask) : pDev->Dummy;
 }
 
-// Slave byte by the CPU: SDRmn holds the byte received, the byte after the
-// next one is written (figure 23.26). The count stops at INT_MAX.
+// Slave byte by the CPU: read RX, then queue the next TX byte in single
+// mode or the byte after it in continuous mode. The count stops at INT_MAX.
 static void R9a02SpiSlaveByte(R9a02SpiDev_t * const pDev)
 {
 	R9A02_SAU_Type *reg = R9a02SauReg(pDev->Unit);
 	uint32_t ch = pDev->Ch;
 	uint8_t d = (uint8_t)(reg->SDR[ch] & pDev->DataMask);
 	int n = pDev->RxCnt;
+	int tx = n <= INT_MAX - pDev->TxAhead ? n + pDev->TxAhead : INT_MAX;
 
 	if (n < pDev->RxLen)
 	{
@@ -704,7 +703,7 @@ static void R9a02SpiSlaveByte(R9a02SpiDev_t * const pDev)
 	{
 		n++;
 	}
-	reg->SDR[ch] = R9a02SpiSlaveTx(pDev, n < INT_MAX ? n + 1 : INT_MAX);
+	reg->SDR[ch] = R9a02SpiSlaveTx(pDev, tx);
 	pDev->RxCnt = n;
 }
 
@@ -721,7 +720,7 @@ static void R9a02SpiSlaveDtcRun(R9a02SpiDev_t * const pDev)
 	uint32_t sdr = (uint32_t)(uintptr_t)&reg->SDR[pDev->Ch];
 	R9a02DtcInfo_t *d = pDev->Dtc;
 	int rx = pDev->RxCnt;
-	int tx = rx < INT_MAX - 2 ? rx + 2 : INT_MAX;
+	int tx = rx <= INT_MAX - pDev->TxAhead ? rx + pDev->TxAhead : INT_MAX;
 	uint32_t n = R9A02_SPI_SLAVE_DTC_MAX;
 
 	d[0].Rsv = 0U;
@@ -786,10 +785,10 @@ static void R9a02SpiSlaveAdd(R9a02SpiDev_t * const pDev, uint32_t Cnt)
 }
 
 // Slave channel started at byte RxCnt of the frame, interrupts disabled by
-// the caller. CPHA = 0 loads the shifter immediately, then byte RxCnt + 1
-// is queued. CPHA = 1 waits for SCK: leave byte RxCnt in SDRmn and let the
-// initial buffer empty interrupt queue the next one. Neither initial event
-// represents received data (figures 23.25 and 23.26).
+// the caller. CPHA = 0 uses two preloaded bytes and buffer empty events.
+// CPHA = 1 uses one byte and transfer end events, so a frame ending here
+// needs no extra SCK edge to make its final RX byte available in SDRmn.
+// Select MD0 here as well as at Init, including when returning from Snooze.
 static void R9a02SpiSlaveRun(R9a02SpiDev_t * const pDev)
 {
 	R9A02_SAU_Type *reg = R9a02SauReg(pDev->Unit);
@@ -799,34 +798,32 @@ static void R9a02SpiSlaveRun(R9a02SpiDev_t * const pDev)
 	uint32_t n = pDev->StartLoops;
 
 	pDev->SegLen = 0U;
-	pDev->bFirst = (reg->SCR[ch] & R9A02_SAU_SCR_DCP_DATA_EARLY) == 0U;
+	pDev->TxAhead = (reg->SCR[ch] & R9A02_SAU_SCR_DCP_DATA_EARLY) ? 2U : 1U;
 
 	reg->ST = bit;
+	reg->SMR[ch] = (uint16_t)((reg->SMR[ch] & ~R9A02_SAU_SMR_MD0) |
+							   (pDev->TxAhead == 2U ? R9A02_SAU_SMR_MD0 : 0U));
 	reg->SIR[ch] = R9A02_SAU_SIR_OVCT;
 	R9a02ClearPendingInt(pDev->IntNo);
 	reg->SS = bit;
 	reg->SDR[ch] = R9a02SpiSlaveTx(pDev, idx);
 
-	if (pDev->bFirst)
+	if (pDev->TxAhead == 2U)
 	{
-		R9a02IntEnable(pDev->IntNo, true);
+		while ((reg->SSR[ch] & R9A02_SAU_SSR_BFF) && --n > 0U)
+		{
+		}
 
-		return;
+		// First byte still in SDRmn: the second write would replace it
+		if (n == 0U)
+		{
+			pDev->bError = true;
+
+			return;
+		}
+
+		reg->SDR[ch] = R9a02SpiSlaveTx(pDev, idx + 1);
 	}
-
-	while ((reg->SSR[ch] & R9A02_SAU_SSR_BFF) && --n > 0U)
-	{
-	}
-
-	// First byte still in SDRmn: the second write would replace it
-	if (n == 0U)
-	{
-		pDev->bError = true;
-
-		return;
-	}
-
-	reg->SDR[ch] = R9a02SpiSlaveTx(pDev, idx + 1);
 
 	R9a02ClearPendingInt(pDev->IntNo);
 	if (pDev->pSpiDev->DevIntrf.bDma)
@@ -920,7 +917,7 @@ static void R9a02SpiSlaveCollect(R9a02SpiDev_t * const pDev)
 	}
 
 	// Take an unread final byte, including one whose event was lost behind
-	// a DTC end. A pending initial buffer empty event is not a received byte.
+	// a DTC end. Queued transmit data is not a received byte.
 	// Reading received data clears BFF; reading queued transmit data leaves
 	// it set (23.3.11, figure 23.25 note 2). Check both sides of the read so
 	// an empty buffer is not counted. Do not queue more data after CS rose.
@@ -1029,9 +1026,7 @@ static void R9a02SpiSlaveCsIrq(int IntNo, void *pCtx)
 // the IR clear of R9a02DtcEnable is dropped, the next byte then sets OVF.
 static void R9a02SpiSlaveIrq(R9a02SpiDev_t * const pDev)
 {
-	R9A02_SAU_Type *reg = R9a02SauReg(pDev->Unit);
 	uintptr_t state;
-	int idx = pDev->RxCnt;
 
 	// The first byte of a frame received in Snooze
 	if (pDev->pSnz != NULL && pDev->pSnz->Resume(pDev, true))
@@ -1044,22 +1039,10 @@ static void R9a02SpiSlaveIrq(R9a02SpiDev_t * const pDev)
 		return;
 	}
 
-	if (pDev->bFirst)
-	{
-		// CPHA = 1: the first SCK edge only loaded the first transmit byte.
-		// No received byte is available yet, and the DTC must not read SDRmn.
-		pDev->bFirst = false;
-		reg->SDR[pDev->Ch] = R9a02SpiSlaveTx(pDev, idx < INT_MAX ? idx + 1 : INT_MAX);
-	}
-	else if (!pDev->pSpiDev->DevIntrf.bDma)
+	if (!pDev->pSpiDev->DevIntrf.bDma)
 	{
 		R9a02SpiSlaveByte(pDev);
 
-		return;
-	}
-
-	if (!pDev->pSpiDev->DevIntrf.bDma)
-	{
 		return;
 	}
 
@@ -1479,7 +1462,6 @@ static bool R9a02SpiSnzResume(R9a02SpiDev_t * const pDev, bool bByte)
 	reg->ST = (uint16_t)(1U << ch);
 	reg->SSC = 0U;
 	reg->SCR[ch] = (uint16_t)(reg->SCR[ch] | R9A02_SAU_SCR_TRXE_TXRX);
-	reg->SMR[ch] = (uint16_t)(reg->SMR[ch] | R9A02_SAU_SMR_MD0);
 	snz->bArmed = false;
 
 	if (bByte)
@@ -1793,7 +1775,8 @@ bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfg)
 	// Mode and format, written with the channel stopped (tables 23.32,
 	// 23.33, 23.62 and 23.63). The operation clock, SMR.CKS, is set by
 	// R9a02SpiSetRate or R9a02SpiSlaveClock. The slave takes its clock from
-	// SCK (CCS) and works on the buffer empty event (MD0).
+	// SCK (CCS), with buffer empty events for CPHA = 0 and transfer end
+	// events for CPHA = 1 so a short frame needs no following SCK edge.
 	uint16_t scr = (uint16_t)(R9A02_SAU_SCR_TRXE_TXRX |
 							  (pCfg->DataSize == 7 ? R9A02_SAU_SCR_DLS_7BIT : R9A02_SAU_SCR_DLS_8BIT));
 
@@ -1811,7 +1794,8 @@ bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfg)
 	}
 
 	reg->SMR[dev->Ch] = (uint16_t)(R9A02_SAU_SMR_FIXED | R9A02_SAU_SMR_MD_SPI |
-								   (slave ? R9A02_SAU_SMR_CCS | R9A02_SAU_SMR_MD0 : 0U));
+								   (slave ? R9A02_SAU_SMR_CCS : 0U) |
+								   (slave && pCfg->DataPhase == SPIDATAPHASE_FIRST_CLK ? R9A02_SAU_SMR_MD0 : 0U));
 	reg->SCR[dev->Ch] = scr;
 
 	// Noise filter of the channel pair off for the simplified SPI (23.3.27),

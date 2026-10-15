@@ -109,7 +109,8 @@ external SPI master of SPI21 and of SPI20. It checks:
   interrupt taken after the last byte (the byte is read from SDR), the chip
   select low when the next frame is prepared (-1), Disable, Enable and
   PowerOff.
-- Reception in Snooze on SPI20, with and without the DTC: SELSR0 and SNZCR,
+- Reception in Snooze on SPI20, with and without the DTC in all four clock
+  modes: SELSR0 and SNZCR,
   a rate above 0.5 Mbps refused at the enabling and by SetRate;
   ICU_SNZCANCEL on only from the standby entry to the wake-up; frames of 1,
   2, 16 and 64 bytes started in Software Standby: byte 0 received in
@@ -119,33 +120,43 @@ external SPI master of SPI21 and of SPI20. It checks:
   select interrupt comes first; another Snooze set up replacing it (not set
   for Snooze, kept when the slave's is turned off); Snooze turned off.
 
-The first buffer-empty event is phase-dependent. CPHA=0 loads the first
-SDR write immediately; CPHA=1 waits for the first SCK edge. The earlier
-model incorrectly used the immediate load for all modes. The corrected
-model reproduces the old driver's mode 1/3 failure: transmit byte 0 is
-overwritten before SCK and the initial buffer-empty event is counted as RX.
-The driver now queues byte 1 in that initial interrupt, without reading RX,
-and enables the DTC afterward. At CS rising, only an SDR read that clears
-an initially set BFF counts as an unread received byte.
+The model follows both ends of the CPHA=1 transfer. In continuous mode,
+the first SCK edge loads TX, and the next byte's first edge exchanges the
+shifter and SDR. If SCK stops, the final RX byte remains in the shifter
+(23.5.6, figure 23.25). CS does not flush it. The previous model moved RX
+to SDR too early at byte end, which hid the hardware failure after
+`fb41374`: a one-byte mode 1 frame reports RX=0. The corrected model
+reproduces that result and loses the final byte of longer CPHA=1 frames
+with that driver.
 
-Checks also cover empty frames, a partial first byte with its initial
-interrupt serviced or still pending when CS rises, unchanged receive
-storage at the initial event, and a final byte interrupt held pending for
-both SAU-first and CS-first dispatch. The corrected model fails the old
-driver. Release (`-Os`) and Debug (`-O0`) pass with LLVM 19.1.7.202501:
+CPHA=1 now selects transfer-end events (MD0=0, figure 23.23). Only byte 0
+is preloaded; each end event reads RX and writes TX at RX index + 1.
+CPHA=0 keeps continuous service and its RX index + 2 transmit offset.
+Both CPU and DTC paths use that offset, including DTC segment boundaries
+and return from Snooze. At CS rising, only an SDR read that clears an
+initially set BFF counts as an unread received byte.
+
+Checks cover empty and partial first-byte frames, no event or RX write on
+the first CPHA=1 edge, 1/16/129-byte frames against a 129-byte buffer,
+unchanged storage beyond the received data, and a final byte interrupt
+held pending for both SAU-first and CS-first dispatch. Release (`-Os`)
+and Debug (`-O0`) pass with LLVM 19.1.7.202501:
 
 ```sh
 python3 tests/r9a02/build_spi_slave_emu.py --llvm --tool-prefix /path/to/llvm-for-renesas-riscv/bin/
 python3 tests/r9a02/build_spi_slave_emu.py --llvm --debug --tool-prefix /path/to/llvm-for-renesas-riscv/bin/
 ```
 
-These checks model register order, not individual SCK edges or interrupt
-latency. The library and SpiMasterSlave example also compile and link with
+These checks model first-edge and byte-end register ordering, not cycle
+timing or interrupt latency. CPHA=1 requires time between bytes to read RX
+and load TX, by CPU or DTC. Maximum gap-free throughput is not validated.
+The library and SpiMasterSlave example also compile and link with
 their Debug and Release LLVM project flags. Hardware now confirms mode 0
 at 1 MHz with master and slave DMA=1 INT=1, including 1-, 16- and 129-byte
-transfers. Mode 1 failed before this correction; its rerun and modes 2/3
-remain pending. Snooze reception of byte 0 (23.5.7) still needs an external
-master on the board.
+transfers. The subsequent capture after `fb41374` still passes mode 0 but
+reports RX=0 for the first mode 1 byte. Hardware validation of the
+transfer-end correction and modes 2/3 remains pending. Snooze reception of
+byte 0 (23.5.7) still needs an external master on the board.
 
 ## UART reception in Snooze (2026-10-13)
 

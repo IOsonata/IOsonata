@@ -165,18 +165,20 @@ P104-to-P202 CS path failed the hardware GPIO check: P104 read high while
 P202 stayed low, with SPI stopped and the P202 pull-up enabled. The SCK,
 MOSI and MISO GPIO checks passed. With the new CS pair, the October 15, 2026
 hardware capture passes every mode 0 transfer at 1 MHz, 8 bits, with
-master and slave DMA=1 INT=1. Mode 1 fails on its first byte. The CPHA=1
-initial buffer-empty handling is now corrected and passes emulator checks;
-hardware validation of that correction and modes 1 to 3 remains pending.
+master and slave DMA=1 INT=1. After the initial-event fix (`fb41374`), mode
+0 still passes but mode 1 reports RX=0 on its first byte: continuous mode
+leaves the final byte in the shifter when SCK stops. Modes 1 and 3 now use
+transfer-end service, with CPU/DTC reads and writes at byte end. Emulator
+checks pass; hardware validation of this correction remains pending.
 
 The console shows, for each mode,
 frames of 1, 16 and 129 bytes sent and received by the master, with PASS or
 FAIL, then `SPI master/slave loopback PASS`. The slave takes its buffers at
 `DEVINTRF_EVT_STATECHG` and reports each frame at the chip select rising
 edge. `SPI_SLAVE_DMA_ENABLE false` in `board.h` tests the slave with one
-interrupt per byte; modes 1 and 3 also need an initial buffer-empty
-interrupt before the first byte completes. Its interrupt priority is above
-the master's.
+interrupt per byte. Its interrupt priority is above the master's. Modes 1
+and 3 require time between bytes for the CPU or DTC to load the next TX
+byte; their maximum gap-free rate has not been measured.
 
 On a slave completion timeout, the R9A02 example prints the CS pin
 configuration, GPIO input registers, SAU1 status and ICU/CLIC routes through
