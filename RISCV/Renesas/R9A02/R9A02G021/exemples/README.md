@@ -284,6 +284,10 @@ wakes the MCU from Software Standby every second: the console shows the date
 and time (the build time after a power-on reset) and LED1 toggles. An alarm
 every 2 minutes toggles LED2. `RTC_DEMO_STANDBY false` in `board.h` uses
 Sleep instead. The debugger connection may be lost in Software Standby.
+FPB hardware captures show consecutive seconds, Software Standby wake-up,
+and alarm events at 23:29:00 and 23:31:00, each successfully rearming.
+UART output continued afterward; J-Link's 0xDEADBEEF indication was not
+accompanied by a confirmed firmware crash.
 
 **DfuBoot:** stage 0 boot for the layout of `ldscript/dfu_layout_r9a02g021.ld`
 (boot 36 KB, record 4 KB, application slot from 0xA000). Build the Release

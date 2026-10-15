@@ -414,3 +414,22 @@ conversions with polling and ADC_ENDI interrupt completion, including
 external inputs, internal reference and temperature sensor. Scan mode,
 continuous conversion, hardware triggers, compare window, calibration,
 Snooze and other ANI pin mappings are not hardware validated by these runs.
+
+## RTC hardware validation (2026-10-14)
+
+FPB-R9A02G021 RtcDemo selected SOSC 32768 Hz for the calendar and Software
+Standby between events. The console reported consecutive one-second calendar
+timestamps from 23:27:48 through 23:31:10, with alarms at 23:29:00 and
+23:31:00. Both alarm handlers reported `Alarm, next in 2 min set` and
+periodic output continued after the second event. This validates calendar
+progression, RTC periodic IRQs, Software Standby wake-up, alarm IRQ delivery
+and alarm rearming in the tested configuration.
+
+A prior capture omitted five timestamp lines between 23:30:03 and 23:30:09,
+but the longer capture reported all timestamps in that interval. Treat that
+single earlier observation as unresolved rather than claiming a driver fault.
+J-Link sometimes loses execution context in Software Standby and reports
+PC 0xDEADBEEF. The continuing UART output is evidence that firmware can
+continue running after such an indication; it is not proof of a CPU fault.
+Sleep-only operation, oscillator accuracy, long-term timekeeping, and
+power-cycle retention are not established by these captures.
