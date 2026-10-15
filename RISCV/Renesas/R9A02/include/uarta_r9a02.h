@@ -8,8 +8,12 @@ UARTCfg_t.DevNo:
 	DevNo 0 to 2 : SAU UART0 to UART2 (uart_r9a02.cpp)
 	DevNo 3 and 4: UARTA0 and UARTA1 (uarta_r9a02.cpp), 48-pin package only
 
-UARTInit and UARTGetInstance in uart_r9a02.cpp select SAU or UARTA from
-DevNo, without application linker flags or direct driver calls.
+UARTInit and UARTGetInstance in uart_r9a02.cpp hand DevNo 3 and 4 to the
+functions below. They reference them weakly so that the UARTA code, about
+3.5 KB, is not linked into an image that does not use it (the DFU boot has
+36 KB). An application using UARTA links it with the linker option
+-Wl,-u,R9a02UartaInit, or by calling R9a02UartaInit itself. Without it
+UARTInit fails for DevNo 3 and 4.
 
 @author	Hoang Nguyen Hoan
 @date	Oct. 12, 2026

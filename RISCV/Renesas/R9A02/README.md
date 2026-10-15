@@ -368,10 +368,10 @@ capture. Together with the earlier three clean modes, all four UART0
 loopback configurations have clean hardware evidence. It does not resolve
 the isolated losses from the earlier transmit-only PRBS captures.
 
-UARTA uses normal `UARTInit` / `UARTGetInstance` dispatch for DevNo 3 and 4.
-No special linker option or direct `R9a02UartaInit` call is required. Since
-UARTA is strongly linked, check DfuBoot's 36 KB Release image after this
-change; retaining the fixed DFU layout is mandatory.
+UARTA is linked only on request, so that images without it stay small (the
+DFU boot): link the application with `-Wl,-u,R9a02UartaInit` (the
+`UartaLoopback` example does), or call `R9a02UartaInit` directly. Without it
+`UARTInit` fails for DevNo 3 and 4.
 
 Reception in Snooze (23.6.3): `R9a02UartSnooze(pDev, true)` (`sau_r9a02.h`)
 for UART0 or UART2 after `UARTInit` with `bIntMode`, at 4800 or 9600 bps,
