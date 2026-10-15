@@ -170,12 +170,12 @@ void SpiMasterSlaveDiagnostics(void)
 	uint32_t clic;
 	unsigned slot;
 	uint8_t event;
+	bool pinIrq;
 
 	__asm volatile ("csrr %0, mstatus" : "=r" (status));
 	// PRWCNTR is write-only; a read does not report the wait setting.
-	printf("SPI timeout MSTATUS=%08lx PWPR=%02x IRQCR2=%02x\r\n",
-		(unsigned long)status, (unsigned)R9A02_PFS_PWPR,
-		(unsigned)R9A02_ICU->IRQCR[2]);
+	printf("SPI timeout MSTATUS=%08lx PWPR=%02x\r\n",
+		(unsigned long)status, (unsigned)R9A02_PFS_PWPR);
 	SpiCsDiagnostics("Master", SPI_MASTER_CS_PORT, SPI_MASTER_CS_PIN);
 	SpiCsDiagnostics("Slave", SPI_SLAVE_CS_PORT, SPI_SLAVE_CS_PIN);
 	printf("SPI master pins PFS SCK=%08lx MISO=%08lx MOSI=%08lx\r\n",
@@ -194,7 +194,8 @@ void SpiMasterSlaveDiagnostics(void)
 	for (slot = 0; slot < R9A02_ICU_IELSR_CNT; slot++)
 	{
 		event = R9a02IntEvent((int)slot);
-		if (event != R9A02_EVT_PORT_IRQ2 && event != R9A02_EVT_SAU1_ENDI0 &&
+		pinIrq = event >= R9A02_EVT_PORT_IRQ0 && event <= R9A02_EVT_PORT_IRQ7;
+		if (!pinIrq && event != R9A02_EVT_SAU1_ENDI0 &&
 			event != R9A02_EVT_SAU1_ENDI1)
 		{
 			continue;
@@ -206,6 +207,12 @@ void SpiMasterSlaveDiagnostics(void)
 			(unsigned)CLIC_INT_IE_REG(R9A02_CLIC_CTRL_BASE, clic),
 			(unsigned)CLIC_INT_IP_REG(R9A02_CLIC_CTRL_BASE, clic),
 			(unsigned)CLIC_INT_CTL_REG(R9A02_CLIC_CTRL_BASE, clic));
+		if (pinIrq)
+		{
+			printf("SPI pin IRQ%u IRQCR=%02x\r\n",
+				(unsigned)(event - R9A02_EVT_PORT_IRQ0),
+				(unsigned)R9A02_ICU->IRQCR[event - R9A02_EVT_PORT_IRQ0]);
+		}
 	}
 	SpiGpioDiagnostics();
 }

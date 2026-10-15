@@ -100,9 +100,10 @@ was not available here: check them against the board schematic.
 | UartaLoopback | RxDA1, TxDA1 | P008, P403 | `IOPINOP_FUNC5` (PSEL 0x06) |
 | SpiLoopback | SCK20, SI20 (MISO), SO20 (MOSI) | P101, P102, P103 | `IOPINOP_FUNC16` |
 | SpiLoopback | Chip select | P104 | GPIO |
-| SpiMasterSlave | Master as SpiLoopback | P101 to P104 | As SpiLoopback |
+| SpiMasterSlave | Master SCK20, SI20 (MISO), SO20 (MOSI) | P101, P102, P103 | `IOPINOP_FUNC16` |
+| SpiMasterSlave | Master chip select | P109, J13-1 | GPIO output |
 | SpiMasterSlave | Slave SCK21, SI21 (MOSI), SO21 (MISO) | P204, P205, P206 | `IOPINOP_FUNC16` |
-| SpiMasterSlave | Slave chip select, IRQ2 | P202 | GPIO input |
+| SpiMasterSlave | Slave chip select, IRQ3 | P201, J13-7 | GPIO input with pull-up |
 | I2CScan | SDAA1, SCLA1 | P010, P011 | `IOPINOP_FUNC6` (PSEL 0x07), open drain |
 | I2CMasterSlave | Master SDAA1, SCLA1 | P010, P011 | As I2CScan |
 | I2CMasterSlave | Slave SDAA0_B, SCLA0_B | P103, P102 | `IOPINOP_FUNC6` (PSEL 0x07), open drain |
@@ -150,8 +151,21 @@ pattern with PASS or FAIL, then `SPI master loopback PASS`. `board.h` sets
 the background with the DTC. Set both false for polling, or only DMA for the
 DTC with the call waiting.
 
-**SpiMasterSlave:** wire P101 to P204 (SCK), P103 to P205 (MOSI), P206 to
-P102 (MISO) and P104 to P202 (chip select). The console shows, for each mode,
+**SpiMasterSlave:** all four jumpers are on Pmod 1 J13:
+
+| Signal | Master pin | Slave pin | J13 jumper |
+| --- | --- | --- | --- |
+| SCK | P101 | P204 | 4 to 8 |
+| MOSI | P103 | P205 | 2 to 9 |
+| MISO | P102 | P206 | 3 to 10 |
+| CS | P109 | P201, IRQ3 | 1 to 7 |
+
+P109 and P201 connect directly to J13 and have board pull-ups. The previous
+P104-to-P202 CS path failed the hardware GPIO check: P104 read high while
+P202 stayed low, with SPI stopped and the P202 pull-up enabled. The SCK,
+MOSI and MISO GPIO checks passed. SPI transfer validation remains pending.
+
+The console shows, for each mode,
 frames of 1, 16 and 129 bytes sent and received by the master, with PASS or
 FAIL, then `SPI master/slave loopback PASS`. The slave takes its buffers at
 `DEVINTRF_EVT_STATECHG` and reports each frame at the chip select rising
@@ -160,8 +174,8 @@ interrupt per byte; its interrupt priority is above the master's.
 
 On a slave completion timeout, the R9A02 example prints the CS pin
 configuration, GPIO input registers, SAU1 status and ICU/CLIC routes through
-the shared example's `SpiMasterSlaveDiagnostics` hook. P202 should show
-`pullup=1 IRQ=1 output=0 peripheral=0`; P104 should be a GPIO output.
+the shared example's `SpiMasterSlaveDiagnostics` hook. P201 should show
+`pullup=1 IRQ=1 output=0 peripheral=0`; P109 should be a GPIO output.
 The diagnostic source is linked by both projects and runs only after timeout.
 After printing the registers, it powers off both SPI interfaces, tests each
 connection as GPIO in its normal direction, and checks the CS rising-edge
