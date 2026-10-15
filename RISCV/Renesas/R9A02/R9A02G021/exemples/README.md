@@ -61,7 +61,7 @@ an input filename and causes a "no such file or directory" error.
 | `TimerDemo` | `exemples/timer/timer_demo.cpp` | `gcc_R9A02G021.ld` | Timer DevNo 0, default frequency |
 | `UartLoopback` | `exemples/uart/uart_loopback.cpp` | `gcc_R9A02G021.ld` | UART0, 115200 8N1, interrupt mode |
 | `UartPrbsTxTest` | `exemples/uart/uart_prbs_tx.cpp` | `gcc_R9A02G021.ld` | UART0, 115200 8N1, interrupt mode |
-| `UartaLoopback` | `exemples/uart/uart_loopback.cpp` | `gcc_R9A02G021.ld` | UARTA1 (DevNo 4), 115200 8N1, interrupt mode, linker option `-Wl,-u,R9a02UartaInit` |
+| `UartaLoopback` | `exemples/uart/uart_loopback.cpp` | `gcc_R9A02G021.ld` | UARTA1 (DevNo 4), 115200 8N1; optional UARTA driver linked as project source, no linker flag |
 | `SpiLoopback` | `exemples/spi/spi_loopback.cpp` | `gcc_R9A02G021.ld` | SPI20 (DevNo 4) at 1 MHz, the four modes, interrupt and DTC reception, console on UART0 |
 | `SpiMasterSlave` | `exemples/spi/spi_master_slave.cpp` | `gcc_R9A02G021.ld` | SPI20 master (DevNo 4) at 1 MHz wired to the SPI21 slave (DevNo 5), the four modes, DTC on both, console on UART0 |
 | `I2CScan` | `exemples/i2c/i2c_scan.cpp` | `gcc_R9A02G021.ld` | IICA1 (DevNo 1) at 100 kHz, HOCO 32 MHz, console on UART0 |
@@ -150,8 +150,9 @@ receives.
 0xFF, no banner.
 
 **UartaLoopback:** connect a 3.3 V serial adapter to P008 (RX) and P403
-(TX), terminal at 115200 8N1. The firmware echoes what it receives. The
-project links UARTA with `-Wl,-u,R9a02UartaInit` (Other linker flags).
+(TX), terminal at 115200 8N1. The firmware echoes what it receives. The `UartaLoopback/ioc` project links `uarta_r9a02.cpp` as an optional
+project source; `UART::Init` still selects DevNo 4 and no internal-symbol
+linker flag is required.
 
 **SpiLoopback:** connect P103 (MOSI) to P102 (MISO). The console on the
 virtual COM port (Release configuration, `NDEBUG`) shows each mode and
