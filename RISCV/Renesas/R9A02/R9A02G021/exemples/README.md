@@ -281,7 +281,9 @@ FPB hardware validation (October 14, 2026): the ADCDemo polling run passed
 29 consecutive conversion rounds and the ADC_ENDI interrupt run passed 18.
 With A0/P400 connected to GND and A1/P401 to 3.3 V, IN0 read 0-2 mV
 and IN1 read 3299 mV; internal VREF and temperature were stable.
-Hardware-triggered, scan, continuous and Snooze ADC modes remain untested.
+Scan and continuous ADC modes remain separately unvalidated by this example.
+AdcSnoozeDemo subsequently validated below-threshold quiet and repeated
+above-threshold wake-up reporting, without independent DTC/ELC measurements.
 
 **RtcDemo:** the 32.768 kHz crystal is the low frequency clock. The RTC
 wakes the MCU from Software Standby every second: the console shows the date

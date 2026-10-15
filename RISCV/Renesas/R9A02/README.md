@@ -753,8 +753,9 @@ channels are not yet hardware validated. See `tests/r9a02/README.md`.
 `ldscript/dfu_layout_r9a02g021.ld`: boot 0x0 to 0x8FFF, record 0x9000 to
 0x9FFF, application slot 0 0xA000 to 0x1FFFF, recovery flag at 0x20006FF0.
 `dfu_boot_r9a02g021.ld` links the boot (with HEAD), `gcc_R9A02G021_dfu.ld`
-an application for slot 0. The boot fits only when built with -Os (36724 of
-36864 bytes); the Debug configuration at -O0 does not fit. UARTA is not
+an application for slot 0. The GCC Release DfuBoot image now links using LTO within the existing 36 KB
+boot partition (2026-10-15: text 35636, data 464, bss 6705 bytes in the
+reported build). The Debug configuration is not validated to fit. UARTA is not
 linked into it (see UART).
 
 `dfu_r9a02.cpp` programs the code flash in 8-byte units and erases 2 KB
