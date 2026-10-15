@@ -857,42 +857,61 @@ static SELFTEST_RES TestDacAdc(void)
 }
 
 // External DACOUT1 readback using the independent ANI2 pin.
+// Compare the two documented DADR data placements using external ANI2.
+// Only this diagnostic touches the DAC registers directly.
 static void TestDacExternal(void)
 {
 	static const uint8_t codes[] = { 0, 32, 64, 128, 192, 255 };
 	AdcChanCfg_t ch = AdcChan(0, 2);
+	R9A02_DAC8_Type *reg = R9A02_DAC8;
+	uint8_t oldFormat;
+	uint8_t dacr;
 	int raw[1];
 	int expected;
 	int mv;
+	int mode;
 	size_t i;
 
-	printf("DACOUT1 P001 to ANI2 P400 diagnostic\r\n");
+	printf("DACOUT1 P001 to ANI2 P400, DADR placement diagnostic\r\n");
 	if (s_Adc.OpenChannel(&ch, 1) == false)
 	{
 		printf("ANI2 open failed\r\n");
 		return;
 	}
 
-	for (i = 0; i < sizeof(codes); i++)
+	oldFormat = reg->DADPR;
+	for (mode = 0; mode < 2; mode++)
 	{
-		if (s_Dac.WriteCode(1, codes[i]) == false)
+		// Reconfigure the DAC format with channel 1 output disabled.
+		dacr = reg->DACR;
+		reg->DACR = (uint8_t)(dacr & ~R9A02_DACR_DAOE(1));
+		reg->DADPR = mode == 0 ? 0U : R9A02_DADPR_DPSEL;
+		reg->DADR[1] = 0U;
+		reg->DACR = dacr;
+		printf("DADPR.DPSEL=%d, DADR uses bits %s\r\n", mode, mode == 0 ? "7:0" : "15:8");
+
+		for (i = 0; i < sizeof(codes); i++)
 		{
-			printf("DAC1 write failed at code %u\r\n", codes[i]);
-			break;
+			reg->DADR[1] = mode == 0 ? (uint16_t)codes[i] : (uint16_t)((uint16_t)codes[i] << 8);
+			usDelay(1000);
+			AdcConvert(raw, 1);
+			AdcConvert(raw, 1);
+			expected = (int)codes[i] * 16;
+			if (raw[0] < 0)
+			{
+				printf("DAC1 %3u: ANI2 no ADC result\r\n", codes[i]);
+				continue;
+			}
+			mv = raw[0] * SELFTEST_VCC_MV / 4095;
+			printf("DAC1 %3u: ANI2 %4d raw, %4d mV (nominal %4d raw)\r\n",
+				   codes[i], raw[0], mv, expected);
 		}
-		usDelay(1000);
-		AdcConvert(raw, 1);
-		AdcConvert(raw, 1);
-		expected = (int)codes[i] * 16;
-		if (raw[0] < 0)
-		{
-			printf("DAC1 %3u: ANI2 no ADC result\r\n", codes[i]);
-			continue;
-		}
-		mv = raw[0] * SELFTEST_VCC_MV / 4095;
-		printf("DAC1 %3u: ANI2 %4d raw, %4d mV (nominal %4d raw)\r\n",
-			   codes[i], raw[0], mv, expected);
 	}
+
+	reg->DACR = (uint8_t)(reg->DACR & ~R9A02_DACR_DAOE(1));
+	reg->DADPR = oldFormat;
+	reg->DADR[1] = 0U;
+	reg->DACR = (uint8_t)(reg->DACR | R9A02_DACR_DAOE(1));
 	AdcCloseAll();
 }
 
