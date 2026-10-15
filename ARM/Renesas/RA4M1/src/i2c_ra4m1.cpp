@@ -689,6 +689,7 @@ static void Ra4m1I2cMasterService(Ra4m1I2cDev_t * const pDev)
 			{
 				Ra4m1I2cClearFlags(reg, RA4M1_I2C_SR2_START);
 				reg->ICDRT = (uint8_t)((pDev->Addr << 1U) | (pDev->bRxDir ? 1U : 0U));
+				Ra4m1I2cTrace(pDev, RA4M1_I2C_TR_ADDR, pDev->bRxDir ? 1U : 0U);
 				pDev->MState = pDev->bRxDir ?
 					RA4M1_I2C_M_RXADDR : RA4M1_I2C_M_TX;
 			}
@@ -853,6 +854,11 @@ static void Ra4m1I2cMasterRun(Ra4m1I2cDev_t * const pDev)
 		else if (--left <= 0)
 		{
 			Ra4m1I2cMasterAbort(pDev, 2U);
+		}
+		else if (left == budget / 2)
+		{
+			// One look at the registers while the transfer is stuck
+			Ra4m1I2cTrace(pDev, RA4M1_I2C_TR_SAMPLE, 0U);
 		}
 	}
 }

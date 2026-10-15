@@ -23,6 +23,8 @@ static const char *TraceName(uint8_t Code)
 		case RA4M1_I2C_TR_BEGIN: return "START requested";
 		case RA4M1_I2C_TR_NACK: return "NACK";
 		case RA4M1_I2C_TR_ABORT: return "abort";
+		case RA4M1_I2C_TR_ADDR: return "address written";
+		case RA4M1_I2C_TR_SAMPLE: return "stuck sample";
 		default: return "?";
 	}
 }
