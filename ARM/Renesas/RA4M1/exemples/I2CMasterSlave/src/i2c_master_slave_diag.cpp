@@ -59,26 +59,10 @@ static void DumpUnit(const char *pName, int DevNo)
 		printf("  no trace events\r\n");
 }
 
-static void DumpPin(const char *pName, int Port, int Pin)
-{
-	uint32_t pfs = R_PFS->PORT[Port].PIN[Pin].PmnPFS;
-
-	// PSEL bits 28..24, PMR 16, NCODR 6, PCR 4, PDR 2
-	printf("  %s P%d%02d PFS=%08lx PSEL=%lu PMR=%lu NCODR=%lu PCR=%lu PDR=%lu DSCR=%lu\r\n",
-		pName, Port, Pin, (unsigned long)pfs, (unsigned long)((pfs >> 24) & 0x1FU),
-		(unsigned long)((pfs >> 16) & 1U), (unsigned long)((pfs >> 6) & 1U),
-		(unsigned long)((pfs >> 4) & 1U), (unsigned long)((pfs >> 2) & 1U),
-		(unsigned long)((pfs >> 10) & 1U));
-}
-
 void I2cMasterSlaveDiagnostics(const char *pWhen)
 {
 	printf("--- I2C diagnostics %s ---\r\n", pWhen);
 	DumpUnit("master", I2C_MASTER_DEVNO);
 	DumpUnit("slave", I2C_SLAVE_DEVNO);
-	DumpPin("master SDA", I2C_MASTER_SDA_PORT, I2C_MASTER_SDA_PIN);
-	DumpPin("master SCL", I2C_MASTER_SCL_PORT, I2C_MASTER_SCL_PIN);
-	DumpPin("slave SDA", I2C_SLAVE_SDA_PORT, I2C_SLAVE_SDA_PIN);
-	DumpPin("slave SCL", I2C_SLAVE_SCL_PORT, I2C_SLAVE_SCL_PIN);
 	printf("--- end ---\r\n");
 }

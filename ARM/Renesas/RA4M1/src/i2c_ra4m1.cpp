@@ -206,23 +206,25 @@ static void Ra4m1I2cTrace(const Ra4m1I2cDev_t * const pDev, uint8_t Code, uint8_
 	rec->ICIER = reg->ICIER;
 	rec->ICSER = reg->ICSER;
 
-	// The other IIC unit, to see which side holds the lines when a transfer stalls
-	const bool peer0 = pDev->DevNo != 0;
-	const R_IIC0_Type *peer = peer0 ? R_IIC0 : R_IIC1;
+	// The other IIC unit is read only when a transfer is abandoned. The
+	// transfer is dead by then, so the read cannot change its outcome.
+	rec->PeerCR1 = 0U;
+	rec->PeerSR1 = 0U;
+	rec->PeerSR2 = 0U;
+	rec->PeerIER = 0U;
 
-	if ((R_MSTP->MSTPCRB & (1UL << (peer0 ? 9 : 8))) == 0U)
+	if (Code == RA4M1_I2C_TR_ABORT)
 	{
-		rec->PeerCR1 = peer->ICCR1;
-		rec->PeerSR1 = peer->ICSR1;
-		rec->PeerSR2 = peer->ICSR2;
-		rec->PeerIER = peer->ICIER;
-	}
-	else
-	{
-		rec->PeerCR1 = 0U;
-		rec->PeerSR1 = 0U;
-		rec->PeerSR2 = 0U;
-		rec->PeerIER = 0U;
+		const bool peer0 = pDev->DevNo != 0;
+		const R_IIC0_Type *peer = peer0 ? R_IIC0 : R_IIC1;
+
+		if ((R_MSTP->MSTPCRB & (1UL << (peer0 ? 9 : 8))) == 0U)
+		{
+			rec->PeerCR1 = peer->ICCR1;
+			rec->PeerSR1 = peer->ICSR1;
+			rec->PeerSR2 = peer->ICSR2;
+			rec->PeerIER = peer->ICIER;
+		}
 	}
 }
 
