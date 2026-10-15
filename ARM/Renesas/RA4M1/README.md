@@ -30,7 +30,7 @@ Therefore the log is **functional evidence, not a bound on GPT interrupt
 latency or period accuracy**. For timing measurement, collect timestamps in
 RAM without semihosting inside the measurement loop.
 
-**Not yet confirmed on hardware:** the rewritten IIC master and slave paths, GPIO edge interrupts,
+**Not yet confirmed on hardware:** the rewritten IIC master and slave paths, the RSPI master and slave (new, see RSPI master and slave), GPIO edge interrupts,
 other AGT/GPT channels and all six GPT compare routes, long-run rollover/pause/resume,
 stop/start recovery, low-power operation, USB, general DMA/DTC and ELC integration.
 SCI UART is complete and hardware-tested. Apart from the UART test
@@ -113,8 +113,9 @@ Compile `.c` sources as C11 or later and `.cpp` sources as C++11 or later:
 - `ARM/Renesas/RA4M1/src/iopincfg_ra4m1.c`
 - `ARM/Renesas/RA4M1/src/uart_ra4m1.cpp`
 - `ARM/Renesas/RA4M1/src/i2c_ra4m1.cpp`
+- `ARM/Renesas/RA4M1/src/spi_ra4m1.cpp`
 - `ARM/Renesas/RA4M1/src/timer_ra4m1.cpp`
-- `src/cfifo.c`, `src/device_intrf.cpp`, `src/coredev/uart.cpp`, `src/coredev/i2c.cpp`, `src/coredev/timer.cpp` (existing, unchanged)
+- `src/cfifo.c`, `src/device_intrf.cpp`, `src/coredev/uart.cpp`, `src/coredev/i2c.cpp`, `src/coredev/spi.cpp`, `src/coredev/timer.cpp` (existing, unchanged)
 
 Use the RA4M1 `include` directory, IOsonata `include` and `ARM/include`, and the
 project's existing CMSIS Core include directory. Link with
@@ -371,6 +372,93 @@ latency, and stuck-bus, arbitration-loss and stuck-slave recovery. It follows
 the FSP flows and is not the silicon: whether START/STOP/NACKF flags set with
 their interrupt disabled (polling), whether TXI and TEI are edge or level at
 the ICU, and the exact bit-rate offsets are open until the hardware run.
+
+## RSPI master and slave
+
+`src/spi_ra4m1.cpp` implements `SPIInit` of `coredev/spi.h` for **DevNo 0 =
+RSPI0** and **DevNo 1 = RSPI1**. It follows the RE01 RSPI master (polled,
+clock synchronous mode, GPIO chip select) and the SAM4L slave event sequence
+(`DEVINTRF_EVT_STATECHG`, then `DEVINTRF_EVT_COMPLETED`). The RSPI clock is
+PCLKA. The generic `SPI` class and the C functions are unchanged. **Hardware
+not tested.**
+
+Master.
+- Full duplex, SPI modes 0 to 3, MSB or LSB first, 8 to 16 bit frames. A frame
+  of more than 8 bits uses two bytes in the buffer, low byte first, and the
+  length must be a multiple of two.
+- The RSPI runs in clock synchronous (3 wire) mode and the chip select is a
+  GPIO from the pin map (index 3 and up, `IOPINOP_GPIO` output) driven by the
+  driver with `SPICSEL_AUTO`; with `SPICSEL_MAN` the application drives it.
+- Rate: `Rate` selects the closest supported SCK, PCLKA / (2 x (SPBR + 1) x
+  2^BRDV), from PCLKA / 4096 to PCLKA / 2. A request outside that range gets
+  the nearest end and the actual rate is returned. A request of 0 selects
+  1 MHz.
+- Polling by default. With `bIntEn`, a `TxData` or `RxData` of more than one
+  frame runs from the receive interrupt, keeps two frames in the RSPI and
+  reports the end with `DEVINTRF_EVT_COMPLETED` and the byte count (-1 on a
+  hardware error). Those calls return -1. `TxData` copies up to 256 bytes into
+  the driver, longer data and every `TxSrData` command phase run polled inside
+  the call. `bDmaEn` is accepted and ignored; `DevIntrf_t::bDma` is false.
+
+Slave (`bIntEn` required).
+- 8 bit frames, modes 1 and 3 only. The RSPI slave does not support CPHA = 0
+  (Renesas FSP refuses it too) and `SPIInit` returns false for it. The master
+  has to release the chip select between frames.
+- The select input is SSL0 of the unit and is pin map index 3. One slave
+  device, `SlaveIdx` 0.
+- The interrupt order is: STATECHG (the application calls `SetSlaveRxBuffer`
+  and `SetSlaveTxData`, index 0), the master clocks the frame, COMPLETED with
+  the byte count, or -1 after an overrun, underrun or when the frame is longer
+  than the RX buffer. The driver arms again from the same interrupt, which
+  discards the unused TX prefetch, so every frame starts at TX byte 0. TX
+  bytes past the data length are `DummyByte`.
+- The next TX frame must be in the RSPI before the master clocks it. The driver
+  loads two frames when armed and writes frame k + 2 from the receive interrupt
+  of frame k. The master SCK rate must therefore leave time for one interrupt
+  per frame, including the interrupts of the other peripherals. Start at
+  400 kHz or lower and raise it only after a hardware run. The limit was not
+  measured.
+
+Pins (LQFP100, function PSEL 6 = `IOPINOP_FUNC5`):
+
+| Signal | RSPI0 | RSPI1 |
+| --- | --- | --- |
+| RSPCK | P412, P102 | P111, P204 |
+| MISO | P410, P100 | P110, P202 |
+| MOSI | P411, P101 | P109, P203 |
+| SSL0 (slave select) | P413, P103 | P108, P112, P205 |
+
+`SPIInit` returns false when a pin is not in the table for its unit. Master
+chip select pins are plain GPIO outputs and are not checked against SSL pins.
+
+Assumptions to confirm on the board:
+- The slave frame ends when the RSPI goes idle (SPII, IDLNF falling) after the
+  master releases the chip select. The manual text was not available when the
+  driver was written; the sequence follows the FSP `r_spi` driver for the TX
+  and RX parts. If COMPLETED never arrives, the slave end detection is the
+  first place to look.
+- A slave error that stops the unit (SPE cleared) ends the frame at once and
+  arms the next one while the chip select may still be low.
+- A slave idle event with no received byte is ignored.
+
+Example: `exemples/SPIMasterSlave` builds the shared
+`exemples/spi/spi_master_slave.cpp` with RSPI0 as master and RSPI1 as slave on
+the EK-RA4M1 headers, see `exemples/README.md`.
+
+Validation: `python3 tests/ra4m1/run_spi_validation.py` runs
+`tests/ra4m1/spi_test.cpp` against a frame level model of two RSPI units wired
+as master and slave, with the real `DeviceIntrf` and `SPI` generic code, at
+-O0, -Os, -O2 and with the address and undefined behavior sanitizers, and
+compiles the driver for Cortex-M4 with the real headers. The model has the
+transmit buffer and shift register, SPRF/SPTEF/IDLNF, the error flags, the
+SCKASE clock stop, SPRI/SPII/SPEI through a simple ICU and PRIMASK. It checks
+the register sequence, the data of modes 1 and 3 at 1, 16 and 129 bytes in
+polled and interrupt master mode, short frames followed by long frames,
+overflow and re-arm, copy of interrupt TX data, busy flag and cancel,
+re-initialization, pin and parameter rejection, and module stop and PRCR use.
+The model CPU is infinitely fast: it does not show whether the slave keeps up
+with a given SCK rate. The SPII behavior at the end of a slave frame is a model
+assumption. It is not hardware validation.
 
 ## ICU and GPIO interrupts
 

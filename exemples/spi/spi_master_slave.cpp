@@ -57,6 +57,11 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #ifndef SPI_MASTER_RATE
 #define SPI_MASTER_RATE 1000000
 #endif
+// Bit n of the mask enables SPI mode n. A slave that supports only
+// CPHA = 1 (modes 1 and 3) sets 0x0A in board.h.
+#ifndef SPI_TEST_MODE_MASK
+#define SPI_TEST_MODE_MASK 0x0F
+#endif
 
 #ifdef MCUOSC
 McuOsc_t g_McuOsc = MCUOSC;
@@ -308,8 +313,11 @@ int main()
 	printf("%s\r\n", SPI_LOOPBACK_WIRING);
 #endif
 	pass = true;
+	bool shown = false;
 	for (mode = 0; mode < 4; ++mode)
 	{
+		if ((SPI_TEST_MODE_MASK & (1 << mode)) == 0)
+			continue;
 
 		cfg = s_SlaveCfg;
 		cfg.ClkPol = (mode & 2) ? SPICLKPOL_LOW : SPICLKPOL_HIGH;
@@ -332,8 +340,9 @@ int main()
 			pass = false;
 			break;
 		}
-		if (mode == 0)
+		if (!shown)
 		{
+			shown = true;
 			intrf = static_cast<DevIntrf_t *>(g_SpiSlave);
 			printf("SPI slave effective DMA=%d INT=%d\r\n", intrf->bDma, intrf->bIntEn);
 		}
