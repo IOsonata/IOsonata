@@ -65,11 +65,9 @@ SOFTWARE.
 #define RA4M1_I2C_ICMR2_SLAVE		0x06U
 #define RA4M1_I2C_ICFER_MASTER		0x77U
 #define RA4M1_I2C_ICFER_SLAVE		0x5DU
-#define RA4M1_I2C_ICCR1_RESET		0x40U
-#define RA4M1_I2C_ICCR1_RESET_ENABLE	0xC0U
-#define RA4M1_I2C_ICCR1_RUN			0x9FU
 
-// ICCR2 request bits. Other bits are written as 0.
+// ICCR2 request bits. They are set with a read-modify-write so that MST and
+// TRS are kept while a request is issued.
 #define RA4M1_I2C_ICCR2_ST			0x02U
 #define RA4M1_I2C_ICCR2_RS			0x04U
 #define RA4M1_I2C_ICCR2_SP			0x08U
@@ -503,10 +501,12 @@ static void Ra4m1I2cConfigure(Ra4m1I2cDev_t * const pDev)
 	const bool slave = cfg->Mode == I2CMODE_SLAVE;
 
 	// Vendor sequence: pins inactive, assert IICRST, enable the block while
-	// in reset, program it, then release reset with SCL/SDA outputs high.
+	// in reset, program it, then release reset. ICCR1 is changed with
+	// read-modify-write. SOWP reads as 1, so SCLO and SDAO are not written and
+	// keep their released reset value.
 	reg->ICIER = 0U;
-	reg->ICCR1 = 0U;
-	reg->ICCR1 = RA4M1_I2C_ICCR1_RESET;
+	reg->ICCR1 &= (uint8_t)~RA4M1_I2C_CR1_ICE;
+	reg->ICCR1 |= RA4M1_I2C_CR1_IICRST;
 
 	int32_t count = Ra4m1I2cTimeout(pDev);
 
@@ -531,7 +531,7 @@ static void Ra4m1I2cConfigure(Ra4m1I2cDev_t * const pDev)
 		return;
 	}
 
-	reg->ICCR1 = RA4M1_I2C_ICCR1_RESET_ENABLE;
+	reg->ICCR1 |= RA4M1_I2C_CR1_ICE;
 
 	for (int i = 0; i < RA4M1_I2C_MAX_SLAVE_ADDR; i++)
 	{
@@ -568,7 +568,7 @@ static void Ra4m1I2cConfigure(Ra4m1I2cDev_t * const pDev)
 
 	reg->ICFER = slave ? RA4M1_I2C_ICFER_SLAVE : RA4M1_I2C_ICFER_MASTER;
 	Ra4m1I2cClearFlags(reg, RA4M1_I2C_SR2_EVENTS);
-	reg->ICCR1 = RA4M1_I2C_ICCR1_RUN;
+	reg->ICCR1 &= (uint8_t)~RA4M1_I2C_CR1_IICRST;
 
 	if (!pDev->bEnabled)
 	{
@@ -673,7 +673,7 @@ static void Ra4m1I2cMasterService(Ra4m1I2cDev_t * const pDev)
 		Ra4m1I2cTrace(pDev, RA4M1_I2C_TR_NACK, (uint8_t)pDev->Sent);
 		Ra4m1I2cClearFlags(reg, RA4M1_I2C_SR2_NACKF);
 		pDev->bNack = true;
-		reg->ICCR2 = RA4M1_I2C_ICCR2_SP;
+		reg->ICCR2 |= RA4M1_I2C_ICCR2_SP;
 		pDev->MState = RA4M1_I2C_M_STOP;
 		return;
 	}
@@ -717,7 +717,7 @@ static void Ra4m1I2cMasterService(Ra4m1I2cDev_t * const pDev)
 			}
 			else if (pDev->bStopReq)
 			{
-				reg->ICCR2 = RA4M1_I2C_ICCR2_SP;
+				reg->ICCR2 |= RA4M1_I2C_ICCR2_SP;
 				pDev->MState = RA4M1_I2C_M_STOP;
 			}
 			else
@@ -766,7 +766,7 @@ static void Ra4m1I2cMasterService(Ra4m1I2cDev_t * const pDev)
 
 				if (remain == 1)
 				{
-					reg->ICCR2 = RA4M1_I2C_ICCR2_SP;
+					reg->ICCR2 |= RA4M1_I2C_ICCR2_SP;
 				}
 
 				pDev->pRx[pDev->Count++] = reg->ICDRR;
@@ -811,21 +811,19 @@ static bool Ra4m1I2cMasterBegin(Ra4m1I2cDev_t * const pDev, bool bRx,
 	pDev->MState = RA4M1_I2C_M_START;
 	Ra4m1I2cTrace(pDev, RA4M1_I2C_TR_BEGIN, (uint8_t)((bRx ? 1U : 0U) | (restart ? 2U : 0U)));
 
-	// The enable bits are set in polling mode too. With no ICU route they
-	// raise nothing, and the START, STOP and NACK flags are then certain to
-	// follow the bus.
-	reg->ICIER = RA4M1_I2C_IER_MASTER;
+	// Polling mode reads the flags and leaves the interrupt enables off.
+	reg->ICIER = bAsync ? RA4M1_I2C_IER_MASTER : 0U;
 
 	if (restart)
 	{
 		// The timeout function is off over a repeated start (vendor flow).
 		Ra4m1I2cSetTimeout(reg, false);
-		reg->ICCR2 = RA4M1_I2C_ICCR2_RS;
+		reg->ICCR2 |= RA4M1_I2C_ICCR2_RS;
 	}
 	else
 	{
 		Ra4m1I2cSetTimeout(reg, true);
-		reg->ICCR2 = RA4M1_I2C_ICCR2_ST;
+		reg->ICCR2 |= RA4M1_I2C_ICCR2_ST;
 	}
 
 	return true;
@@ -911,7 +909,7 @@ static void Ra4m1I2cMasterRelease(Ra4m1I2cDev_t * const pDev)
 
 	if (pDev->MState == RA4M1_I2C_M_HELD)
 	{
-		reg->ICCR2 = RA4M1_I2C_ICCR2_SP;
+		reg->ICCR2 |= RA4M1_I2C_ICCR2_SP;
 		pDev->MState = RA4M1_I2C_M_STOP;
 		Ra4m1I2cMasterRun(pDev);
 	}
