@@ -55,3 +55,20 @@ hardware is required for the existing GNSS example.
 
 No changes to IOsonata `main` or to HciController firmware are required for
 this branch's initial application integration.
+
+## BlueIO SensorTag and original Nordic Thingy:52
+
+The nRF52832 `ARM/Nordic/exemples/TPHSensorTag.cpp` broadcasts non-connectable
+I-SYST manufacturer data. `ARM/Nordic/exemples/BlueIOThingy/BlueIOThingy.cpp`
+also advertises compatible TPH/GAS payloads, but additionally exposes
+connectable GATT sensor services. BleGateway now decodes the company ID and
+TPH (pressure Pa, temperature in centi-degrees Celsius, relative humidity in
+centi-percent) and GAS (gas resistance and air-quality index) records into UDP.
+Only the latest decoded measurement is retained; this does not provide a
+multi-device history.
+
+The **original Nordic Thingy:52** is a different firmware/protocol target:
+its native environmental sensor data is exposed through its GATT services.
+The BlueIO advertising decoder does not automatically cover that device.
+Thingy:52 service discovery and notifications remain to implement and test.
+These additional source changes have not yet been rebuilt or hardware tested.
