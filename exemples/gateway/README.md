@@ -21,8 +21,13 @@ Application: `exemples/gateway/ble_gateway.cpp`.
   `echo.u-blox.com:7`, which is not a production telemetry backend.
   Set `LTE_UDP_HOST` and `LTE_UDP_PORT` in the board configuration.
 
-**Status: implemented as a first-stage source integration; build/link and
-on-device combined BLE+LTE operation have not yet been verified.**
+**Status: built and hardware validated on Nordic Thingy:91 (October 16, 2026).**
+The nRF9160 (modem firmware 1.3.6) with HciController on the nRF52840
+successfully scanned BLE advertisers while sending and receiving LTE-M UDP
+echo telemetry. Four consecutive messages (sequences 0–3) were echoed;
+BLE report counts increased 552, 1044, 1217, 1676. Observed LTE-M network
+registration was roaming, with intermittent unregistered/registered events.
+This confirms the advertisement-observer UDP milestone only.
 BLE central connections, GATT discovery/subscriptions, data batching, retry
 persistence and secure cloud delivery are not implemented by this milestone.
 An observer reports advertisements; it is not equivalent to a connected
