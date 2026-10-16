@@ -71,9 +71,18 @@ SOFTWARE.
 #include "bluetooth/bt_app.h"
 #include "bluetooth/bt_adv.h"
 #include "bluetooth/bt_adv_mandata.h"
+#if GATEWAY_GATT_ENABLE
+#include "bluetooth/bt_dev.h"
+#include "bluetooth/bt_gatt.h"
+#endif
 #include "net/sock_intrf.h"
 
 #include "board.h"
+
+// Disabled by default to preserve the validated advertisement-only gateway.
+#ifndef GATEWAY_GATT_ENABLE
+#define GATEWAY_GATT_ENABLE 0
+#endif
 
 #ifndef LTE_UDP_HOST
 #define LTE_UDP_HOST			"udp.example.com"
@@ -114,9 +123,37 @@ SOFTWARE.
 #define GATEWAY_SCAN_INTERVAL 1000U
 #define GATEWAY_SCAN_WINDOW 100U
 
+#if GATEWAY_GATT_ENABLE
+#define GATEWAY_TES_SERVICE 0x0200U
+#define GATEWAY_TES_TEMPERATURE 0x0201U
+#define GATEWAY_TES_PRESSURE 0x0202U
+#define GATEWAY_TES_HUMIDITY 0x0203U
+
+static BtGapConnParams_t s_GattConnParams = {
+    .IntervalMin = 30.0f,
+    .IntervalMax = 75.0f,
+    .Latency = 0,
+    .Timeout = 4000,
+};
+
+static volatile uint16_t s_GattConnHdl = BT_CONN_HDL_INVALID;
+static volatile uint16_t s_GattTempHdl = BT_ATT_HANDLE_INVALID;
+static volatile uint16_t s_GattPressureHdl = BT_ATT_HANDLE_INVALID;
+static volatile uint16_t s_GattHumidityHdl = BT_ATT_HANDLE_INVALID;
+static bool s_GattConnecting = false;
+static bool s_GattTargetValid = false;
+static uint8_t s_GattTargetAddress[6] = {};
+static bool s_GattTempValid = false;
+static bool s_GattPressureValid = false;
+static bool s_GattHumidityValid = false;
+static int16_t s_GattTempCenti = 0;
+static uint32_t s_GattPressurePa = 0;
+static uint8_t s_GattHumidityPct = 0;
+#endif
+
 static const BtAppCfg_t s_BleAppCfg = {
-    .Role = BTAPP_ROLE_OBSERVER,
-    .PeriphDevMax = 0,
+    .Role = GATEWAY_GATT_ENABLE ? BTAPP_ROLE_CENTRAL : BTAPP_ROLE_OBSERVER,
+    .PeriphDevMax = GATEWAY_GATT_ENABLE ? 1 : 0,
     .CentralDevMax = 0,
     .pDevName = "IOsonataGateway",
 };
@@ -178,8 +215,140 @@ bool BtAppScanReport(int8_t Rssi, uint8_t AddrType, uint8_t Addr[6],
         s_SensorValid = true;
     }
     EnableInterrupt(irq);
+#if GATEWAY_GATT_ENABLE
+    // Select the first BlueIO environmental advertiser. Once selected, a
+    // reconnect is restricted to that address rather than random nearby peers.
+    if (isTph && !s_GattConnecting &&
+        s_GattConnHdl == BT_CONN_HDL_INVALID)
+    {
+        if (!s_GattTargetValid)
+        {
+            memcpy(s_GattTargetAddress, Addr, 6);
+            s_GattTargetValid = true;
+        }
+        if (memcmp(s_GattTargetAddress, Addr, 6) == 0)
+        {
+            s_GattConnecting = true;
+            BtGapScanStop();
+            BtGapPeerAddr_t peer = { .Type = AddrType };
+            memcpy(peer.Addr, Addr, 6);
+            if (!BtGapConnect(&peer, &s_GattConnParams))
+            {
+                s_GattConnecting = false;
+                BtAppScan();
+            }
+            return false;
+        }
+    }
+#endif
     return true;
 }
+
+#if GATEWAY_GATT_ENABLE
+void BtAppEvtConnected(uint16_t ConnHdl)
+{
+    s_GattConnHdl = ConnHdl;
+    s_GattConnecting = false;
+    BtDevice_t *pPeer = BtPeerFindByHdl(ConnHdl);
+    if (pPeer == nullptr || !BtAppDiscoverDevice(pPeer))
+    {
+        s_GattConnHdl = BT_CONN_HDL_INVALID;
+        BtAppDisconnectConn(ConnHdl);
+    }
+}
+
+void BtAppEvtDisconnected(uint16_t ConnHdl)
+{
+    (void)ConnHdl;
+    s_GattConnHdl = BT_CONN_HDL_INVALID;
+    s_GattTempHdl = BT_ATT_HANDLE_INVALID;
+    s_GattPressureHdl = BT_ATT_HANDLE_INVALID;
+    s_GattHumidityHdl = BT_ATT_HANDLE_INVALID;
+    s_GattConnecting = false;
+    BtAppScan();
+}
+
+void BtDeviceDiscovered(BtDevice_t *pDev)
+{
+    if (pDev == nullptr || pDev->Conn.Hdl != s_GattConnHdl)
+    {
+        return;
+    }
+    const int service = BtDeviceFindService(pDev, GATEWAY_TES_SERVICE);
+    if (service < 0)
+    {
+        BtAppDisconnectConn(pDev->Conn.Hdl);
+        return;
+    }
+    const uint16_t uuids[] = {
+        GATEWAY_TES_TEMPERATURE,
+        GATEWAY_TES_PRESSURE,
+        GATEWAY_TES_HUMIDITY,
+    };
+    volatile uint16_t *handles[] = {
+        &s_GattTempHdl,
+        &s_GattPressureHdl,
+        &s_GattHumidityHdl,
+    };
+    for (unsigned i = 0; i < 3; ++i)
+    {
+        const int index = BtDeviceFindCharacteristic(pDev, service, uuids[i]);
+        if (index < 0)
+        {
+            BtAppDisconnectConn(pDev->Conn.Hdl);
+            return;
+        }
+        const auto &characteristic = pDev->pServices[service].characteristics[index];
+        if (characteristic.cccd_handle == BT_ATT_HANDLE_INVALID ||
+            !BtAppEnableNotify(pDev->Conn.Hdl, characteristic.cccd_handle))
+        {
+            BtAppDisconnectConn(pDev->Conn.Hdl);
+            return;
+        }
+        *handles[i] = characteristic.characteristic.handle_value;
+    }
+}
+
+// The BlueIOThingy characteristic wire format is defined in BlueIOTes.cpp:
+// temperature: signed integer byte + decimal hundredths byte;
+// pressure: little-endian signed 32-bit hPa + decimal hundredths;
+// humidity: unsigned percentage byte.
+void BtGattClientNotified(uint16_t ConnHdl, uint16_t ValHdl,
+                          uint8_t *pData, uint16_t Len)
+{
+    if (ConnHdl != s_GattConnHdl || pData == nullptr)
+    {
+        return;
+    }
+    if (ValHdl == s_GattTempHdl && Len == 2)
+    {
+        const int8_t integer = (int8_t)pData[0];
+        const uint8_t decimal = pData[1];
+        if (decimal < 100)
+        {
+            s_GattTempCenti = (int16_t)(integer * 100 +
+                (integer < 0 ? -(int16_t)decimal : (int16_t)decimal));
+            s_GattTempValid = true;
+        }
+    }
+    else if (ValHdl == s_GattPressureHdl && Len == 5)
+    {
+        const int32_t integer = (int32_t)((uint32_t)pData[0] |
+            ((uint32_t)pData[1] << 8) | ((uint32_t)pData[2] << 16) |
+            ((uint32_t)pData[3] << 24));
+        if (integer >= 0 && pData[4] < 100)
+        {
+            s_GattPressurePa = (uint32_t)integer * 100U + pData[4];
+            s_GattPressureValid = true;
+        }
+    }
+    else if (ValHdl == s_GattHumidityHdl && Len == 1 && pData[0] <= 100)
+    {
+        s_GattHumidityPct = pData[0];
+        s_GattHumidityValid = true;
+    }
+}
+#endif
 
 // Application event queue: LTE work, received data and the send timer
 alignas(4) uint8_t g_AppEvtHandlerQueMem[APPEVT_HANDLER_QUE_MEMSIZE(16)];
