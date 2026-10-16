@@ -129,7 +129,7 @@
 					</folderInfo>
 					<fileInfo id="ilg.gnuarmeclipse.managedbuild.cross.config.lib.debug.1902727445.699019057" name="re01xxx.h" rcbsApplicability="disable" resourcePath="include/re01xxx.h" toolsToInvoke=""/>
 					<sourceEntries>
-						<entry excluding="src/usb_hidhost.cpp|src/sysstatus_impl.cpp|src/audio/audiodev.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/usb_hidhost.cpp|src/audio/audiodev.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -264,7 +264,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/usb_hidhost.cpp|src/sysstatus_impl.cpp|src/audio/audiodev.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/usb_hidhost.cpp|src/audio/audiodev.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -397,7 +397,7 @@
 					</folderInfo>
 					<fileInfo id="ilg.gnuarmeclipse.managedbuild.cross.config.lib.debug.1902727445.1233153210.include/re01xxx.h" name="re01xxx.h" rcbsApplicability="disable" resourcePath="include/re01xxx.h" toolsToInvoke=""/>
 					<sourceEntries>
-						<entry excluding="src/usb_hidhost.cpp|src/sysstatus_impl.cpp|src/audio/audiodev.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/usb_hidhost.cpp|src/audio/audiodev.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -530,7 +530,7 @@
 					</folderInfo>
 					<fileInfo id="ilg.gnuarmeclipse.managedbuild.cross.config.lib.debug.1902727445.703439047.include/re01xxx.h" name="re01xxx.h" rcbsApplicability="disable" resourcePath="include/re01xxx.h" toolsToInvoke=""/>
 					<sourceEntries>
-						<entry excluding="src/usb_hidhost.cpp|src/sysstatus_impl.cpp|src/audio/audiodev.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/usb_hidhost.cpp|src/audio/audiodev.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -663,7 +663,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/usb_hidhost.cpp|src/sysstatus_impl.cpp|src/audio/audiodev.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/usb_hidhost.cpp|src/audio/audiodev.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -796,7 +796,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/usb_hidhost.cpp|src/sysstatus_impl.cpp|src/audio/audiodev.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/usb_hidhost.cpp|src/audio/audiodev.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>

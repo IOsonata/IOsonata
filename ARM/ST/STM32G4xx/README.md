@@ -87,8 +87,8 @@ and TIM7 share theirs with the DACs), see `ARM/ST/STM32F0xx/README.md`.
 ## Limits
 
 No I2C, SPI, QSPI, ADC, USB or FDCAN driver for G4. The library project
-leaves out `ARM/ST/src/dfu_stm32.cpp` (no G4 flash programming support) and
-`src/sysstatus.c`. The CCM SRAM is linked as RAM2 only.
+leaves out `ARM/ST/src/dfu_stm32.cpp` (no G4 flash programming support).
+The CCM SRAM is linked as RAM2 only.
 
 ## Memory
 

@@ -205,7 +205,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/usb/usb_hidhost.cpp|src/sysstatus.c|src/sysstatus_impl.cpp|src/bluetooth/bt_adv_hci.cpp|src/bluetooth/bt_gap_hci.cpp|src/bluetooth/bt_gatt_hci.cpp|src/bluetooth/bt_scan_hci.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/usb/usb_hidhost.cpp|src/bluetooth/bt_adv_hci.cpp|src/bluetooth/bt_gap_hci.cpp|src/bluetooth/bt_gatt_hci.cpp|src/bluetooth/bt_scan_hci.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -416,7 +416,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/usb/usb_hidhost.cpp|src/sysstatus.c|src/sysstatus_impl.cpp|src/bluetooth/bt_adv_hci.cpp|src/bluetooth/bt_gap_hci.cpp|src/bluetooth/bt_gatt_hci.cpp|src/bluetooth/bt_scan_hci.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/usb/usb_hidhost.cpp|src/bluetooth/bt_adv_hci.cpp|src/bluetooth/bt_gap_hci.cpp|src/bluetooth/bt_gatt_hci.cpp|src/bluetooth/bt_scan_hci.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>

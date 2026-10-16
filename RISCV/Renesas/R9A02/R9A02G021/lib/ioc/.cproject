@@ -122,7 +122,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/sensors/agm_icm20948.cpp|src/cli|src/motion|src/sysstatus.c|src/sysstatus_impl.cpp|src/display/eink_vb3300.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/sensors/agm_icm20948.cpp|src/cli|src/motion|src/display/eink_vb3300.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -252,7 +252,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/sensors/agm_icm20948.cpp|src/cli|src/motion|src/sysstatus.c|src/sysstatus_impl.cpp|src/display/eink_vb3300.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/sensors/agm_icm20948.cpp|src/cli|src/motion|src/display/eink_vb3300.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>

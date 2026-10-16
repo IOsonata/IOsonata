@@ -159,15 +159,14 @@ UART hardware run: the STM32L476 examples UartLoopback
 builds for B_L475E_IOT01A (the default, STM32L475VG: UART4, DevNo 4, on
 Arduino D0 PA1 and D1 PA0, AF8; ST-LINK virtual COM port on USART1 PB6/PB7)
 and STM32L476G_DISCO (USART2, DevNo 2, on PD5 TX and PD6 RX, AF7, also the
-virtual COM port). The STM32L476 library leaves out the old `src/sysstatus.c`,
-which no longer compiles with the current `sysstatus.h`. The library and these
+virtual COM port). The old `src/sysstatus.c` is retired; `syslog.cpp` and `sysstatus.h` replace it.
+The STM32L476 library and these
 two examples were built for Debug and Release from their `.project` and
 `.cproject` settings with GNU Arm 13.2, outside IOcomposer. The other L476
 examples, except TimerDemo, still name `stm32l476xx.ld`, which is not in
 `ldscript/` (`gcc_stm32l476xx.ld` is), and their board files pair DevNo 1
 with the USART2 pins and PinOp `0x72`, which the GPIO driver does not take as
-AF7. The L496 and L4S9 libraries still build `src/sysstatus.c`, which does
-not compile; the libraries build without it.
+AF7.
 
 Timer hardware run: TimerDemo (`exemples/timer/timer_demo.cpp`), in
 `STM32L476/exemples/TimerDemo` for B_L475E_IOT01A and

@@ -118,7 +118,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/usb_hidhost.cpp|src/sysstatus_impl.cpp|src/I-SYST_Logo320_little.c|src/I-SYST_Logo320.c" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/usb_hidhost.cpp|src/I-SYST_Logo320_little.c|src/I-SYST_Logo320.c" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -241,7 +241,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/usb_hidhost.cpp|src/sysstatus_impl.cpp|src/I-SYST_Logo320_little.c|src/I-SYST_Logo320.c" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/usb_hidhost.cpp|src/I-SYST_Logo320_little.c|src/I-SYST_Logo320.c" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
