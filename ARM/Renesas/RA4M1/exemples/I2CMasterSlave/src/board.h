@@ -49,14 +49,14 @@ SOFTWARE.
 	{UART_TX_PORT, UART_TX_PIN, UART_TX_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL}, \
 }
 
-// Master on IIC0, slave on IIC1. Wiring: SDA P401 (J2-8) to P206 (J1-3),
-// SCL P408 (J2-16) to P205 (J2-14, trace-cut jumper).
+// Isolated IIC0 master SCL test: probe P400 (J2-37), leave SCL
+// disconnected from IIC1 P205. SDA mapping remains unchanged.
 #define I2C_MASTER_DEVNO		0
 #define I2C_MASTER_SDA_PORT		4
 #define I2C_MASTER_SDA_PIN		1
 #define I2C_MASTER_SDA_PINOP	IOPINOP_FUNC6
 #define I2C_MASTER_SCL_PORT		4
-#define I2C_MASTER_SCL_PIN		8
+#define I2C_MASTER_SCL_PIN		0
 #define I2C_MASTER_SCL_PINOP	IOPINOP_FUNC6
 
 #define I2C_MASTER_DMA_ENABLE	false
@@ -77,7 +77,7 @@ SOFTWARE.
 
 // Board test: uncomment to leave the slave unit stopped. The master write
 // should then end with a NACK trace event instead of a stalled clock.
-//#define I2C_SLAVE_SKIP_INIT
+#define I2C_SLAVE_SKIP_INIT
 
 #define I2C_SLAVE_DMA_ENABLE	false
 #define I2C_SLAVE_INT_ENABLE	true
