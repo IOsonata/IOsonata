@@ -58,6 +58,7 @@ SOFTWARE.
 ----------------------------------------------------------------------------*/
 #include <stdint.h>
 #include <stdio.h>
+#include <stdarg.h>
 
 #include "app_evt_handler.h"
 #include "coredev/interrupt.h"
@@ -102,7 +103,7 @@ SOFTWARE.
 
 // Longest message and longest received datagram printed
 #define LTE_UDP_MSG_LEN			160
-#define LTE_UDP_RX_LEN			128
+#define LTE_UDP_RX_LEN			256
 
 // Application events
 #define LTE_UDP_EVT_SEND		1
@@ -275,6 +276,45 @@ static const SysLogCfg_t s_SysLogCfg = {
 static SockIntrf s_Sock;
 static uint32_t s_TxCount = 0;
 
+// RTC0 is the existing application timebase. Its counter measures elapsed
+// monotonic time, not UTC, and must not be read until TimerInit succeeds.
+static bool s_bTimerReady = false;
+static volatile uint32_t s_UdpTimerEvents = 0U;
+static volatile bool s_bSendPending = false;
+static volatile bool s_bSendQueued = false;
+
+// Prefix every application log line without changing the shared SysLog ABI.
+static int GatewayLog(const char *pFormat, ...)
+{
+    char detail[192];
+    va_list args;
+    va_start(args, pFormat);
+    const int len = vsnprintf(detail, sizeof(detail), pFormat, args);
+    va_end(args);
+    if (len < 0)
+    {
+        return len;
+    }
+
+    if (!s_bTimerReady)
+    {
+        return SysLogPrintf(SysLogGet(), "[boot] %s", detail);
+    }
+
+    const uint64_t ticks = TimerGetTickCount(&s_TimerDev);
+    const uint32_t freq = TimerGetFrequency(&s_TimerDev);
+    if (freq == 0U)
+    {
+        return SysLogPrintf(SysLogGet(), "[timer unavailable] %s", detail);
+    }
+
+    const uint64_t seconds = ticks / freq;
+    const uint32_t millis = (uint32_t)(((ticks % freq) * 1000ULL) / freq);
+    return SysLogPrintf(SysLogGet(), "[%llu.%03lu] %s",
+                        (unsigned long long)seconds, (unsigned long)millis, detail);
+}
+
+
 // Data arrived and not read yet: queued once, kept when the queue refused it
 static volatile bool s_bRxPending = false;
 
@@ -282,6 +322,9 @@ static void LteUdpSend(uint32_t Evt, void *pCtx)
 {
 	(void)Evt;
 	(void)pCtx;
+
+    s_bSendPending = false;
+    s_bSendQueued = false;
 
 	// A read the queue refused
 	if (s_bRxPending)
@@ -296,7 +339,7 @@ static void LteUdpSend(uint32_t Evt, void *pCtx)
 
 	if (s_Sock.Connected() == false && s_Sock.Init(s_SockCfg) == false)
 	{
-		SysLogPrintf(SysLogGet(), "Socket to %s:%d failed\r\n", LTE_UDP_HOST, LTE_UDP_PORT);
+		GatewayLog( "Socket to %s:%d failed\r\n", LTE_UDP_HOST, LTE_UDP_PORT);
 		return;
 	}
 
@@ -399,12 +442,12 @@ static void LteUdpSend(uint32_t Evt, void *pCtx)
 
 	if (s_Sock.Tx(0, (uint8_t *)msg, len) == len)
 	{
-		SysLogPrintf(SysLogGet(), "Sent %d: %s\r\n", len, msg);
+		GatewayLog( "Sent %d (rtc_events=%lu): %s\r\n", len, (unsigned long)s_UdpTimerEvents, msg);
 		s_TxCount++;
 	}
 	else
 	{
-		SysLogPrintf(SysLogGet(), "Send failed\r\n");
+		GatewayLog( "Send failed\r\n");
 	}
 }
 
@@ -422,7 +465,7 @@ static void LteUdpRecv(uint32_t Evt, void *pCtx)
 	while ((n = s_Sock.Rx(0, buf, sizeof(buf) - 1)) > 0)
 	{
 		buf[n] = 0;
-		SysLogPrintf(SysLogGet(), "Received %d: %s\r\n", n, (char *)buf);
+		GatewayLog( "Received %d: %s\r\n", n, (char *)buf);
 	}
 }
 
@@ -449,7 +492,27 @@ static void LteUdpTimerTrig(TimerDev_t * const pTimer, int TrigNo, void * const 
 	(void)TrigNo;
 	(void)pContext;
 
-	AppEvtHandlerQue(LTE_UDP_EVT_SEND, nullptr, LteUdpSend);
+    ++s_UdpTimerEvents;
+    s_bSendPending = true;
+    if (!s_bSendQueued && AppEvtHandlerQue(LTE_UDP_EVT_SEND, nullptr, LteUdpSend))
+    {
+        s_bSendQueued = true;
+    }
+}
+
+// Retry timer events rejected by the shared BLE/LTE application queue.
+bool AppCheckStatus(void)
+{
+    BtAppCheckStatus();
+    LteCheckStatus();
+
+    if (s_bSendPending && !s_bSendQueued &&
+        AppEvtHandlerQue(LTE_UDP_EVT_SEND, nullptr, LteUdpSend))
+    {
+        s_bSendQueued = true;
+    }
+
+    return !s_bSendPending && !AppEvtHandlerPending();
 }
 
 static void LteUdpEvtHandler(LTE_EVT Evt, const LteStatus_t * const pStatus)
@@ -457,53 +520,53 @@ static void LteUdpEvtHandler(LTE_EVT Evt, const LteStatus_t * const pStatus)
 	switch (Evt)
 	{
 		case LTE_EVT_REGISTERED:
-			SysLogPrintf(SysLogGet(), "Registered %s, %s, TAC %04X, cell %08X\r\n",
+			GatewayLog( "Registered %s, %s, TAC %04X, cell %08X\r\n",
 									  pStatus->RegStat == LTE_REG_ROAMING ? "roaming" : "home",
 									  pStatus->Rat == LTE_RAT_NBIOT ? "NB-IoT" : "LTE-M",
 									  (unsigned)pStatus->Tac, (unsigned)pStatus->CellId);
 			if (pStatus->bPsm)
 			{
-				SysLogPrintf(SysLogGet(), "PSM TAU %u s, active %u s\r\n",
+				GatewayLog( "PSM TAU %u s, active %u s\r\n",
 										  (unsigned)pStatus->PsmTau, (unsigned)pStatus->PsmActive);
 			}
 			LteUdpSend(0, nullptr);
 			break;
 
 		case LTE_EVT_UNREGISTERED:
-			SysLogPrintf(SysLogGet(), "Unregistered, state %d\r\n", (int)pStatus->RegStat);
+			GatewayLog( "Unregistered, state %d\r\n", (int)pStatus->RegStat);
 			break;
 
 		case LTE_EVT_REG_STATE:
-			SysLogPrintf(SysLogGet(), "Registration state %d\r\n", (int)pStatus->RegStat);
+			GatewayLog( "Registration state %d\r\n", (int)pStatus->RegStat);
 			break;
 
 		case LTE_EVT_CELL:
-			SysLogPrintf(SysLogGet(), "Cell TAC %04X, cell %08X\r\n", (unsigned)pStatus->Tac, (unsigned)pStatus->CellId);
+			GatewayLog( "Cell TAC %04X, cell %08X\r\n", (unsigned)pStatus->Tac, (unsigned)pStatus->CellId);
 			break;
 
 		case LTE_EVT_RRC_CONNECTED:
-			SysLogPrintf(SysLogGet(), "RRC connected\r\n");
+			GatewayLog( "RRC connected\r\n");
 			break;
 
 		case LTE_EVT_RRC_IDLE:
-			SysLogPrintf(SysLogGet(), "RRC idle\r\n");
+			GatewayLog( "RRC idle\r\n");
 			break;
 
 		case LTE_EVT_PSM:
-			SysLogPrintf(SysLogGet(), "PSM %s, TAU %u s, active %u s\r\n", pStatus->bPsm ? "on" : "off",
+			GatewayLog( "PSM %s, TAU %u s, active %u s\r\n", pStatus->bPsm ? "on" : "off",
 									  (unsigned)pStatus->PsmTau, (unsigned)pStatus->PsmActive);
 			break;
 
 		case LTE_EVT_EDRX:
-			SysLogPrintf(SysLogGet(), "eDRX %u ms, PTW %u ms\r\n", (unsigned)pStatus->EdrxCycle, (unsigned)pStatus->EdrxPtw);
+			GatewayLog( "eDRX %u ms, PTW %u ms\r\n", (unsigned)pStatus->EdrxCycle, (unsigned)pStatus->EdrxPtw);
 			break;
 
 		case LTE_EVT_MODEM_FAULT:
-			SysLogPrintf(SysLogGet(), "Modem fault, restarting\r\n");
+			GatewayLog( "Modem fault, restarting\r\n");
 			s_Sock.Close();
 			if (LteInit(&s_LteCfg) == false)
 			{
-				SysLogPrintf(SysLogGet(), "LTE init failed\r\n");
+				GatewayLog( "LTE init failed\r\n");
 			}
 			break;
 	}
@@ -511,7 +574,7 @@ static void LteUdpEvtHandler(LTE_EVT Evt, const LteStatus_t * const pStatus)
 
 static void LteUdpUrcHandler(const char *pUrc)
 {
-	SysLogPrintf(SysLogGet(), "URC %s\r\n", pUrc);
+	GatewayLog( "URC %s\r\n", pUrc);
 }
 
 int main()
@@ -520,7 +583,7 @@ int main()
 
     s_Uart.Init(s_UartCfg);
     SysLogInit(SysLogGet(), &s_SysLogCfg, (DevIntrf_t *)s_Uart, 0, nullptr, 0);
-    SysLogPrintf(SysLogGet(), "BleGateway UDP starting\r\n");
+    GatewayLog( "BleGateway UDP starting\r\n");
 
     // Initialize Bluetooth before AppRun. BLE and LTE share the application
     // event dispatcher, while the observer callback never calls the socket.
@@ -533,32 +596,32 @@ int main()
             BtAppScan();
         }
     }
-    SysLogPrintf(SysLogGet(), "BLE scan %s\r\n",
+    GatewayLog( "BLE scan %s\r\n",
                  bleReady ? "started" : "failed");
 
 	char info[48];
 
 	if (TimerInit(&s_TimerDev, &s_TimerCfg) == false)
 	{
-		SysLogPrintf(SysLogGet(), "Timer init failed\r\n");
+		GatewayLog( "Timer init failed\r\n");
 	}
-	else if (LteInit(&s_LteCfg) == false)
+    else if ((s_bTimerReady = true, LteInit(&s_LteCfg)) == false)
 	{
-		SysLogPrintf(SysLogGet(), "LTE init failed\r\n");
+		GatewayLog( "LTE init failed\r\n");
 	}
 	else
 	{
 		if (LteGetInfo(LTE_INFO_FWVER, info, sizeof(info)))
 		{
-			SysLogPrintf(SysLogGet(), "Modem firmware %s\r\n", info);
+			GatewayLog( "Modem firmware %s\r\n", info);
 		}
 		if (LteGetInfo(LTE_INFO_IMEI, info, sizeof(info)))
 		{
-			SysLogPrintf(SysLogGet(), "IMEI %s\r\n", info);
+			GatewayLog( "IMEI %s\r\n", info);
 		}
 		msTimerEnableTrigger(&s_TimerDev, LTE_UDP_TRIG_SEND, LTE_UDP_INTERVAL * 1000U,
 							 TIMER_TRIG_TYPE_CONTINUOUS, LteUdpTimerTrig, nullptr);
-		SysLogPrintf(SysLogGet(), "Attaching\r\n");
+		GatewayLog( "Attaching\r\n");
 	}
 
 	AppRun();
