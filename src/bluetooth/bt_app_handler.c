@@ -97,6 +97,12 @@ __attribute__((weak)) void BtAppEvtDisconnected(uint16_t ConnHdl)
 
 }
 
+__attribute__((weak)) void BtAppEvtWriteCompleted(uint16_t ConnHdl, bool Success)
+{
+	(void)ConnHdl;
+	(void)Success;
+}
+
 __attribute__((weak)) void BtAppEvtSecured(uint16_t ConnHdl)
 {
 
