@@ -56,6 +56,7 @@ SOFTWARE.
 #define RA4M1_I2C_TR_ABORT			9	// aborted, Info 1 = timeout or arbitration, 2 = no progress
 #define RA4M1_I2C_TR_ADDR			10	// address byte written to ICDRT, Info bit0 = read
 #define RA4M1_I2C_TR_SAMPLE			11	// half of the no-progress budget used, registers then
+#define RA4M1_I2C_TR_START_POST		12	// immediately after START request
 
 // Info bits for TR_START_REFUSED
 #define RA4M1_I2C_INFO_NOT_ENABLED	0x01
