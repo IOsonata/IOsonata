@@ -841,6 +841,12 @@ int main()
     bool bleReady = BtAppInit(&s_BleAppCfg);
     if (bleReady)
     {
+        bleReady = BtAppConnInit();
+        GatewayLog("BLE connection support %s\r\n",
+                   bleReady ? "ready" : "failed");
+    }
+    if (bleReady)
+    {
         bleReady = BtAppScanInit(&s_BleScanCfg);
         if (bleReady)
         {
