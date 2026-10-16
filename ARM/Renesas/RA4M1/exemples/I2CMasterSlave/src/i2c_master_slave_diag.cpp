@@ -1,6 +1,6 @@
 // RA4M1 failure diagnostics for I2CMasterSlave.
 // Prints the IIC registers of both units, the PFS value of the four bus pins
-// and the driver trace. Reads only, nothing is changed.
+// and the driver trace. Runs a GPIO SCL isolation test after failure.
 // Copyright (c) 2026, I-SYST inc. MIT License.
 #include <stdio.h>
 #include <stdint.h>
@@ -72,6 +72,42 @@ static void DumpUnit(const char *pName, int DevNo)
 		printf("  no trace events\r\n");
 }
 
+// Toggle SCL as open-drain GPIO after IIC has been disabled.
+// The slow transitions are visible with a single oscilloscope probe.
+static void GpioSclDelay(void)
+{
+	volatile uint32_t count = SystemCoreClockGet() / 25U;
+
+	while (count > 0U)
+	{
+		__NOP();
+		count--;
+	}
+}
+
+static void GpioSclTest(int PortNo, int PinNo)
+{
+	IOPinSet(PortNo, PinNo);
+	IOPinConfig(PortNo, PinNo, IOPINOP_GPIO, IOPINDIR_OUTPUT,
+		IOPINRES_PULLUP, IOPINTYPE_OPENDRAIN);
+
+	printf("  GPIO SCL start: PFS=%08lx input=%d\r\n",
+		(unsigned long)R_PFS->PORT[PortNo].PIN[PinNo].PmnPFS,
+		IOPinRead(PortNo, PinNo));
+
+	for (int i = 0; i < 8; i++)
+	{
+		IOPinClear(PortNo, PinNo);
+		GpioSclDelay();
+		IOPinSet(PortNo, PinNo);
+		GpioSclDelay();
+	}
+
+	printf("  GPIO SCL finish: PFS=%08lx input=%d\r\n",
+		(unsigned long)R_PFS->PORT[PortNo].PIN[PinNo].PmnPFS,
+		IOPinRead(PortNo, PinNo));
+}
+
 void I2cMasterSlaveDiagnostics(const char *pWhen)
 {
 	printf("--- I2C diagnostics %s ---\r\n", pWhen);
@@ -99,5 +135,6 @@ void I2cMasterSlaveDiagnostics(const char *pWhen)
 	printf("  ICE test after:  CR1=%02x CR2=%02x SR2=%02x SCLPFS=%08lx\r\n",
 		master->ICCR1, master->ICCR2, master->ICSR2,
 		(unsigned long)R_PFS->PORT[port].PIN[pin].PmnPFS);
+	GpioSclTest(port, pin);
 	printf("--- end ---\r\n");
 }
