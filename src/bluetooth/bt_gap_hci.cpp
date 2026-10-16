@@ -64,19 +64,20 @@ typedef struct {
 } BtHciLeExtScanEnable_t;		//!< 6 octets
 
 typedef struct {
-	uint8_t  ScanInterval[2];
-	uint8_t  ScanWindow[2];
 	uint8_t  FilterPolicy;
+	uint8_t  OwnAddrType;
 	uint8_t  PeerAddrType;
 	uint8_t  PeerAddr[6];
-	uint8_t  OwnAddrType;
+	uint8_t  InitiatingPhys;
+	uint8_t  ScanInterval[2];
+	uint8_t  ScanWindow[2];
 	uint8_t  ConnIntervalMin[2];
 	uint8_t  ConnIntervalMax[2];
 	uint8_t  MaxLatency[2];
 	uint8_t  SupervisionTimeout[2];
 	uint8_t  MinCeLength[2];
 	uint8_t  MaxCeLength[2];
-} BtHciLeCreateConn_t;			//!< 25 octets
+} BtHciLeExtCreateConn1_t;		//!< 26 octets, single PHY, 7.8.66
 
 typedef struct {
 	uint8_t  ConnHdl[2];
@@ -342,21 +343,25 @@ bool BtGapConnect(BtGapPeerAddr_t * const pPeerAddr, BtGapConnParams_t * const p
 		return false;
 	}
 
-	BtHciLeCreateConn_t p;
+	// Extended scanning is already selected by BtGapScanInit. Bluetooth HCI
+	// forbids mixing it with the legacy LE Create Connection command.
+	// This implementation initiates on the same single primary scan PHY.
+	BtHciLeExtCreateConn1_t p = {};
 	uint16_t scanInterval = mSecTo0_625(s_ScanParams.Interval);
-	uint16_t scanWindow   = mSecTo0_625(s_ScanParams.Duration);
+	uint16_t scanWindow = mSecTo0_625(s_ScanParams.Duration);
 	BtGapClampScanParams(&scanInterval, &scanWindow);
-	BtGapWr16(p.ScanInterval, scanInterval);
-	BtGapWr16(p.ScanWindow, scanWindow);
-	p.FilterPolicy  = 0;
-	p.PeerAddrType  = pPeerAddr->Type;
-	memcpy(p.PeerAddr, pPeerAddr->Addr, 6);
+	p.FilterPolicy = 0;
+	p.PeerAddrType = pPeerAddr->Type;
+	memcpy(p.PeerAddr, pPeerAddr->Addr, sizeof(p.PeerAddr));
 	uint8_t ownAddrType = BtGapResolveOwnAddr(pDev);
 	if (ownAddrType == 0xFF)
 	{
 		return false;
 	}
-	p.OwnAddrType   = ownAddrType;
+	p.OwnAddrType = ownAddrType;
+	p.InitiatingPhys = s_ScanParams.Phy;
+	BtGapWr16(p.ScanInterval, scanInterval);
+	BtGapWr16(p.ScanWindow, scanWindow);
 	BtGapWr16(p.ConnIntervalMin, connIntervalMin);
 	BtGapWr16(p.ConnIntervalMax, connIntervalMax);
 	BtGapWr16(p.MaxLatency, pConnParam->Latency);
@@ -364,7 +369,9 @@ bool BtGapConnect(BtGapPeerAddr_t * const pPeerAddr, BtGapConnParams_t * const p
 	BtGapWr16(p.MinCeLength, 0);
 	BtGapWr16(p.MaxCeLength, 0);
 
-	uint8_t res = BtHciCommand(pDev, BT_HCI_CMD_CTLR_CREATE_CONN, &p, sizeof(p), NULL, 0);
+	uint8_t res = BtHciCommand(pDev, BT_HCI_CMD_CTLR_EXT_CREATE_CONN,
+							  &p, sizeof(p), NULL, 0);
+	DEBUG_PRINTF("EXT_CREATE_CONN: res=0x%02x\\r\\n", res);
 
 	return res == 0;
 }
