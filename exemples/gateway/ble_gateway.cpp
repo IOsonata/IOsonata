@@ -308,10 +308,10 @@ static int GatewayLog(const char *pFormat, ...)
         return SysLogPrintf(SysLogGet(), "[timer unavailable] %s", detail);
     }
 
-    const uint64_t seconds = ticks / freq;
+    const uint32_t seconds = (uint32_t)(ticks / freq);
     const uint32_t millis = (uint32_t)(((ticks % freq) * 1000ULL) / freq);
-    return SysLogPrintf(SysLogGet(), "[%llu.%03lu] %s",
-                        (unsigned long long)seconds, (unsigned long)millis, detail);
+    return SysLogPrintf(SysLogGet(), "[%lu.%03lu] %s",
+                        (unsigned long)seconds, (unsigned long)millis, detail);
 }
 
 
