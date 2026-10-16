@@ -27,6 +27,7 @@ Copyright (c) 2024 I-SYST inc. All rights reserved.
 #include "bluetooth/bt_hci.h"
 #include "bluetooth/bt_gap.h"
 #include "bluetooth/bt_smp.h"
+#include "syslog.h"
 
 /******** For DEBUG Trace ************/
 // Define DEBUG_ENABLE to turn on trace for this file. Output goes to the
@@ -371,7 +372,11 @@ bool BtGapConnect(BtGapPeerAddr_t * const pPeerAddr, BtGapConnParams_t * const p
 
 	uint8_t res = BtHciCommand(pDev, BT_HCI_CMD_CTLR_EXT_CREATE_CONN,
 							  &p, sizeof(p), NULL, 0);
-	DEBUG_PRINTF("LE Extended Create Connection status=0x%02x\r\n", (unsigned)res);
+	if (res != 0)
+	{
+		SysLogPrintf(SysLogGet(), "GAP: LE Extended Create Connection failed, status=0x%02x\r\n",
+					 (unsigned)res);
+	}
 
 	return res == 0;
 }
