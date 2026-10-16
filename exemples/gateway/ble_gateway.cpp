@@ -134,6 +134,10 @@ static volatile uint16_t s_GattTempHdl = BT_ATT_HANDLE_INVALID;
 static volatile uint16_t s_GattPressureHdl = BT_ATT_HANDLE_INVALID;
 static volatile uint16_t s_GattHumidityHdl = BT_ATT_HANDLE_INVALID;
 static bool s_GattConnecting = false;
+static volatile uint32_t s_GattConnAttempts = 0;
+static volatile uint32_t s_GattConnRejected = 0;
+static volatile uint32_t s_GattConnEstablished = 0;
+static volatile uint32_t s_GattDiscoveryDone = 0;
 static bool s_GattTargetValid = false;
 static uint8_t s_GattTargetAddress[6] = {};
 static bool s_GattTempValid = false;
@@ -219,11 +223,13 @@ bool BtAppScanReport(int8_t Rssi, uint8_t AddrType, uint8_t Addr[6],
 		if (memcmp(s_GattTargetAddress, Addr, 6) == 0)
 		{
 			s_GattConnecting = true;
+			++s_GattConnAttempts;
 			BtGapScanStop();
 			BtGapPeerAddr_t peer = { .Type = AddrType };
 			memcpy(peer.Addr, Addr, 6);
 			if (!BtGapConnect(&peer, &s_GattConnParams))
 			{
+				++s_GattConnRejected;
 				s_GattConnecting = false;
 				BtAppScan();
 			}
@@ -236,6 +242,7 @@ bool BtAppScanReport(int8_t Rssi, uint8_t AddrType, uint8_t Addr[6],
 void BtAppEvtConnected(uint16_t ConnHdl)
 {
 	s_GattConnHdl = ConnHdl;
+	++s_GattConnEstablished;
 	s_GattConnecting = false;
 	BtDevice_t *pPeer = BtPeerFindByHdl(ConnHdl);
 	if (pPeer == nullptr || !BtAppDiscoverDevice(pPeer))
@@ -261,6 +268,7 @@ void BtAppEvtDisconnected(uint16_t ConnHdl)
 
 void BtDeviceDiscovered(BtDevice_t *pDev)
 {
+	++s_GattDiscoveryDone;
 	if (pDev == nullptr || pDev->Conn.Hdl != s_GattConnHdl)
 	{
 		return;
@@ -543,6 +551,10 @@ static void LteUdpSend(uint32_t Evt, void *pCtx)
 	int16_t gattTemperature = 0;
 	uint32_t gattPressure = 0;
 	uint8_t gattHumidity = 0;
+	uint32_t connAttempts = 0;
+	uint32_t connRejected = 0;
+	uint32_t connEstablished = 0;
+	uint32_t discoveryDone = 0;
     uint8_t tph[8] = {};
     uint8_t sensorAddress[6] = {};
     const uint32_t irq = DisableInterrupt();
@@ -561,6 +573,10 @@ static void LteUdpSend(uint32_t Evt, void *pCtx)
 	gattTemperature = s_GattTempCenti;
 	gattPressure = s_GattPressurePa;
 	gattHumidity = s_GattHumidityPct;
+	connAttempts = s_GattConnAttempts;
+	connRejected = s_GattConnRejected;
+	connEstablished = s_GattConnEstablished;
+	discoveryDone = s_GattDiscoveryDone;
     for (unsigned i = 0; i < sizeof(sensorAddress); ++i)
     {
         sensorAddress[i] = s_SensorAddress[i];
@@ -628,6 +644,18 @@ static void LteUdpSend(uint32_t Evt, void *pCtx)
             gattTempValid ? (int)gattTemperature : 0,
             gattPressureValid ? (unsigned long)gattPressure : 0UL,
             gattHumidityValid ? (unsigned)gattHumidity : 0U);
+        if (extra < 0 || extra >= (int)(sizeof(msg) - (size_t)len))
+        {
+            return;
+        }
+        len += extra;
+    }
+    if (len > 0 && len < (int)sizeof(msg))
+    {
+        const int extra = snprintf(msg + len, sizeof(msg) - (size_t)len,
+            " gatt_attempt=%lu rejected=%lu linked=%lu discovered=%lu",
+            (unsigned long)connAttempts, (unsigned long)connRejected,
+            (unsigned long)connEstablished, (unsigned long)discoveryDone);
         if (extra < 0 || extra >= (int)(sizeof(msg) - (size_t)len))
         {
             return;
