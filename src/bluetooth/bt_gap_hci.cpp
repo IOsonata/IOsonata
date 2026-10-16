@@ -371,7 +371,7 @@ bool BtGapConnect(BtGapPeerAddr_t * const pPeerAddr, BtGapConnParams_t * const p
 
 	uint8_t res = BtHciCommand(pDev, BT_HCI_CMD_CTLR_EXT_CREATE_CONN,
 							  &p, sizeof(p), NULL, 0);
-	DEBUG_PRINTF("EXT_CREATE_CONN: res=0x%02x\\r\\n", res);
+	DEBUG_PRINTF("EXT_CREATE_CONN: res=0x%02x\r\n", res);
 
 	return res == 0;
 }
