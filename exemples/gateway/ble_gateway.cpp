@@ -133,6 +133,8 @@ static volatile uint16_t s_GattConnHdl = BT_CONN_HDL_INVALID;
 static volatile uint16_t s_GattTempHdl = BT_ATT_HANDLE_INVALID;
 static volatile uint16_t s_GattPressureHdl = BT_ATT_HANDLE_INVALID;
 static volatile uint16_t s_GattHumidityHdl = BT_ATT_HANDLE_INVALID;
+static uint16_t s_GattCccdHdl[3] = {};
+static uint8_t s_GattNotifyStage = 0;
 static bool s_GattConnecting = false;
 static volatile bool s_GattConnectPending = false;
 static uint8_t s_GattTargetAddrType = 0;
@@ -270,6 +272,7 @@ void BtAppEvtDisconnected(uint16_t ConnHdl)
 	s_GattTempHdl = BT_ATT_HANDLE_INVALID;
 	s_GattPressureHdl = BT_ATT_HANDLE_INVALID;
 	s_GattHumidityHdl = BT_ATT_HANDLE_INVALID;
+	s_GattNotifyStage = 0;
 	s_GattTempValid = false;
 	s_GattPressureValid = false;
 	s_GattHumidityValid = false;
@@ -312,14 +315,43 @@ void BtDeviceDiscovered(BtDevice_t *pDev)
 			return;
 		}
 		const uint16_t cccd = pDev->pServices[service].characteristics[index].cccd_handle;
-		if (cccd == BT_ATT_HANDLE_INVALID ||
-			!BtAppEnableNotify(pDev->Conn.Hdl, cccd))
+		if (cccd == BT_ATT_HANDLE_INVALID)
 		{
-			GatewayLog("GATT notify setup failed for 0x%04x\r\n", (unsigned)uuids[i]);
+			GatewayLog("GATT CCCD missing for 0x%04x\r\n", (unsigned)uuids[i]);
 			BtAppDisconnectConn(pDev->Conn.Hdl);
 			return;
 		}
+		s_GattCccdHdl[i] = cccd;
 		*handles[i] = pDev->pServices[service].characteristics[index].characteristic.handle_value;
+	}
+	s_GattNotifyStage = 0;
+	if (!BtAppEnableNotify(pDev->Conn.Hdl, s_GattCccdHdl[0]))
+	{
+		GatewayLog("GATT temperature subscription request failed\r\n");
+		BtAppDisconnectConn(pDev->Conn.Hdl);
+	}
+}
+
+void BtAppEvtWriteCompleted(uint16_t ConnHdl, bool Success)
+{
+	if (ConnHdl != s_GattConnHdl || s_GattNotifyStage >= 3U)
+	{
+		return;
+	}
+	if (!Success)
+	{
+		GatewayLog("GATT subscription rejected at stage %u\r\n",
+					(unsigned)s_GattNotifyStage);
+		BtAppDisconnectConn(ConnHdl);
+		return;
+	}
+	++s_GattNotifyStage;
+	if (s_GattNotifyStage < 3U &&
+		!BtAppEnableNotify(ConnHdl, s_GattCccdHdl[s_GattNotifyStage]))
+	{
+		GatewayLog("GATT subscription request failed at stage %u\r\n",
+					(unsigned)s_GattNotifyStage);
+		BtAppDisconnectConn(ConnHdl);
 	}
 }
 
