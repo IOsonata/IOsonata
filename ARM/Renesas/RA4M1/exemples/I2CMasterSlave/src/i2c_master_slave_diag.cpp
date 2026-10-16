@@ -25,6 +25,7 @@ static const char *TraceName(uint8_t Code)
 		case RA4M1_I2C_TR_ABORT: return "abort";
 		case RA4M1_I2C_TR_ADDR: return "address written";
 		case RA4M1_I2C_TR_SAMPLE: return "stuck sample";
+		case RA4M1_I2C_TR_START_POST: return "START register set";
 		default: return "?";
 	}
 }
@@ -57,7 +58,9 @@ static void DumpUnit(const char *pName, int DevNo)
 			rec.ICCR2, rec.ICSR2, rec.ICFER, rec.ICMR3, rec.ICIER, rec.ICSER,
 			rec.PeerCR1, rec.PeerSR1, rec.PeerSR2, rec.PeerIER);
 
-		if (rec.Code == RA4M1_I2C_TR_ABORT)
+		if (rec.Code == RA4M1_I2C_TR_ABORT ||
+			rec.Code == RA4M1_I2C_TR_BEGIN ||
+			rec.Code == RA4M1_I2C_TR_START_POST)
 		{
 			printf("    PFS master SDA=%08lx SCL=%08lx slave SDA=%08lx SCL=%08lx\r\n",
 				(unsigned long)rec.SdaPfs, (unsigned long)rec.SclPfs,
@@ -73,5 +76,21 @@ void I2cMasterSlaveDiagnostics(const char *pWhen)
 	printf("--- I2C diagnostics %s ---\r\n", pWhen);
 	DumpUnit("master", I2C_MASTER_DEVNO);
 	DumpUnit("slave", I2C_SLAVE_DEVNO);
+
+	// After all transfers have failed, disable the master peripheral.
+	// Hold this state in the application's final loop for a single-probe
+	// measurement. This is diagnostic-only and does not alter bus wiring.
+	R_IIC0_Type *master = I2C_MASTER_DEVNO == 0 ? R_IIC0 : R_IIC1;
+	const int port = I2C_MASTER_SCL_PORT;
+	const int pin = I2C_MASTER_SCL_PIN;
+
+	printf("  ICE test before: CR1=%02x CR2=%02x SR2=%02x SCLPFS=%08lx\r\n",
+		master->ICCR1, master->ICCR2, master->ICSR2,
+		(unsigned long)R_PFS->PORT[port].PIN[pin].PmnPFS);
+	master->ICIER = 0U;
+	master->ICCR1 &= (uint8_t)~0x80U;
+	printf("  ICE test after:  CR1=%02x CR2=%02x SR2=%02x SCLPFS=%08lx\r\n",
+		master->ICCR1, master->ICCR2, master->ICSR2,
+		(unsigned long)R_PFS->PORT[port].PIN[pin].PmnPFS);
 	printf("--- end ---\r\n");
 }
