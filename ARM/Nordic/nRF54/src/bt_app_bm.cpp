@@ -1159,17 +1159,15 @@ bool BtAppSecInit(void)
 		case BTGAP_SECTYPE_STATICKEY_MITM:
 			secParam.mitm = 1;
 			break;
+		// The S145 SoftDevice has no ATT signed write support, so the signed
+		// types pair as LE Secure Connections without CSRK distribution.
 		case BTGAP_SECTYPE_LESC_MITM:
 		case BTGAP_SECTYPE_SIGNED_MITM:
 			secParam.mitm = 1;
 			secParam.lesc = 1;
-			secParam.kdist_own.sign = 1;
-			secParam.kdist_peer.sign = 1;
 			break;
 		case BTGAP_SECTYPE_SIGNED_NO_MITM:
 			secParam.lesc = 1;
-			secParam.kdist_own.sign = 1;
-			secParam.kdist_peer.sign = 1;
 			break;
 		default:
 			break;
