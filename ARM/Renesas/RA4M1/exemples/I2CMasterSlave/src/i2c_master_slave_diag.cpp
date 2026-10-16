@@ -106,6 +106,28 @@ static void GpioSclTest(int PortNo, int PinNo)
 	printf("  GPIO SCL finish: PFS=%08lx input=%d\r\n",
 		(unsigned long)R_PFS->PORT[PortNo].PIN[PinNo].PmnPFS,
 		IOPinRead(PortNo, PinNo));
+
+	// Isolated P400 test only: exercise push-pull HIGH/LOW after open-drain.
+	// The SCL jumper must remain disconnected during this diagnostic.
+	IOPinSet(PortNo, PinNo);
+	IOPinConfig(PortNo, PinNo, IOPINOP_GPIO, IOPINDIR_OUTPUT,
+		IOPINRES_NONE, IOPINTYPE_NORMAL);
+	GpioSclDelay();
+	printf("  GPIO push-pull HIGH: PFS=%08lx input=%d\r\n",
+		(unsigned long)R_PFS->PORT[PortNo].PIN[PinNo].PmnPFS,
+		IOPinRead(PortNo, PinNo));
+
+	IOPinClear(PortNo, PinNo);
+	GpioSclDelay();
+	printf("  GPIO push-pull LOW:  PFS=%08lx input=%d\r\n",
+		(unsigned long)R_PFS->PORT[PortNo].PIN[PinNo].PmnPFS,
+		IOPinRead(PortNo, PinNo));
+
+	IOPinSet(PortNo, PinNo);
+	GpioSclDelay();
+	printf("  GPIO push-pull HIGH again: PFS=%08lx input=%d\r\n",
+		(unsigned long)R_PFS->PORT[PortNo].PIN[PinNo].PmnPFS,
+		IOPinRead(PortNo, PinNo));
 }
 
 void I2cMasterSlaveDiagnostics(const char *pWhen)
