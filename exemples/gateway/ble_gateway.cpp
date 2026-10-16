@@ -166,6 +166,9 @@ static BtGapScanCfg_t s_BleScanCfg = {
 static uint8_t s_ScanAddress[6];
 static int8_t s_ScanRssi = 0;
 static uint32_t s_ScanReports = 0;
+static uint32_t s_ManReports = 0;
+static uint32_t s_BlueIoReports = 0;
+static uint32_t s_TphReports = 0;
 static bool s_ScanValid = false;
 static uint8_t s_SensorType = 0U;
 static uint8_t s_SensorData[8] = {};
@@ -195,6 +198,18 @@ bool BtAppScanReport(int8_t Rssi, uint8_t AddrType, uint8_t Addr[6],
 	}
 	s_ScanRssi = Rssi;
 	++s_ScanReports;
+	if (manufacturerLen > 0U)
+	{
+		++s_ManReports;
+	}
+	if (isBlueIo)
+	{
+		++s_BlueIoReports;
+	}
+	if (isTph)
+	{
+		++s_TphReports;
+	}
 	s_ScanValid = true;
 	if (isTph || isGas)
 	{
@@ -542,6 +557,9 @@ static void LteUdpSend(uint32_t Evt, void *pCtx)
 	uint8_t address[6] = {};
     int8_t rssi = 0;
     uint32_t reports = 0;
+	uint32_t manReports = 0;
+	uint32_t blueIoReports = 0;
+	uint32_t tphReports = 0;
     bool valid = false;
     bool sensorValid = false;
     uint8_t sensorType = 0U;
@@ -565,6 +583,9 @@ static void LteUdpSend(uint32_t Evt, void *pCtx)
     }
     rssi = s_ScanRssi;
     reports = s_ScanReports;
+	manReports = s_ManReports;
+	blueIoReports = s_BlueIoReports;
+	tphReports = s_TphReports;
     sensorValid = s_SensorValid;
     sensorType = s_SensorType;
 	gattTempValid = s_GattTempValid;
@@ -653,7 +674,9 @@ static void LteUdpSend(uint32_t Evt, void *pCtx)
     if (len > 0 && len < (int)sizeof(msg))
     {
         const int extra = snprintf(msg + len, sizeof(msg) - (size_t)len,
-            " gatt_attempt=%lu rejected=%lu linked=%lu discovered=%lu",
+            " man=%lu blueio=%lu tph=%lu gatt_attempt=%lu rejected=%lu linked=%lu discovered=%lu",
+            (unsigned long)manReports, (unsigned long)blueIoReports,
+            (unsigned long)tphReports,
             (unsigned long)connAttempts, (unsigned long)connRejected,
             (unsigned long)connEstablished, (unsigned long)discoveryDone);
         if (extra < 0 || extra >= (int)(sizeof(msg) - (size_t)len))
