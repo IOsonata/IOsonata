@@ -648,13 +648,16 @@ int nRFxI2CTxDataDMA(DevIntrf_t * const pDev, const uint8_t *pData, int DataLen)
 		dev->pDmaReg->TASKS_RESUME = 1;
 		NRFX_TWI_STARTTX(dev->pDmaReg) = 1;
 
-		if (pDev->bIntEn == false || pDev->bNoStop)
+		if (pDev->bIntEn == false)
 		{
 			if (nRFxI2CWaitTxComplete(dev, timeout) == false)
 				break;
 		}
 		else
 		{
+			// The interrupt handler consumes LASTTX. It sets bTxReady and
+			// leaves the bus suspended when bNoStop is set, which is what
+			// DeviceIntrfRead() waits for before the receive phase.
 			return -1;
 		}
 #ifdef NRF54L_SERIES
