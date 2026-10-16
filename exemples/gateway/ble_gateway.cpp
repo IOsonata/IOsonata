@@ -134,6 +134,8 @@ static volatile uint16_t s_GattTempHdl = BT_ATT_HANDLE_INVALID;
 static volatile uint16_t s_GattPressureHdl = BT_ATT_HANDLE_INVALID;
 static volatile uint16_t s_GattHumidityHdl = BT_ATT_HANDLE_INVALID;
 static bool s_GattConnecting = false;
+static volatile bool s_GattConnectPending = false;
+static uint8_t s_GattTargetAddrType = 0;
 static volatile uint32_t s_GattConnAttempts = 0;
 static volatile uint32_t s_GattConnRejected = 0;
 static volatile uint32_t s_GattConnEstablished = 0;
@@ -237,18 +239,9 @@ bool BtAppScanReport(int8_t Rssi, uint8_t AddrType, uint8_t Addr[6],
 		}
 		if (memcmp(s_GattTargetAddress, Addr, 6) == 0)
 		{
-			s_GattConnecting = true;
-			++s_GattConnAttempts;
-			BtGapScanStop();
-			BtGapPeerAddr_t peer = { .Type = AddrType };
-			memcpy(peer.Addr, Addr, 6);
-			if (!BtGapConnect(&peer, &s_GattConnParams))
-			{
-				++s_GattConnRejected;
-				s_GattConnecting = false;
-				BtAppScan();
-			}
-			return false;
+			s_GattTargetAddrType = AddrType;
+			s_GattConnectPending = true;
+			return true;
 		}
 	}
 	return true;
@@ -278,6 +271,7 @@ void BtAppEvtDisconnected(uint16_t ConnHdl)
 	s_GattPressureValid = false;
 	s_GattHumidityValid = false;
 	s_GattConnecting = false;
+	s_GattConnectPending = false;
 	BtAppScan();
 }
 
@@ -768,6 +762,28 @@ bool AppCheckStatus(void)
 	{
 		s_bLogTxReady = false;
 		(void)SysLogFlush(SysLogGet());
+	}
+
+	// An HCI scan report only selects the peer. Execute synchronous HCI
+	// commands after the report callback returns to the application loop.
+	if (s_GattConnectPending && !s_GattConnecting &&
+		s_GattConnHdl == BT_CONN_HDL_INVALID)
+	{
+		s_GattConnectPending = false;
+		s_GattConnecting = true;
+		++s_GattConnAttempts;
+
+		BtGapPeerAddr_t peer = {};
+		peer.Type = s_GattTargetAddrType;
+		memcpy(peer.Addr, s_GattTargetAddress, sizeof(peer.Addr));
+		BtGapScanStop();
+
+		if (!BtGapConnect(&peer, &s_GattConnParams))
+		{
+			++s_GattConnRejected;
+			s_GattConnecting = false;
+			BtAppScan();
+		}
 	}
 
     BtAppCheckStatus();
