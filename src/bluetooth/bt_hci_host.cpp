@@ -427,7 +427,13 @@ void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtP
 					break;
 				}
 				BtHciLeEvtConnComplete_t *p = (BtHciLeEvtConnComplete_t*)pLeEvtPkt->Data;
-				if (p->Status == 0)
+				if (p->Status != 0)
+				{
+					SysLogPrintf(SysLogGet(),
+							 "HCI: LE Connection Complete failed status=0x%02x\r\n",
+							 (unsigned)p->Status);
+				}
+				else
 				{
 					if (pDev->Connected)
 					{
@@ -553,7 +559,13 @@ void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtP
 
 //				DEBUG_PRINTF("BT_HCI_EVT_LE_ENHANCED_CONN_COMPLETE : hdl %x, role:%d\n", p->ConnHdl, p->Role);
 
-				if (p->Status == 0)
+				if (p->Status != 0)
+				{
+					SysLogPrintf(SysLogGet(),
+							 "HCI: LE Enhanced Connection Complete failed status=0x%02x\r\n",
+							 (unsigned)p->Status);
+				}
+				else
 				{
 					DEBUG_PRINTF("BT_HCI_EVT_LE_ENHANCED_CONN_COMPLETE_V1/V2\r\n");
 					DEBUG_PRINTF("Target device Role = %d\r\n", p->Role);
