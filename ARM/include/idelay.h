@@ -132,5 +132,5 @@ static inline __attribute__((always_inline)) void msDelay(uint32_t ms) {
 
 /** @} End of group Utilities */
 
-#endif	// __IDELAY_H__
+#endif
 

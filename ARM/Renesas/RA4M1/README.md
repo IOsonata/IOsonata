@@ -5,7 +5,7 @@ reporting, Cortex-M4 vectors, normal-boot linker layout, GPIO/pin control, and
 CPU interrupt registration through the ICU, asynchronous SCI UART, AGT/GPT timers, and IIC master and slave.
 See [TIMER.md](TIMER.md) for timer device mapping and validation limits, and
 [INTERRUPTS.md](INTERRUPTS.md) for the ICU/NVIC routing architecture,
-registration contract, and interrupt-maintenance invariants.
+registration rules, and interrupt-maintenance invariants.
 No board package, Arduino/FSP runtime, USB controller, IIC DMA/DTC,
 general DTC, or NMI driver is included yet. UART TX uses native DMAC.
 The IIC master (polling and interrupt) and slave are rewritten and checked

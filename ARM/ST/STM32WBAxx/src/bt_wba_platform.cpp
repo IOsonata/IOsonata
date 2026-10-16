@@ -31,25 +31,27 @@ Known limits:
 
 @license
 
+MIT License
+
 Copyright (c) 2026, I-SYST inc., all rights reserved
 
-Permission to use, copy, modify, and distribute this software for any purpose
-with or without fee is hereby granted, provided that the above copyright
-notice and this permission notice appear in all copies, and none of the
-names : I-SYST or its contributors may be used to endorse or
-promote products derived from this software without specific prior written
-permission.
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is furnished
+to do so, subject to the following conditions:
 
-THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND ANY
-EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-DISCLAIMED. IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE FOR ANY
-DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
-LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
-ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
-THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 
 ----------------------------------------------------------------------------*/
 #include <stdint.h>
@@ -59,10 +61,6 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "app_conf.h"
 #include "bt_wba_stack.h"
-
-extern "C" {
-#include "ll_intf_cmn.h"
-}
 
 #include "istddef.h"
 #include "coredev/timer.h"
@@ -112,45 +110,43 @@ static inline void BtWbaIrqRestore(uint32_t Pm)
 // Interrupt controller and radio clock
 //----------------------------------------------------------------------------
 
-extern "C" {
-
-__attribute__((weak)) void HAL_NVIC_SetPriority(IRQn_Type IRQn,
-												uint32_t PreemptPriority,
-												uint32_t SubPriority)
+extern "C" __attribute__((weak)) void HAL_NVIC_SetPriority(IRQn_Type IRQn,
+														   uint32_t PreemptPriority,
+														   uint32_t SubPriority)
 {
 	(void)SubPriority;
 
 	NVIC_SetPriority(IRQn, PreemptPriority);
 }
 
-__attribute__((weak)) void HAL_NVIC_EnableIRQ(IRQn_Type IRQn)
+extern "C" __attribute__((weak)) void HAL_NVIC_EnableIRQ(IRQn_Type IRQn)
 {
 	NVIC_EnableIRQ(IRQn);
 }
 
-__attribute__((weak)) void HAL_NVIC_DisableIRQ(IRQn_Type IRQn)
+extern "C" __attribute__((weak)) void HAL_NVIC_DisableIRQ(IRQn_Type IRQn)
 {
 	NVIC_DisableIRQ(IRQn);
 }
 
-__attribute__((weak)) void HAL_NVIC_SetPendingIRQ(IRQn_Type IRQn)
+extern "C" __attribute__((weak)) void HAL_NVIC_SetPendingIRQ(IRQn_Type IRQn)
 {
 	NVIC_SetPendingIRQ(IRQn);
 }
 
-__attribute__((weak)) void HAL_RCCEx_EnableRadioBBClock(void)
+extern "C" __attribute__((weak)) void HAL_RCCEx_EnableRadioBBClock(void)
 {
 	SET_BIT(RCC->RADIOENR, RCC_RADIOENR_BBCLKEN);
 }
 
-__attribute__((weak)) void HAL_RCCEx_DisableRadioBBClock(void)
+extern "C" __attribute__((weak)) void HAL_RCCEx_DisableRadioBBClock(void)
 {
 	CLEAR_BIT(RCC->RADIOENR, RCC_RADIOENR_BBCLKEN);
 }
 
 // Called by the PKA controller and the link layer when something fails that
 // cannot be recovered.
-__attribute__((weak)) void Error_Handler(void)
+extern "C" __attribute__((weak)) void Error_Handler(void)
 {
 	__disable_irq();
 	while (1)
@@ -159,17 +155,17 @@ __attribute__((weak)) void Error_Handler(void)
 }
 
 // Link layer debug pins are not used.
-void LINKLAYER_DEBUG_SIGNAL_SET(uint32_t Signal)
+extern "C" void LINKLAYER_DEBUG_SIGNAL_SET(uint32_t Signal)
 {
 	(void)Signal;
 }
 
-void LINKLAYER_DEBUG_SIGNAL_RESET(uint32_t Signal)
+extern "C" void LINKLAYER_DEBUG_SIGNAL_RESET(uint32_t Signal)
 {
 	(void)Signal;
 }
 
-void LINKLAYER_DEBUG_SIGNAL_TOGGLE(uint32_t Signal)
+extern "C" void LINKLAYER_DEBUG_SIGNAL_TOGGLE(uint32_t Signal)
 {
 	(void)Signal;
 }
@@ -179,7 +175,7 @@ void LINKLAYER_DEBUG_SIGNAL_TOGGLE(uint32_t Signal)
 // system_stm32wbaxx.c, so only the HSE32 wait does work.
 //----------------------------------------------------------------------------
 
-void SCM_HSE_WaitUntilReady(void)
+extern "C" void SCM_HSE_WaitUntilReady(void)
 {
 	uint32_t n = BT_WBA_HSE_POLL_MAX;
 
@@ -198,7 +194,7 @@ void SCM_HSE_WaitUntilReady(void)
  * and it starts,
  * otherwise LSI1 is used. LSI1 is less accurate, which limits connections.
  */
-void BtWbaPlatformInit(void)
+extern "C" void BtWbaPlatformInit(void)
 {
 	uint32_t n = BT_WBA_HSE_POLL_MAX;
 	uint32_t src;
@@ -242,12 +238,12 @@ void BtWbaPlatformInit(void)
 	MODIFY_REG(RCC->BDCR1, RCC_BDCR1_RADIOSTSEL, src);
 }
 
-void scm_notifyradiostate(uint32_t State)
+extern "C" void scm_notifyradiostate(uint32_t State)
 {
 	(void)State;
 }
 
-void scm_setsystemclock(uint32_t User, uint32_t Clock)
+extern "C" void scm_setsystemclock(uint32_t User, uint32_t Clock)
 {
 	(void)User;
 	(void)Clock;
@@ -257,12 +253,10 @@ void scm_setsystemclock(uint32_t User, uint32_t Clock)
 // Temperature for the radio calibration
 //----------------------------------------------------------------------------
 
-void TEMPMEAS_RequestTemperatureMeasurement(void)
+extern "C" void TEMPMEAS_RequestTemperatureMeasurement(void)
 {
 	ll_intf_cmn_set_temperature_value((uint32_t)(BT_WBA_TEMPERATURE_C + BT_WBA_TEMPERATURE_OFS));
 }
-
-} // extern "C"
 
 //----------------------------------------------------------------------------
 // Sequencer: the stack and the link layer register tasks and set them. The
@@ -885,13 +879,11 @@ extern "C" void PKA_IRQHandler(void)
 // and LINKLAYER_PLAT_SetupSwLowIT in linklayer_plat.c.
 //----------------------------------------------------------------------------
 
-extern "C" {
+extern "C" void (*radio_callback)(void);
+extern "C" void (*low_isr_callback)(void);
+extern "C" volatile uint8_t radio_sw_low_isr_is_running_high_prio;
 
-extern void (*radio_callback)(void);
-extern void (*low_isr_callback)(void);
-extern volatile uint8_t radio_sw_low_isr_is_running_high_prio;
-
-void RADIO_IRQHandler(void)
+extern "C" void RADIO_IRQHandler(void)
 {
 	if (radio_callback != nullptr)
 	{
@@ -903,7 +895,7 @@ void RADIO_IRQHandler(void)
 }
 
 // Software low priority radio interrupt. It runs on the HASH vector.
-void HASH_IRQHandler(void)
+extern "C" void HASH_IRQHandler(void)
 {
 	// Block nested calls
 	NVIC_DisableIRQ((IRQn_Type)RADIO_SW_LOW_INTR_NUM);
@@ -922,8 +914,6 @@ void HASH_IRQHandler(void)
 
 	NVIC_EnableIRQ((IRQn_Type)RADIO_SW_LOW_INTR_NUM);
 }
-
-} // extern "C"
 
 //----------------------------------------------------------------------------
 // Work that did not fit in the event queue is offered again from here.

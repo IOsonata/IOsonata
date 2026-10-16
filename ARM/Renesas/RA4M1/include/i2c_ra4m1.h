@@ -7,6 +7,9 @@ The driver keeps the last events of each IIC unit with a snapshot of the unit
 registers. It is read by the target test examples after a failure. Set
 RA4M1_I2C_TRACE to 0 when building the library to remove it.
 
+@author	Hoang Nguyen Hoan
+@date	Oct. 15, 2026
+
 @license
 
 MIT License
@@ -17,8 +20,8 @@ Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
 in the Software without restriction, including without limitation the rights
 to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+copies of the Software, and to permit persons to whom the Software is furnished
+to do so, subject to the following conditions:
 
 The above copyright notice and this permission notice shall be included in all
 copies or substantial portions of the Software.
@@ -105,4 +108,4 @@ bool Ra4m1I2cTraceGet(int DevNo, uint32_t Idx, Ra4m1I2cTrace_t *pRec);
 }
 #endif
 
-#endif // __I2C_RA4M1_H__
+#endif

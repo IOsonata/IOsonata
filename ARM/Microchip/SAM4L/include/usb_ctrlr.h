@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
 @file	usb_ctrlr.h
 
-@brief	SAM4L USBC device controller contract.
+@brief	SAM4L USBC device controller interface.
 
 Full-speed control, isochronous, bulk and interrupt transfers. Logical
 endpoints 1-7 are redirected to seven physical endpoints shared between IN
