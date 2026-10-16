@@ -147,10 +147,13 @@ bool BtAppScanReport(int8_t Rssi, uint8_t AddrType, uint8_t Addr[6],
         pAdvData, AdvLen, manufacturer, sizeof(manufacturer));
     // Manufacturer record: two-byte company ID, BlueIO type, sensor bytes.
     // Require a complete TPH payload before decoding its fixed-point fields.
-    const bool isTph = manufacturerLen >= 11U &&
+    const bool isBlueIo = manufacturerLen >= 9U &&
         manufacturer[0] == (uint8_t)(ISYST_BLUETOOTH_ID & 0xFFU) &&
-        manufacturer[1] == (uint8_t)(ISYST_BLUETOOTH_ID >> 8) &&
+        manufacturer[1] == (uint8_t)(ISYST_BLUETOOTH_ID >> 8);
+    const bool isTph = isBlueIo && manufacturerLen >= 11U &&
         manufacturer[2] == BT_ADV_MANDATA_TYPE_TPH;
+    const bool isGas = isBlueIo &&
+        manufacturer[2] == BT_ADV_MANDATA_TYPE_GAS;
 
     const uint32_t irq = DisableInterrupt();
     for (unsigned i = 0; i < 6U; ++i)
@@ -160,7 +163,7 @@ bool BtAppScanReport(int8_t Rssi, uint8_t AddrType, uint8_t Addr[6],
     s_ScanRssi = Rssi;
     ++s_ScanReports;
     s_ScanValid = true;
-    if (isTph)
+    if (isTph || isGas)
     {
         s_SensorType = manufacturer[2];
         for (unsigned i = 0; i < sizeof(s_SensorAddress); ++i)
@@ -309,7 +312,8 @@ static void LteUdpSend(uint32_t Evt, void *pCtx)
     int8_t rssi = 0;
     uint32_t reports = 0;
     bool valid = false;
-    bool tphValid = false;
+    bool sensorValid = false;
+    uint8_t sensorType = 0U;
     uint8_t tph[8] = {};
     uint8_t sensorAddress[6] = {};
     const uint32_t irq = DisableInterrupt();
@@ -320,7 +324,8 @@ static void LteUdpSend(uint32_t Evt, void *pCtx)
     }
     rssi = s_ScanRssi;
     reports = s_ScanReports;
-    tphValid = s_SensorValid;
+    sensorValid = s_SensorValid;
+    sensorType = s_SensorType;
     for (unsigned i = 0; i < sizeof(sensorAddress); ++i)
     {
         sensorAddress[i] = s_SensorAddress[i];
@@ -337,7 +342,8 @@ static void LteUdpSend(uint32_t Evt, void *pCtx)
                        valid ? "" : "none/",
                        address[5], address[4], address[3],
                        address[2], address[1], address[0], (int)rssi);
-    if (tphValid && len > 0 && len < (int)sizeof(msg))
+    if (sensorValid && sensorType == BT_ADV_MANDATA_TYPE_TPH &&
+        len > 0 && len < (int)sizeof(msg))
     {
         const uint32_t pressure = (uint32_t)tph[0] |
             ((uint32_t)tph[1] << 8) | ((uint32_t)tph[2] << 16) |
@@ -353,6 +359,26 @@ static void LteUdpSend(uint32_t Evt, void *pCtx)
                                    sensorAddress[1], sensorAddress[0],
                                    (unsigned long)pressure, (int)temperature,
                                    (unsigned)humidity);
+        if (extra < 0 || extra >= (int)(sizeof(msg) - (size_t)len))
+        {
+            return;
+        }
+        len += extra;
+    }
+    if (sensorValid && sensorType == BT_ADV_MANDATA_TYPE_GAS &&
+        len > 0 && len < (int)sizeof(msg))
+    {
+        const uint32_t resistance = (uint32_t)tph[0] |
+            ((uint32_t)tph[1] << 8) | ((uint32_t)tph[2] << 16) |
+            ((uint32_t)tph[3] << 24);
+        const uint16_t airQuality = (uint16_t)tph[4] |
+            ((uint16_t)tph[5] << 8);
+        const int extra = snprintf(msg + len, sizeof(msg) - (size_t)len,
+                                   " tag=%02x:%02x:%02x:%02x:%02x:%02x gas_res=%lu aqi=%u",
+                                   sensorAddress[5], sensorAddress[4],
+                                   sensorAddress[3], sensorAddress[2],
+                                   sensorAddress[1], sensorAddress[0],
+                                   (unsigned long)resistance, (unsigned)airQuality);
         if (extra < 0 || extra >= (int)(sizeof(msg) - (size_t)len))
         {
             return;
