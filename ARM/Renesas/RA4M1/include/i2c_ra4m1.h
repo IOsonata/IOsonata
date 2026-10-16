@@ -84,6 +84,10 @@ typedef struct
 	uint8_t PeerSR1;	// other unit ICSR1
 	uint8_t PeerSR2;	// other unit ICSR2
 	uint8_t PeerIER;	// other unit ICIER
+	uint32_t SdaPfs;	// local SDA PFS sampled only at stalled transfer
+	uint32_t SclPfs;	// local SCL PFS sampled only at stalled transfer
+	uint32_t PeerSdaPfs;	// other IIC unit SDA PFS, if initialized
+	uint32_t PeerSclPfs;	// other IIC unit SCL PFS, if initialized
 } Ra4m1I2cTrace_t;
 
 #ifdef __cplusplus
