@@ -261,15 +261,16 @@ static const SockIntrfCfg_t s_SockCfg = {
 static UART s_Uart;
 
 // SysLog on the console UART, a record goes out as soon as it is logged.
-// 16 records of 192 bytes. A record the UART does not take in full stays in
-// the store and the rest goes out at the next log call. bBlocking keeps the
-// oldest records when the store is full.
-alignas(4) static uint8_t s_SysLogMem[SYSLOG_MEMSIZE(16, 288)];
+// The record holds the longest received datagram plus the timestamp and
+// formatting. A record the UART does not take in full stays in the store and
+// the rest goes out at the next log call. bBlocking keeps the oldest records
+// when the store is full.
+alignas(4) static uint8_t s_SysLogMem[SYSLOG_MEMSIZE(16, LTE_UDP_RX_LEN + 64)];
 
 static const SysLogCfg_t s_SysLogCfg = {
 	.pMem = s_SysLogMem,
 	.MemSize = sizeof(s_SysLogMem),
-	.RecordLen = 288,
+	.RecordLen = LTE_UDP_RX_LEN + 64,
 	.bBlocking = true,
 };
 
@@ -286,7 +287,7 @@ static volatile bool s_bSendQueued = false;
 // Prefix every application log line without changing the shared SysLog ABI.
 static int GatewayLog(const char *pFormat, ...)
 {
-    char detail[256];
+    char detail[LTE_UDP_RX_LEN + 32];
     va_list args;
     va_start(args, pFormat);
     const int len = vsnprintf(detail, sizeof(detail), pFormat, args);
