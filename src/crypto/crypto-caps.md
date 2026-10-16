@@ -26,7 +26,7 @@ a `Cap` bit and the backing function pointer disagree.
 | `MacEngine` | `Mac` | `CRYPTO_MAC_ALG` | `CRYPTO_MAC_CMAC` (AES engines), `CRYPTO_MAC_HMAC` (SHA-256 engine); GMAC reserved |
 | `AeadEngine` | `Seal`, `Open` | `CRYPTO_AEAD_ALG` | `CRYPTO_AEAD_AES_CCM` (RFC 3610), `CRYPTO_AEAD_AES_GCM` (SP 800-38D, 96 bit IV) |
 | `HashEngine` | `Hash`; `HashInit` / `HashUpdate` / `HashFinal` | `CRYPTO_HASH_ALG` | `CRYPTO_HASH_SHA256`, one-shot and streaming |
-| `KeyAgreeEngine` | `KeyGen`, `Agree` | `CRYPTO_CURVE` | `CRYPTO_CURVE_P256` |
+| `KeyAgreeEngine` | `KeyGen`, `KeyImport`, `Agree` | `CRYPTO_CURVE` | `CRYPTO_CURVE_P256` |
 | `SignEngine` | `Sign`, `Verify` | `CRYPTO_CURVE` | `CRYPTO_CURVE_P256` (ECDSA) |
 | `RngEngine` | `Random` | none | hardware or software source |
 

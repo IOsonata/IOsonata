@@ -146,6 +146,50 @@ CRYPTO_STATUS CryptoUecc::KeyGen(CRYPTO_CURVE Curve, void *pKeyCtx,
 	return CRYPTO_STATUS_OK;
 }
 
+CRYPTO_STATUS CryptoUecc::KeyImport(CRYPTO_CURVE Curve, void *pKeyCtx,
+									const uint8_t *pPrivKey, uint8_t *pPubKey)
+{
+	if (Curve != CRYPTO_CURVE_P256 || pKeyCtx == nullptr ||
+		pPrivKey == nullptr)
+	{
+		return CRYPTO_STATUS_UNSUPPORTED;
+	}
+
+	KeyCtx *pk = (KeyCtx *)pKeyCtx;
+	KeyReset(pk);
+	if (pPubKey != nullptr)
+	{
+		memset(pPubKey, 0, 64U);
+	}
+	if (!P256ScalarInRange(pPrivKey))
+	{
+		return CRYPTO_STATUS_FAIL;
+	}
+
+	uint8_t pub[64];
+	CRYPTO_STATUS begin = UeccBegin(nullptr, false);
+	if (begin != CRYPTO_STATUS_OK)
+	{
+		return begin;
+	}
+	int ok = uECC_compute_public_key(pPrivKey, pub, uECC_secp256r1());
+	UeccEnd();
+	if (ok != 1)
+	{
+		UeccWipe(pub, sizeof(pub));
+		return CRYPTO_STATUS_FAIL;
+	}
+
+	memcpy(pk->PrivKey, pPrivKey, 32U);
+	pk->bKeyValid = true;
+	if (pPubKey != nullptr)
+	{
+		memcpy(pPubKey, pub, sizeof(pub));
+	}
+	UeccWipe(pub, sizeof(pub));
+	return CRYPTO_STATUS_OK;
+}
+
 CRYPTO_STATUS CryptoUecc::Agree(CRYPTO_CURVE Curve, void *pKeyCtx,
 								const uint8_t *pPeerPubKey,
 								uint8_t *pSharedX, bool bKeepKey)

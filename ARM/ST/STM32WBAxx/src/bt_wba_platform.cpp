@@ -8,7 +8,7 @@ platform functions. A Cube project supplies them with its HAL, the sequencer,
 the timer server, the RTC, the memory manager and the flash manager. This file
 supplies them with IOsonata code instead, so the Cube project files that remain
 in a build are bleplat.c, linklayer_plat.c, ll_sys_if.c, ll_sys_startup.c,
-power_table.c and the PKA controller:
+power_table.c:
 
 - HAL_NVIC_* and the radio baseband clock: direct NVIC and RCC access.
 - Sequencer (UTIL_SEQ_RegTask, UTIL_SEQ_SetTask): the tasks are run from the
@@ -16,7 +16,7 @@ power_table.c and the PKA controller:
 - BLE_TIMER_Start/Stop: software timer slots over one IOsonata LPTIM trigger.
 - HW_RNG_Get and the RNG clock requests: RNG peripheral, polled.
 - BAES_*: the IOsonata CryptoSoftAes engine (ECB, CMAC and CCM).
-- PKA controller hooks: queue, semaphore and interrupt handler.
+- The P-256 operations are in bt_wba_pka.cpp.
 - Link layer interrupts (RADIO and HASH vectors), HSE32 wait, system clock
   manager entries, debug signals: small functions.
 
@@ -73,10 +73,6 @@ SOFTWARE.
 // Defined by the port in bt_app_stm32wba.cpp: runs the host stack
 extern "C" void BleStackCB_Process(void);
 
-// Bit of the PKA controller task in the sequencer mask. The link layer task
-// uses the bit its Target file defines, which is below this one.
-#define BT_WBA_SEQ_PKA			31U
-
 // Temperature, in degrees C, given to the link layer for radio calibration
 #define BT_WBA_TEMPERATURE_C	25
 // Offset the link layer adds to the temperature (TEMPMEAS_MIN_TEMP_LIMIT)
@@ -88,7 +84,6 @@ extern "C" void BleStackCB_Process(void);
 // does not answer.
 #define BT_WBA_HSE_POLL_MAX		2000000UL
 #define BT_WBA_RNG_POLL_MAX		200000UL
-#define BT_WBA_PKA_POLL_MAX		50000000UL
 
 #define BT_WBA_RNG_RETRY		4
 
@@ -144,7 +139,7 @@ extern "C" __attribute__((weak)) void HAL_RCCEx_DisableRadioBBClock(void)
 	CLEAR_BIT(RCC->RADIOENR, RCC_RADIOENR_BBCLKEN);
 }
 
-// Called by the PKA controller and the link layer when something fails that
+// Called by the link layer when something fails that
 // cannot be recovered.
 extern "C" __attribute__((weak)) void Error_Handler(void)
 {
@@ -559,7 +554,7 @@ extern "C" void BLE_TIMER_Stop(uint16_t id)
 
 //----------------------------------------------------------------------------
 // Random number generator. The kernel clock is HSI16. The peripheral is
-// started when a number or the PKA needs it and stopped when no user is left.
+// started when a number is needed and stopped when no user is left.
 //----------------------------------------------------------------------------
 
 static uint8_t s_RngUsers;
@@ -802,75 +797,6 @@ extern "C" int BAES_CcmCrypt(uint8_t Mode, const uint8_t *pKey,
 	}
 
 	return st == CRYPTO_STATUS_OK ? 0 : 1;
-}
-
-//----------------------------------------------------------------------------
-// Hooks of the Cube PKA controller (pka_ctrl.c)
-//----------------------------------------------------------------------------
-
-static volatile uint8_t s_PkaSem;
-static volatile uint8_t s_PkaMut;
-static volatile bool s_PkaTaskReg;
-
-extern "C" void PKACTRL_BG_Process(void);
-
-extern "C" void PKACTRL_CB_Process(void)
-{
-	if (s_PkaTaskReg == false)
-	{
-		UTIL_SEQ_RegTask(1UL << BT_WBA_SEQ_PKA, 0, PKACTRL_BG_Process);
-		s_PkaTaskReg = true;
-	}
-	UTIL_SEQ_SetTask(1UL << BT_WBA_SEQ_PKA, 0);
-}
-
-// The stack is the only user of the controller and it runs in one context,
-// so the mutex has nothing to wait for.
-extern "C" int PKACTRL_MutexTake(void)
-{
-	s_PkaMut = (uint8_t)(s_PkaMut + 1U);
-
-	return 0;
-}
-
-extern "C" int PKACTRL_MutexRelease(void)
-{
-	s_PkaMut = 0;
-
-	return 0;
-}
-
-// The semaphore is taken when a PKA operation starts and released by the end
-// of operation interrupt. A second take waits for that release.
-extern "C" int PKACTRL_TakeSemEndOfOperation(void)
-{
-	uint32_t n = BT_WBA_PKA_POLL_MAX;
-
-	while (s_PkaSem != 0U && n > 0U)
-	{
-		n--;
-	}
-	s_PkaSem = 1;
-
-	return 0;
-}
-
-extern "C" int PKACTRL_ReleaseSemEndOfOperation(void)
-{
-	s_PkaSem = 0;
-
-	return 0;
-}
-
-extern "C" void PKACTRL_EndOfProcessCb(void);
-
-extern "C" void PKA_IRQHandler(void)
-{
-	if ((PKA->SR & PKA_SR_PROCENDF) != 0U)
-	{
-		PKA->CLRFR = PKA_CLRFR_PROCENDFC;
-		PKACTRL_EndOfProcessCb();
-	}
 }
 
 //----------------------------------------------------------------------------

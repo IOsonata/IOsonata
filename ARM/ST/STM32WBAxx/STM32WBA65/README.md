@@ -240,8 +240,7 @@ in the same image or two startup/vector definitions will conflict.
 ## External middleware checkout
 
 The ST Bluetooth link layer is a closed library. Its platform files (`bleplat.c`,
-`linklayer_plat.c`, `ll_sys_if.c`, `power_table.c`, `pka_ctrl.c`, `hw_pka.c`,
-`hw_pka_p256.c`) are ST sources under the ST license, so they stay in the ST
+`linklayer_plat.c`, `ll_sys_if.c`, `power_table.c`) are ST sources under the ST license, so they stay in the ST
 repositories and are not copied into IOsonata. The library builds them from the
 STM32CubeWBA checkout.
 
@@ -264,9 +263,9 @@ git sparse-checkout set Projects/Common/WPAN Projects/NUCLEO-WBA65RI/Application
 git submodule update --init --depth 1 Drivers/STM32WBAxx_HAL_Driver Drivers/CMSIS/Device/ST/STM32WBAxx
 ```
 
-Do not use the default branch of either repository. STM32CubeWBA main no longer
-has `hw_pka.c` and `hw_pka_p256.c`, and a newer `stm32-mw-wpan` does not match
-the Cube 1.9.0 platform files. The IOC project uses `external/stm32-mw-wpan/ble/`
+Do not use the default branch of either repository. STM32CubeWBA 1.10 and
+`stm32-mw-wpan` 2.10 change the stack libraries and the crypto platform files,
+and they are not built against yet. Use the tags above. The IOC project uses `external/stm32-mw-wpan/ble/`
 and `external/stm32-mw-wpan/link_layer/` for the BLE middleware headers, and
 STM32CubeWBA for the platform files, the HAL headers and `Utilities/tim_serv`.
 The library defines `PHY_40nm_3_40_a` and `BLE_STACK_BASIC_FEATURES`,
@@ -336,8 +335,6 @@ package and the WPAN middleware commit e66bb629):
   the BLE only project (BLE_p2pServer), not from the audio projects.
 - `link_layer/ll_sys/src/ll_sys_startup.c`, `ll_sys_intf.c`, `ll_sys_cs.c`,
   `ll_sys_dp_slp.c`.
-- `Projects/Common/WPAN/Modules/pka_ctrl.c` and
-  `Interfaces/hw_pka.c`, `hw_pka_p256.c`.
 - Libraries `ble/stack/lib/stm32wba_ble_stack_basic_plus.a` and
   `link_layer/ll_cmd_lib/lib/WBA6_LinkLayer_BLE_Basic_Plus_lib.a`.
 
@@ -372,9 +369,14 @@ ST prebuilt archives and holds only its own sources:
 - `src/bleplat_wrap.c`, which renames the Cube `BLEPLAT_NvmStore` and includes
   `bleplat.c`, so no per file compiler option is needed;
 - the Cube and WPAN platform files `linklayer_plat.c`, `ll_sys_if.c`,
-  `power_table.c`, `pka_ctrl.c`, `hw_pka.c`, `hw_pka_p256.c` and the WPAN
+  `power_table.c` and the WPAN
   `ll_sys_startup.c`, `ll_sys_intf.c`, `ll_sys_cs.c`, `ll_sys_dp_slp.c`, found
   through the `external` folder (see External middleware checkout);
+- `src/bluetooth/bt_wba_pka.cpp`, which answers the P-256 key requests of the
+  stack (public key and Diffie-Hellman) with the IOsonata `CryptoUecc` engine.
+  The Cube PKA controller (`pka_ctrl.c`, `hw_pka.c`, `hw_pka_p256.c`) is not
+  built and the PKA peripheral is not used. The multiplication is software and
+  runs in the event queue context;
 - the headers `include/app_conf.h`, `app_common.h`, `utilities_conf.h`,
   `stm32_rtos.h`, `common_wpan_conf.h` and `main.h`. The ST platform files
   include them by name. They are written for IOsonata (MIT) and define only

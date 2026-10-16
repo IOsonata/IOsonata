@@ -3,7 +3,7 @@
 
 @brief	Configuration of the STM32CubeWBA platform files built with the STM32WBA65 BLE library.
 
-The ST platform files (linklayer_plat.c, ll_sys_if.c, pka_ctrl.c, hw_pka.c and
+The ST platform files (linklayer_plat.c, ll_sys_if.c, power_table.c and
 the ST stack headers) include this file by name. It holds the interrupt
 numbers and priorities of the radio and PKA, the link layer task identifiers
 and the power table selection. The BLE stack sizes (CFG_BLE_*) have defaults in

@@ -1781,6 +1781,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_softsha256.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/micro-ecc/uECC.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/micro-ecc/uECC.c</locationURI>
+		</link>
+		<link>
 			<name>src/crypto/crypto_uecc.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_uecc.cpp</locationURI>
@@ -2676,6 +2681,11 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>src/bluetooth/bt_wba_pka.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/bt_wba_pka.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/bluetooth/bt_wba_platform.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-3-PROJECT_LOC/src/bt_wba_platform.cpp</locationURI>
@@ -2724,21 +2734,6 @@
 			<name>src/stm32wba_ble/ll_sys_dp_slp.c</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/stm32-mw-wpan/link_layer/ll_sys/src/ll_sys_dp_slp.c</locationURI>
-		</link>
-		<link>
-			<name>src/stm32wba_ble/pka_ctrl.c</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/STM32CubeWBA/Projects/Common/WPAN/Modules/pka_ctrl.c</locationURI>
-		</link>
-		<link>
-			<name>src/stm32wba_ble/hw_pka.c</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/STM32CubeWBA/Projects/Common/WPAN/Interfaces/hw_pka.c</locationURI>
-		</link>
-		<link>
-			<name>src/stm32wba_ble/hw_pka_p256.c</name>
-			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/external/STM32CubeWBA/Projects/Common/WPAN/Interfaces/hw_pka_p256.c</locationURI>
 		</link>
 		<link>
 			<name>include/app_common.h</name>
