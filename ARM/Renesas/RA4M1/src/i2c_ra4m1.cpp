@@ -258,7 +258,8 @@ static void Ra4m1I2cTrace(const Ra4m1I2cDev_t * const pDev, uint8_t Code, uint8_
 		rec->SdaPfs = R_PFS->PORT[sda->PortNo].PIN[sda->PinNo].PmnPFS;
 		rec->SclPfs = R_PFS->PORT[scl->PortNo].PIN[scl->PinNo].PmnPFS;
 
-		if ((R_MSTP->MSTPCRB & (1UL << (peer0 ? 9 : 8))) == 0U)
+		if (Code == RA4M1_I2C_TR_ABORT &&
+			(R_MSTP->MSTPCRB & (1UL << (peer0 ? 9 : 8))) == 0U)
 		{
 			rec->PeerCR1 = peer->ICCR1;
 			rec->PeerSR1 = peer->ICSR1;
