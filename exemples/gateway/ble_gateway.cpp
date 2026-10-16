@@ -151,7 +151,7 @@ bool BtAppScanReport(int8_t Rssi, uint8_t AddrType, uint8_t Addr[6],
 }
 
 // Application event queue: LTE work, received data and the send timer
-alignas(4) uint8_t g_AppEvtHandlerQueMem[APPEVT_HANDLER_QUE_MEMSIZE(8)];
+alignas(4) uint8_t g_AppEvtHandlerQueMem[APPEVT_HANDLER_QUE_MEMSIZE(16)];
 
 static void LteUdpEvtHandler(LTE_EVT Evt, const LteStatus_t * const pStatus);
 static void LteUdpUrcHandler(const char *pUrc);
@@ -429,22 +429,25 @@ static void LteUdpUrcHandler(const char *pUrc)
 
 int main()
 {
-	AppEvtHandlerInit(g_AppEvtHandlerQueMem, sizeof(g_AppEvtHandlerQueMem));
-    // The observer and the LTE modem share the application event dispatcher.
-    // Initialize BLE before entering AppRun; do not transmit in scan callbacks.
-    const bool bleReady = BtAppInit(&s_BleAppCfg);
+    AppEvtHandlerInit(g_AppEvtHandlerQueMem, sizeof(g_AppEvtHandlerQueMem));
+
+    s_Uart.Init(s_UartCfg);
+    SysLogInit(SysLogGet(), &s_SysLogCfg, (DevIntrf_t *)s_Uart, 0, nullptr, 0);
+    SysLogPrintf(SysLogGet(), "BleGateway UDP starting\r\n");
+
+    // Initialize Bluetooth before AppRun. BLE and LTE share the application
+    // event dispatcher, while the observer callback never calls the socket.
+    bool bleReady = BtAppInit(&s_BleAppCfg);
     if (bleReady)
     {
-        if (BtAppScanInit(&s_BleScanCfg))
+        bleReady = BtAppScanInit(&s_BleScanCfg);
+        if (bleReady)
         {
             BtAppScan();
         }
     }
-
-
-	s_Uart.Init(s_UartCfg);
-	SysLogInit(SysLogGet(), &s_SysLogCfg, (DevIntrf_t *)s_Uart, 0, nullptr, 0);
-	SysLogPrintf(SysLogGet(), "BleGateway UDP, BLE scan %s\r\n", bleReady ? "started" : "failed");
+    SysLogPrintf(SysLogGet(), "BLE scan %s\r\n",
+                 bleReady ? "started" : "failed");
 
 	char info[48];
 
