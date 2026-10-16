@@ -3,8 +3,8 @@
 Target: STM32WBA65RIV7 (STM32WBA65I-DK1 Discovery Kit).
 
 `lib/ioc` holds the Debug/Release Cortex-M33 library configurations
-(`STM32WBA65xx`) and the Debug_BLE/Release_BLE configurations that add the
-Bluetooth stack glue (see Bluetooth library configurations). It uses the shared IOsonata directory structure. Flash
+(`STM32WBA65xx`), including the Bluetooth stack glue (see Bluetooth in the
+library). It uses the shared IOsonata directory structure. Flash
 and SRAM size do not define a separate library variant; applications select
 their linker script. A different peripheral inventory or interrupt vector
 layout requires a separate library configuration.
@@ -39,8 +39,7 @@ STM32CubeWBA release. Do not compile WBA5x startup or link with the WBA5x
 1 MB/128 KB linker script. The STM32WBA Bluetooth adapter in `../src/`
 additionally requires the CubeWBA HAL and BLE application headers.
 `bt_adv_stm32wba.cpp`, `bt_app_stm32wba.cpp`, `bt_gap_stm32wba.cpp` and
-`bt_gatt_stm32wba.cpp` include `stm32wbaxx_hal.h`. They are excluded from the
-Debug and Release configurations and built by Debug_BLE and Release_BLE.
+`bt_gatt_stm32wba.cpp` include `stm32wbaxx_hal.h`.
 
 ## UART example projects
 
@@ -229,10 +228,10 @@ Not tested on hardware.
 The WBA65 device header is `../include/stm32wba65xx.h` in this repository.
 The library and example include paths find it before the STM32CubeWBA paths.
 The library build needs the `external/Fusion` checkout made by the IOsonata
-installer for `att_xiot_fusion.cpp`; STM32CubeWBA is needed only for the
-Debug_BLE and Release_BLE configurations. The shared
-system module sets the core
-clock to 100 MHz, see Core clock.
+installer for `att_xiot_fusion.cpp`, and the `external/STM32CubeWBA` and
+`external/stm32-mw-wpan` checkouts for the Bluetooth sources (see External
+middleware checkout). The shared system module sets the core clock to 100 MHz,
+see Core clock.
 
 The existing `gcc_arm_flash.ld` calls IOsonata `ResetEntry` and places
 `__Vectors` in `.ivector`. Do not link the STM32CubeWBA GCC startup module
@@ -243,8 +242,8 @@ in the same image or two startup/vector definitions will conflict.
 The ST Bluetooth link layer is a closed library. Its platform files (`bleplat.c`,
 `linklayer_plat.c`, `ll_sys_if.c`, `power_table.c`, `pka_ctrl.c`, `hw_pka.c`,
 `hw_pka_p256.c`) are ST sources under the ST license, so they stay in the ST
-repositories and are not copied into IOsonata. The Debug_BLE and Release_BLE
-library configurations build them from the STM32CubeWBA checkout.
+repositories and are not copied into IOsonata. The library builds them from the
+STM32CubeWBA checkout.
 
 The IOsonata clone scripts in `Installer` clone both repositories at matching
 versions, next to the other `external` repositories:
@@ -270,7 +269,7 @@ has `hw_pka.c` and `hw_pka_p256.c`, and a newer `stm32-mw-wpan` does not match
 the Cube 1.9.0 platform files. The IOC project uses `external/stm32-mw-wpan/ble/`
 and `external/stm32-mw-wpan/link_layer/` for the BLE middleware headers, and
 STM32CubeWBA for the platform files, the HAL headers and `Utilities/tim_serv`.
-The BLE configurations define `PHY_40nm_3_40_a` and `BLE_STACK_BASIC_FEATURES`,
+The library defines `PHY_40nm_3_40_a` and `BLE_STACK_BASIC_FEATURES`,
 as the ST WBA65 project does, so the link layer headers match the prebuilt
 library.
 
@@ -360,16 +359,15 @@ sleep timer clock before `BleStack_Init`: LSE when `g_McuOsc.LowPwrOsc.Type`
 is not `OSC_TYPE_RC`, LSI1 otherwise. Without it the link layer stops on a
 missing sleep clock source.
 
-## Bluetooth library configurations
+## Bluetooth in the library
 
-Debug_BLE and Release_BLE of `lib/ioc` build the Debug and Release library plus
-everything the ST Bluetooth stack needs, so an application project links one
-library and the two ST prebuilt archives and holds only its own sources:
+The Debug and Release configurations of `lib/ioc` include everything the ST
+Bluetooth stack needs, so an application project links the library and the two
+ST prebuilt archives and holds only its own sources:
 
 - the adapter sources `bt_{app,adv,scan,gap,gatt,smp_bond,pds}_stm32wba.cpp` and
-  `bt_wba_platform.cpp`, which Debug and Release exclude. Debug_BLE and
-  Release_BLE exclude the HCI versions `bt_{adv,gap,gatt,scan}_hci.cpp`, which
-  define the same functions;
+  `bt_wba_platform.cpp`. The configurations exclude the HCI versions
+  `bt_{adv,gap,gatt,scan}_hci.cpp`, which define the same functions;
 - `nvm_stm32.cpp` for the bond storage;
 - `src/bleplat_wrap.c`, which renames the Cube `BLEPLAT_NvmStore` and includes
   `bleplat.c`, so no per file compiler option is needed;
@@ -377,26 +375,27 @@ library and the two ST prebuilt archives and holds only its own sources:
   `power_table.c`, `pka_ctrl.c`, `hw_pka.c`, `hw_pka_p256.c` and the WPAN
   `ll_sys_startup.c`, `ll_sys_intf.c`, `ll_sys_cs.c`, `ll_sys_dp_slp.c`, found
   through the `external` folder (see External middleware checkout);
-- the configuration headers `include/app_conf.h`, `common_wpan_conf.h`,
-  `utilities_conf.h`, `app_common.h`, `stm32_rtos.h`, `main.h` and
-  `stm32wbaxx_hal_conf.h`. They come from ST's BLE_p2pServer, with
-  `CFG_SCM_SUPPORTED` 0, temperature calibration 0 and logging 0.
+- the headers `include/app_conf.h`, `app_common.h`, `utilities_conf.h`,
+  `stm32_rtos.h`, `common_wpan_conf.h` and `main.h`. The ST platform files
+  include them by name. They are written for IOsonata (MIT) and define only
+  what the built files use: the radio and PKA interrupt numbers and
+  priorities, the link layer task identifiers, the power table selection and
+  the sequencer prototypes that `bt_wba_platform.cpp` implements. They are not
+  copies of the ST BLE_p2pServer files, which are under the ST license.
 
-The BLE configurations define `STM32WBA65xx`, `BLE_LL`, `IOSONATA_STM32_WBA`,
+The configurations define `STM32WBA65xx`, `BLE_LL`, `IOSONATA_STM32_WBA`,
 `PHY_40nm_3_40_a` and `BLE_STACK_BASIC_FEATURES`, and pass
 `-include cmsis_compiler.h` to the C compiler. Do not define `USE_HAL_DRIVER`,
 `stm32wbaxx.h` would then pull in the HAL and its macros clash with the IOsonata
 UART names.
 
-The Debug and Release configurations do not compile any of the Cube or WPAN
-platform files. They still use the Cube headers listed in their include paths.
 
 ## Bluetooth example project
 
 `exemples/BleAdvertiser/ioc` is the IOcomposer project for
 `exemples/bluetooth/ble_advertiser.cpp`. The project holds `ble_advertiser.cpp`
-and `src/board.h` only. It links `IOsonata_STM32WBA65` from `lib/ioc/Debug_BLE`
-or `lib/ioc/Release_BLE` (build that configuration first) and the two ST stack
+and `src/board.h` only. It links `IOsonata_STM32WBA65` from `lib/ioc/Debug`
+or `lib/ioc/Release` (build the same configuration first) and the two ST stack
 archives `stm32wba_ble_stack_basic_plus.a` and
 `WBA6_LinkLayer_BLE_Basic_Plus_lib.a` from `external/stm32-mw-wpan`.
 
@@ -411,7 +410,7 @@ hardware test of the stack, RNG, timer and sequencer code.
 
 ## First hardware test of BleAdvertiser
 
-1. Build the library project (Debug_BLE), then BleAdvertiser (Debug), flash the
+1. Build the library project (Debug), then BleAdvertiser (Debug), flash the
    DK1 through the ST-LINK.
 2. Open the first virtual COM port at 115200 baud. The example prints the
    `BleStack_Init` result and advertising state through SysLog.

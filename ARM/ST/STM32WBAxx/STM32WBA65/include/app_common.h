@@ -1,29 +1,38 @@
-/* USER CODE BEGIN Header */
-/**
-  ******************************************************************************
-  * @file    app_common.h
-  * @author  MCD Application Team
-  * @brief   App Common application configuration file for STM32WPAN Middleware.
-  ******************************************************************************
-  * @attention
-  *
-  * Copyright (c) 2022 STMicroelectronics.
-  * All rights reserved.
-  *
-  * This software is licensed under terms that can be found in the LICENSE file
-  * in the root directory of this software component.
-  * If no LICENSE file comes with this software, it is provided AS-IS.
-  *
-  ******************************************************************************
-  */
-/* USER CODE END Header */
-/* Define to prevent recursive inclusion -------------------------------------*/
-#ifndef APP_COMMON_H
-#define APP_COMMON_H
+/**-------------------------------------------------------------------------
+@file	app_common.h
 
-#ifdef __cplusplus
-extern "C"{
-#endif
+@brief	Common includes expected by the STM32CubeWBA platform files.
+
+@author	Hoang Nguyen Hoan
+@date	Oct. 16, 2026
+
+@license
+
+MIT License
+
+Copyright (c) 2026, I-SYST inc., all rights reserved
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is furnished
+to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+----------------------------------------------------------------------------*/
+#ifndef __APP_COMMON_H__
+#define __APP_COMMON_H__
 
 #include <stdint.h>
 #include <string.h>
@@ -36,81 +45,16 @@ extern "C"{
 #include "hw.h"
 #include "ll_sys.h"
 
-/* -------------------------------- *
- *  Basic definitions               *
- * -------------------------------- */
-#undef NULL
-#define NULL                    0
-
-#undef FALSE
-#define FALSE                   0
-
-#undef TRUE
-#define TRUE                    (!0)
-
-/* -------------------------------- *
- *  Critical Section definition     *
- * -------------------------------- */
-#define BACKUP_PRIMASK()    uint32_t primask_bit= __get_PRIMASK()
-#define DISABLE_IRQ()       __disable_irq()
-#define RESTORE_PRIMASK()   __set_PRIMASK(primask_bit)
-
-/* -------------------------------- *
- *  Macro delimiters                *
- * -------------------------------- */
-#define M_BEGIN     do {
-
-#define M_END       } while(0)
-
-/* -------------------------------- *
- *  Some useful macro definitions   *
- * -------------------------------- */
-#ifndef MAX
-#define MAX( x, y )          (((x)>(y))?(x):(y))
+#ifdef __cplusplus
+extern "C" {
 #endif
 
-#ifndef MIN
-#define MIN( x, y )          (((x)<(y))?(x):(y))
-#endif
-
-#define MODINC( a, m )       M_BEGIN  (a)++;  if ((a)>=(m)) (a)=0;  M_END
-
-#define MODDEC( a, m )       M_BEGIN  if ((a)==0) (a)=(m);  (a)--;  M_END
-
-#define MODADD( a, b, m )    M_BEGIN  (a)+=(b);  if ((a)>=(m)) (a)-=(m);  M_END
-
-#define MODSUB( a, b, m )    MODADD( a, (m)-(b), m )
-
-#define PAUSE( t )           M_BEGIN \
-                               __IO int _i; \
-                               for ( _i = t; _i > 0; _i -- ); \
-                             M_END
-
-#define DIVF( x, y )         ((x)/(y))
-
-#define DIVC( x, y )         (((x)+(y)-1)/(y))
-
-#define DIVR( x, y )         (((x)+((y)/2))/(y))
-
-#define SHRR( x, n )         ((((x)>>((n)-1))+1)>>1)
-
-#define BITN( w, n )         (((w)[(n)/32] >> ((n)%32)) & 1)
-
-#define BITNSET( w, n, b )   M_BEGIN (w)[(n)/32] |= ((U32)(b))<<((n)%32); M_END
-
-/* -------------------------------- *
- *  Compiler                         *
- * -------------------------------- */
-#define PLACE_IN_SECTION( __x__ )  __attribute__((section (__x__)))
-
-#ifdef WIN32
-#define ALIGN(n)
-#else
-#define ALIGN(n)             __attribute__((aligned(n)))
-#endif
+// Implemented in bt_wba_platform.cpp over the CMSIS NVIC functions
+void HAL_NVIC_EnableIRQ(IRQn_Type IRQn);
+void HAL_NVIC_DisableIRQ(IRQn_Type IRQn);
 
 #ifdef __cplusplus
-} /* extern "C" */
+}
 #endif
 
-#endif /*APP_COMMON_H */
+#endif

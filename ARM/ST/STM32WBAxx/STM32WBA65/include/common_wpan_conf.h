@@ -1,87 +1,39 @@
-/* USER CODE BEGIN Header */
-/**
-  ******************************************************************************
-  * @file    common_wpan_conf.h
-  * @author  MCD Application Team
-  * @brief   Configuration file for STM32 WPAN Common Utilities.
-  ******************************************************************************
-  * @attention
-  *
-  * Copyright (c) 2025 STMicroelectronics.
-  * All rights reserved.
-  *
-  * This software is licensed under terms that can be found in the LICENSE file
-  * in the root directory of this software component.
-  * If no LICENSE file comes with this software, it is provided AS-IS.
-  *
-  ******************************************************************************
-  */
-/* USER CODE END Header */
+/**-------------------------------------------------------------------------
+@file	common_wpan_conf.h
 
-/* Define to prevent recursive inclusion -------------------------------------*/
-#ifndef COMMON_WPAN_CONF_H
-#define COMMON_WPAN_CONF_H
+@brief	WPAN configuration expected by the STM32CubeWBA platform files.
 
-#ifdef __cplusplus
-extern "C" {
+@author	Hoang Nguyen Hoan
+@date	Oct. 16, 2026
+
+@license
+
+MIT License
+
+Copyright (c) 2026, I-SYST inc., all rights reserved
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is furnished
+to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+----------------------------------------------------------------------------*/
+#ifndef __COMMON_WPAN_CONF_H__
+#define __COMMON_WPAN_CONF_H__
+
+#include "app_conf.h"
+
 #endif
-
-#include "stm32_adv_trace.h"
-
-/******************************************************************************
- * System Clock Manager (SCM) configuration
- ******************************************************************************/
-typedef enum {
-  SCM_USER_APP,
-  SCM_USER_LL_FW,
-  SCM_USER_LL_HW_RCO_CLBR,
-  /* USER CODE BEGIN SCM_E */
-
-  /* USER CODE END SCM_E */
-  TOTAL_CLIENT_NUM, /* To be at the end of the enum */
-} scm_user_id_t;
-
-/* USER CODE BEGIN SCM_DBG1 */
-
-/* USER CODE END SCM_DBG1 */
-
-#ifdef SCM_DEBUG
-#define SCM_DBG_PRINTF(...) do{ {UTIL_ADV_TRACE_COND_FSend(VLEVEL_ALWAYS, T_REG_OFF, TS_OFF, __VA_ARGS__);} }while(0);
-
-/* USER CODE BEGIN SCM_DBG2 */
-
-/* USER CODE END SCM_DBG2 */
-#else
-#define SCM_DBG_PRINTF(...)
-#endif /* SCM_DEBUG */
-
-/******************************************************************************
- * Timer Interface configuration
- ******************************************************************************/
-#define RTC_N_PREDIV_S      (10U)
-#define RTC_PREDIV_S        ( ( 1U << RTC_N_PREDIV_S ) - 1U )
-#define RTC_PREDIV_A        ( ( 1U << ( 15U - RTC_N_PREDIV_S ) ) - 1U )
-
-/* USER CODE BEGIN TIF_RTC */
-
-/* USER CODE END TIF_RTC */
-
-/* USER CODE BEGIN TIF_DBG1 */
-
-/* USER CODE END TIF_DBG1 */
-
-#ifdef TIF_DEBUG
-#define TIMER_IF_DBG_PRINTF(...) do{ {UTIL_ADV_TRACE_COND_FSend(VLEVEL_ALWAYS, T_REG_OFF, TS_OFF, __VA_ARGS__);} }while(0);
-
-/* USER CODE BEGIN TIF_DBG2 */
-
-/* USER CODE END TIF_DBG2 */
-#else
-#define TIMER_IF_DBG_PRINTF(...)
-#endif /* TIF_DEBUG */
-
-#ifdef __cplusplus
-}
-#endif
-
-#endif /* COMMON_WPAN_CONF_H */
