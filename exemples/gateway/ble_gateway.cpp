@@ -457,8 +457,9 @@ static void LteUdpRecv(uint32_t Evt, void *pCtx)
 	(void)Evt;
 	(void)pCtx;
 
-	// Data arriving from here on queues the next read
+	// Allow the next socket callback to queue a read.
 	s_bRxPending = false;
+	s_bRxQueued = false;
 
 	uint8_t buf[LTE_UDP_RX_LEN];
 	int n;
