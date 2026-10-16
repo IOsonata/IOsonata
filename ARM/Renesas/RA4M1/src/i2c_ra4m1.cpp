@@ -247,7 +247,8 @@ static void Ra4m1I2cTrace(const Ra4m1I2cDev_t * const pDev, uint8_t Code, uint8_
 	rec->PeerSdaPfs = 0U;
 	rec->PeerSclPfs = 0U;
 
-	if (Code == RA4M1_I2C_TR_ABORT)
+	if (Code == RA4M1_I2C_TR_ABORT || Code == RA4M1_I2C_TR_BEGIN ||
+		Code == RA4M1_I2C_TR_START_POST)
 	{
 		const bool peer0 = pDev->DevNo != 0;
 		const R_IIC0_Type *peer = peer0 ? R_IIC0 : R_IIC1;
@@ -846,6 +847,8 @@ static bool Ra4m1I2cMasterBegin(Ra4m1I2cDev_t * const pDev, bool bRx,
 	{
 		reg->ICCR2 |= RA4M1_I2C_ICCR2_ST;
 	}
+
+	Ra4m1I2cTrace(pDev, RA4M1_I2C_TR_START_POST, 0U);
 
 	return true;
 }
