@@ -183,6 +183,27 @@ typedef struct
 
 } Ra4m1I2cDev_t;
 
+static Ra4m1I2cDev_t s_Ra4m1I2cDev[RA4M1_I2C_COUNT] = {
+	{
+		.DevNo = 0,
+		.pReg = R_IIC0,
+		.MstpMask = (1UL << 9),
+		.IrqRxi = (IRQn_Type)-1,
+		.IrqTxi = (IRQn_Type)-1,
+		.IrqTei = (IRQn_Type)-1,
+		.IrqEei = (IRQn_Type)-1,
+	},
+	{
+		.DevNo = 1,
+		.pReg = R_IIC1,
+		.MstpMask = (1UL << 8),
+		.IrqRxi = (IRQn_Type)-1,
+		.IrqTxi = (IRQn_Type)-1,
+		.IrqTei = (IRQn_Type)-1,
+		.IrqEei = (IRQn_Type)-1,
+	},
+};
+
 #if RA4M1_I2C_TRACE
 static Ra4m1I2cTrace_t s_Ra4m1I2cTrace[RA4M1_I2C_COUNT][RA4M1_I2C_TRACE_DEPTH];
 static uint32_t s_Ra4m1I2cTraceCnt[RA4M1_I2C_COUNT];
@@ -303,26 +324,7 @@ bool Ra4m1I2cTraceGet(int DevNo, uint32_t Idx, Ra4m1I2cTrace_t *pRec)
 }
 #endif
 
-static Ra4m1I2cDev_t s_Ra4m1I2cDev[RA4M1_I2C_COUNT] = {
-	{
-		.DevNo = 0,
-		.pReg = R_IIC0,
-		.MstpMask = (1UL << 9),
-		.IrqRxi = (IRQn_Type)-1,
-		.IrqTxi = (IRQn_Type)-1,
-		.IrqTei = (IRQn_Type)-1,
-		.IrqEei = (IRQn_Type)-1,
-	},
-	{
-		.DevNo = 1,
-		.pReg = R_IIC1,
-		.MstpMask = (1UL << 8),
-		.IrqRxi = (IRQn_Type)-1,
-		.IrqTxi = (IRQn_Type)-1,
-		.IrqTei = (IRQn_Type)-1,
-		.IrqEei = (IRQn_Type)-1,
-	},
-};
+
 
 static Ra4m1I2cDev_t *Ra4m1I2cHandle(DevIntrf_t * const pIntrf)
 {
