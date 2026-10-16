@@ -72,18 +72,11 @@ SOFTWARE.
 #include "bluetooth/bt_app.h"
 #include "bluetooth/bt_adv.h"
 #include "bluetooth/bt_adv_mandata.h"
-#if GATEWAY_GATT_ENABLE
 #include "bluetooth/bt_dev.h"
 #include "bluetooth/bt_gatt.h"
-#endif
 #include "net/sock_intrf.h"
 
 #include "board.h"
-
-// Disabled by default to preserve the validated advertisement-only gateway.
-#ifndef GATEWAY_GATT_ENABLE
-#define GATEWAY_GATT_ENABLE 0
-#endif
 
 #ifndef LTE_UDP_HOST
 #define LTE_UDP_HOST			"udp.example.com"
@@ -124,7 +117,6 @@ SOFTWARE.
 #define GATEWAY_SCAN_INTERVAL 1000U
 #define GATEWAY_SCAN_WINDOW 100U
 
-#if GATEWAY_GATT_ENABLE
 #define GATEWAY_TES_SERVICE 0x0200U
 #define GATEWAY_TES_TEMPERATURE 0x0201U
 #define GATEWAY_TES_PRESSURE 0x0202U
@@ -150,11 +142,10 @@ static bool s_GattHumidityValid = false;
 static int16_t s_GattTempCenti = 0;
 static uint32_t s_GattPressurePa = 0;
 static uint8_t s_GattHumidityPct = 0;
-#endif
 
 static const BtAppCfg_t s_BleAppCfg = {
-    .Role = GATEWAY_GATT_ENABLE ? BTAPP_ROLE_CENTRAL : BTAPP_ROLE_OBSERVER,
-    .PeriphDevMax = GATEWAY_GATT_ENABLE ? 1 : 0,
+    .Role = BTAPP_ROLE_CENTRAL,
+    .PeriphDevMax = 1,
     .CentralDevMax = 0,
     .pDevName = "IOsonataGateway",
 };
@@ -216,7 +207,6 @@ bool BtAppScanReport(int8_t Rssi, uint8_t AddrType, uint8_t Addr[6],
         s_SensorValid = true;
     }
     EnableInterrupt(irq);
-#if GATEWAY_GATT_ENABLE
     // Select the first BlueIO environmental advertiser. Once selected, a
     // reconnect is restricted to that address rather than random nearby peers.
     if (isTph && !s_GattConnecting &&
@@ -241,11 +231,9 @@ bool BtAppScanReport(int8_t Rssi, uint8_t AddrType, uint8_t Addr[6],
             return false;
         }
     }
-#endif
     return true;
 }
 
-#if GATEWAY_GATT_ENABLE
 void BtAppEvtConnected(uint16_t ConnHdl)
 {
     s_GattConnHdl = ConnHdl;
@@ -352,7 +340,6 @@ void BtGattClientNotified(uint16_t ConnHdl, uint16_t ValHdl,
         s_GattHumidityValid = true;
     }
 }
-#endif
 
 // Application event queue: LTE work, received data and the send timer
 alignas(4) uint8_t g_AppEvtHandlerQueMem[APPEVT_HANDLER_QUE_MEMSIZE(16)];
@@ -551,14 +538,12 @@ static void LteUdpSend(uint32_t Evt, void *pCtx)
     bool valid = false;
     bool sensorValid = false;
     uint8_t sensorType = 0U;
-#if GATEWAY_GATT_ENABLE
     bool gattTempValid = false;
     bool gattPressureValid = false;
     bool gattHumidityValid = false;
     int16_t gattTemperature = 0;
     uint32_t gattPressure = 0;
     uint8_t gattHumidity = 0;
-#endif
     uint8_t tph[8] = {};
     uint8_t sensorAddress[6] = {};
     const uint32_t irq = DisableInterrupt();
@@ -571,14 +556,12 @@ static void LteUdpSend(uint32_t Evt, void *pCtx)
     reports = s_ScanReports;
     sensorValid = s_SensorValid;
     sensorType = s_SensorType;
-#if GATEWAY_GATT_ENABLE
     gattTempValid = s_GattTempValid;
     gattPressureValid = s_GattPressureValid;
     gattHumidityValid = s_GattHumidityValid;
     gattTemperature = s_GattTempCenti;
     gattPressure = s_GattPressurePa;
     gattHumidity = s_GattHumidityPct;
-#endif
     for (unsigned i = 0; i < sizeof(sensorAddress); ++i)
     {
         sensorAddress[i] = s_SensorAddress[i];
@@ -638,7 +621,6 @@ static void LteUdpSend(uint32_t Evt, void *pCtx)
         }
         len += extra;
     }
-#if GATEWAY_GATT_ENABLE
     if (len > 0 && len < (int)sizeof(msg) &&
         (gattTempValid || gattPressureValid || gattHumidityValid))
     {
@@ -653,7 +635,6 @@ static void LteUdpSend(uint32_t Evt, void *pCtx)
         }
         len += extra;
     }
-#endif
     if (len <= 0 || len >= (int)sizeof(msg))
     {
         return;
