@@ -1487,9 +1487,9 @@ static void Ra4m1I2cPinConfig(const I2CCfg_t * const pCfg)
 		// The PFS driver preserves PODR, so a reset-low output latch must
 		// not be carried into an active master SCL output.
 		IOPinSet(pin->PortNo, pin->PinNo);
-		// Preserve the board's requested direction, including the SCL
-		// output direction. Do not force peripheral SCL to GPIO input.
-		IOPinConfig(pin->PortNo, pin->PinNo, pin->PinOp, pin->PinDir,
+		// Keep the IIC pads in bidirectional peripheral mode.
+		// Setting GPIO PDR on SCL held the bus low during bring-up.
+		IOPinConfig(pin->PortNo, pin->PinNo, pin->PinOp, IOPINDIR_BI,
 			IOPINRES_PULLUP, pin->Type);
 	}
 }
