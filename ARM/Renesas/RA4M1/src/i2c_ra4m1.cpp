@@ -522,6 +522,8 @@ static inline bool Ra4m1I2cBusy(const R_IIC0_Type * const pReg)
 	return (pReg->ICCR2 & RA4M1_I2C_CR2_BBSY) != 0U;
 }
 
+static void Ra4m1I2cPinConfig(const I2CCfg_t * const pCfg);
+
 static void Ra4m1I2cConfigure(Ra4m1I2cDev_t * const pDev)
 {
 	R_IIC0_Type *reg = pDev->pReg;
@@ -595,6 +597,10 @@ static void Ra4m1I2cConfigure(Ra4m1I2cDev_t * const pDev)
 
 	reg->ICFER = slave ? RA4M1_I2C_ICFER_SLAVE : RA4M1_I2C_ICFER_MASTER;
 	Ra4m1I2cClearFlags(reg, RA4M1_I2C_SR2_EVENTS);
+
+	// Select the peripheral pins only after the IIC registers are prepared,
+	// while IICRST still prevents bus activity.
+	Ra4m1I2cPinConfig(cfg);
 	reg->ICCR1 = 0x9FU;
 
 	if (!pDev->bEnabled)
@@ -1515,7 +1521,6 @@ static void Ra4m1I2cEnable(DevIntrf_t * const pIntrf)
 		return;
 	}
 
-	Ra4m1I2cPinConfig(&dev->pI2cDev->Cfg);
 	dev->bEnabled = true;
 	Ra4m1I2cConfigure(dev);
 }
@@ -1613,8 +1618,6 @@ static void Ra4m1I2cReset(DevIntrf_t * const pIntrf)
 
 	IOPinSet(sda->PortNo, sda->PinNo);
 	IOPinSet(scl->PortNo, scl->PinNo);
-	Ra4m1I2cPinConfig(&dev->pI2cDev->Cfg);
-
 	dev->bEnabled = enabled;
 	Ra4m1I2cConfigure(dev);
 }
@@ -1840,8 +1843,6 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfg)
 		pDev->pTRBuff[i] = NULL;
 		pDev->TRBuffLen[i] = 0;
 	}
-
-	Ra4m1I2cPinConfig(pCfg);
 
 	DevIntrf_t *intrf = &pDev->DevIntrf;
 	intrf->pDevData = dev;
