@@ -123,10 +123,10 @@ SOFTWARE.
 #define GATEWAY_TES_HUMIDITY 0x0203U
 
 static BtGapConnParams_t s_GattConnParams = {
-    .IntervalMin = 30.0f,
-    .IntervalMax = 75.0f,
-    .Latency = 0,
-    .Timeout = 4000,
+	.IntervalMin = 30.0f,
+	.IntervalMax = 75.0f,
+	.Latency = 0,
+	.Timeout = 4000,
 };
 
 static volatile uint16_t s_GattConnHdl = BT_CONN_HDL_INVALID;
@@ -144,19 +144,19 @@ static uint32_t s_GattPressurePa = 0;
 static uint8_t s_GattHumidityPct = 0;
 
 static const BtAppCfg_t s_BleAppCfg = {
-    .Role = BTAPP_ROLE_CENTRAL,
-    .PeriphDevMax = 1,
-    .CentralDevMax = 0,
-    .pDevName = "IOsonataGateway",
+	.Role = BTAPP_ROLE_CENTRAL,
+	.PeriphDevMax = 1,
+	.CentralDevMax = 0,
+	.pDevName = "IOsonataGateway",
 };
 
 static BtGapScanCfg_t s_BleScanCfg = {
-    .Type = BTSCAN_TYPE_ACTIVE,
-    .Param = {
-        .Interval = GATEWAY_SCAN_INTERVAL,
-        .Duration = GATEWAY_SCAN_WINDOW,
-        .Timeout = 0,
-    },
+	.Type = BTSCAN_TYPE_ACTIVE,
+	.Param = {
+		.Interval = GATEWAY_SCAN_INTERVAL,
+		.Duration = GATEWAY_SCAN_WINDOW,
+		.Timeout = 0,
+	},
 };
 
 static uint8_t s_ScanAddress[6];
@@ -169,136 +169,135 @@ static uint8_t s_SensorAddress[6] = {};
 static bool s_SensorValid = false;
 
 bool BtAppScanReport(int8_t Rssi, uint8_t AddrType, uint8_t Addr[6],
-                     size_t AdvLen, uint8_t *pAdvData)
+					 size_t AdvLen, uint8_t *pAdvData)
 {
-    (void)AddrType;
-    uint8_t manufacturer[32] = {};
-    const size_t manufacturerLen = BtAdvDataGetManData(
-        pAdvData, AdvLen, manufacturer, sizeof(manufacturer));
-    // Manufacturer record: two-byte company ID, BlueIO type, sensor bytes.
-    // Require a complete TPH payload before decoding its fixed-point fields.
-    const bool isBlueIo = manufacturerLen >= 9U &&
-        manufacturer[0] == (uint8_t)(ISYST_BLUETOOTH_ID & 0xFFU) &&
-        manufacturer[1] == (uint8_t)(ISYST_BLUETOOTH_ID >> 8);
-    const bool isTph = isBlueIo && manufacturerLen >= 11U &&
-        manufacturer[2] == BT_ADV_MANDATA_TYPE_TPH;
-    const bool isGas = isBlueIo &&
-        manufacturer[2] == BT_ADV_MANDATA_TYPE_GAS;
+	uint8_t manufacturer[32] = {};
+	const size_t manufacturerLen = BtAdvDataGetManData(
+		pAdvData, AdvLen, manufacturer, sizeof(manufacturer));
+	// Manufacturer record: two-byte company ID, BlueIO type, sensor bytes.
+	// Require a complete TPH payload before decoding its fixed-point fields.
+	const bool isBlueIo = manufacturerLen >= 9U &&
+		manufacturer[0] == (uint8_t)(ISYST_BLUETOOTH_ID & 0xFFU) &&
+		manufacturer[1] == (uint8_t)(ISYST_BLUETOOTH_ID >> 8);
+	const bool isTph = isBlueIo && manufacturerLen >= 11U &&
+		manufacturer[2] == BT_ADV_MANDATA_TYPE_TPH;
+	const bool isGas = isBlueIo &&
+		manufacturer[2] == BT_ADV_MANDATA_TYPE_GAS;
 
-    const uint32_t irq = DisableInterrupt();
-    for (unsigned i = 0; i < 6U; ++i)
-    {
-        s_ScanAddress[i] = Addr[i];
-    }
-    s_ScanRssi = Rssi;
-    ++s_ScanReports;
-    s_ScanValid = true;
-    if (isTph || isGas)
-    {
-        s_SensorType = manufacturer[2];
-        for (unsigned i = 0; i < sizeof(s_SensorAddress); ++i)
-        {
-            s_SensorAddress[i] = Addr[i];
-        }
-        for (unsigned i = 0; i < sizeof(s_SensorData); ++i)
-        {
-            s_SensorData[i] = manufacturer[i + 3U];
-        }
-        s_SensorValid = true;
-    }
-    EnableInterrupt(irq);
-    // Select the first BlueIO environmental advertiser. Once selected, a
-    // reconnect is restricted to that address rather than random nearby peers.
-    if (isTph && !s_GattConnecting &&
-        s_GattConnHdl == BT_CONN_HDL_INVALID)
-    {
-        if (!s_GattTargetValid)
-        {
-            memcpy(s_GattTargetAddress, Addr, 6);
-            s_GattTargetValid = true;
-        }
-        if (memcmp(s_GattTargetAddress, Addr, 6) == 0)
-        {
-            s_GattConnecting = true;
-            BtGapScanStop();
-            BtGapPeerAddr_t peer = { .Type = AddrType };
-            memcpy(peer.Addr, Addr, 6);
-            if (!BtGapConnect(&peer, &s_GattConnParams))
-            {
-                s_GattConnecting = false;
-                BtAppScan();
-            }
-            return false;
-        }
-    }
-    return true;
+	const uint32_t irq = DisableInterrupt();
+	for (unsigned i = 0; i < 6U; ++i)
+	{
+		s_ScanAddress[i] = Addr[i];
+	}
+	s_ScanRssi = Rssi;
+	++s_ScanReports;
+	s_ScanValid = true;
+	if (isTph || isGas)
+	{
+		s_SensorType = manufacturer[2];
+		for (unsigned i = 0; i < sizeof(s_SensorAddress); ++i)
+		{
+			s_SensorAddress[i] = Addr[i];
+		}
+		for (unsigned i = 0; i < sizeof(s_SensorData); ++i)
+		{
+			s_SensorData[i] = manufacturer[i + 3U];
+		}
+		s_SensorValid = true;
+	}
+	EnableInterrupt(irq);
+	// Select the first BlueIO environmental advertiser. Once selected, a
+	// reconnect is restricted to that address rather than random nearby peers.
+	if (isTph && !s_GattConnecting &&
+		s_GattConnHdl == BT_CONN_HDL_INVALID)
+	{
+		if (!s_GattTargetValid)
+		{
+			memcpy(s_GattTargetAddress, Addr, 6);
+			s_GattTargetValid = true;
+		}
+		if (memcmp(s_GattTargetAddress, Addr, 6) == 0)
+		{
+			s_GattConnecting = true;
+			BtGapScanStop();
+			BtGapPeerAddr_t peer = { .Type = AddrType };
+			memcpy(peer.Addr, Addr, 6);
+			if (!BtGapConnect(&peer, &s_GattConnParams))
+			{
+				s_GattConnecting = false;
+				BtAppScan();
+			}
+			return false;
+		}
+	}
+	return true;
 }
 
 void BtAppEvtConnected(uint16_t ConnHdl)
 {
-    s_GattConnHdl = ConnHdl;
-    s_GattConnecting = false;
-    BtDevice_t *pPeer = BtPeerFindByHdl(ConnHdl);
-    if (pPeer == nullptr || !BtAppDiscoverDevice(pPeer))
-    {
-        s_GattConnHdl = BT_CONN_HDL_INVALID;
-        BtAppDisconnectConn(ConnHdl);
-    }
+	s_GattConnHdl = ConnHdl;
+	s_GattConnecting = false;
+	BtDevice_t *pPeer = BtPeerFindByHdl(ConnHdl);
+	if (pPeer == nullptr || !BtAppDiscoverDevice(pPeer))
+	{
+		s_GattConnHdl = BT_CONN_HDL_INVALID;
+		BtAppDisconnectConn(ConnHdl);
+	}
 }
 
 void BtAppEvtDisconnected(uint16_t ConnHdl)
 {
-    (void)ConnHdl;
-    s_GattConnHdl = BT_CONN_HDL_INVALID;
-    s_GattTempHdl = BT_ATT_HANDLE_INVALID;
-    s_GattPressureHdl = BT_ATT_HANDLE_INVALID;
-    s_GattHumidityHdl = BT_ATT_HANDLE_INVALID;
-    s_GattTempValid = false;
-    s_GattPressureValid = false;
-    s_GattHumidityValid = false;
-    s_GattConnecting = false;
-    BtAppScan();
+	(void)ConnHdl;
+	s_GattConnHdl = BT_CONN_HDL_INVALID;
+	s_GattTempHdl = BT_ATT_HANDLE_INVALID;
+	s_GattPressureHdl = BT_ATT_HANDLE_INVALID;
+	s_GattHumidityHdl = BT_ATT_HANDLE_INVALID;
+	s_GattTempValid = false;
+	s_GattPressureValid = false;
+	s_GattHumidityValid = false;
+	s_GattConnecting = false;
+	BtAppScan();
 }
 
 void BtDeviceDiscovered(BtDevice_t *pDev)
 {
-    if (pDev == nullptr || pDev->Conn.Hdl != s_GattConnHdl)
-    {
-        return;
-    }
-    const int service = BtDeviceFindService(pDev, GATEWAY_TES_SERVICE);
-    if (service < 0)
-    {
-        BtAppDisconnectConn(pDev->Conn.Hdl);
-        return;
-    }
-    const uint16_t uuids[] = {
-        GATEWAY_TES_TEMPERATURE,
-        GATEWAY_TES_PRESSURE,
-        GATEWAY_TES_HUMIDITY,
-    };
-    volatile uint16_t *handles[] = {
-        &s_GattTempHdl,
-        &s_GattPressureHdl,
-        &s_GattHumidityHdl,
-    };
-    for (unsigned i = 0; i < 3; ++i)
-    {
-        const int index = BtDeviceFindCharacteristic(pDev, service, uuids[i]);
-        if (index < 0)
-        {
-            BtAppDisconnectConn(pDev->Conn.Hdl);
-            return;
-        }
-        const auto &characteristic = pDev->pServices[service].characteristics[index];
-        if (characteristic.cccd_handle == BT_ATT_HANDLE_INVALID ||
-            !BtAppEnableNotify(pDev->Conn.Hdl, characteristic.cccd_handle))
-        {
-            BtAppDisconnectConn(pDev->Conn.Hdl);
-            return;
-        }
-        *handles[i] = characteristic.characteristic.handle_value;
-    }
+	if (pDev == nullptr || pDev->Conn.Hdl != s_GattConnHdl)
+	{
+		return;
+	}
+	const int service = BtDeviceFindService(pDev, GATEWAY_TES_SERVICE);
+	if (service < 0)
+	{
+		BtAppDisconnectConn(pDev->Conn.Hdl);
+		return;
+	}
+	const uint16_t uuids[] = {
+		GATEWAY_TES_TEMPERATURE,
+		GATEWAY_TES_PRESSURE,
+		GATEWAY_TES_HUMIDITY,
+	};
+	volatile uint16_t *handles[] = {
+		&s_GattTempHdl,
+		&s_GattPressureHdl,
+		&s_GattHumidityHdl,
+	};
+	for (unsigned i = 0; i < 3; ++i)
+	{
+		const int index = BtDeviceFindCharacteristic(pDev, service, uuids[i]);
+		if (index < 0)
+		{
+			BtAppDisconnectConn(pDev->Conn.Hdl);
+			return;
+		}
+		const uint16_t cccd = pDev->pServices[service].characteristics[index].cccd_handle;
+		if (cccd == BT_ATT_HANDLE_INVALID ||
+			!BtAppEnableNotify(pDev->Conn.Hdl, cccd))
+		{
+			BtAppDisconnectConn(pDev->Conn.Hdl);
+			return;
+		}
+		*handles[i] = pDev->pServices[service].characteristics[index].characteristic.handle_value;
+	}
 }
 
 // The BlueIOThingy characteristic wire format is defined in BlueIOTes.cpp:
@@ -306,39 +305,39 @@ void BtDeviceDiscovered(BtDevice_t *pDev)
 // pressure: little-endian signed 32-bit hPa + decimal hundredths;
 // humidity: unsigned percentage byte.
 void BtGattClientNotified(uint16_t ConnHdl, uint16_t ValHdl,
-                          uint8_t *pData, uint16_t Len)
+						  uint8_t *pData, uint16_t Len)
 {
-    if (ConnHdl != s_GattConnHdl || pData == nullptr)
-    {
-        return;
-    }
-    if (ValHdl == s_GattTempHdl && Len == 2)
-    {
-        const int8_t integer = (int8_t)pData[0];
-        const uint8_t decimal = pData[1];
-        if (decimal < 100)
-        {
-            s_GattTempCenti = (int16_t)(integer * 100 +
-                (integer < 0 ? -(int16_t)decimal : (int16_t)decimal));
-            s_GattTempValid = true;
-        }
-    }
-    else if (ValHdl == s_GattPressureHdl && Len == 5)
-    {
-        const int32_t integer = (int32_t)((uint32_t)pData[0] |
-            ((uint32_t)pData[1] << 8) | ((uint32_t)pData[2] << 16) |
-            ((uint32_t)pData[3] << 24));
-        if (integer >= 0 && pData[4] < 100)
-        {
-            s_GattPressurePa = (uint32_t)integer * 100U + pData[4];
-            s_GattPressureValid = true;
-        }
-    }
-    else if (ValHdl == s_GattHumidityHdl && Len == 1 && pData[0] <= 100)
-    {
-        s_GattHumidityPct = pData[0];
-        s_GattHumidityValid = true;
-    }
+	if (ConnHdl != s_GattConnHdl || pData == nullptr)
+	{
+		return;
+	}
+	if (ValHdl == s_GattTempHdl && Len == 2)
+	{
+		const int8_t integer = (int8_t)pData[0];
+		const uint8_t decimal = pData[1];
+		if (decimal < 100)
+		{
+			s_GattTempCenti = (int16_t)(integer * 100 +
+				(integer < 0 ? -(int16_t)decimal : (int16_t)decimal));
+			s_GattTempValid = true;
+		}
+	}
+	else if (ValHdl == s_GattPressureHdl && Len == 5)
+	{
+		const int32_t integer = (int32_t)((uint32_t)pData[0] |
+			((uint32_t)pData[1] << 8) | ((uint32_t)pData[2] << 16) |
+			((uint32_t)pData[3] << 24));
+		if (integer >= 0 && pData[4] < 100)
+		{
+			s_GattPressurePa = (uint32_t)integer * 100U + pData[4];
+			s_GattPressureValid = true;
+		}
+	}
+	else if (ValHdl == s_GattHumidityHdl && Len == 1 && pData[0] <= 100)
+	{
+		s_GattHumidityPct = pData[0];
+		s_GattHumidityValid = true;
+	}
 }
 
 // Application event queue: LTE work, received data and the send timer
@@ -538,12 +537,12 @@ static void LteUdpSend(uint32_t Evt, void *pCtx)
     bool valid = false;
     bool sensorValid = false;
     uint8_t sensorType = 0U;
-    bool gattTempValid = false;
-    bool gattPressureValid = false;
-    bool gattHumidityValid = false;
-    int16_t gattTemperature = 0;
-    uint32_t gattPressure = 0;
-    uint8_t gattHumidity = 0;
+	bool gattTempValid = false;
+	bool gattPressureValid = false;
+	bool gattHumidityValid = false;
+	int16_t gattTemperature = 0;
+	uint32_t gattPressure = 0;
+	uint8_t gattHumidity = 0;
     uint8_t tph[8] = {};
     uint8_t sensorAddress[6] = {};
     const uint32_t irq = DisableInterrupt();
@@ -556,12 +555,12 @@ static void LteUdpSend(uint32_t Evt, void *pCtx)
     reports = s_ScanReports;
     sensorValid = s_SensorValid;
     sensorType = s_SensorType;
-    gattTempValid = s_GattTempValid;
-    gattPressureValid = s_GattPressureValid;
-    gattHumidityValid = s_GattHumidityValid;
-    gattTemperature = s_GattTempCenti;
-    gattPressure = s_GattPressurePa;
-    gattHumidity = s_GattHumidityPct;
+	gattTempValid = s_GattTempValid;
+	gattPressureValid = s_GattPressureValid;
+	gattHumidityValid = s_GattHumidityValid;
+	gattTemperature = s_GattTempCenti;
+	gattPressure = s_GattPressurePa;
+	gattHumidity = s_GattHumidityPct;
     for (unsigned i = 0; i < sizeof(sensorAddress); ++i)
     {
         sensorAddress[i] = s_SensorAddress[i];
