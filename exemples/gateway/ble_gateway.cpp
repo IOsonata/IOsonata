@@ -194,8 +194,10 @@ static const IOPinCfg_t s_UartPins[] = {
 	{UART_TX_PORT, UART_TX_PIN, UART_TX_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
 };
 
-// Resume a partial SysLog record whenever DMA frees console TX FIFO space.
-// SysLogFlush only drains stored records; it does not log, so this cannot recurse.
+// The UART callback runs in interrupt context. Only signal that more console
+// TX space is available; AppCheckStatus drains SysLog from the main context.
+static volatile bool s_bLogTxReady = false;
+
 static int GatewayUartEvt(UARTDev_t * const pDev, UART_EVT EvtId,
                           uint8_t *pBuffer, int BufferLen)
 {
@@ -205,7 +207,7 @@ static int GatewayUartEvt(UARTDev_t * const pDev, UART_EVT EvtId,
 
 	if (EvtId == UART_EVT_TXREADY)
 	{
-		(void)SysLogFlush(SysLogGet());
+		s_bLogTxReady = true;
 	}
 
 	return 0;
@@ -526,6 +528,12 @@ static void LteUdpTimerTrig(TimerDev_t * const pTimer, int TrigNo, void * const 
 // Retry timer events rejected by the shared BLE/LTE application queue.
 bool AppCheckStatus(void)
 {
+	if (s_bLogTxReady)
+	{
+		s_bLogTxReady = false;
+		(void)SysLogFlush(SysLogGet());
+	}
+
     BtAppCheckStatus();
     LteCheckStatus();
 
@@ -541,7 +549,8 @@ bool AppCheckStatus(void)
         s_bSendQueued = true;
     }
 
-    return !s_bSendPending && !s_bRxPending && !AppEvtHandlerPending();
+    return !s_bLogTxReady && !s_bSendPending && !s_bRxPending &&
+           !AppEvtHandlerPending();
 }
 
 static void LteUdpEvtHandler(LTE_EVT Evt, const LteStatus_t * const pStatus)
