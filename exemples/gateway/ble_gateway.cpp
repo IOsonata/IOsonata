@@ -264,12 +264,12 @@ static UART s_Uart;
 // 16 records of 192 bytes. A record the UART does not take in full stays in
 // the store and the rest goes out at the next log call. bBlocking keeps the
 // oldest records when the store is full.
-alignas(4) static uint8_t s_SysLogMem[SYSLOG_MEMSIZE(16, 192)];
+alignas(4) static uint8_t s_SysLogMem[SYSLOG_MEMSIZE(16, 288)];
 
 static const SysLogCfg_t s_SysLogCfg = {
 	.pMem = s_SysLogMem,
 	.MemSize = sizeof(s_SysLogMem),
-	.RecordLen = 192,
+	.RecordLen = 288,
 	.bBlocking = true,
 };
 
@@ -286,7 +286,7 @@ static volatile bool s_bSendQueued = false;
 // Prefix every application log line without changing the shared SysLog ABI.
 static int GatewayLog(const char *pFormat, ...)
 {
-    char detail[192];
+    char detail[256];
     va_list args;
     va_start(args, pFormat);
     const int len = vsnprintf(detail, sizeof(detail), pFormat, args);
@@ -616,12 +616,15 @@ int main()
 	{
 		GatewayLog( "Timer init failed\r\n");
 	}
-    else if ((s_bTimerReady = true, LteInit(&s_LteCfg)) == false)
-	{
-		GatewayLog( "LTE init failed\r\n");
-	}
-	else
-	{
+    else
+    {
+        s_bTimerReady = true;
+        if (LteInit(&s_LteCfg) == false)
+        {
+            GatewayLog("LTE init failed\r\n");
+        }
+        else
+        {
 		if (LteGetInfo(LTE_INFO_FWVER, info, sizeof(info)))
 		{
 			GatewayLog( "Modem firmware %s\r\n", info);
@@ -633,7 +636,8 @@ int main()
 		msTimerEnableTrigger(&s_TimerDev, LTE_UDP_TRIG_SEND, LTE_UDP_INTERVAL * 1000U,
 							 TIMER_TRIG_TYPE_CONTINUOUS, LteUdpTimerTrig, nullptr);
 		GatewayLog( "Attaching\r\n");
-	}
+        }
+    }
 
 	AppRun();
 
