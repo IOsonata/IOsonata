@@ -1489,7 +1489,7 @@ static void Ra4m1I2cPinConfig(const I2CCfg_t * const pCfg)
 		IOPinSet(pin->PortNo, pin->PinNo);
 		// Preserve the board's requested direction, including the SCL
 		// output direction. Do not force peripheral SCL to GPIO input.
-		IOPinConfig(pin->PortNo, pin->PinNo, pin->PinOp, pin->Dir,
+		IOPinConfig(pin->PortNo, pin->PinNo, pin->PinOp, pin->PinDir,
 			IOPINRES_PULLUP, pin->Type);
 	}
 }
