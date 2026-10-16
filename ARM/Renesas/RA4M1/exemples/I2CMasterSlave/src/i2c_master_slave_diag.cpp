@@ -6,6 +6,7 @@
 #include <stdint.h>
 
 #include "ra4m1xxx.h"
+#include "coredev/system_core_clock.h"
 #include "iopinctrl.h"
 #include "i2c_ra4m1.h"
 #include "board.h"
@@ -74,6 +75,12 @@ static void DumpUnit(const char *pName, int DevNo)
 void I2cMasterSlaveDiagnostics(const char *pWhen)
 {
 	printf("--- I2C diagnostics %s ---\r\n", pWhen);
+	printf("  MSTPCRB=%08lx SCKSCR=%02x SCKDIVCR=%08lx OPCCR=%02x SOPCCR=%02x\r\n",
+		(unsigned long)R_MSTP->MSTPCRB, R_SYSTEM->SCKSCR,
+		(unsigned long)R_SYSTEM->SCKDIVCR, R_SYSTEM->OPCCR, R_SYSTEM->SOPCCR);
+	printf("  ICLK=%lu PCLKB=%lu Hz\r\n",
+		(unsigned long)SystemCoreClockGet(),
+		(unsigned long)SystemPeriphClockGet(1));
 	DumpUnit("master", I2C_MASTER_DEVNO);
 	DumpUnit("slave", I2C_SLAVE_DEVNO);
 
