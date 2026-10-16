@@ -66,6 +66,7 @@ SOFTWARE.
 #include "syslog.h"
 #include "coredev/timer.h"
 #include "lte/lte.h"
+#include "istddef.h"
 #include "bluetooth/bt_app.h"
 #include "bluetooth/bt_adv.h"
 #include "bluetooth/bt_adv_mandata.h"
@@ -134,6 +135,7 @@ static uint32_t s_ScanReports = 0;
 static bool s_ScanValid = false;
 static uint8_t s_SensorType = 0U;
 static uint8_t s_SensorData[8] = {};
+static uint8_t s_SensorAddress[6] = {};
 static bool s_SensorValid = false;
 
 bool BtAppScanReport(int8_t Rssi, uint8_t AddrType, uint8_t Addr[6],
@@ -146,6 +148,8 @@ bool BtAppScanReport(int8_t Rssi, uint8_t AddrType, uint8_t Addr[6],
     // Manufacturer record: two-byte company ID, BlueIO type, sensor bytes.
     // Require a complete TPH payload before decoding its fixed-point fields.
     const bool isTph = manufacturerLen >= 11U &&
+        manufacturer[0] == (uint8_t)(ISYST_BLUETOOTH_ID & 0xFFU) &&
+        manufacturer[1] == (uint8_t)(ISYST_BLUETOOTH_ID >> 8) &&
         manufacturer[2] == BT_ADV_MANDATA_TYPE_TPH;
 
     const uint32_t irq = DisableInterrupt();
@@ -159,6 +163,10 @@ bool BtAppScanReport(int8_t Rssi, uint8_t AddrType, uint8_t Addr[6],
     if (isTph)
     {
         s_SensorType = manufacturer[2];
+        for (unsigned i = 0; i < sizeof(s_SensorAddress); ++i)
+        {
+            s_SensorAddress[i] = Addr[i];
+        }
         for (unsigned i = 0; i < sizeof(s_SensorData); ++i)
         {
             s_SensorData[i] = manufacturer[i + 3U];
@@ -303,6 +311,7 @@ static void LteUdpSend(uint32_t Evt, void *pCtx)
     bool valid = false;
     bool tphValid = false;
     uint8_t tph[8] = {};
+    uint8_t sensorAddress[6] = {};
     const uint32_t irq = DisableInterrupt();
     valid = s_ScanValid;
     for (unsigned i = 0; i < 6U; ++i)
@@ -312,6 +321,10 @@ static void LteUdpSend(uint32_t Evt, void *pCtx)
     rssi = s_ScanRssi;
     reports = s_ScanReports;
     tphValid = s_SensorValid;
+    for (unsigned i = 0; i < sizeof(sensorAddress); ++i)
+    {
+        sensorAddress[i] = s_SensorAddress[i];
+    }
     for (unsigned i = 0; i < sizeof(tph); ++i)
     {
         tph[i] = s_SensorData[i];
@@ -334,7 +347,10 @@ static void LteUdpSend(uint32_t Evt, void *pCtx)
         const uint16_t humidity = (uint16_t)tph[6] |
             ((uint16_t)tph[7] << 8);
         const int extra = snprintf(msg + len, sizeof(msg) - (size_t)len,
-                                   " tph_pa=%lu tph_centi_c=%d tph_centi_pct=%u",
+                                   " tag=%02x:%02x:%02x:%02x:%02x:%02x tph_pa=%lu tph_centi_c=%d tph_centi_pct=%u",
+                                   sensorAddress[5], sensorAddress[4],
+                                   sensorAddress[3], sensorAddress[2],
+                                   sensorAddress[1], sensorAddress[0],
                                    (unsigned long)pressure, (int)temperature,
                                    (unsigned)humidity);
         if (extra < 0 || extra >= (int)(sizeof(msg) - (size_t)len))
