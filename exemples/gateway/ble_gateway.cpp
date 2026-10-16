@@ -59,6 +59,7 @@ SOFTWARE.
 #include <stdint.h>
 #include <stdio.h>
 #include <stdarg.h>
+#include <string.h>
 
 #include "app_evt_handler.h"
 #include "coredev/interrupt.h"
@@ -111,7 +112,7 @@ SOFTWARE.
 #define LTE_UDP_TRIG_SEND		1
 
 // Longest message and longest received datagram printed
-#define LTE_UDP_MSG_LEN			160
+#define LTE_UDP_MSG_LEN			256
 #define LTE_UDP_RX_LEN			256
 
 // Application events
@@ -264,6 +265,9 @@ void BtAppEvtDisconnected(uint16_t ConnHdl)
     s_GattTempHdl = BT_ATT_HANDLE_INVALID;
     s_GattPressureHdl = BT_ATT_HANDLE_INVALID;
     s_GattHumidityHdl = BT_ATT_HANDLE_INVALID;
+    s_GattTempValid = false;
+    s_GattPressureValid = false;
+    s_GattHumidityValid = false;
     s_GattConnecting = false;
     BtAppScan();
 }
@@ -547,6 +551,14 @@ static void LteUdpSend(uint32_t Evt, void *pCtx)
     bool valid = false;
     bool sensorValid = false;
     uint8_t sensorType = 0U;
+#if GATEWAY_GATT_ENABLE
+    bool gattTempValid = false;
+    bool gattPressureValid = false;
+    bool gattHumidityValid = false;
+    int16_t gattTemperature = 0;
+    uint32_t gattPressure = 0;
+    uint8_t gattHumidity = 0;
+#endif
     uint8_t tph[8] = {};
     uint8_t sensorAddress[6] = {};
     const uint32_t irq = DisableInterrupt();
@@ -559,6 +571,14 @@ static void LteUdpSend(uint32_t Evt, void *pCtx)
     reports = s_ScanReports;
     sensorValid = s_SensorValid;
     sensorType = s_SensorType;
+#if GATEWAY_GATT_ENABLE
+    gattTempValid = s_GattTempValid;
+    gattPressureValid = s_GattPressureValid;
+    gattHumidityValid = s_GattHumidityValid;
+    gattTemperature = s_GattTempCenti;
+    gattPressure = s_GattPressurePa;
+    gattHumidity = s_GattHumidityPct;
+#endif
     for (unsigned i = 0; i < sizeof(sensorAddress); ++i)
     {
         sensorAddress[i] = s_SensorAddress[i];
@@ -618,6 +638,22 @@ static void LteUdpSend(uint32_t Evt, void *pCtx)
         }
         len += extra;
     }
+#if GATEWAY_GATT_ENABLE
+    if (len > 0 && len < (int)sizeof(msg) &&
+        (gattTempValid || gattPressureValid || gattHumidityValid))
+    {
+        const int extra = snprintf(msg + len, sizeof(msg) - (size_t)len,
+            " gatt_tc=%d gatt_pa=%lu gatt_h=%u",
+            gattTempValid ? (int)gattTemperature : 0,
+            gattPressureValid ? (unsigned long)gattPressure : 0UL,
+            gattHumidityValid ? (unsigned)gattHumidity : 0U);
+        if (extra < 0 || extra >= (int)(sizeof(msg) - (size_t)len))
+        {
+            return;
+        }
+        len += extra;
+    }
+#endif
     if (len <= 0 || len >= (int)sizeof(msg))
     {
         return;
