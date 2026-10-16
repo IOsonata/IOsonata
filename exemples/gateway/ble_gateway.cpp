@@ -317,6 +317,7 @@ static int GatewayLog(const char *pFormat, ...)
 
 // Data arrived and not read yet: queued once, kept when the queue refused it
 static volatile bool s_bRxPending = false;
+static volatile bool s_bRxQueued = false;
 
 static void LteUdpSend(uint32_t Evt, void *pCtx)
 {
@@ -479,7 +480,10 @@ static int LteUdpSockEvt(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId, uint8_t *p
 	if (EvtId == DEVINTRF_EVT_RX_DATA && s_bRxPending == false)
 	{
 		s_bRxPending = true;
-		AppEvtHandlerQue(LTE_UDP_EVT_RX, nullptr, LteUdpRecv);
+        if (AppEvtHandlerQue(LTE_UDP_EVT_RX, nullptr, LteUdpRecv))
+        {
+            s_bRxQueued = true;
+        }
 	}
 
 	return 0;
@@ -506,13 +510,19 @@ bool AppCheckStatus(void)
     BtAppCheckStatus();
     LteCheckStatus();
 
+    if (s_bRxPending && !s_bRxQueued &&
+        AppEvtHandlerQue(LTE_UDP_EVT_RX, nullptr, LteUdpRecv))
+    {
+        s_bRxQueued = true;
+    }
+
     if (s_bSendPending && !s_bSendQueued &&
         AppEvtHandlerQue(LTE_UDP_EVT_SEND, nullptr, LteUdpSend))
     {
         s_bSendQueued = true;
     }
 
-    return !s_bSendPending && !AppEvtHandlerPending();
+    return !s_bSendPending && !s_bRxPending && !AppEvtHandlerPending();
 }
 
 static void LteUdpEvtHandler(LTE_EVT Evt, const LteStatus_t * const pStatus)
