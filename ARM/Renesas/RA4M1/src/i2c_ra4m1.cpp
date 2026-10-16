@@ -1487,9 +1487,17 @@ static void Ra4m1I2cPinConfig(const I2CCfg_t * const pCfg)
 		// The PFS driver preserves PODR, so a reset-low output latch must
 		// not be carried into an active master SCL output.
 		IOPinSet(pin->PortNo, pin->PinNo);
-		// Keep the IIC pads in bidirectional peripheral mode.
-		// Setting GPIO PDR on SCL held the bus low during bring-up.
-		IOPinConfig(pin->PortNo, pin->PinNo, pin->PinOp, IOPINDIR_BI,
+		// SDA is bidirectional. Master SCL drives the clock while slave
+		// SCL only samples it; never configure slave SCL as an output.
+		IOPINDIR dir = IOPINDIR_BI;
+
+		if (i == I2C_SCL_IOPIN_IDX)
+		{
+			dir = pCfg->Mode == I2CMODE_MASTER ?
+				IOPINDIR_OUTPUT : IOPINDIR_INPUT;
+		}
+
+		IOPinConfig(pin->PortNo, pin->PinNo, pin->PinOp, dir,
 			IOPINRES_PULLUP, pin->Type);
 	}
 }
