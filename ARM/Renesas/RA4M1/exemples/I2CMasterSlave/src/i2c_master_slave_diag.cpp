@@ -56,6 +56,13 @@ static void DumpUnit(const char *pName, int DevNo)
 			(unsigned long)rec.Seq, TraceName(rec.Code), rec.Info, rec.MState, rec.ICCR1,
 			rec.ICCR2, rec.ICSR2, rec.ICFER, rec.ICMR3, rec.ICIER, rec.ICSER,
 			rec.PeerCR1, rec.PeerSR1, rec.PeerSR2, rec.PeerIER);
+
+		if (rec.Code == RA4M1_I2C_TR_ABORT)
+		{
+			printf("    PFS master SDA=%08lx SCL=%08lx slave SDA=%08lx SCL=%08lx\r\n",
+				(unsigned long)rec.SdaPfs, (unsigned long)rec.SclPfs,
+				(unsigned long)rec.PeerSdaPfs, (unsigned long)rec.PeerSclPfs);
+		}
 	}
 	if (cnt == 0U)
 		printf("  no trace events\r\n");
