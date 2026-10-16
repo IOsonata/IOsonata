@@ -247,6 +247,8 @@ bool BtAppScanReport(int8_t Rssi, uint8_t AddrType, uint8_t Addr[6],
 	return true;
 }
 
+static int GatewayLog(const char *pFormat, ...);
+
 void BtAppEvtConnected(uint16_t ConnHdl)
 {
 	s_GattConnHdl = ConnHdl;
