@@ -194,6 +194,23 @@ static const IOPinCfg_t s_UartPins[] = {
 	{UART_TX_PORT, UART_TX_PIN, UART_TX_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
 };
 
+// Resume a partial SysLog record whenever DMA frees console TX FIFO space.
+// SysLogFlush only drains stored records; it does not log, so this cannot recurse.
+static int GatewayUartEvt(UARTDev_t * const pDev, UART_EVT EvtId,
+                          uint8_t *pBuffer, int BufferLen)
+{
+	(void)pDev;
+	(void)pBuffer;
+	(void)BufferLen;
+
+	if (EvtId == UART_EVT_TXREADY)
+	{
+		(void)SysLogFlush(SysLogGet());
+	}
+
+	return 0;
+}
+
 static const UARTCfg_t s_UartCfg = {
 	.DevNo = UART_DEVNO,
 	.pIOPinMap = s_UartPins,
@@ -205,7 +222,7 @@ static const UARTCfg_t s_UartCfg = {
 	.FlowControl = UART_FLWCTRL_NONE,
 	.bIntMode = true,
 	.IntPrio = IRQ_PRIO_LOW,
-	.EvtCallback = nullptr,
+	.EvtCallback = GatewayUartEvt,
 	.bFifoBlocking = true,
 	.RxMemSize = 0,
 	.pRxMem = nullptr,
