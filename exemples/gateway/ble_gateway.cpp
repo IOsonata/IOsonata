@@ -255,6 +255,7 @@ void BtAppEvtConnected(uint16_t ConnHdl)
 	BtDevice_t *pPeer = BtPeerFindByHdl(ConnHdl);
 	if (pPeer == nullptr || !BtAppDiscoverDevice(pPeer))
 	{
+		GatewayLog("GATT discovery start failed, peer=%s\r\n", pPeer == nullptr ? "missing" : "present");
 		s_GattConnHdl = BT_CONN_HDL_INVALID;
 		BtAppDisconnectConn(ConnHdl);
 	}
@@ -285,6 +286,7 @@ void BtDeviceDiscovered(BtDevice_t *pDev)
 	const int service = BtDeviceFindService(pDev, GATEWAY_TES_SERVICE);
 	if (service < 0)
 	{
+		GatewayLog("GATT environmental service not found\r\n");
 		BtAppDisconnectConn(pDev->Conn.Hdl);
 		return;
 	}
@@ -303,6 +305,7 @@ void BtDeviceDiscovered(BtDevice_t *pDev)
 		const int index = BtDeviceFindCharacteristic(pDev, service, uuids[i]);
 		if (index < 0)
 		{
+			GatewayLog("GATT characteristic 0x%04x not found\r\n", (unsigned)uuids[i]);
 			BtAppDisconnectConn(pDev->Conn.Hdl);
 			return;
 		}
@@ -310,6 +313,7 @@ void BtDeviceDiscovered(BtDevice_t *pDev)
 		if (cccd == BT_ATT_HANDLE_INVALID ||
 			!BtAppEnableNotify(pDev->Conn.Hdl, cccd))
 		{
+			GatewayLog("GATT notify setup failed for 0x%04x\r\n", (unsigned)uuids[i]);
 			BtAppDisconnectConn(pDev->Conn.Hdl);
 			return;
 		}
