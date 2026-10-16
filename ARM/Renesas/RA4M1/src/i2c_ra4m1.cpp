@@ -190,8 +190,18 @@ static uint32_t s_Ra4m1I2cTraceCnt[RA4M1_I2C_COUNT];
 static void Ra4m1I2cTrace(const Ra4m1I2cDev_t * const pDev, uint8_t Code, uint8_t Info)
 {
 	const R_IIC0_Type *reg = pDev->pReg;
-	uint32_t n = s_Ra4m1I2cTraceCnt[pDev->DevNo]++;
-	Ra4m1I2cTrace_t *rec = &s_Ra4m1I2cTrace[pDev->DevNo][n % RA4M1_I2C_TRACE_DEPTH];
+	uint32_t n = s_Ra4m1I2cTraceCnt[pDev->DevNo];
+
+	// Keep the first events and stop when the table is full, so the first
+	// call of a run (and any refusal in it) is never overwritten by retries.
+	if (n >= RA4M1_I2C_TRACE_DEPTH)
+	{
+		return;
+	}
+
+	s_Ra4m1I2cTraceCnt[pDev->DevNo] = n + 1U;
+
+	Ra4m1I2cTrace_t *rec = &s_Ra4m1I2cTrace[pDev->DevNo][n];
 
 	rec->Seq = n + 1U;
 	rec->Code = Code;
