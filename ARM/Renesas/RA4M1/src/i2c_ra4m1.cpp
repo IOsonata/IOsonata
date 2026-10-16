@@ -221,11 +221,20 @@ static void Ra4m1I2cTrace(const Ra4m1I2cDev_t * const pDev, uint8_t Code, uint8_
 	rec->PeerSR1 = 0U;
 	rec->PeerSR2 = 0U;
 	rec->PeerIER = 0U;
+	rec->SdaPfs = 0U;
+	rec->SclPfs = 0U;
+	rec->PeerSdaPfs = 0U;
+	rec->PeerSclPfs = 0U;
 
 	if (Code == RA4M1_I2C_TR_ABORT)
 	{
 		const bool peer0 = pDev->DevNo != 0;
 		const R_IIC0_Type *peer = peer0 ? R_IIC0 : R_IIC1;
+		const IOPinCfg_t *sda = &pDev->pI2cDev->Cfg.pIOPinMap[I2C_SDA_IOPIN_IDX];
+		const IOPinCfg_t *scl = &pDev->pI2cDev->Cfg.pIOPinMap[I2C_SCL_IOPIN_IDX];
+
+		rec->SdaPfs = R_PFS->PORT[sda->PortNo].PIN[sda->PinNo].PmnPFS;
+		rec->SclPfs = R_PFS->PORT[scl->PortNo].PIN[scl->PinNo].PmnPFS;
 
 		if ((R_MSTP->MSTPCRB & (1UL << (peer0 ? 9 : 8))) == 0U)
 		{
@@ -233,6 +242,21 @@ static void Ra4m1I2cTrace(const Ra4m1I2cDev_t * const pDev, uint8_t Code, uint8_
 			rec->PeerSR1 = peer->ICSR1;
 			rec->PeerSR2 = peer->ICSR2;
 			rec->PeerIER = peer->ICIER;
+
+			const Ra4m1I2cDev_t *other = &s_Ra4m1I2cDev[1 - pDev->DevNo];
+
+			if (other->pI2cDev != NULL && other->pI2cDev->Cfg.pIOPinMap != NULL)
+			{
+				const IOPinCfg_t *peerSda =
+					&other->pI2cDev->Cfg.pIOPinMap[I2C_SDA_IOPIN_IDX];
+				const IOPinCfg_t *peerScl =
+					&other->pI2cDev->Cfg.pIOPinMap[I2C_SCL_IOPIN_IDX];
+
+				rec->PeerSdaPfs =
+					R_PFS->PORT[peerSda->PortNo].PIN[peerSda->PinNo].PmnPFS;
+				rec->PeerSclPfs =
+					R_PFS->PORT[peerScl->PortNo].PIN[peerScl->PinNo].PmnPFS;
+			}
 		}
 	}
 }
