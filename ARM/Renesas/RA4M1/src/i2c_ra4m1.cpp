@@ -500,13 +500,11 @@ static void Ra4m1I2cConfigure(Ra4m1I2cDev_t * const pDev)
 	const I2CCfg_t *cfg = &pDev->pI2cDev->Cfg;
 	const bool slave = cfg->Mode == I2CMODE_SLAVE;
 
-	// Vendor sequence: pins inactive, assert IICRST, enable the block while
-	// in reset, program it, then release reset. ICCR1 is changed with
-	// read-modify-write. SOWP reads as 1, so SCLO and SDAO are not written and
-	// keep their released reset value.
+	// Use the vendor reset sequence with explicit ICCR1 values. Do not
+	// preserve output-control bits from a previous transfer during recovery.
 	reg->ICIER = 0U;
-	reg->ICCR1 &= (uint8_t)~RA4M1_I2C_CR1_ICE;
-	reg->ICCR1 |= RA4M1_I2C_CR1_IICRST;
+	reg->ICCR1 = 0U;
+	reg->ICCR1 = 0x40U;
 
 	int32_t count = Ra4m1I2cTimeout(pDev);
 
@@ -531,7 +529,7 @@ static void Ra4m1I2cConfigure(Ra4m1I2cDev_t * const pDev)
 		return;
 	}
 
-	reg->ICCR1 |= RA4M1_I2C_CR1_ICE;
+	reg->ICCR1 = 0xC0U;
 
 	for (int i = 0; i < RA4M1_I2C_MAX_SLAVE_ADDR; i++)
 	{
@@ -569,7 +567,7 @@ static void Ra4m1I2cConfigure(Ra4m1I2cDev_t * const pDev)
 
 	reg->ICFER = slave ? RA4M1_I2C_ICFER_SLAVE : RA4M1_I2C_ICFER_MASTER;
 	Ra4m1I2cClearFlags(reg, RA4M1_I2C_SR2_EVENTS);
-	reg->ICCR1 &= (uint8_t)~RA4M1_I2C_CR1_IICRST;
+	reg->ICCR1 = 0x9FU;
 
 	if (!pDev->bEnabled)
 	{
