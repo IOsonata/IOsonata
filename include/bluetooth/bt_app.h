@@ -264,6 +264,9 @@ bool BtAppSecInit(void);
 
 void BtAppEvtConnected(uint16_t ConnHdl);
 void BtAppEvtDisconnected(uint16_t ConnHdl);
+// Called when a GATT client Write Request receives its ATT response.
+// Success is false for an ATT Error Response. No HCI details reach the app.
+void BtAppEvtWriteCompleted(uint16_t ConnHdl, bool Success);
 // Called once the link is encrypted (freshly paired or re-encrypted from a
 // stored bond). Only fires when the app config requests security. Weak default
 // is empty. Apps that gate work on encryption (e.g. a central reading
