@@ -229,7 +229,8 @@ The WBA65 device header is `../include/stm32wba65xx.h` in this repository.
 The library and example include paths find it before the STM32CubeWBA paths.
 The library build needs the `external/Fusion` checkout made by the IOsonata
 installer for `att_xiot_fusion.cpp`; STM32CubeWBA is needed only for the
-excluded Bluetooth adapter sources. The shared system module sets the core
+excluded Bluetooth adapter sources and the BleAdvertiser example. The shared
+system module sets the core
 clock to 100 MHz, see Core clock.
 
 The existing `gcc_arm_flash.ld` calls IOsonata `ResetEntry` and places
@@ -238,18 +239,38 @@ in the same image or two startup/vector definitions will conflict.
 
 ## External middleware checkout
 
-Clone the ST Bluetooth middleware independently of STM32CubeWBA:
+The ST Bluetooth link layer is a closed library. Its platform files (`bleplat.c`,
+`linklayer_plat.c`, `ll_sys_if.c`, `power_table.c`, `pka_ctrl.c`, `hw_pka.c`,
+`hw_pka_p256.c`) are ST sources under the ST license, so they stay in the ST
+repositories and are not copied into IOsonata. The BleAdvertiser example builds
+them from the STM32CubeWBA checkout.
+
+The IOsonata clone scripts in `Installer` clone both repositories at matching
+versions, next to the other `external` repositories:
+
+- `external/stm32-mw-wpan` at tag `v2.9.0`;
+- `external/STM32CubeWBA` at tag `v1.9.0`, with only `Projects/Common/WPAN`, the
+  NUCLEO-WBA65RI BLE_p2pServer project, `Utilities` and `Drivers`, and the HAL
+  and CMSIS device submodules.
+
+To clone them by hand:
 
 ```sh
 cd ~/swdev/external
-git clone https://github.com/STMicroelectronics/stm32-mw-wpan.git
+git clone --depth=1 --branch v2.9.0 https://github.com/STMicroelectronics/stm32-mw-wpan.git
+git clone --depth=1 --branch v1.9.0 --filter=blob:none --sparse https://github.com/STMicroelectronics/STM32CubeWBA.git
+cd STM32CubeWBA
+git sparse-checkout set Projects/Common/WPAN Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_p2pServer Utilities Drivers
+git submodule update --init --depth 1 Drivers/STM32WBAxx_HAL_Driver Drivers/CMSIS/Device/ST/STM32WBAxx
 ```
 
-The IOC project uses `external/stm32-mw-wpan/ble/` and
-`external/stm32-mw-wpan/link_layer/` for the BLE middleware headers.
-STM32CubeWBA remains the source for CMSIS, HAL, and `Utilities/tim_serv`.
-Use a WPAN revision compatible with the selected STM32CubeWBA version;
-ST documents component compatibility in STM32CubeWBA release notes.
+Do not use the default branch of either repository. STM32CubeWBA main no longer
+has `hw_pka.c` and `hw_pka_p256.c`, and a newer `stm32-mw-wpan` does not match
+the Cube 1.9.0 platform files. The IOC project uses `external/stm32-mw-wpan/ble/`
+and `external/stm32-mw-wpan/link_layer/` for the BLE middleware headers, and
+STM32CubeWBA for the platform files, the HAL headers and `Utilities/tim_serv`.
+The example defines `PHY_40nm_3_40_a` and `BLE_STACK_BASIC_FEATURES`, as the ST
+WBA65 project does, so the link layer headers match the prebuilt library.
 
 ## Bluetooth adapter status
 

@@ -828,7 +828,7 @@ extern "C" void PKACTRL_CB_Process(void)
 // so the mutex has nothing to wait for.
 extern "C" int PKACTRL_MutexTake(void)
 {
-	s_PkaMut++;
+	s_PkaMut = (uint8_t)(s_PkaMut + 1U);
 
 	return 0;
 }

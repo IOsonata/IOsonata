@@ -135,6 +135,7 @@ while [[ $# -gt 0 ]]; do
       echo "  • lwIP TCP/IP stack"
       echo "  • FreeRTOS-Kernel"
       echo "  • TinyUSB"
+      echo "  - ST stm32-mw-wpan v2.9.0 and STM32CubeWBA v1.9.0 (pinned)"
       echo ""
       exit 0
       ;;
@@ -214,6 +215,58 @@ clone_or_update_repo() {
 }
 
 # ---------------------------------------------------------
+# CLONE A REPOSITORY PINNED TO A TAG
+# ---------------------------------------------------------
+# A checkout that is already at the tag is kept. Any other checkout is
+# replaced, so a pinned repository never follows the default branch.
+
+clone_pinned_repo() {
+  local repo_url="$1"
+  local target_dir="$2"
+  local ref="$3"
+
+  if [[ -d "$target_dir" && "$MODE" != "force" ]]; then
+    local current
+    current=$(cd "$target_dir" && git describe --tags --exact-match 2>/dev/null || true)
+    if [[ "$current" == "$ref" ]]; then
+      echo "Keeping $target_dir at $ref"
+      return 0
+    fi
+  fi
+
+  rm -rf "$target_dir"
+  echo "Cloning $target_dir at $ref ..."
+  git clone --depth=1 --branch "$ref" "$repo_url" "$target_dir"
+}
+
+# STM32CubeWBA holds the platform files of the ST BLE link layer that the
+# STM32WBA examples build. Only the folders they use are checked out, with
+# the HAL and CMSIS device submodules.
+clone_cube_wba() {
+  local target_dir="$EXT/STM32CubeWBA"
+  local ref="v1.9.0"
+  local current=""
+
+  if [[ -d "$target_dir" && "$MODE" != "force" ]]; then
+    current=$(cd "$target_dir" && git describe --tags --exact-match 2>/dev/null || true)
+    if [[ "$current" == "$ref" && -f "$target_dir/Drivers/STM32WBAxx_HAL_Driver/Inc/stm32wbaxx_hal.h" ]]; then
+      echo "Keeping $target_dir at $ref"
+      return 0
+    fi
+  fi
+
+  rm -rf "$target_dir"
+  echo "Cloning $target_dir at $ref ..."
+  git clone --depth=1 --branch "$ref" --filter=blob:none --sparse \
+    https://github.com/STMicroelectronics/STM32CubeWBA.git "$target_dir"
+  (cd "$target_dir" \
+    && git sparse-checkout set Projects/Common/WPAN \
+         Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_p2pServer Utilities Drivers \
+    && git submodule update --init --depth 1 \
+         Drivers/STM32WBAxx_HAL_Driver Drivers/CMSIS/Device/ST/STM32WBAxx)
+}
+
+# ---------------------------------------------------------
 # IOSONATA LIBRARY BUILD FUNCTION
 # ---------------------------------------------------------
 
@@ -243,7 +296,6 @@ repos=(
   "https://github.com/lwip-tcpip/lwip.git"
   "https://github.com/hathach/tinyusb.git"
   "https://github.com/Mbed-TLS/TF-PSA-Crypto.git"
-  "https://github.com/STMicroelectronics/stm32-mw-wpan.git"
 )
 
 for repo in "${repos[@]}"; do
@@ -257,6 +309,13 @@ done
 echo ""
 echo -e "${BOLD}${BLUE}📦 Cloning FreeRTOS-Kernel...${RESET}"
 clone_or_update_repo "https://github.com/FreeRTOS/FreeRTOS-Kernel.git" "$EXT/FreeRTOS-Kernel" false
+
+# ST BLE middleware and the platform files it needs, matching versions:
+# STM32CubeWBA v1.9.0 uses stm32-mw-wpan v2.9.0.
+echo ""
+echo "Cloning ST BLE middleware..."
+clone_pinned_repo "https://github.com/STMicroelectronics/stm32-mw-wpan.git" "$EXT/stm32-mw-wpan" "v2.9.0"
+clone_cube_wba
 
 echo ""
 echo -e "${GREEN}✅ All repositories cloned successfully!${RESET}"
