@@ -138,10 +138,6 @@ static uint8_t s_GattNotifyStage = 0;
 static bool s_GattConnecting = false;
 static volatile bool s_GattConnectPending = false;
 static uint8_t s_GattTargetAddrType = 0;
-static volatile uint32_t s_GattConnAttempts = 0;
-static volatile uint32_t s_GattConnRejected = 0;
-static volatile uint32_t s_GattConnEstablished = 0;
-static volatile uint32_t s_GattDiscoveryDone = 0;
 static bool s_GattTargetValid = false;
 static uint8_t s_GattTargetAddress[6] = {};
 static bool s_GattTempValid = false;
@@ -170,9 +166,6 @@ static BtGapScanCfg_t s_BleScanCfg = {
 static uint8_t s_ScanAddress[6];
 static int8_t s_ScanRssi = 0;
 static uint32_t s_ScanReports = 0;
-static uint32_t s_ManReports = 0;
-static uint32_t s_BlueIoReports = 0;
-static uint32_t s_TphReports = 0;
 static bool s_ScanValid = false;
 static uint8_t s_SensorType = 0U;
 static uint8_t s_SensorData[8] = {};
@@ -202,18 +195,6 @@ bool BtAppScanReport(int8_t Rssi, uint8_t AddrType, uint8_t Addr[6],
 	}
 	s_ScanRssi = Rssi;
 	++s_ScanReports;
-	if (manufacturerLen > 0U)
-	{
-		++s_ManReports;
-	}
-	if (isBlueIo)
-	{
-		++s_BlueIoReports;
-	}
-	if (isTph)
-	{
-		++s_TphReports;
-	}
 	s_ScanValid = true;
 	if (isTph || isGas)
 	{
@@ -254,8 +235,8 @@ static int GatewayLog(const char *pFormat, ...);
 void BtAppEvtConnected(uint16_t ConnHdl)
 {
 	s_GattConnHdl = ConnHdl;
-	++s_GattConnEstablished;
 	s_GattConnecting = false;
+	GatewayLog("GATT connected, handle=%u\r\n", (unsigned)ConnHdl);
 	BtDevice_t *pPeer = BtPeerFindByHdl(ConnHdl);
 	if (pPeer == nullptr || !BtAppDiscoverDevice(pPeer))
 	{
@@ -267,7 +248,7 @@ void BtAppEvtConnected(uint16_t ConnHdl)
 
 void BtAppEvtDisconnected(uint16_t ConnHdl)
 {
-	(void)ConnHdl;
+	GatewayLog("GATT disconnected, handle=%u\r\n", (unsigned)ConnHdl);
 	s_GattConnHdl = BT_CONN_HDL_INVALID;
 	s_GattTempHdl = BT_ATT_HANDLE_INVALID;
 	s_GattPressureHdl = BT_ATT_HANDLE_INVALID;
@@ -283,7 +264,6 @@ void BtAppEvtDisconnected(uint16_t ConnHdl)
 
 void BtDeviceDiscovered(BtDevice_t *pDev)
 {
-	++s_GattDiscoveryDone;
 	if (pDev == nullptr || pDev->Conn.Hdl != s_GattConnHdl)
 	{
 		return;
@@ -346,6 +326,10 @@ void BtAppEvtWriteCompleted(uint16_t ConnHdl, bool Success)
 		return;
 	}
 	++s_GattNotifyStage;
+	if (s_GattNotifyStage == 3U)
+	{
+		GatewayLog("GATT environmental notifications enabled\r\n");
+	}
 	if (s_GattNotifyStage < 3U &&
 		!BtAppEnableNotify(ConnHdl, s_GattCccdHdl[s_GattNotifyStage]))
 	{
@@ -589,9 +573,6 @@ static void LteUdpSend(uint32_t Evt, void *pCtx)
 	uint8_t address[6] = {};
     int8_t rssi = 0;
     uint32_t reports = 0;
-	uint32_t manReports = 0;
-	uint32_t blueIoReports = 0;
-	uint32_t tphReports = 0;
     bool valid = false;
     bool sensorValid = false;
     uint8_t sensorType = 0U;
@@ -601,10 +582,6 @@ static void LteUdpSend(uint32_t Evt, void *pCtx)
 	int16_t gattTemperature = 0;
 	uint32_t gattPressure = 0;
 	uint8_t gattHumidity = 0;
-	uint32_t connAttempts = 0;
-	uint32_t connRejected = 0;
-	uint32_t connEstablished = 0;
-	uint32_t discoveryDone = 0;
     uint8_t tph[8] = {};
     uint8_t sensorAddress[6] = {};
     const uint32_t irq = DisableInterrupt();
@@ -615,9 +592,6 @@ static void LteUdpSend(uint32_t Evt, void *pCtx)
     }
     rssi = s_ScanRssi;
     reports = s_ScanReports;
-	manReports = s_ManReports;
-	blueIoReports = s_BlueIoReports;
-	tphReports = s_TphReports;
     sensorValid = s_SensorValid;
     sensorType = s_SensorType;
 	gattTempValid = s_GattTempValid;
@@ -626,10 +600,6 @@ static void LteUdpSend(uint32_t Evt, void *pCtx)
 	gattTemperature = s_GattTempCenti;
 	gattPressure = s_GattPressurePa;
 	gattHumidity = s_GattHumidityPct;
-	connAttempts = s_GattConnAttempts;
-	connRejected = s_GattConnRejected;
-	connEstablished = s_GattConnEstablished;
-	discoveryDone = s_GattDiscoveryDone;
     for (unsigned i = 0; i < sizeof(sensorAddress); ++i)
     {
         sensorAddress[i] = s_SensorAddress[i];
@@ -697,20 +667,6 @@ static void LteUdpSend(uint32_t Evt, void *pCtx)
             gattTempValid ? (int)gattTemperature : 0,
             gattPressureValid ? (unsigned long)gattPressure : 0UL,
             gattHumidityValid ? (unsigned)gattHumidity : 0U);
-        if (extra < 0 || extra >= (int)(sizeof(msg) - (size_t)len))
-        {
-            return;
-        }
-        len += extra;
-    }
-    if (len > 0 && len < (int)sizeof(msg))
-    {
-        const int extra = snprintf(msg + len, sizeof(msg) - (size_t)len,
-            " man=%lu blueio=%lu tph=%lu gatt_attempt=%lu rejected=%lu linked=%lu discovered=%lu",
-            (unsigned long)manReports, (unsigned long)blueIoReports,
-            (unsigned long)tphReports,
-            (unsigned long)connAttempts, (unsigned long)connRejected,
-            (unsigned long)connEstablished, (unsigned long)discoveryDone);
         if (extra < 0 || extra >= (int)(sizeof(msg) - (size_t)len))
         {
             return;
@@ -809,7 +765,6 @@ bool AppCheckStatus(void)
 	{
 		s_GattConnectPending = false;
 		s_GattConnecting = true;
-		++s_GattConnAttempts;
 
 		BtGapPeerAddr_t peer = {};
 		peer.Type = s_GattTargetAddrType;
@@ -818,7 +773,6 @@ bool AppCheckStatus(void)
 
 		if (!BtGapConnect(&peer, &s_GattConnParams))
 		{
-			++s_GattConnRejected;
 			s_GattConnecting = false;
 			BtAppScan();
 		}
