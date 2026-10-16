@@ -67,6 +67,8 @@ SOFTWARE.
 #include "coredev/timer.h"
 #include "lte/lte.h"
 #include "bluetooth/bt_app.h"
+#include "bluetooth/bt_adv.h"
+#include "bluetooth/bt_adv_mandata.h"
 #include "net/sock_intrf.h"
 
 #include "board.h"
@@ -130,13 +132,21 @@ static uint8_t s_ScanAddress[6];
 static int8_t s_ScanRssi = 0;
 static uint32_t s_ScanReports = 0;
 static bool s_ScanValid = false;
+static uint8_t s_SensorType = 0U;
+static uint8_t s_SensorData[8] = {};
+static bool s_SensorValid = false;
 
 bool BtAppScanReport(int8_t Rssi, uint8_t AddrType, uint8_t Addr[6],
                      size_t AdvLen, uint8_t *pAdvData)
 {
     (void)AddrType;
-    (void)AdvLen;
-    (void)pAdvData;
+    uint8_t manufacturer[32] = {};
+    const size_t manufacturerLen = BtAdvDataGetManData(
+        pAdvData, AdvLen, manufacturer, sizeof(manufacturer));
+    // Manufacturer record: two-byte company ID, BlueIO type, sensor bytes.
+    // Require a complete TPH payload before decoding its fixed-point fields.
+    const bool isTph = manufacturerLen >= 11U &&
+        manufacturer[2] == BT_ADV_MANDATA_TYPE_TPH;
 
     const uint32_t irq = DisableInterrupt();
     for (unsigned i = 0; i < 6U; ++i)
@@ -146,6 +156,15 @@ bool BtAppScanReport(int8_t Rssi, uint8_t AddrType, uint8_t Addr[6],
     s_ScanRssi = Rssi;
     ++s_ScanReports;
     s_ScanValid = true;
+    if (isTph)
+    {
+        s_SensorType = manufacturer[2];
+        for (unsigned i = 0; i < sizeof(s_SensorData); ++i)
+        {
+            s_SensorData[i] = manufacturer[i + 3U];
+        }
+        s_SensorValid = true;
+    }
     EnableInterrupt(irq);
     return true;
 }
@@ -282,6 +301,8 @@ static void LteUdpSend(uint32_t Evt, void *pCtx)
     int8_t rssi = 0;
     uint32_t reports = 0;
     bool valid = false;
+    bool tphValid = false;
+    uint8_t tph[8] = {};
     const uint32_t irq = DisableInterrupt();
     valid = s_ScanValid;
     for (unsigned i = 0; i < 6U; ++i)
@@ -290,6 +311,11 @@ static void LteUdpSend(uint32_t Evt, void *pCtx)
     }
     rssi = s_ScanRssi;
     reports = s_ScanReports;
+    tphValid = s_SensorValid;
+    for (unsigned i = 0; i < sizeof(tph); ++i)
+    {
+        tph[i] = s_SensorData[i];
+    }
     EnableInterrupt(irq);
 
     int len = snprintf(msg, sizeof(msg),
@@ -298,6 +324,25 @@ static void LteUdpSend(uint32_t Evt, void *pCtx)
                        valid ? "" : "none/",
                        address[5], address[4], address[3],
                        address[2], address[1], address[0], (int)rssi);
+    if (tphValid && len > 0 && len < (int)sizeof(msg))
+    {
+        const uint32_t pressure = (uint32_t)tph[0] |
+            ((uint32_t)tph[1] << 8) | ((uint32_t)tph[2] << 16) |
+            ((uint32_t)tph[3] << 24);
+        const int16_t temperature = (int16_t)((uint16_t)tph[4] |
+            ((uint16_t)tph[5] << 8));
+        const uint16_t humidity = (uint16_t)tph[6] |
+            ((uint16_t)tph[7] << 8);
+        const int extra = snprintf(msg + len, sizeof(msg) - (size_t)len,
+                                   " tph_pa=%lu tph_centi_c=%d tph_centi_pct=%u",
+                                   (unsigned long)pressure, (int)temperature,
+                                   (unsigned)humidity);
+        if (extra < 0 || extra >= (int)(sizeof(msg) - (size_t)len))
+        {
+            return;
+        }
+        len += extra;
+    }
     if (len <= 0 || len >= (int)sizeof(msg))
     {
         return;
