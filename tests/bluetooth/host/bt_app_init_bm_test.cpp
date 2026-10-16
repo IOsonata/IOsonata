@@ -268,7 +268,6 @@ static void on_conn_params_evt(const struct ble_conn_params_evt *) {}
 struct ble_gap_sec_kdist_t {
 	uint8_t enc : 1;
 	uint8_t id : 1;
-	uint8_t sign : 1;
 	uint8_t link : 1;
 };
 
@@ -433,7 +432,7 @@ int main()
 		BT_CHECK(ctx, s_LastSecParams.min_key_size == BT_SMP_CFG_MIN_ENC_KEY_SIZE);
 		BT_CHECK(ctx, s_LastSecParams.max_key_size == BT_SMP_MAX_ENC_KEY_SIZE);
 		BT_CHECK(ctx, s_LastSecParams.kdist_own.enc == 1 && s_LastSecParams.kdist_own.id == 1);
-		BT_CHECK(ctx, s_LastSecParams.kdist_own.sign == 1 && s_LastSecParams.kdist_peer.sign == 1);
+		BT_CHECK(ctx, s_LastSecParams.kdist_peer.enc == 1 && s_LastSecParams.kdist_peer.id == 1);
 	});
 
 	ctx.Run("crypto engine failure stops security setup", [&]() {
