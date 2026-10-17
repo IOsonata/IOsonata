@@ -267,6 +267,14 @@ I2C of `STM32WBA65I_DK1`: SDA PB1, SCL PB2, AF4 (Arduino D14 and D15). These
 pins match the ST board support package for the DK1 (I2C1, SCL PB2, SDA PB1,
 AF4). The scan result is printed on USART2 through the UART retarget.
 
+`exemples/I2CMasterSlave` (`exemples/i2c/i2c_master_slave.cpp`) runs the master
+on I2C1 and the slave on I2C2 of the same chip. Master SDA PB1 (D14) and SCL
+PB2 (D15), slave SDA PB14 (D5) and SCL PB13 (D3), all AF4. Wire D14 to D5 and
+D15 to D3. The pin AF numbers come from the ST pin data for the STM32WBA65RI
+and the header position from the Zephyr connector map of the DK1. The
+example starts with a polling master and an interrupt slave; the flags are in
+`board.h`.
+
 Validation: the driver is checked by `tests/stm32wba/run_i2c.py` in an
 instruction set emulator with an I2C model and a GPDMA model (63 checks: polling,
 interrupt, DMA, slave). Not tested on hardware.
@@ -306,6 +314,14 @@ matches the ST board support package). The SPI pins come from the Zephyr board
 data and are not confirmed: the ST support package only uses SPI3 (SCK PA0,
 MISO PA1, MOSI PB8, AF6), which is wired to the on-board LCD and EEPROM.
 Confirm the header routing against UM3462 before wiring.
+
+`exemples/SPIMasterSlave` (`exemples/spi/spi_master_slave.cpp`) runs the slave
+on SPI2, AF5: SCK PB10 (D13), MISO PA9 (D12), MOSI PC3 (D11), NSS PB9 (D10).
+The master is the software SPI on header pins that no other peripheral
+needs: SCK PB13 (D3), MOSI PB0 (D6), MISO PA4 (A0), chip select PA10 (D8).
+Wire D3 to D13, D6 to D11, A0 to D12 and D8 to D10. The Zephyr connector map
+puts D10 to D13 on the SPI2 pins above, not on the SPI1 pins used by
+`SPILoopback`, so check which of the two sets the DK1 header carries.
 
 Validation: `tests/stm32wba/run_spi.py` runs the driver in an instruction set
 emulator with a model of the SPI registers, the GPDMA channels and the chip
