@@ -1,5 +1,5 @@
 /**-------------------------------------------------------------------------
-@example	ble_gateway.cpp
+@example	ble_gateway_taktos.cpp
 
 @brief	BLE advertisement observer with LTE-M UDP telemetry.
 
@@ -983,8 +983,8 @@ static void GatewayTask(void *pCtx)
     SysLogInit(SysLogGet(), &s_SysLogCfg, (DevIntrf_t *)s_Uart, 0, nullptr, 0);
     GatewayLog( "BleGatewayTaktOS UDP starting\r\n");
 
-    // Initialize Bluetooth before AppRun. BLE and LTE share the application
-    // event dispatcher, while the observer callback never calls the socket.
+    // BLE and LTE share the worker's application event dispatcher.
+    // The scan callback never calls the socket.
     bool bleReady = BtAppInit(&s_BleAppCfg);
     if (bleReady)
     {
