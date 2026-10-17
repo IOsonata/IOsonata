@@ -918,7 +918,7 @@ bool AppCheckStatus(void)
     {
         const uint32_t freq = TimerGetFrequency(&s_TimerDev);
         if (freq != 0U &&
-            (TimerGetTickCount(&s_TimerDev) - s_ConnectStartTicks) / freq >= 10U)
+            (TimerGetTickCount(&s_TimerDev) - s_ConnectStartTicks) / freq >= 30U)
         {
             if (BtGapConnectCancel())
             {
