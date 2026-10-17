@@ -259,10 +259,26 @@ bool BtAppScanReport(int8_t Rssi, uint8_t AddrType, uint8_t Addr[6],
 	const bool isBlueIo = manufacturerLen >= 9U &&
 		manufacturer[0] == (uint8_t)(ISYST_BLUETOOTH_ID & 0xFFU) &&
 		manufacturer[1] == (uint8_t)(ISYST_BLUETOOTH_ID >> 8);
-	const bool isTph = isBlueIo && manufacturerLen >= 11U &&
+	bool isTph = isBlueIo && manufacturerLen >= 11U &&
 		manufacturer[2] == BT_ADV_MANDATA_TYPE_TPH;
-	const bool isGas = isBlueIo &&
+	const bool isGas = isBlueIo && manufacturerLen >= 11U &&
 		manufacturer[2] == BT_ADV_MANDATA_TYPE_GAS;
+	if (isTph)
+	{
+		const uint32_t pressure = (uint32_t)manufacturer[3] |
+			((uint32_t)manufacturer[4] << 8) |
+			((uint32_t)manufacturer[5] << 16) |
+			((uint32_t)manufacturer[6] << 24);
+		const int16_t temperature = (int16_t)((uint16_t)manufacturer[7] |
+			((uint16_t)manufacturer[8] << 8));
+		const uint16_t humidity = (uint16_t)manufacturer[9] |
+			((uint16_t)manufacturer[10] << 8);
+		// Reject uninitialized or malformed sensor values before caching
+		// them or initiating a GATT connection.
+		isTph = pressure >= 30000U && pressure <= 120000U &&
+			temperature >= -4000 && temperature <= 8500 &&
+			humidity <= 10000U;
+	}
 
 	const uint32_t irq = DisableInterrupt();
 	for (unsigned i = 0; i < 6U; ++i)
