@@ -400,6 +400,7 @@
 									<listOptionValue builtIn="false" value="../../../../../../../../external/nrfx/bsp/stable/mdk/common"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs.1586342971.taktos" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs" useByScannerDiscovery="true" valueType="definedSymbols">
+									<listOptionValue builtIn="false" value="NRF91_MODEM_OS_TAKTOS"/>
 									<listOptionValue builtIn="false" value="uECC_ENABLE_VLI_API"/>
 									<listOptionValue builtIn="false" value="uECC_SQUARE_FUNC=1"/>
 									<listOptionValue builtIn="false" value="uECC_SUPPORTS_secp256r1=1"/>
@@ -440,6 +441,7 @@
 									<listOptionValue builtIn="false" value="../../../../../../../../external/nrfx/bsp/stable/mdk/common"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.defs.824842735.taktos" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.defs" useByScannerDiscovery="true" valueType="definedSymbols">
+									<listOptionValue builtIn="false" value="NRF91_MODEM_OS_TAKTOS"/>
 									<listOptionValue builtIn="false" value="uECC_ENABLE_VLI_API"/>
 									<listOptionValue builtIn="false" value="uECC_SQUARE_FUNC=1"/>
 									<listOptionValue builtIn="false" value="uECC_SUPPORTS_secp256r1=1"/>
@@ -478,7 +480,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/nrf_rpc.c|src/coredev/spi_nrf91.cpp|src/modem_os_nrf91.c" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/nrf_rpc.c|src/coredev/spi_nrf91.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -563,6 +565,7 @@
 									<listOptionValue builtIn="false" value="../../../../../../../../external/nrfx/bsp/stable/mdk/common"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs.401361609.taktos" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs" useByScannerDiscovery="true" valueType="definedSymbols">
+									<listOptionValue builtIn="false" value="NRF91_MODEM_OS_TAKTOS"/>
 									<listOptionValue builtIn="false" value="uECC_ENABLE_VLI_API"/>
 									<listOptionValue builtIn="false" value="uECC_SQUARE_FUNC=1"/>
 									<listOptionValue builtIn="false" value="uECC_SUPPORTS_secp256r1=1"/>
@@ -603,6 +606,7 @@
 									<listOptionValue builtIn="false" value="../../../../../../../../external/nrfx/bsp/stable/mdk/common"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.defs.51215947.taktos" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.defs" useByScannerDiscovery="true" valueType="definedSymbols">
+									<listOptionValue builtIn="false" value="NRF91_MODEM_OS_TAKTOS"/>
 									<listOptionValue builtIn="false" value="uECC_ENABLE_VLI_API"/>
 									<listOptionValue builtIn="false" value="uECC_SQUARE_FUNC=1"/>
 									<listOptionValue builtIn="false" value="uECC_SUPPORTS_secp256r1=1"/>
@@ -641,7 +645,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/nrf_rpc.c|src/coredev/spi_nrf91.cpp|src/modem_os_nrf91.c" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/nrf_rpc.c|src/coredev/spi_nrf91.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
