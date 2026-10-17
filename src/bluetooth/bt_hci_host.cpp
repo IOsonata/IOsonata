@@ -48,7 +48,7 @@ SOFTWARE.
 #include "syslog.h"
 
 // Temporary advertising restart diagnostics for Debug builds.
-#if defined(DEBUG) && !defined(NDEBUG)
+#if !defined(NDEBUG)
 #define ADV_TRACE(...) SysLogPrintf(SysLogGet(), __VA_ARGS__)
 #else
 #define ADV_TRACE(...)
