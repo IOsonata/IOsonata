@@ -117,6 +117,7 @@ typedef struct {
 	uint8_t *pEnd;
 } nRF91ModemArena_t;
 
+#ifndef NRF91_MODEM_OS_TAKTOS
 typedef struct {
 	atomic_uint Count;
 	unsigned int Limit;
@@ -126,6 +127,8 @@ typedef struct {
 	uint32_t Owner;					// IPSR of the holder, 0 for the main loop
 	uint32_t Count;					// Lock depth, 0 when free
 } nRF91ModemMutex_t;
+
+#endif
 
 // Glue state, with or without an RTOS
 typedef struct {
@@ -140,6 +143,7 @@ typedef struct {
 	uint32_t DfuResult;
 } nRF91ModemOs_t;
 
+#ifndef NRF91_MODEM_OS_TAKTOS
 // Bare metal wait state
 typedef struct {
 	uint32_t BusyMs;				// Time counted by the busy steps, no timer
@@ -153,6 +157,8 @@ typedef struct {
 	int NbMutex;
 	nRF91ModemMutex_t Mutex[NRF_MODEM_OS_NUM_MUTEX_REQUIRED];
 } nRF91ModemOsBm_t;
+
+#endif
 
 #pragma pack(pop)
 
@@ -178,7 +184,9 @@ static const char s_nRF91ModemHex[] = "0123456789ABCDEF";
 
 static nRF91ModemOs_t s_nRF91ModemOs;
 
+#ifndef NRF91_MODEM_OS_TAKTOS
 static nRF91ModemOsBm_t s_nRF91ModemOsBm;
+#endif
 
 // ---------------------------------------------------------------------------
 // Initialization
