@@ -355,6 +355,37 @@ nRF9160 DK, with the nRF52840 of the DK running HciController on the
 interface lines. Check the pins in its `board.h` against the board revision
 and the HciController build; the nRF52840 must route those lines.
 
+### BleGateway multi-tag environmental telemetry
+
+The [BleGateway example](../exemples/gateway/ble_gateway.cpp) on nRF91
+observes BlueIO manufacturer-specific TPH and GAS advertisements, initiates
+central-role connections to matching TPH tags, discovers the Thingy-compatible
+environmental service (UUID `0x0200`), and subscribes to temperature,
+pressure, and humidity (`0x0201`–`0x0203`). The application does not send
+HCI commands itself: it uses the GAP/GATT application APIs, and defers scanning
+and connection initiation until outside HCI event callbacks.
+
+The example provisions four central peer slots and four independent GATT
+discovery caches. Each connected tag owns its connection handle, characteristic
+handles, CCCDs and latest notification data. A disconnected slot can be reused
+for a newly discovered tag without replacing an active connection or pending
+initiation. The number of simultaneous links is also limited by the controller
+firmware's supported configuration.
+
+UDP telemetry identifies connected tags with entries such as
+`g0=aa:bb:cc:dd:ee:ff,2536,100798,47`: tag slot and address, temperature
+in centidegrees Celsius, pressure in pascals, and integer relative humidity
+percent. The slot number is not a persistent tag identity; use the address
+when correlating measurements. Advertisement fields are the most recently
+received advertisement snapshot and may remain unchanged while GATT is active.
+
+Two simultaneous BlueIOThingy links, independent environmental notifications,
+disconnect recovery, and combined LTE-M UDP echoes have been validated on
+nRF9160 with an external nRF52840 HciController. Occasional HCI disconnection
+reason `0x08` (connection timeout) was observed during long runs; the root
+cause was not established. Four simultaneous links and reuse after observing
+more than four distinct addresses have not been hardware validated.
+
 ## RTOS integration
 
 Override `BtEvtQue()`. The stack calls it, often from interrupt context, for
