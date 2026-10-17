@@ -530,6 +530,7 @@ void nrf_modem_os_logdump(int level, const char *str, const void *data, size_t l
 	}
 }
 
+#if !defined(NRF91_MODEM_OS_TAKTOS)
 // ---------------------------------------------------------------------------
 // Bare metal waits, semaphores and mutex. Weak, replaced for an RTOS.
 // ---------------------------------------------------------------------------
@@ -829,5 +830,7 @@ __attribute__((weak)) int nrf_modem_os_mutex_unlock(void *mutex)
 
 	return res;
 }
+
+#endif // NRF91_MODEM_OS_TAKTOS
 
 /** @} End of group LTE */
