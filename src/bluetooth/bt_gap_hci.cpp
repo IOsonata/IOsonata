@@ -314,18 +314,6 @@ bool BtGapScanNext(uint8_t * const pBuff, uint16_t Len)
 	return true;
 }
 
-bool BtGapConnectCancel(void)
-{
-	BtHciDevice_t *pDev = BtGapHciDev();
-	if (pDev == nullptr)
-	{
-		return false;
-	}
-
-	return BtHciCommand(pDev, BT_HCI_CMD_CTLR_CREATE_CONN_CANCEL,
-						NULL, 0, NULL, 0) == 0;
-}
-
 bool BtGapConnect(BtGapPeerAddr_t * const pPeerAddr, BtGapConnParams_t * const pConnParam)
 {
 	if (pPeerAddr == nullptr || pConnParam == nullptr)
