@@ -105,8 +105,8 @@ SOFTWARE.
 #define LTE_UDP_TRIG_SEND		1
 
 // Longest message and longest received datagram printed
-#define LTE_UDP_MSG_LEN			256
-#define LTE_UDP_RX_LEN			256
+#define LTE_UDP_MSG_LEN			512
+#define LTE_UDP_RX_LEN			512
 
 // Application events
 #define LTE_UDP_EVT_SEND		1
