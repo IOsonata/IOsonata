@@ -267,7 +267,7 @@ void BtAppEvtDisconnected(uint16_t ConnHdl)
 	s_GattHumidityValid = false;
 	s_GattConnecting = false;
 	s_GattConnectPending = false;
-	BtAppScan();
+	s_GattScanRestartPending = true;
 }
 
 void BtDeviceDiscovered(BtDevice_t *pDev)
@@ -766,8 +766,7 @@ bool AppCheckStatus(void)
 		(void)SysLogFlush(SysLogGet());
 	}
 
-	// An HCI scan report only selects the peer. Execute synchronous HCI
-	// commands after the report callback returns to the application loop.
+	// Issue scan and connection commands only outside HCI event callbacks.
 	if (s_GattScanRestartPending)
 	{
 		s_GattScanRestartPending = false;
@@ -788,7 +787,7 @@ bool AppCheckStatus(void)
 		if (!BtGapConnect(&peer, &s_GattConnParams))
 		{
 			s_GattConnecting = false;
-			BtAppScan();
+			s_GattScanRestartPending = true;
 		}
 	}
 
