@@ -29,6 +29,19 @@ Copyright (c) 2026, I-SYST inc., all rights reserved
 #include "bluetooth/bt_app.h"
 #include "bluetooth/bt_gap.h"
 
+static bool s_bScanning;
+
+bool BtScanIsActive(void)
+{
+	return s_bScanning;
+}
+
+void BtScanEnded(void)
+{
+	s_bScanning = false;
+}
+
+
 bool BtAppScanInit(BtGapScanCfg_t *pCfg)
 {
 	if (pCfg == NULL)
@@ -41,29 +54,25 @@ bool BtAppScanInit(BtGapScanCfg_t *pCfg)
 		return false;
 	}
 
-	g_BtAppData.bScan = true;
-	// ST's aci_gap_start_observation_procedure does not take a buffer -
-	// adv reports come back as HCI events. The args here are kept for
-	// API parity with the SoftDevice ports.
-	return BtGapScanStart(NULL, 0);
+	s_bScanning = BtGapScanStart(NULL, 0);
+	return s_bScanning;
 }
 
 void BtAppScan(void)
 {
-	if (g_BtAppData.bScan)
+	if (s_bScanning)
 	{
 		// ST stack keeps scanning until terminated. Just confirm.
 		BtGapScanNext(NULL, 0);
 	}
 	else
 	{
-		g_BtAppData.bScan = true;
-		BtGapScanStart(NULL, 0);
+		s_bScanning = BtGapScanStart(NULL, 0);
 	}
 }
 
 void BtAppScanStop(void)
 {
 	BtGapScanStop();
-	g_BtAppData.bScan = false;
+	s_bScanning = false;
 }

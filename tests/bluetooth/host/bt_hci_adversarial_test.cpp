@@ -103,9 +103,11 @@ void TestExtendedAdvEventNeedsCountByte()
 }
 
 int s_AdvTimeoutCount = 0;
+int s_AdvStoppedCount = 0;
 
 void AdvTimeout(void)
 {
+	BT_CHECK(s_Test, s_AdvStoppedCount == s_AdvTimeoutCount + 1);
 	s_AdvTimeoutCount++;
 }
 
@@ -140,11 +142,13 @@ void TestAdvSetTerminatedReadsStatus()
 	BtHciDevice_t dev = {};
 	dev.AdvTimeout = AdvTimeout;
 	s_AdvTimeoutCount = 0;
+	s_AdvStoppedCount = 0;
 
 	// A connection was created. Not a timeout.
 	FeedAdvSetTerminated(&dev, BT_HCI_SUCCESS,
 						 sizeof(BtHciLeEvtAdvSetTerminated_t));
 	BT_CHECK(s_Test, s_AdvTimeoutCount == 0);
+	BT_CHECK(s_Test, s_AdvStoppedCount == 0);
 
 	// The duration elapsed, and the advertising event count was met. Both are
 	// what the handler exists for.
@@ -305,4 +309,9 @@ int main()
 	s_Test.Run("advertising set terminated reads status",
 			   TestAdvSetTerminatedReadsStatus);
 	return s_Test.Finish();
+}
+
+void BtAdvHciStopped(void)
+{
+	++s_AdvStoppedCount;
 }

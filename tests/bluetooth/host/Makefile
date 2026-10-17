@@ -392,6 +392,7 @@ test: $(TARGETS)
 		echo "RUN $$target"; \
 		$(TEST_ENV) ./$$target; \
 	done
+	CXX="$(CXX)" $(PYTHON) bt_app_private_test.py
 	CXX="$(CXX)" $(PYTHON) bt_status_queue_test.py
 	CXX="$(CXX)" $(PYTHON) bt_example_work_test.py
 

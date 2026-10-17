@@ -34,6 +34,22 @@ Copyright (c) 2022, I-SYST inc., all rights reserved
 #include "bluetooth/bt_smp.h"
 #include "bluetooth/bt_appearance.h"
 
+static bool s_bAdvertising;
+static bool s_bAdvConfigured;
+static bool s_bExtAdv;
+static uint16_t s_AdvVendorId;
+
+// The controller stopped set 0. Called before its connection/timeout callback.
+void BtAdvHciStopped(void)
+{
+	s_bAdvertising = false;
+}
+
+
+// Internal controller access; not an application API.
+BtHciDevice_t *BtAppHciDevice(void);
+
+
 /******** For DEBUG Trace ************/
 // Define DEBUG_ENABLE to trace advertising state changes for this file. Output
 // goes to the SysLog transport the app configured. A release build defines
@@ -180,7 +196,7 @@ static inline void BtAdvWr24(uint8_t *p, uint32_t v)
 
 static inline BtHciDevice_t *BtAdvHciDev(void)
 {
-	return g_BtAppData.AppDevice.pHciDev;
+	return BtAppHciDevice();
 }
 
 // PHY the next advertising set advertises on. 1M primary and 2M secondary is
@@ -262,7 +278,7 @@ bool BtAdvCodingSelectionEnable(bool bEnable)
 
 bool BtAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int SrLen)
 {
-	if (g_BtAppData.State != BTAPP_STATE_ADVERTISING && g_BtAppData.State != BTAPP_STATE_IDLE)
+	if (!s_bAdvConfigured)
 	{
 		return false;
 	}
@@ -295,8 +311,8 @@ bool BtAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int SrL
 		// Company identifier is little-endian on air. Write the two octets
 		// directly rather than through a uint16_t cast, which assumes host byte
 		// order and an aligned destination (Core Spec Supplement Part A 1.4).
-		p->Data[0] = (uint8_t)(g_BtAppData.AppDevice.VendorId & 0xFF);
-		p->Data[1] = (uint8_t)(g_BtAppData.AppDevice.VendorId >> 8);
+		p->Data[0] = (uint8_t)(s_AdvVendorId & 0xFF);
+		p->Data[1] = (uint8_t)(s_AdvVendorId >> 8);
 		memcpy(&p->Data[2], pAdvData, AdvLen);
 
 		s_BtDevExtAdvData.AdvHandle = 0;
@@ -320,8 +336,8 @@ bool BtAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int SrL
 			return false;
 		}
 		// Company identifier is little-endian on air; see the note above.
-		p->Data[0] = (uint8_t)(g_BtAppData.AppDevice.VendorId & 0xFF);
-		p->Data[1] = (uint8_t)(g_BtAppData.AppDevice.VendorId >> 8);
+		p->Data[0] = (uint8_t)(s_AdvVendorId & 0xFF);
+		p->Data[1] = (uint8_t)(s_AdvVendorId >> 8);
 		memcpy(&p->Data[2], pSrData, SrLen);
 
 		s_BtDevExtSrData.AdvHandle = 0;
@@ -338,18 +354,18 @@ bool BtAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int SrL
 	// Re-enable advertising with the updated data. Disable first so the enable
 	// is not rejected with Command Disallowed (0x0C) when the set is still
 	// considered enabled. Mirrors the nRF52 stop-then-start on data update.
-	if (g_BtAppData.State == BTAPP_STATE_ADVERTISING)
+	if (s_bAdvertising)
 	{
 		// The disable result is not decisive: the set may already have been
 		// stopped by the controller, for example on a duration expiry not yet
 		// processed. The enable result is. If it fails the device is off air
-		// with the new data loaded, so report the failure and record IDLE
+		// with the new data loaded, so report the failure and clear the advertising flag
 		// rather than leave the state claiming the device is advertising.
 		BtAppAdvDisable();
 
 		if (BtAppAdvEnable() != 0)
 		{
-			g_BtAppData.State = BTAPP_STATE_IDLE;
+			s_bAdvertising = false;
 			return false;
 		}
 	}
@@ -379,7 +395,7 @@ static int BtAppAdvEnable(void)
 }
 
 // Disable advertising for adv set 0 (controller command only, does not change
-// app State). Disabling an already-disabled set has no effect.
+// the advertising flag). Disabling an already-disabled set has no effect.
 static int BtAppAdvDisable(void)
 {
 	BtHciDevice_t *pDev = BtAdvHciDev();
@@ -400,13 +416,15 @@ static int BtAppAdvDisable(void)
 
 void BtAdvStart()
 {
-	if (g_BtAppData.State == BTAPP_STATE_ADVERTISING)
+	if (s_bAdvertising || !s_bAdvConfigured)
+	{
 		return;
+	}
 
 	int res = BtAppAdvEnable();
 	if (res == 0)
 	{
-		g_BtAppData.State = BTAPP_STATE_ADVERTISING;
+		s_bAdvertising = true;
 
 		return;
 	}
@@ -422,7 +440,7 @@ void BtAdvStart()
 void BtAdvStop()
 {
 	// Only report idle once the controller has accepted the disable. If the
-	// command failed the set is still on air, and moving to IDLE would make a
+	// command failed the set is still on air, and clearing the advertising flag would make a
 	// later BtAdvStart look like a no-op while the device keeps
 	// advertising with whatever data it had.
 	if (BtAppAdvDisable() != 0)
@@ -430,11 +448,13 @@ void BtAdvStop()
 		return;
 	}
 
-	g_BtAppData.State = BTAPP_STATE_IDLE;
+	s_bAdvertising = false;
 }
 
 bool BtAppAdvInit(const BtAppCfg_t * const pCfg)
 {
+	s_bAdvConfigured = false;
+	s_bAdvertising = false;
 	if (pCfg == nullptr)
 	{
 		return false;
@@ -453,7 +473,7 @@ bool BtAppAdvInit(const BtAppCfg_t * const pCfg)
 	// records pack, and reports it via bExtAdv/scannable.
 	bool scannable = false;
 
-	if (BtAdvEncode(pCfg, advpkt, srpkt, &g_BtAppData.bExtAdv, &scannable) == false)
+	if (BtAdvEncode(pCfg, advpkt, srpkt, &s_bExtAdv, &scannable) == false)
 	{
 		return false;
 	}
@@ -465,7 +485,7 @@ bool BtAppAdvInit(const BtAppCfg_t * const pCfg)
 	// command does not provide.
 	uint16_t extprop = 0;
 
-	if (g_BtAppData.bExtAdv == false)
+	if (s_bExtAdv == false)
 	{
 		extprop |= BTADV_EXTADV_EVT_PROP_LEGACY;
 	}
@@ -485,7 +505,7 @@ bool BtAppAdvInit(const BtAppCfg_t * const pCfg)
 	// rejects it with Invalid HCI Command Parameters. Force the scannable
 	// property (an empty scan response is valid) so a name-only peripheral, the
 	// most common configuration, is accepted and advertises.
-	if (g_BtAppData.bExtAdv == false && (pCfg->Role & BTAPP_ROLE_PERIPHERAL))
+	if (s_bExtAdv == false && (pCfg->Role & BTAPP_ROLE_PERIPHERAL))
 	{
 		scannable = true;
 	}
@@ -619,6 +639,9 @@ bool BtAppAdvInit(const BtAppCfg_t * const pCfg)
 			return false;
 		}
 	}
+
+	s_AdvVendorId = pCfg->VendorId;
+	s_bAdvConfigured = true;
 
 	// Cache the advertising duration (10 ms units) for the enable command.
 	s_BtDevAdvDuration = mSecTo10Ms(pCfg->AdvTimeout);

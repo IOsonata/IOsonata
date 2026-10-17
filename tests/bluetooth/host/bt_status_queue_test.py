@@ -242,7 +242,7 @@ for name, path, stubs in [
 #define BTAPP_STATE_UNKNOWN 0
 #define CONFIG_NRF_SDH_BLE_TOTAL_LINK_COUNT 1
 #define BLE_CONN_HANDLE_INVALID 65535
-static struct { int State; bool bSecInit; } g_BtAppData = {0, false};
+static struct { bool bInitialized; bool bSecInit; } s_BtAppData = {false, false};
 static void BtSecBmCheckStatus() {}
 static uint16_t s_SecurePendingHdl[1] = {BLE_CONN_HANDLE_INVALID};
 static void BtLescCheckStatus() {}

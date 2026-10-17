@@ -37,6 +37,7 @@ SOFTWARE.
 
 #include "bluetooth/bt_uuid.h"
 #include "bluetooth/bt_hcievt.h"
+
 #include "bluetooth/bt_l2cap.h"
 #include "bluetooth/bt_att.h"
 #include "bluetooth/bt_gatt.h"
@@ -45,6 +46,9 @@ SOFTWARE.
 #include "bluetooth/bt_psync.h"
 #include "istddef.h"
 #include "syslog.h"
+
+// Advertising remains optional in a host used only as a central.
+extern void BtAdvHciStopped(void) __attribute__((weak));
 
 void BtProcessAttData(BtHciDevice_t * const pDev, uint16_t ConnHdl, BtL2CapPdu_t * const pRcvPdu);
 
@@ -439,6 +443,10 @@ void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtP
 				}
 				else
 				{
+					if (p->Role == BT_CONN_ROLE_PERIPHERAL && BtAdvHciStopped != nullptr)
+					{
+						BtAdvHciStopped();
+					}
 					if (pDev->Connected)
 					{
 						pDev->Connected(p->ConnHdl, p->Role, p->PeerAddrType, p->PeerAddr);
@@ -577,6 +585,10 @@ void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtP
 				{
 					DEBUG_PRINTF("BT_HCI_EVT_LE_ENHANCED_CONN_COMPLETE_V1/V2\r\n");
 					DEBUG_PRINTF("Target device Role = %d\r\n", p->Role);
+					if (p->Role == BT_CONN_ROLE_PERIPHERAL && BtAdvHciStopped != nullptr)
+					{
+						BtAdvHciStopped();
+					}
 					if (pDev->Connected)
 					{
 						pDev->Connected(p->ConnHdl, p->Role, p->PeerAddrType, p->PeerAddr);
@@ -667,6 +679,13 @@ void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtP
 				BtHciLeEvtAdvSetTerminated_t *p =
 					(BtHciLeEvtAdvSetTerminated_t*)pLeEvtPkt->Data;
 
+				// Successful termination follows connection-complete, which already
+				// retired the set before the application could restart it.
+				if (p->Status != BT_HCI_SUCCESS && p->AdvHdl == 0 &&
+					BtAdvHciStopped != nullptr)
+				{
+					BtAdvHciStopped();
+				}
 				if (p->Status != BT_HCI_SUCCESS && pDev->AdvTimeout)
 				{
 					pDev->AdvTimeout();

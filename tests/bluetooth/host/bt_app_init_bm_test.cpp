@@ -75,11 +75,6 @@ static void ResetHarness()
 	s_DisValueCount = 0;
 	s_ZeroLenCount = 0;
 	s_ZeroLenPointerValid = true;
-	memset(&g_BtAppData, 0, sizeof(g_BtAppData));
-	g_BtAppData.State = BTAPP_STATE_UNKNOWN;
-	g_BtAppData.AdvHdl = 0xFF;
-	g_BtAppData.ConnLedPort = -1;
-	g_BtAppData.ConnLedPin = -1;
 }
 
 static BtAppCfg_t MakeCfg(bool Secure = true, bool DeviceInfo = true)
@@ -127,7 +122,6 @@ static bool CallSeen(CallId Id)
 
 } // namespace
 
-BtAppData_t g_BtAppData = {};
 
 
 extern "C" bool BtPeerInit(uint8_t *, size_t)
@@ -320,7 +314,7 @@ int main()
 		ResetHarness();
 		BtAppCfg_t cfg = MakeCfg();
 		BT_CHECK(ctx, BtAppInit(&cfg));
-		BT_CHECK(ctx, g_BtAppData.State == BTAPP_STATE_INITIALIZED);
+		BT_CHECK(ctx, BtInitialized());
 		BT_CHECK(ctx, CallSeen(CALL_DIS_SERVICE));
 		BT_CHECK(ctx, s_DisValueCount == 7);
 		BT_CHECK(ctx, s_ZeroLenCount == 1);
@@ -337,6 +331,7 @@ int main()
 		s_bSecStart = false;
 		BtAppCfg_t cfg = MakeCfg(false, true);
 		BT_CHECK(ctx, BtAppInit(&cfg));
+		BT_CHECK(ctx, BtInitialized());
 		BT_CHECK(ctx, !CallSeen(CALL_SECURITY));
 		BT_CHECK(ctx, CallSeen(CALL_ADVERTISING));
 	});
@@ -425,6 +420,7 @@ int main()
 		ResetHarness();
 		BtAppCfg_t cfg = MakeCfg();
 		BT_CHECK(ctx, BtAppInit(&cfg));
+		BT_CHECK(ctx, BtInitialized());
 		BT_CHECK(ctx, s_LastSecParams.bond == 1);
 		BT_CHECK(ctx, s_LastSecParams.mitm == 1);
 		BT_CHECK(ctx, s_LastSecParams.lesc == 1);

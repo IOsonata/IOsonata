@@ -87,8 +87,8 @@ user-data hook; do not depend on the contrary ordering in the older header
 comment. Hooks return void, so retain and check application-specific setup
 failures before entering the run loop.
 
-Do not read or modify `g_BtAppData` from application code. Use public state
-queries and connection handles.
+Use public state queries and connection handles. Port implementation state is
+private to its source files and is not accessible to applications.
 
 ## Roles, advertising and scanning
 

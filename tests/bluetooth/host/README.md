@@ -85,3 +85,17 @@ scenarios. For application setup, see the
 
 Host tests must remain independent of an RTOS. Scheduling tests should override only
 the existing wait/notify hooks when an execution model needs to be exercised.
+
+### Private Bluetooth implementation state
+
+`bt_app_private_test.py` checks the changed state boundary for nRF52 SoftDevice,
+nRF54 BM, Nordic SDC, nRF91 HCI and STM32WBA in Debug and Release modes. It compiles
+production private-state operations with the common peer hooks, checks that the
+state has no exported symbol, and exercises failed scan starts, retries and
+controller-stop transitions. The test extracts these definitions to run without
+vendor SDKs; it is not a complete target build or a hardware test.
+
+Run it separately with `python3 bt_app_private_test.py`, or through `make test`.
+The HCI tests check advertising commands and that termination state is updated
+before the existing timeout callback. Target Debug/Release builds and hardware
+advertising, connection and security tests are still required for release.

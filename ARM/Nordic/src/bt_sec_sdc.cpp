@@ -51,6 +51,16 @@ SOFTWARE.
 
 #include "crypto/crypto_uecc.h"
 #include "crypto_rng_nrf.h"
+
+BTGAP_SECTYPE BtAppSecConfigGet(uint8_t *pExchg);
+bool BtAppSecIsStarted(void);
+void BtAppSecStarted(void);
+
+static BTGAP_SECTYPE s_SecType;
+static uint8_t s_SecExchg;
+
+BtHciDevice_t *BtAppHciDevice(void);
+
 #if defined(NRF54L15_XXAA) || defined(NRF54H20_XXAA)
 #include "cracen_intrf.h"
 #include "crypto/ba414ep.h"
@@ -147,7 +157,7 @@ static void BtSecSdcConnected(uint16_t ConnHdl, uint8_t Role, uint8_t AddrType, 
 	// both bits set, so the bitmask cannot say what this connection is. The
 	// central starts pairing; the peripheral asks the central to secure the
 	// link with a Security Request (Vol 3 Part H 2.4.6, 3.5.1).
-	if (g_BtAppData.AppDevice.bSecure)
+	if (s_SecType != BTGAP_SECTYPE_NONE)
 	{
 		switch (Role)
 		{
@@ -178,13 +188,14 @@ static void BtSecSdcConnected(uint16_t ConnHdl, uint8_t Role, uint8_t AddrType, 
  */
 bool BtAppSecInit(void)
 {
-	if (g_BtAppData.bSecInit)
+	s_SecType = BtAppSecConfigGet(&s_SecExchg);
+	if (BtAppSecIsStarted())
 	{
 		// Already started
 		return true;
 	}
 
-	BtHciDevice_t *pDev = (BtHciDevice_t*)g_BtAppData.AppDevice.pHciDev;
+	BtHciDevice_t *pDev = BtAppHciDevice();
 	if (pDev == nullptr)
 	{
 		// BtAppInit has not set up the HCI host yet
@@ -273,21 +284,21 @@ bool BtAppSecInit(void)
 	// SecExchg selects the IO capability; SecType selects bonding and MITM. The
 	// Secure Connections bit is forced inside BtSmpAuthConfig.
 	uint8_t smpIoCaps;
-	if ((g_BtAppData.SecExchg & BTAPP_SECEXCHG_KEYBOARD) &&
-		(g_BtAppData.SecExchg & BTAPP_SECEXCHG_DISPLAY))
+	if ((s_SecExchg & BTAPP_SECEXCHG_KEYBOARD) &&
+		(s_SecExchg & BTAPP_SECEXCHG_DISPLAY))
 	{
 		smpIoCaps = BT_SMP_IOCAPS_KEYBOARD_DISPLAY;
 	}
-	else if ((g_BtAppData.SecExchg & BTAPP_SECEXCHG_DISPLAY) &&
-			 (g_BtAppData.SecExchg & BTAPP_SECEXCHG_YESNO))
+	else if ((s_SecExchg & BTAPP_SECEXCHG_DISPLAY) &&
+			 (s_SecExchg & BTAPP_SECEXCHG_YESNO))
 	{
 		smpIoCaps = BT_SMP_IOCAPS_DISPLAY_YESNO;
 	}
-	else if (g_BtAppData.SecExchg & BTAPP_SECEXCHG_KEYBOARD)
+	else if (s_SecExchg & BTAPP_SECEXCHG_KEYBOARD)
 	{
 		smpIoCaps = BT_SMP_IOCAPS_KEYBOARD_ONLY;
 	}
-	else if (g_BtAppData.SecExchg & BTAPP_SECEXCHG_DISPLAY)
+	else if (s_SecExchg & BTAPP_SECEXCHG_DISPLAY)
 	{
 		smpIoCaps = BT_SMP_IOCAPS_DISPLAY_ONLY;
 	}
@@ -297,13 +308,13 @@ bool BtAppSecInit(void)
 	}
 
 	uint8_t smpAuthReq = 0;
-	if (g_BtAppData.SecType != BTGAP_SECTYPE_NONE)
+	if (s_SecType != BTGAP_SECTYPE_NONE)
 	{
 		smpAuthReq |= BT_SMP_AUTHREQ_BONDING_FLAG_BONDING;
 	}
-	if (g_BtAppData.SecType == BTGAP_SECTYPE_STATICKEY_MITM ||
-		g_BtAppData.SecType == BTGAP_SECTYPE_LESC_MITM ||
-		g_BtAppData.SecType == BTGAP_SECTYPE_SIGNED_MITM)
+	if (s_SecType == BTGAP_SECTYPE_STATICKEY_MITM ||
+		s_SecType == BTGAP_SECTYPE_LESC_MITM ||
+		s_SecType == BTGAP_SECTYPE_SIGNED_MITM)
 	{
 		smpAuthReq |= BT_SMP_AUTHREQ_MITM;
 	}
@@ -314,7 +325,7 @@ bool BtAppSecInit(void)
 	// internal to this path: it loads any stored bonds into the SMP bond table and
 	// links the strong BtSmpBondSave/Load/Erase overrides. The application does
 	// not call it - persistence follows from the configured SecType.
-	if (g_BtAppData.SecType != BTGAP_SECTYPE_NONE)
+	if (s_SecType != BTGAP_SECTYPE_NONE)
 	{
 		// This path stores bonds through bt_pds on Nvm, not through the nRF5
 		// SDK peer_manager and fstorage. Printed so a persistence problem is
@@ -341,7 +352,7 @@ bool BtAppSecInit(void)
 	s_BtSecSdcConnected = pDev->Connected;
 	pDev->Connected = BtSecSdcConnected;
 
-	g_BtAppData.bSecInit = true;
+	BtAppSecStarted();
 
 	return true;
 }

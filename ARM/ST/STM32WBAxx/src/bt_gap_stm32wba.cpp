@@ -554,8 +554,7 @@ void BtGapSetAppearance(uint16_t Val)
 	if (BtGapWbaNativeCharUpdate(s_GapWba.AppearanceCharHdl,
 			value, sizeof(value)))
 	{
-		g_BtAppData.AppDevice.Appearance = Val;
-	}
+		}
 }
 
 void BtGapSetPreferedConnParam(BtGattPreferedConnParams_t *pVal)

@@ -83,6 +83,84 @@ SOFTWARE.
 #include "bluetooth/bt_smp.h"
 #include "bluetooth/bt_dev.h"
 
+
+// Port implementation state. Neither its layout nor storage leaves this file.
+static struct {
+	uint8_t Role;
+	uint16_t MaxMtu;
+	BTGAP_SECTYPE SecType;
+	uint8_t SecExchg;
+	bool bSecInit;
+	bool bSecure;
+	bool bInitialized;
+	int8_t ConnLedPort;
+	int8_t ConnLedPin;
+	uint8_t ConnLedActLevel;
+} s_BtAppData = {
+	.Role = 0,
+	.MaxMtu = 0,
+	.SecType = BTGAP_SECTYPE_NONE,
+	.SecExchg = 0,
+	.bSecInit = false,
+	.bSecure = false,
+	.bInitialized = false,
+	.ConnLedPort = -1,
+	.ConnLedPin = -1,
+	.ConnLedActLevel = 0,
+};
+
+bool BtInitialized(void)
+{
+	return s_BtAppData.bInitialized;
+}
+
+// Called by the peer module and this port's event handlers.
+void BtAppConnLedOff(void)
+{
+	if (s_BtAppData.ConnLedPort < 0 || s_BtAppData.ConnLedPin < 0)
+	{
+		return;
+	}
+	if (s_BtAppData.ConnLedActLevel)
+	{
+		IOPinClear(s_BtAppData.ConnLedPort, s_BtAppData.ConnLedPin);
+	}
+	else
+	{
+		IOPinSet(s_BtAppData.ConnLedPort, s_BtAppData.ConnLedPin);
+	}
+}
+
+void BtAppConnLedOn(void)
+{
+	if (s_BtAppData.ConnLedPort < 0 || s_BtAppData.ConnLedPin < 0)
+	{
+		return;
+	}
+	if (s_BtAppData.ConnLedActLevel)
+	{
+		IOPinSet(s_BtAppData.ConnLedPort, s_BtAppData.ConnLedPin);
+	}
+	else
+	{
+		IOPinClear(s_BtAppData.ConnLedPort, s_BtAppData.ConnLedPin);
+	}
+}
+
+uint8_t BtAdvHandle(void);
+
+// A connection/init event must not force the optional scan object into the image.
+extern void BtScanEnded(void) __attribute__((weak));
+
+static void BtAppScanEnded(void)
+{
+	if (BtScanEnded != nullptr)
+	{
+		BtScanEnded();
+	}
+}
+
+
 extern "C" bool sdh_state_evt_observer_notify(enum nrf_sdh_state_evt state);
 
 // Target-local advertising state hooks implemented in bt_adv_bm.cpp.
@@ -141,8 +219,6 @@ static const int8_t s_TxPowerdBm[] = {
 };
 static const int s_NbTxPowerdBm = sizeof(s_TxPowerdBm) / sizeof(int8_t);
 
-// g_BtAppData definition and helpers (isConnected, BtConnected, BtInitialized,
-// BtAppNotify/BtAppIndicate, BtAppConnLedOff/On) moved to src/bluetooth/bt_app.cpp.
 
 // --- Advertisement packet buffers ---
 
@@ -285,11 +361,11 @@ extern void BtDfuSmpCheckStatus(void) __attribute__((weak));
 void BtAppCheckStatus(void)
 {
 	BtLescCheckStatus();
-	if (g_BtAppData.bSecInit)
+	if (s_BtAppData.bSecInit)
 	{
 		BtSecBmCheckStatus();
 	}
-	if (g_BtAppData.State != BTAPP_STATE_UNKNOWN)
+	if (s_BtAppData.bInitialized)
 	{
 		for (int i = 0; i < CONFIG_NRF_SDH_BLE_TOTAL_LINK_COUNT; i++)
 		{
@@ -524,7 +600,7 @@ static void ble_evt_dispatch(const ble_evt_t *p_ble_evt, void *p_context)
 	const ble_gap_evt_t *p_gap_evt = &p_ble_evt->evt.gap_evt;
 
 	DEBUG_PRINTF("evt: 0x%x\r\n", p_ble_evt->header.evt_id);
-	if (g_BtAppData.bSecInit &&
+	if (s_BtAppData.bSecInit &&
 		p_ble_evt->header.evt_id != BLE_GAP_EVT_CONNECTED &&
 		p_ble_evt->header.evt_id != BLE_GAP_EVT_DISCONNECTED)
 	{
@@ -567,17 +643,15 @@ static void ble_evt_dispatch(const ble_evt_t *p_ble_evt, void *p_context)
 				return;
 			}
 
-			if (g_BtAppData.bSecInit)
+			if (s_BtAppData.bSecInit)
 			{
 				BtSecBmBleEvt(p_ble_evt);
 			}
-
-			g_BtAppData.State = BTAPP_STATE_CONNECTED;
 			BtAppEvtConnected(p_ble_evt->evt.gap_evt.conn_handle);
 
 			// Start security from a queued event. Peer Manager and LESC work
 			// must not run in the SoftDevice event interrupt.
-			if (g_BtAppData.AppDevice.bSecure)
+			if (s_BtAppData.bSecure)
 			{
 				if (SecurePendingAdd(p_gap_evt->conn_handle))
 				{
@@ -593,7 +667,7 @@ static void ble_evt_dispatch(const ble_evt_t *p_ble_evt, void *p_context)
 			// Re-evaluate connectable advertising after every accepted link.
 			// A central-role link can consume the final peer slot even though
 			// it does not consume a peripheral-role link count.
-			if (g_BtAppData.AppDevice.Conn.Role &
+			if (s_BtAppData.Role &
 				(BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER))
 			{
 				BtAdvStart();
@@ -606,7 +680,7 @@ static void ble_evt_dispatch(const ble_evt_t *p_ble_evt, void *p_context)
 			uint16_t connHdl = p_ble_evt->evt.gap_evt.conn_handle;
 			BtDevice_t *pPeer = BtPeerFindByHdl(connHdl);
 
-			if (g_BtAppData.bSecInit)
+			if (s_BtAppData.bSecInit)
 			{
 				BtSecBmBleEvt(p_ble_evt);
 			}
@@ -614,19 +688,14 @@ static void ble_evt_dispatch(const ble_evt_t *p_ble_evt, void *p_context)
 			BtSmpOobDataClearConn(connHdl);
 			BtPeerFree(pPeer);
 
-			if (BtPeerIsConnected())
+			if (!BtConnected())
 			{
-				g_BtAppData.State = BTAPP_STATE_CONNECTED;
-			}
-			else
-			{
-				g_BtAppData.State = BTAPP_STATE_IDLE;
 				BtAppConnLedOff();
 			}
 
 			BtAppEvtDisconnected(connHdl);
 
-			if (g_BtAppData.AppDevice.Conn.Role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER))
+			if (s_BtAppData.Role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER))
 			{
 				BtAdvStart();
 			}
@@ -740,7 +809,7 @@ static void ble_evt_dispatch(const ble_evt_t *p_ble_evt, void *p_context)
 
 		case BLE_GATTS_EVT_EXCHANGE_MTU_REQUEST:
 		{
-			uint16_t mtu = g_BtAppData.AppDevice.Conn.MaxMtu;
+			uint16_t mtu = s_BtAppData.MaxMtu;
 			uint16_t connHdl = p_ble_evt->evt.gatts_evt.conn_handle;
 			err_code = sd_ble_gatts_exchange_mtu_reply(connHdl, mtu);
 
@@ -778,7 +847,7 @@ static void ble_evt_dispatch(const ble_evt_t *p_ble_evt, void *p_context)
 	// a per-link BLE_GAP_ROLE_* value asked nothing meaningful; c47258c5 removed
 	// the local when it gave the connected event its real role and left this
 	// use behind.
-	if (g_BtAppData.AppDevice.Conn.Role & (BTAPP_ROLE_CENTRAL | BTAPP_ROLE_OBSERVER))
+	if (s_BtAppData.Role & (BTAPP_ROLE_CENTRAL | BTAPP_ROLE_OBSERVER))
 	{
 		switch (p_ble_evt->header.evt_id)
 		{
@@ -810,7 +879,7 @@ static void ble_evt_dispatch(const ble_evt_t *p_ble_evt, void *p_context)
 					&p_gap_evt->params.timeout;
 				if (p_timeout->src == BLE_GAP_TIMEOUT_SRC_SCAN)
 				{
-					g_BtAppData.bScan = false;
+	BtAppScanEnded();
 				}
 			}
 			break;
@@ -848,7 +917,7 @@ static void ble_evt_dispatch(const ble_evt_t *p_ble_evt, void *p_context)
 	}
 
 	// Forward to peripheral handlers
-	if (g_BtAppData.AppDevice.Conn.Role & BTAPP_ROLE_PERIPHERAL)
+	if (s_BtAppData.Role & BTAPP_ROLE_PERIPHERAL)
 	{
 		// HVN TX complete gives a count, not a handle. Drain the per-peer
 		// send-order ring once per event.
@@ -1129,7 +1198,7 @@ bool BtAppStackInit(const BtAppCfg_t *pCfg)
 
 bool BtAppSecInit(void)
 {
-	if (g_BtAppData.bSecInit)
+	if (s_BtAppData.bSecInit)
 	{
 		return true;
 	}
@@ -1154,7 +1223,7 @@ bool BtAppSecInit(void)
 	secParam.kdist_peer.enc = 1;
 	secParam.kdist_peer.id = 1;
 
-	switch (g_BtAppData.SecType)
+	switch (s_BtAppData.SecType)
 	{
 		case BTGAP_SECTYPE_STATICKEY_MITM:
 			secParam.mitm = 1;
@@ -1173,7 +1242,7 @@ bool BtAppSecInit(void)
 			break;
 	}
 
-	int exchg = g_BtAppData.SecExchg &
+	int exchg = s_BtAppData.SecExchg &
 		(BTAPP_SECEXCHG_KEYBOARD | BTAPP_SECEXCHG_DISPLAY | BTAPP_SECEXCHG_YESNO);
 	switch (exchg)
 	{
@@ -1197,7 +1266,7 @@ bool BtAppSecInit(void)
 			break;
 	}
 
-	if (g_BtAppData.SecExchg & BTAPP_SECEXCHG_OOB)
+	if (s_BtAppData.SecExchg & BTAPP_SECEXCHG_OOB)
 	{
 		secParam.oob = 1;
 	}
@@ -1208,7 +1277,7 @@ bool BtAppSecInit(void)
 	}
 
 	BtLescOobPeerHandlerSet(BtAppOobPeerDataHandler);
-	g_BtAppData.bSecInit = true;
+	s_BtAppData.bSecInit = true;
 	DEBUG_PRINTF("STORE: bt_pds -> Nvm (S145, no peer_manager)\r\n");
 	return true;
 }
@@ -1221,19 +1290,19 @@ bool BtAppSecInit(void)
  */
 bool BtAppInit(const BtAppCfg_t *pCfg)
 {
+	s_BtAppData.bInitialized = false;
 	uint32_t err_code;
 
 	SecurePendingReset();
 	BtSmpOobDataClearInternal();
 
 	// Populate internal app data from config
-	g_BtAppData.AppDevice.Conn.Role = pCfg->Role;
-	g_BtAppData.AdvHdl = BLE_GAP_ADV_SET_HANDLE_NOT_SET;
+	s_BtAppData.Role = pCfg->Role;
 	// Kept for BtAppSecInit, which the application calls from
 	// BtAppInitUserData when it uses security.
-	g_BtAppData.SecType = pCfg->SecType;
-	g_BtAppData.SecExchg = pCfg->SecExchg;
-	g_BtAppData.bSecInit = false;
+	s_BtAppData.SecType = pCfg->SecType;
+	s_BtAppData.SecExchg = pCfg->SecExchg;
+	s_BtAppData.bSecInit = false;
 	if (!BtPeerInit(pCfg->pPeerPoolMem, pCfg->PeerPoolMemSize))
 	{
 		return false;
@@ -1253,20 +1322,16 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 	// Connection pool removed: the peer manager (BtPeerInit above) owns
 	// the single connection table now.
 	// bExtAdv is no longer a config field; BtAdvEncode determines extended vs
-	// legacy from the encoded payload and sets g_BtAppData.bExtAdv during
+	// legacy from the encoded payload and retains the encoding choice during
 	// BtAppAdvInit.
-	g_BtAppData.ConnLedPort = pCfg->ConnLedPort;
-	g_BtAppData.ConnLedPin = pCfg->ConnLedPin;
-	g_BtAppData.ConnLedActLevel = pCfg->ConnLedActLevel;
-	g_BtAppData.bScan = false;
-	g_BtAppData.AppDevice.VendorId = pCfg->VendorId;
-	g_BtAppData.AppDevice.ProductId = pCfg->ProductId;
-	g_BtAppData.AppDevice.ProductVer = pCfg->ProductVer;
-	g_BtAppData.AppDevice.Appearance = pCfg->Appearance;
+	s_BtAppData.ConnLedPort = pCfg->ConnLedPort;
+	s_BtAppData.ConnLedPin = pCfg->ConnLedPin;
+	s_BtAppData.ConnLedActLevel = pCfg->ConnLedActLevel;
+	BtAppScanEnded();
 
-	g_BtAppData.AppDevice.Conn.MaxMtu = GATT_MTU_SIZE_DEFAULT;
+	s_BtAppData.MaxMtu = GATT_MTU_SIZE_DEFAULT;
 	if (pCfg->MaxMtu > GATT_MTU_SIZE_DEFAULT)
-		g_BtAppData.AppDevice.Conn.MaxMtu = pCfg->MaxMtu;
+		s_BtAppData.MaxMtu = pCfg->MaxMtu;
 
 	// Setup connection LED
 	if (pCfg->ConnLedPort != -1 && pCfg->ConnLedPin != -1)
@@ -1337,17 +1402,17 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 	// Security is started only when the application calls BtAppSecInit,
 	// normally from BtAppInitUserData above. A configuration that asks for
 	// security without starting it must not run unprotected.
-	if (pCfg->SecType != BTGAP_SECTYPE_NONE && g_BtAppData.bSecInit == false)
+	if (pCfg->SecType != BTGAP_SECTYPE_NONE && s_BtAppData.bSecInit == false)
 	{
 		DEBUG_PRINTF("BtAppInit FAIL: security not initialized, SecType=%d\r\n",
 					 (int)pCfg->SecType);
 		return false;
 	}
 
-	g_BtAppData.AppDevice.bSecure = pCfg->SecType != BTGAP_SECTYPE_NONE;
+	s_BtAppData.bSecure = pCfg->SecType != BTGAP_SECTYPE_NONE;
 
 	// Initialize advertising
-	if (g_BtAppData.AppDevice.Conn.Role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER))
+	if (s_BtAppData.Role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER))
 	{
 		if (BtAppAdvInit(pCfg) == false)
 		{
@@ -1357,7 +1422,7 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 
 		err_code = sd_ble_gap_tx_power_set(
 			BLE_GAP_TX_POWER_ROLE_ADV,
-			g_BtAppData.AdvHdl,
+			BtAdvHandle(),
 			GetValidTxPower(pCfg->TxPower));
 		(void)err_code;
 	}
@@ -1370,11 +1435,11 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 		(void)err_code;
 	}
 
-	g_BtAppData.State = BTAPP_STATE_INITIALIZED;
+	s_BtAppData.bInitialized = true;
 
 	// Advertising starts here and not from the event queue: an application
 	// interrupt can fill the queue before the application runs it.
-	if (g_BtAppData.AppDevice.Conn.Role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER))
+	if (s_BtAppData.Role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER))
 	{
 		BtAdvStart();
 	}
@@ -1480,7 +1545,7 @@ NRF_SDH_BLE_OBSERVER(s_BtAppBleObserver, ble_evt_dispatch, NULL, USER);
 bool BtAppConnect(BtGapPeerAddr_t * const pPeerAddr, BtGapConnParams_t * const pConnParam)
 {
 	// SD requires scanning to be stopped before issuing a connect.
-	g_BtAppData.bScan = false;
+	BtAppScanEnded();
 
 	return BtGapConnect(pPeerAddr, pConnParam);
 }

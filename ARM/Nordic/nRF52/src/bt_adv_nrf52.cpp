@@ -43,6 +43,17 @@ Copyright (c) 2016, I-SYST inc., all rights reserved
 #include "bluetooth/bt_appearance.h"
 #include "bluetooth/bt_peer.h"
 
+static uint8_t s_AdvRole;
+static uint16_t s_AdvVendorId;
+static bool s_bExtAdv;
+static uint8_t s_AdvHandle = BLE_GAP_ADV_SET_HANDLE_NOT_SET;
+
+uint8_t BtAdvHandle(void)
+{
+	return s_AdvHandle;
+}
+
+
 //#define DEBUG_ENABLE
 
 #if !defined(NDEBUG) && defined(DEBUG_ENABLE)
@@ -87,7 +98,7 @@ static ble_gap_adv_data_t s_BtAppAdvData = {
 
 static bool BtAdvCanStart()
 {
-	uint8_t role = g_BtAppData.AppDevice.Conn.Role;
+	uint8_t role = s_AdvRole;
 
 	if ((role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER)) == 0)
 	{
@@ -138,19 +149,6 @@ static bool BtAdvCanStart()
 		peripheralCount < s_PeripheralLinkCount;
 }
 
-static void BtAdvStateUpdate()
-{
-	if (BtPeerIsConnected())
-	{
-		g_BtAppData.State = BTAPP_STATE_CONNECTED;
-	}
-	else
-	{
-		g_BtAppData.State = s_bAdvertising ?
-			BTAPP_STATE_ADVERTISING : BTAPP_STATE_IDLE;
-	}
-}
-
 static void BtAdvNrf52EvtHandler(ble_evt_t const *pEvt, void *pContext)
 {
 	(void)pContext;
@@ -165,7 +163,6 @@ static void BtAdvNrf52EvtHandler(ble_evt_t const *pEvt, void *pContext)
 				// the peer slot that callback is about to populate.
 				s_bAdvertising = false;
 				s_PendingPeripheralHdl = pEvt->evt.gap_evt.conn_handle;
-				BtAdvStateUpdate();
 				BtAdvStart();
 				s_PendingPeripheralHdl = BT_CONN_HDL_INVALID;
 			}
@@ -173,7 +170,6 @@ static void BtAdvNrf52EvtHandler(ble_evt_t const *pEvt, void *pContext)
 
 		case BLE_GAP_EVT_ADV_SET_TERMINATED:
 			s_bAdvertising = false;
-			BtAdvStateUpdate();
 			break;
 
 		default:
@@ -188,17 +184,15 @@ void BtAdvStart()
 {
 	if (s_bAdvertising)
 	{
-		BtAdvStateUpdate();
 		return;
 	}
 
 	if (!BtAdvCanStart())
 	{
-		BtAdvStateUpdate();
 		return;
 	}
 
-	uint32_t err_code = sd_ble_gap_adv_start(g_BtAppData.AdvHdl,
+	uint32_t err_code = sd_ble_gap_adv_start(s_AdvHandle,
 		BTAPP_CONN_CFG_TAG);
 	if (err_code != NRF_SUCCESS)
 	{
@@ -207,18 +201,16 @@ void BtAdvStart()
 	}
 
 	s_bAdvertising = true;
-	BtAdvStateUpdate();
 }
 
 void BtAdvStop()
 {
 	if (!s_bAdvertising)
 	{
-		BtAdvStateUpdate();
 		return;
 	}
 
-	uint32_t err_code = sd_ble_gap_adv_stop(g_BtAppData.AdvHdl);
+	uint32_t err_code = sd_ble_gap_adv_stop(s_AdvHandle);
 	if (err_code != NRF_SUCCESS && err_code != NRF_ERROR_INVALID_STATE)
 	{
 		DEBUG_PRINTF("BtAdvStop failed: 0x%08" PRIx32 "\r\n", err_code);
@@ -226,18 +218,11 @@ void BtAdvStop()
 	}
 
 	s_bAdvertising = false;
-	BtAdvStateUpdate();
 }
 
 bool BtAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData,
 		int SrLen)
 {
-	if (g_BtAppData.State != BTAPP_STATE_ADVERTISING &&
-		g_BtAppData.State != BTAPP_STATE_IDLE &&
-		g_BtAppData.State != BTAPP_STATE_CONNECTED)
-	{
-		return false;
-	}
 	if (AdvLen < 0 || SrLen < 0 || (AdvLen > 0 && pAdvData == nullptr) ||
 		(SrLen > 0 && pSrData == nullptr))
 	{
@@ -247,7 +232,7 @@ bool BtAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData,
 	BtAdvPacket_t *advpkt = &s_BleAppAdvPkt;
 	BtAdvPacket_t *srpkt  = &s_BleAppSrPkt;
 
-	if (g_BtAppData.bExtAdv == false)
+	if (s_bExtAdv == false)
 	{
 		if (pAdvData != nullptr && AdvLen > 0)
 		{
@@ -259,7 +244,7 @@ bool BtAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData,
 			{
 				return false;
 			}
-			*(uint16_t *)p->Data = g_BtAppData.AppDevice.VendorId;
+			*(uint16_t *)p->Data = s_AdvVendorId;
 			memcpy(&p->Data[2], pAdvData, (size_t)AdvLen);
 
 			s_BtAppAdvData.adv_data.len = advpkt->Len;
@@ -275,7 +260,7 @@ bool BtAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData,
 			{
 				return false;
 			}
-			*(uint16_t *)p->Data = g_BtAppData.AppDevice.VendorId;
+			*(uint16_t *)p->Data = s_AdvVendorId;
 			memcpy(&p->Data[2], pSrData, (size_t)SrLen);
 
 			s_BtAppAdvData.scan_rsp_data.len = srpkt->Len;
@@ -293,7 +278,7 @@ bool BtAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData,
 			{
 				return false;
 			}
-			*(uint16_t *)p->Data = g_BtAppData.AppDevice.VendorId;
+			*(uint16_t *)p->Data = s_AdvVendorId;
 			if (AdvLen > 0)
 			{
 				memcpy(&p->Data[2], pAdvData, (size_t)AdvLen);
@@ -309,16 +294,15 @@ bool BtAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData,
 	bool restart = s_bAdvertising;
 	if (restart)
 	{
-		uint32_t stopErr = sd_ble_gap_adv_stop(g_BtAppData.AdvHdl);
+		uint32_t stopErr = sd_ble_gap_adv_stop(s_AdvHandle);
 		if (stopErr != NRF_SUCCESS && stopErr != NRF_ERROR_INVALID_STATE)
 		{
 			return false;
 		}
 		s_bAdvertising = false;
-		BtAdvStateUpdate();
 	}
 
-	uint32_t err = sd_ble_gap_adv_set_configure(&g_BtAppData.AdvHdl,
+	uint32_t err = sd_ble_gap_adv_set_configure(&s_AdvHandle,
 		&s_BtAppAdvData, NULL);
 	if (err != NRF_SUCCESS)
 	{
@@ -342,6 +326,9 @@ __WEAK bool BtAppAdvInit(const BtAppCfg_t *pCfg)
 	{
 		return false;
 	}
+	s_AdvRole = pCfg->Role;
+	s_AdvVendorId = pCfg->VendorId;
+
 
 	BtAdvPacket_t *advpkt = &s_BleAppAdvPkt;
 	BtAdvPacket_t *srpkt  = &s_BleAppSrPkt;
@@ -352,7 +339,7 @@ __WEAK bool BtAppAdvInit(const BtAppCfg_t *pCfg)
 	memset(&s_Nrf52Data.AdvParam, 0, sizeof(ble_gap_adv_params_t));
 
 	bool scannable = false;
-	if (BtAdvEncode(pCfg, advpkt, srpkt, &g_BtAppData.bExtAdv,
+	if (BtAdvEncode(pCfg, advpkt, srpkt, &s_bExtAdv,
 		&scannable) == false)
 	{
 		return false;
@@ -360,13 +347,13 @@ __WEAK bool BtAppAdvInit(const BtAppCfg_t *pCfg)
 
 	if (pCfg->Role & BTAPP_ROLE_PERIPHERAL)
 	{
-		s_Nrf52Data.AdvParam.properties.type = g_BtAppData.bExtAdv ?
+		s_Nrf52Data.AdvParam.properties.type = s_bExtAdv ?
 			BLE_GAP_ADV_TYPE_EXTENDED_CONNECTABLE_NONSCANNABLE_UNDIRECTED :
 			BLE_GAP_ADV_TYPE_CONNECTABLE_SCANNABLE_UNDIRECTED;
 	}
 	else if (pCfg->Role & BTAPP_ROLE_BROADCASTER)
 	{
-		if (g_BtAppData.bExtAdv)
+		if (s_bExtAdv)
 		{
 			s_Nrf52Data.AdvParam.properties.type =
 				BLE_GAP_ADV_TYPE_EXTENDED_NONCONNECTABLE_NONSCANNABLE_UNDIRECTED;
@@ -401,7 +388,7 @@ __WEAK bool BtAppAdvInit(const BtAppCfg_t *pCfg)
 	}
 
 	uint32_t err_code = sd_ble_gap_adv_set_configure(
-		&g_BtAppData.AdvHdl, &s_BtAppAdvData, &s_Nrf52Data.AdvParam);
+		&s_AdvHandle, &s_BtAppAdvData, &s_Nrf52Data.AdvParam);
 	if (err_code != NRF_SUCCESS)
 	{
 		DEBUG_PRINTF("sd_ble_gap_adv_set_configure failed: 0x%08" PRIx32

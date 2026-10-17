@@ -70,6 +70,97 @@ SOFTWARE.
 #include "iopinctrl.h"
 
 
+// Port implementation state. Neither its layout nor storage leaves this file.
+static struct {
+	BtHciDevice_t *pHciDev;
+	uint8_t Role;
+	BTGAP_SECTYPE SecType;
+	uint8_t SecExchg;
+	bool bSecInit;
+	bool bInitialized;
+	int8_t ConnLedPort;
+	int8_t ConnLedPin;
+	uint8_t ConnLedActLevel;
+} s_BtAppData = {
+	.pHciDev = nullptr,
+	.Role = 0,
+	.SecType = BTGAP_SECTYPE_NONE,
+	.SecExchg = 0,
+	.bSecInit = false,
+	.bInitialized = false,
+	.ConnLedPort = -1,
+	.ConnLedPin = -1,
+	.ConnLedActLevel = 0,
+};
+
+bool BtInitialized(void)
+{
+	return s_BtAppData.bInitialized;
+}
+
+// Called by the peer module and this port's event handlers.
+void BtAppConnLedOff(void)
+{
+	if (s_BtAppData.ConnLedPort < 0 || s_BtAppData.ConnLedPin < 0)
+	{
+		return;
+	}
+	if (s_BtAppData.ConnLedActLevel)
+	{
+		IOPinClear(s_BtAppData.ConnLedPort, s_BtAppData.ConnLedPin);
+	}
+	else
+	{
+		IOPinSet(s_BtAppData.ConnLedPort, s_BtAppData.ConnLedPin);
+	}
+}
+
+void BtAppConnLedOn(void)
+{
+	if (s_BtAppData.ConnLedPort < 0 || s_BtAppData.ConnLedPin < 0)
+	{
+		return;
+	}
+	if (s_BtAppData.ConnLedActLevel)
+	{
+		IOPinSet(s_BtAppData.ConnLedPort, s_BtAppData.ConnLedPin);
+	}
+	else
+	{
+		IOPinClear(s_BtAppData.ConnLedPort, s_BtAppData.ConnLedPin);
+	}
+}
+
+// A connection/init event must not force the optional scan object into the image.
+extern void BtScanEnded(void) __attribute__((weak));
+
+static void BtAppScanEnded(void)
+{
+	if (BtScanEnded != nullptr)
+	{
+		BtScanEnded();
+	}
+}
+
+// Internal security operations; they do not link the optional security module.
+BTGAP_SECTYPE BtAppSecConfigGet(uint8_t *pExchg)
+{
+	*pExchg = s_BtAppData.SecExchg;
+	return s_BtAppData.SecType;
+}
+
+bool BtAppSecIsStarted(void)
+{
+	return s_BtAppData.bSecInit;
+}
+
+void BtAppSecStarted(void)
+{
+	s_BtAppData.bSecInit = true;
+}
+
+
+
 #define BT_SDC_RX_MAX_PACKET_COUNT			2
 #define BT_SDC_TX_MAX_PACKET_COUNT			3
 
@@ -110,7 +201,7 @@ static void BtAppSdcTimerHandler(TimerDev_t * const pTimer, uint32_t Evt);
 static inline uint32_t BtAppSendData(void *pData, uint32_t Len);
 
 static BtHciDevice_t s_BtHciDev = {
-	.pCtx = (void*)&g_BtAppData,
+	.pCtx = nullptr,
 	.SendData = BtAppSendData,
 	.Command = BtHciCmdSdc,
 	.EvtHandler = BtAppEvtHandler,
@@ -151,12 +242,7 @@ static const BtAppCfg_t *s_pBtAppCfg = nullptr;
 static bool s_bBtAppInitDone = false;
 
 
-// BtAppData_t now declared in bluetooth/bt_app.h, accessed via g_BtAppData.
-// SDC port has no SDK-specific state in BtAppData_t scope; everything that
-// remains here is already in the cross-arch struct.
 
-// g_BtAppData definition and helpers (isConnected, BtAppConnLedOff/On) moved to
-// src/bluetooth/bt_app.cpp.
 
 // On-air local address SMP needs for c1/f5/f6 (set when we configure the
 // random static address below). Defaults to public/zero until then.
@@ -434,20 +520,13 @@ void BtAppDisconnected(uint16_t ConnHdl, uint8_t Reason)
 	BtDevice_t *pPeer = BtPeerFindByHdl(ConnHdl);
 	BtPeerFree(pPeer);
 
-	bool bConnected = BtPeerIsConnected();
+	bool bConnected = BtConnected();
 
-	if (bConnected == false)
-	{
-//		BtGattSrvcDisconnected(&s_BtGapSrvc);
-//		BtGattSrvcDisconnected(&s_BtGattSrvc);
-
-		g_BtAppData.State = BTAPP_STATE_IDLE;
-	}
 
 	BtAppEvtDisconnected(ConnHdl);
 
 	if (bConnected == false &&
-		(g_BtAppData.AppDevice.Conn.Role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER)))
+		(s_BtAppData.Role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER)))
 	{
 		BtAdvStart();
 	}
@@ -714,6 +793,7 @@ bool BtAppConnInit(void)
  */
 bool BtAppInit(const BtAppCfg_t *pCfg)
 {
+	s_BtAppData.bInitialized = false;
 	if (pCfg == nullptr)
 	{
 		return false;
@@ -785,7 +865,6 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 //		return false;
 //	}
 
-	g_BtAppData.CoexMode = pCfg->CoexMode;
 
 	if (pCfg->CoexMode == BTAPP_COEXMODE_1W)
 	{
@@ -796,24 +875,19 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 		//mpsl_coex_support_802152_3wire_gpiote_if();
 	}
 
-	g_BtAppData.AppDevice.Conn.Role = pCfg->Role;
-	g_BtAppData.AppDevice.pHciDev = &s_BtHciDev;		// host used by the HCI operation layer (bt_adv_hci etc.)
+	s_BtAppData.Role = pCfg->Role;
+	s_BtAppData.pHciDev = &s_BtHciDev;
 	// Kept for BtAppSecInit, which the application calls from
 	// BtAppInitUserData when it uses security.
-	g_BtAppData.SecType = pCfg->SecType;
-	g_BtAppData.SecExchg = pCfg->SecExchg;
-	g_BtAppData.bSecInit = false;
-	DEBUG_PRINTF("g_BtAppData.AppDevice.Conn.Role = %d\r\n", g_BtAppData.AppDevice.Conn.Role);
+	s_BtAppData.SecType = pCfg->SecType;
+	s_BtAppData.SecExchg = pCfg->SecExchg;
+	s_BtAppData.bSecInit = false;
+	DEBUG_PRINTF("BLE role = %d\r\n", s_BtAppData.Role);
 
-	g_BtAppData.bScan = false;
-//	g_BtAppData.bAdvertising = false;
-	g_BtAppData.AppDevice.VendorId = pCfg->VendorId;
-	g_BtAppData.AppDevice.ProductId = pCfg->ProductId;
-	g_BtAppData.AppDevice.ProductVer = pCfg->ProductVer;
-	g_BtAppData.AppDevice.Appearance = pCfg->Appearance;
-	g_BtAppData.ConnLedPort = pCfg->ConnLedPort;
-	g_BtAppData.ConnLedPin = pCfg->ConnLedPin;
-	g_BtAppData.ConnLedActLevel = pCfg->ConnLedActLevel;
+	BtAppScanEnded();
+	s_BtAppData.ConnLedPort = pCfg->ConnLedPort;
+	s_BtAppData.ConnLedPin = pCfg->ConnLedPin;
+	s_BtAppData.ConnLedActLevel = pCfg->ConnLedActLevel;
 
 	if (pCfg->ConnLedPort != -1 && pCfg->ConnLedPin != -1)
     {
@@ -935,16 +1009,13 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 	// and started only when the application calls BtAppSecInit, normally from
 	// BtAppInitUserData above. A configuration that asks for security without
 	// starting it must not run unprotected.
-	if (pCfg->SecType != BTGAP_SECTYPE_NONE && g_BtAppData.bSecInit == false)
+	if (pCfg->SecType != BTGAP_SECTYPE_NONE && s_BtAppData.bSecInit == false)
 	{
 		STORE_PRINTF("BtAppInit FAIL: SecType=%d but BtAppSecInit was not called\r\n",
 					 (int)pCfg->SecType);
 		return false;
 	}
 
-	// Record whether security was requested. The security module secures
-	// each new link when this is set.
-	g_BtAppData.AppDevice.bSecure = (pCfg->SecType != BTGAP_SECTYPE_NONE);
 
     if (pCfg->Role & (BTAPP_ROLE_BROADCASTER | BTAPP_ROLE_PERIPHERAL))
     {
@@ -1008,11 +1079,11 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 	}
 	s_bBtAppInitDone = true;
 
-	g_BtAppData.State = BTAPP_STATE_INITIALIZED;
+	s_BtAppData.bInitialized = true;
 
 	// Advertising starts here and not from the event queue: an application
 	// interrupt can fill the queue before the application runs it.
-	if (g_BtAppData.AppDevice.Conn.Role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER))
+	if (s_BtAppData.Role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER))
 	{
     	BtAdvStart();
 	}
@@ -1193,3 +1264,9 @@ void mpsl_lowpower_request_callback(void)
 }
 
 #endif
+
+// Internal controller access for the HCI command and security modules.
+BtHciDevice_t *BtAppHciDevice(void)
+{
+	return s_BtAppData.pHciDev;
+}

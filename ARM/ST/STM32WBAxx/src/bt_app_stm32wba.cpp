@@ -9,7 +9,7 @@
         File responsibilities:
             - BtAppStackInit:  bring up ST BLE stack, register HCI callback,
                                set TX power and BD address.
-            - BtAppInit:       populate g_BtAppData, init GAP/GATT, register
+            - BtAppInit:       initialize private port state, init GAP/GATT, register
                                user services, init DIS, init advertising.
 	- Stack callbacks (hci_notify_asynch_evt, BLE_RESUME_FLOW):
 		       queue the HCI event drain and the host work
@@ -84,6 +84,81 @@ SOFTWARE.
 #include "bluetooth/bt_dev.h"
 #include "bluetooth/bt_att.h"
 #include "bt_wba_event_router.h"
+
+
+// Port implementation state. Neither its layout nor storage leaves this file.
+static struct {
+	uint8_t Role;
+	uint16_t MaxMtu;
+	BTGAP_SECTYPE SecType;
+	uint8_t SecExchg;
+	bool bSecInit;
+	bool bSecure;
+	bool bInitialized;
+	int8_t ConnLedPort;
+	int8_t ConnLedPin;
+	uint8_t ConnLedActLevel;
+} s_BtAppData = {
+	.Role = 0,
+	.MaxMtu = 0,
+	.SecType = BTGAP_SECTYPE_NONE,
+	.SecExchg = 0,
+	.bSecInit = false,
+	.bSecure = false,
+	.bInitialized = false,
+	.ConnLedPort = -1,
+	.ConnLedPin = -1,
+	.ConnLedActLevel = 0,
+};
+
+bool BtInitialized(void)
+{
+	return s_BtAppData.bInitialized;
+}
+
+// Called by the peer module and this port's event handlers.
+void BtAppConnLedOff(void)
+{
+	if (s_BtAppData.ConnLedPort < 0 || s_BtAppData.ConnLedPin < 0)
+	{
+		return;
+	}
+	if (s_BtAppData.ConnLedActLevel)
+	{
+		IOPinClear(s_BtAppData.ConnLedPort, s_BtAppData.ConnLedPin);
+	}
+	else
+	{
+		IOPinSet(s_BtAppData.ConnLedPort, s_BtAppData.ConnLedPin);
+	}
+}
+
+void BtAppConnLedOn(void)
+{
+	if (s_BtAppData.ConnLedPort < 0 || s_BtAppData.ConnLedPin < 0)
+	{
+		return;
+	}
+	if (s_BtAppData.ConnLedActLevel)
+	{
+		IOPinSet(s_BtAppData.ConnLedPort, s_BtAppData.ConnLedPin);
+	}
+	else
+	{
+		IOPinClear(s_BtAppData.ConnLedPort, s_BtAppData.ConnLedPin);
+	}
+}
+
+uint8_t BtAdvHandle(void);
+
+bool BtScanIsActive(void);
+
+// GATT uses this default when a characteristic has no security override.
+BTGAP_SECTYPE BtAppSecTypeGet(void)
+{
+	return s_BtAppData.SecType;
+}
+
 
 /******** For DEBUG ************/
 //#define UART_DEBUG_ENABLE
@@ -660,7 +735,7 @@ void BtSmpOobDataClear(void)
 static void BtAppOobPeerDataPush(uint16_t ConnHdl, uint8_t AddrType,
 								 const uint8_t *pAddr)
 {
-	if (!s_WbaData.bOobEnabled || !g_BtAppData.AppDevice.bSecure ||
+	if (!s_WbaData.bOobEnabled || !s_BtAppData.bSecure ||
 		!s_BtAppPeerOobValid || pAddr == NULL)
 	{
 		return;
@@ -721,15 +796,13 @@ static void BtAppWbaConnected(uint8_t Status, uint16_t ConnHdl, uint8_t Role,
 			// BtPeerConnectionRejected, which terminates the link.
 			return;
 		}
-
-		g_BtAppData.State = BTAPP_STATE_CONNECTED;
 		BtAppConnLedOn();
 		BtAppEvtConnected(ConnHdl);
 
 		// The link starts at the default ATT MTU of 23. Ask for the larger one
 		// the application configured. The server answer raises the link MTU, see
 		// ACI_ATT_EXCHANGE_MTU_RESP below.
-		if (g_BtAppData.AppDevice.Conn.MaxMtu > GATT_MTU_SIZE_DEFAULT)
+		if (s_BtAppData.MaxMtu > GATT_MTU_SIZE_DEFAULT)
 		{
 			(void)aci_gatt_exchange_config(ConnHdl);
 		}
@@ -738,7 +811,7 @@ static void BtAppWbaConnected(uint8_t Status, uint16_t ConnHdl, uint8_t Role,
 		// ACI_GAP_PAIRING_COMPLETE, which surfaces below as
 		// BtAppEvtSecured. A central starts pairing directly; a
 		// peripheral asks the central with a Security Request.
-		if (g_BtAppData.AppDevice.bSecure)
+		if (s_BtAppData.bSecure)
 		{
 			// Only a LESC link configured for OOB may claim the
 			// single staged peer OOB set.
@@ -776,7 +849,7 @@ static void BtAppWbaConnected(uint8_t Status, uint16_t ConnHdl, uint8_t Role,
 // one report per event.
 static void BtAppWbaScanReport(const uint8_t *pData, size_t Len)
 {
-	if (g_BtAppData.bScan == false || Len < 12)
+	if (BtScanIsActive() == false || Len < 12)
 	{
 		return;
 	}
@@ -816,7 +889,7 @@ static void BtAppWbaScanReport(const uint8_t *pData, size_t Len)
 // LE Extended Advertising Report. The stack sends one report per event.
 static void BtAppWbaExtScanReport(const uint8_t *pData, size_t Len)
 {
-	if (g_BtAppData.bScan == false ||
+	if (BtScanIsActive() == false ||
 		Len < offsetof(hci_le_extended_advertising_report_event_rp0, Data))
 	{
 		return;
@@ -866,16 +939,14 @@ static BtWbaEvtFlow_t BtAppHciEvtHandler(void *pPayload)
 				if (pPeer != nullptr)
 				{
 					BtPeerFree(pPeer);
-					bool connected = BtPeerIsConnected();
+					bool connected = BtConnected();
 
 					if (connected)
 					{
-						g_BtAppData.State = BTAPP_STATE_CONNECTED;
 						BtAppConnLedOn();
 					}
 					else
 					{
-						g_BtAppData.State = BTAPP_STATE_IDLE;
 						BtAppConnLedOff();
 					}
 
@@ -936,7 +1007,7 @@ static BtWbaEvtFlow_t BtAppHciEvtHandler(void *pPayload)
 							hci_le_advertising_set_terminated_event_rp0))
 					{
 						auto *p = (hci_le_advertising_set_terminated_event_rp0 *)pMeta->data;
-						if (p->Advertising_Handle == g_BtAppData.AdvHdl &&
+						if (p->Advertising_Handle == BtAdvHandle() &&
 							p->Status != BLE_STATUS_SUCCESS)
 						{
 							// Clear advertising state before the application can restart it.
@@ -995,9 +1066,9 @@ static BtWbaEvtFlow_t BtAppHciEvtHandler(void *pPayload)
 					{
 						uint16_t mtu = pMtu->Server_RX_MTU;
 
-						if (mtu > g_BtAppData.AppDevice.Conn.MaxMtu)
+						if (mtu > s_BtAppData.MaxMtu)
 						{
-							mtu = g_BtAppData.AppDevice.Conn.MaxMtu;
+							mtu = s_BtAppData.MaxMtu;
 						}
 						if (mtu >= GATT_MTU_SIZE_DEFAULT)
 						{
@@ -1381,7 +1452,7 @@ bool BtAppStackInit(const BtAppCfg_t *pCfg)
  */
 bool BtAppSecInit(void)
 {
-	if (g_BtAppData.bSecInit)
+	if (s_BtAppData.bSecInit)
 	{
 		// Already started
 		return true;
@@ -1396,7 +1467,7 @@ bool BtAppSecInit(void)
 	// SMP / pairing config. Map BtGap SecType to ST auth requirement.
 	uint8_t authReq      = 0;	// bonding NO, MITM NO by default
 	uint8_t scSupport    = 0;	// LE Secure Connections off by default
-	switch (g_BtAppData.SecType)
+	switch (s_BtAppData.SecType)
 	{
 		case BTGAP_SECTYPE_STATICKEY_MITM:
 		case BTGAP_SECTYPE_SIGNED_MITM:
@@ -1430,7 +1501,7 @@ bool BtAppSecInit(void)
 	// Map the application key-exchange capability to the ST IO capability so the
 	// MITM models (Numeric Comparison, Passkey Entry) can be selected. With no
 	// exchange bits the configured default (No Input No Output) stays.
-	uint8_t ioExchg = g_BtAppData.SecExchg &
+	uint8_t ioExchg = s_BtAppData.SecExchg &
 			(BTAPP_SECEXCHG_KEYBOARD | BTAPP_SECEXCHG_DISPLAY | BTAPP_SECEXCHG_YESNO);
 	switch (ioExchg)
 	{
@@ -1453,7 +1524,7 @@ bool BtAppSecInit(void)
 
 	aci_gap_set_io_capability(s_WbaData.IoCapability);
 
-	g_BtAppData.bSecInit = true;
+	s_BtAppData.bSecInit = true;
 
 	return true;
 }
@@ -1462,6 +1533,7 @@ static bool BtAppTickStart(void);
 
 bool BtAppInit(const BtAppCfg_t *pCfg)
 {
+	s_BtAppData.bInitialized = false;
 	if (pCfg == NULL)
 	{
 		return false;
@@ -1489,22 +1561,16 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 	// Connection pool removed: the peer manager (BtPeerInit above) owns
 	// the single connection table now.
 	// Populate generic app data from cfg.
-	g_BtAppData.AppDevice.Conn.Role = pCfg->Role;
-	g_BtAppData.AdvHdl          = 0;	// WBA stack manages adv internally
-	g_BtAppData.bExtAdv         = false;	// decided by the advertising encoder
-	g_BtAppData.ConnLedPort     = pCfg->ConnLedPort;
-	g_BtAppData.ConnLedPin      = pCfg->ConnLedPin;
-	g_BtAppData.ConnLedActLevel = pCfg->ConnLedActLevel;
-	g_BtAppData.bScan           = false;
-	g_BtAppData.AppDevice.VendorId   = pCfg->VendorId;
-	g_BtAppData.AppDevice.ProductId  = pCfg->ProductId;
-	g_BtAppData.AppDevice.ProductVer = pCfg->ProductVer;
-	g_BtAppData.AppDevice.Appearance = pCfg->Appearance;
+	s_BtAppData.Role = pCfg->Role;
+	s_BtAppData.ConnLedPort     = pCfg->ConnLedPort;
+	s_BtAppData.ConnLedPin      = pCfg->ConnLedPin;
+	s_BtAppData.ConnLedActLevel = pCfg->ConnLedActLevel;
+	BtScanIsActive()           = false;
 
-	g_BtAppData.AppDevice.Conn.MaxMtu = GATT_MTU_SIZE_DEFAULT;
+	s_BtAppData.MaxMtu = GATT_MTU_SIZE_DEFAULT;
 	if (pCfg->MaxMtu > GATT_MTU_SIZE_DEFAULT)
 	{
-		g_BtAppData.AppDevice.Conn.MaxMtu = pCfg->MaxMtu;
+		s_BtAppData.MaxMtu = pCfg->MaxMtu;
 	}
 
 	// Connection LED.
@@ -1566,12 +1632,12 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 
 	// Store the app security type so the GATT layer can gate characteristic
 	// permissions before user services are registered.
-	g_BtAppData.SecType = pCfg->SecType;
+	s_BtAppData.SecType = pCfg->SecType;
 
 	// The pairing configuration is set by BtAppSecInit, which the application
 	// calls from BtAppInitUserData when it uses security.
-	g_BtAppData.SecExchg = pCfg->SecExchg;
-	g_BtAppData.bSecInit = false;
+	s_BtAppData.SecExchg = pCfg->SecExchg;
+	s_BtAppData.bSecInit = false;
 
 	// Generic GAP init - sets up the generic-layer GAP/GATT service mirror.
 	BtGapCfg_t gapcfg = {
@@ -1612,17 +1678,17 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 	// Security is started only when the application calls BtAppSecInit,
 	// normally from BtAppInitUserData above. A configuration that asks for
 	// security without starting it must not run unprotected.
-	if (pCfg->SecType != BTGAP_SECTYPE_NONE && g_BtAppData.bSecInit == false)
+	if (pCfg->SecType != BTGAP_SECTYPE_NONE && s_BtAppData.bSecInit == false)
 	{
 		DEBUG_PRINTF("BtAppInit FAIL: SecType=%d but BtAppSecInit was not called\r\n",
 					 (int)pCfg->SecType);
 		return false;
 	}
 
-	g_BtAppData.AppDevice.bSecure = (pCfg->SecType != BTGAP_SECTYPE_NONE);
+	s_BtAppData.bSecure = (pCfg->SecType != BTGAP_SECTYPE_NONE);
 
 	// Advertising init - actual ACI calls live in bt_adv_stm32wba.cpp.
-	if (g_BtAppData.AppDevice.Conn.Role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER))
+	if (s_BtAppData.Role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER))
 	{
 		if (BtAppAdvInit(pCfg) == false)
 		{
@@ -1631,17 +1697,17 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 		}
 	}
 
-	g_BtAppData.State = BTAPP_STATE_INITIALIZED;
-
 	if (BtAppTickStart() == false)
 	{
 		DEBUG_PRINTF("BtAppInit: timeout check timer failed\r\n");
 		return false;
 	}
 
+	s_BtAppData.bInitialized = true;
+
 	// Advertising starts here and not from the event queue: an application
 	// interrupt can fill the queue before the application runs it.
-	if (g_BtAppData.AppDevice.Conn.Role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER))
+	if (s_BtAppData.Role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER))
 	{
 		BtAdvStart();
 	}

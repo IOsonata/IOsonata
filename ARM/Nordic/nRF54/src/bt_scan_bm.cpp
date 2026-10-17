@@ -27,6 +27,19 @@ Copyright (c) 2026, I-SYST inc., all rights reserved
 #include "bluetooth/bt_app.h"
 #include "bluetooth/bt_gap.h"
 
+static bool s_bScanning;
+
+bool BtScanIsActive(void)
+{
+	return s_bScanning;
+}
+
+void BtScanEnded(void)
+{
+	s_bScanning = false;
+}
+
+
 // --- Scan buffer for central / observer mode ---
 // S145 on nRF54L15 caps extended-adv data at BLE_GAP_SCAN_BUFFER_EXTENDED_MAX_SUPPORTED (255).
 // Same buffer covers legacy 31-byte scans too.
@@ -44,13 +57,13 @@ bool BtAppScanInit(BtGapScanCfg_t *pCfg)
 		return false;
 	}
 
-	g_BtAppData.bScan = true;
-	return BtGapScanStart(s_BleScanBuff, sizeof(s_BleScanBuff));
+	s_bScanning = BtGapScanStart(s_BleScanBuff, sizeof(s_BleScanBuff));
+	return s_bScanning;
 }
 
 void BtAppScan(void)
 {
-	if (g_BtAppData.bScan)
+	if (s_bScanning)
 	{
 		// Re-arm the scan with the same parameters (SD requirement after
 		// every adv report when reporting is one-shot).
@@ -58,13 +71,12 @@ void BtAppScan(void)
 	}
 	else
 	{
-		g_BtAppData.bScan = true;
-		BtGapScanStart(s_BleScanBuff, sizeof(s_BleScanBuff));
+		s_bScanning = BtGapScanStart(s_BleScanBuff, sizeof(s_BleScanBuff));
 	}
 }
 
 void BtAppScanStop(void)
 {
 	BtGapScanStop();
-	g_BtAppData.bScan = false;
+	s_bScanning = false;
 }

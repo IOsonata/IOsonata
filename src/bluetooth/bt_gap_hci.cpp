@@ -29,6 +29,10 @@ Copyright (c) 2024 I-SYST inc. All rights reserved.
 #include "bluetooth/bt_smp.h"
 #include "syslog.h"
 
+// Internal controller access; not an application API.
+BtHciDevice_t *BtAppHciDevice(void);
+
+
 /******** For DEBUG Trace ************/
 // Define DEBUG_ENABLE to turn on trace for this file. Output goes to the
 // SysLog transport the app configured (UART, USB, RTT, BLE, or any other
@@ -122,7 +126,7 @@ static inline void BtGapWr16(uint8_t *p, uint16_t v)
 
 static inline BtHciDevice_t *BtGapHciDev(void)
 {
-	return g_BtAppData.AppDevice.pHciDev;
+	return BtAppHciDevice();
 }
 
 // Clamp the HCI-encoded LE scan interval and window to the valid range

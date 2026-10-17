@@ -64,6 +64,14 @@ SOFTWARE.
 #include "bluetooth/bt_smp.h"
 #include "bluetooth/bt_dev.h"
 
+BTGAP_SECTYPE BtAppSecConfigGet(uint8_t *pExchg);
+bool BtAppSecIsStarted(void);
+void BtAppSecStarted(void);
+
+static BTGAP_SECTYPE s_SecType;
+static uint8_t s_SecExchg;
+
+
 /******** For DEBUG ************/
 #define DEBUG_ENABLE
 
@@ -239,7 +247,7 @@ static void BtSecNrf52EvtHandler(ble_evt_t const *pEvt, void *pContext)
 {
 	(void)pContext;
 
-	if (g_BtAppData.bSecInit == false)
+	if (BtAppSecIsStarted() == false)
 	{
 		return;
 	}
@@ -252,7 +260,7 @@ static void BtSecNrf52EvtHandler(ble_evt_t const *pEvt, void *pContext)
 		{
 			uint16_t connHdl = pEvt->evt.gap_evt.conn_handle;
 			if (BtPeerFindByHdl(connHdl) != nullptr &&
-				g_BtAppData.AppDevice.bSecure)
+				(s_SecType != BTGAP_SECTYPE_NONE))
 			{
 				ret_code_t r = BtSecSdSecure(connHdl, false);
 				DEBUG_PRINTF("SEC: connect hdl=%d secure=0x%X\r\n",
@@ -341,10 +349,11 @@ extern "C" int BtLescLinkCount(void)
  */
 bool BtAppSecInit(void)
 {
-	BTGAP_SECTYPE SecType = g_BtAppData.SecType;
-	uint8_t SecKeyExchg = g_BtAppData.SecExchg;
+	s_SecType = BtAppSecConfigGet(&s_SecExchg);
+	BTGAP_SECTYPE SecType = s_SecType;
+	uint8_t SecKeyExchg = s_SecExchg;
 
-	if (g_BtAppData.bSecInit)
+	if (BtAppSecIsStarted())
 	{
 		return true;
 	}
@@ -449,7 +458,7 @@ bool BtAppSecInit(void)
 	}
 
 	BtLescOobPeerHandlerSet(BtAppOobPeerDataHandler);
-	g_BtAppData.bSecInit = true;
+	BtAppSecStarted();
 
 	DEBUG_PRINTF("STORE: bt_pds -> Nvm (SoftDevice, no peer_manager/fds)\r\n");
 #ifdef NRF_SD_BLE_API_VERSION

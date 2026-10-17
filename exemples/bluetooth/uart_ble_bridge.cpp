@@ -316,7 +316,7 @@ static void UartBleOobPrintLocal(void)
 	uint8_t r[16];
 	uint8_t c[16];
 
-	if (BtSmpOobLocalDataGen(g_BtAppData.AppDevice.pHciDev, r, c) != 0)
+	if (BtSmpOobLocalDataGen(nullptr, r, c) != 0)
 	{
 		g_Uart.printf("OOB local data generation failed\r\n");
 		return;

@@ -15,6 +15,9 @@
 #include "bluetooth/bt_padv.h"
 #include "bluetooth/bt_psync.h"
 
+static BtHciDevice_t *s_pController;
+
+
 // The HCI host and bt_psync.cpp are not part of this test. BtPadvInit
 // registers the response entry points with the host, so the registration and
 // the two entry points land here.
@@ -33,10 +36,7 @@ void BtPsyncEvtResponseReport(const uint8_t *, int)
 {
 }
 
-// bt_app.cpp is not linked here. It brings the whole application state machine
-// in for one field, the HCI device the command helper reaches the controller
-// through, so the definition lives here instead.
-BtAppData_t g_BtAppData;
+// The command module receives the test controller through its internal accessor.
 
 namespace {
 
@@ -106,7 +106,7 @@ void Reset(void)
 	std::memset(s_Cmds, 0, sizeof(s_Cmds));
 	std::memset(&s_Dev, 0, sizeof(s_Dev));
 	s_Dev.Command = CaptureCommand;
-	g_BtAppData.AppDevice.pHciDev = &s_Dev;
+	s_pController = &s_Dev;
 }
 
 int CountCmd(uint16_t OpCode)
@@ -520,7 +520,7 @@ void TestDataRefreshNeedsAnEnabledTrain(void)
 void TestNoDeviceIsRefused(void)
 {
 	Reset();
-	g_BtAppData.AppDevice.pHciDev = nullptr;
+	s_pController = nullptr;
 
 	BtPadvCfg_t cfg = MakeCfg();
 	CHECK(BtPadvInit(&cfg) == false);
@@ -805,4 +805,9 @@ int main()
 				s_Failures, s_Checks);
 
 	return 1;
+}
+
+BtHciDevice_t *BtAppHciDevice(void)
+{
+	return s_pController;
 }

@@ -15,6 +15,9 @@
 #include "bluetooth/bt_app.h"
 #include "bluetooth/bt_appearance.h"
 
+static BtHciDevice_t *s_pController;
+
+
 namespace {
 
 int s_Failures = 0;
@@ -34,7 +37,7 @@ struct CapturedCmd {
 	uint16_t ParamLen;
 };
 
-CapturedCmd s_Cmds[16];
+CapturedCmd s_Cmds[64];
 int s_CmdCount = 0;
 
 uint8_t s_LocalType = 0;
@@ -85,8 +88,7 @@ void Setup(uint8_t LocalType, const uint8_t LocalAddr[6])
 	std::memset(s_Cmds, 0, sizeof(s_Cmds));
 	std::memset(&s_Dev, 0, sizeof(s_Dev));
 	s_Dev.Command = CaptureCommand;
-	g_BtAppData.AppDevice.pHciDev = &s_Dev;
-	g_BtAppData.State = BTAPP_STATE_IDLE;
+	s_pController = &s_Dev;
 	s_LocalType = LocalType;
 	std::memcpy(s_LocalAddr, LocalAddr, 6);
 }
@@ -206,6 +208,20 @@ void TestAdvDegenerateRandomIdentity()
 // disable is rejected the set is still on air, and a later BtAdvStart would
 // see IDLE, send an enable and treat the device as freshly advertising when it
 // never stopped.
+// Observe whether a start command is emitted without inspecting private state.
+static void CheckStartCommand(bool Expected)
+{
+	int before = s_CmdCount;
+	BtAdvStart();
+	CHECK(s_CmdCount == before + (Expected ? 1 : 0));
+	if (Expected)
+	{
+		CHECK(s_Cmds[before].OpCode == BT_HCI_CMD_CTLR_SET_EXT_ADV_ENABLE);
+		CHECK(s_Cmds[before].Param[0] == 1);
+		BtAdvStop();
+	}
+}
+
 void TestAdvStopKeepsStateOnFailure()
 {
 	uint8_t addr[6] = { 0x11, 0x22, 0x33, 0x44, 0x55, 0xC6 };
@@ -215,18 +231,18 @@ void TestAdvStopKeepsStateOnFailure()
 	CHECK(BtAppAdvInit(&cfg) == true);
 
 	BtAdvStart();
-	CHECK(g_BtAppData.State == BTAPP_STATE_ADVERTISING);
+	CheckStartCommand(false);
 
 	// The controller rejects the disable: the device is still advertising.
 	s_FailOpCode = BT_HCI_CMD_CTLR_SET_EXT_ADV_ENABLE;
 	s_FailEnable = 0;
 	BtAdvStop();
-	CHECK(g_BtAppData.State == BTAPP_STATE_ADVERTISING);
+	CheckStartCommand(false);
 
 	// Once the disable is accepted the state follows.
 	s_FailOpCode = 0;
 	BtAdvStop();
-	CHECK(g_BtAppData.State == BTAPP_STATE_IDLE);
+	CheckStartCommand(true);
 }
 
 // Updating the manufacturer data while advertising stops and restarts the set.
@@ -241,20 +257,20 @@ void TestAdvManDataSetReportsRestartFailure()
 	CHECK(BtAppAdvInit(&cfg) == true);
 
 	BtAdvStart();
-	CHECK(g_BtAppData.State == BTAPP_STATE_ADVERTISING);
+	CheckStartCommand(false);
 
 	uint8_t data[4] = { 1, 2, 3, 4 };
 
 	// A successful update keeps the device advertising.
 	CHECK(BtAppAdvManDataSet(data, sizeof(data), nullptr, 0) == true);
-	CHECK(g_BtAppData.State == BTAPP_STATE_ADVERTISING);
+	CheckStartCommand(false);
 
 	// The re-enable is rejected: the device is off air with the new data
 	// loaded, and the state says so.
 	s_FailOpCode = BT_HCI_CMD_CTLR_SET_EXT_ADV_ENABLE;
 	s_FailEnable = 1;
 	CHECK(BtAppAdvManDataSet(data, sizeof(data), nullptr, 0) == false);
-	CHECK(g_BtAppData.State == BTAPP_STATE_IDLE);
+	CheckStartCommand(true);
 }
 
 // ---- G5: manufacturer company identifier byte order ----------------------
@@ -263,7 +279,10 @@ void TestManDataCompanyIdLittleEndian()
 {
 	uint8_t addr[6] = {};
 	Setup(BTADDR_TYPE_PUBLIC, addr);
-	g_BtAppData.AppDevice.VendorId = 0x1234;
+	BtAppCfg_t cfg = MakePeripheralCfg();
+	cfg.VendorId = 0x1234;
+	CHECK(BtAppAdvInit(&cfg));
+	s_CmdCount = 0;
 
 	uint8_t payload[3] = { 0xAA, 0xBB, 0xCC };
 	CHECK(BtAppAdvManDataSet(payload, sizeof(payload), nullptr, 0) == true);
@@ -274,10 +293,20 @@ void TestManDataCompanyIdLittleEndian()
 	{
 		// AdvHandle(1) Operation(1) FragPref(1) DataLen(1) then the AD list:
 		// Length, Type(0xFF manuf), CompanyId_lo, CompanyId_hi, payload...
-		CHECK(ad->Param[5] == 0xFF);
-		CHECK(ad->Param[6] == 0x34);		// 0x1234 low octet first
-		CHECK(ad->Param[7] == 0x12);
-		CHECK(ad->Param[8] == 0xAA);		// payload follows the company id
+		// Initialization also encodes flags/name. Find the manufacturer TLV.
+		unsigned offset = 4;
+		while (offset + 1 < ad->ParamLen && ad->Param[offset + 1] != 0xFF)
+		{
+			offset += ad->Param[offset] + 1;
+		}
+		CHECK(offset + 4 < ad->ParamLen);
+		if (offset + 4 < ad->ParamLen)
+		{
+			CHECK(ad->Param[offset + 1] == 0xFF);
+			CHECK(ad->Param[offset + 2] == 0x34);
+			CHECK(ad->Param[offset + 3] == 0x12);
+			CHECK(ad->Param[offset + 4] == 0xAA);
+		}
 	}
 }
 
@@ -448,7 +477,6 @@ void TestCodingSelectionHostFeatureBit()
 } // namespace
 
 
-BtAppData_t g_BtAppData;
 
 extern "C" void BtSmpLocalAddrGet(uint8_t *pType, uint8_t pAddr[6])
 {
@@ -480,4 +508,9 @@ int main()
 
 	std::printf("Adv HCI host tests: PASS (%d checks)\n", s_Checks);
 	return 0;
+}
+
+BtHciDevice_t *BtAppHciDevice(void)
+{
+	return s_pController;
 }

@@ -40,6 +40,17 @@ Copyright (c) 2026, I-SYST inc. All rights reserved.
 #include "bluetooth/bt_appearance.h"
 #include "bluetooth/bt_peer.h"
 
+static uint8_t s_AdvRole;
+static uint16_t s_AdvVendorId;
+static bool s_bExtAdv;
+static uint8_t s_AdvHandle = BLE_GAP_ADV_SET_HANDLE_NOT_SET;
+
+uint8_t BtAdvHandle(void)
+{
+	return s_AdvHandle;
+}
+
+
 //#define DEBUG_ENABLE
 
 #if !defined(NDEBUG) && defined(DEBUG_ENABLE)
@@ -121,7 +132,7 @@ static bool BtAdvPeerSlotAvailable()
 
 static bool BtAdvCanStart()
 {
-	uint8_t role = g_BtAppData.AppDevice.Conn.Role;
+	uint8_t role = s_AdvRole;
 
 	if ((role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER)) == 0)
 	{
@@ -136,19 +147,6 @@ static bool BtAdvCanStart()
 	}
 
 	return true;
-}
-
-static void BtAdvStateUpdate()
-{
-	if (BtPeerIsConnected())
-	{
-		g_BtAppData.State = BTAPP_STATE_CONNECTED;
-	}
-	else
-	{
-		g_BtAppData.State = s_bAdvertising ?
-			BTAPP_STATE_ADVERTISING : BTAPP_STATE_IDLE;
-	}
 }
 
 static bool BtAdvDataCanAllocate(const BtAdvPacket_t *pPacket, uint8_t Type,
@@ -199,14 +197,12 @@ static bool BtAdvDataCanAllocate(const BtAdvPacket_t *pPacket, uint8_t Type,
 void BtAdvBmConnected()
 {
 	s_bAdvertising = false;
-	BtAdvStateUpdate();
 }
 
 // Timeout and event-limit termination are reported explicitly by S145.
 void BtAdvBmTerminated()
 {
 	s_bAdvertising = false;
-	BtAdvStateUpdate();
 }
 
 void BtAdvStart()
@@ -222,8 +218,6 @@ void BtAdvStart()
 			BtAdvStop();
 			return;
 		}
-
-		BtAdvStateUpdate();
 		return;
 	}
 
@@ -232,11 +226,10 @@ void BtAdvStart()
 		return;
 	}
 
-	uint32_t err_code = sd_ble_gap_adv_start(g_BtAppData.AdvHdl, BTAPP_CONN_CFG_TAG);
+	uint32_t err_code = sd_ble_gap_adv_start(s_AdvHandle, BTAPP_CONN_CFG_TAG);
 	if (err_code == NRF_SUCCESS)
 	{
 		s_bAdvertising = true;
-		BtAdvStateUpdate();
 	}
 	else
 	{
@@ -251,7 +244,7 @@ void BtAdvStop()
 		return;
 	}
 
-	uint32_t err_code = sd_ble_gap_adv_stop(g_BtAppData.AdvHdl);
+	uint32_t err_code = sd_ble_gap_adv_stop(s_AdvHandle);
 	if (err_code != NRF_SUCCESS && err_code != NRF_ERROR_INVALID_STATE)
 	{
 		DEBUG_PRINTF("BtAdvStop failed: 0x%x\r\n", err_code);
@@ -259,7 +252,6 @@ void BtAdvStop()
 	}
 
 	s_bAdvertising = false;
-	BtAdvStateUpdate();
 }
 
 __attribute__((weak)) bool BtAppAdvInit(const BtAppCfg_t *pCfg)
@@ -268,6 +260,9 @@ __attribute__((weak)) bool BtAppAdvInit(const BtAppCfg_t *pCfg)
 	{
 		return false;
 	}
+	s_AdvRole = pCfg->Role;
+	s_AdvVendorId = pCfg->VendorId;
+
 
 	BtAdvPacket_t *advpkt = &s_BtAppAdvPkt;
 	BtAdvPacket_t *srpkt  = &s_BtAppSrPkt;
@@ -280,7 +275,7 @@ __attribute__((weak)) bool BtAppAdvInit(const BtAppCfg_t *pCfg)
 	// records pack, and reports it via bExtAdv/scannable.
 	bool scannable = false;
 
-	if (BtAdvEncode(pCfg, advpkt, srpkt, &g_BtAppData.bExtAdv, &scannable) == false)
+	if (BtAdvEncode(pCfg, advpkt, srpkt, &s_bExtAdv, &scannable) == false)
 	{
 		return false;
 	}
@@ -292,7 +287,7 @@ __attribute__((weak)) bool BtAppAdvInit(const BtAppCfg_t *pCfg)
 	{
 		// Connectable. Legacy ADV_IND is scannable; extended connectable is
 		// non-scannable (spec forbids connectable + scannable in extended).
-		s_BmData.AdvParam.properties.type = g_BtAppData.bExtAdv ?
+		s_BmData.AdvParam.properties.type = s_bExtAdv ?
 			BLE_GAP_ADV_TYPE_EXTENDED_CONNECTABLE_NONSCANNABLE_UNDIRECTED :
 			BLE_GAP_ADV_TYPE_CONNECTABLE_SCANNABLE_UNDIRECTED;
 	}
@@ -300,7 +295,7 @@ __attribute__((weak)) bool BtAppAdvInit(const BtAppCfg_t *pCfg)
 	{
 		// Non-connectable. Scannable only if the encode placed data on the scan
 		// response; otherwise non-scannable (no scan response).
-		if (g_BtAppData.bExtAdv)
+		if (s_bExtAdv)
 		{
 			s_BmData.AdvParam.properties.type =
 				BLE_GAP_ADV_TYPE_EXTENDED_NONCONNECTABLE_NONSCANNABLE_UNDIRECTED;
@@ -336,7 +331,7 @@ __attribute__((weak)) bool BtAppAdvInit(const BtAppCfg_t *pCfg)
 	}
 
 	uint32_t err_code = sd_ble_gap_adv_set_configure(
-		&g_BtAppData.AdvHdl, &s_BtAppAdvData, &s_BmData.AdvParam);
+		&s_AdvHandle, &s_BtAppAdvData, &s_BmData.AdvParam);
 
 	if (err_code != NRF_SUCCESS)
 	{
@@ -352,7 +347,7 @@ bool BtAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int SrL
 	if (AdvLen < 0 || SrLen < 0 || AdvLen > INT_MAX - 2 || SrLen > INT_MAX - 2 ||
 		(AdvLen != 0 && pAdvData == nullptr) ||
 		(SrLen != 0 && pSrData == nullptr) ||
-		g_BtAppData.AdvHdl == BLE_GAP_ADV_SET_HANDLE_NOT_SET)
+		s_AdvHandle == BLE_GAP_ADV_SET_HANDLE_NOT_SET)
 	{
 		return false;
 	}
@@ -375,14 +370,13 @@ bool BtAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int SrL
 	bool wasAdvertising = s_bAdvertising;
 	if (wasAdvertising)
 	{
-		uint32_t err_code = sd_ble_gap_adv_stop(g_BtAppData.AdvHdl);
+		uint32_t err_code = sd_ble_gap_adv_stop(s_AdvHandle);
 		if (err_code != NRF_SUCCESS && err_code != NRF_ERROR_INVALID_STATE)
 		{
 			DEBUG_PRINTF("BtAppAdvManDataSet stop failed: 0x%x\r\n", err_code);
 			return false;
 		}
 		s_bAdvertising = false;
-		BtAdvStateUpdate();
 	}
 
 	if (pAdvData != nullptr)
@@ -399,7 +393,7 @@ bool BtAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int SrL
 			}
 			return false;
 		}
-		uint16_t vendorId = g_BtAppData.AppDevice.VendorId;
+		uint16_t vendorId = s_AdvVendorId;
 		memcpy(p->Data, &vendorId, sizeof(vendorId));
 		if (AdvLen != 0)
 		{
@@ -419,7 +413,7 @@ bool BtAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int SrL
 			DEBUG_PRINTF("BtAppAdvManDataSet scan allocation invariant failed\r\n");
 			return false;
 		}
-		uint16_t vendorId = g_BtAppData.AppDevice.VendorId;
+		uint16_t vendorId = s_AdvVendorId;
 		memcpy(p->Data, &vendorId, sizeof(vendorId));
 		if (SrLen != 0)
 		{
@@ -431,7 +425,7 @@ bool BtAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int SrL
 	}
 
 	uint32_t err_code = sd_ble_gap_adv_set_configure(
-		&g_BtAppData.AdvHdl, &s_BtAppAdvData, NULL);
+		&s_AdvHandle, &s_BtAppAdvData, NULL);
 	if (err_code != NRF_SUCCESS)
 	{
 		DEBUG_PRINTF("BtAppAdvManDataSet configure failed: 0x%x\r\n", err_code);

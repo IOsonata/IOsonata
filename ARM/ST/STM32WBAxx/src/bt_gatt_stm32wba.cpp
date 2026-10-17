@@ -28,6 +28,9 @@ BtGattSrvcAdd in bt_gatt.cpp is weak; this strong override replaces it on WBA.
 #include "bluetooth/bt_app.h"
 #include "bluetooth/bt_uuid.h"
 
+BTGAP_SECTYPE BtAppSecTypeGet(void);
+
+
 #define WBA_CHAR_VALUE_OFFSET		1
 #define WBA_CHAR_CCCD_OFFSET		2
 
@@ -61,7 +64,7 @@ static uint32_t WbaCharSecType(const BtGattSrvc_t *pSrvc,
 	{
 		return pSrvc->SecType;
 	}
-	return g_BtAppData.SecType;
+	return BtAppSecTypeGet();
 }
 
 // ACI attribute permissions can require encryption or authentication, but the
@@ -71,7 +74,7 @@ static uint32_t WbaCharSecType(const BtGattSrvc_t *pSrvc,
 // cannot enforce.
 static bool WbaSecTypeSupported(uint32_t SecType)
 {
-	uint32_t app = g_BtAppData.SecType;
+	uint32_t app = BtAppSecTypeGet();
 
 	switch (SecType)
 	{

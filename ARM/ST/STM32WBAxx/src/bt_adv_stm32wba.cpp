@@ -33,6 +33,11 @@ Copyright (c) 2026, I-SYST inc., all rights reserved
 #include "bluetooth/bt_gap.h"
 #include "bluetooth/bt_appearance.h"
 
+static uint8_t s_AdvRole;
+static uint16_t s_AdvVendorId;
+static bool s_bExtAdv;
+
+
 /******** For DEBUG ************/
 //#define UART_DEBUG_ENABLE
 
@@ -113,12 +118,12 @@ alignas(4) static BtAdvPacket_t s_BtAppExtSrPkt = {
 // The command family is always advertising-set; bExtAdv selects the PDU.
 static uint16_t MapAdvEvtProps(uint8_t Role)
 {
-	uint16_t prop = g_BtAppData.bExtAdv ? 0 : BT_WBA_EVT_PROP_LEGACY;
+	uint16_t prop = s_bExtAdv ? 0 : BT_WBA_EVT_PROP_LEGACY;
 
 	if (Role & BTAPP_ROLE_PERIPHERAL)
 	{
 		prop |= BT_WBA_EVT_PROP_CONNECTABLE;
-		if (!g_BtAppData.bExtAdv)
+		if (!s_bExtAdv)
 		{
 			prop |= BT_WBA_EVT_PROP_SCANNABLE;
 		}
@@ -162,7 +167,7 @@ static bool BtAdvPeerSlotAvailable(void)
 
 static bool BtAdvCanStart(void)
 {
-	uint8_t role = g_BtAppData.AppDevice.Conn.Role;
+	uint8_t role = s_AdvRole;
 
 	if ((role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER)) == 0)
 	{
@@ -179,32 +184,17 @@ static bool BtAdvCanStart(void)
 	return true;
 }
 
-static void BtAdvStateUpdate(void)
-{
-	if (BtPeerIsConnected())
-	{
-		g_BtAppData.State = BTAPP_STATE_CONNECTED;
-	}
-	else
-	{
-		g_BtAppData.State = s_bAdvertising ?
-			BTAPP_STATE_ADVERTISING : BTAPP_STATE_IDLE;
-	}
-}
-
 // A connectable advertising set stops when it creates a peripheral link.
 // Record that controller-side transition without sending a redundant disable.
 void BtAdvWbaConnected(void)
 {
 	s_bAdvertising = false;
-	BtAdvStateUpdate();
 }
 
 void BtAdvStart(void)
 {
 	if (s_bAdvertising || !BtAdvCanStart())
 	{
-		BtAdvStateUpdate();
 		return;
 	}
 
@@ -218,7 +208,6 @@ void BtAdvStart(void)
 	if (ret == BLE_STATUS_SUCCESS)
 	{
 		s_bAdvertising = true;
-		BtAdvStateUpdate();
 	}
 	else
 	{
@@ -230,7 +219,6 @@ void BtAdvStop(void)
 {
 	if (!s_bAdvertising)
 	{
-		BtAdvStateUpdate();
 		return;
 	}
 
@@ -247,7 +235,6 @@ void BtAdvStop(void)
 	}
 
 	s_bAdvertising = false;
-	BtAdvStateUpdate();
 }
 
 // Push the encoded packet pair using the same command family for both PDUs.
@@ -260,7 +247,7 @@ static bool PushAdvDataToStack(const BtAppCfg_t *pCfg,
 		0, BT_WBA_ADV_HANDLE, MapAdvEvtProps(pCfg->Role),
 		interval, interval, BT_WBA_ADV_CHAN_MAP_ALL,
 		0, 0, zeros, 0, 0x7F, 0,
-		g_BtAppData.bExtAdv ? BT_WBA_PHY_2M : 0x01,
+		s_bExtAdv ? BT_WBA_PHY_2M : 0x01,
 		0, 0);
 	if (ret != BLE_STATUS_SUCCESS)
 	{
@@ -295,6 +282,9 @@ __attribute__((weak)) bool BtAppAdvInit(const BtAppCfg_t *pCfg)
 	{
 		return false;
 	}
+	s_AdvRole = pCfg->Role;
+	s_AdvVendorId = pCfg->VendorId;
+
 
 	// Give the encoder the full packet capacities. It performs its own legacy
 	// attempt with 31-octet limits and reports the selected PDU mode.
@@ -310,7 +300,7 @@ __attribute__((weak)) bool BtAppAdvInit(const BtAppCfg_t *pCfg)
 	advpkt->Len = 0;
 	srpkt->Len = 0;
 
-	if (BtAdvEncode(pCfg, advpkt, srpkt, &g_BtAppData.bExtAdv,
+	if (BtAdvEncode(pCfg, advpkt, srpkt, &s_bExtAdv,
 					&bScannable) == false)
 	{
 		DEBUG_PRINTF("BtAdvEncode failed\r\n");
@@ -320,7 +310,7 @@ __attribute__((weak)) bool BtAppAdvInit(const BtAppCfg_t *pCfg)
 	// Legacy and extended packet views share storage. Preserve the encoded
 	// lengths in the legacy views so later manufacturer-data updates select
 	// the same packet state.
-	if (g_BtAppData.bExtAdv == false)
+	if (s_bExtAdv == false)
 	{
 		s_BtAppAdvPkt.Len = advpkt->Len;
 		s_BtAppSrPkt.Len = srpkt->Len;
@@ -335,9 +325,9 @@ __attribute__((weak)) bool BtAppAdvInit(const BtAppCfg_t *pCfg)
 bool BtAppAdvManDataSet(uint8_t *pAdvData, int AdvLen,
                         uint8_t *pSrData, int SrLen)
 {
-	BtAdvPacket_t *advpkt = g_BtAppData.bExtAdv
+	BtAdvPacket_t *advpkt = s_bExtAdv
 		? &s_BtAppExtAdvPkt : &s_BtAppAdvPkt;
-	BtAdvPacket_t *srpkt  = g_BtAppData.bExtAdv
+	BtAdvPacket_t *srpkt  = s_bExtAdv
 		? &s_BtAppExtSrPkt  : &s_BtAppSrPkt;
 
 	// Update the manuf-specific data record on the adv packet.
@@ -351,7 +341,7 @@ bool BtAppAdvManDataSet(uint8_t *pAdvData, int AdvLen,
 		{
 			return false;
 		}
-		*(uint16_t *)p->Data = g_BtAppData.AppDevice.VendorId;
+		*(uint16_t *)p->Data = s_AdvVendorId;
 		memcpy(&p->Data[2], pAdvData, AdvLen);
 	}
 
@@ -366,7 +356,7 @@ bool BtAppAdvManDataSet(uint8_t *pAdvData, int AdvLen,
 		{
 			return false;
 		}
-		*(uint16_t *)p->Data = g_BtAppData.AppDevice.VendorId;
+		*(uint16_t *)p->Data = s_AdvVendorId;
 		memcpy(&p->Data[2], pSrData, SrLen);
 	}
 
@@ -396,4 +386,9 @@ bool BtAppAdvManDataSet(uint8_t *pAdvData, int AdvLen,
 	}
 
 	return true;
+}
+
+uint8_t BtAdvHandle(void)
+{
+	return BT_WBA_ADV_HANDLE;
 }
