@@ -63,6 +63,7 @@ SOFTWARE.
 
 #include "app_evt_handler.h"
 #include "coredev/interrupt.h"
+#include "coredev/system_core_clock.h"
 #include "coredev/iopincfg.h"
 #include "coredev/uart.h"
 #include "syslog.h"
@@ -842,7 +843,7 @@ static void LteUdpTimerTrig(TimerDev_t * const pTimer, int TrigNo, void * const 
 	(void)TrigNo;
 	(void)pContext;
 
-    ++s_UdpTimerEvents;
+    s_UdpTimerEvents = s_UdpTimerEvents + 1U;
     s_bSendPending = true;
     if (!s_bSendQueued && AppEvtHandlerQue(LTE_UDP_EVT_SEND, nullptr, LteUdpSend))
     {
