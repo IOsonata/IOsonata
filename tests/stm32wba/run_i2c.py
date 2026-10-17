@@ -278,10 +278,14 @@ class I2c:
                 yield
             if rd:
                 self.stx = []
-                for _ in range(op[2]):
+                for _ in range(op[2] + 1):
                     self.f['txis'] = 1
                     while self.f['txis']:
                         yield
+                # TXIS comes again as soon as the last byte is in the shift
+                # register: that byte waits in TXDR and is never sent
+                self.stx.pop()
+                self.txdr_full = True
                 self.got.append(bytes(self.stx))
                 self.f['nackf'] = 1
                 while self.f['nackf']:

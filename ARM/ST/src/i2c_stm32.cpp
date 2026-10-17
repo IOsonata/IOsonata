@@ -193,6 +193,7 @@ typedef struct {
 	Stm32I2cSState_t SState;
 	int SIdx;
 	int SCount;
+	bool bTxData;		// the byte loaded last was data, not filler
 	uint8_t TxBuf[I2C_STM32_TXBUF_SIZE];
 } Stm32I2cDev_t;
 
@@ -967,6 +968,21 @@ static void Stm32I2cSlaveEvent(Stm32I2cDev_t * const pDev, DEVINTRF_EVT Evt, int
 	}
 }
 
+// The byte loaded in TXDR while the master ends the read with a NACK was never
+// sent. It is counted out so that the count is the number of bytes on the bus.
+static int Stm32I2cSlaveSent(Stm32I2cDev_t * const pDev)
+{
+	int count = pDev->SCount;
+
+	if (pDev->SState == STM32_I2C_S_READ && pDev->bTxData && count > 0 &&
+		(pDev->pReg->ISR & I2C_ISR_TXE) == 0U)
+	{
+		count--;
+	}
+
+	return count;
+}
+
 // Address matched: the direction and the address index. A repeated START
 // comes here without a STOP before it.
 static void Stm32I2cSlaveAddress(Stm32I2cDev_t * const pDev, uint32_t Isr)
@@ -993,7 +1009,7 @@ static void Stm32I2cSlaveAddress(Stm32I2cDev_t * const pDev, uint32_t Isr)
 	}
 	else if (pDev->SState == STM32_I2C_S_READ)
 	{
-		Stm32I2cSlaveEvent(pDev, DEVINTRF_EVT_COMPLETED, pDev->SCount);
+		Stm32I2cSlaveEvent(pDev, DEVINTRF_EVT_COMPLETED, Stm32I2cSlaveSent(pDev));
 	}
 
 	pDev->SIdx = idx;
@@ -1025,7 +1041,7 @@ static void Stm32I2cSlaveAddress(Stm32I2cDev_t * const pDev, uint32_t Isr)
 static void Stm32I2cSlaveStop(Stm32I2cDev_t * const pDev)
 {
 	I2C_TypeDef *reg = pDev->pReg;
-	const int count = pDev->SCount;
+	const int count = Stm32I2cSlaveSent(pDev);
 	const bool active = pDev->SState != STM32_I2C_S_IDLE;
 
 	reg->ICR = I2C_ICR_STOPCF | I2C_ICR_NACKCF;
@@ -1080,10 +1096,12 @@ static void Stm32I2cSlaveService(Stm32I2cDev_t * const pDev)
 		if (data != NULL && pDev->SCount < i2c->RRDataLen[pDev->SIdx])
 		{
 			reg->TXDR = data[pDev->SCount++];
+			pDev->bTxData = true;
 		}
 		else
 		{
 			reg->TXDR = 0xFF;
+			pDev->bTxData = false;
 		}
 		isr = reg->ISR;
 	}
