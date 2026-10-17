@@ -2,7 +2,7 @@
 set -euo pipefail
 
 SCRIPT_NAME="install_iocdevtools_macos"
-SCRIPT_VERSION="v1.0.79"
+SCRIPT_VERSION="v1.0.80"
 
 ROOT="$HOME/IOcomposer"
 TOOLS="/opt/xPacks"
@@ -27,6 +27,7 @@ Options:
   --help           Show help and exit
   --version        Show version and exit
   --home <path>    Set custom SDK installation root (default: ~/IOcomposer)
+  --pyocd-only     Install/update pyOCD without reinstalling other tools
   --force-update   Force reinstall
   --uninstall      Remove toolchains + Eclipse (keep repos/workspaces)
   (no option)      Install/update (skip if already installed)
@@ -39,6 +40,7 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --help) show_help; exit 0 ;;
     --version) echo "$SCRIPT_NAME $SCRIPT_VERSION"; exit 0 ;;
+    --pyocd-only) MODE="pyocd" ;;
     --force-update) MODE="force"; echo ">>> Force update mode enabled" ;;
     --uninstall) MODE="uninstall"; echo ">>> Uninstall mode enabled" ;;
     --home)
@@ -55,6 +57,8 @@ while [[ $# -gt 0 ]]; do
 done
 
 EXT="$ROOT/external"
+PYOCD_DIR="$ROOT/tools/pyocd"
+PYOCD="$PYOCD_DIR/bin/pyocd"
 
 # ---------------------------------------------------------
 # UNINSTALL
@@ -79,6 +83,12 @@ if [[ "$MODE" == "uninstall" ]]; then
 
   echo ">>> Removing symlinks..."
   sudo rm -f "$BIN/arm-none-eabi-gcc" "$BIN/riscv-none-elf-gcc" "$BIN/openocd" || true
+
+  echo ">>> Removing installer-managed pyOCD..."
+  if [[ -L "$BIN/pyocd" && "$(readlink "$BIN/pyocd")" == "$PYOCD" ]]; then
+    sudo rm -f "$BIN/pyocd"
+  fi
+  rm -rf "$PYOCD_DIR"
 
   echo ">>> Removing Eclipse installation..."
   sudo rm -rf "$ECLIPSE_APP" || true
@@ -137,8 +147,12 @@ if [[ "$MODE" == "uninstall" ]]; then
   exit 0
 fi
 
-mkdir -p "$ROOT" "$EXT"
-sudo mkdir -p "$TOOLS" "$BIN"
+mkdir -p "$ROOT"
+sudo mkdir -p "$BIN"
+if [[ "$MODE" != "pyocd" ]]; then
+  mkdir -p "$EXT"
+  sudo mkdir -p "$TOOLS"
+fi
 
 # ---------------------------------------------------------
 # Arch detect
@@ -338,6 +352,43 @@ install_xpack() {
   echo "✅ $name installed at $targetdir" >&2
   echo "$targetdir"
 }
+
+# ---------------------------------------------------------
+# Install pyOCD in an isolated, user-owned Python environment
+# ---------------------------------------------------------
+install_pyocd() {
+  if ! command -v python3 >/dev/null 2>&1 ||
+     ! python3 -c 'import sys; sys.exit(sys.version_info < (3, 9))'; then
+    echo "Error: pyOCD requires Python 3.9 or newer." >&2
+    echo "Install Python from python.org or with 'brew install python', then retry." >&2
+    return 1
+  fi
+
+  echo ">>> Installing/updating pyOCD..."
+  if [[ ! -x "$PYOCD_DIR/bin/python3" ]]; then
+    python3 -m venv "$PYOCD_DIR" || return 1
+  fi
+
+  local pip_args=(--upgrade)
+  if [[ "$MODE" == "force" ]]; then
+    pip_args+=(--force-reinstall)
+  fi
+  "$PYOCD_DIR/bin/python3" -m pip install "${pip_args[@]}" pyocd || return 1
+  "$PYOCD" --version || return 1
+
+  # Preserve a pyOCD command supplied by another installation.
+  if [[ ! -e "$BIN/pyocd" && ! -L "$BIN/pyocd" ]]; then
+    sudo ln -s "$PYOCD" "$BIN/pyocd" || return 1
+  elif [[ ! -L "$BIN/pyocd" || "$(readlink "$BIN/pyocd")" != "$PYOCD" ]]; then
+    echo "Keeping existing $BIN/pyocd; use $PYOCD for this installation."
+  fi
+  echo "pyOCD installed at: $PYOCD"
+}
+
+install_pyocd
+if [[ "$MODE" == "pyocd" ]]; then
+  exit 0
+fi
 
 ARM_DIR=$(install_xpack "arm-none-eabi-gcc-xpack" "arm-none-eabi-gcc" "ARM GCC")
 RISCV_DIR=$(install_xpack "riscv-none-elf-gcc-xpack" "riscv-none-elf-gcc" "RISC-V GCC")
@@ -741,6 +792,8 @@ RISCV_GDB = \$(RISCV_GCC_BIN)/riscv-none-elf-gdb
 
 OPENOCD_ROOT = $OPENOCD_DIR
 OPENOCD = $OPENOCD_DIR/bin/openocd
+PYOCD_ROOT = $PYOCD_DIR
+PYOCD = $PYOCD
 
 # ============================================
 # IOsonata Paths
@@ -909,6 +962,8 @@ printf "%-25s %s\n" "Eclipse Embedded CDT:" "$ECLIPSE_VER"
 printf "%-25s %s\n" "ARM GCC:" "$ARM_VER"
 printf "%-25s %s\n" "RISC-V GCC:" "$RISCV_VER"
 printf "%-25s %s\n" "OpenOCD:" "$OPENOCD_VER"
+printf "%-25s %s\n" "pyOCD:" "$("$PYOCD" --version)"
+printf "%-25s %s\n" "pyOCD executable:" "$PYOCD"
 echo ""
 printf "%-25s %s\n" "iocomposer_home:" "$ROOT"
 printf "%-25s %s\n" "iosonata_loc:" "$ROOT"

@@ -240,6 +240,58 @@ The current installers use Eclipse Embedded CDT as the underlying managed-build 
 Get-Help .\install_iocdevtools_win.ps1
 ```
 
+### macOS debug tools
+
+The macOS installer installs or updates pyOCD in a Python virtual environment at
+`$ROOT/tools/pyocd`, where `ROOT` defaults to `~/IOcomposer`. Python 3.9 or newer
+with `venv` is required. Python packages are installed without sudo.
+
+To install only pyOCD, leaving Eclipse and the other tools alone:
+
+```bash
+bash Installer/install_iocdevtools_macos.sh --pyocd-only
+```
+
+Use `--home /path/to/sdk` to select another root. The installer adds
+`/usr/local/bin/pyocd` only if that path is unused; it preserves another
+installation's command. The executable can always be invoked directly:
+
+```bash
+~/IOcomposer/tools/pyocd/bin/pyocd --version
+~/IOcomposer/tools/pyocd/bin/pyocd list
+```
+
+Normal installation updates pyOCD; `--force-update` reinstalls its packages.
+Uninstall removes this virtual environment and only its own command symlink.
+Device packs are installed separately for the required MCU. For STM32WBA65:
+
+```bash
+~/IOcomposer/tools/pyocd/bin/pyocd pack find stm32wba65
+~/IOcomposer/tools/pyocd/bin/pyocd pack install stm32wba65
+~/IOcomposer/tools/pyocd/bin/pyocd list --targets
+```
+
+Use the exact target name reported by the installed pack. Pack availability does
+not establish that programming and debugging have passed on the board. pyOCD
+supports ST-LINK probes; J-Link probes additionally require SEGGER's software.
+
+The default OpenOCD installation remains xPack. For targets such as STM32WBA6x
+that need newer upstream support, Homebrew can build the development version:
+
+```bash
+brew update
+brew install --HEAD open-ocd
+brew --prefix open-ocd
+```
+
+Set the IDE's OpenOCD executable to `<prefix>/bin/openocd` and its scripts
+directory to `<prefix>/share/openocd/scripts`. Do not mix these scripts with the
+older xPack executable.
+
+References: [pyOCD installation](https://pyocd.io/docs/installing.html),
+[pyOCD target packs](https://pyocd.io/docs/target_support.html),
+[Homebrew OpenOCD](https://formulae.brew.sh/formula/open-ocd).
+
 ### What Gets Installed
 
 **Default Installation Paths:**
