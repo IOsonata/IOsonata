@@ -419,7 +419,7 @@ configurations. `Debug` and `Release` build the bare-metal modem OS
 implementation. `Debug_TaktOS` and `Release_TaktOS` build the common modem
 source with the TaktOS wait, semaphore and mutex implementation selected
 by `NRF91_MODEM_OS_TAKTOS`, and include the TaktOS headers. Both build
-variants compile `modem_os_nrf91.c`; applications do not compile a modem
+variants compile `modem_nrf91.c`; applications do not compile a modem
 OS implementation directly.
 
 Build `IOsonata_nRF9160` or `IOsonata_nRF91x1` in `Debug_TaktOS`
