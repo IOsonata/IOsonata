@@ -92,6 +92,10 @@ __attribute__((weak)) void BtAppEvtConnected(uint16_t ConnHdl)
 
 }
 
+__attribute__((weak)) void BtAppEvtConnectFailed(void)
+{
+}
+
 __attribute__((weak)) void BtAppEvtDisconnected(uint16_t ConnHdl)
 {
 
