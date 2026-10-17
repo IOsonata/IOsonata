@@ -308,7 +308,8 @@ bool BtAppScanReport(int8_t Rssi, uint8_t AddrType, uint8_t Addr[6],
 		s_SensorValid = true;
 	}
 	EnableInterrupt(irq);
-    if (isTph)
+    if (isBlueIo && manufacturerLen >= 11U &&
+        manufacturer[2] == BT_ADV_MANDATA_TYPE_TPH)
     {
         GatewayTag_t *pTag = GatewayFindOrCreate(Addr, AddrType);
         if (pTag != nullptr && pTag->ConnHdl == BT_CONN_HDL_INVALID &&
