@@ -152,6 +152,8 @@ typedef struct {
 
 static GatewayTag_t s_Tags[GATEWAY_MAX_TAGS] = {};
 static GatewayTag_t *s_pInitiating = nullptr;
+static uint64_t s_ConnectStartTicks = 0;
+static bool s_ConnectCancelPending = false;
 static volatile bool s_GattScanRestartPending = false;
 static BtDevSrvcCache_t s_GattCaches[GATEWAY_MAX_TAGS] = {};
 const BtDevSrvcCacheCfg_t g_BtDevSrvcCacheCfg = {
@@ -320,6 +322,7 @@ void BtAppEvtConnected(uint16_t ConnHdl)
 {
     GatewayTag_t *pTag = s_pInitiating;
     s_pInitiating = nullptr;
+    s_ConnectCancelPending = false;
     if (pTag == nullptr)
     {
         BtAppDisconnectConn(ConnHdl);
@@ -346,6 +349,7 @@ void BtAppEvtConnectFailed(void)
         s_pInitiating->Connecting = false;
         s_pInitiating = nullptr;
     }
+    s_ConnectCancelPending = false;
     GatewayLog("GATT connection attempt failed\r\n");
     s_GattScanRestartPending = true;
 }
@@ -897,6 +901,8 @@ bool AppCheckStatus(void)
             peer.Type = pTag->AddrType;
             memcpy(peer.Addr, pTag->Addr, sizeof(peer.Addr));
             BtGapScanStop();
+            s_ConnectCancelPending = false;
+            s_ConnectStartTicks = TimerGetTickCount(&s_TimerDev);
             if (!BtGapConnect(&peer, &s_GattConnParams))
             {
                 pTag->Connecting = false;
@@ -904,6 +910,21 @@ bool AppCheckStatus(void)
                 s_GattScanRestartPending = true;
             }
             break;
+        }
+    }
+
+    if (s_pInitiating != nullptr && !s_ConnectCancelPending &&
+        s_bTimerReady)
+    {
+        const uint32_t freq = TimerGetFrequency(&s_TimerDev);
+        if (freq != 0U &&
+            (TimerGetTickCount(&s_TimerDev) - s_ConnectStartTicks) / freq >= 10U)
+        {
+            if (BtGapConnectCancel())
+            {
+                s_ConnectCancelPending = true;
+                GatewayLog("GATT initiation timed out; cancel requested\\r\\n");
+            }
         }
     }
 
