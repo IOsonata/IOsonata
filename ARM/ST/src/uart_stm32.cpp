@@ -76,6 +76,10 @@ SOFTWARE.
 
 #include "stm32.h"
 
+#if defined(STM32WBA)
+#include "gpdma_stm32wba.h"
+#endif
+
 #include "istddef.h"
 #include "coredev/iopincfg.h"
 #include "coredev/uart.h"
@@ -1194,6 +1198,15 @@ static void Stm32UartDmaVector(Stm32UartDev_t * const pDev)
 }
 #endif
 
+#ifdef ST_DMA_GPDMA
+// Channel interrupt of the GPDMA manager, the context is the instance
+static void Stm32UartGpdmaIrq(int Ch, void *pCtx)
+{
+	(void)Ch;
+	Stm32UartDmaVector((Stm32UartDev_t *)pCtx);
+}
+#endif
+
 // The vector passes its instance.
 static void Stm32UartIrqHandler(Stm32UartDev_t * const pDev)
 {
@@ -1919,6 +1932,24 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	{
 		return false;
 	}
+#ifdef ST_DMA_GPDMA
+	// The channels are shared with the I2C and SPI drivers: the first to
+	// ask has them
+	if (pCfg->bDMAMode)
+	{
+		bool rx = WbaGpdmaClaim(dev->RxDma.Idx, Stm32UartGpdmaIrq, dev, pCfg->IntPrio, pCfg->bIntMode);
+
+		if (rx == false || WbaGpdmaClaim(dev->TxDma.Idx, Stm32UartGpdmaIrq, dev, pCfg->IntPrio, pCfg->bIntMode) == false)
+		{
+			if (rx)
+			{
+				WbaGpdmaFree(dev->RxDma.Idx);
+			}
+
+			return false;
+		}
+	}
+#endif
 #else
 	if (pCfg->bDMAMode)
 	{
@@ -2369,52 +2400,8 @@ extern "C" void DMA2_Stream7_IRQHandler()
 }
 #elif defined(STM32WBA)
 // GPDMA1 takes any request on any channel. Two channels for each instance:
-// USART1 0 and 1, USART2 2 and 3, LPUART1 4 and 5, USART3 6 and 7.
-extern "C" void GPDMA1_Channel0_IRQHandler()
-{
-	Stm32UartDmaVector(&s_Stm32UartDev[ST_USART1_IDX]);
-}
-
-extern "C" void GPDMA1_Channel1_IRQHandler()
-{
-	Stm32UartDmaVector(&s_Stm32UartDev[ST_USART1_IDX]);
-}
-
-#ifdef USART2
-extern "C" void GPDMA1_Channel2_IRQHandler()
-{
-	Stm32UartDmaVector(&s_Stm32UartDev[ST_USART2_IDX]);
-}
-
-extern "C" void GPDMA1_Channel3_IRQHandler()
-{
-	Stm32UartDmaVector(&s_Stm32UartDev[ST_USART2_IDX]);
-}
-#endif
-
-#ifdef LPUART1
-extern "C" void GPDMA1_Channel4_IRQHandler()
-{
-	Stm32UartDmaVector(&s_Stm32UartDev[ST_LPUART1_IDX]);
-}
-
-extern "C" void GPDMA1_Channel5_IRQHandler()
-{
-	Stm32UartDmaVector(&s_Stm32UartDev[ST_LPUART1_IDX]);
-}
-#endif
-
-#ifdef USART3
-extern "C" void GPDMA1_Channel6_IRQHandler()
-{
-	Stm32UartDmaVector(&s_Stm32UartDev[ST_USART3_IDX]);
-}
-
-extern "C" void GPDMA1_Channel7_IRQHandler()
-{
-	Stm32UartDmaVector(&s_Stm32UartDev[ST_USART3_IDX]);
-}
-#endif
+// USART1 0 and 1, USART2 2 and 3, LPUART1 4 and 5, USART3 6 and 7. The
+// channel vectors are in the GPDMA manager, which calls Stm32UartGpdmaIrq.
 #endif
 
 void UARTSetCtrlLineState(UARTDev_t * const pDev, uint32_t LineState)

@@ -95,8 +95,11 @@ def main():
                 for label, flags in (('O0', ['-O0']), ('O2', ['-O2'])):
                     opt = ['-D' + part, *flags, '-g', '-fsanitize=undefined', '-fno-sanitize-recover=all']
                     objs = []
-                    for src, lang in ((ROOT / 'src/cfifo.c', 'c'), (ROOT / 'src/device_intrf.cpp', 'c++'),
-                                      (DRIVER, 'c++'), (HERE / 'uart_test.cpp', 'c++')):
+                    srcs = [(ROOT / 'src/cfifo.c', 'c'), (ROOT / 'src/device_intrf.cpp', 'c++'),
+                            (DRIVER, 'c++'), (HERE / 'uart_test.cpp', 'c++')]
+                    if family == 'STM32WBAxx':
+                        srcs.append((ROOT / 'ARM/ST/STM32WBAxx/src/gpdma_stm32wba.cpp', 'c++'))
+                    for src, lang in srcs:
                         obj = tmp / f'{part}_{label}_{src.stem}.o'
                         if lang == 'c':
                             run([cc, '-std=gnu17', *opt, *inc, '-c', src, '-o', obj])

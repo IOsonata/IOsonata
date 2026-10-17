@@ -51,17 +51,35 @@ SOFTWARE.
 extern "C" volatile int32_t g_SpiTestResult[SPI_TEST_MAX_RESULT];
 extern "C" volatile uint8_t g_SpiTestRx[512];
 extern "C" volatile uint32_t g_SpiTestDone;
+extern "C" volatile uint8_t g_SpiTestRx2[4][320];
+extern "C" volatile int32_t g_SpiTestSlvEvt[64];
+extern "C" volatile int32_t g_SpiTestSlvCnt;
+extern "C" volatile uint8_t g_SpiTestSlvRx[24];
+extern "C" volatile uint8_t g_SpiTestSlvSnap[4][24];
 
+extern "C" void SPI1_IRQHandler(void);
+extern "C" void SPI3_IRQHandler(void);
 extern "C" void SpiTestMark(int Id) __attribute__((noinline));
+extern "C" void SpiTestSlaveStep(void) __attribute__((noinline));
 extern "C" void SpiTestDoneHook(void) __attribute__((noinline));
 
 volatile int32_t g_SpiTestResult[SPI_TEST_MAX_RESULT];
 volatile uint8_t g_SpiTestRx[512];
 volatile uint32_t g_SpiTestDone;
+volatile uint8_t g_SpiTestRx2[4][320];
+volatile int32_t g_SpiTestSlvEvt[64];
+volatile int32_t g_SpiTestSlvCnt;
+volatile uint8_t g_SpiTestSlvRx[24];
+volatile uint8_t g_SpiTestSlvSnap[4][24];
 
 extern "C" void SpiTestMark(int Id)
 {
 	__asm volatile ("" : : "r" (Id) : "memory");
+}
+
+extern "C" void SpiTestSlaveStep(void)
+{
+	__asm volatile ("" ::: "memory");
 }
 
 extern "C" void SpiTestDoneHook(void)
@@ -79,17 +97,70 @@ static const IOPinCfg_t s_Spi1Pins[] = {
 	{IOPORTA, 11, IOPINOP_GPIO, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
 };
 
-// SPI3 without a chip select pin
+// SPI3 without a chip select pin; the fourth entry is the NSS pin of the slave
 static const IOPinCfg_t s_Spi3Pins[] = {
 	{IOPORTA, 0, IOPINOP_FUNC6, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
 	{IOPORTA, 1, IOPINOP_FUNC6, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
 	{IOPORTB, 8, IOPINOP_FUNC6, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
+	{IOPORTA, 4, IOPINOP_FUNC6, IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL},
 };
 
 static SPIDev_t s_Spi1;
 static SPIDev_t s_Spi3;
 static uint8_t s_Tx[512];
 static uint8_t s_Big[70000];
+static uint8_t s_SlvTx[8];
+
+static int s_SlvDone;
+static volatile int s_MasterDone;
+static volatile int s_MasterCount;
+
+static int MasterCb(DevIntrf_t * const pDev, DEVINTRF_EVT Evt, uint8_t *pBuff, int Len)
+{
+	if (Evt == DEVINTRF_EVT_COMPLETED)
+	{
+		s_MasterCount = Len;
+		s_MasterDone = 1;
+	}
+
+	return 0;
+}
+
+// Interrupt mode: the vector is called from here, the emulator has no NVIC
+static int WaitMaster(void)
+{
+	for (int i = 0; i < 200000 && !s_MasterDone; i++)
+	{
+		SPI1_IRQHandler();
+	}
+
+	return s_MasterDone ? s_MasterCount : -2;
+}
+
+// Slave events recorded by the callback: 1 arm, 2 completed, and the length
+static int SlaveCb(DevIntrf_t * const pDev, DEVINTRF_EVT Evt, uint8_t *pBuff, int Len)
+{
+	int n = g_SpiTestSlvCnt;
+
+	if (Evt == DEVINTRF_EVT_STATECHG)
+	{
+		SPISetSlaveRxBuffer(SPIGetHandle(pDev), 0, (uint8_t*)g_SpiTestSlvRx, 20);
+		SPISetSlaveTxData(SPIGetHandle(pDev), 0, s_SlvTx, sizeof(s_SlvTx));
+	}
+	if (Evt == DEVINTRF_EVT_COMPLETED && pBuff != NULL && s_SlvDone < 4)
+	{
+		memcpy((void*)g_SpiTestSlvSnap[s_SlvDone], pBuff, 20);
+		s_SlvDone++;
+	}
+	if ((Evt == DEVINTRF_EVT_STATECHG || Evt == DEVINTRF_EVT_COMPLETED) && n < 31)
+	{
+		g_SpiTestSlvEvt[n * 2] = Evt == DEVINTRF_EVT_STATECHG ? 1 : 2;
+		g_SpiTestSlvEvt[n * 2 + 1] = Len;
+		g_SpiTestSlvCnt = n + 1;
+	}
+
+	return 0;
+}
 
 static SPICfg_t MakeCfg(int DevNo, const IOPinCfg_t *pPins, int NbPins, uint32_t Rate)
 {
@@ -216,7 +287,79 @@ extern "C" int main(void)
 	g_SpiTestResult[r++] = SPITx(&s_Spi3, 0, s_Tx, 3);
 	g_SpiTestResult[r++] = SPIRx(&s_Spi3, 0, (uint8_t*)&g_SpiTestRx[48], 3);
 
+	// 12 : interrupt master on SPI1, the end is the completed event
 	SpiTestMark(12);
+	SPICfg_t cfgi = MakeCfg(0, s_Spi1Pins, 5, 1000000);
+	cfgi.bIntEn = true;
+	cfgi.EvtCB = MasterCb;
+	g_SpiTestResult[r++] = SPIInit(&s_Spi1, &cfgi) ? 1 : 0;
+	s_MasterDone = 0;
+	g_SpiTestResult[r++] = SPITx(&s_Spi1, 0, s_Tx, 5);
+	g_SpiTestResult[r++] = WaitMaster();
+	s_MasterDone = 0;
+	g_SpiTestResult[r++] = SPIRx(&s_Spi1, 0, (uint8_t*)&g_SpiTestRx[64], 6);
+	g_SpiTestResult[r++] = WaitMaster();
+	s_MasterDone = 0;
+	g_SpiTestResult[r++] = SPIRx(&s_Spi1, 0, (uint8_t*)g_SpiTestRx2[0], 300);
+	g_SpiTestResult[r++] = WaitMaster();
+	g_SpiTestResult[r++] = SPITx(&s_Spi1, 0, s_Tx, 300);
+
+	// 13 : DMA master, polling wait, then 12 bit data
+	SpiTestMark(13);
+	SPICfg_t cfgd = MakeCfg(0, s_Spi1Pins, 5, 1000000);
+	cfgd.bDmaEn = true;
+	g_SpiTestResult[r++] = SPIInit(&s_Spi1, &cfgd) ? 1 : 0;
+	g_SpiTestResult[r++] = SPITx(&s_Spi1, 0, s_Tx, 5);
+	g_SpiTestResult[r++] = SPIRx(&s_Spi1, 0, (uint8_t*)g_SpiTestRx2[1], 300);
+	g_SpiTestResult[r++] = SPITx(&s_Spi1, 0, s_Tx, 300);
+	cfgd.DataSize = 12;
+	g_SpiTestResult[r++] = SPIInit(&s_Spi1, &cfgd) ? 1 : 0;
+	g_SpiTestResult[r++] = SPITx(&s_Spi1, 0, s_Tx, 6);
+	g_SpiTestResult[r++] = SPIRx(&s_Spi1, 0, (uint8_t*)&g_SpiTestRx[96], 4);
+
+	// 14 : DMA master, interrupt
+	SpiTestMark(14);
+	cfgd.DataSize = 8;
+	cfgd.bIntEn = true;
+	cfgd.EvtCB = MasterCb;
+	g_SpiTestResult[r++] = SPIInit(&s_Spi1, &cfgd) ? 1 : 0;
+	s_MasterDone = 0;
+	g_SpiTestResult[r++] = SPITx(&s_Spi1, 0, s_Tx, 129);
+	g_SpiTestResult[r++] = WaitMaster();
+	s_MasterDone = 0;
+	g_SpiTestResult[r++] = SPIRx(&s_Spi1, 0, (uint8_t*)g_SpiTestRx2[2], 129);
+	g_SpiTestResult[r++] = WaitMaster();
+
+	// 15 : slave on SPI3, polling transfers of the interrupt, a scripted master
+	SpiTestMark(15);
+	for (int i = 0; i < (int)sizeof(s_SlvTx); i++)
+	{
+		s_SlvTx[i] = (uint8_t)(0xC0 + i);
+	}
+	SPICfg_t cfgs = MakeCfg(2, s_Spi3Pins, 4, 1000000);
+	cfgs.Mode = SPIMODE_SLAVE;
+	cfgs.EvtCB = SlaveCb;
+	cfgs.DummyByte = 0x3C;
+	g_SpiTestResult[r++] = SPIInit(&s_Spi3, &cfgs) ? 1 : 0;
+	for (int i = 0; i < 6000; i++)
+	{
+		SpiTestSlaveStep();
+		SPI3_IRQHandler();
+	}
+
+	// 16 : slave with DMA
+	SpiTestMark(16);
+	g_SpiTestSlvCnt = 0;
+	s_SlvDone = 0;
+	cfgs.bDmaEn = true;
+	g_SpiTestResult[r++] = SPIInit(&s_Spi3, &cfgs) ? 1 : 0;
+	for (int i = 0; i < 6000; i++)
+	{
+		SpiTestSlaveStep();
+		SPI3_IRQHandler();
+	}
+
+	SpiTestMark(17);
 	g_SpiTestResult[SPI_TEST_MAX_RESULT - 1] = r;
 	g_SpiTestDone = 1;
 	SpiTestDoneHook();

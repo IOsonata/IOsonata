@@ -6,8 +6,8 @@ Run: python3 tests/stm32wba/run_spi.py
 Needs arm-none-eabi-g++, and the python packages unicorn and pyelftools.
 Without them the test prints NOT RUN.
 
-spi_fw.cpp is built for the Cortex-M33 with the SPI master driver
-ARM/ST/STM32WBAxx/src/spi_stm32wba.cpp, the generic SPI and device interface
+spi_fw.cpp is built for the Cortex-M33 with the generic STM32 SPI driver
+ARM/ST/src/spi_stm32.cpp, the generic SPI and device interface
 sources and the STM32 GPIO driver, and run in unicorn. The SPI1 and SPI3
 registers are a model of the SPI version 2 master (CFG1, CFG2, TSIZE) of the
 reference manual:
@@ -59,6 +59,8 @@ import tempfile
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
+sys.path.insert(0, str(HERE))
+from run_i2c import Gpdma
 HDR = ROOT / 'ARM/ST/STM32WBAxx/include/stm32wba65xx.h'
 FCPU = 16_000_000
 RX_FIFO_BYTES = 8
@@ -104,7 +106,8 @@ def build(tmp):
            '-I' + str(ROOT / 'ARM/ST/STM32WBAxx/include')]
     objs = []
     cxx = ['arm-none-eabi-g++', *cpu, '-std=gnu++23', '-Wall', '-Werror', '-fno-exceptions', '-fno-rtti', *inc]
-    for src in (HERE / 'spi_fw.cpp', ROOT / 'ARM/ST/STM32WBAxx/src/spi_stm32wba.cpp',
+    for src in (HERE / 'spi_fw.cpp', ROOT / 'ARM/ST/src/spi_stm32.cpp',
+                ROOT / 'ARM/ST/STM32WBAxx/src/gpdma_stm32wba.cpp',
                 ROOT / 'src/coredev/spi.cpp', ROOT / 'src/device_intrf.cpp',
                 ROOT / 'ARM/ST/src/iopincfg_stm32.cpp'):
         obj = tmp / (src.stem + '.o')
@@ -138,10 +141,18 @@ class Spi:
     SR_RXP = 1 << 0
     SR_TXP = 1 << 1
     SR_EOT = 1 << 3
+    SR_UDR = 1 << 5
     SR_OVR = 1 << 6
 
-    def __init__(self, name, log, violations):
+    def __init__(self, name, log, violations, req_tx=0, req_rx=0):
         self.name = name
+        self.req_tx = req_tx
+        self.req_rx = req_rx
+        self.gpdma = None
+        self.in_dma = False
+        self.script = None
+        self.stxq = []
+        self.sent_by_slave = []
         self.log = log
         self.viol = violations
         self.reg = collections.defaultdict(int)
@@ -166,13 +177,85 @@ class Spi:
     def mask(self):
         return (1 << ((self.reg[0x08] & 0x1F) + 1)) - 1
 
+    def slave(self):
+        return not (self.reg[0x0C] & hdr('SPI_CFG2_MASTER'))
+
+    def dma_service(self):
+        """The GPDMA channels move the items of the TXP and RXP requests."""
+        if self.gpdma is None or self.in_dma or not self.spe():
+            return
+        self.in_dma = True
+        ib = self.item_bytes()
+        cfg1 = self.reg[0x08]
+        progress = True
+        while progress:
+            progress = False
+            if cfg1 & hdr('SPI_CFG1_TXDMAEN') and self.gpdma.find(self.req_tx) is not None:
+                if self.slave():
+                    if len(self.stxq) * ib < RX_FIFO_BYTES:
+                        self.stxq.append(self.gpdma.take(self.req_tx, ib))
+                        progress = True
+                elif self.active and self.sent < self.tsize and len(self.rxq) * ib < RX_FIFO_BYTES:
+                    self.write_txdr(ib, self.gpdma.take(self.req_tx, ib))
+                    progress = True
+            if cfg1 & hdr('SPI_CFG1_RXDMAEN') and self.gpdma.find(self.req_rx) is not None:
+                if self.rxq and self.rxq[0][1] <= self.polls:
+                    self.gpdma.put(self.req_rx, self.rxq.pop(0)[0], ib)
+                    progress = True
+        self.in_dma = False
+
+    def slave_script(self, frames):
+        mask = self.mask()
+        for fr in frames:
+            while not self.spe():
+                yield
+            self.log.add((self.name, 'F', len(fr)))
+            self.sent_by_slave.append([])
+            for b in fr:
+                for _ in range(5):
+                    if not self.rxq:
+                        break
+                    yield
+                if self.stxq:
+                    t = self.stxq.pop(0)
+                else:
+                    t = self.reg[0x4C] & mask
+                    self.flags |= self.SR_UDR
+                self.sent_by_slave[-1].append(t)
+                if len(self.rxq) * self.item_bytes() >= RX_FIFO_BYTES:
+                    self.flags |= self.SR_OVR
+                else:
+                    self.rxq.append((b & mask, 0))
+                self.dma_service()
+                yield
+            for _ in range(20):
+                if not self.rxq:
+                    break
+                self.dma_service()
+                yield
+            self.flags |= self.SR_EOT
+            self.log.add((self.name, 'E'))
+            while self.flags & self.SR_EOT:
+                yield
+
+    def step(self):
+        if self.script is not None:
+            try:
+                next(self.script)
+            except StopIteration:
+                self.script = None
+
     def rd_reg(self, off, size):
         if off == 0x14:
             self.polls += 1
+            self.dma_service()
             v = self.flags
             if self.rxq and self.rxq[0][1] <= self.polls:
                 v |= self.SR_RXP
-            if self.active:
+            if self.slave():
+                if self.spe() and len(self.stxq) * self.item_bytes() < RX_FIFO_BYTES:
+                    v |= self.SR_TXP
+            elif self.active:
                 v |= self.SR_TXP
             return v
         if off == 0x30:
@@ -195,6 +278,7 @@ class Spi:
                     self.start()
                 val &= ~(1 << 9)
             self.reg[0] = val
+            self.dma_service()
         elif off in (0x04, 0x08, 0x0C):
             if self.spe():
                 self.v(f'register {off:#x} written with SPE set')
@@ -208,6 +292,8 @@ class Spi:
                 self.flags &= ~self.SR_EOT
             if val & (1 << 6):
                 self.flags &= ~self.SR_OVR
+            if val & (1 << 5):
+                self.flags &= ~self.SR_UDR
         elif off == 0x20:
             self.write_txdr(size, val)
         else:
@@ -222,6 +308,7 @@ class Spi:
         self.log.add((self.name, 'T', self.tsize))
         if self.tsize == 0:
             self.v('transfer of 0 items')
+        self.dma_service()
 
     def stop(self):
         if self.active and self.sent < self.tsize:
@@ -229,9 +316,15 @@ class Spi:
             self.v('SPE cleared before the end of the transfer')
         self.active = False
         self.rxq = []
+        self.stxq = []
         self.flags = 0
 
     def write_txdr(self, size, val):
+        if self.slave():
+            if size != self.item_bytes():
+                self.v(f'TXDR write of {size} bytes, data size needs {self.item_bytes()}')
+            self.stxq.append(val)
+            return
         if not self.active or self.sent >= self.tsize:
             self.v('TXDR written with no item left to send')
             return
@@ -297,9 +390,15 @@ def main():
 
         log = Log()
         viol = []
-        spi1 = Spi('SPI1', log, viol)
-        spi3 = Spi('SPI3', log, viol)
-        spi2 = Spi('SPI2', log, viol)
+        gpdma = Gpdma(viol)
+        gpdma.uc = uc
+        spi1 = Spi('SPI1', log, viol, 2, 1)
+        spi3 = Spi('SPI3', log, viol, 4, 3)
+        spi2 = Spi('SPI2', log, viol, 53, 52)
+        for d in (spi1, spi2, spi3):
+            d.gpdma = gpdma
+        gpdma.notify = lambda: [d.dma_service() for d in (spi1, spi2, spi3)]
+        gbase = hdr('GPDMA1_BASE_NS')
         gpio = Gpio(log)
         devs = {hdr('SPI1_BASE_NS'): spi1, hdr('SPI2_BASE_NS'): spi2, hdr('SPI3_BASE_NS'): spi3}
         gpio_base = {hdr('GPIOA_BASE_NS'): 'A', hdr('GPIOB_BASE_NS'): 'B'}
@@ -312,6 +411,8 @@ def main():
             d = devs.get(a & ~0xFF)
             if d is not None:
                 return d.rd_reg(a & 0xFF, size)
+            if gbase <= a < gbase + 0x1000:
+                return gpdma.rd(a - gbase)
             return regs[a]
 
         def wr(uc, off, size, val, base):
@@ -319,6 +420,9 @@ def main():
             d = devs.get(a & ~0xFF)
             if d is not None:
                 d.wr_reg(a & 0xFF, size, val)
+                return
+            if gbase <= a < gbase + 0x1000:
+                gpdma.wr(a - gbase, val)
                 return
             g = gpio_base.get(a & ~0x3FF)
             if g is not None and (a & 0x3FF) == 0x18:
@@ -330,8 +434,31 @@ def main():
         for b, s in ((0x40000000, 0x40000), (0x42020000, 0x10000), (0x46000000, 0x30000)):
             uc.mmio_map(b, s, rd, b, wr, b)
 
+        frames = [bytes(0x10 + i for i in range(5)), bytes(0x20 + i for i in range(12)),
+                  bytes(0x30 + i for i in range(25)), bytes([0x40])]
+        dma_at = {}
+        cfg1_at12 = []
+        run1 = []
+
+        def read_slave(uc):
+            n = int.from_bytes(uc.mem_read(syms['g_SpiTestSlvCnt'], 4), 'little')
+            ev = [int.from_bytes(uc.mem_read(syms['g_SpiTestSlvEvt'] + 4 * i, 4), 'little', signed=True)
+                  for i in range(n * 2)]
+            sn = [bytes(uc.mem_read(syms['g_SpiTestSlvSnap'] + 24 * i, 24)) for i in range(4)]
+            return ev, sn
+
         def on_mark(uc, addr, size, user):
             log.mark = uc.reg_read(UC_ARM_REG_R0)
+            dma_at[log.mark] = gpdma.moved
+            if log.mark == 12:
+                cfg1_at12.append(len(spi1.cfg1w))
+            if log.mark == 16:
+                run1.append(read_slave(uc))
+            if log.mark in (15, 16):
+                spi3.script = spi3.slave_script(frames)
+
+        def on_step(uc, addr, size, user):
+            spi3.step()
 
         state = {'done': False}
 
@@ -340,6 +467,7 @@ def main():
             uc.emu_stop()
 
         uc.hook_add(UC_HOOK_CODE, on_mark, begin=syms['SpiTestMark'] & ~1, end=syms['SpiTestMark'] & ~1)
+        uc.hook_add(UC_HOOK_CODE, on_step, begin=syms['SpiTestSlaveStep'] & ~1, end=syms['SpiTestSlaveStep'] & ~1)
         uc.hook_add(UC_HOOK_CODE, on_done, begin=syms['SpiTestDoneHook'] & ~1, end=syms['SpiTestDoneHook'] & ~1)
 
         vec = bytes(uc.mem_read(0x08000000, 8))
@@ -356,6 +484,11 @@ def main():
         n = int.from_bytes(uc.mem_read(res_addr + 4 * 63, 4), 'little', signed=True)
         res = [int.from_bytes(uc.mem_read(res_addr + 4 * i, 4), 'little', signed=True) for i in range(n)]
         rx = bytes(uc.mem_read(syms['g_SpiTestRx'], 512))
+        rx2 = [bytes(uc.mem_read(syms['g_SpiTestRx2'] + 320 * i, 320)) for i in range(4)]
+        slv_n = int.from_bytes(uc.mem_read(syms['g_SpiTestSlvCnt'], 4), 'little')
+        slv = [int.from_bytes(uc.mem_read(syms['g_SpiTestSlvEvt'] + 4 * i, 4), 'little', signed=True)
+               for i in range(slv_n * 2)]
+        slv_snap = [bytes(uc.mem_read(syms['g_SpiTestSlvSnap'] + 24 * i, 24)) for i in range(4)]
 
     errors = []
     checks = 0
@@ -421,7 +554,7 @@ def main():
     expect(res[11] == 1000000, f'rate 0 gave {res[11]}')
     mbr = [(v >> 28) & 7 for v in spi1.cfg1w]
     expect(mbr[:5] == [0, 3, 6, 0, 3], f'MBR values {mbr[:5]}')
-    expect(len(spi1.cfg1w) == 9, f'CFG1 written {len(spi1.cfg1w)} times, 9 expected (not per transfer)')
+    expect(cfg1_at12[0] == 9, f'CFG1 written {cfg1_at12[0]} times, 9 expected (not per transfer)')
 
     # 8 mode 3, LSB first, 12 bit data
     expect(res[12] == 1 and res[13] == 6 and res[14] == 4, f'12 bit results {res[12:15]}')
@@ -445,10 +578,8 @@ def main():
     expect([x for x in e9 if x[0] == 'GPIO' and x[2] == 0] == [] , f'chip select driven with SPICSEL_MAN: {e9}')
     expect(('SPI1', 'T', 3) in e9 and res[15] == 1 and res[16] == 3, f'manual chip select results {res[15:17]}')
 
-    # 10 refused configurations
-    expect(res[17:24] == [0] * 7, f'unsupported configurations {res[17:24]}')
-    expect(not any(o == rcc_off('APB1ENR1') and v & hdr('RCC_APB1ENR1_SPI2EN') for o, v in rcc_log),
-           'SPI2 clock enabled by a refused init')
+    # 10 slave, interrupt and DMA are accepted, the others are refused
+    expect(res[17:24] == [1, 0, 1, 1, 0, 0, 0], f'configurations {res[17:24]}')
 
     # 11 SPI3
     expect(res[24] == 1 and res[25] == 8000000 and res[26] == 3 and res[27] == 3, f'SPI3 results {res[24:28]}')
@@ -456,6 +587,45 @@ def main():
     expect([x for x in e3 if x[1] == 'T'] == [('SPI3', 'T', 3), ('SPI3', 'T', 3)], f'SPI3 events {e3[:4]}')
     expect(not [x for x in P(11, ('GPIO',))], 'GPIO events on SPI3 without chip select')
     expect(rx[48:51] == bytes([1, 4, 7]), f'SPI3 rx {rx[48:51].hex()}')
+
+    def seq(n):
+        return bytes((3 * i + 1) & 0xFF for i in range(n))
+
+    # 12 interrupt master
+    expect(res[28:36] == [1, -1, 5, -1, 6, -1, 300, 300], f'interrupt results {res[28:36]}')
+    e12 = P(12)
+    k = e12.index(('GPIO', 'A12', 0))
+    expect(e12[k:k + 8] == cs_frame('A12', 5, [X(tx[i], i) for i in range(5)]), f'interrupt tx events {e12[k:k + 8]}')
+    expect(rx[64:70] == seq(6), f'interrupt rx data {rx[64:70].hex()}')
+    expect(rx2[0][:300] == seq(300), 'interrupt rx 300 data')
+
+    # 13 DMA master, polling wait
+    expect(res[36:43] == [1, 5, 300, 300, 1, 6, 4], f'DMA polling results {res[36:43]}')
+    expect(rx2[1][:300] == seq(300), 'DMA rx 300 data')
+    e13 = P(13)
+    xs = [x for x in e13 if x[:2] == ('SPI1', 'X')]
+    it = [tx[0] | tx[1] << 8, tx[2] | tx[3] << 8, tx[4] | tx[5] << 8]
+    expect([x[2] for x in xs[-5:]] == it + [0xA5A5, 0xA5A5], f'DMA 12 bit items {[hex(x[2]) for x in xs[-5:]]}')
+    expect(rx[96:100] == bytes([1, 0, 4, 0]), f'DMA 12 bit rx {rx[96:100].hex()}')
+    expect(dma_at[14] - dma_at[13] == 10 + 600 + 600 + 12 + 8, f'bytes moved by DMA {dma_at[14] - dma_at[13]}')
+
+    # 14 DMA master, interrupt
+    expect(res[43:48] == [1, -1, 129, -1, 129], f'DMA interrupt results {res[43:48]}')
+    expect(rx2[2][:129] == seq(129), 'DMA interrupt rx data')
+    expect(dma_at[15] - dma_at[14] == 129 * 4, f'bytes moved by DMA in interrupt mode {dma_at[15] - dma_at[14]}')
+
+    # 15 and 16 slave, polling of the interrupt and DMA
+    expect(res[48] == 1 and res[49] == 1, f'slave init results {res[48:50]}')
+    exp_ev = [1, 0, 2, 5, 1, 0, 2, 12, 1, 0, 2, -1, 1, 0, 2, 1, 1, 0]
+    for name, (ev, sn) in (('interrupt', run1[0]), ('DMA', (slv, slv_snap))):
+        expect(ev == exp_ev, f'slave {name} events {ev}')
+        expect(sn[0][:5] == frames[0] and sn[1][:12] == frames[1] and sn[2][:20] == frames[2][:20] and
+               sn[3][0] == 0x40 and sn[3][1:20] == frames[2][1:20], f'slave {name} data {[x.hex() for x in sn]}')
+    td = bytes(0xC0 + i for i in range(8))
+    want = [td[:5], td + bytes([0x3C]) * 4, td + bytes([0x3C]) * 17, td[:1]]
+    got = [bytes(x) for x in spi3.sent_by_slave]
+    expect(got == want + want, f'slave transmit data {[g.hex() for g in got]}')
+    expect(dma_at[17] - dma_at[16] == 38 + 5 * 8, f'bytes moved by the slave DMA {dma_at[17] - dma_at[16]}')
 
     # clocks
     def rcc_set(name, bit):

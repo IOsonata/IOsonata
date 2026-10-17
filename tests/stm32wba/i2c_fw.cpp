@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
 @file	i2c_fw.cpp
 
-@brief	STM32WBA I2C master test firmware
+@brief	STM32WBA I2C test firmware, master and slave
 
 Runs on the instruction set emulator of run_i2c.py, which models the I2C
 registers of the STM32WBA65 and the slave devices. Each test calls the
@@ -12,6 +12,7 @@ starts, so that it can check the bus transactions of each test.
 Slave devices modeled by the emulator:
 - 0x50 : memory, the first byte of a write is the pointer
 - 0x51 : memory that refuses the third byte of a write
+I2C3 is a slave at 0x30 and 0x31 driven by a scripted bus master.
 
 Not hardware validation.
 
@@ -53,19 +54,29 @@ SOFTWARE.
 
 extern "C" volatile int32_t g_I2cTestResult[I2C_TEST_MAX_RESULT];
 extern "C" volatile uint8_t g_I2cTestRx[512];
+extern "C" volatile uint8_t g_I2cTestRx2[3][320];
 extern "C" volatile uint32_t g_I2cTestDone;
 extern "C" uint32_t SystemCoreClock;
 
+extern "C" void I2C1_EV_IRQHandler(void);
+extern "C" void I2C3_EV_IRQHandler(void);
 extern "C" void I2cTestMark(int Id) __attribute__((noinline));
+extern "C" void I2cTestSlaveStep(void) __attribute__((noinline));
 extern "C" void I2cTestDoneHook(void) __attribute__((noinline));
 
 volatile int32_t g_I2cTestResult[I2C_TEST_MAX_RESULT];
 volatile uint8_t g_I2cTestRx[512];
+volatile uint8_t g_I2cTestRx2[3][320];
 volatile uint32_t g_I2cTestDone;
 
 extern "C" void I2cTestMark(int Id)
 {
 	__asm volatile ("" : : "r" (Id) : "memory");
+}
+
+extern "C" void I2cTestSlaveStep(void)
+{
+	__asm volatile ("" ::: "memory");
 }
 
 extern "C" void I2cTestDoneHook(void)
@@ -83,9 +94,70 @@ static const IOPinCfg_t s_I2c3Pins[] = {
 	{IOPORTA, 6, IOPINOP_FUNC4, IOPINDIR_BI, IOPINRES_PULLUP, IOPINTYPE_OPENDRAIN},
 };
 
+// Slave events recorded by the callback: 1 read request, 2 write request,
+// 3 completed, and the length
+#define SLV_BUF_SIZE		16
+volatile int32_t g_I2cTestSlvEvt[64];
+volatile int32_t g_I2cTestSlvCnt;
+volatile uint8_t g_I2cTestSlvRx[2][SLV_BUF_SIZE];
+static uint8_t s_SlvTx[2][8];
 static I2CDev_t s_I2c1;
 static I2CDev_t s_I2c3;
 static uint8_t s_Tx[512];
+
+static volatile int s_MasterDone;
+static volatile int s_MasterCount;
+
+static int MasterCb(DevIntrf_t * const pDev, DEVINTRF_EVT Evt, uint8_t *pBuff, int Len)
+{
+	if (Evt == DEVINTRF_EVT_COMPLETED)
+	{
+		s_MasterCount = Len;
+		s_MasterDone = 1;
+	}
+
+	return 0;
+}
+
+// Interrupt mode: the vector is called from here, the emulator has no NVIC
+static int WaitMaster(void)
+{
+	for (int i = 0; i < 20000 && !s_MasterDone; i++)
+	{
+		I2C1_EV_IRQHandler();
+	}
+
+	return s_MasterDone ? s_MasterCount : -2;
+}
+
+static int SlaveCb(DevIntrf_t * const pDev, DEVINTRF_EVT Evt, uint8_t *pBuff, int Len)
+{
+	int code = Evt == DEVINTRF_EVT_READ_RQST ? 1 : (Evt == DEVINTRF_EVT_WRITE_RQST ? 2 : 3);
+	int n = g_I2cTestSlvCnt;
+
+	if (n < 31)
+	{
+		g_I2cTestSlvEvt[n * 2] = code;
+		g_I2cTestSlvEvt[n * 2 + 1] = Len;
+		g_I2cTestSlvCnt = n + 1;
+	}
+	if (code == 1)
+	{
+		for (int i = 0; i < 2; i++)
+		{
+			I2CSetReadRqstData(&s_I2c3, i, s_SlvTx[i], sizeof(s_SlvTx[i]));
+		}
+	}
+	else if (code == 2)
+	{
+		for (int i = 0; i < 2; i++)
+		{
+			I2CSetWriteRqstBuffer(&s_I2c3, i, (uint8_t*)g_I2cTestSlvRx[i], SLV_BUF_SIZE);
+		}
+	}
+
+	return 0;
+}
 
 static I2CCfg_t MakeCfg(int DevNo, const IOPinCfg_t *pPins, uint32_t Rate)
 {
@@ -162,7 +234,7 @@ extern "C" int main(void)
 	g_I2cTestResult[r++] = (int32_t)I2CSetRate(&s_I2c1, 1000000);
 	g_I2cTestResult[r++] = (int32_t)I2CSetRate(&s_I2c1, 0);
 
-	// 10 : unsupported modes are refused
+	// 10 : slave mode without an address is refused, interrupt master is accepted
 	I2cTestMark(10);
 	I2CCfg_t bad = MakeCfg(1, s_I2c1Pins, 100000);
 	I2CDev_t baddev;
@@ -188,7 +260,82 @@ extern "C" int main(void)
 	g_I2cTestResult[r++] = (int32_t)I2CSetRate(&s_I2c1, 1000000);
 	g_I2cTestResult[r++] = I2CTx(&s_I2c1, 0x50, s_Tx, 2);
 
+	// 13 : interrupt master on I2C1, the end is the completed event
 	I2cTestMark(13);
+	SystemCoreClock = 16000000;
+	I2CCfg_t cfgi = MakeCfg(0, s_I2c1Pins, 400000);
+	cfgi.bIntEn = true;
+	cfgi.EvtCB = MasterCb;
+	g_I2cTestResult[r++] = I2CInit(&s_I2c1, &cfgi) ? 1 : 0;
+	s_MasterDone = 0;
+	g_I2cTestResult[r++] = I2CTx(&s_I2c1, 0x50, s_Tx, 5);
+	g_I2cTestResult[r++] = WaitMaster();
+	s_MasterDone = 0;
+	g_I2cTestResult[r++] = I2CRx(&s_I2c1, 0x50, (uint8_t*)&g_I2cTestRx[400], 4);
+	g_I2cTestResult[r++] = WaitMaster();
+	s_MasterDone = 0;
+	g_I2cTestResult[r++] = I2CTx(&s_I2c1, 0x51, s_Tx, 5);
+	g_I2cTestResult[r++] = WaitMaster();
+	s_MasterDone = 0;
+	g_I2cTestResult[r++] = I2CRx(&s_I2c1, 0x50, (uint8_t*)g_I2cTestRx2[0], 300);
+	g_I2cTestResult[r++] = WaitMaster();
+	g_I2cTestResult[r++] = I2CTx(&s_I2c1, 0x50, s_Tx, 100);
+	g_I2cTestResult[r++] = I2CTx(&s_I2c1, 0x23, s_Tx, 3);
+
+	// 14 : slave on I2C3 with two addresses, the emulator plays the bus master
+	I2cTestMark(14);
+	for (int i = 0; i < 8; i++)
+	{
+		s_SlvTx[0][i] = (uint8_t)(0xA0 + i);
+		s_SlvTx[1][i] = (uint8_t)(0xB0 + i);
+	}
+	I2CCfg_t cfgs = MakeCfg(2, s_I2c3Pins, 100000);
+	cfgs.Mode = I2CMODE_SLAVE;
+	cfgs.NbSlaveAddr = 2;
+	cfgs.SlaveAddr[0] = 0x30;
+	cfgs.SlaveAddr[1] = 0x31;
+	cfgs.bIntEn = true;
+	cfgs.EvtCB = SlaveCb;
+	g_I2cTestResult[r++] = I2CInit(&s_I2c3, &cfgs) ? 1 : 0;
+	for (int i = 0; i < 4000; i++)
+	{
+		I2cTestSlaveStep();
+		I2C3_EV_IRQHandler();
+	}
+
+	// 15 : DMA master, polling wait
+	I2cTestMark(15);
+	I2CCfg_t cfgd = MakeCfg(0, s_I2c1Pins, 400000);
+	cfgd.bDmaEn = true;
+	g_I2cTestResult[r++] = I2CInit(&s_I2c1, &cfgd) ? 1 : 0;
+	g_I2cTestResult[r++] = I2CTx(&s_I2c1, 0x50, s_Tx, 5);
+	g_I2cTestResult[r++] = I2CTx(&s_I2c1, 0x50, s_Tx, 300);
+	g_I2cTestResult[r++] = I2CRx(&s_I2c1, 0x50, (uint8_t*)&g_I2cTestRx[420], 4);
+	g_I2cTestResult[r++] = I2CRx(&s_I2c1, 0x50, (uint8_t*)g_I2cTestRx2[1], 300);
+	g_I2cTestResult[r++] = I2CTx(&s_I2c1, 0x51, s_Tx, 5);
+	g_I2cTestResult[r++] = I2CTx(&s_I2c1, 0x23, s_Tx, 3);
+	cmd = 7;
+	g_I2cTestResult[r++] = I2CRead(&s_I2c1, 0x50, &cmd, 1, (uint8_t*)&g_I2cTestRx[430], 6);
+
+	// 16 : DMA master, interrupt, the end is the completed event
+	I2cTestMark(16);
+	cfgd.bIntEn = true;
+	cfgd.EvtCB = MasterCb;
+	g_I2cTestResult[r++] = I2CInit(&s_I2c1, &cfgd) ? 1 : 0;
+	s_MasterDone = 0;
+	g_I2cTestResult[r++] = I2CTx(&s_I2c1, 0x50, s_Tx, 5);
+	g_I2cTestResult[r++] = WaitMaster();
+	s_MasterDone = 0;
+	g_I2cTestResult[r++] = I2CRx(&s_I2c1, 0x50, (uint8_t*)&g_I2cTestRx[440], 4);
+	g_I2cTestResult[r++] = WaitMaster();
+	s_MasterDone = 0;
+	g_I2cTestResult[r++] = I2CRx(&s_I2c1, 0x50, (uint8_t*)g_I2cTestRx2[2], 300);
+	g_I2cTestResult[r++] = WaitMaster();
+	s_MasterDone = 0;
+	g_I2cTestResult[r++] = I2CTx(&s_I2c1, 0x51, s_Tx, 5);
+	g_I2cTestResult[r++] = WaitMaster();
+
+	I2cTestMark(17);
 	g_I2cTestResult[I2C_TEST_MAX_RESULT - 1] = r;
 	g_I2cTestDone = 1;
 	I2cTestDoneHook();

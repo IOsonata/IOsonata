@@ -241,19 +241,26 @@ not in the library.
 References: STM32WBA6 reference manual RM0515 and STM32CubeWBA:
 https://github.com/STMicroelectronics/STM32CubeWBA
 
-## I2C master and example project
+## I2C and example project
 
-`ARM/ST/STM32WBAxx/src/i2c_stm32wba.cpp` drives the I2C v2 peripheral as a
-polling master. DevNo 0 to 3 select I2C1, I2C2, I2C3 and I2C4. I2C3 is on
-APB7, the others on APB1. The kernel clock is PCLK. The timing register is
-computed from the requested rate (100 kHz, 400 kHz, 1 MHz), and the reported
-rate is never above the request. An address probe in StartTx returns false
-when the device does not acknowledge, as `i2c_scan.cpp` expects. Transfers
-longer than 255 bytes use RELOAD. Error handling follows the ST HAL
-(`I2C_IsErrorOccurred`, `I2C_Flush_TXDR`).
+`ARM/ST/src/i2c_stm32.cpp` is the I2C driver shared by the STM32 families
+that have the I2C v2 peripheral (WBA, L4, G4). The WBA instance table selects
+the RCC bits, the interrupts and the GPDMA requests. DevNo 0 to 3 select
+I2C1, I2C2, I2C3 and I2C4. I2C3 is on APB7, the others on APB1. The kernel
+clock is PCLK. The timing register is computed from the requested rate
+(100 kHz, 400 kHz, 1 MHz) and the rate set is the closest the dividers give.
+An address probe in StartTx returns false when the device does not
+acknowledge, as `i2c_scan.cpp` expects. Transfers longer than 255 bytes use
+RELOAD. Error handling follows the ST HAL (`I2C_IsErrorOccurred`,
+`I2C_Flush_TXDR`).
 
-Limits: master mode only, interrupt mode and DMA are refused at init, 7 bit
-addresses only.
+Master: polling, interrupt (`bIntEn`) and GPDMA (`bDmaEn`). The GPDMA
+channels come from `gpdma_stm32wba.cpp`, which the UART shares, so UART and
+I2C do not take the same channel. Slave: interrupt driven, one or two 7 bit
+addresses, with the read and write request events of the other IOsonata I2C
+slaves.
+
+Limits: 7 bit addresses only, no general call, no DMA in slave mode.
 
 `exemples/I2CScan` (`exemples/i2c/i2c_scan.cpp`) scans the bus on the board
 I2C of `STM32WBA65I_DK1`: SDA PB1, SCL PB2, AF4 (Arduino D14 and D15). These
@@ -261,26 +268,35 @@ pins match the ST board support package for the DK1 (I2C1, SCL PB2, SDA PB1,
 AF4). The scan result is printed on USART2 through the UART retarget.
 
 Validation: the driver is checked by `tests/stm32wba/run_i2c.py` in an
-instruction set emulator with an I2C model (40 checks). Not tested on hardware.
+instruction set emulator with an I2C model and a GPDMA model (63 checks: polling,
+interrupt, DMA, slave). Not tested on hardware.
 
-## SPI master and example project
+## SPI and example project
 
-`ARM/ST/STM32WBAxx/src/spi_stm32wba.cpp` drives the SPI v2 peripheral (CFG1,
-CFG2, TSIZE) as a polling master, full duplex. DevNo 0 to 2 select SPI1, SPI2
-and SPI3. SPI3 is on APB7, SPI1 on APB2, SPI2 on APB1. The kernel clock is
-PCLK. The rate is the closest the MBR divider gives (2 to 256), and the rate
-set is returned. The data size is 4 to 16 bits, one byte per item up to 8 bits
-and two bytes per item above.
+`ARM/ST/src/spi_stm32.cpp` is the SPI driver for the STM32 families with the
+SPI peripheral that has CFG1, CFG2 and TSIZE (WBA; the same IP is in the U5,
+H5 and N6). DevNo 0 to 2 select SPI1, SPI2 and SPI3. SPI3 is on APB7, SPI1 on
+APB2, SPI2 on APB1. The kernel clock is PCLK. The rate is the closest the MBR
+divider gives (2 to 256), and the rate set is returned. The data size is 4 to
+16 bits, one byte per item up to 8 bits and two bytes per item above.
 
-Each TxData or RxData call is one hardware transfer, in chunks of up to 65535
-items, as `HAL_SPI_TransmitReceive` does. The chip select is a GPIO of the pin
-map (index `SPI_CS_IOPIN_IDX` and up), low from StartTx or StartRx to StopTx
-or StopRx, so it stays low between the command and the data of a read. With
-`SPICSEL_MAN`, or no chip select pin in the map, the application drives it.
-Receive clocks out `DummyByte`.
+Master: each TxData or RxData call is one hardware transfer, in chunks of up
+to 65535 items, as `HAL_SPI_TransmitReceive` does. The chip select is a GPIO
+of the pin map (index `SPI_CS_IOPIN_IDX` and up), low from StartTx or StartRx
+to StopTx or StopRx, so it stays low between the command and the data of a
+read. With `SPICSEL_MAN`, or no chip select pin in the map, the application
+drives it. Receive clocks out `DummyByte`. Polling, interrupt (`bIntEn`) and
+GPDMA (`bDmaEn`, shared with the UART and I2C through `gpdma_stm32wba.cpp`).
 
-Limits: master only, `SPIPHY_NORMAL` only, interrupt and DMA are refused at
-init.
+Slave: interrupt driven, with or without DMA. The fourth pin of the map is the
+NSS pin, used by the hardware. Each frame is announced by
+`DEVINTRF_EVT_STATECHG` (give the buffers with `SetSlaveRxBuffer` and
+`SetSlaveTxData`, index 0) and ended by `DEVINTRF_EVT_COMPLETED` with the byte
+count, or -1 after an overrun or a frame longer than the receive buffer. The
+`DummyByte` follows the transmit data.
+
+Limits: `SPIPHY_NORMAL` only. The families with the older SPI registers (F0,
+F4, L4, G4) keep their own SPI files.
 
 `exemples/SPILoopback` (`exemples/spi/spi_loopback.cpp`) runs the four SPI
 modes with MOSI wired to MISO on the DK1 header: SCK PB4, MISO PB3, MOSI PA15,
@@ -292,8 +308,9 @@ MISO PA1, MOSI PB8, AF6), which is wired to the on-board LCD and EEPROM.
 Confirm the header routing against UM3462 before wiring.
 
 Validation: `tests/stm32wba/run_spi.py` runs the driver in an instruction set
-emulator with a model of the SPI v2 registers and the chip select pins (46
-checks, including a receive FIFO overrun check and the 70000 byte chunking).
+emulator with a model of the SPI registers, the GPDMA channels and the chip
+select pins (64 checks: polling, interrupt, DMA, slave, a receive FIFO overrun
+check and the 70000 byte chunking).
 Not tested on hardware.
 
 ## Build dependency
