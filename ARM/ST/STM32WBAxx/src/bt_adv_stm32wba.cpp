@@ -3,13 +3,10 @@
 
 @brief	STM32WBAxx BLE port - advertising path.
 
-        Uses the generic BtAdvEncode helper (from src/bluetooth/
-        bt_adv.cpp) to build the AD payload, then pushes it to the ST BLE
-        stack via either legacy HCI commands (legacy adv) or aci_gap_adv_set_*
-        commands (extended adv). Mirrors the structure of bt_adv_bm.cpp.
-
-        Adv-data buffers are owned by this TU; nothing about them needs to
-        be exposed to peer files.
+        Uses the generic BtAdvEncode helper and ST advertising-set commands.
+        The legacy-PDU property preserves legacy packets while the stack owns
+        advertising duration and reports advertising-set termination.
+        Adv-data buffers are owned by this TU.
 
 @author	Hoang Nguyen Hoan
 @date	May 25, 2026
@@ -34,7 +31,6 @@ Copyright (c) 2026, I-SYST inc., all rights reserved
 #include "bluetooth/bt_uuid.h"
 #include "bluetooth/bt_app.h"
 #include "bluetooth/bt_gap.h"
-#include "bluetooth/bt_smp.h"
 #include "bluetooth/bt_appearance.h"
 
 /******** For DEBUG ************/
@@ -68,7 +64,7 @@ extern UART g_Uart;
 // 0.625 ms units across both legacy and extended adv params.
 #define BT_WBA_MSEC_TO_0_625(ms)		(((uint32_t)(ms) * 1600U) / 1000U)
 // 10ms unit for adv duration / timeout.
-#define BT_WBA_MSEC_TO_10MS(ms)			(((uint32_t)(ms) + 9U) / 10U)
+#define BT_WBA_MSEC_TO_10MS(ms)			((ms) / 10U + ((ms) % 10U != 0U))
 
 // Extended adv event_properties bitfield (HCI v5.0+).
 #define BT_WBA_EVT_PROP_CONNECTABLE		0x0001
@@ -94,12 +90,8 @@ extern UART g_Uart;
 // Each pair (legacy + extended) shares the same underlying byte buffer;
 // the BtAdvPacket_t.MaxLen field caps each into the right window. This
 // mirrors bt_adv_bm.cpp - lets app code reuse the buffer between modes.
-// The application timer queues timeout work; stack calls stay out of the ISR.
-void BtAppWbaAdvTimerSet(uint32_t Timeout);
-
 static bool s_bAdvertising;
-static uint32_t s_AdvTimeoutMs;
-static uint32_t s_AdvStartMs;
+static uint16_t s_AdvDuration;
 static uint16_t s_PeripheralLinkCount;
 
 alignas(4) static uint8_t s_BtAppAdvBuff[BT_WBA_ADV_EXTENDED_MAX + 5];
@@ -118,30 +110,19 @@ alignas(4) static BtAdvPacket_t s_BtAppExtSrPkt = {
 	BT_WBA_ADV_EXTENDED_MAX, 0, s_BtAppSrBuff
 };
 
-// Map BtAppCfg_t::Role to the HCI legacy advertising type. ADV_IND for
-// connectable, ADV_NONCONN_IND for broadcaster-only. ADV_SCAN_IND would
-// be scannable-only - not exposed here.
-static uint8_t MapLegacyAdvType(uint8_t Role)
+// The command family is always advertising-set; bExtAdv selects the PDU.
+static uint16_t MapAdvEvtProps(uint8_t Role)
 {
-	if (Role & BTAPP_ROLE_PERIPHERAL)
-	{
-		return 0x00;	// ADV_IND - connectable + scannable
-	}
-	return 0x03;	// ADV_NONCONN_IND - non-connectable + non-scannable
-}
-
-// Map BtAppCfg_t::Role to the HCI extended-adv event_properties bitfield.
-static uint16_t MapExtAdvEvtProps(uint8_t Role)
-{
-	uint16_t prop = 0;
+	uint16_t prop = g_BtAppData.bExtAdv ? 0 : BT_WBA_EVT_PROP_LEGACY;
 
 	if (Role & BTAPP_ROLE_PERIPHERAL)
 	{
 		prop |= BT_WBA_EVT_PROP_CONNECTABLE;
+		if (!g_BtAppData.bExtAdv)
+		{
+			prop |= BT_WBA_EVT_PROP_SCANNABLE;
+		}
 	}
-	// Scannable-not-connectable would set EVT_PROP_SCANNABLE without
-	// EVT_PROP_CONNECTABLE; not exposed via BtAppCfg_t.
-
 	return prop;
 }
 
@@ -215,47 +196,28 @@ static void BtAdvStateUpdate(void)
 // Record that controller-side transition without sending a redundant disable.
 void BtAdvWbaConnected(void)
 {
-	BtAppWbaAdvTimerSet(0);
 	s_bAdvertising = false;
 	BtAdvStateUpdate();
 }
 
 void BtAdvStart(void)
 {
-	if (s_bAdvertising)
+	if (s_bAdvertising || !BtAdvCanStart())
 	{
 		BtAdvStateUpdate();
 		return;
 	}
 
-	if (!BtAdvCanStart())
-	{
-		BtAdvStateUpdate();
-		return;
-	}
-
-	uint8_t ret;
-	if (g_BtAppData.bExtAdv == false)
-	{
-		ret = hci_le_set_advertising_enable(1);
-	}
-	else
-	{
-		// aci_gap_adv_set_enable takes an Adv_Set_t array. Single set
-		// here; duration 0 = until explicitly disabled.
-		Adv_Set_t advSet = {
-			.Advertising_Handle              = BT_WBA_ADV_HANDLE,
-			.Duration                        = 0,
-			.Max_Extended_Advertising_Events = 0,
-		};
-		ret = aci_gap_adv_set_enable(1, 1, &advSet);
-	}
+	Adv_Set_t advSet = {
+		.Advertising_Handle = BT_WBA_ADV_HANDLE,
+		.Duration = s_AdvDuration,
+		.Max_Extended_Advertising_Events = 0,
+	};
+	uint8_t ret = aci_gap_adv_set_enable(1, 1, &advSet);
 
 	if (ret == BLE_STATUS_SUCCESS)
 	{
 		s_bAdvertising = true;
-		s_AdvStartMs = BtSmpMsTick();
-		BtAppWbaAdvTimerSet(s_AdvTimeoutMs);
 		BtAdvStateUpdate();
 	}
 	else
@@ -272,21 +234,12 @@ void BtAdvStop(void)
 		return;
 	}
 
-	uint8_t ret;
-	if (g_BtAppData.bExtAdv == false)
-	{
-		ret = hci_le_set_advertising_enable(0);
-	}
-	else
-	{
-		Adv_Set_t advSet = {
-			.Advertising_Handle              = BT_WBA_ADV_HANDLE,
-			.Duration                        = 0,
-			.Max_Extended_Advertising_Events = 0,
-		};
-		ret = aci_gap_adv_set_enable(0, 1, &advSet);
-	}
-
+	Adv_Set_t advSet = {
+		.Advertising_Handle = BT_WBA_ADV_HANDLE,
+		.Duration = 0,
+		.Max_Extended_Advertising_Events = 0,
+	};
+	uint8_t ret = aci_gap_adv_set_enable(0, 1, &advSet);
 	if (ret != BLE_STATUS_SUCCESS)
 	{
 		DEBUG_PRINTF("BtAdvStop failed: 0x%02x\r\n", ret);
@@ -294,124 +247,64 @@ void BtAdvStop(void)
 	}
 
 	s_bAdvertising = false;
-	BtAppWbaAdvTimerSet(0);
 	BtAdvStateUpdate();
 }
 
-// Called by the existing queued application timer work. A failed disable is
-// retried by the periodic tick; report expiry only after advertising stops.
-void BtAdvWbaTimeoutCheck(void)
+// A successful termination belongs to the connection-complete path, which
+// may already have restarted advertising for another peer. Do not clear it.
+void BtAdvWbaTerminated(uint8_t Status, uint8_t Handle)
 {
-	if (!s_bAdvertising || s_AdvTimeoutMs == 0 ||
-		(uint32_t)(BtSmpMsTick() - s_AdvStartMs) < s_AdvTimeoutMs)
+	if (Handle != BT_WBA_ADV_HANDLE || Status == BLE_STATUS_SUCCESS)
 	{
 		return;
 	}
 
-	BtAdvStop();
-	if (!s_bAdvertising)
+	s_bAdvertising = false;
+	BtAdvStateUpdate();
+	if (Status == HCI_ADVERTISING_TIMEOUT_ERR_CODE ||
+		Status == HCI_ADVERTISING_LIMIT_REACHED_ERR_CODE)
 	{
+		// Advertising Timeout or Limit Reached.
 		BtAppAdvTimeoutHandler();
 	}
 }
 
-// Push the encoded packet pair to the ST stack. Splits between legacy
-// and extended adv command sets - same buffer contents on either side.
+// Push the encoded packet pair using the same command family for both PDUs.
 static bool PushAdvDataToStack(const BtAppCfg_t *pCfg,
-                               BtAdvPacket_t *pAdv, BtAdvPacket_t *pSr)
+							   BtAdvPacket_t *pAdv, BtAdvPacket_t *pSr)
 {
-	uint8_t ret;
-	uint16_t intervalUnits = (uint16_t)BT_WBA_MSEC_TO_0_625(pCfg->AdvInterval);
-
-	if (g_BtAppData.bExtAdv == false)
+	uint8_t zeros[6] = {0,};
+	uint32_t interval = BT_WBA_MSEC_TO_0_625(pCfg->AdvInterval);
+	uint8_t ret = aci_gap_adv_set_configuration(
+		0, BT_WBA_ADV_HANDLE, MapAdvEvtProps(pCfg->Role),
+		interval, interval, BT_WBA_ADV_CHAN_MAP_ALL,
+		0, 0, zeros, 0, 0x7F, 0,
+		g_BtAppData.bExtAdv ? BT_WBA_PHY_2M : 0x01,
+		0, 0);
+	if (ret != BLE_STATUS_SUCCESS)
 	{
-		// Legacy path. Adv params first, then data, then scan response.
-		uint8_t  zeros[6]  = { 0, };
-		uint8_t  advType   = MapLegacyAdvType(pCfg->Role);
+		DEBUG_PRINTF("aci_gap_adv_set_configuration: 0x%02x\r\n", ret);
+		return false;
+	}
 
-		ret = hci_le_set_advertising_parameters(
-			intervalUnits,			// min interval (0.625 ms units)
-			intervalUnits,			// max interval - same for fixed rate
-			advType,
-			0,						// own address type = public
-			0,						// peer address type
-			zeros,					// peer address
-			BT_WBA_ADV_CHAN_MAP_ALL,
-			0);						// filter policy = any
+	ret = aci_gap_adv_set_adv_data(BT_WBA_ADV_HANDLE,
+		BT_WBA_ADV_DATA_OP_COMPLETE, BT_WBA_ADV_DATA_FRAG_PREF_NONE,
+		(uint8_t)pAdv->Len, pAdv->pData);
+	if (ret != BLE_STATUS_SUCCESS)
+	{
+		return false;
+	}
+
+	if (pSr->Len > 0)
+	{
+		ret = aci_gap_adv_set_scan_resp_data(BT_WBA_ADV_HANDLE,
+			BT_WBA_ADV_DATA_OP_COMPLETE, BT_WBA_ADV_DATA_FRAG_PREF_NONE,
+			(uint8_t)pSr->Len, pSr->pData);
 		if (ret != BLE_STATUS_SUCCESS)
 		{
-			DEBUG_PRINTF("hci_le_set_advertising_parameters: 0x%02x\r\n", ret);
-			return false;
-		}
-
-		ret = hci_le_set_advertising_data((uint8_t)pAdv->Len, pAdv->pData);
-		if (ret != BLE_STATUS_SUCCESS)
-		{
-			DEBUG_PRINTF("hci_le_set_advertising_data: 0x%02x\r\n", ret);
-			return false;
-		}
-
-		// Scan response is optional - stack accepts a zero-length buffer.
-		ret = hci_le_set_scan_response_data((uint8_t)pSr->Len, pSr->pData);
-		if (ret != BLE_STATUS_SUCCESS)
-		{
-			DEBUG_PRINTF("hci_le_set_scan_response_data: 0x%02x\r\n", ret);
 			return false;
 		}
 	}
-	else
-	{
-		// Extended adv path. aci_gap_adv_set_configuration takes the
-		// full parameter set in one call.
-		uint8_t zeros[6] = { 0, };
-		uint16_t evtProp = MapExtAdvEvtProps(pCfg->Role);
-
-		ret = aci_gap_adv_set_configuration(
-			0,							// public address, 1M primary PHY
-			BT_WBA_ADV_HANDLE,
-			evtProp,
-			intervalUnits,				// primary interval min
-			intervalUnits,				// primary interval max
-			BT_WBA_ADV_CHAN_MAP_ALL,
-			0,							// own address type = public
-			0, zeros,					// peer
-			0,							// filter policy = any
-			0x7F,						// TX power = host preference
-			0,							// secondary max skip
-			BT_WBA_PHY_2M,				// secondary PHY
-			0,							// SID
-			0);							// scan request notification disabled
-		if (ret != BLE_STATUS_SUCCESS)
-		{
-			DEBUG_PRINTF("aci_gap_adv_set_configuration: 0x%02x\r\n", ret);
-			return false;
-		}
-
-		ret = aci_gap_adv_set_adv_data(BT_WBA_ADV_HANDLE,
-									BT_WBA_ADV_DATA_OP_COMPLETE,
-									BT_WBA_ADV_DATA_FRAG_PREF_NONE,
-									(uint8_t)pAdv->Len, pAdv->pData);
-		if (ret != BLE_STATUS_SUCCESS)
-		{
-			DEBUG_PRINTF("aci_gap_adv_set_adv_data: 0x%02x\r\n", ret);
-			return false;
-		}
-
-		if (pSr->Len > 0)
-		{
-			ret = aci_gap_adv_set_scan_resp_data(BT_WBA_ADV_HANDLE,
-										  BT_WBA_ADV_DATA_OP_COMPLETE,
-										  BT_WBA_ADV_DATA_FRAG_PREF_NONE,
-										  (uint8_t)pSr->Len,
-										  pSr->pData);
-			if (ret != BLE_STATUS_SUCCESS)
-			{
-				DEBUG_PRINTF("aci_gap_adv_set_scan_resp_data: 0x%02x\r\n", ret);
-				return false;
-			}
-		}
-	}
-
 	return true;
 }
 
@@ -429,8 +322,8 @@ __attribute__((weak)) bool BtAppAdvInit(const BtAppCfg_t *pCfg)
 	bool bScannable = false;
 
 	s_bAdvertising = false;
-	s_AdvTimeoutMs = pCfg->AdvTimeout;
-	BtAppWbaAdvTimerSet(0);
+	uint32_t duration = BT_WBA_MSEC_TO_10MS(pCfg->AdvTimeout);
+	s_AdvDuration = duration > UINT16_MAX ? UINT16_MAX : (uint16_t)duration;
 	s_PeripheralLinkCount = pCfg->CentralDevMax > 0 ?
 		(uint16_t)pCfg->CentralDevMax : 0;
 	advpkt->Len = 0;
@@ -496,48 +389,28 @@ bool BtAppAdvManDataSet(uint8_t *pAdvData, int AdvLen,
 		memcpy(&p->Data[2], pSrData, SrLen);
 	}
 
-	// Re-push only the data buffers (params unchanged).
+	// Update data through the same advertising-set commands used at init.
 	uint8_t ret;
-	if (g_BtAppData.bExtAdv == false)
-	{
-		ret = hci_le_set_advertising_data((uint8_t)advpkt->Len, advpkt->pData);
-		if (ret != BLE_STATUS_SUCCESS)
-		{
-			return false;
-		}
 
-		if (srpkt->Len > 0)
-		{
-			ret = hci_le_set_scan_response_data((uint8_t)srpkt->Len,
-			                                    srpkt->pData);
-			if (ret != BLE_STATUS_SUCCESS)
-			{
-				return false;
-			}
-		}
+	ret = aci_gap_adv_set_adv_data(BT_WBA_ADV_HANDLE,
+								BT_WBA_ADV_DATA_OP_COMPLETE,
+								BT_WBA_ADV_DATA_FRAG_PREF_NONE,
+								(uint8_t)advpkt->Len, advpkt->pData);
+	if (ret != BLE_STATUS_SUCCESS)
+	{
+		return false;
 	}
-	else
+
+	if (srpkt->Len > 0)
 	{
-		ret = aci_gap_adv_set_adv_data(BT_WBA_ADV_HANDLE,
-									BT_WBA_ADV_DATA_OP_COMPLETE,
-									BT_WBA_ADV_DATA_FRAG_PREF_NONE,
-									(uint8_t)advpkt->Len, advpkt->pData);
+		ret = aci_gap_adv_set_scan_resp_data(BT_WBA_ADV_HANDLE,
+									  BT_WBA_ADV_DATA_OP_COMPLETE,
+									  BT_WBA_ADV_DATA_FRAG_PREF_NONE,
+									  (uint8_t)srpkt->Len,
+									  srpkt->pData);
 		if (ret != BLE_STATUS_SUCCESS)
 		{
 			return false;
-		}
-
-		if (srpkt->Len > 0)
-		{
-			ret = aci_gap_adv_set_scan_resp_data(BT_WBA_ADV_HANDLE,
-										  BT_WBA_ADV_DATA_OP_COMPLETE,
-										  BT_WBA_ADV_DATA_FRAG_PREF_NONE,
-										  (uint8_t)srpkt->Len,
-										  srpkt->pData);
-			if (ret != BLE_STATUS_SUCCESS)
-			{
-				return false;
-			}
 		}
 	}
 

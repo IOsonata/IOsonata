@@ -136,7 +136,7 @@ extern UART g_Uart;
 extern "C" bool BtAppAdvInit(const BtAppCfg_t *pCfg);
 extern "C" bool BtDisInit(const struct __Bt_App_Cfg *pCfg);
 void BtAdvWbaConnected(void);
-void BtAdvWbaTimeoutCheck(void);
+void BtAdvWbaTerminated(uint8_t Status, uint8_t Handle);
 
 // User hooks - weak symbols overridden by the app.
 __attribute__((weak)) void BtAppInitUserServices(void) {}
@@ -932,6 +932,15 @@ static BtWbaEvtFlow_t BtAppHciEvtHandler(void *pPayload)
 					break;
 				}
 
+				case HCI_LE_ADVERTISING_SET_TERMINATED_SUBEVT_CODE:
+					if (pEvtPkt->plen >= 1 + sizeof(
+							hci_le_advertising_set_terminated_event_rp0))
+					{
+						auto *p = (hci_le_advertising_set_terminated_event_rp0 *)pMeta->data;
+						BtAdvWbaTerminated(p->Status, p->Advertising_Handle);
+					}
+					break;
+
 				case HCI_LE_ADVERTISING_REPORT_SUBEVT_CODE:
 					BtAppWbaScanReport(pMeta->data, (size_t)pEvtPkt->plen - 1);
 					break;
@@ -1637,23 +1646,6 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 // (LPTIM2), see timer_stm32.h.
 static TimerDev_t s_BtAppTimer;
 
-// LPTIM2 trigger 0 keeps the periodic checks; trigger 1 wakes the same
-// queued handler at the advertising deadline. Zero cancels that deadline.
-void BtAppWbaAdvTimerSet(uint32_t Timeout)
-{
-	if (s_BtAppTimer.GetTickCount == nullptr)
-	{
-		return;
-	}
-
-	TimerDisableTrigger(&s_BtAppTimer, 1);
-	if (Timeout != 0)
-	{
-		msTimerEnableTrigger(&s_BtAppTimer, 1, Timeout,
-						 TIMER_TRIG_TYPE_SINGLE, nullptr, nullptr);
-	}
-}
-
 enum {
 	BT_APP_TICK_IDLE,
 	BT_APP_TICK_PENDING,
@@ -1675,7 +1667,6 @@ static void BtAppTickEvt(uint32_t Evt, void *pCtx)
 	s_BtAppTickState = BT_APP_TICK_IDLE;
 	BtGapWbaConnParamProcess();
 	BtGattIndicationTimeoutCheck();
-	BtAdvWbaTimeoutCheck();
 }
 
 static void BtAppTickQue(void)
@@ -1695,7 +1686,7 @@ static void BtAppTimerHandler(TimerDev_t *pTimer, uint32_t Evt)
 {
 	(void)pTimer;
 
-	if (Evt & (TIMER_EVT_TRIGGER(0) | TIMER_EVT_TRIGGER(1)))
+	if (Evt & TIMER_EVT_TRIGGER(0))
 	{
 		if (s_BtAppTickState == BT_APP_TICK_IDLE)
 		{
