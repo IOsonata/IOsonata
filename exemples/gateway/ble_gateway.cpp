@@ -296,7 +296,9 @@ void BtAppEvtConnected(uint16_t ConnHdl)
     }
     pTag->ConnHdl = ConnHdl;
     pTag->Connecting = false;
-    GatewayLog("GATT connected, handle=%u\r\n", (unsigned)ConnHdl);
+    GatewayLog("GATT connected, handle=%u tag=%02x:%02x:%02x:%02x:%02x:%02x\r\n",
+               (unsigned)ConnHdl, pTag->Addr[5], pTag->Addr[4],
+               pTag->Addr[3], pTag->Addr[2], pTag->Addr[1], pTag->Addr[0]);
     BtDevice_t *pPeer = BtPeerFindByHdl(ConnHdl);
     if (pPeer == nullptr || !BtAppDiscoverDevice(pPeer))
     {
@@ -320,7 +322,16 @@ void BtAppEvtConnectFailed(void)
 void BtAppEvtDisconnected(uint16_t ConnHdl)
 {
     GatewayTag_t *pTag = GatewayFindHandle(ConnHdl);
-    GatewayLog("GATT disconnected, handle=%u\r\n", (unsigned)ConnHdl);
+    if (pTag != nullptr)
+    {
+        GatewayLog("GATT disconnected, handle=%u tag=%02x:%02x:%02x:%02x:%02x:%02x\r\n",
+                   (unsigned)ConnHdl, pTag->Addr[5], pTag->Addr[4],
+                   pTag->Addr[3], pTag->Addr[2], pTag->Addr[1], pTag->Addr[0]);
+    }
+    else
+    {
+        GatewayLog("GATT disconnected, handle=%u\r\n", (unsigned)ConnHdl);
+    }
     if (pTag != nullptr)
     {
         pTag->ConnHdl = BT_CONN_HDL_INVALID;
