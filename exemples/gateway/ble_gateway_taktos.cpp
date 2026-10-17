@@ -118,7 +118,8 @@ SOFTWARE.
 
 // Keep scan reports bounded: the application queue processes UDP outside
 // the Bluetooth callback. Each report supersedes the previous one.
-#define GATEWAY_SCAN_INTERVAL 1000U
+// Diagnostic: continuous 1M scanning also shortens HCI initiating scan gaps.
+#define GATEWAY_SCAN_INTERVAL 100U
 #define GATEWAY_SCAN_WINDOW 100U
 
 #define GATEWAY_TES_SERVICE 0x0200U
