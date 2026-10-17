@@ -3,10 +3,10 @@
 
 @brief	nRF91 Modem library glue, TaktOS waits, semaphores and mutex
 
-Link this file into a TaktOS application that uses the modem, with the
-TaktOS include paths. Its functions replace the weak bare metal ones of
-modem_os_nrf91.c; memory, errno, logging, the IPC interrupt and
-nRF91ModemInit stay the library ones. The pTimer and TimerTrigNo of the
+Build this file in the nRF91 port library's Debug_TaktOS or
+Release_TaktOS configuration, not in the application. These configurations
+exclude the bare-metal wait/semaphore/mutex section of modem_os_nrf91.c,
+while retaining its shared memory, errno, logging, IPC and modem init code. The pTimer and TimerTrigNo of the
 modem configuration are not used: timeouts are kernel ticks.
 
 Any number of threads may call the Modem library. A thread in
