@@ -432,6 +432,10 @@ void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtP
 					SysLogPrintf(SysLogGet(),
 							 "HCI: LE Connection Complete failed status=0x%02x\r\n",
 							 (unsigned)p->Status);
+					if (pDev->ConnectFailed != nullptr)
+					{
+						pDev->ConnectFailed();
+					}
 				}
 				else
 				{
@@ -564,6 +568,10 @@ void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtP
 					SysLogPrintf(SysLogGet(),
 							 "HCI: LE Enhanced Connection Complete failed status=0x%02x\r\n",
 							 (unsigned)p->Status);
+					if (pDev->ConnectFailed != nullptr)
+					{
+						pDev->ConnectFailed();
+					}
 				}
 				else
 				{
