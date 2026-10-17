@@ -366,24 +366,7 @@ bool BtAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int SrL
 		}
 	}
 
-	// Re-enable advertising with the updated data. Disable first so the enable
-	// is not rejected with Command Disallowed (0x0C) when the set is still
-	// considered enabled. Mirrors the nRF52 stop-then-start on data update.
-	if (s_bAdvertising)
-	{
-		// The disable result is not decisive: the set may already have been
-		// stopped by the controller, for example on a duration expiry not yet
-		// processed. The enable result is. If it fails the device is off air
-		// with the new data loaded, so report the failure and clear the advertising flag
-		// rather than leave the state claiming the device is advertising.
-		BtAppAdvDisable();
-
-		if (BtAppAdvEnable() != 0)
-		{
-			s_bAdvertising = false;
-			return false;
-		}
-	}
+	// Updating the payload does not change the advertising enable state.
 
 	return true;
 }
@@ -445,16 +428,7 @@ void BtAdvStart()
 		return;
 	}
 
-	// Retire the previous controller enable before starting a new duration.
-	// The pre-encapsulation timeout/data-update path also disabled first.
-	int res = BtAppAdvDisable();
-	ADV_TRACE("ADV restart disable result=%d\r\n", res);
-	if (res != BT_HCI_SUCCESS)
-	{
-		return;
-	}
-
-	res = BtAppAdvEnable();
+	int res = BtAppAdvEnable();
 	ADV_TRACE("ADV start result=%d\r\n", res);
 	if (res == 0)
 	{

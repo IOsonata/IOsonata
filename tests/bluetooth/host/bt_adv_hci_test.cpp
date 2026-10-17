@@ -48,7 +48,6 @@ uint8_t s_LocalAddr[6] = {};
 // Opcode the stub controller rejects, and the Enable byte it rejects it for
 // (0 disable, 1 enable, 0xFF either). Lets a test drive the paths where a
 // command comes back with an error status.
-bool s_RequiresDisable = false;
 uint16_t s_FailOpCode = 0;
 uint8_t  s_FailEnable = 0xFF;
 
@@ -78,18 +77,6 @@ uint8_t CaptureCommand(BtHciDevice_t * const, uint16_t OpCode, const void *pPara
 		}
 	}
 
-	if (OpCode == BT_HCI_CMD_CTLR_SET_EXT_ADV_ENABLE)
-	{
-		const uint8_t *p = (const uint8_t *)pParam;
-		if (p[0] == 0)
-		{
-			s_RequiresDisable = false;
-		}
-		else if (s_RequiresDisable)
-		{
-			return BT_HCI_ERR_COMMAND_DISALLOWED;
-		}
-	}
 	return 0;		// HCI success
 }
 
@@ -228,13 +215,11 @@ static void CheckStartCommand(bool Expected)
 {
 	int before = s_CmdCount;
 	BtAdvStart();
-	CHECK(s_CmdCount == before + (Expected ? 2 : 0));
+	CHECK(s_CmdCount == before + (Expected ? 1 : 0));
 	if (Expected)
 	{
 		CHECK(s_Cmds[before].OpCode == BT_HCI_CMD_CTLR_SET_EXT_ADV_ENABLE);
-		CHECK(s_Cmds[before].Param[0] == 0);
-		CHECK(s_Cmds[before + 1].OpCode == BT_HCI_CMD_CTLR_SET_EXT_ADV_ENABLE);
-		CHECK(s_Cmds[before + 1].Param[0] == 1);
+		CHECK(s_Cmds[before].Param[0] == 1);
 		BtAdvStop();
 	}
 }
@@ -262,35 +247,24 @@ void TestAdvStopKeepsStateOnFailure()
 	CheckStartCommand(true);
 }
 
-// Updating the manufacturer data while advertising stops and restarts the set.
-// If the restart is rejected the device is off air, so the call reports failure
-// instead of leaving the state claiming it still advertises.
-void TestAdvManDataSetReportsRestartFailure()
+// A live payload update must not disable or re-enable advertising.
+void TestLiveDataUpdateDoesNotToggleAdvertising()
 {
-	uint8_t addr[6] = { 0x11, 0x22, 0x33, 0x44, 0x55, 0xC6 };
-	Setup(BTADDR_TYPE_RANDOM_STATIC, addr);
-
+	uint8_t addr[6] = {};
+	Setup(BTADDR_TYPE_PUBLIC, addr);
 	BtAppCfg_t cfg = MakePeripheralCfg();
-	CHECK(BtAppAdvInit(&cfg) == true);
-
+	CHECK(BtAppAdvInit(&cfg));
 	BtAdvStart();
+	uint32_t count = 1;
+	int before = s_CmdCount;
+	CHECK(BtAppAdvManDataSet((uint8_t *)&count, sizeof(count), nullptr, 0));
+	CHECK(s_CmdCount == before + 1);
+	CHECK(s_Cmds[before].OpCode == BT_HCI_CMD_CTLR_SET_EXT_ADV_DATA);
 	CheckStartCommand(false);
-
-	uint8_t data[4] = { 1, 2, 3, 4 };
-
-	// A successful update keeps the device advertising.
-	CHECK(BtAppAdvManDataSet(data, sizeof(data), nullptr, 0) == true);
-	CheckStartCommand(false);
-
-	// The re-enable is rejected: the device is off air with the new data
-	// loaded, and the state says so.
-	s_FailOpCode = BT_HCI_CMD_CTLR_SET_EXT_ADV_ENABLE;
-	s_FailEnable = 1;
-	CHECK(BtAppAdvManDataSet(data, sizeof(data), nullptr, 0) == false);
-	CheckStartCommand(true);
+	BtAdvStop();
 }
 
-void TestTimeoutRestartDisablesBeforeEnable()
+void TestTimeoutRestartWithoutDisable()
 {
 	uint8_t addr[6] = {};
 	Setup(BTADDR_TYPE_PUBLIC, addr);
@@ -302,15 +276,12 @@ void TestTimeoutRestartDisablesBeforeEnable()
 	for (uint32_t count = 1; count <= 10; count++)
 	{
 		BtAdvHciStopped();
-		s_RequiresDisable = true;
 		CHECK(BtAppAdvManDataSet((uint8_t *)&count, sizeof(count), nullptr, 0));
 		int before = s_CmdCount;
 		BtAdvStart();
-		CHECK(s_CmdCount == before + 2);
-		CHECK(s_Cmds[before].Param[0] == 0);
-		CHECK(s_Cmds[before + 1].Param[0] == 1);
-		CHECK(s_Cmds[before + 1].Param[3] == 100);
-		CHECK(!s_RequiresDisable);
+		CHECK(s_CmdCount == before + 1);
+		CHECK(s_Cmds[before].Param[0] == 1);
+		CHECK(s_Cmds[before].Param[3] == 100);
 		CheckStartCommand(false);
 	}
 	BtAdvStop();
@@ -530,14 +501,14 @@ extern "C" void BtSmpLocalAddrGet(uint8_t *pType, uint8_t pAddr[6])
 
 int main()
 {
-	TestTimeoutRestartDisablesBeforeEnable();
+	TestTimeoutRestartWithoutDisable();
 	TestManDataCompanyIdLittleEndian();
 	TestAdvPublicIdentity();
 	TestAdvRandomIdentity();
 	TestAdvInvalidRandomIdentity();
 	TestAdvDegenerateRandomIdentity();
 	TestAdvStopKeepsStateOnFailure();
-	TestAdvManDataSetReportsRestartFailure();
+	TestLiveDataUpdateDoesNotToggleAdvertising();
 	TestCodingSelectionUsesTheV2Opcode();
 	TestCodingNeedsTheCodedPhy();
 	TestCodingOptionRangeIsChecked();
