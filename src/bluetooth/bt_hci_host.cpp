@@ -47,8 +47,8 @@ SOFTWARE.
 #include "istddef.h"
 #include "syslog.h"
 
-// Temporary advertising restart diagnostics for Debug builds.
-#if !defined(NDEBUG)
+// Define BT_ADV_TRACE_ENABLE to trace advertising restart diagnostics.
+#if defined(BT_ADV_TRACE_ENABLE) && !defined(NDEBUG)
 #define ADV_TRACE(...) SysLogPrintf(SysLogGet(), __VA_ARGS__)
 #else
 #define ADV_TRACE(...)
