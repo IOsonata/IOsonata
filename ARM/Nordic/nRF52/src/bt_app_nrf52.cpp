@@ -171,9 +171,9 @@ void BtAppSecStarted(void)
 
 
 /******** For DEBUG ************/
-#define DEBUG_ENABLE
+//#define DEBUG_ENABLE
 
-#ifdef DEBUG_ENABLE
+#if defined(DEBUG_ENABLE) && !defined(NDEBUG)
 #include "syslog.h"
 #define DEBUG_PRINTF(...)		SysLogPrintf(SysLogGet(), __VA_ARGS__)
 #else
