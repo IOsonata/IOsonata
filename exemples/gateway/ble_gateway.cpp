@@ -189,23 +189,38 @@ static GatewayTag_t *GatewayFindOrCreate(const uint8_t Addr[6], uint8_t AddrType
     {
         return pTag;
     }
+    GatewayTag_t *pAvailable = nullptr;
     for (unsigned i = 0; i < GATEWAY_MAX_TAGS; ++i)
     {
         if (!s_Tags[i].Active)
         {
-            pTag = &s_Tags[i];
-            memset(pTag, 0, sizeof(*pTag));
-            memcpy(pTag->Addr, Addr, 6);
-            pTag->AddrType = AddrType;
-            pTag->ConnHdl = BT_CONN_HDL_INVALID;
-            pTag->TempHdl = BT_ATT_HANDLE_INVALID;
-            pTag->PressureHdl = BT_ATT_HANDLE_INVALID;
-            pTag->HumidityHdl = BT_ATT_HANDLE_INVALID;
-            pTag->Active = true;
-            return pTag;
+            pAvailable = &s_Tags[i];
+            break;
+        }
+        if (pAvailable == nullptr &&
+            s_Tags[i].ConnHdl == BT_CONN_HDL_INVALID &&
+            !s_Tags[i].Connecting && !s_Tags[i].Pending &&
+            s_pInitiating != &s_Tags[i])
+        {
+            pAvailable = &s_Tags[i];
         }
     }
-    return nullptr;
+    if (pAvailable == nullptr)
+    {
+        return nullptr;
+    }
+
+    // Reuse a disconnected slot only. Never replace an active link or
+    // a peer for which a connection initiation is already pending.
+    memset(pAvailable, 0, sizeof(*pAvailable));
+    memcpy(pAvailable->Addr, Addr, 6);
+    pAvailable->AddrType = AddrType;
+    pAvailable->ConnHdl = BT_CONN_HDL_INVALID;
+    pAvailable->TempHdl = BT_ATT_HANDLE_INVALID;
+    pAvailable->PressureHdl = BT_ATT_HANDLE_INVALID;
+    pAvailable->HumidityHdl = BT_ATT_HANDLE_INVALID;
+    pAvailable->Active = true;
+    return pAvailable;
 }
 
 static const BtAppCfg_t s_BleAppCfg = {
