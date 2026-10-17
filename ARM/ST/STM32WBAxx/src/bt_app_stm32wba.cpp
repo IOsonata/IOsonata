@@ -152,6 +152,7 @@ void BtAppConnLedOn(void)
 uint8_t BtAdvHandle(void);
 
 bool BtScanIsActive(void);
+void BtScanEnded(void);
 
 // GATT uses this default when a characteristic has no security override.
 BTGAP_SECTYPE BtAppSecTypeGet(void)
@@ -1565,7 +1566,7 @@ bool BtAppInit(const BtAppCfg_t *pCfg)
 	s_BtAppData.ConnLedPort     = pCfg->ConnLedPort;
 	s_BtAppData.ConnLedPin      = pCfg->ConnLedPin;
 	s_BtAppData.ConnLedActLevel = pCfg->ConnLedActLevel;
-	BtScanIsActive()           = false;
+	BtScanEnded();
 
 	s_BtAppData.MaxMtu = GATT_MTU_SIZE_DEFAULT;
 	if (pCfg->MaxMtu > GATT_MTU_SIZE_DEFAULT)

@@ -162,6 +162,19 @@ int main()
 		print('PASS failed scan/retry/controller stop:', path, flush=True)
 
 
+# Check complete source files too: extracted functions do not cover every init
+# and event path. Value-returning accessors cannot replace state assignments.
+VALUE_ACCESSORS = (
+	'BtScanIsActive', 'BtInitialized', 'BtAdvHandle', 'BtAppHciDevice',
+	'BtAppSecConfigGet', 'BtAppSecIsStarted', 'BtAppSecTypeGet',
+)
+accessor_write = re.compile(
+	r'\b(?:' + '|'.join(VALUE_ACCESSORS) + r')\s*\([^;{}]*?\)\s*'
+	r'(?:=(?!=)|[+*/%&|^-]=|<<=|>>=|\+\+|--)')
+for directory in ('ARM', 'src'):
+	for path in (ROOT / directory).rglob('*.cpp'):
+		assert not accessor_write.search(path.read_text()), path
+
 # Application headers must not expose either the old storage or its replacement.
 for header in (ROOT / 'include').rglob('*.h'):
 	assert not re.search(r'\b(?:BtAppData_t|g_BtAppData|s_BtAppData)\b', header.read_text()), header
