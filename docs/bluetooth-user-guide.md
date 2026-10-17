@@ -417,9 +417,10 @@ rate, or long-term RF stability.
 The nRF9160 and nRF91x1 IOsonata library projects each provide four Eclipse
 configurations. `Debug` and `Release` build the bare-metal modem OS
 implementation. `Debug_TaktOS` and `Release_TaktOS` build the common modem
-code together with the TaktOS wait, semaphore and mutex adapter, and include
-the TaktOS headers. Applications must not compile
-`modem_os_nrf91_taktos.c` themselves.
+source with the TaktOS wait, semaphore and mutex implementation selected
+by `NRF91_MODEM_OS_TAKTOS`, and include the TaktOS headers. Both build
+variants compile `modem_os_nrf91.c`; applications do not compile a modem
+OS implementation directly.
 
 Build `IOsonata_nRF9160` or `IOsonata_nRF91x1` in `Debug_TaktOS`
 before building its `LteUdpTaktOS` application in `Debug_TaktOS`, or select
