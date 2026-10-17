@@ -63,7 +63,8 @@ GNU Arm 14.3.1 was used for these checks:
 - `tests/stm32wba/run_i2c.py`: 40 emulator checks passed.
 - `tests/stm32wba/run_spi.py`: 46 emulator checks passed.
 
-No hardware test was run. Full library/example Debug and Release rebuilds,
+The checks above were local. The maintainer subsequently confirmed Blinky LED
+operation on STM32WBA65I-DK1 on October 17, 2026. Full library/example Debug and Release rebuilds,
 radio clock/RNG startup, GPIO input/EXTI, and BLE peripheral/central operation
 remain unverified in this review. The earlier build results below describe
 previous checks, not a new complete build. The only current WBA65 BLE project
@@ -74,7 +75,7 @@ The concurrent BleAdvertiser project fix in `8f9d5e0` moves the ST archives\nfro
 Start hardware validation with `exemples/Blinky/ioc`. It links the common
 `exemples/misc/blinky.c` and uses the existing DK1 board map. Build the MCU
 library and Blinky in the same Debug or Release configuration, then flash
-Blinky through ST-LINK. No serial terminal or jumper is needed.
+Blinky through the configured debugger. No serial terminal is needed.
 
 Expected sequence: both LEDs off, LD6 green (PD8) on for approximately 250 ms,
 all off for approximately 250 ms, LD5 red (PD9) on for approximately 250 ms,
@@ -83,16 +84,31 @@ are software delays; this is GPIO output validation, not timer calibration.
 
 The project uses nosys and does not require semihosting. Its board.h contains
 only mappings. It does not configure UART, BLE, or a hardware timer. The DK1
-joystick is an ADC resistor ladder, so no GPIO button is mapped. GPIO input,
-pulls and EXTI require a subsequent input test and are not covered by Blinky.
+joystick is an ADC resistor ladder. The external button mapping uses PC13,
+Arduino D4 on CN10 pin 5, as an input with an internal pull-up and falling-edge
+EXTI13. Wiring follows UM3462 Table 8.
+
+Input/EXTI test:
+
+1. Leave D4 disconnected and reset. The LEDs should alternate normally.
+2. Momentarily connect CN10 pin 5 (D4/PC13) to CN9 pin 6 (GND).
+3. Blinking should stop with both LEDs off after the current blink finishes
+   (allow 500 ms). The common button callback sets `g_bBut1Pressed` true.
+4. Remove the jumper and reset; blinking should resume. Repeat the test.
+
+The example uses the interrupt callback, not input polling, to stop blinking.
+This checks the pull-up and falling-edge interrupt path; it does not establish
+rising-edge/both-edge behavior or the GPIO read API. Input/EXTI hardware results
+are still pending. The callback's existing printf uses nosys; no UART output
+is required for the LED indication.
 
 The common Blinky source, GPIO driver, ResetEntry, system initializer and
 vector table were compiled and linked locally with the WBA65 I linker script
 at -O0 and -Os using GNU Arm 14.3.1, with warnings treated as errors. Both
 images ran in the emulator: GPIOD clock enabled, PD8/PD9 configured as outputs,
 and the expected alternating BSRR set/clear sequence observed. The full MCU
-library was not rebuilt for this check. LED operation still needs confirmation
-on the DK1 before moving to input/EXTI, UART, timers and BLE.
+library was not rebuilt for this check. The maintainer confirmed LED operation
+on the DK1 on October 17, 2026. Input/EXTI, UART, timers and BLE remain pending.
 
 ## UART example projects
 
@@ -215,8 +231,8 @@ successful boot or a working BLE stack.
 The shared GPIO implementation now supports input, output, alternate functions,
 pull resistors, output type, pin speed, and atomic BSRR set/clear. GPIO EXTI0-EXTI15 now route callbacks by pin number; interrupt allocation uses
 the fixed EXTI line matching that pin, and a line cannot be assigned to two
-ports simultaneously. This implementation has not been hardware-validated.
-GPIO register writes and peripheral clocks have not been hardware tested.
+ports simultaneously. Blinky LED output was hardware-validated on October 17,
+2026; GPIO input levels, pull resistors and EXTI remain pending.
 
 The initial bring-up sequence is startup, GPIO, UART, Timer, then BLE.
 Discovery Kit GPIO/USART wiring belongs in each example's `board.h`,

@@ -49,6 +49,12 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define LED_PINS_MAP		BOARD_LED_PINS
 
 // The DK1 joystick uses an ADC resistor ladder, not a GPIO button.
-// GPIO input and EXTI testing require a separate mapped input pin.
+// Use Arduino D4 (CN10 pin 5, PC13) as an external active-low button.
+// Momentarily connect it to CN9 pin 6 (GND) after the LEDs start blinking.
+#define BUTTON_PINS_MAP \
+	{{IOPORTC, 13, IOPINOP_GPIO, IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL}}
+#define BUT1_INT			13
+#define BUT1_INT_PRIO		6
+#define BUT1_SENSE			IOPINSENSE_LOW_TRANSITION
 
 #endif

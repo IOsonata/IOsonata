@@ -101,9 +101,9 @@ add a second Cube startup or vector table to the application.
 
 | Area | Existing implementation | Remaining validation or limitation |
 |---|---|---|
-| Startup and clocks | ResetEntry, WBA65 vectors, FPU enable, PLL1R at 100 MHz | Debug/Release minimal images reach main in the emulator; actual boot and option bytes untested |
+| Startup and clocks | ResetEntry, WBA65 vectors, FPU enable, PLL1R at 100 MHz | Debug/Release minimal images reach main in the emulator; Blinky boots on hardware; option bytes and clock frequency unverified |
 | Memory layout | WBA65 I: 2 MB flash / 512 KB SRAM; two reserved 16 KB NVM regions | Confirm security configuration on the board; no secure image supplied |
-| GPIO | Shared STM32 pin configuration, atomic output writes, EXTI dispatch | Input, output and EXTI hardware tests pending |
+| GPIO | Shared STM32 pin configuration, atomic output writes, EXTI dispatch | Blinky LED output confirmed October 17, 2026; input and EXTI pending |
 | UART | LPUART1, USART1/2/3; polling, interrupt and GPDMA | TX/RX hardware tests pending |
 | Timers | Two LPTIM and six TIM instances through the shared STM32 driver | Host/emulator checks exist; frequencies and callbacks need hardware tests |
 | I2C | Four instances, polling master, 7-bit addresses | Slave, interrupt and DMA modes unsupported; hardware tests pending |
@@ -118,11 +118,12 @@ hardware pass recorded for these projects.
 
 The first hardware sequence is:
 
-1. Confirm the boot/security configuration and that ResetEntry reaches main.
+1. Blinky LED output is confirmed. Complete the Blinky external input/EXTI
+   test on PC13 (Arduino D4), then confirm the boot/security configuration.
 2. Run Release `UartPrbsTxTest`, then `UartLoopback`, at 1 Mbaud. Record the
    selected UART, interrupt/DMA settings and PRBS results.
 3. Run `TimerDemo` on USART1 VCP at 115200 baud. Check LED output, timer
-   periods and callbacks; then validate GPIO input/EXTI.
+   periods and callbacks.
 4. Start `BleAdvertiser` and verify external advertising reception.
 5. Validate peripheral GATT data, central scan/connect/discovery/read/subscribe,
    reconnect, and supported pairing/bond persistence with the common examples.
