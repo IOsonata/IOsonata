@@ -1,14 +1,14 @@
 /**-------------------------------------------------------------------------
 @file	modem_os_nrf91.c
 
-@brief	nRF91 Modem library glue, bare metal
+@brief	nRF91 Modem library glue, bare-metal or TaktOS
 
 The nrf_modem_os functions the Modem library calls, the IPC interrupt and
 nRF91ModemInit. See modem_nrf91.h.
 
-Memory, errno, logging and the interrupt are the same with or without an
-RTOS. The waits, the semaphores and the mutex here are the bare metal ones.
-They are weak: modem_os_nrf91_taktos.c replaces all of them for TaktOS.
+Memory, errno, logging and the interrupt are shared by both builds.
+The bare-metal wait, semaphore and mutex functions are selected by default;
+NRF91_MODEM_OS_TAKTOS selects their TaktOS implementations in this file.
 
 Bare metal there is one waiting context, the main loop. Interrupts give
 semaphores and notify events, and every give or notify sets the event
