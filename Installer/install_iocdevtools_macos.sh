@@ -2,7 +2,7 @@
 set -euo pipefail
 
 SCRIPT_NAME="install_iocdevtools_macos"
-SCRIPT_VERSION="v1.0.78"
+SCRIPT_VERSION="v1.0.79"
 
 ROOT="$HOME/IOcomposer"
 TOOLS="/opt/xPacks"
@@ -180,7 +180,7 @@ is_valid_dmg_url() {
   # echo "   Checking URL: $(basename "$url")"
 
   local headers
-  headers=$(curl -s -L -I --max-time 10 "$url")
+  headers=$(curl -fsSL -I --connect-timeout 10 --max-time 30 "$url") || return 1
 
   local length_line
   length_line=$(echo "$headers" | grep -i '^Content-Length:' | tail -n 1)
@@ -379,30 +379,48 @@ fi
 # ---------------------------------------------------------
 echo
 echo "💻 Installing Eclipse Embedded CDT IDE..."
-MIRROR="https://ftp2.osuosl.org/pub/eclipse/technology/epp/downloads/release"
-
-RELEASES=$(curl -fsSL "$MIRROR/" | grep -oE 'href="20[0-9]{2}-[0-9]{2}/"' | cut -d'"' -f2 | sed 's|/||g' | sort -r | uniq || true)
-if [[ -z "${RELEASES:-}" ]]; then
-  echo "❌ Failed to enumerate Eclipse releases from mirror: $MIRROR" >&2
-  exit 1
-fi
+# Try the primary server before an alternate mirror. Keep TLS verification on.
+ECLIPSE_MIRRORS=(
+  "https://download.eclipse.org/technology/epp/downloads/release"
+  "https://ftp.osuosl.org/pub/eclipse/technology/epp/downloads/release"
+)
 
 ECLIPSE_URL=""
-for release in $RELEASES; do
-  URL_EMBEDCDT="$MIRROR/$release/R/eclipse-embedcdt-$release-R-macosx-cocoa-$ECLIPSE_ARCH.dmg"
-  URL_EMBEDCPP="$MIRROR/$release/R/eclipse-embedcpp-$release-R-macosx-cocoa-$ECLIPSE_ARCH.dmg"
+for MIRROR in "${ECLIPSE_MIRRORS[@]}"; do
+  echo ">>> Checking Eclipse releases: $MIRROR"
+  if ! RELEASE_INDEX=$(curl -fsSL --connect-timeout 10 --max-time 30 "$MIRROR/"); then
+    echo "Warning: Could not read Eclipse release listing; trying next server." >&2
+    continue
+  fi
 
-  if is_valid_dmg_url "$URL_EMBEDCDT"; then
-    ECLIPSE_URL="$URL_EMBEDCDT"
-    break
-  elif is_valid_dmg_url "$URL_EMBEDCPP"; then
-    ECLIPSE_URL="$URL_EMBEDCPP"
+  # Listings may use relative or absolute links and either quote style.
+  RELEASES=$(printf '%s\n' "$RELEASE_INDEX" | grep -oE "href=['\"][^'\"]*20[0-9]{2}-[0-9]{2}/?['\"]" | grep -oE '20[0-9]{2}-[0-9]{2}' | sort -ru || true)
+  if [[ -z "$RELEASES" ]]; then
+    echo "Warning: No Eclipse releases found; trying next server." >&2
+    continue
+  fi
+
+  for release in $RELEASES; do
+    URL_EMBEDCDT="$MIRROR/$release/R/eclipse-embedcdt-$release-R-macosx-cocoa-$ECLIPSE_ARCH.dmg"
+    URL_EMBEDCPP="$MIRROR/$release/R/eclipse-embedcpp-$release-R-macosx-cocoa-$ECLIPSE_ARCH.dmg"
+
+    if is_valid_dmg_url "$URL_EMBEDCDT"; then
+      ECLIPSE_URL="$URL_EMBEDCDT"
+      break
+    elif is_valid_dmg_url "$URL_EMBEDCPP"; then
+      ECLIPSE_URL="$URL_EMBEDCPP"
+      break
+    fi
+  done
+
+  if [[ -n "$ECLIPSE_URL" ]]; then
     break
   fi
 done
 
 if [[ -z "$ECLIPSE_URL" ]]; then
-  echo "❌ Could not find a valid Eclipse Embedded CDT download URL for any release." >&2
+  echo "Error: Could not find an Eclipse Embedded CDT download on any server." >&2
+  echo "Check the curl errors above and your HTTPS connection." >&2
   exit 1
 fi
 
