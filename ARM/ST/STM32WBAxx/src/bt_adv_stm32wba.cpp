@@ -34,6 +34,7 @@ Copyright (c) 2026, I-SYST inc., all rights reserved
 #include "bluetooth/bt_uuid.h"
 #include "bluetooth/bt_app.h"
 #include "bluetooth/bt_gap.h"
+#include "bluetooth/bt_smp.h"
 #include "bluetooth/bt_appearance.h"
 
 /******** For DEBUG ************/
@@ -93,7 +94,12 @@ extern UART g_Uart;
 // Each pair (legacy + extended) shares the same underlying byte buffer;
 // the BtAdvPacket_t.MaxLen field caps each into the right window. This
 // mirrors bt_adv_bm.cpp - lets app code reuse the buffer between modes.
+// The application timer queues timeout work; stack calls stay out of the ISR.
+void BtAppWbaAdvTimerSet(uint32_t Timeout);
+
 static bool s_bAdvertising;
+static uint32_t s_AdvTimeoutMs;
+static uint32_t s_AdvStartMs;
 static uint16_t s_PeripheralLinkCount;
 
 alignas(4) static uint8_t s_BtAppAdvBuff[BT_WBA_ADV_EXTENDED_MAX + 5];
@@ -209,6 +215,7 @@ static void BtAdvStateUpdate(void)
 // Record that controller-side transition without sending a redundant disable.
 void BtAdvWbaConnected(void)
 {
+	BtAppWbaAdvTimerSet(0);
 	s_bAdvertising = false;
 	BtAdvStateUpdate();
 }
@@ -247,6 +254,8 @@ void BtAdvStart(void)
 	if (ret == BLE_STATUS_SUCCESS)
 	{
 		s_bAdvertising = true;
+		s_AdvStartMs = BtSmpMsTick();
+		BtAppWbaAdvTimerSet(s_AdvTimeoutMs);
 		BtAdvStateUpdate();
 	}
 	else
@@ -285,7 +294,25 @@ void BtAdvStop(void)
 	}
 
 	s_bAdvertising = false;
+	BtAppWbaAdvTimerSet(0);
 	BtAdvStateUpdate();
+}
+
+// Called by the existing queued application timer work. A failed disable is
+// retried by the periodic tick; report expiry only after advertising stops.
+void BtAdvWbaTimeoutCheck(void)
+{
+	if (!s_bAdvertising || s_AdvTimeoutMs == 0 ||
+		(uint32_t)(BtSmpMsTick() - s_AdvStartMs) < s_AdvTimeoutMs)
+	{
+		return;
+	}
+
+	BtAdvStop();
+	if (!s_bAdvertising)
+	{
+		BtAppAdvTimeoutHandler();
+	}
 }
 
 // Push the encoded packet pair to the ST stack. Splits between legacy
@@ -402,6 +429,8 @@ __attribute__((weak)) bool BtAppAdvInit(const BtAppCfg_t *pCfg)
 	bool bScannable = false;
 
 	s_bAdvertising = false;
+	s_AdvTimeoutMs = pCfg->AdvTimeout;
+	BtAppWbaAdvTimerSet(0);
 	s_PeripheralLinkCount = pCfg->CentralDevMax > 0 ?
 		(uint16_t)pCfg->CentralDevMax : 0;
 	advpkt->Len = 0;
