@@ -263,6 +263,8 @@ bool BtAppConnInit(void);
 bool BtAppSecInit(void);
 
 void BtAppEvtConnected(uint16_t ConnHdl);
+// Called when an asynchronous connection initiation fails.
+void BtAppEvtConnectFailed(void);
 void BtAppEvtDisconnected(uint16_t ConnHdl);
 // Called when a GATT client Write Request receives its ATT response.
 // Success is false for an ATT Error Response. No HCI details reach the app.
