@@ -245,6 +245,14 @@ void BtAppEvtConnected(uint16_t ConnHdl)
 	}
 }
 
+void BtAppEvtConnectFailed(void)
+{
+	GatewayLog("GATT connection attempt failed; restarting scan\r\n");
+	s_GattConnecting = false;
+	s_GattConnectPending = false;
+	BtAppScan();
+}
+
 void BtAppEvtDisconnected(uint16_t ConnHdl)
 {
 	GatewayLog("GATT disconnected, handle=%u\r\n", (unsigned)ConnHdl);
