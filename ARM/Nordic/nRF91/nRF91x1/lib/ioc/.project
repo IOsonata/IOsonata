@@ -1610,11 +1610,6 @@
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/src/wdt_nrfx.cpp</locationURI>
 		</link>
-		<link>
-			<name>src/modem_os_nrf91_taktos.c</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/src/modem_os_nrf91_taktos.c</locationURI>
-		</link>
 	</linkedResources>
 	<variableList>
 		<variable>
