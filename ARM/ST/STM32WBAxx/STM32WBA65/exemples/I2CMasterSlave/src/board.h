@@ -3,11 +3,11 @@
 
 @brief	Board definitions of the STM32WBA65 I2C master and slave example
 
-		Two I2C controllers of the same chip on the Arduino header of the
-		STM32WBA65I-DK1, AF4. Master I2C1 on D14 (SDA, PB1) and D15 (SCL, PB2).
-		Slave I2C2 on D5 (SDA, PB14) and D3 (SCL, PB13).
-		Wire D14 to D5 and D15 to D3. The pins use the internal pull-ups, which
-		is enough for 100 kHz on short wires. Add 4.7k pull-ups to 3.3V for
+		Two I2C controllers of the same chip, AF4. Master I2C1 on PB1 (SDA) and
+		PB2 (SCL), the pins of the ST board support package. Slave I2C2 on PB14
+		(SDA) and PB13 (SCL), which the board support package does not use.
+		Wire PB1 to PB14 and PB2 to PB13. The pins use the internal pull-ups,
+		which is enough for 100 kHz on short wires. Add 4.7k pull-ups to 3.3V for
 		longer ones. The result is printed on the first ST-LINK virtual COM
 		port, USART1.
 

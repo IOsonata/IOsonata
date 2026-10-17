@@ -3,11 +3,10 @@
 
 @brief	Board definitions of the STM32WBA65 SPI master and slave example
 
-		The slave is SPI2 on the Arduino header of the STM32WBA65I-DK1, AF5:
-		SCK D13 (PB10), MISO D12 (PA9), MOSI D11 (PC3), NSS D10 (PB9).
-		The master is the software SPI on four other header pins: SCK D3
-		(PB13), MOSI D6 (PB0), MISO A0 (PA4), chip select D8 (PA10).
-		Wire D3 to D13, D6 to D11, A0 to D12 and D8 to D10.
+		The slave is SPI2, AF5: SCK PB10, MISO PA9, MOSI PC3, NSS PB9.
+		The master is the software SPI on four other pins that the ST board
+		support package does not use: SCK PB13, MOSI PB0, MISO PA4, chip select
+		PA10. Wire PB13 to PB10, PB0 to PC3, PA4 to PA9 and PA10 to PB9.
 		The result is printed on the first ST-LINK virtual COM port, USART1.
 
 		Not tested on hardware.
@@ -49,7 +48,7 @@ SOFTWARE.
 
 #include "stm32_boards.h"
 
-#define SPI_LOOPBACK_WIRING			"Wire D3-D13 SCK, D6-D11 MOSI, A0-D12 MISO, D8-D10 CS"
+#define SPI_LOOPBACK_WIRING			"Wire PB13-PB10 SCK, PB0-PC3 MOSI, PA4-PA9 MISO, PA10-PB9 CS"
 
 // First ST-LINK virtual COM port, USART1, RX PA8 and TX PB12, AF7
 #define UART_DEVNO					1

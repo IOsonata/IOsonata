@@ -268,11 +268,11 @@ pins match the ST board support package for the DK1 (I2C1, SCL PB2, SDA PB1,
 AF4). The scan result is printed on USART2 through the UART retarget.
 
 `exemples/I2CMasterSlave` (`exemples/i2c/i2c_master_slave.cpp`) runs the master
-on I2C1 and the slave on I2C2 of the same chip. Master SDA PB1 (D14) and SCL
-PB2 (D15), slave SDA PB14 (D5) and SCL PB13 (D3), all AF4. Wire D14 to D5 and
-D15 to D3. The pin AF numbers come from the ST pin data for the STM32WBA65RI
-and the header position from the Zephyr connector map of the DK1. The
-example starts with a polling master and an interrupt slave; the flags are in
+on I2C1 and the slave on I2C2 of the same chip. Master SDA PB1 and SCL PB2
+(the pins of the ST board support package), slave SDA PB14 and SCL PB13, all
+AF4. Wire PB1 to PB14 and PB2 to PB13. The AF numbers come from the ST pin
+data for the STM32WBA65RI; the board support package does not use PB13 and
+PB14. The example starts with a polling master and an interrupt slave; the flags are in
 `board.h`.
 
 Validation: the driver is checked by `tests/stm32wba/run_i2c.py` in an
@@ -307,21 +307,20 @@ Limits: `SPIPHY_NORMAL` only. The families with the older SPI registers (F0,
 F4, L4, G4) keep their own SPI files.
 
 `exemples/SPILoopback` (`exemples/spi/spi_loopback.cpp`) runs the four SPI
-modes with MOSI wired to MISO on the DK1 header: SCK PB4, MISO PB3, MOSI PA15,
-AF5 (Arduino D13, D12, D11), chip select PA12 as a GPIO. The result is printed
-on USART1, the first ST-LINK virtual COM port (PA8 RX, PB12 TX, AF7, which
-matches the ST board support package). The SPI pins come from the Zephyr board
-data and are not confirmed: the ST support package only uses SPI3 (SCK PA0,
-MISO PA1, MOSI PB8, AF6), which is wired to the on-board LCD and EEPROM.
-Confirm the header routing against UM3462 before wiring.
+modes with MOSI wired to MISO: SPI2, AF5, SCK PB10, MISO PA9, MOSI PC3, chip
+select PB9 as a GPIO. Wire PC3 to PA9. The AF numbers come from the ST pin
+data for the STM32WBA65RI, and the ST board support package does not use
+these pins (it uses SPI3 on PA0, PA1, PB8 for the LCD and EEPROM). The result
+is printed on USART1, the first ST-LINK virtual COM port (PA8 RX, PB12 TX,
+AF7, which matches the ST board support package).
 
 `exemples/SPIMasterSlave` (`exemples/spi/spi_master_slave.cpp`) runs the slave
-on SPI2, AF5: SCK PB10 (D13), MISO PA9 (D12), MOSI PC3 (D11), NSS PB9 (D10).
-The master is the software SPI on header pins that no other peripheral
-needs: SCK PB13 (D3), MOSI PB0 (D6), MISO PA4 (A0), chip select PA10 (D8).
-Wire D3 to D13, D6 to D11, A0 to D12 and D8 to D10. The Zephyr connector map
-puts D10 to D13 on the SPI2 pins above, not on the SPI1 pins used by
-`SPILoopback`, so check which of the two sets the DK1 header carries.
+on SPI2, AF5: SCK PB10, MISO PA9, MOSI PC3, NSS PB9 (AF numbers from the ST
+pin data for the STM32WBA65RI). The master is the software SPI on pins that
+the ST board support package does not use: SCK PB13, MOSI PB0, MISO PA4, chip
+select PA10. Wire PB13 to PB10, PB0 to PC3, PA4 to PA9 and PA10 to PB9.
+The board support package gives no Arduino header map, so check which of
+these pins the DK1 header carries in the user manual.
 
 Validation: `tests/stm32wba/run_spi.py` runs the driver in an instruction set
 emulator with a model of the SPI registers, the GPDMA channels and the chip
@@ -509,9 +508,9 @@ archives `stm32wba_ble_stack_full.a` and
 
 Both Debug and Release configurations compile and link with arm-none-eabi
 (Release about 234 KB code, 83 KB RAM). No test was run on hardware. The DK1 I2C
-pins (PB1, PB2 AF4) and the VCP pins match the ST board support package. The SPI
-header pins (PB4, PB3, PA15 AF5, CS PA12) come from Zephyr data and still need
-confirmation against UM3462.
+pins (PB1, PB2 AF4) and the VCP pins match the ST board support package. The SPI2
+pins (PB10, PA9, PC3 AF5, CS PB9) and the second I2C and SPI pins of the
+MasterSlave examples come from the ST pin data for the STM32WBA65RI.
 
 Still to do: ADC based temperature, use of the AES peripheral, and the
 hardware test of the stack, RNG, timer and sequencer code.
