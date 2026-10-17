@@ -648,6 +648,7 @@ static bool BtAppNrf91ConnStart(const BtAppCfg_t *pCfg)
 	}
 
 	s_BtHciDev.Connected = BtAppConnected;
+	s_BtHciDev.ConnectFailed = BtAppEvtConnectFailed;
 	s_BtHciDev.Disconnected = BtAppDisconnected;
 	s_BtHciDev.SendCompleted = BtAppSendCompleted;
 
