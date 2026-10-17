@@ -254,11 +254,23 @@ void SystemInit(void)
 	// Run from HSI16 with PLL1 off, the reset state, also after a boot loader
 	// or an earlier call left another clock running
 	RCC->CR |= RCC_CR_HSION;
-	WaitFlag(&RCC->CR, RCC_CR_HSIRDY, RCC_CR_HSIRDY, CLK_READY_POLLS);
+	if (WaitFlag(&RCC->CR, RCC_CR_HSIRDY, RCC_CR_HSIRDY, CLK_READY_POLLS) == false)
+	{
+		SystemCoreClockUpdate();
+		return;
+	}
 	RCC->CFGR1 &= ~RCC_CFGR1_SW;
-	WaitFlag(&RCC->CFGR1, RCC_CFGR1_SWS, 0, CLK_READY_POLLS);
+	if (WaitFlag(&RCC->CFGR1, RCC_CFGR1_SWS, 0, CLK_READY_POLLS) == false)
+	{
+		SystemCoreClockUpdate();
+		return;
+	}
 	RCC->CR &= ~RCC_CR_PLL1ON;
-	WaitFlag(&RCC->CR, RCC_CR_PLL1RDY, 0, CLK_READY_POLLS);
+	if (WaitFlag(&RCC->CR, RCC_CR_PLL1RDY, 0, CLK_READY_POLLS) == false)
+	{
+		SystemCoreClockUpdate();
+		return;
+	}
 	RCC->CFGR2 &= ~(RCC_CFGR2_HPRE | RCC_CFGR2_PPRE1 | RCC_CFGR2_PPRE2);
 	RCC->CFGR3 &= ~RCC_CFGR3_PPRE7;
 	RCC->CR &= ~(RCC_CR_HSEON | RCC_CR_HSEPRE);
@@ -298,8 +310,12 @@ void SystemInit(void)
 	if (freq > VOS_RANGE1_MIN_FREQ)
 	{
 		PWR->VOSR |= PWR_VOSR_VOS;
-		WaitFlag(&PWR->VOSR, PWR_VOSR_VOSRDY, PWR_VOSR_VOSRDY, CLK_READY_POLLS);
-		WaitFlag(&PWR->SVMSR, PWR_SVMSR_ACTVOSRDY, PWR_SVMSR_ACTVOSRDY, CLK_READY_POLLS);
+		if (WaitFlag(&PWR->VOSR, PWR_VOSR_VOSRDY, PWR_VOSR_VOSRDY, CLK_READY_POLLS) == false ||
+			WaitFlag(&PWR->SVMSR, PWR_SVMSR_ACTVOSRDY, PWR_SVMSR_ACTVOSRDY, CLK_READY_POLLS) == false)
+		{
+			SystemCoreClockUpdate();
+			return;
+		}
 	}
 
 	if (SetFlashWaitState(freq) == false)
@@ -465,3 +481,4 @@ uint32_t SystemPeriphClockSet(int Idx, uint32_t Freq)
 
 	return SystemCoreClock >> shift;
 }
+

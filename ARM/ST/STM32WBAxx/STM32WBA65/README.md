@@ -32,7 +32,8 @@ build and link. Outstanding work:
 - Verify EXTI interrupt routing/dispatch and the timers on hardware
 - Validate the application linker script against STM32WBA65 flash/SRAM banks
   and the configured secure/nonsecure partitions
-- Integrate and test the STM32CubeWBA radio middleware
+- Hardware-test the integrated STM32CubeWBA radio middleware and complete
+  peripheral/central test projects
 
 Use the WBA65 device definitions and interrupt mapping from a consistent
 STM32CubeWBA release. Do not compile WBA5x startup or link with the WBA5x
@@ -41,7 +42,34 @@ additionally requires the CubeWBA HAL and BLE application headers.
 `bt_adv_stm32wba.cpp`, `bt_app_stm32wba.cpp`, `bt_gap_stm32wba.cpp` and
 `bt_gatt_stm32wba.cpp` include `stm32wbaxx_hal.h`.
 
-## UART example projects
+## Local validation on October 17, 2026
+
+Checked the prerelease sources based on `7d23fb537d35313b61b1a97e223867ca6b780fa7`.
+GNU Arm 14.3.1 was used for these checks:
+
+- Minimal firmware using the actual ResetEntry, WBA65 system and vector files,
+  standard C runtime, and `gcc_stm32wba65_i.ld`: Debug (-O0) and Release (-Os)
+  compile/link passed with warnings treated as errors. Both reached main in
+  the instruction set emulator, vectors at 0x08000000, initial stack at
+  0x20080000, SystemCoreClock 100000000. This was not the full MCU library or
+  a BLE firmware build and did not model TrustZone provisioning.
+- `tests/stm32wba/run_clock.py`: 36 checks passed. The new failure cases
+  produced eight failed assertions before the clock guards were added.
+- `tests/stm32wba/run.py`: 155 checks passed at each of -O0 and -O2 under the
+  undefined-behavior sanitizer; timer sources also compiled for Cortex-M33
+  at -O0 and -Os with warnings treated as errors.
+- Shared UART source compiled for WBA65 at -O0 and -Os with warnings treated
+  as errors.
+- `tests/stm32wba/run_i2c.py`: 40 emulator checks passed.
+- `tests/stm32wba/run_spi.py`: 46 emulator checks passed.
+
+No hardware test was run. Full library/example Debug and Release rebuilds,
+radio clock/RNG startup, GPIO input/EXTI, and BLE peripheral/central operation
+remain unverified in this review. The earlier build results below describe
+previous checks, not a new complete build. The only current WBA65 BLE project
+is BleAdvertiser; it does not establish GATT data exchange or central readiness.
+
+The concurrent BleAdvertiser project fix in `8f9d5e0` moves the ST archives\nfrom Other linker flags into Libraries so they follow the application\nobjects. That change is preserved; a fresh full BLE build is still required.\n\n## UART example projects
 
 `exemples/UartLoopback` (`exemples/uart/uart_loopback.cpp`) and
 `exemples/UartPrbsTxTest` (`exemples/uart/uart_prbs_tx.cpp`) link
@@ -54,7 +82,7 @@ DevNo 2, RX PA11 on Arduino D0 and TX PA12 on D1, AF3. UM3462 also names these
 pins as the second ST-LINK virtual COM port. For USART1 on the first ST-LINK
 virtual COM port (RX PA8, TX PB12) use `BOARD_VCP_DEVNO` and `BOARD_VCP_PINS`.
 
-Both run at 1 Mbaud, 8N1, from the 100 MHz core clock. A character takes 100
+Both run at 1 Mbaud, 8N1, from the 100 MHz core clock. A character takes 1000
 CPU cycles, so UartLoopback sets `UART_DMA_MODE` in its board.h and runs with
 interrupts and DMA: RX on GPDMA1 channel 2 with the linked list ring, TX on
 channel 3. UartPrbsTxTest uses the example defaults, DMA without interrupts,
@@ -93,7 +121,10 @@ sets the core clock to 100 MHz from PLL1R, following `HAL_RCC_OscConfig` and
 5. The switch goes through the PLL1R two step divider as the ST HAL does, then
    the divider is released. HCLK, PCLK1, PCLK2 and PCLK7 are not divided.
 
-If PLL1 does not lock the clock stays on HSI16. `SystemCoreClockUpdate` decodes
+If PLL1 does not lock the clock stays on HSI16. Startup also stops clock
+reconfiguration when HSI readiness, the switch back to HSI, PLL shutdown or
+either voltage-ready acknowledgement times out. It leaves the current clock
+running and updates SystemCoreClock instead of proceeding to an unsafe step. `SystemCoreClockUpdate` decodes
 the RCC registers. `SystemCoreClockSelect(OSC_TYPE_RC, 0)` or
 `SystemCoreClockSelect(OSC_TYPE_XTAL, 32000000)` runs the setup again.
 `SystemPeriphClockSet` sets the APB prescalers, index 0 PCLK1, 1 PCLK2, 2 PCLK7.
@@ -101,8 +132,9 @@ the RCC registers. `SystemCoreClockSelect(OSC_TYPE_RC, 0)` or
 Validation: `tests/stm32wba/run_clock.py` runs the setup in an instruction set
 emulator with a model of the RCC, PWR and flash registers that checks the order
 of the steps, the PLL limits, the flash wait states against the frequency, the
-switch rules of the PLL1R divider and the fall back when HSE does not start (28
-checks). It does not model lock time. Not tested on hardware.
+switch rules of the PLL1R divider and the fall back when HSE does not start (36
+checks, including failed voltage acknowledgements, a refused switch to HSI
+and a PLL that does not stop). It does not model lock time. Not tested on hardware.
 
 ## Timer example project
 
@@ -188,7 +220,7 @@ pins match the ST board support package for the DK1 (I2C1, SCL PB2, SDA PB1,
 AF4). The scan result is printed on USART2 through the UART retarget.
 
 Validation: the driver is checked by `tests/stm32wba/run_i2c.py` in an
-instruction set emulator with an I2C model (39 checks). Not tested on hardware.
+instruction set emulator with an I2C model (40 checks). Not tested on hardware.
 
 ## SPI master and example project
 
@@ -274,9 +306,10 @@ match the Basic Plus link layer library (extended advertising included).
 ## Bluetooth adapter status
 
 The adapter sources `bt_{app,adv,scan,gap,gatt,smp_bond,pds}_stm32wba.cpp`
-compile with `-Wall` and no warnings against STM32CubeWBA 1.10.0 and the WPAN
-middleware commit 7e764835 (the revision that release uses). They are not yet
-built into a firmware image and nothing was run on hardware.
+were compile-checked against STM32CubeWBA 1.10.0 and the WPAN middleware
+commit 7e764835 (the revision that release uses). The BleAdvertiser section
+below records the earlier firmware link results. Hardware testing remains
+pending.
 
 The stack headers have no `extern "C"` guard, so the adapter includes them
 through `include/bt_wba_stack.h`.
@@ -424,3 +457,4 @@ hardware test of the stack, RNG, timer and sequencer code.
 5. If nothing is advertised, check in this order: HSE32 ready (`RCC->CR`),
    `RCC->BDCR1` RADIOSTSEL not zero, the RNG answering, and that the RADIO and
    HASH vectors are reached.
+

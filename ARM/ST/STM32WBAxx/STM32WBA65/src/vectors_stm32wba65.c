@@ -39,7 +39,10 @@ extern void ResetEntry(void);
 
 void Default_Handler(void)
 {
-	for (;;) { __NOP(); }
+	for (;;)
+	{
+		__NOP();
+	}
 }
 
 // Timer vectors. With the timer driver linked (TimerInit), Stm32TimerVector
@@ -51,7 +54,7 @@ void Stm32TimerVector(void)
 {
 	if (Stm32TimerIRQHandler)
 	{
-		Stm32TimerIRQHandler((int)(*(volatile uint32_t *)0xE000ED04 & 0x1FFU) - 16);
+		Stm32TimerIRQHandler((int)(SCB->ICSR & SCB_ICSR_VECTACTIVE_Msk) - 16);
 	}
 	else
 	{
@@ -259,3 +262,4 @@ void (* const __Vectors[])(void) = {
 _Static_assert(WWDG_IRQn == 0, "Incorrect STM32WBA65 vector map");
 _Static_assert(EXTI20_RADIO_IO_IRQn == 81,
 			   "Incorrect STM32WBA65 vector map");
+

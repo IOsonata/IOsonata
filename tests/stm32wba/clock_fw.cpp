@@ -121,7 +121,30 @@ extern "C" int main(void)
 	Rec((int32_t)SystemPeriphClockSet(3, 1000));
 	RecClocks();
 
+	// Voltage acknowledgements must arrive before increasing the clock.
 	ClkTestMark(6);
+	SystemInit();
+	RecClocks();
+
+	ClkTestMark(7);
+	SystemInit();
+	RecClocks();
+
+	// Restore PLL operation before refusing the switch back to HSI.
+	ClkTestMark(8);
+	SystemInit();
+	RecClocks();
+
+	ClkTestMark(9);
+	SystemInit();
+	RecClocks();
+
+	// Refuse PLL shutdown after the core has returned to HSI.
+	ClkTestMark(10);
+	SystemInit();
+	RecClocks();
+
+	ClkTestMark(11);
 	g_ClkTestResult[CLK_TEST_MAX_RESULT - 1] = s_R;
 	g_ClkTestDone = 1;
 	ClkTestDoneHook();

@@ -142,6 +142,7 @@ class Clocks:
         self.sw = 0
         self.vosr = 0
         self.vosrdy = 0
+        self.actvosrdy = 0
         # Reset state: 16 MHz runs in voltage range 2 with one wait state
         self.acr = 1
         self.pll_cfg = None
@@ -187,7 +188,7 @@ class Clocks:
     def allowed(self):
         """Highest HCLK the wait states and the voltage scaling allow."""
         ws = self.acr & 0xF
-        if self.vosr & self.bit('PWR_VOSR_VOS_Pos') and self.vosrdy:
+        if self.vosr & self.bit('PWR_VOSR_VOS_Pos') and self.actvosrdy:
             return {0: 32_000_000, 1: 64_000_000, 2: 96_000_000}.get(ws, 100_000_000)
         return {0: 8_000_000}.get(ws, 16_000_000)
 
@@ -213,7 +214,7 @@ class Clocks:
             if off == self.po['VOSR']:
                 return self.vosr | (self.bit('PWR_VOSR_VOSRDY_Pos') if self.vosrdy else 0)
             if off == self.po['SVMSR']:
-                return (self.bit('PWR_SVMSR_ACTVOSRDY_Pos') if self.vosrdy else 0) | \
+                return (self.bit('PWR_SVMSR_ACTVOSRDY_Pos') if self.actvosrdy else 0) | \
                        (self.bit('PWR_SVMSR_ACTVOS_Pos') if self.vosr & self.bit('PWR_VOSR_VOS_Pos') else 0)
         elif base == 'FLASH':
             if off == self.fo:
@@ -226,7 +227,8 @@ class Clocks:
         elif base == 'PWR':
             if off == self.po['VOSR']:
                 self.vosr = val & ~self.bit('PWR_VOSR_VOSRDY_Pos')
-                self.vosrdy = 1
+                self.vosrdy = self.log.mark != 6
+                self.actvosrdy = self.log.mark != 7
                 self.log.add(('VOS', (val >> hdr('PWR_VOSR_VOS_Pos')) & 1))
             else:
                 self.reg[(base, off)] = val
@@ -265,6 +267,8 @@ class Clocks:
             if pllon and not self.pll_up:
                 self.pll_start()
             elif not pllon and self.pll_up:
+                if self.log.mark == 10:
+                    return
                 if self.sw == 3:
                     self.v('PLL1 switched off while it is the system clock')
                 self.pll_up = False
@@ -274,6 +278,9 @@ class Clocks:
                 self.v('HSI switched off while it is the system clock')
         elif off == o['CFGR1']:
             sw = val & 3
+            if self.log.mark == 9 and sw == 0:
+                self.reg[off] = val
+                return
             if sw != self.sw:
                 if sw == 3 and not self.pll_up:
                     self.v('SW to PLL1R with PLL1 not ready')
@@ -486,8 +493,19 @@ def main():
     expect(res[25:29] == [50_000_000, 25_000_000, f100 >> 4, 0], f'prescaler results {res[25:29]}')
     expect(res[29:33] == [f100, 50_000_000, 25_000_000, f100 >> 4], f'clocks after the prescalers {res[29:33]}')
 
+    expect(res[33:37] == [HSI] * 4, f'VOSRDY failure clocks {res[33:37]}')
+    expect(res[37:41] == [HSI] * 4, f'ACTVOSRDY failure clocks {res[37:41]}')
+    for mark in (6, 7):
+        expect(not any(e[0] == 'PLL' for e in P(mark)),
+               f'PLL started without voltage acknowledgement at mark {mark}')
+    expect(res[41:45] == [f100] * 4, f'voltage recovery clocks {res[41:45]}')
+    expect(res[45:49] == [f100] * 4, f'HSI switch failure clocks {res[45:49]}')
+    expect(not any(e[0] == 'PLLOFF' for e in P(9)),
+           'PLL stopped after the switch to HSI failed')
+    expect(res[49:53] == [HSI] * 4, f'PLL stop failure clocks {res[49:53]}')
+
     # SystemCoreClockUpdate decodes the registers: the value matches the model
-    expect(clk.sysclk() == f100, f'model sysclk {clk.sysclk()}')
+    expect(clk.sysclk() == HSI, f'model sysclk {clk.sysclk()}')
     expect(clk.max_freq <= f100, f'peak HCLK {clk.max_freq}')
 
     expect(not viol, f'model violations: {viol[:6]}')
