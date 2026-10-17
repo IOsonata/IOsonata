@@ -13,7 +13,7 @@ are retained solely for WBA5x devices and must **not** be used for WBA65.
   ST-compatible entry headers; these do **not** contain the device register map.
 - `src/bt_{app,adv,scan,gap,gatt,smp_bond,pds}_stm32wba.cpp` and
   `include/bt_wba_event_router.h`, `include/bt_wba_stack.h`: ST BLE middleware
-  integration, compile checked against STM32CubeWBA 1.9.0, see
+  integration, compile checked against STM32CubeWBA 1.10.0, see
   `STM32WBA65/README.md`.
 - `ldscript/gcc_stm32wba5xxx.ld`: *1 MB / 128 KB* WBA5x-specific memory
   layout with reserved NVM regions; not a universal WBA linker script.

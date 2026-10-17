@@ -322,7 +322,7 @@ static bool BtGattWbaNotificationHead(BtDevice_t *pConn, uint16_t AttrHdl)
 }
 
 // ConnHdl is BT_CONN_HDL_INVALID when the event does not name the link, which
-// is the case of the ACI notification complete event of the CubeWBA 1.9.0 stack.
+// is the case of the ACI notification complete event of the CubeWBA 1.10.0 stack.
 // The first link whose head of the send queue is the attribute completes.
 void BtGattWbaNotificationComplete(uint16_t ConnHdl, uint16_t AttrHdl)
 {

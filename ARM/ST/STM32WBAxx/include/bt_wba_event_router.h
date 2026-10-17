@@ -214,7 +214,7 @@ static bool BtWbaDiscInfoEventValid(
 		   (p->Event_Data_Length % elemLen) == 0;
 }
 
-// Flow control answer of an event handler. The Cube release 1.9.0 stack keeps
+// Flow control answer of an event handler. The Cube release 1.10.0 stack keeps
 // its own event queue, so the answer is only kept for the handlers.
 typedef enum {
 	BTWBA_EVT_FLOW_DISABLE = 0,

@@ -3,7 +3,7 @@
 
 @brief	STM32WBA BLE host stack headers with C linkage.
 
-The headers of the STM32CubeWBA BLE stack (middleware release 1.9.0) declare
+The headers of the STM32CubeWBA BLE stack (middleware release 1.10.0) declare
 the aci_*, hci_* and BleStack_* functions without an extern "C" guard. The
 stack library is C, so the C++ port sources include the stack through this file
 and call the functions by their C names.

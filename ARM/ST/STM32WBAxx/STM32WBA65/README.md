@@ -247,8 +247,8 @@ STM32CubeWBA checkout.
 The IOsonata clone scripts in `Installer` clone both repositories at matching
 versions, next to the other `external` repositories:
 
-- `external/stm32-mw-wpan` at tag `v2.9.0`;
-- `external/STM32CubeWBA` at tag `v1.9.0`, with only `Projects/Common/WPAN`, the
+- `external/stm32-mw-wpan` at tag `v2.10.0`;
+- `external/STM32CubeWBA` at tag `v1.10.0`, with only `Projects/Common/WPAN`, the
   NUCLEO-WBA65RI BLE_p2pServer project, `Utilities` and `Drivers`, and the HAL
   and CMSIS device submodules.
 
@@ -256,33 +256,32 @@ To clone them by hand:
 
 ```sh
 cd ~/swdev/external
-git clone --depth=1 --branch v2.9.0 https://github.com/STMicroelectronics/stm32-mw-wpan.git
-git clone --depth=1 --branch v1.9.0 --filter=blob:none --sparse https://github.com/STMicroelectronics/STM32CubeWBA.git
+git clone --depth=1 --branch v2.10.0 https://github.com/STMicroelectronics/stm32-mw-wpan.git
+git clone --depth=1 --branch v1.10.0 --filter=blob:none --sparse https://github.com/STMicroelectronics/STM32CubeWBA.git
 cd STM32CubeWBA
 git sparse-checkout set Projects/Common/WPAN Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_p2pServer Utilities Drivers
 git submodule update --init --depth 1 Drivers/STM32WBAxx_HAL_Driver Drivers/CMSIS/Device/ST/STM32WBAxx
 ```
 
-Do not use the default branch of either repository. STM32CubeWBA 1.10 and
-`stm32-mw-wpan` 2.10 change the stack libraries and the crypto platform files,
-and they are not built against yet. Use the tags above. The IOC project uses `external/stm32-mw-wpan/ble/`
+Use the tags above, not the default branch of either repository. The two
+releases belong together: STM32CubeWBA 1.10.0 uses STM32_WPAN 2.10.0. The IOC project uses `external/stm32-mw-wpan/ble/`
 and `external/stm32-mw-wpan/link_layer/` for the BLE middleware headers, and
 STM32CubeWBA for the platform files, the HAL headers and `Utilities/tim_serv`.
-The library defines `PHY_40nm_3_40_a` and `BLE_STACK_BASIC_FEATURES`,
-as the ST WBA65 project does, so the link layer headers match the prebuilt
-library.
+The library defines `PHY_40nm_3_40_a` and `BLE_STACK_BASIC_PLUS=1` and takes the
+link layer configuration from `ll_cmd_lib/config/ble_basic_plus`, so the headers
+match the Basic Plus link layer library (extended advertising included).
 
 ## Bluetooth adapter status
 
 The adapter sources `bt_{app,adv,scan,gap,gatt,smp_bond,pds}_stm32wba.cpp`
-compile with `-Wall` and no warnings against STM32CubeWBA 1.9.0 and the WPAN
-middleware commit e66bb629 (the revision that release uses). They are not yet
+compile with `-Wall` and no warnings against STM32CubeWBA 1.10.0 and the WPAN
+middleware commit 7e764835 (the revision that release uses). They are not yet
 built into a firmware image and nothing was run on hardware.
 
 The stack headers have no `extern "C"` guard, so the adapter includes them
 through `include/bt_wba_stack.h`.
 
-How the adapter works with the 1.9.0 stack:
+How the adapter works with the 1.10.0 stack:
 
 - The host stack hands events to `BLECB_Indication`. The adapter copies each
   event into a ring of 8 slots and handles it from the Bluetooth event queue
@@ -327,16 +326,16 @@ at 25 degrees C (set `USE_TEMPERATURE_BASED_RADIO_CALIBRATION` to 0 in
 `app_conf.h`, then it is not used). AES is software. The RNG, timer, sequencer
 and PKA hook code has only been compiled and linked, not run.
 
-Cube sources that remain in a Bluetooth build (all from the STM32CubeWBA 1.9.0
-package and the WPAN middleware commit e66bb629):
+Cube sources that remain in a Bluetooth build (all from the STM32CubeWBA 1.10.0
+package and the WPAN middleware commit 7e764835):
 
 - Project Target files `bleplat.c` (it includes `ble_wrap.c`, so do not compile
   that one), `linklayer_plat.c`, `ll_sys_if.c`, `power_table.c`. Take them from
   the BLE only project (BLE_p2pServer), not from the audio projects.
 - `link_layer/ll_sys/src/ll_sys_startup.c`, `ll_sys_intf.c`, `ll_sys_cs.c`,
   `ll_sys_dp_slp.c`.
-- Libraries `ble/stack/lib/stm32wba_ble_stack_basic_plus.a` and
-  `link_layer/ll_cmd_lib/lib/WBA6_LinkLayer_BLE_Basic_Plus_lib.a`.
+- Libraries `ble/stack/lib/stm32wba_ble_stack_full.a` and
+  `link_layer/ll_cmd_lib/lib/LinkLayer_BLE_Basic_Plus_V3_0.a`.
 
 Build notes found while linking these with the adapter:
 
@@ -386,7 +385,7 @@ ST prebuilt archives and holds only its own sources:
   copies of the ST BLE_p2pServer files, which are under the ST license.
 
 The configurations define `STM32WBA65xx`, `BLE_LL`, `IOSONATA_STM32_WBA`,
-`PHY_40nm_3_40_a` and `BLE_STACK_BASIC_FEATURES`, and pass
+`PHY_40nm_3_40_a` and `BLE_STACK_BASIC_PLUS=1`, and pass
 `-include cmsis_compiler.h` to the C compiler. Do not define `USE_HAL_DRIVER`,
 `stm32wbaxx.h` would then pull in the HAL and its macros clash with the IOsonata
 UART names.
@@ -398,8 +397,8 @@ UART names.
 `exemples/bluetooth/ble_advertiser.cpp`. The project holds `ble_advertiser.cpp`
 and `src/board.h` only. It links `IOsonata_STM32WBA65` from `lib/ioc/Debug`
 or `lib/ioc/Release` (build the same configuration first) and the two ST stack
-archives `stm32wba_ble_stack_basic_plus.a` and
-`WBA6_LinkLayer_BLE_Basic_Plus_lib.a` from `external/stm32-mw-wpan`.
+archives `stm32wba_ble_stack_full.a` and
+`LinkLayer_BLE_Basic_Plus_V3_0.a` from `external/stm32-mw-wpan`.
 
 Both Debug and Release configurations compile and link with arm-none-eabi
 (Release about 234 KB code, 83 KB RAM). No test was run on hardware. The DK1 I2C

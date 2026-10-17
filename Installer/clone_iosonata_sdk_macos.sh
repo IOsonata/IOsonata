@@ -58,7 +58,7 @@ print_help() {
   echo "  • lwIP TCP/IP stack"
   echo "  • FreeRTOS-Kernel"
   echo "  • TinyUSB"
-  echo "  - ST stm32-mw-wpan v2.9.0 and STM32CubeWBA v1.9.0 (pinned)"
+  echo "  - ST stm32-mw-wpan v2.10.0 and STM32CubeWBA v1.10.0 (pinned)"
   echo ""
   exit 0
 }
@@ -178,7 +178,7 @@ clone_pinned_repo() {
 # the HAL and CMSIS device submodules.
 clone_cube_wba() {
   local target_dir="$EXT/STM32CubeWBA"
-  local ref="v1.9.0"
+  local ref="v1.10.0"
   local current=""
 
   if [[ -d "$target_dir" && "$MODE" != "force" ]]; then
@@ -250,10 +250,10 @@ echo "${BOLD}${BLUE}📦 Cloning FreeRTOS-Kernel...${RESET}"
 clone_or_update_repo "https://github.com/FreeRTOS/FreeRTOS-Kernel.git" "$EXT/FreeRTOS-Kernel" false
 
 # ST BLE middleware and the platform files it needs, matching versions:
-# STM32CubeWBA v1.9.0 uses stm32-mw-wpan v2.9.0.
+# STM32CubeWBA v1.10.0 uses stm32-mw-wpan v2.10.0.
 echo ""
 echo "Cloning ST BLE middleware..."
-clone_pinned_repo "https://github.com/STMicroelectronics/stm32-mw-wpan.git" "$EXT/stm32-mw-wpan" "v2.9.0"
+clone_pinned_repo "https://github.com/STMicroelectronics/stm32-mw-wpan.git" "$EXT/stm32-mw-wpan" "v2.10.0"
 clone_cube_wba
 
 echo ""

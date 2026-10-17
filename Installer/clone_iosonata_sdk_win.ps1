@@ -154,7 +154,7 @@ function Sync-PinnedRepository {
 # the HAL and CMSIS device submodules.
 function Sync-CubeWba {
     $Target = Join-Path $EXT "STM32CubeWBA"
-    $Ref = "v1.9.0"
+    $Ref = "v1.10.0"
 
     if ((Test-Path $Target) -and ($Mode -ne "force")) {
         Push-Location $Target
@@ -228,10 +228,10 @@ Write-Host ">>> Cloning FreeRTOS-Kernel..." -ForegroundColor Blue
 Sync-Repository -Url "https://github.com/FreeRTOS/FreeRTOS-Kernel.git" -Target "$EXT\FreeRTOS-Kernel" -RecurseSubmodules $false
 
 # ST BLE middleware and the platform files it needs, matching versions:
-# STM32CubeWBA v1.9.0 uses stm32-mw-wpan v2.9.0.
+# STM32CubeWBA v1.10.0 uses stm32-mw-wpan v2.10.0.
 Write-Host ""
 Write-Host ">>> Cloning ST BLE middleware..." -ForegroundColor Blue
-Sync-PinnedRepository -Url "https://github.com/STMicroelectronics/stm32-mw-wpan.git" -Target "$EXT\stm32-mw-wpan" -Ref "v2.9.0"
+Sync-PinnedRepository -Url "https://github.com/STMicroelectronics/stm32-mw-wpan.git" -Target "$EXT\stm32-mw-wpan" -Ref "v2.10.0"
 Sync-CubeWba
 
 Write-Host ""
@@ -581,7 +581,7 @@ Write-Host "  - lvgl"
 Write-Host "  - lwip"
 Write-Host "  - FreeRTOS-Kernel"
 Write-Host "  - tinyusb"
-Write-Host "  - stm32-mw-wpan v2.9.0 and STM32CubeWBA v1.9.0 (pinned)"
+Write-Host "  - stm32-mw-wpan v2.10.0 and STM32CubeWBA v1.10.0 (pinned)"
 Write-Host ""
 
 if ($Eclipse -and (Test-Path "$env:ProgramFiles\Eclipse Embedded CDT\eclipse.ini")) {

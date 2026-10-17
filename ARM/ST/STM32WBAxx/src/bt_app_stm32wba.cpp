@@ -60,8 +60,8 @@ SOFTWARE.
 #include "stm32wbaxx.h"
 #include "stm32wbaxx_hal.h"
 
-// STM32CubeWBA BLE middleware, release 1.9.0 (WPAN middleware commit
-// e66bb629). The project provides the Target files of the Cube reference
+// STM32CubeWBA BLE middleware, release 1.10.0 (WPAN middleware commit
+// 7e764835). The project provides the Target files of the Cube reference
 // application (bleplat.c, linklayer_plat.c, ll_sys_if.c, bpka.c, power_table.c)
 // and its app_conf.h set. host_stack_if.c is not used: BleStackCB_Process and
 // HostStack_Process are defined here and run the host stack from the

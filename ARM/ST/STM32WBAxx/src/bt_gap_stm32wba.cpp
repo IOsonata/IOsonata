@@ -641,13 +641,17 @@ bool BtGapScanStart(uint8_t * const pBuff, uint16_t Len)
 	(void)pBuff;	// ST stack reports results via HCI events, not a buffer
 	(void)Len;
 
-	uint8_t ret = aci_gap_start_observation_proc(
-		s_GapWba.ScanInterval,
-		s_GapWba.ScanWindow,
-		s_GapWba.ScanType,
+	Scan_Param_Phy_t scanparam[2] = {};
+
+	scanparam[0].Scan_Type = s_GapWba.ScanType;
+	scanparam[0].Scan_Interval = s_GapWba.ScanInterval;
+	scanparam[0].Scan_Window = s_GapWba.ScanWindow;
+
+	uint8_t ret = aci_gap_start_scan(0, GAP_OBSERVATION_PROC,
 		0,							// own address type = public
-		s_GapWba.ScanFilterDup,
-		0);							// scanning filter policy = accept all
+		s_GapWba.ScanFilterDup, 0, 0,
+		0,							// scanning filter policy = accept all
+		HCI_SCANNING_PHYS_LE_1M, scanparam);
 
 	return ret == BLE_STATUS_SUCCESS;
 }

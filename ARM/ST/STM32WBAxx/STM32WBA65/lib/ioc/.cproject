@@ -83,7 +83,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/ble/stack/include/auto&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/link_layer/ll_sys/inc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/link_layer/ll_cmd_lib/inc&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/link_layer/ll_cmd_lib/config/ble_full&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/link_layer/ll_cmd_lib/config/ble_basic_plus&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Drivers/STM32WBAxx_HAL_Driver/Inc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/Common/WPAN/Interfaces&quot;"/>
@@ -120,7 +120,7 @@
 									<listOptionValue builtIn="false" value="BLE_LL"/>
 									<listOptionValue builtIn="false" value="IOSONATA_STM32_WBA"/>
 									<listOptionValue builtIn="false" value="PHY_40nm_3_40_a"/>
-									<listOptionValue builtIn="false" value="BLE_STACK_BASIC_FEATURES"/>
+									<listOptionValue builtIn="false" value="BLE_STACK_BASIC_PLUS=1"/>
 									<listOptionValue builtIn="false" value="uECC_ENABLE_VLI_API"/>
 									<listOptionValue builtIn="false" value="uECC_OPTIMIZATION_LEVEL=3"/>
 									<listOptionValue builtIn="false" value="uECC_SQUARE_FUNC=1"/>
@@ -157,7 +157,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/ble/stack/include/auto&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/link_layer/ll_sys/inc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/link_layer/ll_cmd_lib/inc&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/link_layer/ll_cmd_lib/config/ble_full&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/link_layer/ll_cmd_lib/config/ble_basic_plus&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Drivers/STM32WBAxx_HAL_Driver/Inc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/Common/WPAN/Interfaces&quot;"/>
@@ -194,7 +194,7 @@
 									<listOptionValue builtIn="false" value="BLE_LL"/>
 									<listOptionValue builtIn="false" value="IOSONATA_STM32_WBA"/>
 									<listOptionValue builtIn="false" value="PHY_40nm_3_40_a"/>
-									<listOptionValue builtIn="false" value="BLE_STACK_BASIC_FEATURES"/>
+									<listOptionValue builtIn="false" value="BLE_STACK_BASIC_PLUS=1"/>
 									<listOptionValue builtIn="false" value="uECC_ENABLE_VLI_API"/>
 									<listOptionValue builtIn="false" value="uECC_OPTIMIZATION_LEVEL=3"/>
 									<listOptionValue builtIn="false" value="uECC_SQUARE_FUNC=1"/>
@@ -304,7 +304,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/ble/stack/include/auto&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/link_layer/ll_sys/inc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/link_layer/ll_cmd_lib/inc&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/link_layer/ll_cmd_lib/config/ble_full&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/link_layer/ll_cmd_lib/config/ble_basic_plus&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Drivers/STM32WBAxx_HAL_Driver/Inc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/Common/WPAN/Interfaces&quot;"/>
@@ -341,7 +341,7 @@
 									<listOptionValue builtIn="false" value="BLE_LL"/>
 									<listOptionValue builtIn="false" value="IOSONATA_STM32_WBA"/>
 									<listOptionValue builtIn="false" value="PHY_40nm_3_40_a"/>
-									<listOptionValue builtIn="false" value="BLE_STACK_BASIC_FEATURES"/>
+									<listOptionValue builtIn="false" value="BLE_STACK_BASIC_PLUS=1"/>
 									<listOptionValue builtIn="false" value="uECC_ENABLE_VLI_API"/>
 									<listOptionValue builtIn="false" value="uECC_OPTIMIZATION_LEVEL=3"/>
 									<listOptionValue builtIn="false" value="uECC_SQUARE_FUNC=1"/>
@@ -378,7 +378,7 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/ble/stack/include/auto&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/link_layer/ll_sys/inc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/link_layer/ll_cmd_lib/inc&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/link_layer/ll_cmd_lib/config/ble_full&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/link_layer/ll_cmd_lib/config/ble_basic_plus&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Drivers/STM32WBAxx_HAL_Driver/Inc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/Common/WPAN/Interfaces&quot;"/>
@@ -415,7 +415,7 @@
 									<listOptionValue builtIn="false" value="BLE_LL"/>
 									<listOptionValue builtIn="false" value="IOSONATA_STM32_WBA"/>
 									<listOptionValue builtIn="false" value="PHY_40nm_3_40_a"/>
-									<listOptionValue builtIn="false" value="BLE_STACK_BASIC_FEATURES"/>
+									<listOptionValue builtIn="false" value="BLE_STACK_BASIC_PLUS=1"/>
 									<listOptionValue builtIn="false" value="uECC_ENABLE_VLI_API"/>
 									<listOptionValue builtIn="false" value="uECC_OPTIMIZATION_LEVEL=3"/>
 									<listOptionValue builtIn="false" value="uECC_SQUARE_FUNC=1"/>
