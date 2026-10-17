@@ -38,11 +38,18 @@ SOFTWARE.
 #include "app_evt_handler.h"
 #include "bluetooth/bt_app.h"
 #include "bluetooth/blueio_blesrvc.h"
-#include "blueio_board.h"
 #include "coredev/uart.h"
 #include "coredev/iopincfg.h"
 
 #include "board.h"
+
+#ifndef UART_DEVNO
+#define UART_DEVNO 0
+#endif
+
+#ifndef BLUEIO_CONNECT_LED_PORT
+#include "blueio_board.h"
+#endif
 
 //#define DUMP_MAN_SPEC_DATA
 
@@ -101,7 +108,7 @@ alignas(4) static uint8_t s_UartRxFifo[UARTFIFOSIZE];
 alignas(4) static uint8_t s_UartTxFifo[UARTFIFOSIZE];
 
 UARTCfg_t g_UartCfg = {
-	.DevNo = 0,									// Device number zero based
+	.DevNo = UART_DEVNO,									// Device number zero based
 	.pIOPinMap = s_UartPins,					// UART assigned pins
 	.NbIOPins = sizeof(s_UartPins) / sizeof(IOPinCfg_t),					// Total number of UART pins used
 	.Rate = 115200,								// Baudrate

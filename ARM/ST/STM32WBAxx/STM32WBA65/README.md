@@ -9,6 +9,59 @@ and SRAM size do not define a separate library variant; applications select
 their linker script. A different peripheral inventory or interrupt vector
 layout requires a separate library configuration.
 
+## BLE validation projects
+
+Import the projects below from `exemples/<project>/ioc`. They link the common
+application sources, the same WBA65 library and the same two ST archives as
+the hardware-tested BleAdvertiser. Build the library and application with
+matching Debug or Release configurations. These new projects have not yet
+passed full target builds or hardware tests.
+
+All use USART1 (DevNo 1), PA8 RX / PB12 TX, on the first ST-LINK virtual COM
+port, 8N1 without flow control. Board headers contain mappings only.
+Application entry is the shared source's standard `main()`.
+
+| Project | Shared source | UART baud | Purpose |
+|---|---|---|---|
+| UartBleDemo | uart_ble.cpp | 115200 | Open-link peripheral, BlueIO UART writes and notifications |
+| BleIntrfPrbsTx | bleintrf_prbs_tx.cpp | 115200 | BtIntrf PRBS notification stream, advertised name BlePrbs |
+| BleCentralScanDemo | ble_central_scan.cpp | 115200 | Advertising reports, device names and RSSI |
+| UartBleCentral | uart_ble_central.cpp | 1000000 | Find UARTDemo, connect, discover its service and CCCD, subscribe and exchange UART data |
+| BleSecurityDemo | ble_security_demo.cpp | 115200 | Default Just Works bonding and protected UART service, advertised name BLESec |
+
+UartBleCentral sets `BLE_SC_METHOD=0` in both configurations for the first
+open-link test against UartBleDemo. Security belongs to the stack; this does
+not change the common example's security selection on other boards.
+BleSecurityDemo uses its existing default security policy. Numeric Comparison
+and passkey UI are not configured by this project.
+
+The UART peripheral/security examples map their optional UART-toggle button
+to the already-tested external input PC13 (Arduino D4) with EXTI13. Leave it
+open during data tests; momentarily grounding it toggles the UART. The DK1
+joystick is analog and is not used as a GPIO button.
+
+Hardware sequence:
+
+1. Run UartBleDemo and connect to UARTDemo with an external BLE central.
+   Discover the BlueIO UART service, subscribe to its notify characteristic,
+   send UART bytes and receive them over BLE; write the BLE characteristic
+   and verify UART output. Disconnect and reconnect.
+2. Run BleIntrfPrbsTx, subscribe, and check the received PRBS stream.
+3. Run BleCentralScanDemo and verify names/RSSI from known external advertisers.
+4. Run UartBleCentral with an external IOsonata UARTDemo peripheral.
+   Verify connection, service/characteristic/CCCD discovery, subscription,
+   both transfer directions and automatic scan/reconnect after disconnect.
+   This example does not establish characteristic-read coverage.
+5. Run BleSecurityDemo; test pairing, protected data transfer, disconnect,
+   reconnect and bond reuse after reset. Record unsupported security modes.
+
+Maintainer hardware results on October 17, 2026: GPIO output/input and EXTI
+work; UART PRBS TX at 1 Mbaud reports about 100139 B/s and loopback about
+67150 B/s with zero errors; LPTIM and TIM callbacks were tested at 100 ms
+and 1000 ms without an external frequency reference. Advertising and counter
+updates pass on WBA65. GATT peripheral, central and security tests remain
+pending. Earlier validation sections below describe historical checks.
+
 ## Integration status
 
 The IOC library includes IOsonata `ResetEntry.c`, the WBA65 interrupt
@@ -32,8 +85,8 @@ build and link. Outstanding work:
 - Verify EXTI interrupt routing/dispatch and the timers on hardware
 - Validate the application linker script against STM32WBA65 flash/SRAM banks
   and the configured secure/nonsecure partitions
-- Hardware-test the integrated STM32CubeWBA radio middleware and complete
-  peripheral/central test projects
+- Hardware-test the integrated STM32CubeWBA radio middleware with the
+  peripheral/central test projects listed above
 
 Use the WBA65 device definitions and interrupt mapping from a consistent
 STM32CubeWBA release. Do not compile WBA5x startup or link with the WBA5x
@@ -67,8 +120,8 @@ The checks above were local. The maintainer subsequently confirmed Blinky LED
 operation on STM32WBA65I-DK1 on October 17, 2026. Full library/example Debug and Release rebuilds,
 radio clock/RNG startup, GPIO input/EXTI, and BLE peripheral/central operation
 remain unverified in this review. The earlier build results below describe
-previous checks, not a new complete build. The only current WBA65 BLE project
-is BleAdvertiser; it does not establish GATT data exchange or central readiness.
+previous checks, not a new complete build. BleAdvertiser is hardware-tested. The additional BLE projects listed above
+still require target builds and GATT/central/security hardware validation.
 
 The concurrent BleAdvertiser project fix in `8f9d5e0` moves the ST archives\nfrom Other linker flags into Libraries so they follow the application\nobjects. That change is preserved; a fresh full BLE build is still required.\n\n## GPIO first: Blinky
 

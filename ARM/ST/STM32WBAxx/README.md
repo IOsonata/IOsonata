@@ -108,13 +108,13 @@ add a second Cube startup or vector table to the application.
 | Timers | Two LPTIM and six TIM instances through the shared STM32 driver | Host/emulator checks exist; frequencies and callbacks need hardware tests |
 | I2C | Four instances, polling master, 7-bit addresses | Slave, interrupt and DMA modes unsupported; hardware tests pending |
 | SPI | Three instances, polling full-duplex master | Slave, interrupt and DMA modes unsupported; header wiring and hardware tests pending |
-| BLE | CubeWBA host/link-layer integration, GAP/GATT, security and bond storage | Advertiser project exists; peripheral data exchange and central test projects remain to be prepared and validated |
+| BLE | CubeWBA host/link-layer integration, GAP/GATT, security and bond storage | Advertising and counter updates pass; peripheral, PRBS, scan, central and security projects are provided, with GATT/security validation pending |
 
 Existing WBA65 projects: `UartPrbsTxTest`, `UartLoopback`, `TimerDemo`,
 `I2CScan`, `SPILoopback`, and `BleAdvertiser`, each with Debug and Release
 configurations. The library includes the BLE glue and vendor platform sources;
-Bluetooth applications also link the two ST middleware archives. There is no
-hardware pass recorded for these projects.
+Bluetooth applications also link the two ST middleware archives. GPIO, UART, timer and advertising hardware results and the additional BLE
+validation projects are recorded in `STM32WBA65/README.md`.
 
 The first hardware sequence is:
 
