@@ -1340,7 +1340,8 @@ bool BtAppStackInit(const BtAppCfg_t *pCfg)
 	init.prWriteListSize = CFG_BLE_PREPARE_WRITE_LIST_SIZE;
 	init.mblockCount = CFG_BLE_MBLOCK_COUNT;
 	init.attMtu = CFG_BLE_ATT_MTU_MAX;
-	init.options = CFG_BLE_OPTIONS;
+	// Advertising-set commands also carry legacy PDUs and their native duration.
+	init.options = CFG_BLE_OPTIONS | BLE_OPTIONS_EXTENDED_ADV;
 
 	BtWbaPlatformInit();
 
