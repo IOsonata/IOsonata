@@ -386,6 +386,32 @@ reason `0x08` (connection timeout) was observed during long runs; the root
 cause was not established. Four simultaneous links and reuse after observing
 more than four distinct addresses have not been hardware validated.
 
+### BleGatewayTaktOS on nRF9160
+
+[ble_gateway_taktos.cpp](../exemples/gateway/ble_gateway_taktos.cpp)
+provides the same multi-tag environmental gateway with TaktOS.
+Import `ARM/Nordic/nRF91/nRF9160/exemples/BleGatewayTaktOS/ioc`.
+The project uses the existing Thingy gateway board/HCI UART configuration,
+the nRF91 TaktOS modem OS adapter, and `TaktOS_M33`.
+
+The gateway creates a 32-entry TaktOS work queue before enabling BLE or LTE.
+`BtEvtQue()`, `LteEvtQue()`, and the application's timer/socket callbacks
+deliver work to one gateway worker. The worker runs handlers serially, executes
+deferred GAP calls outside HCI event callbacks, and uses a blocking queue
+receive with a 50-tick maximum wait for retry/status/console processing.
+Unlike the initial prototype, it does not wake every millisecond simply to
+poll the shared application event queue.
+
+On nRF9160 with nRF52840 HciController, hardware testing confirmed two
+concurrent BlueIOThingy GATT links, independent environmental notifications,
+combined `g0`/`g1` UDP telemetry, and continued operation of the other link
+after one peer timed out. LTE-M registration changes did not prevent subsequent
+UDP echoes. One transmitted datagram in the captured TaktOS test had no visible
+echo response; no cause was established. A BLE link timeout (`0x08`) was also
+observed, with the remaining tag unaffected. These tests establish functional
+multi-tag operation, not measured idle current, a guaranteed echo delivery
+rate, or long-term RF stability.
+
 ## RTOS integration
 
 Override `BtEvtQue()`. The stack calls it, often from interrupt context, for
