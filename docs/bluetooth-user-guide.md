@@ -412,6 +412,22 @@ observed, with the remaining tag unaffected. These tests establish functional
 multi-tag operation, not measured idle current, a guaranteed echo delivery
 rate, or long-term RF stability.
 
+### nRF91 modem OS library build selection
+
+The nRF9160 and nRF91x1 IOsonata library projects each provide four Eclipse
+configurations. `Debug` and `Release` build the bare-metal modem OS
+implementation. `Debug_TaktOS` and `Release_TaktOS` build the common modem
+code together with the TaktOS wait, semaphore and mutex adapter, and include
+the TaktOS headers. Applications must not compile
+`modem_os_nrf91_taktos.c` themselves.
+
+Build `IOsonata_nRF9160` or `IOsonata_nRF91x1` in `Debug_TaktOS`
+before building its `LteUdpTaktOS` application in Debug, or select
+`Release_TaktOS` before the application Release build. The nRF9160
+`BleGatewayTaktOS` uses the same pairing. Rebuild the library when changing
+variants; a TaktOS application must not link the bare-metal `Debug` or
+`Release` library.
+
 ## RTOS integration
 
 Override `BtEvtQue()`. The stack calls it, often from interrupt context, for
