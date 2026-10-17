@@ -70,28 +70,28 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../CMSIS/Core/Include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/modules/nrfx/mdk&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK_Mesh/examples/common/include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK_Mesh/examples/light_switch/include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK_Mesh/models/foundation/health/include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK_Mesh/models/foundation/config/include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK_Mesh/models/model_spec/common/include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK_Mesh/models/model_spec/generic_dtt/include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK_Mesh/models/model_spec/generic_onoff/include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK_Mesh/models/model_spec/generic_level/include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK_Mesh/models/model_spec/scene/include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK_Mesh/mesh/dfu/api&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK_Mesh/mesh/friend/api&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK_Mesh/mesh/friend/include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK_Mesh/mesh/bearer/include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK_Mesh/mesh/bearer/api&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK_Mesh/mesh/access/api&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK_Mesh/mesh/stack/api&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK_Mesh/mesh/prov/api&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK_Mesh/mesh/prov/include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK_Mesh/mesh/gatt/api&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK_Mesh/mesh/gatt/include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK_Mesh/mesh/core/api&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK_Mesh/mesh/core/include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrf5_SDK_Mesh/examples/common/include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrf5_SDK_Mesh/examples/light_switch/include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrf5_SDK_Mesh/models/foundation/health/include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrf5_SDK_Mesh/models/foundation/config/include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrf5_SDK_Mesh/models/model_spec/common/include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrf5_SDK_Mesh/models/model_spec/generic_dtt/include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrf5_SDK_Mesh/models/model_spec/generic_onoff/include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrf5_SDK_Mesh/models/model_spec/generic_level/include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrf5_SDK_Mesh/models/model_spec/scene/include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrf5_SDK_Mesh/mesh/dfu/api&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrf5_SDK_Mesh/mesh/friend/api&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrf5_SDK_Mesh/mesh/friend/include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrf5_SDK_Mesh/mesh/bearer/include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrf5_SDK_Mesh/mesh/bearer/api&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrf5_SDK_Mesh/mesh/access/api&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrf5_SDK_Mesh/mesh/stack/api&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrf5_SDK_Mesh/mesh/prov/api&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrf5_SDK_Mesh/mesh/prov/include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrf5_SDK_Mesh/mesh/gatt/api&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrf5_SDK_Mesh/mesh/gatt/include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrf5_SDK_Mesh/mesh/core/api&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrf5_SDK_Mesh/mesh/core/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/external/segger_rtt&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/integration/nrfx&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/modules/nrfx&quot;"/>
@@ -236,28 +236,28 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../CMSIS/Core/Include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/modules/nrfx/mdk&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK_Mesh/examples/common/include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK_Mesh/examples/light_switch/include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK_Mesh/models/foundation/health/include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK_Mesh/models/foundation/config/include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK_Mesh/models/model_spec/common/include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK_Mesh/models/model_spec/generic_dtt/include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK_Mesh/models/model_spec/generic_onoff/include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK_Mesh/models/model_spec/generic_level/include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK_Mesh/models/model_spec/scene/include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK_Mesh/mesh/dfu/api&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK_Mesh/mesh/friend/api&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK_Mesh/mesh/friend/include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK_Mesh/mesh/bearer/include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK_Mesh/mesh/bearer/api&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK_Mesh/mesh/access/api&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK_Mesh/mesh/stack/api&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK_Mesh/mesh/prov/api&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK_Mesh/mesh/prov/include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK_Mesh/mesh/gatt/api&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK_Mesh/mesh/gatt/include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK_Mesh/mesh/core/api&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK_Mesh/mesh/core/include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrf5_SDK_Mesh/examples/common/include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrf5_SDK_Mesh/examples/light_switch/include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrf5_SDK_Mesh/models/foundation/health/include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrf5_SDK_Mesh/models/foundation/config/include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrf5_SDK_Mesh/models/model_spec/common/include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrf5_SDK_Mesh/models/model_spec/generic_dtt/include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrf5_SDK_Mesh/models/model_spec/generic_onoff/include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrf5_SDK_Mesh/models/model_spec/generic_level/include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrf5_SDK_Mesh/models/model_spec/scene/include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrf5_SDK_Mesh/mesh/dfu/api&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrf5_SDK_Mesh/mesh/friend/api&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrf5_SDK_Mesh/mesh/friend/include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrf5_SDK_Mesh/mesh/bearer/include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrf5_SDK_Mesh/mesh/bearer/api&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrf5_SDK_Mesh/mesh/access/api&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrf5_SDK_Mesh/mesh/stack/api&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrf5_SDK_Mesh/mesh/prov/api&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrf5_SDK_Mesh/mesh/prov/include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrf5_SDK_Mesh/mesh/gatt/api&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrf5_SDK_Mesh/mesh/gatt/include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrf5_SDK_Mesh/mesh/core/api&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nrf5_SDK_Mesh/mesh/core/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/external/segger_rtt&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/integration/nrfx&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../../external/nRF5_SDK/modules/nrfx&quot;"/>

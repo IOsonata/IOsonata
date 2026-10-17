@@ -97,62 +97,62 @@
 		<link>
 			<name>src/nRF5_SDK/examples/common/src/app_error_weak.c</name>
 			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK_Mesh/examples/common/src/app_error_weak.c</locationURI>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrf5_SDK_Mesh/examples/common/src/app_error_weak.c</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK/examples/common/src/app_level.c</name>
 			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK_Mesh/examples/common/src/app_level.c</locationURI>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrf5_SDK_Mesh/examples/common/src/app_level.c</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK/examples/common/src/app_onoff.c</name>
 			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK_Mesh/examples/common/src/app_onoff.c</locationURI>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrf5_SDK_Mesh/examples/common/src/app_onoff.c</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK/examples/common/src/assertion_handler_weak.c</name>
 			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK_Mesh/examples/common/src/assertion_handler_weak.c</locationURI>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrf5_SDK_Mesh/examples/common/src/assertion_handler_weak.c</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK/examples/common/src/ble_dfu_support.c</name>
 			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK_Mesh/examples/common/src/ble_dfu_support.c</locationURI>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrf5_SDK_Mesh/examples/common/src/ble_dfu_support.c</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK/examples/common/src/ble_softdevice_support.c</name>
 			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK_Mesh/examples/common/src/ble_softdevice_support.c</locationURI>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrf5_SDK_Mesh/examples/common/src/ble_softdevice_support.c</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK/examples/common/src/mesh_adv.c</name>
 			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK_Mesh/examples/common/src/mesh_adv.c</locationURI>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrf5_SDK_Mesh/examples/common/src/mesh_adv.c</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK/examples/common/src/mesh_app_utils.c</name>
 			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK_Mesh/examples/common/src/mesh_app_utils.c</locationURI>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrf5_SDK_Mesh/examples/common/src/mesh_app_utils.c</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK/examples/common/src/mesh_provisionee.c</name>
 			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK_Mesh/examples/common/src/mesh_provisionee.c</locationURI>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrf5_SDK_Mesh/examples/common/src/mesh_provisionee.c</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK/examples/common/src/rtt_input.c</name>
 			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK_Mesh/examples/common/src/rtt_input.c</locationURI>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrf5_SDK_Mesh/examples/common/src/rtt_input.c</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK/examples/common/src/simple_hal.c</name>
 			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK_Mesh/examples/common/src/simple_hal.c</locationURI>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrf5_SDK_Mesh/examples/common/src/simple_hal.c</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK_Mesh/models/foundation/config/CMakeLists.txt</name>
 			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK_Mesh/models/foundation/config/CMakeLists.txt</locationURI>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrf5_SDK_Mesh/models/foundation/config/CMakeLists.txt</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK_Mesh/models/foundation/config/include</name>
@@ -167,7 +167,7 @@
 		<link>
 			<name>src/nRF5_SDK_Mesh/models/model_spec/common/CMakeLists.txt</name>
 			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK_Mesh/models/model_spec/common/CMakeLists.txt</locationURI>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrf5_SDK_Mesh/models/model_spec/common/CMakeLists.txt</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK_Mesh/models/model_spec/common/include</name>
@@ -182,7 +182,7 @@
 		<link>
 			<name>src/nRF5_SDK_Mesh/models/model_spec/generic_onoff/CMakeLists.txt</name>
 			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK_Mesh/models/model_spec/generic_onoff/CMakeLists.txt</locationURI>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrf5_SDK_Mesh/models/model_spec/generic_onoff/CMakeLists.txt</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK_Mesh/models/model_spec/generic_onoff/include</name>
@@ -197,117 +197,117 @@
 		<link>
 			<name>src/nRF5_SDK_Mesh/models/foundation/config/include/composition_data.h</name>
 			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK_Mesh/models/foundation/config/include/composition_data.h</locationURI>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrf5_SDK_Mesh/models/foundation/config/include/composition_data.h</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK_Mesh/models/foundation/config/include/config_client.h</name>
 			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK_Mesh/models/foundation/config/include/config_client.h</locationURI>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrf5_SDK_Mesh/models/foundation/config/include/config_client.h</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK_Mesh/models/foundation/config/include/config_messages.h</name>
 			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK_Mesh/models/foundation/config/include/config_messages.h</locationURI>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrf5_SDK_Mesh/models/foundation/config/include/config_messages.h</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK_Mesh/models/foundation/config/include/config_opcodes.h</name>
 			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK_Mesh/models/foundation/config/include/config_opcodes.h</locationURI>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrf5_SDK_Mesh/models/foundation/config/include/config_opcodes.h</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK_Mesh/models/foundation/config/include/config_server.h</name>
 			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK_Mesh/models/foundation/config/include/config_server.h</locationURI>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrf5_SDK_Mesh/models/foundation/config/include/config_server.h</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK_Mesh/models/foundation/config/include/config_server_events.h</name>
 			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK_Mesh/models/foundation/config/include/config_server_events.h</locationURI>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrf5_SDK_Mesh/models/foundation/config/include/config_server_events.h</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK_Mesh/models/foundation/config/include/packed_index_list.h</name>
 			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK_Mesh/models/foundation/config/include/packed_index_list.h</locationURI>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrf5_SDK_Mesh/models/foundation/config/include/packed_index_list.h</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK_Mesh/models/foundation/config/src/composition_data.c</name>
 			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK_Mesh/models/foundation/config/src/composition_data.c</locationURI>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrf5_SDK_Mesh/models/foundation/config/src/composition_data.c</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK_Mesh/models/foundation/config/src/config_client.c</name>
 			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK_Mesh/models/foundation/config/src/config_client.c</locationURI>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrf5_SDK_Mesh/models/foundation/config/src/config_client.c</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK_Mesh/models/foundation/config/src/config_server.c</name>
 			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK_Mesh/models/foundation/config/src/config_server.c</locationURI>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrf5_SDK_Mesh/models/foundation/config/src/config_server.c</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK_Mesh/models/foundation/config/src/packed_index_list.c</name>
 			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK_Mesh/models/foundation/config/src/packed_index_list.c</locationURI>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrf5_SDK_Mesh/models/foundation/config/src/packed_index_list.c</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK_Mesh/models/model_spec/common/include/model_common.h</name>
 			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK_Mesh/models/model_spec/common/include/model_common.h</locationURI>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrf5_SDK_Mesh/models/model_spec/common/include/model_common.h</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK_Mesh/models/model_spec/common/include/model_config_file.h</name>
 			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK_Mesh/models/model_spec/common/include/model_config_file.h</locationURI>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrf5_SDK_Mesh/models/model_spec/common/include/model_config_file.h</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK_Mesh/models/model_spec/common/src/model_common.c</name>
 			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK_Mesh/models/model_spec/common/src/model_common.c</locationURI>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrf5_SDK_Mesh/models/model_spec/common/src/model_common.c</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK_Mesh/models/model_spec/common/src/model_config_file.c</name>
 			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK_Mesh/models/model_spec/common/src/model_config_file.c</locationURI>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrf5_SDK_Mesh/models/model_spec/common/src/model_config_file.c</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK_Mesh/models/model_spec/generic_onoff/include/generic_onoff_client.h</name>
 			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK_Mesh/models/model_spec/generic_onoff/include/generic_onoff_client.h</locationURI>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrf5_SDK_Mesh/models/model_spec/generic_onoff/include/generic_onoff_client.h</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK_Mesh/models/model_spec/generic_onoff/include/generic_onoff_common.h</name>
 			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK_Mesh/models/model_spec/generic_onoff/include/generic_onoff_common.h</locationURI>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrf5_SDK_Mesh/models/model_spec/generic_onoff/include/generic_onoff_common.h</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK_Mesh/models/model_spec/generic_onoff/include/generic_onoff_mc.h</name>
 			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK_Mesh/models/model_spec/generic_onoff/include/generic_onoff_mc.h</locationURI>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrf5_SDK_Mesh/models/model_spec/generic_onoff/include/generic_onoff_mc.h</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK_Mesh/models/model_spec/generic_onoff/include/generic_onoff_messages.h</name>
 			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK_Mesh/models/model_spec/generic_onoff/include/generic_onoff_messages.h</locationURI>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrf5_SDK_Mesh/models/model_spec/generic_onoff/include/generic_onoff_messages.h</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK_Mesh/models/model_spec/generic_onoff/include/generic_onoff_server.h</name>
 			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK_Mesh/models/model_spec/generic_onoff/include/generic_onoff_server.h</locationURI>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrf5_SDK_Mesh/models/model_spec/generic_onoff/include/generic_onoff_server.h</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK_Mesh/models/model_spec/generic_onoff/src/generic_onoff_client.c</name>
 			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK_Mesh/models/model_spec/generic_onoff/src/generic_onoff_client.c</locationURI>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrf5_SDK_Mesh/models/model_spec/generic_onoff/src/generic_onoff_client.c</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK_Mesh/models/model_spec/generic_onoff/src/generic_onoff_mc.c</name>
 			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK_Mesh/models/model_spec/generic_onoff/src/generic_onoff_mc.c</locationURI>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrf5_SDK_Mesh/models/model_spec/generic_onoff/src/generic_onoff_mc.c</locationURI>
 		</link>
 		<link>
 			<name>src/nRF5_SDK_Mesh/models/model_spec/generic_onoff/src/generic_onoff_server.c</name>
 			<type>1</type>
-			<locationURI>PARENT-8-PROJECT_LOC/external/nRF5_SDK_Mesh/models/model_spec/generic_onoff/src/generic_onoff_server.c</locationURI>
+			<locationURI>PARENT-8-PROJECT_LOC/external/nrf5_SDK_Mesh/models/model_spec/generic_onoff/src/generic_onoff_server.c</locationURI>
 		</link>
 	</linkedResources>
 </projectDescription>
