@@ -52,6 +52,7 @@
 							<tool id="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.1339173683" name="GNU ARM Cross C Compiler" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler">
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.include.paths.334790225" name="Include paths (-I)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.include.paths" useByScannerDiscovery="true" valueType="includePath">
 									<listOptionValue builtIn="false" value="../../src"/>
+									<listOptionValue builtIn="false" value="../../../../../../../CMSIS/Core/Include"/>
 									<listOptionValue builtIn="false" value="../../../../lib/include"/>
 									<listOptionValue builtIn="false" value="../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../include"/>
@@ -70,6 +71,7 @@
 							<tool id="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.compiler.1059206095" name="GNU ARM Cross C++ Compiler" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.compiler">
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.include.paths.2138991742" name="Include paths (-I)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.include.paths" useByScannerDiscovery="true" valueType="includePath">
 									<listOptionValue builtIn="false" value="../../src"/>
+									<listOptionValue builtIn="false" value="../../../../../../../CMSIS/Core/Include"/>
 									<listOptionValue builtIn="false" value="../../../../lib/include"/>
 									<listOptionValue builtIn="false" value="../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../include"/>
@@ -191,6 +193,7 @@
 							<tool id="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.65388191" name="GNU ARM Cross C Compiler" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler">
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.include.paths.1547012622" name="Include paths (-I)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.include.paths" useByScannerDiscovery="true" valueType="includePath">
 									<listOptionValue builtIn="false" value="../../src"/>
+									<listOptionValue builtIn="false" value="../../../../../../../CMSIS/Core/Include"/>
 									<listOptionValue builtIn="false" value="../../../../lib/include"/>
 									<listOptionValue builtIn="false" value="../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../include"/>
@@ -209,6 +212,7 @@
 							<tool id="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.compiler.314321333" name="GNU ARM Cross C++ Compiler" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.compiler">
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.include.paths.1003767944" name="Include paths (-I)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.include.paths" useByScannerDiscovery="true" valueType="includePath">
 									<listOptionValue builtIn="false" value="../../src"/>
+									<listOptionValue builtIn="false" value="../../../../../../../CMSIS/Core/Include"/>
 									<listOptionValue builtIn="false" value="../../../../lib/include"/>
 									<listOptionValue builtIn="false" value="../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../include"/>
