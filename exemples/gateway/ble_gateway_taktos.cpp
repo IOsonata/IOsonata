@@ -80,6 +80,7 @@ SOFTWARE.
 #include "board.h"
 #include "TaktOS.h"
 #include "TaktOSThread.h"
+#include "TaktOSQueue.h"
 
 #ifndef LTE_UDP_HOST
 #define LTE_UDP_HOST			"udp.example.com"
@@ -487,7 +488,36 @@ void BtGattClientNotified(uint16_t ConnHdl, uint16_t ValHdl,
 }
 
 // Application event queue: LTE work, received data and the send timer
-alignas(4) uint8_t g_AppEvtHandlerQueMem[APPEVT_HANDLER_QUE_MEMSIZE(16)];
+// One TaktOS worker serializes BLE, LTE and gateway work.
+typedef struct {
+    uint32_t Evt;
+    void *pCtx;
+    AppEvtHandler_t Handler;
+} GatewayWork_t;
+
+#define GATEWAY_WORK_QUE_COUNT 32U
+static uint8_t s_GatewayWorkMem[GATEWAY_WORK_QUE_COUNT * sizeof(GatewayWork_t)] TAKT_ALIGNED(4);
+static TaktOSQueue_t s_GatewayWorkQue;
+
+static bool GatewayWorkQue(uint32_t Evt, void *pCtx, AppEvtHandler_t Handler)
+{
+    if (Handler == nullptr)
+    {
+        return false;
+    }
+    const GatewayWork_t work = { Evt, pCtx, Handler };
+    return TaktOSQueueSend(&s_GatewayWorkQue, &work, false, 0) == TAKTOS_OK;
+}
+
+bool BtEvtQue(uint32_t Evt, void *pCtx, BtEvtQueHandler_t Handler)
+{
+    return GatewayWorkQue(Evt, pCtx, Handler);
+}
+
+bool LteEvtQue(uint32_t Evt, void *pCtx, LteEvtQueHandler_t Handler)
+{
+    return GatewayWorkQue(Evt, pCtx, Handler);
+}
 
 static void LteUdpEvtHandler(LTE_EVT Evt, const LteStatus_t * const pStatus);
 static void LteUdpUrcHandler(const char *pUrc);
@@ -827,7 +857,7 @@ static int LteUdpSockEvt(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId, uint8_t *p
 	if (EvtId == DEVINTRF_EVT_RX_DATA && s_bRxPending == false)
 	{
 		s_bRxPending = true;
-        if (AppEvtHandlerQue(LTE_UDP_EVT_RX, nullptr, LteUdpRecv))
+        if (GatewayWorkQue(LTE_UDP_EVT_RX, nullptr, LteUdpRecv))
         {
             s_bRxQueued = true;
         }
@@ -845,7 +875,7 @@ static void LteUdpTimerTrig(TimerDev_t * const pTimer, int TrigNo, void * const 
 
     s_UdpTimerEvents = s_UdpTimerEvents + 1U;
     s_bSendPending = true;
-    if (!s_bSendQueued && AppEvtHandlerQue(LTE_UDP_EVT_SEND, nullptr, LteUdpSend))
+    if (!s_bSendQueued && GatewayWorkQue(LTE_UDP_EVT_SEND, nullptr, LteUdpSend))
     {
         s_bSendQueued = true;
     }
@@ -898,19 +928,18 @@ bool AppCheckStatus(void)
     LteCheckStatus();
 
     if (s_bRxPending && !s_bRxQueued &&
-        AppEvtHandlerQue(LTE_UDP_EVT_RX, nullptr, LteUdpRecv))
+        GatewayWorkQue(LTE_UDP_EVT_RX, nullptr, LteUdpRecv))
     {
         s_bRxQueued = true;
     }
 
     if (s_bSendPending && !s_bSendQueued &&
-        AppEvtHandlerQue(LTE_UDP_EVT_SEND, nullptr, LteUdpSend))
+        GatewayWorkQue(LTE_UDP_EVT_SEND, nullptr, LteUdpSend))
     {
         s_bSendQueued = true;
     }
 
-    return !s_bLogTxReady && !s_bSendPending && !s_bRxPending &&
-           !AppEvtHandlerPending();
+    return !s_bLogTxReady && !s_bSendPending && !s_bRxPending;
 }
 
 static void LteUdpEvtHandler(LTE_EVT Evt, const LteStatus_t * const pStatus)
@@ -1035,13 +1064,18 @@ static void GatewayTask(void *pCtx)
 
     while (true)
     {
-        while (AppEvtHandlerExec())
+        GatewayWork_t work;
+        if (TaktOSQueueReceive(&s_GatewayWorkQue, &work, false, 0) != TAKTOS_OK)
         {
+            AppCheckStatus();
+            // A bounded wait also services rejected work and asynchronous
+            // console TX progress when the queue is otherwise idle.
+            if (TaktOSQueueReceive(&s_GatewayWorkQue, &work, true, 50U) != TAKTOS_OK)
+            {
+                continue;
+            }
         }
-        if (AppCheckStatus() && !AppEvtHandlerPending())
-        {
-            (void)TaktOSThreadSleepTicks(TaktOSCurrentThread(), 1U);
-        }
+        work.Handler(work.Evt, work.pCtx);
     }
 }
 
@@ -1052,7 +1086,14 @@ static uint8_t s_GatewayTaskMem[TAKTOS_THREAD_MEM_SIZE(GATEWAY_TAKTOS_STACK)] TA
 
 int main()
 {
-    AppEvtHandlerInit(g_AppEvtHandlerQueMem, sizeof(g_AppEvtHandlerQueMem));
+    if (TaktOSQueueInit(&s_GatewayWorkQue, s_GatewayWorkMem,
+                        sizeof(GatewayWork_t), GATEWAY_WORK_QUE_COUNT) != TAKTOS_OK)
+    {
+        while (true)
+        {
+            __WFE();
+        }
+    }
 
     TaktOSCfg_t cfg = {
         .KernClockHz = SystemCoreClockGet(),
