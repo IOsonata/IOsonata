@@ -412,7 +412,6 @@ void BtGapServiceInit(void);//BtGattSrvc_t * const pSrvc);
 void BtGapSetDevName(const char *pName);
 void BtGapSetAppearance(uint16_t Val);
 void BtGapSetPreferedConnParam(BtGattPreferedConnParams_t *pVal);
-bool BtGapConnectCancel(void);
 bool BtGapConnect(BtGapPeerAddr_t * const pPeerAddr, BtGapConnParams_t * const pConnParam);//, BtGapScanParam_t * const pScanParam);
 bool BtGapScanInit(BtGapScanCfg_t * const pCfg);
 bool BtGapScanStart(uint8_t * const pBuff, uint16_t Len);
