@@ -53,7 +53,9 @@ SOFTWARE.
 #include "app_evt_handler.h"
 #include "usb/usb.h"
 #include "usb/usbd_cdc.h"
+#if __has_include("board.h")
 #include "board.h"
+#endif
 
 
 #ifdef MCUOSC

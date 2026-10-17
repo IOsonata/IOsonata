@@ -56,7 +56,9 @@ SOFTWARE.
 #include "prbs.h"
 #include "app_evt_handler.h"
 #include "usb/usb.h"
+#if __has_include("board.h")
 #include "board.h"
+#endif
 #include "usb/usbd_cdc.h"
 #ifdef MCUOSC
 McuOsc_t g_McuOsc = MCUOSC;
