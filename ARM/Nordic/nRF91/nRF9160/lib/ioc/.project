@@ -1381,9 +1381,9 @@
 			<locationURI>PARENT-3-PROJECT_LOC/include/nrfx_config_nrf91.h</locationURI>
 		</link>
 		<link>
-			<name>src/modem_os_nrf91.c</name>
+			<name>src/modem_nrf91.c</name>
 			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/src/modem_os_nrf91.c</locationURI>
+			<locationURI>PARENT-3-PROJECT_LOC/src/modem_nrf91.c</locationURI>
 		</link>
 		<link>
 			<name>src/nrfx</name>
