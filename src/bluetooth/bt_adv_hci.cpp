@@ -428,7 +428,17 @@ void BtAdvStart()
 		return;
 	}
 
-	int res = BtAppAdvEnable();
+	// SDC timeout restart workaround: after reporting termination it can
+	// reject enable with Command Disallowed until explicitly disabled.
+	// Keep this sequence in start; live data updates do not toggle enable.
+	int res = BtAppAdvDisable();
+	ADV_TRACE("ADV restart disable result=%d\r\n", res);
+	if (res != BT_HCI_SUCCESS)
+	{
+		return;
+	}
+
+	res = BtAppAdvEnable();
 	ADV_TRACE("ADV start result=%d\r\n", res);
 	if (res == 0)
 	{

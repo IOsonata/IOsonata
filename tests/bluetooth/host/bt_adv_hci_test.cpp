@@ -215,11 +215,13 @@ static void CheckStartCommand(bool Expected)
 {
 	int before = s_CmdCount;
 	BtAdvStart();
-	CHECK(s_CmdCount == before + (Expected ? 1 : 0));
+	CHECK(s_CmdCount == before + (Expected ? 2 : 0));
 	if (Expected)
 	{
 		CHECK(s_Cmds[before].OpCode == BT_HCI_CMD_CTLR_SET_EXT_ADV_ENABLE);
-		CHECK(s_Cmds[before].Param[0] == 1);
+		CHECK(s_Cmds[before].Param[0] == 0);
+		CHECK(s_Cmds[before + 1].OpCode == BT_HCI_CMD_CTLR_SET_EXT_ADV_ENABLE);
+		CHECK(s_Cmds[before + 1].Param[0] == 1);
 		BtAdvStop();
 	}
 }
@@ -264,7 +266,7 @@ void TestLiveDataUpdateDoesNotToggleAdvertising()
 	BtAdvStop();
 }
 
-void TestTimeoutRestartWithoutDisable()
+void TestTimeoutRestartDisablesBeforeEnable()
 {
 	uint8_t addr[6] = {};
 	Setup(BTADDR_TYPE_PUBLIC, addr);
@@ -279,9 +281,11 @@ void TestTimeoutRestartWithoutDisable()
 		CHECK(BtAppAdvManDataSet((uint8_t *)&count, sizeof(count), nullptr, 0));
 		int before = s_CmdCount;
 		BtAdvStart();
-		CHECK(s_CmdCount == before + 1);
-		CHECK(s_Cmds[before].Param[0] == 1);
-		CHECK(s_Cmds[before].Param[3] == 100);
+		CHECK(s_CmdCount == before + 2);
+		CHECK(s_Cmds[before].Param[0] == 0);
+		CHECK(s_Cmds[before + 1].OpCode == BT_HCI_CMD_CTLR_SET_EXT_ADV_ENABLE);
+		CHECK(s_Cmds[before + 1].Param[0] == 1);
+		CHECK(s_Cmds[before + 1].Param[3] == 100);
 		CheckStartCommand(false);
 	}
 	BtAdvStop();
@@ -501,7 +505,7 @@ extern "C" void BtSmpLocalAddrGet(uint8_t *pType, uint8_t pAddr[6])
 
 int main()
 {
-	TestTimeoutRestartWithoutDisable();
+	TestTimeoutRestartDisablesBeforeEnable();
 	TestManDataCompanyIdLittleEndian();
 	TestAdvPublicIdentity();
 	TestAdvRandomIdentity();

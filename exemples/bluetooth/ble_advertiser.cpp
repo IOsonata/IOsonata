@@ -195,9 +195,7 @@ void BtAppAdvTimeoutHandler()
 	g_AdvCnt++;
 
 	BtAppAdvManDataSet((uint8_t*)&g_AdvCnt, sizeof(g_AdvCnt), NULL, 0);
-#ifndef NRFXLIB_SDC
 	BtAdvStart();
-#endif
 }
 #endif
 
