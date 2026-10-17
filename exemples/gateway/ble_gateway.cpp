@@ -121,6 +121,7 @@ SOFTWARE.
 #define GATEWAY_TES_TEMPERATURE 0x0201U
 #define GATEWAY_TES_PRESSURE 0x0202U
 #define GATEWAY_TES_HUMIDITY 0x0203U
+#define GATEWAY_MAX_TAGS 4U
 
 static BtGapConnParams_t s_GattConnParams = {
 	.IntervalMin = 30.0f,
@@ -129,28 +130,87 @@ static BtGapConnParams_t s_GattConnParams = {
 	.Timeout = 4000,
 };
 
-static volatile uint16_t s_GattConnHdl = BT_CONN_HDL_INVALID;
-static volatile uint16_t s_GattTempHdl = BT_ATT_HANDLE_INVALID;
-static volatile uint16_t s_GattPressureHdl = BT_ATT_HANDLE_INVALID;
-static volatile uint16_t s_GattHumidityHdl = BT_ATT_HANDLE_INVALID;
-static uint16_t s_GattCccdHdl[3] = {};
-static uint8_t s_GattNotifyStage = 0;
-static bool s_GattConnecting = false;
-static volatile bool s_GattConnectPending = false;
+typedef struct {
+    uint8_t Addr[6];
+    uint8_t AddrType;
+    uint16_t ConnHdl;
+    uint16_t TempHdl;
+    uint16_t PressureHdl;
+    uint16_t HumidityHdl;
+    uint16_t CccdHdl[3];
+    uint8_t NotifyStage;
+    bool Active;
+    bool Connecting;
+    bool Pending;
+    bool TempValid;
+    bool PressureValid;
+    bool HumidityValid;
+    int16_t TempCenti;
+    uint32_t PressurePa;
+    uint8_t HumidityPct;
+} GatewayTag_t;
+
+static GatewayTag_t s_Tags[GATEWAY_MAX_TAGS] = {};
+static GatewayTag_t *s_pInitiating = nullptr;
 static volatile bool s_GattScanRestartPending = false;
-static uint8_t s_GattTargetAddrType = 0;
-static bool s_GattTargetValid = false;
-static uint8_t s_GattTargetAddress[6] = {};
-static bool s_GattTempValid = false;
-static bool s_GattPressureValid = false;
-static bool s_GattHumidityValid = false;
-static int16_t s_GattTempCenti = 0;
-static uint32_t s_GattPressurePa = 0;
-static uint8_t s_GattHumidityPct = 0;
+static BtDevSrvcCache_t s_GattCaches[GATEWAY_MAX_TAGS] = {};
+const BtDevSrvcCacheCfg_t g_BtDevSrvcCacheCfg = {
+    s_GattCaches, GATEWAY_MAX_TAGS
+};
+
+static GatewayTag_t *GatewayFindAddr(const uint8_t Addr[6])
+{
+    for (unsigned i = 0; i < GATEWAY_MAX_TAGS; ++i)
+    {
+        if (s_Tags[i].Active && memcmp(s_Tags[i].Addr, Addr, 6) == 0)
+        {
+            return &s_Tags[i];
+        }
+    }
+    return nullptr;
+}
+
+static GatewayTag_t *GatewayFindHandle(uint16_t ConnHdl)
+{
+    for (unsigned i = 0; i < GATEWAY_MAX_TAGS; ++i)
+    {
+        if (s_Tags[i].Active && s_Tags[i].ConnHdl == ConnHdl)
+        {
+            return &s_Tags[i];
+        }
+    }
+    return nullptr;
+}
+
+static GatewayTag_t *GatewayFindOrCreate(const uint8_t Addr[6], uint8_t AddrType)
+{
+    GatewayTag_t *pTag = GatewayFindAddr(Addr);
+    if (pTag != nullptr)
+    {
+        return pTag;
+    }
+    for (unsigned i = 0; i < GATEWAY_MAX_TAGS; ++i)
+    {
+        if (!s_Tags[i].Active)
+        {
+            pTag = &s_Tags[i];
+            memset(pTag, 0, sizeof(*pTag));
+            memcpy(pTag->Addr, Addr, 6);
+            pTag->AddrType = AddrType;
+            pTag->ConnHdl = BT_CONN_HDL_INVALID;
+            pTag->TempHdl = BT_ATT_HANDLE_INVALID;
+            pTag->PressureHdl = BT_ATT_HANDLE_INVALID;
+            pTag->HumidityHdl = BT_ATT_HANDLE_INVALID;
+            pTag->Active = true;
+            return pTag;
+        }
+    }
+    return nullptr;
+}
 
 static const BtAppCfg_t s_BleAppCfg = {
 	.Role = BTAPP_ROLE_CENTRAL,
-	.PeriphDevMax = 1,
+	.PeriphDevMax = GATEWAY_MAX_TAGS,
 	.CentralDevMax = 0,
 	.pDevName = "IOsonataGateway",
 };
@@ -211,22 +271,15 @@ bool BtAppScanReport(int8_t Rssi, uint8_t AddrType, uint8_t Addr[6],
 		s_SensorValid = true;
 	}
 	EnableInterrupt(irq);
-	// Select the BlueIO TPH advertiser and retain its address for reconnects.
-	if (isTph && !s_GattConnecting &&
-		s_GattConnHdl == BT_CONN_HDL_INVALID)
-	{
-		if (!s_GattTargetValid)
-		{
-			memcpy(s_GattTargetAddress, Addr, 6);
-			s_GattTargetValid = true;
-		}
-		if (memcmp(s_GattTargetAddress, Addr, 6) == 0)
-		{
-			s_GattTargetAddrType = AddrType;
-			s_GattConnectPending = true;
-			return true;
-		}
-	}
+    if (isTph)
+    {
+        GatewayTag_t *pTag = GatewayFindOrCreate(Addr, AddrType);
+        if (pTag != nullptr && pTag->ConnHdl == BT_CONN_HDL_INVALID &&
+            !pTag->Connecting && !pTag->Pending)
+        {
+            pTag->Pending = true;
+        }
+    }
 	return true;
 }
 
@@ -234,157 +287,174 @@ static int GatewayLog(const char *pFormat, ...);
 
 void BtAppEvtConnected(uint16_t ConnHdl)
 {
-	s_GattConnHdl = ConnHdl;
-	s_GattConnecting = false;
-	GatewayLog("GATT connected, handle=%u\r\n", (unsigned)ConnHdl);
-	BtDevice_t *pPeer = BtPeerFindByHdl(ConnHdl);
-	if (pPeer == nullptr || !BtAppDiscoverDevice(pPeer))
-	{
-		GatewayLog("GATT discovery start failed, peer=%s\r\n", pPeer == nullptr ? "missing" : "present");
-		s_GattConnHdl = BT_CONN_HDL_INVALID;
-		BtAppDisconnectConn(ConnHdl);
-	}
+    GatewayTag_t *pTag = s_pInitiating;
+    s_pInitiating = nullptr;
+    if (pTag == nullptr)
+    {
+        BtAppDisconnectConn(ConnHdl);
+        return;
+    }
+    pTag->ConnHdl = ConnHdl;
+    pTag->Connecting = false;
+    GatewayLog("GATT connected, handle=%u\r\n", (unsigned)ConnHdl);
+    BtDevice_t *pPeer = BtPeerFindByHdl(ConnHdl);
+    if (pPeer == nullptr || !BtAppDiscoverDevice(pPeer))
+    {
+        GatewayLog("GATT discovery start failed\r\n");
+        BtAppDisconnectConn(ConnHdl);
+    }
+    s_GattScanRestartPending = true;
 }
 
 void BtAppEvtConnectFailed(void)
 {
-	GatewayLog("GATT connection attempt failed; scan restart pending\r\n");
-	s_GattConnecting = false;
-	s_GattConnectPending = false;
-	s_GattScanRestartPending = true;
+    if (s_pInitiating != nullptr)
+    {
+        s_pInitiating->Connecting = false;
+        s_pInitiating = nullptr;
+    }
+    GatewayLog("GATT connection attempt failed\r\n");
+    s_GattScanRestartPending = true;
 }
 
 void BtAppEvtDisconnected(uint16_t ConnHdl)
 {
-	GatewayLog("GATT disconnected, handle=%u\r\n", (unsigned)ConnHdl);
-	s_GattConnHdl = BT_CONN_HDL_INVALID;
-	s_GattTempHdl = BT_ATT_HANDLE_INVALID;
-	s_GattPressureHdl = BT_ATT_HANDLE_INVALID;
-	s_GattHumidityHdl = BT_ATT_HANDLE_INVALID;
-	s_GattNotifyStage = 0;
-	s_GattTempValid = false;
-	s_GattPressureValid = false;
-	s_GattHumidityValid = false;
-	s_GattConnecting = false;
-	s_GattConnectPending = false;
-	s_GattScanRestartPending = true;
+    GatewayTag_t *pTag = GatewayFindHandle(ConnHdl);
+    GatewayLog("GATT disconnected, handle=%u\r\n", (unsigned)ConnHdl);
+    if (pTag != nullptr)
+    {
+        pTag->ConnHdl = BT_CONN_HDL_INVALID;
+        pTag->TempHdl = BT_ATT_HANDLE_INVALID;
+        pTag->PressureHdl = BT_ATT_HANDLE_INVALID;
+        pTag->HumidityHdl = BT_ATT_HANDLE_INVALID;
+        pTag->NotifyStage = 0;
+        pTag->TempValid = false;
+        pTag->PressureValid = false;
+        pTag->HumidityValid = false;
+        pTag->Connecting = false;
+        pTag->Pending = false;
+    }
+    s_GattScanRestartPending = true;
 }
 
 void BtDeviceDiscovered(BtDevice_t *pDev)
 {
-	if (pDev == nullptr || pDev->Conn.Hdl != s_GattConnHdl)
-	{
-		return;
-	}
-	const int service = BtDeviceFindService(pDev, GATEWAY_TES_SERVICE);
-	if (service < 0)
-	{
-		GatewayLog("GATT environmental service not found\r\n");
-		BtAppDisconnectConn(pDev->Conn.Hdl);
-		return;
-	}
-	const uint16_t uuids[] = {
-		GATEWAY_TES_TEMPERATURE,
-		GATEWAY_TES_PRESSURE,
-		GATEWAY_TES_HUMIDITY,
-	};
-	volatile uint16_t *handles[] = {
-		&s_GattTempHdl,
-		&s_GattPressureHdl,
-		&s_GattHumidityHdl,
-	};
-	for (unsigned i = 0; i < 3; ++i)
-	{
-		const int index = BtDeviceFindCharacteristic(pDev, service, uuids[i]);
-		if (index < 0)
-		{
-			GatewayLog("GATT characteristic 0x%04x not found\r\n", (unsigned)uuids[i]);
-			BtAppDisconnectConn(pDev->Conn.Hdl);
-			return;
-		}
-		const uint16_t cccd = pDev->pServices[service].characteristics[index].cccd_handle;
-		if (cccd == BT_ATT_HANDLE_INVALID)
-		{
-			GatewayLog("GATT CCCD missing for 0x%04x\r\n", (unsigned)uuids[i]);
-			BtAppDisconnectConn(pDev->Conn.Hdl);
-			return;
-		}
-		s_GattCccdHdl[i] = cccd;
-		*handles[i] = pDev->pServices[service].characteristics[index].characteristic.handle_value;
-	}
-	s_GattNotifyStage = 0;
-	if (!BtAppEnableNotify(pDev->Conn.Hdl, s_GattCccdHdl[0]))
-	{
-		GatewayLog("GATT temperature subscription request failed\r\n");
-		BtAppDisconnectConn(pDev->Conn.Hdl);
-	}
+    if (pDev == nullptr)
+    {
+        return;
+    }
+    GatewayTag_t *pTag = GatewayFindHandle(pDev->Conn.Hdl);
+    if (pTag == nullptr)
+    {
+        return;
+    }
+    const int service = BtDeviceFindService(pDev, GATEWAY_TES_SERVICE);
+    if (service < 0)
+    {
+        GatewayLog("GATT environmental service not found\r\n");
+        BtAppDisconnectConn(pDev->Conn.Hdl);
+        return;
+    }
+    const uint16_t uuids[] = {
+        GATEWAY_TES_TEMPERATURE,
+        GATEWAY_TES_PRESSURE,
+        GATEWAY_TES_HUMIDITY,
+    };
+    uint16_t *handles[] = {
+        &pTag->TempHdl,
+        &pTag->PressureHdl,
+        &pTag->HumidityHdl,
+    };
+    for (unsigned i = 0; i < 3U; ++i)
+    {
+        const int index = BtDeviceFindCharacteristic(pDev, service, uuids[i]);
+        if (index < 0)
+        {
+            GatewayLog("GATT characteristic 0x%04x missing\r\n", (unsigned)uuids[i]);
+            BtAppDisconnectConn(pDev->Conn.Hdl);
+            return;
+        }
+        const uint16_t cccd = pDev->pServices[service].characteristics[index].cccd_handle;
+        if (cccd == BT_ATT_HANDLE_INVALID)
+        {
+            GatewayLog("GATT CCCD missing for 0x%04x\r\n", (unsigned)uuids[i]);
+            BtAppDisconnectConn(pDev->Conn.Hdl);
+            return;
+        }
+        pTag->CccdHdl[i] = cccd;
+        *handles[i] = pDev->pServices[service].characteristics[index].characteristic.handle_value;
+    }
+    pTag->NotifyStage = 0;
+    if (!BtAppEnableNotify(pDev->Conn.Hdl, pTag->CccdHdl[0]))
+    {
+        GatewayLog("GATT temperature subscription failed\r\n");
+        BtAppDisconnectConn(pDev->Conn.Hdl);
+    }
 }
 
 void BtAppEvtWriteCompleted(uint16_t ConnHdl, bool Success)
 {
-	if (ConnHdl != s_GattConnHdl || s_GattNotifyStage >= 3U)
-	{
-		return;
-	}
-	if (!Success)
-	{
-		GatewayLog("GATT subscription rejected at stage %u\r\n",
-					(unsigned)s_GattNotifyStage);
-		BtAppDisconnectConn(ConnHdl);
-		return;
-	}
-	++s_GattNotifyStage;
-	if (s_GattNotifyStage == 3U)
-	{
-		GatewayLog("GATT environmental notifications enabled\r\n");
-	}
-	if (s_GattNotifyStage < 3U &&
-		!BtAppEnableNotify(ConnHdl, s_GattCccdHdl[s_GattNotifyStage]))
-	{
-		GatewayLog("GATT subscription request failed at stage %u\r\n",
-					(unsigned)s_GattNotifyStage);
-		BtAppDisconnectConn(ConnHdl);
-	}
+    GatewayTag_t *pTag = GatewayFindHandle(ConnHdl);
+    if (pTag == nullptr || pTag->NotifyStage >= 3U)
+    {
+        return;
+    }
+    if (!Success)
+    {
+        GatewayLog("GATT subscription rejected at stage %u\r\n",
+                   (unsigned)pTag->NotifyStage);
+        BtAppDisconnectConn(ConnHdl);
+        return;
+    }
+    ++pTag->NotifyStage;
+    if (pTag->NotifyStage == 3U)
+    {
+        GatewayLog("GATT environmental notifications enabled, handle=%u\r\n",
+                   (unsigned)ConnHdl);
+    }
+    else if (!BtAppEnableNotify(ConnHdl, pTag->CccdHdl[pTag->NotifyStage]))
+    {
+        GatewayLog("GATT subscription failed at stage %u\r\n",
+                   (unsigned)pTag->NotifyStage);
+        BtAppDisconnectConn(ConnHdl);
+    }
 }
 
-// The BlueIOThingy characteristic wire format is defined in BlueIOTes.cpp:
-// temperature: signed integer byte + decimal hundredths byte;
-// pressure: little-endian signed 32-bit hPa + decimal hundredths;
-// humidity: unsigned percentage byte.
 void BtGattClientNotified(uint16_t ConnHdl, uint16_t ValHdl,
-						  uint8_t *pData, uint16_t Len)
+                          uint8_t *pData, uint16_t Len)
 {
-	if (ConnHdl != s_GattConnHdl || pData == nullptr)
-	{
-		return;
-	}
-	if (ValHdl == s_GattTempHdl && Len == 2)
-	{
-		const int8_t integer = (int8_t)pData[0];
-		const uint8_t decimal = pData[1];
-		if (decimal < 100)
-		{
-			s_GattTempCenti = (int16_t)(integer * 100 +
-				(integer < 0 ? -(int16_t)decimal : (int16_t)decimal));
-			s_GattTempValid = true;
-		}
-	}
-	else if (ValHdl == s_GattPressureHdl && Len == 5)
-	{
-		const int32_t integer = (int32_t)((uint32_t)pData[0] |
-			((uint32_t)pData[1] << 8) | ((uint32_t)pData[2] << 16) |
-			((uint32_t)pData[3] << 24));
-		if (integer >= 0 && pData[4] < 100)
-		{
-			s_GattPressurePa = (uint32_t)integer * 100U + pData[4];
-			s_GattPressureValid = true;
-		}
-	}
-	else if (ValHdl == s_GattHumidityHdl && Len == 1 && pData[0] <= 100)
-	{
-		s_GattHumidityPct = pData[0];
-		s_GattHumidityValid = true;
-	}
+    GatewayTag_t *pTag = GatewayFindHandle(ConnHdl);
+    if (pTag == nullptr || pData == nullptr)
+    {
+        return;
+    }
+    if (ValHdl == pTag->TempHdl && Len == 2)
+    {
+        const int8_t integer = (int8_t)pData[0];
+        const uint8_t decimal = pData[1];
+        if (decimal < 100)
+        {
+            pTag->TempCenti = (int16_t)(integer * 100 +
+                (integer < 0 ? -(int16_t)decimal : (int16_t)decimal));
+            pTag->TempValid = true;
+        }
+    }
+    else if (ValHdl == pTag->PressureHdl && Len == 5)
+    {
+        const int32_t integer = (int32_t)((uint32_t)pData[0] |
+            ((uint32_t)pData[1] << 8) | ((uint32_t)pData[2] << 16) |
+            ((uint32_t)pData[3] << 24));
+        if (integer >= 0 && pData[4] < 100)
+        {
+            pTag->PressurePa = (uint32_t)integer * 100U + pData[4];
+            pTag->PressureValid = true;
+        }
+    }
+    else if (ValHdl == pTag->HumidityHdl && Len == 1 && pData[0] <= 100)
+    {
+        pTag->HumidityPct = pData[0];
+        pTag->HumidityValid = true;
+    }
 }
 
 // Application event queue: LTE work, received data and the send timer
@@ -584,12 +654,6 @@ static void LteUdpSend(uint32_t Evt, void *pCtx)
     bool valid = false;
     bool sensorValid = false;
     uint8_t sensorType = 0U;
-	bool gattTempValid = false;
-	bool gattPressureValid = false;
-	bool gattHumidityValid = false;
-	int16_t gattTemperature = 0;
-	uint32_t gattPressure = 0;
-	uint8_t gattHumidity = 0;
     uint8_t tph[8] = {};
     uint8_t sensorAddress[6] = {};
     const uint32_t irq = DisableInterrupt();
@@ -602,12 +666,6 @@ static void LteUdpSend(uint32_t Evt, void *pCtx)
     reports = s_ScanReports;
     sensorValid = s_SensorValid;
     sensorType = s_SensorType;
-	gattTempValid = s_GattTempValid;
-	gattPressureValid = s_GattPressureValid;
-	gattHumidityValid = s_GattHumidityValid;
-	gattTemperature = s_GattTempCenti;
-	gattPressure = s_GattPressurePa;
-	gattHumidity = s_GattHumidityPct;
     for (unsigned i = 0; i < sizeof(sensorAddress); ++i)
     {
         sensorAddress[i] = s_SensorAddress[i];
@@ -667,14 +725,21 @@ static void LteUdpSend(uint32_t Evt, void *pCtx)
         }
         len += extra;
     }
-    if (len > 0 && len < (int)sizeof(msg) &&
-        (gattTempValid || gattPressureValid || gattHumidityValid))
+    for (unsigned i = 0; i < GATEWAY_MAX_TAGS && len > 0; ++i)
     {
+        const GatewayTag_t *pTag = &s_Tags[i];
+        if (!pTag->Active || pTag->ConnHdl == BT_CONN_HDL_INVALID ||
+            (!pTag->TempValid && !pTag->PressureValid && !pTag->HumidityValid))
+        {
+            continue;
+        }
         const int extra = snprintf(msg + len, sizeof(msg) - (size_t)len,
-            " gatt_tc=%d gatt_pa=%lu gatt_h=%u",
-            gattTempValid ? (int)gattTemperature : 0,
-            gattPressureValid ? (unsigned long)gattPressure : 0UL,
-            gattHumidityValid ? (unsigned)gattHumidity : 0U);
+            " g%u=%02x:%02x:%02x:%02x:%02x:%02x,%d,%lu,%u",
+            i, pTag->Addr[5], pTag->Addr[4], pTag->Addr[3],
+            pTag->Addr[2], pTag->Addr[1], pTag->Addr[0],
+            pTag->TempValid ? (int)pTag->TempCenti : 0,
+            pTag->PressureValid ? (unsigned long)pTag->PressurePa : 0UL,
+            pTag->HumidityValid ? (unsigned)pTag->HumidityPct : 0U);
         if (extra < 0 || extra >= (int)(sizeof(msg) - (size_t)len))
         {
             return;
@@ -773,23 +838,32 @@ bool AppCheckStatus(void)
 		BtAppScan();
 	}
 
-	if (s_GattConnectPending && !s_GattConnecting &&
-		s_GattConnHdl == BT_CONN_HDL_INVALID)
-	{
-		s_GattConnectPending = false;
-		s_GattConnecting = true;
-
-		BtGapPeerAddr_t peer = {};
-		peer.Type = s_GattTargetAddrType;
-		memcpy(peer.Addr, s_GattTargetAddress, sizeof(peer.Addr));
-		BtGapScanStop();
-
-		if (!BtGapConnect(&peer, &s_GattConnParams))
-		{
-			s_GattConnecting = false;
-			s_GattScanRestartPending = true;
-		}
-	}
+    if (s_pInitiating == nullptr)
+    {
+        for (unsigned i = 0; i < GATEWAY_MAX_TAGS; ++i)
+        {
+            GatewayTag_t *pTag = &s_Tags[i];
+            if (!pTag->Active || !pTag->Pending ||
+                pTag->ConnHdl != BT_CONN_HDL_INVALID)
+            {
+                continue;
+            }
+            pTag->Pending = false;
+            pTag->Connecting = true;
+            s_pInitiating = pTag;
+            BtGapPeerAddr_t peer = {};
+            peer.Type = pTag->AddrType;
+            memcpy(peer.Addr, pTag->Addr, sizeof(peer.Addr));
+            BtGapScanStop();
+            if (!BtGapConnect(&peer, &s_GattConnParams))
+            {
+                pTag->Connecting = false;
+                s_pInitiating = nullptr;
+                s_GattScanRestartPending = true;
+            }
+            break;
+        }
+    }
 
     BtAppCheckStatus();
     LteCheckStatus();
