@@ -81,11 +81,34 @@ static void Jumper(const char *pName, int OutPort, int OutPin, int InPort, int I
 	printf("%s: out high -> in %d, out low -> in %d (expect 1 then 0)\r\n", pName, high, low);
 }
 
+static void DumpGpdma(void)
+{
+	DMA_Channel_TypeDef * const ch[8] = {
+		GPDMA1_Channel0, GPDMA1_Channel1, GPDMA1_Channel2, GPDMA1_Channel3,
+		GPDMA1_Channel4, GPDMA1_Channel5, GPDMA1_Channel6, GPDMA1_Channel7,
+	};
+
+	for (int i = 0; i < 8; ++i)
+	{
+		if (ch[i]->CCR == 0U && ch[i]->CSR == 0U)
+			continue;
+		printf("GPDMA%d: CCR=%08lx CSR=%08lx CBR1=%08lx CTR2=%08lx NVIC en=%lu pend=%lu\r\n", i,
+			(unsigned long)ch[i]->CCR, (unsigned long)ch[i]->CSR,
+			(unsigned long)ch[i]->CBR1, (unsigned long)ch[i]->CTR2,
+			(unsigned long)NVIC_GetEnableIRQ((IRQn_Type)(GPDMA1_Channel0_IRQn + i)),
+			(unsigned long)NVIC_GetPendingIRQ((IRQn_Type)(GPDMA1_Channel0_IRQn + i)));
+	}
+	printf("I2C1 NVIC ev en=%lu pend=%lu, I2C2 ev en=%lu pend=%lu\r\n",
+		(unsigned long)NVIC_GetEnableIRQ(I2C1_EV_IRQn), (unsigned long)NVIC_GetPendingIRQ(I2C1_EV_IRQn),
+		(unsigned long)NVIC_GetEnableIRQ(I2C2_EV_IRQn), (unsigned long)NVIC_GetPendingIRQ(I2C2_EV_IRQn));
+}
+
 void I2cMasterSlaveDiagnostics(const char *pWhen)
 {
 	printf("Diagnostics %s\r\n", pWhen);
 	DumpUnit("I2C1", I2C1);
 	DumpUnit("I2C2", I2C2);
+	DumpGpdma();
 	DumpPin("master SDA", I2C_MASTER_SDA_PORT, I2C_MASTER_SDA_PIN);
 	DumpPin("master SCL", I2C_MASTER_SCL_PORT, I2C_MASTER_SCL_PIN);
 	DumpPin("slave  SDA", I2C_SLAVE_SDA_PORT, I2C_SLAVE_SDA_PIN);

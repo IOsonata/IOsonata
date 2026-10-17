@@ -604,7 +604,7 @@ static void Stm32I2cDmaIrq(int Ch, void *pCtx)
 {
 	Stm32I2cDev_t *dev = (Stm32I2cDev_t *)pCtx;
 
-	(void)Ch;
+	WbaGpdmaAck(Ch);
 	Stm32I2cService(dev);
 }
 

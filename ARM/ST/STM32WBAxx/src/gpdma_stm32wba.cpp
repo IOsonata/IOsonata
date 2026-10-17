@@ -55,6 +55,8 @@ typedef struct {
 } WbaGpdmaSlot_t;
 
 static WbaGpdmaSlot_t s_WbaGpdma[WBA_GPDMA_NBCH];
+static uint32_t s_WbaGpdmaIe[WBA_GPDMA_NBCH];		// interrupt enables of the channel
+static uint32_t s_WbaGpdmaLatch[WBA_GPDMA_NBCH];	// flags taken by WbaGpdmaAck
 
 static DMA_Channel_TypeDef * const s_WbaGpdmaCh[WBA_GPDMA_NBCH] = {
 	GPDMA1_Channel0, GPDMA1_Channel1, GPDMA1_Channel2, GPDMA1_Channel3,
@@ -173,7 +175,8 @@ void WbaGpdmaSetup(int Ch, uint32_t Req, bool bToPeriph, volatile void *pPeriph,
 	{
 		ch->CSAR = (uint32_t)(uintptr_t)pPeriph;
 	}
-	ch->CCR = bIrq ? (DMA_CCR_TCIE | DMA_CCR_DTEIE | DMA_CCR_ULEIE | DMA_CCR_USEIE) : 0U;
+	s_WbaGpdmaIe[Ch] = bIrq ? (DMA_CCR_TCIE | DMA_CCR_DTEIE | DMA_CCR_ULEIE | DMA_CCR_USEIE) : 0U;
+	ch->CCR = s_WbaGpdmaIe[Ch];
 }
 
 void WbaGpdmaMemInc(int Ch, bool bInc)
@@ -206,7 +209,10 @@ void WbaGpdmaStart(int Ch, const void *pMem, uint32_t Count)
 		ch->CDAR = (uint32_t)(uintptr_t)pMem;
 	}
 	ch->CBR1 = Count;
-	ch->CCR |= DMA_CCR_EN;
+	s_WbaGpdmaLatch[Ch] = 0U;
+	// The interrupt enables are written again: the reset at the end of the
+	// previous transfer may have cleared them
+	ch->CCR |= s_WbaGpdmaIe[Ch] | DMA_CCR_EN;
 }
 
 void WbaGpdmaStop(int Ch)
@@ -229,18 +235,31 @@ uint32_t WbaGpdmaRemain(int Ch)
 	return s_WbaGpdmaCh[Ch]->CBR1 & DMA_CBR1_BNDT;
 }
 
+static uint32_t WbaGpdmaFlagsOf(uint32_t Csr)
+{
+	return ((Csr & DMA_CSR_TCF) ? WBA_GPDMA_FLAG_TC : 0U) |
+		   ((Csr & (DMA_CSR_DTEF | DMA_CSR_ULEF | DMA_CSR_USEF)) ? WBA_GPDMA_FLAG_ERR : 0U);
+}
+
 uint32_t WbaGpdmaFlags(int Ch)
 {
-	uint32_t csr = s_WbaGpdmaCh[Ch]->CSR;
-
-	return ((csr & DMA_CSR_TCF) ? WBA_GPDMA_FLAG_TC : 0U) |
-		   ((csr & (DMA_CSR_DTEF | DMA_CSR_ULEF | DMA_CSR_USEF)) ? WBA_GPDMA_FLAG_ERR : 0U);
+	return WbaGpdmaFlagsOf(s_WbaGpdmaCh[Ch]->CSR) | s_WbaGpdmaLatch[Ch];
 }
 
 void WbaGpdmaClear(int Ch)
 {
+	s_WbaGpdmaLatch[Ch] = 0U;
 	s_WbaGpdmaCh[Ch]->CFCR = DMA_CFCR_TCF | DMA_CFCR_HTF | DMA_CFCR_DTEF | DMA_CFCR_ULEF | DMA_CFCR_USEF |
 							 DMA_CFCR_SUSPF | DMA_CFCR_TOF;
+}
+
+void WbaGpdmaAck(int Ch)
+{
+	const uint32_t flags = WbaGpdmaFlagsOf(s_WbaGpdmaCh[Ch]->CSR);
+
+	s_WbaGpdmaCh[Ch]->CFCR = DMA_CFCR_TCF | DMA_CFCR_HTF | DMA_CFCR_DTEF | DMA_CFCR_ULEF | DMA_CFCR_USEF |
+							 DMA_CFCR_SUSPF | DMA_CFCR_TOF;
+	s_WbaGpdmaLatch[Ch] |= flags;
 }
 
 static void WbaGpdmaIrq(int Ch)

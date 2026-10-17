@@ -313,7 +313,7 @@ static void Stm32SpiDmaGive(Stm32SpiDev_t * const pDev)
 
 static void Stm32SpiDmaIrq(int Ch, void *pCtx)
 {
-	(void)Ch;
+	WbaGpdmaAck(Ch);
 	Stm32SpiService((Stm32SpiDev_t *)pCtx);
 }
 

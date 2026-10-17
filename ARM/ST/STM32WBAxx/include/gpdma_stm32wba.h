@@ -150,9 +150,18 @@ void WbaGpdmaStop(int Ch);
 uint32_t WbaGpdmaRemain(int Ch);
 
 /**
- * @brief	Channel flags WBA_GPDMA_FLAG_xxx.
+ * @brief	Channel flags WBA_GPDMA_FLAG_xxx, those seen by the hardware and
+ * 			those taken by WbaGpdmaAck() since the transfer started.
  */
 uint32_t WbaGpdmaFlags(int Ch);
+
+/**
+ * @brief	Take the channel flags into the latch and clear them in the
+ * 			hardware. A handler that does not clear the flags itself calls
+ * 			this first, so that the channel interrupt does not fire again.
+ * 			WbaGpdmaFlags() keeps reporting what was taken.
+ */
+void WbaGpdmaAck(int Ch);
 
 /**
  * @brief	Clear the channel flags.
