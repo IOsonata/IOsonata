@@ -968,14 +968,15 @@ static void Stm32I2cSlaveEvent(Stm32I2cDev_t * const pDev, DEVINTRF_EVT Evt, int
 	}
 }
 
-// The byte loaded in TXDR while the master ends the read with a NACK was never
-// sent. It is counted out so that the count is the number of bytes on the bus.
+// The slave is asked for the next byte as soon as the previous one is in the
+// shift register, so a read that the master ends with a NACK always has one
+// byte loaded that was never sent. It is counted out so that the count is the
+// number of bytes on the bus. A load of filler is not in the count.
 static int Stm32I2cSlaveSent(Stm32I2cDev_t * const pDev)
 {
 	int count = pDev->SCount;
 
-	if (pDev->SState == STM32_I2C_S_READ && pDev->bTxData && count > 0 &&
-		(pDev->pReg->ISR & I2C_ISR_TXE) == 0U)
+	if (pDev->SState == STM32_I2C_S_READ && pDev->bTxData && count > 0)
 	{
 		count--;
 	}
