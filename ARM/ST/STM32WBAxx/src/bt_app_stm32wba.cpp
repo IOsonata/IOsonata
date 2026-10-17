@@ -136,7 +136,6 @@ extern UART g_Uart;
 extern "C" bool BtAppAdvInit(const BtAppCfg_t *pCfg);
 extern "C" bool BtDisInit(const struct __Bt_App_Cfg *pCfg);
 void BtAdvWbaConnected(void);
-void BtAdvWbaTerminated(uint8_t Status, uint8_t Handle);
 
 // User hooks - weak symbols overridden by the app.
 __attribute__((weak)) void BtAppInitUserServices(void) {}
@@ -937,7 +936,17 @@ static BtWbaEvtFlow_t BtAppHciEvtHandler(void *pPayload)
 							hci_le_advertising_set_terminated_event_rp0))
 					{
 						auto *p = (hci_le_advertising_set_terminated_event_rp0 *)pMeta->data;
-						BtAdvWbaTerminated(p->Status, p->Advertising_Handle);
+						if (p->Advertising_Handle == g_BtAppData.AdvHdl &&
+							p->Status != BLE_STATUS_SUCCESS)
+						{
+							// Clear advertising state before the application can restart it.
+							BtAdvWbaConnected();
+							if (p->Status == HCI_ADVERTISING_TIMEOUT_ERR_CODE ||
+								p->Status == HCI_ADVERTISING_LIMIT_REACHED_ERR_CODE)
+							{
+								BtAppAdvTimeoutHandler();
+							}
+						}
 					}
 					break;
 

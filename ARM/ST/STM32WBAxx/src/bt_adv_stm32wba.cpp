@@ -250,25 +250,6 @@ void BtAdvStop(void)
 	BtAdvStateUpdate();
 }
 
-// A successful termination belongs to the connection-complete path, which
-// may already have restarted advertising for another peer. Do not clear it.
-void BtAdvWbaTerminated(uint8_t Status, uint8_t Handle)
-{
-	if (Handle != BT_WBA_ADV_HANDLE || Status == BLE_STATUS_SUCCESS)
-	{
-		return;
-	}
-
-	s_bAdvertising = false;
-	BtAdvStateUpdate();
-	if (Status == HCI_ADVERTISING_TIMEOUT_ERR_CODE ||
-		Status == HCI_ADVERTISING_LIMIT_REACHED_ERR_CODE)
-	{
-		// Advertising Timeout or Limit Reached.
-		BtAppAdvTimeoutHandler();
-	}
-}
-
 // Push the encoded packet pair using the same command family for both PDUs.
 static bool PushAdvDataToStack(const BtAppCfg_t *pCfg,
 							   BtAdvPacket_t *pAdv, BtAdvPacket_t *pSr)
