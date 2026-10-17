@@ -232,9 +232,9 @@ SOFTWARE.
 // I2C1 (DevNo 0) on the Arduino D14 SDA PB1 and D15 SCL PB2, AF4
 #define BOARD_I2C_DEVNO		0
 #define BOARD_I2C_PINS		STM32_BOARD_I2C(IOPORTB, 1, IOPINOP_FUNC4, IOPORTB, 2, IOPINOP_FUNC4)
-// SPI2 (DevNo 1), AF5 from the ST pin data: SCK PB10, MISO PA9, MOSI PC3.
-// The chip select is a GPIO driven by the driver, PB9. The ST board support
-// package does not use these pins.
+// SPI2 (DevNo 1), AF5 from the ST pin data, on the Arduino pins of UM3462
+// table 8: SCK PB10 (D13), MISO PA9 (D12), MOSI PC3 (D11). The chip select is a
+// GPIO driven by the driver, PB9 (D10).
 #define BOARD_SPI_DEVNO		1
 #define BOARD_SPI_SCK_PORT	IOPORTB
 #define BOARD_SPI_SCK_PIN	10

@@ -3,11 +3,12 @@
 
 @brief	Board definitions of the STM32WBA65 SPI master and slave example
 
-		The slave is SPI2, AF5: SCK PB10, MISO PA9, MOSI PC3, NSS PB9.
-		The master is the software SPI on four other pins that the ST board
-		support package does not use: SCK PB13, MOSI PB0, MISO PA4, chip select
-		PA10. Wire PB13 to PB10, PB0 to PC3, PA4 to PA9 and PA10 to PB9.
-		The result is printed on the first ST-LINK virtual COM port, USART1.
+		The slave is SPI2, AF5, on the Arduino pins of UM3462 table 8: SCK PB10
+		(D13), MISO PA9 (D12), MOSI PC3 (D11), NSS PB9 (D10). The master is the
+		software SPI: SCK PB11 (D9), MOSI PB0 (D6, also drives LED3), MISO PC13
+		(D4), chip select PA10 (D8). Wire D9 to D13, D6 to D11, D12 to D4 and
+		D8 to D10. The result is printed on the first ST-LINK virtual COM port,
+		USART1.
 
 		Not tested on hardware.
 
@@ -48,7 +49,7 @@ SOFTWARE.
 
 #include "stm32_boards.h"
 
-#define SPI_LOOPBACK_WIRING			"Wire PB13-PB10 SCK, PB0-PC3 MOSI, PA4-PA9 MISO, PA10-PB9 CS"
+#define SPI_LOOPBACK_WIRING			"Wire D9-D13 SCK, D6-D11 MOSI, D12-D4 MISO, D8-D10 CS"
 
 // First ST-LINK virtual COM port, USART1, RX PA8 and TX PB12, AF7
 #define UART_DEVNO					1
@@ -69,10 +70,10 @@ SOFTWARE.
 #define SPI_MASTER_SOFTWARE			true
 #define SPI_MASTER_DEVNO			0
 #define SPI_MASTER_SCK_PORT			IOPORTB
-#define SPI_MASTER_SCK_PIN			13
+#define SPI_MASTER_SCK_PIN			11
 #define SPI_MASTER_SCK_PINOP		IOPINOP_GPIO
-#define SPI_MASTER_MISO_PORT		IOPORTA
-#define SPI_MASTER_MISO_PIN			4
+#define SPI_MASTER_MISO_PORT		IOPORTC
+#define SPI_MASTER_MISO_PIN			13
 #define SPI_MASTER_MISO_PINOP		IOPINOP_GPIO
 #define SPI_MASTER_MOSI_PORT		IOPORTB
 #define SPI_MASTER_MOSI_PIN			0

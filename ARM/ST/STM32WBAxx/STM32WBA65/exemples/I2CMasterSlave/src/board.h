@@ -3,13 +3,13 @@
 
 @brief	Board definitions of the STM32WBA65 I2C master and slave example
 
-		Two I2C controllers of the same chip, AF4. Master I2C1 on PB1 (SDA) and
-		PB2 (SCL), the pins of the ST board support package. Slave I2C2 on PB14
-		(SDA) and PB13 (SCL), which the board support package does not use.
-		Wire PB1 to PB14 and PB2 to PB13. The pins use the internal pull-ups,
-		which is enough for 100 kHz on short wires. Add 4.7k pull-ups to 3.3V for
-		longer ones. The result is printed on the first ST-LINK virtual COM
-		port, USART1.
+		Two I2C controllers of the same chip, AF4. Master I2C1 on PB1 (SDA, D14)
+		and PB2 (SCL, D15). Slave I2C2 on PB11 (SDA, D9) and PB10 (SCL, D13).
+		Wire D14 to D9 and D15 to D13 (UM3462 table 8). D13 also drives LED3
+		through R42: use 4.7k external pull-ups to 3.3V, or remove R42. PB13
+		and PB14 (D3, D5) are not usable: solder bridges SB24 and SB22 tie them
+		to the audio codec signals. The result is printed on the first ST-LINK
+		virtual COM port, USART1.
 
 		Not tested on hardware.
 
@@ -75,10 +75,10 @@ SOFTWARE.
 
 #define I2C_SLAVE_DEVNO				1
 #define I2C_SLAVE_SDA_PORT			IOPORTB
-#define I2C_SLAVE_SDA_PIN			14
+#define I2C_SLAVE_SDA_PIN			11
 #define I2C_SLAVE_SDA_PINOP			IOPINOP_FUNC4
 #define I2C_SLAVE_SCL_PORT			IOPORTB
-#define I2C_SLAVE_SCL_PIN			13
+#define I2C_SLAVE_SCL_PIN			10
 #define I2C_SLAVE_SCL_PINOP			IOPINOP_FUNC4
 
 // Start with the polling master and the interrupt slave. Set the master

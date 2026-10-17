@@ -3,9 +3,9 @@
 
 @brief	Board definitions of the STM32WBA65 SPI loopback example
 
-		SPI2 master of the STM32WBA65I-DK1, from stm32_boards.h: SCK PB10,
-		MISO PA9, MOSI PC3, AF5, chip select PB9 driven as a GPIO.
-		Connect MOSI (PC3) to MISO (PA9) with a jumper.
+		SPI2 master of the STM32WBA65I-DK1, from stm32_boards.h: SCK PB10
+		(D13), MISO PA9 (D12), MOSI PC3 (D11), AF5, chip select PB9 (D10)
+		driven as a GPIO. Connect D11 (MOSI) to D12 (MISO) with a jumper.
 		The result is printed on the first ST-LINK virtual COM port, USART1.
 
 		Not tested on hardware.
@@ -47,7 +47,7 @@ SOFTWARE.
 
 #include "stm32_boards.h"
 
-#define SPI_LOOPBACK_WIRING	"Jumper PC3 (MOSI) <-> PA9 (MISO)"
+#define SPI_LOOPBACK_WIRING	"Jumper D11 (PC3 MOSI) <-> D12 (PA9 MISO)"
 
 // Polling master: the driver has no interrupt or DMA mode
 #define SPI_MASTER_DMA_ENABLE		false
