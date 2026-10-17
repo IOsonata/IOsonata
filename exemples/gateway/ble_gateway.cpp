@@ -137,6 +137,7 @@ static uint16_t s_GattCccdHdl[3] = {};
 static uint8_t s_GattNotifyStage = 0;
 static bool s_GattConnecting = false;
 static volatile bool s_GattConnectPending = false;
+static volatile bool s_GattScanRestartPending = false;
 static uint8_t s_GattTargetAddrType = 0;
 static bool s_GattTargetValid = false;
 static uint8_t s_GattTargetAddress[6] = {};
@@ -247,10 +248,10 @@ void BtAppEvtConnected(uint16_t ConnHdl)
 
 void BtAppEvtConnectFailed(void)
 {
-	GatewayLog("GATT connection attempt failed; restarting scan\r\n");
+	GatewayLog("GATT connection attempt failed; scan restart pending\r\n");
 	s_GattConnecting = false;
 	s_GattConnectPending = false;
-	BtAppScan();
+	s_GattScanRestartPending = true;
 }
 
 void BtAppEvtDisconnected(uint16_t ConnHdl)
@@ -767,6 +768,12 @@ bool AppCheckStatus(void)
 
 	// An HCI scan report only selects the peer. Execute synchronous HCI
 	// commands after the report callback returns to the application loop.
+	if (s_GattScanRestartPending)
+	{
+		s_GattScanRestartPending = false;
+		BtAppScan();
+	}
+
 	if (s_GattConnectPending && !s_GattConnecting &&
 		s_GattConnHdl == BT_CONN_HDL_INVALID)
 	{
