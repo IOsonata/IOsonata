@@ -445,7 +445,16 @@ void BtAdvStart()
 		return;
 	}
 
-	int res = BtAppAdvEnable();
+	// Retire the previous controller enable before starting a new duration.
+	// The pre-encapsulation timeout/data-update path also disabled first.
+	int res = BtAppAdvDisable();
+	ADV_TRACE("ADV restart disable result=%d\r\n", res);
+	if (res != BT_HCI_SUCCESS)
+	{
+		return;
+	}
+
+	res = BtAppAdvEnable();
 	ADV_TRACE("ADV start result=%d\r\n", res);
 	if (res == 0)
 	{
