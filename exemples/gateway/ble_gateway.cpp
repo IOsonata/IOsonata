@@ -923,7 +923,7 @@ bool AppCheckStatus(void)
             if (BtGapConnectCancel())
             {
                 s_ConnectCancelPending = true;
-                GatewayLog("GATT initiation timed out; cancel requested\\r\\n");
+                GatewayLog("GATT initiation timed out; cancel requested\r\n");
             }
         }
     }
