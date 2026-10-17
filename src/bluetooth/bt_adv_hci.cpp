@@ -34,6 +34,15 @@ Copyright (c) 2022, I-SYST inc., all rights reserved
 #include "bluetooth/bt_smp.h"
 #include "bluetooth/bt_appearance.h"
 
+#include "syslog.h"
+
+// Temporary advertising restart diagnostics for Debug builds.
+#if defined(DEBUG) && !defined(NDEBUG)
+#define ADV_TRACE(...) SysLogPrintf(SysLogGet(), __VA_ARGS__)
+#else
+#define ADV_TRACE(...)
+#endif
+
 static bool s_bAdvertising;
 static bool s_bAdvConfigured;
 static bool s_bExtAdv;
@@ -42,6 +51,7 @@ static uint16_t s_AdvVendorId;
 // The controller stopped set 0. Called before its connection/timeout callback.
 void BtAdvHciStopped(void)
 {
+	ADV_TRACE("ADV stopped: active=%u\r\n", (unsigned)s_bAdvertising);
 	s_bAdvertising = false;
 }
 
@@ -278,6 +288,8 @@ bool BtAdvCodingSelectionEnable(bool bEnable)
 
 bool BtAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int SrLen)
 {
+	ADV_TRACE("ADV data: active=%u configured=%u adv=%d scan=%d\r\n",
+			  (unsigned)s_bAdvertising, (unsigned)s_bAdvConfigured, AdvLen, SrLen);
 	if (!s_bAdvConfigured)
 	{
 		return false;
@@ -320,7 +332,10 @@ bool BtAppAdvManDataSet(uint8_t *pAdvData, int AdvLen, uint8_t *pSrData, int SrL
 		s_BtDevExtAdvData.FragPref  = 1;
 		s_BtDevExtAdvData.DataLen   = advpkt->Len;
 
-		if (BtHciCommand(pDev, BT_HCI_CMD_CTLR_SET_EXT_ADV_DATA, &s_BtDevExtAdvData, BTADV_HCI_DATA_HDR_LEN + advpkt->Len, NULL, 0) != 0)
+		int res = BtHciCommand(pDev, BT_HCI_CMD_CTLR_SET_EXT_ADV_DATA, &s_BtDevExtAdvData,
+							   BTADV_HCI_DATA_HDR_LEN + advpkt->Len, NULL, 0);
+		ADV_TRACE("ADV data response: status=0x%02x\r\n", (unsigned)res);
+		if (res != 0)
 		{
 			return false;
 		}
@@ -391,7 +406,12 @@ static int BtAppAdvEnable(void)
 	BtAdvWr16(x.Duration, s_BtDevAdvDuration);
 	x.MaxExtAdvEvts = 0;
 
-	return BtHciCommand(pDev, BT_HCI_CMD_CTLR_SET_EXT_ADV_ENABLE, &x, sizeof(x), NULL, 0);
+	ADV_TRACE("ADV enable command: enable=%u duration=%u\r\n",
+			  (unsigned)x.Enable, (unsigned)(x.Duration[0] | (x.Duration[1] << 8)));
+	int res = BtHciCommand(pDev, BT_HCI_CMD_CTLR_SET_EXT_ADV_ENABLE, &x, sizeof(x), NULL, 0);
+	ADV_TRACE("ADV enable response: enable=%u status=0x%02x\r\n",
+			  (unsigned)x.Enable, (unsigned)res);
+	return res;
 }
 
 // Disable advertising for adv set 0 (controller command only, does not change
@@ -411,17 +431,22 @@ static int BtAppAdvDisable(void)
 	BtAdvWr16(x.Duration, 0);
 	x.MaxExtAdvEvts = 0;
 
-	return BtHciCommand(pDev, BT_HCI_CMD_CTLR_SET_EXT_ADV_ENABLE, &x, sizeof(x), NULL, 0);
+	int res = BtHciCommand(pDev, BT_HCI_CMD_CTLR_SET_EXT_ADV_ENABLE, &x, sizeof(x), NULL, 0);
+	ADV_TRACE("ADV disable response: status=0x%02x\r\n", (unsigned)res);
+	return res;
 }
 
 void BtAdvStart()
 {
+	ADV_TRACE("ADV start: active=%u configured=%u\r\n",
+			  (unsigned)s_bAdvertising, (unsigned)s_bAdvConfigured);
 	if (s_bAdvertising || !s_bAdvConfigured)
 	{
 		return;
 	}
 
 	int res = BtAppAdvEnable();
+	ADV_TRACE("ADV start result=%d\r\n", res);
 	if (res == 0)
 	{
 		s_bAdvertising = true;

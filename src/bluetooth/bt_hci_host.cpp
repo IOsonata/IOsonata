@@ -47,6 +47,13 @@ SOFTWARE.
 #include "istddef.h"
 #include "syslog.h"
 
+// Temporary advertising restart diagnostics for Debug builds.
+#if defined(DEBUG) && !defined(NDEBUG)
+#define ADV_TRACE(...) SysLogPrintf(SysLogGet(), __VA_ARGS__)
+#else
+#define ADV_TRACE(...)
+#endif
+
 // Advertising remains optional in a host used only as a central.
 extern void BtAdvHciStopped(void) __attribute__((weak));
 
@@ -679,6 +686,10 @@ void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtP
 				BtHciLeEvtAdvSetTerminated_t *p =
 					(BtHciLeEvtAdvSetTerminated_t*)pLeEvtPkt->Data;
 
+				ADV_TRACE("ADV terminated: status=0x%02x handle=%u events=%u hook=%u callback=%u\r\n",
+						  (unsigned)p->Status, (unsigned)p->AdvHdl, (unsigned)p->NbCompletedEvt,
+						  (unsigned)(BtAdvHciStopped != nullptr), (unsigned)(pDev->AdvTimeout != nullptr));
+
 				// Successful termination follows connection-complete, which already
 				// retired the set before the application could restart it.
 				if (p->Status != BT_HCI_SUCCESS && p->AdvHdl == 0 &&
@@ -688,7 +699,9 @@ void BtHciProcessLeEvent(BtHciDevice_t * const pDev, BtHciLeEvtPacket_t *pLeEvtP
 				}
 				if (p->Status != BT_HCI_SUCCESS && pDev->AdvTimeout)
 				{
+					ADV_TRACE("ADV timeout callback enter\r\n");
 					pDev->AdvTimeout();
+					ADV_TRACE("ADV timeout callback exit\r\n");
 				}
 			}
 			break;
