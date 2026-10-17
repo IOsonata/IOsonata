@@ -897,6 +897,10 @@ bool AppCheckStatus(void)
             BtGapPeerAddr_t peer = {};
             peer.Type = pTag->AddrType;
             memcpy(peer.Addr, pTag->Addr, sizeof(peer.Addr));
+            GatewayLog("GATT initiating tag=%02x:%02x:%02x:%02x:%02x:%02x addr_type=%u\r\n",
+                       peer.Addr[5], peer.Addr[4], peer.Addr[3],
+                       peer.Addr[2], peer.Addr[1], peer.Addr[0],
+                       (unsigned)peer.Type);
             BtGapScanStop();
                     if (!BtGapConnect(&peer, &s_GattConnParams))
             {
