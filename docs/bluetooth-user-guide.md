@@ -422,8 +422,8 @@ the TaktOS headers. Applications must not compile
 `modem_os_nrf91_taktos.c` themselves.
 
 Build `IOsonata_nRF9160` or `IOsonata_nRF91x1` in `Debug_TaktOS`
-before building its `LteUdpTaktOS` application in Debug, or select
-`Release_TaktOS` before the application Release build. The nRF9160
+before building its `LteUdpTaktOS` application in `Debug_TaktOS`, or select
+`Release_TaktOS` for both the library and application Release_TaktOS builds. The nRF9160
 `BleGatewayTaktOS` uses the same pairing. Rebuild the library when changing
 variants; a TaktOS application must not link the bare-metal `Debug` or
 `Release` library.
