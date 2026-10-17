@@ -188,17 +188,6 @@ bool BtAppScanReport(int8_t Rssi, uint8_t AddrType, uint8_t Addr[6],
 	const bool isGas = isBlueIo &&
 		manufacturer[2] == BT_ADV_MANDATA_TYPE_GAS;
 
-	// The Nordic Thingy:52 exposes the same environmental GATT service,
-	// but does not transmit BlueIO manufacturer-specific TPH measurements.
-	// Identify its advertised name without requiring a connection to read GAP.
-	char name[32] = {};
-	const size_t nameLen = BtAdvDataGetDevName(
-		pAdvData, AdvLen, name, sizeof(name) - 1U);
-	const bool isThingy = nameLen > 0U && nameLen < sizeof(name) &&
-		(strcmp(name, "Thingy") == 0 ||
-		 strcmp(name, "Thingy:52") == 0 ||
-		 strcmp(name, "IOSonataThingy") == 0);
-
 	const uint32_t irq = DisableInterrupt();
 	for (unsigned i = 0; i < 6U; ++i)
 	{
@@ -221,10 +210,8 @@ bool BtAppScanReport(int8_t Rssi, uint8_t AddrType, uint8_t Addr[6],
 		s_SensorValid = true;
 	}
 	EnableInterrupt(irq);
-	// BlueIO sensors are identified by their TPH manufacturer record;
-	// Thingy:52 sensors by their advertising name. Retain the first selected
-	// address so reconnects do not switch between nearby sensor devices.
-	if ((isTph || isThingy) && !s_GattConnecting &&
+	// Select the BlueIO TPH advertiser and retain its address for reconnects.
+	if (isTph && !s_GattConnecting &&
 		s_GattConnHdl == BT_CONN_HDL_INVALID)
 	{
 		if (!s_GattTargetValid)
