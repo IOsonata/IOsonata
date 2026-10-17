@@ -69,7 +69,32 @@ remain unverified in this review. The earlier build results below describe
 previous checks, not a new complete build. The only current WBA65 BLE project
 is BleAdvertiser; it does not establish GATT data exchange or central readiness.
 
-The concurrent BleAdvertiser project fix in `8f9d5e0` moves the ST archives\nfrom Other linker flags into Libraries so they follow the application\nobjects. That change is preserved; a fresh full BLE build is still required.\n\n## UART example projects
+The concurrent BleAdvertiser project fix in `8f9d5e0` moves the ST archives\nfrom Other linker flags into Libraries so they follow the application\nobjects. That change is preserved; a fresh full BLE build is still required.\n\n## GPIO first: Blinky
+
+Start hardware validation with `exemples/Blinky/ioc`. It links the common
+`exemples/misc/blinky.c` and uses the existing DK1 board map. Build the MCU
+library and Blinky in the same Debug or Release configuration, then flash
+Blinky through ST-LINK. No serial terminal or jumper is needed.
+
+Expected sequence: both LEDs off, LD6 green (PD8) on for approximately 250 ms,
+all off for approximately 250 ms, LD5 red (PD9) on for approximately 250 ms,
+all off for approximately 250 ms, repeated. Both LEDs are active low. These
+are software delays; this is GPIO output validation, not timer calibration.
+
+The project uses nosys and does not require semihosting. Its board.h contains
+only mappings. It does not configure UART, BLE, or a hardware timer. The DK1
+joystick is an ADC resistor ladder, so no GPIO button is mapped. GPIO input,
+pulls and EXTI require a subsequent input test and are not covered by Blinky.
+
+The common Blinky source, GPIO driver, ResetEntry, system initializer and
+vector table were compiled and linked locally with the WBA65 I linker script
+at -O0 and -Os using GNU Arm 14.3.1, with warnings treated as errors. Both
+images ran in the emulator: GPIOD clock enabled, PD8/PD9 configured as outputs,
+and the expected alternating BSRR set/clear sequence observed. The full MCU
+library was not rebuilt for this check. LED operation still needs confirmation
+on the DK1 before moving to input/EXTI, UART, timers and BLE.
+
+## UART example projects
 
 `exemples/UartLoopback` (`exemples/uart/uart_loopback.cpp`) and
 `exemples/UartPrbsTxTest` (`exemples/uart/uart_prbs_tx.cpp`) link
