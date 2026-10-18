@@ -65,6 +65,9 @@
 									<listOptionValue builtIn="false" value="IOSONATA_STM32_WBA"/>
 									<listOptionValue builtIn="false" value="PHY_40nm_3_40_a"/>
 									<listOptionValue builtIn="false" value="BLE_STACK_BASIC_PLUS=1"/>
+									<listOptionValue builtIn="false" value="BLE_SECURITY_TYPE=BTGAP_SECTYPE_LESC_MITM"/>
+									<listOptionValue builtIn="false" value="BLE_SECURITY_EXCHG=&quot;(BTAPP_SECEXCHG_DISPLAY|BTAPP_SECEXCHG_YESNO)&quot;"/>
+									<listOptionValue builtIn="false" value="BLE_SECURITY_UART_CONFIRM"/>
 								</option>
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.other.5001" name="Other compiler flags" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.other" value="-include cmsis_compiler.h" valueType="string"/>
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std.1886428985" name="Language standard" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std" useByScannerDiscovery="true" value="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std.gnu17" valueType="enumerated"/>
@@ -86,6 +89,9 @@
 									<listOptionValue builtIn="false" value="IOSONATA_STM32_WBA"/>
 									<listOptionValue builtIn="false" value="PHY_40nm_3_40_a"/>
 									<listOptionValue builtIn="false" value="BLE_STACK_BASIC_PLUS=1"/>
+									<listOptionValue builtIn="false" value="BLE_SECURITY_TYPE=BTGAP_SECTYPE_LESC_MITM"/>
+									<listOptionValue builtIn="false" value="BLE_SECURITY_EXCHG=&quot;(BTAPP_SECEXCHG_DISPLAY|BTAPP_SECEXCHG_YESNO)&quot;"/>
+									<listOptionValue builtIn="false" value="BLE_SECURITY_UART_CONFIRM"/>
 								</option>
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.nortti.773595059" name="Do not use RTTI (-fno-rtti)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.nortti" useByScannerDiscovery="true" value="true" valueType="boolean"/>
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.noexceptions.1503715994" name="Do not use exceptions (-fno-exceptions)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.noexceptions" useByScannerDiscovery="true" value="true" valueType="boolean"/>
@@ -220,6 +226,9 @@
 									<listOptionValue builtIn="false" value="IOSONATA_STM32_WBA"/>
 									<listOptionValue builtIn="false" value="PHY_40nm_3_40_a"/>
 									<listOptionValue builtIn="false" value="BLE_STACK_BASIC_PLUS=1"/>
+									<listOptionValue builtIn="false" value="BLE_SECURITY_TYPE=BTGAP_SECTYPE_LESC_MITM"/>
+									<listOptionValue builtIn="false" value="BLE_SECURITY_EXCHG=&quot;(BTAPP_SECEXCHG_DISPLAY|BTAPP_SECEXCHG_YESNO)&quot;"/>
+									<listOptionValue builtIn="false" value="BLE_SECURITY_UART_CONFIRM"/>
 								</option>
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.other.5002" name="Other compiler flags" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.other" value="-include cmsis_compiler.h" valueType="string"/>
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std.77347841" name="Language standard" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std" useByScannerDiscovery="true" value="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std.gnu17" valueType="enumerated"/>
@@ -241,6 +250,9 @@
 									<listOptionValue builtIn="false" value="IOSONATA_STM32_WBA"/>
 									<listOptionValue builtIn="false" value="PHY_40nm_3_40_a"/>
 									<listOptionValue builtIn="false" value="BLE_STACK_BASIC_PLUS=1"/>
+									<listOptionValue builtIn="false" value="BLE_SECURITY_TYPE=BTGAP_SECTYPE_LESC_MITM"/>
+									<listOptionValue builtIn="false" value="BLE_SECURITY_EXCHG=&quot;(BTAPP_SECEXCHG_DISPLAY|BTAPP_SECEXCHG_YESNO)&quot;"/>
+									<listOptionValue builtIn="false" value="BLE_SECURITY_UART_CONFIRM"/>
 								</option>
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.nortti.1870897350" name="Do not use RTTI (-fno-rtti)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.nortti" useByScannerDiscovery="true" value="true" valueType="boolean"/>
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.noexceptions.736013882" name="Do not use exceptions (-fno-exceptions)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.noexceptions" useByScannerDiscovery="true" value="true" valueType="boolean"/>

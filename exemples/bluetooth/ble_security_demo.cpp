@@ -55,7 +55,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 // Configure a security policy in the application board.h. The library owns
 // SMP, key exchange, bonding, persistence and security events.
-// No console commands or application pairing state machine are required.
+// Confirmation uses buttons or UART input; pairing remains in the library.
 #ifndef BLE_SECURITY_TYPE
 #define BLE_SECURITY_TYPE BTGAP_SECTYPE_STATICKEY_NO_MITM
 #endif
@@ -292,20 +292,38 @@ void BtAppInitUserServices()
 	res = BtGattSrvcAdd(&g_UartBleSrvc);
 }
 
-#ifdef BLE_SECURITY_BUTTON_CONFIRM
+#if defined(BLE_SECURITY_BUTTON_CONFIRM) || defined(BLE_SECURITY_UART_CONFIRM)
 // User-interface state only. The IOsonata library retains the pairing
 // transaction while awaiting the decision.
 static volatile uint8_t s_PairDecision = 0; // 0=pending, 1=accept, 2=reject
 static volatile bool s_PairAwaiting = false;
 static uint16_t s_PairConn = 0;
 
+void BtAppEvtDisconnected(uint16_t ConnHdl)
+{
+	if (s_PairAwaiting && s_PairConn == ConnHdl)
+	{
+		s_PairAwaiting = false;
+		s_PairDecision = 0;
+	}
+}
+
 int BtAppPairConfirm(uint16_t ConnHdl, uint32_t Number)
 {
+	if (s_PairAwaiting)
+	{
+		return 0;
+	}
 	s_PairConn = ConnHdl;
 	s_PairDecision = 0;
 	s_PairAwaiting = true;
+#ifdef BLE_SECURITY_UART_CONFIRM
+	SysLogPrintf(SysLogGet(), "Compare %06u on both devices: y=accept, n=reject\r\n",
+			(unsigned)Number);
+#else
 	SysLogPrintf(SysLogGet(), "Compare %06u on both devices: BUT1=accept, BUT2=reject\r\n",
 			(unsigned)Number);
+#endif
 	return -1; // Defer; no blocking and no protocol reply in this callback.
 }
 #endif
@@ -388,6 +406,26 @@ void UartRxChedHandler(uint32_t Evt, void *pCtx)
 	{
 		s_UartRxBuffLen = g_Uart.Rx(s_UartRxBuff, sizeof(s_UartRxBuff));
 	}
+#ifdef BLE_SECURITY_UART_CONFIRM
+	if (s_PairAwaiting)
+	{
+		for (int i = 0; i < s_UartRxBuffLen; i++)
+		{
+			if (s_UartRxBuff[i] == 'y' || s_UartRxBuff[i] == 'Y')
+			{
+				s_PairDecision = 1;
+				break;
+			}
+			if (s_UartRxBuff[i] == 'n' || s_UartRxBuff[i] == 'N')
+			{
+				s_PairDecision = 2;
+				break;
+			}
+		}
+		s_UartRxBuffLen = 0;
+		return;
+	}
+#endif
 	if (s_UartRxBuffLen > 0 &&
 		BtAppNotify(&g_UartChars[0], s_UartRxBuff, (uint16_t)s_UartRxBuffLen))
 	{
@@ -474,7 +512,7 @@ int main()
 bool AppCheckStatus(void)
 {
 	BtAppCheckStatus();
-#ifdef BLE_SECURITY_BUTTON_CONFIRM
+#if defined(BLE_SECURITY_BUTTON_CONFIRM) || defined(BLE_SECURITY_UART_CONFIRM)
 	uint32_t irq = DisableInterrupt();
 	uint8_t decision = s_PairDecision;
 	uint16_t conn = s_PairConn;

@@ -586,3 +586,18 @@ hardware test of the stack, RNG, timer and sequencer code.
    `RCC->BDCR1` RADIOSTSEL not zero, the RNG answering, and that the RADIO and
    HASH vectors are reached.
 
+
+## BleSecurityDemo pairing
+
+Both Debug and Release select LE Secure Connections with MITM and bonding
+(`BTGAP_SECTYPE_LESC_MITM`), with DisplayYesNo capability. Legacy pairing
+fallback is disabled. Open the ST-LINK USART1 VCP at 115200 baud. Compare the
+six-digit number printed there with the central's number; type `y` to accept
+only when they match, or `n` to reject, and answer on the central as well.
+UART confirmation bytes are consumed by the demo while a decision is pending.
+The existing button confirmation used by other boards is unchanged.
+
+Build the library and example in the same configuration. Security setup now
+fails if ST rejects authentication requirements or IO capability. Pairing,
+protected GATT access, rejection and bonded reconnect still require hardware
+validation. Use UartBleDemo for an open connection.

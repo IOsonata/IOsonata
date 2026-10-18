@@ -1489,7 +1489,7 @@ bool BtAppSecInit(void)
 	}
 	s_WbaData.AuthRequirement = authReq;
 
-	aci_gap_set_authentication_requirement(authReq & 0x01,	// bonding
+	uint8_t status = aci_gap_set_authentication_requirement(authReq & 0x01,	// bonding
 	                                       (authReq >> 2) & 0x01,	// MITM
 	                                       scSupport,
 	                                       0,	// keypress not supported
@@ -1498,6 +1498,11 @@ bool BtAppSecInit(void)
 	                                       0,	// use fixed pin = no
 	                                       0,	// fixed pin value
 	                                       0);	// identity address type
+
+	if (status != BLE_STATUS_SUCCESS)
+	{
+		return false;
+	}
 
 	// Map the application key-exchange capability to the ST IO capability so the
 	// MITM models (Numeric Comparison, Passkey Entry) can be selected. With no
@@ -1523,7 +1528,11 @@ bool BtAppSecInit(void)
 			break;
 	}
 
-	aci_gap_set_io_capability(s_WbaData.IoCapability);
+	status = aci_gap_set_io_capability(s_WbaData.IoCapability);
+	if (status != BLE_STATUS_SUCCESS)
+	{
+		return false;
+	}
 
 	s_BtAppData.bSecInit = true;
 
