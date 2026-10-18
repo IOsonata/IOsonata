@@ -55,7 +55,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "board.h"
 
 // Optional target-test diagnostic implementation, outside board configuration.
-// Called after Init and after a failed run.
+// Called after a failed run.
 void I2cMasterSlaveDiagnostics(const char *pWhen) __attribute__((weak));
 
 #ifdef MCUOSC

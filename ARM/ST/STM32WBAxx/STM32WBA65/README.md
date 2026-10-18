@@ -387,8 +387,7 @@ LED3), NSS PB9 (D10). Wire A5 to D13, D11 to D6, A3 to D12 and D8 to D10.
 One run tests the master in polling, interrupt, DMA and DMA with interrupt mode
 against the slave in interrupt and DMA mode, in each SPI mode, with frames of 1,
 16 and 129 bytes (`SPI_TEST_MASTER_MASK`, `SPI_TEST_SLAVE_MASK` and
-`SPI_TEST_MODE_MASK` in `board.h` restrict the set). On a failure the example
-prints the SPI2 registers and a jumper test.
+`SPI_TEST_MODE_MASK` in `board.h` restrict the set).
 
 Connectors (MB2143 schematic, checked on the DK1): CN8 pin 9 is D15 and pin 10
 is D14, pins 1 to 6 are D8 to D13; CN10 pins 1 to 8 are D0 to D7; A3 and A5 are
