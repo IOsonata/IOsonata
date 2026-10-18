@@ -52,13 +52,13 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 // Output on USART2, the Arduino D0/D1 pins, also the second ST-LINK virtual
 // COM port. The test prints one line per check and the totals.
 #define UART_RETARGET
-#define UART_DEVNO			BOARD_UART_DEVNO
+#define UART_DEVNO			BOARD_VCP_DEVNO
 #define UART_RX_PORT		IOPORTA
-#define UART_RX_PIN			11
-#define UART_RX_PINOP		IOPINOP_FUNC3
-#define UART_TX_PORT		IOPORTA
+#define UART_RX_PIN			8
+#define UART_RX_PINOP		IOPINOP_FUNC7
+#define UART_TX_PORT		IOPORTB
 #define UART_TX_PIN			12
-#define UART_TX_PINOP		IOPINOP_FUNC3
+#define UART_TX_PINOP		IOPINOP_FUNC7
 
 // Engines under test: the STM32WBA AES, PKA and RNG blocks. The software
 // engines are the reference inside the test.
