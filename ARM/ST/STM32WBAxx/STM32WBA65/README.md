@@ -88,8 +88,10 @@ P-256 scalar multiplication, mean of 8: **31072 us** on the engine and
 **188099 us** in software (6.05 times faster).
 
 These results cover the standalone crypto engines. The ST BLE adapter uses the
-AES and PKA engines. That use is checked on the emulator only and is pending on
-the DK1.
+AES and PKA engines. On the DK1, BleSecurityDemo paired with numeric comparison
+and reconnected encrypted from the stored bond, and pairing is noticeably
+faster than with the software engines. The adapter also runs on the instruction
+set emulator (`tests/stm32wba/run_bt_crypto.py`).
 
 ## Integration status
 
@@ -627,11 +629,9 @@ pins (PB1, PB2 AF4) and the VCP pins match the ST board support package. The SPI
 pins (PB10, PA9, PC3 AF5, CS PB9) and the second I2C and SPI pins of the
 MasterSlave examples come from the ST pin data for the STM32WBA65RI and UM3462 table 8.
 
-Remaining work: ADC-based radio temperature measurement, BLE central tests
-and the hardware check of the hardware crypto engines in the ST BLE adapter
-(BleSecurityDemo with `python/examples/secure_reconnect.py`). The standalone
-crypto engines are hardware validated. The adapter uses them and
-has run on the instruction set emulator only (`tests/stm32wba/run_bt_crypto.py`).
+Remaining work: ADC-based radio temperature measurement and BLE central tests.
+The standalone crypto engines are hardware validated. The ST BLE adapter uses
+them; pairing and a bonded reconnect ran on the DK1 with BleSecurityDemo.
 
 ## First hardware test of BleAdvertiser
 
