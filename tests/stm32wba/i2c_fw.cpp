@@ -100,6 +100,9 @@ static const IOPinCfg_t s_I2c3Pins[] = {
 volatile int32_t g_I2cTestSlvEvt[64];
 volatile int32_t g_I2cTestSlvCnt;
 volatile uint8_t g_I2cTestSlvRx[2][SLV_BUF_SIZE];
+volatile uint8_t g_I2cTestSlvRx2[2][SLV_BUF_SIZE];
+volatile int32_t g_I2cTestSlvDmaInit;
+static volatile uint8_t (*s_pSlvRx)[SLV_BUF_SIZE] = g_I2cTestSlvRx;
 static uint8_t s_SlvTx[2][8];
 static I2CDev_t s_I2c1;
 static I2CDev_t s_I2c3;
@@ -152,7 +155,7 @@ static int SlaveCb(DevIntrf_t * const pDev, DEVINTRF_EVT Evt, uint8_t *pBuff, in
 	{
 		for (int i = 0; i < 2; i++)
 		{
-			I2CSetWriteRqstBuffer(&s_I2c3, i, (uint8_t*)g_I2cTestSlvRx[i], SLV_BUF_SIZE);
+			I2CSetWriteRqstBuffer(&s_I2c3, i, (uint8_t*)s_pSlvRx[i], SLV_BUF_SIZE);
 		}
 	}
 
@@ -336,6 +339,18 @@ extern "C" int main(void)
 	g_I2cTestResult[r++] = WaitMaster();
 
 	I2cTestMark(17);
+
+	// 18 : the same slave requests with the DMA channels
+	I2cTestMark(18);
+	s_pSlvRx = g_I2cTestSlvRx2;
+	cfgs.bDmaEn = true;
+	g_I2cTestSlvDmaInit = I2CInit(&s_I2c3, &cfgs) ? 1 : 0;
+	for (int i = 0; i < 4000; i++)
+	{
+		I2cTestSlaveStep();
+		I2C3_EV_IRQHandler();
+	}
+
 	g_I2cTestResult[I2C_TEST_MAX_RESULT - 1] = r;
 	g_I2cTestDone = 1;
 	I2cTestDoneHook();

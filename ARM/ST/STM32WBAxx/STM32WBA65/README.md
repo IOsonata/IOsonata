@@ -313,7 +313,7 @@ I2C do not take the same channel. Slave: interrupt driven, one or two 7 bit
 addresses, with the read and write request events of the other IOsonata I2C
 slaves.
 
-Limits: 7 bit addresses only, no general call, no DMA in slave mode.
+Limits: 7 bit addresses only, no general call. In slave mode a GPDMA channel pair moves the data of a request into the buffer that the application installs from the request event; bytes past the buffer are dropped on a write and read as 0xFF on a read.
 
 `exemples/I2CScan` (`exemples/i2c/i2c_scan.cpp`) scans the bus on the board
 I2C of `STM32WBA65I_DK1`: SDA PB1, SCL PB2, AF4 (Arduino D14 and D15). These
@@ -330,11 +330,11 @@ hardware run showed PB13 held low). The example starts with a polling master and
 `board.h`.
 
 Validation: the driver is checked by `tests/stm32wba/run_i2c.py` in an
-instruction set emulator with an I2C model and a GPDMA model (63 checks: polling,
-interrupt, DMA, slave). On the DK1 the I2CScan example found the codec at 0x1A,
+instruction set emulator with an I2C model and a GPDMA model (70 checks: polling,
+interrupt, DMA, slave in interrupt and DMA mode). On the DK1 the I2CScan example found the codec at 0x1A,
 and the I2CMasterSlave example passed with the master in polling, interrupt,
 DMA and DMA with interrupt (I2C1 to I2C2, 100 kHz). The slave ran in interrupt
-mode; a slave DMA request is ignored by the driver.
+mode on the DK1; slave DMA is checked on the emulator only.
 
 ## SPI and example project
 

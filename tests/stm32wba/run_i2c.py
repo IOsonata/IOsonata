@@ -280,6 +280,7 @@ class I2c:
                 self.stx = []
                 for _ in range(op[2] + 1):
                     self.f['txis'] = 1
+                    self.dma_service()
                     while self.f['txis']:
                         yield
                 # TXIS comes again as soon as the last byte is in the shift
@@ -294,6 +295,7 @@ class I2c:
                 for b in op[2]:
                     self.reg[0x24] = b
                     self.f['rxne'] = 1
+                    self.dma_service()
                     while self.f['rxne']:
                         yield
             if op[-1] == 'P':
@@ -496,7 +498,7 @@ class Gpdma:
                 c['ccr'] = 0
                 c['active'] = False
                 return
-            en = bool(val & hdr('DMA_CCR_EN'))
+            en = bool(val & hdr('DMA_CCR_EN')) and not (val & hdr('DMA_CCR_SUSP'))
             if en and not c['active'] and (c['cbr1'] & 0xFFFF) == 0:
                 self.viol.append(f'GPDMA channel {n} enabled with a zero count')
             c['ccr'] = val
@@ -684,7 +686,7 @@ def main():
         def on_mark(uc, addr, size, user):
             log.mark = uc.reg_read(UC_ARM_REG_R0)
             dma_at[log.mark] = gpdma.moved
-            if log.mark == 14:
+            if log.mark in (14, 18):
                 i2c3.script = i2c3.master_script(slave_ops)
 
         def on_step(uc, addr, size, user):
@@ -718,6 +720,8 @@ def main():
         slv_n = int.from_bytes(uc.mem_read(syms['g_I2cTestSlvCnt'], 4), 'little')
         slv = [int.from_bytes(uc.mem_read(syms['g_I2cTestSlvEvt'] + 4 * i, 4), 'little') for i in range(slv_n * 2)]
         slv_rx = [bytes(uc.mem_read(syms['g_I2cTestSlvRx'] + 16 * i, 16)) for i in range(2)]
+        slv_rx2 = [bytes(uc.mem_read(syms['g_I2cTestSlvRx2'] + 16 * i, 16)) for i in range(2)]
+        slv_dma_init = int.from_bytes(uc.mem_read(syms['g_I2cTestSlvDmaInit'], 4), 'little')
 
     errors = []
     checks = 0
@@ -829,13 +833,22 @@ def main():
               (2, 0), (1, 1), (3, 4),
               (1, 0), (3, 8),
               (2, 0), (3, 16)]
-    expect(pairs == exp_cb, f'slave callback events {pairs}')
+    expect(pairs[:9] == exp_cb, f'slave callback events {pairs[:9]}')
     expect(slv_rx[0][:3] == bytes([4, 2, 3]), f'slave write data {slv_rx[0][:3].hex()}')
     expect(slv_rx[1] == w20[:16], f'slave write data past the buffer {slv_rx[1].hex()}')
     got = i2c3.got
     exp_a = bytes(0xA0 + i for i in range(4))
     exp_b = bytes(0xB0 + i for i in range(8)) + b'\xff\xff'
-    expect(got == [exp_a, exp_b], f'slave read data {[g.hex() for g in got]}')
+    expect(got[:2] == [exp_a, exp_b], f'slave read data {[g.hex() for g in got[:2]]}')
+
+    # 18 the same requests with the DMA channels
+    expect(slv_dma_init == 1, 'slave DMA init failed')
+    expect(log.of(18, 'I2C3') == exp_ev, f'slave DMA bus events {log.of(18, "I2C3")}')
+    expect(pairs[9:] == exp_cb, f'slave DMA callback events {pairs[9:]}')
+    expect(slv_rx2[0][:3] == bytes([4, 2, 3]), f'slave DMA write data {slv_rx2[0][:3].hex()}')
+    expect(slv_rx2[1] == w20[:16], f'slave DMA write data past the buffer {slv_rx2[1].hex()}')
+    expect(got[2:] == [exp_a, exp_b], f'slave DMA read data {[g.hex() for g in got[2:]]}')
+    expect(gpdma.moved - dma_at[18] == 3 + 1 + 5 + 8 + 16, f'slave DMA bytes moved {gpdma.moved - dma_at[18]}')
 
     # 15 DMA master, polling wait
     d = b + 12
@@ -870,7 +883,7 @@ def main():
     else:
         expect(False, f'TIMINGR writes at 100 MHz: {len(t1)}')
     t3 = [t for t, _ in i2c3.timings]
-    expect(len(t3) == 2, f'I2C3 TIMINGR writes {len(t3)}')
+    expect(len(t3) == 3, f'I2C3 TIMINGR writes {len(t3)}')
     if t3:
         timing_check('I2C3', FCPU, t3[0], 0, 340000, 400000, res[18], errors)
     # fast mode plus drive: on after the 1 MHz request, off after the 100 kHz one

@@ -145,6 +145,14 @@ void WbaGpdmaStart(int Ch, const void *pMem, uint32_t Count);
 void WbaGpdmaStop(int Ch);
 
 /**
+ * @brief	Suspend the channel, take the bytes it has still to move, then
+ * 			stop it and clear its flags.
+ *
+ * @return	Bytes not moved.
+ */
+uint32_t WbaGpdmaStopRemain(int Ch);
+
+/**
  * @brief	Bytes the channel has still to read from its source.
  */
 uint32_t WbaGpdmaRemain(int Ch);

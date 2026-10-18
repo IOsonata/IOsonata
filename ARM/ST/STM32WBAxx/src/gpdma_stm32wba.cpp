@@ -230,6 +230,29 @@ void WbaGpdmaStop(int Ch)
 	WbaGpdmaClear(Ch);
 }
 
+uint32_t WbaGpdmaStopRemain(int Ch)
+{
+	DMA_Channel_TypeDef *ch = s_WbaGpdmaCh[Ch];
+	uint32_t remain;
+
+	if (ch->CCR & DMA_CCR_EN)
+	{
+		ch->CCR |= DMA_CCR_SUSP;
+		for (int i = 0; i < WBA_GPDMA_STOP_POLLS && (ch->CSR & DMA_CSR_IDLEF) == 0U; i++)
+		{
+		}
+		remain = ch->CBR1 & DMA_CBR1_BNDT;
+		ch->CCR = (ch->CCR & ~(DMA_CCR_EN | DMA_CCR_SUSP)) | DMA_CCR_RESET;
+	}
+	else
+	{
+		remain = ch->CBR1 & DMA_CBR1_BNDT;
+	}
+	WbaGpdmaClear(Ch);
+
+	return remain;
+}
+
 uint32_t WbaGpdmaRemain(int Ch)
 {
 	return s_WbaGpdmaCh[Ch]->CBR1 & DMA_CBR1_BNDT;

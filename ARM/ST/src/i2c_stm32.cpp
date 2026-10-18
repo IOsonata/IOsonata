@@ -194,6 +194,9 @@ typedef struct {
 	int SIdx;
 	int SCount;
 	bool bTxData;		// the byte loaded last was data, not filler
+	bool bSDma;			// the slave holds the DMA channels
+	bool bSDmaOn;		// a channel moves the data of the request
+	int SDmaLen;		// bytes given to the channel
 	uint8_t TxBuf[I2C_STM32_TXBUF_SIZE];
 } Stm32I2cDev_t;
 
@@ -977,6 +980,81 @@ static void Stm32I2cSlaveEvent(Stm32I2cDev_t * const pDev, DEVINTRF_EVT Evt, int
 	}
 }
 
+#ifdef STM32_I2C_DMA
+// The channel moves the data of the request in the buffer that the
+// application installed from the request event. The CPU interrupts for the
+// data are off while it runs.
+static void Stm32I2cSlaveDmaArm(Stm32I2cDev_t * const pDev, bool bRead)
+{
+	I2CDev_t *i2c = pDev->pI2cDev;
+	const int idx = pDev->SIdx;
+	uint8_t *buf = bRead ? i2c->pRRData[idx] : i2c->pTRBuff[idx];
+	const int len = bRead ? i2c->RRDataLen[idx] : i2c->TRBuffLen[idx];
+
+	if (pDev->bSDma == false || buf == NULL || len <= 0)
+	{
+		return;
+	}
+
+	pDev->SDmaLen = len;
+	pDev->bSDmaOn = true;
+	pDev->bTxData = bRead;
+	WbaGpdmaStart(bRead ? pDev->DmaTx : pDev->DmaRx, buf, (uint32_t)len);
+	pDev->pReg->CR1 = (pDev->pReg->CR1 & ~(I2C_CR1_RXIE | I2C_CR1_TXIE)) |
+					  (bRead ? I2C_CR1_TXDMAEN : I2C_CR1_RXDMAEN);
+}
+
+// The request ends or the buffer is used up: the channel stops, the bytes it
+// moved are the count and the CPU takes the data again.
+static void Stm32I2cSlaveDmaEnd(Stm32I2cDev_t * const pDev)
+{
+	I2C_TypeDef *reg = pDev->pReg;
+
+	if (pDev->bSDmaOn == false)
+	{
+		return;
+	}
+
+	const bool read = pDev->SState == STM32_I2C_S_READ;
+	int moved;
+
+	reg->CR1 &= ~STM32_I2C_CR1_DMA;
+	moved = pDev->SDmaLen - (int)WbaGpdmaStopRemain(read ? pDev->DmaTx : pDev->DmaRx);
+	if (moved < 0)
+	{
+		moved = 0;
+	}
+	if (read == false && (reg->ISR & I2C_ISR_RXNE) != 0U)
+	{
+		// The channel did not take the last byte
+		uint8_t value = (uint8_t)reg->RXDR;
+		uint8_t *buf = pDev->pI2cDev->pTRBuff[pDev->SIdx];
+
+		if (buf != NULL && moved < pDev->SDmaLen)
+		{
+			buf[moved++] = value;
+		}
+	}
+	pDev->SCount = moved;
+	pDev->bSDmaOn = false;
+	reg->CR1 |= I2C_CR1_RXIE | I2C_CR1_TXIE;
+}
+
+static void Stm32I2cSlaveDmaCheck(Stm32I2cDev_t * const pDev)
+{
+	if (pDev->bSDmaOn &&
+		(WbaGpdmaFlags(pDev->SState == STM32_I2C_S_READ ? pDev->DmaTx : pDev->DmaRx) &
+		 (WBA_GPDMA_FLAG_TC | WBA_GPDMA_FLAG_ERR)))
+	{
+		Stm32I2cSlaveDmaEnd(pDev);
+	}
+}
+#else
+static inline void Stm32I2cSlaveDmaArm(Stm32I2cDev_t * const, bool) {}
+static inline void Stm32I2cSlaveDmaEnd(Stm32I2cDev_t * const) {}
+static inline void Stm32I2cSlaveDmaCheck(Stm32I2cDev_t * const) {}
+#endif
+
 // The slave is asked for the next byte as soon as the previous one is in the
 // shift register, so a read that the master ends with a NACK always has one
 // byte loaded that was never sent. It is counted out so that the count is the
@@ -1013,6 +1091,7 @@ static void Stm32I2cSlaveAddress(Stm32I2cDev_t * const pDev, uint32_t Isr)
 		}
 	}
 
+	Stm32I2cSlaveDmaEnd(pDev);
 	if (pDev->SState == STM32_I2C_S_WRITE)
 	{
 		prior = pDev->SCount;
@@ -1024,6 +1103,7 @@ static void Stm32I2cSlaveAddress(Stm32I2cDev_t * const pDev, uint32_t Isr)
 
 	pDev->SIdx = idx;
 	pDev->SCount = 0;
+	pDev->bTxData = false;
 	pDev->SState = read ? STM32_I2C_S_READ : STM32_I2C_S_WRITE;
 
 	// The application installs the buffer again for every request
@@ -1044,6 +1124,8 @@ static void Stm32I2cSlaveAddress(Stm32I2cDev_t * const pDev, uint32_t Isr)
 		Stm32I2cSlaveEvent(pDev, DEVINTRF_EVT_WRITE_RQST, 0);
 	}
 
+	Stm32I2cSlaveDmaArm(pDev, read);
+
 	// SCL is released
 	reg->ICR = I2C_ICR_ADDRCF;
 }
@@ -1051,8 +1133,11 @@ static void Stm32I2cSlaveAddress(Stm32I2cDev_t * const pDev, uint32_t Isr)
 static void Stm32I2cSlaveStop(Stm32I2cDev_t * const pDev)
 {
 	I2C_TypeDef *reg = pDev->pReg;
-	const int count = Stm32I2cSlaveSent(pDev);
 	const bool active = pDev->SState != STM32_I2C_S_IDLE;
+
+	Stm32I2cSlaveDmaEnd(pDev);
+
+	const int count = Stm32I2cSlaveSent(pDev);
 
 	reg->ICR = I2C_ICR_STOPCF | I2C_ICR_NACKCF;
 	Stm32I2cFlushTx(reg);
@@ -1068,7 +1153,10 @@ static void Stm32I2cSlaveService(Stm32I2cDev_t * const pDev)
 {
 	I2C_TypeDef *reg = pDev->pReg;
 	I2CDev_t *i2c = pDev->pI2cDev;
-	uint32_t isr = reg->ISR;
+	uint32_t isr;
+
+	Stm32I2cSlaveDmaCheck(pDev);
+	isr = reg->ISR;
 
 	if (isr & (I2C_ISR_BERR | I2C_ISR_ARLO | I2C_ISR_OVR | I2C_ISR_TIMEOUT))
 	{
@@ -1077,7 +1165,7 @@ static void Stm32I2cSlaveService(Stm32I2cDev_t * const pDev)
 	}
 
 	// The last byte of a write is read before a repeated START is handled
-	if ((isr & I2C_ISR_RXNE) != 0U)
+	if ((isr & I2C_ISR_RXNE) != 0U && pDev->bSDmaOn == false)
 	{
 		uint8_t value = (uint8_t)reg->RXDR;
 
@@ -1099,7 +1187,7 @@ static void Stm32I2cSlaveService(Stm32I2cDev_t * const pDev)
 		isr = reg->ISR;
 	}
 
-	if ((isr & I2C_ISR_TXIS) != 0U && pDev->SState == STM32_I2C_S_READ)
+	if ((isr & I2C_ISR_TXIS) != 0U && pDev->SState == STM32_I2C_S_READ && pDev->bSDmaOn == false)
 	{
 		const uint8_t *data = i2c->pRRData[pDev->SIdx];
 
@@ -1195,6 +1283,7 @@ static void Stm32I2cReset(DevIntrf_t * const pIntrf)
 	dev->bAsync = false;
 	dev->SState = STM32_I2C_S_IDLE;
 	dev->SCount = 0;
+	dev->bSDmaOn = false;
 	atomic_store(&pIntrf->bTxReady, true);
 }
 
@@ -1524,7 +1613,7 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
 		dev->DmaRx = -1;
 	}
 #ifdef STM32_I2C_DMA
-	else if (pCfgData->bDmaEn == false || pCfgData->Mode != I2CMODE_MASTER)
+	else if (pCfgData->bDmaEn == false)
 	{
 		// Initialized again without DMA: the channels are given back
 		Stm32I2cDmaGive(dev);
@@ -1536,10 +1625,11 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
 	// DMA is for the master data, on the families with a channel table
 	bool useDma = false;
 
-	if (pCfgData->bDmaEn && slave == false)
+	if (pCfgData->bDmaEn)
 	{
 #ifdef STM32_I2C_DMA
-		if (Stm32I2cDmaTake(dev, pCfgData->bIntEn, pCfgData->IntPrio) == false)
+		// The slave needs the channel interrupts
+		if (Stm32I2cDmaTake(dev, pCfgData->bIntEn || slave, pCfgData->IntPrio) == false)
 		{
 			return false;
 		}
@@ -1554,7 +1644,7 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
 	{
 		// The slave is driven by its interrupts
 		pDev->Cfg.bIntEn = true;
-		pDev->Cfg.bDmaEn = false;
+		pDev->Cfg.bDmaEn = useDma;
 	}
 	memset(pDev->pRRData, 0, sizeof(pDev->pRRData));
 	memset(pDev->RRDataLen, 0, sizeof(pDev->RRDataLen));
@@ -1571,6 +1661,8 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
 	dev->bNack = false;
 	dev->bFail = false;
 	dev->bDma = false;
+	dev->bSDma = useDma && slave;
+	dev->bSDmaOn = false;
 	dev->SState = STM32_I2C_S_IDLE;
 	dev->SCount = 0;
 	dev->SIdx = 0;
