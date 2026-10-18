@@ -36,6 +36,34 @@ COM port: PD9 RX, PD8 TX, AF7, USART3 DevNo 3. Their `board.h` can select
 PB7 RX and PB6 TX, AF7. Connect an external 3.3 V serial adapter there.
 Board pin mappings are in `ARM/ST/include/stm32_boards.h`.
 
+## TaktOS UART PRBS example
+
+`STM32H753/exemples/UartPrbsTxTestTaktOS/ioc` uses the existing shared
+`exemples/uart/uart_prbs_tx_taktos.cpp`. It sends 16-byte PRBS buffers from a
+TaktOS thread through USART3/ST-LINK VCP at 1 Mbaud, 8N1, interrupt mode,
+DMA disabled. The scheduler uses processor-clock SysTick at 1 kHz.
+
+Keep the TaktOS repository beside the IOsonata repository. Import
+`TaktOS/ARM/cm7/ioc`, the H753 library, and this example into IOcomposer.
+Build both libraries before the example, using these matching configurations:
+
+| Example | IOsonata_STM32H753 | TaktOS_M7 |
+|---|---|---|
+| Debug | Debug_FPU | Debug_DP |
+| Release | Release_FPU | Release_DP |
+
+All three use Cortex-M7 with `-mfpu=fpv5-d16 -mfloat-abi=hard`. Debug links
+semihosting, so enable it in the debugger before resume. Release uses nosys
+and runs without a debugger. Use Release for throughput tests, then run:
+
+```sh
+python3 Python/uartprbs_rx.py --baud 1000000 --port <serial-port>
+```
+
+Debug and Release library/kernel/example builds pass with GNU Arm GCC 13.2.1.
+The linked vectors select TaktOS PendSV and SysTick handlers. TaktOS operation
+on the H753 board has not yet been hardware tested.
+
 ## Clocks and memory
 
 Startup selects the internal LDO, voltage scale 1 and HSI64 / 32 feeding PLL1
