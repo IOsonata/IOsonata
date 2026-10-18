@@ -409,6 +409,11 @@ extern "C" uint8_t BLECB_Indication(const uint8_t *pData, uint16_t Length,
 	return BLE_STATUS_SUCCESS;
 }
 
+#ifdef BT_WBA_SEC_TRACE
+extern "C" void BtWbaAesTraceReset(void);
+extern "C" void BtWbaAesTraceDump(void);
+#endif
+
 static void BtAppTickQue(void);
 
 extern void BtDfuSmpCheckStatus(void) __attribute__((weak));
@@ -832,6 +837,9 @@ static void BtAppWbaConnected(uint8_t Status, uint16_t ConnHdl, uint8_t Role,
 		// peripheral asks the central with a Security Request.
 		if (s_BtAppData.bSecure)
 		{
+#ifdef BT_WBA_SEC_TRACE
+			BtWbaAesTraceReset();
+#endif
 			uint8_t identityType = 0;
 			uint8_t identity[6] = {};
 			uint8_t bondStatus = aci_gap_check_bonded_device(
@@ -966,6 +974,7 @@ static BtWbaEvtFlow_t BtAppHciEvtHandler(void *pPayload)
 					(unsigned)p->Connection_Handle, (unsigned)p->Status,
 					(unsigned)p->Reason);
 #ifdef BT_WBA_SEC_TRACE
+			BtWbaAesTraceDump();
 			SysLogPrintf(SysLogGet(), "WBA trace: t=%lu host runs=%lu last=%lu\r\n",
 					(unsigned long)BtSmpMsTick(), (unsigned long)s_TraceHostRuns,
 					(unsigned long)s_TraceHostLast);

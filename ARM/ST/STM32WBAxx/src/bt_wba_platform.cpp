@@ -711,6 +711,97 @@ static void BtWbaAesKey(CryptoKey &Key, const uint8_t *pKey, uint32_t Usage)
 	Key.Plain.Len = 16;
 }
 
+#ifdef BT_WBA_SEC_TRACE
+// Bench aid: the stack's AES calls, kept in rings and printed from the
+// application context by BtWbaAesTraceDump. The calls can come from interrupt
+// context, so nothing is printed here. Keys are printed too, so this stays off
+// in any build that leaves the bench.
+#include "syslog.h"
+
+#define BT_WBA_ECB_TRACE	6
+#define BT_WBA_CCM_TRACE	6
+
+typedef struct __Bt_Wba_Ecb_Trace {
+	uint32_t	Tick;
+	uint8_t		Key[16];
+	uint8_t		In[16];
+	uint8_t		Out[16];
+} BtWbaEcbTrace_t;
+
+typedef struct __Bt_Wba_Ccm_Trace {
+	uint32_t	Tick;
+	uint8_t		Mode;
+	uint8_t		Ret;
+	uint8_t		IvLen;
+	uint8_t		TagLen;
+	uint16_t	AddLen;
+	uint16_t	InLen;
+	uint8_t		Key[16];
+	uint8_t		Iv[16];
+} BtWbaCcmTrace_t;
+
+static BtWbaEcbTrace_t s_EcbTrace[BT_WBA_ECB_TRACE];
+static BtWbaCcmTrace_t s_CcmTrace[BT_WBA_CCM_TRACE];
+static volatile uint32_t s_EcbCnt;
+static volatile uint32_t s_CcmCnt;
+static volatile uint32_t s_CcmFail;
+
+static void BtWbaTraceHex(char *pDst, const uint8_t *pSrc, size_t Len)
+{
+	static const char hex[] = "0123456789abcdef";
+
+	for (size_t i = 0; i < Len; i++)
+	{
+		pDst[i * 2] = hex[pSrc[i] >> 4];
+		pDst[i * 2 + 1] = hex[pSrc[i] & 0x0F];
+	}
+	pDst[Len * 2] = 0;
+}
+
+extern "C" void BtWbaAesTraceReset(void)
+{
+	s_EcbCnt = 0;
+	s_CcmCnt = 0;
+	s_CcmFail = 0;
+}
+
+extern "C" void BtWbaAesTraceDump(void)
+{
+	char a[33], b[33], c[33];
+	uint32_t n = s_EcbCnt;
+
+	SysLogPrintf(SysLogGet(), "aes: ecb %lu ccm %lu ccm fail %lu\r\n",
+			(unsigned long)n, (unsigned long)s_CcmCnt, (unsigned long)s_CcmFail);
+
+	for (uint32_t i = n > BT_WBA_ECB_TRACE ? n - BT_WBA_ECB_TRACE : 0; i < n; i++)
+	{
+		const BtWbaEcbTrace_t *p = &s_EcbTrace[i % BT_WBA_ECB_TRACE];
+
+		BtWbaTraceHex(a, p->Key, 16);
+		BtWbaTraceHex(b, p->In, 16);
+		BtWbaTraceHex(c, p->Out, 16);
+		SysLogPrintf(SysLogGet(), "ecb %lu k %s\r\n", (unsigned long)p->Tick, a);
+		SysLogPrintf(SysLogGet(), "ecb i %s\r\n", b);
+		SysLogPrintf(SysLogGet(), "ecb o %s\r\n", c);
+	}
+
+	n = s_CcmCnt;
+	for (uint32_t i = n > BT_WBA_CCM_TRACE ? n - BT_WBA_CCM_TRACE : 0; i < n; i++)
+	{
+		const BtWbaCcmTrace_t *p = &s_CcmTrace[i % BT_WBA_CCM_TRACE];
+
+		BtWbaTraceHex(a, p->Key, 16);
+		BtWbaTraceHex(b, p->Iv, 16);
+		SysLogPrintf(SysLogGet(), "ccm %lu m%u r%u iv%u tag%u add%u in%u\r\n",
+				(unsigned long)p->Tick, (unsigned)p->Mode, (unsigned)p->Ret,
+				(unsigned)p->IvLen, (unsigned)p->TagLen, (unsigned)p->AddLen,
+				(unsigned)p->InLen);
+		SysLogPrintf(SysLogGet(), "ccm k %s\r\n", a);
+		SysLogPrintf(SysLogGet(), "ccm n %s\r\n", b);
+	}
+}
+#endif
+
 extern "C" void BAES_Reset(void)
 {
 }
@@ -749,6 +840,17 @@ extern "C" void BAES_EcbCrypt(const uint8_t *pKey, const uint8_t *pIn,
 		memset(output, 0, sizeof(output));
 	}
 	BtWbaAesReverse(pOut, output);
+#ifdef BT_WBA_SEC_TRACE
+	{
+		BtWbaEcbTrace_t *pT = &s_EcbTrace[s_EcbCnt % BT_WBA_ECB_TRACE];
+
+		pT->Tick = TimerGetMilisecond(&s_BleTimerDev);
+		memcpy(pT->Key, pKey, 16);
+		memcpy(pT->In, pIn, 16);
+		memcpy(pT->Out, pOut, 16);
+		s_EcbCnt++;
+	}
+#endif
 	CryptoSecureWipe(aesKey, sizeof(aesKey));
 	CryptoSecureWipe(input, sizeof(input));
 	CryptoSecureWipe(output, sizeof(output));
@@ -818,6 +920,27 @@ extern "C" int BAES_CcmCrypt(uint8_t Mode, const uint8_t *pKey,
 					 pIn, InLen, pOut, pTag, TagLen);
 	}
 
+#ifdef BT_WBA_SEC_TRACE
+	{
+		BtWbaCcmTrace_t *pT = &s_CcmTrace[s_CcmCnt % BT_WBA_CCM_TRACE];
+
+		pT->Tick = TimerGetMilisecond(&s_BleTimerDev);
+		pT->Mode = Mode;
+		pT->Ret = st == CRYPTO_STATUS_OK ? 0 : 1;
+		pT->IvLen = IvLen;
+		pT->TagLen = TagLen;
+		pT->AddLen = AddLen;
+		pT->InLen = InLen;
+		memcpy(pT->Key, pKey, 16);
+		memset(pT->Iv, 0, sizeof(pT->Iv));
+		memcpy(pT->Iv, pIv, IvLen < sizeof(pT->Iv) ? IvLen : sizeof(pT->Iv));
+		if (st != CRYPTO_STATUS_OK)
+		{
+			s_CcmFail++;
+		}
+		s_CcmCnt++;
+	}
+#endif
 	CryptoSecureWipe(aesKey, sizeof(aesKey));
 	return st == CRYPTO_STATUS_OK ? 0 : 1;
 }
