@@ -87,8 +87,9 @@ PKA peripherals. The hardware test passed:
 P-256 scalar multiplication, mean of 8: **31072 us** on the engine and
 **188099 us** in software (6.05 times faster).
 
-These results cover the standalone crypto engines. The ST BLE adapter's
-software AES selection is separate from this test.
+These results cover the standalone crypto engines. The ST BLE adapter uses the
+AES and PKA engines by default (`BT_WBA_SOFT_AES` and `BT_WBA_SOFT_PKA` select
+software). That use is checked on the emulator only and is pending on the DK1.
 
 ## Integration status
 
@@ -531,15 +532,18 @@ server, RTC, memory manager or flash manager:
   (Timer DevNo 0). The expiry callbacks run from `BtEvtQue`.
 - `HW_RNG_Get` and the RNG clock requests: RNG peripheral, HSI16 kernel clock,
   polled.
-- `BAES_*`: the IOsonata `CryptoSoftAes` engine. Only ECB encrypt, CMAC and CCM
-  are provided, which is what the stack calls. The host test vectors (FIPS-197,
-  RFC 4493 and RFC 3610 packet vector 1) pass.
+- `BAES_*`: the IOsonata `CryptoWbaAes` engine (AES peripheral, polled). Only
+  ECB encrypt, CMAC and CCM are provided, which is what the stack calls. A call
+  that arrives while the AES block is busy, a radio interrupt during a task
+  level CCM for example, runs on `CryptoSoftAes` for that call. Define
+  `BT_WBA_SOFT_AES` to use `CryptoSoftAes` only. The host test vectors
+  (FIPS-197, RFC 4493 and RFC 3610 packet vector 1) pass.
 - PKA controller hooks (`PKACTRL_CB_Process`, mutex, semaphore, `PKA_IRQHandler`).
 - `SCM_HSE_WaitUntilReady`, `scm_*` and the link layer debug signals.
 
 Limits: the temperature given to the link layer for radio calibration is fixed
 at 25 degrees C (set `USE_TEMPERATURE_BASED_RADIO_CALIBRATION` to 0 in
-`app_conf.h`, then it is not used). AES is software. The RNG, timer, sequencer
+`app_conf.h`, then it is not used). The RNG, timer, sequencer
 and PKA hooks are exercised by the BLE examples. Separate failure-path tests
 for these hooks remain pending.
 
@@ -589,10 +593,11 @@ ST prebuilt archives and holds only its own sources:
   `ll_sys_startup.c`, `ll_sys_intf.c`, `ll_sys_cs.c`, `ll_sys_dp_slp.c`, found
   through the `external` folder (see External middleware checkout);
 - `src/bluetooth/bt_wba_pka.cpp`, which answers the P-256 key requests of the
-  stack (public key and Diffie-Hellman) with the IOsonata `CryptoUecc` engine.
-  The Cube PKA controller (`pka_ctrl.c`, `hw_pka.c`, `hw_pka_p256.c`) is not
-  built and the PKA peripheral is not used. The multiplication is software and
-  runs in the event queue context;
+  stack (public key and Diffie-Hellman) with the IOsonata `CryptoWbaPka` engine
+  (PKA peripheral, polled). The Cube PKA controller (`pka_ctrl.c`, `hw_pka.c`,
+  `hw_pka_p256.c`) is not built. Define `BT_WBA_SOFT_PKA` to use the
+  `CryptoUecc` software engine instead. The operation runs in the event queue
+  context;
 - the headers `include/app_conf.h`, `app_common.h`, `utilities_conf.h`,
   `stm32_rtos.h`, `common_wpan_conf.h` and `main.h`. The ST platform files
   include them by name. They are written for IOsonata (MIT) and define only
@@ -625,8 +630,10 @@ pins (PB10, PA9, PC3 AF5, CS PB9) and the second I2C and SPI pins of the
 MasterSlave examples come from the ST pin data for the STM32WBA65RI and UM3462 table 8.
 
 Remaining work: ADC-based radio temperature measurement, BLE central tests
-and using the hardware crypto engines in the ST BLE adapter. The standalone
-crypto engines are hardware validated; the adapter still selects software AES.
+and the hardware check of the hardware crypto engines in the ST BLE adapter
+(BleSecurityDemo with `python/examples/secure_reconnect.py`). The standalone
+crypto engines are hardware validated. The adapter uses them by default and
+has run on the instruction set emulator only (`tests/stm32wba/run_bt_crypto.py`).
 
 ## First hardware test of BleAdvertiser
 
