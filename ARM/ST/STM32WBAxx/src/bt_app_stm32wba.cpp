@@ -282,6 +282,11 @@ extern "C" void BleStackCB_Process(void);
 
 // Let the BLE host stack process its pending work. It runs the state machines
 // that issue the ACI commands and forwards the events to BLECB_Indication.
+#ifdef BT_WBA_SEC_TRACE
+static volatile uint32_t s_TraceHostRuns;
+static volatile uint32_t s_TraceHostLast;
+#endif
+
 static void BleHostEvt(uint32_t Evt, void *pCtx)
 {
 	(void)Evt;
@@ -289,6 +294,10 @@ static void BleHostEvt(uint32_t Evt, void *pCtx)
 
 	s_bBleHostQueued = false;
 	uint32_t start = BtSmpMsTick();
+#ifdef BT_WBA_SEC_TRACE
+	s_TraceHostRuns++;
+	s_TraceHostLast = start;
+#endif
 	int result = BleStack_Process();
 	uint32_t elapsed = BtSmpMsTick() - start;
 	if (elapsed >= 100)
@@ -854,6 +863,11 @@ static void BtAppWbaConnected(uint8_t Status, uint16_t ConnHdl, uint8_t Role,
 			}
 			SysLogPrintf(SysLogGet(), "WBA security: request hdl=%u status=0x%02x\r\n",
 					(unsigned)ConnHdl, (unsigned)secStatus);
+#ifdef BT_WBA_SEC_TRACE
+			SysLogPrintf(SysLogGet(), "WBA trace: t=%lu host runs=%lu last=%lu\r\n",
+					(unsigned long)BtSmpMsTick(), (unsigned long)s_TraceHostRuns,
+					(unsigned long)s_TraceHostLast);
+#endif
 		}
 
 		if (Role == BT_CONN_ROLE_PERIPHERAL)
@@ -951,6 +965,11 @@ static BtWbaEvtFlow_t BtAppHciEvtHandler(void *pPayload)
 					"WBA link: disconnected hdl=%u status=0x%02x reason=0x%02x\r\n",
 					(unsigned)p->Connection_Handle, (unsigned)p->Status,
 					(unsigned)p->Reason);
+#ifdef BT_WBA_SEC_TRACE
+			SysLogPrintf(SysLogGet(), "WBA trace: t=%lu host runs=%lu last=%lu\r\n",
+					(unsigned long)BtSmpMsTick(), (unsigned long)s_TraceHostRuns,
+					(unsigned long)s_TraceHostLast);
+#endif
 			if (p->Status == BLE_STATUS_SUCCESS)
 			{
 				if (s_WbaData.PasskeyRejectedHdl == p->Connection_Handle)
@@ -992,6 +1011,10 @@ static BtWbaEvtFlow_t BtAppHciEvtHandler(void *pPayload)
 					"WBA security: encryption hdl=%u status=0x%02x enabled=%u\r\n",
 					(unsigned)p->Connection_Handle, (unsigned)p->Status,
 					(unsigned)p->Encryption_Enabled);
+#ifdef BT_WBA_SEC_TRACE
+			SysLogPrintf(SysLogGet(), "WBA trace: t=%lu\r\n",
+					(unsigned long)BtSmpMsTick());
+#endif
 			// Link encrypted. On a bonded reconnect the stack has restored the
 			// peer's CCCDs by this point, so re-arm the notify/indicate callbacks.
 			// On a fresh pairing the CCCDs are still clear, so this is a no-op and
