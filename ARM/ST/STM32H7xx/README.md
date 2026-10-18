@@ -2,7 +2,7 @@
 
 Initial IOsonata port for the STM32H753ZI Cortex-M7. It supplies startup,
 GPIO/EXTI, polling and interrupt UART, and the 14 general-purpose/basic/advanced
-TIM instances. Hardware validation is pending.
+TIM instances. Blinky is hardware tested; timer and UART validation is pending.
 
 ## Build and first board tests
 
@@ -14,8 +14,11 @@ also has FPU configurations using `fpv5-d16`; match the application's ABI
 when using those configurations.
 
 1. Run `Blinky`: the three user LEDs cycle.
-2. Run `TimerDemo`: USART3 on the ST-LINK virtual COM port prints at 115200
-   baud, 8N1. Default DevNo 8 selects TIM2, at 100 kHz with multiple triggers.
+2. Run `TimerDemo` in Debug with semihosting enabled in the debugger. Add
+   `monitor arm semihosting enable` to the GDB startup commands before resume.
+   Output appears in the OpenOCD console. Release uses USART3 on the ST-LINK
+   virtual COM port at 115200 baud, 8N1. Default DevNo 8 selects TIM2,
+   at 100 kHz with multiple triggers.
 3. Run `UartPrbsTxTest` in Release, then on the host:
    `python3 Python/uartprbs_rx.py --baud 1000000 --port <serial-port>`.
 4. Run `UartLoopback` in Release, then:
