@@ -160,6 +160,9 @@ typedef struct {
 	bool bCsDrive;			//!< The driver drives the chip select pin
 	bool bCsLow;			//!< Chip select pin driven low by StartTx or StartRx
 	bool bSlave;
+	bool bFrame;			//!< Slave: NSS seen active, the frame is running
+	bool bNssInt;			//!< Slave: the NSS pin event is enabled
+	int NssLine;			//!< Slave: EXTI line of the NSS pin
 	// Master transfer
 	bool bRun;				//!< Transfer engine running
 	bool bAsync;			//!< Running transfer ends in the interrupt and reports with the event
@@ -741,6 +744,7 @@ static void Stm32SpiSlaveArm(Stm32SpiDev_t * const pDev)
 	}
 
 	pDev->bBad = false;
+	pDev->bFrame = false;
 	pDev->SRx = 0;
 	pDev->STx = 0;
 	pDev->SRxMax = spi->pRxBuff[0] != NULL && spi->RxBuffLen[0] > 0 ? (uint32_t)spi->RxBuffLen[0] / isz : 0;
@@ -954,6 +958,38 @@ static void Stm32SpiSlaveService(Stm32SpiDev_t * const pDev)
 	}
 }
 
+// The peripheral raises no EOT when NSS goes inactive while the transfer
+// size is open, so the pin event ends the frame.
+static bool Stm32SpiSlaveActive(Stm32SpiDev_t * const pDev)
+{
+	bool active = pDev->bFrame || pDev->SRx > 0U || (pDev->pReg->SR & SPI_SR_RXP) != 0U;
+
+#ifdef STM32_SPI_DMA
+	if (pDev->bDma && pDev->SRxMax > 0U)
+	{
+		active = active || WbaGpdmaRemain(pDev->DmaRx) < pDev->SRxMax * (uint32_t)Stm32SpiItemSize(pDev);
+	}
+#endif
+
+	return active;
+}
+
+static void Stm32SpiNssEvt(int IntNo, void *pCtx)
+{
+	Stm32SpiDev_t *dev = (Stm32SpiDev_t*)pCtx;
+	const IOPinCfg_t &cs = dev->pSpiDev->Cfg.pIOPinMap[SPI_CS_IOPIN_IDX];
+
+	(void)IntNo;
+	if (IOPinRead(cs.PortNo, cs.PinNo) == 0)
+	{
+		dev->bFrame = true;
+	}
+	else if (Stm32SpiSlaveActive(dev))
+	{
+		Stm32SpiSlaveEnd(dev);
+	}
+}
+
 // ---------------------------------------------------------------------------
 // Interrupts
 // ---------------------------------------------------------------------------
@@ -1099,6 +1135,11 @@ static void Stm32SpiPowerOff(DevIntrf_t * const pIntrf)
 		dev->pReg->IER = 0;
 		dev->pReg->CR1 &= ~SPI_CR1_SPE;
 		NVIC_DisableIRQ(dev->pInfo->Irq);
+		if (dev->bNssInt)
+		{
+			IOPinDisableInterrupt(dev->NssLine);
+			dev->bNssInt = false;
+		}
 #ifdef STM32_SPI_DMA
 		Stm32SpiDmaGive(dev);
 #endif
@@ -1240,6 +1281,12 @@ bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfgData)
 	dev->DevNo = pCfgData->DevNo;
 	dev->pInfo = &s_Stm32SpiInfo[pCfgData->DevNo];
 	dev->pReg = reg;
+	if (dev->bNssInt)
+	{
+		IOPinDisableInterrupt(dev->NssLine);
+	}
+	dev->bNssInt = false;
+	dev->bFrame = false;
 	dev->bSlave = slave;
 	dev->Dummy = pCfgData->DataSize > 8 ? (uint16_t)(pCfgData->DummyByte * 0x0101U) : pCfgData->DummyByte;
 	dev->Sink = 0;
@@ -1375,6 +1422,18 @@ bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfgData)
 
 	if (slave)
 	{
+		if (pCfgData->NbIOPins > SPI_CS_IOPIN_IDX)
+		{
+			const IOPinCfg_t &cs = pCfgData->pIOPinMap[SPI_CS_IOPIN_IDX];
+
+			if (cs.PortNo >= 0 && cs.PinNo >= 0 &&
+				IOPinEnableInterrupt(cs.PinNo, pCfgData->IntPrio, cs.PortNo, cs.PinNo,
+									 IOPINSENSE_TOGGLE, Stm32SpiNssEvt, dev))
+			{
+				dev->NssLine = cs.PinNo;
+				dev->bNssInt = true;
+			}
+		}
 		Stm32SpiSlaveArm(dev);
 	}
 
