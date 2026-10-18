@@ -680,7 +680,8 @@ extern "C" void HW_RNG_Disable(void)
 
 //----------------------------------------------------------------------------
 // AES for the stack: ECB, CMAC and CCM on the IOsonata software engine.
-// Byte arrays are in the natural AES order, as the Cube BasicAES module.
+// ST ECB reverses the key, input and output relative to standard AES byte
+// strings. ST CCM reverses only the key; CMAC uses standard byte order.
 //----------------------------------------------------------------------------
 
 static uint64_t s_AesMem[(CRYPTO_SOFTAES_MEMSIZE + 7U) / 8U];
@@ -714,13 +715,24 @@ extern "C" void BAES_Reset(void)
 {
 }
 
-// The stack encrypts only (BLEPLAT_AesEcbEncrypt). The engine has no ECB
-// decrypt, so a decrypt request answers zeros.
+// Match Cube baes_ecb.c / hw_aes.c: the BLE e() interface is little endian.
+// Keep conversion here; CryptoSoftAes and the common SMP use standard AES order.
+static void BtWbaAesReverse(uint8_t *pDst, const uint8_t *pSrc)
+{
+	for (size_t i = 0; i < 16; i++)
+	{
+		pDst[i] = pSrc[15 - i];
+	}
+}
+
 extern "C" void BAES_EcbCrypt(const uint8_t *pKey, const uint8_t *pIn,
 							  uint8_t *pOut, int bEnc)
 {
 	CryptoSoftAes *p = BtWbaAes();
 	CryptoKey key;
+	uint8_t aesKey[16];
+	uint8_t input[16];
+	uint8_t output[16] = {};
 
 	if (p == nullptr)
 	{
@@ -728,11 +740,18 @@ extern "C" void BAES_EcbCrypt(const uint8_t *pKey, const uint8_t *pIn,
 		return;
 	}
 
-	BtWbaAesKey(key, pKey, CRYPTO_KEY_USE_ENCRYPT | CRYPTO_KEY_USE_DECRYPT);
-	if (p->Cipher(CRYPTO_CIPHER_ECB, bEnc, key, nullptr, 0, pIn, 16, pOut) != CRYPTO_STATUS_OK)
+	BtWbaAesReverse(aesKey, pKey);
+	BtWbaAesReverse(input, pIn);
+	BtWbaAesKey(key, aesKey, CRYPTO_KEY_USE_ENCRYPT | CRYPTO_KEY_USE_DECRYPT);
+	if (p->Cipher(CRYPTO_CIPHER_ECB, bEnc, key, nullptr, 0,
+				  input, sizeof(input), output) != CRYPTO_STATUS_OK)
 	{
-		memset(pOut, 0, 16);
+		memset(output, 0, sizeof(output));
 	}
+	BtWbaAesReverse(pOut, output);
+	CryptoSecureWipe(aesKey, sizeof(aesKey));
+	CryptoSecureWipe(input, sizeof(input));
+	CryptoSecureWipe(output, sizeof(output));
 }
 
 extern "C" void BAES_CmacSetKey(const uint8_t *pKey)
@@ -740,9 +759,9 @@ extern "C" void BAES_CmacSetKey(const uint8_t *pKey)
 	memcpy(s_CmacKey, pKey, sizeof(s_CmacKey));
 }
 
-// One call computes the whole tag. The stack never calls it in pieces. The
-// Cube module accepts a call with no output to continue with more data, which
-// is not supported here, so such a call does nothing.
+// Only one-shot CMAC is implemented here. BLEPLAT also permits calls with
+// no output to append data; that incremental mode remains unsupported.
+// See SECURITY_REVIEW.md.
 extern "C" void BAES_CmacCompute(const uint8_t *pIn, uint32_t Size, uint8_t *pOut)
 {
 	if (pOut == nullptr)
@@ -776,6 +795,7 @@ extern "C" int BAES_CcmCrypt(uint8_t Mode, const uint8_t *pKey,
 {
 	CryptoSoftAes *p = BtWbaAes();
 	CryptoKey key;
+	uint8_t aesKey[16];
 	CRYPTO_STATUS st;
 
 	if (p == nullptr)
@@ -783,19 +803,22 @@ extern "C" int BAES_CcmCrypt(uint8_t Mode, const uint8_t *pKey,
 		return 1;
 	}
 
+	// HW_AES_InitCcm loads KEYR0 first, unlike the standard-order CMAC key.
+	BtWbaAesReverse(aesKey, pKey);
 	if (Mode == 0U)
 	{
-		BtWbaAesKey(key, pKey, CRYPTO_KEY_USE_ENCRYPT);
+		BtWbaAesKey(key, aesKey, CRYPTO_KEY_USE_ENCRYPT);
 		st = p->Seal(CRYPTO_AEAD_AES_CCM, key, pIv, IvLen, pAdd, AddLen,
 					 pIn, InLen, pOut, pTag, TagLen);
 	}
 	else
 	{
-		BtWbaAesKey(key, pKey, CRYPTO_KEY_USE_DECRYPT);
+		BtWbaAesKey(key, aesKey, CRYPTO_KEY_USE_DECRYPT);
 		st = p->Open(CRYPTO_AEAD_AES_CCM, key, pIv, IvLen, pAdd, AddLen,
 					 pIn, InLen, pOut, pTag, TagLen);
 	}
 
+	CryptoSecureWipe(aesKey, sizeof(aesKey));
 	return st == CRYPTO_STATUS_OK ? 0 : 1;
 }
 
