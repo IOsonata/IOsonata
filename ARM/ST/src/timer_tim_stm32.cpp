@@ -77,6 +77,10 @@ SOFTWARE.
 #define ST_RCC_APB1ENR			APB1ENR1
 #define ST_RCC_APB1RSTR			APB1RSTR1
 #define ST_RCC_APB1EN(Inst)		RCC_APB1ENR1_##Inst##EN
+#elif defined(RCC_APB1LENR_TIM2EN)
+#define ST_RCC_APB1ENR			APB1LENR
+#define ST_RCC_APB1RSTR			APB1LRSTR
+#define ST_RCC_APB1EN(Inst)		RCC_APB1LENR_##Inst##EN
 #elif defined(RCC_APB1ENR_PWREN)
 #define ST_RCC_APB1ENR			APB1ENR
 #define ST_RCC_APB1RSTR			APB1RSTR
@@ -87,7 +91,7 @@ SOFTWARE.
 
 // SystemPeriphClockGet index of the APB2 timers. Parts with a single APB
 // prescaler have one PCLK.
-#if defined(RCC_CFGR_PPRE2) || defined(RCC_CFGR2_PPRE2)
+#if defined(RCC_CFGR_PPRE2) || defined(RCC_CFGR2_PPRE2) || defined(RCC_D2CFGR_D2PPRE2)
 #define ST_PCLK_APB2			1
 #else
 #define ST_PCLK_APB2			0
@@ -141,6 +145,17 @@ SOFTWARE.
 #define ST_TIM16_IRQn			TIM1_UP_TIM16_IRQn
 #define ST_TIM17_IRQn			TIM1_TRG_COM_TIM17_IRQn
 #define ST_TIM20_IRQn			TIM20_UP_IRQn
+#elif defined(IOSONATA_STM32_H7)
+#define ST_TIM1_IRQn			TIM1_UP_IRQn
+#define ST_TIM6_IRQn			TIM6_DAC_IRQn
+#define ST_TIM7_IRQn			TIM7_IRQn
+#define ST_TIM8_IRQn			TIM8_UP_TIM13_IRQn
+#define ST_TIM12_IRQn			TIM8_BRK_TIM12_IRQn
+#define ST_TIM13_IRQn			TIM8_UP_TIM13_IRQn
+#define ST_TIM14_IRQn			TIM8_TRG_COM_TIM14_IRQn
+#define ST_TIM15_IRQn			TIM15_IRQn
+#define ST_TIM16_IRQn			TIM16_IRQn
+#define ST_TIM17_IRQn			TIM17_IRQn
 #elif defined(STM32WBA)
 #define ST_TIM1_IRQn			TIM1_UP_IRQn
 #define ST_TIM16_IRQn			TIM16_IRQn
@@ -573,10 +588,25 @@ static bool StTimPlan(int PclkIdx, uint32_t Freq, uint32_t *pDiv, uint32_t *pFre
 {
 	uint32_t base = SystemPeriphClockGet(PclkIdx);
 
+#if defined(IOSONATA_STM32_H7)
+	// H7: APB is derived from HCLK, not the CPU clock. TIMPRE selects
+	// either twice PCLK or four times PCLK, capped at HCLK.
+	uint32_t pos = PclkIdx == 0 ? RCC_D2CFGR_D2PPRE1_Pos : RCC_D2CFGR_D2PPRE2_Pos;
+	uint32_t pre = (RCC->D2CFGR >> pos) & 7U;
+	if (RCC->CFGR & RCC_CFGR_TIMPRE)
+	{
+		base = pre <= 5U ? SystemD2Clock : base * 4U;
+	}
+	else if (pre >= 4U)
+	{
+		base *= 2U;
+	}
+#else
 	if (base < SystemCoreClock)
 	{
 		base *= 2;
 	}
+#endif
 	if (base == 0)
 	{
 		return false;
@@ -1228,3 +1258,4 @@ int Stm32TimCount(void)
 {
 	return ST_TIM_CNT;
 }
+

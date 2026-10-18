@@ -24,6 +24,9 @@
 		         12 TIM8
 		G474   : 0 LPTIM1, 1 TIM6, 2 TIM7, 3 TIM16, 4 TIM17, 5 TIM15, 6 TIM2,
 		         7 TIM3, 8 TIM4, 9 TIM5, 10 TIM1, 11 TIM8, 12 TIM20
+		H753   : 0 TIM6, 1 TIM7, 2 TIM13, 3 TIM14, 4 TIM16, 5 TIM17,
+		         6 TIM12, 7 TIM15, 8 TIM2, 9 TIM3, 10 TIM4, 11 TIM5,
+		         12 TIM1, 13 TIM8 (LPTIM not exposed yet)
 		WBA65  : 0 LPTIM1, 1 LPTIM2, 2 TIM16, 3 TIM17, 4 TIM2, 5 TIM3,
 		         6 TIM4, 7 TIM1
 
@@ -137,3 +140,4 @@ int Stm32TimCount(void);
 #endif
 
 #endif
+

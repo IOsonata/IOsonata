@@ -55,6 +55,10 @@ SOFTWARE.
 #define IOSONATA_STM32_F4		1
 #include "stm32f4xx.h"
 
+#elif defined(STM32H753xx)
+#define IOSONATA_STM32_H7		1
+#include "stm32h7xx.h"
+
 #elif defined(STM32L412xx) || defined(STM32L422xx) || defined(STM32L431xx) || defined(STM32L432xx) || \
 	defined(STM32L433xx) || defined(STM32L442xx) || defined(STM32L443xx) || defined(STM32L451xx) || \
 	defined(STM32L452xx) || defined(STM32L462xx) || defined(STM32L471xx) || defined(STM32L475xx) || \
@@ -94,4 +98,5 @@ SOFTWARE.
 #endif
 
 #endif // __IOSONATA_STM32_H__
+
 

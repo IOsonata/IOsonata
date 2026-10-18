@@ -165,6 +165,10 @@ SOFTWARE.
 #define ST_RCC_APB1ENR			APB1ENR1
 #define ST_RCC_APB1RSTR			APB1RSTR1
 #define ST_RCC_APB1EN(Inst)		RCC_APB1ENR1_##Inst##EN
+#elif defined(RCC_APB1LENR_TIM2EN)
+#define ST_RCC_APB1ENR			APB1LENR
+#define ST_RCC_APB1RSTR			APB1LRSTR
+#define ST_RCC_APB1EN(Inst)		RCC_APB1LENR_##Inst##EN
 #elif defined(RCC_APB1ENR_PWREN)
 #define ST_RCC_APB1ENR			APB1ENR
 #define ST_RCC_APB1RSTR			APB1RSTR
@@ -176,12 +180,14 @@ SOFTWARE.
 // SystemPeriphClockGet index of the APB2 instances. Parts with a single APB
 // prescaler have one PCLK. WBA has its prescalers in CFGR2 and LPUART1 on
 // APB7, index 2.
-#if defined(RCC_CFGR_PPRE2) || defined(RCC_CFGR2_PPRE2)
+#if defined(RCC_CFGR_PPRE2) || defined(RCC_CFGR2_PPRE2) || defined(RCC_D2CFGR_D2PPRE2)
 #define ST_PCLK_APB2			1
 #else
 #define ST_PCLK_APB2			0
 #endif
-#ifdef RCC_CFGR3_PPRE7
+#if defined(IOSONATA_STM32_H7)
+#define ST_PCLK_LPUART1			3
+#elif defined(RCC_CFGR3_PPRE7)
 #define ST_PCLK_LPUART1			2
 #else
 #define ST_PCLK_LPUART1			0
@@ -191,7 +197,14 @@ SOFTWARE.
 // peripheral reset does not clear it, boot code or an application may have
 // selected another clock. Instances without one (F1, F2, F4, most F0 USART2
 // and up) run from PCLK.
-#if defined(RCC_CCIPR_USART1SEL)
+#if defined(IOSONATA_STM32_H7)
+#define ST_RCC_USARTSELR		D2CCIP2R
+#define ST_RCC_USART1SEL		RCC_D2CCIP2R_USART16SEL
+#define ST_RCC_USART2SEL		RCC_D2CCIP2R_USART28SEL
+#define ST_RCC_USART3SEL		RCC_D2CCIP2R_USART28SEL
+#define ST_RCC_UART4SEL			RCC_D2CCIP2R_USART28SEL
+#define ST_RCC_UART5SEL			RCC_D2CCIP2R_USART28SEL
+#elif defined(RCC_CCIPR_USART1SEL)
 #define ST_RCC_USARTSELR		CCIPR
 #define ST_RCC_USART1SEL		RCC_CCIPR_USART1SEL
 #ifdef RCC_CCIPR_USART2SEL
@@ -239,6 +252,12 @@ SOFTWARE.
 #define ST_RCC_LPUART1EN		RCC_APB7ENR_LPUART1EN
 #define ST_RCC_LPUART1SELR		CCIPR3
 #define ST_RCC_LPUART1SEL_Pos	RCC_CCIPR3_LPUART1SEL_Pos
+#elif defined(LPUART1) && defined(RCC_APB4ENR_LPUART1EN)
+#define ST_RCC_LPUART1ENR		APB4ENR
+#define ST_RCC_LPUART1RSTR		APB4RSTR
+#define ST_RCC_LPUART1EN		RCC_APB4ENR_LPUART1EN
+#define ST_RCC_LPUART1SELR		D3CCIPR
+#define ST_RCC_LPUART1SEL_Pos	RCC_D3CCIPR_LPUART1SEL_Pos
 #elif defined(LPUART1)
 #error "uart_stm32.cpp: LPUART1 RCC names not mapped"
 #endif
@@ -327,7 +346,11 @@ typedef struct {
 #endif
 
 // LPUART kernel clock selection values and the HSI16 frequency
+#if defined(IOSONATA_STM32_H7)
+#define ST_LPUART_CLKSEL_MSK	7U
+#else
 #define ST_LPUART_CLKSEL_MSK	3U
+#endif
 #define ST_LPUART_CLKSEL_PCLK	0U
 #define ST_LPUART_CLKSEL_HSI16	2U
 #define ST_LPUART_CLKSEL_LSE	3U
@@ -435,6 +458,12 @@ enum {
 #endif
 #ifdef USART6
 	ST_USART6_IDX,
+#endif
+#ifdef UART7
+	ST_UART7_IDX,
+#endif
+#ifdef UART8
+	ST_UART8_IDX,
 #endif
 };
 
@@ -625,10 +654,38 @@ static Stm32UartDev_t s_Stm32UartDev[] = {
 		.pRccRstReg = &RCC->APB2RSTR,
 		.RccMask = RCC_APB2ENR_USART6EN,
 		.PclkIdx = ST_PCLK_APB2,
+#if defined(IOSONATA_STM32_H7)
+		.pClkSelReg = &RCC->D2CCIP2R,
+		.ClkSelMask = RCC_D2CCIP2R_USART16SEL,
+#endif
 #if defined(STM32F4)
 		.RxDma = { DMA2_Stream1, DMA2, 1, 5, DMA2_Stream1_IRQn },
 		.TxDma = { DMA2_Stream6, DMA2, 6, 5, DMA2_Stream6_IRQn },
 #endif
+	},
+#endif
+#if defined(IOSONATA_STM32_H7) && defined(UART7)
+	{
+		.pReg = UART7,
+		.IrqNo = UART7_IRQn,
+		.pRccEnReg = &RCC->APB1LENR,
+		.pRccRstReg = &RCC->APB1LRSTR,
+		.RccMask = RCC_APB1LENR_UART7EN,
+		.PclkIdx = 0,
+		.pClkSelReg = &RCC->D2CCIP2R,
+		.ClkSelMask = RCC_D2CCIP2R_USART28SEL,
+	},
+#endif
+#if defined(IOSONATA_STM32_H7) && defined(UART8)
+	{
+		.pReg = UART8,
+		.IrqNo = UART8_IRQn,
+		.pRccEnReg = &RCC->APB1LENR,
+		.pRccRstReg = &RCC->APB1LRSTR,
+		.RccMask = RCC_APB1LENR_UART8EN,
+		.PclkIdx = 0,
+		.pClkSelReg = &RCC->D2CCIP2R,
+		.ClkSelMask = RCC_D2CCIP2R_USART28SEL,
 	},
 #endif
 };
@@ -1360,6 +1417,7 @@ static uint32_t Stm32UartSetRate(DevIntrf_t * const pDev, uint32_t Rate)
 		// rates up to 16 MHz / 3, PCLK the ones above.
 		uint32_t clksel = ST_LPUART_CLKSEL_PCLK;
 
+#if !defined(IOSONATA_STM32_H7)
 		if (GetLowFreqOscType() == OSC_TYPE_XTAL && Rate <= GetLowFreqOscFreq() / 3U)
 		{
 			clksel = ST_LPUART_CLKSEL_LSE;
@@ -1374,6 +1432,7 @@ static uint32_t Stm32UartSetRate(DevIntrf_t * const pDev, uint32_t Rate)
 			fclk = ST_HSI16_FREQ;
 		}
 
+#endif
 		RCC->ST_RCC_LPUART1SELR = (RCC->ST_RCC_LPUART1SELR & ~(ST_LPUART_CLKSEL_MSK << ST_RCC_LPUART1SEL_Pos)) |
 								  (clksel << ST_RCC_LPUART1SEL_Pos);
 
@@ -2471,4 +2530,19 @@ extern "C" void USART6_IRQHandler()
 	Stm32UartIrqHandler(&s_Stm32UartDev[ST_USART6_IDX]);
 }
 #endif
+#endif
+
+
+#if defined(IOSONATA_STM32_H7) && defined(UART7)
+extern "C" void UART7_IRQHandler(void)
+{
+	Stm32UartIrqHandler(&s_Stm32UartDev[ST_UART7_IDX]);
+}
+#endif
+
+#if defined(IOSONATA_STM32_H7) && defined(UART8)
+extern "C" void UART8_IRQHandler(void)
+{
+	Stm32UartIrqHandler(&s_Stm32UartDev[ST_UART8_IDX]);
+}
 #endif

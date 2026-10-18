@@ -195,9 +195,8 @@ SOFTWARE.
 #define BOARD_BUT1_SENSE	IOPINSENSE_LOW_TRANSITION
 
 #elif BOARD == NUCLEO_H753ZI
-// No IOsonata STM32H7 port yet. DevNo as the UART driver would number the
-// H753 instances: LPUART1 0, USART1 1, USART2 2, USART3 3, UART4 4, UART5 5,
-// USART6 6.
+// STM32H753 UART DevNo: LPUART1 0, USART1 1, USART2 2, USART3 3, UART4 4, UART5 5,
+// USART6 6, UART7 7, UART8 8.
 #if !defined(STM32H753xx)
 #error "NUCLEO-H753ZI: build an STM32H753 project"
 #endif
@@ -257,3 +256,4 @@ SOFTWARE.
 #endif
 
 #endif
+
