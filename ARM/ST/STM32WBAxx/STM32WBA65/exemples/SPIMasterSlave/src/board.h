@@ -5,9 +5,10 @@
 
 		The slave is SPI2, AF5, on the Arduino pins of UM3462 table 8: SCK PB10
 		(D13), MISO PA9 (D12), MOSI PC3 (D11), NSS PB9 (D10). The master is the
-		software SPI: SCK PB11 (D9), MOSI PB0 (D6, also drives LED3), MISO PC13
-		(D4), chip select PA10 (D8). Wire D9 to D13, D6 to D11, D12 to D4 and
-		D8 to D10. The result is printed on the first ST-LINK virtual COM port,
+		software SPI: SCK PB2 (D15), MOSI PB0 (D6, also drives LED3), MISO PC13
+		(D4), chip select PA10 (D8). Wire D15 to D13, D6 to D11, D12 to D4 and
+		D8 to D10. The D15 to D13 wire is also the I2CMasterSlave SCL wire, so
+		both examples use the same five wires (add D14 to D9 for I2C). The result is printed on the first ST-LINK virtual COM port,
 		USART1.
 
 		Not tested on hardware.
@@ -49,7 +50,7 @@ SOFTWARE.
 
 #include "stm32_boards.h"
 
-#define SPI_LOOPBACK_WIRING			"Wire D9-D13 SCK, D6-D11 MOSI, D12-D4 MISO, D8-D10 CS"
+#define SPI_LOOPBACK_WIRING			"Wire D15-D13 SCK, D6-D11 MOSI, D12-D4 MISO, D8-D10 CS"
 
 // First ST-LINK virtual COM port, USART1, RX PA8 and TX PB12, AF7
 #define UART_DEVNO					1
@@ -70,7 +71,7 @@ SOFTWARE.
 #define SPI_MASTER_SOFTWARE			true
 #define SPI_MASTER_DEVNO			0
 #define SPI_MASTER_SCK_PORT			IOPORTB
-#define SPI_MASTER_SCK_PIN			11
+#define SPI_MASTER_SCK_PIN			2
 #define SPI_MASTER_SCK_PINOP		IOPINOP_GPIO
 #define SPI_MASTER_MISO_PORT		IOPORTC
 #define SPI_MASTER_MISO_PIN			13

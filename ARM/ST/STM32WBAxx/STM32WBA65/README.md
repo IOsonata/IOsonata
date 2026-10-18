@@ -323,7 +323,7 @@ AF4). The scan result is printed on USART2 through the UART retarget.
 `exemples/I2CMasterSlave` (`exemples/i2c/i2c_master_slave.cpp`) runs the master
 on I2C1 and the slave on I2C2 of the same chip, AF4. Master SDA PB1 (D14) and
 SCL PB2 (D15), slave SDA PB11 (D9) and SCL PB10 (D13). Wire D14 to D9 and D15
-to D13 (UM3462 table 8). D13 also drives LED3 through R42, so use 4.7k
+to D13 (UM3462 table 8), the same wires as SPIMasterSlave uses. D13 also drives LED3 through R42, so use 4.7k
 external pull-ups to 3.3V on the slave bus or remove R42. PB13 and PB14 (D3 and
 D5) cannot be used: SB24 and SB22 tie them to the audio codec signals (a
 hardware run showed PB13 held low). One run tests the master in polling,
@@ -381,9 +381,11 @@ AF7, which matches the ST board support package).
 
 `exemples/SPIMasterSlave` (`exemples/spi/spi_master_slave.cpp`) runs the slave
 on SPI2, AF5, on the Arduino pins of UM3462 table 8: SCK PB10 (D13), MISO PA9
-(D12), MOSI PC3 (D11), NSS PB9 (D10). The master is the software SPI: SCK PB11
-(D9), MOSI PB0 (D6, also drives LED3), MISO PC13 (D4), chip select PA10 (D8).
-Wire D9 to D13, D6 to D11, D12 to D4 and D8 to D10. On the DK1 the four modes
+(D12), MOSI PC3 (D11), NSS PB9 (D10). The master is the software SPI: SCK PB2
+(D15), MOSI PB0 (D6, also drives LED3), MISO PC13 (D4), chip select PA10 (D8).
+Wire D15 to D13, D6 to D11, D12 to D4 and D8 to D10. The D15 to D13 wire is
+also the I2CMasterSlave SCL wire, so with D14 to D9 added the five wires serve
+both examples. On the DK1 the four modes
 passed with the slave in interrupt mode and frames of 1, 16 and 129 bytes. One
 run tests the slave in interrupt and DMA mode in each SPI mode (the software
 master has one mode; `SPI_TEST_SLAVE_MASK` and `SPI_TEST_MODE_MASK` in
