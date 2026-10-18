@@ -842,6 +842,26 @@ static int GarbageCollect(uint32_t Need)
 	uint16_t destination = FindErasedSector();
 	if (destination == BT_PDS_NO_SECTOR)
 	{
+		// A sector with no valid header under this epoch, such as one left
+		// unusable by a failed header write, holds nothing to keep: BtPdsInit
+		// erases the same sectors at mount. Erase it now rather than waiting
+		// for a reset.
+		for (uint16_t sector = 0; sector < s_SectorCount; sector++)
+		{
+			if (!s_Sectors[sector].Valid && !s_Sectors[sector].Erased)
+			{
+				int result = EraseSector(sector);
+				if (result != 0)
+				{
+					return result;
+				}
+				destination = sector;
+				break;
+			}
+		}
+	}
+	if (destination == BT_PDS_NO_SECTOR)
+	{
 		// Expected only after an interrupted erase. A sector owning no globally
 		// newest record can be reclaimed without copying.
 		for (uint16_t sector = 0; sector < s_SectorCount; sector++)
