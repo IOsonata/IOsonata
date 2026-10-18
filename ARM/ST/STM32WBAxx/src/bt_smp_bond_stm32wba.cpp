@@ -77,6 +77,31 @@ typedef struct __Bt_Wba_Nvm_Manifest {
 
 static bool s_PdsReady;
 
+#ifdef BT_WBA_SEC_TRACE
+// Bench aid: print the cache image as hex. The image holds key material, so
+// this stays off in any build that leaves the bench. 48 bytes a line keeps a
+// whole image inside the SysLog record queue.
+static void BondImageDump(const char *pTag, const void *pImg, size_t Len)
+{
+	static const char hex[] = "0123456789abcdef";
+	const uint8_t *p = (const uint8_t *)pImg;
+
+	for (size_t off = 0; off < Len; off += 48)
+	{
+		char line[48 * 2 + 1];
+		size_t n = Len - off < 48 ? Len - off : 48;
+
+		for (size_t i = 0; i < n; i++)
+		{
+			line[i * 2] = hex[p[off + i] >> 4];
+			line[i * 2 + 1] = hex[p[off + i] & 0x0F];
+		}
+		line[n * 2] = 0;
+		SysLogPrintf(SysLogGet(), "%s %03u %s\r\n", pTag, (unsigned)off, line);
+	}
+}
+#endif
+
 /* The stack's NVM cache, captured when the application registers it. The
  * store call reports a portion pointer and a valid word count that always
  * counts from the cache's beginning, so persisting needs the beginning,
@@ -169,9 +194,12 @@ extern "C" void BLEPLAT_NvmStore(const uint64_t *ptr, uint16_t size)
 	man.Crc = crc32_ieee((uint8_t *)img, (int)len);
 
 	ssize_t result = BtPdsWrite(BT_WBA_NVM_KEY_BASE, &man, sizeof(man));
-	SysLogPrintf(SysLogGet(), "WBA bond: save %lu bytes, status %ld\r\n",
-			(unsigned long)len,
+	SysLogPrintf(SysLogGet(), "WBA bond: save %lu bytes crc %08lx, status %ld\r\n",
+			(unsigned long)len, (unsigned long)man.Crc,
 			(long)(result == (ssize_t)sizeof(man) ? 0 : result));
+#ifdef BT_WBA_SEC_TRACE
+	BondImageDump("save", img, len);
+#endif
 }
 
 // ---------------------------------------------------------------------------
@@ -261,8 +289,12 @@ extern "C" uint16_t BtSmpBondWbaCacheInit(uint64_t *pCache, uint16_t MaxWords)
 	size_t n = BtSmpBondWbaRestore(pCache, (size_t)MaxWords *
 								   sizeof(uint64_t));
 
-	SysLogPrintf(SysLogGet(), "WBA bond: restored %lu bytes\r\n",
-			(unsigned long)n);
+	SysLogPrintf(SysLogGet(), "WBA bond: restored %lu bytes crc %08lx\r\n",
+			(unsigned long)n,
+			(unsigned long)(n != 0 ? crc32_ieee((uint8_t *)pCache, (int)n) : 0));
+#ifdef BT_WBA_SEC_TRACE
+	BondImageDump("rest", pCache, n);
+#endif
 
 	// Whole words by construction: the image was stored from a word count.
 	return (uint16_t)(n / sizeof(uint64_t));

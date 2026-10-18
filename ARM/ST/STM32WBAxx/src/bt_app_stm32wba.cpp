@@ -1061,6 +1061,10 @@ static BtWbaEvtFlow_t BtAppHciEvtHandler(void *pPayload)
 					break;
 
 				default:
+#ifdef BT_WBA_SEC_TRACE
+					SysLogPrintf(SysLogGet(), "WBA evt: le meta 0x%02x\r\n",
+							(unsigned)pMeta->subevent);
+#endif
 					break;
 			}
 			break;
@@ -1210,12 +1214,20 @@ static BtWbaEvtFlow_t BtAppHciEvtHandler(void *pPayload)
 				}
 
 				default:
+#ifdef BT_WBA_SEC_TRACE
+					SysLogPrintf(SysLogGet(), "WBA evt: aci 0x%04x\r\n",
+							(unsigned)pAci->ecode);
+#endif
 					break;
 			}
 			break;
 		}
 
 		default:
+#ifdef BT_WBA_SEC_TRACE
+			SysLogPrintf(SysLogGet(), "WBA evt: hci 0x%02x\r\n",
+					(unsigned)pEvtPkt->evt);
+#endif
 			break;
 	}
 
