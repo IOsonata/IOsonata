@@ -66,6 +66,7 @@ python3 tests/stm32wba/run_ble_crypto.py
 python3 tests/stm32wba/run_bt_crypto.py
 python3 tests/stm32wba/run_bond_store.py
 python3 tests/stm32wba/run_bond_powerloss.py
+python3 tests/stm32wba/run_bond_flash.py
 ```
 
 The host AES adapter test needs g++ and Python cryptography. It uses the real
@@ -79,6 +80,15 @@ The hardware adapter test needs an Arm GNU toolchain, Python unicorn,
 pyelftools and cryptography, and `CUBE_WPAN` pointing to stm32-mw-wpan 2.10.0.
 It runs the actual WBA AES/PKA drivers on register models.
 
+The bond flash test needs an Arm GNU toolchain and Python unicorn and
+pyelftools. It runs the real bond store, PDS store and STM32 flash driver on
+an emulated Cortex-M33 against a model of the flash controller with write
+protection, across simulated resets. The protection is turned on and off
+where a board would need an option byte change and a reset, which shows the
+retry times, the drop, a retry succeeding mid wait, a partly written save
+keeping the committed image, and the missing region case on the real store
+code.
+
 October 18 review fixes, tested locally:
 
 - Host AES adapter: **179 checks, 0 failures** at both `-O0` and `-Os`.
@@ -86,6 +96,13 @@ October 18 review fixes, tested locally:
   mount/chunk/manifest failures, timed retries with the 1 to 64 s back-off and
   the retry limit, a missing NVM region, a new request during a flush, torn
   images, missing chunks, CRC rejection and empty images.
+- Bond store over the flash model: **13 checks, 0 failures**, with tries
+  after 1, 2, 4 .. 64 s, the drop after the 64 s wait and no write from the
+  idle loop between ticks. It found two defects, both fixed: the STM32 flash
+  page erase read the control register before unlocking it and locked the
+  controller again, so no page was ever erased; and the PDS store left a
+  sector it could not write unusable until a reset, so after one refused write
+  every later save on a two-sector store failed until reboot.
 - Cortex-M33 crypto integration: **18 checks, 0 failures**, including
   incremental CMAC and three interrupt preemptions while AES is busy.
   The existing model warning about the platform `HW_RNG_Get` initialization
