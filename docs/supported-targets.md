@@ -138,7 +138,7 @@ all SDK integrations were rebuilt for 0.13.
 
 | MCU | Implemented peripherals | Application examples | Status and validation |
 |---|---|---|---|
-| [RA4M1](../ARM/Renesas/RA4M1/README.md) | Startup, GPIO, ICU interrupt routing, SCI UART polling/interrupt and TX DMAC, AGT0/1 and GPT0-7 timers, IIC master/slave | [Examples](../ARM/Renesas/RA4M1/exemples/): Blinky, TimerDemo, UART loopback/PRBS and I2CMasterSlave | Supported; EK-RA4M1 startup/GPIO, timer callbacks and SCI UART have maintainer-confirmed hardware results. IIC hardware validation remains pending. USB and IIC DMA/DTC are not implemented; UART TX DMAC is separate. |
+| [RA4M1](../ARM/Renesas/RA4M1/README.md) | Startup, GPIO, ICU interrupt routing, SCI UART polling/interrupt and TX DMAC, AGT0/1 and GPT0-7 timers, IIC master/slave | [Examples](../ARM/Renesas/RA4M1/exemples/): Blinky, TimerDemo, UART loopback/PRBS and I2CMasterSlave | Supported; EK-RA4M1 startup/GPIO, timer callbacks and SCI UART have maintainer-confirmed hardware results. IIC fixes and hardware validation are deferred beyond 0.13; IIC is excluded from validated release functionality. USB and IIC DMA/DTC are not implemented; UART TX DMAC is separate. |
 | [RE01 1500 KB](../ARM/Renesas/RE01/RE01_1500KB/lib/ioc/) | Startup, GPIO, interrupt routing, SCI UART, AGT0/1, cascaded TMR0/1 and GPT0-5, polling RIIC0/1 I2C master and SPI0/1 master | [Examples](../ARM/Renesas/RE01/RE01_1500KB/exemples/README.md): UART/SLIP, TaktOS UART, timers, pulse trains, I2C and SPI | Supported; DBN/CFB/CFP compile/link/layout and register-model results are documented. Hardware validation is pending. |
 | [R9A02G021](../RISCV/Renesas/R9A02/README.md) | Startup, GPIO, CLIC/ICU interrupts, UART, SPI and I2C master and slave, ADC, DAC8, comparators, DTC, ELC, timers, RTC, low power and DFU | [Examples](../RISCV/Renesas/R9A02/R9A02G021/exemples/README.md): Blinky, timers, UART, SPI, I2C, ADC, analog, RTC, Snooze, self-test and DFU boot | Supported; GCC and clang builds, DFU boot emulated. FPB-R9A02G021 hardware validates UART0, IICA master/slave and SAU SPI master/slave in the configurations documented by the port. The mixed SPI master-DMA/slave-CPU configuration remains a documented timing limitation. Machine timer, TAU0 and TAU7 continuous 100 ms callbacks and ADC12 polling/interrupt single-round conversions are hardware validated; RTC SOSC calendar, Sleep and Software Standby wake-up and repeated alarms are also hardware validated; other timer/ADC/RTC modes and optional peripherals remain pending. |
 
@@ -329,7 +329,8 @@ the review commit or that every project passed both IOC build profiles.
 | RA4M1 | EK-RA4M1 | Blinky, TimerDemo callbacks and SCI UART | Maintainer-confirmed board results; semihosting affected timer timestamps. IIC and other optional modes are not covered. |
 
 RA4M1 has separate maintainer-confirmed startup/GPIO, timer and UART hardware
-results; IIC remains unvalidated. For RE01, retain the model/compiler/linker
+results; IIC remains unvalidated and is deferred beyond 0.13 by maintainer
+decision on October 18, 2026. For RE01, retain the model/compiler/linker
 results in its port notes without relabeling them as physical tests. STM32L4 has separate
 maintainer-confirmed hardware validation and project use. An unrecorded hardware
 result is unknown, not proof that the port fails.

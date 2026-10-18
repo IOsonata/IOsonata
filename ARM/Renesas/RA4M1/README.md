@@ -11,6 +11,15 @@ general DTC, or NMI driver is included yet. UART TX uses native DMAC.
 The IIC master (polling and interrupt) and slave are rewritten and checked
 against a host model of the IIC, not yet hardware-validated.
 
+## IOsonata 0.13 release scope
+
+RA4M1 I2C (IIC) fixes and master/slave hardware validation are deferred beyond
+0.13 by maintainer decision on October 18, 2026. The unresolved hardware
+issue remains open; the existing IIC implementation is not hardware validated
+and is excluded from the validated functionality claimed for this release.
+This deferral removes RA4M1 I2C from the 0.13 merge requirements. Startup,
+GPIO, timer and UART hardware results remain unchanged.
+
 ## Implementation status (October 13, 2026)
 
 Target: `prerelease_0.13`. The RA4M1 register-access migration uses Renesas
