@@ -14,8 +14,8 @@ layout requires a separate library configuration.
 Import the projects below from `exemples/<project>/ioc`. They link the common
 application sources, the same WBA65 library and the same two ST archives as
 the hardware-tested BleAdvertiser. Build the library and application with
-matching Debug or Release configurations. These new projects have not yet
-passed full target builds or hardware tests.
+matching Debug or Release configurations. BleAdvertiser and BleSecurityDemo
+are hardware validated. The other BLE projects require hardware testing.
 
 All use USART1 (DevNo 1), PA8 RX / PB12 TX, on the first ST-LINK virtual COM
 port, 8N1 without flow control. Board headers contain mappings only.
@@ -27,13 +27,13 @@ Application entry is the shared source's standard `main()`.
 | BleIntrfPrbsTx | bleintrf_prbs_tx.cpp | 115200 | BtIntrf PRBS notification stream, advertised name BlePrbs |
 | BleCentralScanDemo | ble_central_scan.cpp | 115200 | Advertising reports, device names and RSSI |
 | UartBleCentral | uart_ble_central.cpp | 1000000 | Find UARTDemo, connect, discover its service and CCCD, subscribe and exchange UART data |
-| BleSecurityDemo | ble_security_demo.cpp | 115200 | Default Just Works bonding and protected UART service, advertised name BLESec |
+| BleSecurityDemo | ble_security_demo.cpp | 115200 | LE Secure Connections, MITM, Numeric Comparison, bonding and protected UART service, advertised name BLESec |
 
 UartBleCentral sets `BLE_SC_METHOD=0` in both configurations for the first
 open-link test against UartBleDemo. Security belongs to the stack; this does
 not change the common example's security selection on other boards.
-BleSecurityDemo uses its existing default security policy. Numeric Comparison
-and passkey UI are not configured by this project.
+BleSecurityDemo selects LE Secure Connections with MITM and DisplayYesNo.
+Numeric Comparison uses the UART confirmation described below.
 
 The UART peripheral/security examples map their optional UART-toggle button
 to the already-tested external input PC13 (Arduino D4) with EXTI13. Leave it
@@ -59,8 +59,36 @@ Maintainer hardware results on October 17, 2026: GPIO output/input and EXTI
 work; UART PRBS TX at 1 Mbaud reports about 100139 B/s and loopback about
 67150 B/s with zero errors; LPTIM and TIM callbacks were tested at 100 ms
 and 1000 ms without an external frequency reference. Advertising and counter
-updates pass on WBA65. GATT peripheral, central and security tests remain
-pending. Earlier validation sections below describe historical checks.
+updates pass on WBA65. BleSecurityDemo is hardware validated as of October 18,
+2026. BLE central tests remain pending. Earlier sections below retain the
+compiler and emulator test results.
+
+## Crypto hardware validation
+
+STM32WBA65I-DK1, October 18, 2026: **51 passed, 0 failed**.
+
+The WBA crypto engines in `../src/crypto_stm32wba.cpp` use the RNG, AES and
+PKA peripherals. The hardware test passed:
+
+- Engine construction and AES/P-256 self-tests.
+- RNG draws, odd-length buffer bounds, a 4 KB sample distribution check and
+  the source's security-grade capability flag.
+- AES ECB, CBC and CTR known-answer tests; CTR carry, wrap and partial blocks;
+  invalid block lengths and key-usage rejection.
+- CMAC, CCM and GCM known-answer tests; authenticated decryption rejects bad
+  tags and clears the output.
+- AES ECB/CBC/CTR/CMAC/CCM/GCM comparisons against software, 200 random rounds.
+- P-256 public keys and ECDH shared secrets; consumed-key handling and rejection
+  of invalid peer points and private scalars.
+- ECDSA signing, verification in both hardware/software directions, and
+  rejection of modified signatures and hashes.
+- P-256 public-key, shared-secret and signature comparisons, 8 random rounds.
+
+P-256 scalar multiplication, mean of 8: **31072 us** on the engine and
+**188099 us** in software (6.05 times faster).
+
+These results cover the standalone crypto engines. The ST BLE adapter's
+software AES selection is separate from this test.
 
 ## Integration status
 
@@ -82,11 +110,10 @@ build and link. Outstanding work:
 - Verify startup and vector placement on hardware with the chosen security
   configuration
 - Check the core clock setup on hardware (PLL lock, 100 MHz, flash wait states)
-- Verify EXTI interrupt routing/dispatch and the timers on hardware
 - Validate the application linker script against STM32WBA65 flash/SRAM banks
   and the configured secure/nonsecure partitions
-- Hardware-test the integrated STM32CubeWBA radio middleware with the
-  peripheral/central test projects listed above
+- Validate BLE central scanning, connection, discovery, reads and subscriptions
+- Validate USB enumeration, CDC transfers, suspend/resume and reconnect
 
 Use the WBA65 device definitions and interrupt mapping from a consistent
 STM32CubeWBA release. Do not compile WBA5x startup or link with the WBA5x
@@ -116,14 +143,15 @@ GNU Arm 14.3.1 was used for these checks:
 - `tests/stm32wba/run_i2c.py`: 40 emulator checks passed.
 - `tests/stm32wba/run_spi.py`: 46 emulator checks passed.
 
-The checks above were local. The maintainer subsequently confirmed Blinky LED
-operation on STM32WBA65I-DK1 on October 17, 2026. Full library/example Debug and Release rebuilds,
-radio clock/RNG startup, GPIO input/EXTI, and BLE peripheral/central operation
-remain unverified in this review. The earlier build results below describe
-previous checks, not a new complete build. BleAdvertiser is hardware-tested. The additional BLE projects listed above
-still require target builds and GATT/central/security hardware validation.
+The checks above used the compiler and emulator. Subsequent DK1 hardware
+validation covers GPIO output/input and EXTI, UART TX/RX, LPTIM and TIM
+callbacks, I2C and SPI master/slave, BLE advertising and BleSecurityDemo.
+Crypto results are recorded above. BLE central and USB tests remain pending.
 
-The concurrent BleAdvertiser project fix in `8f9d5e0` moves the ST archives\nfrom Other linker flags into Libraries so they follow the application\nobjects. That change is preserved; a fresh full BLE build is still required.\n\n## GPIO first: Blinky
+BleAdvertiser links the ST archives through the Libraries setting so they
+follow the application objects.
+
+## GPIO: Blinky
 
 Start hardware validation with `exemples/Blinky/ioc`. It links the common
 `exemples/misc/blinky.c` and uses the existing DK1 board map. Build the MCU
@@ -151,8 +179,8 @@ Input/EXTI test:
 
 The example uses the interrupt callback, not input polling, to stop blinking.
 This checks the pull-up and falling-edge interrupt path; it does not establish
-rising-edge/both-edge behavior or the GPIO read API. Input/EXTI hardware results
-are still pending. The callback's existing printf uses nosys; no UART output
+rising-edge/both-edge behavior or the GPIO read API. The falling-edge EXTI
+callback is hardware validated. The callback's existing printf uses nosys; no UART output
 is required for the LED indication.
 
 The common Blinky source, GPIO driver, ResetEntry, system initializer and
@@ -161,7 +189,8 @@ at -O0 and -Os using GNU Arm 14.3.1, with warnings treated as errors. Both
 images ran in the emulator: GPIOD clock enabled, PD8/PD9 configured as outputs,
 and the expected alternating BSRR set/clear sequence observed. The full MCU
 library was not rebuilt for this check. The maintainer confirmed LED operation
-on the DK1 on October 17, 2026. Input/EXTI, UART, timers and BLE remain pending.
+on the DK1 on October 17, 2026. GPIO input/EXTI, UART TX/RX, timer callbacks,
+BLE advertising and BleSecurityDemo have also passed hardware testing.
 
 ## UART example projects
 
@@ -278,14 +307,13 @@ The application linker layouts are now provided in `ldscript/`:
 Each reserves two 16 KB flash NVM partitions at the upper end of its
 variant's flash. The memory boundaries require verification against the
 chosen ST secure/nonsecure image layout, option bytes, and radio firmware
-reservation before flashing. These linker scripts are not evidence of a
-successful boot or a working BLE stack.
+reservation before flashing.
 
 The shared GPIO implementation now supports input, output, alternate functions,
 pull resistors, output type, pin speed, and atomic BSRR set/clear. GPIO EXTI0-EXTI15 now route callbacks by pin number; interrupt allocation uses
 the fixed EXTI line matching that pin, and a line cannot be assigned to two
-ports simultaneously. Blinky LED output was hardware-validated on October 17,
-2026; GPIO input levels, pull resistors and EXTI remain pending.
+ports simultaneously. LED output and external input/EXTI are hardware validated.
+Pull-resistor configurations and other interrupt edge modes were not tested separately.
 
 The initial bring-up sequence is startup, GPIO, UART, Timer, then BLE.
 Discovery Kit GPIO/USART wiring belongs in each example's `board.h`,
@@ -512,7 +540,8 @@ server, RTC, memory manager or flash manager:
 Limits: the temperature given to the link layer for radio calibration is fixed
 at 25 degrees C (set `USE_TEMPERATURE_BASED_RADIO_CALIBRATION` to 0 in
 `app_conf.h`, then it is not used). AES is software. The RNG, timer, sequencer
-and PKA hook code has only been compiled and linked, not run.
+and PKA hooks are exercised by the BLE examples. Separate failure-path tests
+for these hooks remain pending.
 
 Cube sources that remain in a Bluetooth build (all from the STM32CubeWBA 1.10.0
 package and the WPAN middleware commit 7e764835):
@@ -595,8 +624,9 @@ pins (PB1, PB2 AF4) and the VCP pins match the ST board support package. The SPI
 pins (PB10, PA9, PC3 AF5, CS PB9) and the second I2C and SPI pins of the
 MasterSlave examples come from the ST pin data for the STM32WBA65RI and UM3462 table 8.
 
-Still to do: ADC based temperature, use of the AES peripheral, and the
-hardware test of the stack, RNG, timer and sequencer code.
+Remaining work: ADC-based radio temperature measurement, BLE central tests
+and using the hardware crypto engines in the ST BLE adapter. The standalone
+crypto engines are hardware validated; the adapter still selects software AES.
 
 ## First hardware test of BleAdvertiser
 
@@ -627,8 +657,8 @@ The existing button confirmation used by other boards is unchanged.
 
 Build the library and example in the same configuration. Security setup now
 fails if ST rejects authentication requirements or IO capability. The maintainer
-reports BleSecurityDemo working on October 18, 2026. The current branch also
-records the bonded reconnect fix. Rejection and other cases not explicitly
+confirmed BleSecurityDemo hardware validated on October 18, 2026. The branch
+includes the bonded reconnect fix. Rejection and other cases not explicitly
 reported remain unvalidated. Use UartBleDemo for an open connection.
 
 ## Additional UART examples
@@ -659,5 +689,5 @@ The receive test should accumulate frames with zero PRBS errors. These new
 projects have not yet been built or hardware-tested on WBA65.
 
 As of October 18, 2026, the maintainer reports BleSecurityDemo, TimerDemo,
-SPI and I2C working. The I2C and SPI mode matrices above retain the detailed
-results. New examples do not extend those hardware-validation claims.
+SPI and I2C hardware validated. The I2C and SPI mode matrices above list the
+tested configurations. Additional UART examples remain untested.

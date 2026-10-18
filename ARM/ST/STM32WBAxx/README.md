@@ -84,6 +84,14 @@ vector is replaced by an application handler. TimerDemo callbacks have passed
 on hardware for the LPTIM and TIM engines; absolute frequency has not been
 measured against an external reference.
 
+## Crypto
+
+Hardware validated on STM32WBA65I-DK1, October 18, 2026: **51 passed, 0 failed**.
+Tests cover RNG, AES ECB/CBC/CTR/CMAC/CCM/GCM, P-256 ECDH and ECDSA,
+invalid-input rejection, output clearing and comparison with software engines.
+P-256 scalar multiplication averaged 31072 us on the engine and 188099 us in
+software over 8 rounds. See the [test results](STM32WBA65/README.md#crypto-hardware-validation).
+
 ## USB device
 
 The WBA65 library links the shared STM32 OTG FIFO driver. UsbCdcLoopback and
@@ -118,7 +126,9 @@ add a second Cube startup or vector table to the application.
 | Timers | Two LPTIM and six TIM instances through the shared STM32 driver | LPTIM and TIM callbacks passed; no external frequency reference used |
 | I2C | Master polling/interrupt/DMA/DMA+interrupt; slave interrupt/DMA | I2CMasterSlave: all eight combinations passed on DK1 |
 | SPI | Master polling/interrupt/DMA/DMA+interrupt; slave interrupt/DMA | SPIMasterSlave: all eight combinations passed; see detailed README |
-| BLE | CubeWBA host/link-layer integration, GAP/GATT, security and bond storage | Advertising and counter updates pass; BleSecurityDemo reported working October 18, 2026; central validation remains pending |
+| Crypto | RNG, AES and PKA engines | Hardware validated: 51 passed, 0 failed; see Crypto above |
+| USB | Shared STM32 OTG device controller; control, bulk and interrupt transfers | Compile and software tests pass; hardware validation pending |
+| BLE | CubeWBA host/link-layer integration, GAP/GATT, security and bond storage | Advertising and counter updates pass; BleSecurityDemo hardware validated October 18, 2026; central validation remains pending |
 
 WBA65 projects include GPIO, UART, timer, I2C, SPI and BLE examples with Debug
 and Release configurations. UartRetargetDemo, UartSlipPrbsTx and UartSlipPrbsRx

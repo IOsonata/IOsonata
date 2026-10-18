@@ -1,6 +1,10 @@
-# WBA BLE security integration review — 2026-10-18
+# WBA BLE security integration review - 2026-10-18
 
-Scope: STM32WBA adapter, compared with STM32CubeWBA v1.10.0 and stm32-mw-wpan v2.10.0. Common IOsonata cryptography and other MCU ports are unchanged. This is a confirmed-finding checkpoint, not release sign-off.
+Scope: STM32WBA adapter, compared with STM32CubeWBA v1.10.0 and stm32-mw-wpan v2.10.0. Common IOsonata cryptography and other MCU ports are unchanged. The findings below describe the integration before the subsequent hardware tests.
+
+Current status: BleSecurityDemo is hardware validated (October 18, 2026).
+Standalone WBA crypto tests also passed, 51 passed and 0 failed. See the
+[target test results](STM32WBA65/README.md#crypto-hardware-validation).
 
 ## Confirmed byte-order mismatch, corrected
 
@@ -10,7 +14,7 @@ BAES_CcmCrypt also requires a reversed key, as shown by HW_AES_InitCcm's key reg
 
 Temporary conversion buffers are wiped. No common security API or crypto engine changes are needed.
 
-The mismatch can produce incorrect encryption key derivation and is consistent with the reported local 0x3d MIC failure on bond reuse. Hardware confirmation is still required; this review does not establish that it is the only cause.
+The mismatch can produce incorrect encryption key derivation and is consistent with the reported local 0x3d MIC failure on bond reuse. The initial logs did not isolate it as the only cause.
 
 ## Regression checks
 
@@ -28,15 +32,18 @@ BLEPLAT exposes ECB encryption only. Raw ECB decryption remains unsupported by t
 
 ## Additional confirmed integration gap
 
-BAES_CmacCompute ignores calls with a null output pointer. Contrary to the adapter comment, the vendor BLEPLAT interface explicitly permits such calls to append data before finalization. ST's baes_cmac.c implements this state. Current one-shot CMAC passes, but incremental CMAC is not implemented. This remains an integration issue to resolve before claiming complete platform compatibility; it is not proven to cause the observed bonded reconnect failure.
+BAES_CmacCompute ignores calls with a null output pointer. Contrary to the adapter comment, the vendor BLEPLAT interface explicitly permits such calls to append data before finalization. ST's baes_cmac.c implements this state. Current one-shot CMAC passes, but incremental CMAC is not implemented. This limitation needs a separate incremental-CMAC test. It was not identified as the cause of the bonded reconnect failure.
 
-## Remaining verification
+## Hardware checks requested during this review
 
 Rebuild the IOsonata WBA library and BleSecurity application. Test reconnect with the existing bond first, without clearing it. Require encrypted authenticated Secure Connections (mode 1, level 4), working notifications, and no 0x3d disconnect. Repeat after WBA reset, then separately test fresh pairing and subsequent reconnect.
 
-The prior user logs demonstrate fresh numeric-comparison pairing and notifications, and restoration of a 312-byte stack cache with successful peer lookup. They do not demonstrate successful bonded reconnection.
+The initial logs showed fresh Numeric Comparison pairing and notifications,
+and restoration of a 312-byte stack cache with successful peer lookup.
+Bonded reconnect failed in those runs. BleSecurityDemo was subsequently
+reported working; the target README records the current hardware status.
 
-Full integration review and target Debug/Release validation remain open, including event delivery on bond reuse, persistence failure recovery and radio scheduling during flash writes, platform callback contracts, and the reported pairing latency.
+Full integration review and target Debug/Release validation remain open, including event delivery on bond reuse, persistence failure recovery and radio scheduling during flash writes, platform callback handling, and the reported pairing latency.
 
 ## Vendor references
 
@@ -44,4 +51,4 @@ Full integration review and target Debug/Release validation remain open, includi
 - [CMAC](https://github.com/STMicroelectronics/STM32CubeWBA/blob/v1.10.0/Projects/Common/WPAN/Modules/BasicAES/baes_cmac.c)
 - [CCM](https://github.com/STMicroelectronics/STM32CubeWBA/blob/v1.10.0/Projects/Common/WPAN/Modules/BasicAES/baes_ccm.c)
 - [AES register adapter](https://github.com/STMicroelectronics/STM32CubeWBA/blob/v1.10.0/Projects/Common/WPAN/Interfaces/hw_aes.c)
-- [BLE platform contract](https://github.com/STMicroelectronics/stm32-mw-wpan/blob/v2.10.0/ble/stack/include/bleplat.h)
+- [BLE platform interface](https://github.com/STMicroelectronics/stm32-mw-wpan/blob/v2.10.0/ble/stack/include/bleplat.h)
