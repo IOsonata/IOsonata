@@ -463,8 +463,8 @@ match the Basic Plus link layer library (extended advertising included).
 The adapter sources `bt_{app,adv,scan,gap,gatt,smp_bond,pds}_stm32wba.cpp`
 were compile-checked against STM32CubeWBA 1.10.0 and the WPAN middleware
 commit 7e764835 (the revision that release uses). The BleAdvertiser section
-below records the earlier firmware link results. Hardware testing remains
-pending.
+below records the earlier firmware link results. The maintainer has since
+validated advertising and BleSecurityDemo on hardware (October 18, 2026).
 
 The stack headers have no `extern "C"` guard, so the adapter includes them
 through `include/bt_wba_stack.h`.
@@ -588,8 +588,9 @@ or `lib/ioc/Release` (build the same configuration first) and the two ST stack
 archives `stm32wba_ble_stack_full.a` and
 `LinkLayer_BLE_Basic_Plus_V3_0.a` from `external/stm32-mw-wpan`.
 
-Both Debug and Release configurations compile and link with arm-none-eabi
-(Release about 234 KB code, 83 KB RAM). No test was run on hardware. The DK1 I2C
+Both Debug and Release configurations previously compiled and linked with
+arm-none-eabi (Release about 234 KB code, 83 KB RAM). Advertising and counter
+updates have since passed on hardware. The DK1 I2C
 pins (PB1, PB2 AF4) and the VCP pins match the ST board support package. The SPI2
 pins (PB10, PA9, PC3 AF5, CS PB9) and the second I2C and SPI pins of the
 MasterSlave examples come from the ST pin data for the STM32WBA65RI and UM3462 table 8.
@@ -625,6 +626,38 @@ UART confirmation bytes are consumed by the demo while a decision is pending.
 The existing button confirmation used by other boards is unchanged.
 
 Build the library and example in the same configuration. Security setup now
-fails if ST rejects authentication requirements or IO capability. Pairing,
-protected GATT access, rejection and bonded reconnect still require hardware
-validation. Use UartBleDemo for an open connection.
+fails if ST rejects authentication requirements or IO capability. The maintainer
+reports BleSecurityDemo working on October 18, 2026. The current branch also
+records the bonded reconnect fix. Rejection and other cases not explicitly
+reported remain unvalidated. Use UartBleDemo for an open connection.
+
+## Additional UART examples
+
+The following projects link the existing shared sources under `exemples/uart`.
+Import their `ioc` directories into IOcomposer and build the matching Debug or
+Release configuration of `lib/ioc` first. All three select USART1 (DevNo 1),
+PA8 RX / PB12 TX, through the ST-LINK VCP at 1000000 baud, 8N1, no flow control.
+`board.h` contains only the board and pin mappings.
+
+| Project | Shared source | Purpose |
+|---|---|---|
+| UartRetargetDemo | uart_retarget_demo.cpp | UART stdin/stdout with printf and scanf; type a word and press Enter to receive its echo |
+| UartSlipPrbsTx | uart_slip_prbs_tx.cpp | Interrupt-driven UART transmitting 92-byte PRBS payloads with SLIP framing |
+| UartSlipPrbsRx | uart_slip_prbs_rx.cpp | Interrupt-driven UART receiving SLIP frames and checking the decoded PRBS stream |
+
+UartRetargetDemo deliberately routes both Debug and Release console I/O to
+UART. The SLIP projects reserve UART for binary data and do not retarget stdio
+to that stream. Debug links rdimon; Release links nosys. Debug console output
+depends on the existing library stdio/semihosting configuration; if unavailable,
+inspect `lcnt` in TX or `pkcnt` and `errcnt` in RX with the debugger.
+Release provides no SLIP diagnostic console.
+
+For a SLIP test, use a host SLIP/PRBS peer through the VCP, or a second board
+running the complementary example with crossed TX/RX and common ground on
+suitable exposed UART pins. Raw UART PRBS scripts do not decode SLIP framing.
+The receive test should accumulate frames with zero PRBS errors. These new
+projects have not yet been built or hardware-tested on WBA65.
+
+As of October 18, 2026, the maintainer reports BleSecurityDemo, TimerDemo,
+SPI and I2C working. The I2C and SPI mode matrices above retain the detailed
+results. New examples do not extend those hardware-validation claims.

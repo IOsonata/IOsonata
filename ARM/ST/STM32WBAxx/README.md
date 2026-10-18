@@ -38,7 +38,7 @@ channels for each instance and defines their vectors. GPDMA has no circular
 mode, the RX ring is a linked list node that loads the same block again at
 the end of each block. The driver leaves the GPDMA1 security and privilege
 settings at their reset value, which suits a device with TrustZone disabled
-(TZEN = 0). Not tested on hardware. The STM32WBA65I-DK1 test projects are
+(TZEN = 0). UART PRBS TX and loopback have passed on hardware. The STM32WBA65I-DK1 test projects are
 `STM32WBA65/exemples/UartLoopback` and `UartPrbsTxTest`, described in
 `STM32WBA65/README.md`.
 
@@ -80,8 +80,9 @@ The TIM count at the APB timer clock divided by 1 to 65536,
 TIM16 and TIM17, 4 on TIM1 to TIM4. External trigger and the tick interrupt
 are not supported. The timer vectors of `STM32WBA65/src/vectors_stm32wba65.c`
 are weak aliases of `Stm32TimerVector`; TimerInit refuses a timer whose
-vector is replaced by an application handler. Not tested on hardware;
-`STM32WBA65/exemples/TimerDemo` is the test project.
+vector is replaced by an application handler. TimerDemo callbacks have passed
+on hardware for the LPTIM and TIM engines; absolute frequency has not been
+measured against an external reference.
 
 ## STM32CubeWBA dependency
 
@@ -103,30 +104,23 @@ add a second Cube startup or vector table to the application.
 |---|---|---|
 | Startup and clocks | ResetEntry, WBA65 vectors, FPU enable, PLL1R at 100 MHz | Debug/Release minimal images reach main in the emulator; Blinky boots on hardware; option bytes and clock frequency unverified |
 | Memory layout | WBA65 I: 2 MB flash / 512 KB SRAM; two reserved 16 KB NVM regions | Confirm security configuration on the board; no secure image supplied |
-| GPIO | Shared STM32 pin configuration, atomic output writes, EXTI dispatch | Blinky LED output confirmed October 17, 2026; input and EXTI pending |
-| UART | LPUART1, USART1/2/3; polling, interrupt and GPDMA | TX/RX hardware tests pending |
-| Timers | Two LPTIM and six TIM instances through the shared STM32 driver | Host/emulator checks exist; frequencies and callbacks need hardware tests |
-| I2C | Four instances, polling master, 7-bit addresses | Slave, interrupt and DMA modes unsupported; hardware tests pending |
-| SPI | Three instances, polling full-duplex master | Slave, interrupt and DMA modes unsupported; header wiring and hardware tests pending |
-| BLE | CubeWBA host/link-layer integration, GAP/GATT, security and bond storage | Advertising and counter updates pass; peripheral, PRBS, scan, central and security projects are provided, with GATT/security validation pending |
+| GPIO | Shared STM32 pin configuration, atomic output writes, EXTI dispatch | LED output and external input/EXTI confirmed on hardware |
+| UART | LPUART1, USART1/2/3; polling, interrupt and GPDMA | 1 Mbaud PRBS TX and loopback passed; loopback reported zero errors |
+| Timers | Two LPTIM and six TIM instances through the shared STM32 driver | LPTIM and TIM callbacks passed; no external frequency reference used |
+| I2C | Master polling/interrupt/DMA/DMA+interrupt; slave interrupt/DMA | I2CMasterSlave: all eight combinations passed on DK1 |
+| SPI | Master polling/interrupt/DMA/DMA+interrupt; slave interrupt/DMA | SPIMasterSlave: all eight combinations passed; see detailed README |
+| BLE | CubeWBA host/link-layer integration, GAP/GATT, security and bond storage | Advertising and counter updates pass; BleSecurityDemo reported working October 18, 2026; central validation remains pending |
 
-Existing WBA65 projects: `UartPrbsTxTest`, `UartLoopback`, `TimerDemo`,
-`I2CScan`, `SPILoopback`, and `BleAdvertiser`, each with Debug and Release
-configurations. The library includes the BLE glue and vendor platform sources;
-Bluetooth applications also link the two ST middleware archives. GPIO, UART, timer and advertising hardware results and the additional BLE
-validation projects are recorded in `STM32WBA65/README.md`.
+WBA65 projects include GPIO, UART, timer, I2C, SPI and BLE examples with Debug
+and Release configurations. UartRetargetDemo, UartSlipPrbsTx and UartSlipPrbsRx
+now link the shared UART examples. Their builds and hardware tests are pending.
+The library includes the BLE glue and vendor platform sources; Bluetooth
+applications also link the two ST middleware archives. See
+`STM32WBA65/README.md` for the project list, wiring and recorded test results.
 
-The first hardware sequence is:
-
-1. Blinky LED output is confirmed. Complete the Blinky external input/EXTI
-   test on PC13 (Arduino D4), then confirm the boot/security configuration.
-2. Run Release `UartPrbsTxTest`, then `UartLoopback`, at 1 Mbaud. Record the
-   selected UART, interrupt/DMA settings and PRBS results.
-3. Run `TimerDemo` on USART1 VCP at 115200 baud. Check LED output, timer
-   periods and callbacks.
-4. Start `BleAdvertiser` and verify external advertising reception.
-5. Validate peripheral GATT data, central scan/connect/discovery/read/subscribe,
-   reconnect, and supported pairing/bond persistence with the common examples.
+Remaining validation includes BLE central scan/connect/discovery/read/subscribe
+and optional peripherals not covered by the reported tests. Do not repeat every
+timer instance when the same timer engine has already been tested.
 
 Keep the release unmerged until hardware validation and final approval.
 
