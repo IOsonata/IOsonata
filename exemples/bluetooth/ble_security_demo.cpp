@@ -333,8 +333,14 @@ void ButEvent(int IntNo, void *pCtx)
 #ifdef BLE_SECURITY_BUTTON_CONFIRM
 	if (s_PairAwaiting)
 	{
-		if (IntNo == BUT1_INT) s_PairDecision = 1;
-		else if (IntNo == BUT2_INT) s_PairDecision = 2;
+		if (IntNo == BUT1_INT)
+		{
+			s_PairDecision = 1;
+		}
+		else if (IntNo == BUT2_INT)
+		{
+			s_PairDecision = 2;
+		}
 		return;
 	}
 #endif
