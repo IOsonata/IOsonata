@@ -1,49 +1,61 @@
-# WBA BLE security integration review - 2026-10-18
+# WBA BLE security integration
 
-Scope: STM32WBA adapter, compared with STM32CubeWBA v1.10.0 and stm32-mw-wpan v2.10.0. Common IOsonata cryptography and other MCU ports are unchanged. The findings below describe the integration before the subsequent hardware tests.
+Updated October 18, 2026. Target: STM32WBA65I-DK1.
+Middleware: STM32CubeWBA 1.10.0 and stm32-mw-wpan 2.10.0.
 
-Current status: BleSecurityDemo is hardware validated (October 18, 2026).
-Standalone WBA crypto tests also passed, 51 passed and 0 failed. See the
-[target test results](STM32WBA65/README.md#crypto-hardware-validation).
+## Hardware validated
 
-## Confirmed byte-order mismatch, corrected
+BleSecurityDemo passes fresh Numeric Comparison pairing, encrypted data transfer
+and bonded reconnect after reset. PDS saved 88 bytes with CRC `89681f20`;
+after reset it restored the same length and CRC. Peer lookup, encryption and
+pairing returned status `0x00`, without another confirmation prompt.
 
-In `src/bt_wba_platform.cpp`, BAES_EcbCrypt previously passed the ST key and block directly to CryptoSoftAes. ST's baes_ecb.c and hw_aes.c implement Bluetooth little-endian key, input and output order. CryptoSoftAes takes standard AES byte strings. The adapter now reverses those three arrays.
+The initial Numeric Comparison prompt appeared 197 ms after the security
+request. Reconnect encryption was enabled 45 ms after the request.
+The earlier central log reported mode 1, level 4 for fresh pairing. The latest
+reset/reconnect log records encryption and successful bond reuse.
 
-BAES_CcmCrypt also requires a reversed key, as shown by HW_AES_InitCcm's key register loading. Nonce, AAD, payload and tag retain their order. CMAC retains standard byte order, matching ST's implementation.
+The standalone hardware crypto test passed **51 tests, 0 failed**. See
+[target results](STM32WBA65/README.md#crypto-hardware-validation).
 
-Temporary conversion buffers are wiped. No common security API or crypto engine changes are needed.
+## Crypto integration
 
-The mismatch can produce incorrect encryption key derivation and is consistent with the reported local 0x3d MIC failure on bond reuse. The initial logs did not isolate it as the only cause.
+`src/bt_wba_pka.cpp` uses `CryptoWbaPka` for P-256 public keys and ECDH.
+`src/bt_wba_platform.cpp` uses `CryptoWbaAes` for the ST BAES callbacks.
+If AES returns busy, the callback retries with `CryptoSoftAes`.
 
-## Regression checks
+The adapter converts ST's little-endian ECB key, input and output to the
+standard AES byte order. CCM reverses the key; nonce, AAD, payload and tag
+retain their order. CMAC uses standard byte order. Temporary conversion
+buffers are wiped.
 
-Run from repository root:
+The earlier byte-order mismatch was corrected before the successful reconnect
+tests. The previous logs alone did not isolate it as the only reconnect cause.
+
+## Regression tests
+
+Run from the repository root:
 
 ```sh
 python3 tests/stm32wba/run_ble_crypto.py
+python3 tests/stm32wba/run_bt_crypto.py
 ```
 
-Uses the actual adapter section and CryptoSoftAes with only Device lifecycle stubbed. FIPS-197 ECB encryption (including in-place), RFC 4493 CMAC example 2, and RFC 3610 CCM vector 1 cover encryption, decryption, in-place decryption and rejection of an invalid tag.
+The byte-order tests cover FIPS-197 ECB, RFC 4493 CMAC and RFC 3610 CCM,
+including in-place operations and invalid-tag rejection. The hardware adapter
+test runs with an instruction-set emulator. These tests are separate from
+the DK1 hardware results above; no new test run was performed for this
+documentation update.
 
-Original adapter: ECB and CCM vector checks fail. Corrected adapter: all checks pass at host -O0 and -Os. These are not ARM Debug/Release firmware builds.
+## Remaining limitations and tests
 
-BLEPLAT exposes ECB encryption only. Raw ECB decryption remains unsupported by the software adapter; the test does not claim it is supported.
-
-## Additional confirmed integration gap
-
-BAES_CmacCompute ignores calls with a null output pointer. Contrary to the adapter comment, the vendor BLEPLAT interface explicitly permits such calls to append data before finalization. ST's baes_cmac.c implements this state. Current one-shot CMAC passes, but incremental CMAC is not implemented. This limitation needs a separate incremental-CMAC test. It was not identified as the cause of the bonded reconnect failure.
-
-## Hardware checks requested during this review
-
-Rebuild the IOsonata WBA library and BleSecurity application. Test reconnect with the existing bond first, without clearing it. Require encrypted authenticated Secure Connections (mode 1, level 4), working notifications, and no 0x3d disconnect. Repeat after WBA reset, then separately test fresh pairing and subsequent reconnect.
-
-The initial logs showed fresh Numeric Comparison pairing and notifications,
-and restoration of a 312-byte stack cache with successful peer lookup.
-Bonded reconnect failed in those runs. BleSecurityDemo was subsequently
-reported working; the target README records the current hardware status.
-
-Full integration review and target Debug/Release validation remain open, including event delivery on bond reuse, persistence failure recovery and radio scheduling during flash writes, platform callback handling, and the reported pairing latency.
+- `BAES_CmacCompute` returns when the output pointer is null. ST permits that
+  form to append input before finalization. Incremental CMAC remains
+  unimplemented; resolve or explicitly defer it before merge.
+- Pairing rejection, persistence failure recovery, and radio scheduling during
+  flash writes need separate tests.
+- Complete the final Debug/Release build and regression checks on the release
+  candidate, and remove temporary security diagnostics.
 
 ## Vendor references
 

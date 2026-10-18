@@ -93,8 +93,22 @@ is separate from the previously tested ST-LINK virtual COM port.
    Record the selected byte/buffer mode, errors and sustained rate. The CDC
    baud setting is line-coding metadata, not the USB transfer rate.
 
-These hardware checks are **pending**. No USB enumeration, transfer rate,
-electrical behavior or suspend/reconnect result is claimed yet.
+### Hardware results - October 18, 2026
+
+WBA65I-DK1 enumeration and CDC transfers are hardware validated:
+
+| Test | Build | Result |
+|---|---|---|
+| PRBS TX | Debug | Approximately 194.5 kB/s |
+| PRBS TX | Release | Approximately 649 kB/s |
+| CDC loopback | Release, 60 seconds | 72094720 bytes TX and RX; 0 errors; 0 pending; PASS |
+
+Loopback averaged 1201554.01 B/s TX and 1201451.62 B/s RX. First RX was
+3 ms after start. The banner arrived after a DTR toggle. Cable reconnect,
+suspend/resume, FS fallback and other classes remain untested. Negotiated
+USB speed was not recorded in the host log.
+
+F401, L476 and L496 USB hardware tests remain pending.
 
 ## Software validation (October 18, 2026)
 
@@ -109,8 +123,8 @@ electrical behavior or suspend/reconnect result is claimed yet.
   cancellation, unaligned IN, ZLPs, EP0 reply copying, invalid status OUT and
   bounded flush failure. Run with `ASAN_OPTIONS=detect_leaks=0` where the host
   environment prevents LeakSanitizer process inspection.
-- Full Eclipse Debug/Release library and firmware links remain pending, as do
-  all physical-board USB tests on all listed families.
+- The maintainer built and ran WBA PRBS TX in Debug and Release, and CDC
+  loopback in Release. Other family firmware links and board tests remain pending.
 
 References used for register sequences and board wiring:
 

@@ -89,9 +89,29 @@ P-256 scalar multiplication, mean of 8: **31072 us** on the engine and
 
 These results cover the standalone crypto engines. The ST BLE adapter uses the
 AES and PKA engines. On the DK1, BleSecurityDemo paired with numeric comparison
-and reconnected encrypted from the stored bond, and pairing is noticeably
-faster than with the software engines. The adapter also runs on the instruction
+and reconnected encrypted from the stored bond after reset. The prompt took
+197 ms in the recorded run; reconnect encryption took 45 ms. The adapter also runs on the instruction
 set emulator (`tests/stm32wba/run_bt_crypto.py`).
+
+## USB CDC hardware validation
+
+STM32WBA65I-DK1 native USB (CN5), October 18, 2026:
+
+| Application | Build | Result |
+|---|---|---|
+| UsbCdcPrbsTx | Debug | Approximately 194.5 kB/s |
+| UsbCdcPrbsTx | Release | Approximately 649 kB/s |
+| UsbCdcLoopback | Release, 60 seconds | PASS: 72094720 bytes sent and received, 0 errors, 0 pending |
+
+Loopback averaged 1201554.01 B/s TX and 1201451.62 B/s RX. First RX was
+3 ms after the test started. The longest TX wait was 130 ms and the longest
+RX gap was 129 ms. The host received the banner after toggling DTR.
+
+Enumeration and CDC TX/RX are hardware validated. Cable reconnect,
+suspend/resume, explicit FS fallback and other USB classes remain untested.
+The host log did not record negotiated USB speed. The serial baud argument
+does not set native USB throughput. See [STM32 USB](../../USB.md) for the
+driver's supported modes and test commands.
 
 ## Integration status
 
@@ -116,7 +136,7 @@ build and link. Outstanding work:
 - Validate the application linker script against STM32WBA65 flash/SRAM banks
   and the configured secure/nonsecure partitions
 - Validate BLE central scanning, connection, discovery, reads and subscriptions
-- Validate USB enumeration, CDC transfers, suspend/resume and reconnect
+- Validate USB cable reconnect, suspend/resume, FS fallback and other classes
 
 Use the WBA65 device definitions and interrupt mapping from a consistent
 STM32CubeWBA release. Do not compile WBA5x startup or link with the WBA5x
@@ -149,7 +169,8 @@ GNU Arm 14.3.1 was used for these checks:
 The checks above used the compiler and emulator. Subsequent DK1 hardware
 validation covers GPIO output/input and EXTI, UART TX/RX, LPTIM and TIM
 callbacks, I2C and SPI master/slave, BLE advertising and BleSecurityDemo.
-Crypto results are recorded above. BLE central and USB tests remain pending.
+Crypto and USB CDC results are recorded above. BLE central and the remaining
+USB modes still require hardware testing.
 
 BleAdvertiser links the ST archives through the Libraries setting so they
 follow the application objects.
@@ -665,6 +686,23 @@ fails if ST rejects authentication requirements or IO capability. The maintainer
 confirmed BleSecurityDemo hardware validated on October 18, 2026. The branch
 includes the bonded reconnect fix. Rejection and other cases not explicitly
 reported remain unvalidated. Use UartBleDemo for an open connection.
+
+### Bonded reconnect after reset
+
+Hardware validated on October 18, 2026:
+
+- Fresh Numeric Comparison pairing succeeded and encryption was enabled.
+- PDS saved 88 bytes with CRC `89681f20`.
+- After reset, PDS restored 88 bytes with the same CRC.
+- Peer lookup returned status `0x00`; encryption and pairing completed with
+  status `0x00`, without another Numeric Comparison prompt.
+- The initial prompt appeared 197 ms after the security request
+  (7497 to 7694 ms). On reconnect, encryption was enabled 45 ms after the
+  request (5622 to 5667 ms).
+
+The earlier fresh-pairing central log reported mode 1, level 4. The reset/
+reconnect log confirms encryption and successful bond reuse; it does not
+include a new central-side security-level report.
 
 ## Additional UART examples
 

@@ -1,7 +1,9 @@
 # STM32WBA MCU port - STM32WBA65 priority
 
 IOsonata contains a standalone STM32WBA65 MCU library and an ST Bluetooth ACI
-adapter. **Hardware validation is incomplete.** The bring-up target is the
+adapter. GPIO, UART, timers, I2C/SPI, BLE security, crypto and USB CDC are
+hardware validated. BLE central and additional USB modes remain pending.
+The target is the
 STM32WBA65I-DK1 Discovery Kit with STM32WBA65RIV7 (2 MB flash / 512 KB SRAM).
 The current application layout assumes TrustZone disabled (TZEN = 0); it does
 not install a secure bootloader or configure secure/nonsecure partitions.
@@ -90,15 +92,18 @@ Hardware validated on STM32WBA65I-DK1, October 18, 2026: **51 passed, 0 failed**
 Tests cover RNG, AES ECB/CBC/CTR/CMAC/CCM/GCM, P-256 ECDH and ECDSA,
 invalid-input rejection, output clearing and comparison with software engines.
 P-256 scalar multiplication averaged 31072 us on the engine and 188099 us in
-software over 8 rounds. See the [test results](STM32WBA65/README.md#crypto-hardware-validation).
+software over 8 rounds. BLE uses CryptoWbaAes and CryptoWbaPka, with software
+AES fallback when the AES peripheral is busy. See the [test results](STM32WBA65/README.md#crypto-hardware-validation).
 
 ## USB device
 
 The WBA65 library links the shared STM32 OTG FIFO driver. UsbCdcLoopback and
 UsbCdcPrbsTx projects use the common IOsonata applications on the native CN5
 connector. Control, bulk and interrupt transfers are implemented; ISO and USB
-host mode are unsupported. ARM object compilation and software ownership tests
-pass; full project links and hardware USB tests are pending. See
+host mode are unsupported. CDC PRBS TX runs at about 194.5 kB/s in Debug and
+649 kB/s in Release. Release CDC loopback passed 60 seconds at about 1.20 MB/s
+in each direction: 72094720 bytes sent and received, zero errors and zero
+pending bytes. Reconnect, suspend/resume and FS fallback remain pending. See
 [`../USB.md`](../USB.md) for family coverage, clock requirements and testing.
 
 ## STM32CubeWBA dependency
@@ -127,8 +132,8 @@ add a second Cube startup or vector table to the application.
 | I2C | Master polling/interrupt/DMA/DMA+interrupt; slave interrupt/DMA | I2CMasterSlave: all eight combinations passed on DK1 |
 | SPI | Master polling/interrupt/DMA/DMA+interrupt; slave interrupt/DMA | SPIMasterSlave: all eight combinations passed; see detailed README |
 | Crypto | RNG, AES and PKA engines | Hardware validated: 51 passed, 0 failed; see Crypto above |
-| USB | Shared STM32 OTG device controller; control, bulk and interrupt transfers | Compile and software tests pass; hardware validation pending |
-| BLE | CubeWBA host/link-layer integration, GAP/GATT, security and bond storage | Advertising and counter updates pass; BleSecurityDemo hardware validated October 18, 2026; central validation remains pending |
+| USB | Shared STM32 OTG device controller; control, bulk and interrupt transfers | CDC hardware validated: Debug/Release PRBS TX and Release 60-second loopback; additional modes pending |
+| BLE | CubeWBA host/link-layer integration, GAP/GATT, security and bond storage | Advertising and counter updates pass; Numeric Comparison, encrypted transfer and bonded reconnect after reset hardware validated; central validation remains pending |
 
 WBA65 projects include GPIO, UART, timer, I2C, SPI and BLE examples with Debug
 and Release configurations. UartRetargetDemo, UartSlipPrbsTx and UartSlipPrbsRx
