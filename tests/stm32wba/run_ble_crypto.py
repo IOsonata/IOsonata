@@ -335,7 +335,7 @@ def main():
             PROVIDER + adapter + vectors() + TEST)
         for opt in ("-O0", "-Os"):
             exe = tmp / "test"
-            subprocess.run([os.environ.get("CXX", "g++"), "-std=c++23", "-Wall", "-Wextra", "-Werror", opt,
+            subprocess.run([os.environ.get("CXX", "g++"), "-std=c++2b", "-Wall", "-Wextra", "-Werror", opt,
                             "-fsanitize=address,undefined", "-fno-omit-frame-pointer",
                             "-I" + str(tmp), "-I" + str(ROOT / "include"),
                             str(tmp / "test.cpp"),

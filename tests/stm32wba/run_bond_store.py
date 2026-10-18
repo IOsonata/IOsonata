@@ -282,7 +282,7 @@ def main():
             subprocess.run([os.environ.get('CC', 'cc'), '-std=gnu17', opt, *san,
                             '-I' + str(ROOT / 'include'), '-c',
                             str(ROOT / 'src/crc.c'), '-o', str(crc)], check=True)
-            subprocess.run([os.environ.get('CXX', 'g++'), '-std=c++23', opt,
+            subprocess.run([os.environ.get('CXX', 'g++'), '-std=c++2b', opt,
                             '-Wall', '-Wextra', '-Werror', *san, '-I' + str(tmp),
                             '-I' + str(ROOT), '-I' + str(ROOT / 'include'),
                             str(tmp / 'test.cpp'), str(crc),
