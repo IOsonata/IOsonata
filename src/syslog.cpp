@@ -383,13 +383,32 @@ int SysLogVPrintf(SysLog_t * const pLog, const char *pFormat, va_list Args)
 		return 0;
 	}
 
-	int len = vsnprintf((char *)pBlock, (size_t)recordLen, pFormat, Args);
+	// Millisecond stamp ahead of the text when a Timer is configured.
+	int pre = 0;
+
+	if (pLog->pTimer != 0)
+	{
+		pre = snprintf((char *)pBlock, (size_t)recordLen, "[%lu] ",
+					   (unsigned long)TimerGetMilisecond(pLog->pTimer));
+		if (pre < 0)
+		{
+			pre = 0;
+		}
+		else if ((uint32_t)pre >= recordLen)
+		{
+			pre = (int)recordLen - 1;
+		}
+	}
+
+	int len = vsnprintf((char *)pBlock + pre, (size_t)(recordLen - (uint32_t)pre),
+						pFormat, Args);
 	if (len < 0)
 	{
 		pBlock[0] = 0U;
 		return 0;
 	}
 
+	len += pre;
 	if ((uint32_t)len >= recordLen)
 	{
 		len = (int)recordLen - 1;

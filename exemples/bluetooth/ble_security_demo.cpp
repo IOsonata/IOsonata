@@ -45,6 +45,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "bluetooth/bt_gatt.h"
 #include "bluetooth/blueio_blesrvc.h"
 #include "coredev/uart.h"
+#include "coredev/timer.h"
 #include "coredev/iopincfg.h"
 #include "iopinctrl.h"
 #include "app_evt_handler.h"
@@ -241,6 +242,17 @@ static const SysLogCfg_t s_SysLogCfg = {
 	.bBlocking = false
 };
 
+#ifdef TIMER_DEVNO
+static const TimerCfg_t s_TimerCfg = {
+	.DevNo = TIMER_DEVNO,
+	.ClkSrc = TIMER_CLKSRC_DEFAULT,
+	.Freq = 0,
+	.IntPrio = 6,
+};
+
+Timer g_Timer;
+#endif
+
 // Pending stays set through queue refusal until the callback runs.
 static volatile bool s_bUartRxPending = false;
 static volatile bool s_bUartRxTimeout = false;
@@ -363,11 +375,21 @@ void HardwareInit()
 {
 	g_bUartState = g_Uart.Init(g_UartCfg);
 
+#ifdef TIMER_DEVNO
+	// Free running timer for the millisecond stamp on each log line.
+	g_Timer.Init(s_TimerCfg);
+#endif
+
 	// Route SysLog to the same UART so the SMP/ATT stack traces (SMP_TRACE,
 	// DEBUG_PRINTF) appear here alongside the application output. Without this
 	// the stack pairs/runs silently and no trace is seen.
+#ifdef TIMER_DEVNO
+	SysLogInit(SysLogGet(), &s_SysLogCfg, (DevIntrf_t *)g_Uart, 0,
+			   (TimerDev_t *)g_Timer, 0);
+#else
 	SysLogInit(SysLogGet(), &s_SysLogCfg, (DevIntrf_t *)g_Uart, 0,
 			   nullptr, 0);
+#endif
 
 	IOPinCfg(s_LedPins, s_NbLedPins);
 
