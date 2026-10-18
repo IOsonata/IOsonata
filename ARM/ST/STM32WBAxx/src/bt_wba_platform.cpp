@@ -18,7 +18,6 @@ power_table.c:
 - BAES_*: the STM32WBA AES block through CryptoWbaAes (ECB, CMAC and CCM).
   A call that arrives while another one holds the block, an interrupt that
   preempts a task for example, runs on the CryptoSoftAes engine instead.
-  Define BT_WBA_SOFT_AES to use CryptoSoftAes only.
 - The P-256 operations are in bt_wba_pka.cpp.
 - Link layer interrupts (RADIO and HASH vectors), HSE32 wait, system clock
   manager entries, debug signals: small functions.
@@ -69,9 +68,7 @@ SOFTWARE.
 #include "istddef.h"
 #include "coredev/timer.h"
 #include "crypto/crypto_softaes.h"
-#ifndef BT_WBA_SOFT_AES
 #include "crypto/crypto_stm32wba.h"
-#endif
 #include "bluetooth/bt_app.h"
 
 #include "coredev/system_core_clock.h"
@@ -691,22 +688,21 @@ extern "C" void HW_RNG_Disable(void)
 // strings. ST CCM reverses only the key; CMAC uses standard byte order.
 //----------------------------------------------------------------------------
 
-static uint64_t s_AesMem[(CRYPTO_SOFTAES_MEMSIZE + 7U) / 8U];
-static CryptoSoftAes *s_pAes;
-#ifndef BT_WBA_SOFT_AES
-static uint64_t s_HwAesMem[(CRYPTO_WBA_AES_MEMSIZE + 7U) / 8U];
+// Every STM32WBA part has the AES block, so the hardware engine is the one the
+// stack uses. The software engine takes a call only when the hardware one is
+// busy.
+alignas(CryptoWbaAes) static uint8_t s_HwAesMem[CRYPTO_WBA_AES_MEMSIZE];
+alignas(CryptoSoftAes) static uint8_t s_AesMem[CRYPTO_SOFTAES_MEMSIZE];
 static CryptoWbaAes *s_pHwAes;
-#endif
+static CryptoSoftAes *s_pAes;
 static uint8_t s_CmacKey[16];
 
-// Engine for one attempt of a call. Pass 0 is the hardware engine, or the
-// software engine in a BT_WBA_SOFT_AES build. Pass 1 is the software engine
-// and is used only after pass 0 answered BUSY. Null when there is no engine
-// for the pass. The engines are built on first use with interrupts off, as
-// the calls can come from interrupt context.
+// Engine for one attempt of a call: pass 0 is the hardware engine, pass 1 the
+// software engine. A call goes to pass 1 only after pass 0 answered BUSY. The
+// engines are built on first use with interrupts off, as the calls can come
+// from interrupt context.
 static CryptoSoftAes *BtWbaAes(int Pass)
 {
-#ifndef BT_WBA_SOFT_AES
 	if (Pass == 0)
 	{
 		if (s_pHwAes == nullptr)
@@ -722,12 +718,6 @@ static CryptoSoftAes *BtWbaAes(int Pass)
 
 		return s_pHwAes;
 	}
-#else
-	if (Pass != 0)
-	{
-		return nullptr;
-	}
-#endif
 
 	if (s_pAes == nullptr)
 	{

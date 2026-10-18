@@ -8,8 +8,8 @@ forwards them to the PKACTRL_* functions of the Cube PKA controller: the public
 key of a private key the link layer generated, and the Diffie-Hellman shared
 secret of a private key and a peer public key. This file provides the same
 PKACTRL_* functions on the IOsonata CryptoWbaPka engine (the PKA peripheral),
-so the Cube pka_ctrl.c, hw_pka.c and hw_pka_p256.c are not built. Define
-BT_WBA_SOFT_PKA to use the CryptoUecc software engine instead.
+so the Cube pka_ctrl.c, hw_pka.c and hw_pka_p256.c are not built. Every
+STM32WBA part has the PKA.
 
 The operation runs from the sequencer task and reports the end through
 PKACTRL_CB_Complete, as the PKA controller does. The engine is polled. The
@@ -18,7 +18,7 @@ which keeps the RNG clock and start state in one place.
 
 Known limits:
 - The operation runs in the event queue context. A multiplication takes about
-  31 ms on the PKA and about 190 ms on CryptoUecc at the DK1 clock.
+  31 ms on the PKA at the DK1 clock.
 - The hardware engine has run in the crypto engine test on the DK1 only. The
   Bluetooth use of it is not tested on hardware.
 
@@ -55,11 +55,20 @@ SOFTWARE.
 #include <new>
 
 #include "crypto/icrypto.h"
-#ifdef BT_WBA_SOFT_PKA
-#include "crypto/crypto_uecc.h"
-#else
 #include "crypto/crypto_stm32wba.h"
+
+/******** For DEBUG Trace ************/
+// Define DEBUG_ENABLE to turn on trace for this file. A release build
+// defines NDEBUG, which strips all trace regardless of DEBUG_ENABLE.
+//#define DEBUG_ENABLE
+
+#if !defined(NDEBUG) && defined(DEBUG_ENABLE)
+#include "syslog.h"
+#define DEBUG_PRINTF(...)		SysLogPrintf(SysLogGet(), __VA_ARGS__)
+#else
+#define DEBUG_PRINTF(...)
 #endif
+/*******************************/
 #include "bt_wba_platform.h"
 
 // Bit of the task in the sequencer mask. The link layer task uses the bit its
@@ -110,15 +119,9 @@ public:
 	bool IsSecure() const override { return true; }
 };
 
-#ifdef BT_WBA_SOFT_PKA
-typedef CryptoUecc BtWbaPkaEng;
-#else
-typedef CryptoWbaPka BtWbaPkaEng;
-#endif
-
-static uint64_t s_EngMem[(sizeof(BtWbaPkaEng) + 7U) / 8U];
-static uint64_t s_RngMem[(sizeof(BtWbaPkaRng) + 7U) / 8U];
-static BtWbaPkaEng *s_pEng;
+alignas(CryptoWbaPka) static uint8_t s_EngMem[CRYPTO_WBA_PKA_MEMSIZE];
+alignas(BtWbaPkaRng) static uint8_t s_RngMem[sizeof(BtWbaPkaRng)];
+static CryptoWbaPka *s_pEng;
 
 static volatile uint8_t s_PkaOp;
 static volatile int s_PkaErr = 1;
@@ -127,20 +130,21 @@ static uint32_t s_PkaBuf[BT_WBA_PKA_WORDS];
 
 // The engine is built on first use so no static constructor is needed. Null
 // when the engine does not start; the next operation tries again.
-static BtWbaPkaEng *BtWbaPkaEngine(void)
+static CryptoWbaPka *BtWbaPkaEngine(void)
 {
 	if (s_pEng == nullptr)
 	{
 		BtWbaPkaRng *pRng = new (s_RngMem) BtWbaPkaRng();
-#ifdef BT_WBA_SOFT_PKA
-		CryptoUecc *pEng = new (s_EngMem) CryptoUecc();
 
-		pEng->SetRng(pRng);
-		pEng->Enable();
-#else
-		CryptoWbaPka *pEng = CryptoWbaPkaCreate(s_EngMem, sizeof(s_EngMem), pRng);
-#endif
-		s_pEng = pEng;
+		s_pEng = CryptoWbaPkaCreate(s_EngMem, sizeof(s_EngMem), pRng);
+		if (s_pEng != nullptr)
+		{
+			DEBUG_PRINTF("Crypto ECDH engine: CryptoWbaPka (PKA hardware P-256)\r\n");
+		}
+		else
+		{
+			DEBUG_PRINTF("Crypto ECDH engine MISSING, LESC pairing will fail\r\n");
+		}
 	}
 
 	return s_pEng;
@@ -157,8 +161,8 @@ static void BtWbaPkaRev(uint8_t *pDst, const uint8_t *pSrc, size_t Len)
 
 static bool BtWbaPkaKeyGen(void)
 {
-	BtWbaPkaEng *pEng = BtWbaPkaEngine();
-	BtWbaPkaEng::KeyCtx ctx;
+	CryptoWbaPka *pEng = BtWbaPkaEngine();
+	CryptoWbaPka::KeyCtx ctx;
 	uint8_t priv[P256_BYTES];
 	uint8_t pub[2U * P256_BYTES];
 	bool bOk;
@@ -184,8 +188,8 @@ static bool BtWbaPkaKeyGen(void)
 
 static bool BtWbaPkaDhKey(void)
 {
-	BtWbaPkaEng *pEng = BtWbaPkaEngine();
-	BtWbaPkaEng::KeyCtx ctx;
+	CryptoWbaPka *pEng = BtWbaPkaEngine();
+	CryptoWbaPka::KeyCtx ctx;
 	uint8_t priv[P256_BYTES];
 	uint8_t peer[2U * P256_BYTES];
 	uint8_t secret[P256_BYTES];

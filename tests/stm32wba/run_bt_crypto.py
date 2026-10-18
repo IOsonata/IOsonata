@@ -2,13 +2,11 @@
 """
 STM32WBA Bluetooth crypto hooks on an emulated Cortex-M33.
 
-Builds bt_crypto_fw.cpp with the real bt_wba_platform.cpp and bt_wba_pka.cpp,
-once with the hardware engines (the default) and once with BT_WBA_SOFT_AES and
-BT_WBA_SOFT_PKA, and runs both on the models of run_crypto.py (AES, PKA, RNG,
-RCC). The firmware calls BAES_*, PKACTRL_* and HW_RNG_Get as the Cube BLE stack
+Builds bt_crypto_fw.cpp with the real bt_wba_platform.cpp and bt_wba_pka.cpp
+and runs it on the models of run_crypto.py (AES, PKA, RNG, RCC). The firmware calls BAES_*, PKACTRL_* and HW_RNG_Get as the Cube BLE stack
 does. The expected values come from the python cryptography package.
 
-In the hardware build the emulator preempts the firmware at a chosen AES block
+The emulator preempts the firmware at a chosen AES block
 of a CMAC or CCM and runs BtFwIsr, which calls BAES_EcbCrypt as a radio
 interrupt would. The hardware block is busy, so that call has to run on the
 software engine, and both the task result and the interrupt result must be
@@ -156,7 +154,7 @@ def make_vectors(path, seed=7):
     Path(path).write_text(''.join(out))
 
 
-def build(tmp, soft, wpan):
+def build(tmp, wpan):
     gen = tmp / 'gen'
     gen.mkdir()
     make_vectors(gen / 'bt_vectors.h')
@@ -173,8 +171,7 @@ def build(tmp, soft, wpan):
            wpan / 'link_layer/ll_cmd_lib/inc', wpan / 'link_layer/ll_sys/inc',
            wpan / 'link_layer/ll_cmd_lib/config/ble_basic_plus_20_links']
     inc = ['-I' + str(p) for p in inc]
-    defs = ['-DBT_WBA_SOFT_AES', '-DBT_WBA_SOFT_PKA', '-DBT_FW_EXPECT_PREEMPT=0'] if soft else []
-    cxx = ['arm-none-eabi-g++', *cpu, *defs, '-std=gnu++23', '-Wall', '-Werror', '-fno-exceptions', '-fno-rtti', *inc]
+    cxx = ['arm-none-eabi-g++', *cpu, '-std=gnu++23', '-Wall', '-Werror', '-fno-exceptions', '-fno-rtti', *inc]
     srcs = [
         HERE / 'bt_crypto_fw.cpp',
         ROOT / 'ARM/ST/STM32WBAxx/src/bt_wba_platform.cpp',
@@ -200,7 +197,7 @@ def build(tmp, soft, wpan):
     return elf
 
 
-def make_driver(preempt):
+def make_driver():
     """Run loop that preempts the firmware at a block of the hardware AES."""
     from unicorn import UC_HOOK_CODE
     from unicorn.arm_const import (UC_ARM_REG_R0, UC_ARM_REG_R1, UC_ARM_REG_R2, UC_ARM_REG_R3, UC_ARM_REG_R4,
@@ -212,9 +209,9 @@ def make_driver(preempt):
 
     def driver(uc, syms, env, state, pc):
         block = [a for n, a in syms.items() if '12CryptoWbaAes' in n and 'AesEcbEncrypt' in n]
-        if preempt and len(block) != 1:
+        if len(block) != 1:
             raise SystemExit('FAIL the hardware AES block function was not found in the firmware')
-        block = (block[0] & ~1) if preempt else None
+        block = block[0] & ~1
         isr = syms['BtFwIsr'] & ~1
         trap = syms['BtFwTrap'] & ~1
         arm_at = syms['BtFwArm'] & ~1
@@ -245,8 +242,7 @@ def make_driver(preempt):
 
         uc.hook_add(UC_HOOK_CODE, on_arm, begin=arm_at, end=arm_at)
         uc.hook_add(UC_HOOK_CODE, on_trap, begin=trap, end=trap)
-        if block is not None:
-            uc.hook_add(UC_HOOK_CODE, on_block, begin=block, end=block)
+        uc.hook_add(UC_HOOK_CODE, on_block, begin=block, end=block)
 
         start = pc
         while True:
@@ -295,48 +291,39 @@ def main():
 
     rcr.model_self_check()
     errors = []
-    total = 0
-    for soft in (False, True):
-        label = 'software engines' if soft else 'hardware engines'
-        with tempfile.TemporaryDirectory(prefix='wba-bt-crypto-') as td:
-            tmp = Path(td)
-            elf = build(tmp, soft, wpan)
-            result, text, env, left = rcr.run_fw(elf, 1, 128, not soft, make_driver(not soft))
-        passed = text.count('[PASS]')
-        failed = text.count('[FAIL]')
-        total += passed + failed
-        print(f'{label}: {passed} passed, {failed} failed, result {result}')
-        print('  model counters:', dict(sorted(env.stats.items())))
-        for line in text.splitlines():
-            if '[FAIL]' in line:
-                errors.append(f'{label}: {line.strip()}')
-        if result != 0:
-            errors.append(f'{label}: the test returned {result}')
-        if 'Bluetooth crypto hooks' not in text:
-            errors.append(f'{label}: no test output')
-        # HW_RNG_Get of bt_wba_platform.cpp starts the RNG with the setup the HAL
-        # uses when the device header has no RNG_CR_NIST_VALUE. The WBA65 header
-        # has it, and CryptoWbaRng uses it. The platform RNG is not part of
-        # the AES and PKA swap, so it is reported and not counted.
-        rng_notes = [v for v in env.viol if v.startswith('RNG health test register') or
-                     v.startswith('RNG configuration')]
-        if rng_notes:
-            print(f'  note: platform HW_RNG_Get does not use the NIST RNG setup ({len(rng_notes)} model messages)')
-        for v in [v for v in env.viol if v not in rng_notes][:10]:
-            errors.append(f'{label}: model violation: {v}')
-        for m in left:
-            errors.append(f'{label}: {m}')
-        if soft:
-            for k in ('aes_blocks', 'pka_mul', 'pka_mode_0x28'):
-                if env.stats[k] != 0:
-                    errors.append(f'{label}: the model was used ({k} = {env.stats[k]})')
-        else:
-            if env.stats['aes_blocks'] == 0 or env.stats['pka_mul'] == 0:
-                errors.append(f'{label}: the models were not used')
-            if env.stats['preempts'] != 3:
-                errors.append(f'{label}: {env.stats["preempts"]} preemptions, 3 expected')
-        if '-v' in sys.argv:
-            print(text)
+    with tempfile.TemporaryDirectory(prefix='wba-bt-crypto-') as td:
+        elf = build(Path(td), wpan)
+        result, text, env, left = rcr.run_fw(elf, 1, 128, True, make_driver())
+    passed = text.count('[PASS]')
+    failed = text.count('[FAIL]')
+    total = passed + failed
+    print(f'{passed} passed, {failed} failed, result {result}')
+    print('  model counters:', dict(sorted(env.stats.items())))
+    for line in text.splitlines():
+        if '[FAIL]' in line:
+            errors.append(line.strip())
+    if result != 0:
+        errors.append(f'the test returned {result}')
+    if 'Bluetooth crypto hooks' not in text:
+        errors.append('no test output')
+    # HW_RNG_Get of bt_wba_platform.cpp starts the RNG with the setup the HAL
+    # uses when the device header has no RNG_CR_NIST_VALUE. The WBA65 header
+    # has it, and CryptoWbaRng uses it. The platform RNG is not part of
+    # the AES and PKA change, so it is reported and not counted.
+    rng_notes = [v for v in env.viol if v.startswith('RNG health test register') or
+                 v.startswith('RNG configuration')]
+    if rng_notes:
+        print(f'  note: platform HW_RNG_Get does not use the NIST RNG setup ({len(rng_notes)} model messages)')
+    for v in [v for v in env.viol if v not in rng_notes][:10]:
+        errors.append(f'model violation: {v}')
+    for m in left:
+        errors.append(m)
+    if env.stats['aes_blocks'] == 0 or env.stats['pka_mul'] == 0:
+        errors.append('the models were not used')
+    if env.stats['preempts'] != 3:
+        errors.append(f'{env.stats["preempts"]} preemptions, 3 expected')
+    if '-v' in sys.argv:
+        print(text)
     print(f'STM32WBA Bluetooth crypto hooks on the emulator: {total} checks, {len(errors)} failures')
     for e in errors:
         print('  FAIL', e)

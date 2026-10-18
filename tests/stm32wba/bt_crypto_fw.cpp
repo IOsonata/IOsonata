@@ -79,10 +79,6 @@ volatile int32_t g_CryptoFwResult = -1000;
 volatile int32_t g_Preempts = 0;
 }
 
-#ifndef BT_FW_EXPECT_PREEMPT
-#define BT_FW_EXPECT_PREEMPT	1
-#endif
-
 //----------------------------------------------------------------------------
 // Stubs of what the platform file takes from the rest of the system
 //----------------------------------------------------------------------------
@@ -332,8 +328,7 @@ static void Preempted(void)
 	check("CMAC with an interrupt call in the middle, task result",
 		  memcmp(tag, pM->Tag, 16) == 0);
 	check("CMAC with an interrupt call in the middle, interrupt result",
-		  g_Preempts - before == BT_FW_EXPECT_PREEMPT &&
-		  s_IsrRuns == BT_FW_EXPECT_PREEMPT && (BT_FW_EXPECT_PREEMPT == 0 || s_IsrOk));
+		  g_Preempts - before == 1 && s_IsrRuns == 1 && s_IsrOk);
 
 	// CCM seal cut at its 5th block
 	s_IsrRuns = 0;
@@ -349,8 +344,7 @@ static void Preempted(void)
 		  ok && memcmp(out, pC->Ct, pC->Len) == 0 &&
 		  memcmp(tag, pC->Tag, pC->TagLen) == 0);
 	check("CCM seal with an interrupt call in the middle, interrupt result",
-		  g_Preempts - before == BT_FW_EXPECT_PREEMPT &&
-		  s_IsrRuns == BT_FW_EXPECT_PREEMPT && (BT_FW_EXPECT_PREEMPT == 0 || s_IsrOk));
+		  g_Preempts - before == 1 && s_IsrRuns == 1 && s_IsrOk);
 
 	// CCM open cut at its 4th block
 	uint8_t back[300];
@@ -367,8 +361,7 @@ static void Preempted(void)
 	check("CCM open with an interrupt call in the middle, task result",
 		  ok && memcmp(back, pC->Pt, pC->Len) == 0);
 	check("CCM open with an interrupt call in the middle, interrupt result",
-		  g_Preempts - before == BT_FW_EXPECT_PREEMPT &&
-		  s_IsrRuns == BT_FW_EXPECT_PREEMPT && (BT_FW_EXPECT_PREEMPT == 0 || s_IsrOk));
+		  g_Preempts - before == 1 && s_IsrRuns == 1 && s_IsrOk);
 }
 
 static int PkaWait(void)

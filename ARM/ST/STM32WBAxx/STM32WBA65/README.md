@@ -88,8 +88,8 @@ P-256 scalar multiplication, mean of 8: **31072 us** on the engine and
 **188099 us** in software (6.05 times faster).
 
 These results cover the standalone crypto engines. The ST BLE adapter uses the
-AES and PKA engines by default (`BT_WBA_SOFT_AES` and `BT_WBA_SOFT_PKA` select
-software). That use is checked on the emulator only and is pending on the DK1.
+AES and PKA engines. That use is checked on the emulator only and is pending on
+the DK1.
 
 ## Integration status
 
@@ -535,9 +535,8 @@ server, RTC, memory manager or flash manager:
 - `BAES_*`: the IOsonata `CryptoWbaAes` engine (AES peripheral, polled). Only
   ECB encrypt, CMAC and CCM are provided, which is what the stack calls. A call
   that arrives while the AES block is busy, a radio interrupt during a task
-  level CCM for example, runs on `CryptoSoftAes` for that call. Define
-  `BT_WBA_SOFT_AES` to use `CryptoSoftAes` only. The host test vectors
-  (FIPS-197, RFC 4493 and RFC 3610 packet vector 1) pass.
+  level CCM for example, runs on `CryptoSoftAes` for that call. The host test
+  vectors (FIPS-197, RFC 4493 and RFC 3610 packet vector 1) pass.
 - PKA controller hooks (`PKACTRL_CB_Process`, mutex, semaphore, `PKA_IRQHandler`).
 - `SCM_HSE_WaitUntilReady`, `scm_*` and the link layer debug signals.
 
@@ -595,8 +594,7 @@ ST prebuilt archives and holds only its own sources:
 - `src/bluetooth/bt_wba_pka.cpp`, which answers the P-256 key requests of the
   stack (public key and Diffie-Hellman) with the IOsonata `CryptoWbaPka` engine
   (PKA peripheral, polled). The Cube PKA controller (`pka_ctrl.c`, `hw_pka.c`,
-  `hw_pka_p256.c`) is not built. Define `BT_WBA_SOFT_PKA` to use the
-  `CryptoUecc` software engine instead. The operation runs in the event queue
+  `hw_pka_p256.c`) is not built. The operation runs in the event queue
   context;
 - the headers `include/app_conf.h`, `app_common.h`, `utilities_conf.h`,
   `stm32_rtos.h`, `common_wpan_conf.h` and `main.h`. The ST platform files
@@ -632,7 +630,7 @@ MasterSlave examples come from the ST pin data for the STM32WBA65RI and UM3462 t
 Remaining work: ADC-based radio temperature measurement, BLE central tests
 and the hardware check of the hardware crypto engines in the ST BLE adapter
 (BleSecurityDemo with `python/examples/secure_reconnect.py`). The standalone
-crypto engines are hardware validated. The adapter uses them by default and
+crypto engines are hardware validated. The adapter uses them and
 has run on the instruction set emulator only (`tests/stm32wba/run_bt_crypto.py`).
 
 ## First hardware test of BleAdvertiser
