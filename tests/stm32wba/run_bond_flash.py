@@ -27,8 +27,9 @@ The flash content is kept between the boots of the firmware, so a boot is a
 reset. The one-second tick of the application is a call of
 BtSmpBondWbaPoll; the emulator counts those calls and checks each retry line
 against that count: tries after 1, 2, 4 .. 64 s, the save dropped after the
-64 s wait, no write at all from the idle loop calls in between. A second
-image is linked without the bond store region and checks that a missing
+64 s wait (127 polls in total), and no retry from idle-loop calls while
+that wait is active. The initial save still runs from the application loop.
+A second image is linked without the bond store region and checks that a missing
 region is reported and never retried.
 
 The model is a reading of the HAL and the reference manual, so it finds

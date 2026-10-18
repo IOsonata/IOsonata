@@ -97,12 +97,21 @@ October 18 review fixes, tested locally:
   the retry limit, a missing NVM region, a new request during a flush, torn
   images, missing chunks, CRC rejection and empty images.
 - Bond store over the flash model: **13 checks, 0 failures**, with tries
-  after 1, 2, 4 .. 64 s, the drop after the 64 s wait and no write from the
-  idle loop between ticks. It found two defects, both fixed: the STM32 flash
-  page erase read the control register before unlocking it and locked the
-  controller again, so no page was ever erased; and the PDS store left a
-  sector it could not write unusable until a reset, so after one refused write
-  every later save on a two-sector store failed until reboot.
+  after waits of 1, 2, 4 up to 64 s and the drop at cumulative poll count
+  127. Idle-loop calls do not retry a failed save while its retry wait is
+  active; the initial save still runs from the application loop. The STM32
+  erase defect read LOCK before unlocking, then wrote it back and relocked
+  the controller before STRT. The PDS defect left a failed sector-header
+  destination unusable until reset, preventing later saves on the two-sector
+  store even after writes became available. Both defects are fixed.
+  The supplied hardware logs do not establish whether an erase occurred.
+  Hardware erase/garbage-collection and physical power-cut tests remain pending.
+- Independent review at `f0dfd9f`: the flash model again passed 13 checks.
+  Reverting only the erase fix produced 19 failures; reverting only the PDS
+  fix produced 10. The generic PDS suite passed 105 checks with 4-byte and
+  16-byte programming units under ASan/UBSan. Bond retry tests and the 486
+  power cuts per optimization mode also passed. Changed WBA sources compiled
+  in Debug and Release. These are software tests, not hardware validation.
 - Cortex-M33 crypto integration: **18 checks, 0 failures**, including
   incremental CMAC and three interrupt preemptions while AES is busy.
   The existing model warning about the platform `HW_RNG_Get` initialization
