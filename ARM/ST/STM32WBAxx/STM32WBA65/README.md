@@ -334,9 +334,9 @@ DMA mode (8 combinations) and prints a summary line. `I2C_TEST_MASTER_MASK` and
 Validation: the driver is checked by `tests/stm32wba/run_i2c.py` in an
 instruction set emulator with an I2C model and a GPDMA model (70 checks: polling,
 interrupt, DMA, slave in interrupt and DMA mode). On the DK1 the I2CScan example found the codec at 0x1A,
-and the I2CMasterSlave example passed with the master in polling, interrupt,
-DMA and DMA with interrupt (I2C1 to I2C2, 100 kHz). The slave ran in interrupt
-mode, and in DMA mode with the master in each of the four modes.
+and the I2CMasterSlave example passed all 8 combinations in one run: the master
+in polling, interrupt, DMA and DMA with interrupt mode against the slave in
+interrupt and DMA mode (I2C1 to I2C2, 100 kHz).
 
 ## SPI and example project
 
@@ -383,7 +383,10 @@ AF7, which matches the ST board support package).
 on SPI2, AF5, on the Arduino pins of UM3462 table 8: SCK PB10 (D13), MISO PA9
 (D12), MOSI PC3 (D11), NSS PB9 (D10). The master is the software SPI: SCK PB2
 (D15), MOSI PB0 (D6, also drives LED3), MISO PC13 (D4), chip select PA10 (D8).
-Wire D15 to D13, D6 to D11, D12 to D4 and D8 to D10. The D15 to D13 wire is
+Wire D15 to D13, D6 to D11, D12 to D4 and D8 to D10. On the connectors (MB2143
+schematic, checked on the DK1): CN8 pin 9 is D15 and pin 10 is D14, pins 1 to 6
+are D8 to D13; CN10 pins 1 to 8 are D0 to D7. The five wires are CN8 9 to CN8 6,
+CN8 10 to CN8 2, CN10 7 to CN8 4, CN8 5 to CN10 5 and CN8 1 to CN8 3. The D15 to D13 wire is
 also the I2CMasterSlave SCL wire, so with D14 to D9 added the five wires serve
 both examples. On the DK1 the four modes
 passed with the slave in interrupt mode and frames of 1, 16 and 129 bytes. One
