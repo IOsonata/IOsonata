@@ -40,8 +40,29 @@ SOFTWARE.
 #include <stdint.h>
 
 #include "stm32wba65xx.h"
+#include "coredev/iopincfg.h"
+#include "iopinctrl.h"
+#include "board.h"
 
 extern volatile uint32_t g_Stm32SpiSlaveTrace[8];
+
+static void Jumper(const char *pName, int OutPort, int OutPin, int InPort, int InPin)
+{
+	int high;
+	int low;
+
+	IOPinConfig(InPort, InPin, IOPINOP_GPIO, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL);
+	IOPinConfig(OutPort, OutPin, IOPINOP_GPIO, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL);
+	IOPinSet(OutPort, OutPin);
+	for (volatile int i = 0; i < 1000; ++i)
+		__NOP();
+	high = IOPinRead(InPort, InPin);
+	IOPinClear(OutPort, OutPin);
+	for (volatile int i = 0; i < 1000; ++i)
+		__NOP();
+	low = IOPinRead(InPort, InPin);
+	printf("%s: out high -> in %d, out low -> in %d (expect 1 then 0)\r\n", pName, high, low);
+}
 
 void SpiMasterSlaveDiagnostics(void)
 {
@@ -62,4 +83,9 @@ void SpiMasterSlaveDiagnostics(void)
 	printf("NVIC SPI2: enabled=%d pending=%d active=%d\r\n",
 		(NVIC->ISER[idx] & bit) != 0U, (NVIC->ISPR[idx] & bit) != 0U,
 		(NVIC->IABR[idx] & bit) != 0U);
+	printf("Jumper test, the SPI pins are left as GPIO\r\n");
+	Jumper("SCK  D9-D13 ", SPI_MASTER_SCK_PORT, SPI_MASTER_SCK_PIN, SPI_SLAVE_SCK_PORT, SPI_SLAVE_SCK_PIN);
+	Jumper("MOSI D6-D11 ", SPI_MASTER_MOSI_PORT, SPI_MASTER_MOSI_PIN, SPI_SLAVE_MOSI_PORT, SPI_SLAVE_MOSI_PIN);
+	Jumper("CS   D8-D10 ", SPI_MASTER_CS_PORT, SPI_MASTER_CS_PIN, SPI_SLAVE_CS_PORT, SPI_SLAVE_CS_PIN);
+	Jumper("MISO D12-D4 ", SPI_SLAVE_MISO_PORT, SPI_SLAVE_MISO_PIN, SPI_MASTER_MISO_PORT, SPI_MASTER_MISO_PIN);
 }
