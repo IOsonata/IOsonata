@@ -30,6 +30,13 @@ device log contains a second boot banner. Build configuration and exact
 flashed commit were not recorded in the supplied log.
 
 
+A further hardware retest after the two-bank bond-storage change saved and
+restored 88 bytes with matching CRC `d551074e`. Fresh Numeric Comparison
+pairing succeeded; after reset, peer lookup, encryption and pairing returned
+status `0x00` without another confirmation. Reconnect encryption took 45 ms
+(4723 to 4768 ms). The supplied log does not identify the build configuration
+or flashed commit. Physical power interruption during a save was not tested.
+
 The standalone hardware crypto test passed **51 tests, 0 failed**. See
 [target results](STM32WBA65/README.md#crypto-hardware-validation).
 
@@ -137,8 +144,13 @@ Release library leaves it out. Errors are always printed.
 
 - Pairing rejection, persistence failure recovery on hardware, and radio
   scheduling during flash writes need separate tests.
-- Complete the final Debug/Release application builds and regression checks
-  on the release candidate.
+- Production devices need secret identity/encryption roots supplied through
+  `BtAppWbaIdentityGet`. The default derives roots from the chip ID; they are
+  not secret. Successful encrypted pairing does not validate provisioning.
+
+The final WBA candidate builds pass for all 20 examples in Debug and Release
+with Arm GCC 13.2.1. The shared Bluetooth host suite passes at `-O0` and `-O2`;
+USB regression checks also pass. These are local checks, not a current CI run.
 
 ## Vendor references
 

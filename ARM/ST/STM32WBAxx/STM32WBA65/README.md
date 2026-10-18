@@ -23,9 +23,9 @@ Application entry is the shared source's standard `main()`.
 
 | Project | Shared source | UART baud | Purpose |
 |---|---|---|---|
-| UartBleDemo | uart_ble.cpp | 115200 | Open-link peripheral, BlueIO UART writes and notifications |
+| UartBleDemo | uart_ble.cpp | 1000000 | Open-link peripheral, BlueIO UART writes and notifications |
 | BleIntrfPrbsTx | bleintrf_prbs_tx.cpp | 115200 | BtIntrf PRBS notification stream, advertised name BlePrbs |
-| BleCentralScanDemo | ble_central_scan.cpp | 115200 | Advertising reports, device names and RSSI |
+| BleCentralScanDemo | ble_central_scan.cpp | 1000000 | Advertising reports, device names and RSSI |
 | UartBleCentral | uart_ble_central.cpp | 1000000 | Find UARTDemo, connect, discover its service and CCCD, subscribe and exchange UART data |
 | BleSecurityDemo | ble_security_demo.cpp | 115200 | LE Secure Connections, MITM, Numeric Comparison, bonding and protected UART service, advertised name BLESec |
 
@@ -60,8 +60,10 @@ work; UART PRBS TX at 1 Mbaud reports about 100139 B/s and loopback about
 67150 B/s with zero errors; LPTIM and TIM callbacks were tested at 100 ms
 and 1000 ms without an external frequency reference. Advertising and counter
 updates pass on WBA65. BleSecurityDemo is hardware validated as of October 18,
-2026. BLE central tests remain pending. Earlier sections below retain the
-compiler and emulator test results.
+2026. Central scanning, connection, UART service discovery, notification data and
+scan/reconnect are hardware validated. Explicit characteristic reads remain
+unvalidated.
+Earlier sections below retain the compiler and emulator test results.
 
 ## Crypto hardware validation
 
@@ -135,7 +137,8 @@ build and link. Outstanding work:
 - Check the core clock setup on hardware (PLL lock, 100 MHz, flash wait states)
 - Validate the application linker script against STM32WBA65 flash/SRAM banks
   and the configured secure/nonsecure partitions
-- Validate BLE central scanning, connection, discovery, reads and subscriptions
+- Validate explicit BLE characteristic reads; scan/connect/discovery,
+  notification data and reconnect have passed on hardware
 - Validate USB cable reconnect, suspend/resume, FS fallback and other classes
 
 Use the WBA65 device definitions and interrupt mapping from a consistent
@@ -169,8 +172,8 @@ GNU Arm 14.3.1 was used for these checks:
 The checks above used the compiler and emulator. Subsequent DK1 hardware
 validation covers GPIO output/input and EXTI, UART TX/RX, LPTIM and TIM
 callbacks, I2C and SPI master/slave, BLE advertising and BleSecurityDemo.
-Crypto and USB CDC results are recorded above. BLE central and the remaining
-USB modes still require hardware testing.
+Crypto, USB CDC and BLE central results are recorded above. Explicit BLE
+characteristic reads and the remaining USB modes still require hardware testing.
 
 BleAdvertiser links the ST archives through the Libraries setting so they
 follow the application objects.
@@ -650,7 +653,8 @@ pins (PB1, PB2 AF4) and the VCP pins match the ST board support package. The SPI
 pins (PB10, PA9, PC3 AF5, CS PB9) and the second I2C and SPI pins of the
 MasterSlave examples come from the ST pin data for the STM32WBA65RI and UM3462 table 8.
 
-Remaining work: ADC-based radio temperature measurement and BLE central tests.
+Remaining work: ADC-based radio temperature measurement and explicit BLE
+characteristic-read tests.
 The standalone crypto engines are hardware validated. The ST BLE adapter uses
 them; pairing and a bonded reconnect ran on the DK1 with BleSecurityDemo.
 
@@ -740,8 +744,31 @@ For a SLIP test, use a host SLIP/PRBS peer through the VCP, or a second board
 running the complementary example with crossed TX/RX and common ground on
 suitable exposed UART pins. Raw UART PRBS scripts do not decode SLIP framing.
 The receive test should accumulate frames with zero PRBS errors. These new
-projects have not yet been built or hardware-tested on WBA65.
+projects compile and link in Debug and Release; hardware testing remains pending.
 
 As of October 18, 2026, the maintainer reports BleSecurityDemo, TimerDemo,
 SPI and I2C hardware validated. The I2C and SPI mode matrices above list the
 tested configurations. Additional UART examples remain untested.
+
+## Final candidate validation - October 18, 2026
+
+Central scanning, connection, UART service discovery, notification data and
+scan/reconnect are hardware validated. Explicit characteristic reads remain
+unvalidated.
+The central log discovered UARTDemo at RSSI -46, connected on handle 0 and
+found RX `0x0010` and TX `0x0014`. After disconnect it resumed scanning,
+connected again and rediscovered the service. Received UART text was shown;
+the maintainer confirmed the data test passed.
+
+A further hardware retest after the two-bank bond-storage change saved and
+restored 88 bytes with matching CRC `d551074e`. Fresh Numeric Comparison
+pairing succeeded; after reset, peer lookup, encryption and pairing returned
+status `0x00` without another confirmation. Reconnect encryption took 45 ms
+(4723 to 4768 ms). The supplied log does not identify the build configuration
+or flashed commit. Physical power interruption during a save was not tested.
+
+All 20 WBA examples compile and link in Debug and Release using Arm GCC
+13.2.1 and the project settings at `e721268478c5475f018aaa36259c2c605af8ee54`.
+The full library (276 translation units per configuration) was built earlier;
+the subsequently changed bond object was rebuilt and both archives relinked.
+Eclipse itself and the maintainer's GCC 15.2.1 were not run here.

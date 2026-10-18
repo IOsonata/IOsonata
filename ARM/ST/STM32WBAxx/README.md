@@ -2,7 +2,9 @@
 
 IOsonata contains a standalone STM32WBA65 MCU library and an ST Bluetooth ACI
 adapter. GPIO, UART, timers, I2C/SPI, BLE security, crypto and USB CDC are
-hardware validated. BLE central and additional USB modes remain pending.
+hardware validated. BLE central scan/connect/discovery, notification data and
+reconnect are hardware validated. Explicit characteristic reads and additional
+USB modes remain unvalidated.
 The target is the
 STM32WBA65I-DK1 Discovery Kit with STM32WBA65RIV7 (2 MB flash / 512 KB SRAM).
 The current application layout assumes TrustZone disabled (TZEN = 0); it does
@@ -133,17 +135,17 @@ add a second Cube startup or vector table to the application.
 | SPI | Master polling/interrupt/DMA/DMA+interrupt; slave interrupt/DMA | SPIMasterSlave: all eight combinations passed; see detailed README |
 | Crypto | RNG, AES and PKA engines | Hardware validated: 51 passed, 0 failed; see Crypto above |
 | USB | Shared STM32 OTG device controller; control, bulk and interrupt transfers | CDC hardware validated: Debug/Release PRBS TX and Release 60-second loopback; additional modes pending |
-| BLE | CubeWBA host/link-layer integration, GAP/GATT, security and bond storage | Advertising and counter updates pass; Numeric Comparison, encrypted transfer and bonded reconnect after reset hardware validated; central validation remains pending |
+| BLE | CubeWBA host/link-layer integration, GAP/GATT, security and bond storage | Advertising and counter updates pass; Numeric Comparison, encrypted transfer and bonded reconnect after reset hardware validated; central scan/connect/discovery, notification data and reconnect hardware validated; explicit characteristic reads unvalidated |
 
 WBA65 projects include GPIO, UART, timer, I2C, SPI and BLE examples with Debug
 and Release configurations. UartRetargetDemo, UartSlipPrbsTx and UartSlipPrbsRx
-now link the shared UART examples. Their builds and hardware tests are pending.
+now link the shared UART examples. Their Debug/Release builds pass; hardware tests remain pending.
 The library includes the BLE glue and vendor platform sources; Bluetooth
 applications also link the two ST middleware archives. See
 `STM32WBA65/README.md` for the project list, wiring and recorded test results.
 
-Remaining validation includes BLE central scan/connect/discovery/read/subscribe
-and optional peripherals not covered by the reported tests. Do not repeat every
+Remaining validation includes explicit BLE characteristic reads and optional
+peripherals not covered by the reported tests. Do not repeat every
 timer instance when the same timer engine has already been tested.
 
 Keep the release unmerged until hardware validation and final approval.
