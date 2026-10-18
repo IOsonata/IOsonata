@@ -293,9 +293,9 @@ static bool Frame(int Length, uint8_t Seed, bool Receive = false)
 			IOPinRead(SPI_MASTER_CS_PORT, SPI_MASTER_CS_PIN),
 			IOPinRead(SPI_SLAVE_CS_PORT, SPI_SLAVE_CS_PIN),
 			before, s_Completions, armsBefore, s_Arms, s_Count);
-		if (SpiMasterSlaveDiagnostics != nullptr)
-			SpiMasterSlaveDiagnostics();
 	}
+	if (!pass && SpiMasterSlaveDiagnostics != nullptr)
+		SpiMasterSlaveDiagnostics();
 	if (mismatch >= 0)
 		printf("Mismatch at %d: master RX=%02x expected=%02x slave RX=%02x expected=%02x\r\n",
 			mismatch, masterRx[mismatch], s_SlaveTx[mismatch],
