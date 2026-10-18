@@ -288,7 +288,15 @@ static void BleHostEvt(uint32_t Evt, void *pCtx)
 	(void)pCtx;
 
 	s_bBleHostQueued = false;
-	if (BleStack_Process() == 0)
+	uint32_t start = BtSmpMsTick();
+	int result = BleStack_Process();
+	uint32_t elapsed = BtSmpMsTick() - start;
+	if (elapsed >= 100)
+	{
+		SysLogPrintf(SysLogGet(), "WBA host: process %lu ms, result %d\r\n",
+				(unsigned long)elapsed, result);
+	}
+	if (result == 0)
 	{
 		// The stack has more to do
 		BleStackCB_Process();
@@ -815,6 +823,12 @@ static void BtAppWbaConnected(uint8_t Status, uint16_t ConnHdl, uint8_t Role,
 		// peripheral asks the central with a Security Request.
 		if (s_BtAppData.bSecure)
 		{
+			uint8_t identityType = 0;
+			uint8_t identity[6] = {};
+			uint8_t bondStatus = aci_gap_check_bonded_device(
+					PeerAddrType & 1U, pPeerAddr, &identityType, identity);
+			SysLogPrintf(SysLogGet(), "WBA bond: peer lookup hdl=%u status=0x%02x\r\n",
+					(unsigned)ConnHdl, (unsigned)bondStatus);
 			// Only a LESC link configured for OOB may claim the
 			// single staged peer OOB set.
 			if (s_WbaData.bOobEnabled)
@@ -933,6 +947,10 @@ static BtWbaEvtFlow_t BtAppHciEvtHandler(void *pPayload)
 		{
 			hci_disconnection_complete_event_rp0 *p =
 				(hci_disconnection_complete_event_rp0 *)pEvtPkt->data;
+			SysLogPrintf(SysLogGet(),
+					"WBA link: disconnected hdl=%u status=0x%02x reason=0x%02x\r\n",
+					(unsigned)p->Connection_Handle, (unsigned)p->Status,
+					(unsigned)p->Reason);
 			if (p->Status == BLE_STATUS_SUCCESS)
 			{
 				if (s_WbaData.PasskeyRejectedHdl == p->Connection_Handle)
