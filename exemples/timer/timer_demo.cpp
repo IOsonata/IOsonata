@@ -45,6 +45,8 @@ SOFTWARE.
 
 #include "board.h"
 
+#define TIMER_DEMO_UART
+
 #ifdef TIMER_DEMO_UART
 #include "coredev/uart.h"
 #include "stddev.h"
@@ -115,7 +117,7 @@ static const UARTCfg_t s_UartCfg = {
 	.DevNo = UART_DEVNO,
 	.pIOPinMap = s_UartPins,
 	.NbIOPins = sizeof(s_UartPins) / sizeof(IOPinCfg_t),
-	.Rate = 115200,
+	.Rate = 1000000,
 	.DataBits = 8,
 	.Parity = UART_PARITY_NONE,
 	.StopBits = 1,
