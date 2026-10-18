@@ -379,28 +379,33 @@ these pins (it uses SPI3 on PA0, PA1, PB8 for the LCD and EEPROM). The result
 is printed on USART1, the first ST-LINK virtual COM port (PA8 RX, PB12 TX,
 AF7, which matches the ST board support package).
 
-`exemples/SPIMasterSlave` (`exemples/spi/spi_master_slave.cpp`) runs the slave
-on SPI2, AF5, on the Arduino pins of UM3462 table 8: SCK PB10 (D13), MISO PA9
-(D12), MOSI PC3 (D11), NSS PB9 (D10). The master is the software SPI: SCK PB2
-(D15), MOSI PB0 (D6, also drives LED3), MISO PC13 (D4), chip select PA10 (D8).
-Wire D15 to D13, D6 to D11, D12 to D4 and D8 to D10. On the connectors (MB2143
-schematic, checked on the DK1): CN8 pin 9 is D15 and pin 10 is D14, pins 1 to 6
-are D8 to D13; CN10 pins 1 to 8 are D0 to D7. The five wires are CN8 9 to CN8 6,
-CN8 10 to CN8 2, CN10 7 to CN8 4, CN8 5 to CN10 5 and CN8 1 to CN8 3. The D15 to D13 wire is
-also the I2CMasterSlave SCL wire, so with D14 to D9 added the five wires serve
-both examples. On the DK1 the four modes
-passed with the slave in interrupt mode and frames of 1, 16 and 129 bytes. One
-run tests the slave in interrupt and DMA mode in each SPI mode (the software
-master has one mode; `SPI_TEST_SLAVE_MASK` and `SPI_TEST_MODE_MASK` in
-`board.h` restrict the set). On a failure the example prints the SPI2 registers and a jumper test.
+`exemples/SPIMasterSlave` (`exemples/spi/spi_master_slave.cpp`) runs the master
+on SPI3, AF6, and the slave on SPI2, AF5, on the Arduino pins of UM3462
+table 8. Master: SCK PA0 (A5), MISO PA1 (A3), MOSI PC3 (D11), chip select PA10
+(D8, a GPIO). Slave: SCK PB10 (D13), MISO PA9 (D12), MOSI PB0 (D6, also drives
+LED3), NSS PB9 (D10). Wire A5 to D13, D11 to D6, A3 to D12 and D8 to D10.
+One run tests the master in polling, interrupt, DMA and DMA with interrupt mode
+against the slave in interrupt and DMA mode, in each SPI mode, with frames of 1,
+16 and 129 bytes (`SPI_TEST_MASTER_MASK`, `SPI_TEST_SLAVE_MASK` and
+`SPI_TEST_MODE_MASK` in `board.h` restrict the set). On a failure the example
+prints the SPI2 registers and a jumper test.
+
+Connectors (MB2143 schematic, checked on the DK1): CN8 pin 9 is D15 and pin 10
+is D14, pins 1 to 6 are D8 to D13; CN10 pins 1 to 8 are D0 to D7; A3 and A5 are
+CN11 pins 4 and 6. UM3462 table 8 lists D15 and D14 on pins 10 and 9, the
+opposite of what the DK1 did. The I2CMasterSlave example adds D15 to D13 and
+D14 to D9 (CN8 9 to CN8 6 and CN8 10 to CN8 2), so one set of six wires serves
+both examples. The SPI wiring before this change used the SPISoft master on
+other pins (SCK PB2, MOSI PB0, MISO PC13) and passed on the DK1 in all four SPI
+modes with the slave in interrupt and in DMA mode.
 
 Validation: `tests/stm32wba/run_spi.py` runs the driver in an instruction set
 emulator with a model of the SPI registers, the GPDMA channels and the chip
 select pins (64 checks: polling, interrupt, DMA, slave, a receive FIFO overrun
 check and the 70000 byte chunking).
-Hardware: SPIMasterSlave passed on the DK1 with the slave in interrupt and in DMA
-mode, all four SPI modes (software master). SPILoopback and the hardware master
-are not tested.
+Hardware: the SPI slave passed on the DK1 in interrupt and in DMA mode, all four
+SPI modes, driven by the SPISoft master. The SPI3 hardware master example is new
+and has not been run. SPILoopback is not tested.
 
 ## Build dependency
 

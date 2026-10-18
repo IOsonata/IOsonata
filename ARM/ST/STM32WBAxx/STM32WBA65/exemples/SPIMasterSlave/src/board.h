@@ -3,13 +3,13 @@
 
 @brief	Board definitions of the STM32WBA65 SPI master and slave example
 
-		The slave is SPI2, AF5, on the Arduino pins of UM3462 table 8: SCK PB10
-		(D13), MISO PA9 (D12), MOSI PC3 (D11), NSS PB9 (D10). The master is the
-		software SPI: SCK PB2 (D15), MOSI PB0 (D6, also drives LED3), MISO PC13
-		(D4), chip select PA10 (D8). Wire D15 to D13, D6 to D11, D12 to D4 and
-		D8 to D10. The D15 to D13 wire is also the I2CMasterSlave SCL wire, so
-		both examples use the same five wires (add D14 to D9 for I2C). The result is printed on the first ST-LINK virtual COM port,
-		USART1.
+		The slave is SPI2, AF5: SCK PB10 (D13), MISO PA9 (D12), MOSI PB0 (D6, also
+		drives LED3), NSS PB9 (D10). The master is the hardware SPI3, AF6: SCK PA0
+		(A5), MISO PA1 (A3), MOSI PC3 (D11), chip select PA10 (D8) driven as a
+		GPIO. Wire A5 to D13, D11 to D6, A3 to D12 and D8 to D10 (UM3462 table 8).
+		The I2CMasterSlave example adds D15 to D13 and D14 to D9, so one set of six
+		wires serves both examples. The result is printed on the first ST-LINK
+		virtual COM port, USART1.
 
 		Not tested on hardware.
 
@@ -50,7 +50,7 @@ SOFTWARE.
 
 #include "stm32_boards.h"
 
-#define SPI_LOOPBACK_WIRING			"Wire D15-D13 SCK, D6-D11 MOSI, D12-D4 MISO, D8-D10 CS"
+#define SPI_LOOPBACK_WIRING			"Wire A5-D13 SCK, D11-D6 MOSI, A3-D12 MISO, D8-D10 CS"
 
 // First ST-LINK virtual COM port, USART1, RX PA8 and TX PB12, AF7
 #define UART_DEVNO					1
@@ -67,22 +67,26 @@ SOFTWARE.
 #define UART_RTS_PIN				-1
 #define UART_RTS_PINOP				IOPINOP_GPIO
 
-// Master: software SPI, plain GPIO on these pins
-#define SPI_MASTER_SOFTWARE			true
-#define SPI_MASTER_DEVNO			0
-#define SPI_MASTER_SCK_PORT			IOPORTB
-#define SPI_MASTER_SCK_PIN			2
-#define SPI_MASTER_SCK_PINOP		IOPINOP_GPIO
-#define SPI_MASTER_MISO_PORT		IOPORTC
-#define SPI_MASTER_MISO_PIN			13
-#define SPI_MASTER_MISO_PINOP		IOPINOP_GPIO
-#define SPI_MASTER_MOSI_PORT		IOPORTB
-#define SPI_MASTER_MOSI_PIN			0
-#define SPI_MASTER_MOSI_PINOP		IOPINOP_GPIO
+// Master: SPI3 (DevNo 2), AF6, chip select PA10 is a GPIO
+#define SPI_MASTER_SOFTWARE			false
+#define SPI_MASTER_DEVNO			2
+#define SPI_MASTER_SCK_PORT			IOPORTA
+#define SPI_MASTER_SCK_PIN			0
+#define SPI_MASTER_SCK_PINOP		IOPINOP_FUNC6
+#define SPI_MASTER_MISO_PORT		IOPORTA
+#define SPI_MASTER_MISO_PIN			1
+#define SPI_MASTER_MISO_PINOP		IOPINOP_FUNC6
+#define SPI_MASTER_MOSI_PORT		IOPORTC
+#define SPI_MASTER_MOSI_PIN			3
+#define SPI_MASTER_MOSI_PINOP		IOPINOP_FUNC6
 #define SPI_MASTER_CS_PORT			IOPORTA
 #define SPI_MASTER_CS_PIN			10
 #define SPI_MASTER_CS_PINOP			IOPINOP_GPIO
 #define SPI_MASTER_RATE				500000
+
+// The slave takes each byte in its interrupt, so it runs above the master
+#define SPI_SLAVE_INT_PRIO			5
+#define SPI_MASTER_INT_PRIO			6
 
 // Slave: SPI2 (DevNo 1), the fourth pin is the hardware NSS
 #define SPI_SLAVE_DEVNO				1
@@ -92,8 +96,8 @@ SOFTWARE.
 #define SPI_SLAVE_MISO_PORT			IOPORTA
 #define SPI_SLAVE_MISO_PIN			9
 #define SPI_SLAVE_MISO_PINOP		IOPINOP_FUNC5
-#define SPI_SLAVE_MOSI_PORT			IOPORTC
-#define SPI_SLAVE_MOSI_PIN			3
+#define SPI_SLAVE_MOSI_PORT			IOPORTB
+#define SPI_SLAVE_MOSI_PIN			0
 #define SPI_SLAVE_MOSI_PINOP		IOPINOP_FUNC5
 #define SPI_SLAVE_CS_PORT			IOPORTB
 #define SPI_SLAVE_CS_PIN			9
