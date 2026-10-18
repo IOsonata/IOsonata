@@ -171,6 +171,14 @@ extern UART g_Uart;
 #else
 #define DEBUG_PRINTF(...)
 #endif
+
+// Link, security and host timing status on SysLog for bench runs. A release
+// build defines NDEBUG, which removes these lines. Errors are always printed.
+#ifndef NDEBUG
+#define STATUS_PRINTF(...)		SysLogPrintf(SysLogGet(), __VA_ARGS__)
+#else
+#define STATUS_PRINTF(...)
+#endif
 /*******************************/
 
 // ST BLE stack expects success = 0; everything else is an error code.
@@ -287,7 +295,18 @@ static void BleHostEvt(uint32_t Evt, void *pCtx)
 	(void)pCtx;
 
 	s_bBleHostQueued = false;
+#ifndef NDEBUG
+	uint32_t start = BtSmpMsTick();
+#endif
 	int result = BleStack_Process();
+#ifndef NDEBUG
+	uint32_t elapsed = BtSmpMsTick() - start;
+	if (elapsed >= 100)
+	{
+		STATUS_PRINTF("WBA host: process %lu ms, result %d\r\n",
+				(unsigned long)elapsed, result);
+	}
+#endif
 	if (result == 0)
 	{
 		// The stack has more to do
@@ -819,6 +838,14 @@ static void BtAppWbaConnected(uint8_t Status, uint16_t ConnHdl, uint8_t Role,
 		// peripheral asks the central with a Security Request.
 		if (s_BtAppData.bSecure)
 		{
+#ifndef NDEBUG
+			uint8_t identityType = 0;
+			uint8_t identity[6] = {};
+			uint8_t bondStatus = aci_gap_check_bonded_device(
+					PeerAddrType & 1U, pPeerAddr, &identityType, identity);
+			STATUS_PRINTF("WBA bond: peer lookup hdl=%u status=0x%02x\r\n",
+					(unsigned)ConnHdl, (unsigned)bondStatus);
+#endif
 			// Only a LESC link configured for OOB may claim the
 			// single staged peer OOB set.
 			if (s_WbaData.bOobEnabled)
@@ -846,6 +873,10 @@ static void BtAppWbaConnected(uint8_t Status, uint16_t ConnHdl, uint8_t Role,
 			{
 				SysLogPrintf(SysLogGet(), "WBA security: request failed hdl=%u status=0x%02x\r\n",
 						(unsigned)ConnHdl, (unsigned)secStatus);
+			}
+			else
+			{
+				STATUS_PRINTF("WBA security: request hdl=%u\r\n", (unsigned)ConnHdl);
 			}
 		}
 
@@ -940,7 +971,9 @@ static BtWbaEvtFlow_t BtAppHciEvtHandler(void *pPayload)
 		{
 			hci_disconnection_complete_event_rp0 *p =
 				(hci_disconnection_complete_event_rp0 *)pEvtPkt->data;
-
+			STATUS_PRINTF("WBA link: disconnected hdl=%u status=0x%02x reason=0x%02x\r\n",
+					(unsigned)p->Connection_Handle, (unsigned)p->Status,
+					(unsigned)p->Reason);
 			if (p->Status == BLE_STATUS_SUCCESS)
 			{
 				if (s_WbaData.PasskeyRejectedHdl == p->Connection_Handle)
@@ -978,6 +1011,9 @@ static BtWbaEvtFlow_t BtAppHciEvtHandler(void *pPayload)
 		{
 			hci_encryption_change_event_rp0 *p =
 				(hci_encryption_change_event_rp0 *)pEvtPkt->data;
+			STATUS_PRINTF("WBA security: encryption hdl=%u status=0x%02x enabled=%u\r\n",
+					(unsigned)p->Connection_Handle, (unsigned)p->Status,
+					(unsigned)p->Encryption_Enabled);
 
 			// Link encrypted. On a bonded reconnect the stack has restored the
 			// peer's CCCDs by this point, so re-arm the notify/indicate callbacks.
@@ -1139,7 +1175,8 @@ static BtWbaEvtFlow_t BtAppHciEvtHandler(void *pPayload)
 				{
 					aci_gap_pairing_complete_event_rp0 *pPc =
 						(aci_gap_pairing_complete_event_rp0 *)pAci->data;
-
+					STATUS_PRINTF("WBA security: pairing hdl=%u status=0x%02x\r\n",
+							(unsigned)pPc->Connection_Handle, (unsigned)pPc->Status);
 					if (s_WbaData.PasskeyRejectedHdl == pPc->Connection_Handle)
 					{
 						s_WbaData.PasskeyRejectedHdl = BT_CONN_HDL_INVALID;

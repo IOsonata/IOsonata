@@ -2,7 +2,8 @@
 """WBA bond adapter failure tests with an in-memory PDS and the real CRC.
 
 Compiles the complete port adapter. PDS failures are injected at mount,
-chunk and manifest writes. This does not test flash or radio scheduling.
+chunk and manifest writes, including the retry back-off, the retry limit and
+a missing NVM region. This does not test flash or radio scheduling.
 """
 import os
 from pathlib import Path
@@ -21,6 +22,7 @@ TEST = r'''
 
 static std::map<uint32_t, std::vector<uint8_t>> records;
 static int mountResult;
+static int mountCalls;
 static int writes;
 static int failWrite;
 static bool requestDuringWrite;
@@ -29,6 +31,7 @@ static uint64_t restored[64];
 
 extern "C" int BtPdsWbaInit(void)
 {
+	mountCalls++;
 	return mountResult;
 }
 
@@ -68,7 +71,8 @@ static void Reset()
 	requestDuringWrite = false;
 	s_PdsReady = false;
 	s_bStorePending = false;
-	s_bStoreRetry = false;
+	s_RetryWait = 0;
+	s_RetryInterval = 0;
 	s_pCache = nullptr;
 	assert(BtSmpBondWbaCacheInit(cache, 64) == 0);
 	for (unsigned i = 0; i < 64; i++)
@@ -180,6 +184,84 @@ int main()
 	BtPdsWrite(BT_WBA_NVM_KEY_BASE, &man, sizeof(man));
 	CheckRestored(0);
 	puts("PASS non-word image length refused");
+
+	// A save that keeps failing is tried after 1, 2, 4 .. 64 polls, then
+	// dropped. Flush calls from the idle loop between polls do not try it.
+	Reset();
+	s_PdsReady = false;
+	mountResult = -EIO;
+	mountCalls = 0;
+	BLEPLAT_NvmStore(cache, 39);
+	BtSmpBondWbaFlush();
+	assert(mountCalls == 1 && s_bStorePending);
+	for (unsigned gap = 1; gap <= BT_WBA_STORE_RETRY_MAX; gap *= 2)
+	{
+		int before = mountCalls;
+		for (unsigned i = 1; i < gap; i++)
+		{
+			BtSmpBondWbaPoll();
+			BtSmpBondWbaFlush();
+			assert(mountCalls == before);
+		}
+		BtSmpBondWbaPoll();
+		assert(mountCalls == before + 1);
+	}
+	assert(!s_bStorePending && mountCalls == 8);
+	for (int i = 0; i < 300; i++)
+	{
+		BtSmpBondWbaPoll();
+		BtSmpBondWbaFlush();
+	}
+	assert(mountCalls == 8 && writes == 0);
+	puts("PASS failed save waits 1 to 64 polls, then dropped");
+
+	mountResult = 0;
+	BLEPLAT_NvmStore(cache, 39);
+	BtSmpBondWbaFlush();
+	assert(!s_bStorePending);
+	CheckRestored(312);
+	puts("PASS new store request after a drop saves at once");
+
+	// No NVM region: dropped at once, never retried.
+	Reset();
+	s_PdsReady = false;
+	mountResult = -ENODEV;
+	mountCalls = 0;
+	BLEPLAT_NvmStore(cache, 39);
+	BtSmpBondWbaFlush();
+	assert(mountCalls == 1 && !s_bStorePending && s_RetryWait == 0);
+	for (int i = 0; i < 10; i++)
+	{
+		BtSmpBondWbaPoll();
+	}
+	assert(mountCalls == 1 && writes == 0);
+	puts("PASS missing NVM region not retried");
+
+	// A save that succeeds after a retry starts the next failure at 1 s.
+	Reset();
+	BLEPLAT_NvmStore(cache, 39);
+	failWrite = 1;
+	BtSmpBondWbaFlush();
+	assert(s_bStorePending && s_RetryInterval == 1);
+	failWrite = writes + 1;
+	BtSmpBondWbaPoll();
+	assert(s_bStorePending && s_RetryInterval == 2 && s_RetryWait == 2);
+	failWrite = 0;
+	BtSmpBondWbaPoll();
+	assert(s_bStorePending);
+	BtSmpBondWbaPoll();
+	assert(!s_bStorePending && s_RetryInterval == 0);
+	CheckRestored(312);
+	cache[1] ^= 1;
+	BLEPLAT_NvmStore(cache, 39);
+	failWrite = writes + 1;
+	BtSmpBondWbaFlush();
+	assert(s_bStorePending && s_RetryInterval == 1 && s_RetryWait == 1);
+	failWrite = 0;
+	BtSmpBondWbaPoll();
+	assert(!s_bStorePending);
+	CheckRestored(312);
+	puts("PASS successful save resets the retry wait");
 }
 '''
 

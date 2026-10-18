@@ -74,9 +74,10 @@ It runs the actual WBA AES/PKA drivers on register models.
 October 18 review fixes, tested locally:
 
 - Host AES adapter: **179 checks, 0 failures** at both `-O0` and `-Os`.
-- Bond adapter: **9 test groups passed** at both `-O0` and `-Os`, including
-  mount/chunk/manifest failures, timed retries, a new request during a flush,
-  torn images, missing chunks, CRC rejection and empty images.
+- Bond adapter: **13 test groups passed** at both `-O0` and `-Os`, including
+  mount/chunk/manifest failures, timed retries with the 1 to 64 s back-off and
+  the retry limit, a missing NVM region, a new request during a flush, torn
+  images, missing chunks, CRC rejection and empty images.
 - Cortex-M33 crypto integration: **18 checks, 0 failures**, including
   incremental CMAC and three interrupt preemptions while AES is busy.
   The existing model warning about the platform `HW_RNG_Get` initialization
@@ -92,9 +93,12 @@ retest recorded above.
 ## Bond persistence
 
 A failed mount, chunk write or manifest write leaves the save pending. The
-existing one-second Bluetooth timer event retries it; idle-loop checks do not
-repeatedly retry a failed flash write. A request received during a flush is
-retained for the next attempt.
+existing one-second Bluetooth timer event tries it again after 1 s, then after
+2, 4 and up to 64 s; idle-loop checks do not try a failed write again. A save
+that still fails after the 64 s wait is dropped until the stack asks for a new
+save, so a medium that keeps failing is not rewritten forever. A missing NVM
+region is a build setup error and is not retried. A request received during a
+flush is retained for the next attempt.
 
 Chunks are replaced under the existing record keys, then the manifest is
 written. A reset during a partial update can lose the stored image; this is
@@ -102,8 +106,12 @@ not rollback to the previous image. Restore rejects missing or inconsistent
 chunks and clears the cache before the stack starts. The on-flash format is
 unchanged, so existing valid bonds remain readable.
 
-Temporary AES/key dumps, bond-image dumps and routine bring-up traces have
-been removed. Storage and security-request errors still use SysLog.
+Temporary AES/key dumps and bond-image dumps have been removed. The store
+status lines (PDS mount, bond saved and restored with length and CRC) are
+printed in every build, as in the other IOsonata bond stores. Link and security
+status (peer lookup, security request, pairing, encryption, disconnection and
+host runs of 100 ms or more) is printed when `NDEBUG` is not defined, so the
+Release library leaves it out. Errors are always printed.
 
 ## Remaining limitations and tests
 

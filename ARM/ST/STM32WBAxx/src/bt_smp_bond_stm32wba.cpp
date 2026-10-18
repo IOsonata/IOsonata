@@ -59,6 +59,16 @@ SOFTWARE.
 #include "syslog.h"
 #include "bluetooth/bt_pds.h"
 
+// Store trace, unconditional as in the other bond stores: a release build is
+// where a bond has to survive a reset. Errors are always printed.
+#define BT_WBA_BOND_TRACE
+
+#ifdef BT_WBA_BOND_TRACE
+#define BOND_PRINTF(...)		SysLogPrintf(SysLogGet(), __VA_ARGS__)
+#else
+#define BOND_PRINTF(...)
+#endif
+
 extern "C" int BtPdsWbaInit(void);
 
 // The key range holding the image. The manifest sits at the base and chunk i
@@ -115,9 +125,17 @@ static int PdsEnsureReady(void)
 // image, or a manifest whose CRC the torn chunks fail. Either way a restore
 // never hands the stack a mixture.
 // ---------------------------------------------------------------------------
+// A failed save is tried again from BtSmpBondWbaPoll, called once a second.
+// The wait doubles from 1 s to BT_WBA_STORE_RETRY_MAX s. When the save still
+// fails after the longest wait, the request is dropped until the stack asks
+// for a new one, so a medium that keeps failing is not rewritten forever. A
+// missing NVM region (-ENODEV) is a build setup error and is not retried.
+#define BT_WBA_STORE_RETRY_MAX		64U
+
 static volatile bool s_bStorePending;
-static bool s_bStoreRetry;
 static volatile uint16_t s_StoreWords;
+static uint8_t s_RetryWait;			//!< Poll calls left before the next try, 0 none
+static uint8_t s_RetryInterval;		//!< Wait set by the last failed try, 0 none
 
 // The stack calls this from inside its own processing. As in the Cube
 // reference, which only queues SNVMA_Write, nothing is written here: the
@@ -144,9 +162,26 @@ extern "C" void BLEPLAT_NvmStore(const uint64_t *ptr, uint16_t size)
 	s_bStorePending = true;
 }
 
+static void BondStoreFailed(int Err)
+{
+	if (Err == -ENODEV || s_RetryInterval >= BT_WBA_STORE_RETRY_MAX)
+	{
+		s_RetryInterval = 0;
+		SysLogPrintf(SysLogGet(), "WBA bond: save dropped (%d) until the next "
+				"store request\r\n", Err);
+		return;
+	}
+
+	s_RetryInterval = s_RetryInterval == 0 ? 1U : (uint8_t)(s_RetryInterval * 2U);
+	s_RetryWait = s_RetryInterval;
+	s_bStorePending = true;
+	SysLogPrintf(SysLogGet(), "WBA bond: save failed (%d), retry in %u s\r\n",
+			Err, (unsigned)s_RetryInterval);
+}
+
 extern "C" void BtSmpBondWbaFlush(void)
 {
-	if (s_bStorePending == false || s_bStoreRetry)
+	if (s_bStorePending == false || s_RetryWait != 0)
 	{
 		return;
 	}
@@ -160,10 +195,10 @@ extern "C" void BtSmpBondWbaFlush(void)
 	{
 		return;
 	}
-	if (PdsEnsureReady() != 0)
+	int r = PdsEnsureReady();
+	if (r != 0)
 	{
-		s_bStorePending = true;
-		s_bStoreRetry = true;
+		BondStoreFailed(r);
 		return;
 	}
 
@@ -175,15 +210,14 @@ extern "C" void BtSmpBondWbaFlush(void)
 	{
 		size_t n = len - off < BT_WBA_CHUNK_SIZE ? len - off : BT_WBA_CHUNK_SIZE;
 
-		if (BtPdsWrite(BT_WBA_NVM_KEY_BASE + 1U + idx, img + off, n) !=
-			(ssize_t)n)
+		ssize_t wr = BtPdsWrite(BT_WBA_NVM_KEY_BASE + 1U + idx, img + off, n);
+		if (wr != (ssize_t)n)
 		{
 			SysLogPrintf(SysLogGet(), "WBA bond: chunk %lu save failed\r\n",
 					(unsigned long)idx);
 			// Earlier chunks may already be replaced. A reset can then
 			// reject the image by CRC; the previous image is not retained.
-			s_bStorePending = true;
-			s_bStoreRetry = true;
+			BondStoreFailed(wr < 0 ? (int)wr : -EIO);
 			return;
 		}
 	}
@@ -196,18 +230,26 @@ extern "C" void BtSmpBondWbaFlush(void)
 	ssize_t result = BtPdsWrite(BT_WBA_NVM_KEY_BASE, &man, sizeof(man));
 	if (result != (ssize_t)sizeof(man))
 	{
-		s_bStorePending = true;
-		s_bStoreRetry = true;
 		SysLogPrintf(SysLogGet(), "WBA bond: manifest save failed (%ld)\r\n",
 				(long)result);
+		BondStoreFailed(result < 0 ? (int)result : -EIO);
+		return;
 	}
+
+	s_RetryInterval = 0;
+	BOND_PRINTF("WBA bond: saved %lu bytes crc %08lx\r\n",
+			(unsigned long)len, (unsigned long)man.Crc);
 }
 
-// Called by the existing one-second Bluetooth timer event. A failed write
-// must not retry on every idle-loop pass and repeatedly rewrite flash.
+// Called by the existing one-second Bluetooth timer event. It counts down the
+// wait after a failed save, so a failed write is not tried again on every
+// idle-loop pass.
 extern "C" void BtSmpBondWbaPoll(void)
 {
-	s_bStoreRetry = false;
+	if (s_RetryWait != 0)
+	{
+		s_RetryWait--;
+	}
 	BtSmpBondWbaFlush();
 }
 
@@ -302,6 +344,10 @@ extern "C" uint16_t BtSmpBondWbaCacheInit(uint64_t *pCache, uint16_t MaxWords)
 
 	size_t n = BtSmpBondWbaRestore(pCache, (size_t)MaxWords *
 								   sizeof(uint64_t));
+
+	BOND_PRINTF("WBA bond: restored %lu bytes crc %08lx\r\n",
+			(unsigned long)n,
+			(unsigned long)(n != 0 ? crc32_ieee((uint8_t *)pCache, (int)n) : 0));
 
 	// Whole words by construction: the image was stored from a word count.
 	return (uint16_t)(n / sizeof(uint64_t));

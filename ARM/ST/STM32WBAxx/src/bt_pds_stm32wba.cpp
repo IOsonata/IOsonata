@@ -55,7 +55,18 @@ SOFTWARE.
 #include "storage/nvm_region.h"
 #include "bluetooth/bt_pds.h"
 
+// Store trace, unconditional for the same reason the Nordic stores' is: a
+// release build is where bond data has to survive a reset, and a mount that
+// silently did not happen looks exactly like data that was written and not
+// found again.
+#define BT_PDS_WBA_TRACE
+
+#ifdef BT_PDS_WBA_TRACE
 #include "syslog.h"
+#define PDS_PRINTF(...)			SysLogPrintf(SysLogGet(), __VA_ARGS__)
+#else
+#define PDS_PRINTF(...)
+#endif
 
 // Which linker region holds the store.
 #ifndef BT_PDS_WBA_REGION_NO
@@ -78,9 +89,13 @@ extern "C" int BtPdsWbaInit(void)
 	uintptr_t base = NvmRegionAddr(BT_PDS_WBA_REGION_NO);
 	size_t size = NvmRegionSize(BT_PDS_WBA_REGION_NO);
 
+	PDS_PRINTF("PDS: linker NVM%d at %08lX size %08lX\r\n",
+			   BT_PDS_WBA_REGION_NO, (unsigned long)base,
+			   (unsigned long)size);
+
 	if (base == 0 || size == 0)
 	{
-		SysLogPrintf(SysLogGet(), "PDS: no NVM%d region in the linker script, "
+		PDS_PRINTF("PDS: no NVM%d region in the linker script, "
 				   "bonds will not persist\r\n", BT_PDS_WBA_REGION_NO);
 
 		return -ENODEV;
@@ -88,7 +103,7 @@ extern "C" int BtPdsWbaInit(void)
 
 	if (s_PdsIntrf.Init() == false)
 	{
-		SysLogPrintf(SysLogGet(), "PDS: memory interface init failed\r\n");
+		PDS_PRINTF("PDS: memory interface init failed\r\n");
 
 		return -EIO;
 	}
@@ -105,18 +120,25 @@ extern "C" int BtPdsWbaInit(void)
 
 	if (s_PdsMem.Init(cfg, &s_PdsIntrf, 0, 0) == false)
 	{
-		SysLogPrintf(SysLogGet(), "PDS: Nvm init failed\r\n");
+		PDS_PRINTF("PDS: Nvm init failed\r\n");
 
 		return -EIO;
 	}
 
+	PDS_PRINTF("PDS: Nvm ok, size %lu, sector %lu, wr %lu\r\n",
+			   (unsigned long)s_PdsMem.Size(),
+			   (unsigned long)s_PdsMem.LogicalSectorSize(),
+			   (unsigned long)s_PdsMem.WriteGran());
+
 	int r = BtPdsInit(&s_PdsMem);
 	if (r != 0)
 	{
-		SysLogPrintf(SysLogGet(), "PDS: store mount failed %d\r\n", r);
+		PDS_PRINTF("PDS: store mount failed %d\r\n", r);
 
 		return r;
 	}
+
+	PDS_PRINTF("PDS: store mounted\r\n");
 
 	s_bPdsMounted = true;
 
