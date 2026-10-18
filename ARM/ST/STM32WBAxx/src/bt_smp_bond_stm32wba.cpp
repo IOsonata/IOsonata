@@ -56,6 +56,7 @@ SOFTWARE.
 #include <errno.h>
 
 #include "crc.h"
+#include "syslog.h"
 #include "bluetooth/bt_pds.h"
 
 extern "C" int BtPdsWbaInit(void);
@@ -152,6 +153,8 @@ extern "C" void BLEPLAT_NvmStore(const uint64_t *ptr, uint16_t size)
 		if (BtPdsWrite(BT_WBA_NVM_KEY_BASE + 1U + idx, img + off, n) !=
 			(ssize_t)n)
 		{
+			SysLogPrintf(SysLogGet(), "WBA bond: chunk %lu save failed\r\n",
+					(unsigned long)idx);
 			// The image on the medium is now part old, part new, and the
 			// manifest still names the old one, so a restore answers with
 			// the old image until a later flush completes. Nothing to roll
@@ -165,7 +168,10 @@ extern "C" void BLEPLAT_NvmStore(const uint64_t *ptr, uint16_t size)
 	man.Len = (uint32_t)len;
 	man.Crc = crc32_ieee((uint8_t *)img, (int)len);
 
-	(void)BtPdsWrite(BT_WBA_NVM_KEY_BASE, &man, sizeof(man));
+	ssize_t result = BtPdsWrite(BT_WBA_NVM_KEY_BASE, &man, sizeof(man));
+	SysLogPrintf(SysLogGet(), "WBA bond: save %lu bytes, status %ld\r\n",
+			(unsigned long)len,
+			(long)(result == (ssize_t)sizeof(man) ? 0 : result));
 }
 
 // ---------------------------------------------------------------------------
@@ -254,6 +260,9 @@ extern "C" uint16_t BtSmpBondWbaCacheInit(uint64_t *pCache, uint16_t MaxWords)
 
 	size_t n = BtSmpBondWbaRestore(pCache, (size_t)MaxWords *
 								   sizeof(uint64_t));
+
+	SysLogPrintf(SysLogGet(), "WBA bond: restored %lu bytes\r\n",
+			(unsigned long)n);
 
 	// Whole words by construction: the image was stored from a word count.
 	return (uint16_t)(n / sizeof(uint64_t));

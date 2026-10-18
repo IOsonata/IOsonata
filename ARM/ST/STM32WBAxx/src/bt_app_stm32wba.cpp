@@ -84,6 +84,7 @@ SOFTWARE.
 #include "bluetooth/bt_dev.h"
 #include "bluetooth/bt_att.h"
 #include "bt_wba_event_router.h"
+#include "syslog.h"
 
 
 // Port implementation state. Neither its layout nor storage leaves this file.
@@ -823,19 +824,22 @@ static void BtAppWbaConnected(uint8_t Status, uint16_t ConnHdl, uint8_t Role,
 				                     pPeerAddr);
 			}
 
+			uint8_t secStatus = BLE_STATUS_SUCCESS;
 			switch (Role)
 			{
 				case BT_CONN_ROLE_CENTRAL:
-					aci_gap_send_pairing_req(ConnHdl, 0);
+					secStatus = aci_gap_send_pairing_req(ConnHdl, 0);
 					break;
 
 				case BT_CONN_ROLE_PERIPHERAL:
-					aci_gap_peripheral_security_req(ConnHdl);
+					secStatus = aci_gap_peripheral_security_req(ConnHdl);
 					break;
 
 				default:
 					break;
 			}
+			SysLogPrintf(SysLogGet(), "WBA security: request hdl=%u status=0x%02x\r\n",
+					(unsigned)ConnHdl, (unsigned)secStatus);
 		}
 
 		if (Role == BT_CONN_ROLE_PERIPHERAL)
@@ -966,6 +970,10 @@ static BtWbaEvtFlow_t BtAppHciEvtHandler(void *pPayload)
 		{
 			hci_encryption_change_event_rp0 *p =
 				(hci_encryption_change_event_rp0 *)pEvtPkt->data;
+			SysLogPrintf(SysLogGet(),
+					"WBA security: encryption hdl=%u status=0x%02x enabled=%u\r\n",
+					(unsigned)p->Connection_Handle, (unsigned)p->Status,
+					(unsigned)p->Encryption_Enabled);
 			// Link encrypted. On a bonded reconnect the stack has restored the
 			// peer's CCCDs by this point, so re-arm the notify/indicate callbacks.
 			// On a fresh pairing the CCCDs are still clear, so this is a no-op and
@@ -1126,6 +1134,9 @@ static BtWbaEvtFlow_t BtAppHciEvtHandler(void *pPayload)
 				{
 					aci_gap_pairing_complete_event_rp0 *pPc =
 						(aci_gap_pairing_complete_event_rp0 *)pAci->data;
+					SysLogPrintf(SysLogGet(),
+							"WBA security: pairing hdl=%u status=0x%02x\r\n",
+							(unsigned)pPc->Connection_Handle, (unsigned)pPc->Status);
 					if (s_WbaData.PasskeyRejectedHdl == pPc->Connection_Handle)
 					{
 						s_WbaData.PasskeyRejectedHdl = BT_CONN_HDL_INVALID;
@@ -1249,16 +1260,10 @@ static uint32_t s_BleGattRam[DIVC(BLE_TOTAL_BUFFER_SIZE_GATT(
 static uint64_t s_BleNvmCache[CFG_BLE_NVM_MAX_SIZE];
 static uint16_t s_BleHostEvtFifo[CFG_BLE_HOST_EVT_FIFO_SIZE];
 
-// Preload the cache from the PDS and say how many words came back.
-// Implemented in bt_smp_bond_stm32wba.cpp; weak no-op here so a build
-// without security still links and starts with an empty cache.
-extern "C" __attribute__((weak))
-uint16_t BtSmpBondWbaCacheInit(uint64_t *pCache, uint16_t MaxWords)
-{
-	(void)pCache;
-	(void)MaxWords;
-	return 0;
-}
+// A strong reference must pull the native bond store from the MCU archive.
+// A local weak fallback can satisfy the call and silently skip restoration.
+extern "C" uint16_t BtSmpBondWbaCacheInit(uint64_t *pCache, uint16_t MaxWords);
+extern "C" int BtSmpBondWbaInit(void);
 
 // PA level of aci_hal_set_tx_power_level, from the STM32WBA BLE Wireless
 // Interface Annex: output power at the IC pin in tenths of dBm, index is the
@@ -1381,11 +1386,14 @@ bool BtAppStackInit(const BtAppCfg_t *pCfg)
 	// stack initializes, because BleStack_init_t takes the preloaded word
 	// count: nvm_cache_size is what the restore answered. A first boot, a
 	// torn flush or a store that would not mount all answer 0 and the
-	// stack starts empty. Guarded on the security type the way the Nordic
-	// ports guard on bSecure; without security the weak no-op answers and
-	// nothing is pulled in.
+	// stack starts empty. A store that cannot mount fails initialization
+	// rather than advertising bonding without persistent storage.
 	if (pCfg->SecType != BTGAP_SECTYPE_NONE)
 	{
+		if (BtSmpBondWbaInit() != 0)
+		{
+			return false;
+		}
 		s_WbaData.NvmCacheWords =
 				BtSmpBondWbaCacheInit(s_BleNvmCache, CFG_BLE_NVM_MAX_SIZE);
 	}
