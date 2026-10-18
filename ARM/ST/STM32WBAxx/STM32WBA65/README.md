@@ -398,8 +398,9 @@ Validation: `tests/stm32wba/run_spi.py` runs the driver in an instruction set
 emulator with a model of the SPI registers, the GPDMA channels and the chip
 select pins (64 checks: polling, interrupt, DMA, slave, a receive FIFO overrun
 check and the 70000 byte chunking).
-Hardware: SPIMasterSlave passed on the DK1 (slave in interrupt mode). SPILoopback,
-the SPI slave in DMA mode and the hardware master are not tested.
+Hardware: SPIMasterSlave passed on the DK1 with the slave in interrupt and in DMA
+mode, all four SPI modes (software master). SPILoopback and the hardware master
+are not tested.
 
 ## Build dependency
 
