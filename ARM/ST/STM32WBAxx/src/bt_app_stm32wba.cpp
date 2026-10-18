@@ -828,7 +828,13 @@ static void BtAppWbaConnected(uint8_t Status, uint16_t ConnHdl, uint8_t Role,
 		// ACI_ATT_EXCHANGE_MTU_RESP below.
 		if (s_BtAppData.MaxMtu > GATT_MTU_SIZE_DEFAULT)
 		{
+#ifdef BT_WBA_SEC_TRACE
+			uint8_t mtuStatus = aci_gatt_exchange_config(ConnHdl);
+			SysLogPrintf(SysLogGet(), "WBA mtu: exchange status=0x%02x\r\n",
+					(unsigned)mtuStatus);
+#else
 			(void)aci_gatt_exchange_config(ConnHdl);
+#endif
 		}
 
 		// Secure link setup. ST owns the SMP exchange and emits
@@ -962,6 +968,25 @@ static void BtAppWbaExtScanReport(const uint8_t *pData, size_t Len)
 static BtWbaEvtFlow_t BtAppHciEvtHandler(void *pPayload)
 {
 	hci_event_pckt *pEvtPkt = (hci_event_pckt *)((hci_uart_pckt *)pPayload)->data;
+
+#ifdef BT_WBA_SEC_TRACE
+	// Every event the stack delivers, in order, with the code that identifies
+	// it: the LE meta subevent or the ACI event code where there is one.
+	{
+		unsigned code = 0;
+
+		if (pEvtPkt->evt == HCI_LE_META_EVT_CODE)
+		{
+			code = ((evt_le_meta_event *)pEvtPkt->data)->subevent;
+		}
+		else if (pEvtPkt->evt == HCI_VENDOR_SPECIFIC_DEBUG_EVT_CODE)
+		{
+			code = ((evt_blecore_aci *)pEvtPkt->data)->ecode;
+		}
+		SysLogPrintf(SysLogGet(), "evt hci 0x%02x code 0x%04x len %u\r\n",
+				(unsigned)pEvtPkt->evt, code, (unsigned)pEvtPkt->plen);
+	}
+#endif
 
 	switch (pEvtPkt->evt)
 	{
