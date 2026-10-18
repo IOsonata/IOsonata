@@ -653,11 +653,6 @@ static int Stm32SpiTransfer(Stm32SpiDev_t * const pDev, const uint8_t *pTx, uint
 // Slave engine
 // ---------------------------------------------------------------------------
 
-// Diagnostic counters of the slave handler: 0 entries, 1 status bits seen,
-// 2 last status, 3 last IER, 4 entries without a pending enabled flag,
-// 5 arms, 6 frame ends, 7 first status without a pending enabled flag
-volatile uint32_t g_Stm32SpiSlaveTrace[8];
-
 static void Stm32SpiSlaveWrite(Stm32SpiDev_t * const pDev)
 {
 	SPI_TypeDef *reg = pDev->pReg;
@@ -728,7 +723,6 @@ static void Stm32SpiSlaveRead(Stm32SpiDev_t * const pDev)
 // enabled and waits for NSS.
 static void Stm32SpiSlaveArm(Stm32SpiDev_t * const pDev)
 {
-	g_Stm32SpiSlaveTrace[5] = g_Stm32SpiSlaveTrace[5] + 1U;
 	SPI_TypeDef *reg = pDev->pReg;
 	SPIDev_t *spi = pDev->pSpiDev;
 	DevIntrf_t *intrf = &spi->DevIntrf;
@@ -798,7 +792,6 @@ static void Stm32SpiSlaveArm(Stm32SpiDev_t * const pDev)
 // NSS went inactive: the frame is over
 static void Stm32SpiSlaveEnd(Stm32SpiDev_t * const pDev)
 {
-	g_Stm32SpiSlaveTrace[6] = g_Stm32SpiSlaveTrace[6] + 1U;
 	SPI_TypeDef *reg = pDev->pReg;
 	SPIDev_t *spi = pDev->pSpiDev;
 	DevIntrf_t *intrf = &spi->DevIntrf;
@@ -890,28 +883,6 @@ static void Stm32SpiSlaveService(Stm32SpiDev_t * const pDev)
 {
 	SPI_TypeDef *reg = pDev->pReg;
 	uint32_t sr = reg->SR;
-	const uint32_t ier = reg->IER;
-
-	g_Stm32SpiSlaveTrace[0] = g_Stm32SpiSlaveTrace[0] + 1U;
-	g_Stm32SpiSlaveTrace[1] = g_Stm32SpiSlaveTrace[1] | sr;
-	g_Stm32SpiSlaveTrace[2] = sr;
-	g_Stm32SpiSlaveTrace[3] = ier;
-	if ((sr & ier & (SPI_SR_RXP | SPI_SR_TXP | SPI_SR_EOT | SPI_SR_OVR)) == 0U)
-	{
-		const uint32_t quiet = g_Stm32SpiSlaveTrace[4] + 1U;
-
-		g_Stm32SpiSlaveTrace[4] = quiet;
-		if (quiet == 1U)
-		{
-			g_Stm32SpiSlaveTrace[7] = sr;
-		}
-		if (quiet > 100000U)
-		{
-			// Diagnostic cut: a handler that keeps entering without a cause
-			NVIC_DisableIRQ(pDev->pInfo->Irq);
-			return;
-		}
-	}
 
 	if (sr & SPI_SR_OVR)
 	{

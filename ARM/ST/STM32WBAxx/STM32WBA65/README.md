@@ -358,7 +358,13 @@ NSS pin, used by the hardware. Each frame is announced by
 `DEVINTRF_EVT_STATECHG` (give the buffers with `SetSlaveRxBuffer` and
 `SetSlaveTxData`, index 0) and ended by `DEVINTRF_EVT_COMPLETED` with the byte
 count, or -1 after an overrun or a frame longer than the receive buffer. The
-`DummyByte` follows the transmit data.
+`DummyByte` follows the transmit data. The frame ends when NSS goes inactive:
+the peripheral raises no EOT for it while the transfer size is open, so the
+driver watches the NSS pin (an EXTI line, DevNo of the pin number) and also
+accepts the EOT flag. The EXTI line of the NSS pin must be free. While the
+transmit FIFO is empty TXC stays set and EOTIE raises the interrupt for it, so
+the handler puts one underrun item in the FIFO each time TXC is set with no
+data left.
 
 Limits: `SPIPHY_NORMAL` only. The families with the older SPI registers (F0,
 F4, L4, G4) keep their own SPI files.
@@ -375,13 +381,16 @@ AF7, which matches the ST board support package).
 on SPI2, AF5, on the Arduino pins of UM3462 table 8: SCK PB10 (D13), MISO PA9
 (D12), MOSI PC3 (D11), NSS PB9 (D10). The master is the software SPI: SCK PB11
 (D9), MOSI PB0 (D6, also drives LED3), MISO PC13 (D4), chip select PA10 (D8).
-Wire D9 to D13, D6 to D11, D12 to D4 and D8 to D10.
+Wire D9 to D13, D6 to D11, D12 to D4 and D8 to D10. On the DK1 the four modes
+passed with the slave in interrupt mode and frames of 1, 16 and 129 bytes. On a
+failure the example prints the SPI2 registers and a jumper test.
 
 Validation: `tests/stm32wba/run_spi.py` runs the driver in an instruction set
 emulator with a model of the SPI registers, the GPDMA channels and the chip
 select pins (64 checks: polling, interrupt, DMA, slave, a receive FIFO overrun
 check and the 70000 byte chunking).
-Not tested on hardware.
+Hardware: SPIMasterSlave passed on the DK1 (slave in interrupt mode). SPILoopback,
+the SPI slave in DMA mode and the hardware master are not tested.
 
 ## Build dependency
 

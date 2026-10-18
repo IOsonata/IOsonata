@@ -4,8 +4,8 @@
 @brief	Diagnostics of the STM32WBA65 SPI master and slave example
 
 Called by spi_master_slave.cpp when a frame does not complete. It prints the
-SPI2 registers, the counters of the slave handler and the NVIC state of the
-SPI2 interrupt.
+SPI2 registers and the NVIC state of the SPI2 interrupt, then checks the four
+jumpers.
 
 @author	Hoang Nguyen Hoan
 @date	Oct. 17, 2026
@@ -44,8 +44,6 @@ SOFTWARE.
 #include "iopinctrl.h"
 #include "board.h"
 
-extern volatile uint32_t g_Stm32SpiSlaveTrace[8];
-
 static void Jumper(const char *pName, int OutPort, int OutPin, int InPort, int InPin)
 {
 	int high;
@@ -74,12 +72,6 @@ void SpiMasterSlaveDiagnostics(void)
 	printf("SPI2: CR1=%08x CR2=%08x CFG1=%08x CFG2=%08x IER=%08x SR=%08x\r\n",
 		(unsigned)reg->CR1, (unsigned)reg->CR2, (unsigned)reg->CFG1,
 		(unsigned)reg->CFG2, (unsigned)reg->IER, (unsigned)reg->SR);
-	printf("Handler: entries=%u status seen=%08x last status=%08x last IER=%08x\r\n",
-		(unsigned)g_Stm32SpiSlaveTrace[0], (unsigned)g_Stm32SpiSlaveTrace[1],
-		(unsigned)g_Stm32SpiSlaveTrace[2], (unsigned)g_Stm32SpiSlaveTrace[3]);
-	printf("Handler: no pending enabled flag=%u first such status=%08x arms=%u ends=%u\r\n",
-		(unsigned)g_Stm32SpiSlaveTrace[4], (unsigned)g_Stm32SpiSlaveTrace[7],
-		(unsigned)g_Stm32SpiSlaveTrace[5], (unsigned)g_Stm32SpiSlaveTrace[6]);
 	printf("NVIC SPI2: enabled=%d pending=%d active=%d\r\n",
 		(NVIC->ISER[idx] & bit) != 0U, (NVIC->ISPR[idx] & bit) != 0U,
 		(NVIC->IABR[idx] & bit) != 0U);
