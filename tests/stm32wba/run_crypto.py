@@ -91,7 +91,7 @@ def build(tmp):
     srcs = [
         (HERE / 'crypto_fw.cpp', []),
         (ROOT / 'exemples/crypto/crypto_engine_test.cpp',
-         ['-DCRYPTO_TEST_NO_MAIN', f'-DCRYPTO_TEST_SOAK_PKA={SOAK_PKA}', f'-DCRYPTO_TEST_SOAK_AES={SOAK_AES}']),
+         ['-DCRYPTO_TEST_NO_MAIN', '-DCRYPTO_TEST_PKA_DIAG_ALWAYS=1', f'-DCRYPTO_TEST_SOAK_PKA={SOAK_PKA}', f'-DCRYPTO_TEST_SOAK_AES={SOAK_AES}']),
         (ROOT / 'ARM/ST/STM32WBAxx/src/crypto_stm32wba.cpp', []),
         (ROOT / 'src/crypto/crypto_softaes.cpp', []),
         (ROOT / 'src/crypto/crypto_softrng.cpp', []),
@@ -683,7 +683,9 @@ class Pka:
     def finish(self):
         env = self.env
         m = self.mode
-        if m == 0x20:
+        if m == 0x01:
+            self.do_montgomery()
+        elif m == 0x20:
             self.do_mul()
         elif m == 0x24:
             self.do_sign()
@@ -761,6 +763,20 @@ class Pka:
         self.put(h('PKA_ECC_SCALAR_MUL_OUT_RESULT_X'), R[0])
         self.put(h('PKA_ECC_SCALAR_MUL_OUT_RESULT_Y'), R[1])
         self.ram[h('PKA_ECC_SCALAR_MUL_OUT_ERROR')] = 0xD60D
+
+    def do_montgomery(self):
+        h = hdr
+        env = self.env
+        r = self.ram
+        if r[h('PKA_MONTGOMERY_PARAM_IN_MOD_NB_BITS')] != 256:
+            env.v('PKA Montgomery parameter bit count is not 256')
+        p = self.num(h('PKA_MONTGOMERY_PARAM_IN_MODULUS'))
+        if p != P256_P:
+            env.v('PKA Montgomery parameter modulus is not the P-256 prime')
+        env.stats['pka_montgomery'] += 1
+        res = pow(2, 512, p)
+        for i in range(8):
+            r[h('PKA_MONTGOMERY_PARAM_OUT_PARAMETER') + i] = (res >> (32 * i)) & 0xFFFFFFFF
 
     def do_check(self):
         h = hdr
@@ -1015,6 +1031,11 @@ def main():
                     errors.append(f'seed {seed}: {line.strip()}')
             if result != 0:
                 errors.append(f'seed {seed}: the test returned {result}')
+            for want in ('pka point check 1 err d60d, constant 1 err d60d',
+                         'pka mul 1, verify 1, R2 same 1',
+                         'pka R2 00000003 00000000 ffffffff fffffffb fffffffe ffffffff fffffffd 00000004'):
+                if want not in text:
+                    errors.append(f'seed {seed}: Diag line missing: {want}')
             if 'engines construct' not in text:
                 errors.append(f'seed {seed}: no test output')
             for v in env.viol[:10]:

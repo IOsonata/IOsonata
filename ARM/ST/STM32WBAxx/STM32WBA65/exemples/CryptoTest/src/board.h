@@ -44,6 +44,9 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define BOARD				STM32WBA65I_DK1
 
 #include "stm32_boards.h"
+#include <stdio.h>
+#include <stdint.h>
+
 #include "coredev/system_core_clock.h"
 
 // Output on USART2, the Arduino D0/D1 pins, also the second ST-LINK virtual
@@ -72,6 +75,20 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define CRYPTO_TEST_RNG_TYPE		CryptoWbaRng
 #define CRYPTO_TEST_RNG_MEMSIZE		CRYPTO_WBA_RNG_MEMSIZE
 #define CRYPTO_TEST_RNG_CREATE(m, s)	CryptoWbaRngCreate((m), (s))
+
+// Details of the accelerator printed when its self-test fails
+#define CRYPTO_TEST_PKA_DIAG(p)		do { \
+		uint32_t d[15]; \
+		if ((p)->Diag(d, 15) == 0) { \
+			printf("    pka point check %d err %04lx, constant %d err %04lx\r\n", \
+				(int)d[0], (unsigned long)d[1], (int)d[2], (unsigned long)d[3]); \
+			printf("    pka mul %d, verify %d, R2 same %lu\r\n", \
+				(int)d[4], (int)d[5], (unsigned long)d[6]); \
+			printf("    pka R2 %08lx %08lx %08lx %08lx %08lx %08lx %08lx %08lx\r\n", \
+				(unsigned long)d[7], (unsigned long)d[8], (unsigned long)d[9], \
+				(unsigned long)d[10], (unsigned long)d[11], (unsigned long)d[12], \
+				(unsigned long)d[13], (unsigned long)d[14]); \
+		} } while (0)
 
 // Timing from the Cortex-M33 cycle counter (DWT), needs no library
 #define CRYPTO_TEST_TICKS_INIT()	do { \

@@ -179,6 +179,21 @@ public:
 	/// fixed nonce (RFC 6979 A.2.5) and verify. 0 on pass.
 	int SelfTest() override;
 
+	/// Bring-up probe of the accelerator, independent of the key and
+	/// signature paths. Words must be at least 15. Out holds:
+	/// 0 point check of a valid point, accelerator Montgomery parameter
+	///   (1 on the curve, 0 off it, -1 block failure, -2 no parameter)
+	/// 1 error word of that check
+	/// 2 the same check with the constant R^2 mod p
+	/// 3 error word of that check
+	/// 4 scalar multiplication of a point other than the base point
+	///   (1 result as expected, 0 not, -1 block failure)
+	/// 5 verification of a known signature, no point check before it
+	/// 6 1 when the accelerator's R^2 mod p equals the constant
+	/// 7..14 the accelerator's R^2 mod p, least significant word first
+	/// Returns 0, or -1 when the probe could not run.
+	int Diag(uint32_t *pOut, size_t Words);
+
 private:
 	bool OpAcquire() { return std::atomic_flag_test_and_set(&vOpBusy) == false; }
 	void OpRelease() { std::atomic_flag_clear(&vOpBusy); }
