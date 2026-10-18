@@ -334,7 +334,7 @@ instruction set emulator with an I2C model and a GPDMA model (70 checks: polling
 interrupt, DMA, slave in interrupt and DMA mode). On the DK1 the I2CScan example found the codec at 0x1A,
 and the I2CMasterSlave example passed with the master in polling, interrupt,
 DMA and DMA with interrupt (I2C1 to I2C2, 100 kHz). The slave ran in interrupt
-mode, and in DMA mode with the master in polling, DMA and DMA with interrupt.
+mode, and in DMA mode with the master in each of the four modes.
 
 ## SPI and example project
 
