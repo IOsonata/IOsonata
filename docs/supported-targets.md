@@ -208,7 +208,7 @@ entire series.
 | [STM32F401xC](../ARM/ST/STM32F4xx/STM32F401/STM32F401xc/lib/ioc/) | Startup, vector/linker files, shared STM32 GPIO/EXTI, UART and timer (TIM9/10/11/2/3/4/5/1) | Library project links the shared GPIO, UART and timer drivers; no example project | Partial port: library builds; host tests of the UART and timer drivers. Hardware validation remains outstanding. |
 | STM32F301x8, STM32F302x8 | Vector files | No complete MCU application project | Deferred: no board is available for development or validation. The parts are active at ST. Incomplete startup and peripheral ports. |
 | [STM32WBA65](../ARM/ST/STM32WBAxx/STM32WBA65/lib/ioc/) | Startup with 100 MHz PLL1 clock, GPIO/EXTI, UART with GPDMA, I2C and SPI (master and slave, interrupt, GPDMA), LPTIM1/2 and TIM | [Examples](../ARM/ST/STM32WBAxx/STM32WBA65/exemples/): UART loopback, PRBS, TimerDemo, I2CScan, I2CMasterSlave, SPIMasterSlave and SPILoopback for the STM32WBA65I-DK1 | Incomplete: the Bluetooth adapter is not integrated. DK1 hardware: I2C master/slave (8 mode combinations) and SPI master/slave (SPI3 master in polling, interrupt, DMA and DMA with interrupt against the SPI2 slave in interrupt and DMA mode, 8 combinations) pass; SPILoopback is not yet run. |
-| STM32L152 | Planned | Planned after 0.13 | Outside the 0.13 support list. |
+| [STM32L152RE](../ARM/ST/STM32L1xx/STM32L152RE/lib/ioc/) | Startup at 32 MHz, GPIO/EXTI, polling/interrupt UART and nine TIM instances | [Examples](../ARM/ST/STM32L1xx/STM32L152RE/exemples/): Blinky, TimerDemo, UartPrbsTxTest and UartLoopback for NUCLEO-L152RE | Initial supported port; Debug/Release compile/link and modeled register tests pass. Hardware validation pending. DMA and optional peripherals are not implemented; see [L1 port notes](../ARM/ST/STM32L1xx/README.md). |
 
 The L4 [I2C](../ARM/ST/STM32L4xx/src/i2c_stm32l4xx.cpp) driver supports polling
 master transfers. The [SPI driver](../ARM/ST/STM32L4xx/src/spi_stm32l4xx.cpp)
@@ -264,7 +264,8 @@ those functions, not a test of every mode or all seven timers. TIM14, TIM17,
 TIM15, TIM3 and TIM1 still need hardware coverage. These runs used the F030x8
 timer source that the shared STM32 timer driver replaced on 2026-10-14; the
 shared driver needs the TIM6 and TIM16 runs again.
-The planned L152/Nucleo-64 work is outside the 0.13 support list.
+STM32L152RE now has an initial minimum port and NUCLEO-L152RE example projects.
+Build and modeled register checks pass; hardware validation remains pending.
 
 ## NXP, Espressif and Raspberry Pi
 

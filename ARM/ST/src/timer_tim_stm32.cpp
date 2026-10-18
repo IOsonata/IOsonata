@@ -110,6 +110,12 @@ SOFTWARE.
 #define ST_TIM15_IRQn			TIM15_IRQn
 #define ST_TIM16_IRQn			TIM16_IRQn
 #define ST_TIM17_IRQn			TIM17_IRQn
+#elif defined(IOSONATA_STM32_L1)
+#define ST_TIM6_IRQn			TIM6_IRQn
+#define ST_TIM7_IRQn			TIM7_IRQn
+#define ST_TIM9_IRQn			TIM9_IRQn
+#define ST_TIM10_IRQn			TIM10_IRQn
+#define ST_TIM11_IRQn			TIM11_IRQn
 #elif defined(STM32F4)
 #ifdef TIM10
 #define ST_TIM1_IRQn			TIM1_UP_TIM10_IRQn

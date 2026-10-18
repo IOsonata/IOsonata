@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "mcu": "STM32L152RE",
+  "cpu": "cortex-m3",
+  "fpu": false,
+  "defines": [
+    "STM32L152xE"
+  ],
+  "includes": [
+    "${iosonata}/ARM/ST/include",
+    "${iosonata}/ARM/ST/STM32L1xx/include",
+    "${iosonata}/ARM/ST/STM32L1xx/STM32L152RE/lib/include"
+  ],
+  "linker_script": "${iosonata}/ARM/ST/STM32L1xx/ldscript/gcc_stm32l152xe.ld",
+  "lib_path": "${iosonata}/ARM/ST/STM32L1xx/STM32L152RE/lib/ioc/${config}",
+  "lib": "IOsonata_STM32L152RE"
+}

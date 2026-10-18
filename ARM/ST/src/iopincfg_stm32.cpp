@@ -57,7 +57,7 @@ static bool Stm32GpioEnableClock(int PortNo)
 		return false;
 	}
 
-#if defined(IOSONATA_STM32_F0)
+#if defined(IOSONATA_STM32_F0) || defined(IOSONATA_STM32_L1)
 	uint32_t mask = 0U;
 
 	switch (PortNo)
@@ -73,6 +73,15 @@ static bool Stm32GpioEnableClock(int PortNo)
 #endif
 #ifdef RCC_AHBENR_GPIODEN
 		case IOPORTD: mask = RCC_AHBENR_GPIODEN; break;
+#endif
+#ifdef RCC_AHBENR_GPIOEEN
+		case IOPORTE: mask = RCC_AHBENR_GPIOEEN; break;
+#endif
+#ifdef RCC_AHBENR_GPIOGEN
+		case IOPORTG: mask = RCC_AHBENR_GPIOGEN; break;
+#endif
+#ifdef RCC_AHBENR_GPIOHEN
+		case IOPORTH: mask = RCC_AHBENR_GPIOHEN; break;
 #endif
 #ifdef RCC_AHBENR_GPIOFEN
 		case IOPORTF: mask = RCC_AHBENR_GPIOFEN; break;
@@ -365,9 +374,21 @@ static void Stm32ExtiSelect(int PortNo, int PinNo)
 #else
 	uint32_t shift = ((unsigned)PinNo & 3U) * 4U;
 	uint32_t mask = 0x0FUL << shift;
+	uint32_t port = (unsigned)PortNo;
 
+#if defined(IOSONATA_STM32_L1)
+	// L1 encodes H before F and G in EXTICR, as in the GPIO clock bits.
+	if (PortNo == IOPORTH)
+	{
+		port = 5U;
+	}
+	else if (PortNo == IOPORTF || PortNo == IOPORTG)
+	{
+		port++;
+	}
+#endif
 	SYSCFG->EXTICR[index] = (SYSCFG->EXTICR[index] & ~mask) |
-							(((unsigned)PortNo & 0x0FU) << shift);
+							((port & 0x0FU) << shift);
 #endif
 }
 
@@ -525,6 +546,9 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, uint32_t PortNo,
 #elif defined(IOSONATA_STM32_H7)
 	RCC->APB4ENR |= RCC_APB4ENR_SYSCFGEN;
 	(void)RCC->APB4ENR;
+#elif defined(IOSONATA_STM32_L1)
+	RCC->APB2ENR |= RCC_APB2ENR_SYSCFGEN;
+	(void)RCC->APB2ENR;
 #elif defined(IOSONATA_STM32_F4) || defined(IOSONATA_STM32_L4) || defined(IOSONATA_STM32_G4)
 	RCC->APB2ENR |= RCC_APB2ENR_SYSCFGEN;
 	(void)RCC->APB2ENR;
