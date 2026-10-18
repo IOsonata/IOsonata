@@ -768,12 +768,6 @@ static const uint8_t s_Gy[32] = {
 	0x4f,0xe3,0x42,0xe2,0xfe,0x1a,0x7f,0x9b,0x8e,0xe7,0xeb,0x4a,0x7c,0x0f,0x9e,0x16,
 	0x2b,0xce,0x33,0x57,0x6b,0x31,0x5e,0xce,0xcb,0xb6,0x40,0x68,0x37,0xbf,0x51,0xf5 };
 
-// R^2 mod p with R = 2^256, least significant word first. The point check
-// takes it as its Montgomery parameter.
-static const uint32_t s_R2[8] = {
-	0x00000003U, 0x00000000U, 0xffffffffU, 0xfffffffbU,
-	0xfffffffeU, 0xffffffffU, 0xfffffffdU, 0x00000004U };
-
 static void WbaPkaPut(uint32_t Idx, const uint8_t *pBe)
 {
 	for (uint32_t i = 0U; i < 8U; i++)
@@ -1380,67 +1374,6 @@ static const uint8_t s_TvSigExpect[64] = {
 	0x9d,0x2c,0x87,0x7b,0x56,0xaa,0xf9,0x91,0xc3,0x4d,0x0e,0xa8,0x4e,0xaf,0x37,0x16,
 	0xf7,0xcb,0x1c,0x94,0x2d,0x65,0x7c,0x41,0xd4,0x36,0xc7,0xa1,0xb6,0xe2,0x9f,0x65,
 	0xf3,0xe9,0x00,0xdb,0xb9,0xaf,0xf4,0x06,0x4d,0xc4,0xab,0x2f,0x84,0x3a,0xcd,0xa8 };
-
-int CryptoWbaPka::Diag(uint32_t *pOut, size_t Words)
-{
-	if (pOut == nullptr || Words < 15U)
-	{
-		return -1;
-	}
-	if (!vbValid || !OpAcquire())
-	{
-		return -1;
-	}
-
-	uint32_t hw[8];
-	uint32_t err = 0U;
-	uint8_t rx[32];
-	uint8_t ry[32];
-
-	for (size_t i = 0U; i < Words; i++)
-	{
-		pOut[i] = 0U;
-	}
-
-	// 0, 1 : point check of a valid point with the accelerator's own parameter
-	if (!WbaPkaMontgomery(hw))
-	{
-		pOut[0] = (uint32_t)-2;
-	}
-	else
-	{
-		for (uint32_t i = 0U; i < 8U; i++)
-		{
-			pOut[7U + i] = hw[i];
-		}
-		pOut[6] = memcmp(hw, s_R2, sizeof(hw)) == 0 ? 1U : 0U;
-		WbaPkaWipeRam();
-		pOut[0] = (uint32_t)WbaPkaPointCheckR2(s_TvPubB, s_TvPubB + 32, hw, &err);
-		pOut[1] = err;
-	}
-	WbaPkaWipeRam();
-
-	// 2, 3 : the same check with the constant R^2 mod p
-	err = 0U;
-	pOut[2] = (uint32_t)WbaPkaPointCheckR2(s_TvPubB, s_TvPubB + 32, s_R2, &err);
-	pOut[3] = err;
-	WbaPkaWipeRam();
-
-	// 4 : scalar multiplication of a point other than the base point
-	pOut[4] = WbaPkaScalarMul(s_TvPrivA, s_TvPubB, s_TvPubB + 32, rx, ry) ?
-			  (memcmp(rx, s_TvDh, sizeof(rx)) == 0 ? 1U : 0U) : (uint32_t)-1;
-	WbaPkaWipeRam();
-
-	// 5 : verification of the RFC 6979 signature, no point check before it
-	pOut[5] = (uint32_t)WbaPkaVerify(s_TvSigPub, s_TvSigHash, s_TvSigExpect);
-	WbaPkaWipeRam();
-
-	OpRelease();
-	CryptoSecureWipe(rx, sizeof(rx));
-	CryptoSecureWipe(ry, sizeof(ry));
-
-	return 0;
-}
 
 int CryptoWbaPka::SelfTest()
 {

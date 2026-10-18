@@ -91,7 +91,7 @@ def build(tmp):
     srcs = [
         (HERE / 'crypto_fw.cpp', []),
         (ROOT / 'exemples/crypto/crypto_engine_test.cpp',
-         ['-DCRYPTO_TEST_NO_MAIN', '-DCRYPTO_TEST_PKA_DIAG_ALWAYS=1', f'-DCRYPTO_TEST_SOAK_PKA={SOAK_PKA}', f'-DCRYPTO_TEST_SOAK_AES={SOAK_AES}']),
+         ['-DCRYPTO_TEST_NO_MAIN', f'-DCRYPTO_TEST_SOAK_PKA={SOAK_PKA}', f'-DCRYPTO_TEST_SOAK_AES={SOAK_AES}']),
         (ROOT / 'ARM/ST/STM32WBAxx/src/crypto_stm32wba.cpp', []),
         (ROOT / 'src/crypto/crypto_softaes.cpp', []),
         (ROOT / 'src/crypto/crypto_softrng.cpp', []),
@@ -892,7 +892,9 @@ def model_self_check():
 # ---------------------------------------------------------------------------
 # emulator
 
-def run_fw(elf_path, seed, ctr_bits, rng_fault):
+def run_fw(elf_path, seed, ctr_bits, rng_fault, driver=None):
+    """driver(uc, syms, env, state, pc) replaces the plain emu_start when given
+    (run_bt_crypto.py uses it to preempt the firmware at a chosen call)."""
     from unicorn import Uc, UC_ARCH_ARM, UC_MODE_THUMB, UC_MODE_MCLASS, UC_HOOK_CODE
     from unicorn.arm_const import UC_CPU_ARM_CORTEX_M33
     from unicorn.arm_const import UC_ARM_REG_R0, UC_ARM_REG_R1, UC_ARM_REG_SP, UC_ARM_REG_PC
@@ -980,7 +982,10 @@ def run_fw(elf_path, seed, ctr_bits, rng_fault):
     uc.reg_write(UC_ARM_REG_SP, int.from_bytes(vec[0:4], 'little'))
     pc = int.from_bytes(vec[4:8], 'little')
     try:
-        uc.emu_start(pc, 0xFFFFFFFF, count=4_000_000_000)
+        if driver is None:
+            uc.emu_start(pc, 0xFFFFFFFF, count=4_000_000_000)
+        else:
+            driver(uc, syms, env, state, pc)
     except Exception as ex:
         text = console.decode('ascii', 'replace')
         raise SystemExit(f'FAIL emulator stopped at {uc.reg_read(UC_ARM_REG_PC):#x}: {ex}\n{text[-1500:]}')
@@ -1031,11 +1036,6 @@ def main():
                     errors.append(f'seed {seed}: {line.strip()}')
             if result != 0:
                 errors.append(f'seed {seed}: the test returned {result}')
-            for want in ('pka point check 1 err d60d, constant 1 err d60d',
-                         'pka mul 1, verify 1, R2 same 1',
-                         'pka R2 00000003 00000000 ffffffff fffffffb fffffffe ffffffff fffffffd 00000004'):
-                if want not in text:
-                    errors.append(f'seed {seed}: Diag line missing: {want}')
             if 'engines construct' not in text:
                 errors.append(f'seed {seed}: no test output')
             for v in env.viol[:10]:

@@ -26,8 +26,6 @@ checks the test itself on a host. A board selects its engines in board.h:
 
 Optional:
 
-	CRYPTO_TEST_PKA_DIAG(p)		print engine details after a failed P-256 self-test
-	CRYPTO_TEST_PKA_DIAG_ALWAYS	1 prints them after a pass too, default 0
 	CRYPTO_TEST_TICKS_INIT()	start a free running counter
 	CRYPTO_TEST_TICKS()			read it, a uint32_t
 	CRYPTO_TEST_TICKS_PER_US	counts per microsecond
@@ -106,10 +104,6 @@ public:
 #define CRYPTO_TEST_AES_TYPE		CryptoSoftAes
 #define CRYPTO_TEST_AES_MEMSIZE		CRYPTO_SOFTAES_MEMSIZE
 #define CRYPTO_TEST_AES_CREATE(m, s)	CryptoSoftAesCreate((m), (s))
-#endif
-
-#ifndef CRYPTO_TEST_PKA_DIAG_ALWAYS
-#define CRYPTO_TEST_PKA_DIAG_ALWAYS	0
 #endif
 
 #ifndef CRYPTO_TEST_PKA_TYPE
@@ -903,25 +897,8 @@ int CryptoEngineTest(void)
 	CRYPTO_TEST_TICKS_INIT();
 #endif
 
-	int rc = hwAes->SelfTest();
-
-	check("AES engine self-test", rc == 0);
-	if (rc != 0)
-	{
-		printf("    code %d\r\n", rc);
-	}
-	rc = hwPka->SelfTest();
-	check("P-256 engine self-test", rc == 0);
-	if (rc != 0)
-	{
-		printf("    code %d\r\n", rc);
-	}
-#ifdef CRYPTO_TEST_PKA_DIAG
-	if (rc != 0 || CRYPTO_TEST_PKA_DIAG_ALWAYS)
-	{
-		CRYPTO_TEST_PKA_DIAG(hwPka);
-	}
-#endif
+	check("AES engine self-test", hwAes->SelfTest() == 0);
+	check("P-256 engine self-test", hwPka->SelfTest() == 0);
 
 	RngChecks(hwRng);
 	AesVectors(hwAes, hwAes, hwAes);
