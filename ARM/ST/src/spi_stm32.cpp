@@ -313,8 +313,14 @@ static void Stm32SpiDmaGive(Stm32SpiDev_t * const pDev)
 
 static void Stm32SpiDmaIrq(int Ch, void *pCtx)
 {
+	Stm32SpiDev_t *dev = (Stm32SpiDev_t *)pCtx;
+
 	WbaGpdmaAck(Ch);
-	Stm32SpiService((Stm32SpiDev_t *)pCtx);
+	// A master transfer that the caller waits for is followed by its polling loop
+	if (dev->bAsync || dev->pSpiDev->Cfg.Mode == SPIMODE_SLAVE)
+	{
+		Stm32SpiService(dev);
+	}
 }
 
 static void Stm32SpiDmaStop(Stm32SpiDev_t * const pDev)

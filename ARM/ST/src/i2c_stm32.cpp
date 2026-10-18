@@ -605,7 +605,11 @@ static void Stm32I2cDmaIrq(int Ch, void *pCtx)
 	Stm32I2cDev_t *dev = (Stm32I2cDev_t *)pCtx;
 
 	WbaGpdmaAck(Ch);
-	Stm32I2cService(dev);
+	// A transfer that the caller waits for is followed by its polling loop
+	if (dev->bAsync || dev->pI2cDev->Cfg.Mode == I2CMODE_SLAVE)
+	{
+		Stm32I2cService(dev);
+	}
 }
 
 static inline int Stm32I2cDmaCh(Stm32I2cDev_t * const pDev)
@@ -883,19 +887,24 @@ static bool Stm32I2cMasterBegin(Stm32I2cDev_t * const pDev, bool bRx, bool bStop
 	{
 		cr1 |= bRx ? I2C_CR1_RXDMAEN : I2C_CR1_TXDMAEN;
 	}
-	if (bAsync)
-	{
-		cr1 |= STM32_I2C_CR1_MASTER_INT;
-		if (pDev->bDma == false)
-		{
-			cr1 |= bRx ? I2C_CR1_RXIE : I2C_CR1_TXIE;
-		}
-	}
 	reg->CR1 = cr1;
 
 	pDev->bRun = true;
 	pDev->bHold = false;
 	Stm32I2cMasterChunk(pDev, true);
+
+	// The interrupts are enabled last. The TC flag of a held write is still
+	// set until the START clears it, so enabling TCIE earlier would run the
+	// interrupt on the old flags in the middle of this setup.
+	if (bAsync)
+	{
+		cr1 = STM32_I2C_CR1_MASTER_INT;
+		if (pDev->bDma == false)
+		{
+			cr1 |= bRx ? I2C_CR1_RXIE : I2C_CR1_TXIE;
+		}
+		reg->CR1 |= cr1;
+	}
 
 	return true;
 }
