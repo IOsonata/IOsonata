@@ -208,7 +208,9 @@ def make_driver():
             UC_ARM_REG_R12, UC_ARM_REG_SP, UC_ARM_REG_LR]
 
     def driver(uc, syms, env, state, pc):
-        block = [a for n, a in syms.items() if '12CryptoWbaAes' in n and 'AesEcbEncrypt' in n]
+        # Both Cipher and the inherited CMAC/CCM primitive enter WbaAesRun
+        # after acquiring the AES engine. Preempt here to test both paths.
+        block = [a for n, a in syms.items() if 'WbaAesRun' in n]
         if len(block) != 1:
             raise SystemExit('FAIL the hardware AES block function was not found in the firmware')
         block = block[0] & ~1

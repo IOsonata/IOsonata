@@ -26,8 +26,11 @@ If AES returns busy, the callback retries with `CryptoSoftAes`.
 
 The adapter converts ST's little-endian ECB key, input and output to the
 standard AES byte order. CCM reverses the key; nonce, AAD, payload and tag
-retain their order. CMAC uses standard byte order. Temporary conversion
-buffers are wiped.
+retain their order. CMAC uses standard byte order and retains the chaining
+value across whole-block appends with a null output pointer. The final call
+applies padding and the CMAC subkey. AES failures invalidate the operation
+and clear the final tag. Temporary conversion buffers and completed CMAC
+state are wiped.
 
 The earlier byte-order mismatch was corrected before the successful reconnect
 tests. The previous logs alone did not isolate it as the only reconnect cause.
@@ -39,23 +42,61 @@ Run from the repository root:
 ```sh
 python3 tests/stm32wba/run_ble_crypto.py
 python3 tests/stm32wba/run_bt_crypto.py
+python3 tests/stm32wba/run_bond_store.py
 ```
 
-The byte-order tests cover FIPS-197 ECB, RFC 4493 CMAC and RFC 3610 CCM,
-including in-place operations and invalid-tag rejection. The hardware adapter
-test runs with an instruction-set emulator. These tests are separate from
-the DK1 hardware results above; no new test run was performed for this
-documentation update.
+The host AES adapter test needs g++ and Python cryptography. It uses the real
+software AES implementation with a simulated hardware provider to check
+byte order, incremental CMAC, busy fallback and failure handling. The bond
+adapter test compiles the complete adapter with an in-memory PDS and the real
+CRC implementation. Both host tests enable AddressSanitizer and
+UndefinedBehaviorSanitizer.
+
+The hardware adapter test needs an Arm GNU toolchain, Python unicorn,
+pyelftools and cryptography, and `CUBE_WPAN` pointing to stm32-mw-wpan 2.10.0.
+It runs the actual WBA AES/PKA drivers on register models.
+
+October 18 review fixes, tested locally:
+
+- Host AES adapter: **179 checks, 0 failures** at both `-O0` and `-Os`.
+- Bond adapter: **9 test groups passed** at both `-O0` and `-Os`, including
+  mount/chunk/manifest failures, timed retries, a new request during a flush,
+  torn images, missing chunks, CRC rejection and empty images.
+- Cortex-M33 crypto integration: **18 checks, 0 failures**, including
+  incremental CMAC and three interrupt preemptions while AES is busy.
+  The existing model warning about the platform `HW_RNG_Get` initialization
+  remains; this test does not count those RNG configuration messages as failures.
+- The four changed WBA source files compile at `-O0` and `-Os` with Arm GCC
+  13.2.1, Cortex-M33 hard float, CubeWBA 1.10.0 HAL headers and WPAN 2.10.0.
+  Existing volatile increment/decrement warnings in the event ring remain.
+  These are object compilation checks, not complete application builds.
+
+These results are separate from the DK1 hardware runs above. No new hardware
+run was performed for these fixes.
+
+## Bond persistence
+
+A failed mount, chunk write or manifest write leaves the save pending. The
+existing one-second Bluetooth timer event retries it; idle-loop checks do not
+repeatedly retry a failed flash write. A request received during a flush is
+retained for the next attempt.
+
+Chunks are replaced under the existing record keys, then the manifest is
+written. A reset during a partial update can lose the stored image; this is
+not rollback to the previous image. Restore rejects missing or inconsistent
+chunks and clears the cache before the stack starts. The on-flash format is
+unchanged, so existing valid bonds remain readable.
+
+Temporary AES/key dumps, bond-image dumps and routine bring-up traces have
+been removed. Storage and security-request errors still use SysLog.
 
 ## Remaining limitations and tests
 
-- `BAES_CmacCompute` returns when the output pointer is null. ST permits that
-  form to append input before finalization. Incremental CMAC remains
-  unimplemented; resolve or explicitly defer it before merge.
-- Pairing rejection, persistence failure recovery, and radio scheduling during
-  flash writes need separate tests.
-- Complete the final Debug/Release build and regression checks on the release
-  candidate, and remove temporary security diagnostics.
+- Repeat pairing and bonded reconnect after reset with the corrected firmware.
+- Pairing rejection, persistence failure recovery on hardware, and radio
+  scheduling during flash writes need separate tests.
+- Complete the final Debug/Release application builds and regression checks
+  on the release candidate.
 
 ## Vendor references
 

@@ -26,8 +26,6 @@ Known limits:
 - The temperature used by the link layer for radio calibration is fixed at 25
   degrees C. There is no ADC based measurement yet.
 - The AES block is polled. The secure AES (SAES) is not used.
-- The hardware AES path has run in the crypto engine test on the DK1 only.
-  The Bluetooth use of it is not tested on hardware.
 
 @author	Hoang Nguyen Hoan
 @date	Oct. 14, 2026
@@ -683,7 +681,7 @@ extern "C" void HW_RNG_Disable(void)
 }
 
 //----------------------------------------------------------------------------
-// AES for the stack: ECB, CMAC and CCM on the IOsonata software engine.
+// AES for the stack: ECB, CMAC and CCM through the IOsonata engines.
 // ST ECB reverses the key, input and output relative to standard AES byte
 // strings. ST CCM reverses only the key; CMAC uses standard byte order.
 //----------------------------------------------------------------------------
@@ -696,6 +694,8 @@ alignas(CryptoSoftAes) static uint8_t s_AesMem[CRYPTO_SOFTAES_MEMSIZE];
 static CryptoWbaAes *s_pHwAes;
 static CryptoSoftAes *s_pAes;
 static uint8_t s_CmacKey[16];
+static uint8_t s_CmacIv[16];
+static bool s_CmacFailed;
 
 // Engine for one attempt of a call: pass 0 is the hardware engine, pass 1 the
 // software engine. A call goes to pass 1 only after pass 0 answered BUSY. The
@@ -748,99 +748,11 @@ static void BtWbaAesKey(CryptoKey &Key, const uint8_t *pKey, uint32_t Usage)
 	Key.Plain.Len = 16;
 }
 
-#ifdef BT_WBA_SEC_TRACE
-// Bench aid: the stack's AES calls, kept in rings and printed from the
-// application context by BtWbaAesTraceDump. The calls can come from interrupt
-// context, so nothing is printed here. Keys are printed too, so this stays off
-// in any build that leaves the bench.
-#include "syslog.h"
-
-#define BT_WBA_ECB_TRACE	6
-#define BT_WBA_CCM_TRACE	6
-
-typedef struct __Bt_Wba_Ecb_Trace {
-	uint32_t	Tick;
-	uint8_t		Key[16];
-	uint8_t		In[16];
-	uint8_t		Out[16];
-} BtWbaEcbTrace_t;
-
-typedef struct __Bt_Wba_Ccm_Trace {
-	uint32_t	Tick;
-	uint8_t		Mode;
-	uint8_t		Ret;
-	uint8_t		IvLen;
-	uint8_t		TagLen;
-	uint16_t	AddLen;
-	uint16_t	InLen;
-	uint8_t		Key[16];
-	uint8_t		Iv[16];
-} BtWbaCcmTrace_t;
-
-static BtWbaEcbTrace_t s_EcbTrace[BT_WBA_ECB_TRACE];
-static BtWbaCcmTrace_t s_CcmTrace[BT_WBA_CCM_TRACE];
-static volatile uint32_t s_EcbCnt;
-static volatile uint32_t s_CcmCnt;
-static volatile uint32_t s_CcmFail;
-
-static void BtWbaTraceHex(char *pDst, const uint8_t *pSrc, size_t Len)
-{
-	static const char hex[] = "0123456789abcdef";
-
-	for (size_t i = 0; i < Len; i++)
-	{
-		pDst[i * 2] = hex[pSrc[i] >> 4];
-		pDst[i * 2 + 1] = hex[pSrc[i] & 0x0F];
-	}
-	pDst[Len * 2] = 0;
-}
-
-extern "C" void BtWbaAesTraceReset(void)
-{
-	s_EcbCnt = 0;
-	s_CcmCnt = 0;
-	s_CcmFail = 0;
-}
-
-extern "C" void BtWbaAesTraceDump(void)
-{
-	char a[33], b[33], c[33];
-	uint32_t n = s_EcbCnt;
-
-	SysLogPrintf(SysLogGet(), "aes: ecb %lu ccm %lu ccm fail %lu\r\n",
-			(unsigned long)n, (unsigned long)s_CcmCnt, (unsigned long)s_CcmFail);
-
-	for (uint32_t i = n > BT_WBA_ECB_TRACE ? n - BT_WBA_ECB_TRACE : 0; i < n; i++)
-	{
-		const BtWbaEcbTrace_t *p = &s_EcbTrace[i % BT_WBA_ECB_TRACE];
-
-		BtWbaTraceHex(a, p->Key, 16);
-		BtWbaTraceHex(b, p->In, 16);
-		BtWbaTraceHex(c, p->Out, 16);
-		SysLogPrintf(SysLogGet(), "ecb %lu k %s\r\n", (unsigned long)p->Tick, a);
-		SysLogPrintf(SysLogGet(), "ecb i %s\r\n", b);
-		SysLogPrintf(SysLogGet(), "ecb o %s\r\n", c);
-	}
-
-	n = s_CcmCnt;
-	for (uint32_t i = n > BT_WBA_CCM_TRACE ? n - BT_WBA_CCM_TRACE : 0; i < n; i++)
-	{
-		const BtWbaCcmTrace_t *p = &s_CcmTrace[i % BT_WBA_CCM_TRACE];
-
-		BtWbaTraceHex(a, p->Key, 16);
-		BtWbaTraceHex(b, p->Iv, 16);
-		SysLogPrintf(SysLogGet(), "ccm %lu m%u r%u iv%u tag%u add%u in%u\r\n",
-				(unsigned long)p->Tick, (unsigned)p->Mode, (unsigned)p->Ret,
-				(unsigned)p->IvLen, (unsigned)p->TagLen, (unsigned)p->AddLen,
-				(unsigned)p->InLen);
-		SysLogPrintf(SysLogGet(), "ccm k %s\r\n", a);
-		SysLogPrintf(SysLogGet(), "ccm n %s\r\n", b);
-	}
-}
-#endif
-
 extern "C" void BAES_Reset(void)
 {
+	CryptoSecureWipe(s_CmacKey, sizeof(s_CmacKey));
+	CryptoSecureWipe(s_CmacIv, sizeof(s_CmacIv));
+	s_CmacFailed = false;
 }
 
 // Match Cube baes_ecb.c / hw_aes.c: the BLE e() interface is little endian.
@@ -881,17 +793,6 @@ extern "C" void BAES_EcbCrypt(const uint8_t *pKey, const uint8_t *pIn,
 		memset(output, 0, sizeof(output));
 	}
 	BtWbaAesReverse(pOut, output);
-#ifdef BT_WBA_SEC_TRACE
-	{
-		BtWbaEcbTrace_t *pT = &s_EcbTrace[s_EcbCnt % BT_WBA_ECB_TRACE];
-
-		pT->Tick = TimerGetMilisecond(&s_BleTimerDev);
-		memcpy(pT->Key, pKey, 16);
-		memcpy(pT->In, pIn, 16);
-		memcpy(pT->Out, pOut, 16);
-		s_EcbCnt++;
-	}
-#endif
 	CryptoSecureWipe(aesKey, sizeof(aesKey));
 	CryptoSecureWipe(input, sizeof(input));
 	CryptoSecureWipe(output, sizeof(output));
@@ -900,22 +801,17 @@ extern "C" void BAES_EcbCrypt(const uint8_t *pKey, const uint8_t *pIn,
 extern "C" void BAES_CmacSetKey(const uint8_t *pKey)
 {
 	memcpy(s_CmacKey, pKey, sizeof(s_CmacKey));
+	memset(s_CmacIv, 0, sizeof(s_CmacIv));
+	s_CmacFailed = false;
 }
 
-// Only one-shot CMAC is implemented here. BLEPLAT also permits calls with
-// no output to append data; that incremental mode remains unsupported.
-// See SECURITY_REVIEW.md.
-extern "C" void BAES_CmacCompute(const uint8_t *pIn, uint32_t Size, uint8_t *pOut)
+// Standard byte order here; the ST ECB entry above has different byte order.
+static bool BtWbaCmacEncrypt(const uint8_t *pIn, uint8_t *pOut)
 {
-	if (pOut == nullptr)
-	{
-		return;
-	}
-
 	CryptoKey key;
 	CRYPTO_STATUS st = CRYPTO_STATUS_BUSY;
 
-	BtWbaAesKey(key, s_CmacKey, CRYPTO_KEY_USE_SIGN);
+	BtWbaAesKey(key, s_CmacKey, CRYPTO_KEY_USE_ENCRYPT);
 	for (int pass = 0; pass < 2 && st == CRYPTO_STATUS_BUSY; pass++)
 	{
 		CryptoSoftAes *p = BtWbaAes(pass);
@@ -924,12 +820,95 @@ extern "C" void BAES_CmacCompute(const uint8_t *pIn, uint32_t Size, uint8_t *pOu
 		{
 			break;
 		}
-		st = p->Mac(CRYPTO_MAC_CMAC, key, pIn, Size, pOut, 16);
+		st = p->Cipher(CRYPTO_CIPHER_ECB, 1, key, nullptr, 0, pIn, 16, pOut);
 	}
-	if (st != CRYPTO_STATUS_OK)
+
+	return st == CRYPTO_STATUS_OK;
+}
+
+static void BtWbaCmacSubkey(uint8_t *pKey)
+{
+	uint8_t carry = 0;
+	uint8_t msb = pKey[0] >> 7;
+
+	for (int i = 15; i >= 0; i--)
 	{
-		memset(pOut, 0, 16);
+		uint8_t value = pKey[i];
+
+		pKey[i] = (uint8_t)((value << 1) | carry);
+		carry = value >> 7;
 	}
+	pKey[15] ^= (uint8_t)(0x87U & (0U - msb));
+}
+
+// Cube permits whole-block appends with no output. Only the final call
+// applies CMAC padding and subkeys; its input may have any length.
+extern "C" void BAES_CmacCompute(const uint8_t *pIn, uint32_t Size, uint8_t *pOut)
+{
+	uint8_t block[16] = {};
+	uint8_t subkey[16] = {};
+	uint32_t last = 0;
+
+	if ((Size != 0 && pIn == nullptr) || (pOut == nullptr && Size % 16 != 0))
+	{
+		s_CmacFailed = true;
+	}
+	if (pOut != nullptr)
+	{
+		last = Size % 16;
+		if (Size != 0 && last == 0)
+		{
+			last = 16;
+		}
+	}
+
+	uint32_t prefix = Size - last;
+
+	while (prefix != 0 && s_CmacFailed == false)
+	{
+		for (size_t i = 0; i < 16; i++)
+		{
+			block[i] = pIn[i] ^ s_CmacIv[i];
+		}
+		s_CmacFailed = BtWbaCmacEncrypt(block, s_CmacIv) == false;
+		pIn += 16;
+		prefix -= 16;
+	}
+
+	if (pOut != nullptr)
+	{
+		if (s_CmacFailed == false)
+		{
+			memset(block, 0, sizeof(block));
+			s_CmacFailed = BtWbaCmacEncrypt(block, subkey) == false;
+			BtWbaCmacSubkey(subkey);
+			if (last < 16)
+			{
+				BtWbaCmacSubkey(subkey);
+				block[last] = 0x80;
+			}
+			if (last != 0)
+			{
+				memcpy(block, pIn, last);
+			}
+			for (size_t i = 0; i < 16; i++)
+			{
+				block[i] ^= s_CmacIv[i] ^ subkey[i];
+			}
+			if (s_CmacFailed == false)
+			{
+				s_CmacFailed = BtWbaCmacEncrypt(block, pOut) == false;
+			}
+		}
+		if (s_CmacFailed)
+		{
+			memset(pOut, 0, 16);
+		}
+		CryptoSecureWipe(s_CmacIv, sizeof(s_CmacIv));
+		CryptoSecureWipe(s_CmacKey, sizeof(s_CmacKey));
+	}
+	CryptoSecureWipe(block, sizeof(block));
+	CryptoSecureWipe(subkey, sizeof(subkey));
 }
 
 // Mode 0 encrypts and writes the tag. Mode 1 decrypts and checks the tag, the
@@ -968,27 +947,6 @@ extern "C" int BAES_CcmCrypt(uint8_t Mode, const uint8_t *pKey,
 		}
 	}
 
-#ifdef BT_WBA_SEC_TRACE
-	{
-		BtWbaCcmTrace_t *pT = &s_CcmTrace[s_CcmCnt % BT_WBA_CCM_TRACE];
-
-		pT->Tick = TimerGetMilisecond(&s_BleTimerDev);
-		pT->Mode = Mode;
-		pT->Ret = st == CRYPTO_STATUS_OK ? 0 : 1;
-		pT->IvLen = IvLen;
-		pT->TagLen = TagLen;
-		pT->AddLen = AddLen;
-		pT->InLen = InLen;
-		memcpy(pT->Key, pKey, 16);
-		memset(pT->Iv, 0, sizeof(pT->Iv));
-		memcpy(pT->Iv, pIv, IvLen < sizeof(pT->Iv) ? IvLen : sizeof(pT->Iv));
-		if (st != CRYPTO_STATUS_OK)
-		{
-			s_CcmFail++;
-		}
-		s_CcmCnt++;
-	}
-#endif
 	CryptoSecureWipe(aesKey, sizeof(aesKey));
 	return st == CRYPTO_STATUS_OK ? 0 : 1;
 }

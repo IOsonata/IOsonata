@@ -265,6 +265,23 @@ static void CmacVectors(void)
 		ok = ok && memcmp(tag, g_CmacCase[i].Tag, 16) == 0;
 	}
 	check("BAES_CmacCompute, lengths 0 to 251", ok);
+
+	ok = true;
+	for (unsigned i = 0; i < BT_NUM_CMAC; i++)
+	{
+		const BtCmacCase_t *pC = &g_CmacCase[i];
+
+		for (uint32_t split = 0; split < pC->Len || split == 0; split += 16)
+		{
+			uint8_t tag[16];
+
+			BAES_CmacSetKey(pC->Key);
+			BAES_CmacCompute(pC->Msg, split, nullptr);
+			BAES_CmacCompute(pC->Msg + split, pC->Len - split, tag);
+			ok = (memcmp(tag, pC->Tag, 16) == 0) && ok;
+		}
+	}
+	check("BAES_CmacCompute, incremental whole-block appends", ok);
 }
 
 static bool CcmOne(const BtCcmCase_t *pC)

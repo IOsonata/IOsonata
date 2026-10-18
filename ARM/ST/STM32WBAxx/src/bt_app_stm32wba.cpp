@@ -87,7 +87,6 @@ SOFTWARE.
 #include "bt_wba_event_router.h"
 #include "syslog.h"
 
-
 // Port implementation state. Neither its layout nor storage leaves this file.
 static struct {
 	uint8_t Role;
@@ -161,7 +160,6 @@ BTGAP_SECTYPE BtAppSecTypeGet(void)
 {
 	return s_BtAppData.SecType;
 }
-
 
 /******** For DEBUG ************/
 //#define UART_DEBUG_ENABLE
@@ -282,10 +280,6 @@ extern "C" void BleStackCB_Process(void);
 
 // Let the BLE host stack process its pending work. It runs the state machines
 // that issue the ACI commands and forwards the events to BLECB_Indication.
-#ifdef BT_WBA_SEC_TRACE
-static volatile uint32_t s_TraceHostRuns;
-static volatile uint32_t s_TraceHostLast;
-#endif
 
 static void BleHostEvt(uint32_t Evt, void *pCtx)
 {
@@ -293,18 +287,7 @@ static void BleHostEvt(uint32_t Evt, void *pCtx)
 	(void)pCtx;
 
 	s_bBleHostQueued = false;
-	uint32_t start = BtSmpMsTick();
-#ifdef BT_WBA_SEC_TRACE
-	s_TraceHostRuns++;
-	s_TraceHostLast = start;
-#endif
 	int result = BleStack_Process();
-	uint32_t elapsed = BtSmpMsTick() - start;
-	if (elapsed >= 100)
-	{
-		SysLogPrintf(SysLogGet(), "WBA host: process %lu ms, result %d\r\n",
-				(unsigned long)elapsed, result);
-	}
 	if (result == 0)
 	{
 		// The stack has more to do
@@ -410,11 +393,7 @@ extern "C" uint8_t BLECB_Indication(const uint8_t *pData, uint16_t Length,
 }
 
 extern "C" void BtSmpBondWbaFlush(void);
-
-#ifdef BT_WBA_SEC_TRACE
-extern "C" void BtWbaAesTraceReset(void);
-extern "C" void BtWbaAesTraceDump(void);
-#endif
+extern "C" void BtSmpBondWbaPoll(void);
 
 static void BtAppTickQue(void);
 
@@ -831,13 +810,7 @@ static void BtAppWbaConnected(uint8_t Status, uint16_t ConnHdl, uint8_t Role,
 		// ACI_ATT_EXCHANGE_MTU_RESP below.
 		if (s_BtAppData.MaxMtu > GATT_MTU_SIZE_DEFAULT)
 		{
-#ifdef BT_WBA_SEC_TRACE
-			uint8_t mtuStatus = aci_gatt_exchange_config(ConnHdl);
-			SysLogPrintf(SysLogGet(), "WBA mtu: exchange status=0x%02x\r\n",
-					(unsigned)mtuStatus);
-#else
 			(void)aci_gatt_exchange_config(ConnHdl);
-#endif
 		}
 
 		// Secure link setup. ST owns the SMP exchange and emits
@@ -846,15 +819,6 @@ static void BtAppWbaConnected(uint8_t Status, uint16_t ConnHdl, uint8_t Role,
 		// peripheral asks the central with a Security Request.
 		if (s_BtAppData.bSecure)
 		{
-#ifdef BT_WBA_SEC_TRACE
-			BtWbaAesTraceReset();
-#endif
-			uint8_t identityType = 0;
-			uint8_t identity[6] = {};
-			uint8_t bondStatus = aci_gap_check_bonded_device(
-					PeerAddrType & 1U, pPeerAddr, &identityType, identity);
-			SysLogPrintf(SysLogGet(), "WBA bond: peer lookup hdl=%u status=0x%02x\r\n",
-					(unsigned)ConnHdl, (unsigned)bondStatus);
 			// Only a LESC link configured for OOB may claim the
 			// single staged peer OOB set.
 			if (s_WbaData.bOobEnabled)
@@ -878,13 +842,11 @@ static void BtAppWbaConnected(uint8_t Status, uint16_t ConnHdl, uint8_t Role,
 				default:
 					break;
 			}
-			SysLogPrintf(SysLogGet(), "WBA security: request hdl=%u status=0x%02x\r\n",
-					(unsigned)ConnHdl, (unsigned)secStatus);
-#ifdef BT_WBA_SEC_TRACE
-			SysLogPrintf(SysLogGet(), "WBA trace: t=%lu host runs=%lu last=%lu\r\n",
-					(unsigned long)BtSmpMsTick(), (unsigned long)s_TraceHostRuns,
-					(unsigned long)s_TraceHostLast);
-#endif
+			if (secStatus != BLE_STATUS_SUCCESS)
+			{
+				SysLogPrintf(SysLogGet(), "WBA security: request failed hdl=%u status=0x%02x\r\n",
+						(unsigned)ConnHdl, (unsigned)secStatus);
+			}
 		}
 
 		if (Role == BT_CONN_ROLE_PERIPHERAL)
@@ -972,41 +934,13 @@ static BtWbaEvtFlow_t BtAppHciEvtHandler(void *pPayload)
 {
 	hci_event_pckt *pEvtPkt = (hci_event_pckt *)((hci_uart_pckt *)pPayload)->data;
 
-#ifdef BT_WBA_SEC_TRACE
-	// Every event the stack delivers, in order, with the code that identifies
-	// it: the LE meta subevent or the ACI event code where there is one.
-	{
-		unsigned code = 0;
-
-		if (pEvtPkt->evt == HCI_LE_META_EVT_CODE)
-		{
-			code = ((evt_le_meta_event *)pEvtPkt->data)->subevent;
-		}
-		else if (pEvtPkt->evt == HCI_VENDOR_SPECIFIC_DEBUG_EVT_CODE)
-		{
-			code = ((evt_blecore_aci *)pEvtPkt->data)->ecode;
-		}
-		SysLogPrintf(SysLogGet(), "evt hci 0x%02x code 0x%04x len %u\r\n",
-				(unsigned)pEvtPkt->evt, code, (unsigned)pEvtPkt->plen);
-	}
-#endif
-
 	switch (pEvtPkt->evt)
 	{
 		case HCI_DISCONNECTION_COMPLETE_EVT_CODE:
 		{
 			hci_disconnection_complete_event_rp0 *p =
 				(hci_disconnection_complete_event_rp0 *)pEvtPkt->data;
-			SysLogPrintf(SysLogGet(),
-					"WBA link: disconnected hdl=%u status=0x%02x reason=0x%02x\r\n",
-					(unsigned)p->Connection_Handle, (unsigned)p->Status,
-					(unsigned)p->Reason);
-#ifdef BT_WBA_SEC_TRACE
-			BtWbaAesTraceDump();
-			SysLogPrintf(SysLogGet(), "WBA trace: t=%lu host runs=%lu last=%lu\r\n",
-					(unsigned long)BtSmpMsTick(), (unsigned long)s_TraceHostRuns,
-					(unsigned long)s_TraceHostLast);
-#endif
+
 			if (p->Status == BLE_STATUS_SUCCESS)
 			{
 				if (s_WbaData.PasskeyRejectedHdl == p->Connection_Handle)
@@ -1044,14 +978,7 @@ static BtWbaEvtFlow_t BtAppHciEvtHandler(void *pPayload)
 		{
 			hci_encryption_change_event_rp0 *p =
 				(hci_encryption_change_event_rp0 *)pEvtPkt->data;
-			SysLogPrintf(SysLogGet(),
-					"WBA security: encryption hdl=%u status=0x%02x enabled=%u\r\n",
-					(unsigned)p->Connection_Handle, (unsigned)p->Status,
-					(unsigned)p->Encryption_Enabled);
-#ifdef BT_WBA_SEC_TRACE
-			SysLogPrintf(SysLogGet(), "WBA trace: t=%lu\r\n",
-					(unsigned long)BtSmpMsTick());
-#endif
+
 			// Link encrypted. On a bonded reconnect the stack has restored the
 			// peer's CCCDs by this point, so re-arm the notify/indicate callbacks.
 			// On a fresh pairing the CCCDs are still clear, so this is a no-op and
@@ -1121,10 +1048,6 @@ static BtWbaEvtFlow_t BtAppHciEvtHandler(void *pPayload)
 					break;
 
 				default:
-#ifdef BT_WBA_SEC_TRACE
-					SysLogPrintf(SysLogGet(), "WBA evt: le meta 0x%02x\r\n",
-							(unsigned)pMeta->subevent);
-#endif
 					break;
 			}
 			break;
@@ -1216,9 +1139,7 @@ static BtWbaEvtFlow_t BtAppHciEvtHandler(void *pPayload)
 				{
 					aci_gap_pairing_complete_event_rp0 *pPc =
 						(aci_gap_pairing_complete_event_rp0 *)pAci->data;
-					SysLogPrintf(SysLogGet(),
-							"WBA security: pairing hdl=%u status=0x%02x\r\n",
-							(unsigned)pPc->Connection_Handle, (unsigned)pPc->Status);
+
 					if (s_WbaData.PasskeyRejectedHdl == pPc->Connection_Handle)
 					{
 						s_WbaData.PasskeyRejectedHdl = BT_CONN_HDL_INVALID;
@@ -1274,20 +1195,12 @@ static BtWbaEvtFlow_t BtAppHciEvtHandler(void *pPayload)
 				}
 
 				default:
-#ifdef BT_WBA_SEC_TRACE
-					SysLogPrintf(SysLogGet(), "WBA evt: aci 0x%04x\r\n",
-							(unsigned)pAci->ecode);
-#endif
 					break;
 			}
 			break;
 		}
 
 		default:
-#ifdef BT_WBA_SEC_TRACE
-			SysLogPrintf(SysLogGet(), "WBA evt: hci 0x%02x\r\n",
-					(unsigned)pEvtPkt->evt);
-#endif
 			break;
 	}
 
@@ -1885,6 +1798,7 @@ static void BtAppTickEvt(uint32_t Evt, void *pCtx)
 	s_BtAppTickState = BT_APP_TICK_IDLE;
 	BtGapWbaConnParamProcess();
 	BtGattIndicationTimeoutCheck();
+	BtSmpBondWbaPoll();
 }
 
 static void BtAppTickQue(void)

@@ -5,10 +5,13 @@ No ST code is copied. Expected byte order follows CubeWBA v1.10.0
 Projects/Common/WPAN/Modules/BasicAES/baes_ecb.c, baes_cmac.c, baes_ccm.c
 and Projects/Common/WPAN/Interfaces/hw_aes.c. Vectors are FIPS-197,
 RFC 4493 example 2 and RFC 3610 packet vector 1.
-Only Device lifecycle is stubbed; this is not a firmware build.
+Device lifecycle and the hardware AES provider are stubbed. The provider uses
+the real software engine or returns BUSY to exercise fallback. This is not
+a firmware build; run_bt_crypto.py tests the actual hardware driver.
 """
 from pathlib import Path
 import os
+import random
 import subprocess
 import tempfile
 
@@ -42,6 +45,61 @@ public:
 };
 """
 
+PROVIDER = r"""
+#include <new>
+#include <cstring>
+#include "crypto/crypto_softaes.h"
+static bool s_TestBusy;
+static int s_TestFailAfter = -1;
+static unsigned s_TestAttempts;
+static uint32_t BtWbaIrqSave() { return 0; }
+static void BtWbaIrqRestore(uint32_t) {}
+class CryptoWbaAes : public CryptoSoftAes {
+public:
+	CRYPTO_STATUS Cipher(CRYPTO_CIPHER_ALG Alg, int Encrypt, const CryptoKey &Key,
+						 const uint8_t *pIv, size_t IvLen, const uint8_t *pIn,
+						 size_t Len, uint8_t *pOut) override
+	{
+		s_TestAttempts++;
+		if (s_TestBusy || s_TestFailAfter == 0)
+		{
+			memset(pOut, 0, Len);
+			return s_TestBusy ? CRYPTO_STATUS_BUSY : CRYPTO_STATUS_FAIL;
+		}
+		if (s_TestFailAfter > 0)
+		{
+			s_TestFailAfter--;
+		}
+		return CryptoSoftAes::Cipher(Alg, Encrypt, Key, pIv, IvLen, pIn, Len, pOut);
+	}
+	CRYPTO_STATUS Seal(CRYPTO_AEAD_ALG Alg, const CryptoKey &Key,
+					   const uint8_t *pNonce, size_t NonceLen,
+					   const uint8_t *pAad, size_t AadLen, const uint8_t *pMsg,
+					   size_t Len, uint8_t *pOut, uint8_t *pTag, size_t TagLen) override
+	{
+		return s_TestBusy ? CRYPTO_STATUS_BUSY :
+			CryptoSoftAes::Seal(Alg, Key, pNonce, NonceLen, pAad, AadLen,
+							   pMsg, Len, pOut, pTag, TagLen);
+	}
+	CRYPTO_STATUS Open(CRYPTO_AEAD_ALG Alg, const CryptoKey &Key,
+					   const uint8_t *pNonce, size_t NonceLen,
+					   const uint8_t *pAad, size_t AadLen, const uint8_t *pMsg,
+					   size_t Len, uint8_t *pOut, const uint8_t *pTag, size_t TagLen) override
+	{
+		return s_TestBusy ? CRYPTO_STATUS_BUSY :
+			CryptoSoftAes::Open(Alg, Key, pNonce, NonceLen, pAad, AadLen,
+							   pMsg, Len, pOut, pTag, TagLen);
+	}
+};
+#define CRYPTO_WBA_AES_MEMSIZE sizeof(CryptoWbaAes)
+static CryptoWbaAes *CryptoWbaAesCreate(void *pMem, size_t)
+{
+	CryptoWbaAes *p = new (pMem) CryptoWbaAes;
+	p->Enable();
+	return p;
+}
+"""
+
 TEST = r"""
 #include <cstdlib>
 #include <cstdio>
@@ -55,9 +113,11 @@ extern "C" void CryptoSecureWipe(void *p, size_t n)
 }
 
 static int failures;
+static int checks;
 
 static void Check(bool ok, const char *name)
 {
+	checks++;
 	if (!ok)
 	{
 		fprintf(stderr, "FAIL: %s\n", name);
@@ -73,7 +133,7 @@ static void Reverse(uint8_t *d, const uint8_t *s)
 	}
 }
 
-int main()
+static void KnownAnswers()
 {
 	const uint8_t key[16] = {
 		0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15
@@ -163,24 +223,120 @@ int main()
 	Check(BAES_CcmCrypt(1, leKey, 13, nonce, 8, aad, 23,
 					   encrypted, 8, tag, decoded) != 0,
 		"ST CCM rejects wrong tag");
+	const uint8_t cleared[23] = {};
+	Check(memcmp(decoded, cleared, 23) == 0,
+		"CCM clears output on wrong tag");
+}
+
+static void IncrementalCmac()
+{
+	for (const auto &v : s_CmacVectors)
+	{
+		for (size_t split = 0; split < v.Len || split == 0; split += 16)
+		{
+			uint8_t tag[16];
+
+			BAES_CmacSetKey(v.Key);
+			for (size_t off = 0; off < split; off += 16)
+			{
+				BAES_CmacCompute(v.Msg + off, 16, nullptr);
+			}
+			BAES_CmacCompute(v.Msg + split, v.Len - split, tag);
+			Check(memcmp(tag, v.Tag, 16) == 0, "CMAC split matches independent vector");
+
+			// One call may append several whole blocks.
+			BAES_CmacSetKey(v.Key);
+			BAES_CmacCompute(v.Msg, split, nullptr);
+			BAES_CmacCompute(v.Msg + split, v.Len - split, tag);
+			Check(memcmp(tag, v.Tag, 16) == 0, "CMAC multi-block append");
+		}
+	}
+}
+
+static void FailureChecks()
+{
+	const auto &v = s_CmacVectors[5];
+	uint8_t tag[16];
+	const uint8_t zero[16] = {};
+
+	// A failed append must not become a valid tag of only the final part.
+	BAES_CmacSetKey(v.Key);
+	s_TestFailAfter = 0;
+	BAES_CmacCompute(v.Msg, 16, nullptr);
+	s_TestFailAfter = -1;
+	BAES_CmacCompute(v.Msg + 16, v.Len - 16, tag);
+	Check(memcmp(tag, zero, 16) == 0, "CMAC retains append failure");
+
+	for (int fail = 0; fail < 4; fail++)
+	{
+		BAES_CmacSetKey(v.Key);
+		s_TestFailAfter = fail;
+		BAES_CmacCompute(v.Msg, v.Len, tag);
+		Check(memcmp(tag, zero, 16) == 0, "CMAC clears tag on cipher failure");
+	}
+	s_TestFailAfter = -1;
+	BAES_CmacSetKey(v.Key);
+	BAES_CmacCompute(v.Msg, 1, nullptr);
+	BAES_CmacCompute(v.Msg, v.Len, tag);
+	Check(memcmp(tag, zero, 16) == 0, "CMAC refuses partial nonfinal block");
+	BAES_CmacSetKey(v.Key);
+	BAES_CmacCompute(nullptr, 16, nullptr);
+	BAES_CmacCompute(v.Msg, v.Len, tag);
+	Check(memcmp(tag, zero, 16) == 0, "CMAC refuses missing input");
+	BAES_CmacSetKey(v.Key);
+	BAES_CmacCompute(v.Msg, v.Len, tag);
+	Check(memcmp(tag, v.Tag, 16) == 0, "CMAC new key resets failed operation");
+}
+
+int main()
+{
+	for (int busy = 0; busy < 2; busy++)
+	{
+		s_TestBusy = busy;
+		KnownAnswers();
+		IncrementalCmac();
+	}
+	s_TestBusy = false;
+	FailureChecks();
+	Check(s_TestAttempts != 0, "hardware provider attempted");
+	BAES_Reset();
+	printf("%d checks, %d failures\n", checks, failures);
 	return failures ? 1 : 0;
 }
 """
 
+def vectors():
+    from cryptography.hazmat.primitives.cmac import CMAC
+    from cryptography.hazmat.primitives.ciphers import algorithms
+    rng = random.Random(4493)
+    rows = []
+    for length in (0, 1, 15, 16, 17, 40, 64, 129, 251):
+        key = rng.randbytes(16)
+        msg = rng.randbytes(length)
+        mac = CMAC(algorithms.AES(key))
+        mac.update(msg)
+        fmt = lambda data: '{' + ','.join(str(b) for b in data) + '}'
+        rows.append('{' + fmt(key) + ',' + fmt(msg or b'\0') + ',' +
+                    str(length) + ',' + fmt(mac.finalize()) + '}')
+    return ('static const struct { uint8_t Key[16]; uint8_t Msg[251]; '
+            'size_t Len; uint8_t Tag[16]; } s_CmacVectors[] = {\n' +
+            ',\n'.join(rows) + '\n};\n')
+
+
 def main():
     source = PLATFORM.read_text()
-    start = source.index("static uint64_t s_AesMem")
-    end = source.index("// Link layer interrupts.", start)
+    start = source.index('// AES for the stack:')
+    end = source.index('// Link layer interrupts.', start)
     adapter = source[start:end]
     with tempfile.TemporaryDirectory(prefix="wba-crypto-") as d:
         tmp = Path(d)
         (tmp / "device.h").write_text(DEVICE)
         (tmp / "test.cpp").write_text(
-            '#include <cstring>\n#include "crypto/crypto_softaes.h"\n'
-            + adapter + TEST)
+            PROVIDER + adapter + vectors() + TEST)
         for opt in ("-O0", "-Os"):
             exe = tmp / "test"
-            subprocess.run([os.environ.get("CXX", "g++"), "-std=c++23", opt,
+            subprocess.run([os.environ.get("CXX", "g++"), "-std=c++23", "-Wall", "-Wextra", "-Werror", opt,
+                            "-fsanitize=address,undefined", "-fno-omit-frame-pointer",
                             "-I" + str(tmp), "-I" + str(ROOT / "include"),
                             str(tmp / "test.cpp"),
                             str(ROOT / "src/crypto/crypto_softaes.cpp"),
