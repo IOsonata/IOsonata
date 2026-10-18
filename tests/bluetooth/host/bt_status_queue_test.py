@@ -249,6 +249,12 @@ static void BtLescCheckStatus() {}
 static void SecurePendingQue() {}
 '''),
 		('stm32wba', 'ARM/ST/STM32WBAxx/src/bt_app_stm32wba.cpp', r'''
+#define WBA_STATUS_TEST
+static unsigned bondFlushes;
+extern "C" void BtSmpBondWbaFlush(void)
+{
+	++bondFlushes;
+}
 static bool s_bEvtDrainOwed, s_bBleHostOwed;
 static void BtAppTickQue() {}
 static void BtAppEvtDrainQue() {}
@@ -267,6 +273,9 @@ int main() {
 	assert(AppEvtHandlerInit(nullptr, 0));
 	run();
 	assert(!AppEvtHandlerPending());
+#ifdef WBA_STATUS_TEST
+	assert(bondFlushes == 1);
+#endif
 #ifdef WITH_SECURITY
 	extern unsigned dfuChecks;
 	assert(dfuChecks == 1);

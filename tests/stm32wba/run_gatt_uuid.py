@@ -11,7 +11,7 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
 source = (ROOT / 'ARM/ST/STM32WBAxx/src/bt_gatt_stm32wba.cpp').read_text()
-registration = source[source.index('static uint8_t WbaSecPerm'):source.index('bool BtGattCharNotify')]
+registration = source[source.index('static uint8_t WbaSecPerm'):source.index('bool BtGattCharSetValue')]
 code = r'''
 #include <cstdlib>
 #define CHECK(x) do { if (!(x)) std::abort(); } while (0)
@@ -83,7 +83,7 @@ with tempfile.TemporaryDirectory(prefix='wba-gatt-uuid-') as temporary:
     path = Path(temporary)
     (path / 'test.cpp').write_text(code)
     for mode, flags in [('Debug', ['-O0', '-DDEBUG']), ('Release', ['-Os', '-DNDEBUG'])]:
-        subprocess.run([os.environ.get('CXX', 'g++'), '-std=gnu++23',
+        subprocess.run([os.environ.get('CXX', 'g++'), '-std=c++2b',
             '-ffunction-sections', '-fdata-sections', *flags,
             '-I' + str(ROOT / 'include'), str(path / 'test.cpp'),
             str(ROOT / 'src/bluetooth/bt_adv.cpp'),
