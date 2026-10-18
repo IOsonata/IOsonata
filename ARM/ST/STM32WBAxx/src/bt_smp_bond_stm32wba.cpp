@@ -141,8 +141,45 @@ static int PdsEnsureReady(void)
 // image, or a manifest whose CRC the torn chunks fail. Either way a restore
 // never hands the stack a mixture.
 // ---------------------------------------------------------------------------
+static volatile bool s_bStorePending;
+static volatile uint16_t s_StoreWords;
+
+// The stack calls this from inside its own processing. As in the Cube
+// reference, which only queues SNVMA_Write, nothing is written here: the
+// request is noted and BtSmpBondWbaFlush, run from the application loop, does
+// the flash work.
 extern "C" void BLEPLAT_NvmStore(const uint64_t *ptr, uint16_t size)
 {
+	if (ptr == NULL)
+	{
+		return;
+	}
+
+	if (s_pCache != NULL &&
+		(ptr < s_pCache || ptr >= s_pCache + s_CacheMaxWords))
+	{
+		return;
+	}
+	if (s_CacheMaxWords != 0 && size > s_CacheMaxWords)
+	{
+		return;
+	}
+
+	s_StoreWords = size;
+	s_bStorePending = true;
+}
+
+extern "C" void BtSmpBondWbaFlush(void)
+{
+	if (s_bStorePending == false)
+	{
+		return;
+	}
+	s_bStorePending = false;
+
+	const uint16_t size = s_StoreWords;
+	const uint64_t *ptr = s_pCache;
+
 	if (ptr == NULL)
 	{
 		return;
@@ -152,22 +189,7 @@ extern "C" void BLEPLAT_NvmStore(const uint64_t *ptr, uint16_t size)
 		return;
 	}
 
-	const uint64_t *base = s_pCache != NULL ? s_pCache : ptr;
-
-	if (s_pCache != NULL &&
-		(ptr < s_pCache || ptr >= s_pCache + s_CacheMaxWords))
-	{
-		// A pointer outside the registered cache is a call this file does
-		// not understand; storing from either address would persist bytes
-		// nobody meant.
-		return;
-	}
-	if (s_CacheMaxWords != 0 && size > s_CacheMaxWords)
-	{
-		return;
-	}
-
-	const uint8_t *img = (const uint8_t *)base;
+	const uint8_t *img = (const uint8_t *)ptr;
 	size_t len = (size_t)size * sizeof(uint64_t);
 	uint32_t idx = 0;
 
@@ -285,6 +307,11 @@ extern "C" uint16_t BtSmpBondWbaCacheInit(uint64_t *pCache, uint16_t MaxWords)
 
 	s_pCache = pCache;
 	s_CacheMaxWords = MaxWords;
+
+	// Empty until the restore says otherwise. The Cube reference clears word
+	// 0 for the same reason: the stack finds the end of its records by the
+	// zero that follows them.
+	memset(pCache, 0, (size_t)MaxWords * sizeof(uint64_t));
 
 	size_t n = BtSmpBondWbaRestore(pCache, (size_t)MaxWords *
 								   sizeof(uint64_t));

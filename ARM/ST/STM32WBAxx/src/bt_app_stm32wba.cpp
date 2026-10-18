@@ -69,6 +69,7 @@ SOFTWARE.
 #include "bt_wba_stack.h"
 #include "bt_wba_platform.h"
 #include "stm32wbaxx_ll_system.h"
+#include "stm32wbaxx_ll_utils.h"
 
 #include "istddef.h"
 #include "idelay.h"
@@ -195,7 +196,7 @@ extern UART g_Uart;
 #define BT_APP_CONN_PARAMS_MAX_ATTEMPTS		3
 
 // SMP key-size limits per BT spec.
-#define SEC_PARAM_MIN_KEY_SIZE			7
+#define SEC_PARAM_MIN_KEY_SIZE			8
 #define SEC_PARAM_MAX_KEY_SIZE			16
 
 // HCI error used when the application cannot complete an authenticated user
@@ -229,7 +230,6 @@ typedef struct __Bt_App_WbaData {
 	uint8_t		AuthRequirement;	//!< SMP auth requirement bits
 	bool		bOobEnabled;		//!< LESC OOB explicitly enabled by app config
 	bool		bStackInited;		//!< true after BleStack_Init succeeded
-	uint16_t	NvmCacheWords;		//!< 64 bit words preloaded into the cache
 } BtAppWbaData_t;
 
 static BtAppWbaData_t s_WbaData = {
@@ -409,6 +409,8 @@ extern "C" uint8_t BLECB_Indication(const uint8_t *pData, uint16_t Length,
 	return BLE_STATUS_SUCCESS;
 }
 
+extern "C" void BtSmpBondWbaFlush(void);
+
 #ifdef BT_WBA_SEC_TRACE
 extern "C" void BtWbaAesTraceReset(void);
 extern "C" void BtWbaAesTraceDump(void);
@@ -430,6 +432,7 @@ void BtAppCheckStatus(void)
 		BleStackCB_Process();
 	}
 	BtWbaPlatformRetry();
+	BtSmpBondWbaFlush();
 	if (BtDfuSmpCheckStatus != nullptr)
 	{
 		BtDfuSmpCheckStatus();
@@ -1423,14 +1426,44 @@ void BtAppWbaIdentityGet(uint8_t *pAddr, uint8_t *pIr, uint8_t *pEr)
 		pAddr[5] = 0;
 	}
 
-	uint32_t seed = udn ^ (devid << 24) ^ (company << 7) ^ 0x6C078965UL;
+	// Identity and encryption roots built from the unique ID words the way the
+	// Cube reference does it. Chips without a unique ID get its fixed values.
+	uint32_t uid0 = LL_GetUID_Word0();
+	uint32_t uid1 = LL_GetUID_Word1();
+	uint32_t uid2 = LL_GetUID_Word2();
 
-	for (int i = 0; i < 16; i++)
+	if (uid0 != 0xFFFFFFFFUL && uid1 != 0xFFFFFFFFUL)
 	{
-		seed = seed * 1664525UL + 1013904223UL;
-		pIr[i] = (uint8_t)(seed >> 24);
-		seed = seed * 1664525UL + 1013904223UL;
-		pEr[i] = (uint8_t)(seed >> 24);
+		for (int i = 0; i < 4; i++)
+		{
+			pIr[i] = pIr[i + 8] = (uint8_t)(uid0 >> (8 * i));
+			pIr[i + 4] = pIr[i + 12] = (uint8_t)(uid1 >> (8 * i));
+		}
+	}
+	else
+	{
+		static const uint8_t irDef[16] = {
+			0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC, 0xDE, 0xF0,
+			0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC, 0xDE, 0xF0
+		};
+		memcpy(pIr, irDef, 16);
+	}
+
+	if (uid1 != 0xFFFFFFFFUL && uid2 != 0xFFFFFFFFUL)
+	{
+		for (int i = 0; i < 4; i++)
+		{
+			pEr[i] = pEr[i + 8] = (uint8_t)(uid2 >> (8 * i));
+			pEr[i + 4] = pEr[i + 12] = (uint8_t)~(uint8_t)(uid1 >> (8 * i));
+		}
+	}
+	else
+	{
+		static const uint8_t erDef[16] = {
+			0xFE, 0xDC, 0xBA, 0x09, 0x87, 0x65, 0x43, 0x21,
+			0xFE, 0xDC, 0xBA, 0x09, 0x87, 0x65, 0x43, 0x21
+		};
+		memcpy(pEr, erDef, 16);
 	}
 }
 
@@ -1470,19 +1503,17 @@ bool BtAppStackInit(const BtAppCfg_t *pCfg)
 	PKACTRL_Reset();
 
 	// The bond store mounts and preloads the stack's NVM cache before the
-	// stack initializes, because BleStack_init_t takes the preloaded word
-	// count: nvm_cache_size is what the restore answered. A first boot, a
-	// torn flush or a store that would not mount all answer 0 and the
-	// stack starts empty. A store that cannot mount fails initialization
-	// rather than advertising bonding without persistent storage.
+	// stack initializes. A first boot, a torn flush or a store that would not
+	// mount leave the cache empty and the stack starts without bonds. A store
+	// that cannot mount fails initialization rather than advertising bonding
+	// without persistent storage.
 	if (pCfg->SecType != BTGAP_SECTYPE_NONE)
 	{
 		if (BtSmpBondWbaInit() != 0)
 		{
 			return false;
 		}
-		s_WbaData.NvmCacheWords =
-				BtSmpBondWbaCacheInit(s_BleNvmCache, CFG_BLE_NVM_MAX_SIZE);
+		(void)BtSmpBondWbaCacheInit(s_BleNvmCache, CFG_BLE_NVM_MAX_SIZE);
 	}
 
 	// Host stack bring-up, sized by the numbers above; an app_conf.h that
@@ -1496,7 +1527,9 @@ bool BtAppStackInit(const BtAppCfg_t *pCfg)
 	init.bleStartRamAddress_GATT = (uint8_t *)s_BleGattRam;
 	init.total_buffer_size_GATT = sizeof(s_BleGattRam);
 	init.nvm_cache_buffer = s_BleNvmCache;
-	init.nvm_cache_size = s_WbaData.NvmCacheWords;
+	// As the Cube reference: the whole buffer minus one word is offered, the
+	// stack walks its own record headers and stops at the zero word.
+	init.nvm_cache_size = CFG_BLE_NVM_MAX_SIZE - 1;
 	init.nvm_cache_max_size = CFG_BLE_NVM_MAX_SIZE;
 	init.host_event_fifo_buffer = s_BleHostEvtFifo;
 	init.host_event_fifo_buffer_size = CFG_BLE_HOST_EVT_FIFO_SIZE;
@@ -1571,7 +1604,11 @@ bool BtAppSecInit(void)
 			break;
 		case BTGAP_SECTYPE_LESC_MITM:
 			authReq   = 0x05;
+#ifdef BT_WBA_SC_OPTIONAL
+			scSupport = 1;	// as the Cube reference: SC when the peer can
+#else
 			scSupport = 2;	// SC-only, no legacy fallback
+#endif
 			break;
 		case BTGAP_SECTYPE_STATICKEY_NO_MITM:
 		case BTGAP_SECTYPE_SIGNED_NO_MITM:
