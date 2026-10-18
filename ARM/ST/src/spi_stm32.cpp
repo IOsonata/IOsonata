@@ -868,9 +868,17 @@ static void Stm32SpiSlaveService(Stm32SpiDev_t * const pDev)
 		{
 			Stm32SpiSlaveRead(pDev);
 		}
-		if ((sr & SPI_SR_TXP) && pDev->STx < pDev->STxMax)
+		if (sr & SPI_SR_TXP)
 		{
-			Stm32SpiSlaveWrite(pDev);
+			if (pDev->STx < pDev->STxMax)
+			{
+				Stm32SpiSlaveWrite(pDev);
+			}
+			else
+			{
+				// Nothing left to load, TXP stays set while the FIFO has room
+				reg->IER &= ~SPI_IER_TXPIE;
+			}
 		}
 	}
 	else if (pDev->SRxMax == 0 && (sr & SPI_SR_RXP))
