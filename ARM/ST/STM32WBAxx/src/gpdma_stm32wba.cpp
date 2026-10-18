@@ -241,7 +241,8 @@ uint32_t WbaGpdmaStopRemain(int Ch)
 		for (int i = 0; i < WBA_GPDMA_STOP_POLLS && (ch->CSR & DMA_CSR_IDLEF) == 0U; i++)
 		{
 		}
-		remain = ch->CBR1 & DMA_CBR1_BNDT;
+		// The source is read ahead into the FIFO, those bytes are not moved yet
+		remain = (ch->CBR1 & DMA_CBR1_BNDT) + ((ch->CSR & DMA_CSR_FIFOL) >> DMA_CSR_FIFOL_Pos);
 		ch->CCR = (ch->CCR & ~(DMA_CCR_EN | DMA_CCR_SUSP)) | DMA_CCR_RESET;
 	}
 	else

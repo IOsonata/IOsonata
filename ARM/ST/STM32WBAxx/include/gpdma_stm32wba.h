@@ -146,7 +146,8 @@ void WbaGpdmaStop(int Ch);
 
 /**
  * @brief	Suspend the channel, take the bytes it has still to move, then
- * 			stop it and clear its flags.
+ * 			stop it and clear its flags. The bytes held in the channel FIFO count
+ * as not moved.
  *
  * @return	Bytes not moved.
  */
