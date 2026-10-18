@@ -73,12 +73,10 @@ SOFTWARE.
 // rather than failing to build or, worse, guessing an address the way FDS
 // does from CODESIZE. A linker symbol's value is its address, which is why
 // these are arrays and are read as such.
-extern "C" {
-extern char __start_nvm0[] __attribute__((weak));
-extern char __stop_nvm0[] __attribute__((weak));
-extern char __start_nvm1[] __attribute__((weak));
-extern char __stop_nvm1[] __attribute__((weak));
-}
+extern "C" char __start_nvm0[] __attribute__((weak));
+extern "C" char __stop_nvm0[] __attribute__((weak));
+extern "C" char __start_nvm1[] __attribute__((weak));
+extern "C" char __stop_nvm1[] __attribute__((weak));
 
 typedef struct {
 	const char	*pStart;
