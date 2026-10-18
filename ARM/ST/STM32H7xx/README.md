@@ -2,7 +2,8 @@
 
 Initial IOsonata port for the STM32H753ZI Cortex-M7. It supplies startup,
 GPIO/EXTI, polling and interrupt UART, and the 14 general-purpose/basic/advanced
-TIM instances. Blinky is hardware tested; timer and UART validation is pending.
+TIM instances. Startup, LED GPIO, USART3 TX/RX and TIM2 multi-trigger operation
+are hardware tested on NUCLEO-H753ZI.
 
 ## Build and first board tests
 
@@ -14,15 +15,20 @@ also has FPU configurations using `fpv5-d16`; match the application's ABI
 when using those configurations.
 
 1. Run `Blinky`: the three user LEDs cycle.
-2. Run `TimerDemo` in Debug with semihosting enabled in the debugger. Add
+2. Run `TimerDemo` in Release: USART3 on the ST-LINK virtual COM port prints
+   at 115200 baud, 8N1. Default DevNo 8 selects TIM2 at 100 kHz, with trigger
+   periods of 100, 1000, 250 and 500 ms. Debug uses semihosting; add
    `monitor arm semihosting enable` to the GDB startup commands before resume.
-   Output appears in the OpenOCD console. Release uses USART3 on the ST-LINK
-   virtual COM port at 115200 baud, 8N1. Default DevNo 8 selects TIM2,
-   at 100 kHz with multiple triggers.
+   Debug output appears in the OpenOCD console. Semihosting delays interrupt
+   handling and distorts measured periods; use Release UART output for this test.
 3. Run `UartPrbsTxTest` in Release, then on the host:
    `python3 Python/uartprbs_rx.py --baud 1000000 --port <serial-port>`.
 4. Run `UartLoopback` in Release, then:
    `python3 Python/uartprbs_lb.py --baud 1000000 --port <serial-port>`.
+
+The onboard ST-LINK UART bridge uses the same USB connection as debugging;
+no external UART adapter or jumpers are needed with the default board configuration.
+On macOS, find the port with `ls /dev/cu.usbmodem*`.
 
 The UART examples default to interrupt mode, DMA off, on the ST-LINK virtual
 COM port: PD9 RX, PD8 TX, AF7, USART3 DevNo 3. Their `board.h` can select
@@ -86,6 +92,26 @@ and timer clock calculation with APB /1 and TIMPRE.
 
 All four configurations passed with GNU Arm GCC 13.2.1. This is compile/link
 and modeled register evidence, not a hardware throughput or timing result.
+
+## Hardware results
+
+User tests on NUCLEO-H753ZI, October 18, 2026:
+
+| Test | Result |
+|---|---|
+| Library and Blinky builds | Successful on the user's toolchain |
+| Blinky | All three user LEDs flash at 1-second intervals |
+| UartPrbsTxTest, Release, 1 Mbaud | About 100.34 kB/s through ST-LINK VCP; no errors reported in the supplied log |
+| UartLoopback, Release, 1 Mbaud | 58.6-65.0 kB/s received; zero errors in the supplied log |
+| TimerDemo, Release, USART3 at 115200 baud | TIM2 (DevNo 8), all four triggers operating; steady periods of 100000, 1000000, 250000 and 500000 us |
+
+UART tests used the default interrupt mode with DMA disabled. Timer first-sample
+offsets settled on subsequent cycles; steady periods remained consistent through
+the supplied 8.6-second log. These are measurements against the MCU timer clock,
+not an independent measurement of absolute oscillator accuracy.
+
+Other timer instances, other UART instances, polling UART and GPIO EXTI have
+not yet been validated on hardware.
 
 ## References
 
