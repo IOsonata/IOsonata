@@ -82,11 +82,4 @@ SOFTWARE.
 #define I2C_SLAVE_SCL_PIN			10
 #define I2C_SLAVE_SCL_PINOP			IOPINOP_FUNC4
 
-// Start with the polling master and the interrupt slave. Set the master
-// INT and DMA flags, then the slave DMA flag, to run the other modes.
-#define I2C_MASTER_DMA_ENABLE		false
-#define I2C_MASTER_INT_ENABLE		false
-#define I2C_SLAVE_DMA_ENABLE		false
-#define I2C_SLAVE_INT_ENABLE		true
-
 #endif

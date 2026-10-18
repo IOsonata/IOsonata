@@ -98,8 +98,4 @@ SOFTWARE.
 #define SPI_SLAVE_CS_PIN			9
 #define SPI_SLAVE_CS_PINOP			IOPINOP_FUNC5
 
-// Start with the interrupt slave. Set SPI_SLAVE_DMA_ENABLE to true for GPDMA.
-#define SPI_SLAVE_INT_ENABLE		true
-#define SPI_SLAVE_DMA_ENABLE		false
-
 #endif

@@ -326,8 +326,10 @@ SCL PB2 (D15), slave SDA PB11 (D9) and SCL PB10 (D13). Wire D14 to D9 and D15
 to D13 (UM3462 table 8). D13 also drives LED3 through R42, so use 4.7k
 external pull-ups to 3.3V on the slave bus or remove R42. PB13 and PB14 (D3 and
 D5) cannot be used: SB24 and SB22 tie them to the audio codec signals (a
-hardware run showed PB13 held low). The example starts with a polling master and an interrupt slave; the flags are in
-`board.h`.
+hardware run showed PB13 held low). One run tests the master in polling,
+interrupt, DMA and DMA with interrupt mode against the slave in interrupt and
+DMA mode (8 combinations) and prints a summary line. `I2C_TEST_MASTER_MASK` and
+`I2C_TEST_SLAVE_MASK` in `board.h` restrict the set.
 
 Validation: the driver is checked by `tests/stm32wba/run_i2c.py` in an
 instruction set emulator with an I2C model and a GPDMA model (70 checks: polling,
@@ -382,8 +384,10 @@ on SPI2, AF5, on the Arduino pins of UM3462 table 8: SCK PB10 (D13), MISO PA9
 (D12), MOSI PC3 (D11), NSS PB9 (D10). The master is the software SPI: SCK PB11
 (D9), MOSI PB0 (D6, also drives LED3), MISO PC13 (D4), chip select PA10 (D8).
 Wire D9 to D13, D6 to D11, D12 to D4 and D8 to D10. On the DK1 the four modes
-passed with the slave in interrupt mode and frames of 1, 16 and 129 bytes. On a
-failure the example prints the SPI2 registers and a jumper test.
+passed with the slave in interrupt mode and frames of 1, 16 and 129 bytes. One
+run tests the slave in interrupt and DMA mode in each SPI mode (the software
+master has one mode; `SPI_TEST_SLAVE_MASK` and `SPI_TEST_MODE_MASK` in
+`board.h` restrict the set). On a failure the example prints the SPI2 registers and a jumper test.
 
 Validation: `tests/stm32wba/run_spi.py` runs the driver in an instruction set
 emulator with a model of the SPI registers, the GPDMA channels and the chip

@@ -48,31 +48,48 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #if SPI_MASTER_SOFTWARE
 #include "coredev/spi_soft.h"
 #endif
+#ifndef SPI_MASTER_RATE
+#define SPI_MASTER_RATE 1000000
+#endif
+// One run tests every master and slave transfer mode combination, each in
+// all enabled SPI modes.
+// Bit n of SPI_TEST_MODE_MASK enables SPI mode n. A slave that supports only
+// CPHA = 1 (modes 1 and 3) sets 0x0A in board.h.
+// Master mode bits: 0 polling, 1 interrupt, 2 DMA, 3 DMA with interrupt.
+// SPISoft has a single mode and ignores the master mask.
+// Slave mode bits: 0 interrupt, 1 DMA.
+// A board that still defines the single mode SPI_MASTER_DMA_ENABLE /
+// SPI_MASTER_INT_ENABLE and SPI_SLAVE_DMA_ENABLE flags keeps testing only that
+// combination.
+#ifndef SPI_TEST_MODE_MASK
+#define SPI_TEST_MODE_MASK 0x0F
+#endif
+#ifndef SPI_TEST_MASTER_MASK
+#if defined(SPI_MASTER_DMA_ENABLE) || defined(SPI_MASTER_INT_ENABLE)
 #ifndef SPI_MASTER_DMA_ENABLE
 #define SPI_MASTER_DMA_ENABLE (!SPI_MASTER_SOFTWARE)
 #endif
 #ifndef SPI_MASTER_INT_ENABLE
 #define SPI_MASTER_INT_ENABLE (!SPI_MASTER_SOFTWARE)
 #endif
-#ifndef SPI_MASTER_RATE
-#define SPI_MASTER_RATE 1000000
+#define SPI_TEST_MASTER_MASK \
+	(1 << ((SPI_MASTER_DMA_ENABLE ? 2 : 0) + (SPI_MASTER_INT_ENABLE ? 1 : 0)))
+#else
+#define SPI_TEST_MASTER_MASK 0x0F
 #endif
-// Bit n of the mask enables SPI mode n. A slave that supports only
-// CPHA = 1 (modes 1 and 3) sets 0x0A in board.h.
-#ifndef SPI_TEST_MODE_MASK
-#define SPI_TEST_MODE_MASK 0x0F
+#endif
+#ifndef SPI_TEST_SLAVE_MASK
+#if defined(SPI_SLAVE_DMA_ENABLE)
+#define SPI_TEST_SLAVE_MASK (SPI_SLAVE_DMA_ENABLE ? 2 : 1)
+#else
+#define SPI_TEST_SLAVE_MASK 0x03
+#endif
 #endif
 
 #ifdef MCUOSC
 McuOsc_t g_McuOsc = MCUOSC;
 #endif
 
-#ifndef SPI_SLAVE_DMA_ENABLE
-#define SPI_SLAVE_DMA_ENABLE true
-#endif
-#ifndef SPI_SLAVE_INT_ENABLE
-#define SPI_SLAVE_INT_ENABLE true
-#endif
 // Interrupt priorities. A slave that takes each byte in its interrupt may
 // need a higher priority than the master interrupt on the same MCU.
 #ifndef SPI_MASTER_INT_PRIO
@@ -161,7 +178,7 @@ static const SPICfg_t s_SlaveCfg = {
 	s_SlavePins, sizeof(s_SlavePins) / sizeof(IOPinCfg_t),
 	100000, 8, 0, SPIDATABIT_MSB,
 	SPIDATAPHASE_FIRST_CLK, SPICLKPOL_HIGH, SPICSEL_AUTO,
-	SPI_SLAVE_DMA_ENABLE, SPI_SLAVE_INT_ENABLE, SPI_SLAVE_INT_PRIO, 0xFF, SlaveEvent
+	false, true, SPI_SLAVE_INT_PRIO, 0xFF, SlaveEvent
 };
 
 static volatile bool s_MasterDone;
@@ -173,8 +190,7 @@ static const SPICfg_t s_MasterCfg = {
 	s_MasterPins, sizeof(s_MasterPins) / sizeof(IOPinCfg_t),
 	SPI_MASTER_RATE, 8, 0, SPIDATABIT_MSB,
 	SPIDATAPHASE_FIRST_CLK, SPICLKPOL_HIGH, SPICSEL_AUTO,
-	!SPI_MASTER_SOFTWARE && SPI_MASTER_DMA_ENABLE,
-	!SPI_MASTER_SOFTWARE && SPI_MASTER_INT_ENABLE, SPI_MASTER_INT_PRIO, 0xFF, MasterEvent
+	false, false, SPI_MASTER_INT_PRIO, 0xFF, MasterEvent
 };
 #if SPI_MASTER_SOFTWARE
 SPISoft g_SpiMaster;
@@ -287,62 +303,50 @@ static bool Frame(int Length, uint8_t Seed, bool Receive = false)
 	return pass;
 }
 
-int main()
+static const char *ModeName(bool bDma, bool bInt)
+{
+	if (bDma)
+		return bInt ? "DMA+interrupt" : "DMA";
+	return bInt ? "interrupt" : "polling";
+}
+
+// Run one master and slave combination in every enabled SPI mode.
+// Return 1 for pass, 0 for fail, -1 when the combination is not supported.
+static int RunCombo(const SPICfg_t &SlaveBase, const SPICfg_t &MasterBase)
 {
 	const int lengths[] = {1, 16, 129};
-	bool pass;
-	bool shown;
 	SPICfg_t cfg;
 	SPICfg_t masterCfg;
 	const DevIntrf_t *intrf;
 	int mode;
 	unsigned i;
 	unsigned n;
+	bool shown = false;
 
-	g_Uart.Init(s_UartCfg);
-#ifdef NDEBUG
-	UARTRetargetEnable(g_Uart, STDIN_FILENO);
-	UARTRetargetEnable(g_Uart, STDOUT_FILENO);
-#endif
-	printf("Init SPI Master/Slave demo\r\n");
-	printf("SPI master %s DMA=%d INT=%d\r\n",
-		SPI_MASTER_SOFTWARE ? "SPISoft" : "hardware",
-		s_MasterCfg.bDmaEn, s_MasterCfg.bIntEn);
-	printf("SPI slave requested DMA=%d INT=%d\r\n",
-		s_SlaveCfg.bDmaEn, s_SlaveCfg.bIntEn);
-#ifdef SPI_LOOPBACK_WIRING
-	printf("%s\r\n", SPI_LOOPBACK_WIRING);
-#endif
-	pass = true;
-	shown = false;
 	for (mode = 0; mode < 4; ++mode)
 	{
 		if ((SPI_TEST_MODE_MASK & (1 << mode)) == 0)
 			continue;
 
-		cfg = s_SlaveCfg;
+		cfg = SlaveBase;
 		cfg.ClkPol = (mode & 2) ? SPICLKPOL_LOW : SPICLKPOL_HIGH;
 		cfg.DataPhase = (mode & 1) ? SPIDATAPHASE_SECOND_CLK : SPIDATAPHASE_FIRST_CLK;
-		masterCfg = s_MasterCfg;
+		masterCfg = MasterBase;
 		masterCfg.ClkPol = cfg.ClkPol;
 		masterCfg.DataPhase = cfg.DataPhase;
 		if (!g_SpiMaster.Init(masterCfg))
 		{
-			printf("SPI master init FAIL\r\n");
-			pass = false;
-			break;
+			printf("SPI master init failed\r\n");
+			return -1;
 		}
-		printf("SPI master init OK\r\n");
 		s_FrameLength = sizeof(s_SlaveRx);
 		for (i = 0; i < sizeof(s_SlaveTx); ++i)
 			s_SlaveTx[i] = static_cast<uint8_t>(0xA0 ^ i);
 		if (!g_SpiSlave.Init(cfg))
 		{
-			printf("SPI slave init FAIL\r\n");
-			pass = false;
-			break;
+			printf("SPI slave init failed\r\n");
+			return -1;
 		}
-		printf("SPI slave init OK\r\n");
 		if (!shown)
 		{
 			shown = true;
@@ -361,39 +365,93 @@ int main()
 			g_SpiSlave.Reset();
 #endif
 			if (!Frame(s_FrameLength, 0x30))
-			{
-				pass = false;
-				break;
-			}
+				return 0;
 			// No reset: NSS rising must rearm byte zero for the next frame.
 			memset(s_SlaveRx, 0, sizeof(s_SlaveRx));
 			if (!Frame(s_FrameLength, 0x50))
-			{
-				pass = false;
-				break;
-			}
+				return 0;
 #if !SPI_MASTER_SOFTWARE
 			if (!Frame(s_FrameLength, 0, true))
-			{
-				pass = false;
-				break;
-			}
+				return 0;
 #endif
 			if (s_FrameLength > 1)
 			{
 				// A short CS frame must discard the unused TX prefetch.
 				if (!Frame(1, 0x70) || !Frame(s_FrameLength, 0x90))
-				{
-					pass = false;
-					break;
-				}
+					return 0;
 			}
 		}
-		if (!pass)
-			break;
 	}
-	printf("SPI master/slave loopback %s\r\n", pass ? "PASS" : "FAIL");
+	return 1;
+}
+
+int main()
+{
+	SPICfg_t slaveCfg;
+	SPICfg_t masterCfg;
+	int sm;
+	int mm;
+	int rc;
+	int nPass = 0;
+	int nFail = 0;
+	int nSkip = 0;
+
+	g_Uart.Init(s_UartCfg);
+#ifdef NDEBUG
+	UARTRetargetEnable(g_Uart, STDIN_FILENO);
+	UARTRetargetEnable(g_Uart, STDOUT_FILENO);
+#endif
+	printf("Init SPI Master/Slave demo\r\n");
+	printf("SPI master %s\r\n", SPI_MASTER_SOFTWARE ? "SPISoft" : "hardware");
+#ifdef SPI_LOOPBACK_WIRING
+	printf("%s\r\n", SPI_LOOPBACK_WIRING);
+#endif
+	for (sm = 0; sm < 2; ++sm)
+	{
+		if ((SPI_TEST_SLAVE_MASK & (1 << sm)) == 0)
+			continue;
+
+		for (mm = 0; mm < 4; ++mm)
+		{
+#if SPI_MASTER_SOFTWARE
+			// The software master has one mode, run it once per slave mode.
+			if (mm != 0)
+				continue;
+#else
+			if ((SPI_TEST_MASTER_MASK & (1 << mm)) == 0)
+				continue;
+#endif
+			slaveCfg = s_SlaveCfg;
+			slaveCfg.bDmaEn = sm == 1;
+			slaveCfg.bIntEn = true;
+			masterCfg = s_MasterCfg;
+#if !SPI_MASTER_SOFTWARE
+			masterCfg.bDmaEn = mm >= 2;
+			masterCfg.bIntEn = mm == 1 || mm == 3;
+#endif
+			printf("\r\n== SPI master %s, slave %s ==\r\n",
+				SPI_MASTER_SOFTWARE ? "software" : ModeName(masterCfg.bDmaEn, masterCfg.bIntEn),
+				sm == 1 ? "DMA" : "interrupt");
+			rc = RunCombo(slaveCfg, masterCfg);
+			if (rc > 0)
+			{
+				++nPass;
+				printf("-> PASS\r\n");
+			}
+			else if (rc == 0)
+			{
+				++nFail;
+				printf("-> FAIL\r\n");
+			}
+			else
+			{
+				++nSkip;
+				printf("-> SKIPPED\r\n");
+			}
+		}
+	}
+	printf("\r\nSPI master/slave loopback %s (%d passed, %d failed, %d skipped)\r\n",
+		(nFail == 0 && nPass > 0) ? "PASS" : "FAIL", nPass, nFail, nSkip);
 	while (1)
 		__WFE();
 }
-
