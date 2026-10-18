@@ -191,8 +191,6 @@
 									<listOptionValue builtIn="false" value="__PROGRAM_START"/>
 									<listOptionValue builtIn="false" value="STM32WBA65xx"/>
 									<listOptionValue builtIn="false" value="DEBUG"/>
-									<listOptionValue builtIn="false" value="BT_WBA_SEC_TRACE"/>
-									<listOptionValue builtIn="false" value="BT_WBA_SC_OPTIONAL"/>
 									<listOptionValue builtIn="false" value="BLE_LL"/>
 									<listOptionValue builtIn="false" value="IOSONATA_STM32_WBA"/>
 									<listOptionValue builtIn="false" value="PHY_40nm_3_40_a"/>
