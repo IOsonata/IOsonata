@@ -7,17 +7,20 @@ The Cube BLE stack asks for two P-256 operations through bleplat.c, which
 forwards them to the PKACTRL_* functions of the Cube PKA controller: the public
 key of a private key the link layer generated, and the Diffie-Hellman shared
 secret of a private key and a peer public key. This file provides the same
-PKACTRL_* functions on the IOsonata CryptoUecc engine, so the Cube pka_ctrl.c,
-hw_pka.c and hw_pka_p256.c are not built and the PKA peripheral is not used.
+PKACTRL_* functions on the IOsonata CryptoWbaPka engine (the PKA peripheral),
+so the Cube pka_ctrl.c, hw_pka.c and hw_pka_p256.c are not built. Define
+BT_WBA_SOFT_PKA to use the CryptoUecc software engine instead.
 
 The operation runs from the sequencer task and reports the end through
-PKACTRL_CB_Complete, as the PKA controller does. The random numbers needed for
-the multiplication blinding come from the RNG of bt_wba_platform.cpp.
+PKACTRL_CB_Complete, as the PKA controller does. The engine is polled. The
+random numbers the engines ask for come from the RNG of bt_wba_platform.cpp,
+which keeps the RNG clock and start state in one place.
 
 Known limits:
-- The multiplication is software, about the cost of one micro-ecc point
-  multiplication, and runs in the event queue context.
-- Nothing here is tested on hardware.
+- The operation runs in the event queue context. A multiplication takes about
+  31 ms on the PKA and about 190 ms on CryptoUecc at the DK1 clock.
+- The hardware engine has run in the crypto engine test on the DK1 only. The
+  Bluetooth use of it is not tested on hardware.
 
 @author	Hoang Nguyen Hoan
 @date	Oct. 16, 2026
@@ -52,7 +55,11 @@ SOFTWARE.
 #include <new>
 
 #include "crypto/icrypto.h"
+#ifdef BT_WBA_SOFT_PKA
 #include "crypto/crypto_uecc.h"
+#else
+#include "crypto/crypto_stm32wba.h"
+#endif
 #include "bt_wba_platform.h"
 
 // Bit of the task in the sequencer mask. The link layer task uses the bit its
@@ -103,25 +110,36 @@ public:
 	bool IsSecure() const override { return true; }
 };
 
-static uint64_t s_EngMem[(sizeof(CryptoUecc) + 7U) / 8U];
+#ifdef BT_WBA_SOFT_PKA
+typedef CryptoUecc BtWbaPkaEng;
+#else
+typedef CryptoWbaPka BtWbaPkaEng;
+#endif
+
+static uint64_t s_EngMem[(sizeof(BtWbaPkaEng) + 7U) / 8U];
 static uint64_t s_RngMem[(sizeof(BtWbaPkaRng) + 7U) / 8U];
-static CryptoUecc *s_pEng;
+static BtWbaPkaEng *s_pEng;
 
 static volatile uint8_t s_PkaOp;
 static volatile int s_PkaErr = 1;
 static volatile bool s_PkaTaskReg;
 static uint32_t s_PkaBuf[BT_WBA_PKA_WORDS];
 
-// The engine is built on first use so no static constructor is needed.
-static CryptoUecc *BtWbaPkaEngine(void)
+// The engine is built on first use so no static constructor is needed. Null
+// when the engine does not start; the next operation tries again.
+static BtWbaPkaEng *BtWbaPkaEngine(void)
 {
 	if (s_pEng == nullptr)
 	{
 		BtWbaPkaRng *pRng = new (s_RngMem) BtWbaPkaRng();
+#ifdef BT_WBA_SOFT_PKA
 		CryptoUecc *pEng = new (s_EngMem) CryptoUecc();
 
 		pEng->SetRng(pRng);
 		pEng->Enable();
+#else
+		CryptoWbaPka *pEng = CryptoWbaPkaCreate(s_EngMem, sizeof(s_EngMem), pRng);
+#endif
 		s_pEng = pEng;
 	}
 
@@ -139,12 +157,16 @@ static void BtWbaPkaRev(uint8_t *pDst, const uint8_t *pSrc, size_t Len)
 
 static bool BtWbaPkaKeyGen(void)
 {
-	CryptoUecc *pEng = BtWbaPkaEngine();
-	CryptoUecc::KeyCtx ctx;
+	BtWbaPkaEng *pEng = BtWbaPkaEngine();
+	BtWbaPkaEng::KeyCtx ctx;
 	uint8_t priv[P256_BYTES];
 	uint8_t pub[2U * P256_BYTES];
 	bool bOk;
 
+	if (pEng == nullptr)
+	{
+		return false;
+	}
 	BtWbaPkaRev(priv, (const uint8_t *)s_PkaBuf, P256_BYTES);
 	bOk = pEng->KeyImport(CRYPTO_CURVE_P256, &ctx, priv, pub) ==
 		CRYPTO_STATUS_OK;
@@ -162,14 +184,18 @@ static bool BtWbaPkaKeyGen(void)
 
 static bool BtWbaPkaDhKey(void)
 {
-	CryptoUecc *pEng = BtWbaPkaEngine();
-	CryptoUecc::KeyCtx ctx;
+	BtWbaPkaEng *pEng = BtWbaPkaEngine();
+	BtWbaPkaEng::KeyCtx ctx;
 	uint8_t priv[P256_BYTES];
 	uint8_t peer[2U * P256_BYTES];
 	uint8_t secret[P256_BYTES];
 	const uint8_t *pRaw = (const uint8_t *)s_PkaBuf;
 	bool bOk;
 
+	if (pEng == nullptr)
+	{
+		return false;
+	}
 	BtWbaPkaRev(priv, pRaw, P256_BYTES);
 	BtWbaPkaRev(peer, pRaw + P256_BYTES, P256_BYTES);
 	BtWbaPkaRev(peer + P256_BYTES, pRaw + 2U * P256_BYTES, P256_BYTES);

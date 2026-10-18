@@ -15,7 +15,10 @@ power_table.c:
   Bluetooth event queue, BtEvtQue.
 - BLE_TIMER_Start/Stop: software timer slots over one IOsonata LPTIM trigger.
 - HW_RNG_Get and the RNG clock requests: RNG peripheral, polled.
-- BAES_*: the IOsonata CryptoSoftAes engine (ECB, CMAC and CCM).
+- BAES_*: the STM32WBA AES block through CryptoWbaAes (ECB, CMAC and CCM).
+  A call that arrives while another one holds the block, an interrupt that
+  preempts a task for example, runs on the CryptoSoftAes engine instead.
+  Define BT_WBA_SOFT_AES to use CryptoSoftAes only.
 - The P-256 operations are in bt_wba_pka.cpp.
 - Link layer interrupts (RADIO and HASH vectors), HSE32 wait, system clock
   manager entries, debug signals: small functions.
@@ -23,8 +26,9 @@ power_table.c:
 Known limits:
 - The temperature used by the link layer for radio calibration is fixed at 25
   degrees C. There is no ADC based measurement yet.
-- AES is software. The AES peripheral is not used.
-- Nothing here is tested on hardware.
+- The AES block is polled. The secure AES (SAES) is not used.
+- The hardware AES path has run in the crypto engine test on the DK1 only.
+  The Bluetooth use of it is not tested on hardware.
 
 @author	Hoang Nguyen Hoan
 @date	Oct. 14, 2026
@@ -65,6 +69,9 @@ SOFTWARE.
 #include "istddef.h"
 #include "coredev/timer.h"
 #include "crypto/crypto_softaes.h"
+#ifndef BT_WBA_SOFT_AES
+#include "crypto/crypto_stm32wba.h"
+#endif
 #include "bluetooth/bt_app.h"
 
 #include "coredev/system_core_clock.h"
@@ -686,17 +693,57 @@ extern "C" void HW_RNG_Disable(void)
 
 static uint64_t s_AesMem[(CRYPTO_SOFTAES_MEMSIZE + 7U) / 8U];
 static CryptoSoftAes *s_pAes;
+#ifndef BT_WBA_SOFT_AES
+static uint64_t s_HwAesMem[(CRYPTO_WBA_AES_MEMSIZE + 7U) / 8U];
+static CryptoWbaAes *s_pHwAes;
+#endif
 static uint8_t s_CmacKey[16];
 
-static CryptoSoftAes *BtWbaAes(void)
+// Engine for one attempt of a call. Pass 0 is the hardware engine, or the
+// software engine in a BT_WBA_SOFT_AES build. Pass 1 is the software engine
+// and is used only after pass 0 answered BUSY. Null when there is no engine
+// for the pass. The engines are built on first use with interrupts off, as
+// the calls can come from interrupt context.
+static CryptoSoftAes *BtWbaAes(int Pass)
 {
+#ifndef BT_WBA_SOFT_AES
+	if (Pass == 0)
+	{
+		if (s_pHwAes == nullptr)
+		{
+			uint32_t pm = BtWbaIrqSave();
+
+			if (s_pHwAes == nullptr)
+			{
+				s_pHwAes = CryptoWbaAesCreate(s_HwAesMem, sizeof(s_HwAesMem));
+			}
+			BtWbaIrqRestore(pm);
+		}
+
+		return s_pHwAes;
+	}
+#else
+	if (Pass != 0)
+	{
+		return nullptr;
+	}
+#endif
+
 	if (s_pAes == nullptr)
 	{
-		s_pAes = CryptoSoftAesCreate(s_AesMem, sizeof(s_AesMem));
-		if (s_pAes != nullptr)
+		uint32_t pm = BtWbaIrqSave();
+
+		if (s_pAes == nullptr)
 		{
-			s_pAes->Enable();
+			CryptoSoftAes *p = CryptoSoftAesCreate(s_AesMem, sizeof(s_AesMem));
+
+			if (p != nullptr)
+			{
+				p->Enable();
+			}
+			s_pAes = p;
 		}
+		BtWbaIrqRestore(pm);
 	}
 
 	return s_pAes;
@@ -819,23 +866,27 @@ static void BtWbaAesReverse(uint8_t *pDst, const uint8_t *pSrc)
 extern "C" void BAES_EcbCrypt(const uint8_t *pKey, const uint8_t *pIn,
 							  uint8_t *pOut, int bEnc)
 {
-	CryptoSoftAes *p = BtWbaAes();
 	CryptoKey key;
 	uint8_t aesKey[16];
 	uint8_t input[16];
 	uint8_t output[16] = {};
-
-	if (p == nullptr)
-	{
-		memset(pOut, 0, 16);
-		return;
-	}
+	CRYPTO_STATUS st = CRYPTO_STATUS_BUSY;
 
 	BtWbaAesReverse(aesKey, pKey);
 	BtWbaAesReverse(input, pIn);
 	BtWbaAesKey(key, aesKey, CRYPTO_KEY_USE_ENCRYPT | CRYPTO_KEY_USE_DECRYPT);
-	if (p->Cipher(CRYPTO_CIPHER_ECB, bEnc, key, nullptr, 0,
-				  input, sizeof(input), output) != CRYPTO_STATUS_OK)
+	for (int pass = 0; pass < 2 && st == CRYPTO_STATUS_BUSY; pass++)
+	{
+		CryptoSoftAes *p = BtWbaAes(pass);
+
+		if (p == nullptr)
+		{
+			break;
+		}
+		st = p->Cipher(CRYPTO_CIPHER_ECB, bEnc, key, nullptr, 0,
+					   input, sizeof(input), output);
+	}
+	if (st != CRYPTO_STATUS_OK)
 	{
 		memset(output, 0, sizeof(output));
 	}
@@ -871,17 +922,21 @@ extern "C" void BAES_CmacCompute(const uint8_t *pIn, uint32_t Size, uint8_t *pOu
 		return;
 	}
 
-	CryptoSoftAes *p = BtWbaAes();
 	CryptoKey key;
-
-	if (p == nullptr)
-	{
-		memset(pOut, 0, 16);
-		return;
-	}
+	CRYPTO_STATUS st = CRYPTO_STATUS_BUSY;
 
 	BtWbaAesKey(key, s_CmacKey, CRYPTO_KEY_USE_SIGN);
-	if (p->Mac(CRYPTO_MAC_CMAC, key, pIn, Size, pOut, 16) != CRYPTO_STATUS_OK)
+	for (int pass = 0; pass < 2 && st == CRYPTO_STATUS_BUSY; pass++)
+	{
+		CryptoSoftAes *p = BtWbaAes(pass);
+
+		if (p == nullptr)
+		{
+			break;
+		}
+		st = p->Mac(CRYPTO_MAC_CMAC, key, pIn, Size, pOut, 16);
+	}
+	if (st != CRYPTO_STATUS_OK)
 	{
 		memset(pOut, 0, 16);
 	}
@@ -895,29 +950,32 @@ extern "C" int BAES_CcmCrypt(uint8_t Mode, const uint8_t *pKey,
 							 uint16_t InLen, const uint8_t *pIn,
 							 uint8_t TagLen, uint8_t *pTag, uint8_t *pOut)
 {
-	CryptoSoftAes *p = BtWbaAes();
 	CryptoKey key;
 	uint8_t aesKey[16];
-	CRYPTO_STATUS st;
-
-	if (p == nullptr)
-	{
-		return 1;
-	}
+	CRYPTO_STATUS st = CRYPTO_STATUS_BUSY;
 
 	// HW_AES_InitCcm loads KEYR0 first, unlike the standard-order CMAC key.
 	BtWbaAesReverse(aesKey, pKey);
-	if (Mode == 0U)
+	BtWbaAesKey(key, aesKey, Mode == 0U ? CRYPTO_KEY_USE_ENCRYPT :
+										   CRYPTO_KEY_USE_DECRYPT);
+	for (int pass = 0; pass < 2 && st == CRYPTO_STATUS_BUSY; pass++)
 	{
-		BtWbaAesKey(key, aesKey, CRYPTO_KEY_USE_ENCRYPT);
-		st = p->Seal(CRYPTO_AEAD_AES_CCM, key, pIv, IvLen, pAdd, AddLen,
-					 pIn, InLen, pOut, pTag, TagLen);
-	}
-	else
-	{
-		BtWbaAesKey(key, aesKey, CRYPTO_KEY_USE_DECRYPT);
-		st = p->Open(CRYPTO_AEAD_AES_CCM, key, pIv, IvLen, pAdd, AddLen,
-					 pIn, InLen, pOut, pTag, TagLen);
+		CryptoSoftAes *p = BtWbaAes(pass);
+
+		if (p == nullptr)
+		{
+			break;
+		}
+		if (Mode == 0U)
+		{
+			st = p->Seal(CRYPTO_AEAD_AES_CCM, key, pIv, IvLen, pAdd, AddLen,
+						 pIn, InLen, pOut, pTag, TagLen);
+		}
+		else
+		{
+			st = p->Open(CRYPTO_AEAD_AES_CCM, key, pIv, IvLen, pAdd, AddLen,
+						 pIn, InLen, pOut, pTag, TagLen);
+		}
 	}
 
 #ifdef BT_WBA_SEC_TRACE
