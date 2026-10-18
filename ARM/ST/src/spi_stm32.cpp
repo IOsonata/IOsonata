@@ -853,6 +853,35 @@ static void Stm32SpiSlaveEnd(Stm32SpiDev_t * const pDev)
 	Stm32SpiSlaveArm(pDev);
 }
 
+// TXC stays set while the transmit FIFO is empty and EOTIE raises the
+// interrupt for it, so the handler would never leave. One underrun item in the
+// FIFO clears TXC until it is sent: the interrupt then comes once per item.
+static bool Stm32SpiSlaveTxDone(Stm32SpiDev_t * const pDev)
+{
+#ifdef STM32_SPI_DMA
+	if (pDev->bDma && pDev->STxMax > 0)
+	{
+		return WbaGpdmaRemain(pDev->DmaTx) == 0U;
+	}
+#endif
+
+	return pDev->bDma ? true : pDev->STx >= pDev->STxMax;
+}
+
+static void Stm32SpiSlaveFeed(Stm32SpiDev_t * const pDev)
+{
+	SPI_TypeDef *reg = pDev->pReg;
+
+	if (pDev->pSpiDev->Cfg.DataSize > 8)
+	{
+		*(Stm32SpiReg16_t*)&reg->TXDR = pDev->Dummy;
+	}
+	else
+	{
+		*(volatile uint8_t*)&reg->TXDR = (uint8_t)pDev->Dummy;
+	}
+}
+
 static void Stm32SpiSlaveService(Stm32SpiDev_t * const pDev)
 {
 	SPI_TypeDef *reg = pDev->pReg;
@@ -918,6 +947,10 @@ static void Stm32SpiSlaveService(Stm32SpiDev_t * const pDev)
 	if (sr & SPI_SR_EOT)
 	{
 		Stm32SpiSlaveEnd(pDev);
+	}
+	else if ((sr & SPI_SR_TXC) && Stm32SpiSlaveTxDone(pDev))
+	{
+		Stm32SpiSlaveFeed(pDev);
 	}
 }
 
