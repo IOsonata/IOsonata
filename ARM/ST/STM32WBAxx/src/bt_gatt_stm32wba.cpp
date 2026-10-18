@@ -104,6 +104,17 @@ static bool WbaGattCharAdd(BtGattSrvc_t * const pSrvc,
 {
 	Char_UUID_t uuid;
 	uint8_t uuidType;
+	uint8_t baseidx = pSrvc->Uuid.BaseIdx;
+
+	if (pChar->pUuidBase != nullptr)
+	{
+		int idx = BtUuidAddBase(pChar->pUuidBase);
+		if (idx < 0)
+		{
+			return false;
+		}
+		baseidx = (uint8_t)idx;
+	}
 
 	// A characteristic with a base of its own, such as SMP's, whose
 	// characteristic and service UUIDs share no base.
@@ -144,6 +155,7 @@ static bool WbaGattCharAdd(BtGattSrvc_t * const pSrvc,
 		return false;
 	}
 
+	pChar->BaseUuidIdx = baseidx;
 	pChar->Hdl = charHdl;
 	pChar->ValHdl = charHdl + WBA_CHAR_VALUE_OFFSET;
 	if (pChar->Property &
@@ -181,9 +193,16 @@ bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)
 
 	Service_UUID_t uuid;
 	uint8_t uuidType;
+	uint8_t baseidx = 0;
 
 	if (pSrvc->bCustom)
 	{
+		int idx = BtUuidAddBase(pSrvc->UuidBase);
+		if (idx < 0)
+		{
+			return false;
+		}
+		baseidx = (uint8_t)idx;
 		uuidType = UUID_TYPE_128;
 		memcpy(uuid.Service_UUID_128, pSrvc->UuidBase, 16);
 		uuid.Service_UUID_128[12] = (uint8_t)(pSrvc->UuidSrvc & 0xFF);
@@ -213,6 +232,7 @@ bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)
 	{
 		return false;
 	}
+	pSrvc->Uuid = {baseidx, BT_UUID_TYPE_16, {pSrvc->UuidSrvc}};
 	pSrvc->Hdl = srvcHdl;
 
 	for (int i = 0; i < pSrvc->NbChar; i++)
