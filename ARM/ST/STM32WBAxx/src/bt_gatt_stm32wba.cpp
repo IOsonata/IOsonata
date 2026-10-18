@@ -247,6 +247,43 @@ bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)
 	return true;
 }
 
+// ST owns the attribute value storage. Update it without sending; the common
+// BtAppNotify/BtAppIndicate helpers send separately to each subscribed link.
+bool BtGattCharSetValue(BtGattChar_t *pChar, void * const pVal, size_t Len)
+{
+	if (pChar == nullptr || pChar->pSrvc == nullptr ||
+		pChar->Hdl == BT_ATT_HANDLE_INVALID ||
+		pChar->ValHdl == BT_ATT_HANDLE_INVALID ||
+		(Len > 0 && pVal == nullptr) || Len > pChar->MaxDataLen ||
+		Len > 512)
+	{
+		return false;
+	}
+
+	uint8_t dummy = 0;
+	const uint8_t *p = Len > 0 ? (const uint8_t *)pVal : &dummy;
+	size_t offset = 0;
+	do
+	{
+		size_t count = Len - offset;
+		if (count > 240)
+		{
+			count = 240;
+		}
+		tBleStatus status = aci_gatt_update_char_value_ext(0x0FFF,
+				pChar->pSrvc->Hdl, pChar->Hdl, 0x00, (uint16_t)Len,
+				(uint16_t)offset, (uint8_t)count, p + offset);
+		if (status != BLE_STATUS_SUCCESS)
+		{
+			return false;
+		}
+		offset += count;
+	} while (offset < Len);
+
+	pChar->ValueLen = (uint16_t)Len;
+	return true;
+}
+
 bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *pChar,
 						  void * const pVal, size_t Len)
 {
