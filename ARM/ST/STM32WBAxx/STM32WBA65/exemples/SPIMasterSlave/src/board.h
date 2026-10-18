@@ -7,8 +7,8 @@
 		drives LED3), NSS PB9 (D10). The master is the hardware SPI3, AF6: SCK PA0
 		(A5), MISO PA1 (A3), MOSI PC3 (D11), chip select PA10 (D8) driven as a
 		GPIO. Wire A5 to D13, D11 to D6, A3 to D12 and D8 to D10 (UM3462 table 8).
-		The I2CMasterSlave example adds D15 to D13 and D14 to D9, so one set of six
-		wires serves both examples. The result is printed on the first ST-LINK
+		The I2CMasterSlave example adds D14 to D9 and uses D15 to D13 in place of
+		A5 to D13: the D13 end stays and the other end moves between A5 and D15. The result is printed on the first ST-LINK
 		virtual COM port, USART1.
 
 		Not tested on hardware.

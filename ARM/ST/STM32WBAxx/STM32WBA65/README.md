@@ -393,9 +393,11 @@ prints the SPI2 registers and a jumper test.
 Connectors (MB2143 schematic, checked on the DK1): CN8 pin 9 is D15 and pin 10
 is D14, pins 1 to 6 are D8 to D13; CN10 pins 1 to 8 are D0 to D7; A3 and A5 are
 CN11 pins 4 and 6. UM3462 table 8 lists D15 and D14 on pins 10 and 9, the
-opposite of what the DK1 did. The I2CMasterSlave example adds D15 to D13 and
-D14 to D9 (CN8 9 to CN8 6 and CN8 10 to CN8 2), so one set of six wires serves
-both examples. The SPI wiring before this change used the SPISoft master on
+opposite of what the DK1 did. The I2CMasterSlave example adds D14 to D9
+(CN8 10 to CN8 2) and needs D15 to D13 (CN8 9 to CN8 6) for SCL, while the SPI
+example needs A5 to D13 (CN11 6 to CN8 6) for SCK. Two wires cannot share the
+D13 socket, so one wire stays on CN8 6 and its other end moves between CN11 6
+(SPI) and CN8 9 (I2C). The other five wires stay for both examples. The SPI wiring before this change used the SPISoft master on
 other pins (SCK PB2, MOSI PB0, MISO PC13) and passed on the DK1 in all four SPI
 modes with the slave in interrupt and in DMA mode.
 
