@@ -11,11 +11,10 @@
 		IOsonata, and the restore preloads it before BleStack_Init.
 
 		The cache is larger than one bt_pds record, so the image goes down
-		as a run of chunk records under consecutive keys, and a manifest
-		record written last commits it: the manifest names the length and a
-		CRC over the whole image, so a restore takes the image entire or
-		not at all. A flush torn by power loss leaves chunks that fail the
-		CRC and restores nothing, which is a lost image, never a mixed one.
+		as chunk records in two banks. A save writes the inactive bank and
+		then commits a manifest selecting it. Until that manifest commits,
+		the previous bank remains intact, including across PDS garbage
+		collection. An interrupted update restores the committed image.
 
 		Layering:
 		    ST stack NVM cache  --BLEPLAT_NvmStore-->  THIS FILE
@@ -71,9 +70,11 @@ SOFTWARE.
 
 extern "C" int BtPdsWbaInit(void);
 
-// The key range holding the image. The manifest sits at the base and chunk i
-// at base + 1 + i. A dedicated range so nothing added later collides.
+// The manifest remains at the original key. Bank 0 keeps the legacy chunk
+// keys; bank 1 is separate. A bank covers even the largest uint16_t word count.
 #define BT_WBA_NVM_KEY_BASE		0x57424E00u		// 'W''B''N', low byte the index
+
+#define BT_WBA_BANK_STRIDE		0x1000u
 
 // One chunk fills a record.
 #define BT_WBA_CHUNK_SIZE		BT_PDS_RECORD_DATA_MAX
@@ -83,7 +84,34 @@ extern "C" int BtPdsWbaInit(void);
 typedef struct __Bt_Wba_Nvm_Manifest {
 	uint32_t	Len;			//!< Image bytes across the chunks
 	uint32_t	Crc;			//!< CRC32 over the image
+	uint32_t	Bank;			//!< Committed chunk bank, 0 or 1
 } BtWbaNvmManifest_t;
+
+static_assert((UINT16_MAX * sizeof(uint64_t) + BT_WBA_CHUNK_SIZE - 1U) /
+		BT_WBA_CHUNK_SIZE < BT_WBA_BANK_STRIDE, "bond chunk key range");
+
+static uint32_t BondChunkKey(uint32_t Bank, uint32_t Index)
+{
+	return BT_WBA_NVM_KEY_BASE + Bank * BT_WBA_BANK_STRIDE + 1U + Index;
+}
+
+// PDS commits each record independently. An interrupted manifest append leaves
+// the previous manifest readable. The old eight-byte format selects bank 0.
+static int BondManifestRead(BtWbaNvmManifest_t *pManifest)
+{
+	memset(pManifest, 0, sizeof(*pManifest));
+	ssize_t n = BtPdsRead(BT_WBA_NVM_KEY_BASE, pManifest, sizeof(*pManifest));
+	if (n < 0)
+	{
+		return (int)n;
+	}
+	if ((n != 8 && n != (ssize_t)sizeof(*pManifest)) ||
+		pManifest->Bank > 1 || pManifest->Len % sizeof(uint64_t) != 0)
+	{
+		return -EIO;
+	}
+	return 0;
+}
 
 static bool s_PdsReady;
 
@@ -120,10 +148,8 @@ static int PdsEnsureReady(void)
 // from the base the application registered; ptr only says the call is about
 // that cache. Calls without a registered cache are refused.
 //
-// Chunks first, manifest last: the manifest is the commit point, so a flush
-// that loses power mid run leaves the previous manifest naming the previous
-// image, or a manifest whose CRC the torn chunks fail. Either way a restore
-// never hands the stack a mixture.
+// Write only the bank not selected by the committed manifest. Publish the
+// replacement with one manifest record after every chunk has committed.
 // ---------------------------------------------------------------------------
 // A failed save is tried again from BtSmpBondWbaPoll, called once a second.
 // The wait doubles from 1 s to BT_WBA_STORE_RETRY_MAX s. When the save still
@@ -202,6 +228,17 @@ extern "C" void BtSmpBondWbaFlush(void)
 		return;
 	}
 
+	// Read the durable selector on every attempt, including retries: a write
+	// may have reached flash even when its completion reported an error.
+	BtWbaNvmManifest_t previous;
+	r = BondManifestRead(&previous);
+	if (r != 0 && r != -ENOENT)
+	{
+		BondStoreFailed(r);
+		return;
+	}
+	uint32_t bank = r == 0 ? previous.Bank ^ 1U : 0U;
+
 	const uint8_t *img = (const uint8_t *)ptr;
 	size_t len = (size_t)size * sizeof(uint64_t);
 	uint32_t idx = 0;
@@ -210,13 +247,13 @@ extern "C" void BtSmpBondWbaFlush(void)
 	{
 		size_t n = len - off < BT_WBA_CHUNK_SIZE ? len - off : BT_WBA_CHUNK_SIZE;
 
-		ssize_t wr = BtPdsWrite(BT_WBA_NVM_KEY_BASE + 1U + idx, img + off, n);
+		ssize_t wr = BtPdsWrite(BondChunkKey(bank, idx), img + off, n);
 		if (wr != (ssize_t)n)
 		{
 			SysLogPrintf(SysLogGet(), "WBA bond: chunk %lu save failed\r\n",
 					(unsigned long)idx);
-			// Earlier chunks may already be replaced. A reset can then
-			// reject the image by CRC; the previous image is not retained.
+			// Only the inactive bank has changed; the committed image
+			// remains readable even if the store runs out of space.
 			BondStoreFailed(wr < 0 ? (int)wr : -EIO);
 			return;
 		}
@@ -224,6 +261,7 @@ extern "C" void BtSmpBondWbaFlush(void)
 
 	BtWbaNvmManifest_t man;
 
+	man.Bank = bank;
 	man.Len = (uint32_t)len;
 	man.Crc = crc32_ieee((uint8_t *)img, (int)len);
 
@@ -255,8 +293,8 @@ extern "C" void BtSmpBondWbaPoll(void)
 
 // ---------------------------------------------------------------------------
 // Restore the image into the buffer the ST stack will use, before
-// BleStack_Init. Returns bytes loaded, 0 when there is nothing valid, which
-// is a first boot or a torn flush.
+// BleStack_Init. Returns bytes loaded, 0 when there is no committed image or
+// its records are corrupt. An interrupted save does not replace the selector.
 // ---------------------------------------------------------------------------
 extern "C" size_t BtSmpBondWbaRestore(void *pCacheBuf, size_t Capacity)
 {
@@ -272,8 +310,7 @@ extern "C" size_t BtSmpBondWbaRestore(void *pCacheBuf, size_t Capacity)
 
 	BtWbaNvmManifest_t man;
 
-	if (BtPdsRead(BT_WBA_NVM_KEY_BASE, &man, sizeof(man)) !=
-		(ssize_t)sizeof(man))
+	if (BondManifestRead(&man) != 0)
 	{
 		return 0;
 	}
@@ -290,7 +327,7 @@ extern "C" size_t BtSmpBondWbaRestore(void *pCacheBuf, size_t Capacity)
 		size_t n = man.Len - off < BT_WBA_CHUNK_SIZE ?
 				   man.Len - off : BT_WBA_CHUNK_SIZE;
 
-		if (BtPdsRead(BT_WBA_NVM_KEY_BASE + 1U + idx, img, n) != (ssize_t)n)
+		if (BtPdsRead(BondChunkKey(man.Bank, idx), img, n) != (ssize_t)n)
 		{
 			memset(pCacheBuf, 0, Capacity);
 			return 0;
@@ -300,8 +337,8 @@ extern "C" size_t BtSmpBondWbaRestore(void *pCacheBuf, size_t Capacity)
 
 	if (crc32_ieee((uint8_t *)pCacheBuf, (int)man.Len) != man.Crc)
 	{
-		// Chunks from two flushes. The whole image is refused rather than
-		// handing the stack a mixture it would treat as its own state.
+		// Reject damaged committed data. Do not fall back to an older
+		// bank, which could resurrect a bond that was deliberately deleted.
 		memset(pCacheBuf, 0, Capacity);
 		return 0;
 	}
@@ -326,7 +363,7 @@ extern "C" void BtSmpBondWbaCommit(uint16_t ConnHdl)
 // that pulls this object from the archive, so the strong BLEPLAT_NvmStore
 // here wins over any weak stub.
 //
-// Returns the preloaded 64 bit words, 0 on a first boot, a torn flush, or
+// Returns the preloaded 64 bit words, 0 on a first boot, corrupt data, or
 // a store that would not mount; the stack then starts empty, which is the
 // same recovery either way.
 // ---------------------------------------------------------------------------
@@ -357,3 +394,4 @@ extern "C" int BtSmpBondWbaInit(void)
 {
 	return PdsEnsureReady();
 }
+

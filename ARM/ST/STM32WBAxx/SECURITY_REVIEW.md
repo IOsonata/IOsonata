@@ -58,6 +58,7 @@ Run from the repository root:
 python3 tests/stm32wba/run_ble_crypto.py
 python3 tests/stm32wba/run_bt_crypto.py
 python3 tests/stm32wba/run_bond_store.py
+python3 tests/stm32wba/run_bond_powerloss.py
 ```
 
 The host AES adapter test needs g++ and Python cryptography. It uses the real
@@ -100,11 +101,30 @@ save, so a medium that keeps failing is not rewritten forever. A missing NVM
 region is a build setup error and is not retried. A request received during a
 flush is retained for the next attempt.
 
-Chunks are replaced under the existing record keys, then the manifest is
-written. A reset during a partial update can lose the stored image; this is
-not rollback to the previous image. Restore rejects missing or inconsistent
-chunks and clears the cache before the stack starts. The on-flash format is
-unchanged, so existing valid bonds remain readable.
+Bond images use two banks of chunk keys. A save writes the inactive bank,
+then commits one manifest record selecting that bank. Until the manifest
+commits, restore reads the previous complete image. PDS protects individual
+records and retains both banks during garbage collection. The legacy
+eight-byte manifest remains readable as bank 0; the first update writes
+bank 1 before replacing it with the twelve-byte manifest.
+
+An interrupted update restores either the old or new complete image.
+Corrupt committed data still clears the cache: restore does not fall back
+to an older bank, which could restore deliberately deleted bonds.
+
+Both banks and their record overhead must fit in the PDS live set. The
+existing 16 KB NVM0 region has two 8 KB sectors, one reserved for garbage
+collection. It cannot retain two full 4 KB cache images plus overhead.
+If space runs out, the save fails with bounded retries and preserves the
+committed image. Chunk records from earlier, larger images also consume
+space. No linker partition or NVM1 allocation has changed.
+
+The production PDS and WBA adapter passed 486 simulated power cuts at each
+of `-O0` and `-Os`, with AddressSanitizer and UndefinedBehaviorSanitizer.
+The tests interrupt programming and erases, including torn operations,
+garbage collection, bank switching, empty-image commits and legacy migration.
+Store exhaustion also retains the committed image. These are flash-model
+tests; physical power-cut testing on the DK1 remains outstanding.
 
 Temporary AES/key dumps and bond-image dumps have been removed. The store
 status lines (PDS mount, bond saved and restored with length and CRC) are
@@ -127,3 +147,4 @@ Release library leaves it out. Errors are always printed.
 - [CCM](https://github.com/STMicroelectronics/STM32CubeWBA/blob/v1.10.0/Projects/Common/WPAN/Modules/BasicAES/baes_ccm.c)
 - [AES register adapter](https://github.com/STMicroelectronics/STM32CubeWBA/blob/v1.10.0/Projects/Common/WPAN/Interfaces/hw_aes.c)
 - [BLE platform interface](https://github.com/STMicroelectronics/stm32-mw-wpan/blob/v2.10.0/ble/stack/include/bleplat.h)
+

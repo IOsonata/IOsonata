@@ -81,11 +81,11 @@ static void Reset()
 	}
 }
 
-static void CheckRestored(size_t Len)
+static void CheckRestored(size_t Len, const void *pExpected = cache)
 {
 	memset(restored, 0xA5, sizeof(restored));
 	assert(BtSmpBondWbaRestore(restored, sizeof(restored)) == Len);
-	assert(memcmp(restored, cache, Len) == 0);
+	assert(memcmp(restored, pExpected, Len) == 0);
 	const uint8_t *p = (const uint8_t *)restored;
 	for (size_t i = Len; i < sizeof(restored); i++)
 	{
@@ -143,17 +143,21 @@ int main()
 	Reset();
 	BLEPLAT_NvmStore(cache, 39);
 	BtSmpBondWbaFlush();
+	uint64_t previous[64];
+	memcpy(previous, cache, sizeof(previous));
 	cache[0] ^= 1;
 	BLEPLAT_NvmStore(cache, 39);
 	failWrite = writes + 2;
 	BtSmpBondWbaFlush();
-	CheckRestored(0);
+	CheckRestored(312, previous);
 	failWrite = 0;
 	BtSmpBondWbaPoll();
 	CheckRestored(312);
-	puts("PASS mixed old/new chunks rejected and cache cleared, retry repairs image");
+	puts("PASS interrupted bank update preserves committed image, retry commits replacement");
 
-	records.erase(BT_WBA_NVM_KEY_BASE + 2);
+	BtWbaNvmManifest_t active;
+	assert(BondManifestRead(&active) == 0);
+	records.erase(BondChunkKey(active.Bank, 1));
 	CheckRestored(0);
 	puts("PASS missing chunk clears entire destination");
 
@@ -180,7 +184,7 @@ int main()
 	assert(writes == 0);
 	puts("PASS invalid store requests refused");
 
-	BtWbaNvmManifest_t man = { 7, 0 };
+	BtWbaNvmManifest_t man = { 7, 0, 0 };
 	BtPdsWrite(BT_WBA_NVM_KEY_BASE, &man, sizeof(man));
 	CheckRestored(0);
 	puts("PASS non-word image length refused");
@@ -293,3 +297,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+
