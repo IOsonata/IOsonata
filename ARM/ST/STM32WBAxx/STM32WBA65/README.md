@@ -405,9 +405,11 @@ Validation: `tests/stm32wba/run_spi.py` runs the driver in an instruction set
 emulator with a model of the SPI registers, the GPDMA channels and the chip
 select pins (64 checks: polling, interrupt, DMA, slave, a receive FIFO overrun
 check and the 70000 byte chunking).
-Hardware: the SPI slave passed on the DK1 in interrupt and in DMA mode, all four
-SPI modes, driven by the SPISoft master. The SPI3 hardware master example is new
-and has not been run. SPILoopback is not tested.
+Hardware: SPIMasterSlave passed all 8 combinations on the DK1 (SPI3 master in
+polling, interrupt, DMA and DMA with interrupt against the SPI2 slave in
+interrupt and DMA mode), in all four SPI modes with frames of 1, 16 and 129
+bytes, TX and RX. The 500000 Hz request ran at 390625 Hz (kernel clock divider).
+Earlier runs with the SPISoft master also passed. SPILoopback is not tested.
 
 ## Build dependency
 
