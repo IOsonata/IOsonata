@@ -11,7 +11,8 @@
 		to the audio codec signals. The result is printed on the first ST-LINK
 		virtual COM port, USART1.
 
-		Not tested on hardware.
+		Tested on the DK1 with the master in polling, interrupt, DMA and DMA
+		with interrupt modes.
 
 @author	Hoang Nguyen Hoan
 @date	Oct. 17, 2026

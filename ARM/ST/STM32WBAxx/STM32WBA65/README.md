@@ -331,7 +331,10 @@ hardware run showed PB13 held low). The example starts with a polling master and
 
 Validation: the driver is checked by `tests/stm32wba/run_i2c.py` in an
 instruction set emulator with an I2C model and a GPDMA model (63 checks: polling,
-interrupt, DMA, slave). Not tested on hardware.
+interrupt, DMA, slave). On the DK1 the I2CScan example found the codec at 0x1A,
+and the I2CMasterSlave example passed with the master in polling, interrupt,
+DMA and DMA with interrupt (I2C1 to I2C2, 100 kHz). The slave ran in interrupt
+mode; a slave DMA request is ignored by the driver.
 
 ## SPI and example project
 
