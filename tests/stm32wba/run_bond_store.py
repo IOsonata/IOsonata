@@ -273,13 +273,19 @@ def main():
             '#pragma once\ninline void *SysLogGet() { return nullptr; }\n'
             'inline void SysLogPrintf(void *, const char *, ...) {}\n')
         (tmp / 'test.cpp').write_text(TEST)
+        san = ['-fsanitize=address,undefined', '-fno-omit-frame-pointer']
         for opt in ('-O0', '-Os'):
             exe = tmp / 'test'
+            # crc.c is C, as in the firmware; crc.h declares C linkage. A C++
+            # driver given a .c file treats it as C++, which clang refuses.
+            crc = tmp / 'crc.o'
+            subprocess.run([os.environ.get('CC', 'cc'), '-std=gnu17', opt, *san,
+                            '-I' + str(ROOT / 'include'), '-c',
+                            str(ROOT / 'src/crc.c'), '-o', str(crc)], check=True)
             subprocess.run([os.environ.get('CXX', 'g++'), '-std=c++23', opt,
-                            '-Wall', '-Wextra', '-Werror', '-fsanitize=address,undefined',
-                            '-fno-omit-frame-pointer', '-I' + str(tmp),
+                            '-Wall', '-Wextra', '-Werror', *san, '-I' + str(tmp),
                             '-I' + str(ROOT), '-I' + str(ROOT / 'include'),
-                            str(tmp / 'test.cpp'), str(ROOT / 'src/crc.c'),
+                            str(tmp / 'test.cpp'), str(crc),
                             '-o', str(exe)], check=True)
             subprocess.run([str(exe)], check=True)
             print(opt + ': WBA bond store checks passed', flush=True)
