@@ -48,7 +48,7 @@ SOFTWARE.
   */
 
 // Peripheral capability values are compile-time allocation bounds.
-// A controller driver must still be implemented for the selected USB IP.
+// Implemented by the shared OTG FIFO device controller.
 typedef enum __Usb_Ctrlr_Trans_Type {
 	CONTROL = USB_ENDPATT_TRANS_CONTROL,
 	ISO = USB_ENDPATT_TRANS_ISO,
@@ -67,9 +67,9 @@ enum {
 	USB_CTRLR0_BULK_PKT_LEN_MAX = 512,
 	USB_CTRLR0_INT_PKT_LEN_MAX = 1024,
 	USB_CTRLR0_ISO_PKT_LEN_MAX = 1024,
-	USB_ISO_SUPPORTED_0 = 1,
-	USB_ISO_EPIN_MASK_0 = 0x01FEU,
-	USB_ISO_EPOUT_MASK_0 = 0x01FEU,
+	USB_ISO_SUPPORTED_0 = 0,
+	USB_ISO_EPIN_MASK_0 = 0,
+	USB_ISO_EPOUT_MASK_0 = 0,
 };
 #elif defined(STM32F401xC) || defined(STM32F401xE)
 // STM32F401: USB OTG FS, four endpoint numbers including EP0.
@@ -82,9 +82,9 @@ enum {
 	USB_CTRLR0_BULK_PKT_LEN_MAX = 64,
 	USB_CTRLR0_INT_PKT_LEN_MAX = 64,
 	USB_CTRLR0_ISO_PKT_LEN_MAX = 1023,
-	USB_ISO_SUPPORTED_0 = 1,
-	USB_ISO_EPIN_MASK_0 = 0x000EU,
-	USB_ISO_EPOUT_MASK_0 = 0x000EU,
+	USB_ISO_SUPPORTED_0 = 0,
+	USB_ISO_EPIN_MASK_0 = 0,
+	USB_ISO_EPOUT_MASK_0 = 0,
 };
 #elif defined(STM32L476xx) || defined(STM32L496xx)
 // STM32L476/L496: USB OTG FS, six bidirectional endpoint numbers.
@@ -98,9 +98,9 @@ enum {
 	USB_CTRLR0_BULK_PKT_LEN_MAX = 64,
 	USB_CTRLR0_INT_PKT_LEN_MAX = 64,
 	USB_CTRLR0_ISO_PKT_LEN_MAX = 1023,
-	USB_ISO_SUPPORTED_0 = 1,
-	USB_ISO_EPIN_MASK_0 = 0x003EU,
-	USB_ISO_EPOUT_MASK_0 = 0x003EU,
+	USB_ISO_SUPPORTED_0 = 0,
+	USB_ISO_EPIN_MASK_0 = 0,
+	USB_ISO_EPOUT_MASK_0 = 0,
 };
 #elif defined(STM32F030x8)
 // STM32F030x8 has no USB peripheral; reject USB stack inclusion.
@@ -230,7 +230,7 @@ bool UsbCtrlrEp0Status(int DevNo, uint8_t EpAddr);
 void UsbCtrlrEpStall(int DevNo, uint8_t EpNo, bool bIn);
 void UsbCtrlrEpClearStall(int DevNo, uint8_t EpNo, bool bIn);
 size_t UsbCtrlrGetSerial(int DevNo, char *pBuff, size_t BuffLen);
-// ISO endpoints require the STM32 controller's HS FIFO implementation.
+// ISO is not implemented by this OTG port; these functions report failure.
 bool UsbCtrlrIsoInit(int DevNo);
 bool UsbCtrlrIsoOpen(int DevNo, uint8_t EpNo, bool bIn, uint16_t MaxPacketSize);
 bool UsbCtrlrIsoSend(int DevNo, uint8_t EpNum, uint8_t *pBuffer, uint16_t Length);
@@ -243,3 +243,4 @@ uint16_t UsbCtrlrIsoTraceSnapshot(int DevNo, uint8_t **ppData);
 /** @} End of group USB */
 
 #endif
+

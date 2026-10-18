@@ -84,6 +84,15 @@ vector is replaced by an application handler. TimerDemo callbacks have passed
 on hardware for the LPTIM and TIM engines; absolute frequency has not been
 measured against an external reference.
 
+## USB device
+
+The WBA65 library links the shared STM32 OTG FIFO driver. UsbCdcLoopback and
+UsbCdcPrbsTx projects use the common IOsonata applications on the native CN5
+connector. Control, bulk and interrupt transfers are implemented; ISO and USB
+host mode are unsupported. ARM object compilation and software ownership tests
+pass; full project links and hardware USB tests are pending. See
+[`../USB.md`](../USB.md) for family coverage, clock requirements and testing.
+
 ## STM32CubeWBA dependency
 
 Use an ST STM32CubeWBA distribution matched to the selected device and BLE
@@ -148,4 +157,5 @@ References:
 - https://www.st.com/en/evaluation-tools/stm32wba65i-dk1.html
 - https://www.st.com/resource/en/user_manual/DM01147159.pdf
 - https://www.st.com/en/microcontrollers-microprocessors/stm32wba65mi.html
+
 

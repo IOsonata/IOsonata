@@ -2780,5 +2780,21 @@
 			<type>1</type>
 			<locationURI>PARENT-2-PROJECT_LOC/include/utilities_conf.h</locationURI>
 		</link>
+		<link>
+			<name>src/usb_otg_stm32.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/usb_otg_stm32.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/usb_otg_target_stm32.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/usb_otg_target_stm32.cpp</locationURI>
+		</link>
+		<link>
+			<name>include/usb_ctrlr.h</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/include/usb_ctrlr.h</locationURI>
+		</link>
 	</linkedResources>
 </projectDescription>
+
