@@ -12,8 +12,23 @@ pairing returned status `0x00`, without another confirmation prompt.
 
 The initial Numeric Comparison prompt appeared 197 ms after the security
 request. Reconnect encryption was enabled 45 ms after the request.
-The earlier central log reported mode 1, level 4 for fresh pairing. The latest
-reset/reconnect log records encryption and successful bond reuse.
+These timings are from the earlier device-side log.
+
+Hardware retest reported after the review fixes on October 18, 2026:
+fresh Numeric Comparison pairing, a notification, reset and bonded reconnect
+passed. nRF Connect reported mode 1, level 4 on fresh pairing and both
+subsequent reconnects, without another Numeric Comparison prompt.
+
+| Central log | Connected | Mode 1, level 4 | Elapsed |
+|---|---|---|---|
+| First reconnect | 18:01:06.968 | 18:01:07.017 | 49 ms |
+| Second reconnect | 18:01:17.402 | 18:01:17.452 | 50 ms |
+
+The first disconnect was reported as connection timeout; the second was a
+local host disconnect. Both subsequent connections restored security. The
+device log contains a second boot banner. Build configuration and exact
+flashed commit were not recorded in the supplied log.
+
 
 The standalone hardware crypto test passed **51 tests, 0 failed**. See
 [target results](STM32WBA65/README.md#crypto-hardware-validation).
@@ -71,8 +86,8 @@ October 18 review fixes, tested locally:
   Existing volatile increment/decrement warnings in the event ring remain.
   These are object compilation checks, not complete application builds.
 
-These results are separate from the DK1 hardware runs above. No new hardware
-run was performed for these fixes.
+These software results are separate from the maintainer's DK1 hardware
+retest recorded above.
 
 ## Bond persistence
 
@@ -92,7 +107,6 @@ been removed. Storage and security-request errors still use SysLog.
 
 ## Remaining limitations and tests
 
-- Repeat pairing and bonded reconnect after reset with the corrected firmware.
 - Pairing rejection, persistence failure recovery on hardware, and radio
   scheduling during flash writes need separate tests.
 - Complete the final Debug/Release application builds and regression checks

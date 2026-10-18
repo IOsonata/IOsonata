@@ -700,9 +700,20 @@ Hardware validated on October 18, 2026:
   (7497 to 7694 ms). On reconnect, encryption was enabled 45 ms after the
   request (5622 to 5667 ms).
 
-The earlier fresh-pairing central log reported mode 1, level 4. The reset/
-reconnect log confirms encryption and successful bond reuse; it does not
-include a new central-side security-level report.
+Hardware retest reported after the review fixes on October 18, 2026:
+fresh Numeric Comparison pairing, a notification, reset and bonded reconnect
+passed. nRF Connect reported mode 1, level 4 on fresh pairing and both
+subsequent reconnects, without another Numeric Comparison prompt.
+
+| Central log | Connected | Mode 1, level 4 | Elapsed |
+|---|---|---|---|
+| First reconnect | 18:01:06.968 | 18:01:07.017 | 49 ms |
+| Second reconnect | 18:01:17.402 | 18:01:17.452 | 50 ms |
+
+The first disconnect was reported as connection timeout; the second was a
+local host disconnect. Both subsequent connections restored security. The
+device log contains a second boot banner. Build configuration and exact
+flashed commit were not recorded in the supplied log.
 
 ## Additional UART examples
 
