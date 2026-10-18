@@ -425,6 +425,12 @@ int NvmMcuErase(uintptr_t Addr)
 	ST_FLASH_SR = ST_FLASH_SR & ST_FLASH_ERR;
 
 	uint32_t page = (uint32_t)((Addr - FLASH_BASE) / NVM_INTRF_PAGE_SIZE);
+
+	// Unlock before reading the control register: a value read while locked
+	// holds LOCK, and writing it back locks the controller again, so the
+	// start write that follows is ignored and nothing is erased.
+	StFlashUnlock();
+
 	uint32_t cr = ST_FLASH_CR;
 
 	cr &= ~(ST_FLASH_CR_PNB_Msk | ST_FLASH_CR_PG | ST_FLASH_CR_MER);
@@ -447,7 +453,6 @@ int NvmMcuErase(uintptr_t Addr)
 
 	cr |= (page << ST_FLASH_CR_PNB_Pos) | ST_FLASH_CR_PER;
 
-	StFlashUnlock();
 	ST_FLASH_CR = cr;
 	ST_FLASH_CR = cr | ST_FLASH_CR_STRT;
 
