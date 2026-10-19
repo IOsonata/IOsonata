@@ -276,8 +276,9 @@ a write across a page boundary, programming clears bits only, unaligned
 erase and read past the end rejected, ALL PASS (2026-10-19). First run of
 QUADSPI on the boards.
 SystemInit now sets MSIPLLEN after the LSE is ready when `g_McuOsc` has the
-RC core oscillator and the LSE crystal (2026-10-19), not tested on the
-boards yet.
+RC core oscillator and the LSE crystal (2026-10-19). On the
+B-L475E-IOT01A2 UartPrbsTxTest with DMA then runs at 99560 B/s (100940
+before), the core clock locked to the crystal.
 
 STM32L432: `STM32L432/lib/ioc` has the Debug, Release, Debug_FPU and
 Release_FPU configurations of the L476 library. It adds the STM32L432xx
