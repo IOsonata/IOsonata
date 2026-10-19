@@ -32,6 +32,7 @@ SOFTWARE.
 ----------------------------------------------------------------------------*/
 
 #include <stdint.h>
+#include <stdbool.h>
 #include "stm32wbaxx.h"
 
 extern unsigned long __StackTop;
@@ -62,7 +63,21 @@ void Stm32TimerVector(void)
 	}
 }
 
-void NMI_Handler(void) __attribute__((weak, alias("Default_Handler")));
+// NMI. With the flash driver linked (NvmIntrf), Stm32FlashEccNmi takes a
+// double ECC error that hit one of its own flash reads: it clears the error
+// and that read fails, so the caller sees a damaged word instead of the
+// device stopping. Any other NMI stops here as before. Weak, so an
+// application can still supply its own.
+__attribute__((weak)) bool Stm32FlashEccNmi(void);
+__attribute__((weak)) void NMI_Handler(void)
+{
+	if (Stm32FlashEccNmi && Stm32FlashEccNmi())
+	{
+		return;
+	}
+	Default_Handler();
+}
+
 void HardFault_Handler(void) __attribute__((weak, alias("Default_Handler")));
 void MemManage_Handler(void) __attribute__((weak, alias("Default_Handler")));
 void BusFault_Handler(void) __attribute__((weak, alias("Default_Handler")));

@@ -101,6 +101,12 @@ SOFTWARE.
 #define ST_FLASH_SR				(FLASH_NS->NSSR)
 #define ST_FLASH_KEYR			(FLASH_NS->NSKEYR)
 
+// A double ECC error on a flash read raises the NMI on this family (the ST
+// HAL calls HAL_FLASHEx_ECCD_IRQHandler from the NMI). A power cut while a
+// flash word is programmed or a page erased can leave such a word, so the
+// read path takes the error through Stm32FlashEccNmi below.
+#define ST_FLASH_ECCR			(FLASH_NS->ECCR)
+
 #define ST_FLASH_CR_PG			FLASH_NSCR1_PG
 #define ST_FLASH_CR_PER			FLASH_NSCR1_PER
 // Mass erase bits. The WBA6x has two banks with one bit each, the other parts
@@ -240,6 +246,14 @@ static_assert((NVM_INTRF_MAX_XFER % NVM_INTRF_WRITE_GRAN) == 0,
 static NvmIntrfStat_t s_Stat;
 
 static NvmDevIntrf_t s_NvmDev;
+
+#ifdef ST_FLASH_ECCR
+// The bus range of the flash read in progress, 0 to 0 when none, and whether
+// a double ECC error inside it was taken by the NMI.
+static volatile uintptr_t s_EccFrom;
+static volatile uintptr_t s_EccTo;
+static volatile bool s_bEccHit;
+#endif
 
 DevIntrf_t *NvmMcuDevIntrf(void)
 {
@@ -473,6 +487,46 @@ int NvmMcuErase(uintptr_t Addr)
 	return res;
 }
 
+#ifdef ST_FLASH_ECCR
+// From NMI_Handler of the vector file. A double ECC error at an address the
+// read in progress covers is cleared and makes that read fail. Any other
+// double error, a code fetch or a read outside this driver, is not taken
+// here: false lets the vector file stop as before. C linkage: the vector
+// file calls it through a weak reference, like Stm32TimerIRQHandler.
+extern "C" bool Stm32FlashEccNmi(void)
+{
+	uint32_t eccr = ST_FLASH_ECCR;
+
+	if ((eccr & FLASH_ECCR_ECCD) == 0 || (eccr & FLASH_ECCR_SYSF_ECC) != 0)
+	{
+		return false;
+	}
+
+	// Same decode as HAL_FLASHEx_GetEccInfo: the field counts 8 byte steps
+	// from the start of the bank.
+	uintptr_t addr = FLASH_BASE + ((uintptr_t)(eccr & FLASH_ECCR_ADDR_ECC_Msk) << 3);
+
+#ifdef ST_FLASH_CR_BKER
+	if (eccr & FLASH_ECCR_BK_ECC)
+	{
+		addr += ST_FLASH_BANK_SIZE();
+	}
+#endif
+
+	// The whole flash word holding the address failed its check
+	addr &= ~(uintptr_t)(NVM_INTRF_WRITE_GRAN - 1);
+	if (addr + NVM_INTRF_WRITE_GRAN <= s_EccFrom || addr >= s_EccTo)
+	{
+		return false;
+	}
+
+	s_bEccHit = true;
+	ST_FLASH_ECCR |= FLASH_ECCR_ECCD;
+
+	return true;
+}
+#endif
+
 bool NvmMcuIsReady(void)
 {
 	return (ST_FLASH_SR & ST_FLASH_SR_BUSY) == 0;
@@ -643,7 +697,24 @@ static int NvmRxData(DevIntrf_t *pIntrf, uint8_t *pBuff, int Len)
 	}
 
 	// The flash is memory mapped, so a read is a copy from the bus address.
+#ifdef ST_FLASH_ECCR
+	// A word failing its ECC check raises the NMI during the copy; the copy
+	// then holds bytes that are not the data and the read fails.
+	s_bEccHit = false;
+	s_EccFrom = FrameAddr(dev);
+	s_EccTo = FrameAddr(dev) + (uintptr_t)Len;
 	memcpy(pBuff, (const void *)FrameAddr(dev), (size_t)Len);
+	s_EccFrom = 0;
+	s_EccTo = 0;
+	if (s_bEccHit)
+	{
+		s_bEccHit = false;
+
+		return 0;
+	}
+#else
+	memcpy(pBuff, (const void *)FrameAddr(dev), (size_t)Len);
+#endif
 
 	// Advance for a continued read, the same way the write side does.
 	uintptr_t next = FrameAddr(dev) + (uintptr_t)Len;
