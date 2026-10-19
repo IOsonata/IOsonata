@@ -275,7 +275,10 @@ program, polling: JEDEC id C2 28 17, the stamp written and read back, erase,
 a write across a page boundary, programming clears bits only, unaligned
 erase and read past the end rejected, ALL PASS (2026-10-19). After power
 cycles the stamp is found and its boot count rises (boot 3). First run of
-QUADSPI on the boards. FlashMemoryDemo
+QUADSPI on the boards. In quad mode (2026-10-19): QREAD 0x6B (1-1-4, 8 dummy
+cycles) and 4PP 0x38 (1-4-4) from the chip config, the Quad Enable bit
+(status register 1 bit 6) set by Nvm from `NvmCfg_t.QuadEnable`, status
+0x40 logged, ALL PASS, the stamp kept across power cycles. FlashMemoryDemo
 (`exemples/storage/flash_memory_demo.cpp`, legacy Flash driver, NVM_MODE 0)
 on the same flash: chip erase, sectors 0,
 1, 2, 30 and 40 written and read back, sector erase verified, completed
