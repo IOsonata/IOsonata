@@ -772,3 +772,15 @@ All 20 WBA examples compile and link in Debug and Release using Arm GCC
 The full library (276 translation units per configuration) was built earlier;
 the subsequently changed bond object was rebuilt and both archives relinked.
 Eclipse itself and the maintainer's GCC 15.2.1 were not run here.
+
+## Onboard OLED
+
+`exemples/OledSSD1315/ioc` builds the generic SSD1315 display demo in Debug
+and Release. It uses SPI3 (DevNo 2), SCK PA0 and MOSI PB8 at AF6, with CS
+PE1, D/C PE0 and reset PE3. No external wiring is needed. Rebuild the
+matching library first; its Eclipse project includes the generic driver.
+The demo displays text, a checkerboard and a counter updated every 500 ms.
+
+The driver and demo build and link with Arm GCC 13.2.1 in both configurations.
+SPI display-model tests pass at `-O0` and `-Os` with ASan/UBSan; OLED hardware
+operation has not yet been tested. See [SSD1315 usage](../../../../docs/display/ssd1315.md).
