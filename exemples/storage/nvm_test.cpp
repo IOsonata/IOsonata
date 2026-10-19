@@ -162,6 +162,8 @@ static uint32_t s_QSetMemSize;
 static uint32_t s_QRstCnt;
 static uint32_t s_QEraseCnt;
 static uint32_t s_QWrsrCnt;
+static uint8_t s_QSr2;
+static uint32_t s_QWrsr2Cnt;
 static uint32_t s_QVioNoWel;
 static uint32_t s_QVioEraseNoWel;
 
@@ -670,6 +672,8 @@ static void QspiPowerOn(void)
 	s_QRstCnt = 0;
 	s_QEraseCnt = 0;
 	s_QWrsrCnt = 0;
+	s_QSr2 = 0;
+	s_QWrsr2Cnt = 0;
 	s_QVioNoWel = 0;
 	s_QVioEraseNoWel = 0;
 }
@@ -737,6 +741,11 @@ static int QspiRxData(DevIntrf_t *, uint8_t *pBuff, int Len)
 		}
 		return Len;
 	}
+	if (s_QCmd == 0x35)		// status register 2
+	{
+		for (int i = 0; i < Len; i++) { pBuff[i] = s_QSr2; }
+		return Len;
+	}
 	if (s_QCmd == FLASH_CMD_READSTATUS)
 	{
 		uint8_t st = s_QBp;
@@ -755,8 +764,17 @@ static int QspiRxData(DevIntrf_t *, uint8_t *pBuff, int Len)
 
 static int QspiTxData(DevIntrf_t *, const uint8_t *pData, int Len)
 {
+	if (s_QCmd == 0x31)		// write status register 2
+	{
+		if (!s_QWel) { s_QVioNoWel++; return Len; }
+		if (Len >= 1) { s_QSr2 = pData[0]; }
+		s_QWrsr2Cnt++;
+		s_QWel = false;
+		return Len;
+	}
 	if (s_QCmd == FLASH_CMD_WRSR)
 	{
+		if (!s_QWel) { s_QVioNoWel++; return Len; }
 		if (Len >= 1) { s_QBp = pData[0]; }
 		s_QWrsrCnt++;
 		s_QWel = false;
@@ -1047,6 +1065,71 @@ static void TestQspi(MockIntrf &Bus)
 	CHECK(s_QWrsrCnt >= 1, "qspi: the write status command was used");
 	CHECK(mem.SetWriteProtect(false) == 0,
 		  "qspi: unprotect through the status bits");
+}
+
+// The Quad Enable bit: set by Init in the register the config names, once,
+// with the write enable latch, the other bits kept.
+static void TestQspiQe(MockIntrf &Bus)
+{
+	NvmCfg_t cfg;
+	memset(&cfg, 0, sizeof(cfg));
+	cfg.TotalSize = QSPI_SIZE;
+	cfg.EraseSize = 4096;
+	cfg.PageSize = QSPI_PAGE;
+	cfg.AddrSize = QSPI_ADDR;
+	cfg.DevId = QSPI_ID;
+	cfg.DevIdSize = 3;
+	cfg.WrProtMask = 0x3C;
+	cfg.RdCmd = { 0xEB, 6 };			// 1-4-4 read
+	cfg.WrCmd = { 0x38, 0 };			// 1-4-4 page program
+	cfg.WrProtPin = { -1, -1, 0, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL };
+
+	// Status register 1 bit 6 (Macronix), with a protect bit already set
+	QspiPowerOn();
+	s_QBp = 0x04;
+	cfg.QuadEnable = { 1, 6 };
+	{
+		Nvm mem;
+		CHECK(mem.Init(cfg, &Bus), "qe sr1: init");
+		CHECK(s_QBp == 0x44, "qe sr1: bit 6 set, the other bits kept");
+		CHECK(s_QWrsrCnt == 1, "qe sr1: one status write");
+		CHECK(s_QVioNoWel == 0, "qe sr1: written with the latch");
+		CHECK(mem.SetWriteProtect(false) == 0 && (s_QBp & 0x40) != 0,
+			  "qe sr1: write protect keeps the bit");
+	}
+	{
+		Nvm mem;
+		uint32_t n = s_QWrsrCnt;
+		CHECK(mem.Init(cfg, &Bus), "qe sr1: init with the bit set");
+		CHECK(s_QWrsrCnt == n, "qe sr1: no write when already set");
+	}
+
+	// Status register 2 bit 1 (Winbond)
+	QspiPowerOn();
+	cfg.QuadEnable = { 2, 1 };
+	{
+		Nvm mem;
+		CHECK(mem.Init(cfg, &Bus), "qe sr2: init");
+		CHECK(s_QSr2 == 0x02 && s_QWrsr2Cnt == 1, "qe sr2: bit 1 set with 0x31");
+		CHECK(s_QWrsrCnt == 0, "qe sr2: status register 1 untouched");
+	}
+
+	// No Quad Enable: nothing written
+	QspiPowerOn();
+	cfg.QuadEnable = { 0, 0 };
+	{
+		Nvm mem;
+		CHECK(mem.Init(cfg, &Bus), "qe none: init");
+		CHECK(s_QWrsrCnt == 0 && s_QWrsr2Cnt == 0, "qe none: no register write");
+	}
+
+	// A register the driver does not know
+	QspiPowerOn();
+	cfg.QuadEnable = { 3, 1 };
+	{
+		Nvm mem;
+		CHECK(mem.Init(cfg, &Bus) == false, "qe: unknown register refused");
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -1622,6 +1705,7 @@ int main(void)
 	atomic_flag_clear(&s_QDev.DevIntrf.bBusy);
 	qspi.vDev.pDevData = &s_QDev;
 	TestQspi(qspi);
+	TestQspiQe(qspi);
 	TestNorAsync(nor);
 	TestBaseAddr(nor);
 	TestNorAsyncIntrf(nor);

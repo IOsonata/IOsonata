@@ -77,6 +77,17 @@ typedef struct __Nvm_Cmd {
 	uint8_t	DummyCycle;
 } NvmCmd_t;
 
+/// Quad Enable bit of a serial NOR flash. A part with the IO2 and IO3 pins
+/// shared with WP and HOLD takes the quad commands only with this bit set.
+/// Init sets it when Reg is not 0 and leaves the other bits as they are.
+/// Reg 0: none, 1: status register 1 (read 0x05, write 0x01; Macronix, ISSI
+/// bit 6), 2: status register 2 (read 0x35, write 0x31; Winbond, GigaDevice
+/// bit 1). Bit: bit number in the register.
+typedef struct __Nvm_Qe {
+	uint8_t	Reg;
+	uint8_t	Bit;
+} NvmQe_t;
+
 typedef struct __Nvm_Cfg {
 	int			DevNo;
 
@@ -95,6 +106,7 @@ typedef struct __Nvm_Cfg {
 	uint8_t		DevIdSize;
 	NvmCmd_t	RdCmd;
 	NvmCmd_t	WrCmd;
+	NvmQe_t		QuadEnable;	//!< Quad Enable bit, set by Init
 	uint8_t		WrProtMask;
 	IOPinCfg_t	WrProtPin;
 	uint32_t	WriteDelayUs;
@@ -220,6 +232,9 @@ private:
 	int EraseUnit(uint32_t Addr, bool bDefer);
 	int SendCmd(const NvmCmd_t &Cmd);
 	int ReadStatus(uint8_t &Status);
+	int RegRead(uint8_t Cmd, uint8_t &Val);
+	int RegWrite(uint8_t Cmd, uint8_t Val);
+	int SetQuadEnable(const NvmQe_t &Qe);
 
 	/// Arm a transfer before the call that can complete inside it.
 	void XferBegin(void);
