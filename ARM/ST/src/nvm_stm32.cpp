@@ -541,9 +541,12 @@ extern "C" bool Stm32FlashEccNmi(void)
 		return false;
 	}
 
-	// Same decode as HAL_FLASHEx_GetEccInfo: the field counts 8 byte steps
-	// from the start of the bank.
-	uintptr_t off = (uintptr_t)(eccr & FLASH_ECCR_ADDR_ECC_Msk) << 3;
+	// ADDR_ECC is the byte offset of the failing word from the start of its
+	// bank, as RM0515 describes FLASH_ECCR. HAL_FLASHEx_GetEccInfo shifts it
+	// left by 3, but the field is exactly as wide as the largest bank of the
+	// line is in bytes: 20 bits on the lines with 1 MB banks (WBA52, WBA54,
+	// WBA55, WBA6x), 19 on the 512 KB WBA50.
+	uintptr_t off = (uintptr_t)(eccr & FLASH_ECCR_ADDR_ECC_Msk);
 	bool hit = false;
 
 #ifdef ST_FLASH_CR_BKER
@@ -563,15 +566,6 @@ extern "C" bool Stm32FlashEccNmi(void)
 	hit = StEccInWindow(FLASH_BASE + off);
 #endif
 
-	// ECCC set during the read: a corrected error came first and the
-	// controller kept its address, not the address of the double error. The
-	// read clears ECCC before it starts, so an error during the read is the
-	// read's own.
-	if (hit == false && (eccr & FLASH_ECCR_ECCC) != 0)
-	{
-		hit = true;
-	}
-
 	if (hit == false)
 	{
 		return false;
@@ -580,7 +574,67 @@ extern "C" bool Stm32FlashEccNmi(void)
 	s_bEccHit = true;
 	ST_FLASH_ECCR = (ST_FLASH_ECCR & FLASH_ECCR_ECCIE) | FLASH_ECCR_ECCD | FLASH_ECCR_ECCC;
 
+	// A cache line filled by the failed read holds the damaged bytes and
+	// would give them to the next read of the same address without an ECC
+	// check, and without the NMI. An enabled ICACHE is invalidated before
+	// the read is retried.
+	StFlashCacheFlush();
+
 	return true;
+}
+
+// Copy Len bytes of flash at Addr, one flash word at a time. ECCR takes an
+// error only while ECCC and ECCD are both clear (RM0515 FLASH_ECCR): a
+// corrected error left set, by an earlier word of the read or by anything
+// else, would keep a double error in the next word from raising the NMI, and
+// the read would return the damaged bytes. ECCC is therefore cleared before
+// each word. Set again after the word, by the word's own corrected error or
+// by an interrupt or a code fetch in between, it may have hidden a double
+// error in the word, so the word is read once more with ECCC clear. Returns
+// false when the NMI took a double error inside the read.
+static bool StFlashEccCopy(uint8_t *pBuff, uintptr_t Addr, int Len)
+{
+	s_bEccHit = false;
+	s_EccFrom = Addr;
+	s_EccTo = Addr + (uintptr_t)Len;
+
+	while (Len > 0 && s_bEccHit == false)
+	{
+		int n = NVM_INTRF_WRITE_GRAN - (int)(Addr % NVM_INTRF_WRITE_GRAN);
+
+		if (n > Len)
+		{
+			n = Len;
+		}
+
+		for (int pass = 0; pass < 2; pass++)
+		{
+			ST_FLASH_ECCR = (ST_FLASH_ECCR & FLASH_ECCR_ECCIE) | FLASH_ECCR_ECCC;
+			memcpy(pBuff, (const void *)Addr, (size_t)n);
+			// The NMI of a load can come a few instructions after it, so
+			// ECCC and the hit are looked at once the loads are done.
+			__DSB();
+			__ISB();
+
+			if (s_bEccHit || (ST_FLASH_ECCR & FLASH_ECCR_ECCC) == 0)
+			{
+				break;
+			}
+		}
+
+		pBuff += n;
+		Addr += (uintptr_t)n;
+		Len -= n;
+	}
+
+	s_EccFrom = 0;
+	s_EccTo = 0;
+
+	bool ok = s_bEccHit == false;
+
+	s_bEccHit = false;
+
+	return ok;
 }
 #endif
 
@@ -768,24 +822,9 @@ static int NvmRxData(DevIntrf_t *pIntrf, uint8_t *pBuff, int Len)
 	// The flash is memory mapped, so a read is a copy from the bus address.
 #ifdef ST_FLASH_ECCR
 	// A word failing its ECC check raises the NMI during the copy; the copy
-	// then holds bytes that are not the data and the read fails. A corrected
-	// error left recorded from an earlier read keeps the controller from
-	// recording the address of the next one, so ECCC is cleared first.
-	ST_FLASH_ECCR = (ST_FLASH_ECCR & FLASH_ECCR_ECCIE) | FLASH_ECCR_ECCC;
-	s_bEccHit = false;
-	s_EccFrom = FrameAddr(dev);
-	s_EccTo = FrameAddr(dev) + (uintptr_t)Len;
-	memcpy(pBuff, (const void *)FrameAddr(dev), (size_t)Len);
-	// The NMI of the last load can come a few instructions after it, so
-	// the window stays open until the loads are done.
-	__DSB();
-	__ISB();
-	s_EccFrom = 0;
-	s_EccTo = 0;
-	if (s_bEccHit)
+	// then holds bytes that are not the data and the read fails.
+	if (StFlashEccCopy(pBuff, FrameAddr(dev), Len) == false)
 	{
-		s_bEccHit = false;
-
 		return 0;
 	}
 #else
