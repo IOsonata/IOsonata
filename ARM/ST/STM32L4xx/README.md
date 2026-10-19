@@ -261,8 +261,9 @@ the instances the L432 does not have; the code generated for the L476, L496
 and L4S9 differs only by the new check in I2CInit and SPIInit.
 
 The STM32L432 examples UartLoopback and UartPrbsTxTest select NUCLEO_L432KC
-in `board.h`: USART1, DevNo 1, on Arduino Nano D0 PA10 RX and D1 PA9 TX, AF7.
-The ST-LINK virtual COM port is USART2, DevNo 2, RX PA15 AF3 and TX PA2 AF7.
+in `board.h`: the ST-LINK virtual COM port, USART2, DevNo 2, RX PA15 AF3
+and TX PA2 AF7 (2026-10-19; the loopback used USART1 before). USART1, DevNo
+1, is on Arduino Nano D0 PA10 RX and D1 PA9 TX, AF7.
 Like the L476 examples they link `rdimon` semihosting and use the example
 defaults at 1 Mbaud: interrupts without DMA for the loopback, DMA without
 interrupts for PRBS TX. The library in its four configurations and both
