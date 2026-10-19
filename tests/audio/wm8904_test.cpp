@@ -12,6 +12,9 @@ public:
 	unsigned FailAt = 0;
 	uint16_t Id = 0x8904;
 	bool ReadFailure = false;
+	bool MclkPresent = false;
+	unsigned BlockedAccesses = 0;
+	int DropReg = -1;
 
 	operator DevIntrf_t *()
 	{
@@ -35,13 +38,15 @@ public:
 
 	int Read(uint32_t Addr, const uint8_t *pReg, int RegLen, uint8_t *pData, int Len)
 	{
-		assert(Addr == 0x1A && RegLen == 1 && Len == 2 && pReg[0] == 0);
-		if (ReadFailure)
+		assert(Addr == 0x1A && RegLen == 1 && Len == 2);
+		if (ReadFailure || (*pReg != 0x16 && !MclkPresent && (Registers[0x16] & 4)))
 		{
 			return 0;
 		}
-		pData[0] = Id >> 8;
-		pData[1] = Id;
+		uint16_t value = *pReg == 0 ? Id : Registers[*pReg];
+
+		pData[0] = value >> 8;
+		pData[1] = value;
 		return 2;
 	}
 
@@ -54,6 +59,17 @@ public:
 		}
 		uint16_t value = uint16_t(pData[0]) << 8 | pData[1];
 
+		// WM8904 Rev 4.1: with CLK_SYS_ENA set, only R22 is accessible
+		// without MCLK. Transferring the bytes does not apply the setting.
+		if (*pReg != 0x16 && !MclkPresent && (Registers[0x16] & 4))
+		{
+			BlockedAccesses++;
+			return 2;
+		}
+		if (*pReg == DropReg)
+		{
+			return 2;
+		}
 		if (*pReg == 0)
 		{
 			assert(value == 0);
@@ -89,26 +105,31 @@ int main()
 	assert(!codec.Valid() && !codec.Enable());
 	assert(!codec.Init(cfg, nullptr));
 	assert(codec.Init(cfg, &control));
+	assert(control.BlockedAccesses == 0);
 	assert(codec.Valid() && codec.DeviceID() == 0x8904 && s_Delay == 100);
 	assert(control.Registers[0x15] == 0xC02);
 	assert(control.Registers[0x16] == 6 && control.Registers[0x19] == 2);
 	assert(control.Registers[0x27] == 0x1800 && control.Registers[0x79] == 8);
 	assert(control.Registers[0x12] == 2 && control.Registers[0x0C] == 0);
 	assert(control.Registers[0x18] == 0x10 && control.Registers[0x0A] == 1);
-	assert(control.Registers[0x24] == 240 && control.Registers[0x25] == 0x1F0);
+	assert(control.Registers[0x24] == 239 && control.Registers[0x25] == 0x1EF);
 	unsigned writes = control.Writes;
 
 	assert(codec.Enable() && control.Writes == writes);
-	assert(codec.Gain(999999) == 23625 && codec.Gain() == 23625);
-	assert(control.Registers[0x25] == 0x1FF);
+	control.MclkPresent = true;
+	assert(codec.Gain(999999) == 17625 && codec.Gain() == 17625);
+	assert(control.Registers[0x25] == 0x1EF);
 	assert(codec.Gain(-999999) == -71625 && control.Registers[0x25] == 0x101);
 	assert(codec.Gain(-200) == -375 && codec.Gain(200) == 375);
+	control.MclkPresent = false;
 	codec.Disable();
+	assert(control.BlockedAccesses == 0);
 	assert(codec.Valid() && control.Registers[0x12] == 0 && control.Registers[0x27] == 0);
-	assert(control.Registers[0x16] == 4 && control.Registers[0x24] == 0x100);
+	assert(control.Registers[0x16] == 0 && control.Registers[0x24] == 0x100);
 	assert(codec.Enable() && control.Registers[0x12] == 2 && control.Registers[0x25] == 0x1C1);
 	codec.Reset();
 	assert(codec.Valid() && control.Registers[0x27] == 0x1800);
+	assert(control.BlockedAccesses == 0);
 	codec.PowerOff();
 	assert(!codec.Valid() && !codec.Enable() && control.Registers[0x16] == 0);
 	cfg.MicInput = 1;
@@ -148,9 +169,22 @@ int main()
 		codec.PowerOff();
 	}
 	control.FailAt = 0;
+	const int droppedRegisters[] = { 0x15, 0x19, 0x18, 0x79, 0x27, 0x12, 0x24, 0x16 };
+
+	for (int reg : droppedRegisters)
+	{
+		control.DropReg = reg;
+		assert(!codec.Init(cfg, &control));
+		assert(!codec.Valid());
+		control.DropReg = -1;
+		codec.PowerOff();
+	}
+	// MCU-only reset can leave SYSCLK enabled while the MCU stops MCLK.
+	control.Registers[0x16] = 6;
 	assert(codec.Init(cfg, &control));
+	assert(control.BlockedAccesses == 0);
 	control.FailAt = control.Writes + 1;
 	codec.Disable();
 	assert(!codec.Valid());
-	puts("WM8904 registers, endian, rate, gain, lifecycle and write failures PASS");
+	puts("WM8904 registers, endian, rate, gain, lifecycle, missing MCLK and lost writes PASS");
 }

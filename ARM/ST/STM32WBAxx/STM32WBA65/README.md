@@ -1016,7 +1016,8 @@ receives the codec output. Board headers contain only pin/configuration
 mapping. `Wm8904` is a generic `Device` accepting an injected `DeviceIntrf`
 for control; PCM is read through the existing `I2S`/`DeviceIntrf` interface.
 The codec driver supports DMICDAT1/2 capture, 16/24-bit I2S or justified
-formats, gain in 0.375 dB steps, enable/disable, reset and power off. Analogue
+formats, gain from -71.625 to +17.625 dB in 0.375 dB steps, enable/disable,
+reset and power off. Analogue
 capture and headphone/line playback are not implemented in this codec driver.
 
 ### WBA I2S operation
@@ -1081,7 +1082,14 @@ continues to own the GPDMA interrupt vectors and allocate channels alongside
 UART, I2C and SPI.
 
 The example disables capture during the codec's 100 ms bias settling delay,
-then enables DMA capture. Its RX FIFO holds 1,024 mono samples. Main-loop
+then enables DMA capture. The codec driver stages and reads back its settings
+with CLK_SYS_ENA cleared; it enables SYSCLK only after configuring the capture
+path. This permits initialization before the audio interface starts MCLK.
+WM8904 requires MCLK for ordinary control register access once CLK_SYS_ENA is
+set; only the clock control register R22 remains accessible without MCLK.
+Disable/PowerOff clear CLK_SYS_ENA before other writes, including after an
+MCU-only reset. MCLK must be running for live gain changes after Enable.
+The RX FIFO holds 1,024 mono samples. Main-loop
 processing drains it and refreshes the OLED every 100 ms. A capture error or
 500 ms without samples stops capture and displays an error.
 
@@ -1098,6 +1106,9 @@ Validation:
   capture. Both -O0 and -Os pass. Native PDM regression also passes.
 - Generic codec tests run at -O0/-Os under ASan/UBSan, checking register byte
   order, routing, format, gain, lifecycle and each initialization write failing.
+  The model enforces the missing-MCLK register restriction, including startup,
+  restart and shutdown with MCLK stopped. Lost configuration writes are caught
+  by readback before SYSCLK is enabled.
 - Physical onboard microphone capture and sustained DMA timing need board
   validation. A successful simulation does not establish those electrical
   and timing results.

@@ -41,6 +41,9 @@ SOFTWARE.
 
 // Digital microphone capture. The codec is the I2S slave; its external MCLK
 // must be 256 times the actual frame rate returned by the audio interface.
+// Init/Enable stage configuration with SYSCLK disabled and enable it last, so
+// MCLK may start afterward. MCLK must run during live gain changes. Disable
+// and PowerOff first gate SYSCLK and also work after MCLK has stopped.
 typedef struct __Wm8904_Config
 {
 	uint8_t DevAddr;	   //!< Seven-bit control address, normally 0x1A.
@@ -67,6 +70,7 @@ public:
 private:
 	bool ReadReg(uint8_t Reg, uint16_t &Value);
 	bool WriteReg(uint8_t Reg, uint16_t Value);
+	bool VerifyReg(uint8_t Reg, uint16_t Value, uint16_t Mask);
 	Wm8904Cfg_t vCfg{};
 	bool vbEnabled = false;
 };

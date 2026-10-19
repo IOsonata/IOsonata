@@ -97,6 +97,13 @@ bool Wm8904::WriteReg(uint8_t Reg, uint16_t Value)
 	return true;
 }
 
+bool Wm8904::VerifyReg(uint8_t Reg, uint16_t Value, uint16_t Mask)
+{
+	uint16_t actual;
+
+	return ReadReg(Reg, actual) && (actual & Mask) == (Value & Mask);
+}
+
 bool Wm8904::Init(const Wm8904Cfg_t &Cfg, DeviceIntrf *pIntrf)
 {
 	uint16_t id;
@@ -121,7 +128,10 @@ bool Wm8904::Init(const Wm8904Cfg_t &Cfg, DeviceIntrf *pIntrf)
 	Interface(pIntrf);
 	DeviceAddress(Cfg.DevAddr);
 	vCfg = Cfg;
-	if (!ReadReg(WM8904_RESET, id) || id != 0x8904 || !WriteReg(WM8904_RESET, 0))
+	// R22 remains accessible without MCLK, even after an MCU-only reset
+	// left the codec running. All other accesses below use CLK_SYS_ENA=0.
+	if (!WriteReg(WM8904_CLOCK_ENABLE, 0) || !ReadReg(WM8904_RESET, id) ||
+		id != 0x8904 || !WriteReg(WM8904_RESET, 0))
 	{
 		return false;
 	}
@@ -150,7 +160,7 @@ bool Wm8904::Init(const Wm8904Cfg_t &Cfg, DeviceIntrf *pIntrf)
 		format |= 2U << 2;
 	}
 	// Outputs and analogue input PGAs remain powered down for DMIC capture.
-	if (!WriteReg(WM8904_CLOCK_ENABLE, 4) || !WriteReg(WM8904_BIAS, 0x18) ||
+	if (!WriteReg(WM8904_BIAS, 0x18) ||
 		!WriteReg(WM8904_VMID, 0x47))
 	{
 		PowerOff();
@@ -163,7 +173,11 @@ bool Wm8904::Init(const Wm8904Cfg_t &Cfg, DeviceIntrf *pIntrf)
 		!WriteReg(WM8904_AUDIO_FORMAT, format) ||
 		!WriteReg(WM8904_AUDIO_SOURCE, 0x10) ||
 		!WriteReg(WM8904_ADC_OSR, Cfg.Freq < 32000 ? 1 : 0) ||
-		!WriteReg(WM8904_GPIO1, 8))
+		!WriteReg(WM8904_GPIO1, 8) ||
+		!VerifyReg(WM8904_CLOCK_RATE, 0x0C00 | rate, 0x3C07) ||
+		!VerifyReg(WM8904_AUDIO_FORMAT, format, 0x000F) ||
+		!VerifyReg(WM8904_AUDIO_SOURCE, 0x10, 0x00F0) ||
+		!VerifyReg(WM8904_GPIO1, 8, 0x001F))
 	{
 		PowerOff();
 		return false;
@@ -182,7 +196,9 @@ bool Wm8904::Enable()
 	{
 		return true;
 	}
-	if (!WriteReg(WM8904_CLOCK_ENABLE, 6) ||
+	// Configure and read back the capture path before enabling SYSCLK.
+	// Init may run while the audio interface has MCLK stopped.
+	if (!WriteReg(WM8904_CLOCK_ENABLE, 0) ||
 		!WriteReg(WM8904_DMIC, vCfg.MicInput == 2 ? 0x1800 : 0x1000) ||
 		!WriteReg(WM8904_CONVERTER_POWER, 2))
 	{
@@ -190,12 +206,18 @@ bool Wm8904::Enable()
 		return false;
 	}
 	Gain(vCfg.Gain);
-	vbEnabled = Device::Valid();
-	if (!vbEnabled)
+	if (!Device::Valid() ||
+		!VerifyReg(WM8904_DMIC, vCfg.MicInput == 2 ? 0x1800 : 0x1000, 0x1800) ||
+		!VerifyReg(WM8904_CONVERTER_POWER, 2, 0x000F) ||
+		!VerifyReg(WM8904_ADC_LEFT_VOLUME, 192 + vCfg.Gain / 375, 0x00FF) ||
+		!WriteReg(WM8904_CLOCK_ENABLE, 6) ||
+		!VerifyReg(WM8904_CLOCK_ENABLE, 6, 0x0006))
 	{
 		PowerOff();
+		return false;
 	}
-	return vbEnabled;
+	vbEnabled = true;
+	return true;
 }
 
 void Wm8904::Disable()
@@ -204,10 +226,10 @@ void Wm8904::Disable()
 	{
 		return;
 	}
-	if (!WriteReg(WM8904_ADC_LEFT_VOLUME, 0x100) ||
+	if (!WriteReg(WM8904_CLOCK_ENABLE, 0) ||
+		!WriteReg(WM8904_ADC_LEFT_VOLUME, 0x100) ||
 		!WriteReg(WM8904_ADC_RIGHT_VOLUME, 0x100) ||
-		!WriteReg(WM8904_CONVERTER_POWER, 0) || !WriteReg(WM8904_DMIC, 0) ||
-		!WriteReg(WM8904_CLOCK_ENABLE, 4))
+		!WriteReg(WM8904_CONVERTER_POWER, 0) || !WriteReg(WM8904_DMIC, 0))
 	{
 		PowerOff();
 	}
@@ -218,6 +240,7 @@ void Wm8904::PowerOff()
 {
 	if (Interface())
 	{
+		WriteReg(WM8904_CLOCK_ENABLE, 0);
 		WriteReg(WM8904_RESET, 0);
 	}
 	Valid(false);
@@ -240,9 +263,9 @@ int Wm8904::Gain(int MilliDb)
 	{
 		gain = -71625;
 	}
-	else if (gain > 23625)
+	else if (gain > 17625)
 	{
-		gain = 23625;
+		gain = 17625;
 	}
 	int code = 192 + (gain + (gain < 0 ? -187 : 187)) / 375;
 
