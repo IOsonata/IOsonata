@@ -21,6 +21,12 @@
 		      -> bt_pds.cpp (KV over a region)
 		        -> Nvm over the WBA flash (bt_pds_stm32wba.cpp)
 
+		Bond deletion: BtSmpBondClearAll wipes the generic bond table, which
+		the ST host does not fill, and calls BtSmpBondErase. The port's
+		BtSmpBondErase (bt_app_stm32wba.cpp) clears the ST table with
+		aci_gap_clear_security_db between BtSmpBondWbaEraseBegin and
+		BtSmpBondWbaEraseEnd, and the stored image is then erased here.
+
 @author	Hoang Nguyen Hoan
 @date	July 29, 2026
 
@@ -163,6 +169,13 @@ static volatile uint16_t s_StoreWords;
 static uint8_t s_RetryWait;			//!< Poll calls left before the next try, 0 none
 static uint8_t s_RetryInterval;		//!< Wait set by the last failed try, 0 none
 
+// Bond deletion: the stored image is to be erased before any later save
+static volatile bool s_bErasePending;
+// Store request taken back by BtSmpBondWbaEraseBegin, given back when the ST
+// table could not be cleared
+static bool s_bEraseHeldPending;
+static uint16_t s_EraseHeldWords;
+
 // The stack calls this from inside its own processing. As in the Cube
 // reference, which only queues SNVMA_Write, nothing is written here: the
 // request is noted and BtSmpBondWbaFlush, run from the application loop, does
@@ -205,12 +218,61 @@ static void BondStoreFailed(int Err)
 			Err, (unsigned)s_RetryInterval);
 }
 
+// A failed erase waits as a failed save does, but is never dropped: bonds left
+// on the medium would come back at the next reset.
+static void BondEraseFailed(int Err)
+{
+	if (s_RetryInterval < BT_WBA_STORE_RETRY_MAX)
+	{
+		s_RetryInterval = s_RetryInterval == 0 ? 1U : (uint8_t)(s_RetryInterval * 2U);
+	}
+	s_RetryWait = s_RetryInterval;
+	SysLogPrintf(SysLogGet(), "WBA bond: delete failed (%d), retry in %u s\r\n",
+			Err, (unsigned)s_RetryInterval);
+}
+
+// Erase the stored image. BtPdsClear commits the clear before it erases, so a
+// power loss cannot bring the deleted image back. No region (-ENODEV) holds
+// nothing to delete.
+static int BondStoreErase(void)
+{
+	int r = PdsEnsureReady();
+
+	if (r == 0)
+	{
+		r = BtPdsClear();
+	}
+
+	return r == -ENODEV ? 0 : r;
+}
+
 extern "C" void BtSmpBondWbaFlush(void)
 {
-	if (s_bStorePending == false || s_RetryWait != 0)
+	if ((s_bStorePending == false && s_bErasePending == false) || s_RetryWait != 0)
 	{
 		return;
 	}
+
+	// A deletion goes first. A store request made after it names the cache
+	// the ST stack has after its table was cleared.
+	if (s_bErasePending)
+	{
+		int r = BondStoreErase();
+		if (r != 0)
+		{
+			BondEraseFailed(r);
+			return;
+		}
+		s_bErasePending = false;
+		s_RetryInterval = 0;
+		BOND_PRINTF("WBA bond: stored bonds deleted\r\n");
+
+		if (s_bStorePending == false)
+		{
+			return;
+		}
+	}
+
 	// Consume this request before writing so a new request stays pending.
 	s_bStorePending = false;
 
@@ -354,6 +416,44 @@ extern "C" size_t BtSmpBondWbaRestore(void *pCacheBuf, size_t Capacity)
 extern "C" void BtSmpBondWbaCommit(uint16_t ConnHdl)
 {
 	(void)ConnHdl;
+}
+
+// ---------------------------------------------------------------------------
+// Bond deletion, around aci_gap_clear_security_db in BtSmpBondErase.
+//
+// Begin takes back a store request not yet written: it names the cache as it
+// was before the clear, and its word count could cover records the clear
+// removed. A request the stack makes during or after the clear is the one
+// saved. End with bCleared true schedules the erase of the stored image,
+// done by BtSmpBondWbaFlush from the application loop before any save. With
+// bCleared false the ST table still holds the bonds, the stored image is
+// kept and the request taken back is given back.
+// ---------------------------------------------------------------------------
+extern "C" void BtSmpBondWbaEraseBegin(void)
+{
+	s_bEraseHeldPending = s_bStorePending;
+	s_EraseHeldWords = s_StoreWords;
+	s_bStorePending = false;
+}
+
+extern "C" void BtSmpBondWbaEraseEnd(bool bCleared)
+{
+	if (bCleared == false)
+	{
+		if (s_bEraseHeldPending && s_bStorePending == false)
+		{
+			s_StoreWords = s_EraseHeldWords;
+			s_bStorePending = true;
+		}
+		s_bEraseHeldPending = false;
+
+		return;
+	}
+
+	s_bEraseHeldPending = false;
+	s_bErasePending = true;
+	s_RetryWait = 0;
+	s_RetryInterval = 0;
 }
 
 // ---------------------------------------------------------------------------

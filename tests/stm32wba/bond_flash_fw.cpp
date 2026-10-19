@@ -19,7 +19,10 @@ is the WBA65 one (vectors_stm32wba65.c), so an NMI the emulator raises for a
 flash double ECC error runs the port's NMI_Handler; BondFwNmiTrap is where
 the emulator returns from it. Boots 6 to 8
 are the power cut sweep of run_bond_flash.py --powercut: prepare the old
-image, the save the emulator cuts, and the boot after the cut.
+image, the save the emulator cuts, and the boot after the cut. Boots 9 to 12
+are the bond deletion of BtSmpBondErase: the firmware plays the ST stack
+clearing its table between BtSmpBondWbaEraseBegin and BtSmpBondWbaEraseEnd.
+Boots 13 and 14 are the power cut sweep of a deletion.
 
 Not hardware validation.
 
@@ -71,6 +74,8 @@ extern "C" size_t BtSmpBondWbaRestore(void *pCacheBuf, size_t Capacity);
 extern "C" void BLEPLAT_NvmStore(const uint64_t *ptr, uint16_t size);
 extern "C" void BtSmpBondWbaFlush(void);
 extern "C" void BtSmpBondWbaPoll(void);
+extern "C" void BtSmpBondWbaEraseBegin(void);
+extern "C" void BtSmpBondWbaEraseEnd(bool bCleared);
 
 extern "C" void BondFwConsole(const char *pStr, int Len) __attribute__((noinline));
 extern "C" void BondFwProtect(int Mode) __attribute__((noinline));
@@ -416,6 +421,114 @@ static void BootCutCheck(void)
 	Check(StoredIs(g_BondFwArg[2], g_BondFwArg[3]), "save after the power cut stored");
 }
 
+// Bond deletion as BtSmpBondErase does it. Words is the size of the save
+// request the stack makes while it clears its table, 0 for none. bCleared is
+// what aci_gap_clear_security_db reports.
+static void Erase(bool bCleared, uint32_t Seed = 0, uint32_t Words = 0)
+{
+	BtSmpBondWbaEraseBegin();
+	if (bCleared)
+	{
+		memset(s_Cache, 0, sizeof(s_Cache));
+		if (Words != 0)
+		{
+			Fill(Seed, Words);
+			BLEPLAT_NvmStore(s_Cache, (uint16_t)Words);
+		}
+	}
+	BtSmpBondWbaEraseEnd(bCleared);
+}
+
+// Deletion with no save request from the stack
+static void BootErase0(void)
+{
+	Check(BtSmpBondWbaCacheInit(s_Cache, BOND_FW_CACHE_WORDS) == 0, "delete: erased store");
+	Save(31);
+	Erase(true);
+	Check(StoredIs(31), "delete: the image stays until the application loop runs");
+	BtSmpBondWbaFlush();
+	Check(NothingStored(), "delete: the stored image is erased");
+}
+
+// The deletion holds across a reset. A save request still waiting when the
+// table is cleared names the old cache and is dropped; one the stack makes
+// while clearing is saved after the erase.
+static void BootErase1(void)
+{
+	Check(BtSmpBondWbaCacheInit(s_Cache, BOND_FW_CACHE_WORDS) == 0,
+		  "delete: nothing restored after reset");
+
+	Save(32);
+	Fill(33);
+	BLEPLAT_NvmStore(s_Cache, BOND_FW_WORDS);
+	Erase(true);
+	BtSmpBondWbaFlush();
+	Check(NothingStored(), "delete: a save request made before the clear is dropped");
+
+	Save(34);
+	Erase(true, 35, 20);
+	BtSmpBondWbaFlush();
+	Check(StoredIs(35, 20), "delete: the save request of the clear is stored after the erase");
+}
+
+// A refused clear keeps everything. A medium refusing the erase is retried
+// until it takes it, then the store takes the next save.
+static void BootErase2(void)
+{
+	Check(BtSmpBondWbaCacheInit(s_Cache, BOND_FW_CACHE_WORDS) == 20 && CacheIs(35, 20),
+		  "delete: the save after the erase restored after reset");
+
+	Save(36);
+	Fill(37);
+	BLEPLAT_NvmStore(s_Cache, BOND_FW_WORDS);
+	Erase(false);
+	BtSmpBondWbaFlush();
+	Check(StoredIs(37), "delete: a refused clear keeps the image and the waiting save");
+
+	BondFwProtect(0);
+	Erase(true);
+	BtSmpBondWbaFlush();
+	Seconds(3);
+	Check(StoredIs(37), "delete: the image stays while the medium refuses the erase");
+	BondFwProtect(-1);
+	Seconds(5);
+	Check(NothingStored(), "delete: the erase is retried until the medium takes it");
+
+	Save(38);
+	Check(StoredIs(38), "delete: a save after the deletion is stored");
+}
+
+static void BootErase3(void)
+{
+	Check(BtSmpBondWbaCacheInit(s_Cache, BOND_FW_CACHE_WORDS) == BOND_FW_WORDS && CacheIs(38),
+		  "delete: the save after the retried erase restored after reset");
+}
+
+// Power cut sweep of a deletion, after BootCutPrepare: the deletion the
+// emulator cuts, then the boot after the cut.
+static void BootCutErase(void)
+{
+	Check(BtSmpBondWbaCacheInit(s_Cache, BOND_FW_CACHE_WORDS) == g_BondFwArg[1] &&
+		  CacheIs(g_BondFwArg[0], g_BondFwArg[1]), "erase cut: old image restored before the deletion");
+	Erase(true);
+	BtSmpBondWbaFlush();
+	Check(NothingStored(), "erase cut: deletion completed");
+}
+
+// The old image or nothing, never anything else, and the store takes the
+// next save
+static void BootCutEraseCheck(void)
+{
+	uint16_t n = BtSmpBondWbaCacheInit(s_Cache, BOND_FW_CACHE_WORDS);
+	bool isOld = n == g_BondFwArg[1] && CacheIs(g_BondFwArg[0], g_BondFwArg[1]);
+	bool isNone = n == 0 && s_Cache[0] == 0;
+
+	Print("erase cut: restored %s\r\n", isOld ? "old" : (isNone ? "none" : "neither"));
+	Check(isOld || isNone, "after a power cut in a deletion the restore is the old image or nothing");
+	Save(g_BondFwArg[2], g_BondFwArg[3]);
+	Check(StoredIs(g_BondFwArg[2], g_BondFwArg[3]), "save after the power cut in a deletion stored");
+}
+
 extern "C" void __cxa_pure_virtual(void)
 {
 	while (1)
@@ -430,7 +543,9 @@ extern "C" int main(void)
 {
 	static void (* const s_Boot[])(void) = {
 		Boot0, Boot1, Boot2, Boot3, Boot4, BootNoRegion,
-		BootCutPrepare, BootCutSave, BootCutCheck
+		BootCutPrepare, BootCutSave, BootCutCheck,
+		BootErase0, BootErase1, BootErase2, BootErase3,
+		BootCutErase, BootCutEraseCheck
 	};
 	uint32_t boot = g_BondFwBoot;
 

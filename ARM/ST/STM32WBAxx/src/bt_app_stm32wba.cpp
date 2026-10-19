@@ -437,6 +437,30 @@ void BtAppCheckStatus(void)
 	}
 }
 
+extern "C" void BtSmpBondWbaEraseBegin(void);
+extern "C" void BtSmpBondWbaEraseEnd(bool bCleared);
+
+// Bond deletion, called by BtSmpBondClearAll after it wiped the generic bond
+// table. The ST host pairs on this port and keeps the keys of every bonded
+// peer in its own security database, so the generic table is empty here.
+// Clear the ST database; the bond store then erases the stored image from the
+// application loop, before the stack's next save. Replaces the empty weak
+// default in bt_smp_bond.cpp.
+extern "C" void BtSmpBondErase(void)
+{
+	BtSmpBondWbaEraseBegin();
+
+	tBleStatus status = aci_gap_clear_security_db();
+
+	BtSmpBondWbaEraseEnd(status == BLE_STATUS_SUCCESS);
+
+	if (status != BLE_STATUS_SUCCESS)
+	{
+		SysLogPrintf(SysLogGet(), "WBA bond: security database not cleared "
+					 "(0x%02x), bonds kept\r\n", status);
+	}
+}
+
 // --- GATT client discovery (central role) ---
 //
 // ST runs each discovery procedure to completion and signals the end with a

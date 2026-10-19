@@ -40,12 +40,22 @@ reads of the header of the sector holding the image, must leave the sector
 and the image in place: PDS tries a read three times before it takes the
 data as damaged.
 
+Bond deletion, the four boots of BtSmpBondErase on a store of its own: the
+stored image is erased from the application loop and stays erased across a
+reset; a save request left from before the clear is dropped, one made by the
+clear is saved after the erase; a clear the stack refuses keeps the image and
+the waiting save; an erase the medium refuses is tried after 1, 2 and 4 s
+until it succeeds, and the next save is stored.
+
 With --powercut it also cuts the power at every program and erase of one
 save, whole or left half done, for a bank switch in each direction and for
 a save that runs the PDS garbage collection, then boots: the restore must
 give the old or the new image and the store must take the next save. A
 half done cut leaves a damaged quad word, so the next boot takes the flash
-ECC NMI, which must not stop it. The sweep runs about 15 minutes.
+ECC NMI, which must not stop it. The sweep runs about 15 minutes. It also
+cuts every program and erase of a bond deletion: the restore must give the
+old image or nothing, and a deleted image must not come back at a later cut.
+--powercut-erase runs only the deletion sweep.
 
 The model is a reading of the HAL and the reference manual, so it finds
 errors of logic, layout and sequence, and not differences of the silicon.
@@ -608,15 +618,25 @@ RETRY = re.compile(r'WBA bond: save failed \((-?\d+)\), retry in (\d+) s')
 DROP = re.compile(r'WBA bond: save dropped \((-?\d+)\)')
 SAVED = re.compile(r'WBA bond: saved (\d+) bytes')
 RESTORED = re.compile(r'WBA bond: restored (\d+) bytes')
+DEL_RETRY = re.compile(r'WBA bond: delete failed \((-?\d+)\), retry in (\d+) s')
+DELETED = re.compile(r'WBA bond: stored bonds deleted')
 
 
 def events(st):
-    """Retry, drop and saved lines with the poll count when printed."""
+    """Retry, drop, saved, delete retry and deleted lines with the poll count
+    when printed."""
     ev = []
     for poll, line in st['lines']:
         m = RETRY.search(line)
         if m:
             ev.append((poll, 'retry', int(m.group(2)), int(m.group(1))))
+            continue
+        m = DEL_RETRY.search(line)
+        if m:
+            ev.append((poll, 'delretry', int(m.group(2)), int(m.group(1))))
+            continue
+        if DELETED.search(line):
+            ev.append((poll, 'deleted', 0, 0))
             continue
         m = DROP.search(line)
         if m:
@@ -637,6 +657,9 @@ def expect_events(errors, boot, got, want):
 BOOT_CUT_PREPARE = 6
 BOOT_CUT_SAVE = 7
 BOOT_CUT_CHECK = 8
+BOOT_ERASE = 9			# first of the four bond deletion boots
+BOOT_CUT_ERASE = 13
+BOOT_CUT_ERASE_CHECK = 14
 
 
 def boot_ok(errors, label, result, st, flash):
@@ -717,6 +740,63 @@ def powercut(elf, errors):
     return total, damaged
 
 
+def powercut_erase(elf, errors):
+    """Cut the power at every program and erase of one bond deletion, whole or
+    half done, then boot: the restore must give the old image or nothing, and
+    once a cut gives nothing every later cut must too, so a deleted image never
+    comes back."""
+    # old seed, old words, seed and words of the save after the cut, fillers,
+    # old image in bank 1
+    cases = [
+        ('deletion of an image in bank 0', [41, 39, 42, 39, 0, 0]),
+        ('deletion of an image in bank 1', [43, 64, 44, 39, 0, 1]),
+        ('deletion with a sector full of other records', [45, 39, 46, 64, 30, 0]),
+    ]
+    total = 0
+    for name, args in cases:
+        mem = bytearray(b'\xff' * NVM_MAP)
+        result, st, fl = run_boot(elf, BOOT_CUT_PREPARE, mem, args=args)
+        boot_ok(errors, f'{name}, prepare', result, st, fl)
+        start = bytes(mem)
+        ref = bytearray(start)
+        result, st, fl = run_boot(elf, BOOT_CUT_ERASE, ref, args=args)
+        boot_ok(errors, f'{name}, uncut deletion', result, st, fl)
+        steps = fl.ops
+        if steps == 0:
+            errors.append(f'{name}: the deletion wrote nothing')
+            continue
+        counts = {'old': 0, 'none': 0, 'neither': 0}
+        for tear in (False, True):
+            seen_none = False
+            for cut in range(steps):
+                mem = bytearray(start)
+                torn = set()
+                _, st, fl = run_boot(elf, BOOT_CUT_ERASE, mem, torn, cut, tear, args)
+                if not fl.cut_done:
+                    errors.append(f'{name}: cut {cut} was not reached')
+                    continue
+                label = f'{name}, cut {cut}{" torn" if tear else ""}'
+                result, st, fl = run_boot(elf, BOOT_CUT_ERASE_CHECK, mem, torn, args=args)
+                boot_ok(errors, label, result, st, fl)
+                got = None
+                for _, t in st['lines']:
+                    m = re.search(r'erase cut: restored (\w+)', t)
+                    if m:
+                        got = m.group(1)
+                if got is None:
+                    errors.append(f'{label}: no restore line')
+                    continue
+                counts[got] += 1
+                if got == 'none':
+                    seen_none = True
+                elif got == 'old' and seen_none:
+                    errors.append(f'{label}: the deleted image came back after a later cut')
+                total += 1
+        print(f'  {name}: {steps} flash operations, {2 * steps} cuts, restored old {counts["old"]}, '
+              f'nothing {counts["none"]}, neither {counts["neither"]}')
+    return total
+
+
 def main():
     if not shutil.which('arm-none-eabi-g++'):
         print('NOT RUN: arm-none-eabi-g++ not found')
@@ -737,9 +817,10 @@ def main():
         elf_none = build(tmp, False)
 
         mem = bytearray(b'\xff' * NVM_MAP)
-        runs = [(elf, b) for b in range(BOOTS)] + [(elf_none, BOOT_NO_REGION)]
+        runs = [(elf, b) for b in range(BOOTS)] + [(elf_none, BOOT_NO_REGION)] + \
+            [(elf, b) for b in range(BOOT_ERASE, BOOT_ERASE + 4)]
         for path, boot in runs:
-            if path is elf_none:
+            if path is elf_none or boot == BOOT_ERASE:
                 mem = bytearray(b'\xff' * NVM_MAP)
             result, st, flash = run_boot(path, boot, mem)
             if st['hang'] or st['nmis']:
@@ -798,6 +879,25 @@ def main():
                                   f'{stamps}, expected 3 at [0, 0, 10]')
                 if flash.stats['programs'] or flash.stats['erases']:
                     errors.append(f'boot {boot}: flash written without a region')
+            elif boot == BOOT_ERASE:
+                expect_events(errors, boot, ev, [(0, 'saved', 312), (0, 'deleted', 0)])
+            elif boot == BOOT_ERASE + 1:
+                # The save request made before the clear never reaches the medium
+                expect_events(errors, boot, ev, [(0, 'saved', 312), (0, 'deleted', 0),
+                                                 (0, 'saved', 312), (0, 'deleted', 0),
+                                                 (0, 'saved', 160)])
+            elif boot == BOOT_ERASE + 2:
+                want = [(0, 'saved', 312), (0, 'saved', 312), (0, 'delretry', 1), (1, 'delretry', 2),
+                        (3, 'delretry', 4), (7, 'deleted', 0), (8, 'saved', 312)]
+                expect_events(errors, boot, ev, want)
+                codes = {e[3] for e in ev if e[1] == 'delretry'}
+                if not codes or any(c >= 0 for c in codes):
+                    errors.append(f'boot {boot}: error codes of the refused erases {sorted(codes)}')
+                if flash.stats['wrperr'] == 0:
+                    errors.append(f'boot {boot}: the protection was never hit')
+            elif boot == BOOT_ERASE + 3:
+                if not any(RESTORED.search(t) and RESTORED.search(t).group(1) == '312' for t in text):
+                    errors.append(f'boot {boot}: no "restored 312 bytes" line')
 
         # A read error that passes: the first quad word of the store, the
         # header of the sector holding the image, fails twice at boot, fewer
@@ -823,6 +923,10 @@ def main():
             cuts, damaged = powercut(elf, errors)
             print(f'  {cuts} power cuts checked')
             print(f'  {damaged} half done cuts left a quad word that raised the flash ECC NMI at the next boot')
+        if '--powercut' in sys.argv or '--powercut-erase' in sys.argv:
+            print('power cut sweep of a bond deletion:')
+            cuts = powercut_erase(elf, errors)
+            print(f'  {cuts} power cuts checked')
 
     print(f'{passed} passed, {failed} failed')
     print('  model counters:', totals)
