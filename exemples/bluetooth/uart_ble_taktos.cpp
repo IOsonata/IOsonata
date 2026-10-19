@@ -8,6 +8,15 @@ This application demo shows UART Rx/Tx over BLE custom service using EHAL librar
 For evaluating power consumption of the UART, the button 1 is used to enable/disable it.
 This example also demonstrates passkey paring mode.
 
+One thread, the BLE task, serves Bluetooth. It runs the work the stack queues
+with BtEvtQue and the UART to BLE step, so every call into the Bluetooth
+stack is made from that thread, which a port running its host stack in the
+application needs.
+
+board.h gives UART_PINS, LED_PINS, BUTTON_PINS and the CONNECT_LED_PORT /
+CONNECT_LED_PIN / CONNECT_LED_LOGIC of the link LED. It can also set
+UART_DEVNO, BUT1_INT and BLE_TAKTOS_THREAD_STACK.
+
 @author Hoang Nguyen Hoan
 @date   Feb. 4, 2017
 
@@ -41,7 +50,6 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "TaktOS.h"
 #include "TaktOSThread.h"
-#include "TaktOSSem.h"
 #include "TaktOSQueue.h"
 
 #include "bluetooth/bt_app.h"
@@ -50,9 +58,18 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "bluetooth/blueio_blesrvc.h"
 #include "coredev/uart.h"
 #include "coredev/iopincfg.h"
+#include "coredev/interrupt.h"
 #include "iopinctrl.h"
 
 #include "board.h"
+
+#ifndef UART_DEVNO
+#define UART_DEVNO						0
+#endif
+
+#ifndef BUT1_INT
+#define BUT1_INT						0
+#endif
 
 #define DEVICE_NAME                     "UARTTaktOS"                            //!< Name of device. Will be included in the advertising data.
 
@@ -69,10 +86,12 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define MIN_CONN_INTERVAL               10//MSEC_TO_UNITS(10, UNIT_1_25_MS)             /**< Minimum acceptable connection interval (20 ms), Connection interval uses 1.25 ms units. */
 #define MAX_CONN_INTERVAL               40//MSEC_TO_UNITS(40, UNIT_1_25_MS)             /**< Maximum acceptable connection interval (75 ms), Connection interval uses 1.25 ms units. */
 
-// The BLE task runs the work of the stack queued with BtEvtQue, the RX task
-// only moves UART bytes to a notification.
+// The BLE task runs the work of the stack queued with BtEvtQue and moves the
+// UART bytes to a notification. A port running its host stack in this thread
+// sets a larger stack in board.h.
+#ifndef BLE_TAKTOS_THREAD_STACK
 #define BLE_TAKTOS_THREAD_STACK         1024u
-#define RX_TAKTOS_THREAD_STACK          512u
+#endif
 
 // One notification holds one characteristic value
 #define UART_BLE_PACKET_SIZE            20
@@ -91,9 +110,16 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 void UartTxSrvcCallback(BtGattChar_t *pChar, uint8_t *pData, int Offset, int Len);
 
 static hTaktOSThread_t s_BleTask = NULL;
-static hTaktOSThread_t s_RxTask = NULL;
 
-static TaktOSSem_t s_RxEvtSem;
+// UART to BLE: one packet, kept while the stack refuses it. Used by the BLE
+// task only.
+static uint8_t s_UartRxBuff[UART_BLE_PACKET_SIZE];
+static int s_UartRxLen = 0;
+
+// UART to BLE step queued as Bluetooth work, at most once at a time. Owed is
+// set when the work queue refused it, the BLE task queues it again.
+static volatile bool s_bUartRxQueued = false;
+static volatile bool s_bUartRxOwed = false;
 
 // Bluetooth work: one message per BtEvtQue call, run by the BLE task
 typedef struct {
@@ -108,7 +134,6 @@ static uint8_t g_BleWorkQueMem[BLE_WORK_QUE_SIZE * sizeof(BleWork_t)] TAKT_ALIGN
 static TaktOSQueue_t s_BleWorkQue;
 
 static uint8_t g_BleTaskMem[TAKTOS_THREAD_MEM_SIZE(BLE_TAKTOS_THREAD_STACK)] TAKT_ALIGNED(4);
-static uint8_t g_RxTaskMem[TAKTOS_THREAD_MEM_SIZE(RX_TAKTOS_THREAD_STACK)] TAKT_ALIGNED(4);
 
 //static const ble_uuid_t s_AdvUuids[] = {
 //	{BLUEIO_UUID_UART_SERVICE, BLE_UUID_TYPE_VENDOR_BEGIN}
@@ -188,7 +213,7 @@ int UartEvtHandler(UARTDEV *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLe
 static IOPinCfg_t s_UartPins[] = UART_PINS;
 
 const UARTCfg_t g_UartCfg = {
-	.DevNo = 0,
+	.DevNo = UART_DEVNO,
 	.pIOPinMap = s_UartPins,
 	.NbIOPins = sizeof(s_UartPins) / sizeof(IOPinCfg_t),
 	.Rate = 1000000,			// Rate
@@ -260,7 +285,7 @@ void BtAppInitUserServices()
 
 void ButEvent(int IntNo, void *pCtx)
 {
-	if (IntNo == 0)
+	if (IntNo == BUT1_INT)
 	{
 		if (g_bUartState == false)
 		{
@@ -292,11 +317,95 @@ void HardwareInit()
 
 	IOPinCfg(s_ButPins, s_NbButPins);
 
-	IOPinEnableInterrupt(0, IRQ_PRIO_LOW, s_ButPins[0].PortNo, s_ButPins[0].PinNo, IOPINSENSE_LOW_TRANSITION, ButEvent, NULL);
+	IOPinEnableInterrupt(BUT1_INT, IRQ_PRIO_LOW, s_ButPins[0].PortNo, s_ButPins[0].PinNo, IOPINSENSE_LOW_TRANSITION, ButEvent, NULL);
 }
 
-// UART interrupt: wake the RX task. A full binary semaphore already records
-// the wake, so any number of events before the take cost nothing.
+// Interrupt or thread context. Never blocks.
+static bool BleWorkSend(uint32_t EvtId, void *pCtx, BtEvtQueHandler_t Handler)
+{
+	const BleWork_t work = { EvtId, pCtx, Handler };
+
+	return TaktOSQueueSend(&s_BleWorkQue, &work, false, 0) == TAKTOS_OK;
+}
+
+// RTOS bridge: link-time override of BtEvtQue, see bluetooth/bt_app.h. The
+// Bluetooth stack calls it, often from interrupt context, for every piece of
+// work that must run outside the interrupt. Each one becomes a message to the
+// BLE task, which runs it. The application event queue is not used.
+bool BtEvtQue(uint32_t EvtId, void *pCtx, BtEvtQueHandler_t Handler)
+{
+	return BleWorkSend(EvtId, pCtx, Handler);
+}
+
+static void UartRxEvt(uint32_t Evt, void *pCtx);
+
+// Queue the UART to BLE step, unless it is already queued. Interrupt or
+// thread context.
+static void UartRxQue(void)
+{
+	// Finish recording admission before the BLE task can run the step
+	uint32_t state = DisableInterrupt();
+	if (s_bUartRxQueued == false)
+	{
+		s_bUartRxQueued = true;
+		s_bUartRxOwed = BleWorkSend(0, nullptr, UartRxEvt) == false;
+		if (s_bUartRxOwed)
+		{
+			s_bUartRxQueued = false;
+		}
+	}
+	EnableInterrupt(state);
+}
+
+// UART to BLE, in the BLE task. The characteristic takes UART_BLE_PACKET_SIZE
+// bytes per notification, so the UART FIFO is drained in packets. A packet
+// the stack refuses is kept and offered again: on the next UART event, on a
+// connection, or, while the peer has the notification on and only the stack
+// queue is full, one tick later from the BLE task. The ports report no
+// notification done event to the application.
+static void UartRxSend(void)
+{
+	while (true)
+	{
+		if (s_UartRxLen == 0)
+		{
+			s_UartRxLen = g_Uart.Rx(s_UartRxBuff, sizeof(s_UartRxBuff));
+			if (s_UartRxLen <= 0)
+			{
+				s_UartRxLen = 0;
+				break;
+			}
+		}
+		if (BtAppNotify(&g_UartBleSrvc.pCharArray[0], s_UartRxBuff, (uint16_t)s_UartRxLen) == false)
+		{
+			// Not connected, notification off, or the stack queue full
+			break;
+		}
+		s_UartRxLen = 0;
+	}
+}
+
+static void UartRxEvt(uint32_t Evt, void *pCtx)
+{
+	(void)Evt;
+	(void)pCtx;
+
+	s_bUartRxQueued = false;
+	UartRxSend();
+}
+
+void BtAppEvtConnected(uint16_t ConnHdl)
+{
+	(void)ConnHdl;
+
+	// A packet kept while there was no link
+	if (s_UartRxLen > 0)
+	{
+		UartRxQue();
+	}
+}
+
+// UART interrupt: queue the UART to BLE step
 int UartEvtHandler(UARTDEV *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen)
 {
 	(void)pDev;
@@ -307,7 +416,7 @@ int UartEvtHandler(UARTDEV *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLe
 	{
 		case UART_EVT_RXTIMEOUT:
 		case UART_EVT_RXDATA:
-			(void)TaktOSSemGive(&s_RxEvtSem, false);
+			UartRxQue();
 			break;
 		case UART_EVT_TXREADY:
 			break;
@@ -316,54 +425,6 @@ int UartEvtHandler(UARTDEV *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLe
 	}
 
 	return 0;
-}
-
-// RTOS bridge: link-time override of BtEvtQue, see bluetooth/bt_app.h. The
-// Bluetooth stack calls it, often from interrupt context, for every piece of
-// work that must run outside the interrupt. Each one becomes a message to the
-// BLE task, which runs it. The application event queue is not used.
-bool BtEvtQue(uint32_t EvtId, void *pCtx, BtEvtQueHandler_t Handler)
-{
-	const BleWork_t work = { EvtId, pCtx, Handler };
-
-	return TaktOSQueueSend(&s_BleWorkQue, &work, false, 0) == TAKTOS_OK;
-}
-
-// UART to BLE. The characteristic takes UART_BLE_PACKET_SIZE bytes per
-// notification, so the UART FIFO is drained in packets. A packet the stack
-// refuses, its notification queue being full, is kept and offered again: the
-// ports report no notification done event to the application, so the retry
-// waits one tick instead of the next UART event, which may never come.
-static void RxTask(void * pvParameter)
-{
-	(void)pvParameter;
-
-	uint8_t buff[UART_BLE_PACKET_SIZE];
-	int pending = 0;
-
-	while (1)
-	{
-		(void)TaktOSSemTake(&s_RxEvtSem, true, pending > 0 ? 1u : TAKTOS_WAIT_FOREVER);
-
-		while (true)
-		{
-			if (pending == 0)
-			{
-				pending = g_Uart.Rx(buff, sizeof(buff));
-				if (pending <= 0)
-				{
-					pending = 0;
-					break;
-				}
-			}
-			if (BtAppNotify(&g_UartBleSrvc.pCharArray[0], buff, (uint16_t)pending) == false)
-			{
-				// Not connected, notification off, or the stack queue full
-				break;
-			}
-			pending = 0;
-		}
-	}
 }
 
 void BtAppInitUserData()
@@ -383,10 +444,23 @@ static void BleTask(void * pvParameter)
 
 		if (TaktOSQueueReceive(&s_BleWorkQue, &work, false, 0) != TAKTOS_OK)
 		{
-			// Queue empty: queue again the work it refused, then wait
+			// Queue empty: queue again the work it refused, then wait. A UART
+			// packet refused while the peer has the notification on is
+			// offered again after one tick.
 			BtAppCheckStatus();
-			if (TaktOSQueueReceive(&s_BleWorkQue, &work, true, TAKTOS_WAIT_FOREVER) != TAKTOS_OK)
+			if (s_bUartRxOwed)
 			{
+				UartRxQue();
+			}
+			bool bRetry = s_UartRxLen > 0 &&
+						  isBtGattCharNotifyEnabled(&g_UartBleSrvc.pCharArray[0]);
+			if (TaktOSQueueReceive(&s_BleWorkQue, &work, true,
+								   bRetry ? 1u : TAKTOS_WAIT_FOREVER) != TAKTOS_OK)
+			{
+				if (bRetry)
+				{
+					UartRxSend();
+				}
 				continue;
 			}
 		}
@@ -396,11 +470,6 @@ static void BleTask(void * pvParameter)
 
 void TaktOSAppInit()
 {
-	if (TaktOSSemInit(&s_RxEvtSem, 0u, 1u) != TAKTOS_OK)
-	{
-		AppFatalError(APP_ERR_INVALID_PARAM);
-	}
-
 	TaktOSCfg_t cfg = {
 		.KernClockHz = TAKTOS_APP_CORE_CLOCK_HZ,
 		.TickHz = TAKTOS_APP_TICK_HZ,
@@ -417,16 +486,6 @@ void TaktOSAppInit()
 								   NULL,
 								   TAKTOS_PRIORITY_HIGH);
 	if (s_BleTask == NULL)
-	{
-		AppFatalError(APP_ERR_NO_MEM);
-	}
-
-	s_RxTask = TaktOSThreadCreate(g_RxTaskMem,
-								  sizeof(g_RxTaskMem),
-								  RxTask,
-								  NULL,
-								  TAKTOS_PRIORITY_NORMAL);
-	if (s_RxTask == NULL)
 	{
 		AppFatalError(APP_ERR_NO_MEM);
 	}
