@@ -40,16 +40,19 @@ CFIFO full is dropped and counted in `RxDropCnt` with a blocking CFIFO
 
 UART DMA (`bDMAMode`, with or without `bIntMode`) sends TX blocks straight
 from the TX CFIFO and receives into a circular ring moved into the RX CFIFO,
-as on the F0 parts. With a non-blocking CFIFO each TX block, at most 32
-bytes, is a copy taken out of the CFIFO, see `ARM/ST/STM32F0xx/README.md`
-(STM32L432 in the emulator at 80 MHz and 1 Mbaud: loopback 96.6 kB/s, 99.0
-with a blocking CFIFO). Each channel has its own vector. Since 2026-10-19 the
-vectors belong to the DMA channel manager `ARM/ST/src/dma_stm32.cpp`, which
-all four L4 libraries build: a driver claims the channels the reference
-manual gives its request, the first to ask has them (UART and SPI, I2C
-next). L476 and L496 select the request in the DMA1 or DMA2 CSELR, L4+ parts
-route it through DMAMUX1 (DMA1 channel n on DMAMUX1 channel n - 1, DMA2
-channel n on channel n + 6). Not tested on hardware.
+as on the F0 parts. With a non-blocking CFIFO each TX block, at most 32 bytes,
+is a copy taken out of the CFIFO, see `ARM/ST/STM32F0xx/README.md` (STM32L432
+in the emulator at 80 MHz and 1 Mbaud: loopback 96.6 kB/s, 99.0 with a
+blocking CFIFO). Each channel has its own vector. Since 2026-10-19 the vectors
+belong to the DMA channel manager `ARM/ST/src/dma_stm32.cpp`, which all four
+L4 libraries build: a driver claims the channels the reference manual gives
+its request, the first to ask has them (UART, SPI and I2C). L476 and L496
+select the request in the DMA1 or DMA2 CSELR, L4+ parts route it through
+DMAMUX1 (DMA1 channel n on DMAMUX1 channel n - 1, DMA2 channel n on DMAMUX1
+channel n + 6). On the NUCLEO-L432KC (2026-10-19), UartPrbsTxTest on USART2,
+the ST-LINK virtual COM port, at 1 Mbaud: DMA without interrupts and DMA with
+interrupts 99.4 kB/s, interrupts without DMA 99.9 kB/s, no loss after the
+start of the stream.
 
 | DevNo | Hardware | TX DMA | RX DMA | CSELR | DMAMUX1 TX, RX |
 |---|---|---|---|---|---|
@@ -129,16 +132,19 @@ in `ARM/ST/STM32F0xx/README.md` and `ARM/ST/include/timer_stm32.h`.
 ## I2C limits
 
 The STM32L432 library builds the shared STM32 I2C driver,
-`ARM/ST/src/i2c_stm32.cpp`, in place of `src/i2c_stm32l4xx.cpp`
-(2026-10-19): master in polling and interrupt mode, slave in interrupt mode,
-7 bit addresses. DMA is not available on L4 yet, I2CInit returns false for
-bDmaEn. The STM32L432 example I2CMasterSlave runs
-I2C1 (DevNo 0, D1 PA9 SCL, D0 PA10 SDA) as master against I2C3 (DevNo 2, A6
-PA7 SCL, D12 PB4 SDA) as slave on one NUCLEO-L432KC, wired D1 to A6 and D0 to
-D12. The Release build prints on the ST-LINK virtual COM port at 1 Mbaud.
-On the NUCLEO-L432KC (2026-10-19), master polling and master interrupt, each
-against the interrupt driven slave, pass: write 8 bytes at an offset, read
-them back, and a 4 byte read, at 100 kHz with the internal pull-ups.
+`ARM/ST/src/i2c_stm32.cpp`, in place of `src/i2c_stm32l4xx.cpp` (2026-10-19):
+master in polling and interrupt mode, slave in interrupt mode, 7 bit
+addresses. DMA for master and slave through the DMA channel manager: I2C1 TX
+DMA1 channel 6 and RX channel 7 (CSELR 3), or DMA2 channels 7 and 6 (CSELR 5)
+when those are taken; I2C2 DMA1 channels 4 and 5; I2C3 DMA1 channels 2 and 3
+(CSELR 3); I2C4 DMA2 channels 2 and 1 (CSELR 0). The STM32L432 example
+I2CMasterSlave runs I2C1 (DevNo 0, D1 PA9 SCL, D0 PA10 SDA) as master against
+I2C3 (DevNo 2, A6 PA7 SCL, D12 PB4 SDA) as slave on one NUCLEO-L432KC, wired
+D1 to A6 and D0 to D12. The Release build prints on the ST-LINK virtual COM
+port at 1 Mbaud. On the NUCLEO-L432KC (2026-10-19), master polling and master
+interrupt, each against the interrupt driven slave, pass: write 8 bytes at an
+offset, read them back, and a 4 byte read, at 100 kHz with the internal
+pull-ups.
 
 The L476, L496 and L4S9 libraries keep `src/i2c_stm32l4xx.cpp`, which
 accepts polling master configurations only. Slave, interrupt and DMA requests

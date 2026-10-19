@@ -83,8 +83,4 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define I2C_SLAVE_SCL_PIN			7
 #define I2C_SLAVE_SCL_PINOP			IOPINOP_FUNC4
 
-// The L4 I2C has no DMA yet: master polling and interrupt, slave interrupt
-#define I2C_TEST_MASTER_MASK		0x03
-#define I2C_TEST_SLAVE_MASK			0x01
-
 #endif

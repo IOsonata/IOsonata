@@ -34,9 +34,11 @@
 		transmit of up to I2C_STM32_TXBUF_SIZE bytes without bNoStop, return -1
 		at once and the end is reported with DEVINTRF_EVT_COMPLETED and the
 		count; the transmit data is copied first. With bDmaEn the data bytes
-		are moved by a GPDMA channel. DMA is available on the families that
-		have a channel table (WBA); I2CInit returns false for bDmaEn on the
-		others. A DMA channel is taken at I2CInit and kept until PowerOff.
+		are moved by a DMA channel: a GPDMA channel on the WBA, on the L4 a
+		DMA1 or DMA2 channel of the instance table from the DMA channel
+		manager (dma_stm32.h). I2CInit returns false for bDmaEn on the other
+		families (G4). A DMA channel is taken at I2CInit and kept until
+		PowerOff.
 
 		A refused address or byte, an arbitration loss, a bus error or a bus
 		timeout stops the bus, clears the flags and returns the number of
@@ -94,6 +96,28 @@ SOFTWARE.
 #if defined(IOSONATA_STM32_WBA)
 #include "gpdma_stm32wba.h"
 #define STM32_I2C_DMA
+#define STM32_I2C_DMA_FREE(Ch)				WbaGpdmaFree(Ch)
+#define STM32_I2C_DMA_ACK(Ch)				WbaGpdmaAck(Ch)
+#define STM32_I2C_DMA_START(Ch, pMem, Cnt)	WbaGpdmaStart(Ch, pMem, Cnt)
+#define STM32_I2C_DMA_STOP(Ch)				WbaGpdmaStop(Ch)
+#define STM32_I2C_DMA_STOPREMAIN(Ch)		WbaGpdmaStopRemain(Ch)
+#define STM32_I2C_DMA_REMAIN(Ch)			WbaGpdmaRemain(Ch)
+#define STM32_I2C_DMA_FLAGS(Ch)				WbaGpdmaFlags(Ch)
+#define STM32_I2C_DMA_FLAG_TC				WBA_GPDMA_FLAG_TC
+#define STM32_I2C_DMA_FLAG_ERR				WBA_GPDMA_FLAG_ERR
+#elif defined(IOSONATA_STM32_L4)
+// DMA1 and DMA2 channels of the DMA channel manager
+#include "dma_stm32.h"
+#define STM32_I2C_DMA
+#define STM32_I2C_DMA_FREE(Ch)				Stm32DmaChFree(Ch)
+#define STM32_I2C_DMA_ACK(Ch)				Stm32DmaChAck(Ch)
+#define STM32_I2C_DMA_START(Ch, pMem, Cnt)	Stm32DmaChStart(Ch, pMem, Cnt)
+#define STM32_I2C_DMA_STOP(Ch)				Stm32DmaChStop(Ch)
+#define STM32_I2C_DMA_STOPREMAIN(Ch)		Stm32DmaChStopRemain(Ch)
+#define STM32_I2C_DMA_REMAIN(Ch)			Stm32DmaChRemain(Ch)
+#define STM32_I2C_DMA_FLAGS(Ch)				Stm32DmaChFlags(Ch)
+#define STM32_I2C_DMA_FLAG_TC				STM32_DMA_FLAG_TC
+#define STM32_I2C_DMA_FLAG_ERR				STM32_DMA_FLAG_ERR
 #endif
 
 #include "istddef.h"
@@ -141,6 +165,23 @@ SOFTWARE.
 
 #pragma pack(push, 4)
 
+#if defined(IOSONATA_STM32_L4)
+/// DMA channels of an instance and their requests, STM32_DMA_CH and
+/// STM32_DMA_REQ. Channel -1: none.
+typedef struct {
+	int8_t TxCh;
+	int8_t RxCh;
+	uint8_t TxReq;
+	uint8_t RxReq;
+} Stm32I2cDmaPair_t;
+
+#define STM32_I2C_DMA_NOPAIR		{ -1, -1, 0, 0 }
+// Table entry of the DMA choices, L4 only
+#define STM32_I2C_DMA_PAIRS(...)	, { __VA_ARGS__ }
+#else
+#define STM32_I2C_DMA_PAIRS(...)
+#endif
+
 /// What differs between the instances: registers of the RCC, interrupts, DMA
 typedef struct {
 	I2C_TypeDef *pReg;
@@ -155,6 +196,9 @@ typedef struct {
 	IRQn_Type ErIrq;
 	uint8_t TxReq;					//!< GPDMA request of the transmit, 0 none
 	uint8_t RxReq;
+#if defined(IOSONATA_STM32_L4)
+	Stm32I2cDmaPair_t Dma[2];		//!< DMA channels, first choice then second
+#endif
 } Stm32I2cInfo_t;
 
 typedef enum {
@@ -182,6 +226,9 @@ typedef struct {
 	bool bDma;				//!< Data bytes moved by DMA
 	int DmaTx;				//!< GPDMA channel of the transmit, -1 none
 	int DmaRx;
+#if defined(IOSONATA_STM32_L4)
+	int DmaPair;			//!< Choice of Dma[] the channels come from
+#endif
 	const uint8_t *pTx;
 	uint8_t *pRx;
 	int Len;				//!< Bytes of the transfer
@@ -221,25 +268,39 @@ static const Stm32I2cInfo_t s_Stm32I2cInfo[STM32_I2C_MAXDEV] = {
 	  WBA_GPDMA_REQ_I2C4_TX, WBA_GPDMA_REQ_I2C4_RX },
 };
 #elif defined(IOSONATA_STM32_L4) || defined(IOSONATA_STM32_G4)
-// I2C1 to I2C3 are in APB1ENR1, I2C4 in APB1ENR2, all clocked from PCLK1
+// I2C1 to I2C3 are in APB1ENR1, I2C4 in APB1ENR2, all clocked from PCLK1.
+// L4 DMA requests of the reference manual: I2C1 TX DMA1 channel 6 and RX
+// channel 7 (CSELR 3), or TX DMA2 channel 7 and RX channel 6 (CSELR 5).
+// I2C2 TX DMA1 channel 4 and RX channel 5 (CSELR 3). I2C3 TX DMA1 channel 2
+// and RX channel 3 (CSELR 3). I2C4 TX DMA2 channel 2 and RX channel 1
+// (CSELR 0). The L4+ route the same channels through DMAMUX1, requests 16 to
+// 23. The G4 has no DMA here.
 static const Stm32I2cInfo_t s_Stm32I2cInfo[STM32_I2C_MAXDEV] = {
 	{ I2C1, &RCC->APB1ENR1, RCC_APB1ENR1_I2C1EN, &RCC->APB1RSTR1, RCC_APB1RSTR1_I2C1RST,
-	  &RCC->CCIPR, RCC_CCIPR_I2C1SEL_Msk, 0, I2C1_EV_IRQn, I2C1_ER_IRQn, 0, 0 },
+	  &RCC->CCIPR, RCC_CCIPR_I2C1SEL_Msk, 0, I2C1_EV_IRQn, I2C1_ER_IRQn, 0, 0
+	  STM32_I2C_DMA_PAIRS({ STM32_DMA_CH(1, 6), STM32_DMA_CH(1, 7), STM32_DMA_REQ(3, 17), STM32_DMA_REQ(3, 16) },
+						  { STM32_DMA_CH(2, 7), STM32_DMA_CH(2, 6), STM32_DMA_REQ(5, 17), STM32_DMA_REQ(5, 16) }) },
 #ifdef I2C2
 	{ I2C2, &RCC->APB1ENR1, RCC_APB1ENR1_I2C2EN, &RCC->APB1RSTR1, RCC_APB1RSTR1_I2C2RST,
-	  &RCC->CCIPR, RCC_CCIPR_I2C2SEL_Msk, 0, I2C2_EV_IRQn, I2C2_ER_IRQn, 0, 0 },
+	  &RCC->CCIPR, RCC_CCIPR_I2C2SEL_Msk, 0, I2C2_EV_IRQn, I2C2_ER_IRQn, 0, 0
+	  STM32_I2C_DMA_PAIRS({ STM32_DMA_CH(1, 4), STM32_DMA_CH(1, 5), STM32_DMA_REQ(3, 19), STM32_DMA_REQ(3, 18) },
+						  STM32_I2C_DMA_NOPAIR) },
 #else
 	{ NULL },
 #endif
 #ifdef I2C3
 	{ I2C3, &RCC->APB1ENR1, RCC_APB1ENR1_I2C3EN, &RCC->APB1RSTR1, RCC_APB1RSTR1_I2C3RST,
-	  &RCC->CCIPR, RCC_CCIPR_I2C3SEL_Msk, 0, I2C3_EV_IRQn, I2C3_ER_IRQn, 0, 0 },
+	  &RCC->CCIPR, RCC_CCIPR_I2C3SEL_Msk, 0, I2C3_EV_IRQn, I2C3_ER_IRQn, 0, 0
+	  STM32_I2C_DMA_PAIRS({ STM32_DMA_CH(1, 2), STM32_DMA_CH(1, 3), STM32_DMA_REQ(3, 21), STM32_DMA_REQ(3, 20) },
+						  STM32_I2C_DMA_NOPAIR) },
 #else
 	{ NULL },
 #endif
 #ifdef I2C4
 	{ I2C4, &RCC->APB1ENR2, RCC_APB1ENR2_I2C4EN, &RCC->APB1RSTR2, RCC_APB1RSTR2_I2C4RST,
-	  &RCC->CCIPR2, RCC_CCIPR2_I2C4SEL_Msk, 0, I2C4_EV_IRQn, I2C4_ER_IRQn, 0, 0 },
+	  &RCC->CCIPR2, RCC_CCIPR2_I2C4SEL_Msk, 0, I2C4_EV_IRQn, I2C4_ER_IRQn, 0, 0
+	  STM32_I2C_DMA_PAIRS({ STM32_DMA_CH(2, 2), STM32_DMA_CH(2, 1), STM32_DMA_REQ(0, 23), STM32_DMA_REQ(0, 22) },
+						  STM32_I2C_DMA_NOPAIR) },
 #else
 	{ NULL },
 #endif
@@ -559,6 +620,7 @@ static void Stm32I2cMasterTimeout(Stm32I2cDev_t * const pDev)
 static void Stm32I2cDmaIrq(int Ch, void *pCtx);
 static void Stm32I2cService(Stm32I2cDev_t * const pDev);
 
+#if defined(IOSONATA_STM32_WBA)
 // Take the two channels of the master. Both or none.
 static bool Stm32I2cDmaTake(Stm32I2cDev_t * const pDev, bool bIrq, int IntPrio)
 {
@@ -577,7 +639,7 @@ static bool Stm32I2cDmaTake(Stm32I2cDev_t * const pDev, bool bIrq, int IntPrio)
 	pDev->DmaRx = WbaGpdmaAlloc(Stm32I2cDmaIrq, pDev, IntPrio, bIrq);
 	if (pDev->DmaRx < 0)
 	{
-		WbaGpdmaFree(pDev->DmaTx);
+		STM32_I2C_DMA_FREE(pDev->DmaTx);
 		pDev->DmaTx = -1;
 
 		return false;
@@ -588,17 +650,70 @@ static bool Stm32I2cDmaTake(Stm32I2cDev_t * const pDev, bool bIrq, int IntPrio)
 
 	return true;
 }
+#else
+static void Stm32I2cDmaGive(Stm32I2cDev_t * const pDev);
+
+// Take the two channels of one choice of the table, the first that is free.
+// Both or none. Taken again at each I2CInit, which sets their interrupt.
+static bool Stm32I2cDmaTake(Stm32I2cDev_t * const pDev, bool bIrq, int IntPrio)
+{
+	const Stm32I2cInfo_t *info = pDev->pInfo;
+
+	if (pDev->DmaTx < 0 || pDev->DmaRx < 0)
+	{
+		Stm32I2cDmaGive(pDev);
+		for (int i = 0; i < 2 && pDev->DmaTx < 0; i++)
+		{
+			const Stm32I2cDmaPair_t *p = &info->Dma[i];
+
+			if (p->TxCh < 0 || p->RxCh < 0)
+			{
+				continue;
+			}
+			if (Stm32DmaChClaim(p->TxCh, Stm32I2cDmaIrq, pDev, IntPrio, bIrq))
+			{
+				if (Stm32DmaChClaim(p->RxCh, Stm32I2cDmaIrq, pDev, IntPrio, bIrq))
+				{
+					pDev->DmaTx = p->TxCh;
+					pDev->DmaRx = p->RxCh;
+					pDev->DmaPair = i;
+				}
+				else
+				{
+					Stm32DmaChFree(p->TxCh);
+				}
+			}
+		}
+		if (pDev->DmaTx < 0)
+		{
+			return false;
+		}
+	}
+	else if (Stm32DmaChClaim(pDev->DmaTx, Stm32I2cDmaIrq, pDev, IntPrio, bIrq) == false ||
+			 Stm32DmaChClaim(pDev->DmaRx, Stm32I2cDmaIrq, pDev, IntPrio, bIrq) == false)
+	{
+		return false;
+	}
+
+	const Stm32I2cDmaPair_t *p = &info->Dma[pDev->DmaPair];
+
+	Stm32DmaChSetup(pDev->DmaTx, p->TxReq, true, &pDev->pReg->TXDR, 0, bIrq);
+	Stm32DmaChSetup(pDev->DmaRx, p->RxReq, false, &pDev->pReg->RXDR, 0, bIrq);
+
+	return true;
+}
+#endif
 
 static void Stm32I2cDmaGive(Stm32I2cDev_t * const pDev)
 {
 	if (pDev->DmaTx >= 0)
 	{
-		WbaGpdmaFree(pDev->DmaTx);
+		STM32_I2C_DMA_FREE(pDev->DmaTx);
 		pDev->DmaTx = -1;
 	}
 	if (pDev->DmaRx >= 0)
 	{
-		WbaGpdmaFree(pDev->DmaRx);
+		STM32_I2C_DMA_FREE(pDev->DmaRx);
 		pDev->DmaRx = -1;
 	}
 }
@@ -607,7 +722,7 @@ static void Stm32I2cDmaIrq(int Ch, void *pCtx)
 {
 	Stm32I2cDev_t *dev = (Stm32I2cDev_t *)pCtx;
 
-	WbaGpdmaAck(Ch);
+	STM32_I2C_DMA_ACK(Ch);
 	// A transfer that the caller waits for is followed by its polling loop
 	if (dev->bAsync || dev->pI2cDev->Cfg.Mode == I2CMODE_SLAVE)
 	{
@@ -641,7 +756,7 @@ static int Stm32I2cMasterCount(Stm32I2cDev_t * const pDev)
 #ifdef STM32_I2C_DMA
 	else if (pDev->bDma)
 	{
-		n = pDev->Done + pDev->Chunk - (int)WbaGpdmaRemain(pDev->DmaRx);
+		n = pDev->Done + pDev->Chunk - (int)STM32_I2C_DMA_REMAIN(pDev->DmaRx);
 	}
 #endif
 	else
@@ -677,7 +792,7 @@ static void Stm32I2cMasterEnd(Stm32I2cDev_t * const pDev, bool bHold)
 
 		if (ch >= 0)
 		{
-			WbaGpdmaStop(ch);
+			STM32_I2C_DMA_STOP(ch);
 		}
 	}
 #endif
@@ -741,11 +856,11 @@ static void Stm32I2cMasterChunk(Stm32I2cDev_t * const pDev, bool bFirst)
 	{
 		if (pDev->bRx)
 		{
-			WbaGpdmaStart(pDev->DmaRx, pDev->pRx + pDev->Done, (uint32_t)len);
+			STM32_I2C_DMA_START(pDev->DmaRx, pDev->pRx + pDev->Done, (uint32_t)len);
 		}
 		else
 		{
-			WbaGpdmaStart(pDev->DmaTx, pDev->pTx + pDev->Done, (uint32_t)len);
+			STM32_I2C_DMA_START(pDev->DmaTx, pDev->pTx + pDev->Done, (uint32_t)len);
 		}
 	}
 #endif
@@ -780,7 +895,7 @@ static void Stm32I2cMasterService(Stm32I2cDev_t * const pDev)
 	uint32_t isr = reg->ISR;
 
 #ifdef STM32_I2C_DMA
-	if (pDev->bDma && (WbaGpdmaFlags(Stm32I2cDmaCh(pDev)) & WBA_GPDMA_FLAG_ERR))
+	if (pDev->bDma && (STM32_I2C_DMA_FLAGS(Stm32I2cDmaCh(pDev)) & STM32_I2C_DMA_FLAG_ERR))
 	{
 		Stm32I2cMasterFail(pDev);
 
@@ -821,7 +936,7 @@ static void Stm32I2cMasterService(Stm32I2cDev_t * const pDev)
 #ifdef STM32_I2C_DMA
 		// The channel finishes its last transfer after the STOP
 		if (pDev->bDma && pDev->bNack == false &&
-			(WbaGpdmaFlags(Stm32I2cDmaCh(pDev)) & WBA_GPDMA_FLAG_TC) == 0U)
+			(STM32_I2C_DMA_FLAGS(Stm32I2cDmaCh(pDev)) & STM32_I2C_DMA_FLAG_TC) == 0U)
 		{
 			return;
 		}
@@ -839,7 +954,7 @@ static void Stm32I2cMasterService(Stm32I2cDev_t * const pDev)
 	if (isr & I2C_ISR_TCR)
 	{
 #ifdef STM32_I2C_DMA
-		if (pDev->bDma && (WbaGpdmaFlags(Stm32I2cDmaCh(pDev)) & WBA_GPDMA_FLAG_TC) == 0U)
+		if (pDev->bDma && (STM32_I2C_DMA_FLAGS(Stm32I2cDmaCh(pDev)) & STM32_I2C_DMA_FLAG_TC) == 0U)
 		{
 			return;
 		}
@@ -850,7 +965,7 @@ static void Stm32I2cMasterService(Stm32I2cDev_t * const pDev)
 	else if (isr & I2C_ISR_TC)
 	{
 #ifdef STM32_I2C_DMA
-		if (pDev->bDma && (WbaGpdmaFlags(Stm32I2cDmaCh(pDev)) & WBA_GPDMA_FLAG_TC) == 0U)
+		if (pDev->bDma && (STM32_I2C_DMA_FLAGS(Stm32I2cDmaCh(pDev)) & STM32_I2C_DMA_FLAG_TC) == 0U)
 		{
 			return;
 		}
@@ -999,7 +1114,7 @@ static void Stm32I2cSlaveDmaArm(Stm32I2cDev_t * const pDev, bool bRead)
 	pDev->SDmaLen = len;
 	pDev->bSDmaOn = true;
 	pDev->bTxData = bRead;
-	WbaGpdmaStart(bRead ? pDev->DmaTx : pDev->DmaRx, buf, (uint32_t)len);
+	STM32_I2C_DMA_START(bRead ? pDev->DmaTx : pDev->DmaRx, buf, (uint32_t)len);
 	pDev->pReg->CR1 = (pDev->pReg->CR1 & ~(I2C_CR1_RXIE | I2C_CR1_TXIE)) |
 					  (bRead ? I2C_CR1_TXDMAEN : I2C_CR1_RXDMAEN);
 }
@@ -1019,7 +1134,7 @@ static void Stm32I2cSlaveDmaEnd(Stm32I2cDev_t * const pDev)
 	int moved;
 
 	reg->CR1 &= ~STM32_I2C_CR1_DMA;
-	moved = pDev->SDmaLen - (int)WbaGpdmaStopRemain(read ? pDev->DmaTx : pDev->DmaRx);
+	moved = pDev->SDmaLen - (int)STM32_I2C_DMA_STOPREMAIN(read ? pDev->DmaTx : pDev->DmaRx);
 	if (moved < 0)
 	{
 		moved = 0;
@@ -1043,8 +1158,8 @@ static void Stm32I2cSlaveDmaEnd(Stm32I2cDev_t * const pDev)
 static void Stm32I2cSlaveDmaCheck(Stm32I2cDev_t * const pDev)
 {
 	if (pDev->bSDmaOn &&
-		(WbaGpdmaFlags(pDev->SState == STM32_I2C_S_READ ? pDev->DmaTx : pDev->DmaRx) &
-		 (WBA_GPDMA_FLAG_TC | WBA_GPDMA_FLAG_ERR)))
+		(STM32_I2C_DMA_FLAGS(pDev->SState == STM32_I2C_S_READ ? pDev->DmaTx : pDev->DmaRx) &
+		 (STM32_I2C_DMA_FLAG_TC | STM32_I2C_DMA_FLAG_ERR)))
 	{
 		Stm32I2cSlaveDmaEnd(pDev);
 	}
@@ -1265,11 +1380,11 @@ static void Stm32I2cReset(DevIntrf_t * const pIntrf)
 #ifdef STM32_I2C_DMA
 	if (dev->DmaTx >= 0)
 	{
-		WbaGpdmaStop(dev->DmaTx);
+		STM32_I2C_DMA_STOP(dev->DmaTx);
 	}
 	if (dev->DmaRx >= 0)
 	{
-		WbaGpdmaStop(dev->DmaRx);
+		STM32_I2C_DMA_STOP(dev->DmaRx);
 	}
 #endif
 	if (dev->pI2cDev->Cfg.Mode == I2CMODE_SLAVE)
