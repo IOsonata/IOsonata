@@ -326,6 +326,20 @@ static void I2sChecks()
 			DeviceIntrfPowerOff(&dev.DevIntrf);
 		}
 	}
+	// Playback uses transmit only and allocates its TX channel independently.
+	cfg.pIOPinMap = pins;
+	pins[2].PortNo = -1;
+	cfg.pRxFifoMem = nullptr;
+	cfg.bIntEn = true;
+	Check(I2SInit(&dev, &cfg));
+	Check(s_Dma[0].Used && s_Dma[0].ToPeriph && !s_Dma[1].Used);
+	Check(DeviceIntrfTx(&dev.DevIntrf, 0, data, 96) == 96);
+	Complete(0);
+	Check(CFifoUsed(dev.hTxFifo) == 0);
+	Check(s_Dma[0].pMem[0] == 1 && s_Dma[0].pMem[2] == 0x7F && s_Dma[0].pMem[3] == 0);
+	DeviceIntrfPowerOff(&dev.DevIntrf);
+	pins[2] = s_Pins[2];
+	cfg.pRxFifoMem = s_RxMem;
 	// The board microphone uses receive only, with no SD_A output pin.
 	cfg.pIOPinMap = pins;
 	pins[3].PortNo = -1;

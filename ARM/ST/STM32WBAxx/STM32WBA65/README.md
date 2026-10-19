@@ -1017,8 +1017,8 @@ mapping. `Wm8904` is a generic `Device` accepting an injected `DeviceIntrf`
 for control; PCM is read through the existing `I2S`/`DeviceIntrf` interface.
 The codec driver supports DMICDAT1/2 capture, 16/24-bit I2S or justified
 formats, gain from -71.625 to +17.625 dB in 0.375 dB steps, enable/disable,
-reset and power off. Analogue
-capture and headphone/line playback are not implemented in this codec driver.
+reset and power off. Stereo headphone playback is also supported as described
+below. Analogue capture and line-output playback are not implemented.
 
 ### WBA I2S operation
 
@@ -1109,9 +1109,9 @@ Validation:
   The model enforces the missing-MCLK register restriction, including startup,
   restart and shutdown with MCLK stopped. Lost configuration writes are caught
   by readback before SYSCLK is enabled.
-- Physical onboard microphone capture and sustained DMA timing need board
-  validation. A successful simulation does not establish those electrical
-  and timing results.
+- The maintainer confirmed onboard microphone capture and the OLED level
+  meter on October 19, 2026, after the codec clock-ordering fix. Headphone
+  playback and sustained DMA timing still need board validation.
 
 ```sh
 # Same Arm toolchain and emulator environment as the PDM tests above.
@@ -1122,3 +1122,65 @@ python3 tests/audio/run_wm8904.py
 References: [WM8904 Rev 4.1](https://statics.cirrus.com/pubs/proDatasheet/WM8904_Rev4.1.pdf),
 [DS14736 AF13 routes](https://www.st.com/resource/en/datasheet/stm32wba65ri.pdf),
 [ST board audio configuration](https://github.com/STMicroelectronics/stm32wba65ri-dk1-bsp/blob/main/stm32wba65i_discovery_audio.c).
+
+## Stereo headphone tone demo
+
+Import `exemples/I2sToneDemo/ioc`, rebuild the matching IOsonata library, and
+build the example. Connect stereo headphones to the board audio jack.
+`exemples/audio/i2s_tone_demo.cpp` repeats four one-second stages:
+
+| OLED step | Left output | Right output |
+| --- | --- | --- |
+| LEFT 440 Hz | 440 Hz | Silence |
+| RIGHT 880 Hz | Silence | 880 Hz |
+| BOTH 660 Hz | 660 Hz | 660 Hz |
+| SILENCE | Silence | Silence |
+
+The example uses I2S DevNo 0, stereo 16-bit TX DMA and a 256-frame caller-owned
+FIFO. PD5 AF13 carries SD_A to the WM8904 DAC input. SD_B is unused; the
+microphone/ADC path is off. Control, MCLK/SCK/FS and OLED pins match the
+microphone example. The OLED shows the step being queued; the FIFO adds a
+small delay before those samples reach the jack.
+
+The tones use a fixed sine table, a phase accumulator based on the actual
+returned sample rate, and a 10 ms fade at each tone boundary. Sample peaks
+are 4096 (about -18 dBFS), and headphone gain starts at -24 dB. The sequence
+runs continuously, with one second of silence each cycle. A short Tx return
+retains the remaining samples for the next call. Display drawing and sample
+generation run in main; the DMA interrupt handles the output buffers.
+
+`Wm8904Cfg_t` adds `bHeadphoneEn` and `HeadphoneGain`. Set `MicInput` to zero
+for playback only, or select DMICDAT1/2 to enable capture as well. Keep MCLK
+running throughout headphone Init/Enable: the charge pump, headphone PGAs and
+DC servo need the codec clocks. The tone demo starts I2S TX with silence
+before initializing the codec, and keeps those clocks running. Capture-only
+initialization continues to support MCLK starting afterward.
+
+Headphone startup holds the DAC muted and output shorts engaged, starts both
+DC servo channels, and polls completion for at most 300 ms. It releases the
+shorts and unmutes only after both channels complete. A control error or
+servo timeout shuts down the outputs and fails Init. Disable/PowerOff mute,
+re-engage shorts and turn off the drivers, servo, charge pump and PGAs.
+HeadphoneGain accepts milli-dB requests, rounds to 1 dB steps and clamps to
+-57 through +6 dB. Live gain changes require MCLK. The existing ADC Gain
+continues to use 0.375 dB steps.
+
+Validation:
+
+- Debug/Release incremental library builds and I2sToneDemo links pass; the
+  existing I2sMicLevelDemo also builds and links with the updated codec.
+- Cortex-M33 I2S tests cover transmit-only DMA and verify that its separately
+  allocated channel sends packed samples correctly, alongside the existing
+  receive/duplex, overflow and recovery cases.
+- Codec ASan/UBSan tests cover playback-only and combined microphone/playback,
+  gain limits, mute/short/servo ordering, servo timeout, missing MCLK, shutdown
+  and each initialization write failing. Capture-only regression remains.
+- The actual example's sample generator is tested at -O0/-Os under ASan/UBSan:
+  stereo routing, frequency, signal bounds, fades, silence and chunk boundaries.
+- Physical headphone output remains pending board validation.
+
+```sh
+python3 tests/audio/run_wm8904.py
+python3 tests/audio/run_i2s_tone.py
+/tmp/iosonata-pdm-tests/bin/python tests/stm32wba/run_i2s.py
+```

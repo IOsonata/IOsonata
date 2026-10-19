@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
 @file	wm8904.cpp
 
-@brief	WM8904 digital microphone control
+@brief	WM8904 digital microphone and headphone control
 
 
 @author	Hoang Nguyen Hoan
@@ -44,14 +44,26 @@ SOFTWARE.
 #define WM8904_MIC_BIAS 0x06
 #define WM8904_ADC_OSR 0x0A
 #define WM8904_INPUT_POWER 0x0C
+#define WM8904_HEADPHONE_POWER 0x0E
 #define WM8904_CONVERTER_POWER 0x12
 #define WM8904_CLOCK_RATE 0x15
 #define WM8904_CLOCK_ENABLE 0x16
 #define WM8904_AUDIO_SOURCE 0x18
 #define WM8904_AUDIO_FORMAT 0x19
+#define WM8904_DAC_LEFT_VOLUME 0x1E
+#define WM8904_DAC_RIGHT_VOLUME 0x1F
+#define WM8904_DAC_CONTROL 0x21
 #define WM8904_ADC_LEFT_VOLUME 0x24
 #define WM8904_ADC_RIGHT_VOLUME 0x25
 #define WM8904_DMIC 0x27
+#define WM8904_HP_LEFT_VOLUME 0x39
+#define WM8904_HP_RIGHT_VOLUME 0x3A
+#define WM8904_SERVO_ENABLE 0x43
+#define WM8904_SERVO_START 0x44
+#define WM8904_SERVO_STATUS 0x4D
+#define WM8904_HP_CONTROL 0x5A
+#define WM8904_CHARGE_PUMP 0x62
+#define WM8904_CLASS_W 0x68
 #define WM8904_GPIO1 0x79
 
 typedef struct __Wm8904_Sample_Rate
@@ -120,7 +132,7 @@ bool Wm8904::Init(const Wm8904Cfg_t &Cfg, DeviceIntrf *pIntrf)
 	if (!pIntrf || Cfg.DevAddr > 0x7F || !Cfg.Freq ||
 		(Cfg.SampleWidth != I2SSWIDTH_16BITS && Cfg.SampleWidth != I2SSWIDTH_24BITS) ||
 		(Cfg.Format != I2SFMT_NORMAL && Cfg.Format != I2SFMT_ALIGN_LEFT && Cfg.Format != I2SFMT_ALIGN_RIGHT) ||
-		(Cfg.MicInput != 1 && Cfg.MicInput != 2) ||
+		(Cfg.MicInput > 2 || (!Cfg.MicInput && !Cfg.bHeadphoneEn)) ||
 		uint64_t(Cfg.Freq) * 256 > Cfg.MClkFreq || uint64_t(Cfg.Freq) * 256 + 255 < Cfg.MClkFreq)
 	{
 		return false;
@@ -159,7 +171,7 @@ bool Wm8904::Init(const Wm8904Cfg_t &Cfg, DeviceIntrf *pIntrf)
 	{
 		format |= 2U << 2;
 	}
-	// Outputs and analogue input PGAs remain powered down for DMIC capture.
+	// Analogue input PGAs stay off. Output stages are enabled separately.
 	if (!WriteReg(WM8904_BIAS, 0x18) ||
 		!WriteReg(WM8904_VMID, 0x47))
 	{
@@ -168,16 +180,16 @@ bool Wm8904::Init(const Wm8904Cfg_t &Cfg, DeviceIntrf *pIntrf)
 	}
 	msDelay(100);
 	if (!WriteReg(WM8904_VMID, 0x43) || !WriteReg(WM8904_BIAS, 0x19) ||
-		!WriteReg(WM8904_MIC_BIAS, 1) || !WriteReg(WM8904_INPUT_POWER, 0) ||
+		!WriteReg(WM8904_MIC_BIAS, Cfg.MicInput ? 1 : 0) || !WriteReg(WM8904_INPUT_POWER, 0) ||
 		!WriteReg(WM8904_CLOCK_RATE, 0x0C00 | rate) ||
 		!WriteReg(WM8904_AUDIO_FORMAT, format) ||
 		!WriteReg(WM8904_AUDIO_SOURCE, 0x10) ||
 		!WriteReg(WM8904_ADC_OSR, Cfg.Freq < 32000 ? 1 : 0) ||
-		!WriteReg(WM8904_GPIO1, 8) ||
+		!WriteReg(WM8904_GPIO1, Cfg.MicInput ? 8 : 0x14) ||
 		!VerifyReg(WM8904_CLOCK_RATE, 0x0C00 | rate, 0x3C07) ||
 		!VerifyReg(WM8904_AUDIO_FORMAT, format, 0x000F) ||
 		!VerifyReg(WM8904_AUDIO_SOURCE, 0x10, 0x00F0) ||
-		!VerifyReg(WM8904_GPIO1, 8, 0x001F))
+		!VerifyReg(WM8904_GPIO1, Cfg.MicInput ? 8 : 0x14, 0x001F))
 	{
 		PowerOff();
 		return false;
@@ -186,8 +198,63 @@ bool Wm8904::Init(const Wm8904Cfg_t &Cfg, DeviceIntrf *pIntrf)
 	return Enable();
 }
 
+bool Wm8904::StartHeadphones()
+{
+	uint16_t status = 0;
+
+	HeadphoneGain(vCfg.HeadphoneGain);
+	if (!Device::Valid() ||
+		!VerifyReg(WM8904_HP_LEFT_VOLUME, 57 + vCfg.HeadphoneGain / 1000, 0x003F) ||
+		!VerifyReg(WM8904_CONVERTER_POWER, vCfg.MicInput ? 0x0E : 0x0C, 0x000F) ||
+		!WriteReg(WM8904_HEADPHONE_POWER, 3) ||
+		!WriteReg(WM8904_CHARGE_PUMP, 1) ||
+		!WriteReg(WM8904_HP_CONTROL, 0x11) ||
+		!WriteReg(WM8904_HP_CONTROL, 0x33) ||
+		!WriteReg(WM8904_SERVO_ENABLE, 3) ||
+		!WriteReg(WM8904_SERVO_START, 0x30))
+	{
+		return false;
+	}
+	// Keep output shorts engaged and DAC muted until both channels calibrate.
+	for (unsigned count = 0; count < 30; count++)
+	{
+		msDelay(10);
+		if (!ReadReg(WM8904_SERVO_STATUS, status))
+		{
+			return false;
+		}
+		if ((status & 3) == 3)
+		{
+			return WriteReg(WM8904_HP_CONTROL, 0x77) &&
+				   WriteReg(WM8904_HP_CONTROL, 0xFF) &&
+				   WriteReg(WM8904_CLASS_W, 1) &&
+				   WriteReg(WM8904_DAC_CONTROL, 0x0640);
+		}
+	}
+	return false;
+}
+
+bool Wm8904::StopHeadphones()
+{
+	// Attempt every shutdown step even if a control transfer fails.
+	uint16_t state = 0;
+	bool result = ReadReg(WM8904_HP_CONTROL, state);
+
+	result = WriteReg(WM8904_DAC_CONTROL, 0x0648) && result;
+	result = WriteReg(WM8904_HP_CONTROL, state & ~0x88U) && result;
+	result = WriteReg(WM8904_HP_CONTROL, 0) && result;
+	result = WriteReg(WM8904_SERVO_ENABLE, 0) && result;
+	result = WriteReg(WM8904_CHARGE_PUMP, 0) && result;
+	result = WriteReg(WM8904_HEADPHONE_POWER, 0) && result;
+	result = WriteReg(WM8904_CLASS_W, 0) && result;
+	return result;
+}
+
 bool Wm8904::Enable()
 {
+	uint16_t dmic = vCfg.MicInput ? (vCfg.MicInput == 2 ? 0x1800 : 0x1000) : 0;
+	uint16_t power = (vCfg.MicInput ? 2 : 0) | (vCfg.bHeadphoneEn ? 0x0C : 0);
+
 	if (!Device::Valid())
 	{
 		return false;
@@ -197,21 +264,30 @@ bool Wm8904::Enable()
 		return true;
 	}
 	// Configure and read back the capture path before enabling SYSCLK.
-	// Init may run while the audio interface has MCLK stopped.
+	// Capture-only Init may run while the audio interface has MCLK stopped.
 	if (!WriteReg(WM8904_CLOCK_ENABLE, 0) ||
-		!WriteReg(WM8904_DMIC, vCfg.MicInput == 2 ? 0x1800 : 0x1000) ||
-		!WriteReg(WM8904_CONVERTER_POWER, 2))
+		!WriteReg(WM8904_DMIC, dmic) ||
+		!WriteReg(WM8904_CONVERTER_POWER, power))
 	{
 		PowerOff();
 		return false;
 	}
 	Gain(vCfg.Gain);
+	if (vCfg.bHeadphoneEn &&
+		(!WriteReg(WM8904_DAC_CONTROL, 0x0648) ||
+		 !WriteReg(WM8904_DAC_LEFT_VOLUME, 0x00C0) ||
+		 !WriteReg(WM8904_DAC_RIGHT_VOLUME, 0x01C0)))
+	{
+		PowerOff();
+		return false;
+	}
 	if (!Device::Valid() ||
-		!VerifyReg(WM8904_DMIC, vCfg.MicInput == 2 ? 0x1800 : 0x1000, 0x1800) ||
-		!VerifyReg(WM8904_CONVERTER_POWER, 2, 0x000F) ||
+		!VerifyReg(WM8904_DMIC, dmic, 0x1800) ||
+		!VerifyReg(WM8904_CONVERTER_POWER, power, 0x000F) ||
 		!VerifyReg(WM8904_ADC_LEFT_VOLUME, 192 + vCfg.Gain / 375, 0x00FF) ||
 		!WriteReg(WM8904_CLOCK_ENABLE, 6) ||
-		!VerifyReg(WM8904_CLOCK_ENABLE, 6, 0x0006))
+		!VerifyReg(WM8904_CLOCK_ENABLE, 6, 0x0006) ||
+		(vCfg.bHeadphoneEn && !StartHeadphones()))
 	{
 		PowerOff();
 		return false;
@@ -227,6 +303,7 @@ void Wm8904::Disable()
 		return;
 	}
 	if (!WriteReg(WM8904_CLOCK_ENABLE, 0) ||
+		(vCfg.bHeadphoneEn && !StopHeadphones()) ||
 		!WriteReg(WM8904_ADC_LEFT_VOLUME, 0x100) ||
 		!WriteReg(WM8904_ADC_RIGHT_VOLUME, 0x100) ||
 		!WriteReg(WM8904_CONVERTER_POWER, 0) || !WriteReg(WM8904_DMIC, 0))
@@ -241,6 +318,10 @@ void Wm8904::PowerOff()
 	if (Interface())
 	{
 		WriteReg(WM8904_CLOCK_ENABLE, 0);
+		if (vCfg.bHeadphoneEn)
+		{
+			StopHeadphones();
+		}
 		WriteReg(WM8904_RESET, 0);
 	}
 	Valid(false);
@@ -284,4 +365,35 @@ int Wm8904::Gain(int MilliDb)
 int Wm8904::Gain() const
 {
 	return vCfg.Gain;
+}
+
+int Wm8904::HeadphoneGain(int MilliDb)
+{
+	int gain = MilliDb;
+
+	if (gain < -57000)
+	{
+		gain = -57000;
+	}
+	else if (gain > 6000)
+	{
+		gain = 6000;
+	}
+	int code = 57 + (gain + (gain < 0 ? -500 : 500)) / 1000;
+
+	vCfg.HeadphoneGain = (code - 57) * 1000;
+	if (Device::Valid() && vCfg.bHeadphoneEn)
+	{
+		if (!WriteReg(WM8904_HP_LEFT_VOLUME, code) ||
+			!WriteReg(WM8904_HP_RIGHT_VOLUME, code | 0x80))
+		{
+			return 0;
+		}
+	}
+	return vCfg.HeadphoneGain;
+}
+
+int Wm8904::HeadphoneGain() const
+{
+	return vCfg.HeadphoneGain;
 }

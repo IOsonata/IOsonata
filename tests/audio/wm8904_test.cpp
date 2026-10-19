@@ -15,6 +15,8 @@ public:
 	bool MclkPresent = false;
 	unsigned BlockedAccesses = 0;
 	int DropReg = -1;
+	bool ServoStuck = false;
+	unsigned ServoReads = 0;
 
 	operator DevIntrf_t *()
 	{
@@ -45,6 +47,12 @@ public:
 		}
 		uint16_t value = *pReg == 0 ? Id : Registers[*pReg];
 
+		if (*pReg == 0x4D)
+		{
+			assert(Registers[0x43] == 3 && Registers[0x5A] == 0x33);
+			value = !ServoStuck && ++ServoReads >= 3 ? 3 : 0;
+		}
+
 		pData[0] = value >> 8;
 		pData[1] = value;
 		return 2;
@@ -70,10 +78,20 @@ public:
 		{
 			return 2;
 		}
+		if (*pReg == 0x5A && (value & 0x88))
+		{
+			assert(!ServoStuck && ServoReads >= 3 && Registers[0x43] == 3);
+			assert(Registers[0x21] & 8);
+		}
+		if (*pReg == 0x21 && !(value & 8))
+		{
+			assert(Registers[0x5A] == 0xFF && ServoReads >= 3);
+		}
 		if (*pReg == 0)
 		{
 			assert(value == 0);
 			memset(Registers, 0, sizeof(Registers));
+			ServoReads = 0;
 		}
 		else
 		{
@@ -99,7 +117,9 @@ int main()
 		.SampleWidth = I2SSWIDTH_16BITS,
 		.Format = I2SFMT_NORMAL,
 		.MicInput = 2,
-		.Gain = 18000
+		.Gain = 18000,
+		.bHeadphoneEn = false,
+		.HeadphoneGain = -24000
 	};
 
 	assert(!codec.Valid() && !codec.Enable());
@@ -186,5 +206,51 @@ int main()
 	control.FailAt = control.Writes + 1;
 	codec.Disable();
 	assert(!codec.Valid());
-	puts("WM8904 registers, endian, rate, gain, lifecycle, missing MCLK and lost writes PASS");
+	control.FailAt = 0;
+	control.MclkPresent = true;
+	cfg.MicInput = 0;
+	cfg.bHeadphoneEn = true;
+	cfg.HeadphoneGain = -24000;
+	control.Writes = 0;
+	assert(codec.Init(cfg, &control));
+	unsigned headphoneWrites = control.Writes;
+
+	assert(control.Registers[0x12] == 0x0C && control.Registers[0x27] == 0);
+	assert(control.Registers[0x0E] == 3 && control.Registers[0x62] == 1);
+	assert(control.Registers[0x5A] == 0xFF && control.Registers[0x21] == 0x0640);
+	assert(control.Registers[0x39] == 33 && control.Registers[0x3A] == 0xA1);
+	assert(codec.HeadphoneGain() == -24000 && control.ServoReads == 3);
+	assert(codec.HeadphoneGain(999999) == 6000 && control.Registers[0x39] == 63);
+	assert(codec.HeadphoneGain(-999999) == -57000 && control.Registers[0x39] == 0);
+	assert(codec.HeadphoneGain(-24100) == -24000);
+	control.MclkPresent = false;
+	codec.Disable();
+	assert(codec.Valid() && control.Registers[0x5A] == 0 && control.Registers[0x62] == 0);
+	assert(control.Registers[0x0E] == 0 && control.Registers[0x12] == 0);
+	assert(!codec.Enable() && !codec.Valid());
+	assert(control.Registers[0x62] == 0);
+	control.MclkPresent = true;
+	assert(codec.Init(cfg, &control));
+	codec.PowerOff();
+	control.ServoStuck = true;
+	unsigned delayBefore = s_Delay;
+
+	assert(!codec.Init(cfg, &control) && !codec.Valid());
+	assert(s_Delay - delayBefore == 400);
+	assert(control.Registers[0x62] == 0 && control.Registers[0x5A] == 0);
+	control.ServoStuck = false;
+	for (unsigned failure = 1; failure <= headphoneWrites; failure++)
+	{
+		control.Writes = 0;
+		control.FailAt = failure;
+		assert(!codec.Init(cfg, &control) && !codec.Valid());
+		assert(control.Registers[0x62] == 0 && control.Registers[0x5A] == 0);
+		codec.PowerOff();
+	}
+	control.FailAt = 0;
+	cfg.MicInput = 2;
+	assert(codec.Init(cfg, &control));
+	assert(control.Registers[0x12] == 0x0E && control.Registers[0x27] == 0x1800);
+	codec.PowerOff();
+	puts("WM8904 capture/playback, clock, gain, servo ordering/timeout and failures PASS");
 }

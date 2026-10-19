@@ -193,7 +193,9 @@ static bool HardwareInit()
 		.SampleWidth = I2SSWIDTH_16BITS,
 		.Format = I2SFMT_NORMAL,
 		.MicInput = AUDIO_MIC_INPUT,
-		.Gain = 18000
+		.Gain = 18000,
+		.bHeadphoneEn = false,
+		.HeadphoneGain = -24000
 	};
 	if (!s_Codec.Init(codecCfg, &s_Control))
 	{

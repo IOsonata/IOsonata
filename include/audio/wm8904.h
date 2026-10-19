@@ -39,11 +39,12 @@ SOFTWARE.
 #include "device.h"
 #include "coredev/i2s.h"
 
-// Digital microphone capture. The codec is the I2S slave; its external MCLK
+// Digital microphone capture and optional stereo headphone playback. The codec is the I2S slave; its external MCLK
 // must be 256 times the actual frame rate returned by the audio interface.
 // Init/Enable stage configuration with SYSCLK disabled and enable it last, so
 // MCLK may start afterward. MCLK must run during live gain changes. Disable
 // and PowerOff first gate SYSCLK and also work after MCLK has stopped.
+// Headphone Init/Enable additionally require MCLK throughout DC servo startup.
 typedef struct __Wm8904_Config
 {
 	uint8_t DevAddr;	   //!< Seven-bit control address, normally 0x1A.
@@ -51,8 +52,10 @@ typedef struct __Wm8904_Config
 	uint32_t MClkFreq;	   //!< External MCLK in Hz.
 	I2SSWIDTH SampleWidth; //!< 16 or 24 bits.
 	I2SFMT Format;
-	unsigned MicInput; //!< DMICDAT1 = 1, DMICDAT2 = 2.
+	unsigned MicInput; //!< 0 = off, DMICDAT1 = 1, DMICDAT2 = 2.
 	int Gain;		   //!< ADC digital gain in milli-dB, rounded to 375 milli-dB.
+	bool bHeadphoneEn; //!< Enable stereo headphone playback.
+	int HeadphoneGain; //!< Headphone gain in milli-dB, -57000 to 6000, 1000 steps.
 } Wm8904Cfg_t;
 
 // Control uses the injected DeviceIntrf. PCM travels through the application's
@@ -66,8 +69,12 @@ public:
 	void PowerOff();
 	int Gain(int MilliDb);
 	int Gain() const;
+	int HeadphoneGain(int MilliDb);
+	int HeadphoneGain() const;
 
 private:
+	bool StartHeadphones();
+	bool StopHeadphones();
 	bool ReadReg(uint8_t Reg, uint16_t &Value);
 	bool WriteReg(uint8_t Reg, uint16_t Value);
 	bool VerifyReg(uint8_t Reg, uint16_t Value, uint16_t Mask);
