@@ -22,7 +22,9 @@ are the power cut sweep of run_bond_flash.py --powercut: prepare the old
 image, the save the emulator cuts, and the boot after the cut. Boots 9 to 12
 are the bond deletion of BtSmpBondErase: the firmware plays the ST stack
 clearing its table between BtSmpBondWbaEraseBegin and BtSmpBondWbaEraseEnd.
-Boots 13 and 14 are the power cut sweep of a deletion.
+Boots 13 and 14 are the power cut sweep of a deletion. Boot 15 runs the flash
+driver alone through an Nvm over the region: programs the controller refuses
+must fail the write.
 
 Not hardware validation.
 
@@ -64,6 +66,9 @@ SOFTWARE.
 #include "coredev/spi.h"
 #include "coredev/iopincfg.h"
 #include "bluetooth/bt_pds.h"
+#include "storage/nvm.h"
+#include "storage/nvm_intrf.h"
+#include "storage/nvm_region.h"
 
 // Image of the stack's NVM cache: 39 words, 312 bytes, two PDS chunks
 #define BOND_FW_WORDS		39U
@@ -529,6 +534,55 @@ static void BootCutEraseCheck(void)
 	Check(StoredIs(g_BondFwArg[2], g_BondFwArg[3]), "save after the power cut in a deletion stored");
 }
 
+// The flash driver alone, through an Nvm over the store region: a program
+// the controller refuses (PROGERR, the quad word is not erased) must fail
+// the write, for a full 64 byte block as for a shorter one.
+static NvmIntrf s_TestIntrf;
+static Nvm s_TestMem;
+
+static bool TestMemInit(void)
+{
+	NvmCfg_t cfg;
+
+	memset(&cfg, 0, sizeof(cfg));
+	NvmMcuCfg(cfg);
+	cfg.BaseAddr = NvmRegionAddr(0);
+	cfg.TotalSize = NvmRegionSize(0);
+
+	return s_TestIntrf.Init() && s_TestMem.Init(cfg, &s_TestIntrf, 0, 0);
+}
+
+static void BootProgramError(void)
+{
+	uint8_t a[64];
+	uint8_t b[64];
+	uint8_t c[64];
+
+	for (int i = 0; i < 64; i++)
+	{
+		a[i] = (uint8_t)(i + 1);
+		b[i] = (uint8_t)(0x80 + i);
+	}
+
+	Check(TestMemInit(), "program error: Nvm over the region");
+	Check(s_TestMem.Erase(0, 0x2000) == 0, "program error: page erased");
+	Check(s_TestMem.Write(0x40, a, 64) == 64, "program error: 64 bytes written");
+	Check(s_TestMem.Write(0x40, b, 64) < 0, "program error: 64 bytes over data fail");
+	Check(s_TestMem.Write(0x80, a, 48) == 48, "program error: 48 bytes written");
+	Check(s_TestMem.Write(0x80, b, 48) < 0, "program error: 48 bytes over data fail");
+
+	// Only the last quad word of the block holds data: the first three go
+	// in, the fourth is refused, and the write fails.
+	Check(s_TestMem.Write(0xF0, a, 16) == 16, "program error: one quad word written");
+	Check(s_TestMem.Write(0xC0, b, 64) < 0, "program error: block ending on data fails");
+
+	// A write after a failed one lands where it is asked to
+	Check(s_TestMem.Write(0x100, b, 64) == 64 && s_TestMem.Read(0x100, c, 64) == 64 &&
+		  memcmp(c, b, 64) == 0, "program error: next write lands at its own address");
+	Check(s_TestMem.Read(0x40, c, 64) == 64 && memcmp(c, a, 64) == 0,
+		  "program error: the refused write left the data");
+}
+
 extern "C" void __cxa_pure_virtual(void)
 {
 	while (1)
@@ -545,7 +599,7 @@ extern "C" int main(void)
 		Boot0, Boot1, Boot2, Boot3, Boot4, BootNoRegion,
 		BootCutPrepare, BootCutSave, BootCutCheck,
 		BootErase0, BootErase1, BootErase2, BootErase3,
-		BootCutErase, BootCutEraseCheck
+		BootCutErase, BootCutEraseCheck, BootProgramError
 	};
 	uint32_t boot = g_BondFwBoot;
 

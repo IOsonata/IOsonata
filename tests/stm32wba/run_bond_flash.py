@@ -197,7 +197,7 @@ class Flash:
     """STM32WBA flash controller, non-secure registers, and the memory of
     the bond store region."""
 
-    def __init__(self, mem, torn=None, transient=None):
+    def __init__(self, mem, torn=None, transient=None, swap=False, corrected=None):
         self.mem = mem			# bytearray of NVM_MAP bytes from NVM_BASE - kept across boots
         # Offsets of quad words a power cut left part programmed or part
         # erased, kept across boots. The silicon checks every flash read
@@ -207,6 +207,14 @@ class Flash:
         # Quad words whose next reads fail their ECC check, then read well:
         # offset -> reads left to fail.
         self.transient = transient if transient is not None else {}
+        # Quad words with a single bit error the ECC corrects on every read:
+        # ECCC is set, no NMI.
+        self.corrected = corrected if corrected is not None else set()
+        # SWAP_BANK option: the second physical bank is mapped first. BKER
+        # names the physical bank; BK_ECC is given as the physical bank too.
+        self.swap = swap
+        self.off_optr = reg_off('FLASH_TypeDef', 'OPTR')
+        self.SWAP_BANK = hdr('FLASH_OPTR_SWAP_BANK')
         self.ecc_reads = []		# reads that touched a torn quad word
         self.cut_at = None		# flash operation the power cut stops, None for no cut
         self.tear = False		# the cut operation is left half done
@@ -285,6 +293,8 @@ class Flash:
             return self.cr
         if off == self.off_sr:
             return self.sr			# BSY and WDW never set: the model is instant
+        if off == self.off_optr:
+            return self.SWAP_BANK if self.swap else 0
         return 0
 
     def wr(self, off, val):
@@ -331,6 +341,8 @@ class Flash:
             self.v('erase started with error flags still set')
         page = (cr & self.PNB_MSK) >> self.PNB_POS
         bank = 1 if cr & self.BKER else 0
+        if self.swap:
+            bank ^= 1			# physical bank to the mapped one
         addr = FLASH_BASE + bank * (FLASH_KB * 1024 // 2) + page * PAGE
         if not (NVM_BASE <= addr < NVM_BASE + NVM_MAP):
             self.v(f'erase of page {addr:#x} outside the store')
@@ -354,13 +366,17 @@ class Flash:
 
     # memory of the store region
     def mem_rd(self, off, size):
-        if self.skip_pc is not None or self.transient or self.torn:
+        if self.skip_pc is not None or self.transient or self.torn or self.corrected:
             from unicorn.arm_const import UC_ARM_REG_PC
             pc = self.uc.reg_read(UC_ARM_REG_PC)
             if self.skip_pc is not None and pc != self.skip_pc:
                 self.skip_pc = None
                 self.skip.clear()
-            for q in sorted({off - off % QWORD, (off + size - 1) - (off + size - 1) % QWORD}):
+            quads = sorted({off - off % QWORD, (off + size - 1) - (off + size - 1) % QWORD})
+            for q in quads:
+                if q in self.corrected:
+                    self.ecc_record(q, self.ECCC)
+            for q in quads:
                 if q in self.skip:
                     continue
                 if self.transient.get(q, 0) > 0:
@@ -371,22 +387,31 @@ class Flash:
                 break
         return int.from_bytes(self.mem[off:off + size], 'little')
 
+    def ecc_record(self, q, flag):
+        """Set ECCC or ECCD. The address and bank are recorded only when
+        neither flag was set: the controller keeps the first error until the
+        flags are cleared, as the reference manuals of the L4 and U5 parts
+        describe ECCR, taken here for the WBA."""
+        if not (self.eccr & (self.ECCD | self.ECCC)):
+            bank_size = FLASH_KB * 1024 // 2
+            rel = NVM_BASE + q - FLASH_BASE
+            bank = rel >= bank_size
+            rel -= bank_size if bank else 0
+            if self.swap:
+                bank = not bank		# the physical bank
+            self.eccr = (self.eccr & self.ECCIE) | ((rel >> 3) & self.ADDR_ECC) | \
+                (self.BK_ECC if bank else 0)
+        self.eccr |= flag
+
     def ecc_error(self, pc, q):
-        """A read of a torn quad word: double ECC error, NMI after the read.
-        The first error stays recorded until ECCD is cleared."""
+        """A read of a torn quad word: double ECC error, NMI after the read."""
         addr = NVM_BASE + q
         if self.skip_pc != pc:
             self.skip.clear()
         self.skip_pc = pc
         self.skip.add(q)
         self.ecc_reads.append(addr)
-        if not (self.eccr & self.ECCD):
-            bank_size = FLASH_KB * 1024 // 2
-            rel = addr - FLASH_BASE
-            bank = rel >= bank_size
-            rel -= bank_size if bank else 0
-            self.eccr = (self.eccr & self.ECCIE) | self.ECCD | ((rel >> 3) & self.ADDR_ECC) | \
-                (self.BK_ECC if bank else 0)
+        self.ecc_record(q, self.ECCD)
         self.nmi_pending = True
         self.uc.emu_stop()
 
@@ -437,7 +462,8 @@ class Flash:
         self.done(0)
 
 
-def run_boot(elf_path, boot, mem, torn=None, cut=None, tear=False, args=None, transient=None):
+def run_boot(elf_path, boot, mem, torn=None, cut=None, tear=False, args=None, transient=None,
+             swap=False, corrected=None):
     from unicorn import Uc, UC_ARCH_ARM, UC_MODE_THUMB, UC_MODE_MCLASS, UC_HOOK_CODE
     from unicorn.arm_const import UC_CPU_ARM_CORTEX_M33
     from unicorn.arm_const import UC_ARM_REG_R0, UC_ARM_REG_R1, UC_ARM_REG_SP, UC_ARM_REG_PC
@@ -455,7 +481,7 @@ def run_boot(elf_path, boot, mem, torn=None, cut=None, tear=False, args=None, tr
         if seg['p_type'] == 'PT_LOAD' and seg['p_filesz']:
             uc.mem_write(seg['p_paddr'], seg.data())
 
-    flash = Flash(mem, torn, transient)
+    flash = Flash(mem, torn, transient, swap, corrected)
     flash.uc = uc
     flash.cut_at = cut
     flash.tear = tear
@@ -492,6 +518,16 @@ def run_boot(elf_path, boot, mem, torn=None, cut=None, tear=False, args=None, tr
         return FLASH_KB if (size_reg & ~0xFFF) + off == size_reg else 0
 
     uc.mmio_map(size_reg & ~0xFFF, 0x1000, size_rd, None, lambda *a: flash.v('write of the flash size'), None)
+
+    # ICACHE, disabled: the driver invalidates it after a program or an erase
+    # only when it is enabled, and reads CR to know.
+    icache = hdr('ICACHE_BASE_NS')
+
+    def icache_rd(uc, off, size, user):
+        return 0
+
+    uc.mmio_map(icache & ~0xFFF, 0x1000, icache_rd, None,
+                lambda *a: flash.v('write of ICACHE while it is disabled'), None)
 
     st = {'poll': 0, 'done': False, 'init': 0, 'lines': [], 'buf': '', 'nmis': 0, 'hang': False}
 
@@ -660,6 +696,7 @@ BOOT_CUT_CHECK = 8
 BOOT_ERASE = 9			# first of the four bond deletion boots
 BOOT_CUT_ERASE = 13
 BOOT_CUT_ERASE_CHECK = 14
+BOOT_PROGRAM_ERROR = 15
 
 
 def boot_ok(errors, label, result, st, flash):
@@ -797,6 +834,87 @@ def powercut_erase(elf, errors):
     return total
 
 
+
+def boot_or_error(errors, label, *a, **kw):
+    """run_boot, with an emulator that stops for no reason reported as a
+    failure of the run instead of ending the test."""
+    try:
+        return run_boot(*a, **kw)
+    except SystemExit as e:
+        errors.append(f'{label}: {str(e).splitlines()[0]}')
+        st = {'lines': [], 'hang': True, 'nmis': 0}
+        return -1, st, Flash(bytearray(NVM_MAP))
+
+
+def driver_runs(elf, errors):
+    """Runs of the flash driver on its own. Returns how many passed."""
+    passed = 0
+
+    # A program the controller refuses fails the write, a full 64 byte block
+    # as well as a shorter one: three refused programs in boot 15.
+    n = len(errors)
+    mem = bytearray(b'\xff' * NVM_MAP)
+    result, st, fl = boot_or_error(errors, 'program error', elf, BOOT_PROGRAM_ERROR, mem)
+    for _, t in st['lines']:
+        if '[FAIL]' in t:
+            errors.append(f'program error: {t}')
+    if result != 0 or st['hang'] or st['nmis']:
+        errors.append(f'program error: {result} failures, {st["nmis"]} NMI, stopped {st["hang"]}')
+    for v in fl.viol:
+        errors.append(f'program error: model violation: {v}')
+    if fl.stats['progerr'] != 3:
+        errors.append(f'program error: {fl.stats["progerr"]} programs refused, 3 expected')
+    if len(errors) == n:
+        passed += 1
+        print('programs the controller refuses: every write fails, 64 byte blocks included')
+
+    # Banks swapped: the erases of the deletion boots go to the page of the
+    # store, not to the other bank, and an ECC error is taken.
+    n = len(errors)
+    mem = bytearray(b'\xff' * NVM_MAP)
+    for boot in range(BOOT_ERASE, BOOT_ERASE + 4):
+        result, st, fl = boot_or_error(errors, f'banks swapped, boot {boot}', elf, boot, mem, swap=True)
+        boot_ok(errors, f'banks swapped, boot {boot}', result, st, fl)
+        if boot == BOOT_ERASE and fl.stats['erases'] == 0:
+            errors.append('banks swapped: the deletion erased nothing')
+    args = [23, 39, 24, 64, 0, 0]
+    mem = bytearray(b'\xff' * NVM_MAP)
+    result, st, fl = boot_or_error(errors, 'banks swapped, prepare', elf, BOOT_CUT_PREPARE, mem,
+                                   args=args, swap=True)
+    boot_ok(errors, 'banks swapped, prepare', result, st, fl)
+    result, st, fl = boot_or_error(errors, 'banks swapped, read error', elf, BOOT_CUT_CHECK, mem,
+                                   args=args, transient={0: 2}, swap=True)
+    boot_ok(errors, 'banks swapped, read error', result, st, fl)
+    if not any('cut sweep: restored old' in t for _, t in st['lines']) or st['nmis'] != 2:
+        errors.append(f'banks swapped, read error: {st["nmis"]} NMI, the image was not restored')
+    if len(errors) == n:
+        passed += 1
+        print('banks swapped: erases stay in the store, ECC errors are taken')
+
+    # A corrected error recorded first. The first record header of the store
+    # reads with a single bit error (ECCC), the last record written has a
+    # torn quad word (ECCD). With ECCC left set the controller would keep the
+    # first address and the NMI would not be taken.
+    n = len(errors)
+    args = [25, 39, 26, 39, 20, 0]
+    mem = bytearray(b'\xff' * NVM_MAP)
+    result, st, fl = boot_or_error(errors, 'corrected error first, prepare', elf, BOOT_CUT_PREPARE, mem,
+                                   args=args)
+    boot_ok(errors, 'corrected error first, prepare', result, st, fl)
+    last = max(q for q in range(0, PAGE, QWORD) if mem[q:q + QWORD] != b'\xff' * QWORD)
+    corrected = {QWORD}
+    torn = {last}
+    result, st, fl = boot_or_error(errors, 'corrected error first', elf, BOOT_CUT_CHECK, mem, torn,
+                                   args=args, corrected=corrected)
+    boot_ok(errors, 'corrected error first', result, st, fl)
+    if not any('cut sweep: restored old' in t for _, t in st['lines']) or st['nmis'] == 0:
+        errors.append(f'corrected error first: {st["nmis"]} NMI, the image was not restored')
+    if len(errors) == n:
+        passed += 1
+        print(f'corrected error recorded first: the double error at {last:#x} is taken, {st["nmis"]} NMI, '
+              'image restored')
+    return passed
+
 def main():
     if not shutil.which('arm-none-eabi-g++'):
         print('NOT RUN: arm-none-eabi-g++ not found')
@@ -917,6 +1035,8 @@ def main():
         else:
             passed += 1
             print('passing read error on a sector header: sector kept, image restored, 2 NMI')
+
+        passed += driver_runs(elf, errors)
 
         if '--powercut' in sys.argv:
             print('power cut sweep:')
