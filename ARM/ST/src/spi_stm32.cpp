@@ -21,8 +21,12 @@
 		stays at its idle level. The slave has no underrun value: its
 		transmit FIFO is kept filled, with the DummyByte after the data.
 		Clearing SPE leaves the FIFO content, so the slave is reset through
-		RCC before each frame. QUADSPI is not handled here. DMA is not
-		available on this layout yet, SPIInit returns false for bDmaEn.
+		RCC before each frame. QUADSPI is not handled here. DMA on the L4
+		takes the channels of the instance table from the DMA channel
+		manager (dma_stm32.h), two for each instance: the receive channel
+		ends a master chunk of up to 65535 items, the slave receive channel
+		takes the frame into the buffer and the transmit channel loads the
+		data, the transmit interrupt then feeds the DummyByte.
 		What follows describes the CFG1/CFG2 layout; master chip select,
 		events, the slave frame sequence and the NSS pin event are the same
 		on both.
@@ -112,6 +116,18 @@ SOFTWARE.
 #if defined(IOSONATA_STM32_WBA)
 #include "gpdma_stm32wba.h"
 #define STM32_SPI_DMA
+#define STM32_SPI_DMA_REMAIN(Ch)		WbaGpdmaRemain(Ch)
+#define STM32_SPI_DMA_FREE(Ch)			WbaGpdmaFree(Ch)
+#define STM32_SPI_DMA_ACK(Ch)			WbaGpdmaAck(Ch)
+#define STM32_SPI_DMA_STOP(Ch)			WbaGpdmaStop(Ch)
+#elif defined(IOSONATA_STM32_L4)
+// DMA1 and DMA2 channels of the DMA channel manager
+#include "dma_stm32.h"
+#define STM32_SPI_DMA
+#define STM32_SPI_DMA_REMAIN(Ch)		Stm32DmaChRemain(Ch)
+#define STM32_SPI_DMA_FREE(Ch)			Stm32DmaChFree(Ch)
+#define STM32_SPI_DMA_ACK(Ch)			Stm32DmaChAck(Ch)
+#define STM32_SPI_DMA_STOP(Ch)			Stm32DmaChStop(Ch)
 #endif
 
 #include "istddef.h"
@@ -182,6 +198,7 @@ typedef volatile uint16_t __attribute__((may_alias)) Stm32SpiReg16_t;
 // FRE is for the TI mode, not used
 #define STM32_SPI_ERR_FLAGS			(SPI_SR_OVR | SPI_SR_MODF)
 #define STM32_SPI_CR2_INT			(SPI_CR2_RXNEIE | SPI_CR2_TXEIE | SPI_CR2_ERRIE)
+#define STM32_SPI_CR2_DMA			(SPI_CR2_TXDMAEN | SPI_CR2_RXDMAEN)
 #endif
 
 #ifdef STM32_SPI_LAYOUT_CFG
@@ -191,6 +208,19 @@ typedef volatile uint16_t __attribute__((may_alias)) Stm32SpiReg16_t;
 #endif
 
 #pragma pack(push, 4)
+
+#ifdef STM32_SPI_LAYOUT_CR
+/// DMA channels of an instance and their requests, STM32_DMA_CH and
+/// STM32_DMA_REQ. Channel -1: none.
+typedef struct {
+	int8_t TxCh;
+	int8_t RxCh;
+	uint8_t TxReq;
+	uint8_t RxReq;
+} Stm32SpiDmaPair_t;
+
+#define STM32_SPI_DMA_NOPAIR		{ -1, -1, 0, 0 }
+#endif
 
 /// What differs between the instances: registers of the RCC, interrupt, DMA
 typedef struct {
@@ -205,6 +235,9 @@ typedef struct {
 	IRQn_Type Irq;
 	uint8_t TxReq;					//!< GPDMA request of the transmit, 0 none
 	uint8_t RxReq;
+#ifdef STM32_SPI_LAYOUT_CR
+	Stm32SpiDmaPair_t Dma[2];		//!< DMA channels, first choice then second
+#endif
 } Stm32SpiInfo_t;
 
 typedef struct {
@@ -245,6 +278,7 @@ typedef struct {
 #ifdef STM32_SPI_LAYOUT_CR
 	uint32_t Cr1;			//!< CR1 of the configuration, without SPE
 	uint32_t Cr2;			//!< CR2 of the configuration, without the interrupt enables
+	int DmaPair;			//!< Choice of Dma[] the channels come from
 #endif
 	uint8_t TxBuf[SPI_STM32_TXBUF_SIZE];
 } Stm32SpiDev_t;
@@ -266,17 +300,29 @@ static const Stm32SpiInfo_t s_Stm32SpiInfo[STM32_SPI_MAXDEV] = {
 #elif defined(IOSONATA_STM32_L4)
 // SPI1 on APB2 (PCLK2), SPI2 and SPI3 on APB1 (PCLK1). The kernel clock is the
 // APB clock, there is no selection. The STM32L43x and L44x have no SPI2.
+// DMA requests of the reference manual: SPI1 TX DMA1 channel 3 and RX
+// channel 2 (CSELR 1), or TX DMA2 channel 4 and RX channel 3 (CSELR 4).
+// SPI2 TX DMA1 channel 5 and RX channel 4 (CSELR 1). SPI3 TX DMA2 channel 2
+// and RX channel 1 (CSELR 3). The L4+ route the same channels through
+// DMAMUX1, requests 10 to 15.
 static const Stm32SpiInfo_t s_Stm32SpiInfo[STM32_SPI_MAXDEV] = {
 	{ SPI1, &RCC->APB2ENR, RCC_APB2ENR_SPI1EN, &RCC->APB2RSTR, RCC_APB2RSTR_SPI1RST,
-	  NULL, 0, 1, SPI1_IRQn, 0, 0 },
+	  NULL, 0, 1, SPI1_IRQn, 0, 0,
+	  { { STM32_DMA_CH(1, 3), STM32_DMA_CH(1, 2), STM32_DMA_REQ(1, 11), STM32_DMA_REQ(1, 10) },
+		{ STM32_DMA_CH(2, 4), STM32_DMA_CH(2, 3), STM32_DMA_REQ(4, 11), STM32_DMA_REQ(4, 10) } } },
 #ifdef SPI2
 	{ SPI2, &RCC->APB1ENR1, RCC_APB1ENR1_SPI2EN, &RCC->APB1RSTR1, RCC_APB1RSTR1_SPI2RST,
-	  NULL, 0, 0, SPI2_IRQn, 0, 0 },
+	  NULL, 0, 0, SPI2_IRQn, 0, 0,
+	  { { STM32_DMA_CH(1, 5), STM32_DMA_CH(1, 4), STM32_DMA_REQ(1, 13), STM32_DMA_REQ(1, 12) },
+		STM32_SPI_DMA_NOPAIR } },
 #else
-	{ NULL, NULL, 0, NULL, 0, NULL, 0, 0, (IRQn_Type)0, 0, 0 },
+	{ NULL, NULL, 0, NULL, 0, NULL, 0, 0, (IRQn_Type)0, 0, 0,
+	  { STM32_SPI_DMA_NOPAIR, STM32_SPI_DMA_NOPAIR } },
 #endif
 	{ SPI3, &RCC->APB1ENR1, RCC_APB1ENR1_SPI3EN, &RCC->APB1RSTR1, RCC_APB1RSTR1_SPI3RST,
-	  NULL, 0, 0, SPI3_IRQn, 0, 0 },
+	  NULL, 0, 0, SPI3_IRQn, 0, 0,
+	  { { STM32_DMA_CH(2, 2), STM32_DMA_CH(2, 1), STM32_DMA_REQ(3, 15), STM32_DMA_REQ(3, 14) },
+		STM32_SPI_DMA_NOPAIR } },
 };
 #else
 #error "spi_stm32.cpp: no SPI instance table for this STM32 family"
@@ -357,6 +403,7 @@ static void Stm32SpiDmaIrq(int Ch, void *pCtx);
 static void Stm32SpiService(Stm32SpiDev_t * const pDev);
 static void Stm32SpiDmaGive(Stm32SpiDev_t * const pDev);
 
+#ifdef STM32_SPI_LAYOUT_CFG
 // Take the two channels. Both or none.
 static bool Stm32SpiDmaTake(Stm32SpiDev_t * const pDev, bool bIrq, int IntPrio)
 {
@@ -386,17 +433,69 @@ static bool Stm32SpiDmaTake(Stm32SpiDev_t * const pDev, bool bIrq, int IntPrio)
 
 	return true;
 }
+#else
+// Take the two channels of one choice of the table, the first that is free.
+// Both or none. Taken again at each SPIInit, which sets their interrupt.
+static bool Stm32SpiDmaTake(Stm32SpiDev_t * const pDev, bool bIrq, int IntPrio)
+{
+	const Stm32SpiInfo_t *info = pDev->pInfo;
+	const int width = Stm32SpiItemSize(pDev) - 1;
+
+	if (pDev->DmaTx < 0 || pDev->DmaRx < 0)
+	{
+		Stm32SpiDmaGive(pDev);
+		for (int i = 0; i < 2 && pDev->DmaTx < 0; i++)
+		{
+			const Stm32SpiDmaPair_t *p = &info->Dma[i];
+
+			if (p->TxCh < 0 || p->RxCh < 0)
+			{
+				continue;
+			}
+			if (Stm32DmaChClaim(p->TxCh, Stm32SpiDmaIrq, pDev, IntPrio, bIrq))
+			{
+				if (Stm32DmaChClaim(p->RxCh, Stm32SpiDmaIrq, pDev, IntPrio, bIrq))
+				{
+					pDev->DmaTx = p->TxCh;
+					pDev->DmaRx = p->RxCh;
+					pDev->DmaPair = i;
+				}
+				else
+				{
+					Stm32DmaChFree(p->TxCh);
+				}
+			}
+		}
+		if (pDev->DmaTx < 0)
+		{
+			return false;
+		}
+	}
+	else if (Stm32DmaChClaim(pDev->DmaTx, Stm32SpiDmaIrq, pDev, IntPrio, bIrq) == false ||
+			 Stm32DmaChClaim(pDev->DmaRx, Stm32SpiDmaIrq, pDev, IntPrio, bIrq) == false)
+	{
+		return false;
+	}
+
+	const Stm32SpiDmaPair_t *p = &info->Dma[pDev->DmaPair];
+
+	Stm32DmaChSetup(pDev->DmaTx, p->TxReq, true, &pDev->pReg->DR, width, bIrq);
+	Stm32DmaChSetup(pDev->DmaRx, p->RxReq, false, &pDev->pReg->DR, width, bIrq);
+
+	return true;
+}
+#endif
 
 static void Stm32SpiDmaGive(Stm32SpiDev_t * const pDev)
 {
 	if (pDev->DmaTx >= 0)
 	{
-		WbaGpdmaFree(pDev->DmaTx);
+		STM32_SPI_DMA_FREE(pDev->DmaTx);
 		pDev->DmaTx = -1;
 	}
 	if (pDev->DmaRx >= 0)
 	{
-		WbaGpdmaFree(pDev->DmaRx);
+		STM32_SPI_DMA_FREE(pDev->DmaRx);
 		pDev->DmaRx = -1;
 	}
 }
@@ -405,7 +504,7 @@ static void Stm32SpiDmaIrq(int Ch, void *pCtx)
 {
 	Stm32SpiDev_t *dev = (Stm32SpiDev_t *)pCtx;
 
-	WbaGpdmaAck(Ch);
+	STM32_SPI_DMA_ACK(Ch);
 	// A master transfer that the caller waits for is followed by its polling loop
 	if (dev->bAsync || dev->pSpiDev->Cfg.Mode == SPIMODE_SLAVE)
 	{
@@ -417,11 +516,11 @@ static void Stm32SpiDmaStop(Stm32SpiDev_t * const pDev)
 {
 	if (pDev->DmaTx >= 0)
 	{
-		WbaGpdmaStop(pDev->DmaTx);
+		STM32_SPI_DMA_STOP(pDev->DmaTx);
 	}
 	if (pDev->DmaRx >= 0)
 	{
-		WbaGpdmaStop(pDev->DmaRx);
+		STM32_SPI_DMA_STOP(pDev->DmaRx);
 	}
 }
 #endif
@@ -439,7 +538,7 @@ static int Stm32SpiMasterCount(Stm32SpiDev_t * const pDev)
 #ifdef STM32_SPI_DMA
 	if (pDev->bDma)
 	{
-		items = pDev->Chunk - WbaGpdmaRemain(pDev->DmaRx) / isz;
+		items = pDev->Chunk - STM32_SPI_DMA_REMAIN(pDev->DmaRx) / isz;
 	}
 #endif
 
@@ -649,7 +748,13 @@ static void Stm32SpiMasterEnd(Stm32SpiDev_t * const pDev, bool bad)
 	SPI_TypeDef *reg = pDev->pReg;
 
 	pDev->Result = bad ? Stm32SpiMasterCount(pDev) : (int)(pDev->Items * Stm32SpiItemSize(pDev));
-	reg->CR2 &= ~STM32_SPI_CR2_INT;
+	reg->CR2 &= ~(STM32_SPI_CR2_INT | STM32_SPI_CR2_DMA);
+#ifdef STM32_SPI_DMA
+	if (pDev->bDma)
+	{
+		Stm32SpiDmaStop(pDev);
+	}
+#endif
 	if (bad)
 	{
 		reg->CR1 &= ~SPI_CR1_SPE;
@@ -717,15 +822,18 @@ static void Stm32SpiMasterPump(Stm32SpiDev_t * const pDev, uint32_t Sr)
 	}
 }
 
-// Start the transfer. The peripheral has no transfer size: the whole transfer
-// is one chunk, it ends when the last item is received. With the interrupt
-// the first items are loaded here, the receive interrupt then keeps the
-// transfer going.
+// Start the next chunk of the transfer. The peripheral has no transfer size:
+// a chunk ends when its last item is received. Without DMA the whole
+// transfer is one chunk; with the interrupt the first items are loaded here,
+// the receive interrupt then keeps the transfer going. With DMA a chunk is
+// at most the 65535 items of a channel count, the receive channel is enabled
+// before the transmit one as the reference manual asks.
 static void Stm32SpiMasterChunk(Stm32SpiDev_t * const pDev)
 {
 	SPI_TypeDef *reg = pDev->pReg;
+	uint32_t left = pDev->Items - pDev->Done;
 
-	pDev->Chunk = pDev->Items - pDev->Done;
+	pDev->Chunk = left;
 	pDev->TxN = 0;
 	pDev->RxN = 0;
 
@@ -733,6 +841,44 @@ static void Stm32SpiMasterChunk(Stm32SpiDev_t * const pDev)
 	{
 		reg->CR1 |= SPI_CR1_SPE;
 	}
+#ifdef STM32_SPI_DMA
+	if (pDev->bDma)
+	{
+		const int isz = Stm32SpiItemSize(pDev);
+
+		if (pDev->Chunk > 0xFFFFU)
+		{
+			pDev->Chunk = 0xFFFFU;
+		}
+
+		const uint32_t bytes = pDev->Chunk * isz;
+
+		reg->CR2 |= SPI_CR2_RXDMAEN;
+		if (pDev->pRx)
+		{
+			Stm32DmaChMemInc(pDev->DmaRx, true);
+			Stm32DmaChStart(pDev->DmaRx, pDev->pRx + pDev->Done * isz, bytes);
+		}
+		else
+		{
+			Stm32DmaChMemInc(pDev->DmaRx, false);
+			Stm32DmaChStart(pDev->DmaRx, &pDev->Sink, bytes);
+		}
+		if (pDev->pTx)
+		{
+			Stm32DmaChMemInc(pDev->DmaTx, true);
+			Stm32DmaChStart(pDev->DmaTx, pDev->pTx + pDev->Done * isz, bytes);
+		}
+		else
+		{
+			Stm32DmaChMemInc(pDev->DmaTx, false);
+			Stm32DmaChStart(pDev->DmaTx, &pDev->Dummy, bytes);
+		}
+		reg->CR2 |= SPI_CR2_TXDMAEN | (pDev->bAsync ? SPI_CR2_ERRIE : 0U);
+
+		return;
+	}
+#endif
 	if (pDev->bAsync)
 	{
 		Stm32SpiMasterPump(pDev, reg->SR);
@@ -747,6 +893,15 @@ static void Stm32SpiMasterService(Stm32SpiDev_t * const pDev)
 	SPI_TypeDef *reg = pDev->pReg;
 	uint32_t sr = reg->SR;
 
+#ifdef STM32_SPI_DMA
+	if (pDev->bDma && ((Stm32DmaChFlags(pDev->DmaTx) | Stm32DmaChFlags(pDev->DmaRx)) & STM32_DMA_FLAG_ERR))
+	{
+		pDev->bFail = true;
+		Stm32SpiMasterEnd(pDev, true);
+
+		return;
+	}
+#endif
 	if (sr & STM32_SPI_ERR_FLAGS)
 	{
 		pDev->bFail = true;
@@ -755,17 +910,39 @@ static void Stm32SpiMasterService(Stm32SpiDev_t * const pDev)
 		return;
 	}
 
-	Stm32SpiMasterPump(pDev, sr);
+	bool done;
 
-	if (pDev->RxN >= pDev->Chunk)
+	if (pDev->bDma)
+	{
+#ifdef STM32_SPI_DMA
+		done = (Stm32DmaChFlags(pDev->DmaRx) & STM32_DMA_FLAG_TC) != 0U;
+#else
+		done = false;
+#endif
+	}
+	else
+	{
+		Stm32SpiMasterPump(pDev, sr);
+		done = pDev->RxN >= pDev->Chunk;
+	}
+
+	if (done)
 	{
 		// The last item is in, the clock ends with it: BSY clears within a
 		// bit time
 		for (uint32_t n = Stm32SpiTimeout(pDev); n > 0 && (reg->SR & SPI_SR_BSY); n--)
 		{
 		}
+		reg->CR2 &= ~STM32_SPI_CR2_DMA;
 		pDev->Done += pDev->Chunk;
-		Stm32SpiMasterEnd(pDev, false);
+		if (pDev->Done < pDev->Items)
+		{
+			Stm32SpiMasterChunk(pDev);
+		}
+		else
+		{
+			Stm32SpiMasterEnd(pDev, false);
+		}
 	}
 }
 #endif
@@ -787,7 +964,7 @@ static void Stm32SpiMasterRun(Stm32SpiDev_t * const pDev)
 #ifdef STM32_SPI_DMA
 		if (pDev->bDma && pDev->bRun)
 		{
-			sig += WbaGpdmaRemain(pDev->DmaRx) * 11U + WbaGpdmaRemain(pDev->DmaTx) * 13U;
+			sig += STM32_SPI_DMA_REMAIN(pDev->DmaRx) * 11U + STM32_SPI_DMA_REMAIN(pDev->DmaTx) * 13U;
 		}
 #endif
 		if (sig != last)
@@ -1251,9 +1428,37 @@ static void Stm32SpiSlaveArm(Stm32SpiDev_t * const pDev)
 	Stm32SpiRccReset(pDev);
 	reg->CR1 = pDev->Cr1;
 	reg->CR2 = pDev->Cr2;
+
+	// With DMA the receive channel takes the frame into the buffer and the
+	// transmit channel loads the data, the interrupt then feeds the
+	// DummyByte. Without a buffer or data the interrupt does the work.
+	uint32_t cr2 = SPI_CR2_ERRIE | SPI_CR2_RXNEIE | SPI_CR2_TXEIE;
+
+#ifdef STM32_SPI_DMA
+	if (pDev->bDma)
+	{
+		if (pDev->SRxMax > 0)
+		{
+			reg->CR2 |= SPI_CR2_RXDMAEN;
+			Stm32DmaChMemInc(pDev->DmaRx, true);
+			Stm32DmaChStart(pDev->DmaRx, spi->pRxBuff[0], pDev->SRxMax * isz);
+			cr2 &= ~SPI_CR2_RXNEIE;
+		}
+		if (pDev->STxMax > 0)
+		{
+			Stm32DmaChMemInc(pDev->DmaTx, true);
+			Stm32DmaChStart(pDev->DmaTx, spi->pTxData[0], pDev->STxMax * isz);
+			reg->CR2 |= SPI_CR2_TXDMAEN;
+			cr2 &= ~SPI_CR2_TXEIE;
+		}
+	}
+#endif
 	reg->CR1 |= SPI_CR1_SPE;
-	Stm32SpiSlaveWrite(pDev);
-	reg->CR2 |= STM32_SPI_CR2_INT;
+	if (cr2 & SPI_CR2_TXEIE)
+	{
+		Stm32SpiSlaveWrite(pDev);
+	}
+	reg->CR2 |= cr2;
 }
 
 // NSS went inactive: the frame is over
@@ -1265,15 +1470,41 @@ static void Stm32SpiSlaveEnd(Stm32SpiDev_t * const pDev)
 	const int isz = Stm32SpiItemSize(pDev);
 	int count;
 
-	Stm32SpiSlaveRead(pDev);
+#ifdef STM32_SPI_DMA
+	if (pDev->bDma && pDev->SRxMax > 0)
+	{
+		// The channel takes what the FIFO still holds
+		for (uint32_t n = Stm32SpiTimeout(pDev); n > 0 && (reg->SR & SPI_SR_RXNE) &&
+			 Stm32DmaChRemain(pDev->DmaRx) > 0; n--)
+		{
+		}
+		pDev->SRx = pDev->SRxMax - Stm32DmaChRemain(pDev->DmaRx) / isz;
+		if (reg->SR & SPI_SR_RXNE)
+		{
+			// Items are left that the channel did not take: the frame is
+			// longer than the receive buffer
+			pDev->bBad = true;
+		}
+	}
+	else
+#endif
+	{
+		Stm32SpiSlaveRead(pDev);
+	}
 	if (reg->SR & SPI_SR_OVR)
 	{
 		pDev->bBad = true;
 	}
 	count = pDev->bBad ? -1 : (int)(pDev->SRx * isz);
 
-	reg->CR2 &= ~STM32_SPI_CR2_INT;
+	reg->CR2 &= ~(STM32_SPI_CR2_INT | STM32_SPI_CR2_DMA);
 	reg->CR1 &= ~SPI_CR1_SPE;
+#ifdef STM32_SPI_DMA
+	if (pDev->bDma)
+	{
+		Stm32SpiDmaStop(pDev);
+	}
+#endif
 
 	if (intrf->EvtCB != NULL)
 	{
@@ -1288,6 +1519,8 @@ static void Stm32SpiSlaveService(Stm32SpiDev_t * const pDev)
 	SPI_TypeDef *reg = pDev->pReg;
 	uint32_t sr = reg->SR;
 
+	uint32_t cr2 = reg->CR2;
+
 	if (sr & SPI_SR_OVR)
 	{
 		// Cleared by reading DR then SR
@@ -1295,11 +1528,21 @@ static void Stm32SpiSlaveService(Stm32SpiDev_t * const pDev)
 		Stm32SpiFlushRx(reg);
 		(void)reg->SR;
 	}
-	if (sr & SPI_SR_RXNE)
+	if ((cr2 & SPI_CR2_RXDMAEN) == 0 && (sr & SPI_SR_RXNE))
 	{
 		Stm32SpiSlaveRead(pDev);
 	}
-	if (sr & SPI_SR_TXE)
+#ifdef STM32_SPI_DMA
+	if ((cr2 & SPI_CR2_TXDMAEN) && (Stm32DmaChFlags(pDev->DmaTx) & STM32_DMA_FLAG_TC))
+	{
+		// The channel has loaded the data: the interrupt feeds the DummyByte
+		reg->CR2 &= ~SPI_CR2_TXDMAEN;
+		pDev->STx = pDev->STxMax;
+		reg->CR2 |= SPI_CR2_TXEIE;
+		cr2 = reg->CR2;
+	}
+#endif
+	if ((cr2 & SPI_CR2_TXEIE) && (sr & SPI_SR_TXE))
 	{
 		Stm32SpiSlaveWrite(pDev);
 	}
@@ -1315,7 +1558,7 @@ static bool Stm32SpiSlaveActive(Stm32SpiDev_t * const pDev)
 #ifdef STM32_SPI_DMA
 	if (pDev->bDma && pDev->SRxMax > 0U)
 	{
-		active = active || WbaGpdmaRemain(pDev->DmaRx) < pDev->SRxMax * (uint32_t)Stm32SpiItemSize(pDev);
+		active = active || STM32_SPI_DMA_REMAIN(pDev->DmaRx) < pDev->SRxMax * (uint32_t)Stm32SpiItemSize(pDev);
 	}
 #endif
 
@@ -1452,7 +1695,7 @@ static void Stm32SpiReset(DevIntrf_t * const pIntrf)
 #else
 	// Interrupts off, the receive FIFO emptied and the errors cleared. The
 	// master sets SPE again, the slave is armed below.
-	dev->pReg->CR2 &= ~STM32_SPI_CR2_INT;
+	dev->pReg->CR2 &= ~(STM32_SPI_CR2_INT | STM32_SPI_CR2_DMA);
 	dev->pReg->CR1 &= ~SPI_CR1_SPE;
 	Stm32SpiFlushRx(dev->pReg);
 	(void)dev->pReg->SR;
@@ -1503,7 +1746,7 @@ static void Stm32SpiPowerOff(DevIntrf_t * const pIntrf)
 #ifdef STM32_SPI_LAYOUT_CFG
 		dev->pReg->IER = 0;
 #else
-		dev->pReg->CR2 &= ~STM32_SPI_CR2_INT;
+		dev->pReg->CR2 &= ~(STM32_SPI_CR2_INT | STM32_SPI_CR2_DMA);
 #endif
 		dev->pReg->CR1 &= ~SPI_CR1_SPE;
 		NVIC_DisableIRQ(dev->pInfo->Irq);

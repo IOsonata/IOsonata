@@ -104,8 +104,4 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define SPI_SLAVE_CS_PIN			4
 #define SPI_SLAVE_CS_PINOP			IOPINOP_FUNC6
 
-// The L4 SPI has no DMA yet: master polling and interrupt, slave interrupt
-#define SPI_TEST_MASTER_MASK		0x03
-#define SPI_TEST_SLAVE_MASK			0x01
-
 #endif

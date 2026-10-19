@@ -46,7 +46,7 @@ bytes, is a copy taken out of the CFIFO, see `ARM/ST/STM32F0xx/README.md`
 with a blocking CFIFO). Each channel has its own vector. Since 2026-10-19 the
 vectors belong to the DMA channel manager `ARM/ST/src/dma_stm32.cpp`, which
 all four L4 libraries build: a driver claims the channels the reference
-manual gives its request, the first to ask has them (UART now, SPI and I2C
+manual gives its request, the first to ask has them (UART and SPI, I2C
 next). L476 and L496 select the request in the DMA1 or DMA2 CSELR, L4+ parts
 route it through DMAMUX1 (DMA1 channel n on DMAMUX1 channel n - 1, DMA2
 channel n on channel n + 6). Not tested on hardware.
@@ -71,20 +71,22 @@ DMA and slave requests fail initialization.
 
 The STM32L432 library builds the shared STM32 SPI driver,
 `ARM/ST/src/spi_stm32.cpp`, in place of `src/spi_stm32l4xx.cpp` (2026-10-19):
-SPI1 and SPI3 (DevNo 0 and 2), master in polling and interrupt mode, slave
-in interrupt mode with the hardware NSS pin, 4 to 16 bit data, the rate from
-the BR divider. DMA is not available on L4 yet, SPIInit returns false for
-bDmaEn. QUADSPI (DevNo 3) is not in the L432 library for now: SPIInit
-returns false for it. The STM32L432 example SPIMasterSlave runs SPI1 as master (A1 PA1 SCK, D10 PA11 MISO, A6 PA7 MOSI,
-D3 PB0 chip select GPIO) against SPI3 as slave (D13 PB3 SCK, D12 PB4 MISO,
-D11 PB5 MOSI, A3 PA4 NSS) on one NUCLEO-L432KC, wired A1 to D13, A6 to D11,
-D10 to D12 and D3 to A3. The A6 and D12 lines are shared with the
-I2CMasterSlave wiring. On the NUCLEO-L432KC (2026-10-19), master polling
-and master interrupt, each against the interrupt driven slave, pass in SPI
-modes 0 to 3 at 625 kHz, 8 bit data: master transmit and receive frames of
-1, 16 and 129 bytes, and a 1 byte frame that discards the slave transmit
-prefetch before the next frame. The L476, L496 and L4S9 libraries keep
-`src/spi_stm32l4xx.cpp`.
+SPI1 and SPI3 (DevNo 0 and 2), master in polling and interrupt mode, slave in
+interrupt mode with the hardware NSS pin, 4 to 16 bit data, the rate from the
+BR divider. DMA for master and slave through the DMA channel manager: SPI1 TX
+DMA1 channel 3 and RX channel 2 (CSELR 1), or DMA2 channels 4 and 3 (CSELR 4)
+when those are taken; SPI2 DMA1 channels 5 and 4; SPI3 DMA2 channels 2 and 1
+(CSELR 3). QUADSPI (DevNo 3) is not in the L432 library for now: SPIInit
+returns false for it. The STM32L432 example SPIMasterSlave runs SPI1 as master
+(A1 PA1 SCK, D10 PA11 MISO, A6 PA7 MOSI, D3 PB0 chip select GPIO) against SPI3
+as slave (D13 PB3 SCK, D12 PB4 MISO, D11 PB5 MOSI, A3 PA4 NSS) on one
+NUCLEO-L432KC, wired A1 to D13, A6 to D11, D10 to D12 and D3 to A3. The A6 and
+D12 lines are shared with the I2CMasterSlave wiring. On the NUCLEO-L432KC
+(2026-10-19), master polling and master interrupt, each against the interrupt
+driven slave, pass in SPI modes 0 to 3 at 625 kHz, 8 bit data: master transmit
+and receive frames of 1, 16 and 129 bytes, and a 1 byte frame that discards
+the slave transmit prefetch before the next frame. The L476, L496 and L4S9
+libraries keep `src/spi_stm32l4xx.cpp`.
 
 ## Timer
 
