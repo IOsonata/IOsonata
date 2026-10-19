@@ -843,4 +843,5 @@ and security queries run in application context. UART remains at 1 Mbaud.
 Both this project and the original BleSecurityDemo compile/link in Debug and
 Release. SPI OLED tests exercise peer state, live security levels, numeric
 comparison and UART decisions, disconnect cleanup and queue saturation
-under ASan/UBSan. This status-display example needs hardware validation.
+under ASan/UBSan. On October 19, 2026, the maintainer confirmed that BleStatusDisplayDemo
+works on the STM32WBA65I-DK1.

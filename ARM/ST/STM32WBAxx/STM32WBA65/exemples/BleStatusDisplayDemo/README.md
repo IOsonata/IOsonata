@@ -44,5 +44,5 @@ security example with the real peer pool, AppEvt queue and SSD1315 SPI RAM
 model at -O0/-Os under ASan/UBSan. Security queries and radio decisions are
 modeled. Tests cover two peers, security changes and unavailable queries,
 leading-zero comparison numbers, UART acceptance/rejection, disconnect
-cleanup, deferred transfers and full-queue recovery. Hardware validation
-of this status-display example remains pending.
+cleanup, deferred transfers and full-queue recovery. On October 19, 2026, the maintainer confirmed that BleStatusDisplayDemo
+works on the STM32WBA65I-DK1.
