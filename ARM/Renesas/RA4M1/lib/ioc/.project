@@ -152,5 +152,25 @@
 			<type>1</type>
 			<locationURI>PARENT-5-PROJECT_LOC/src/coredev/timer.cpp</locationURI>
 		</link>
+		<link>
+			<name>src/nvm_ra4m1.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/ARM/Renesas/RA4M1/src/nvm_ra4m1.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/nvm.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/src/storage/nvm.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/device.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/src/device.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/CppRuntimeOverload.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/src/CppRuntimeOverload.cpp</locationURI>
+		</link>
 	</linkedResources>
 </projectDescription>

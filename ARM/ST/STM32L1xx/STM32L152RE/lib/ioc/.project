@@ -145,6 +145,21 @@
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/stddev.c</locationURI>
 		</link>
+		<link>
+			<name>src/nvm_stm32l1xx.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/ARM/ST/STM32L1xx/src/nvm_stm32l1xx.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/nvm.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/storage/nvm.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/spi.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/spi.cpp</locationURI>
+		</link>
 	</linkedResources>
 	<variableList>
 		<variable>

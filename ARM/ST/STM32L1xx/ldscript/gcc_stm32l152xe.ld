@@ -11,7 +11,7 @@ SEARCH_DIR("../../../../../../IOsonata/ARM/ldscript")
 SEARCH_DIR("../../../../../../../IOsonata/ARM/ldscript")
 GROUP( -lstdc++ -lgcc -lc)
 
-/* Full flash and SRAM; EEPROM and NVM partitions are not exposed yet. */
+/* Full code flash and SRAM. Data EEPROM is a separate mapped region. */
 MEMORY
 {
 	FLASH (rx) : ORIGIN = 0x08000000, LENGTH = 512K

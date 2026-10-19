@@ -55,7 +55,8 @@ is not 1. HSI accuracy limits absolute UART baud and timer accuracy. HSE and
 low-frequency oscillator selection are not implemented in this initial port.
 
 The linker uses all 512 KiB of flash at 0x08000000 and 80 KiB of SRAM at
-0x20000000. EEPROM and flash storage partitions are not exposed.
+0x20000000. The separate 16 KiB data EEPROM at 0x08080000 is available through
+`NvmIntrf` and `Nvm`; program-flash storage is not exposed.
 
 ## Device numbers
 
@@ -87,12 +88,43 @@ GNU Arm GCC 13.2.1 Debug and Release builds pass. Register checks cover the
 port encoding, USART2 baud/pins/interrupt configuration, DMA rejection, all
 nine TIM indices and trigger counts, and TIM clock calculation with APB
 prescalers. H753 library/example/register tests also pass after the shared
-GPIO and timer additions. No L152 hardware result is claimed yet.
+GPIO and timer additions. Hardware checks have confirmed Blinky and UART TX: the byte PRBS test at
+1 Mbaud delivered about 26.8 KB/s in Debug and 74.64 KB/s in Release.
+TimerDemo printed its trigger setup but no subsequent events; timer hardware
+validation remains unresolved.
 
-DMA, I2C, SPI, USB, RTC, LCD, ADC/DAC, PWM, EEPROM/internal NVM and low-power
+DMA, I2C, SPI, USB, RTC, LCD, ADC/DAC, PWM, program-flash NVM and low-power
 modes are not implemented by this port. UART initialization rejects DMA.
 Only the minimum core device, UART, timer and application support sources
 are included in the single library project.
+
+## Data EEPROM
+
+`NvmMcuCfg` describes the STM32L152xE 16 KiB EEPROM at 0x08080000:
+byte writes, 64-byte transfer chunks and `EraseSize=0`. `Nvm::Write` overwrites
+bytes, including zeros and ones. `Nvm::Erase` is a no-op for this geometry;
+write the desired fill bytes to clear a region. Program flash and option
+bytes are not unlocked or modified.
+
+Import `STM32L152RE/exemples/EepromDemo/ioc`, rebuild the library and example,
+and open the ST-LINK UART at 1000000 baud, 8N1. This example uses UART in both
+Debug and Release. It runs once and prints `ALL PASS` when checks succeed.
+It overwrites **0x08083D00-0x08083FFF** (the last 768 bytes of EEPROM).
+The last 256-byte unit contains a boot stamp; power cycle without erasing
+EEPROM and confirm that the reported previous boot stamp increases.
+
+The controller port is polling-only: `NvmIntrf::Init(..., true)` returns false.
+An installed arbiter blocks operations because this port does not implement
+timeslots. Access through Nvm/NvmIntrf; do not access the flash controller from
+another driver concurrently. Waits are bounded. On a busy timeout, no further
+EEPROM access is allowed until BSY clears; the next readiness check relocks it.
+A failed write can leave a partially changed range and is not atomic.
+
+Debug/Release library and EepromDemo compile/link checks pass with GCC 13.2.1.
+`tests/storage/data_nvm/run.py` executes the actual ARM port and generic Nvm
+code under a register model, covering overwrite, boundaries, lock handling,
+program errors, busy timeout and subsequent recovery. EEPROM hardware testing
+is pending.
 
 ## References
 

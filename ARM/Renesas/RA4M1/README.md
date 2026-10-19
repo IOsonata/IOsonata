@@ -724,3 +724,41 @@ UART hardware basis: the same Rev.1.10 manual, chapter 28 (SCI), chapter 10
 (module stop) and section 13.3 (interrupt request handling). Renesas FSP
 `v6.6.0` `r_sci_uart.c` was a secondary sequencing cross-check only.
 
+## Data flash NVM
+
+`nvm_ra4m1.cpp` exposes the 8 KiB data flash at 0x40100000 through the existing
+`NvmIntrf` and `Nvm`. `NvmMcuCfg` reports byte programming, 64-byte transfer
+chunks and 1 KiB erase blocks. Call `Nvm::Erase` before reusing a programmed
+range. The driver uses the FACI blank-check command before programming and
+rejects nonblank destinations. It does not emulate EEPROM or erase implicitly.
+Code flash and option-setting memory are outside the permitted address range.
+
+The IOC library project includes this port in `libIOsonata_RA4M1.a`.
+Import `exemples/NvmDemo/ioc` and rebuild the library and example with matching
+configurations. Output uses the existing UART0 pins (P100 RX, P101 TX) at
+1000000 baud, 8N1, interrupt mode and no DMA in both Debug and Release.
+The test erases/programs **0x40101400-0x40101FFF**, the last three data-flash
+blocks. Two blocks are scratch; the last stores a boot stamp. Expect
+`ALL PASS`, then power cycle without clearing data flash and check that the
+previous boot stamp increases.
+
+This port is polling-only; `NvmIntrf::Init(..., true)` rejects interrupt mode.
+Registering an arbiter blocks accesses rather than bypassing its owner. Keep
+FCLK between 4 and 32 MHz and unchanged during an operation. Interrupts remain
+enabled during polling, but no ISR, DMA or other driver may read data flash or
+use FACI while it is in program/erase mode. Code flash remains readable.
+Timeout/error paths reset the sequencer and attempt to restore read mode;
+if that fails, subsequent operations are refused. Failed writes may partially
+program their range. Erase before retrying a failed program.
+
+Debug/Release library and NvmDemo compile/link checks pass with GCC 13.2.1.
+`tests/storage/data_nvm/run.py` executes the production ARM port and generic
+Nvm code under a register model, including P/E address conversion, protected
+mode writes, blank checks, erase boundaries, error/timeout recovery and bounds.
+Data-flash hardware validation is pending. The model does not establish flash
+timing, endurance or power-loss behavior.
+
+Controller sequence reference: Renesas RA4M1 hardware manual, FACI LP data-flash
+program/erase flowcharts, cross-checked against the RA4M1 MF3 paths in Renesas
+FSP `ra/fsp/src/r_flash_lp/r_flash_lp.c`. The port uses the existing vendor
+CMSIS registers directly and has no FSP runtime dependency.
