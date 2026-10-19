@@ -520,12 +520,16 @@ static int AppendToSector(uint16_t Sector, uint32_t Id, uint16_t Len,
 		return -ENOMEM;
 	}
 
+	// The sequence number is used up before the write. A write that reports
+	// an error may still have reached the medium; the next record must not
+	// carry the same number, or the newest of the two would depend on which
+	// sector a scan reads first.
 	BtPdsRecHdr_t hdr;
 	memset(&hdr, 0, sizeof(hdr));
 	hdr.Magic = BT_PDS_REC_MAGIC;
 	hdr.Id = Id;
 	hdr.Len = Len;
-	hdr.Seq = s_NextSeq;
+	hdr.Seq = s_NextSeq++;
 	hdr.Crc = RecCrc(&hdr, pData);
 
 	alignas(BT_PDS_MAX_WRITE_GRAN) uint8_t rec[
@@ -545,7 +549,6 @@ static int AppendToSector(uint16_t Sector, uint32_t Id, uint16_t Len,
 	}
 
 	pInfo->Head += total;
-	s_NextSeq++;
 	return 0;
 }
 
@@ -993,7 +996,7 @@ static int FormatStore(void)
 	return StartSector(0U);
 }
 
-int BtPdsInit(Nvm *pMem)
+static int PdsMount(Nvm *pMem)
 {
 	if (pMem == nullptr)
 	{
@@ -1093,6 +1096,23 @@ int BtPdsInit(Nvm *pMem)
 	return 0;
 }
 
+// A mount that fails leaves no store behind. One that stopped part way
+// leaves the sector table half filled, a sector can be marked valid before
+// its records were read, and a store still usable after that could take
+// such a sector as holding nothing: the next write could collect and erase
+// it with the data still in it.
+int BtPdsInit(Nvm *pMem)
+{
+	int result = PdsMount(pMem);
+
+	if (result != 0)
+	{
+		s_pMem = nullptr;
+	}
+
+	return result;
+}
+
 ssize_t BtPdsRead(uint32_t Id, void *pBuf, size_t Len)
 {
 	if (s_pMem == nullptr || Id == BT_PDS_CTRL_GC_DONE_ID)
@@ -1168,12 +1188,37 @@ int BtPdsClear(void)
 		return -EINVAL;
 	}
 
+	// The clear commits on an erased sector. Without one, a sector holding
+	// nothing under this epoch is erased for it: after a clear whose erase
+	// failed, that is a sector the commit already took away. Falling back to
+	// erasing every sector in order instead would erase the commit header
+	// first, and a failure or a power cut after that would bring the cleared
+	// records back.
 	uint16_t spare = FindErasedSector();
+	for (uint16_t sector = 0; spare == BT_PDS_NO_SECTOR && sector < s_SectorCount; sector++)
+	{
+		if (!s_Sectors[sector].Valid && !s_Sectors[sector].Erased)
+		{
+			int result = EraseSector(sector);
+			if (result != 0)
+			{
+				return result;
+			}
+			spare = sector;
+		}
+	}
 	if (spare == BT_PDS_NO_SECTOR)
 	{
-		// No erased spare exists only in an already-degraded state. Fall back
-		// to the sequential format, which is not power-loss atomic.
-		return FormatStore();
+		// Every sector holds live records, a store left without its spare.
+		// One is erased to make it: its records go now, the others at the
+		// commit below. A power cut in between leaves the clear not done,
+		// as the call reports.
+		int result = EraseSector(0U);
+		if (result != 0)
+		{
+			return result;
+		}
+		spare = 0U;
 	}
 
 	// Commit point of the clear. Once a sector header under the next epoch
