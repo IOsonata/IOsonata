@@ -987,3 +987,127 @@ SAI PDM section and tables 422/423;
 [DS14736](https://www.st.com/resource/en/datasheet/stm32wba65ri.pdf), AF3 table;
 [board audio connections](https://github.com/STMicroelectronics/stm32wba65ri-dk1-bsp/blob/main/stm32wba65i_discovery_audio.c).
 
+
+## I2S audio and onboard microphone
+
+Import `exemples/I2sMicLevelDemo/ioc` and rebuild the matching Debug or Release
+IOsonata library. The project links the portable example
+`exemples/audio/i2s_mic_level_demo.cpp`. It records the onboard microphone
+through WM8904 and SAI1, and shows peak amplitude, sample count and clipping
+on the SSD1315. The bar spans -72 to 0 dBFS; the numeric peak is in dBFS.
+This is a digital level meter, not a calibrated sound-pressure
+measurement. The sample count should advance and the bar should respond to
+speech or a finger tap near the microphone.
+
+The board connections are:
+
+| Signal | STM32WBA65I-DK1 connection |
+| --- | --- |
+| Codec control | I2C1 SDA PB1 / SCL PB2, AF4 |
+| Codec address | 0x1A, seven-bit address |
+| Microphone input | WM8904 DMICDAT2 |
+| SAI1 SCK_A | PA7, AF13 |
+| SAI1 FS_A | PC4, AF13 |
+| SAI1 SD_B receive | PC5, AF13 |
+| SAI1 MCLK_A | PE2, AF13 |
+
+The example does not drive SD_A. SAI block A supplies the clocks and block B
+receives the codec output. Board headers contain only pin/configuration
+mapping. `Wm8904` is a generic `Device` accepting an injected `DeviceIntrf`
+for control; PCM is read through the existing `I2S`/`DeviceIntrf` interface.
+The codec driver supports DMICDAT1/2 capture, 16/24-bit I2S or justified
+formats, gain in 0.375 dB steps, enable/disable, reset and power off. Analogue
+capture and headphone/line playback are not implemented in this codec driver.
+
+### WBA I2S operation
+
+`ARM/ST/STM32WBAxx/src/i2s_stm32wba.cpp` implements DevNo 0 with SAI1 A
+transmit/clock and synchronized B receive. It supports master/slave operation,
+normal I2S, left/right justified data, 8/16/24-bit samples, and stereo or
+left/right slot selection. All AF13 routes for these signals in DS14736
+are accepted; choose routes present on the MCU package. A negative PortNo
+omits SDI, SDO or MCLK. At least one data direction and both clock pins are
+required. Slave mode expects externally supplied SCK_A/FS_A and reports the
+configured frame rate; it does not measure that external clock.
+
+Master mode uses HSI16 with a fixed MCLK/frame ratio of 256 and dividers
+1 through 63. Rate selects and returns the closest supported frame rate;
+zero selects the 16 kHz request. The default therefore returns **15,625 Hz**,
+with 4 MHz MCLK and HSI oscillator accuracy. It does not modify the system
+PLL or Bluetooth clocks. Use the returned rate and `I2SDev_t::MClkFreq` to
+configure the codec. Exact standard audio rates require a different clock
+source configuration, which this port does not currently select.
+
+Application samples are little-endian packed bytes: one, two or three bytes
+per sample, and left then right in stereo. Transfer lengths must contain
+whole selected-channel frames. FIFO memory must be four-byte aligned and
+sized with `CFIFO_TOTAL_MEMSIZE(frames, frame_bytes)`. RX and TX buffers must
+not overlap. Init divides the supplied memory into complete frames.
+
+- Without a FIFO, receive/transmit use bounded synchronous polling. Receive
+  without a FIFO is supported only with both interrupt and DMA disabled.
+- FIFO receive is continuous while enabled. Rx copies completed frames and
+  returns immediately, including zero when no frames are ready. It never
+  publishes an incomplete frame or overwrites a frame being read.
+- FIFO transmit returns the bytes queued. The peripheral transmits silence
+  when the queue is empty. A positive return means accepted bytes, not that
+  the last sample has left the pin. Transmit without a FIFO uses polling.
+- `bDmaEn` uses dynamically allocated shared GPDMA channels for FIFO paths.
+  DMA uses two fixed internal buffers per direction, in 32-frame transfers;
+  receive memory must hold at least 32 frames. The interrupt rearms DMA and
+  packs/unpacks at most 32 frames. No heap storage is used.
+- `bIntEn` enables DMA/error interrupts, or hardware FIFO interrupts when
+  DMA is disabled. With interrupts off, calls to Rx/Tx service the FIFOs and
+  DMA flags. Poll often enough to avoid hardware overrun; polling does not
+  create an autonomous background task.
+- RX_DATA reports completed FIFO data. DMA TX_READY reports queue space
+  after a transmit block, and TX_FIFO_EMPTY reports the queued block ending.
+  Callbacks run in the service context, normally the interrupt. Defer slow
+  processing and display work to the application. Do not change lifecycle,
+  rate or ownership from a callback.
+
+Init enables I2S. Disable stops both blocks/DMA and flushes both queues;
+Enable restarts them. Reference-counted enables follow DeviceIntrf. Reset
+clears an error, flushes queues and restarts if logically enabled. DMA,
+clock/frame errors or RX overflow stop the stream and report STATECHG or
+RX_FIFO_FULL. Rx/Tx then return zero until Reset or a fresh Init. PowerOff
+releases SAI1 and DMA channels and restores the previous SAI clock selection.
+Use one application-context owner for transfers and lifecycle. Reconfigure
+with PowerOff followed by Init. Keep SAI/GPDMA clocks running during capture.
+
+The shared `sai_stm32wba.cpp` owns SAI1_IRQHandler and arbitrates I2S versus
+native PDM. These two modes cannot run simultaneously. The DMA manager
+continues to own the GPDMA interrupt vectors and allocate channels alongside
+UART, I2C and SPI.
+
+The example disables capture during the codec's 100 ms bias settling delay,
+then enables DMA capture. Its RX FIFO holds 1,024 mono samples. Main-loop
+processing drains it and refreshes the OLED every 100 ms. A capture error or
+500 ms without samples stops capture and displays an error.
+
+Validation:
+
+- Debug and Release builds compile the changed library sources and link
+  I2sMicLevelDemo with the real GPDMA implementation and existing library
+  objects. This is an incremental library build, not a clean rebuild of
+  every library source.
+- Cortex-M33 I2S simulation exercises production I2S, SAI ownership,
+  DeviceIntrf and CFifo with modeled registers/DMA. It checks widths,
+  packing, channels, RX/TX, polling/interrupt service, rate bounds,
+  FIFO overflow, reset/restart, errors, allocation cleanup and receive-only
+  capture. Both -O0 and -Os pass. Native PDM regression also passes.
+- Generic codec tests run at -O0/-Os under ASan/UBSan, checking register byte
+  order, routing, format, gain, lifecycle and each initialization write failing.
+- Physical onboard microphone capture and sustained DMA timing need board
+  validation. A successful simulation does not establish those electrical
+  and timing results.
+
+```sh
+# Same Arm toolchain and emulator environment as the PDM tests above.
+/tmp/iosonata-pdm-tests/bin/python tests/stm32wba/run_i2s.py
+python3 tests/audio/run_wm8904.py
+```
+
+References: [WM8904 Rev 4.1](https://statics.cirrus.com/pubs/proDatasheet/WM8904_Rev4.1.pdf),
+[DS14736 AF13 routes](https://www.st.com/resource/en/datasheet/stm32wba65ri.pdf),
+[ST board audio configuration](https://github.com/STMicroelectronics/stm32wba65ri-dk1-bsp/blob/main/stm32wba65i_discovery_audio.c).

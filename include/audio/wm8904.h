@@ -1,0 +1,74 @@
+/**-------------------------------------------------------------------------
+@file	wm8904.h
+
+@brief	WM8904 digital microphone control
+
+
+@author	Hoang Nguyen Hoan
+@date	Oct. 19, 2026
+
+@license
+
+MIT License
+
+Copyright (c) 2026, I-SYST inc., all rights reserved
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+----------------------------------------------------------------------------*/
+
+#ifndef __AUDIO_WM8904_H__
+#define __AUDIO_WM8904_H__
+
+#include "device.h"
+#include "coredev/i2s.h"
+
+// Digital microphone capture. The codec is the I2S slave; its external MCLK
+// must be 256 times the actual frame rate returned by the audio interface.
+typedef struct __Wm8904_Config
+{
+	uint8_t DevAddr;	   //!< Seven-bit control address, normally 0x1A.
+	uint32_t Freq;		   //!< Actual audio frame rate in Hz.
+	uint32_t MClkFreq;	   //!< External MCLK in Hz.
+	I2SSWIDTH SampleWidth; //!< 16 or 24 bits.
+	I2SFMT Format;
+	unsigned MicInput; //!< DMICDAT1 = 1, DMICDAT2 = 2.
+	int Gain;		   //!< ADC digital gain in milli-dB, rounded to 375 milli-dB.
+} Wm8904Cfg_t;
+
+// Control uses the injected DeviceIntrf. PCM travels through the application's
+// separately configured I2S interface, keeping MCU registers out of this driver.
+class Wm8904 : public Device {
+public:
+	bool Init(const Wm8904Cfg_t &Cfg, DeviceIntrf *pIntrf);
+	bool Enable();
+	void Disable();
+	void Reset();
+	void PowerOff();
+	int Gain(int MilliDb);
+	int Gain() const;
+
+private:
+	bool ReadReg(uint8_t Reg, uint16_t &Value);
+	bool WriteReg(uint8_t Reg, uint16_t Value);
+	Wm8904Cfg_t vCfg{};
+	bool vbEnabled = false;
+};
+
+#endif

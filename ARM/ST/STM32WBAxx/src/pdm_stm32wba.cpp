@@ -39,6 +39,7 @@ SOFTWARE.
 #include "coredev/pdm.h"
 #include "audio/pdm_filter.h"
 #include "gpdma_stm32wba.h"
+#include "sai_stm32wba.h"
 #include "iopinctrl.h"
 
 #define PDM_RAW_BLOCK_SIZE 512
@@ -90,6 +91,7 @@ static unsigned s_Discard;
 static PdmFilter_t s_Filter[2];
 
 static void PdmDmaHandler(int Ch, void *pCtx);
+static void PdmSaiHandler();
 
 static bool PdmOwned(PdmDev_t *pDev)
 {
@@ -301,6 +303,7 @@ void PdmPowerOff(PdmDev_t *pDev)
 	RCC->CCIPR2 = (RCC->CCIPR2 & ~RCC_CCIPR2_SAI1SEL) | s_OldClock;
 	RCC->APB2ENR &= ~RCC_APB2ENR_SAI1EN;
 	s_pDev = nullptr;
+	WbaSaiRelease(pDev);
 }
 
 bool PdmInit(PdmDev_t *const pDev, const PdmCfg_t *const pCfg)
@@ -310,7 +313,6 @@ bool PdmInit(PdmDev_t *const pDev, const PdmCfg_t *const pCfg)
 	bool dataPin = false;
 	uint32_t best = 1;
 	uint64_t difference = UINT64_MAX;
-	uint32_t irq;
 
 	if (!pDev || !pCfg || !pCfg->pPins || pCfg->NbPins != 2 ||
 		!pCfg->pFifoMem || (uintptr_t(pCfg->pFifoMem) & 3U) ||
@@ -345,15 +347,11 @@ bool PdmInit(PdmDev_t *const pDev, const PdmCfg_t *const pCfg)
 	{
 		return false;
 	}
-	irq = __get_PRIMASK();
-	__disable_irq();
-	if (s_pDev || (RCC->APB2ENR & RCC_APB2ENR_SAI1EN))
+	if (!WbaSaiClaim(pDev, PdmSaiHandler))
 	{
-		__set_PRIMASK(irq);
 		return false;
 	}
 	s_pDev = pDev;
-	__set_PRIMASK(irq);
 	// Select the closest hardware clock; zero requests the 1 MHz default.
 	requested = pCfg->Freq ? pCfg->Freq : 1000000;
 	for (uint32_t divider = 1; divider <= 63; divider++)
@@ -371,6 +369,7 @@ bool PdmInit(PdmDev_t *const pDev, const PdmCfg_t *const pCfg)
 	if (s_Dma < 0)
 	{
 		s_pDev = nullptr;
+		WbaSaiRelease(pDev);
 		return false;
 	}
 	RCC->CR |= RCC_CR_HSION;
@@ -382,6 +381,7 @@ bool PdmInit(PdmDev_t *const pDev, const PdmCfg_t *const pCfg)
 		WbaGpdmaFree(s_Dma);
 		s_Dma = -1;
 		s_pDev = nullptr;
+		WbaSaiRelease(pDev);
 		return false;
 	}
 	pDev->CfgData = *pCfg;
@@ -498,7 +498,7 @@ uint16_t *PdmGetSamples(PdmDev_t *pDev)
 	return result;
 }
 
-extern "C" void SAI1_IRQHandler()
+static void PdmSaiHandler()
 {
 	if (s_pDev && (SAI1_Block_A->SR & PDM_SAI_ERRORS))
 	{

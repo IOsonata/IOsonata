@@ -44,58 +44,63 @@ SOFTWARE.
 
 #include "cfifo.h"
 #include "device_intrf.h"
-#include "iopincfg.h"
+#include "coredev/iopincfg.h"
 
-#define I2S_MAX_NB_IOPIN		5
+#define I2S_MAX_NB_IOPIN 5
 
 /// I2S operating modes
-typedef enum __I2S_Mode {
+typedef enum __I2S_Mode
+{
 	I2SMODE_MASTER,
 	I2SMODE_SLAVE
 } I2SMODE;
 
-typedef enum __I2S_Sample_Width {
+typedef enum __I2S_Sample_Width
+{
 	I2SSWIDTH_8BITS = 8,
 	I2SSWIDTH_16BITS = 16,
 	I2SSWIDTH_24BITS = 24
 } I2SSWIDTH;
 
-typedef enum __I2S_Format {
-	I2SFMT_NORMAL,		//!< I2S standard
-	I2SFMT_ALIGN_LEFT,	//!< Left aligned
-	I2SFMT_ALIGN_RIGHT	//!< Right aligned
+typedef enum __I2S_Format
+{
+	I2SFMT_NORMAL,	   //!< I2S standard
+	I2SFMT_ALIGN_LEFT, //!< Left aligned
+	I2SFMT_ALIGN_RIGHT //!< Right aligned
 } I2SFMT;
 
-typedef enum __I2S_Channel {
+typedef enum __I2S_Channel
+{
 	I2SCHAN_STEREO,
 	I2SCHAN_LEFT,
 	I2SCHAN_RIGHT
 } I2SCHAN;
 
 /// I2S pins map index
-#define I2S_SCK_IOPIN_IDX		0	//!< Serial clock
-#define I2S_WS_IOPIN_IDX		1	//!< Word select (left-right clock)
-#define I2S_SDI_IOPIN_IDX		2	//!< Serial Data
-#define I2S_SDO_IOPIN_IDX		3	//!< Serial data out
-#define I2S_MCK_IOPIN_IDX		4	//!< Master clock
+#define I2S_SCK_IOPIN_IDX 0 //!< Serial clock
+#define I2S_WS_IOPIN_IDX 1	//!< Word select (left-right clock)
+#define I2S_SDI_IOPIN_IDX 2 //!< Serial data in
+#define I2S_SDO_IOPIN_IDX 3 //!< Serial data out
+#define I2S_MCK_IOPIN_IDX 4 //!< Master clock
 
 #pragma pack(push, 4)
 
 /// Configuration data used to initialize device
-typedef struct __I2S_Config {
-	int DevNo;			//!< Device physical instance number
-	const IOPinCfg_t *pIOPinMap;	//!< Define I/O pins used by I2S (standard pins : SCK, SDA, WS. Other MCU may have 5 pins)
-	int NbIOPins;		//!< Total number of I/O pins
-	I2SMODE Mode;		//!< Master/Slave mode
-	I2SFMT Format;		//!< Format I2S/aligned-left/aligned-right
-	I2SSWIDTH SampleWidth;	//!< Sample width 8/16/24 bits
-	I2SCHAN Chan;		//! Channel stereo/left/right
-	uint32_t Freq;		//! sampling frequency in Hz
-	int MaxRetry;		//!< Max number of retry
-	bool bDmaEn;		//!< true - Use DMA mode
-	bool bIntEn;		//!< true - Interrupt enable
-	int IntPrio;		//!< Interrupt priority
-	DevIntrfEvtHandler_t EvtCB;	//!< Interrupt based event callback function pointer. Must be set to NULL if not used
+typedef struct __I2S_Config
+{
+	int DevNo;					 //!< Device physical instance number
+	const IOPinCfg_t *pIOPinMap; //!< Define I/O pins used by I2S (SCK, WS, SDI, optional SDO and MCLK)
+	int NbIOPins;				 //!< Total number of I/O pins
+	I2SMODE Mode;				 //!< Master/Slave mode
+	I2SFMT Format;				 //!< Format I2S/aligned-left/aligned-right
+	I2SSWIDTH SampleWidth;		 //!< Sample width 8/16/24 bits
+	I2SCHAN Chan;				 //! Channel stereo/left/right
+	uint32_t Freq;				 //! sampling frequency in Hz
+	int MaxRetry;				 //!< Max number of retry
+	bool bDmaEn;				 //!< true - Use DMA mode
+	bool bIntEn;				 //!< true - Interrupt enable
+	int IntPrio;				 //!< Interrupt priority
+	DevIntrfEvtHandler_t EvtCB;	 //!< Interrupt based event callback function pointer. Must be set to NULL if not used
 	uint8_t *pRxFifoMem;
 	int RxFifoMemSize;
 	uint8_t *pTxFifoMem;
@@ -103,19 +108,20 @@ typedef struct __I2S_Config {
 } I2SCfg_t;
 
 /// Device driver data require by low level functions
-typedef struct __I2S_Device {
-	I2SMODE	Mode;		//!< Operating mode master/slave
-	I2SFMT Format;		//!< Format
-	uint8_t SampleWidth;//!< Sample width in bytes
-	uint32_t Freq;		//! sampling frequency in mHz
-	I2SCHAN Chan;		//! Channel stereo/left/right
-	uint32_t MClkFreq;	//!< Master clock frequency in Hz
-	DevIntrf_t DevIntrf;	//!< Device interface instance
-	const IOPinCfg_t *pIOPinMap;	//!< Define I/O pins used by I2S (standard pins : SCK, SDA, WS. Other MCU may have 5 pins)
-	int NbIOPins;			//!< Total number of I/O pins
+typedef struct __I2S_Device
+{
+	I2SMODE Mode;				 //!< Operating mode master/slave
+	I2SFMT Format;				 //!< Format
+	uint8_t SampleWidth;		 //!< Sample width in bytes
+	uint32_t Freq;				 //! sampling frequency in Hz
+	I2SCHAN Chan;				 //! Channel stereo/left/right
+	uint32_t MClkFreq;			 //!< Master clock frequency in Hz
+	DevIntrf_t DevIntrf;		 //!< Device interface instance
+	const IOPinCfg_t *pIOPinMap; //!< Define I/O pins used by I2S (SCK, WS, SDI, optional SDO and MCLK)
+	int NbIOPins;				 //!< Total number of I/O pins
 	hCFifo_t hRxFifo;
 	hCFifo_t hTxFifo;
-	DevIntrfEvtHandler_t EvtCB;	//!< Interrupt based event callback function pointer. Must be set to NULL if not used
+	DevIntrfEvtHandler_t EvtCB; //!< Interrupt based event callback function pointer. Must be set to NULL if not used
 } I2SDev_t;
 
 #pragma pack(pop)
@@ -134,30 +140,66 @@ extern "C" {
  *
  * @return	true - Initialization success
  */
-bool I2SInit(I2SDev_t * const pDev, const I2SCfg_t * const pCfg);
+bool I2SInit(I2SDev_t *const pDev, const I2SCfg_t *const pCfg);
 
-static inline void I2SEnable(I2SDev_t *const pDev) { DeviceIntrfEnable(&pDev->DevIntrf); }
-static inline void I2SDisable(I2SDev_t *const pDev) { DeviceIntrfDisable(&pDev->DevIntrf); }
+static inline void I2SEnable(I2SDev_t *const pDev)
+{
+	DeviceIntrfEnable(&pDev->DevIntrf);
+}
+
+static inline void I2SDisable(I2SDev_t *const pDev)
+{
+	DeviceIntrfDisable(&pDev->DevIntrf);
+}
 
 #ifdef __cplusplus
 }
 
 class I2S : public DeviceIntrf {
 public:
-	bool Init(const I2SCfg_t &Cfg) { return I2SInit(&vDevData, &Cfg); }
-	operator DevIntrf_t * () { return &vDevData.DevIntrf; }
-	operator I2SDev_t& () { return vDevData; }
-	operator I2SDev_t* () { return &vDevData; }
-	uint32_t Rate(uint32_t RateHz) { return vDevData.DevIntrf.SetRate(&vDevData.DevIntrf, RateHz); }
-	uint32_t Rate(void) { return vDevData.DevIntrf.GetRate(&vDevData.DevIntrf); }	// Get rate in Hz
-	void Enable(void) { DeviceIntrfEnable(&vDevData.DevIntrf); }
-	void Disable(void) { DeviceIntrfDisable(&vDevData.DevIntrf); }
+	bool Init(const I2SCfg_t &Cfg)
+	{
+		return I2SInit(&vDevData, &Cfg);
+	}
 
-	// DevCs is the ordinal starting from 0 of device connected to the SPI bus.
+	operator DevIntrf_t *()
+	{
+		return &vDevData.DevIntrf;
+	}
+
+	operator I2SDev_t &()
+	{
+		return vDevData;
+	}
+
+	operator I2SDev_t *()
+	{
+		return &vDevData;
+	}
+
+	uint32_t Rate(uint32_t RateHz)
+	{
+		return vDevData.DevIntrf.SetRate(&vDevData.DevIntrf, RateHz);
+	}
+
+	uint32_t Rate(void)
+	{
+		return vDevData.DevIntrf.GetRate(&vDevData.DevIntrf);
+	} // Get rate in Hz
+
+	void Enable(void)
+	{
+		DeviceIntrfEnable(&vDevData.DevIntrf);
+	}
+
+	void Disable(void)
+	{
+		DeviceIntrfDisable(&vDevData.DevIntrf);
+	}
 
 protected:
 private:
-	I2SDev_t vDevData;
+	I2SDev_t vDevData{};
 };
 
 #endif // __cplusplus

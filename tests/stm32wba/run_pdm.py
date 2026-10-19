@@ -142,6 +142,7 @@ def main():
                        'ARM/ST/include', 'ARM/ST/STM32WBAxx/include')]
             objects = []
             for source in ('tests/stm32wba/pdm_fw.cpp', 'ARM/ST/STM32WBAxx/src/pdm_stm32wba.cpp',
+                           'ARM/ST/STM32WBAxx/src/sai_stm32wba.cpp',
                            'src/audio/pdm_filter.cpp', 'src/cfifo.c'):
                 obj = temp / (Path(source).stem + '.o')
                 cpp = source.endswith('.cpp')
