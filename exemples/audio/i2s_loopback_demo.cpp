@@ -97,9 +97,19 @@ static int16_t s_Samples[64 * 2];
 static unsigned s_Pending;
 static unsigned s_Offset;
 static unsigned s_Peak;
+static unsigned s_PairMismatches;
 static uint32_t s_Frames;
 static uint32_t s_LastPaint;
 static uint32_t s_LastSample;
+static uint32_t s_TestRate;
+static uint32_t s_TestRemaining;
+static uint32_t s_TestPhase;
+static uint32_t s_TestStep;
+static unsigned s_LastStage;
+static const int16_t s_TestSine[] = {
+	0, 1567, 2896, 3784, 4096, 3784, 2896, 1567,
+	0, -1567, -2896, -3784, -4096, -3784, -2896, -1567
+};
 static volatile AudioError_t s_AudioError;
 static I2S s_Audio;
 static I2C s_Control;
@@ -173,6 +183,23 @@ static int AudioEvent(DevIntrf_t *pDev, DEVINTRF_EVT Evt, uint8_t *pData, int Co
 	return 0;
 }
 
+static void PrepareOutput(unsigned Frames)
+{
+	for (unsigned frame = 0; frame < Frames && s_TestRemaining; frame++)
+	{
+		int16_t value = 0;
+
+		if (s_TestRemaining > s_TestRate)
+		{
+			value = s_TestSine[s_TestPhase >> 28];
+			s_TestPhase += s_TestStep;
+		}
+		s_Samples[frame * 2] = value;
+		s_Samples[frame * 2 + 1] = value;
+		s_TestRemaining--;
+	}
+}
+
 static bool PumpAudio()
 {
 	bool progressed = false;
@@ -197,11 +224,16 @@ static bool PumpAudio()
 			{
 				unsigned magnitude = s_Samples[i] < 0 ? -int(s_Samples[i]) : s_Samples[i];
 
+				if (!(i & 1) && s_Samples[i] != s_Samples[i + 1])
+				{
+					s_PairMismatches++;
+				}
 				if (magnitude > s_Peak)
 				{
 					s_Peak = magnitude;
 				}
 			}
+			PrepareOutput(count / 4);
 		}
 	}
 	if (s_Offset < s_Pending)
@@ -223,13 +255,23 @@ static void DrawLevel()
 {
 	int db = s_Peak ? int(200.0f * log10f(float(s_Peak) / 32768.0f)) : -960;
 	unsigned magnitude = db < 0 ? unsigned(-db) : unsigned(db);
+	unsigned stage = s_TestRemaining > s_TestRate ? 2 : (s_TestRemaining ? 1 : 0);
 
-	// Update only these two lines to keep display work short during audio.
+	if (stage != s_LastStage)
+	{
+		s_Lcd.SetCursor(0, 0);
+		s_Lcd.printf("%-20s", stage == 2 ? "Duplex tone 1 kHz" : (stage == 1 ? "Duplex silence" : "MIC -> HEADPHONES"));
+		s_LastStage = stage;
+	}
+	// Update only these lines to keep display work short during audio.
+	s_Lcd.SetCursor(0, 32);
+	s_Lcd.printf("L/R mismatches %u   ", s_PairMismatches);
 	s_Lcd.SetCursor(0, 40);
 	s_Lcd.printf("Peak %s%u.%u dBFS   ", db < 0 ? "-" : "", magnitude / 10, magnitude % 10);
 	s_Lcd.SetCursor(0, 56);
 	s_Lcd.printf("Frames %lu", (unsigned long)s_Frames);
 	s_Peak = 0;
+	s_PairMismatches = 0;
 }
 
 static bool PrepareStream()
@@ -299,7 +341,7 @@ static bool HardwareInit()
 	}
 	s_Lcd.Clear();
 	s_Lcd.SetCursor(0, 0);
-	s_Lcd.printf("MIC -> HEADPHONES");
+	s_Lcd.printf("Duplex tone 1 kHz");
 	s_Lcd.SetCursor(0, 16);
 	s_Lcd.printf("%lu Hz stereo", (unsigned long)s_Audio.Rate());
 	s_Lcd.SetCursor(0, 24);
@@ -311,6 +353,11 @@ static bool HardwareInit()
 		s_Lcd.printf("Audio startup failed");
 		return false;
 	}
+	s_TestRate = s_Audio.Rate();
+	s_TestRemaining = s_TestRate * 2;
+	s_TestPhase = 0;
+	s_TestStep = (uint64_t(1000) << 32) / s_TestRate;
+	s_LastStage = 2;
 	s_LastSample = s_Clock.mSecond();
 	s_LastPaint = s_LastSample;
 	return true;

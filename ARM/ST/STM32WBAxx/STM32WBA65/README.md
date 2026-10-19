@@ -1196,6 +1196,14 @@ stereo frames, and main forwards them to I2S transmit for headphone playback.
 The codec's mono microphone signal appears in both channels. The OLED shows
 input peak in dBFS and the number of captured frames.
 
+Startup sends a known 1 kHz tone for one second, followed by one second of
+zero samples, then forwards the microphone. RX, TX and the codec stay enabled
+through all three phases. The OLED identifies each phase and shows L/R sample
+mismatches per display interval; the codec routes the same microphone to both
+slots. These checks distinguish noisy captured samples from noise in playback.
+The maintainer reports continuous noise and a varying peak that does not track
+sound volume; intelligible microphone loopback is not yet validated.
+
 This exercises simultaneous RX and TX DMA through the same generic I2S
 interface. Board mapping combines PC5 AF13 receive with PD5 AF13 transmit;
 control and clock pins match the two working audio examples. The portable

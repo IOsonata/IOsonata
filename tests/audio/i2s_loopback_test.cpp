@@ -147,7 +147,9 @@ static void ResetModel()
 	s_Offset = 0;
 	s_Frames = 0;
 	s_Peak = 0;
+	s_PairMismatches = 0;
 	s_AudioError = AUDIO_ERROR_NONE;
+	s_TestRemaining = 0;
 	DevIntrf_t *audio = s_Audio;
 
 	atomic_flag_clear(&audio->bBusy);
@@ -202,6 +204,7 @@ int main()
 			assert(s_OutputPos == sizeof(s_Input));
 			assert(memcmp(s_Input, s_Output, sizeof(s_Input)) == 0);
 			assert(s_Frames == sizeof(s_Input) / 4 && s_Peak == 32768);
+			assert(s_PairMismatches == sizeof(s_Input) / 4);
 			assert(s_LastSample > 0 && s_Offset == s_Pending);
 			assert(!PumpAudio());
 		}
@@ -255,5 +258,48 @@ int main()
 	ResetModel();
 	AudioEvent(audio, DEVINTRF_EVT_RX_FIFO_FULL, nullptr, 0);
 	assert(strcmp(AudioErrorText(0), "RX FIFO overflow") == 0);
+	// Known output and silence use the same duplex stream and retain input
+	// values as soon as the two-second test has finished.
+	ResetModel();
+	s_TestRate = 15625;
+	s_TestRemaining = s_TestRate * 2;
+	s_TestPhase = 0;
+	s_TestStep = (uint64_t(1000) << 32) / s_TestRate;
+	unsigned positiveCrossings = 0;
+	int previous = 0;
+
+	for (unsigned frame = 0; frame < s_TestRate * 2 + 8; frame++)
+	{
+		s_Samples[0] = 123;
+		s_Samples[1] = -456;
+		PrepareOutput(1);
+		if (frame < s_TestRate)
+		{
+			assert(s_Samples[0] == s_Samples[1]);
+			assert(s_Samples[0] >= -4096 && s_Samples[0] <= 4096);
+			if (previous <= 0 && s_Samples[0] > 0)
+			{
+				positiveCrossings++;
+			}
+			previous = s_Samples[0];
+		}
+		else if (frame < s_TestRate * 2)
+		{
+			assert(s_Samples[0] == 0 && s_Samples[1] == 0);
+		}
+		else
+		{
+			assert(s_Samples[0] == 123 && s_Samples[1] == -456);
+		}
+	}
+	assert(positiveCrossings >= 999 && positiveCrossings <= 1001);
+	assert(s_TestRemaining == 0);
+	// A block crossing the test boundary must retain its live tail.
+	s_TestRemaining = 1;
+	s_Samples[2] = 123;
+	s_Samples[3] = -456;
+	PrepareOutput(2);
+	assert(s_Samples[0] == 0 && s_Samples[1] == 0);
+	assert(s_Samples[2] == 123 && s_Samples[3] == -456);
 	puts("I2S loopback config, exact forwarding, short TX, stalls, startup and errors PASS");
 }
