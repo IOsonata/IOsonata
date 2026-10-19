@@ -264,6 +264,10 @@ sets `UART_DMA_MODE` in its board.h, as on the WBA65. The rates are 1.4 percent 
 1 Mbaud 8N1: the core clock comes from the MSI through the PLL and SystemInit
 did not lock the MSI to the LSE (MSIPLLEN), the MSI kept its factory
 calibration. The NUCLEO-L432KC measured 99.9 kB/s with the same code.
+I2CScan (`exemples/i2c/i2c_scan.cpp`) on I2C2, the onboard sensor bus (SDA
+PB11, SCL PB10), polling master at 100 kHz, finds 7 devices: 0x1E LIS3MDL,
+0x29 VL53L0X, 0x2D, 0x56 NFC tag, 0x5D LPS22HB, 0x5F HTS221, 0x6A LSM6DSL,
+and reads the LSM6DSL WHO_AM_I register 0x0F as 0x6A.
 SystemInit now sets MSIPLLEN after the LSE is ready when `g_McuOsc` has the
 RC core oscillator and the LSE crystal (2026-10-19), not tested on the
 boards yet.
