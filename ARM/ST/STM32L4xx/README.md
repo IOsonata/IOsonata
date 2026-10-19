@@ -248,7 +248,22 @@ UART output. The four TimerDemo projects build for Debug and Release; in an
 instruction set emulator with LPTIM, TIM, RCC and UART models the L432 image
 runs each of its eight timers and the L476 image LPTIM1, LPTIM2, TIM6, TIM17,
 TIM5, TIM1 and TIM8 for 3.3 s, with the expected periods and no LPTIM write
-order violation. Not tested on the boards.
+order violation. The L432 TimerDemo ran on the NUCLEO-L432KC (2026-10-19):
+LPTIM1 100006 us, TIM6 (DevNo 2) 100000 us. The L476 TimerDemo ran on the
+B-L475E-IOT01A2 in Debug with semihosting output (2026-10-19).
+
+B-L475E-IOT01A2 hardware run (2026-10-19), STM32L476 project on the
+STM32L475VG, shared drivers: Blinky blinks LD1 and LD2 and stops on B1.
+UartPrbsTxTest on the ST-LINK virtual COM port, USART1 at 1 Mbaud: polling
+101380 B/s, interrupts 101390 B/s, DMA 100940 B/s, DMA with interrupts 100920
+B/s, no loss after the receiver locks on the stream. UartLoopback with
+interrupts and DMA: about 66 kB/s, 0 errors. In polling the loopback loses
+about 1 percent of the bytes: a character takes 800 CPU cycles at 80 MHz and
+the USART has no receive FIFO, so UartLoopback sets `UART_DMA_MODE` in its
+board.h, as on the WBA65. The rates are 1.4 percent above the 100000 B/s of
+1 Mbaud 8N1: the core clock comes from the MSI through the PLL and SystemInit
+does not lock the MSI to the LSE (MSIPLLEN), the MSI keeps its factory
+calibration. The NUCLEO-L432KC measured 99.9 kB/s with the same code.
 
 STM32L432: `STM32L432/lib/ioc` has the Debug, Release, Debug_FPU and
 Release_FPU configurations of the L476 library. It adds the STM32L432xx
@@ -266,8 +281,9 @@ in `board.h`: the ST-LINK virtual COM port, USART2, DevNo 2, RX PA15 AF3
 and TX PA2 AF7 (2026-10-19; the loopback used USART1 before). USART1, DevNo
 1, is on Arduino Nano D0 PA10 RX and D1 PA9 TX, AF7.
 Like the L476 examples they link `rdimon` semihosting and use the example
-defaults at 1 Mbaud: interrupts without DMA for the loopback, DMA without
-interrupts for PRBS TX. The library in its four configurations and both
+defaults at 1 Mbaud: interrupts with DMA for the loopback (UART_DMA_MODE in
+board.h, 2026-10-19), DMA without interrupts for PRBS TX. The library in its
+four configurations and both
 examples in Debug and Release were built from their `.project` and `.cproject`
 settings with GNU Arm 13.2, outside IOcomposer; all 99 vector table entries
 match the STM32L432xx interrupt list. The images ran in an instruction set
