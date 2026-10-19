@@ -42,3 +42,15 @@ with tempfile.TemporaryDirectory(prefix='ssd1315-') as td:
                        [str(ROOT / p) for p in console_sources] + fonts +
                        ['-o', str(console)], check=True)
         subprocess.run([str(console)], check=True)
+        gfx = Path(td) / 'ssd1315_gfx_test'
+        gfx_sources = ['tests/display/ssd1315_gfx_test.cpp', 'src/display/igfx.cpp',
+                       'src/display/display_ssd1315.cpp', 'src/display/display.cpp',
+                       'src/device.cpp', 'src/device_intrf.cpp']
+        subprocess.run(cmd + ['-DSTM32WBA65xx', '-ffunction-sections', '-fdata-sections',
+                             '-Wno-missing-field-initializers',
+                             '-I' + str(ROOT / 'ARM/ST/include'),
+                             '-I' + str(ROOT / 'ARM/ST/STM32WBAxx/STM32WBA65/exemples/GfxDisplayDemo/src'),
+                             '-Wl,--gc-sections'] +
+                       [str(ROOT / p) for p in gfx_sources] + fonts +
+                       ['-o', str(gfx)], check=True)
+        subprocess.run([str(gfx)], check=True)
