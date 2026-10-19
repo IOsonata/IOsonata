@@ -88,8 +88,10 @@ D12 lines are shared with the I2CMasterSlave wiring. On the NUCLEO-L432KC
 (2026-10-19), master polling and master interrupt, each against the interrupt
 driven slave, pass in SPI modes 0 to 3 at 625 kHz, 8 bit data: master transmit
 and receive frames of 1, 16 and 129 bytes, and a 1 byte frame that discards
-the slave transmit prefetch before the next frame. The L476, L496 and L4S9
-libraries keep `src/spi_stm32l4xx.cpp`.
+the slave transmit prefetch before the next frame. With DMA (2026-10-19) the
+same test passes in all 8 combinations: master polling, interrupt, DMA and DMA
+with interrupt, each against the interrupt driven slave and the DMA slave. The
+L476, L496 and L4S9 libraries keep `src/spi_stm32l4xx.cpp`.
 
 ## Timer
 
@@ -144,7 +146,9 @@ D1 to A6 and D0 to D12. The Release build prints on the ST-LINK virtual COM
 port at 1 Mbaud. On the NUCLEO-L432KC (2026-10-19), master polling and master
 interrupt, each against the interrupt driven slave, pass: write 8 bytes at an
 offset, read them back, and a 4 byte read, at 100 kHz with the internal
-pull-ups.
+pull-ups. With DMA (2026-10-19) the same test passes in all 8 combinations:
+master polling, interrupt, DMA and DMA with interrupt, each against the
+interrupt driven slave and the DMA slave.
 
 The L476, L496 and L4S9 libraries keep `src/i2c_stm32l4xx.cpp`, which
 accepts polling master configurations only. Slave, interrupt and DMA requests
