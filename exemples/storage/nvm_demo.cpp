@@ -840,6 +840,31 @@ static bool NvmDemoSetup(void)
 		return false;
 	}
 
+#if NVM_DEMO_MEDIUM == 1
+	// The commands in use, and the status register with the Quad Enable bit,
+	// which a quad command needs. A command of 0 is the single line default.
+	SysLogPrintf(SysLogGet(), "commands: read 0x%02X dummy %u, write 0x%02X\r\n",
+							  cfg.RdCmd.Cmd != 0 ? cfg.RdCmd.Cmd : 0x03,
+							  (unsigned)cfg.RdCmd.DummyCycle,
+							  cfg.WrCmd.Cmd != 0 ? cfg.WrCmd.Cmd : 0x02);
+	{
+		uint8_t sr = s_Nvm.ReadStatus();
+
+		if (cfg.QuadEnable.Reg == 1)
+		{
+			SysLogPrintf(SysLogGet(), "status  : 0x%02X, quad enable bit %u %s\r\n",
+									  (unsigned)sr, (unsigned)cfg.QuadEnable.Bit,
+									  (sr >> cfg.QuadEnable.Bit) & 1 ? "set" : "clear");
+		}
+		else
+		{
+			SysLogPrintf(SysLogGet(), "status  : 0x%02X, quad enable %s\r\n",
+									  (unsigned)sr, cfg.QuadEnable.Reg == 0 ?
+									  "not used" : "in status register 2");
+		}
+	}
+#endif
+
 	return true;
 }
 
