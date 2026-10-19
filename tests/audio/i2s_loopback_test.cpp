@@ -147,7 +147,7 @@ static void ResetModel()
 	s_Offset = 0;
 	s_Frames = 0;
 	s_Peak = 0;
-	s_AudioFailed = false;
+	s_AudioError = AUDIO_ERROR_NONE;
 	DevIntrf_t *audio = s_Audio;
 
 	atomic_flag_clear(&audio->bBusy);
@@ -197,7 +197,7 @@ int main()
 
 				PumpAudio();
 				assert(!pending || s_RxCalls == calls);
-				assert(!s_AudioFailed);
+				assert(s_AudioError == AUDIO_ERROR_NONE);
 			}
 			assert(s_OutputPos == sizeof(s_Input));
 			assert(memcmp(s_Input, s_Output, sizeof(s_Input)) == 0);
@@ -220,21 +220,40 @@ int main()
 	assert(!PrepareStream() && s_RxCalls == 256);
 	ResetModel();
 	s_RxChunk = 2;
-	assert(!PumpAudio() && s_AudioFailed && s_OutputPos == 0);
+	assert(!PumpAudio() && s_AudioError != AUDIO_ERROR_NONE && s_OutputPos == 0);
 	ResetModel();
 	s_RxChunk = 256;
 	s_TxChunk = 2;
-	assert(!PumpAudio() && s_AudioFailed);
+	assert(!PumpAudio() && s_AudioError != AUDIO_ERROR_NONE);
 	ResetModel();
 	s_TxChunk = 128;
 	assert(!PrepareStream());
 	ResetModel();
 	AudioEvent(audio, DEVINTRF_EVT_TX_READY, nullptr, 0);
-	assert(!s_AudioFailed);
+	assert(s_AudioError == AUDIO_ERROR_NONE);
 	AudioEvent(audio, DEVINTRF_EVT_RX_FIFO_FULL, nullptr, 0);
-	assert(s_AudioFailed);
+	assert(s_AudioError != AUDIO_ERROR_NONE);
 	ResetModel();
 	AudioEvent(audio, DEVINTRF_EVT_STATECHG, nullptr, 0);
-	assert(s_AudioFailed);
+	assert(s_AudioError != AUDIO_ERROR_NONE);
+	assert(strcmp(AudioErrorText(0), "SAI/DMA error") == 0);
+	AudioEvent(audio, DEVINTRF_EVT_RX_FIFO_FULL, nullptr, 0);
+	assert(strcmp(AudioErrorText(0), "SAI/DMA error") == 0);
+	ResetModel();
+	s_LastSample = 100;
+	assert(AudioErrorText(600) == nullptr);
+	assert(strcmp(AudioErrorText(601), "RX timeout") == 0);
+	ResetModel();
+	s_LastSample = UINT32_MAX - 100;
+	assert(AudioErrorText(399) == nullptr);
+	assert(strcmp(AudioErrorText(400), "RX timeout") == 0);
+	ResetModel();
+	s_LastSample = 100;
+	s_Pending = 256;
+	s_Offset = 128;
+	assert(strcmp(AudioErrorText(601), "TX stalled") == 0);
+	ResetModel();
+	AudioEvent(audio, DEVINTRF_EVT_RX_FIFO_FULL, nullptr, 0);
+	assert(strcmp(AudioErrorText(0), "RX FIFO overflow") == 0);
 	puts("I2S loopback config, exact forwarding, short TX, stalls, startup and errors PASS");
 }

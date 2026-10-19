@@ -47,6 +47,17 @@ SOFTWARE.
 #include "idelay.h"
 #include "board.h"
 
+enum AudioError_t
+{
+	AUDIO_ERROR_NONE,
+	AUDIO_ERROR_TRANSPORT,
+	AUDIO_ERROR_RX_OVERFLOW,
+	AUDIO_ERROR_RX_COUNT,
+	AUDIO_ERROR_TX_COUNT,
+	AUDIO_ERROR_RX_TIMEOUT,
+	AUDIO_ERROR_TX_STALLED
+};
+
 static const IOPinCfg_t s_CtrlPins[] = TFT_PINS;
 static const IOPinCfg_t s_SpiPins[] = SPI_PINS;
 static const SPICfg_t s_SpiCfg = {
@@ -89,7 +100,7 @@ static unsigned s_Peak;
 static uint32_t s_Frames;
 static uint32_t s_LastPaint;
 static uint32_t s_LastSample;
-static volatile bool s_AudioFailed;
+static volatile AudioError_t s_AudioError;
 static I2S s_Audio;
 static I2C s_Control;
 static Wm8904 s_Codec;
@@ -148,9 +159,16 @@ static int AudioEvent(DevIntrf_t *pDev, DEVINTRF_EVT Evt, uint8_t *pData, int Co
 	(void)pDev;
 	(void)pData;
 	(void)Count;
-	if (Evt == DEVINTRF_EVT_STATECHG || Evt == DEVINTRF_EVT_RX_FIFO_FULL)
+	if (s_AudioError == AUDIO_ERROR_NONE)
 	{
-		s_AudioFailed = true;
+		if (Evt == DEVINTRF_EVT_STATECHG)
+		{
+			s_AudioError = AUDIO_ERROR_TRANSPORT;
+		}
+		else if (Evt == DEVINTRF_EVT_RX_FIFO_FULL)
+		{
+			s_AudioError = AUDIO_ERROR_RX_OVERFLOW;
+		}
 	}
 	return 0;
 }
@@ -165,7 +183,7 @@ static bool PumpAudio()
 
 		if (count < 0 || unsigned(count) > sizeof(s_Samples) || count % 4)
 		{
-			s_AudioFailed = true;
+			s_AudioError = AUDIO_ERROR_RX_COUNT;
 			return false;
 		}
 		s_Pending = count;
@@ -192,7 +210,7 @@ static bool PumpAudio()
 
 		if (count < 0 || unsigned(count) > s_Pending - s_Offset || count % 4)
 		{
-			s_AudioFailed = true;
+			s_AudioError = AUDIO_ERROR_TX_COUNT;
 			return false;
 		}
 		s_Offset += count;
@@ -221,7 +239,7 @@ static bool PrepareStream()
 	{
 		int count = s_Audio.Rx(0, (uint8_t *)s_Samples, sizeof(s_Samples));
 
-		if (count < 0 || s_AudioFailed)
+		if (count < 0 || s_AudioError != AUDIO_ERROR_NONE)
 		{
 			return false;
 		}
@@ -298,6 +316,31 @@ static bool HardwareInit()
 	return true;
 }
 
+static const char *AudioErrorText(uint32_t Now)
+{
+	if (s_AudioError == AUDIO_ERROR_NONE && Now - s_LastSample > 500)
+	{
+		s_AudioError = s_Offset < s_Pending ? AUDIO_ERROR_TX_STALLED : AUDIO_ERROR_RX_TIMEOUT;
+	}
+	switch (s_AudioError)
+	{
+		case AUDIO_ERROR_TRANSPORT:
+			return "SAI/DMA error";
+		case AUDIO_ERROR_RX_OVERFLOW:
+			return "RX FIFO overflow";
+		case AUDIO_ERROR_RX_COUNT:
+			return "Invalid RX count";
+		case AUDIO_ERROR_TX_COUNT:
+			return "Invalid TX count";
+		case AUDIO_ERROR_RX_TIMEOUT:
+			return "RX timeout";
+		case AUDIO_ERROR_TX_STALLED:
+			return "TX stalled";
+		default:
+			return nullptr;
+	}
+}
+
 int main()
 {
 	if (!HardwareInit())
@@ -309,12 +352,20 @@ int main()
 		bool progressed = PumpAudio();
 		uint32_t now = s_Clock.mSecond();
 
-		if (s_AudioFailed || now - s_LastSample > 500)
+		const char *error = AudioErrorText(now);
+
+		if (error)
 		{
 			s_Codec.PowerOff();
 			s_Audio.PowerOff();
 			s_Lcd.Clear();
-			s_Lcd.printf("Audio loopback failed");
+			s_Lcd.printf("Loopback stopped");
+			s_Lcd.SetCursor(0, 16);
+			s_Lcd.printf("%s", error);
+			s_Lcd.SetCursor(0, 32);
+			s_Lcd.printf("Frames %lu", (unsigned long)s_Frames);
+			s_Lcd.SetCursor(0, 48);
+			s_Lcd.printf("Pending %u bytes", s_Pending - s_Offset);
 			return 1;
 		}
 		if (now - s_LastPaint >= 100)
