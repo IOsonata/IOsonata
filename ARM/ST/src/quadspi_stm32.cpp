@@ -116,6 +116,14 @@ static void Stm32QspiAbort(Stm32QspiDev_t *pDev)
 	pDev->pReg->FCR = QUADSPI_FCR_CTCF | QUADSPI_FCR_CTEF;
 }
 
+// The SPI device, what SPIGetHandle returns
+static void *Stm32QspiGetHandle(DevIntrf_t * const pDev)
+{
+	Stm32QspiDev_t *dev = (Stm32QspiDev_t *)pDev->pDevData;
+
+	return dev != NULL ? dev->pSpiDev : NULL;
+}
+
 static uint32_t Stm32QspiGetRate(DevIntrf_t * const pDev)
 {
 	Stm32QspiDev_t *dev = (Stm32QspiDev_t *)pDev->pDevData;
@@ -482,6 +490,7 @@ bool Stm32QospiInit(SPIDev_t * const pDev, const SPICfg_t *pCfgData)
 	pDev->DevIntrf.Type = DEVINTRF_TYPE_QSPI;
 	pDev->DevIntrf.Disable = Stm32QspiDisable;
 	pDev->DevIntrf.Enable = Stm32QspiEnable;
+	pDev->DevIntrf.GetHandle = Stm32QspiGetHandle;
 	pDev->DevIntrf.GetRate = Stm32QspiGetRate;
 	pDev->DevIntrf.SetRate = Stm32QspiSetRate;
 	pDev->DevIntrf.StartRx = Stm32QspiStart;
@@ -493,7 +502,9 @@ bool Stm32QospiInit(SPIDev_t * const pDev, const SPICfg_t *pCfgData)
 	pDev->DevIntrf.IntPrio = pCfgData->IntPrio;
 	pDev->DevIntrf.EvtCB = pCfgData->EvtCB;
 	pDev->DevIntrf.MaxRetry = pCfgData->MaxRetry;
-	pDev->DevIntrf.bDma = pCfgData->bDmaEn;
+	pDev->DevIntrf.bDma = false;
+	pDev->DevIntrf.bIntEn = false;
+	pDev->DevIntrf.bNoStop = false;
 	pDev->DevIntrf.PowerOff = Stm32QspiPowerOff;
 	pDev->DevIntrf.EnCnt = 1;
 
