@@ -112,6 +112,12 @@ October 18 review fixes, tested locally:
   16-byte programming units under ASan/UBSan. Bond retry tests and the 486
   power cuts per optimization mode also passed. Changed WBA sources compiled
   in Debug and Release. These are software tests, not hardware validation.
+- Power cuts through the real flash driver: `run_bond_flash.py --powercut`
+  cuts every program and erase of one save, whole or half done, for a bank
+  switch in each direction and for a save that runs PDS garbage collection:
+  **330 cuts**, every boot after a cut restored the committed image and
+  stored the next save, with no quad word programmed over data. This repeats
+  the power-loss test through the real `Nvm` layer and flash driver.
 - Cortex-M33 crypto integration: **18 checks, 0 failures**, including
   incremental CMAC and three interrupt preemptions while AES is busy.
   The existing model warning about the platform `HW_RNG_Get` initialization
@@ -170,6 +176,23 @@ Release library leaves it out. Errors are always printed.
 
 - Pairing rejection, persistence failure recovery on hardware, and radio
   scheduling during flash writes need separate tests.
+- Flash ECC after a power cut. A cut during a quad word program or a page
+  erase can leave a word that fails the flash ECC check when it is read. On
+  the WBA a double ECC error raises the NMI (`HAL_FLASHEx_ECCD_IRQHandler`
+  in the ST HAL), and the WBA65 NMI vector is the default handler, an
+  endless loop. In the power cut sweep, 164 of 165 half done cuts left such
+  a word where the next boot's PDS mount reads it. If the silicon reports a
+  double error there, the device stops in the NMI at every boot until the
+  bond region is erased. Not handled yet: an NMI path that clears ECCD and
+  makes the flash read fail, PDS treating that word as torn, and a physical
+  power cut test on the DK1.
+- The largest bond image that can still be updated is about 3.6 KB (19 PDS
+  chunk records per bank, 456 of the 512 cache words), from the record and
+  sector sizes; not measured.
+- A manifest record that reads back but does not decode (bank above 1 or an
+  unexpected length) makes every save fail while restore treats it as empty.
+  It needs corruption past the record CRC or a newer format; writing bank 0
+  and committing a new manifest would recover it.
 - Production devices need secret identity/encryption roots supplied through
   `BtAppWbaIdentityGet`. The default derives roots from the chip ID; they are
   not secret. Successful encrypted pairing does not validate provisioning.

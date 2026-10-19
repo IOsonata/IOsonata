@@ -14,7 +14,9 @@ The emulator sets g_BondFwBoot before each boot and keeps the flash between
 boots, so a boot is a reset. BondFwProtect asks the emulator to refuse writes
 to the bond store region: -1 off, 0 from now on, n from the n-th next
 BtPdsWrite call. Printed lines go to the emulator through BondFwConsole, and
-the emulator checks the retry times against the poll count.
+the emulator checks the retry times against the poll count. Boots 6 to 8
+are the power cut sweep of run_bond_flash.py --powercut: prepare the old
+image, the save the emulator cuts, and the boot after the cut.
 
 Not hardware validation.
 
@@ -55,10 +57,11 @@ SOFTWARE.
 #include "syslog.h"
 #include "coredev/spi.h"
 #include "coredev/iopincfg.h"
+#include "bluetooth/bt_pds.h"
 
 // Image of the stack's NVM cache: 39 words, 312 bytes, two PDS chunks
 #define BOND_FW_WORDS		39U
-#define BOND_FW_CACHE_WORDS	64U
+#define BOND_FW_CACHE_WORDS	80U
 
 extern "C" uint16_t BtSmpBondWbaCacheInit(uint64_t *pCache, uint16_t MaxWords);
 extern "C" size_t BtSmpBondWbaRestore(void *pCacheBuf, size_t Capacity);
@@ -73,8 +76,14 @@ extern "C" void BondFwDone(void) __attribute__((noinline));
 extern "C" volatile uint32_t g_BondFwBoot;
 extern "C" volatile int32_t g_BondFwResult;
 
-// Written by the emulator before the start code runs, which leaves it alone
+// Power cut sweep of run_bond_flash.py --powercut: old seed, old words, new
+// seed, new words, filler records written after the old image, and 1 when
+// the old image is saved twice so that it sits in the second bank.
+extern "C" volatile uint32_t g_BondFwArg[6];
+
+// Written by the emulator before the start code runs, which leaves them alone
 volatile uint32_t g_BondFwBoot __attribute__((section(".noinit")));
+volatile uint32_t g_BondFwArg[6] __attribute__((section(".noinit")));
 volatile int32_t g_BondFwResult = -1000;
 
 static uint64_t s_Cache[BOND_FW_CACHE_WORDS];
@@ -189,17 +198,17 @@ static uint64_t Word(uint32_t Seed, uint32_t Idx)
 	return (0x9E3779B97F4A7C15ULL * (Seed + 1U)) ^ ((uint64_t)Idx << 8) ^ Idx;
 }
 
-static void Fill(uint32_t Seed)
+static void Fill(uint32_t Seed, uint32_t Words = BOND_FW_WORDS)
 {
-	for (uint32_t i = 0; i < BOND_FW_WORDS; i++)
+	for (uint32_t i = 0; i < Words; i++)
 	{
 		s_Cache[i] = Word(Seed, i);
 	}
 }
 
-static bool CacheIs(uint32_t Seed)
+static bool CacheIs(uint32_t Seed, uint32_t Words = BOND_FW_WORDS)
 {
-	for (uint32_t i = 0; i < BOND_FW_WORDS; i++)
+	for (uint32_t i = 0; i < Words; i++)
 	{
 		if (s_Cache[i] != Word(Seed, i))
 		{
@@ -211,14 +220,14 @@ static bool CacheIs(uint32_t Seed)
 }
 
 // What a reset would hand the stack now, without touching the stack's cache
-static bool StoredIs(uint32_t Seed)
+static bool StoredIs(uint32_t Seed, uint32_t Words = BOND_FW_WORDS)
 {
 	memset(s_Check, 0xA5, sizeof(s_Check));
-	if (BtSmpBondWbaRestore(s_Check, sizeof(s_Check)) != BOND_FW_WORDS * 8U)
+	if (BtSmpBondWbaRestore(s_Check, sizeof(s_Check)) != Words * 8U)
 	{
 		return false;
 	}
-	for (uint32_t i = 0; i < BOND_FW_WORDS; i++)
+	for (uint32_t i = 0; i < Words; i++)
 	{
 		if (s_Check[i] != Word(Seed, i))
 		{
@@ -249,10 +258,10 @@ static bool NothingStored(void)
 
 // The stack changed its cache and asks for a save; the application loop
 // then runs its status check, which flushes.
-static void Save(uint32_t Seed)
+static void Save(uint32_t Seed, uint32_t Words = BOND_FW_WORDS)
 {
-	Fill(Seed);
-	BLEPLAT_NvmStore(s_Cache, BOND_FW_WORDS);
+	Fill(Seed, Words);
+	BLEPLAT_NvmStore(s_Cache, (uint16_t)Words);
 	BtSmpBondWbaFlush();
 }
 
@@ -347,6 +356,52 @@ extern "C" uint32_t SystemMicroSecLoopCnt;
 void *__dso_handle = nullptr;
 uint32_t SystemMicroSecLoopCnt = 1;
 
+// Power cut sweep. Prepare: the old image, and filler records so that the
+// next save runs the PDS garbage collection when asked for.
+static void BootCutPrepare(void)
+{
+	static const uint8_t filler[BT_PDS_RECORD_DATA_MAX] = {};
+
+	Check(BtSmpBondWbaCacheInit(s_Cache, BOND_FW_CACHE_WORDS) == 0, "cut sweep: erased store");
+	if (g_BondFwArg[5])
+	{
+		Save(g_BondFwArg[0] + 100U, g_BondFwArg[1]);
+	}
+	Save(g_BondFwArg[0], g_BondFwArg[1]);
+	Check(StoredIs(g_BondFwArg[0], g_BondFwArg[1]), "cut sweep: old image stored");
+	for (uint32_t i = 0; i < g_BondFwArg[4]; i++)
+	{
+		if (BtPdsWrite(0x1234U, filler, sizeof(filler)) != (ssize_t)sizeof(filler))
+		{
+			Check(false, "cut sweep: filler record");
+			break;
+		}
+	}
+}
+
+// The save the emulator cuts at a chosen flash operation
+static void BootCutSave(void)
+{
+	Check(BtSmpBondWbaCacheInit(s_Cache, BOND_FW_CACHE_WORDS) == g_BondFwArg[1] &&
+		  CacheIs(g_BondFwArg[0], g_BondFwArg[1]), "cut sweep: old image restored before the save");
+	Save(g_BondFwArg[2], g_BondFwArg[3]);
+	Check(StoredIs(g_BondFwArg[2], g_BondFwArg[3]), "cut sweep: save completed");
+}
+
+// The boot after the cut: the old or the new image, never anything else,
+// and the store takes the next save.
+static void BootCutCheck(void)
+{
+	uint16_t n = BtSmpBondWbaCacheInit(s_Cache, BOND_FW_CACHE_WORDS);
+	bool isOld = n == g_BondFwArg[1] && CacheIs(g_BondFwArg[0], g_BondFwArg[1]);
+	bool isNew = n == g_BondFwArg[3] && CacheIs(g_BondFwArg[2], g_BondFwArg[3]);
+
+	Print("cut sweep: restored %s\r\n", isOld ? "old" : (isNew ? "new" : "neither"));
+	Check(isOld || isNew, "after a power cut the restore is the old or the new image");
+	Save(g_BondFwArg[2], g_BondFwArg[3]);
+	Check(StoredIs(g_BondFwArg[2], g_BondFwArg[3]), "save after the power cut stored");
+}
+
 extern "C" void __cxa_pure_virtual(void)
 {
 	while (1)
@@ -360,7 +415,8 @@ void operator delete(void *, size_t) noexcept {}
 extern "C" int main(void)
 {
 	static void (* const s_Boot[])(void) = {
-		Boot0, Boot1, Boot2, Boot3, Boot4, BootNoRegion
+		Boot0, Boot1, Boot2, Boot3, Boot4, BootNoRegion,
+		BootCutPrepare, BootCutSave, BootCutCheck
 	};
 	uint32_t boot = g_BondFwBoot;
 

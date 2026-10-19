@@ -32,6 +32,15 @@ that wait is active. The initial save still runs from the application loop.
 A second image is linked without the bond store region and checks that a missing
 region is reported and never retried.
 
+With --powercut it also cuts the power at every program and erase of one
+save, whole or left half done, for a bank switch in each direction and for
+a save that runs the PDS garbage collection, then boots: the restore must
+give the old or the new image and the store must take the next save. It
+reports the half done cuts that leave a quad word the next boot reads: on
+the silicon such a read can fail the flash ECC check, which raises the NMI
+on the WBA, and the model cannot show what the silicon does then. The sweep
+runs about 10 minutes.
+
 The model is a reading of the HAL and the reference manual, so it finds
 errors of logic, layout and sequence, and not differences of the silicon.
 
@@ -170,8 +179,19 @@ class Flash:
     """STM32WBA flash controller, non-secure registers, and the memory of
     the bond store region."""
 
-    def __init__(self, mem):
+    def __init__(self, mem, torn=None):
         self.mem = mem			# bytearray of NVM_MAP bytes from NVM_BASE - kept across boots
+        # Offsets of quad words a power cut left part programmed or part
+        # erased, kept across boots. The silicon checks every flash read
+        # against the quad word ECC; such a word can fail it, and on the WBA
+        # a double ECC error raises the NMI (stm32wbaxx_hal_flash_ex.c).
+        self.torn = torn if torn is not None else set()
+        self.ecc_reads = []		# reads that touched a torn quad word
+        self.cut_at = None		# flash operation the power cut stops, None for no cut
+        self.tear = False		# the cut operation is left half done
+        self.cut_done = False
+        self.ops = 0			# program and erase operations started
+        self.uc = None
         self.off_keyr = reg_off('FLASH_TypeDef', 'NSKEYR')
         self.off_sr = reg_off('FLASH_TypeDef', 'NSSR')
         self.off_cr = reg_off('FLASH_TypeDef', 'NSCR1')
@@ -206,6 +226,15 @@ class Flash:
 
     def protected(self, addr):
         return self.prot and NVM_BASE <= addr < NVM_BASE + NVM_SIZE
+
+    def cut_here(self):
+        """Count one program or erase; True when the power cut stops it."""
+        if self.cut_at is not None and self.ops == self.cut_at:
+            self.cut_done = True
+            self.uc.emu_stop()
+            return True
+        self.ops += 1
+        return False
 
     def done(self, err):
         if err:
@@ -270,12 +299,23 @@ class Flash:
             self.done(self.WRPERR)
             return
         o = addr - NVM_BASE
+        if self.cut_here():
+            if self.tear:
+                # Half erased; the other half is left in an unknown state
+                self.mem[o:o + PAGE // 2] = b'\xff' * (PAGE // 2)
+                self.torn.update(range(o + PAGE // 2, o + PAGE, QWORD))
+            return
         self.mem[o:o + PAGE] = b'\xff' * PAGE
+        self.torn.difference_update(range(o, o + PAGE, QWORD))
         self.stats['erases'] += 1
         self.done(0)
 
     # memory of the store region
     def mem_rd(self, off, size):
+        if self.torn:
+            q = off - off % QWORD
+            if q in self.torn or (off + size - 1) - (off + size - 1) % QWORD in self.torn:
+                self.ecc_reads.append(NVM_BASE + off)
         return int.from_bytes(self.mem[off:off + size], 'little')
 
     def mem_wr(self, off, size, val):
@@ -309,6 +349,13 @@ class Flash:
             self.done(self.WRPERR)
             return
         o = base - NVM_BASE
+        if self.cut_here():
+            if self.tear:
+                # Half the quad word programmed
+                for i in range(QWORD // 2):
+                    self.mem[o + i] &= data[i]
+                self.torn.add(o)
+            return
         if self.mem[o:o + QWORD] != b'\xff' * QWORD:
             self.stats['progerr'] += 1
             self.done(self.PROGERR)
@@ -318,7 +365,7 @@ class Flash:
         self.done(0)
 
 
-def run_boot(elf_path, boot, mem):
+def run_boot(elf_path, boot, mem, torn=None, cut=None, tear=False, args=None):
     from unicorn import Uc, UC_ARCH_ARM, UC_MODE_THUMB, UC_MODE_MCLASS, UC_HOOK_CODE
     from unicorn.arm_const import UC_CPU_ARM_CORTEX_M33
     from unicorn.arm_const import UC_ARM_REG_R0, UC_ARM_REG_R1, UC_ARM_REG_SP, UC_ARM_REG_PC
@@ -336,7 +383,10 @@ def run_boot(elf_path, boot, mem):
         if seg['p_type'] == 'PT_LOAD' and seg['p_filesz']:
             uc.mem_write(seg['p_paddr'], seg.data())
 
-    flash = Flash(mem)
+    flash = Flash(mem, torn)
+    flash.uc = uc
+    flash.cut_at = cut
+    flash.tear = tear
 
     def mem_rd(uc, off, size, user):
         return flash.mem_rd(off, size)
@@ -421,6 +471,8 @@ def run_boot(elf_path, boot, mem):
 
     uc.hook_add(UC_HOOK_MEM_UNMAPPED, on_unmapped)
     uc.mem_write(syms['g_BondFwBoot'], boot.to_bytes(4, 'little'))
+    for i, v in enumerate(args or ()):
+        uc.mem_write(syms['g_BondFwArg'] + 4 * i, v.to_bytes(4, 'little'))
     vec = bytes(uc.mem_read(FLASH_BASE, 8))
     uc.reg_write(UC_ARM_REG_SP, int.from_bytes(vec[0:4], 'little'))
     pc = int.from_bytes(vec[4:8], 'little')
@@ -430,6 +482,8 @@ def run_boot(elf_path, boot, mem):
         text = '\n'.join(f'[{p}] {line}' for p, line in st['lines'])
         raise SystemExit(f'FAIL boot {boot}: emulator stopped at {uc.reg_read(UC_ARM_REG_PC):#x}: {ex} {bad}\n'
                          f'{text[-2000:]}')
+    if flash.cut_done:
+        return None, st, flash
     if not st['done']:
         raise SystemExit(f'FAIL boot {boot}: firmware did not finish')
     result = int.from_bytes(uc.mem_read(syms['g_BondFwResult'], 4), 'little', signed=True)
@@ -464,6 +518,83 @@ def expect_events(errors, boot, got, want):
     got = [e[:3] for e in got]
     if got != want:
         errors.append(f'boot {boot}: retry events {got}, expected {want}')
+
+
+BOOT_CUT_PREPARE = 6
+BOOT_CUT_SAVE = 7
+BOOT_CUT_CHECK = 8
+
+
+def boot_ok(errors, label, result, st, flash):
+    for _, t in st['lines']:
+        if '[FAIL]' in t:
+            errors.append(f'{label}: {t}')
+    if result != 0:
+        errors.append(f'{label}: the firmware counted {result} failures')
+    for v in flash.viol:
+        errors.append(f'{label}: model violation: {v}')
+    if flash.stats['progerr']:
+        errors.append(f'{label}: {flash.stats["progerr"]} quad words programmed over data')
+
+
+def powercut(elf, errors):
+    """Cut the power at every program and erase of one save, whole or half
+    done, then boot: the restore must give the old or the new image and the
+    store must take the next save."""
+    # old seed, old words, new seed, new words, fillers, old image in bank 1
+    cases = [
+        ('first bank switch, 312 to 512 bytes', [11, 39, 12, 64, 0, 0]),
+        ('switch back to bank 0, 512 to 312 bytes', [13, 64, 14, 39, 0, 1]),
+        ('save through PDS garbage collection', [15, 39, 16, 64, None, 0]),
+    ]
+    total = 0
+    damaged = 0
+    for name, args in cases:
+        if args[4] is None:
+            # Fill the active sector until the save has to collect it
+            for fillers in range(25, 45):
+                args[4] = fillers
+                mem = bytearray(b'\xff' * NVM_MAP)
+                run_boot(elf, BOOT_CUT_PREPARE, mem, args=args)
+                _, _, fl = run_boot(elf, BOOT_CUT_SAVE, mem, args=args)
+                if fl.stats['erases']:
+                    break
+            else:
+                errors.append(f'{name}: no filler count makes the save collect a sector')
+                continue
+        mem = bytearray(b'\xff' * NVM_MAP)
+        result, st, fl = run_boot(elf, BOOT_CUT_PREPARE, mem, args=args)
+        boot_ok(errors, f'{name}, prepare', result, st, fl)
+        start = bytes(mem)
+        ref = bytearray(start)
+        result, st, fl = run_boot(elf, BOOT_CUT_SAVE, ref, args=args)
+        boot_ok(errors, f'{name}, uncut save', result, st, fl)
+        steps = fl.ops
+        counts = {'old': 0, 'new': 0, 'neither': 0}
+        reads = 0
+        for cut in range(steps):
+            for tear in (False, True):
+                mem = bytearray(start)
+                torn = set()
+                _, st, fl = run_boot(elf, BOOT_CUT_SAVE, mem, torn, cut, tear, args)
+                if not fl.cut_done:
+                    errors.append(f'{name}: cut {cut} was not reached')
+                    continue
+                label = f'{name}, cut {cut}{" torn" if tear else ""}'
+                result, st, fl = run_boot(elf, BOOT_CUT_CHECK, mem, torn, args=args)
+                boot_ok(errors, label, result, st, fl)
+                for _, t in st['lines']:
+                    m = re.search(r'cut sweep: restored (\w+)', t)
+                    if m:
+                        counts[m.group(1)] += 1
+                if fl.ecc_reads:
+                    reads += 1
+                total += 1
+        damaged += reads
+        print(f'  {name}: {steps} flash operations, {2 * steps} cuts, restored old {counts["old"]}, '
+              f'new {counts["new"]}, neither {counts["neither"]}; '
+              f'{reads} of {steps} half done cuts read a damaged quad word at the next boot')
+    return total, damaged
 
 
 def main():
@@ -545,6 +676,15 @@ def main():
                                   f'{stamps}, expected 3 at [0, 0, 10]')
                 if flash.stats['programs'] or flash.stats['erases']:
                     errors.append(f'boot {boot}: flash written without a region')
+
+        if '--powercut' in sys.argv:
+            print('power cut sweep:')
+            cuts, damaged = powercut(elf, errors)
+            print(f'  {cuts} power cuts checked')
+            if damaged:
+                print(f'  note: {damaged} half done cuts left a quad word that the next boot reads. On the '
+                      'silicon such a read can fail the flash ECC check, which raises the NMI on the WBA; '
+                      'this port has no flash ECC NMI handling. The model returns the data and goes on.')
 
     print(f'{passed} passed, {failed} failed')
     print('  model counters:', totals)
