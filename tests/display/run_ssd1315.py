@@ -83,3 +83,20 @@ with tempfile.TemporaryDirectory(prefix='ssd1315-') as td:
                        [str(ROOT / p) for p in scan_sources] + fonts + [str(fifo)] +
                        ['-o', str(scan)], check=True)
         subprocess.run([str(scan)], check=True)
+        status = Path(td) / 'ble_status_display_test'
+        status_sources = ['tests/display/ble_status_display_test.cpp',
+                          'src/display/display_ssd1315.cpp', 'src/display/display.cpp',
+                          'src/device.cpp', 'src/device_intrf.cpp', 'src/coredev/timer.cpp',
+                          'src/app_evt_handler.cpp', 'src/bluetooth/bt_peer.cpp']
+        subprocess.run(cmd + ['-DSTM32WBA65xx', '-DBLE_SECURITY_UART_CONFIRM',
+                             '-DBLE_SECURITY_TYPE=BTGAP_SECTYPE_LESC_MITM',
+                             '-DBLE_SECURITY_EXCHG=(BTAPP_SECEXCHG_DISPLAY|BTAPP_SECEXCHG_YESNO)',
+                             '-ffunction-sections', '-fdata-sections',
+                             '-Wno-unused-parameter', '-Wno-unused-variable',
+                             '-Wno-unused-but-set-variable', '-Wno-missing-field-initializers',
+                             '-I' + str(ROOT / 'ARM/ST/include'),
+                             '-I' + str(ROOT / 'ARM/ST/STM32WBAxx/STM32WBA65/exemples/BleStatusDisplayDemo/src'),
+                             '-Wl,--gc-sections'] +
+                       [str(ROOT / p) for p in status_sources] + fonts + [str(fifo)] +
+                       ['-o', str(status)], check=True)
+        subprocess.run([str(status)], check=True)

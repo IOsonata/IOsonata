@@ -32,4 +32,6 @@ example with the production advertisement-name parser, AppEvt queue and
 SSD1315 driver against a SPI RAM model at -O0/-Os under ASan/UBSan. It
 checks name length/preservation/sanitization, identity matching, eviction,
 RSSI bar pixels, deferred transfers, full-queue recovery, expiry and clock
-wrap. The combined BLE/OLED example still needs hardware validation.
+wrap. On October 19, 2026, the maintainer confirmed that the combined
+BLE scanner and OLED example works on the STM32WBA65I-DK1.
+

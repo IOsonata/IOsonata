@@ -821,5 +821,26 @@ leaving LPTIM1/2 to Bluetooth. UART reports remain on the ST-LINK USART1 VCP
 at 1 Mbaud. Rebuild the matching Debug/Release MCU library first. Both the
 OLED and original UART-only scan projects compile and link. Display-model
 tests cover device identity, name preservation, RSSI bars, expiry, clock wrap
-and event queue saturation under ASan/UBSan. Hardware validation of this
-combined BLE/OLED example remains pending.
+and event queue saturation under ASan/UBSan. On October 19, 2026, the
+maintainer confirmed that the combined BLE scanner and OLED example works
+on the STM32WBA65I-DK1.
+
+
+## BLE connection and security status on the OLED
+
+`exemples/BleStatusDisplayDemo/ioc` enables the optional OLED view in the
+shared `exemples/bluetooth/ble_security_demo.cpp`. The device advertises as
+BLEStatus and keeps the existing LE Secure Connections MITM policy and
+UART numeric-comparison confirmation. It shows waiting/connected state,
+two link handles and peer addresses, and each link's current security level
+through BtGapConnSecGet. A failed query shows unknown. During comparison,
+the six-digit number appears on both OLED and UART; y/n on the UART accepts
+or rejects it. Reconnecting from a stored bond uses the existing stack path.
+
+The project uses the working OLED pins, TIM16 (Timer DevNo 2), a 16-entry
+AppEvt queue and AppRun. A 250 ms timer queues display work; OLED transfers
+and security queries run in application context. UART remains at 1 Mbaud.
+Both this project and the original BleSecurityDemo compile/link in Debug and
+Release. SPI OLED tests exercise peer state, live security levels, numeric
+comparison and UART decisions, disconnect cleanup and queue saturation
+under ASan/UBSan. This status-display example needs hardware validation.
