@@ -100,3 +100,14 @@ with tempfile.TemporaryDirectory(prefix='ssd1315-') as td:
                        [str(ROOT / p) for p in status_sources] + fonts + [str(fifo)] +
                        ['-o', str(status)], check=True)
         subprocess.run([str(status)], check=True)
+
+        stopwatch = Path(td) / 'stopwatch_test'
+        stopwatch_sources = menu_sources + ['src/coredev/timer.cpp']
+        subprocess.run(cmd + ['-DSTM32WBA65xx', '-ffunction-sections', '-fdata-sections',
+                             '-Wno-missing-field-initializers',
+                             '-I' + str(ROOT / 'ARM/ST/include'),
+                             '-I' + str(ROOT / 'ARM/ST/STM32WBAxx/STM32WBA65/exemples/StopwatchDemo/src'),
+                             '-Wl,--gc-sections'] +
+                       [str(ROOT / p) for p in stopwatch_sources] + fonts +
+                       ['-o', str(stopwatch)], check=True)
+        subprocess.run([str(stopwatch)], check=True)

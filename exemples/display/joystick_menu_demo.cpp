@@ -35,6 +35,7 @@ SOFTWARE.
 
 #include <math.h>
 #include "coredev/spi.h"
+#include "coredev/timer.h"
 #include "display/display_ssd1315.h"
 #include "display/display_hx8357.h"
 #include "display/display_ili9341.h"
@@ -77,11 +78,57 @@ static DISPLAY_DRIVER g_Lcd;
 static ADC_DRIVER g_Adc;
 
 enum Key { KEY_SELECT, KEY_LEFT, KEY_DOWN, KEY_UP, KEY_RIGHT, KEY_NONE, KEY_INVALID };
+#ifdef JOYSTICK_STOPWATCH
+static unsigned s_Item = 3, s_Page = 3;
+static const unsigned s_ItemCount = 4;
+#else
 static unsigned s_Item, s_Page;
+static const unsigned s_ItemCount = 3;
+#endif
 static int s_Level = 5;
 static bool s_LedOn, s_InputError;
 static Key s_Candidate = KEY_INVALID, s_Stable = KEY_INVALID;
 static unsigned s_Debounce;
+
+#ifdef JOYSTICK_STOPWATCH
+static const TimerCfg_t s_TimerCfg = {
+	.DevNo = TIMER_DEVNO, .ClkSrc = TIMER_CLKSRC_DEFAULT, .Freq = 1000000,
+	.IntPrio = 7, .EvtHandler = nullptr, .bTickInt = false
+};
+static Timer s_Clock;
+static uint64_t s_ElapsedMs, s_LapMs;
+static uint32_t s_LastTick, s_LastPaint;
+static bool s_Running, s_HaveLap;
+static const uint64_t s_MaxElapsedMs = 359999990; // 99:59:59.99
+
+static void DrawMenu();
+static void PrintElapsed(uint64_t Ms)
+{
+	g_Lcd.printf("%02u:%02u:%02u.%02u", (unsigned)(Ms / 3600000),
+		(unsigned)(Ms / 60000 % 60), (unsigned)(Ms / 1000 % 60), (unsigned)(Ms / 10 % 100));
+}
+// Time comes from the free-running hardware timer. Rendering, SPI and ADC
+// delays do not become accumulated stopwatch error. Unsigned subtraction
+// also covers the millisecond counter wrapping, provided we poll each wrap.
+static void UpdateStopwatch()
+{
+	uint32_t now = s_Clock.mSecond();
+	uint32_t delta = now - s_LastTick;
+	s_LastTick = now;
+	bool wasRunning = s_Running;
+	if (s_Running)
+	{
+		s_ElapsedMs += delta;
+		if (s_ElapsedMs >= s_MaxElapsedMs) { s_ElapsedMs = s_MaxElapsedMs; s_Running = false; }
+	}
+	if (s_Page == 3 && !s_InputError && wasRunning &&
+		(now - s_LastPaint >= 100 || !s_Running))
+	{
+		s_LastPaint = now;
+		DrawMenu();
+	}
+}
+#endif
 
 static void SetLed(bool On)
 {
@@ -109,6 +156,19 @@ static void DrawMenu()
 	{
 		g_Lcd.printf("IOsonata\nJoystick + OLED\nGeneric ADC/display\n\nSelect/left: back");
 	}
+#ifdef JOYSTICK_STOPWATCH
+	else if (s_Page == 3)
+	{
+		g_Lcd.printf("Stopwatch %s", s_Running ? "RUN" : "PAUSED");
+		g_Lcd.SetCursor(0, 16); PrintElapsed(s_ElapsedMs);
+		g_Lcd.SetCursor(0, 32);
+		g_Lcd.printf("Lap ");
+		if (s_HaveLap) { PrintElapsed(s_LapMs); }
+		else { g_Lcd.printf("--:--:--.--"); }
+		g_Lcd.SetCursor(0, 48); g_Lcd.printf("SEL run/pause RT lap");
+		g_Lcd.SetCursor(0, 56); g_Lcd.printf("LT reset UP/DN menu");
+	}
+#endif
 	else
 	{
 		g_Lcd.printf("Joystick menu");
@@ -116,6 +176,9 @@ static void DrawMenu()
 		g_Lcd.printf("%c LED: %s\n%c Level: %d\n%c About",
 			s_Item == 0 ? '>' : ' ', s_LedOn ? "on" : "off",
 			s_Item == 1 ? '>' : ' ', s_Level, s_Item == 2 ? '>' : ' ');
+#ifdef JOYSTICK_STOPWATCH
+		g_Lcd.printf("\n%c Stopwatch", s_Item == 3 ? '>' : ' ');
+#endif
 		g_Lcd.SetCursor(0, 56);
 		g_Lcd.printf("UP/DN move SEL open");
 	}
@@ -132,10 +195,23 @@ static void HandleKey(Key k)
 	{
 		if (k == KEY_SELECT || k == KEY_LEFT) { s_Page = 0; }
 	}
+#ifdef JOYSTICK_STOPWATCH
+	else if (s_Page == 3)
+	{
+		if (k == KEY_SELECT) { s_Running = !s_Running && s_ElapsedMs < s_MaxElapsedMs; }
+		else if (k == KEY_RIGHT) { s_LapMs = s_ElapsedMs; s_HaveLap = true; }
+		else if (k == KEY_LEFT && !s_Running)
+		{
+			s_ElapsedMs = s_LapMs = 0;
+			s_HaveLap = false;
+		}
+		else if (k == KEY_UP || k == KEY_DOWN) { s_Page = 0; }
+	}
+#endif
 	else
 	{
-		if (k == KEY_UP) { s_Item = (s_Item + 2) % 3; }
-		else if (k == KEY_DOWN) { s_Item = (s_Item + 1) % 3; }
+		if (k == KEY_UP) { s_Item = (s_Item + s_ItemCount - 1) % s_ItemCount; }
+		else if (k == KEY_DOWN) { s_Item = (s_Item + 1) % s_ItemCount; }
 		else if (k == KEY_SELECT)
 		{
 			if (s_Item == 0) { SetLed(!s_LedOn); }
@@ -160,6 +236,9 @@ static Key DecodeKey(float Voltage)
 // produces one action and must be released before another action is accepted.
 static void PollJoystick()
 {
+#ifdef JOYSTICK_STOPWATCH
+	UpdateStopwatch();
+#endif
 	AdcData_t data;
 	Key k = g_Adc.Read(0, &data) ? DecodeKey(data.Data) : KEY_INVALID;
 	if (k == KEY_INVALID)
@@ -184,6 +263,10 @@ static bool HardwareInit()
 	if (!g_Spi.Init(s_SpiCfg) || !g_Lcd.Init(s_LcdCfg, &g_Spi)) { return false; }
 	g_Lcd.Backlight(true);
 	if (g_Lcd.Width() < 128 || g_Lcd.Height() < 64 || !g_Lcd.SetFont(&iFontSystem5x7)) { return false; }
+#ifdef JOYSTICK_STOPWATCH
+	if (!s_Clock.Init(s_TimerCfg)) { g_Lcd.printf("Timer init failed"); return false; }
+	s_LastTick = s_Clock.mSecond();
+#endif
 	IOPinConfig(s_LedPins[0].PortNo, s_LedPins[0].PinNo, s_LedPins[0].PinOp,
 		IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL);
 	SetLed(false);
@@ -201,3 +284,4 @@ int main()
 	if (!HardwareInit()) { return 1; }
 	while (1) { PollJoystick(); msDelay(10); }
 }
+

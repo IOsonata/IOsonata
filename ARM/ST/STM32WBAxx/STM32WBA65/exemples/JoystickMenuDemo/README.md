@@ -47,3 +47,8 @@ References:
 - https://github.com/STMicroelectronics/stm32wba65ri-dk1-bsp/blob/main/stm32wba65i_discovery.h
 - https://www.st.com/resource/en/datasheet/stm32wba65ri.pdf
 - https://www.st.com/resource/en/user_manual/um3462-discovery-kit-with-stm32wba65ri-mcu-stmicroelectronics.pdf
+
+
+The same shared source also supports the optional stopwatch in the separate
+[StopwatchDemo](../StopwatchDemo/README.md) project. This project's three-item
+menu and controls are unchanged.

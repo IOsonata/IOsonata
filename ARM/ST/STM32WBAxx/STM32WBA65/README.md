@@ -845,3 +845,21 @@ Release. SPI OLED tests exercise peer state, live security levels, numeric
 comparison and UART decisions, disconnect cleanup and queue saturation
 under ASan/UBSan. On October 19, 2026, the maintainer confirmed that BleStatusDisplayDemo
 works on the STM32WBA65I-DK1.
+
+
+## Joystick stopwatch
+
+`exemples/StopwatchDemo/ioc` enables JOYSTICK_STOPWATCH in the existing shared
+joystick menu example. It starts on the stopwatch page: select starts or
+pauses, right records a lap, left resets while paused, and up/down opens
+the menu. Elapsed time continues while the menu is open. The original
+JoystickMenuDemo remains a three-item menu when the option is absent.
+
+The generic Timer API on TIM16 (Timer DevNo 2), requested 1 MHz, supplies
+elapsed time. Display and ADC delays do not accumulate as stopwatch error.
+The screen refreshes about ten times per second and stops at 99:59:59.99.
+Both projects compile/link in Debug and Release. SPI OLED model tests pass
+at -O0/-Os under ASan/UBSan, covering pause/resume, lap, guarded reset,
+menu navigation, elapsed digits, delayed polling, ADC failure, timestamp
+wrap and the display limit. Stopwatch hardware validation remains pending.
+See the [project instructions](exemples/StopwatchDemo/README.md).
