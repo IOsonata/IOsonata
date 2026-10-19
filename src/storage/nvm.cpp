@@ -684,11 +684,6 @@ int Nvm::Read(uint64_t Off, void *pBuf, uint32_t Len)
 
 		if (rd != (int)l)
 		{
-			// Keep uncorrectable data distinct from a controller or bus failure.
-			if (rd == -EBADMSG)
-			{
-				return rd;
-			}
 			// Zero is the framework's retryable answer: DeviceIntrfRead has
 			// already looped MaxRetry times and the interface moved nothing
 			// each time, which is what another device holding it looks like.
@@ -1710,4 +1705,3 @@ void Nvm::Reset(void)
 	vbEnabled = ok;
 	Valid(ok);
 }
-
