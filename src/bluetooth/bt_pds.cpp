@@ -128,13 +128,31 @@ static uint32_t s_SectorHdrSize;
 #define BT_PDS_FILL_CHUNK		64
 #endif
 
+// A read that fails is tried again before it is believed. On a memory with
+// ECC, a word left half programmed or half erased by a power cut fails every
+// time, while a passing bus error does not; the callers treat a read that
+// still fails as damaged data.
+#ifndef BT_PDS_READ_TRIES
+#define BT_PDS_READ_TRIES		3
+#endif
+
 // The store works in whole results: a transfer either moved everything asked
 // for or it failed. Nvm reports the byte count, so fold that here once.
 static int MemRead(uint32_t Off, void *pBuf, uint32_t Len)
 {
-	int r = s_pMem->Read(Off, pBuf, Len);
+	int r = -EIO;
 
-	return r < 0 ? r : (r == (int)Len ? 0 : -EIO);
+	for (int i = 0; i < BT_PDS_READ_TRIES; i++)
+	{
+		r = s_pMem->Read(Off, pBuf, Len);
+		r = r < 0 ? r : (r == (int)Len ? 0 : -EIO);
+		if (r == 0)
+		{
+			return 0;
+		}
+	}
+
+	return r;
 }
 
 static int MemWrite(uint32_t Off, const void *pData, uint32_t Len)
@@ -341,18 +359,18 @@ static int ScanSector(uint16_t Sector)
 	pInfo->SourceSector = BT_PDS_NO_SECTOR;
 	pInfo->Head = SectorBase(Sector);
 
-	if (MemRead(SectorBase(Sector), &sectorHdr, sizeof(sectorHdr)) != 0)
-	{
-		return -EIO;
-	}
+	// A header that cannot be read is damaged, from a power cut while it was
+	// written or while the sector was erased. Like a header that fails its
+	// check, the sector then holds nothing the store needs and init erases it.
+	bool readable = MemRead(SectorBase(Sector), &sectorHdr, sizeof(sectorHdr)) == 0;
 
-	if (IsErased(&sectorHdr, sizeof(sectorHdr)))
+	if (readable && IsErased(&sectorHdr, sizeof(sectorHdr)))
 	{
 		SectorInfoReset(Sector);
 		return 0;
 	}
 
-	if (!ReadSectorHdr(Sector, &sectorHdr))
+	if (!readable || !ReadSectorHdr(Sector, &sectorHdr))
 	{
 		pInfo->Valid = false;
 		pInfo->Erased = false;
@@ -388,7 +406,11 @@ static int ScanSector(uint16_t Sector)
 		uint32_t word;
 		if (MemRead(off, &word, sizeof(word)) != 0)
 		{
-			return -EIO;
+			// A slot that cannot be read is a damaged record, handled as the
+			// partial record below.
+			pInfo->Writable = false;
+			pInfo->Head = SectorEnd(Sector);
+			return 0;
 		}
 
 		if (word == BT_PDS_ERASED_U32)
@@ -1027,7 +1049,8 @@ int BtPdsInit(Nvm *pMem)
 	uint32_t firstWord = BT_PDS_ERASED_U32;
 	if (MemRead(0U, &firstWord, sizeof(firstWord)) != 0)
 	{
-		return -EIO;
+		// Unreadable is not the old format; the sector scan sorts it out
+		firstWord = BT_PDS_ERASED_U32;
 	}
 	if (firstWord == BT_PDS_REC_MAGIC)
 	{
