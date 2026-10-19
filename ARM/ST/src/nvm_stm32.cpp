@@ -583,14 +583,81 @@ extern "C" bool Stm32FlashEccNmi(void)
 	return true;
 }
 
+// Copy one flash word, or the part of it at pSrc, with nothing else reading
+// the flash between the ECCC clear and the loads: the function runs from RAM
+// (.fastrun, which the linker scripts place in .data, copied at reset) and
+// interrupts are masked, so no instruction is fetched from flash and no other
+// code runs in between. A correction ECCR shows afterwards is then the word's
+// own, unless another bus master read the flash meanwhile. The source is read
+// through a volatile pointer so the compiler cannot make the loop a memcpy
+// call, which would run from flash. The NMI of a double error is not masked.
+// Returns ECCR as read once the loads are done.
+__attribute__((section(".fastrun"), noinline, long_call))
+static uint32_t StFlashWordCopy(uint8_t *pDst, const volatile uint8_t *pSrc, int Len)
+{
+	uint32_t primask = __get_PRIMASK();
+
+	__disable_irq();
+	ST_FLASH_ECCR = (ST_FLASH_ECCR & FLASH_ECCR_ECCIE) | FLASH_ECCR_ECCC;
+
+	// Stops at a double error: every further load of a damaged word would
+	// raise the NMI again.
+	for (int i = 0; i < Len && s_bEccHit == false; i++)
+	{
+		pDst[i] = pSrc[i];
+	}
+
+	// The NMI of a load can come a few instructions after it, so ECCR is
+	// read once the loads are done, and before an interrupt can run.
+	__DSB();
+	__ISB();
+
+	uint32_t eccr = ST_FLASH_ECCR;
+
+	__set_PRIMASK(primask);
+
+	return eccr;
+}
+
+// Whether the corrected error recorded in Eccr names the flash word holding
+// Addr. The address is compared without its low bits, as StEccInWindow does
+// for a double error, and with the banks swapped both readings of BK_ECC are
+// taken, as Stm32FlashEccNmi does.
+static bool StEccOwnWord(uint32_t Eccr, uintptr_t Addr)
+{
+	if (Eccr & FLASH_ECCR_SYSF_ECC)
+	{
+		return false;
+	}
+
+	uintptr_t gran = NVM_INTRF_WRITE_GRAN;
+	uintptr_t off = (Addr & ~(gran - 1)) - FLASH_BASE;
+	uintptr_t ecc = (uintptr_t)(Eccr & FLASH_ECCR_ADDR_ECC_Msk) & ~(gran - 1);
+
+#ifdef ST_FLASH_CR_BKER
+	uintptr_t bank = ST_FLASH_BANK_SIZE();
+	bool second = off >= bank;
+
+	if (second != ((Eccr & FLASH_ECCR_BK_ECC) != 0) && !StFlashBankSwapped())
+	{
+		return false;
+	}
+	off %= bank;
+#endif
+
+	return ecc == off;
+}
+
 // Copy Len bytes of flash at Addr, one flash word at a time. ECCR takes an
 // error only while ECCC and ECCD are both clear (RM0515 FLASH_ECCR): a
 // corrected error left set, by an earlier word of the read or by anything
 // else, would keep a double error in the next word from raising the NMI, and
 // the read would return the damaged bytes. ECCC is therefore cleared before
-// each word. A correction recorded for this word is valid corrected data.
-// A correction elsewhere may have hidden a double error here: invalidate
-// cached data before retrying. Two uncertain attempts fail the read.
+// each word, by StFlashWordCopy. A correction recorded for the word is valid
+// corrected data. One recorded elsewhere, which only another bus master can
+// leave inside StFlashWordCopy, may have hidden a double error here: the
+// cache is invalidated and the word read again. Two such attempts fail the
+// read.
 static bool StFlashEccCopy(uint8_t *pBuff, uintptr_t Addr, int Len)
 {
 	s_bEccHit = false;
@@ -609,38 +676,15 @@ static bool StFlashEccCopy(uint8_t *pBuff, uintptr_t Addr, int Len)
 		bool checked = false;
 		for (int pass = 0; pass < 2; pass++)
 		{
-			ST_FLASH_ECCR = (ST_FLASH_ECCR & FLASH_ECCR_ECCIE) | FLASH_ECCR_ECCC;
-			memcpy(pBuff, (const void *)Addr, (size_t)n);
-			// The NMI of a load can come a few instructions after it, so
-			// ECCC and the hit are looked at once the loads are done.
-			__DSB();
-			__ISB();
+			uint32_t eccr = StFlashWordCopy(pBuff, (const volatile uint8_t *)Addr, n);
 
 			if (s_bEccHit)
 			{
 				break;
 			}
 
-			uint32_t eccr = ST_FLASH_ECCR;
-			if ((eccr & FLASH_ECCR_ECCC) == 0)
-			{
-				checked = true;
-				break;
-			}
-
-			uintptr_t word = Addr & ~(uintptr_t)(NVM_INTRF_WRITE_GRAN - 1);
-			uintptr_t off = word - FLASH_BASE;
-			bool bankMatches = true;
-#ifdef ST_FLASH_CR_BKER
-			uintptr_t bank = ST_FLASH_BANK_SIZE();
-			bankMatches = !StFlashBankSwapped() &&
-				((off >= bank) == ((eccr & FLASH_ECCR_BK_ECC) != 0));
-			off %= bank;
-#endif
-			// A corrected word is usable. Do not guess which bank a
-			// corrected address names when the banks are swapped.
-			if (bankMatches && (eccr & FLASH_ECCR_SYSF_ECC) == 0 &&
-				(uintptr_t)(eccr & FLASH_ECCR_ADDR_ECC_Msk) == off)
+			// No correction, or a correction of this word, which is usable
+			if ((eccr & FLASH_ECCR_ECCC) == 0 || StEccOwnWord(eccr, Addr))
 			{
 				checked = true;
 				break;
@@ -934,4 +978,3 @@ void NvmIntrfGetStat(NvmIntrfStat_t *pStat)
 		*pStat = s_Stat;
 	}
 }
-

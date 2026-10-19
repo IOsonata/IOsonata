@@ -37,7 +37,13 @@ reference manual and the ST HAL (stm32wbaxx_hal_flash.c):
   that returns without one, fails the test. A masked double error can fill
   a cached word: clearing ECCC without invalidating it serves those same
   bytes without a new ECC check. Raw read tests cover this and corrections
-  from elsewhere on both retry attempts.
+  from elsewhere on both retry attempts;
+- corrected errors in the cases the driver cannot see from ECCR alone: the
+  banks swapped, ADDR_ECC giving the address of the load rather than of its
+  quad word, and a corrected error on every instruction fetched from flash
+  between the ECCC clear and the load of the word. The last one stands for
+  a weak cell in code run in that window; the driver copies each word from
+  RAM with interrupts masked, so nothing is fetched there.
 
 The flash content is kept between the boots of the firmware, so a boot is a
 reset. The one-second tick of the application is a call of
@@ -141,7 +147,7 @@ SECTIONS
 		__init_array_end = .;
 	} > FLASH
 %(nvm)s	_sidata = LOADADDR(.data);
-	.data : { _sdata = .; *(.data*) . = ALIGN(4); _edata = .; } > RAM AT > FLASH
+	.data : { _sdata = .; *(.data*) *(.fastrun*) . = ALIGN(4); _edata = .; } > RAM AT > FLASH
 	.bss : { _sbss = .; *(.bss*) *(COMMON) . = ALIGN(4); _ebss = .; } > RAM
 	.noinit (NOLOAD) : { *(.noinit*) } > RAM
 	end = .;
@@ -210,7 +216,7 @@ class Flash:
     the bond store region."""
 
     def __init__(self, mem, torn=None, transient=None, swap=False, corrected=None, icache=False,
-                 foreign=None, foreign_always=False):
+                 foreign=None, foreign_always=False, ecc_at_load=False, weak_fetch=False):
         self.mem = mem			# bytearray of NVM_MAP bytes from NVM_BASE - kept across boots
         # Offsets of quad words a power cut left part programmed or part
         # erased, kept across boots. The silicon checks every flash read
@@ -243,6 +249,16 @@ class Flash:
         # again after one more clear is read without it.
         self.foreign = foreign if foreign is not None else set()
         self.foreign_always = foreign_always
+        # ADDR_ECC of a corrected error gives the address of the load rather
+        # than of its quad word, should the silicon record it that way.
+        self.ecc_at_load = ecc_at_load
+        # Every instruction fetched from flash between an ECCC clear and the
+        # next load of the store has a corrected error: the worst case of a
+        # weak cell in code that runs in that window. Needs the code hook of
+        # run_boot, so only for short boots.
+        self.weak_fetch = weak_fetch
+        self.window = False		# ECCC cleared, no load of the store since
+        self.weak_fetches = 0
         self.flip = {}
         self.loaded = set()		# quad words loaded since ECCC was last cleared
         # In the NMI handler. Its clear of the flags is not a clear before a
@@ -279,10 +295,11 @@ class Flash:
         self.nmi_pending = False		# a double ECC error waits for the NMI
         # The emulator stops on the faulting load, so the return from the NMI
         # runs that load again; on the silicon the read completed and the NMI
-        # came once. While that instruction runs again, the quad words that
-        # already raised the NMI raise nothing.
-        self.skip_pc = None
+        # came once. That one load, the first after the return, raises nothing
+        # for the quad words that already raised the NMI. Any later load does,
+        # even by the same instruction, as in a byte copy loop.
         self.skip = set()
+        self.resumed = False		# the next load is the one the NMI interrupted
         self.PG = hdr('FLASH_NSCR1_PG')
         self.PER = hdr('FLASH_NSCR1_PER')
         self.MER = hdr('FLASH_NSCR1_MER1') | hdr('FLASH_NSCR1_MER2')
@@ -348,6 +365,7 @@ class Flash:
             if (val & self.ECCC) and not self.in_nmi:
                 self.loaded.clear()
                 self.ecc_clears += 1
+                self.window = True
             self.eccr &= ~(val & (self.ECCD | self.ECCC))
             self.eccr = (self.eccr & ~self.ECCIE) | (val & self.ECCIE)
             return
@@ -418,6 +436,7 @@ class Flash:
         if self.icache and self.stale:
             self.v('read of the store through the enabled ICACHE not invalidated after a program or an erase')
         quads = sorted({off - off % QWORD, (off + size - 1) - (off + size - 1) % QWORD})
+        self.window = False
         if self.unchecked is not None and self.unchecked not in quads:
             self.returned.append(NVM_BASE + self.unchecked)
             self.unchecked = None
@@ -434,15 +453,16 @@ class Flash:
             data = bytes(self.masked_cache[a - a % QWORD][a % QWORD]
                          for a in range(off, off + size))
             return int.from_bytes(data, 'little')
-        if self.skip_pc is not None or self.transient or self.torn or self.corrected:
+        resumed = self.resumed
+        self.resumed = False
+        if not resumed:
+            self.skip.clear()
+        if self.transient or self.torn or self.corrected:
             from unicorn.arm_const import UC_ARM_REG_PC
             pc = self.uc.reg_read(UC_ARM_REG_PC)
-            if self.skip_pc is not None and pc != self.skip_pc:
-                self.skip_pc = None
-                self.skip.clear()
             for q in quads:
                 if q in self.corrected:
-                    self.ecc_record(q, self.ECCC)
+                    self.ecc_record(q, self.ECCC, max(off, q) if self.ecc_at_load else q)
             for q in quads:
                 if q in self.skip:
                     continue
@@ -454,17 +474,18 @@ class Flash:
                 break
         return int.from_bytes(self.mem[off:off + size], 'little')
 
-    def ecc_record(self, q, flag):
+    def ecc_record(self, q, flag, at=None):
         """Record a corrected (ECCC) or double (ECCD) ECC error. ECCR takes
         an error only while ECCC and ECCD are both clear: a later error sets
         no flag and records no address until software clears them (RM0515
         FLASH_ECCR), so a double error behind a corrected one raises no NMI.
-        ADDR_ECC is the byte offset of the word from the start of its bank.
-        True when the error was recorded."""
+        ADDR_ECC is the byte offset of the word from the start of its bank,
+        or of At when given. Q may be below the store, for code. True when
+        the error was recorded."""
         if self.eccr & (self.ECCD | self.ECCC):
             return False
         bank_size = FLASH_KB * 1024 // 2
-        rel = NVM_BASE + q - FLASH_BASE
+        rel = NVM_BASE + (q if at is None else at) - FLASH_BASE
         bank = rel >= bank_size
         rel -= bank_size if bank else 0
         if self.swap:
@@ -487,9 +508,6 @@ class Flash:
             return
         if self.unchecked == q:
             self.unchecked = None
-        if self.skip_pc != pc:
-            self.skip.clear()
-        self.skip_pc = pc
         self.skip.add(q)
         self.nmi_pending = True
         self.uc.emu_stop()
@@ -543,7 +561,8 @@ class Flash:
 
 
 def run_boot(elf_path, boot, mem, torn=None, cut=None, tear=False, args=None, transient=None,
-             swap=False, corrected=None, icache=False, foreign=None, foreign_always=False):
+             swap=False, corrected=None, icache=False, foreign=None, foreign_always=False,
+             ecc_at_load=False, weak_fetch=False):
     from unicorn import Uc, UC_ARCH_ARM, UC_MODE_THUMB, UC_MODE_MCLASS, UC_HOOK_CODE
     from unicorn.arm_const import UC_CPU_ARM_CORTEX_M33
     from unicorn.arm_const import UC_ARM_REG_R0, UC_ARM_REG_R1, UC_ARM_REG_SP, UC_ARM_REG_PC
@@ -563,7 +582,8 @@ def run_boot(elf_path, boot, mem, torn=None, cut=None, tear=False, args=None, tr
         if seg['p_type'] == 'PT_LOAD' and seg['p_filesz']:
             uc.mem_write(seg['p_paddr'], seg.data())
 
-    flash = Flash(mem, torn, transient, swap, corrected, icache, foreign, foreign_always)
+    flash = Flash(mem, torn, transient, swap, corrected, icache, foreign, foreign_always,
+                  ecc_at_load, weak_fetch)
     flash.uc = uc
     flash.cut_at = cut
     flash.tear = tear
@@ -674,6 +694,14 @@ def run_boot(elf_path, boot, mem, torn=None, cut=None, tear=False, args=None, tr
         return False
 
     uc.hook_add(UC_HOOK_MEM_UNMAPPED, on_unmapped)
+
+    if weak_fetch:
+        def on_fetch(uc, addr, size, user):
+            if flash.window and not flash.in_nmi:
+                flash.weak_fetches += 1
+                flash.ecc_record(addr - NVM_BASE, flash.ECCC)
+
+        uc.hook_add(UC_HOOK_CODE, on_fetch, begin=FLASH_BASE, end=NVM_BASE - 1)
     uc.mem_write(syms['g_BondFwBoot'], boot.to_bytes(4, 'little'))
     for i, v in enumerate(args or ()):
         uc.mem_write(syms['g_BondFwArg'] + 4 * i, v.to_bytes(4, 'little'))
@@ -726,6 +754,7 @@ def run_boot(elf_path, boot, mem, torn=None, cut=None, tear=False, args=None, tr
                     uc.reg_write(r, val)
                 nmi['saved'] = None
                 flash.in_nmi = False
+                flash.resumed = True
                 start = nmi['resume']
                 continue
             if flash.nmi_pending and nmi['saved'] is None:
@@ -1066,11 +1095,24 @@ def driver_runs(elf, errors):
         ('cached masked double error', dict(torn={16}, foreign={16}, icache=True), True),
         ('persistent single-bit correction', dict(corrected={16}), False),
         ('cached valid data after a foreign correction', dict(foreign={16}, icache=True), False),
+        # With the banks swapped BK_ECC names either bank, so the word's own
+        # correction is taken with both readings, as the NMI takes a hit.
+        ('persistent correction, banks swapped', dict(corrected={16}, swap=True), False),
+        # ADDR_ECC at the address of the load; the read starts at byte 24,
+        # inside the corrected quad word at 16.
+        ('correction recorded at the load address', dict(corrected={16}, ecc_at_load=True), False, 24),
+        # A corrected error on every flash fetch between the ECCC clear and
+        # the load. The word copy runs from RAM with interrupts masked, so
+        # nothing is fetched from flash there and the data is read.
+        ('flash fetch between the clear and the load', dict(weak_fetch=True), False),
     ]
-    for label, options, rejected in cases:
+    for case in cases:
+        label, options, rejected = case[:3]
+        offset = case[3] if len(case) > 3 else 0
         n = len(errors)
         result, st, fl = boot_or_error(errors, label, elf, BOOT_ECC_RETRY,
-                                       bytearray(b'\xa5' * NVM_MAP), args=[int(rejected)], **options)
+                                       bytearray(b'\xa5' * NVM_MAP), args=[int(rejected), offset],
+                                       **options)
         boot_ok(errors, label, result, st, fl, read_rejected=rejected)
         if options.get('torn') and not fl.masked:
             errors.append(f'{label}: no double error was masked')
@@ -1082,6 +1124,25 @@ def driver_runs(elf, errors):
             passed += 1
             print(f'{label}: {"read rejected" if rejected else "valid data kept"}, '
                   f'{st["nmis"]} NMI, {fl.icache_inv} cache invalidations')
+
+    # The same weak flash fetch through a whole mount. A read refused on
+    # every attempt makes PDS take the sector header as damaged and erase the
+    # sector holding the image; the word copy from RAM keeps every fetch out
+    # of the window, so the store mounts and the image comes back.
+    n = len(errors)
+    label = 'saved image, flash fetch between the clear and the load'
+    args = [21, 39, 22, 64, 0, 0]
+    mem = bytearray(b'\xff' * NVM_MAP)
+    result, st, fl = boot_or_error(errors, f'{label}, prepare', elf, BOOT_CUT_PREPARE, mem, args=args)
+    boot_ok(errors, f'{label}, prepare', result, st, fl)
+    result, st, fl = boot_or_error(errors, label, elf, BOOT_CUT_CHECK, mem, args=args, weak_fetch=True)
+    boot_ok(errors, label, result, st, fl)
+    if not any('cut sweep: restored old' in t for _, t in st['lines']) or fl.stats['erases'] or fl.weak_fetches:
+        errors.append(f'{label}: {fl.stats["erases"]} erases, {fl.weak_fetches} flash fetches in the window, '
+                      f'image restored {any("cut sweep: restored old" in t for _, t in st["lines"])}')
+    if len(errors) == n:
+        passed += 1
+        print(f'{label}: no fetch from flash in the window, store mounted, image restored')
 
     # ICACHE enabled. It is invalidated after every program and erase, and in
     # the NMI of a double error the driver takes: a line filled by the failed
@@ -1260,4 +1321,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-

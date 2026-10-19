@@ -584,12 +584,14 @@ static void BootProgramError(void)
 }
 
 // Raw reads must reject a double error even when another correction masks
-// both attempts. A genuine corrected word must remain readable.
+// both attempts. A genuine corrected word must remain readable. Argument 0:
+// the read is to be refused; argument 1: where in the region it starts.
 static void BootEccRetry(void)
 {
 	uint8_t data[64];
+	uint32_t off = g_BondFwArg[1];
 	Check(TestMemInit(), "ECC retry: Nvm over the region");
-	int count = s_TestMem.Read(0, data, sizeof(data));
+	int count = s_TestMem.Read(off, data, sizeof(data));
 	if (g_BondFwArg[0])
 	{
 		Check(count < 0, "ECC retry: uncertain read refused");
@@ -604,7 +606,7 @@ static void BootEccRetry(void)
 		}
 		Check(same, "ECC retry: data preserved");
 	}
-	Check(s_TestMem.Read(64, data, sizeof(data)) == (int)sizeof(data),
+	Check(s_TestMem.Read(off + 64, data, sizeof(data)) == (int)sizeof(data),
 		  "ECC retry: next read remains usable");
 }
 
@@ -672,4 +674,3 @@ extern "C" void ResetEntry(void)
 	{
 	}
 }
-
