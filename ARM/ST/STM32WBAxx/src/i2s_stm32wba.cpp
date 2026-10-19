@@ -54,7 +54,7 @@ typedef struct __I2s_Dma_Buffer
 	alignas(4) uint8_t Data[2][I2S_DMA_FRAMES * 2 * 4];
 	int Channel;
 	unsigned Index;
-	unsigned Bytes;
+	unsigned Bytes[2];
 } I2sDmaBuffer_t;
 
 typedef struct __I2s_Pin_Route
@@ -221,6 +221,24 @@ static unsigned I2sTxBlock(uint8_t *pRaw)
 {
 	unsigned count = 0;
 
+	if (s_AccessBytes == s_pDev->SampleWidth)
+	{
+		while (count < I2S_DMA_FRAMES)
+		{
+			int frames = I2S_DMA_FRAMES - count;
+			const uint8_t *data = CFifoPeekMultiple(s_pDev->hTxFifo, &frames);
+
+			if (!data)
+			{
+				break;
+			}
+			memcpy(pRaw + count * s_FrameBytes, data, frames * s_FrameBytes);
+			CFifoRelease(s_pDev->hTxFifo, frames);
+			count += frames;
+		}
+		memset(pRaw + count * s_FrameBytes, 0, (I2S_DMA_FRAMES - count) * s_FrameBytes);
+		return count * s_FrameBytes;
+	}
 	for (unsigned frame = 0; frame < I2S_DMA_FRAMES; frame++)
 	{
 		const uint8_t *data = CFifoPeek(s_pDev->hTxFifo);
@@ -241,6 +259,45 @@ static unsigned I2sTxBlock(uint8_t *pRaw)
 	return count;
 }
 
+static bool I2sRxBlock(const uint8_t *pRaw)
+{
+	if (s_AccessBytes == s_pDev->SampleWidth)
+	{
+		unsigned count = 0;
+
+		while (count < I2S_DMA_FRAMES)
+		{
+			int frames = I2S_DMA_FRAMES - count;
+			uint8_t *dest = CFifoResvMultiple(s_pDev->hRxFifo, &frames);
+
+			if (!dest)
+			{
+				I2sFail(DEVINTRF_EVT_RX_FIFO_FULL);
+				return false;
+			}
+			memcpy(dest, pRaw + count * s_FrameBytes, frames * s_FrameBytes);
+			CFifoPutMultiple(s_pDev->hRxFifo, &frames);
+			count += frames;
+		}
+		return true;
+	}
+	for (unsigned frame = 0; frame < I2S_DMA_FRAMES; frame++)
+	{
+		uint8_t packed[6];
+
+		for (unsigned sample = 0; sample < s_Channels; sample++)
+		{
+			I2sPack(packed + sample * s_pDev->SampleWidth, I2sLoad(pRaw));
+			pRaw += s_AccessBytes;
+		}
+		if (!I2sPublish(packed))
+		{
+			return false;
+		}
+	}
+	return true;
+}
+
 static void I2sServiceDma(int Ch)
 {
 	if (!s_Enabled)
@@ -248,48 +305,38 @@ static void I2sServiceDma(int Ch)
 		WbaGpdmaClear(Ch);
 		return;
 	}
-	uint32_t flags = WbaGpdmaFlags(Ch);
+	uint32_t rxFlags = s_Rx.Channel >= 0 ? WbaGpdmaFlags(s_Rx.Channel) : 0;
+	uint32_t txFlags = s_Tx.Channel >= 0 ? WbaGpdmaFlags(s_Tx.Channel) : 0;
 
-	if (flags & WBA_GPDMA_FLAG_ERR)
+	if ((rxFlags | txFlags) & WBA_GPDMA_FLAG_ERR)
 	{
 		I2sFail(DEVINTRF_EVT_STATECHG);
 		return;
 	}
-	if (!(flags & WBA_GPDMA_FLAG_TC))
-	{
-		return;
-	}
-	WbaGpdmaClear(Ch);
-	if (Ch == s_Rx.Channel)
-	{
-		uint8_t *raw = s_Rx.Data[s_Rx.Index];
+	unsigned rxIndex = s_Rx.Index;
+	unsigned txIndex = s_Tx.Index;
+	unsigned bytes = I2S_DMA_FRAMES * s_Channels * s_AccessBytes;
 
+	// Restart every completed channel before copying or converting frames.
+	// TX's alternate buffer was prepared during the previous completion.
+	if (rxFlags & WBA_GPDMA_FLAG_TC)
+	{
+		WbaGpdmaClear(s_Rx.Channel);
 		s_Rx.Index ^= 1;
-		WbaGpdmaStart(Ch, s_Rx.Data[s_Rx.Index], I2S_DMA_FRAMES * s_Channels * s_AccessBytes);
-		for (unsigned frame = 0; frame < I2S_DMA_FRAMES; frame++)
-		{
-			uint8_t packed[6];
-
-			for (unsigned sample = 0; sample < s_Channels; sample++)
-			{
-				I2sPack(packed + sample * s_pDev->SampleWidth, I2sLoad(raw));
-				raw += s_AccessBytes;
-			}
-			if (!I2sPublish(packed))
-			{
-				return;
-			}
-		}
-		I2sNotify(DEVINTRF_EVT_RX_DATA, CFifoUsed(s_pDev->hRxFifo) * s_FrameBytes);
+		WbaGpdmaStart(s_Rx.Channel, s_Rx.Data[s_Rx.Index], bytes);
 	}
-	else if (Ch == s_Tx.Channel)
+	if (txFlags & WBA_GPDMA_FLAG_TC)
 	{
-		unsigned completed = s_Tx.Bytes;
-
+		WbaGpdmaClear(s_Tx.Channel);
 		s_Tx.Index ^= 1;
-		s_Tx.Bytes = I2sTxBlock(s_Tx.Data[s_Tx.Index]);
-		WbaGpdmaStart(Ch, s_Tx.Data[s_Tx.Index], I2S_DMA_FRAMES * s_Channels * s_AccessBytes);
-		if (completed && !s_Tx.Bytes)
+		WbaGpdmaStart(s_Tx.Channel, s_Tx.Data[s_Tx.Index], bytes);
+	}
+	if (txFlags & WBA_GPDMA_FLAG_TC)
+	{
+		unsigned completed = s_Tx.Bytes[txIndex];
+
+		s_Tx.Bytes[txIndex] = I2sTxBlock(s_Tx.Data[txIndex]);
+		if (completed && !s_Tx.Bytes[0] && !s_Tx.Bytes[1])
 		{
 			I2sNotify(DEVINTRF_EVT_TX_FIFO_EMPTY, 0);
 		}
@@ -297,6 +344,10 @@ static void I2sServiceDma(int Ch)
 		{
 			I2sNotify(DEVINTRF_EVT_TX_READY, CFifoUsed(s_pDev->hTxFifo) * s_FrameBytes);
 		}
+	}
+	if ((rxFlags & WBA_GPDMA_FLAG_TC) && s_Enabled && I2sRxBlock(s_Rx.Data[rxIndex]))
+	{
+		I2sNotify(DEVINTRF_EVT_RX_DATA, CFifoUsed(s_pDev->hRxFifo) * s_FrameBytes);
 	}
 }
 
@@ -449,7 +500,8 @@ static void I2sEnable(DevIntrf_t *pDev)
 	}
 	if (s_Tx.Channel >= 0)
 	{
-		s_Tx.Bytes = I2sTxBlock(s_Tx.Data[0]);
+		s_Tx.Bytes[0] = I2sTxBlock(s_Tx.Data[0]);
+		s_Tx.Bytes[1] = I2sTxBlock(s_Tx.Data[1]);
 		WbaGpdmaSetup(s_Tx.Channel, WBA_GPDMA_REQ_SAI1_A, true, &SAI1_Block_A->DR, s_AccessBytes == 4 ? 2 : s_AccessBytes - 1, pDev->bIntEn);
 		WbaGpdmaStart(s_Tx.Channel, s_Tx.Data[0], I2S_DMA_FRAMES * s_Channels * s_AccessBytes);
 		SAI1_Block_A->CR1 |= SAI_xCR1_DMAEN;

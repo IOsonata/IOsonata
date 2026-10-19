@@ -1226,7 +1226,16 @@ Validation:
   draining and error detection at -O0/-Os.
 - The existing Cortex-M33 I2S tests cover simultaneous receive/transmit DMA;
   codec tests cover microphone and headphone paths enabled together.
-- Physical live microphone/headphone loopback awaits board validation.
+- The first board loopback run stopped with a SAI/DMA error after 64 frames.
+  The driver previously built the next TX block before rearming its DMA and
+  processed RX before servicing another pending TX completion. Both completed
+  channels are now rearmed before FIFO processing, and TX uses a previously
+  prepared alternate buffer. Native 8/16-bit samples use bulk FIFO copies.
+  The additional prepared TX block is 32 frames (about 2 ms at 15,625 Hz).
+- The DMA-ordering regression fails on the earlier driver and passes after
+  the change. Tests also check FIFO wrap at a 40-frame capacity, sample order,
+  packed widths, single-direction operation, error shutdown and reset.
+- Physical live microphone/headphone loopback still awaits a successful retest.
 
 ```sh
 python3 tests/audio/run_i2s_loopback.py

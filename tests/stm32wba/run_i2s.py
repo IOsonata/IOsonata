@@ -148,7 +148,8 @@ def main():
                 run([cxx if cpp else cc, *flags, *language, '-c', str(ROOT / source), '-o', str(obj)])
                 objects.append(str(obj))
             exe = temp / 'i2s.elf'
-            run([cxx, *flags, '-nostdlib', '-Wl,--gc-sections', '-T' + str(HERE / 'clock_fw.ld'),
+            run([cxx, *flags, '-nostdlib', '-Wl,--gc-sections',
+                 '-Wl,--wrap=CFifoPeek,--wrap=CFifoResv,--wrap=CFifoPeekMultiple,--wrap=CFifoResvMultiple', '-T' + str(HERE / 'clock_fw.ld'),
                  *objects, '-lgcc', '-o', str(exe)])
             print(f'{opt}: I2S {emulate(exe)} checks PASS', flush=True)
 

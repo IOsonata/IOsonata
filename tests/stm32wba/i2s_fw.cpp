@@ -25,6 +25,7 @@ typedef struct __Test_Dma
 static TestDma_t s_Dma[2];
 static int s_AllocationLimit = 2;
 static unsigned s_Checks;
+static bool s_RequireBothRunning;
 static unsigned s_Events[DEVINTRF_EVT_COMPLETED + 1];
 static volatile uint32_t *const s_Io = (volatile uint32_t *)0x500FF000;
 alignas(4) static uint8_t s_RxMem[CFIFO_TOTAL_MEMSIZE(64, 6)];
@@ -37,9 +38,46 @@ static const IOPinCfg_t s_Pins[] = {
 	{ IOPORTE, 2, IOPINOP_FUNC13, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL }
 };
 
+extern "C" uint8_t *__real_CFifoPeek(hCFifo_t Fifo);
+extern "C" uint8_t *__real_CFifoResv(hCFifo_t Fifo);
+extern "C" uint8_t *__real_CFifoPeekMultiple(hCFifo_t Fifo, int *pCount);
+extern "C" uint8_t *__real_CFifoResvMultiple(hCFifo_t Fifo, int *pCount);
+
 static void Check(bool Ok)
 {
 	s_Io[1] = ++s_Checks | (Ok ? 0 : 0x80000000U);
+}
+
+static void CheckDmaRunning()
+{
+	if (s_RequireBothRunning)
+	{
+		Check(s_Dma[0].Running && s_Dma[1].Running);
+	}
+}
+
+extern "C" uint8_t *__wrap_CFifoPeek(hCFifo_t Fifo)
+{
+	CheckDmaRunning();
+	return __real_CFifoPeek(Fifo);
+}
+
+extern "C" uint8_t *__wrap_CFifoResv(hCFifo_t Fifo)
+{
+	CheckDmaRunning();
+	return __real_CFifoResv(Fifo);
+}
+
+extern "C" uint8_t *__wrap_CFifoPeekMultiple(hCFifo_t Fifo, int *pCount)
+{
+	CheckDmaRunning();
+	return __real_CFifoPeekMultiple(Fifo, pCount);
+}
+
+extern "C" uint8_t *__wrap_CFifoResvMultiple(hCFifo_t Fifo, int *pCount)
+{
+	CheckDmaRunning();
+	return __real_CFifoResvMultiple(Fifo, pCount);
 }
 
 extern "C" void *memset(void *pDest, int Value, size_t Count)
@@ -226,6 +264,16 @@ static void I2sChecks()
 	Check(SAI1_Block_A->FRCR == (31U | (15U << 8) | SAI_xFRCR_FSDEF | SAI_xFRCR_FSOFF));
 	Check((SAI1_Block_A->CR1 & (SAI_xCR1_MCKEN | SAI_xCR1_SAIEN)) == (SAI_xCR1_MCKEN | SAI_xCR1_SAIEN));
 	Check((SAI1_Block_B->CR1 & (SAI_xCR1_MODE | SAI_xCR1_SYNCEN)) == (SAI_xCR1_MODE | SAI_xCR1_SYNCEN_0));
+	// Both DMA completions must be rearmed before any FIFO processing.
+	s_Dma[0].Flags = WBA_GPDMA_FLAG_TC;
+	s_Dma[1].Flags = WBA_GPDMA_FLAG_TC;
+	s_Dma[0].Running = false;
+	s_Dma[1].Running = false;
+	s_RequireBothRunning = true;
+	s_Dma[0].Handler(0, s_Dma[0].pCtx);
+	s_RequireBothRunning = false;
+	DeviceIntrfReset(&dev.DevIntrf);
+	memset(s_Events, 0, sizeof(s_Events));
 	Check(DeviceIntrfRx(&dev.DevIntrf, 0, data, 4) == 0);
 	Check(DeviceIntrfRx(&dev.DevIntrf, 0, data, 3) == 0);
 	Check(CFifoUsed(dev.hRxFifo) == 0);
@@ -240,6 +288,12 @@ static void I2sChecks()
 	Check(CFifoUsed(dev.hTxFifo) == 32);
 	Complete(1);
 	Check(CFifoUsed(dev.hTxFifo) == 0 && s_Dma[1].Count == 128);
+	// The already prepared silent block runs before the new data block.
+	for (unsigned i = 0; i < 128; i++)
+	{
+		Check(s_Dma[1].pMem[i] == 0);
+	}
+	Complete(1);
 	for (unsigned i = 0; i < 128; i++)
 	{
 		Check(s_Dma[1].pMem[i] == data[i]);
@@ -316,6 +370,11 @@ static void I2sChecks()
 				DeviceIntrfRx(&dev.DevIntrf, 0, data, width * (channel ? 1 : 2));
 			}
 			Check(CFifoUsed(dev.hTxFifo) == 0);
+			Complete(1);
+			if (!cfg.bIntEn)
+			{
+				DeviceIntrfRx(&dev.DevIntrf, 0, data, width * (channel ? 1 : 2));
+			}
 			for (unsigned sample = 0; sample < count / width; sample++)
 			{
 				for (unsigned byte = 0; byte < s_Dma[1].Width; byte++)
@@ -326,6 +385,52 @@ static void I2sChecks()
 			DeviceIntrfPowerOff(&dev.DevIntrf);
 		}
 	}
+	// Non-power-of-two FIFOs split a DMA block at the ring boundary.
+	cfg.SampleWidth = I2SSWIDTH_16BITS;
+	cfg.Chan = I2SCHAN_STEREO;
+	cfg.Format = I2SFMT_NORMAL;
+	cfg.bIntEn = true;
+	cfg.RxFifoMemSize = CFIFO_TOTAL_MEMSIZE(40, 4);
+	cfg.TxFifoMemSize = cfg.RxFifoMemSize;
+	Check(I2SInit(&dev, &cfg));
+	Capture();
+	Check(DeviceIntrfRx(&dev.DevIntrf, 0, data, 96) == 96);
+	Capture();
+	Check(CFifoUsed(dev.hRxFifo) == 40);
+	Check(DeviceIntrfRx(&dev.DevIntrf, 0, data, 160) == 160);
+	for (unsigned frame = 0; frame < 40; frame++)
+	{
+		Check(data[frame * 4] == 1 && data[frame * 4 + 1] == 0 && data[frame * 4 + 2] == 0xFE && data[frame * 4 + 3] == 0xFF);
+	}
+	Check(DeviceIntrfTx(&dev.DevIntrf, 0, data, 128) == 128);
+	Complete(1);
+	Check(DeviceIntrfTx(&dev.DevIntrf, 0, data, 128) == 128);
+	Complete(1);
+	for (unsigned block = 0; block < 2; block++)
+	{
+		for (unsigned i = 0; i < 128; i++)
+		{
+			Check(s_Dma[1].pMem[i] == data[i]);
+		}
+		Complete(1);
+	}
+	Check(CFifoUsed(dev.hTxFifo) == 0);
+	DeviceIntrfPowerOff(&dev.DevIntrf);
+	for (unsigned sample = 0; sample < 32; sample++)
+	{
+		uint32_t value = (sample & 1) ? 0x0080FFFE : 0x007F0001;
+
+		for (unsigned byte = 0; byte < 3; byte++)
+		{
+			data[sample * 3 + byte] = value >> (8 * byte);
+		}
+	}
+	// Restore the packed 24-bit playback case used below.
+	cfg.SampleWidth = I2SSWIDTH_24BITS;
+	cfg.Chan = I2SCHAN_RIGHT;
+	cfg.Format = I2SFMT_ALIGN_RIGHT;
+	cfg.RxFifoMemSize = CFIFO_TOTAL_MEMSIZE(64, 3);
+	cfg.TxFifoMemSize = cfg.RxFifoMemSize;
 	// Playback uses transmit only and allocates its TX channel independently.
 	cfg.pIOPinMap = pins;
 	pins[2].PortNo = -1;
@@ -336,6 +441,7 @@ static void I2sChecks()
 	Check(DeviceIntrfTx(&dev.DevIntrf, 0, data, 96) == 96);
 	Complete(0);
 	Check(CFifoUsed(dev.hTxFifo) == 0);
+	Complete(0);
 	Check(s_Dma[0].pMem[0] == 1 && s_Dma[0].pMem[2] == 0x7F && s_Dma[0].pMem[3] == 0);
 	DeviceIntrfPowerOff(&dev.DevIntrf);
 	pins[2] = s_Pins[2];
