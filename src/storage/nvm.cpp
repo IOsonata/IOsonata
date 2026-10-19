@@ -473,7 +473,8 @@ bool Nvm::Init(const NvmCfg_t &Cfg, DeviceIntrf * const pIntrf,
 
 	if (vbPhased)
 	{
-		QuadSPISetMemSize(SPIGetHandle(*pIntrf), (uint32_t)vDevSize);
+		// The interface takes the size in KBytes
+		QuadSPISetMemSize(SPIGetHandle(*pIntrf), (uint32_t)(vDevSize / 1024U));
 	}
 
 	if (vbBare)

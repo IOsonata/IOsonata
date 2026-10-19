@@ -1020,7 +1020,7 @@ static void TestQspi(MockIntrf &Bus)
 	cfg.WrProtPin = { -1, -1, 0, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL };
 
 	CHECK(mem.Init(cfg, &Bus), "qspi init");
-	CHECK(s_QSetMemSize == QSPI_SIZE, "qspi: device size handed to the interface");
+	CHECK(s_QSetMemSize == QSPI_SIZE / 1024, "qspi: device size in KBytes handed to the interface");
 	CHECK(s_QRstCnt == 1, "qspi: reset went as a phase, before the id probe");
 	CHECK(mem.ReadId(3) == QSPI_ID, "qspi id");
 
