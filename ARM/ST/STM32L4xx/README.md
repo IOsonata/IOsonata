@@ -257,11 +257,10 @@ STM32L475VG, shared drivers: Blinky blinks LD1 and LD2 and stops on B1.
 UartPrbsTxTest on the ST-LINK virtual COM port, USART1 at 1 Mbaud: polling
 101380 B/s, interrupts 101390 B/s, DMA 100940 B/s, DMA with interrupts 100920
 B/s, no loss after the receiver locks on the stream. UartLoopback with
-interrupts and DMA: about 66 kB/s, 0 errors. In polling the loopback loses
-about 1 percent of the bytes: a character takes 800 CPU cycles at 80 MHz, the
-polling path does not always read RDR in time. The WBA65 polling loopback,
-1000 cycles per character at 100 MHz with its receive FIFO off, has no loss
-(about 69.4 kB/s). UartLoopback sets `UART_DMA_MODE` in its board.h. The rates are 1.4 percent above the 100000 B/s of
+interrupts and DMA: about 66 kB/s, 0 errors; polling, Debug and Release:
+about 66 kB/s, 0 errors. A first polling run lost about 1 percent of the
+bytes and did not repeat, most likely a library not rebuilt. UartLoopback
+sets `UART_DMA_MODE` in its board.h, as on the WBA65. The rates are 1.4 percent above the 100000 B/s of
 1 Mbaud 8N1: the core clock comes from the MSI through the PLL and SystemInit
 does not lock the MSI to the LSE (MSIPLLEN), the MSI keeps its factory
 calibration. The NUCLEO-L432KC measured 99.9 kB/s with the same code.

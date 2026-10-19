@@ -50,9 +50,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define UART_DEVNO			BOARD_VCP_DEVNO
 #define UART_PINS			BOARD_VCP_PINS
 
-// The core runs at 80 MHz. At the 1 Mbaud default a character takes 800 CPU
-// cycles, the polling and interrupt only RX paths can miss characters.
-// Receive with DMA.
+// Interrupts and DMA, as on the WBA65
 #define UART_DMA_MODE		true
 
 #endif
