@@ -43,9 +43,34 @@ SOFTWARE.
 #include "display/display_st77xx.h"
 #include "display/display_ili9341.h"
 #include "display/display_hx8357.h"
+#include "display/display_ssd1315.h"
 #include "iopinctrl.h"
 
 #include "board.h"
+
+// Existing HX8357 boards keep their original settings. Other panels select
+// their driver, native geometry and SPI settings beside the pin map.
+#ifndef DISPLAY_DRIVER
+#define DISPLAY_DRIVER LcdHX8357
+#endif
+#ifndef DISPLAY_WIDTH
+#define DISPLAY_WIDTH 320
+#endif
+#ifndef DISPLAY_HEIGHT
+#define DISPLAY_HEIGHT 480
+#endif
+#ifndef DISPLAY_PIXEL_SIZE
+#define DISPLAY_PIXEL_SIZE 16
+#endif
+#ifndef DISPLAY_STRIDE
+#define DISPLAY_STRIDE (320 * 3)
+#endif
+#ifndef DISPLAY_SPI_CLKPOL
+#define DISPLAY_SPI_CLKPOL SPICLKPOL_HIGH
+#endif
+#ifndef DISPLAY_SPI_DMA_ENABLE
+#define DISPLAY_SPI_DMA_ENABLE true
+#endif
 
 static const IOPinCfg_t s_TFTCtrlPins[] = TFT_PINS;
 const int s_NbTFTCtrlPins = sizeof(s_TFTCtrlPins) / sizeof(IOPinCfg_t);
@@ -63,9 +88,9 @@ static const SPICfg_t s_SpiCfg = {
 	.MaxRetry = 5,      // Max retries
 	.BitOrder = SPIDATABIT_MSB,
 	.DataPhase = SPIDATAPHASE_FIRST_CLK, // Data phase
-	.ClkPol = SPICLKPOL_HIGH,         // clock polarity
+	.ClkPol = DISPLAY_SPI_CLKPOL,         // clock polarity
 	.ChipSel = SPICSEL_AUTO,
-	.bDmaEn = true,	// DMA
+	.bDmaEn = DISPLAY_SPI_DMA_ENABLE,	// DMA
 	.bIntEn = false,
 	.IntPrio = 6, //APP_IRQ_PRIORITY_LOW,      // Interrupt priority
 	.EvtCB = NULL
@@ -77,29 +102,42 @@ static DisplayCfg_t s_LcdCfg = {
 	.DevAddr = 0,
 	.pPins = s_TFTCtrlPins,
 	.NbPins = sizeof(s_TFTCtrlPins) / sizeof(IOPinCfg_t),
-	.Stride = 320 * 3,
-	.Width = 320,
-	.Height = 480,
-	.PixelSize = 16,
+	.Stride = DISPLAY_STRIDE,
+	.Width = DISPLAY_WIDTH,
+	.Height = DISPLAY_HEIGHT,
+	.PixelSize = DISPLAY_PIXEL_SIZE,
 	.Orient = DISPL_ORIENT_LANDSCAPE,
 };
 
-//LcdST77xx g_Lcd;
-//LcdILI9341 g_Lcd;
-LcdHX8357 g_Lcd;
+DISPLAY_DRIVER g_Lcd;
 
 uint8_t g_LineBuff[480 * 4];
 
 static const char s_FontText[] = "!\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~\r\n";
 
-void HardwareInit()
+// Keep the font demo usable on small panels. The generic formatted-print
+// buffer is 80 bytes, so send the character sample in smaller chunks. "%s"
+// formatting also keeps the sample's percent sign literal.
+static void ShowFont(const FontDesc_t *pFont, const char *pName)
 {
-	g_Spi.Init(s_SpiCfg);
+	if (!g_Lcd.SetFont(pFont)) { return; }
+	g_Lcd.printf("%s\r\n", pName);
+	for (size_t off = 0; off < sizeof(s_FontText) - 1; off += 32)
+	{
+		g_Lcd.printf("%.32s", s_FontText + off);
+	}
+}
 
-	g_Lcd.Init(s_LcdCfg, &g_Spi);
+bool HardwareInit()
+{
+	if (!g_Spi.Init(s_SpiCfg) || !g_Lcd.Init(s_LcdCfg, &g_Spi))
+	{
+		return false;
+	}
 	g_Lcd.Backlight(true);
 
 	g_Lcd.Clear();
+	return true;
 }
 
 //
@@ -124,7 +162,7 @@ int main()
 	uint32_t colorg = 0;
 	uint32_t colorb = 0;
 
-	HardwareInit();
+	if (!HardwareInit()) { return 1; }
 
 	colorr = EndianCvt16(0xf800);
 	colorg = EndianCvt16(0x7e0);
@@ -134,247 +172,125 @@ int main()
 
 	while (1)
 	{
-		g_Lcd.SetFont(&iFontFreeMono24pt);
-		g_Lcd.printf("FreeMono 24pt\r\n");
-		g_Lcd.printf(s_FontText);
-		g_Lcd.SetFont(&iFontFreeMonoIta24pt);
-		g_Lcd.printf("FreeMono Italic 24pt\r\n");
-		g_Lcd.printf(s_FontText);
-		g_Lcd.SetFont(&iFontFreeMonoBold24pt);
-		g_Lcd.printf("FreeMono Bold 24pt\r\n");
-		g_Lcd.printf(s_FontText);
-		g_Lcd.SetFont(&iFontFreeMonoBoldIta24pt);
-		g_Lcd.printf("FreeMono Bold Italic 24pt\r\n");
-		g_Lcd.printf(s_FontText);
+		ShowFont(&iFontFreeMono24pt, "FreeMono 24pt");
+		ShowFont(&iFontFreeMonoIta24pt, "FreeMono Italic 24pt");
+		ShowFont(&iFontFreeMonoBold24pt, "FreeMono Bold 24pt");
+		ShowFont(&iFontFreeMonoBoldIta24pt, "FreeMono Bold Italic 24pt");
 
 		msDelay(3000);
 		g_Lcd.Clear();
 
-		g_Lcd.SetFont(&iFontFreeMono16pt);
-		g_Lcd.printf("FreeMono 16pt\r\n");
-		g_Lcd.printf(s_FontText);
-		g_Lcd.SetFont(&iFontFreeMonoIta16pt);
-		g_Lcd.printf("FreeMono Italic 16pt\r\n");
-		g_Lcd.printf(s_FontText);
-		g_Lcd.SetFont(&iFontFreeMonoBold16pt);
-		g_Lcd.printf("FreeMono Bold 16pt\r\n");
-		g_Lcd.printf(s_FontText);
-		g_Lcd.SetFont(&iFontFreeMonoBoldIta16pt);
-		g_Lcd.printf("FreeMono Bold Italic 16pt\r\n");
-		g_Lcd.printf(s_FontText);
+		ShowFont(&iFontFreeMono16pt, "FreeMono 16pt");
+		ShowFont(&iFontFreeMonoIta16pt, "FreeMono Italic 16pt");
+		ShowFont(&iFontFreeMonoBold16pt, "FreeMono Bold 16pt");
+		ShowFont(&iFontFreeMonoBoldIta16pt, "FreeMono Bold Italic 16pt");
 
 		msDelay(3000);
 		g_Lcd.Clear();
 
-		g_Lcd.SetFont(&iFontFreeMono12pt);
-		g_Lcd.printf("FreeMono 12pt\r\n");
-		g_Lcd.printf(s_FontText);
-		g_Lcd.SetFont(&iFontFreeMonoIta12pt);
-		g_Lcd.printf("FreeMono Italic 12pt\r\n");
-		g_Lcd.printf(s_FontText);
-		g_Lcd.SetFont(&iFontFreeMonoBold12pt);
-		g_Lcd.printf("FreeMono Bold 12pt\r\n");
-		g_Lcd.printf(s_FontText);
-		g_Lcd.SetFont(&iFontFreeMonoBoldIta12pt);
-		g_Lcd.printf("FreeMono Bold Italic 12pt\r\n");
-		g_Lcd.printf(s_FontText);
+		ShowFont(&iFontFreeMono12pt, "FreeMono 12pt");
+		ShowFont(&iFontFreeMonoIta12pt, "FreeMono Italic 12pt");
+		ShowFont(&iFontFreeMonoBold12pt, "FreeMono Bold 12pt");
+		ShowFont(&iFontFreeMonoBoldIta12pt, "FreeMono Bold Italic 12pt");
 
 		msDelay(3000);
 		g_Lcd.Clear();
 
-		g_Lcd.SetFont(&iFontFreeMono10pt);
-		g_Lcd.printf("FreeMono 10pt\r\n");
-		g_Lcd.printf(s_FontText);
-		g_Lcd.SetFont(&iFontFreeMonoIta10pt);
-		g_Lcd.printf("FreeMono Italic 10pt\r\n");
-		g_Lcd.printf(s_FontText);
-		g_Lcd.SetFont(&iFontFreeMonoBold10pt);
-		g_Lcd.printf("FreeMono Bold 10pt\r\n");
-		g_Lcd.printf(s_FontText);
-		g_Lcd.SetFont(&iFontFreeMonoBoldIta10pt);
-		g_Lcd.printf("FreeMono Bold Italic 10pt\r\n");
-		g_Lcd.printf(s_FontText);
+		ShowFont(&iFontFreeMono10pt, "FreeMono 10pt");
+		ShowFont(&iFontFreeMonoIta10pt, "FreeMono Italic 10pt");
+		ShowFont(&iFontFreeMonoBold10pt, "FreeMono Bold 10pt");
+		ShowFont(&iFontFreeMonoBoldIta10pt, "FreeMono Bold Italic 10pt");
 
 		msDelay(3000);
 		g_Lcd.Clear();
 
-		g_Lcd.SetFont(&iFontFreeMono8pt);
-		g_Lcd.printf("FreeMono 8pt\r\n");
-		g_Lcd.printf(s_FontText);
-		g_Lcd.SetFont(&iFontFreeMonoIta8pt);
-		g_Lcd.printf("FreeMono Italic 8pt\r\n");
-		g_Lcd.printf(s_FontText);
-		g_Lcd.SetFont(&iFontFreeMonoBold8pt);
-		g_Lcd.printf("FreeMono Bold 8pt\r\n");
-		g_Lcd.printf(s_FontText);
-		g_Lcd.SetFont(&iFontFreeMonoBoldIta8pt);
-		g_Lcd.printf("FreeMono Bold Italic 8pt\r\n");
-		g_Lcd.printf(s_FontText);
+		ShowFont(&iFontFreeMono8pt, "FreeMono 8pt");
+		ShowFont(&iFontFreeMonoIta8pt, "FreeMono Italic 8pt");
+		ShowFont(&iFontFreeMonoBold8pt, "FreeMono Bold 8pt");
+		ShowFont(&iFontFreeMonoBoldIta8pt, "FreeMono Bold Italic 8pt");
 
 		msDelay(3000);
 		g_Lcd.Clear();
 
-		g_Lcd.SetFont(&iFontFreeSans24pt);
-		g_Lcd.printf("FreeSans 24pt\r\n");
-		g_Lcd.printf(s_FontText);
-		g_Lcd.SetFont(&iFontFreeSansIta24pt);
-		g_Lcd.printf("FreeSans Italic 24pt\r\n");
-		g_Lcd.printf(s_FontText);
-		g_Lcd.SetFont(&iFontFreeSansBold24pt);
-		g_Lcd.printf("FreeSans Bold 24pt\r\n");
-		g_Lcd.printf(s_FontText);
-		g_Lcd.SetFont(&iFontFreeSansBoldIta24pt);
-		g_Lcd.printf("FreeSans Bold Italic 24pt\r\n");
-		g_Lcd.printf(s_FontText);
+		ShowFont(&iFontFreeSans24pt, "FreeSans 24pt");
+		ShowFont(&iFontFreeSansIta24pt, "FreeSans Italic 24pt");
+		ShowFont(&iFontFreeSansBold24pt, "FreeSans Bold 24pt");
+		ShowFont(&iFontFreeSansBoldIta24pt, "FreeSans Bold Italic 24pt");
 
 		msDelay(3000);
 		g_Lcd.Clear();
 
 
-		g_Lcd.SetFont(&iFontFreeSans16pt);
-		g_Lcd.printf("FreeSans 16pt\r\n");
-		g_Lcd.printf(s_FontText);
-		g_Lcd.SetFont(&iFontFreeSansIta16pt);
-		g_Lcd.printf("FreeSans Italic 16pt\r\n");
-		g_Lcd.printf(s_FontText);
-		g_Lcd.SetFont(&iFontFreeSansBold16pt);
-		g_Lcd.printf("FreeSans Bold 16pt\r\n");
-		g_Lcd.printf(s_FontText);
-		g_Lcd.SetFont(&iFontFreeSansBoldIta16pt);
-		g_Lcd.printf("FreeSans Bold Italic 16pt\r\n");
-		g_Lcd.printf(s_FontText);
+		ShowFont(&iFontFreeSans16pt, "FreeSans 16pt");
+		ShowFont(&iFontFreeSansIta16pt, "FreeSans Italic 16pt");
+		ShowFont(&iFontFreeSansBold16pt, "FreeSans Bold 16pt");
+		ShowFont(&iFontFreeSansBoldIta16pt, "FreeSans Bold Italic 16pt");
 
 		msDelay(3000);
 		g_Lcd.Clear();
 
-		g_Lcd.SetFont(&iFontFreeSans12pt);
-		g_Lcd.printf("FreeSans 12pt\r\n");
-		g_Lcd.printf(s_FontText);
-		g_Lcd.SetFont(&iFontFreeSansIta12pt);
-		g_Lcd.printf("FreeSans Italic 12pt\r\n");
-		g_Lcd.printf(s_FontText);
-		g_Lcd.SetFont(&iFontFreeSansBold12pt);
-		g_Lcd.printf("FreeSans Bold 12pt\r\n");
-		g_Lcd.printf(s_FontText);
-		g_Lcd.SetFont(&iFontFreeSansBoldIta12pt);
-		g_Lcd.printf("FreeSans Bold Italic 12pt\r\n");
-		g_Lcd.printf(s_FontText);
+		ShowFont(&iFontFreeSans12pt, "FreeSans 12pt");
+		ShowFont(&iFontFreeSansIta12pt, "FreeSans Italic 12pt");
+		ShowFont(&iFontFreeSansBold12pt, "FreeSans Bold 12pt");
+		ShowFont(&iFontFreeSansBoldIta12pt, "FreeSans Bold Italic 12pt");
 
 		msDelay(3000);
 		g_Lcd.Clear();
 
-		g_Lcd.SetFont(&iFontFreeSans10pt);
-		g_Lcd.printf("FreeSans 10Pt\r\n");
-		g_Lcd.printf(s_FontText);
-		g_Lcd.SetFont(&iFontFreeSansIta10pt);
-		g_Lcd.printf("FreeSans Italic 10pt\r\n");
-		g_Lcd.printf(s_FontText);
-		g_Lcd.SetFont(&iFontFreeSansBold10pt);
-		g_Lcd.printf("FreeSans Bold 10pt\r\n");
-		g_Lcd.printf(s_FontText);
-		g_Lcd.SetFont(&iFontFreeSansBoldIta10pt);
-		g_Lcd.printf("FreeSans Bold Italic 10pt\r\n");
-		g_Lcd.printf(s_FontText);
+		ShowFont(&iFontFreeSans10pt, "FreeSans 10Pt");
+		ShowFont(&iFontFreeSansIta10pt, "FreeSans Italic 10pt");
+		ShowFont(&iFontFreeSansBold10pt, "FreeSans Bold 10pt");
+		ShowFont(&iFontFreeSansBoldIta10pt, "FreeSans Bold Italic 10pt");
 
 		msDelay(3000);
 		g_Lcd.Clear();
 
-		g_Lcd.SetFont(&iFontFreeSans8pt);
-		g_Lcd.printf("FreeSans 8Pt\r\n");
-		g_Lcd.printf(s_FontText);
-		g_Lcd.SetFont(&iFontFreeSansIta8pt);
-		g_Lcd.printf("FreeSans Italic 8pt\r\n");
-		g_Lcd.printf(s_FontText);
-		g_Lcd.SetFont(&iFontFreeSansBold8pt);
-		g_Lcd.printf("FreeSans Bold 8pt\r\n");
-		g_Lcd.printf(s_FontText);
-		g_Lcd.SetFont(&iFontFreeSansBoldIta8pt);
-		g_Lcd.printf("FreeSans Bold Italic 8pt\r\n");
-		g_Lcd.printf(s_FontText);
+		ShowFont(&iFontFreeSans8pt, "FreeSans 8Pt");
+		ShowFont(&iFontFreeSansIta8pt, "FreeSans Italic 8pt");
+		ShowFont(&iFontFreeSansBold8pt, "FreeSans Bold 8pt");
+		ShowFont(&iFontFreeSansBoldIta8pt, "FreeSans Bold Italic 8pt");
 
 		msDelay(3000);
 		g_Lcd.Clear();
 
-		g_Lcd.SetFont(&iFontFreeSerif24pt);
-		g_Lcd.printf("FreeSerif 24pt\r\n");
-		g_Lcd.printf(s_FontText);
-		g_Lcd.SetFont(&iFontFreeSerifIta24pt);
-		g_Lcd.printf("FreeSerif ITalic 24pt\r\n");
-		g_Lcd.printf(s_FontText);
-		g_Lcd.SetFont(&iFontFreeSerifBold24pt);
-		g_Lcd.printf("FreeSerif Bold 24pt\r\n");
-		g_Lcd.printf(s_FontText);
-		g_Lcd.SetFont(&iFontFreeSerifBoldIta24pt);
-		g_Lcd.printf("FreeSerif Bold Italic 24pt\r\n");
-		g_Lcd.printf(s_FontText);
+		ShowFont(&iFontFreeSerif24pt, "FreeSerif 24pt");
+		ShowFont(&iFontFreeSerifIta24pt, "FreeSerif ITalic 24pt");
+		ShowFont(&iFontFreeSerifBold24pt, "FreeSerif Bold 24pt");
+		ShowFont(&iFontFreeSerifBoldIta24pt, "FreeSerif Bold Italic 24pt");
 
 		msDelay(3000);
 		g_Lcd.Clear();
 
-		g_Lcd.SetFont(&iFontFreeSerif16pt);
-		g_Lcd.printf("FreeSerif 16pt\r\n");
-		g_Lcd.printf(s_FontText);
-		g_Lcd.SetFont(&iFontFreeSerifIta16pt);
-		g_Lcd.printf("FreeSerif ITalic 16pt\r\n");
-		g_Lcd.printf(s_FontText);
-		g_Lcd.SetFont(&iFontFreeSerifBold16pt);
-		g_Lcd.printf("FreeSerif Bold 16pt\r\n");
-		g_Lcd.printf(s_FontText);
-		g_Lcd.SetFont(&iFontFreeSerifBoldIta16pt);
-		g_Lcd.printf("FreeSerif Bold Italic 16pt\r\n");
-		g_Lcd.printf(s_FontText);
+		ShowFont(&iFontFreeSerif16pt, "FreeSerif 16pt");
+		ShowFont(&iFontFreeSerifIta16pt, "FreeSerif ITalic 16pt");
+		ShowFont(&iFontFreeSerifBold16pt, "FreeSerif Bold 16pt");
+		ShowFont(&iFontFreeSerifBoldIta16pt, "FreeSerif Bold Italic 16pt");
 
 		msDelay(3000);
 		g_Lcd.Clear();
 
-		g_Lcd.SetFont(&iFontFreeSerif12pt);
-		g_Lcd.printf("FreeSerif 12pt\r\n");
-		g_Lcd.printf(s_FontText);
-		g_Lcd.SetFont(&iFontFreeSerifIta12pt);
-		g_Lcd.printf("FreeSerif ITalic 12pt\r\n");
-		g_Lcd.printf(s_FontText);
-		g_Lcd.SetFont(&iFontFreeSerifBold12pt);
-		g_Lcd.printf("FreeSerif Bold 12pt\r\n");
-		g_Lcd.printf(s_FontText);
-		g_Lcd.SetFont(&iFontFreeSerifBoldIta12pt);
-		g_Lcd.printf("FreeSerif Bold Italic 12pt\r\n");
-		g_Lcd.printf(s_FontText);
+		ShowFont(&iFontFreeSerif12pt, "FreeSerif 12pt");
+		ShowFont(&iFontFreeSerifIta12pt, "FreeSerif ITalic 12pt");
+		ShowFont(&iFontFreeSerifBold12pt, "FreeSerif Bold 12pt");
+		ShowFont(&iFontFreeSerifBoldIta12pt, "FreeSerif Bold Italic 12pt");
 
 		msDelay(3000);
 		g_Lcd.Clear();
 
-		g_Lcd.SetFont(&iFontFreeSerif10pt);
-		g_Lcd.printf("FreeSerif 10pt\r\n");
-		g_Lcd.printf(s_FontText);
-		g_Lcd.SetFont(&iFontFreeSerifIta10pt);
-		g_Lcd.printf("FreeSerif ITalic 10pt\r\n");
-		g_Lcd.printf(s_FontText);
-		g_Lcd.SetFont(&iFontFreeSerifBold10pt);
-		g_Lcd.printf("FreeSerif Bold 10pt\r\n");
-		g_Lcd.printf(s_FontText);
-		g_Lcd.SetFont(&iFontFreeSerifBoldIta10pt);
-		g_Lcd.printf("FreeSerif Bold Italic 10pt\r\n");
-		g_Lcd.printf(s_FontText);
+		ShowFont(&iFontFreeSerif10pt, "FreeSerif 10pt");
+		ShowFont(&iFontFreeSerifIta10pt, "FreeSerif ITalic 10pt");
+		ShowFont(&iFontFreeSerifBold10pt, "FreeSerif Bold 10pt");
+		ShowFont(&iFontFreeSerifBoldIta10pt, "FreeSerif Bold Italic 10pt");
 
 		msDelay(3000);
 		g_Lcd.Clear();
 
-		g_Lcd.SetFont(&iFontFreeSerif8pt);
-		g_Lcd.printf("FreeSerif 8pt\r\n");
-		g_Lcd.printf(s_FontText);
-		g_Lcd.SetFont(&iFontFreeSerifIta8pt);
-		g_Lcd.printf("FreeSerif ITalic 8pt\r\n");
-		g_Lcd.printf(s_FontText);
-		g_Lcd.SetFont(&iFontFreeSerifBold8pt);
-		g_Lcd.printf("FreeSerif Bold 8pt\r\n");
-		g_Lcd.printf(s_FontText);
-		g_Lcd.SetFont(&iFontFreeSerifBoldIta8pt);
-		g_Lcd.printf("FreeSerif Bold Italic 8pt\r\n");
-		g_Lcd.printf(s_FontText);
+		ShowFont(&iFontFreeSerif8pt, "FreeSerif 8pt");
+		ShowFont(&iFontFreeSerifIta8pt, "FreeSerif ITalic 8pt");
+		ShowFont(&iFontFreeSerifBold8pt, "FreeSerif Bold 8pt");
+		ShowFont(&iFontFreeSerifBoldIta8pt, "FreeSerif Bold Italic 8pt");
 
-		g_Lcd.SetFont(&iFontSystem5x7);
-		g_Lcd.printf("System fixed 5x7\r\n");
-		g_Lcd.printf(s_FontText);
+		ShowFont(&iFontSystem5x7, "System fixed 5x7");
 
 		msDelay(3000);
 
@@ -390,3 +306,4 @@ int main()
 
 	return 0;
 }
+

@@ -775,11 +775,12 @@ Eclipse itself and the maintainer's GCC 15.2.1 were not run here.
 
 ## Onboard OLED
 
-`exemples/OledSSD1315/ioc` builds the generic SSD1315 display demo in Debug
+`exemples/LCDConsoleDisplayDemo/ioc` builds the existing console display demo in Debug
 and Release. It uses SPI3 (DevNo 2), SCK PA0 and MOSI PB8 at AF6, with CS
 PE1, D/C PE0 and reset PE3. No external wiring is needed. Rebuild the
 matching library first; its Eclipse project includes the generic driver.
-The demo displays text, a checkerboard and a counter updated every 500 ms.
+The shared `exemples/display/console_display_demo.cpp` cycles font samples,
+scrolling and orientation. Fonts too large for the panel are skipped.
 
 The driver and demo build and link with Arm GCC 13.2.1 in both configurations.
 SPI display-model tests pass at `-O0` and `-Os` with ASan/UBSan; OLED hardware

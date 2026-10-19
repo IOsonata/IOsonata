@@ -150,6 +150,16 @@ int main()
 	assert(oled.SetFont(&iFontSystem5x7));
 	oled.printf("!");
 	assert(ram[0][2] == 0x5F); // Existing IOsonata system font
+	// The shared console demo also uses proportional fonts. Render all of
+	// its printable characters with actual small and large font tables.
+	const FontDesc_t *fonts[] = {&iFontFreeMono8pt, &iFontFreeSansBold24pt};
+	for (const FontDesc_t *font : fonts)
+	{
+		assert(oled.SetFont(font));
+		oled.Clear();
+		for (int ch = '!'; ch <= '~'; ch++) { oled.printf("%c", ch); }
+	}
+	assert(oled.SetFont(&iFontSystem5x7));
 	assert(!oled.SetFont(nullptr));
 	FontDesc_t huge = iFontSystem5x7; huge.Height = 255;
 	assert(!oled.SetFont(&huge));

@@ -17,11 +17,13 @@ with tempfile.TemporaryDirectory(prefix='ssd1315-') as td:
                '-I' + str(ROOT / 'include')]
         sources = ['tests/display/ssd1315_test.cpp', 'src/display/display_ssd1315.cpp',
                    'src/display/display.cpp', 'src/device.cpp', 'src/device_intrf.cpp']
-        # Compile font as C, preserving its C linkage declaration in the header.
-        font = Path(td) / 'font.o'
-        subprocess.run([os.environ.get('CC', 'gcc'), '-I' + str(ROOT / 'include'),
-                        '-c', str(ROOT / 'src/display/fonts/syst5x7.c'), '-o', str(font)], check=True)
+        fonts = []
+        for name in ('syst5x7.c', 'FreeMono/FreeMono8pt.c', 'FreeSans/FreeSansBold24pt.c'):
+            font = Path(td) / (Path(name).stem + '.o')
+            subprocess.run([os.environ.get('CC', 'gcc'), '-I' + str(ROOT / 'include'),
+                            '-c', str(ROOT / 'src/display/fonts' / name), '-o', str(font)], check=True)
+            fonts.append(str(font))
         subprocess.run(cmd + [str(ROOT / p) for p in sources] +
-                       [str(font), '-o', str(exe)], check=True)
+                       fonts + ['-o', str(exe)], check=True)
         subprocess.run([str(exe)], check=True)
         print(opt + ': SSD1315 checks passed', flush=True)

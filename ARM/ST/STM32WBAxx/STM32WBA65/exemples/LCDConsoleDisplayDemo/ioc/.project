@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <projectDescription>
-	<name>OledSSD1315</name>
+	<name>LCDConsoleDisplayDemo</name>
 	<comment></comment>
 	<projects>
 	</projects>
@@ -31,9 +31,9 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>src/ssd1315_demo.cpp</name>
+			<name>src/console_display_demo.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-7-PROJECT_LOC/exemples/display/ssd1315_demo.cpp</locationURI>
+			<locationURI>PARENT-7-PROJECT_LOC/exemples/display/console_display_demo.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/board.h</name>
