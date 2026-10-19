@@ -3,13 +3,29 @@
 
 @brief	Generic STM32 SPI implementation, master and slave
 
-		For the STM32 families with the SPI peripheral that has the CFG1,
-		CFG2 and TSIZE registers (WBA; the same IP is in the U5, H5 and N6
-		families). The engine is the same for all, the instance table holds
-		what differs: the RCC enable, reset and kernel clock selection, the
-		interrupt and the DMA requests. A family is added with its table.
-		The families with the older SPI register layout (F0, F4, L4, G4) keep
-		their own file.
+		Two register layouts, chosen from the CMSIS names. The SPI with the
+		CFG1, CFG2 and TSIZE registers (WBA; the same IP is in the U5, H5 and
+		N6 families), and the SPI with CR1, CR2, SR and DR and a 32 bit FIFO
+		each way (L4; the same IP is in the F0, F3, G4 and WB families). The
+		engine is the same for both, the instance table holds what differs:
+		the RCC enable, reset and kernel clock selection, the interrupt and
+		the DMA requests. A family is added with its table.
+
+		CR1/CR2 layout (L4). DevNo 0 to 2 are SPI1 to SPI3, an instance the
+		part does not have (SPI2 of the STM32L43x and L44x) fails SPIInit.
+		SPI1 is clocked from PCLK2, SPI2 and SPI3 from PCLK1, the rate is set
+		with the BR divider of CR1 (2 to 256). The peripheral has no transfer
+		size: a master transfer ends when its last item is received. With
+		bIntEn the receive interrupt moves the items, at most a FIFO of items
+		in flight. The master keeps SPE set between transfers so that SCK
+		stays at its idle level. The slave has no underrun value: its
+		transmit FIFO is kept filled, with the DummyByte after the data.
+		Clearing SPE leaves the FIFO content, so the slave is reset through
+		RCC before each frame. QUADSPI is not handled here. DMA is not
+		available on this layout yet, SPIInit returns false for bDmaEn.
+		What follows describes the CFG1/CFG2 layout; master chip select,
+		events, the slave frame sequence and the NSS pin event are the same
+		on both.
 
 		DevNo 0 to 2 are SPI1 to SPI3 of the WBA. SPI1 is clocked from PCLK2,
 		SPI2 from PCLK1 and SPI3 from PCLK7. The kernel clock selection is
@@ -106,6 +122,18 @@ SOFTWARE.
 
 #define STM32_SPI_MAXDEV			3
 
+// Register layout of the SPI, from the CMSIS names
+#if defined(SPI_CFG1_MBR)
+// CFG1, CFG2, TSIZE, TXDR and RXDR
+#define STM32_SPI_LAYOUT_CFG
+#elif defined(SPI_CR2_DS)
+// CR1, CR2, SR and DR with a 32 bit FIFO each way
+#define STM32_SPI_LAYOUT_CR
+#else
+#error "spi_stm32.cpp: SPI register layout not supported"
+#endif
+
+#ifdef STM32_SPI_LAYOUT_CFG
 #define STM32_SPI_TSIZE_MAX			0xFFFFU
 
 #define SPI_STM32_TXBUF_SIZE		256
@@ -134,6 +162,33 @@ typedef volatile uint16_t __attribute__((may_alias)) Stm32SpiReg16_t;
 #define STM32_SPI_IER_MASTER		(SPI_IER_EOTIE | SPI_IER_UDRIE | SPI_IER_OVRIE | SPI_IER_MODFIE)
 #define STM32_SPI_IER_DATA			(SPI_IER_TXPIE | SPI_IER_RXPIE)
 #define STM32_SPI_IER_SLAVE			(SPI_IER_EOTIE | SPI_IER_OVRIE)
+#else
+#define SPI_STM32_TXBUF_SIZE		256
+
+// Data bytes in flight, the 32 bit FIFO
+#define STM32_SPI_FIFO_BYTES		4
+
+// BR divider of CR1, 2 to 256
+#define STM32_SPI_MBR_MAX			7
+
+#define STM32_SPI_DATASIZE_MIN		4
+#define STM32_SPI_DATASIZE_MAX		16
+
+#define STM32_SPI_RATE_DEFAULT		1000000
+
+// 16 bit access to the data register
+typedef volatile uint16_t __attribute__((may_alias)) Stm32SpiReg16_t;
+
+// FRE is for the TI mode, not used
+#define STM32_SPI_ERR_FLAGS			(SPI_SR_OVR | SPI_SR_MODF)
+#define STM32_SPI_CR2_INT			(SPI_CR2_RXNEIE | SPI_CR2_TXEIE | SPI_CR2_ERRIE)
+#endif
+
+#ifdef STM32_SPI_LAYOUT_CFG
+#define STM32_SPI_SR_RXNE			SPI_SR_RXP
+#else
+#define STM32_SPI_SR_RXNE			SPI_SR_RXNE
+#endif
 
 #pragma pack(push, 4)
 
@@ -187,6 +242,10 @@ typedef struct {
 	uint32_t STxMax;		//!< Items of transmit data
 	uint16_t Sink;			//!< Receive data nobody wants
 	uint16_t Dummy;			//!< Transmit value when there is no data
+#ifdef STM32_SPI_LAYOUT_CR
+	uint32_t Cr1;			//!< CR1 of the configuration, without SPE
+	uint32_t Cr2;			//!< CR2 of the configuration, without the interrupt enables
+#endif
 	uint8_t TxBuf[SPI_STM32_TXBUF_SIZE];
 } Stm32SpiDev_t;
 
@@ -203,6 +262,21 @@ static const Stm32SpiInfo_t s_Stm32SpiInfo[STM32_SPI_MAXDEV] = {
 	{ SPI3, &RCC->APB7ENR, RCC_APB7ENR_SPI3EN, &RCC->APB7RSTR, RCC_APB7RSTR_SPI3RST,
 	  &RCC->CCIPR3, RCC_CCIPR3_SPI3SEL_Msk, 2, SPI3_IRQn,
 	  WBA_GPDMA_REQ_SPI3_TX, WBA_GPDMA_REQ_SPI3_RX },
+};
+#elif defined(IOSONATA_STM32_L4)
+// SPI1 on APB2 (PCLK2), SPI2 and SPI3 on APB1 (PCLK1). The kernel clock is the
+// APB clock, there is no selection. The STM32L43x and L44x have no SPI2.
+static const Stm32SpiInfo_t s_Stm32SpiInfo[STM32_SPI_MAXDEV] = {
+	{ SPI1, &RCC->APB2ENR, RCC_APB2ENR_SPI1EN, &RCC->APB2RSTR, RCC_APB2RSTR_SPI1RST,
+	  NULL, 0, 1, SPI1_IRQn, 0, 0 },
+#ifdef SPI2
+	{ SPI2, &RCC->APB1ENR1, RCC_APB1ENR1_SPI2EN, &RCC->APB1RSTR1, RCC_APB1RSTR1_SPI2RST,
+	  NULL, 0, 0, SPI2_IRQn, 0, 0 },
+#else
+	{ NULL, NULL, 0, NULL, 0, NULL, 0, 0, (IRQn_Type)0, 0, 0 },
+#endif
+	{ SPI3, &RCC->APB1ENR1, RCC_APB1ENR1_SPI3EN, &RCC->APB1RSTR1, RCC_APB1RSTR1_SPI3RST,
+	  NULL, 0, 0, SPI3_IRQn, 0, 0 },
 };
 #else
 #error "spi_stm32.cpp: no SPI instance table for this STM32 family"
@@ -223,7 +297,9 @@ static void Stm32SpiClkEnable(Stm32SpiDev_t * const pDev, bool bEn)
 
 	if (bEn)
 	{
+#ifdef STM32_SPI_LAYOUT_CFG
 		*info->pSelReg &= ~info->SelMask;
+#endif
 		*info->pEnReg |= info->EnMask;
 		(void)*info->pEnReg;
 	}
@@ -260,6 +336,17 @@ static uint32_t Stm32SpiTimeout(Stm32SpiDev_t * const pDev)
 
 	return (SystemCoreClock / rate + 1U) * (pDev->pSpiDev->Cfg.DataSize + 2U) + 256U;
 }
+
+#ifdef STM32_SPI_LAYOUT_CR
+// Empty the receive FIFO, one byte at a time
+static void Stm32SpiFlushRx(SPI_TypeDef * const pReg)
+{
+	for (int i = 0; i < 8 && (pReg->SR & SPI_SR_RXNE); i++)
+	{
+		(void)*(volatile uint8_t*)&pReg->DR;
+	}
+}
+#endif
 
 // ---------------------------------------------------------------------------
 // DMA
@@ -359,6 +446,7 @@ static int Stm32SpiMasterCount(Stm32SpiDev_t * const pDev)
 	return (int)((pDev->Done + items) * isz);
 }
 
+#ifdef STM32_SPI_LAYOUT_CFG
 // End of the transfer. Interrupts and DMA off, flags cleared, the result
 // stored.
 static void Stm32SpiMasterEnd(Stm32SpiDev_t * const pDev, bool bad)
@@ -552,6 +640,136 @@ static void Stm32SpiMasterService(Stm32SpiDev_t * const pDev)
 	}
 }
 
+#else
+// End of the transfer. Interrupts off, the result stored. After an error the
+// receive FIFO is emptied and the peripheral restarted, so that the next
+// transfer starts clean.
+static void Stm32SpiMasterEnd(Stm32SpiDev_t * const pDev, bool bad)
+{
+	SPI_TypeDef *reg = pDev->pReg;
+
+	pDev->Result = bad ? Stm32SpiMasterCount(pDev) : (int)(pDev->Items * Stm32SpiItemSize(pDev));
+	reg->CR2 &= ~STM32_SPI_CR2_INT;
+	if (bad)
+	{
+		reg->CR1 &= ~SPI_CR1_SPE;
+		Stm32SpiFlushRx(reg);
+		(void)reg->SR;
+		reg->CR1 = pDev->Cr1 | SPI_CR1_SPE;
+	}
+	pDev->bRun = false;
+}
+
+// Move the items the flags allow. Received items are read first: each one
+// read makes room for one more in flight. At most a FIFO of items is in
+// flight, so the receive FIFO cannot overflow.
+static void Stm32SpiMasterPump(Stm32SpiDev_t * const pDev, uint32_t Sr)
+{
+	SPI_TypeDef *reg = pDev->pReg;
+	const bool b16 = pDev->pSpiDev->Cfg.DataSize > 8;
+	const uint32_t fifo = STM32_SPI_FIFO_BYTES / (b16 ? 2 : 1);
+	const uint32_t first = pDev->Done;
+
+	while ((Sr & SPI_SR_RXNE) && pDev->RxN < pDev->Chunk)
+	{
+		const uint32_t i = first + pDev->RxN;
+
+		if (b16)
+		{
+			uint16_t d = *(Stm32SpiReg16_t*)&reg->DR;
+
+			if (pDev->pRx)
+			{
+				pDev->pRx[i * 2] = (uint8_t)d;
+				pDev->pRx[i * 2 + 1] = (uint8_t)(d >> 8);
+			}
+		}
+		else
+		{
+			uint8_t d = *(volatile uint8_t*)&reg->DR;
+
+			if (pDev->pRx)
+			{
+				pDev->pRx[i] = d;
+			}
+		}
+		pDev->RxN++;
+		Sr = reg->SR;
+	}
+
+	while ((Sr & SPI_SR_TXE) && pDev->TxN < pDev->Chunk && (pDev->TxN - pDev->RxN) < fifo)
+	{
+		const uint32_t i = first + pDev->TxN;
+
+		if (b16)
+		{
+			uint16_t d = pDev->pTx ? (uint16_t)(pDev->pTx[i * 2] | ((uint16_t)pDev->pTx[i * 2 + 1] << 8)) :
+									 pDev->Dummy;
+
+			*(Stm32SpiReg16_t*)&reg->DR = d;
+		}
+		else
+		{
+			*(volatile uint8_t*)&reg->DR = pDev->pTx ? pDev->pTx[i] : (uint8_t)pDev->Dummy;
+		}
+		pDev->TxN++;
+		Sr = reg->SR;
+	}
+}
+
+// Start the transfer. The peripheral has no transfer size: the whole transfer
+// is one chunk, it ends when the last item is received. With the interrupt
+// the first items are loaded here, the receive interrupt then keeps the
+// transfer going.
+static void Stm32SpiMasterChunk(Stm32SpiDev_t * const pDev)
+{
+	SPI_TypeDef *reg = pDev->pReg;
+
+	pDev->Chunk = pDev->Items - pDev->Done;
+	pDev->TxN = 0;
+	pDev->RxN = 0;
+
+	if ((reg->CR1 & SPI_CR1_SPE) == 0)
+	{
+		reg->CR1 |= SPI_CR1_SPE;
+	}
+	if (pDev->bAsync)
+	{
+		Stm32SpiMasterPump(pDev, reg->SR);
+		reg->CR2 |= SPI_CR2_RXNEIE | SPI_CR2_ERRIE;
+	}
+}
+
+// One step of the transfer from the flags. Called by the polling loop and by
+// the interrupt.
+static void Stm32SpiMasterService(Stm32SpiDev_t * const pDev)
+{
+	SPI_TypeDef *reg = pDev->pReg;
+	uint32_t sr = reg->SR;
+
+	if (sr & STM32_SPI_ERR_FLAGS)
+	{
+		pDev->bFail = true;
+		Stm32SpiMasterEnd(pDev, true);
+
+		return;
+	}
+
+	Stm32SpiMasterPump(pDev, sr);
+
+	if (pDev->RxN >= pDev->Chunk)
+	{
+		// The last item is in, the clock ends with it: BSY clears within a
+		// bit time
+		for (uint32_t n = Stm32SpiTimeout(pDev); n > 0 && (reg->SR & SPI_SR_BSY); n--)
+		{
+		}
+		pDev->Done += pDev->Chunk;
+		Stm32SpiMasterEnd(pDev, false);
+	}
+}
+#endif
+
 // Polling loop of the engine. The wait restarts whenever the transfer
 // progresses.
 static void Stm32SpiMasterRun(Stm32SpiDev_t * const pDev)
@@ -653,6 +871,7 @@ static int Stm32SpiTransfer(Stm32SpiDev_t * const pDev, const uint8_t *pTx, uint
 // Slave engine
 // ---------------------------------------------------------------------------
 
+#ifdef STM32_SPI_LAYOUT_CFG
 static void Stm32SpiSlaveWrite(Stm32SpiDev_t * const pDev)
 {
 	SPI_TypeDef *reg = pDev->pReg;
@@ -929,11 +1148,169 @@ static void Stm32SpiSlaveService(Stm32SpiDev_t * const pDev)
 	}
 }
 
+#else
+// Load the transmit FIFO up to its threshold: the data of the frame, then
+// the DummyByte. The peripheral has no underrun value, the FIFO is kept
+// filled so that the DummyByte goes out after the data.
+static void Stm32SpiSlaveWrite(Stm32SpiDev_t * const pDev)
+{
+	SPI_TypeDef *reg = pDev->pReg;
+	SPIDev_t *spi = pDev->pSpiDev;
+	const bool b16 = spi->Cfg.DataSize > 8;
+	const uint8_t *data = spi->pTxData[0];
+
+	while (reg->SR & SPI_SR_TXE)
+	{
+		uint16_t d = pDev->Dummy;
+
+		if (pDev->STx < pDev->STxMax)
+		{
+			const uint32_t i = pDev->STx;
+
+			d = b16 ? (uint16_t)(data[i * 2] | ((uint16_t)data[i * 2 + 1] << 8)) : data[i];
+			pDev->STx++;
+		}
+		if (b16)
+		{
+			*(Stm32SpiReg16_t*)&reg->DR = d;
+		}
+		else
+		{
+			*(volatile uint8_t*)&reg->DR = (uint8_t)d;
+		}
+	}
+}
+
+static void Stm32SpiSlaveRead(Stm32SpiDev_t * const pDev)
+{
+	SPI_TypeDef *reg = pDev->pReg;
+	SPIDev_t *spi = pDev->pSpiDev;
+	const bool b16 = spi->Cfg.DataSize > 8;
+	uint8_t *buf = spi->pRxBuff[0];
+
+	while (reg->SR & SPI_SR_RXNE)
+	{
+		uint16_t d;
+
+		if (b16)
+		{
+			d = *(Stm32SpiReg16_t*)&reg->DR;
+		}
+		else
+		{
+			d = *(volatile uint8_t*)&reg->DR;
+		}
+		if (pDev->SRx < pDev->SRxMax)
+		{
+			if (b16)
+			{
+				buf[pDev->SRx * 2] = (uint8_t)d;
+				buf[pDev->SRx * 2 + 1] = (uint8_t)(d >> 8);
+			}
+			else
+			{
+				buf[pDev->SRx] = (uint8_t)d;
+			}
+		}
+		else
+		{
+			pDev->bBad = true;
+		}
+		pDev->SRx++;
+	}
+}
+
+// Prepare the next frame: the handler gives the buffers, the peripheral is
+// enabled with the transmit FIFO loaded and waits for NSS.
+static void Stm32SpiSlaveArm(Stm32SpiDev_t * const pDev)
+{
+	SPI_TypeDef *reg = pDev->pReg;
+	SPIDev_t *spi = pDev->pSpiDev;
+	DevIntrf_t *intrf = &spi->DevIntrf;
+	const int isz = Stm32SpiItemSize(pDev);
+
+	spi->pRxBuff[0] = NULL;
+	spi->RxBuffLen[0] = 0;
+	spi->pTxData[0] = NULL;
+	spi->TxDataLen[0] = 0;
+	if (intrf->EvtCB != NULL)
+	{
+		intrf->EvtCB(intrf, DEVINTRF_EVT_STATECHG, NULL, 0);
+	}
+
+	pDev->bBad = false;
+	pDev->bFrame = false;
+	pDev->SRx = 0;
+	pDev->STx = 0;
+	pDev->SRxMax = spi->pRxBuff[0] != NULL && spi->RxBuffLen[0] > 0 ? (uint32_t)spi->RxBuffLen[0] / isz : 0;
+	pDev->STxMax = spi->pTxData[0] != NULL && spi->TxDataLen[0] > 0 ? (uint32_t)spi->TxDataLen[0] / isz : 0;
+
+	// Clearing SPE leaves the FIFO content: the items loaded for the frame
+	// that ended would go out in the next one. The RCC reset empties the
+	// FIFOs, the registers are written again.
+	Stm32SpiRccReset(pDev);
+	reg->CR1 = pDev->Cr1;
+	reg->CR2 = pDev->Cr2;
+	reg->CR1 |= SPI_CR1_SPE;
+	Stm32SpiSlaveWrite(pDev);
+	reg->CR2 |= STM32_SPI_CR2_INT;
+}
+
+// NSS went inactive: the frame is over
+static void Stm32SpiSlaveEnd(Stm32SpiDev_t * const pDev)
+{
+	SPI_TypeDef *reg = pDev->pReg;
+	SPIDev_t *spi = pDev->pSpiDev;
+	DevIntrf_t *intrf = &spi->DevIntrf;
+	const int isz = Stm32SpiItemSize(pDev);
+	int count;
+
+	Stm32SpiSlaveRead(pDev);
+	if (reg->SR & SPI_SR_OVR)
+	{
+		pDev->bBad = true;
+	}
+	count = pDev->bBad ? -1 : (int)(pDev->SRx * isz);
+
+	reg->CR2 &= ~STM32_SPI_CR2_INT;
+	reg->CR1 &= ~SPI_CR1_SPE;
+
+	if (intrf->EvtCB != NULL)
+	{
+		intrf->EvtCB(intrf, DEVINTRF_EVT_COMPLETED, spi->pRxBuff[0], count);
+	}
+
+	Stm32SpiSlaveArm(pDev);
+}
+
+static void Stm32SpiSlaveService(Stm32SpiDev_t * const pDev)
+{
+	SPI_TypeDef *reg = pDev->pReg;
+	uint32_t sr = reg->SR;
+
+	if (sr & SPI_SR_OVR)
+	{
+		// Cleared by reading DR then SR
+		pDev->bBad = true;
+		Stm32SpiFlushRx(reg);
+		(void)reg->SR;
+	}
+	if (sr & SPI_SR_RXNE)
+	{
+		Stm32SpiSlaveRead(pDev);
+	}
+	if (sr & SPI_SR_TXE)
+	{
+		Stm32SpiSlaveWrite(pDev);
+	}
+}
+#endif
+
 // The peripheral raises no EOT when NSS goes inactive while the transfer
 // size is open, so the pin event ends the frame.
 static bool Stm32SpiSlaveActive(Stm32SpiDev_t * const pDev)
 {
-	bool active = pDev->bFrame || pDev->SRx > 0U || (pDev->pReg->SR & SPI_SR_RXP) != 0U;
+	bool active = pDev->bFrame || pDev->SRx > 0U || (pDev->pReg->SR & STM32_SPI_SR_RXNE) != 0U;
 
 #ifdef STM32_SPI_DMA
 	if (pDev->bDma && pDev->SRxMax > 0U)
@@ -1031,9 +1408,16 @@ static uint32_t Stm32SpiSetRate(DevIntrf_t * const pIntrf, uint32_t Rate)
 	SPI_TypeDef *reg = dev->pReg;
 	bool spe = (reg->CR1 & SPI_CR1_SPE) != 0;
 
+#ifdef STM32_SPI_LAYOUT_CFG
 	// MBR can only change with the peripheral disabled
 	reg->CR1 &= ~SPI_CR1_SPE;
 	reg->CFG1 = (reg->CFG1 & ~(SPI_CFG1_MBR_Msk | SPI_CFG1_BPASS)) | (best << SPI_CFG1_MBR_Pos);
+#else
+	// BR can only change with the peripheral disabled
+	reg->CR1 &= ~SPI_CR1_SPE;
+	reg->CR1 = (reg->CR1 & ~SPI_CR1_BR_Msk) | (best << SPI_CR1_BR_Pos);
+	dev->Cr1 = (dev->Cr1 & ~SPI_CR1_BR_Msk) | (best << SPI_CR1_BR_Pos);
+#endif
 	if (spe)
 	{
 		reg->CR1 |= SPI_CR1_SPE;
@@ -1059,11 +1443,24 @@ static void Stm32SpiReset(DevIntrf_t * const pIntrf)
 		return;
 	}
 
+#ifdef STM32_SPI_LAYOUT_CFG
 	// SPE low resets the state machine, the configuration is kept
 	dev->pReg->IER = 0;
 	dev->pReg->CR1 &= ~SPI_CR1_SPE;
 	dev->pReg->CFG1 &= ~STM32_SPI_CFG1_DMA;
 	dev->pReg->IFCR = STM32_SPI_IFCR_ALL;
+#else
+	// Interrupts off, the receive FIFO emptied and the errors cleared. The
+	// master sets SPE again, the slave is armed below.
+	dev->pReg->CR2 &= ~STM32_SPI_CR2_INT;
+	dev->pReg->CR1 &= ~SPI_CR1_SPE;
+	Stm32SpiFlushRx(dev->pReg);
+	(void)dev->pReg->SR;
+	if (dev->bSlave == false)
+	{
+		dev->pReg->CR1 = dev->Cr1 | SPI_CR1_SPE;
+	}
+#endif
 #ifdef STM32_SPI_DMA
 	Stm32SpiDmaStop(dev);
 #endif
@@ -1103,7 +1500,11 @@ static void Stm32SpiPowerOff(DevIntrf_t * const pIntrf)
 
 	if (dev)
 	{
+#ifdef STM32_SPI_LAYOUT_CFG
 		dev->pReg->IER = 0;
+#else
+		dev->pReg->CR2 &= ~STM32_SPI_CR2_INT;
+#endif
 		dev->pReg->CR1 &= ~SPI_CR1_SPE;
 		NVIC_DisableIRQ(dev->pInfo->Irq);
 		if (dev->bNssInt)
@@ -1224,6 +1625,14 @@ bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfgData)
 	{
 		return false;
 	}
+
+#ifdef STM32_SPI_LAYOUT_CR
+	// An instance the part does not have has no register block
+	if (s_Stm32SpiInfo[pCfgData->DevNo].pReg == NULL)
+	{
+		return false;
+	}
+#endif
 
 	const bool slave = pCfgData->Mode == SPIMODE_SLAVE;
 
@@ -1350,6 +1759,7 @@ bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfgData)
 		IOPinSetSpeed(pDev->Cfg.pIOPinMap[i].PortNo, pDev->Cfg.pIOPinMap[i].PinNo, IOPINSPEED_TURBO);
 	}
 
+#ifdef STM32_SPI_LAYOUT_CFG
 	// Master: the internal slave select is held inactive (SSM and SSI), so
 	// the NSS pin is not used and no mode fault occurs. Slave: the NSS pin is
 	// the frame select. AFCNTR keeps the pins driven by the peripheral when it
@@ -1383,6 +1793,44 @@ bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfgData)
 	reg->IFCR = STM32_SPI_IFCR_ALL;
 
 	Stm32SpiSetRate(&pDev->DevIntrf, pCfgData->Rate);
+#else
+	// Master: the internal slave select is held inactive (SSM and SSI), so
+	// the NSS pin is not used and no mode fault occurs. Slave: the NSS pin is
+	// the frame select. Data of 8 bits or less: RXNE at each byte (FRXTH).
+	uint32_t cr1 = 0;
+	uint32_t cr2 = ((pCfgData->DataSize - 1) << SPI_CR2_DS_Pos) | (pCfgData->DataSize <= 8 ? SPI_CR2_FRXTH : 0U);
+
+	if (slave == false)
+	{
+		cr1 |= SPI_CR1_MSTR | SPI_CR1_SSM | SPI_CR1_SSI;
+	}
+	if (pCfgData->ClkPol == SPICLKPOL_LOW)
+	{
+		cr1 |= SPI_CR1_CPOL;
+	}
+	if (pCfgData->DataPhase == SPIDATAPHASE_SECOND_CLK)
+	{
+		cr1 |= SPI_CR1_CPHA;
+	}
+	if (pCfgData->BitOrder == SPIDATABIT_LSB)
+	{
+		cr1 |= SPI_CR1_LSBFIRST;
+	}
+
+	reg->CR1 = 0;
+	reg->CR2 = cr2;
+	reg->CR1 = cr1;
+	dev->Cr1 = cr1;
+	dev->Cr2 = cr2;
+
+	Stm32SpiSetRate(&pDev->DevIntrf, pCfgData->Rate);
+	if (slave == false)
+	{
+		// SPE set: the peripheral drives SCK at its idle level between
+		// transfers
+		reg->CR1 |= SPI_CR1_SPE;
+	}
+#endif
 
 	if (pDev->Cfg.bIntEn)
 	{
@@ -1417,10 +1865,12 @@ extern "C" void SPI1_IRQHandler(void)
 	Stm32SpiService(&s_Stm32SpiDev[0]);
 }
 
+#ifdef SPI2
 extern "C" void SPI2_IRQHandler(void)
 {
 	Stm32SpiService(&s_Stm32SpiDev[1]);
 }
+#endif
 
 extern "C" void SPI3_IRQHandler(void)
 {

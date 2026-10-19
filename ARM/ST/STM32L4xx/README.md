@@ -66,6 +66,20 @@ index 1 fails initialization. Extended SPI
 controllers currently accept polling master configurations only; interrupt,
 DMA and slave requests fail initialization.
 
+The STM32L432 library builds the shared STM32 SPI driver,
+`ARM/ST/src/spi_stm32.cpp`, in place of `src/spi_stm32l4xx.cpp` (2026-10-19):
+SPI1 and SPI3 (DevNo 0 and 2), master in polling and interrupt mode, slave
+in interrupt mode with the hardware NSS pin, 4 to 16 bit data, the rate from
+the BR divider. DMA is not available on L4 yet, SPIInit returns false for
+bDmaEn. QUADSPI (DevNo 3) is not in the L432 library for now: SPIInit
+returns false for it. Not tested on hardware yet. The STM32L432 example
+SPIMasterSlave runs SPI1 as master (A1 PA1 SCK, D10 PA11 MISO, A6 PA7 MOSI,
+D3 PB0 chip select GPIO) against SPI3 as slave (D13 PB3 SCK, D12 PB4 MISO,
+D11 PB5 MOSI, A3 PA4 NSS) on one NUCLEO-L432KC, wired A1 to D13, A6 to D11,
+D10 to D12 and D3 to A3. The A6 and D12 lines are shared with the
+I2CMasterSlave wiring. The L476, L496 and L4S9 libraries keep
+`src/spi_stm32l4xx.cpp`.
+
 ## Timer
 
 The libraries build the STM32 timer driver: `ARM/ST/src/timer_stm32.cpp`
