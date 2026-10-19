@@ -106,8 +106,21 @@ in `ARM/ST/STM32F0xx/README.md` and `ARM/ST/include/timer_stm32.h`.
 
 ## I2C limits
 
-I2C currently accepts polling master configurations only. Slave, interrupt
-and DMA requests return false before changing the device or hardware state.
+The STM32L432 library builds the shared STM32 I2C driver,
+`ARM/ST/src/i2c_stm32.cpp`, in place of `src/i2c_stm32l4xx.cpp`
+(2026-10-19): master in polling and interrupt mode, slave in interrupt mode,
+7 bit addresses. DMA is not available on L4 yet, I2CInit returns false for
+bDmaEn. The STM32L432 example I2CMasterSlave runs
+I2C1 (DevNo 0, D1 PA9 SCL, D0 PA10 SDA) as master against I2C3 (DevNo 2, A6
+PA7 SCL, D12 PB4 SDA) as slave on one NUCLEO-L432KC, wired D1 to A6 and D0 to
+D12. The Release build prints on the ST-LINK virtual COM port at 1 Mbaud.
+On the NUCLEO-L432KC (2026-10-19), master polling and master interrupt, each
+against the interrupt driven slave, pass: write 8 bytes at an offset, read
+them back, and a 4 byte read, at 100 kHz with the internal pull-ups.
+
+The L476, L496 and L4S9 libraries keep `src/i2c_stm32l4xx.cpp`, which
+accepts polling master configurations only. Slave, interrupt and DMA requests
+return false before changing the device or hardware state.
 L4S9 I2C4 uses virtual index 3. The L432 has no I2C2: index 1 fails
 initialization, I2C1 and I2C3 keep indices 0 and 2.
 
