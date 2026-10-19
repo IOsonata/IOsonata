@@ -25,7 +25,7 @@ The link is open (no pairing). Build the peer with BLE_SC_METHOD set to
 BLE_SC_NONE: a peer asking for security disconnects this central.
 
 board.h gives LED_PINS and the CONNECT_LED_PORT / CONNECT_LED_PIN /
-CONNECT_LED_LOGIC of the link LED.
+CONNECT_LED_LOGIC of the link LED. It can also set BLE_TAKTOS_THREAD_STACK.
 
 @author	Hoang Nguyen Hoan
 @date	Oct. 3, 2026
@@ -119,8 +119,14 @@ alignas(4) static uint8_t s_BleWorkQueMem[WORK_QUE_SIZE * sizeof(Work_t)];
 static TaktOSQueue_t s_UsbWorkQue;
 static TaktOSQueue_t s_BleWorkQue;
 
+// The Bluetooth thread runs the work of the stack. A port running its host
+// stack in this thread sets a larger stack in board.h.
+#ifndef BLE_TAKTOS_THREAD_STACK
+#define BLE_TAKTOS_THREAD_STACK	1024u
+#endif
+
 alignas(8) static uint8_t s_UsbThreadMem[TAKTOS_THREAD_MEM_SIZE(2048)];
-alignas(8) static uint8_t s_BleThreadMem[TAKTOS_THREAD_MEM_SIZE(1024)];
+alignas(8) static uint8_t s_BleThreadMem[TAKTOS_THREAD_MEM_SIZE(BLE_TAKTOS_THREAD_STACK)];
 
 static void BridgeCheckStatus(TaktOSQueue_t *pQue);
 
