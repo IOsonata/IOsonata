@@ -44,6 +44,14 @@ SOFTWARE.
 #include "coredev/spi.h"
 #include "storage/diskio_flash.h"
 
+// board.h first, it can select NVM_MODE and SPI_DMA_ENABLE
+#include "board.h"
+
+// DMA for the SPI transfers. A QSPI device, polling only, needs it false.
+#ifndef SPI_DMA_ENABLE
+#define SPI_DMA_ENABLE		true
+#endif
+
 // Select the driver underneath. Both run the same test flow through the
 // common DiskIO sector api.
 // 0 : the legacy Flash driver (storage/flash.h), original behavior
@@ -61,8 +69,6 @@ SOFTWARE.
 #endif
 #include "stddev.h"
 #include "idelay.h"
-
-#include "board.h"
 
 #define FIFOSIZE			CFIFO_MEMSIZE(256)
 
@@ -113,7 +119,7 @@ static const SPICfg_t s_SpiCfg = {
 	.DataPhase = SPIDATAPHASE_FIRST_CLK, // Data phase
 	.ClkPol = SPICLKPOL_HIGH,         // clock polarity
 	.ChipSel = SPICSEL_AUTO,
-	.bDmaEn = true,	// DMA
+	.bDmaEn = SPI_DMA_ENABLE,
 	.bIntEn = false,
 	.IntPrio = 6, //APP_IRQ_PRIORITY_LOW,      // Interrupt priority
 	.EvtCB = NULL
