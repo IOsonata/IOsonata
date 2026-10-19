@@ -296,8 +296,16 @@ typedef DMA_Stream_TypeDef StDmaChan_t;
 typedef DMA_Channel_TypeDef StDmaChan_t;
 #if defined(DMA_CTR2_REQSEL)
 #define ST_DMA_GPDMA
+#elif defined(STM32L4)
+// L4 and L4+: the channels and their vectors belong to the DMA channel
+// manager, shared with the I2C and SPI drivers
+#define ST_DMA_CHAN
 #endif
 #endif
+#endif
+
+#ifdef ST_DMA_CHAN
+#include "dma_stm32.h"
 #endif
 
 #ifdef ST_UART_DMA
@@ -1264,6 +1272,21 @@ static void Stm32UartGpdmaIrq(int Ch, void *pCtx)
 }
 #endif
 
+#ifdef ST_DMA_CHAN
+// Channel interrupt of the DMA channel manager, the context is the instance
+static void Stm32UartChDmaIrq(int Ch, void *pCtx)
+{
+	(void)Ch;
+	Stm32UartDmaVector((Stm32UartDev_t *)pCtx);
+}
+
+// Channel number of the manager
+static inline int Stm32UartDmaChNo(const Stm32UartDma_t *pDma)
+{
+	return (pDma->pDma == DMA1 ? STM32_DMA_CH(1, 1) : STM32_DMA_CH(2, 1)) + pDma->Idx;
+}
+#endif
+
 // The vector passes its instance.
 static void Stm32UartIrqHandler(Stm32UartDev_t * const pDev)
 {
@@ -2009,6 +2032,26 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 		}
 	}
 #endif
+#ifdef ST_DMA_CHAN
+	// The channels are shared with the I2C and SPI drivers: the first to
+	// ask has them
+	if (pCfg->bDMAMode)
+	{
+		const int rxch = Stm32UartDmaChNo(&dev->RxDma);
+		bool rx = Stm32DmaChClaim(rxch, Stm32UartChDmaIrq, dev, pCfg->IntPrio, pCfg->bIntMode);
+
+		if (rx == false ||
+			Stm32DmaChClaim(Stm32UartDmaChNo(&dev->TxDma), Stm32UartChDmaIrq, dev, pCfg->IntPrio, pCfg->bIntMode) == false)
+		{
+			if (rx)
+			{
+				Stm32DmaChFree(rxch);
+			}
+
+			return false;
+		}
+	}
+#endif
 #else
 	if (pCfg->bDMAMode)
 	{
@@ -2250,71 +2293,8 @@ extern "C" void DMA1_Channel4_5_IRQHandler()
 }
 #endif
 #elif defined(STM32L4)
-#ifdef USART3
-extern "C" void DMA1_Channel2_IRQHandler()
-{
-	Stm32UartDmaVector(&s_Stm32UartDev[ST_USART3_IDX]);
-}
-
-extern "C" void DMA1_Channel3_IRQHandler()
-{
-	Stm32UartDmaVector(&s_Stm32UartDev[ST_USART3_IDX]);
-}
-#endif
-
-extern "C" void DMA1_Channel4_IRQHandler()
-{
-	Stm32UartDmaVector(&s_Stm32UartDev[ST_USART1_IDX]);
-}
-
-extern "C" void DMA1_Channel5_IRQHandler()
-{
-	Stm32UartDmaVector(&s_Stm32UartDev[ST_USART1_IDX]);
-}
-
-extern "C" void DMA1_Channel6_IRQHandler()
-{
-	Stm32UartDmaVector(&s_Stm32UartDev[ST_USART2_IDX]);
-}
-
-extern "C" void DMA1_Channel7_IRQHandler()
-{
-	Stm32UartDmaVector(&s_Stm32UartDev[ST_USART2_IDX]);
-}
-
-#ifdef UART5
-extern "C" void DMA2_Channel1_IRQHandler()
-{
-	Stm32UartDmaVector(&s_Stm32UartDev[ST_UART5_IDX]);
-}
-
-extern "C" void DMA2_Channel2_IRQHandler()
-{
-	Stm32UartDmaVector(&s_Stm32UartDev[ST_UART5_IDX]);
-}
-#endif
-
-#ifdef UART4
-extern "C" void DMA2_Channel3_IRQHandler()
-{
-	Stm32UartDmaVector(&s_Stm32UartDev[ST_UART4_IDX]);
-}
-
-extern "C" void DMA2_Channel5_IRQHandler()
-{
-	Stm32UartDmaVector(&s_Stm32UartDev[ST_UART4_IDX]);
-}
-#endif
-
-extern "C" void DMA2_Channel6_IRQHandler()
-{
-	Stm32UartDmaVector(&s_Stm32UartDev[ST_LPUART1_IDX]);
-}
-
-extern "C" void DMA2_Channel7_IRQHandler()
-{
-	Stm32UartDmaVector(&s_Stm32UartDev[ST_LPUART1_IDX]);
-}
+// The channel vectors are in the DMA channel manager (dma_stm32.cpp), which
+// calls Stm32UartChDmaIrq
 #elif defined(STM32G4)
 // DMAMUX1 routes any request to any channel. Two channels for each instance,
 // the six the smallest G4 parts have on each controller: USART1 DMA1 1 and

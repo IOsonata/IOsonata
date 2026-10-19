@@ -936,6 +936,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/ARM/ST/src/uart_stm32.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/coredev/dma_stm32.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/ARM/ST/src/dma_stm32.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/display/display.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/display/display.cpp</locationURI>

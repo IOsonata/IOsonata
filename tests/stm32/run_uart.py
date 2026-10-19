@@ -99,6 +99,8 @@ def main():
                             (DRIVER, 'c++'), (HERE / 'uart_test.cpp', 'c++')]
                     if family == 'STM32WBAxx':
                         srcs.append((ROOT / 'ARM/ST/STM32WBAxx/src/gpdma_stm32wba.cpp', 'c++'))
+                    elif family == 'STM32L4xx':
+                        srcs.append((ROOT / 'ARM/ST/src/dma_stm32.cpp', 'c++'))
                     for src, lang in srcs:
                         obj = tmp / f'{part}_{label}_{src.stem}.o'
                         if lang == 'c':
