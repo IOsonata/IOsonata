@@ -864,3 +864,20 @@ menu navigation, elapsed digits, delayed polling, ADC failure, timestamp
 wrap and the display limit. On October 19, 2026, the maintainer confirmed that StopwatchDemo works
 on the STM32WBA65I-DK1.
 See the [project instructions](exemples/StopwatchDemo/README.md).
+
+
+## Joystick countdown timer
+
+`exemples/CountdownTimerDemo/ioc` uses the shared
+`exemples/display/countdown_timer_demo.cpp` with the working joystick ADC,
+SSD1315 OLED and TIM16 timer. Select starts/pauses; while paused, right adds
+10 seconds, up/down adds/subtracts one minute, and left resets to the preset.
+Changing the preset reloads the remaining time. The range is 00:10 to 99:59.
+At expiry the display shows DONE and the green LED turns on; select restarts
+the preset. Hardware timestamps preserve elapsed time through display/ADC
+work and timestamp wrap. ADC read failures do not stop expiry handling.
+
+Debug/Release compile and link checks pass. OLED model tests cover digits,
+preset bounds, debounce, pause/resume, reset, expiry/LED, input failures and
+clock wrap at -O0/-Os under ASan/UBSan. CountdownTimerDemo hardware validation
+remains pending. See the [project instructions](exemples/CountdownTimerDemo/README.md).
