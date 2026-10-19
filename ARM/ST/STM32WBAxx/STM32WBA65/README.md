@@ -1110,8 +1110,9 @@ Validation:
   restart and shutdown with MCLK stopped. Lost configuration writes are caught
   by readback before SYSCLK is enabled.
 - The maintainer confirmed onboard microphone capture and the OLED level
-  meter on October 19, 2026, after the codec clock-ordering fix. Headphone
-  playback and sustained DMA timing still need board validation.
+  meter on October 19, 2026, after the codec clock-ordering fix. The maintainer also confirmed headphone
+  tone playback and stereo routing on October 19, 2026. Sustained DMA
+  timing under additional system load has not been measured.
 
 ```sh
 # Same Arm toolchain and emulator environment as the PDM tests above.
@@ -1177,10 +1178,56 @@ Validation:
   and each initialization write failing. Capture-only regression remains.
 - The actual example's sample generator is tested at -O0/-Os under ASan/UBSan:
   stereo routing, frequency, signal bounds, fades, silence and chunk boundaries.
-- Physical headphone output remains pending board validation.
+- The maintainer confirmed onboard headphone tone playback and stereo
+  routing on October 19, 2026.
 
 ```sh
 python3 tests/audio/run_wm8904.py
 python3 tests/audio/run_i2s_tone.py
 /tmp/iosonata-pdm-tests/bin/python tests/stm32wba/run_i2s.py
+```
+
+## Live microphone to headphones loopback
+
+Import `exemples/I2sLoopbackDemo/ioc` and rebuild the matching library and
+example. Connect headphones to the onboard audio jack and speak near the
+onboard microphone. The WM8904 digitizes the microphone, I2S receives the
+stereo frames, and main forwards them to I2S transmit for headphone playback.
+The codec's mono microphone signal appears in both channels. The OLED shows
+input peak in dBFS and the number of captured frames.
+
+This exercises simultaneous RX and TX DMA through the same generic I2S
+interface. Board mapping combines PC5 AF13 receive with PD5 AF13 transmit;
+control and clock pins match the two working audio examples. The portable
+example is `exemples/audio/i2s_loopback_demo.cpp`; it accesses audio through
+DeviceIntrf Rx/Tx and contains no MCU register operations.
+
+The receive FIFO holds 8,192 stereo frames (32 KiB of sample memory) so it
+can keep receiving while codec Init waits through its 100 ms bias settling
+and up to 300 ms servo calibration. The transmit FIFO holds 256 frames.
+MCLK and both streams stay running throughout startup. The application
+discards queued startup samples, then queues 128 silent frames (about 8 ms
+at the default 15,625 Hz rate) ahead of live audio to cushion display updates.
+This priming delay is not a measured end-to-end latency result.
+
+Main retains a partially queued block until Tx accepts all of it, then reads
+another block. It forwards whole stereo frames without altering sample values.
+Only two display lines refresh during audio, every 100 ms. ADC gain requests
++18 dB and the codec selects its +17.625 dB maximum; headphone gain is -12 dB.
+A DMA/SAI error, receive overflow or 500 ms without newly received samples
+shuts down the codec and audio interface and displays an error.
+
+Validation:
+
+- Debug/Release incremental library builds and I2sLoopbackDemo links pass.
+- Host ASan/UBSan tests include the actual example and verify exact sample
+  forwarding across short Rx/Tx transfers, repeated transmit stalls, no buffer
+  reuse while data remains pending, startup discard/priming, bounded startup
+  draining and error detection at -O0/-Os.
+- The existing Cortex-M33 I2S tests cover simultaneous receive/transmit DMA;
+  codec tests cover microphone and headphone paths enabled together.
+- Physical live microphone/headphone loopback awaits board validation.
+
+```sh
+python3 tests/audio/run_i2s_loopback.py
 ```
