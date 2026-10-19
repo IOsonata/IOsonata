@@ -17,9 +17,10 @@ An MCU needs startup, GPIO, UART and timer support to be considered supported.
 Peripheral source files and project metadata alone do not establish this.
 Hardware validation is recorded separately from implementation coverage.
 
-STM32L432 (STM32L432KC on the NUCLEO-L432KC) has a library project and two
-UART example projects built from the same L4 sources (2026-10-13). It is not
-tested on hardware yet; see the STM32L432 paragraph under Validation.
+STM32L432 (STM32L432KC on the NUCLEO-L432KC) has a library project and the
+example projects Blinky, TimerDemo, UartLoopback and UartPrbsTxTest built from
+the same L4 sources (2026-10-13, Blinky 2026-10-19). It is not tested on
+hardware yet; see the STM32L432 paragraph under Validation.
 
 ## Virtual device numbers
 
@@ -216,6 +217,15 @@ emulator with USART1, DMA1 (channels 4 and 5, CSELR request 2) and RCC models:
 the loopback echoes in order with no lost character in polling, interrupt,
 DMA without interrupts and DMA with interrupts, and the PRBS output matches
 `Prbs8()`. This does not replace a run on the board.
+
+The STM32L432 Blinky example (`exemples/misc/blinky.c`) selects NUCLEO_L432KC
+in `board.h` and blinks LD3, PB3. The board has no user button, so the LED
+blinks until reset. It links `nosys`, no semihosting, and runs without a
+debugger. Debug and Release were built from the `.project` and `.cproject`
+settings with xPack GNU Arm 15.2 outside IOcomposer. In an instruction set
+emulator with an RCC model the image sets PB3 as output, runs the core from
+the MSI PLL at 80 MHz and toggles PB3 at a fixed interval. Not tested on the
+board.
 
 For a new release-candidate run, record the project, MCU/board, revision,
 toolchain and exercised modes alongside the existing hardware-validation

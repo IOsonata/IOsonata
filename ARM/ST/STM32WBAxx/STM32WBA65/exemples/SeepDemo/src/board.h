@@ -11,9 +11,9 @@
 
 #define NVM_MODE 1
 #define EEPROM_SPI 1
-#ifndef EEPROM_DEMO_UART
-#define EEPROM_DEMO_UART 1
-#endif
+//#ifndef EEPROM_DEMO_UART
+//#define EEPROM_DEMO_UART 1
+//#endif
 #define EEPROM_UART_DEVNO BOARD_VCP_DEVNO
 #define EEPROM_UART_PINS BOARD_VCP_PINS
 
