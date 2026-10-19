@@ -56,9 +56,10 @@ SOFTWARE.
 // common DiskIO sector api.
 // 0 : the legacy Flash driver (storage/flash.h), original behavior
 // 1 : the new unified Nvm driver behind NvmDiskIO. The board's FLASH_CFG is
-//     translated at run time. Quad commands fall back to the standard
-//     opcodes until the QSPI path lands in Nvm; the legacy driver keeps
-//     quad in mode 0.
+//     translated at run time with the standard single line opcodes. The
+//     legacy config does not say how to set the quad enable bit, so its
+//     quad commands are not carried over. For quad access with Nvm, set
+//     RdCmd, WrCmd and QuadEnable in an NvmCfg_t, see nvm_demo.cpp.
 #ifndef NVM_MODE
 #define NVM_MODE			1
 #endif
@@ -149,9 +150,9 @@ static NvmDiskIO s_Flash;
 // The board's legacy FLASH_CFG expressed as the unified config: the values
 // that vary come over, and everything the legacy driver hardcoded or did in
 // code, the protocol, the reset, the id retry, EN4B, is driver knowledge in
-// Nvm, derived from the erase kind. Legacy TotalSize is in KBytes. The quad
-// opcodes of a legacy quad config wait for the QSPI path in Nvm; the legacy
-// driver keeps quad in mode 0.
+// Nvm, derived from the erase kind. Legacy TotalSize is in KBytes. RdCmd,
+// WrCmd and QuadEnable are left at their defaults, the standard single line
+// opcodes, because the legacy config has no quad enable information.
 static const NvmCfg_t s_NvmCfg = {
 	.DevNo = 0,
 	.TotalSize = (uint64_t)s_FlashCfg.TotalSize * 1024ULL,	// legacy: KBytes
