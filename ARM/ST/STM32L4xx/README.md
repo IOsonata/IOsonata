@@ -278,7 +278,10 @@ cycles the stamp is found and its boot count rises (boot 3). First run of
 QUADSPI on the boards. In quad mode (2026-10-19): QREAD 0x6B (1-1-4, 8 dummy
 cycles) and 4PP 0x38 (1-4-4) from the chip config, the Quad Enable bit
 (status register 1 bit 6) set by Nvm from `NvmCfg_t.QuadEnable`, status
-0x40 logged, ALL PASS, the stamp kept across power cycles. FlashMemoryDemo
+0x40 logged, ALL PASS, the stamp kept across power cycles. A single line
+build (read 0x03, program 0x02) then reads the stamp written in quad mode
+(boot 3), so the quad commands store the data where the single line ones
+find it. FlashMemoryDemo
 (`exemples/storage/flash_memory_demo.cpp`, legacy Flash driver, NVM_MODE 0)
 on the same flash: chip erase, sectors 0,
 1, 2, 30 and 40 written and read back, sector erase verified, completed
