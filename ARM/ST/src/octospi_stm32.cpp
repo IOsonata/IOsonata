@@ -5,8 +5,11 @@
 
 		OCTOSPI1 and OCTOSPI2 are the SPI devices DevNo 3 and 4
 		(STM32_QOSPI_DEVNO_START), SPIInit of spi_stm32.cpp calls
-		Stm32QospiInit for them. Master in polling mode, indirect mode, the
-		commands of QuadSPISendCmd. The chip select is a GPIO of the pin map
+		Stm32QospiInit for them. Master in polling mode, indirect mode.
+		QuadSPISendCmd gives the command, its address, dummy cycles and data
+		length; a command without data runs at once, one with data is started
+		by RxData or TxData. The flash drivers (Flash, Nvm) describe any part
+		this way. The chip select is a GPIO of the pin map
 		from index OSPI_CS_IOPIN_IDX when ChipSel is SPICSEL_DRIVER. The rate
 		is HCLK divided by 1 to 256 (PRESCALER of DCR2).
 
@@ -44,8 +47,6 @@ SOFTWARE.
 
 #if defined(OCTOSPI1)
 
-#include <stddef.h>
-
 #include "istddef.h"
 #include "qospi_stm32.h"
 #include "iopinctrl.h"
@@ -67,15 +68,24 @@ typedef struct {
 	OCTOSPI_TypeDef *pReg;
 	QOSPI_PHASE QOPhase;
 	int AdSize;
-	uint32_t CcrReg;
+	uint32_t CcrReg;		// ADSIZE and DDTR, kept for every command
+	// Command with a data phase given by QuadSPISendCmd, started by RxData
+	// (indirect read) or TxData (indirect write)
+	uint32_t PendCmd;
+	uint32_t PendCcr;
+	uint32_t PendDcyc;
+	uint32_t PendAddr;
+	uint32_t PendLen;
+	bool bPendAddr;
+	bool bPend;
 } Stm32OspiDev_t;
 
 #pragma pack(pop)
 
 static Stm32OspiDev_t s_Stm32OspiDev[STM32_OSPI_MAXDEV] = {
-	{ 0, NULL, OCTOSPI1, QOSPI_PHASE_IDLE, 0, 0 },
+	{ 0, NULL, OCTOSPI1, QOSPI_PHASE_IDLE, 0, 0, 0, 0, 0, 0, 0, false, false },
 #ifdef OCTOSPI2
-	{ 1, NULL, OCTOSPI2, QOSPI_PHASE_IDLE, 0, 0 },
+	{ 1, NULL, OCTOSPI2, QOSPI_PHASE_IDLE, 0, 0, 0, 0, 0, 0, 0, false, false },
 #endif
 };
 
@@ -117,16 +127,14 @@ static bool Stm32OspiWaitTxComplete(Stm32OspiDev_t *pDev, int Timeout)
 	return false;
 }
 
-static bool Stm32OspiWaitFifo(Stm32OspiDev_t *pDev, int Timeout)
+// Stop a transfer that did not end, the controller is ready for the next one
+static void Stm32OspiAbort(Stm32OspiDev_t *pDev)
 {
-	do {
-		if ((pDev->pReg->SR & OCTOSPI_SR_FLEVEL_Msk))
-		{
-			return true;
-		}
-	} while (Timeout-- > 0);
+	pDev->pReg->CR |= OCTOSPI_CR_ABORT;
 
-	return false;
+	for (int i = 0; i < 100000 && (pDev->pReg->CR & OCTOSPI_CR_ABORT); i++);
+
+	pDev->pReg->FCR = OCTOSPI_FCR_CTCF | OCTOSPI_FCR_CTEF;
 }
 
 static uint32_t Stm32OspiGetRate(DevIntrf_t * const pDev)
@@ -209,67 +217,101 @@ static void Stm32OspiPowerOff(DevIntrf_t * const pDev)
 	}
 }
 
+// Line modes of the address and data phases of a command: 1 single, 2 dual,
+// 3 quad lines, the CCR ADMODE and DMODE values
+static void Stm32OspiModes(uint32_t Cmd, uint32_t &AdMode, uint32_t &DMode)
+{
+	switch (Cmd)
+	{
+		case FLASH_CMD_DREAD:		// 1-1-2
+			AdMode = 1;
+			DMode = 2;
+			break;
+		case FLASH_CMD_2READ:		// 1-2-2
+			AdMode = 2;
+			DMode = 2;
+			break;
+		case FLASH_CMD_QREAD:		// 1-1-4
+		case FLASH_CMD_QWRITE:
+			AdMode = 1;
+			DMode = 3;
+			break;
+		case FLASH_CMD_4READ:		// 1-4-4
+		case FLASH_CMD_4WRITE:
+		case FLASH_CMD_E4WRITE:
+			AdMode = 3;
+			DMode = 3;
+			break;
+		default:					// 1-1-1
+			AdMode = 1;
+			DMode = 1;
+	}
+}
+
+// Indirect mode. With FMODE set in CR, the controller starts a transfer on
+// the last register of its sequence: IR when there is no address, AR
+// otherwise; an indirect write then takes its data from the FIFO. A command
+// with a data phase is kept here and started by RxData or TxData, which know
+// the direction. A command without data runs now.
 static bool Stm32OspiSendCmd(Stm32OspiDev_t *dev, uint32_t Cmd, uint32_t Addr, uint8_t AddrLen, uint32_t DataLen, uint8_t DummyCycle)
 {
-	dev->CcrReg &= ~(OCTOSPI_CCR_IMODE_Msk | OCTOSPI_CCR_DMODE_Msk | OCTOSPI_CCR_ADMODE_Msk);
-	dev->pReg->TCR &= ~OCTOSPI_TCR_DCYC_Msk;
+	OCTOSPI_TypeDef *reg = dev->pReg;
+	uint32_t admode, dmode;
+	bool baddr = Addr != (uint32_t)-1;
+
+	Stm32OspiModes(Cmd, admode, dmode);
+
+	uint32_t ccr = (dev->CcrReg & OCTOSPI_CCR_DDTR) | OCTOSPI_CCR_IMODE_0;
+
+	if (baddr)
+	{
+		// Address size of the command, or the one of the memory size
+		if (AddrLen > 0 && AddrLen <= 4)
+		{
+			ccr |= (uint32_t)(AddrLen - 1) << OCTOSPI_CCR_ADSIZE_Pos;
+		}
+		else
+		{
+			ccr |= dev->CcrReg & OCTOSPI_CCR_ADSIZE_Msk;
+		}
+		ccr |= admode << OCTOSPI_CCR_ADMODE_Pos;
+	}
+
+	if (Stm32OspiWaitBusy(dev, 100000) == false)
+	{
+		Stm32OspiAbort(dev);
+	}
 
 	if (DataLen > 0)
 	{
-		dev->pReg->DLR = DataLen - 1;
-		switch (Cmd)
-		{
-			case FLASH_CMD_DREAD:
-				dev->CcrReg |= OCTOSPI_CCR_ADMODE_0 | OCTOSPI_CCR_DMODE_1;
-				dev->pReg->TCR |= (DummyCycle << OCTOSPI_TCR_DCYC_Pos);
-				break;
-			case FLASH_CMD_QREAD:
-				dev->CcrReg |= OCTOSPI_CCR_ADMODE_0 | OCTOSPI_CCR_DMODE_Msk;
-				dev->pReg->TCR |= (DummyCycle << OCTOSPI_TCR_DCYC_Pos);
-				break;
-			case FLASH_CMD_2READ:
-				dev->CcrReg |= OCTOSPI_CCR_ADMODE_1 | OCTOSPI_CCR_DMODE_1;
-				dev->pReg->TCR |= (DummyCycle << OCTOSPI_TCR_DCYC_Pos);
-				break;
-			case FLASH_CMD_QWRITE:
-				dev->CcrReg |= OCTOSPI_CCR_ADMODE_0 | OCTOSPI_CCR_DMODE_Msk;
-				break;
-			case FLASH_CMD_4READ:
-				dev->pReg->TCR |= (DummyCycle << OCTOSPI_TCR_DCYC_Pos);
-				// fall through
-			case FLASH_CMD_4WRITE:
-			case FLASH_CMD_E4WRITE:
-				dev->CcrReg |= OCTOSPI_CCR_ADMODE_Msk | OCTOSPI_CCR_DMODE_Msk;
-				break;
-			default:
-				if (Addr != (uint32_t)-1)
-				{
-					dev->CcrReg |= OCTOSPI_CCR_ADMODE_0 | OCTOSPI_CCR_DMODE_0;
-				}
-				else
-				{
-					dev->CcrReg |= OCTOSPI_CCR_DMODE_0;
-				}
-		}
+		dev->PendCmd = Cmd;
+		dev->PendCcr = ccr | (dmode << OCTOSPI_CCR_DMODE_Pos);
+		dev->PendDcyc = (uint32_t)DummyCycle << OCTOSPI_TCR_DCYC_Pos;
+		dev->PendAddr = Addr;
+		dev->bPendAddr = baddr;
+		dev->PendLen = DataLen;
+		dev->bPend = true;
+
+		return true;
 	}
-	else
+
+	dev->bPend = false;
+	reg->FCR = OCTOSPI_FCR_CTCF;
+	reg->CR &= ~OCTOSPI_CR_FMODE_Msk;	// indirect write, no data
+	reg->CCR = ccr;
+	reg->TCR &= ~OCTOSPI_TCR_DCYC_Msk;
+	reg->IR = Cmd;
+	if (baddr)
 	{
-		if (Addr != (uint32_t)-1)
-		{
-			dev->CcrReg |= OCTOSPI_CCR_ADMODE_0;
-		}
-		dev->pReg->DLR = 0;
+		reg->AR = Addr;
 	}
 
-	dev->pReg->CCR = dev->CcrReg;
-	if (Addr != (uint32_t)-1)
+	if (Stm32OspiWaitTxComplete(dev, 100000) == false)
 	{
-		dev->pReg->AR = Addr;
+		Stm32OspiAbort(dev);
+
+		return false;
 	}
-
-	dev->pReg->IR = Cmd;
-
-	Stm32OspiWaitFifo(dev, 100000);
 
 	return true;
 }
@@ -286,8 +328,10 @@ static bool Stm32OspiStart(DevIntrf_t * const pDev, uint32_t DevCs)
 
 	if (Stm32OspiWaitBusy(dev, 100000) == false)
 	{
-		return false;
+		Stm32OspiAbort(dev);
 	}
+
+	dev->bPend = false;
 
 	if (dev->pSpiDev->Cfg.ChipSel == SPICSEL_DRIVER)
 	{
@@ -312,39 +356,59 @@ static void Stm32OspiCsHigh(Stm32OspiDev_t *dev)
 	}
 }
 
-// Receive Data only, no Start/Stop condition
+// Start the command kept by QuadSPISendCmd with the data phase length Len
+static void Stm32OspiStartData(Stm32OspiDev_t *dev, uint32_t Fmode, uint32_t Len)
+{
+	OCTOSPI_TypeDef *reg = dev->pReg;
+
+	reg->FCR = OCTOSPI_FCR_CTCF;
+	reg->CR = (reg->CR & ~OCTOSPI_CR_FMODE_Msk) | Fmode;
+	reg->DLR = Len - 1;
+	reg->CCR = dev->PendCcr;
+	reg->TCR = (reg->TCR & ~OCTOSPI_TCR_DCYC_Msk) | dev->PendDcyc;
+	reg->IR = dev->PendCmd;
+	if (dev->bPendAddr)
+	{
+		reg->AR = dev->PendAddr;
+	}
+	dev->bPend = false;
+	dev->QOPhase = QOSPI_PHASE_DATA;
+}
+
+// Receive the data phase of the command given by QuadSPISendCmd
 static int Stm32OspiRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 {
 	Stm32OspiDev_t *dev = (Stm32OspiDev_t *)pDev->pDevData;
 	OCTOSPI_TypeDef *reg = dev->pReg;
-	// DR accessed as a half word for data above 8 bits
-	volatile uint16_t *dr16 = (volatile uint16_t *)((uintptr_t)reg + offsetof(OCTOSPI_TypeDef, DR));
 	int cnt = 0;
 
-	reg->DLR = BuffLen - 1;
-	reg->CR |= OCTOSPI_CR_FMODE_0;
-	reg->AR = reg->AR;
-
-	while (BuffLen > 0)
+	if (dev->bPend == false || pBuff == NULL || BuffLen <= 0)
 	{
-		Stm32OspiWaitFifo(dev, 100000);
+		return 0;
+	}
 
-		if (dev->pSpiDev->Cfg.DataSize > 8)
+	uint32_t len = (uint32_t)BuffLen < dev->PendLen ? (uint32_t)BuffLen : dev->PendLen;
+
+	Stm32OspiStartData(dev, OCTOSPI_CR_FMODE_0, len);	// indirect read
+
+	while (cnt < (int)len)
+	{
+		int timeout = 100000;
+
+		while ((reg->SR & OCTOSPI_SR_FLEVEL_Msk) == 0 && timeout-- > 0);
+
+		if (timeout < 0)
 		{
-			uint16_t x = *dr16;
-			pBuff[0] = x & 0xff;
-			pBuff[1] = (x >> 8) & 0xFF;
-			BuffLen -= 2;
-			pBuff += 2;
-			cnt += 2;
+			Stm32OspiAbort(dev);
+
+			return cnt;
 		}
-		else
-		{
-			*pBuff = *(volatile uint8_t*)&reg->DR;
-			BuffLen--;
-			pBuff++;
-			cnt++;
-		}
+		pBuff[cnt++] = *(volatile uint8_t *)&reg->DR;
+	}
+
+	if (Stm32OspiWaitTxComplete(dev, 100000) == false)
+	{
+		Stm32OspiAbort(dev);
 	}
 
 	return cnt;
@@ -353,38 +417,48 @@ static int Stm32OspiRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 // Stop receive
 static void Stm32OspiStopRx(DevIntrf_t * const pDev)
 {
-	Stm32OspiCsHigh((Stm32OspiDev_t *)pDev->pDevData);
+	Stm32OspiDev_t *dev = (Stm32OspiDev_t *)pDev->pDevData;
+
+	dev->bPend = false;
+	dev->QOPhase = QOSPI_PHASE_IDLE;
+	Stm32OspiCsHigh(dev);
 }
 
-// Send Data only, no Start/Stop condition
+// Send the data phase of the command given by QuadSPISendCmd
 static int Stm32OspiTxData(DevIntrf_t * const pDev, uint8_t const *pData, int DataLen)
 {
 	Stm32OspiDev_t *dev = (Stm32OspiDev_t*)pDev->pDevData;
 	OCTOSPI_TypeDef *reg = dev->pReg;
-	// DR accessed as a half word for data above 8 bits
-	volatile uint16_t *dr16 = (volatile uint16_t *)((uintptr_t)reg + offsetof(OCTOSPI_TypeDef, DR));
 	int cnt = 0;
 
-	reg->DLR = DataLen - 1;
-	reg->CR &= ~OCTOSPI_CR_FMODE_Msk;
-	reg->CCR = dev->CcrReg;
-
-	while (DataLen > 0)
+	if (dev->bPend == false || pData == NULL || DataLen <= 0)
 	{
-		if (dev->pSpiDev->Cfg.DataSize > 8)
+		return 0;
+	}
+
+	uint32_t len = (uint32_t)DataLen < dev->PendLen ? (uint32_t)DataLen : dev->PendLen;
+
+	Stm32OspiStartData(dev, 0, len);	// indirect write
+
+	while (cnt < (int)len)
+	{
+		int timeout = 100000;
+
+		// FTF: room in the FIFO, the threshold is 1
+		while ((reg->SR & OCTOSPI_SR_FTF) == 0 && timeout-- > 0);
+
+		if (timeout < 0)
 		{
-			*dr16 = ((uint16_t)pData[1] << 8) | (uint16_t)pData[0];
-			pData += 2;
-			DataLen -= 2;
-			cnt += 2;
+			Stm32OspiAbort(dev);
+
+			return cnt;
 		}
-		else
-		{
-			*(volatile uint8_t*)&reg->DR = *pData;
-			pData++;
-			DataLen--;
-			cnt++;
-		}
+		*(volatile uint8_t *)&reg->DR = pData[cnt++];
+	}
+
+	if (Stm32OspiWaitTxComplete(dev, 100000) == false)
+	{
+		Stm32OspiAbort(dev);
 	}
 
 	return cnt;
@@ -395,7 +469,8 @@ static void Stm32OspiStopTx(DevIntrf_t * const pDev)
 {
 	Stm32OspiDev_t *dev = (Stm32OspiDev_t *)pDev->pDevData;
 
-	Stm32OspiWaitTxComplete(dev, 100000);
+	dev->bPend = false;
+	dev->QOPhase = QOSPI_PHASE_IDLE;
 	Stm32OspiCsHigh(dev);
 }
 
