@@ -145,6 +145,7 @@ October 18 review fixes, tested locally:
     recording the address of the next error, so a later double error was
     decoded to the old address and the device stopped. Each read clears
     ECCC first; ECCC set during the read makes the double error the read's.
+    (This model of ECCR was wrong; replaced by the second review below.)
   - ICACHE, which caches flash data reads too, is invalidated after a
     program or an erase when an application enables it.
   - PDS: a clear retried after a failed erase fell back to erasing every
@@ -156,6 +157,46 @@ October 18 review fixes, tested locally:
   corrected error before a double one; `pds_test` adds the failing clear
   erase, the write that lands but fails and the failed mount. Each fails
   against the code before its fix.
+- Second persistence review, October 19. An external review found that
+  three of the fixes above were checked against a wrong flash model, and
+  one PDS defect; a fifth came out of the new tests. All are fixed:
+  - The ECC NMI decoded ADDR_ECC in 8-byte steps, as
+    `HAL_FLASHEx_GetEccInfo` does. RM0515 gives the byte offset of the word
+    in its bank, and the field widths agree (20 bits on the lines with 1 MB
+    banks, 19 on the 512 KB WBA50). The flash model made the inverse
+    mistake, so the two cancelled out. With ECCR modelled as RM0515 gives
+    it, every double error was rejected and the boot stopped in
+    `Default_Handler`.
+  - ECCR records an error only while ECCC and ECCD are both clear. The read
+    cleared ECCC once, so a corrected error in one flash word hid a double
+    error in a later word of the same read: no NMI, and the read returned
+    the damaged bytes (the PDS record CRC still caught them in the test). The
+    read now copies one flash word at a time with ECCC cleared before each,
+    and reads a word again when ECCC was set during it.
+  - The ECC NMI did not invalidate an enabled ICACHE, so a line filled by
+    the failed read could give the damaged bytes to the retry without an
+    NMI. It is now invalidated in the NMI.
+  - PDS: `BtPdsClear` erased sector 0 when no sector was erased. With three
+    sectors and a collection whose source erase failed, a power cut before
+    the commit lost a saved record. The clear now erases only a sector the
+    collection could reclaim, and otherwise returns `-ENOMEM` with the
+    store unchanged.
+  - PDS: a sector whose erase was cut after its header was taken as erased
+    at mount. A header written over it later brought its old records back,
+    so a clear could succeed and the cleared records reappear after the
+    next reset. The mount now requires the whole sector to read erased.
+  `run_bond_flash.py` models ECCR as RM0515 gives it and fails any read that
+  returns a damaged word without an NMI or a second read of that word. It
+  adds corrected errors in an earlier read, in the same read and from
+  elsewhere (an interrupt between the clear and the load), and a run with
+  ICACHE enabled. `pds_test` adds a clear without an erased sector, with a
+  power cut at every step and a clear after the remount, and the cut erase.
+  Each new test fails against the code before its fix. On the final code:
+  32 emulator checks; the sweep recovers from all 330 cuts of a save and all
+  18 cuts of a deletion, and all 165 half done cuts take the ECC NMI at the
+  next boot with none stopping; 215 PDS checks with 4- and 16-byte units;
+  486 bond power-loss cuts. All 28 WBA65 examples build in Debug and
+  Release. These are software tests, not hardware validation.
 - Cortex-M33 crypto integration: **18 checks, 0 failures**, including
   incremental CMAC and three interrupt preemptions while AES is busy.
   The existing model warning about the platform `HW_RNG_Get` initialization
@@ -223,13 +264,18 @@ Release library leaves it out. Errors are always printed.
   PDS tries a read three times; a read that still fails is a damaged record
   (no more appends to that sector) or a damaged sector header (the sector is
   erased at init, as for a header that fails its check). The address decode
-  follows `HAL_FLASHEx_GetEccInfo`. With the banks swapped, whether BK_ECC
-  names the physical or the mapped bank is not settled (the HAL ignores the
-  swap), so both readings are taken. The ECCC latch behavior is taken from
-  the ECCR description of the L4 and U5 reference manuals; check it against
-  RM0515. An application that defines its own `NMI_Handler` must call
+  takes ADDR_ECC as a byte offset, as RM0515 describes it and against the
+  shift by 3 in `HAL_FLASHEx_GetEccInfo`; the board has to confirm which is
+  right, since with the wrong one every double error stops the device. With
+  the banks swapped, whether BK_ECC names the physical or the mapped bank is
+  not settled (the HAL ignores the swap), so both readings are taken. An
+  application that defines its own `NMI_Handler` must call
   `Stm32FlashEccNmi` first. A physical power cut test on the DK1 remains to
   be done.
+- A clear on a store left without a sector it can erase safely (a refused
+  or interrupted erase, before the next mount) returns `-ENOMEM`. The bond
+  deletion keeps retrying it; a reset before it succeeds restores the bonds,
+  since the deletion request is not kept across a reset.
 - A bond store that does not mount still makes `BtAppInit` fail for an
   application with security. Whether to reformat the store and start
   without bonds instead is not decided.
