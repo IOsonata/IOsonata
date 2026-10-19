@@ -38,4 +38,5 @@ wrap. Time and the preset are not retained through reset.
 Debug and Release compile/link checks pass. The display simulation checks
 OLED clock digits, preset limits, debounce, held keys, pause/resume, reset,
 expiry and LED state, ADC failure and timestamp wrap at -O0/-Os under ASan/UBSan.
-CountdownTimerDemo hardware validation remains pending.
+On October 19, 2026, the maintainer confirmed that CountdownTimerDemo
+works on the STM32WBA65I-DK1.

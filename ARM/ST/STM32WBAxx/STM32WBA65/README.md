@@ -879,5 +879,5 @@ work and timestamp wrap. ADC read failures do not stop expiry handling.
 
 Debug/Release compile and link checks pass. OLED model tests cover digits,
 preset bounds, debounce, pause/resume, reset, expiry/LED, input failures and
-clock wrap at -O0/-Os under ASan/UBSan. CountdownTimerDemo hardware validation
-remains pending. See the [project instructions](exemples/CountdownTimerDemo/README.md).
+clock wrap at -O0/-Os under ASan/UBSan. On October 19, 2026, the maintainer confirmed that CountdownTimerDemo
+works on the STM32WBA65I-DK1. See the [project instructions](exemples/CountdownTimerDemo/README.md).
