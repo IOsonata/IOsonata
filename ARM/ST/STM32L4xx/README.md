@@ -273,7 +273,8 @@ MX25R6435F through the Nvm driver and QUADSPI (SPI DevNo 3, PE10 CLK, PE12
 to PE15 IO0 to IO3, PE11 NCS, AF10), 8 MHz, single line read and page
 program, polling: JEDEC id C2 28 17, the stamp written and read back, erase,
 a write across a page boundary, programming clears bits only, unaligned
-erase and read past the end rejected, ALL PASS (2026-10-19). First run of
+erase and read past the end rejected, ALL PASS (2026-10-19). After power
+cycles the stamp is found and its boot count rises (boot 3). First run of
 QUADSPI on the boards.
 SystemInit now sets MSIPLLEN after the LSE is ready when `g_McuOsc` has the
 RC core oscillator and the LSE crystal (2026-10-19). On the
