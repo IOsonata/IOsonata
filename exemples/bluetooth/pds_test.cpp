@@ -130,6 +130,13 @@ static bool s_Dead;
 // not a driver one, because the driver passes the store's offsets through.
 static uint32_t s_AlignFault;
 
+// Fail a selected read and the following retries. Ordinary I/O failures
+// must stop an operation; only -EBADMSG identifies an unreadable flash word.
+static uint32_t s_ReadCount;
+static uint32_t s_ReadFailAt;
+static uint32_t s_ReadFailLeft;
+static int s_ReadError;
+
 static std::vector<uint8_t> s_Tx;
 static uint32_t s_Addr;
 static bool s_AddrSet;
@@ -237,6 +244,8 @@ static void MediumWipe(uint32_t RegionSize, uint32_t Gran)
 	s_CutKeep = 0;
 	s_Dead = false;
 	s_AlignFault = 0;
+	s_ReadCount = 0;
+	s_ReadFailLeft = 0;
 }
 
 static void MediumArmCut(uint32_t OpIndex, uint32_t Keep)
@@ -368,8 +377,15 @@ static int MemTxData(DevIntrf_t *, const uint8_t *pData, int Len)
 	return s_Dead ? -1 : Len;
 }
 
-static int MemRxData(DevIntrf_t *, uint8_t *pBuff, int Len)
+static int MemRxData(DevIntrf_t *pIntrf, uint8_t *pBuff, int Len)
 {
+	s_ReadCount++;
+	if (s_ReadFailLeft != 0 && s_ReadCount >= s_ReadFailAt)
+	{
+		s_ReadFailLeft--;
+		DeviceIntrfStopRx(pIntrf);
+		return s_ReadError;
+	}
 	if (s_AddrSet == false)
 	{
 		// A status poll would land here. The driver must not make one.
@@ -1113,10 +1129,159 @@ static void TestSequenceWidth(void)
 
 // ---------------------------------------------------------------------------
 
+// Read failures at every stage of a mount, lookup and garbage collection.
+// The fault spans all three PDS attempts at that read.
+static void TestReadFailures(uint32_t Gran)
+{
+	printf("--- read failures, unit %u\n", Gran);
+	MediumWipe(2U * PDS_SECTOR_SIZE, Gran);
+	if (!Mounted(Boot(Gran), "read failure setup"))
+	{
+		return;
+	}
+	// A nonzero clear epoch also checks the first header scan: ignoring a
+	// failed read there would make the later scan discard a valid sector.
+	CHECK(BtPdsClear() == 0, "read failures: clear epoch");
+	auto value = MakeVal(71, 64);
+	CHECK(BtPdsWrite(0x71, value.data(), value.size()) == (ssize_t)value.size(),
+		"read failures: initial value");
+	std::vector<uint8_t> before(s_Mem, s_Mem + s_RegionSize);
+	s_ReadCount = 0;
+	CHECK(Boot(Gran) == 0, "read failures: reference mount");
+	uint32_t reads = s_ReadCount;
+	bool ok = true;
+	for (uint32_t at = 1; at <= reads && ok; at++)
+	{
+		memcpy(s_Mem, before.data(), before.size());
+		s_ReadCount = 0;
+		s_ReadFailAt = at;
+		s_ReadFailLeft = 3;
+		s_ReadError = -EIO;
+		uint32_t ops = s_OpCount;
+		ok = Boot(Gran) < 0 && s_OpCount == ops &&
+			memcmp(s_Mem, before.data(), before.size()) == 0;
+		s_ReadFailLeft = 0;
+		uint8_t buf[64];
+		ok = ok && Boot(Gran) == 0 &&
+			BtPdsRead(0x71, buf, sizeof(buf)) == (ssize_t)value.size() &&
+			memcmp(buf, value.data(), sizeof(buf)) == 0;
+	}
+	CHECK(ok, "read failures: all %u mount read positions preserve the medium", reads);
+
+	// Exercise the real Nvm wrapper: ECC remains distinct, and a synchronous
+	// failed receive releases the interface for the next transfer.
+	s_ReadCount = 0;
+	s_ReadFailAt = 1;
+	s_ReadFailLeft = 1;
+	s_ReadError = -EBADMSG;
+	uint8_t word[4];
+	CHECK(s_Nvm.Read(0, word, sizeof(word)) == -EBADMSG &&
+		s_Nvm.Read(0, word, sizeof(word)) == sizeof(word),
+		"read failures: ECC result and next transfer");
+
+	s_ReadCount = 0;
+	uint8_t buf[64];
+	CHECK(BtPdsRead(0x71, buf, sizeof(buf)) == sizeof(buf),
+		"read failures: reference lookup");
+	reads = s_ReadCount;
+	ok = true;
+	for (uint32_t at = 1; at <= reads && ok; at++)
+	{
+		s_ReadCount = 0;
+		s_ReadFailAt = at;
+		s_ReadFailLeft = 3;
+		s_ReadError = -EIO;
+		ok = BtPdsRead(0x71, buf, sizeof(buf)) < 0;
+		s_ReadFailLeft = 0;
+		ok = ok && BtPdsRead(0x71, buf, sizeof(buf)) == sizeof(buf) &&
+			memcmp(buf, value.data(), sizeof(buf)) == 0;
+	}
+	CHECK(ok, "read failures: all %u lookup read positions return an error", reads);
+
+	MediumWipe(2U * PDS_SECTOR_SIZE, Gran);
+	if (!Mounted(Boot(Gran), "collection read failure setup"))
+	{
+		return;
+	}
+	auto old = MakeVal(72, BT_PDS_RECORD_DATA_MAX);
+	auto next = MakeVal(73, BT_PDS_RECORD_DATA_MAX);
+	uint32_t hdr = (PDS_SECTOR_HDR + Gran - 1U) & ~(Gran - 1U);
+	uint32_t rec = (PDS_REC_HDR + old.size() + Gran - 1U) & ~(Gran - 1U);
+	for (uint32_t i = 0; i < (PDS_SECTOR_SIZE - hdr) / rec; i++)
+	{
+		if (BtPdsWrite(0x72, old.data(), old.size()) != (ssize_t)old.size())
+		{
+			CHECK(false, "collection read failures: fill active sector");
+			return;
+		}
+	}
+	before.assign(s_Mem, s_Mem + s_RegionSize);
+	s_ReadCount = 0;
+	CHECK(BtPdsWrite(0x72, next.data(), next.size()) == (ssize_t)next.size(),
+		"collection read failures: reference write");
+	reads = s_ReadCount;
+	ok = true;
+	for (uint32_t at = 1; at <= reads && ok; at++)
+	{
+		memcpy(s_Mem, before.data(), before.size());
+		if (Boot(Gran) != 0)
+		{
+			ok = false;
+			break;
+		}
+		s_ReadCount = 0;
+		s_ReadFailAt = at;
+		s_ReadFailLeft = 3;
+		s_ReadError = -EIO;
+		ok = BtPdsWrite(0x72, next.data(), next.size()) < 0 &&
+			memcmp(s_Mem, before.data(), PDS_SECTOR_SIZE) == 0;
+		s_ReadFailLeft = 0;
+		uint8_t saved[BT_PDS_RECORD_DATA_MAX];
+		ok = ok && Boot(Gran) == 0 &&
+			BtPdsRead(0x72, saved, sizeof(saved)) == (ssize_t)old.size() &&
+			memcmp(saved, old.data(), old.size()) == 0 &&
+			BtPdsWrite(0x72, next.data(), next.size()) == (ssize_t)next.size();
+	}
+	CHECK(ok, "collection read failures: all %u read positions keep the source", reads);
+}
+
+static void TestPartialErase(uint32_t Gran)
+{
+	printf("--- partially erased spare, unit %u\n", Gran);
+	MediumWipe(2U * PDS_SECTOR_SIZE, Gran);
+	if (!Mounted(Boot(Gran), "partial erase setup"))
+	{
+		return;
+	}
+	auto value = MakeVal(81, BT_PDS_RECORD_DATA_MAX);
+	CHECK(BtPdsWrite(0x81, value.data(), value.size()) == (ssize_t)value.size(),
+		"partial erase: initial value");
+	// Match a cut halfway through erasing the spare: blank first half,
+	// programmed second half. Mount must erase the rest before reuse.
+	memset(s_Mem + PDS_SECTOR_SIZE + PDS_SECTOR_SIZE / 2U, 0,
+		PDS_SECTOR_SIZE / 2U);
+	CHECK(Boot(Gran) == 0, "partial erase: mount");
+	bool erased = true;
+	for (uint32_t i = PDS_SECTOR_SIZE; i < 2U * PDS_SECTOR_SIZE; i++)
+	{
+		erased = erased && s_Mem[i] == 0xFF;
+	}
+	CHECK(erased, "partial erase: whole spare erased");
+	bool ok = true;
+	for (uint32_t i = 0; i < 100 && ok; i++)
+	{
+		ok = BtPdsWrite(0x81, value.data(), value.size()) == (ssize_t)value.size();
+	}
+	CHECK(ok && s_AlignFault == 0 && Boot(Gran) == 0,
+		"partial erase: writes through reused page and collection");
+}
+
 static void RunAll(uint32_t Gran)
 {
 	printf("\n=== write unit %u ===\n", Gran);
 
+	TestReadFailures(Gran);
+	TestPartialErase(Gran);
 	TestLayout(Gran);
 	TestBasics(Gran);
 	TestChurn(Gran);

@@ -130,6 +130,8 @@ public:
 	}
 	virtual uint32_t PageSize(void) const { return vPageSize; }
 
+	/// Returns Len on success or negative errno. -EBADMSG identifies data
+	/// that the memory's error correction could not recover.
 	virtual int Read(uint64_t Off, void *pBuf, uint32_t Len);
 
 	/// In interrupt-driven NVM mode, pData must remain valid and unchanged until

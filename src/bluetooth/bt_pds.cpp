@@ -128,10 +128,8 @@ static uint32_t s_SectorHdrSize;
 #define BT_PDS_FILL_CHUNK		64
 #endif
 
-// A read that fails is tried again before it is believed. On a memory with
-// ECC, a word left half programmed or half erased by a power cut fails every
-// time, while a passing bus error does not; the callers treat a read that
-// still fails as damaged data.
+// Retry a failed read before reporting it. Only -EBADMSG identifies damaged
+// data; a busy memory or an I/O failure must not make valid records disappear.
 #ifndef BT_PDS_READ_TRIES
 #define BT_PDS_READ_TRIES		3
 #endif
@@ -298,13 +296,8 @@ static bool IsErased(const void *pData, uint32_t Len)
 	return true;
 }
 
-static bool ReadSectorHdr(uint16_t Sector, BtPdsSectorHdr_t *pHdr)
+static bool SectorHdrValid(const BtPdsSectorHdr_t *pHdr)
 {
-	if (MemRead(SectorBase(Sector), pHdr, sizeof(*pHdr)) != 0)
-	{
-		return false;
-	}
-
 	return pHdr->Magic == BT_PDS_SECTOR_MAGIC &&
 		pHdr->Version == BT_PDS_FORMAT_VERSION &&
 		(pHdr->SourceSector == BT_PDS_NO_SECTOR ||
@@ -312,33 +305,53 @@ static bool ReadSectorHdr(uint16_t Sector, BtPdsSectorHdr_t *pHdr)
 		SectorHdrCrc(pHdr) == pHdr->Crc;
 }
 
-static bool ReadRecord(uint16_t Sector, uint32_t Off, BtPdsRecHdr_t *pHdr,
+static int ReadSectorHdr(uint16_t Sector, BtPdsSectorHdr_t *pHdr)
+{
+	int result = MemRead(SectorBase(Sector), pHdr, sizeof(*pHdr));
+	if (result != 0)
+	{
+		return result;
+	}
+	return SectorHdrValid(pHdr) ? 0 : -EBADMSG;
+}
+
+static int ReadRecord(uint16_t Sector, uint32_t Off, BtPdsRecHdr_t *pHdr,
 					   uint8_t *pData)
 {
 	uint32_t end = SectorEnd(Sector);
 
 	if (Off < SectorDataStart(Sector) ||
-		Off + BT_PDS_REC_HDR_SIZE > end ||
-		MemRead(Off, pHdr, BT_PDS_REC_HDR_SIZE) != 0 ||
-		pHdr->Magic != BT_PDS_REC_MAGIC)
+		Off + BT_PDS_REC_HDR_SIZE > end)
 	{
-		return false;
+		return -EBADMSG;
+	}
+	int result = MemRead(Off, pHdr, BT_PDS_REC_HDR_SIZE);
+	if (result != 0)
+	{
+		return result;
+	}
+	if (pHdr->Magic != BT_PDS_REC_MAGIC)
+	{
+		return -EBADMSG;
 	}
 
 	uint16_t dataLen = pHdr->Len == BT_PDS_TOMBSTONE ? 0U : pHdr->Len;
 	if (dataLen > BT_PDS_RECORD_DATA_MAX ||
 		Off + RecSize(pHdr->Len) > end)
 	{
-		return false;
+		return -EBADMSG;
 	}
 
-	if (dataLen > 0U &&
-		MemRead(Off + BT_PDS_REC_HDR_SIZE, pData, dataLen) != 0)
+	if (dataLen > 0U)
 	{
-		return false;
+		result = MemRead(Off + BT_PDS_REC_HDR_SIZE, pData, dataLen);
+		if (result != 0)
+		{
+			return result;
+		}
 	}
 
-	return RecCrc(pHdr, pData) == pHdr->Crc;
+	return RecCrc(pHdr, pData) == pHdr->Crc ? 0 : -EBADMSG;
 }
 
 static void SectorInfoReset(uint16_t Sector)
@@ -359,18 +372,46 @@ static int ScanSector(uint16_t Sector)
 	pInfo->SourceSector = BT_PDS_NO_SECTOR;
 	pInfo->Head = SectorBase(Sector);
 
-	// A header that cannot be read is damaged, from a power cut while it was
-	// written or while the sector was erased. Like a header that fails its
-	// check, the sector then holds nothing the store needs and init erases it.
-	bool readable = MemRead(SectorBase(Sector), &sectorHdr, sizeof(sectorHdr)) == 0;
-
-	if (readable && IsErased(&sectorHdr, sizeof(sectorHdr)))
+	int result = MemRead(SectorBase(Sector), &sectorHdr, sizeof(sectorHdr));
+	if (result == -EBADMSG)
 	{
+		pInfo->Head = SectorEnd(Sector);
+		return 0;
+	}
+	if (result != 0)
+	{
+		return result;
+	}
+
+	if (IsErased(&sectorHdr, sizeof(sectorHdr)))
+	{
+		// An interrupted erase may clear the header and leave programmed
+		// words or bad ECC later in the page. Verify the entire sector.
+		uint8_t data[BT_PDS_FILL_CHUNK];
+		for (uint32_t off = sizeof(sectorHdr); off < s_SectorSize; )
+		{
+			uint32_t len = s_SectorSize - off;
+			if (len > sizeof(data))
+			{
+				len = sizeof(data);
+			}
+			result = MemRead(SectorBase(Sector) + off, data, len);
+			if (result == -EBADMSG || (result == 0 && !IsErased(data, len)))
+			{
+				pInfo->Head = SectorEnd(Sector);
+				return 0;
+			}
+			if (result != 0)
+			{
+				return result;
+			}
+			off += len;
+		}
 		SectorInfoReset(Sector);
 		return 0;
 	}
 
-	if (!readable || !ReadSectorHdr(Sector, &sectorHdr))
+	if (!SectorHdrValid(&sectorHdr))
 	{
 		pInfo->Valid = false;
 		pInfo->Erased = false;
@@ -404,7 +445,12 @@ static int ScanSector(uint16_t Sector)
 	while (off + BT_PDS_REC_HDR_SIZE <= SectorEnd(Sector))
 	{
 		uint32_t word;
-		if (MemRead(off, &word, sizeof(word)) != 0)
+		result = MemRead(off, &word, sizeof(word));
+		if (result != 0 && result != -EBADMSG)
+		{
+			return result;
+		}
+		if (result == -EBADMSG)
 		{
 			// A slot that cannot be read is a damaged record, handled as the
 			// partial record below.
@@ -420,7 +466,12 @@ static int ScanSector(uint16_t Sector)
 		}
 
 		BtPdsRecHdr_t hdr;
-		if (!ReadRecord(Sector, off, &hdr, data))
+		result = ReadRecord(Sector, off, &hdr, data);
+		if (result != 0 && result != -EBADMSG)
+		{
+			return result;
+		}
+		if (result == -EBADMSG)
 		{
 			// Never append over a partial record on one-way programmable media.
 			pInfo->Writable = false;
@@ -549,7 +600,7 @@ static int AppendToSector(uint16_t Sector, uint32_t Id, uint16_t Len,
 	return 0;
 }
 
-static bool FindLatest(uint32_t Id, BtPdsLatest_t *pLatest)
+static int FindLatest(uint32_t Id, BtPdsLatest_t *pLatest)
 {
 	BtPdsLatest_t latest;
 	memset(&latest, 0, sizeof(latest));
@@ -567,7 +618,12 @@ static bool FindLatest(uint32_t Id, BtPdsLatest_t *pLatest)
 			   off + BT_PDS_REC_HDR_SIZE <= SectorEnd(sector))
 		{
 			BtPdsRecHdr_t hdr;
-			if (!ReadRecord(sector, off, &hdr, data))
+			int result = ReadRecord(sector, off, &hdr, data);
+			if (result != 0 && result != -EBADMSG)
+			{
+				return result;
+			}
+			if (result == -EBADMSG)
 			{
 				break;
 			}
@@ -590,10 +646,10 @@ static bool FindLatest(uint32_t Id, BtPdsLatest_t *pLatest)
 	{
 		*pLatest = latest;
 	}
-	return latest.Found;
+	return latest.Found ? 0 : -ENOENT;
 }
 
-static bool HasRecordOutsideSector(uint32_t Id, uint16_t ExcludedSector)
+static int HasRecordOutsideSector(uint32_t Id, uint16_t ExcludedSector)
 {
 	uint8_t data[BT_PDS_RECORD_DATA_MAX];
 
@@ -609,21 +665,48 @@ static bool HasRecordOutsideSector(uint32_t Id, uint16_t ExcludedSector)
 			   off + BT_PDS_REC_HDR_SIZE <= SectorEnd(sector))
 		{
 			BtPdsRecHdr_t hdr;
-			if (!ReadRecord(sector, off, &hdr, data))
+			int result = ReadRecord(sector, off, &hdr, data);
+			if (result != 0 && result != -EBADMSG)
+			{
+				return result;
+			}
+			if (result == -EBADMSG)
 			{
 				break;
 			}
 			if (hdr.Id == Id && hdr.Id != BT_PDS_CTRL_GC_DONE_ID)
 			{
-				return true;
+				return 1;
 			}
 			off += RecSize(hdr.Len);
 		}
 	}
-	return false;
+	return 0;
 }
 
-static uint32_t SectorCopyBytes(uint16_t Victim)
+// Whether a record must survive collection. Errors stop collection before
+// its completion marker can make an incomplete copy replace the source.
+static int KeepRecord(const BtPdsRecHdr_t *pHdr, uint16_t Sector, uint32_t Off)
+{
+	if (pHdr->Id == BT_PDS_CTRL_GC_DONE_ID)
+	{
+		return 0;
+	}
+	BtPdsLatest_t latest;
+	int result = FindLatest(pHdr->Id, &latest);
+	if (result != 0)
+	{
+		return result == -ENOENT ? 0 : result;
+	}
+	if (latest.Sector != Sector || latest.Off != Off)
+	{
+		return 0;
+	}
+	return pHdr->Len == BT_PDS_TOMBSTONE ?
+		HasRecordOutsideSector(pHdr->Id, Sector) : 1;
+}
+
+static int SectorCopyBytes(uint16_t Victim)
 {
 	uint32_t bytes = 0U;
 	uint8_t data[BT_PDS_RECORD_DATA_MAX];
@@ -633,21 +716,24 @@ static uint32_t SectorCopyBytes(uint16_t Victim)
 		   off + BT_PDS_REC_HDR_SIZE <= SectorEnd(Victim))
 	{
 		BtPdsRecHdr_t hdr;
-		if (!ReadRecord(Victim, off, &hdr, data))
+		int result = ReadRecord(Victim, off, &hdr, data);
+		if (result != 0 && result != -EBADMSG)
+		{
+			return result;
+		}
+		if (result == -EBADMSG)
 		{
 			break;
 		}
 
-		if (hdr.Id != BT_PDS_CTRL_GC_DONE_ID)
+		result = KeepRecord(&hdr, Victim, off);
+		if (result < 0)
 		{
-			BtPdsLatest_t latest;
-			if (FindLatest(hdr.Id, &latest) &&
-				latest.Sector == Victim && latest.Off == off &&
-				(hdr.Len != BT_PDS_TOMBSTONE ||
-				 HasRecordOutsideSector(hdr.Id, Victim)))
-			{
-				bytes += RecSize(hdr.Len);
-			}
+			return result;
+		}
+		if (result > 0)
+		{
+			bytes += RecSize(hdr.Len);
 		}
 		off += RecSize(hdr.Len);
 	}
@@ -663,7 +749,12 @@ static int CopyLatestFromSector(uint16_t Victim, uint16_t Destination)
 		   off + BT_PDS_REC_HDR_SIZE <= SectorEnd(Victim))
 	{
 		BtPdsRecHdr_t hdr;
-		if (!ReadRecord(Victim, off, &hdr, data))
+		int result = ReadRecord(Victim, off, &hdr, data);
+		if (result != 0 && result != -EBADMSG)
+		{
+			return result;
+		}
+		if (result == -EBADMSG)
 		{
 			// An unreadable record ends the sector log, exactly as it does
 			// for ScanSector, FindLatest and SectorCopyBytes. A victim that
@@ -673,21 +764,18 @@ static int CopyLatestFromSector(uint16_t Victim, uint16_t Destination)
 		}
 
 		uint32_t next = off + RecSize(hdr.Len);
-		if (hdr.Id != BT_PDS_CTRL_GC_DONE_ID)
+		result = KeepRecord(&hdr, Victim, off);
+		if (result < 0)
 		{
-			BtPdsLatest_t latest;
-			if (FindLatest(hdr.Id, &latest) &&
-				latest.Sector == Victim && latest.Off == off &&
-				(hdr.Len != BT_PDS_TOMBSTONE ||
-				 HasRecordOutsideSector(hdr.Id, Victim)))
+			return result;
+		}
+		if (result > 0)
+		{
+			const void *pData = hdr.Len == BT_PDS_TOMBSTONE ? nullptr : data;
+			result = AppendToSector(Destination, hdr.Id, hdr.Len, pData);
+			if (result != 0)
 			{
-				const void *pData =
-					hdr.Len == BT_PDS_TOMBSTONE ? nullptr : data;
-				int result = AppendToSector(Destination, hdr.Id, hdr.Len, pData);
-				if (result != 0)
-				{
-					return result;
-				}
+				return result;
 			}
 		}
 		off = next;
@@ -755,7 +843,12 @@ static int ScanAll(void)
 	for (uint16_t sector = 0; sector < s_SectorCount; sector++)
 	{
 		BtPdsSectorHdr_t hdr;
-		if (ReadSectorHdr(sector, &hdr) && hdr.Epoch > s_Epoch)
+		int result = ReadSectorHdr(sector, &hdr);
+		if (result != 0 && result != -EBADMSG)
+		{
+			return result;
+		}
+		if (result == 0 && hdr.Epoch > s_Epoch)
 		{
 			s_Epoch = hdr.Epoch;
 		}
@@ -888,7 +981,16 @@ static int GarbageCollect(uint32_t Need)
 		// newest record can be reclaimed without copying.
 		for (uint16_t sector = 0; sector < s_SectorCount; sector++)
 		{
-			if (s_Sectors[sector].Valid && SectorCopyBytes(sector) == 0U)
+			if (!s_Sectors[sector].Valid)
+			{
+				continue;
+			}
+			int bytes = SectorCopyBytes(sector);
+			if (bytes < 0)
+			{
+				return bytes;
+			}
+			if (bytes == 0)
 			{
 				int result = EraseSector(sector);
 				if (result != 0)
@@ -918,7 +1020,12 @@ static int GarbageCollect(uint32_t Need)
 			continue;
 		}
 
-		uint32_t copyBytes = SectorCopyBytes(sector);
+		int count = SectorCopyBytes(sector);
+		if (count < 0)
+		{
+			return count;
+		}
+		uint32_t copyBytes = (uint32_t)count;
 		if (copyBytes + doneSize + Need <= capacity &&
 			copyBytes < bestBytes)
 		{
@@ -1047,17 +1154,17 @@ int BtPdsInit(Nvm *pMem)
 	// version changed) and are erased by the sweep below. Neither can be
 	// upgraded in place while preserving the power loss guarantee.
 	uint32_t firstWord = BT_PDS_ERASED_U32;
-	if (MemRead(0U, &firstWord, sizeof(firstWord)) != 0)
+	int result = MemRead(0U, &firstWord, sizeof(firstWord));
+	if (result != 0 && result != -EBADMSG)
 	{
-		// Unreadable is not the old format; the sector scan sorts it out
-		firstWord = BT_PDS_ERASED_U32;
+		return result;
 	}
-	if (firstWord == BT_PDS_REC_MAGIC)
+	if (result == 0 && firstWord == BT_PDS_REC_MAGIC)
 	{
 		return FormatStore();
 	}
 
-	int result = ScanAll();
+	result = ScanAll();
 	if (result != 0)
 	{
 		return result;
@@ -1101,7 +1208,12 @@ ssize_t BtPdsRead(uint32_t Id, void *pBuf, size_t Len)
 	}
 
 	BtPdsLatest_t latest;
-	if (!FindLatest(Id, &latest) || latest.Tombstone)
+	int result = FindLatest(Id, &latest);
+	if (result != 0)
+	{
+		return result;
+	}
+	if (latest.Tombstone)
 	{
 		return -ENOENT;
 	}
@@ -1147,12 +1259,17 @@ int BtPdsDelete(uint32_t Id)
 	}
 
 	BtPdsLatest_t latest;
-	if (!FindLatest(Id, &latest) || latest.Tombstone)
+	int result = FindLatest(Id, &latest);
+	if (result != 0 && result != -ENOENT)
+	{
+		return result;
+	}
+	if (result == -ENOENT || latest.Tombstone)
 	{
 		return 0;
 	}
 
-	int result = EnsureSpace(RecSize(BT_PDS_TOMBSTONE));
+	result = EnsureSpace(RecSize(BT_PDS_TOMBSTONE));
 	if (result != 0)
 	{
 		return result;
@@ -1225,3 +1342,4 @@ int BtPdsClear(void)
 	}
 	return 0;
 }
+

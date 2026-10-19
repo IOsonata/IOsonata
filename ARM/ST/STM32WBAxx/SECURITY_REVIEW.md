@@ -190,9 +190,12 @@ Release library leaves it out. Errors are always printed.
   `NMI_Handler` of the WBA65 vector table hands it to `Stm32FlashEccNmi` of
   the flash driver, which takes only an error inside its own read: it clears
   ECCD and that read fails. Any other NMI still stops in `Default_Handler`.
-  PDS tries a read three times; a read that still fails is a damaged record
-  (no more appends to that sector) or a damaged sector header (the sector is
-  erased at init, as for a header that fails its check). The address decode
+  PDS retries failed reads three times. Only `-EBADMSG` identifies damaged
+  data: a torn record closes the sector to appends, and a damaged sector
+  header is reclaimed at init. Other read errors abort mount, lookup or
+  collection without treating valid data as damaged. A blank sector header
+  is accepted as erased only after every remaining byte is checked; a
+  partially erased sector is erased again before reuse. The address decode
   follows `HAL_FLASHEx_GetEccInfo`. An application that defines its own
   `NMI_Handler` must call `Stm32FlashEccNmi` first. A physical power cut
   test on the DK1 remains to be done.
