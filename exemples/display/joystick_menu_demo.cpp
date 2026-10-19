@@ -105,7 +105,8 @@ static SPI g_Spi;
 static DISPLAY_DRIVER g_Lcd;
 static ADC_DRIVER g_Adc;
 
-enum Key {
+enum MENU_KEY
+{
 	KEY_SELECT,
 	KEY_LEFT,
 	KEY_DOWN,
@@ -123,7 +124,7 @@ static const unsigned s_ItemCount = 3;
 #endif
 static int s_Level = 5;
 static bool s_LedOn, s_InputError;
-static Key s_Candidate = KEY_INVALID, s_Stable = KEY_INVALID;
+static MENU_KEY s_Candidate = KEY_INVALID, s_Stable = KEY_INVALID;
 static unsigned s_Debounce;
 
 #ifdef JOYSTICK_STOPWATCH
@@ -246,7 +247,7 @@ static void DrawMenu()
 	}
 }
 
-static void HandleKey(Key k)
+static void HandleKey(MENU_KEY k)
 {
 	if (s_Page == 1)
 	{
@@ -318,7 +319,7 @@ static void HandleKey(Key k)
 	DrawMenu();
 }
 
-static Key DecodeKey(float Voltage)
+static MENU_KEY DecodeKey(float Voltage)
 {
 	if (!isfinite(Voltage) || Voltage < 0 || Voltage > JOYSTICK_REF_VOLTAGE * 1.05f)
 	{
@@ -331,7 +332,7 @@ static Key DecodeKey(float Voltage)
 	{
 		if (ratio < (levels[i] + levels[i + 1]) / 2.0f)
 		{
-			return Key(i);
+			return MENU_KEY(i);
 		}
 	}
 	return KEY_NONE;
@@ -345,7 +346,7 @@ static void PollJoystick()
 	UpdateStopwatch();
 #endif
 	AdcData_t data;
-	Key k = g_Adc.Read(0, &data) ? DecodeKey(data.Data) : KEY_INVALID;
+	MENU_KEY k = g_Adc.Read(0, &data) ? DecodeKey(data.Data) : KEY_INVALID;
 	if (k == KEY_INVALID)
 	{
 		s_Candidate = s_Stable = KEY_INVALID;
@@ -374,7 +375,7 @@ static void PollJoystick()
 	}
 	if (s_Debounce == 3 && k != s_Stable)
 	{
-		Key old = s_Stable;
+		MENU_KEY old = s_Stable;
 		s_Stable = k;
 		if (old == KEY_NONE && k != KEY_NONE)
 		{

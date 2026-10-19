@@ -65,53 +65,53 @@ SOFTWARE.
 //#define DUMP_MAN_SPEC_DATA
 
 // BLE
-#define DEVICE_NAME             "UARTCentral"
+#define DEVICE_NAME "UARTCentral"
 
-#define MANUFACTURER_NAME       "I-SYST inc."
-#define MODEL_NAME              "IMM-NRF5x"
-#define MANUFACTURER_ID         ISYST_BLUETOOTH_ID
-#define ORG_UNIQUE_ID           ISYST_BLUETOOTH_ID
+#define MANUFACTURER_NAME "I-SYST inc."
+#define MODEL_NAME "IMM-NRF5x"
+#define MANUFACTURER_ID ISYST_BLUETOOTH_ID
+#define ORG_UNIQUE_ID ISYST_BLUETOOTH_ID
 
-#define MIN_CONN_INTERVAL       10 // in msec
-#define MAX_CONN_INTERVAL       40 // in msec
+#define MIN_CONN_INTERVAL 10 // in msec
+#define MAX_CONN_INTERVAL 40 // in msec
 
-#define SCAN_INTERVAL           1000	// in msec
-#define SCAN_WINDOW             100 	// in msec
-#define SCAN_TIMEOUT            0		// 0 = never
+#define SCAN_INTERVAL 1000 // in msec
+#define SCAN_WINDOW 100	   // in msec
+#define SCAN_TIMEOUT 0	   // 0 = never
 
-#define TARGET_BRIDGE_DEV_NAME	"BlueIO832Mini"
+#define TARGET_BRIDGE_DEV_NAME "BlueIO832Mini"
 
 // UART
-#define BLE_MTU_SIZE			512		// in bytes
-#define PACKET_SIZE				256
-#define UART_MAX_DATA_LEN  		(PACKET_SIZE*4)
-#define UARTFIFOSIZE			CFIFO_MEMSIZE(UART_MAX_DATA_LEN)
+#define BLE_MTU_SIZE 512 // in bytes
+#define PACKET_SIZE 256
+#define UART_MAX_DATA_LEN (PACKET_SIZE * 4)
+#define UARTFIFOSIZE CFIFO_MEMSIZE(UART_MAX_DATA_LEN)
 
 int UartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);
 void BtAppCentralEvtHandler(uint32_t Evt, void *pCtx);
 
 const BtAppCfg_t s_BleAppCfg = {
 	.Role = BTAPP_ROLE_CENTRAL,
-	.PeriphDevMax = 1, 							// Max peripheral devices we connect to as central
-	.CentralDevMax = 0, 							// Max central devices we serve as peripheral
-	.pDevName = DEVICE_NAME,                // Device name
-	.VendorId = ISYST_BLUETOOTH_ID,     	// PnP Bluetooth/USB vendor id
-	.ProductId = 1,                      	// PnP Product ID
-	.ProductVer = 0,							// Pnp prod version
+	.PeriphDevMax = 1,				// Max peripheral devices we connect to as central
+	.CentralDevMax = 0,				// Max central devices we serve as peripheral
+	.pDevName = DEVICE_NAME,		// Device name
+	.VendorId = ISYST_BLUETOOTH_ID, // PnP Bluetooth/USB vendor id
+	.ProductId = 1,					// PnP Product ID
+	.ProductVer = 0,				// Pnp prod version
 	.ConnIntervalMin = MIN_CONN_INTERVAL,
 	.ConnIntervalMax = MAX_CONN_INTERVAL,
-	.ConnLedPort = BLUEIO_CONNECT_LED_PORT,    // Led port nuber
-	.ConnLedPin = BLUEIO_CONNECT_LED_PIN,     // Led pin number
+	.ConnLedPort = BLUEIO_CONNECT_LED_PORT, // Led port nuber
+	.ConnLedPin = BLUEIO_CONNECT_LED_PIN,	// Led pin number
 	.ConnLedActLevel = 0,
-	.TxPower = 0,							// Tx power
+	.TxPower = 0, // Tx power
 	.MaxMtu = BLE_MTU_SIZE,
 };
 
 static IOPinCfg_t s_UartPins[] = {
-	{UART_RX_PORT, UART_RX_PIN, UART_RX_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},	// RX
-	{UART_TX_PORT, UART_TX_PIN, UART_TX_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},	// TX
-	{UART_CTS_PORT, UART_CTS_PIN, UART_CTS_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},	// CTS
-	{UART_RTS_PORT, UART_RTS_PIN, UART_RTS_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},// RTS
+	{ UART_RX_PORT, UART_RX_PIN, UART_RX_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL },	   // RX
+	{ UART_TX_PORT, UART_TX_PIN, UART_TX_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL },	   // TX
+	{ UART_CTS_PORT, UART_CTS_PIN, UART_CTS_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL },  // CTS
+	{ UART_RTS_PORT, UART_RTS_PIN, UART_RTS_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL }, // RTS
 };
 
 /// UART operation mode config
@@ -119,18 +119,18 @@ alignas(4) static uint8_t s_UartRxFifo[UARTFIFOSIZE];
 alignas(4) static uint8_t s_UartTxFifo[UARTFIFOSIZE];
 
 UARTCfg_t g_UartCfg = {
-	.DevNo = UART_DEVNO,									// Device number zero based
-	.pIOPinMap = s_UartPins,					// UART assigned pins
-	.NbIOPins = sizeof(s_UartPins) / sizeof(IOPinCfg_t),					// Total number of UART pins used
-	.Rate = 1000000,								// Baudrate
-	.DataBits = 8,								// Data bits
-	.Parity = UART_PARITY_NONE,			// Parity
-	.StopBits = 1,								// Stop bit
-	.FlowControl = UART_FLWCTRL_NONE,	// Flow control
-	.bIntMode = true,							// Interrupt mode
-	.IntPrio = 6,//APP_IRQ_PRIORITY_LOW,			// Interrupt priority
-	.EvtCallback = UartEvthandler,			// UART event handler
-	.bFifoBlocking = true,						// Blocking FIFO
+	.DevNo = UART_DEVNO,								 // Device number zero based
+	.pIOPinMap = s_UartPins,							 // UART assigned pins
+	.NbIOPins = sizeof(s_UartPins) / sizeof(IOPinCfg_t), // Total number of UART pins used
+	.Rate = 1000000,									 // Baudrate
+	.DataBits = 8,										 // Data bits
+	.Parity = UART_PARITY_NONE,							 // Parity
+	.StopBits = 1,										 // Stop bit
+	.FlowControl = UART_FLWCTRL_NONE,					 // Flow control
+	.bIntMode = true,									 // Interrupt mode
+	.IntPrio = 6,										 //APP_IRQ_PRIORITY_LOW,			// Interrupt priority
+	.EvtCallback = UartEvthandler,						 // UART event handler
+	.bFifoBlocking = true,								 // Blocking FIFO
 	.RxMemSize = UARTFIFOSIZE,
 	.pRxMem = s_UartRxFifo,
 	.TxMemSize = UARTFIFOSIZE,
@@ -147,19 +147,28 @@ static BtGapScanCfg_t s_ScanParams = {
 	.Type = BTSCAN_TYPE_ACTIVE,
 	.Param = {
 		.Interval = SCAN_INTERVAL,
-	.Duration = SCAN_WINDOW,
-	.Timeout = SCAN_TIMEOUT,
+		.Duration = SCAN_WINDOW,
+		.Timeout = SCAN_TIMEOUT,
 	},
 	.BaseUid = BLUEIO_UUID_BASE,
-	.ServUid = BLUEIO_UUID_UART_SERVICE,//s_UartBleSrvAdvUuid,
+	.ServUid = BLUEIO_UUID_UART_SERVICE, //s_UartBleSrvAdvUuid,
 };
 
-uint8_t g_ScanBuff[BT_GAP_SCAN_BUFFER_SIZE_DEFAULT];//BLE_GAP_SCAN_BUFFER_EXTENDED_MAX];
+uint8_t g_ScanBuff[BT_GAP_SCAN_BUFFER_SIZE_DEFAULT]; //BLE_GAP_SCAN_BUFFER_EXTENDED_MAX];
 
 #ifdef BLE_SCAN_DISPLAY
 // The display is optional; existing UART-only projects keep their setup.
 // Four recent devices, fixed storage. The timer queues work; only the
 // application event handler sends display data.
+typedef struct __Scan_Device
+{
+	bool Used;
+	uint8_t AddrType, Addr[6];
+	char Name[15];
+	int8_t Rssi;
+	uint32_t Seen;
+} ScanDevice_t;
+
 alignas(4) uint8_t g_AppEvtHandlerQueMem[APPEVT_HANDLER_QUE_MEMSIZE(16)];
 static const IOPinCfg_t s_DisplayPins[] = TFT_PINS;
 static const IOPinCfg_t s_DisplaySpiPins[] = SPI_PINS;
@@ -200,15 +209,7 @@ static const TimerCfg_t s_DisplayTimerCfg = {
 	.bTickInt = false
 };
 
-struct ScanDevice {
-	bool Used;
-	uint8_t AddrType, Addr[6];
-	char Name[15];
-	int8_t Rssi;
-	uint32_t Seen;
-};
-
-static ScanDevice s_Devices[4];
+static ScanDevice_t s_Devices[4];
 static SPI s_DisplaySpi;
 static DISPLAY_DRIVER s_Display;
 static Timer s_DisplayTimer;
@@ -276,7 +277,7 @@ static void ScanDisplayReport(int8_t Rssi, uint8_t AddrType, const uint8_t *Addr
 		}
 		s_Devices[slot] = {};
 	}
-	ScanDevice &d = s_Devices[slot];
+	ScanDevice_t &d = s_Devices[slot];
 	d.Used = true;
 	d.AddrType = AddrType;
 	memcpy(d.Addr, Addr, 6);
@@ -297,7 +298,7 @@ static void ScanDisplayRefresh(uint32_t, void *)
 	{
 		return;
 	}
-	ScanDevice devices[4];
+	ScanDevice_t devices[4];
 	uint32_t now = s_DisplayTimer.mSecond();
 	uint32_t state = DisableInterrupt();
 	for (auto &d : s_Devices)
@@ -410,13 +411,13 @@ bool BtAppScanReport(int8_t Rssi, uint8_t AddrType, uint8_t Addr[6], size_t AdvL
 		{
 			// BtAdvDataGetDevName returns characters copied and terminates name.
 			g_Uart.printf("%02x %02x %02x %02x %02x %02x : RSSI = %d, ",
-							Addr[0], Addr[1], Addr[2],
-							Addr[3], Addr[4], Addr[5], Rssi);
+						  Addr[0], Addr[1], Addr[2],
+						  Addr[3], Addr[4], Addr[5], Rssi);
 			g_Uart.printf("%s\r\n", name);
 		}
 		else
 		{
-//			g_Uart.printf("(No Name)\r\n", name);
+			//			g_Uart.printf("(No Name)\r\n", name);
 		}
 #ifdef DUMP_MAN_SPEC_DATA
 		uint8_t buff[256];
@@ -450,9 +451,9 @@ bool HardwareInit()
 
 	g_Uart.printf("BLE Central Scan Demo\r\n");
 	g_Uart.printf("UART Configuration: %d, Flow Control (%s), Parity (%s)\r\n",
-			g_UartCfg.Rate,
-			(g_UartCfg.FlowControl == UART_FLWCTRL_NONE) ? "No" : "Yes",
-			(g_UartCfg.Parity == UART_PARITY_NONE) ? "No" : "Yes");
+				  g_UartCfg.Rate,
+				  (g_UartCfg.FlowControl == UART_FLWCTRL_NONE) ? "No" : "Yes",
+				  (g_UartCfg.Parity == UART_PARITY_NONE) ? "No" : "Yes");
 
 #ifdef BLE_SCAN_DISPLAY
 	if (!ScanDisplayInit())
@@ -470,7 +471,7 @@ void BtAppInitUserData()
 int UartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen)
 {
 	int cnt = 0;
-//	uint8_t buff[20];
+	//	uint8_t buff[20];
 
 	switch (EvtId)
 	{
@@ -534,5 +535,3 @@ int main()
 
 	return 0;
 }
-
-

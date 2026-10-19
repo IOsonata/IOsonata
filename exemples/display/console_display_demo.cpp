@@ -83,14 +83,14 @@ static const SPICfg_t s_SpiCfg = {
 	.Mode = SPIMODE_MASTER,
 	.pIOPinMap = s_SpiPins,
 	.NbIOPins = sizeof(s_SpiPins) / sizeof(IOPinCfg_t),
-	.Rate = SPI_RATE,   // Speed in Hz
-	.DataSize = 8,      // Data Size
-	.MaxRetry = 5,      // Max retries
+	.Rate = SPI_RATE, // Speed in Hz
+	.DataSize = 8,	  // Data Size
+	.MaxRetry = 5,	  // Max retries
 	.BitOrder = SPIDATABIT_MSB,
 	.DataPhase = SPIDATAPHASE_FIRST_CLK, // Data phase
-	.ClkPol = DISPLAY_SPI_CLKPOL,         // clock polarity
+	.ClkPol = DISPLAY_SPI_CLKPOL,		 // clock polarity
 	.ChipSel = SPICSEL_AUTO,
-	.bDmaEn = DISPLAY_SPI_DMA_ENABLE,	// DMA
+	.bDmaEn = DISPLAY_SPI_DMA_ENABLE, // DMA
 	.bIntEn = false,
 	.IntPrio = 6, //APP_IRQ_PRIORITY_LOW,      // Interrupt priority
 	.EvtCB = NULL
@@ -226,7 +226,6 @@ int main()
 		msDelay(3000);
 		g_Lcd.Clear();
 
-
 		ShowFont(&iFontFreeSans16pt, "FreeSans 16pt");
 		ShowFont(&iFontFreeSansIta16pt, "FreeSans Italic 16pt");
 		ShowFont(&iFontFreeSansBold16pt, "FreeSans Bold 16pt");
@@ -312,5 +311,3 @@ int main()
 
 	return 0;
 }
-
-

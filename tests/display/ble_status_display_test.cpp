@@ -11,6 +11,13 @@
 #include "../../exemples/bluetooth/ble_security_demo.cpp"
 #undef main
 
+static SysLog_t logState;
+static bool selected, dataMode;
+static uint8_t ram[8][128];
+static unsigned page, column;
+static bool pageMode, displayOn;
+static unsigned transfers, resetLow, resetHigh;
+
 static TimerTrigEvtHandler_t tickHandler;
 static bool triggerDisabled;
 static bool knownSecurity = true;
@@ -75,8 +82,6 @@ int BtAppNotify(BtGattChar_t *, uint8_t *, uint16_t)
 	assert(false);
 	return 0;
 }
-
-static SysLog_t logState;
 
 extern "C" SysLog_t *SysLogGet()
 {
@@ -147,12 +152,6 @@ extern "C" bool TimerInit(TimerDev_t *t, const TimerCfg_t *c)
 	t->DisableTrigger = DisableTrigger;
 	return true;
 }
-
-static bool selected, dataMode;
-static uint8_t ram[8][128];
-static unsigned page, column;
-static bool pageMode, displayOn;
-static unsigned transfers, resetLow, resetHigh;
 
 // Unused SPI virtual methods must never be called by a display master.
 extern "C" void SPISetSlaveRxBuffer(SPIDev_t *, int, uint8_t *, int)

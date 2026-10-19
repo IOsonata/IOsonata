@@ -72,7 +72,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #endif
 
 #ifndef UART_DEVNO
-#define UART_DEVNO					0
+#define UART_DEVNO 0
 #endif
 
 #ifndef BUT2_INT
@@ -80,33 +80,33 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #endif
 
 #ifndef BUT1_INT
-#define BUT1_INT					0
+#define BUT1_INT 0
 #endif
 
 #ifndef DEVICE_NAME
-#define DEVICE_NAME					"BLESec"
+#define DEVICE_NAME "BLESec"
 #endif
 
-#define PACKET_SIZE					20
+#define PACKET_SIZE 20
 
-#define MANUFACTURER_NAME			"I-SYST inc."
-#define MODEL_NAME					"Generic"
+#define MANUFACTURER_NAME "I-SYST inc."
+#define MODEL_NAME "Generic"
 
-#define MANUFACTURER_ID				ISYST_BLUETOOTH_ID
-#define ORG_UNIQUE_ID				ISYST_BLUETOOTH_ID
+#define MANUFACTURER_ID ISYST_BLUETOOTH_ID
+#define ORG_UNIQUE_ID ISYST_BLUETOOTH_ID
 
-#define APP_ADV_INTERVAL			64	// in msec
+#define APP_ADV_INTERVAL 64 // in msec
 
-#define APP_ADV_TIMEOUT				0	// in msec
+#define APP_ADV_TIMEOUT 0 // in msec
 
-#define MIN_CONN_INTERVAL			10	// in msec
-#define MAX_CONN_INTERVAL			40	// in msec
+#define MIN_CONN_INTERVAL 10 // in msec
+#define MAX_CONN_INTERVAL 40 // in msec
 
-#define BLE_UART_UUID_BASE			BLUEIO_UUID_BASE
+#define BLE_UART_UUID_BASE BLUEIO_UUID_BASE
 
-#define BLE_UART_UUID_SERVICE		BLUEIO_UUID_UART_SERVICE		//!< BlueIO default service
-#define BLE_UART_UUID_TX_CHAR		BLUEIO_UUID_UART_TX_CHAR		//!< Data characteristic
-#define BLE_UART_UUID_RX_CHAR		BLUEIO_UUID_UART_RX_CHAR		//!< Command control characteristic
+#define BLE_UART_UUID_SERVICE BLUEIO_UUID_UART_SERVICE //!< BlueIO default service
+#define BLE_UART_UUID_TX_CHAR BLUEIO_UUID_UART_TX_CHAR //!< Data characteristic
+#define BLE_UART_UUID_RX_CHAR BLUEIO_UUID_UART_RX_CHAR //!< Command control characteristic
 
 void UartTxSrvcCallback(BtGattChar_t *pChar, uint8_t *pData, int Offset, int Len);
 
@@ -118,7 +118,9 @@ static const BtUuidArr_t s_AdvUuid = {
 	.BaseIdx = 1,
 	.Type = BT_UUID_TYPE_16,
 	.Count = 1,
-	.Uuid16 = {BLE_UART_UUID_SERVICE,}
+	.Uuid16 = {
+		BLE_UART_UUID_SERVICE,
+	}
 };
 
 static const char s_RxCharDescString[] = {
@@ -141,7 +143,7 @@ BtGattChar_t g_UartChars[] = {
 	BT_CHAR(BLE_UART_UUID_TX_CHAR, PACKET_SIZE,
 			BT_GATT_CHAR_PROP_WRITE_WORESP,
 			s_TxCharDescString,
-	.WrCB = UartTxSrvcCallback),
+			.WrCB = UartTxSrvcCallback),
 };
 
 uint8_t g_LWrBuffer[512];
@@ -150,48 +152,48 @@ uint8_t g_LWrBuffer[512];
 BtGattSrvc_t g_UartBleSrvc = BT_SRVC_CUSTOM(BLE_UART_UUID_BASE,
 											BLE_UART_UUID_SERVICE,
 											g_UartChars,
-	.SecType = BLE_SECURITY_TYPE);
+											.SecType = BLE_SECURITY_TYPE);
 
 const BtAppDevInfo_t s_UartBleDevDesc = {
-	MODEL_NAME,       		// Model name
-	MANUFACTURER_NAME,		// Manufacturer name
-	"123",					// Serial number string
-	"0.0",					// Firmware version string
-	"0.0",					// Hardware version string
+	MODEL_NAME,		   // Model name
+	MANUFACTURER_NAME, // Manufacturer name
+	"123",			   // Serial number string
+	"0.0",			   // Firmware version string
+	"0.0",			   // Hardware version string
 };
 
 uint8_t g_AdvLong[] = "1234567890abcdefghijklmnopqrstuvwxyz`!@#$%^&*()_+\0";
 
 const BtAppCfg_t s_BleAppCfg = {
 	.Role = BTAPP_ROLE_PERIPHERAL,
-	.PeriphDevMax = 0, 				// Max peripheral devices we connect to as central
-	.CentralDevMax = 2, 				// Max central devices we serve as peripheral; keep advertising after the first
-	.pDevName = DEVICE_NAME,			// Device name
-	.VendorId = ISYST_BLUETOOTH_ID,		// PnP Bluetooth/USB vendor id
-	.ProductId = 1,						// PnP Product ID
-	.ProductVer = 0,					// Pnp prod version
+	.PeriphDevMax = 0,				// Max peripheral devices we connect to as central
+	.CentralDevMax = 2,				// Max central devices we serve as peripheral; keep advertising after the first
+	.pDevName = DEVICE_NAME,		// Device name
+	.VendorId = ISYST_BLUETOOTH_ID, // PnP Bluetooth/USB vendor id
+	.ProductId = 1,					// PnP Product ID
+	.ProductVer = 0,				// Pnp prod version
 	.Appearance = 0,
 	.pDevInfo = &s_UartBleDevDesc,
 	.pAdvManData = g_ManData,			// Manufacture specific data to advertise
-	.AdvManDataLen = sizeof(g_ManData),	// Length of manufacture specific data
+	.AdvManDataLen = sizeof(g_ManData), // Length of manufacture specific data
 	.pSrManData = NULL,
 	.SrManDataLen = 0,
 	.SecType = BLE_SECURITY_TYPE,
 	.SecExchg = BLE_SECURITY_EXCHG,
 	.bCompleteUuidList = false,
-	.pAdvUuid = &s_AdvUuid,      			// Service uuids to advertise
-	.AdvInterval = APP_ADV_INTERVAL,	// Advertising interval in msec
-	.AdvTimeout = APP_ADV_TIMEOUT,		// Advertising timeout in sec
-	.AdvSlowInterval = 0,				// Slow advertising interval, if > 0, fallback to
-										// slow interval on adv timeout and advertise until connected
+	.pAdvUuid = &s_AdvUuid,			 // Service uuids to advertise
+	.AdvInterval = APP_ADV_INTERVAL, // Advertising interval in msec
+	.AdvTimeout = APP_ADV_TIMEOUT,	 // Advertising timeout in sec
+	.AdvSlowInterval = 0,			 // Slow advertising interval, if > 0, fallback to
+									 // slow interval on adv timeout and advertise until connected
 	.ConnIntervalMin = MIN_CONN_INTERVAL,
 	.ConnIntervalMax = MAX_CONN_INTERVAL,
-	.ConnLedPort = CONNECT_LED_PORT,// Led port nuber
-	.ConnLedPin = CONNECT_LED_PIN,// Led pin number
+	.ConnLedPort = CONNECT_LED_PORT, // Led port nuber
+	.ConnLedPin = CONNECT_LED_PIN,	 // Led pin number
 	.ConnLedActLevel = CONNECT_LED_LOGIC,
-	.TxPower = 0,						// Tx power
+	.TxPower = 0, // Tx power
 	// .SDEvtHandler removed for compatibility with older BtAppCfg_t definitions
-	.pLongWrPoolMem = g_LWrBuffer,		// Long-write reassembly pool (split across peer slots)
+	.pLongWrPoolMem = g_LWrBuffer, // Long-write reassembly pool (split across peer slots)
 	.LongWrPoolMemSize = sizeof(g_LWrBuffer),
 };
 
@@ -208,7 +210,7 @@ int g_DelayCnt = 0;
 volatile bool g_bUartState = false;
 int UartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);
 
-#define UARTFIFOSIZE				CFIFO_MEMSIZE(256)
+#define UARTFIFOSIZE CFIFO_MEMSIZE(256)
 
 static uint8_t s_UartRxFifo[UARTFIFOSIZE];
 static uint8_t s_UartTxFifo[UARTFIFOSIZE];
@@ -218,18 +220,18 @@ static IOPinCfg_t s_UartPins[] = UART_PINS;
 
 /// UART configuration
 const UARTCfg_t g_UartCfg = {
-	.DevNo = UART_DEVNO,				// Device number zero based
-	.pIOPinMap = s_UartPins,				// UART assigned pins
-	.NbIOPins = sizeof(s_UartPins) / sizeof(IOPinCfg_t),	// Total number of UART pins used
-	.Rate = 1000000,						// Baudrate
-	.DataBits = 8,						// Data bits
-	.Parity = UART_PARITY_NONE,			// Parity
-	.StopBits = 1,						// Stop bit
-	.FlowControl = UART_FLWCTRL_NONE,	// Flow control
-	.bIntMode = true,					// Interrupt mode
-	.IntPrio = IRQ_PRIO_LOW,			// Interrupt priority
-	.EvtCallback = UartEvthandler,		// UART event handler
-	.bFifoBlocking = true,				// Blocking FIFO
+	.DevNo = UART_DEVNO,								 // Device number zero based
+	.pIOPinMap = s_UartPins,							 // UART assigned pins
+	.NbIOPins = sizeof(s_UartPins) / sizeof(IOPinCfg_t), // Total number of UART pins used
+	.Rate = 1000000,									 // Baudrate
+	.DataBits = 8,										 // Data bits
+	.Parity = UART_PARITY_NONE,							 // Parity
+	.StopBits = 1,										 // Stop bit
+	.FlowControl = UART_FLWCTRL_NONE,					 // Flow control
+	.bIntMode = true,									 // Interrupt mode
+	.IntPrio = IRQ_PRIO_LOW,							 // Interrupt priority
+	.EvtCallback = UartEvthandler,						 // UART event handler
+	.bFifoBlocking = true,								 // Blocking FIFO
 	.RxMemSize = UARTFIFOSIZE,
 	.pRxMem = s_UartRxFifo,
 	.TxMemSize = UARTFIFOSIZE,
@@ -277,46 +279,6 @@ static void SysLogFlushEvt(uint32_t Evt, void *pCtx);
 static uint8_t s_UartRxBuff[PACKET_SIZE];
 static int s_UartRxBuffLen = 0;
 
-static void UartRxQue(void)
-{
-	uint32_t state = DisableInterrupt();
-
-	if (s_bUartRxPending == false)
-	{
-		s_bUartRxPending = true;
-		(void)AppEvtHandlerQue(0, nullptr, UartRxChedHandler);
-	}
-	EnableInterrupt(state);
-}
-
-static void SysLogFlushQue(void)
-{
-	uint32_t state = DisableInterrupt();
-
-	if (s_bSysLogFlushPending == false)
-	{
-		s_bSysLogFlushPending = true;
-		(void)AppEvtHandlerQue(0, nullptr, SysLogFlushEvt);
-	}
-	EnableInterrupt(state);
-}
-
-void UartTxSrvcCallback(BtGattChar_t *pChar, uint8_t *pData, int Offset, int Len)
-{
-	g_Uart.Tx(pData, Len);
-}
-
-void BtAppPeriphEvtHandler(uint32_t Evt, void * const pCtx)
-{
-	//BtGattEvtHandler(Evt, pCtx);
-}
-
-void BtAppInitUserServices()
-{
-	bool res;
-	res = BtGattSrvcAdd(&g_UartBleSrvc);
-}
-
 #if defined(BLE_SECURITY_BUTTON_CONFIRM) || defined(BLE_SECURITY_UART_CONFIRM)
 // User-interface state only. The IOsonata library retains the pairing
 // transaction while awaiting the decision.
@@ -327,36 +289,6 @@ static uint16_t s_PairConn = 0;
 static uint32_t s_PairNumber;
 #endif
 
-void BtAppEvtDisconnected(uint16_t ConnHdl)
-{
-	if (s_PairAwaiting && s_PairConn == ConnHdl)
-	{
-		s_PairAwaiting = false;
-		s_PairDecision = 0;
-	}
-}
-
-int BtAppPairConfirm(uint16_t ConnHdl, uint32_t Number)
-{
-	if (s_PairAwaiting)
-	{
-		return 0;
-	}
-	s_PairConn = ConnHdl;
-#ifdef BLE_STATUS_DISPLAY
-	s_PairNumber = Number;
-#endif
-	s_PairDecision = 0;
-	s_PairAwaiting = true;
-#ifdef BLE_SECURITY_UART_CONFIRM
-	SysLogPrintf(SysLogGet(), "Compare %06u on both devices: y=accept, n=reject\r\n",
-			(unsigned)Number);
-#else
-	SysLogPrintf(SysLogGet(), "Compare %06u on both devices: BUT1=accept, BUT2=reject\r\n",
-			(unsigned)Number);
-#endif
-	return -1; // Defer; no blocking and no protocol reply in this callback.
-}
 #endif
 
 #ifdef BLE_STATUS_DISPLAY
@@ -365,6 +297,12 @@ int BtAppPairConfirm(uint16_t ConnHdl, uint32_t Number)
 #ifndef TIMER_DEVNO
 #error BLE_STATUS_DISPLAY requires a free TIMER_DEVNO
 #endif
+typedef struct __Display_Link
+{
+	uint16_t Hdl;
+	uint8_t Addr[6];
+} DisplayLink_t;
+
 alignas(4) uint8_t g_AppEvtHandlerQueMem[APPEVT_HANDLER_QUE_MEMSIZE(16)];
 static const IOPinCfg_t s_DisplayPins[] = TFT_PINS;
 static const IOPinCfg_t s_DisplaySpiPins[] = SPI_PINS;
@@ -401,6 +339,82 @@ static DISPLAY_DRIVER s_Display;
 static bool s_DisplayReady, s_BleReady;
 static volatile bool s_DisplayQueued;
 
+#endif
+
+static void UartRxQue(void)
+{
+	uint32_t state = DisableInterrupt();
+
+	if (s_bUartRxPending == false)
+	{
+		s_bUartRxPending = true;
+		(void)AppEvtHandlerQue(0, nullptr, UartRxChedHandler);
+	}
+	EnableInterrupt(state);
+}
+
+static void SysLogFlushQue(void)
+{
+	uint32_t state = DisableInterrupt();
+
+	if (s_bSysLogFlushPending == false)
+	{
+		s_bSysLogFlushPending = true;
+		(void)AppEvtHandlerQue(0, nullptr, SysLogFlushEvt);
+	}
+	EnableInterrupt(state);
+}
+
+void UartTxSrvcCallback(BtGattChar_t *pChar, uint8_t *pData, int Offset, int Len)
+{
+	g_Uart.Tx(pData, Len);
+}
+
+void BtAppPeriphEvtHandler(uint32_t Evt, void *const pCtx)
+{
+	//BtGattEvtHandler(Evt, pCtx);
+}
+
+void BtAppInitUserServices()
+{
+	bool res;
+	res = BtGattSrvcAdd(&g_UartBleSrvc);
+}
+
+#if defined(BLE_SECURITY_BUTTON_CONFIRM) || defined(BLE_SECURITY_UART_CONFIRM)
+void BtAppEvtDisconnected(uint16_t ConnHdl)
+{
+	if (s_PairAwaiting && s_PairConn == ConnHdl)
+	{
+		s_PairAwaiting = false;
+		s_PairDecision = 0;
+	}
+}
+
+int BtAppPairConfirm(uint16_t ConnHdl, uint32_t Number)
+{
+	if (s_PairAwaiting)
+	{
+		return 0;
+	}
+	s_PairConn = ConnHdl;
+#ifdef BLE_STATUS_DISPLAY
+	s_PairNumber = Number;
+#endif
+	s_PairDecision = 0;
+	s_PairAwaiting = true;
+#ifdef BLE_SECURITY_UART_CONFIRM
+	SysLogPrintf(SysLogGet(), "Compare %06u on both devices: y=accept, n=reject\r\n",
+				 (unsigned)Number);
+#else
+	SysLogPrintf(SysLogGet(), "Compare %06u on both devices: BUT1=accept, BUT2=reject\r\n",
+				 (unsigned)Number);
+#endif
+	return -1; // Defer; no blocking and no protocol reply in this callback.
+}
+#endif
+
+#ifdef BLE_STATUS_DISPLAY
 static const char *SecurityText(bool Known, const BtConnSec_t &Sec)
 {
 	if (!Known)
@@ -430,10 +444,7 @@ static void StatusDisplayRefresh(uint32_t, void *)
 		return;
 	}
 
-	struct Link {
-		uint16_t Hdl;
-		uint8_t Addr[6];
-	} links[2];
+	DisplayLink_t links[2];
 
 	unsigned count = 0, shown = 0;
 	bool awaiting = false;
@@ -783,7 +794,7 @@ bool AppCheckStatus(void)
 	if (decision != 0)
 	{
 		SysLogPrintf(SysLogGet(), "Pairing numeric comparison %s (hdl=%u)\r\n",
-				decision == 1 ? "accepted" : "rejected", (unsigned)conn);
+					 decision == 1 ? "accepted" : "rejected", (unsigned)conn);
 		BtAppPairDecision(conn, decision == 1);
 #ifdef BLE_SECURITY_DISCONNECT_ON_REJECT
 		// S132 may defer its SMP Pairing Failed until the central transmits
@@ -813,9 +824,8 @@ bool AppCheckStatus(void)
 		}
 	}
 	const bool idle = s_bUartRxPending == false &&
-		s_bSysLogFlushPending == false &&
-		AppEvtHandlerPending() == false;
+					  s_bSysLogFlushPending == false &&
+					  AppEvtHandlerPending() == false;
 	EnableInterrupt(state);
 	return idle;
 }
-

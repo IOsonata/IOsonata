@@ -9,6 +9,12 @@
 #include "../../exemples/bluetooth/ble_central_scan.cpp"
 #undef main
 
+static bool selected, dataMode;
+static uint8_t ram[8][128];
+static unsigned page, column;
+static bool pageMode, displayOn;
+static unsigned transfers, resetLow, resetHigh;
+
 static uint64_t ticks;
 static TimerTrigEvtHandler_t tickHandler;
 static bool timerStopped;
@@ -66,12 +72,6 @@ extern "C" bool AppCheckStatus()
 {
 	return true;
 }
-
-static bool selected, dataMode;
-static uint8_t ram[8][128];
-static unsigned page, column;
-static bool pageMode, displayOn;
-static unsigned transfers, resetLow, resetHigh;
 
 // Unused SPI virtual methods must never be called by a display master.
 extern "C" void SPISetSlaveRxBuffer(SPIDev_t *, int, uint8_t *, int)
