@@ -210,9 +210,40 @@ October 18 review fixes, tested locally:
   The flash sweep passes all 330 save cuts and 18 deletion cuts, including
   all 165 torn-save boots taking ECC NMI without stopping. The added raw
   read cases also pass with the firmware built at -O0.
-  With bank swap enabled, corrected-error bank attribution remains
-  uncertain: such a read is retried and may be refused, rather than trusting
-  the other bank's correction as validation of this word.
+  With bank swap enabled, this version refused every correction of the word
+  itself, so a word with a persistent single-bit error could not be read;
+  fixed by the next entry.
+- ECC retry review, October 19. Three cases the retry rule above got wrong:
+  - With the banks swapped, a word with a persistent corrected error could
+    never be read. The word's own correction is now taken with both readings
+    of BK_ECC, as `Stm32FlashEccNmi` takes a double error.
+  - The word's own correction was matched by exact equality with the word
+    address. If ADDR_ECC gives the address of the load, a read starting
+    inside a corrected word was refused; in the flash model, an erased
+    sector with a corrected word was erased again at every boot. The low
+    bits are now ignored, as `StEccInWindow` ignores them.
+  - A corrected error recorded elsewhere on every attempt, such as a weak
+    cell in code fetched between the ECCC clear and the load (`memcpy`
+    with ICACHE off), made every read fail: the mount took the sector
+    header as damaged, erased the sector holding the bonds, then failed,
+    and every save after it failed. Each word's ECCC clear, copy and ECCR
+    read now run in `StFlashWordCopy`, in RAM (`.fastrun`, as the SAM4E
+    DFU does) with interrupts masked, so nothing else reads the flash in
+    between except another bus master. A correction recorded elsewhere then
+    still fails the read after two attempts. The copy also stops at the
+    first double error, so a torn word raises one NMI per read instead of
+    one per load: 312 instead of 1248 in one boot of the emulator test.
+  The flash model adds the three cases: ADDR_ECC at the load address, and
+  a corrected error on every instruction fetched from flash in the window,
+  for a raw read and for a full mount. Taking out each change makes its case
+  fail; with the copy back in flash, the mount erases the store. The model's
+  replay of the load an NMI interrupted now applies to that one load only:
+  keyed by instruction address, it skipped the later loads of a byte copy
+  loop too. 41 flash model checks, also with the firmware built at -O0;
+  the sweep recovers from all 330 cuts of a save and all 18 of a deletion,
+  and all 165 half done cuts take the ECC NMI with none stopping; the
+  486-cut bond suite passes; the WBA65 library and its 28 examples build in
+  Debug and Release. Software tests, not hardware validation.
 - Cortex-M33 crypto integration: **18 checks, 0 failures**, including
   incremental CMAC and three interrupt preemptions while AES is busy.
   The existing model warning about the platform `HW_RNG_Get` initialization
@@ -320,5 +351,3 @@ USB regression checks also pass. These are local checks, not a current CI run.
 - [CCM](https://github.com/STMicroelectronics/STM32CubeWBA/blob/v1.10.0/Projects/Common/WPAN/Modules/BasicAES/baes_ccm.c)
 - [AES register adapter](https://github.com/STMicroelectronics/STM32CubeWBA/blob/v1.10.0/Projects/Common/WPAN/Interfaces/hw_aes.c)
 - [BLE platform interface](https://github.com/STMicroelectronics/stm32-mw-wpan/blob/v2.10.0/ble/stack/include/bleplat.h)
-
-
