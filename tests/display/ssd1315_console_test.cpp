@@ -11,37 +11,65 @@ static bool selected;
 static unsigned transfers, resetLow, resetHigh;
 
 // Unused SPI virtual methods must never be called by a display master.
-extern "C" void SPISetSlaveRxBuffer(SPIDev_t *, int, uint8_t *, int) { assert(false); }
-extern "C" void SPISetSlaveTxData(SPIDev_t *, int, uint8_t *, int) { assert(false); }
-extern "C" SPIPHY SPISetPhy(SPIDev_t *, SPIPHY Phy) { assert(false); return Phy; }
+extern "C" void SPISetSlaveRxBuffer(SPIDev_t *, int, uint8_t *, int)
+{
+	assert(false);
+}
+
+extern "C" void SPISetSlaveTxData(SPIDev_t *, int, uint8_t *, int)
+{
+	assert(false);
+}
+
+extern "C" SPIPHY SPISetPhy(SPIDev_t *, SPIPHY Phy)
+{
+	assert(false);
+	return Phy;
+}
 
 extern "C" void IOPinConfig(int Port, int Pin, int, IOPINDIR, IOPINRES, IOPINTYPE)
 {
 	assert(Port == IOPORTE && (Pin == 0 || Pin == 3));
 }
+
 extern "C" void IOPinSet(int Port, int Pin)
 {
 	assert(Port == IOPORTE && (Pin == 0 || Pin == 3));
-	if (Pin == 3) { resetHigh++; }
+	if (Pin == 3)
+	{
+		resetHigh++;
+	}
 }
+
 extern "C" void IOPinClear(int Port, int Pin)
 {
 	assert(Port == IOPORTE && (Pin == 0 || Pin == 3));
-	if (Pin == 3) { resetLow++; }
+	if (Pin == 3)
+	{
+		resetLow++;
+	}
 }
+
 static bool Start(DevIntrf_t *, uint32_t Address)
 {
 	assert(Address == 0 && !selected);
 	selected = true;
 	return true;
 }
-static void Stop(DevIntrf_t *) { assert(selected); selected = false; }
+
+static void Stop(DevIntrf_t *)
+{
+	assert(selected);
+	selected = false;
+}
+
 static int Tx(DevIntrf_t *, const uint8_t *, int Count)
 {
 	assert(selected);
 	transfers++;
 	return Count;
 }
+
 extern "C" bool SPIInit(SPIDev_t *pDev, const SPICfg_t *pCfg)
 {
 	assert(pCfg->DevNo == 2 && pCfg->Phy == SPIPHY_NORMAL);

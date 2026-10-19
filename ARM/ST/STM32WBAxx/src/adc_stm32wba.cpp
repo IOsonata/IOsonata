@@ -42,18 +42,26 @@ SOFTWARE.
 #include "idelay.h"
 
 static AdcSTM32WBA *s_Owner;
-static const uint8_t s_Pin[] = {8, 7, 6, 5, 4, 3, 2, 1, 0, 9};
+static const uint8_t s_Pin[] = { 8, 7, 6, 5, 4, 3, 2, 1, 0, 9 };
+
 static bool Wait(volatile uint32_t *pReg, uint32_t Mask, uint32_t Value)
 {
 	for (unsigned n = 0; n < 100000; n++)
 	{
-		if ((*pReg & Mask) == Value) { return true; }
+		if ((*pReg & Mask) == Value)
+		{
+			return true;
+		}
 	}
 	return false;
 }
+
 // CR command bits are set by software and cleared by hardware. Write only
 // the requested command, keeping ADVREGEN; zero does not clear ADEN.
-static void Command(uint32_t Bits) { ADC4->CR = ADC_CR_ADVREGEN | Bits; }
+static void Command(uint32_t Bits)
+{
+	ADC4->CR = ADC_CR_ADVREGEN | Bits;
+}
 
 AdcSTM32WBA::AdcSTM32WBA()
 {
@@ -69,8 +77,16 @@ AdcSTM32WBA::AdcSTM32WBA()
 	vNbRefVolt = 0;
 	vRef = 0;
 }
-AdcSTM32WBA::~AdcSTM32WBA() { PowerOff(); }
-bool AdcSTM32WBA::Owned() { return s_Owner == this; }
+
+AdcSTM32WBA::~AdcSTM32WBA()
+{
+	PowerOff();
+}
+
+bool AdcSTM32WBA::Owned()
+{
+	return s_Owner == this;
+}
 
 bool AdcSTM32WBA::Init(const AdcCfg_t &Cfg, Timer *pTimer, DeviceIntrf *pIntrf)
 {
@@ -84,38 +100,58 @@ bool AdcSTM32WBA::Init(const AdcCfg_t &Cfg, Timer *pTimer, DeviceIntrf *pIntrf)
 		return false;
 	}
 	uint32_t clock = SystemCoreClockGet() / 16;
-	if (clock < 140000 || clock > 55000000) { return false; }
+	if (clock < 140000 || clock > 55000000)
+	{
+		return false;
+	}
 	PowerOff();
 	s_Owner = this;
 	RCC->AHB4ENR |= RCC_AHB4ENR_ADC4EN;
 	(void)RCC->AHB4ENR;
 	RCC->AHB4RSTR |= RCC_AHB4RSTR_ADC4RST;
 	RCC->AHB4RSTR &= ~RCC_AHB4RSTR_ADC4RST;
-	RCC->CCIPR3 &= ~RCC_CCIPR3_ADCSEL; // HCLK
+	RCC->CCIPR3 &= ~RCC_CCIPR3_ADCSEL;			// HCLK
 	ADC4_COMMON->CCR = 7U << ADC_CCR_PRESC_Pos; // /16
 	ADC4->IER = 0;
 	ADC4->CFGR1 = 0; // Software trigger, fixed channel mask, right aligned
 	ADC4->CFGR2 = ADC_CFGR2_LFTRIG;
 	ADC4->SMPR = ADC_SMPR_SMP1; // 814.5 cycles, all channels on common 1
 	ADC4->CR = ADC_CR_ADVREGEN;
-	if (!Wait(&ADC4->ISR, ADC_ISR_LDORDY, ADC_ISR_LDORDY)) { PowerOff(); return false; }
+	if (!Wait(&ADC4->ISR, ADC_ISR_LDORDY, ADC_ISR_LDORDY))
+	{
+		PowerOff();
+		return false;
+	}
 	SetRefVoltage(Cfg.pRefVolt, 1);
 	vRef = Cfg.pRefVolt[0].Voltage;
 	vpTimer = pTimer;
 	SetEvtHandler(Cfg.EvtHandler);
 	Resolution(Cfg.Resolution);
-	if (!Calibrate() || !Enable()) { PowerOff(); return false; }
+	if (!Calibrate() || !Enable())
+	{
+		PowerOff();
+		return false;
+	}
 	Valid(true);
 	return true;
 }
 
 uint16_t AdcSTM32WBA::Resolution(uint16_t Val)
 {
-	uint16_t bits = Val >= 11 ? 12 : Val >= 9 ? 10 : Val >= 7 ? 8 : 6;
-	if (!Owned()) { vResolution = bits; return bits; }
-	if (ADC4->CR & ADC_CR_ADSTART) { return vResolution; }
+	uint16_t bits = Val >= 11 ? 12 : Val >= 9 ? 10
+								 : Val >= 7	  ? 8
+											  : 6;
+	if (!Owned())
+	{
+		vResolution = bits;
+		return bits;
+	}
+	if (ADC4->CR & ADC_CR_ADSTART)
+	{
+		return vResolution;
+	}
 	ADC4->CFGR1 = (ADC4->CFGR1 & ~ADC_CFGR1_RES) |
-		((12U - bits) / 2U << ADC_CFGR1_RES_Pos);
+				  ((12U - bits) / 2U << ADC_CFGR1_RES_Pos);
 	vResolution = bits;
 	memset(vbNew, 0, sizeof(vbNew));
 	return bits;
@@ -124,7 +160,10 @@ uint16_t AdcSTM32WBA::Resolution(uint16_t Val)
 bool AdcSTM32WBA::OpenChannel(const AdcChanCfg_t *pCfg, int Count)
 {
 	if (!Owned() || !Valid() || !pCfg || Count <= 0 || Count > 8 ||
-		(ADC4->CR & ADC_CR_ADSTART)) { return false; }
+		(ADC4->CR & ADC_CR_ADSTART))
+	{
+		return false;
+	}
 	for (int i = 0; i < Count; i++)
 	{
 		const AdcChanCfg_t &c = pCfg[i];
@@ -135,7 +174,13 @@ bool AdcSTM32WBA::OpenChannel(const AdcChanCfg_t *pCfg, int Count)
 		{
 			return false;
 		}
-		for (int j = 0; j < i; j++) { if (pCfg[j].Chan == c.Chan) { return false; } }
+		for (int j = 0; j < i; j++)
+		{
+			if (pCfg[j].Chan == c.Chan)
+			{
+				return false;
+			}
+		}
 	}
 	for (int i = 0; i < Count; i++)
 	{
@@ -150,6 +195,7 @@ bool AdcSTM32WBA::OpenChannel(const AdcChanCfg_t *pCfg, int Count)
 	}
 	return true;
 }
+
 void AdcSTM32WBA::CloseChannel(int Chan)
 {
 	if (Owned() && Chan >= 0 && Chan < 8)
@@ -161,52 +207,93 @@ void AdcSTM32WBA::CloseChannel(int Chan)
 
 bool AdcSTM32WBA::Enable()
 {
-	if (!Owned() || (ADC4->CR & (ADC_CR_ADCAL | ADC_CR_ADDIS | ADC_CR_ADSTP))) { return false; }
-	if (ADC4->CR & ADC_CR_ADEN) { return true; }
+	if (!Owned() || (ADC4->CR & (ADC_CR_ADCAL | ADC_CR_ADDIS | ADC_CR_ADSTP)))
+	{
+		return false;
+	}
+	if (ADC4->CR & ADC_CR_ADEN)
+	{
+		return true;
+	}
 	ADC4->ISR = ADC_ISR_ADRDY;
 	Command(ADC_CR_ADEN);
-	if (!Wait(&ADC4->ISR, ADC_ISR_ADRDY, ADC_ISR_ADRDY)) { return false; }
+	if (!Wait(&ADC4->ISR, ADC_ISR_ADRDY, ADC_ISR_ADRDY))
+	{
+		return false;
+	}
 	// tSTAB: three ADC clocks plus a conversion (DS14736), including
 	// the configured 814.5-cycle sampling time.
 	uint32_t clock = SystemCoreClockGet() / 16;
 	usDelay((828000000U + clock - 1) / clock);
 	return true;
 }
+
 void AdcSTM32WBA::StopConversion()
 {
-	if (!Owned()) { return; }
+	if (!Owned())
+	{
+		return;
+	}
 	if (ADC4->CR & ADC_CR_ADSTART)
 	{
 		Command(ADC_CR_ADSTP);
-		if (!Wait(&ADC4->CR, ADC_CR_ADSTART | ADC_CR_ADSTP, 0)) { Valid(false); }
+		if (!Wait(&ADC4->CR, ADC_CR_ADSTART | ADC_CR_ADSTP, 0))
+		{
+			Valid(false);
+		}
 	}
 	memset(vbNew, 0, sizeof(vbNew));
 }
+
 void AdcSTM32WBA::Disable()
 {
-	if (!Owned()) { return; }
+	if (!Owned())
+	{
+		return;
+	}
 	StopConversion();
-	if (ADC4->CR & (ADC_CR_ADSTART | ADC_CR_ADSTP)) { return; }
+	if (ADC4->CR & (ADC_CR_ADSTART | ADC_CR_ADSTP))
+	{
+		return;
+	}
 	if (ADC4->CR & ADC_CR_ADEN)
 	{
 		Command(ADC_CR_ADDIS);
-		if (!Wait(&ADC4->CR, ADC_CR_ADEN | ADC_CR_ADDIS, 0)) { Valid(false); }
+		if (!Wait(&ADC4->CR, ADC_CR_ADEN | ADC_CR_ADDIS, 0))
+		{
+			Valid(false);
+		}
 	}
 }
+
 bool AdcSTM32WBA::Calibrate()
 {
-	if (!Owned()) { return false; }
+	if (!Owned())
+	{
+		return false;
+	}
 	bool enabled = ADC4->CR & ADC_CR_ADEN;
 	Disable();
-	if (ADC4->CR & (ADC_CR_ADEN | ADC_CR_ADSTART | ADC_CR_ADSTP | ADC_CR_ADDIS | ADC_CR_ADCAL)) { return false; }
+	if (ADC4->CR & (ADC_CR_ADEN | ADC_CR_ADSTART | ADC_CR_ADSTP | ADC_CR_ADDIS | ADC_CR_ADCAL))
+	{
+		return false;
+	}
 	Command(ADC_CR_ADCAL);
-	if (!Wait(&ADC4->CR, ADC_CR_ADCAL, 0)) { Valid(false); return false; }
+	if (!Wait(&ADC4->CR, ADC_CR_ADCAL, 0))
+	{
+		Valid(false);
+		return false;
+	}
 	usDelay(20); // At least two ADC clocks at fADC >= 140 kHz
 	return !enabled || Enable();
 }
+
 void AdcSTM32WBA::PowerOff()
 {
-	if (!Owned()) { return; }
+	if (!Owned())
+	{
+		return;
+	}
 	Disable();
 	// Reset also terminates a conversion whose stop timed out.
 	RCC->AHB4RSTR |= RCC_AHB4RSTR_ADC4RST;
@@ -217,15 +304,25 @@ void AdcSTM32WBA::PowerOff()
 	memset(vbNew, 0, sizeof(vbNew));
 	s_Owner = nullptr;
 }
+
 void AdcSTM32WBA::Reset()
 {
-	if (!Owned()) { return; }
-	if (!Calibrate() || !Enable()) { Valid(false); }
+	if (!Owned())
+	{
+		return;
+	}
+	if (!Calibrate() || !Enable())
+	{
+		Valid(false);
+	}
 }
 
 bool AdcSTM32WBA::Convert(int Chan)
 {
-	if (!Owned() || !Valid() || vMode != ADC_CONV_MODE_SINGLE || !Enable()) { return false; }
+	if (!Owned() || !Valid() || vMode != ADC_CONV_MODE_SINGLE || !Enable())
+	{
+		return false;
+	}
 	ADC4->CHSELR = 1U << vInput[Chan];
 	ADC4->ISR = ADC_ISR_EOC | ADC_ISR_EOS | ADC_ISR_OVR;
 	Command(ADC_CR_ADSTART);
@@ -239,39 +336,74 @@ bool AdcSTM32WBA::Convert(int Chan)
 	vbNew[Chan] = true;
 	return true;
 }
+
 bool AdcSTM32WBA::StartConversion()
 {
-	if (!Owned() || !Valid()) { return false; }
+	if (!Owned() || !Valid())
+	{
+		return false;
+	}
 	memset(vbNew, 0, sizeof(vbNew));
 	bool any = false;
 	for (int c = 0; c < 8; c++)
 	{
-		if (!vInput[c]) { continue; }
+		if (!vInput[c])
+		{
+			continue;
+		}
 		any = true;
-		if (!Convert(c)) { memset(vbNew, 0, sizeof(vbNew)); return false; }
+		if (!Convert(c))
+		{
+			memset(vbNew, 0, sizeof(vbNew));
+			return false;
+		}
 	}
 	return any;
 }
+
 bool AdcSTM32WBA::UpdateData()
 {
-	if (!Owned() || !Valid()) { return false; }
-	for (bool fresh : vbNew) { if (fresh) { return true; } }
+	if (!Owned() || !Valid())
+	{
+		return false;
+	}
+	for (bool fresh : vbNew)
+	{
+		if (fresh)
+		{
+			return true;
+		}
+	}
 	return false;
 }
+
 int AdcSTM32WBA::Read(AdcData_t *pBuff, int Len)
 {
-	if (!pBuff || Len <= 0 || !Owned() || !Valid()) { return 0; }
+	if (!pBuff || Len <= 0 || !Owned() || !Valid())
+	{
+		return 0;
+	}
 	int n = 0;
 	for (int c = 0; c < 8 && n < Len; c++)
 	{
-		if (vbNew[c] && Read(c, &pBuff[n])) { n++; }
+		if (vbNew[c] && Read(c, &pBuff[n]))
+		{
+			n++;
+		}
 	}
 	return n;
 }
+
 bool AdcSTM32WBA::Read(int Chan, AdcData_t *pBuff)
 {
-	if (!pBuff || Chan < 0 || Chan >= 8 || !Owned() || !Valid() || !vInput[Chan]) { return false; }
-	if (!vbNew[Chan] && !Convert(Chan)) { return false; }
+	if (!pBuff || Chan < 0 || Chan >= 8 || !Owned() || !Valid() || !vInput[Chan])
+	{
+		return false;
+	}
+	if (!vbNew[Chan] && !Convert(Chan))
+	{
+		return false;
+	}
 	pBuff->Chan = Chan;
 	pBuff->Timestamp = 0; // Single conversion, as AdcData_t specifies
 	pBuff->Data = vRaw[Chan] * vRef / (1U << vResolution);

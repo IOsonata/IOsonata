@@ -62,11 +62,31 @@ public:
 	void Reset() override;
 	void PowerOff() override;
 	uint16_t Resolution(uint16_t Val) override;
-	uint16_t Resolution() override { return vResolution; }
-	uint32_t Rate(uint32_t) override { return 0; }
-	uint32_t Rate() override { return 0; }
-	void Mode(ADC_CONV_MODE) override {} // Single rounds only
-	ADC_CONV_MODE Mode() override { return ADC_CONV_MODE_SINGLE; }
+
+	uint16_t Resolution() override
+	{
+		return vResolution;
+	}
+
+	uint32_t Rate(uint32_t) override
+	{
+		return 0;
+	}
+
+	uint32_t Rate() override
+	{
+		return 0;
+	}
+
+	void Mode(ADC_CONV_MODE) override
+	{
+	} // Single rounds only
+
+	ADC_CONV_MODE Mode() override
+	{
+		return ADC_CONV_MODE_SINGLE;
+	}
+
 private:
 	AdcSTM32WBA(const AdcSTM32WBA &) = delete;
 	AdcSTM32WBA &operator=(const AdcSTM32WBA &) = delete;

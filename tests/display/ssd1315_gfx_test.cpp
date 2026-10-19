@@ -13,12 +13,14 @@ public:
 		assert(X < Width() && Y < Height());
 		LcdSSD1315::SetPixel(X, Y, Color);
 	}
+
 	void Fill(uint16_t X, uint16_t Y, uint16_t W, uint16_t H, uint32_t Color) override
 	{
 		assert(W && H && X + W <= Width() && Y + H <= Height());
 		LcdSSD1315::Fill(X, Y, W, H, Color);
 	}
 };
+
 #undef DISPLAY_DRIVER
 #define DISPLAY_DRIVER CheckedOLED
 #define main GfxDisplayMain
@@ -32,33 +34,66 @@ static bool pageMode, displayOn;
 static unsigned transfers, resetLow, resetHigh;
 
 // Unused SPI virtual methods must never be called by a display master.
-extern "C" void SPISetSlaveRxBuffer(SPIDev_t *, int, uint8_t *, int) { assert(false); }
-extern "C" void SPISetSlaveTxData(SPIDev_t *, int, uint8_t *, int) { assert(false); }
-extern "C" SPIPHY SPISetPhy(SPIDev_t *, SPIPHY Phy) { assert(false); return Phy; }
+extern "C" void SPISetSlaveRxBuffer(SPIDev_t *, int, uint8_t *, int)
+{
+	assert(false);
+}
+
+extern "C" void SPISetSlaveTxData(SPIDev_t *, int, uint8_t *, int)
+{
+	assert(false);
+}
+
+extern "C" SPIPHY SPISetPhy(SPIDev_t *, SPIPHY Phy)
+{
+	assert(false);
+	return Phy;
+}
 
 extern "C" void IOPinConfig(int Port, int Pin, int, IOPINDIR, IOPINRES, IOPINTYPE)
 {
 	assert(Port == IOPORTE && (Pin == 0 || Pin == 3));
 }
+
 extern "C" void IOPinSet(int Port, int Pin)
 {
 	assert(Port == IOPORTE && (Pin == 0 || Pin == 3));
-	if (Pin == 3) { resetHigh++; }
-	else { dataMode = true; }
+	if (Pin == 3)
+	{
+		resetHigh++;
+	}
+	else
+	{
+		dataMode = true;
+	}
 }
+
 extern "C" void IOPinClear(int Port, int Pin)
 {
 	assert(Port == IOPORTE && (Pin == 0 || Pin == 3));
-	if (Pin == 3) { resetLow++; }
-	else { dataMode = false; }
+	if (Pin == 3)
+	{
+		resetLow++;
+	}
+	else
+	{
+		dataMode = false;
+	}
 }
+
 static bool Start(DevIntrf_t *, uint32_t Address)
 {
 	assert(Address == 0 && !selected);
 	selected = true;
 	return true;
 }
-static void Stop(DevIntrf_t *) { assert(selected); selected = false; }
+
+static void Stop(DevIntrf_t *)
+{
+	assert(selected);
+	selected = false;
+}
+
 static int Tx(DevIntrf_t *, const uint8_t *p, int n)
 {
 	assert(selected && n > 0);
@@ -81,19 +116,45 @@ static int Tx(DevIntrf_t *, const uint8_t *p, int n)
 				cmd == 0x8D || cmd == 0xDA || cmd == 0x81 || cmd == 0xD9 || cmd == 0xDB)
 			{
 				assert(++i < n);
-				if (cmd == 0x20) { assert(p[i] == 2); pageMode = true; }
-				if (cmd == 0xA8) { assert(p[i] >= 15 && p[i] <= 63); }
-				if (cmd == 0xDB) { assert((p[i] & ~0x30U) == 0); }
+				if (cmd == 0x20)
+				{
+					assert(p[i] == 2);
+					pageMode = true;
+				}
+				if (cmd == 0xA8)
+				{
+					assert(p[i] >= 15 && p[i] <= 63);
+				}
+				if (cmd == 0xDB)
+				{
+					assert((p[i] & ~0x30U) == 0);
+				}
 			}
-			else if ((cmd & 0xF8) == 0xB0) { page = cmd & 7; }
-			else if ((cmd & 0xF0) == 0x00) { column = (column & 0xF0) | (cmd & 15); }
-			else if ((cmd & 0xF0) == 0x10) { column = (column & 15) | ((cmd & 15) << 4); }
-			else if (cmd == 0xAF) { displayOn = true; }
-			else if (cmd == 0xAE) { displayOn = false; }
+			else if ((cmd & 0xF8) == 0xB0)
+			{
+				page = cmd & 7;
+			}
+			else if ((cmd & 0xF0) == 0x00)
+			{
+				column = (column & 0xF0) | (cmd & 15);
+			}
+			else if ((cmd & 0xF0) == 0x10)
+			{
+				column = (column & 15) | ((cmd & 15) << 4);
+			}
+			else if (cmd == 0xAF)
+			{
+				displayOn = true;
+			}
+			else if (cmd == 0xAE)
+			{
+				displayOn = false;
+			}
 		}
 	}
 	return n;
 }
+
 extern "C" bool SPIInit(SPIDev_t *pDev, const SPICfg_t *pCfg)
 {
 	assert(pCfg->DevNo == 2 && pCfg->Phy == SPIPHY_NORMAL);
@@ -136,7 +197,10 @@ int main()
 		{
 			unsigned edge = x < 127 - x ? x : 127 - x;
 			unsigned ey = y < 63 - y ? y : 63 - y;
-			if (ey < edge) { edge = ey; }
+			if (ey < edge)
+			{
+				edge = ey;
+			}
 			assert(On(x, y) == (edge % 4 == 0));
 		}
 	}

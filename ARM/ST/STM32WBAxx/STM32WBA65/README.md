@@ -861,5 +861,6 @@ The screen refreshes about ten times per second and stops at 99:59:59.99.
 Both projects compile/link in Debug and Release. SPI OLED model tests pass
 at -O0/-Os under ASan/UBSan, covering pause/resume, lap, guarded reset,
 menu navigation, elapsed digits, delayed polling, ADC failure, timestamp
-wrap and the display limit. Stopwatch hardware validation remains pending.
+wrap and the display limit. On October 19, 2026, the maintainer confirmed that StopwatchDemo works
+on the STM32WBA65I-DK1.
 See the [project instructions](exemples/StopwatchDemo/README.md).

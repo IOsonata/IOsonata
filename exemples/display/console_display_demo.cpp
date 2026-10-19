@@ -120,7 +120,10 @@ static const char s_FontText[] = "!\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLM
 // formatting also keeps the sample's percent sign literal.
 static void ShowFont(const FontDesc_t *pFont, const char *pName)
 {
-	if (!g_Lcd.SetFont(pFont)) { return; }
+	if (!g_Lcd.SetFont(pFont))
+	{
+		return;
+	}
 	g_Lcd.printf("%s\r\n", pName);
 	for (size_t off = 0; off < sizeof(s_FontText) - 1; off += 32)
 	{
@@ -162,7 +165,10 @@ int main()
 	uint32_t colorg = 0;
 	uint32_t colorb = 0;
 
-	if (!HardwareInit()) { return 1; }
+	if (!HardwareInit())
+	{
+		return 1;
+	}
 
 	colorr = EndianCvt16(0xf800);
 	colorg = EndianCvt16(0x7e0);
@@ -306,4 +312,5 @@ int main()
 
 	return 0;
 }
+
 

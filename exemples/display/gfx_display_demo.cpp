@@ -118,7 +118,7 @@ static bool HardwareInit()
 
 static uint32_t DemoColor(unsigned Index)
 {
-	static const uint16_t colors[] = {0xFFFF, 0xF800, 0x07E0, 0x001F};
+	static const uint16_t colors[] = { 0xFFFF, 0xF800, 0x07E0, 0x001F };
 	return DISPLAY_PIXEL_SIZE == 1 ? 1 : colors[Index % 4];
 }
 
@@ -181,8 +181,14 @@ static void ShowAnimation()
 		Rectangle(x, y, bw, bh, DemoColor(frame / 40));
 		msDelay(25);
 		g_Lcd.Fill(x, y, bw, bh, 0);
-		if (x + dx < 2 || x + dx + bw > w - 2) { dx = -dx; }
-		if (y + dy < 2 || y + dy + bh > h - 2) { dy = -dy; }
+		if (x + dx < 2 || x + dx + bw > w - 2)
+		{
+			dx = -dx;
+		}
+		if (y + dy < 2 || y + dy + bh > h - 2)
+		{
+			dy = -dy;
+		}
 		x += dx;
 		y += dy;
 	}
@@ -190,7 +196,10 @@ static void ShowAnimation()
 
 int main()
 {
-	if (!HardwareInit()) { return 1; }
+	if (!HardwareInit())
+	{
+		return 1;
+	}
 	while (1)
 	{
 		ShowLines();

@@ -41,4 +41,5 @@ Timer conversion and SSD1315 driver, and a SPI OLED RAM model under
 ASan/UBSan at -O0/-Os. Tests cover displayed digits, a delayed iteration,
 pause/resume, lap retention, reset guards, menu navigation, time continuing
 through ADC read failure, counter wrap and the upper display limit.
-Stopwatch hardware validation remains pending.
+On October 19, 2026, the maintainer confirmed that StopwatchDemo works
+on the STM32WBA65I-DK1.

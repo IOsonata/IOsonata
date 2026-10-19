@@ -141,7 +141,7 @@ BtGattChar_t g_UartChars[] = {
 	BT_CHAR(BLE_UART_UUID_TX_CHAR, PACKET_SIZE,
 			BT_GATT_CHAR_PROP_WRITE_WORESP,
 			s_TxCharDescString,
-			.WrCB = UartTxSrvcCallback),
+	.WrCB = UartTxSrvcCallback),
 };
 
 uint8_t g_LWrBuffer[512];
@@ -150,7 +150,7 @@ uint8_t g_LWrBuffer[512];
 BtGattSrvc_t g_UartBleSrvc = BT_SRVC_CUSTOM(BLE_UART_UUID_BASE,
 											BLE_UART_UUID_SERVICE,
 											g_UartChars,
-											.SecType = BLE_SECURITY_TYPE);
+	.SecType = BLE_SECURITY_TYPE);
 
 const BtAppDevInfo_t s_UartBleDevDesc = {
 	MODEL_NAME,       		// Model name
@@ -369,17 +369,32 @@ alignas(4) uint8_t g_AppEvtHandlerQueMem[APPEVT_HANDLER_QUE_MEMSIZE(16)];
 static const IOPinCfg_t s_DisplayPins[] = TFT_PINS;
 static const IOPinCfg_t s_DisplaySpiPins[] = SPI_PINS;
 static const SPICfg_t s_DisplaySpiCfg = {
-	.DevNo = SPI_DEVNO, .Phy = SPI_PHY, .Mode = SPIMODE_MASTER,
-	.pIOPinMap = s_DisplaySpiPins, .NbIOPins = sizeof(s_DisplaySpiPins) / sizeof(s_DisplaySpiPins[0]),
-	.Rate = SPI_RATE, .DataSize = 8, .MaxRetry = 5,
-	.BitOrder = SPIDATABIT_MSB, .DataPhase = SPIDATAPHASE_FIRST_CLK,
-	.ClkPol = DISPLAY_SPI_CLKPOL, .ChipSel = SPICSEL_AUTO,
-	.bDmaEn = DISPLAY_SPI_DMA_ENABLE, .bIntEn = false, .IntPrio = 6, .EvtCB = nullptr
+	.DevNo = SPI_DEVNO,
+	.Phy = SPI_PHY,
+	.Mode = SPIMODE_MASTER,
+	.pIOPinMap = s_DisplaySpiPins,
+	.NbIOPins = sizeof(s_DisplaySpiPins) / sizeof(s_DisplaySpiPins[0]),
+	.Rate = SPI_RATE,
+	.DataSize = 8,
+	.MaxRetry = 5,
+	.BitOrder = SPIDATABIT_MSB,
+	.DataPhase = SPIDATAPHASE_FIRST_CLK,
+	.ClkPol = DISPLAY_SPI_CLKPOL,
+	.ChipSel = SPICSEL_AUTO,
+	.bDmaEn = DISPLAY_SPI_DMA_ENABLE,
+	.bIntEn = false,
+	.IntPrio = 6,
+	.EvtCB = nullptr
 };
 static DisplayCfg_t s_DisplayCfg = {
-	.DevAddr = 0, .pPins = s_DisplayPins, .NbPins = sizeof(s_DisplayPins) / sizeof(s_DisplayPins[0]),
-	.Stride = DISPLAY_STRIDE, .Width = DISPLAY_WIDTH, .Height = DISPLAY_HEIGHT,
-	.PixelSize = DISPLAY_PIXEL_SIZE, .Orient = DISPLAY_ORIENTATION
+	.DevAddr = 0,
+	.pPins = s_DisplayPins,
+	.NbPins = sizeof(s_DisplayPins) / sizeof(s_DisplayPins[0]),
+	.Stride = DISPLAY_STRIDE,
+	.Width = DISPLAY_WIDTH,
+	.Height = DISPLAY_HEIGHT,
+	.PixelSize = DISPLAY_PIXEL_SIZE,
+	.Orient = DISPLAY_ORIENTATION
 };
 static SPI s_DisplaySpi;
 static DISPLAY_DRIVER s_Display;
@@ -388,21 +403,38 @@ static volatile bool s_DisplayQueued;
 
 static const char *SecurityText(bool Known, const BtConnSec_t &Sec)
 {
-	if (!Known) { return "unknown"; }
+	if (!Known)
+	{
+		return "unknown";
+	}
 	switch (Sec.Level)
 	{
-		case BT_GAP_SEC_LEVEL_NONE: return "open L1";
-		case BT_GAP_SEC_LEVEL_ENC_UNAUTH: return "enc L2";
-		case BT_GAP_SEC_LEVEL_ENC_AUTH: return "MITM L3";
-		case BT_GAP_SEC_LEVEL_LESC_AUTH: return "LESC MITM L4";
-		default: return "unknown";
+		case BT_GAP_SEC_LEVEL_NONE:
+			return "open L1";
+		case BT_GAP_SEC_LEVEL_ENC_UNAUTH:
+			return "enc L2";
+		case BT_GAP_SEC_LEVEL_ENC_AUTH:
+			return "MITM L3";
+		case BT_GAP_SEC_LEVEL_LESC_AUTH:
+			return "LESC MITM L4";
+		default:
+			return "unknown";
 	}
 }
+
 static void StatusDisplayRefresh(uint32_t, void *)
 {
 	s_DisplayQueued = false;
-	if (!s_DisplayReady) { return; }
-	struct Link { uint16_t Hdl; uint8_t Addr[6]; } links[2];
+	if (!s_DisplayReady)
+	{
+		return;
+	}
+
+	struct Link {
+		uint16_t Hdl;
+		uint8_t Addr[6];
+	} links[2];
+
 	unsigned count = 0, shown = 0;
 	bool awaiting = false;
 	uint32_t number = 0;
@@ -410,7 +442,10 @@ static void StatusDisplayRefresh(uint32_t, void *)
 	for (uint16_t i = 0; i < BtPeerCount(); i++)
 	{
 		BtDevice_t *p = BtPeerSlot(i);
-		if (!p || p->Conn.Hdl == BT_CONN_HDL_INVALID) { continue; }
+		if (!p || p->Conn.Hdl == BT_CONN_HDL_INVALID)
+		{
+			continue;
+		}
 		count++;
 		if (shown < 2)
 		{
@@ -454,37 +489,54 @@ static void StatusDisplayRefresh(uint32_t, void *)
 		s_Display.printf("Buttons: yes/no");
 #endif
 	}
-	else { s_Display.printf("UART: 1000000 baud"); }
+	else
+	{
+		s_Display.printf("UART: 1000000 baud");
+	}
 }
+
 static void StatusDisplayTick(TimerDev_t *, int, void *)
 {
 	if (s_DisplayReady && !s_DisplayQueued)
 	{
 		s_DisplayQueued = true;
-		if (!AppEvtHandlerQue(0, nullptr, StatusDisplayRefresh)) { s_DisplayQueued = false; }
+		if (!AppEvtHandlerQue(0, nullptr, StatusDisplayRefresh))
+		{
+			s_DisplayQueued = false;
+		}
 	}
 }
+
 static bool StatusDisplayInit()
 {
 	if (!s_DisplaySpi.Init(s_DisplaySpiCfg) || !s_Display.Init(s_DisplayCfg, &s_DisplaySpi) ||
-		s_Display.Width() < 128 || s_Display.Height() < 64 || !s_Display.SetFont(&iFontSystem5x7)) { return false; }
+		s_Display.Width() < 128 || s_Display.Height() < 64 || !s_Display.SetFont(&iFontSystem5x7))
+	{
+		return false;
+	}
 	s_Display.Backlight(true);
 	s_DisplayReady = true;
 	StatusDisplayRefresh(0, nullptr);
 	if (!g_Timer.EnableTimerTrigger(0, uint32_t(250), TIMER_TRIG_TYPE_CONTINUOUS, StatusDisplayTick, nullptr))
 	{
 		s_DisplayReady = false;
-		s_Display.Clear(); s_Display.printf("Timer trigger failed");
+		s_Display.Clear();
+		s_Display.printf("Timer trigger failed");
 		return false;
 	}
 	return true;
 }
+
 static void StatusDisplayError(const char *Message)
 {
-	if (!s_DisplayReady) { return; }
+	if (!s_DisplayReady)
+	{
+		return;
+	}
 	s_DisplayReady = false;
 	g_Timer.DisableTimerTrigger(0);
-	s_Display.Clear(); s_Display.printf("%s", Message);
+	s_Display.Clear();
+	s_Display.printf("%s", Message);
 }
 #endif
 
@@ -522,11 +574,17 @@ void ButEvent(int IntNo, void *pCtx)
 bool HardwareInit()
 {
 	g_bUartState = g_Uart.Init(g_UartCfg);
-	if (!g_bUartState) { return false; }
+	if (!g_bUartState)
+	{
+		return false;
+	}
 
 #ifdef TIMER_DEVNO
 	// Free running timer for the millisecond stamp on each log line.
-	if (!g_Timer.Init(s_TimerCfg)) { return false; }
+	if (!g_Timer.Init(s_TimerCfg))
+	{
+		return false;
+	}
 #endif
 
 	// Route SysLog to the same UART so the SMP/ATT stack traces (SMP_TRACE,
@@ -662,9 +720,15 @@ int UartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int Buffer
 int main()
 {
 #ifdef BLE_STATUS_DISPLAY
-	if (!AppEvtHandlerInit(g_AppEvtHandlerQueMem, sizeof(g_AppEvtHandlerQueMem))) { return 1; }
+	if (!AppEvtHandlerInit(g_AppEvtHandlerQueMem, sizeof(g_AppEvtHandlerQueMem)))
+	{
+		return 1;
+	}
 #endif
-	if (!HardwareInit()) { return 1; }
+	if (!HardwareInit())
+	{
+		return 1;
+	}
 #ifdef BLE_STATUS_DISPLAY
 	if (!StatusDisplayInit())
 	{
