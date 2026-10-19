@@ -262,8 +262,11 @@ about 66 kB/s, 0 errors. A first polling run lost about 1 percent of the
 bytes and did not repeat, most likely a library not rebuilt. UartLoopback
 sets `UART_DMA_MODE` in its board.h, as on the WBA65. The rates are 1.4 percent above the 100000 B/s of
 1 Mbaud 8N1: the core clock comes from the MSI through the PLL and SystemInit
-does not lock the MSI to the LSE (MSIPLLEN), the MSI keeps its factory
+did not lock the MSI to the LSE (MSIPLLEN), the MSI kept its factory
 calibration. The NUCLEO-L432KC measured 99.9 kB/s with the same code.
+SystemInit now sets MSIPLLEN after the LSE is ready when `g_McuOsc` has the
+RC core oscillator and the LSE crystal (2026-10-19), not tested on the
+boards yet.
 
 STM32L432: `STM32L432/lib/ioc` has the Debug, Release, Debug_FPU and
 Release_FPU configurations of the L476 library. It adds the STM32L432xx
