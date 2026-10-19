@@ -27,3 +27,18 @@ with tempfile.TemporaryDirectory(prefix='ssd1315-') as td:
                        fonts + ['-o', str(exe)], check=True)
         subprocess.run([str(exe)], check=True)
         print(opt + ': SSD1315 checks passed', flush=True)
+        # Exercise the configuration supplied to SPIInit by the real console
+        # example, not just a manually configured mock display interface.
+        console = Path(td) / 'ssd1315_console_test'
+        console_sources = ['tests/display/ssd1315_console_test.cpp',
+                           'src/display/display_ssd1315.cpp', 'src/display/display.cpp',
+                           'src/device.cpp', 'src/device_intrf.cpp']
+        subprocess.run(cmd + ['-DSTM32WBA65xx', '-ffunction-sections', '-fdata-sections',
+                             '-Wno-unused-but-set-variable',
+                             '-Wno-missing-field-initializers',
+                             '-I' + str(ROOT / 'ARM/ST/include'),
+                             '-I' + str(ROOT / 'ARM/ST/STM32WBAxx/STM32WBA65/exemples/LCDConsoleDisplayDemo/src'),
+                             '-Wl,--gc-sections'] +
+                       [str(ROOT / p) for p in console_sources] + fonts +
+                       ['-o', str(console)], check=True)
+        subprocess.run([str(console)], check=True)

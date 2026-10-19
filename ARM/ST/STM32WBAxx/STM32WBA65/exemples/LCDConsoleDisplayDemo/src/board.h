@@ -28,7 +28,8 @@
 #define DISPLAY_HEIGHT 64
 #define DISPLAY_STRIDE 16
 #define DISPLAY_PIXEL_SIZE 1
-#define DISPLAY_SPI_CLKPOL SPICLKPOL_LOW
+// IOsonata names the active polarity: HIGH means CPOL=0, idle low.
+#define DISPLAY_SPI_CLKPOL SPICLKPOL_HIGH
 #define DISPLAY_SPI_DMA_ENABLE false
 
 #define SPI_DEVNO OLED_SPI_DEVNO
