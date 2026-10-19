@@ -14,7 +14,10 @@ The emulator sets g_BondFwBoot before each boot and keeps the flash between
 boots, so a boot is a reset. BondFwProtect asks the emulator to refuse writes
 to the bond store region: -1 off, 0 from now on, n from the n-th next
 BtPdsWrite call. Printed lines go to the emulator through BondFwConsole, and
-the emulator checks the retry times against the poll count. Boots 6 to 8
+the emulator checks the retry times against the poll count. The vector table
+is the WBA65 one (vectors_stm32wba65.c), so an NMI the emulator raises for a
+flash double ECC error runs the port's NMI_Handler; BondFwNmiTrap is where
+the emulator returns from it. Boots 6 to 8
 are the power cut sweep of run_bond_flash.py --powercut: prepare the old
 image, the save the emulator cuts, and the boot after the cut.
 
@@ -72,6 +75,7 @@ extern "C" void BtSmpBondWbaPoll(void);
 extern "C" void BondFwConsole(const char *pStr, int Len) __attribute__((noinline));
 extern "C" void BondFwProtect(int Mode) __attribute__((noinline));
 extern "C" void BondFwDone(void) __attribute__((noinline));
+extern "C" void BondFwNmiTrap(void) __attribute__((noinline));
 
 extern "C" volatile uint32_t g_BondFwBoot;
 extern "C" volatile int32_t g_BondFwResult;
@@ -104,6 +108,16 @@ extern "C" void BondFwDone(void)
 {
 	__asm volatile ("" ::: "memory");
 }
+
+// Return address the emulator gives the NMI it raises. Nothing calls it, so
+// the pointer below keeps it in the link.
+extern "C" void BondFwNmiTrap(void)
+{
+	__asm volatile ("" ::: "memory");
+}
+
+extern "C" void (* volatile g_pBondFwNmiTrap)(void);
+void (* volatile g_pBondFwNmiTrap)(void) = BondFwNmiTrap;
 
 // The store prints through SysLog; here every line goes to the emulator.
 SysLog_t *SysLogGet(void)
@@ -420,6 +434,8 @@ extern "C" int main(void)
 	};
 	uint32_t boot = g_BondFwBoot;
 
+	(void)g_pBondFwNmiTrap;
+
 	Print("bond flash test, boot %lu\r\n", (unsigned long)boot);
 	if (boot < sizeof(s_Boot) / sizeof(s_Boot[0]))
 	{
@@ -437,11 +453,11 @@ extern "C" int main(void)
 
 // Minimal start: stack, data and bss, the static constructors of the store
 // objects, then main
-extern "C" uint32_t _sidata, _sdata, _edata, _sbss, _ebss, _estack;
+extern "C" uint32_t _sidata, _sdata, _edata, _sbss, _ebss;
 extern "C" void (*__init_array_start[])(void);
 extern "C" void (*__init_array_end[])(void);
 
-extern "C" void ResetHandler(void)
+extern "C" void ResetEntry(void)
 {
 	uint32_t *src = &_sidata;
 
@@ -462,9 +478,3 @@ extern "C" void ResetHandler(void)
 	{
 	}
 }
-
-extern "C" __attribute__((section(".isr_vector"), used))
-void (* const __Vectors[16 + 128])(void) = {
-	(void (*)(void))&_estack,
-	ResetHandler,
-};

@@ -118,6 +118,14 @@ October 18 review fixes, tested locally:
   **330 cuts**, every boot after a cut restored the committed image and
   stored the next save, with no quad word programmed over data. This repeats
   the power-loss test through the real `Nvm` layer and flash driver.
+- Flash ECC after a power cut: the flash model now raises the double ECC
+  error NMI when a quad word left half programmed or half erased is read,
+  and the test firmware links the WBA65 vector table. Before the fix, all 37
+  half done cuts of the first bank switch stopped the next boot in
+  `Default_Handler`. With it, 164 of the 165 half done cuts of the sweep took
+  the NMI at the next boot and none stopped; the 330 cuts restored the
+  committed image and stored the next save. A read error that passes (two
+  failed reads of a sector header) keeps the sector and the image.
 - Cortex-M33 crypto integration: **18 checks, 0 failures**, including
   incremental CMAC and three interrupt preemptions while AES is busy.
   The existing model warning about the platform `HW_RNG_Get` initialization
@@ -176,16 +184,18 @@ Release library leaves it out. Errors are always printed.
 
 - Pairing rejection, persistence failure recovery on hardware, and radio
   scheduling during flash writes need separate tests.
-- Flash ECC after a power cut. A cut during a quad word program or a page
-  erase can leave a word that fails the flash ECC check when it is read. On
-  the WBA a double ECC error raises the NMI (`HAL_FLASHEx_ECCD_IRQHandler`
-  in the ST HAL), and the WBA65 NMI vector is the default handler, an
-  endless loop. In the power cut sweep, 164 of 165 half done cuts left such
-  a word where the next boot's PDS mount reads it. If the silicon reports a
-  double error there, the device stops in the NMI at every boot until the
-  bond region is erased. Not handled yet: an NMI path that clears ECCD and
-  makes the flash read fail, PDS treating that word as torn, and a physical
-  power cut test on the DK1.
+- Flash ECC after a power cut is handled in software and not yet on the
+  board. A cut during a quad word program or a page erase can leave a word
+  that fails the flash ECC check; on the WBA a double error raises the NMI.
+  `NMI_Handler` of the WBA65 vector table hands it to `Stm32FlashEccNmi` of
+  the flash driver, which takes only an error inside its own read: it clears
+  ECCD and that read fails. Any other NMI still stops in `Default_Handler`.
+  PDS tries a read three times; a read that still fails is a damaged record
+  (no more appends to that sector) or a damaged sector header (the sector is
+  erased at init, as for a header that fails its check). The address decode
+  follows `HAL_FLASHEx_GetEccInfo`. An application that defines its own
+  `NMI_Handler` must call `Stm32FlashEccNmi` first. A physical power cut
+  test on the DK1 remains to be done.
 - The largest bond image that can still be updated is about 3.6 KB (19 PDS
   chunk records per bank, 456 of the 512 cache words), from the record and
   sector sizes; not measured.
