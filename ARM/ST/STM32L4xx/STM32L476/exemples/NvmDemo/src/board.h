@@ -69,8 +69,8 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 }
 
 // MX25R6435F : 64 Mbits NOR flash, 4K sector, 256 byte page, JEDEC id
-// C2 28 17. The single line read and page program commands, the defaults of
-// Nvm.
+// C2 28 17. Quad: QREAD 0x6B (1-1-4, 8 dummy cycles) and 4PP 0x38 (1-4-4),
+// with the Quad Enable bit, status register 1 bit 6, set by Nvm.
 #define NVM_DEMO_CHIP_CFG	{ \
 	.DevNo = 0, \
 	.TotalSize = 64 * 1024 * 1024 / 8, \
@@ -79,6 +79,9 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 	.AddrSize = 3, \
 	.DevId = 0x1728C2, \
 	.DevIdSize = 3, \
+	.RdCmd = { 0x6B, 8 }, \
+	.WrCmd = { 0x38, 0 }, \
+	.QuadEnable = { 1, 6 }, \
 	.WrProtMask = 0x3C, \
 	.WrProtPin = { -1, -1, }, \
 }
