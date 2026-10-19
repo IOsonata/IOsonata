@@ -881,3 +881,109 @@ Debug/Release compile and link checks pass. OLED model tests cover digits,
 preset bounds, debounce, pause/resume, reset, expiry/LED, input failures and
 clock wrap at -O0/-Os under ASan/UBSan. On October 19, 2026, the maintainer confirmed that CountdownTimerDemo
 works on the STM32WBA65I-DK1. See the [project instructions](exemples/CountdownTimerDemo/README.md).
+
+
+## Native SAI PDM microphone capture
+
+`pdm_stm32wba.cpp` implements the existing `coredev/pdm.h` C API using
+SAI1 block A and one channel from the shared GPDMA manager. No generic PDM
+configuration or function signature changes. The portable filter is in
+`audio/pdm_filter.h` and `src/audio/pdm_filter.cpp`. Rebuild the matching
+Debug or Release MCU library to include these new sources.
+
+This captures a microphone wired directly to a SAI PDM input. The onboard
+STM32WBA65I-DK1 microphone feeds the WM8904 codec, whose output reaches SAI
+as audio samples. This native PDM driver does not initialize that codec or
+implement its I2S capture path.
+
+Supported configuration:
+
+- One microphone pair on SAI1_D1, mono left/right or interleaved stereo.
+- PDM pins use AF3. Clock routes are CK1 on PA1, PA9, PE2 or PG7, or CK2
+  on PA6 or PE5. Data routes are D1 on PA2, PA10, PC3, PD5 or PE6.
+  Select pins available on the MCU package and accessible on the board.
+  The pin array is clock/output first, data/input second.
+- HSI16 supplies the SAI clock. The driver selects the nearest PDM clock
+  obtainable with dividers 1 through 63 and stores it in
+  `PdmDev_t::CfgData.Freq`. Zero requests the 1 MHz default. For example,
+  requesting 1.032 MHz selects 1 MHz; PCM rate is then 15,625 samples/s
+  per channel, with the HSI oscillator's accuracy.
+- Signed 16-bit PCM, native byte order, with 64:1 third-order CIC
+  decimation. The CIC has no passband compensation or DC-removal stage;
+  this is not a calibrated sound-pressure measurement.
+  Only gain fields of zero are supported; other gain values fail Init.
+- With `PDM_SMPLMODE_FALLING`, the first channel is the falling-edge
+  microphone; RISING swaps the two edge streams. OpMode then selects the
+  first/second channel or both.
+- `bIntEn` selects interrupt notification or polling service. Both use DMA
+  for continuous raw capture. There is no dependency on AppRun or AppEvt.
+
+Use aligned caller-owned memory sized with
+`CFIFO_TOTAL_MEMSIZE(blocks, pcm_bytes_per_block)`. A PCM block must contain
+whole 16-bit samples, and whole left/right pairs in stereo. `NbSamples`
+counts 16-bit values in a returned block, including both channels in stereo.
+The driver owns four additional 512-byte raw DMA blocks and fixed filter
+state; it allocates no heap memory.
+
+Init claims SAI1 and a free GPDMA channel. It fails without disturbing a
+different owner, an already clocked SAI1, invalid pins/buffers/modes, DMA
+exhaustion or an HSI-ready timeout. Init enables the logical device;
+Start begins capture. Enable after Disable allows another Start.
+Stop discards queued/partial input and PCM. SetMode validates the new mode,
+stops capture and requires a new Start; an invalid request leaves the
+existing mode/capture intact. PowerOff releases the DMA channel and SAI1
+clock and restores the prior SAI clock selection. HSI is kept available
+for other MCU users. Reconfiguration uses PowerOff followed by Init.
+
+The DMA interrupt publishes a finished raw block and starts another.
+`DEVINTRF_EVT_RX_DATA` means raw input is available, so the callback should
+wake or flag the application. Call `PdmGetSamples` repeatedly in application
+context until it returns null. Each call converts at most one raw block
+and returns as soon as a complete PCM block is available; even a one-sample
+PCM buffer can be drained without losing the rest of a raw block. An
+incomplete PCM block stays private. The returned pointer remains FIFO-owned
+and must be consumed/copied before the next GetSamples call.
+
+The first two SAI PDM frames are discarded on every Start, as required by
+RM0515. On a DMA/SAI error, STATECHG signals stopped capture; exhausting the
+raw queue reports RX_FIFO_FULL and stops rather than overwriting input
+being filtered. GetSamples returns null after either failure. The application
+can Start again to discard old data and reset the filters. In polling mode,
+GetSamples services completion/error flags and must be called often enough
+to keep the capture FIFO from overrunning. Keep the SAI/GPDMA clocks running
+during capture; stop capture before a deep sleep that gates them. Lifecycle
+calls and GetSamples have one application-context owner.
+
+Validation:
+
+- Driver and filter compile for Debug/Release; an application calling the
+  PDM API links with the real shared GPDMA implementation.
+- Cortex-M33 software/register simulation passes at -O0/-Os. It uses real
+  CMSIS, PDM, CIC and CFifo code with the DMA transport modeled at the
+  channel-manager API. Checks cover configuration, ownership, clock
+  selection, mono/stereo/edge mapping, initial-frame discard, deferred
+  PCM publication, tiny buffers, polling/interrupt service, raw queue
+  exhaustion, DMA/SAI errors, HSI timeout, stuck-stop reset and restart.
+- An independent finite FIR reference matches 2,560 PCM samples at each
+  optimization under ASan/UBSan, including saturation, modulo wrap and reset.
+- Physical PDM clock, microphone capture and sustained capture timing remain
+  pending hardware validation.
+
+Run the tests with:
+
+```sh
+python3 -m venv /tmp/iosonata-pdm-tests
+/tmp/iosonata-pdm-tests/bin/pip install -r tests/stm32wba/requirements-pdm.txt
+/tmp/iosonata-pdm-tests/bin/python tests/stm32wba/run_pdm.py
+python3 tests/audio/run_pdm_filter.py
+```
+
+The emulation uses Unicorn 2.0.1.post1. Unicorn 2.1.4 misexecutes a Thumb IT
+block in this optimized firmware; the same binary passes with the pinned
+version. The runner rejects that version explicitly.
+
+References: [RM0515](https://www.st.com/resource/en/reference_manual/rm0515-stm32wba6xxx-series-advanced-armbased-32bit-mcus-stmicroelectronics.pdf),
+SAI PDM section and tables 422/423;
+[DS14736](https://www.st.com/resource/en/datasheet/stm32wba65ri.pdf), AF3 table;
+[board audio connections](https://github.com/STMicroelectronics/stm32wba65ri-dk1-bsp/blob/main/stm32wba65i_discovery_audio.c).
+

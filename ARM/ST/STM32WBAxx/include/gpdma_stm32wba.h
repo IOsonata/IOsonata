@@ -50,7 +50,7 @@ SOFTWARE.
 
 #define WBA_GPDMA_NBCH				8
 
-/// GPDMA1 request numbers of the I2C and SPI instances
+/// GPDMA1 request numbers of the I2C, SPI and SAI instances
 #define WBA_GPDMA_REQ_SPI1_RX		1
 #define WBA_GPDMA_REQ_SPI1_TX		2
 #define WBA_GPDMA_REQ_SPI3_RX		3
@@ -65,6 +65,9 @@ SOFTWARE.
 #define WBA_GPDMA_REQ_I2C2_TX		55
 #define WBA_GPDMA_REQ_I2C4_RX		57
 #define WBA_GPDMA_REQ_I2C4_TX		58
+
+#define WBA_GPDMA_REQ_SAI1_A		17
+#define WBA_GPDMA_REQ_SAI1_B		18
 
 /// Channel flags returned by WbaGpdmaFlags
 #define WBA_GPDMA_FLAG_TC			1U		//!< Transfer complete
@@ -182,3 +185,4 @@ void WbaGpdmaClear(int Ch);
 #endif
 
 #endif	// __GPDMA_STM32WBA_H__
+
