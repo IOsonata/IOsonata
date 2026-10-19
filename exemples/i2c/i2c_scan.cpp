@@ -3,7 +3,8 @@
 
 @brief	I2C master bus scan.
 
-Probes every 7 bit address from 0x08 to 0x77 with a START and the address,
+Probes every 7 bit address from 0x08 to 0x77 with a START and the address
+(or a one-byte read when I2C_SCAN_READ_PROBE is selected),
 and prints the addresses acknowledged. Then, when I2C_SCAN_REG_DEVADDR is
 defined, reads the register I2C_SCAN_REG of that device, for example an ID
 register, and prints its value.
@@ -45,6 +46,7 @@ SOFTWARE.
 
 #include "coredev/system_core_clock.h"
 #include "coredev/uart.h"
+#include "coredev/interrupt.h"
 #include "coredev/i2c.h"
 #include "stddev.h"
 #include "board.h"
@@ -59,6 +61,10 @@ McuOsc_t g_McuOsc = MCUOSC;
 
 #ifndef I2C_SCAN_INT_ENABLE
 #define I2C_SCAN_INT_ENABLE	false
+#endif
+
+#ifndef I2C_SCAN_READ_PROBE
+#define I2C_SCAN_READ_PROBE false
 #endif
 
 #define I2C_SCAN_ADDR_FIRST	0x08
@@ -129,7 +135,7 @@ static int I2cEvent(DevIntrf_t * const pDev, DEVINTRF_EVT Evt, uint8_t *pBuffer,
 	return 0;
 }
 
-#ifdef I2C_SCAN_REG_DEVADDR
+#if defined(I2C_SCAN_REG_DEVADDR) || I2C_SCAN_READ_PROBE
 // A negative count is a transfer running in the background, its end comes
 // with DEVINTRF_EVT_COMPLETED
 static int I2cWait(int Count)
@@ -192,10 +198,16 @@ int main()
 
 	for (addr = I2C_SCAN_ADDR_FIRST; addr <= I2C_SCAN_ADDR_LAST; addr++)
 	{
-		// The START with the address is acknowledged by a device at it
-		if (s_I2c.StartTx(addr))
+#if I2C_SCAN_READ_PROBE
+		uint8_t probe;
+		s_I2cCount = -1;
+		bool present = I2cWait(s_I2c.Rx(addr, &probe, 1)) == 1;
+#else
+		bool present = s_I2c.StartTx(addr);
+		if (present) { s_I2c.StopTx(); }
+#endif
+		if (present)
 		{
-			s_I2c.StopTx();
 			printf("Device at 0x%02X\r\n", addr);
 			found++;
 		}
@@ -222,3 +234,4 @@ int main()
 
 	return 0;
 }
+
