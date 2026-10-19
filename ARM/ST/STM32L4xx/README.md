@@ -213,8 +213,9 @@ UART hardware run: the STM32L476 examples UartLoopback
 (`exemples/uart/uart_loopback.cpp`) and UartPrbsTxTest
 (`exemples/uart/uart_prbs_tx.cpp`) select their board with `#define BOARD` in
 `board.h`, from the pin maps of `ARM/ST/include/stm32_boards.h`. The project
-builds for B_L475E_IOT01A (the default, STM32L475VG: UART4, DevNo 4, on
-Arduino D0 PA1 and D1 PA0, AF8; ST-LINK virtual COM port on USART1 PB6/PB7)
+builds for B_L475E_IOT01A (the default, STM32L475VG: the ST-LINK virtual
+COM port, USART1, DevNo 1, PB7 RX and PB6 TX, AF7, since 2026-10-19, Release
+linked with nosys; UART4, DevNo 4, on Arduino D0 PA1 and D1 PA0, AF8)
 and STM32L476G_DISCO (USART2, DevNo 2, on PD5 TX and PD6 RX, AF7, also the
 virtual COM port). The old `src/sysstatus.c` is retired; `syslog.cpp` and `sysstatus.h` replace it.
 The STM32L476 library and these
