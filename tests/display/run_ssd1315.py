@@ -66,3 +66,20 @@ with tempfile.TemporaryDirectory(prefix='ssd1315-') as td:
                        [str(ROOT / p) for p in menu_sources] + fonts +
                        ['-o', str(menu)], check=True)
         subprocess.run([str(menu)], check=True)
+        scan = Path(td) / 'ble_scan_display_test'
+        scan_sources = ['tests/display/ble_scan_display_test.cpp',
+                        'src/display/display_ssd1315.cpp', 'src/display/display.cpp',
+                        'src/device.cpp', 'src/device_intrf.cpp', 'src/coredev/timer.cpp',
+                        'src/app_evt_handler.cpp', 'src/bluetooth/bt_adv.cpp']
+        fifo = Path(td) / 'cfifo.o'
+        subprocess.run([os.environ.get('CC', 'gcc'), opt, '-I' + str(ROOT / 'include'),
+                        '-fsanitize=address,undefined', '-c', str(ROOT / 'src/cfifo.c'),
+                        '-o', str(fifo)], check=True)
+        subprocess.run(cmd + ['-DSTM32WBA65xx', '-ffunction-sections', '-fdata-sections',
+                             '-Wno-unused-parameter', '-Wno-missing-field-initializers',
+                             '-I' + str(ROOT / 'ARM/ST/include'),
+                             '-I' + str(ROOT / 'ARM/ST/STM32WBAxx/STM32WBA65/exemples/BleScanDisplayDemo/src'),
+                             '-Wl,--gc-sections'] +
+                       [str(ROOT / p) for p in scan_sources] + fonts + [str(fifo)] +
+                       ['-o', str(scan)], check=True)
+        subprocess.run([str(scan)], check=True)

@@ -783,8 +783,8 @@ The shared `exemples/display/console_display_demo.cpp` cycles font samples,
 scrolling and orientation. Fonts too large for the panel are skipped.
 
 The driver and demo build and link with Arm GCC 13.2.1 in both configurations.
-SPI display-model tests pass at `-O0` and `-Os` with ASan/UBSan; OLED hardware
-operation has not yet been tested. See [SSD1315 usage](../../../../docs/display/ssd1315.md).
+SPI display-model tests pass at `-O0` and `-Os` with ASan/UBSan. The maintainer
+confirmed that the console display demo works on the board. See [SSD1315 usage](../../../../docs/display/ssd1315.md).
 
 
 ## Analog joystick and OLED menu
@@ -804,5 +804,22 @@ Rebuild the matching Debug or Release MCU library first.
 
 The example builds and links in Debug and Release. ADC register simulation
 passes at -O0 and -Os, including failure recovery. The shared menu passes
-scripted input and SPI OLED RAM tests under ASan/UBSan. Joystick and menu
-hardware validation remains pending. See the [project instructions](exemples/JoystickMenuDemo/README.md).
+scripted input and SPI OLED RAM tests under ASan/UBSan. On October 19, 2026,
+the maintainer confirmed that the joystick example works on the board. See the [project instructions](exemples/JoystickMenuDemo/README.md).
+
+## BLE scanner on the OLED
+
+`exemples/BleScanDisplayDemo/ioc` enables the optional display in the existing
+shared `exemples/bluetooth/ble_central_scan.cpp`. It lists four recently seen
+advertiser addresses/names with RSSI values and bars. A name received in a
+scan response updates the same entry; entries expire after ten seconds.
+The timer queues a display refresh every 250 ms through AppEvt. No display
+transfer is done in the timer interrupt or scan-report callback.
+
+The board uses the working OLED SPI3 mapping and TIM16 (Timer DevNo 2),
+leaving LPTIM1/2 to Bluetooth. UART reports remain on the ST-LINK USART1 VCP
+at 1 Mbaud. Rebuild the matching Debug/Release MCU library first. Both the
+OLED and original UART-only scan projects compile and link. Display-model
+tests cover device identity, name preservation, RSSI bars, expiry, clock wrap
+and event queue saturation under ASan/UBSan. Hardware validation of this
+combined BLE/OLED example remains pending.

@@ -39,7 +39,8 @@ scaling and timeout/overrun recovery. `tests/display/run_ssd1315.py` runs the
 shared menu with scripted ADC input through the real SSD1315 driver and SPI
 RAM model under ASan/UBSan at -O0 and -Os. It checks the ladder, debounce,
 held keys, navigation, level limits, LED state and ADC read failures.
-Hardware validation of the joystick and this menu remains pending.
+Maintainer hardware result, October 19, 2026: the joystick example works on
+the STM32WBA65I-DK1.
 
 References:
 
