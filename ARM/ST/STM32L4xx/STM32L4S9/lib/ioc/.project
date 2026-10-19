@@ -1546,6 +1546,31 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/display/fonts/FreeSerif/FreeSerifIta8pt.c</locationURI>
 		</link>
 			<link><name>src/iopincfg_stm32.cpp</name><type>1</type><locationURI>PARENT-4-PROJECT_LOC/src/iopincfg_stm32.cpp</locationURI></link>
+		<link>
+			<name>src/Xiot</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/Xiot/FusionAhrs.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/Fusion/Fusion/FusionAhrs.c</locationURI>
+		</link>
+		<link>
+			<name>src/Xiot/FusionBias.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/Fusion/Fusion/FusionBias.c</locationURI>
+		</link>
+		<link>
+			<name>src/Xiot/FusionCompass.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/Fusion/Fusion/FusionCompass.c</locationURI>
+		</link>
+		<link>
+			<name>src/motion/att_xiot_fusion.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/motion/att_xiot_fusion.cpp</locationURI>
+		</link>
 	</linkedResources>
 	<variableList>
 		<variable>
