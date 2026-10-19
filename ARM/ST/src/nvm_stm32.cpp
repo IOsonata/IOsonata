@@ -588,10 +588,9 @@ extern "C" bool Stm32FlashEccNmi(void)
 // corrected error left set, by an earlier word of the read or by anything
 // else, would keep a double error in the next word from raising the NMI, and
 // the read would return the damaged bytes. ECCC is therefore cleared before
-// each word. Set again after the word, by the word's own corrected error or
-// by an interrupt or a code fetch in between, it may have hidden a double
-// error in the word, so the word is read once more with ECCC clear. Returns
-// false when the NMI took a double error inside the read.
+// each word. A correction recorded for this word is valid corrected data.
+// A correction elsewhere may have hidden a double error here: invalidate
+// cached data before retrying. Two uncertain attempts fail the read.
 static bool StFlashEccCopy(uint8_t *pBuff, uintptr_t Addr, int Len)
 {
 	s_bEccHit = false;
@@ -607,6 +606,7 @@ static bool StFlashEccCopy(uint8_t *pBuff, uintptr_t Addr, int Len)
 			n = Len;
 		}
 
+		bool checked = false;
 		for (int pass = 0; pass < 2; pass++)
 		{
 			ST_FLASH_ECCR = (ST_FLASH_ECCR & FLASH_ECCR_ECCIE) | FLASH_ECCR_ECCC;
@@ -616,12 +616,46 @@ static bool StFlashEccCopy(uint8_t *pBuff, uintptr_t Addr, int Len)
 			__DSB();
 			__ISB();
 
-			if (s_bEccHit || (ST_FLASH_ECCR & FLASH_ECCR_ECCC) == 0)
+			if (s_bEccHit)
 			{
 				break;
 			}
+
+			uint32_t eccr = ST_FLASH_ECCR;
+			if ((eccr & FLASH_ECCR_ECCC) == 0)
+			{
+				checked = true;
+				break;
+			}
+
+			uintptr_t word = Addr & ~(uintptr_t)(NVM_INTRF_WRITE_GRAN - 1);
+			uintptr_t off = word - FLASH_BASE;
+			bool bankMatches = true;
+#ifdef ST_FLASH_CR_BKER
+			uintptr_t bank = ST_FLASH_BANK_SIZE();
+			bankMatches = !StFlashBankSwapped() &&
+				((off >= bank) == ((eccr & FLASH_ECCR_BK_ECC) != 0));
+			off %= bank;
+#endif
+			// A corrected word is usable. Do not guess which bank a
+			// corrected address names when the banks are swapped.
+			if (bankMatches && (eccr & FLASH_ECCR_SYSF_ECC) == 0 &&
+				(uintptr_t)(eccr & FLASH_ECCR_ADDR_ECC_Msk) == off)
+			{
+				checked = true;
+				break;
+			}
+
+			// Clearing ECCC alone does not evict bytes fetched while it
+			// masked a double error. Flush even on the last attempt so a
+			// later call cannot accept those bytes from the cache.
+			StFlashCacheFlush();
 		}
 
+		if (!checked)
+		{
+			break;
+		}
 		pBuff += n;
 		Addr += (uintptr_t)n;
 		Len -= n;
@@ -630,7 +664,7 @@ static bool StFlashEccCopy(uint8_t *pBuff, uintptr_t Addr, int Len)
 	s_EccFrom = 0;
 	s_EccTo = 0;
 
-	bool ok = s_bEccHit == false;
+	bool ok = Len == 0 && s_bEccHit == false;
 
 	s_bEccHit = false;
 
@@ -900,3 +934,4 @@ void NvmIntrfGetStat(NvmIntrfStat_t *pStat)
 		*pStat = s_Stat;
 	}
 }
+

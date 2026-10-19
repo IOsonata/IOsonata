@@ -583,6 +583,31 @@ static void BootProgramError(void)
 		  "program error: the refused write left the data");
 }
 
+// Raw reads must reject a double error even when another correction masks
+// both attempts. A genuine corrected word must remain readable.
+static void BootEccRetry(void)
+{
+	uint8_t data[64];
+	Check(TestMemInit(), "ECC retry: Nvm over the region");
+	int count = s_TestMem.Read(0, data, sizeof(data));
+	if (g_BondFwArg[0])
+	{
+		Check(count < 0, "ECC retry: uncertain read refused");
+	}
+	else
+	{
+		Check(count == (int)sizeof(data), "ECC retry: valid corrected data read");
+		bool same = true;
+		for (unsigned i = 0; i < sizeof(data); i++)
+		{
+			same = same && data[i] == 0xA5;
+		}
+		Check(same, "ECC retry: data preserved");
+	}
+	Check(s_TestMem.Read(64, data, sizeof(data)) == (int)sizeof(data),
+		  "ECC retry: next read remains usable");
+}
+
 extern "C" void __cxa_pure_virtual(void)
 {
 	while (1)
@@ -599,7 +624,7 @@ extern "C" int main(void)
 		Boot0, Boot1, Boot2, Boot3, Boot4, BootNoRegion,
 		BootCutPrepare, BootCutSave, BootCutCheck,
 		BootErase0, BootErase1, BootErase2, BootErase3,
-		BootCutErase, BootCutEraseCheck, BootProgramError
+		BootCutErase, BootCutEraseCheck, BootProgramError, BootEccRetry
 	};
 	uint32_t boot = g_BondFwBoot;
 
@@ -647,3 +672,4 @@ extern "C" void ResetEntry(void)
 	{
 	}
 }
+

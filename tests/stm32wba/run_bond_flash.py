@@ -32,9 +32,12 @@ reference manual and the ST HAL (stm32wbaxx_hal_flash.c):
   A double error read with a flag already set raises nothing and the load
   returns the damaged bytes; a read the driver ends without reading such a
   word again fails the test;
-- ICACHE, disabled, or enabled for one run: then a read of the store after
+- ICACHE, disabled or enabled: then a read of the store after
   a program or an erase without an invalidation in between, or an ECC NMI
-  that returns without one, fails the test.
+  that returns without one, fails the test. A masked double error can fill
+  a cached word: clearing ECCC without invalidating it serves those same
+  bytes without a new ECC check. Raw read tests cover this and corrections
+  from elsewhere on both retry attempts.
 
 The flash content is kept between the boots of the firmware, so a boot is a
 reset. The one-second tick of the application is a call of
@@ -207,7 +210,7 @@ class Flash:
     the bond store region."""
 
     def __init__(self, mem, torn=None, transient=None, swap=False, corrected=None, icache=False,
-                 foreign=None):
+                 foreign=None, foreign_always=False):
         self.mem = mem			# bytearray of NVM_MAP bytes from NVM_BASE - kept across boots
         # Offsets of quad words a power cut left part programmed or part
         # erased, kept across boots. The silicon checks every flash read
@@ -239,6 +242,7 @@ class Flash:
         # between the clear and the load. Every other time, so a word read
         # again after one more clear is read without it.
         self.foreign = foreign if foreign is not None else set()
+        self.foreign_always = foreign_always
         self.flip = {}
         self.loaded = set()		# quad words loaded since ECCC was last cleared
         # In the NMI handler. Its clear of the flags is not a clear before a
@@ -249,6 +253,14 @@ class Flash:
         self.icache = icache
         self.icache_inv = 0
         self.stale = False		# programmed or erased since the last invalidation
+        # A masked double error can fill a cache line with invalid data.
+        # Keep those words until invalidation: flag clears alone do not make
+        # a later load go back to flash and check ECC again.
+        self.masked_cache = {}
+        self.masked_cache_hits = 0
+        self.masked_cache_clear = {}
+        self.ecc_clears = 0
+        self.masked_cache_reuses = 0
         self.cut_at = None		# flash operation the power cut stops, None for no cut
         self.tear = False		# the cut operation is left half done
         self.cut_done = False
@@ -335,6 +347,7 @@ class Flash:
             # ECCD and ECCC clear by writing 1, ECCIE is a setting
             if (val & self.ECCC) and not self.in_nmi:
                 self.loaded.clear()
+                self.ecc_clears += 1
             self.eccr &= ~(val & (self.ECCD | self.ECCC))
             self.eccr = (self.eccr & ~self.ECCIE) | (val & self.ECCIE)
             return
@@ -410,10 +423,17 @@ class Flash:
             self.unchecked = None
         for q in quads:
             if q in self.foreign and q not in self.loaded:
-                self.flip[q] = not self.flip.get(q, False)
+                self.flip[q] = self.foreign_always or not self.flip.get(q, False)
                 if self.flip[q]:
                     self.ecc_record((q + PAGE) % NVM_MAP, self.ECCC)
             self.loaded.add(q)
+        if self.icache and all(q in self.masked_cache for q in quads):
+            self.masked_cache_hits += 1
+            if any(self.masked_cache_clear[q] < self.ecc_clears for q in quads):
+                self.masked_cache_reuses += 1
+            data = bytes(self.masked_cache[a - a % QWORD][a % QWORD]
+                         for a in range(off, off + size))
+            return int.from_bytes(data, 'little')
         if self.skip_pc is not None or self.transient or self.torn or self.corrected:
             from unicorn.arm_const import UC_ARM_REG_PC
             pc = self.uc.reg_read(UC_ARM_REG_PC)
@@ -461,6 +481,9 @@ class Flash:
         if not self.ecc_record(q, self.ECCD):
             self.masked.append(addr)
             self.unchecked = q
+            if self.icache:
+                self.masked_cache[q] = bytes(self.mem[q:q + QWORD])
+                self.masked_cache_clear[q] = self.ecc_clears
             return
         if self.unchecked == q:
             self.unchecked = None
@@ -520,7 +543,7 @@ class Flash:
 
 
 def run_boot(elf_path, boot, mem, torn=None, cut=None, tear=False, args=None, transient=None,
-             swap=False, corrected=None, icache=False, foreign=None):
+             swap=False, corrected=None, icache=False, foreign=None, foreign_always=False):
     from unicorn import Uc, UC_ARCH_ARM, UC_MODE_THUMB, UC_MODE_MCLASS, UC_HOOK_CODE
     from unicorn.arm_const import UC_CPU_ARM_CORTEX_M33
     from unicorn.arm_const import UC_ARM_REG_R0, UC_ARM_REG_R1, UC_ARM_REG_SP, UC_ARM_REG_PC
@@ -540,7 +563,7 @@ def run_boot(elf_path, boot, mem, torn=None, cut=None, tear=False, args=None, tr
         if seg['p_type'] == 'PT_LOAD' and seg['p_filesz']:
             uc.mem_write(seg['p_paddr'], seg.data())
 
-    flash = Flash(mem, torn, transient, swap, corrected, icache, foreign)
+    flash = Flash(mem, torn, transient, swap, corrected, icache, foreign, foreign_always)
     flash.uc = uc
     flash.cut_at = cut
     flash.tear = tear
@@ -597,6 +620,8 @@ def run_boot(elf_path, boot, mem, torn=None, cut=None, tear=False, args=None, tr
         elif val & ic_inv:
             flash.icache_inv += 1
             flash.stale = False
+            flash.masked_cache.clear()
+            flash.masked_cache_clear.clear()
 
     uc.mmio_map(icache & ~0xFFF, 0x1000, icache_rd, None, icache_wr, None)
 
@@ -783,9 +808,10 @@ BOOT_ERASE = 9			# first of the four bond deletion boots
 BOOT_CUT_ERASE = 13
 BOOT_CUT_ERASE_CHECK = 14
 BOOT_PROGRAM_ERROR = 15
+BOOT_ECC_RETRY = 16
 
 
-def boot_ok(errors, label, result, st, flash):
+def boot_ok(errors, label, result, st, flash, read_rejected=False):
     if st['hang']:
         errors.append(f'{label}: stopped in Default_Handler after {st["nmis"]} NMI')
         return
@@ -798,7 +824,10 @@ def boot_ok(errors, label, result, st, flash):
         errors.append(f'{label}: model violation: {v}')
     if flash.stats['progerr']:
         errors.append(f'{label}: {flash.stats["progerr"]} quad words programmed over data')
-    if flash.returned:
+    # The normal boots must not pass on a masked word. The raw failure
+    # test instead checks the negative Read return in the firmware itself;
+    # its discarded buffer may contain bytes from the rejected read.
+    if flash.returned and not read_rejected:
         errors.append(f'{label}: {len(flash.returned)} reads returned a damaged quad word that raised no NMI '
                       f'and was not read again, first at {flash.returned[0]:#x} '
                       f'({len(flash.masked)} loads raised nothing)')
@@ -1027,6 +1056,33 @@ def driver_runs(elf, errors):
         print(f'corrected error from elsewhere before the torn quad word: {len(fl.masked)} loads raised nothing, '
               f'each read again, {st["nmis"]} NMI, image restored')
 
+    # Raw driver regressions. A correction on both attempts must fail even
+    # on readable data, and a masked error cached on the first attempt must
+    # be evicted before the next attempt. Also keep persistent single-bit
+    # corrections usable, rather than treating every ECCC as damaged data.
+    cases = [
+        ('foreign correction on both attempts', dict(foreign={16}, foreign_always=True), True),
+        ('masked double error on both attempts', dict(torn={16}, foreign={16}, foreign_always=True), True),
+        ('cached masked double error', dict(torn={16}, foreign={16}, icache=True), True),
+        ('persistent single-bit correction', dict(corrected={16}), False),
+        ('cached valid data after a foreign correction', dict(foreign={16}, icache=True), False),
+    ]
+    for label, options, rejected in cases:
+        n = len(errors)
+        result, st, fl = boot_or_error(errors, label, elf, BOOT_ECC_RETRY,
+                                       bytearray(b'\xa5' * NVM_MAP), args=[int(rejected)], **options)
+        boot_ok(errors, label, result, st, fl, read_rejected=rejected)
+        if options.get('torn') and not fl.masked:
+            errors.append(f'{label}: no double error was masked')
+        if options.get('foreign_always') and fl.flip.get(16) is not True:
+            errors.append(f'{label}: no foreign correction was injected')
+        if label == 'cached masked double error' and fl.masked_cache_reuses:
+            errors.append(f'{label}: damaged cache survived an ECC clear {fl.masked_cache_reuses} times')
+        if len(errors) == n:
+            passed += 1
+            print(f'{label}: {"read rejected" if rejected else "valid data kept"}, '
+                  f'{st["nmis"]} NMI, {fl.icache_inv} cache invalidations')
+
     # ICACHE enabled. It is invalidated after every program and erase, and in
     # the NMI of a double error the driver takes: a line filled by the failed
     # read would give the damaged bytes again, with no NMI, to the read that
@@ -1204,3 +1260,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+

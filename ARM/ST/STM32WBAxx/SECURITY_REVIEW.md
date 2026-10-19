@@ -197,6 +197,22 @@ October 18 review fixes, tested locally:
   next boot with none stopping; 215 PDS checks with 4- and 16-byte units;
   486 bond power-loss cuts. All 28 WBA65 examples build in Debug and
   Release. These are software tests, not hardware validation.
+- ECC retry follow-up, October 19. A corrected error from elsewhere could
+  mask both attempts, or leave damaged bytes cached for the second attempt.
+  The read now invalidates the enabled cache before retrying an uncertain
+  word and fails when neither attempt establishes valid data. A correction
+  recorded for the word itself remains usable. The raw read regressions
+  also check that a later read works after the failure; each retry defect
+  reproduces against the previous driver. The model retains masked words
+  until cache invalidation and can inject a foreign correction on every
+  attempt. Five added cases bring the flash suite to 37 checks. The 486-cut
+  bond suite passes; WBA50 and WBA65 driver builds pass at -O0 and -Os.
+  The flash sweep passes all 330 save cuts and 18 deletion cuts, including
+  all 165 torn-save boots taking ECC NMI without stopping. The added raw
+  read cases also pass with the firmware built at -O0.
+  With bank swap enabled, corrected-error bank attribution remains
+  uncertain: such a read is retried and may be refused, rather than trusting
+  the other bank's correction as validation of this word.
 - Cortex-M33 crypto integration: **18 checks, 0 failures**, including
   incremental CMAC and three interrupt preemptions while AES is busy.
   The existing model warning about the platform `HW_RNG_Get` initialization
@@ -304,4 +320,5 @@ USB regression checks also pass. These are local checks, not a current CI run.
 - [CCM](https://github.com/STMicroelectronics/STM32CubeWBA/blob/v1.10.0/Projects/Common/WPAN/Modules/BasicAES/baes_ccm.c)
 - [AES register adapter](https://github.com/STMicroelectronics/STM32CubeWBA/blob/v1.10.0/Projects/Common/WPAN/Interfaces/hw_aes.c)
 - [BLE platform interface](https://github.com/STMicroelectronics/stm32-mw-wpan/blob/v2.10.0/ble/stack/include/bleplat.h)
+
 
