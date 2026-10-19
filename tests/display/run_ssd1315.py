@@ -54,3 +54,15 @@ with tempfile.TemporaryDirectory(prefix='ssd1315-') as td:
                        [str(ROOT / p) for p in gfx_sources] + fonts +
                        ['-o', str(gfx)], check=True)
         subprocess.run([str(gfx)], check=True)
+        menu = Path(td) / 'joystick_menu_test'
+        menu_sources = ['tests/display/joystick_menu_test.cpp',
+                        'src/display/display_ssd1315.cpp', 'src/display/display.cpp',
+                        'src/device.cpp', 'src/device_intrf.cpp']
+        subprocess.run(cmd + ['-DSTM32WBA65xx', '-ffunction-sections', '-fdata-sections',
+                             '-Wno-missing-field-initializers',
+                             '-I' + str(ROOT / 'ARM/ST/include'),
+                             '-I' + str(ROOT / 'ARM/ST/STM32WBAxx/STM32WBA65/exemples/JoystickMenuDemo/src'),
+                             '-Wl,--gc-sections'] +
+                       [str(ROOT / p) for p in menu_sources] + fonts +
+                       ['-o', str(menu)], check=True)
+        subprocess.run([str(menu)], check=True)

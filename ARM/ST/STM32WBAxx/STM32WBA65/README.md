@@ -785,3 +785,24 @@ scrolling and orientation. Fonts too large for the panel are skipped.
 The driver and demo build and link with Arm GCC 13.2.1 in both configurations.
 SPI display-model tests pass at `-O0` and `-Os` with ASan/UBSan; OLED hardware
 operation has not yet been tested. See [SSD1315 usage](../../../../docs/display/ssd1315.md).
+
+
+## Analog joystick and OLED menu
+
+`exemples/JoystickMenuDemo/ioc` links the shared
+`exemples/display/joystick_menu_demo.cpp`. It uses the onboard OLED, the
+analog joystick on PA3 (ADC4 input 6) and the green LED on PD8. Up/down
+navigate; select toggles the LED or opens Level/About. Level uses arrows to
+adjust a bar and select to return. Each press requires a release.
+
+The new `AdcSTM32WBA` implements the generic AdcDevice API for software-triggered
+single rounds in polling mode. Its initial support is intentionally limited:
+external inputs 1..10, single-ended, unity gain, 6/8/10/12-bit resolution,
+VREF+ supplied by the caller. Continuous conversion, interrupt, DMA, FIFO,
+oversampling and internal radio temperature measurement are not implemented.
+Rebuild the matching Debug or Release MCU library first.
+
+The example builds and links in Debug and Release. ADC register simulation
+passes at -O0 and -Os, including failure recovery. The shared menu passes
+scripted input and SPI OLED RAM tests under ASan/UBSan. Joystick and menu
+hardware validation remains pending. See the [project instructions](exemples/JoystickMenuDemo/README.md).
