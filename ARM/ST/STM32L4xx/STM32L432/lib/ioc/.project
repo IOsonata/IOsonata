@@ -1206,6 +1206,26 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/storage/flash.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/syslog.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/syslog.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/storage/nvm.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/storage/nvm.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/storage/nvm_region.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/storage/nvm_region.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/storage/diskio_nvm.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/storage/diskio_nvm.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/storage/sdcard_impl.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/storage/sdcard_impl.cpp</locationURI>
