@@ -41,6 +41,8 @@ SOFTWARE.
 
 // Digital microphone capture and optional stereo headphone playback. The codec is the I2S slave; its external MCLK
 // must be 256 times the actual frame rate returned by the audio interface.
+// SYSCLK uses MCLK directly and must be at least 3 MHz. Double DAC OSR
+// is selected only with MCLK >= 6 MHz; lower clocks use normal DAC OSR.
 // Init/Enable stage configuration with SYSCLK disabled and enable it last, so
 // MCLK may start afterward. MCLK must run during live gain changes. Disable
 // and PowerOff first gate SYSCLK and also work after MCLK has stopped.
@@ -73,6 +75,7 @@ public:
 	int HeadphoneGain() const;
 
 private:
+	uint16_t DacControl(bool bMute) const;
 	bool StartHeadphones();
 	bool StopHeadphones();
 	bool ReadReg(uint8_t Reg, uint16_t &Value);

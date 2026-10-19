@@ -13,6 +13,7 @@ public:
 	uint16_t Id = 0x8904;
 	bool ReadFailure = false;
 	bool MclkPresent = false;
+	uint32_t SysClk = 4000000;
 	unsigned BlockedAccesses = 0;
 	int DropReg = -1;
 	bool ServoStuck = false;
@@ -67,6 +68,12 @@ public:
 		}
 		uint16_t value = uint16_t(pData[0]) << 8 | pData[1];
 
+		// Rev 4.1 p100: double DAC OSR requires SYSCLK >= 6 MHz,
+		// including while muted during startup or shutdown.
+		if (*pReg == 0x21 && (value & 0x40))
+		{
+			assert(SysClk >= 6000000);
+		}
 		// WM8904 Rev 4.1: with CLK_SYS_ENA set, only R22 is accessible
 		// without MCLK. Transferring the bytes does not apply the setting.
 		if (*pReg != 0x16 && !MclkPresent && (Registers[0x16] & 4))
@@ -217,7 +224,7 @@ int main()
 
 	assert(control.Registers[0x12] == 0x0C && control.Registers[0x27] == 0);
 	assert(control.Registers[0x0E] == 3 && control.Registers[0x62] == 1);
-	assert(control.Registers[0x5A] == 0xFF && control.Registers[0x21] == 0x0640);
+	assert(control.Registers[0x5A] == 0xFF && control.Registers[0x21] == 0x0600);
 	assert(control.Registers[0x39] == 33 && control.Registers[0x3A] == 0xA1);
 	assert(codec.HeadphoneGain() == -24000 && control.ServoReads == 3);
 	assert(codec.HeadphoneGain(999999) == 6000 && control.Registers[0x39] == 63);
@@ -252,5 +259,31 @@ int main()
 	assert(codec.Init(cfg, &control));
 	assert(control.Registers[0x12] == 0x0E && control.Registers[0x27] == 0x1800);
 	codec.PowerOff();
+	// Clock limits and DAC OSR selection at both datasheet boundaries.
+	const uint32_t clocks[] = { 2999999, 3000000, 4000000, 5999999, 6000000, 12288000 };
+
+	for (uint32_t clock : clocks)
+	{
+		cfg.Freq = clock / 256;
+		cfg.MClkFreq = clock;
+		control.SysClk = clock;
+		if (clock < 3000000)
+		{
+			assert(!codec.Init(cfg, &control) && !codec.Valid());
+			continue;
+		}
+		assert(codec.Init(cfg, &control));
+		assert(control.Registers[0x21] == (clock >= 6000000 ? 0x0640 : 0x0600));
+		codec.Disable();
+		assert(control.Registers[0x21] == (clock >= 6000000 ? 0x0648 : 0x0608));
+		assert(codec.Enable());
+		codec.PowerOff();
+	}
+	cfg.Freq = 15625;
+	cfg.MClkFreq = 4000000;
+	control.SysClk = 4000000;
+	control.DropReg = 0x21;
+	assert(!codec.Init(cfg, &control) && !codec.Valid());
+	control.DropReg = -1;
 	puts("WM8904 capture/playback, clock, gain, servo ordering/timeout and failures PASS");
 }

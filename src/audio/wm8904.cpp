@@ -129,7 +129,7 @@ bool Wm8904::Init(const Wm8904Cfg_t &Cfg, DeviceIntrf *pIntrf)
 	}
 	Valid(false);
 	vbEnabled = false;
-	if (!pIntrf || Cfg.DevAddr > 0x7F || !Cfg.Freq ||
+	if (!pIntrf || Cfg.DevAddr > 0x7F || !Cfg.Freq || Cfg.MClkFreq < 3000000 ||
 		(Cfg.SampleWidth != I2SSWIDTH_16BITS && Cfg.SampleWidth != I2SSWIDTH_24BITS) ||
 		(Cfg.Format != I2SFMT_NORMAL && Cfg.Format != I2SFMT_ALIGN_LEFT && Cfg.Format != I2SFMT_ALIGN_RIGHT) ||
 		(Cfg.MicInput > 2 || (!Cfg.MicInput && !Cfg.bHeadphoneEn)) ||
@@ -198,6 +198,13 @@ bool Wm8904::Init(const Wm8904Cfg_t &Cfg, DeviceIntrf *pIntrf)
 	return Enable();
 }
 
+uint16_t Wm8904::DacControl(bool bMute) const
+{
+	// Rev 4.1 p100: DAC_OSR128 requires SYSCLK >= 6 MHz. This
+	// driver uses MCLK directly as SYSCLK, with no divider or FLL.
+	return 0x0600 | (vCfg.MClkFreq >= 6000000 ? 0x0040 : 0) | (bMute ? 0x0008 : 0);
+}
+
 bool Wm8904::StartHeadphones()
 {
 	uint16_t status = 0;
@@ -228,7 +235,7 @@ bool Wm8904::StartHeadphones()
 			return WriteReg(WM8904_HP_CONTROL, 0x77) &&
 				   WriteReg(WM8904_HP_CONTROL, 0xFF) &&
 				   WriteReg(WM8904_CLASS_W, 1) &&
-				   WriteReg(WM8904_DAC_CONTROL, 0x0640);
+				   WriteReg(WM8904_DAC_CONTROL, DacControl(false));
 		}
 	}
 	return false;
@@ -240,7 +247,7 @@ bool Wm8904::StopHeadphones()
 	uint16_t state = 0;
 	bool result = ReadReg(WM8904_HP_CONTROL, state);
 
-	result = WriteReg(WM8904_DAC_CONTROL, 0x0648) && result;
+	result = WriteReg(WM8904_DAC_CONTROL, DacControl(true)) && result;
 	result = WriteReg(WM8904_HP_CONTROL, state & ~0x88U) && result;
 	result = WriteReg(WM8904_HP_CONTROL, 0) && result;
 	result = WriteReg(WM8904_SERVO_ENABLE, 0) && result;
@@ -274,7 +281,8 @@ bool Wm8904::Enable()
 	}
 	Gain(vCfg.Gain);
 	if (vCfg.bHeadphoneEn &&
-		(!WriteReg(WM8904_DAC_CONTROL, 0x0648) ||
+		(!WriteReg(WM8904_DAC_CONTROL, DacControl(true)) ||
+		 !VerifyReg(WM8904_DAC_CONTROL, DacControl(true), 0x0648) ||
 		 !WriteReg(WM8904_DAC_LEFT_VOLUME, 0x00C0) ||
 		 !WriteReg(WM8904_DAC_RIGHT_VOLUME, 0x01C0)))
 	{

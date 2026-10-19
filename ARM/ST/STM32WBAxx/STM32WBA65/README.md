@@ -1166,6 +1166,16 @@ HeadphoneGain accepts milli-dB requests, rounds to 1 dB steps and clamps to
 -57 through +6 dB. Live gain changes require MCLK. The existing ADC Gain
 continues to use 0.375 dB steps.
 
+The WM8904 uses MCLK directly as SYSCLK and requires at least 3 MHz. DAC
+oversampling is selected from that clock: normal OSR below 6 MHz, double OSR
+at 6 MHz and above. The earlier headphone configuration unconditionally set
+DAC_OSR128, violating the codec's 6 MHz minimum at this board's 4 MHz MCLK.
+This is a confirmed configuration error; its correction needs a board retest
+for the reported hiss during zero-sample playback. Init verifies the muted
+DAC setting before enabling SYSCLK, and mute/unmute retain the selected OSR.
+Tests cover the 3 MHz and 6 MHz boundaries, shutdown/restart, and a dropped
+DAC control write.
+
 Validation:
 
 - Debug/Release incremental library builds and I2sToneDemo links pass; the
@@ -1201,8 +1211,9 @@ zero samples, then forwards the microphone. RX, TX and the codec stay enabled
 through all three phases. The OLED identifies each phase and shows L/R sample
 mismatches per display interval; the codec routes the same microphone to both
 slots. These checks distinguish noisy captured samples from noise in playback.
-The maintainer reports continuous noise and a varying peak that does not track
-sound volume; intelligible microphone loopback is not yet validated.
+The maintainer heard the startup tone, reported hiss during zero-sample
+playback, and confirmed zero L/R mismatches. The microphone peak varies but
+does not track sound volume; intelligible loopback is not yet validated.
 
 This exercises simultaneous RX and TX DMA through the same generic I2S
 interface. Board mapping combines PC5 AF13 receive with PD5 AF13 transmit;
