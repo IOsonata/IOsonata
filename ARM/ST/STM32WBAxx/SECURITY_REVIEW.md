@@ -126,6 +126,36 @@ October 18 review fixes, tested locally:
   the NMI at the next boot and none stopped; the 330 cuts restored the
   committed image and stored the next save. A read error that passes (two
   failed reads of a sector header) keeps the sector and the image.
+- Persistence review, October 18. 39640a3 made PDS take only `-EBADMSG` as
+  damaged data. The STM32 driver can only fail a read with 0 bytes, which
+  `Nvm::Read` reports as `-EBUSY`, so the mount failed after a half programmed
+  quad word: 161 of the 165 half done cuts restored nothing, and with the
+  bond store unmounted `BtAppInit` did not start Bluetooth for an
+  application with security. It is reverted (4a81644); the sweep recovers
+  from all 330 cuts and all 18 cuts of a bond deletion again. The review
+  also found, and the following commits fix:
+  - The flash driver reported a refused program of a full 64-byte transfer
+    as written. Every `Nvm::Write` chunk of 64 bytes took that path, so a
+    PROGERR, WRPERR or timeout could leave a chunk unwritten while the
+    store committed a manifest naming it.
+  - SWAP_BANK was ignored. With the banks swapped an erase of NVM0 erased a
+    page of the application in the other bank, and the ECC decode missed
+    errors in the read.
+  - A corrected ECC error (ECCC) left set keeps the controller from
+    recording the address of the next error, so a later double error was
+    decoded to the old address and the device stopped. Each read clears
+    ECCC first; ECCC set during the read makes the double error the read's.
+  - ICACHE, which caches flash data reads too, is invalidated after a
+    program or an erase when an application enables it.
+  - PDS: a clear retried after a failed erase fell back to erasing every
+    sector in order, starting with the commit header, so a second failure or
+    a power cut brought the cleared records back; a failed mount left the
+    store usable; a write that reached the medium but reported an error
+    gave its sequence number to the next record.
+  `run_bond_flash.py` adds the refused programs, the swapped banks and a
+  corrected error before a double one; `pds_test` adds the failing clear
+  erase, the write that lands but fails and the failed mount. Each fails
+  against the code before its fix.
 - Cortex-M33 crypto integration: **18 checks, 0 failures**, including
   incremental CMAC and three interrupt preemptions while AES is busy.
   The existing model warning about the platform `HW_RNG_Get` initialization
@@ -193,9 +223,19 @@ Release library leaves it out. Errors are always printed.
   PDS tries a read three times; a read that still fails is a damaged record
   (no more appends to that sector) or a damaged sector header (the sector is
   erased at init, as for a header that fails its check). The address decode
-  follows `HAL_FLASHEx_GetEccInfo`. An application that defines its own
-  `NMI_Handler` must call `Stm32FlashEccNmi` first. A physical power cut
-  test on the DK1 remains to be done.
+  follows `HAL_FLASHEx_GetEccInfo`. With the banks swapped, whether BK_ECC
+  names the physical or the mapped bank is not settled (the HAL ignores the
+  swap), so both readings are taken. The ECCC latch behavior is taken from
+  the ECCR description of the L4 and U5 reference manuals; check it against
+  RM0515. An application that defines its own `NMI_Handler` must call
+  `Stm32FlashEccNmi` first. A physical power cut test on the DK1 remains to
+  be done.
+- A bond store that does not mount still makes `BtAppInit` fail for an
+  application with security. Whether to reformat the store and start
+  without bonds instead is not decided.
+- Flash program and erase run without radio arbitration. The store relies on
+  the dual-bank read-while-write of the WBA65 with NVM0 in bank 2; the ST
+  reference schedules flash work in radio windows (flash_manager, RFTS).
 - The largest bond image that can still be updated is about 3.6 KB (19 PDS
   chunk records per bank, 456 of the 512 cache words), from the record and
   sector sizes; not measured.
