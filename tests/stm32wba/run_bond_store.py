@@ -63,6 +63,14 @@ extern "C" ssize_t BtPdsRead(uint32_t Id, void *pData, size_t Len)
 	return it->second.size();
 }
 
+// The bond deletion erases the store; tests/stm32wba/run_bond_flash.py covers
+// it over the real PDS and flash driver.
+extern "C" int BtPdsClear(void)
+{
+	records.clear();
+	return 0;
+}
+
 static void Reset()
 {
 	records.clear();
@@ -71,6 +79,7 @@ static void Reset()
 	requestDuringWrite = false;
 	s_PdsReady = false;
 	s_bStorePending = false;
+	s_bErasePending = false;
 	s_RetryWait = 0;
 	s_RetryInterval = 0;
 	s_pCache = nullptr;
