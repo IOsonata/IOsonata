@@ -2641,7 +2641,7 @@
                 <name>$PROJ_DIR$\..\..\..\..\..\..\src\coredev\spi.cpp</name>
             </file>
             <file>
-                <name>$PROJ_DIR$\..\..\..\src\spi_stm32l4xx.cpp</name>
+                <name>$PROJ_DIR$\..\..\..\..\src\spi_stm32.cpp</name>
             </file>
             <file>
                 <name>$PROJ_DIR$\..\..\..\..\..\..\src\coredev\timer.cpp</name>

@@ -1,16 +1,22 @@
 /**-------------------------------------------------------------------------
-@file	spi_stm32l4xx.h
+@file	qospi_stm32.h
 
-@brief	SPI implementation specific to STM32L4xx
+@brief	STM32 QUADSPI and OCTOSPI, the SPI devices after the SPI instances
+
+		SPIInit of spi_stm32.cpp hands a DevNo from STM32_QOSPI_DEVNO_START
+		to Stm32QospiInit. quadspi_stm32.cpp implements it on the parts that
+		have QUADSPI (DevNo 3), octospi_stm32.cpp on the parts that have
+		OCTOSPI1 and OCTOSPI2 (DevNo 3 and 4). A library links the one of its
+		part. Master in polling mode only.
 
 @author	Hoang Nguyen Hoan
-@date	June. 3, 2019
+@date	Oct. 19, 2026
 
 @license
 
-MIT
+MIT License
 
-Copyright (c) 2019, I-SYST inc., all rights reserved
+Copyright (c) 2026, I-SYST inc., all rights reserved
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -31,45 +37,36 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ----------------------------------------------------------------------------*/
+#ifndef __QOSPI_STM32_H__
+#define __QOSPI_STM32_H__
 
-#ifndef __SPI_STM32L4XX_H__
-#define __SPI_STM32L4XX_H__
-
-#include <stdint.h>
-
-#include "stm32l4xx.h"
+#include "stm32.h"
 #include "coredev/spi.h"
 
-#define STM32L4XX_SPI_DEV_COUNT		3
+#if defined(QUADSPI) || defined(OCTOSPI1)
 
-#ifdef STM32L4S9xx
-#define STM32L4XX_SPI_MAXDEV		5
-#define STM32L4XX_OSPI_DEVNO_START	3
-#else
-#define STM32L4XX_SPI_MAXDEV		4
-#define STM32L4XX_QSPI_DEVNO_START	3
+/// First DevNo of the QUADSPI or OCTOSPI instances, after SPI1 to SPI3
+#define STM32_QOSPI_DEVNO_START		3
+
+#ifdef __cplusplus
+extern "C" {
 #endif
 
-#pragma pack(push, 4)
+/**
+ * @brief	Initialize the QUADSPI or OCTOSPI instance of pCfgData->DevNo.
+ *
+ * Master in polling mode only: slave, interrupt and DMA configurations, and
+ * a DevNo that is not a QUADSPI or OCTOSPI instance, return false before
+ * the device or the hardware is changed.
+ *
+ * @return	true - success
+ */
+bool Stm32QospiInit(SPIDev_t * const pDev, const SPICfg_t *pCfgData);
 
-typedef struct {
-	int DevNo;
-	SPIDEV *pSpiDev;
-	union {
-		SPI_TypeDef	*pReg;
-#ifdef STM32L4S9xx
-		OCTOSPI_TypeDef	*pOReg;
-#else
-		QUADSPI_TypeDef	*pQReg;
+#ifdef __cplusplus
+}
 #endif
-	};
-	QOSPI_PHASE QOPhase;
-	int AdSize;
-	uint32_t CcrReg;	// used by QuadSPI only
-} STM32L4XX_SPIDev_t;
-#pragma pack(pop)
 
-uint32_t STM32L4xxSPIGetRate(DevIntrf_t * const pDev);
+#endif // QUADSPI || OCTOSPI1
 
-#endif // __SPI_STM32L4XX_H__
-
+#endif // __QOSPI_STM32_H__

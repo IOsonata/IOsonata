@@ -21,7 +21,9 @@
 		stays at its idle level. The slave has no underrun value: its
 		transmit FIFO is kept filled, with the DummyByte after the data.
 		Clearing SPE leaves the FIFO content, so the slave is reset through
-		RCC before each frame. QUADSPI is not handled here. DMA on the L4
+		RCC before each frame. DevNo 3 and up are the QUADSPI or OCTOSPI
+		instances, SPIInit passes them to Stm32QospiInit (qospi_stm32.h,
+		quadspi_stm32.cpp or octospi_stm32.cpp). DMA on the L4
 		takes the channels of the instance table from the DMA channel
 		manager (dma_stm32.h), two for each instance: the receive channel
 		ends a master chunk of up to 65535 items, the slave receive channel
@@ -123,6 +125,7 @@ SOFTWARE.
 #elif defined(IOSONATA_STM32_L4)
 // DMA1 and DMA2 channels of the DMA channel manager
 #include "dma_stm32.h"
+#include "qospi_stm32.h"
 #define STM32_SPI_DMA
 #define STM32_SPI_DMA_REMAIN(Ch)		Stm32DmaChRemain(Ch)
 #define STM32_SPI_DMA_FREE(Ch)			Stm32DmaChFree(Ch)
@@ -1863,6 +1866,14 @@ bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfgData)
 	{
 		return false;
 	}
+
+#ifdef STM32_QOSPI_DEVNO_START
+	// QUADSPI or OCTOSPI
+	if (pCfgData->DevNo >= STM32_QOSPI_DEVNO_START)
+	{
+		return Stm32QospiInit(pDev, pCfgData);
+	}
+#endif
 
 	if (pCfgData->DevNo < 0 || pCfgData->DevNo >= STM32_SPI_MAXDEV)
 	{

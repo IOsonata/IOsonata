@@ -68,19 +68,26 @@ more.
 
 SPI indices 0-2 select SPI1-3. On L432/L476/L496, index 3 selects QUADSPI.
 On L4S9, indices 3 and 4 select OCTOSPI1 and OCTOSPI2. The L432 has no SPI2:
-index 1 fails initialization. Extended SPI
-controllers currently accept polling master configurations only; interrupt,
-DMA and slave requests fail initialization.
+index 1 fails initialization. QUADSPI and OCTOSPI accept polling master
+configurations only; interrupt, DMA and slave requests fail initialization.
 
-The STM32L432 library builds the shared STM32 SPI driver,
-`ARM/ST/src/spi_stm32.cpp`, in place of `src/spi_stm32l4xx.cpp` (2026-10-19):
-SPI1 and SPI3 (DevNo 0 and 2), master in polling and interrupt mode, slave in
+The four L4 libraries build the shared STM32 SPI driver,
+`ARM/ST/src/spi_stm32.cpp`. SPIInit passes index 3 and up to
+`ARM/ST/src/quadspi_stm32.cpp` (L432, L476, L496) or
+`ARM/ST/src/octospi_stm32.cpp` (L4S9), declared in
+`ARM/ST/include/qospi_stm32.h`. These replace `src/spi_stm32l4xx.cpp`,
+`src/quadspi_stm32l4xx.cpp`, `src/octospi_stm32l4xx.cpp` and
+`include/spi_stm32l4xx.h`, removed (2026-10-19). The QUADSPI rate is now
+HCLK / (PRESCALER + 1), as for the OCTOSPI: the old code divided by
+PRESCALER, a division by zero at the highest rate. The QUADSPI StopTx now
+raises the chip select it lowered (QSPI_CS_IOPIN_IDX).
+
+SPI1 to SPI3 (DevNo 0 to 2), master in polling and interrupt mode, slave in
 interrupt mode with the hardware NSS pin, 4 to 16 bit data, the rate from the
 BR divider. DMA for master and slave through the DMA channel manager: SPI1 TX
 DMA1 channel 3 and RX channel 2 (CSELR 1), or DMA2 channels 4 and 3 (CSELR 4)
 when those are taken; SPI2 DMA1 channels 5 and 4; SPI3 DMA2 channels 2 and 1
-(CSELR 3). QUADSPI (DevNo 3) is not in the L432 library for now: SPIInit
-returns false for it. The STM32L432 example SPIMasterSlave runs SPI1 as master
+(CSELR 3). The STM32L432 example SPIMasterSlave runs SPI1 as master
 (A1 PA1 SCK, D10 PA11 MISO, A6 PA7 MOSI, D3 PB0 chip select GPIO) against SPI3
 as slave (D13 PB3 SCK, D12 PB4 MISO, D11 PB5 MOSI, A3 PA4 NSS) on one
 NUCLEO-L432KC, wired A1 to D13, A6 to D11, D10 to D12 and D3 to A3. The A6 and
@@ -90,8 +97,13 @@ driven slave, pass in SPI modes 0 to 3 at 625 kHz, 8 bit data: master transmit
 and receive frames of 1, 16 and 129 bytes, and a 1 byte frame that discards
 the slave transmit prefetch before the next frame. With DMA (2026-10-19) the
 same test passes in all 8 combinations: master polling, interrupt, DMA and DMA
-with interrupt, each against the interrupt driven slave and the DMA slave. The
-L476, L496 and L4S9 libraries keep `src/spi_stm32l4xx.cpp`.
+with interrupt, each against the interrupt driven slave and the DMA slave.
+
+The master chip select is a GPIO driven by the driver; the hardware NSS is
+used by the slave only. The old driver drove the master NSS pin by hardware
+with a single chip select, so the L476, L496 and L4S9 SPIMasterSlave examples
+now configure the master chip select pin as a GPIO. The shared driver is not
+tested on the L476, L496 and L4S9 hardware yet.
 
 ## Timer
 
@@ -133,8 +145,8 @@ in `ARM/ST/STM32F0xx/README.md` and `ARM/ST/include/timer_stm32.h`.
 
 ## I2C limits
 
-The STM32L432 library builds the shared STM32 I2C driver,
-`ARM/ST/src/i2c_stm32.cpp`, in place of `src/i2c_stm32l4xx.cpp` (2026-10-19):
+The four L4 libraries build the shared STM32 I2C driver,
+`ARM/ST/src/i2c_stm32.cpp`; `src/i2c_stm32l4xx.cpp` is removed (2026-10-19):
 master in polling and interrupt mode, slave in interrupt mode, 7 bit
 addresses. DMA for master and slave through the DMA channel manager: I2C1 TX
 DMA1 channel 6 and RX channel 7 (CSELR 3), or DMA2 channels 7 and 6 (CSELR 5)
@@ -150,10 +162,9 @@ pull-ups. With DMA (2026-10-19) the same test passes in all 8 combinations:
 master polling, interrupt, DMA and DMA with interrupt, each against the
 interrupt driven slave and the DMA slave.
 
-The L476, L496 and L4S9 libraries keep `src/i2c_stm32l4xx.cpp`, which
-accepts polling master configurations only. Slave, interrupt and DMA requests
-return false before changing the device or hardware state.
-L4S9 I2C4 uses virtual index 3. The L432 has no I2C2: index 1 fails
+The shared driver is not tested on the L476, L496 and L4S9 hardware yet. The
+old driver accepted polling master configurations only.
+L496 and L4S9 I2C4 use virtual index 3. The L432 has no I2C2: index 1 fails
 initialization, I2C1 and I2C3 keep indices 0 and 2.
 
 These restrictions identify unsupported modes within the hardware-validated
