@@ -268,6 +268,13 @@ I2CScan (`exemples/i2c/i2c_scan.cpp`) on I2C2, the onboard sensor bus (SDA
 PB11, SCL PB10), polling master at 100 kHz, finds 7 devices: 0x1E LIS3MDL,
 0x29 VL53L0X, 0x2D, 0x56 NFC tag, 0x5D LPS22HB, 0x5F HTS221, 0x6A LSM6DSL,
 and reads the LSM6DSL WHO_AM_I register 0x0F as 0x6A.
+NvmDemo (`exemples/storage/nvm_demo.cpp`, NVM_DEMO_MEDIUM 1) on the onboard
+MX25R6435F through the Nvm driver and QUADSPI (SPI DevNo 3, PE10 CLK, PE12
+to PE15 IO0 to IO3, PE11 NCS, AF10), 8 MHz, single line read and page
+program, polling: JEDEC id C2 28 17, the stamp written and read back, erase,
+a write across a page boundary, programming clears bits only, unaligned
+erase and read past the end rejected, ALL PASS (2026-10-19). First run of
+QUADSPI on the boards.
 SystemInit now sets MSIPLLEN after the LSE is ready when `g_McuOsc` has the
 RC core oscillator and the LSE crystal (2026-10-19), not tested on the
 boards yet.
