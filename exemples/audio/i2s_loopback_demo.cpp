@@ -49,7 +49,7 @@ SOFTWARE.
 #include "idelay.h"
 #include "board.h"
 
-// Compare microphone clock OFF/ON with zero PCM and analogue MICBIAS off.
+// Disable capture while driving the microphone with an independent clock.
 #ifndef AUDIO_LOOPBACK_MIC_ENABLE
 #define AUDIO_LOOPBACK_MIC_ENABLE 1
 #endif
@@ -58,6 +58,9 @@ SOFTWARE.
 #endif
 #ifndef AUDIO_LOOPBACK_MIC_INVERT
 #define AUDIO_LOOPBACK_MIC_INVERT 0
+#endif
+#ifndef AUDIO_LOOPBACK_CLOCK_ONLY
+#define AUDIO_LOOPBACK_CLOCK_ONLY 1
 #endif
 
 enum AudioError_t
@@ -143,7 +146,8 @@ static uint32_t s_DisplayOffSince;
 static const char *const s_StageNames[] = {
 	!AUDIO_LOOPBACK_MIC_ENABLE ? "MIC OFF - ZERO PCM" :
 	(AUDIO_LOOPBACK_MIC_FORWARD ?
-	(AUDIO_LOOPBACK_MIC_INVERT ? "MIC 180 DEG -> HP" : "MIC -> HEADPHONES") : "MIC CLK OFF ZERO"),
+	(AUDIO_LOOPBACK_MIC_INVERT ? "MIC 180 DEG -> HP" : "MIC -> HEADPHONES") :
+	(AUDIO_LOOPBACK_CLOCK_ONLY ? "CAP OFF CLK 2MHz" : "MIC CLK OFF ZERO")),
 	"DAC muted",
 	"Zero PCM",
 	"Duplex tone 1 kHz"
@@ -260,7 +264,7 @@ static bool UpdateOutputMute()
 static bool MicrophoneClockRestoreDue()
 {
 	// Five seconds of startup, then five seconds of quiet zero PCM.
-	return AUDIO_LOOPBACK_MIC_ENABLE && !AUDIO_LOOPBACK_MIC_FORWARD &&
+	return AUDIO_LOOPBACK_MIC_ENABLE && !AUDIO_LOOPBACK_MIC_FORWARD && !AUDIO_LOOPBACK_CLOCK_ONLY &&
 		!s_MicClockRestored && s_TestRate && s_Frames >= s_TestRate * 10;
 }
 
@@ -353,7 +357,7 @@ static void DrawLevel()
 	AudioStage_t stage = OutputStage();
 	const char *label = s_StageNames[stage];
 
-	if (stage == AUDIO_STAGE_MIC && AUDIO_LOOPBACK_MIC_ENABLE && !AUDIO_LOOPBACK_MIC_FORWARD && s_MicClockRestored)
+	if (stage == AUDIO_STAGE_MIC && AUDIO_LOOPBACK_MIC_ENABLE && !AUDIO_LOOPBACK_MIC_FORWARD && !AUDIO_LOOPBACK_CLOCK_ONLY && s_MicClockRestored)
 	{
 		label = "MIC CLK ON ZERO";
 	}
@@ -488,11 +492,16 @@ static bool HardwareInit()
 		s_Lcd.printf("WM8904 init failed");
 		return false;
 	}
-	if (AUDIO_LOOPBACK_MIC_ENABLE && !AUDIO_LOOPBACK_MIC_FORWARD && !s_Codec.MicrophoneClock(false))
+	if (AUDIO_LOOPBACK_MIC_ENABLE && !AUDIO_LOOPBACK_MIC_FORWARD)
 	{
-		s_Audio.PowerOff();
-		s_Lcd.printf("Mic clock stop failed");
-		return false;
+		bool ready = AUDIO_LOOPBACK_CLOCK_ONLY ? s_Codec.MicrophoneClockOnly() : s_Codec.MicrophoneClock(false);
+
+		if (!ready)
+		{
+			s_Audio.PowerOff();
+			s_Lcd.printf("Mic clock setup failed");
+			return false;
+		}
 	}
 	s_Lcd.Clear();
 	s_Lcd.SetCursor(0, 0);

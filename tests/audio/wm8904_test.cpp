@@ -236,6 +236,7 @@ int main()
 	assert(control.Registers[0x16] == 6 && control.Registers[0x5A] == 0xFF);
 	assert(codec.Mute(false) && control.Registers[0x21] == 0x0600);
 	assert(!codec.MicrophoneClock(false));
+	assert(!codec.MicrophoneClockOnly());
 	assert(codec.HeadphoneGain(999999) == 6000 && control.Registers[0x39] == 63);
 	assert(codec.HeadphoneGain(-999999) == -57000 && control.Registers[0x39] == 0);
 	assert(codec.HeadphoneGain(-24100) == -24000);
@@ -282,6 +283,45 @@ int main()
 	assert(codec.MicrophoneClock(true) && control.Registers[0x79] == 8);
 	captureRegisters[0x79] = 8;
 	assert(memcmp(captureRegisters, control.Registers, sizeof(captureRegisters)) == 0);
+	control.Registers[0x1A] = 0x15;
+	memcpy(captureRegisters, control.Registers, sizeof(captureRegisters));
+	unsigned clockOnlyWrites = control.Writes;
+
+	assert(codec.MicrophoneClockOnly());
+	clockOnlyWrites = control.Writes - clockOnlyWrites;
+	captureRegisters[0x12] = 0x0C;
+	captureRegisters[0x27] = 0;
+	captureRegisters[0x1A] = 0x115;
+	captureRegisters[0x16] |= 8;
+	captureRegisters[0x79] = 1;
+	assert(memcmp(captureRegisters, control.Registers, sizeof(captureRegisters)) == 0);
+	codec.Disable();
+	assert(control.Registers[0x16] == 0 && !codec.MicrophoneClockOnly());
+	assert(codec.Enable());
+	assert(control.Registers[0x16] == 6 && control.Registers[0x79] == 8);
+	assert(control.Registers[0x12] == 0x0E && control.Registers[0x27] == 0x1800);
+	for (unsigned failure = 1; failure <= clockOnlyWrites; failure++)
+	{
+		assert(codec.Init(cfg, &control));
+		control.FailAt = control.Writes + failure;
+		assert(!codec.MicrophoneClockOnly() && !codec.Valid());
+		assert(control.Registers[0x12] == 0 && control.Registers[0x62] == 0);
+		control.FailAt = 0;
+	}
+	const int clockOnlyDropped[] = { 0x27, 0x12, 0x1A, 0x16, 0x79 };
+
+	for (int reg : clockOnlyDropped)
+	{
+		assert(codec.Init(cfg, &control));
+		control.DropReg = reg;
+		assert(!codec.MicrophoneClockOnly() && !codec.Valid());
+		control.DropReg = -1;
+	}
+	assert(codec.Init(cfg, &control));
+	control.ReadFailure = true;
+	assert(!codec.MicrophoneClockOnly() && !codec.Valid());
+	control.ReadFailure = false;
+	assert(codec.Init(cfg, &control));
 	control.DropReg = 0x79;
 	assert(!codec.MicrophoneClock(false) && !codec.Valid());
 	assert(control.Registers[0x12] == 0 && control.Registers[0x62] == 0);

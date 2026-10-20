@@ -79,6 +79,10 @@ public:
 	// Select DMIC clock output or hold GPIO1 low, leaving capture enabled.
 	// Requires enabled microphone capture and running MCLK. Init restores clock.
 	bool MicrophoneClock(bool bEnable);
+	// Disable DMIC capture and both ADCs, but drive GPIO1 with SYSCLK / 2.
+	// Requires enabled microphone configuration and running MCLK. Headphones
+	// retain their state. Disable/Enable or Init restores normal capture.
+	bool MicrophoneClockOnly();
 
 private:
 	uint16_t DacControl(bool bMute) const;

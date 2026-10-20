@@ -50,6 +50,7 @@ SOFTWARE.
 #define WM8904_CLOCK_ENABLE 0x16
 #define WM8904_AUDIO_SOURCE 0x18
 #define WM8904_AUDIO_FORMAT 0x19
+#define WM8904_AUDIO_CLOCK 0x1A
 #define WM8904_DAC_LEFT_VOLUME 0x1E
 #define WM8904_DAC_RIGHT_VOLUME 0x1F
 #define WM8904_DAC_CONTROL 0x21
@@ -242,6 +243,42 @@ bool Wm8904::MicrophoneClock(bool bEnable)
 	return true;
 }
 
+bool Wm8904::MicrophoneClockOnly()
+{
+	uint16_t clock;
+	uint16_t divider;
+	uint16_t power = vCfg.bHeadphoneEn ? 0x0C : 0;
+
+	if (!Device::Valid() || !vbEnabled || !vCfg.MicInput)
+	{
+		return false;
+	}
+	if (!ReadReg(WM8904_CLOCK_ENABLE, clock) || !ReadReg(WM8904_AUDIO_CLOCK, divider))
+	{
+		PowerOff();
+		return false;
+	}
+	// OPCLK runs independently of DMIC_ENA and the ADC enable bits.
+	// Hold the pin low while changing its source, then select SYSCLK / 2.
+	divider = (divider & ~0x0F00U) | 0x0100;
+	clock |= 8;
+	if (!WriteReg(WM8904_GPIO1, 2) ||
+		!WriteReg(WM8904_DMIC, 0) ||
+		!WriteReg(WM8904_CONVERTER_POWER, power) ||
+		!WriteReg(WM8904_AUDIO_CLOCK, divider) ||
+		!WriteReg(WM8904_CLOCK_ENABLE, clock) ||
+		!VerifyReg(WM8904_DMIC, 0, 0x1800) ||
+		!VerifyReg(WM8904_CONVERTER_POWER, power, 0x000F) ||
+		!VerifyReg(WM8904_AUDIO_CLOCK, divider, 0x0F00) ||
+		!VerifyReg(WM8904_CLOCK_ENABLE, clock, 0x000E) ||
+		!WriteReg(WM8904_GPIO1, 1) || !VerifyReg(WM8904_GPIO1, 1, 0x003F))
+	{
+		PowerOff();
+		return false;
+	}
+	return true;
+}
+
 bool Wm8904::StartHeadphones()
 {
 	uint16_t status = 0;
@@ -314,6 +351,7 @@ bool Wm8904::Enable()
 	// Configure and read back the capture path before enabling SYSCLK.
 	// Capture-only Init may run while the audio interface has MCLK stopped.
 	if (!WriteReg(WM8904_CLOCK_ENABLE, 0) ||
+		!WriteReg(WM8904_GPIO1, vCfg.MicInput ? 8 : 0x14) ||
 		!WriteReg(WM8904_DMIC, dmic) ||
 		!WriteReg(WM8904_CONVERTER_POWER, power))
 	{
@@ -332,10 +370,11 @@ bool Wm8904::Enable()
 	}
 	if (!Device::Valid() ||
 		!VerifyReg(WM8904_DMIC, dmic, 0x1800) ||
+		!VerifyReg(WM8904_GPIO1, vCfg.MicInput ? 8 : 0x14, 0x003F) ||
 		!VerifyReg(WM8904_CONVERTER_POWER, power, 0x000F) ||
 		!VerifyReg(WM8904_ADC_LEFT_VOLUME, 192 + vCfg.Gain / 375, 0x00FF) ||
 		!WriteReg(WM8904_CLOCK_ENABLE, 6) ||
-		!VerifyReg(WM8904_CLOCK_ENABLE, 6, 0x0006) ||
+		!VerifyReg(WM8904_CLOCK_ENABLE, 6, 0x000E) ||
 		(vCfg.bHeadphoneEn && !StartHeadphones()))
 	{
 		PowerOff();

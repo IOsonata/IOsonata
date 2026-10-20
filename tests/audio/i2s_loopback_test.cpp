@@ -450,12 +450,12 @@ int main()
 	s_Frames = s_TestRate * 10 - 1;
 	assert(!MicrophoneClockRestoreDue());
 	s_Frames++;
-	assert(MicrophoneClockRestoreDue() == bool(AUDIO_LOOPBACK_MIC_ENABLE && !AUDIO_LOOPBACK_MIC_FORWARD));
+	assert(MicrophoneClockRestoreDue() == bool(AUDIO_LOOPBACK_MIC_ENABLE && !AUDIO_LOOPBACK_MIC_FORWARD && !AUDIO_LOOPBACK_CLOCK_ONLY));
 	s_LastStage = AUDIO_STAGE_MIC;
 	DrawLevel();
 	if (AUDIO_LOOPBACK_MIC_ENABLE && !AUDIO_LOOPBACK_MIC_FORWARD)
 	{
-		assert(strncmp(s_DisplayText[0], "MIC CLK OFF ZERO", 16) == 0);
+		assert(strncmp(s_DisplayText[0], AUDIO_LOOPBACK_CLOCK_ONLY ? "CAP OFF CLK 2MHz" : "MIC CLK OFF ZERO", 15) == 0);
 	}
 	s_MicClockRestored = true;
 	assert(!MicrophoneClockRestoreDue());
@@ -463,7 +463,7 @@ int main()
 	assert(s_DisplayRow == 0);
 	if (AUDIO_LOOPBACK_MIC_ENABLE && !AUDIO_LOOPBACK_MIC_FORWARD)
 	{
-		assert(strncmp(s_DisplayText[0], "MIC CLK ON ZERO", 15) == 0);
+		assert(strncmp(s_DisplayText[0], AUDIO_LOOPBACK_CLOCK_ONLY ? "CAP OFF CLK 2MHz" : "MIC CLK ON ZERO", 15) == 0);
 	}
 	DrawLevel();
 	assert(s_DisplayRow == 1);
