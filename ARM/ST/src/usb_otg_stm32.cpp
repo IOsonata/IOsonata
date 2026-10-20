@@ -129,6 +129,8 @@ static void TraceDispatch(uint32_t Status, void *pContext)
 		SysLogPrintf(SysLogGet(), "USB RCC CR=%08x USBSEL=%08x AHB1ENR=%08x PWR CR3=%08x\r\n",
 			static_cast<unsigned>(RCC->CR), static_cast<unsigned>(RCC->D2CCIP2R),
 			static_cast<unsigned>(RCC->AHB1ENR), static_cast<unsigned>(PWR->CR3));
+		SysLogPrintf(SysLogGet(), "USB RCC AHB1LPENR=%08x\r\n",
+			static_cast<unsigned>(RCC->AHB1LPENR));
 		SysLogPrintf(SysLogGet(), "USB GPIOA MODER=%08x AFRH=%08x CRS ISR=%08x\r\n",
 			static_cast<unsigned>(GPIOA->MODER), static_cast<unsigned>(GPIOA->AFR[1]),
 			static_cast<unsigned>(CRS->ISR));

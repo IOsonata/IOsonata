@@ -126,6 +126,9 @@ extern "C" int main(void)
 	const uint32_t supply = PWR->CR3;
 	UsbCtrlrCfg_t usb = {};
 	usb.IntPrio = 6;
+	// Model reset-enabled ULPI sleep gating and an unrelated clock bit.
+	RCC->AHB1LPENR = RCC_AHB1LPENR_USB2OTGFSULPILPEN | RCC_AHB1LPENR_DMA1LPEN;
+	const uint32_t sleep = RCC->AHB1LPENR;
 	CHECK(Stm32UsbOtgPowerInit(&usb));
 	CHECK(Stm32UsbOtgRegs() == USB2_OTG_FS);
 	CHECK(Stm32UsbOtgIrq() == OTG_FS_IRQn);
@@ -142,6 +145,8 @@ extern "C" int main(void)
 		(CRS_CR_CEN | CRS_CR_AUTOTRIMEN));
 	CHECK(PWR->CR3 == (supply | PWR_CR3_USB33DEN));
 	CHECK(RCC->AHB1ENR & RCC_AHB1ENR_USB2OTGFSEN);
+	CHECK(RCC->AHB1LPENR == ((sleep & ~RCC_AHB1LPENR_USB2OTGFSULPILPEN) |
+		RCC_AHB1LPENR_USB2OTGFSLPEN));
 	CHECK((GPIOA->AFR[1] & 0xFF000U) == 0xAA000U);
 	CHECK((GPIOA->MODER & (3U << 18)) == 0); // PA9 input
 	CHECK((GPIOA->MODER & (15U << 22)) == (10U << 22));

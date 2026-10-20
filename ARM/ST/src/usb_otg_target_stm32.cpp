@@ -182,6 +182,11 @@ bool Stm32UsbOtgPowerInit(const UsbCtrlrCfg_t *pCfg)
 	PWR->CR3 |= PWR_CR3_USB33DEN;
 	RCC->AHB1ENR |= RCC_AHB1ENR_USB2OTGFSEN;
 	(void)RCC->AHB1ENR;
+	// Embedded FS PHY: the reset-enabled ULPI sleep clock prevents USB2
+	// operation during CPU sleep. Keep the peripheral clock, not ULPI.
+	RCC->AHB1LPENR = (RCC->AHB1LPENR & ~RCC_AHB1LPENR_USB2OTGFSULPILPEN) |
+		RCC_AHB1LPENR_USB2OTGFSLPEN;
+	(void)RCC->AHB1LPENR;
 #elif defined(STM32F401xC) || defined(STM32F401xE)
 	// The F401 system port starts on HSI. An unused main PLL can supply
 	// USB independently without switching SYSCLK. Board builds must provide
