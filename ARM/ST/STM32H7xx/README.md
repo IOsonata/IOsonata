@@ -98,8 +98,36 @@ buffers may remain in DTCM. The generic USB core and classes are unchanged.
 Control, bulk and interrupt transfers are supported. USB1, external ULPI,
 high-speed operation, host mode, ISO and USB DMA are not exposed. These
 examples do not advertise remote wakeup. See [shared STM32 USB notes](../USB.md).
-USB enumeration, electrical behavior and sustained transfers still require
-hardware validation on this board.
+CDC enumeration and Release transfers are hardware validated. The 60-second
+USB CDC loopback run transferred 26996224 bytes each way, averaging 449927.81
+B/s TX and 449868.73 B/s RX, with zero errors and zero pending bytes after
+draining. Standalone PRBS TX sustained approximately 770-780 kB/s. These are
+full-speed USB results; the WBA65 high-speed result is a different bus mode.
+
+### Additional USB examples
+
+Import the corresponding project under `STM32H753/exemples/<name>/ioc`.
+Each links the existing application in `exemples/usb` and uses the same
+H753 library, Debug/Release settings and native CN13 connection as CDC.
+
+| Project | Application |
+|---|---|
+| UsbDualCdcStress | Two CDC ports: simultaneous loopback and PRBS TX |
+| UsbCustomBulkLoopback | Vendor bulk OUT/IN loopback |
+| UsbHidLoopback | Vendor HID input/output reports |
+| UsbIntLoopback | Interrupt loopback with alternate endpoint intervals |
+| UsbMscRamDisk | Disposable 64 KiB FAT12 RAM disk; contents reset on reboot |
+
+Use the host scripts and dependencies in the [USB User Guide](../../../docs/usb-user-guide.md).
+The scripts are `Python/usb_dual_cdc_stress.py`,
+`Python/usb_custom_bulk_loopback.py`, `Python/usb_hid_loopback.py` and
+`Python/usb_int_loopback.py`; use `--help` for device selection and options.
+The RAM disk appears as a USB storage device; eject it before reset or unplug.
+The dual-CDC application's remote-wakeup setting is shared with other ports;
+remote wakeup has not been validated on H753.
+
+These five additional projects have not yet been built or hardware tested on
+H753. ISO and the ISO-containing combo stress examples are not included.
 
 ## Clocks and memory
 
@@ -149,7 +177,7 @@ are not implemented by this port. Unsupported UART DMA configuration returns
 false. The single library project includes the core device, UART, timer,
 application event and logging sources needed by these examples.
 
-`python3 tests/stm32h7/run.py` builds the library and all six bare-metal examples in
+`python3 tests/stm32h7/run.py` builds the library and all bare-metal examples in
 Debug/Release, with and without hard-float, and runs Cortex-M instruction tests
 using the actual CMSIS header. Install Python `unicorn` and `pyelftools` for
 the modeled register tests. These check startup clock selection, all four APB

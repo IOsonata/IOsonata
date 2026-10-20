@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the H753 library and six examples; emulate register tests.
+"""Build the H753 library and bare-metal examples; emulate register tests.
 
 Requires GNU Arm GCC, Python unicorn and pyelftools. Uses the real ST CMSIS
 header and driver instructions. Ready flags are modeled, not physical timing.
@@ -29,6 +29,11 @@ EXAMPLES = {
     'UartLoopback': 'exemples/uart/uart_loopback.cpp',
     'UsbCdcLoopback': 'exemples/usb/usb_cdc_loopback.cpp',
     'UsbCdcPrbsTx': 'exemples/usb/usb_cdc_prbs_tx.cpp',
+    'UsbDualCdcStress': 'exemples/usb/usb_dual_cdc_stress.cpp',
+    'UsbCustomBulkLoopback': 'exemples/usb/usb_custom_bulk_loopback.cpp',
+    'UsbHidLoopback': 'exemples/usb/usb_hid_loopback.cpp',
+    'UsbIntLoopback': 'exemples/usb/usb_int_loopback.cpp',
+    'UsbMscRamDisk': 'exemples/usb/usb_msc_ramdisk.cpp',
 }
 
 
@@ -154,7 +159,7 @@ def main():
             compile_source(ROOT / 'tests/stm32h7/register_test.cpp', obj)
             link(obj, out / 'register_test.elf')
             emulate(out / 'register_test.elf')
-            print(label + ': library, six examples and register tests PASS', flush=True)
+            print(label + ': library, all examples and register tests PASS', flush=True)
     print('Hardware timing, electrical behavior and data transfers remain untested.')
 
 
