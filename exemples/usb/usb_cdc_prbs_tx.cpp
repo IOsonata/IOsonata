@@ -226,6 +226,14 @@ bool AppCheckStatus(void)
 	return false;
 }
 
+#if defined(STM32H753xx) && defined(USB_LOG_UART_DEVNO)
+// Temporary bring-up check: isolate USB operation from the WFE idle path.
+// Keep this in the diagnostic application, not in the shared AppWait.
+void AppWait(void)
+{
+}
+#endif
+
 int main()
 {
 #if defined(USB_LOG_UART_DEVNO)
@@ -235,6 +243,9 @@ int main()
 		return -1;
 	}
 	SysLogPrintf(SysLogGet(), "USB CDC PRBS starting; UART log 1000000 8N1\r\n");
+#if defined(STM32H753xx)
+	SysLogPrintf(SysLogGet(), "USB diagnostic: idle sleep disabled\r\n");
+#endif
 #endif
 	if (!AppEvtHandlerInit(g_AppEvtHandlerQueMem, sizeof(g_AppEvtHandlerQueMem)) ||
 		!UsbInit(&s_UsbCfg) || !g_Cdc.Init(s_CdcCfg))

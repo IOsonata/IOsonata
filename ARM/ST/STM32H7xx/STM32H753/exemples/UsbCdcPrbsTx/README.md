@@ -29,3 +29,8 @@ snapshot. No FIFO-pop register is read by diagnostics.
 Capture the banner and connected register dump, then unplug and reconnect CN13
 once and capture the resulting bus-event lines. This trace does not establish
 successful enumeration or hardware validation.
+
+This diagnostic example temporarily overrides AppWait with an empty function.
+The banner reports `idle sleep disabled`. This isolates the USB failure from
+WFE and sleep clock gating; it is an experiment, not a validated fix. Restore
+the normal idle wait after testing.
