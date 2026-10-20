@@ -1210,14 +1210,22 @@ shows `XTAL 15625 Hz`. A crystal startup failure is reported instead of
 silently running this comparison from HSI. No MCU register writes are added
 to the application or board header.
 
-The current charge-pump comparison defaults `AUDIO_LOOPBACK_MIC_ENABLE` to 1,
+The current MICBIAS comparison defaults `AUDIO_LOOPBACK_MIC_ENABLE` to 1,
 and `AUDIO_LOOPBACK_MIC_FORWARD` and `AUDIO_LOOPBACK_MIC_INVERT` to 0.
+WM8904 previously enabled the analogue MICBIAS output whenever DMIC capture
+was selected. The onboard digital microphone has its own 3.3 V supply;
+MICBIAS instead feeds the analogue headset microphone contact. Init now
+leaves MICBIAS off and verifies that setting. Master bias, VMID, the DMIC
+interface and headphone output remain enabled. The OLED displays
+`MICBIAS OFF -12dB`. Whether removing this unused analogue path affects the
+clock-triggered buzz still requires the board comparison.
+
 For microphone capture with headphones, WM8904 now selects and reads back
 CP_DYN_PWR = 0: charge-pump operation follows the volume registers rather
 than the instantaneous DAC signal level. Playback-only configurations retain
 Class W (CP_DYN_PWR = 1). This is a supported alternate mode, tested here as
 a possible influence on clock interference; it is not a confirmed fix.
-The OLED shows `CP register -12 dB` and stays on.
+The OLED stays on.
 
 The example repeats the clock isolation comparison. Codec capture stays enabled,
 but MicrophoneClock(false) changes GPIO1 from DMIC clock output to logic zero.
@@ -1284,8 +1292,9 @@ confirmed that the buzz returns with the microphone clock on. The next
 comparison kept the same transition and zero PCM, using the crystal-derived
 audio clock. The maintainer confirmed that the buzz still returns. The
 crystal reference did not remove it. Inverting the captured microphone PCM
-also made no audible difference. The charge-pump mode comparison now awaits
-a board retest, using zero PCM and the same microphone clock OFF/ON sequence.
+also made no audible difference. Register-controlled charge-pump operation
+did not remove the buzz either. The MICBIAS-off comparison now awaits a
+board retest, using zero PCM and the same microphone clock OFF/ON sequence.
 
 This exercises simultaneous RX and TX DMA through the same generic I2S
 interface. Board mapping combines PC5 AF13 receive with PD5 AF13 transmit;

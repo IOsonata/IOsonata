@@ -49,7 +49,7 @@ SOFTWARE.
 #include "idelay.h"
 #include "board.h"
 
-// Compare microphone clock OFF/ON with zero PCM and register-controlled pump.
+// Compare microphone clock OFF/ON with zero PCM and analogue MICBIAS off.
 #ifndef AUDIO_LOOPBACK_MIC_ENABLE
 #define AUDIO_LOOPBACK_MIC_ENABLE 1
 #endif
@@ -504,7 +504,7 @@ static bool HardwareInit()
 	s_Lcd.printf("%lu Hz stereo", (unsigned long)s_Audio.Rate());
 #endif
 	s_Lcd.SetCursor(0, 24);
-	s_Lcd.printf(AUDIO_LOOPBACK_MIC_ENABLE ? "CP register -12 dB" : "CP dynamic -12 dB");
+	s_Lcd.printf("MICBIAS OFF -12dB");
 	if (!PrepareStream())
 	{
 		s_Codec.PowerOff();

@@ -179,8 +179,11 @@ bool Wm8904::Init(const Wm8904Cfg_t &Cfg, DeviceIntrf *pIntrf)
 		return false;
 	}
 	msDelay(100);
+	// Digital microphones use an external supply. Leave the unused analogue
+	// headset MICBIAS output off during digital-only capture.
 	if (!WriteReg(WM8904_VMID, 0x43) || !WriteReg(WM8904_BIAS, 0x19) ||
-		!WriteReg(WM8904_MIC_BIAS, Cfg.MicInput ? 1 : 0) || !WriteReg(WM8904_INPUT_POWER, 0) ||
+		!WriteReg(WM8904_MIC_BIAS, 0) || !VerifyReg(WM8904_MIC_BIAS, 0, 1) ||
+		!WriteReg(WM8904_INPUT_POWER, 0) ||
 		!WriteReg(WM8904_CLOCK_RATE, 0x0C00 | rate) ||
 		!WriteReg(WM8904_AUDIO_FORMAT, format) ||
 		!WriteReg(WM8904_AUDIO_SOURCE, 0x10) ||

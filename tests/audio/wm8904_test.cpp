@@ -138,6 +138,7 @@ int main()
 	assert(control.Registers[0x16] == 6 && control.Registers[0x19] == 2);
 	assert(control.Registers[0x27] == 0x1800 && control.Registers[0x79] == 8);
 	assert(control.Registers[0x12] == 2 && control.Registers[0x0C] == 0);
+	assert(control.Registers[0x06] == 0);
 	assert(!codec.Mute(true) && codec.Valid());
 	assert(control.Registers[0x18] == 0x10 && control.Registers[0x0A] == 1);
 	assert(control.Registers[0x24] == 239 && control.Registers[0x25] == 0x1EF);
@@ -225,6 +226,7 @@ int main()
 
 	assert(control.Registers[0x12] == 0x0C && control.Registers[0x27] == 0);
 	assert(control.Registers[0x0E] == 3 && control.Registers[0x62] == 1);
+	assert(control.Registers[0x06] == 0);
 	assert(control.Registers[0x68] == 1);
 	assert(control.Registers[0x5A] == 0xFF && control.Registers[0x21] == 0x0600);
 	assert(control.Registers[0x39] == 33 && control.Registers[0x3A] == 0xA1);
@@ -266,6 +268,7 @@ int main()
 	assert(codec.Init(cfg, &control));
 	assert(control.Registers[0x12] == 0x0E && control.Registers[0x27] == 0x1800);
 	assert(control.Registers[0x68] == 0 && control.Registers[0x62] == 1);
+	assert(control.Registers[0x06] == 0);
 	assert(codec.Mute(true) && control.Registers[0x21] == 0x0608);
 	assert(control.Registers[0x12] == 0x0E && control.Registers[0x27] == 0x1800);
 	assert(control.Registers[0x16] == 6 && control.Registers[0x79] == 8);
