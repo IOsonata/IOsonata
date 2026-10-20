@@ -10,10 +10,9 @@
 
 		STM32F0/F030 does not have hardware RNG and must not link this file.
 
-		This code enables the RNG peripheral clock and the RNG block. It does not
-		rebuild the system clock tree. If the RNG kernel clock is not valid, the
-		status register reports a clock error and Random reports failure. Configure
-		the RNG clock source in the board/system clock code.
+		H753 selects HSI48 for the RNG kernel without changing PLL or USB clock
+		selection. Other families require a valid RNG kernel clock configured by
+		their system clock code. Clock and data-ready waits are bounded.
 
 @author	Hoang Nguyen Hoan
 @date	Jul 2026
@@ -76,8 +75,23 @@ SOFTWARE.
 
 static volatile bool s_RngInited = false;
 
-static void RngClockEnable(void)
+static bool RngClockEnable(void)
 {
+#if defined(STM32H753xx)
+	RCC->CR |= RCC_CR_HSI48ON;
+	uint32_t polls = RNG_STM32_TIMEOUT;
+
+	while ((RCC->CR & RCC_CR_HSI48RDY) == 0U && polls > 0U)
+	{
+		polls--;
+	}
+	if ((RCC->CR & RCC_CR_HSI48RDY) == 0U)
+	{
+		return false;
+	}
+	// RNGSEL=0 selects HSI48. USBSEL and all PLL settings are preserved.
+	RCC->D2CCIP2R &= ~RCC_D2CCIP2R_RNGSEL;
+#endif
 #if defined(RCC_AHB2ENR_RNGEN)
 	RCC->AHB2ENR |= RCC_AHB2ENR_RNGEN;
 	(void)RCC->AHB2ENR;
@@ -93,6 +107,7 @@ static void RngClockEnable(void)
 #else
 #error "rng_stm32.cpp: selected STM32 device header does not define RNG clock enable bit"
 #endif
+	return true;
 }
 
 static void RngReset(void)
@@ -135,6 +150,7 @@ static void RngClearLatchedErrors(void)
 #endif
 }
 
+#if !defined(STM32H753xx)
 static void RngRecoverSeedError(void)
 {
 	RngDisable();
@@ -147,6 +163,7 @@ static void RngRecoverSeedError(void)
 
 	RngEnable();
 }
+#endif
 
 static bool RngInit(void)
 {
@@ -155,7 +172,10 @@ static bool RngInit(void)
 		return true;
 	}
 
-	RngClockEnable();
+	if (RngClockEnable() == false)
+	{
+		return false;
+	}
 	RngReset();
 	RngClearLatchedErrors();
 	RngEnable();
@@ -175,6 +195,14 @@ static bool RngReadWord(uint32_t *pWord)
 	{
 		uint32_t sr = RNG->SR;
 
+#if defined(STM32H753xx)
+		// Latched seed errors invalidate data even after SECS has cleared.
+		// Fail this request; the caller must explicitly enable/reset again.
+		if (sr & (RNG_SR_SECS | RNG_SR_SEIS | RNG_SR_CECS | RNG_SR_CEIS))
+		{
+			return false;
+		}
+#else
 		if ((sr & RNG_SR_SECS) != 0U)
 		{
 			RngRecoverSeedError();
@@ -185,10 +213,19 @@ static bool RngReadWord(uint32_t *pWord)
 		{
 			return false;
 		}
+#endif
 
 		if ((sr & RNG_SR_DRDY) != 0U)
 		{
 			*pWord = RNG->DR;
+#if defined(STM32H753xx)
+			if (RNG->SR & (RNG_SR_SECS | RNG_SR_SEIS | RNG_SR_CECS | RNG_SR_CEIS))
+			{
+				*pWord = 0;
+
+				return false;
+			}
+#endif
 			return true;
 		}
 	}
@@ -295,6 +332,14 @@ CRYPTO_STATUS CryptoRngStm32::Random(uint8_t *pOut, size_t Len)
 	}
 
 	bool ok = RngFill(pOut, Len);
+#if defined(STM32H753xx)
+	if (ok == false)
+	{
+		RngDisable();
+		vbValid = false;
+		vbEnabled = false;
+	}
+#endif
 	atomic_flag_clear(&vOpBusy);
 	if (!ok)
 	{

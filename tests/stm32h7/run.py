@@ -22,7 +22,9 @@ from unicorn.arm_const import UC_ARM_REG_SP, UC_ARM_REG_LR, UC_ARM_REG_R0, UC_AR
 ROOT = Path(__file__).resolve().parents[2]
 PORT = ROOT / 'ARM/ST/STM32H7xx'
 PROJECT = PORT / 'STM32H753'
+LWIP = Path(os.environ.get('LWIP_ROOT', ROOT.parent / 'external/lwip'))
 EXAMPLES = {
+    'CryptoTest': 'exemples/crypto/crypto_engine_test.cpp',
     'Blinky': 'exemples/misc/blinky.c',
     'TimerDemo': 'exemples/timer/timer_demo.cpp',
     'UartPrbsTxTest': 'exemples/uart/uart_prbs_tx.cpp',
@@ -34,6 +36,9 @@ EXAMPLES = {
     'UsbHidLoopback': 'exemples/usb/usb_hid_loopback.cpp',
     'UsbIntLoopback': 'exemples/usb/usb_int_loopback.cpp',
     'UsbMscRamDisk': 'exemples/usb/usb_msc_ramdisk.cpp',
+    'EthernetDemo': 'exemples/net/ethernet_demo.cpp',
+    'EthernetUdpDemo': 'exemples/net/ethernet_demo.cpp',
+    'EthernetTcpDemo': 'exemples/net/ethernet_demo.cpp',
 }
 
 
@@ -97,8 +102,15 @@ def main():
         if not shutil.which('arm-none-eabi-' + tool):
             raise SystemExit('Missing arm-none-eabi-' + tool)
     links = ET.parse(PROJECT / 'lib/ioc/.project').findall('.//linkedResources/link')
-    sources = [ROOT / link.findtext('locationURI').removeprefix('PARENT-6-PROJECT_LOC/')
-               for link in links if link.findtext('name', '').startswith('src/')]
+    sources = []
+    for link in links:
+        if not link.findtext('name', '').startswith('src/'):
+            continue
+        loc = link.findtext('locationURI')
+        if loc.startswith('PARENT-7-PROJECT_LOC/external/lwip/'):
+            sources.append(LWIP / loc.removeprefix('PARENT-7-PROJECT_LOC/external/lwip/'))
+        else:
+            sources.append(ROOT / loc.removeprefix('PARENT-6-PROJECT_LOC/'))
     assert sources and all(p.is_file() for p in sources)
     includes = [ROOT / p for p in ('ARM/ST/include', 'ARM/include', 'ARM/CMSIS/Core/Include', 'include')]
     includes.append(PORT / 'include')
@@ -114,7 +126,23 @@ def main():
                                 ('Release_FPU', '-Os', ['-mfloat-abi=hard', '-mfpu=fpv5-d16'])):
             out = tmp / label
             out.mkdir()
-            flags = [*base, opt, *fpu]
+            flags = [*base, opt, *fpu, '-DDEBUG' if label.startswith('Debug') else '-DNDEBUG']
+            project = ET.parse(PROJECT / 'lib/ioc/.cproject')
+            config = next(c for c in project.findall('.//cconfiguration')
+                          if c.find('storageModule').get('name') == label)
+            # Use the project's actual build-directory-relative include paths.
+            # Both C and C++ need the IOsonata profile and external lwIP headers.
+            for language in ('c', 'cpp'):
+                option = next(o for o in config.findall('.//option')
+                              if o.get('superClass', '').endswith('.' + language + '.compiler.include.paths'))
+                paths = [(PROJECT / 'lib/ioc' / label / v.get('value').strip('"')).resolve()
+                         for v in option.findall('listOptionValue')]
+                assert (ROOT / 'include/net/lwip').resolve() in paths
+                assert (ROOT.parent / 'external/lwip/src/include').resolve() in paths
+                if language == 'c':
+                    flags += ['-I' + str(p) for p in paths]
+                    # An override can select a separately installed checkout.
+                    flags += ['-I' + str(LWIP / 'src/include')]
 
             def compile_source(source, obj, extra=()):
                 cpp = source.suffix == '.cpp'
@@ -124,7 +152,7 @@ def main():
 
             objects = []
             for source in sources:
-                obj = out / (source.stem + '.o')
+                obj = out / (str(len(objects)) + '_' + source.stem + '.o')
                 compile_source(source, obj)
                 objects.append(obj)
             archive = out / 'libIOsonata_STM32H753.a'
@@ -141,7 +169,31 @@ def main():
             for name, rel in EXAMPLES.items():
                 obj = out / (name + '.o')
                 compile_source(ROOT / rel, obj, ['-I' + str(PROJECT / 'exemples' / name / 'src')])
-                link(obj, out / (name + '.elf'), usb=name.startswith('Usb'))
+                link(obj, out / (name + '.elf'), usb=name.startswith('Usb') or name == 'CryptoTest')
+                with (out / (name + '.elf')).open('rb') as firmware:
+                    elf = ELFFile(firmware)
+                    symbols = {s.name: s for s in elf.get_section_by_name('.symtab').iter_symbols()}
+                    dma = elf.get_section_by_name('.eth_dma')
+                    if name.startswith('Ethernet'):
+                        assert dma and dma['sh_type'] == 'SHT_NOBITS'
+                        assert dma['sh_addr'] % 32 == 0
+                        assert 0x24000000 <= dma['sh_addr'] < dma['sh_addr'] + dma['sh_size'] <= 0x24080000
+                        handler = symbols['ETH_IRQHandler']
+                        assert handler['st_info']['bind'] == 'STB_GLOBAL'
+                        if name != 'EthernetDemo':
+                            assert symbols['SockIntrfInit']['st_info']['bind'] == 'STB_GLOBAL'
+                        for segment in elf.iter_segments():
+                            offset = 0x08000000 + (16 + 61) * 4 - segment['p_vaddr']
+                            if segment['p_type'] == 'PT_LOAD' and 0 <= offset < segment['p_filesz']:
+                                assert struct.unpack_from('<I', segment.data(), offset)[0] == handler['st_value']
+                                break
+                        else:
+                            raise AssertionError('Ethernet vector missing')
+                        if name == 'EthernetDemo':
+                            print(label + ' EthernetDemo: ' + run(['arm-none-eabi-size', out / (name + '.elf')]).strip(), flush=True)
+                    else:
+                        assert not dma or dma['sh_size'] == 0
+                        assert 'IpInit' not in symbols
                 if name.startswith('Usb'):
                     with (out / (name + '.elf')).open('rb') as firmware:
                         elf = ELFFile(firmware)
@@ -165,4 +217,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-

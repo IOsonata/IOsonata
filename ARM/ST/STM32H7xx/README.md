@@ -2,8 +2,8 @@
 
 Initial IOsonata port for the STM32H753ZI Cortex-M7. It supplies startup,
 GPIO/EXTI, polling and interrupt UART, and the 14 general-purpose/basic/advanced
-TIM instances, plus USB2 full-speed device support through the shared STM32
-OTG driver. Startup, LED GPIO, USART3 TX/RX and TIM2 multi-trigger operation
+TIM instances, USB2 full-speed device support through the shared STM32
+OTG driver, and an Ethernet MAC/DMA driver for the LAN8742A RMII PHY. Startup, LED GPIO, USART3 TX/RX and TIM2 multi-trigger operation
 are hardware tested on NUCLEO-H753ZI.
 
 ## Build and first board tests
@@ -126,8 +126,48 @@ The RAM disk appears as a USB storage device; eject it before reset or unplug.
 The dual-CDC application's remote-wakeup setting is shared with other ports;
 remote wakeup has not been validated on H753.
 
-These five additional projects have not yet been built or hardware tested on
-H753. ISO and the ISO-containing combo stress examples are not included.
+These five additional projects compile/link in all four H753 library
+configurations; hardware validation remains pending. ISO and the
+ISO-containing combo stress examples are not included.
+
+## Ethernet examples
+
+`EthernetDemo`, `EthernetUdpDemo` and `EthernetTcpDemo` use the onboard
+LAN8742A PHY and RJ45 CN14. They share the generic Ethernet frame interface,
+lwIP IPv4 service and existing `SockIntrf` C/C++ interface. DHCP, ping, DNS,
+connected UDP and connected TCP are implemented. Ethernet TLS/DTLS is not yet
+implemented; nRF91 modem support is unchanged.
+
+The console is USART3/ST-LINK VCP at 1 Mbaud, 8N1. Start with DHCP/ping using
+`EthernetDemo`, then set the host address in either echo project's `board.h`
+and run `Python/net_echo.py`. Assign a unique MAC address per board. The default
+SDK layout must include `external/lwip` beside IOsonata; the tested version is
+lwIP 2.2.0. See [networking and board bring-up](../../../docs/networking.md)
+for build steps, pin mapping, ownership, memory, limits and validation.
+
+All examples compile/link and the packet/register simulations pass. Physical
+Ethernet operation remains untested.
+
+## Crypto engines
+
+`CryptoTest` uses the same generic `exemples/crypto/crypto_engine_test.cpp`
+as the WBA port. The H753 library links the existing `CryptoRngStm32`,
+`CryptoSoftAes`, `CryptoSoftSha256` and `CryptoUecc` implementations. AES-128,
+CMAC, CCM, GCM, SHA-256/HMAC and P-256 use those shared software engines;
+random numbers use the hardware RNG. H753 CRYP/HASH acceleration is not yet
+implemented. No new generic crypto interfaces are introduced.
+
+The RNG selects HSI48 without changing USB clock selection or PLL settings.
+A clock/seed error or data-ready timeout fails the request, clears its output
+and disables the RNG; call Enable or Reset explicitly before trying again.
+The HSI48 oscillator remains on because USB can share it.
+
+Build `CryptoTest` in Release and open ST-LINK VCP at **115200 baud, 8N1**.
+Debug uses semihosting. No Ethernet cable is needed. See the
+[CryptoTest instructions](STM32H753/exemples/CryptoTest/README.md).
+Run `python3 tests/stm32h7/run_crypto.py` for RNG register fault tests and
+existing engine known answers. Simulation does not validate physical entropy;
+board crypto tests remain pending. Ethernet TLS/DTLS remains unimplemented.
 
 ## Clocks and memory
 
@@ -146,8 +186,10 @@ CPU clock.
 The image uses 2 MiB flash and 128 KiB DTCM for data and stack. AXI SRAM is a
 separate 512 KiB RAM2 region. D2 SRAM and SRAM4 are not allocated by this linker
 script. SystemInit enables the Cortex-M7 instruction cache for flash execution;
-data cache remains disabled. DMA is not supported by the current peripheral
-ports; DTCM must not be assumed accessible to DMA1/2.
+data cache remains disabled. Ethernet descriptors and frame buffers use a
+separate `.eth_dma` section in AXI SRAM, with explicit cache maintenance when
+enabled. General-purpose DMA1/2 is not supported; DTCM must not be assumed
+accessible to those controllers.
 
 ## Device numbers
 
@@ -172,7 +214,7 @@ LPTIM is not yet exposed. `TimerGetLowFreqDevCount()` returns 0.
 
 ## Limits and validation
 
-I2C, SPI, Ethernet, CAN, ADC/DAC, PWM, internal NVM, RNG/crypto and DMA
+I2C, SPI, CAN, ADC/DAC, PWM, internal NVM and general-purpose DMA
 are not implemented by this port. Unsupported UART DMA configuration returns
 false. The single library project includes the core device, UART, timer,
 application event and logging sources needed by these examples.
@@ -217,4 +259,3 @@ not yet been validated on hardware.
 - ST STM32CubeH7 `Projects/NUCLEO-H743ZI/Templates_LL/Src/main.c` confirms the
   400/200/100 MHz voltage-scale-1 clock and flash timing configuration. This
   port accesses the CMSIS registers directly; it does not depend on HAL or LL.
-

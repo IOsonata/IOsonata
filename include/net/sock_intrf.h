@@ -17,18 +17,19 @@ datagram and one RxData returns one datagram, cut to the buffer size.
 
 TxData waits until the data is handed to the network stack, at most the
 configuration Timeout. RxData does not wait: it returns 0 when nothing has
-arrived. The configuration EvtCB is called in interrupt context with
+arrived. The configuration EvtCB is called from the port service context with
 DEVINTRF_EVT_RX_DATA when data arrives and DEVINTRF_EVT_STATECHG when the
 peer or the network closes the socket (SockIntrfConnected then returns
-false). Both have no buffer. A transfer on a closed socket returns 0. A
-temporary error (no buffer, rate control, timeout) also returns 0 and leaves
+false). The nRF91 callback runs in the modem interrupt; the Ethernet/lwIP
+callback runs in the serialized IP service. Neither may block. Both have no
+buffer. A transfer on a closed socket returns 0. A temporary error (no buffer, rate control, timeout) also returns 0 and leaves
 the socket open; data left after a close can still be read.
 
 The IP stack and the name lookup belong to the network implementation of
 the target, so a port implements this API: on nRF91 the modem
-(sock_intrf_nrf91.cpp). TLS and DTLS credentials are stored in it
-beforehand with SockIntrfCredWrite, under the security tag the socket
-configuration gives. Where the network stack is in a modem, it writes and
+(sock_intrf_nrf91.cpp), and on Ethernet the shared lwIP service. TLS and DTLS
+credentials are stored with SockIntrfCredWrite where supported, under the
+security tag the socket configuration gives. Where the network stack is in a modem, it writes and
 deletes them only with the radio off. On LTE, LteInit starts the attach,
 so:
 
@@ -39,6 +40,11 @@ so:
 		SockIntrfCredWrite(Tag, SOCKINTRF_CRED_CA_CERT, s_CaPem);
 		LteConnect();
 	}
+
+Ethernet uses the shared raw lwIP implementation after IpInit (net/ip.h).
+Its initial IPv4 profile supports connected TCP/UDP; TLS/DTLS and credential
+operations return false. UDP does not fragment: its transmit limit is 1472
+bytes. Socket calls and IP processing have one foreground owner.
 
 @author	Hoang Nguyen Hoan
 @date	Oct. 6, 2026
