@@ -13,8 +13,7 @@ Master with EasyDMA and bIntEn : TxData and RxData start the first DMA block and
 return -1. The interrupt handler starts the following blocks, releases the bus
 and reports DEVINTRF_EVT_COMPLETED with the number of bytes moved (the receive
 buffer for a receive). A transmit that keeps the bus for a following receive
-(bNoStop) only sets bTxReady. Not available on nRF54L, which refuses a master
-with bIntEn.
+(bNoStop) only sets bTxReady.
 
 @author	Hoang Nguyen Hoan
 @date	Oct. 6, 2016
@@ -1188,8 +1187,7 @@ bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfgData)
 
 #ifdef NRF54L_SERIES
 	if (pCfgData->pIOPinMap == NULL || pCfgData->DataSize != 8 ||
-		((pCfgData->Mode == SPIMODE_SLAVE || pCfgData->ChipSel == SPICSEL_AUTO) && pCfgData->NbIOPins < 4) ||
-		(pCfgData->Mode == SPIMODE_MASTER && pCfgData->bIntEn))
+		((pCfgData->Mode == SPIMODE_SLAVE || pCfgData->ChipSel == SPICSEL_AUTO) && pCfgData->NbIOPins < 4))
 		return false;
 #endif
 

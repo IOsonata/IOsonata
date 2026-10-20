@@ -15,7 +15,7 @@ p.add_argument('--chip', action='append', help='MCU define, can be repeated (def
 a = p.parse_args()
 includes = [a.mdk, root/'include', root/'include/coredev', root/'ARM/Nordic/include',
             root/'ARM/include', a.cmsis]
-chips = a.chip or ['NRF9160_XXAA', 'NRF52832_XXAA']
+chips = a.chip or ['NRF9160_XXAA', 'NRF52832_XXAA', 'NRF54L15_XXAA', 'NRF54LM20A_XXAA']
 with tempfile.TemporaryDirectory() as tmp:
     for chip in chips:
         cpu = 'cortex-m4' if chip.startswith('NRF52') else 'cortex-m33'

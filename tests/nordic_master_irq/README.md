@@ -1,8 +1,8 @@
 # Nordic master interrupt transfers
 
 Register level checks of the SPIM and TWIM master drivers with `bIntEn = true`
-and EasyDMA, built for each MCU register layout (nRF9160 and nRF52832 by
-default, `--chip NRFxxxx_XXAA` to select). They run the production
+and EasyDMA, built for each MCU register layout (nRF9160, nRF52832, nRF54L15 and
+nRF54LM20A by default, `--chip NRFxxxx_XXAA` to select). They run the production
 `spi_nrfx.cpp`, `i2c_nrfx.cpp`, `shared_intrf_nrfx.cpp` and `device_intrf.cpp`
 in an Arm emulator. Each START task is recorded; the test then raises the
 completion events and runs the shared interrupt handler.

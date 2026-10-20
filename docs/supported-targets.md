@@ -87,9 +87,8 @@ for both MCUs. These are timer-only checks, not full IOC application builds.
 No hardware board is available for validation.
 
 The nRF54L15/LM20 library projects include `i2c_nrfx.cpp` and `spi_nrfx.cpp`.
-Both support polling EasyDMA masters (`bIntEn = false`) and interrupt-driven
-slaves. Master interrupt operation is unfinished and these ports reject that
-mode during initialization. I2C uses 7-bit addresses and selects the closest
+Both support EasyDMA masters, polled or interrupt driven (`bIntEn`), and
+interrupt-driven slaves. I2C uses 7-bit addresses and selects the closest
 100, 250, 400 or 1000 kbit/s rate. SPI uses 8-bit words and selects the closest
 rate available from the instance's prescaler. Requests below or above the
 available rates return the closest rate; the application decides whether to use

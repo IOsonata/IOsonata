@@ -1241,8 +1241,7 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
 
 #ifdef NRF54L_SERIES
 	if (pCfgData->DevNo == 4 || pCfgData->pIOPinMap == NULL ||
-		pCfgData->NbIOPins < 2 || pCfgData->AddrType != I2CADDR_TYPE_NORMAL ||
-		(pCfgData->Mode == I2CMODE_MASTER && pCfgData->bIntEn))
+		pCfgData->NbIOPins < 2 || pCfgData->AddrType != I2CADDR_TYPE_NORMAL)
 		return false;
 #endif
 
