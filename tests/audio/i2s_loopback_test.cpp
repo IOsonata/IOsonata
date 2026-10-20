@@ -20,6 +20,55 @@ static unsigned s_TxCalls;
 static bool s_Stall;
 static bool s_Forever;
 static uint64_t s_Ticks;
+static bool s_DisplayTesting;
+static bool s_Continuous;
+static uint64_t s_StreamUs;
+static uint64_t s_StreamFraction;
+static unsigned s_StreamRx;
+static unsigned s_StreamTx;
+static unsigned s_StreamUnderruns;
+static unsigned s_StreamMaxRx;
+static unsigned s_DisplayCalls;
+
+static void AdvanceStream(unsigned Microseconds)
+{
+	s_StreamUs += Microseconds;
+	s_StreamFraction += uint64_t(Microseconds) * 15625;
+	unsigned frames = s_StreamFraction / 1000000;
+
+	s_StreamFraction %= 1000000;
+	s_StreamRx += frames;
+	if (s_StreamRx > s_StreamMaxRx)
+	{
+		s_StreamMaxRx = s_StreamRx;
+	}
+	if (s_StreamRx > 8192)
+	{
+		AudioEvent(s_Audio, DEVINTRF_EVT_RX_FIFO_FULL, nullptr, 0);
+	}
+	if (frames > s_StreamTx)
+	{
+		s_StreamUnderruns += frames - s_StreamTx;
+		s_StreamTx = 0;
+	}
+	else
+	{
+		s_StreamTx -= frames;
+	}
+}
+
+static int DisplayTransmit(DevIntrf_t *, const uint8_t *, int Count)
+{
+	assert(s_DisplayTesting && Count > 0);
+	s_DisplayCalls++;
+	if (s_Continuous)
+	{
+		// Stress polling and rendering overhead at 20 us per SPI byte.
+		// This is an injected delay, not measured board timing.
+		AdvanceStream(Count * 20);
+	}
+	return Count;
+}
 
 static void ControlDisable(DevIntrf_t *)
 {
@@ -56,24 +105,24 @@ extern "C" SPIPHY SPISetPhy(SPIDev_t *, SPIPHY Phy)
 	return Phy;
 }
 
-extern "C" void IOPinConfig(int, int, int, IOPINDIR, IOPINRES, IOPINTYPE)
+extern "C" void IOPinConfig(int Port, int Pin, int, IOPINDIR, IOPINRES, IOPINTYPE)
 {
-	assert(false);
+	assert(s_DisplayTesting && Port == IOPORTE && (Pin == 0 || Pin == 3));
 }
 
-extern "C" void IOPinSet(int, int)
+extern "C" void IOPinSet(int Port, int Pin)
 {
-	assert(false);
+	assert(s_DisplayTesting && Port == IOPORTE && (Pin == 0 || Pin == 3));
 }
 
-extern "C" void IOPinClear(int, int)
+extern "C" void IOPinClear(int Port, int Pin)
 {
-	assert(false);
+	assert(s_DisplayTesting && Port == IOPORTE && (Pin == 0 || Pin == 3));
 }
 
 static uint64_t TickCount(TimerDev_t *)
 {
-	return ++s_Ticks;
+	return s_Continuous ? s_StreamUs : ++s_Ticks;
 }
 
 extern "C" bool TimerInit(TimerDev_t *, const TimerCfg_t *)
@@ -95,6 +144,18 @@ static void Stop(DevIntrf_t *)
 static int Receive(DevIntrf_t *, uint8_t *pBuff, int Len)
 {
 	s_RxCalls++;
+	if (s_Continuous)
+	{
+		unsigned frames = s_StreamRx & ~31U;
+
+		if (frames > unsigned(Len) / 4)
+		{
+			frames = Len / 4;
+		}
+		memset(pBuff, 0, frames * 4);
+		s_StreamRx -= frames;
+		return frames * 4;
+	}
 	if (s_Forever)
 	{
 		memset(pBuff, 0, Len);
@@ -118,6 +179,17 @@ static int Receive(DevIntrf_t *, uint8_t *pBuff, int Len)
 static int Transmit(DevIntrf_t *, const uint8_t *pData, int Len)
 {
 	s_TxCalls++;
+	if (s_Continuous)
+	{
+		unsigned frames = 256 - s_StreamTx;
+
+		if (frames > unsigned(Len) / 4)
+		{
+			frames = Len / 4;
+		}
+		s_StreamTx += frames;
+		return frames * 4;
+	}
 	if (s_Stall && s_TxCalls % 3 == 0)
 	{
 		return 0;
@@ -301,5 +373,45 @@ int main()
 	PrepareOutput(2);
 	assert(s_Samples[0] == 0 && s_Samples[1] == 0);
 	assert(s_Samples[2] == 123 && s_Samples[3] == -456);
+	// Run the real OLED driver and application scheduler for one minute
+	// with continuous 15,625 Hz RX/TX and injected SPI transfer delays.
+	ResetModel();
+	s_DisplayTesting = true;
+	DevIntrf_t *spi = s_Spi;
+
+	spi->Type = DEVINTRF_TYPE_SPI;
+	spi->StartTx = Start;
+	spi->StopTx = Stop;
+	spi->TxData = DisplayTransmit;
+	assert(s_Lcd.Init(s_LcdCfg, &s_Spi));
+	assert(s_Lcd.SetFont(&iFontSystem5x7));
+	clock->Freq = 1000000;
+	s_Continuous = true;
+	s_StreamTx = 128;
+	s_TestRemaining = s_TestRate * 2;
+	s_LastPaint = 0;
+	s_LastSample = 0;
+	s_DisplayRow = 4;
+	s_LastStage = 2;
+	s_DisplayCalls = 0;
+	while (s_StreamUs < 60000000 && s_AudioError == AUDIO_ERROR_NONE)
+	{
+		AdvanceStream(100);
+		bool progressed = PumpAudio();
+		uint32_t now = s_Clock.mSecond();
+		unsigned calls = s_DisplayCalls;
+
+		assert(AudioErrorText(now) == nullptr);
+		ServiceDisplay(progressed, now);
+		if (progressed || s_Offset < s_Pending)
+		{
+			assert(s_DisplayCalls == calls);
+		}
+	}
+	assert(s_AudioError == AUDIO_ERROR_NONE);
+	printf("Duplex OLED stress: 60 s, %u TX underrun frames, max RX %u frames\n", s_StreamUnderruns, s_StreamMaxRx);
+	assert(s_StreamUnderruns == 0 && s_StreamMaxRx < 256);
+	assert(s_Frames > 900000 && s_DisplayCalls > 1000);
+	s_Continuous = false;
 	puts("I2S loopback config, exact forwarding, short TX, stalls, startup and errors PASS");
 }

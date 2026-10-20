@@ -1231,7 +1231,10 @@ This priming delay is not a measured end-to-end latency result.
 
 Main retains a partially queued block until Tx accepts all of it, then reads
 another block. It forwards whole stereo frames without altering sample values.
-Only two display lines refresh during audio, every 100 ms. ADC gain requests
+Display text is snapshotted every 100 ms and one row is sent only after audio
+has been serviced and no application TX data remain pending. SSD1315 text
+printing now transmits only changed spans within each page, instead of a full
+screen for every printf. Unchanged text generates no SPI traffic. ADC gain requests
 +18 dB and the codec selects its +17.625 dB maximum; headphone gain is -12 dB.
 A DMA/SAI error, receive overflow or 500 ms without newly received samples
 shuts down the codec and audio interface and displays an error.
@@ -1254,6 +1257,18 @@ Validation:
 - The DMA-ordering regression fails on the earlier driver and passes after
   the change. Tests also check FIFO wrap at a 40-frame capacity, sample order,
   packed widths, single-direction operation, error shutdown and reset.
+- A later board run stopped with RX FIFO overflow after a few seconds. Full
+  screen refreshes during text printing could exhaust the TX lead while RX
+  kept running, leaving captured data queued behind silence sent by TX.
+  Text updates now use changed page spans and the demo services audio between
+  individual display rows.
+- A one-minute host simulation runs the actual example and OLED driver with
+  continuous 15,625 Hz capture/playback and injected 20 us delays per SPI byte.
+  It checks for no TX underrun, bounded RX backlog, and audio priority over
+  display work. This is a scheduling stress test, not measured board timing.
+  The earlier OLED implementation fails the same underrun/backlog checks.
+- OLED tests check bounded text traffic, unchanged text, page boundaries,
+  rotation and clearing, alongside the existing console and graphics demos.
 - Physical live microphone/headphone loopback still awaits a successful retest.
 
 ```sh

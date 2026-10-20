@@ -19,6 +19,7 @@
 // The supplied SPI must be initialized, 8-bit, MSB first, mode 0, polling.
 // All drawing methods update the display immediately. Colors: zero = black,
 // nonzero = white. SetCursor uses the top-left pixel of the next character.
+// Text sends only changed page spans. Refresh explicitly resends the frame.
 class LcdSSD1315 : public DisplayDotMatrix {
 public:
 	LcdSSD1315();
@@ -55,3 +56,4 @@ private:
 };
 
 #endif
+

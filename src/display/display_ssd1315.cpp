@@ -278,13 +278,34 @@ void LcdSSD1315::NewLine()
 
 void LcdSSD1315::Print(char const *pStr, uint32_t Color)
 {
-	if (!vbReady || !pStr || !vpFont) { return; }
+	if (!vbReady || !pStr || !vpFont)
+	{
+		return;
+	}
+	uint16_t first[SSD1315_HEIGHT_MAX / 8];
+	uint16_t last[SSD1315_HEIGHT_MAX / 8] = {};
+
+	for (unsigned page = 0; page < SSD1315_HEIGHT_MAX / 8; page++)
+	{
+		first[page] = vCfg.Width;
+	}
 	while (*pStr)
 	{
 		unsigned ch = (uint8_t)*pStr++;
-		if (ch == '\r') { vCurCol = 0; continue; }
-		if (ch == '\n') { NewLine(); continue; }
-		if (ch < 32 || ch > 126) { ch = '?'; }
+		if (ch == '\r')
+		{
+			vCurCol = 0;
+			continue;
+		}
+		if (ch == '\n')
+		{
+			NewLine();
+			continue;
+		}
+		if (ch < 32 || ch > 126)
+		{
+			ch = '?';
+		}
 		unsigned type = vpFont->Prop & FONT_TYPE_MASK;
 		const uint8_t *bits = nullptr;
 		uint16_t w = vpFont->Width;
@@ -295,17 +316,25 @@ void LcdSSD1315::Print(char const *pStr, uint32_t Color)
 			{
 				w = vpFont->pCharDesc[idx].Width;
 				bits = vpFont->pCharDesc[idx].pBits;
-				if (w > vpFont->Width || !bits) { continue; }
+				if (w > vpFont->Width || !bits)
+				{
+					continue;
+				}
 			}
 			else
 			{
-				unsigned size = type == FONT_TYPE_FIXED_VERT ?
-					w * ((vpFont->Height + 7U) / 8U) : ((w + 7U) / 8U) * vpFont->Height;
+				unsigned size = type == FONT_TYPE_FIXED_VERT ? w * ((vpFont->Height + 7U) / 8U) : ((w + 7U) / 8U) * vpFont->Height;
 				bits = vpFont->pBits + idx * size;
 			}
 		}
-		if ((uint32_t)vCurCol + w > vWidth) { NewLine(); }
-		if ((uint32_t)vCurLine + vpFont->Height > vHeight) { vCurLine = 0; }
+		if ((uint32_t)vCurCol + w > vWidth)
+		{
+			NewLine();
+		}
+		if ((uint32_t)vCurLine + vpFont->Height > vHeight)
+		{
+			vCurLine = 0;
+		}
 		for (uint16_t y = 0; y < vpFont->Height; y++)
 		{
 			for (uint16_t x = 0; x <= w; x++)
@@ -313,14 +342,48 @@ void LcdSSD1315::Print(char const *pStr, uint32_t Color)
 				bool on = false;
 				if (bits && x < w)
 				{
-					on = type == FONT_TYPE_FIXED_VERT ?
-						(bits[(y >> 3) * w + x] & (1U << (y & 7))) :
-						(bits[y * ((w + 7U) / 8U) + (x >> 3)] & (0x80U >> (x & 7)));
+					on = type == FONT_TYPE_FIXED_VERT ? (bits[(y >> 3) * w + x] & (1U << (y & 7))) : (bits[y * ((w + 7U) / 8U) + (x >> 3)] & (0x80U >> (x & 7)));
 				}
-				Pixel(vCurCol + x, vCurLine + y, on ? Color : 0);
+				uint16_t px = vCurCol + x;
+				uint16_t py = vCurLine + y;
+
+				if (Map(px, py))
+				{
+					unsigned page = py >> 3;
+					uint8_t &byte = vFrame[page * vCfg.Width + px];
+					uint8_t before = byte;
+					uint8_t mask = 1U << (py & 7);
+
+					if (on && Color)
+					{
+						byte |= mask;
+					}
+					else
+					{
+						byte &= uint8_t(~mask);
+					}
+					if (byte != before)
+					{
+						if (px < first[page])
+						{
+							first[page] = px;
+						}
+						if (px > last[page])
+						{
+							last[page] = px;
+						}
+					}
+				}
 			}
 		}
 		vCurCol += w + 1;
 	}
-	Refresh();
+	// Text updates need only the changed spans, not all 1,024 screen bytes.
+	for (unsigned page = 0; page < vCfg.Height / 8U; page++)
+	{
+		if (first[page] <= last[page])
+		{
+			Page(first[page], page * 8, last[page] - first[page] + 1);
+		}
+	}
 }

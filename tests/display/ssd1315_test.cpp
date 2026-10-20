@@ -7,6 +7,7 @@
 
 static bool dataMode, selected, refuse, failData;
 static unsigned starts, stops, sends, dcWrites, resetWrites;
+static unsigned dataBytes;
 static uint8_t ram[8][128];
 static unsigned page, column;
 static bool pageMode, displayOn;
@@ -73,6 +74,7 @@ static int Tx(DevIntrf_t *, const uint8_t *p, int n)
 	}
 	if (dataMode)
 	{
+		dataBytes += n;
 		assert(pageMode);
 		for (int i = 0; i < n; i++)
 		{
@@ -241,6 +243,38 @@ int main()
 	assert(oled.SetFont(&iFontSystem5x7));
 	oled.printf("!");
 	assert(ram[0][2] == 0x5F); // Existing IOsonata system font
+	// A two-character update must send only its touched pages/columns.
+	// Compare physical RAM before and after a full refresh to catch omissions
+	// at page boundaries and in rotated orientations.
+	for (unsigned orient = 0; orient < 4; orient++)
+	{
+		oled.Orientation(DISPL_ORIENT(orient));
+		oled.Clear();
+		oled.SetCursor(4, 7);
+		unsigned bytesBefore = dataBytes;
+
+		oled.printf("AB");
+		assert(dataBytes - bytesBefore <= 24);
+		uint8_t expected[sizeof(ram)];
+
+		memcpy(expected, ram, sizeof(ram));
+		assert(oled.Refresh());
+		assert(memcmp(expected, ram, sizeof(ram)) == 0);
+		oled.SetCursor(4, 7);
+		bytesBefore = dataBytes;
+		oled.printf("AB");
+		assert(dataBytes == bytesBefore);
+		oled.SetCursor(4, 7);
+		oled.printf("  ");
+		for (const auto &row : ram)
+		{
+			for (uint8_t value : row)
+			{
+				assert(value == 0);
+			}
+		}
+	}
+	oled.Orientation(DISPL_ORIENT_LANDSCAPE);
 	// The shared console demo also uses proportional fonts. Render all of
 	// its printable characters with actual small and large font tables.
 	const FontDesc_t *fonts[] = { &iFontFreeMono8pt, &iFontFreeSansBold24pt };

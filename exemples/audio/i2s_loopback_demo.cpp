@@ -34,6 +34,7 @@ SOFTWARE.
 ----------------------------------------------------------------------------*/
 
 #include <math.h>
+#include <stdio.h>
 #include <string.h>
 #include "coredev/timer.h"
 #include "coredev/i2c.h"
@@ -106,6 +107,9 @@ static uint32_t s_TestRemaining;
 static uint32_t s_TestPhase;
 static uint32_t s_TestStep;
 static unsigned s_LastStage;
+static char s_DisplayText[4][32];
+static unsigned s_DisplayRow = 4;
+static const uint16_t s_DisplayY[] = { 0, 32, 40, 56 };
 static const int16_t s_TestSine[] = {
 	0, 1567, 2896, 3784, 4096, 3784, 2896, 1567,
 	0, -1567, -2896, -3784, -4096, -3784, -2896, -1567
@@ -257,21 +261,32 @@ static void DrawLevel()
 	unsigned magnitude = db < 0 ? unsigned(-db) : unsigned(db);
 	unsigned stage = s_TestRemaining > s_TestRate ? 2 : (s_TestRemaining ? 1 : 0);
 
-	if (stage != s_LastStage)
-	{
-		s_Lcd.SetCursor(0, 0);
-		s_Lcd.printf("%-20s", stage == 2 ? "Duplex tone 1 kHz" : (stage == 1 ? "Duplex silence" : "MIC -> HEADPHONES"));
-		s_LastStage = stage;
-	}
-	// Update only these lines to keep display work short during audio.
-	s_Lcd.SetCursor(0, 32);
-	s_Lcd.printf("L/R mismatches %u   ", s_PairMismatches);
-	s_Lcd.SetCursor(0, 40);
-	s_Lcd.printf("Peak %s%u.%u dBFS   ", db < 0 ? "-" : "", magnitude / 10, magnitude % 10);
-	s_Lcd.SetCursor(0, 56);
-	s_Lcd.printf("Frames %lu", (unsigned long)s_Frames);
+	// Snapshot text only. ServiceDisplay sends one row after servicing audio.
+	snprintf(s_DisplayText[0], sizeof(s_DisplayText[0]), "%-20s", stage == 2 ? "Duplex tone 1 kHz" : (stage == 1 ? "Duplex silence" : "MIC -> HEADPHONES"));
+	snprintf(s_DisplayText[1], sizeof(s_DisplayText[1]), "L/R mismatches %-6u", s_PairMismatches);
+	snprintf(s_DisplayText[2], sizeof(s_DisplayText[2]), "Peak %s%u.%u dBFS   ", db < 0 ? "-" : "", magnitude / 10, magnitude % 10);
+	snprintf(s_DisplayText[3], sizeof(s_DisplayText[3]), "Frames %-13lu", (unsigned long)s_Frames);
+	s_DisplayRow = stage != s_LastStage ? 0 : 1;
+	s_LastStage = stage;
 	s_Peak = 0;
 	s_PairMismatches = 0;
+}
+
+static bool ServiceDisplay(bool AudioProgressed, uint32_t Now)
+{
+	if (Now - s_LastPaint >= 100 && s_DisplayRow == 4)
+	{
+		s_LastPaint = Now;
+		DrawLevel();
+	}
+	if (AudioProgressed || s_Offset < s_Pending || s_DisplayRow == 4)
+	{
+		return false;
+	}
+	s_Lcd.SetCursor(0, s_DisplayY[s_DisplayRow]);
+	s_Lcd.printf("%-20.20s", s_DisplayText[s_DisplayRow]);
+	s_DisplayRow++;
+	return true;
 }
 
 static bool PrepareStream()
@@ -415,12 +430,9 @@ int main()
 			s_Lcd.printf("Pending %u bytes", s_Pending - s_Offset);
 			return 1;
 		}
-		if (now - s_LastPaint >= 100)
-		{
-			s_LastPaint = now;
-			DrawLevel();
-		}
-		if (!progressed)
+		bool painted = ServiceDisplay(progressed, now);
+
+		if (!progressed && !painted)
 		{
 			usDelay(100);
 		}
