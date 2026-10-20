@@ -117,8 +117,9 @@ CPU clock.
 
 The image uses 2 MiB flash and 128 KiB DTCM for data and stack. AXI SRAM is a
 separate 512 KiB RAM2 region. D2 SRAM and SRAM4 are not allocated by this linker
-script. CPU caches remain at their reset state, disabled. DMA is not supported;
-DTCM must not be assumed accessible to DMA1/2.
+script. SystemInit enables the Cortex-M7 instruction cache for flash execution;
+data cache remains disabled. DMA is not supported by the current peripheral
+ports; DTCM must not be assumed accessible to DMA1/2.
 
 ## Device numbers
 

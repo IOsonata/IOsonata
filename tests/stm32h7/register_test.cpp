@@ -54,6 +54,8 @@ extern "C" { volatile uint32_t UsbClockFailure; }
 
 extern "C" int main(void)
 {
+	CHECK((SCB->CCR & SCB_CCR_IC_Msk) != 0U);
+	CHECK((SCB->CCR & SCB_CCR_DC_Msk) == 0U);
 	CHECK(SystemCoreClock == 400000000UL);
 	CHECK(SystemD2Clock == 200000000UL);
 	for (int i = 0; i < 4; i++)
