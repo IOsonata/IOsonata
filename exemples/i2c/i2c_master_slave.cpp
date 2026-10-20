@@ -198,20 +198,21 @@ I2C g_I2CSlave;
 
 #define I2C_BUFF_SIZE	20
 
-// Long write test: data bytes after the offset byte. Longer than one DMA
-// block on the MCUs whose EasyDMA count is 8 bits.
+// Longest write test: data bytes after the command byte. A board sets it to
+// what its slave takes in one transfer (254 on nRF52832, whose TWIS takes 255
+// bytes with the command byte).
 #ifndef I2C_LONG_WRITE_LEN
 #define I2C_LONG_WRITE_LEN		300
 #endif
 
-// Offset byte of the long write: outside the slave memory, so the slave only
-// keeps the data in its write buffer
-#define I2C_LONG_WRITE_CMD		0xFF
+// Command byte of the write length tests: outside the slave memory, so the
+// slave only keeps the data in its write buffer
+#define I2C_WRITE_TEST_CMD		0xFF
 
 static uint8_t s_ReadRqstData[I2C_BUFF_SIZE];
 static uint8_t s_WriteRqstData[I2C_LONG_WRITE_LEN + 1];
 static std::atomic<int> s_SlaveWriteLen(0);	// Bytes of the last completed write
-static uint8_t s_LongWr[I2C_LONG_WRITE_LEN];
+static uint8_t s_WriteTestData[I2C_LONG_WRITE_LEN];
 static bool s_bWriteRqst = false;
 static int s_Offset = 0;
 
@@ -253,7 +254,7 @@ int I2CSlaveIntrfHandler(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId, uint8_t *p
 				}
 				s_bWriteRqst = false;
 			}
-			g_I2CSlave.SetReadRqstData(0, &s_ReadRqstData[s_Offset], I2C_BUFF_SIZE);
+			g_I2CSlave.SetReadRqstData(0, &s_ReadRqstData[s_Offset], I2C_BUFF_SIZE - s_Offset);
 
 			break;
 
@@ -312,159 +313,203 @@ static const char *ModeName(const I2CCfg_t &Cfg)
 	return Cfg.bIntEn ? "interrupt" : "polling";
 }
 
+// Master write of the command byte then Len data bytes. Returns the data
+// bytes written. In interrupt mode the count comes with the completion.
+static int MasterWrite(const I2CCfg_t &Cfg, uint8_t Addr, uint8_t Cmd, const uint8_t *pData, int Len)
+{
+	int c;
+
+	s_MasterCompleted = false;
+	s_MasterCount = 0;
+	c = g_I2CMaster.Write(Addr, &Cmd, 1, pData, Len);
+	if (Cfg.bIntEn)
+	{
+		// DeviceIntrfWrite() converts the -1 of an interrupt transfer into 0
+		// after subtracting the command length
+		int total = WaitMasterComplete(10000000);
+		c = total >= 1 ? total - 1 : 0;
+	}
+
+	return c;
+}
+
+// Register read of Len bytes at Offset
+static int MasterRead(uint8_t Offset, uint8_t *pBuff, int Len)
+{
+	int c;
+
+	s_MasterCompleted = false;
+	s_MasterCount = 0;
+	c = g_I2CMaster.Read(I2C_SLAVE_ADDR, &Offset, 1, pBuff, Len);
+	if (c < 0)
+	{
+		c = WaitMasterComplete(10000000);
+	}
+
+	return c;
+}
+
+// Receive of Len bytes without a command, the slave continues from its last
+// offset
+static int MasterRx(uint8_t *pBuff, int Len)
+{
+	int c;
+
+	s_MasterCompleted = false;
+	s_MasterCount = 0;
+	c = g_I2CMaster.Rx(I2C_SLAVE_ADDR, pBuff, Len);
+	if (c < 0)
+	{
+		c = WaitMasterComplete(10000000);
+	}
+
+	return c;
+}
+
+static void PrintBytes(const uint8_t *pData, int Len)
+{
+	for (int i = 0; i < Len && i < 16; ++i)
+		printf(" %02x", pData[i]);
+	if (Len > 16)
+		printf(" ...");
+	printf("\r\n");
+}
+
+// Check Len received bytes against the expected ones
+static bool CheckRx(const char *pLabel, int Count, int Len, const uint8_t *pRx, const uint8_t *pExpected)
+{
+	bool pass = Count == Len && memcmp(pRx, pExpected, Len) == 0;
+
+	printf("%s %d/%d bytes:", pLabel, Count, Len);
+	PrintBytes(pRx, Count > 0 ? Count : 0);
+	if (!pass)
+	{
+		printf("Expected:");
+		PrintBytes(pExpected, Len);
+	}
+
+	return pass;
+}
+
+// Write Len data bytes after the test command. The slave must receive every
+// byte, in order.
+static bool WriteTest(const I2CCfg_t &Cfg, int Len)
+{
+	uint32_t timeout;
+	int c;
+	int got;
+	bool pass;
+
+	for (int i = 0; i < Len; ++i)
+		s_WriteTestData[i] = (uint8_t)(i * 7 + 3);
+	memset(s_WriteRqstData, 0, sizeof(s_WriteRqstData));
+	s_SlaveWriteLen = 0;
+
+	c = MasterWrite(Cfg, I2C_SLAVE_ADDR, I2C_WRITE_TEST_CMD, Len > 0 ? s_WriteTestData : NULL, Len);
+
+	// The slave reports the write when it sees the STOP
+	timeout = 1000000;
+	while (s_SlaveWriteLen == 0 && --timeout != 0)
+	{
+	}
+	got = s_SlaveWriteLen - 1;
+	pass = c == Len && got == Len && s_WriteRqstData[0] == I2C_WRITE_TEST_CMD &&
+		memcmp(&s_WriteRqstData[1], s_WriteTestData, Len) == 0;
+	printf("Write %d bytes: master %d, slave %d %s\r\n", Len, c, got < 0 ? 0 : got,
+		pass ? "OK" : "FAIL");
+	if (!pass)
+	{
+		for (int i = 0; i < Len; ++i)
+		{
+			if (s_WriteRqstData[i + 1] != s_WriteTestData[i])
+			{
+				printf("Write mismatch at %d: %02x expected %02x\r\n",
+					i, s_WriteRqstData[i + 1], s_WriteTestData[i]);
+				break;
+			}
+		}
+	}
+
+	return pass;
+}
+
 // Run one master and slave combination.
 // Return 1 for pass, 0 for fail, -1 when the combination is not supported.
 static int RunCombo(const I2CCfg_t &MasterCfg, const I2CCfg_t &SlaveCfg)
 {
-	const uint8_t expectedRx[4] = { 0x0C, 0x0D, 0x0E, 0x0F };
-	uint8_t rx[4] = { 0xFF, 0xFF, 0xFF, 0xFF };
-	bool masterOk;
-	bool slaveOk;
-	int c;
-	int total;
-	bool writeOk;
-	bool pass;
-	int rc;
-	int i;
+	static const int writeLen[] = { 0, 1, 2, 8, I2C_LONG_WRITE_LEN };
+	static const int readLen[] = { 1, 2, 8 };
+	const uint8_t wr[8] = { 0xA0, 0xA1, 0xA2, 0xA3, 0xA4, 0xA5, 0xA6, 0xA7 };
+	const uint8_t offset = 4;
 	uint8_t buff[I2C_BUFF_SIZE];
-	uint8_t wr[8] = { 0xA0, 0xA1, 0xA2, 0xA3, 0xA4, 0xA5, 0xA6, 0xA7 };
-	uint8_t offset = 4;
+	uint8_t expected[I2C_BUFF_SIZE];
+	char label[32];
+	bool pass = true;
+	int c;
+	int i;
 
-	masterOk = g_I2CMaster.Init(MasterCfg);
-	slaveOk = g_I2CSlave.Init(SlaveCfg);
-	if (!masterOk || !slaveOk)
+	if (!g_I2CMaster.Init(MasterCfg) || !g_I2CSlave.Init(SlaveCfg))
 	{
-		printf("Init master=%d slave=%d, combination not supported\r\n", masterOk, slaveOk);
+		printf("Combination not supported\r\n");
 		return -1;
 	}
 
 	for (i = 0; i < I2C_BUFF_SIZE; ++i)
 		s_ReadRqstData[i] = (uint8_t)i;
 	memset(s_WriteRqstData, 0, sizeof(s_WriteRqstData));
-	memset(buff, 0xFF, sizeof(buff));
 	s_Offset = 0;
 	s_bWriteRqst = false;
 
-	s_MasterCompleted = false;
-	s_MasterCount = 0;
-	c = g_I2CMaster.Write(I2C_SLAVE_ADDR, &offset, 1, wr, sizeof(wr));
-	if (MasterCfg.bIntEn)
-	{
-		// DeviceIntrfWrite() converts the target TxData() async -1 return
-		// into 0 after subtracting the address-command length. In interrupt
-		// mode completion must therefore be taken from the callback.
-		total = WaitMasterComplete(10000000);
-		c = total >= 1 ? total - 1 : 0;
-	}
+	// Register write of 8 bytes at offset 4
+	c = MasterWrite(MasterCfg, I2C_SLAVE_ADDR, offset, wr, sizeof(wr));
 	printf("Write %d/%d bytes at offset %d\r\n", c, (int)sizeof(wr), offset);
-	writeOk = c == (int)sizeof(wr);
+	pass = c == (int)sizeof(wr);
 
-	memset(buff, 0xFF, sizeof(buff));
-	s_MasterCompleted = false;
-	s_MasterCount = 0;
-	c = g_I2CMaster.Read(I2C_SLAVE_ADDR, &offset, 1, buff, sizeof(wr));
-	if (c < 0)
+	// Register reads of 1, 2 and 8 bytes at offset 4
+	for (i = 0; pass && i < (int)(sizeof(readLen) / sizeof(readLen[0])); ++i)
 	{
-		// Reception completed in the background, the count comes with the
-		// callback as for Rx below
-		c = WaitMasterComplete(10000000);
-	}
-	printf("Read %d/%d bytes at offset %d:", c, (int)sizeof(wr), offset);
-	for (i = 0; i < c; ++i)
-		printf(" %02x", buff[i]);
-	printf("\r\n");
-
-	pass = writeOk && c == (int)sizeof(wr) &&
-		memcmp(buff, wr, sizeof(wr)) == 0;
-
-	if (pass)
-	{
-		// The register-style read above validates the SAM4L CMDR/NCMDR
-		// repeated-start path. Exercise the ordinary RX path for the selected
-		// transfer engine too.
-		s_MasterCompleted = false;
-		s_MasterCount = 0;
-		rc = g_I2CMaster.Rx(I2C_SLAVE_ADDR, rx, sizeof(rx));
-		if (rc < 0)
-			rc = WaitMasterComplete(10000000);
-		printf("%s RX %d/%d bytes:", ModeName(MasterCfg), rc, (int)sizeof(rx));
-		for (i = 0; i < rc && i < (int)sizeof(rx); ++i)
-			printf(" %02x", rx[i]);
-		printf("\r\n");
-		pass = rc == (int)sizeof(rx) &&
-			memcmp(rx, expectedRx, sizeof(rx)) == 0;
-		if (!pass)
-			printf("Expected RX 4/4 bytes: 0c 0d 0e 0f\r\n");
+		memset(buff, 0xFF, sizeof(buff));
+		c = MasterRead(offset, buff, readLen[i]);
+		snprintf(label, sizeof(label), "Read at offset %d", offset);
+		pass = CheckRx(label, c, readLen[i], buff, wr);
 	}
 
+	// Receives without a command continue after the last read: 4 bytes at
+	// offset 12, then 1 byte at offset 16
 	if (pass)
 	{
-		// Long write: one transfer of I2C_LONG_WRITE_LEN data bytes after the
-		// command byte. The slave must receive every byte, in order.
-		uint8_t cmd = I2C_LONG_WRITE_CMD;
-		uint32_t timeout;
+		memset(buff, 0xFF, sizeof(buff));
+		c = MasterRx(buff, 4);
+		memcpy(expected, &s_ReadRqstData[offset + sizeof(wr)], 4);
+		snprintf(label, sizeof(label), "%s RX", ModeName(MasterCfg));
+		pass = CheckRx(label, c, 4, buff, expected);
+	}
+	if (pass)
+	{
+		memset(buff, 0xFF, sizeof(buff));
+		c = MasterRx(buff, 1);
+		expected[0] = s_ReadRqstData[offset + sizeof(wr) + 4];
+		pass = CheckRx(label, c, 1, buff, expected);
+	}
 
-		for (i = 0; i < I2C_LONG_WRITE_LEN; ++i)
-			s_LongWr[i] = (uint8_t)(i * 7 + 3);
-		memset(s_WriteRqstData, 0, sizeof(s_WriteRqstData));
-		s_SlaveWriteLen = 0;
-		s_MasterCompleted = false;
-		s_MasterCount = 0;
-		c = g_I2CMaster.Write(I2C_SLAVE_ADDR, &cmd, 1, s_LongWr, I2C_LONG_WRITE_LEN);
-		if (MasterCfg.bIntEn)
-		{
-			total = WaitMasterComplete(10000000);
-			c = total >= 1 ? total - 1 : 0;
-		}
-		// The slave reports the write when it sees the STOP
-		timeout = 1000000;
-		while (s_SlaveWriteLen == 0 && --timeout != 0)
-		{
-		}
-		printf("Long write %d/%d bytes, slave received %d\r\n", c, I2C_LONG_WRITE_LEN,
-			s_SlaveWriteLen > 0 ? (int)s_SlaveWriteLen - 1 : 0);
-		pass = c == I2C_LONG_WRITE_LEN && s_SlaveWriteLen == I2C_LONG_WRITE_LEN + 1 &&
-			s_WriteRqstData[0] == I2C_LONG_WRITE_CMD &&
-			memcmp(&s_WriteRqstData[1], s_LongWr, I2C_LONG_WRITE_LEN) == 0;
-		if (!pass)
-		{
-			for (i = 0; i < I2C_LONG_WRITE_LEN; ++i)
-			{
-				if (s_WriteRqstData[i + 1] != s_LongWr[i])
-				{
-					printf("Long write mismatch at %d: %02x expected %02x\r\n",
-						i, s_WriteRqstData[i + 1], s_LongWr[i]);
-					break;
-				}
-			}
-		}
+	// Writes of 0 (command only), 1, 2, 8 and I2C_LONG_WRITE_LEN data bytes
+	for (i = 0; pass && i < (int)(sizeof(writeLen) / sizeof(writeLen[0])); ++i)
+	{
+		pass = WriteTest(MasterCfg, writeLen[i]);
 	}
 
 	if (pass)
 	{
 		// Address NACK: no device answers I2C_NACK_ADDR. No data byte may be
-		// reported as written, and the bus must work after the error.
-		s_MasterCompleted = false;
-		s_MasterCount = 0;
-		c = g_I2CMaster.Write(I2C_NACK_ADDR, &offset, 1, wr, sizeof(wr));
-		if (MasterCfg.bIntEn)
-		{
-			total = WaitMasterComplete(10000000);
-			c = total >= 1 ? total - 1 : 0;
-		}
+		// reported as written, and a register read must work after the error.
+		c = MasterWrite(MasterCfg, I2C_NACK_ADDR, offset, wr, sizeof(wr));
 		printf("NACK write %d/%d bytes at address 0x%02x\r\n", c, (int)sizeof(wr), I2C_NACK_ADDR);
 		pass = c == 0;
 
 		memset(buff, 0xFF, sizeof(buff));
-		s_MasterCompleted = false;
-		s_MasterCount = 0;
-		rc = g_I2CMaster.Read(I2C_SLAVE_ADDR, &offset, 1, buff, sizeof(wr));
-		if (rc < 0)
-			rc = WaitMasterComplete(10000000);
-		printf("Read after NACK %d/%d bytes\r\n", rc, (int)sizeof(wr));
-		if (rc != (int)sizeof(wr) || memcmp(buff, wr, sizeof(wr)) != 0)
+		c = MasterRead(offset, buff, sizeof(wr));
+		if (!CheckRx("Read after NACK", c, sizeof(wr), buff, wr))
 		{
-			printf("Bus not usable after the NACK\r\n");
 			pass = false;
 		}
 	}
