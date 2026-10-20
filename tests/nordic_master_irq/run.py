@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Execute the real Arm SPIM and TWIM master drivers with bIntEn on nRF9160.
+"""Execute the real Arm SPIM and TWIM master drivers with bIntEn.
 
-Usage: run.py fixture.elf
+Usage: run.py fixture.elf [MCU name]
 Requires unicorn and pyelftools. The register model starts nothing by itself:
 each START or STARTTX/STARTRX task is recorded, and the test then raises the
 completion events and runs the shared interrupt handler, which is what the
@@ -15,7 +15,7 @@ from unicorn import Uc, UC_ARCH_ARM, UC_MODE_THUMB, UC_MODE_MCLASS, UC_HOOK_MEM_
 from unicorn.arm_const import UC_ARM_REG_SP, UC_ARM_REG_LR, UC_ARM_REG_PC, UC_ARM_REG_R0
 
 u = Uc(UC_ARCH_ARM, UC_MODE_THUMB | UC_MODE_MCLASS)
-for base, size in [(0, 0x100000), (0x20000000, 0x100000), (0x50000000, 0x200000), (0x50800000, 0x100000), (0xE0000000, 0x100000)]:
+for base, size in [(0, 0x100000), (0x20000000, 0x100000), (0x40000000, 0x100000), (0x50000000, 0x200000), (0x50800000, 0x100000), (0xE0000000, 0x100000)]:
     u.mem_map(base, size)
 with open(sys.argv[1], 'rb') as f:
     elf = ELFFile(f)
@@ -66,11 +66,12 @@ def call_break(name, args, brk, action):
     assert u.reg_read(UC_ARM_REG_PC) == 0xF0000, (name, 'did not return after', brk)
     return signed(u.reg_read(UC_ARM_REG_R0))
 
-o = [get(symbols['offsets'] + i * 4) for i in range(23)]
+o = [get(symbols['offsets'] + i * 4) for i in range(24)]
+CHIP = sys.argv[2] if len(sys.argv) > 2 else 'NRF9160_XXAA'
 TWIM_MAX, SH_TX_SUSPEND, SH_TX_STOP, SH_RX_STOP, TWIM_INTEN = [get(symbols['twim'] + i * 4) for i in range(5)]
 DMA_MAX = get(symbols['dma_max'])
 BUF = call('buffer_address')
-BASE = {0: 0x50008000, 1: 0x50008000}   # SPIM0 and TWIM0 share the instance
+BASE = {bus: call('address', bus, 0) for bus in (0, 1)}   # SPIM and TWIM share the instance
 pending = []
 shorts = []
 actions = []
@@ -84,6 +85,10 @@ def write(uc, access, addr, size, value, data):
     offset = addr - base
     if active == 1 and offset == o[0]:
         rx, tx = base + o[4], base + o[5]
+        if get(rx + 4) == 0 and get(tx + 4) == 0:
+            # Empty start of the nRF52 anomaly 109 workaround
+            put(base + o[23], 1)
+            return
         kind, reg = ('rx', rx) if get(rx + 4) else ('tx', tx)
         pending.append((kind, get(reg), get(reg + 4)))
         if polled:
@@ -98,7 +103,9 @@ def write(uc, access, addr, size, value, data):
         if polled:
             pending.pop()
             shorts.pop()
+            put(reg + 8, get(reg + 4))
             put(base + (o[10] if kind == 'rx' else o[11]), 1)
+            put(base + (o[9] if kind == 'rx' else o[17]), 1)
     elif active == 0 and offset == o[8]:
         actions.append('stop')
         if polled:
@@ -295,4 +302,4 @@ for bus in (1, 0):
         check(call('busy', bus) == 0 and not pending, 'polled end', bus, kind, call('busy', bus), pending)
     active = None
 polled = False
-print('PASS: nRF9160 master SPI and TWIM interrupt transfers')
+print('PASS: %s master SPI and TWIM interrupt transfers' % CHIP)
