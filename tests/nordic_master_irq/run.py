@@ -87,13 +87,17 @@ legacy = None      # 'twi' selects the TWI model, without EasyDMA
 sent = []          # bytes written to TXD
 
 at_start = []      # TXDSENT, RXDREADY and SHORTS seen by STARTTX and STARTRX
+nack_at = None     # polled TWI: the byte of this index is refused
 
 def legacy_write(addr, value):
     offset = addr - BASE[0]
     if offset == T[10]:
         sent.append(value & 0xFF)
         if legacy == 'twi_polled':
-            put(BASE[0] + T[7], 1)     # TXDSENT for the byte just written
+            if nack_at is not None and len(sent) - 1 == nack_at:
+                put(BASE[0] + T[8], 1) # ERROR, data NACK
+            else:
+                put(BASE[0] + T[7], 1) # TXDSENT for the byte just written
         return
     if value != 1:
         return
@@ -483,6 +487,15 @@ if T[0]:
             # One byte: STOP from the BB shortcut, before the byte is acknowledged
             check(at_start[0][2] == (T[13] if length == 1 else 0), 'polled twi rx shorts', length,
                   hex(at_start[0][2]))
+
+    # A refused byte stops the transmit: nothing more is written to TXD
+    check(call('init', 0, 0, 0, 0) == 1)
+    actions.clear(); sent.clear(); at_start.clear()
+    nack_at = 2
+    r = call('tx', 0, 5)
+    nack_at = None
+    check(r == 2 and len(sent) == 3, 'polled twi transmit after a NACK', r, sent)
+    check(actions.count('stop') >= 1, 'polled twi NACK without STOP', actions)
     legacy = None
 
 # ---- SPI master without EasyDMA, interrupt

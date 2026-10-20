@@ -811,9 +811,7 @@ int nRFxI2CTxDataDMA(DevIntrf_t * const pDev, const uint8_t *pData, int DataLen)
 int nRFxI2CTxData(DevIntrf_t * const pDev, const uint8_t *pData, int Datalen)
 {
 	nRFTwiDev_t *dev = (nRFTwiDev_t*)pDev->pDevData;
-	uint32_t d;
 	int cnt = 0;
-	int rtry = pDev->MaxRetry;
 
 	if (pData == nullptr || Datalen <= 0)
 	{
@@ -857,13 +855,15 @@ int nRFxI2CTxData(DevIntrf_t * const pDev, const uint8_t *pData, int Datalen)
 		dev->pReg->TASKS_STARTTX = 1;
 
 		pDev->bTxReady = false;
-		while (Datalen > 0 && rtry > 0)
+		while (Datalen > 0)
 		{
 			dev->pReg->TXD = *pData;
 			if (nRFxI2CWaitTxComplete(dev, I2C_TIMEOUT_CNT) == false)
 			{
-				rtry--;
-				continue;
+				// A bus error has stopped the bus, writing TXD again would
+				// leave a byte for the next transfer. DeviceIntrfTx retries
+				// the whole transfer.
+				break;
 			}
 			Datalen--;
 			cnt++;
