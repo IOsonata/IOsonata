@@ -49,20 +49,6 @@ SOFTWARE.
 #include "idelay.h"
 #include "board.h"
 
-// Disable capture while driving the microphone with an independent clock.
-#ifndef AUDIO_LOOPBACK_MIC_ENABLE
-#define AUDIO_LOOPBACK_MIC_ENABLE 1
-#endif
-#ifndef AUDIO_LOOPBACK_MIC_FORWARD
-#define AUDIO_LOOPBACK_MIC_FORWARD 0
-#endif
-#ifndef AUDIO_LOOPBACK_MIC_INVERT
-#define AUDIO_LOOPBACK_MIC_INVERT 0
-#endif
-#ifndef AUDIO_LOOPBACK_CLOCK_ONLY
-#define AUDIO_LOOPBACK_CLOCK_ONLY 1
-#endif
-
 enum AudioError_t
 {
 	AUDIO_ERROR_NONE,
@@ -71,18 +57,7 @@ enum AudioError_t
 	AUDIO_ERROR_RX_COUNT,
 	AUDIO_ERROR_TX_COUNT,
 	AUDIO_ERROR_RX_TIMEOUT,
-	AUDIO_ERROR_TX_STALLED,
-	AUDIO_ERROR_CODEC,
-	AUDIO_ERROR_MIC_CLOCK,
-	AUDIO_ERROR_DISPLAY
-};
-
-enum AudioStage_t
-{
-	AUDIO_STAGE_MIC,
-	AUDIO_STAGE_MUTED,
-	AUDIO_STAGE_ZERO,
-	AUDIO_STAGE_TONE
+	AUDIO_ERROR_TX_STALLED
 };
 
 #ifdef AUDIO_OSC_CFG
@@ -132,39 +107,9 @@ static unsigned s_PairMismatches;
 static uint32_t s_Frames;
 static uint32_t s_LastPaint;
 static uint32_t s_LastSample;
-static uint32_t s_TestRate;
-static uint32_t s_TestRemaining;
-static uint32_t s_TestPhase;
-static uint32_t s_TestStep;
-static AudioStage_t s_LastStage;
-static bool s_TestMuted;
-static bool s_MicClockRestored;
-static bool s_LastMicClockRestored;
-static unsigned s_MicClockStep;
-static unsigned s_LastMicClockStep;
-static const uint32_t s_MicClockRates[] = { 2000000, 1000000, 666667, 0 };
-static const char *const s_MicClockLabels[] = {
-	"CAP OFF CLK 2MHz", "CAP OFF CLK 1MHz", "CAP OFF CLK 667kHz", "CAP OFF CLK OFF"
-};
-static bool s_DisplayOff;
-static bool s_DisplayTestDone;
-static uint32_t s_DisplayOffSince;
-static const char *const s_StageNames[] = {
-	!AUDIO_LOOPBACK_MIC_ENABLE ? "MIC OFF - ZERO PCM" :
-	(AUDIO_LOOPBACK_MIC_FORWARD ?
-	(AUDIO_LOOPBACK_MIC_INVERT ? "MIC 180 DEG -> HP" : "MIC -> HEADPHONES") :
-	(AUDIO_LOOPBACK_CLOCK_ONLY ? "CAP OFF CLK 2MHz" : "MIC CLK OFF ZERO")),
-	"DAC muted",
-	"Zero PCM",
-	"Duplex tone 1 kHz"
-};
 static char s_DisplayText[4][32];
 static unsigned s_DisplayRow = 4;
 static const uint16_t s_DisplayY[] = { 0, 32, 40, 56 };
-static const int16_t s_TestSine[] = {
-	0, 1567, 2896, 3784, 4096, 3784, 2896, 1567,
-	0, -1567, -2896, -3784, -4096, -3784, -2896, -1567
-};
 static volatile AudioError_t s_AudioError;
 static I2S s_Audio;
 static I2C s_Control;
@@ -238,101 +183,6 @@ static int AudioEvent(DevIntrf_t *pDev, DEVINTRF_EVT Evt, uint8_t *pData, int Co
 	return 0;
 }
 
-static AudioStage_t OutputStage()
-{
-	if (s_TestRemaining > s_TestRate * 4)
-	{
-		return AUDIO_STAGE_TONE;
-	}
-	if (s_TestRemaining > s_TestRate * 2)
-	{
-		return AUDIO_STAGE_ZERO;
-	}
-	return s_TestRemaining ? AUDIO_STAGE_MUTED : AUDIO_STAGE_MIC;
-}
-
-static bool UpdateOutputMute()
-{
-	bool mute = OutputStage() == AUDIO_STAGE_MUTED;
-
-	if (mute == s_TestMuted)
-	{
-		return true;
-	}
-	if (!s_Codec.Mute(mute))
-	{
-		return false;
-	}
-	s_TestMuted = mute;
-	return true;
-}
-
-static bool MicrophoneClockRestoreDue()
-{
-	// Five seconds of startup, then five seconds of quiet zero PCM.
-	return AUDIO_LOOPBACK_MIC_ENABLE && !AUDIO_LOOPBACK_MIC_FORWARD && !AUDIO_LOOPBACK_CLOCK_ONLY &&
-		!s_MicClockRestored && s_TestRate && s_Frames >= s_TestRate * 10;
-}
-
-static unsigned MicrophoneClockStep()
-{
-	if (!AUDIO_LOOPBACK_MIC_ENABLE || AUDIO_LOOPBACK_MIC_FORWARD || !AUDIO_LOOPBACK_CLOCK_ONLY ||
-		!s_TestRate || s_Frames < s_TestRate * 5)
-	{
-		return 0;
-	}
-	// Keep the first clock through startup, then hold each step for eight seconds.
-	return ((s_Frames - s_TestRate * 5) / (s_TestRate * 8)) % 4;
-}
-
-static bool UpdateMicrophoneClock()
-{
-	unsigned step = MicrophoneClockStep();
-
-	if (step == s_MicClockStep)
-	{
-		return true;
-	}
-	bool ready = s_MicClockRates[step] ? s_Codec.MicrophoneClockOnly(s_MicClockRates[step]) != 0 : s_Codec.MicrophoneClock(false);
-
-	if (ready)
-	{
-		s_MicClockStep = step;
-	}
-	return ready;
-}
-
-static void PrepareOutput(unsigned Frames)
-{
-	if (!AUDIO_LOOPBACK_MIC_ENABLE || !AUDIO_LOOPBACK_MIC_FORWARD)
-	{
-		memset(s_Samples, 0, Frames * 2 * sizeof(s_Samples[0]));
-	}
-	else if (AUDIO_LOOPBACK_MIC_INVERT)
-	{
-		for (unsigned sample = 0; sample < Frames * 2; sample++)
-		{
-			int32_t value = -int32_t(s_Samples[sample]);
-
-			// -32768 has no positive counterpart in signed 16-bit PCM.
-			s_Samples[sample] = value > INT16_MAX ? INT16_MAX : value;
-		}
-	}
-	for (unsigned frame = 0; frame < Frames && s_TestRemaining; frame++)
-	{
-		int16_t value = 0;
-
-		if (s_TestRemaining > s_TestRate * 4)
-		{
-			value = s_TestSine[s_TestPhase >> 28];
-			s_TestPhase += s_TestStep;
-		}
-		s_Samples[frame * 2] = value;
-		s_Samples[frame * 2 + 1] = value;
-		s_TestRemaining--;
-	}
-}
-
 static bool PumpAudio()
 {
 	bool progressed = false;
@@ -366,7 +216,6 @@ static bool PumpAudio()
 					s_Peak = magnitude;
 				}
 			}
-			PrepareOutput(count / 4);
 		}
 	}
 	if (s_Offset < s_Pending)
@@ -388,28 +237,13 @@ static void DrawLevel()
 {
 	int db = s_Peak ? int(200.0f * log10f(float(s_Peak) / 32768.0f)) : -960;
 	unsigned magnitude = db < 0 ? unsigned(-db) : unsigned(db);
-	AudioStage_t stage = OutputStage();
-	const char *label = s_StageNames[stage];
-
-	if (stage == AUDIO_STAGE_MIC && AUDIO_LOOPBACK_MIC_ENABLE && !AUDIO_LOOPBACK_MIC_FORWARD && !AUDIO_LOOPBACK_CLOCK_ONLY && s_MicClockRestored)
-	{
-		label = "MIC CLK ON ZERO";
-	}
-
-	if (stage == AUDIO_STAGE_MIC && AUDIO_LOOPBACK_MIC_ENABLE && !AUDIO_LOOPBACK_MIC_FORWARD && AUDIO_LOOPBACK_CLOCK_ONLY)
-	{
-		label = s_MicClockLabels[s_MicClockStep];
-	}
 
 	// Snapshot text only. ServiceDisplay sends one row after servicing audio.
-	snprintf(s_DisplayText[0], sizeof(s_DisplayText[0]), "%-20s", label);
+	snprintf(s_DisplayText[0], sizeof(s_DisplayText[0]), "MIC -> HEADPHONES   ");
 	snprintf(s_DisplayText[1], sizeof(s_DisplayText[1]), "L/R mismatches %-6u", s_PairMismatches);
 	snprintf(s_DisplayText[2], sizeof(s_DisplayText[2]), "Peak %s%u.%u dBFS   ", db < 0 ? "-" : "", magnitude / 10, magnitude % 10);
 	snprintf(s_DisplayText[3], sizeof(s_DisplayText[3]), "Frames %-13lu", (unsigned long)s_Frames);
-	s_DisplayRow = stage != s_LastStage || s_MicClockRestored != s_LastMicClockRestored || s_MicClockStep != s_LastMicClockStep ? 0 : 1;
-	s_LastStage = stage;
-	s_LastMicClockRestored = s_MicClockRestored;
-	s_LastMicClockStep = s_MicClockStep;
+	s_DisplayRow = 1;
 	s_Peak = 0;
 	s_PairMismatches = 0;
 }
@@ -419,31 +253,6 @@ static bool ServiceDisplay(bool AudioProgressed, uint32_t Now)
 	if (AudioProgressed || s_Offset < s_Pending)
 	{
 		return false;
-	}
-	if (s_DisplayOff)
-	{
-		if (Now - s_DisplayOffSince < 5000)
-		{
-			return false;
-		}
-		if (!s_Lcd.Enable())
-		{
-			s_AudioError = AUDIO_ERROR_DISPLAY;
-			return false;
-		}
-		s_DisplayOff = false;
-		s_LastPaint = Now;
-		DrawLevel();
-		return true;
-	}
-	if (AUDIO_LOOPBACK_MIC_ENABLE && AUDIO_LOOPBACK_MIC_FORWARD && !AUDIO_LOOPBACK_MIC_INVERT && !s_DisplayTestDone && OutputStage() == AUDIO_STAGE_MIC)
-	{
-		// Compare live audio with the OLED panel and charge pump disabled.
-		s_Lcd.Disable();
-		s_DisplayOff = true;
-		s_DisplayTestDone = true;
-		s_DisplayOffSince = Now;
-		return true;
 	}
 	if (Now - s_LastPaint >= 100 && s_DisplayRow == 4)
 	{
@@ -521,7 +330,7 @@ static bool HardwareInit()
 		.MClkFreq = ((I2SDev_t *)s_Audio)->MClkFreq,
 		.SampleWidth = I2SSWIDTH_16BITS,
 		.Format = I2SFMT_NORMAL,
-		.MicInput = AUDIO_LOOPBACK_MIC_ENABLE ? AUDIO_MIC_INPUT : 0,
+		.MicInput = AUDIO_MIC_INPUT,
 		.Gain = 18000,
 		.bHeadphoneEn = true,
 		.HeadphoneGain = -12000
@@ -532,20 +341,9 @@ static bool HardwareInit()
 		s_Lcd.printf("WM8904 init failed");
 		return false;
 	}
-	if (AUDIO_LOOPBACK_MIC_ENABLE && !AUDIO_LOOPBACK_MIC_FORWARD)
-	{
-		bool ready = AUDIO_LOOPBACK_CLOCK_ONLY ? s_Codec.MicrophoneClockOnly() : s_Codec.MicrophoneClock(false);
-
-		if (!ready)
-		{
-			s_Audio.PowerOff();
-			s_Lcd.printf("Mic clock setup failed");
-			return false;
-		}
-	}
 	s_Lcd.Clear();
 	s_Lcd.SetCursor(0, 0);
-	s_Lcd.printf("Duplex tone 1 kHz");
+	s_Lcd.printf("MIC -> HEADPHONES");
 	s_Lcd.SetCursor(0, 16);
 #ifdef AUDIO_OSC_CFG
 	s_Lcd.printf("XTAL %lu Hz", (unsigned long)s_Audio.Rate());
@@ -553,7 +351,7 @@ static bool HardwareInit()
 	s_Lcd.printf("%lu Hz stereo", (unsigned long)s_Audio.Rate());
 #endif
 	s_Lcd.SetCursor(0, 24);
-	s_Lcd.printf("MICBIAS OFF -12dB");
+	s_Lcd.printf("Headphones -12 dB");
 	if (!PrepareStream())
 	{
 		s_Codec.PowerOff();
@@ -561,18 +359,6 @@ static bool HardwareInit()
 		s_Lcd.printf("Audio startup failed");
 		return false;
 	}
-	s_TestRate = s_Audio.Rate();
-	s_TestRemaining = s_TestRate * 5;
-	s_TestPhase = 0;
-	s_TestStep = (uint64_t(1000) << 32) / s_TestRate;
-	s_LastStage = AUDIO_STAGE_TONE;
-	s_TestMuted = false;
-	s_MicClockRestored = false;
-	s_LastMicClockRestored = false;
-	s_MicClockStep = 0;
-	s_LastMicClockStep = 0;
-	s_DisplayOff = false;
-	s_DisplayTestDone = false;
 	s_LastSample = s_Clock.mSecond();
 	s_LastPaint = s_LastSample;
 	return true;
@@ -598,12 +384,6 @@ static const char *AudioErrorText(uint32_t Now)
 			return "RX timeout";
 		case AUDIO_ERROR_TX_STALLED:
 			return "TX stalled";
-		case AUDIO_ERROR_CODEC:
-			return "Codec mute failed";
-		case AUDIO_ERROR_MIC_CLOCK:
-			return "Mic clock setup failed";
-		case AUDIO_ERROR_DISPLAY:
-			return "OLED enable failed";
 		default:
 			return nullptr;
 	}
@@ -618,35 +398,13 @@ int main()
 	while (1)
 	{
 		bool progressed = PumpAudio();
-
-		if (s_AudioError == AUDIO_ERROR_NONE && !UpdateOutputMute())
-		{
-			s_AudioError = AUDIO_ERROR_CODEC;
-		}
 		uint32_t now = s_Clock.mSecond();
-
-		if (s_AudioError == AUDIO_ERROR_NONE && MicrophoneClockRestoreDue())
-		{
-			if (s_Codec.MicrophoneClock(true))
-			{
-				s_MicClockRestored = true;
-			}
-			else
-			{
-				s_AudioError = AUDIO_ERROR_MIC_CLOCK;
-			}
-		}
-		if (s_AudioError == AUDIO_ERROR_NONE && !UpdateMicrophoneClock())
-		{
-			s_AudioError = AUDIO_ERROR_MIC_CLOCK;
-		}
 		const char *error = AudioErrorText(now);
 
 		if (error)
 		{
 			s_Codec.PowerOff();
 			s_Audio.PowerOff();
-			s_Lcd.Enable();
 			s_Lcd.Clear();
 			s_Lcd.printf("Loopback stopped");
 			s_Lcd.SetCursor(0, 16);

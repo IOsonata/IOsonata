@@ -30,12 +30,6 @@ static unsigned s_StreamUnderruns;
 static unsigned s_StreamMaxRx;
 static unsigned s_DisplayCalls;
 static bool s_DisplayData;
-static bool s_PanelOff;
-static unsigned s_PanelOffCount;
-static unsigned s_PanelOnCount;
-static uint64_t s_PanelOffUs;
-static uint32_t s_PanelOffFrames;
-
 static void AdvanceStream(unsigned Microseconds)
 {
 	s_StreamUs += Microseconds;
@@ -66,31 +60,8 @@ static void AdvanceStream(unsigned Microseconds)
 static int DisplayTransmit(DevIntrf_t *, const uint8_t *pData, int Count)
 {
 	assert(s_DisplayTesting && Count > 0);
-	if (s_Continuous)
-	{
-		if (!s_DisplayData && Count == 3 && pData[0] == 0xAE && pData[1] == 0x8D && pData[2] == 0x10)
-		{
-			assert(!s_PanelOff && OutputStage() == AUDIO_STAGE_MIC);
-			s_PanelOff = true;
-			s_PanelOffCount++;
-			s_PanelOffUs = s_StreamUs;
-			s_PanelOffFrames = s_Frames;
-		}
-		else if (!s_DisplayData && Count == 3 && pData[0] == 0x8D && pData[1] == 0x14 && pData[2] == 0xAF)
-		{
-			assert(s_PanelOff);
-			// The application timer has millisecond resolution.
-			assert(s_StreamUs - s_PanelOffUs >= 4999000);
-			assert(s_StreamUs - s_PanelOffUs < 5003000);
-			assert(s_Frames - s_PanelOffFrames >= 78000);
-			s_PanelOff = false;
-			s_PanelOnCount++;
-		}
-		else
-		{
-			assert(!s_PanelOff);
-		}
-	}
+	// The normal loopback must never send the OLED power-off sequence.
+	assert(s_DisplayData || Count != 3 || pData[0] != 0xAE || pData[1] != 0x8D || pData[2] != 0x10);
 	s_DisplayCalls++;
 	if (s_Continuous)
 	{
@@ -260,9 +231,6 @@ static void ResetModel()
 	s_Peak = 0;
 	s_PairMismatches = 0;
 	s_AudioError = AUDIO_ERROR_NONE;
-	s_TestRemaining = 0;
-	s_MicClockRestored = false;
-	s_LastMicClockRestored = false;
 	DevIntrf_t *audio = s_Audio;
 
 	atomic_flag_clear(&audio->bBusy);
@@ -315,32 +283,7 @@ int main()
 				assert(s_AudioError == AUDIO_ERROR_NONE);
 			}
 			assert(s_OutputPos == sizeof(s_Input));
-			if (AUDIO_LOOPBACK_MIC_ENABLE && AUDIO_LOOPBACK_MIC_FORWARD)
-			{
-				if (AUDIO_LOOPBACK_MIC_INVERT)
-				{
-					for (unsigned i = 0; i < sizeof(s_Input); i += 2)
-					{
-						int16_t input;
-						int16_t output;
-
-						memcpy(&input, s_Input + i, 2);
-						memcpy(&output, s_Output + i, 2);
-						assert(int(input) + output == (input == INT16_MIN ? -1 : 0));
-					}
-				}
-				else
-				{
-					assert(memcmp(s_Input, s_Output, sizeof(s_Input)) == 0);
-				}
-			}
-			else
-			{
-				for (unsigned i = 0; i < sizeof(s_Output); i++)
-				{
-					assert(s_Output[i] == 0);
-				}
-			}
+			assert(memcmp(s_Input, s_Output, sizeof(s_Input)) == 0);
 			assert(s_Frames == sizeof(s_Input) / 4 && s_Peak == 32768);
 			assert(s_PairMismatches == sizeof(s_Input) / 4);
 			assert(s_LastSample > 0 && s_Offset == s_Pending);
@@ -396,104 +339,10 @@ int main()
 	ResetModel();
 	AudioEvent(audio, DEVINTRF_EVT_RX_FIFO_FULL, nullptr, 0);
 	assert(strcmp(AudioErrorText(0), "RX FIFO overflow") == 0);
-	// Known output and silence use the same duplex stream and retain input
-	// values as soon as the five-second test has finished.
 	ResetModel();
-	s_TestRate = 15625;
-	s_TestRemaining = s_TestRate * 5;
-	s_TestPhase = 0;
-	s_TestStep = (uint64_t(1000) << 32) / s_TestRate;
-	unsigned positiveCrossings = 0;
-	int previous = 0;
-
-	for (unsigned frame = 0; frame < s_TestRate * 5 + 8; frame++)
-	{
-		s_Samples[0] = 123;
-		s_Samples[1] = -456;
-		unsigned stage = OutputStage();
-
-		assert(stage == (frame < s_TestRate ? 3 : (frame < s_TestRate * 3 ? 2 : (frame < s_TestRate * 5 ? 1 : 0))));
-		PrepareOutput(1);
-		if (frame < s_TestRate)
-		{
-			assert(s_Samples[0] == s_Samples[1]);
-			assert(s_Samples[0] >= -4096 && s_Samples[0] <= 4096);
-			if (previous <= 0 && s_Samples[0] > 0)
-			{
-				positiveCrossings++;
-			}
-			previous = s_Samples[0];
-		}
-		else if (frame < s_TestRate * 5)
-		{
-			assert(s_Samples[0] == 0 && s_Samples[1] == 0);
-		}
-		else
-		{
-			assert(s_Samples[0] == (AUDIO_LOOPBACK_MIC_ENABLE && AUDIO_LOOPBACK_MIC_FORWARD ? (AUDIO_LOOPBACK_MIC_INVERT ? -123 : 123) : 0));
-			assert(s_Samples[1] == (AUDIO_LOOPBACK_MIC_ENABLE && AUDIO_LOOPBACK_MIC_FORWARD ? (AUDIO_LOOPBACK_MIC_INVERT ? 456 : -456) : 0));
-		}
-	}
-	assert(positiveCrossings >= 999 && positiveCrossings <= 1001);
-	assert(s_TestRemaining == 0);
-	// A block crossing the test boundary must retain its live tail.
-	s_TestRemaining = 1;
-	s_Samples[2] = 123;
-	s_Samples[3] = -456;
-	PrepareOutput(2);
-	assert(s_Samples[0] == 0 && s_Samples[1] == 0);
-	assert(s_Samples[2] == (AUDIO_LOOPBACK_MIC_ENABLE && AUDIO_LOOPBACK_MIC_FORWARD ? (AUDIO_LOOPBACK_MIC_INVERT ? -123 : 123) : 0));
-	assert(s_Samples[3] == (AUDIO_LOOPBACK_MIC_ENABLE && AUDIO_LOOPBACK_MIC_FORWARD ? (AUDIO_LOOPBACK_MIC_INVERT ? 456 : -456) : 0));
-	// Restore once, after five seconds of zero PCM following startup.
-	ResetModel();
-	s_TestRate = 15625;
-	s_Frames = s_TestRate * 10 - 1;
-	assert(!MicrophoneClockRestoreDue());
-	s_Frames++;
-	assert(MicrophoneClockRestoreDue() == bool(AUDIO_LOOPBACK_MIC_ENABLE && !AUDIO_LOOPBACK_MIC_FORWARD && !AUDIO_LOOPBACK_CLOCK_ONLY));
-	s_LastStage = AUDIO_STAGE_MIC;
 	DrawLevel();
-	if (AUDIO_LOOPBACK_MIC_ENABLE && !AUDIO_LOOPBACK_MIC_FORWARD)
-	{
-		assert(strncmp(s_DisplayText[0], AUDIO_LOOPBACK_CLOCK_ONLY ? "CAP OFF CLK 2MHz" : "MIC CLK OFF ZERO", 15) == 0);
-	}
-	s_MicClockRestored = true;
-	assert(!MicrophoneClockRestoreDue());
-	DrawLevel();
-	assert(s_DisplayRow == 0);
-	if (AUDIO_LOOPBACK_MIC_ENABLE && !AUDIO_LOOPBACK_MIC_FORWARD)
-	{
-		assert(strncmp(s_DisplayText[0], AUDIO_LOOPBACK_CLOCK_ONLY ? "CAP OFF CLK 2MHz" : "MIC CLK ON ZERO", 15) == 0);
-	}
-	DrawLevel();
+	assert(strncmp(s_DisplayText[0], "MIC -> HEADPHONES", 17) == 0);
 	assert(s_DisplayRow == 1);
-	// Clock-only sweep keeps the first frequency through startup, then repeats
-	// every 32 seconds. Check both sides of every eight-second boundary.
-	for (unsigned step = 0; step < 12; step++)
-	{
-		s_Frames = s_TestRate * (5 + step * 8);
-		unsigned expected = AUDIO_LOOPBACK_MIC_ENABLE && !AUDIO_LOOPBACK_MIC_FORWARD && AUDIO_LOOPBACK_CLOCK_ONLY ? step % 4 : 0;
-
-		assert(MicrophoneClockStep() == expected);
-		if (step)
-		{
-			s_Frames--;
-			assert(MicrophoneClockStep() == (AUDIO_LOOPBACK_MIC_ENABLE && !AUDIO_LOOPBACK_MIC_FORWARD && AUDIO_LOOPBACK_CLOCK_ONLY ? (step - 1) % 4 : 0));
-		}
-	}
-	if (AUDIO_LOOPBACK_MIC_ENABLE && !AUDIO_LOOPBACK_MIC_FORWARD && AUDIO_LOOPBACK_CLOCK_ONLY)
-	{
-		for (unsigned step = 1; step < 5; step++)
-		{
-			s_MicClockStep = step % 4;
-			DrawLevel();
-			assert(s_DisplayRow == 0);
-			assert(strncmp(s_DisplayText[0], s_MicClockLabels[step % 4], strlen(s_MicClockLabels[step % 4])) == 0);
-			DrawLevel();
-			assert(s_DisplayRow == 1);
-		}
-	}
-
 	// Run the real OLED driver and application scheduler for one minute
 	// with continuous 15,625 Hz RX/TX and injected SPI transfer delays.
 	ResetModel();
@@ -509,11 +358,9 @@ int main()
 	clock->Freq = 1000000;
 	s_Continuous = true;
 	s_StreamTx = 128;
-	s_TestRemaining = s_TestRate * 5;
 	s_LastPaint = 0;
 	s_LastSample = 0;
 	s_DisplayRow = 4;
-	s_LastStage = AUDIO_STAGE_TONE;
 	s_DisplayCalls = 0;
 	while (s_StreamUs < 60000000 && s_AudioError == AUDIO_ERROR_NONE)
 	{
@@ -533,10 +380,6 @@ int main()
 	printf("Duplex OLED stress: 60 s, %u TX underrun frames, max RX %u frames\n", s_StreamUnderruns, s_StreamMaxRx);
 	assert(s_StreamUnderruns == 0 && s_StreamMaxRx < 256);
 	assert(s_Frames > 900000 && s_DisplayCalls > 1000);
-	assert(s_DisplayTestDone == bool(AUDIO_LOOPBACK_MIC_ENABLE && AUDIO_LOOPBACK_MIC_FORWARD && !AUDIO_LOOPBACK_MIC_INVERT));
-	assert(!s_DisplayOff && !s_PanelOff);
-	assert(s_PanelOffCount == unsigned(AUDIO_LOOPBACK_MIC_ENABLE && AUDIO_LOOPBACK_MIC_FORWARD && !AUDIO_LOOPBACK_MIC_INVERT));
-	assert(s_PanelOnCount == unsigned(AUDIO_LOOPBACK_MIC_ENABLE && AUDIO_LOOPBACK_MIC_FORWARD && !AUDIO_LOOPBACK_MIC_INVERT));
 	s_Continuous = false;
 	puts("I2S loopback config, exact forwarding, short TX, stalls, startup and errors PASS");
 }

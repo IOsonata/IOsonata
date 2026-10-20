@@ -9,13 +9,47 @@ and SRAM size do not define a separate library variant; applications select
 their linker script. A different peripheral inventory or interrupt vector
 layout requires a separate library configuration.
 
+## Port status
+
+The core STM32WBA65 port and the main STM32WBA65I-DK1 onboard peripherals
+are implemented. Hardware bring-up covers startup, GPIO, UART, timers,
+I2C, SPI, BLE, hardware crypto, native USB CDC, OLED, joystick, microphone
+level capture and headphone tone playback. This is the supported TZEN = 0
+layout; secure/nonsecure image provisioning is not implemented.
+
+| Area | Status |
+| --- | --- |
+| Startup, GPIO and EXTI | Boots on DK1; LED output and external input/EXTI tested |
+| UART | 1 Mbaud PRBS TX and loopback tested; optional retarget/SLIP examples build |
+| Timers | LPTIM and TIM callbacks tested |
+| I2C and SPI | Master/slave mode matrices tested on hardware |
+| BLE | Advertising, central scan/connect/discovery/notification/reconnect, Numeric Comparison and bonded reconnect tested |
+| Crypto | RNG, AES and P-256 hardware test: 51 passed, 0 failed |
+| USB | Native CDC TX/RX tested, including 60-second Release loopback |
+| SSD1315 OLED | Console, graphics and interactive examples exercised |
+| Analog joystick | Menu, stopwatch and countdown examples tested |
+| M95P32 SPI EEPROM | SeepDemo uses the generic Nvm driver; command-model tests and builds pass; hardware result not recorded |
+| WM8904 and MP23DB01HP | Microphone level meter and stereo headphone tones tested |
+| Microphone/headphone loopback | Data path implemented; unresolved clock-associated headphone buzz on DK1 |
+| Native SAI PDM | Implemented and simulated; needs an external directly connected PDM microphone for hardware validation |
+| Optional features | RTC calendar/alarms, deep-sleep wakeup, analog audio input and line output are outside this bring-up |
+
+Additional validation remains for explicit BLE characteristic reads, USB
+reconnect/suspend/resume/FS fallback, and optional modes listed below. These
+are separate from the working core port. Absolute timer/clock frequency has
+not been measured against an external reference. The audio noise investigation
+is closed for this bring-up; its findings are recorded in the loopback section.
+
 ## BLE validation projects
 
 Import the projects below from `exemples/<project>/ioc`. They link the common
 application sources, the same WBA65 library and the same two ST archives as
 the hardware-tested BleAdvertiser. Build the library and application with
 matching Debug or Release configurations. BleAdvertiser and BleSecurityDemo
-are hardware validated. The other BLE projects require hardware testing.
+are hardware validated. Central scan/connect/discovery/notification/reconnect
+and the OLED BLE examples also have hardware results recorded below. Keep
+per-example validation separate; a successful central connection does not
+establish explicit characteristic-read coverage.
 
 All use USART1 (DevNo 1), PA8 RX / PB12 TX, on the first ST-LINK virtual COM
 port, 8N1 without flow control. Board headers contain mappings only.
@@ -129,17 +163,10 @@ with the hard float ABI; the system initializer enables CP10 and CP11,
 installs the vector base and sets the core clock (see Core clock below). It
 does not configure TrustZone.
 
-**The MCU port is not complete.** The UART and timer example projects below
-build and link. Outstanding work:
-
-- Verify startup and vector placement on hardware with the chosen security
-  configuration
-- Check the core clock setup on hardware (PLL lock, 100 MHz, flash wait states)
-- Validate the application linker script against STM32WBA65 flash/SRAM banks
-  and the configured secure/nonsecure partitions
-- Validate explicit BLE characteristic reads; scan/connect/discovery,
-  notification data and reconnect have passed on hardware
-- Validate USB cable reconnect, suspend/resume, FS fallback and other classes
+The core port is hardware operational on STM32WBA65I-DK1. Use the status
+table above for tested peripherals and the documented optional limitations.
+The supplied linker layout assumes TrustZone disabled (TZEN = 0); a secure
+application needs its own provisioning and memory partition review.
 
 Use the WBA65 device definitions and interrupt mapping from a consistent
 STM32CubeWBA release. Do not compile WBA5x startup or link with the WBA5x
@@ -148,35 +175,18 @@ additionally requires the CubeWBA HAL and BLE application headers.
 `bt_adv_stm32wba.cpp`, `bt_app_stm32wba.cpp`, `bt_gap_stm32wba.cpp` and
 `bt_gatt_stm32wba.cpp` include `stm32wbaxx_hal.h`.
 
-## Local validation on October 17, 2026
+## Software validation
 
-Checked the prerelease sources based on `7d23fb537d35313b61b1a97e223867ca6b780fa7`.
-GNU Arm 14.3.1 was used for these checks:
+The core startup, clock, timer, I2C, SPI, crypto, storage, ADC, PDM and I2S
+regression runners are in `tests/stm32wba`. Generic display and audio tests
+are in `tests/display` and `tests/audio`. They exercise production sources
+against register/transport models; they do not establish electrical timing,
+analog audio quality or physical power-interruption behavior. Each peripheral
+section records its build, simulation and hardware evidence separately.
 
-- Minimal firmware using the actual ResetEntry, WBA65 system and vector files,
-  standard C runtime, and `gcc_stm32wba65_i.ld`: Debug (-O0) and Release (-Os)
-  compile/link passed with warnings treated as errors. Both reached main in
-  the instruction set emulator, vectors at 0x08000000, initial stack at
-  0x20080000, SystemCoreClock 100000000. This was not the full MCU library or
-  a BLE firmware build and did not model TrustZone provisioning.
-- `tests/stm32wba/run_clock.py`: 36 checks passed. The new failure cases
-  produced eight failed assertions before the clock guards were added.
-- `tests/stm32wba/run.py`: 155 checks passed at each of -O0 and -O2 under the
-  undefined-behavior sanitizer; timer sources also compiled for Cortex-M33
-  at -O0 and -Os with warnings treated as errors.
-- Shared UART source compiled for WBA65 at -O0 and -Os with warnings treated
-  as errors.
-- `tests/stm32wba/run_i2c.py`: 40 emulator checks passed.
-- `tests/stm32wba/run_spi.py`: 46 emulator checks passed.
-
-The checks above used the compiler and emulator. Subsequent DK1 hardware
-validation covers GPIO output/input and EXTI, UART TX/RX, LPTIM and TIM
-callbacks, I2C and SPI master/slave, BLE advertising and BleSecurityDemo.
-Crypto, USB CDC and BLE central results are recorded above. Explicit BLE
-characteristic reads and the remaining USB modes still require hardware testing.
-
-BleAdvertiser links the ST archives through the Libraries setting so they
-follow the application objects.
+BLE applications link the ST archives after the application objects through
+the project Libraries setting. Build the MCU library and application in the
+same Debug or Release configuration.
 
 ## GPIO: Blinky
 
@@ -750,29 +760,6 @@ As of October 18, 2026, the maintainer reports BleSecurityDemo, TimerDemo,
 SPI and I2C hardware validated. The I2C and SPI mode matrices above list the
 tested configurations. Additional UART examples remain untested.
 
-## Final candidate validation - October 18, 2026
-
-Central scanning, connection, UART service discovery, notification data and
-scan/reconnect are hardware validated. Explicit characteristic reads remain
-unvalidated.
-The central log discovered UARTDemo at RSSI -46, connected on handle 0 and
-found RX `0x0010` and TX `0x0014`. After disconnect it resumed scanning,
-connected again and rediscovered the service. Received UART text was shown;
-the maintainer confirmed the data test passed.
-
-A further hardware retest after the two-bank bond-storage change saved and
-restored 88 bytes with matching CRC `d551074e`. Fresh Numeric Comparison
-pairing succeeded; after reset, peer lookup, encryption and pairing returned
-status `0x00` without another confirmation. Reconnect encryption took 45 ms
-(4723 to 4768 ms). The supplied log does not identify the build configuration
-or flashed commit. Physical power interruption during a save was not tested.
-
-All 20 WBA examples compile and link in Debug and Release using Arm GCC
-13.2.1 and the project settings at `e721268478c5475f018aaa36259c2c605af8ee54`.
-The full library (276 translation units per configuration) was built earlier;
-the subsequently changed bond object was rebuilt and both archives relinked.
-Eclipse itself and the maintainer's GCC 15.2.1 were not run here.
-
 ## Onboard OLED
 
 `exemples/LCDConsoleDisplayDemo/ioc` builds the existing console display demo in Debug
@@ -795,7 +782,7 @@ analog joystick on PA3 (ADC4 input 6) and the green LED on PD8. Up/down
 navigate; select toggles the LED or opens Level/About. Level uses arrows to
 adjust a bar and select to return. Each press requires a release.
 
-The new `AdcSTM32WBA` implements the generic AdcDevice API for software-triggered
+`AdcSTM32WBA` implements the generic AdcDevice API for software-triggered
 single rounds in polling mode. Its initial support is intentionally limited:
 external inputs 1..10, single-ended, unity gain, 6/8/10/12-bit resolution,
 VREF+ supplied by the caller. Continuous conversion, interrupt, DMA, FIFO,
@@ -889,7 +876,7 @@ works on the STM32WBA65I-DK1. See the [project instructions](exemples/CountdownT
 SAI1 block A and one channel from the shared GPDMA manager. No generic PDM
 configuration or function signature changes. The portable filter is in
 `audio/pdm_filter.h` and `src/audio/pdm_filter.cpp`. Rebuild the matching
-Debug or Release MCU library to include these new sources.
+Debug or Release MCU library to include the PDM driver and filter.
 
 This captures a microphone wired directly to a SAI PDM input. The onboard
 STM32WBA65I-DK1 microphone feeds the WM8904 codec, whose output reaches SAI
@@ -1172,8 +1159,8 @@ The WM8904 uses MCLK directly as SYSCLK and requires at least 3 MHz. DAC
 oversampling is selected from that clock: normal OSR below 6 MHz, double OSR
 at 6 MHz and above. The earlier headphone configuration unconditionally set
 DAC_OSR128, violating the codec's 6 MHz minimum at this board's 4 MHz MCLK.
-This is a confirmed configuration error; its correction needs a board retest
-for the reported hiss during zero-sample playback. Init verifies the muted
+The setting is corrected. The separate clock-associated loopback buzz remains
+unresolved as described below. Init verifies the muted
 DAC setting before enabling SYSCLK, and mute/unmute retain the selected OSR.
 Tests cover the 3 MHz and 6 MHz boundaries, shutdown/restart, and a dropped
 DAC control write.
@@ -1201,179 +1188,69 @@ python3 tests/audio/run_i2s_tone.py
 
 ## Live microphone to headphones loopback
 
-The WBA65 loopback board configuration now selects its 32 MHz crystal through
-the existing g_McuOsc startup configuration. Startup produces a 100 MHz core
-clock; SAI uses this HSE-derived SYSCLK divided by 25. The example requests
-15,625 Hz explicitly, retaining the earlier 4 MHz MCLK and 15,625 Hz frame
-rate while changing their reference from HSI16 to the crystal. The OLED
-shows `XTAL 15625 Hz`. A crystal startup failure is reported instead of
-silently running this comparison from HSI. No MCU register writes are added
-to the application or board header.
-
-The current capture-off / clock-on comparison defaults
-`AUDIO_LOOPBACK_MIC_ENABLE=1`, `AUDIO_LOOPBACK_MIC_FORWARD=0`,
-`AUDIO_LOOPBACK_MIC_INVERT=0` and `AUDIO_LOOPBACK_CLOCK_ONLY=1`.
-Wm8904::MicrophoneClockOnly disables DMIC capture and both ADCs, then drives
-GPIO1 with independent OPCLK: the 4 MHz SYSCLK divided by two. Register
-read-back checks the capture, ADC, clock divider, clock enable and GPIO
-settings. The DAC and headphones remain enabled. After the startup phases,
-headphone PCM stays zero. The clock repeats 2 MHz, 1 MHz, approximately
-667 kHz, and off, holding each step for eight seconds. The first eight-second
-step starts after the five-second startup sequence. OLED labels are
-`CAP OFF CLK 2MHz`, `CAP OFF CLK 1MHz`, `CAP OFF CLK 667kHz` and
-`CAP OFF CLK OFF`. The off step holds GPIO1 low; the independent OPCLK
-continues internally. SYSCLK, I2S rate, DAC and headphone settings stay fixed.
-Compare steady buzz pitch and level after each transition; a brief transition
-click is separate from the steady noise. Input peak is not an acoustic level
-with capture disabled. This checks codec capture off with the external
-microphone still powered and clocked; it does not disconnect microphone power.
-The clock frequency is derived from the programmed divider, not measured on
-the board. Disable/Enable or Init restores normal codec capture configuration.
-
-WM8904 previously enabled the analogue MICBIAS output whenever DMIC capture
-was selected. The onboard digital microphone has its own 3.3 V supply;
-MICBIAS instead feeds the analogue headset microphone contact. Init now
-leaves MICBIAS off and verifies that setting. The OLED displays
-`MICBIAS OFF -12dB`. The maintainer confirmed that this change did not remove
-the clock-triggered buzz.
-
-For microphone capture with headphones, WM8904 now selects and reads back
-CP_DYN_PWR = 0: charge-pump operation follows the volume registers rather
-than the instantaneous DAC signal level. Playback-only configurations retain
-Class W (CP_DYN_PWR = 1). This is a supported alternate mode, tested here as
-a possible influence on clock interference; it is not a confirmed fix.
-The OLED stays on.
-
-Set `AUDIO_LOOPBACK_CLOCK_ONLY=0` to repeat the earlier clock isolation
-comparison. Codec capture stays enabled,
-but MicrophoneClock(false) changes GPIO1 from DMIC clock output to logic zero.
-After the startup tone, zero PCM and DAC mute phases, it sends zero PCM
-continuously and labels the screen `MIC CLK OFF ZERO`. Five seconds later,
-it restores only the microphone clock and labels the screen `MIC CLK ON ZERO`.
-The restored clock stays on. Headphone PCM remains zero throughout both
-phases. With no microphone clock, input peak is not a valid acoustic level.
-Frame counts still advance.
-The OLED stays on; headphone gain and audio clocks retain the loopback settings.
-Set `AUDIO_LOOPBACK_MIC_ENABLE=0` to repeat the microphone-off comparison;
-this stops capture and its clock without disconnecting its supply. Define
-`AUDIO_LOOPBACK_MIC_FORWARD=1` with the microphone enabled to restore live
-loopback and the OLED power test described below. Inverted playback remains
-available by also setting `AUDIO_LOOPBACK_MIC_INVERT=1`; it displays
-`MIC 180 DEG -> HP` and keeps the OLED on. That reverses both PCM channels,
-saturating -32768 to 32767 and preserving transformed blocks across partial
-TX retries. The startup tone retains its original polarity.
-
 Import `exemples/I2sLoopbackDemo/ioc` and rebuild the matching library and
-example. Connect headphones to the onboard audio jack and speak near the
-onboard microphone. The WM8904 digitizes the microphone, I2S receives the
-stereo frames, and main forwards them to I2S transmit for headphone playback.
-The codec's mono microphone signal appears in both channels. The OLED shows
-input peak in dBFS and the number of captured frames.
+application. The shared `exemples/audio/i2s_loopback_demo.cpp` continuously
+forwards signed 16-bit stereo frames from the onboard microphone through
+WM8904/SAI1 to the headphone jack. The mono microphone appears in both slots.
+The OLED shows peak dBFS, L/R sample mismatches and captured frame count.
+This example is retained to exercise full-duplex I2S, with the board audio
+limitation below. Use I2sToneDemo for the validated playback-only example.
 
-The onboard microphone is U21, MP23DB01HPTR, connected to the WM8904
-DMICDAT2 input with its left channel selected in the MB2143 A02 schematic.
+The board configuration selects its 32 MHz crystal through g_McuOsc.
+The 100 MHz SYSCLK divided by 25 supplies 4 MHz MCLK and a 15,625 Hz frame
+rate. A crystal startup failure is reported instead of silently using HSI.
+PD5 AF13 is SD_A transmit and PC5 AF13 is SD_B receive. Control and clock
+pins match I2sMicLevelDemo. Board headers contain configuration and pin maps;
+the application uses the generic I2S/DeviceIntrf APIs without MCU registers.
 
-Startup sends a known 1 kHz tone for one second, two seconds of zero PCM,
-and two seconds with the codec DAC soft-muted, then forwards the microphone.
-The OLED labels these phases `Duplex tone 1 kHz`, `Zero PCM`, `DAC muted`,
-and `MIC -> HEADPHONES`. RX, TX, microphone capture, codec clocks and headphone
-stages remain enabled throughout. Wm8904::Mute changes and verifies only the
-DAC control register, preserving its OSR setting; a failed control operation
-shuts down the codec. MCLK must be running for this live operation.
+The receive FIFO holds 8,192 stereo frames through codec bias/servo startup;
+the transmit FIFO holds 256 frames. Startup discards captured setup samples
+and queues 128 silent frames (about 8 ms) ahead of the live stream. This is
+buffer priming, not a measured end-to-end latency. Main retains partial TX
+blocks until accepted, then reads the next block. Capture gain requests
++18 dB and selects the codec maximum +17.625 dB; headphone gain is -12 dB.
+A DMA/SAI error, receive overflow or 500 ms without progress stops audio and
+displays the error.
 
-After these startup phases, live microphone playback continues while the
-OLED panel and its charge pump are disabled for five seconds. The screen
-then returns automatically and stays on. No display transfers occur during
-the black interval. Compare the buzz with the screen off and on; audio
-clocks, microphone gain and headphone gain remain unchanged.
+Audio is serviced before display work. Each 100 ms display snapshot is sent
+one row at a time only after audio has been serviced and no TX data remain
+pending. SSD1315 sends only changed text spans. The demo has no diagnostic
+clock sweep, PCM inversion, forced silence/mute phases or OLED power cycle.
 
-Compare noise during Zero PCM and DAC muted. Noise removed by codec mute
-points toward the DAC or its digital input; noise remaining during mute
-points farther along the output/power/headphone path. This comparison narrows
-the fault but does not identify its exact source. The OLED also shows L/R
-sample mismatches per display interval; the codec routes the same microphone
-to both slots.
-The maintainer heard the startup tone, reported hiss during zero-sample
-playback, and confirmed zero L/R mismatches. The microphone peak varies but
-does not track sound volume; intelligible loopback is not yet validated.
-The maintainer reports that DAC mute does not affect the noise and that it
-appears when the display starts. Turning off the OLED and its charge pump
-did not remove the buzz on the board. The buzz disappeared with microphone
-capture and its clock disabled. It returned with capture and microphone clock
-enabled while headphone PCM stayed zero. The next comparison holds the
-external microphone clock low while leaving codec capture enabled. This
-separates external microphone activity from the codec capture circuitry.
-With the microphone clock held low, the maintainer reports that the noise
-stopped when the startup tone began and stayed off. The next board comparison
-restores the clock after five seconds of quiet zero PCM. The maintainer
-confirmed that the buzz returns with the microphone clock on. The next
-comparison kept the same transition and zero PCM, using the crystal-derived
-audio clock. The maintainer confirmed that the buzz still returns. The
-crystal reference did not remove it. Inverting the captured microphone PCM
-also made no audible difference. Register-controlled charge-pump operation
-did not remove the buzz either. Disabling MICBIAS did not remove it. The
-current comparison disables codec capture while maintaining an independent
-2 MHz microphone clock. The maintainer confirmed that the buzz remains in
-that mode. Codec capture and ADC processing are therefore not required for
-the buzz. The current repeating frequency/off comparison awaits the board test;
-it does not yet distinguish clock coupling from activity in the powered mic.
+### Known board audio limitation
 
-This exercises simultaneous RX and TX DMA through the same generic I2S
-interface. Board mapping combines PC5 AF13 receive with PD5 AF13 transmit;
-control and clock pins match the two working audio examples. The portable
-example is `exemples/audio/i2s_loopback_demo.cpp`; it accesses audio through
-DeviceIntrf Rx/Tx and contains no MCU register operations.
+The maintainer confirmed a loud headphone buzz whenever the external
+microphone clock runs. Holding that clock low removes the noise. The buzz
+also persists with codec DMIC capture and both ADCs disabled and zero PCM
+sent to the headphones. Changing the independent microphone clock between
+2 MHz, 1 MHz and approximately 667 kHz made no audible difference; its off
+step removed the noise. The microphone remained powered during these tests.
 
-The receive FIFO holds 8,192 stereo frames (32 KiB of sample memory) so it
-can keep receiving while codec Init waits through its 100 ms bias settling
-and up to 300 ms servo calibration. The transmit FIFO holds 256 frames.
-MCLK and both streams stay running throughout startup. The application
-discards queued startup samples, then queues 128 silent frames (about 8 ms
-at the default 15,625 Hz rate) ahead of live audio to cushion display updates.
-This priming delay is not a measured end-to-end latency result.
-
-Main retains a partially queued block until Tx accepts all of it, then reads
-another block. It forwards whole stereo frames without altering sample values.
-Display text is snapshotted every 100 ms and one row is sent only after audio
-has been serviced and no application TX data remain pending. SSD1315 text
-printing now transmits only changed spans within each page, instead of a full
-screen for every printf. Unchanged text generates no SPI traffic. ADC gain requests
-+18 dB and the codec selects its +17.625 dB maximum; headphone gain is -12 dB.
-A DMA/SAI error, receive overflow or 500 ms without newly received samples
-shuts down the codec and audio interface and displays an error.
+DAC soft mute, disabling the OLED and its charge pump, crystal-derived audio
+clocks, reversing microphone PCM polarity, register-controlled codec charge
+pump operation and disabling unused analog headset MICBIAS did not remove
+the buzz. These results associate the noise with clock output or clocked
+microphone activity; they do not establish a specific board-design fault.
+Clean acoustic loopback is not validated. Further noise investigation was
+stopped at the maintainer's request. Microphone level capture and playback-only
+stereo tones remain hardware validated.
 
 Validation:
 
 - Debug/Release incremental library builds and I2sLoopbackDemo links pass.
-- Host ASan/UBSan tests include the actual example and verify exact sample
-  forwarding across short Rx/Tx transfers, repeated transmit stalls, no buffer
-  reuse while data remains pending, startup discard/priming, bounded startup
-  draining and error detection at -O0/-Os.
-- The existing Cortex-M33 I2S tests cover simultaneous receive/transmit DMA;
-  codec tests cover microphone and headphone paths enabled together.
-- The first board loopback run stopped with a SAI/DMA error after 64 frames.
-  The driver previously built the next TX block before rearming its DMA and
-  processed RX before servicing another pending TX completion. Both completed
-  channels are now rearmed before FIFO processing, and TX uses a previously
-  prepared alternate buffer. Native 8/16-bit samples use bulk FIFO copies.
-  The additional prepared TX block is 32 frames (about 2 ms at 15,625 Hz).
-- The DMA-ordering regression fails on the earlier driver and passes after
-  the change. Tests also check FIFO wrap at a 40-frame capacity, sample order,
-  packed widths, single-direction operation, error shutdown and reset.
-- A later board run stopped with RX FIFO overflow after a few seconds. Full
-  screen refreshes during text printing could exhaust the TX lead while RX
-  kept running, leaving captured data queued behind silence sent by TX.
-  Text updates now use changed page spans and the demo services audio between
-  individual display rows.
-- A one-minute host simulation runs the actual example and OLED driver with
-  continuous 15,625 Hz capture/playback and injected 20 us delays per SPI byte.
-  It checks for no TX underrun, bounded RX backlog, and audio priority over
-  display work. This is a scheduling stress test, not measured board timing.
-  The earlier OLED implementation fails the same underrun/backlog checks.
-- OLED tests check bounded text traffic, unchanged text, page boundaries,
-  rotation and clearing, alongside the existing console and graphics demos.
-- Physical live microphone/headphone loopback still awaits a successful retest.
+- ASan/UBSan tests at -O0/-Os verify exact forwarding across short transfers,
+  repeated TX stalls, pending-buffer ownership, startup draining/priming,
+  whole-frame checks, timeout/wrap and error handling.
+- A one-minute host simulation runs the actual application and OLED driver
+  at 15,625 Hz with injected 20 us SPI-byte delays. It checks no TX underrun,
+  bounded RX backlog, audio priority and no diagnostic OLED power-off. This
+  is a scheduling test, not measured board timing or analog noise simulation.
+- Cortex-M33 I2S tests cover simultaneous RX/TX DMA, rearming both completed
+  channels before FIFO processing, FIFO wrap, sample packing and recovery.
+- Codec tests retain capture/playback, mute, clock control, servo ordering,
+  register readback and control-failure shutdown coverage.
 
 ```sh
 python3 tests/audio/run_i2s_loopback.py
+python3 tests/audio/run_wm8904.py
 ```

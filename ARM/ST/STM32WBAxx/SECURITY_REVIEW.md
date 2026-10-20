@@ -1,43 +1,19 @@
 # WBA BLE security integration
 
-Updated October 18, 2026. Target: STM32WBA65I-DK1.
-Middleware: STM32CubeWBA 1.10.0 and stm32-mw-wpan 2.10.0.
+Target: STM32WBA65I-DK1. Middleware: STM32CubeWBA 1.10.0 and
+stm32-mw-wpan 2.10.0. See the [port status](STM32WBA65/README.md#port-status)
+for the supported configuration and peripheral validation.
 
-## Hardware validated
+## Hardware validation
 
-BleSecurityDemo passes fresh Numeric Comparison pairing, encrypted data transfer
-and bonded reconnect after reset. PDS saved 88 bytes with CRC `89681f20`;
-after reset it restored the same length and CRC. Peer lookup, encryption and
-pairing returned status `0x00`, without another confirmation prompt.
+BleSecurityDemo passes fresh LE Secure Connections Numeric Comparison,
+encrypted data transfer and bonded reconnect after reset. The recorded
+central logs report security mode 1, level 4 on fresh pairing and subsequent
+reconnects without another confirmation prompt. Recorded reconnect encryption
+latencies were approximately 45 to 50 ms. Saved/restored cache length and CRC
+matched. The logs do not identify the exact flashed commit or configuration.
 
-The initial Numeric Comparison prompt appeared 197 ms after the security
-request. Reconnect encryption was enabled 45 ms after the request.
-These timings are from the earlier device-side log.
-
-Hardware retest reported after the review fixes on October 18, 2026:
-fresh Numeric Comparison pairing, a notification, reset and bonded reconnect
-passed. nRF Connect reported mode 1, level 4 on fresh pairing and both
-subsequent reconnects, without another Numeric Comparison prompt.
-
-| Central log | Connected | Mode 1, level 4 | Elapsed |
-|---|---|---|---|
-| First reconnect | 18:01:06.968 | 18:01:07.017 | 49 ms |
-| Second reconnect | 18:01:17.402 | 18:01:17.452 | 50 ms |
-
-The first disconnect was reported as connection timeout; the second was a
-local host disconnect. Both subsequent connections restored security. The
-device log contains a second boot banner. Build configuration and exact
-flashed commit were not recorded in the supplied log.
-
-
-A further hardware retest after the two-bank bond-storage change saved and
-restored 88 bytes with matching CRC `d551074e`. Fresh Numeric Comparison
-pairing succeeded; after reset, peer lookup, encryption and pairing returned
-status `0x00` without another confirmation. Reconnect encryption took 45 ms
-(4723 to 4768 ms). The supplied log does not identify the build configuration
-or flashed commit. Physical power interruption during a save was not tested.
-
-The standalone hardware crypto test passed **51 tests, 0 failed**. See
+The standalone hardware crypto test passed 51 tests, 0 failed. See the
 [target results](STM32WBA65/README.md#crypto-hardware-validation).
 
 ## Crypto integration
@@ -53,208 +29,6 @@ value across whole-block appends with a null output pointer. The final call
 applies padding and the CMAC subkey. AES failures invalidate the operation
 and clear the final tag. Temporary conversion buffers and completed CMAC
 state are wiped.
-
-The earlier byte-order mismatch was corrected before the successful reconnect
-tests. The previous logs alone did not isolate it as the only reconnect cause.
-
-## Regression tests
-
-Run from the repository root:
-
-```sh
-python3 tests/stm32wba/run_ble_crypto.py
-python3 tests/stm32wba/run_bt_crypto.py
-python3 tests/stm32wba/run_bond_store.py
-python3 tests/stm32wba/run_bond_powerloss.py
-python3 tests/stm32wba/run_bond_flash.py
-```
-
-The host AES adapter test needs g++ and Python cryptography. It uses the real
-software AES implementation with a simulated hardware provider to check
-byte order, incremental CMAC, busy fallback and failure handling. The bond
-adapter test compiles the complete adapter with an in-memory PDS and the real
-CRC implementation. Both host tests enable AddressSanitizer and
-UndefinedBehaviorSanitizer.
-
-The hardware adapter test needs an Arm GNU toolchain, Python unicorn,
-pyelftools and cryptography, and `CUBE_WPAN` pointing to stm32-mw-wpan 2.10.0.
-It runs the actual WBA AES/PKA drivers on register models.
-
-The bond flash test needs an Arm GNU toolchain and Python unicorn and
-pyelftools. It runs the real bond store, PDS store and STM32 flash driver on
-an emulated Cortex-M33 against a model of the flash controller with write
-protection, across simulated resets. The protection is turned on and off
-where a board would need an option byte change and a reset, which shows the
-retry times, the drop, a retry succeeding mid wait, a partly written save
-keeping the committed image, and the missing region case on the real store
-code.
-
-October 18 review fixes, tested locally:
-
-- Host AES adapter: **179 checks, 0 failures** at both `-O0` and `-Os`.
-- Bond adapter: **13 test groups passed** at both `-O0` and `-Os`, including
-  mount/chunk/manifest failures, timed retries with the 1 to 64 s back-off and
-  the retry limit, a missing NVM region, a new request during a flush, torn
-  images, missing chunks, CRC rejection and empty images.
-- Bond store over the flash model: **13 checks, 0 failures**, with tries
-  after waits of 1, 2, 4 up to 64 s and the drop at cumulative poll count
-  127. Idle-loop calls do not retry a failed save while its retry wait is
-  active; the initial save still runs from the application loop. The STM32
-  erase defect read LOCK before unlocking, then wrote it back and relocked
-  the controller before STRT. The PDS defect left a failed sector-header
-  destination unusable until reset, preventing later saves on the two-sector
-  store even after writes became available. Both defects are fixed.
-  The supplied hardware logs do not establish whether an erase occurred.
-  Hardware erase/garbage-collection and physical power-cut tests remain pending.
-- Independent review at `f0dfd9f`: the flash model again passed 13 checks.
-  Reverting only the erase fix produced 19 failures; reverting only the PDS
-  fix produced 10. The generic PDS suite passed 105 checks with 4-byte and
-  16-byte programming units under ASan/UBSan. Bond retry tests and the 486
-  power cuts per optimization mode also passed. Changed WBA sources compiled
-  in Debug and Release. These are software tests, not hardware validation.
-- Power cuts through the real flash driver: `run_bond_flash.py --powercut`
-  cuts every program and erase of one save, whole or half done, for a bank
-  switch in each direction and for a save that runs PDS garbage collection:
-  **330 cuts**, every boot after a cut restored the committed image and
-  stored the next save, with no quad word programmed over data. This repeats
-  the power-loss test through the real `Nvm` layer and flash driver.
-- Flash ECC after a power cut: the flash model now raises the double ECC
-  error NMI when a quad word left half programmed or half erased is read,
-  and the test firmware links the WBA65 vector table. Before the fix, all 37
-  half done cuts of the first bank switch stopped the next boot in
-  `Default_Handler`. With it, 164 of the 165 half done cuts of the sweep took
-  the NMI at the next boot and none stopped; the 330 cuts restored the
-  committed image and stored the next save. A read error that passes (two
-  failed reads of a sector header) keeps the sector and the image.
-- Persistence review, October 18. 39640a3 made PDS take only `-EBADMSG` as
-  damaged data. The STM32 driver can only fail a read with 0 bytes, which
-  `Nvm::Read` reports as `-EBUSY`, so the mount failed after a half programmed
-  quad word: 161 of the 165 half done cuts restored nothing, and with the
-  bond store unmounted `BtAppInit` did not start Bluetooth for an
-  application with security. It is reverted (4a81644); the sweep recovers
-  from all 330 cuts and all 18 cuts of a bond deletion again. The review
-  also found, and the following commits fix:
-  - The flash driver reported a refused program of a full 64-byte transfer
-    as written. Every `Nvm::Write` chunk of 64 bytes took that path, so a
-    PROGERR, WRPERR or timeout could leave a chunk unwritten while the
-    store committed a manifest naming it.
-  - SWAP_BANK was ignored. With the banks swapped an erase of NVM0 erased a
-    page of the application in the other bank, and the ECC decode missed
-    errors in the read.
-  - A corrected ECC error (ECCC) left set keeps the controller from
-    recording the address of the next error, so a later double error was
-    decoded to the old address and the device stopped. Each read clears
-    ECCC first; ECCC set during the read makes the double error the read's.
-    (This model of ECCR was wrong; replaced by the second review below.)
-  - ICACHE, which caches flash data reads too, is invalidated after a
-    program or an erase when an application enables it.
-  - PDS: a clear retried after a failed erase fell back to erasing every
-    sector in order, starting with the commit header, so a second failure or
-    a power cut brought the cleared records back; a failed mount left the
-    store usable; a write that reached the medium but reported an error
-    gave its sequence number to the next record.
-  `run_bond_flash.py` adds the refused programs, the swapped banks and a
-  corrected error before a double one; `pds_test` adds the failing clear
-  erase, the write that lands but fails and the failed mount. Each fails
-  against the code before its fix.
-- Second persistence review, October 19. An external review found that
-  three of the fixes above were checked against a wrong flash model, and
-  one PDS defect; a fifth came out of the new tests. All are fixed:
-  - The ECC NMI decoded ADDR_ECC in 8-byte steps, as
-    `HAL_FLASHEx_GetEccInfo` does. RM0515 gives the byte offset of the word
-    in its bank, and the field widths agree (20 bits on the lines with 1 MB
-    banks, 19 on the 512 KB WBA50). The flash model made the inverse
-    mistake, so the two cancelled out. With ECCR modelled as RM0515 gives
-    it, every double error was rejected and the boot stopped in
-    `Default_Handler`.
-  - ECCR records an error only while ECCC and ECCD are both clear. The read
-    cleared ECCC once, so a corrected error in one flash word hid a double
-    error in a later word of the same read: no NMI, and the read returned
-    the damaged bytes (the PDS record CRC still caught them in the test). The
-    read now copies one flash word at a time with ECCC cleared before each,
-    and reads a word again when ECCC was set during it.
-  - The ECC NMI did not invalidate an enabled ICACHE, so a line filled by
-    the failed read could give the damaged bytes to the retry without an
-    NMI. It is now invalidated in the NMI.
-  - PDS: `BtPdsClear` erased sector 0 when no sector was erased. With three
-    sectors and a collection whose source erase failed, a power cut before
-    the commit lost a saved record. The clear now erases only a sector the
-    collection could reclaim, and otherwise returns `-ENOMEM` with the
-    store unchanged.
-  - PDS: a sector whose erase was cut after its header was taken as erased
-    at mount. A header written over it later brought its old records back,
-    so a clear could succeed and the cleared records reappear after the
-    next reset. The mount now requires the whole sector to read erased.
-  `run_bond_flash.py` models ECCR as RM0515 gives it and fails any read that
-  returns a damaged word without an NMI or a second read of that word. It
-  adds corrected errors in an earlier read, in the same read and from
-  elsewhere (an interrupt between the clear and the load), and a run with
-  ICACHE enabled. `pds_test` adds a clear without an erased sector, with a
-  power cut at every step and a clear after the remount, and the cut erase.
-  Each new test fails against the code before its fix. On the final code:
-  32 emulator checks; the sweep recovers from all 330 cuts of a save and all
-  18 cuts of a deletion, and all 165 half done cuts take the ECC NMI at the
-  next boot with none stopping; 215 PDS checks with 4- and 16-byte units;
-  486 bond power-loss cuts. All 28 WBA65 examples build in Debug and
-  Release. These are software tests, not hardware validation.
-- ECC retry follow-up, October 19. A corrected error from elsewhere could
-  mask both attempts, or leave damaged bytes cached for the second attempt.
-  The read now invalidates the enabled cache before retrying an uncertain
-  word and fails when neither attempt establishes valid data. A correction
-  recorded for the word itself remains usable. The raw read regressions
-  also check that a later read works after the failure; each retry defect
-  reproduces against the previous driver. The model retains masked words
-  until cache invalidation and can inject a foreign correction on every
-  attempt. Five added cases bring the flash suite to 37 checks. The 486-cut
-  bond suite passes; WBA50 and WBA65 driver builds pass at -O0 and -Os.
-  The flash sweep passes all 330 save cuts and 18 deletion cuts, including
-  all 165 torn-save boots taking ECC NMI without stopping. The added raw
-  read cases also pass with the firmware built at -O0.
-  With bank swap enabled, this version refused every correction of the word
-  itself, so a word with a persistent single-bit error could not be read;
-  fixed by the next entry.
-- ECC retry review, October 19. Three cases the retry rule above got wrong:
-  - With the banks swapped, a word with a persistent corrected error could
-    never be read. The word's own correction is now taken with both readings
-    of BK_ECC, as `Stm32FlashEccNmi` takes a double error.
-  - The word's own correction was matched by exact equality with the word
-    address. If ADDR_ECC gives the address of the load, a read starting
-    inside a corrected word was refused; in the flash model, an erased
-    sector with a corrected word was erased again at every boot. The low
-    bits are now ignored, as `StEccInWindow` ignores them.
-  - A corrected error recorded elsewhere on every attempt, such as a weak
-    cell in code fetched between the ECCC clear and the load (`memcpy`
-    with ICACHE off), made every read fail: the mount took the sector
-    header as damaged, erased the sector holding the bonds, then failed,
-    and every save after it failed. Each word's ECCC clear, copy and ECCR
-    read now run in `StFlashWordCopy`, in RAM (`.fastrun`, as the SAM4E
-    DFU does) with interrupts masked, so nothing else reads the flash in
-    between except another bus master. A correction recorded elsewhere then
-    still fails the read after two attempts. The copy also stops at the
-    first double error, so a torn word raises one NMI per read instead of
-    one per load: 312 instead of 1248 in one boot of the emulator test.
-  The flash model adds the three cases: ADDR_ECC at the load address, and
-  a corrected error on every instruction fetched from flash in the window,
-  for a raw read and for a full mount. Taking out each change makes its case
-  fail; with the copy back in flash, the mount erases the store. The model's
-  replay of the load an NMI interrupted now applies to that one load only:
-  keyed by instruction address, it skipped the later loads of a byte copy
-  loop too. 41 flash model checks, also with the firmware built at -O0;
-  the sweep recovers from all 330 cuts of a save and all 18 of a deletion,
-  and all 165 half done cuts take the ECC NMI with none stopping; the
-  486-cut bond suite passes; the WBA65 library and its 28 examples build in
-  Debug and Release. Software tests, not hardware validation.
-- Cortex-M33 crypto integration: **18 checks, 0 failures**, including
-  incremental CMAC and three interrupt preemptions while AES is busy.
-  The existing model warning about the platform `HW_RNG_Get` initialization
-  remains; this test does not count those RNG configuration messages as failures.
-- The four changed WBA source files compile at `-O0` and `-Os` with Arm GCC
-  13.2.1, Cortex-M33 hard float, CubeWBA 1.10.0 HAL headers and WPAN 2.10.0.
-  Existing volatile increment/decrement warnings in the event ring remain.
-  These are object compilation checks, not complete application builds.
-
-These software results are separate from the maintainer's DK1 hardware
-retest recorded above.
 
 ## Bond persistence
 
@@ -284,65 +58,72 @@ If space runs out, the save fails with bounded retries and preserves the
 committed image. Chunk records from earlier, larger images also consume
 space. No linker partition or NVM1 allocation has changed.
 
-The production PDS and WBA adapter passed 486 simulated power cuts at each
-of `-O0` and `-Os`, with AddressSanitizer and UndefinedBehaviorSanitizer.
-The tests interrupt programming and erases, including torn operations,
-garbage collection, bank switching, empty-image commits and legacy migration.
-Store exhaustion also retains the committed image. These are flash-model
-tests; physical power-cut testing on the DK1 remains outstanding.
+Power-loss recovery has been tested by simulation, including torn programming
+and erases, garbage collection, bank switching, empty-image commits and legacy
+migration. Store exhaustion retains the committed image. These tests exercise
+production PDS, Nvm and flash-driver paths against models; they do not measure
+physical interruption behavior on a DK1.
 
-Temporary AES/key dumps and bond-image dumps have been removed. The store
-status lines (PDS mount, bond saved and restored with length and CRC) are
-printed in every build, as in the other IOsonata bond stores. Link and security
-status (peer lookup, security request, pairing, encryption, disconnection and
-host runs of 100 ms or more) is printed when `NDEBUG` is not defined, so the
-Release library leaves it out. Errors are always printed.
+## Flash ECC and deletion
 
-## Remaining limitations and tests
+The WBA65 NMI handler delegates flash-read ECC errors to Stm32FlashEccNmi.
+The flash driver accepts errors in its own active read, clears ECCD and fails
+that read. Other NMIs continue to Default_Handler. An application overriding
+NMI_Handler must preserve this delegation. ECC address decoding uses the
+RM0515 byte offset. Corrected-error handling and cache invalidation prevent a
+masked double error from being accepted without a validated read. With bank
+swap, uncertain corrected-error attribution causes a retry or read failure.
 
-- Pairing rejection, persistence failure recovery on hardware, and radio
-  scheduling during flash writes need separate tests.
-- Flash ECC after a power cut is handled in software and not yet on the
-  board. A cut during a quad word program or a page erase can leave a word
-  that fails the flash ECC check; on the WBA a double error raises the NMI.
-  `NMI_Handler` of the WBA65 vector table hands it to `Stm32FlashEccNmi` of
-  the flash driver, which takes only an error inside its own read: it clears
-  ECCD and that read fails. Any other NMI still stops in `Default_Handler`.
-  PDS tries a read three times; a read that still fails is a damaged record
-  (no more appends to that sector) or a damaged sector header (the sector is
-  erased at init, as for a header that fails its check). The address decode
-  takes ADDR_ECC as a byte offset, as RM0515 describes it and against the
-  shift by 3 in `HAL_FLASHEx_GetEccInfo`; the board has to confirm which is
-  right, since with the wrong one every double error stops the device. With
-  the banks swapped, whether BK_ECC names the physical or the mapped bank is
-  not settled (the HAL ignores the swap), so both readings are taken. An
-  application that defines its own `NMI_Handler` must call
-  `Stm32FlashEccNmi` first. A physical power cut test on the DK1 remains to
-  be done.
-- A clear on a store left without a sector it can erase safely (a refused
-  or interrupted erase, before the next mount) returns `-ENOMEM`. The bond
-  deletion keeps retrying it; a reset before it succeeds restores the bonds,
-  since the deletion request is not kept across a reset.
-- A bond store that does not mount still makes `BtAppInit` fail for an
-  application with security. Whether to reformat the store and start
-  without bonds instead is not decided.
-- Flash program and erase run without radio arbitration. The store relies on
-  the dual-bank read-while-write of the WBA65 with NVM0 in bank 2; the ST
-  reference schedules flash work in radio windows (flash_manager, RFTS).
-- The largest bond image that can still be updated is about 3.6 KB (19 PDS
-  chunk records per bank, 456 of the 512 cache words), from the record and
-  sector sizes; not measured.
-- A manifest record that reads back but does not decode (bank above 1 or an
-  unexpected length) makes every save fail while restore treats it as empty.
-  It needs corruption past the record CRC or a newer format; writing bank 0
-  and committing a new manifest would recover it.
-- Production devices need secret identity/encryption roots supplied through
-  `BtAppWbaIdentityGet`. The default derives roots from the chip ID; they are
-  not secret. Successful encrypted pairing does not validate provisioning.
+PDS commits a clear before reclaiming the erased data. If no sector can be
+reclaimed safely, clear returns -ENOMEM. The bond adapter keeps retrying a
+failed deletion; a reset before the clear commits can restore the previous
+bonds because the pending deletion request is held in RAM.
 
-The final WBA candidate builds pass for all 20 examples in Debug and Release
-with Arm GCC 13.2.1. The shared Bluetooth host suite passes at `-O0` and `-O2`;
-USB regression checks also pass. These are local checks, not a current CI run.
+## Regression tests
+
+Run from the repository root:
+
+```sh
+python3 tests/stm32wba/run_ble_crypto.py
+python3 tests/stm32wba/run_bt_crypto.py
+python3 tests/stm32wba/run_bond_store.py
+python3 tests/stm32wba/run_bond_powerloss.py
+python3 tests/stm32wba/run_bond_flash.py
+python3 tests/stm32wba/run_bond_flash.py --powercut
+```
+
+Host adapter tests use g++, Python cryptography, ASan and UBSan. The Cortex-M33
+register-model tests need an Arm GNU toolchain, Unicorn and pyelftools; the
+crypto adapter runner also needs CUBE_WPAN pointing to stm32-mw-wpan 2.10.0.
+Use the pinned emulator environment described in the target README.
+
+Previously recorded software results include 486 bond power-loss cuts per
+optimization mode, 330 flash-driver save cuts and 18 deletion cuts. The flash
+sweep includes torn-word ECC NMIs, bank swap, refused programs, corrected-error
+masking and enabled-cache cases. PDS regression checks also cover failed mount,
+failed clear/collection, cut erases and writes that reach flash but report a
+failure. These results are simulation evidence, separate from hardware pairing
+and reconnect results.
+
+## Limits
+
+- Production devices need secret identity/encryption roots through
+  BtAppWbaIdentityGet. The chip-ID-derived defaults are not secret.
+- Radio scheduling during flash programming/erase and persistence-failure
+  recovery on hardware have not been validated. Flash work relies on
+  dual-bank read-while-write with NVM0 in bank 2; it is not arbitrated through
+  ST flash_manager/RFTS radio windows.
+- A persistent store mount failure makes BtAppInit fail for an application
+  configured with security.
+- A malformed manifest that passes the record CRC is rejected. Saves remain
+  failed until the stored format is repaired; no automatic format migration
+  beyond the documented legacy manifest is implemented.
+- Analog radio-temperature calibration is not implemented; the platform uses
+  the documented fixed-temperature configuration.
+
+Store status reports mount and saved/restored image length and CRC. Errors
+are always logged. Link/security diagnostic output is controlled by NDEBUG;
+key and bond-image dumps are absent.
 
 ## Vendor references
 
@@ -351,3 +132,5 @@ USB regression checks also pass. These are local checks, not a current CI run.
 - [CCM](https://github.com/STMicroelectronics/STM32CubeWBA/blob/v1.10.0/Projects/Common/WPAN/Modules/BasicAES/baes_ccm.c)
 - [AES register adapter](https://github.com/STMicroelectronics/STM32CubeWBA/blob/v1.10.0/Projects/Common/WPAN/Interfaces/hw_aes.c)
 - [BLE platform interface](https://github.com/STMicroelectronics/stm32-mw-wpan/blob/v2.10.0/ble/stack/include/bleplat.h)
+
+
