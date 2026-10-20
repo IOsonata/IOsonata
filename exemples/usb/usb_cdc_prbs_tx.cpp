@@ -60,6 +60,40 @@ SOFTWARE.
 #include "board.h"
 #endif
 #include "usb/usbd_cdc.h"
+#if defined(USB_LOG_UART_DEVNO)
+#include "coredev/uart.h"
+#include "syslog.h"
+
+static const IOPinCfg_t s_LogPins[] = USB_LOG_UART_PINS;
+alignas(4) static uint8_t s_LogTx[CFIFO_MEMSIZE(2048)];
+alignas(4) static uint8_t s_LogMem[SYSLOG_MEMSIZE(16, 128)];
+static UART s_LogUart;
+static const UARTCfg_t s_LogUartCfg = {
+	.DevNo = USB_LOG_UART_DEVNO,
+	.pIOPinMap = s_LogPins,
+	.NbIOPins = sizeof(s_LogPins) / sizeof(s_LogPins[0]),
+	.Rate = 1000000,
+	.DataBits = 8,
+	.Parity = UART_PARITY_NONE,
+	.StopBits = 1,
+	.FlowControl = UART_FLWCTRL_NONE,
+	.bIntMode = true,
+	.IntPrio = IRQ_PRIO_NORMAL,
+	.EvtCallback = nullptr,
+	.bFifoBlocking = true,
+	.RxMemSize = 0,
+	.pRxMem = nullptr,
+	.TxMemSize = sizeof(s_LogTx),
+	.pTxMem = s_LogTx,
+	.bDMAMode = false,
+};
+static const SysLogCfg_t s_LogCfg = {
+	.pMem = s_LogMem,
+	.MemSize = sizeof(s_LogMem),
+	.RecordLen = 128,
+	.bBlocking = true,
+};
+#endif
 #ifdef MCUOSC
 McuOsc_t g_McuOsc = MCUOSC;
 #endif
@@ -156,6 +190,9 @@ static int s_Offset;
 bool AppCheckStatus(void)
 {
 	UsbCheckStatus();
+#if defined(USB_LOG_UART_DEVNO)
+	SysLogFlush(SysLogGet());
+#endif
 	if (!g_Cdc.IsPortOpen())
 	{
 #ifndef BYTE_MODE
@@ -191,9 +228,24 @@ bool AppCheckStatus(void)
 
 int main()
 {
+#if defined(USB_LOG_UART_DEVNO)
+	if (!s_LogUart.Init(s_LogUartCfg) ||
+		!SysLogGetInstance()->Init(s_LogCfg, &s_LogUart))
+	{
+		return -1;
+	}
+	SysLogPrintf(SysLogGet(), "USB CDC PRBS starting; UART log 1000000 8N1\r\n");
+#endif
 	if (!AppEvtHandlerInit(g_AppEvtHandlerQueMem, sizeof(g_AppEvtHandlerQueMem)) ||
 		!UsbInit(&s_UsbCfg) || !g_Cdc.Init(s_CdcCfg))
 	{
+#if defined(USB_LOG_UART_DEVNO)
+		SysLogPrintf(SysLogGet(), "USB initialization failed\r\n");
+		while (true)
+		{
+			SysLogFlush(SysLogGet());
+		}
+#endif
 		return -1;
 	}
 	(void)UsbEnable(USB_DEVNO);

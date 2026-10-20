@@ -44,6 +44,10 @@ SOFTWARE.
 #include "coredev/interrupt.h"
 #include "coredev/system_core_clock.h"
 #include "usb/usb.h"
+#if defined(STM32H753xx)
+#include "app_evt_handler.h"
+#include "syslog.h"
+#endif
 
 // Private target hooks implement clock, power and PHY setup only.
 extern bool Stm32UsbOtgPowerInit(const UsbCtrlrCfg_t *pCfg);
@@ -97,6 +101,54 @@ static USB_OTG_DeviceTypeDef *Device(void)
 	return reinterpret_cast<USB_OTG_DeviceTypeDef *>(
 		reinterpret_cast<uintptr_t>(s_Usb.pReg) + USB_OTG_DEVICE_BASE);
 }
+
+// H753 bring-up trace. Only bus events are queued; packet interrupts are silent.
+// Formatting and UART writes run in AppRun, never in the USB ISR. Register
+// values below are live at dispatch time; Status is the original IRQ snapshot.
+#if defined(STM32H753xx)
+static unsigned s_TraceDropped;
+
+static void TraceDispatch(uint32_t Status, void *pContext)
+{
+	const char *name = static_cast<const char *>(pContext);
+	SysLogPrintf(SysLogGet(), "USB %s irq=%08x dropped=%u\r\n",
+		name, static_cast<unsigned>(Status), __atomic_load_n(&s_TraceDropped, __ATOMIC_RELAXED));
+	SysLogPrintf(SysLogGet(), "USB now GOTGCTL=%08x GINTSTS=%08x GINTMSK=%08x\r\n",
+		static_cast<unsigned>(s_Usb.pReg->GOTGCTL),
+		static_cast<unsigned>(s_Usb.pReg->GINTSTS),
+		static_cast<unsigned>(s_Usb.pReg->GINTMSK));
+	SysLogPrintf(SysLogGet(), "USB now DCFG=%08x DCTL=%08x DSTS=%08x\r\n",
+		static_cast<unsigned>(Device()->DCFG), static_cast<unsigned>(Device()->DCTL),
+		static_cast<unsigned>(Device()->DSTS));
+	if (Status == 0)
+	{
+		SysLogPrintf(SysLogGet(), "USB now GAHBCFG=%08x GUSBCFG=%08x GCCFG=%08x\r\n",
+			static_cast<unsigned>(s_Usb.pReg->GAHBCFG),
+			static_cast<unsigned>(s_Usb.pReg->GUSBCFG),
+			static_cast<unsigned>(s_Usb.pReg->GCCFG));
+		SysLogPrintf(SysLogGet(), "USB RCC CR=%08x USBSEL=%08x AHB1ENR=%08x PWR CR3=%08x\r\n",
+			static_cast<unsigned>(RCC->CR), static_cast<unsigned>(RCC->D2CCIP2R),
+			static_cast<unsigned>(RCC->AHB1ENR), static_cast<unsigned>(PWR->CR3));
+		SysLogPrintf(SysLogGet(), "USB GPIOA MODER=%08x AFRH=%08x CRS ISR=%08x\r\n",
+			static_cast<unsigned>(GPIOA->MODER), static_cast<unsigned>(GPIOA->AFR[1]),
+			static_cast<unsigned>(CRS->ISR));
+	}
+}
+
+static void Trace(uint32_t Status, const char *pName)
+{
+	if (SysLogGet()->Marker != SYSLOG_INIT_MARKER)
+	{
+		return;
+	}
+	if (!AppEvtHandlerQue(Status, const_cast<char *>(pName), TraceDispatch))
+	{
+		__atomic_fetch_add(&s_TraceDropped, 1U, __ATOMIC_RELAXED);
+	}
+}
+#else
+static inline void Trace(uint32_t, const char *) {}
+#endif
 
 static USB_OTG_INEndpointTypeDef *In(unsigned Ep)
 {
@@ -164,6 +216,7 @@ static void Forget(unsigned Ep, bool bIn)
 
 static void Fault(void)
 {
+	Trace(0, "controller fault");
 	NVIC_DisableIRQ(Stm32UsbOtgIrq());
 	Stm32UsbOtgReset();
 	s_Usb.Started = false;
@@ -571,6 +624,7 @@ void UsbCtrlrConnect(int DevNo)
 	if (DevNo == 0 && s_Usb.Started)
 	{
 		Device()->DCTL &= ~USB_OTG_DCTL_SDIS;
+		Trace(0, "connected");
 	}
 }
 
@@ -1001,6 +1055,13 @@ void Stm32UsbOtgInterrupt(void)
 	}
 	USB_OTG_GlobalTypeDef *reg = s_Usb.pReg;
 	uint32_t status = reg->GINTSTS & reg->GINTMSK;
+	const uint32_t bus = status & (USB_OTG_GINTSTS_USBRST | USB_OTG_GINTSTS_ENUMDNE |
+		USB_OTG_GINTSTS_USBSUSP | USB_OTG_GINTSTS_WKUINT |
+		USB_OTG_GINTSTS_SRQINT | USB_OTG_GINTSTS_OTGINT);
+	if (bus != 0)
+	{
+		Trace(status, "bus");
+	}
 	if ((status & USB_OTG_GINTSTS_USBRST) != 0)
 	{
 		reg->GINTSTS = USB_OTG_GINTSTS_USBRST;
