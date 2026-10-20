@@ -137,8 +137,9 @@ ST-LINK virtual COM port at 1 Mbaud from HSI16.
   window is nearly always full: the rate is the round trip of the ST-LINK
   virtual COM port, not the MCU. The runs made as polling and as interrupts
   without DMA also ran with DMA: board.h defined `UART_DMA_MODE` true, which
-  overrides the define at the top of `uart_loopback.cpp`. The define is
-  removed from board.h; the loopback without DMA is still to be run.
+  overrides the define at the top of `uart_loopback.cpp`. With the define
+  removed from board.h, interrupts without DMA also echo about 69 kB/s with
+  0 errors.
 
 - TimerDemo, Debug with semihosting: LPTIM1 (LSE) and TIM7 trigger every
   100 ms; the printed periods (86 to 101 ms) are distorted by the
