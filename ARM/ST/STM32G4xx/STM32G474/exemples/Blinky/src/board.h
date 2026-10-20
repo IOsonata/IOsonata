@@ -49,4 +49,11 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define LED_PINS_MAP		BOARD_LED_PINS
 #define BUTTON_PINS_MAP		BOARD_BUT_PINS
 
+// B1 is active high. Blinky without BUT1_INT reads the button and takes a
+// low level as pressed, so B1 is read with its interrupt on the rising edge.
+// The STM32 EXTI line is the pin number.
+#define BUT1_INT			13
+#define BUT1_INT_PRIO		6
+#define BUT1_SENSE			BOARD_BUT1_SENSE
+
 #endif // __BOARD_H__
