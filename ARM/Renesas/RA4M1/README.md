@@ -94,19 +94,22 @@ the compiler installation through IOC's existing toolchain settings, not an
 absolute path embedded in the project.
 
 The outputs are `lib/ioc/Debug/libIOsonata_RA4M1.a` and
-`lib/ioc/Release/libIOsonata_RA4M1.a`. The project links the six target sources, the existing `ARM/src/ResetEntry.c`,
-and the existing `src/cfifo.c`, `src/device_intrf.cpp`, `src/coredev/uart.cpp`,
-and `src/coredev/timer.cpp`;
-it does not copy them. It uses
-the production target/generic headers and `ARM/CMSIS/Core/Include`, never the
-reduced headers in `tests/ra4m1`. CMSIS is taken from the existing repository
-files; no new vendor SDK or submodule is required.
+`lib/ioc/Release/libIOsonata_RA4M1.a`. The project has the same layout and
+the same common sources as the other IOsonata libraries (made from the
+STM32G474 library project): the generic `src` and `include` trees, sensors,
+storage, display, DFU, micro-ecc, littlefs and FatFs support, with the RA4M1
+sources in place of the vendor ones: `system_ra4m1.c`, `vectors_ra4m1.c`,
+`iopincfg_ra4m1.c`, `interrupt_ra4m1.cpp`, `uart_ra4m1.cpp`, `i2c_ra4m1.cpp`,
+`spi_ra4m1.cpp`, `timer_ra4m1.cpp` and `nvm_ra4m1.cpp`, plus `nvm.cpp`,
+`nvm_region.cpp`, `diskio_nvm.cpp` and `syslog.cpp`. All are linked, not
+copied. The include paths are `ARM/Renesas/RA4M1/include`, `ARM/include`,
+`ARM/CMSIS/Core/Include`, the repository `include`, littlefs, FatFs and
+micro-ecc, never the reduced headers in `tests/ra4m1`. Release defines
+`NDEBUG`. No vendor SDK or submodule is required.
 
-This project builds startup, GPIO, ICU, UART, timer and IIC master and slave support. It does not yet compile
-the generic USB/application subsystem. Future driver
-increments must add their sources to this same project. The
-library does not link an executable or produce a flash image; the application
-links it with `ldscript/gcc_ra4m1.ld` and the matching hard-float runtime. Do not
+The library does not link an executable or produce a flash image; the
+application links it with `ldscript/gcc_ra4m1.ld` and the matching hard-float
+runtime. Do not
 also compile the same startup sources into the application. The accompanying
 `wizard.json` supplies the MCU, library and linker metadata using the existing
 IOC wizard format; it does not add a board configuration.
