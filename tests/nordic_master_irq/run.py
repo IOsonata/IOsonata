@@ -69,6 +69,7 @@ def call_break(name, args, brk, action):
 o = [get(symbols['offsets'] + i * 4) for i in range(24)]
 CHIP = sys.argv[2] if len(sys.argv) > 2 else 'NRF9160_XXAA'
 T = [get(symbols['twi'] + i * 4) for i in range(16 if get(symbols['twi']) else 1)]
+S = [get(symbols['spi_legacy'] + i * 4) for i in range(6 if get(symbols['spi_legacy']) else 1)]
 TWIM_MAX, SH_TX_SUSPEND, SH_TX_STOP, SH_RX_STOP, TWIM_INTEN = [get(symbols['twim'] + i * 4) for i in range(5)]
 DMA_MAX = get(symbols['dma_max'])
 BUF = call('buffer_address')
@@ -96,6 +97,10 @@ def legacy_write(addr, value):
 def write(uc, access, addr, size, value, data):
     if legacy == 'twi':
         legacy_write(addr, value)
+        return
+    if legacy == 'spi':
+        if addr - BASE[1] == S[3]:
+            sent.append(value & 0xFF)
         return
     if active is None or value != 1:
         return
@@ -379,6 +384,55 @@ if T[0]:
     check(call('events', 0) == 1 and call('events', 1) == 1 and call('busy', 0) == 0, 'twi error end')
     legacy = None
 
+# ---- SPI master without EasyDMA, interrupt
+if S[0]:
+    base = BASE[1]
+    legacy = 'spi'
+    def spi_legacy_init():
+        sent.clear()
+        check(call('init', 1, 0, 0, 1) == 1, 'spi init')
+        check(get(base + S[4]) == S[5], 'SPI interrupt mask', hex(get(base + S[4])))
+    def ready(rxd=0):
+        put(base + S[2], rxd)
+        put(base + S[1], 1)
+        isr(1)
+        check(get(base + S[1]) == 0, 'READY not cleared')
+
+    for length in (1, 3):
+        spi_legacy_init()
+        u.mem_write(BUF, bytes(range(0x10, 0x10 + length)))
+        check(call('tx', 1, length) == -1, 'spi tx')
+        for i in range(length):
+            check(sent == list(range(0x10, 0x11 + i)), 'spi tx bytes', sent)
+            check(call('events', 0) == 0 and call('busy', 1) == 1, 'spi tx early end')
+            ready()
+        check(len(sent) == length, sent)
+        check(call('events', 0) == 1 and call('events', 1) == length and call('busy', 1) == 0, 'spi tx end')
+        check(call('tx_ready', 1) == 1 and call('events', 3) == 0, 'spi tx ready')
+
+    for length in (1, 3):
+        spi_legacy_init()
+        check(call('rx', 1, length) == -1, 'spi rx')
+        for i in range(length):
+            check(sent == [0xA5] * (i + 1), 'spi rx dummy', sent)
+            check(call('events', 0) == 0 and call('busy', 1) == 1, 'spi rx early end')
+            ready(0x60 + i)
+        check(call('events', 0) == 1 and call('events', 1) == length and call('busy', 1) == 0, 'spi rx end')
+        check(call('events', 3) == BUF, 'spi rx buffer')
+        check(bytes(u.mem_read(BUF, length)) == bytes(0x60 + i for i in range(length)), 'spi rx data')
+
+    spi_legacy_init()
+    def spi_legacy_cmd():
+        check(sent == [4], sent)
+        ready()
+        check(call('tx_ready', 1) == 1 and call('busy', 1) == 1 and call('events', 0) == 0, 'spi command')
+    check(call_break('read_reg', (1, 2), 'DeviceIntrfWaitTxComplete', spi_legacy_cmd) == -1)
+    check(sent == [4, 0xA5], sent)
+    ready(1)
+    ready(2)
+    check(call('events', 0) == 1 and call('events', 1) == 2 and call('busy', 1) == 0, 'spi read end')
+    legacy = None
+
 # ---- Polled transfers still work when bIntEn is false
 polled = True
 pending.clear()
@@ -391,4 +445,4 @@ for bus in (1, 0):
         check(call('busy', bus) == 0 and not pending, 'polled end', bus, kind, call('busy', bus), pending)
     active = None
 polled = False
-print('PASS: %s master interrupt transfers: SPIM, TWIM%s' % (CHIP, ', TWI' if T[0] else ''))
+print('PASS: %s master interrupt transfers: SPIM, TWIM%s' % (CHIP, ', TWI, SPI' if T[0] and S[0] else ''))

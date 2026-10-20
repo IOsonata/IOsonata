@@ -28,6 +28,8 @@ Checks cover:
   suspends the bus after each byte and ends with STOP after the last one, a
   one byte receive stops at once, the command of a register read keeps the
   bus, a bus error stops it, completion only on STOPPED;
+- SPI without EasyDMA (nRF52832): one byte per READY event, the receive
+  buffer in the completion, the command of a register read keeps the bus;
 - polled transfers (`bIntEn = false`) are unchanged.
 
 Install Python packages `unicorn` and `pyelftools`, and provide an Arm GNU C++

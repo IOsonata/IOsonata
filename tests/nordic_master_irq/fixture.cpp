@@ -171,3 +171,11 @@ extern "C" const uint32_t twi[] = {
 #else
 extern "C" const uint32_t twi[] = { 0 };
 #endif
+#ifdef SPI_PRESENT
+extern "C" const uint32_t spi_legacy[] = {
+	1, OFS(NRF_SPI_Type,EVENTS_READY), OFS(NRF_SPI_Type,RXD),				// 0 1 2
+	OFS(NRF_SPI_Type,TXD), OFS(NRF_SPI_Type,INTENSET), SPI_INTENSET_READY_Msk,	// 3 4 5
+};
+#else
+extern "C" const uint32_t spi_legacy[] = { 0 };
+#endif
