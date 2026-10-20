@@ -6,7 +6,7 @@
 #include "iopinctrl.h"
 #include <stddef.h>
 uint32_t SystemCoreClock = 128000000;
-uint32_t SystemMicroSecLoopCnt = 0;
+extern "C" uint32_t SystemMicroSecLoopCnt = 0;
 extern "C" void IOPinConfig(int, int, int, IOPINDIR, IOPINRES, IOPINTYPE) {}
 extern "C" void IOPinDisable(int, int) {}
 extern "C" NRF_GPIO_Type *nRFGpioGetReg(int) { return NRF_P1_S; }
