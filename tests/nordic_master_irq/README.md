@@ -14,9 +14,15 @@ Checks cover:
 - one `DEVINTRF_EVT_COMPLETED` with the byte count, `bTxReady` after a TX;
 - SPI command then read: the command phase keeps the bus and reports no
   completion;
-- TWIM write and register read: the command phase returns -1 and
-  `DeviceIntrfRead()` waits for `bTxReady` instead of polling LASTTX, no STOP
-  between the phases, STOP after the receive;
+- TWIM transmit and receive, single and several DMA blocks: transmit blocks
+  suspend the bus and the last one ends with STOP, receive blocks end with
+  STOP, the bus is released and one `DEVINTRF_EVT_COMPLETED` is reported only
+  after the hardware has stopped, with no extra STOP task;
+- TWIM register read: the command phase suspends the bus, sets `bTxReady`
+  and reports nothing, `DeviceIntrfRead()` waits for it, then the receive;
+- TWIM bus error: the driver stops the bus, the completion reports the bytes
+  moved, the bus can be used again; an address NACK on the command phase still
+  ends the read;
 - polled transfers (`bIntEn = false`) are unchanged.
 
 Install Python packages `unicorn` and `pyelftools`, and provide an Arm GNU C++
