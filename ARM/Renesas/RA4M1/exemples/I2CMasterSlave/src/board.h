@@ -4,13 +4,13 @@
 @brief	RA4M1 shared I2C master/slave example board configuration.
 
 		SCI0 on P410/P411 is the console. Renesas EK-RA4M1 reference pin
-		layout: IIC1 master on P206/P100 and IIC0 slave on P401/P400.
+		layout: IIC0 master on P401/P400 and IIC1 slave on P206/P205.
 
 @license
 
 MIT License
 
-Copyright (c) 2026 I-SYST inc. All rights reserved.
+Copyright (c) 2026, I-SYST inc., all rights reserved
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -49,27 +49,29 @@ SOFTWARE.
 	{UART_TX_PORT, UART_TX_PIN, UART_TX_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL}, \
 }
 
-#define I2C_MASTER_DEVNO		1
-#define I2C_MASTER_SDA_PORT		2
-#define I2C_MASTER_SDA_PIN		6
+// Connect master P401 SDA to slave P206 SDA, and P400 SCL to P205 SCL.
+// Both bus lines require suitable pull-ups.
+#define I2C_MASTER_DEVNO		0
+#define I2C_MASTER_SDA_PORT		4
+#define I2C_MASTER_SDA_PIN		1
 #define I2C_MASTER_SDA_PINOP	IOPINOP_FUNC6
-#define I2C_MASTER_SCL_PORT		1
+#define I2C_MASTER_SCL_PORT		4
 #define I2C_MASTER_SCL_PIN		0
 #define I2C_MASTER_SCL_PINOP	IOPINOP_FUNC6
 
 #define I2C_MASTER_DMA_ENABLE	false
 #define I2C_MASTER_INT_ENABLE	false
 
-// Shared master/slave example: IIC0 uses interrupt callbacks.
-#define I2C_SLAVE_DEVNO		0
-#define I2C_SLAVE_SDA_PORT		4
-#define I2C_SLAVE_SDA_PIN		1
+// Slave uses interrupt callbacks.
+#define I2C_SLAVE_DEVNO		1
+#define I2C_SLAVE_SDA_PORT		2
+#define I2C_SLAVE_SDA_PIN		6
 #define I2C_SLAVE_SDA_PINOP	IOPINOP_FUNC6
-#define I2C_SLAVE_SCL_PORT		4
-#define I2C_SLAVE_SCL_PIN		0
+#define I2C_SLAVE_SCL_PORT		2
+#define I2C_SLAVE_SCL_PIN		5
 #define I2C_SLAVE_SCL_PINOP	IOPINOP_FUNC6
 
 #define I2C_SLAVE_DMA_ENABLE	false
 #define I2C_SLAVE_INT_ENABLE	true
 
-#endif // __BOARD_H__
+#endif

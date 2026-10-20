@@ -1,17 +1,23 @@
 /**-------------------------------------------------------------------------
 @file	timer_re01_gpt.cpp
+
 @brief	RE01 GPT0/1 32-bit and GPT2..5 16-bit internal timers.
+
+@author	Hoang Nguyen Hoan
+@date	Oct. 7, 2026
+
+@license
 
 MIT License
 
-Copyright (c) 2026 I-SYST inc. All rights reserved.
+Copyright (c) 2026, I-SYST inc., all rights reserved
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
 in the Software without restriction, including without limitation the rights
 to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+copies of the Software, and to permit persons to whom the Software is furnished
+to do so, subject to the following conditions:
 
 The above copyright notice and this permission notice shall be included in all
 copies or substantial portions of the Software.
@@ -23,6 +29,7 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
 ----------------------------------------------------------------------------*/
 #include <stddef.h>
 #include "timer_re01.h"
@@ -313,9 +320,9 @@ bool Re01GptInit(RE01_TimerData_t * const dev, const TimerCfg_t * const pCfg)
 	dev->BaseFreq = SystemPeriphClockGet(0); // PCLKA = ICLK; register bus uses PCLKB.
 	if (dev->BaseFreq == 0) return false;
 
-	uint32_t gate = dev->DevNo < RE01_TIMER_GPT_DEVNO + 2 ?
+	uint32_t clkmask = dev->DevNo < RE01_TIMER_GPT_DEVNO + 2 ?
 		MSTP_MSTPCRD_MSTPD5_Msk : MSTP_MSTPCRD_MSTPD6_Msk;
-	MSTP->MSTPCRD &= ~gate;
+	MSTP->MSTPCRD &= ~clkmask;
 	GPT320_Type *reg = dev->pGptReg;
 	reg->GTWP = 0xA500UL;
 	reg->GTCR = 0;

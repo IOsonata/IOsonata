@@ -7,10 +7,11 @@ SPI20 is the master, SPI21 the slave, both on SAU1. Wiring:
 	P101 (SCK20)	to P204 (SCK21)		SCK
 	P103 (SO20)		to P205 (SI21)		MOSI
 	P206 (SO21)		to P102 (SI20)		MISO
-	P104 (GPIO)		to P202 (IRQ2_C)	chip select
-Connectors (FPB-R9A02G021 user's manual): P101, P102, P103 on Pmod 1 J13-4,
-J13-3, J13-2 and Arduino D13, D12, D11; P104 Arduino D6 (J11-7); P204, P205,
-P206 Pmod 1 J13-8, J13-9, J13-10; P202 Pmod 2 J14-7.
+	P109 (GPIO)		to P201 (IRQ3_C)	chip select
+All connections are on Pmod 1 J13 (FPB-R9A02G021 schematic):
+	J13-4 to J13-8 SCK, J13-2 to J13-9 MOSI,
+	J13-10 to J13-3 MISO, J13-1 to J13-7 chip select.
+P109 and P201 connect directly to J13 and have board pull-ups.
 
 @author	Hoang Nguyen Hoan
 @date	Oct. 13, 2026
@@ -71,7 +72,7 @@ SOFTWARE.
 #define UART_RTS_PINOP		IOPINOP_GPIO
 
 // Master SPI20, SAU1 channel 0: SCK20 P101, SI20 P102, SO20 P103, chip
-// select P104 as GPIO
+// select P109 as GPIO on J13-1
 #define SPI_MASTER_DEVNO		4
 #define SPI_MASTER_SCK_PORT		1
 #define SPI_MASTER_SCK_PIN		1
@@ -83,7 +84,7 @@ SOFTWARE.
 #define SPI_MASTER_MOSI_PIN		3
 #define SPI_MASTER_MOSI_PINOP	IOPINOP_FUNC16
 #define SPI_MASTER_CS_PORT		1
-#define SPI_MASTER_CS_PIN		4
+#define SPI_MASTER_CS_PIN		9
 #define SPI_MASTER_CS_PINOP		IOPINOP_GPIO
 
 #define SPI_MASTER_RATE			1000000
@@ -94,7 +95,7 @@ SOFTWARE.
 #define SPI_MASTER_DMA_ENABLE	true
 
 // Slave SPI21, SAU1 channel 1: SCK21 P204, SO21 P206 (MISO), SI21 P205
-// (MOSI), chip select P202 as GPIO input on IRQ2. The slave needs the
+// (MOSI), chip select P201 as GPIO input on IRQ3 (J13-7). The slave needs the
 // interrupt; with DMA the DTC moves its bytes, false for one interrupt
 // per byte. Its priority is above the master's: the master interrupt at
 // the end of a DTC reception waits for the last byte, a slave interrupt
@@ -110,7 +111,7 @@ SOFTWARE.
 #define SPI_SLAVE_MOSI_PIN		5
 #define SPI_SLAVE_MOSI_PINOP	IOPINOP_FUNC16
 #define SPI_SLAVE_CS_PORT		2
-#define SPI_SLAVE_CS_PIN		2
+#define SPI_SLAVE_CS_PIN		1
 #define SPI_SLAVE_CS_PINOP		IOPINOP_GPIO
 
 #define SPI_SLAVE_INT_ENABLE	true
@@ -118,6 +119,6 @@ SOFTWARE.
 #define SPI_SLAVE_INT_PRIO		7
 #define SPI_MASTER_INT_PRIO		6
 
-#define SPI_LOOPBACK_WIRING		"Connect P101-P204 SCK, P103-P205 MOSI, P206-P102 MISO, P104-P202 CS"
+#define SPI_LOOPBACK_WIRING		"Connect P101-P204 SCK, P103-P205 MOSI, P206-P102 MISO, P109-P201 CS (J13-1 to J13-7)"
 
 #endif

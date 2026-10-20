@@ -451,10 +451,6 @@
       <SubType>compile</SubType>
       <Link>src\stddev.c</Link>
     </Compile>
-    <Compile Include="..\..\..\..\..\..\src\sysstatus.c">
-      <SubType>compile</SubType>
-      <Link>src\sysstatus.c</Link>
-    </Compile>
     <Compile Include="..\..\..\..\..\..\src\uart_retarget.c">
       <SubType>compile</SubType>
       <Link>src\uart_retarget.c</Link>

@@ -36,6 +36,19 @@ Copyright (c) 2016, I-SYST inc., all rights reserved
 #include "bluetooth/bt_app.h"
 #include "bluetooth/bt_gap.h"
 
+static bool s_bScanning;
+
+bool BtScanIsActive(void)
+{
+	return s_bScanning;
+}
+
+void BtScanEnded(void)
+{
+	s_bScanning = false;
+}
+
+
 // Run before the application observer (priority 1). The scan is continued or
 // stopped before the application's central event callback sees the report,
 // same order as when these events were handled in the application dispatcher.
@@ -54,17 +67,14 @@ static ble_data_t g_BleScanReportData = {
 
 void BtAppScan(void)
 {
-	if (g_BtAppData.bScan == true)
+	if (s_bScanning == true)
 	{
 		//err_code = sd_ble_gap_scan_start(NULL, &g_BleScanReportData);
 		BtGapScanNext(g_BleScanReportData.p_data, g_BleScanReportData.len);
 	}
 	else
 	{
-		g_BtAppData.bScan = true;
-
-//		err_code = sd_ble_gap_scan_start(&s_BleScanParams, &g_BleScanReportData);
-		BtGapScanStart(g_BleScanReportData.p_data, g_BleScanReportData.len);
+		s_bScanning = BtGapScanStart(g_BleScanReportData.p_data, g_BleScanReportData.len);
 	}
 }
 
@@ -72,7 +82,7 @@ void BtAppScanStop(void)
 {
 	BtGapScanStop();
 
-	g_BtAppData.bScan = false;
+	s_bScanning = false;
 }
 
 bool BtAppScanInit(BtGapScanCfg_t *pCfg)
@@ -95,13 +105,9 @@ bool BtAppScanInit(BtGapScanCfg_t *pCfg)
     ret_code_t err_code = sd_ble_uuid_vs_add(&uid, &uidtype);
     APP_ERROR_CHECK(err_code);
 */
-    g_BtAppData.bScan = true;
 
-//	err_code = sd_ble_gap_scan_start(&s_BleScanParams, &g_BleScanReportData);
-//	APP_ERROR_CHECK(err_code);
-
-//	return err_code == NRF_SUCCESS;
-    return BtGapScanStart(g_BleScanReportData.p_data, g_BleScanReportData.len);
+	s_bScanning = BtGapScanStart(g_BleScanReportData.p_data, g_BleScanReportData.len);
+	return s_bScanning;
 }
 
 // Scan events live here, not in the application dispatcher, so that this
@@ -113,7 +119,7 @@ static void BtScanNrf52EvtHandler(ble_evt_t const *pEvt, void *pContext)
 	uint16_t role = ble_conn_state_role(pEvt->evt.gap_evt.conn_handle);
 
 	if ((role != BLE_GAP_ROLE_CENTRAL) &&
-		(g_BtAppData.AppDevice.Conn.Role & (BTAPP_ROLE_CENTRAL | BTAPP_ROLE_OBSERVER)) == 0)
+		!s_bScanning)
 	{
 		return;
 	}
@@ -142,7 +148,7 @@ static void BtScanNrf52EvtHandler(ble_evt_t const *pEvt, void *pContext)
 		case BLE_GAP_EVT_TIMEOUT:
 			if (pEvt->evt.gap_evt.params.timeout.src == BLE_GAP_TIMEOUT_SRC_SCAN)
 			{
-				g_BtAppData.bScan = false;
+				s_bScanning = false;
 				BtAppScanTimeoutHandler();
 			}
 			break;

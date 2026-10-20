@@ -8,7 +8,7 @@ import os
 from pathlib import Path
 import shutil
 import sys
-from run_validation import ROOT, HERE, TARGET, BUILD, run
+from run_validation import ROOT, HERE, TARGET, BUILD, run, sanitizer_cxx
 
 
 def main():
@@ -24,7 +24,13 @@ def main():
                             '-fno-sanitize-recover=all', '-fno-omit-frame-pointer'])]
     for label, flags in modes:
         out = BUILD/('timer_model_'+label)
-        run([cxx, *common, *flags, HERE/'timer_model.cpp', '-o', out])
+        host = cxx
+        if label == 'sanitized':
+            # g++ when this Clang has no sanitizer runtime. The compact model
+            # source trips its misleading-indentation warning, only a style one.
+            host = sanitizer_cxx(cxx)
+            flags = [*flags, '-Wno-misleading-indentation']
+        run([host, *common, *flags, HERE/'timer_model.cpp', '-o', out])
         log = run([out]); (BUILD/(out.name+'.log')).write_text(log)
         print(label, log.strip())
     for abi in ('soft', 'hard'):

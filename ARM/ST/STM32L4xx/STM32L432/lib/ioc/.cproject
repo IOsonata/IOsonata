@@ -59,6 +59,7 @@
 									<listOptionValue builtIn="false" value="../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../../../include"/>
+									<listOptionValue builtIn="false" value="../../../../../../../../external/Fusion"/>
 									<listOptionValue builtIn="false" value="../../../../../../CMSIS/Core/Include"/>
 									<listOptionValue builtIn="false" value="../../../../../../../littlefs"/>
 									<listOptionValue builtIn="false" value="../../../../../../../fatfs"/>
@@ -86,6 +87,7 @@
 									<listOptionValue builtIn="false" value="../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../../../include"/>
+									<listOptionValue builtIn="false" value="../../../../../../../../external/Fusion"/>
 									<listOptionValue builtIn="false" value="../../../../../../CMSIS/Core/Include"/>
 									<listOptionValue builtIn="false" value="../../../../../../../littlefs"/>
 									<listOptionValue builtIn="false" value="../../../../../../../fatfs"/>
@@ -129,7 +131,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/sysstatus.c|srcx|includex" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="srcx|includex" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -192,6 +194,7 @@
 									<listOptionValue builtIn="false" value="../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../../../include"/>
+									<listOptionValue builtIn="false" value="../../../../../../../../external/Fusion"/>
 									<listOptionValue builtIn="false" value="../../../../../../CMSIS/Core/Include"/>
 									<listOptionValue builtIn="false" value="../../../../../../../littlefs"/>
 									<listOptionValue builtIn="false" value="../../../../../../../fatfs"/>
@@ -219,6 +222,7 @@
 									<listOptionValue builtIn="false" value="../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../../../include"/>
+									<listOptionValue builtIn="false" value="../../../../../../../../external/Fusion"/>
 									<listOptionValue builtIn="false" value="../../../../../../CMSIS/Core/Include"/>
 									<listOptionValue builtIn="false" value="../../../../../../../littlefs"/>
 									<listOptionValue builtIn="false" value="../../../../../../../fatfs"/>
@@ -262,7 +266,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/sysstatus.c|srcx|includex" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="srcx|includex" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -328,6 +332,7 @@
 									<listOptionValue builtIn="false" value="../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../../../include"/>
+									<listOptionValue builtIn="false" value="../../../../../../../../external/Fusion"/>
 									<listOptionValue builtIn="false" value="../../../../../../CMSIS/Core/Include"/>
 									<listOptionValue builtIn="false" value="../../../../../../../littlefs"/>
 									<listOptionValue builtIn="false" value="../../../../../../../fatfs"/>
@@ -355,6 +360,7 @@
 									<listOptionValue builtIn="false" value="../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../../../include"/>
+									<listOptionValue builtIn="false" value="../../../../../../../../external/Fusion"/>
 									<listOptionValue builtIn="false" value="../../../../../../CMSIS/Core/Include"/>
 									<listOptionValue builtIn="false" value="../../../../../../../littlefs"/>
 									<listOptionValue builtIn="false" value="../../../../../../../fatfs"/>
@@ -398,7 +404,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/sysstatus.c|srcx|includex" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="srcx|includex" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -463,6 +469,7 @@
 									<listOptionValue builtIn="false" value="../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../../../include"/>
+									<listOptionValue builtIn="false" value="../../../../../../../../external/Fusion"/>
 									<listOptionValue builtIn="false" value="../../../../../../CMSIS/Core/Include"/>
 									<listOptionValue builtIn="false" value="../../../../../../../littlefs"/>
 									<listOptionValue builtIn="false" value="../../../../../../../fatfs"/>
@@ -490,6 +497,7 @@
 									<listOptionValue builtIn="false" value="../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../../../include"/>
+									<listOptionValue builtIn="false" value="../../../../../../../../external/Fusion"/>
 									<listOptionValue builtIn="false" value="../../../../../../CMSIS/Core/Include"/>
 									<listOptionValue builtIn="false" value="../../../../../../../littlefs"/>
 									<listOptionValue builtIn="false" value="../../../../../../../fatfs"/>
@@ -533,7 +541,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/sysstatus.c|srcx|includex" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="srcx|includex" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>

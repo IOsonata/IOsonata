@@ -1,4 +1,4 @@
-/* Stage 0 DFU boot, nRF54LM20 (A and B) with S145.
+/* Stage 0 DFU boot, nRF54LM20A with S145.
  *
  * The boot is at 0 and runs out of reset. The SoftDevice is not running while
  * the boot is, so all of RAM is the boot's.

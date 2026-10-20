@@ -2,7 +2,7 @@
 @file	bt_app.cpp
 
 @brief	Generic Bluetooth application code shared across all ports.
-		Holds cross-arch state and helpers that have no SDK dependency.
+		Provides peer operations that have no SDK dependency.
 
 
 @author	Hoang Nguyen Hoan
@@ -40,69 +40,9 @@ SOFTWARE.
 #include "bluetooth/bt_gatt.h"
 #include "bluetooth/bt_peer.h"
 
-// Cross-arch app state. Port-specific state lives in port-private structs
-// inside each ARM/<vendor>/<chip>/src/bt_app_<port>.cpp.
-BtAppData_t g_BtAppData = {
-	.State           = BTAPP_STATE_UNKNOWN,
-	.AdvHdl          = 0xFF,		// port overrides during init
-	.ConnLedPort     = -1,
-	.ConnLedPin      = -1,
-	.ConnLedActLevel = 0,
-	.PeriphDevCnt    = 0,
-	.CoexMode        = BTAPP_COEXMODE_NONE,
-	.bExtAdv         = false,
-	.bScan           = false,
-	.bInitialized    = false,
-	.bSecInit        = false,
-	.AppDevice = {
-		// Local device identity. Filled in by BtAppInit from BtAppCfg_t.
-		// Every member is listed. The omitted ones would be zeroed anyway, but
-		// leaving them out makes the compiler report an incomplete initialiser
-		// on every build that includes this file.
-		.Conn = {
-			.Hdl            = BT_CONN_HDL_INVALID,	// unused for local
-			.Role           = BTAPP_ROLE_PERIPHERAL,
-			.PeerAddrType   = 0,
-			.PeerAddr       = {0,},
-			.OwnAddrType    = 0,
-			.OwnAddr        = {0,},
-			.MaxMtu         = 0,
-			.pLongWrBuff    = NULL,
-			.LongWrBuffSize = 0,
-			.LongWrLen      = 0,
-			.bIndCfmPending = false,
-			.IndCfmTime     = 0,
-			.NbCccd         = 0,
-			.Cccd           = {},
-			.Sec            = {},
-		},
-		.Name       = {0,},
-		.Appearance = 0,
-		.VendorId   = 0,
-		.ProductId  = 0,
-		.ProductVer = 0,
-		.bIsLocal   = true,
-		.bSecure    = false,
-		.pHciDev    = NULL,
-		.NbSrvc     = 0,
-		.pServices  = NULL,
-		.Discovery  = {},
-		.pIndChar = NULL,
-		.bAttReqPending = false,
-		.bAttTimedOut = false,
-		.AttReqOpcode = 0,
-		.AttRspOpcode = 0,
-		.AttReqTime = 0,
-		.TxPend     = {},
-		.TxPendHead = 0,
-		.TxPendCount = 0,
-	},
-};
-
-bool BtInitialized(void)
-{
-	return g_BtAppData.State != BTAPP_STATE_UNKNOWN;
-}
+// Internal port operations. Common code does not own or access port state.
+void BtAppConnLedOff(void);
+void BtAppConnLedOn(void);
 
 // Ports with work retained after an enqueue failure override this check.
 extern void BtDfuSmpCheckStatus(void) __attribute__((weak));
@@ -131,7 +71,6 @@ bool isConnected(void)
 // idle while other links remain.
 void BtPeerConnectionStateChanged(bool Connected)
 {
-	g_BtAppData.State = Connected ? BTAPP_STATE_CONNECTED : BTAPP_STATE_IDLE;
 	if (Connected)
 	{
 		BtAppConnLedOn();
@@ -369,32 +308,3 @@ __attribute__((weak)) void BtDeviceDiscovered(BtDevice_t *pDev)
 	(void)pDev;
 }
 
-void BtAppConnLedOff(void)
-{
-	if (g_BtAppData.ConnLedPort < 0 || g_BtAppData.ConnLedPin < 0)
-		return;
-
-	if (g_BtAppData.ConnLedActLevel)
-	{
-		//IOPinClear(g_BtAppData.ConnLedPort, g_BtAppData.ConnLedPin);
-	}
-	else
-	{
-		//IOPinSet(g_BtAppData.ConnLedPort, g_BtAppData.ConnLedPin);
-	}
-}
-
-void BtAppConnLedOn(void)
-{
-	if (g_BtAppData.ConnLedPort < 0 || g_BtAppData.ConnLedPin < 0)
-		return;
-
-	if (g_BtAppData.ConnLedActLevel)
-	{
-		//IOPinSet(g_BtAppData.ConnLedPort, g_BtAppData.ConnLedPin);
-	}
-	else
-	{
-		//IOPinClear(g_BtAppData.ConnLedPort, g_BtAppData.ConnLedPin);
-	}
-}

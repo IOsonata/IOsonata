@@ -159,13 +159,21 @@ static void Fail(const char *pMsg)
 
 int main()
 {
+	AdcData_t data;
+	int i;
+
 	IOPinCfg(s_Leds, s_NbLeds);
 
 	if (s_Uart.Init(s_UartCfg) == false)
 	{
-		while (1) __WFE();
+		while (1)
+		{
+			__WFE();
+		}
 	}
+#ifdef NDEBUG
 	UARTRetargetEnable(s_Uart, STDOUT_FILENO);
+#endif
 	setvbuf(stdout, NULL, _IONBF, 0);
 
 	printf("\r\nA/D conversion in Snooze, wake-up at %d mV and above\r\n", (int)(ADC_SNOOZE_LIMIT * 1000.0f));
@@ -196,12 +204,10 @@ int main()
 		R9a02LowPowerEnter(true);
 
 		// ADC_ENDI follows the wake-up
-		for (int i = 0; i < 100 && s_bAdcDone == false; i++)
+		for (i = 0; i < 100 && s_bAdcDone == false; i++)
 		{
 			usDelay(10);
 		}
-
-		AdcData_t data;
 
 		if (s_Adc.Read(0, &data))
 		{

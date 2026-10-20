@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <projectDescription>
 	<name>I2CMasterSlave</name>
-	<comment>RA4M1 IIC master/slave example; slave driver integration is pending.</comment>
+	<comment>RA4M1 IIC master/slave example; hardware validation is deferred.</comment>
 	<projects>
 		<project>IOsonata_RA4M1</project>
 	</projects>

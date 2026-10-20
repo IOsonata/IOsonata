@@ -107,7 +107,12 @@ class EchoCheck:
         if 0 < d <= MAX_LOSS and pos + d < sent:
             return d
         if d >= PRBS_PERIOD - MAX_REPEAT:
-            return d - PRBS_PERIOD
+            # A repeat must refer to a byte in this run. If that position
+            # would be negative, only the forward loss can be valid.
+            if pos + d >= PRBS_PERIOD:
+                return d - PRBS_PERIOD
+            if pos + d < sent:
+                return d
         return None
 
     def _matched(self, newpos, jump):
@@ -133,6 +138,9 @@ class EchoCheck:
         last = sent - 1
         p = last - ((last - self.phase[run[-1]]) % PRBS_PERIOD)
         first = p - RESYNC_BYTES + 1
+        if first < 0:
+            # No complete matching run has been sent yet.
+            return False
         self.recent = self.recent[:-RESYNC_BYTES]
         # Positive: the bytes before the run were lost. Negative: the run
         # repeats positions already passed.

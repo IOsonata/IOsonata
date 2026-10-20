@@ -12,6 +12,7 @@
 #define IOPINOP_FUNC31 32
 #define IOPINOP_FUNC3 4
 #define IOPINOP_FUNC4 5
+#define IOPINOP_FUNC5 6
 #define IOPINOP_FUNC6 7
 #define IOPINOP_FUNC12 13
 #define IOPINOP_FUNC15 16
@@ -32,7 +33,7 @@ extern "C" {
 #endif
 void IOPinConfig(int,int,int,IOPINDIR,IOPINRES,IOPINTYPE);
 static inline void IOPinCfg(const IOPINCFG *p, int n) {
- for (int i=0;i<n;++i) IOPinConfig(p[i].PortNo,p[i].PinNo,p[i].PinOp,p[i].PinDir,p[i].Res,p[i].Type);
+	for (int i=0;i<n;++i) IOPinConfig(p[i].PortNo,p[i].PinNo,p[i].PinOp,p[i].PinDir,p[i].Res,p[i].Type);
 }
 void IOPinDisable(int,int);
 void IOPinDisableInterrupt(int);

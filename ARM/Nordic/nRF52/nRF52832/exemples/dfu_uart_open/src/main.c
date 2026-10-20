@@ -76,55 +76,55 @@ static const IOPINCFG s_PinsCfg[] = {
 
 static const int s_NbPins = sizeof(s_PinsCfg) / sizeof(IOPINCFG);
 
-/* Timer used to blink LED on DFU progress. */
+// Timer used to blink LED on DFU progress.
 APP_TIMER_DEF(m_dfu_progress_led_timer);
 
 static void on_error(void)
 {
-    NRF_LOG_FINAL_FLUSH();
+	NRF_LOG_FINAL_FLUSH();
 
 #if NRF_MODULE_ENABLED(NRF_LOG_BACKEND_RTT)
-    // To allow the buffer to be flushed by the host.
-    nrf_delay_ms(100);
+	// To allow the buffer to be flushed by the host.
+	nrf_delay_ms(100);
 #endif
 #ifdef NRF_DFU_DEBUG_VERSION
-    NRF_BREAKPOINT_COND;
+	NRF_BREAKPOINT_COND;
 #endif
-    NVIC_SystemReset();
+	NVIC_SystemReset();
 }
 
 
 void app_error_handler(uint32_t error_code, uint32_t line_num, const uint8_t * p_file_name)
 {
-    NRF_LOG_ERROR("app_error_handler err_code:%d %s:%d", error_code, p_file_name, line_num);
-    on_error();
+	NRF_LOG_ERROR("app_error_handler err_code:%d %s:%d", error_code, p_file_name, line_num);
+	on_error();
 }
 
 
 void app_error_fault_handler(uint32_t id, uint32_t pc, uint32_t info)
 {
-    NRF_LOG_ERROR("Received a fault! id: 0x%08x, pc: 0x%08x, info: 0x%08x", id, pc, info);
-    on_error();
+	NRF_LOG_ERROR("Received a fault! id: 0x%08x, pc: 0x%08x, info: 0x%08x", id, pc, info);
+	on_error();
 }
 
 
 void app_error_handler_bare(uint32_t error_code)
 {
-    NRF_LOG_ERROR("Received an error: 0x%08x!", error_code);
-    on_error();
+	NRF_LOG_ERROR("Received an error: 0x%08x!", error_code);
+	on_error();
 }
 
 
 static void dfu_progress_led_timeout_handler(void * p_context)
 {
-    app_timer_id_t timer = (app_timer_id_t)p_context;
+	app_timer_id_t timer = (app_timer_id_t)p_context;
 
-    uint32_t err_code = app_timer_start(timer,
-                                        APP_TIMER_TICKS(DFU_LED_CONFIG_PROGRESS_BLINK_MS),
-                                        p_context);
-    APP_ERROR_CHECK(err_code);
+	uint32_t err_code = app_timer_start(timer,
+										APP_TIMER_TICKS(DFU_LED_CONFIG_PROGRESS_BLINK_MS),
+										p_context);
+	APP_ERROR_CHECK(err_code);
 
-    //bsp_board_led_invert(BSP_BOARD_LED_1);
+	//bsp_board_led_invert(BSP_BOARD_LED_1);
 }
 
 /**
@@ -132,115 +132,115 @@ static void dfu_progress_led_timeout_handler(void * p_context)
  */
 static void dfu_observer(nrf_dfu_evt_type_t evt_type)
 {
-    static bool timer_created = false;
-    uint32_t err_code;
+	static bool timer_created = false;
+	uint32_t err_code;
 
-    if (!timer_created)
-    {
-        err_code = app_timer_create(&m_dfu_progress_led_timer,
-                                    APP_TIMER_MODE_SINGLE_SHOT,
-                                    dfu_progress_led_timeout_handler);
-        APP_ERROR_CHECK(err_code);
-        timer_created = true;
-    }
+	if (!timer_created)
+	{
+		err_code = app_timer_create(&m_dfu_progress_led_timer,
+									APP_TIMER_MODE_SINGLE_SHOT,
+									dfu_progress_led_timeout_handler);
+		APP_ERROR_CHECK(err_code);
+		timer_created = true;
+	}
 
-    switch (evt_type)
-    {
-        case NRF_DFU_EVT_DFU_FAILED:
-        case NRF_DFU_EVT_DFU_ABORTED:
-            //err_code = led_softblink_stop();
-            //APP_ERROR_CHECK(err_code);
+	switch (evt_type)
+	{
+		case NRF_DFU_EVT_DFU_FAILED:
+		case NRF_DFU_EVT_DFU_ABORTED:
+			//err_code = led_softblink_stop();
+			//APP_ERROR_CHECK(err_code);
 
-            err_code = app_timer_stop(m_dfu_progress_led_timer);
-            APP_ERROR_CHECK(err_code);
+			err_code = app_timer_stop(m_dfu_progress_led_timer);
+			APP_ERROR_CHECK(err_code);
 
-            //err_code = led_softblink_start(BSP_LED_1_MASK);
-            //APP_ERROR_CHECK(err_code);
+			//err_code = led_softblink_start(BSP_LED_1_MASK);
+			//APP_ERROR_CHECK(err_code);
 
-            break;
-        case NRF_DFU_EVT_DFU_INITIALIZED:
-        {
+			break;
+		case NRF_DFU_EVT_DFU_INITIALIZED:
+		{
 //            bsp_board_init(BSP_INIT_LEDS);
         	IOPinClear(LED1_PORT, LED1_PIN);
 
         	nrf_clock_lfclk_t clksrc;
-            if (!nrf_clock_is_running(NRF_CLOCK, NRF_CLOCK_DOMAIN_LFCLK, &clksrc))
-            {
-                nrf_clock_task_trigger(NRF_CLOCK, NRF_CLOCK_TASK_LFCLKSTART);
-            }
-            err_code = app_timer_init();
-            APP_ERROR_CHECK(err_code);
+			if (!nrf_clock_is_running(NRF_CLOCK, NRF_CLOCK_DOMAIN_LFCLK, &clksrc))
+			{
+				nrf_clock_task_trigger(NRF_CLOCK, NRF_CLOCK_TASK_LFCLKSTART);
+			}
+			err_code = app_timer_init();
+			APP_ERROR_CHECK(err_code);
 
-            //led_sb_init_params_t led_sb_init_param = LED_SB_INIT_DEFAULT_PARAMS(BSP_LED_1_MASK);
+			//led_sb_init_params_t led_sb_init_param = LED_SB_INIT_DEFAULT_PARAMS(BSP_LED_1_MASK);
 
-            uint32_t ticks = APP_TIMER_TICKS(DFU_LED_CONFIG_TRANSPORT_INACTIVE_BREATH_MS);
-            //led_sb_init_param.p_leds_port    = BSP_LED_1_PORT;
-            //led_sb_init_param.on_time_ticks  = ticks;
-            //led_sb_init_param.off_time_ticks = ticks;
-            //led_sb_init_param.duty_cycle_max = 255;
+			uint32_t ticks = APP_TIMER_TICKS(DFU_LED_CONFIG_TRANSPORT_INACTIVE_BREATH_MS);
+			//led_sb_init_param.p_leds_port    = BSP_LED_1_PORT;
+			//led_sb_init_param.on_time_ticks  = ticks;
+			//led_sb_init_param.off_time_ticks = ticks;
+			//led_sb_init_param.duty_cycle_max = 255;
 
-            //err_code = led_softblink_init(&led_sb_init_param);
-            //APP_ERROR_CHECK(err_code);
+			//err_code = led_softblink_init(&led_sb_init_param);
+			//APP_ERROR_CHECK(err_code);
 
-            //err_code = led_softblink_start(BSP_LED_1_MASK);
-            //APP_ERROR_CHECK(err_code);
-            break;
-        }
-        case NRF_DFU_EVT_TRANSPORT_ACTIVATED:
-        {
-            uint32_t ticks = APP_TIMER_TICKS(DFU_LED_CONFIG_TRANSPORT_ACTIVE_BREATH_MS);
-            //led_softblink_off_time_set(ticks);
-            //led_softblink_on_time_set(ticks);
-            break;
-        }
-        case NRF_DFU_EVT_TRANSPORT_DEACTIVATED:
-        {
-            uint32_t ticks =  APP_TIMER_TICKS(DFU_LED_CONFIG_PROGRESS_BLINK_MS);
-            //err_code = led_softblink_stop();
-            //APP_ERROR_CHECK(err_code);
+			//err_code = led_softblink_start(BSP_LED_1_MASK);
+			//APP_ERROR_CHECK(err_code);
+			break;
+		}
+		case NRF_DFU_EVT_TRANSPORT_ACTIVATED:
+		{
+			uint32_t ticks = APP_TIMER_TICKS(DFU_LED_CONFIG_TRANSPORT_ACTIVE_BREATH_MS);
+			//led_softblink_off_time_set(ticks);
+			//led_softblink_on_time_set(ticks);
+			break;
+		}
+		case NRF_DFU_EVT_TRANSPORT_DEACTIVATED:
+		{
+			uint32_t ticks =  APP_TIMER_TICKS(DFU_LED_CONFIG_PROGRESS_BLINK_MS);
+			//err_code = led_softblink_stop();
+			//APP_ERROR_CHECK(err_code);
 
-            err_code = app_timer_start(m_dfu_progress_led_timer, ticks, m_dfu_progress_led_timer);
-            APP_ERROR_CHECK(err_code);
+			err_code = app_timer_start(m_dfu_progress_led_timer, ticks, m_dfu_progress_led_timer);
+			APP_ERROR_CHECK(err_code);
 
-            break;
-        }
-        default:
-            break;
-    }
+			break;
+		}
+		default:
+			break;
+	}
 }
 /**@brief Function for application main entry.
  */
 int main(void)
 {
-    uint32_t ret_val;
+	uint32_t ret_val;
 
-    IOPinCfg(s_PinsCfg, s_NbPins);
+	IOPinCfg(s_PinsCfg, s_NbPins);
 
-    // Must happen before flash protection is applied, since it edits a protected page.
-    nrf_bootloader_mbr_addrs_populate();
+	// Must happen before flash protection is applied, since it edits a protected page.
+	nrf_bootloader_mbr_addrs_populate();
 
-    // Protect MBR and bootloader code from being overwritten.
-    ret_val = nrf_bootloader_flash_protect(0, MBR_SIZE);
-    APP_ERROR_CHECK(ret_val);
-    ret_val = nrf_bootloader_flash_protect(BOOTLOADER_START_ADDR, BOOTLOADER_SIZE);
-    APP_ERROR_CHECK(ret_val);
+	// Protect MBR and bootloader code from being overwritten.
+	ret_val = nrf_bootloader_flash_protect(0, MBR_SIZE);
+	APP_ERROR_CHECK(ret_val);
+	ret_val = nrf_bootloader_flash_protect(BOOTLOADER_START_ADDR, BOOTLOADER_SIZE);
+	APP_ERROR_CHECK(ret_val);
 
-    ret_val = NRF_LOG_INIT(app_timer_cnt_get);
-    APP_ERROR_CHECK(ret_val);
-    NRF_LOG_DEFAULT_BACKENDS_INIT();
+	ret_val = NRF_LOG_INIT(app_timer_cnt_get);
+	APP_ERROR_CHECK(ret_val);
+	NRF_LOG_DEFAULT_BACKENDS_INIT();
 
-    NRF_LOG_INFO("Open USB bootloader started");
-    NRF_LOG_FLUSH();
+	NRF_LOG_INFO("Open USB bootloader started");
+	NRF_LOG_FLUSH();
 
-    ret_val = nrf_bootloader_init(dfu_observer);
-    APP_ERROR_CHECK(ret_val);
+	ret_val = nrf_bootloader_init(dfu_observer);
+	APP_ERROR_CHECK(ret_val);
 
-    NRF_LOG_FLUSH();
+	NRF_LOG_FLUSH();
 
-    NRF_LOG_ERROR("After main, should never be reached.");
-    NRF_LOG_FLUSH();
+	NRF_LOG_ERROR("After main, should never be reached.");
+	NRF_LOG_FLUSH();
 
-    APP_ERROR_CHECK_BOOL(false);
+	APP_ERROR_CHECK_BOOL(false);
 }
 
 /**

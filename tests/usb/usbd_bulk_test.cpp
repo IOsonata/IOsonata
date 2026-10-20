@@ -53,43 +53,42 @@ static void ReceiveDma(void)
 	}
 }
 
-extern "C" {
-const UsbCfg_t *UsbGetCfg(int DevNo)
+extern "C" const UsbCfg_t *UsbGetCfg(int DevNo)
 {
-    return DevNo == 0 ? &s_UsbCfg : nullptr;
+	return DevNo == 0 ? &s_UsbCfg : nullptr;
 }
 
-bool UsbCtrlrHighSpeed(int) { return false; }
+extern "C" bool UsbCtrlrHighSpeed(int) { return false; }
 
-bool UsbCtrlrEpOpen(int, const UsbEndPointDesc_t *pDesc)
+extern "C" bool UsbCtrlrEpOpen(int, const UsbEndPointDesc_t *pDesc)
 {
-    if (pDesc == nullptr || s_OpenCount >= 2)
-        return false;
-    s_OpenDesc[s_OpenCount++] = *pDesc;
-    return true;
+	if (pDesc == nullptr || s_OpenCount >= 2)
+		return false;
+	s_OpenDesc[s_OpenCount++] = *pDesc;
+	return true;
 }
 
-void UsbCtrlrEpClose(int, uint8_t, bool) { s_CloseCount++; }
+extern "C" void UsbCtrlrEpClose(int, uint8_t, bool) { s_CloseCount++; }
 
-void UsbCtrlrEpBind(int, uint8_t, bool bIn, bool Blocking,
-                        UsbCtrlrEpHandler_t Handler, void *pContext)
+extern "C" void UsbCtrlrEpBind(int, uint8_t, bool bIn, bool Blocking,
+						UsbCtrlrEpHandler_t Handler, void *pContext)
 {
-    if (bIn)
-    {
-        s_InBuffer = nullptr;
-        s_InHandler = Handler;
-        s_InContext = pContext;
-    }
-    else
-    {
-        s_OutBuffer = nullptr;
-        s_OutHandler = Handler;
-        s_OutContext = pContext;
-        s_OutBlocking = Blocking;
-    }
+	if (bIn)
+	{
+		s_InBuffer = nullptr;
+		s_InHandler = Handler;
+		s_InContext = pContext;
+	}
+	else
+	{
+		s_OutBuffer = nullptr;
+		s_OutHandler = Handler;
+		s_OutContext = pContext;
+		s_OutBlocking = Blocking;
+	}
 }
 
-bool UsbCtrlrEpReceive(int, uint8_t, uint8_t *pBuffer, uint16_t Capacity)
+extern "C" bool UsbCtrlrEpReceive(int, uint8_t, uint8_t *pBuffer, uint16_t Capacity)
 {
 	if (!s_HwOutReady || s_OutDma || pBuffer == nullptr || Capacity == 0U) return false;
 	s_OutBuffer = pBuffer;
@@ -97,7 +96,7 @@ bool UsbCtrlrEpReceive(int, uint8_t, uint8_t *pBuffer, uint16_t Capacity)
 	return s_OutDma;
 }
 
-bool UsbCtrlrEpSend(int, uint8_t EpNum, uint8_t *pBuffer, uint16_t Length)
+extern "C" bool UsbCtrlrEpSend(int, uint8_t EpNum, uint8_t *pBuffer, uint16_t Length)
 {
 	if ((EpNum & 0x80U) != 0U) return false;
 	if (s_InBusy) return false;
@@ -108,33 +107,32 @@ bool UsbCtrlrEpSend(int, uint8_t EpNum, uint8_t *pBuffer, uint16_t Length)
 	return true;
 }
 
-}
 
 bool UsbClassRegister(int DevNo, UsbDeviceClass *pClass,
-                      uint8_t FirstInterface, uint8_t InterfaceCount,
-                      uint16_t EpInMask, uint16_t EpOutMask)
+					  uint8_t FirstInterface, uint8_t InterfaceCount,
+					  uint16_t EpInMask, uint16_t EpOutMask)
 {
-    if (DevNo != 0 || pClass == nullptr || s_ClassObject != nullptr)
-        return false;
+	if (DevNo != 0 || pClass == nullptr || s_ClassObject != nullptr)
+		return false;
 
-    if (InterfaceCount != 0U && s_ReservedCount != 0U)
-    {
-        const uint16_t lastA = FirstInterface + InterfaceCount;
-        const uint16_t lastB = s_ReservedFirst + s_ReservedCount;
-        if (FirstInterface < lastB && s_ReservedFirst < lastA)
-            return false;
-    }
-    if ((EpInMask & s_ReservedIn) != 0U ||
-        (EpOutMask & s_ReservedOut) != 0U)
-        return false;
+	if (InterfaceCount != 0U && s_ReservedCount != 0U)
+	{
+		const uint16_t lastA = FirstInterface + InterfaceCount;
+		const uint16_t lastB = s_ReservedFirst + s_ReservedCount;
+		if (FirstInterface < lastB && s_ReservedFirst < lastA)
+			return false;
+	}
+	if ((EpInMask & s_ReservedIn) != 0U ||
+		(EpOutMask & s_ReservedOut) != 0U)
+		return false;
 
-    s_ClassObject = pClass;
-    s_ReservedFirst = FirstInterface;
-    s_ReservedCount = InterfaceCount;
-    s_ReservedIn = EpInMask;
-    s_ReservedOut = EpOutMask;
-    s_ClassRegistered = true;
-    return true;
+	s_ClassObject = pClass;
+	s_ReservedFirst = FirstInterface;
+	s_ReservedCount = InterfaceCount;
+	s_ReservedIn = EpInMask;
+	s_ReservedOut = EpOutMask;
+	s_ClassRegistered = true;
+	return true;
 }
 
 bool UsbDescRegister(int DevNo, UsbDeviceClass *pClass,
@@ -156,7 +154,7 @@ bool UsbDescRegister(int DevNo, UsbDeviceClass *pClass,
 
 static int s_Fail;
 #define CHECK(c) do { if (!(c)) { \
-    printf("FAIL %s:%d  %s\n", __FILE__, __LINE__, #c); s_Fail++; } } while (0)
+	printf("FAIL %s:%d  %s\n", __FILE__, __LINE__, #c); s_Fail++; } } while (0)
 
 alignas(4) static uint8_t s_RxMem[USBD_BULK_RXMEM_SIZE(RX_SLOTS)];
 alignas(4) static uint8_t s_TxByteMem[CFIFO_MEMSIZE(256)];
@@ -164,211 +162,211 @@ alignas(4) static uint8_t s_TxPacketMem[USBD_BULK_TXMEM_SIZE(TX_SLOTS)];
 
 static UsbdBulkCfg_t MakeCfg(UsbdBulkMode_t Mode)
 {
-    UsbdBulkCfg_t cfg = {};
-    cfg.bBlocking = true;
-    cfg.RxFifoMemSize = sizeof(s_RxMem);
-    cfg.pRxFifoMem = s_RxMem;
-    cfg.TxFifoMemSize = Mode == USBD_BULK_MODE_PACKET ?
-        sizeof(s_TxPacketMem) : sizeof(s_TxByteMem);
-    cfg.pTxFifoMem = Mode == USBD_BULK_MODE_PACKET ? s_TxPacketMem : s_TxByteMem;
-    cfg.DevNo = 0;
-    cfg.SubClass = 0x12U;
-    cfg.Protocol = 0x34U;
-    cfg.InterfaceString = 5U;
-    cfg.Mode = Mode;
-    return cfg;
+	UsbdBulkCfg_t cfg = {};
+	cfg.bBlocking = true;
+	cfg.RxFifoMemSize = sizeof(s_RxMem);
+	cfg.pRxFifoMem = s_RxMem;
+	cfg.TxFifoMemSize = Mode == USBD_BULK_MODE_PACKET ?
+		sizeof(s_TxPacketMem) : sizeof(s_TxByteMem);
+	cfg.pTxFifoMem = Mode == USBD_BULK_MODE_PACKET ? s_TxPacketMem : s_TxByteMem;
+	cfg.DevNo = 0;
+	cfg.SubClass = 0x12U;
+	cfg.Protocol = 0x34U;
+	cfg.InterfaceString = 5U;
+	cfg.Mode = Mode;
+	return cfg;
 }
 
 static void ResetFake(void)
 {
-    memset(&s_UsbCfg, 0, sizeof(s_UsbCfg));
-    memset(s_OpenDesc, 0, sizeof(s_OpenDesc));
-    memset(s_HwOut, 0, sizeof(s_HwOut));
-    s_ClassObject = nullptr;
-    s_ClassRegistered = false;
-    s_ReservedFirst = 0U;
-    s_ReservedCount = 0U;
-    s_ReservedIn = 0U;
-    s_ReservedOut = 0U;
+	memset(&s_UsbCfg, 0, sizeof(s_UsbCfg));
+	memset(s_OpenDesc, 0, sizeof(s_OpenDesc));
+	memset(s_HwOut, 0, sizeof(s_HwOut));
+	s_ClassObject = nullptr;
+	s_ClassRegistered = false;
+	s_ReservedFirst = 0U;
+	s_ReservedCount = 0U;
+	s_ReservedIn = 0U;
+	s_ReservedOut = 0U;
 	s_FsDescriptor = nullptr;
 	s_FsDescriptorLength = 0U;
-    s_OpenCount = 0;
-    s_CloseCount = 0;
-    s_OutBuffer = nullptr;
-    s_InBuffer = nullptr;
-    s_OutHandler = nullptr;
-    s_InHandler = nullptr;
-    s_OutContext = nullptr;
-    s_InContext = nullptr;
-    s_OutBlocking = true;
-    s_HwOutReady = false;
-    s_OutDma = false;
-    s_HwOutLength = 0U;
-    s_InBusy = false;
-    s_InLength = 0U;
-    s_OutSubmitCount = 0;
-    s_SendCount = 0;
-    s_UsbCfg.DevNo = 0;
+	s_OpenCount = 0;
+	s_CloseCount = 0;
+	s_OutBuffer = nullptr;
+	s_InBuffer = nullptr;
+	s_OutHandler = nullptr;
+	s_InHandler = nullptr;
+	s_OutContext = nullptr;
+	s_InContext = nullptr;
+	s_OutBlocking = true;
+	s_HwOutReady = false;
+	s_OutDma = false;
+	s_HwOutLength = 0U;
+	s_InBusy = false;
+	s_InLength = 0U;
+	s_OutSubmitCount = 0;
+	s_SendCount = 0;
+	s_UsbCfg.DevNo = 0;
 }
 
 static void DeliverOut(const uint8_t *pData, uint16_t Length)
 {
-    CHECK(!s_HwOutReady);
-    CHECK(s_OutHandler != nullptr);
-    CHECK(s_OutBlocking);
-    if (Length > 0U)
-        memcpy(s_HwOut, pData, Length);
-    s_HwOutLength = Length;
-    s_HwOutReady = true;
+	CHECK(!s_HwOutReady);
+	CHECK(s_OutHandler != nullptr);
+	CHECK(s_OutBlocking);
+	if (Length > 0U)
+		memcpy(s_HwOut, pData, Length);
+	s_HwOutLength = Length;
+	s_HwOutReady = true;
 
-    s_OutHandler(USB_CTRLR_EVT_DRDY,
-                 Length, s_OutContext);
+	s_OutHandler(USB_CTRLR_EVT_DRDY,
+				 Length, s_OutContext);
 	ReceiveDma();
-    CHECK(s_OutDma);
-    if (!s_OutDma)
-        return;
+	CHECK(s_OutDma);
+	if (!s_OutDma)
+		return;
 
-    if (Length > 0U)
-        memcpy(s_OutBuffer, s_HwOut, Length);
-    s_HwOutReady = false;
-    s_OutDma = false;
-    s_OutBuffer = nullptr;
-    s_OutHandler(USB_CTRLR_EVT_XFER_CMPL,
-                 s_HwOutLength, s_OutContext);
+	if (Length > 0U)
+		memcpy(s_OutBuffer, s_HwOut, Length);
+	s_HwOutReady = false;
+	s_OutDma = false;
+	s_OutBuffer = nullptr;
+	s_OutHandler(USB_CTRLR_EVT_XFER_CMPL,
+				 s_HwOutLength, s_OutContext);
 }
 
 static void CompleteIn(void)
 {
-    CHECK(s_InBusy);
-    if (!s_InBusy)
-        return;
-    const uint16_t length = s_InLength;
-    s_InBusy = false;
-    s_InHandler(USB_CTRLR_EVT_XFER_CMPL,
-                length, s_InContext);
+	CHECK(s_InBusy);
+	if (!s_InBusy)
+		return;
+	const uint16_t length = s_InLength;
+	s_InBusy = false;
+	s_InHandler(USB_CTRLR_EVT_XFER_CMPL,
+				length, s_InContext);
 }
 
 static void TestDescriptor(void)
 {
-    ResetFake();
-    UsbdBulk bulk;
-    UsbdBulkCfg_t cfg = MakeCfg(USBD_BULK_MODE_BYTE);
+	ResetFake();
+	UsbdBulk bulk;
+	UsbdBulkCfg_t cfg = MakeCfg(USBD_BULK_MODE_BYTE);
 
-    CHECK(bulk.Init(cfg));
-    UsbIntrf *pTransport = &bulk;
-    DeviceIntrf *pDevice = pTransport;
-    CHECK(pTransport->Data() == &static_cast<UsbdBulkDev_t *>(bulk)->pData->DevIntrf);
-    CHECK(static_cast<DevIntrf_t *>(*pDevice) == bulk.Data());
+	CHECK(bulk.Init(cfg));
+	UsbIntrf *pTransport = &bulk;
+	DeviceIntrf *pDevice = pTransport;
+	CHECK(pTransport->Data() == &static_cast<UsbdBulkDev_t *>(bulk)->pData->DevIntrf);
+	CHECK(static_cast<DevIntrf_t *>(*pDevice) == bulk.Data());
 	CHECK(s_FsDescriptorLength == sizeof(UsbdBulkDesc_t));
 	const UsbdBulkDesc_t &desc =
 		*reinterpret_cast<const UsbdBulkDesc_t *>(s_FsDescriptor);
-    CHECK(sizeof(desc) == sizeof(UsbIntrfDesc_t) + 2U * sizeof(UsbEndPointDesc_t));
-    CHECK(desc.Interface.bInterfaceNumber == ITF_NO);
-    CHECK(desc.Interface.bNumEndpoints == 2U);
-    CHECK(desc.Interface.bInterfaceClass == USB_INTRFCLASS_VENDOR);
-    CHECK(desc.Interface.bInterfaceSubClass == cfg.SubClass);
-    CHECK(desc.Interface.bInterfaceProtocol == cfg.Protocol);
-    CHECK(desc.Out.bEndpointAddress == USB_ENDPADDR_DIROUT(EP_NO));
-    CHECK(desc.In.bEndpointAddress == USB_ENDPADDR_DIRIN(EP_NO));
-    CHECK(desc.Out.bmAttributes == USB_ENDPATT_TRANS_BULK);
-    CHECK(desc.Out.wMaxPacketSize == USBD_BULK_FS_MPS);
+	CHECK(sizeof(desc) == sizeof(UsbIntrfDesc_t) + 2U * sizeof(UsbEndPointDesc_t));
+	CHECK(desc.Interface.bInterfaceNumber == ITF_NO);
+	CHECK(desc.Interface.bNumEndpoints == 2U);
+	CHECK(desc.Interface.bInterfaceClass == USB_INTRFCLASS_VENDOR);
+	CHECK(desc.Interface.bInterfaceSubClass == cfg.SubClass);
+	CHECK(desc.Interface.bInterfaceProtocol == cfg.Protocol);
+	CHECK(desc.Out.bEndpointAddress == USB_ENDPADDR_DIROUT(EP_NO));
+	CHECK(desc.In.bEndpointAddress == USB_ENDPADDR_DIRIN(EP_NO));
+	CHECK(desc.Out.bmAttributes == USB_ENDPATT_TRANS_BULK);
+	CHECK(desc.Out.wMaxPacketSize == USBD_BULK_FS_MPS);
 }
 
 static void TestAutoPlacement(void)
 {
-    ResetFake();
-    s_ReservedFirst = 0U;
-    s_ReservedCount = 1U;
-    s_ReservedIn = (uint16_t)(1U << 1);
-    s_ReservedOut = (uint16_t)(1U << 1);
+	ResetFake();
+	s_ReservedFirst = 0U;
+	s_ReservedCount = 1U;
+	s_ReservedIn = (uint16_t)(1U << 1);
+	s_ReservedOut = (uint16_t)(1U << 1);
 
-    UsbdBulk bulk;
-    const UsbdBulkCfg_t cfg = MakeCfg(USBD_BULK_MODE_BYTE);
-    CHECK(bulk.Init(cfg));
-    CHECK(s_ClassRegistered);
-    CHECK(s_ReservedFirst == 1U);
-    CHECK(s_ReservedIn == (1U << 2));
-    CHECK(s_ReservedOut == (1U << 2));
+	UsbdBulk bulk;
+	const UsbdBulkCfg_t cfg = MakeCfg(USBD_BULK_MODE_BYTE);
+	CHECK(bulk.Init(cfg));
+	CHECK(s_ClassRegistered);
+	CHECK(s_ReservedFirst == 1U);
+	CHECK(s_ReservedIn == (1U << 2));
+	CHECK(s_ReservedOut == (1U << 2));
 }
 
 static void TestByteMode(void)
 {
-    ResetFake();
-    UsbdBulk bulk;
-    const UsbdBulkCfg_t cfg = MakeCfg(USBD_BULK_MODE_BYTE);
+	ResetFake();
+	UsbdBulk bulk;
+	const UsbdBulkCfg_t cfg = MakeCfg(USBD_BULK_MODE_BYTE);
 
-    CHECK(bulk.Init(cfg));
-    CHECK(s_ClassRegistered);
-    CHECK(s_ClassObject == &bulk);
-    CHECK(s_OutBuffer == nullptr && s_InBuffer == nullptr);
-    CHECK(s_OutSubmitCount == 0);
+	CHECK(bulk.Init(cfg));
+	CHECK(s_ClassRegistered);
+	CHECK(s_ClassObject == &bulk);
+	CHECK(s_OutBuffer == nullptr && s_InBuffer == nullptr);
+	CHECK(s_OutSubmitCount == 0);
 
-    CHECK(bulk.SelectConfig(1U));
-    CHECK(s_OpenCount == 2);
-    CHECK(s_OpenDesc[0].bEndpointAddress == USB_ENDPADDR_DIRIN(EP_NO));
-    CHECK(s_OpenDesc[1].bEndpointAddress == USB_ENDPADDR_DIROUT(EP_NO));
-    CHECK(s_OpenDesc[0].wMaxPacketSize == USBD_BULK_FS_MPS);
-    CHECK(s_OutSubmitCount == 0);
+	CHECK(bulk.SelectConfig(1U));
+	CHECK(s_OpenCount == 2);
+	CHECK(s_OpenDesc[0].bEndpointAddress == USB_ENDPADDR_DIRIN(EP_NO));
+	CHECK(s_OpenDesc[1].bEndpointAddress == USB_ENDPADDR_DIROUT(EP_NO));
+	CHECK(s_OpenDesc[0].wMaxPacketSize == USBD_BULK_FS_MPS);
+	CHECK(s_OutSubmitCount == 0);
 
-    const uint8_t rx[] = { 1U, 2U, 3U, 4U };
-    DeliverOut(rx, sizeof(rx));
-    CHECK(s_OutSubmitCount == 1);
-    uint8_t received[sizeof(rx)] = {};
-    CHECK(static_cast<UsbIntrf *>(&bulk)->RxData(received, sizeof(received)) == (int)sizeof(received));
-    CHECK(memcmp(received, rx, sizeof(rx)) == 0);
+	const uint8_t rx[] = { 1U, 2U, 3U, 4U };
+	DeliverOut(rx, sizeof(rx));
+	CHECK(s_OutSubmitCount == 1);
+	uint8_t received[sizeof(rx)] = {};
+	CHECK(static_cast<UsbIntrf *>(&bulk)->RxData(received, sizeof(received)) == (int)sizeof(received));
+	CHECK(memcmp(received, rx, sizeof(rx)) == 0);
 
-    const uint8_t tx[] = { 5U, 6U, 7U };
-    CHECK(static_cast<UsbIntrf *>(&bulk)->TxData(tx, sizeof(tx)) == (int)sizeof(tx));
-    CHECK(s_InBusy && s_InLength == sizeof(tx));
-    CHECK(memcmp(s_InBuffer, tx, sizeof(tx)) == 0);
-    CompleteIn();
-    CHECK(!s_InBusy);
+	const uint8_t tx[] = { 5U, 6U, 7U };
+	CHECK(static_cast<UsbIntrf *>(&bulk)->TxData(tx, sizeof(tx)) == (int)sizeof(tx));
+	CHECK(s_InBusy && s_InLength == sizeof(tx));
+	CHECK(memcmp(s_InBuffer, tx, sizeof(tx)) == 0);
+	CompleteIn();
+	CHECK(!s_InBusy);
 
-    UsbSetupData_t setup = {};
-    setup.bmRequestType = USB_REQTYPE_VEND | USB_REQTYPE_INTERFACE;
-    setup.wIndex = ITF_NO;
-    uint16_t length = 0U;
-    CHECK(!bulk.Control(&setup, USB_CTRL_SETUP, nullptr, &length));
+	UsbSetupData_t setup = {};
+	setup.bmRequestType = USB_REQTYPE_VEND | USB_REQTYPE_INTERFACE;
+	setup.wIndex = ITF_NO;
+	uint16_t length = 0U;
+	CHECK(!bulk.Control(&setup, USB_CTRL_SETUP, nullptr, &length));
 
-    bulk.Reset();
-    CHECK(DeviceIntrfGetRate(bulk.Data()) == 0U);
+	bulk.Reset();
+	CHECK(DeviceIntrfGetRate(bulk.Data()) == 0U);
 
-    CHECK(bulk.SelectConfig(0U));
-    CHECK(DeviceIntrfGetRate(bulk.Data()) == 0U);
+	CHECK(bulk.SelectConfig(0U));
+	CHECK(DeviceIntrfGetRate(bulk.Data()) == 0U);
 }
 
 static void TestPacketMode(void)
 {
-    ResetFake();
-    UsbdBulk bulk;
-    const UsbdBulkCfg_t cfg = MakeCfg(USBD_BULK_MODE_PACKET);
-    CHECK(bulk.Init(cfg));
-    CHECK(bulk.SelectConfig(1U));
+	ResetFake();
+	UsbdBulk bulk;
+	const UsbdBulkCfg_t cfg = MakeCfg(USBD_BULK_MODE_PACKET);
+	CHECK(bulk.Init(cfg));
+	CHECK(bulk.SelectConfig(1U));
 
-    alignas(4) uint8_t block[USBD_BULK_PKT_BLKSIZE] = {};
-    UsbPkt_t *pPacket = reinterpret_cast<UsbPkt_t *>(block);
-    pPacket->Hdr.Length = 5U;
-    memcpy(pPacket->Data, "bulk!", 5U);
+	alignas(4) uint8_t block[USBD_BULK_PKT_BLKSIZE] = {};
+	UsbPkt_t *pPacket = reinterpret_cast<UsbPkt_t *>(block);
+	pPacket->Hdr.Length = 5U;
+	memcpy(pPacket->Data, "bulk!", 5U);
 
-    CHECK(static_cast<UsbIntrf *>(&bulk)->TxData(block, sizeof(block)) == (int)sizeof(block));
-    CHECK(s_InBusy && s_InLength == 5U);
-    CHECK(memcmp(s_InBuffer, "bulk!", 5U) == 0);
+	CHECK(static_cast<UsbIntrf *>(&bulk)->TxData(block, sizeof(block)) == (int)sizeof(block));
+	CHECK(s_InBusy && s_InLength == 5U);
+	CHECK(memcmp(s_InBuffer, "bulk!", 5U) == 0);
 }
 
 int main(void)
 {
-    TestDescriptor();
-    TestAutoPlacement();
-    TestByteMode();
-    TestPacketMode();
+	TestDescriptor();
+	TestAutoPlacement();
+	TestByteMode();
+	TestPacketMode();
 
-    if (s_Fail != 0)
-    {
-        printf("%d failed\n", s_Fail);
-        return 1;
-    }
-    printf("all pass\n");
-    return 0;
+	if (s_Fail != 0)
+	{
+		printf("%d failed\n", s_Fail);
+		return 1;
+	}
+	printf("all pass\n");
+	return 0;
 }
 
 // The process event of the USB core is not part of this test.

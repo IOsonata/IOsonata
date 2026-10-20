@@ -506,16 +506,6 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/syslog.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/sysstatus.c</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/sysstatus.c</locationURI>
-		</link>
-		<link>
-			<name>src/sysstatus_impl.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/sysstatus_impl.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/system_stm32wbaxx.c</name>
 			<type>1</type>
 			<locationURI>PARENT-3-PROJECT_LOC/src/system_stm32wbaxx.c</locationURI>
@@ -829,6 +819,11 @@
 			<name>include/crypto/crypto_softsha256.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/crypto_softsha256.h</locationURI>
+		</link>
+		<link>
+			<name>include/crypto/crypto_stm32wba.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/crypto_stm32wba.h</locationURI>
 		</link>
 		<link>
 			<name>include/crypto/crypto_uecc.h</name>
@@ -1666,14 +1661,14 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_smp_bond.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/bluetooth/bt_smp_bond_nvm.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_smp_bond_nvm.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/bluetooth/bt_smp_bond_stm32wba.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-3-PROJECT_LOC/src/bt_smp_bond_stm32wba.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/bt_smp_keydist_stm32wba.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/bt_smp_keydist_stm32wba.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/bluetooth/bt_uuid.cpp</name>
@@ -1704,6 +1699,26 @@
 			<name>src/coredev/i2c.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/i2c.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/i2c_stm32.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/i2c_stm32.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/gpdma_stm32wba.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/gpdma_stm32wba.cpp</locationURI>
+		</link>
+		<link>
+			<name>include/gpdma_stm32wba.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/include/gpdma_stm32wba.h</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/spi_stm32.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/spi_stm32.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/coredev/iopincfg_stm32.cpp</name>
@@ -1779,6 +1794,16 @@
 			<name>src/crypto/crypto_softsha256.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_softsha256.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/crypto_stm32wba.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/crypto_stm32wba.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/micro-ecc/uECC.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/micro-ecc/uECC.c</locationURI>
 		</link>
 		<link>
 			<name>src/crypto/crypto_uecc.cpp</name>
@@ -2670,5 +2695,169 @@
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/display/fonts/FreeSerif/FreeSerifIta8pt.c</locationURI>
 		</link>
+		<link>
+			<name>src/stm32wba_ble</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/bt_wba_pka.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/bt_wba_pka.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/bt_wba_platform.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/bt_wba_platform.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/storage/nvm_stm32.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/nvm_stm32.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/stm32wba_ble/bleplat_wrap.c</name>
+			<type>1</type>
+			<locationURI>PARENT-2-PROJECT_LOC/src/bleplat_wrap.c</locationURI>
+		</link>
+		<link>
+			<name>src/stm32wba_ble/linklayer_plat.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/STM32CubeWBA/Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_p2pServer/STM32_WPAN/Target/linklayer_plat.c</locationURI>
+		</link>
+		<link>
+			<name>src/stm32wba_ble/ll_sys_if.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/STM32CubeWBA/Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_p2pServer/STM32_WPAN/Target/ll_sys_if.c</locationURI>
+		</link>
+		<link>
+			<name>src/stm32wba_ble/power_table.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/STM32CubeWBA/Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_p2pServer/STM32_WPAN/Target/power_table.c</locationURI>
+		</link>
+		<link>
+			<name>src/stm32wba_ble/ll_sys_startup.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/stm32-mw-wpan/link_layer/ll_sys/src/ll_sys_startup.c</locationURI>
+		</link>
+		<link>
+			<name>src/stm32wba_ble/ll_sys_intf.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/stm32-mw-wpan/link_layer/ll_sys/src/ll_sys_intf.c</locationURI>
+		</link>
+		<link>
+			<name>src/stm32wba_ble/ll_sys_cs.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/stm32-mw-wpan/link_layer/ll_sys/src/ll_sys_cs.c</locationURI>
+		</link>
+		<link>
+			<name>src/stm32wba_ble/ll_sys_dp_slp.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/stm32-mw-wpan/link_layer/ll_sys/src/ll_sys_dp_slp.c</locationURI>
+		</link>
+		<link>
+			<name>include/app_common.h</name>
+			<type>1</type>
+			<locationURI>PARENT-2-PROJECT_LOC/include/app_common.h</locationURI>
+		</link>
+		<link>
+			<name>include/app_conf.h</name>
+			<type>1</type>
+			<locationURI>PARENT-2-PROJECT_LOC/include/app_conf.h</locationURI>
+		</link>
+		<link>
+			<name>include/common_wpan_conf.h</name>
+			<type>1</type>
+			<locationURI>PARENT-2-PROJECT_LOC/include/common_wpan_conf.h</locationURI>
+		</link>
+		<link>
+			<name>include/main.h</name>
+			<type>1</type>
+			<locationURI>PARENT-2-PROJECT_LOC/include/main.h</locationURI>
+		</link>
+		<link>
+			<name>include/stm32_rtos.h</name>
+			<type>1</type>
+			<locationURI>PARENT-2-PROJECT_LOC/include/stm32_rtos.h</locationURI>
+		</link>
+		<link>
+			<name>include/utilities_conf.h</name>
+			<type>1</type>
+			<locationURI>PARENT-2-PROJECT_LOC/include/utilities_conf.h</locationURI>
+		</link>
+		<link>
+			<name>src/usb_otg_stm32.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/usb_otg_stm32.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/usb_otg_target_stm32.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/usb_otg_target_stm32.cpp</locationURI>
+		</link>
+		<link>
+			<name>include/usb_ctrlr.h</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/include/usb_ctrlr.h</locationURI>
+		</link>
+		<link>
+			<name>src/display/display_ssd1315.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/display/display_ssd1315.cpp</locationURI>
+		</link>
+		<link>
+			<name>include/adc_stm32wba.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/include/adc_stm32wba.h</locationURI>
+		</link>
+		<link>
+			<name>src/adc_stm32wba.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/adc_stm32wba.cpp</locationURI>
+		</link>
+		<link>
+			<name>include/audio/pdm_filter.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/audio/pdm_filter.h</locationURI>
+		</link>
+		<link>
+			<name>src/audio/pdm_filter.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/audio/pdm_filter.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/pdm_stm32wba.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/pdm_stm32wba.cpp</locationURI>
+		</link>
+		<link>
+			<name>include/sai_stm32wba.h</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/include/sai_stm32wba.h</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/sai_stm32wba.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/sai_stm32wba.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/i2s_stm32wba.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-3-PROJECT_LOC/src/i2s_stm32wba.cpp</locationURI>
+		</link>
+		<link>
+			<name>include/audio/wm8904.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/audio/wm8904.h</locationURI>
+		</link>
+		<link>
+			<name>src/audio/wm8904.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/audio/wm8904.cpp</locationURI>
+		</link>
 	</linkedResources>
 </projectDescription>
+
+
+
+

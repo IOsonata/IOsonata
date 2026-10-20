@@ -521,11 +521,6 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>src/sysstatus.c</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/sysstatus.c</locationURI>
-		</link>
-		<link>
 			<name>src/system_stm32l4xx.c</name>
 			<type>1</type>
 			<locationURI>PARENT-3-PROJECT_LOC/src/system_stm32l4xx.c</locationURI>
@@ -584,11 +579,6 @@
 			<name>include/coredev/spi.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/spi.h</locationURI>
-		</link>
-		<link>
-			<name>include/coredev/spi_stm32l4xx.h</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/include/spi_stm32l4xx.h</locationURI>
 		</link>
 		<link>
 			<name>include/coredev/system_core_clock.h</name>
@@ -891,14 +881,14 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/i2c.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/coredev/i2c_stm32l4xx.cpp</name>
+			<name>src/coredev/i2c_stm32.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/src/i2c_stm32l4xx.cpp</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/src/i2c_stm32.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/coredev/quadspi_stm32l4xx.cpp</name>
+			<name>src/coredev/quadspi_stm32.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/src/quadspi_stm32l4xx.cpp</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/src/quadspi_stm32.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/coredev/spi.cpp</name>
@@ -906,9 +896,9 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/spi.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/coredev/spi_stm32l4xx.cpp</name>
+			<name>src/coredev/spi_stm32.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/src/spi_stm32l4xx.cpp</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/src/spi_stm32.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/coredev/timer.cpp</name>
@@ -939,6 +929,11 @@
 			<name>src/coredev/uart_stm32.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/ARM/ST/src/uart_stm32.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/dma_stm32.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/ARM/ST/src/dma_stm32.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/display/display.cpp</name>
@@ -1189,6 +1184,26 @@
 			<name>src/storage/flash.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/storage/flash.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/syslog.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/syslog.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/storage/nvm.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/storage/nvm.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/storage/nvm_region.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/storage/nvm_region.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/storage/diskio_nvm.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/storage/diskio_nvm.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/storage/sdcard_impl.cpp</name>
@@ -1530,6 +1545,151 @@
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/src/iopincfg_stm32.cpp</locationURI>
 		</link>
+		<link>
+			<name>src/usb_otg_stm32.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/usb_otg_stm32.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/usb_otg_target_stm32.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/usb_otg_target_stm32.cpp</locationURI>
+		</link>
+		<link>
+			<name>include/usb_ctrlr.h</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/include/usb_ctrlr.h</locationURI>
+		</link>
+		<link>
+			<name>src/usb</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>include/usb/usb.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usb.h</locationURI>
+		</link>
+		<link>
+			<name>include/usb/usb_ctrlr.h</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/include/usb_ctrlr.h</locationURI>
+		</link>
+		<link>
+			<name>include/usb/usb_int.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usb_int.h</locationURI>
+		</link>
+		<link>
+			<name>include/usb/usb_intrf.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usb_intrf.h</locationURI>
+		</link>
+		<link>
+			<name>include/usb/usb_iso.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usb_iso.h</locationURI>
+		</link>
+		<link>
+			<name>include/usb/usbd_bulk.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usbd_bulk.h</locationURI>
+		</link>
+		<link>
+			<name>include/usb/usbd_cdc.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usbd_cdc.h</locationURI>
+		</link>
+		<link>
+			<name>include/usb/usbd_epalloc.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usbd_epalloc.h</locationURI>
+		</link>
+		<link>
+			<name>include/usb/usbd_hid.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usbd_hid.h</locationURI>
+		</link>
+		<link>
+			<name>include/usb/usbd_msc.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/usb/usbd_msc.h</locationURI>
+		</link>
+		<link>
+			<name>src/usb/usb.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usb.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/usb/usb_int.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usb_int.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/usb/usb_intrf.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usb_intrf.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/usb/usb_iso.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usb_iso.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/usb/usbd_bulk.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usbd_bulk.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/usb/usbd_cdc.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usbd_cdc.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/usb/usbd_cdc_desc.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usbd_cdc_desc.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/usb/usbd_epalloc.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usbd_epalloc.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/usb/usbd_hid.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usbd_hid.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/usb/usbd_msc.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/usb/usbd_msc.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/Xiot</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/Xiot/FusionAhrs.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/Fusion/Fusion/FusionAhrs.c</locationURI>
+		</link>
+		<link>
+			<name>src/Xiot/FusionBias.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/Fusion/Fusion/FusionBias.c</locationURI>
+		</link>
+		<link>
+			<name>src/Xiot/FusionCompass.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/Fusion/Fusion/FusionCompass.c</locationURI>
+		</link>
+		<link>
+			<name>src/motion/att_xiot_fusion.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/motion/att_xiot_fusion.cpp</locationURI>
+		</link>
 	</linkedResources>
 	<variableList>
 		<variable>
@@ -1538,3 +1698,4 @@
 		</variable>
 	</variableList>
 </projectDescription>
+

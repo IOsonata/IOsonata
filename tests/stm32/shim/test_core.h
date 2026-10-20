@@ -22,6 +22,9 @@ static inline void __DMB(void) { __asm__ volatile("" ::: "memory"); }
 static inline void __DSB(void) { __asm__ volatile("" ::: "memory"); }
 static inline void __ISB(void) { __asm__ volatile("" ::: "memory"); }
 static inline void __NOP(void) {}
+static inline uint32_t __get_PRIMASK(void) { return 0; }
+static inline void __set_PRIMASK(uint32_t v) { (void)v; }
+static inline void __disable_irq(void) {}
 
 #ifdef __cplusplus
 extern "C" {
@@ -38,4 +41,4 @@ void TestNvic(int Op, int IrqNo, uint32_t Prio);
 #define NVIC_SetPriority(n, p)		TestNvic(3, (int)(n), (uint32_t)(p))
 #define NVIC_SetPendingIRQ(n)		TestNvic(4, (int)(n), 0)
 
-#endif // __TEST_CORE_H__
+#endif

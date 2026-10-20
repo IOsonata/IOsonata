@@ -78,4 +78,4 @@ bool UsbdEpAlloc(int DevNo, const UsbdEpAllocReq_t *pReq,
 				 UsbDeviceClass *pClass, UsbdEpAllocRes_t *pRes);
 #endif
 
-#endif	// __USBD_EPALLOC_H__
+#endif

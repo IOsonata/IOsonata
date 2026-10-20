@@ -8,7 +8,7 @@ zero, Events use a dedicated interrupt IN endpoint, ACL data uses the inherited
 UsbIntrf bulk endpoint pair, and optional SCO data uses the synchronous
 interface through UsbIsoIntrf. Interface and endpoint numbers are allocated
 internally. Optional Bulk Serialization mode adds HCI interface alternate
-setting 1 and carries every HCI packet over the bulk endpoint pair with the
+setting 1 and sends every HCI packet over the bulk endpoint pair with the
 standard one-byte packet indicator.
 
 One successful DeviceIntrf transfer is one complete HCI packet. DevAddr is the
@@ -281,5 +281,5 @@ private:
 
 /** @} End of group Bluetooth */
 
-#endif	// __BT_HCI_USB_H__
+#endif
 

@@ -47,11 +47,7 @@ SOFTWARE.
 #include "stm32wbaxx.h"
 #include "stm32wbaxx_hal.h"
 
-#include "ble_types.h"
-#include "ble_std.h"
-#include "ble.h"
-#include "ble_gap_aci.h"
-#include "ble_hci_le.h"
+#include "bt_wba_stack.h"
 
 #include "istddef.h"
 #include "bluetooth/bt_app.h"
@@ -325,7 +321,7 @@ static void BtGapWbaConnParamRetry(BtGapWbaConnParamLink_t *pLink)
 		return;
 	}
 
-	pLink->DueTime = HAL_GetTick() + BT_GAP_WBA_CONN_PARAMS_NEXT_DELAY_MS;
+	pLink->DueTime = BtGattMsTick() + BT_GAP_WBA_CONN_PARAMS_NEXT_DELAY_MS;
 }
 
 static void BtGapWbaConnParamIssue(BtGapWbaConnParamLink_t *pLink)
@@ -369,7 +365,7 @@ static void BtGapWbaConnParamIssue(BtGapWbaConnParamLink_t *pLink)
 	{
 		pLink->bAwaitingComplete = true;
 		// Also bounds a lost L2CAP response or HCI completion event.
-		pLink->DueTime = HAL_GetTick() + BT_GAP_WBA_CONN_PARAMS_NEXT_DELAY_MS;
+		pLink->DueTime = BtGattMsTick() + BT_GAP_WBA_CONN_PARAMS_NEXT_DELAY_MS;
 	}
 	else
 	{
@@ -386,7 +382,7 @@ void BtGapWbaConnParamProcess(void)
 		return;
 	}
 
-	uint32_t now = HAL_GetTick();
+	uint32_t now = BtGattMsTick();
 	for (size_t i = 0; i < CFG_BLE_NUM_LINK; i++)
 	{
 		BtGapWbaConnParamLink_t *pLink = &s_ConnParamLink[i];
@@ -435,7 +431,7 @@ void BtGapWbaConnParamsConnected(uint16_t ConnHdl, uint8_t Role,
 	BtGapWbaConnParamClear(pLink);
 	pLink->ConnHdl = ConnHdl;
 	pLink->Role = Role;
-	pLink->DueTime = HAL_GetTick() + BT_GAP_WBA_CONN_PARAMS_FIRST_DELAY_MS;
+	pLink->DueTime = BtGattMsTick() + BT_GAP_WBA_CONN_PARAMS_FIRST_DELAY_MS;
 }
 
 void BtGapWbaConnParamsDisconnected(uint16_t ConnHdl)
@@ -558,8 +554,7 @@ void BtGapSetAppearance(uint16_t Val)
 	if (BtGapWbaNativeCharUpdate(s_GapWba.AppearanceCharHdl,
 			value, sizeof(value)))
 	{
-		g_BtAppData.AppDevice.Appearance = Val;
-	}
+		}
 }
 
 void BtGapSetPreferedConnParam(BtGattPreferedConnParams_t *pVal)
@@ -645,13 +640,17 @@ bool BtGapScanStart(uint8_t * const pBuff, uint16_t Len)
 	(void)pBuff;	// ST stack reports results via HCI events, not a buffer
 	(void)Len;
 
-	uint8_t ret = aci_gap_start_observation_procedure(
-		s_GapWba.ScanInterval,
-		s_GapWba.ScanWindow,
-		s_GapWba.ScanType,
+	Scan_Param_Phy_t scanparam[2] = {};
+
+	scanparam[0].Scan_Type = s_GapWba.ScanType;
+	scanparam[0].Scan_Interval = s_GapWba.ScanInterval;
+	scanparam[0].Scan_Window = s_GapWba.ScanWindow;
+
+	uint8_t ret = aci_gap_start_scan(0, GAP_OBSERVATION_PROC,
 		0,							// own address type = public
-		s_GapWba.ScanFilterDup,
-		0);							// scanning filter policy = accept all
+		s_GapWba.ScanFilterDup, 0, 0,
+		0,							// scanning filter policy = accept all
+		HCI_SCANNING_PHYS_LE_1M, scanparam);
 
 	return ret == BLE_STATUS_SUCCESS;
 }
@@ -668,7 +667,7 @@ bool BtGapScanNext(uint8_t * const pBuff, uint16_t Len)
 
 void BtGapScanStop(void)
 {
-	(void)aci_gap_terminate_gap_procedure(GAP_OBSERVATION_PROC);
+	(void)aci_gap_terminate_gap_proc(GAP_OBSERVATION_PROC);
 }
 
 // Strong override of the weak generic BtGapConnSecGet. The ST host owns link

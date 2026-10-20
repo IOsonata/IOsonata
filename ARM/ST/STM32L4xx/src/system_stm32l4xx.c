@@ -377,6 +377,12 @@ void SystemInit(void)
 #else
 		RCC->BDCR |= RCC_BDCR_RTCSEL_0;	// RTC source LSE
 #endif
+		// The MSI feeds the PLL: lock it to the LSE (MSI PLL mode), the core
+		// clock then has the LSE crystal accuracy
+		if (g_McuOsc.CoreOsc.Type == OSC_TYPE_RC)
+		{
+			RCC->CR |= RCC_CR_MSIPLLEN;
+		}
 		RCC->APB1ENR1 &= ~RCC_APB1ENR1_PWREN;
 	}
 

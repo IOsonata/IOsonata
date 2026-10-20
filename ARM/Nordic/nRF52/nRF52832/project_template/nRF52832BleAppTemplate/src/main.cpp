@@ -13,7 +13,7 @@ specific data.  The counter increments every second.
 
 MIT License
 
-Copyright (c) 2024, I-SYST inc., all rights reserved
+Copyright (c) 2017, I-SYST inc., all rights reserved
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -42,36 +42,81 @@ SOFTWARE.
 
 #include "app_evt_handler.h"
 #include "bluetooth/bt_app.h"
+#include "bluetooth/bt_hci_ctlr.h"
 //#ifndef NRFXLIB_SDC
 //#include "ble_app_nrf5.h"
 //#endif
 #include "bluetooth/bt_appearance.h"
 #include "iopinctrl.h"
 #include "coredev/system_core_clock.h"
-
+#include "coredev/uart.h"
+#include "syslog.h"
 #include "board.h"
 
 // Uncomment this to set custom board oscillator
 // Default library setting is :
-// #define MCUOSC	{{OSC_TYPE_XTAL, 32000000, 20}, {OSC_TYPE_XTAL, 32768, 20}, false}
+// #define MCU_OSC	{{OSC_TYPE_XTAL, 32000000, 20}, {OSC_TYPE_XTAL, 32768, 20}, false}
 
-#ifdef MCUOSC
-McuOsc_t g_McuOsc = MCUOSC;
+#ifdef MCU_OSC
+McuOsc_t g_McuOsc = MCU_OSC;
 #endif
 
+static const IOPinCfg_t s_Leds[] = LED_PINS_MAP;
+static const int s_NbLeds = sizeof(s_Leds) / sizeof(IOPinCfg_t);
+
+#define UARTFIFOSIZE			CFIFO_MEMSIZE(256)
+
+alignas(4) static uint8_t s_UartRxFifo[UARTFIFOSIZE];
+alignas(4) static uint8_t s_UartTxFifo[UARTFIFOSIZE];
+
+#ifdef UART_PINS
+static const IOPinCfg_t s_UartPins[] = UART_PINS;
+
+// UART configuration data
+static const UARTCfg_t s_UartCfg = {
+	.DevNo = UART_DEVNO,
+	.pIOPinMap = s_UartPins,
+	.NbIOPins = sizeof(s_UartPins) / sizeof(IOPinCfg_t),
+	.Rate = 1000000,
+	.DataBits = 8,
+	.Parity = UART_PARITY_NONE,
+	.StopBits = 1,
+	.FlowControl = UART_FLWCTRL_NONE,
+	.bIntMode = true,
+	.IntPrio = 6,
+	.EvtCallback = nullptr,
+	.bFifoBlocking = true,
+	.RxMemSize = 0,//UARTFIFOSIZE,
+	.pRxMem = NULL,//s_UartRxFifo,
+	.TxMemSize = 0,//UARTFIFOSIZE,//FIFOSIZE,
+	.pTxMem = NULL,//s_UartTxFifo,//g_TxBuff,
+	.bDMAMode = true,
+};
+
+UART g_Uart;
+#endif
 //#define EXTADV		// Uncomment to enable extended advertisement
 
 #ifdef EXTADV
-#define DEVICE_NAME                     "Advertising extra long long name"
+#define DEVICE_NAME                     "Advertising extra long name"
 #else
 #define DEVICE_NAME                     "Advertising"
 #endif
 
 #define APP_ADV_INTERVAL_MSEC       50
-#define APP_ADV_TIMEOUT_MSEC      	0
+#define APP_ADV_TIMEOUT_MSEC      	1000
 
 uint32_t g_AdvCnt = 0;
 uint8_t g_AdvLong[] = "1234567890abcdefghijklmnopqrstuvwxyz`!@#$%^&*()_+";
+
+// Controller memory pool. A broadcaster has no link, so it needs far less
+// than the library default, which is sized for several links. Used by the
+// ports that run the controller in the application (SDC), not linked
+// otherwise. BtHciCtlrMemPoolSizeNeeded gives the size the configuration
+// asked for.
+alignas(8) static uint8_t s_BtCtlrMemPool[2400];
+
+const BtHciCtlrMemPool_t g_BtHciCtlrMemPool = { s_BtCtlrMemPool, sizeof(s_BtCtlrMemPool) };
 
 const BtAppCfg_t s_BtAppCfg = {
 	.Role = BTAPP_ROLE_BROADCASTER,
@@ -81,11 +126,11 @@ const BtAppCfg_t s_BtAppCfg = {
 	.VendorId = ISYST_BLUETOOTH_ID,			// PnP Bluetooth/USB vendor id
 	.Appearance = BT_APPEAR_COMPUTER_WEARABLE,
 #ifdef EXTADV
-	.bExtAdv = true,						// Enable extended advertising
+//	.bExtAdv = true,						// Enable extended advertising
 	.pAdvManData  = (uint8_t*)&g_AdvLong,   // Manufacture specific data to advertise
 	.AdvManDataLen = sizeof(g_AdvLong),     // Length of manufacture specific data
 #else
-	.bExtAdv = false,						// Legacy advertising
+//	.bExtAdv = false,						// Legacy advertising
 	.pAdvManData  = (uint8_t*)&g_AdvCnt,   	// Manufacture specific data to advertise
 	.AdvManDataLen = sizeof(g_AdvCnt),      // Length of manufacture specific data
 #endif
@@ -103,11 +148,34 @@ static const TimerCfg_t s_TimerCfg = {
 	.IntPrio = 6,
 };
 
-#if 1
+// NOTE 1: Build DFU zip file
+// SoftDevice v7.2.0
+// 		nrfutil pkg generate --hw-version 52 --sd-req 0x0101 --application-version 0x0 --application ./BleAdvertiser.hex --key-file ../../../../../../src/iosonata_dfukey.pem BleAdvertiser_package.zip
+//
+// SoftDevice v7.3.0
+// 		nrfutil pkg generate --hw-version 52 --sd-req 0x0124 --application-version 0x0 --application ./BleAdvertiser.hex --key-file ../../../../../../src/iosonata_dfukey.pem BleAdvertiser_package.zip
+
+#ifdef UART_PINS
+// SysLog store. With the UART attached at init, each record goes out as it
+// is logged. 16 records of 128 bytes, non blocking, so a burst the UART
+// cannot keep up with drops the oldest lines rather than the newest.
+alignas(4) static uint8_t s_SysLogMem[SYSLOG_MEMSIZE(16, 128)];
+
+static const SysLogCfg_t s_SysLogCfg = {
+	.pMem      = s_SysLogMem,
+	.MemSize   = sizeof(s_SysLogMem),
+	.RecordLen = 128,
+	.bBlocking = false
+};
+#endif
+
+#if 0
 Timer g_Timer;
 
 void TimerTrigEvtHandler(TimerDev_t * const pTimer, int TrigNo, void * const pContext)
 {
+	IOPinToggle(s_Leds[3].PortNo, s_Leds[3].PinNo);
+
 	g_AdvCnt++;
 
 	BtAppAdvManDataSet((uint8_t*)&g_AdvCnt, sizeof(g_AdvCnt), NULL, 0);
@@ -115,26 +183,52 @@ void TimerTrigEvtHandler(TimerDev_t * const pTimer, int TrigNo, void * const pCo
 
 void BtAppInitUserData()
 {
+	IOPinSet(s_Leds[2].PortNo, s_Leds[2].PinNo);
 	g_Timer.Init(s_TimerCfg);
 
 	g_Timer.EnableTimerTrigger(0, 1000UL, TIMER_TRIG_TYPE_CONTINUOUS, TimerTrigEvtHandler);
 }
 
 #else
-void BleAppAdvTimeoutHandler()
+void BtAppAdvTimeoutHandler()
 {
 	g_AdvCnt++;
 
-	BleAppAdvManDataSet((uint8_t*)&g_AdvCnt, sizeof(g_AdvCnt), NULL, 0);
-	BleAppAdvStart();
+	BtAppAdvManDataSet((uint8_t*)&g_AdvCnt, sizeof(g_AdvCnt), NULL, 0);
+	BtAdvStart();
 }
 #endif
 
 int main()
 {
-    BtAppInit(&s_BtAppCfg);
+	// Configure Leds
+	IOPinCfg(s_Leds, s_NbLeds);
 
-    AppRun();
+	IOPinToggle(0,4);
+
+#ifdef UART_PINS
+	bool res = g_Uart.Init(s_UartCfg);
+
+	g_Uart.printf("BleAdvertiser\n\r");
+
+	// Enable SysLog output through the UART so library DEBUG_PRINTF appears.
+	SysLogInit(SysLogGet(), &s_SysLogCfg, (DevIntrf_t *)g_Uart, 0,
+			   nullptr, 0);
+#endif
+
+	// Clear all leds
+	for (int i = 0; i < s_NbLeds; i++)
+	{
+		IOPinClear(s_Leds[i].PortNo, s_Leds[i].PinNo);
+	}
+
+	IOPinSet(s_Leds[0].PortNo, s_Leds[0].PinNo);
+
+	BtAppInit(&s_BtAppCfg);
+
+	IOPinSet(s_Leds[1].PortNo, s_Leds[1].PinNo);
+
+	AppRun();
 
 	return 0;
 }

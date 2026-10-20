@@ -45,12 +45,8 @@ void __WEAK GPIOTE_IRQHandler(void);
 
 #if defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
 #define IOPIN_MAX_INT			(GPIOTE20_GPIOTE_NCHANNELS_SIZE + GPIOTE30_GPIOTE_NCHANNELS_SIZE)
-#define GPIO_PIN_CNF_DRIVE_Pos (8UL)              //!< Position of DRIVE0 field.
-#define GPIO_PIN_CNF_DRIVE_Msk (0xFUL << GPIO_PIN_CNF_DRIVE0_Pos) //!< Bit mask of DRIVE0 field.
 #elif defined(NRF54H20_XXAA)
 #define IOPIN_MAX_INT			(GPIOTE130_GPIOTE_NCHANNELS_SIZE)
-#define GPIO_PIN_CNF_DRIVE_Pos (8UL)              //!< Position of DRIVE0 field.
-#define GPIO_PIN_CNF_DRIVE_Msk (0xFUL << GPIO_PIN_CNF_DRIVE0_Pos) //!< Bit mask of DRIVE0 field.
 #else
 #ifndef GPIOTE_CH_NUM
 #define GPIOTE_CH_NUM	8
@@ -292,8 +288,8 @@ void IOPinDisableInterrupt(int IntNo)
     if (IntNo >= IOPIN_MAX_INT)
         return;
 
-    // A negative IntNo is the port event, the last entry
-    NRF_GPIOTE_Type *gpiotereg = nRFGpioteGetReg(s_GpIOSenseEvt[IntNo < 0 ? IOPIN_MAX_INT : IntNo].PortPinNo >> 8);
+	// A negative IntNo is the port event, the last entry
+	NRF_GPIOTE_Type *gpiotereg = nRFGpioteGetReg(s_GpIOSenseEvt[IntNo < 0 ? IOPIN_MAX_INT : IntNo].PortPinNo >> 8);
 
     if (IntNo < 0)
     {
@@ -769,6 +765,27 @@ void IOPinSetStrength(int PortNo, int PinNo, IOPINSTRENGTH Strength)
 		return;
 	}
 
+#if defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
+	// DRIVE0 and DRIVE1 are separate 2 bit fields. A side set to disconnect
+	// (open drain) is kept, the other sides go to standard or high drive.
+	uint32_t cnf = reg->PIN_CNF[PinNo];
+	uint32_t d0 = (cnf & GPIO_PIN_CNF_DRIVE0_Msk) >> GPIO_PIN_CNF_DRIVE0_Pos;
+	uint32_t d1 = (cnf & GPIO_PIN_CNF_DRIVE1_Msk) >> GPIO_PIN_CNF_DRIVE1_Pos;
+	bool bStrong = (Strength == IOPINSTRENGTH_STRONG);
+
+	if (d0 != GPIO_PIN_CNF_DRIVE0_D0)
+	{
+		d0 = bStrong ? GPIO_PIN_CNF_DRIVE0_H0 : GPIO_PIN_CNF_DRIVE0_S0;
+	}
+	if (d1 != GPIO_PIN_CNF_DRIVE1_D1)
+	{
+		d1 = bStrong ? GPIO_PIN_CNF_DRIVE1_H1 : GPIO_PIN_CNF_DRIVE1_S1;
+	}
+
+	cnf &= ~(GPIO_PIN_CNF_DRIVE0_Msk | GPIO_PIN_CNF_DRIVE1_Msk);
+	cnf |= (d0 << GPIO_PIN_CNF_DRIVE0_Pos) | (d1 << GPIO_PIN_CNF_DRIVE1_Pos);
+	reg->PIN_CNF[PinNo] = cnf;
+#else
 	uint32_t val = ((reg->PIN_CNF[PinNo] & GPIO_PIN_CNF_DRIVE_Msk) >> GPIO_PIN_CNF_DRIVE_Pos) & 6;
 	reg->PIN_CNF[PinNo] &= ~GPIO_PIN_CNF_DRIVE_Msk;
 	if (Strength == IOPINSTRENGTH_STRONG)
@@ -778,6 +795,7 @@ void IOPinSetStrength(int PortNo, int PinNo, IOPINSTRENGTH Strength)
 	}
 
 	reg->PIN_CNF[PinNo] |= (val << GPIO_PIN_CNF_DRIVE_Pos);
+#endif
 }
 
 //#if defined(NRF91_SERIES) || defined(NRF53_SERIES) || defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA)
@@ -801,8 +819,8 @@ void __WEAK GPIOTE_IRQHandler(void)
 	}
 	if (NRF_GPIOTE_NS->EVENTS_PORT)
 	{
-        if (s_pGpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB)
-            s_pGpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB(-1, s_pGpIOSenseEvt[IOPIN_MAX_INT].pCtx);
+		if (s_pGpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB)
+			s_pGpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB(-1, s_pGpIOSenseEvt[IOPIN_MAX_INT].pCtx);
 	    NRF_GPIOTE_NS->EVENTS_PORT = 0;
 	    //NRF_GPIO->LATCH = 0xFFFFFFFF;	// Clear detect latch
 	}
@@ -829,8 +847,8 @@ void __WEAK GPIOTE0_IRQHandler(void)
 	}
 	if (NRF_GPIOTE0_S->EVENTS_PORT)
 	{
-        if (s_pGpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB)
-            s_pGpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB(-1, s_pGpIOSenseEvt[IOPIN_MAX_INT].pCtx);
+		if (s_pGpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB)
+			s_pGpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB(-1, s_pGpIOSenseEvt[IOPIN_MAX_INT].pCtx);
 	    NRF_GPIOTE0_S->EVENTS_PORT = 0;
 	    //NRF_GPIO->LATCH = 0xFFFFFFFF;	// Clear detect latch
 	}
@@ -857,8 +875,8 @@ void __WEAK GPIOTE1_IRQHandler(void)
 	}
 	if (NRF_GPIOTE1_NS->EVENTS_PORT)
 	{
-        if (s_pGpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB)
-            s_pGpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB(-1, s_pGpIOSenseEvt[IOPIN_MAX_INT].pCtx);
+		if (s_pGpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB)
+			s_pGpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB(-1, s_pGpIOSenseEvt[IOPIN_MAX_INT].pCtx);
 	    NRF_GPIOTE1_NS->EVENTS_PORT = 0;
 	    //NRF_GPIO->LATCH = 0xFFFFFFFF;	// Clear detect latch
 	}
@@ -888,8 +906,8 @@ void __WEAK GPIOTE20_0_IRQHandler(void)
 
 	if (NRF_GPIOTE20_NS->EVENTS_PORT[0].NONSECURE)
 	{
-        if (s_pGpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB)
-            s_pGpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB(-1, s_pGpIOSenseEvt[IOPIN_MAX_INT].pCtx);
+		if (s_pGpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB)
+			s_pGpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB(-1, s_pGpIOSenseEvt[IOPIN_MAX_INT].pCtx);
 
         NRF_GPIOTE20_NS->EVENTS_PORT[0].NONSECURE = 0;
 		NRF_P1_NS->LATCH = 0xFFFFFFFF;
@@ -920,8 +938,8 @@ void __WEAK GPIOTE20_1_IRQHandler(void)
 
 	if (NRF_GPIOTE20_S->EVENTS_PORT[0].SECURE)
 	{
-        if (s_pGpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB)
-            s_pGpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB(-1, s_pGpIOSenseEvt[IOPIN_MAX_INT].pCtx);
+		if (s_pGpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB)
+			s_pGpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB(-1, s_pGpIOSenseEvt[IOPIN_MAX_INT].pCtx);
 
         NRF_GPIOTE20_S->EVENTS_PORT[0].SECURE = 0;
 		NRF_P1_S->LATCH = 0xFFFFFFFF;
@@ -949,8 +967,8 @@ void __WEAK GPIOTE30_0_IRQHandler(void)
 
 	if (NRF_GPIOTE30_NS->EVENTS_PORT[0].NONSECURE)
 	{
-        if (s_pGpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB)
-            s_pGpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB(-1, s_pGpIOSenseEvt[IOPIN_MAX_INT].pCtx);
+		if (s_pGpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB)
+			s_pGpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB(-1, s_pGpIOSenseEvt[IOPIN_MAX_INT].pCtx);
 
         NRF_GPIOTE30_NS->EVENTS_PORT[0].NONSECURE = 0;
 		NRF_P0_NS->LATCH = 0xFFFFFFFF;
@@ -978,8 +996,8 @@ void __WEAK GPIOTE30_1_IRQHandler(void)
 
 	if (NRF_GPIOTE30_S->EVENTS_PORT[0].SECURE)
 	{
-        if (s_pGpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB)
-            s_pGpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB(-1, s_pGpIOSenseEvt[IOPIN_MAX_INT].pCtx);
+		if (s_pGpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB)
+			s_pGpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB(-1, s_pGpIOSenseEvt[IOPIN_MAX_INT].pCtx);
 
         NRF_GPIOTE30_S->EVENTS_PORT[0].SECURE = 0;
 		NRF_P0_S->LATCH = 0xFFFFFFFF;
@@ -1006,8 +1024,8 @@ void __WEAK GPIOTE_IRQHandler(void)
 	}
 	if (NRF_GPIOTE->EVENTS_PORT)
 	{
-        if (s_pGpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB)
-            s_pGpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB(-1, s_pGpIOSenseEvt[IOPIN_MAX_INT].pCtx);
+		if (s_pGpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB)
+			s_pGpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB(-1, s_pGpIOSenseEvt[IOPIN_MAX_INT].pCtx);
 	    NRF_GPIOTE->EVENTS_PORT = 0;
 #ifdef NRF52_SERIES
 	    NRF_GPIO->LATCH = 0xFFFFFFFF;	// Clear detect latch

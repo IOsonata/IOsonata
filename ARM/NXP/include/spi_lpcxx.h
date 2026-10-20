@@ -130,8 +130,8 @@ bool LpcSSPWaitTxFifo(SSPDEV *pDev, int TimeoutCnt);
 }
 
 
-#endif // __cplusplus
+#endif
 
-#endif // __LPCSSP_H__
+#endif
 
 

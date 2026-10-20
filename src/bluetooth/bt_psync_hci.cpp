@@ -48,6 +48,10 @@ SOFTWARE.
 #include "bluetooth/bt_hci.h"
 #include "bluetooth/bt_psync.h"
 
+// Internal controller access; not an application API.
+BtHciDevice_t *BtAppHciDevice(void);
+
+
 /******** For DEBUG Trace ************/
 // Define DEBUG_ENABLE to turn on trace for this file. Output goes to the
 // SysLog transport the app configured. A release build defines NDEBUG, which
@@ -106,7 +110,7 @@ static inline void BtPsyncWr16(uint8_t *p, uint16_t v)
 
 static inline BtHciDevice_t *BtPsyncHciDev(void)
 {
-	return g_BtAppData.AppDevice.pHciDev;
+	return BtAppHciDevice();
 }
 
 // An advertiser is named by address type, address and SID in three commands,

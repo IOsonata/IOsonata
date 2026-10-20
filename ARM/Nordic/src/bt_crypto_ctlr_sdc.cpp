@@ -22,6 +22,10 @@ into its AES slot uniformly alongside real crypto engines.
 #include "bluetooth/bt_hci.h"
 #include "bluetooth/bt_app.h"
 
+// Internal controller access; not an application API.
+BtHciDevice_t *BtAppHciDevice(void);
+
+
 static void ReverseCopy(uint8_t *pDst, const uint8_t *pSrc, size_t Len)
 {
 	for (size_t i = 0; i < Len; i++)
@@ -55,7 +59,7 @@ public:
 			return CRYPTO_STATUS_UNSUPPORTED;
 		}
 
-		BtHciDevice_t *pHci = g_BtAppData.AppDevice.pHciDev;
+		BtHciDevice_t *pHci = BtAppHciDevice();
 		if (pHci == nullptr)
 		{
 			memset(pOut, 0, 16U);

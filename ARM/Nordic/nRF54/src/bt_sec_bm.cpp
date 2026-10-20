@@ -48,8 +48,6 @@ typedef struct __Bt_Sec_Sd_Link {
 	ble_gap_enc_key_t       OwnEnc;
 	ble_gap_enc_key_t       PeerEnc;
 	ble_gap_id_key_t        PeerId;
-	ble_gap_sign_info_t     OwnSign;
-	ble_gap_sign_info_t     PeerSign;
 	ble_gap_lesc_p256_pk_t  PeerPk;
 	ble_gap_sec_params_t    ReplyParams;
 	bool                    bReplyPending;
@@ -221,8 +219,6 @@ static void LinkKeyBuffersReset(BtSecBmLink_t *pLink)
 	CryptoSecureWipe(&pLink->OwnEnc, sizeof(pLink->OwnEnc));
 	CryptoSecureWipe(&pLink->PeerEnc, sizeof(pLink->PeerEnc));
 	CryptoSecureWipe(&pLink->PeerId, sizeof(pLink->PeerId));
-	CryptoSecureWipe(&pLink->OwnSign, sizeof(pLink->OwnSign));
-	CryptoSecureWipe(&pLink->PeerSign, sizeof(pLink->PeerSign));
 	CryptoSecureWipe(&pLink->PeerPk, sizeof(pLink->PeerPk));
 	pLink->bSc = false;
 	pLink->bAuthenticated = false;
@@ -351,15 +347,8 @@ static void KeysetFill(uint16_t ConnHdl, bool bSc, ble_gap_sec_keyset_t *pKeyset
 	// because the peer may distribute a distinct LTK for later role reversal.
 	pKeyset->keys_peer.p_enc_key = bSc ? nullptr : &pLink->PeerEnc;
 	pKeyset->keys_peer.p_id_key = &pLink->PeerId;
-
-	if (s_SecParams.kdist_own.sign)
-	{
-		pKeyset->keys_own.p_sign_key = &pLink->OwnSign;
-	}
-	if (s_SecParams.kdist_peer.sign)
-	{
-		pKeyset->keys_peer.p_sign_key = &pLink->PeerSign;
-	}
+	// The S145 SoftDevice has no ATT signed write support, so no CSRK is
+	// distributed.
 }
 
 static uint32_t ParamsReplyAttempt(uint16_t ConnHdl, const ble_gap_sec_params_t *pParams,
@@ -509,7 +498,6 @@ static void KeysFromLink(uint16_t ConnHdl, const ble_gap_evt_auth_status_t *pAut
 	memcpy(pKeys->Irk, pLink->PeerId.id_info.irk, sizeof(pKeys->Irk));
 	pKeys->IdAddrType = pLink->PeerId.id_addr_info.addr_type;
 	memcpy(pKeys->IdAddr, pLink->PeerId.id_addr_info.addr, sizeof(pKeys->IdAddr));
-	memcpy(pKeys->Csrk, pLink->PeerSign.csrk, sizeof(pKeys->Csrk));
 
 	bool peerLtk = KeyPresent(pKeys->Ltk, sizeof(pKeys->Ltk));
 	bool localLtk = KeyPresent(pKeys->LocalLtk, sizeof(pKeys->LocalLtk));
@@ -605,7 +593,7 @@ static void SecInfoRequestProcess(const ble_gap_evt_t *pGapEvt)
 		}
 	}
 
-	uint32_t r = sd_ble_gap_sec_info_reply(h, pEnc, nullptr, nullptr);
+	uint32_t r = sd_ble_gap_sec_info_reply(h, pEnc);
 	if (r != NRF_SUCCESS && r != NRF_ERROR_INVALID_STATE)
 	{
 		DEBUG_PRINTF("SEC: info reply failed 0x%X\r\n", (unsigned)r);

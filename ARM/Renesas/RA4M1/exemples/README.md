@@ -7,7 +7,7 @@ Release configuration before building the example; the example links that
 configuration's archive. All projects use Cortex-M4 Thumb, FPv4-SP-D16,
 hard-float ABI, GNU C17/C++23 and the native `gcc_ra4m1.ld` normal-boot layout.
 The application project names remain `Blinky`, `TimerDemo`, `UartLoopback`,
-`UartPrbsTxTest`, and `I2CMasterSlave`; the MCU is identified by its directory and library, not an
+`UartPrbsTxTest`, `I2CMasterSlave`, and `SPIMasterSlave`; the MCU is identified by its directory and library, not an
 application-name suffix. Remove the old suffixed workspace entries before
 reimporting these projects, without deleting their files from disk.
 
@@ -18,6 +18,7 @@ reimporting these projects, without deleting their files from disk.
 | `UartLoopback` | `UartLoopback` | `exemples/uart/uart_loopback.cpp` | SCI0, 115200 8N1, interrupt mode, no DMA |
 | `UartPrbsTxTest` | `UartPrbsTxTest` | `exemples/uart/uart_prbs_tx.cpp` | SCI0, 115200 8N1, polling with TX DMA |
 | `I2CMasterSlave` | `I2CMasterSlave` | `exemples/i2c/i2c_master_slave.cpp` | IIC0, 100 kHz, 7-bit master, polling |
+| `SPIMasterSlave` | `SPIMasterSlave` | `exemples/spi/spi_master_slave.cpp` | RSPI0 master (polled, 400 kHz) to RSPI1 slave (interrupt), modes 1 and 3 |
 
 The PRBS project additionally links unchanged `src/prbs.c`. Every application
 source is an IOC linked resource; none is copied into the MCU example directory.
@@ -63,6 +64,26 @@ example is ready for bring-up, not a claimed loopback PASS. The shared
 example remains unchanged; the target address is 0x22. This concrete example pin pair requires a
 64- or 100-pin RA4M1 package; the driver itself also accepts the other legal IIC
 pin alternatives documented in ../README.md.
+
+The shared SPI example uses **RSPI0 as master and RSPI1 as slave** on one
+board, with the console on SCI0 P410/P411. Wire the pins with four jumpers and a
+shared ground. On the EK-RA4M1:
+
+| Signal | RSPI0 master | RSPI1 slave | Jumper |
+| --- | --- | --- | --- |
+| SCK | P102, J2-6 | P111, J1-33 | J2-6 to J1-33 |
+| MOSI | P101, J3-8 | P203, J1-12 | J3-8 to J1-12 |
+| MISO | P100, J1-1 | P110, J1-9 | J1-9 to J1-1 |
+| Chip select | P103, J1-29 (GPIO) | P112, J1-40 (SSL0) | J1-29 to J1-40 |
+
+All are `IOPINOP_FUNC5` (PSEL 6) except the master chip select, which is a GPIO
+the driver toggles. P108 and P109 are not used because the on-board debugger
+shares them. The RSPI slave supports modes 1 and 3 only, so `board.h` sets
+`SPI_TEST_MODE_MASK` to 0x0A and the shared example skips modes 0 and 2. The
+master runs at 400 kHz and polls; set `SPI_MASTER_INT_ENABLE` to `true` to run
+the interrupt transfers. This example is built from `spi_ra4m1.cpp` that has
+only run against the host model, **Hardware not tested**. See "RSPI master and
+slave" in `../README.md` for the limits and the assumptions to confirm.
 
 The library's internal HOCO/LOCO defaults are retained: no oscillator override
 or external crystal is needed. The initial port's 48 MHz clock configuration

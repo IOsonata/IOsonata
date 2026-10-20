@@ -464,7 +464,7 @@ int main()
 
     BtAppInit(&s_BleAppCfg);
 
-    AppRun();
+	AppRun();
 
 	return 0;
 }

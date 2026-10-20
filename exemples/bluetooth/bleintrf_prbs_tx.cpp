@@ -46,9 +46,16 @@ SOFTWARE.
 #include "coredev/interrupt.h"
 #include "prbs.h"
 #include "coredev/system_core_clock.h"
-#include "blueio_board.h"
 
 #include "board.h"
+
+#ifndef UART_DEVNO
+#define UART_DEVNO 0
+#endif
+
+#ifndef BLUEIO_CONNECT_LED_PORT
+#include "blueio_board.h"
+#endif
 
 #ifdef MCUOSC
 McuOsc_t g_McuOsc = MCUOSC;
@@ -60,8 +67,10 @@ McuOsc_t g_McuOsc = MCUOSC;
 #define DEVICE_NAME                     "BlePrbs_S132"                            //!< Name of device. Will be included in the advertising data.
 #elif defined(S140)
 #define DEVICE_NAME                     "BlePrbs_S140"                            //!< Name of device. Will be included in the advertising data.
-#else
+#elif defined(NRFXLIB_SDC)
 #define DEVICE_NAME                     "BlePrbs_SDC"                            //!< Name of device. Will be included in the advertising data.
+#else
+#define DEVICE_NAME                     "BlePrbs"
 #endif
 
 #define PACKET_SIZE						244
@@ -203,7 +212,7 @@ static const IOPinCfg_t s_UartPins[] = {
 
 /// UART configuration
 const UARTCfg_t g_UartCfg = {
-	.DevNo = 0,							// Device number zero based
+	.DevNo = UART_DEVNO,							// Device number zero based
 	.pIOPinMap = s_UartPins,				// UART assigned pins
 	.NbIOPins = sizeof(s_UartPins) / sizeof(IOPinCfg_t),	// Total number of UART pins used
 	.Rate = 115200,						// Baudrate

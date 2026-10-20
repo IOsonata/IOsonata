@@ -205,9 +205,8 @@ void TestSuccessfulSendUpdatesValue()
 
 } // namespace
 
-extern "C" {
 
-void CryptoSecureWipe(void *pData, size_t Len)
+extern "C" void CryptoSecureWipe(void *pData, size_t Len)
 {
 	volatile uint8_t *p = static_cast<volatile uint8_t *>(pData);
 	while (Len-- > 0)
@@ -216,7 +215,7 @@ void CryptoSecureWipe(void *pData, size_t Len)
 	}
 }
 
-bool BtSmpBondKeysLookup(uint16_t, uint64_t, uint16_t, BtSmpKeys_t *pKeys)
+extern "C" bool BtSmpBondKeysLookup(uint16_t, uint64_t, uint16_t, BtSmpKeys_t *pKeys)
 {
 	if (pKeys != nullptr)
 	{
@@ -225,7 +224,7 @@ bool BtSmpBondKeysLookup(uint16_t, uint64_t, uint16_t, BtSmpKeys_t *pKeys)
 	return false;
 }
 
-bool BtGapConnSecGet(uint16_t ConnHdl, BtConnSec_t *pSec)
+extern "C" bool BtGapConnSecGet(uint16_t ConnHdl, BtConnSec_t *pSec)
 {
 	if (ConnHdl != kConnHdl || pSec == nullptr)
 	{
@@ -235,22 +234,22 @@ bool BtGapConnSecGet(uint16_t ConnHdl, BtConnSec_t *pSec)
 	return true;
 }
 
-BtDevice_t *BtPeerFindByHdl(uint16_t ConnHdl)
+extern "C" BtDevice_t *BtPeerFindByHdl(uint16_t ConnHdl)
 {
 	return ConnHdl == kConnHdl ? &s_Peer : nullptr;
 }
 
-bool BtGattCharNotifyEnabled(uint16_t, BtGattChar_t *)
+extern "C" bool BtGattCharNotifyEnabled(uint16_t, BtGattChar_t *)
 {
 	return s_NotifyEnabled;
 }
 
-bool BtGattCharIndicateEnabled(uint16_t, BtGattChar_t *)
+extern "C" bool BtGattCharIndicateEnabled(uint16_t, BtGattChar_t *)
 {
 	return s_IndicateEnabled;
 }
 
-bool BtGattTxPendReserve(uint16_t ConnHdl, BtGattChar_t *, uint16_t NbPkt)
+extern "C" bool BtGattTxPendReserve(uint16_t ConnHdl, BtGattChar_t *, uint16_t NbPkt)
 {
 	s_ReserveCount++;
 	// The refusals the real one makes, plus a switch for the ring being full,
@@ -262,12 +261,12 @@ bool BtGattTxPendReserve(uint16_t ConnHdl, BtGattChar_t *, uint16_t NbPkt)
 	return true;
 }
 
-void BtGattTxPendRelease(uint16_t)
+extern "C" void BtGattTxPendRelease(uint16_t)
 {
 	s_ReleaseCount++;
 }
 
-uint32_t BtHciSendAcl(BtHciDevice_t * const,
+extern "C" uint32_t BtHciSendAcl(BtHciDevice_t * const,
 					  BtHciACLDataPacket_t * const pPacket)
 {
 	s_SendCount++;
@@ -278,12 +277,11 @@ uint32_t BtHciSendAcl(BtHciDevice_t * const,
 	return (uint32_t)pPacket->Hdr.Len + sizeof(BtHciACLDataPacketHdr_t);
 }
 
-uint32_t BtGattMsTick(void)
+extern "C" uint32_t BtGattMsTick(void)
 {
 	return 100;
 }
 
-} // extern "C"
 
 int main()
 {

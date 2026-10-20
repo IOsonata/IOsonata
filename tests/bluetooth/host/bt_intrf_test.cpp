@@ -278,24 +278,23 @@ void TestNoSubscribedPeerKeepsQueue()
 
 } // namespace
 
-extern "C" {
 
-uint16_t BtPeerCount(void)
+extern "C" uint16_t BtPeerCount(void)
 {
 	return s_PeerEnabled ? 1 : 0;
 }
 
-BtDevice_t *BtPeerSlot(uint16_t Idx)
+extern "C" BtDevice_t *BtPeerSlot(uint16_t Idx)
 {
 	return s_PeerEnabled && Idx == 0 ? &s_Peer : nullptr;
 }
 
-bool BtGattCharNotifyEnabled(uint16_t ConnHdl, BtGattChar_t *)
+extern "C" bool BtGattCharNotifyEnabled(uint16_t ConnHdl, BtGattChar_t *)
 {
 	return ConnHdl == kConnHdl && s_NotifyEnabled;
 }
 
-bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *,
+extern "C" bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *,
 		void * const pVal, size_t Len)
 {
 	if (ConnHdl != kConnHdl || (Len > 0 && pVal == nullptr))
@@ -315,7 +314,6 @@ bool BtGattCharNotify(uint16_t ConnHdl, BtGattChar_t *,
 	return s_NotifyResult;
 }
 
-} // extern "C"
 
 int main()
 {

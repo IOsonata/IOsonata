@@ -3,6 +3,7 @@
 #include <cstring>
 
 #include "bluetooth/bt_app.h"
+#include "bluetooth/bt_smp.h"
 #include "bluetooth/services/bt_dis.h"
 #include "bt_test_harness.h"
 
@@ -26,6 +27,7 @@ enum FailPoint {
 	FAIL_DIS_SERVICE,
 	FAIL_DIS_VALUE,
 	FAIL_SECURITY,
+	FAIL_CRYPTO,
 	FAIL_ADVERTISING,
 };
 
@@ -73,11 +75,6 @@ static void ResetHarness()
 	s_DisValueCount = 0;
 	s_ZeroLenCount = 0;
 	s_ZeroLenPointerValid = true;
-	memset(&g_BtAppData, 0, sizeof(g_BtAppData));
-	g_BtAppData.State = BTAPP_STATE_UNKNOWN;
-	g_BtAppData.AdvHdl = 0xFF;
-	g_BtAppData.ConnLedPort = -1;
-	g_BtAppData.ConnLedPin = -1;
 }
 
 static BtAppCfg_t MakeCfg(bool Secure = true, bool DeviceInfo = true)
@@ -125,64 +122,62 @@ static bool CallSeen(CallId Id)
 
 } // namespace
 
-BtAppData_t g_BtAppData = {};
 
-extern "C" {
 
-bool BtPeerInit(uint8_t *, size_t)
+extern "C" bool BtPeerInit(uint8_t *, size_t)
 {
 	Record(CALL_PEER_POOL);
 	return s_FailPoint != FAIL_PEER_POOL;
 }
 
 // BtAppInit checks the requested link count against the pool slot count.
-uint16_t BtPeerCount(void)
+extern "C" uint16_t BtPeerCount(void)
 {
 	return 1;
 }
 
-void BtPeerLongWrInit(uint8_t *, size_t)
+extern "C" void BtPeerLongWrInit(uint8_t *, size_t)
 {
 	Record(CALL_LONG_WRITE);
 }
 
-void BtAppConnLedOff(void) {}
-void IOPinConfig(int, int, int, IOPINDIR, IOPINRES, IOPINTYPE) {}
+extern "C" void BtAppConnLedOff(void) {}
+extern "C" void IOPinConfig(int, int, int, IOPINDIR, IOPINRES, IOPINTYPE) {}
 
-bool BtAppStackInit(const BtAppCfg_t *)
+extern "C" bool BtAppStackInit(const BtAppCfg_t *)
 {
 	Record(CALL_STACK);
 	return s_FailPoint != FAIL_STACK;
 }
 
-uint32_t sd_ble_gap_appearance_set(uint16_t)
+extern "C" uint32_t sd_ble_gap_appearance_set(uint16_t)
 {
 	Record(CALL_APPEARANCE);
 	return NRF_SUCCESS;
 }
 
-bool BtGapInit(const BtGapCfg_t *)
+extern "C" bool BtGapInit(const BtGapCfg_t *)
 {
 	Record(CALL_GAP);
 	return s_FailPoint != FAIL_GAP_INIT;
 }
 
-void BtGapSetDevName(const char *)
+extern "C" void BtGapSetDevName(const char *)
 {
 	Record(CALL_NAME);
 }
 
-void ble_conn_params_evt_handler_set(void (*)(const struct ble_conn_params_evt *))
+extern "C" void ble_conn_params_evt_handler_set(void (*)(const struct ble_conn_params_evt *))
 {
 	Record(CALL_CONN_PARAMS);
 }
 
-void BtAppInitUserServices(void)
+extern "C" void BtAppInitUserServices(void)
 {
 	Record(CALL_USER_SERVICES);
 }
 
-void BtAppInitUserData(void)
+extern "C" void BtAppInitUserData(void)
 {
 	Record(CALL_USER_DATA);
 
@@ -193,7 +188,7 @@ void BtAppInitUserData(void)
 	}
 }
 
-bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)
+extern "C" bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)
 {
 	Record(CALL_DIS_SERVICE);
 	if (s_FailPoint == FAIL_DIS_SERVICE || pSrvc == nullptr)
@@ -207,7 +202,7 @@ bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)
 	return true;
 }
 
-bool BtGattCharSetValue(BtGattChar_t *pChar, void * const pVal, size_t Len)
+extern "C" bool BtGattCharSetValue(BtGattChar_t *pChar, void * const pVal, size_t Len)
 {
 	Record(CALL_DIS_VALUE);
 	const int index = s_DisValueCount++;
@@ -230,42 +225,83 @@ bool BtGattCharSetValue(BtGattChar_t *pChar, void * const pVal, size_t Len)
 	return true;
 }
 
-bool BtAppAdvInit(const BtAppCfg_t *)
+extern "C" bool BtAppAdvInit(const BtAppCfg_t *)
 {
 	Record(CALL_ADVERTISING);
 	return s_FailPoint != FAIL_ADVERTISING;
 }
 
-uint32_t sd_ble_gap_tx_power_set(uint8_t, uint8_t, int8_t)
+extern "C" uint32_t sd_ble_gap_tx_power_set(uint8_t, uint8_t, int8_t)
 {
 	Record(CALL_TX_POWER);
 	return NRF_SUCCESS;
 }
 
-int8_t GetValidTxPower(int Value)
+extern "C" int8_t GetValidTxPower(int Value)
 {
 	return (int8_t)Value;
 }
 
 // BtAppInit starts advertising as its last step
-void BtAdvStart(void)
+extern "C" void BtAdvStart(void)
 {
 	Record(CALL_ADV_START);
 }
 
-bool BtEvtQue(uint32_t, void *, BtEvtQueHandler_t)
+extern "C" bool BtEvtQue(uint32_t, void *, BtEvtQueHandler_t)
 {
 	return true;
 }
 
-} // extern "C"
 
 static void on_conn_params_evt(const struct ble_conn_params_evt *) {}
 
-static uint32_t BtAppPeerMngrInit(BTGAP_SECTYPE, uint8_t, bool)
+// Stand-ins for what BtAppSecInit uses from the S145 stack, the BM security
+// manager and the crypto engines. The parameters handed to BtSecBmInit are
+// kept so a test can check what a configuration produces.
+struct ble_gap_sec_kdist_t {
+	uint8_t enc : 1;
+	uint8_t id : 1;
+	uint8_t link : 1;
+};
+
+struct ble_gap_sec_params_t {
+	uint8_t bond : 1;
+	uint8_t mitm : 1;
+	uint8_t lesc : 1;
+	uint8_t keypress : 1;
+	uint8_t oob : 1;
+	uint8_t io_caps : 3;
+	uint8_t min_key_size;
+	uint8_t max_key_size;
+	ble_gap_sec_kdist_t kdist_own;
+	ble_gap_sec_kdist_t kdist_peer;
+};
+
+enum {
+	BLE_GAP_IO_CAPS_DISPLAY_ONLY = 0,
+	BLE_GAP_IO_CAPS_DISPLAY_YESNO = 1,
+	BLE_GAP_IO_CAPS_KEYBOARD_ONLY = 2,
+	BLE_GAP_IO_CAPS_NONE = 3,
+	BLE_GAP_IO_CAPS_KEYBOARD_DISPLAY = 4
+};
+
+struct Ba414ep {
+	bool Init(void *, void *) { return s_FailPoint != FAIL_CRYPTO; }
+};
+
+static ble_gap_sec_params_t s_LastSecParams;
+static void *CracenIntrfInstance(void) { return nullptr; }
+static void *CryptoRngNrfInstance(void) { return nullptr; }
+static void BtLescSetCryptoEngine(void *) {}
+static void BtAppOobPeerDataHandler(void) {}
+static void BtLescOobPeerHandlerSet(void (*)(void)) {}
+
+static bool BtSecBmInit(const ble_gap_sec_params_t *pParams)
 {
 	Record(CALL_SECURITY);
-	return s_FailPoint == FAIL_SECURITY ? NRF_ERROR_INTERNAL : NRF_SUCCESS;
+	s_LastSecParams = *pParams;
+	return s_FailPoint != FAIL_SECURITY;
 }
 
 #include "generated/bt_app_bm_init.inc"
@@ -278,7 +314,7 @@ int main()
 		ResetHarness();
 		BtAppCfg_t cfg = MakeCfg();
 		BT_CHECK(ctx, BtAppInit(&cfg));
-		BT_CHECK(ctx, g_BtAppData.State == BTAPP_STATE_INITIALIZED);
+		BT_CHECK(ctx, BtInitialized());
 		BT_CHECK(ctx, CallSeen(CALL_DIS_SERVICE));
 		BT_CHECK(ctx, s_DisValueCount == 7);
 		BT_CHECK(ctx, s_ZeroLenCount == 1);
@@ -295,6 +331,7 @@ int main()
 		s_bSecStart = false;
 		BtAppCfg_t cfg = MakeCfg(false, true);
 		BT_CHECK(ctx, BtAppInit(&cfg));
+		BT_CHECK(ctx, BtInitialized());
 		BT_CHECK(ctx, !CallSeen(CALL_SECURITY));
 		BT_CHECK(ctx, CallSeen(CALL_ADVERTISING));
 	});
@@ -377,6 +414,30 @@ int main()
 		BT_CHECK(ctx, !BtAppInit(&cfg));
 		BT_CHECK(ctx, CallSeen(CALL_SECURITY));
 		BT_CHECK(ctx, !CallSeen(CALL_TX_POWER));
+	});
+
+	ctx.Run("security parameters follow the configuration", [&]() {
+		ResetHarness();
+		BtAppCfg_t cfg = MakeCfg();
+		BT_CHECK(ctx, BtAppInit(&cfg));
+		BT_CHECK(ctx, BtInitialized());
+		BT_CHECK(ctx, s_LastSecParams.bond == 1);
+		BT_CHECK(ctx, s_LastSecParams.mitm == 1);
+		BT_CHECK(ctx, s_LastSecParams.lesc == 1);
+		BT_CHECK(ctx, s_LastSecParams.io_caps == BLE_GAP_IO_CAPS_DISPLAY_YESNO);
+		BT_CHECK(ctx, s_LastSecParams.min_key_size == BT_SMP_CFG_MIN_ENC_KEY_SIZE);
+		BT_CHECK(ctx, s_LastSecParams.max_key_size == BT_SMP_MAX_ENC_KEY_SIZE);
+		BT_CHECK(ctx, s_LastSecParams.kdist_own.enc == 1 && s_LastSecParams.kdist_own.id == 1);
+		BT_CHECK(ctx, s_LastSecParams.kdist_peer.enc == 1 && s_LastSecParams.kdist_peer.id == 1);
+	});
+
+	ctx.Run("crypto engine failure stops security setup", [&]() {
+		ResetHarness();
+		s_FailPoint = FAIL_CRYPTO;
+		BtAppCfg_t cfg = MakeCfg();
+		BT_CHECK(ctx, !BtAppInit(&cfg));
+		BT_CHECK(ctx, !CallSeen(CALL_SECURITY));
+		BT_CHECK(ctx, !CallSeen(CALL_ADVERTISING));
 	});
 
 	return ctx.Finish();

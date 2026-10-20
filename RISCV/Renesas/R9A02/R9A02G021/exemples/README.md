@@ -15,11 +15,25 @@ The e2 projects link only `lib/e2/Debug` or `lib/e2/Release`; GCC and LLVM
 archives must not be mixed. Project references name the e2 library.
 
 Both use RV32IMAC with Zba, Zbb, Zbs, Zicsr and Zifencei and the ilp32 ABI.
-The ioc projects use GNU C17/C++23 and newlib-nano with nosys. The e2 projects
-use LLVM for Renesas RISC-V 19.1.7.202501, GNU C17/C++17, its prebuilt runtime
-and nosys. Select that compiler in e2 studio Toolchain Management. They use
+The ioc projects use GNU C17/C++23 and newlib-nano. The e2 projects use
+LLVM for Renesas RISC-V 19.1.7.202501, GNU C17/C++17 and its prebuilt runtime.
+Select that compiler in e2 studio Toolchain Management. They use
 the native Renesas LLVM managed-build integration for R9A02G0214CNE on the
 FPB-R9A02G021; no Smart Configurator generated startup is required.
+
+Debug enables semihosting and leaves `NDEBUG` undefined. These RISC-V
+toolchains call the library `semihost`, the equivalent of Arm `rdimon`:
+GCC uses `--specs=semihost.specs`, and both toolchains link `libsemihost`
+with `--whole-archive` / `--no-whole-archive` so its syscalls replace the
+weak startup stubs. The e2 linker command places this library before the
+application libraries to avoid extracting the UART syscall implementation.
+The runtime constructor initializes the host streams. Run Debug with
+debugger semihosting enabled; the examples enable UART console retargeting
+only in Release.
+
+Release uses nosys without semihosting and defines `NDEBUG` in the C and
+C++ compiler settings of both the examples and the matching library.
+Use Release for standalone operation and UART performance measurements.
 
 The C, C++, assembler and linker command patterns explicitly place
 `-march=rv32imac_zba_zbb_zbs_zicsr_zifencei -mabi=ilp32` after `${FLAGS}`.
@@ -47,10 +61,11 @@ an input filename and causes a "no such file or directory" error.
 | `TimerDemo` | `exemples/timer/timer_demo.cpp` | `gcc_R9A02G021.ld` | Timer DevNo 0, default frequency |
 | `UartLoopback` | `exemples/uart/uart_loopback.cpp` | `gcc_R9A02G021.ld` | UART0, 115200 8N1, interrupt mode |
 | `UartPrbsTxTest` | `exemples/uart/uart_prbs_tx.cpp` | `gcc_R9A02G021.ld` | UART0, 115200 8N1, interrupt mode |
-| `UartaLoopback` | `exemples/uart/uart_loopback.cpp` | `gcc_R9A02G021.ld` | UARTA1 (DevNo 4), 115200 8N1, interrupt mode, linker option `-Wl,-u,R9a02UartaInit` |
+| `UartaLoopback` | `exemples/uart/uart_loopback.cpp` | `gcc_R9A02G021.ld` | UARTA1 (DevNo 4), 115200 8N1; optional UARTA driver linked as project source, no linker flag |
 | `SpiLoopback` | `exemples/spi/spi_loopback.cpp` | `gcc_R9A02G021.ld` | SPI20 (DevNo 4) at 1 MHz, the four modes, interrupt and DTC reception, console on UART0 |
 | `SpiMasterSlave` | `exemples/spi/spi_master_slave.cpp` | `gcc_R9A02G021.ld` | SPI20 master (DevNo 4) at 1 MHz wired to the SPI21 slave (DevNo 5), the four modes, DTC on both, console on UART0 |
 | `I2CScan` | `exemples/i2c/i2c_scan.cpp` | `gcc_R9A02G021.ld` | IICA1 (DevNo 1) at 100 kHz, HOCO 32 MHz, console on UART0 |
+| `I2CMasterSlave` | `exemples/i2c/i2c_master_slave.cpp` | `gcc_R9A02G021.ld` | IICA1 master (DevNo 1) at 100 kHz wired to the IICA0 slave (DevNo 0) at 0x22, HOCO 32 MHz, console on UART0 at 1 Mbaud |
 | `ADCDemo` | `src/adc_demo.cpp` (this port) | `gcc_R9A02G021.ld` | ANI2, ANI3, internal reference, temperature sensor, console on UART0 |
 | `RtcDemo` | `src/rtc_demo.cpp` (this port) | `gcc_R9A02G021.ld` | RTC on the 32.768 kHz crystal, Software Standby, console on UART0 |
 | `AnalogDemo` | `src/analog_demo.cpp` (this port) | `gcc_R9A02G021.ld` | TML32 interval, DAC8 channel 1 ramp, comparator 0 on the internal reference, console on UART0 |
@@ -85,10 +100,13 @@ was not available here: check them against the board schematic.
 | UartaLoopback | RxDA1, TxDA1 | P008, P403 | `IOPINOP_FUNC5` (PSEL 0x06) |
 | SpiLoopback | SCK20, SI20 (MISO), SO20 (MOSI) | P101, P102, P103 | `IOPINOP_FUNC16` |
 | SpiLoopback | Chip select | P104 | GPIO |
-| SpiMasterSlave | Master as SpiLoopback | P101 to P104 | As SpiLoopback |
+| SpiMasterSlave | Master SCK20, SI20 (MISO), SO20 (MOSI) | P101, P102, P103 | `IOPINOP_FUNC16` |
+| SpiMasterSlave | Master chip select | P109, J13-1 | GPIO output |
 | SpiMasterSlave | Slave SCK21, SI21 (MOSI), SO21 (MISO) | P204, P205, P206 | `IOPINOP_FUNC16` |
-| SpiMasterSlave | Slave chip select, IRQ2 | P202 | GPIO input |
+| SpiMasterSlave | Slave chip select, IRQ3 | P201, J13-7 | GPIO input with pull-up |
 | I2CScan | SDAA1, SCLA1 | P010, P011 | `IOPINOP_FUNC6` (PSEL 0x07), open drain |
+| I2CMasterSlave | Master SDAA1, SCLA1 | P010, P011 | As I2CScan |
+| I2CMasterSlave | Slave SDAA0_B, SCLA0_B | P103, P102 | `IOPINOP_FUNC6` (PSEL 0x07), open drain |
 | ADCDemo | ANI2, ANI3 (A2, A3) | P400, P401 | `IOPINOP_FUNC31` (analog) |
 | AnalogDemo | DACOUT1, IVCMP0, wired together | P001, P106 | Analog, set by the drivers |
 | AdcSnoozeDemo | ANI2 (A2) | P400 | `IOPINOP_FUNC31` (analog) |
@@ -104,15 +122,25 @@ fitted on the board with `MCUOSC`.
 
 **Blinky:** the LEDs are on after start, each one goes off for 250 ms in turn.
 Pressing S1 stops the sequence (`g_bBut1Pressed`). The shared example prints
-from the button handler; no console is configured, the output is dropped.
+from the button handler through semihosting in Debug. No UART console is
+configured, so that output is dropped in Release.
 
-**TimerDemo:** see `g_TimerInitOk`, `g_TriggerPeriod[]`, `g_Period[]` and
+**TimerDemo:** Release prints on the J-Link OB virtual COM port at 115200 8N1,
+no flow control; Debug keeps semihosted `printf`. The first line reports the
+accepted trigger period and subsequent lines report `Count` and `T0`. Also
+see `g_TimerInitOk`, `g_TriggerPeriod[]`, `g_Period[]` and
 `g_TriggerCount[]` in the debugger. LED1 toggles on trigger 0. DevNo 0 (machine
 timer, 32768 Hz) and DevNo 1 to 8 (TAU channels 0 to 7) each have one trigger,
 so only the 100 ms period is used. For a TAU channel, set `TIMER_DEVNO` to 1 to
 8 and `TIMER_FREQ` to a frequency that holds 100 ms in 16 bits, for example
 46875 (PCLKB 48 MHz / 1024); the default frequency (PCLKB) gives at most
-1.37 ms and the trigger is rejected.
+1.37 ms and the trigger is rejected. The 100 ms request is about 100006 us on
+the 32768 Hz machine timer and about 100011 us at 46875 Hz.
+
+FPB TimerDemo hardware results: DevNo 0 reported 100006 us for 11 callbacks;
+DevNo 1 (TAU0) and DevNo 8 (TAU7) reported 100010 us for 18 callbacks
+each, all with steady 100 ms `Count` steps. All three continuous-trigger
+runs PASS. Other timer modes and channels remain untested on hardware.
 
 **UartLoopback:** terminal at 115200 8N1, no flow control, on the J-Link OB
 virtual COM port. The firmware prints nothing by itself, it echoes what it
@@ -122,8 +150,9 @@ receives.
 0xFF, no banner.
 
 **UartaLoopback:** connect a 3.3 V serial adapter to P008 (RX) and P403
-(TX), terminal at 115200 8N1. The firmware echoes what it receives. The
-project links UARTA with `-Wl,-u,R9a02UartaInit` (Other linker flags).
+(TX), terminal at 115200 8N1. The firmware echoes what it receives. The `UartaLoopback/ioc` project links `uarta_r9a02.cpp` as an optional
+project source; `UART::Init` still selects DevNo 4 and no internal-symbol
+linker flag is required.
 
 **SpiLoopback:** connect P103 (MOSI) to P102 (MISO). The console on the
 virtual COM port (Release configuration, `NDEBUG`) shows each mode and
@@ -132,13 +161,63 @@ pattern with PASS or FAIL, then `SPI master loopback PASS`. `board.h` sets
 the background with the DTC. Set both false for polling, or only DMA for the
 DTC with the call waiting.
 
-**SpiMasterSlave:** wire P101 to P204 (SCK), P103 to P205 (MOSI), P206 to
-P102 (MISO) and P104 to P202 (chip select). The console shows, for each mode,
+**SpiMasterSlave:** all four jumpers are on Pmod 1 J13:
+
+| Signal | Master pin | Slave pin | J13 jumper |
+| --- | --- | --- | --- |
+| SCK | P101 | P204 | 4 to 8 |
+| MOSI | P103 | P205 | 2 to 9 |
+| MISO | P102 | P206 | 3 to 10 |
+| CS | P109 | P201, IRQ3 | 1 to 7 |
+
+P109 and P201 connect directly to J13 and have board pull-ups. The previous
+P104-to-P202 CS path failed the hardware GPIO check: P104 read high while
+P202 stayed low, with SPI stopped and the P202 pull-up enabled. The SCK,
+MOSI and MISO GPIO checks passed. With the new CS pair, the October 15, 2026
+hardware capture passes every mode 0 transfer at 1 MHz, 8 bits, with
+master and slave DMA=1 INT=1. After the initial-event fix (`fb41374`), mode
+0 still passes but mode 1 reports RX=0 on its first byte: continuous mode
+leaves the final byte in the shifter when SCK stops. Modes 1 and 3 now use
+transfer-end service, with CPU/DTC reads and writes at byte end. Emulator
+checks pass. Hardware reruns after `2c03bf7` also pass every TX/RX check
+in modes 0-3 at 1 MHz, 8 bits: master DMA=1 with INT=0 or INT=1 and slave
+DMA=1 INT=1, and master DMA=0 with INT=0 or INT=1 and slave DMA=0 INT=1.
+All four include 1-, 16- and 129-byte frames and short-to-long transitions,
+ending with `SPI master/slave loopback PASS`. Build type was not reported;
+the other combinations are recorded separately below.
+
+With master DMA=1 INT=0 and slave DMA=0 INT=1, mode 0 passes but the mode 1
+16-byte master RX fails: slave RX=-1 and master byte 1 is 0xFF rather than
+0xA1. Modes 2 and 3 are not reached. This mixes DTC-clocked master reads
+with CPU slave service. CPHA=1 needs the next slave TX byte loaded before
+the next byte starts; the result is consistent with too little inter-byte
+time for its ISR. The passing TX checks are CPU-polled even when master
+DMA is enabled. The follow-up keeps master DMA=1 INT=0 and enables slave
+DMA=1 INT=1: every check passes in modes 0-3. This validates master DMA
+with polled completion when the slave also uses DMA. The mixed failure
+remains a separate limit; other flag combinations and maximum gap-free
+rate still need hardware validation.
+
+The console shows, for each mode,
 frames of 1, 16 and 129 bytes sent and received by the master, with PASS or
 FAIL, then `SPI master/slave loopback PASS`. The slave takes its buffers at
 `DEVINTRF_EVT_STATECHG` and reports each frame at the chip select rising
 edge. `SPI_SLAVE_DMA_ENABLE false` in `board.h` tests the slave with one
-interrupt per byte; its interrupt priority is above the master's.
+interrupt per byte. Its interrupt priority is above the master's. Modes 1
+and 3 require time between bytes for the CPU or DTC to load the next TX
+byte; their maximum gap-free rate has not been measured.
+
+On a slave completion timeout, the R9A02 example prints the CS pin
+configuration, GPIO input registers, SAU1 status and ICU/CLIC routes through
+the shared example's `SpiMasterSlaveDiagnostics` hook. P201 should show
+`pullup=1 IRQ=1 output=0 peripheral=0`; P109 should be a GPIO output.
+The diagnostic source is linked by both projects and runs only after timeout.
+After printing the registers, it powers off both SPI interfaces, tests each
+connection as GPIO in its normal direction, and checks the CS rising-edge
+interrupt. Each pair should report `low=0/0 high=1/1`; the interrupt check
+should report one rising callback. It then releases the pins. The original
+SPI failure remains a failure; these checks isolate GPIO and IRQ operation
+from the SAU configuration. The write-only PRWCNTR is not read.
 
 **I2CScan:** connect I2C devices with pull-ups to P010 (SDA) and P011 (SCL).
 The console lists the addresses that answer. The core clock is the HOCO at
@@ -146,6 +225,22 @@ The console lists the addresses that answer. The core clock is the HOCO at
 reads the register of `I2C_SCAN_REG_DEVADDR` in the interrupt. `board.h`
 gives the pin map for the SAU simplified I2C IIC20 (DevNo 6, P101 SCL, P102
 SDA).
+
+**I2CMasterSlave:** wire P010 to P103 (SDA) and P011 to P102 (SCL), with a
+pull-up from each line to 3.3 V (4.7 kOhm for example); the internal pull-ups
+are off once the IICA pins are in output mode. The console, Release
+configuration (`NDEBUG`) at 1,000,000 baud, shows the init result of both
+I2C, the write of 8 bytes at offset 4 of the slave memory, their read back
+with a restart, then a read of 4 bytes without command that continues at
+offset 12 (`0c 0d 0e 0f`), and `I2C master/slave loopback PASS`. Both DMA
+switches default to true in the shared example. The master waits for
+completion by default; `I2C_MASTER_INT_ENABLE true` enables background
+completion. The slave requires interrupts. DTC moves payload bytes while
+the CPU continues to handle the IICA protocol at each byte.
+
+Hardware PASS on October 14, 2026: master DMA=0 INT=0 with slave DMA=0
+INT=1, and master DMA=1 with either INT=0 or INT=1 with slave DMA=1 INT=1.
+Each run passed the 8-byte write/read and the final 4-byte receive.
 
 **AnalogDemo:** wire P001 to P106. The TML32 (LOCO) steps DAC8 channel 1 every
 20 ms, a ramp from 0 to VCC in about 2.6 s. Comparator 0 compares it with its
@@ -159,7 +254,11 @@ Standby; every 100 ms the TML32 starts Snooze, the conversion of A2 runs
 without the CPU. At 1.65 V or more the CPU wakes up, prints the voltage,
 toggles LED1 and waits one second before the next Software Standby. Below
 1.65 V nothing is printed and the current stays low. The debugger connection
-may be lost in Software Standby.
+may be lost in Software Standby. A hardware run with P400 grounded printed
+only the startup banner; applying 3.3 V produced repeated 3299 mV readings.
+An earlier accidental RESET-pin contact explains repeated banners in a prior
+capture. The return-to-GND transition and independent DTC/ELC transfer counts
+were not captured.
 
 **SelfTest:** wire P001 to P106, A2 to GND and A3 to 3.3 V, terminal on the
 virtual COM port. The firmware runs 12 tests and prints the values measured
@@ -179,36 +278,47 @@ internal reference with the VCC it gives, and the die temperature from the
 factory calibration point. LED1 toggles. `ADC_DEMO_INT_ENABLE` in `board.h`
 selects the interrupt mode.
 
+FPB hardware validation (October 14, 2026): the ADCDemo polling run passed
+29 consecutive conversion rounds and the ADC_ENDI interrupt run passed 18.
+With A0/P400 connected to GND and A1/P401 to 3.3 V, IN0 read 0-2 mV
+and IN1 read 3299 mV; internal VREF and temperature were stable.
+Scan and continuous ADC modes remain separately unvalidated by this example.
+AdcSnoozeDemo subsequently validated below-threshold quiet and repeated
+above-threshold wake-up reporting, without independent DTC/ELC measurements.
+
 **RtcDemo:** the 32.768 kHz crystal is the low frequency clock. The RTC
 wakes the MCU from Software Standby every second: the console shows the date
 and time (the build time after a power-on reset) and LED1 toggles. An alarm
 every 2 minutes toggles LED2. `RTC_DEMO_STANDBY false` in `board.h` uses
 Sleep instead. The debugger connection may be lost in Software Standby.
+FPB hardware captures show consecutive seconds, Software Standby wake-up,
+and alarm events at 23:29:00 and 23:31:00, each successfully rearming.
+UART output continued afterward; J-Link's 0xDEADBEEF indication was not
+accompanied by a confirmed firmware crash.
 
 **DfuBoot:** stage 0 boot for the layout of `ldscript/dfu_layout_r9a02g021.ld`
 (boot 36 KB, record 4 KB, application slot from 0xA000). Build the Release
-configuration: at -O0 (Debug) the boot does not fit in 36 KB. The Debug
-configuration defines `DFU_BOOT_ALLOW_UNSIGNED`. An application for the slot
-links with `gcc_R9A02G021_dfu.ld`.
+configuration for deployment; the current LLVM size limitation is recorded
+below. The Debug configuration defines `DFU_BOOT_ALLOW_UNSIGNED`.
+An application for the slot links with `gcc_R9A02G021_dfu.ld`.
 
 ## Status
 
-All fourteen examples build and link with xPack riscv-none-elf-gcc 15.2.0
-(October 13, 2026). Sizes at -Os (text + data, KB of 1000 bytes): Blinky 11.8,
-TimerDemo 19.8, UartLoopback 15.0, UartPrbsTxTest 15.0, UartaLoopback 18.6,
-SpiLoopback 29.6, SpiMasterSlave 30.3, I2CScan 31.5, ADCDemo 34.3, RtcDemo
-24.9, AnalogDemo 29.3, AdcSnoozeDemo 38.4, SelfTest 65.3, DfuBoot 36576 bytes
-of the 36864 of its region.
-I2CInit links the SAU simplified I2C with the IICA. None has been run on the
-board yet.
+On October 14, 2026, all fifteen current examples compiled from the command
+line with LLVM for Renesas RISC-V 19.1.7.202501 in Debug (`-Og`) and Release
+(`-Os`). Fourteen linked in each configuration. DfuBoot exceeded its 36 KB
+boot region by 12112 bytes in Debug and 1836 bytes in Release. Its Release
+main function's generated code is identical before and after the declaration
+cleanup; resolving the boot-image size requires separate work.
 
-The fourteen e2 examples compile and link from the command line with LLVM
-for Renesas RISC-V 19.1.7.202501 in Release (`-Os`). Thirteen also link in
-Debug (`-Og`); DfuBoot Debug overflows its 36 KB boot region. DfuBoot Release
-uses 35238 bytes of text and data. These checks compiled the 61 library
-source files needed by the examples, including the LLVM runtime entry,
-with the projects' defines, include paths and target settings. The XML,
-source links, library paths and linker-script paths were also checked.
-Import and managed build inside e2 studio, the remaining library modules
-and on-board execution have not been tested in this environment.
+These checks compiled the 61 library source files needed by the examples,
+including the LLVM runtime entry, with the projects' defines, include paths
+and target settings. All fourteen linked Debug images contain the
+semihosting initializer; none of the Release images does. Compiler AST
+checks confirmed that active local declarations are grouped at function
+entry in both configurations. The project XML and configuration settings
+were also checked.
+
+The xPack GCC builds, IDE import and managed builds, remaining library
+modules and on-board execution were not repeated for these changes.
 

@@ -1,5 +1,6 @@
 /**-------------------------------------------------------------------------
 @file	spi_re01.cpp
+
 @brief	RE01 1500KB SPI0/1 polling master implementation.
 
 Uses the existing SPIDev_t/DevIntrf_t C interface and SPI C++ wrapper.
@@ -7,16 +8,21 @@ Supports normal SPI, 8-16 bit frames, all four clock modes, MSB/LSB first,
 and GPIO or application controlled chip selects. Register encodings and
 clocking follow Renesas re-driver-package, r_spi_cmsis_api.c.
 
+@author	Hoang Nguyen Hoan
+@date	Oct. 7, 2026
+
 @license
+
 MIT License
-Copyright (c) 2026 I-SYST inc. All rights reserved.
+
+Copyright (c) 2026, I-SYST inc., all rights reserved
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
 in the Software without restriction, including without limitation the rights
 to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+copies of the Software, and to permit persons to whom the Software is furnished
+to do so, subject to the following conditions:
 
 The above copyright notice and this permission notice shall be included in all
 copies or substantial portions of the Software.
@@ -28,6 +34,7 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
 ----------------------------------------------------------------------------*/
 #include "re01xxx.h"
 #include "coredev/spi.h"

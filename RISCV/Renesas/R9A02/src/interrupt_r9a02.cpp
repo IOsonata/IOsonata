@@ -10,8 +10,7 @@ Event to IELSRn group mapping: R9A02G021 User's Manual R01UH1036EJ0110,
 table 12.7. The events that table 12.4 lets connect to the CLIC are listed,
 and SYSTEM_SNZREQ, which starts the DTC only: it can be routed without a
 handler (R9a02RouteEvent) for the DTC, never to the CPU. ELC_SWEVT0 and
-ELC_SWEVT1 connect to the CLIC only after a DTC transfer, they are not
-listed.
+ELC_SWEVT1 connect to the CLIC only after a DTC transfer.
 
 A slot with IELSRn.DTCE = 1 sends its event to the DTC (12.5.4.2). The DTC
 clears DTCE after the last transfer and leaves IR set, the CPU interrupt
@@ -83,6 +82,8 @@ static const uint16_t s_R9a02EvtMap[] = {
 	R9A02_EVTMAP(R9A02_EVT_RTC_ALM_OR_PRD, 1, 0x05), R9A02_EVTMAP(R9A02_EVT_RTC_ALM_OR_PRD, 5, 0x05),
 	R9A02_EVTMAP(R9A02_EVT_IIC0_ENDI, 0, 0x0B),
 	R9A02_EVTMAP(R9A02_EVT_IIC1_ENDI, 1, 0x0B),
+	R9A02_EVTMAP(R9A02_EVT_ELC_SWEVT0, 1, 0x0D),
+	R9A02_EVTMAP(R9A02_EVT_ELC_SWEVT1, 5, 0x0C),
 	R9A02_EVTMAP(R9A02_EVT_KEY_INTKR, 3, 0x0C), R9A02_EVTMAP(R9A02_EVT_KEY_INTKR, 7, 0x0C),
 	R9A02_EVTMAP(R9A02_EVT_CAC_FERRI, 2, 0x10),
 	R9A02_EVTMAP(R9A02_EVT_CAC_MENDI, 3, 0x10),
@@ -414,6 +415,28 @@ void R9a02UnregisterCoreIntHandler(uint32_t ClicId)
 	EnableInterrupt(state);
 }
 
+// Level pins are acknowledged after the owner has handled the level. Keep
+// this return path separate so pulse events can tail-call their handler
+// without saving a hook, generation and register address across every IRQ.
+__attribute__((noinline)) static void R9a02IcuLevelDispatch(uint32_t Slot, uintptr_t State)
+{
+	R9a02IntHook_t &hook = s_IcuHook[Slot];
+	R9a02IRQHandler_t handler = hook.Handler;
+	void *ctx = hook.pCtx;
+	uint32_t generation = hook.Generation;
+
+	EnableInterrupt(State);
+	handler((int)Slot, ctx);
+
+	State = DisableInterrupt();
+	if (hook.Generation == generation)
+	{
+		R9A02_ICU->IELSR[Slot] = hook.Iels;
+		(void)R9A02_ICU->IELSR[Slot];
+	}
+	EnableInterrupt(State);
+}
+
 static void R9a02IcuDispatch(uint32_t Slot)
 {
 	uint32_t clicid = R9A02_CLIC_ID_IELSR0 + Slot;
@@ -442,33 +465,26 @@ static void R9a02IcuDispatch(uint32_t Slot)
 	bool level = hook.EvtId <= R9A02_EVT_PORT_IRQ7 &&
 				 (R9A02_ICU->IRQCR[hook.EvtId - R9A02_EVT_PORT_IRQ0] & R9A02_IRQCR_IRQMD_Msk) == R9A02_IRQCR_IRQMD_LOW;
 
-	if (!level)
+	if (level)
 	{
-		// Pulse event: clear IR now, a new event sets it again
-		R9A02_ICU->IELSR[Slot] = hook.Iels;
-		(void)R9A02_ICU->IELSR[Slot];
+		R9a02IcuLevelDispatch(Slot, state);
+
+		return;
 	}
 
+	// Pulse event: clear IR now, a new event sets it again. There is no
+	// post-handler work, including when the handler unregisters its route.
+	R9A02_ICU->IELSR[Slot] = hook.Iels;
+	(void)R9A02_ICU->IELSR[Slot];
 	R9a02IRQHandler_t handler = hook.Handler;
 	void *ctx = hook.pCtx;
-	uint32_t generation = hook.Generation;
 
 	EnableInterrupt(state);
 
 	handler((int)Slot, ctx);
-
-	if (level)
-	{
-		state = DisableInterrupt();
-		if (hook.Generation == generation)
-		{
-			R9A02_ICU->IELSR[Slot] = hook.Iels;
-			(void)R9A02_ICU->IELSR[Slot];
-		}
-		EnableInterrupt(state);
-	}
 }
 
+__attribute__((used, externally_visible))
 void R9a02IrqDispatch(uint32_t ClicId)
 {
 	if (ClicId >= R9A02_CLIC_ID_IELSR0 && ClicId < R9A02_CLIC_INT_COUNT)
@@ -495,3 +511,4 @@ void R9a02IrqDispatch(uint32_t ClicId)
 		handler((int)ClicId, ctx);
 	}
 }
+

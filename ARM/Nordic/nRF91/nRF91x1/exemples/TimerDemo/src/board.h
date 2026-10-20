@@ -43,6 +43,9 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #define NORDIC_DK
 
+// UARTE0 for the timer demo output
+#define UART_DEVNO			0
+
 #ifdef NORDIC_DK
 
 #define LED1_PORT		0

@@ -7,7 +7,7 @@ the device opens the endpoint with a smaller MPS than the descriptor
 advertises. A host frame of the full descriptor MPS is then oversized at the
 controller and must be dropped for that frame only.
 
-The test streams one continuous OUT burst where every frame carries the
+The test streams one continuous OUT burst where every frame has the
 clamped length except a single mid-burst frame of the full alternate-setting
 MPS. Expected behavior: the oversized frame is not echoed, and every fitting
 frame after it still loops back. The historical failure mode is that all

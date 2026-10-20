@@ -55,11 +55,16 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #ifndef UART_BAUDRATE
 #define UART_BAUDRATE 		1000000
 #endif
+// Default 1 stop bit. A port under bring-up may set 2 in board.h: the extra idle
+// bit per character lets a receiver started mid-stream find the frame.
+#ifndef UART_STOPBITS
+#define UART_STOPBITS 1
+#endif
 #ifndef UART_INT_MODE
 #define UART_INT_MODE false
 #endif
 #ifndef UART_DMA_MODE
-#define UART_DMA_MODE true
+#define UART_DMA_MODE false
 #endif
 
 #ifdef MCUOSC
@@ -86,9 +91,7 @@ static const UARTCfg_t s_UartCfg = {
 	.Rate = UART_BAUDRATE,
 	.DataBits = 8,
 	.Parity = UART_PARITY_NONE,
-	// 2 stop bits add an idle bit per character, which lets a receiver started
-	// mid-stream find the frame. nRF51 and nRF52832 send 1 stop bit only.
-	.StopBits = 1,
+	.StopBits = UART_STOPBITS,
 	.FlowControl = UART_FLWCTRL_NONE,
 	.bIntMode = UART_INT_MODE,
 	.IntPrio = IRQ_PRIO_NORMAL,
@@ -117,6 +120,8 @@ UARTDev_t g_UartDev;
 UART g_Uart;
 #endif
 
+volatile bool g_UartInitOk = false;
+
 int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen)
 {
 	(void)pDev;
@@ -136,10 +141,17 @@ int nRFUartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int Buf
 	return 0;
 }
 
-volatile bool g_UartInitOk = false;
-
 int main()
 {
+	uint8_t d = 0xff;
+#ifndef BYTE_MODE
+	uint8_t buff[TEST_BUFSIZE];
+	uint8_t *p;
+	int i;
+	int len;
+	int l;
+#endif
+
 #ifdef DEMO_C
 	g_UartInitOk = UARTInit(&g_UartDev, &s_UartCfg);
 	//UARTprintf(&g_UartDev, "UART PRBS Test\n\r");
@@ -147,12 +159,10 @@ int main()
 	g_UartInitOk = g_Uart.Init(s_UartCfg);
 	//g_Uart.printf("UART PRBS Test\n\r");
 #endif
-	if (!g_UartInitOk) return 1;
-
-	uint8_t d = 0xff;
-#ifndef BYTE_MODE
-	uint8_t buff[TEST_BUFSIZE];
-#endif
+	if (!g_UartInitOk)
+	{
+		return 1;
+	}
 
 	while (1)
 	{
@@ -168,19 +178,19 @@ int main()
 		}
 #else
 		// Demo transfer buffer
-		for (int i = 0; i < TEST_BUFSIZE; i++)
+		for (i = 0; i < TEST_BUFSIZE; i++)
 		{
 			d = Prbs8(d);
 			buff[i] = d;
 		}
-		int len = TEST_BUFSIZE;
-		uint8_t *p = buff;
+		len = TEST_BUFSIZE;
+		p = buff;
 		while (len > 0)
 		{
 #ifdef DEMO_C
-			int l = UARTTx(&g_UartDev, p, len);
+			l = UARTTx(&g_UartDev, p, len);
 #else
-			int l = g_Uart.Tx(p, len);
+			l = g_Uart.Tx(p, len);
 #endif
 			len -= l;
 			p += l;

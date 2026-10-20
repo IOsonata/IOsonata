@@ -101,9 +101,23 @@ SOFTWARE.
 #define ST_FLASH_SR				(FLASH_NS->NSSR)
 #define ST_FLASH_KEYR			(FLASH_NS->NSKEYR)
 
+// A double ECC error on a flash read raises the NMI on this family (the ST
+// HAL calls HAL_FLASHEx_ECCD_IRQHandler from the NMI). A power cut while a
+// flash word is programmed or a page erased can leave such a word, so the
+// read path takes the error through Stm32FlashEccNmi below.
+#define ST_FLASH_ECCR			(FLASH_NS->ECCR)
+
 #define ST_FLASH_CR_PG			FLASH_NSCR1_PG
 #define ST_FLASH_CR_PER			FLASH_NSCR1_PER
+// Mass erase bits. The WBA6x has two banks with one bit each, the other parts
+// have a single bit.
+#if defined(FLASH_NSCR1_MER2)
+#define ST_FLASH_CR_MER			(FLASH_NSCR1_MER1 | FLASH_NSCR1_MER2)
+#elif defined(FLASH_NSCR1_MER1)
+#define ST_FLASH_CR_MER			FLASH_NSCR1_MER1
+#else
 #define ST_FLASH_CR_MER			FLASH_NSCR1_MER
+#endif
 #define ST_FLASH_CR_PNB_Pos		FLASH_NSCR1_PNB_Pos
 #define ST_FLASH_CR_PNB_Msk		FLASH_NSCR1_PNB_Msk
 #define ST_FLASH_CR_STRT		FLASH_NSCR1_STRT
@@ -188,20 +202,32 @@ SOFTWARE.
 // both families at their FLASHSIZE_BASE.
 static inline uint32_t StFlashSize(void)
 {
+#if defined(IOSONATA_STM32_WBA)
+	// The device header reads the register and gives the part's own size when
+	// it holds all ones or zero: 2 MB on the WBA65, 1 MB on the WBA52.
+	return (uint32_t)FLASH_SIZE;
+#else
 	uint32_t kb = *(const volatile uint16_t *)FLASHSIZE_BASE;
 
-#if defined(IOSONATA_STM32_WBA)
-	// All ones or zero means the full 1 MB, the same reading the HAL makes.
-	if (kb == 0xFFFFUL || kb == 0UL)
-	{
-		return 0x100000UL;
-	}
-#endif
-
 	return kb << 10;
+#endif
 }
 
 #ifdef ST_FLASH_CR_BKER
+// Whether the banks are swapped: the second physical bank is mapped first.
+// BKER names the physical bank, so an erase picks the other bank bit then,
+// as dfu_stm32.cpp does.
+static inline bool StFlashBankSwapped(void)
+{
+#if defined(SYSCFG_MEMRMP_FB_MODE)
+	return (SYSCFG->MEMRMP & SYSCFG_MEMRMP_FB_MODE) != 0;
+#elif defined(FLASH_OPTR_SWAP_BANK)
+	return (FLASH->OPTR & FLASH_OPTR_SWAP_BANK) != 0;
+#else
+	return false;
+#endif
+}
+
 // Bank size on a dual bank part. On L4 the classic dual bank parts split
 // the device in half, the same arithmetic the HAL uses.
 #define ST_FLASH_BANK_SIZE()	(StFlashSize() / 2UL)
@@ -232,6 +258,14 @@ static_assert((NVM_INTRF_MAX_XFER % NVM_INTRF_WRITE_GRAN) == 0,
 static NvmIntrfStat_t s_Stat;
 
 static NvmDevIntrf_t s_NvmDev;
+
+#ifdef ST_FLASH_ECCR
+// The bus range of the flash read in progress, 0 to 0 when none, and whether
+// a double ECC error inside it was taken by the NMI.
+static volatile uintptr_t s_EccFrom;
+static volatile uintptr_t s_EccTo;
+static volatile bool s_bEccHit;
+#endif
 
 DevIntrf_t *NvmMcuDevIntrf(void)
 {
@@ -295,12 +329,22 @@ static void StFlashLock(void)
 
 // What runs after the medium changed under the caches. A memory mapped read
 // through a stale line answers with the bytes from before the operation,
-// which for a store means reading back data it never wrote. WBA fetches
-// through its ICACHE peripheral, which snoops nothing either, but data
-// reads there do not cache flash, so only L4 has work to do here.
+// which for a store means reading back data it never wrote. WBA reads flash,
+// data as well as code, through its ICACHE peripheral, which snoops
+// nothing: an enabled cache is invalidated, as dfu_stm32.cpp does.
 static void StFlashCacheFlush(void)
 {
-#if defined(IOSONATA_STM32_L4)
+#if defined(IOSONATA_STM32_WBA)
+	if (ICACHE->CR & ICACHE_CR_EN)
+	{
+		uint32_t spin = NVM_INTRF_SPIN;
+
+		ICACHE->CR |= ICACHE_CR_CACHEINV;
+		while ((ICACHE->SR & ICACHE_SR_BUSYF) && --spin != 0)
+		{
+		}
+	}
+#elif defined(IOSONATA_STM32_L4)
 	uint32_t acr = FLASH->ACR;
 
 	if (acr & FLASH_ACR_DCEN)
@@ -417,18 +461,32 @@ int NvmMcuErase(uintptr_t Addr)
 	ST_FLASH_SR = ST_FLASH_SR & ST_FLASH_ERR;
 
 	uint32_t page = (uint32_t)((Addr - FLASH_BASE) / NVM_INTRF_PAGE_SIZE);
+
+	// Unlock before reading the control register: a value read while locked
+	// holds LOCK, and writing it back locks the controller again, so the
+	// start write that follows is ignored and nothing is erased.
+	StFlashUnlock();
+
 	uint32_t cr = ST_FLASH_CR;
 
 	cr &= ~(ST_FLASH_CR_PNB_Msk | ST_FLASH_CR_PG | ST_FLASH_CR_MER);
 
 #ifdef ST_FLASH_CR_BKER
 	// The page number counts within the bank; which bank is a bit of its
-	// own.
+	// own, the physical bank, so it flips when the banks are swapped.
 	uint32_t bank = ST_FLASH_BANK_SIZE();
+	bool second = (Addr - FLASH_BASE) >= bank;
 
-	if ((Addr - FLASH_BASE) >= bank)
+	if (second)
 	{
 		page -= bank / NVM_INTRF_PAGE_SIZE;
+	}
+	if (StFlashBankSwapped())
+	{
+		second = !second;
+	}
+	if (second)
+	{
 		cr |= ST_FLASH_CR_BKER;
 	}
 	else
@@ -439,7 +497,6 @@ int NvmMcuErase(uintptr_t Addr)
 
 	cr |= (page << ST_FLASH_CR_PNB_Pos) | ST_FLASH_CR_PER;
 
-	StFlashUnlock();
 	ST_FLASH_CR = cr;
 	ST_FLASH_CR = cr | ST_FLASH_CR_STRT;
 
@@ -459,6 +516,205 @@ int NvmMcuErase(uintptr_t Addr)
 
 	return res;
 }
+
+#ifdef ST_FLASH_ECCR
+// Whether the flash word holding Addr is inside the read in progress
+static inline bool StEccInWindow(uintptr_t Addr)
+{
+	Addr &= ~(uintptr_t)(NVM_INTRF_WRITE_GRAN - 1);
+
+	return Addr + NVM_INTRF_WRITE_GRAN > s_EccFrom && Addr < s_EccTo;
+}
+
+// From NMI_Handler of the vector file. A double ECC error at an address the
+// read in progress covers is cleared and makes that read fail. Any other
+// double error, a code fetch or a read outside this driver, is not taken
+// here: false lets the vector file stop as before. C linkage: the vector
+// file calls it through a weak reference, like Stm32TimerIRQHandler.
+extern "C" bool Stm32FlashEccNmi(void)
+{
+	uint32_t eccr = ST_FLASH_ECCR;
+
+	if ((eccr & FLASH_ECCR_ECCD) == 0 || (eccr & FLASH_ECCR_SYSF_ECC) != 0 ||
+		s_EccTo == 0)
+	{
+		return false;
+	}
+
+	// ADDR_ECC is the byte offset of the failing word from the start of its
+	// bank, as RM0515 describes FLASH_ECCR. HAL_FLASHEx_GetEccInfo shifts it
+	// left by 3, but the field is exactly as wide as the largest bank of the
+	// line is in bytes: 20 bits on the lines with 1 MB banks (WBA52, WBA54,
+	// WBA55, WBA6x), 19 on the 512 KB WBA50.
+	uintptr_t off = (uintptr_t)(eccr & FLASH_ECCR_ADDR_ECC_Msk);
+	bool hit = false;
+
+#ifdef ST_FLASH_CR_BKER
+	uintptr_t bank = ST_FLASH_BANK_SIZE();
+	bool second = (eccr & FLASH_ECCR_BK_ECC) != 0;
+
+	hit = StEccInWindow(FLASH_BASE + off + (second ? bank : 0));
+
+	// With the banks swapped, whether BK_ECC names the physical bank, as
+	// BKER does, or the mapped one is not settled here:
+	// HAL_FLASHEx_GetEccInfo ignores the swap. Both readings are taken.
+	if (hit == false && StFlashBankSwapped())
+	{
+		hit = StEccInWindow(FLASH_BASE + off + (second ? 0 : bank));
+	}
+#else
+	hit = StEccInWindow(FLASH_BASE + off);
+#endif
+
+	if (hit == false)
+	{
+		return false;
+	}
+
+	s_bEccHit = true;
+	ST_FLASH_ECCR = (ST_FLASH_ECCR & FLASH_ECCR_ECCIE) | FLASH_ECCR_ECCD | FLASH_ECCR_ECCC;
+
+	// A cache line filled by the failed read holds the damaged bytes and
+	// would give them to the next read of the same address without an ECC
+	// check, and without the NMI. An enabled ICACHE is invalidated before
+	// the read is retried.
+	StFlashCacheFlush();
+
+	return true;
+}
+
+// Copy one flash word, or the part of it at pSrc, with nothing else reading
+// the flash between the ECCC clear and the loads: the function runs from RAM
+// (.fastrun, which the linker scripts place in .data, copied at reset) and
+// interrupts are masked, so no instruction is fetched from flash and no other
+// code runs in between. A correction ECCR shows afterwards is then the word's
+// own, unless another bus master read the flash meanwhile. The source is read
+// through a volatile pointer so the compiler cannot make the loop a memcpy
+// call, which would run from flash. The NMI of a double error is not masked.
+// Returns ECCR as read once the loads are done.
+__attribute__((section(".fastrun"), noinline, long_call))
+static uint32_t StFlashWordCopy(uint8_t *pDst, const volatile uint8_t *pSrc, int Len)
+{
+	uint32_t primask = __get_PRIMASK();
+
+	__disable_irq();
+	ST_FLASH_ECCR = (ST_FLASH_ECCR & FLASH_ECCR_ECCIE) | FLASH_ECCR_ECCC;
+
+	// Stops at a double error: every further load of a damaged word would
+	// raise the NMI again.
+	for (int i = 0; i < Len && s_bEccHit == false; i++)
+	{
+		pDst[i] = pSrc[i];
+	}
+
+	// The NMI of a load can come a few instructions after it, so ECCR is
+	// read once the loads are done, and before an interrupt can run.
+	__DSB();
+	__ISB();
+
+	uint32_t eccr = ST_FLASH_ECCR;
+
+	__set_PRIMASK(primask);
+
+	return eccr;
+}
+
+// Whether the corrected error recorded in Eccr names the flash word holding
+// Addr. The address is compared without its low bits, as StEccInWindow does
+// for a double error, and with the banks swapped both readings of BK_ECC are
+// taken, as Stm32FlashEccNmi does.
+static bool StEccOwnWord(uint32_t Eccr, uintptr_t Addr)
+{
+	if (Eccr & FLASH_ECCR_SYSF_ECC)
+	{
+		return false;
+	}
+
+	uintptr_t gran = NVM_INTRF_WRITE_GRAN;
+	uintptr_t off = (Addr & ~(gran - 1)) - FLASH_BASE;
+	uintptr_t ecc = (uintptr_t)(Eccr & FLASH_ECCR_ADDR_ECC_Msk) & ~(gran - 1);
+
+#ifdef ST_FLASH_CR_BKER
+	uintptr_t bank = ST_FLASH_BANK_SIZE();
+	bool second = off >= bank;
+
+	if (second != ((Eccr & FLASH_ECCR_BK_ECC) != 0) && !StFlashBankSwapped())
+	{
+		return false;
+	}
+	off %= bank;
+#endif
+
+	return ecc == off;
+}
+
+// Copy Len bytes of flash at Addr, one flash word at a time. ECCR takes an
+// error only while ECCC and ECCD are both clear (RM0515 FLASH_ECCR): a
+// corrected error left set, by an earlier word of the read or by anything
+// else, would keep a double error in the next word from raising the NMI, and
+// the read would return the damaged bytes. ECCC is therefore cleared before
+// each word, by StFlashWordCopy. A correction recorded for the word is valid
+// corrected data. One recorded elsewhere, which only another bus master can
+// leave inside StFlashWordCopy, may have hidden a double error here: the
+// cache is invalidated and the word read again. Two such attempts fail the
+// read.
+static bool StFlashEccCopy(uint8_t *pBuff, uintptr_t Addr, int Len)
+{
+	s_bEccHit = false;
+	s_EccFrom = Addr;
+	s_EccTo = Addr + (uintptr_t)Len;
+
+	while (Len > 0 && s_bEccHit == false)
+	{
+		int n = NVM_INTRF_WRITE_GRAN - (int)(Addr % NVM_INTRF_WRITE_GRAN);
+
+		if (n > Len)
+		{
+			n = Len;
+		}
+
+		bool checked = false;
+		for (int pass = 0; pass < 2; pass++)
+		{
+			uint32_t eccr = StFlashWordCopy(pBuff, (const volatile uint8_t *)Addr, n);
+
+			if (s_bEccHit)
+			{
+				break;
+			}
+
+			// No correction, or a correction of this word, which is usable
+			if ((eccr & FLASH_ECCR_ECCC) == 0 || StEccOwnWord(eccr, Addr))
+			{
+				checked = true;
+				break;
+			}
+
+			// Clearing ECCC alone does not evict bytes fetched while it
+			// masked a double error. Flush even on the last attempt so a
+			// later call cannot accept those bytes from the cache.
+			StFlashCacheFlush();
+		}
+
+		if (!checked)
+		{
+			break;
+		}
+		pBuff += n;
+		Addr += (uintptr_t)n;
+		Len -= n;
+	}
+
+	s_EccFrom = 0;
+	s_EccTo = 0;
+
+	bool ok = Len == 0 && s_bEccHit == false;
+
+	s_bEccHit = false;
+
+	return ok;
+}
+#endif
 
 bool NvmMcuIsReady(void)
 {
@@ -512,7 +768,20 @@ static uintptr_t FrameAddr(NvmDevIntrf_t *pXfer)
 	return a;
 }
 
-// Put whatever whole flash words have been collected into the memory.
+// Move the frame address on by Len, for a transfer continued in pieces
+static void FrameAdvance(NvmDevIntrf_t *pXfer, uint32_t Len)
+{
+	uintptr_t next = FrameAddr(pXfer) + (uintptr_t)Len;
+
+	for (int i = NVM_INTRF_ADDR_SIZE; i > 0; i--)
+	{
+		pXfer->Hdr[i] = (uint8_t)(next & 0xFF);
+		next >>= 8;
+	}
+}
+
+// Put whatever whole flash words have been collected into the memory, and
+// move the frame address past them.
 static int NvmFlush(NvmDevIntrf_t *pXfer)
 {
 	if (pXfer->DataLen == 0)
@@ -538,6 +807,7 @@ static int NvmFlush(NvmDevIntrf_t *pXfer)
 	if (res == 0)
 	{
 		s_Stat.RepDone++;
+		FrameAdvance(pXfer, (uint32_t)pXfer->DataLen);
 	}
 
 	pXfer->DataLen = 0;
@@ -581,9 +851,15 @@ static int NvmTxData(DevIntrf_t *pIntrf, const uint8_t *pData, int Len)
 
 	if (dev->Hdr[0] != NVM_INTRF_CMD_WRITE)
 	{
-		return Len;				// a read frame, served by RxData
+		// A read frame is the frame alone, served by RxData. Data after
+		// any other frame is not taken.
+		return n;
 	}
 
+	// The data goes in at the frame address, which NvmFlush moves past what
+	// it wrote, so a driver that streams a transfer in pieces lands each
+	// where the last one ended. NvmFlush empties the buffer either way: on a
+	// failure the bytes it held were not written, and the count says so.
 	while (n < Len)
 	{
 		dev->Data[dev->DataLen++] = pData[n++];
@@ -592,24 +868,16 @@ static int NvmTxData(DevIntrf_t *pIntrf, const uint8_t *pData, int Len)
 		{
 			if (NvmFlush(dev) != 0)
 			{
-				return n - dev->DataLen;
+				return n - (int)sizeof(dev->Data);
 			}
 		}
 	}
 
+	int pending = dev->DataLen;
+
 	if (NvmFlush(dev) != 0)
 	{
-		return 0;
-	}
-
-	// The frame address moves with what was taken, so a driver that streams
-	// a transfer in pieces lands each where the last one ended.
-	uintptr_t next = FrameAddr(dev) + (uintptr_t)(n - NVM_INTRF_FRAME_SIZE);
-
-	for (int i = NVM_INTRF_ADDR_SIZE; i > 0; i--)
-	{
-		dev->Hdr[i] = (uint8_t)(next & 0xFF);
-		next >>= 8;
+		return n - pending;
 	}
 
 	return Len;
@@ -624,22 +892,25 @@ static int NvmRxData(DevIntrf_t *pIntrf, uint8_t *pBuff, int Len)
 {
 	NvmDevIntrf_t *dev = (NvmDevIntrf_t *)pIntrf->pDevData;
 
-	if (dev->HdrLen < NVM_INTRF_FRAME_SIZE)
+	if (dev->HdrLen < NVM_INTRF_FRAME_SIZE || dev->Hdr[0] != NVM_INTRF_CMD_READ)
 	{
 		return 0;
 	}
 
 	// The flash is memory mapped, so a read is a copy from the bus address.
+#ifdef ST_FLASH_ECCR
+	// A word failing its ECC check raises the NMI during the copy; the copy
+	// then holds bytes that are not the data and the read fails.
+	if (StFlashEccCopy(pBuff, FrameAddr(dev), Len) == false)
+	{
+		return 0;
+	}
+#else
 	memcpy(pBuff, (const void *)FrameAddr(dev), (size_t)Len);
+#endif
 
 	// Advance for a continued read, the same way the write side does.
-	uintptr_t next = FrameAddr(dev) + (uintptr_t)Len;
-
-	for (int i = NVM_INTRF_ADDR_SIZE; i > 0; i--)
-	{
-		dev->Hdr[i] = (uint8_t)(next & 0xFF);
-		next >>= 8;
-	}
+	FrameAdvance(dev, (uint32_t)Len);
 
 	return Len;
 }

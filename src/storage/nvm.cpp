@@ -60,6 +60,8 @@ SOFTWARE.
 #define NVM_CMD_WRDISABLE	0x04U
 #define NVM_CMD_RDSR		0x05U
 #define NVM_CMD_WRSR		0x01U
+#define NVM_CMD_RDSR2		0x35U
+#define NVM_CMD_WRSR2		0x31U
 #define NVM_CMD_SECT_ERASE	0x20U
 #define NVM_CMD_BLK32_ERASE	0x52U
 #define NVM_CMD_BLK64_ERASE	0xD8U
@@ -252,6 +254,99 @@ int Nvm::ReadStatus(uint8_t &Status)
 	int n = Read(&cmd, 1, &Status, 1);
 
 	return XferShort(n, 1) ? 0 : -EIO;
+}
+
+// Read a one byte register of the part with its read command
+int Nvm::RegRead(uint8_t Cmd, uint8_t &Val)
+{
+	Val = 0;
+
+	if (vbPhased)
+	{
+		SPIDev_t *dev = SPIGetHandle(*Interface());
+
+		SPIStartRx(dev, (int)vBaseDevAddr);
+		QuadSPISendCmd(dev, Cmd, (uint32_t)-1, 0, 1, 0);
+		int rd = SPIRxData(dev, &Val, 1);
+		SPIStopRx(dev);
+
+		return rd == 1 ? 0 : -EIO;
+	}
+
+	XferBegin();
+	int n = Read(&Cmd, 1, &Val, 1);
+
+	return XferShort(n, 1) ? 0 : -EIO;
+}
+
+// Write a one byte register of the part with its write command. The write
+// enable latch is the caller's.
+int Nvm::RegWrite(uint8_t Cmd, uint8_t Val)
+{
+	if (vbPhased)
+	{
+		SPIDev_t *dev = SPIGetHandle(*Interface());
+
+		SPIStartTx(dev, (int)vBaseDevAddr);
+		QuadSPISendCmd(dev, Cmd, (uint32_t)-1, 0, 1, 0);
+		int wr = SPITxData(dev, &Val, 1);
+		SPIStopTx(dev);
+
+		return wr == 1 ? 0 : -EIO;
+	}
+
+	return Write(&Cmd, 1, &Val, 1) == 1 ? 0 : -EIO;
+}
+
+// Set the Quad Enable bit when it is not set. The bit is non volatile on most
+// parts, so it is written once in the life of the part.
+int Nvm::SetQuadEnable(const NvmQe_t &Qe)
+{
+	if (Qe.Reg == 0)
+	{
+		return 0;
+	}
+	if (Qe.Reg > 2 || Qe.Bit > 7)
+	{
+		return -EINVAL;
+	}
+
+	uint8_t rdcmd = Qe.Reg == 1 ? NVM_CMD_RDSR : NVM_CMD_RDSR2;
+	uint8_t wrcmd = Qe.Reg == 1 ? NVM_CMD_WRSR : NVM_CMD_WRSR2;
+	uint8_t mask = (uint8_t)(1U << Qe.Bit);
+	uint8_t val;
+
+	if (RegRead(rdcmd, val) != 0)
+	{
+		return -EIO;
+	}
+	if (val & mask)
+	{
+		return 0;
+	}
+
+	if (WriteEnable() == false)
+	{
+		return -EBUSY;
+	}
+	if (RegWrite(wrcmd, (uint8_t)(val | mask)) != 0)
+	{
+		WriteDisable();
+		return -EIO;
+	}
+	if (WaitReady() == false)
+	{
+		WriteDisable();
+		return -EBUSY;
+	}
+	WriteDisable();
+
+	if (RegRead(rdcmd, val) != 0 || (val & mask) == 0)
+	{
+		return -EIO;
+	}
+
+	return 0;
 }
 
 uint8_t Nvm::ReadStatus(void)
@@ -473,7 +568,8 @@ bool Nvm::Init(const NvmCfg_t &Cfg, DeviceIntrf * const pIntrf,
 
 	if (vbPhased)
 	{
-		QuadSPISetMemSize(SPIGetHandle(*pIntrf), (uint32_t)vDevSize);
+		// The interface takes the size in KBytes
+		QuadSPISetMemSize(SPIGetHandle(*pIntrf), (uint32_t)(vDevSize / 1024U));
 	}
 
 	if (vbBare)
@@ -574,6 +670,13 @@ bool Nvm::Init(const NvmCfg_t &Cfg, DeviceIntrf * const pIntrf,
 	if (vbBare == false && vEraseSize != 0 && vAddrSize > 3 &&
 		SendCmd({ NVM_CMD_EN4B, 0 }) != 0)
 	{
+		return fail();
+	}
+
+	// Quad commands need the Quad Enable bit of the part
+	if (vbBare == false && SetQuadEnable(Cfg.QuadEnable) != 0)
+	{
+		DEBUG_PRINTF("Nvm quad enable failed\r\n");
 		return fail();
 	}
 

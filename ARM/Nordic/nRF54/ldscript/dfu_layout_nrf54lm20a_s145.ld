@@ -1,4 +1,4 @@
-/* DFU RRAM layout, nRF54LM20 (A and B) with S145.
+/* DFU RRAM layout, nRF54LM20A with S145.
  *
  * Included by the stage 0 boot script (dfu_boot_nrf54lm20a_s145.ld) and
  * the application script (gcc_nrf54lm20a_xxaa_s145_dfu.ld), so both agree

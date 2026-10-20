@@ -77,10 +77,103 @@ SOFTWARE.
 #include "app_evt_handler.h"		// AppWait, overridden here
 #include "sd_dispatch.h"
 
-/******** For DEBUG ************/
-#define DEBUG_ENABLE
 
-#ifdef DEBUG_ENABLE
+// Port implementation state. Neither its layout nor storage leaves this file.
+static struct {
+	uint8_t Role;
+	uint16_t MaxMtu;
+	BTGAP_SECTYPE SecType;
+	uint8_t SecExchg;
+	bool bSecInit;
+	bool bInitialized;
+	int8_t ConnLedPort;
+	int8_t ConnLedPin;
+	uint8_t ConnLedActLevel;
+} s_BtAppData = {
+	.Role = 0,
+	.MaxMtu = 0,
+	.SecType = BTGAP_SECTYPE_NONE,
+	.SecExchg = 0,
+	.bSecInit = false,
+	.bInitialized = false,
+	.ConnLedPort = -1,
+	.ConnLedPin = -1,
+	.ConnLedActLevel = 0,
+};
+
+bool BtInitialized(void)
+{
+	return s_BtAppData.bInitialized;
+}
+
+// Called by the peer module and this port's event handlers.
+void BtAppConnLedOff(void)
+{
+	if (s_BtAppData.ConnLedPort < 0 || s_BtAppData.ConnLedPin < 0)
+	{
+		return;
+	}
+	if (s_BtAppData.ConnLedActLevel)
+	{
+		IOPinClear(s_BtAppData.ConnLedPort, s_BtAppData.ConnLedPin);
+	}
+	else
+	{
+		IOPinSet(s_BtAppData.ConnLedPort, s_BtAppData.ConnLedPin);
+	}
+}
+
+void BtAppConnLedOn(void)
+{
+	if (s_BtAppData.ConnLedPort < 0 || s_BtAppData.ConnLedPin < 0)
+	{
+		return;
+	}
+	if (s_BtAppData.ConnLedActLevel)
+	{
+		IOPinSet(s_BtAppData.ConnLedPort, s_BtAppData.ConnLedPin);
+	}
+	else
+	{
+		IOPinClear(s_BtAppData.ConnLedPort, s_BtAppData.ConnLedPin);
+	}
+}
+
+uint8_t BtAdvHandle(void);
+
+// A connection/init event must not force the optional scan object into the image.
+extern void BtScanEnded(void) __attribute__((weak));
+
+static void BtAppScanEnded(void)
+{
+	if (BtScanEnded != nullptr)
+	{
+		BtScanEnded();
+	}
+}
+
+// Internal security operations; they do not link the optional security module.
+BTGAP_SECTYPE BtAppSecConfigGet(uint8_t *pExchg)
+{
+	*pExchg = s_BtAppData.SecExchg;
+	return s_BtAppData.SecType;
+}
+
+bool BtAppSecIsStarted(void)
+{
+	return s_BtAppData.bSecInit;
+}
+
+void BtAppSecStarted(void)
+{
+	s_BtAppData.bSecInit = true;
+}
+
+
+/******** For DEBUG ************/
+//#define DEBUG_ENABLE
+
+#if defined(DEBUG_ENABLE) && !defined(NDEBUG)
 #include "syslog.h"
 #define DEBUG_PRINTF(...)		SysLogPrintf(SysLogGet(), __VA_ARGS__)
 #else
@@ -178,8 +271,6 @@ static const BtAppCfg_t *s_pBtAppCfg = nullptr;
 // after that point finishes the service setup itself.
 static bool s_bBtAppSrvcDone = false;
 
-// g_BtAppData definition and helpers (isConnected, BtConnected, BtInitialized,
-// BtAppConnLedOff/On) moved to src/bluetooth/bt_app.cpp.
 
 //BtDevice_t g_BtDevnRF5;
 
@@ -736,7 +827,7 @@ static void BtAppNrf52ConnEvt(ble_evt_t const * p_ble_evt, void *p_context)
 	{
 		case BLE_GAP_EVT_SEC_PARAMS_REQUEST:
 			DEBUG_PRINTF("SEC: EVT_SEC_PARAMS_REQUEST (pairing started by peer/PM)\r\n");
-			if (g_BtAppData.bSecInit == false)
+			if (s_BtAppData.bSecInit == false)
 			{
 				// The application did not start the security module
 				// (BtAppSecInit). Nothing else answers this request, so
@@ -746,7 +837,7 @@ static void BtAppNrf52ConnEvt(ble_evt_t const * p_ble_evt, void *p_context)
 			}
 			break;
 		case BLE_GAP_EVT_SEC_INFO_REQUEST:
-			if (g_BtAppData.bSecInit == false)
+			if (s_BtAppData.bSecInit == false)
 			{
 				// No bond is kept without the security module: no key.
 				(void)sd_ble_gap_sec_info_reply(p_ble_evt->evt.gap_evt.conn_handle,
@@ -754,7 +845,7 @@ static void BtAppNrf52ConnEvt(ble_evt_t const * p_ble_evt, void *p_context)
 			}
 			break;
 		case BLE_GAP_EVT_SEC_REQUEST:
-			if (g_BtAppData.bSecInit == false)
+			if (s_BtAppData.bSecInit == false)
 			{
 				// Central role: reject the peripheral Security Request.
 				(void)sd_ble_gap_authenticate(p_ble_evt->evt.gap_evt.conn_handle, NULL);
@@ -815,7 +906,6 @@ static void BtAppNrf52ConnEvt(ble_evt_t const * p_ble_evt, void *p_context)
 			}
 
         	BtAppConnLedOn();
-        	g_BtAppData.State = BTAPP_STATE_CONNECTED;
 
         	// If a secure SecType was configured, security is requested on
         	// the link by the security observer in bt_sec_nrf52.cpp
@@ -835,15 +925,13 @@ static void BtAppNrf52ConnEvt(ble_evt_t const * p_ble_evt, void *p_context)
 					BtPeerFree(pPeer);
 				}
 
-				bool connected = BtPeerIsConnected();
+				bool connected = BtConnected();
 				if (connected)
 				{
-					g_BtAppData.State = BTAPP_STATE_CONNECTED;
 					BtAppConnLedOn();
 				}
 				else
 				{
-					g_BtAppData.State = BTAPP_STATE_IDLE;
 					BtAppConnLedOff();
 				}
 
@@ -923,7 +1011,7 @@ static void BtAppNrf52ConnEvt(ble_evt_t const * p_ble_evt, void *p_context)
    }
    // on_ble_evt(p_ble_evt);
 #if 1
-    if ((role == BLE_GAP_ROLE_CENTRAL) || g_BtAppData.AppDevice.Conn.Role & (BTAPP_ROLE_CENTRAL | BTAPP_ROLE_OBSERVER))
+    if ((role == BLE_GAP_ROLE_CENTRAL) || s_BtAppData.Role & (BTAPP_ROLE_CENTRAL | BTAPP_ROLE_OBSERVER))
     {
     	switch (p_ble_evt->header.evt_id)
         {
@@ -972,7 +1060,7 @@ static void BtAppNrf52ConnEvt(ble_evt_t const * p_ble_evt, void *p_context)
         }
     	BtAppCentralEvtHandler(p_ble_evt->header.evt_id, (void*)p_ble_evt);
     }
-    if (g_BtAppData.AppDevice.Conn.Role & BTAPP_ROLE_PERIPHERAL)
+    if (s_BtAppData.Role & BTAPP_ROLE_PERIPHERAL)
     {
     	// HVN TX complete gives a count, not a handle. Drain the per-peer
     	// send-order ring once per event.
@@ -1011,7 +1099,7 @@ static void ble_evt_dispatch(ble_evt_t const * p_ble_evt, void *p_context)
 		BtAppAdvTimeoutHandler();
 	}
 
-	if (g_BtAppData.AppDevice.Conn.Role & (BTAPP_ROLE_CENTRAL | BTAPP_ROLE_OBSERVER))
+	if (s_BtAppData.Role & (BTAPP_ROLE_CENTRAL | BTAPP_ROLE_OBSERVER))
 	{
 		BtAppCentralEvtHandler(p_ble_evt->header.evt_id, (void*)p_ble_evt);
 	}
@@ -1050,18 +1138,18 @@ void BtGattInit(void)
     err_code = nrf_ble_gatt_init(&s_Gatt, BtGattEvtHandler);
     APP_ERROR_CHECK(err_code);
 
-    if (g_BtAppData.AppDevice.Conn.Role & BT_GAP_ROLE_PERIPHERAL)
+    if (s_BtAppData.Role & BT_GAP_ROLE_PERIPHERAL)
     {
-    	err_code = nrf_ble_gatt_att_mtu_periph_set(&s_Gatt, g_BtAppData.AppDevice.Conn.MaxMtu);
+    	err_code = nrf_ble_gatt_att_mtu_periph_set(&s_Gatt, s_BtAppData.MaxMtu);
     	APP_ERROR_CHECK(err_code);
 
-    	if (g_BtAppData.AppDevice.Conn.MaxMtu >= 27)
+    	if (s_BtAppData.MaxMtu >= 27)
     	{
     		// 251 bytes is max dat length as per Bluetooth core spec 5, vol 6, part b, section 4.5.10
     		// 27 - 251 bytes is hardcoded in nrf_ble_gat of the SDK.
     		// It is very confusing in the SDK. According to the Specs, it should be ATT MTU + 4
     		// where Max length cannot be more than 251. Which means ATT MTU max is no more than 247.
-    		uint8_t dlen = g_BtAppData.AppDevice.Conn.MaxMtu + 4;//> 254 ? 251: g_BtAppData.AppDevice.Conn.MaxMtu - 3;
+    		uint8_t dlen = s_BtAppData.MaxMtu + 4;//> 254 ? 251: s_BtAppData.MaxMtu - 3;
     		err_code = nrf_ble_gatt_data_length_set(&s_Gatt, BLE_CONN_HANDLE_INVALID, dlen);
     		APP_ERROR_CHECK(err_code);
     	}
@@ -1074,9 +1162,9 @@ void BtGattInit(void)
       	APP_ERROR_CHECK(err_code);
     }
 
-    if (g_BtAppData.AppDevice.Conn.Role & BT_GAP_ROLE_CENTRAL)
+    if (s_BtAppData.Role & BT_GAP_ROLE_CENTRAL)
     {
-    	err_code = nrf_ble_gatt_att_mtu_central_set(&s_Gatt, g_BtAppData.AppDevice.Conn.MaxMtu);
+    	err_code = nrf_ble_gatt_att_mtu_central_set(&s_Gatt, s_BtAppData.MaxMtu);
     	APP_ERROR_CHECK(err_code);
 
     	ble_opt_t opt;
@@ -1537,6 +1625,7 @@ bool BtAppConnInit(void)
 
 bool BtAppInit(const BtAppCfg_t *pCfg)//, bool bEraseBond)
 {
+	s_BtAppData.bInitialized = false;
 	ret_code_t err_code;
 
 	//g_BleAppData.State = BLEAPP_STATE_UNKNOWN;
@@ -1544,28 +1633,23 @@ bool BtAppInit(const BtAppCfg_t *pCfg)//, bool bEraseBond)
 	//g_BleAppData.bScan = false;
 	//g_BleAppData.bAdvertising = false;
 	//g_BleAppData.VendorId = pBleAppCfg->VendorID;
-	g_BtAppData.AppDevice.Conn.Role = pCfg->Role;
+	s_BtAppData.Role = pCfg->Role;
 	// Kept for BtAppSecInit, which the application calls from
 	// BtAppInitUserData when it uses security.
-	g_BtAppData.SecType = pCfg->SecType;
-	g_BtAppData.SecExchg = pCfg->SecExchg;
-	g_BtAppData.bSecInit = false;
-	g_BtAppData.AdvHdl = BLE_GAP_ADV_SET_HANDLE_NOT_SET;
+	s_BtAppData.SecType = pCfg->SecType;
+	s_BtAppData.SecExchg = pCfg->SecExchg;
+	s_BtAppData.bSecInit = false;
 
 	// The peer table, the GAP setup, the connection parameters module and
 	// the GATT module are set up by BtAppConnInit, see the service setup
 	// below.
 	s_pBtAppCfg = pCfg;
 	s_bBtAppSrvcDone = false;
-	g_BtAppData.ConnLedPort = pCfg->ConnLedPort;
-	g_BtAppData.ConnLedPin = pCfg->ConnLedPin;
-	g_BtAppData.ConnLedActLevel = pCfg->ConnLedActLevel;
-	g_BtAppData.bScan = false;
+	s_BtAppData.ConnLedPort = pCfg->ConnLedPort;
+	s_BtAppData.ConnLedPin = pCfg->ConnLedPin;
+	s_BtAppData.ConnLedActLevel = pCfg->ConnLedActLevel;
+	BtAppScanEnded();
 	//s_BtDevnRF5.bAdvertising = false;
-	g_BtAppData.AppDevice.VendorId = pCfg->VendorId;
-	g_BtAppData.AppDevice.ProductId = pCfg->ProductId;
-	g_BtAppData.AppDevice.ProductVer = pCfg->ProductVer;
-	g_BtAppData.AppDevice.Appearance = pCfg->Appearance;
 
 	if (pCfg->ConnLedPort != -1 && pCfg->ConnLedPin != -1)
     {
@@ -1578,12 +1662,12 @@ bool BtAppInit(const BtAppCfg_t *pCfg)//, bool bEraseBond)
 	//g_BleAppData.Role = pBleAppCfg->Role;
 	//g_BleAppData.AdvHdl = BLE_GAP_ADV_SET_HANDLE_NOT_SET;
     //g_BleAppData.ConnHdl = BLE_CONN_HANDLE_INVALID;
-	g_BtAppData.AppDevice.Conn.MaxMtu = NRF_BLE_MAX_MTU_SIZE;
+	s_BtAppData.MaxMtu = NRF_BLE_MAX_MTU_SIZE;
 
     if (pCfg->MaxMtu > NRF_BLE_MAX_MTU_SIZE)
-    	g_BtAppData.AppDevice.Conn.MaxMtu = pCfg->MaxMtu;
+    	s_BtAppData.MaxMtu = pCfg->MaxMtu;
     else
-    	g_BtAppData.AppDevice.Conn.MaxMtu = NRF_BLE_MAX_MTU_SIZE;
+    	s_BtAppData.MaxMtu = NRF_BLE_MAX_MTU_SIZE;
 
     nrf_clock_lf_cfg_t lfclk = {
     	0
@@ -1608,7 +1692,7 @@ bool BtAppInit(const BtAppCfg_t *pCfg)//, bool bEraseBond)
     APP_ERROR_CHECK(err_code);
 
     // Initialize SoftDevice.
-    BtAppStackInit(g_BtAppData.AppDevice.Conn.MaxMtu, pCfg->PeriphDevMax, pCfg->CentralDevMax,
+    BtAppStackInit(s_BtAppData.MaxMtu, pCfg->PeriphDevMax, pCfg->CentralDevMax,
     				pCfg->Role & BTAPP_ROLE_PERIPHERAL);
     				//pBleAppCfg->AdvType != BLEADV_TYPE_ADV_NONCONN_IND);
 //    				pBleAppCfg->AppMode != BLEAPP_MODE_NOCONNECT);
@@ -1653,22 +1737,21 @@ bool BtAppInit(const BtAppCfg_t *pCfg)//, bool bEraseBond)
 
     BtAppInitUserData();
 
-    // The security module (IOsonata bond/security state, LESC, ECDH engine) is linked and
-    // started only when the application calls BtAppSecInit, normally from
-    // BtAppInitUserData above. A configuration that asks for security without
-    // starting it must not run unprotected.
-    if (pCfg->SecType != BTGAP_SECTYPE_NONE && g_BtAppData.bSecInit == false)
-    {
+	// The security module (IOsonata bond/security state, LESC, ECDH engine) is linked and
+	// started only when the application calls BtAppSecInit, normally from
+	// BtAppInitUserData above. A configuration that asks for security without
+	// starting it must not run unprotected.
+	if (pCfg->SecType != BTGAP_SECTYPE_NONE && s_BtAppData.bSecInit == false)
+	{
     	DEBUG_PRINTF("BtAppInit FAIL: SecType=%d but BtAppSecInit was not called\r\n",
     				 (int)pCfg->SecType);
     	return false;
-    }
+	}
 
-    g_BtAppData.AppDevice.bSecure = pCfg->SecType != BTGAP_SECTYPE_NONE;
 
     DEBUG_PRINTF("BtAppInit: reached adv gate, role=0x%02x\r\n",
-        (unsigned)g_BtAppData.AppDevice.Conn.Role);
-    if (g_BtAppData.AppDevice.Conn.Role & (BT_GAP_ROLE_PERIPHERAL | BT_GAP_ROLE_BROADCASTER))
+        (unsigned)s_BtAppData.Role);
+    if (s_BtAppData.Role & (BT_GAP_ROLE_PERIPHERAL | BT_GAP_ROLE_BROADCASTER))
     {
         if (BtAppAdvInit(pCfg) == false)
         {
@@ -1676,15 +1759,15 @@ bool BtAppInit(const BtAppCfg_t *pCfg)//, bool bEraseBond)
         	return false;
         }
         DEBUG_PRINTF("BtAppInit: BtAppAdvInit ok, AdvHdl=%d\r\n",
-            (int)g_BtAppData.AdvHdl);
+            (int)BtAdvHandle());
 
-        err_code = sd_ble_gap_tx_power_set(BLE_GAP_TX_POWER_ROLE_ADV, g_BtAppData.AdvHdl, GetValidTxPower(pCfg->TxPower));
+        err_code = sd_ble_gap_tx_power_set(BLE_GAP_TX_POWER_ROLE_ADV, BtAdvHandle(), GetValidTxPower(pCfg->TxPower));
         APP_ERROR_CHECK(err_code);
-       // BtGapInit(g_BtAppData.AppDevice.Conn.Role);
+       // BtGapInit(s_BtAppData.Role);
     }
     else
     {
-        err_code = sd_ble_gap_tx_power_set(BLE_GAP_TX_POWER_ROLE_SCAN_INIT, g_BtAppData.AdvHdl, GetValidTxPower(pCfg->TxPower));
+        err_code = sd_ble_gap_tx_power_set(BLE_GAP_TX_POWER_ROLE_SCAN_INIT, BtAdvHandle(), GetValidTxPower(pCfg->TxPower));
         APP_ERROR_CHECK(err_code);
     }
     //err_code = ble_lesc_init();
@@ -1697,16 +1780,16 @@ bool BtAppInit(const BtAppCfg_t *pCfg)//, bool bEraseBond)
     NVIC_EnableIRQ(FPU_IRQn);
 #endif
 
-    g_BtAppData.State = BTAPP_STATE_INITIALIZED;
+    s_BtAppData.bInitialized = true;
 
-    // Advertising starts here and not from the event queue: an application
-    // interrupt can fill the queue before the application runs it.
-    if (g_BtAppData.AppDevice.Conn.Role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER))
+	// Advertising starts here and not from the event queue: an application
+	// interrupt can fill the queue before the application runs it.
+	if (s_BtAppData.Role & (BTAPP_ROLE_PERIPHERAL | BTAPP_ROLE_BROADCASTER))
     {
     	BtAdvStart();
     }
 
-    return true;
+	return true;
 }
 
 
@@ -1716,7 +1799,7 @@ bool BtAppInit(const BtAppCfg_t *pCfg)//, bool bEraseBond)
 //uint32_t BtAppConnect(ble_gap_addr_t * const pDevAddr, ble_gap_conn_params_t * const pConnParam)
 bool BtAppConnect(BtGapPeerAddr_t * const pPeerAddr, BtGapConnParams_t * const pConnParam)
 {
-    g_BtAppData.bScan = false;
+	BtAppScanEnded();
 
     return BtGapConnect(pPeerAddr, pConnParam);
 
@@ -1726,7 +1809,7 @@ bool BtAppConnect(BtGapPeerAddr_t * const pPeerAddr, BtGapConnParams_t * const p
 											 BTAPP_CONN_CFG_TAG);
     //APP_ERROR_CHECK(err_code);
 
-    g_BtAppData.bScan = false;
+	BtAppScanEnded();
 #endif
 
     //return err_code == NRF_SUCCESS;

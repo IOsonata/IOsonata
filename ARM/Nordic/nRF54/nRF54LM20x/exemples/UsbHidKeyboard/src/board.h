@@ -46,4 +46,4 @@ SOFTWARE.
 #define HID_LED_PIN			22
 #define HID_LED_PINOP		0
 
-#endif // __USB_HID_KEYBOARD_BOARD_H__
+#endif

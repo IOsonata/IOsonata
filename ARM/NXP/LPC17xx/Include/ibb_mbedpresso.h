@@ -132,6 +132,6 @@ Modified by          Date              Description
 #define MBEDPRESSO_OPSWITCH2_PORT		2
 #define MBEDPRESSO_OPSWITCH2_PIN		10
 
-#endif	// __IBB_MBEDPRESSO_H__
+#endif
 
 

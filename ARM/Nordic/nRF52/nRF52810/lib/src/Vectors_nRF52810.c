@@ -59,7 +59,7 @@ __attribute__((weak, alias("DEF_IRQHandler"))) void RADIO_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void UARTE0_UART0_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void TWIM0_TWIS0_TWI0_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void SPIM0_SPIS0_SPI0_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void GPIOTE_IRQHandler(void);
+__attribute__((weak)) void GPIOTE_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void SAADC_IRQHandler(void);
 __attribute__((weak/*, alias("DEF_IRQHandler")*/)) void TIMER0_IRQHandler(void);
 __attribute__((weak/*, alias("DEF_IRQHandler")*/)) void TIMER1_IRQHandler(void);

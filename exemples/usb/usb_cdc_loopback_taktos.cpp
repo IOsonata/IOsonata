@@ -44,7 +44,9 @@ SOFTWARE.
 #include "coredev/interrupt.h"
 #include "usb/usb.h"
 #include "usb/usbd_cdc.h"
+#if __has_include("board.h")
 #include "board.h"
+#endif
 #include "coredev/system_core_clock.h"
 #include "TaktOS.h"
 #include "TaktOSThread.h"

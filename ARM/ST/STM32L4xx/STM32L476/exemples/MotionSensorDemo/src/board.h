@@ -39,96 +39,23 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #ifndef __BOARD_H__
 #define __BOARD_H__
 
-#include "stm32l4xx.h"
+// Board, one of the names in stm32_boards.h. This STM32L476 project builds for
+// B_L475E_IOT01A (B-L475E-IOT01A and B-L475E-IOT01A2, STM32L475VG).
+#define BOARD				B_L475E_IOT01A
 
-#define STM32L476G_DISCO
+#include "stm32_boards.h"
 
-// *** STM32L476G-DISCO
-#define UART_NO				1
-#define UART_RX_PORT		3
-#define UART_RX_PIN			6
-#define UART_RX_PINOP		(0x72)
+// The demo reads an ICM456x connected to the Arduino header. The Debug build
+// prints with semihosting.
+//
+// I2C1 (DevNo 0, the I2C instance the demo uses) on the Arduino header,
+// AF4: SDA D14 PB9, SCL D15 PB8. ICM456x AP_AD0 low selects address 0x68.
+#define I2C_PINS			STM32_BOARD_I2C(IOPORTB, 9, IOPINOP_FUNC4, IOPORTB, 8, IOPINOP_FUNC4)
+#define ACC_DEV_ADDR		ICM456X_I2C_7BITS_DEVADDR0
 
-#define UART_TX_PORT		3
-#define UART_TX_PIN			5
-#define UART_TX_PINOP		(0x72)
-
-#define UART_CTS_PORT		-1
-#define UART_CTS_PIN		-1
-#define UART_CTS_PINOP		0
-#define UART_RTS_PORT		-1
-#define UART_RTS_PIN		-1
-#define UART_RTS_PINOP		0
-
-#ifdef QSPI
-#define QSPI_DEVNO			0
-#define QSPI_SCK_PORT       4		// PE10
-#define QSPI_SCK_PIN        10
-#define QSPI_SCK_PINOP      (0xA2)	// AF10
-#define QSPI_D0_PORT		4		// PE12
-#define QSPI_D0_PIN        	12
-#define QSPI_D0_PINOP      	(0xA2)	// AF10
-#define QSPI_D1_PORT		4		// PE13
-#define QSPI_D1_PIN        	13
-#define QSPI_D1_PINOP      	(0xA2)	// AF10
-#define QSPI_D2_PORT		4		// PE14
-#define QSPI_D2_PIN        	14
-#define QSPI_D2_PINOP      	(0xA2)	// AF10
-#define QSPI_D3_PORT		4		// PE15
-#define QSPI_D3_PIN        	15
-#define QSPI_D3_PINOP      	(0xA2)	// AF10
-#define QSPI_FLASH_CS_PORT	4		// PE11
-#define QSPI_FLASH_CS_PIN   11
-#define QSPI_FLASH_CS_PINOP (0xA2)	// AF10
-#else
-#if 0
-#define SPI2_DEVNO			0
-#define SPI2_SCK_PORT      	4		// PE13
-#define SPI2_SCK_PIN       	13
-#define SPI2_SCK_PINOP     	(0x52)	// AF5
-#define SPI2_MISO_PORT		4		// PE14
-#define SPI2_MISO_PIN       14
-#define SPI2_MISO_PINOP     (0x52)	// AF5
-#define SPI2_MOSI_PORT      4		// PE15
-#define SPI2_MOSI_PIN       15
-#define SPI2_MOSI_PINOP     (0x52)	// AF5
-#else
-#define SPI_DEVNO			1
-#define SPI_SCK_PORT      	3		// PD1
-#define SPI_SCK_PIN       	1
-#define SPI_SCK_PINOP     	(0x52)	// AF5
-#define SPI_MISO_PORT		3		// PD3
-#define SPI_MISO_PIN       3
-#define SPI_MISO_PINOP     (0x52)	// AF5
-#define SPI_MOSI_PORT      3		// PD4
-#define SPI_MOSI_PIN       4
-#define SPI_MOSI_PINOP     (0x52)	// AF5
-#endif
-#define SPI_XL_CS_PORT		4		// PE0
-#define SPI_XL_CS_PIN		0
-#define SPI_XL_CS_PINOP		1
-
-#define SPI_GY_CS_PORT		3		// PD7
-#define SPI_GY_CS_PIN		7
-#define SPI_GY_CS_PINOP		0
-
-#define SPI_MG_CS_PORT		2		// PC0
-#define SPI_MG_CS_PIN		0
-#define SPI_MG_CS_PINOP		1
-
-#define SPI2_FLASH_CS_PORT	4		// PE11
-#define SPI2_FLASH_CS_PIN   11
-#define SPI2_FLASH_CS_PINOP (0x52)	// AF5
-#endif
-
-#define I2C_SCL_PORT		5		// PF1
-#define I2C_SCL_PIN			1
-#define I2C_SCL_PINOP		(0x42)	// AF4
-
-#define I2C_SDA_PORT		5		// PF0
-#define I2C_SDA_PIN			0
-#define I2C_SDA_PINOP		(0x42)	// AF4
-
+// ICM456x INT1 on Arduino D2 PD14
+#define IMU_INT_PORT		IOPORTD
+#define IMU_INT_PIN			14
+#define IMU_INT_PINOP		IOPINOP_GPIO
 
 #endif // __BOARD_H__
-

@@ -44,7 +44,6 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "bluetooth/bt_app.h"
 #include "bluetooth/blueio_blesrvc.h"
 #include "bluetooth/bt_dev.h"
-#include "blueio_board.h"
 #include "coredev/uart.h"
 #include "coredev/iopincfg.h"
 #include "app_evt_handler.h"
@@ -53,6 +52,10 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "iopinctrl.h"
 
 #include "board.h"
+
+#ifndef UART_DEVNO
+#define UART_DEVNO 0
+#endif
 
 #define DEBUG_PRINT		// Enable printing debug info over UART interface
 
@@ -239,7 +242,7 @@ alignas(4) static uint8_t s_UartRxFifo[UARTFIFOSIZE];//internal Uart_Rx buffer
 alignas(4) static uint8_t s_UartTxFifo[UARTFIFOSIZE];//internal Uart_Tx buffer
 
 UARTCfg_t g_UartCfg = {
-	.DevNo = 0,									// Device number zero based
+	.DevNo = UART_DEVNO,									// Device number zero based
 	.pIOPinMap = s_UartPins,					// UART assigned pins
 	.NbIOPins = sizeof(s_UartPins) / sizeof(IOPinCfg_t),					// Total number of UART pins used
 	.Rate = 1000000,								// Baudrate
@@ -758,7 +761,7 @@ static void UartBleOobPrintLocal(void)
 	uint8_t r[16];
 	uint8_t c[16];
 
-	if (BtSmpOobLocalDataGen(g_BtAppData.AppDevice.pHciDev, r, c) != 0)
+	if (BtSmpOobLocalDataGen(nullptr, r, c) != 0)
 	{
 		g_Uart.printf("OOB local data generation failed\r\n");
 		return;

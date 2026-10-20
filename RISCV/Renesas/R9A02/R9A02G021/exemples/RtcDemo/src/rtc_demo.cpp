@@ -122,12 +122,13 @@ static int Digits2(const char *pStr)
 // __DATE__ is "Mmm dd yyyy", __TIME__ is "hh:mm:ss"
 static void BuildTime(struct tm *pTime)
 {
+	int i;
 	const char *d = __DATE__;
 	const char *t = __TIME__;
 
 	memset(pTime, 0, sizeof(struct tm));
 
-	for (int i = 0; i < 12; i++)
+	for (i = 0; i < 12; i++)
 	{
 		if (memcmp(d, &s_MonthNames[i * 3], 3) == 0)
 		{
@@ -151,6 +152,7 @@ static void PrintTime(const struct tm *pTime)
 // Alarm Min minutes after the current time, any weekday
 static bool AlarmSet(int Min)
 {
+	int m;
 	struct tm t;
 
 	if (R9a02RtcGetTime(&t) == false)
@@ -158,7 +160,7 @@ static bool AlarmSet(int Min)
 		return false;
 	}
 
-	int m = t.tm_hour * 60 + t.tm_min + Min;
+	m = t.tm_hour * 60 + t.tm_min + Min;
 
 	return R9a02RtcSetAlarm(0x7F, (m / 60) % 24, m % 60);
 }
@@ -178,13 +180,25 @@ static void UartWaitIdle(void)
 
 int main()
 {
+	bool calendar;
+	bool setup;
+	struct tm t;
+	uint32_t secs;
+	uintptr_t state;
+	uint32_t evt;
+
 	IOPinCfg(s_Leds, s_NbLeds);
 
 	if (s_Uart.Init(s_UartCfg) == false)
 	{
-		while (1) __WFE();
+		while (1)
+		{
+			__WFE();
+		}
 	}
+#ifdef NDEBUG
 	UARTRetargetEnable(s_Uart, STDOUT_FILENO);
+#endif
 	setvbuf(stdout, NULL, _IONBF, 0);
 
 	printf("\r\nRTC demo, %s between events\r\n", RTC_DEMO_STANDBY ? "Software Standby" : "Sleep");
@@ -192,12 +206,14 @@ int main()
 	if (R9a02RtcInit(RtcEvtHandler, NULL, IRQ_PRIO_NORMAL, true) == false)
 	{
 		printf("RTC init failed, low frequency clock not running\r\n");
-		while (1) __WFE();
+		while (1)
+		{
+			__WFE();
+		}
 	}
 
-	bool calendar = R9a02RtcCalendar();
-	bool setup = calendar;
-	struct tm t;
+	calendar = R9a02RtcCalendar();
+	setup = calendar;
 
 	printf("%s\r\n", calendar ? "Calendar on SOSC" : "RTC on LOCO, fixed-cycle interrupt only");
 
@@ -205,12 +221,12 @@ int main()
 	// the 1 s event, the calendar is set up at the first one
 	R9a02RtcSetPeriod(R9A02_RTC_PERIOD_SEC);
 
-	uint32_t secs = 0;
+	secs = 0;
 
 	while (1)
 	{
-		uintptr_t state = DisableInterrupt();
-		uint32_t evt = s_RtcEvt;
+		state = DisableInterrupt();
+		evt = s_RtcEvt;
 
 		s_RtcEvt = 0;
 		EnableInterrupt(state);

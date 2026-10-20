@@ -14,7 +14,7 @@ DevNo 3 and 4, UARTA0 and UARTA1, are handed to uarta_r9a02.cpp when the
 application links it (uarta_r9a02.h).
 
 Format: 7 or 8 data bits, no, odd, even or space (0) parity, 1 or 2 stop
-bits, LSB first, no flow control, no DMA. Unsupported settings fail
+bits, LSB first, no flow control. Unsupported settings fail
 UARTInit.
 
 Rate: fMCK = PCLKB / 2^PRS (PRS 0 to 15, fMCK at most 32 MHz, table 23.5),
@@ -25,12 +25,23 @@ another channel of the unit runs or uses it, the rate is then set with STCLK
 only. The UART claims its two channels there, a channel cannot be used by the
 UART and the SPI at the same time.
 
-The SAU has a one character buffer each way. With interrupts, transmit uses
-the buffer empty interrupt (SMR.MD0 = 1), receive the transfer end
-interrupt and the error interrupt (SCR.EOC = 1). The transmit interrupt
+The SAU has a one character buffer each way. With interrupts, an isolated
+transmit byte uses transfer end to let following bytes accumulate. Queued
+transmission uses buffer empty (SMR.MD0 = 1). Receive uses transfer end
+and the error interrupt (SCR.EOC = 1). The transmit interrupt
 runs one level below IntPrio so that the receive interrupt can preempt it.
-Without interrupts, TxData waits for each character to go out and RxData
-reads the receive buffer when called.
+Without interrupts, TxData and RxData service both directions without
+waiting for a character on the wire. The application keeps calling them
+while queued bytes remain, as with the STM32 polling implementation.
+
+bDMAMode selects DTC transmit in private blocks, as in the SAM4L port.
+RX retains the interrupt/polling path, including per-character errors and
+short-burst callbacks. The DTC writes SDR by halfwords; the CPU starts each
+block, then the buffer-empty events transfer its remaining characters.
+An isolated CPU byte uses transfer end instead, allowing the producer to
+queue more bytes before the next block is selected, as in the STM32 TC path.
+The TX completion route is enabled in the CLIC also with bIntMode false
+(manual 14.5); in that mode it chains blocks without application callbacks.
 
 Pins: PinOp R9A02_PSEL_SAU (IOPINOP_FUNC16). IOPinConfig puts the RX pin in
 input mode with NCODR = 1 (16.5.1). The RxD noise filter (SNFEN) is on.
@@ -81,9 +92,11 @@ SOFTWARE.
 
 #include "r9a02g021.h"
 #include "coredev/iopincfg.h"
+#include "iopinctrl.h"
 #include "coredev/uart.h"
 #include "coredev/interrupt.h"
 #include "interrupt_r9a02.h"
+#include "dtc_r9a02.h"
 #include "system_r9a02.h"
 #include "sau_r9a02.h"
 #include "uarta_r9a02.h"
@@ -97,6 +110,9 @@ SOFTWARE.
 // Most bytes TxData and RxData copy to or from a CFIFO with interrupts
 // disabled, to keep the RX interrupt latency short
 #define R9A02_UART_COPY_MAX			8
+
+// Private TX staging, as in SAM4L. SDR requires halfword writes (23.3.8).
+#define R9A02_UART_DMA_SIZE			16
 
 #define R9A02_SAU_SIR_ALL			(R9A02_SAU_SIR_OVCT | R9A02_SAU_SIR_PECT | R9A02_SAU_SIR_FECT)
 
@@ -128,6 +144,8 @@ typedef struct {
 	int IntRx;
 	int IntErr;
 	const struct __R9a02_Uart_Snz_Ops *pSnz;	// Reception in Snooze set up, NULL when not
+	R9a02DtcInfo_t TxDtc;
+	uint16_t TxDmaMem[R9A02_UART_DMA_SIZE];
 } R9a02UartDev_t;
 
 // Reception in Snooze, reached through R9a02UartDev_t.pSnz, which only
@@ -224,6 +242,8 @@ static_assert(sizeof(s_R9a02UartDev) / sizeof(s_R9a02UartDev[0]) == R9A02_UART_S
 
 static void R9a02UartReleaseInts(R9a02UartDev_t * const pDev)
 {
+	R9a02DtcClear(pDev->IntTx);
+	pDev->TxDtc.Cra = 0U;
 	R9a02UnregisterIntHandler(pDev->IntTx);
 	R9a02UnregisterIntHandler(pDev->IntRx);
 	R9a02UnregisterIntHandler(pDev->IntErr);
@@ -232,12 +252,17 @@ static void R9a02UartReleaseInts(R9a02UartDev_t * const pDev)
 	pDev->IntErr = -1;
 }
 
-// Both channels stopped, TxD held at the idle level by SO (23.6.1)
+// Both channels stopped, TxD held at the idle level by SO (23.6.1).
+// ST retains the pin level; clear SOE before writing SO (23.3.15, 23.3.19).
 static void R9a02UartStop(R9a02UartDev_t * const pDev)
 {
 	R9A02_SAU_Type *reg = pDev->pReg;
 	uint16_t txbit = (uint16_t)(1U << pDev->TxCh);
 
+	if (pDev->IntTx >= 0 && pDev->pUartDev->DevIntrf.bDma)
+	{
+		R9a02DtcDisable(pDev->IntTx);
+	}
 	reg->ST = (uint16_t)(3U << pDev->TxCh);
 	reg->SOE = (uint16_t)(reg->SOE & ~txbit);
 	reg->SO = (uint16_t)(reg->SO | txbit);
@@ -260,18 +285,11 @@ static void R9a02UartStart(R9a02UartDev_t * const pDev)
 // The receive buffer, with its error flags (23.6.5). Data first, then the
 // flags read and cleared with the value read. A framing error restarts the
 // receive channel. Returns the number of bytes put in the RX CFIFO.
-static int R9a02UartRxHw(R9a02UartDev_t * const pDev, uint8_t *pErr)
+static int R9a02UartRxRead(R9a02UartDev_t * const pDev, uint8_t *pErr)
 {
 	UARTDev_t *udev = pDev->pUartDev;
 	R9A02_SAU_Type *reg = pDev->pReg;
 	uint32_t ch = pDev->TxCh + 1U;
-	uint16_t ssr = reg->SSR[ch];
-
-	if ((ssr & (R9A02_SAU_SSR_BFF | R9A02_SAU_SSR_ERR_Msk)) == 0U)
-	{
-		return 0;
-	}
-
 	uint16_t d = reg->SDR[ch];
 	uint16_t err = reg->SSR[ch] & R9A02_SAU_SSR_ERR_Msk;
 
@@ -317,56 +335,192 @@ static int R9a02UartRxHw(R9a02UartDev_t * const pDev, uint8_t *pErr)
 	return 0;
 }
 
-// Next byte of the TX CFIFO into SDR. SDR takes a byte only when empty, a
-// write with BFF set is lost (23.3.11), a stopped channel takes none: the
-// bytes wait in the CFIFO. Returns 1 when a byte was written, 0 when the
-// CFIFO is empty, -1 when SDR is full or the channel stopped.
-static int R9a02UartTxHw(R9a02UartDev_t * const pDev)
+// The empty check stays inline in the streaming path, as in the STM32 port.
+// Error handling and FIFO insertion are only entered when RX needs service.
+static inline __attribute__((always_inline)) int R9a02UartRxHw(R9a02UartDev_t * const pDev, uint8_t *pErr)
 {
-	R9A02_SAU_Type *reg = pDev->pReg;
-
-	if ((reg->SSR[pDev->TxCh] & R9A02_SAU_SSR_BFF) || (reg->SE & (1U << pDev->TxCh)) == 0U)
-	{
-		return -1;
-	}
-
-	uint8_t *p = CFifoGet(pDev->pUartDev->hTxFifo);
-
-	if (p == NULL)
+	if ((pDev->pReg->SSR[pDev->TxCh + 1U] & (R9A02_SAU_SSR_BFF | R9A02_SAU_SSR_ERR_Msk)) == 0U)
 	{
 		return 0;
 	}
 
-	reg->SDR[pDev->TxCh] = *p;
+	return R9a02UartRxRead(pDev, pErr);
+}
+
+// Next byte of the TX CFIFO into SDR. SDR takes a byte only when empty, a
+// write with BFF set is lost (23.3.11), a stopped channel takes none: the
+// bytes wait in the CFIFO. Returns 1 when a byte was written, 0 when the
+// CFIFO is empty, -1 when SDR is full or the channel stopped.
+static inline __attribute__((always_inline)) int R9a02UartTxHw(R9a02UartDev_t * const pDev, bool bTransferEnd = false)
+{
+	R9A02_SAU_Type *reg = pDev->pReg;
+	uint32_t ch = pDev->TxCh;
+	volatile uint16_t *sdr = &reg->SDR[ch];
+
+	if ((reg->SSR[ch] & R9A02_SAU_SSR_BFF) || (reg->SE & (1U << ch)) == 0U)
+	{
+		return -1;
+	}
+
+	int c = CFifoGetByte(pDev->pUartDev->hTxFifo);
+
+	if (c < 0)
+	{
+		return 0;
+	}
+
+	if (bTransferEnd)
+	{
+		// Let bytes accumulate during this character before servicing
+		// the next data, as the STM32 TC path does. MD0 may change while
+		// running (figure 23.33); set it before writing this character.
+		reg->SMR[ch] = (uint16_t)(reg->SMR[ch] & ~R9A02_SAU_SMR_MD0);
+	}
+	*sdr = (uint8_t)c;
 
 	return 1;
 }
 
-// Without interrupts, everything in the TX CFIFO is sent now. Each byte waits
-// at most two character times for SDR.
-static void R9a02UartTxDrain(R9a02UartDev_t * const pDev)
+// DTC drains a private block; CFIFO storage may be reused immediately.
+// A normal transfer ends when its last halfword enters SDR, not on wire
+// completion. Stage the next block while that byte is still transmitting,
+// then leave the buffer-empty request to the CPU to arm it. Arming while
+// SDR is full could lose an event while DTCE is set.
+// Called with interrupts disabled, from TxData, polling or the TX handler.
+static void R9a02UartTxDma(R9a02UartDev_t * const pDev)
 {
-	R9A02_SAU_Type *reg = pDev->pReg;
 	UARTDev_t *udev = pDev->pUartDev;
-	uint32_t rate = udev->Rate > 0 ? (uint32_t)udev->Rate : 1U;
-	uint32_t timeout = (SystemCoreClock / rate + 1U) * 24U + 1000U;
+	R9A02_SAU_Type *reg = pDev->pReg;
+	volatile R9a02DtcInfo_t *info = &pDev->TxDtc;
 
-	if ((reg->SE & (1U << pDev->TxCh)) == 0U)
+	if (R9a02DtcEnabled(pDev->IntTx) || (reg->SE & (1U << pDev->TxCh)) == 0U)
+	{
+		return;
+	}
+	if (info->Cra == 0U)
+	{
+		int cnt = 0;
+
+		while (cnt < R9A02_UART_DMA_SIZE)
+		{
+			int len = R9A02_UART_DMA_SIZE - cnt;
+			uint8_t *p = CFifoGetMultiple(udev->hTxFifo, &len);
+
+			if (p == NULL)
+			{
+				break;
+			}
+			for (int i = 0; i < len; i++)
+			{
+				pDev->TxDmaMem[cnt + i] = p[i];
+			}
+			cnt += len;
+		}
+		if (cnt == 0)
+		{
+			// Ready still means SDR is available, not just an empty CFIFO.
+			if ((reg->SSR[pDev->TxCh] & R9A02_SAU_SSR_BFF) == 0U)
+			{
+				udev->bTxReady = true;
+			}
+
+			return;
+		}
+		info->Sar = (uint32_t)(uintptr_t)pDev->TxDmaMem;
+		info->Cra = (uint16_t)cnt;
+	}
+	udev->bTxReady = false;
+	if (reg->SSR[pDev->TxCh] & R9A02_SAU_SSR_BFF)
 	{
 		return;
 	}
 
-	while (CFifoUsed(udev->hTxFifo) > 0)
-	{
-		uint32_t n = timeout;
+	// Blocks use buffer-empty requests so the DTC fills SDR while the
+	// preceding character is shifting. A lone CPU byte used transfer end.
+	reg->SMR[pDev->TxCh] = (uint16_t)(reg->SMR[pDev->TxCh] | R9A02_SAU_SMR_MD0);
 
-		while ((reg->SSR[pDev->TxCh] & R9A02_SAU_SSR_BFF) && --n > 0U)
+	uint16_t first = *(const uint16_t *)(uintptr_t)info->Sar;
+
+	info->Sar = info->Sar + sizeof(uint16_t);
+	info->Cra = info->Cra - 1U;
+	// SDR stays empty until the first write below. DtcEnable clears the old
+	// CPU request before arming; do not repeat full route cleanup here.
+	if (info->Cra != 0U)
+	{
+		R9a02DtcEnable(pDev->IntTx);
+	}
+	else
+	{
+		R9a02EventFlagClear(pDev->IntTx);
+	}
+	reg->SDR[pDev->TxCh] = first;
+}
+
+// Called only when TX is idle, after its CPU event, or after Stop. Single
+// bytes use the register directly with transfer-end notification; queued
+// bursts use buffer-empty events and, when selected, the DTC. The running
+// transfer owns the FIFO until it drains, as in STM32 and SAM4L.
+static inline __attribute__((always_inline)) void R9a02UartTxKick(R9a02UartDev_t * const pDev, bool bDma)
+{
+	UARTDev_t *udev = pDev->pUartDev;
+
+	if (bDma &&
+		(((volatile R9a02DtcInfo_t *)&pDev->TxDtc)->Cra != 0U || CFifoUsed(udev->hTxFifo) > 1))
+	{
+		R9a02UartTxDma(pDev);
+	}
+	else
+	{
+		// An isolated byte waits until transfer end so the producer can
+		// queue its successor. Bursts continue on buffer-empty events.
+		int cnt = R9a02UartTxHw(pDev, bDma || CFifoUsed(udev->hTxFifo) == 1);
+
+		if (cnt >= 0)
 		{
+			udev->bTxReady = cnt == 0;
 		}
-		if (n == 0U || R9a02UartTxHw(pDev) <= 0)
+	}
+}
+
+// Poll completion only when a CPU event is pending. DTCE protects a live
+// block even if its IR is briefly set during a DTC activation.
+static inline __attribute__((always_inline)) void R9a02UartTxDmaPoll(R9a02UartDev_t * const pDev)
+{
+	if (!pDev->pUartDev->bTxReady)
+	{
+		uint32_t evt = R9A02_ICU->IELSR[pDev->IntTx];
+
+		if ((evt & (R9A02_IELSR_IR | R9A02_IELSR_DTCE)) != R9A02_IELSR_IR)
+		{
+			return;
+		}
+		R9a02EventFlagClear(pDev->IntTx);
+	}
+	R9a02UartTxKick(pDev, true);
+}
+
+// Without interrupts, service both directions as the handlers would. Fill
+// the shift register and SDR when ready, but never wait for a character on
+// the wire. Read RX between TX writes so full duplex reception keeps going.
+static void R9a02UartPoll(R9a02UartDev_t * const pDev)
+{
+	uint8_t err = 0;
+
+	R9a02UartRxHw(pDev, &err);
+	if (pDev->pUartDev->DevIntrf.bDma)
+	{
+		R9a02UartTxDmaPoll(pDev);
+		R9a02UartRxHw(pDev, &err);
+
+		return;
+	}
+	for (int i = 0; i < 2; i++)
+	{
+		if (R9a02UartTxHw(pDev) <= 0)
 		{
 			break;
 		}
+		R9a02UartRxHw(pDev, &err);
 	}
 }
 
@@ -377,7 +531,11 @@ static void R9a02UartTxResume(R9a02UartDev_t * const pDev)
 {
 	UARTDev_t *udev = pDev->pUartDev;
 
-	if (udev->DevIntrf.bIntEn)
+	if (udev->DevIntrf.bDma)
+	{
+		R9a02UartTxKick(pDev, true);
+	}
+	else if (udev->DevIntrf.bIntEn)
 	{
 		udev->bTxReady = R9a02UartTxHw(pDev) <= 0;
 	}
@@ -393,7 +551,9 @@ static void R9a02UartTxWait(R9a02UartDev_t * const pDev)
 	UARTDev_t *udev = pDev->pUartDev;
 	R9A02_SAU_Type *reg = pDev->pReg;
 	uint32_t rate = udev->Rate > 0 ? (uint32_t)udev->Rate : 1U;
-	uint32_t limit = (SystemCoreClock / rate + 1U) * 12U * ((uint32_t)CFifoUsed(udev->hTxFifo) + 2U);
+	uint32_t staged = udev->DevIntrf.bDma ? R9A02_UART_DMA_SIZE : 0U;
+	uint32_t limit = (SystemCoreClock / rate + 1U) * 12U *
+					 ((uint32_t)CFifoUsed(udev->hTxFifo) + staged + 2U);
 	uint32_t start;
 
 	__asm volatile ("csrr %0, mcycle" : "=r"(start));
@@ -403,6 +563,13 @@ static void R9a02UartTxWait(R9a02UartDev_t * const pDev)
 	{
 		uint32_t now;
 
+		if (udev->DevIntrf.bDma)
+		{
+			uintptr_t state = DisableInterrupt();
+
+			R9a02UartTxDma(pDev);
+			EnableInterrupt(state);
+		}
 		__asm volatile ("csrr %0, mcycle" : "=r"(now));
 		if ((uint32_t)(now - start) >= limit)
 		{
@@ -499,22 +666,70 @@ static void R9a02UartRxIRQHandler(int IntNo, void *pCtx)
 	}
 }
 
-// Transmit buffer empty interrupt: the byte in SDR went to the shift register
+// The callback is outside the byte path, so its call state is not saved
+// around every SDR write.
+__attribute__((noinline)) static void R9a02UartTxNotify(UARTDev_t * const pDev)
+{
+	if (pDev->DevIntrf.bIntEn && pDev->EvtCallback)
+	{
+		pDev->EvtCallback(pDev, UART_EVT_TXREADY, NULL, CFifoAvail(pDev->hTxFifo));
+	}
+}
+
+// Byte service has no DMA selection or descriptor state. Keep the hardware
+// guards: a higher-priority RX callback can stop or restart TX after the
+// dispatcher acknowledges this event and before this handler runs.
 static void R9a02UartTxIRQHandler(int IntNo, void *pCtx)
 {
 	R9a02UartDev_t *dev = (R9a02UartDev_t *)pCtx;
 	UARTDev_t *udev = dev->pUartDev;
 	uintptr_t state = DisableInterrupt();
 
-	if (R9a02UartTxHw(dev) == 0)
+	// The isolated startup byte used transfer end. Subsequent bytes
+	// fill SDR ahead of the shift register through buffer-empty events.
+	R9A02_SAU_Type *reg = dev->pReg;
+
+	reg->SMR[dev->TxCh] = (uint16_t)(reg->SMR[dev->TxCh] | R9A02_SAU_SMR_MD0);
+
+	int cnt = R9a02UartTxHw(dev);
+
+	if (cnt >= 0)
 	{
-		// TX CFIFO empty, TxData starts the next transmission
-		udev->bTxReady = true;
+		udev->bTxReady = cnt == 0;
+	}
+	EnableInterrupt(state);
+
+	if (cnt == 0 && udev->bTxReady)
+	{
+		R9a02UartTxNotify(udev);
+	}
+}
+
+static void R9a02UartTxDmaIRQHandler(int IntNo, void *pCtx)
+{
+	R9a02UartDev_t *dev = (R9a02UartDev_t *)pCtx;
+	UARTDev_t *udev = dev->pUartDev;
+	uintptr_t state = DisableInterrupt();
+	uint8_t err = 0;
+
+	// This IRQ also runs with bIntMode false. Service the one-byte RX
+	// buffer around TX work, as in the polling path; foreground polling
+	// cannot run while the next DMA block is staged here.
+	if (!udev->DevIntrf.bIntEn)
+	{
+		R9a02UartRxHw(dev, &err);
+	}
+
+	R9a02UartTxKick(dev, true);
+
+	if (!udev->DevIntrf.bIntEn)
+	{
+		R9a02UartRxHw(dev, &err);
 	}
 
 	EnableInterrupt(state);
 
-	if (udev->EvtCallback)
+	if (udev->bTxReady && udev->DevIntrf.bIntEn && udev->EvtCallback)
 	{
 		udev->EvtCallback(udev, UART_EVT_TXREADY, NULL, CFifoAvail(udev->hTxFifo));
 	}
@@ -566,7 +781,7 @@ static bool R9a02UartSnoozeClock(R9a02UartDev_t * const pDev, uint32_t Rate)
 
 	if (running)
 	{
-		reg->ST = chmsk;
+		R9a02UartStop(pDev);
 	}
 
 	bool ok = R9a02SauSetPrs(pDev->Unit, chmsk, Rate == 4800U ? 5U : 4U, &clk);
@@ -624,7 +839,7 @@ static uint32_t R9a02UartSetRate(DevIntrf_t * const pDev, uint32_t Rate)
 
 	if (running)
 	{
-		reg->ST = chmsk;
+		R9a02UartStop(dev);
 	}
 
 	// Rate = fMCK / (2 x (STCLK + 1)), STCLK from 2 (23.3.8). Both channels
@@ -665,6 +880,7 @@ static int R9a02UartRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int Bufflen)
 	UARTDev_t *udev = dev->pUartDev;
 	hCFifo_t fifo = udev->hRxFifo;
 	bool poll = !pDev->bIntEn;
+	bool held = !poll && CFifoIsBlocking(fifo);
 	int cnt = 0;
 
 	if (pBuff == NULL || Bufflen <= 0)
@@ -672,34 +888,52 @@ static int R9a02UartRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int Bufflen)
 		return 0;
 	}
 
-	// CFifoGetMultiple frees the slots before they are copied, interrupts
-	// are disabled until the copy is done so that the interrupt cannot put
-	// over them. Without interrupts the receive buffer is read first.
+	// A blocking FIFO keeps the inspected bytes until the copy is released,
+	// so RX can interrupt the copy. A non-blocking producer can overwrite
+	// old bytes: keep its copy protected. Polling services both directions.
 	while (cnt < Bufflen)
 	{
 		int l = Bufflen - cnt < R9A02_UART_COPY_MAX ? Bufflen - cnt : R9A02_UART_COPY_MAX;
-		uintptr_t state = DisableInterrupt();
+		uintptr_t state = 0;
+
+		if (!held)
+		{
+			state = DisableInterrupt();
+		}
 
 		if (poll)
 		{
-			uint8_t err = 0;
-
-			R9a02UartRxHw(dev, &err);
+			R9a02UartPoll(dev);
 		}
 
-		uint8_t *p = CFifoGetMultiple(fifo, &l);
+		uint8_t *p = held ? CFifoPeekMultiple(fifo, &l) : CFifoGetMultiple(fifo, &l);
 
 		if (p != NULL)
 		{
 			memcpy(pBuff + cnt, p, l);
+			if (held)
+			{
+				CFifoRelease(fifo, l);
+			}
 		}
-		EnableInterrupt(state);
+		if (!held)
+		{
+			EnableInterrupt(state);
+		}
 
 		if (p == NULL)
 		{
 			break;
 		}
 		cnt += l;
+	}
+
+	if (poll)
+	{
+		uintptr_t state = DisableInterrupt();
+
+		R9a02UartPoll(dev);
+		EnableInterrupt(state);
 	}
 
 	// Cleared first, then set again if a byte is left. A byte put by the
@@ -722,25 +956,43 @@ static bool R9a02UartStartTx(DevIntrf_t * const pDev, uint32_t DevAddr)
 	return true;
 }
 
-// Several bytes into the TX CFIFO. CFifoPutMultiple publishes the slots
-// before they are written, so interrupts are disabled for the copy, in pieces
-// of at most R9A02_UART_COPY_MAX bytes. Returns the number of bytes put.
+// Reserve, fill, then publish a blocking FIFO span. DeviceIntrf serializes
+// the producer; the TX interrupt cannot read it before publication. Polling
+// and non-blocking FIFOs keep the protected, short-copy path.
 __attribute__((noinline)) static int R9a02UartTxPut(R9a02UartDev_t * const pDev, uint8_t const *pData, int Datalen)
 {
 	hCFifo_t fifo = pDev->pUartDev->hTxFifo;
+	bool poll = !pDev->pUartDev->DevIntrf.bIntEn;
+	bool held = !poll && CFifoIsBlocking(fifo);
 	int cnt = 0;
 
 	while (Datalen > 0)
 	{
-		int l = Datalen < R9A02_UART_COPY_MAX ? Datalen : R9A02_UART_COPY_MAX;
-		uintptr_t state = DisableInterrupt();
-		uint8_t *p = CFifoPutMultiple(fifo, &l);
+		int l = held || Datalen < R9A02_UART_COPY_MAX ? Datalen : R9A02_UART_COPY_MAX;
+		uintptr_t state = 0;
+
+		if (!held)
+		{
+			state = DisableInterrupt();
+		}
+		if (poll)
+		{
+			R9a02UartPoll(pDev);
+		}
+		uint8_t *p = held ? CFifoResvMultiple(fifo, &l) : CFifoPutMultiple(fifo, &l);
 
 		if (p != NULL)
 		{
 			memcpy(p, pData, l);
+			if (held)
+			{
+				CFifoPutMultiple(fifo, &l);
+			}
 		}
-		EnableInterrupt(state);
+		if (!held)
+		{
+			EnableInterrupt(state);
+		}
 
 		if (p == NULL)
 		{
@@ -754,7 +1006,10 @@ __attribute__((noinline)) static int R9a02UartTxPut(R9a02UartDev_t * const pDev,
 	return cnt;
 }
 
-static int R9a02UartTxData(DevIntrf_t * const pDev, uint8_t const *pData, int Datalen)
+// Init selects the byte or DMA entry. Compile the same enqueue logic with
+// a fixed mode so byte writes do not carry DMA calls and their saved state.
+static inline __attribute__((always_inline)) int R9a02UartTxDataMode(DevIntrf_t * const pDev,
+		uint8_t const *pData, int Datalen, bool bDma)
 {
 	R9a02UartDev_t *dev = (R9a02UartDev_t *)pDev->pDevData;
 	UARTDev_t *udev = dev->pUartDev;
@@ -765,6 +1020,8 @@ static int R9a02UartTxData(DevIntrf_t * const pDev, uint8_t const *pData, int Da
 		return 0;
 	}
 
+	// Keep the one-byte producer short, as in the STM32 port. Buffer
+	// copies use TxPut so their loop state is not saved for every byte.
 	if (Datalen == 1)
 	{
 		cnt = CFifoPutByte(udev->hTxFifo, *pData) ? 1 : 0;
@@ -776,23 +1033,42 @@ static int R9a02UartTxData(DevIntrf_t * const pDev, uint8_t const *pData, int Da
 
 	if (!pDev->bIntEn)
 	{
-		R9a02UartTxDrain(dev);
+		// DTC completion has a CPU route even in polling mode. Accepted
+		// writes to a busy blocking FIFO leave TX to that route, just as
+		// in interrupt mode. A full FIFO still polls, so a masked TX IRQ
+		// cannot prevent progress. Non-blocking FIFOs always poll since
+		// their puts never report full. Check RX on every call.
+		if (!bDma || udev->bTxReady || cnt == 0 || !CFifoIsBlocking(udev->hTxFifo) ||
+			(dev->pReg->SSR[dev->TxCh + 1U] & (R9A02_SAU_SSR_BFF | R9A02_SAU_SSR_ERR_Msk)))
+		{
+			uintptr_t state = DisableInterrupt();
+
+			R9a02UartPoll(dev);
+			EnableInterrupt(state);
+		}
 	}
 	else if (udev->bTxReady)
 	{
-		// The first byte starts the transmission, the buffer empty interrupt
-		// sends the rest. Checked again with interrupts disabled, TxData may
-		// also be called from an interrupt.
 		uintptr_t state = DisableInterrupt();
 
-		if (udev->bTxReady && R9a02UartTxHw(dev) > 0)
+		if (udev->bTxReady)
 		{
-			udev->bTxReady = false;
+			R9a02UartTxKick(dev, bDma);
 		}
 		EnableInterrupt(state);
 	}
 
 	return cnt;
+}
+
+static int R9a02UartTxData(DevIntrf_t * const pDev, uint8_t const *pData, int Datalen)
+{
+	return R9a02UartTxDataMode(pDev, pData, Datalen, false);
+}
+
+static int R9a02UartTxDmaData(DevIntrf_t * const pDev, uint8_t const *pData, int Datalen)
+{
+	return R9a02UartTxDataMode(pDev, pData, Datalen, true);
 }
 
 static void R9a02UartStopTx(DevIntrf_t * const pDev)
@@ -864,7 +1140,7 @@ static void R9a02UartSnzHook(bool bEnter, void *pCtx)
 	R9a02ClearPendingInt(dev->IntRx);
 	R9a02ClearPendingInt(dev->IntErr);
 
-	reg->ST = (uint16_t)(3U << dev->TxCh);
+	R9a02UartStop(dev);
 	reg->SIR[rx] = R9A02_SAU_SIR_ALL;
 	(void)reg->SDR[rx];
 	reg->SDR[rx] = snz->SdrSnz;
@@ -1028,10 +1304,11 @@ static void R9a02UartEnable(DevIntrf_t * const pDev)
 	udev->RxDropCnt = 0;
 	udev->TxDropCnt = 0;
 
+	R9a02UartStop(dev);
+	dev->TxDtc.Cra = 0U;
 	CFifoFlush(udev->hTxFifo);
 	udev->bTxReady = true;
 
-	R9a02UartStop(dev);
 	R9a02UartStart(dev);
 
 	EnableInterrupt(state);
@@ -1095,11 +1372,11 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 		return false;
 	}
 
-	if (pCfg->bDMAMode || pCfg->Mode != UART_MODE_UART || pCfg->Duplex != UART_DUPLEX_FULL ||
+	if (pCfg->Mode != UART_MODE_UART || pCfg->Duplex != UART_DUPLEX_FULL ||
 		pCfg->bIrDAMode || pCfg->FlowControl != UART_FLWCTRL_NONE ||
 		(pCfg->DataBits != 7 && pCfg->DataBits != 8) || pCfg->Parity == UART_PARITY_MARK ||
 		(pCfg->StopBits != 1 && pCfg->StopBits != 2) || pCfg->Rate <= 0 ||
-		(pCfg->bIntMode && (pCfg->IntPrio < 0 || pCfg->IntPrio > (int)R9A02_CLIC_PRIO_MAX)))
+		((pCfg->bIntMode || pCfg->bDMAMode) && (pCfg->IntPrio < 0 || pCfg->IntPrio > (int)R9A02_CLIC_PRIO_MAX)))
 	{
 		return false;
 	}
@@ -1206,6 +1483,11 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 		return false;
 	}
 
+	// Pin configuration passes through GPIO output before selecting SAU.
+	// Preload the idle level so the reset PODR value cannot drive TX low.
+	const IOPinCfg_t *txpin = &dev->pIOPinMap[UARTPIN_TX_IDX];
+
+	IOPinSet(txpin->PortNo, txpin->PinNo);
 	IOPinCfg(dev->pIOPinMap, dev->NbIOPins);
 
 	pDev->DevIntrf.Type = DEVINTRF_TYPE_UART;
@@ -1230,7 +1512,7 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	pDev->TxDropCnt = 0;
 	pDev->DevIntrf.IntPrio = pCfg->IntPrio;
 	pDev->DevIntrf.bIntEn = pCfg->bIntMode;
-	pDev->DevIntrf.bDma = false;
+	pDev->DevIntrf.bDma = pCfg->bDMAMode;
 	pDev->DevIntrf.bTxReady = true;
 	pDev->DevIntrf.bNoStop = false;
 	pDev->DevIntrf.EvtCB = NULL;
@@ -1245,7 +1527,7 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	pDev->DevIntrf.RxData = R9a02UartRxData;
 	pDev->DevIntrf.StopRx = R9a02UartStopRx;
 	pDev->DevIntrf.StartTx = R9a02UartStartTx;
-	pDev->DevIntrf.TxData = R9a02UartTxData;
+	pDev->DevIntrf.TxData = pCfg->bDMAMode ? R9a02UartTxDmaData : R9a02UartTxData;
 	pDev->DevIntrf.StopTx = R9a02UartStopTx;
 	pDev->DevIntrf.MaxRetry = UART_RETRY_MAX;
 	pDev->DevIntrf.PowerOff = R9a02UartPowerOff;
@@ -1258,17 +1540,32 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 
 		dev->IntRx = R9a02RegisterIntHandler(dev->EvtRx, pCfg->IntPrio, R9a02UartRxIRQHandler, dev);
 		dev->IntErr = R9a02RegisterIntHandler(dev->EvtErr, pCfg->IntPrio, R9a02UartRxIRQHandler, dev);
-		dev->IntTx = R9a02RegisterIntHandler(dev->EvtTx, txprio, R9a02UartTxIRQHandler, dev);
+		dev->IntTx = R9a02RegisterIntHandler(dev->EvtTx, txprio,
+				pCfg->bDMAMode ? R9a02UartTxDmaIRQHandler : R9a02UartTxIRQHandler, dev);
+	}
+	else if (pCfg->bDMAMode)
+	{
+		// The DTC activation source must be enabled in the CLIC (14.5).
+		dev->IntTx = R9a02RegisterIntHandler(dev->EvtTx, pCfg->IntPrio, R9a02UartTxDmaIRQHandler, dev);
+	}
 
-		if (dev->IntRx < 0 || dev->IntErr < 0 || dev->IntTx < 0)
-		{
-			R9a02UartReleaseInts(dev);
-			IOPinDis(dev->pIOPinMap, dev->NbIOPins);
-			R9a02SauRelease(dev->Unit, chmsk, dev);
-			EnableInterrupt(state);
+	bool ok = !pCfg->bIntMode || (dev->IntRx >= 0 && dev->IntErr >= 0 && dev->IntTx >= 0);
 
-			return false;
-		}
+	if (pCfg->bDMAMode)
+	{
+		memset(&dev->TxDtc, 0, sizeof(dev->TxDtc));
+		dev->TxDtc.Mra = R9A02_DTC_MRA_MD_NORMAL | R9A02_DTC_MRA_SZ_HALF | R9A02_DTC_MRA_SM_INC;
+		dev->TxDtc.Dar = (uint32_t)(uintptr_t)&reg->SDR[dev->TxCh];
+		ok = ok && R9a02DtcSet(dev->IntTx, &dev->TxDtc);
+	}
+	if (!ok)
+	{
+		R9a02UartReleaseInts(dev);
+		IOPinDis(dev->pIOPinMap, dev->NbIOPins);
+		R9a02SauRelease(dev->Unit, chmsk, dev);
+		EnableInterrupt(state);
+
+		return false;
 	}
 
 	R9a02UartEnable(&pDev->DevIntrf);

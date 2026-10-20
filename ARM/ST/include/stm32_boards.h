@@ -1,4 +1,4 @@
-/**--------------------------------------------------------------------------
+/**-------------------------------------------------------------------------
 @file	stm32_boards.h
 
 @brief	Pin maps of the ST evaluation boards used by the STM32 examples
@@ -21,6 +21,10 @@
 							LED_LOGIC_LOW)
 		BOARD_BUT_PINS		user button and its BOARD_BUT1_SENSE, when the
 							board has a button read as a GPIO
+		BOARD_I2C_DEVNO		I2C instance and its SDA and SCL pins on the
+		BOARD_I2C_PINS		Arduino header, where defined
+		BOARD_SPI_DEVNO		SPI instance with BOARD_SPI_SCK, _MISO, _MOSI and
+							_CS _PORT, _PIN and _PINOP, where defined
 
 		DevNo is the position of the instance in the table of the STM32 UART
 		driver, ARM/ST/src/uart_stm32.cpp, counting only the instances of the
@@ -41,7 +45,7 @@
 
 MIT License
 
-Copyright (c) 2026 I-SYST inc. All rights reserved.
+Copyright (c) 2026, I-SYST inc., all rights reserved
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -77,6 +81,8 @@ SOFTWARE.
 #define NUCLEO_H753ZI			6	//!< NUCLEO-H753ZI, STM32H753ZI
 #define STM32WBA65I_DK1			7	//!< STM32WBA65I-DK1, STM32WBA65RI
 
+#define NUCLEO_L152RE			8	//!< NUCLEO-L152RE, STM32L152RE
+
 #ifndef BOARD
 #error "stm32_boards.h: define BOARD before including this file"
 #endif
@@ -90,6 +96,12 @@ SOFTWARE.
 #define STM32_BOARD_UART2(RxPort, RxPin, RxOp, TxPort, TxPin, TxOp)	{ \
 	{RxPort, RxPin, RxOp, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL}, \
 	{TxPort, TxPin, TxOp, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL}, \
+}
+
+// I2C pins: SDA then SCL, open drain with the pull-up of the pin
+#define STM32_BOARD_I2C(SdaPort, SdaPin, SdaOp, SclPort, SclPin, SclOp)	{ \
+	{SdaPort, SdaPin, SdaOp, IOPINDIR_BI, IOPINRES_PULLUP, IOPINTYPE_OPENDRAIN}, \
+	{SclPort, SclPin, SclOp, IOPINDIR_BI, IOPINRES_PULLUP, IOPINTYPE_OPENDRAIN}, \
 }
 
 #define STM32_BOARD_LED(Port, Pin)	{Port, Pin, IOPINOP_GPIO, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL}
@@ -180,14 +192,29 @@ SOFTWARE.
 // LD2 green PA5 (also Arduino D13)
 #define BOARD_LED_PINS		{ STM32_BOARD_LED(IOPORTA, 5), }
 #define BOARD_LED_ACTIVE	1
-// B1 user on PC13, active low
-#define BOARD_BUT_PINS		{ {IOPORTC, 13, IOPINOP_GPIO, IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL}, }
+// B1 user on PC13, active high: the button connects PC13 to VDD, the board
+// has a pull-down (ST NUCLEO-G474RE BSP: pull-down, rising edge)
+#define BOARD_BUT_PINS		{ {IOPORTC, 13, IOPINOP_GPIO, IOPINDIR_INPUT, IOPINRES_PULLDOWN, IOPINTYPE_NORMAL}, }
+#define BOARD_BUT1_SENSE	IOPINSENSE_HIGH_TRANSITION
+
+#elif BOARD == NUCLEO_L152RE
+#if !defined(STM32L152xE)
+#error "NUCLEO-L152RE: build the STM32L152RE project"
+#endif
+#define BOARD_NAME			"NUCLEO-L152RE"
+// USART2, ST-LINK VCP and Arduino D0/D1: PA3 RX, PA2 TX, AF7.
+#define BOARD_VCP_DEVNO		1
+#define BOARD_VCP_PINS		STM32_BOARD_UART(IOPORTA, 3, IOPINOP_FUNC7, 2, IOPINOP_FUNC7)
+#define BOARD_UART_DEVNO	BOARD_VCP_DEVNO
+#define BOARD_UART_PINS		BOARD_VCP_PINS
+#define BOARD_LED_PINS		{ STM32_BOARD_LED(IOPORTA, 5), }
+#define BOARD_LED_ACTIVE	1
+#define BOARD_BUT_PINS		{ {IOPORTC, 13, IOPINOP_GPIO, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL}, }
 #define BOARD_BUT1_SENSE	IOPINSENSE_LOW_TRANSITION
 
 #elif BOARD == NUCLEO_H753ZI
-// No IOsonata STM32H7 port yet. DevNo as the UART driver would number the
-// H753 instances: LPUART1 0, USART1 1, USART2 2, USART3 3, UART4 4, UART5 5,
-// USART6 6.
+// STM32H753 UART DevNo: LPUART1 0, USART1 1, USART2 2, USART3 3, UART4 4, UART5 5,
+// USART6 6, UART7 7, UART8 8.
 #if !defined(STM32H753xx)
 #error "NUCLEO-H753ZI: build an STM32H753 project"
 #endif
@@ -219,6 +246,25 @@ SOFTWARE.
 // USART1 (DevNo 1) on PA8 RX and PB12 TX, AF7, ST-LINK virtual COM port
 #define BOARD_VCP_DEVNO		1
 #define BOARD_VCP_PINS		STM32_BOARD_UART2(IOPORTA, 8, IOPINOP_FUNC7, IOPORTB, 12, IOPINOP_FUNC7)
+// I2C1 (DevNo 0) on the Arduino D14 SDA PB1 and D15 SCL PB2, AF4
+#define BOARD_I2C_DEVNO		0
+#define BOARD_I2C_PINS		STM32_BOARD_I2C(IOPORTB, 1, IOPINOP_FUNC4, IOPORTB, 2, IOPINOP_FUNC4)
+// SPI2 (DevNo 1), AF5 from the ST pin data, on the Arduino pins of UM3462
+// table 8: SCK PB10 (D13), MISO PA9 (D12), MOSI PC3 (D11). The chip select is a
+// GPIO driven by the driver, PB9 (D10).
+#define BOARD_SPI_DEVNO		1
+#define BOARD_SPI_SCK_PORT	IOPORTB
+#define BOARD_SPI_SCK_PIN	10
+#define BOARD_SPI_SCK_PINOP	IOPINOP_FUNC5
+#define BOARD_SPI_MISO_PORT	IOPORTA
+#define BOARD_SPI_MISO_PIN	9
+#define BOARD_SPI_MISO_PINOP	IOPINOP_FUNC5
+#define BOARD_SPI_MOSI_PORT	IOPORTC
+#define BOARD_SPI_MOSI_PIN	3
+#define BOARD_SPI_MOSI_PINOP	IOPINOP_FUNC5
+#define BOARD_SPI_CS_PORT	IOPORTB
+#define BOARD_SPI_CS_PIN	9
+#define BOARD_SPI_CS_PINOP	IOPINOP_GPIO
 // LD6 green PD8, LD5 red PD9
 #define BOARD_LED_PINS		{ STM32_BOARD_LED(IOPORTD, 8), STM32_BOARD_LED(IOPORTD, 9), }
 #define BOARD_LED_ACTIVE	0
@@ -227,4 +273,5 @@ SOFTWARE.
 #error "stm32_boards.h: BOARD is not one of the boards listed"
 #endif
 
-#endif // __STM32_BOARDS_H__
+#endif
+

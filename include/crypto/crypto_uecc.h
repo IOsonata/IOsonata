@@ -61,6 +61,9 @@ public:
 	void KeyReset(void *pKeyCtx) override;
 	CRYPTO_STATUS KeyGen(CRYPTO_CURVE Curve, void *pKeyCtx,
 						 uint8_t *pPubKey) override;
+	CRYPTO_STATUS KeyImport(CRYPTO_CURVE Curve, void *pKeyCtx,
+							const uint8_t *pPrivKey,
+							uint8_t *pPubKey) override;
 	CRYPTO_STATUS Agree(CRYPTO_CURVE Curve, void *pKeyCtx,
 						const uint8_t *pPeerPubKey, uint8_t *pSharedX,
 						bool bKeepKey = false) override;

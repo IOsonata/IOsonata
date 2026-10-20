@@ -6,12 +6,12 @@
 #include <stddef.h>
 #pragma pack(push,4)
 typedef struct {
- uint32_t PutIdx,GetIdx,BlkSize;
- uint8_t *pMemStart;
- int32_t MaxIdxCnt;
- uint32_t Mask;
- bool bBlocking;
- uint32_t DropCnt;
+	uint32_t PutIdx,GetIdx,BlkSize;
+	uint8_t *pMemStart;
+	int32_t MaxIdxCnt;
+	uint32_t Mask;
+	bool bBlocking;
+	uint32_t DropCnt;
 } CFifo_t;
 #pragma pack(pop)
 typedef CFifo_t *hCFifo_t;

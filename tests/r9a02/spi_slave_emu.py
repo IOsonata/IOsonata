@@ -4,17 +4,22 @@
 #
 # The script is the external master. It models what the manual describes:
 #   - SAU slave channel in continuous mode (23.5.6, figures 23.25 and 23.26):
-#     after SS the first SDR write goes to the shift register at once with a
-#     buffer empty event; at the end of each byte the transmit byte waiting
-#     in SDR goes to the shift register and the received byte to SDR, then
-#     the event. Reading received data clears BFF, reading transmit data does
+#     after SS, CPHA=0 loads the first SDR write into the shift register;
+#     CPHA=1 waits for the first SCK edge. Both raise an initial buffer-empty
+#     event without received data in continuous mode. CPHA=1 continuous
+#     transfers exchange SDR and the shifter at the NEXT byte's first edge,
+#     so the final received byte stays in the shifter when SCK stops.
+#     In single mode (23.5.6, figure 23.23), reception reaches SDR and raises
+#     the event at the final sampling edge, without another SCK edge.
+#     Reading received data clears BFF, reading transmit data does
 #     not. OVF on a write with BFF at 1, on received data overwritten, on a
 #     byte clocked without transmit data.
 #   - ICU IELSR: an event sets IR, only software clears it; an event with IR
 #     at 1 is lost (table 12.8 note 2). DTCE at 1 gives the events to the DTC.
 #   - DTC: normal mode chains (table 14.3) with write back; when the counter
 #     of the last record ends, DTCE goes to 0 and IR stays at 1.
-# Interrupts are delivered by calling R9a02IrqDispatch, at byte boundaries.
+# Interrupts are delivered through R9a02IrqDispatch at the first clock edge
+# and byte boundaries. This is a register-order model, not a cycle model.
 # What the model assumes is to confirm on the board (SpiMasterSlave).
 #
 # Needs unicorn 2.1 and pyelftools. unicorn does not decode Zba, Zbb and
@@ -43,6 +48,8 @@ with open(ELF, "rb") as f:
         symsize.setdefault(s.name, s["st_size"])
     segs = [(seg["p_paddr"], seg.data()) for seg in elf.iter_segments()
             if seg["p_type"] == "PT_LOAD" and seg["p_filesz"]]
+
+CAPACITY = symsize["g_Rx"]
 
 def S(name):
     for k, v in sym.items():
@@ -134,6 +141,7 @@ class Slave:
     def __init__(s):
         s.running = False
         s.shift = None
+        s.rxshift = None
         s.sdr = 0
         s.bff = False
         s.isrx = False
@@ -195,10 +203,11 @@ def sau_write(off, size, v):
         m.sdr = v & 0xFF
         m.isrx = False
         m.bff = True
-        if m.shift is None:
+        if m.shift is None and not second_edge(ch):
             m.shift = m.sdr
             m.bff = False
-            sl_event(ch)
+            if continuous(ch):
+                sl_event(ch)
         return
     ch = sau_ch(off, 0x88)
     if ch is not None:
@@ -212,13 +221,35 @@ def sau_write(off, size, v):
                 m.running = off == U1 + 0xA2
                 m.bff = False
                 m.shift = None
+                m.rxshift = None
         return
     bset(SAU, off, size, v)
 
 def snooze_on(ch):
     return ch == 0 and bget(SAU, U1 + 0xB8, 2) & 1
 
-def clock(mosi, ch=None):
+def second_edge(ch):
+    return not (bget(SAU, U1 + 0x98 + 2 * ch, 2) & 0x2000)
+
+def continuous(ch):
+    return bool(bget(SAU, U1 + 0x90 + 2 * ch, 2) & 1)
+
+def first_edge(ch, service=True):
+    m = SL[ch]
+    if m.shift is None and second_edge(ch) and m.bff and not m.isrx:
+        m.shift = m.sdr
+        m.bff = False
+        if m.rxshift is not None:
+            m.sdr = m.rxshift
+            m.rxshift = None
+            m.isrx = True
+            m.bff = True
+        if continuous(ch):
+            sl_event(ch)
+        if service:
+            deliver()
+
+def clock(mosi, ch=None, service_start=True):
     ch = CH if ch is None else ch
     m = SL[ch]
     if not m.running:
@@ -239,16 +270,28 @@ def clock(mosi, ch=None):
         if bget(ICU, 0x200, 2) == EVT_ENDI[ch]:
             event(slot_of(EVT_SNZCANCEL))
         return 0xFF
+    first_edge(ch, service_start)
     if m.shift is None:
         m.ovf = True
         out = 0xFF
     else:
         out = m.shift & 0xFF
-    if m.bff and not m.isrx:
-        m.shift = m.sdr
-    else:
-        m.ovf = True
+    if continuous(ch) and second_edge(ch):
+        # No next leading edge: the last received byte cannot be read
+        # from SDR. CS alone does not transfer it out of the shifter.
+        m.rxshift = mosi
         m.shift = None
+        return out
+    if continuous(ch):
+        if m.bff and not m.isrx:
+            m.shift = m.sdr
+        else:
+            m.ovf = True
+            m.shift = None
+    else:
+        m.shift = None
+        if m.bff:
+            m.ovf = True
     m.sdr = mosi
     m.isrx = True
     m.bff = True
@@ -438,11 +481,12 @@ def tx_expect(n, txlen, tx):
     return [tx[i] if i < txlen else 0xFF for i in range(n)]
 
 def setbufs(rxlen, txlen, seed):
+    assert max(rxlen, txlen) <= CAPACITY
     si("g_RxLen", rxlen)
     si("g_TxLen", txlen)
-    tx = bytes((seed * 7 + i * 13 + 1) & 0xFF for i in range(128))
+    tx = bytes((seed * 7 + i * 13 + 1) & 0xFF for i in range(CAPACITY))
     uc.mem_write(S("g_Tx"), tx)
-    uc.mem_write(S("g_Rx"), b"\x00" * 128)
+    uc.mem_write(S("g_Rx"), b"\x00" * CAPACITY)
     return tx
 
 def run_frames(label, rxlen, txlen, lengths, first=None):
@@ -452,17 +496,17 @@ def run_frames(label, rxlen, txlen, lengths, first=None):
         call("EmuReset")
         done = gi("g_Done")
         mosi = [random.randrange(256) for _ in range(n)]
-        uc.mem_write(S("g_Rx"), b"\x00" * 128)
-        miso = frame(mosi, first)
+        uc.mem_write(S("g_Rx"), b"\x00" * CAPACITY)
+        miso = frame(mosi, first, late={n - 1} if first is not None else None)
         cnt = gi("g_Count")
-        rx = bytes(uc.mem_read(S("g_Rx"), 128))
+        rx = bytes(uc.mem_read(S("g_Rx"), CAPACITY))
         exp_cnt = -1 if (rxlen > 0 and n > rxlen) else n
         tag = "%s rx%d tx%d n%d" % (label, rxlen, txlen, n)
         check(tag + " event", gi("g_Done") == done + 1, "done %d->%d" % (done, gi("g_Done")))
         check(tag + " count", cnt == exp_cnt, "count %d expected %d" % (cnt, exp_cnt))
         m = min(n, rxlen)
         check(tag + " rx", list(rx[:m]) == mosi[:m], "rx %s" % rx[:m].hex())
-        check(tag + " rx untouched", all(x == 0 for x in rx[m:rxlen]), "")
+        check(tag + " rx untouched", all(x == 0 for x in rx[m:]), "")
         check(tag + " miso", miso == tx_expect(n, txlen, tx), "miso %s" % bytes(miso).hex())
 
 random.seed(1)
@@ -485,14 +529,36 @@ check("rate above refused", call("EmuRate", 3100000) == 0)
 check("master Tx refused", call("EmuMasterTx") == 0)
 check("arms after init", gi("g_Arms") >= 1)
 
-lengths = [1, 2, 3, 4, 16, 61, 62, 63, 64, 65, 70, 128]
+lengths = [0, 1, 2, 3, 4, 16, 61, 62, 63, 64, 65, 70, 128]
 for dma in (1, 0):
     for mode in range(4):
         check("init dma%d mode%d" % (dma, mode), call("EmuInit", dma, mode, 1000000) == 1)
         label = "dma%d m%d" % (dma, mode)
+        check(label + " event selection", continuous(CH) == (mode & 1 == 0))
+        if mode & 1:
+            for service in (True, False):
+                tx = setbufs(64, 64, 1)
+                call("EmuReset")
+                endi = slot_of(EVT_SAU1_ENDI1)
+                check(label + " first TX waits for SCK", sl.shift is None and sl.bff and sl.sdr == tx[0])
+                check(label + " DTC ready for transfer end", not icu.ir[endi] and icu.dtce[endi] == bool(dma))
+                events_before = sl.events
+                dtc_before = dtc_runs[0]
+                cs[0] = 0
+                first_edge(CH, service)
+                check(label + " first byte preserved", sl.shift == tx[0])
+                check(label + " first edge has no event", sl.events == events_before and dtc_runs[0] == dtc_before)
+                check(label + " first edge does not store RX", bytes(uc.mem_read(S("g_Rx"), 64)) == bytes(64))
+                # A partial byte is not a transfer end and is not counted.
+                cs[0] = 1
+                event(slot_of(EVT_PORT_IRQ2))
+                deliver(EVT_PORT_IRQ2)
+                check(label + " partial first byte count", gi("g_Count") == 0)
         run_frames(label, 64, 64, lengths)
         run_frames(label + " cs-first", 64, 64, [1, 16, 63, 64], first=EVT_PORT_IRQ2)
         run_frames(label + " sau-first", 64, 64, [1, 16, 63, 64], first=EVT_SAU1_ENDI1)
+        if CAPACITY >= 129:
+            run_frames(label + " demo", 129, 129, [1, 16, 129, 1, 129])
         for rl, tl in ((64, 10), (10, 64), (10, 10), (0, 20), (20, 0), (0, 0), (1, 1), (2, 3), (3, 2)):
             run_frames(label + " uneven", rl, tl, [1, 2, 3, 5, 9, 10, 11, 12, 13, 20])
 
@@ -582,13 +648,13 @@ SNZCR = 0x4001E092
 def ssc():
     return bget(SAU, U1 + 0xB8, 2)
 def ch0_normal():
-    return (bget(SAU, U1 + 0x98, 2) >> 14) & 3 == 3 and bget(SAU, U1 + 0x90, 2) & 1 == 1 and ssc() == 0
+    return (bget(SAU, U1 + 0x98, 2) >> 14) & 3 == 3 and continuous(0) == (not second_edge(0)) and ssc() == 0
 
 call("EmuPowerOff")
 CH = 0
-for dma in (1, 0):
-    tag = "snooze dma%d" % dma
-    check(tag + " init SPI20", call("EmuInit20", dma, 500000) == 1)
+for dma, mode in ((d, m) for d in (1, 0) for m in range(4)):
+    tag = "snooze dma%d m%d" % (dma, mode)
+    check(tag + " init SPI20", call("EmuInit20", dma, 500000, mode) == 1)
     check(tag + " enable", call("EmuSnooze", 1) == 1)
     check(tag + " SELSR0 SAU1_ENDI0", bget(ICU, 0x200, 2) == EVT_ENDI[0], "%x" % bget(ICU, 0x200, 2))
     snzcr = uc.mem_read(SNZCR, 1)[0]

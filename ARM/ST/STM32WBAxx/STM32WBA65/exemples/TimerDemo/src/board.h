@@ -58,8 +58,9 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 // 100 kHz on a TIM. An LPTIM takes the closest frequency it makes, 32 kHz.
 #define TIMER_DEMO_FREQ		100000
 
-// Output on the first ST-LINK virtual COM port, 115200 8N1: USART1 (DevNo 1)
-// RX PA8, TX PB12, AF7, the BOARD_VCP_PINS of stm32_boards.h
+// Output on the first ST-LINK virtual COM port, 1 Mbaud 8N1 in Release (Debug
+// prints with semihosting): USART1 (DevNo 1) RX PA8, TX PB12, AF7, the
+// BOARD_VCP_PINS of stm32_boards.h
 #define TIMER_DEMO_UART
 #define UART_DEVNO			BOARD_VCP_DEVNO
 #define UART_RX_PORT		IOPORTA
@@ -69,4 +70,4 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define UART_TX_PIN			12
 #define UART_TX_PINOP		IOPINOP_FUNC7
 
-#endif // __BOARD_H__
+#endif

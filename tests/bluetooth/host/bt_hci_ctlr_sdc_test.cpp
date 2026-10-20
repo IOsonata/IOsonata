@@ -674,23 +674,22 @@ extern "C" void (* const g_pBtHciCtlrPeriodicAdvSupport)(void) = BtHciCtlrPeriod
 
 // --- the vendor entry points ------------------------------------------------
 
-extern "C" {
 
-int32_t sdc_init(sdc_fault_handler_t)
+extern "C" int32_t sdc_init(sdc_fault_handler_t)
 {
 	s_InitCalls++;
 
 	return s_FailInit ? kVendorRefused : 0;
 }
 
-int32_t sdc_rand_source_register(const sdc_rand_source_t *)
+extern "C" int32_t sdc_rand_source_register(const sdc_rand_source_t *)
 {
 	s_RandSourceCalls++;
 
 	return s_FailRandSource ? kVendorRefused : 0;
 }
 
-int32_t sdc_cfg_set(uint8_t, uint8_t Type, const sdc_cfg_t *pCfg)
+extern "C" int32_t sdc_cfg_set(uint8_t, uint8_t Type, const sdc_cfg_t *pCfg)
 {
 	if (s_CfgCount < kMaxCfg)
 	{
@@ -710,29 +709,29 @@ int32_t sdc_cfg_set(uint8_t, uint8_t Type, const sdc_cfg_t *pCfg)
 	return s_CfgRam;
 }
 
-int32_t sdc_enable(sdc_callback_t, uint8_t *)
+extern "C" int32_t sdc_enable(sdc_callback_t, uint8_t *)
 {
 	s_EnableCalls++;
 
 	return s_FailEnable ? kVendorRefused : 0;
 }
 
-int32_t sdc_disable(void)
+extern "C" int32_t sdc_disable(void)
 {
 	return 0;
 }
 
-int32_t sdc_hci_get(uint8_t *, uint8_t *)
+extern "C" int32_t sdc_hci_get(uint8_t *, uint8_t *)
 {
 	return kVendorRefused;
 }
 
-int32_t sdc_hci_data_put(uint8_t *)
+extern "C" int32_t sdc_hci_data_put(uint8_t *)
 {
 	return 0;
 }
 
-uint8_t sdc_hci_cmd_vs_event_length_set(const sdc_hci_cmd_vs_event_length_set_t *)
+extern "C" uint8_t sdc_hci_cmd_vs_event_length_set(const sdc_hci_cmd_vs_event_length_set_t *)
 {
 	return 0;
 }
@@ -748,7 +747,7 @@ uint8_t sdc_hci_cmd_vs_event_length_set(const sdc_hci_cmd_vs_event_length_set_t 
 		} \
 	}
 
-SDC_SUPPORT_STUB(adv)
+extern "C" SDC_SUPPORT_STUB(adv)
 SDC_SUPPORT_STUB(ext_adv)
 SDC_SUPPORT_STUB(scan)
 SDC_SUPPORT_STUB(ext_scan)
@@ -778,19 +777,18 @@ bool MpslInit(void)
 	return s_FailMpslInit == false;
 }
 
-int MpslNvmArbiterStart(void)
+extern "C" int MpslNvmArbiterStart(void)
 {
 	s_ArbiterStartCalls++;
 
 	return s_FailArbiter ? -1 : 0;
 }
 
-void MpslNvmArbiterStop(void)
+extern "C" void MpslNvmArbiterStop(void)
 {
 	s_ArbiterStopCalls++;
 }
 
-}	// extern "C"
 
 // The controller reaches the entropy source through the crypto engine facet.
 // Nothing in the bring-up draws from it, so these only have to exist. Defining

@@ -55,6 +55,14 @@ SOFTWARE.
 #define IOSONATA_STM32_F4		1
 #include "stm32f4xx.h"
 
+#elif defined(STM32L152xE)
+#define IOSONATA_STM32_L1		1
+#include "stm32l1xx.h"
+
+#elif defined(STM32H753xx)
+#define IOSONATA_STM32_H7		1
+#include "stm32h7xx.h"
+
 #elif defined(STM32L412xx) || defined(STM32L422xx) || defined(STM32L431xx) || defined(STM32L432xx) || \
 	defined(STM32L433xx) || defined(STM32L442xx) || defined(STM32L443xx) || defined(STM32L451xx) || \
 	defined(STM32L452xx) || defined(STM32L462xx) || defined(STM32L471xx) || defined(STM32L475xx) || \
@@ -79,7 +87,7 @@ SOFTWARE.
 
 #elif defined(STM32WBA) || defined(STM32WBA50xx) || defined(STM32WBA52xx) || defined(STM32WBA54xx) || \
 	defined(STM32WBA55xx) || defined(STM32WBA5Mxx) || defined(STM32WBA6xx) || \
-    defined(STM32WBA62xx) || defined(STM32WBA63xx) || defined(STM32WBA64xx) || defined(STM32WBA65xx) || defined(STM32WBA6Mxx)
+	defined(STM32WBA62xx) || defined(STM32WBA63xx) || defined(STM32WBA64xx) || defined(STM32WBA65xx) || defined(STM32WBA6Mxx)
 #define IOSONATA_STM32_WBA		1
 #include "stm32wbaxx.h"
 
@@ -94,4 +102,5 @@ SOFTWARE.
 #endif
 
 #endif // __IOSONATA_STM32_H__
+
 

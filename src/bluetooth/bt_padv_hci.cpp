@@ -51,6 +51,10 @@ SOFTWARE.
 #include "bluetooth/bt_psync.h"
 #include "bluetooth/bt_hci_ctlr.h"
 
+// Internal controller access; not an application API.
+BtHciDevice_t *BtAppHciDevice(void);
+
+
 /******** For DEBUG Trace ************/
 // Define DEBUG_ENABLE to turn on trace for this file. Output goes to the
 // SysLog transport the app configured. A release build defines NDEBUG, which
@@ -146,7 +150,7 @@ static inline void BtPadvWr16(uint8_t *p, uint16_t v)
 
 static inline BtHciDevice_t *BtPadvHciDev(void)
 {
-	return g_BtAppData.AppDevice.pHciDev;
+	return BtAppHciDevice();
 }
 
 // The device to reach the controller through, for a handle inside the range

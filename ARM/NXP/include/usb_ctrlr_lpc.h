@@ -160,4 +160,4 @@ uint16_t UsbCtrlrIsoTraceSnapshot(int DevNo, uint8_t **ppData);
 }
 #endif
 
-#endif // __USB_CTRLR_LPC_H__
+#endif

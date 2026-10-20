@@ -109,4 +109,4 @@ bool UsbdCdcIntrfInit(UsbdCdcDevIntrf_t * const pUsbdDevIntrf, const UsbdCdcIntr
 
 /** @} End of group USBD */
 
-#endif	// __USBD_CDC_INTRF_H__
+#endif

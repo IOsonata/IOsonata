@@ -219,8 +219,8 @@ bool nRFxI2CWaitStop(nRFTwiDev_t * const pDev, int Timeout)
             reg->EVENTS_STOPPED = 0;
 
 #ifdef TWIM_PRESENT
-            NRFX_TWI_TXSTARTED(pDev->pDmaReg) = 0;
-            NRFX_TWI_RXSTARTED(pDev->pDmaReg) = 0;
+			NRFX_TWI_TXSTARTED(pDev->pDmaReg) = 0;
+			NRFX_TWI_RXSTARTED(pDev->pDmaReg) = 0;
 #endif
             return true;
         }
@@ -648,13 +648,16 @@ int nRFxI2CTxDataDMA(DevIntrf_t * const pDev, const uint8_t *pData, int DataLen)
 		dev->pDmaReg->TASKS_RESUME = 1;
 		NRFX_TWI_STARTTX(dev->pDmaReg) = 1;
 
-		if (pDev->bIntEn == false || pDev->bNoStop)
+		if (pDev->bIntEn == false)
 		{
 			if (nRFxI2CWaitTxComplete(dev, timeout) == false)
 				break;
 		}
 		else
 		{
+			// The interrupt handler consumes LASTTX. It sets bTxReady and
+			// leaves the bus suspended when bNoStop is set, which is what
+			// DeviceIntrfRead() waits for before the receive phase.
 			return -1;
 		}
 #ifdef NRF54L_SERIES
@@ -809,8 +812,8 @@ void I2CSetReadRqstData(I2CDev_t * const pDev, int SlaveIdx, uint8_t * const pDa
     nRFTwiDev_t *nrfdev = (nRFTwiDev_t*)pDev->DevIntrf.pDevData;
 
 #ifdef TWIM_PRESENT
-    NRFX_TWI_TX(nrfdev->pDmaSReg).PTR = (uint32_t)pDev->pRRData[SlaveIdx];
-    NRFX_TWI_TX(nrfdev->pDmaSReg).MAXCNT = min(pDev->RRDataLen[SlaveIdx], NRFX_I2C_DMA_MAXCNT);
+	NRFX_TWI_TX(nrfdev->pDmaSReg).PTR = (uint32_t)pDev->pRRData[SlaveIdx];
+	NRFX_TWI_TX(nrfdev->pDmaSReg).MAXCNT = min(pDev->RRDataLen[SlaveIdx], NRFX_I2C_DMA_MAXCNT);
     nrfdev->pDmaSReg->TASKS_PREPARETX = 1;
     nrfdev->pDmaSReg->TASKS_RESUME = 1;
 #endif
@@ -926,7 +929,7 @@ void I2C_IRQHandler(int DevNo, DevIntrf_t * const pDev)
 			len = dev->RxIdx;
 #ifdef TWIM_PRESENT
 
-            NRFX_TWI_TXSTARTED(reg) = 0;
+			NRFX_TWI_TXSTARTED(reg) = 0;
 			if (NRFX_TWI_RXSTARTED(reg))
 			{
 				len = NRFX_TWI_RX(dev->pDmaReg).AMOUNT;
@@ -1194,8 +1197,8 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
 #ifdef TWIM_PRESENT
     reg->EVENTS_LASTRX = 0;
     reg->EVENTS_LASTTX = 0;
-    NRFX_TWI_RXSTARTED(reg) = 0;
-    NRFX_TWI_TXSTARTED(reg) = 0;
+	NRFX_TWI_RXSTARTED(reg) = 0;
+	NRFX_TWI_TXSTARTED(reg) = 0;
 #endif
     reg->EVENTS_SUSPENDED = 0;
     reg->EVENTS_STOPPED = 0;
@@ -1211,8 +1214,8 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
     if (pCfgData->Mode == I2CMODE_SLAVE)
     {
     	NRF_TWIS_Type *sreg = s_nRFxI2CDev[pCfgData->DevNo].pDmaSReg;
-        // TWIS matches at most as many addresses as it has ADDRESS registers
-        pDev->Cfg.NbSlaveAddr = min(pCfgData->NbSlaveAddr, (int)(sizeof(sreg->ADDRESS) / sizeof(sreg->ADDRESS[0])));
+		// TWIS matches at most as many addresses as it has ADDRESS registers
+		pDev->Cfg.NbSlaveAddr = min(pCfgData->NbSlaveAddr, (int)(sizeof(sreg->ADDRESS) / sizeof(sreg->ADDRESS[0])));
 
         sreg->CONFIG = 0;
         sreg->ORC = 0xff;
@@ -1235,8 +1238,8 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
         sreg->EVENTS_READ = 0;
         sreg->EVENTS_WRITE = 0;
         sreg->EVENTS_ERROR = 0;
-        NRFX_TWI_RXSTARTED(sreg) = 0;
-        NRFX_TWI_TXSTARTED(sreg) = 0;
+		NRFX_TWI_RXSTARTED(sreg) = 0;
+		NRFX_TWI_TXSTARTED(sreg) = 0;
         sreg->EVENTS_STOPPED = 0;
 
         enval = TWIS_ENABLE_ENABLE_Enabled << TWIS_ENABLE_ENABLE_Pos;
@@ -1255,8 +1258,8 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
     {
 #ifdef TWIM_PRESENT
 
-        NRFX_TWI_RXSTARTED(reg) = 0;
-        NRFX_TWI_TXSTARTED(reg) = 0;
+		NRFX_TWI_RXSTARTED(reg) = 0;
+		NRFX_TWI_TXSTARTED(reg) = 0;
         reg->EVENTS_STOPPED = 0;
 
         if (pDev->DevIntrf.bDma)

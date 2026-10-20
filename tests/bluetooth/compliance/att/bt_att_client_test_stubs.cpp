@@ -44,14 +44,13 @@ void CompleteCapturedRequest(uint16_t ConnHdl)
 
 } // namespace
 
-extern "C" {
 
-uint32_t BtGattMsTick(void)
+extern "C" uint32_t BtGattMsTick(void)
 {
 	return s_Tick++;
 }
 
-bool BtGattTxPendReserve(uint16_t ConnHdl, BtGattChar_t *pChar,
+extern "C" bool BtGattTxPendReserve(uint16_t ConnHdl, BtGattChar_t *pChar,
 						uint16_t NbPkt)
 {
 	BtDevice_t *pPeer = BtPeerFindByHdl(ConnHdl);
@@ -69,7 +68,7 @@ bool BtGattTxPendReserve(uint16_t ConnHdl, BtGattChar_t *pChar,
 	return true;
 }
 
-void BtGattTxPendRelease(uint16_t ConnHdl)
+extern "C" void BtGattTxPendRelease(uint16_t ConnHdl)
 {
 	BtDevice_t *pPeer = BtPeerFindByHdl(ConnHdl);
 	if (pPeer == nullptr || pPeer->TxPendCount == 0)
@@ -84,7 +83,7 @@ void BtGattTxPendRelease(uint16_t ConnHdl)
 	pPeer->TxPendCount--;
 }
 
-uint32_t BtHciSendAcl(BtHciDevice_t * const pDev,
+extern "C" uint32_t BtHciSendAcl(BtHciDevice_t * const pDev,
 					  BtHciACLDataPacket_t * const pPacket)
 {
 	if (pDev == nullptr || pPacket == nullptr || pDev->SendData == nullptr)
@@ -101,7 +100,6 @@ uint32_t BtHciSendAcl(BtHciDevice_t * const pDev,
 	return sent;
 }
 
-} // extern "C"
 
 // bt_att_dual_host_test.cpp owns BtPeerFindByHdl and its server peer pool.
 // Before running its original main, reuse one zero-initialized pool slot as the

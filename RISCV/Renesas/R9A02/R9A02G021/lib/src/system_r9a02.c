@@ -13,7 +13,8 @@ the source, and the subsystem clock from g_McuOsc.LowPwrOsc. See
 system_r9a02.h for the supported oscillators.
 
 Operating power mode: high-speed above 24 MHz, middle-speed otherwise. The
-code flash needs one wait cycle (MEMWAIT, FLDWAITR) above 32 MHz. With the
+code flash needs one wait cycle (MEMWAIT, FLDWAITR) above 32 MHz, its
+instruction prefetch buffer (PFBER) is turned on at startup. With the
 internal clock supply type B (OFS1.ICSATS = 0) ICLK and PCLKB are always
 equal and HOCO 48 MHz is not allowed (6.2.2).
 
@@ -806,6 +807,24 @@ static void R9a02UnusedCircuitInit(void)
 	R9a02Protect(prev);
 }
 
+// Keep UART0 TxD0_B (P302) disconnected and high impedance during startup.
+// UARTInit configures the pin function when the application opens UART0.
+static void R9a02StartupUartTxHiZ(void)
+{
+	uint8_t pwpr = R9A02_PFS_PWPR;
+	uint32_t pfs;
+
+	R9A02_PFS_PWPR = 0U;
+	R9A02_PFS_PWPR = R9A02_PWPR_PFSWE;
+
+	pfs = R9A02_PFS(3, 2);
+	R9A02_PFS(3, 2) = pfs & ~R9A02_PFS_PMR;
+	R9A02_PFS(3, 2) = pfs & ~(R9A02_PFS_PMR | R9A02_PFS_PDR);
+
+	R9A02_PFS_PWPR = 0U;
+	R9A02_PFS_PWPR = (pwpr & R9A02_PWPR_PFSWE) ? R9A02_PWPR_PFSWE : R9A02_PWPR_B0WI;
+}
+
 static void R9a02StartupStop(void)
 {
 	__asm volatile ("csrci mstatus, 8" ::: "memory");
@@ -823,7 +842,12 @@ void SystemInit(void)
 	// stops in R9a02ExceptionHandler.
 	R9a02TrapInit();
 
+	R9a02StartupUartTxHiZ();
 	R9a02UnusedCircuitInit();
+
+	// Instruction prefetch from the code flash (35.4), off after reset. The
+	// DFU turns it off while it programs the flash.
+	R9A02_FLCN_PFBER = R9A02_PFBER_PFBE;
 
 	SystemOscInit();
 	if (g_R9a02StartupError != R9A02_STARTUP_OK)

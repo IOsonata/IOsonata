@@ -569,18 +569,17 @@ void CheckControllerEnableGatesOnInit(Context &ctx)
 
 } // namespace
 
-extern "C" {
 
 // Stands in for a port's controller bring-up. The weak default in
 // bt_hci_ctlr.cpp succeeds; this strong one records whether it was reached and
 // answers what the test asked for.
-bool BtHciCtlrStart(BtHciCtlrDev_t * const, const BtHciCtlrCfg_t *)
+extern "C" bool BtHciCtlrStart(BtHciCtlrDev_t * const, const BtHciCtlrCfg_t *)
 {
 	s_CtlrStartCalls++;
 	return s_CtlrStartResult;
 }
 
-uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReq,
+extern "C" uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReq,
 	int ReqLen, BtAttReqRsp_t * const)
 {
 	s_AttRequests++;
@@ -590,54 +589,53 @@ uint32_t BtAttProcessReq(uint16_t ConnHdl, BtAttReqRsp_t * const pReq,
 	return 0;
 }
 
-void BtAttProcessRsp(uint16_t, BtAttReqRsp_t * const, int)
+extern "C" void BtAttProcessRsp(uint16_t, BtAttReqRsp_t * const, int)
 {
 }
 
-uint32_t BtL2CapProcessSignal(BtHciDevice_t * const, uint16_t,
+extern "C" uint32_t BtL2CapProcessSignal(BtHciDevice_t * const, uint16_t,
 	BtL2CapPdu_t const * const, uint16_t, BtL2CapPdu_t * const)
 {
 	return 0;
 }
 
-void BtProcessSmpData(BtHciDevice_t * const, uint16_t,
+extern "C" void BtProcessSmpData(BtHciDevice_t * const, uint16_t,
 	BtL2CapSmp_t * const, size_t)
 {
 }
 
-void BtSmpProcessLtkRequest(BtHciDevice_t * const, uint16_t, uint64_t, uint16_t)
+extern "C" void BtSmpProcessLtkRequest(BtHciDevice_t * const, uint16_t, uint64_t, uint16_t)
 {
 }
 
-void BtSmpLocalPubKeyReady(BtHciDevice_t * const, uint8_t,
+extern "C" void BtSmpLocalPubKeyReady(BtHciDevice_t * const, uint8_t,
 	const uint8_t *, const uint8_t *)
 {
 }
 
-void BtSmpDhKeyReady(BtHciDevice_t * const, uint8_t, const uint8_t *)
+extern "C" void BtSmpDhKeyReady(BtHciDevice_t * const, uint8_t, const uint8_t *)
 {
 }
 
-void BtSmpEncryptionChanged(BtHciDevice_t * const, uint16_t, uint8_t, uint8_t)
+extern "C" void BtSmpEncryptionChanged(BtHciDevice_t * const, uint16_t, uint8_t, uint8_t)
 {
 }
 
-void BtSmpDisconnected(uint16_t)
+extern "C" void BtSmpDisconnected(uint16_t)
 {
 }
 
-SysLog_t *SysLogGet(void)
+extern "C" SysLog_t *SysLogGet(void)
 {
 	static SysLog_t log = {};
 	return &log;
 }
 
-int SysLogPrintf(SysLog_t * const, const char *, ...)
+extern "C" int SysLogPrintf(SysLog_t * const, const char *, ...)
 {
 	return 0;
 }
 
-} // extern "C"
 
 int main()
 {

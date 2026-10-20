@@ -65,7 +65,9 @@ symbol-based selector and are not needed in the object model.
 Interfaces that hold a key between calls (`KeyAgreeEngine`) take a `pKeyCtx` (a
 caller-owned key-context buffer of `KeyCtxSize()` bytes). `KeyGen` writes the
 private key into it and `Agree` consumes it, so one engine object serves several
-independent key contexts. The engine object itself is stateless beyond its
+independent key contexts. `KeyImport` loads a private scalar the caller was
+handed (the BLE link layer on STM32WBA) and returns its public key; only
+`CryptoUecc` provides it so far, the other engines report unsupported. The engine object itself is stateless beyond its
 `Device` lifecycle; the scarce hardware resource, not a per-key secret, is what
 the object owns.
 

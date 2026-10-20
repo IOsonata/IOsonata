@@ -3,18 +3,21 @@
 
 @brief	RA4M1 ICU event-to-IRQ registration following the RE01 interface.
 
+@author	Hoang Nguyen Hoan
+@date	Oct. 7, 2026
+
 @license
 
 MIT License
 
-Copyright (c) 2026 I-SYST inc. All rights reserved.
+Copyright (c) 2026, I-SYST inc., all rights reserved
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
 in the Software without restriction, including without limitation the rights
 to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+copies of the Software, and to permit persons to whom the Software is furnished
+to do so, subject to the following conditions:
 
 The above copyright notice and this permission notice shall be included in all
 copies or substantial portions of the Software.
@@ -33,10 +36,9 @@ SOFTWARE.
 #include <stdbool.h>
 #include "ra4m1xxx.h"
 
-/* R01UH0887EJ0110 Table 13.4. These are event IDs, not NVIC IRQ numbers.
- * IRQ13 does not exist as a pin source; IEL13 is an ordinary usable CPU slot.
- * DMA/DTC-only entries below are names, not a promise of CPU support.
- */
+// R01UH0887EJ0110 Table 13.4. These are event IDs, not NVIC IRQ numbers.
+// IRQ13 does not exist as a pin source; IEL13 is an ordinary usable CPU slot.
+// DMA/DTC-only entries below are names, not a promise of CPU support.
 #define RA4M1_IELS_CNT 32
 #define RA4M1_EVTID_DISABLE 0U
 #define RA4M1_EVTID_PORT_IRQ0                0x01U
@@ -223,28 +225,26 @@ typedef void (*Ra4m1IRQHandler_t)(int IntNo, void *pCtx);
 #ifdef __cplusplus
 extern "C" {
 #endif
-/* Native counterpart of Re01RegisterIntHandler. CPU interrupts only, no DTC
- * or DMAC routing. Configure/negate the peripheral before registration. For
- * non-pin sources the callback MUST negate/read back the peripheral request
- * and allow its two module-clock synchronization cycles before returning;
- * the dispatcher then clears IR. Edge-mode IRQ-pin requests are acknowledged
- * before callback entry. No normal ISR exit clears NVIC pending state.
- * A callback receives the allocated CPU slot, not the event ID.
- * Callbacks are synchronous ISR calls and must not block. NMI is not supported.
- */
+// Native counterpart of Re01RegisterIntHandler. CPU interrupts only, no DTC
+// or DMAC routing. Configure/negate the peripheral before registration. For
+// non-pin sources the callback MUST negate/read back the peripheral request
+// and allow its two module-clock synchronization cycles before returning;
+// the dispatcher then clears IR. Edge-mode IRQ-pin requests are acknowledged
+// before callback entry. No normal ISR exit clears NVIC pending state.
+// A callback receives the allocated CPU slot, not the event ID.
+// Callbacks are synchronous ISR calls and must not block. NMI is not supported.
 IRQn_Type Ra4m1RegisterIntHandler(uint8_t EvtId, int Prio,
-    Ra4m1IRQHandler_t pHandler, void *pCtx);
-/* Quiesce the event source first. A released integer IRQ is not a persistent
- * handle; do not retain or use it after release. Raw changes to an allocated
- * IELSR/DTCE are not supported. Custom strong IEL handlers reserve their slot.
- * Unregister does not wait for an already active callback. Keep its code and
- * context alive until that callback returns, including across preemption.
- */
+	Ra4m1IRQHandler_t pHandler, void *pCtx);
+// Quiesce the event source first. A released integer IRQ is not a persistent
+// handle; do not retain or use it after release. Raw changes to an allocated
+// IELSR/DTCE are not supported. Custom strong IEL handlers reserve their slot.
+// Unregister does not wait for an already active callback. Keep its code and
+// context alive until that callback returns, including across preemption.
 void Ra4m1UnregisterIntHandler(IRQn_Type IrqNo);
-/* Negate/read back the peripheral source and wait its synchronization cycles
- * first. An active registered handler may acknowledge here before application
- * callbacks; the dispatcher will not clear a fresh event after that callback.
- * Also usable on a stopped owned source during Disable/Reset. */
+// Negate/read back the peripheral source and wait its synchronization cycles
+// first. An active registered handler may acknowledge here before application
+// callbacks; the dispatcher will not clear a fresh event after that callback.
+// Also usable on a stopped owned source during Disable/Reset.
 bool Ra4m1AcknowledgeInt(IRQn_Type IrqNo);
 #ifdef __cplusplus
 }

@@ -150,4 +150,4 @@ MEMCPY_FAST_INLINE void *memcpy_fast(void *pDst, const void *pSrc, size_t Size)
 
 /** @} End of group Utilities */
 
-#endif // __MEMCPY_FAST_H__
+#endif

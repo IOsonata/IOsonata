@@ -85,7 +85,7 @@ static inline uint32_t GetSysPllClk(void)
 	}
 }
 
-/* Update clock frequencies from the selected source and AHB divider. */
+// Update clock frequencies from the selected source and AHB divider.
 void SystemCoreClockUpdate(void)
 {
 	uint32_t sysclk = 0;

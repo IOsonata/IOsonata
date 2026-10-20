@@ -8,9 +8,8 @@ hardware use. Each family section describes what its ports actually provide.
 
 The initial inventory at `c505b73` was updated for the prerelease work through
 [`a0d9865f`](https://github.com/IOsonata/IOsonata/commit/a0d9865fe629e624c8c8c233503c3f18a77c6a7c).
-The current updates reconcile the target port notes, projects and recorded
-validation; they are not a fresh build of every MCU library. Hardware results
-retain their original scope below.
+The tables list implementations, example projects and test results.
+Build results apply to the revisions and configurations listed below.
 
 ## Reading the tables
 
@@ -61,7 +60,7 @@ by MCU and selected radio stack.
 | [nRF9160](../ARM/Nordic/nRF91/nRF9160/lib/ioc/) | GPIO, UART, I2C, SPI, RTC/TIMER, PWM, SAADC, watchdog, NVM, RNG/CC3xx, modem IPC, LTE, sockets and GNSS | [Examples](../ARM/Nordic/nRF91/nRF9160/exemples/): modem information, LTE UDP with bare metal/TaktOS, GNSS fixes, ADC, NVM, watchdog and crypto | Hardware tested: `LteModemInfo` modem initialization/AT replies and `LteUdpTaktOS` LTE-M registration with a successful UDP echo. GNSS needs modem firmware 1.3.4 or newer (revision 2 silicon); revision 1, limited to firmware 1.2.8, has no GNSS. |
 | [nRF91x1](../ARM/Nordic/nRF91/nRF91x1/lib/ioc/) | Shared nRF91 peripheral, LTE/socket and GNSS implementations | [Examples](../ARM/Nordic/nRF91/nRF91x1/exemples/): LTE/GNSS, ADC, NVM, watchdog, crypto, I2C/SPI, EEPROM, environmental sensors, PWM, UART/SLIP and timers | Hardware tested on nRF9161: `LteUdpTaktOS` LTE-M registration and UDP echo confirmed by the maintainer. Debug/Release currently select `NRF9120_XXAA`. Select and verify the intended part and modem firmware. |
 | [nRF52805](../ARM/Nordic/nRF52/nRF52805/lib/ioc/), [nRF52810](../ARM/Nordic/nRF52/nRF52810/lib/ioc/) | Shared nRF52 startup, GPIO, UART, I2C, SPI, RTC/TIMER, RNG and Bluetooth sources | Blinky and DFU projects in each target directory | RTC/TIMER drivers included in both library projects. Timer compile/link checks pass for both MCUs; hardware validation is pending. |
-| nRF54H20 [application](../ARM/Nordic/nRF54/nRF54H20/nRF54H20_App/lib/ioc/), [network](../ARM/Nordic/nRF54/nRF54H20/nRF54H20_Net/lib/ioc/) and [RISC-V](../RISCV/Nordic/nRF54/nRF54H20/lib/ioc/) | Initial projects and partial target integration | See [H20 development notes](../ARM/Nordic/nRF54/nRF54H20/README.md) | Incomplete ports: startup, peripheral, NRFS USB, MPSL and inter-core HCI work remains. |
+| nRF54H20 [application](../ARM/Nordic/nRF54/nRF54H20/nRF54H20_App/lib/ioc/), [network](../ARM/Nordic/nRF54/nRF54H20/nRF54H20_Net/lib/ioc/) and [RISC-V](../RISCV/Nordic/nRF54/nRF54H20/lib/ioc/) | Initial projects and partial target integration | See [H20 development notes](../ARM/Nordic/nRF54/nRF54H20/README.md) | Deferred until the chip is available. Incomplete ports: startup, peripheral, NRFS USB, MPSL and inter-core HCI work remains. |
 
 ### Nordic implementation details
 
@@ -75,7 +74,7 @@ The [PDM driver](../ARM/Nordic/src/pdm_nrfx.cpp) captures microphone blocks into
 a FIFO, and the [NFC driver](../ARM/Nordic/src/nfct_nrfx.cpp) handles target-mode
 frames. These are distinct from the unfinished
 [I2S transfer implementation](../ARM/Nordic/src/i2s_nrfx.cpp), which is not
-included in the feature claims above.
+included in the supported features above.
 
 The nRF52805/52810 library projects include the shared timer dispatcher,
 RTC driver and TIMER driver. On both MCUs, timer devices 0 and 1 select RTC0
@@ -139,9 +138,9 @@ all SDK integrations were rebuilt for 0.13.
 
 | MCU | Implemented peripherals | Application examples | Status and validation |
 |---|---|---|---|
-| [RA4M1](../ARM/Renesas/RA4M1/README.md) | Startup, GPIO, ICU interrupt routing, SCI UART polling/interrupt and TX DMAC, AGT0/1 and GPT0-7 timers, IIC master/slave | [Examples](../ARM/Renesas/RA4M1/exemples/): Blinky, TimerDemo, UART loopback/PRBS and I2CMasterSlave | Supported; EK-RA4M1 startup/GPIO, timer callbacks and SCI UART have maintainer-confirmed hardware results. IIC hardware validation remains pending. USB and IIC DMA/DTC are not implemented; UART TX DMAC is separate. |
+| [RA4M1](../ARM/Renesas/RA4M1/README.md) | Startup, GPIO, ICU interrupt routing, SCI UART polling/interrupt and TX DMAC, AGT0/1 and GPT0-7 timers, IIC master/slave, RSPI0/1 master and slave, data flash NVM | [Examples](../ARM/Renesas/RA4M1/exemples/): Blinky, TimerDemo, UART loopback/PRBS, I2CMasterSlave, SPIMasterSlave and NvmDemo | Supported; EK-RA4M1 startup/GPIO, timer callbacks and SCI UART have maintainer-confirmed hardware results. IIC fixes and hardware validation are deferred beyond 0.13; IIC is excluded from validated release functionality. RSPI and data flash NVM are not yet confirmed on hardware. USB and IIC DMA/DTC are not implemented; UART TX DMAC is separate. |
 | [RE01 1500 KB](../ARM/Renesas/RE01/RE01_1500KB/lib/ioc/) | Startup, GPIO, interrupt routing, SCI UART, AGT0/1, cascaded TMR0/1 and GPT0-5, polling RIIC0/1 I2C master and SPI0/1 master | [Examples](../ARM/Renesas/RE01/RE01_1500KB/exemples/README.md): UART/SLIP, TaktOS UART, timers, pulse trains, I2C and SPI | Supported; DBN/CFB/CFP compile/link/layout and register-model results are documented. Hardware validation is pending. |
-| [R9A02G021](../RISCV/Renesas/R9A02/README.md) | Startup, GPIO, CLIC/ICU interrupts, UART, SPI and I2C masters, ADC, DAC8, comparators, DTC, ELC, timers, RTC, low power and DFU | [Examples](../RISCV/Renesas/R9A02/R9A02G021/exemples/README.md): Blinky, timers, UART, SPI, I2C, ADC, analog, RTC, Snooze, self-test and DFU boot | Supported; GCC and clang builds, DFU boot emulated. Hardware validation is pending. |
+| [R9A02G021](../RISCV/Renesas/R9A02/README.md) | Startup, GPIO, CLIC/ICU interrupts, UART, SPI and I2C master and slave, ADC, DAC8, comparators, DTC, ELC, timers, RTC, low power and DFU | [Examples](../RISCV/Renesas/R9A02/R9A02G021/exemples/README.md): Blinky, timers, UART, SPI, I2C, ADC, analog, RTC, Snooze, self-test and DFU boot | Supported; GCC and clang builds, DFU boot emulated. FPB-R9A02G021 hardware validates UART0, IICA master/slave and SAU SPI master/slave in the configurations documented by the port. The mixed SPI master-DMA/slave-CPU configuration remains a documented timing limitation. Machine timer, TAU0 and TAU7 continuous 100 ms callbacks and ADC12 polling/interrupt single-round conversions are hardware validated; RTC SOSC calendar, Sleep and Software Standby wake-up and repeated alarms are also hardware validated; other timer/ADC/RTC modes and optional peripherals remain pending. |
 
 RE01's [I2C](../ARM/Renesas/RE01/src/i2c_re01.cpp) and
 [SPI](../ARM/Renesas/RE01/src/spi_re01.cpp) implementations perform polling
@@ -187,7 +186,7 @@ that endpoint budget. USB host mode is unsupported. See the
 
 ## STM32 MCU support
 
-The table describes the current source. L4 review evidence is recorded at
+The table describes the current source. L4 review results is recorded at
 [b2eea8c](https://github.com/IOsonata/IOsonata/commit/b2eea8c4450b371eefffab77ce92aa70f4dc7ea4).
 The STM32 timer driver in `ARM/ST/src` (`timer_stm32.cpp`,
 `timer_lptim_stm32.cpp`, `timer_tim_stm32.cpp`) serves F030x8, F401xC, the L4
@@ -198,24 +197,26 @@ entire series.
 
 | MCU | Implemented peripherals | Application examples | Status and validation |
 |---|---|---|---|
-| [STM32L476](../ARM/ST/STM32L4xx/STM32L476/lib/ioc/) | GPIO/EXTI, interrupt-driven UART, I2C, SPI, QSPI, LPTIM1/2 and TIM | [Examples](../ARM/ST/STM32L4xx/STM32L476/exemples/): EEPROM, flash memory, motion sensors, SPI master/slave, UART PRBS/SLIP and timers | Supported; hardware validated and used in existing projects. The shared timer driver is not yet tested on hardware. |
-| [STM32L496](../ARM/ST/STM32L4xx/STM32L496/lib/ioc/) | GPIO/EXTI, interrupt-driven UART, I2C, SPI, QSPI, LPTIM1/2 and TIM | [Examples](../ARM/ST/STM32L4xx/STM32L496/exemples/): flash memory, motion sensors, SPI master/slave, UART PRBS/SLIP and timers | Supported; hardware validated and used in existing projects. The shared timer driver is not yet tested on hardware. |
-| [STM32L4S9](../ARM/ST/STM32L4xx/STM32L4S9/lib/ioc/) | GPIO/EXTI, interrupt-driven UART, I2C, SPI, OSPI, LPTIM1/2 and TIM | [Examples](../ARM/ST/STM32L4xx/STM32L4S9/exemples/): EEPROM, flash memory, SPI master/slave, UART PRBS/SLIP and timers | Supported; hardware validated and used in existing projects. The shared timer driver is not yet tested on hardware. |
-| [STM32L432](../ARM/ST/STM32L4xx/STM32L432/lib/ioc/) | GPIO/EXTI, UART (polling, interrupt, DMA), I2C1/I2C3, SPI1/SPI3 and QSPI from the L4 sources, LPTIM1/2 and TIM | [Examples](../ARM/ST/STM32L4xx/STM32L432/exemples/): UART loopback, PRBS and TimerDemo for the NUCLEO-L432KC | Library and examples build; emulator run of the UART examples and TimerDemo. Not tested on hardware. |
-| [STM32G474](../ARM/ST/STM32G4xx/STM32G474/lib/ioc/) | Startup at 170 MHz, GPIO/EXTI, UART (polling, interrupt, DMA through DMAMUX1), LPTIM1 and TIM | [Examples](../ARM/ST/STM32G4xx/STM32G474/exemples/): UART loopback, PRBS and TimerDemo for the NUCLEO-G474RE | Library and examples build; host tests and emulator run of the UART examples and TimerDemo. Not tested on hardware. No I2C or SPI driver; see the [G4 port notes](../ARM/ST/STM32G4xx/README.md). |
+| [STM32L476](../ARM/ST/STM32L4xx/STM32L476/lib/ioc/) | GPIO/EXTI, UART (polling, interrupt, DMA), I2C and SPI master and slave with DMA, QSPI, LPTIM1/2 and TIM | [Examples](../ARM/ST/STM32L4xx/STM32L476/exemples/): Blinky, EEPROM, flash memory, Nvm demo, I2C scan, motion sensors, SPI master/slave, UART PRBS/SLIP and timers | Supported; hardware validated and used in existing projects. Shared drivers on the B-L475E-IOT01A2 (2026-10-19): Blinky, UART PRBS TX in all modes and loopback with DMA, I2C scan, NvmDemo and FlashMemoryDemo on the QUADSPI MX25R6435F (single line and quad). Shared SPI and timer drivers not yet tested on this MCU. |
+| [STM32L496](../ARM/ST/STM32L4xx/STM32L496/lib/ioc/) | GPIO/EXTI, UART (polling, interrupt, DMA), I2C and SPI master and slave with DMA, QSPI, LPTIM1/2 and TIM | [Examples](../ARM/ST/STM32L4xx/STM32L496/exemples/): flash memory, motion sensors, SPI master/slave, UART PRBS/SLIP and timers | Supported; hardware validated and used in existing projects. The shared timer, UART, I2C and SPI drivers are not yet tested on this MCU. |
+| [STM32L4S9](../ARM/ST/STM32L4xx/STM32L4S9/lib/ioc/) | GPIO/EXTI, UART (polling, interrupt, DMA), I2C and SPI master and slave with DMA, OSPI, LPTIM1/2 and TIM | [Examples](../ARM/ST/STM32L4xx/STM32L4S9/exemples/): EEPROM, flash memory, SPI master/slave, UART PRBS/SLIP and timers | Supported; hardware validated and used in existing projects. The shared timer, UART, I2C and SPI drivers are not yet tested on this MCU. |
+| [STM32L432](../ARM/ST/STM32L4xx/STM32L432/lib/ioc/) | GPIO/EXTI, UART (polling, interrupt, DMA), I2C1/I2C3 and SPI1/SPI3 master and slave with DMA, QSPI, LPTIM1/2 and TIM | [Examples](../ARM/ST/STM32L4xx/STM32L432/exemples/): Blinky, UART loopback, PRBS, TimerDemo, I2C and SPI master/slave for the NUCLEO-L432KC | NUCLEO-L432KC hardware tests pass (2026-10-19): Blinky, TimerDemo, UART PRBS TX on the ST-LINK VCP with interrupts and DMA, I2C and SPI master/slave in 8 combinations each (master polling, interrupt, DMA, DMA with interrupt against the interrupt and DMA slave). QUADSPI not tested on hardware. |
+| [STM32G474](../ARM/ST/STM32G4xx/STM32G474/lib/ioc/) | Startup at 170 MHz, GPIO/EXTI, UART (polling, interrupt, DMA through DMAMUX1), LPTIM1 and TIM | [Examples](../ARM/ST/STM32G4xx/STM32G474/exemples/): Blinky, UART loopback, PRBS and TimerDemo for the NUCLEO-G474RE | NUCLEO-G474RE hardware tests pass (2026-10-19): Blinky with the B1 interrupt, UART PRBS TX and loopback on the LPUART1 virtual COM port at 1 Mbaud in polling, interrupt and DMA modes, LPTIM1, TIM7 and TIM1 with four triggers. No I2C or SPI driver; see the [G4 port notes](../ARM/ST/STM32G4xx/README.md). |
+| [STM32H753](../ARM/ST/STM32H7xx/STM32H753/lib/ioc/) | Startup at 400 MHz, GPIO/EXTI, polling/interrupt UART, 14 TIM instances and USB2 full-speed device | [Examples](../ARM/ST/STM32H7xx/STM32H753/exemples/): Blinky, TimerDemo, UartPrbsTxTest, UartLoopback, UsbCdcLoopback and UsbCdcPrbsTx for NUCLEO-H753ZI | Initial supported port; library and examples compile/link in Debug/Release with and without hard-float, with modeled register tests. NUCLEO-H753ZI hardware tests pass for startup/LED GPIO, USART3 interrupt TX/RX at 1 Mbaud and TIM2 (DevNo 8) with four triggers. USB uses the shared STM32 OTG driver; USB hardware tests, other instances and EXTI remain pending. DMA, LPTIM and other optional peripherals are not yet implemented; see [H7 port notes](../ARM/ST/STM32H7xx/README.md). |
 | [STM32F030x8](../ARM/ST/STM32F0xx/STM32F030x8/lib/ioc/) | GPIO/EXTI, UART with interrupt/FIFO and TX DMA, TIM6/14/16/17/15/3/1 | [Examples](../ARM/ST/STM32F0xx/STM32F030x8/exemples/README.md): UART loopback/PRBS/SLIP, TaktOS UART, timer triggers, pulse trains, software crypto and DFU image verification | Supported; hardware validated. Native I2C/SPI/ADC drivers are not supplied by this port. |
 | [STM32F401xC](../ARM/ST/STM32F4xx/STM32F401/STM32F401xc/lib/ioc/) | Startup, vector/linker files, shared STM32 GPIO/EXTI, UART and timer (TIM9/10/11/2/3/4/5/1) | Library project links the shared GPIO, UART and timer drivers; no example project | Partial port: library builds; host tests of the UART and timer drivers. Hardware validation remains outstanding. |
-| STM32F301x8, STM32F302x8 | Vector files | No complete MCU application project | Incomplete startup and peripheral ports. |
-| [STM32WBA65](../ARM/ST/STM32WBAxx/STM32WBA65/lib/ioc/) | Startup, GPIO/EXTI, UART with GPDMA, LPTIM1/2 and TIM | [Examples](../ARM/ST/STM32WBAxx/STM32WBA65/exemples/): UART loopback, PRBS and TimerDemo for the STM32WBA65I-DK1 | Incomplete: the Bluetooth adapter is not integrated. Not tested on hardware. |
-| STM32L152 | Planned | Planned after 0.13 | Outside the 0.13 support list. |
+| STM32F301x8, STM32F302x8 | Vector files | No complete MCU application project | Deferred: no board is available for development or validation. The parts are active at ST. Incomplete startup and peripheral ports. |
+| [STM32WBA65](../ARM/ST/STM32WBAxx/STM32WBA65/lib/ioc/) | Startup with 100 MHz PLL1 clock, GPIO/EXTI, UART with GPDMA, I2C/SPI master and slave, LPTIM1/2 and TIM, ADC4, SAI/I2S, PDM, SSD1315 display, BLE, RNG/AES/PKA crypto and OTG USB device | [Examples](../ARM/ST/STM32WBAxx/STM32WBA65/exemples/): GPIO, UART, timers, I2C/SPI master/slave, display, joystick, audio, BLE peripheral/central/security, crypto and USB CDC | Hardware validated on STM32WBA65I-DK1: GPIO/EXTI, UART TX/RX, LPTIM/TIM callbacks, I2C and SPI master/slave (8 mode combinations each), advertising, Numeric Comparison and bonded reconnect after reset, crypto (51 passed, 0 failed), and USB CDC. Release CDC loopback: 60 seconds, 1.20 MB/s each direction, 0 errors and 0 pending. BLE central scan/connect/discovery/notification/reconnect are hardware validated. Explicit characteristic reads, USB reconnect/suspend/FS fallback and SPILoopback remain untested. |
+| [STM32L152RE](../ARM/ST/STM32L1xx/STM32L152RE/lib/ioc/) | Startup at 32 MHz, GPIO/EXTI, polling/interrupt UART and nine TIM instances | [Examples](../ARM/ST/STM32L1xx/STM32L152RE/exemples/): Blinky, TimerDemo, UartPrbsTxTest, UartLoopback and EepromDemo for NUCLEO-L152RE | Initial supported port; Debug/Release compile/link and modeled register tests pass. NUCLEO-L152RE: Blinky and UART TX pass; timer events and the data EEPROM demo are not confirmed on hardware. DMA and optional peripherals are not implemented; see [L1 port notes](../ARM/ST/STM32L1xx/README.md). |
 
-The L4 [I2C](../ARM/ST/STM32L4xx/src/i2c_stm32l4xx.cpp) driver supports polling
-master transfers. The [SPI driver](../ARM/ST/STM32L4xx/src/spi_stm32l4xx.cpp)
-provides normal SPI transfers and slave receive interrupts; its DMA transfer
-functions are unfinished. [QSPI](../ARM/ST/STM32L4xx/src/quadspi_stm32l4xx.cpp)
-on L476/L496 and [OSPI](../ARM/ST/STM32L4xx/src/octospi_stm32l4xx.cpp) on L4S9
-support polling master configurations. These interfaces allow applications to
-use the portable memory and sensor drivers already shown in the examples.
+The L4 libraries build the shared STM32 [I2C](../ARM/ST/src/i2c_stm32.cpp)
+and [SPI](../ARM/ST/src/spi_stm32.cpp) drivers: master in polling, interrupt
+and DMA mode, slave in interrupt and DMA mode, DMA through the
+[DMA channel manager](../ARM/ST/src/dma_stm32.cpp).
+[QUADSPI](../ARM/ST/src/quadspi_stm32.cpp) on L432/L476/L496 and
+[OCTOSPI](../ARM/ST/src/octospi_stm32.cpp) on L4S9 support polling master
+configurations. These interfaces allow applications to use the portable
+memory and sensor drivers already shown in the examples.
 
 L4 UART virtual devices 0-5 support seven/eight payload bits, none/even/odd
 parity and one/two stop bits. LPUART1 cannot use seven payload bits without
@@ -223,7 +224,7 @@ parity; nine-bit payloads are unsupported. Timers use LPTIM1/2 at virtual
 indices 0/1, then the TIM, from TIM6 to TIM8. See the
 [L4 port notes](../ARM/ST/STM32L4xx/README.md) for mappings and mode restrictions.
 
-### STM32 validation evidence
+### STM32 validation
 
 The maintainer confirms STM32F0 and STM32L4 hardware validation. The listed
 STM32L476, STM32L496 and STM32L4S9 ports are also used in existing projects
@@ -240,8 +241,8 @@ source for L4S9. These are compilation and host-model results, not complete
 IOC library/application links or hardware tests. The L4 LPTIM source of that
 review was replaced by the shared STM32 timer driver on 2026-10-14.
 
-F030x8 has existing maintainer-reported use in TaktOS benchmarks. That evidence
-is separate from the peripheral timer tests: the benchmark uses
+F030x8 has existing maintainer-reported use in TaktOS benchmarks. Those runs
+are separate from the peripheral timer tests: the benchmark uses
 SysTick for kernel timing and TIM17 as an IRQ probe. The shared timer driver
 passes host register tests (`tests/stm32/run_timer.py`) and Cortex-M0
 archive-link checks, including application SysTick and TIM handlers. See the [F030x8 port notes](../ARM/ST/STM32F0xx/README.md)
@@ -258,12 +259,13 @@ level-shifter supply explained the temporary loss of UART output.
 
 The implementation was merged in [PR 75](https://github.com/IOsonata/IOsonata/pull/75).
 The exact flashed revision, successful build profile and complete tool versions
-were not recorded with these runs. This is maintainer hardware evidence for
-those functions, not a test of every mode or all seven timers. TIM14, TIM17,
+were not recorded with these runs. Those functions are hardware validated. Other modes and timer instances
+were not covered by these runs. TIM14, TIM17,
 TIM15, TIM3 and TIM1 still need hardware coverage. These runs used the F030x8
 timer source that the shared STM32 timer driver replaced on 2026-10-14; the
 shared driver needs the TIM6 and TIM16 runs again.
-The planned L152/Nucleo-64 work is outside the 0.13 support list.
+STM32L152RE now has an initial minimum port and NUCLEO-L152RE example projects.
+Build and modeled register checks pass; hardware validation remains pending.
 
 ## NXP, Espressif and Raspberry Pi
 
@@ -305,13 +307,13 @@ ESP32-C3 uses a native [UART driver](../RISCV/Espressif/src/uart_esp32.cpp)
 with separate clock and interrupt modules. Wi-Fi/Bluetooth hardware on an
 Espressif chip does not imply that an IOsonata radio port is supplied here.
 
-## Recorded hardware evidence
+## Hardware validation
 
 This table records the scope of maintainer results, independently of the
 implementation descriptions. It is not a claim that every row was tested at
 the review commit or that every project passed both IOC build profiles.
 
-| MCU | Hardware / configuration recorded | Exercised functions | Evidence scope |
+| MCU | Hardware / configuration recorded | Exercised functions | Results and limitations |
 |---|---|---|---|
 | nRF52832 | IDK-BLYST-NANO, BLUEIO-TAG-EVIM, Nordic nRF52 DK | BLE, UART, sensors and low-power applications | Established application and peripheral development platform. |
 | nRF54L15 | BLYSTL15, Nordic nRF54L15 DK | UART, Bluetooth and TaktOS benchmarks | Established Bluetooth and RTOS development platform. |
@@ -324,10 +326,12 @@ the review commit or that every project passed both IOC build profiles.
 | SAM4LC8C | SAM4L8 Xplained Pro | Startup, LED GPIO, UART, AST/TC timers, I2C, SPI, CDC loopback, ISO and manual suspend/wake | Hardware validated, confirmed 2026-10-08. See [timer results](../tests/sam4l/README.md) and [USB results](releases/0.13.md#sam4l-usb-port). |
 | STM32F030x8 | STM32F0308-DISCO | Hardware validated: startup, GPIO, UART and timers; later UART TX DMA PRBS | Maintainer-confirmed validation. Detailed recorded timer runs cover TIM6/TIM16 with the F030x8 timer source replaced on 2026-10-14; coverage of additional modes is tracked separately. |
 | STM32L476, STM32L496, STM32L4S9 | Maintainer's existing projects | Hardware validated and used in projects | Confirmed by the maintainer on 2026-10-08, with the L4 timer source replaced on 2026-10-14; board names and per-project configurations were not supplied in this confirmation. |
+| STM32WBA65 | STM32WBA65I-DK1 | GPIO/EXTI, UART, LPTIM/TIM, I2C/SPI, BLE advertising/security and crypto | Hardware validated. Crypto: 51 passed, 0 failed on 2026-10-18; P-256 scalar multiplication 31072 us versus 188099 us in software, mean of 8. See [WBA results](../ARM/ST/STM32WBAxx/STM32WBA65/README.md#crypto-hardware-validation). USB CDC is hardware validated: Release 60-second loopback, 72094720 bytes TX/RX, 0 errors and 0 pending. BLE bond reuse after reset passes. BLE central scan/connect/discovery/notification/reconnect pass. Explicit characteristic reads and additional USB modes remain pending. |
 | RA4M1 | EK-RA4M1 | Blinky, TimerDemo callbacks and SCI UART | Maintainer-confirmed board results; semihosting affected timer timestamps. IIC and other optional modes are not covered. |
 
 RA4M1 has separate maintainer-confirmed startup/GPIO, timer and UART hardware
-results; IIC remains unvalidated. For RE01, retain the model/compiler/linker
+results; IIC remains unvalidated and is deferred beyond 0.13 by maintainer
+decision on October 18, 2026. For RE01, retain the model/compiler/linker
 results in its port notes without relabeling them as physical tests. STM32L4 has separate
 maintainer-confirmed hardware validation and project use. An unrecorded hardware
 result is unknown, not proof that the port fails.
@@ -387,3 +391,5 @@ build log and flash/runtime output.
 - [Getting Started](getting-started.md)
 - [IOcomposer workflow](architecture/iocomposer-workflow.md)
 - [0.13 release notes](releases/0.13.md)
+
+

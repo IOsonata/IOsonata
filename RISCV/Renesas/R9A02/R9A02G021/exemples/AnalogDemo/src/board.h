@@ -73,15 +73,18 @@ SOFTWARE.
 	{UART_TX_PORT, UART_TX_PIN, UART_TX_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL}, \
 }
 
-#define UART_BAUDRATE		115200
+#define UART_BAUDRATE		1000000
 
 // VCC of the board in mV, the DAC8 reference
 #define ANALOG_DEMO_VCC_MV		3300
 
-// DAC8 channel 1 on DACOUT1 (P001), comparator 0 on IVCMP0 (P106) with the
-// internal reference. Wire P001 to P106.
+// DAC8 channel 1 on DACOUT1 (P001), comparator 0 on IVCMP0 (P106).
+// The R23 pull-up makes the internal 1.44 V reference unsuitable. DAC0 on
+// P000 supplies IVREF0 instead; code 192 puts its reference in the range
+// swept by the loaded DAC1 output. Wire P001 to P106.
 #define ANALOG_DEMO_DAC_CHAN	1
 #define ANALOG_DEMO_COMP_DEVNO	0
+#define ANALOG_DEMO_REF_CODE	192
 
 // DAC8 ramp: code step at each TML32 interval
 #define ANALOG_DEMO_STEP		2

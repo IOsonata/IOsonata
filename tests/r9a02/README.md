@@ -1,6 +1,6 @@
 # R9A02G021 port checks
 
-Two emulator checks of the SAU drivers. Each script builds a fixture with the
+Emulator checks of the SAU, UARTA and IICA drivers. Each script builds a fixture with the
 port's sources for RV32IMAC (no Zba, Zbb or Zbs, which unicorn does not
 decode), runs it on unicorn and models the peripherals as the manual
 describes them: the SAU channels, the ICU IR and DTCE flags, the CLIC input
@@ -14,12 +14,82 @@ not, the Snooze end also setting the IR of the SAU route or not.
 ```sh
 python3 tests/r9a02/build_spi_slave_emu.py
 python3 tests/r9a02/build_uart_snooze_emu.py
+python3 tests/r9a02/build_i2c_emu.py
 python3 tests/r9a02/build_spi_slave_emu.py --tool-prefix /path/to/bin/riscv-none-elf-
 ```
 
 Needs xPack riscv-none-elf-gcc, unicorn 2.1 and pyelftools. The objects go to
 `tests/r9a02/build`. Each script prints PASS and exits with 0, or lists the
 failed checks and exits with 1.
+
+The UART check also supports LLVM for Renesas RISC-V and Debug builds:
+
+```sh
+python3 tests/r9a02/build_uart_snooze_emu.py --llvm --tool-prefix /path/to/llvm-for-renesas-riscv/bin/
+python3 tests/r9a02/build_uart_snooze_emu.py --llvm --tool-prefix /path/to/llvm-for-renesas-riscv/bin/ --debug
+```
+
+Release (`-Os`) and Debug (`-O0`) UART checks passed with LLVM 19.1.7.202501
+on 2026-10-14. These check code and modeled register behavior, not timing or
+electrical behavior. Hardware performance uses Release `UartPrbsTxTest`
+first, then `UartLoopback` for RX, with the same configuration across MCUs.
+
+## UART DTC transmit (2026-10-14)
+
+The UART fixture includes `dtc_r9a02.cpp` and `uarta_r9a02.cpp`. The model
+executes the DTC records through their bus access widths, requires DTCST and
+the CLIC input enabled, and raises the completion event on the last transfer.
+It checks SAU UART0 and both UARTA channels with polling/interrupt RX and
+blocking/non-blocking FIFOs:
+
+- Exact TX order for single bytes, blocks, FIFO wrapping and backpressure;
+  private DMA storage remains intact when a non-blocking FIFO overwrites data.
+- Autonomous DTC transfers without CPU handlers, followed by block chaining;
+  SAU halfword writes and UARTA byte writes, including a full transmit buffer
+  at DTC completion and delayed CPU handling.
+- A one-byte producer bypasses descriptor setup for an idle byte and only
+  enqueues while TX is busy. Queued bytes become real DTC blocks; active
+  descriptors stay unchanged by subsequent enqueues. TX-ready callbacks occur
+  once the queue drains in both byte-interrupt and DMA operation.
+- SAU starts an isolated byte with transfer-end notification in byte-IRQ
+  and DMA modes. Immediate interrupt delivery must not retire it before
+  following bytes accumulate. Queued data restores buffer-empty service.
+- Polling/DMA with a blocking FIFO progresses while CPU interrupts remain
+  masked, including full-FIFO retries. TX calls still service pending RX.
+- After DTC completion, the next block is staged while the last byte still
+  occupies the transmit buffer. Reusing the freed FIFO space cannot overwrite
+  that block. The following buffer-empty event arms the staged data in order.
+- Short RX bursts, RX callbacks, parity-error discard, seven-bit masking and
+  full duplex traffic during DTC TX.
+- With polling RX, arrivals before and during the mandatory TX completion
+  interrupt must reach the RX FIFO before the next character arrives and
+  foreground polling resumes. SAU UART0 and both UARTA channels retain both
+  bytes in order, report no overrun and make no application callbacks, with
+  either FIFO policy. These checks fail on the earlier TX-only handler.
+- Disable/Enable with an active transfer, active reinitialization, rate changes
+  preserving the staged tail, PowerOff cleanup, setup failure and retry,
+  default FIFOs, and TX draining around SAU Snooze entry and wake-up.
+
+RX uses the existing CPU path, as in the SAM4L port. RX DMA is not implemented.
+
+The IRQ checks also verify pulse acknowledgement before the callback, level
+acknowledgement after it, no CPU dispatch while the DTC owns the event, and
+preservation of a new pending event when a handler replaces its route. These
+cover the pulse dispatch shortcut used by UART without changing level-pin
+acknowledgement behavior.
+
+The unchanged `UartPrbsTxTest` and `UartLoopback` sources were linked with
+all four interrupt/DMA selections in both Release and Debug using the same
+LLVM toolchain. The Release examples also preserve 2,048 bytes in sequence
+with instruction-scheduled peripheral events; loopback exercises real DTC
+transfers in both DMA modes. These are ordering checks, not a cycle model or
+a hardware throughput measurement. The port README records line-rate PRBS
+TX in all four modes across the tested revisions, isolated losses in the
+two DMA captures, and clean loopback in all four modes across the recorded
+runs. The UART0 interrupt-off/DMA-on hardware rerun after `7b28c9c` reports
+19 clean samples at about 66 kB/s, confirming the RX-service correction in
+that capture. The earlier isolated transmit-only PRBS losses remain unresolved;
+UARTA hardware validation is still pending.
 
 ## SPI slave (2026-10-13)
 
@@ -39,7 +109,8 @@ external SPI master of SPI21 and of SPI20. It checks:
   interrupt taken after the last byte (the byte is read from SDR), the chip
   select low when the next frame is prepared (-1), Disable, Enable and
   PowerOff.
-- Reception in Snooze on SPI20, with and without the DTC: SELSR0 and SNZCR,
+- Reception in Snooze on SPI20, with and without the DTC in all four clock
+  modes: SELSR0 and SNZCR,
   a rate above 0.5 Mbps refused at the enabling and by SetRate;
   ICU_SNZCANCEL on only from the standby entry to the wake-up; frames of 1,
   2, 16 and 64 bytes started in Software Standby: byte 0 received in
@@ -49,11 +120,62 @@ external SPI master of SPI21 and of SPI20. It checks:
   select interrupt comes first; another Snooze set up replacing it (not set
   for Snooze, kept when the slave's is turned off); Snooze turned off.
 
-The model is the reading of the manual that the driver follows: the first
-buffer empty event right after the first SDR write, BFF kept when SDR holds
-transmit data, and the Snooze reception of byte 0 (23.5.7) are to confirm on
-the board, the first two with the SpiMasterSlave example, the third with an
-external master.
+The model follows both ends of the CPHA=1 transfer. In continuous mode,
+the first SCK edge loads TX, and the next byte's first edge exchanges the
+shifter and SDR. If SCK stops, the final RX byte remains in the shifter
+(23.5.6, figure 23.25). CS does not flush it. The previous model moved RX
+to SDR too early at byte end, which hid the hardware failure after
+`fb41374`: a one-byte mode 1 frame reports RX=0. The corrected model
+reproduces that result and loses the final byte of longer CPHA=1 frames
+with that driver.
+
+CPHA=1 now selects transfer-end events (MD0=0, figure 23.23). Only byte 0
+is preloaded; each end event reads RX and writes TX at RX index + 1.
+CPHA=0 keeps continuous service and its RX index + 2 transmit offset.
+Both CPU and DTC paths use that offset, including DTC segment boundaries
+and return from Snooze. At CS rising, only an SDR read that clears an
+initially set BFF counts as an unread received byte.
+
+Checks cover empty and partial first-byte frames, no event or RX write on
+the first CPHA=1 edge, 1/16/129-byte frames against a 129-byte buffer,
+unchanged storage beyond the received data, and a final byte interrupt
+held pending for both SAU-first and CS-first dispatch. Release (`-Os`)
+and Debug (`-O0`) pass with LLVM 19.1.7.202501:
+
+```sh
+python3 tests/r9a02/build_spi_slave_emu.py --llvm --tool-prefix /path/to/llvm-for-renesas-riscv/bin/
+python3 tests/r9a02/build_spi_slave_emu.py --llvm --debug --tool-prefix /path/to/llvm-for-renesas-riscv/bin/
+```
+
+These checks model first-edge and byte-end register ordering, not cycle
+timing or interrupt latency. CPHA=1 requires time between bytes to read RX
+and load TX, by CPU or DTC. Maximum gap-free throughput is not validated.
+The library and SpiMasterSlave example also compile and link with
+their Debug and Release LLVM project flags. The hardware capture after
+`fb41374` passes mode 0 but reports RX=0 for the first mode 1 byte. The
+reruns after `2c03bf7` now pass every TX/RX check in modes 0-3 at 1 MHz,
+8 bits, with master DMA=1 INT=0 or INT=1 and slave DMA=1 INT=1, and with
+master DMA=0 INT=0 or INT=1 and slave DMA=0 INT=1. All four include 1-,
+16- and 129-byte frames and short-to-long transitions. Each run ends with
+`SPI master/slave loopback PASS`. These validate the transfer-end correction
+for DMA and
+CPU slave service with those master configurations. Build type was not
+reported.
+
+The subsequent master DMA=1 INT=0, slave DMA=0 INT=1 capture passes mode 0
+but fails the mode 1 16-byte master RX, with slave RX=-1 and master byte 1
+0xFF instead of 0xA1. Modes 2 and 3 are not reached. The CPU-polled TX and
+one-byte RX checks pass; multibyte master RX starts subsequent bytes by
+DTC. This is consistent with insufficient inter-byte time for the CPHA=1
+slave ISR to read RX and load TX. The emulator dispatches CPU service at
+explicit points and cannot establish whether that service fits the actual
+master gap. Its PASS does not validate this mixed hardware configuration.
+The follow-up with master DMA=1 INT=0 and slave DMA=1 INT=1 passes all
+four modes and every tested length, including the 16-byte master RX that
+failed with CPU slave service. This validates polled master DMA completion
+with a DMA slave and supports the timing explanation for the mixed failure.
+Other untested combinations and Snooze reception of byte 0 (23.5.7) still
+need hardware validation.
 
 ## UART reception in Snooze (2026-10-13)
 
@@ -90,3 +212,261 @@ The Snooze model takes the character in SDR at the end of its reception and
 no error flag (SSEC = 1); the error case of figure 23.41 (back to Software
 Standby without the CPU) is hardware only and is to confirm on the board
 with the UartSnoozeDemo example.
+
+## I2C master (2026-10-14)
+
+`build_i2c_emu.py` builds `i2c_fixture.cpp` with the IICA, SAU simplified
+I2C, SAU, ICU, pin and DeviceIntrf sources, then runs `i2c_emu.py`. The two
+buses, IICA1 (P010, P011) and IIC20 (P102, P101), are modeled bit by bit:
+each line is the wired AND of the GPIO, the controller and the slaves, and
+two slave devices (0x50, 0x68) decode START, STOP, address, data and ACK
+from the line changes. The IICA follows 24.2 to 24.4 (STT, address and data
+in IICA, events at the 9th or 8th clock with WTIM, ACK from ACKE, WREL, SPT,
+IICBSY, STCF, LREL, pins low while IICE = 0), the SAU 23.8 (SO and CKO under
+software control, 8 clocks and the ACK clock per SDR write, PEF on a NACK,
+the ACK driven in reception while SOE = 1). It checks, polling and with
+`bIntEn`:
+
+- I2CInit, the IICA widths and IICCTL1 of 24.3.2, both IICA pins in output
+  mode, the scan of the I2CScan example (only 0x50 and 0x68 answer), a
+  start and stop in the read direction without data (one byte read without
+  ACK first), register reads of 1, 2 and 4 bytes with a restart and the last
+  byte not acknowledged, a register write, a reception without command, a
+  data byte not acknowledged, an absent device, a slave holding SDA low
+  cleared by Reset, a rate change to 400 kHz, PowerOff. Every operation
+  leaves both lines high; with `bIntEn` each Rx, Tx and Read with data ends
+  with one `DEVINTRF_EVT_COMPLETED`.
+- The rules of the manual on the way: IICE set with both lines high, ACKE,
+  WTIM and SPIE changed only with IICE = 0 or in a clock stretch, IICF and
+  IICCTLn1 written with IICE = 0, IICA written only in a transmission
+  stretch, no stop or restart after an acknowledged received byte or before
+  the first one, SAU SCR and SMR written with the channel stopped, SO and CKO
+  written only while software controls them.
+
+Where the manual leaves a choice both readings are run: the IICA drives a
+pin only in output mode (PDR = 1, 24.2.9 and figure 24.16) or whatever PDR;
+SO keeps the last data bit after the ACK slot of a SAU transmission or goes
+to 1. What the model cannot decide (the IICA pin direction, the SAU restart,
+SCL as CMOS or open drain, a slave stretching SCL) is for the I2CScan
+example on the board.
+
+## I2C slave (2026-10-14)
+
+`i2c_fixture.cpp` also sets up IICA0 (DevNo 0, P103 SDA, P102 SCL) as a
+slave at 0x22 with the event handler of `exemples/i2c/i2c_master_slave.cpp`,
+and `i2c_emu.py` wires it to the IICA1 master as the I2CMasterSlave example,
+with the 0x50 and 0x68 devices on the same bus. The IICA model acts as a
+slave when it is not master (24.4.4, table 24.2, 24.4.11, figures 24.29 to
+24.38): its address acknowledged whatever ACKE, the event and the SCL
+stretch at the 9th clock of the address and of each data byte, ACK of a
+received byte from ACKE set before it, IICA written to send, the master ACK
+in ACKD, WREL, which with TRC = 1 clears TRC and releases SDA; an extension
+code raises the event and stretches at the 8th clock and is acknowledged only
+with ACKE; another address after a restart raises the event at the 9th clock
+without stretch; LREL; the stop event with SPIE. A master finding SCL held by
+a slave stretch lets the CPU take its pending interrupts; when none releases
+SCL it is an anomaly.
+
+Interrupts are taken during the firmware: an event with its CLIC input on is
+taken after the register access that follows it when mstatus.MIE is 1 and its
+level is above the level running, as with the trap entry of
+`Vectors_R9A02.c`, which sets MIE again. The handler runs nested on the
+stack in use (unicorn 2 allows `emu_start` in a hook), the registers are
+restored after it.
+
+Checks, master polled and with `bIntEn` (master priority 3, slave 7), with
+and without PDR = 1 for the IICA outputs:
+
+- Slave I2CInit: IICWL and IICWH of 24.3.2 (2) (76 and 85 at fMCK 16 MHz
+  for 100 and 50 kHz, 21 and 20 at 400 kHz), IICCTL1, SVA, IICCTL0 = IICE,
+  WTIM, SPIE, both pins in output mode. Refused: polling, two addresses, 0x05
+  and 0x78, a bus held low (the module is stopped again).
+- The I2CScan scan finds 0x22, 0x50 and 0x68. The sequence of the example:
+  8 bytes written at offset 4, read back with a restart, 4 bytes read without
+  command at offset 12, with the slave events WRITE_RQST, READ_RQST with the
+  count written before the restart, COMPLETED with the count.
+- A write longer than the slave buffer (the first byte that does not fit is
+  not acknowledged), no buffer given, a read past the data (0xFF, not
+  counted), extension codes and the general call after a write left ACKE at
+  1 (not acknowledged, no event), a restart from the slave to another device
+  and back, stop events taken late, at the 2nd clock of the next address
+  (SPD 0, STD 1, COI 0: the transfer is reported, the address still
+  answered), a master call on the slave object (no start on the bus), 400
+  kHz, Reset, Disable and Enable, PowerOff.
+- The rules of the manual on the way, also for the slave: IICA written and
+  WREL only in its clock stretch, a transmission not ended by WREL while the
+  master reads, not continued after the master NACK.
+
+Driver mutations that make the check fail (15 of 16): data never
+acknowledged, data acknowledged past the buffer, bytes stored past the
+buffer, WREL instead of IICA at a read address, IICA written after the
+master NACK, no LREL after an extension code, LREL when not addressed
+without an extension code, the transmitted count not kept, the write count
+lost at a restart, SPIE off, SVA not shifted, IICE set on a busy bus, a
+master start allowed on the slave, the master widths used by the slave
+(seen at 50 kHz), no end of the transfer when not addressed. Not seen: the
+LREL right after IICE, which only matters when the bus changes between the
+idle check and IICE. The 9 master mutations of the I2C master section still
+fail the check.
+
+
+## IICA DMA payload transfers (2026-10-14)
+
+IICA0 and IICA1 now accept `bDmaEn` for master and slave TX/RX. The DTC
+moves payload bytes between memory and IICA through a software event:
+`ELC_SWEVT0` for IICA0 and `ELC_SWEVT1` for IICA1, each with its own ICU
+slot and static descriptor. These software events must not be linked to
+other peripherals while the corresponding IICA uses DMA. Init fails if
+its software event cannot be reserved; PowerOff and reinitialization
+release the descriptor and route.
+
+The CPU still handles every IICA protocol event. IICn_ENDI is shared by
+address, data and STOP, so the driver checks ACKD, sets ACKE for the next
+receive byte, and handles slave requests before triggering the byte move.
+This preserves NACK counts and variable-length slave transactions. It is
+DMA-assisted data movement, not autonomous block transfer or a throughput
+optimization. `bIntEn` still selects polling or background master
+completion; the slave still requires `bIntEn = true`. SAU simplified I2C
+DMA remains unsupported.
+
+The I2C emulator now executes the DTC descriptor, models ELSEGR write
+protection, and checks the DTCST/CLIC requirements. Master IICA bus clocks
+are deferred until after the DTC register write completes, so a slave CPU
+can service clock stretching. Checks cover:
+
+- DMA on master only, slave only, and both, with polling and interrupt
+  master completion; the existing scan, loopback, NACK, short-buffer,
+  restart, extension-code, rate and lifecycle checks run for these modes.
+- Actual TX and RX DTC byte movement, lengths 1, 31, 32, 33 and 64,
+  payload order and RX buffer boundaries.
+- Missing software events on master and slave, partial completion,
+  unchanged RX storage on failure, released bus/DTC, and successful retry.
+- Reinitialization between DMA and CPU modes, event ownership conflicts,
+  and release of vector entries and routes on PowerOff.
+
+Run with GCC using the existing command, or with LLVM:
+
+```sh
+python3 tests/r9a02/build_i2c_emu.py --llvm --tool-prefix /path/to/llvm-for-renesas-riscv/bin/
+python3 tests/r9a02/build_i2c_emu.py --llvm --tool-prefix /path/to/llvm-for-renesas-riscv/bin/ --debug
+```
+
+Release (`-Os`) and Debug (`-O0`) checks passed with LLVM 19.1.7.202501.
+The I2CMasterSlave example also compiled and linked in Debug and Release
+with the current example-required library sources and LLVM project flags.
+The maintainer's hardware runs on October 14, 2026 now validate the
+DMA-off loopback (master DMA=0 INT=0, slave DMA=0 INT=1) and both DMA
+completion modes (master DMA=1 INT=0 and INT=1, slave DMA=1 INT=1).
+All three runs initialized both devices, wrote 8/8 bytes at offset 4,
+read back `a0 a1 a2 a3 a4 a5 a6 a7`, received 4/4 bytes `0c 0d 0e 0f`,
+and reported `I2C master/slave loopback PASS`. The two DMA runs label the
+last transfer `DMA RX`. Build type was not included in the hardware logs.
+The `I2CMasterSlave` example defaults both DMA enables to true, with master
+interrupts off and slave interrupts on. Its configuration is kept.
+
+## Timer hardware validation (2026-10-14)
+
+FPB-R9A02G021 TimerDemo hardware console captures validate the machine timer
+and first/last TAU channels with continuous 100 ms trigger 0:
+
+| DevNo | Peripheral | TIMER_FREQ | Reported T0 | Consecutive callbacks | Result |
+| --- | --- | ---: | ---: | ---: | --- |
+| 0 | Machine timer, LOCO 32768 Hz | 0 | 100006 us | 11 | PASS |
+| 1 | TAU0 | 46875 | 100010 us | 18 | PASS |
+| 8 | TAU7 | 46875 | 100010 us | 18 | PASS |
+
+Every reported interval was identical within its capture. `Count` advanced
+by 100 ms every callback: from 100 to 1100 ms for DevNo 0, and from 100 to
+1800 ms for DevNo 1 and 8. The captures show no missed callbacks or
+unexpected interval changes. LED behavior was not explicitly reported.
+The build configuration was not stated in the supplied hardware logs.
+
+These results validate 100 ms continuous timer callbacks and software
+elapsed-time reporting for the three selected devices, not absolute oscillator
+accuracy, worst-case interrupt latency, every TAU channel, or long-duration
+counter extension. Frequency changes, single-shot callbacks, disable/enable,
+reset, and other TAU channels remain unvalidated on hardware.
+
+TimerDemo Release enables high-level UART output through the J-Link OB
+virtual COM port (UART0, 115200 8N1) with no semihosting; Debug uses
+semihosting. The UART console is an observation path only.
+
+## ADC12 hardware validation (2026-10-14)
+
+FPB-R9A02G021 ADCDemo used ANI2 (P400, Arduino A0) wired to GND and ANI3
+(P401, Arduino A1) wired to board 3.3 V. Both runs used 12-bit conversions,
+VCC as the ADC reference, and one measurement set per second. The build type
+was not explicitly included in the supplied console captures.
+
+| Mode | Complete sets | IN0 | IN1 | Internal VREF | Estimated VCC | Temperature | Result |
+| --- | ---: | --- | --- | --- | --- | --- | --- |
+| Polling | 29 | 1-2 mV | 3299 mV | 1441-1449 mV | 3349-3366 mV | 27.2-27.7 C | PASS |
+| ADC_ENDI interrupt | 18 | 0 mV | 3299 mV | 1441-1450 mV | 3345-3366 mV | 27.0-27.7 C | PASS |
+
+Both runs reported factory temperature calibration code CAL140 = 792.
+All recorded measurement sets completed; inputs stayed near their wired
+rails and the internal readings were plausible and stable. The VCC estimate
+uses a typical internal reference value and the temperature conversion
+assumes 3.3 V, so neither is an independent precision measurement.
+
+These captures validate repeated software-triggered select-mode ADC12
+conversions with polling and ADC_ENDI interrupt completion, including
+external inputs, internal reference and temperature sensor. Scan mode,
+continuous conversion, hardware triggers, compare window, calibration,
+Snooze and other ANI pin mappings are not hardware validated by these runs.
+
+## RTC hardware validation (2026-10-14)
+
+FPB-R9A02G021 RtcDemo selected SOSC 32768 Hz for the calendar and Software
+Standby between events. The console reported consecutive one-second calendar
+timestamps from 23:27:48 through 23:31:10, with alarms at 23:29:00 and
+23:31:00. Both alarm handlers reported `Alarm, next in 2 min set` and
+periodic output continued after the second event. This validates calendar
+progression, RTC periodic IRQs, Software Standby wake-up, alarm IRQ delivery
+and alarm rearming in the tested configuration.
+
+A prior capture omitted five timestamp lines between 23:30:03 and 23:30:09,
+but the longer capture reported all timestamps in that interval. Treat that
+single earlier observation as unresolved rather than claiming a driver fault.
+J-Link sometimes loses execution context in Software Standby and reports
+PC 0xDEADBEEF. The continuing UART output is evidence that firmware can
+continue running after such an indication; it is not proof of a CPU fault.
+A separate RtcDemo hardware run with `RTC_DEMO_STANDBY=false` validated
+ordinary Sleep: the console showed every second from 23:39:01 through
+23:44:52, with alarm events at 23:41:00 and 23:43:00, both rearmed
+successfully. No timestamp gaps occurred in that capture. These observations
+validate RTC operation and repeated alarms in both Sleep and Software
+Standby for the configurations tested. Absolute oscillator accuracy and
+power-cycle retention remain untested.
+
+## AnalogDemo hardware validation (2026-10-15)
+
+FPB-R9A02G021 AnalogDemo in the supplied console capture uses TML32 LOCO
+interval 19989 us with DAC1 code increment 2 every tick. DACOUT1 P001 is
+wired to comparator input P106. Board resistor R23 externally pulls P001
+toward 3.3 V, so DAC1 output cannot cross the comparator's original 1.44 V
+internal reference. The updated example drives CMP0 IVREF0 from DAC0 P000
+at code 192 instead. The log records 1216 TML32 ticks and 18 comparator
+events, with rising transitions reported at DAC1 code 192 and falling
+transitions at the DAC1 wrap to code 0. Hardware PASS for TML32 scheduling,
+DAC1 ramp, comparator reference configuration and both-edge event callbacks.
+
+This does not validate DAC1's unloaded voltage accuracy. Earlier external
+ANI2 measurements across codes 0 to 255 gave approximately 1.675 to
+3.295 V with R23 installed, matching a heavily pull-up-loaded DAC output.
+
+## AdcSnoozeDemo hardware validation (2026-10-15)
+
+FPB-R9A02G021 AdcSnoozeDemo was run with ANI2/P400 first firmly at GND,
+then switched to board 3.3 V. At GND the UART printed only the startup banner
+and no above-threshold values. Applying 3.3 V produced repeated stable
+3299 mV readings after a first transitional value. The software threshold
+was 1650 mV; TML32 Snooze interval was configured for 100 ms.
+
+An earlier capture included additional banners; the tester reported accidental
+contact with the RESET pin next to the 3.3 V connection. Treat those banners
+as explained by the physical test setup, not a demonstrated firmware fault.
+Intermediate values (1700-2627 mV) occurred while moving the jumper; the
+final return-to-GND condition was not independently captured. This validates
+observed quiet below-threshold behavior and repeated high-input reporting,
+but not power consumption or independent internal DTC/ELC transaction counts.

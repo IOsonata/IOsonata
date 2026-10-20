@@ -226,11 +226,11 @@ static void TimerIRQHandler(int DevNo)
         {
             evt |= TIMER_EVT_TRIGGER(i);
             reg->EVENTS_COMPARE[i] = 0;
-            if (tdata.pTrigger[i].Type == TIMER_TRIG_TYPE_CONTINUOUS)
+			if (tdata.pTrigger[i].Type == TIMER_TRIG_TYPE_CONTINUOUS)
             {
             	reg->CC[i] = count + tdata.pCC[i];;
             }
-            if (tdata.pTrigger[i].Handler)
+			if (tdata.pTrigger[i].Handler)
             {
             	tdata.pTrigger[i].Handler(timer, i, tdata.pTrigger[i].pContext);
             }
@@ -533,9 +533,9 @@ static uint32_t nRFxTimerSetFrequency(TimerDev_t * const pTimer, uint32_t Freq)
 
     pTimer->Freq = TIMER_NRFX_HF_BASE_FREQ / (1 << prescaler);
 
-    // Tick period rounded down to a nanosecond, 62 for the 62.5 ns of 16 MHz.
-    // Not precise enough to convert a count or a trigger period, those are
-    // computed from Freq, see TimerTickToTime.
+	// Tick period rounded down to a nanosecond, 62 for the 62.5 ns of 16 MHz.
+	// Not precise enough to convert a count or a trigger period, those are
+	// computed from Freq, see TimerTickToTime.
     pTimer->nsPeriod = 1000000000ULL / pTimer->Freq;
 
     reg->TASKS_START = 1;
@@ -581,15 +581,15 @@ static uint64_t nRFxTimerEnableTrigger(TimerDev_t * const pTimer, int TrigNo, ui
 		return 0;
 	}
 
-    uint32_t cc = TimerNanosecondToTick(pTimer, nsPeriod);
+	uint32_t cc = TimerNanosecondToTick(pTimer, nsPeriod);
 
     if (cc <= 0)
     {
         return 0;
     }
 
-    tdata.pTrigger[TrigNo].Type = Type;
-    tdata.pCC[TrigNo] = cc;
+	tdata.pTrigger[TrigNo].Type = Type;
+	tdata.pCC[TrigNo] = cc;
     reg->TASKS_CAPTURE[TrigNo] = 1;
 
     uint32_t count = reg->CC[TrigNo];
@@ -606,11 +606,11 @@ static uint64_t nRFxTimerEnableTrigger(TimerDev_t * const pTimer, int TrigNo, ui
 
     pTimer->LastCount = count;
 
-    tdata.pTrigger[TrigNo].nsPeriod = TimerTickToNanosecond(pTimer, cc);
-    tdata.pTrigger[TrigNo].Handler = Handler;
-    tdata.pTrigger[TrigNo].pContext = pContext;
+	tdata.pTrigger[TrigNo].nsPeriod = TimerTickToNanosecond(pTimer, cc);
+	tdata.pTrigger[TrigNo].Handler = Handler;
+	tdata.pTrigger[TrigNo].pContext = pContext;
 
-    return tdata.pTrigger[TrigNo].nsPeriod; // Return real period in nsec
+	return tdata.pTrigger[TrigNo].nsPeriod; // Return real period in nsec
 }
 
 static void nRFxTimerDisableTrigger(TimerDev_t * const pTimer, int TrigNo)
@@ -622,14 +622,14 @@ static void nRFxTimerDisableTrigger(TimerDev_t * const pTimer, int TrigNo)
 	if (TrigNo < 0 || TrigNo >= tdata.MaxNbTrigEvt)
         return;
 
-    tdata.pCC[TrigNo] = 0;
+	tdata.pCC[TrigNo] = 0;
     reg->CC[TrigNo] = 0;
     reg->INTENCLR = TIMER_INTENSET_COMPARE0_Msk << TrigNo;
 
-    tdata.pTrigger[TrigNo].Type = TIMER_TRIG_TYPE_SINGLE;
-    tdata.pTrigger[TrigNo].Handler = NULL;
-    tdata.pTrigger[TrigNo].pContext = NULL;
-    tdata.pTrigger[TrigNo].nsPeriod = 0;
+	tdata.pTrigger[TrigNo].Type = TIMER_TRIG_TYPE_SINGLE;
+	tdata.pTrigger[TrigNo].Handler = NULL;
+	tdata.pTrigger[TrigNo].pContext = NULL;
+	tdata.pTrigger[TrigNo].nsPeriod = 0;
 }
 
 static int nRFxTimerFindAvailTrigger(TimerDev_t * const pTimer)

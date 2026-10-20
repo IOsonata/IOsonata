@@ -12,6 +12,7 @@
 #include <cstdio>
 #include <cstring>
 
+#include "bluetooth/bt_app.h"
 #include "bluetooth/bt_att.h"
 #include "bluetooth/bt_dev.h"
 #include "bluetooth/bt_gatt.h"
@@ -34,6 +35,9 @@ int s_SendCount;
 int s_ReserveCount;
 int s_ReleaseCount;
 int s_DisconnectCount;
+int s_WriteCompleteCount;
+uint16_t s_WriteCompleteHdl;
+bool s_WriteCompleteSuccess;
 bool s_ReserveOk;
 bool s_SendOk;
 int s_Checks;
@@ -86,6 +90,9 @@ void Setup()
 	s_ReserveCount = 0;
 	s_ReleaseCount = 0;
 	s_DisconnectCount = 0;
+	s_WriteCompleteCount = 0;
+	s_WriteCompleteHdl = BT_CONN_HDL_INVALID;
+	s_WriteCompleteSuccess = false;
 	s_ReserveOk = true;
 	s_SendOk = true;
 }
@@ -121,12 +128,16 @@ void TestMatchingResponseOwnsBearer()
 	BtAttProcessRsp(kConnHdl, &rsp, 5);
 	CHECK(s_Peer.bAttReqPending);
 
+	CHECK(s_WriteCompleteCount == 0);
 	std::memset(&rsp, 0, sizeof(rsp));
 	rsp.OpCode = BT_ATT_OPCODE_ATT_WRITE_RSP;
 	BtAttProcessRsp(kConnHdl, &rsp, 1);
 	CHECK(s_Peer.bAttReqPending == false);
 	CHECK(s_Peer.AttReqOpcode == 0);
 	CHECK(s_Peer.AttRspOpcode == 0);
+	CHECK(s_WriteCompleteCount == 1);
+	CHECK(s_WriteCompleteHdl == kConnHdl);
+	CHECK(s_WriteCompleteSuccess);
 	CHECK(BtAttReadRequest(&s_Hci, kConnHdl, 0x0021));
 	CHECK(s_SendCount == 2);
 }
@@ -145,6 +156,9 @@ void TestMatchingErrorResponseReleasesBearer()
 	BtAttProcessRsp(kConnHdl, &rsp, 5);
 
 	CHECK(s_Peer.bAttReqPending == false);
+	CHECK(s_WriteCompleteCount == 1);
+	CHECK(s_WriteCompleteHdl == kConnHdl);
+	CHECK(!s_WriteCompleteSuccess);
 	CHECK(BtAttReadRequest(&s_Hci, kConnHdl, 0x0021));
 }
 
@@ -282,40 +296,39 @@ void TestUuid32ExpandsTo128()
 
 } // namespace
 
-extern "C" {
 
-BtDevice_t *BtPeerFindByHdl(uint16_t Hdl)
+extern "C" BtDevice_t *BtPeerFindByHdl(uint16_t Hdl)
 {
 	return Hdl == kConnHdl ? &s_Peer : nullptr;
 }
 
-uint16_t BtPeerCount(void)
+extern "C" uint16_t BtPeerCount(void)
 {
 	return 1;
 }
 
-BtDevice_t *BtPeerSlot(uint16_t Idx)
+extern "C" BtDevice_t *BtPeerSlot(uint16_t Idx)
 {
 	return Idx == 0 ? &s_Peer : nullptr;
 }
 
-bool BtGattTxPendReserve(uint16_t, BtGattChar_t *, uint16_t)
+extern "C" bool BtGattTxPendReserve(uint16_t, BtGattChar_t *, uint16_t)
 {
 	++s_ReserveCount;
 	return s_ReserveOk;
 }
 
-void BtGattTxPendRelease(uint16_t)
+extern "C" void BtGattTxPendRelease(uint16_t)
 {
 	++s_ReleaseCount;
 }
 
-uint32_t BtGattMsTick(void)
+extern "C" uint32_t BtGattMsTick(void)
 {
 	return s_Now;
 }
 
-uint32_t BtHciSendAcl(BtHciDevice_t *, BtHciACLDataPacket_t *pAcl)
+extern "C" uint32_t BtHciSendAcl(BtHciDevice_t *, BtHciACLDataPacket_t *pAcl)
 {
 	if (!s_SendOk)
 	{
@@ -328,14 +341,21 @@ uint32_t BtHciSendAcl(BtHciDevice_t *, BtHciACLDataPacket_t *pAcl)
 	return len;
 }
 
-uint16_t BtAttGetMtu(void)
+extern "C" uint16_t BtAttGetMtu(void)
 {
 	return 247;
 }
 
-void BtDeviceDiscovered(BtDevice_t *) {}
+extern "C" void BtAppEvtWriteCompleted(uint16_t ConnHdl, bool Success)
+{
+	++s_WriteCompleteCount;
+	s_WriteCompleteHdl = ConnHdl;
+	s_WriteCompleteSuccess = Success;
+	CHECK(!s_Peer.bAttReqPending);
+}
 
-} // extern "C"
+extern "C" void BtDeviceDiscovered(BtDevice_t *) {}
+
 
 int main()
 {

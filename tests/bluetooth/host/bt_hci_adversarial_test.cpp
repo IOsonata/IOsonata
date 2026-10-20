@@ -103,9 +103,11 @@ void TestExtendedAdvEventNeedsCountByte()
 }
 
 int s_AdvTimeoutCount = 0;
+int s_AdvStoppedCount = 0;
 
 void AdvTimeout(void)
 {
+	BT_CHECK(s_Test, s_AdvStoppedCount == s_AdvTimeoutCount + 1);
 	s_AdvTimeoutCount++;
 }
 
@@ -140,11 +142,13 @@ void TestAdvSetTerminatedReadsStatus()
 	BtHciDevice_t dev = {};
 	dev.AdvTimeout = AdvTimeout;
 	s_AdvTimeoutCount = 0;
+	s_AdvStoppedCount = 0;
 
 	// A connection was created. Not a timeout.
 	FeedAdvSetTerminated(&dev, BT_HCI_SUCCESS,
 						 sizeof(BtHciLeEvtAdvSetTerminated_t));
 	BT_CHECK(s_Test, s_AdvTimeoutCount == 0);
+	BT_CHECK(s_Test, s_AdvStoppedCount == 0);
 
 	// The duration elapsed, and the advertising event count was met. Both are
 	// what the handler exists for.
@@ -220,63 +224,61 @@ void TestDroppedReassemblyCannotBecomeComplete()
 
 } // namespace
 
-extern "C" {
 
-uint32_t BtAttProcessReq(uint16_t, BtAttReqRsp_t * const, int,
+extern "C" uint32_t BtAttProcessReq(uint16_t, BtAttReqRsp_t * const, int,
 						 BtAttReqRsp_t * const)
 {
 	return 0;
 }
 
-void BtAttProcessRsp(uint16_t, BtAttReqRsp_t * const, int)
+extern "C" void BtAttProcessRsp(uint16_t, BtAttReqRsp_t * const, int)
 {
 }
 
-uint32_t BtL2CapProcessSignal(BtHciDevice_t * const, uint16_t,
+extern "C" uint32_t BtL2CapProcessSignal(BtHciDevice_t * const, uint16_t,
 							  BtL2CapPdu_t const * const, uint16_t,
 							  BtL2CapPdu_t * const)
 {
 	return 0;
 }
 
-void BtProcessSmpData(BtHciDevice_t * const, uint16_t,
+extern "C" void BtProcessSmpData(BtHciDevice_t * const, uint16_t,
 					  BtL2CapSmp_t * const, size_t)
 {
 }
 
-void BtSmpProcessLtkRequest(BtHciDevice_t * const, uint16_t, uint64_t, uint16_t)
+extern "C" void BtSmpProcessLtkRequest(BtHciDevice_t * const, uint16_t, uint64_t, uint16_t)
 {
 }
 
-void BtSmpLocalPubKeyReady(BtHciDevice_t * const, uint8_t,
+extern "C" void BtSmpLocalPubKeyReady(BtHciDevice_t * const, uint8_t,
 						   const uint8_t *, const uint8_t *)
 {
 }
 
-void BtSmpDhKeyReady(BtHciDevice_t * const, uint8_t, const uint8_t *)
+extern "C" void BtSmpDhKeyReady(BtHciDevice_t * const, uint8_t, const uint8_t *)
 {
 }
 
-void BtSmpEncryptionChanged(BtHciDevice_t * const, uint16_t, uint8_t, uint8_t)
+extern "C" void BtSmpEncryptionChanged(BtHciDevice_t * const, uint16_t, uint8_t, uint8_t)
 {
 }
 
-void BtSmpDisconnected(uint16_t)
+extern "C" void BtSmpDisconnected(uint16_t)
 {
 }
 
-SysLog_t *SysLogGet(void)
+extern "C" SysLog_t *SysLogGet(void)
 {
 	static SysLog_t log = {};
 	return &log;
 }
 
-int SysLogPrintf(SysLog_t * const, const char *, ...)
+extern "C" int SysLogPrintf(SysLog_t * const, const char *, ...)
 {
 	return 0;
 }
 
-} // extern "C"
 
 // The host reaches SMP only through the table BtSmpInit registers. This
 // test stands in for SMP, so it registers its own entry points.
@@ -307,4 +309,9 @@ int main()
 	s_Test.Run("advertising set terminated reads status",
 			   TestAdvSetTerminatedReadsStatus);
 	return s_Test.Finish();
+}
+
+void BtAdvHciStopped(void)
+{
+	++s_AdvStoppedCount;
 }

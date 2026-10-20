@@ -18,4 +18,4 @@ extern TestScb_t g_TestScb;
 
 #define SCB		(&g_TestScb)
 
-#endif // __TEST_SCB_H__
+#endif

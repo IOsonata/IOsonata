@@ -1,18 +1,31 @@
-# STM32WBA MCU port — STM32WBA65 priority
+# STM32WBA MCU port
 
-IOsonata currently contains the STM32WBA Bluetooth ACI adapter and linker
-scripts, but **not** a complete standalone STM32WBA MCU port. The hardware bring-up target is **STM32WBA65**. The target board is **STM32WBA65I-DK1 Discovery Kit**, with the
-**STM32WBA65RIV7** device (2 MB flash / 512 KB SRAM), as confirmed by ST's
-UM3462 and the board product page. Match its TrustZone configuration and
-middleware version. The WBA5x linker scripts
-are retained solely for WBA5x devices and must **not** be used for WBA65.
+IOsonata contains a standalone STM32WBA65 MCU library and an ST Bluetooth ACI
+adapter. GPIO, UART, timers, I2C/SPI, BLE security, crypto and USB CDC are
+hardware validated. BLE central scan/connect/discovery/notification/reconnect
+also pass on hardware. OLED, analog joystick, microphone level capture and
+stereo headphone tone examples work on the DK1. Full-duplex microphone audio
+has an unresolved clock-associated headphone buzz; further investigation is
+closed for this bring-up. See the detailed status and optional limitations.
+The target is the
+STM32WBA65I-DK1 Discovery Kit with STM32WBA65RIV7 (2 MB flash / 512 KB SRAM).
+The current application layout assumes TrustZone disabled (TZEN = 0); it does
+not install a secure bootloader or configure secure/nonsecure partitions.
+Confirm the board's option bytes before using this layout. WBA5x linker
+scripts must not be used for WBA65.
+
+The detailed build dependencies, examples and validation status are in
+[`STM32WBA65/README.md`](STM32WBA65/README.md).
 
 ## Existing IOsonata sources
 
 - `include/stm32wbaxx.h` and `include/system_stm32wbaxx.h`:
-  ST-compatible entry headers; these do **not** contain the device register map.
+  device selection and system declarations. `include/stm32wba65xx.h` supplies
+  the ST device register map and IRQ definitions.
 - `src/bt_{app,adv,scan,gap,gatt,smp_bond,pds}_stm32wba.cpp` and
-  `src/bt_wba_event_router.h`: initial ST BLE middleware integration.
+  `include/bt_wba_event_router.h`, `include/bt_wba_stack.h`: ST BLE middleware
+  integration, compile checked against STM32CubeWBA 1.10.0, see
+  `STM32WBA65/README.md`.
 - `ldscript/gcc_stm32wba5xxx.ld`: *1 MB / 128 KB* WBA5x-specific memory
   layout with reserved NVM regions; not a universal WBA linker script.
 
@@ -31,7 +44,7 @@ channels for each instance and defines their vectors. GPDMA has no circular
 mode, the RX ring is a linked list node that loads the same block again at
 the end of each block. The driver leaves the GPDMA1 security and privilege
 settings at their reset value, which suits a device with TrustZone disabled
-(TZEN = 0). Not tested on hardware. The STM32WBA65I-DK1 test projects are
+(TZEN = 0). UART PRBS TX and loopback have passed on hardware. The STM32WBA65I-DK1 test projects are
 `STM32WBA65/exemples/UartLoopback` and `UartPrbsTxTest`, described in
 `STM32WBA65/README.md`.
 
@@ -73,8 +86,29 @@ The TIM count at the APB timer clock divided by 1 to 65536,
 TIM16 and TIM17, 4 on TIM1 to TIM4. External trigger and the tick interrupt
 are not supported. The timer vectors of `STM32WBA65/src/vectors_stm32wba65.c`
 are weak aliases of `Stm32TimerVector`; TimerInit refuses a timer whose
-vector is replaced by an application handler. Not tested on hardware;
-`STM32WBA65/exemples/TimerDemo` is the test project.
+vector is replaced by an application handler. TimerDemo callbacks have passed
+on hardware for the LPTIM and TIM engines; absolute frequency has not been
+measured against an external reference.
+
+## Crypto
+
+Hardware validated on STM32WBA65I-DK1, October 18, 2026: **51 passed, 0 failed**.
+Tests cover RNG, AES ECB/CBC/CTR/CMAC/CCM/GCM, P-256 ECDH and ECDSA,
+invalid-input rejection, output clearing and comparison with software engines.
+P-256 scalar multiplication averaged 31072 us on the engine and 188099 us in
+software over 8 rounds. BLE uses CryptoWbaAes and CryptoWbaPka, with software
+AES fallback when the AES peripheral is busy. See the [test results](STM32WBA65/README.md#crypto-hardware-validation).
+
+## USB device
+
+The WBA65 library links the shared STM32 OTG FIFO driver. UsbCdcLoopback and
+UsbCdcPrbsTx projects use the common IOsonata applications on the native CN5
+connector. Control, bulk and interrupt transfers are implemented; ISO and USB
+host mode are unsupported. CDC PRBS TX runs at about 194.5 kB/s in Debug and
+649 kB/s in Release. Release CDC loopback passed 60 seconds at about 1.20 MB/s
+in each direction: 72094720 bytes sent and received, zero errors and zero
+pending bytes. Reconnect, suspend/resume and FS fallback remain pending. See
+[`../USB.md`](../USB.md) for family coverage, clock requirements and testing.
 
 ## STM32CubeWBA dependency
 
@@ -86,42 +120,44 @@ their official headers, linked middleware objects/libraries, and any required
 BLE/link-layer initialization components. Do not substitute invented register
 definitions or mix headers from incompatible CubeWBA releases.
 
-The complete device header (for example, `stm32wba55xx.h`) and matching
-CMSIS startup/system implementation are required. The presence of
-`stm32wbaxx.h` alone does not satisfy them.
+The WBA65 library uses `stm32wba65xx.h`, IOsonata `ARM/src/ResetEntry.c`,
+`src/system_stm32wbaxx.c` and `STM32WBA65/src/vectors_stm32wba65.c`. Do not
+add a second Cube startup or vector table to the application.
 
-## Work required before claiming an IOsonata MCU port
+## Implementation and validation inventory
 
-1. For STM32WBA65, add the exact WBA65 CMSIS device package, device-specific
-   system clock and reset/startup implementation, vector
-   table and interrupt dispatch using the existing IOsonata MCU pattern.
-2. Implement and test MCU-owned GPIO/pinmux, UART and Timer drivers using
-   the target reference manual and the correct STM32WBA device definitions.
-   GPIO, UART and the timers are implemented, not tested on hardware.
-3. Bind the existing BLE adapter to a pinned STM32CubeWBA release, resolve the
-   ACI and link-layer dependencies, and verify controller/stack bring-up.
-4. Create an MCU library project and small bring-up applications with
-   application-owned `board.h` files; do not put board wiring in the library.
-5. Create a dedicated STM32WBA65 linker script (the 1 MB/128 KB WBA5x
-   script is incompatible). Verify FLASH/RAM sizes and secure/non-secure placement against the
-   exact WBA part and chosen provisioning configuration.
-6. Run compiler/link checks and hardware tests for startup, UART, timers,
-   BLE advertising, connecting, GATT, pairing/bonding and NVM persistence.
+| Area | Existing implementation | Remaining validation or limitation |
+|---|---|---|
+| Startup and clocks | ResetEntry, WBA65 vectors, FPU enable, PLL1R at 100 MHz | Debug/Release minimal images reach main in the emulator; Blinky boots on hardware; option bytes and clock frequency unverified |
+| Memory layout | WBA65 I: 2 MB flash / 512 KB SRAM; two reserved 16 KB NVM regions | Confirm security configuration on the board; no secure image supplied |
+| GPIO | Shared STM32 pin configuration, atomic output writes, EXTI dispatch | LED output and external input/EXTI confirmed on hardware |
+| UART | LPUART1, USART1/2/3; polling, interrupt and GPDMA | 1 Mbaud PRBS TX and loopback passed; loopback reported zero errors |
+| Timers | Two LPTIM and six TIM instances through the shared STM32 driver | LPTIM and TIM callbacks passed; no external frequency reference used |
+| I2C | Master polling/interrupt/DMA/DMA+interrupt; slave interrupt/DMA | I2CMasterSlave: all eight combinations passed on DK1 |
+| SPI | Master polling/interrupt/DMA/DMA+interrupt; slave interrupt/DMA | SPIMasterSlave: all eight combinations passed; see detailed README |
+| Crypto | RNG, AES and PKA engines | Hardware validated: 51 passed, 0 failed; see Crypto above |
+| USB | Shared STM32 OTG device controller; control, bulk and interrupt transfers | CDC hardware validated: Debug/Release PRBS TX and Release 60-second loopback; additional modes pending |
+| BLE | CubeWBA host/link-layer integration, GAP/GATT, security and bond storage | Advertising and counter updates pass; Numeric Comparison, encrypted transfer and bonded reconnect after reset hardware validated; central scan/connect/discovery/notification/reconnect tested; explicit characteristic reads unvalidated |
+| ADC / joystick | Polling single-round ADC, external inputs; menu, stopwatch and countdown | Joystick examples hardware tested; continuous/DMA/internal-temperature modes unsupported |
+| OLED | Generic SSD1315 through SPI3 | Console, graphics and interactive examples exercised |
+| EEPROM | M95P32 through generic Nvm; SeepDemo | Builds and command-model tests pass; hardware result not recorded |
+| Audio | Generic WM8904 control and SAI1 I2S; shared SAI/GPDMA native PDM | Level meter and headphone tones hardware tested; clock-associated loopback buzz unresolved; native PDM hardware untested |
 
-**Validation status:** these steps are not yet complete. Bluetooth source
-presence must not be interpreted as a buildable or hardware-validated port.
-The BLE adapter is designed for ST's CubeWBA host/controller middleware,
-not a replacement of its radio controller.
+WBA65 projects include GPIO, UART, timer, I2C, SPI and BLE examples with Debug
+and Release configurations. UartRetargetDemo, UartSlipPrbsTx and UartSlipPrbsRx
+link the shared UART examples. They compile and link in Debug/Release;
+hardware results are not recorded.
+The library includes the BLE glue and vendor platform sources; Bluetooth
+applications also link the two ST middleware archives. See
+`STM32WBA65/README.md` for the project list, wiring and recorded test results.
+
+Remaining validation includes explicit BLE characteristic reads, additional
+USB modes and optional peripherals not covered by the reported tests. Do not repeat every
+timer instance when the same timer engine has already been tested.
 
 ST's firmware package: https://github.com/STMicroelectronics/STM32CubeWBA
 
-## STM32WBA65 hardware priority (2026-10-09)
-
-The maintainer has a WBA65 development board available for target testing.
-WBA65 is now the first STM32WBA bring-up target. ST documents WBA65 family
-variants with up to 2 MB flash and 512 KB SRAM, a 100 MHz Cortex-M33 and
-Bluetooth LE support. Confirm the exact MCU marking before selecting the
-flash/RAM layout; do not assume every WBA65 has the maximum memory.
+## STM32WBA65I-DK1 board mapping
 
 For STM32WBA65I-DK1, use the WBA65 device header and board-local pin
 assignments in examples; no Discovery Kit wiring belongs in the MCU library.
@@ -137,3 +173,5 @@ References:
 - https://www.st.com/en/evaluation-tools/stm32wba65i-dk1.html
 - https://www.st.com/resource/en/user_manual/DM01147159.pdf
 - https://www.st.com/en/microcontrollers-microprocessors/stm32wba65mi.html
+
+

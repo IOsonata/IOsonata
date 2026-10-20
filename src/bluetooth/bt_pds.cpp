@@ -128,13 +128,31 @@ static uint32_t s_SectorHdrSize;
 #define BT_PDS_FILL_CHUNK		64
 #endif
 
+// A read that fails is tried again before it is believed. On a memory with
+// ECC, a word left half programmed or half erased by a power cut fails every
+// time, while a passing bus error does not; the callers treat a read that
+// still fails as damaged data.
+#ifndef BT_PDS_READ_TRIES
+#define BT_PDS_READ_TRIES		3
+#endif
+
 // The store works in whole results: a transfer either moved everything asked
 // for or it failed. Nvm reports the byte count, so fold that here once.
 static int MemRead(uint32_t Off, void *pBuf, uint32_t Len)
 {
-	int r = s_pMem->Read(Off, pBuf, Len);
+	int r = -EIO;
 
-	return r < 0 ? r : (r == (int)Len ? 0 : -EIO);
+	for (int i = 0; i < BT_PDS_READ_TRIES; i++)
+	{
+		r = s_pMem->Read(Off, pBuf, Len);
+		r = r < 0 ? r : (r == (int)Len ? 0 : -EIO);
+		if (r == 0)
+		{
+			return 0;
+		}
+	}
+
+	return r;
 }
 
 static int MemWrite(uint32_t Off, const void *pData, uint32_t Len)
@@ -332,6 +350,29 @@ static void SectorInfoReset(uint16_t Sector)
 	s_Sectors[Sector].Head = SectorBase(Sector);
 }
 
+// Whether everything after the sector header reads erased
+static bool SectorBodyErased(uint16_t Sector)
+{
+	uint8_t buf[64];
+	uint32_t off = SectorBase(Sector) + sizeof(BtPdsSectorHdr_t);
+
+	while (off < SectorEnd(Sector))
+	{
+		uint32_t len = SectorEnd(Sector) - off;
+
+		if (len > sizeof(buf))
+		{
+			len = sizeof(buf);
+		}
+		if (MemRead(off, buf, len) != 0 || !IsErased(buf, len))
+		{
+			return false;
+		}
+		off += len;
+	}
+	return true;
+}
+
 static int ScanSector(uint16_t Sector)
 {
 	BtPdsSectorHdr_t sectorHdr;
@@ -341,18 +382,27 @@ static int ScanSector(uint16_t Sector)
 	pInfo->SourceSector = BT_PDS_NO_SECTOR;
 	pInfo->Head = SectorBase(Sector);
 
-	if (MemRead(SectorBase(Sector), &sectorHdr, sizeof(sectorHdr)) != 0)
+	// A header that cannot be read is damaged, from a power cut while it was
+	// written or while the sector was erased. Like a header that fails its
+	// check, the sector then holds nothing the store needs and init erases it.
+	bool readable = MemRead(SectorBase(Sector), &sectorHdr, sizeof(sectorHdr)) == 0;
+
+	// An erase cut by a power loss can leave the header erased and older
+	// records after it. Taken as erased, the sector would get a new header
+	// over them and those records would be read again under it: records a
+	// clear or a collection had already taken away. It is erased only when
+	// all of it is; otherwise it is damaged and init erases it.
+	if (readable && IsErased(&sectorHdr, sizeof(sectorHdr)))
 	{
-		return -EIO;
+		if (SectorBodyErased(Sector))
+		{
+			SectorInfoReset(Sector);
+			return 0;
+		}
+		readable = false;
 	}
 
-	if (IsErased(&sectorHdr, sizeof(sectorHdr)))
-	{
-		SectorInfoReset(Sector);
-		return 0;
-	}
-
-	if (!ReadSectorHdr(Sector, &sectorHdr))
+	if (!readable || !ReadSectorHdr(Sector, &sectorHdr))
 	{
 		pInfo->Valid = false;
 		pInfo->Erased = false;
@@ -388,7 +438,11 @@ static int ScanSector(uint16_t Sector)
 		uint32_t word;
 		if (MemRead(off, &word, sizeof(word)) != 0)
 		{
-			return -EIO;
+			// A slot that cannot be read is a damaged record, handled as the
+			// partial record below.
+			pInfo->Writable = false;
+			pInfo->Head = SectorEnd(Sector);
+			return 0;
 		}
 
 		if (word == BT_PDS_ERASED_U32)
@@ -498,12 +552,16 @@ static int AppendToSector(uint16_t Sector, uint32_t Id, uint16_t Len,
 		return -ENOMEM;
 	}
 
+	// The sequence number is used up before the write. A write that reports
+	// an error may still have reached the medium; the next record must not
+	// carry the same number, or the newest of the two would depend on which
+	// sector a scan reads first.
 	BtPdsRecHdr_t hdr;
 	memset(&hdr, 0, sizeof(hdr));
 	hdr.Magic = BT_PDS_REC_MAGIC;
 	hdr.Id = Id;
 	hdr.Len = Len;
-	hdr.Seq = s_NextSeq;
+	hdr.Seq = s_NextSeq++;
 	hdr.Crc = RecCrc(&hdr, pData);
 
 	alignas(BT_PDS_MAX_WRITE_GRAN) uint8_t rec[
@@ -523,7 +581,6 @@ static int AppendToSector(uint16_t Sector, uint32_t Id, uint16_t Len,
 	}
 
 	pInfo->Head += total;
-	s_NextSeq++;
 	return 0;
 }
 
@@ -837,31 +894,61 @@ static int StartSector(uint16_t Sector)
 	return result;
 }
 
-static int GarbageCollect(uint32_t Need)
+// Finds an erased sector, erasing one only if that loses no record. Used by
+// the collection for its destination and by BtPdsClear for its commit sector.
+// Returns 0 with *pSector set, the erase error, or -ENOMEM with nothing
+// changed when every sector still owns a newest record.
+static int ReclaimSector(uint16_t *pSector)
 {
-	uint16_t destination = FindErasedSector();
-	if (destination == BT_PDS_NO_SECTOR)
+	*pSector = FindErasedSector();
+	if (*pSector != BT_PDS_NO_SECTOR)
 	{
-		// Expected only after an interrupted erase. A sector owning no globally
-		// newest record can be reclaimed without copying.
-		for (uint16_t sector = 0; sector < s_SectorCount; sector++)
+		return 0;
+	}
+
+	// A sector with no valid header under this epoch, such as one left
+	// unusable by a failed header write or one a committed clear did not get
+	// to erase, holds nothing to keep: BtPdsInit erases the same sectors at
+	// mount. Erase it now rather than waiting for a reset.
+	for (uint16_t sector = 0; sector < s_SectorCount; sector++)
+	{
+		if (!s_Sectors[sector].Valid && !s_Sectors[sector].Erased)
 		{
-			if (s_Sectors[sector].Valid && SectorCopyBytes(sector) == 0U)
+			int result = EraseSector(sector);
+			if (result == 0)
 			{
-				int result = EraseSector(sector);
-				if (result != 0)
-				{
-					return result;
-				}
-				destination = sector;
-				break;
+				*pSector = sector;
 			}
+			return result;
 		}
 	}
 
-	if (destination == BT_PDS_NO_SECTOR)
+	// Expected only after an interrupted or refused erase, such as the
+	// source of a collection that could not be erased. A sector owning no
+	// globally newest record can be reclaimed without copying.
+	for (uint16_t sector = 0; sector < s_SectorCount; sector++)
 	{
-		return -ENOMEM;
+		if (s_Sectors[sector].Valid && SectorCopyBytes(sector) == 0U)
+		{
+			int result = EraseSector(sector);
+			if (result == 0)
+			{
+				*pSector = sector;
+			}
+			return result;
+		}
+	}
+
+	return -ENOMEM;
+}
+
+static int GarbageCollect(uint32_t Need)
+{
+	uint16_t destination;
+	int result = ReclaimSector(&destination);
+	if (result != 0)
+	{
+		return result;
 	}
 
 	uint32_t capacity = s_SectorSize - s_SectorHdrSize;
@@ -890,8 +977,8 @@ static int GarbageCollect(uint32_t Need)
 		return -ENOMEM;
 	}
 
-	int result = WriteSectorHdr(destination, victim,
-								s_Sectors[victim].Generation);
+	result = WriteSectorHdr(destination, victim,
+							s_Sectors[victim].Generation);
 	if (result != 0)
 	{
 		return result;
@@ -951,7 +1038,7 @@ static int FormatStore(void)
 	return StartSector(0U);
 }
 
-int BtPdsInit(Nvm *pMem)
+static int PdsMount(Nvm *pMem)
 {
 	if (pMem == nullptr)
 	{
@@ -1007,7 +1094,8 @@ int BtPdsInit(Nvm *pMem)
 	uint32_t firstWord = BT_PDS_ERASED_U32;
 	if (MemRead(0U, &firstWord, sizeof(firstWord)) != 0)
 	{
-		return -EIO;
+		// Unreadable is not the old format; the sector scan sorts it out
+		firstWord = BT_PDS_ERASED_U32;
 	}
 	if (firstWord == BT_PDS_REC_MAGIC)
 	{
@@ -1048,6 +1136,23 @@ int BtPdsInit(Nvm *pMem)
 		return StartSector(FindErasedSector());
 	}
 	return 0;
+}
+
+// A mount that fails leaves no store behind. One that stopped part way
+// leaves the sector table half filled, a sector can be marked valid before
+// its records were read, and a store still usable after that could take
+// such a sector as holding nothing: the next write could collect and erase
+// it with the data still in it.
+int BtPdsInit(Nvm *pMem)
+{
+	int result = PdsMount(pMem);
+
+	if (result != 0)
+	{
+		s_pMem = nullptr;
+	}
+
+	return result;
 }
 
 ssize_t BtPdsRead(uint32_t Id, void *pBuf, size_t Len)
@@ -1125,12 +1230,19 @@ int BtPdsClear(void)
 		return -EINVAL;
 	}
 
-	uint16_t spare = FindErasedSector();
-	if (spare == BT_PDS_NO_SECTOR)
+	// The clear commits on an erased sector. Without one, a sector is erased
+	// for it only if that loses nothing before the commit: a sector holding
+	// nothing under this epoch, which after a clear whose erase failed is a
+	// sector the commit already took away, or one whose records all have a
+	// newer copy elsewhere. Erasing any other sector, or every sector in
+	// order, would lose records, or bring cleared ones back, if the power
+	// went before the commit header is written. With no such sector the
+	// clear is refused and the store is left as it was.
+	uint16_t spare;
+	int result = ReclaimSector(&spare);
+	if (result != 0)
 	{
-		// No erased spare exists only in an already-degraded state. Fall back
-		// to the sequential format, which is not power-loss atomic.
-		return FormatStore();
+		return result;
 	}
 
 	// Commit point of the clear. Once a sector header under the next epoch
@@ -1147,7 +1259,7 @@ int BtPdsClear(void)
 
 	s_Epoch = prev + 1U;
 
-	int result = StartSector(spare);
+	result = StartSector(spare);
 	if (result != 0)
 	{
 		s_Epoch = prev;

@@ -1,4 +1,4 @@
-/* Application with DFU, nRF54LM20 (A and B) with S145.
+/* Application with DFU, nRF54LM20A with S145.
  *
  * Same as gcc_nrf54lm20a_xxaa_s145.ld with FLASH cut down to slot 0, from the
  * layout the stage 0 boot shares, and RAM stopped short of the recovery

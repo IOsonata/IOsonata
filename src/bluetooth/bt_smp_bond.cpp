@@ -840,14 +840,30 @@ static void BtSmpRepeatDecay(BtSmpRepeatEntry_t *p, uint32_t Now)
 	p->LastFailure += (uint32_t)dec * BT_SMP_REPEAT_DECAY_MS;
 }
 
+// An identity address names the same claimant whatever HCI type reports it:
+// public and resolved public as BTADDR_TYPE_PUBLIC, random static as
+// BTADDR_TYPE_RAND. Private addresses are left as they are.
+static void BtSmpRepeatCanonical(uint8_t *pType, const uint8_t Addr[6])
+{
+	uint8_t idType;
+	if (BtSmpAddrIdentityType(*pType, Addr, &idType))
+	{
+		*pType = idType;
+	}
+}
+
 // Caller holds the bond/attempt lock. A known RPA is resolved by the bond
 // table. Once an identity address was distributed use that stable identity,
-// so a later connection on a different RPA reaches the same penalty.
+// so a later connection on a different RPA reaches the same penalty. Without
+// a bond the address is used in its canonical form, so that a penalty moved
+// to an identity distributed without an IRK (or with a zero IRK) is found
+// again when the peer connects with that identity address.
 static void BtSmpRepeatNormalizeLocked(uint8_t *pType, uint8_t Addr[6])
 {
 	int slot = BtSmpBondFindByAddr(*pType, Addr);
 	if (slot < 0 || s_pBtSmpBondTable == nullptr)
 	{
+		BtSmpRepeatCanonical(pType, Addr);
 		return;
 	}
 
@@ -1011,6 +1027,8 @@ void BtSmpPairingAttemptSucceeded(uint16_t ConnHdl)
 	uint8_t rawType = type;
 	uint8_t rawAddr[6];
 	memcpy(rawAddr, addr, 6);
+	// The failures were recorded under the canonical form of the address
+	BtSmpRepeatCanonical(&rawType, rawAddr);
 
 	uint32_t state = BtSmpBondTableEnter();
 	BtSmpRepeatNormalizeLocked(&type, addr);

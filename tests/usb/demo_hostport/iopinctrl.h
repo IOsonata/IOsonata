@@ -47,4 +47,4 @@ static inline void IOPinClear(int, int) {}
 }
 #endif
 
-#endif // __IOPINCTRL_H__
+#endif

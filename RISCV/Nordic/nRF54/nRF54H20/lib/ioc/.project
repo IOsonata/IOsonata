@@ -246,6 +246,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/app_run.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/app_wait.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/app_wait.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/base64.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/base64.c</locationURI>
@@ -349,16 +354,6 @@
 			<name>src/stddev.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/stddev.c</locationURI>
-		</link>
-		<link>
-			<name>src/sysstatus.c</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/sysstatus.c</locationURI>
-		</link>
-		<link>
-			<name>src/sysstatus_impl.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/sysstatus_impl.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/uart_retarget.c</name>

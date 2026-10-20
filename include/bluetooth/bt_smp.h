@@ -572,7 +572,7 @@ void BtSmpPasskeyReply(uint16_t ConnHdl, uint32_t Passkey);
  * pair so the confirm stays valid. All values are SMP byte order, low octet
  * first.
  *
- * @param	pDev	HCI device used by the crypto provider.
+ * @param	pDev	Reserved for compatibility; pass NULL. The stack owns the crypto context.
  * @param	pRand	Filled with the 16 octet random r.
  * @param	pConf	Filled with the 16 octet confirm C.
  *

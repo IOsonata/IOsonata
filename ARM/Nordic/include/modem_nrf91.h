@@ -6,9 +6,9 @@
 The nRF91 modem is driven by Nordic's Modem library (nrfxlib nrf_modem). The
 library is OS independent: the application provides its OS glue (the
 nrf_modem_os functions), the IPC interrupt and the memory shared with the
-modem. This is that glue for IOsonata, bare metal by default. A TaktOS
-application also links modem_os_nrf91_taktos.c, which replaces the waits,
-the semaphores and the mutex with TaktOS ones.
+modem. IOsonata implements this glue in modem_nrf91.c. The library's
+Debug and Release configurations use bare-metal waits, semaphores and mutexes;
+Debug_TaktOS and Release_TaktOS select the TaktOS versions in the same file.
 
 The application is a single secure image, linked with nrf9160_xxaa.ld or
 nrf9120_xxaa.ld (or their _dfu variant) and the library, as any other nRF91

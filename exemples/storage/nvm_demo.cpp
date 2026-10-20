@@ -139,6 +139,11 @@ McuOsc_t g_McuOsc = MCU_OSC;
 
 #define NVM_DEMO_MAGIC			0x4E564D31UL	// "NVM1"
 
+// UART instance of the output, 0 when board.h does not say
+#ifndef NVM_DEMO_UART_DEVNO
+#define NVM_DEMO_UART_DEVNO		0
+#endif
+
 static const IOPinCfg_t s_UartPins[] = UART_PINS;
 
 // TX FIFO large enough for the burst of check results printed back to back;
@@ -148,7 +153,7 @@ static const IOPinCfg_t s_UartPins[] = UART_PINS;
 alignas(4) static uint8_t s_UartTxFifoMem[UART_TXFIFO_MEMSIZE];
 
 static const UARTCfg_t s_UartCfg = {
-	.DevNo = 0,
+	.DevNo = NVM_DEMO_UART_DEVNO,
 	.pIOPinMap = s_UartPins,
 	.NbIOPins = sizeof(s_UartPins) / sizeof(IOPinCfg_t),
 	.Rate = 115200,
@@ -216,6 +221,10 @@ static const SPICfg_t s_SpiCfg = {
 
 static SPI s_MemIntrf;
 
+#ifdef NVM_DEMO_CHIP_CFG
+// The part of the board, from board.h
+static const NvmCfg_t s_ChipCfg = NVM_DEMO_CHIP_CFG;
+#else
 // MX25R3235F : 32 Mbits NOR flash, 4K sector, 256 byte page. From the
 // device database in nvm.h; another part is another entry here.
 static const NvmCfg_t s_ChipCfg = {
@@ -227,6 +236,7 @@ static const NvmCfg_t s_ChipCfg = {
 	.WrProtMask = 0x3C,				// BP0..BP3
 	.WrProtPin = { -1, -1, },		// no pin on this part
 };
+#endif
 
 #elif NVM_DEMO_MEDIUM == 2
 
@@ -829,6 +839,31 @@ static bool NvmDemoSetup(void)
 		SysLogPrintf(SysLogGet(), "Nvm init failed\r\n");
 		return false;
 	}
+
+#if NVM_DEMO_MEDIUM == 1
+	// The commands in use, and the status register with the Quad Enable bit,
+	// which a quad command needs. A command of 0 is the single line default.
+	SysLogPrintf(SysLogGet(), "commands: read 0x%02X dummy %u, write 0x%02X\r\n",
+							  cfg.RdCmd.Cmd != 0 ? cfg.RdCmd.Cmd : 0x03,
+							  (unsigned)cfg.RdCmd.DummyCycle,
+							  cfg.WrCmd.Cmd != 0 ? cfg.WrCmd.Cmd : 0x02);
+	{
+		uint8_t sr = s_Nvm.ReadStatus();
+
+		if (cfg.QuadEnable.Reg == 1)
+		{
+			SysLogPrintf(SysLogGet(), "status  : 0x%02X, quad enable bit %u %s\r\n",
+									  (unsigned)sr, (unsigned)cfg.QuadEnable.Bit,
+									  (sr >> cfg.QuadEnable.Bit) & 1 ? "set" : "clear");
+		}
+		else
+		{
+			SysLogPrintf(SysLogGet(), "status  : 0x%02X, quad enable %s\r\n",
+									  (unsigned)sr, cfg.QuadEnable.Reg == 0 ?
+									  "not used" : "in status register 2");
+		}
+	}
+#endif
 
 	return true;
 }

@@ -94,7 +94,7 @@
 								</option>
 								<inputType id="com.renesas.cdt.managedbuild.llvm.core.inputType.assembler.75729129" superClass="com.renesas.cdt.managedbuild.llvm.core.inputType.assembler"/>
 							</tool>
-							<tool id="com.renesas.cdt.managedbuild.llvm.riscv.tool.Linker.1944959581" name="Linker" superClass="com.renesas.cdt.managedbuild.llvm.riscv.tool.Linker" commandLinePattern="${COMMAND} ${FLAGS} -march=rv32imac_zba_zbb_zbs_zicsr_zifencei -mabi=ilp32 ${OUTPUT_FLAG} ${OUTPUT_PREFIX}${OUTPUT} ${INPUTS}">
+							<tool id="com.renesas.cdt.managedbuild.llvm.riscv.tool.Linker.1944959581" name="Linker" superClass="com.renesas.cdt.managedbuild.llvm.riscv.tool.Linker" commandLinePattern="${COMMAND} -Wl,--whole-archive -lsemihost -Wl,--no-whole-archive ${FLAGS} -march=rv32imac_zba_zbb_zbs_zicsr_zifencei -mabi=ilp32 ${OUTPUT_FLAG} ${OUTPUT_PREFIX}${OUTPUT} ${INPUTS}">
 								<option id="com.renesas.cdt.managedbuild.llvm.core.option.linker.misc.inputsections.617085414" name="Enable garbage collection of unused input sections(-gc-sections)" superClass="com.renesas.cdt.managedbuild.llvm.core.option.linker.misc.inputsections" value="true" valueType="boolean"/>
 								<option id="com.renesas.cdt.managedbuild.llvm.riscv.linker.nostartfiles.1234694818" name="Do not use the standard system startup files when linking" superClass="com.renesas.cdt.managedbuild.llvm.riscv.linker.nostartfiles" value="false" valueType="boolean"/>
 								<option id="com.renesas.cdt.managedbuild.llvm.core.option.linker.source.linkerScript.63238886" name="Linker script" superClass="com.renesas.cdt.managedbuild.llvm.core.option.linker.source.linkerScript" valueType="stringList" IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false">
@@ -106,10 +106,9 @@
 								</option>
 								<option id="com.renesas.cdt.managedbuild.llvm.core.option.linker.archives.archiveLibraryFiles.1939929501" name="Archive (library) files (-l)" superClass="com.renesas.cdt.managedbuild.llvm.core.option.linker.archives.archiveLibraryFiles" valueType="libs" IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false">
 									<listOptionValue builtIn="false" value="IOsonata_R9A02G021"/>
-									<listOptionValue builtIn="false" value="nosys"/>
 								</option>
 							</tool>
-							<tool id="com.renesas.cdt.managedbuild.llvm.riscv.tool.cpp.linker.1911579983" name="Linker CPP" superClass="com.renesas.cdt.managedbuild.llvm.riscv.tool.cpp.linker" commandLinePattern="${COMMAND} ${FLAGS} -march=rv32imac_zba_zbb_zbs_zicsr_zifencei -mabi=ilp32 ${OUTPUT_FLAG} ${OUTPUT_PREFIX}${OUTPUT} ${INPUTS}">
+							<tool id="com.renesas.cdt.managedbuild.llvm.riscv.tool.cpp.linker.1911579983" name="Linker CPP" superClass="com.renesas.cdt.managedbuild.llvm.riscv.tool.cpp.linker" commandLinePattern="${COMMAND} -Wl,--whole-archive -lsemihost -Wl,--no-whole-archive ${FLAGS} -march=rv32imac_zba_zbb_zbs_zicsr_zifencei -mabi=ilp32 ${OUTPUT_FLAG} ${OUTPUT_PREFIX}${OUTPUT} ${INPUTS}">
 								<option id="com.renesas.cdt.managedbuild.llvm.core.option.linker.misc.inputsections.1333285826" name="Enable garbage collection of unused input sections(-gc-sections)" superClass="com.renesas.cdt.managedbuild.llvm.core.option.linker.misc.inputsections" value="true" valueType="boolean"/>
 								<option id="com.renesas.cdt.managedbuild.llvm.riscv.linker.cpp.nostartfiles.838221928" name="Do not use the standard system startup files when linking" superClass="com.renesas.cdt.managedbuild.llvm.riscv.linker.cpp.nostartfiles" value="false" valueType="boolean"/>
 								<option id="com.renesas.cdt.managedbuild.llvm.core.option.linker.source.linkerScript.2026600416" name="Linker script" superClass="com.renesas.cdt.managedbuild.llvm.core.option.linker.source.linkerScript" valueType="stringList" IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false">
@@ -121,7 +120,6 @@
 								</option>
 								<option id="com.renesas.cdt.managedbuild.llvm.core.option.linker.archives.archiveLibraryFiles.1817926688" name="Archive (library) files (-l)" superClass="com.renesas.cdt.managedbuild.llvm.core.option.linker.archives.archiveLibraryFiles" valueType="libs" IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false">
 									<listOptionValue builtIn="false" value="IOsonata_R9A02G021"/>
-									<listOptionValue builtIn="false" value="nosys"/>
 								</option>
 							</tool>
 							<tool id="com.renesas.cdt.managedbuild.llvm.riscv.tool.Objcopy.935014097" name="Objcopy" superClass="com.renesas.cdt.managedbuild.llvm.riscv.tool.Objcopy"/>
@@ -198,6 +196,7 @@
 								<option id="com.renesas.cdt.managedbuild.llvm.core.option.compiler.source.std.651565897" name="Language standard" superClass="com.renesas.cdt.managedbuild.llvm.core.option.compiler.source.std" useByScannerDiscovery="true" value="com.renesas.cdt.managedbuild.llvm.core.option.compiler.cpp.gnu17" valueType="enumerated"/>
 								<option id="com.renesas.cdt.managedbuild.llvm.riscv.Compiler.macro.1246577792" name="Macro Defines (-D)" superClass="com.renesas.cdt.managedbuild.llvm.riscv.Compiler.macro" valueType="definedSymbols" IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false">
 									<listOptionValue builtIn="false" value="R9A02G021"/>
+									<listOptionValue builtIn="false" value="NDEBUG"/>
 								</option>
 								<option id="com.renesas.cdt.managedbuild.llvm.riscv.Compiler.includesFiles.783230672" name="Include file directories (-I)" superClass="com.renesas.cdt.managedbuild.llvm.riscv.Compiler.includesFiles" valueType="includePath" IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false">
 									<listOptionValue builtIn="false" value="&quot;../../src&quot;"/>
@@ -213,6 +212,7 @@
 								<option id="com.renesas.cdt.managedbuild.llvm.core.option.compiler.cpp.language.1576266660" name="Language standard" superClass="com.renesas.cdt.managedbuild.llvm.core.option.compiler.cpp.language" useByScannerDiscovery="true" value="com.renesas.cdt.managedbuild.llvm.core.option.compiler.cpp.gnu17" valueType="enumerated"/>
 								<option id="com.renesas.cdt.managedbuild.llvm.riscv.compilercpp.macro.1264428203" name="Macro Defines (-D)" superClass="com.renesas.cdt.managedbuild.llvm.riscv.compilercpp.macro" valueType="definedSymbols" IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false">
 									<listOptionValue builtIn="false" value="R9A02G021"/>
+									<listOptionValue builtIn="false" value="NDEBUG"/>
 								</option>
 								<option id="com.renesas.cdt.managedbuild.llvm.riscv.Compiler.includesFiles.cpp.1521062685" name="Include file directories (-I)" superClass="com.renesas.cdt.managedbuild.llvm.riscv.Compiler.includesFiles.cpp" valueType="includePath" IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false">
 									<listOptionValue builtIn="false" value="&quot;../../src&quot;"/>
@@ -227,6 +227,7 @@
 								<option id="com.renesas.cdt.managedbuild.llvm.core.option.assembler.source.usepreprocessor.930773394" name="Use preprocessor (-x assembler-with-cpp)" superClass="com.renesas.cdt.managedbuild.llvm.core.option.assembler.source.usepreprocessor"/>
 								<option id="com.renesas.cdt.managedbuild.llvm.core.option.assembler.includes.symbolDefines.433106818" name="Define a symbol (-D)" superClass="com.renesas.cdt.managedbuild.llvm.core.option.assembler.includes.symbolDefines" valueType="definedSymbols" IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false">
 									<listOptionValue builtIn="false" value="R9A02G021"/>
+									<listOptionValue builtIn="false" value="NDEBUG"/>
 								</option>
 								<inputType id="com.renesas.cdt.managedbuild.llvm.core.inputType.assembler.449198169" superClass="com.renesas.cdt.managedbuild.llvm.core.inputType.assembler"/>
 							</tool>

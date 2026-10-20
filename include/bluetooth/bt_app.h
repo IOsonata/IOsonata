@@ -173,43 +173,6 @@ typedef struct __Bt_App_Cfg {
 extern "C" {
 #endif
 
-// ===== Internal Voci state =====
-// BtAppData_t and g_BtAppData are for cross-arch sharing between Voci's own
-// source files (the generic bt_app.cpp and the per-port bt_app_<port>.cpp).
-// Apps must not bind to fields here; use accessor functions (isConnected,
-// BtPeerGetConnectedHandles, BtInitialized, ...) declared further below.
-
-#pragma pack(push, 4)
-
-typedef struct __Bt_App_Data {
-	BTAPP_STATE     State;          //!< Current app state
-	uint8_t         AdvHdl;         //!< Advertising set handle, SDK-defined value
-	int8_t          ConnLedPort;    //!< Connection LED port, -1 if not used
-	int8_t          ConnLedPin;     //!< Connection LED pin, -1 if not used
-	uint8_t         ConnLedActLevel;//!< Connection LED active level
-	int             PeriphDevCnt;   //!< Peripheral connection count when in central role
-	BTAPP_COEXMODE  CoexMode;       //!< CoEx mode in effect
-	BTGAP_SECTYPE   SecType;        //!< Configured application security mode
-	uint8_t         SecExchg;       //!< Configured security key exchange capability
-	bool            bExtAdv;        //!< Extended advertising enabled
-	bool            bScan;          //!< Scan currently enabled
-	bool            bInitialized;   //!< BtAppInit completed
-	bool            bSecInit;       //!< Security module started by BtAppSecInit
-	BtDevice_t      AppDevice;      //!< Local device identity (bIsLocal = true). Holds Role,
-	                                //!< Appearance, VendorId, ProductId, ProductVer, MaxMtu,
-	                                //!< bSecure, Name, Addr, Services, etc.
-} BtAppData_t;
-
-#pragma pack(pop)
-
-extern BtAppData_t g_BtAppData;
-
-// Internal helpers, defined in src/bluetooth/bt_app.cpp.
-// Called from port event handlers, not from app code.
-void BtAppConnLedOff(void);
-void BtAppConnLedOn(void);
-
-
 // ***
 // Require implementations per app
 //
@@ -263,7 +226,12 @@ bool BtAppConnInit(void);
 bool BtAppSecInit(void);
 
 void BtAppEvtConnected(uint16_t ConnHdl);
+// Called when an asynchronous connection initiation fails.
+void BtAppEvtConnectFailed(void);
 void BtAppEvtDisconnected(uint16_t ConnHdl);
+// Called when a GATT client Write Request receives its ATT response.
+// Success is false for an ATT Error Response. No HCI details reach the app.
+void BtAppEvtWriteCompleted(uint16_t ConnHdl, bool Success);
 // Called once the link is encrypted (freshly paired or re-encrypted from a
 // stored bond). Only fires when the app config requests security. Weak default
 // is empty. Apps that gate work on encryption (e.g. a central reading

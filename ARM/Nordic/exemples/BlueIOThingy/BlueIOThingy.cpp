@@ -795,18 +795,18 @@ int main()
 
     HardwareInit();
 
-    if (BtAppInit(&s_BleAppCfg) == false)
-    {
+	if (BtAppInit(&s_BleAppCfg) == false)
+	{
     	// Stop here so that the debugger shows where it failed
     	while (1)
     	{
     		__WFE();
     	}
-    }
+	}
 
 	uint32_t period = g_Timer.EnableTimerTrigger(0, 500UL, TIMER_TRIG_TYPE_CONTINUOUS, AppTimerHandler);
 
-    AppRun();
+	AppRun();
 
 	return 0;
 }

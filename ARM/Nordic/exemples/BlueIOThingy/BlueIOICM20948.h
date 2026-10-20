@@ -50,4 +50,4 @@ void ICM20948EnableFeature(uint32_t Feature);
 }
 #endif
 
-#endif	// __BLUEIOICM20948_H__
+#endif

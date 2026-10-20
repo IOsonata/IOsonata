@@ -3,7 +3,7 @@
 
 @brief	R9A02G021 UART reception in Snooze, emulator firmware
 
-UART0 (DevNo 0) on P302 (TxD0_B) and P303 (RxD0_B), interrupt mode.
+UART0 (DevNo 0) on P302 (TxD0_B) and P303 (RxD0_B), interrupt or polling mode.
 uart_snooze_emu.py loads it, calls the Emu functions, sends the characters
 and delivers the interrupts through R9a02IrqDispatch. main only waits.
 
@@ -38,8 +38,10 @@ SOFTWARE.
 #include <string.h>
 #include "coredev/iopincfg.h"
 #include "coredev/uart.h"
+#include "interrupt_r9a02.h"
 #include "sau_r9a02.h"
 #include "system_r9a02.h"
+#include "uarta_r9a02.h"
 
 #define EMU_FIFO_SIZE		CFIFO_MEMSIZE(32)
 
@@ -47,6 +49,18 @@ UART g_Uart;
 uint8_t g_RxBuf[32];
 volatile int g_RxEvt;
 volatile int g_CbMode;			// UART_EVT_RXDATA: 1 echo, 2 Snooze off, 3 Disable
+volatile int g_FifoBlocking;		// 0 drops oldest when full, 1 refuses new data
+volatile int g_PollMode;			// 0 interrupts, 1 polling
+volatile int g_DmaMode;			// DTC transmit, RX retains interrupt/polling
+volatile int g_DevNo;
+volatile int g_DefaultFifo;
+volatile int g_DataBits;			// 0 uses 8 bits
+volatile int g_TxEvt;
+volatile int g_LineEvt;
+volatile int g_IrqSlot = -1;
+volatile int g_IrqMode;			// 1 replace route in handler, 2 unregister
+volatile int g_IrqCalls;
+volatile int g_IrqSeen;
 
 static const R9a02SnoozeCfg_t s_OtherSnz = {
 	.Request = R9A02_SNZREQ_IRQ(3),
@@ -66,8 +80,59 @@ static const IOPinCfg_t s_Pins[2] = {
 	{3, 2, IOPINOP_FUNC16, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
 };
 
+static const IOPinCfg_t s_UartaPins[2][2] = {
+	{
+		{0, 10, IOPINOP_FUNC5, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
+		{0, 9, IOPINOP_FUNC5, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
+	},
+	{
+		{0, 8, IOPINOP_FUNC5, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
+		{4, 3, IOPINOP_FUNC5, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
+	},
+};
+
+static void IrqEvt(int IntNo, void *pCtx)
+{
+	g_IrqCalls = g_IrqCalls + 1;
+	g_IrqSeen = (R9A02_ICU->IELSR[IntNo] & R9A02_IELSR_IR) != 0U;
+	if (g_IrqMode != 0)
+	{
+		R9a02UnregisterIntHandler(IntNo);
+		g_IrqSlot = -1;
+		if (g_IrqMode == 1)
+		{
+			g_IrqSlot = R9a02RegisterIntHandler(R9A02_EVT_PORT_IRQ2, 6, IrqEvt, NULL);
+		}
+		g_IrqMode = 0;
+	}
+}
+
+extern "C" int EmuIrqInit(int bLevel)
+{
+	R9A02_ICU->IRQCR[2] = bLevel ? R9A02_IRQCR_IRQMD_LOW : R9A02_IRQCR_IRQMD_FALLING;
+	g_IrqSlot = R9a02RegisterIntHandler(R9A02_EVT_PORT_IRQ2, 6, IrqEvt, NULL);
+
+	return g_IrqSlot;
+}
+
+extern "C" int EmuIrqRelease(void)
+{
+	R9a02UnregisterIntHandler(g_IrqSlot);
+	g_IrqSlot = -1;
+
+	return 1;
+}
+
 static int Evt(UARTDev_t * const pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen)
 {
+	if (EvtId == UART_EVT_TXREADY)
+	{
+		g_TxEvt = g_TxEvt + 1;
+	}
+	if (EvtId == UART_EVT_LINESTATE)
+	{
+		g_LineEvt = g_LineEvt + 1;
+	}
 	if (EvtId == UART_EVT_RXDATA)
 	{
 		g_RxEvt = g_RxEvt + 1;
@@ -92,28 +157,29 @@ static int Evt(UARTDev_t * const pDev, UART_EVT EvtId, uint8_t *pBuffer, int Buf
 	return 0;
 }
 
-// UART0 at Rate, 8N1, interrupt mode. Returns 1 when UARTInit succeeds.
+// UART0 at Rate, 8N1. Returns 1 when UARTInit succeeds.
 extern "C" int EmuUartInit(int Rate)
 {
 	UARTCfg_t cfg;
 
 	memset(&cfg, 0, sizeof(cfg));
-	cfg.DevNo = 0;
-	cfg.pIOPinMap = s_Pins;
+	cfg.DevNo = g_DevNo;
+	cfg.pIOPinMap = g_DevNo >= 3 ? s_UartaPins[g_DevNo - 3] : s_Pins;
 	cfg.NbIOPins = 2;
 	cfg.Rate = Rate;
-	cfg.DataBits = 8;
+	cfg.DataBits = g_DataBits != 0 ? g_DataBits : 8;
 	cfg.Parity = UART_PARITY_NONE;
 	cfg.StopBits = 1;
 	cfg.FlowControl = UART_FLWCTRL_NONE;
-	cfg.bIntMode = true;
+	cfg.bIntMode = g_PollMode == 0;
+	cfg.bDMAMode = g_DmaMode != 0;
 	cfg.IntPrio = 6;
 	cfg.EvtCallback = Evt;
-	cfg.bFifoBlocking = false;
+	cfg.bFifoBlocking = g_FifoBlocking != 0;
 	cfg.RxMemSize = EMU_FIFO_SIZE;
-	cfg.pRxMem = s_RxMem;
+	cfg.pRxMem = g_DefaultFifo ? NULL : s_RxMem;
 	cfg.TxMemSize = EMU_FIFO_SIZE;
-	cfg.pTxMem = s_TxMem;
+	cfg.pTxMem = g_DefaultFifo ? NULL : s_TxMem;
 	cfg.Duplex = UART_DUPLEX_FULL;
 	cfg.Mode = UART_MODE_UART;
 
@@ -159,6 +225,13 @@ extern "C" int EmuUartTx(int Len)
 extern "C" int EmuUartEnable(void)
 {
 	g_Uart.Enable();
+
+	return 1;
+}
+
+extern "C" int EmuUartDisable(void)
+{
+	g_Uart.Disable();
 
 	return 1;
 }

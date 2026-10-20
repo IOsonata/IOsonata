@@ -71,8 +71,9 @@ Discovery caches are separate from peer records. A peripheral-only program
 does not need to retain discovered remote service databases. The cache
 descriptor can be sized for the number of simultaneously discovered peers.
 
-Use public queries and callbacks. `g_BtAppData` is shared implementation
-state for the generic code and ports, not an application configuration API.
+Use public queries and callbacks. Each port keeps its implementation state
+private in its source file. Advertising and scanning own their state separately;
+no header declares their storage or internal state structures.
 
 ## BtIntrf and DeviceIntrf
 

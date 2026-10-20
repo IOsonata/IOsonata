@@ -38,6 +38,10 @@ static inline void __set_PRIMASK(uint32_t v) {test_primask=v;}
 #ifdef RA4M1_IO_TEST
 extern uint32_t test_enabled, test_active, test_pending;
 extern uint32_t test_priority[32];
+// A host function address does not fit the 32 bit VTOR. The model sets
+// test_vtor to the active table instead of SCB->VTOR.
+extern void (* const *test_vtor)(void);
+static inline uintptr_t NVIC_GetVector(IRQn_Type n) {return (uintptr_t)test_vtor[(unsigned)n + 16U];}
 static inline uint32_t NVIC_GetEnableIRQ(IRQn_Type n) {return (test_enabled >> (unsigned)n) & 1U;}
 static inline uint32_t NVIC_GetActive(IRQn_Type n) {return (test_active >> (unsigned)n) & 1U;}
 static inline void NVIC_EnableIRQ(IRQn_Type n) {test_enabled |= 1UL << (unsigned)n;}
@@ -57,6 +61,7 @@ static inline uint32_t NVIC_GetActive(IRQn_Type n) {return (*(volatile uint32_t 
 static inline void NVIC_EnableIRQ(IRQn_Type n) {*(volatile uint32_t *)0xE000E100UL=1UL << (unsigned)n;}
 static inline void NVIC_SetPriority(IRQn_Type n, uint32_t p) {((volatile uint8_t *)0xE000E400UL)[(unsigned)n]=(uint8_t)(p << (8U-__NVIC_PRIO_BITS));}
 #define SCB ((SCB_Type *)0xE000ED00UL)
+static inline uint32_t NVIC_GetVector(IRQn_Type n) {return ((volatile const uint32_t *)(uintptr_t)SCB->VTOR)[(int32_t)n + 16];}
 static inline void __NOP(void) {__asm volatile("nop");}
 static inline void __DSB(void) {__asm volatile("dsb 0xF":::"memory");}
 static inline void __ISB(void) {__asm volatile("isb 0xF":::"memory");}

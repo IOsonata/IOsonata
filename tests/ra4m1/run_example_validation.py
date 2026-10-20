@@ -13,6 +13,7 @@ import re
 import shutil
 import subprocess
 import xml.etree.ElementTree as ET
+from run_validation import sanitizer_cxx
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
@@ -24,6 +25,19 @@ EXAMPLES = {
     'UartLoopback': ('exemples/uart/uart_loopback.cpp', 2),
     'UartPrbsTxTest': ('exemples/uart/uart_prbs_tx.cpp', 3),
     'I2CMasterSlave': ('exemples/i2c/i2c_master_slave.cpp', 0),
+    # Kind 0 like Blinky and I2CMasterSlave: IOC metadata and board.h pin map
+    # only. The shared sources need NVM and SPI API test doubles which the
+    # host model does not have.
+    'NvmDemo': ('exemples/storage/data_nvm_demo.cpp', 0),
+    'SPIMasterSlave': ('exemples/spi/spi_master_slave.cpp', 0),
+}
+# Examples whose Debug C++ link uses semihosting (rdimon) for printf
+SEMIHOSTING = {'TimerDemo', 'I2CMasterSlave', 'SPIMasterSlave'}
+# Sources linked from an example's own src folder besides board.h, with the
+# reason. I2CMasterSlave links the RA4M1 IIC failure report that the shared
+# example calls (I2C trace, see ARM/Renesas/RA4M1/README.md).
+LOCAL_SOURCES = {
+    'I2CMasterSlave': ['i2c_master_slave_diag.cpp'],
 }
 PREFIX = 'ilg.gnuarmeclipse.managedbuild.cross.option.'
 
@@ -45,6 +59,8 @@ def metadata(partial=False):
         expected = {ROOT / shared}
         if name == 'UartPrbsTxTest':
             expected.add(ROOT / 'src/prbs.c')
+        local = LOCAL_SOURCES.get(name, [])
+        expected |= {(project.parent / 'src' / f).resolve() for f in local}
         sources = set()
         for link in px.findall('linkedResources/link'):
             uri = link.findtext('locationURI')
@@ -61,7 +77,8 @@ def metadata(partial=False):
                 missing.add(str(path.relative_to(ROOT)))
         assert sources == expected, (name, sources)
         # Only configuration lives under an MCU example: no duplicate mains.
-        assert list((project.parent / 'src').iterdir()) == [project.parent / 'src/board.h']
+        assert sorted((project.parent / 'src').iterdir()) == \
+            sorted([project.parent / 'src/board.h', *(project.parent / 'src' / f for f in local)])
         xml = ET.parse(project / '.cproject').getroot()
         ids = {e.get('id') for e in xml.iter() if e.get('id')}
         for scan in xml.findall('.//scannerConfigBuildInfo'):
@@ -93,9 +110,17 @@ def metadata(partial=False):
                 script = (project/config/values('.linker.scriptfile')[0]).resolve()
                 assert script == TARGET/'ldscript/gcc_ra4m1.ld' and script.is_file()
                 flags = opts[PREFIX+lang+'.linker.other'].get('value')
-                assert '--specs=nosys.specs' in flags
-                assert '-u,ResetEntry,-u,__Vectors' in flags
-                assert 'rdimon' not in flags and 'nostartfiles' not in flags
+                assert 'nostartfiles' not in flags
+                if 'rdimon' in flags:
+                    # Debug C++ link of the examples with a console: printf
+                    # through semihosting. ResetEntry stays the ELF entry of
+                    # gcc_ra4m1.ld, which keeps the vector table.
+                    assert name in SEMIHOSTING and config == 'Debug' and lang == 'cpp', (name, config, lang)
+                    assert '--specs=rdimon.specs' in flags and '-lrdimon' in flags
+                    assert 'ENTRY(ResetEntry)' in script.read_text()
+                else:
+                    assert '--specs=nosys.specs' in flags
+                    assert '-u,ResetEntry,-u,__Vectors' in flags
         print('PASS: IOC metadata, shared source links, configuration paths:', name)
     if missing:
         if not partial:
@@ -120,7 +145,11 @@ def models():
     common = [compiler, '-std=c++23', '-Wall', '-Wextra', '-Werror',
               '-Wno-missing-field-initializers', '-DRA4M1_HOST_TEST', *inc]
     for name in EXAMPLES:
-        packages = (64, 100) if name == 'I2CMasterSlave' else (40, 48, 64, 100)
+        # Packages that bond every pin of the example: the I2C pins and the
+        # Blinky LED0 P106 need 64 or 100 pins, the SPI slave MOSI P203 and
+        # the console P410/P411 100 pins
+        packages = {'Blinky': (64, 100), 'I2CMasterSlave': (64, 100),
+                    'SPIMasterSlave': (100,)}.get(name, (40, 48, 64, 100))
         for package in packages:
             output = BUILD / f'{name}_pins_{package}'
             run([*common, '-O2', '-DRA4M1_PACKAGE_PINS='+str(package),
@@ -143,7 +172,8 @@ def models():
                     defs = ['-DDEMO_C'] if api == 'c' else []
                     if device is not None:
                         defs.append('-DTIMER_DEVNO='+str(device))
-                    run([*common, *flags, *defs, '-DEXAMPLE_KIND='+str(kind),
+                    cmd = common if opt != 'sanitized' else [sanitizer_cxx(compiler), *common[1:]]
+                    run([*cmd, *flags, *defs, '-DEXAMPLE_KIND='+str(kind),
                          '-DEXAMPLE_SOURCE="'+str(ROOT/source)+'"',
                          '-I'+str(TARGET/'exemples'/name/'src'), HERE/'example_model.cpp', '-o', output])
                     log = run([output])

@@ -90,4 +90,4 @@ enum {
 #define USB_CTRLR_ISO_INIT(DevNo) UsbCtrlrIsoInit(DevNo)
 
 
-#endif // __USB_CTRLR_H__
+#endif

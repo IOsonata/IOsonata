@@ -14,6 +14,34 @@ The private wrappers also capture the one aci_gap_init result and retain the
 native GAP handles. They correct the old BtAppGapDeviceNameSet path, which used
 the GAP value-handle offset instead of the characteristic handle returned by
 aci_gap_init.
+
+@author	Hoang Nguyen Hoan
+@date	Oct. 14, 2026
+
+@license
+
+MIT License
+
+Copyright (c) 2026, I-SYST inc., all rights reserved
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is furnished
+to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
 ----------------------------------------------------------------------------*/
 #ifndef __BT_WBA_EVENT_ROUTER_H__
 #define __BT_WBA_EVENT_ROUTER_H__
@@ -23,6 +51,34 @@ aci_gap_init.
 
 #include "bluetooth/bt_gatt.h"
 #include "bluetooth/bt_smp.h"
+
+// HCI packet layouts as the stack gives them in BLECB_Indication. The Cube
+// svc_ctl.h declares the same structures, it is not needed here.
+typedef struct __attribute__((packed)) {
+	uint8_t		type;
+	uint8_t		data[1];
+} hci_uart_pckt;
+
+typedef struct __attribute__((packed)) {
+	uint8_t		evt;
+	uint8_t		plen;
+	uint8_t		data[1];
+} hci_event_pckt;
+
+typedef struct __attribute__((packed)) {
+	uint8_t		subevent;
+	uint8_t		data[1];
+} evt_le_meta_event;
+
+// Vendor specific event of the BLE core
+typedef struct __attribute__((packed)) {
+	uint16_t	ecode;
+	uint8_t		data[1];
+} evt_blecore_aci;
+
+#ifndef HCI_VENDOR_SPECIFIC_DEBUG_EVT_CODE
+#define HCI_VENDOR_SPECIFIC_DEBUG_EVT_CODE	HCI_VENDOR_SPECIFIC_EVT_CODE
+#endif
 
 #ifndef BT_GAP_WBA_DEVICE_NAME_MAX_LEN
 #define BT_GAP_WBA_DEVICE_NAME_MAX_LEN	64U
@@ -158,18 +214,25 @@ static bool BtWbaDiscInfoEventValid(
 		   (p->Event_Data_Length % elemLen) == 0;
 }
 
-typedef SVCCTL_UserEvtFlowStatus_t (*BtWbaUserEvtHandler_t)(void *pPayload);
+// Flow control answer of an event handler. The Cube release 1.10.0 stack keeps
+// its own event queue, so the answer is only kept for the handlers.
+typedef enum {
+	BTWBA_EVT_FLOW_DISABLE = 0,
+	BTWBA_EVT_FLOW_ENABLE = 1
+} BtWbaEvtFlow_t;
+
+typedef BtWbaEvtFlow_t (*BtWbaUserEvtHandler_t)(void *pPayload);
 
 static BtWbaUserEvtHandler_t s_BtWbaOriginalHandler;
 static uint16_t s_BtWbaGapSrvcHdl = BT_ATT_HANDLE_INVALID;
 static uint16_t s_BtWbaDevNameCharHdl = BT_ATT_HANDLE_INVALID;
 static bool s_BtWbaPasskeyRandValid = true;
 
-static SVCCTL_UserEvtFlowStatus_t BtWbaEventRouterDispatch(void *pPayload)
+static BtWbaEvtFlow_t BtWbaEventRouterDispatch(void *pPayload)
 {
 	if (pPayload == nullptr)
 	{
-		return SVCCTL_UserEvtFlowEnable;
+		return BTWBA_EVT_FLOW_ENABLE;
 	}
 
 	hci_event_pckt *pEvt =
@@ -230,7 +293,7 @@ static SVCCTL_UserEvtFlowStatus_t BtWbaEventRouterDispatch(void *pPayload)
 	{
 		if (pEvt->plen < offsetof(evt_blecore_aci, data))
 		{
-			return SVCCTL_UserEvtFlowEnable;
+			return BTWBA_EVT_FLOW_ENABLE;
 		}
 
 		evt_blecore_aci *pAci = (evt_blecore_aci *)pEvt->data;
@@ -244,7 +307,7 @@ static SVCCTL_UserEvtFlowStatus_t BtWbaEventRouterDispatch(void *pPayload)
 						(aci_att_read_by_group_type_resp_event_rp0 *)pAci->data,
 						available))
 				{
-					return SVCCTL_UserEvtFlowEnable;
+					return BTWBA_EVT_FLOW_ENABLE;
 				}
 				break;
 
@@ -253,7 +316,7 @@ static SVCCTL_UserEvtFlowStatus_t BtWbaEventRouterDispatch(void *pPayload)
 						(aci_att_read_by_type_resp_event_rp0 *)pAci->data,
 						available))
 				{
-					return SVCCTL_UserEvtFlowEnable;
+					return BTWBA_EVT_FLOW_ENABLE;
 				}
 				break;
 
@@ -262,7 +325,7 @@ static SVCCTL_UserEvtFlowStatus_t BtWbaEventRouterDispatch(void *pPayload)
 						(aci_att_find_info_resp_event_rp0 *)pAci->data,
 						available))
 				{
-					return SVCCTL_UserEvtFlowEnable;
+					return BTWBA_EVT_FLOW_ENABLE;
 				}
 				break;
 
@@ -288,9 +351,9 @@ static SVCCTL_UserEvtFlowStatus_t BtWbaEventRouterDispatch(void *pPayload)
 					auto *p =
 						(aci_gatt_notification_complete_event_rp0 *)pAci->data;
 					BtGattWbaNotificationComplete(
-						p->Connection_Handle, p->Attribute_Handle);
+						BT_CONN_HDL_INVALID, p->Attr_Handle);
 				}
-				return SVCCTL_UserEvtFlowEnable;
+				return BTWBA_EVT_FLOW_ENABLE;
 			}
 #endif
 
@@ -299,7 +362,7 @@ static SVCCTL_UserEvtFlowStatus_t BtWbaEventRouterDispatch(void *pPayload)
 				{
 					BtGattHandleValueConfirm(BtWbaEvtLe16(pAci->data));
 				}
-				return SVCCTL_UserEvtFlowEnable;
+				return BTWBA_EVT_FLOW_ENABLE;
 
 			default:
 				break;
@@ -307,13 +370,19 @@ static SVCCTL_UserEvtFlowStatus_t BtWbaEventRouterDispatch(void *pPayload)
 	}
 
 	return s_BtWbaOriginalHandler != nullptr ?
-		s_BtWbaOriginalHandler(pPayload) : SVCCTL_UserEvtFlowEnable;
+		s_BtWbaOriginalHandler(pPayload) : BTWBA_EVT_FLOW_ENABLE;
 }
 
 static inline void BtWbaEventRouterRegister(BtWbaUserEvtHandler_t Handler)
 {
 	s_BtWbaOriginalHandler = Handler;
-	SVCCTL_RegisterHandler(BtWbaEventRouterDispatch);
+}
+
+// Run one event, a packet as the stack gives it: type, event code, length,
+// parameters.
+static inline void BtWbaEventRouterRun(void *pPayload)
+{
+	(void)BtWbaEventRouterDispatch(pPayload);
 }
 
 static inline tBleStatus BtWbaGapInitCapture(uint8_t Role,
@@ -379,4 +448,4 @@ static inline void BtWbaPasskeyRequest(uint16_t ConnHdl)
 	BtSmpPasskeyRequest(ConnHdl);
 }
 
-#endif // __BT_WBA_EVENT_ROUTER_H__
+#endif

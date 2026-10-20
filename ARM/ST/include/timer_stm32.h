@@ -17,6 +17,8 @@
 		F030x8 : 0 TIM6, 1 TIM14, 2 TIM16, 3 TIM17, 4 TIM15, 5 TIM3, 6 TIM1
 		F401   : 0 TIM10, 1 TIM11, 2 TIM9, 3 TIM2, 4 TIM3, 5 TIM4, 6 TIM5,
 		         7 TIM1
+		L152xE : 0 TIM6, 1 TIM7, 2 TIM10, 3 TIM11, 4 TIM9, 5 TIM2,
+		         6 TIM3, 7 TIM4, 8 TIM5
 		L432   : 0 LPTIM1, 1 LPTIM2, 2 TIM6, 3 TIM7, 4 TIM16, 5 TIM15,
 		         6 TIM2, 7 TIM1
 		L476, L496, L4S9 : 0 LPTIM1, 1 LPTIM2, 2 TIM6, 3 TIM7, 4 TIM16,
@@ -24,6 +26,9 @@
 		         12 TIM8
 		G474   : 0 LPTIM1, 1 TIM6, 2 TIM7, 3 TIM16, 4 TIM17, 5 TIM15, 6 TIM2,
 		         7 TIM3, 8 TIM4, 9 TIM5, 10 TIM1, 11 TIM8, 12 TIM20
+		H753   : 0 TIM6, 1 TIM7, 2 TIM13, 3 TIM14, 4 TIM16, 5 TIM17,
+		         6 TIM12, 7 TIM15, 8 TIM2, 9 TIM3, 10 TIM4, 11 TIM5,
+		         12 TIM1, 13 TIM8 (LPTIM not exposed yet)
 		WBA65  : 0 LPTIM1, 1 LPTIM2, 2 TIM16, 3 TIM17, 4 TIM2, 5 TIM3,
 		         6 TIM4, 7 TIM1
 
@@ -45,7 +50,7 @@
 
 MIT License
 
-Copyright (c) 2019 I-SYST inc. All rights reserved.
+Copyright (c) 2019, I-SYST inc., all rights reserved
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -136,4 +141,5 @@ int Stm32TimCount(void);
 }
 #endif
 
-#endif // __TIMER_STM32_H__
+#endif
+

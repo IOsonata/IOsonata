@@ -60,7 +60,7 @@
 					</folderInfo>
 					<sourceEntries>
 						<entry excluding="src" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
-						<entry excluding="diskio_flash.cpp|timer.cpp|sysstatus_impl.cpp|seep_impl.cpp|sdcard_impl.cpp|fats_vdisk.c|fatfs_vdisk.cpp|fatfs.cpp|diskio_impl.cpp|converters/adc_device.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="src"/>
+						<entry excluding="diskio_flash.cpp|timer.cpp|seep_impl.cpp|sdcard_impl.cpp|fats_vdisk.c|fatfs_vdisk.cpp|fatfs.cpp|diskio_impl.cpp|converters/adc_device.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="src"/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -123,7 +123,7 @@
 					</folderInfo>
 					<sourceEntries>
 						<entry excluding="src" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
-						<entry excluding="diskio_flash.cpp|timer.cpp|sysstatus_impl.cpp|seep_impl.cpp|sdcard_impl.cpp|fats_vdisk.c|fatfs_vdisk.cpp|fatfs.cpp|diskio_impl.cpp|converters/adc_device.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="src"/>
+						<entry excluding="diskio_flash.cpp|timer.cpp|seep_impl.cpp|sdcard_impl.cpp|fats_vdisk.c|fatfs_vdisk.cpp|fatfs.cpp|diskio_impl.cpp|converters/adc_device.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="src"/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -186,7 +186,7 @@
 					</folderInfo>
 					<sourceEntries>
 						<entry excluding="src" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
-						<entry excluding="diskio_flash.cpp|timer.cpp|sysstatus_impl.cpp|seep_impl.cpp|sdcard_impl.cpp|fats_vdisk.c|fatfs_vdisk.cpp|fatfs.cpp|diskio_impl.cpp|converters/adc_device.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="src"/>
+						<entry excluding="diskio_flash.cpp|timer.cpp|seep_impl.cpp|sdcard_impl.cpp|fats_vdisk.c|fatfs_vdisk.cpp|fatfs.cpp|diskio_impl.cpp|converters/adc_device.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="src"/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -251,7 +251,7 @@
 					</folderInfo>
 					<sourceEntries>
 						<entry excluding="src" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
-						<entry excluding="diskio_flash.cpp|timer.cpp|sysstatus_impl.cpp|seep_impl.cpp|sdcard_impl.cpp|fats_vdisk.c|fatfs_vdisk.cpp|fatfs.cpp|diskio_impl.cpp|converters/adc_device.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="src"/>
+						<entry excluding="diskio_flash.cpp|timer.cpp|seep_impl.cpp|sdcard_impl.cpp|fats_vdisk.c|fatfs_vdisk.cpp|fatfs.cpp|diskio_impl.cpp|converters/adc_device.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name="src"/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>

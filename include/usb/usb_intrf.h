@@ -284,5 +284,5 @@ protected:
 
 /** @} End of group USBD */
 
-#endif	// __USB_INTRF_H__
+#endif
 

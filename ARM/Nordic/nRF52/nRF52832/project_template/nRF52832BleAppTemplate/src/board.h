@@ -12,7 +12,7 @@ modified to suit the need for the application use case.
 
 @license
 
-Copyright (c) 2024, I-SYST inc., all rights reserved
+Copyright (c) 2016, I-SYST inc., all rights reserved
 
 Permission to use, copy, modify, and distribute this software for any purpose
 with or without fee is hereby granted, provided that the above copyright
@@ -21,7 +21,7 @@ names : I-SYST or its contributors may be used to endorse or
 promote products derived from this software without specific prior written
 permission.
 
-For info or contributing contact : info at i-syst dot com
+For info or contributing contact : hnhoan at i-syst dot com
 
 THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND ANY
 EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
@@ -41,7 +41,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "blystnano_boards.h"
 
-#define BOARD			IBK_BLYST_NANO
+#define BOARD			BLYST_NANO_DK
 
 #if BOARD == IBK_BLUEIO
 
@@ -74,6 +74,25 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define BUT2_SENSE			BLYST_NANO_DK_BUT2_SENSE
 
 #define LED_PINS_MAP		BLYST_NANO_DK_LED_PINS_CFG
+
+#define UART_DEVNO			0
+
+#define UART_RX_PORT		BLYST_NANO_DK_UART_RX_PORT
+#define UART_RX_PIN			BLYST_NANO_DK_UART_RX_PIN
+#define UART_RX_PINOP		BLYST_NANO_DK_UART_RX_PINOP
+#define UART_TX_PORT		BLYST_NANO_DK_UART_TX_PORT
+#define UART_TX_PIN			BLYST_NANO_DK_UART_TX_PIN
+#define UART_TX_PINOP		BLYST_NANO_DK_UART_TX_PINOP
+#define UART_CTS_PORT		BLYST_NANO_DK_UART_CTS_PORT
+#define UART_CTS_PIN		BLYST_NANO_DK_UART_CTS_PIN
+#define UART_CTS_PINOP		BLYST_NANO_DK_UART_CTS_PINOP
+#define UART_RTS_PORT		BLYST_NANO_DK_UART_RTS_PORT
+#define UART_RTS_PIN		BLYST_NANO_DK_UART_RTS_PIN
+#define UART_RTS_PINOP		BLYST_NANO_DK_UART_RTS_PINOP
+
+#define UART_PINS			{ \
+	{UART_RX_PORT, UART_RX_PIN, UART_RX_PINOP, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},\
+	{UART_TX_PORT, UART_TX_PIN, UART_TX_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},}
 
 #elif BOARD == BLUEIO832_MINI
 

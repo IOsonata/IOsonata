@@ -130,6 +130,15 @@ static bool s_Dead;
 // not a driver one, because the driver passes the store's offsets through.
 static uint32_t s_AlignFault;
 
+// Erase refusals, the medium left as it was: the sector whose erases fail,
+// -1 none. A worn or protected unit answers like this.
+static int s_EraseFailSector;
+
+// A program that lands whole but reports a failure: -1 none, otherwise the
+// number of programs to let through first. A timeout read after the data
+// went in looks like this.
+static int s_LandFailCountdown;
+
 static std::vector<uint8_t> s_Tx;
 static uint32_t s_Addr;
 static bool s_AddrSet;
@@ -237,6 +246,8 @@ static void MediumWipe(uint32_t RegionSize, uint32_t Gran)
 	s_CutKeep = 0;
 	s_Dead = false;
 	s_AlignFault = 0;
+	s_EraseFailSector = -1;
+	s_LandFailCountdown = -1;
 }
 
 static void MediumArmCut(uint32_t OpIndex, uint32_t Keep)
@@ -284,6 +295,10 @@ extern "C" int NvmMcuErase(uintptr_t Addr)
 		s_AlignFault++;
 
 		return -EINVAL;
+	}
+	if (s_EraseFailSector >= 0 && Addr == (uintptr_t)s_EraseFailSector * PDS_SECTOR_SIZE)
+	{
+		return -EIO;
 	}
 
 	memset(&s_Mem[Addr], 0xFF, MediumTake(PDS_SECTOR_SIZE));
@@ -364,6 +379,17 @@ static int MemTxData(DevIntrf_t *, const uint8_t *pData, int Len)
 		}
 	}
 	s_Addr += (uint32_t)Len;
+
+	if (s_LandFailCountdown == 0)
+	{
+		s_LandFailCountdown = -1;
+
+		return -1;
+	}
+	if (s_LandFailCountdown > 0)
+	{
+		s_LandFailCountdown--;
+	}
 
 	return s_Dead ? -1 : Len;
 }
@@ -1113,6 +1139,438 @@ static void TestSequenceWidth(void)
 
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// A clear whose erase fails after the commit, then a retry. The retry must not
+// erase the commit header and leave the old sector: a failure or a power cut
+// after that would bring the cleared records back at the next mount.
+// ---------------------------------------------------------------------------
+static void TestClearEraseFails(uint32_t Gran)
+{
+	printf("--- clear with a failing erase\n");
+
+	for (int variant = 0; variant < 3; variant++)
+	{
+		const char *pName = variant == 0 ? "erase still failing" :
+							variant == 1 ? "power cut in the retry" : "erase back";
+
+		MediumWipe(2U * PDS_SECTOR_SIZE, Gran);
+		if (!Mounted(Boot(Gran), "clear erase fails: setup"))
+		{
+			return;
+		}
+
+		// Fill sector 0 so the live data moves to sector 1 and sector 0 is
+		// the erased spare the clear commits on.
+		std::vector<uint8_t> v = MakeVal(95, BT_PDS_RECORD_DATA_MAX);
+
+		for (int i = 0; i < 200; i++)
+		{
+			(void)BtPdsWrite(0x95, v.data(), v.size());
+			if (MemWord(0) == 0xFFFFFFFFU && MemWord(PDS_SECTOR_SIZE) == PDS_SECTOR_MAGIC)
+			{
+				break;
+			}
+		}
+		CHECK(MemWord(0) == 0xFFFFFFFFU && MemWord(PDS_SECTOR_SIZE) == PDS_SECTOR_MAGIC,
+			  "clear erase fails (%s): data in sector 1, sector 0 erased", pName);
+		CHECK(Boot(Gran) == 0, "clear erase fails (%s): remount", pName);
+
+		uint8_t buf[BT_PDS_RECORD_DATA_MAX];
+
+		s_EraseFailSector = 1;
+		CHECK(BtPdsClear() != 0, "clear erase fails (%s): the clear reports the failure", pName);
+		CHECK(BtPdsRead(0x95, buf, sizeof(buf)) == -ENOENT,
+			  "clear erase fails (%s): cleared id gone at once", pName);
+
+		if (variant == 1)
+		{
+			s_EraseFailSector = -1;
+			MediumArmCut(0, 0);
+		}
+		else if (variant == 2)
+		{
+			s_EraseFailSector = -1;
+		}
+
+		int retry = BtPdsClear();
+
+		if (variant == 2)
+		{
+			CHECK(retry == 0, "clear erase fails (%s): the retry clears", pName);
+
+			std::vector<uint8_t> w = MakeVal(96, 16);
+
+			CHECK(BtPdsWrite(0x96, w.data(), w.size()) == (ssize_t)w.size(),
+				  "clear erase fails (%s): write after the retry", pName);
+		}
+
+		s_EraseFailSector = -1;
+		int b = Boot(Gran);
+
+		CHECK(b == 0, "clear erase fails (%s): mount after the retry, %d", pName, b);
+		CHECK(BtPdsRead(0x95, buf, sizeof(buf)) == -ENOENT,
+			  "clear erase fails (%s): cleared id still gone after reset", pName);
+		if (variant == 2)
+		{
+			CHECK(BtPdsRead(0x96, buf, sizeof(buf)) == 16,
+				  "clear erase fails (%s): the write after the clear kept", pName);
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// A clear on a store left without an erased sector. A collection that cannot
+// erase its source, or whose copy fails and whose destination cannot be
+// erased, leaves every sector holding records. The clear has to make its
+// commit sector without losing a record, or refuse: a power cut at any point
+// of it must leave either the whole store or none of it.
+// ---------------------------------------------------------------------------
+#define NS_SECTORS		3U
+#define NS_CHURN_ID		0x0CU
+#define NS_FIXED_COUNT	3U
+
+static const uint32_t s_NsId[NS_FIXED_COUNT] = { 0x0AU, 0x0BU, 0x07U };
+static const uint32_t s_NsLen[NS_FIXED_COUNT] = { 16U, 16U, 64U };
+
+static uint32_t ErasedMask(void)
+{
+	uint32_t mask = 0U;
+
+	for (uint32_t s = 0; s < NS_SECTORS; s++)
+	{
+		if (MemWord(s * PDS_SECTOR_SIZE) == 0xFFFFFFFFU)
+		{
+			mask |= 1U << s;
+		}
+	}
+
+	return mask;
+}
+
+// Writes the fixed ids once, then rewrites NS_CHURN_ID. With Trigger below 0
+// the rewrites stop at the first one that changes the sectors while a single
+// erased sector is left, the write that runs a collection, and its index is
+// returned. Otherwise the same writes are made and the injections are armed
+// just before write Trigger. Old and New are the churned values before and
+// after that write.
+static int NoSpareSetup(uint32_t Gran, int Trigger, int FailSector, int LandFail,
+						Model_t &Model, std::vector<uint8_t> &Old,
+						std::vector<uint8_t> &New)
+{
+	MediumWipe(NS_SECTORS * PDS_SECTOR_SIZE, Gran);
+	if (Boot(Gran) != 0)
+	{
+		return -1;
+	}
+
+	Model.clear();
+	for (uint32_t i = 0; i < NS_FIXED_COUNT; i++)
+	{
+		std::vector<uint8_t> v = MakeVal(s_NsId[i], s_NsLen[i]);
+
+		if (BtPdsWrite(s_NsId[i], v.data(), v.size()) != (ssize_t)v.size())
+		{
+			return -1;
+		}
+		Model[s_NsId[i]] = v;
+	}
+
+	for (int i = 0; i < 400; i++)
+	{
+		uint32_t before = ErasedMask();
+		std::vector<uint8_t> v = MakeVal(0x100U + (uint32_t)i, BT_PDS_RECORD_DATA_MAX);
+
+		if (i == Trigger)
+		{
+			s_EraseFailSector = FailSector;
+			s_LandFailCountdown = LandFail;
+			New = v;
+			(void)BtPdsWrite(NS_CHURN_ID, v.data(), v.size());
+
+			return i;
+		}
+		if (BtPdsWrite(NS_CHURN_ID, v.data(), v.size()) != (ssize_t)v.size())
+		{
+			return -1;
+		}
+		if (Trigger < 0 && __builtin_popcount(before) == 1 && ErasedMask() != before)
+		{
+			return i;
+		}
+		Old = v;
+	}
+
+	return -1;
+}
+
+static void TestClearNoSpare(uint32_t Gran)
+{
+	printf("--- clear without an erased sector, unit %u\n", Gran);
+
+	Model_t model;
+	std::vector<uint8_t> oldVal;
+	std::vector<uint8_t> newVal;
+	int trigger = NoSpareSetup(Gran, -1, -1, -1, model, oldVal, newVal);
+
+	CHECK(trigger >= 0, "no spare: the setup finds the collecting write");
+	if (trigger < 0)
+	{
+		return;
+	}
+
+	const uint32_t keeps[BT_PDS_TEAR_POINTS] = BT_PDS_TEARS(Gran);
+	uint32_t noSpare = 0;
+	uint32_t refused = 0;
+	uint32_t committed = 0;
+	uint32_t nomem = 0;
+	uint32_t alignFault = 0;
+	bool ok = true;
+
+	for (int persist = 0; persist < 2 && ok; persist++)
+	{
+		for (int fail = 0; fail < (int)NS_SECTORS && ok; fail++)
+		{
+			for (int land = -1; land < 8 && ok; land++)
+			{
+				for (int at = -1; at < 5 && ok; at++)
+				{
+					uint32_t tears = at < 0 ? 1U : BT_PDS_TEAR_POINTS;
+
+					for (uint32_t k = 0; k < tears && ok; k++)
+					{
+						// Counted before the next wipe clears it.
+						alignFault += s_AlignFault;
+						if (NoSpareSetup(Gran, trigger, fail, land, model, oldVal,
+										 newVal) != trigger)
+						{
+							printf("FAIL no spare: setup fail %d land %d\n", fail, land);
+							ok = false;
+							break;
+						}
+						s_LandFailCountdown = -1;
+						if (persist == 0)
+						{
+							s_EraseFailSector = -1;
+						}
+						if (ErasedMask() != 0U)
+						{
+							// The collection kept a spare; nothing to test here.
+							continue;
+						}
+						noSpare++;
+
+						if (at >= 0)
+						{
+							MediumArmCut((uint32_t)at, keeps[k]);
+						}
+
+						int c = BtPdsClear();
+
+						s_EraseFailSector = -1;
+						if (Boot(Gran) != 0)
+						{
+							printf("FAIL no spare: mount, persist %d fail %d land %d at %d keep %u\n",
+								   persist, fail, land, at, (unsigned)keeps[k]);
+							ok = false;
+							break;
+						}
+
+						uint8_t buf[BT_PDS_RECORD_DATA_MAX];
+						uint32_t found = 0;
+						uint32_t gone = 0;
+
+						for (Model_t::iterator it = model.begin(); it != model.end(); ++it)
+						{
+							ssize_t n = BtPdsRead(it->first, buf, sizeof(buf));
+
+							if (n == (ssize_t)it->second.size() &&
+								memcmp(buf, it->second.data(), it->second.size()) == 0)
+							{
+								found++;
+							}
+							else if (n == -ENOENT)
+							{
+								gone++;
+							}
+						}
+
+						ssize_t n = BtPdsRead(NS_CHURN_ID, buf, sizeof(buf));
+						bool churnKept = n == BT_PDS_RECORD_DATA_MAX &&
+							(memcmp(buf, oldVal.data(), n) == 0 ||
+							 memcmp(buf, newVal.data(), n) == 0);
+						bool allKept = found == model.size() && churnKept;
+						bool allGone = gone == model.size() && n == -ENOENT;
+
+						if (!allKept && !allGone)
+						{
+							printf("FAIL no spare: persist %d fail %d land %d at %d keep %u clear %d: "
+								   "%u of %u kept, churned id read %d\n",
+								   persist, fail, land, at, (unsigned)keeps[k], c,
+								   (unsigned)found, (unsigned)model.size(), (int)n);
+							ok = false;
+						}
+						else if (at < 0 && c == 0 && !allGone)
+						{
+							// An error is either a refusal, the store kept, or
+							// an erase that failed after the commit, the store
+							// cleared. Success has only one meaning.
+							printf("FAIL no spare: persist %d fail %d land %d clear succeeded but the store was kept\n",
+								   persist, fail, land);
+							ok = false;
+						}
+						else if (at < 0 && c == 0)
+						{
+							committed++;
+						}
+						else if (at < 0 && allKept)
+						{
+							refused++;
+							nomem += c == -ENOMEM;
+						}
+
+						// A store left whole, by a refusal or a cut before the
+						// commit, is mounted again: the mount finishes or undoes
+						// the collection and gives the spare back, so a clear
+						// then succeeds.
+						if (ok && allKept)
+						{
+							int again = BtPdsClear();
+
+							if (again != 0 || Boot(Gran) != 0 ||
+								BtPdsRead(NS_CHURN_ID, buf, sizeof(buf)) != -ENOENT)
+							{
+								printf("FAIL no spare: persist %d fail %d land %d at %d keep %u: "
+									   "clear after the remount %d\n",
+									   persist, fail, land, at, (unsigned)keeps[k], again);
+								ok = false;
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	alignFault += s_AlignFault;
+	CHECK(ok, "no spare: every clear and power cut left all of the store or none of it");
+	CHECK(noSpare > 0, "no spare: %u runs started without an erased sector", (unsigned)noSpare);
+	CHECK(committed > 0, "no spare: %u clears committed", (unsigned)committed);
+	printf("    %u runs without a spare, %u clears committed, %u refused (%u with no sector to free)\n",
+		   (unsigned)noSpare, (unsigned)committed, (unsigned)refused, (unsigned)nomem);
+	CHECK(alignFault == 0, "no spare: %u programs the controller refused",
+		  (unsigned)alignFault);
+}
+
+// ---------------------------------------------------------------------------
+// An erase cut by a power loss that leaves the sector header erased and the
+// records after it. The mount must not take that sector as erased: a header
+// written over it later would bring the records back. Here the clear's erase
+// of the old sector is the one cut, and a second clear then commits on it.
+// ---------------------------------------------------------------------------
+static void TestTornEraseHeader(uint32_t Gran)
+{
+	printf("--- erase cut after the header\n");
+
+	MediumWipe(2U * PDS_SECTOR_SIZE, Gran);
+	if (!Mounted(Boot(Gran), "torn erase: setup"))
+	{
+		return;
+	}
+
+	std::vector<uint8_t> v = MakeVal(98, 64);
+	uint8_t buf[64];
+
+	CHECK(BtPdsWrite(0x98, v.data(), v.size()) == 64, "torn erase: value");
+	CHECK(MemWord(0) == PDS_SECTOR_MAGIC, "torn erase: value in sector 0");
+
+	std::vector<uint8_t> old(&s_Mem[0], &s_Mem[PDS_SECTOR_SIZE]);
+
+	CHECK(BtPdsClear() == 0, "torn erase: clear");
+	CHECK(MemWord(PDS_SECTOR_SIZE) == PDS_SECTOR_MAGIC, "torn erase: clear committed in sector 1");
+
+	// Sector 0 as the cut erase left it: the 24 byte header and its padding
+	// erased, the records still there.
+	memcpy(&s_Mem[0], old.data(), old.size());
+	memset(&s_Mem[0], 0xFF, PadTo(24U, Gran));
+
+	CHECK(Boot(Gran) == 0, "torn erase: mount");
+	CHECK(BtPdsRead(0x98, buf, sizeof(buf)) == -ENOENT, "torn erase: cleared value gone after the mount");
+
+	bool erased = true;
+
+	for (uint32_t i = 0; i < PDS_SECTOR_SIZE; i++)
+	{
+		erased = erased && s_Mem[i] == 0xFFU;
+	}
+	CHECK(erased, "torn erase: the mount erased the sector");
+
+	CHECK(BtPdsClear() == 0, "torn erase: second clear");
+	CHECK(Boot(Gran) == 0, "torn erase: mount after the second clear");
+	CHECK(BtPdsRead(0x98, buf, sizeof(buf)) == -ENOENT, "torn erase: cleared value still gone");
+}
+
+// ---------------------------------------------------------------------------
+// A write that lands but reports a failure, then a write that succeeds. After
+// a reset the read must give the write that was acknowledged.
+// ---------------------------------------------------------------------------
+static void TestWriteLandsButFails(uint32_t Gran)
+{
+	printf("--- write that lands but reports a failure\n");
+
+	MediumWipe(PDS_MAX_REGION, Gran);
+	if (!Mounted(Boot(Gran), "lands but fails: setup"))
+	{
+		return;
+	}
+
+	std::vector<uint8_t> v0 = MakeVal(1, 40);
+	std::vector<uint8_t> v1 = MakeVal(2, 16);
+	std::vector<uint8_t> v2 = MakeVal(3, 40);
+	uint8_t buf[64];
+
+	CHECK(BtPdsWrite(0x97, v0.data(), v0.size()) == 40, "lands but fails: first write");
+	s_LandFailCountdown = 0;
+	CHECK(BtPdsWrite(0x97, v1.data(), v1.size()) < 0, "lands but fails: the write reports the failure");
+	CHECK(BtPdsWrite(0x97, v2.data(), v2.size()) == 40, "lands but fails: next write");
+	CHECK(BtPdsRead(0x97, buf, sizeof(buf)) == 40 && memcmp(buf, v2.data(), 40) == 0,
+		  "lands but fails: read gives the acknowledged write");
+	CHECK(Boot(Gran) == 0, "lands but fails: remount");
+	CHECK(BtPdsRead(0x97, buf, sizeof(buf)) == 40 && memcmp(buf, v2.data(), 40) == 0,
+		  "lands but fails: after reset the read gives the acknowledged write");
+}
+
+// ---------------------------------------------------------------------------
+// A mount that fails leaves no store to write to. Sector 1 holds a damaged
+// header the mount must erase, and its erase is refused.
+// ---------------------------------------------------------------------------
+static void TestFailedMountNoStore(uint32_t Gran)
+{
+	printf("--- failed mount\n");
+
+	MediumWipe(2U * PDS_SECTOR_SIZE, Gran);
+	if (!Mounted(Boot(Gran), "failed mount: setup"))
+	{
+		return;
+	}
+
+	std::vector<uint8_t> v = MakeVal(91, 64);
+	uint8_t buf[64];
+
+	CHECK(BtPdsWrite(0x91, v.data(), v.size()) == 64, "failed mount: value");
+
+	memset(&s_Mem[PDS_SECTOR_SIZE], 0x00, 16);
+	s_EraseFailSector = 1;
+	CHECK(Boot(Gran) != 0, "failed mount: mount fails when the damaged sector cannot be erased");
+	CHECK(BtPdsWrite(0x92, v.data(), 16) == -EINVAL, "failed mount: write refused");
+	CHECK(BtPdsRead(0x91, buf, sizeof(buf)) == -EINVAL, "failed mount: read refused");
+	CHECK(BtPdsClear() == -EINVAL, "failed mount: clear refused");
+
+	s_EraseFailSector = -1;
+	CHECK(Boot(Gran) == 0, "failed mount: mount once the erase works");
+	CHECK(BtPdsRead(0x91, buf, sizeof(buf)) == 64 && memcmp(buf, v.data(), 64) == 0,
+		  "failed mount: the value is kept");
+}
+
 static void RunAll(uint32_t Gran)
 {
 	printf("\n=== write unit %u ===\n", Gran);
@@ -1123,6 +1581,11 @@ static void RunAll(uint32_t Gran)
 	TestFill(Gran);
 	TestCutSweep(Gran);
 	TestClearCutSweep(Gran);
+	TestClearEraseFails(Gran);
+	TestClearNoSpare(Gran);
+	TestTornEraseHeader(Gran);
+	TestWriteLandsButFails(Gran);
+	TestFailedMountNoStore(Gran);
 }
 
 int main(void)

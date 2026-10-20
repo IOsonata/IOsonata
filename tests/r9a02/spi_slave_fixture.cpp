@@ -43,8 +43,8 @@ SOFTWARE.
 #include "system_r9a02.h"
 
 SPI g_Slave;
-uint8_t g_Rx[128];
-uint8_t g_Tx[128];
+uint8_t g_Rx[256];
+uint8_t g_Tx[256];
 volatile int g_RxLen = 64;
 volatile int g_TxLen = 64;
 volatile int g_Done;
@@ -149,12 +149,15 @@ extern "C" int EmuRate(int Rate)
 }
 
 // SPI20 slave, DevNo 4. Flags bit 0: DMA. Returns 1 when SPIInit succeeds.
-extern "C" int EmuInit20(int Flags, int Rate)
+extern "C" int EmuInit20(int Flags, int Rate, int Mode)
 {
 	SPICfg_t cfg = {
 		4, SPIPHY_NORMAL, SPIMODE_SLAVE, s_Pins20, 4, (uint32_t)Rate, 8, 0, SPIDATABIT_MSB,
 		SPIDATAPHASE_FIRST_CLK, SPICLKPOL_HIGH, SPICSEL_AUTO, (Flags & 1) != 0, true, 6, 0xFF, Evt
 	};
+
+	cfg.DataPhase = (Mode & 1) ? SPIDATAPHASE_SECOND_CLK : SPIDATAPHASE_FIRST_CLK;
+	cfg.ClkPol = (Mode & 2) ? SPICLKPOL_LOW : SPICLKPOL_HIGH;
 
 	return g_Slave.Init(cfg) ? 1 : 0;
 }

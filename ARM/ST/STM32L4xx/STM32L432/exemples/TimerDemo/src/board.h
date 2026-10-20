@@ -60,8 +60,9 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 // it makes, 32768 Hz.
 #define TIMER_DEMO_FREQ		100000
 
-// Output on the ST-LINK virtual COM port, 115200 8N1: USART2 (DevNo 2) RX
-// PA15 AF3, TX PA2 AF7, the BOARD_VCP_PINS of stm32_boards.h
+// Output on the ST-LINK virtual COM port, 1 Mbaud 8N1 in Release (Debug prints
+// with semihosting): USART2 (DevNo 2) RX PA15 AF3, TX PA2 AF7, the
+// BOARD_VCP_PINS of stm32_boards.h
 #define TIMER_DEMO_UART
 #define UART_DEVNO			BOARD_VCP_DEVNO
 #define UART_RX_PORT		IOPORTA
@@ -71,4 +72,4 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define UART_TX_PIN			2
 #define UART_TX_PINOP		IOPINOP_FUNC7
 
-#endif // __BOARD_H__
+#endif

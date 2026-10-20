@@ -338,6 +338,14 @@ UART shows the C/C++ dual API, static CFIFO storage, interrupt-driven producers
 and consumers, DMA buffering, and applications using the same interface under
 different schedulers.
 
+For every MCU, validate UART TX first with `UartPrbsTxTest`, the primary UART
+test. Then use `UartLoopback` to validate the RX path. Use Release builds of
+both the example and its IOsonata library for performance benchmarks. Use Debug
+builds for development debugging. Preserve the selected PRBS byte or buffer mode
+when comparing implementations, and report the mode, baud rate, and interrupt
+and DMA settings with the result. Emulator instruction counts are not measured
+hardware throughput.
+
 ### I2C and SPI
 
 Read together:

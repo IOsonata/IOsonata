@@ -35,17 +35,16 @@ static bool s_InBusy;
 static uint16_t s_InLength;
 static int s_OutXferCount;
 
-extern "C" {
-const UsbCfg_t *UsbGetCfg(int DevNo)
+extern "C" const UsbCfg_t *UsbGetCfg(int DevNo)
 {
 	return DevNo == 0 ? &s_UsbCfg : nullptr;
 }
 
-bool UsbCtrlrHighSpeed(int) { return false; }
+extern "C" bool UsbCtrlrHighSpeed(int) { return false; }
 
 // Opens are counted without limit, as the controller allows a pair to be
 // closed and opened again; the first two descriptors are kept for checks.
-bool UsbCtrlrEpOpen(int, const UsbEndPointDesc_t *pDesc)
+extern "C" bool UsbCtrlrEpOpen(int, const UsbEndPointDesc_t *pDesc)
 {
 	if (pDesc == nullptr)
 	{
@@ -59,9 +58,9 @@ bool UsbCtrlrEpOpen(int, const UsbEndPointDesc_t *pDesc)
 	return true;
 }
 
-void UsbCtrlrEpClose(int, uint8_t, bool) { s_CloseCount++; }
+extern "C" void UsbCtrlrEpClose(int, uint8_t, bool) { s_CloseCount++; }
 
-void UsbCtrlrEpBind(int, uint8_t, bool bIn, bool Blocking,
+extern "C" void UsbCtrlrEpBind(int, uint8_t, bool bIn, bool Blocking,
 						UsbCtrlrEpHandler_t Handler, void *pContext)
 {
 	if (bIn)
@@ -79,14 +78,14 @@ void UsbCtrlrEpBind(int, uint8_t, bool bIn, bool Blocking,
 	}
 }
 
-bool UsbCtrlrEpReceive(int, uint8_t, uint8_t *pBuffer, uint16_t Capacity)
+extern "C" bool UsbCtrlrEpReceive(int, uint8_t, uint8_t *pBuffer, uint16_t Capacity)
 {
 	if (s_OutBuffer != nullptr || pBuffer == nullptr || Capacity == 0U) return false;
 	s_OutBuffer = pBuffer;
 	return true;
 }
 
-bool UsbCtrlrEpSend(int, uint8_t EpNum, uint8_t *pBuffer, uint16_t Length)
+extern "C" bool UsbCtrlrEpSend(int, uint8_t EpNum, uint8_t *pBuffer, uint16_t Length)
 {
 	if ((EpNum & 0x80U) != 0U) return false;
 	if (s_InBusy) return false;
@@ -96,7 +95,6 @@ bool UsbCtrlrEpSend(int, uint8_t EpNum, uint8_t *pBuffer, uint16_t Length)
 	return true;
 }
 
-}
 
 bool UsbClassRegister(int DevNo, UsbDeviceClass *pClass,
 					  uint8_t FirstInterface, uint8_t InterfaceCount,

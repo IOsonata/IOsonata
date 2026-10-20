@@ -14,6 +14,11 @@
 #include "bluetooth/bt_adv.h"
 #include "bluetooth/bt_app.h"
 #include "bluetooth/bt_appearance.h"
+#include "syslog.h"
+
+void BtAdvHciStopped(void);
+static BtHciDevice_t *s_pController;
+
 
 namespace {
 
@@ -34,7 +39,7 @@ struct CapturedCmd {
 	uint16_t ParamLen;
 };
 
-CapturedCmd s_Cmds[16];
+CapturedCmd s_Cmds[64];
 int s_CmdCount = 0;
 
 uint8_t s_LocalType = 0;
@@ -85,8 +90,7 @@ void Setup(uint8_t LocalType, const uint8_t LocalAddr[6])
 	std::memset(s_Cmds, 0, sizeof(s_Cmds));
 	std::memset(&s_Dev, 0, sizeof(s_Dev));
 	s_Dev.Command = CaptureCommand;
-	g_BtAppData.AppDevice.pHciDev = &s_Dev;
-	g_BtAppData.State = BTAPP_STATE_IDLE;
+	s_pController = &s_Dev;
 	s_LocalType = LocalType;
 	std::memcpy(s_LocalAddr, LocalAddr, 6);
 }
@@ -206,6 +210,22 @@ void TestAdvDegenerateRandomIdentity()
 // disable is rejected the set is still on air, and a later BtAdvStart would
 // see IDLE, send an enable and treat the device as freshly advertising when it
 // never stopped.
+// Observe whether a start command is emitted without inspecting private state.
+static void CheckStartCommand(bool Expected)
+{
+	int before = s_CmdCount;
+	BtAdvStart();
+	CHECK(s_CmdCount == before + (Expected ? 2 : 0));
+	if (Expected)
+	{
+		CHECK(s_Cmds[before].OpCode == BT_HCI_CMD_CTLR_SET_EXT_ADV_ENABLE);
+		CHECK(s_Cmds[before].Param[0] == 0);
+		CHECK(s_Cmds[before + 1].OpCode == BT_HCI_CMD_CTLR_SET_EXT_ADV_ENABLE);
+		CHECK(s_Cmds[before + 1].Param[0] == 1);
+		BtAdvStop();
+	}
+}
+
 void TestAdvStopKeepsStateOnFailure()
 {
 	uint8_t addr[6] = { 0x11, 0x22, 0x33, 0x44, 0x55, 0xC6 };
@@ -215,46 +235,60 @@ void TestAdvStopKeepsStateOnFailure()
 	CHECK(BtAppAdvInit(&cfg) == true);
 
 	BtAdvStart();
-	CHECK(g_BtAppData.State == BTAPP_STATE_ADVERTISING);
+	CheckStartCommand(false);
 
 	// The controller rejects the disable: the device is still advertising.
 	s_FailOpCode = BT_HCI_CMD_CTLR_SET_EXT_ADV_ENABLE;
 	s_FailEnable = 0;
 	BtAdvStop();
-	CHECK(g_BtAppData.State == BTAPP_STATE_ADVERTISING);
+	CheckStartCommand(false);
 
 	// Once the disable is accepted the state follows.
 	s_FailOpCode = 0;
 	BtAdvStop();
-	CHECK(g_BtAppData.State == BTAPP_STATE_IDLE);
+	CheckStartCommand(true);
 }
 
-// Updating the manufacturer data while advertising stops and restarts the set.
-// If the restart is rejected the device is off air, so the call reports failure
-// instead of leaving the state claiming it still advertises.
-void TestAdvManDataSetReportsRestartFailure()
+// A live payload update must not disable or re-enable advertising.
+void TestLiveDataUpdateDoesNotToggleAdvertising()
 {
-	uint8_t addr[6] = { 0x11, 0x22, 0x33, 0x44, 0x55, 0xC6 };
-	Setup(BTADDR_TYPE_RANDOM_STATIC, addr);
-
+	uint8_t addr[6] = {};
+	Setup(BTADDR_TYPE_PUBLIC, addr);
 	BtAppCfg_t cfg = MakePeripheralCfg();
-	CHECK(BtAppAdvInit(&cfg) == true);
-
+	CHECK(BtAppAdvInit(&cfg));
 	BtAdvStart();
-	CHECK(g_BtAppData.State == BTAPP_STATE_ADVERTISING);
+	uint32_t count = 1;
+	int before = s_CmdCount;
+	CHECK(BtAppAdvManDataSet((uint8_t *)&count, sizeof(count), nullptr, 0));
+	CHECK(s_CmdCount == before + 1);
+	CHECK(s_Cmds[before].OpCode == BT_HCI_CMD_CTLR_SET_EXT_ADV_DATA);
+	CheckStartCommand(false);
+	BtAdvStop();
+}
 
-	uint8_t data[4] = { 1, 2, 3, 4 };
-
-	// A successful update keeps the device advertising.
-	CHECK(BtAppAdvManDataSet(data, sizeof(data), nullptr, 0) == true);
-	CHECK(g_BtAppData.State == BTAPP_STATE_ADVERTISING);
-
-	// The re-enable is rejected: the device is off air with the new data
-	// loaded, and the state says so.
-	s_FailOpCode = BT_HCI_CMD_CTLR_SET_EXT_ADV_ENABLE;
-	s_FailEnable = 1;
-	CHECK(BtAppAdvManDataSet(data, sizeof(data), nullptr, 0) == false);
-	CHECK(g_BtAppData.State == BTAPP_STATE_IDLE);
+void TestTimeoutRestartDisablesBeforeEnable()
+{
+	uint8_t addr[6] = {};
+	Setup(BTADDR_TYPE_PUBLIC, addr);
+	BtAppCfg_t cfg = MakePeripheralCfg();
+	cfg.Role = BTAPP_ROLE_BROADCASTER;
+	cfg.AdvTimeout = 1000;
+	CHECK(BtAppAdvInit(&cfg));
+	BtAdvStart();
+	for (uint32_t count = 1; count <= 10; count++)
+	{
+		BtAdvHciStopped();
+		CHECK(BtAppAdvManDataSet((uint8_t *)&count, sizeof(count), nullptr, 0));
+		int before = s_CmdCount;
+		BtAdvStart();
+		CHECK(s_CmdCount == before + 2);
+		CHECK(s_Cmds[before].Param[0] == 0);
+		CHECK(s_Cmds[before + 1].OpCode == BT_HCI_CMD_CTLR_SET_EXT_ADV_ENABLE);
+		CHECK(s_Cmds[before + 1].Param[0] == 1);
+		CHECK(s_Cmds[before + 1].Param[3] == 100);
+		CheckStartCommand(false);
+	}
+	BtAdvStop();
 }
 
 // ---- G5: manufacturer company identifier byte order ----------------------
@@ -263,7 +297,10 @@ void TestManDataCompanyIdLittleEndian()
 {
 	uint8_t addr[6] = {};
 	Setup(BTADDR_TYPE_PUBLIC, addr);
-	g_BtAppData.AppDevice.VendorId = 0x1234;
+	BtAppCfg_t cfg = MakePeripheralCfg();
+	cfg.VendorId = 0x1234;
+	CHECK(BtAppAdvInit(&cfg));
+	s_CmdCount = 0;
 
 	uint8_t payload[3] = { 0xAA, 0xBB, 0xCC };
 	CHECK(BtAppAdvManDataSet(payload, sizeof(payload), nullptr, 0) == true);
@@ -274,10 +311,20 @@ void TestManDataCompanyIdLittleEndian()
 	{
 		// AdvHandle(1) Operation(1) FragPref(1) DataLen(1) then the AD list:
 		// Length, Type(0xFF manuf), CompanyId_lo, CompanyId_hi, payload...
-		CHECK(ad->Param[5] == 0xFF);
-		CHECK(ad->Param[6] == 0x34);		// 0x1234 low octet first
-		CHECK(ad->Param[7] == 0x12);
-		CHECK(ad->Param[8] == 0xAA);		// payload follows the company id
+		// Initialization also encodes flags/name. Find the manufacturer TLV.
+		unsigned offset = 4;
+		while (offset + 1 < ad->ParamLen && ad->Param[offset + 1] != 0xFF)
+		{
+			offset += ad->Param[offset] + 1;
+		}
+		CHECK(offset + 4 < ad->ParamLen);
+		if (offset + 4 < ad->ParamLen)
+		{
+			CHECK(ad->Param[offset + 1] == 0xFF);
+			CHECK(ad->Param[offset + 2] == 0x34);
+			CHECK(ad->Param[offset + 3] == 0x12);
+			CHECK(ad->Param[offset + 4] == 0xAA);
+		}
 	}
 }
 
@@ -447,27 +494,25 @@ void TestCodingSelectionHostFeatureBit()
 
 } // namespace
 
-extern "C" {
 
-BtAppData_t g_BtAppData;
 
-void BtSmpLocalAddrGet(uint8_t *pType, uint8_t pAddr[6])
+extern "C" void BtSmpLocalAddrGet(uint8_t *pType, uint8_t pAddr[6])
 {
 	*pType = s_LocalType;
 	std::memcpy(pAddr, s_LocalAddr, 6);
 }
 
-} // extern "C"
 
 int main()
 {
+	TestTimeoutRestartDisablesBeforeEnable();
 	TestManDataCompanyIdLittleEndian();
 	TestAdvPublicIdentity();
 	TestAdvRandomIdentity();
 	TestAdvInvalidRandomIdentity();
 	TestAdvDegenerateRandomIdentity();
 	TestAdvStopKeepsStateOnFailure();
-	TestAdvManDataSetReportsRestartFailure();
+	TestLiveDataUpdateDoesNotToggleAdvertising();
 	TestCodingSelectionUsesTheV2Opcode();
 	TestCodingNeedsTheCodedPhy();
 	TestCodingOptionRangeIsChecked();
@@ -481,5 +526,20 @@ int main()
 	}
 
 	std::printf("Adv HCI host tests: PASS (%d checks)\n", s_Checks);
+	return 0;
+}
+
+BtHciDevice_t *BtAppHciDevice(void)
+{
+	return s_pController;
+}
+
+extern "C" SysLog_t *SysLogGet(void)
+{
+	return nullptr;
+}
+
+extern "C" int SysLogPrintf(SysLog_t * const, const char *, ...)
+{
 	return 0;
 }

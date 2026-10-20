@@ -64,4 +64,4 @@ void nRFUsbPowerIrqHandler(void);
 }
 #endif
 
-#endif // __POWER_CLOCK_IRQ_NRF52_H__
+#endif

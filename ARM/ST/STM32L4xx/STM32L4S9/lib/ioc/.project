@@ -521,11 +521,6 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
-			<name>src/sysstatus.c</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/sysstatus.c</locationURI>
-		</link>
-		<link>
 			<name>src/system_stm32l4plus.c</name>
 			<type>1</type>
 			<locationURI>PARENT-3-PROJECT_LOC/src/system_stm32l4plus.c</locationURI>
@@ -589,11 +584,6 @@
 			<name>include/coredev/spi.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/spi.h</locationURI>
-		</link>
-		<link>
-			<name>include/coredev/spi_stm32l4xx.h</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/include/spi_stm32l4xx.h</locationURI>
 		</link>
 		<link>
 			<name>include/coredev/system_core_clock.h</name>
@@ -896,14 +886,14 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/i2c.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/coredev/i2c_stm32l4xx.cpp</name>
+			<name>src/coredev/i2c_stm32.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/src/i2c_stm32l4xx.cpp</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/src/i2c_stm32.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/coredev/octospi_stm32l4xx.cpp</name>
+			<name>src/coredev/octospi_stm32.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/src/octospi_stm32l4xx.cpp</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/src/octospi_stm32.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/coredev/spi.cpp</name>
@@ -911,9 +901,9 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/spi.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/coredev/spi_stm32l4xx.cpp</name>
+			<name>src/coredev/spi_stm32.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/src/spi_stm32l4xx.cpp</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/src/spi_stm32.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/coredev/timer.cpp</name>
@@ -944,6 +934,11 @@
 			<name>src/coredev/uart_stm32.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/ARM/ST/src/uart_stm32.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/dma_stm32.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/ARM/ST/src/dma_stm32.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/display/display.cpp</name>
@@ -1194,6 +1189,26 @@
 			<name>src/storage/flash.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/storage/flash.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/syslog.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/syslog.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/storage/nvm.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/storage/nvm.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/storage/nvm_region.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/storage/nvm_region.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/storage/diskio_nvm.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/storage/diskio_nvm.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/storage/sdcard_impl.cpp</name>
@@ -1531,6 +1546,31 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/display/fonts/FreeSerif/FreeSerifIta8pt.c</locationURI>
 		</link>
 			<link><name>src/iopincfg_stm32.cpp</name><type>1</type><locationURI>PARENT-4-PROJECT_LOC/src/iopincfg_stm32.cpp</locationURI></link>
+		<link>
+			<name>src/Xiot</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/Xiot/FusionAhrs.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/Fusion/Fusion/FusionAhrs.c</locationURI>
+		</link>
+		<link>
+			<name>src/Xiot/FusionBias.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/Fusion/Fusion/FusionBias.c</locationURI>
+		</link>
+		<link>
+			<name>src/Xiot/FusionCompass.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/Fusion/Fusion/FusionCompass.c</locationURI>
+		</link>
+		<link>
+			<name>src/motion/att_xiot_fusion.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/motion/att_xiot_fusion.cpp</locationURI>
+		</link>
 	</linkedResources>
 	<variableList>
 		<variable>

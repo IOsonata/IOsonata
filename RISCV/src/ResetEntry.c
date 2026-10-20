@@ -9,12 +9,12 @@ Boot sequence:
      (placed at flash 0x00000000 by the device-specific linker script).
      ResetEntry is the only function in that section.
 
-  2. ResetEntry (naked, no stack frame) sets up gp from __global_pointer$
-     and sp from __StackTop, then jumps to ResetEntryInit. The gp load
-     MUST be wrapped in .option norelax, otherwise the linker can relax
-     la gp,__global_pointer$ into a gp-relative form that uses gp before
-     it is set, corrupting it (GCC RISC-V manual, "Linker relaxation").
-     ResetEntryInit runs steps 3 to 7.
+	2. ResetEntry (naked, no stack frame) sets up gp from __global_pointer$
+		 and sp from __StackTop, then jumps to ResetEntryInit. The gp load
+		 MUST be wrapped in .option norelax, otherwise the linker can relax
+		 la gp,__global_pointer$ into a gp-relative form that uses gp before
+		 it is set, corrupting it (GCC RISC-V manual, "Linker relaxation").
+		 ResetEntryInit runs steps 3 to 7.
 
   3. Optional executable-RAM (.iram.text) is copied from flash LMA to
      its runtime VMA, then a fence.i ensures any cached instruction

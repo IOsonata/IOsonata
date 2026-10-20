@@ -8,7 +8,7 @@ DevNo 3 (UARTA0, TxDA0 P009, RxDA0 P010) and DevNo 4 (UARTA1, TxDA1 P403,
 RxDA1 P008). The pins exist on the 48-pin package only.
 
 Format: 5, 7 or 8 data bits, no, odd, even or space (0) parity, 1 or 2 stop
-bits, LSB first, no flow control, no DMA. Unsupported settings fail
+bits, LSB first, no flow control. Unsupported settings fail
 UARTInit.
 
 Clock: the UARTA does not use PCLKB. fSEL is the HOCO when it runs, else the
@@ -29,6 +29,12 @@ read from ASISAn. With interrupts, transmit uses the buffer empty interrupt
 (ISSMA = 1) one level below IntPrio. Without interrupts RX_ENDI is routed to
 an IELSR without a CPU interrupt and its IR flag tells RxData that a
 character is there: the UARTA has no receive data flag.
+
+bDMAMode selects DTC transmit in private blocks, as in the SAM4L port.
+RX retains interrupt/polling service and per-character errors. In polling
+DMA mode, TxData and RxData also service completion without waiting for the
+wire. The TX completion route stays enabled in the CLIC (manual 14.5),
+chaining blocks without application callbacks when bIntMode is false.
 
 Pins: PinOp R9A02_PSEL_UARTA (IOPINOP_FUNC5), RX input, TX output.
 
@@ -69,6 +75,7 @@ SOFTWARE.
 #include "coredev/interrupt.h"
 #include "iopinctrl.h"
 #include "interrupt_r9a02.h"
+#include "dtc_r9a02.h"
 #include "system_r9a02.h"
 #include "uarta_r9a02.h"
 
@@ -81,6 +88,7 @@ SOFTWARE.
 // Most bytes TxData and RxData copy to or from a CFIFO with interrupts
 // disabled, to keep the RX interrupt latency short
 #define R9A02_UARTA_COPY_MAX		8
+#define R9A02_UARTA_DMA_SIZE		16
 
 #define R9A02_UARTA_BRGCA_MAX		255U
 #define R9A02_UARTA_RATE_TOL		50U			// Rate error at most 1/50 of the rate
@@ -100,6 +108,8 @@ typedef struct __R9a02_Uarta_Dev {
 	int IntTx;						// IELSR numbers, -1 when not routed
 	int IntRx;						// Interrupt or polled route
 	bool bInUse;					// Initialized and not powered off
+	R9a02DtcInfo_t TxDtc;
+	uint8_t TxDmaMem[R9A02_UARTA_DMA_SIZE];
 } R9a02UartaDev_t;
 #pragma pack(pop)
 
@@ -119,6 +129,8 @@ static R9a02UartaDev_t s_R9a02UartaDev[R9A02_UART_UARTA_CNT] = {
 
 static void R9a02UartaReleaseInts(R9a02UartaDev_t * const pDev)
 {
+	R9a02DtcClear(pDev->IntTx);
+	pDev->TxDtc.Cra = 0U;
 	R9a02UnregisterIntHandler(pDev->IntTx);
 	R9a02UnregisterIntHandler(pDev->IntRx);
 	pDev->IntTx = -1;
@@ -140,6 +152,10 @@ static void R9a02UartaStop(R9a02UartaDev_t * const pDev)
 {
 	R9A02_UARTA_Unit_Type *reg = pDev->pReg;
 
+	if (pDev->IntTx >= 0 && pDev->pUartDev->DevIntrf.bDma)
+	{
+		R9a02DtcDisable(pDev->IntTx);
+	}
 	if (reg->ASIMA0 & R9A02_ASIMA0_TXEA)
 	{
 		uint32_t rate = pDev->pUartDev != NULL && pDev->pUartDev->Rate > 0 ?
@@ -270,6 +286,108 @@ static int R9a02UartaTxHw(R9a02UartaDev_t * const pDev, bool bCheckFull)
 	return 1;
 }
 
+// SAM4L pattern: copy a CFIFO block into private DMA storage, then chain
+// another on completion. UARTA permits byte writes to TXBA (25.2.6).
+// Prepare the next block while the last DTC byte still occupies TXBA. Its
+// buffer-empty event must reach the CPU before the new block is armed.
+// Called with interrupts disabled.
+static void R9a02UartaTxDma(R9a02UartaDev_t * const pDev)
+{
+	UARTDev_t *udev = pDev->pUartDev;
+	R9A02_UARTA_Unit_Type *reg = pDev->pReg;
+	volatile R9a02DtcInfo_t *info = &pDev->TxDtc;
+
+	if (R9a02DtcEnabled(pDev->IntTx) || (reg->ASIMA0 & R9A02_ASIMA0_TXEA) == 0U)
+	{
+		return;
+	}
+	if (info->Cra == 0U)
+	{
+		int cnt = 0;
+
+		while (cnt < R9A02_UARTA_DMA_SIZE)
+		{
+			int len = R9A02_UARTA_DMA_SIZE - cnt;
+			uint8_t *p = CFifoGetMultiple(udev->hTxFifo, &len);
+
+			if (p == NULL)
+			{
+				break;
+			}
+			memcpy(pDev->TxDmaMem + cnt, p, len);
+			cnt += len;
+		}
+		if (cnt == 0)
+		{
+			if ((reg->ASISA & R9A02_ASISA_TXBFA) == 0U)
+			{
+				udev->bTxReady = true;
+			}
+
+			return;
+		}
+		info->Sar = (uint32_t)(uintptr_t)pDev->TxDmaMem;
+		info->Cra = (uint16_t)cnt;
+	}
+	udev->bTxReady = false;
+	if (reg->ASISA & R9A02_ASISA_TXBFA)
+	{
+		return;
+	}
+
+	uint8_t first = *(const uint8_t *)(uintptr_t)info->Sar;
+
+	info->Sar = info->Sar + 1U;
+	info->Cra = info->Cra - 1U;
+	// DtcEnable already clears the old CPU request before arming.
+	if (info->Cra != 0U)
+	{
+		R9a02DtcEnable(pDev->IntTx);
+	}
+	else
+	{
+		R9a02EventFlagClear(pDev->IntTx);
+	}
+	reg->TXBA = first;
+}
+
+// Idle/event service only. One byte needs no DMA descriptor setup; queued
+// bursts use private DTC storage. A running transfer owns FIFO consumption.
+static inline __attribute__((always_inline)) void R9a02UartaTxKick(R9a02UartaDev_t * const pDev)
+{
+	UARTDev_t *udev = pDev->pUartDev;
+
+	if (udev->DevIntrf.bDma &&
+		(((volatile R9a02DtcInfo_t *)&pDev->TxDtc)->Cra != 0U || CFifoUsed(udev->hTxFifo) > 1))
+	{
+		R9a02UartaTxDma(pDev);
+	}
+	else if (pDev->pReg->ASIMA0 & R9A02_ASIMA0_TXEA)
+	{
+		int cnt = R9a02UartaTxHw(pDev, true);
+
+		if (cnt >= 0)
+		{
+			udev->bTxReady = cnt == 0;
+		}
+	}
+}
+
+static inline __attribute__((always_inline)) void R9a02UartaTxDmaPoll(R9a02UartaDev_t * const pDev)
+{
+	if (!pDev->pUartDev->bTxReady)
+	{
+		uint32_t evt = R9A02_ICU->IELSR[pDev->IntTx];
+
+		if ((evt & (R9A02_IELSR_IR | R9A02_IELSR_DTCE)) != R9A02_IELSR_IR)
+		{
+			return;
+		}
+		R9a02EventFlagClear(pDev->IntTx);
+	}
+	R9a02UartaTxKick(pDev);
+}
+
 // Without interrupts, everything in the TX CFIFO is sent now. Each byte waits
 // at most two character times for TXBAn (table 25.6).
 static void R9a02UartaTxDrain(R9a02UartaDev_t * const pDev)
@@ -338,15 +456,24 @@ static void R9a02UartaTxIRQHandler(int IntNo, void *pCtx)
 	UARTDev_t *udev = dev->pUartDev;
 	uintptr_t state = DisableInterrupt();
 
-	if (R9a02UartaTxHw(dev, false) == 0)
+	// DTC completion interrupts foreground polling even with bIntMode
+	// false. Empty RXBA before staging TX and take any byte received while
+	// staging before returning to the application. No polling callbacks.
+	if (!udev->DevIntrf.bIntEn)
 	{
-		// TX CFIFO empty, TxData starts the next transmission
-		udev->bTxReady = true;
+		R9a02UartaRxPoll(dev);
+	}
+
+	R9a02UartaTxKick(dev);
+
+	if (!udev->DevIntrf.bIntEn)
+	{
+		R9a02UartaRxPoll(dev);
 	}
 
 	EnableInterrupt(state);
 
-	if (udev->EvtCallback)
+	if (udev->bTxReady && udev->DevIntrf.bIntEn && udev->EvtCallback)
 	{
 		udev->EvtCallback(udev, UART_EVT_TXREADY, NULL, CFifoAvail(udev->hTxFifo));
 	}
@@ -463,6 +590,10 @@ static uint32_t R9a02UartaSetRate(DevIntrf_t * const pDev, uint32_t Rate)
 	if (running)
 	{
 		R9a02UartaStart(dev);
+		if (pDev->bDma)
+		{
+			R9a02UartaTxKick(dev);
+		}
 	}
 
 	EnableInterrupt(state);
@@ -499,6 +630,11 @@ static int R9a02UartaRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int Bufflen
 		if (poll)
 		{
 			R9a02UartaRxPoll(dev);
+			if (pDev->bDma)
+			{
+				R9a02UartaTxDmaPoll(dev);
+				R9a02UartaRxPoll(dev);
+			}
 		}
 
 		uint8_t *p = CFifoGetMultiple(fifo, &l);
@@ -587,7 +723,16 @@ static int R9a02UartaTxData(DevIntrf_t * const pDev, uint8_t const *pData, int D
 		cnt = R9a02UartaTxPut(dev, pData, Datalen);
 	}
 
-	if (!pDev->bIntEn)
+	if (!pDev->bIntEn && pDev->bDma)
+	{
+		uintptr_t state = DisableInterrupt();
+
+		R9a02UartaRxPoll(dev);
+		R9a02UartaTxDmaPoll(dev);
+		R9a02UartaRxPoll(dev);
+		EnableInterrupt(state);
+	}
+	else if (!pDev->bIntEn)
 	{
 		R9a02UartaTxDrain(dev);
 	}
@@ -598,9 +743,9 @@ static int R9a02UartaTxData(DevIntrf_t * const pDev, uint8_t const *pData, int D
 		// interrupt.
 		uintptr_t state = DisableInterrupt();
 
-		if (udev->bTxReady && R9a02UartaTxHw(dev, true) > 0)
+		if (udev->bTxReady)
 		{
-			udev->bTxReady = false;
+			R9a02UartaTxKick(dev);
 		}
 		EnableInterrupt(state);
 	}
@@ -636,10 +781,11 @@ static void R9a02UartaEnable(DevIntrf_t * const pDev)
 	udev->RxDropCnt = 0;
 	udev->TxDropCnt = 0;
 
+	R9a02UartaStop(dev);
+	dev->TxDtc.Cra = 0U;
 	CFifoFlush(udev->hTxFifo);
 	udev->bTxReady = true;
 
-	R9a02UartaStop(dev);
 	R9a02UartaStart(dev);
 
 	EnableInterrupt(state);
@@ -687,11 +833,12 @@ bool R9a02UartaInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 		return false;
 	}
 
-	if (pCfg->bDMAMode || pCfg->Mode != UART_MODE_UART || pCfg->Duplex != UART_DUPLEX_FULL ||
+	if (pCfg->Mode != UART_MODE_UART || pCfg->Duplex != UART_DUPLEX_FULL ||
 		pCfg->bIrDAMode || pCfg->FlowControl != UART_FLWCTRL_NONE ||
 		(pCfg->DataBits != 5 && pCfg->DataBits != 7 && pCfg->DataBits != 8) ||
 		pCfg->Parity == UART_PARITY_MARK || (pCfg->StopBits != 1 && pCfg->StopBits != 2) ||
-		pCfg->Rate <= 0 || (pCfg->bIntMode && (pCfg->IntPrio < 0 || pCfg->IntPrio > (int)R9A02_CLIC_PRIO_MAX)))
+		pCfg->Rate <= 0 || ((pCfg->bIntMode || pCfg->bDMAMode) &&
+		(pCfg->IntPrio < 0 || pCfg->IntPrio > (int)R9A02_CLIC_PRIO_MAX)))
 	{
 		return false;
 	}
@@ -803,7 +950,7 @@ bool R9a02UartaInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	// Format and interrupt sources with EN, TXEA and RXEA off (table 25.3).
 	// Every receive error on RX_ENDI, transmit on buffer empty.
 	reg->ASIMA1 = asim1;
-	reg->ASIMA0 = (uint8_t)(R9A02_ASIMA0_ISRMA | (pCfg->bIntMode ? R9A02_ASIMA0_ISSMA : 0U));
+	reg->ASIMA0 = (uint8_t)(R9A02_ASIMA0_ISRMA | ((pCfg->bIntMode || pCfg->bDMAMode) ? R9A02_ASIMA0_ISSMA : 0U));
 	R9A02_PORGA_ULBS = (uint8_t)(R9A02_PORGA_ULBS & ~dev->UlbsMask);
 
 	// A rate outside the characterized range or more than 2 % away from the
@@ -848,7 +995,7 @@ bool R9a02UartaInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	pDev->TxDropCnt = 0;
 	pDev->DevIntrf.IntPrio = pCfg->IntPrio;
 	pDev->DevIntrf.bIntEn = pCfg->bIntMode;
-	pDev->DevIntrf.bDma = false;
+	pDev->DevIntrf.bDma = pCfg->bDMAMode;
 	pDev->DevIntrf.bTxReady = true;
 	pDev->DevIntrf.bNoStop = false;
 	pDev->DevIntrf.EvtCB = NULL;
@@ -880,9 +1027,23 @@ bool R9a02UartaInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	else
 	{
 		dev->IntRx = R9a02RouteEvent(dev->EvtRx);
+		if (pCfg->bDMAMode)
+		{
+			// DTC activation requires the CLIC input enabled (14.5).
+			dev->IntTx = R9a02RegisterIntHandler(dev->EvtTx, pCfg->IntPrio, R9a02UartaTxIRQHandler, dev);
+		}
 	}
 
-	if (dev->IntRx < 0 || (pCfg->bIntMode && dev->IntTx < 0))
+	bool ok = dev->IntRx >= 0 && (!(pCfg->bIntMode || pCfg->bDMAMode) || dev->IntTx >= 0);
+
+	if (pCfg->bDMAMode)
+	{
+		memset(&dev->TxDtc, 0, sizeof(dev->TxDtc));
+		dev->TxDtc.Mra = R9A02_DTC_MRA_MD_NORMAL | R9A02_DTC_MRA_SZ_BYTE | R9A02_DTC_MRA_SM_INC;
+		dev->TxDtc.Dar = (uint32_t)(uintptr_t)&reg->TXBA;
+		ok = ok && R9a02DtcSet(dev->IntTx, &dev->TxDtc);
+	}
+	if (!ok)
 	{
 		R9a02UartaReleaseInts(dev);
 		IOPinDis(dev->pIOPinMap, 2);
@@ -902,3 +1063,4 @@ bool R9a02UartaInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 
 	return true;
 }
+

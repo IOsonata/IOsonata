@@ -188,4 +188,4 @@ _Static_assert(sizeof(UsbMscCmdStatusWrapper_t) == 13,
 
 /** @} end group USB */
 
-#endif	// __USB_MSCDEF_H__
+#endif

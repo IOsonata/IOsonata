@@ -85,6 +85,8 @@ def host_compat(function: str) -> str:
 	# compiled without copying unrelated nRF54 BM implementation details.
 	helpers = (
 		"static void SecurePendingReset() {}\n"
+		"static void BtAppScanEnded() {}\n"
+		"static uint8_t BtAdvHandle() { return 0; }\n"
 		"static void BtSmpOobDataClearInternal() {}\n\n"
 	)
 
@@ -104,6 +106,11 @@ def main() -> int:
 			r"^bool\s+BtAppInit\s*\(const\s+BtAppCfg_t\s*\*\s*pCfg\s*\)",
 		)
 		function = host_compat(function)
+		# Extract the production file-local declaration, never publish a test type.
+		state = re.search(r"static struct \{[^}]+\} s_BtAppData = \{[^}]+\};", source)
+		if state is None:
+			raise ValueError("private application state not found")
+		initialized = extract_function(source, r"^bool BtInitialized\(void\)")
 		# BtAppInit refuses a secure configuration unless the application
 		# started security, so the function that starts it is taken from the
 		# port as well.
@@ -118,6 +125,7 @@ def main() -> int:
 	args.output.parent.mkdir(parents=True, exist_ok=True)
 	args.output.write_text(
 		"// Generated from the production nRF54 BM port. Do not edit.\n" +
+		state.group(0) + "\n\n" + initialized + "\n\n" +
 		sec_init + "\n\n" + function + "\n",
 		encoding="utf-8",
 	)

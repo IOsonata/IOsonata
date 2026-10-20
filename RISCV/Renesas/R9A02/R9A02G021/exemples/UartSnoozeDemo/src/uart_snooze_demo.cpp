@@ -104,13 +104,23 @@ static void UartWaitIdle(void)
 
 int main()
 {
+	uint32_t wakes;
+	uint8_t buf[16];
+	int n;
+	int i;
+
 	IOPinCfg(s_Leds, s_NbLeds);
 
 	if (s_Uart.Init(s_UartCfg) == false)
 	{
-		while (1) __WFE();
+		while (1)
+		{
+			__WFE();
+		}
 	}
+#ifdef NDEBUG
 	UARTRetargetEnable(s_Uart, STDOUT_FILENO);
+#endif
 	setvbuf(stdout, NULL, _IONBF, 0);
 
 	printf("\r\nUART reception in Snooze, UART0 at %lu bps\r\n", (unsigned long)s_Uart.Rate());
@@ -118,15 +128,17 @@ int main()
 	if (R9a02UartSnooze(s_Uart, true) == false)
 	{
 		printf("Snooze reception refused: HOCO at 24 or 32 MHz, 4800 or 9600 bps\r\n");
-		while (1) __WFE();
+		while (1)
+		{
+			__WFE();
+		}
 	}
 
-	uint32_t wakes = 0;
+	wakes = 0;
 
 	while (1)
 	{
-		uint8_t buf[16];
-		int n = s_Uart.Rx(buf, sizeof(buf));
+		n = s_Uart.Rx(buf, sizeof(buf));
 
 		if (n > 0)
 		{
@@ -151,7 +163,7 @@ int main()
 			printf("Wake-up %lu:", (unsigned long)wakes);
 		}
 
-		for (int i = 0; i < n; i++)
+		for (i = 0; i < n; i++)
 		{
 			printf(" 0x%02X", buf[i]);
 			if (buf[i] >= 0x20 && buf[i] < 0x7F)

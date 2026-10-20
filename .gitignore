@@ -128,3 +128,12 @@ __pycache__/
 
 # Eclipse/IOcomposer local project settings
 **/.settings/
+
+# Build output of the Eclipse/IOcomposer configurations and of the NCS examples
+**/ioc/Debug*/
+**/ioc/Release*/
+**/exemples/*_NCS/build_*/
+*.o
+*.elf
+*.map
+!site/**/*.map

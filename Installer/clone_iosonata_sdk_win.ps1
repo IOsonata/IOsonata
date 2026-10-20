@@ -120,6 +120,68 @@ function Sync-Repository {
     }
 }
 
+# --- Function: Clone a repository pinned to a tag ---
+# A checkout that is already at the tag is kept. Any other checkout is
+# replaced, so a pinned repository never follows the default branch.
+function Sync-PinnedRepository {
+    param(
+        [string]$Url,
+        [string]$Target,
+        [string]$Ref
+    )
+
+    if ((Test-Path $Target) -and ($Mode -ne "force")) {
+        Push-Location $Target
+        try {
+            $current = git describe --tags --exact-match 2>$null
+        } finally {
+            Pop-Location
+        }
+        if ($current -eq $Ref) {
+            Write-Host "   `[INFO`] Keeping $Target at $Ref" -ForegroundColor Yellow
+            return
+        }
+    }
+    if (Test-Path $Target) {
+        Remove-Item -Path $Target -Recurse -Force
+    }
+    Write-Host "   `[INFO`] Cloning $Target at $Ref ..." -ForegroundColor Blue
+    git clone --depth=1 --branch $Ref $Url $Target
+}
+
+# STM32CubeWBA holds the platform files of the ST BLE link layer that the
+# STM32WBA examples build. Only the folders they use are checked out, with
+# the HAL and CMSIS device submodules.
+function Sync-CubeWba {
+    $Target = Join-Path $EXT "STM32CubeWBA"
+    $Ref = "v1.10.0"
+
+    if ((Test-Path $Target) -and ($Mode -ne "force")) {
+        Push-Location $Target
+        try {
+            $current = git describe --tags --exact-match 2>$null
+        } finally {
+            Pop-Location
+        }
+        if (($current -eq $Ref) -and (Test-Path "$Target\Drivers\STM32WBAxx_HAL_Driver\Inc\stm32wbaxx_hal.h")) {
+            Write-Host "   `[INFO`] Keeping $Target at $Ref" -ForegroundColor Yellow
+            return
+        }
+    }
+    if (Test-Path $Target) {
+        Remove-Item -Path $Target -Recurse -Force
+    }
+    Write-Host "   `[INFO`] Cloning $Target at $Ref ..." -ForegroundColor Blue
+    git clone --depth=1 --branch $Ref --filter=blob:none --sparse https://github.com/STMicroelectronics/STM32CubeWBA.git $Target
+    Push-Location $Target
+    try {
+        git sparse-checkout set Projects/Common/WPAN Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_p2pServer Utilities Drivers
+        git submodule update --init --depth 1 Drivers/STM32WBAxx_HAL_Driver Drivers/CMSIS/Device/ST/STM32WBAxx
+    } finally {
+        Pop-Location
+    }
+}
+
 # --- IOsonata Library Build Function ---
 
 # ---------------------------------------------------------
@@ -151,7 +213,6 @@ $repos = @{
     "https://github.com/lwip-tcpip/lwip.git" = "lwip"
     "https://github.com/hathach/tinyusb.git" = "tinyusb"
     "https://github.com/Mbed-TLS/TF-PSA-Crypto.git" = "TF-PSA-Crypto"
-    "https://github.com/STMicroelectronics/stm32-mw-wpan.git"
 }
 
 foreach ($repo in $repos.GetEnumerator()) {
@@ -165,6 +226,13 @@ foreach ($repo in $repos.GetEnumerator()) {
 Write-Host ""
 Write-Host ">>> Cloning FreeRTOS-Kernel..." -ForegroundColor Blue
 Sync-Repository -Url "https://github.com/FreeRTOS/FreeRTOS-Kernel.git" -Target "$EXT\FreeRTOS-Kernel" -RecurseSubmodules $false
+
+# ST BLE middleware and the platform files it needs, matching versions:
+# STM32CubeWBA v1.10.0 uses stm32-mw-wpan v2.10.0.
+Write-Host ""
+Write-Host ">>> Cloning ST BLE middleware..." -ForegroundColor Blue
+Sync-PinnedRepository -Url "https://github.com/STMicroelectronics/stm32-mw-wpan.git" -Target "$EXT\stm32-mw-wpan" -Ref "v2.10.0"
+Sync-CubeWba
 
 Write-Host ""
 Write-Host "   `[OK`] All repositories cloned successfully!" -ForegroundColor Green
@@ -513,6 +581,7 @@ Write-Host "  - lvgl"
 Write-Host "  - lwip"
 Write-Host "  - FreeRTOS-Kernel"
 Write-Host "  - tinyusb"
+Write-Host "  - stm32-mw-wpan v2.10.0 and STM32CubeWBA v1.10.0 (pinned)"
 Write-Host ""
 
 if ($Eclipse -and (Test-Path "$env:ProgramFiles\Eclipse Embedded CDT\eclipse.ini")) {

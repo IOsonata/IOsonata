@@ -379,4 +379,4 @@ bool UsbDescRegister(int DevNo, UsbDeviceClass *pClass,
 
 /** @} End of group USB */
 
-#endif	// __USB_H__
+#endif

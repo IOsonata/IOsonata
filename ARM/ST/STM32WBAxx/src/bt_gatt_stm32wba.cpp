@@ -19,11 +19,7 @@ BtGattSrvcAdd in bt_gatt.cpp is weak; this strong override replaces it on WBA.
 
 #include "stm32wbaxx.h"
 #include "stm32wbaxx_hal.h"
-#include "ble_types.h"
-#include "ble_std.h"
-#include "ble_defs.h"
-#include "ble_gatt_aci.h"
-#include "ble_events.h"
+#include "bt_wba_stack.h"
 
 #include "bluetooth/bt_gatt.h"
 #include "bluetooth/bt_att.h"
@@ -31,6 +27,9 @@ BtGattSrvcAdd in bt_gatt.cpp is weak; this strong override replaces it on WBA.
 #include "bluetooth/bt_peer.h"
 #include "bluetooth/bt_app.h"
 #include "bluetooth/bt_uuid.h"
+
+BTGAP_SECTYPE BtAppSecTypeGet(void);
+
 
 #define WBA_CHAR_VALUE_OFFSET		1
 #define WBA_CHAR_CCCD_OFFSET		2
@@ -65,7 +64,7 @@ static uint32_t WbaCharSecType(const BtGattSrvc_t *pSrvc,
 	{
 		return pSrvc->SecType;
 	}
-	return g_BtAppData.SecType;
+	return BtAppSecTypeGet();
 }
 
 // ACI attribute permissions can require encryption or authentication, but the
@@ -75,7 +74,7 @@ static uint32_t WbaCharSecType(const BtGattSrvc_t *pSrvc,
 // cannot enforce.
 static bool WbaSecTypeSupported(uint32_t SecType)
 {
-	uint32_t app = g_BtAppData.SecType;
+	uint32_t app = BtAppSecTypeGet();
 
 	switch (SecType)
 	{
@@ -105,6 +104,17 @@ static bool WbaGattCharAdd(BtGattSrvc_t * const pSrvc,
 {
 	Char_UUID_t uuid;
 	uint8_t uuidType;
+	uint8_t baseidx = pSrvc->Uuid.BaseIdx;
+
+	if (pChar->pUuidBase != nullptr)
+	{
+		int idx = BtUuidAddBase(pChar->pUuidBase);
+		if (idx < 0)
+		{
+			return false;
+		}
+		baseidx = (uint8_t)idx;
+	}
 
 	// A characteristic with a base of its own, such as SMP's, whose
 	// characteristic and service UUIDs share no base.
@@ -145,6 +155,7 @@ static bool WbaGattCharAdd(BtGattSrvc_t * const pSrvc,
 		return false;
 	}
 
+	pChar->BaseUuidIdx = baseidx;
 	pChar->Hdl = charHdl;
 	pChar->ValHdl = charHdl + WBA_CHAR_VALUE_OFFSET;
 	if (pChar->Property &
@@ -182,9 +193,16 @@ bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)
 
 	Service_UUID_t uuid;
 	uint8_t uuidType;
+	uint8_t baseidx = 0;
 
 	if (pSrvc->bCustom)
 	{
+		int idx = BtUuidAddBase(pSrvc->UuidBase);
+		if (idx < 0)
+		{
+			return false;
+		}
+		baseidx = (uint8_t)idx;
 		uuidType = UUID_TYPE_128;
 		memcpy(uuid.Service_UUID_128, pSrvc->UuidBase, 16);
 		uuid.Service_UUID_128[12] = (uint8_t)(pSrvc->UuidSrvc & 0xFF);
@@ -214,6 +232,7 @@ bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)
 	{
 		return false;
 	}
+	pSrvc->Uuid = {baseidx, BT_UUID_TYPE_16, {pSrvc->UuidSrvc}};
 	pSrvc->Hdl = srvcHdl;
 
 	for (int i = 0; i < pSrvc->NbChar; i++)
@@ -225,6 +244,43 @@ bool BtGattSrvcAdd(BtGattSrvc_t *pSrvc)
 	}
 
 	BtGattInsertSrvcList(pSrvc);
+	return true;
+}
+
+// ST owns the attribute value storage. Update it without sending; the common
+// BtAppNotify/BtAppIndicate helpers send separately to each subscribed link.
+bool BtGattCharSetValue(BtGattChar_t *pChar, void * const pVal, size_t Len)
+{
+	if (pChar == nullptr || pChar->pSrvc == nullptr ||
+		pChar->Hdl == BT_ATT_HANDLE_INVALID ||
+		pChar->ValHdl == BT_ATT_HANDLE_INVALID ||
+		(Len > 0 && pVal == nullptr) || Len > pChar->MaxDataLen ||
+		Len > 512)
+	{
+		return false;
+	}
+
+	uint8_t dummy = 0;
+	const uint8_t *p = Len > 0 ? (const uint8_t *)pVal : &dummy;
+	size_t offset = 0;
+	do
+	{
+		size_t count = Len - offset;
+		if (count > 240)
+		{
+			count = 240;
+		}
+		tBleStatus status = aci_gatt_update_char_value_ext(0x0FFF,
+				pChar->pSrvc->Hdl, pChar->Hdl, 0x00, (uint16_t)Len,
+				(uint16_t)offset, (uint8_t)count, p + offset);
+		if (status != BLE_STATUS_SUCCESS)
+		{
+			return false;
+		}
+		offset += count;
+	} while (offset < Len);
+
+	pChar->ValueLen = (uint16_t)Len;
 	return true;
 }
 
@@ -309,21 +365,45 @@ bool BtGattCharIndicate(uint16_t ConnHdl, BtGattChar_t *pChar,
 	return true;
 }
 
-void BtGattWbaNotificationComplete(uint16_t ConnHdl, uint16_t AttrHdl)
+// The head of the send queue of a link is the notification waiting for its
+// completion event.
+static bool BtGattWbaNotificationHead(BtDevice_t *pConn, uint16_t AttrHdl)
 {
-	BtDevice_t *pConn = BtPeerFindByHdl(ConnHdl);
 	if (pConn == nullptr || pConn->TxPendCount == 0)
 	{
-		return;
+		return false;
 	}
 
 	auto *pPend = &pConn->TxPend[pConn->TxPendHead];
 	BtGattChar_t *pChar = (BtGattChar_t *)pPend->pChar;
-	if (pChar == nullptr || pPend->Remain != 1 ||
-		(AttrHdl != pChar->Hdl && AttrHdl != pChar->ValHdl))
+
+	return pChar != nullptr && pPend->Remain == 1 &&
+		(AttrHdl == pChar->Hdl || AttrHdl == pChar->ValHdl);
+}
+
+// ConnHdl is BT_CONN_HDL_INVALID when the event does not name the link, which
+// is the case of the ACI notification complete event of the CubeWBA 1.10.0 stack.
+// The first link whose head of the send queue is the attribute completes.
+void BtGattWbaNotificationComplete(uint16_t ConnHdl, uint16_t AttrHdl)
+{
+	if (ConnHdl != BT_CONN_HDL_INVALID)
 	{
+		if (BtGattWbaNotificationHead(BtPeerFindByHdl(ConnHdl), AttrHdl))
+		{
+			BtGattSendCompleted(ConnHdl, 1);
+		}
 		return;
 	}
 
-	BtGattSendCompleted(ConnHdl, 1);
+	for (uint16_t i = 0; i < BtPeerCount(); i++)
+	{
+		BtDevice_t *pConn = BtPeerSlot(i);
+
+		if (pConn != nullptr && pConn->Conn.Hdl != BT_CONN_HDL_INVALID &&
+			BtGattWbaNotificationHead(pConn, AttrHdl))
+		{
+			BtGattSendCompleted(pConn->Conn.Hdl, 1);
+			return;
+		}
+	}
 }

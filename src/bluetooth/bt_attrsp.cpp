@@ -535,6 +535,8 @@ void BtAttProcessRsp(uint16_t ConnHdl, BtAttReqRsp_t * const pRspAtt, int RspLen
 		return;
 	}
 
+	const bool writeRequest = pPeer->AttReqOpcode == BT_ATT_OPCODE_ATT_WRITE_REQ;
+
 	// A structurally valid matching response completes the request. Release
 	// before dispatch so discovery can issue the next request immediately.
 	pPeer->bAttReqPending = false;
@@ -546,6 +548,10 @@ void BtAttProcessRsp(uint16_t ConnHdl, BtAttReqRsp_t * const pRspAtt, int RspLen
 	{
 		case BT_ATT_OPCODE_ATT_ERROR_RSP:
 			(void)BtAttProcessError(ConnHdl, pRspAtt, RspLen);
+			if (writeRequest)
+			{
+				BtAppEvtWriteCompleted(ConnHdl, false);
+			}
 			break;
 
 		case BT_ATT_OPCODE_ATT_EXCHANGE_MTU_RSP:
@@ -595,6 +601,12 @@ void BtAttProcessRsp(uint16_t ConnHdl, BtAttReqRsp_t * const pRspAtt, int RspLen
 		case BT_ATT_OPCODE_ATT_READ_BLOB_RSP:
 		case BT_ATT_OPCODE_ATT_READ_MULTIPLE_RSP:
 		case BT_ATT_OPCODE_ATT_WRITE_RSP:
+			if (writeRequest)
+			{
+				BtAppEvtWriteCompleted(ConnHdl, true);
+			}
+			break;
+
 		case BT_ATT_OPCODE_ATT_PREPARE_WRITE_RSP:
 		case BT_ATT_OPCODE_ATT_EXECUTE_WRITE_RSP:
 		case BT_ATT_OPCODE_ATT_READ_MULTIPLE_VARIABLE_RSP:

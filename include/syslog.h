@@ -32,7 +32,8 @@
  CCCC : code, hexadecimal.
  detail : optional caller string.
 
- The timestamp field is emitted only when a Timer is configured.
+ The timestamp field is emitted only when a Timer is configured. SysLogPrintf
+ lines get a leading [milliseconds] in the same case.
 
  Usage :
 

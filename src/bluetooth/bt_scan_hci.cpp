@@ -26,6 +26,19 @@ Copyright (c) 2022, I-SYST inc., all rights reserved.
 #include "bluetooth/bt_hci.h"
 #include "bluetooth/bt_hci_ctlr.h"
 
+static bool s_bScanning;
+
+bool BtScanIsActive(void)
+{
+	return s_bScanning;
+}
+
+void BtScanEnded(void)
+{
+	s_bScanning = false;
+}
+
+
 // Default for a controller port with nothing to switch on for the central
 // and observer roles. A port that has, defines it.
 __attribute__((weak)) void BtHciCtlrCentralSupport(void)
@@ -42,16 +55,16 @@ void BtAppScan()
 {
 	if (BtGapScanStart(NULL, 0))
 	{
-		g_BtAppData.bScan = true;
+		s_bScanning = true;
 	}
 }
 
 void BtAppScanStop()
 {
-	if (g_BtAppData.bScan == true)
+	if (s_bScanning == true)
 	{
 		BtGapScanStop();
-		g_BtAppData.bScan = false;
+		s_bScanning = false;
 	}
 }
 

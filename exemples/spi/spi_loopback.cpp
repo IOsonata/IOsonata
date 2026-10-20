@@ -100,17 +100,7 @@ static volatile bool s_SpiDone;
 static volatile int s_SpiCount;
 
 static int SpiEvent(DevIntrf_t * const pDev, DEVINTRF_EVT Event,
-				   uint8_t *pBuffer, int Length)
-{
-	(void)pDev;
-	(void)pBuffer;
-	if (Event == DEVINTRF_EVT_COMPLETED)
-	{
-		s_SpiCount = Length;
-		s_SpiDone = true;
-	}
-	return 0;
-}
+				   uint8_t *pBuffer, int Length);
 
 static const IOPinCfg_t s_SpiMasterPins[] = {
 	{SPI_MASTER_SCK_PORT, SPI_MASTER_SCK_PIN,
@@ -153,12 +143,27 @@ SPISoft g_SpiMaster;
 SPI g_SpiMaster;
 #endif
 
+static int SpiEvent(DevIntrf_t * const pDev, DEVINTRF_EVT Event,
+				   uint8_t *pBuffer, int Length)
+{
+	(void)pDev;
+	(void)pBuffer;
+	if (Event == DEVINTRF_EVT_COMPLETED)
+	{
+		s_SpiCount = Length;
+		s_SpiDone = true;
+	}
+	return 0;
+}
+
 static int SpiWait(int Count)
 {
+	uint32_t timeout;
+
 	if (Count >= 0)
 		return Count;
 	// Keep timeout bounded even if the completion interrupt never arrives.
-	uint32_t timeout = 10000000U;
+	timeout = 10000000U;
 	while (!s_SpiDone && --timeout != 0U)
 		__NOP();
 	if (!s_SpiDone)
@@ -183,6 +188,21 @@ void HardwareInit()
 
 int main()
 {
+	const uint8_t patterns[] = { 0x00, 0xFF, 0x55, 0xAA, 0xA5, 0x3C };
+	const uint8_t command[] = { 0x9F, 0x12, 0x34 };
+	uint8_t rx[16];
+	uint8_t longrx[129];
+	uint8_t tx[129];
+	SPICfg_t cfg;
+	bool pass;
+	bool initialized;
+	int count;
+	bool match;
+	int pending;
+	int mode;
+	unsigned p;
+	unsigned i;
+
 	HardwareInit();
 	printf("SPI master %s DMA=%d INT=%d\r\n",
 		SPI_MASTER_SOFTWARE ? "SPISoft" : "hardware",
@@ -190,15 +210,13 @@ int main()
 #ifdef SPI_LOOPBACK_WIRING
 	printf("%s\r\n", SPI_LOOPBACK_WIRING);
 #endif
-	const uint8_t patterns[] = { 0x00, 0xFF, 0x55, 0xAA, 0xA5, 0x3C };
-	uint8_t rx[16];
-	bool pass = true;
-	for (int mode = 0; mode < 4; ++mode)
+	pass = true;
+	for (mode = 0; mode < 4; ++mode)
 	{
-		bool initialized = true;
-		for (unsigned p = 0; p < sizeof(patterns); ++p)
+		initialized = true;
+		for (p = 0; p < sizeof(patterns); ++p)
 		{
-			SPICfg_t cfg = s_SpiMasterCfg;
+			cfg = s_SpiMasterCfg;
 			cfg.ClkPol = (mode & 2) ? SPICLKPOL_LOW : SPICLKPOL_HIGH;
 			cfg.DataPhase = (mode & 1) ?
 				SPIDATAPHASE_SECOND_CLK : SPIDATAPHASE_FIRST_CLK;
@@ -218,14 +236,14 @@ int main()
 			// Fill with the inverse so a missing receive write cannot pass.
 			memset(rx, (uint8_t)~patterns[p], sizeof(rx));
 			s_SpiDone = false;
-			const int count = SpiWait(g_SpiMaster.Rx(0, rx, sizeof(rx)));
-			bool match = count == (int)sizeof(rx);
-			for (unsigned i = 0; i < sizeof(rx); ++i)
+			count = SpiWait(g_SpiMaster.Rx(0, rx, sizeof(rx)));
+			match = count == (int)sizeof(rx);
+			for (i = 0; i < sizeof(rx); ++i)
 				if (rx[i] != patterns[p])
 					match = false;
 
 			printf("RX %d/%d expected=%02x: ", count, (int)sizeof(rx), patterns[p]);
-			for (unsigned i = 0; i < sizeof(rx); ++i)
+			for (i = 0; i < sizeof(rx); ++i)
 				printf("%02x ", rx[i]);
 			printf("%s\r\n", match ? "PASS" : "FAIL");
 			pass = pass && match;
@@ -233,12 +251,11 @@ int main()
 		if (!initialized)
 			break;
 		// Cross multiple PDCA chunks and check the final partial chunk.
-		uint8_t longrx[129];
 		memset(longrx, 0, sizeof(longrx));
 		s_SpiDone = false;
-		int count = SpiWait(g_SpiMaster.Rx(0, longrx, sizeof(longrx)));
-		bool match = count == (int)sizeof(longrx);
-		for (unsigned i = 0; i < sizeof(longrx); ++i)
+		count = SpiWait(g_SpiMaster.Rx(0, longrx, sizeof(longrx)));
+		match = count == (int)sizeof(longrx);
+		for (i = 0; i < sizeof(longrx); ++i)
 			if (longrx[i] != patterns[sizeof(patterns) - 1])
 				match = false;
 		printf("Long RX %d/%d %s\r\n", count, (int)sizeof(longrx),
@@ -246,11 +263,10 @@ int main()
 		pass = pass && match;
 
 		// TX must drain receive data and leave the interface ready for RX.
-		uint8_t tx[129];
-		for (unsigned i = 0; i < sizeof(tx); ++i)
+		for (i = 0; i < sizeof(tx); ++i)
 			tx[i] = (uint8_t)i;
 		s_SpiDone = false;
-		int pending = g_SpiMaster.Tx(0, tx, sizeof(tx));
+		pending = g_SpiMaster.Tx(0, tx, sizeof(tx));
 		// An asynchronous driver must already own its copy of this buffer.
 		memset(tx, 0, sizeof(tx));
 		count = SpiWait(pending);
@@ -260,12 +276,11 @@ int main()
 		pass = pass && match;
 
 		// Exercise generic command -> RX while CS remains asserted.
-		const uint8_t command[] = { 0x9F, 0x12, 0x34 };
 		memset(rx, 0, sizeof(rx));
 		s_SpiDone = false;
 		count = SpiWait(g_SpiMaster.Read(0, command, sizeof(command), rx, sizeof(rx)));
 		match = count == (int)sizeof(rx);
-		for (unsigned i = 0; i < sizeof(rx); ++i)
+		for (i = 0; i < sizeof(rx); ++i)
 			if (rx[i] != patterns[sizeof(patterns) - 1])
 				match = false;
 		printf("Command RX %d/%d %s\r\n", count, (int)sizeof(rx),

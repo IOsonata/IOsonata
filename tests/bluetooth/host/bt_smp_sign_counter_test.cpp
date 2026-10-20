@@ -369,6 +369,12 @@ void TestRepeatedAttemptSuccessPreservesIdentityPenalty()
 
 	// Pairing then reveals a stable identity and the bond is installed before
 	// the success notification. The one-second penalty must migrate, not vanish.
+	// An identity address is distributed together with the IRK, and the bond
+	// resolves a connection by identity only when it holds one.
+	for (size_t i = 0; i < sizeof(s_Keys.Irk); ++i)
+	{
+		s_Keys.Irk[i] = static_cast<uint8_t>(0xA0U + i);
+	}
 	s_Keys.IdAddrType = BTADDR_TYPE_RAND;
 	std::memcpy(s_Keys.IdAddr, identity, sizeof(identity));
 	AddBond();
@@ -376,6 +382,58 @@ void TestRepeatedAttemptSuccessPreservesIdentityPenalty()
 
 	s_Peer.Conn.PeerAddrType = BTADDR_TYPE_RANDOM_STATIC;
 	std::memcpy(s_Peer.Conn.PeerAddr, identity, sizeof(identity));
+	BT_CHECK(s_Test, !BtSmpPairingAttemptAllowed(kConnHdl, base + 500U));
+	BT_CHECK(s_Test, BtSmpPairingAttemptAllowed(kConnHdl, base + 1000U));
+}
+
+// The identity address is distributed without an IRK. The bond record keeps
+// an all zero IRK then, the same as a zero IRK distributed by the peer, and
+// does not resolve the identity address. The migrated penalty must still
+// apply when the peer connects with its identity address, whatever HCI type
+// reports it.
+static void RunIdentityWithoutIrk(uint8_t ConnType)
+{
+	ResetHarness(true);
+
+	const uint8_t raw[6] = { 0x21, 0x32, 0x43, 0x54, 0x65, 0x46 };
+	const uint8_t identity[6] = { 0x31, 0x42, 0x53, 0x64, 0x75, 0xC6 };
+	s_Peer.Conn.PeerAddrType = BTADDR_TYPE_RAND;
+	std::memcpy(s_Peer.Conn.PeerAddr, raw, sizeof(raw));
+
+	const uint32_t base = 5U * BT_SMP_REPEAT_DECAY_MS + 500000U;
+	BtSmpPairingAttemptFailed(kConnHdl, base);
+
+	s_Keys.IdAddrType = BTADDR_TYPE_RAND;
+	std::memcpy(s_Keys.IdAddr, identity, sizeof(identity));
+	AddBond();
+	BtSmpPairingAttemptSucceeded(kConnHdl);
+
+	s_Peer.Conn.PeerAddrType = ConnType;
+	std::memcpy(s_Peer.Conn.PeerAddr, identity, sizeof(identity));
+	BT_CHECK(s_Test, !BtSmpPairingAttemptAllowed(kConnHdl, base + 500U));
+	BT_CHECK(s_Test, BtSmpPairingAttemptAllowed(kConnHdl, base + 1000U));
+}
+
+void TestRepeatedAttemptIdentityWithoutIrk()
+{
+	RunIdentityWithoutIrk(BTADDR_TYPE_RANDOM_STATIC);
+	RunIdentityWithoutIrk(BTADDR_TYPE_RAND);
+}
+
+// Failures reported under one HCI type of an identity address count for the
+// other: random static reported as RANDOM_STATIC, then as RAND.
+void TestRepeatedAttemptIdentityTypeAlias()
+{
+	ResetHarness(true);
+
+	const uint8_t identity[6] = { 0x11, 0x22, 0x33, 0x44, 0x55, 0xC7 };
+	s_Peer.Conn.PeerAddrType = BTADDR_TYPE_RANDOM_STATIC;
+	std::memcpy(s_Peer.Conn.PeerAddr, identity, sizeof(identity));
+
+	const uint32_t base = 6U * BT_SMP_REPEAT_DECAY_MS + 600000U;
+	BtSmpPairingAttemptFailed(kConnHdl, base);
+
+	s_Peer.Conn.PeerAddrType = BTADDR_TYPE_RAND;
 	BT_CHECK(s_Test, !BtSmpPairingAttemptAllowed(kConnHdl, base + 500U));
 	BT_CHECK(s_Test, BtSmpPairingAttemptAllowed(kConnHdl, base + 1000U));
 }
@@ -425,19 +483,18 @@ void TestRepeatedAttemptSaturationPreservesPenalty()
 
 } // namespace
 
-extern "C" {
 
-BtDevice_t *BtPeerFindByHdl(uint16_t Hdl)
+extern "C" BtDevice_t *BtPeerFindByHdl(uint16_t Hdl)
 {
 	return Hdl == kConnHdl ? &s_Peer : nullptr;
 }
 
-bool BtSmpRpaResolve(const uint8_t[16], const uint8_t[6])
+extern "C" bool BtSmpRpaResolve(const uint8_t[16], const uint8_t[6])
 {
 	return false;
 }
 
-void BtSmpSignMac(const uint8_t Csrk[16], const uint8_t *pMsg,
+extern "C" void BtSmpSignMac(const uint8_t Csrk[16], const uint8_t *pMsg,
 				  size_t Len, uint8_t Mac[8])
 {
 	uint32_t a = 0x811C9DC5U;
@@ -459,7 +516,7 @@ void BtSmpSignMac(const uint8_t Csrk[16], const uint8_t *pMsg,
 	PutLe32(Mac + 4, b);
 }
 
-void CryptoSecureWipe(void *pData, size_t Len)
+extern "C" void CryptoSecureWipe(void *pData, size_t Len)
 {
 	volatile uint8_t *p = static_cast<volatile uint8_t *>(pData);
 	while (Len-- > 0)
@@ -468,7 +525,7 @@ void CryptoSecureWipe(void *pData, size_t Len)
 	}
 }
 
-void BtSmpBondSave(int Slot, const void *pBond, size_t Len)
+extern "C" void BtSmpBondSave(int Slot, const void *pBond, size_t Len)
 {
 	s_SaveCount++;
 	s_LastSlot = Slot;
@@ -484,13 +541,12 @@ void BtSmpBondSave(int Slot, const void *pBond, size_t Len)
 	}
 }
 
-void BtSmpBondErase(void)
+extern "C" void BtSmpBondErase(void)
 {
 	// Simulated power cycles clear RAM through BtSmpBondClearAll while the test
 	// keeps a copied committed record for the subsequent restore.
 }
 
-} // extern "C"
 
 int main()
 {
@@ -516,5 +572,11 @@ int main()
 			   TestRepeatedAttemptSuccessPreservesIdentityPenalty);
 	s_Test.Run("repeated-attempt saturation preserves active penalties",
 			   TestRepeatedAttemptSaturationPreservesPenalty);
+	// The attempt table is not cleared between tests: these run last, with
+	// later times than the saturation test.
+	s_Test.Run("identity without IRK keeps the penalty",
+			   TestRepeatedAttemptIdentityWithoutIrk);
+	s_Test.Run("identity address types share the penalty",
+			   TestRepeatedAttemptIdentityTypeAlias);
 	return s_Test.Finish();
 }

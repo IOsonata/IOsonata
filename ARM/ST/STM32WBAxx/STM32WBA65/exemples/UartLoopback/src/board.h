@@ -48,11 +48,11 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 // USART2 on the Arduino D0/D1 pins, also wired to the second ST-LINK virtual
 // COM port. For USART1 on the first ST-LINK virtual COM port use
 // BOARD_VCP_DEVNO and BOARD_VCP_PINS.
-#define UART_DEVNO			BOARD_UART_DEVNO
-#define UART_PINS			BOARD_UART_PINS
+#define UART_DEVNO			BOARD_VCP_DEVNO
+#define UART_PINS			BOARD_VCP_PINS
 
-// The core runs from HSI16. At the 1 Mbaud default a character takes 160 CPU
+// The core runs at 100 MHz. At the 1 Mbaud default a character takes 100 CPU
 // cycles, the interrupt only RX path can miss characters. Receive with GPDMA.
 #define UART_DMA_MODE		true
 
-#endif // __BOARD_H__
+#endif

@@ -41,5 +41,10 @@
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/exemples/spi/spi_master_slave.cpp</locationURI>
 		</link>
+		<link>
+			<name>src/spi_master_slave_diag.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-1-PROJECT_LOC/src/spi_master_slave_diag.cpp</locationURI>
+		</link>
 	</linkedResources>
 </projectDescription>

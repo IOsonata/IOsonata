@@ -259,18 +259,6 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #endif
 
-typedef enum {
-	RTC0_LFCLK = 0,
-	RTC1_LFCLK,
-	RTC2_LFCLK,
-	TIMER0_HFCLK,
-	TIMER1_HFCLK,
-	TIMER2_HFCLK,
-	TIMER3_HFCLK,
-	TIMER4_HFCLK
-} TIMER_SOURCES;
-
-
 #define MAX_FLASH_DATA_LEN		233 // Max data bytes to write to flash per transaction
 									// must be smaller than SPI_PACKET_SIZE < BLE_MTU_SIZE
 #pragma pack(push,1)

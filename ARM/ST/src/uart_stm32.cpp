@@ -76,6 +76,10 @@ SOFTWARE.
 
 #include "stm32.h"
 
+#if defined(STM32WBA)
+#include "gpdma_stm32wba.h"
+#endif
+
 #include "istddef.h"
 #include "coredev/iopincfg.h"
 #include "coredev/uart.h"
@@ -161,6 +165,10 @@ SOFTWARE.
 #define ST_RCC_APB1ENR			APB1ENR1
 #define ST_RCC_APB1RSTR			APB1RSTR1
 #define ST_RCC_APB1EN(Inst)		RCC_APB1ENR1_##Inst##EN
+#elif defined(RCC_APB1LENR_TIM2EN)
+#define ST_RCC_APB1ENR			APB1LENR
+#define ST_RCC_APB1RSTR			APB1LRSTR
+#define ST_RCC_APB1EN(Inst)		RCC_APB1LENR_##Inst##EN
 #elif defined(RCC_APB1ENR_PWREN)
 #define ST_RCC_APB1ENR			APB1ENR
 #define ST_RCC_APB1RSTR			APB1RSTR
@@ -172,12 +180,14 @@ SOFTWARE.
 // SystemPeriphClockGet index of the APB2 instances. Parts with a single APB
 // prescaler have one PCLK. WBA has its prescalers in CFGR2 and LPUART1 on
 // APB7, index 2.
-#if defined(RCC_CFGR_PPRE2) || defined(RCC_CFGR2_PPRE2)
+#if defined(RCC_CFGR_PPRE2) || defined(RCC_CFGR2_PPRE2) || defined(RCC_D2CFGR_D2PPRE2)
 #define ST_PCLK_APB2			1
 #else
 #define ST_PCLK_APB2			0
 #endif
-#ifdef RCC_CFGR3_PPRE7
+#if defined(IOSONATA_STM32_H7)
+#define ST_PCLK_LPUART1			3
+#elif defined(RCC_CFGR3_PPRE7)
 #define ST_PCLK_LPUART1			2
 #else
 #define ST_PCLK_LPUART1			0
@@ -187,7 +197,14 @@ SOFTWARE.
 // peripheral reset does not clear it, boot code or an application may have
 // selected another clock. Instances without one (F1, F2, F4, most F0 USART2
 // and up) run from PCLK.
-#if defined(RCC_CCIPR_USART1SEL)
+#if defined(IOSONATA_STM32_H7)
+#define ST_RCC_USARTSELR		D2CCIP2R
+#define ST_RCC_USART1SEL		RCC_D2CCIP2R_USART16SEL
+#define ST_RCC_USART2SEL		RCC_D2CCIP2R_USART28SEL
+#define ST_RCC_USART3SEL		RCC_D2CCIP2R_USART28SEL
+#define ST_RCC_UART4SEL			RCC_D2CCIP2R_USART28SEL
+#define ST_RCC_UART5SEL			RCC_D2CCIP2R_USART28SEL
+#elif defined(RCC_CCIPR_USART1SEL)
 #define ST_RCC_USARTSELR		CCIPR
 #define ST_RCC_USART1SEL		RCC_CCIPR_USART1SEL
 #ifdef RCC_CCIPR_USART2SEL
@@ -235,6 +252,12 @@ SOFTWARE.
 #define ST_RCC_LPUART1EN		RCC_APB7ENR_LPUART1EN
 #define ST_RCC_LPUART1SELR		CCIPR3
 #define ST_RCC_LPUART1SEL_Pos	RCC_CCIPR3_LPUART1SEL_Pos
+#elif defined(LPUART1) && defined(RCC_APB4ENR_LPUART1EN)
+#define ST_RCC_LPUART1ENR		APB4ENR
+#define ST_RCC_LPUART1RSTR		APB4RSTR
+#define ST_RCC_LPUART1EN		RCC_APB4ENR_LPUART1EN
+#define ST_RCC_LPUART1SELR		D3CCIPR
+#define ST_RCC_LPUART1SEL_Pos	RCC_D3CCIPR_LPUART1SEL_Pos
 #elif defined(LPUART1)
 #error "uart_stm32.cpp: LPUART1 RCC names not mapped"
 #endif
@@ -273,8 +296,16 @@ typedef DMA_Stream_TypeDef StDmaChan_t;
 typedef DMA_Channel_TypeDef StDmaChan_t;
 #if defined(DMA_CTR2_REQSEL)
 #define ST_DMA_GPDMA
+#elif defined(STM32L4)
+// L4 and L4+: the channels and their vectors belong to the DMA channel
+// manager, shared with the I2C and SPI drivers
+#define ST_DMA_CHAN
 #endif
 #endif
+#endif
+
+#ifdef ST_DMA_CHAN
+#include "dma_stm32.h"
 #endif
 
 #ifdef ST_UART_DMA
@@ -323,7 +354,11 @@ typedef struct {
 #endif
 
 // LPUART kernel clock selection values and the HSI16 frequency
+#if defined(IOSONATA_STM32_H7)
+#define ST_LPUART_CLKSEL_MSK	7U
+#else
 #define ST_LPUART_CLKSEL_MSK	3U
+#endif
 #define ST_LPUART_CLKSEL_PCLK	0U
 #define ST_LPUART_CLKSEL_HSI16	2U
 #define ST_LPUART_CLKSEL_LSE	3U
@@ -431,6 +466,12 @@ enum {
 #endif
 #ifdef USART6
 	ST_USART6_IDX,
+#endif
+#ifdef UART7
+	ST_UART7_IDX,
+#endif
+#ifdef UART8
+	ST_UART8_IDX,
 #endif
 };
 
@@ -621,10 +662,38 @@ static Stm32UartDev_t s_Stm32UartDev[] = {
 		.pRccRstReg = &RCC->APB2RSTR,
 		.RccMask = RCC_APB2ENR_USART6EN,
 		.PclkIdx = ST_PCLK_APB2,
+#if defined(IOSONATA_STM32_H7)
+		.pClkSelReg = &RCC->D2CCIP2R,
+		.ClkSelMask = RCC_D2CCIP2R_USART16SEL,
+#endif
 #if defined(STM32F4)
 		.RxDma = { DMA2_Stream1, DMA2, 1, 5, DMA2_Stream1_IRQn },
 		.TxDma = { DMA2_Stream6, DMA2, 6, 5, DMA2_Stream6_IRQn },
 #endif
+	},
+#endif
+#if defined(IOSONATA_STM32_H7) && defined(UART7)
+	{
+		.pReg = UART7,
+		.IrqNo = UART7_IRQn,
+		.pRccEnReg = &RCC->APB1LENR,
+		.pRccRstReg = &RCC->APB1LRSTR,
+		.RccMask = RCC_APB1LENR_UART7EN,
+		.PclkIdx = 0,
+		.pClkSelReg = &RCC->D2CCIP2R,
+		.ClkSelMask = RCC_D2CCIP2R_USART28SEL,
+	},
+#endif
+#if defined(IOSONATA_STM32_H7) && defined(UART8)
+	{
+		.pReg = UART8,
+		.IrqNo = UART8_IRQn,
+		.pRccEnReg = &RCC->APB1LENR,
+		.pRccRstReg = &RCC->APB1LRSTR,
+		.RccMask = RCC_APB1LENR_UART8EN,
+		.PclkIdx = 0,
+		.pClkSelReg = &RCC->D2CCIP2R,
+		.ClkSelMask = RCC_D2CCIP2R_USART28SEL,
 	},
 #endif
 };
@@ -1194,6 +1263,30 @@ static void Stm32UartDmaVector(Stm32UartDev_t * const pDev)
 }
 #endif
 
+#ifdef ST_DMA_GPDMA
+// Channel interrupt of the GPDMA manager, the context is the instance
+static void Stm32UartGpdmaIrq(int Ch, void *pCtx)
+{
+	(void)Ch;
+	Stm32UartDmaVector((Stm32UartDev_t *)pCtx);
+}
+#endif
+
+#ifdef ST_DMA_CHAN
+// Channel interrupt of the DMA channel manager, the context is the instance
+static void Stm32UartChDmaIrq(int Ch, void *pCtx)
+{
+	(void)Ch;
+	Stm32UartDmaVector((Stm32UartDev_t *)pCtx);
+}
+
+// Channel number of the manager
+static inline int Stm32UartDmaChNo(const Stm32UartDma_t *pDma)
+{
+	return (pDma->pDma == DMA1 ? STM32_DMA_CH(1, 1) : STM32_DMA_CH(2, 1)) + pDma->Idx;
+}
+#endif
+
 // The vector passes its instance.
 static void Stm32UartIrqHandler(Stm32UartDev_t * const pDev)
 {
@@ -1347,6 +1440,7 @@ static uint32_t Stm32UartSetRate(DevIntrf_t * const pDev, uint32_t Rate)
 		// rates up to 16 MHz / 3, PCLK the ones above.
 		uint32_t clksel = ST_LPUART_CLKSEL_PCLK;
 
+#if !defined(IOSONATA_STM32_H7)
 		if (GetLowFreqOscType() == OSC_TYPE_XTAL && Rate <= GetLowFreqOscFreq() / 3U)
 		{
 			clksel = ST_LPUART_CLKSEL_LSE;
@@ -1361,6 +1455,7 @@ static uint32_t Stm32UartSetRate(DevIntrf_t * const pDev, uint32_t Rate)
 			fclk = ST_HSI16_FREQ;
 		}
 
+#endif
 		RCC->ST_RCC_LPUART1SELR = (RCC->ST_RCC_LPUART1SELR & ~(ST_LPUART_CLKSEL_MSK << ST_RCC_LPUART1SEL_Pos)) |
 								  (clksel << ST_RCC_LPUART1SEL_Pos);
 
@@ -1869,6 +1964,19 @@ UARTDev_t const *UARTGetInstance(int DevNo)
 	return DevNo >= 0 && DevNo < s_NbUartDev ? s_Stm32UartDev[DevNo].pUartDev : NULL;
 }
 
+#if defined(ST_DMA_GPDMA) || defined(ST_DMA_CHAN)
+static void Stm32UartDmaFree(Stm32UartDev_t *pDev)
+{
+#ifdef ST_DMA_GPDMA
+	WbaGpdmaFree(pDev->RxDma.Idx);
+	WbaGpdmaFree(pDev->TxDma.Idx);
+#else
+	Stm32DmaChFree(Stm32UartDmaChNo(&pDev->RxDma));
+	Stm32DmaChFree(Stm32UartDmaChNo(&pDev->TxDma));
+#endif
+}
+#endif
+
 bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 {
 	if (pDev == NULL || pCfg == NULL)
@@ -1897,6 +2005,15 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 		return false;
 	}
 
+	// Reject undersized caller buffers before changing the instance or DMA.
+	if ((pCfg->pRxMem != NULL && pCfg->RxMemSize > 0 &&
+		 pCfg->RxMemSize < (int)CFIFO_MEMSIZE(1)) ||
+		(pCfg->pTxMem != NULL && pCfg->TxMemSize > 0 &&
+		 pCfg->TxMemSize < (int)CFIFO_MEMSIZE(1)))
+	{
+		return false;
+	}
+
 	// The hardware word length includes the parity bit.
 	int wordbits = pCfg->DataBits + (pCfg->Parity != UART_PARITY_NONE ? 1 : 0);
 
@@ -1909,32 +2026,82 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 
 	Stm32UartDev_t *dev = &s_Stm32UartDev[pCfg->DevNo];
 	USART_TypeDef *reg = dev->pReg;
-#ifdef ST_UART_DMA
-	if (pCfg->bDMAMode && (dev->TxDma.pChan == NULL || dev->RxDma.pChan == NULL))
-	{
-		return false;
-	}
-	if (pCfg->bDMAMode && Stm32DmaInUse(&dev->TxDma) &&
-		(dev->pUartDev == NULL || dev->pUartDev != pDev))
-	{
-		return false;
-	}
-#else
-	if (pCfg->bDMAMode)
-	{
-		return false;
-	}
-#endif
 	uint32_t state = DisableInterrupt();
+#if defined(ST_DMA_GPDMA) || defined(ST_DMA_CHAN)
+	bool dmaOwned = dev->pUartDev != NULL && dev->pUartDev->DevIntrf.bDma;
+#endif
 
-	// An instance running for another UART object is not taken over.
+	// Reject another running owner before claiming or resetting its DMA.
 	if (dev->pUartDev != NULL && dev->pUartDev != pDev && (reg->CR1 & USART_CR1_UE))
 	{
 		EnableInterrupt(state);
 
 		return false;
 	}
+#ifdef ST_UART_DMA
+	if (pCfg->bDMAMode && (dev->TxDma.pChan == NULL || dev->RxDma.pChan == NULL))
+	{
+		EnableInterrupt(state);
 
+		return false;
+	}
+	if (pCfg->bDMAMode && Stm32DmaInUse(&dev->TxDma) &&
+		(dev->pUartDev == NULL || dev->pUartDev != pDev))
+	{
+		EnableInterrupt(state);
+
+		return false;
+	}
+#ifdef ST_DMA_GPDMA
+	// The channels are shared with the I2C and SPI drivers: the first to
+	// ask has them
+	if (pCfg->bDMAMode)
+	{
+		bool rx = WbaGpdmaClaim(dev->RxDma.Idx, Stm32UartGpdmaIrq, dev, pCfg->IntPrio, pCfg->bIntMode);
+
+		if (rx == false || WbaGpdmaClaim(dev->TxDma.Idx, Stm32UartGpdmaIrq, dev, pCfg->IntPrio, pCfg->bIntMode) == false)
+		{
+			if (rx && dmaOwned == false)
+			{
+				WbaGpdmaFree(dev->RxDma.Idx);
+			}
+
+			EnableInterrupt(state);
+
+			return false;
+		}
+	}
+#endif
+#ifdef ST_DMA_CHAN
+	// The channels are shared with the I2C and SPI drivers: the first to
+	// ask has them
+	if (pCfg->bDMAMode)
+	{
+		const int rxch = Stm32UartDmaChNo(&dev->RxDma);
+		bool rx = Stm32DmaChClaim(rxch, Stm32UartChDmaIrq, dev, pCfg->IntPrio, pCfg->bIntMode);
+
+		if (rx == false ||
+			Stm32DmaChClaim(Stm32UartDmaChNo(&dev->TxDma), Stm32UartChDmaIrq, dev, pCfg->IntPrio, pCfg->bIntMode) == false)
+		{
+			if (rx && dmaOwned == false)
+			{
+				Stm32DmaChFree(rxch);
+			}
+
+			EnableInterrupt(state);
+
+			return false;
+		}
+	}
+#endif
+#else
+	if (pCfg->bDMAMode)
+	{
+		EnableInterrupt(state);
+
+		return false;
+	}
+#endif
 	pDev->DevIntrf.pDevData = dev;
 	dev->pUartDev = pDev;
 	dev->pMem = &s_Stm32UartMem[pCfg->DevNo];
@@ -1990,6 +2157,12 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	// CFifoInit returns NULL when the supplied memory is too small.
 	if (pDev->hRxFifo == NULL || pDev->hTxFifo == NULL)
 	{
+#if defined(ST_DMA_GPDMA) || defined(ST_DMA_CHAN)
+		if (pCfg->bDMAMode && dmaOwned == false)
+		{
+			Stm32UartDmaFree(dev);
+		}
+#endif
 		*dev->pRccEnReg &= ~dev->RccMask;
 		EnableInterrupt(state);
 
@@ -2001,6 +2174,12 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	pDev->Rate = (int)Stm32UartSetRate(&pDev->DevIntrf, (uint32_t)pCfg->Rate);
 	if (pDev->Rate == 0)
 	{
+#if defined(ST_DMA_GPDMA) || defined(ST_DMA_CHAN)
+		if (pCfg->bDMAMode && dmaOwned == false)
+		{
+			Stm32UartDmaFree(dev);
+		}
+#endif
 		*dev->pRccEnReg &= ~dev->RccMask;
 		EnableInterrupt(state);
 
@@ -2160,71 +2339,8 @@ extern "C" void DMA1_Channel4_5_IRQHandler()
 }
 #endif
 #elif defined(STM32L4)
-#ifdef USART3
-extern "C" void DMA1_Channel2_IRQHandler()
-{
-	Stm32UartDmaVector(&s_Stm32UartDev[ST_USART3_IDX]);
-}
-
-extern "C" void DMA1_Channel3_IRQHandler()
-{
-	Stm32UartDmaVector(&s_Stm32UartDev[ST_USART3_IDX]);
-}
-#endif
-
-extern "C" void DMA1_Channel4_IRQHandler()
-{
-	Stm32UartDmaVector(&s_Stm32UartDev[ST_USART1_IDX]);
-}
-
-extern "C" void DMA1_Channel5_IRQHandler()
-{
-	Stm32UartDmaVector(&s_Stm32UartDev[ST_USART1_IDX]);
-}
-
-extern "C" void DMA1_Channel6_IRQHandler()
-{
-	Stm32UartDmaVector(&s_Stm32UartDev[ST_USART2_IDX]);
-}
-
-extern "C" void DMA1_Channel7_IRQHandler()
-{
-	Stm32UartDmaVector(&s_Stm32UartDev[ST_USART2_IDX]);
-}
-
-#ifdef UART5
-extern "C" void DMA2_Channel1_IRQHandler()
-{
-	Stm32UartDmaVector(&s_Stm32UartDev[ST_UART5_IDX]);
-}
-
-extern "C" void DMA2_Channel2_IRQHandler()
-{
-	Stm32UartDmaVector(&s_Stm32UartDev[ST_UART5_IDX]);
-}
-#endif
-
-#ifdef UART4
-extern "C" void DMA2_Channel3_IRQHandler()
-{
-	Stm32UartDmaVector(&s_Stm32UartDev[ST_UART4_IDX]);
-}
-
-extern "C" void DMA2_Channel5_IRQHandler()
-{
-	Stm32UartDmaVector(&s_Stm32UartDev[ST_UART4_IDX]);
-}
-#endif
-
-extern "C" void DMA2_Channel6_IRQHandler()
-{
-	Stm32UartDmaVector(&s_Stm32UartDev[ST_LPUART1_IDX]);
-}
-
-extern "C" void DMA2_Channel7_IRQHandler()
-{
-	Stm32UartDmaVector(&s_Stm32UartDev[ST_LPUART1_IDX]);
-}
+// The channel vectors are in the DMA channel manager (dma_stm32.cpp), which
+// calls Stm32UartChDmaIrq
 #elif defined(STM32G4)
 // DMAMUX1 routes any request to any channel. Two channels for each instance,
 // the six the smallest G4 parts have on each controller: USART1 DMA1 1 and
@@ -2369,52 +2485,8 @@ extern "C" void DMA2_Stream7_IRQHandler()
 }
 #elif defined(STM32WBA)
 // GPDMA1 takes any request on any channel. Two channels for each instance:
-// USART1 0 and 1, USART2 2 and 3, LPUART1 4 and 5, USART3 6 and 7.
-extern "C" void GPDMA1_Channel0_IRQHandler()
-{
-	Stm32UartDmaVector(&s_Stm32UartDev[ST_USART1_IDX]);
-}
-
-extern "C" void GPDMA1_Channel1_IRQHandler()
-{
-	Stm32UartDmaVector(&s_Stm32UartDev[ST_USART1_IDX]);
-}
-
-#ifdef USART2
-extern "C" void GPDMA1_Channel2_IRQHandler()
-{
-	Stm32UartDmaVector(&s_Stm32UartDev[ST_USART2_IDX]);
-}
-
-extern "C" void GPDMA1_Channel3_IRQHandler()
-{
-	Stm32UartDmaVector(&s_Stm32UartDev[ST_USART2_IDX]);
-}
-#endif
-
-#ifdef LPUART1
-extern "C" void GPDMA1_Channel4_IRQHandler()
-{
-	Stm32UartDmaVector(&s_Stm32UartDev[ST_LPUART1_IDX]);
-}
-
-extern "C" void GPDMA1_Channel5_IRQHandler()
-{
-	Stm32UartDmaVector(&s_Stm32UartDev[ST_LPUART1_IDX]);
-}
-#endif
-
-#ifdef USART3
-extern "C" void GPDMA1_Channel6_IRQHandler()
-{
-	Stm32UartDmaVector(&s_Stm32UartDev[ST_USART3_IDX]);
-}
-
-extern "C" void GPDMA1_Channel7_IRQHandler()
-{
-	Stm32UartDmaVector(&s_Stm32UartDev[ST_USART3_IDX]);
-}
-#endif
+// USART1 0 and 1, USART2 2 and 3, LPUART1 4 and 5, USART3 6 and 7. The
+// channel vectors are in the GPDMA manager, which calls Stm32UartGpdmaIrq.
 #endif
 
 void UARTSetCtrlLineState(UARTDev_t * const pDev, uint32_t LineState)
@@ -2484,4 +2556,19 @@ extern "C" void USART6_IRQHandler()
 	Stm32UartIrqHandler(&s_Stm32UartDev[ST_USART6_IDX]);
 }
 #endif
+#endif
+
+
+#if defined(IOSONATA_STM32_H7) && defined(UART7)
+extern "C" void UART7_IRQHandler(void)
+{
+	Stm32UartIrqHandler(&s_Stm32UartDev[ST_UART7_IDX]);
+}
+#endif
+
+#if defined(IOSONATA_STM32_H7) && defined(UART8)
+extern "C" void UART8_IRQHandler(void)
+{
+	Stm32UartIrqHandler(&s_Stm32UartDev[ST_UART8_IDX]);
+}
 #endif

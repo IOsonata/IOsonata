@@ -11,40 +11,38 @@
 #include "coredev/iopincfg.h"
 #include "coredev/uart.h"
 
-extern "C" {
-void IEL0_IRQHandler();
-void IEL1_IRQHandler();
-void IEL2_IRQHandler();
-void IEL3_IRQHandler();
-void IEL4_IRQHandler();
-void IEL5_IRQHandler();
-void IEL6_IRQHandler();
-void IEL7_IRQHandler();
-void IEL8_IRQHandler();
-void IEL9_IRQHandler();
-void IEL10_IRQHandler();
-void IEL11_IRQHandler();
-void IEL12_IRQHandler();
-void IEL13_IRQHandler();
-void IEL14_IRQHandler();
-void IEL15_IRQHandler();
-void IEL16_IRQHandler();
-void IEL17_IRQHandler();
-void IEL18_IRQHandler();
-void IEL19_IRQHandler();
-void IEL20_IRQHandler();
-void IEL21_IRQHandler();
-void IEL22_IRQHandler();
-void IEL23_IRQHandler();
-void IEL24_IRQHandler();
-void IEL25_IRQHandler();
-void IEL26_IRQHandler();
-void IEL27_IRQHandler();
-void IEL28_IRQHandler();
-void IEL29_IRQHandler();
-void IEL30_IRQHandler();
-void IEL31_IRQHandler();
-}
+extern "C" void IEL0_IRQHandler();
+extern "C" void IEL1_IRQHandler();
+extern "C" void IEL2_IRQHandler();
+extern "C" void IEL3_IRQHandler();
+extern "C" void IEL4_IRQHandler();
+extern "C" void IEL5_IRQHandler();
+extern "C" void IEL6_IRQHandler();
+extern "C" void IEL7_IRQHandler();
+extern "C" void IEL8_IRQHandler();
+extern "C" void IEL9_IRQHandler();
+extern "C" void IEL10_IRQHandler();
+extern "C" void IEL11_IRQHandler();
+extern "C" void IEL12_IRQHandler();
+extern "C" void IEL13_IRQHandler();
+extern "C" void IEL14_IRQHandler();
+extern "C" void IEL15_IRQHandler();
+extern "C" void IEL16_IRQHandler();
+extern "C" void IEL17_IRQHandler();
+extern "C" void IEL18_IRQHandler();
+extern "C" void IEL19_IRQHandler();
+extern "C" void IEL20_IRQHandler();
+extern "C" void IEL21_IRQHandler();
+extern "C" void IEL22_IRQHandler();
+extern "C" void IEL23_IRQHandler();
+extern "C" void IEL24_IRQHandler();
+extern "C" void IEL25_IRQHandler();
+extern "C" void IEL26_IRQHandler();
+extern "C" void IEL27_IRQHandler();
+extern "C" void IEL28_IRQHandler();
+extern "C" void IEL29_IRQHandler();
+extern "C" void IEL30_IRQHandler();
+extern "C" void IEL31_IRQHandler();
 static void (* const handlers[])() = {
 	IEL0_IRQHandler,
 	IEL1_IRQHandler,

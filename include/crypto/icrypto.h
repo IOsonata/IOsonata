@@ -314,6 +314,17 @@ public:
 		(void)Curve; (void)pKeyCtx; (void)pPubKey;
 		return CRYPTO_STATUS_UNSUPPORTED;
 	}
+	// Load a private scalar, 32 bytes big-endian in the range 1 to n-1, into
+	// pKeyCtx so that Agree can use it. When pPubKey is not null it receives
+	// the matching public key, X then Y, 64 bytes. This is for a caller that
+	// is handed its private key, as the BLE link layer is, instead of letting
+	// KeyGen choose one.
+	virtual CRYPTO_STATUS KeyImport(CRYPTO_CURVE Curve, void *pKeyCtx,
+									const uint8_t *pPrivKey, uint8_t *pPubKey)
+	{
+		(void)Curve; (void)pKeyCtx; (void)pPrivKey; (void)pPubKey;
+		return CRYPTO_STATUS_UNSUPPORTED;
+	}
 	// Agree validates pPeerPubKey before it is used as a point. An
 	// implementation shall reject a peer key whose coordinates are not both
 	// less than the field prime or that does not satisfy the curve equation,

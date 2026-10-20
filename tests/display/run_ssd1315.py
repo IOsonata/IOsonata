@@ -1,0 +1,126 @@
+#!/usr/bin/env python3
+"""Exercise the production SSD1315 driver over a modeled SPI controller."""
+import os
+from pathlib import Path
+import subprocess
+import tempfile
+
+ROOT = Path(__file__).resolve().parents[2]
+
+with tempfile.TemporaryDirectory(prefix='ssd1315-') as td:
+    for opt in ('-O0', '-Os'):
+        exe = Path(td) / 'ssd1315_test'
+        cmd = [os.environ.get('CXX', 'g++'), '-std=gnu++23', opt,
+               '-Wall', '-Wextra', '-Werror', '-Wno-overloaded-virtual',
+               '-fsanitize=address,undefined', '-fno-omit-frame-pointer',
+               '-I' + str(ROOT / 'tests/display/hostport'),
+               '-I' + str(ROOT / 'include')]
+        sources = ['tests/display/ssd1315_test.cpp', 'src/display/display_ssd1315.cpp',
+                   'src/display/display.cpp', 'src/device.cpp', 'src/device_intrf.cpp']
+        fonts = []
+        for name in ('syst5x7.c', 'FreeMono/FreeMono8pt.c', 'FreeSans/FreeSansBold24pt.c'):
+            font = Path(td) / (Path(name).stem + '.o')
+            subprocess.run([os.environ.get('CC', 'gcc'), '-I' + str(ROOT / 'include'),
+                            '-c', str(ROOT / 'src/display/fonts' / name), '-o', str(font)], check=True)
+            fonts.append(str(font))
+        subprocess.run(cmd + [str(ROOT / p) for p in sources] +
+                       fonts + ['-o', str(exe)], check=True)
+        subprocess.run([str(exe)], check=True)
+        print(opt + ': SSD1315 checks passed', flush=True)
+        # Exercise the configuration supplied to SPIInit by the real console
+        # example, not just a manually configured mock display interface.
+        console = Path(td) / 'ssd1315_console_test'
+        console_sources = ['tests/display/ssd1315_console_test.cpp',
+                           'src/display/display_ssd1315.cpp', 'src/display/display.cpp',
+                           'src/device.cpp', 'src/device_intrf.cpp']
+        subprocess.run(cmd + ['-DSTM32WBA65xx', '-ffunction-sections', '-fdata-sections',
+                             '-Wno-unused-but-set-variable',
+                             '-Wno-missing-field-initializers',
+                             '-I' + str(ROOT / 'ARM/ST/include'),
+                             '-I' + str(ROOT / 'ARM/ST/STM32WBAxx/STM32WBA65/exemples/LCDConsoleDisplayDemo/src'),
+                             '-Wl,--gc-sections'] +
+                       [str(ROOT / p) for p in console_sources] + fonts +
+                       ['-o', str(console)], check=True)
+        subprocess.run([str(console)], check=True)
+        gfx = Path(td) / 'ssd1315_gfx_test'
+        gfx_sources = ['tests/display/ssd1315_gfx_test.cpp', 'src/display/igfx.cpp',
+                       'src/display/display_ssd1315.cpp', 'src/display/display.cpp',
+                       'src/device.cpp', 'src/device_intrf.cpp']
+        subprocess.run(cmd + ['-DSTM32WBA65xx', '-ffunction-sections', '-fdata-sections',
+                             '-Wno-missing-field-initializers',
+                             '-I' + str(ROOT / 'ARM/ST/include'),
+                             '-I' + str(ROOT / 'ARM/ST/STM32WBAxx/STM32WBA65/exemples/GfxDisplayDemo/src'),
+                             '-Wl,--gc-sections'] +
+                       [str(ROOT / p) for p in gfx_sources] + fonts +
+                       ['-o', str(gfx)], check=True)
+        subprocess.run([str(gfx)], check=True)
+        menu = Path(td) / 'joystick_menu_test'
+        menu_sources = ['tests/display/joystick_menu_test.cpp',
+                        'src/display/display_ssd1315.cpp', 'src/display/display.cpp',
+                        'src/device.cpp', 'src/device_intrf.cpp']
+        subprocess.run(cmd + ['-DSTM32WBA65xx', '-ffunction-sections', '-fdata-sections',
+                             '-Wno-missing-field-initializers',
+                             '-I' + str(ROOT / 'ARM/ST/include'),
+                             '-I' + str(ROOT / 'ARM/ST/STM32WBAxx/STM32WBA65/exemples/JoystickMenuDemo/src'),
+                             '-Wl,--gc-sections'] +
+                       [str(ROOT / p) for p in menu_sources] + fonts +
+                       ['-o', str(menu)], check=True)
+        subprocess.run([str(menu)], check=True)
+        scan = Path(td) / 'ble_scan_display_test'
+        scan_sources = ['tests/display/ble_scan_display_test.cpp',
+                        'src/display/display_ssd1315.cpp', 'src/display/display.cpp',
+                        'src/device.cpp', 'src/device_intrf.cpp', 'src/coredev/timer.cpp',
+                        'src/app_evt_handler.cpp', 'src/bluetooth/bt_adv.cpp']
+        fifo = Path(td) / 'cfifo.o'
+        subprocess.run([os.environ.get('CC', 'gcc'), opt, '-I' + str(ROOT / 'include'),
+                        '-fsanitize=address,undefined', '-c', str(ROOT / 'src/cfifo.c'),
+                        '-o', str(fifo)], check=True)
+        subprocess.run(cmd + ['-DSTM32WBA65xx', '-ffunction-sections', '-fdata-sections',
+                             '-Wno-unused-parameter', '-Wno-missing-field-initializers',
+                             '-I' + str(ROOT / 'ARM/ST/include'),
+                             '-I' + str(ROOT / 'ARM/ST/STM32WBAxx/STM32WBA65/exemples/BleScanDisplayDemo/src'),
+                             '-Wl,--gc-sections'] +
+                       [str(ROOT / p) for p in scan_sources] + fonts + [str(fifo)] +
+                       ['-o', str(scan)], check=True)
+        subprocess.run([str(scan)], check=True)
+        status = Path(td) / 'ble_status_display_test'
+        status_sources = ['tests/display/ble_status_display_test.cpp',
+                          'src/display/display_ssd1315.cpp', 'src/display/display.cpp',
+                          'src/device.cpp', 'src/device_intrf.cpp', 'src/coredev/timer.cpp',
+                          'src/app_evt_handler.cpp', 'src/bluetooth/bt_peer.cpp']
+        subprocess.run(cmd + ['-DSTM32WBA65xx', '-DBLE_SECURITY_UART_CONFIRM',
+                             '-DBLE_SECURITY_TYPE=BTGAP_SECTYPE_LESC_MITM',
+                             '-DBLE_SECURITY_EXCHG=(BTAPP_SECEXCHG_DISPLAY|BTAPP_SECEXCHG_YESNO)',
+                             '-ffunction-sections', '-fdata-sections',
+                             '-Wno-unused-parameter', '-Wno-unused-variable',
+                             '-Wno-unused-but-set-variable', '-Wno-missing-field-initializers',
+                             '-I' + str(ROOT / 'ARM/ST/include'),
+                             '-I' + str(ROOT / 'ARM/ST/STM32WBAxx/STM32WBA65/exemples/BleStatusDisplayDemo/src'),
+                             '-Wl,--gc-sections'] +
+                       [str(ROOT / p) for p in status_sources] + fonts + [str(fifo)] +
+                       ['-o', str(status)], check=True)
+        subprocess.run([str(status)], check=True)
+
+        stopwatch = Path(td) / 'stopwatch_test'
+        stopwatch_sources = menu_sources + ['src/coredev/timer.cpp']
+        subprocess.run(cmd + ['-DSTM32WBA65xx', '-ffunction-sections', '-fdata-sections',
+                             '-Wno-missing-field-initializers',
+                             '-I' + str(ROOT / 'ARM/ST/include'),
+                             '-I' + str(ROOT / 'ARM/ST/STM32WBAxx/STM32WBA65/exemples/StopwatchDemo/src'),
+                             '-Wl,--gc-sections'] +
+                       [str(ROOT / p) for p in stopwatch_sources] + fonts +
+                       ['-o', str(stopwatch)], check=True)
+        subprocess.run([str(stopwatch)], check=True)
+
+        countdown = Path(td) / 'countdown_timer_test'
+        countdown_sources = ['tests/display/countdown_timer_test.cpp',
+                             'src/display/display_ssd1315.cpp', 'src/display/display.cpp',
+                             'src/device.cpp', 'src/device_intrf.cpp', 'src/coredev/timer.cpp']
+        subprocess.run(cmd + ['-DSTM32WBA65xx', '-ffunction-sections', '-fdata-sections',
+                             '-Wno-missing-field-initializers',
+                             '-I' + str(ROOT / 'ARM/ST/include'),
+                             '-I' + str(ROOT / 'ARM/ST/STM32WBAxx/STM32WBA65/exemples/CountdownTimerDemo/src'),
+                             '-Wl,--gc-sections'] +
+                       [str(ROOT / p) for p in countdown_sources] + fonts +
+                       ['-o', str(countdown)], check=True)
+        subprocess.run([str(countdown)], check=True)

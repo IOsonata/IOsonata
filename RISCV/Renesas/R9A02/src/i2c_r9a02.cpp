@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
 @file	i2c_r9a02.cpp
 
-@brief	R9A02G021 I2C master on the I2C bus interface (IICA)
+@brief	R9A02G021 I2C master and slave on the I2C bus interface (IICA)
 
 R9A02G021 User's Manual R01UH1036EJ0110, chapter 24.
 
@@ -10,10 +10,10 @@ R9A02G021 User's Manual R01UH1036EJ0110, chapter 24.
 	DevNo 2 to 7 : simplified I2C of the serial array units, IIC00, IIC01,
 				   IIC10, IIC11, IIC20, IIC21, see i2c_sau_r9a02.cpp
 
-Master, 7-bit addresses, standard mode up to 100 kHz, fast mode up to 400
-kHz, fast mode plus up to 1 MHz. Single master: communication reservation
-is off and a start may be issued without a prior stop (IICF IICRSV = 1,
-STCEN = 1). No slave mode, 10-bit address or SMBus, these fail I2CInit.
+Master or slave, 7-bit addresses, standard mode up to 100 kHz, fast mode up
+to 400 kHz, fast mode plus up to 1 MHz. Single master: communication
+reservation is off and a start may be issued without a prior stop (IICF
+IICRSV = 1, STCEN = 1). No 10-bit address or SMBus, these fail I2CInit.
 
 The IICA has no end of byte status flag. Its event (IICn_ENDI) marks the end
 of each byte (24.4, 12.2.6). WTIM = 1: the event and the clock stretch come
@@ -41,9 +41,54 @@ Transfer modes:
 	interrupt, the IICA waits for the bus to be free (at most about 50 ms
 	with a slave holding SCL low).
 
-	bDmaEn fails I2CInit: the CPU has to act at each byte, the ACK of a
-	transmitted byte is checked before the next one and ACKE is cleared
-	before the last received byte, the DTC can do neither.
+	bDmaEn: DTC moves each payload byte between memory and IICA. The CPU
+	still handles each byte's protocol event: checks ACKD before TX, sets
+	ACKE before RX, and distinguishes slave address, data and STOP events.
+	After these decisions, ELSEGR triggers a one-byte normal DTC transfer.
+	IICA0 reserves ELC_SWEVT0, IICA1 ELC_SWEVT1 and each needs one extra ICU
+	slot. Do not link these software events elsewhere while DMA is enabled.
+	The transfer completes before the caller's buffer can be released.
+	bIntEn still selects synchronous or background master completion; a
+	slave requires interrupts. This is DMA-assisted data movement, not an
+	autonomous block transfer or a reduction in per-byte CPU service.
+
+Slave (I2CMODE_SLAVE, 24.4.16 (3), figures 24.21 and 24.22): bIntEn and one
+address, SlaveAddr[0] 0x08 to 0x77 in SVA, NbSlaveAddr 1, slave index 0 of
+the read and write request buffers. The IICA acknowledges its address by
+itself, stretches SCL at the 9th clock and raises IICn_ENDI, as after each
+data byte (WTIM = 1, table 24.2); SPIE = 1 adds the event of the stop
+condition. The handler, at each event:
+
+	Address, master write: DEVINTRF_EVT_WRITE_RQST, the handler gives the
+	buffer with SetWriteRqstBuffer. Each byte is stored while it fits and
+	acknowledged, ACKE being set before it (24.4.4), the first one that does
+	not fit is not acknowledged and dropped. WREL releases SCL.
+
+	Address, master read: DEVINTRF_EVT_READ_RQST with the count of the bytes
+	written before a restart, the handler gives the data with
+	SetReadRqstData. Writing IICA sends a byte and releases SCL, 0xFF once
+	the data is used up. The NACK of the master ends the read: WREL with TRC
+	= 1 releases SDA (24.2.3).
+
+	Stop condition, or restart to a read or to another device:
+	DEVINTRF_EVT_COMPLETED with the bytes received, or the bytes sent from
+	the data. A write followed by a restart to a read is reported by the
+	READ_RQST count instead.
+
+The buffers are given again at every request, a request left without one
+receives nothing (NACK) or sends 0xFF. The address is acknowledged whatever
+ACKE, an extension code or a general call only with ACKE at 1 (24.4.4). The
+event of an extension code comes at the 8th clock, before the ACK, the IICA
+then leaves the communication (LREL, 24.4.11): none is acknowledged, ACKE
+being 1 or not. The master must allow clock stretching after each byte, the
+SAU simplified I2C does not (23.1.3). The handler must run before the master
+ends the address of its next transfer, about 8 clock periods after a stop:
+later, the stop and the address are seen as one restart.
+
+A slave does not clock the bus to recover it: the set up waits for both
+lines high, then sets LREL right after IICE in case of a start falsely
+detected (24.2.3). A bus that stays low leaves the IICA off: I2CInit fails,
+SetRate returns 0, Reset tries again.
 
 Transfer clock = fMCK / (IICWL + IICWH + fMCK x (tR + tF)), fMCK = PCLKB
 (PCLKB up to 20 MHz) or PCLKB / 2 (above 20 MHz) (24.3.2). PCLKB must be 32
@@ -52,7 +97,8 @@ the core clock or PCLKB (SystemPeriphClockSet) first, it must also be 1 MHz
 or more. IICWL and IICWH are computed from the manual formulas with tR + tF
 = 0, the bus clock then does not exceed the rate set whatever the rise time,
 except below the lowest rate the 8-bit widths can make at that fMCK, which
-is then used. SetRate returns this nominal rate.
+is then used. SetRate returns this nominal rate. A slave uses the rate for
+the mode, its digital filter and the widths of 24.3.2 (2), with tR + tF = 0.
 
 The IICA is enabled only with SCL and SDA high (24.2.3 IICE): a bus held
 low is first cleared by clocking SCL as a GPIO (figure 24.16 note 2), the
@@ -62,7 +108,9 @@ reception the last byte is not acknowledged before a stop or a restart
 
 Pins: PinOp R9A02_PSEL_IICA (IOPINOP_FUNC6), type IOPINTYPE_OPENDRAIN, external
 pull-ups. The pins are GPIO inputs whenever IICE = 0, the IICA drives them low
-in peripheral mode while it is off (24.2.9).
+in peripheral mode while it is off (24.2.9). Once IICE = 1 both are set in
+output mode, N-ch open drain, whatever direction the pin map gives (24.2.9,
+figure 24.16).
 
 @author	Hoang Nguyen Hoan
 @date	Oct. 12, 2026
@@ -103,7 +151,9 @@ SOFTWARE.
 #include "interrupt_r9a02.h"
 #include "system_r9a02.h"
 #include "i2c_r9a02.h"
+#include "dtc_r9a02.h"
 
+#define R9A02_I2C_DTC_LOOPS		1024U		//!< One peripheral bus transfer
 #define R9A02_I2C_FM_MAX			400000UL
 #define R9A02_I2C_FMP_MAX			1000000UL
 #define R9A02_I2C_FM_PCLKB_MIN		3500000UL	//!< 24.2, table 37.38
@@ -112,6 +162,18 @@ SOFTWARE.
 #define R9A02_I2C_WIDTH_MAX			255U		//!< IICWL and IICWH are 8-bit
 #define R9A02_I2C_BUS_RECOVER_CLK	9			//!< SCL pulses to free SDA
 #define R9A02_I2C_IICA_CNT			2			//!< DevNo of the IICA, then the SAU
+#define R9A02_I2C_SLAVE_WH_SM		5300		//!< ns, slave IICWH standard mode, 24.3.2 (2)
+#define R9A02_I2C_SLAVE_WH_FM		1200		//!< ns, fast mode
+#define R9A02_I2C_SLAVE_WH_FMP		500			//!< ns, fast mode plus
+#define R9A02_I2C_SLAVE_ADDR_MIN	0x08U		//!< 0x00 to 0x07, 0x78 to 0x7F are extension codes
+#define R9A02_I2C_SLAVE_ADDR_MAX	0x77U
+
+// Slave transfer phase
+typedef enum {
+	R9A02_I2C_S_IDLE,				// Not addressed
+	R9A02_I2C_S_RX,					// Master writes, slave receives
+	R9A02_I2C_S_TX					// Master reads, slave transmits
+} R9A02_I2C_SSTATE;
 
 #pragma pack(push, 4)
 typedef struct __R9a02_I2c_Dev {
@@ -136,14 +198,22 @@ typedef struct __R9a02_I2c_Dev {
 	int XferLen;					// Background transfer length
 	volatile int XferCnt;
 	uint8_t TxBuf[R9A02_I2C_TX_COPY_SIZE];	// Background transmission
+	R9A02_I2C_SSTATE SState;		// Slave phase
+	int SlaveCount;					// Slave: bytes of the phase
+	bool bSlaveReal;				// Slave: the byte sent comes from the read data
+	bool bSlaveNack;				// Slave: the master ended its read
+	int DmaIntNo;					// Software event route, -1 without DMA
+	R9a02DtcInfo_t DmaInfo;		// Static, one byte, normal mode
 } R9a02I2cDev_t;
 #pragma pack(pop)
 
 static R9a02I2cDev_t s_R9a02I2cDev[R9A02_I2C_IICA_CNT] = {
 	{ R9A02_IICA0, R9A02_MSTPCRB_IICA0, R9A02_EVT_IIC0_ENDI, NULL, -1, 0, 0, 0, 0,
-	  false, false, false, false, false, false, false, false, NULL, 0, 0, {} },
+	  false, false, false, false, false, false, false, false, NULL, 0, 0, {}, R9A02_I2C_S_IDLE, 0, false,
+	  false, -1, {} },
 	{ R9A02_IICA1, R9A02_MSTPCRB_IICA1, R9A02_EVT_IIC1_ENDI, NULL, -1, 0, 0, 0, 0,
-	  false, false, false, false, false, false, false, false, NULL, 0, 0, {} },
+	  false, false, false, false, false, false, false, false, NULL, 0, 0, {}, R9A02_I2C_S_IDLE, 0, false,
+	  false, -1, {} },
 };
 
 static const int s_NbR9a02I2cDev = sizeof(s_R9a02I2cDev) / sizeof(s_R9a02I2cDev[0]);
@@ -155,9 +225,99 @@ static R9a02I2cDev_t *R9a02I2cHandle(DevIntrf_t * const pIntrf)
 	return dev && dev->pI2cDev && &dev->pI2cDev->DevIntrf == pIntrf ? dev : NULL;
 }
 
+// Software events reach the CPU only at DTC completion. The byte helper
+// masks CPU interrupts while it polls that completion; this handler also
+// disables the input if a completion arrives after a timed out transfer.
+static void R9a02I2cDmaIrqHandler(int IntNo, void *pCtx)
+{
+	R9a02IntEnable(IntNo, false);
+}
+
+static void R9a02I2cDmaRelease(R9a02I2cDev_t * const pDev)
+{
+	if (pDev->DmaIntNo < 0)
+	{
+		return;
+	}
+
+	R9a02IntEnable(pDev->DmaIntNo, false);
+	R9a02DtcClear(pDev->DmaIntNo);
+	R9a02UnregisterIntHandler(pDev->DmaIntNo);
+	pDev->DmaIntNo = -1;
+}
+
+// IICn_ENDI is shared by data, address, NACK and STOP. Starting a block DTC
+// directly from that event would move bytes before checking the protocol.
+// Use the dedicated software event after the check instead (15.2.2).
+// Only the memory/peripheral byte transfer is masked, not the bus clocks.
+static bool R9a02I2cMoveByte(R9a02I2cDev_t * const pDev, const volatile uint8_t *pSrc,
+							volatile uint8_t *pDst)
+{
+	uintptr_t state;
+	uint32_t loops = R9A02_I2C_DTC_LOOPS;
+	unsigned int sw;
+	bool running;
+	bool ok;
+
+	if (pDev->DmaIntNo < 0)
+	{
+		*pDst = *pSrc;
+
+		return true;
+	}
+
+	state = DisableInterrupt();
+	sw = pDev->EvtEnd == R9A02_EVT_IIC0_ENDI ? 0U : 1U;
+	running = R9a02ModuleRunning(R9A02_MSTPCR_C, R9A02_MSTPCRC_ELC);
+	if (!running)
+	{
+		R9a02ModuleStart(R9A02_MSTPCR_C, R9A02_MSTPCRC_ELC);
+	}
+
+	pDev->DmaInfo.Sar = (uint32_t)(uintptr_t)pSrc;
+	pDev->DmaInfo.Dar = (uint32_t)(uintptr_t)pDst;
+	pDev->DmaInfo.Cra = 1U;
+	ok = R9a02DtcEnable(pDev->DmaIntNo);
+	if (ok)
+	{
+		// The CLIC input must be enabled for DTC activation even when MIE
+		// is clear (14.5). No ELSRn link or change to ELCR is needed: the
+		// software event is routed directly to the ICU.
+		R9a02IntEnable(pDev->DmaIntNo, true);
+		R9A02_ELC_ELSEGR(sw) = 0U;
+		R9A02_ELC_ELSEGR(sw) = R9A02_ELSEGR_WE;
+		R9A02_ELC_ELSEGR(sw) = R9A02_ELSEGR_WE | R9A02_ELSEGR_SEG;
+		while (R9a02DtcEnabled(pDev->DmaIntNo) && --loops > 0U)
+		{
+		}
+	}
+
+	R9a02IntEnable(pDev->DmaIntNo, false);
+	R9a02DtcDisable(pDev->DmaIntNo);
+	__asm volatile ("fence rw, rw" ::: "memory");
+	ok = ok && *(volatile uint16_t *)&pDev->DmaInfo.Cra == 0U;
+	R9A02_ELC_ELSEGR(sw) = 0U;
+	if (!running)
+	{
+		R9a02ModuleStop(R9A02_MSTPCR_C, R9A02_MSTPCRC_ELC);
+	}
+	if (!ok)
+	{
+		// No byte moved: the IICA is still at its clock stretch. The
+		// normal NACK/STOP sequence can release the bus.
+		pDev->bError = true;
+	}
+	EnableInterrupt(state);
+
+	return ok;
+}
+
 // Mode, fMCK and widths of a transfer clock. Above the fast mode plus limit,
-// or above the limit of the mode PCLKB allows, the highest rate is used.
-static bool R9a02I2cRate(uint32_t Rate, uint8_t *pCtl1, uint8_t *pWl, uint8_t *pWh, uint32_t *pActual)
+// or above the limit of the mode PCLKB allows, the highest rate is used. A
+// slave gets the widths of 24.3.2 (2) for the mode and the rate of the mode
+// kept.
+static bool R9a02I2cRate(uint32_t Rate, bool bSlave, uint8_t *pCtl1, uint8_t *pWl, uint8_t *pWh,
+						 uint32_t *pActual)
 {
 	uint32_t pclk = SystemPeriphClockGet(0);
 
@@ -172,6 +332,7 @@ static bool R9a02I2cRate(uint32_t Rate, uint8_t *pCtl1, uint8_t *pWl, uint8_t *p
 	uint32_t highpm;
 	uint32_t lowns;					// Minimum widths (table 37.37 to 37.39)
 	uint32_t highns;
+	uint32_t slavehighns;			// Slave IICWH (24.3.2 (2))
 	uint8_t ctl1 = prs ? R9A02_IICCTL1_PRS : 0U;
 
 	if (Rate > R9A02_I2C_FMP_MAX)
@@ -193,6 +354,7 @@ static bool R9a02I2cRate(uint32_t Rate, uint8_t *pCtl1, uint8_t *pWl, uint8_t *p
 		highpm = 530;
 		lowns = I2C_SCL_TLOW_STD_MODE_MIN;
 		highns = I2C_SCL_THIGH_STD_MODE_MIN;
+		slavehighns = R9A02_I2C_SLAVE_WH_SM;
 	}
 	else if (Rate <= R9A02_I2C_FM_MAX)
 	{
@@ -200,6 +362,7 @@ static bool R9a02I2cRate(uint32_t Rate, uint8_t *pCtl1, uint8_t *pWl, uint8_t *p
 		highpm = 480;
 		lowns = I2C_SCL_TLOW_FAST_MODE_MIN;
 		highns = I2C_SCL_THIGH_FAST_MODE_MIN;
+		slavehighns = R9A02_I2C_SLAVE_WH_FM;
 		ctl1 |= R9A02_IICCTL1_SMC | R9A02_IICCTL1_DFC;
 	}
 	else
@@ -208,6 +371,7 @@ static bool R9a02I2cRate(uint32_t Rate, uint8_t *pCtl1, uint8_t *pWl, uint8_t *p
 		highpm = 500;
 		lowns = I2C_SCL_TLOW_FAST_MODE_PLUS_MIN;
 		highns = I2C_SCL_THIGH_FAST_MODE_PLUS_MIN;
+		slavehighns = R9A02_I2C_SLAVE_WH_FMP;
 		ctl1 |= R9A02_IICCTL1_SMC | R9A02_IICCTL1_DFC;
 	}
 
@@ -217,6 +381,13 @@ static bool R9a02I2cRate(uint32_t Rate, uint8_t *pCtl1, uint8_t *pWl, uint8_t *p
 	uint64_t wlmin = (fmck * lowns + 999999999ULL) / 1000000000ULL;
 	uint64_t whmin = (fmck * highns + 999999999ULL) / 1000000000ULL;
 
+	if (bSlave)
+	{
+		// The low width is the minimum low period of the mode
+		wl = wlmin;
+		wh = (fmck * slavehighns + 999999999ULL) / 1000000000ULL;
+		whmin = wh;
+	}
 	if (wl < wlmin)
 	{
 		wl = wlmin;
@@ -241,7 +412,7 @@ static bool R9a02I2cRate(uint32_t Rate, uint8_t *pCtl1, uint8_t *pWl, uint8_t *p
 	*pCtl1 = ctl1;
 	*pWl = (uint8_t)wl;
 	*pWh = (uint8_t)wh;
-	*pActual = (uint32_t)(fmck / (wl + wh));
+	*pActual = bSlave ? Rate : (uint32_t)(fmck / (wl + wh));
 
 	return *pActual != 0U;
 }
@@ -279,6 +450,22 @@ static bool R9a02I2cBusIdle(R9a02I2cDev_t * const pDev)
 
 	return IOPinRead(pins[I2C_SDA_IOPIN_IDX].PortNo, pins[I2C_SDA_IOPIN_IDX].PinNo) &&
 		   IOPinRead(pins[I2C_SCL_IOPIN_IDX].PortNo, pins[I2C_SCL_IOPIN_IDX].PinNo);
+}
+
+// Slave: both lines high, a transfer in progress may end first
+static bool R9a02I2cWaitIdle(R9a02I2cDev_t * const pDev)
+{
+	uint32_t n = pDev->Loops;
+
+	while (!R9a02I2cBusIdle(pDev))
+	{
+		if (--n == 0U)
+		{
+			return false;
+		}
+	}
+
+	return true;
 }
 
 // Bus recovery (figure 24.16 note 2), the IICA off: SCL is clocked as a GPIO
@@ -331,35 +518,56 @@ static bool R9a02I2cBusRecover(R9a02I2cDev_t * const pDev)
 }
 
 // IICA stopped, set up, then started with the pins given back when enabled
-// (figure 24.16). IICE is set only with SCL and SDA high (24.2.3), a bus
-// held low is cleared first, with the interrupts on. Returns false when the
-// IICA stays off.
+// (figures 24.16 and 24.21). IICE is set only with SCL and SDA high
+// (24.2.3): a master clears a bus held low first, with the interrupts on, a
+// slave waits for it. Returns false when the IICA stays off. A slave
+// transfer in progress is dropped without event.
 static bool R9a02I2cConfigure(R9a02I2cDev_t * const pDev)
 {
 	R9A02_IICA_Type *reg = pDev->pReg;
-	const IOPinCfg_t *pins = pDev->pI2cDev->Cfg.pIOPinMap;
+	const I2CCfg_t *cfg = &pDev->pI2cDev->Cfg;
+	const IOPinCfg_t *pins = cfg->pIOPinMap;
+	bool slave = cfg->Mode == I2CMODE_SLAVE;
 	bool ok = true;
+
+	// Slave: ACKE 0 until an address match (24.4.4), SPIE for the stop
+	uint8_t ctl0 = slave ? (uint8_t)(R9A02_IICCTL0_WTIM | R9A02_IICCTL0_SPIE) : R9A02_IICCTL0_WTIM;
 
 	R9a02I2cPinsGpio(pDev);
 	reg->IICCTL0 = 0U;
 	reg->IICWL = pDev->Wl;
 	reg->IICWH = pDev->Wh;
-	reg->SVA = 0U;
+	reg->SVA = slave ? (uint8_t)(cfg->SlaveAddr[0] << 1) : 0U;
 	reg->IICF = R9A02_IICF_IICRSV | R9A02_IICF_STCEN;
 	reg->IICCTL1 = pDev->Ctl1;
-	reg->IICCTL0 = R9A02_IICCTL0_WTIM;
+	reg->IICCTL0 = ctl0;
 
 	if (pDev->bEnabled)
 	{
-		ok = R9a02I2cBusIdle(pDev) || R9a02I2cBusRecover(pDev);
+		ok = slave ? R9a02I2cWaitIdle(pDev) : (R9a02I2cBusIdle(pDev) || R9a02I2cBusRecover(pDev));
 	}
 
 	uintptr_t state = DisableInterrupt();
 
 	if (pDev->bEnabled && ok)
 	{
-		reg->IICCTL0 = R9A02_IICCTL0_IICE | R9A02_IICCTL0_WTIM;
-		IOPinCfg(pins, 2);
+		reg->IICCTL0 = (uint8_t)(R9A02_IICCTL0_IICE | ctl0);
+		if (slave)
+		{
+			// A start falsely detected when the bus changed after it was
+			// seen free is dropped (24.2.3 IICE, 24.4.15 note 3). On a free
+			// bus the IICA waits for the next start as before.
+			reg->IICCTL0 = (uint8_t)(R9A02_IICCTL0_IICE | ctl0 | R9A02_IICCTL0_LREL);
+		}
+
+		// Both pins from input to output mode with IICE = 1 (24.2.9, figure
+		// 24.16), open drain. SDA given as input or bidirectional in the pin
+		// map would leave the IICA unable to pull it low.
+		for (int i = I2C_SDA_IOPIN_IDX; i <= I2C_SCL_IOPIN_IDX; i++)
+		{
+			IOPinConfig(pins[i].PortNo, pins[i].PinNo, pins[i].PinOp, IOPINDIR_OUTPUT, pins[i].Res,
+						IOPINTYPE_OPENDRAIN);
+		}
 	}
 
 	if (pDev->IntNo >= 0)
@@ -369,6 +577,10 @@ static bool R9a02I2cConfigure(R9a02I2cDev_t * const pDev)
 	pDev->bActive = false;
 	pDev->bNacked = false;
 	pDev->bLost = false;
+	pDev->SState = R9A02_I2C_S_IDLE;
+	pDev->SlaveCount = 0;
+	pDev->bSlaveReal = false;
+	pDev->bSlaveNack = false;
 
 	EnableInterrupt(state);
 
@@ -516,7 +728,7 @@ static bool R9a02I2cStart(DevIntrf_t * const pIntrf, uint32_t Addr, bool bRx)
 {
 	R9a02I2cDev_t *dev = R9a02I2cHandle(pIntrf);
 
-	if (dev == NULL || !dev->bEnabled || Addr > 0x7FU)
+	if (dev == NULL || !dev->bEnabled || Addr > 0x7FU || dev->pI2cDev->Cfg.Mode == I2CMODE_SLAVE)
 	{
 		if (dev && dev->bOpen)
 		{
@@ -612,28 +824,33 @@ static bool R9a02I2cStartRx(DevIntrf_t * const pIntrf, uint32_t Addr)
 static int R9a02I2cTxPoll(DevIntrf_t * const pIntrf, const uint8_t *pData, int Len)
 {
 	R9a02I2cDev_t *dev = R9a02I2cHandle(pIntrf);
+	R9A02_IICA_Type *reg;
+	int cnt = 0;
+	uint8_t st;
 
 	if (dev == NULL || !dev->bOpen || !dev->bActive || dev->bRx || dev->bError || pData == NULL || Len <= 0)
 	{
 		return 0;
 	}
 
-	R9A02_IICA_Type *reg = dev->pReg;
-	int cnt = 0;
+	reg = dev->pReg;
 
 	pIntrf->bTxReady = false;
 
 	while (cnt < Len)
 	{
 		R9a02EventFlagClear(dev->IntNo);
-		reg->IICA = pData[cnt];
+		if (!R9a02I2cMoveByte(dev, &pData[cnt], &reg->IICA))
+		{
+			break;
+		}
 
 		if (!R9a02I2cWaitEvent(dev))
 		{
 			break;
 		}
 
-		uint8_t st = R9a02I2cStatus(dev);
+		st = R9a02I2cStatus(dev);
 
 		if (dev->bError || (st & R9A02_IICS_ACKD) == 0U)
 		{
@@ -654,6 +871,9 @@ static int R9a02I2cTxPoll(DevIntrf_t * const pIntrf, const uint8_t *pData, int L
 static int R9a02I2cRxPoll(DevIntrf_t * const pIntrf, uint8_t *pBuff, int Len)
 {
 	R9a02I2cDev_t *dev = R9a02I2cHandle(pIntrf);
+	R9A02_IICA_Type *reg;
+	int cnt = 0;
+	uint8_t ctl0;
 
 	if (dev == NULL || !dev->bOpen || !dev->bActive || !dev->bRx || dev->bError || dev->bNacked ||
 		pBuff == NULL || Len <= 0)
@@ -661,12 +881,11 @@ static int R9a02I2cRxPoll(DevIntrf_t * const pIntrf, uint8_t *pBuff, int Len)
 		return 0;
 	}
 
-	R9A02_IICA_Type *reg = dev->pReg;
-	int cnt = 0;
+	reg = dev->pReg;
 
 	while (cnt < Len)
 	{
-		uint8_t ctl0 = R9A02_IICCTL0_IICE | R9A02_IICCTL0_WTIM;
+		ctl0 = R9A02_IICCTL0_IICE | R9A02_IICCTL0_WTIM;
 
 		if (cnt + 1 < Len)
 		{
@@ -688,7 +907,11 @@ static int R9a02I2cRxPoll(DevIntrf_t * const pIntrf, uint8_t *pBuff, int Len)
 			break;
 		}
 
-		pBuff[cnt++] = reg->IICA;
+		if (!R9a02I2cMoveByte(dev, &reg->IICA, &pBuff[cnt]))
+		{
+			break;
+		}
+		cnt++;
 	}
 
 	dev->bNacked = cnt == Len;
@@ -726,25 +949,27 @@ static void R9a02I2cAsyncEnd(R9a02I2cDev_t * const pDev)
 static void R9a02I2cIrqHandler(int IntNo, void *pCtx)
 {
 	R9a02I2cDev_t *dev = (R9a02I2cDev_t *)pCtx;
+	R9A02_IICA_Type *reg;
+	uint8_t st;
+	uint8_t ctl0;
 
 	if (!dev->bAsync || dev->pI2cDev == NULL)
 	{
 		return;
 	}
 
-	R9A02_IICA_Type *reg = dev->pReg;
-	uint8_t st = R9a02I2cStatus(dev);
+	reg = dev->pReg;
+	st = R9a02I2cStatus(dev);
 
 	if (dev->bRx)
 	{
-		if (!dev->bError)
+		if (!dev->bError && R9a02I2cMoveByte(dev, &reg->IICA, &dev->pRxBuf[dev->XferCnt]))
 		{
-			dev->pRxBuf[dev->XferCnt] = reg->IICA;
 			dev->XferCnt = dev->XferCnt + 1;
 
 			if (dev->XferCnt < dev->XferLen)
 			{
-				uint8_t ctl0 = R9A02_IICCTL0_IICE | R9A02_IICCTL0_WTIM;
+				ctl0 = R9A02_IICCTL0_IICE | R9A02_IICCTL0_WTIM;
 
 				if (dev->XferCnt + 1 < dev->XferLen)
 				{
@@ -764,10 +989,9 @@ static void R9a02I2cIrqHandler(int IntNo, void *pCtx)
 		{
 			dev->XferCnt = dev->XferCnt + 1;
 
-			if (dev->XferCnt < dev->XferLen)
+			if (dev->XferCnt < dev->XferLen &&
+				R9a02I2cMoveByte(dev, &dev->TxBuf[dev->XferCnt], &reg->IICA))
 			{
-				reg->IICA = dev->TxBuf[dev->XferCnt];
-
 				return;
 			}
 		}
@@ -783,12 +1007,15 @@ static void R9a02I2cIrqHandler(int IntNo, void *pCtx)
 static int R9a02I2cTxData(DevIntrf_t * const pIntrf, const uint8_t *pData, int Len)
 {
 	R9a02I2cDev_t *dev = R9a02I2cHandle(pIntrf);
+	uintptr_t state;
+	int i;
+	int cnt;
 
 	if (dev != NULL && pIntrf->bIntEn && !pIntrf->bNoStop && pData != NULL && Len > 0 &&
 		Len <= R9A02_I2C_TX_COPY_SIZE && dev->bOpen && dev->bActive && !dev->bRx && !dev->bError &&
 		!dev->bAsync)
 	{
-		for (int i = 0; i < Len; i++)
+		for (i = 0; i < Len; i++)
 		{
 			dev->TxBuf[i] = pData[i];
 		}
@@ -796,12 +1023,15 @@ static int R9a02I2cTxData(DevIntrf_t * const pIntrf, const uint8_t *pData, int L
 		dev->XferCnt = 0;
 		pIntrf->bTxReady = false;
 
-		uintptr_t state = DisableInterrupt();
+		state = DisableInterrupt();
 
 		dev->bAsync = true;
 		R9a02EventFlagClear(dev->IntNo);
 		R9a02IntEnable(dev->IntNo, true);
-		dev->pReg->IICA = dev->TxBuf[0];
+		if (!R9a02I2cMoveByte(dev, &dev->TxBuf[0], &dev->pReg->IICA))
+		{
+			R9a02I2cAsyncEnd(dev);
+		}
 
 		EnableInterrupt(state);
 
@@ -817,7 +1047,7 @@ static int R9a02I2cTxData(DevIntrf_t * const pIntrf, const uint8_t *pData, int L
 
 	// With bIntEn it ends as a background transfer: stop and release, the
 	// event with the bytes acknowledged, -1
-	int cnt = R9a02I2cTxPoll(pIntrf, pData, Len);
+	cnt = R9a02I2cTxPoll(pIntrf, pData, Len);
 
 	DeviceIntrfTxComplete(pIntrf);
 
@@ -869,6 +1099,221 @@ static int R9a02I2cRxData(DevIntrf_t * const pIntrf, uint8_t *pBuff, int Len)
 	return -1;
 }
 
+static void R9a02I2cSlaveEvent(R9a02I2cDev_t * const pDev, DEVINTRF_EVT Evt, int Len)
+{
+	DevIntrf_t *intrf = &pDev->pI2cDev->DevIntrf;
+
+	if (intrf->EvtCB != NULL)
+	{
+		intrf->EvtCB(intrf, Evt, NULL, Len);
+	}
+}
+
+// End of a slave phase, by a stop condition or a restart: the count is
+// reported
+static void R9a02I2cSlaveEnd(R9a02I2cDev_t * const pDev)
+{
+	if (pDev->SState == R9A02_I2C_S_IDLE)
+	{
+		return;
+	}
+
+	int cnt = pDev->SlaveCount;
+
+	pDev->SState = R9A02_I2C_S_IDLE;
+	pDev->SlaveCount = 0;
+	pDev->bSlaveReal = false;
+	pDev->bSlaveNack = false;
+	R9a02I2cSlaveEvent(pDev, DEVINTRF_EVT_COMPLETED, cnt);
+}
+
+// Reception: the ACK of the next byte is set before it (WTIM = 1, 24.4.4),
+// it is refused when the buffer is full. WREL releases SCL.
+static void R9a02I2cSlaveRxNext(R9a02I2cDev_t * const pDev)
+{
+	I2CDev_t *i2c = pDev->pI2cDev;
+	uint8_t ctl0 = R9A02_IICCTL0_IICE | R9A02_IICCTL0_WTIM | R9A02_IICCTL0_SPIE;
+
+	if (i2c->pTRBuff[0] != NULL && pDev->SlaveCount < i2c->TRBuffLen[0])
+	{
+		ctl0 |= R9A02_IICCTL0_ACKE;
+	}
+
+	pDev->pReg->IICCTL0 = ctl0;
+	pDev->pReg->IICCTL0 = (uint8_t)(ctl0 | R9A02_IICCTL0_WREL);
+}
+
+// Transmission: writing IICA sends the byte and releases SCL, 0xFF once the
+// data is used up
+static void R9a02I2cSlaveTxNext(R9a02I2cDev_t * const pDev)
+{
+	I2CDev_t *i2c = pDev->pI2cDev;
+	const uint8_t *data = i2c->pRRData[0];
+	uint8_t fill = 0xFFU;
+	const uint8_t *src = &fill;
+
+	if (data != NULL && pDev->SlaveCount < i2c->RRDataLen[0])
+	{
+		pDev->bSlaveReal = true;
+		src = &data[pDev->SlaveCount];
+	}
+	else
+	{
+		pDev->bSlaveReal = false;
+	}
+	if (!R9a02I2cMoveByte(pDev, src, &pDev->pReg->IICA))
+	{
+		pDev->pReg->IICCTL0 |= R9A02_IICCTL0_LREL;
+		R9a02I2cSlaveEnd(pDev);
+	}
+}
+
+// Address match, after a start or a restart, SCL stretched. A restart ends
+// the previous phase: the count of a write goes with the read request that
+// follows, or with its own event before a new write request.
+static void R9a02I2cSlaveAddress(R9a02I2cDev_t * const pDev, bool bTx)
+{
+	I2CDev_t *i2c = pDev->pI2cDev;
+	int prior = 0;
+
+	if (pDev->SState == R9A02_I2C_S_RX)
+	{
+		prior = pDev->SlaveCount;
+	}
+	else
+	{
+		R9a02I2cSlaveEnd(pDev);
+	}
+
+	pDev->SlaveCount = 0;
+	pDev->bSlaveReal = false;
+	pDev->bSlaveNack = false;
+
+	if (bTx)
+	{
+		pDev->SState = R9A02_I2C_S_TX;
+		i2c->pRRData[0] = NULL;
+		i2c->RRDataLen[0] = 0;
+		R9a02I2cSlaveEvent(pDev, DEVINTRF_EVT_READ_RQST, prior);
+
+		// ACKE is not used in transmission. Cleared, a following extension
+		// code is not acknowledged.
+		pDev->pReg->IICCTL0 = R9A02_IICCTL0_IICE | R9A02_IICCTL0_WTIM | R9A02_IICCTL0_SPIE;
+		R9a02I2cSlaveTxNext(pDev);
+	}
+	else
+	{
+		pDev->SState = R9A02_I2C_S_RX;
+		i2c->pTRBuff[0] = NULL;
+		i2c->TRBuffLen[0] = 0;
+		if (prior > 0)
+		{
+			R9a02I2cSlaveEvent(pDev, DEVINTRF_EVT_COMPLETED, prior);
+		}
+		R9a02I2cSlaveEvent(pDev, DEVINTRF_EVT_WRITE_RQST, 0);
+		R9a02I2cSlaveRxNext(pDev);
+	}
+}
+
+// IICn_ENDI of the slave (table 24.2, figure 24.22): address match at the
+// 9th clock, data byte at the 9th, extension code at the 8th, address of
+// another device after a restart at the 9th without stretch, stop condition.
+// SCL is stretched at the address and data events until IICA is written or
+// WREL set, at the extension code until LREL.
+static void R9a02I2cSlaveIrqHandler(int IntNo, void *pCtx)
+{
+	R9a02I2cDev_t *dev = (R9a02I2cDev_t *)pCtx;
+	R9A02_IICA_Type *reg;
+	I2CDev_t *i2c;
+	uint8_t *buf;
+	uint8_t st;
+	uint8_t drop;
+	bool fits;
+
+	if (dev->pI2cDev == NULL || !dev->bEnabled)
+	{
+		return;
+	}
+
+	reg = dev->pReg;
+	st = reg->IICS;
+
+	if ((st & R9A02_IICS_COI) == 0U)
+	{
+		// Not addressed: a stop, another device after a restart, an
+		// extension code, or a stop event taken once the next start is
+		// detected (SPD is then 0). The transfer of this device has ended.
+		R9a02I2cSlaveEnd(dev);
+
+		if (st & R9A02_IICS_EXC)
+		{
+			// Leaves the communication before the ACK (24.4.11)
+			reg->IICCTL0 = (uint8_t)(reg->IICCTL0 | R9A02_IICCTL0_LREL);
+		}
+
+		return;
+	}
+
+	if (st & R9A02_IICS_STD)
+	{
+		R9a02I2cSlaveAddress(dev, (st & R9A02_IICS_TRC) != 0U);
+
+		return;
+	}
+
+	if (dev->SState == R9A02_I2C_S_IDLE)
+	{
+		// Addressed without a phase, not expected: SCL released, the next
+		// bytes not acknowledged
+		reg->IICCTL0 = R9A02_IICCTL0_IICE | R9A02_IICCTL0_WTIM | R9A02_IICCTL0_SPIE;
+		reg->IICCTL0 = R9A02_IICCTL0_IICE | R9A02_IICCTL0_WTIM | R9A02_IICCTL0_SPIE | R9A02_IICCTL0_WREL;
+
+		return;
+	}
+
+	if (dev->SState == R9A02_I2C_S_RX)
+	{
+		i2c = dev->pI2cDev;
+		buf = i2c->pTRBuff[0];
+		fits = buf != NULL && dev->SlaveCount < i2c->TRBuffLen[0];
+
+		// A byte that did not fit was not acknowledged and is dropped.
+		if (!R9a02I2cMoveByte(dev, &reg->IICA, fits ? &buf[dev->SlaveCount] : &drop))
+		{
+			reg->IICCTL0 |= R9A02_IICCTL0_LREL;
+			R9a02I2cSlaveEnd(dev);
+
+			return;
+		}
+		if (fits)
+		{
+			dev->SlaveCount = dev->SlaveCount + 1;
+		}
+		R9a02I2cSlaveRxNext(dev);
+
+		return;
+	}
+
+	if (dev->bSlaveReal)
+	{
+		dev->SlaveCount = dev->SlaveCount + 1;
+	}
+
+	if ((st & R9A02_IICS_ACKD) && !dev->bSlaveNack)
+	{
+		R9a02I2cSlaveTxNext(dev);
+
+		return;
+	}
+
+	// The master did not acknowledge, its read ends. WREL at the 9th clock
+	// with TRC = 1 clears TRC and releases SDA (24.2.3), the stop or the
+	// restart follows.
+	dev->bSlaveNack = true;
+	dev->bSlaveReal = false;
+	reg->IICCTL0 = R9A02_IICCTL0_IICE | R9A02_IICCTL0_WTIM | R9A02_IICCTL0_SPIE | R9A02_IICCTL0_WREL;
+}
+
 static uint32_t R9a02I2cGetRate(DevIntrf_t * const pIntrf)
 {
 	R9a02I2cDev_t *dev = R9a02I2cHandle(pIntrf);
@@ -892,7 +1337,8 @@ static uint32_t R9a02I2cSetRate(DevIntrf_t * const pIntrf, uint32_t Rate)
 	uint8_t wh;
 	uint32_t actual;
 
-	if (dev == NULL || dev->bOpen || !R9a02I2cRate(Rate, &ctl1, &wl, &wh, &actual))
+	if (dev == NULL || dev->bOpen ||
+		!R9a02I2cRate(Rate, dev->pI2cDev->Cfg.Mode == I2CMODE_SLAVE, &ctl1, &wl, &wh, &actual))
 	{
 		return 0;
 	}
@@ -902,7 +1348,13 @@ static uint32_t R9a02I2cSetRate(DevIntrf_t * const pIntrf, uint32_t Rate)
 	dev->Wh = wh;
 	dev->pI2cDev->Cfg.Rate = actual;
 	R9a02I2cSetLoops(dev);
-	R9a02I2cConfigure(dev);
+
+	// A master tries the set up again at its next start, a slave left off
+	// waits for Reset or Enable
+	if (!R9a02I2cConfigure(dev) && dev->pI2cDev->Cfg.Mode == I2CMODE_SLAVE)
+	{
+		return 0;
+	}
 
 	return actual;
 }
@@ -948,7 +1400,8 @@ static void R9a02I2cEnable(DevIntrf_t * const pIntrf)
 }
 
 // Bus recovery (figure 24.16 note 2), then a new set up. A background
-// transfer is dropped without event and the interface released.
+// transfer is dropped without event and the interface released. A slave is
+// only set up again.
 static void R9a02I2cReset(DevIntrf_t * const pIntrf)
 {
 	R9a02I2cDev_t *dev = R9a02I2cHandle(pIntrf);
@@ -961,7 +1414,10 @@ static void R9a02I2cReset(DevIntrf_t * const pIntrf)
 	bool running = R9a02I2cCancel(dev);
 
 	R9a02I2cStop(pIntrf);
-	R9a02I2cBusRecover(dev);
+	if (dev->pI2cDev->Cfg.Mode != I2CMODE_SLAVE)
+	{
+		R9a02I2cBusRecover(dev);
+	}
 	R9a02I2cConfigure(dev);
 	if (running)
 	{
@@ -974,6 +1430,7 @@ static void R9a02I2cReset(DevIntrf_t * const pIntrf)
 static void R9a02I2cPowerOff(DevIntrf_t * const pIntrf)
 {
 	R9a02I2cDev_t *dev = R9a02I2cHandle(pIntrf);
+	uintptr_t state;
 
 	if (dev == NULL)
 	{
@@ -982,8 +1439,9 @@ static void R9a02I2cPowerOff(DevIntrf_t * const pIntrf)
 
 	R9a02I2cDisable(pIntrf);
 
-	uintptr_t state = DisableInterrupt();
+	state = DisableInterrupt();
 
+	R9a02I2cDmaRelease(dev);
 	R9a02UnregisterIntHandler(dev->IntNo);
 	dev->IntNo = -1;
 	IOPinDis(dev->pI2cDev->Cfg.pIOPinMap, 2);
@@ -1017,6 +1475,18 @@ bool R9a02I2cIicaUses(const I2CDev_t *pDev, int DevNo)
 
 bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfg)
 {
+	R9a02I2cDev_t *dev;
+	DevIntrf_t *intrf;
+	const IOPinCfg_t *pin;
+	uintptr_t state;
+	uint8_t ctl1;
+	uint8_t wl;
+	uint8_t wh;
+	uint32_t actual;
+	int i;
+	bool slave;
+	bool ok;
+
 	if (pDev == NULL || pCfg == NULL)
 	{
 		return false;
@@ -1027,18 +1497,27 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfg)
 		return R9a02I2cSauInit(pDev, pCfg);
 	}
 
+	slave = pCfg->Mode == I2CMODE_SLAVE;
+
 	if (pCfg->DevNo < 0 || pCfg->DevNo >= s_NbR9a02I2cDev ||
-		pCfg->Type != I2CTYPE_STANDARD || pCfg->Mode != I2CMODE_MASTER ||
-		pCfg->AddrType != I2CADDR_TYPE_NORMAL || pCfg->bDmaEn ||
+		pCfg->Type != I2CTYPE_STANDARD || (pCfg->Mode != I2CMODE_MASTER && !slave) ||
+		pCfg->AddrType != I2CADDR_TYPE_NORMAL ||
 		(pCfg->bIntEn && (pCfg->IntPrio < 0 || pCfg->IntPrio > (int)R9A02_CLIC_PRIO_MAX)) ||
 		pCfg->pIOPinMap == NULL || pCfg->NbIOPins != 2 || pCfg->MaxRetry < 0)
 	{
 		return false;
 	}
 
-	for (int i = 0; i < 2; i++)
+	// The slave works from its interrupt with the one address SVA holds
+	if (slave && (!pCfg->bIntEn || pCfg->NbSlaveAddr != 1 ||
+		pCfg->SlaveAddr[0] < R9A02_I2C_SLAVE_ADDR_MIN || pCfg->SlaveAddr[0] > R9A02_I2C_SLAVE_ADDR_MAX))
 	{
-		const IOPinCfg_t *pin = &pCfg->pIOPinMap[i];
+		return false;
+	}
+
+	for (i = 0; i < 2; i++)
+	{
+		pin = &pCfg->pIOPinMap[i];
 
 		if (!R9a02PinValid(pin->PortNo, pin->PinNo) || pin->PinOp != R9A02_PSEL_IICA ||
 			pin->Type != IOPINTYPE_OPENDRAIN || pin->Res == IOPINRES_PULLDOWN)
@@ -1053,18 +1532,13 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfg)
 		return false;
 	}
 
-	uint8_t ctl1;
-	uint8_t wl;
-	uint8_t wh;
-	uint32_t actual;
-
-	if (!R9a02I2cRate(pCfg->Rate, &ctl1, &wl, &wh, &actual))
+	if (!R9a02I2cRate(pCfg->Rate, slave, &ctl1, &wl, &wh, &actual))
 	{
 		return false;
 	}
 
-	R9a02I2cDev_t *dev = &s_R9a02I2cDev[pCfg->DevNo];
-	uintptr_t state = DisableInterrupt();
+	dev = &s_R9a02I2cDev[pCfg->DevNo];
+	state = DisableInterrupt();
 
 	// An instance in use by another I2C object is not taken over, an I2C
 	// object is not used for two instances
@@ -1076,14 +1550,27 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfg)
 		return false;
 	}
 
+	// Reinitialization must leave no live peripheral behind if a new
+	// route cannot be allocated.
+	if (dev->pI2cDev == pDev)
+	{
+		R9a02I2cPowerOff(&pDev->DevIntrf);
+	}
+
 	// Route for the mode: a handler with bIntEn, its CLIC input on only for
-	// the data in the background, the IR flag polled otherwise
+	// the data in the background, the IR flag polled otherwise. The slave
+	// handler takes every event.
+	R9a02I2cDmaRelease(dev);
 	if (dev->IntNo >= 0)
 	{
 		R9a02UnregisterIntHandler(dev->IntNo);
 		dev->IntNo = -1;
 	}
-	if (pCfg->bIntEn)
+	if (slave)
+	{
+		dev->IntNo = R9a02RegisterIntHandler(dev->EvtEnd, pCfg->IntPrio, R9a02I2cSlaveIrqHandler, dev);
+	}
+	else if (pCfg->bIntEn)
 	{
 		dev->IntNo = R9a02RegisterIntHandler(dev->EvtEnd, pCfg->IntPrio, R9a02I2cIrqHandler, dev);
 		R9a02IntEnable(dev->IntNo, false);
@@ -1102,6 +1589,26 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfg)
 		return false;
 	}
 
+	if (pCfg->bDmaEn)
+	{
+		dev->DmaIntNo = R9a02RegisterIntHandler(pCfg->DevNo == 0 ? R9A02_EVT_ELC_SWEVT0 :
+				R9A02_EVT_ELC_SWEVT1, 0, R9a02I2cDmaIrqHandler, dev);
+		R9a02IntEnable(dev->DmaIntNo, false);
+		dev->DmaInfo = {};
+		if (dev->DmaIntNo < 0 || !R9a02DtcSet(dev->DmaIntNo, &dev->DmaInfo))
+		{
+			R9a02I2cDmaRelease(dev);
+			R9a02UnregisterIntHandler(dev->IntNo);
+			dev->IntNo = -1;
+			dev->pI2cDev = NULL;
+			pDev->DevIntrf.pDevData = NULL;
+			pDev->DevIntrf.EnCnt = 0;
+			EnableInterrupt(state);
+
+			return false;
+		}
+	}
+
 	// Module clock first, register writes before it are ignored
 	R9a02ModuleStart(R9A02_MSTPCR_B, dev->MstpMask);
 
@@ -1118,11 +1625,11 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfg)
 	dev->bAsync = false;
 	R9a02I2cSetLoops(dev);
 
-	DevIntrf_t *intrf = &pDev->DevIntrf;
+	intrf = &pDev->DevIntrf;
 
 	intrf->pDevData = dev;
 	intrf->Type = DEVINTRF_TYPE_I2C;
-	intrf->bDma = false;
+	intrf->bDma = pCfg->bDmaEn;
 	intrf->bIntEn = pCfg->bIntEn;
 	intrf->bTxReady = true;
 	intrf->bNoStop = false;
@@ -1146,9 +1653,17 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfg)
 	intrf->EnCnt = 1;
 	atomic_flag_clear(&intrf->bBusy);
 
-	R9a02I2cConfigure(dev);
+	ok = R9a02I2cConfigure(dev);
 
 	EnableInterrupt(state);
+
+	// A slave that does not find the bus free stays off
+	if (!ok && slave)
+	{
+		R9a02I2cPowerOff(intrf);
+
+		return false;
+	}
 
 	return true;
 }

@@ -120,6 +120,9 @@ volatile bool g_UartInitOk = false;
 
 int main()
 {
+	int pending;
+	int offset;
+	int sent;
 	uint8_t buff[BUFFER_SIZE];
 #ifdef BYTE_MODE
 	int len = 1;
@@ -132,10 +135,13 @@ int main()
 #else
 	g_UartInitOk = g_Uart.Init(g_UartCfg);
 #endif
-	if (!g_UartInitOk) return 1;
+	if (!g_UartInitOk)
+	{
+		return 1;
+	}
 
-	int pending = 0;
-	int offset = 0;
+	pending = 0;
+	offset = 0;
 	while (1)
 	{
 		// Keep the unsent suffix until accepted; never overwrite it with RX.
@@ -151,9 +157,9 @@ int main()
 		if (pending > 0)
 		{
 #ifdef DEMO_C
-			int sent = UARTTx(&g_UartDev, buff + offset, pending);
+			sent = UARTTx(&g_UartDev, buff + offset, pending);
 #else
-			int sent = g_Uart.Tx(buff + offset, pending);
+			sent = g_Uart.Tx(buff + offset, pending);
 #endif
 			if (sent > 0)
 			{

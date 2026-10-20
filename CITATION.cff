@@ -1,6 +1,8 @@
 cff-version: 1.2.0
 message: "If you use IOsonata in your work, please cite it as below."
 type: software
+version: "0.13.0"
+date-released: 2026-10-14
 title: "IOsonata: bare-metal, event-driven C++ HAL and firmware framework for microcontrollers"
 abstract: >-
   IOsonata is an open-source, bare-metal C++ hardware-abstraction layer,
@@ -16,7 +18,7 @@ authors:
     family-names: "Hoang"
     affiliation: "I-SYST inc."
   - name: "I-SYST inc."
-    city: "Brossard"
+    city: "Boucherville"
     region: "Quebec"
     country: "CA"
     website: "https://www.i-syst.com"

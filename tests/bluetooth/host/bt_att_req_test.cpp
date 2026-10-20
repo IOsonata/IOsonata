@@ -30,7 +30,6 @@ uint8_t g_CccdWriteErr = 0;
 // Minimal externals BtAttProcessReq reaches for. This test drives the ATT
 // server logic directly, so peers, CCCD state, security and signing are stubbed
 // to a plain unencrypted single link with no subscriptions.
-extern "C" {
 
 // A single stub peer so the Prepare/Execute Write paths (which resolve the
 // link through BtPeerFindByHdl) can queue and apply prepared writes. Enabled
@@ -39,7 +38,7 @@ static BtDevice_t s_StubPeer;
 static uint8_t    s_StubLongWrBuff[512];
 bool              g_PeerEnabled = false;
 
-BtDevice_t *BtPeerFindByHdl(uint16_t Hdl)
+extern "C" BtDevice_t *BtPeerFindByHdl(uint16_t Hdl)
 {
 	if (!g_PeerEnabled)
 	{
@@ -51,29 +50,28 @@ BtDevice_t *BtPeerFindByHdl(uint16_t Hdl)
 	return &s_StubPeer;
 }
 
-bool BtGapConnSecGet(uint16_t, BtConnSec_t *) { return false; }
+extern "C" bool BtGapConnSecGet(uint16_t, BtConnSec_t *) { return false; }
 
-uint16_t BtGattCccdGet(uint16_t, uint16_t) { return 0; }
-uint8_t BtGattCccdValueError(BtGattChar_t *, uint16_t) { return g_CccdWriteErr; }
-bool BtGattCccdCanStore(uint16_t, uint16_t, uint16_t)
+extern "C" uint16_t BtGattCccdGet(uint16_t, uint16_t) { return 0; }
+extern "C" uint8_t BtGattCccdValueError(BtGattChar_t *, uint16_t) { return g_CccdWriteErr; }
+extern "C" bool BtGattCccdCanStore(uint16_t, uint16_t, uint16_t)
 {
 	return g_CccdCanStore;
 }
-bool BtGattCccdSet(uint16_t, uint16_t, uint16_t Value)
+extern "C" bool BtGattCccdSet(uint16_t, uint16_t, uint16_t Value)
 {
 	++g_CccdSetCount;
 	g_CccdSetVal = Value;
 	return true;
 }
-void BtGattClientNotified(uint16_t, uint16_t, uint8_t *, uint16_t) {}
-void BtGattHandleValueConfirm(uint16_t) {}
+extern "C" void BtGattClientNotified(uint16_t, uint16_t, uint8_t *, uint16_t) {}
+extern "C" void BtGattHandleValueConfirm(uint16_t) {}
 
-bool BtSmpSignVerify(uint16_t, const uint8_t *, size_t, const uint8_t *)
+extern "C" bool BtSmpSignVerify(uint16_t, const uint8_t *, size_t, const uint8_t *)
 {
 	return false;
 }
 
-} // extern "C"
 
 namespace {
 

@@ -169,5 +169,5 @@ private:
 
 /** @} End of group USBD */
 
-#endif	// __USBD_HID_H__
+#endif
 

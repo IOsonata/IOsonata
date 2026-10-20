@@ -3,18 +3,21 @@
 
 @brief	Renesas RA4M1 Cortex-M4 core and startup definitions.
 
+@author	Hoang Nguyen Hoan
+@date	Oct. 7, 2026
+
 @license
 
 MIT License
 
-Copyright (c) 2026 I-SYST inc. All rights reserved.
+Copyright (c) 2026, I-SYST inc., all rights reserved
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
 in the Software without restriction, including without limitation the rights
 to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+copies of the Software, and to permit persons to whom the Software is furnished
+to do so, subject to the following conditions:
 
 The above copyright notice and this permission notice shall be included in all
 copies or substantial portions of the Software.
@@ -33,10 +36,9 @@ SOFTWARE.
 
 #include <stdint.h>
 
-/* RA4M1 has 32 configurable ICU event links, not fixed peripheral vectors.
- * Event selection belongs to the interrupt/peripheral driver, as on RE01.
- * This initial header describes the core, not the complete peripheral set.
- */
+// RA4M1 has 32 configurable ICU event links, not fixed peripheral vectors.
+// Event selection belongs to the interrupt/peripheral driver, as on RE01.
+// This initial header describes the core, not the complete peripheral set.
 typedef enum IRQn {
 	NonMaskableInt_IRQn = -14,
 	HardFault_IRQn      = -13,
@@ -83,7 +85,7 @@ typedef enum IRQn {
 
 #ifdef __GNUC__
 #ifndef __PROGRAM_START
-#define __PROGRAM_START          /* IOsonata owns ResetEntry, not CMSIS CRT. */
+#define __PROGRAM_START          // IOsonata owns ResetEntry, not CMSIS CRT.
 #endif
 #endif
 #include "R7FA4M1AB.h"
@@ -96,4 +98,4 @@ typedef enum IRQn {
 #define RA4M1_RAM_SIZE            0x00008000UL
 
 #include "system_ra4m1.h"
-#endif /* __RA4M1XXX_H__ */
+#endif

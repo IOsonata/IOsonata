@@ -110,7 +110,10 @@ int BtPdsDelete(uint32_t Id);
  * the medium. A power loss after that point cannot bring cleared records
  * back; a power loss before it leaves the store unchanged.
  *
- * @return 0 on success or negative errno.
+ * @return 0 on success or negative errno. -ENOMEM means no sector could be
+ * erased for the commit without losing a record before it, a state only a
+ * refused or interrupted erase leaves; the store is unchanged and a remount
+ * normally restores the spare sector.
  */
 int BtPdsClear(void);
 

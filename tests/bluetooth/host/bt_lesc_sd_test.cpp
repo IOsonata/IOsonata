@@ -178,9 +178,8 @@ static void FillPeerKey(ble_gap_lesc_p256_pk_t *pPeer, uint8_t Base)
 
 } // namespace
 
-extern "C" {
 
-void CryptoSecureWipe(void *pData, size_t Len)
+extern "C" void CryptoSecureWipe(void *pData, size_t Len)
 {
 	volatile uint8_t *p = static_cast<volatile uint8_t *>(pData);
 	while (Len-- != 0)
@@ -189,13 +188,13 @@ void CryptoSecureWipe(void *pData, size_t Len)
 	}
 }
 
-void BtSmpOobDataClear(void)
+extern "C" void BtSmpOobDataClear(void)
 {
 	s_OobClearCount++;
 	std::memset(&s_PeerOob, 0, sizeof(s_PeerOob));
 }
 
-uint32_t sd_ble_gap_lesc_oob_data_get(uint16_t,
+extern "C" uint32_t sd_ble_gap_lesc_oob_data_get(uint16_t,
 								 ble_gap_lesc_p256_pk_t *,
 								 ble_gap_lesc_oob_data_t *pData)
 {
@@ -207,7 +206,7 @@ uint32_t sd_ble_gap_lesc_oob_data_get(uint16_t,
 	return NRF_SUCCESS;
 }
 
-uint32_t sd_ble_gap_lesc_oob_data_set(uint16_t ConnHdl,
+extern "C" uint32_t sd_ble_gap_lesc_oob_data_set(uint16_t ConnHdl,
 								 ble_gap_lesc_oob_data_t *pOwn,
 								 ble_gap_lesc_oob_data_t *pPeer)
 {
@@ -219,7 +218,7 @@ uint32_t sd_ble_gap_lesc_oob_data_set(uint16_t ConnHdl,
 	return s_OobSetResult;
 }
 
-uint32_t BtLescDhKeyReply(uint16_t, uint8_t SecStatus,
+extern "C" uint32_t BtLescDhKeyReply(uint16_t, uint8_t SecStatus,
 						  const ble_gap_lesc_dhkey_t *pDhKey)
 {
 	s_DhReplyCount++;
@@ -228,7 +227,7 @@ uint32_t BtLescDhKeyReply(uint16_t, uint8_t SecStatus,
 	return NRF_SUCCESS;
 }
 
-int BtLescLinkCount(void)
+extern "C" int BtLescLinkCount(void)
 {
 	return 2;
 }
@@ -238,7 +237,7 @@ static int s_QueCount;
 static BtEvtQueHandler_t s_pQueHandler;
 static bool s_bQueFull;
 
-bool BtEvtQue(uint32_t, void *, BtEvtQueHandler_t Handler)
+extern "C" bool BtEvtQue(uint32_t, void *, BtEvtQueHandler_t Handler)
 {
 	s_QueCount++;
 	if (s_bQueFull)
@@ -249,7 +248,6 @@ bool BtEvtQue(uint32_t, void *, BtEvtQueHandler_t Handler)
 	return true;
 }
 
-} // extern "C"
 
 int main()
 {

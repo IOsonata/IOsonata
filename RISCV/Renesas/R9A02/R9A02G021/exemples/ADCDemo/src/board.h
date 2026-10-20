@@ -73,7 +73,7 @@ SOFTWARE.
 	{UART_TX_PORT, UART_TX_PIN, UART_TX_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL}, \
 }
 
-#define UART_BAUDRATE		115200
+#define UART_BAUDRATE		1000000
 
 // Inputs converted, ANI numbers: ANI2 (P400) and ANI3 (P401), Arduino A0
 // and A1
@@ -81,6 +81,6 @@ SOFTWARE.
 #define ADC_DEMO_IN1		3
 
 // true to convert in the background with the ADC_ENDI interrupt
-#define ADC_DEMO_INT_ENABLE	false
+#define ADC_DEMO_INT_ENABLE	true
 
 #endif

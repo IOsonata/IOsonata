@@ -57,4 +57,4 @@ SOFTWARE.
 #define BMI323_LS_EN_PIN		3
 #define BMI323_LS_EN_PINOP	0
 
-#endif // __USB_HID_3D_MOUSE_BOARD_H__
+#endif

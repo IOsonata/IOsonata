@@ -242,20 +242,30 @@ for name, path, stubs in [
 #define BTAPP_STATE_UNKNOWN 0
 #define CONFIG_NRF_SDH_BLE_TOTAL_LINK_COUNT 1
 #define BLE_CONN_HANDLE_INVALID 65535
-static struct { int State; } g_BtAppData = {0};
+static struct { bool bInitialized; bool bSecInit; } s_BtAppData = {false, false};
+static void BtSecBmCheckStatus() {}
 static uint16_t s_SecurePendingHdl[1] = {BLE_CONN_HANDLE_INVALID};
 static void BtLescCheckStatus() {}
 static void SecurePendingQue() {}
 '''),
 		('stm32wba', 'ARM/ST/STM32WBAxx/src/bt_app_stm32wba.cpp', r'''
-static bool s_bHciUserEvtOwed, s_bBleHostOwed;
-static void hci_notify_asynch_evt(void *) {}
-static void BLE_RESUME_FLOW_PROCESS_Callback() {}
+#define WBA_STATUS_TEST
+static unsigned bondFlushes;
+extern "C" void BtSmpBondWbaFlush(void)
+{
+	++bondFlushes;
+}
+static bool s_bEvtDrainOwed, s_bBleHostOwed;
+static void BtAppTickQue() {}
+static void BtAppEvtDrainQue() {}
+extern "C" void BleStackCB_Process(void) {}
+extern "C" void BtWbaPlatformRetry(void) {}
+extern "C" void BtWbaPlatformInit(void) {}
 ''')]:
 	source = (ROOT / path).read_text()
 	code = COMMON + stubs + '\nextern "C" void BtAppCheckStatus(void);\n'
 	code += '\n'.join(re.findall(
-		r'^extern[^\n]*void Bt(?:DfuSmp|Lesc)CheckStatus[^\n]*weak[^\n]*;',
+		r'^extern[^\n]*void Bt(?:DfuSmp|Lesc|SecSd)CheckStatus[^\n]*weak[^\n]*;',
 		source, re.M)) + '\n'
 	code += function(source.replace('__attribute__((weak)) ', ''), 'BtAppCheckStatus')
 	code += r'''
@@ -263,6 +273,9 @@ int main() {
 	assert(AppEvtHandlerInit(nullptr, 0));
 	run();
 	assert(!AppEvtHandlerPending());
+#ifdef WBA_STATUS_TEST
+	assert(bondFlushes == 1);
+#endif
 #ifdef WITH_SECURITY
 	extern unsigned dfuChecks;
 	assert(dfuChecks == 1);

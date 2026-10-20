@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "mcu": "STM32H753",
+  "cpu": "cortex-m7",
+  "fpu": true,
+  "fpu_unit": "fpv5d16",
+  "defines": [
+    "STM32H753xx"
+  ],
+  "includes": [
+    "${iosonata}/ARM/ST/include",
+    "${iosonata}/ARM/ST/STM32H7xx/include",
+    "${iosonata}/ARM/ST/STM32H7xx/STM32H753/lib/include"
+  ],
+  "linker_script": "${iosonata}/ARM/ST/STM32H7xx/ldscript/gcc_stm32h753xx.ld",
+  "lib_path": "${iosonata}/ARM/ST/STM32H7xx/STM32H753/lib/ioc/${config}",
+  "lib": "IOsonata_STM32H753"
+}
+

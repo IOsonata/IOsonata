@@ -14,6 +14,9 @@
 #include "bluetooth/bt_gap.h"
 #include "bluetooth/bt_app.h"
 
+static BtHciDevice_t *s_pController;
+
+
 namespace {
 
 int s_Failures = 0;
@@ -80,7 +83,7 @@ void Setup(uint8_t LocalType, const uint8_t LocalAddr[6])
 	s_RetLen = 0;
 	s_CmdStatus = 0;
 	s_Dev.Command = CaptureCommand;
-	g_BtAppData.AppDevice.pHciDev = &s_Dev;
+	s_pController = &s_Dev;
 	s_LocalType = LocalType;
 	std::memcpy(s_LocalAddr, LocalAddr, 6);
 }
@@ -557,7 +560,7 @@ void TestLinkProceduresWithoutDevice()
 	uint8_t rx = 0;
 
 	Setup(BTADDR_TYPE_PUBLIC, addr);
-	g_BtAppData.AppDevice.pHciDev = nullptr;
+	s_pController = nullptr;
 
 	CHECK(BtGapReadPhy(0x0010, &tx, &rx) == false);
 	CHECK(BtGapSetPhy(0x0010, BT_GAP_PHY_1MBITS, BT_GAP_PHY_1MBITS,
@@ -568,23 +571,21 @@ void TestLinkProceduresWithoutDevice()
 
 } // namespace
 
-extern "C" {
 
 static void TestConnectStartsConnSupport(void);
 
-BtAppData_t g_BtAppData;
 
 // Connection support of the port, which initiating a connection starts.
 static bool s_ConnInitResult = true;
 static int s_ConnInitCalls = 0;
 
-bool BtAppConnInit(void)
+extern "C" bool BtAppConnInit(void)
 {
 	s_ConnInitCalls++;
 	return s_ConnInitResult;
 }
 
-void BtSmpLocalAddrGet(uint8_t *pType, uint8_t pAddr[6])
+extern "C" void BtSmpLocalAddrGet(uint8_t *pType, uint8_t pAddr[6])
 {
 	*pType = s_LocalType;
 	std::memcpy(pAddr, s_LocalAddr, 6);
@@ -616,7 +617,6 @@ static void TestConnectStartsConnSupport(void)
 	CHECK(s_CmdCount > 0);
 }
 
-} // extern "C"
 
 int main()
 {
@@ -648,5 +648,23 @@ int main()
 	}
 
 	std::printf("GAP HCI host tests: PASS (%d checks)\n", s_Checks);
+	return 0;
+}
+
+BtHciDevice_t *BtAppHciDevice(void)
+{
+	return s_pController;
+}
+
+// Failed controller commands are logged by the production GAP implementation.
+#include "syslog.h"
+
+SysLog_t *SysLogGet(void)
+{
+	return nullptr;
+}
+
+int SysLogPrintf(SysLog_t * const, const char *, ...)
+{
 	return 0;
 }

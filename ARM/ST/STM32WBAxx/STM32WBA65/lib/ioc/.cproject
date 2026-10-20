@@ -79,12 +79,55 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/link_layer/ll_cmd_lib/porting&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/link_layer/ll_cmd_lib/inc/ot_inc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Utilities/tim_serv&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/ble/stack/include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/ble/stack/include/auto&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/link_layer/ll_sys/inc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/link_layer/ll_cmd_lib/inc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/link_layer/ll_cmd_lib/config/ble_basic_plus&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Drivers/STM32WBAxx_HAL_Driver/Inc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/Common/WPAN/Interfaces&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/Common/WPAN/Modules&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/Common/WPAN/Modules/BasicAES&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/Common/WPAN/Modules/Flash&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/Common/WPAN/Modules/Log&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/Common/WPAN/Modules/MemoryManager&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/Common/WPAN/Modules/RFControl&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/Common/WPAN/Modules/RTDebug&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/Common/WPAN/Modules/SerialCmdInterpreter&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_p2pServer/STM32_WPAN/App&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_p2pServer/STM32_WPAN/Target&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_p2pServer/System/Config/Log&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_p2pServer/System/Config/ADC_Ctrl&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_p2pServer/System/Config/CRC_Ctrl&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_p2pServer/System/Config/Debug_GPIO&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_p2pServer/System/Config/Flash&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_p2pServer/System/Config/LowPower&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_p2pServer/System/Interfaces&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_p2pServer/System/Modules&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Utilities/CPU&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Utilities/conf&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Utilities/lpm/tiny_lpm&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Utilities/misc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Utilities/sequencer&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Utilities/tim_serv&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Utilities/trace/adv_trace&quot;"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="wba65.36" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs" useByScannerDiscovery="true" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="__PROGRAM_START"/>
 									<listOptionValue builtIn="false" value="STM32WBA65xx"/>
 									<listOptionValue builtIn="false" value="DEBUG"/>
+									<listOptionValue builtIn="false" value="BLE_LL"/>
+									<listOptionValue builtIn="false" value="IOSONATA_STM32_WBA"/>
+									<listOptionValue builtIn="false" value="PHY_40nm_3_40_a"/>
+									<listOptionValue builtIn="false" value="BLE_STACK_BASIC_PLUS=1"/>
+									<listOptionValue builtIn="false" value="uECC_ENABLE_VLI_API"/>
+									<listOptionValue builtIn="false" value="uECC_OPTIMIZATION_LEVEL=3"/>
+									<listOptionValue builtIn="false" value="uECC_SQUARE_FUNC=1"/>
+									<listOptionValue builtIn="false" value="uECC_SUPPORTS_secp256r1=1"/>
+									<listOptionValue builtIn="false" value="uECC_SUPPORT_COMPRESSED_POINT=0"/>
 								</option>
+								<option id="wba65.9001" name="Other compiler flags" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.other" value="-include cmsis_compiler.h" valueType="string"/>
 								<option id="wba65.37" name="Language standard" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std" useByScannerDiscovery="true" value="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std.gnu17" valueType="enumerated"/>
 								<inputType id="wba65.38" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input"/>
 							</tool>
@@ -110,11 +153,53 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/link_layer/ll_cmd_lib/porting&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/link_layer/ll_cmd_lib/inc/ot_inc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Utilities/tim_serv&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/ble/stack/include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/ble/stack/include/auto&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/link_layer/ll_sys/inc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/link_layer/ll_cmd_lib/inc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/link_layer/ll_cmd_lib/config/ble_basic_plus&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Drivers/STM32WBAxx_HAL_Driver/Inc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/Common/WPAN/Interfaces&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/Common/WPAN/Modules&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/Common/WPAN/Modules/BasicAES&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/Common/WPAN/Modules/Flash&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/Common/WPAN/Modules/Log&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/Common/WPAN/Modules/MemoryManager&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/Common/WPAN/Modules/RFControl&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/Common/WPAN/Modules/RTDebug&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/Common/WPAN/Modules/SerialCmdInterpreter&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_p2pServer/STM32_WPAN/App&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_p2pServer/STM32_WPAN/Target&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_p2pServer/System/Config/Log&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_p2pServer/System/Config/ADC_Ctrl&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_p2pServer/System/Config/CRC_Ctrl&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_p2pServer/System/Config/Debug_GPIO&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_p2pServer/System/Config/Flash&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_p2pServer/System/Config/LowPower&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_p2pServer/System/Interfaces&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_p2pServer/System/Modules&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Utilities/CPU&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Utilities/conf&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Utilities/lpm/tiny_lpm&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Utilities/misc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Utilities/sequencer&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Utilities/tim_serv&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Utilities/trace/adv_trace&quot;"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="wba65.41" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.defs" useByScannerDiscovery="true" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="__PROGRAM_START"/>
 									<listOptionValue builtIn="false" value="STM32WBA65xx"/>
 									<listOptionValue builtIn="false" value="DEBUG"/>
+									<listOptionValue builtIn="false" value="BLE_LL"/>
+									<listOptionValue builtIn="false" value="IOSONATA_STM32_WBA"/>
+									<listOptionValue builtIn="false" value="PHY_40nm_3_40_a"/>
+									<listOptionValue builtIn="false" value="BLE_STACK_BASIC_PLUS=1"/>
+									<listOptionValue builtIn="false" value="uECC_ENABLE_VLI_API"/>
+									<listOptionValue builtIn="false" value="uECC_OPTIMIZATION_LEVEL=3"/>
+									<listOptionValue builtIn="false" value="uECC_SQUARE_FUNC=1"/>
+									<listOptionValue builtIn="false" value="uECC_SUPPORTS_secp256r1=1"/>
+									<listOptionValue builtIn="false" value="uECC_SUPPORT_COMPRESSED_POINT=0"/>
 								</option>
 								<option id="wba65.42" name="Language standard" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.std" useByScannerDiscovery="true" value="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.std.gnucpp23" valueType="enumerated"/>
 								<option id="wba65.44" name="Do not use RTTI (-fno-rtti)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.nortti" useByScannerDiscovery="true" value="true" valueType="boolean"/>
@@ -130,7 +215,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/usb/usb_hidhost.cpp|src/sysstatus.c|src/sysstatus_impl.cpp|src/bluetooth/bt_adv_stm32wba.cpp|src/bluetooth/bt_app_stm32wba.cpp|src/bluetooth/bt_gap_stm32wba.cpp|src/bluetooth/bt_gatt_stm32wba.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/usb/usb_hidhost.cpp|src/bluetooth/bt_adv_hci.cpp|src/bluetooth/bt_gap_hci.cpp|src/bluetooth/bt_gatt_hci.cpp|src/bluetooth/bt_scan_hci.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -215,12 +300,55 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/link_layer/ll_cmd_lib/porting&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/link_layer/ll_cmd_lib/inc/ot_inc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Utilities/tim_serv&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/ble/stack/include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/ble/stack/include/auto&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/link_layer/ll_sys/inc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/link_layer/ll_cmd_lib/inc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/link_layer/ll_cmd_lib/config/ble_basic_plus&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Drivers/STM32WBAxx_HAL_Driver/Inc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/Common/WPAN/Interfaces&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/Common/WPAN/Modules&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/Common/WPAN/Modules/BasicAES&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/Common/WPAN/Modules/Flash&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/Common/WPAN/Modules/Log&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/Common/WPAN/Modules/MemoryManager&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/Common/WPAN/Modules/RFControl&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/Common/WPAN/Modules/RTDebug&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/Common/WPAN/Modules/SerialCmdInterpreter&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_p2pServer/STM32_WPAN/App&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_p2pServer/STM32_WPAN/Target&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_p2pServer/System/Config/Log&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_p2pServer/System/Config/ADC_Ctrl&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_p2pServer/System/Config/CRC_Ctrl&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_p2pServer/System/Config/Debug_GPIO&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_p2pServer/System/Config/Flash&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_p2pServer/System/Config/LowPower&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_p2pServer/System/Interfaces&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_p2pServer/System/Modules&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Utilities/CPU&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Utilities/conf&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Utilities/lpm/tiny_lpm&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Utilities/misc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Utilities/sequencer&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Utilities/tim_serv&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Utilities/trace/adv_trace&quot;"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="wba65.87" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs" useByScannerDiscovery="true" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="__PROGRAM_START"/>
 									<listOptionValue builtIn="false" value="STM32WBA65xx"/>
 									<listOptionValue builtIn="false" value="NDEBUG"/>
+									<listOptionValue builtIn="false" value="BLE_LL"/>
+									<listOptionValue builtIn="false" value="IOSONATA_STM32_WBA"/>
+									<listOptionValue builtIn="false" value="PHY_40nm_3_40_a"/>
+									<listOptionValue builtIn="false" value="BLE_STACK_BASIC_PLUS=1"/>
+									<listOptionValue builtIn="false" value="uECC_ENABLE_VLI_API"/>
+									<listOptionValue builtIn="false" value="uECC_OPTIMIZATION_LEVEL=3"/>
+									<listOptionValue builtIn="false" value="uECC_SQUARE_FUNC=1"/>
+									<listOptionValue builtIn="false" value="uECC_SUPPORTS_secp256r1=1"/>
+									<listOptionValue builtIn="false" value="uECC_SUPPORT_COMPRESSED_POINT=0"/>
 								</option>
+								<option id="wba65.9002" name="Other compiler flags" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.other" value="-include cmsis_compiler.h" valueType="string"/>
 								<option id="wba65.88" name="Language standard" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std" useByScannerDiscovery="true" value="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std.gnu17" valueType="enumerated"/>
 								<inputType id="wba65.89" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input"/>
 							</tool>
@@ -246,11 +374,53 @@
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/link_layer/ll_cmd_lib/porting&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/link_layer/ll_cmd_lib/inc/ot_inc&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Utilities/tim_serv&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/ble/stack/include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/ble/stack/include/auto&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/link_layer/ll_sys/inc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/link_layer/ll_cmd_lib/inc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan/link_layer/ll_cmd_lib/config/ble_basic_plus&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/stm32-mw-wpan&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Drivers/STM32WBAxx_HAL_Driver/Inc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/Common/WPAN/Interfaces&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/Common/WPAN/Modules&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/Common/WPAN/Modules/BasicAES&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/Common/WPAN/Modules/Flash&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/Common/WPAN/Modules/Log&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/Common/WPAN/Modules/MemoryManager&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/Common/WPAN/Modules/RFControl&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/Common/WPAN/Modules/RTDebug&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/Common/WPAN/Modules/SerialCmdInterpreter&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_p2pServer/STM32_WPAN/App&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_p2pServer/STM32_WPAN/Target&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_p2pServer/System/Config/Log&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_p2pServer/System/Config/ADC_Ctrl&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_p2pServer/System/Config/CRC_Ctrl&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_p2pServer/System/Config/Debug_GPIO&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_p2pServer/System/Config/Flash&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_p2pServer/System/Config/LowPower&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_p2pServer/System/Interfaces&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Projects/NUCLEO-WBA65RI/Applications/BLE/BLE_p2pServer/System/Modules&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Utilities/CPU&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Utilities/conf&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Utilities/lpm/tiny_lpm&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Utilities/misc&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Utilities/sequencer&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Utilities/tim_serv&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/STM32CubeWBA/Utilities/trace/adv_trace&quot;"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="wba65.92" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.defs" useByScannerDiscovery="true" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="__PROGRAM_START"/>
 									<listOptionValue builtIn="false" value="STM32WBA65xx"/>
 									<listOptionValue builtIn="false" value="NDEBUG"/>
+									<listOptionValue builtIn="false" value="BLE_LL"/>
+									<listOptionValue builtIn="false" value="IOSONATA_STM32_WBA"/>
+									<listOptionValue builtIn="false" value="PHY_40nm_3_40_a"/>
+									<listOptionValue builtIn="false" value="BLE_STACK_BASIC_PLUS=1"/>
+									<listOptionValue builtIn="false" value="uECC_ENABLE_VLI_API"/>
+									<listOptionValue builtIn="false" value="uECC_OPTIMIZATION_LEVEL=3"/>
+									<listOptionValue builtIn="false" value="uECC_SQUARE_FUNC=1"/>
+									<listOptionValue builtIn="false" value="uECC_SUPPORTS_secp256r1=1"/>
+									<listOptionValue builtIn="false" value="uECC_SUPPORT_COMPRESSED_POINT=0"/>
 								</option>
 								<option id="wba65.93" name="Language standard" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.std" useByScannerDiscovery="true" value="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.std.gnucpp23" valueType="enumerated"/>
 								<option id="wba65.95" name="Do not use RTTI (-fno-rtti)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.nortti" useByScannerDiscovery="true" value="true" valueType="boolean"/>
@@ -266,7 +436,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="src/usb/usb_hidhost.cpp|src/sysstatus.c|src/sysstatus_impl.cpp|src/bluetooth/bt_adv_stm32wba.cpp|src/bluetooth/bt_app_stm32wba.cpp|src/bluetooth/bt_gap_stm32wba.cpp|src/bluetooth/bt_gatt_stm32wba.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/usb/usb_hidhost.cpp|src/bluetooth/bt_adv_hci.cpp|src/bluetooth/bt_gap_hci.cpp|src/bluetooth/bt_gatt_hci.cpp|src/bluetooth/bt_scan_hci.cpp" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>

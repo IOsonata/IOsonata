@@ -21,14 +21,13 @@ __attribute__((constructor)) void IgnoreBrokenPipeSignal()
 
 } // namespace
 
-extern "C" {
 
 // bt_smp.cpp is compiled with its initializer renamed for this host test. The
 // wrapper keeps deterministic ECDH and RNG from each worker but replaces the
 // temporary test mixer with IOsonata's production AES-128 implementation.
-bool BtSmpInitReal(KeyAgreeEngine *pEcdh, CipherEngine *pAes, RngEngine *pRng);
+extern "C" bool BtSmpInitReal(KeyAgreeEngine *pEcdh, CipherEngine *pAes, RngEngine *pRng);
 
-bool BtSmpInit(KeyAgreeEngine *pEcdh, CipherEngine *pAes, RngEngine *pRng)
+extern "C" bool BtSmpInit(KeyAgreeEngine *pEcdh, CipherEngine *pAes, RngEngine *pRng)
 {
 	(void)pAes;
 	if (!s_Aes.Enable())
@@ -40,18 +39,18 @@ bool BtSmpInit(KeyAgreeEngine *pEcdh, CipherEngine *pAes, RngEngine *pRng)
 
 // This harness delivers SMP PDUs and controller events directly to SMP;
 // it does not link the HCI host that normally owns this registration.
-void BtHciSmpHandlerSet(const BtHciSmpHandler_t *pHandler)
+extern "C" void BtHciSmpHandlerSet(const BtHciSmpHandler_t *pHandler)
 {
 	(void)pHandler;
 }
 
-void BtGattCccdRestoreBonded(uint16_t ConnHdl)
+extern "C" void BtGattCccdRestoreBonded(uint16_t ConnHdl)
 {
 	(void)ConnHdl;
 }
 
 // The deterministic engines never report BUSY, so SMP has no retry to queue.
-bool BtEvtQue(uint32_t EvtId, void *pCtx, BtEvtQueHandler_t Handler)
+extern "C" bool BtEvtQue(uint32_t EvtId, void *pCtx, BtEvtQueHandler_t Handler)
 {
 	(void)EvtId;
 	(void)pCtx;
@@ -59,17 +58,16 @@ bool BtEvtQue(uint32_t EvtId, void *pCtx, BtEvtQueHandler_t Handler)
 	return false;
 }
 
-SysLog_t *SysLogGet(void)
+extern "C" SysLog_t *SysLogGet(void)
 {
 	static SysLog_t log = {};
 	return &log;
 }
 
-int SysLogPrintf(SysLog_t * const pLog, const char *pFormat, ...)
+extern "C" int SysLogPrintf(SysLog_t * const pLog, const char *pFormat, ...)
 {
 	(void)pLog;
 	(void)pFormat;
 	return 0;
 }
 
-} // extern "C"

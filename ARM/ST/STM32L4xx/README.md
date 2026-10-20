@@ -17,9 +17,10 @@ An MCU needs startup, GPIO, UART and timer support to be considered supported.
 Peripheral source files and project metadata alone do not establish this.
 Hardware validation is recorded separately from implementation coverage.
 
-STM32L432 (STM32L432KC on the NUCLEO-L432KC) has a library project and two
-UART example projects built from the same L4 sources (2026-10-13). It is not
-tested on hardware yet; see the STM32L432 paragraph under Validation.
+STM32L432 (STM32L432KC on the NUCLEO-L432KC) has a library project and the
+example projects Blinky, TimerDemo, UartLoopback and UartPrbsTxTest built from
+the same L4 sources (2026-10-13, Blinky 2026-10-19). It is not tested on
+hardware yet; see the STM32L432 paragraph under Validation.
 
 ## Virtual device numbers
 
@@ -39,13 +40,19 @@ CFIFO full is dropped and counted in `RxDropCnt` with a blocking CFIFO
 
 UART DMA (`bDMAMode`, with or without `bIntMode`) sends TX blocks straight
 from the TX CFIFO and receives into a circular ring moved into the RX CFIFO,
-as on the F0 parts. With a non-blocking CFIFO each TX block, at most 32
-bytes, is a copy taken out of the CFIFO, see `ARM/ST/STM32F0xx/README.md`
-(STM32L432 in the emulator at 80 MHz and 1 Mbaud: loopback 96.6 kB/s, 99.0
-with a blocking CFIFO). Each channel has its own vector, defined by the UART
-driver. L476 and L496 select the request in the DMA1 or DMA2 CSELR, L4+ parts
-route it through DMAMUX1 (DMA1 channel n on DMAMUX1 channel n - 1, DMA2
-channel n on channel n + 6). Not tested on hardware.
+as on the F0 parts. With a non-blocking CFIFO each TX block, at most 32 bytes,
+is a copy taken out of the CFIFO, see `ARM/ST/STM32F0xx/README.md` (STM32L432
+in the emulator at 80 MHz and 1 Mbaud: loopback 96.6 kB/s, 99.0 with a
+blocking CFIFO). Each channel has its own vector. Since 2026-10-19 the vectors
+belong to the DMA channel manager `ARM/ST/src/dma_stm32.cpp`, which all four
+L4 libraries build: a driver claims the channels the reference manual gives
+its request, the first to ask has them (UART, SPI and I2C). L476 and L496
+select the request in the DMA1 or DMA2 CSELR, L4+ parts route it through
+DMAMUX1 (DMA1 channel n on DMAMUX1 channel n - 1, DMA2 channel n on DMAMUX1
+channel n + 6). On the NUCLEO-L432KC (2026-10-19), UartPrbsTxTest on USART2,
+the ST-LINK virtual COM port, at 1 Mbaud: DMA without interrupts and DMA with
+interrupts 99.4 kB/s, interrupts without DMA 99.9 kB/s, no loss after the
+start of the stream.
 
 | DevNo | Hardware | TX DMA | RX DMA | CSELR | DMAMUX1 TX, RX |
 |---|---|---|---|---|---|
@@ -61,9 +68,42 @@ more.
 
 SPI indices 0-2 select SPI1-3. On L432/L476/L496, index 3 selects QUADSPI.
 On L4S9, indices 3 and 4 select OCTOSPI1 and OCTOSPI2. The L432 has no SPI2:
-index 1 fails initialization. Extended SPI
-controllers currently accept polling master configurations only; interrupt,
-DMA and slave requests fail initialization.
+index 1 fails initialization. QUADSPI and OCTOSPI accept polling master
+configurations only; interrupt, DMA and slave requests fail initialization.
+
+The four L4 libraries build the shared STM32 SPI driver,
+`ARM/ST/src/spi_stm32.cpp`. SPIInit passes index 3 and up to
+`ARM/ST/src/quadspi_stm32.cpp` (L432, L476, L496) or
+`ARM/ST/src/octospi_stm32.cpp` (L4S9), declared in
+`ARM/ST/include/qospi_stm32.h`. These replace `src/spi_stm32l4xx.cpp`,
+`src/quadspi_stm32l4xx.cpp`, `src/octospi_stm32l4xx.cpp` and
+`include/spi_stm32l4xx.h`, removed (2026-10-19). The QUADSPI rate is now
+HCLK / (PRESCALER + 1), as for the OCTOSPI: the old code divided by
+PRESCALER, a division by zero at the highest rate. The QUADSPI StopTx now
+raises the chip select it lowered (QSPI_CS_IOPIN_IDX).
+
+SPI1 to SPI3 (DevNo 0 to 2), master in polling and interrupt mode, slave in
+interrupt mode with the hardware NSS pin, 4 to 16 bit data, the rate from the
+BR divider. DMA for master and slave through the DMA channel manager: SPI1 TX
+DMA1 channel 3 and RX channel 2 (CSELR 1), or DMA2 channels 4 and 3 (CSELR 4)
+when those are taken; SPI2 DMA1 channels 5 and 4; SPI3 DMA2 channels 2 and 1
+(CSELR 3). The STM32L432 example SPIMasterSlave runs SPI1 as master
+(A1 PA1 SCK, D10 PA11 MISO, A6 PA7 MOSI, D3 PB0 chip select GPIO) against SPI3
+as slave (D13 PB3 SCK, D12 PB4 MISO, D11 PB5 MOSI, A3 PA4 NSS) on one
+NUCLEO-L432KC, wired A1 to D13, A6 to D11, D10 to D12 and D3 to A3. The A6 and
+D12 lines are shared with the I2CMasterSlave wiring. On the NUCLEO-L432KC
+(2026-10-19), master polling and master interrupt, each against the interrupt
+driven slave, pass in SPI modes 0 to 3 at 625 kHz, 8 bit data: master transmit
+and receive frames of 1, 16 and 129 bytes, and a 1 byte frame that discards
+the slave transmit prefetch before the next frame. With DMA (2026-10-19) the
+same test passes in all 8 combinations: master polling, interrupt, DMA and DMA
+with interrupt, each against the interrupt driven slave and the DMA slave.
+
+The master chip select is a GPIO driven by the driver; the hardware NSS is
+used by the slave only. The old driver drove the master NSS pin by hardware
+with a single chip select, so the L476, L496 and L4S9 SPIMasterSlave examples
+now configure the master chip select pin as a GPIO. The shared driver is not
+tested on the L476, L496 and L4S9 hardware yet.
 
 ## Timer
 
@@ -105,9 +145,26 @@ in `ARM/ST/STM32F0xx/README.md` and `ARM/ST/include/timer_stm32.h`.
 
 ## I2C limits
 
-I2C currently accepts polling master configurations only. Slave, interrupt
-and DMA requests return false before changing the device or hardware state.
-L4S9 I2C4 uses virtual index 3. The L432 has no I2C2: index 1 fails
+The four L4 libraries build the shared STM32 I2C driver,
+`ARM/ST/src/i2c_stm32.cpp`; `src/i2c_stm32l4xx.cpp` is removed (2026-10-19):
+master in polling and interrupt mode, slave in interrupt mode, 7 bit
+addresses. DMA for master and slave through the DMA channel manager: I2C1 TX
+DMA1 channel 6 and RX channel 7 (CSELR 3), or DMA2 channels 7 and 6 (CSELR 5)
+when those are taken; I2C2 DMA1 channels 4 and 5; I2C3 DMA1 channels 2 and 3
+(CSELR 3); I2C4 DMA2 channels 2 and 1 (CSELR 0). The STM32L432 example
+I2CMasterSlave runs I2C1 (DevNo 0, D1 PA9 SCL, D0 PA10 SDA) as master against
+I2C3 (DevNo 2, A6 PA7 SCL, D12 PB4 SDA) as slave on one NUCLEO-L432KC, wired
+D1 to A6 and D0 to D12. The Release build prints on the ST-LINK virtual COM
+port at 1 Mbaud. On the NUCLEO-L432KC (2026-10-19), master polling and master
+interrupt, each against the interrupt driven slave, pass: write 8 bytes at an
+offset, read them back, and a 4 byte read, at 100 kHz with the internal
+pull-ups. With DMA (2026-10-19) the same test passes in all 8 combinations:
+master polling, interrupt, DMA and DMA with interrupt, each against the
+interrupt driven slave and the DMA slave.
+
+The shared driver is not tested on the L476, L496 and L4S9 hardware yet. The
+old driver accepted polling master configurations only.
+L496 and L4S9 I2C4 use virtual index 3. The L432 has no I2C2: index 1 fails
 initialization, I2C1 and I2C3 keep indices 0 and 2.
 
 These restrictions identify unsupported modes within the hardware-validated
@@ -156,23 +213,23 @@ UART hardware run: the STM32L476 examples UartLoopback
 (`exemples/uart/uart_loopback.cpp`) and UartPrbsTxTest
 (`exemples/uart/uart_prbs_tx.cpp`) select their board with `#define BOARD` in
 `board.h`, from the pin maps of `ARM/ST/include/stm32_boards.h`. The project
-builds for B_L475E_IOT01A (the default, STM32L475VG: UART4, DevNo 4, on
-Arduino D0 PA1 and D1 PA0, AF8; ST-LINK virtual COM port on USART1 PB6/PB7)
+builds for B_L475E_IOT01A (the default, STM32L475VG: the ST-LINK virtual
+COM port, USART1, DevNo 1, PB7 RX and PB6 TX, AF7, since 2026-10-19, Release
+linked with nosys; UART4, DevNo 4, on Arduino D0 PA1 and D1 PA0, AF8)
 and STM32L476G_DISCO (USART2, DevNo 2, on PD5 TX and PD6 RX, AF7, also the
-virtual COM port). The STM32L476 library leaves out the old `src/sysstatus.c`,
-which no longer compiles with the current `sysstatus.h`. The library and these
+virtual COM port). The old `src/sysstatus.c` is retired; `syslog.cpp` and `sysstatus.h` replace it.
+The STM32L476 library and these
 two examples were built for Debug and Release from their `.project` and
 `.cproject` settings with GNU Arm 13.2, outside IOcomposer. The other L476
 examples, except TimerDemo, still name `stm32l476xx.ld`, which is not in
 `ldscript/` (`gcc_stm32l476xx.ld` is), and their board files pair DevNo 1
 with the USART2 pins and PinOp `0x72`, which the GPIO driver does not take as
-AF7. The L496 and L4S9 libraries still build `src/sysstatus.c`, which does
-not compile; the libraries build without it.
+AF7.
 
 Timer hardware run: TimerDemo (`exemples/timer/timer_demo.cpp`), in
 `STM32L476/exemples/TimerDemo` for B_L475E_IOT01A and
 `STM32L432/exemples/TimerDemo` for NUCLEO_L432KC. Output on the ST-LINK
-virtual COM port at 115200 8N1 (USART1 PB7/PB6 on the B-L475E-IOT01A,
+virtual COM port at 1000000 8N1 in Release (USART1 PB7/PB6 on the B-L475E-IOT01A,
 USART2 PA15/PA2 on the NUCLEO-L432KC), the first LED toggles on trigger 0.
 `TIMER_DEMO_DEVNO` in `board.h` selects the timer, LPTIM1 by default, from
 the LSE crystal; the TIM run at 100 kHz. Expected output, LPTIM1:
@@ -191,7 +248,49 @@ UART output. The four TimerDemo projects build for Debug and Release; in an
 instruction set emulator with LPTIM, TIM, RCC and UART models the L432 image
 runs each of its eight timers and the L476 image LPTIM1, LPTIM2, TIM6, TIM17,
 TIM5, TIM1 and TIM8 for 3.3 s, with the expected periods and no LPTIM write
-order violation. Not tested on the boards.
+order violation. The L432 TimerDemo ran on the NUCLEO-L432KC (2026-10-19):
+LPTIM1 100006 us, TIM6 (DevNo 2) 100000 us. The L476 TimerDemo ran on the
+B-L475E-IOT01A2 in Debug with semihosting output (2026-10-19).
+
+B-L475E-IOT01A2 hardware run (2026-10-19), STM32L476 project on the
+STM32L475VG, shared drivers: Blinky blinks LD1 and LD2 and stops on B1.
+UartPrbsTxTest on the ST-LINK virtual COM port, USART1 at 1 Mbaud: polling
+101380 B/s, interrupts 101390 B/s, DMA 100940 B/s, DMA with interrupts 100920
+B/s, no loss after the receiver locks on the stream. UartLoopback with
+interrupts and DMA: about 66 kB/s, 0 errors. The runs recorded as polling
+(about 66 kB/s, 0 errors, Debug and Release) ran with DMA: board.h defined
+`UART_DMA_MODE` true, which overrides the define at the top of
+`uart_loopback.cpp`. The define is removed from board.h (2026-10-19); the
+loopback without DMA is still to be run. The rates are 1.4 percent above the 100000 B/s of
+1 Mbaud 8N1: the core clock comes from the MSI through the PLL and SystemInit
+did not lock the MSI to the LSE (MSIPLLEN), the MSI kept its factory
+calibration. The NUCLEO-L432KC measured 99.9 kB/s with the same code.
+I2CScan (`exemples/i2c/i2c_scan.cpp`) on I2C2, the onboard sensor bus (SDA
+PB11, SCL PB10), polling master at 100 kHz, finds 7 devices: 0x1E LIS3MDL,
+0x29 VL53L0X, 0x2D, 0x56 NFC tag, 0x5D LPS22HB, 0x5F HTS221, 0x6A LSM6DSL,
+and reads the LSM6DSL WHO_AM_I register 0x0F as 0x6A.
+NvmDemo (`exemples/storage/nvm_demo.cpp`, NVM_DEMO_MEDIUM 1) on the onboard
+MX25R6435F through the Nvm driver and QUADSPI (SPI DevNo 3, PE10 CLK, PE12
+to PE15 IO0 to IO3, PE11 NCS, AF10), 8 MHz, single line read and page
+program, polling: JEDEC id C2 28 17, the stamp written and read back, erase,
+a write across a page boundary, programming clears bits only, unaligned
+erase and read past the end rejected, ALL PASS (2026-10-19). After power
+cycles the stamp is found and its boot count rises (boot 3). First run of
+QUADSPI on the boards. In quad mode (2026-10-19): QREAD 0x6B (1-1-4, 8 dummy
+cycles) and 4PP 0x38 (1-4-4) from the chip config, the Quad Enable bit
+(status register 1 bit 6) set by Nvm from `NvmCfg_t.QuadEnable`, status
+0x40 logged, ALL PASS, the stamp kept across power cycles. A single line
+build (read 0x03, program 0x02) then reads the stamp written in quad mode
+(boot 3), so the quad commands store the data where the single line ones
+find it. FlashMemoryDemo
+(`exemples/storage/flash_memory_demo.cpp`, legacy Flash driver, NVM_MODE 0)
+on the same flash: chip erase, sectors 0,
+1, 2, 30 and 40 written and read back, sector erase verified, completed
+without error (2026-10-19).
+SystemInit now sets MSIPLLEN after the LSE is ready when `g_McuOsc` has the
+RC core oscillator and the LSE crystal (2026-10-19). On the
+B-L475E-IOT01A2 UartPrbsTxTest with DMA then runs at 99560 B/s (100940
+before), the core clock locked to the crystal.
 
 STM32L432: `STM32L432/lib/ioc` has the Debug, Release, Debug_FPU and
 Release_FPU configurations of the L476 library. It adds the STM32L432xx
@@ -205,11 +304,14 @@ the instances the L432 does not have; the code generated for the L476, L496
 and L4S9 differs only by the new check in I2CInit and SPIInit.
 
 The STM32L432 examples UartLoopback and UartPrbsTxTest select NUCLEO_L432KC
-in `board.h`: USART1, DevNo 1, on Arduino Nano D0 PA10 RX and D1 PA9 TX, AF7.
-The ST-LINK virtual COM port is USART2, DevNo 2, RX PA15 AF3 and TX PA2 AF7.
+in `board.h`: the ST-LINK virtual COM port, USART2, DevNo 2, RX PA15 AF3
+and TX PA2 AF7 (2026-10-19; the loopback used USART1 before). USART1, DevNo
+1, is on Arduino Nano D0 PA10 RX and D1 PA9 TX, AF7.
 Like the L476 examples they link `rdimon` semihosting and use the example
 defaults at 1 Mbaud: interrupts without DMA for the loopback, DMA without
-interrupts for PRBS TX. The library in its four configurations and both
+interrupts for PRBS TX. The modes are set at the top of the example source,
+board.h does not set them. The library in its
+four configurations and both
 examples in Debug and Release were built from their `.project` and `.cproject`
 settings with GNU Arm 13.2, outside IOcomposer; all 99 vector table entries
 match the STM32L432xx interrupt list. The images ran in an instruction set
@@ -217,6 +319,15 @@ emulator with USART1, DMA1 (channels 4 and 5, CSELR request 2) and RCC models:
 the loopback echoes in order with no lost character in polling, interrupt,
 DMA without interrupts and DMA with interrupts, and the PRBS output matches
 `Prbs8()`. This does not replace a run on the board.
+
+The STM32L432 Blinky example (`exemples/misc/blinky.c`) selects NUCLEO_L432KC
+in `board.h` and blinks LD3, PB3. The board has no user button, so the LED
+blinks until reset. It links `nosys`, no semihosting, and runs without a
+debugger. Debug and Release were built from the `.project` and `.cproject`
+settings with xPack GNU Arm 15.2 outside IOcomposer. In an instruction set
+emulator with an RCC model the image sets PB3 as output, runs the core from
+the MSI PLL at 80 MHz and toggles PB3 at a fixed interval. Not tested on the
+board.
 
 For a new release-candidate run, record the project, MCU/board, revision,
 toolchain and exercised modes alongside the existing hardware-validation

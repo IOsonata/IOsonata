@@ -27,7 +27,6 @@
       <file file_name="../../../../../../src/pulse_train.c" />
       <file file_name="../../../../../../src/sbuffer.c" />
       <file file_name="../../../../../../src/stddev.c" />
-      <file file_name="../../../../../../src/sysstatus.c" />
       <file file_name="../../../../../../src/uart_retarget.c" />
       <file file_name="../../../../../../src/utf8.c" />
       <file file_name="../../../../../src/ResetEntry.c" />

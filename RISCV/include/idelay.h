@@ -20,7 +20,7 @@ Path selection is automatic via __riscv_zicntr / __riscv_zicsr / __riscv_32e
 compiler-defined macros - no manual configuration needed.
 
 Globals (set by SystemCoreClockUpdate, in their natural physical units):
-  SystemCoreClockPeriodus = cycles per us   (= CPU MHz, e.g. 80 @ 80MHz)
+	SystemCoreClockPeriodus = cycles per us   (= CPU MHz, e.g. 80 @ 80MHz)
   SystemCoreClockPeriodns = ns per cycle    (e.g. 13 @ 80MHz)
 
 @author Hoang Nguyen Hoan
@@ -120,11 +120,11 @@ static inline __attribute__((always_inline)) void usDelay(uint32_t cnt)
 		__asm volatile("nop");
 	}
 #else
-	/* Fallback NOP loop. Inaccurate by design - actual cycles per
-	 * iteration depends on whether the core has branch prediction.
-	 * On the ESP32-C3 (no prediction, branch-taken = 3 cycles) one
-	 * iteration is ~4 cycles, not 2.  Use Zicsr+Zicntr in -march to
-	 * get the rdcycle path above for accurate timing. */
+	// Fallback NOP loop. Inaccurate by design - actual cycles per
+	// iteration depends on whether the core has branch prediction.
+	// On the ESP32-C3 (no prediction, branch-taken = 3 cycles) one
+	// iteration is ~4 cycles, not 2.  Use Zicsr+Zicntr in -march to
+	// get the rdcycle path above for accurate timing.
 	uint32_t n = cnt * (uint32_t)SystemCoreClockPeriodus;
 	if (n == 0U)
 	{
@@ -162,8 +162,8 @@ static inline __attribute__((always_inline)) void nsDelay(uint32_t cnt)
 		__asm volatile("nop");
 	}
 #else
-	/* Fallback NOP loop - see usDelay for accuracy notes.  Use rdcycle
-	 * (Zicsr+Zicntr in -march) for accurate ns-resolution timing. */
+	// Fallback NOP loop - see usDelay for accuracy notes.  Use rdcycle
+	// (Zicsr+Zicntr in -march) for accurate ns-resolution timing.
 	uint32_t n = cnt * (uint32_t)SystemCoreClockPeriodns;
 	if (n == 0U)
 	{

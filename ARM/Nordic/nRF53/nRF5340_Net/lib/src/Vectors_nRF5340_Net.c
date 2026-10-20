@@ -58,7 +58,7 @@ __attribute__((weak/*, alias("DNT_IRQHandler")*/)) void SysTick_Handler(void) {}
 __attribute__((weak, alias("DEF_IRQHandler"))) void CLOCK_POWER_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void RADIO_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void RNG_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void GPIOTE_IRQHandler(void);
+__attribute__((weak)) void GPIOTE_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void WDT_IRQHandler(void);
 __attribute__((weak, /*alias("DEF_IRQHandler")*/)) void TIMER0_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void ECB_IRQHandler(void);

@@ -48,6 +48,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ----------------------------------------------------------------------------*/
 
+#include "coredev/system_core_clock.h"
 #include "coredev/i2c.h"
 #include "coredev/uart.h"
 #include "stddev.h"
@@ -57,20 +58,41 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 McuOsc_t g_McuOsc = MCUOSC;
 #endif
 
+// One run tests every master and slave transfer mode combination.
+// Master mode bits: 0 polling, 1 interrupt, 2 DMA, 3 DMA with interrupt.
+// Slave mode bits: 0 interrupt, 1 DMA.
+// A board restricts the set with these masks. A board that still defines the
+// single mode I2C_MASTER_DMA_ENABLE / I2C_MASTER_INT_ENABLE and
+// I2C_SLAVE_DMA_ENABLE flags keeps testing only that combination.
+#ifndef I2C_TEST_MASTER_MASK
+#if defined(I2C_MASTER_DMA_ENABLE) || defined(I2C_MASTER_INT_ENABLE)
 #ifndef I2C_MASTER_DMA_ENABLE
 #define I2C_MASTER_DMA_ENABLE true
 #endif
-
 #ifndef I2C_MASTER_INT_ENABLE
 #define I2C_MASTER_INT_ENABLE false
 #endif
-
-#ifndef I2C_SLAVE_DMA_ENABLE
-#define I2C_SLAVE_DMA_ENABLE true
+#define I2C_TEST_MASTER_MASK \
+	(1 << ((I2C_MASTER_DMA_ENABLE ? 2 : 0) + (I2C_MASTER_INT_ENABLE ? 1 : 0)))
+#else
+#define I2C_TEST_MASTER_MASK 0x0F
+#endif
 #endif
 
-#ifndef I2C_SLAVE_INT_ENABLE
-#define I2C_SLAVE_INT_ENABLE true
+#ifndef I2C_TEST_SLAVE_MASK
+#if defined(I2C_SLAVE_DMA_ENABLE)
+#define I2C_TEST_SLAVE_MASK (I2C_SLAVE_DMA_ENABLE ? 2 : 1)
+#else
+#define I2C_TEST_SLAVE_MASK 0x03
+#endif
+#endif
+
+#ifndef I2C_MASTER_INT_PRIO
+#define I2C_MASTER_INT_PRIO 7
+#endif
+
+#ifndef I2C_SLAVE_INT_PRIO
+#define I2C_SLAVE_INT_PRIO 7
 #endif
 
 //int nRFUartEvthandler(UARTDEV *pDev, UART_EVT EvtId, uint8_t *pBuffer, int BufferLen);
@@ -128,9 +150,9 @@ static const I2CCfg_t s_I2cCfgMaster = {
 	.AddrType = I2CADDR_TYPE_NORMAL,
 	.NbSlaveAddr = 0,			// Number of slave addresses
 	.SlaveAddr = {0,},		// Slave addresses
-	.bDmaEn = I2C_MASTER_DMA_ENABLE,
-	.bIntEn = I2C_MASTER_INT_ENABLE,
-	.IntPrio = 7,			// Interrupt prio
+	.bDmaEn = false,			// set for each run
+	.bIntEn = false,
+	.IntPrio = I2C_MASTER_INT_PRIO,	// Interrupt prio
 	.EvtCB = I2CMasterIntrfHandler		// Event callback
 };
 
@@ -138,26 +160,6 @@ I2C g_I2CMaster;
 
 static std::atomic<bool> s_MasterCompleted(false);
 static std::atomic<int> s_MasterCount(0);
-
-static int I2CMasterIntrfHandler(DevIntrf_t * const pDev,
-	DEVINTRF_EVT EvtId, uint8_t *pBuffer, int Len)
-{
-	if (EvtId == DEVINTRF_EVT_COMPLETED)
-	{
-		s_MasterCount = Len;
-		s_MasterCompleted = true;
-	}
-	return 0;
-}
-
-static int WaitMasterComplete(int Timeout)
-{
-	while (!s_MasterCompleted && --Timeout > 0)
-	{
-		// Interrupt completion updates the atomic state.
-	}
-	return s_MasterCompleted ? (int)s_MasterCount : -1;
-}
 
 //********** I2C Slave **********
 
@@ -181,9 +183,9 @@ static const I2CCfg_t s_I2cCfgSlave = {
 	.AddrType = I2CADDR_TYPE_NORMAL,	// I2C address type normal 7bits or extended 10bits
 	.NbSlaveAddr = 1,					// Number of slave addresses
 	.SlaveAddr = {I2C_SLAVE_ADDR,},// + 1,I2C_SLAVE_ADDR},		// Slave addresses
-	.bDmaEn = I2C_SLAVE_DMA_ENABLE,			// DMA mode enable
-	.bIntEn = I2C_SLAVE_INT_ENABLE,						// Interrupt enable
-	.IntPrio = 7,						// Interrupt priority
+	.bDmaEn = false,					// set for each run
+	.bIntEn = true,
+	.IntPrio = I2C_SLAVE_INT_PRIO,		// Interrupt priority
 	.EvtCB = I2CSlaveIntrfHandler		// Event callback
 };
 
@@ -195,8 +197,30 @@ static uint8_t s_WriteRqstData[I2C_BUFF_SIZE];
 static bool s_bWriteRqst = false;
 static int s_Offset = 0;
 
+static int I2CMasterIntrfHandler(DevIntrf_t * const pDev,
+	DEVINTRF_EVT EvtId, uint8_t *pBuffer, int Len)
+{
+	if (EvtId == DEVINTRF_EVT_COMPLETED)
+	{
+		s_MasterCount = Len;
+		s_MasterCompleted = true;
+	}
+	return 0;
+}
+
+static int WaitMasterComplete(int Timeout)
+{
+	while (!s_MasterCompleted && --Timeout > 0)
+	{
+		// Interrupt completion updates the atomic state.
+	}
+	return s_MasterCompleted ? (int)s_MasterCount : -1;
+}
+
 int I2CSlaveIntrfHandler(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId, uint8_t *pBuffer, int Len)
 {
+	int n;
+
 	switch (EvtId)
 	{
 		case DEVINTRF_EVT_READ_RQST:
@@ -238,7 +262,7 @@ int I2CSlaveIntrfHandler(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId, uint8_t *p
 				// Write data completed. Byte 0 is the slave-memory offset.
 				if (Len > 1 && s_WriteRqstData[0] < I2C_BUFF_SIZE)
 				{
-					int n = Len - 1;
+					n = Len - 1;
 					if (n > I2C_BUFF_SIZE - s_WriteRqstData[0])
 						n = I2C_BUFF_SIZE - s_WriteRqstData[0];
 					memcpy(&s_ReadRqstData[s_WriteRqstData[0]], &s_WriteRqstData[1], n);
@@ -262,71 +286,76 @@ void HardwareInit()
 	printf("Init I2C Master/Slave demo\r\n");
 }
 
-//
-// Print a greeting message on standard output and exit.
-//
-// On embedded platforms this might require semi-hosting or similar.
-//
-// For example, for toolchains derived from GNU Tools for Embedded,
-// to enable semi-hosting, the following was added to the linker:
-//
-// --specs=rdimon.specs -Wl,--start-group -lgcc -lc -lm -lrdimon -Wl,--end-group
-//
-// Adjust it for other toolchains.
-//
-
-int main()
+static const char *ModeName(const I2CCfg_t &Cfg)
 {
+	if (Cfg.bDmaEn)
+		return Cfg.bIntEn ? "DMA+interrupt" : "DMA";
+	return Cfg.bIntEn ? "interrupt" : "polling";
+}
+
+// Run one master and slave combination.
+// Return 1 for pass, 0 for fail, -1 when the combination is not supported.
+static int RunCombo(const I2CCfg_t &MasterCfg, const I2CCfg_t &SlaveCfg)
+{
+	const uint8_t expectedRx[4] = { 0x0C, 0x0D, 0x0E, 0x0F };
+	uint8_t rx[4] = { 0xFF, 0xFF, 0xFF, 0xFF };
+	bool masterOk;
+	bool slaveOk;
+	int c;
+	int total;
+	bool writeOk;
+	bool pass;
+	int rc;
+	int i;
 	uint8_t buff[I2C_BUFF_SIZE];
 	uint8_t wr[8] = { 0xA0, 0xA1, 0xA2, 0xA3, 0xA4, 0xA5, 0xA6, 0xA7 };
 	uint8_t offset = 4;
 
-	HardwareInit();
-
-	printf("I2C master DMA=%d INT=%d\r\n",
-		s_I2cCfgMaster.bDmaEn, s_I2cCfgMaster.bIntEn);
-	printf("I2C slave  DMA=%d INT=%d\r\n",
-		s_I2cCfgSlave.bDmaEn, s_I2cCfgSlave.bIntEn);
-
-
-
-	bool masterOk = g_I2CMaster.Init(s_I2cCfgMaster);
-	bool slaveOk = g_I2CSlave.Init(s_I2cCfgSlave);
-	printf("I2C init master=%d slave=%d\r\n", masterOk, slaveOk);
-
+	masterOk = g_I2CMaster.Init(MasterCfg);
+	slaveOk = g_I2CSlave.Init(SlaveCfg);
 	if (!masterOk || !slaveOk)
 	{
-		while (1)
-			__WFE();
+		printf("Init master=%d slave=%d, combination not supported\r\n", masterOk, slaveOk);
+		return -1;
 	}
 
-	for (int i = 0; i < I2C_BUFF_SIZE; ++i)
+	for (i = 0; i < I2C_BUFF_SIZE; ++i)
 		s_ReadRqstData[i] = (uint8_t)i;
 	memset(s_WriteRqstData, 0, sizeof(s_WriteRqstData));
 	memset(buff, 0xFF, sizeof(buff));
+	s_Offset = 0;
+	s_bWriteRqst = false;
 
 	s_MasterCompleted = false;
 	s_MasterCount = 0;
-	int c = g_I2CMaster.Write(I2C_SLAVE_ADDR, &offset, 1, wr, sizeof(wr));
-	if (s_I2cCfgMaster.bIntEn)
+	c = g_I2CMaster.Write(I2C_SLAVE_ADDR, &offset, 1, wr, sizeof(wr));
+	if (MasterCfg.bIntEn)
 	{
 		// DeviceIntrfWrite() converts the target TxData() async -1 return
 		// into 0 after subtracting the address-command length. In interrupt
 		// mode completion must therefore be taken from the callback.
-		const int total = WaitMasterComplete(10000000);
+		total = WaitMasterComplete(10000000);
 		c = total >= 1 ? total - 1 : 0;
 	}
 	printf("Write %d/%d bytes at offset %d\r\n", c, (int)sizeof(wr), offset);
-	const bool writeOk = c == (int)sizeof(wr);
+	writeOk = c == (int)sizeof(wr);
 
 	memset(buff, 0xFF, sizeof(buff));
+	s_MasterCompleted = false;
+	s_MasterCount = 0;
 	c = g_I2CMaster.Read(I2C_SLAVE_ADDR, &offset, 1, buff, sizeof(wr));
+	if (c < 0)
+	{
+		// Reception completed in the background, the count comes with the
+		// callback as for Rx below
+		c = WaitMasterComplete(10000000);
+	}
 	printf("Read %d/%d bytes at offset %d:", c, (int)sizeof(wr), offset);
-	for (int i = 0; i < c; ++i)
+	for (i = 0; i < c; ++i)
 		printf(" %02x", buff[i]);
 	printf("\r\n");
 
-	bool pass = writeOk && c == (int)sizeof(wr) &&
+	pass = writeOk && c == (int)sizeof(wr) &&
 		memcmp(buff, wr, sizeof(wr)) == 0;
 
 	if (pass)
@@ -334,18 +363,13 @@ int main()
 		// The register-style read above validates the SAM4L CMDR/NCMDR
 		// repeated-start path. Exercise the ordinary RX path for the selected
 		// transfer engine too.
-		const uint8_t expectedRx[4] = { 0x0C, 0x0D, 0x0E, 0x0F };
-		uint8_t rx[4] = { 0xFF, 0xFF, 0xFF, 0xFF };
 		s_MasterCompleted = false;
 		s_MasterCount = 0;
-		int rc = g_I2CMaster.Rx(I2C_SLAVE_ADDR, rx, sizeof(rx));
+		rc = g_I2CMaster.Rx(I2C_SLAVE_ADDR, rx, sizeof(rx));
 		if (rc < 0)
 			rc = WaitMasterComplete(10000000);
-		printf("%s RX %d/%d bytes:",
-			s_I2cCfgMaster.bDmaEn ? "DMA" :
-				(s_I2cCfgMaster.bIntEn ? "Interrupt" : "Polling"),
-			rc, (int)sizeof(rx));
-		for (int i = 0; i < rc && i < (int)sizeof(rx); ++i)
+		printf("%s RX %d/%d bytes:", ModeName(MasterCfg), rc, (int)sizeof(rx));
+		for (i = 0; i < rc && i < (int)sizeof(rx); ++i)
 			printf(" %02x", rx[i]);
 		printf("\r\n");
 		pass = rc == (int)sizeof(rx) &&
@@ -354,7 +378,62 @@ int main()
 			printf("Expected RX 4/4 bytes: 0c 0d 0e 0f\r\n");
 	}
 
-	printf("I2C master/slave loopback %s\r\n", pass ? "PASS" : "FAIL");
+	return pass ? 1 : 0;
+}
+
+int main()
+{
+	I2CCfg_t masterCfg;
+	I2CCfg_t slaveCfg;
+	int mm;
+	int sm;
+	int rc;
+	int nPass = 0;
+	int nFail = 0;
+	int nSkip = 0;
+
+	HardwareInit();
+
+	for (sm = 0; sm < 2; ++sm)
+	{
+		if ((I2C_TEST_SLAVE_MASK & (1 << sm)) == 0)
+			continue;
+
+		for (mm = 0; mm < 4; ++mm)
+		{
+			if ((I2C_TEST_MASTER_MASK & (1 << mm)) == 0)
+				continue;
+
+			masterCfg = s_I2cCfgMaster;
+			masterCfg.bDmaEn = mm >= 2;
+			masterCfg.bIntEn = mm == 1 || mm == 3;
+			slaveCfg = s_I2cCfgSlave;
+			slaveCfg.bDmaEn = sm == 1;
+			slaveCfg.bIntEn = true;
+
+			printf("\r\n== I2C master %s, slave %s ==\r\n",
+				ModeName(masterCfg), sm == 1 ? "DMA" : "interrupt");
+			rc = RunCombo(masterCfg, slaveCfg);
+			if (rc > 0)
+			{
+				++nPass;
+				printf("-> PASS\r\n");
+			}
+			else if (rc == 0)
+			{
+				++nFail;
+				printf("-> FAIL\r\n");
+			}
+			else
+			{
+				++nSkip;
+				printf("-> SKIPPED\r\n");
+			}
+		}
+	}
+
+	printf("\r\nI2C master/slave loopback %s (%d passed, %d failed, %d skipped)\r\n",
+		(nFail == 0 && nPass > 0) ? "PASS" : "FAIL", nPass, nFail, nSkip);
 
 	while (1)
 		__WFE();

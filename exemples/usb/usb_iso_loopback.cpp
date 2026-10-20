@@ -53,7 +53,9 @@ SOFTWARE.
 #include "usb/usb.h"
 #include "usb/usb_iso.h"
 #include "usb/usbd_epalloc.h"
+#if __has_include("board.h")
 #include "board.h"
+#endif
 
 #ifdef MCUOSC
 McuOsc_t g_McuOsc = MCUOSC;

@@ -55,6 +55,20 @@ SOFTWARE.
 	{LED2_PORT, LED2_PIN, LED2_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL}, \
 }
 
+// Release output uses the on-board J-Link OB virtual COM port. Debug keeps
+// semihosting. SAU UART0: RxD0_B P303, TxD0_B P302, PSEL 0x11.
+#ifdef NDEBUG
+#define TIMER_DEMO_UART
+#endif
+
+#define UART_DEVNO			0
+#define UART_RX_PORT		3
+#define UART_RX_PIN			3
+#define UART_RX_PINOP		IOPINOP_FUNC16
+#define UART_TX_PORT		3
+#define UART_TX_PIN			2
+#define UART_TX_PINOP		IOPINOP_FUNC16
+
 // Timer DevNo 0 is the machine timer at 32768 Hz, DevNo 1 to 8 are the TAU
 // channels 0 to 7. Freq 0 selects the default rate of the device.
 #ifndef TIMER_DEVNO

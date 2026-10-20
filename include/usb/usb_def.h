@@ -107,7 +107,7 @@ typedef enum __USB_Standard_Request_Codes {
 										//!< the specified interface.
 	USB_REQ_SET_INTERFACE = 11,			//!< allows the host to select an alternate setting
 										//!< for the specified interface.
-	USB_REQ_SYNCH_FRAME = 12			//!< set and then report an endpoint’s synchronization frame.
+	USB_REQ_SYNCH_FRAME = 12			//!< set and then report an endpoint's synchronization frame.
 } USB_REQ;
 
 typedef enum __USB_Descriptor_Type {
@@ -204,7 +204,7 @@ typedef struct __USB_Device_Descriptor {
 	uint8_t		bDescriptorType;	//!< Device Descriptor (0x01)
 	uint16_t	bcdUSB;				//!< BCD USB Specification Number which device complies too.
 	uint8_t 	bDeviceClass;		//!< Class Code (Assigned by USB Org)
-									//!< - If equal to Zero, each interface specifies it’s own class code
+									//!< - If equal to Zero, each interface specifies its own class code
 									//!< - If equal to 0xFF, the class code is vendor specified.
 									//!< - Otherwise field is valid Class Code.
 	uint8_t		bDeviceSubClass;	//!< Subclass Code (Assigned by USB Org)
@@ -385,4 +385,4 @@ typedef struct __USB_String_Descriptor {
 
 /** @} end group USB */
 
-#endif	// __USB_DEF_H__
+#endif

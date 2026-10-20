@@ -53,6 +53,7 @@ SOFTWARE.
 #include "coredev/system_core_clock.h"
 #include "iopinctrl.h"
 #include "interrupt_ra4m1.h"
+#include "i2c_ra4m1.h"
 
 #define RA4M1_I2C_COUNT				2
 #define RA4M1_I2C_MAX_RATE			400000U
@@ -60,15 +61,13 @@ SOFTWARE.
 #define RA4M1_I2C_TXBUF_SIZE		64
 #define RA4M1_I2C_ICBR_RESERVED		0xE0U
 #define RA4M1_I2C_ICMR1_BASE		0x08U
-#define RA4M1_I2C_ICMR2_MASTER		0x04U
+#define RA4M1_I2C_ICMR2_MASTER		0x06U
 #define RA4M1_I2C_ICMR2_SLAVE		0x06U
-#define RA4M1_I2C_ICFER_MASTER		0x77U
+#define RA4M1_I2C_ICFER_MASTER		0x7AU
 #define RA4M1_I2C_ICFER_SLAVE		0x5DU
-#define RA4M1_I2C_ICCR1_RESET		0x40U
-#define RA4M1_I2C_ICCR1_RESET_ENABLE	0xC0U
-#define RA4M1_I2C_ICCR1_RUN			0x9FU
 
-// ICCR2 request bits. Other bits are written as 0.
+// ICCR2 request bits. They are set with a read-modify-write so that MST and
+// TRS are kept while a request is issued.
 #define RA4M1_I2C_ICCR2_ST			0x02U
 #define RA4M1_I2C_ICCR2_RS			0x04U
 #define RA4M1_I2C_ICCR2_SP			0x08U
@@ -92,6 +91,7 @@ SOFTWARE.
 #define RA4M1_I2C_CR1_SOWP			0x10U
 #define RA4M1_I2C_CR2_BBSY			0x80U
 #define RA4M1_I2C_FER_TMOE			0x01U
+#define RA4M1_I2C_MR3_NF2			0x01U
 #define RA4M1_I2C_MR3_ACKBT			0x08U
 #define RA4M1_I2C_MR3_ACKWP			0x10U
 #define RA4M1_I2C_MR3_WAIT			0x40U
@@ -204,6 +204,130 @@ static Ra4m1I2cDev_t s_Ra4m1I2cDev[RA4M1_I2C_COUNT] = {
 	},
 };
 
+#if RA4M1_I2C_TRACE
+static Ra4m1I2cTrace_t s_Ra4m1I2cTrace[RA4M1_I2C_COUNT][RA4M1_I2C_TRACE_DEPTH];
+static uint32_t s_Ra4m1I2cTraceCnt[RA4M1_I2C_COUNT];
+
+static void Ra4m1I2cTrace(const Ra4m1I2cDev_t * const pDev, uint8_t Code, uint8_t Info)
+{
+	const R_IIC0_Type *reg = pDev->pReg;
+	uint32_t n = s_Ra4m1I2cTraceCnt[pDev->DevNo];
+
+	// Keep the first events and stop when the table is full, so the first
+	// call of a run (and any refusal in it) is never overwritten by retries.
+	if (n >= RA4M1_I2C_TRACE_DEPTH)
+	{
+		return;
+	}
+
+	s_Ra4m1I2cTraceCnt[pDev->DevNo] = n + 1U;
+
+	Ra4m1I2cTrace_t *rec = &s_Ra4m1I2cTrace[pDev->DevNo][n];
+
+	rec->Seq = n + 1U;
+	rec->Code = Code;
+	rec->Info = Info;
+	rec->MState = (uint8_t)pDev->MState;
+	rec->ICCR1 = reg->ICCR1;
+	rec->ICCR2 = reg->ICCR2;
+	rec->ICSR2 = reg->ICSR2;
+	rec->ICFER = reg->ICFER;
+	rec->ICMR3 = reg->ICMR3;
+	rec->ICIER = reg->ICIER;
+	rec->ICSER = reg->ICSER;
+
+	// The other IIC unit is read only when a transfer is abandoned. The
+	// transfer is dead by then, so the read cannot change its outcome.
+	rec->PeerCR1 = 0U;
+	rec->PeerSR1 = 0U;
+	rec->PeerSR2 = 0U;
+	rec->PeerIER = 0U;
+	rec->SdaPfs = 0U;
+	rec->SclPfs = 0U;
+	rec->PeerSdaPfs = 0U;
+	rec->PeerSclPfs = 0U;
+
+	if (Code == RA4M1_I2C_TR_ABORT || Code == RA4M1_I2C_TR_BEGIN ||
+		Code == RA4M1_I2C_TR_START_POST)
+	{
+		const bool peer0 = pDev->DevNo != 0;
+		const R_IIC0_Type *peer = peer0 ? R_IIC0 : R_IIC1;
+		const IOPinCfg_t *sda = &pDev->pI2cDev->Cfg.pIOPinMap[I2C_SDA_IOPIN_IDX];
+		const IOPinCfg_t *scl = &pDev->pI2cDev->Cfg.pIOPinMap[I2C_SCL_IOPIN_IDX];
+
+		rec->SdaPfs = R_PFS->PORT[sda->PortNo].PIN[sda->PinNo].PmnPFS;
+		rec->SclPfs = R_PFS->PORT[scl->PortNo].PIN[scl->PinNo].PmnPFS;
+
+		if (Code == RA4M1_I2C_TR_ABORT &&
+			(R_MSTP->MSTPCRB & (1UL << (peer0 ? 9 : 8))) == 0U)
+		{
+			rec->PeerCR1 = peer->ICCR1;
+			rec->PeerSR1 = peer->ICSR1;
+			rec->PeerSR2 = peer->ICSR2;
+			rec->PeerIER = peer->ICIER;
+
+			const Ra4m1I2cDev_t *other = &s_Ra4m1I2cDev[1 - pDev->DevNo];
+
+			if (other->pI2cDev != NULL && other->pI2cDev->Cfg.pIOPinMap != NULL)
+			{
+				const IOPinCfg_t *peerSda =
+					&other->pI2cDev->Cfg.pIOPinMap[I2C_SDA_IOPIN_IDX];
+				const IOPinCfg_t *peerScl =
+					&other->pI2cDev->Cfg.pIOPinMap[I2C_SCL_IOPIN_IDX];
+
+				rec->PeerSdaPfs =
+					R_PFS->PORT[peerSda->PortNo].PIN[peerSda->PinNo].PmnPFS;
+				rec->PeerSclPfs =
+					R_PFS->PORT[peerScl->PortNo].PIN[peerScl->PinNo].PmnPFS;
+			}
+		}
+	}
+}
+
+uint32_t Ra4m1I2cTraceCount(int DevNo)
+{
+	return (DevNo >= 0 && DevNo < RA4M1_I2C_COUNT) ? s_Ra4m1I2cTraceCnt[DevNo] : 0U;
+}
+
+bool Ra4m1I2cTraceGet(int DevNo, uint32_t Idx, Ra4m1I2cTrace_t *pRec)
+{
+	if (DevNo < 0 || DevNo >= RA4M1_I2C_COUNT || pRec == NULL)
+	{
+		return false;
+	}
+
+	uint32_t cnt = s_Ra4m1I2cTraceCnt[DevNo];
+	uint32_t first = cnt > RA4M1_I2C_TRACE_DEPTH ? cnt - RA4M1_I2C_TRACE_DEPTH : 0U;
+
+	if (Idx >= cnt - first)
+	{
+		return false;
+	}
+
+	*pRec = s_Ra4m1I2cTrace[DevNo][(first + Idx) % RA4M1_I2C_TRACE_DEPTH];
+
+	return true;
+}
+#else
+#define Ra4m1I2cTrace(pDev, Code, Info)		((void)0)
+
+uint32_t Ra4m1I2cTraceCount(int DevNo)
+{
+	(void)DevNo;
+	return 0U;
+}
+
+bool Ra4m1I2cTraceGet(int DevNo, uint32_t Idx, Ra4m1I2cTrace_t *pRec)
+{
+	(void)DevNo;
+	(void)Idx;
+	(void)pRec;
+	return false;
+}
+#endif
+
+
+
 static Ra4m1I2cDev_t *Ra4m1I2cHandle(DevIntrf_t * const pIntrf)
 {
 	if (pIntrf == NULL)
@@ -286,14 +410,15 @@ static bool Ra4m1I2cRate(uint32_t Rate, uint8_t *pCks, uint8_t *pBrl,
 	uint8_t bestBrl = 0U;
 	uint8_t bestBrh = 0U;
 
-	// SCLE is enabled and NFE is disabled. With CKS=0 the IIC adds three
-	// IIC-phi clocks to each programmed high/low count, with a divided
-	// IIC-phi it adds two. Rise and fall time are treated as zero, a real
-	// open-drain bus only lengthens the period, so the result is at or below
-	// the requested rate and never violates the low/high minima.
+	// The master runs with SCLE and NFE enabled and two noise filter stages.
+	// With CKS=0 the IIC adds five IIC-phi clocks to each programmed high/low
+	// count, with a divided IIC-phi it adds four. Rise and fall time are
+	// treated as zero, a real open-drain bus only lengthens the period, so the
+	// result is at or below the requested rate and never violates the low/high
+	// minima.
 	for (uint8_t cks = 0U; cks < 8U; cks++)
 	{
-		uint32_t offset = cks == 0U ? 3U : 2U;
+		uint32_t offset = cks == 0U ? 5U : 4U;
 		uint32_t divider = 1UL << cks;
 
 		for (uint8_t brl = 0U; brl < 32U; brl++)
@@ -380,18 +505,6 @@ static inline void Ra4m1I2cSetWait(R_IIC0_Type * const pReg, bool bWait)
 	}
 }
 
-static inline void Ra4m1I2cSetTimeout(R_IIC0_Type * const pReg, bool bOn)
-{
-	if (bOn)
-	{
-		pReg->ICFER |= RA4M1_I2C_FER_TMOE;
-	}
-	else
-	{
-		pReg->ICFER &= (uint8_t)~RA4M1_I2C_FER_TMOE;
-	}
-}
-
 // Reading ICDRR also releases SCL and clears RDRF, so a discarded read must
 // still be issued.
 static inline uint8_t Ra4m1I2cReadData(R_IIC0_Type * const pReg)
@@ -409,17 +522,19 @@ static inline bool Ra4m1I2cBusy(const R_IIC0_Type * const pReg)
 	return (pReg->ICCR2 & RA4M1_I2C_CR2_BBSY) != 0U;
 }
 
+static void Ra4m1I2cPinConfig(const I2CCfg_t * const pCfg);
+
 static void Ra4m1I2cConfigure(Ra4m1I2cDev_t * const pDev)
 {
 	R_IIC0_Type *reg = pDev->pReg;
 	const I2CCfg_t *cfg = &pDev->pI2cDev->Cfg;
 	const bool slave = cfg->Mode == I2CMODE_SLAVE;
 
-	// Vendor sequence: pins inactive, assert IICRST, enable the block while
-	// in reset, program it, then release reset with SCL/SDA outputs high.
+	// Use the vendor reset sequence with explicit ICCR1 values. Do not
+	// preserve output-control bits from a previous transfer during recovery.
 	reg->ICIER = 0U;
 	reg->ICCR1 = 0U;
-	reg->ICCR1 = RA4M1_I2C_ICCR1_RESET;
+	reg->ICCR1 = 0x40U;
 
 	int32_t count = Ra4m1I2cTimeout(pDev);
 
@@ -444,7 +559,7 @@ static void Ra4m1I2cConfigure(Ra4m1I2cDev_t * const pDev)
 		return;
 	}
 
-	reg->ICCR1 = RA4M1_I2C_ICCR1_RESET_ENABLE;
+	reg->ICCR1 = 0xC0U;
 
 	for (int i = 0; i < RA4M1_I2C_MAX_SLAVE_ADDR; i++)
 	{
@@ -476,12 +591,17 @@ static void Ra4m1I2cConfigure(Ra4m1I2cDev_t * const pDev)
 	// Renesas configures WAIT as an optional clock-stretching feature. In the
 	// loopback bring-up, leave WAIT clear to distinguish clock stretching from
 	// an external SCL-low condition. Master RX configures WAIT as needed.
-	reg->ICMR3 = RA4M1_I2C_MR3_ACKWP;
+	// Two noise filter stages, as the RE01 driver on the same IIC block.
+	reg->ICMR3 = RA4M1_I2C_MR3_NF2 | RA4M1_I2C_MR3_ACKWP;
 	Ra4m1I2cAck(reg, false);
 
 	reg->ICFER = slave ? RA4M1_I2C_ICFER_SLAVE : RA4M1_I2C_ICFER_MASTER;
 	Ra4m1I2cClearFlags(reg, RA4M1_I2C_SR2_EVENTS);
-	reg->ICCR1 = RA4M1_I2C_ICCR1_RUN;
+
+	// Select the peripheral pins only after the IIC registers are prepared,
+	// while IICRST still prevents bus activity.
+	Ra4m1I2cPinConfig(cfg);
+	reg->ICCR1 = 0x9FU;
 
 	if (!pDev->bEnabled)
 	{
@@ -491,6 +611,8 @@ static void Ra4m1I2cConfigure(Ra4m1I2cDev_t * const pDev)
 	{
 		reg->ICIER = RA4M1_I2C_IER_SLAVE_IDLE;
 	}
+
+	Ra4m1I2cTrace(pDev, RA4M1_I2C_TR_CONFIG, 0U);
 }
 
 // ---------------------------------------------------------------------------
@@ -512,14 +634,24 @@ static bool Ra4m1I2cWaitIdle(Ra4m1I2cDev_t * const pDev)
 
 	if (Ra4m1I2cBusy(reg))
 	{
+		Ra4m1I2cTrace(pDev, RA4M1_I2C_TR_IDLE_BUSY, 0U);
 		Ra4m1I2cConfigure(pDev);
 	}
 
-	return !Ra4m1I2cBusy(reg);
+	if (Ra4m1I2cBusy(reg))
+	{
+		Ra4m1I2cTrace(pDev, RA4M1_I2C_TR_IDLE_FAIL, 0U);
+
+		return false;
+	}
+
+	return true;
 }
 
-static void Ra4m1I2cMasterAbort(Ra4m1I2cDev_t * const pDev)
+static void Ra4m1I2cMasterAbort(Ra4m1I2cDev_t * const pDev, uint8_t Why)
 {
+	Ra4m1I2cTrace(pDev, RA4M1_I2C_TR_ABORT, Why);
+	(void)Why;
 	pDev->bError = true;
 	Ra4m1I2cConfigure(pDev);
 	pDev->MState = RA4M1_I2C_M_DONE;
@@ -547,7 +679,7 @@ static void Ra4m1I2cMasterService(Ra4m1I2cDev_t * const pDev)
 
 	if ((sr & (RA4M1_I2C_SR2_TMOF | RA4M1_I2C_SR2_AL)) != 0U)
 	{
-		Ra4m1I2cMasterAbort(pDev);
+		Ra4m1I2cMasterAbort(pDev, 1U);
 		return;
 	}
 
@@ -559,7 +691,6 @@ static void Ra4m1I2cMasterService(Ra4m1I2cDev_t * const pDev)
 				RA4M1_I2C_SR2_START);
 			Ra4m1I2cSetWait(reg, false);
 			Ra4m1I2cAck(reg, false);
-			Ra4m1I2cSetTimeout(reg, true);
 			pDev->MState = RA4M1_I2C_M_DONE;
 		}
 
@@ -571,9 +702,10 @@ static void Ra4m1I2cMasterService(Ra4m1I2cDev_t * const pDev)
 	{
 		// The slave refused the address or a data byte. With the master
 		// still owning the bus a STOP is required to release it.
+		Ra4m1I2cTrace(pDev, RA4M1_I2C_TR_NACK, (uint8_t)pDev->Sent);
 		Ra4m1I2cClearFlags(reg, RA4M1_I2C_SR2_NACKF);
 		pDev->bNack = true;
-		reg->ICCR2 = RA4M1_I2C_ICCR2_SP;
+		reg->ICCR2 |= RA4M1_I2C_ICCR2_SP;
 		pDev->MState = RA4M1_I2C_M_STOP;
 		return;
 	}
@@ -589,6 +721,7 @@ static void Ra4m1I2cMasterService(Ra4m1I2cDev_t * const pDev)
 			{
 				Ra4m1I2cClearFlags(reg, RA4M1_I2C_SR2_START);
 				reg->ICDRT = (uint8_t)((pDev->Addr << 1U) | (pDev->bRxDir ? 1U : 0U));
+				Ra4m1I2cTrace(pDev, RA4M1_I2C_TR_ADDR, pDev->bRxDir ? 1U : 0U);
 				pDev->MState = pDev->bRxDir ?
 					RA4M1_I2C_M_RXADDR : RA4M1_I2C_M_TX;
 			}
@@ -616,7 +749,7 @@ static void Ra4m1I2cMasterService(Ra4m1I2cDev_t * const pDev)
 			}
 			else if (pDev->bStopReq)
 			{
-				reg->ICCR2 = RA4M1_I2C_ICCR2_SP;
+				reg->ICCR2 |= RA4M1_I2C_ICCR2_SP;
 				pDev->MState = RA4M1_I2C_M_STOP;
 			}
 			else
@@ -665,7 +798,7 @@ static void Ra4m1I2cMasterService(Ra4m1I2cDev_t * const pDev)
 
 				if (remain == 1)
 				{
-					reg->ICCR2 = RA4M1_I2C_ICCR2_SP;
+					reg->ICCR2 |= RA4M1_I2C_ICCR2_SP;
 				}
 
 				pDev->pRx[pDev->Count++] = reg->ICDRR;
@@ -708,23 +841,21 @@ static bool Ra4m1I2cMasterBegin(Ra4m1I2cDev_t * const pDev, bool bRx,
 
 	Ra4m1I2cClearFlags(reg, RA4M1_I2C_SR2_EVENTS);
 	pDev->MState = RA4M1_I2C_M_START;
+	Ra4m1I2cTrace(pDev, RA4M1_I2C_TR_BEGIN, (uint8_t)((bRx ? 1U : 0U) | (restart ? 2U : 0U)));
 
-	// The enable bits are set in polling mode too. With no ICU route they
-	// raise nothing, and the START, STOP and NACK flags are then certain to
-	// follow the bus.
-	reg->ICIER = RA4M1_I2C_IER_MASTER;
+	// Polling mode reads the flags and leaves the interrupt enables off.
+	reg->ICIER = bAsync ? RA4M1_I2C_IER_MASTER : 0U;
 
 	if (restart)
 	{
-		// The timeout function is off over a repeated start (vendor flow).
-		Ra4m1I2cSetTimeout(reg, false);
-		reg->ICCR2 = RA4M1_I2C_ICCR2_RS;
+		reg->ICCR2 |= RA4M1_I2C_ICCR2_RS;
 	}
 	else
 	{
-		Ra4m1I2cSetTimeout(reg, true);
-		reg->ICCR2 = RA4M1_I2C_ICCR2_ST;
+		reg->ICCR2 |= RA4M1_I2C_ICCR2_ST;
 	}
+
+	Ra4m1I2cTrace(pDev, RA4M1_I2C_TR_START_POST, 0U);
 
 	return true;
 }
@@ -751,7 +882,12 @@ static void Ra4m1I2cMasterRun(Ra4m1I2cDev_t * const pDev)
 		}
 		else if (--left <= 0)
 		{
-			Ra4m1I2cMasterAbort(pDev);
+			Ra4m1I2cMasterAbort(pDev, 2U);
+		}
+		else if (left == budget / 2)
+		{
+			// One look at the registers while the transfer is stuck
+			Ra4m1I2cTrace(pDev, RA4M1_I2C_TR_SAMPLE, 0U);
 		}
 	}
 }
@@ -804,7 +940,7 @@ static void Ra4m1I2cMasterRelease(Ra4m1I2cDev_t * const pDev)
 
 	if (pDev->MState == RA4M1_I2C_M_HELD)
 	{
-		reg->ICCR2 = RA4M1_I2C_ICCR2_SP;
+		reg->ICCR2 |= RA4M1_I2C_ICCR2_SP;
 		pDev->MState = RA4M1_I2C_M_STOP;
 		Ra4m1I2cMasterRun(pDev);
 	}
@@ -844,6 +980,15 @@ static bool Ra4m1I2cStart(DevIntrf_t * const pIntrf, uint32_t Addr, bool bRx)
 	if (dev == NULL || !dev->bEnabled || Addr > 0x7FU ||
 		dev->pI2cDev->Cfg.Mode != I2CMODE_MASTER)
 	{
+#if RA4M1_I2C_TRACE
+		if (dev != NULL)
+		{
+			Ra4m1I2cTrace(dev, RA4M1_I2C_TR_START_REFUSED,
+				(uint8_t)((dev->bEnabled ? 0U : RA4M1_I2C_INFO_NOT_ENABLED) |
+				(Addr > 0x7FU ? RA4M1_I2C_INFO_BAD_ADDR : 0U) |
+				(dev->pI2cDev->Cfg.Mode != I2CMODE_MASTER ? RA4M1_I2C_INFO_NOT_MASTER : 0U)));
+		}
+#endif
 		return false;
 	}
 
@@ -877,6 +1022,16 @@ static int Ra4m1I2cTx(DevIntrf_t * const pIntrf, const uint8_t *pData, int Len)
 	if (dev == NULL || !dev->bOpen || dev->bRxDir || dev->bAsync ||
 		pData == NULL || Len <= 0)
 	{
+#if RA4M1_I2C_TRACE
+		if (dev != NULL)
+		{
+			Ra4m1I2cTrace(dev, RA4M1_I2C_TR_TX_REFUSED,
+				(uint8_t)((dev->bOpen ? 0U : RA4M1_I2C_INFO_NOT_OPEN) |
+				(dev->bRxDir ? RA4M1_I2C_INFO_WRONG_DIR : 0U) |
+				(dev->bAsync ? RA4M1_I2C_INFO_ASYNC_BUSY : 0U) |
+				((pData == NULL || Len <= 0) ? RA4M1_I2C_INFO_BAD_ARG : 0U)));
+		}
+#endif
 		return 0;
 	}
 
@@ -925,6 +1080,16 @@ static int Ra4m1I2cRx(DevIntrf_t * const pIntrf, uint8_t *pBuff, int Len)
 	if (dev == NULL || !dev->bOpen || !dev->bRxDir || dev->bAsync ||
 		pBuff == NULL || Len <= 0)
 	{
+#if RA4M1_I2C_TRACE
+		if (dev != NULL)
+		{
+			Ra4m1I2cTrace(dev, RA4M1_I2C_TR_RX_REFUSED,
+				(uint8_t)((dev->bOpen ? 0U : RA4M1_I2C_INFO_NOT_OPEN) |
+				(dev->bRxDir ? 0U : RA4M1_I2C_INFO_WRONG_DIR) |
+				(dev->bAsync ? RA4M1_I2C_INFO_ASYNC_BUSY : 0U) |
+				((pBuff == NULL || Len <= 0) ? RA4M1_I2C_INFO_BAD_ARG : 0U)));
+		}
+#endif
 		return 0;
 	}
 
@@ -1332,13 +1497,17 @@ static void Ra4m1I2cPinConfig(const I2CCfg_t * const pCfg)
 		// The PFS driver preserves PODR, so a reset-low output latch must
 		// not be carried into an active master SCL output.
 		IOPinSet(pin->PortNo, pin->PinNo);
-		// RA4M1 IIC bus needs a high idle level. Request the internal
-		// pull-up for both SDA and SCL. The IIC block drives the pad by
-		// itself, and the pull-up does not act while PDR is set, so PDR is
-		// kept clear whatever direction the pin map lists (the loopback log
-		// showed SCLI low at idle for an IOPINDIR_OUTPUT SCL entry while the
-		// SDA entry with PDR clear read high).
-		IOPinConfig(pin->PortNo, pin->PinNo, pin->PinOp, IOPINDIR_BI,
+		// SDA is bidirectional. Master SCL drives the clock while slave
+		// SCL only samples it; never configure slave SCL as an output.
+		IOPINDIR dir = IOPINDIR_BI;
+
+		if (i == I2C_SCL_IOPIN_IDX)
+		{
+			dir = pCfg->Mode == I2CMODE_MASTER ?
+				IOPINDIR_OUTPUT : IOPINDIR_INPUT;
+		}
+
+		IOPinConfig(pin->PortNo, pin->PinNo, pin->PinOp, dir,
 			IOPINRES_PULLUP, pin->Type);
 	}
 }
@@ -1352,7 +1521,6 @@ static void Ra4m1I2cEnable(DevIntrf_t * const pIntrf)
 		return;
 	}
 
-	Ra4m1I2cPinConfig(&dev->pI2cDev->Cfg);
 	dev->bEnabled = true;
 	Ra4m1I2cConfigure(dev);
 }
@@ -1450,8 +1618,6 @@ static void Ra4m1I2cReset(DevIntrf_t * const pIntrf)
 
 	IOPinSet(sda->PortNo, sda->PinNo);
 	IOPinSet(scl->PortNo, scl->PinNo);
-	Ra4m1I2cPinConfig(&dev->pI2cDev->Cfg);
-
 	dev->bEnabled = enabled;
 	Ra4m1I2cConfigure(dev);
 }
@@ -1677,8 +1843,6 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfg)
 		pDev->pTRBuff[i] = NULL;
 		pDev->TRBuffLen[i] = 0;
 	}
-
-	Ra4m1I2cPinConfig(pCfg);
 
 	DevIntrf_t *intrf = &pDev->DevIntrf;
 	intrf->pDevData = dev;
