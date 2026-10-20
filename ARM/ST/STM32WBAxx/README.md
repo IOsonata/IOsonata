@@ -138,7 +138,7 @@ add a second Cube startup or vector table to the application.
 | Crypto | RNG, AES and PKA engines | Hardware validated: 51 passed, 0 failed; see Crypto above |
 | USB | Shared STM32 OTG device controller; control, bulk and interrupt transfers | CDC hardware validated: Debug/Release PRBS TX and Release 60-second loopback; additional modes pending |
 | BLE | CubeWBA host/link-layer integration, GAP/GATT, security and bond storage | Advertising and counter updates pass; Numeric Comparison, encrypted transfer and bonded reconnect after reset hardware validated; central scan/connect/discovery/notification/reconnect tested; explicit characteristic reads unvalidated |
-| ADC / joystick | Polling single-round ADC, external inputs; menu, stopwatch and countdown | Joystick examples hardware tested; continuous/DMA/internal-temperature modes unsupported |
+| ADC / joystick | Polling single-round ADC, external inputs; menu, stopwatch, countdown and Pong | Menu/stopwatch/countdown hardware tested; Pong hardware pending; continuous/DMA/internal-temperature modes unsupported |
 | OLED | Generic SSD1315 through SPI3 | Console, graphics and interactive examples exercised |
 | EEPROM | M95P32 through generic Nvm; SeepDemo | Builds and command-model tests pass; hardware result not recorded |
 | Audio | Generic WM8904 control and SAI1 I2S; shared SAI/GPDMA native PDM | Level meter and headphone tones hardware tested; clock-associated loopback buzz unresolved; native PDM hardware untested |
