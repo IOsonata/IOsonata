@@ -36,6 +36,8 @@ Checks cover:
 - one byte SPIM receive on nRF52832 (anomaly 58): done by the SPI of the same
   instance, the SPIM never starts and is enabled again, polled, with
   interrupt and after a command phase;
+- a new configuration clears the interrupts of the previous one (SPI and
+  SPIM, TWI and TWIM, are one block);
 - polled transfers (`bIntEn = false`) are unchanged.
 
 Install Python packages `unicorn` and `pyelftools`, and provide an Arm GNU C++

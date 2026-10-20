@@ -66,7 +66,7 @@ def call_break(name, args, brk, action):
     assert u.reg_read(UC_ARM_REG_PC) == 0xF0000, (name, 'did not return after', brk)
     return signed(u.reg_read(UC_ARM_REG_R0))
 
-o = [get(symbols['offsets'] + i * 4) for i in range(24)]
+o = [get(symbols['offsets'] + i * 4) for i in range(26)]
 CHIP = sys.argv[2] if len(sys.argv) > 2 else 'NRF9160_XXAA'
 T = [get(symbols['twi'] + i * 4) for i in range(16 if get(symbols['twi']) else 1)]
 S = [get(symbols['spi_legacy'] + i * 4) for i in range(9 if get(symbols['spi_legacy']) else 1)]
@@ -111,7 +111,11 @@ def legacy_read(uc, access, addr, size, value, data):
     if legacy == 'twi_polled' and addr == BASE[0] + T[6]:
         put(addr, 1)
 
+intenclr = []      # values written to INTENCLR of the SPI and TWI instance
+
 def write(uc, access, addr, size, value, data):
+    if addr in (BASE[1] + o[24], BASE[0] + o[25]):
+        intenclr.append(value & 0xFFFFFFFF)
     if legacy in ('twi', 'twi_polled'):
         legacy_write(addr, value)
         return
@@ -254,6 +258,14 @@ check(pending == [('rx', BUF, 8)], pending)
 spi_finish()
 check(call('events', 0) == 1 and call('events', 1) == 8 and call('busy', 1) == 0, 'read completion')
 active = None
+
+# A new configuration clears every interrupt of the previous one (SPI and SPIM,
+# TWI and TWIM, are one block: an event of one is seen by the other).
+for bus in (1, 0):
+    for dma in ((0, 1) if S[0] else (1,)):
+        intenclr.clear()
+        check(call('init', bus, 0, dma, 0) == 1)
+        check(0xFFFFFFFF in intenclr, 'interrupts of a previous configuration kept', bus, dma, intenclr)
 
 # One byte SPIM receive on a part with anomaly 58: done by the SPI, the SPIM
 # never starts and is enabled again after.

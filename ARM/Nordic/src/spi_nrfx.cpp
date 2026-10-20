@@ -1019,8 +1019,11 @@ static bool nRFxSPIInit(SPIDev_t * const pDev)
 	*(volatile uint32_t *)((uint32_t)reg + 0xFFC) = 1;
 #else
 	reg->ENABLE = 0;
-	reg->INTENCLR = 0xFFFFFFFF;
 #endif
+	// No interrupt from a previous configuration. SPI and SPIM are one block:
+	// READY left enabled by an interrupt SPI configuration would also fire
+	// for the SPIM, whose handler does not clear it.
+	reg->INTENCLR = 0xFFFFFFFF;
 
 	// Configure I/O pins
 	IOPinCfg(pDev->Cfg.pIOPinMap, pDev->Cfg.NbIOPins);
