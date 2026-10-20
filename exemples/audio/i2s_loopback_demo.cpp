@@ -57,7 +57,8 @@ enum AudioError_t
 	AUDIO_ERROR_TX_COUNT,
 	AUDIO_ERROR_RX_TIMEOUT,
 	AUDIO_ERROR_TX_STALLED,
-	AUDIO_ERROR_CODEC
+	AUDIO_ERROR_CODEC,
+	AUDIO_ERROR_DISPLAY
 };
 
 enum AudioStage_t
@@ -117,6 +118,9 @@ static uint32_t s_TestPhase;
 static uint32_t s_TestStep;
 static AudioStage_t s_LastStage;
 static bool s_TestMuted;
+static bool s_DisplayOff;
+static bool s_DisplayTestDone;
+static uint32_t s_DisplayOffSince;
 static const char *const s_StageNames[] = {
 	"MIC -> HEADPHONES",
 	"DAC muted",
@@ -319,12 +323,41 @@ static void DrawLevel()
 
 static bool ServiceDisplay(bool AudioProgressed, uint32_t Now)
 {
+	if (AudioProgressed || s_Offset < s_Pending)
+	{
+		return false;
+	}
+	if (s_DisplayOff)
+	{
+		if (Now - s_DisplayOffSince < 5000)
+		{
+			return false;
+		}
+		if (!s_Lcd.Enable())
+		{
+			s_AudioError = AUDIO_ERROR_DISPLAY;
+			return false;
+		}
+		s_DisplayOff = false;
+		s_LastPaint = Now;
+		DrawLevel();
+		return true;
+	}
+	if (!s_DisplayTestDone && OutputStage() == AUDIO_STAGE_MIC)
+	{
+		// Compare live audio with the OLED panel and charge pump disabled.
+		s_Lcd.Disable();
+		s_DisplayOff = true;
+		s_DisplayTestDone = true;
+		s_DisplayOffSince = Now;
+		return true;
+	}
 	if (Now - s_LastPaint >= 100 && s_DisplayRow == 4)
 	{
 		s_LastPaint = Now;
 		DrawLevel();
 	}
-	if (AudioProgressed || s_Offset < s_Pending || s_DisplayRow == 4)
+	if (s_DisplayRow == 4)
 	{
 		return false;
 	}
@@ -419,6 +452,8 @@ static bool HardwareInit()
 	s_TestStep = (uint64_t(1000) << 32) / s_TestRate;
 	s_LastStage = AUDIO_STAGE_TONE;
 	s_TestMuted = false;
+	s_DisplayOff = false;
+	s_DisplayTestDone = false;
 	s_LastSample = s_Clock.mSecond();
 	s_LastPaint = s_LastSample;
 	return true;
@@ -446,6 +481,8 @@ static const char *AudioErrorText(uint32_t Now)
 			return "TX stalled";
 		case AUDIO_ERROR_CODEC:
 			return "Codec mute failed";
+		case AUDIO_ERROR_DISPLAY:
+			return "OLED enable failed";
 		default:
 			return nullptr;
 	}
@@ -473,6 +510,7 @@ int main()
 		{
 			s_Codec.PowerOff();
 			s_Audio.PowerOff();
+			s_Lcd.Enable();
 			s_Lcd.Clear();
 			s_Lcd.printf("Loopback stopped");
 			s_Lcd.SetCursor(0, 16);

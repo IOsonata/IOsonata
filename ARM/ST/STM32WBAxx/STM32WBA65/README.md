@@ -1217,6 +1217,12 @@ stages remain enabled throughout. Wm8904::Mute changes and verifies only the
 DAC control register, preserving its OSR setting; a failed control operation
 shuts down the codec. MCLK must be running for this live operation.
 
+After these startup phases, live microphone playback continues while the
+OLED panel and its charge pump are disabled for five seconds. The screen
+then returns automatically and stays on. No display transfers occur during
+the black interval. Compare the buzz with the screen off and on; audio
+clocks, microphone gain and headphone gain remain unchanged.
+
 Compare noise during Zero PCM and DAC muted. Noise removed by codec mute
 points toward the DAC or its digital input; noise remaining during mute
 points farther along the output/power/headphone path. This comparison narrows
@@ -1226,6 +1232,9 @@ to both slots.
 The maintainer heard the startup tone, reported hiss during zero-sample
 playback, and confirmed zero L/R mismatches. The microphone peak varies but
 does not track sound volume; intelligible loopback is not yet validated.
+The maintainer reports that DAC mute does not affect the noise and that it
+appears when the display starts. The OLED power comparison remains pending
+on the board; display or power coupling is a hypothesis, not a confirmed cause.
 
 This exercises simultaneous RX and TX DMA through the same generic I2S
 interface. Board mapping combines PC5 AF13 receive with PD5 AF13 transmit;

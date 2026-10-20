@@ -29,6 +29,12 @@ static unsigned s_StreamTx;
 static unsigned s_StreamUnderruns;
 static unsigned s_StreamMaxRx;
 static unsigned s_DisplayCalls;
+static bool s_DisplayData;
+static bool s_PanelOff;
+static unsigned s_PanelOffCount;
+static unsigned s_PanelOnCount;
+static uint64_t s_PanelOffUs;
+static uint32_t s_PanelOffFrames;
 
 static void AdvanceStream(unsigned Microseconds)
 {
@@ -57,9 +63,34 @@ static void AdvanceStream(unsigned Microseconds)
 	}
 }
 
-static int DisplayTransmit(DevIntrf_t *, const uint8_t *, int Count)
+static int DisplayTransmit(DevIntrf_t *, const uint8_t *pData, int Count)
 {
 	assert(s_DisplayTesting && Count > 0);
+	if (s_Continuous)
+	{
+		if (!s_DisplayData && Count == 3 && pData[0] == 0xAE && pData[1] == 0x8D && pData[2] == 0x10)
+		{
+			assert(!s_PanelOff && OutputStage() == AUDIO_STAGE_MIC);
+			s_PanelOff = true;
+			s_PanelOffCount++;
+			s_PanelOffUs = s_StreamUs;
+			s_PanelOffFrames = s_Frames;
+		}
+		else if (!s_DisplayData && Count == 3 && pData[0] == 0x8D && pData[1] == 0x14 && pData[2] == 0xAF)
+		{
+			assert(s_PanelOff);
+			// The application timer has millisecond resolution.
+			assert(s_StreamUs - s_PanelOffUs >= 4999000);
+			assert(s_StreamUs - s_PanelOffUs < 5003000);
+			assert(s_Frames - s_PanelOffFrames >= 78000);
+			s_PanelOff = false;
+			s_PanelOnCount++;
+		}
+		else
+		{
+			assert(!s_PanelOff);
+		}
+	}
 	s_DisplayCalls++;
 	if (s_Continuous)
 	{
@@ -113,11 +144,19 @@ extern "C" void IOPinConfig(int Port, int Pin, int, IOPINDIR, IOPINRES, IOPINTYP
 extern "C" void IOPinSet(int Port, int Pin)
 {
 	assert(s_DisplayTesting && Port == IOPORTE && (Pin == 0 || Pin == 3));
+	if (Pin == 0)
+	{
+		s_DisplayData = true;
+	}
 }
 
 extern "C" void IOPinClear(int Port, int Pin)
 {
 	assert(s_DisplayTesting && Port == IOPORTE && (Pin == 0 || Pin == 3));
+	if (Pin == 0)
+	{
+		s_DisplayData = false;
+	}
 }
 
 static uint64_t TickCount(TimerDev_t *)
@@ -415,6 +454,8 @@ int main()
 	printf("Duplex OLED stress: 60 s, %u TX underrun frames, max RX %u frames\n", s_StreamUnderruns, s_StreamMaxRx);
 	assert(s_StreamUnderruns == 0 && s_StreamMaxRx < 256);
 	assert(s_Frames > 900000 && s_DisplayCalls > 1000);
+	assert(s_DisplayTestDone && !s_DisplayOff && !s_PanelOff);
+	assert(s_PanelOffCount == 1 && s_PanelOnCount == 1);
 	s_Continuous = false;
 	puts("I2S loopback config, exact forwarding, short TX, stalls, startup and errors PASS");
 }
