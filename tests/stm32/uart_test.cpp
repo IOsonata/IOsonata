@@ -74,6 +74,11 @@ SOFTWARE.
 #include <ucontext.h>
 
 #include "stm32.h"
+#if defined(STM32WBA)
+#include "gpdma_stm32wba.h"
+#elif defined(STM32L4)
+#include "dma_stm32.h"
+#endif
 #include "coredev/uart.h"
 #include "coredev/iopincfg.h"
 #include "coredev/system_core_clock.h"
@@ -495,7 +500,7 @@ McuOsc_t g_McuOsc = { { OSC_TYPE_RC, 16000000, 20, 0 }, { OSC_TYPE_RC, 32768, 20
 
 // PCLK of each SystemPeriphClockGet index, all different so that the rate
 // shows which one an instance uses
-static const uint32_t s_Pclk[3] = { 24000000, 48000000, 12000000 };
+static uint32_t s_Pclk[3] = { 24000000, 48000000, 12000000 };
 
 static int s_PinCfgCnt;
 static int s_PinDisCnt;
@@ -1847,6 +1852,128 @@ static void TestDmaDrop(int i)
 	CHECK(u.hTxFifo->DropCnt == 0 && u.hRxFifo->DropCnt == 0);
 }
 
+#if defined(STM32WBA) || defined(STM32L4)
+static bool TestDmaClaim(int Ch, void *pCtx)
+{
+#if defined(STM32WBA)
+	return WbaGpdmaClaim(Ch, NULL, pCtx, 6, false);
+#else
+	return Stm32DmaChClaim(Ch, NULL, pCtx, 6, false);
+#endif
+}
+
+static void TestDmaFree(int Ch)
+{
+#if defined(STM32WBA)
+	WbaGpdmaFree(Ch);
+#else
+	Stm32DmaChFree(Ch);
+#endif
+}
+
+static int TestDmaCh(const TestDma_t &Dma)
+{
+#if defined(STM32WBA)
+	return Dma.Idx;
+#else
+	return Dma.Idx + (Dma.pCtl == DMA1 ? 0 : STM32_DMA_CTRL_NBCH);
+#endif
+}
+
+static void CheckAllDmaFree(void)
+{
+#if defined(STM32WBA)
+	const int nb = WBA_GPDMA_NBCH;
+#else
+	const int nb = STM32_DMA_NBCH;
+#endif
+
+	for (int ch = 0; ch < nb; ch++)
+	{
+		bool claimed = TestDmaClaim(ch, &s_CheckCnt);
+
+		CHECK(claimed);
+		if (claimed)
+		{
+			TestDmaFree(ch);
+		}
+	}
+}
+
+// Run before successful initialization reserves any of the shared channels.
+static void TestInitFailure(void)
+{
+	int i = 0;
+	UARTCfg_t c;
+	uint8_t tiny[1];
+	uint32_t clock;
+	int tx;
+
+	// LPUART can select HSI16 independently of PCLK. Use a USART for
+	// the deliberately unusable-clock cases.
+	while (s_Inst[i].bLpuart)
+	{
+		i++;
+	}
+	c = Cfg(i, 115200, true, true);
+	clock = s_Pclk[s_Inst[i].PclkIdx];
+	tx = TestDmaCh(s_Inst[i].Tx);
+
+	c.pRxMem = tiny;
+	c.RxMemSize = sizeof(tiny);
+	CHECK(!UARTInit(&s_Uart[i], &c));
+	CheckAllDmaFree();
+	c = Cfg(i, 115200, true, true);
+	c.pTxMem = tiny;
+	c.TxMemSize = sizeof(tiny);
+	CHECK(!UARTInit(&s_Uart[i], &c));
+	CheckAllDmaFree();
+	c = Cfg(i, 115200, true, true);
+
+	// Both the unavailable clock and a clock whose baud rounds to zero
+	// fail after the channels have been claimed.
+	for (uint32_t hz = 0; hz < 2; hz++)
+	{
+		s_Pclk[s_Inst[i].PclkIdx] = hz;
+		CHECK(!UARTInit(&s_Uart[i], &c));
+		CheckAllDmaFree();
+	}
+	s_Pclk[s_Inst[i].PclkIdx] = clock;
+
+	// Failure of the second claim returns the first channel to the pool.
+	CHECK(TestDmaClaim(tx, &c));
+	CHECK(!UARTInit(&s_Uart[i], &c));
+	TestDmaFree(tx);
+	CheckAllDmaFree();
+}
+
+static void TestReinitFailure(int i)
+{
+	UARTCfg_t c = Cfg(i, 115200, true, true);
+	UARTDev_t &u = s_Uart[i];
+	uint8_t tiny[1];
+	hCFifo_t rx = u.hRxFifo;
+	hCFifo_t tx = u.hTxFifo;
+	uint32_t cr1 = Rd(s_Inst[i].pReg->CR1);
+	uint32_t clock = s_Pclk[s_Inst[i].PclkIdx];
+
+	c.pRxMem = tiny;
+	c.RxMemSize = sizeof(tiny);
+	CHECK(!UARTInit(&u, &c));
+	CHECK(u.hRxFifo == rx && u.hTxFifo == tx);
+	CHECK(Rd(s_Inst[i].pReg->CR1) == cr1);
+
+	// A clock failure on the same object keeps its existing reservation.
+	c = Cfg(i, 115200, true, true);
+	s_Pclk[s_Inst[i].PclkIdx] = 0;
+	CHECK(!UARTInit(&u, &c));
+	CHECK(!TestDmaClaim(TestDmaCh(s_Inst[i].Rx), &c));
+	CHECK(!TestDmaClaim(TestDmaCh(s_Inst[i].Tx), &c));
+	s_Pclk[s_Inst[i].PclkIdx] = clock;
+	CHECK(UARTInit(&u, &c));
+}
+#endif
+
 // Framing on the first USART, not LPUART
 static void TestFraming(int i)
 {
@@ -1965,6 +2092,10 @@ int main()
 	RCC->CR |= RCC_CR_HSIRDY;
 	Prot();
 
+#if defined(STM32WBA) || defined(STM32L4)
+	TestInitFailure();
+#endif
+
 	int first = -1;
 	for (int i = 0; i < s_NbInst; i++)
 	{
@@ -1977,6 +2108,9 @@ int main()
 		TestInterrupt(i);
 		TestDma(i);
 		TestDmaDrop(i);
+#if defined(STM32WBA) || defined(STM32L4)
+		TestReinitFailure(i);
+#endif
 		if (s_Inst[i].bLpuart)
 		{
 			TestLpuart(i);

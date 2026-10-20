@@ -54,10 +54,6 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "stddev.h"
 #include "board.h"
 
-// Optional target-test diagnostic implementation, outside board configuration.
-// Called after a failed run.
-void I2cMasterSlaveDiagnostics(const char *pWhen) __attribute__((weak));
-
 #ifdef MCUOSC
 McuOsc_t g_McuOsc = MCUOSC;
 #endif
@@ -316,30 +312,12 @@ static int RunCombo(const I2CCfg_t &MasterCfg, const I2CCfg_t &SlaveCfg)
 	uint8_t offset = 4;
 
 	masterOk = g_I2CMaster.Init(MasterCfg);
-#ifdef I2C_SLAVE_SKIP_INIT
-	// Board test: leave the slave unit stopped to exercise the master alone.
-	// The master then sees no ACK, which is the expected result.
-	slaveOk = true;
-	printf("I2C slave not started\r\n");
-#else
 	slaveOk = g_I2CSlave.Init(SlaveCfg);
-#endif
 	if (!masterOk || !slaveOk)
 	{
 		printf("Init master=%d slave=%d, combination not supported\r\n", masterOk, slaveOk);
 		return -1;
 	}
-#ifdef I2C_PINS_STRONG_DRIVE
-	// Optional board test: raise the output drive of the bus pins after Init
-	if (I2C_PINS_STRONG_DRIVE)
-	{
-		IOPinSetStrength(I2C_MASTER_SDA_PORT, I2C_MASTER_SDA_PIN, IOPINSTRENGTH_STRONG);
-		IOPinSetStrength(I2C_MASTER_SCL_PORT, I2C_MASTER_SCL_PIN, IOPINSTRENGTH_STRONG);
-		IOPinSetStrength(I2C_SLAVE_SDA_PORT, I2C_SLAVE_SDA_PIN, IOPINSTRENGTH_STRONG);
-		IOPinSetStrength(I2C_SLAVE_SCL_PORT, I2C_SLAVE_SCL_PIN, IOPINSTRENGTH_STRONG);
-		printf("I2C pins strong drive\r\n");
-	}
-#endif
 
 	for (i = 0; i < I2C_BUFF_SIZE; ++i)
 		s_ReadRqstData[i] = (uint8_t)i;
@@ -400,8 +378,6 @@ static int RunCombo(const I2CCfg_t &MasterCfg, const I2CCfg_t &SlaveCfg)
 			printf("Expected RX 4/4 bytes: 0c 0d 0e 0f\r\n");
 	}
 
-	if (!pass && I2cMasterSlaveDiagnostics != nullptr)
-		I2cMasterSlaveDiagnostics("after failure");
 	return pass ? 1 : 0;
 }
 

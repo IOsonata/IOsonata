@@ -4,7 +4,7 @@
 @brief	RA4M1 shared I2C master/slave example board configuration.
 
 		SCI0 on P410/P411 is the console. Renesas EK-RA4M1 reference pin
-		layout: IIC1 master on P206/P100 and IIC0 slave on P401/P400.
+		layout: IIC0 master on P401/P400 and IIC1 slave on P206/P205.
 
 @license
 
@@ -49,8 +49,8 @@ SOFTWARE.
 	{UART_TX_PORT, UART_TX_PIN, UART_TX_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL}, \
 }
 
-// Isolated IIC0 master SCL test: probe P400 (J2-37), leave SCL
-// disconnected from IIC1 P205. SDA mapping remains unchanged.
+// Connect master P401 SDA to slave P206 SDA, and P400 SCL to P205 SCL.
+// Both bus lines require suitable pull-ups.
 #define I2C_MASTER_DEVNO		0
 #define I2C_MASTER_SDA_PORT		4
 #define I2C_MASTER_SDA_PIN		1
@@ -70,14 +70,6 @@ SOFTWARE.
 #define I2C_SLAVE_SCL_PORT		2
 #define I2C_SLAVE_SCL_PIN		5
 #define I2C_SLAVE_SCL_PINOP	IOPINOP_FUNC6
-
-// Board test: set to true to raise the output drive of the four bus pins
-// after Init. Off: it changes pin settings after the IIC is programmed.
-#define I2C_PINS_STRONG_DRIVE	false
-
-// Board test: uncomment to leave the slave unit stopped. The master write
-// should then end with a NACK trace event instead of a stalled clock.
-#define I2C_SLAVE_SKIP_INIT
 
 #define I2C_SLAVE_DMA_ENABLE	false
 #define I2C_SLAVE_INT_ENABLE	true

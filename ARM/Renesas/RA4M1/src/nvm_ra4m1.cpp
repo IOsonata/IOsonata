@@ -50,7 +50,10 @@ static NvmDevIntrf_t s_NvmDev;
 static NvmIntrfStat_t s_Stat;
 static NvmIntrfArb_t s_Arbiter;
 
-DevIntrf_t *NvmMcuDevIntrf(void) { return &s_NvmDev.DevIntrf; }
+DevIntrf_t *NvmMcuDevIntrf(void)
+{
+	return &s_NvmDev.DevIntrf;
+}
 
 static bool InRange(uintptr_t Addr, uint32_t Len)
 {
@@ -65,8 +68,10 @@ static bool Available(void)
 	if (s_Arbiter || !NvmMcuIsReady())
 	{
 		s_Stat.Busy++;
+
 		return false;
 	}
+
 	return true;
 }
 
@@ -77,25 +82,33 @@ bool NvmMcuIsReady(void)
 
 static bool ControllerInit(void)
 {
-	if (!NvmMcuIsReady()) return false;
+	if (!NvmMcuIsReady())
+	{
+		return false;
+	}
+
 	if (R_FACI_LP->DFLCTL != 1)
 	{
 		R_FACI_LP->DFLCTL = 1;
 		usDelay(6);
 	}
+
 	return true;
 }
 
 static bool SetMode(uint8_t Mode)
 {
 	uint32_t mask = __get_PRIMASK();
+	bool ok;
+
 	__disable_irq();
 	R_FACI_LP->FPR = 0xA5;
 	R_FACI_LP->FPMCR = Mode;
 	R_FACI_LP->FPMCR = (uint8_t)~Mode;
 	R_FACI_LP->FPMCR = Mode;
-	bool ok = R_FACI_LP->FPMCR == Mode;
+	ok = R_FACI_LP->FPMCR == Mode;
 	__set_PRIMASK(mask);
+
 	return ok;
 }
 
@@ -106,29 +119,58 @@ static int LeaveMode(int Res)
 		R_FACI_LP->FRESETR = 1;
 		R_FACI_LP->FRESETR = 0;
 	}
-	if (!SetMode(0x08)) return -EIO;
+
+	if (!SetMode(0x08))
+	{
+		return -EIO;
+	}
 	usDelay(6);
 	R_FACI_LP->FENTRYR = 0xAA00;
 	for (uint32_t n = 0; n < 1000000UL; n++)
-		if (R_FACI_LP->FENTRYR == 0) return Res;
+	{
+		if (R_FACI_LP->FENTRYR == 0)
+		{
+			return Res;
+		}
+	}
+
 	return -ETIMEDOUT;
 }
 
 static int EnterMode(void)
 {
-	if (!Available()) return -EBUSY;
-	uint32_t clock = SystemFlashClockGet();
+	uint32_t clock;
+
+	if (!Available())
+	{
+		return -EBUSY;
+	}
+	clock = SystemFlashClockGet();
 	// MF3 PCKA uses five bits. The application must keep FCLK stable for
 	// the entire operation; no writes at an unsupported flash clock.
-	if (clock < 4000000UL || clock > 32000000UL) return -EINVAL;
-	if (!ControllerInit()) return -EBUSY;
+	if (clock < 4000000UL || clock > 32000000UL)
+	{
+		return -EINVAL;
+	}
+
+	if (!ControllerInit())
+	{
+		return -EBUSY;
+	}
 	R_FACI_LP->FENTRYR = 0xAA80;
 	usDelay(6);
-	if (R_FACI_LP->FENTRYR != 0x0080) return LeaveMode(-EIO);
-	if (!SetMode(R_SYSTEM->OPCCR_b.OPCM == 0 ? 0x10 : 0x50))
+	if (R_FACI_LP->FENTRYR != 0x0080)
+	{
 		return LeaveMode(-EIO);
+	}
+
+	if (!SetMode(R_SYSTEM->OPCCR_b.OPCM == 0 ? 0x10 : 0x50))
+	{
+		return LeaveMode(-EIO);
+	}
 	R_FACI_LP->FISR_b.PCKA = (clock + 999999UL) / 1000000UL - 1;
 	R_FACI_LP->FASR = 0;
+
 	return 0;
 }
 
@@ -138,13 +180,26 @@ static int FinishCommand(uint32_t TimeoutUs)
 	// operation-specific budgets, independent of compiler optimization.
 	uint32_t n = TimeoutUs;
 	while (!(R_FACI_LP->FSTATR1 & R_FACI_LP_FSTATR1_FRDY_Msk) && --n)
+	{
 		usDelay(1);
-	if (!n) return -ETIMEDOUT;
+	}
+
+	if (!n)
+	{
+		return -ETIMEDOUT;
+	}
 	R_FACI_LP->FCR = 0;
 	n = 5000;
 	while ((R_FACI_LP->FSTATR1 & R_FACI_LP_FSTATR1_FRDY_Msk) && --n)
+	{
 		usDelay(1);
-	if (!n) return -ETIMEDOUT;
+	}
+
+	if (!n)
+	{
+		return -ETIMEDOUT;
+	}
+
 	return (R_FACI_LP->FSTATR2 & NVM_ERRORS) ? -EIO : 0;
 }
 
@@ -160,18 +215,33 @@ static void Address(uintptr_t Addr, uint32_t Len)
 
 static int BlankCheck(uintptr_t Addr, uint32_t Len)
 {
+	int res;
+
 	Address(Addr, Len);
 	R_FACI_LP->FCR = 0x83;
-	int res = FinishCommand(1000 + 200 * Len);
-	if (res == 0 && R_FACI_LP->FSTATR00_b.BCERR0) res = -EACCES;
+	res = FinishCommand(1000 + 200 * Len);
+	if (res == 0 && R_FACI_LP->FSTATR00_b.BCERR0)
+	{
+		res = -EACCES;
+	}
+
 	return res;
 }
 
 static int Program(uintptr_t Addr, const uint8_t *pData, int Len)
 {
-	if (!InRange(Addr, Len) || Len <= 0) return -EINVAL;
-	int res = EnterMode();
-	if (res != 0) return res;
+	int res = 0;
+
+	if (!InRange(Addr, Len) || Len <= 0)
+	{
+		return -EINVAL;
+	}
+	res = EnterMode();
+	if (res != 0)
+	{
+		return res;
+	}
+
 	// Use the sequencer blank check, not an erased-byte assumption. Never
 	// erase implicitly or program the same data-flash cell twice.
 	res = BlankCheck(Addr, Len);
@@ -183,21 +253,41 @@ static int Program(uintptr_t Addr, const uint8_t *pData, int Len)
 		res = FinishCommand(5000);
 	}
 	res = LeaveMode(res);
-	if (res == 0 && memcmp((const void *)Addr, pData, Len) != 0) res = -EIO;
+	if (res == 0 && memcmp((const void *)Addr, pData, Len) != 0)
+	{
+		res = -EIO;
+	}
+
 	return res;
 }
 
 int NvmMcuErase(uintptr_t Addr)
 {
-	if ((Addr % NVM_ERASE_SIZE) || !InRange(Addr, NVM_ERASE_SIZE)) return -EINVAL;
-	int res = EnterMode();
-	if (res != 0) return res;
+	int res;
+
+	if ((Addr % NVM_ERASE_SIZE) || !InRange(Addr, NVM_ERASE_SIZE))
+	{
+		return -EINVAL;
+	}
+	res = EnterMode();
+	if (res != 0)
+	{
+		return res;
+	}
 	Address(Addr, NVM_ERASE_SIZE);
 	R_FACI_LP->FCR = 0x84;
 	res = FinishCommand(1000000);
-	if (res == 0) res = BlankCheck(Addr, NVM_ERASE_SIZE);
+	if (res == 0)
+	{
+		res = BlankCheck(Addr, NVM_ERASE_SIZE);
+	}
 	res = LeaveMode(res);
-	if (res == 0) { s_Stat.Ops++; s_Stat.Direct++; }
+	if (res == 0)
+	{
+		s_Stat.Ops++;
+		s_Stat.Direct++;
+	}
+
 	return res;
 }
 
@@ -225,7 +315,10 @@ static uintptr_t FrameAddr(void)
 {
 	uintptr_t addr = 0;
 	for (int i = 1; i < NVM_INTRF_FRAME_SIZE; i++)
+	{
 		addr = (addr << 8) | s_NvmDev.Hdr[i];
+	}
+
 	return addr;
 }
 
@@ -242,38 +335,68 @@ static void FrameAdvance(uint32_t Len)
 static bool NvmStartTx(DevIntrf_t *, uint32_t)
 {
 	s_NvmDev.HdrLen = 0;
+
 	return true;
 }
 
 static bool NvmStartRx(DevIntrf_t *, uint32_t)
 {
 	// Keep the command/address across the repeated start in DeviceIntrfRead.
+
 	return true;
 }
 
 static int NvmTxData(DevIntrf_t *, const uint8_t *pData, int Len)
 {
-	if (!pData || Len <= 0) return 0;
 	int n = 0;
+
+	if (!pData || Len <= 0)
+	{
+		return 0;
+	}
 	while (n < Len && s_NvmDev.HdrLen < NVM_INTRF_FRAME_SIZE)
+	{
 		s_NvmDev.Hdr[s_NvmDev.HdrLen++] = pData[n++];
-	if (s_NvmDev.HdrLen < NVM_INTRF_FRAME_SIZE) return n;
-	if (s_NvmDev.Hdr[0] != 0x02) return n;
-	if (!InRange(FrameAddr(), (uint32_t)(Len - n))) return n;
+	}
+
+	if (s_NvmDev.HdrLen < NVM_INTRF_FRAME_SIZE)
+	{
+		return n;
+	}
+
+	if (s_NvmDev.Hdr[0] != 0x02)
+	{
+		return n;
+	}
+
+	if (!InRange(FrameAddr(), (uint32_t)(Len - n)))
+	{
+		return n;
+	}
 
 	while (n < Len)
 	{
 		int count = Len - n;
-		if (count > (int)sizeof(s_NvmDev.Data)) count = sizeof(s_NvmDev.Data);
+		if (count > (int)sizeof(s_NvmDev.Data))
+		{
+			count = sizeof(s_NvmDev.Data);
+		}
 		// Stage before entering P/E mode, including a source in data flash.
-		if (!Available()) return n;
+		if (!Available())
+		{
+			return n;
+		}
 		memcpy(s_NvmDev.Data, pData + n, count);
-		if (Program(FrameAddr(), s_NvmDev.Data, count) != 0) return n;
+		if (Program(FrameAddr(), s_NvmDev.Data, count) != 0)
+		{
+			return n;
+		}
 		s_Stat.Ops++;
 		s_Stat.Direct++;
 		FrameAdvance(count);
 		n += count;
 	}
+
 	return n;
 }
 
@@ -281,30 +404,58 @@ static int NvmRxData(DevIntrf_t *, uint8_t *pBuff, int Len)
 {
 	if (!pBuff || Len <= 0 || s_NvmDev.HdrLen != NVM_INTRF_FRAME_SIZE ||
 		s_NvmDev.Hdr[0] != 0x03 || !InRange(FrameAddr(), (uint32_t)Len) ||
-		!Available()) return 0;
+		!Available())
+	{
+		return 0;
+	}
 	memcpy(pBuff, (const void *)FrameAddr(), Len);
 	FrameAdvance(Len);
+
 	return Len;
 }
 
-static void NvmNoOp(DevIntrf_t *) {}
-static uint32_t NvmGetRate(DevIntrf_t *) { return 0; }
-static uint32_t NvmSetRate(DevIntrf_t *, uint32_t) { return 0; }
-static void *NvmGetHandle(DevIntrf_t *pDev) { return pDev->pDevData; }
+static void NvmNoOp(DevIntrf_t *)
+{
+}
+
+static uint32_t NvmGetRate(DevIntrf_t *)
+{
+	return 0;
+}
+
+static uint32_t NvmSetRate(DevIntrf_t *, uint32_t)
+{
+	return 0;
+}
+
+static void *NvmGetHandle(DevIntrf_t *pDev)
+{
+	return pDev->pDevData;
+}
 
 bool NvmIntrf::Init(DevIntrfEvtHandler_t EvtCB, bool bIntEn)
 {
+	DevIntrf_t &dev = s_NvmDev.DevIntrf;
+
 	// This port completes inside the call; it cannot promise an IRQ event.
-	if (bIntEn) return false;
+	if (bIntEn)
+	{
+		return false;
+	}
+
 	// Do not reinitialize a controller while another object has a transfer.
-	if (atomic_flag_test_and_set(&s_NvmDev.DevIntrf.bBusy)) return false;
+	if (atomic_flag_test_and_set(&s_NvmDev.DevIntrf.bBusy))
+	{
+		return false;
+	}
+
 	if (!ControllerInit())
 	{
 		atomic_flag_clear(&s_NvmDev.DevIntrf.bBusy);
+
 		return false;
 	}
 	s_NvmDev.HdrLen = 0;
-	DevIntrf_t &dev = s_NvmDev.DevIntrf;
 	dev.pDevData = &s_NvmDev;
 	dev.Type = DEVINTRF_TYPE_MEMCTRL;
 	dev.Enable = NvmNoOp;
@@ -325,11 +476,19 @@ bool NvmIntrf::Init(DevIntrfEvtHandler_t EvtCB, bool bIntEn)
 	dev.EvtCB = EvtCB;
 	dev.bIntEn = false;
 	atomic_flag_clear(&dev.bBusy);
+
 	return true;
 }
 
-void NvmIntrfSetArbiter(NvmIntrfArb_t pArb) { s_Arbiter = pArb; }
+void NvmIntrfSetArbiter(NvmIntrfArb_t pArb)
+{
+	s_Arbiter = pArb;
+}
+
 void NvmIntrfGetStat(NvmIntrfStat_t *pStat)
 {
-	if (pStat) *pStat = s_Stat;
+	if (pStat)
+	{
+		*pStat = s_Stat;
+	}
 }

@@ -1964,6 +1964,19 @@ UARTDev_t const *UARTGetInstance(int DevNo)
 	return DevNo >= 0 && DevNo < s_NbUartDev ? s_Stm32UartDev[DevNo].pUartDev : NULL;
 }
 
+#if defined(ST_DMA_GPDMA) || defined(ST_DMA_CHAN)
+static void Stm32UartDmaFree(Stm32UartDev_t *pDev)
+{
+#ifdef ST_DMA_GPDMA
+	WbaGpdmaFree(pDev->RxDma.Idx);
+	WbaGpdmaFree(pDev->TxDma.Idx);
+#else
+	Stm32DmaChFree(Stm32UartDmaChNo(&pDev->RxDma));
+	Stm32DmaChFree(Stm32UartDmaChNo(&pDev->TxDma));
+#endif
+}
+#endif
+
 bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 {
 	if (pDev == NULL || pCfg == NULL)
@@ -1992,6 +2005,15 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 		return false;
 	}
 
+	// Reject undersized caller buffers before changing the instance or DMA.
+	if ((pCfg->pRxMem != NULL && pCfg->RxMemSize > 0 &&
+		 pCfg->RxMemSize < (int)CFIFO_MEMSIZE(1)) ||
+		(pCfg->pTxMem != NULL && pCfg->TxMemSize > 0 &&
+		 pCfg->TxMemSize < (int)CFIFO_MEMSIZE(1)))
+	{
+		return false;
+	}
+
 	// The hardware word length includes the parity bit.
 	int wordbits = pCfg->DataBits + (pCfg->Parity != UART_PARITY_NONE ? 1 : 0);
 
@@ -2004,14 +2026,30 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 
 	Stm32UartDev_t *dev = &s_Stm32UartDev[pCfg->DevNo];
 	USART_TypeDef *reg = dev->pReg;
+	uint32_t state = DisableInterrupt();
+#if defined(ST_DMA_GPDMA) || defined(ST_DMA_CHAN)
+	bool dmaOwned = dev->pUartDev != NULL && dev->pUartDev->DevIntrf.bDma;
+#endif
+
+	// Reject another running owner before claiming or resetting its DMA.
+	if (dev->pUartDev != NULL && dev->pUartDev != pDev && (reg->CR1 & USART_CR1_UE))
+	{
+		EnableInterrupt(state);
+
+		return false;
+	}
 #ifdef ST_UART_DMA
 	if (pCfg->bDMAMode && (dev->TxDma.pChan == NULL || dev->RxDma.pChan == NULL))
 	{
+		EnableInterrupt(state);
+
 		return false;
 	}
 	if (pCfg->bDMAMode && Stm32DmaInUse(&dev->TxDma) &&
 		(dev->pUartDev == NULL || dev->pUartDev != pDev))
 	{
+		EnableInterrupt(state);
+
 		return false;
 	}
 #ifdef ST_DMA_GPDMA
@@ -2023,10 +2061,12 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 
 		if (rx == false || WbaGpdmaClaim(dev->TxDma.Idx, Stm32UartGpdmaIrq, dev, pCfg->IntPrio, pCfg->bIntMode) == false)
 		{
-			if (rx)
+			if (rx && dmaOwned == false)
 			{
 				WbaGpdmaFree(dev->RxDma.Idx);
 			}
+
+			EnableInterrupt(state);
 
 			return false;
 		}
@@ -2043,10 +2083,12 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 		if (rx == false ||
 			Stm32DmaChClaim(Stm32UartDmaChNo(&dev->TxDma), Stm32UartChDmaIrq, dev, pCfg->IntPrio, pCfg->bIntMode) == false)
 		{
-			if (rx)
+			if (rx && dmaOwned == false)
 			{
 				Stm32DmaChFree(rxch);
 			}
+
+			EnableInterrupt(state);
 
 			return false;
 		}
@@ -2055,19 +2097,11 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 #else
 	if (pCfg->bDMAMode)
 	{
-		return false;
-	}
-#endif
-	uint32_t state = DisableInterrupt();
-
-	// An instance running for another UART object is not taken over.
-	if (dev->pUartDev != NULL && dev->pUartDev != pDev && (reg->CR1 & USART_CR1_UE))
-	{
 		EnableInterrupt(state);
 
 		return false;
 	}
-
+#endif
 	pDev->DevIntrf.pDevData = dev;
 	dev->pUartDev = pDev;
 	dev->pMem = &s_Stm32UartMem[pCfg->DevNo];
@@ -2123,6 +2157,12 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	// CFifoInit returns NULL when the supplied memory is too small.
 	if (pDev->hRxFifo == NULL || pDev->hTxFifo == NULL)
 	{
+#if defined(ST_DMA_GPDMA) || defined(ST_DMA_CHAN)
+		if (pCfg->bDMAMode && dmaOwned == false)
+		{
+			Stm32UartDmaFree(dev);
+		}
+#endif
 		*dev->pRccEnReg &= ~dev->RccMask;
 		EnableInterrupt(state);
 
@@ -2134,6 +2174,12 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	pDev->Rate = (int)Stm32UartSetRate(&pDev->DevIntrf, (uint32_t)pCfg->Rate);
 	if (pDev->Rate == 0)
 	{
+#if defined(ST_DMA_GPDMA) || defined(ST_DMA_CHAN)
+		if (pCfg->bDMAMode && dmaOwned == false)
+		{
+			Stm32UartDmaFree(dev);
+		}
+#endif
 		*dev->pRccEnReg &= ~dev->RccMask;
 		EnableInterrupt(state);
 

@@ -50,7 +50,10 @@ static NvmDevIntrf_t s_NvmDev;
 static NvmIntrfStat_t s_Stat;
 static NvmIntrfArb_t s_Arbiter;
 
-DevIntrf_t *NvmMcuDevIntrf(void) { return &s_NvmDev.DevIntrf; }
+DevIntrf_t *NvmMcuDevIntrf(void)
+{
+	return &s_NvmDev.DevIntrf;
+}
 
 static bool InRange(uintptr_t Addr, uint32_t Len)
 {
@@ -65,8 +68,10 @@ static bool Available(void)
 	if (s_Arbiter || !NvmMcuIsReady())
 	{
 		s_Stat.Busy++;
+
 		return false;
 	}
+
 	return true;
 }
 
@@ -74,32 +79,57 @@ static bool s_RelockPending;
 
 bool NvmMcuIsReady(void)
 {
-	if (FLASH->SR & FLASH_SR_BSY) return false;
+	if (FLASH->SR & FLASH_SR_BSY)
+	{
+		return false;
+	}
+
 	if (s_RelockPending)
 	{
 		FLASH->PECR |= FLASH_PECR_PELOCK;
 		s_RelockPending = false;
 	}
+
 	return true;
 }
 
-static bool ControllerInit(void) { return NvmMcuIsReady(); }
+static bool ControllerInit(void)
+{
+	return NvmMcuIsReady();
+}
 
 static int WaitReady(void)
 {
 	// Bounded even when SysTick is stopped or interrupts are masked.
 	for (uint32_t n = 0; n < 1000000UL; n++)
-		if (NvmMcuIsReady()) return (FLASH->SR & NVM_ERRORS) ? -EIO : 0;
+	{
+		if (NvmMcuIsReady())
+		{
+			return (FLASH->SR & NVM_ERRORS) ? -EIO : 0;
+		}
+	}
+
 	return -ETIMEDOUT;
 }
 
 static int Program(uintptr_t Addr, const uint8_t *pData, int Len)
 {
-	if (!InRange(Addr, Len)) return -EINVAL;
-	if (!Available()) return -EBUSY;
+	int res = 0;
+	uint32_t mask;
+
+	if (!InRange(Addr, Len))
+	{
+		return -EINVAL;
+	}
+
+	if (!Available())
+	{
+		return -EBUSY;
+	}
+
 	// Only unlock the data EEPROM; program flash and option bytes stay locked.
 	FLASH->SR = NVM_ERRORS | FLASH_SR_EOP;
-	uint32_t mask = __get_PRIMASK();
+	mask = __get_PRIMASK();
 	__disable_irq();
 	if (FLASH->PECR & FLASH_PECR_PELOCK)
 	{
@@ -107,19 +137,32 @@ static int Program(uintptr_t Addr, const uint8_t *pData, int Len)
 		FLASH->PEKEYR = 0x02030405UL;
 	}
 	__set_PRIMASK(mask);
-	if (FLASH->PECR & FLASH_PECR_PELOCK) return -EACCES;
+	if (FLASH->PECR & FLASH_PECR_PELOCK)
+	{
+		return -EACCES;
+	}
 	FLASH->PECR &= ~(FLASH_PECR_PROG | FLASH_PECR_DATA | FLASH_PECR_ERASE |
 		FLASH_PECR_FPRG | FLASH_PECR_FTDW | FLASH_PECR_EOPIE | FLASH_PECR_ERRIE);
-	int res = 0;
 	for (int i = 0; i < Len; i++)
 	{
 		volatile uint8_t *dst = (volatile uint8_t *)(Addr + i);
-		if (*dst == pData[i]) continue;
+		if (*dst == pData[i])
+		{
+			continue;
+		}
 		*dst = pData[i];
 		res = WaitReady();
-		if (res != 0) break;
-		if (*dst != pData[i]) { res = -EIO; break; }
+		if (res != 0)
+		{
+			break;
+		}
+		if (*dst != pData[i])
+		{
+			res = -EIO;
+			break;
+		}
 	}
+
 	// PECR must not be changed while BSY is set. A timeout leaves the port
 	// unavailable until the controller finishes; the next readiness check relocks.
 	if (NvmMcuIsReady())
@@ -127,13 +170,18 @@ static int Program(uintptr_t Addr, const uint8_t *pData, int Len)
 		FLASH->PECR |= FLASH_PECR_PELOCK;
 		FLASH->SR = NVM_ERRORS | FLASH_SR_EOP;
 	}
-	else s_RelockPending = true;
+	else
+	{
+		s_RelockPending = true;
+	}
+
 	return res;
 }
 
 int NvmMcuErase(uintptr_t)
 {
 	// True EEPROM overwrites bytes. Nvm::Erase is a no-op with EraseSize=0.
+
 	return -ENOTSUP;
 }
 
@@ -161,7 +209,10 @@ static uintptr_t FrameAddr(void)
 {
 	uintptr_t addr = 0;
 	for (int i = 1; i < NVM_INTRF_FRAME_SIZE; i++)
+	{
 		addr = (addr << 8) | s_NvmDev.Hdr[i];
+	}
+
 	return addr;
 }
 
@@ -178,38 +229,68 @@ static void FrameAdvance(uint32_t Len)
 static bool NvmStartTx(DevIntrf_t *, uint32_t)
 {
 	s_NvmDev.HdrLen = 0;
+
 	return true;
 }
 
 static bool NvmStartRx(DevIntrf_t *, uint32_t)
 {
 	// Keep the command/address across the repeated start in DeviceIntrfRead.
+
 	return true;
 }
 
 static int NvmTxData(DevIntrf_t *, const uint8_t *pData, int Len)
 {
-	if (!pData || Len <= 0) return 0;
 	int n = 0;
+
+	if (!pData || Len <= 0)
+	{
+		return 0;
+	}
 	while (n < Len && s_NvmDev.HdrLen < NVM_INTRF_FRAME_SIZE)
+	{
 		s_NvmDev.Hdr[s_NvmDev.HdrLen++] = pData[n++];
-	if (s_NvmDev.HdrLen < NVM_INTRF_FRAME_SIZE) return n;
-	if (s_NvmDev.Hdr[0] != 0x02) return n;
-	if (!InRange(FrameAddr(), (uint32_t)(Len - n))) return n;
+	}
+
+	if (s_NvmDev.HdrLen < NVM_INTRF_FRAME_SIZE)
+	{
+		return n;
+	}
+
+	if (s_NvmDev.Hdr[0] != 0x02)
+	{
+		return n;
+	}
+
+	if (!InRange(FrameAddr(), (uint32_t)(Len - n)))
+	{
+		return n;
+	}
 
 	while (n < Len)
 	{
 		int count = Len - n;
-		if (count > (int)sizeof(s_NvmDev.Data)) count = sizeof(s_NvmDev.Data);
+		if (count > (int)sizeof(s_NvmDev.Data))
+		{
+			count = sizeof(s_NvmDev.Data);
+		}
 		// Stage before entering P/E mode, including a source in data flash.
-		if (!Available()) return n;
+		if (!Available())
+		{
+			return n;
+		}
 		memcpy(s_NvmDev.Data, pData + n, count);
-		if (Program(FrameAddr(), s_NvmDev.Data, count) != 0) return n;
+		if (Program(FrameAddr(), s_NvmDev.Data, count) != 0)
+		{
+			return n;
+		}
 		s_Stat.Ops++;
 		s_Stat.Direct++;
 		FrameAdvance(count);
 		n += count;
 	}
+
 	return n;
 }
 
@@ -217,30 +298,58 @@ static int NvmRxData(DevIntrf_t *, uint8_t *pBuff, int Len)
 {
 	if (!pBuff || Len <= 0 || s_NvmDev.HdrLen != NVM_INTRF_FRAME_SIZE ||
 		s_NvmDev.Hdr[0] != 0x03 || !InRange(FrameAddr(), (uint32_t)Len) ||
-		!Available()) return 0;
+		!Available())
+	{
+		return 0;
+	}
 	memcpy(pBuff, (const void *)FrameAddr(), Len);
 	FrameAdvance(Len);
+
 	return Len;
 }
 
-static void NvmNoOp(DevIntrf_t *) {}
-static uint32_t NvmGetRate(DevIntrf_t *) { return 0; }
-static uint32_t NvmSetRate(DevIntrf_t *, uint32_t) { return 0; }
-static void *NvmGetHandle(DevIntrf_t *pDev) { return pDev->pDevData; }
+static void NvmNoOp(DevIntrf_t *)
+{
+}
+
+static uint32_t NvmGetRate(DevIntrf_t *)
+{
+	return 0;
+}
+
+static uint32_t NvmSetRate(DevIntrf_t *, uint32_t)
+{
+	return 0;
+}
+
+static void *NvmGetHandle(DevIntrf_t *pDev)
+{
+	return pDev->pDevData;
+}
 
 bool NvmIntrf::Init(DevIntrfEvtHandler_t EvtCB, bool bIntEn)
 {
+	DevIntrf_t &dev = s_NvmDev.DevIntrf;
+
 	// This port completes inside the call; it cannot promise an IRQ event.
-	if (bIntEn) return false;
+	if (bIntEn)
+	{
+		return false;
+	}
+
 	// Do not reinitialize a controller while another object has a transfer.
-	if (atomic_flag_test_and_set(&s_NvmDev.DevIntrf.bBusy)) return false;
+	if (atomic_flag_test_and_set(&s_NvmDev.DevIntrf.bBusy))
+	{
+		return false;
+	}
+
 	if (!ControllerInit())
 	{
 		atomic_flag_clear(&s_NvmDev.DevIntrf.bBusy);
+
 		return false;
 	}
 	s_NvmDev.HdrLen = 0;
-	DevIntrf_t &dev = s_NvmDev.DevIntrf;
 	dev.pDevData = &s_NvmDev;
 	dev.Type = DEVINTRF_TYPE_MEMCTRL;
 	dev.Enable = NvmNoOp;
@@ -261,11 +370,19 @@ bool NvmIntrf::Init(DevIntrfEvtHandler_t EvtCB, bool bIntEn)
 	dev.EvtCB = EvtCB;
 	dev.bIntEn = false;
 	atomic_flag_clear(&dev.bBusy);
+
 	return true;
 }
 
-void NvmIntrfSetArbiter(NvmIntrfArb_t pArb) { s_Arbiter = pArb; }
+void NvmIntrfSetArbiter(NvmIntrfArb_t pArb)
+{
+	s_Arbiter = pArb;
+}
+
 void NvmIntrfGetStat(NvmIntrfStat_t *pStat)
 {
-	if (pStat) *pStat = s_Stat;
+	if (pStat)
+	{
+		*pStat = s_Stat;
+	}
 }
