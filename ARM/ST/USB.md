@@ -14,11 +14,12 @@ No second USB stack or Cube HAL USB library is linked.
 
 | Devices | Engine | Setup and limits |
 |---|---|---|
+| STM32H753 | USB2 OTG, integrated FS PHY | HSI48 with USB2 SOF calibration; 4096-byte FIFO; 9 endpoint numbers |
 | STM32WBA65 | OTG HS, integrated HS PHY | 32 MHz HSE and USB regulator/booster; 4096-byte FIFO; 9 endpoint numbers |
 | STM32F401xC/xE | OTG FS, integrated FS PHY | HSE-derived PLLQ at 48 MHz; 1280-byte FIFO; 4 endpoint numbers |
 | STM32L476/L496 | OTG FS, integrated FS PHY | MSI 48 MHz calibrated by LSE; 1280-byte FIFO; 6 endpoint numbers |
 
-The library projects for WBA65, F401xC, L476 and L496 link the shared sources.
+The library projects for H753, WBA65, F401xC, L476 and L496 link the shared sources.
 F401xE selects the same source path but has not been compile tested separately.
 Other STM32 devices, including those with the packet-memory (PMA) USB engine,
 are not implemented by this change. The header rejects unlisted devices.
@@ -52,7 +53,7 @@ the CubeWBA 1.10.0 USBX MSP power sequence without changing the system PLL.
 It exports `OTG_HS_IRQHandler`, matching IOsonata's existing vector table;
 the NVIC number is ST's `USB_OTG_HS_IRQn`.
 
-F401, L476 and L496 use PA11 D-, PA12 D+ (AF10), and PA9 VBUS sense. Optional
+H753, F401, L476 and L496 use PA11 D-, PA12 D+ (AF10), and PA9 VBUS sense. Optional
 `pIOPinMap` entries are applied after those defaults. Boards must route VBUS
 to the sensing pad. These pins cannot simultaneously serve another peripheral.
 
@@ -65,6 +66,22 @@ from HSE. HSI alone is not accepted as the USB reference.
 L476/L496 require the existing system setup to have MSI at 48 MHz and LSE ready.
 USB enables MSI calibration by LSE and selects MSI for CLK48. Initialization
 fails for another clock arrangement rather than retuning a live system PLL.
+
+H753 selects USB2 with its embedded full-speed PHY. HSI48 supplies 48 MHz;
+CRS uses USB2 SOF at 1 kHz for automatic trimming. PLL1 remains unchanged.
+VDD33USB must be supplied externally. The NUCLEO-H753ZI supplies it through
+SB13. USB1 and ULPI are not exposed. RM0433 specifies 4 KB of FIFO on each
+H753 OTG controller; older AN4879 tables incorrectly listed 1.25 KB for FS.
+
+## NUCLEO-H753ZI examples
+
+`STM32H7xx/STM32H753/exemples/UsbCdcLoopback` and `UsbCdcPrbsTx` use the same
+common CDC applications. Power the board through ST-LINK before connecting
+native USB CN13. See [H753 build and test instructions](STM32H7xx/README.md).
+USB hardware validation is pending. The H753 library and six bare-metal
+examples compile and link in Debug/Release with soft-float and hard-float;
+modeled register tests check HSI48/CRS, pins, clock preservation and timeout.
+The firmware USB vector resolves to the production OTG handler.
 
 ## WBA65I-DK1 examples and hardware validation
 
@@ -110,15 +127,15 @@ USB speed was not recorded in the host log.
 
 F401, L476 and L496 USB hardware tests remain pending.
 
-## Software validation (October 18, 2026)
+## Software validation (updated October 20, 2026)
 
 - ARM GCC 13.2.1: controller, target initialization, generic CDC stack and both
-  common application sources compiled for WBA65, F401xC, L476 and L496 at
+  common application sources compiled for H753, WBA65, F401xC, L476 and L496 at
   `-O0` and `-Os`, with the matching Cortex-M CPU and hard-float ABI.
 - `tests/usb/stm32_otg_build_test.py` reproduces those object compilations.
   It does not build the complete IOsonata archive or link board firmware.
 - `tests/usb/stm32_otg_test.py` runs the production transfer functions with ST
-  register structures and mocked CPU intrinsics. Address/undefined-behavior
+  register structures for WBA65 and H753 and mocked CPU intrinsics. Address/undefined-behavior
   sanitizers pass for buffer ownership, short packets, reentrant unbinding,
   cancellation, unaligned IN, ZLPs, EP0 reply copying, invalid status OUT and
   bounded flush failure. Run with `ASAN_OPTIONS=detect_leaks=0` where the host
@@ -132,3 +149,7 @@ References used for register sequences and board wiring:
 - [ST F4 USB low-level driver](https://github.com/STMicroelectronics/stm32f4xx-hal-driver/blob/master/Src/stm32f4xx_ll_usb.c)
 - [CubeWBA 1.10.0 USBX MSP](https://github.com/STMicroelectronics/STM32CubeWBA/blob/v1.10.0/Projects/NUCLEO-WBA65RI/Applications/USBX/Ux_Device_CDC_ACM/Core/Src/stm32wbaxx_hal_msp.c)
 - [STM32WBA65I-DK1 user manual UM3462](https://www.st.com/resource/en/user_manual/um3462-discovery-kit-with-stm32wba65ri-mcu-stmicroelectronics.pdf)
+
+
+- [ST clarification of H753 FIFO size](https://community.st.com/stm32-mcus-products-25/correct-otg-fs-fifo-size-for-stm32h753-163943)
+- [ST H7 RCC clock and CRS definitions](https://github.com/STMicroelectronics/stm32h7xx-hal-driver/blob/master/Inc/stm32h7xx_hal_rcc_ex.h)

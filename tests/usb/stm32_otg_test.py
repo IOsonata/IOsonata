@@ -41,7 +41,13 @@ USB_OTG_GlobalTypeDef *Stm32UsbOtgRegs()
 {
 	return reinterpret_cast<USB_OTG_GlobalTypeDef *>(registers);
 }
-IRQn_Type Stm32UsbOtgIrq() { return USB_OTG_HS_IRQn; }
+IRQn_Type Stm32UsbOtgIrq() {
+#if defined(STM32H753xx)
+	return OTG_FS_IRQn;
+#else
+	return USB_OTG_HS_IRQn;
+#endif
+}
 uint16_t Stm32UsbOtgFifoWords() { return 1024; }
 void UsbProcessQue(int) {}
 void UsbDevProcessEvent(int, const UsbCtrlrEvt_t *pEvent) { control = *pEvent; }
@@ -70,20 +76,30 @@ int main()
 	UsbCtrlrCfg_t cfg = {};
 	assert(UsbCtrlrInit(0, &cfg));
 	s_Usb.Started = true;
-	s_Usb.HighSpeed = true;
+	constexpr bool highSpeed = USB_HIGHSPEED_CAPABLE_0;
+	constexpr unsigned bulkMps = USB_CTRLR0_BULK_PKT_LEN_MAX;
+	s_Usb.HighSpeed = highSpeed;
+	Device()->DSTS = highSpeed ? 0 : USB_OTG_DSTS_ENUMSPD;
 	s_Usb.pReg->GINTMSK = USB_OTG_GINTSTS_ENUMDNE;
 	s_Usb.pReg->GINTSTS = USB_OTG_GINTSTS_ENUMDNE;
 	Stm32UsbOtgInterrupt();
 	assert((Device()->DCTL & USB_OTG_DCTL_CGINAK) != 0);
 	assert((s_Usb.pReg->GUSBCFG & USB_OTG_GUSBCFG_TRDT) ==
-		(9U << USB_OTG_GUSBCFG_TRDT_Pos));
+		((highSpeed ? 9U : 6U) << USB_OTG_GUSBCFG_TRDT_Pos));
 	assert(GrowRx(1024));
 	assert(AllocateTx(0, 64));
-	assert(UsbCtrlrEpOpenData(0, 1, true, BULK, 512));
-	assert(UsbCtrlrEpOpenData(0, 1, false, BULK, 512));
+	assert(UsbCtrlrEpOpenData(0, 1, true, BULK, bulkMps));
+	assert(UsbCtrlrEpOpenData(0, 1, false, BULK, bulkMps));
 	assert(UsbCtrlrEpOpenData(0, 2, true, INT, 16));
 	assert(!UsbCtrlrEpOpenData(0, 3, true, ISO, 1024));
-	assert(!UsbCtrlrEpOpenData(0, 3, true, BULK, 64));
+	if (highSpeed)
+		assert(!UsbCtrlrEpOpenData(0, 3, true, BULK, 64));
+	else
+	{
+		assert(!UsbCtrlrEpOpenData(0, 3, true, BULK, 512));
+		assert(UsbCtrlrEpOpenData(0, 8, true, BULK, 64));
+		assert(!UsbCtrlrEpOpenData(0, 9, true, BULK, 64));
+	}
 	for (unsigned ep = 0; ep < USB_EP_COUNT; ep++)
 	{
 		if (s_Usb.TxWords[ep] != 0)
@@ -94,7 +110,7 @@ int main()
 	}
 	// OUT accepts a full-packet buffer and rejects a second owner.
 	UsbCtrlrEpBind(0, 1, false, false, Handler, nullptr);
-	assert(!UsbCtrlrEpReceive(0, 1, receive, 511));
+	assert(!UsbCtrlrEpReceive(0, 1, receive, bulkMps - 1));
 	assert(UsbCtrlrEpReceive(0, 1, receive, sizeof(receive)));
 	assert(!UsbCtrlrEpReceive(0, 1, receive, sizeof(receive)));
 	*Fifo(0) = 0x00CCBBAA;
@@ -140,16 +156,19 @@ int main()
 }
 '''
 
-with tempfile.TemporaryDirectory() as tmp:
-    path = Path(tmp)
-    (path / 'core_cm33.h').write_text(CPU)
-    (path / 'idelay.h').write_text('#pragma once\ninline void usDelay(unsigned) {}\n')
-    (path / 'test.cpp').write_text(TEST)
-    cmd = [os.environ.get('CXX', 'g++'), '-std=c++17', '-g',
-           '-fsanitize=address,undefined', '-DSTM32WBA65xx',
-           '-I' + tmp, '-I' + str(ROOT), '-I' + str(ROOT / 'include'),
-           '-I' + str(ROOT / 'ARM/ST/include'),
-           '-I' + str(ROOT / 'ARM/ST/STM32WBAxx/include'),
-           str(path / 'test.cpp'), '-o', str(path / 'test')]
-    subprocess.run(cmd, check=True)
-    subprocess.run([str(path / 'test')], check=True)
+for device, family, cpu in (('STM32WBA65xx', 'STM32WBAxx', 'core_cm33.h'),
+                            ('STM32H753xx', 'STM32H7xx', 'core_cm7.h')):
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp)
+        (path / cpu).write_text(CPU)
+        (path / 'idelay.h').write_text('#pragma once\ninline void usDelay(unsigned) {}\n')
+        (path / 'test.cpp').write_text(TEST)
+        cmd = [os.environ.get('CXX', 'g++'), '-std=c++17', '-g',
+               '-fsanitize=address,undefined', '-D' + device,
+               '-I' + tmp, '-I' + str(ROOT), '-I' + str(ROOT / 'include'),
+               '-I' + str(ROOT / 'ARM/ST/include'),
+               '-I' + str(ROOT / 'ARM/ST' / family / 'include'),
+               str(path / 'test.cpp'), '-o', str(path / 'test')]
+        subprocess.run(cmd, check=True)
+        subprocess.run([str(path / 'test')], check=True)
+

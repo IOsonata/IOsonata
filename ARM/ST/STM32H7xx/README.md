@@ -2,7 +2,8 @@
 
 Initial IOsonata port for the STM32H753ZI Cortex-M7. It supplies startup,
 GPIO/EXTI, polling and interrupt UART, and the 14 general-purpose/basic/advanced
-TIM instances. Startup, LED GPIO, USART3 TX/RX and TIM2 multi-trigger operation
+TIM instances, plus USB2 full-speed device support through the shared STM32
+OTG driver. Startup, LED GPIO, USART3 TX/RX and TIM2 multi-trigger operation
 are hardware tested on NUCLEO-H753ZI.
 
 ## Build and first board tests
@@ -64,6 +65,42 @@ Debug and Release library/kernel/example builds pass with GNU Arm GCC 13.2.1.
 The linked vectors select TaktOS PendSV and SysTick handlers. TaktOS operation
 on the H753 board has not yet been hardware tested.
 
+## Native USB CDC examples
+
+Import `STM32H753/exemples/UsbCdcLoopback/ioc` or
+`STM32H753/exemples/UsbCdcPrbsTx/ioc` alongside the same MCU library. These
+projects link the existing common applications in `exemples/usb`. Build the
+library and application in matching Debug or Release configurations. Debug
+links semihosting; enable `monitor arm semihosting enable` before resume.
+Release uses nosys and runs without the debugger.
+
+Power the board through ST-LINK first, then connect a data cable from **CN13**
+to the host. CN13 is the MCU's native USB port; its CDC port is separate from
+the ST-LINK USART3 bridge. UM2407 requires board power before connecting CN13.
+Keep the default SB13 USB supply and SB21/SB22/SB23 data/VBUS connections.
+
+1. Flash `UsbCdcLoopback`, find the new serial port, and open it to check the
+   banner and echoed characters. Then run:
+   `python3 Python/usb_cdc_loopback.py --port <native-usb-port> --duration 60`.
+   Expect zero errors and zero pending bytes after draining.
+2. Flash `UsbCdcPrbsTx` and run:
+   `python3 Python/uartprbs_rx.py --baud 1000000 --port <native-usb-port>`.
+   The baud argument is CDC line-coding metadata; it does not set USB speed.
+3. Check device reset, cable reconnect and host suspend/resume separately.
+
+USB DevNo 0 selects USB2 OTG with its embedded FS PHY: PA11 D-, PA12 D+,
+AF10, and PA9 VBUS sense. HSI48 supplies the USB clock and CRS trims it from
+USB2 SOF without changing PLL1. VDD33USB is supplied externally by the board.
+The controller has nine endpoint numbers and 4096 bytes of FIFO RAM, as
+specified by RM0433. Transfers use interrupts and CPU FIFO copies, so caller
+buffers may remain in DTCM. The generic USB core and classes are unchanged.
+
+Control, bulk and interrupt transfers are supported. USB1, external ULPI,
+high-speed operation, host mode, ISO and USB DMA are not exposed. These
+examples do not advertise remote wakeup. See [shared STM32 USB notes](../USB.md).
+USB enumeration, electrical behavior and sustained transfers still require
+hardware validation on this board.
+
 ## Clocks and memory
 
 Startup selects the internal LDO, voltage scale 1 and HSI64 / 32 feeding PLL1
@@ -106,17 +143,18 @@ LPTIM is not yet exposed. `TimerGetLowFreqDevCount()` returns 0.
 
 ## Limits and validation
 
-I2C, SPI, USB, Ethernet, CAN, ADC/DAC, PWM, internal NVM, RNG/crypto and DMA
+I2C, SPI, Ethernet, CAN, ADC/DAC, PWM, internal NVM, RNG/crypto and DMA
 are not implemented by this port. Unsupported UART DMA configuration returns
 false. The single library project includes the core device, UART, timer,
 application event and logging sources needed by these examples.
 
-`python3 tests/stm32h7/run.py` builds the library and all four examples in
+`python3 tests/stm32h7/run.py` builds the library and all six bare-metal examples in
 Debug/Release, with and without hard-float, and runs Cortex-M instruction tests
 using the actual CMSIS header. Install Python `unicorn` and `pyelftools` for
 the modeled register tests. These check startup clock selection, all four APB
 clock setters, UART3/GPIO setup, DMA rejection, all 14 timer device indices,
-and timer clock calculation with APB /1 and TIMPRE.
+timer clock calculation with APB /1 and TIMPRE, and USB2 clock/power/pin setup
+with a failed HSI48 start. USB firmware vectors select the shared OTG handler.
 
 All four configurations passed with GNU Arm GCC 13.2.1. This is compile/link
 and modeled register evidence, not a hardware throughput or timing result.
@@ -150,3 +188,4 @@ not yet been validated on hardware.
 - ST STM32CubeH7 `Projects/NUCLEO-H743ZI/Templates_LL/Src/main.c` confirms the
   400/200/100 MHz voltage-scale-1 clock and flash timing configuration. This
   port accesses the CMSIS registers directly; it does not depend on HAL or LL.
+

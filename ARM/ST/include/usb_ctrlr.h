@@ -71,6 +71,22 @@ enum {
 	USB_ISO_EPIN_MASK_0 = 0,
 	USB_ISO_EPOUT_MASK_0 = 0,
 };
+#elif defined(STM32H753xx)
+// USB2 OTG with its embedded FS PHY: EP0 through EP8, 4 KB FIFO.
+// USB1/ULPI and high-speed operation are not exposed by this port.
+enum {
+	USB_CTRLR_CNT = 1,
+	USB_HIGHSPEED_CAPABLE_0 = 0,
+	USB_EPIN_CNT_0 = 9,
+	USB_EPOUT_CNT_0 = 9,
+	USB_CTRLR0_CONTROL_PKT_LEN_MAX = 64,
+	USB_CTRLR0_BULK_PKT_LEN_MAX = 64,
+	USB_CTRLR0_INT_PKT_LEN_MAX = 64,
+	USB_CTRLR0_ISO_PKT_LEN_MAX = 1023,
+	USB_ISO_SUPPORTED_0 = 0,
+	USB_ISO_EPIN_MASK_0 = 0,
+	USB_ISO_EPOUT_MASK_0 = 0,
+};
 #elif defined(STM32F401xC) || defined(STM32F401xE)
 // STM32F401: USB OTG FS, four endpoint numbers including EP0.
 enum {
@@ -243,4 +259,5 @@ uint16_t UsbCtrlrIsoTraceSnapshot(int DevNo, uint8_t **ppData);
 /** @} End of group USB */
 
 #endif
+
 

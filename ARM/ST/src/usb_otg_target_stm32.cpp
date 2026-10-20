@@ -15,7 +15,7 @@ SPDX-License-Identifier: MIT
 
 extern void Stm32UsbOtgInterrupt(void);
 
-#if defined(STM32WBA65xx) || defined(STM32F401xC) || defined(STM32F401xE)
+#if defined(STM32WBA65xx) || defined(STM32F401xC) || defined(STM32F401xE) || defined(STM32H753xx)
 static bool ClockReady(volatile uint32_t *pReg, uint32_t Mask)
 {
 	for (unsigned i = 0; i < 2000000; i++)
@@ -94,7 +94,7 @@ extern "C" void OTG_HS_IRQHandler(void)
 	__DSB();
 }
 
-#elif defined(STM32F401xC) || defined(STM32F401xE) || defined(STM32L476xx) || defined(STM32L496xx)
+#elif defined(STM32F401xC) || defined(STM32F401xE) || defined(STM32L476xx) || defined(STM32L496xx) || defined(STM32H753xx)
 
 USB_OTG_GlobalTypeDef *Stm32UsbOtgRegs(void)
 {
@@ -108,14 +108,25 @@ IRQn_Type Stm32UsbOtgIrq(void)
 
 uint16_t Stm32UsbOtgFifoWords(void)
 {
+#if defined(STM32H753xx)
+	// RM0433: both OTG cores have 4 KB, including USB2 with the FS PHY.
+	return 1024;
+#else
 	return 320;
+#endif
 }
 
 void Stm32UsbOtgReset(void)
 {
+#if defined(STM32H753xx)
+	RCC->AHB1RSTR |= RCC_AHB1RSTR_USB2OTGFSRST;
+	__DSB();
+	RCC->AHB1RSTR &= ~RCC_AHB1RSTR_USB2OTGFSRST;
+#else
 	RCC->AHB2RSTR |= RCC_AHB2RSTR_OTGFSRST;
 	__DSB();
 	RCC->AHB2RSTR &= ~RCC_AHB2RSTR_OTGFSRST;
+#endif
 	__DSB();
 }
 
@@ -125,7 +136,26 @@ bool Stm32UsbOtgPowerInit(const UsbCtrlrCfg_t *pCfg)
 	{
 		return false;
 	}
-#if defined(STM32F401xC) || defined(STM32F401xE)
+#if defined(STM32H753xx)
+	// Dedicated HSI48, synchronized to USB2 SOF, leaves the system PLL alone.
+	RCC->CR |= RCC_CR_HSI48ON;
+	if (!ClockReady(&RCC->CR, RCC_CR_HSI48RDY))
+	{
+		return false;
+	}
+	RCC->D2CCIP2R |= RCC_D2CCIP2R_USBSEL;
+	RCC->APB1HENR |= RCC_APB1HENR_CRSEN;
+	(void)RCC->APB1HENR;
+	CRS->CR = 32U << CRS_CR_TRIM_Pos;
+	CRS->CFGR = CRS_CFGR_SYNCSRC | (34U << CRS_CFGR_FELIM_Pos) | 47999U;
+	CRS->ICR = CRS_ICR_SYNCOKC | CRS_ICR_SYNCWARNC | CRS_ICR_ERRC | CRS_ICR_ESYNCC;
+	CRS->CR |= CRS_CR_AUTOTRIMEN | CRS_CR_CEN;
+	// VDD33USB must be supplied externally (NUCLEO-H753ZI SB13).
+	// USB33RDY describes the internal regulator, which is not used here.
+	PWR->CR3 |= PWR_CR3_USB33DEN;
+	RCC->AHB1ENR |= RCC_AHB1ENR_USB2OTGFSEN;
+	(void)RCC->AHB1ENR;
+#elif defined(STM32F401xC) || defined(STM32F401xE)
 	// The F401 system port starts on HSI. An unused main PLL can supply
 	// USB independently without switching SYSCLK. Board builds must provide
 	// their real HSE_VALUE (the ST family default is 25 MHz).
@@ -177,8 +207,10 @@ bool Stm32UsbOtgPowerInit(const UsbCtrlrCfg_t *pCfg)
 	(void)RCC->APB1ENR1;
 	PWR->CR2 |= PWR_CR2_USV;
 #endif
+#if !defined(STM32H753xx)
 	RCC->AHB2ENR |= RCC_AHB2ENR_OTGFSEN;
 	(void)RCC->AHB2ENR;
+#endif
 	// PA11/PA12 are the FS data pads on these MCUs. PA9 is VBUS sense.
 	IOPinConfig(0, 9, IOPINOP_GPIO, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL);
 	IOPinConfig(0, 11, IOPINOP_FUNC10, IOPINDIR_BI, IOPINRES_NONE, IOPINTYPE_NORMAL);
@@ -201,3 +233,4 @@ extern "C" void OTG_FS_IRQHandler(void)
 #else
 #error "STM32 OTG clock and PHY setup is not implemented for this device"
 #endif
+

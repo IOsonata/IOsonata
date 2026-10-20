@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the H753 library and four examples; emulate register tests.
+"""Build the H753 library and six examples; emulate register tests.
 
 Requires GNU Arm GCC, Python unicorn and pyelftools. Uses the real ST CMSIS
 header and driver instructions. Ready flags are modeled, not physical timing.
@@ -27,6 +27,8 @@ EXAMPLES = {
     'TimerDemo': 'exemples/timer/timer_demo.cpp',
     'UartPrbsTxTest': 'exemples/uart/uart_prbs_tx.cpp',
     'UartLoopback': 'exemples/uart/uart_loopback.cpp',
+    'UsbCdcLoopback': 'exemples/usb/usb_cdc_loopback.cpp',
+    'UsbCdcPrbsTx': 'exemples/usb/usb_cdc_prbs_tx.cpp',
 }
 
 
@@ -61,6 +63,7 @@ def emulate(path):
         if address == 0x58024400:  # RCC CR, HSI and PLL1 ready
             value = read(address)
             value = (value | 4) if value & 1 else value & ~4
+            value = (value | (1 << 13)) if value & (1 << 12) and not read(symbols["UsbClockFailure"]) else value & ~(1 << 13)
             value = (value | (1 << 25)) if value & (1 << 24) else value & ~(1 << 25)
             write(address, value)
         elif address == 0x58024410:  # RCC CFGR clock switch acknowledgement
@@ -75,7 +78,7 @@ def emulate(path):
     def call(name):
         u.reg_write(UC_ARM_REG_SP, 0x2001fff0)
         u.reg_write(UC_ARM_REG_LR, 0x080ff001)
-        u.emu_start(symbols[name] | 1, 0x080ff000, count=10000000)
+        u.emu_start(symbols[name] | 1, 0x080ff000, count=40000000)
         assert u.reg_read(UC_ARM_REG_PC) == 0x080ff000, name + ' did not return'
         return u.reg_read(UC_ARM_REG_R0)
 
@@ -122,22 +125,39 @@ def main():
             archive = out / 'libIOsonata_STM32H753.a'
             run(['arm-none-eabi-ar', 'rcs', archive, *objects])
 
-            def link(obj, elf):
-                run(['arm-none-eabi-g++', '-mcpu=cortex-m7', '-mthumb', *fpu, *ldflags,
+            def link(obj, elf, usb=False):
+                specs = (['-specs=nano.specs', '-specs=' +
+                          ('rdimon.specs' if label.startswith('Debug') else 'nosys.specs')]
+                         if usb else [])
+                run(['arm-none-eabi-g++', '-mcpu=cortex-m7', '-mthumb', *fpu, *ldflags, *specs,
                      '-L' + str(ROOT / 'ARM/ldscript'), '-T' + str(PORT / 'ldscript/gcc_stm32h753xx.ld'),
-                     '-Wl,--gc-sections', obj, archive, '-lnosys', '-o', elf])
+                     '-Wl,--gc-sections', obj, archive, *([] if usb else ['-lnosys']), '-o', elf])
 
             for name, rel in EXAMPLES.items():
                 obj = out / (name + '.o')
                 compile_source(ROOT / rel, obj, ['-I' + str(PROJECT / 'exemples' / name / 'src')])
-                link(obj, out / (name + '.elf'))
+                link(obj, out / (name + '.elf'), usb=name.startswith('Usb'))
+                if name.startswith('Usb'):
+                    with (out / (name + '.elf')).open('rb') as firmware:
+                        elf = ELFFile(firmware)
+                        symbols = {s.name: s for s in elf.get_section_by_name('.symtab').iter_symbols()}
+                        handler = symbols['OTG_FS_IRQHandler']
+                        assert handler['st_info']['bind'] == 'STB_GLOBAL'
+                        for segment in elf.iter_segments():
+                            offset = 0x08000000 + (16 + 101) * 4 - segment['p_vaddr']
+                            if segment['p_type'] == 'PT_LOAD' and 0 <= offset < segment['p_filesz']:
+                                assert struct.unpack_from('<I', segment.data(), offset)[0] == handler['st_value']
+                                break
+                        else:
+                            raise AssertionError('USB vector missing')
             obj = out / 'register_test.o'
             compile_source(ROOT / 'tests/stm32h7/register_test.cpp', obj)
             link(obj, out / 'register_test.elf')
             emulate(out / 'register_test.elf')
-            print(label + ': library, four examples and register tests PASS', flush=True)
+            print(label + ': library, six examples and register tests PASS', flush=True)
     print('Hardware timing, electrical behavior and data transfers remain untested.')
 
 
 if __name__ == '__main__':
     main()
+

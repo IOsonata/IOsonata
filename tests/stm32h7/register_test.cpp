@@ -4,6 +4,16 @@
 #include "coredev/uart.h"
 #include "coredev/timer.h"
 #include "iopinctrl.h"
+#include "usb/usb.h"
+
+extern USB_OTG_GlobalTypeDef *Stm32UsbOtgRegs(void);
+extern IRQn_Type Stm32UsbOtgIrq(void);
+extern uint16_t Stm32UsbOtgFifoWords(void);
+extern bool Stm32UsbOtgPowerInit(const UsbCtrlrCfg_t *);
+extern void Stm32UsbOtgReset(void);
+
+// The emulator clears HSI48RDY when this flag is set.
+extern "C" { volatile uint32_t UsbClockFailure; }
 
 #define CHECK(Expr) do { if (!(Expr)) { return __LINE__; } } while (0)
 
@@ -75,5 +85,37 @@ extern "C" int main(void)
 		tc.DevNo = i;
 		CHECK(TimerInit(&timer, &tc));
 	}
+	// USB2 FS setup must preserve the system clock and unrelated selectors.
+	const uint32_t pll = RCC->PLL1DIVR;
+	const uint32_t selectors = RCC->D2CCIP2R;
+	const uint32_t supply = PWR->CR3;
+	UsbCtrlrCfg_t usb = {};
+	usb.IntPrio = 6;
+	CHECK(Stm32UsbOtgPowerInit(&usb));
+	CHECK(Stm32UsbOtgRegs() == USB2_OTG_FS);
+	CHECK(Stm32UsbOtgIrq() == OTG_FS_IRQn);
+	CHECK(Stm32UsbOtgFifoWords() == 1024);
+	CHECK(USB_EPIN_CNT(0) == 9 && USB_EPOUT_CNT(0) == 9);
+	CHECK(!USB_HIGHSPEED_CAPABLE(0));
+	CHECK(RCC->PLL1DIVR == pll);
+	CHECK((RCC->D2CCIP2R & ~RCC_D2CCIP2R_USBSEL) ==
+		(selectors & ~RCC_D2CCIP2R_USBSEL));
+	CHECK((RCC->D2CCIP2R & RCC_D2CCIP2R_USBSEL) == RCC_D2CCIP2R_USBSEL);
+	CHECK((CRS->CFGR & CRS_CFGR_SYNCSRC) == CRS_CFGR_SYNCSRC);
+	CHECK((CRS->CFGR & CRS_CFGR_RELOAD) == 47999U);
+	CHECK((CRS->CR & (CRS_CR_CEN | CRS_CR_AUTOTRIMEN)) ==
+		(CRS_CR_CEN | CRS_CR_AUTOTRIMEN));
+	CHECK(PWR->CR3 == (supply | PWR_CR3_USB33DEN));
+	CHECK(RCC->AHB1ENR & RCC_AHB1ENR_USB2OTGFSEN);
+	CHECK((GPIOA->AFR[1] & 0xFF000U) == 0xAA000U);
+	CHECK((GPIOA->MODER & (3U << 18)) == 0); // PA9 input
+	CHECK((GPIOA->MODER & (15U << 22)) == (10U << 22));
+	const uint32_t reset = RCC->AHB1RSTR;
+	Stm32UsbOtgReset();
+	CHECK(RCC->AHB1RSTR == reset);
+	UsbClockFailure = 1;
+	CHECK(!Stm32UsbOtgPowerInit(&usb));
+	CHECK(RCC->PLL1DIVR == pll);
 	return 0;
 }
+

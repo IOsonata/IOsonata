@@ -12,6 +12,7 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
 TARGETS = (
+    ('STM32H753xx', 'STM32H7xx', 'cortex-m7'),
     ('STM32WBA65xx', 'STM32WBAxx', 'cortex-m33'),
     ('STM32F401xC', 'STM32F4xx', 'cortex-m4'),
     ('STM32L476xx', 'STM32L4xx', 'cortex-m4'),
@@ -35,7 +36,8 @@ with tempfile.TemporaryDirectory() as tmp:
             flags = [os.environ.get('ARM_CXX', 'arm-none-eabi-g++'),
                      '-std=gnu++23', '-c', optimization, '-mcpu=' + cpu,
                      '-mthumb', '-mfloat-abi=hard', '-mfpu=' +
-                     ('fpv5-sp-d16' if cpu == 'cortex-m33' else 'fpv4-sp-d16'),
+                     ('fpv5-d16' if cpu == 'cortex-m7' else
+                      'fpv5-sp-d16' if cpu == 'cortex-m33' else 'fpv4-sp-d16'),
                      '-fno-exceptions', '-fno-rtti', '-Wno-volatile',
                      '-D' + device, '-D__PROGRAM_START']
             flags += shlex.split(os.environ.get('ARM_CXXFLAGS', ''))
@@ -54,3 +56,4 @@ with tempfile.TemporaryDirectory() as tmp:
                                         str(Path(tmp) / (str(index) + '.o'))],
                                check=True)
             print(device, optimization, 'controller, CDC and examples PASS')
+
