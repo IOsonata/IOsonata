@@ -35,7 +35,7 @@ SOFTWARE.
 #ifndef __IP_H__
 #define __IP_H__
 
-#include "coredev/ethernet.h"
+#include "net/ethernet.h"
 #include "coredev/timer.h"
 
 #pragma pack(push, 4)

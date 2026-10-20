@@ -33,7 +33,7 @@ SOFTWARE.
 ----------------------------------------------------------------------------*/
 #include <string.h>
 #include "stm32h7xx.h"
-#include "coredev/ethernet.h"
+#include "net/ethernet.h"
 #include "coredev/interrupt.h"
 #include "idelay.h"
 
