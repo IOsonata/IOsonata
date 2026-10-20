@@ -1,13 +1,14 @@
 /**-------------------------------------------------------------------------
 @file	dfu_stm32.cpp
 
-@brief	DFU target layer for STM32: F0, F4, L4, L4+ and WBA on die flash.
+@brief	DFU target layer for STM32: F0, F4, L4, L4+, WBA and H753 on die flash.
 
 One file serves the families the way nvm_stm32.cpp does: stm32.h selects
 the device header and the family differences are a few aliases and the
 erase and program sequences, all taken from the device headers.
 
 	family	program unit				erase unit
+	H753	256 bit flash word, ECC		128 KB sector
 	F0		16 bit half word			1 KB page (2 KB on F030xC, F07x, F09x)
 	F4		32 bit word, PSIZE x32		sector: 16, 16, 16, 16, 64, 128... KB
 	L4		64 bit double word, ECC		2 KB page
@@ -74,7 +75,7 @@ SOFTWARE.
   */
 
 #if !defined(IOSONATA_STM32_F0) && !defined(IOSONATA_STM32_F4) && \
-	!defined(IOSONATA_STM32_L4) && !defined(IOSONATA_STM32_WBA)
+	!defined(IOSONATA_STM32_L4) && !defined(IOSONATA_STM32_WBA) && !defined(STM32H753xx)
 #error "dfu_stm32: this STM32 family has no DFU target support"
 #endif
 
@@ -83,7 +84,11 @@ SOFTWARE.
 // unit and page size. The L4 and WBA sets are those of nvm_stm32.cpp.
 // ---------------------------------------------------------------------------
 
-#if defined(IOSONATA_STM32_WBA)
+#if defined(STM32H753xx)
+#include "flash_stm32h7xx.h"
+#define DFU_TGT_WR_UNIT ST_H7_FLASH_UNIT
+#define DFU_TGT_PAGE ST_H7_FLASH_SECTOR
+#elif defined(IOSONATA_STM32_WBA)
 
 // Non secure bank registers, the access a non CMSE build makes.
 #define ST_FLASH_CR				(FLASH_NS->NSCR1)
@@ -240,7 +245,9 @@ static_assert(DFU_TGT_WR_UNIT <= DFU_TGT_WRITE_UNIT_MAX, "program unit");
 // Total flash from the device's size register, a KB count.
 static inline uint32_t StFlashSize(void)
 {
-#if defined(IOSONATA_STM32_WBA)
+#if defined(STM32H753xx)
+	return StH7FlashSize();
+#elif defined(IOSONATA_STM32_WBA)
 	// The header's reading: all ones or zero means the part's full size.
 	return FLASH_SIZE;
 #else
@@ -344,6 +351,7 @@ static inline bool StBankSwapped(void)
 // The controller
 // ---------------------------------------------------------------------------
 
+#if !defined(STM32H753xx)
 static bool StFlashWait(void)
 {
 	uint32_t spin = DFU_TGT_SPIN;
@@ -443,6 +451,8 @@ static void StFlashSync(void)
 	__ISB();
 }
 
+#endif
+
 // ---------------------------------------------------------------------------
 // Target API
 // ---------------------------------------------------------------------------
@@ -463,6 +473,9 @@ uint32_t DfuTgtEraseUnit(uintptr_t Addr)
 
 bool DfuTgtErase(uintptr_t Addr)
 {
+#if defined(STM32H753xx)
+	return StH7FlashErase(Addr, DFU_TGT_SPIN) == 0;
+#else
 	uint32_t unit = DfuTgtEraseUnit(Addr);
 
 	if (unit == 0 || ((Addr - FLASH_BASE) % unit) != 0 ||
@@ -540,10 +553,14 @@ bool DfuTgtErase(uintptr_t Addr)
 	StFlashSync();
 
 	return ok;
+#endif
 }
 
 bool DfuTgtWrite(uintptr_t Addr, const void *pData, uint32_t Len)
 {
+#if defined(STM32H753xx)
+	return StH7FlashProgram(Addr, pData, Len, DFU_TGT_SPIN) == 0;
+#else
 	if ((Addr % DFU_TGT_WR_UNIT) != 0 || (Len % DFU_TGT_WR_UNIT) != 0 ||
 		pData == nullptr || StFlashIn(Addr, Len) == false)
 	{
@@ -614,6 +631,7 @@ bool DfuTgtWrite(uintptr_t Addr, const void *pData, uint32_t Len)
 	StFlashSync();
 
 	return ok && memcmp((const void *)Addr, pData, Len) == 0;
+#endif
 }
 
 // ---------------------------------------------------------------------------
@@ -622,6 +640,13 @@ bool DfuTgtWrite(uintptr_t Addr, const void *pData, uint32_t Len)
 
 bool DfuTgtEntryValid(const void *pImg, uintptr_t RunAddr, uint32_t ImgSize)
 {
+#if defined(STM32H753xx)
+	// H753 SRAM is discontinuous; do not accept stacks in the bus holes.
+	return DfuCmEntryValid(pImg, RunAddr, ImgSize, 0x20000000UL, 0x20020000UL) ||
+		DfuCmEntryValid(pImg, RunAddr, ImgSize, D1_AXISRAM_BASE, D1_AXISRAM_BASE + 0x80000UL) ||
+		DfuCmEntryValid(pImg, RunAddr, ImgSize, D2_AHBSRAM_BASE, D2_AHBSRAM_BASE + 0x48000UL) ||
+		DfuCmEntryValid(pImg, RunAddr, ImgSize, D3_SRAM_BASE, D3_SRAM_BASE + 0x10000UL);
+#else
 	if (DfuCmEntryValid(pImg, RunAddr, ImgSize, DFU_CM_SRAM_START,
 						DFU_CM_SRAM_END))
 	{
@@ -635,6 +660,7 @@ bool DfuTgtEntryValid(const void *pImg, uintptr_t RunAddr, uint32_t ImgSize)
 #else
 	return false;
 #endif
+#endif
 }
 
 void DfuTgtReset(void)
@@ -645,6 +671,11 @@ void DfuTgtReset(void)
 void DfuTgtStart(uintptr_t RunAddr)
 {
 	DfuCmQuiesce();
+
+#if defined(STM32H753xx)
+	SCB_DisableDCache();
+	SCB_DisableICache();
+#endif
 
 #if DFU_CM_HAS_VTOR
 	DfuCmStart((const uint32_t *)RunAddr, true);
@@ -670,3 +701,4 @@ void DfuTgtStart(uintptr_t RunAddr)
 }
 
 /** @} */
+

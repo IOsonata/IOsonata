@@ -169,6 +169,42 @@ Run `python3 tests/stm32h7/run_crypto.py` for RNG register fault tests and
 existing engine known answers. Simulation does not validate physical entropy;
 board crypto tests remain pending. Ethernet TLS/DTLS remains unimplemented.
 
+## Internal flash NVM and DFU
+
+The H753 library includes `nvm_stm32.cpp` and `dfu_stm32.cpp`. Both use
+`flash_stm32h7xx.h` for the same register-level erase/program sequence.
+The existing `NvmIntrf` / `Nvm` and `DfuTgt*` interfaces are unchanged.
+
+- Geometry: 2 MiB, two 1 MiB banks, 128 KiB erase sectors, 32-byte writes.
+- Addresses use the mapped flash range starting at 0x08000000. Active bank
+  swap selects the physical control registers for both writes and erases.
+- Writes require whole, aligned 32-byte units in erased flash. Source buffers
+  may be unaligned. All-ones units stay erased; programmed units are read
+  back. Do not rewrite an ECC unit before erasing its sector.
+- Erase uses x32 parallelism and requires VDD between 2.7 and 3.6 V.
+- Operations finish synchronously, report controller errors, and bound busy
+  polling. A timeout leaves the active operation untouched; reset before
+  retrying. Same-bank execution can stall for the duration of an operation.
+- Changed flash data-cache lines and the instruction cache are invalidated.
+  Preserve the default flash memory attributes; do not map flash write-back.
+  DFU disables core caches before handing control to the application's vector
+  table and accepts initial stacks only in the H753's actual SRAM ranges.
+
+Reserve storage sectors in the application's linker layout. The driver does
+not choose an NVM region or protect application/boot sectors from its caller.
+DFU boot/record/slot linker layouts and an H753 DfuBoot example are not supplied
+by this change. OTP, option-byte programming and recovery from uncorrectable
+ECC read faults are not implemented.
+
+Validation: both drivers compile with GNU Arm GCC 13.2.1 for Cortex-M7 at
+-O0 and -O3, using soft-float and hard-float (`fpv5-d16`). Linux host register
+checks cover both bank mappings, all sectors, programming/readback, rejected
+alignment/range/rewrite requests, lock failure, status clearing and timeouts:
+`python3 tests/storage/stm32h7_flash/run.py`. The model does not emulate ECC,
+key unlocking or physical timing. Flash erase/write and DFU handoff still need
+hardware validation; the earlier full-library build results below predate
+these flash additions.
+
 ## Clocks and memory
 
 Startup selects the internal LDO, voltage scale 1 and HSI64 / 32 feeding PLL1
@@ -214,7 +250,7 @@ LPTIM is not yet exposed. `TimerGetLowFreqDevCount()` returns 0.
 
 ## Limits and validation
 
-I2C, SPI, CAN, ADC/DAC, PWM, internal NVM and general-purpose DMA
+I2C, SPI, CAN, ADC/DAC, PWM and general-purpose DMA
 are not implemented by this port. Unsupported UART DMA configuration returns
 false. The single library project includes the core device, UART, timer,
 application event and logging sources needed by these examples.
@@ -259,3 +295,4 @@ not yet been validated on hardware.
 - ST STM32CubeH7 `Projects/NUCLEO-H743ZI/Templates_LL/Src/main.c` confirms the
   400/200/100 MHz voltage-scale-1 clock and flash timing configuration. This
   port accesses the CMSIS registers directly; it does not depend on HAL or LL.
+

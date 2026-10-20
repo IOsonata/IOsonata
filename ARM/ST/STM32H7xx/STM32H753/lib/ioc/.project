@@ -2835,6 +2835,16 @@
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/display/fonts/FreeSerif/FreeSerifIta8pt.c</locationURI>
 		</link>
+		<link>
+			<name>src/storage/nvm_stm32.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/nvm_stm32.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/dfu/dfu_stm32.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/dfu_stm32.cpp</locationURI>
+		</link>
 	</linkedResources>
 	<variableList>
 		<variable>
@@ -2843,3 +2853,4 @@
 		</variable>
 	</variableList>
 </projectDescription>
+
