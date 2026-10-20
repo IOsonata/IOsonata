@@ -257,10 +257,11 @@ STM32L475VG, shared drivers: Blinky blinks LD1 and LD2 and stops on B1.
 UartPrbsTxTest on the ST-LINK virtual COM port, USART1 at 1 Mbaud: polling
 101380 B/s, interrupts 101390 B/s, DMA 100940 B/s, DMA with interrupts 100920
 B/s, no loss after the receiver locks on the stream. UartLoopback with
-interrupts and DMA: about 66 kB/s, 0 errors; polling, Debug and Release:
-about 66 kB/s, 0 errors. A first polling run lost about 1 percent of the
-bytes and did not repeat, most likely a library not rebuilt. UartLoopback
-sets `UART_DMA_MODE` in its board.h, as on the WBA65. The rates are 1.4 percent above the 100000 B/s of
+interrupts and DMA: about 66 kB/s, 0 errors. The runs recorded as polling
+(about 66 kB/s, 0 errors, Debug and Release) ran with DMA: board.h defined
+`UART_DMA_MODE` true, which overrides the define at the top of
+`uart_loopback.cpp`. The define is removed from board.h (2026-10-19); the
+loopback without DMA is still to be run. The rates are 1.4 percent above the 100000 B/s of
 1 Mbaud 8N1: the core clock comes from the MSI through the PLL and SystemInit
 did not lock the MSI to the LSE (MSIPLLEN), the MSI kept its factory
 calibration. The NUCLEO-L432KC measured 99.9 kB/s with the same code.
@@ -307,8 +308,9 @@ in `board.h`: the ST-LINK virtual COM port, USART2, DevNo 2, RX PA15 AF3
 and TX PA2 AF7 (2026-10-19; the loopback used USART1 before). USART1, DevNo
 1, is on Arduino Nano D0 PA10 RX and D1 PA9 TX, AF7.
 Like the L476 examples they link `rdimon` semihosting and use the example
-defaults at 1 Mbaud: interrupts with DMA for the loopback (UART_DMA_MODE in
-board.h, 2026-10-19), DMA without interrupts for PRBS TX. The library in its
+defaults at 1 Mbaud: interrupts without DMA for the loopback, DMA without
+interrupts for PRBS TX. The modes are set at the top of the example source,
+board.h does not set them. The library in its
 four configurations and both
 examples in Debug and Release were built from their `.project` and `.cproject`
 settings with GNU Arm 13.2, outside IOcomposer; all 99 vector table entries

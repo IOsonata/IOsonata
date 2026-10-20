@@ -108,7 +108,8 @@ configuration. Build the library first. `board.h` selects
 `#define BOARD NUCLEO_G474RE` (`ARM/ST/include/stm32_boards.h`). Blinky blinks
 LD2 (PA5) until B1 (PC13) is pressed. The UART examples use the ST-LINK
 virtual COM port, LPUART1, DevNo 0, RX PA3 and TX PA2, AF12, at 1 Mbaud:
-interrupts with DMA for the loopback, polling for PRBS TX. For USART1 on
+interrupts without DMA for the loopback, polling for PRBS TX, as set at the
+top of the example sources. For USART1 on
 Arduino D0 PC5 RX and D1 PC4 TX, AF7, use `BOARD_UART_DEVNO` and
 `BOARD_UART_PINS`. The Debug builds link `rdimon` semihosting: run them from
 a debugger with semihosting enabled. The Release builds link `nosys` and
@@ -131,10 +132,13 @@ ST-LINK virtual COM port at 1 Mbaud from HSI16.
   interrupts 99.25 kB/s. No loss after the script syncs: the drop counts of
   the interrupt (1) and polling (8) runs happen once at the start and do not
   grow. 100.02 kB/s is within 0.02 percent of the 1 Mbaud line rate.
-- UartLoopback, Release, `Python/uartprbs_lb.py` (window 128): polling, DMA
-  without interrupts, interrupts with DMA and interrupts without DMA all
-  echo about 69 kB/s with 0 errors. The window is nearly always full: the
-  rate is the round trip of the ST-LINK virtual COM port, not the MCU.
+- UartLoopback, Release, `Python/uartprbs_lb.py` (window 128): DMA without
+  interrupts and DMA with interrupts echo about 69 kB/s with 0 errors. The
+  window is nearly always full: the rate is the round trip of the ST-LINK
+  virtual COM port, not the MCU. The runs made as polling and as interrupts
+  without DMA also ran with DMA: board.h defined `UART_DMA_MODE` true, which
+  overrides the define at the top of `uart_loopback.cpp`. The define is
+  removed from board.h; the loopback without DMA is still to be run.
 
 ## Validation
 
