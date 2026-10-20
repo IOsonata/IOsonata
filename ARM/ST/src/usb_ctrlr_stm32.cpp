@@ -469,17 +469,31 @@ static bool FlushTx(unsigned Ep)
 // Read every word, including rejected bytes, so the next RX status stays in sync.
 static void ReadFifo(uint8_t *pBuffer, unsigned Capacity, unsigned Length)
 {
-	for (unsigned offset = 0; offset < Length; offset += 4)
+	volatile uint32_t *fifo = Fifo(0);
+	unsigned count = pBuffer != nullptr ? (Capacity < Length ? Capacity : Length) : 0;
+	unsigned words = (Length + 3) / 4;
+	while (count >= 4)
 	{
-		uint32_t word = *Fifo(0);
-		for (unsigned i = 0; i < 4 && offset + i < Length; i++)
+		const uint32_t word = *fifo;
+		memcpy(pBuffer, &word, sizeof(word));
+		pBuffer += 4;
+		count -= 4;
+		words--;
+	}
+	if (count != 0)
+	{
+		uint32_t word = *fifo;
+		words--;
+		do
 		{
-			if (pBuffer != nullptr && offset + i < Capacity)
-			{
-				pBuffer[offset + i] = static_cast<uint8_t>(word);
-			}
+			*pBuffer++ = static_cast<uint8_t>(word);
 			word >>= 8;
-		}
+		} while (--count != 0);
+	}
+	while (words != 0)
+	{
+		(void)*fifo;
+		words--;
 	}
 }
 
@@ -645,12 +659,29 @@ static void ArmIn(unsigned Ep)
 	In(Ep)->DIEPTSIZ = ep->Length | (1U << USB_OTG_DIEPTSIZ_PKTCNT_Pos);
 	const uint32_t ctl = In(Ep)->DIEPCTL;
 	In(Ep)->DIEPCTL = ctl | USB_OTG_DIEPCTL_EPENA | USB_OTG_DIEPCTL_CNAK;
-	for (unsigned offset = 0; offset < ep->Length; offset += 4)
+	volatile uint32_t *fifo = Fifo(Ep);
+	const uint8_t *buffer = ep->pBuffer;
+	unsigned length = ep->Length;
+	while (length >= 4)
 	{
-		uint32_t word = 0;
-		const unsigned remain = ep->Length - offset;
-		memcpy(&word, ep->pBuffer + offset, remain < 4 ? remain : 4);
-		*Fifo(Ep) = word;
+		uint32_t word;
+		memcpy(&word, buffer, sizeof(word));
+		*fifo = word;
+		buffer += 4;
+		length -= 4;
+	}
+	if (length != 0)
+	{
+		uint32_t word = buffer[0];
+		if (length > 1)
+		{
+			word |= static_cast<uint32_t>(buffer[1]) << 8;
+		}
+		if (length > 2)
+		{
+			word |= static_cast<uint32_t>(buffer[2]) << 16;
+		}
+		*fifo = word;
 	}
 }
 
@@ -1330,8 +1361,16 @@ void Stm32UsbOtgInterrupt(void)
 	{
 		return;
 	}
-	for (unsigned ep = 0; ep < USB_EP_COUNT; ep++)
+	// Visit only endpoints with work. Recheck live status below because an
+	// OUT callback can close or rearm an IN endpoint. New interrupts retrigger
+	// the vector; callbacks that mark RxReady already pend it explicitly.
+	const uint32_t pending = Device()->DAINT & Device()->DAINTMSK;
+	uint32_t active = (pending | (pending >> 16) | s_Usb.RxReady) &
+		((1U << USB_EP_COUNT) - 1U);
+	while (active != 0)
 	{
+		const unsigned ep = __builtin_ctz(active);
+		active &= active - 1;
 		if ((Device()->DAINT & Device()->DAINTMSK & (1U << (ep + 16))) != 0)
 		{
 			const uint32_t bits = Out(ep)->DOEPINT & Device()->DOEPMSK;
@@ -1467,3 +1506,4 @@ size_t UsbCtrlrGetSerial(int DevNo, char *pBuff, size_t BuffLen)
 	pBuff[length] = 0;
 	return length;
 }
+

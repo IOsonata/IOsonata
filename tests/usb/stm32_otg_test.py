@@ -144,6 +144,62 @@ int main()
 	assert(UsbCtrlrEpSend(0, 1, nullptr, 0));
 	assert(In(1)->DIEPTSIZ == (1U << USB_OTG_DIEPTSIZ_PKTCNT_Pos));
 	Complete(1, true, false);
+	// Exercise word copies, every tail and unaligned buffers, with canaries.
+	for (unsigned offset = 0; offset < 4; offset++)
+	{
+		for (unsigned length = 0; length <= bulkMps; length++)
+		{
+			uint8_t *buffer = new uint8_t[length + offset];
+			for (unsigned i = 0; i < length; i++) buffer[offset + i] = i + 1;
+			assert(UsbCtrlrEpSend(0, 1, buffer + offset, length));
+			if (length != 0)
+			{
+				unsigned start = (length - 1) & ~3U;
+				uint32_t expected = 0;
+				for (unsigned i = start; i < length; i++)
+					expected |= uint32_t(buffer[offset + i]) << (8 * (i - start));
+				assert(*Fifo(1) == expected);
+			}
+			Complete(1, true, false);
+			delete[] buffer;
+		}
+		for (unsigned length = 0; length <= 69; length++)
+		{
+			for (unsigned capacity = 0; capacity <= 69; capacity++)
+			{
+				uint8_t buffer[80];
+				memset(buffer, 0xEE, sizeof(buffer));
+				*Fifo(0) = 0x44332211;
+				ReadFifo(buffer + offset, capacity, length);
+				unsigned copied = capacity < length ? capacity : length;
+				for (unsigned i = 0; i < sizeof(buffer); i++)
+					assert(buffer[i] == (i >= offset && i < offset + copied ?
+						0x11 * (1 + (i - offset) % 4) : 0xEE));
+			}
+		}
+	}
+	ReadFifo(nullptr, 64, 65);
+	// Sparse dispatch includes the highest endpoint and software-only DRDY.
+	s_Usb.pReg->GINTMSK = 0;
+	s_Usb.pReg->GINTSTS = 0;
+	const unsigned lastEp = USB_EP_COUNT - 1;
+	s_Usb.Ep[lastEp][1].Busy = true;
+	s_Usb.Ep[lastEp][1].Length = 1;
+	Device()->DAINT = 1U << lastEp;
+	Device()->DAINTMSK = 0;
+	Device()->DIEPMSK = USB_OTG_DIEPINT_XFRC;
+	In(lastEp)->DIEPINT = USB_OTG_DIEPINT_XFRC;
+	s_Usb.RxReady = 0;
+	Stm32UsbOtgInterrupt();
+	assert(s_Usb.Ep[lastEp][1].Busy);
+	Device()->DAINTMSK = 1U << lastEp;
+	Stm32UsbOtgInterrupt();
+	assert(!s_Usb.Ep[lastEp][1].Busy);
+	Device()->DAINT = 0;
+	s_Usb.RxReady = 1U << 1;
+	const unsigned previousReady = ready;
+	Stm32UsbOtgInterrupt();
+	assert(ready == previousReady + 1 && s_Usb.RxReady == 0);
 	// EP0 copies stack replies before returning and rejects nonzero status OUT.
 	s_Usb.Ep[0][1].Mps = 64;
 	assert(UsbCtrlrEp0Send(0, bytes + 1, 3) == 3);
@@ -191,4 +247,5 @@ extern uint16_t Stm32UsbOtgFifoWords(void);
                str(path / 'test.cpp'), '-o', str(path / 'test')]
         subprocess.run(cmd, check=True)
         subprocess.run([str(path / 'test')], check=True)
+
 
