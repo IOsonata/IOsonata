@@ -225,6 +225,7 @@ int main()
 
 	assert(control.Registers[0x12] == 0x0C && control.Registers[0x27] == 0);
 	assert(control.Registers[0x0E] == 3 && control.Registers[0x62] == 1);
+	assert(control.Registers[0x68] == 1);
 	assert(control.Registers[0x5A] == 0xFF && control.Registers[0x21] == 0x0600);
 	assert(control.Registers[0x39] == 33 && control.Registers[0x3A] == 0xA1);
 	assert(codec.HeadphoneGain() == -24000 && control.ServoReads == 3);
@@ -264,6 +265,7 @@ int main()
 	cfg.MicInput = 2;
 	assert(codec.Init(cfg, &control));
 	assert(control.Registers[0x12] == 0x0E && control.Registers[0x27] == 0x1800);
+	assert(control.Registers[0x68] == 0 && control.Registers[0x62] == 1);
 	assert(codec.Mute(true) && control.Registers[0x21] == 0x0608);
 	assert(control.Registers[0x12] == 0x0E && control.Registers[0x27] == 0x1800);
 	assert(control.Registers[0x16] == 6 && control.Registers[0x79] == 8);

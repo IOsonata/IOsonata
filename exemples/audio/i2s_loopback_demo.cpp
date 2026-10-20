@@ -49,15 +49,15 @@ SOFTWARE.
 #include "idelay.h"
 #include "board.h"
 
-// Capture the microphone and reverse PCM polarity for the phase comparison.
+// Compare microphone clock OFF/ON with zero PCM and register-controlled pump.
 #ifndef AUDIO_LOOPBACK_MIC_ENABLE
 #define AUDIO_LOOPBACK_MIC_ENABLE 1
 #endif
 #ifndef AUDIO_LOOPBACK_MIC_FORWARD
-#define AUDIO_LOOPBACK_MIC_FORWARD 1
+#define AUDIO_LOOPBACK_MIC_FORWARD 0
 #endif
 #ifndef AUDIO_LOOPBACK_MIC_INVERT
-#define AUDIO_LOOPBACK_MIC_INVERT 1
+#define AUDIO_LOOPBACK_MIC_INVERT 0
 #endif
 
 enum AudioError_t
@@ -504,7 +504,7 @@ static bool HardwareInit()
 	s_Lcd.printf("%lu Hz stereo", (unsigned long)s_Audio.Rate());
 #endif
 	s_Lcd.SetCursor(0, 24);
-	s_Lcd.printf("Headphones -12 dB");
+	s_Lcd.printf(AUDIO_LOOPBACK_MIC_ENABLE ? "CP register -12 dB" : "CP dynamic -12 dB");
 	if (!PrepareStream())
 	{
 		s_Codec.PowerOff();

@@ -242,6 +242,9 @@ bool Wm8904::MicrophoneClock(bool bEnable)
 bool Wm8904::StartHeadphones()
 {
 	uint16_t status = 0;
+	// Compare volume-register pump control during microphone capture with
+	// the previous signal-dependent Class W mode. Playback-only keeps Class W.
+	uint16_t dynamicPower = vCfg.MicInput ? 0 : 1;
 
 	HeadphoneGain(vCfg.HeadphoneGain);
 	if (!Device::Valid() ||
@@ -268,7 +271,8 @@ bool Wm8904::StartHeadphones()
 		{
 			return WriteReg(WM8904_HP_CONTROL, 0x77) &&
 				   WriteReg(WM8904_HP_CONTROL, 0xFF) &&
-				   WriteReg(WM8904_CLASS_W, 1) &&
+				   WriteReg(WM8904_CLASS_W, dynamicPower) &&
+				   VerifyReg(WM8904_CLASS_W, dynamicPower, 1) &&
 				   WriteReg(WM8904_DAC_CONTROL, DacControl(false));
 		}
 	}
