@@ -99,6 +99,7 @@ static volatile bool s_Enabled;
 static volatile bool s_Failed;
 static uint32_t s_OldClock;
 static uint32_t s_Divider;
+static uint32_t s_KernelClock;
 static unsigned s_Channels;
 static unsigned s_FrameBytes;
 static unsigned s_AccessBytes;
@@ -566,6 +567,39 @@ static void I2sPowerOff(DevIntrf_t *pDev)
 	atomic_store(&pDev->EnCnt, 0);
 }
 
+static uint32_t I2sClockSource(uint32_t &Selection)
+{
+	Selection = RCC_CCIPR2_SAI1SEL_2;
+	if (!(RCC->CR & RCC_CR_HSERDY))
+	{
+		return 16000000;
+	}
+	uint32_t source = 32000000U >> ((RCC->CR & RCC_CR_HSEPRE) >> RCC_CR_HSEPRE_Pos);
+	uint32_t sws = RCC->CFGR1 & RCC_CFGR1_SWS;
+	uint32_t cfgr = RCC->PLL1CFGR;
+
+	if (sws == RCC_CFGR1_SWS_1)
+	{
+		Selection = RCC_CCIPR2_SAI1SEL_1;
+		return source;
+	}
+	if (sws == (RCC_CFGR1_SWS_1 | RCC_CFGR1_SWS_0) &&
+		(RCC->CR & RCC_CR_PLL1RDY) &&
+		(cfgr & RCC_PLL1CFGR_PLL1SRC) == (RCC_PLL1CFGR_PLL1SRC_1 | RCC_PLL1CFGR_PLL1SRC_0))
+	{
+		uint32_t divr = RCC->PLL1DIVR;
+		uint32_t m = ((cfgr & RCC_PLL1CFGR_PLL1M) >> RCC_PLL1CFGR_PLL1M_Pos) + 1;
+		uint32_t n = ((divr & RCC_PLL1DIVR_PLL1N) >> RCC_PLL1DIVR_PLL1N_Pos) + 1;
+		uint32_t r = ((divr & RCC_PLL1DIVR_PLL1R) >> RCC_PLL1DIVR_PLL1R_Pos) + 1;
+		uint32_t fraction = cfgr & RCC_PLL1CFGR_PLL1FRACEN ?
+			(RCC->PLL1FRACR & RCC_PLL1FRACR_PLL1FRACN) >> RCC_PLL1FRACR_PLL1FRACN_Pos : 0;
+
+		Selection = RCC_CCIPR2_SAI1SEL_1;
+		return uint64_t(source) * (n * 8192U + fraction) / (uint64_t(m) * r * 8192U);
+	}
+	return 16000000;
+}
+
 static uint32_t I2sGetRate(DevIntrf_t *pDev)
 {
 	return I2sOwned(pDev) ? s_pDev->Freq : 0;
@@ -587,7 +621,7 @@ static uint32_t I2sSetRate(DevIntrf_t *pDev, uint32_t Rate)
 	}
 	for (uint32_t d = 1; d <= 63; d++)
 	{
-		uint32_t actual = 16000000U / (256U * d);
+		uint32_t actual = s_KernelClock / (256U * d);
 		uint64_t diff = actual > Rate ? uint64_t(actual) - Rate : uint64_t(Rate) - actual;
 
 		if (diff < difference)
@@ -599,8 +633,8 @@ static uint32_t I2sSetRate(DevIntrf_t *pDev, uint32_t Rate)
 	enabled = s_Enabled;
 	I2sDisable(pDev);
 	s_Divider = divider;
-	s_pDev->MClkFreq = s_pDev->Mode == I2SMODE_MASTER ? 16000000U / divider : 0;
-	s_pDev->Freq = s_pDev->Mode == I2SMODE_MASTER ? 16000000U / (256U * divider) : Rate;
+	s_pDev->MClkFreq = s_pDev->Mode == I2SMODE_MASTER ? s_KernelClock / divider : 0;
+	s_pDev->Freq = s_pDev->Mode == I2SMODE_MASTER ? s_KernelClock / (256U * divider) : Rate;
 	if (enabled)
 	{
 		I2sEnable(pDev);
@@ -852,11 +886,17 @@ bool I2SInit(I2SDev_t *const pDev, const I2SCfg_t *const pCfg)
 			return false;
 		}
 	}
-	RCC->CR |= RCC_CR_HSION;
-	for (unsigned i = 0; i < I2S_STOP_POLLS && !(RCC->CR & RCC_CR_HSIRDY); i++)
+	uint32_t selection;
+
+	s_KernelClock = I2sClockSource(selection);
+	if (selection == RCC_CCIPR2_SAI1SEL_2)
 	{
+		RCC->CR |= RCC_CR_HSION;
+		for (unsigned i = 0; i < I2S_STOP_POLLS && !(RCC->CR & RCC_CR_HSIRDY); i++)
+		{
+		}
 	}
-	if (!(RCC->CR & RCC_CR_HSIRDY))
+	if (selection == RCC_CCIPR2_SAI1SEL_2 && !(RCC->CR & RCC_CR_HSIRDY))
 	{
 		WbaGpdmaFree(s_Rx.Channel);
 		WbaGpdmaFree(s_Tx.Channel);
@@ -908,7 +948,7 @@ bool I2SInit(I2SDev_t *const pDev, const I2SCfg_t *const pCfg)
 	atomic_store(&intrf->bTxReady, true);
 	atomic_store(&intrf->bNoStop, false);
 	s_OldClock = RCC->CCIPR2 & RCC_CCIPR2_SAI1SEL;
-	RCC->CCIPR2 = (RCC->CCIPR2 & ~RCC_CCIPR2_SAI1SEL) | RCC_CCIPR2_SAI1SEL_2;
+	RCC->CCIPR2 = (RCC->CCIPR2 & ~RCC_CCIPR2_SAI1SEL) | selection;
 	RCC->APB2ENR |= RCC_APB2ENR_SAI1EN;
 	(void)RCC->APB2ENR;
 	RCC->APB2RSTR |= RCC_APB2RSTR_SAI1RST;

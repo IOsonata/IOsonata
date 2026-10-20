@@ -1031,13 +1031,15 @@ omits SDI, SDO or MCLK. At least one data direction and both clock pins are
 required. Slave mode expects externally supplied SCK_A/FS_A and reports the
 configured frame rate; it does not measure that external clock.
 
-Master mode uses HSI16 with a fixed MCLK/frame ratio of 256 and dividers
-1 through 63. Rate selects and returns the closest supported frame rate;
-zero selects the 16 kHz request. The default therefore returns **15,625 Hz**,
-with 4 MHz MCLK and HSI oscillator accuracy. It does not modify the system
-PLL or Bluetooth clocks. Use the returned rate and `I2SDev_t::MClkFreq` to
-configure the codec. Exact standard audio rates require a different clock
-source configuration, which this port does not currently select.
+Master mode uses a fixed MCLK/frame ratio of 256 and dividers 1 through 63.
+When SYSCLK already runs from HSE32 or an HSE32-derived PLL, SAI reuses that
+crystal-derived SYSCLK. The driver decodes the source before AHB division,
+including HSEPRE and the PLL fractional divider. Otherwise it uses HSI16.
+It does not reconfigure the CPU PLL. The selected source must remain stable
+while audio runs. PowerOff restores the previous SAI clock selection.
+Rate selects and returns the closest supported frame rate; zero selects the
+16 kHz request. With HSI16 this returns **15,625 Hz** and 4 MHz MCLK. Use the
+returned rate and `I2SDev_t::MClkFreq` to configure the codec.
 
 Application samples are little-endian packed bytes: one, two or three bytes
 per sample, and left then right in stereo. Transfer lengths must contain
@@ -1199,6 +1201,15 @@ python3 tests/audio/run_i2s_tone.py
 
 ## Live microphone to headphones loopback
 
+The WBA65 loopback board configuration now selects its 32 MHz crystal through
+the existing g_McuOsc startup configuration. Startup produces a 100 MHz core
+clock; SAI uses this HSE-derived SYSCLK divided by 25. The example requests
+15,625 Hz explicitly, retaining the earlier 4 MHz MCLK and 15,625 Hz frame
+rate while changing their reference from HSI16 to the crystal. The OLED
+shows `XTAL 15625 Hz`. A crystal startup failure is reported instead of
+silently running this comparison from HSI. No MCU register writes are added
+to the application or board header.
+
 The current noise isolation build defaults `AUDIO_LOOPBACK_MIC_ENABLE` to 1
 and `AUDIO_LOOPBACK_MIC_FORWARD` to 0. Codec microphone capture stays enabled,
 but MicrophoneClock(false) changes GPIO1 from DMIC clock output to logic zero.
@@ -1256,8 +1267,10 @@ external microphone clock low while leaving codec capture enabled. This
 separates external microphone activity from the codec capture circuitry.
 With the microphone clock held low, the maintainer reports that the noise
 stopped when the startup tone began and stayed off. The next board comparison
-restores the clock after five seconds of quiet zero PCM to check whether
-the buzz returns at that transition.
+restores the clock after five seconds of quiet zero PCM. The maintainer
+confirmed that the buzz returns with the microphone clock on. The next
+comparison keeps the same transition and zero PCM, using the crystal-derived
+audio clock. Its board result remains pending.
 
 This exercises simultaneous RX and TX DMA through the same generic I2S
 interface. Board mapping combines PC5 AF13 receive with PD5 AF13 transmit;

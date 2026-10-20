@@ -40,6 +40,7 @@ SOFTWARE.
 #include "coredev/i2c.h"
 #include "coredev/i2s.h"
 #include "coredev/spi.h"
+#include "coredev/system_core_clock.h"
 #include "audio/wm8904.h"
 #include "display/display_ssd1315.h"
 #include "display/display_hx8357.h"
@@ -78,6 +79,10 @@ enum AudioStage_t
 	AUDIO_STAGE_ZERO,
 	AUDIO_STAGE_TONE
 };
+
+#ifdef AUDIO_OSC_CFG
+McuOsc_t g_McuOsc = AUDIO_OSC_CFG;
+#endif
 
 static const IOPinCfg_t s_CtrlPins[] = TFT_PINS;
 static const IOPinCfg_t s_SpiPins[] = SPI_PINS;
@@ -180,7 +185,7 @@ static const I2SCfg_t s_AudioCfg = {
 	.Format = I2SFMT_NORMAL,
 	.SampleWidth = I2SSWIDTH_16BITS,
 	.Chan = I2SCHAN_STEREO,
-	.Freq = 16000,
+	.Freq = 15625,
 	.MaxRetry = 0,
 	.bDmaEn = true,
 	.bIntEn = true,
@@ -441,6 +446,13 @@ static bool HardwareInit()
 		return false;
 	}
 	s_Lcd.printf("Starting audio...");
+#ifdef AUDIO_OSC_CFG
+	if (GetHighFreqOscType() == OSC_TYPE_RC || SystemCoreClockGet() != AUDIO_CORE_FREQ)
+	{
+		s_Lcd.printf("Crystal clock failed");
+		return false;
+	}
+#endif
 	if (!s_Control.Init(s_ControlCfg) || !s_Audio.Init(s_AudioCfg))
 	{
 		s_Lcd.printf("Audio bus init failed");
@@ -473,7 +485,11 @@ static bool HardwareInit()
 	s_Lcd.SetCursor(0, 0);
 	s_Lcd.printf("Duplex tone 1 kHz");
 	s_Lcd.SetCursor(0, 16);
+#ifdef AUDIO_OSC_CFG
+	s_Lcd.printf("XTAL %lu Hz", (unsigned long)s_Audio.Rate());
+#else
 	s_Lcd.printf("%lu Hz stereo", (unsigned long)s_Audio.Rate());
+#endif
 	s_Lcd.SetCursor(0, 24);
 	s_Lcd.printf("Headphones -12 dB");
 	if (!PrepareStream())

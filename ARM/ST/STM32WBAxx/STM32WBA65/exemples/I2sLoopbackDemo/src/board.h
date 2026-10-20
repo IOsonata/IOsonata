@@ -54,6 +54,9 @@
 #define AUDIO_CODEC_ADDR 0x1A
 #define AUDIO_MIC_INPUT 2
 #define AUDIO_I2S_DEVNO 0
+// Crystal reference for the audio clock comparison. Startup owns PLL setup.
+#define AUDIO_OSC_CFG { { OSC_TYPE_XTAL, 32000000, 20, 0 }, { OSC_TYPE_RC, 32000, 20, 0 }, false }
+#define AUDIO_CORE_FREQ 100000000
 // SCK_A, FS_A, SD_B in, SD_A out, MCLK_A.
 #define AUDIO_I2S_PINS { \
 	{IOPORTA, 7, IOPINOP_FUNC13, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL}, \

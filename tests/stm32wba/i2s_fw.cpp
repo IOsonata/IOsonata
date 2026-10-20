@@ -487,6 +487,45 @@ static void I2sChecks()
 	DeviceIntrfPowerOff(&dev.DevIntrf);
 	Check(WbaSaiClaim(&other, DummyHandler));
 	WbaSaiRelease(&other);
+	// Reuse a running HSE-derived SYSCLK without changing the PLL or CPU.
+	cfg.Mode = I2SMODE_MASTER;
+	cfg.Freq = 15625;
+	RCC->CR |= RCC_CR_HSERDY | RCC_CR_PLL1RDY;
+	RCC->CFGR1 = RCC_CFGR1_SWS_1 | RCC_CFGR1_SWS_0;
+	RCC->CFGR2 = RCC_CFGR2_HPRE;
+	RCC->PLL1CFGR = RCC_PLL1CFGR_PLL1SRC_1 | RCC_PLL1CFGR_PLL1SRC_0 |
+		(7U << RCC_PLL1CFGR_PLL1M_Pos) | RCC_PLL1CFGR_PLL1REN;
+	RCC->PLL1DIVR = (99U << RCC_PLL1DIVR_PLL1N_Pos) | (3U << RCC_PLL1DIVR_PLL1R_Pos);
+	RCC->CCIPR2 = RCC_CCIPR2_SAI1SEL_0;
+	uint32_t pll = RCC->PLL1CFGR;
+	uint32_t divr = RCC->PLL1DIVR;
+
+	Check(I2SInit(&dev, &cfg));
+	Check(dev.Freq == 15625 && dev.MClkFreq == 4000000);
+	Check((RCC->CCIPR2 & RCC_CCIPR2_SAI1SEL) == RCC_CCIPR2_SAI1SEL_1);
+	Check((SAI1_Block_A->CR1 & SAI_xCR1_MCKDIV) == (25U << SAI_xCR1_MCKDIV_Pos));
+	Check(RCC->PLL1CFGR == pll && RCC->PLL1DIVR == divr);
+	Check(RCC->CFGR1 == (RCC_CFGR1_SWS_1 | RCC_CFGR1_SWS_0));
+	DeviceIntrfPowerOff(&dev.DevIntrf);
+	Check((RCC->CCIPR2 & RCC_CCIPR2_SAI1SEL) == RCC_CCIPR2_SAI1SEL_0);
+	RCC->PLL1CFGR |= RCC_PLL1CFGR_PLL1FRACEN;
+	RCC->PLL1FRACR = 4096U << RCC_PLL1FRACR_PLL1FRACN_Pos;
+	Check(I2SInit(&dev, &cfg));
+	Check(dev.Freq == 15703 && dev.MClkFreq == 4020000);
+	DeviceIntrfPowerOff(&dev.DevIntrf);
+	// Direct HSE with HSEPRE also uses SYSCLK before the AHB prescaler.
+	RCC->CFGR1 = RCC_CFGR1_SWS_1;
+	RCC->CR |= RCC_CR_HSEPRE;
+	Check(I2SInit(&dev, &cfg));
+	Check(dev.Freq == 15625 && dev.MClkFreq == 4000000);
+	Check((RCC->CCIPR2 & RCC_CCIPR2_SAI1SEL) == RCC_CCIPR2_SAI1SEL_1);
+	DeviceIntrfPowerOff(&dev.DevIntrf);
+	// An HSI-derived PLL keeps the original independent HSI16 source.
+	RCC->CFGR1 = RCC_CFGR1_SWS_1 | RCC_CFGR1_SWS_0;
+	RCC->PLL1CFGR = RCC_PLL1CFGR_PLL1SRC_1;
+	Check(I2SInit(&dev, &cfg));
+	Check((RCC->CCIPR2 & RCC_CCIPR2_SAI1SEL) == RCC_CCIPR2_SAI1SEL_2);
+	DeviceIntrfPowerOff(&dev.DevIntrf);
 	s_Io[2] = 1;
 }
 
