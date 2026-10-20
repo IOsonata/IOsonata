@@ -2,8 +2,8 @@
 
 Initial IOsonata port for the STM32H753ZI Cortex-M7. It supplies startup,
 GPIO/EXTI, polling and interrupt UART, and the 14 general-purpose/basic/advanced
-TIM instances, plus USB2 full-speed device support through the shared STM32
-OTG driver. Startup, LED GPIO, USART3 TX/RX and TIM2 multi-trigger operation
+TIM instances, USB2 full-speed device support through the shared STM32
+OTG driver, and an Ethernet MAC/DMA driver for the LAN8742A RMII PHY. Startup, LED GPIO, USART3 TX/RX and TIM2 multi-trigger operation
 are hardware tested on NUCLEO-H753ZI.
 
 ## Build and first board tests
@@ -101,6 +101,24 @@ examples do not advertise remote wakeup. See [shared STM32 USB notes](../USB.md)
 USB enumeration, electrical behavior and sustained transfers still require
 hardware validation on this board.
 
+## Ethernet examples
+
+`EthernetDemo`, `EthernetUdpDemo` and `EthernetTcpDemo` use the onboard
+LAN8742A PHY and RJ45 CN14. They share the generic Ethernet frame interface,
+lwIP IPv4 service and existing `SockIntrf` C/C++ interface. DHCP, ping, DNS,
+connected UDP and connected TCP are implemented. Ethernet TLS/DTLS is not yet
+implemented; nRF91 modem support is unchanged.
+
+The console is USART3/ST-LINK VCP at 1 Mbaud, 8N1. Start with DHCP/ping using
+`EthernetDemo`, then set the host address in either echo project's `board.h`
+and run `Python/net_echo.py`. Assign a unique MAC address per board. The default
+SDK layout must include `external/lwip` beside IOsonata; the tested version is
+lwIP 2.2.0. See [networking and board bring-up](../../../docs/networking.md)
+for build steps, pin mapping, ownership, memory, limits and validation.
+
+All examples compile/link and the packet/register simulations pass. Physical
+Ethernet operation remains untested.
+
 ## Clocks and memory
 
 Startup selects the internal LDO, voltage scale 1 and HSI64 / 32 feeding PLL1
@@ -117,8 +135,10 @@ CPU clock.
 
 The image uses 2 MiB flash and 128 KiB DTCM for data and stack. AXI SRAM is a
 separate 512 KiB RAM2 region. D2 SRAM and SRAM4 are not allocated by this linker
-script. CPU caches remain at their reset state, disabled. DMA is not supported;
-DTCM must not be assumed accessible to DMA1/2.
+script. CPU caches remain at their reset state, disabled. Ethernet descriptors and
+frame buffers use a dedicated `.eth_dma` section in AXI SRAM, with explicit
+cache maintenance when enabled. General-purpose DMA1/2 is not supported;
+DTCM must not be assumed accessible to those controllers.
 
 ## Device numbers
 
@@ -143,12 +163,12 @@ LPTIM is not yet exposed. `TimerGetLowFreqDevCount()` returns 0.
 
 ## Limits and validation
 
-I2C, SPI, Ethernet, CAN, ADC/DAC, PWM, internal NVM, RNG/crypto and DMA
+I2C, SPI, CAN, ADC/DAC, PWM, internal NVM, RNG/crypto and general-purpose DMA
 are not implemented by this port. Unsupported UART DMA configuration returns
 false. The single library project includes the core device, UART, timer,
 application event and logging sources needed by these examples.
 
-`python3 tests/stm32h7/run.py` builds the library and all six bare-metal examples in
+`python3 tests/stm32h7/run.py` builds the library and all nine bare-metal examples in
 Debug/Release, with and without hard-float, and runs Cortex-M instruction tests
 using the actual CMSIS header. Install Python `unicorn` and `pyelftools` for
 the modeled register tests. These check startup clock selection, all four APB
