@@ -301,6 +301,11 @@
 			<locationURI>PARENT-5-PROJECT_LOC/src/ResetEntry.c</locationURI>
 		</link>
 		<link>
+			<name>src/Vector_STM32H753xx.c</name>
+			<type>1</type>
+			<locationURI>PARENT-1-PROJECT_LOC/src/Vector_STM32H753xx.c</locationURI>
+		</link>
+		<link>
 			<name>src/app_evt_handler.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/app_evt_handler.cpp</locationURI>
@@ -1941,6 +1946,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/dfu/dfu_smp.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/dfu/dfu_stm32.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/dfu_stm32.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/dfu/dfu_store_nvm.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/dfu/dfu_store_nvm.cpp</locationURI>
@@ -2379,6 +2389,11 @@
 			<name>src/storage/nvm_region.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/storage/nvm_region.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/storage/nvm_stm32.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/nvm_stm32.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/storage/sdcard_impl.cpp</name>
@@ -2835,16 +2850,6 @@
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/display/fonts/FreeSerif/FreeSerifIta8pt.c</locationURI>
 		</link>
-		<link>
-			<name>src/storage/nvm_stm32.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/nvm_stm32.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/dfu/dfu_stm32.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/dfu_stm32.cpp</locationURI>
-		</link>
 	</linkedResources>
 	<variableList>
 		<variable>
@@ -2853,4 +2858,3 @@
 		</variable>
 	</variableList>
 </projectDescription>
-
