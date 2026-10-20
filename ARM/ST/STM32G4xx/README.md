@@ -99,21 +99,24 @@ RAM2.
 
 ## Example projects
 
+`STM32G474/exemples/Blinky` (`exemples/misc/blinky.c`),
 `STM32G474/exemples/UartLoopback` (`exemples/uart/uart_loopback.cpp`),
 `STM32G474/exemples/UartPrbsTxTest` (`exemples/uart/uart_prbs_tx.cpp`) and
 `STM32G474/exemples/TimerDemo` (`exemples/timer/timer_demo.cpp`) link
 `IOsonata_STM32G474` from `STM32G474/lib/ioc` in the same Debug or Release
 configuration. Build the library first. `board.h` selects
-`#define BOARD NUCLEO_G474RE` (`ARM/ST/include/stm32_boards.h`): USART1,
-DevNo 1, on Arduino D0 PC5 RX and D1 PC4 TX, AF7. The ST-LINK virtual COM
-port is LPUART1, DevNo 0, RX PA3 and TX PA2, AF12. Both run at 1 Mbaud with
-the example defaults: interrupts without DMA for the loopback, DMA without
-interrupts for PRBS TX. Like the L4 examples they link `rdimon` semihosting:
-run them from a debugger with semihosting enabled.
+`#define BOARD NUCLEO_G474RE` (`ARM/ST/include/stm32_boards.h`). Blinky blinks
+LD2 (PA5) until B1 (PC13) is pressed. The UART examples use the ST-LINK
+virtual COM port, LPUART1, DevNo 0, RX PA3 and TX PA2, AF12, at 1 Mbaud:
+interrupts with DMA for the loopback, polling for PRBS TX. For USART1 on
+Arduino D0 PC5 RX and D1 PC4 TX, AF7, use `BOARD_UART_DEVNO` and
+`BOARD_UART_PINS`. The Debug builds link `rdimon` semihosting: run them from
+a debugger with semihosting enabled. The Release builds link `nosys` and
+define `NDEBUG`.
 
-TimerDemo prints on the ST-LINK virtual COM port, LPUART1 at 115200 8N1, and
-toggles LD2 on trigger 0; it links `nosys`. `TIMER_DEMO_DEVNO` in `board.h`
-selects the timer, LPTIM1 by default, from the LSE crystal, 100 ms per
+TimerDemo toggles LD2 on trigger 0 and prints with semihosting in Debug, on
+the ST-LINK virtual COM port, LPUART1 at 115200 8N1, in Release.
+`TIMER_DEMO_DEVNO` in `board.h` selects the timer, LPTIM1 by default, from the LSE crystal, 100 ms per
 trigger 0 event (3277 ticks, 100.006 ms). The TIM run at 100 kHz, a four
 channel TIM prints triggers 0 to 3: 100 ms, 1 s, 250 ms and 500 ms.
 

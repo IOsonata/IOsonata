@@ -45,10 +45,13 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "stm32_boards.h"
 
-// USART1 on the Arduino D0/D1 pins for the serial adapter. For LPUART1 on the
-// ST-LINK virtual COM port use BOARD_VCP_DEVNO and BOARD_VCP_PINS.
-#define UART_DEVNO			BOARD_UART_DEVNO
-#define UART_PINS			BOARD_UART_PINS
+// LPUART1 on the ST-LINK virtual COM port. For USART1 on the Arduino D0/D1
+// pins (serial adapter) use BOARD_UART_DEVNO and BOARD_UART_PINS.
+#define UART_DEVNO			BOARD_VCP_DEVNO
+#define UART_PINS			BOARD_VCP_PINS
+
+// Interrupts and DMA, as on the L476 and WBA65
+#define UART_DMA_MODE		true
 
 #endif
 
