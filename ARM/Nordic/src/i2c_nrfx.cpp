@@ -596,13 +596,21 @@ int nRFxI2CRxData(DevIntrf_t *pDev, uint8_t *pBuff, int Bufflen)
 #ifdef TWI_PRESENT
 	if (pDev->bIntEn == true)
 	{
-		dev->RxBufflen = Bufflen;
-		dev->RxIdx = 0;
+		// The interrupt handler takes each byte. The bus is suspended after
+		// each byte until the handler resumes it, the last byte ends with
+		// STOP. The transfer ends on STOPPED.
 		dev->pRxBuff = pBuff;
+		dev->RxIdx = 0;
+		dev->RxBufflen = Bufflen;
+		dev->TxDatalen = 0;
+		dev->bAsyncErr = false;
+		dev->bStopped = false;
+		dev->Async = NRFX_I2C_ASYNC_RX;
 
-		dev->pReg->SHORTS = TWI_SHORTS_BB_SUSPEND_Msk;
-		dev->pReg->EVENTS_SUSPENDED = 0;
+		dev->pReg->EVENTS_RXDREADY = 0;
+		dev->pReg->EVENTS_ERROR = 0;
 		dev->pReg->EVENTS_STOPPED = 0;
+		dev->pReg->SHORTS = Bufflen > 1 ? TWI_SHORTS_BB_SUSPEND_Msk : TWI_SHORTS_BB_STOP_Msk;
 		dev->pReg->TASKS_STARTRX = 1;
 
 		cnt = -1;
@@ -772,36 +780,35 @@ int nRFxI2CTxData(DevIntrf_t * const pDev, const uint8_t *pData, int Datalen)
 		return 0;
 	}
 
-	//atomic_store(&pDev->bTxComplete, false);
 #ifdef TWI_PRESENT
-	dev->pReg->SHORTS = 0;
-	dev->pReg->EVENTS_STOPPED = 0;
-	dev->pReg->TASKS_STARTTX = 1;
-
 	if (pDev->bIntEn == true)
 	{
-		dev->TxDatalen = Datalen;
-		dev->TxIdx = 0;
+		// The interrupt handler writes each byte. At the end it sets
+		// bTxReady, then stops the bus and reports DEVINTRF_EVT_COMPLETED on
+		// STOPPED, or keeps the bus when bNoStop is set.
+		pDev->bTxReady = false;
 		dev->pTxData = pData;
+		dev->TxIdx = 0;
+		dev->TxDatalen = Datalen;
+		dev->RxBufflen = 0;
+		dev->bAsyncErr = false;
+		dev->bStopped = false;
+		dev->Async = NRFX_I2C_ASYNC_TX;
 
-		if (pDev->bTxReady == true)
-		{
-			pDev->bTxReady = false;
-			dev->pReg->TXD = dev->pTxData[dev->TxIdx];
-
-			if (pDev->bNoStop == true)
-			{
-				//if (nRFxI2CWaitTxComplete(dev, 100000) == false)
-				{
-				//	break;
-				}
-			}
-		}
+		dev->pReg->EVENTS_TXDSENT = 0;
+		dev->pReg->EVENTS_ERROR = 0;
+		dev->pReg->EVENTS_STOPPED = 0;
+		dev->pReg->SHORTS = 0;
+		dev->pReg->TASKS_STARTTX = 1;
+		dev->pReg->TXD = pData[0];
 
 		return -1;
 	}
 	else
 	{
+		dev->pReg->SHORTS = 0;
+		dev->pReg->EVENTS_STOPPED = 0;
+		dev->pReg->TASKS_STARTTX = 1;
 
 		pDev->bTxReady = false;
 		while (Datalen > 0 && rtry > 0)
@@ -1044,6 +1051,91 @@ static void nRFxI2CTwimIrq(DevIntrf_t * const pIntrf, nRFTwiDev_t * const pDev)
 }
 #endif
 
+#ifdef TWI_PRESENT
+// Master interrupt without EasyDMA, one byte per event.
+// A receive suspends the bus after each byte until the handler takes it and
+// resumes, the last byte ends with STOP. A transmit ends with a STOP task, or
+// keeps the bus when bNoStop is set. The transfer ends on STOPPED.
+static void nRFxI2CTwiIrq(DevIntrf_t * const pIntrf, nRFTwiDev_t * const pDev)
+{
+	NRF_TWI_Type *reg = pDev->pReg;
+
+	if (reg->EVENTS_ERROR)
+	{
+		reg->EVENTS_ERROR = 0;
+		reg->ERRORSRC = reg->ERRORSRC;
+
+		if (pDev->Async != NRFX_I2C_ASYNC_IDLE && pDev->bAsyncErr == false)
+		{
+			// Abort, the transfer ends on STOPPED
+			pDev->bAsyncErr = true;
+			reg->SHORTS = 0;
+			reg->TASKS_RESUME = 1;
+			reg->TASKS_STOP = 1;
+		}
+	}
+
+	if (reg->EVENTS_TXDSENT)
+	{
+		reg->EVENTS_TXDSENT = 0;
+
+		if (pDev->Async == NRFX_I2C_ASYNC_TX && pDev->bAsyncErr == false)
+		{
+			pDev->TxIdx++;
+			pDev->TxDatalen--;
+
+			if (pDev->TxDatalen > 0)
+			{
+				reg->TXD = pDev->pTxData[pDev->TxIdx];
+			}
+			else if (pIntrf->bNoStop)
+			{
+				// The bus is kept for the following receive
+				nRFxI2CAsyncEnd(pIntrf, pDev, false);
+			}
+			else
+			{
+				reg->TASKS_STOP = 1;
+			}
+		}
+	}
+
+	if (reg->EVENTS_RXDREADY)
+	{
+		reg->EVENTS_RXDREADY = 0;
+
+		uint8_t d = reg->RXD;
+
+		if (pDev->Async == NRFX_I2C_ASYNC_RX && pDev->bAsyncErr == false && pDev->RxBufflen > 0)
+		{
+			pDev->pRxBuff[pDev->RxIdx] = d;
+			pDev->RxIdx++;
+			pDev->RxBufflen--;
+
+			if (pDev->RxBufflen > 0)
+			{
+				if (pDev->RxBufflen == 1)
+				{
+					// STOP after the last byte
+					reg->SHORTS = TWI_SHORTS_BB_STOP_Msk;
+				}
+				reg->TASKS_RESUME = 1;
+			}
+		}
+	}
+
+	if (reg->EVENTS_STOPPED)
+	{
+		reg->EVENTS_STOPPED = 0;
+
+		if (pDev->Async != NRFX_I2C_ASYNC_IDLE)
+		{
+			nRFxI2CAsyncEnd(pIntrf, pDev, true);
+		}
+	}
+}
+#endif
+
 void I2C_IRQHandler(int DevNo, DevIntrf_t * const pDev)
 //extern "C" void I2C_IRQHandler(int DevNo)
 {
@@ -1135,88 +1227,7 @@ void I2C_IRQHandler(int DevNo, DevIntrf_t * const pDev)
 #endif
     	{
 #ifdef TWI_PRESENT
-    		NRF_TWI_Type *reg = dev->pReg;
-
-			if (reg->EVENTS_ERROR)
-			{
-				// Abort in case error
-				reg->ERRORSRC = reg->ERRORSRC;
-				reg->EVENTS_ERROR = 0;
-				reg->TASKS_RESUME = 1;
-				reg->TASKS_STOP = 1;
-
-				int timeout = 3000;
-				while( !reg->EVENTS_STOPPED && (timeout-- > 0));
-			}
-
-			if (reg->EVENTS_STOPPED)
-			{
-				reg->EVENTS_STOPPED = 0;
-
-				if (dev->pI2cDev->DevIntrf.EvtCB)
-				{
-					dev->pI2cDev->DevIntrf.EvtCB(&dev->pI2cDev->DevIntrf, DEVINTRF_EVT_COMPLETED, NULL, dev->RxIdx);
-				}
-			}
-
-            if (dev->pReg->EVENTS_TXDSENT)
-            {
-				dev->pReg->EVENTS_TXDSENT = 0;
-				dev->TxIdx++;
-				dev->TxDatalen--;
-
-				if (dev->TxDatalen > 0)
-				{
-					dev->pReg->TXD = dev->pTxData[dev->TxIdx];
-				}
-				else
-				{
-					if (dev->pI2cDev->DevIntrf.EvtCB)
-					{
-						dev->pI2cDev->DevIntrf.EvtCB(&dev->pI2cDev->DevIntrf, DEVINTRF_EVT_TX_FIFO_EMPTY, NULL, dev->TxIdx);
-					}
-					if (pDev->bNoStop == false)
-					{
-						DeviceIntrfStopTx(pDev);
-					}
-					atomic_store(&pDev->bTxReady, true);
-				}
-				//if (dev->pI2cDev->DevIntrf.EvtCB)
-				//{
-				//	dev->pI2cDev->DevIntrf.EvtCB(&dev->pI2cDev->DevIntrf, DEVINTRF_EVT_TX_READY, NULL, dev->TxIdx - 1);
-				//}
-            }
-            if (dev->pReg->EVENTS_RXDREADY)
-            {
-				dev->pReg->EVENTS_RXDREADY = 0;
-				dev->pRxBuff[dev->RxIdx] = dev->pReg->RXD;
-
-           		dev->RxBufflen--;
-           		dev->RxIdx++;
-
-           		//while (dev->pReg->EVENTS_SUSPENDED == 0 && dev->pReg->EVENTS_STOPPED == 0);
-
-           		dev->pReg->EVENTS_SUSPENDED = 0;
-				if (dev->RxBufflen > 1)
-        		{
-					dev->pReg->EVENTS_STOPPED = 0;
-					dev->pReg->TASKS_RESUME = 1;
-        		}
-				else if (dev->RxBufflen > 0)
-        		{
-    				if (pDev->bNoStop == false)
-    				{
-    					//dev->bRxReady = false;
-    					DeviceIntrfStopRx(pDev);
-    				}
-        		}
-				if (dev->pI2cDev->DevIntrf.EvtCB)
-				{
-					//uint32_t d = dev->pReg->RXD;
-					//int cnt = CFifoUsed(dev->hRxFifo);
-					//dev->pI2cDev->DevIntrf.EvtCB(&dev->pI2cDev->DevIntrf, DEVINTRF_EVT_RX_DATA, (uint8_t*)&d, dev->RxIdx);
-				}
-            }
+    		nRFxI2CTwiIrq(pDev, dev);
 #endif
     	}
     }
@@ -1444,12 +1455,10 @@ bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)
 			enval = (TWI_ENABLE_ENABLE_Enabled << TWI_ENABLE_ENABLE_Pos);
 			s_nRFxI2CDev[pCfgData->DevNo].pReg->EVENTS_RXDREADY = 0;
 			s_nRFxI2CDev[pCfgData->DevNo].pReg->ENABLE = enval;
-			// Interrupt not available in non DMA
-//			pDev->DevIntrf.bIntEn = false;
 			if (pDev->DevIntrf.bIntEn)
 			{
 				inten = TWI_INTENSET_TXDSENT_Msk | TWI_INTENSET_RXDREADY_Msk |
-						TWI_INTENSET_ERROR_Msk | TWI_INTENSET_STOPPED_Msk | TWI_INTENSET_SUSPENDED_Msk;
+						TWI_INTENSET_ERROR_Msk | TWI_INTENSET_STOPPED_Msk;
 
 				//reg->ENABLE = enval;
 			}

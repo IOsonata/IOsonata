@@ -68,6 +68,7 @@ def call_break(name, args, brk, action):
 
 o = [get(symbols['offsets'] + i * 4) for i in range(24)]
 CHIP = sys.argv[2] if len(sys.argv) > 2 else 'NRF9160_XXAA'
+T = [get(symbols['twi'] + i * 4) for i in range(16 if get(symbols['twi']) else 1)]
 TWIM_MAX, SH_TX_SUSPEND, SH_TX_STOP, SH_RX_STOP, TWIM_INTEN = [get(symbols['twim'] + i * 4) for i in range(5)]
 DMA_MAX = get(symbols['dma_max'])
 BUF = call('buffer_address')
@@ -78,7 +79,24 @@ actions = []
 active = None
 polled = False      # model hardware that finishes by itself, for bIntEn false
 
+legacy = None      # 'twi' selects the TWI model, without EasyDMA
+sent = []          # bytes written to TXD
+
+def legacy_write(addr, value):
+    offset = addr - BASE[0]
+    if offset == T[10]:
+        sent.append(value & 0xFF)
+        return
+    if value != 1:
+        return
+    name = {T[1]: 'startrx', T[2]: 'starttx', T[3]: 'stop', T[4]: 'resume'}.get(offset)
+    if name:
+        actions.append(name)
+
 def write(uc, access, addr, size, value, data):
+    if legacy == 'twi':
+        legacy_write(addr, value)
+        return
     if active is None or value != 1:
         return
     base = BASE[active]
@@ -290,6 +308,77 @@ isr(0)
 check(call('events', 0) == 1 and call('events', 1) == 0 and call('busy', 0) == 0, 'nacked read end')
 active = None
 
+# ---- TWI master without EasyDMA, interrupt
+if T[0]:
+    base = BASE[0]
+    legacy = 'twi'
+    def twi_init():
+        actions.clear(); sent.clear()
+        check(call('init', 0, 0, 0, 1) == 1, 'twi init')
+        check(get(base + T[14]) == T[15], 'TWI interrupt mask', hex(get(base + T[14])))
+        actions.clear()
+    def twi_event(index, rxd=None):
+        if rxd is not None:
+            put(base + T[9], rxd)
+        put(base + T[index], 1)
+        isr(0)
+        check(get(base + T[index]) == 0, 'TWI event not cleared', index)
+
+    for length in (1, 3):
+        twi_init()
+        check(call('tx', 0, length) == -1, 'twi tx')
+        check(actions == ['starttx'] and sent == [0], 'twi tx start', actions, sent)
+        for i in range(length):
+            check(call('events', 0) == 0 and call('busy', 0) == 1, 'twi tx early end')
+            twi_event(7)
+        check(len(sent) == length and actions == ['starttx', 'stop'], 'twi tx stop', actions, sent)
+        check(call('busy', 0) == 1 and call('events', 0) == 0, 'twi tx released before STOPPED')
+        twi_event(5)
+        check(call('busy', 0) == 0 and call('tx_ready', 0) == 1, 'twi tx end')
+        check(call('events', 0) == 1 and call('events', 1) == length, 'twi tx completion', call('events', 1))
+
+    for length in (1, 2, 4):
+        twi_init()
+        check(call('rx', 0, length) == -1, 'twi rx')
+        check(actions == ['startrx'], 'twi rx start', actions)
+        check(get(base + T[11]) == (T[12] if length > 1 else T[13]), 'twi rx shorts', length)
+        for i in range(length):
+            actions.clear()
+            twi_event(6, 0x40 + i)
+            left = length - i - 1
+            check(actions == (['resume'] if left else []), 'twi rx resume', length, i, actions)
+            if left:
+                check(get(base + T[11]) == (T[13] if left == 1 else T[12]), 'twi rx shorts', length, i)
+        check(call('busy', 0) == 1 and call('events', 0) == 0, 'twi rx released before STOPPED')
+        twi_event(5)
+        check(call('busy', 0) == 0 and call('events', 0) == 1 and call('events', 1) == length, 'twi rx end')
+        check(call('events', 3) == BUF, 'twi rx buffer')
+        check(bytes(u.mem_read(BUF, length)) == bytes(0x40 + i for i in range(length)), 'twi rx data')
+
+    # Register read: the command keeps the bus, then the receive
+    twi_init()
+    def twi_cmd():
+        check(actions == ['starttx'] and sent == [4], actions, sent)
+        twi_event(7)
+        check(call('tx_ready', 0) == 1 and call('busy', 0) == 1 and call('events', 0) == 0, 'twi command')
+        check(actions == ['starttx'], 'twi command stopped the bus', actions)
+    check(call_break('read_reg', (0, 2), 'DeviceIntrfWaitTxComplete', twi_cmd) == -1)
+    check(actions == ['starttx', 'startrx'], 'twi read', actions)
+    twi_event(6, 1)
+    twi_event(6, 2)
+    twi_event(5)
+    check(call('events', 0) == 1 and call('events', 1) == 2 and call('busy', 0) == 0, 'twi read end')
+
+    # Bus error
+    twi_init()
+    check(call('tx', 0, 4) == -1)
+    twi_event(7)
+    twi_event(8)
+    check(actions == ['starttx', 'resume', 'stop'], 'twi error stop', actions)
+    twi_event(5)
+    check(call('events', 0) == 1 and call('events', 1) == 1 and call('busy', 0) == 0, 'twi error end')
+    legacy = None
+
 # ---- Polled transfers still work when bIntEn is false
 polled = True
 pending.clear()
@@ -302,4 +391,4 @@ for bus in (1, 0):
         check(call('busy', bus) == 0 and not pending, 'polled end', bus, kind, call('busy', bus), pending)
     active = None
 polled = False
-print('PASS: %s master SPI and TWIM interrupt transfers' % CHIP)
+print('PASS: %s master interrupt transfers: SPIM, TWIM%s' % (CHIP, ', TWI' if T[0] else ''))

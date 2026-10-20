@@ -24,6 +24,10 @@ Checks cover:
 - TWIM bus error: the driver stops the bus, the completion reports the bytes
   moved, the bus can be used again; an address NACK on the command phase still
   ends the read;
+- TWI without EasyDMA (nRF52832): each byte from the interrupt, the receive
+  suspends the bus after each byte and ends with STOP after the last one, a
+  one byte receive stops at once, the command of a register read keeps the
+  bus, a bus error stops it, completion only on STOPPED;
 - polled transfers (`bIntEn = false`) are unchanged.
 
 Install Python packages `unicorn` and `pyelftools`, and provide an Arm GNU C++
