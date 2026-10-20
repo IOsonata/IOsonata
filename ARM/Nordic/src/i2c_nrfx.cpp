@@ -652,7 +652,9 @@ int nRFxI2CRxData(DevIntrf_t *pDev, uint8_t *pBuff, int Bufflen)
 	}
 	else
 	{
-		dev->pReg->SHORTS = 0;
+		// A one byte receive stops after that byte. A longer one gets its
+		// STOP task once the byte before the last is in.
+		dev->pReg->SHORTS = Bufflen > 1 ? 0 : TWI_SHORTS_BB_STOP_Msk;
 		dev->pReg->EVENTS_RXDREADY = 0;
 		dev->pReg->EVENTS_ERROR = 0;
 		dev->pReg->EVENTS_STOPPED = 0;

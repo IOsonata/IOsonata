@@ -437,6 +437,10 @@ if T[0]:
               'polled twi stale event at start', kind, length, at_start)
         if kind == 'tx':
             check(actions == ['starttx', 'resume', 'stop'], 'polled twi tx', actions)
+        else:
+            # One byte: STOP from the BB shortcut, before the byte is acknowledged
+            check(at_start[0][2] == (T[13] if length == 1 else 0), 'polled twi rx shorts', length,
+                  hex(at_start[0][2]))
     legacy = None
 
 # ---- SPI master without EasyDMA, interrupt

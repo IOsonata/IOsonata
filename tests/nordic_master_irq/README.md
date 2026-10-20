@@ -31,7 +31,8 @@ Checks cover:
 - SPI without EasyDMA (nRF52832): one byte per READY event, the receive
   buffer in the completion, the command of a register read keeps the bus;
 - polled TWI after TWIM transfers (nRF52832): the TXDSENT and RXDREADY events
-  a TWIM transfer leaves in the shared block are cleared before the start;
+  a TWIM transfer leaves in the shared block are cleared before the start, a
+  one byte receive stops through the BB shortcut;
 - polled transfers (`bIntEn = false`) are unchanged.
 
 Install Python packages `unicorn` and `pyelftools`, and provide an Arm GNU C++
