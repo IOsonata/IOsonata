@@ -59,6 +59,16 @@ SOFTWARE.
 	{LED2_PORT, LED2_PIN, LED2_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL}, \
 }
 
+// Timer demo output, the same UART as the UartLoopback example: UART device
+// 0, RX P100 and TX P101
+#define UART_DEVNO			0
+#define UART_RX_PORT		1
+#define UART_RX_PIN			0
+#define UART_RX_PINOP		IOPINOP_FUNC3
+#define UART_TX_PORT		1
+#define UART_TX_PIN			1
+#define UART_TX_PINOP		IOPINOP_FUNC3
+
 // One Timer interface and one logical device-number space.
 // Select any timer with DevNo (0..9). Freq=0 uses that device's default rate.
 // Low-frequency devices come first; TimerGetHighFreqDevNo() returns the
