@@ -1210,8 +1210,19 @@ shows `XTAL 15625 Hz`. A crystal startup failure is reported instead of
 silently running this comparison from HSI. No MCU register writes are added
 to the application or board header.
 
-The current noise isolation build defaults `AUDIO_LOOPBACK_MIC_ENABLE` to 1
-and `AUDIO_LOOPBACK_MIC_FORWARD` to 0. Codec microphone capture stays enabled,
+The current phase comparison defaults `AUDIO_LOOPBACK_MIC_ENABLE`,
+`AUDIO_LOOPBACK_MIC_FORWARD` and `AUDIO_LOOPBACK_MIC_INVERT` to 1. After the
+five-second startup tone/zero/mute sequence, it captures microphone PCM,
+reverses the polarity of both channels and forwards it to the headphones.
+The screen labels this `MIC 180 DEG -> HP`; the OLED stays on. Signed 16-bit
+minimum input (-32768) saturates to 32767 on inversion. Partial TX retries
+retain the already inverted block. The startup tone retains its original
+polarity. Set `AUDIO_LOOPBACK_MIC_INVERT=0` for normal polarity.
+This is a 180-degree PCM polarity reversal; cancellation of the headphone
+buzz has not been established, and capture/playback latency remains.
+
+Set `AUDIO_LOOPBACK_MIC_FORWARD=0` to repeat the clock isolation comparison.
+Codec microphone capture stays enabled,
 but MicrophoneClock(false) changes GPIO1 from DMIC clock output to logic zero.
 After the startup tone, zero PCM and DAC mute phases, it sends zero PCM
 continuously and labels the screen `MIC CLK OFF ZERO`. Five seconds later,
@@ -1269,8 +1280,10 @@ With the microphone clock held low, the maintainer reports that the noise
 stopped when the startup tone began and stayed off. The next board comparison
 restores the clock after five seconds of quiet zero PCM. The maintainer
 confirmed that the buzz returns with the microphone clock on. The next
-comparison keeps the same transition and zero PCM, using the crystal-derived
-audio clock. Its board result remains pending.
+comparison kept the same transition and zero PCM, using the crystal-derived
+audio clock. The maintainer confirmed that the buzz still returns. The
+crystal reference did not remove it. The requested inverted microphone
+playback comparison now awaits a board retest.
 
 This exercises simultaneous RX and TX DMA through the same generic I2S
 interface. Board mapping combines PC5 AF13 receive with PD5 AF13 transmit;

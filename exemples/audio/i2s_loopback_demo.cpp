@@ -49,13 +49,15 @@ SOFTWARE.
 #include "idelay.h"
 #include "board.h"
 
-// Hold the microphone clock low, then restore it with headphone PCM at zero.
-// Enable forwarding separately to restore loopback and the OLED power test.
+// Capture the microphone and reverse PCM polarity for the phase comparison.
 #ifndef AUDIO_LOOPBACK_MIC_ENABLE
 #define AUDIO_LOOPBACK_MIC_ENABLE 1
 #endif
 #ifndef AUDIO_LOOPBACK_MIC_FORWARD
-#define AUDIO_LOOPBACK_MIC_FORWARD 0
+#define AUDIO_LOOPBACK_MIC_FORWARD 1
+#endif
+#ifndef AUDIO_LOOPBACK_MIC_INVERT
+#define AUDIO_LOOPBACK_MIC_INVERT 1
 #endif
 
 enum AudioError_t
@@ -140,7 +142,8 @@ static bool s_DisplayTestDone;
 static uint32_t s_DisplayOffSince;
 static const char *const s_StageNames[] = {
 	!AUDIO_LOOPBACK_MIC_ENABLE ? "MIC OFF - ZERO PCM" :
-	(AUDIO_LOOPBACK_MIC_FORWARD ? "MIC -> HEADPHONES" : "MIC CLK OFF ZERO"),
+	(AUDIO_LOOPBACK_MIC_FORWARD ?
+	(AUDIO_LOOPBACK_MIC_INVERT ? "MIC 180 DEG -> HP" : "MIC -> HEADPHONES") : "MIC CLK OFF ZERO"),
 	"DAC muted",
 	"Zero PCM",
 	"Duplex tone 1 kHz"
@@ -267,6 +270,16 @@ static void PrepareOutput(unsigned Frames)
 	{
 		memset(s_Samples, 0, Frames * 2 * sizeof(s_Samples[0]));
 	}
+	else if (AUDIO_LOOPBACK_MIC_INVERT)
+	{
+		for (unsigned sample = 0; sample < Frames * 2; sample++)
+		{
+			int32_t value = -int32_t(s_Samples[sample]);
+
+			// -32768 has no positive counterpart in signed 16-bit PCM.
+			s_Samples[sample] = value > INT16_MAX ? INT16_MAX : value;
+		}
+	}
 	for (unsigned frame = 0; frame < Frames && s_TestRemaining; frame++)
 	{
 		int16_t value = 0;
@@ -379,7 +392,7 @@ static bool ServiceDisplay(bool AudioProgressed, uint32_t Now)
 		DrawLevel();
 		return true;
 	}
-	if (AUDIO_LOOPBACK_MIC_ENABLE && AUDIO_LOOPBACK_MIC_FORWARD && !s_DisplayTestDone && OutputStage() == AUDIO_STAGE_MIC)
+	if (AUDIO_LOOPBACK_MIC_ENABLE && AUDIO_LOOPBACK_MIC_FORWARD && !AUDIO_LOOPBACK_MIC_INVERT && !s_DisplayTestDone && OutputStage() == AUDIO_STAGE_MIC)
 	{
 		// Compare live audio with the OLED panel and charge pump disabled.
 		s_Lcd.Disable();

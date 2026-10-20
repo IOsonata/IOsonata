@@ -317,7 +317,22 @@ int main()
 			assert(s_OutputPos == sizeof(s_Input));
 			if (AUDIO_LOOPBACK_MIC_ENABLE && AUDIO_LOOPBACK_MIC_FORWARD)
 			{
-				assert(memcmp(s_Input, s_Output, sizeof(s_Input)) == 0);
+				if (AUDIO_LOOPBACK_MIC_INVERT)
+				{
+					for (unsigned i = 0; i < sizeof(s_Input); i += 2)
+					{
+						int16_t input;
+						int16_t output;
+
+						memcpy(&input, s_Input + i, 2);
+						memcpy(&output, s_Output + i, 2);
+						assert(int(input) + output == (input == INT16_MIN ? -1 : 0));
+					}
+				}
+				else
+				{
+					assert(memcmp(s_Input, s_Output, sizeof(s_Input)) == 0);
+				}
 			}
 			else
 			{
@@ -415,8 +430,8 @@ int main()
 		}
 		else
 		{
-			assert(s_Samples[0] == (AUDIO_LOOPBACK_MIC_ENABLE && AUDIO_LOOPBACK_MIC_FORWARD ? 123 : 0));
-			assert(s_Samples[1] == (AUDIO_LOOPBACK_MIC_ENABLE && AUDIO_LOOPBACK_MIC_FORWARD ? -456 : 0));
+			assert(s_Samples[0] == (AUDIO_LOOPBACK_MIC_ENABLE && AUDIO_LOOPBACK_MIC_FORWARD ? (AUDIO_LOOPBACK_MIC_INVERT ? -123 : 123) : 0));
+			assert(s_Samples[1] == (AUDIO_LOOPBACK_MIC_ENABLE && AUDIO_LOOPBACK_MIC_FORWARD ? (AUDIO_LOOPBACK_MIC_INVERT ? 456 : -456) : 0));
 		}
 	}
 	assert(positiveCrossings >= 999 && positiveCrossings <= 1001);
@@ -427,8 +442,8 @@ int main()
 	s_Samples[3] = -456;
 	PrepareOutput(2);
 	assert(s_Samples[0] == 0 && s_Samples[1] == 0);
-	assert(s_Samples[2] == (AUDIO_LOOPBACK_MIC_ENABLE && AUDIO_LOOPBACK_MIC_FORWARD ? 123 : 0));
-	assert(s_Samples[3] == (AUDIO_LOOPBACK_MIC_ENABLE && AUDIO_LOOPBACK_MIC_FORWARD ? -456 : 0));
+	assert(s_Samples[2] == (AUDIO_LOOPBACK_MIC_ENABLE && AUDIO_LOOPBACK_MIC_FORWARD ? (AUDIO_LOOPBACK_MIC_INVERT ? -123 : 123) : 0));
+	assert(s_Samples[3] == (AUDIO_LOOPBACK_MIC_ENABLE && AUDIO_LOOPBACK_MIC_FORWARD ? (AUDIO_LOOPBACK_MIC_INVERT ? 456 : -456) : 0));
 	// Restore once, after five seconds of zero PCM following startup.
 	ResetModel();
 	s_TestRate = 15625;
@@ -491,10 +506,10 @@ int main()
 	printf("Duplex OLED stress: 60 s, %u TX underrun frames, max RX %u frames\n", s_StreamUnderruns, s_StreamMaxRx);
 	assert(s_StreamUnderruns == 0 && s_StreamMaxRx < 256);
 	assert(s_Frames > 900000 && s_DisplayCalls > 1000);
-	assert(s_DisplayTestDone == bool(AUDIO_LOOPBACK_MIC_ENABLE && AUDIO_LOOPBACK_MIC_FORWARD));
+	assert(s_DisplayTestDone == bool(AUDIO_LOOPBACK_MIC_ENABLE && AUDIO_LOOPBACK_MIC_FORWARD && !AUDIO_LOOPBACK_MIC_INVERT));
 	assert(!s_DisplayOff && !s_PanelOff);
-	assert(s_PanelOffCount == unsigned(AUDIO_LOOPBACK_MIC_ENABLE && AUDIO_LOOPBACK_MIC_FORWARD));
-	assert(s_PanelOnCount == unsigned(AUDIO_LOOPBACK_MIC_ENABLE && AUDIO_LOOPBACK_MIC_FORWARD));
+	assert(s_PanelOffCount == unsigned(AUDIO_LOOPBACK_MIC_ENABLE && AUDIO_LOOPBACK_MIC_FORWARD && !AUDIO_LOOPBACK_MIC_INVERT));
+	assert(s_PanelOnCount == unsigned(AUDIO_LOOPBACK_MIC_ENABLE && AUDIO_LOOPBACK_MIC_FORWARD && !AUDIO_LOOPBACK_MIC_INVERT));
 	s_Continuous = false;
 	puts("I2S loopback config, exact forwarding, short TX, stalls, startup and errors PASS");
 }
