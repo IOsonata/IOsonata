@@ -1215,22 +1215,22 @@ void I2C_IRQHandler(int DevNo, DevIntrf_t * const pDev)
 
 #endif
     }
-    else
-    {
-    	// Master mode
+	else
+	{
+		// Master mode
 #ifdef TWIM_PRESENT
-    	if (pDev->bDma)
-    	{
-    		nRFxI2CTwimIrq(pDev, dev);
-    	}
-    	else
+		if (pDev->bDma)
+		{
+			nRFxI2CTwimIrq(pDev, dev);
+		}
+		else
 #endif
-    	{
+		{
 #ifdef TWI_PRESENT
-    		nRFxI2CTwiIrq(pDev, dev);
+			nRFxI2CTwiIrq(pDev, dev);
 #endif
-    	}
-    }
+		}
+	}
 }
 
 bool I2CInit(I2CDev_t * const pDev, const I2CCfg_t *pCfgData)

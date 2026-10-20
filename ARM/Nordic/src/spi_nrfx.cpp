@@ -411,30 +411,30 @@ bool nRFxSPIStartRx(DevIntrf_t * const pDev, uint32_t DevCs)
 int nRFxSPIRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 {
 	nRFSpiDev_t *dev = (nRFSpiDev_t *)pDev-> pDevData;
-    int cnt = 0;
+	int cnt = 0;
 
 #ifdef SPI_PRESENT
-    if (pBuff == NULL || BuffLen <= 0)
-    {
-    	return 0;
-    }
+	if (pBuff == NULL || BuffLen <= 0)
+	{
+		return 0;
+	}
 
-    dev->pReg->EVENTS_READY = 0;
+	dev->pReg->EVENTS_READY = 0;
 
-    if (pDev->bIntEn == true)
-    {
-    	// The interrupt handler takes each byte, releases the bus and reports
-    	// DEVINTRF_EVT_COMPLETED.
-    	dev->pRxBuff = pBuff;
-    	dev->RxIdx = 0;
-    	dev->RxBufflen = BuffLen;
-    	dev->TxDatalen = 0;
-    	dev->TxIdx = 0;
-    	cnt = -1;
+	if (pDev->bIntEn == true)
+	{
+		// The interrupt handler takes each byte, releases the bus and reports
+		// DEVINTRF_EVT_COMPLETED.
+		dev->pRxBuff = pBuff;
+		dev->RxIdx = 0;
+		dev->RxBufflen = BuffLen;
+		dev->TxDatalen = 0;
+		dev->TxIdx = 0;
+		cnt = -1;
 		dev->pReg->TXD = dev->pSpiDev->Cfg.DummyByte;
-    }
-    else
-    {
+	}
+	else
+	{
 		while (BuffLen > 0)
 		{
 			dev->pReg->TXD = dev->pSpiDev->Cfg.DummyByte;
@@ -674,32 +674,32 @@ bool nRFxSPIStartTx(DevIntrf_t * const pDev, uint32_t DevCs)
 int nRFxSPITxData(DevIntrf_t *pDev, const uint8_t *pData, int DataLen)
 {
 	nRFSpiDev_t *dev = (nRFSpiDev_t*)pDev->pDevData;
-    int cnt = 0;
+	int cnt = 0;
 
 #ifdef SPI_PRESENT
-    if (pData == NULL || DataLen <= 0)
-    {
-        return 0;
-    }
+	if (pData == NULL || DataLen <= 0)
+	{
+		return 0;
+	}
 
-    pDev->bTxReady = false;
+	pDev->bTxReady = false;
 
-    if (pDev->bIntEn)
-    {
-    	// The interrupt handler writes each byte. At the end it sets
-    	// bTxReady, then releases the bus and reports DEVINTRF_EVT_COMPLETED,
-    	// or keeps the bus when bNoStop is set.
-    	dev->pTxData = pData;
-    	dev->TxDatalen = DataLen;
-    	dev->TxIdx = 0;
-    	dev->RxBufflen = 0;
-    	dev->pReg->EVENTS_READY = 0;
+	if (pDev->bIntEn)
+	{
+		// The interrupt handler writes each byte. At the end it sets
+		// bTxReady, then releases the bus and reports DEVINTRF_EVT_COMPLETED,
+		// or keeps the bus when bNoStop is set.
+		dev->pTxData = pData;
+		dev->TxDatalen = DataLen;
+		dev->TxIdx = 0;
+		dev->RxBufflen = 0;
+		dev->pReg->EVENTS_READY = 0;
 		dev->pReg->TXD = *pData;
 		dev->TxIdx++;
 		dev->TxDatalen--;
 
-    	return -1;
-    }
+		return -1;
+	}
     else
     {
 		while (DataLen > 0)
