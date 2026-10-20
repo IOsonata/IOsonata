@@ -1,7 +1,14 @@
-/* STM32H753 system clock.
- * 400 MHz CPU, 200 MHz AHB, 100 MHz APB1..4, voltage scale 1.
- * HSI64 avoids a dependency on the Nucleo ST-LINK MCO solder bridges.
- * Data and stack use DTCM. D-cache is left disabled during bring-up.
+/**-------------------------------------------------------------------------
+@file	system_stm32h7xx.c
+
+@brief	STM32H753 system clock.
+
+400 MHz CPU, 200 MHz AHB, 100 MHz APB1..4, voltage scale 1.
+HSI64 avoids a dependency on the Nucleo ST-LINK MCO solder bridges.
+Data and stack use DTCM. D-cache is left disabled during bring-up.
+
+@author	Hoang Nguyen Hoan
+@date	Oct. 18, 2026
 
 @license
 
@@ -13,8 +20,8 @@ Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
 in the Software without restriction, including without limitation the rights
 to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is furnished
-to do so, subject to the following conditions:
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
 
 The above copyright notice and this permission notice shall be included in all
 copies or substantial portions of the Software.
@@ -27,7 +34,8 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
- */
+----------------------------------------------------------------------------*/
+
 #include "stm32h7xx.h"
 #include "coredev/system_core_clock.h"
 

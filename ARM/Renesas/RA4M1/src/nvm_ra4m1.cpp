@@ -1,6 +1,11 @@
-/**
-@file nvm_ra4m1.cpp
-@brief RA4M1 data flash. Polling, byte program and explicit 1 KB erase.
+/**-------------------------------------------------------------------------
+@file	nvm_ra4m1.cpp
+
+@brief	RA4M1 data flash. Polling, byte program and explicit 1 KB erase.
+
+@author	Hoang Nguyen Hoan
+@date	Oct. 19, 2026
+
 @license
 
 MIT License
@@ -26,6 +31,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ----------------------------------------------------------------------------*/
+
 #include <string.h>
 #include <errno.h>
 #include "ra4m1xxx.h"

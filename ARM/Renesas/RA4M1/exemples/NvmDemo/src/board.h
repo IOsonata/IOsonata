@@ -7,6 +7,9 @@ This file contains the I/O definitions for this application firmware.
 Keep it in the application project and modify it for the hardware in use.
 The supplied pin assignments are examples, not a development-board definition.
 
+@author	Hoang Nguyen Hoan
+@date	Oct. 19, 2026
+
 @license
 
 MIT License
@@ -32,6 +35,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ----------------------------------------------------------------------------*/
+
 #ifndef __BOARD_H__
 #define __BOARD_H__
 

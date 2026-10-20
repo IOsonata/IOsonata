@@ -1,10 +1,15 @@
-/**
-@example data_nvm_demo.cpp
-@brief Internal data EEPROM/data flash test using the common Nvm interface.
+/**-------------------------------------------------------------------------
+@example	data_nvm_demo.cpp
+
+@brief	Internal data EEPROM/data flash test using the common Nvm interface.
 
 Destructive test of the last three units of the data memory only. Two units
 are scratch; the third keeps a boot stamp for a power-cycle check. On true
 EEPROM a unit is 256 bytes. Run once per boot, not continuously.
+
+@author	Hoang Nguyen Hoan
+@date	Oct. 19, 2026
+
 @license
 
 MIT License
@@ -30,6 +35,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ----------------------------------------------------------------------------*/
+
 #include <string.h>
 #include "coredev/uart.h"
 #include "storage/nvm_intrf.h"

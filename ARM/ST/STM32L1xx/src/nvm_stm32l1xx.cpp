@@ -1,6 +1,11 @@
-/**
-@file nvm_stm32l1xx.cpp
-@brief STM32L152xE true data EEPROM. Polling, byte overwrite.
+/**-------------------------------------------------------------------------
+@file	nvm_stm32l1xx.cpp
+
+@brief	STM32L152xE true data EEPROM. Polling, byte overwrite.
+
+@author	Hoang Nguyen Hoan
+@date	Oct. 19, 2026
+
 @license
 
 MIT License
@@ -26,6 +31,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ----------------------------------------------------------------------------*/
+
 #include <string.h>
 #include <errno.h>
 #include "stm32l1xx.h"
