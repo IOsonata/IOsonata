@@ -1,6 +1,8 @@
 /* Actual timer and ICU implementations with an explicit register/event model.
  * This does not simulate the ARM pipeline, electrical clocks or ISR latency.
  */
+// The driver registers are the objects of ra4m1_host_regs.h, whose accesses
+// call read8 ... write32 below with the register address.
 #include <cassert>
 #include <cstdio>
 #include <cstring>
@@ -21,6 +23,8 @@ static void write32(uintptr_t,uint32_t);
 #define RA4M1_WR8(a,v) write8(a,v)
 #define RA4M1_WR16(a,v) write16(a,v)
 #define RA4M1_WR32(a,v) write32(a,v)
+#include "ra4m1xxx.h"
+#include "ra4m1_host_regs.h"
 #include "../../ARM/Renesas/RA4M1/src/interrupt_ra4m1.cpp"
 #include "../../ARM/Renesas/RA4M1/src/timer_ra4m1.cpp"
 SCB_Type test_scb;
@@ -38,6 +42,10 @@ extern "C" void (* const __Vectors[48])(void)={
 	V(12),V(13),V(14),V(15),V(16),V(17),V(18),V(19),V(20),V(21),V(22),V(23),
 	V(24),V(25),V(26),V(27),V(28),V(29),V(30),V(31)};
 #undef V
+void (* const *test_vtor)(void)=__Vectors;
+#define RA4M1_IELS_IR R_ICU_IELSR_IR_Msk
+// Compare 0..5 use GTCCRA, B, C, E, D, F: physical order, not alphabetical
+static const uint8_t s_Gtccr[6]={0x4C,0x50,0x54,0x5C,0x58,0x60};
 struct Ag {uint8_t ctrl[16];uint16_t counter,reload,cma,cmb;int settling;bool goal;};
 static Ag ag[2];
 static uint32_t gp[8][64],iel[32],del[4],mstp;
@@ -129,7 +137,7 @@ static void step(unsigned dev,uint64_t n)
 	}else{
 		unsigned h=dev-2;if(mstp&clkbit(dev)||!(gp[h][RA4M1_GTCR/4]&1U))return;
 		uint64_t c=gp[h][RA4M1_GTCNT/4],cycle=(uint64_t)gp[h][RA4M1_GTPR/4]+1U;
-		for(unsigned k=0;k<6;++k){uint32_t match=gp[h][s_Ra4m1GtccrOffset[k]/4];uint64_t dist=(match+cycle-c)%cycle;
+		for(unsigned k=0;k<6;++k){uint32_t match=gp[h][s_Gtccr[k]/4];uint64_t dist=(match+cycle-c)%cycle;
 			if(!dist)dist=cycle;if(n>=dist){gp[h][RA4M1_GTST/4]|=1U<<k;event(0x57+8*h+k);}
 		}
 		if(c+n>=cycle){gp[h][RA4M1_GTST/4]|=0x40;event(0x5D+8*h);}
@@ -222,7 +230,7 @@ int main()
 	// Six independent GPT compares, D/E physical register ordering, rearm phase.
 	for(unsigned dev:{2U,4U}){reset_model();CHECK(init(t,dev));for(unsigned k=0;k<6;++k){
 		CHECK(t.EnableTrigger(&t,k,ns(101+k,t.Freq),TIMER_TRIG_TYPE_CONTINUOUS,cb,&checks)>0);
-		CHECK(gp[dev-2][s_Ra4m1GtccrOffset[k]/4]==101+k);
+		CHECK(gp[dev-2][s_Gtccr[k]/4]==101+k);
 	}CHECK(t.FindAvailTrigger(&t)==-1);step(dev,113);serve(dev);
 		for(unsigned k=0;k<6;++k){CHECK(trigger_calls[k]==1);CHECK(s_Timer[dev].Trigger[k].Deadline==2*(101+k));}
 		step(dev,400);serve(dev);for(unsigned k=0;k<6;++k){CHECK(trigger_calls[k]==2);CHECK(s_Timer[dev].Trigger[k].Deadline>513);CHECK(s_Timer[dev].Trigger[k].Deadline%(101+k)==0);}

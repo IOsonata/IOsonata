@@ -100,6 +100,9 @@ static void Check(bool Cond, const char *pFmt, ...)
 
 R_IIC0_Type g_TestIic[2];
 R_PFS_Type g_TestPfs;
+
+#define TEST_PFS_SDA0	0x07010401U
+#define TEST_PFS_SCL0	0x07010408U
 R_SYSTEM_Type g_TestSystem;
 R_MSTP_Type g_TestMstp;
 uint32_t g_TestPrimask;
@@ -144,14 +147,37 @@ extern "C" void IOPinDisable(int PortNo, int PinNo)
 	s_PinGpio[PortNo][PinNo] = true;
 }
 
+// SCL pins of the two units (s_Pins0, s_Pins1)
+static bool IsSclPin(int PortNo, int PinNo)
+{
+	return (PortNo == 4 && PinNo == 8) || (PortNo == 2 && PinNo == 5);
+}
+
+// Direction given to a pin in IIC function, -1 none
+static int s_PinDir[10][16];
+
+// SDA is bidirectional. Since faccde39 the driver configures master SCL as
+// an output and slave SCL as an input: checked at START and at an address
+// match of the unit.
 extern "C" void IOPinConfig(int PortNo, int PinNo, int PinOp, IOPINDIR Dir, IOPINRES Resistor, IOPINTYPE Type)
 {
 	s_PinGpio[PortNo][PinNo] = PinOp == IOPINOP_GPIO;
+	s_PinDir[PortNo][PinNo] = PinOp == IOPINOP_GPIO ? -1 : (int)Dir;
 
-	if (PinOp != IOPINOP_GPIO && Dir != IOPINDIR_BI)
+	if (PinOp != IOPINOP_GPIO && Dir != IOPINDIR_BI && !IsSclPin(PortNo, PinNo))
 	{
-		Violation("IIC pin configured with an output direction (PDR set)");
+		Violation("IIC SDA pin configured with direction %d, not bidirectional", (int)Dir);
 	}
+	if (PinOp != IOPINOP_GPIO && IsSclPin(PortNo, PinNo) &&
+		Dir != IOPINDIR_OUTPUT && Dir != IOPINDIR_INPUT)
+	{
+		Violation("IIC SCL pin configured with direction %d", (int)Dir);
+	}
+}
+
+static int SclDir(int Unit)
+{
+	return Unit == 0 ? s_PinDir[4][8] : s_PinDir[2][5];
 }
 
 extern "C" int IOPinRead(int PortNo, int PinNo)
@@ -478,6 +504,7 @@ void TestBasePriLowered(void)
 #define SR2_TEND		0x40U
 #define SR2_TDRE		0x80U
 
+#define FER_NFE			0x20U
 #define IER_TMOIE		0x01U
 #define IER_ALIE		0x02U
 #define IER_STIE		0x04U
@@ -486,7 +513,9 @@ void TestBasePriLowered(void)
 #define IER_RIE			0x20U
 #define IER_TEIE		0x40U
 #define IER_TIE			0x80U
+#define IER_SLAVE_IDLE	(IER_RIE | IER_ALIE | IER_TMOIE)
 
+#define MR3_NF			0x03U
 #define MR3_ACKBT		0x08U
 #define MR3_ACKWP		0x10U
 #define MR3_WAIT		0x40U
@@ -753,6 +782,10 @@ static void MasterWriteCr2(Iic_t &u, uint8_t v)
 
 	if (v & 0x02U)
 	{
+		if (SclDir(&u == &s_Iic[0] ? 0 : 1) != IOPINDIR_OUTPUT)
+		{
+			Violation("START with master SCL not configured as an output");
+		}
 		if ((u.iccr2 & M_BBSY) || u.ph != PH_IDLE)
 		{
 			Violation("ST on a busy bus");
@@ -879,8 +912,19 @@ static bool BmAddress(int Unit, int Addr, bool bRead)
 		return false;
 	}
 
+	// Unread ICDRR: SCL held at the 8th clock, as for a data byte (BmWrite)
+	for (int i = 0; i < 200000 && (u.icsr2 & SR2_RDRF) != 0; i++)
+	{
+		Advance();
+		TestIrqPoint();
+	}
+
 	const bool ack = (u.icmr3 & MR3_ACKBT) == 0;
 
+	if (SclDir(Unit) != IOPINDIR_INPUT)
+	{
+		Violation("slave address match with SCL not configured as an input");
+	}
 	u.icsr1 |= (uint8_t)(1U << match);
 	TraceByte(bRead ? 'R' : 'W', (uint8_t)Addr, ack);
 
@@ -928,6 +972,16 @@ static bool BmWrite(int Unit, uint8_t B)
 	{
 		TraceByte('d', B, false);
 		return false;
+	}
+
+	// ICSR2 has no receive overrun flag: with ICDRR unread the IIC holds
+	// SCL low at the falling edge of the 8th clock of the next byte, before
+	// the acknowledge, until ICDRR is read. WAIT holds after the 9th clock
+	// instead. The slave of the driver runs with WAIT cleared.
+	for (int i = 0; i < 200000 && u.bSlActive && (u.icsr2 & SR2_RDRF) != 0; i++)
+	{
+		Advance();
+		TestIrqPoint();
 	}
 
 	const bool ack = (u.icmr3 & MR3_ACKBT) == 0;
@@ -1430,6 +1484,7 @@ static void WorldReset(void)
 	DevReset();
 	memset(s_PinGpio, 0, sizeof(s_PinGpio));
 	memset(s_PinLatch, 1, sizeof(s_PinLatch));
+	memset(s_PinDir, 0xFF, sizeof(s_PinDir));
 	s_SdaHeldPulses = 0;
 	s_SclRises = 0;
 	s_PinStops = 0;
@@ -1584,8 +1639,12 @@ static void TestRate(void)
 			}
 
 			const uint32_t actual = I2CGetRate(&dev);
+			// The IIC adds 3 IIC-phi clocks to each count with CKS=0, 2 with a
+			// divided clock, plus the noise filter stages with ICFER.NFE set
+			// (ICMR3.NF + 1)
 			const uint8_t cks = (s_Iic[0].icmr1 >> 4) & 7U;
-			const uint32_t off = cks == 0 ? 3 : 2;
+			const uint32_t nf = (s_Iic[0].icfer & FER_NFE) ? (s_Iic[0].icmr3 & MR3_NF) + 1U : 0U;
+			const uint32_t off = (cks == 0 ? 3 : 2) + nf;
 			const uint32_t lo = ((s_Iic[0].icbrl & 0x1FU) + off) << cks;
 			const uint32_t hi = ((s_Iic[0].icbrh & 0x1FU) + off) << cks;
 			const uint32_t hw = clk / (lo + hi);
@@ -1774,18 +1833,50 @@ static void TestMasterPolling(void)
 		CheckTrace("bbsy", "S W50+ d03+ d04+ P");
 	}
 
-	// Register dump text
+	// Trace records. They replace the register dump text (Ra4m1I2cDump) of
+	// the first port: registers after each event, pin registers at START and
+	// at an abandoned transfer. The table keeps the first events since power
+	// up, the earlier tests included.
 	{
-		char txt[400];
-		const int n = Ra4m1I2cDump(&dev.DevIntrf, txt, sizeof(txt));
+		const uint32_t cnt = Ra4m1I2cTraceCount(0);
+		Ra4m1I2cTrace_t rec;
+		int config = 0;
+		int begin = 0;
 
-		Check(n > 0 && n == (int)strlen(txt), "dump length %d", n);
-		Check(strstr(txt, " cr1=9") != NULL, "dump has no cr1: %s", txt);
-		Check(strstr(txt, " fer=77") != NULL, "dump has no fer=77: %s", txt);
-		Check(strstr(txt, " sdapfs=") != NULL && strstr(txt, " sclpfs=") != NULL,
-			"dump has no pin registers: %s", txt);
-		char small[8];
-		Check(Ra4m1I2cDump(&dev.DevIntrf, small, sizeof(small)) < 8, "dump overran");
+		Check(cnt > 0 && cnt <= RA4M1_I2C_TRACE_DEPTH, "trace count %u", (unsigned)cnt);
+		for (uint32_t i = 0; i < cnt; i++)
+		{
+			if (!Ra4m1I2cTraceGet(0, i, &rec))
+			{
+				Check(false, "trace record %u missing", (unsigned)i);
+				break;
+			}
+			Check(rec.Seq == i + 1, "trace record %u has Seq %u", (unsigned)i, (unsigned)rec.Seq);
+			if (rec.Code == RA4M1_I2C_TR_CONFIG)
+			{
+				config++;
+				// 0x7A master, 0x5D slave (821a8d4b)
+				Check(rec.ICFER == 0x7A || rec.ICFER == 0x5D, "config record ICFER %02X", rec.ICFER);
+			}
+			if (rec.Code == RA4M1_I2C_TR_BEGIN || rec.Code == RA4M1_I2C_TR_ABORT ||
+				rec.Code == RA4M1_I2C_TR_START_POST)
+			{
+				begin += rec.Code == RA4M1_I2C_TR_BEGIN;
+				Check(rec.SdaPfs == TEST_PFS_SDA0 && rec.SclPfs == TEST_PFS_SCL0,
+					"record %u pin registers %08X %08X", (unsigned)i, rec.SdaPfs, rec.SclPfs);
+			}
+			else
+			{
+				Check(rec.SdaPfs == 0 && rec.SclPfs == 0, "record %u code %u has pin registers",
+					(unsigned)i, rec.Code);
+			}
+		}
+		Check(config > 0, "no configure record");
+		Check(begin > 0, "no START record");
+		Check(!Ra4m1I2cTraceGet(0, cnt, &rec), "record read past the count");
+		Check(!Ra4m1I2cTraceGet(0, 0, NULL), "record read to NULL");
+		Check(!Ra4m1I2cTraceGet(-1, 0, &rec) && !Ra4m1I2cTraceGet(2, 0, &rec), "record of an invalid unit");
+		Check(Ra4m1I2cTraceCount(-1) == 0 && Ra4m1I2cTraceCount(2) == 0, "count of an invalid unit");
 	}
 
 	// Still usable after the errors
@@ -2140,8 +2231,10 @@ static void TestSlave(long Latency)
 	s_pSlave = &dev;
 	Check(SlotCount() == 4, "slave used %d slots", SlotCount());
 	Check((s_Iic[1].icser & 7U) == 1 && (s_Iic[1].sarl[0] >> 1) == 0x2A, "slave address registers");
-	Check((s_Iic[1].icmr3 & MR3_WAIT) != 0, "slave WAIT not set");
-	Check(s_Iic[1].icier == IER_RIE, "idle slave ICIER %02X", s_Iic[1].icier);
+	// The slave runs with WAIT cleared and, when idle, RIE with the timeout
+	// and arbitration lost enables (RA4M1_I2C_IER_SLAVE_IDLE)
+	Check((s_Iic[1].icmr3 & MR3_WAIT) == 0, "slave WAIT set");
+	Check(s_Iic[1].icier == IER_SLAVE_IDLE, "idle slave ICIER %02X", s_Iic[1].icier);
 
 	// Write
 	s_SlWrLen = 8;
@@ -2155,7 +2248,7 @@ static void TestSlave(long Latency)
 	Check(memcmp(s_SlWrBuf, wr, 4) == 0, "write 4 data");
 	ExpectEvents("write 4", { { EV_WR, 0 }, { EV_DONE, 4 } });
 	CheckTrace("write 4", "S W2A+ d01+ d02+ d03+ d04+ P");
-	Check(s_Iic[1].icier == IER_RIE, "ICIER %02X after stop", s_Iic[1].icier);
+	Check(s_Iic[1].icier == IER_SLAVE_IDLE, "ICIER %02X after stop", s_Iic[1].icier);
 	Check((s_Iic[1].icmr3 & MR3_ACKBT) == 0, "ACKBT left set");
 
 	// Write exactly the buffer size, then more
@@ -2388,6 +2481,10 @@ static void TestBothUnits(void)
 
 int main(void)
 {
+	// Pin registers of IIC0 SDA (P401) and SCL (P408), only read by the trace
+	g_TestPfs.PORT[4].PIN[1].PmnPFS = TEST_PFS_SDA0;
+	g_TestPfs.PORT[4].PIN[8].PmnPFS = TEST_PFS_SCL0;
+
 	TestInit();
 	TestRate();
 	TestMasterPolling();

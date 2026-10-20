@@ -1,4 +1,8 @@
 /* Actual-source host register model. Not a CPU, oscillator, or electrical model. */
+// The driver registers are the objects of ra4m1_host_regs.h, whose accesses
+// call rd8 ... wr32 below with the register address. PFS is written through
+// a pointer to the model storage (&PmnPFS), those writes are checked by
+// pfs_sync() at the next register access, PWPR relock included.
 #include <cassert>
 #include <cstdio>
 #include <cstring>
@@ -18,6 +22,8 @@ static void wr32(uintptr_t,uint32_t);
 #define RA4M1_WR8(a,v) wr8(a,v)
 #define RA4M1_WR16(a,v) wr16(a,v)
 #define RA4M1_WR32(a,v) wr32(a,v)
+#include "ra4m1xxx.h"
+#include "ra4m1_host_regs.h"
 #include "../../ARM/Renesas/RA4M1/src/interrupt_ra4m1.cpp"
 #include "../../ARM/Renesas/RA4M1/src/iopincfg_ra4m1.c"
 SCB_Type test_scb;
@@ -33,7 +39,13 @@ extern "C" void (* const __Vectors[48])(void) = {
 	V(24),V(25),V(26),V(27),V(28),V(29),V(30),V(31)
 };
 #undef V
-static uint32_t links[32],dma[4],wakeup,portregs[10][4],pfs[10][16];
+void (* const *test_vtor)(void) = __Vectors;
+static void (* const s_RelocVectors[48])(void) = {
+	nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,
+	nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,
+	override_irq,Ra4m1DefaultIEL1,Ra4m1DefaultIEL2
+};
+static uint32_t links[32],dma[4],wakeup,portregs[10][4],pfs[10][16],pfs_seen[10][16];
 static uint8_t pwpr,irqcr[16],mosc,sosc,vbt,valid,vin,vout;
 static uint16_t protect;
 static uintptr_t fail_addr;
@@ -41,8 +53,50 @@ static unsigned writes,checks,callback_count;
 static int callback_arg;
 static void *callback_ctx;
 static bool pending_source;
+// One PFS change, old to value. Single is false for the writes made through
+// the pointer: several of them between two register accesses are seen as one
+// change, so the rule "PSEL/ASEL change only with PMR cleared" cannot be
+// checked there, only on a single write.
+static void pfs_check(unsigned p,unsigned n,uint32_t old,uint32_t value,bool single)
+{
+	assert(test_primask);assert(pwpr&0x40);
+	assert(Ra4m1PinValid(p,n));assert(p!=9);
+	if(single&&((old^value)&(RA4M1_PFS_PSEL|RA4M1_PFS_ASEL)))assert(!(old&RA4M1_PFS_PMR)&&!(value&RA4M1_PFS_PMR));
+	assert(!(value&RA4M1_PFS_PIDR));
+	if(p==2&&(n==0||n>=14))assert(!(value&(RA4M1_PFS_PDR|RA4M1_PFS_PODR|RA4M1_PFS_PCR|RA4M1_PFS_NCODR)));
+	if(p!=4||n!=8)assert(!(value&RA4M1_PFS_DSCR1));
+	else assert((value&(RA4M1_PFS_DSCR|RA4M1_PFS_DSCR1))!=(RA4M1_PFS_DSCR|RA4M1_PFS_DSCR1));
+	if(p==0)assert(!(value&RA4M1_PFS_NCODR));
+	if(value&RA4M1_PFS_ASEL)assert(!(value&(RA4M1_PFS_PMR|RA4M1_PFS_PCR|RA4M1_PFS_PDR)));
+	if(p==4&&n>=2&&n<=4)assert(valid&0x10);
+	uint32_t bit=1U<<n;portregs[p][0]&=~(bit|(bit<<16));
+	if(value&RA4M1_PFS_PDR)portregs[p][0]|=bit;
+	if(value&RA4M1_PFS_PODR)portregs[p][0]|=bit<<16;
+}
+// Check the PFS writes made through the pointer since the last register
+// access. A write to fail_addr does not take effect.
+static void pfs_sync(void)
+{
+	for(unsigned p=0;p<10;++p)for(unsigned n=0;n<16;++n){
+		uint32_t old=pfs_seen[p][n],value=pfs[p][n];
+		if(old==value)continue;
+		++writes;
+		if(RA4M1_PFS(p,n)==fail_addr){pfs[p][n]=old;continue;}
+		pfs_check(p,n,old,value,false);
+		pfs[p][n]=value|(old&RA4M1_PFS_PIDR);pfs_seen[p][n]=pfs[p][n];
+	}
+}
+// The test changed pfs[][] itself: not a driver write
+static void pfs_accept(void){memcpy(pfs_seen,pfs,sizeof(pfs));}
+volatile uint32_t *HostRegPtr(uintptr_t a,uint32_t *)
+{
+	assert(a>=RA4M1_PFS(0,0)&&a<=RA4M1_PFS(9,15)&&!(a&3));
+	unsigned p=(a-RA4M1_PFS(0,0))/0x40,n=((a-RA4M1_PFS(0,0))%0x40)/4;
+	assert(Ra4m1PinValid(p,n));return &pfs[p][n];
+}
 static uint8_t rd8(uintptr_t a)
 {
+	pfs_sync();
 #ifdef RA4M1_UART_TEST
 	if(a>=0x40070000UL && a<0x40070140UL) return UartRead8(a);
 #endif
@@ -57,6 +111,7 @@ static uint8_t rd8(uintptr_t a)
 	assert(false);return 0;
 }
 static uint16_t rd16(uintptr_t a){
+	pfs_sync();
 #ifdef RA4M1_UART_TEST
 	if(a>=0x40070000UL && a<0x40070040UL) return UartRead16(a);
 #endif
@@ -64,6 +119,7 @@ static uint16_t rd16(uintptr_t a){
 }
 static uint32_t rd32(uintptr_t a)
 {
+	pfs_sync();
 #ifdef RA4M1_UART_TEST
 	if(a==0x40047000UL) return uart_mstp;
 #endif
@@ -83,7 +139,7 @@ static uint32_t rd32(uintptr_t a)
 }
 static void wr8(uintptr_t a,uint8_t value)
 {
-	assert(test_primask);++writes;if(a==fail_addr)return;
+	pfs_sync();assert(test_primask);++writes;if(a==fail_addr)return;
 	#ifdef RA4M1_UART_TEST
 	if(a>=0x40070000UL && a<0x40070140UL){UartWrite8(a,value);return;}
 #endif
@@ -97,7 +153,7 @@ static void wr8(uintptr_t a,uint8_t value)
 }
 static void wr16(uintptr_t a,uint16_t value)
 {
-	assert(test_primask);++writes;if(a==fail_addr)return;
+	pfs_sync();assert(test_primask);++writes;if(a==fail_addr)return;
 	#ifdef RA4M1_UART_TEST
 	if(a>=0x40070000UL && a<0x40070040UL){UartWrite16(a,value);return;}
 #endif
@@ -105,7 +161,7 @@ static void wr16(uintptr_t a,uint16_t value)
 }
 static void wr32(uintptr_t a,uint32_t value)
 {
-	++writes;if(a==fail_addr)return;assert(!(a&3));
+	pfs_sync();++writes;if(a==fail_addr)return;assert(!(a&3));
 #ifdef RA4M1_UART_TEST
 	if(a==0x40047000UL){assert(protect&2);uart_mstp=value;return;}
 #endif
@@ -114,21 +170,10 @@ static void wr32(uintptr_t a,uint32_t value)
 		assert(!pending_source);links[(a-RA4M1_IELSR(0))/4]=value;return;
 	}
 	if(a>=RA4M1_PFS(0,0)&&a<=RA4M1_PFS(9,15)){
-		assert(test_primask);assert(pwpr&0x40);
+		// Through the register object, the driver writes PFS through its address
 		unsigned p=(a-RA4M1_PFS(0,0))/0x40,n=((a-RA4M1_PFS(0,0))%0x40)/4;
-		assert(Ra4m1PinValid(p,n));assert(p!=9);uint32_t old=pfs[p][n];
-		if((old^value)&(RA4M1_PFS_PSEL|RA4M1_PFS_ASEL))assert(!(old&RA4M1_PFS_PMR)&&!(value&RA4M1_PFS_PMR));
-		assert(!(value&RA4M1_PFS_PIDR));
-		if(p==2&&(n==0||n>=14))assert(!(value&(RA4M1_PFS_PDR|RA4M1_PFS_PODR|RA4M1_PFS_PCR|RA4M1_PFS_NCODR)));
-		if(p!=4||n!=8)assert(!(value&RA4M1_PFS_DSCR1));
-		else assert((value&(RA4M1_PFS_DSCR|RA4M1_PFS_DSCR1))!=(RA4M1_PFS_DSCR|RA4M1_PFS_DSCR1));
-		if(p==0)assert(!(value&RA4M1_PFS_NCODR));
-		if(value&RA4M1_PFS_ASEL)assert(!(value&(RA4M1_PFS_PMR|RA4M1_PFS_PCR|RA4M1_PFS_PDR)));
-		if(p==4&&n>=2&&n<=4)assert(valid&0x10);
-		pfs[p][n]=value|(old&RA4M1_PFS_PIDR);
-		uint32_t bit=1U<<n;portregs[p][0]&=~(bit|(bit<<16));
-		if(value&RA4M1_PFS_PDR)portregs[p][0]|=bit;
-		if(value&RA4M1_PFS_PODR)portregs[p][0]|=bit<<16;
+		uint32_t old=pfs[p][n];pfs_check(p,n,old,value,true);
+		pfs[p][n]=value|(old&RA4M1_PFS_PIDR);pfs_seen[p][n]=pfs[p][n];
 		return;
 	}
 	unsigned p=(a-RA4M1_PCNTR1(0))/0x20;
@@ -136,11 +181,12 @@ static void wr32(uintptr_t a,uint32_t value)
 	assert(!(set&clr));assert(((set|clr)&~Ra4m1OutputMask(p))==0);
 	portregs[p][0]=(portregs[p][0]|(set<<16))&~(clr<<16);
 	for(unsigned n=0;n<16;n++){if(set&(1U<<n))pfs[p][n]|=1;if(clr&(1U<<n))pfs[p][n]&=~1U;}
+	pfs_accept();
 }
 static void reset(void)
 {
 	memset(s_IntHook,0,sizeof(s_IntHook));memset(s_PinHook,0,sizeof(s_PinHook));
-	memset(links,0,sizeof(links));memset(dma,0,sizeof(dma));memset(portregs,0,sizeof(portregs));memset(pfs,0,sizeof(pfs));memset(irqcr,0,sizeof(irqcr));
+	memset(links,0,sizeof(links));memset(dma,0,sizeof(dma));memset(portregs,0,sizeof(portregs));memset(pfs,0,sizeof(pfs));memset(pfs_seen,0,sizeof(pfs_seen));memset(irqcr,0,sizeof(irqcr));
 	test_primask=test_disabled=test_cleared=test_enabled=test_active=test_pending=wakeup=0;
 	memset(test_priority,0,sizeof(test_priority));pwpr=0x80;protect=8;mosc=sosc=1;vbt=0;valid=0x10;vin=vout=0;fail_addr=0;writes=callback_count=0;callback_arg=-99;callback_ctx=nullptr;pending_source=false;
 }
@@ -197,7 +243,7 @@ int main()
 	old=pfs[4][8];IOPinSetSpeed(4,8,IOPINSPEED_TURBO);CHECK(pfs[4][8]==old);
 	portregs[1][3]=(1U<<3)|(1U<<20);old=portregs[1][0];IOPinWritePort(1,0);CHECK(((old^portregs[1][0])&((1U<<19)|(1U<<20)))==0);
 	old=pfs[1][3];cfg(1,3);CHECK(pfs[1][3]==old);portregs[1][3]=0;
-	old=pfs[9][14]=RA4M1_PFS_PMR;cfg(9,14);IOPinClear(9,14);IOPinSet(9,15);CHECK(pfs[9][14]==old&&pfs[9][15]==0);
+	old=pfs[9][14]=RA4M1_PFS_PMR;pfs_accept();cfg(9,14);IOPinClear(9,14);IOPinSet(9,15);CHECK(pfs[9][14]==old&&pfs[9][15]==0);
 	reset();cfg(4,2);CHECK(pfs[4][2]==RA4M1_PFS_PDR&&vbt==0&&protect==8);
 	reset();valid=0;cfg(4,2);CHECK(pfs[4][2]==0&&vbt==0&&protect==8);
 	reset();vin=1;cfg(4,2);CHECK(pfs[4][2]==0&&vin==1);
@@ -221,6 +267,10 @@ int main()
 	reset();fail_addr=RA4M1_IELSR(0);CHECK(Ra4m1RegisterIntHandler(1,3,cb,nullptr)==-1&&test_enabled==0&&!s_IntHook[0].Handler);
 	reset();for(int i=0;i<31;i++){irq=Ra4m1RegisterIntHandler((uint8_t)(0x57+i),3,cb,nullptr);CHECK(irq>=0&&irq!=11);}CHECK(Ra4m1RegisterIntHandler(1,3,cb,nullptr)==-1);
 	CHECK(!links[11]); // strong vector reserved
+	// The free slot test reads the table at VTOR: a strong handler in a
+	// relocated table reserves its slot as well.
+	reset();test_vtor=s_RelocVectors;irq=Ra4m1RegisterIntHandler(1,3,cb,nullptr);CHECK(irq==1&&!links[0]&&links[1]==1);
+	Ra4m1UnregisterIntHandler((IRQn_Type)irq);test_vtor=__Vectors;
 	reset();CHECK(!IOPinEnableInterrupt(13,3,1,0,IOPINSENSE_TOGGLE,cb,nullptr));
 	CHECK(!IOPinEnableInterrupt(1,3,1,0,IOPINSENSE_TOGGLE,cb,nullptr));CHECK(writes==0);
 	cfg(1,0,0,IOPINDIR_INPUT,IOPINRES_PULLUP);
@@ -232,8 +282,8 @@ int main()
 	IOPinDisableInterrupt(2);CHECK(!links[irq]&&!(pfs[1][0]&RA4M1_PFS_ISEL)&&(pfs[1][0]&RA4M1_PFS_PCR));
 	reset();wakeup=4;CHECK(IOPinAllocateInterrupt(3,1,0,IOPINSENSE_TOGGLE,cb,nullptr)==-1&&writes==0);
 	reset();dma[0]=3;CHECK(IOPinAllocateInterrupt(3,1,0,IOPINSENSE_TOGGLE,cb,nullptr)==-1&&writes==0);
-	reset();pfs[0][2]=RA4M1_PFS_ISEL;CHECK(IOPinAllocateInterrupt(3,1,0,IOPINSENSE_TOGGLE,cb,nullptr)==-1&&writes==0);
-	reset();for(int i=0;i<32;i++)links[i]=0x57+i;irqcr[2]=0xB1;old=pfs[1][0]=RA4M1_PFS_PCR;
+	reset();pfs[0][2]=RA4M1_PFS_ISEL;pfs_accept();CHECK(IOPinAllocateInterrupt(3,1,0,IOPINSENSE_TOGGLE,cb,nullptr)==-1&&writes==0);
+	reset();for(int i=0;i<32;i++)links[i]=0x57+i;irqcr[2]=0xB1;old=pfs[1][0]=RA4M1_PFS_PCR;pfs_accept();
 	CHECK(IOPinAllocateInterrupt(3,1,0,IOPINSENSE_TOGGLE,cb,nullptr)==-1);CHECK(pfs[1][0]==old&&irqcr[2]==0xB1&&!s_PinHook[2].Handler);
 	reset();fail_addr=RA4M1_PFS(1,0);CHECK(IOPinAllocateInterrupt(3,1,0,IOPINSENSE_TOGGLE,cb,nullptr)==-1&&test_enabled==0);
 	reset();fail_addr=RA4M1_IRQCR(2);CHECK(IOPinAllocateInterrupt(3,1,0,IOPINSENSE_TOGGLE,cb,nullptr)==-1&&test_enabled==0);

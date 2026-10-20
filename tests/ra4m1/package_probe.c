@@ -1,7 +1,7 @@
 /* Compile/run package bonding checks; not hardware validation. */
 #include <assert.h>
 #include <stdio.h>
-#include "ra4m1_ioregs.h"
+#include "iopinctrl.h"
 int main(void)
 {
 	unsigned count=0;

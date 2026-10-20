@@ -1,9 +1,10 @@
 /* Host model for the actual system_ra4m1.c. Not a hardware emulator. */
-#include <assert.h>
-#include <stdio.h>
-#include <string.h>
-#include <stdint.h>
-#include <stdbool.h>
+// Built as C++: the driver registers are the objects of ra4m1_host_regs.h,
+// whose accesses call rd8 ... wr32 below with the register address.
+#include <cassert>
+#include <cstdio>
+#include <cstring>
+#include <cstdint>
 #define RA4M1_HOST_TEST 1
 #define RA4M1_STARTUP_TIMEOUT 32U
 static uint8_t rd8(uintptr_t);
@@ -20,17 +21,20 @@ static void delay_us(uint32_t);
 #define RA4M1_WR16(a,v) wr16(a,v)
 #define RA4M1_WR32(a,v) wr32(a,v)
 #define RA4M1_TEST_DELAY_US(us) delay_us(us)
+#include "ra4m1xxx.h"
+#include "ra4m1_host_regs.h"
 #include "../../ARM/Renesas/RA4M1/src/system_ra4m1.c"
 SCB_Type test_scb;
 uint32_t test_primask, test_disabled, test_cleared;
 uint32_t SystemMicroSecLoopCnt;
-void (*const __Vectors[48])(void) = {0};
+void (* const __Vectors[48])(void) = {};
 static uint8_t sys[0x500];
 static uint16_t protect,cache,invalid,usb_cfg;
 static uint32_t dividers,links[32],writes,delays,input_hz;
 static uintptr_t fail_addr;
 static uint8_t stuck_ready;
 static bool fail_invalidate;
+static unsigned hocowtcr_writes;
 static unsigned checks;
 static uint32_t nominal(void)
 {
@@ -60,14 +64,14 @@ static void wr8(uintptr_t a,uint8_t v)
 	assert(protect & (a==RA4M1_OPCCR || a==RA4M1_SOPCCR?2:1));
 	if(a==RA4M1_HOCOCR2){assert(sys[0x36]&1);assert(v==0||v==0x10||v==0x20||v==0x28);}
 	if(a==RA4M1_HOCOCR && v==1){assert((sys[0xA0]&3)!=2);assert((sys[0x26]&7)!=0);}
-	if(a==RA4M1_HOCOWTCR){assert((sys[0x36]&1)||(sys[0x3C]&1));assert(v==5||v==6);}
+	if(a==RA4M1_HOCOWTCR){assert(sys[0x36]&1);assert(v==6&&sys[0x37]==0x28);++hocowtcr_writes;}
 	if(a==RA4M1_OPCCR){assert(cache==0);assert((sys[0x36]&1)||(sys[0x3C]&1));assert((sys[0xA0]&0x10)==0);}
 	if(a==RA4M1_MEMWAIT){assert(cache==0);assert((sys[0xA0]&3)==0);assert(nominal()>>((dividers>>24)&7)<=32000000);}
 	if(a==RA4M1_MOMCR||a==RA4M1_MOSCWTCR)assert((sys[0x32]&1)&&!(sys[0x3C]&8));
 	if(a==RA4M1_MOSCWTCR)assert(v<=9);
 	if(a==RA4M1_PLLCCR2){assert(sys[0x2A]&1);assert((v&31)>=7&&(v&31)<=30);assert((v>>6)==1||(v>>6)==2);delays=0;}
 	if(a==RA4M1_PLLCR && v==0){assert(delays>=1);assert(sys[0x3C]&8);}
-	if(a==RA4M1_SOMCR)assert(sys[0x33]&1);
+	if(a==RA4M1_SOMCR)assert(sys[0x480]&1);
 	if(a==RA4M1_USBCKCR)assert(!(usb_cfg&RA4M1_USB_SCKE));
 	if(a==RA4M1_SCKSCR){assert(v<=5);if(v==0)assert(sys[0x3C]&1);if(v==3)assert(sys[0x3C]&8);if(v==5)assert(sys[0x3C]&0x20);}
 	sys[a-0x4001E000UL]=v;
@@ -90,21 +94,25 @@ static void wr32(uintptr_t a,uint32_t v)
 	assert(a>=RA4M1_IELSR(0)&&a<=RA4M1_IELSR(31));links[(a-RA4M1_IELSR(0))/4]=v;
 }
 static void delay_us(uint32_t us){delays+=us;}
+// Ra4m1Wait8/Wait16 poll through a pointer to the register: the model storage
+volatile uint8_t *HostRegPtr(uintptr_t a,uint8_t *){assert(a>=0x4001E000UL&&a<0x4001E500UL);return &sys[a-0x4001E000UL];}
+volatile uint16_t *HostRegPtr(uintptr_t a,uint16_t *){if(a==RA4M1_FCACHEE)return &cache;assert(a==RA4M1_FCACHEIV);return &invalid;}
+
 static void reset_model(void)
 {
 	memset(sys,0,sizeof(sys));memset(&test_scb,0,sizeof(test_scb));
-	sys[0x26]=1;sys[0x2A]=sys[0x32]=sys[0x33]=sys[0x34]=1;sys[0x3C]=1;sys[0xA0]=2;sys[0xA5]=5;
+	sys[0x26]=1;sys[0x2A]=sys[0x32]=sys[0x480]=sys[0x490]=1;sys[0x3C]=1;sys[0xA0]=2;sys[0xA5]=5;
 	dividers=RA4M1_RESET_DIV;input_hz=12000000;protect=cache=invalid=usb_cfg=0;
 	writes=delays=0;fail_addr=0;stuck_ready=0;fail_invalidate=false;s_MainOscFreq=0;
 	test_primask=test_disabled=test_cleared=0;
-	g_McuOsc=(McuOsc_t){{OSC_TYPE_RC,48000000,0,0},{OSC_TYPE_RC,32768,0,0},false};
-	g_Ra4m1StartupError=0;SystemCoreClock=500000;
+	g_McuOsc=McuOsc_t{{OSC_TYPE_RC,48000000,0,0},{OSC_TYPE_RC,32768,0,0},false};
+	g_Ra4m1StartupError=0;SystemCoreClock=500000;hocowtcr_writes=0;
 	for(unsigned i=0;i<32;i++)links[i]=0x0101002B;
 }
 static void pass(const char *name){++checks;printf("PASS %u: %s\n",checks,name);}
 int main(void)
 {
-	reset_model();SystemInit();assert(SystemCoreClock==48000000);assert(dividers==0x10010100);assert(sys[0x31]==1&&cache==1&&protect==0);
+	reset_model();SystemInit();assert(SystemCoreClock==48000000);assert(dividers==0x10010100);assert(sys[0x31]==1&&cache==1&&protect==0);assert(sys[0xA5]==5&&hocowtcr_writes==0);
 	assert(test_disabled==0xFFFFFFFFU && test_cleared==0xFFFFFFFFU && test_primask==0);
 	assert(test_scb.CPACR==0xF00000 && test_scb.VTOR==(uint32_t)(uintptr_t)__Vectors);
 	for(unsigned i=0;i<32;i++)assert(links[i]==0);pass("48 MHz cold startup, FPU, VTOR, all 32 IRQs disabled/unrouted");
@@ -136,9 +144,9 @@ int main(void)
 	reset_model();stuck_ready=32;assert(!SystemCoreClockSelect(OSC_TYPE_XTAL,12000000));assert(g_Ra4m1StartupError==RA4M1_STARTUP_PLL&&SystemCoreClock==500000);pass("PLL lock timeout");
 	reset_model();fail_invalidate=true;assert(!SystemCoreClockSelect(OSC_TYPE_RC,48000000));assert(g_Ra4m1StartupError==RA4M1_STARTUP_FLASH&&cache==0&&sys[0x31]==1);pass("cache invalidation timeout remains correctly timed and uncached");
 	reset_model();protect=8;test_primask=1;assert(SystemCoreClockSelect(OSC_TYPE_RC,48000000));assert(protect==8&&test_primask==1);pass("nested PRIMASK and unrelated PRCR bits preserved");
-	reset_model();assert(SystemLowFreqClockSelect(OSC_TYPE_RC,32768));assert(sys[0x34]==0&&delays>=100&&protect==0);pass("LOCO low-frequency source startup");
-	reset_model();assert(SystemLowFreqClockSelect(OSC_TYPE_XTAL,32768));assert(sys[0x33]==0&&delays>=2000000&&protect==0);pass("SOSC drive setup and configurable stabilization wait");
-	reset_model();sys[0x33]=0;sys[0x481]=2;assert(SystemLowFreqClockSelect(OSC_TYPE_XTAL,32768));assert(sys[0x481]==2);pass("running SOSC is preserved across reset/reselection");
+	reset_model();assert(SystemLowFreqClockSelect(OSC_TYPE_RC,32768));assert(sys[0x490]==0&&delays>=100&&protect==0);pass("LOCO low-frequency source startup");
+	reset_model();assert(SystemLowFreqClockSelect(OSC_TYPE_XTAL,32768));assert(sys[0x480]==0&&delays>=2000000&&protect==0);pass("SOSC drive setup and configurable stabilization wait");
+	reset_model();sys[0x480]=0;sys[0x481]=2;assert(SystemLowFreqClockSelect(OSC_TYPE_XTAL,32768));assert(sys[0x481]==2);pass("running SOSC is preserved across reset/reselection");
 	reset_model();assert(!SystemLowFreqClockSelect(OSC_TYPE_TCXO,32768)&&!SystemLowFreqClockSelect(OSC_TYPE_RC,32000));assert(writes==0);pass("unsupported low-frequency descriptors rejected");
 	reset_model();fail_addr=RA4M1_SOSCCR;assert(!SystemLowFreqClockSelect(OSC_TYPE_XTAL,32768));assert(protect==0&&test_primask==0);pass("LF start failure restores protection");
 	reset_model();dividers=0x77077777;assert(SystemCoreClockGet()==0&&SystemPeriphClockGet(0)==0);pass("prohibited divider encodings report unknown frequency");

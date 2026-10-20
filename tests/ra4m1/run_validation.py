@@ -27,6 +27,30 @@ def run(args, *, expect=True):
     return p.stdout
 
 
+SANITIZE = ['-fsanitize=address,undefined', '-fno-sanitize-recover=all', '-fno-omit-frame-pointer']
+_sanitizer_cxx = {}
+
+
+def sanitizer_cxx(cxx):
+    """C++ compiler for the sanitizer builds: cxx when it links the address and
+    undefined behavior runtimes, g++ otherwise. Some Clang installs come without
+    the sanitizer runtime libraries."""
+    if cxx not in _sanitizer_cxx:
+        BUILD.mkdir(exist_ok=True)
+        probe = BUILD/'sanitizer_probe.cpp'
+        probe.write_text('int main() { return 0; }\n')
+        found = None
+        for c in (cxx, shutil.which('g++')):
+            if c and subprocess.run([str(c), *SANITIZE, str(probe), '-o', str(BUILD/'sanitizer_probe')],
+                                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0:
+                found = c
+                break
+        if not found:
+            raise SystemExit('No C++ compiler with the address/undefined sanitizer runtime (Clang++ or g++).')
+        _sanitizer_cxx[cxx] = found
+    return _sanitizer_cxx[cxx]
+
+
 def elf(path):
     data = path.read_bytes()
     assert data[:7] == b'\x7fELF\x01\x01\x01', 'ELF32 little-endian required'
@@ -90,6 +114,7 @@ def check_ioc():
     xml = ET.parse(project/'.project').getroot()
     assert xml.findtext('name') == 'IOsonata_RA4M1'
     source_names = set()
+    port_sources = set()
     for link in xml.findall('linkedResources/link'):
         name, uri = link.findtext('name'), link.findtext('locationURI')
         assert 'tests/ra4m1' not in uri
@@ -101,13 +126,22 @@ def check_ioc():
         # RA4M1 links are all required to exist locally; shared paths were
         # read from the live repository and retain the existing project links.
         if 'RA4M1' in path.parts: assert path.is_file() or path.is_dir(), path
-        if name.endswith(('.c', '.cpp')): source_names.add(name)
-    assert source_names == {'src/ResetEntry.c', 'src/system_ra4m1.c',
-                            'src/vectors_ra4m1.c', 'src/iopincfg_ra4m1.c',
-                            'src/interrupt_ra4m1.cpp', 'src/uart_ra4m1.cpp',
-                            'src/i2c_ra4m1.cpp', 'src/timer_ra4m1.cpp',
-                            'src/timer.cpp', 'src/cfifo.c', 'src/device_intrf.cpp',
-                            'src/uart.cpp', 'src/i2c.cpp'}
+        if name.endswith(('.c', '.cpp')):
+            source_names.add(name)
+            if 'RA4M1' in path.parts: port_sources.add(path.resolve())
+    # Since a37e3412 the library project uses the standard IOC layout: it links
+    # the shared IOsonata library sources as well, not only the 13 sources of
+    # the first port. Check that every RA4M1 port source is linked, and the
+    # shared sources the port drivers and the startup need.
+    assert port_sources == {p.resolve() for p in (TARGET/'src').iterdir()
+                            if p.suffix in ('.c', '.cpp')}, port_sources
+    assert {'src/ResetEntry.c', 'src/system_ra4m1.c', 'src/vectors_ra4m1.c',
+            'src/coredev/iopincfg_ra4m1.c', 'src/coredev/interrupt_ra4m1.cpp',
+            'src/coredev/uart_ra4m1.cpp', 'src/coredev/i2c_ra4m1.cpp',
+            'src/coredev/spi_ra4m1.cpp', 'src/coredev/timer_ra4m1.cpp',
+            'src/storage/nvm_ra4m1.cpp', 'src/cfifo.c', 'src/device_intrf.cpp',
+            'src/coredev/uart.cpp', 'src/coredev/i2c.cpp', 'src/coredev/spi.cpp',
+            'src/coredev/timer.cpp', 'src/storage/nvm.cpp'} <= source_names, source_names
     cxml = ET.parse(project/'.cproject').getroot()
     configs = cxml.findall('.//cconfiguration')
     assert len(configs) == 2
@@ -125,12 +159,18 @@ def check_ioc():
         for language in ('c', 'cpp'):
             paths = options[prefix+language+'.compiler.include.paths'].findall('listOptionValue')
             assert all('tests/ra4m1' not in v.attrib['value'] for v in paths)
-        assert not any(e.attrib.get('excluding') for e in cfg.findall('.//sourceEntries/entry'))
+        # The standard layout excludes its srcx/includex folders. No linked
+        # source may be excluded from the build.
+        for e in cfg.findall('.//sourceEntries/entry'):
+            for x in filter(None, e.attrib.get('excluding', '').split('|')):
+                assert x in ('srcx', 'includex'), x
+                assert not any(n == x or n.startswith(x+'/') for n in source_names), x
     assert names == {'Debug','Release'}
     wizard = json.loads((project/'wizard.json').read_text())
     assert wizard['lib'] == 'IOsonata_RA4M1' and wizard['mcu'] == 'RA4M1'
     assert wizard['lib_path'] == '${iosonata}/ARM/Renesas/RA4M1/lib/ioc/${config}'
-    print('PASS: IOC XML, thirteen linked sources, target links, hard-float configurations and wizard metadata')
+    print('PASS: IOC XML, all', len(port_sources), 'RA4M1 sources and shared driver sources linked,',
+          len(source_names), 'sources, target links, hard-float configurations and wizard metadata')
 
 
 def main():
@@ -142,16 +182,18 @@ def main():
         raise SystemExit('Install Clang/Clang++, LLD and llvm-ar, or set CLANG, CLANGXX, LD_LLD, LLVM_AR.')
     BUILD.mkdir(exist_ok=True)
     includes = ['-I'+str(HERE/'include'), '-I'+str(TARGET/'include')]
+    # The register model is C++: the driver registers are host objects
+    # (include/ra4m1_host_regs.h). system_ra4m1.c is compiled as C++ there,
+    # where {0} initializers warn without being wrong.
     for opt in ('-O0','-Os','-O2'):
         out = BUILD/('register_model'+opt)
-        run([clang,'-std=c11',opt,'-Wall','-Wextra','-Werror',*includes,
-             HERE/'register_model.c','-o',out])
+        run([clangxx,'-std=c++11',opt,'-Wall','-Wextra','-Werror','-Wno-missing-field-initializers',
+             *includes,HERE/'register_model.cpp','-o',out])
         log = run([out])
         (BUILD/(out.name+'.log')).write_text(log)
         print(opt,log.splitlines()[-1])
     out = BUILD/'register_model_sanitized'
-    run([clang,'-std=c11','-O1','-g','-fsanitize=address,undefined', '-fno-sanitize-recover=all',
-         '-fno-omit-frame-pointer',*includes,HERE/'register_model.c','-o',out])
+    run([sanitizer_cxx(clangxx),'-std=c++11','-O1','-g',*SANITIZE,*includes,HERE/'register_model.cpp','-o',out])
     log = run([out]); (BUILD/'sanitizers.log').write_text(log)
     print('ASan/UBSan:',log.splitlines()[-1])
     for opt in ('-O0', '-Os', '-O2'):
@@ -161,8 +203,7 @@ def main():
         log = run([out]); (BUILD/(out.name+'.log')).write_text(log)
         print(opt, log.strip())
     out = BUILD/'io_model_sanitized'
-    run([clangxx, '-std=c++11', '-O1', '-g', '-fsanitize=address,undefined', '-fno-sanitize-recover=all',
-         '-fno-omit-frame-pointer', *includes, HERE/'io_model.cpp', '-o', out])
+    run([sanitizer_cxx(clangxx), '-std=c++11', '-O1', '-g', *SANITIZE, *includes, HERE/'io_model.cpp', '-o', out])
     log = run([out]); (BUILD/'io_sanitizers.log').write_text(log)
     print('ASan/UBSan:', log.strip())
     for package in (40, 48, 64, 100):
