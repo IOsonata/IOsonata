@@ -31,6 +31,11 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>include/app_evt_handler.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/app_evt_handler.h</locationURI>
+		</link>
+		<link>
 			<name>include/cbor.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/cbor.h</locationURI>
@@ -319,6 +324,21 @@
 			<name>src/Vector_STM32L476xx.c</name>
 			<type>1</type>
 			<locationURI>copy_PARENT/src/Vector_STM32L476xx.c</locationURI>
+		</link>
+		<link>
+			<name>src/app_evt_handler.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/app_evt_handler.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/app_run.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/app_run.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/app_wait.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/app_wait.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/base64.c</name>
