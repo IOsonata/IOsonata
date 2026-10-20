@@ -1546,14 +1546,9 @@
 			<locationURI>PARENT-4-PROJECT_LOC/src/iopincfg_stm32.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/usb_otg_stm32.cpp</name>
+			<name>src/usb_ctrlr_stm32.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/usb_otg_stm32.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/usb_otg_target_stm32.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/usb_otg_target_stm32.cpp</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/src/usb_ctrlr_stm32.cpp</locationURI>
 		</link>
 		<link>
 			<name>include/usb_ctrlr.h</name>

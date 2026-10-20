@@ -27,7 +27,7 @@ TEST = r'''
 #include <cassert>
 #include <cstdio>
 #include <cstring>
-#include "ARM/ST/src/usb_otg_stm32.cpp"
+#include "usb_ctrlr_stm32_test.cpp"
 
 alignas(4) static uint8_t registers[0x12000];
 static unsigned completed, cancelled, ready, failed, resets;
@@ -35,6 +35,12 @@ static uint16_t lastLength;
 static bool rebind;
 static uint8_t receive[1024];
 static UsbCtrlrEvt_t control;
+#if defined(STM32H753xx)
+static SysLog_t logState;
+SysLog_t *SysLogGet() { return &logState; }
+int SysLogPrintf(SysLog_t *, const char *, ...) { return 0; }
+bool AppEvtHandlerQue(uint32_t, void *, AppEvtHandler_t) { return false; }
+#endif
 bool Stm32UsbOtgPowerInit(const UsbCtrlrCfg_t *) { return true; }
 void Stm32UsbOtgReset() { resets++; }
 USB_OTG_GlobalTypeDef *Stm32UsbOtgRegs()
@@ -162,6 +168,20 @@ for device, family, cpu in (('STM32WBA65xx', 'STM32WBAxx', 'core_cm33.h'),
         path = Path(tmp)
         (path / cpu).write_text(CPU)
         (path / 'idelay.h').write_text('#pragma once\ninline void usDelay(unsigned) {}\n')
+        # Isolate FIFO ownership from physical clocks/pins in this host test.
+        # The complete merged source is compiled by stm32_otg_build_test.py;
+        # MCU initialization is exercised by the family register tests.
+        source = (ROOT / 'ARM/ST/src/usb_ctrlr_stm32.cpp').read_text()
+        begin = source.index('// MCU clock, power, PHY and interrupt setup.')
+        end = source.index('// Endpoint state and FIFO transfers.')
+        hooks = """extern bool Stm32UsbOtgPowerInit(const UsbCtrlrCfg_t *pCfg);
+extern void Stm32UsbOtgReset(void);
+extern USB_OTG_GlobalTypeDef *Stm32UsbOtgRegs(void);
+extern IRQn_Type Stm32UsbOtgIrq(void);
+extern uint16_t Stm32UsbOtgFifoWords(void);
+
+"""
+        (path / 'usb_ctrlr_stm32_test.cpp').write_text(source[:begin] + hooks + source[end:])
         (path / 'test.cpp').write_text(TEST)
         cmd = [os.environ.get('CXX', 'g++'), '-std=c++17', '-g',
                '-fsanitize=address,undefined', '-D' + device,

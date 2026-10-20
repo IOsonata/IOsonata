@@ -19,8 +19,7 @@ TARGETS = (
     ('STM32L496xx', 'STM32L4xx', 'cortex-m4'),
 )
 SOURCES = (
-    'ARM/ST/src/usb_otg_stm32.cpp',
-    'ARM/ST/src/usb_otg_target_stm32.cpp',
+    'ARM/ST/src/usb_ctrlr_stm32.cpp',
     'src/usb/usb.cpp',
     'src/usb/usb_intrf.cpp',
     'src/usb/usb_int.cpp',

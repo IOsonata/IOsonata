@@ -1,10 +1,9 @@
 # STM32 USB device port
 
 The existing IOsonata USB core, endpoint allocator and device classes use
-`src/usb_otg_stm32.cpp`. It implements the STM32 OTG FIFO controller in
-interrupt-driven device mode. `src/usb_otg_target_stm32.cpp` contains only
-device-specific clock, power, PHY and vector setup. Both use ST's device
-register definitions through `stm32.h`.
+`src/usb_ctrlr_stm32.cpp`. This common STM32 controller file contains clock,
+power, PHY and vector setup together with interrupt-driven FIFO transfers.
+It uses ST's device register definitions through `stm32.h`.
 
 No application-specific STM32 USB initialization is required. Applications
 use the existing `UsbInit`, `UsbEnable`, USB classes and application event queue.
@@ -19,7 +18,7 @@ No second USB stack or Cube HAL USB library is linked.
 | STM32F401xC/xE | OTG FS, integrated FS PHY | HSE-derived PLLQ at 48 MHz; 1280-byte FIFO; 4 endpoint numbers |
 | STM32L476/L496 | OTG FS, integrated FS PHY | MSI 48 MHz calibrated by LSE; 1280-byte FIFO; 6 endpoint numbers |
 
-The library projects for H753, WBA65, F401xC, L476 and L496 link the shared sources.
+The library projects for H753, WBA65, F401xC, L476 and L496 link the shared controller source.
 F401xE selects the same source path but has not been compile tested separately.
 Other STM32 devices, including those with the packet-memory (PMA) USB engine,
 are not implemented by this change. The header rejects unlisted devices.
