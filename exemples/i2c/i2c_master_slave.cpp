@@ -197,8 +197,21 @@ static const I2CCfg_t s_I2cCfgSlave = {
 I2C g_I2CSlave;
 
 #define I2C_BUFF_SIZE	20
+
+// Long write test: data bytes after the offset byte. Longer than one DMA
+// block on the MCUs whose EasyDMA count is 8 bits.
+#ifndef I2C_LONG_WRITE_LEN
+#define I2C_LONG_WRITE_LEN		300
+#endif
+
+// Offset byte of the long write: outside the slave memory, so the slave only
+// keeps the data in its write buffer
+#define I2C_LONG_WRITE_CMD		0xFF
+
 static uint8_t s_ReadRqstData[I2C_BUFF_SIZE];
-static uint8_t s_WriteRqstData[I2C_BUFF_SIZE];
+static uint8_t s_WriteRqstData[I2C_LONG_WRITE_LEN + 1];
+static std::atomic<int> s_SlaveWriteLen(0);	// Bytes of the last completed write
+static uint8_t s_LongWr[I2C_LONG_WRITE_LEN];
 static bool s_bWriteRqst = false;
 static int s_Offset = 0;
 
@@ -246,7 +259,7 @@ int I2CSlaveIntrfHandler(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId, uint8_t *p
 
 		case DEVINTRF_EVT_WRITE_RQST:
 			s_bWriteRqst = true;
-			g_I2CSlave.SetWriteRqstBuffer(0, s_WriteRqstData, I2C_BUFF_SIZE);
+			g_I2CSlave.SetWriteRqstBuffer(0, s_WriteRqstData, sizeof(s_WriteRqstData));
 			break;
 
 		case DEVINTRF_EVT_COMPLETED:
@@ -265,6 +278,7 @@ int I2CSlaveIntrfHandler(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId, uint8_t *p
 			else
 			{
 				// Write data completed. Byte 0 is the slave-memory offset.
+				s_SlaveWriteLen = Len;
 				if (Len > 1 && s_WriteRqstData[0] < I2C_BUFF_SIZE)
 				{
 					n = Len - 1;
@@ -381,6 +395,49 @@ static int RunCombo(const I2CCfg_t &MasterCfg, const I2CCfg_t &SlaveCfg)
 			memcmp(rx, expectedRx, sizeof(rx)) == 0;
 		if (!pass)
 			printf("Expected RX 4/4 bytes: 0c 0d 0e 0f\r\n");
+	}
+
+	if (pass)
+	{
+		// Long write: one transfer of I2C_LONG_WRITE_LEN data bytes after the
+		// command byte. The slave must receive every byte, in order.
+		uint8_t cmd = I2C_LONG_WRITE_CMD;
+		uint32_t timeout;
+
+		for (i = 0; i < I2C_LONG_WRITE_LEN; ++i)
+			s_LongWr[i] = (uint8_t)(i * 7 + 3);
+		memset(s_WriteRqstData, 0, sizeof(s_WriteRqstData));
+		s_SlaveWriteLen = 0;
+		s_MasterCompleted = false;
+		s_MasterCount = 0;
+		c = g_I2CMaster.Write(I2C_SLAVE_ADDR, &cmd, 1, s_LongWr, I2C_LONG_WRITE_LEN);
+		if (MasterCfg.bIntEn)
+		{
+			total = WaitMasterComplete(10000000);
+			c = total >= 1 ? total - 1 : 0;
+		}
+		// The slave reports the write when it sees the STOP
+		timeout = 1000000;
+		while (s_SlaveWriteLen == 0 && --timeout != 0)
+		{
+		}
+		printf("Long write %d/%d bytes, slave received %d\r\n", c, I2C_LONG_WRITE_LEN,
+			s_SlaveWriteLen > 0 ? (int)s_SlaveWriteLen - 1 : 0);
+		pass = c == I2C_LONG_WRITE_LEN && s_SlaveWriteLen == I2C_LONG_WRITE_LEN + 1 &&
+			s_WriteRqstData[0] == I2C_LONG_WRITE_CMD &&
+			memcmp(&s_WriteRqstData[1], s_LongWr, I2C_LONG_WRITE_LEN) == 0;
+		if (!pass)
+		{
+			for (i = 0; i < I2C_LONG_WRITE_LEN; ++i)
+			{
+				if (s_WriteRqstData[i + 1] != s_LongWr[i])
+				{
+					printf("Long write mismatch at %d: %02x expected %02x\r\n",
+						i, s_WriteRqstData[i + 1], s_LongWr[i]);
+					break;
+				}
+			}
+		}
 	}
 
 	if (pass)
