@@ -73,6 +73,9 @@ public:
 	int Gain() const;
 	int HeadphoneGain(int MilliDb);
 	int HeadphoneGain() const;
+	// Soft-mute the DAC while capture, clocks and headphone stages stay on.
+	// Requires enabled playback and running MCLK. Re-enable after Disable unmutes.
+	bool Mute(bool bMute);
 
 private:
 	uint16_t DacControl(bool bMute) const;

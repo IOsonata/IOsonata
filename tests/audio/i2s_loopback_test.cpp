@@ -331,19 +331,22 @@ int main()
 	AudioEvent(audio, DEVINTRF_EVT_RX_FIFO_FULL, nullptr, 0);
 	assert(strcmp(AudioErrorText(0), "RX FIFO overflow") == 0);
 	// Known output and silence use the same duplex stream and retain input
-	// values as soon as the two-second test has finished.
+	// values as soon as the five-second test has finished.
 	ResetModel();
 	s_TestRate = 15625;
-	s_TestRemaining = s_TestRate * 2;
+	s_TestRemaining = s_TestRate * 5;
 	s_TestPhase = 0;
 	s_TestStep = (uint64_t(1000) << 32) / s_TestRate;
 	unsigned positiveCrossings = 0;
 	int previous = 0;
 
-	for (unsigned frame = 0; frame < s_TestRate * 2 + 8; frame++)
+	for (unsigned frame = 0; frame < s_TestRate * 5 + 8; frame++)
 	{
 		s_Samples[0] = 123;
 		s_Samples[1] = -456;
+		unsigned stage = OutputStage();
+
+		assert(stage == (frame < s_TestRate ? 3 : (frame < s_TestRate * 3 ? 2 : (frame < s_TestRate * 5 ? 1 : 0))));
 		PrepareOutput(1);
 		if (frame < s_TestRate)
 		{
@@ -355,7 +358,7 @@ int main()
 			}
 			previous = s_Samples[0];
 		}
-		else if (frame < s_TestRate * 2)
+		else if (frame < s_TestRate * 5)
 		{
 			assert(s_Samples[0] == 0 && s_Samples[1] == 0);
 		}
@@ -388,11 +391,11 @@ int main()
 	clock->Freq = 1000000;
 	s_Continuous = true;
 	s_StreamTx = 128;
-	s_TestRemaining = s_TestRate * 2;
+	s_TestRemaining = s_TestRate * 5;
 	s_LastPaint = 0;
 	s_LastSample = 0;
 	s_DisplayRow = 4;
-	s_LastStage = 2;
+	s_LastStage = AUDIO_STAGE_TONE;
 	s_DisplayCalls = 0;
 	while (s_StreamUs < 60000000 && s_AudioError == AUDIO_ERROR_NONE)
 	{

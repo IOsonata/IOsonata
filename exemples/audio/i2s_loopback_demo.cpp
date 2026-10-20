@@ -56,7 +56,16 @@ enum AudioError_t
 	AUDIO_ERROR_RX_COUNT,
 	AUDIO_ERROR_TX_COUNT,
 	AUDIO_ERROR_RX_TIMEOUT,
-	AUDIO_ERROR_TX_STALLED
+	AUDIO_ERROR_TX_STALLED,
+	AUDIO_ERROR_CODEC
+};
+
+enum AudioStage_t
+{
+	AUDIO_STAGE_MIC,
+	AUDIO_STAGE_MUTED,
+	AUDIO_STAGE_ZERO,
+	AUDIO_STAGE_TONE
 };
 
 static const IOPinCfg_t s_CtrlPins[] = TFT_PINS;
@@ -106,7 +115,14 @@ static uint32_t s_TestRate;
 static uint32_t s_TestRemaining;
 static uint32_t s_TestPhase;
 static uint32_t s_TestStep;
-static unsigned s_LastStage;
+static AudioStage_t s_LastStage;
+static bool s_TestMuted;
+static const char *const s_StageNames[] = {
+	"MIC -> HEADPHONES",
+	"DAC muted",
+	"Zero PCM",
+	"Duplex tone 1 kHz"
+};
 static char s_DisplayText[4][32];
 static unsigned s_DisplayRow = 4;
 static const uint16_t s_DisplayY[] = { 0, 32, 40, 56 };
@@ -187,13 +203,42 @@ static int AudioEvent(DevIntrf_t *pDev, DEVINTRF_EVT Evt, uint8_t *pData, int Co
 	return 0;
 }
 
+static AudioStage_t OutputStage()
+{
+	if (s_TestRemaining > s_TestRate * 4)
+	{
+		return AUDIO_STAGE_TONE;
+	}
+	if (s_TestRemaining > s_TestRate * 2)
+	{
+		return AUDIO_STAGE_ZERO;
+	}
+	return s_TestRemaining ? AUDIO_STAGE_MUTED : AUDIO_STAGE_MIC;
+}
+
+static bool UpdateOutputMute()
+{
+	bool mute = OutputStage() == AUDIO_STAGE_MUTED;
+
+	if (mute == s_TestMuted)
+	{
+		return true;
+	}
+	if (!s_Codec.Mute(mute))
+	{
+		return false;
+	}
+	s_TestMuted = mute;
+	return true;
+}
+
 static void PrepareOutput(unsigned Frames)
 {
 	for (unsigned frame = 0; frame < Frames && s_TestRemaining; frame++)
 	{
 		int16_t value = 0;
 
-		if (s_TestRemaining > s_TestRate)
+		if (s_TestRemaining > s_TestRate * 4)
 		{
 			value = s_TestSine[s_TestPhase >> 28];
 			s_TestPhase += s_TestStep;
@@ -259,10 +304,10 @@ static void DrawLevel()
 {
 	int db = s_Peak ? int(200.0f * log10f(float(s_Peak) / 32768.0f)) : -960;
 	unsigned magnitude = db < 0 ? unsigned(-db) : unsigned(db);
-	unsigned stage = s_TestRemaining > s_TestRate ? 2 : (s_TestRemaining ? 1 : 0);
+	AudioStage_t stage = OutputStage();
 
 	// Snapshot text only. ServiceDisplay sends one row after servicing audio.
-	snprintf(s_DisplayText[0], sizeof(s_DisplayText[0]), "%-20s", stage == 2 ? "Duplex tone 1 kHz" : (stage == 1 ? "Duplex silence" : "MIC -> HEADPHONES"));
+	snprintf(s_DisplayText[0], sizeof(s_DisplayText[0]), "%-20s", s_StageNames[stage]);
 	snprintf(s_DisplayText[1], sizeof(s_DisplayText[1]), "L/R mismatches %-6u", s_PairMismatches);
 	snprintf(s_DisplayText[2], sizeof(s_DisplayText[2]), "Peak %s%u.%u dBFS   ", db < 0 ? "-" : "", magnitude / 10, magnitude % 10);
 	snprintf(s_DisplayText[3], sizeof(s_DisplayText[3]), "Frames %-13lu", (unsigned long)s_Frames);
@@ -369,10 +414,11 @@ static bool HardwareInit()
 		return false;
 	}
 	s_TestRate = s_Audio.Rate();
-	s_TestRemaining = s_TestRate * 2;
+	s_TestRemaining = s_TestRate * 5;
 	s_TestPhase = 0;
 	s_TestStep = (uint64_t(1000) << 32) / s_TestRate;
-	s_LastStage = 2;
+	s_LastStage = AUDIO_STAGE_TONE;
+	s_TestMuted = false;
 	s_LastSample = s_Clock.mSecond();
 	s_LastPaint = s_LastSample;
 	return true;
@@ -398,6 +444,8 @@ static const char *AudioErrorText(uint32_t Now)
 			return "RX timeout";
 		case AUDIO_ERROR_TX_STALLED:
 			return "TX stalled";
+		case AUDIO_ERROR_CODEC:
+			return "Codec mute failed";
 		default:
 			return nullptr;
 	}
@@ -412,6 +460,11 @@ int main()
 	while (1)
 	{
 		bool progressed = PumpAudio();
+
+		if (s_AudioError == AUDIO_ERROR_NONE && !UpdateOutputMute())
+		{
+			s_AudioError = AUDIO_ERROR_CODEC;
+		}
 		uint32_t now = s_Clock.mSecond();
 
 		const char *error = AudioErrorText(now);

@@ -1206,11 +1206,23 @@ stereo frames, and main forwards them to I2S transmit for headphone playback.
 The codec's mono microphone signal appears in both channels. The OLED shows
 input peak in dBFS and the number of captured frames.
 
-Startup sends a known 1 kHz tone for one second, followed by one second of
-zero samples, then forwards the microphone. RX, TX and the codec stay enabled
-through all three phases. The OLED identifies each phase and shows L/R sample
-mismatches per display interval; the codec routes the same microphone to both
-slots. These checks distinguish noisy captured samples from noise in playback.
+The onboard microphone is U21, MP23DB01HPTR, connected to the WM8904
+DMICDAT2 input with its left channel selected in the MB2143 A02 schematic.
+
+Startup sends a known 1 kHz tone for one second, two seconds of zero PCM,
+and two seconds with the codec DAC soft-muted, then forwards the microphone.
+The OLED labels these phases `Duplex tone 1 kHz`, `Zero PCM`, `DAC muted`,
+and `MIC -> HEADPHONES`. RX, TX, microphone capture, codec clocks and headphone
+stages remain enabled throughout. Wm8904::Mute changes and verifies only the
+DAC control register, preserving its OSR setting; a failed control operation
+shuts down the codec. MCLK must be running for this live operation.
+
+Compare noise during Zero PCM and DAC muted. Noise removed by codec mute
+points toward the DAC or its digital input; noise remaining during mute
+points farther along the output/power/headphone path. This comparison narrows
+the fault but does not identify its exact source. The OLED also shows L/R
+sample mismatches per display interval; the codec routes the same microphone
+to both slots.
 The maintainer heard the startup tone, reported hiss during zero-sample
 playback, and confirmed zero L/R mismatches. The microphone peak varies but
 does not track sound volume; intelligible loopback is not yet validated.

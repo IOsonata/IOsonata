@@ -205,6 +205,23 @@ uint16_t Wm8904::DacControl(bool bMute) const
 	return 0x0600 | (vCfg.MClkFreq >= 6000000 ? 0x0040 : 0) | (bMute ? 0x0008 : 0);
 }
 
+bool Wm8904::Mute(bool bMute)
+{
+	if (!Device::Valid() || !vbEnabled || !vCfg.bHeadphoneEn)
+	{
+		return false;
+	}
+	uint16_t value = DacControl(bMute);
+
+	if (!WriteReg(WM8904_DAC_CONTROL, value) ||
+		!VerifyReg(WM8904_DAC_CONTROL, value, 0x0648))
+	{
+		PowerOff();
+		return false;
+	}
+	return true;
+}
+
 bool Wm8904::StartHeadphones()
 {
 	uint16_t status = 0;
