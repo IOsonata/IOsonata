@@ -51,6 +51,8 @@ static uint8_t s_DnsQuery[1514];
 static int s_DnsLen;
 static int s_DhcpOffers;
 static int s_DhcpAcks;
+static bool s_DropDhcp;
+static uint32_t s_DhcpLease = 3600;
 static bool s_FailTrigger;
 static bool s_FullQueue;
 static int s_Events;
@@ -62,6 +64,10 @@ static TimerDev_t s_Timer;
 static EthernetDev_t s_Ethernet;
 static int s_Checks;
 static bool s_IcmpReply;
+static bool s_InSocketCall;
+static int s_NestedEvents;
+static int s_CallbackBytes;
+static uint8_t s_CallbackData[8192];
 static const uint8_t s_Mac[6] = {2, 0, 0, 0, 0, 2};
 static const uint8_t s_Ip[4] = {192,168,1,10};
 static const IpCfg_t s_Cfg = {{192,168,1,50},{255,255,255,0},{192,168,1,1},{192,168,1,10},false};
@@ -226,6 +232,11 @@ static void DhcpReply(const uint8_t *p, int Len)
 	int type = 0;
 	int size = 42 + 240 + sizeof(options);
 
+	if (s_DropDhcp)
+	{
+		return;
+	}
+	W32(options + 11, s_DhcpLease);
 	for (int i = 282; i < Len && p[i] != 255;)
 	{
 		if (p[i] == 0)
@@ -422,6 +433,22 @@ bool AppEvtHandlerQue(uint32_t, void *, AppEvtHandler_t Handler)
 static int Event(DevIntrf_t *, DEVINTRF_EVT, uint8_t *, int)
 {
 	s_Events++;
+	if (s_InSocketCall)
+	{
+		s_NestedEvents++;
+	}
+
+	return 0;
+}
+
+static int ReceiveEvent(DevIntrf_t *pDev, DEVINTRF_EVT Evt, uint8_t *, int)
+{
+	Event(pDev, Evt, nullptr, 0);
+	if (Evt == DEVINTRF_EVT_RX_DATA)
+	{
+		s_CallbackBytes += DeviceIntrfRx(pDev, 0, s_CallbackData + s_CallbackBytes,
+			sizeof(s_CallbackData) - s_CallbackBytes);
+	}
 
 	return 0;
 }
@@ -566,6 +593,86 @@ int main()
 	CHECK(SockIntrfTx(&udp, (const uint8_t *)"late", 4) == 4);
 	Pump();
 	CHECK(SockIntrfRx(&udp, rx, sizeof(rx)) == 4 && memcmp(rx, "late", 4) == 0);
+	SockIntrfClose(&udp);
+	IpClose();
+
+	// Filling the TCP send window makes the next send service incoming
+	// ACKs and data while DeviceIntrf still owns the transfer lock.
+	CHECK(IpInit(&s_Cfg, &s_Ethernet, &s_Timer, 0));
+	Pump();
+	cfg.Proto = SOCKINTRF_PROTO_TCP;
+	cfg.EvtCB = ReceiveEvent;
+	CHECK(SockIntrfInit(&tcp, &cfg));
+	uint8_t burst[5840];
+
+	for (int i = 0; i < (int)sizeof(burst); i++)
+	{
+		burst[i] = (uint8_t)(i * 13);
+	}
+	CHECK(SockIntrfTx(&tcp, burst, sizeof(burst)) == (int)sizeof(burst));
+	s_InSocketCall = true;
+	CHECK(SockIntrfTx(&tcp, (const uint8_t *)"tail", 4) == 4);
+	s_InSocketCall = false;
+	CHECK(s_NestedEvents == 0);
+	Pump(100);
+	CHECK(s_CallbackBytes == (int)sizeof(burst));
+	CHECK(memcmp(s_CallbackData, burst, sizeof(burst)) == 0);
+	SockIntrfClose(&tcp);
+	IpClose();
+
+	// Lease expiry must disconnect UDP even when the physical link stays up.
+	s_DhcpLease = 120;
+	CHECK(IpInit(&dynamic, &s_Ethernet, &s_Timer, 0));
+	Pump(2000);
+	CHECK(IpReady());
+	cfg.Proto = SOCKINTRF_PROTO_UDP;
+	cfg.EvtCB = Event;
+	CHECK(SockIntrfInit(&udp, &cfg));
+	CHECK(SockIntrfTx(&udp, (const uint8_t *)"held", 4) == 4);
+	Pump();
+	s_DropDhcp = true;
+	Pump(20000);
+	CHECK(!IpReady());
+	CHECK(!SockIntrfConnected(&udp));
+	CHECK(SockIntrfRx(&udp, rx, sizeof(rx)) == 4 && memcmp(rx, "held", 4) == 0);
+	CHECK(SockIntrfTx(&udp, data, 1) == 0);
+	s_DropDhcp = false;
+	for (int i = 0; i < 12000 && IpReady() == false; i++)
+	{
+		Pump(1);
+	}
+	CHECK(IpReady());
+	CHECK(SockIntrfInit(&udp, &cfg));
+	CHECK(SockIntrfTx(&udp, (const uint8_t *)"renewed", 7) == 7);
+	Pump();
+	CHECK(SockIntrfRx(&udp, rx, sizeof(rx)) == 7 && memcmp(rx, "renewed", 7) == 0);
+
+	// DNS and TCP connection waits also defer application notifications.
+	CHECK(SockIntrfTx(&udp, (const uint8_t *)"during dns", 10) == 10);
+	s_DropDns = false;
+	cfg.Proto = SOCKINTRF_PROTO_TCP;
+	cfg.pHost = "deferred.test";
+	int events = s_Events;
+
+	s_InSocketCall = true;
+	CHECK(SockIntrfInit(&tcp, &cfg));
+	s_InSocketCall = false;
+	CHECK(s_NestedEvents == 0 && s_Events == events);
+	Pump();
+	CHECK(s_Events > events);
+	CHECK(SockIntrfRx(&udp, rx, sizeof(rx)) == 10 && memcmp(rx, "during dns", 10) == 0);
+	SockIntrfClose(&tcp);
+	CHECK(SockIntrfTx(&udp, (const uint8_t *)"during connect", 14) == 14);
+	cfg.pHost = "192.168.1.10";
+	events = s_Events;
+	s_InSocketCall = true;
+	CHECK(SockIntrfInit(&tcp, &cfg));
+	s_InSocketCall = false;
+	CHECK(s_NestedEvents == 0 && s_Events == events);
+	Pump();
+	CHECK(s_Events > events);
+	CHECK(SockIntrfRx(&udp, rx, sizeof(rx)) == 14 && memcmp(rx, "during connect", 14) == 0);
+	SockIntrfClose(&tcp);
 	SockIntrfClose(&udp);
 	IpClose();
 	CHECK(s_Events > 0);

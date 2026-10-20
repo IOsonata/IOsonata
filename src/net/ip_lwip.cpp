@@ -326,7 +326,18 @@ static void IpAbort(IpSocket_t *pSock)
 	IpSocketDown(pSock);
 }
 
-void IpProcess(void)
+static void IpNetifStatus(struct netif *pNetif)
+{
+	(void)pNetif;
+	// DHCP may remove or replace the address without a physical link loss.
+	// Connections using the old address cannot survive that transition.
+	for (int i = 0; i < IP_SOCKET_COUNT; i++)
+	{
+		IpAbort(&s_IpSockets[i]);
+	}
+}
+
+static void IpService(bool bNotify)
 {
 	uint32_t now;
 
@@ -384,8 +395,22 @@ void IpProcess(void)
 		}
 	}
 	sys_check_timeouts();
-	IpNotify();
+	if (bNotify)
+	{
+		IpNotify();
+	}
+	else
+	{
+		// Connect/send waits may hold the caller's transfer lock. Deliver
+		// socket callbacks from the queued service after that call returns.
+		IpWake();
+	}
 	s_IpProcessing = false;
+}
+
+void IpProcess(void)
+{
+	IpService(true);
 }
 
 bool IpReady(void)
@@ -497,6 +522,7 @@ bool IpInit(const IpCfg_t *pCfg, EthernetDev_t *pEthernet, TimerDev_t *pTimer, i
 	s_IpOldEthCallback = pEthernet->DevIntrf.EvtCB;
 	pEthernet->DevIntrf.EvtCB = IpEthernetEvent;
 	s_IpInitialized = true;
+	netif_set_status_callback(&s_IpNetif, IpNetifStatus);
 	netif_set_default(&s_IpNetif);
 	netif_set_up(&s_IpNetif);
 	IP_ADDR4(&dns, pCfg->Dns[0], pCfg->Dns[1], pCfg->Dns[2], pCfg->Dns[3]);
@@ -668,7 +694,7 @@ static int IpSockTx(DevIntrf_t *pDev, const uint8_t *pData, int Len)
 
 			return n;
 		}
-		IpProcess();
+		IpService(false);
 		usDelay(1000);
 	} while ((uint32_t)(sys_now() - start) < timeout);
 
@@ -826,7 +852,7 @@ bool SockIntrfInit(SockIntrfDev_t *pDev, const SockIntrfCfg_t *pCfg)
 	{
 		while (sock->bDnsDone == false && (uint32_t)(sys_now() - start) < sock->Timeout)
 		{
-			IpProcess();
+			IpService(false);
 			usDelay(1000);
 		}
 		res = sock->bDnsDone && ip_addr_isany(&sock->DnsAddr) == false ? ERR_OK : ERR_TIMEOUT;
@@ -864,7 +890,7 @@ bool SockIntrfInit(SockIntrfDev_t *pDev, const SockIntrfCfg_t *pCfg)
 				{
 					while (sock->bConnecting && (uint32_t)(sys_now() - start) < sock->Timeout)
 					{
-						IpProcess();
+						IpService(false);
 						usDelay(1000);
 					}
 				}

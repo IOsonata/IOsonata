@@ -35,7 +35,10 @@ No lwIP processing runs in an interrupt handler.
 
 Call `SockIntrfInit()` after `IpReady()` becomes true. Initialization resolves the
 host and connects TCP within the configured timeout; UDP selects a remote peer.
-These waits service IP traffic but do not dispatch unrelated application events.
+These waits service IP traffic but defer socket callbacks until a subsequent
+foreground `IpProcess()` call, after initialization or the transfer has returned.
+They do not dispatch unrelated application events. This lets receive callbacks
+read queued data after the socket's transfer lock has been released.
 Socket event callbacks run in the foreground IP service and must return promptly.
 Do not initialize another socket or perform blocking work inside a callback.
 
@@ -44,8 +47,9 @@ remaining bytes. It does not mean the peer received them. UDP accepts a complete
 datagram or returns zero. `Rx()` is nonblocking. TCP preserves unread stream
 bytes; UDP returns one datagram and discards a truncated remainder. A zero read
 can mean no queued data; inspect `Connected()` for connection loss. Buffered data
-can still be read after loss of the connection. Link loss disconnects sockets;
-applications close and initialize them again after the network recovers.
+can still be read after loss of the connection. Link loss, DHCP lease expiry and
+local address changes disconnect sockets; applications close and initialize
+them again after the network recovers.
 
 `IpClose()` releases the timer trigger, closes sockets, removes the network
 interface and restores its callback. Close IP before closing its Ethernet
@@ -144,6 +148,9 @@ packet peer under AddressSanitizer and UndefinedBehaviorSanitizer at O0/O2.
 They cover ARP, ICMP echo, DHCP with address-conflict probes, DNS, UDP boundaries
 and truncation, TCP multi-segment traffic, connect timeout, link loss/recovery,
 close/reopen, event-queue refusal and a late DNS result after socket reuse.
+They also cover deferred callbacks during DNS/connect/send waits, receive
+callbacks after TCP send-buffer exhaustion, and DHCP lease expiry/recovery
+while the physical link remains up.
 They do not emulate the physical Ethernet controller.
 
 The separate H753 register model executes the production driver at O0/Os with

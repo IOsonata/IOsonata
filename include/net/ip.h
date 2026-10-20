@@ -63,7 +63,8 @@ bool IpReady(void);
 bool IpAddress(uint8_t Addr[4]);
 
 /// Foreground, serialized with all SockIntrf calls. Normally called through
-/// the queued network event. Also services blocking socket connect/send waits.
+/// the queued network event. Delivers socket callbacks deferred by blocking
+/// connect/send waits, after those calls return and release transfer locks.
 void IpProcess(void);
 
 /// Retry a network event refused by a full application queue. Does not drain
