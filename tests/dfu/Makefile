@@ -33,6 +33,7 @@ LAYOUT := -no-pie \
 
 CRYPTO_SRC := \
 	$(ROOT)/src/crypto/crypto_softsha256.cpp \
+	$(ROOT)/src/crypto/crypto_p256.cpp \
 	$(ROOT)/src/crypto/crypto_uecc.cpp
 
 DFU_SRC := \
