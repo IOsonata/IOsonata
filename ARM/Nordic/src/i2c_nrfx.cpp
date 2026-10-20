@@ -1224,11 +1224,9 @@ void I2C_IRQHandler(int DevNo, DevIntrf_t * const pDev)
     		}
     		dev->pDmaSReg->EVENTS_WRITE = 0;
     		NRFX_TWI_RX(dev->pDmaSReg).PTR = (uint32_t)dev->pI2cDev->pTRBuff[dev->pDmaSReg->MATCH];
-#ifdef NRF54L_SERIES
+		// One transfer takes at most the EasyDMA count, the TWIS refuses the
+		// bytes after it
 		NRFX_TWI_RX(dev->pDmaSReg).MAXCNT = min(max(dev->pI2cDev->TRBuffLen[dev->pDmaSReg->MATCH], 0), NRFX_I2C_DMA_MAXCNT);
-#else
-		NRFX_TWI_RX(dev->pDmaSReg).MAXCNT = dev->pI2cDev->TRBuffLen[dev->pDmaSReg->MATCH];
-#endif
     		//dev->pDmaSReg->SHORTS = 0;
     		dev->pDmaSReg->TASKS_PREPARERX = 1;
     		dev->pDmaSReg->TASKS_RESUME = 1;
