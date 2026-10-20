@@ -198,19 +198,22 @@ I2C g_I2CSlave;
 
 #define I2C_BUFF_SIZE	20
 
-// Longest write test: data bytes after the command byte. A board sets it to
-// what its slave takes in one transfer (254 on nRF52832, whose TWIS takes 255
-// bytes with the command byte).
-#ifndef I2C_LONG_WRITE_LEN
-#define I2C_LONG_WRITE_LEN		300
+// Most bytes the slave takes in one transfer, the command byte included.
+// The longest write test sends this many bytes. A board.h overrides it with
+// what its slave takes.
+#ifndef I2C_SLAVE_MAX_XFER
+#define I2C_SLAVE_MAX_XFER		255
 #endif
+
+// Data bytes of the longest write test, after the command byte
+#define I2C_LONG_WRITE_LEN		(I2C_SLAVE_MAX_XFER - 1)
 
 // Command byte of the write length tests: outside the slave memory, so the
 // slave only keeps the data in its write buffer
 #define I2C_WRITE_TEST_CMD		0xFF
 
 static uint8_t s_ReadRqstData[I2C_BUFF_SIZE];
-static uint8_t s_WriteRqstData[I2C_LONG_WRITE_LEN + 1];
+static uint8_t s_WriteRqstData[I2C_SLAVE_MAX_XFER];
 static std::atomic<int> s_SlaveWriteLen(0);	// Bytes of the last completed write
 static uint8_t s_WriteTestData[I2C_LONG_WRITE_LEN];
 static bool s_bWriteRqst = false;

@@ -84,8 +84,5 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define I2C_SLAVE_SCL_PIN		4
 #define I2C_SLAVE_SCL_PINOP		1
 
-// The TWIS takes 255 bytes in one transfer, the command byte included
-#define I2C_LONG_WRITE_LEN		254
-
 #endif // __BOARD_H__
 
