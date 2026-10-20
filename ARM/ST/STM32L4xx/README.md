@@ -229,7 +229,7 @@ AF7.
 Timer hardware run: TimerDemo (`exemples/timer/timer_demo.cpp`), in
 `STM32L476/exemples/TimerDemo` for B_L475E_IOT01A and
 `STM32L432/exemples/TimerDemo` for NUCLEO_L432KC. Output on the ST-LINK
-virtual COM port at 115200 8N1 (USART1 PB7/PB6 on the B-L475E-IOT01A,
+virtual COM port at 1000000 8N1 in Release (USART1 PB7/PB6 on the B-L475E-IOT01A,
 USART2 PA15/PA2 on the NUCLEO-L432KC), the first LED toggles on trigger 0.
 `TIMER_DEMO_DEVNO` in `board.h` selects the timer, LPTIM1 by default, from
 the LSE crystal; the TIM run at 100 kHz. Expected output, LPTIM1:

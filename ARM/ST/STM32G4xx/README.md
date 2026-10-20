@@ -116,7 +116,7 @@ a debugger with semihosting enabled. The Release builds link `nosys` and
 define `NDEBUG`.
 
 TimerDemo toggles LD2 on trigger 0 and prints with semihosting in Debug, on
-the ST-LINK virtual COM port, LPUART1 at 115200 8N1, in Release.
+the ST-LINK virtual COM port, LPUART1 at 1000000 8N1, in Release.
 `TIMER_DEMO_DEVNO` in `board.h` selects the timer, LPTIM1 by default, from the LSE crystal, 100 ms per
 trigger 0 event (3277 ticks, 100.006 ms). The TIM run at 100 kHz, a four
 channel TIM prints triggers 0 to 3: 100 ms, 1 s, 250 ms and 500 ms.
@@ -139,6 +139,15 @@ ST-LINK virtual COM port at 1 Mbaud from HSI16.
   without DMA also ran with DMA: board.h defined `UART_DMA_MODE` true, which
   overrides the define at the top of `uart_loopback.cpp`. The define is
   removed from board.h; the loopback without DMA is still to be run.
+
+- TimerDemo, Debug with semihosting: LPTIM1 (LSE) and TIM7 trigger every
+  100 ms; the printed periods (86 to 101 ms) are distorted by the
+  semihosting halts, each printed line takes about 3.2 s.
+- TimerDemo, Release, TIM1 (DevNo 10) at 100 kHz, output on the virtual COM
+  port: triggers 0 to 3 at 100000, 1000000, 250000 and 500000 us exactly.
+  The first period of triggers 1 to 3 reads a little long (1000170, 250340,
+  500510 us): it is counted from 0 and includes the time the demo takes to
+  enable and print the triggers one after the other.
 
 ## Validation
 
