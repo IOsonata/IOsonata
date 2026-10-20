@@ -119,6 +119,27 @@ for build steps, pin mapping, ownership, memory, limits and validation.
 All examples compile/link and the packet/register simulations pass. Physical
 Ethernet operation remains untested.
 
+## Crypto engines
+
+`CryptoTest` uses the same generic `exemples/crypto/crypto_engine_test.cpp`
+as the WBA port. The H753 library links the existing `CryptoRngStm32`,
+`CryptoSoftAes`, `CryptoSoftSha256` and `CryptoUecc` implementations. AES-128,
+CMAC, CCM, GCM, SHA-256/HMAC and P-256 use those shared software engines;
+random numbers use the hardware RNG. H753 CRYP/HASH acceleration is not yet
+implemented. No new generic crypto interfaces are introduced.
+
+The RNG selects HSI48 without changing USB clock selection or PLL settings.
+A clock/seed error or data-ready timeout fails the request, clears its output
+and disables the RNG; call Enable or Reset explicitly before trying again.
+The HSI48 oscillator remains on because USB can share it.
+
+Build `CryptoTest` in Release and open ST-LINK VCP at **115200 baud, 8N1**.
+Debug uses semihosting. No Ethernet cable is needed. See the
+[CryptoTest instructions](STM32H753/exemples/CryptoTest/README.md).
+Run `python3 tests/stm32h7/run_crypto.py` for RNG register fault tests and
+existing engine known answers. Simulation does not validate physical entropy;
+board crypto tests remain pending. Ethernet TLS/DTLS remains unimplemented.
+
 ## Clocks and memory
 
 Startup selects the internal LDO, voltage scale 1 and HSI64 / 32 feeding PLL1
@@ -163,12 +184,12 @@ LPTIM is not yet exposed. `TimerGetLowFreqDevCount()` returns 0.
 
 ## Limits and validation
 
-I2C, SPI, CAN, ADC/DAC, PWM, internal NVM, RNG/crypto and general-purpose DMA
+I2C, SPI, CAN, ADC/DAC, PWM, internal NVM and general-purpose DMA
 are not implemented by this port. Unsupported UART DMA configuration returns
 false. The single library project includes the core device, UART, timer,
 application event and logging sources needed by these examples.
 
-`python3 tests/stm32h7/run.py` builds the library and all nine bare-metal examples in
+`python3 tests/stm32h7/run.py` builds the library and all ten bare-metal examples in
 Debug/Release, with and without hard-float, and runs Cortex-M instruction tests
 using the actual CMSIS header. Install Python `unicorn` and `pyelftools` for
 the modeled register tests. These check startup clock selection, all four APB

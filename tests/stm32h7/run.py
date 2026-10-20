@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the H753 library and nine examples; emulate register tests.
+"""Build the H753 library and ten examples; emulate register tests.
 
 Requires GNU Arm GCC, Python unicorn and pyelftools. Uses the real ST CMSIS
 header and driver instructions. Ready flags are modeled, not physical timing.
@@ -24,6 +24,7 @@ PORT = ROOT / 'ARM/ST/STM32H7xx'
 PROJECT = PORT / 'STM32H753'
 LWIP = Path(os.environ.get('LWIP_ROOT', ROOT.parent / 'external/lwip'))
 EXAMPLES = {
+    'CryptoTest': 'exemples/crypto/crypto_engine_test.cpp',
     'Blinky': 'exemples/misc/blinky.c',
     'TimerDemo': 'exemples/timer/timer_demo.cpp',
     'UartPrbsTxTest': 'exemples/uart/uart_prbs_tx.cpp',
@@ -120,7 +121,7 @@ def main():
                                 ('Release_FPU', '-Os', ['-mfloat-abi=hard', '-mfpu=fpv5-d16'])):
             out = tmp / label
             out.mkdir()
-            flags = [*base, opt, *fpu]
+            flags = [*base, opt, *fpu, '-DDEBUG' if label.startswith('Debug') else '-DNDEBUG']
             project = ET.parse(PROJECT / 'lib/ioc/.cproject')
             config = next(c for c in project.findall('.//cconfiguration')
                           if c.find('storageModule').get('name') == label)
@@ -163,7 +164,7 @@ def main():
             for name, rel in EXAMPLES.items():
                 obj = out / (name + '.o')
                 compile_source(ROOT / rel, obj, ['-I' + str(PROJECT / 'exemples' / name / 'src')])
-                link(obj, out / (name + '.elf'), usb=name.startswith('Usb'))
+                link(obj, out / (name + '.elf'), usb=name.startswith('Usb') or name == 'CryptoTest')
                 with (out / (name + '.elf')).open('rb') as firmware:
                     elf = ELFFile(firmware)
                     symbols = {s.name: s for s in elf.get_section_by_name('.symtab').iter_symbols()}
@@ -205,7 +206,7 @@ def main():
             compile_source(ROOT / 'tests/stm32h7/register_test.cpp', obj)
             link(obj, out / 'register_test.elf')
             emulate(out / 'register_test.elf')
-            print(label + ': library, nine examples and register tests PASS', flush=True)
+            print(label + ': library, ten examples and register tests PASS', flush=True)
     print('Hardware timing, electrical behavior and data transfers remain untested.')
 
 
