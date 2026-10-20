@@ -48,10 +48,13 @@ SOFTWARE.
 #include "idelay.h"
 #include "board.h"
 
-// Disable microphone capture and its clock for the noise isolation test.
-// Define as 1 to restore live microphone forwarding and the OLED power test.
+// Run microphone capture and its clock, but send zero PCM after startup.
+// Enable forwarding separately to restore loopback and the OLED power test.
 #ifndef AUDIO_LOOPBACK_MIC_ENABLE
-#define AUDIO_LOOPBACK_MIC_ENABLE 0
+#define AUDIO_LOOPBACK_MIC_ENABLE 1
+#endif
+#ifndef AUDIO_LOOPBACK_MIC_FORWARD
+#define AUDIO_LOOPBACK_MIC_FORWARD 0
 #endif
 
 enum AudioError_t
@@ -128,7 +131,8 @@ static bool s_DisplayOff;
 static bool s_DisplayTestDone;
 static uint32_t s_DisplayOffSince;
 static const char *const s_StageNames[] = {
-	AUDIO_LOOPBACK_MIC_ENABLE ? "MIC -> HEADPHONES" : "MIC OFF - ZERO PCM",
+	!AUDIO_LOOPBACK_MIC_ENABLE ? "MIC OFF - ZERO PCM" :
+	(AUDIO_LOOPBACK_MIC_FORWARD ? "MIC -> HEADPHONES" : "MIC ON - ZERO PCM"),
 	"DAC muted",
 	"Zero PCM",
 	"Duplex tone 1 kHz"
@@ -244,7 +248,7 @@ static bool UpdateOutputMute()
 
 static void PrepareOutput(unsigned Frames)
 {
-	if (!AUDIO_LOOPBACK_MIC_ENABLE)
+	if (!AUDIO_LOOPBACK_MIC_ENABLE || !AUDIO_LOOPBACK_MIC_FORWARD)
 	{
 		memset(s_Samples, 0, Frames * 2 * sizeof(s_Samples[0]));
 	}
@@ -353,7 +357,7 @@ static bool ServiceDisplay(bool AudioProgressed, uint32_t Now)
 		DrawLevel();
 		return true;
 	}
-	if (AUDIO_LOOPBACK_MIC_ENABLE && !s_DisplayTestDone && OutputStage() == AUDIO_STAGE_MIC)
+	if (AUDIO_LOOPBACK_MIC_ENABLE && AUDIO_LOOPBACK_MIC_FORWARD && !s_DisplayTestDone && OutputStage() == AUDIO_STAGE_MIC)
 	{
 		// Compare live audio with the OLED panel and charge pump disabled.
 		s_Lcd.Disable();

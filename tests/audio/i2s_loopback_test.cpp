@@ -313,7 +313,7 @@ int main()
 				assert(s_AudioError == AUDIO_ERROR_NONE);
 			}
 			assert(s_OutputPos == sizeof(s_Input));
-			if (AUDIO_LOOPBACK_MIC_ENABLE)
+			if (AUDIO_LOOPBACK_MIC_ENABLE && AUDIO_LOOPBACK_MIC_FORWARD)
 			{
 				assert(memcmp(s_Input, s_Output, sizeof(s_Input)) == 0);
 			}
@@ -413,8 +413,8 @@ int main()
 		}
 		else
 		{
-			assert(s_Samples[0] == (AUDIO_LOOPBACK_MIC_ENABLE ? 123 : 0));
-			assert(s_Samples[1] == (AUDIO_LOOPBACK_MIC_ENABLE ? -456 : 0));
+			assert(s_Samples[0] == (AUDIO_LOOPBACK_MIC_ENABLE && AUDIO_LOOPBACK_MIC_FORWARD ? 123 : 0));
+			assert(s_Samples[1] == (AUDIO_LOOPBACK_MIC_ENABLE && AUDIO_LOOPBACK_MIC_FORWARD ? -456 : 0));
 		}
 	}
 	assert(positiveCrossings >= 999 && positiveCrossings <= 1001);
@@ -425,8 +425,8 @@ int main()
 	s_Samples[3] = -456;
 	PrepareOutput(2);
 	assert(s_Samples[0] == 0 && s_Samples[1] == 0);
-	assert(s_Samples[2] == (AUDIO_LOOPBACK_MIC_ENABLE ? 123 : 0));
-	assert(s_Samples[3] == (AUDIO_LOOPBACK_MIC_ENABLE ? -456 : 0));
+	assert(s_Samples[2] == (AUDIO_LOOPBACK_MIC_ENABLE && AUDIO_LOOPBACK_MIC_FORWARD ? 123 : 0));
+	assert(s_Samples[3] == (AUDIO_LOOPBACK_MIC_ENABLE && AUDIO_LOOPBACK_MIC_FORWARD ? -456 : 0));
 	// Run the real OLED driver and application scheduler for one minute
 	// with continuous 15,625 Hz RX/TX and injected SPI transfer delays.
 	ResetModel();
@@ -466,10 +466,10 @@ int main()
 	printf("Duplex OLED stress: 60 s, %u TX underrun frames, max RX %u frames\n", s_StreamUnderruns, s_StreamMaxRx);
 	assert(s_StreamUnderruns == 0 && s_StreamMaxRx < 256);
 	assert(s_Frames > 900000 && s_DisplayCalls > 1000);
-	assert(s_DisplayTestDone == bool(AUDIO_LOOPBACK_MIC_ENABLE));
+	assert(s_DisplayTestDone == bool(AUDIO_LOOPBACK_MIC_ENABLE && AUDIO_LOOPBACK_MIC_FORWARD));
 	assert(!s_DisplayOff && !s_PanelOff);
-	assert(s_PanelOffCount == unsigned(AUDIO_LOOPBACK_MIC_ENABLE));
-	assert(s_PanelOnCount == unsigned(AUDIO_LOOPBACK_MIC_ENABLE));
+	assert(s_PanelOffCount == unsigned(AUDIO_LOOPBACK_MIC_ENABLE && AUDIO_LOOPBACK_MIC_FORWARD));
+	assert(s_PanelOnCount == unsigned(AUDIO_LOOPBACK_MIC_ENABLE && AUDIO_LOOPBACK_MIC_FORWARD));
 	s_Continuous = false;
 	puts("I2S loopback config, exact forwarding, short TX, stalls, startup and errors PASS");
 }

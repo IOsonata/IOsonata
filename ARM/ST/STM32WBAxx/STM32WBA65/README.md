@@ -1199,13 +1199,16 @@ python3 tests/audio/run_i2s_tone.py
 
 ## Live microphone to headphones loopback
 
-The current noise isolation build defaults `AUDIO_LOOPBACK_MIC_ENABLE` to 0.
-It configures the codec with MicInput = 0, disabling microphone capture and
-the microphone clock. After the startup tone, zero PCM and DAC mute phases,
-it sends zero PCM continuously and labels the screen `MIC OFF - ZERO PCM`.
-The OLED stays on; headphone gain and audio clocks retain the loopback settings.
-The microphone supply is not physically disconnected. Define
-`AUDIO_LOOPBACK_MIC_ENABLE=1` to restore the live loopback described below.
+The current noise isolation build defaults `AUDIO_LOOPBACK_MIC_ENABLE` to 1
+and `AUDIO_LOOPBACK_MIC_FORWARD` to 0. Microphone capture and its clock run
+normally, but after the startup tone, zero PCM and DAC mute phases, it sends
+zero PCM continuously and labels the screen `MIC ON - ZERO PCM`. Input peak
+and frame counts still measure the captured microphone samples. The OLED
+stays on; headphone gain and audio clocks retain the loopback settings.
+Set `AUDIO_LOOPBACK_MIC_ENABLE=0` to repeat the microphone-off comparison;
+this stops capture and its clock without disconnecting its supply. Define
+`AUDIO_LOOPBACK_MIC_FORWARD=1` with the microphone enabled to restore live
+loopback and the OLED power test described below.
 
 Import `exemples/I2sLoopbackDemo/ioc` and rebuild the matching library and
 example. Connect headphones to the onboard audio jack and speak near the
@@ -1242,8 +1245,10 @@ playback, and confirmed zero L/R mismatches. The microphone peak varies but
 does not track sound volume; intelligible loopback is not yet validated.
 The maintainer reports that DAC mute does not affect the noise and that it
 appears when the display starts. Turning off the OLED and its charge pump
-did not remove the buzz on the board. The microphone-off comparison is
-awaiting a board retest.
+did not remove the buzz on the board. The buzz disappeared with microphone
+capture and its clock disabled. The microphone-on, zero-PCM comparison is
+awaiting a board retest; it separates interference from microphone operation
+from noise carried in the captured samples.
 
 This exercises simultaneous RX and TX DMA through the same generic I2S
 interface. Board mapping combines PC5 AF13 receive with PD5 AF13 transmit;
