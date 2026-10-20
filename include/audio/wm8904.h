@@ -83,6 +83,9 @@ public:
 	// Requires enabled microphone configuration and running MCLK. Headphones
 	// retain their state. Disable/Enable or Init restores normal capture.
 	bool MicrophoneClockOnly();
+	// Select the nearest supported independent clock frequency. Returns Hz,
+	// or zero on hardware failure. Capture remains disabled.
+	uint32_t MicrophoneClockOnly(uint32_t Freq);
 
 private:
 	uint16_t DacControl(bool bMute) const;

@@ -295,6 +295,21 @@ int main()
 	captureRegisters[0x16] |= 8;
 	captureRegisters[0x79] = 1;
 	assert(memcmp(captureRegisters, control.Registers, sizeof(captureRegisters)) == 0);
+	const uint32_t clockRequests[] = { 4000000, 2000000, 1333333, 1000000, 727273, 666667, 500000, 333333, 250000 };
+
+	for (unsigned code = 0; code < sizeof(clockRequests) / sizeof(clockRequests[0]); code++)
+	{
+		assert(codec.MicrophoneClockOnly(clockRequests[code]) == clockRequests[code]);
+		captureRegisters[0x1A] = (code << 8) | 0x15;
+		assert(memcmp(captureRegisters, control.Registers, sizeof(captureRegisters)) == 0);
+	}
+	assert(codec.MicrophoneClockOnly(UINT32_MAX) == 4000000);
+	assert(codec.MicrophoneClockOnly(0) == 250000);
+	assert(codec.MicrophoneClock(false));
+	assert(control.Registers[0x79] == 2 && control.Registers[0x12] == 0x0C && control.Registers[0x27] == 0);
+	assert(codec.MicrophoneClockOnly(1000000) == 1000000);
+	assert(control.Registers[0x79] == 1 && control.Registers[0x1A] == 0x315);
+
 	codec.Disable();
 	assert(control.Registers[0x16] == 0 && !codec.MicrophoneClockOnly());
 	assert(codec.Enable());

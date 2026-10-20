@@ -467,6 +467,33 @@ int main()
 	}
 	DrawLevel();
 	assert(s_DisplayRow == 1);
+	// Clock-only sweep keeps the first frequency through startup, then repeats
+	// every 32 seconds. Check both sides of every eight-second boundary.
+	for (unsigned step = 0; step < 12; step++)
+	{
+		s_Frames = s_TestRate * (5 + step * 8);
+		unsigned expected = AUDIO_LOOPBACK_MIC_ENABLE && !AUDIO_LOOPBACK_MIC_FORWARD && AUDIO_LOOPBACK_CLOCK_ONLY ? step % 4 : 0;
+
+		assert(MicrophoneClockStep() == expected);
+		if (step)
+		{
+			s_Frames--;
+			assert(MicrophoneClockStep() == (AUDIO_LOOPBACK_MIC_ENABLE && !AUDIO_LOOPBACK_MIC_FORWARD && AUDIO_LOOPBACK_CLOCK_ONLY ? (step - 1) % 4 : 0));
+		}
+	}
+	if (AUDIO_LOOPBACK_MIC_ENABLE && !AUDIO_LOOPBACK_MIC_FORWARD && AUDIO_LOOPBACK_CLOCK_ONLY)
+	{
+		for (unsigned step = 1; step < 5; step++)
+		{
+			s_MicClockStep = step % 4;
+			DrawLevel();
+			assert(s_DisplayRow == 0);
+			assert(strncmp(s_DisplayText[0], s_MicClockLabels[step % 4], strlen(s_MicClockLabels[step % 4])) == 0);
+			DrawLevel();
+			assert(s_DisplayRow == 1);
+		}
+	}
+
 	// Run the real OLED driver and application scheduler for one minute
 	// with continuous 15,625 Hz RX/TX and injected SPI transfer delays.
 	ResetModel();

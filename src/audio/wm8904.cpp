@@ -245,22 +245,43 @@ bool Wm8904::MicrophoneClock(bool bEnable)
 
 bool Wm8904::MicrophoneClockOnly()
 {
+	return MicrophoneClockOnly(2000000) != 0;
+}
+
+uint32_t Wm8904::MicrophoneClockOnly(uint32_t Freq)
+{
+	static const unsigned dividers[] = { 2, 4, 6, 8, 11, 12, 16, 24, 32 };
+	unsigned selected = 0;
+	uint32_t rate = 0;
+	uint32_t difference = UINT32_MAX;
 	uint16_t clock;
 	uint16_t divider;
 	uint16_t power = vCfg.bHeadphoneEn ? 0x0C : 0;
 
 	if (!Device::Valid() || !vbEnabled || !vCfg.MicInput)
 	{
-		return false;
+		return 0;
 	}
 	if (!ReadReg(WM8904_CLOCK_ENABLE, clock) || !ReadReg(WM8904_AUDIO_CLOCK, divider))
 	{
 		PowerOff();
-		return false;
+		return 0;
+	}
+	for (unsigned code = 0; code < sizeof(dividers) / sizeof(dividers[0]); code++)
+	{
+		uint32_t candidate = (uint64_t(vCfg.MClkFreq) * 2 + dividers[code] / 2) / dividers[code];
+		uint32_t diff = Freq > candidate ? Freq - candidate : candidate - Freq;
+
+		if (diff < difference)
+		{
+			difference = diff;
+			selected = code;
+			rate = candidate;
+		}
 	}
 	// OPCLK runs independently of DMIC_ENA and the ADC enable bits.
-	// Hold the pin low while changing its source, then select SYSCLK / 2.
-	divider = (divider & ~0x0F00U) | 0x0100;
+	// Hold the pin low while changing its source, then select its divider.
+	divider = (divider & ~0x0F00U) | (selected << 8);
 	clock |= 8;
 	if (!WriteReg(WM8904_GPIO1, 2) ||
 		!WriteReg(WM8904_DMIC, 0) ||
@@ -274,9 +295,9 @@ bool Wm8904::MicrophoneClockOnly()
 		!WriteReg(WM8904_GPIO1, 1) || !VerifyReg(WM8904_GPIO1, 1, 0x003F))
 	{
 		PowerOff();
-		return false;
+		return 0;
 	}
-	return true;
+	return rate;
 }
 
 bool Wm8904::StartHeadphones()

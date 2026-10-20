@@ -140,6 +140,12 @@ static AudioStage_t s_LastStage;
 static bool s_TestMuted;
 static bool s_MicClockRestored;
 static bool s_LastMicClockRestored;
+static unsigned s_MicClockStep;
+static unsigned s_LastMicClockStep;
+static const uint32_t s_MicClockRates[] = { 2000000, 1000000, 666667, 0 };
+static const char *const s_MicClockLabels[] = {
+	"CAP OFF CLK 2MHz", "CAP OFF CLK 1MHz", "CAP OFF CLK 667kHz", "CAP OFF CLK OFF"
+};
 static bool s_DisplayOff;
 static bool s_DisplayTestDone;
 static uint32_t s_DisplayOffSince;
@@ -268,6 +274,34 @@ static bool MicrophoneClockRestoreDue()
 		!s_MicClockRestored && s_TestRate && s_Frames >= s_TestRate * 10;
 }
 
+static unsigned MicrophoneClockStep()
+{
+	if (!AUDIO_LOOPBACK_MIC_ENABLE || AUDIO_LOOPBACK_MIC_FORWARD || !AUDIO_LOOPBACK_CLOCK_ONLY ||
+		!s_TestRate || s_Frames < s_TestRate * 5)
+	{
+		return 0;
+	}
+	// Keep the first clock through startup, then hold each step for eight seconds.
+	return ((s_Frames - s_TestRate * 5) / (s_TestRate * 8)) % 4;
+}
+
+static bool UpdateMicrophoneClock()
+{
+	unsigned step = MicrophoneClockStep();
+
+	if (step == s_MicClockStep)
+	{
+		return true;
+	}
+	bool ready = s_MicClockRates[step] ? s_Codec.MicrophoneClockOnly(s_MicClockRates[step]) != 0 : s_Codec.MicrophoneClock(false);
+
+	if (ready)
+	{
+		s_MicClockStep = step;
+	}
+	return ready;
+}
+
 static void PrepareOutput(unsigned Frames)
 {
 	if (!AUDIO_LOOPBACK_MIC_ENABLE || !AUDIO_LOOPBACK_MIC_FORWARD)
@@ -362,14 +396,20 @@ static void DrawLevel()
 		label = "MIC CLK ON ZERO";
 	}
 
+	if (stage == AUDIO_STAGE_MIC && AUDIO_LOOPBACK_MIC_ENABLE && !AUDIO_LOOPBACK_MIC_FORWARD && AUDIO_LOOPBACK_CLOCK_ONLY)
+	{
+		label = s_MicClockLabels[s_MicClockStep];
+	}
+
 	// Snapshot text only. ServiceDisplay sends one row after servicing audio.
 	snprintf(s_DisplayText[0], sizeof(s_DisplayText[0]), "%-20s", label);
 	snprintf(s_DisplayText[1], sizeof(s_DisplayText[1]), "L/R mismatches %-6u", s_PairMismatches);
 	snprintf(s_DisplayText[2], sizeof(s_DisplayText[2]), "Peak %s%u.%u dBFS   ", db < 0 ? "-" : "", magnitude / 10, magnitude % 10);
 	snprintf(s_DisplayText[3], sizeof(s_DisplayText[3]), "Frames %-13lu", (unsigned long)s_Frames);
-	s_DisplayRow = stage != s_LastStage || s_MicClockRestored != s_LastMicClockRestored ? 0 : 1;
+	s_DisplayRow = stage != s_LastStage || s_MicClockRestored != s_LastMicClockRestored || s_MicClockStep != s_LastMicClockStep ? 0 : 1;
 	s_LastStage = stage;
 	s_LastMicClockRestored = s_MicClockRestored;
+	s_LastMicClockStep = s_MicClockStep;
 	s_Peak = 0;
 	s_PairMismatches = 0;
 }
@@ -529,6 +569,8 @@ static bool HardwareInit()
 	s_TestMuted = false;
 	s_MicClockRestored = false;
 	s_LastMicClockRestored = false;
+	s_MicClockStep = 0;
+	s_LastMicClockStep = 0;
 	s_DisplayOff = false;
 	s_DisplayTestDone = false;
 	s_LastSample = s_Clock.mSecond();
@@ -559,7 +601,7 @@ static const char *AudioErrorText(uint32_t Now)
 		case AUDIO_ERROR_CODEC:
 			return "Codec mute failed";
 		case AUDIO_ERROR_MIC_CLOCK:
-			return "Mic clock restore failed";
+			return "Mic clock setup failed";
 		case AUDIO_ERROR_DISPLAY:
 			return "OLED enable failed";
 		default:
@@ -593,6 +635,10 @@ int main()
 			{
 				s_AudioError = AUDIO_ERROR_MIC_CLOCK;
 			}
+		}
+		if (s_AudioError == AUDIO_ERROR_NONE && !UpdateMicrophoneClock())
+		{
+			s_AudioError = AUDIO_ERROR_MIC_CLOCK;
 		}
 		const char *error = AudioErrorText(now);
 

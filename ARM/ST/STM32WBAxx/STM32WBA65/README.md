@@ -1217,8 +1217,14 @@ Wm8904::MicrophoneClockOnly disables DMIC capture and both ADCs, then drives
 GPIO1 with independent OPCLK: the 4 MHz SYSCLK divided by two. Register
 read-back checks the capture, ADC, clock divider, clock enable and GPIO
 settings. The DAC and headphones remain enabled. After the startup phases,
-headphone PCM stays zero and the OLED shows `CAP OFF CLK 2MHz`. There is no
-automatic clock transition in this mode. Input peak is not an acoustic level
+headphone PCM stays zero. The clock repeats 2 MHz, 1 MHz, approximately
+667 kHz, and off, holding each step for eight seconds. The first eight-second
+step starts after the five-second startup sequence. OLED labels are
+`CAP OFF CLK 2MHz`, `CAP OFF CLK 1MHz`, `CAP OFF CLK 667kHz` and
+`CAP OFF CLK OFF`. The off step holds GPIO1 low; the independent OPCLK
+continues internally. SYSCLK, I2S rate, DAC and headphone settings stay fixed.
+Compare steady buzz pitch and level after each transition; a brief transition
+click is separate from the steady noise. Input peak is not an acoustic level
 with capture disabled. This checks codec capture off with the external
 microphone still powered and clocked; it does not disconnect microphone power.
 The clock frequency is derived from the programmed divider, not measured on
@@ -1307,7 +1313,10 @@ crystal reference did not remove it. Inverting the captured microphone PCM
 also made no audible difference. Register-controlled charge-pump operation
 did not remove the buzz either. Disabling MICBIAS did not remove it. The
 current comparison disables codec capture while maintaining an independent
-2 MHz microphone clock; its audible result still awaits the board test.
+2 MHz microphone clock. The maintainer confirmed that the buzz remains in
+that mode. Codec capture and ADC processing are therefore not required for
+the buzz. The current repeating frequency/off comparison awaits the board test;
+it does not yet distinguish clock coupling from activity in the powered mic.
 
 This exercises simultaneous RX and TX DMA through the same generic I2S
 interface. Board mapping combines PC5 AF13 receive with PD5 AF13 transmit;
