@@ -3,7 +3,7 @@
 STM32G474 has a library project, `STM32G474/lib/ioc`, and UART and timer
 example projects for the NUCLEO-G474RE (2026-10-13). Startup, GPIO, UART and
 timers (LPTIM1 and the TIM) are implemented, the minimum for a supported
-MCU. Not tested on hardware yet.
+MCU. Tested on the NUCLEO-G474RE, see Hardware results.
 Other G4 parts need their own library project; the shared sources take the
 G4 device headers in `include/`.
 
@@ -119,6 +119,22 @@ the ST-LINK virtual COM port, LPUART1 at 115200 8N1, in Release.
 `TIMER_DEMO_DEVNO` in `board.h` selects the timer, LPTIM1 by default, from the LSE crystal, 100 ms per
 trigger 0 event (3277 ticks, 100.006 ms). The TIM run at 100 kHz, a four
 channel TIM prints triggers 0 to 3: 100 ms, 1 s, 250 ms and 500 ms.
+
+## Hardware results
+
+NUCLEO-G474RE, 2026-10-19, core at 170 MHz from HSI16, LPUART1 on the
+ST-LINK virtual COM port at 1 Mbaud from HSI16.
+
+- Blinky: LD2 blinks, B1 (active high, EXTI line 13) stops it.
+- UartPrbsTxTest, Release, `Python/uartprbs_rx.py`: interrupts and DMA
+  99.5 kB/s, interrupts 100.02 kB/s, polling 100.02 kB/s, DMA without
+  interrupts 99.25 kB/s. No loss after the script syncs: the drop counts of
+  the interrupt (1) and polling (8) runs happen once at the start and do not
+  grow. 100.02 kB/s is within 0.02 percent of the 1 Mbaud line rate.
+- UartLoopback, Release, `Python/uartprbs_lb.py` (window 128): polling, DMA
+  without interrupts, interrupts with DMA and interrupts without DMA all
+  echo about 69 kB/s with 0 errors. The window is nearly always full: the
+  rate is the round trip of the ST-LINK virtual COM port, not the MCU.
 
 ## Validation
 
