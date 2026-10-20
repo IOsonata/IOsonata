@@ -18,6 +18,10 @@ buffer for a receive). A transmit that keeps the bus for a following receive
 Master without EasyDMA and bIntEn : the interrupt handler moves one byte per
 READY event and ends the transfer the same way.
 
+A transmit of up to NRFX_SPI_TXBUF_SIZE bytes is sent from a copy, so the
+caller's buffer may be released as soon as TxData returns. A longer transmit
+waits for its end before TxData returns.
+
 @author	Hoang Nguyen Hoan
 @date	Oct. 6, 2016
 
@@ -175,14 +179,37 @@ alignas(4) nRFSpiDev_t g_nRFxSPIDev[NRFX_SPI_MAXDEV] = {
 
 static const int s_NbnRFxSPIDev = sizeof(g_nRFxSPIDev) / sizeof(nRFSpiDev_t);
 
-#ifdef NRF54L_SERIES
 // Allow at least one CPU cycle per polling iteration for the wire time.
 static uint32_t nRFxSPIDmaTimeout(int Length, uint32_t Rate)
 {
 	uint64_t cycles = (uint64_t)SystemCoreClock * Length * 8 / Rate + NRFSPI_TIMEOUT;
 	return cycles > INT32_MAX ? INT32_MAX : (uint32_t)cycles;
 }
-#endif
+
+// Start an interrupt driven transmit. Up to NRFX_SPI_TXBUF_SIZE bytes are
+// sent from a copy and the call returns at once. A longer transmit is sent
+// from the caller's buffer and the call waits for its end, the completion is
+// reported the same way.
+static const uint8_t *nRFxSPIAsyncTxBuff(nRFSpiDev_t * const pDev, const uint8_t *pData, int DataLen)
+{
+	if (DataLen <= NRFX_SPI_TXBUF_SIZE)
+	{
+		memcpy(pDev->TxBuf, pData, DataLen);
+
+		return pDev->TxBuf;
+	}
+
+	return pData;
+}
+
+static void nRFxSPIAsyncTxWait(nRFSpiDev_t * const pDev, int DataLen)
+{
+	if (DataLen > NRFX_SPI_TXBUF_SIZE)
+	{
+		DeviceIntrfWaitTxComplete(&pDev->pSpiDev->DevIntrf,
+								  nRFxSPIDmaTimeout(DataLen, pDev->pSpiDev->Cfg.Rate));
+	}
+}
 
 #ifdef SPIM_PRESENT
 bool nRFxSPIWaitDMA(nRFSpiDev_t * const pDev, uint32_t Timeout)
@@ -689,14 +716,15 @@ int nRFxSPITxData(DevIntrf_t *pDev, const uint8_t *pData, int DataLen)
 		// The interrupt handler writes each byte. At the end it sets
 		// bTxReady, then releases the bus and reports DEVINTRF_EVT_COMPLETED,
 		// or keeps the bus when bNoStop is set.
-		dev->pTxData = pData;
+		dev->pTxData = nRFxSPIAsyncTxBuff(dev, pData, DataLen);
 		dev->TxDatalen = DataLen;
 		dev->TxIdx = 0;
 		dev->RxBufflen = 0;
 		dev->pReg->EVENTS_READY = 0;
-		dev->pReg->TXD = *pData;
+		dev->pReg->TXD = dev->pTxData[0];
 		dev->TxIdx++;
 		dev->TxDatalen--;
+		nRFxSPIAsyncTxWait(dev, DataLen);
 
 		return -1;
 	}
@@ -762,11 +790,12 @@ int nRFxSPITxDataDma(DevIntrf_t * const pDev, const uint8_t *pData, int DataLen)
 		// The interrupt handler moves through the DMA blocks, releases the
 		// bus and reports DEVINTRF_EVT_COMPLETED.
 		pDev->bTxReady = false;
-		dev->pTxData = pData;
+		dev->pTxData = nRFxSPIAsyncTxBuff(dev, pData, DataLen);
 		dev->TxIdx = 0;
 		dev->RxBufflen = 0;
 		dev->TxDatalen = DataLen;
 		nRFxSPIDmaNextBlock(dev);
+		nRFxSPIAsyncTxWait(dev, DataLen);
 
 		return -1;
 	}

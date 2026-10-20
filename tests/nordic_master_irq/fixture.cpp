@@ -113,6 +113,11 @@ extern "C" unsigned address(unsigned bus, unsigned dev)
 	return bus ? (unsigned)g_nRFxSPIDev[dev].pDmaReg : (unsigned)s_nRFxI2CDev[dev].pDmaReg;
 }
 extern "C" const unsigned dma_max = NRFX_SPI_DMA_MAXCNT;
+extern "C" const unsigned txbuf_size[] = { NRFX_I2C_TXBUF_SIZE, NRFX_SPI_TXBUF_SIZE };
+extern "C" unsigned txbuf_address(unsigned bus, unsigned dev)
+{
+	return bus ? (unsigned)g_nRFxSPIDev[dev].TxBuf : (unsigned)s_nRFxI2CDev[dev].TxBuf;
+}
 
 // Export offsets from the real MDK instead of hand-written register layouts.
 #define OFS(type, field) offsetof(type, field)

@@ -12,6 +12,9 @@ releases it and reports DEVINTRF_EVT_COMPLETED with the number of bytes moved
 (the receive buffer for a receive). A transmit that keeps the bus for a
 following receive (bNoStop) leaves it suspended and only sets bTxReady. A bus
 error stops the transfer, the completion then reports the bytes moved so far.
+A transmit of up to NRFX_I2C_TXBUF_SIZE bytes is sent from a copy, so the
+caller's buffer may be released as soon as TxData returns. A longer transmit
+waits for its end before TxData returns.
 
 @author	Hoang Nguyen Hoan
 @date	Oct. 12, 2016
@@ -96,6 +99,14 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #define NRFX_I2C_TRBUFF_SIZE	4
 
+// Interrupt driven transmit of up to this size is sent from a copy, so that
+// the caller's buffer, such as the one DeviceIntrfWrite() builds on its
+// stack, may be gone before the transfer ends. A longer transmit waits for
+// its end before returning.
+#ifndef NRFX_I2C_TXBUF_SIZE
+#define NRFX_I2C_TXBUF_SIZE			64
+#endif
+
 // Default fifo size if one is not provided in the config.
 #define NRFX_I2C_BUFF_SIZE			8
 
@@ -125,6 +136,7 @@ typedef struct {
 	volatile int Async;		// Interrupt driven master transfer, NRFX_I2C_ASYNC_xxx
 	volatile bool bAsyncErr;// The transfer met a bus error
 	volatile bool bStopped;	// The interrupt handler has already stopped the bus
+	uint8_t TxBuf[NRFX_I2C_TXBUF_SIZE];	// Copy of an interrupt driven transmit
 } nRFTwiDev_t;
 
 #define NRFX_I2C_ASYNC_IDLE		0
@@ -197,14 +209,37 @@ alignas(4) static nRFTwiDev_t s_nRFxI2CDev[NRFX_I2C_MAXDEV] = {
 #endif
 };
 
-#ifdef NRF54L_SERIES
 // Allow at least one CPU cycle per polling iteration for the wire time.
 static uint32_t nRFxI2CDmaTimeout(int Length, uint32_t Rate)
 {
 	uint64_t cycles = (uint64_t)SystemCoreClock * Length * 10 / Rate + I2C_TIMEOUT_CNT;
 	return cycles > INT32_MAX ? INT32_MAX : (uint32_t)cycles;
 }
-#endif
+
+// Start an interrupt driven transmit. Up to NRFX_I2C_TXBUF_SIZE bytes are
+// sent from a copy and the call returns at once. A longer transmit is sent
+// from the caller's buffer and the call waits for its end, the completion is
+// reported the same way.
+static const uint8_t *nRFxI2CAsyncTxBuff(nRFTwiDev_t * const pDev, const uint8_t *pData, int DataLen)
+{
+	if (DataLen <= NRFX_I2C_TXBUF_SIZE)
+	{
+		memcpy(pDev->TxBuf, pData, DataLen);
+
+		return pDev->TxBuf;
+	}
+
+	return pData;
+}
+
+static void nRFxI2CAsyncTxWait(nRFTwiDev_t * const pDev, int DataLen)
+{
+	if (DataLen > NRFX_I2C_TXBUF_SIZE)
+	{
+		DeviceIntrfWaitTxComplete(&pDev->pI2cDev->DevIntrf,
+								  nRFxI2CDmaTimeout(DataLen, pDev->pI2cDev->Cfg.Rate));
+	}
+}
 
 bool nRFxI2CWaitStop(nRFTwiDev_t * const pDev, int Timeout)
 {
@@ -715,7 +750,7 @@ int nRFxI2CTxDataDMA(DevIntrf_t * const pDev, const uint8_t *pData, int DataLen)
 		// DEVINTRF_EVT_COMPLETED, or keeps the bus suspended when bNoStop is
 		// set, which is what DeviceIntrfRead() waits for before the receive.
 		pDev->bTxReady = false;
-		dev->pTxData = pData;
+		dev->pTxData = nRFxI2CAsyncTxBuff(dev, pData, DataLen);
 		dev->TxIdx = 0;
 		dev->TxDatalen = DataLen;
 		dev->RxBufflen = 0;
@@ -723,6 +758,7 @@ int nRFxI2CTxDataDMA(DevIntrf_t * const pDev, const uint8_t *pData, int DataLen)
 		dev->bStopped = false;
 		dev->Async = NRFX_I2C_ASYNC_TX;
 		nRFxI2CDmaNextBlock(dev);
+		nRFxI2CAsyncTxWait(dev, DataLen);
 
 		return -1;
 	}
@@ -787,7 +823,7 @@ int nRFxI2CTxData(DevIntrf_t * const pDev, const uint8_t *pData, int Datalen)
 		// bTxReady, then stops the bus and reports DEVINTRF_EVT_COMPLETED on
 		// STOPPED, or keeps the bus when bNoStop is set.
 		pDev->bTxReady = false;
-		dev->pTxData = pData;
+		dev->pTxData = nRFxI2CAsyncTxBuff(dev, pData, Datalen);
 		dev->TxIdx = 0;
 		dev->TxDatalen = Datalen;
 		dev->RxBufflen = 0;
@@ -800,7 +836,8 @@ int nRFxI2CTxData(DevIntrf_t * const pDev, const uint8_t *pData, int Datalen)
 		dev->pReg->EVENTS_STOPPED = 0;
 		dev->pReg->SHORTS = 0;
 		dev->pReg->TASKS_STARTTX = 1;
-		dev->pReg->TXD = pData[0];
+		dev->pReg->TXD = dev->pTxData[0];
+		nRFxI2CAsyncTxWait(dev, Datalen);
 
 		return -1;
 	}

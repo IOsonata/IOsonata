@@ -52,7 +52,7 @@ def call_break(name, args, brk, action):
         if not hit:
             hit.append(address)
             uc.emu_stop()
-    where = [v for k, v in symbols.items() if k.startswith('_Z%d%s' % (len(brk), brk))][0] & ~1
+    where = [v for k, v in symbols.items() if k == brk or k.startswith('_Z%d%s' % (len(brk), brk))][0] & ~1
     h = u.hook_add(UC_HOOK_CODE, code, begin=where, end=where)
     u.ctl_flush_tb()    # blocks translated earlier do not run a new hook
     setup(name, args, 0x200FF000)
@@ -153,6 +153,44 @@ def spi_finish():
 def check(cond, *info):
     assert cond, info
 
+TXBUF_SIZE = [get(symbols['txbuf_size'] + i * 4) for i in range(2)]
+TXBUF = [call('txbuf_address', bus, 0) for bus in range(2)]
+
+def transfer(bus, kind, length, maximum, finish, block_check=None):
+    """Run one interrupt transfer and its DMA blocks, return what TxData returned.
+
+    A transmit that fits the driver copy is checked to be sent from the copy:
+    the caller's buffer is overwritten as soon as the call returns. A longer
+    transmit waits in the driver, its blocks are completed from that wait."""
+    pattern = bytes((0x30 + i) & 0xFF for i in range(min(length, 4096)))
+    u.mem_write(BUF, pattern)
+    copied = kind == 'tx' and length <= TXBUF_SIZE[bus]
+    src = TXBUF[bus] if copied else BUF
+    blocks = sequence(kind, length, maximum)
+
+    def run_blocks():
+        done = 0
+        for i, n in enumerate(blocks):
+            check(len(pending) == 1 and pending[0] == (kind, src + done, n), bus, kind, length,
+                  pending, (src + done, n))
+            if block_check:
+                block_check(i, i == len(blocks) - 1)
+            check(call('busy', bus) == 1 and call('events', 0) == 0, 'released early', bus, kind, length, i)
+            finish()
+            done += n
+        check(not pending, pending)
+
+    if kind == 'tx' and not copied:
+        r = call_break(kind, (bus, length), 'DeviceIntrfWaitTxComplete', run_blocks)
+        check(call('events', 0) == 1, 'long transmit returned before its end', bus, length)
+    else:
+        r = call(kind, bus, length)
+        if copied:
+            u.mem_write(BUF, b'\x55' * len(pattern))
+            check(bytes(u.mem_read(src, len(pattern))) == pattern, 'transmit not sent from a copy', bus, length)
+        run_blocks()
+    return r
+
 def sequence(kind, total, maximum=None):
     blocks = []
     left = total
@@ -164,23 +202,12 @@ def sequence(kind, total, maximum=None):
 # ---- SPI master, interrupt and DMA
 check(call('init', 1, 0, 1, 1) == 1, 'spi init')
 active = 1
-for kind, length in [('tx', 10), ('rx', 20), ('tx', 2 * DMA_MAX + 5), ('rx', DMA_MAX + 7), ('tx', DMA_MAX)]:
+for kind, length in [('tx', 10), ('rx', 20), ('tx', 2 * DMA_MAX + 5), ('rx', DMA_MAX + 7), ('tx', DMA_MAX),
+                     ('tx', TXBUF_SIZE[1]), ('tx', TXBUF_SIZE[1] + 1)]:
     pending.clear()
     call('init', 1, 0, 1, 1)
-    r = call(kind, 1, length)
+    r = transfer(1, kind, length, DMA_MAX, spi_finish)
     check(r == -1, kind, length, 'returns', r)
-    check(call('busy', 1) == 1, 'bus released before the transfer ended')
-    blocks = sequence(kind, length)
-    done = 0
-    for i, n in enumerate(blocks):
-        check(len(pending) == 1, kind, length, 'one block at a time', pending)
-        check(pending[0] == (kind, BUF + done, n), kind, length, pending, (BUF + done, n))
-        check(call('events', 0) == 0, 'completion before the last block')
-        spi_finish()
-        done += n
-        if i < len(blocks) - 1:
-            check(call('busy', 1) == 1, 'bus released between blocks')
-    check(not pending)
     check(call('events', 0) == 1, kind, length, 'one completion event')
     check(call('events', 1) == length, kind, length, 'count', call('events', 1))
     check(call('events', 3) == (BUF if kind == 'rx' else 0), 'event buffer')
@@ -229,23 +256,18 @@ def twim_finish(amount=None, event=None, error=False):
     return kind, sh
 
 active = 0
-for kind, length in [('tx', 4), ('rx', 20), ('tx', 2 * TWIM_MAX + 5), ('rx', TWIM_MAX + 7), ('tx', TWIM_MAX)]:
+def twim_block(i, last):
+    kind = pending[0][0]
+    if kind == 'tx':
+        check(shorts[0] == (SH_TX_STOP if last else SH_TX_SUSPEND), 'i2c tx shorts', i, hex(shorts[0]))
+    else:
+        check(shorts[0] == SH_RX_STOP, 'i2c rx shorts', hex(shorts[0]))
+
+for kind, length in [('tx', 4), ('rx', 20), ('tx', 2 * TWIM_MAX + 5), ('rx', TWIM_MAX + 7), ('tx', TWIM_MAX),
+                     ('tx', TXBUF_SIZE[0]), ('tx', TXBUF_SIZE[0] + 1)]:
     twim_reset()
-    r = call(kind, 0, length)
+    r = transfer(0, kind, length, TWIM_MAX, twim_finish, twim_block)
     check(r == -1, 'i2c', kind, length, 'returns', r)
-    blocks = sequence(kind, length, TWIM_MAX)
-    done = 0
-    for i, n in enumerate(blocks):
-        last = i == len(blocks) - 1
-        check(len(pending) == 1 and pending[0] == (kind, BUF + done, n), 'i2c', kind, length, pending)
-        if kind == 'tx':
-            check(shorts[0] == (SH_TX_STOP if last else SH_TX_SUSPEND), 'i2c tx shorts', i, hex(shorts[0]))
-        else:
-            check(shorts[0] == SH_RX_STOP, 'i2c rx shorts', hex(shorts[0]))
-        check(call('busy', 0) == 1 and call('events', 0) == 0, 'i2c released early', kind, length, i)
-        twim_finish()
-        done += n
-    check(not pending, pending)
     check(actions == [], 'STOP task issued by the driver after the hardware stop', actions)
     check(call('events', 0) == 1 and call('events', 1) == length, 'i2c completion', kind, length,
           call('events', 0), call('events', 1))
@@ -294,7 +316,7 @@ for kind in ('tx', 'rx'):
           call('busy', 0), call('events', 0), call('events', 1))
     check(actions == ['stop'], 'second STOP task', actions)
     # The bus can be used again
-    check(call('tx', 0, 2) == -1 and pending == [('tx', BUF, 2)], 'transfer after an error', pending)
+    check(call('tx', 0, 2) == -1 and pending == [('tx', TXBUF[0], 2)], 'transfer after an error', pending)
     twim_finish()
     check(call('events', 0) == 2 and call('busy', 0) == 0, 'transfer after an error ended')
 
@@ -331,12 +353,15 @@ if T[0]:
 
     for length in (1, 3):
         twi_init()
+        u.mem_write(BUF, bytes(range(0x10, 0x10 + length)))
         check(call('tx', 0, length) == -1, 'twi tx')
-        check(actions == ['starttx'] and sent == [0], 'twi tx start', actions, sent)
+        u.mem_write(BUF, b'\x55' * length)  # caller buffer gone
+        check(actions == ['starttx'] and sent == [0x10], 'twi tx start', actions, sent)
         for i in range(length):
             check(call('events', 0) == 0 and call('busy', 0) == 1, 'twi tx early end')
             twi_event(7)
-        check(len(sent) == length and actions == ['starttx', 'stop'], 'twi tx stop', actions, sent)
+        check(sent == list(range(0x10, 0x10 + length)), 'twi tx bytes', sent)
+        check(actions == ['starttx', 'stop'], 'twi tx stop', actions, sent)
         check(call('busy', 0) == 1 and call('events', 0) == 0, 'twi tx released before STOPPED')
         twi_event(5)
         check(call('busy', 0) == 0 and call('tx_ready', 0) == 1, 'twi tx end')
@@ -402,6 +427,7 @@ if S[0]:
         spi_legacy_init()
         u.mem_write(BUF, bytes(range(0x10, 0x10 + length)))
         check(call('tx', 1, length) == -1, 'spi tx')
+        u.mem_write(BUF, b'\x55' * length)  # caller buffer gone
         for i in range(length):
             check(sent == list(range(0x10, 0x11 + i)), 'spi tx bytes', sent)
             check(call('events', 0) == 0 and call('busy', 1) == 1, 'spi tx early end')
