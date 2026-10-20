@@ -15,7 +15,7 @@ from unicorn import Uc, UC_ARCH_ARM, UC_MODE_THUMB, UC_MODE_MCLASS, UC_HOOK_MEM_
 from unicorn.arm_const import UC_ARM_REG_SP, UC_ARM_REG_LR, UC_ARM_REG_PC, UC_ARM_REG_R0
 
 u = Uc(UC_ARCH_ARM, UC_MODE_THUMB | UC_MODE_MCLASS)
-for base, size in [(0, 0x100000), (0x20000000, 0x100000), (0x40000000, 0x100000), (0x50000000, 0x200000), (0x50800000, 0x100000), (0xE0000000, 0x100000)]:
+for base, size in [(0, 0x100000), (0x10000000, 0x1000), (0x20000000, 0x100000), (0x40000000, 0x100000), (0x50000000, 0x200000), (0x50800000, 0x100000), (0xE0000000, 0x100000)]:
     u.mem_map(base, size)
 with open(sys.argv[1], 'rb') as f:
     elf = ELFFile(f)
@@ -69,7 +69,10 @@ def call_break(name, args, brk, action):
 o = [get(symbols['offsets'] + i * 4) for i in range(24)]
 CHIP = sys.argv[2] if len(sys.argv) > 2 else 'NRF9160_XXAA'
 T = [get(symbols['twi'] + i * 4) for i in range(16 if get(symbols['twi']) else 1)]
-S = [get(symbols['spi_legacy'] + i * 4) for i in range(6 if get(symbols['spi_legacy']) else 1)]
+S = [get(symbols['spi_legacy'] + i * 4) for i in range(9 if get(symbols['spi_legacy']) else 1)]
+if CHIP.startswith('NRF52832'):
+    put(0x10000130, 0x06)      # FICR INFO.PART, nRF52832
+    put(0x10000134, 0x05)      # FICR INFO.VARIANT, revision 3
 TWIM_MAX, SH_TX_SUSPEND, SH_TX_STOP, SH_RX_STOP, TWIM_INTEN = [get(symbols['twim'] + i * 4) for i in range(5)]
 DMA_MAX = get(symbols['dma_max'])
 BUF = call('buffer_address')
@@ -115,6 +118,12 @@ def write(uc, access, addr, size, value, data):
     if legacy == 'spi':
         if addr - BASE[1] == S[3]:
             sent.append(value & 0xFF)
+        return
+    if active == 1 and S[0] and addr - BASE[1] == S[3] and get(BASE[1] + S[6]) == S[7]:
+        # SPI (without EasyDMA) on the SPIM instance: the byte is clocked
+        sent.append(value & 0xFF)
+        put(BASE[1] + S[2], 0x5A)
+        put(BASE[1] + S[1], 1)
         return
     if active is None or value != 1:
         return
@@ -244,6 +253,27 @@ check(r == -1, 'read returns', r)
 check(pending == [('rx', BUF, 8)], pending)
 spi_finish()
 check(call('events', 0) == 1 and call('events', 1) == 8 and call('busy', 1) == 0, 'read completion')
+active = None
+
+# One byte SPIM receive on a part with anomaly 58: done by the SPI, the SPIM
+# never starts and is enabled again after.
+if S[0] and CHIP.startswith('NRF52832'):
+    active = 1
+    for irq in (0, 1):
+        pending.clear(); sent.clear()
+        call('init', 1, 0, 1, irq)
+        u.mem_write(BUF, b'\x00')
+        r = call('rx', 1, 1)
+        check(r == 1, 'one byte receive', irq, r)
+        check(not pending and sent == [0xA5], 'one byte receive on the SPIM', irq, pending, sent)
+        check(u.mem_read(BUF, 1)[0] == 0x5A, 'one byte receive data', irq)
+        check(get(BASE[1] + S[6]) == S[8], 'SPIM not enabled again', irq, get(BASE[1] + S[6]))
+        check(call('busy', 1) == 0, 'one byte receive bus', irq)
+    # Command then one byte: the command uses the SPIM, the byte the SPI
+    pending.clear(); sent.clear()
+    call('init', 1, 0, 1, 1)
+    r = call_break('read_reg', (1, 1), 'DeviceIntrfWaitTxComplete', spi_finish)
+    check(r == 1 and sent == [0xA5] and call('busy', 1) == 0, 'command then one byte', r, sent)
 active = None
 
 # ---- TWIM master, interrupt and DMA

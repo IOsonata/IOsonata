@@ -33,6 +33,9 @@ Checks cover:
 - polled TWI after TWIM transfers (nRF52832): the TXDSENT and RXDREADY events
   a TWIM transfer leaves in the shared block are cleared before the start, a
   one byte receive stops through the BB shortcut;
+- one byte SPIM receive on nRF52832 (anomaly 58): done by the SPI of the same
+  instance, the SPIM never starts and is enabled again, polled, with
+  interrupt and after a command phase;
 - polled transfers (`bIntEn = false`) are unchanged.
 
 Install Python packages `unicorn` and `pyelftools`, and provide an Arm GNU C++

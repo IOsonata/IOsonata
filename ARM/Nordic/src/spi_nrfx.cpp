@@ -58,6 +58,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "coredev/shared_intrf.h"
 
 #include "spi_nrfx.h"
+#include "nrf_erratas.h"
 
 #ifdef NRF54L_SERIES
 #define NRFX_SPI_RX(reg) ((reg)->DMA.RX)
@@ -570,6 +571,33 @@ static void nRFxSPIDmaEnd(DevIntrf_t * const pIntrf, nRFSpiDev_t * const pDev)
 }
 #endif
 
+#if defined(NRF52_SERIES) && defined(SPI_PRESENT)
+// nRF52832 anomaly 58: with RXD.MAXCNT = 1 and TXD.MAXCNT <= 1 the SPIM clocks
+// out an additional byte. As the errata proposes, a one byte receive is done
+// by the SPI, the same instance without EasyDMA, then the SPIM is enabled
+// again. The byte is returned at once, also with bIntEn.
+static int nRFxSPIRxByteNoDma(nRFSpiDev_t * const pDev, uint8_t *pBuff)
+{
+	int cnt = 0;
+
+	pDev->pDmaReg->ENABLE = (SPIM_ENABLE_ENABLE_Disabled << SPIM_ENABLE_ENABLE_Pos);
+	pDev->pReg->ENABLE = (SPI_ENABLE_ENABLE_Enabled << SPI_ENABLE_ENABLE_Pos);
+	pDev->pReg->EVENTS_READY = 0;
+	pDev->pReg->TXD = pDev->pSpiDev->Cfg.DummyByte;
+
+	if (nRFxSPIWaitReady(pDev, nRFxSPIDmaTimeout(1, pDev->pSpiDev->Cfg.Rate)))
+	{
+		*pBuff = pDev->pReg->RXD;
+		cnt = 1;
+	}
+
+	pDev->pReg->ENABLE = (SPI_ENABLE_ENABLE_Disabled << SPI_ENABLE_ENABLE_Pos);
+	pDev->pDmaReg->ENABLE = (SPIM_ENABLE_ENABLE_Enabled << SPIM_ENABLE_ENABLE_Pos);
+
+	return cnt;
+}
+#endif
+
 // Receive Data only, no Start/Stop condition
 int nRFxSPIRxDataDma(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 {
@@ -580,24 +608,10 @@ int nRFxSPIRxDataDma(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 	NRFX_SPI_TX(dev->pDmaReg).PTR = 0;
 	NRFX_SPI_TX(dev->pDmaReg).MAXCNT = 0;
 	NRFX_SPI_TX(dev->pDmaReg).LIST = 0;
-#ifdef NRF52_SERIES
-	// Anomaly 109
-	if (BuffLen < 2)
+#if defined(NRF52_SERIES) && defined(SPI_PRESENT)
+	if (BuffLen == 1 && nrf52_errata_58())
 	{
-		// The dummy start must not reach the interrupt handler
-		dev->pDmaReg->INTENCLR = SPIM_INTENCLR_END_Msk;
-		NRFX_SPI_RX(dev->pDmaReg).MAXCNT = 0;
-		NRFX_SPI_RX(dev->pDmaReg).PTR = 0;
-		NRFX_SPI_RX(dev->pDmaReg).LIST = 0;
-		dev->pDmaReg->EVENTS_STARTED = 0;
-		dev->pDmaReg->TASKS_START = 1;
-		while (dev->pDmaReg->EVENTS_STARTED == 0);
-		dev->pDmaReg->EVENTS_STARTED = 0;
-		dev->pDmaReg->EVENTS_END = 0;
-		if (pDev->bIntEn == true)
-		{
-			dev->pDmaReg->INTENSET = SPIM_INTENSET_END_Msk;
-		}
+		return nRFxSPIRxByteNoDma(dev, pBuff);
 	}
 #endif
 
@@ -762,26 +776,6 @@ int nRFxSPITxDataDma(DevIntrf_t * const pDev, const uint8_t *pData, int DataLen)
 	NRFX_SPI_RX(dev->pDmaReg).MAXCNT = 0;
 	NRFX_SPI_RX(dev->pDmaReg).LIST = 0;
 
-#ifdef NRF52_SERIES
-	// Anomaly 109
-	if (DataLen < 2)
-	{
-		// The dummy start must not reach the interrupt handler
-		dev->pDmaReg->INTENCLR = SPIM_INTENCLR_END_Msk;
-		NRFX_SPI_TX(dev->pDmaReg).MAXCNT = 0;
-		NRFX_SPI_TX(dev->pDmaReg).PTR = 0;
-		NRFX_SPI_TX(dev->pDmaReg).LIST = 0;
-		dev->pDmaReg->EVENTS_STARTED = 0;
-		dev->pDmaReg->TASKS_START = 1;
-		while (dev->pDmaReg->EVENTS_STARTED == 0);
-		dev->pDmaReg->EVENTS_STARTED = 0;
-		dev->pDmaReg->EVENTS_END = 0;
-		if (pDev->bIntEn == true)
-		{
-			dev->pDmaReg->INTENSET = SPIM_INTENSET_END_Msk;
-		}
-	}
-#endif
 	NRFX_SPI_TX(dev->pDmaReg).PTR = (uint32_t)pData;
 	NRFX_SPI_TX(dev->pDmaReg).LIST = NRFX_SPI_TX_LIST;
 

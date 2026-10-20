@@ -180,6 +180,7 @@ extern "C" const uint32_t twi[] = { 0 };
 extern "C" const uint32_t spi_legacy[] = {
 	1, OFS(NRF_SPI_Type,EVENTS_READY), OFS(NRF_SPI_Type,RXD),				// 0 1 2
 	OFS(NRF_SPI_Type,TXD), OFS(NRF_SPI_Type,INTENSET), SPI_INTENSET_READY_Msk,	// 3 4 5
+	OFS(NRF_SPI_Type,ENABLE), SPI_ENABLE_ENABLE_Enabled, SPIM_ENABLE_ENABLE_Enabled,	// 6 7 8
 };
 #else
 extern "C" const uint32_t spi_legacy[] = { 0 };
