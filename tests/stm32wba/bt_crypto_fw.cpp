@@ -52,32 +52,33 @@ SOFTWARE.
 
 #include "bt_vectors.h"
 
-extern "C" {
-void BAES_Reset(void);
-void BAES_EcbCrypt(const uint8_t *pKey, const uint8_t *pIn, uint8_t *pOut, int bEnc);
-void BAES_CmacSetKey(const uint8_t *pKey);
-void BAES_CmacCompute(const uint8_t *pIn, uint32_t Size, uint8_t *pOut);
-int BAES_CcmCrypt(uint8_t Mode, const uint8_t *pKey, uint8_t IvLen,
+extern "C" void BAES_Reset(void);
+extern "C" void BAES_EcbCrypt(const uint8_t *pKey, const uint8_t *pIn, uint8_t *pOut, int bEnc);
+extern "C" void BAES_CmacSetKey(const uint8_t *pKey);
+extern "C" void BAES_CmacCompute(const uint8_t *pIn, uint32_t Size, uint8_t *pOut);
+extern "C" int BAES_CcmCrypt(uint8_t Mode, const uint8_t *pKey, uint8_t IvLen,
 				  const uint8_t *pIv, uint16_t AddLen, const uint8_t *pAdd,
 				  uint16_t InLen, const uint8_t *pIn, uint8_t TagLen,
 				  uint8_t *pTag, uint8_t *pOut);
-void HW_RNG_Get(uint8_t n, uint32_t *pVal);
-void PKACTRL_Reset(void);
-int PKACTRL_StartP256Key(const uint32_t *pLocalPrivateKey);
-int PKACTRL_ReadP256Key(uint32_t *pLocalPublicKey);
-int PKACTRL_StartDhKey(const uint32_t *pLocalPrivateKey, const uint32_t *pRemotePublicKey);
-int PKACTRL_ReadDhKey(uint32_t *pDhKey);
+extern "C" void HW_RNG_Get(uint8_t n, uint32_t *pVal);
+extern "C" void PKACTRL_Reset(void);
+extern "C" int PKACTRL_StartP256Key(const uint32_t *pLocalPrivateKey);
+extern "C" int PKACTRL_ReadP256Key(uint32_t *pLocalPublicKey);
+extern "C" int PKACTRL_StartDhKey(const uint32_t *pLocalPrivateKey, const uint32_t *pRemotePublicKey);
+extern "C" int PKACTRL_ReadDhKey(uint32_t *pDhKey);
 
 // Hooked by the emulator
-void BtFwArm(int BlockNo) __attribute__((noinline));
-void BtFwTrap(void) __attribute__((noinline));
-void CryptoFwConsole(const char *pStr, int Len) __attribute__((noinline));
-void CryptoFwDone(void) __attribute__((noinline));
+extern "C" void BtFwArm(int BlockNo) __attribute__((noinline));
+extern "C" void BtFwTrap(void) __attribute__((noinline));
+extern "C" void CryptoFwConsole(const char *pStr, int Len) __attribute__((noinline));
+extern "C" void CryptoFwDone(void) __attribute__((noinline));
 
+extern "C" volatile int32_t g_CryptoFwResult;
 volatile int32_t g_CryptoFwResult = -1000;
 // Written by the emulator: number of preemptions it made
+extern "C" volatile int32_t g_Preempts;
 volatile int32_t g_Preempts = 0;
-}
+
 
 //----------------------------------------------------------------------------
 // Stubs of what the platform file takes from the rest of the system

@@ -1,11 +1,47 @@
-// Execute the production Nvm and target port under the register model.
+/**-------------------------------------------------------------------------
+@file	checks.cpp
+
+@brief	Data EEPROM and data flash checks of the STM32L152 and RA4M1 Nvm ports.
+
+Execute the production Nvm and target port under the register model.
+
+@author	Hoang Nguyen Hoan
+@date	Oct. 19, 2026
+
+@license
+
+MIT License
+
+Copyright (c) 2026, I-SYST inc., all rights reserved
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+----------------------------------------------------------------------------*/
+
 #include <string.h>
 #include <stddef.h>
 #include "storage/nvm_intrf.h"
 #ifdef RA4M1
 #include "ra4m1xxx.h"
 extern "C" uint32_t SystemFlashClockGet(void) { return 24000000; }
-extern "C" { uint32_t SystemMicroSecLoopCnt = 3; }
+extern "C" uint32_t SystemMicroSecLoopCnt;
+uint32_t SystemMicroSecLoopCnt = 3;
 #define REG(member) (uintptr_t)&R_FACI_LP->member
 extern "C" const uintptr_t g_Regs[] = {
 	REG(FENTRYR), REG(FPMCR), REG(FPR), REG(FISR), REG(FCR),
