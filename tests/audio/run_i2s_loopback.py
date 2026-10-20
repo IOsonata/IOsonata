@@ -8,13 +8,13 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[2]
 
 with tempfile.TemporaryDirectory(prefix='i2s-loopback-') as temp:
-    for opt in ('-O0', '-Os'):
+    for opt, mic in ((opt, mic) for opt in ('-O0', '-Os') for mic in (0, 1)):
         exe = Path(temp) / 'loopback'
         flags = ['-std=gnu++23', opt, '-Wall', '-Wextra', '-Werror',
                  '-Wno-overloaded-virtual', '-Wno-missing-field-initializers',
                  '-ffunction-sections', '-fdata-sections', '-Wl,--gc-sections',
                  '-fsanitize=address,undefined', '-fno-omit-frame-pointer',
-                 '-DSTM32WBA65xx']
+                 '-DSTM32WBA65xx', f'-DAUDIO_LOOPBACK_MIC_ENABLE={mic}']
         flags += ['-I' + str(ROOT / p) for p in
                   ('tests/display/hostport', 'include', 'ARM/ST/include',
                    'ARM/ST/STM32WBAxx/STM32WBA65/exemples/I2sLoopbackDemo/src')]
@@ -26,4 +26,4 @@ with tempfile.TemporaryDirectory(prefix='i2s-loopback-') as temp:
         subprocess.run([os.environ.get('CXX', 'g++'), *flags,
                         *[str(ROOT / p) for p in sources], str(font), '-o', str(exe)], check=True)
         subprocess.run([str(exe)], check=True)
-        print(opt + ': I2S loopback checks passed', flush=True)
+        print(f'{opt}, mic={mic}: I2S loopback checks passed', flush=True)

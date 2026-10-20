@@ -1199,6 +1199,14 @@ python3 tests/audio/run_i2s_tone.py
 
 ## Live microphone to headphones loopback
 
+The current noise isolation build defaults `AUDIO_LOOPBACK_MIC_ENABLE` to 0.
+It configures the codec with MicInput = 0, disabling microphone capture and
+the microphone clock. After the startup tone, zero PCM and DAC mute phases,
+it sends zero PCM continuously and labels the screen `MIC OFF - ZERO PCM`.
+The OLED stays on; headphone gain and audio clocks retain the loopback settings.
+The microphone supply is not physically disconnected. Define
+`AUDIO_LOOPBACK_MIC_ENABLE=1` to restore the live loopback described below.
+
 Import `exemples/I2sLoopbackDemo/ioc` and rebuild the matching library and
 example. Connect headphones to the onboard audio jack and speak near the
 onboard microphone. The WM8904 digitizes the microphone, I2S receives the
@@ -1233,8 +1241,9 @@ The maintainer heard the startup tone, reported hiss during zero-sample
 playback, and confirmed zero L/R mismatches. The microphone peak varies but
 does not track sound volume; intelligible loopback is not yet validated.
 The maintainer reports that DAC mute does not affect the noise and that it
-appears when the display starts. The OLED power comparison remains pending
-on the board; display or power coupling is a hypothesis, not a confirmed cause.
+appears when the display starts. Turning off the OLED and its charge pump
+did not remove the buzz on the board. The microphone-off comparison is
+awaiting a board retest.
 
 This exercises simultaneous RX and TX DMA through the same generic I2S
 interface. Board mapping combines PC5 AF13 receive with PD5 AF13 transmit;

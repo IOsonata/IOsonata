@@ -48,6 +48,12 @@ SOFTWARE.
 #include "idelay.h"
 #include "board.h"
 
+// Disable microphone capture and its clock for the noise isolation test.
+// Define as 1 to restore live microphone forwarding and the OLED power test.
+#ifndef AUDIO_LOOPBACK_MIC_ENABLE
+#define AUDIO_LOOPBACK_MIC_ENABLE 0
+#endif
+
 enum AudioError_t
 {
 	AUDIO_ERROR_NONE,
@@ -122,7 +128,7 @@ static bool s_DisplayOff;
 static bool s_DisplayTestDone;
 static uint32_t s_DisplayOffSince;
 static const char *const s_StageNames[] = {
-	"MIC -> HEADPHONES",
+	AUDIO_LOOPBACK_MIC_ENABLE ? "MIC -> HEADPHONES" : "MIC OFF - ZERO PCM",
 	"DAC muted",
 	"Zero PCM",
 	"Duplex tone 1 kHz"
@@ -238,6 +244,10 @@ static bool UpdateOutputMute()
 
 static void PrepareOutput(unsigned Frames)
 {
+	if (!AUDIO_LOOPBACK_MIC_ENABLE)
+	{
+		memset(s_Samples, 0, Frames * 2 * sizeof(s_Samples[0]));
+	}
 	for (unsigned frame = 0; frame < Frames && s_TestRemaining; frame++)
 	{
 		int16_t value = 0;
@@ -343,7 +353,7 @@ static bool ServiceDisplay(bool AudioProgressed, uint32_t Now)
 		DrawLevel();
 		return true;
 	}
-	if (!s_DisplayTestDone && OutputStage() == AUDIO_STAGE_MIC)
+	if (AUDIO_LOOPBACK_MIC_ENABLE && !s_DisplayTestDone && OutputStage() == AUDIO_STAGE_MIC)
 	{
 		// Compare live audio with the OLED panel and charge pump disabled.
 		s_Lcd.Disable();
@@ -421,7 +431,7 @@ static bool HardwareInit()
 		.MClkFreq = ((I2SDev_t *)s_Audio)->MClkFreq,
 		.SampleWidth = I2SSWIDTH_16BITS,
 		.Format = I2SFMT_NORMAL,
-		.MicInput = AUDIO_MIC_INPUT,
+		.MicInput = AUDIO_LOOPBACK_MIC_ENABLE ? AUDIO_MIC_INPUT : 0,
 		.Gain = 18000,
 		.bHeadphoneEn = true,
 		.HeadphoneGain = -12000
