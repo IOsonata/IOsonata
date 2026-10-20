@@ -1314,6 +1314,40 @@ void Stm32UsbOtgInterrupt(void)
 	}
 	USB_OTG_GlobalTypeDef *reg = s_Usb.pReg;
 	uint32_t status = reg->GINTSTS & reg->GINTMSK;
+	// Data-IN completion is the steady transmit path. Rearm from the owner
+	// callback before spending time on bus/OUT handling. EP0 stays on the
+	// full path so a received SETUP always supersedes its old completion.
+	if (status == USB_OTG_GINTSTS_IEPINT && s_Usb.RxReady == 0 && !s_Usb.SetupPending)
+	{
+		uint32_t pending = Device()->DAINT & Device()->DAINTMSK;
+		if ((pending & 0xFFFF0001U) == 0)
+		{
+			pending &= (1U << USB_EP_COUNT) - 1U;
+			while (pending != 0)
+			{
+				const unsigned ep = __builtin_ctz(pending);
+				pending &= pending - 1;
+				// Earlier callbacks may close or reconfigure another endpoint.
+				if ((Device()->DAINTMSK & (1U << ep)) == 0)
+				{
+					continue;
+				}
+				const uint32_t bits = In(ep)->DIEPINT & Device()->DIEPMSK;
+				In(ep)->DIEPINT = bits;
+				if ((bits & USB_OTG_DIEPINT_XFRC) != 0)
+				{
+					Complete(ep, true, false);
+				}
+				if (!s_Usb.Started)
+				{
+					return;
+				}
+			}
+			// Events arriving during callbacks remain asserted and retrigger
+			// the vector. Do not acknowledge a new transfer's status here.
+			return;
+		}
+	}
 	const uint32_t bus = status & (USB_OTG_GINTSTS_USBRST | USB_OTG_GINTSTS_ENUMDNE |
 		USB_OTG_GINTSTS_USBSUSP | USB_OTG_GINTSTS_WKUINT |
 		USB_OTG_GINTSTS_SRQINT | USB_OTG_GINTSTS_OTGINT);
