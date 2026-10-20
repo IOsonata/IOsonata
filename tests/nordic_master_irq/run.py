@@ -11,7 +11,7 @@ electrical signalling, bus timing or hardware errata.
 import struct
 import sys
 from elftools.elf.elffile import ELFFile
-from unicorn import Uc, UC_ARCH_ARM, UC_MODE_THUMB, UC_MODE_MCLASS, UC_HOOK_MEM_WRITE, UC_HOOK_CODE
+from unicorn import Uc, UC_ARCH_ARM, UC_MODE_THUMB, UC_MODE_MCLASS, UC_HOOK_MEM_WRITE, UC_HOOK_MEM_READ, UC_HOOK_CODE
 from unicorn.arm_const import UC_ARM_REG_SP, UC_ARM_REG_LR, UC_ARM_REG_PC, UC_ARM_REG_R0
 
 u = Uc(UC_ARCH_ARM, UC_MODE_THUMB | UC_MODE_MCLASS)
@@ -83,19 +83,33 @@ polled = False      # model hardware that finishes by itself, for bIntEn false
 legacy = None      # 'twi' selects the TWI model, without EasyDMA
 sent = []          # bytes written to TXD
 
+at_start = []      # TXDSENT, RXDREADY and SHORTS seen by STARTTX and STARTRX
+
 def legacy_write(addr, value):
     offset = addr - BASE[0]
     if offset == T[10]:
         sent.append(value & 0xFF)
+        if legacy == 'twi_polled':
+            put(BASE[0] + T[7], 1)     # TXDSENT for the byte just written
         return
     if value != 1:
         return
     name = {T[1]: 'startrx', T[2]: 'starttx', T[3]: 'stop', T[4]: 'resume'}.get(offset)
     if name:
         actions.append(name)
+    if legacy == 'twi_polled':
+        if name in ('starttx', 'startrx'):
+            at_start.append((get(BASE[0] + T[7]), get(BASE[0] + T[6]), get(BASE[0] + T[11])))
+        if name == 'stop':
+            put(BASE[0] + T[5], 1)     # STOPPED
+
+def legacy_read(uc, access, addr, size, value, data):
+    # Polled TWI receive: a byte is always ready
+    if legacy == 'twi_polled' and addr == BASE[0] + T[6]:
+        put(addr, 1)
 
 def write(uc, access, addr, size, value, data):
-    if legacy == 'twi':
+    if legacy in ('twi', 'twi_polled'):
         legacy_write(addr, value)
         return
     if legacy == 'spi':
@@ -135,6 +149,7 @@ def write(uc, access, addr, size, value, data):
             put(base + o[9], 1)
 
 u.hook_add(UC_HOOK_MEM_WRITE, write)
+u.hook_add(UC_HOOK_MEM_READ, legacy_read)
 
 def isr(bus):
     call('isr', bus, 0, sp=0x200F0000)
@@ -407,6 +422,21 @@ if T[0]:
     check(actions == ['starttx', 'resume', 'stop'], 'twi error stop', actions)
     twi_event(5)
     check(call('events', 0) == 1 and call('events', 1) == 1 and call('busy', 0) == 0, 'twi error end')
+
+    # Polled TWI after TWIM transfers: TWI and TWIM are one block, the events
+    # a TWIM transfer leaves must not count for the TWI.
+    legacy = 'twi_polled'
+    for kind, length in (('tx', 3), ('rx', 3), ('rx', 1)):
+        check(call('init', 0, 0, 0, 0) == 1, 'polled twi init')
+        actions.clear(); sent.clear(); at_start.clear()
+        put(base + T[7], 1)            # stale TXDSENT
+        put(base + T[6], 1)            # stale RXDREADY
+        r = call(kind, 0, length)
+        check(r == length, 'polled twi', kind, length, r)
+        check(len(at_start) == 1 and at_start[0][0 if kind == 'tx' else 1] == 0,
+              'polled twi stale event at start', kind, length, at_start)
+        if kind == 'tx':
+            check(actions == ['starttx', 'resume', 'stop'], 'polled twi tx', actions)
     legacy = None
 
 # ---- SPI master without EasyDMA, interrupt

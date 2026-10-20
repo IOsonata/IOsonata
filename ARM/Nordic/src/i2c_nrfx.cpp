@@ -653,6 +653,8 @@ int nRFxI2CRxData(DevIntrf_t *pDev, uint8_t *pBuff, int Bufflen)
 	else
 	{
 		dev->pReg->SHORTS = 0;
+		dev->pReg->EVENTS_RXDREADY = 0;
+		dev->pReg->EVENTS_ERROR = 0;
 		dev->pReg->EVENTS_STOPPED = 0;
 		dev->pReg->TASKS_STARTRX = 1;
 
@@ -843,7 +845,12 @@ int nRFxI2CTxData(DevIntrf_t * const pDev, const uint8_t *pData, int Datalen)
 	}
 	else
 	{
+		// TWI and TWIM are one block: events left by a TWIM transfer are seen
+		// here. A stale TXDSENT would end each wait one byte early and the
+		// STOP would cut the last byte.
 		dev->pReg->SHORTS = 0;
+		dev->pReg->EVENTS_TXDSENT = 0;
+		dev->pReg->EVENTS_ERROR = 0;
 		dev->pReg->EVENTS_STOPPED = 0;
 		dev->pReg->TASKS_STARTTX = 1;
 

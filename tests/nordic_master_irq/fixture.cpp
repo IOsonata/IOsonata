@@ -81,7 +81,7 @@ extern "C" int init(unsigned bus, unsigned dev, unsigned dma, unsigned irq)
 		I2CCfg_t cfg = {};
 		cfg.DevNo = dev; cfg.Mode = I2CMODE_MASTER;
 		cfg.pIOPinMap = pins; cfg.NbIOPins = 2; cfg.Rate = 400000;
-		cfg.bDmaEn = dma; cfg.bIntEn = irq; cfg.EvtCB = Event;
+		cfg.bDmaEn = dma; cfg.bIntEn = irq; cfg.EvtCB = Event; cfg.MaxRetry = 5;
 		return I2CInit(&i2c, &cfg);
 	}
 	SPICfg_t cfg = {};
