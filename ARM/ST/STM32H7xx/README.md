@@ -224,8 +224,24 @@ separate 512 KiB RAM2 region. D2 SRAM and SRAM4 are not allocated by this linker
 script. SystemInit enables the Cortex-M7 instruction cache for flash execution;
 data cache remains disabled. Ethernet descriptors and frame buffers use a
 separate `.eth_dma` section in AXI SRAM, with explicit cache maintenance when
-enabled. General-purpose DMA1/2 is not supported; DTCM must not be assumed
-accessible to those controllers.
+enabled. The shared `dma_stm32.cpp` manager supports all 16 DMA1/2 streams and DMAMUX1
+peripheral routing. It uses direct mode with byte, half-word or word transfers,
+exclusive ownership, per-stream callbacks, completion/error flags and bounded
+disable waits. Use `STM32_DMA_STREAM(controller, stream)` with controller 1/2
+and stream 0-7. BDMA, MDMA, circular/double-buffer transfers and DMAMUX request
+generators/synchronization are not provided by this manager.
+
+H753 UART DMA is still not connected to this manager; UART DMA configuration
+continues to fail explicitly. The successful UART benchmarks used interrupt
+mode with DMA off. I2C/SPI DMA integration also remains pending. DMA buffers
+must be in accessible SRAM, such as AXI SRAM, rather than the default DTCM.
+The manager rejects ITCM/DTCM buffers. The owning driver must use non-cacheable
+buffers or perform TX clean and RX invalidation with exclusive cache lines.
+
+`python3 tests/stm32h7/run_dma.py` tests the compiled Arm manager against modeled
+registers: all streams, routing, widths, direction, remaining counts, interrupt
+vectors, flags, ownership, rejected buffers and disable timeout. The manager
+compiles at -O0 and -O3 for H753 and L476. Hardware DMA transfers remain untested.
 
 ## Device numbers
 
@@ -250,7 +266,7 @@ LPTIM is not yet exposed. `TimerGetLowFreqDevCount()` returns 0.
 
 ## Limits and validation
 
-I2C, SPI, CAN, ADC/DAC, PWM and general-purpose DMA
+I2C, SPI, CAN, ADC/DAC and PWM
 are not implemented by this port. Unsupported UART DMA configuration returns
 false. The single library project includes the core device, UART, timer,
 application event and logging sources needed by these examples.

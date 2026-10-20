@@ -1,10 +1,10 @@
 /**-------------------------------------------------------------------------
 @file	dma_stm32.cpp
 
-@brief	STM32 DMA channel manager, DMA controllers made of channels
+@brief	STM32 DMA channel and stream manager
 
 		See dma_stm32.h. The manager owns the DMA1 and DMA2 channel interrupt
-		vectors of the L4 and L4+ parts and gives each channel to one driver
+		vectors of L4/L4+ and stream vectors of H753 and gives each channel to one driver
 		at a time.
 
 @author	Hoang Nguyen Hoan
@@ -40,9 +40,14 @@ SOFTWARE.
 
 #include "dma_stm32.h"
 
+#if defined(STM32H753xx)
+#define STM32_DMA_ISR_TC			0x20U
+#define STM32_DMA_ISR_TE			0x0DU // FEIF, DMEIF and TEIF
+#else
 // TC and TE of the group of 4 flags of a channel in ISR, GIF is bit 0
 #define STM32_DMA_ISR_TC			2U
 #define STM32_DMA_ISR_TE			8U
+#endif
 
 typedef struct {
 	Stm32DmaChHandler_t Handler;
@@ -54,6 +59,35 @@ static Stm32DmaSlot_t s_Stm32DmaSlot[STM32_DMA_NBCH];
 static uint32_t s_Stm32DmaLatch[STM32_DMA_NBCH];	// flags taken by Stm32DmaChAck
 static uint8_t s_Stm32DmaWidth[STM32_DMA_NBCH];		// transfer width, log2 of bytes
 
+#if defined(STM32H753xx)
+static DMA_Stream_TypeDef * const s_Stm32DmaCh[STM32_DMA_NBCH] = {
+	DMA1_Stream0, DMA1_Stream1, DMA1_Stream2, DMA1_Stream3,
+	DMA1_Stream4, DMA1_Stream5, DMA1_Stream6, DMA1_Stream7,
+	DMA2_Stream0, DMA2_Stream1, DMA2_Stream2, DMA2_Stream3,
+	DMA2_Stream4, DMA2_Stream5, DMA2_Stream6, DMA2_Stream7,
+};
+static const IRQn_Type s_Stm32DmaIrq[STM32_DMA_NBCH] = {
+	DMA1_Stream0_IRQn, DMA1_Stream1_IRQn, DMA1_Stream2_IRQn, DMA1_Stream3_IRQn,
+	DMA1_Stream4_IRQn, DMA1_Stream5_IRQn, DMA1_Stream6_IRQn, DMA1_Stream7_IRQn,
+	DMA2_Stream0_IRQn, DMA2_Stream1_IRQn, DMA2_Stream2_IRQn, DMA2_Stream3_IRQn,
+	DMA2_Stream4_IRQn, DMA2_Stream5_IRQn, DMA2_Stream6_IRQn, DMA2_Stream7_IRQn,
+};
+
+// EN is cleared only after the current beat finishes. Do not reprogram or
+// release a stream that failed to stop. No controller reset: other owners
+// can still be using the other seven streams.
+static bool Stm32DmaDisable(int Ch)
+{
+	DMA_Stream_TypeDef *ch = s_Stm32DmaCh[Ch];
+	ch->CR &= ~DMA_SxCR_EN;
+	for (unsigned i = 0; i < 100000U; i++)
+	{
+		if ((ch->CR & DMA_SxCR_EN) == 0) { __DSB(); return true; }
+	}
+	s_Stm32DmaLatch[Ch] |= STM32_DMA_FLAG_ERR;
+	return false;
+}
+#else
 static DMA_Channel_TypeDef * const s_Stm32DmaCh[STM32_DMA_NBCH] = {
 	DMA1_Channel1, DMA1_Channel2, DMA1_Channel3, DMA1_Channel4, DMA1_Channel5, DMA1_Channel6, DMA1_Channel7,
 	DMA2_Channel1, DMA2_Channel2, DMA2_Channel3, DMA2_Channel4, DMA2_Channel5, DMA2_Channel6, DMA2_Channel7,
@@ -66,6 +100,8 @@ static const IRQn_Type s_Stm32DmaIrq[STM32_DMA_NBCH] = {
 	DMA2_Channel5_IRQn, DMA2_Channel6_IRQn, DMA2_Channel7_IRQn,
 };
 
+#endif
+
 static inline DMA_TypeDef *Stm32DmaCtrl(int Ch)
 {
 	return Ch < STM32_DMA_CTRL_NBCH ? DMA1 : DMA2;
@@ -74,12 +110,22 @@ static inline DMA_TypeDef *Stm32DmaCtrl(int Ch)
 // Position of the flag group of the channel in ISR and IFCR
 static inline uint32_t Stm32DmaShift(int Ch)
 {
+#if defined(STM32H753xx)
+	static const uint8_t shift[4] = { 0, 6, 16, 22 };
+	return shift[Ch & 3];
+#else
 	return (uint32_t)(Ch % STM32_DMA_CTRL_NBCH) * 4U;
+#endif
 }
 
 static inline uint32_t Stm32DmaIsr(int Ch)
 {
+#if defined(STM32H753xx)
+	DMA_TypeDef *dma = Stm32DmaCtrl(Ch);
+	return ((Ch & 4 ? dma->HISR : dma->LISR) >> Stm32DmaShift(Ch)) & 0x3DU;
+#else
 	return (Stm32DmaCtrl(Ch)->ISR >> Stm32DmaShift(Ch)) & 0xFU;
+#endif
 }
 
 // Controller clock on, and DMAMUX1 when the part has it
@@ -95,7 +141,7 @@ static void Stm32DmaClock(int Ch)
 // Request routed to the channel: DMAMUX1 (L4+) or CSELR (L4)
 static void Stm32DmaRoute(int Ch, uint32_t Req)
 {
-#if defined(DMAMUX1)
+#if defined(DMAMUX1) || defined(STM32H753xx)
 	// DMA1 channel n on DMAMUX1 channel n - 1, DMA2 channel n after the 7 DMA1
 	// channels
 	DMAMUX1_Channel0[Ch].CCR = Req;
@@ -107,8 +153,13 @@ static void Stm32DmaRoute(int Ch, uint32_t Req)
 #endif
 }
 
-static void Stm32DmaTake(int Ch, Stm32DmaChHandler_t Handler, void *pCtx, int IntPrio, bool bIrq)
+static bool Stm32DmaTake(int Ch, Stm32DmaChHandler_t Handler, void *pCtx, int IntPrio, bool bIrq)
 {
+#if defined(STM32H753xx)
+	Stm32DmaClock(Ch);
+	if (!Stm32DmaDisable(Ch)) { return false; }
+	s_Stm32DmaWidth[Ch] = 0xFF; // Setup must precede Start.
+#endif
 	s_Stm32DmaSlot[Ch].Handler = Handler;
 	s_Stm32DmaSlot[Ch].pCtx = pCtx;
 	s_Stm32DmaSlot[Ch].bUsed = true;
@@ -126,6 +177,7 @@ static void Stm32DmaTake(int Ch, Stm32DmaChHandler_t Handler, void *pCtx, int In
 	{
 		NVIC_DisableIRQ(s_Stm32DmaIrq[Ch]);
 	}
+	return true;
 }
 
 bool Stm32DmaChClaim(int Ch, Stm32DmaChHandler_t Handler, void *pCtx, int IntPrio, bool bIrq)
@@ -142,8 +194,7 @@ bool Stm32DmaChClaim(int Ch, Stm32DmaChHandler_t Handler, void *pCtx, int IntPri
 	if (s_Stm32DmaSlot[Ch].bUsed == false ||
 		(s_Stm32DmaSlot[Ch].Handler == Handler && s_Stm32DmaSlot[Ch].pCtx == pCtx))
 	{
-		Stm32DmaTake(Ch, Handler, pCtx, IntPrio, bIrq);
-		ok = true;
+		ok = Stm32DmaTake(Ch, Handler, pCtx, IntPrio, bIrq);
 	}
 	__set_PRIMASK(pm);
 
@@ -162,13 +213,97 @@ void Stm32DmaChFree(int Ch)
 	__disable_irq();
 	NVIC_DisableIRQ(s_Stm32DmaIrq[Ch]);
 	Stm32DmaChStop(Ch);
+#if defined(STM32H753xx)
+	if (s_Stm32DmaCh[Ch]->CR & DMA_SxCR_EN)
+	{
+		__set_PRIMASK(pm);
+		return;
+	}
+	s_Stm32DmaCh[Ch]->CR = 0;
+	DMAMUX1_Channel0[Ch].CCR = 0;
+#else
 	s_Stm32DmaCh[Ch]->CCR = 0;
+#endif
 	s_Stm32DmaSlot[Ch].Handler = NULL;
 	s_Stm32DmaSlot[Ch].pCtx = NULL;
 	s_Stm32DmaSlot[Ch].bUsed = false;
 	__set_PRIMASK(pm);
 }
 
+#if defined(STM32H753xx)
+void Stm32DmaChSetup(int Ch, uint32_t Req, bool bToPeriph, volatile void *pPeriph, int WidthLog2, bool bIrq)
+{
+	DMA_Stream_TypeDef *ch = s_Stm32DmaCh[Ch];
+	if (!Stm32DmaDisable(Ch)) { return; }
+	Stm32DmaChClear(Ch);
+	s_Stm32DmaWidth[Ch] = 0xFF;
+	// Peripheral requests only; no request-generator or synchronization mode.
+	if (WidthLog2 < 0 || WidthLog2 > 2 || Req < 9 || Req > 115 ||
+		pPeriph == NULL || ((uintptr_t)pPeriph & ((1U << WidthLog2) - 1U)))
+	{
+		s_Stm32DmaLatch[Ch] = STM32_DMA_FLAG_ERR;
+		return;
+	}
+	Stm32DmaRoute(Ch, Req);
+	s_Stm32DmaWidth[Ch] = (uint8_t)WidthLog2;
+	ch->PAR = (uint32_t)(uintptr_t)pPeriph;
+	ch->FCR = 0; // Direct mode, single beats; NDTR counts peripheral items.
+	ch->CR = ((uint32_t)WidthLog2 << DMA_SxCR_PSIZE_Pos) |
+		((uint32_t)WidthLog2 << DMA_SxCR_MSIZE_Pos) | DMA_SxCR_MINC |
+		(bToPeriph ? DMA_SxCR_DIR_0 : 0U) |
+		(bIrq ? DMA_SxCR_TCIE | DMA_SxCR_TEIE | DMA_SxCR_DMEIE : 0U);
+}
+
+void Stm32DmaChMemInc(int Ch, bool bInc)
+{
+	if (!Stm32DmaDisable(Ch)) { return; }
+	if (bInc) { s_Stm32DmaCh[Ch]->CR |= DMA_SxCR_MINC; }
+	else { s_Stm32DmaCh[Ch]->CR &= ~DMA_SxCR_MINC; }
+}
+
+void Stm32DmaChStart(int Ch, const void *pMem, uint32_t Count)
+{
+	DMA_Stream_TypeDef *ch = s_Stm32DmaCh[Ch];
+	if (!Stm32DmaDisable(Ch)) { return; }
+	Stm32DmaChClear(Ch);
+	uint32_t w = s_Stm32DmaWidth[Ch];
+	uintptr_t addr = (uintptr_t)pMem;
+	uint32_t span = (ch->CR & DMA_SxCR_MINC) ? Count : (w <= 2 ? 1U << w : 0);
+	// The H753 linker puts ordinary data in DTCM, which DMA1/2 cannot reach.
+	if (w > 2 || Count == 0 || Count >> w > 65535 ||
+		(Count & ((1U << w) - 1U)) || (addr & ((1U << w) - 1U)) ||
+		addr < 0x08000000UL || addr > 0xFFFFFFFFUL - span ||
+		(addr < 0x20020000UL && addr + span > 0x20000000UL))
+	{
+		s_Stm32DmaLatch[Ch] = STM32_DMA_FLAG_ERR;
+		return;
+	}
+	ch->M0AR = (uint32_t)addr;
+	ch->NDTR = Count >> w;
+	__DMB();
+	ch->CR |= DMA_SxCR_EN;
+}
+
+void Stm32DmaChStop(int Ch)
+{
+	if (Stm32DmaDisable(Ch)) { Stm32DmaChClear(Ch); }
+}
+
+uint32_t Stm32DmaChStopRemain(int Ch)
+{
+	bool stopped = Stm32DmaDisable(Ch);
+	uint32_t remain = Stm32DmaChRemain(Ch);
+	if (stopped) { Stm32DmaChClear(Ch); }
+	return remain;
+}
+
+uint32_t Stm32DmaChRemain(int Ch)
+{
+	uint32_t w = s_Stm32DmaWidth[Ch];
+	return w <= 2 ? (s_Stm32DmaCh[Ch]->NDTR & 0xFFFFU) << w : 0;
+}
+
+#else
 void Stm32DmaChSetup(int Ch, uint32_t Req, bool bToPeriph, volatile void *pPeriph, int WidthLog2, bool bIrq)
 {
 	DMA_Channel_TypeDef *ch = s_Stm32DmaCh[Ch];
@@ -234,6 +369,8 @@ uint32_t Stm32DmaChRemain(int Ch)
 	return (s_Stm32DmaCh[Ch]->CNDTR & 0xFFFFU) << s_Stm32DmaWidth[Ch];
 }
 
+#endif
+
 static uint32_t Stm32DmaFlagsOf(uint32_t Isr)
 {
 	return ((Isr & STM32_DMA_ISR_TC) ? STM32_DMA_FLAG_TC : 0U) |
@@ -245,18 +382,29 @@ uint32_t Stm32DmaChFlags(int Ch)
 	return Stm32DmaFlagsOf(Stm32DmaIsr(Ch)) | s_Stm32DmaLatch[Ch];
 }
 
+static void Stm32DmaClearHw(int Ch)
+{
+#if defined(STM32H753xx)
+	DMA_TypeDef *dma = Stm32DmaCtrl(Ch);
+	uint32_t flags = 0x3DU << Stm32DmaShift(Ch);
+	if (Ch & 4) { dma->HIFCR = flags; }
+	else { dma->LIFCR = flags; }
+#else
+	Stm32DmaCtrl(Ch)->IFCR = DMA_IFCR_CGIF1 << Stm32DmaShift(Ch);
+#endif
+}
+
 void Stm32DmaChClear(int Ch)
 {
 	s_Stm32DmaLatch[Ch] = 0U;
-	// CGIF clears the 4 flags of the channel
-	Stm32DmaCtrl(Ch)->IFCR = DMA_IFCR_CGIF1 << Stm32DmaShift(Ch);
+	Stm32DmaClearHw(Ch);
 }
 
 void Stm32DmaChAck(int Ch)
 {
 	const uint32_t flags = Stm32DmaFlagsOf(Stm32DmaIsr(Ch));
 
-	Stm32DmaCtrl(Ch)->IFCR = DMA_IFCR_CGIF1 << Stm32DmaShift(Ch);
+	Stm32DmaClearHw(Ch);
 	s_Stm32DmaLatch[Ch] |= flags;
 }
 
@@ -272,6 +420,24 @@ static void Stm32DmaChIrq(int Ch)
 	}
 }
 
+#if defined(STM32H753xx)
+extern "C" void DMA1_Stream0_IRQHandler(void) { Stm32DmaChIrq(STM32_DMA_STREAM(1, 0)); }
+extern "C" void DMA1_Stream1_IRQHandler(void) { Stm32DmaChIrq(STM32_DMA_STREAM(1, 1)); }
+extern "C" void DMA1_Stream2_IRQHandler(void) { Stm32DmaChIrq(STM32_DMA_STREAM(1, 2)); }
+extern "C" void DMA1_Stream3_IRQHandler(void) { Stm32DmaChIrq(STM32_DMA_STREAM(1, 3)); }
+extern "C" void DMA1_Stream4_IRQHandler(void) { Stm32DmaChIrq(STM32_DMA_STREAM(1, 4)); }
+extern "C" void DMA1_Stream5_IRQHandler(void) { Stm32DmaChIrq(STM32_DMA_STREAM(1, 5)); }
+extern "C" void DMA1_Stream6_IRQHandler(void) { Stm32DmaChIrq(STM32_DMA_STREAM(1, 6)); }
+extern "C" void DMA1_Stream7_IRQHandler(void) { Stm32DmaChIrq(STM32_DMA_STREAM(1, 7)); }
+extern "C" void DMA2_Stream0_IRQHandler(void) { Stm32DmaChIrq(STM32_DMA_STREAM(2, 0)); }
+extern "C" void DMA2_Stream1_IRQHandler(void) { Stm32DmaChIrq(STM32_DMA_STREAM(2, 1)); }
+extern "C" void DMA2_Stream2_IRQHandler(void) { Stm32DmaChIrq(STM32_DMA_STREAM(2, 2)); }
+extern "C" void DMA2_Stream3_IRQHandler(void) { Stm32DmaChIrq(STM32_DMA_STREAM(2, 3)); }
+extern "C" void DMA2_Stream4_IRQHandler(void) { Stm32DmaChIrq(STM32_DMA_STREAM(2, 4)); }
+extern "C" void DMA2_Stream5_IRQHandler(void) { Stm32DmaChIrq(STM32_DMA_STREAM(2, 5)); }
+extern "C" void DMA2_Stream6_IRQHandler(void) { Stm32DmaChIrq(STM32_DMA_STREAM(2, 6)); }
+extern "C" void DMA2_Stream7_IRQHandler(void) { Stm32DmaChIrq(STM32_DMA_STREAM(2, 7)); }
+#else
 extern "C" void DMA1_Channel1_IRQHandler(void) { Stm32DmaChIrq(STM32_DMA_CH(1, 1)); }
 extern "C" void DMA1_Channel2_IRQHandler(void) { Stm32DmaChIrq(STM32_DMA_CH(1, 2)); }
 extern "C" void DMA1_Channel3_IRQHandler(void) { Stm32DmaChIrq(STM32_DMA_CH(1, 3)); }
@@ -286,3 +452,6 @@ extern "C" void DMA2_Channel4_IRQHandler(void) { Stm32DmaChIrq(STM32_DMA_CH(2, 4
 extern "C" void DMA2_Channel5_IRQHandler(void) { Stm32DmaChIrq(STM32_DMA_CH(2, 5)); }
 extern "C" void DMA2_Channel6_IRQHandler(void) { Stm32DmaChIrq(STM32_DMA_CH(2, 6)); }
 extern "C" void DMA2_Channel7_IRQHandler(void) { Stm32DmaChIrq(STM32_DMA_CH(2, 7)); }
+
+
+#endif
