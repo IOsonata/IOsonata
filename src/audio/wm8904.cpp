@@ -222,6 +222,23 @@ bool Wm8904::Mute(bool bMute)
 	return true;
 }
 
+bool Wm8904::MicrophoneClock(bool bEnable)
+{
+	if (!Device::Valid() || !vbEnabled || !vCfg.MicInput)
+	{
+		return false;
+	}
+	// Rev 4.1 GPIO1_SEL: 8 = DMIC clock output, 2 = logic zero.
+	uint16_t value = bEnable ? 8 : 2;
+
+	if (!WriteReg(WM8904_GPIO1, value) || !VerifyReg(WM8904_GPIO1, value, 0x003F))
+	{
+		PowerOff();
+		return false;
+	}
+	return true;
+}
+
 bool Wm8904::StartHeadphones()
 {
 	uint16_t status = 0;

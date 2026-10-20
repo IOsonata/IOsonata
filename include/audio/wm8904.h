@@ -76,6 +76,9 @@ public:
 	// Soft-mute the DAC while capture, clocks and headphone stages stay on.
 	// Requires enabled playback and running MCLK. Re-enable after Disable unmutes.
 	bool Mute(bool bMute);
+	// Select DMIC clock output or hold GPIO1 low, leaving capture enabled.
+	// Requires enabled microphone capture and running MCLK. Init restores clock.
+	bool MicrophoneClock(bool bEnable);
 
 private:
 	uint16_t DacControl(bool bMute) const;

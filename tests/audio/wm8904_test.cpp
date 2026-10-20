@@ -232,6 +232,7 @@ int main()
 	assert(control.Registers[0x12] == 0x0C && control.Registers[0x0E] == 3);
 	assert(control.Registers[0x16] == 6 && control.Registers[0x5A] == 0xFF);
 	assert(codec.Mute(false) && control.Registers[0x21] == 0x0600);
+	assert(!codec.MicrophoneClock(false));
 	assert(codec.HeadphoneGain(999999) == 6000 && control.Registers[0x39] == 63);
 	assert(codec.HeadphoneGain(-999999) == -57000 && control.Registers[0x39] == 0);
 	assert(codec.HeadphoneGain(-24100) == -24000);
@@ -267,6 +268,28 @@ int main()
 	assert(control.Registers[0x12] == 0x0E && control.Registers[0x27] == 0x1800);
 	assert(control.Registers[0x16] == 6 && control.Registers[0x79] == 8);
 	assert(codec.Mute(false) && control.Registers[0x21] == 0x0600);
+	uint16_t captureRegisters[256];
+
+	memcpy(captureRegisters, control.Registers, sizeof(captureRegisters));
+	assert(codec.MicrophoneClock(false) && control.Registers[0x79] == 2);
+	captureRegisters[0x79] = 2;
+	assert(memcmp(captureRegisters, control.Registers, sizeof(captureRegisters)) == 0);
+	assert(codec.MicrophoneClock(true) && control.Registers[0x79] == 8);
+	captureRegisters[0x79] = 8;
+	assert(memcmp(captureRegisters, control.Registers, sizeof(captureRegisters)) == 0);
+	control.DropReg = 0x79;
+	assert(!codec.MicrophoneClock(false) && !codec.Valid());
+	assert(control.Registers[0x12] == 0 && control.Registers[0x62] == 0);
+	control.DropReg = -1;
+	assert(codec.Init(cfg, &control));
+	assert(control.Registers[0x79] == 8);
+	control.FailAt = control.Writes + 1;
+	assert(!codec.MicrophoneClock(false) && !codec.Valid());
+	control.FailAt = 0;
+	assert(codec.Init(cfg, &control));
+	control.ReadFailure = true;
+	assert(!codec.MicrophoneClock(false) && !codec.Valid());
+	control.ReadFailure = false;
 	codec.PowerOff();
 	// Clock limits and DAC OSR selection at both datasheet boundaries.
 	const uint32_t clocks[] = { 2999999, 3000000, 4000000, 5999999, 6000000, 12288000 };

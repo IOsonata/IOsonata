@@ -48,7 +48,7 @@ SOFTWARE.
 #include "idelay.h"
 #include "board.h"
 
-// Run microphone capture and its clock, but send zero PCM after startup.
+// Keep capture enabled but hold its microphone clock low; send zero PCM.
 // Enable forwarding separately to restore loopback and the OLED power test.
 #ifndef AUDIO_LOOPBACK_MIC_ENABLE
 #define AUDIO_LOOPBACK_MIC_ENABLE 1
@@ -132,7 +132,7 @@ static bool s_DisplayTestDone;
 static uint32_t s_DisplayOffSince;
 static const char *const s_StageNames[] = {
 	!AUDIO_LOOPBACK_MIC_ENABLE ? "MIC OFF - ZERO PCM" :
-	(AUDIO_LOOPBACK_MIC_FORWARD ? "MIC -> HEADPHONES" : "MIC ON - ZERO PCM"),
+	(AUDIO_LOOPBACK_MIC_FORWARD ? "MIC -> HEADPHONES" : "MIC CLK OFF ZERO"),
 	"DAC muted",
 	"Zero PCM",
 	"Duplex tone 1 kHz"
@@ -444,6 +444,12 @@ static bool HardwareInit()
 	{
 		s_Audio.PowerOff();
 		s_Lcd.printf("WM8904 init failed");
+		return false;
+	}
+	if (AUDIO_LOOPBACK_MIC_ENABLE && !AUDIO_LOOPBACK_MIC_FORWARD && !s_Codec.MicrophoneClock(false))
+	{
+		s_Audio.PowerOff();
+		s_Lcd.printf("Mic clock stop failed");
 		return false;
 	}
 	s_Lcd.Clear();

@@ -1200,11 +1200,12 @@ python3 tests/audio/run_i2s_tone.py
 ## Live microphone to headphones loopback
 
 The current noise isolation build defaults `AUDIO_LOOPBACK_MIC_ENABLE` to 1
-and `AUDIO_LOOPBACK_MIC_FORWARD` to 0. Microphone capture and its clock run
-normally, but after the startup tone, zero PCM and DAC mute phases, it sends
-zero PCM continuously and labels the screen `MIC ON - ZERO PCM`. Input peak
-and frame counts still measure the captured microphone samples. The OLED
-stays on; headphone gain and audio clocks retain the loopback settings.
+and `AUDIO_LOOPBACK_MIC_FORWARD` to 0. Codec microphone capture stays enabled,
+but MicrophoneClock(false) changes GPIO1 from DMIC clock output to logic zero.
+After the startup tone, zero PCM and DAC mute phases, it sends zero PCM
+continuously and labels the screen `MIC CLK OFF ZERO`. With no microphone
+clock, input peak is not a valid acoustic level. Frame counts still advance.
+The OLED stays on; headphone gain and audio clocks retain the loopback settings.
 Set `AUDIO_LOOPBACK_MIC_ENABLE=0` to repeat the microphone-off comparison;
 this stops capture and its clock without disconnecting its supply. Define
 `AUDIO_LOOPBACK_MIC_FORWARD=1` with the microphone enabled to restore live
@@ -1246,9 +1247,11 @@ does not track sound volume; intelligible loopback is not yet validated.
 The maintainer reports that DAC mute does not affect the noise and that it
 appears when the display starts. Turning off the OLED and its charge pump
 did not remove the buzz on the board. The buzz disappeared with microphone
-capture and its clock disabled. The microphone-on, zero-PCM comparison is
-awaiting a board retest; it separates interference from microphone operation
-from noise carried in the captured samples.
+capture and its clock disabled. It returned with capture and microphone clock
+enabled while headphone PCM stayed zero. The next comparison holds the
+external microphone clock low while leaving codec capture enabled. This
+separates external microphone activity from the codec capture circuitry;
+the board retest remains pending.
 
 This exercises simultaneous RX and TX DMA through the same generic I2S
 interface. Board mapping combines PC5 AF13 receive with PD5 AF13 transmit;
