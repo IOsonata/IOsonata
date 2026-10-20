@@ -1203,8 +1203,11 @@ The current noise isolation build defaults `AUDIO_LOOPBACK_MIC_ENABLE` to 1
 and `AUDIO_LOOPBACK_MIC_FORWARD` to 0. Codec microphone capture stays enabled,
 but MicrophoneClock(false) changes GPIO1 from DMIC clock output to logic zero.
 After the startup tone, zero PCM and DAC mute phases, it sends zero PCM
-continuously and labels the screen `MIC CLK OFF ZERO`. With no microphone
-clock, input peak is not a valid acoustic level. Frame counts still advance.
+continuously and labels the screen `MIC CLK OFF ZERO`. Five seconds later,
+it restores only the microphone clock and labels the screen `MIC CLK ON ZERO`.
+The restored clock stays on. Headphone PCM remains zero throughout both
+phases. With no microphone clock, input peak is not a valid acoustic level.
+Frame counts still advance.
 The OLED stays on; headphone gain and audio clocks retain the loopback settings.
 Set `AUDIO_LOOPBACK_MIC_ENABLE=0` to repeat the microphone-off comparison;
 this stops capture and its clock without disconnecting its supply. Define
@@ -1250,8 +1253,11 @@ did not remove the buzz on the board. The buzz disappeared with microphone
 capture and its clock disabled. It returned with capture and microphone clock
 enabled while headphone PCM stayed zero. The next comparison holds the
 external microphone clock low while leaving codec capture enabled. This
-separates external microphone activity from the codec capture circuitry;
-the board retest remains pending.
+separates external microphone activity from the codec capture circuitry.
+With the microphone clock held low, the maintainer reports that the noise
+stopped when the startup tone began and stayed off. The next board comparison
+restores the clock after five seconds of quiet zero PCM to check whether
+the buzz returns at that transition.
 
 This exercises simultaneous RX and TX DMA through the same generic I2S
 interface. Board mapping combines PC5 AF13 receive with PD5 AF13 transmit;

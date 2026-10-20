@@ -261,6 +261,8 @@ static void ResetModel()
 	s_PairMismatches = 0;
 	s_AudioError = AUDIO_ERROR_NONE;
 	s_TestRemaining = 0;
+	s_MicClockRestored = false;
+	s_LastMicClockRestored = false;
 	DevIntrf_t *audio = s_Audio;
 
 	atomic_flag_clear(&audio->bBusy);
@@ -427,6 +429,29 @@ int main()
 	assert(s_Samples[0] == 0 && s_Samples[1] == 0);
 	assert(s_Samples[2] == (AUDIO_LOOPBACK_MIC_ENABLE && AUDIO_LOOPBACK_MIC_FORWARD ? 123 : 0));
 	assert(s_Samples[3] == (AUDIO_LOOPBACK_MIC_ENABLE && AUDIO_LOOPBACK_MIC_FORWARD ? -456 : 0));
+	// Restore once, after five seconds of zero PCM following startup.
+	ResetModel();
+	s_TestRate = 15625;
+	s_Frames = s_TestRate * 10 - 1;
+	assert(!MicrophoneClockRestoreDue());
+	s_Frames++;
+	assert(MicrophoneClockRestoreDue() == bool(AUDIO_LOOPBACK_MIC_ENABLE && !AUDIO_LOOPBACK_MIC_FORWARD));
+	s_LastStage = AUDIO_STAGE_MIC;
+	DrawLevel();
+	if (AUDIO_LOOPBACK_MIC_ENABLE && !AUDIO_LOOPBACK_MIC_FORWARD)
+	{
+		assert(strncmp(s_DisplayText[0], "MIC CLK OFF ZERO", 16) == 0);
+	}
+	s_MicClockRestored = true;
+	assert(!MicrophoneClockRestoreDue());
+	DrawLevel();
+	assert(s_DisplayRow == 0);
+	if (AUDIO_LOOPBACK_MIC_ENABLE && !AUDIO_LOOPBACK_MIC_FORWARD)
+	{
+		assert(strncmp(s_DisplayText[0], "MIC CLK ON ZERO", 15) == 0);
+	}
+	DrawLevel();
+	assert(s_DisplayRow == 1);
 	// Run the real OLED driver and application scheduler for one minute
 	// with continuous 15,625 Hz RX/TX and injected SPI transfer delays.
 	ResetModel();

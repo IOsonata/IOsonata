@@ -48,7 +48,7 @@ SOFTWARE.
 #include "idelay.h"
 #include "board.h"
 
-// Keep capture enabled but hold its microphone clock low; send zero PCM.
+// Hold the microphone clock low, then restore it with headphone PCM at zero.
 // Enable forwarding separately to restore loopback and the OLED power test.
 #ifndef AUDIO_LOOPBACK_MIC_ENABLE
 #define AUDIO_LOOPBACK_MIC_ENABLE 1
@@ -67,6 +67,7 @@ enum AudioError_t
 	AUDIO_ERROR_RX_TIMEOUT,
 	AUDIO_ERROR_TX_STALLED,
 	AUDIO_ERROR_CODEC,
+	AUDIO_ERROR_MIC_CLOCK,
 	AUDIO_ERROR_DISPLAY
 };
 
@@ -127,6 +128,8 @@ static uint32_t s_TestPhase;
 static uint32_t s_TestStep;
 static AudioStage_t s_LastStage;
 static bool s_TestMuted;
+static bool s_MicClockRestored;
+static bool s_LastMicClockRestored;
 static bool s_DisplayOff;
 static bool s_DisplayTestDone;
 static uint32_t s_DisplayOffSince;
@@ -246,6 +249,13 @@ static bool UpdateOutputMute()
 	return true;
 }
 
+static bool MicrophoneClockRestoreDue()
+{
+	// Five seconds of startup, then five seconds of quiet zero PCM.
+	return AUDIO_LOOPBACK_MIC_ENABLE && !AUDIO_LOOPBACK_MIC_FORWARD &&
+		!s_MicClockRestored && s_TestRate && s_Frames >= s_TestRate * 10;
+}
+
 static void PrepareOutput(unsigned Frames)
 {
 	if (!AUDIO_LOOPBACK_MIC_ENABLE || !AUDIO_LOOPBACK_MIC_FORWARD)
@@ -323,14 +333,21 @@ static void DrawLevel()
 	int db = s_Peak ? int(200.0f * log10f(float(s_Peak) / 32768.0f)) : -960;
 	unsigned magnitude = db < 0 ? unsigned(-db) : unsigned(db);
 	AudioStage_t stage = OutputStage();
+	const char *label = s_StageNames[stage];
+
+	if (stage == AUDIO_STAGE_MIC && AUDIO_LOOPBACK_MIC_ENABLE && !AUDIO_LOOPBACK_MIC_FORWARD && s_MicClockRestored)
+	{
+		label = "MIC CLK ON ZERO";
+	}
 
 	// Snapshot text only. ServiceDisplay sends one row after servicing audio.
-	snprintf(s_DisplayText[0], sizeof(s_DisplayText[0]), "%-20s", s_StageNames[stage]);
+	snprintf(s_DisplayText[0], sizeof(s_DisplayText[0]), "%-20s", label);
 	snprintf(s_DisplayText[1], sizeof(s_DisplayText[1]), "L/R mismatches %-6u", s_PairMismatches);
 	snprintf(s_DisplayText[2], sizeof(s_DisplayText[2]), "Peak %s%u.%u dBFS   ", db < 0 ? "-" : "", magnitude / 10, magnitude % 10);
 	snprintf(s_DisplayText[3], sizeof(s_DisplayText[3]), "Frames %-13lu", (unsigned long)s_Frames);
-	s_DisplayRow = stage != s_LastStage ? 0 : 1;
+	s_DisplayRow = stage != s_LastStage || s_MicClockRestored != s_LastMicClockRestored ? 0 : 1;
 	s_LastStage = stage;
+	s_LastMicClockRestored = s_MicClockRestored;
 	s_Peak = 0;
 	s_PairMismatches = 0;
 }
@@ -472,6 +489,8 @@ static bool HardwareInit()
 	s_TestStep = (uint64_t(1000) << 32) / s_TestRate;
 	s_LastStage = AUDIO_STAGE_TONE;
 	s_TestMuted = false;
+	s_MicClockRestored = false;
+	s_LastMicClockRestored = false;
 	s_DisplayOff = false;
 	s_DisplayTestDone = false;
 	s_LastSample = s_Clock.mSecond();
@@ -501,6 +520,8 @@ static const char *AudioErrorText(uint32_t Now)
 			return "TX stalled";
 		case AUDIO_ERROR_CODEC:
 			return "Codec mute failed";
+		case AUDIO_ERROR_MIC_CLOCK:
+			return "Mic clock restore failed";
 		case AUDIO_ERROR_DISPLAY:
 			return "OLED enable failed";
 		default:
@@ -524,6 +545,17 @@ int main()
 		}
 		uint32_t now = s_Clock.mSecond();
 
+		if (s_AudioError == AUDIO_ERROR_NONE && MicrophoneClockRestoreDue())
+		{
+			if (s_Codec.MicrophoneClock(true))
+			{
+				s_MicClockRestored = true;
+			}
+			else
+			{
+				s_AudioError = AUDIO_ERROR_MIC_CLOCK;
+			}
+		}
 		const char *error = AudioErrorText(now);
 
 		if (error)
