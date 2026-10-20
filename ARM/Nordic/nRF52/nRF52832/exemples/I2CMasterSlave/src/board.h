@@ -68,20 +68,20 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define I2C_MASTER_DEVNO		1
 
 #define I2C_MASTER_SDA_PORT		0
-#define I2C_MASTER_SDA_PIN		23
+#define I2C_MASTER_SDA_PIN		5
 #define I2C_MASTER_SDA_PINOP	1
 #define I2C_MASTER_SCL_PORT		0
-#define I2C_MASTER_SCL_PIN		24
+#define I2C_MASTER_SCL_PIN		3
 #define I2C_MASTER_SCL_PINOP	1
 
 // I2C Slave
 #define I2C_SLAVE_DEVNO			0
 
 #define I2C_SLAVE_SDA_PORT		0
-#define I2C_SLAVE_SDA_PIN		16
+#define I2C_SLAVE_SDA_PIN		6
 #define I2C_SLAVE_SDA_PINOP		1
 #define I2C_SLAVE_SCL_PORT		0
-#define I2C_SLAVE_SCL_PIN		15
+#define I2C_SLAVE_SCL_PIN		4
 #define I2C_SLAVE_SCL_PINOP		1
 
 // The TWIS takes 255 bytes in one transfer, the command byte included
