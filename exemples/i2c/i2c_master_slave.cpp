@@ -165,6 +165,11 @@ static std::atomic<int> s_MasterCount(0);
 
 #define I2C_SLAVE_ADDR			0x22
 
+// No device answers this address, for the address NACK test
+#ifndef I2C_NACK_ADDR
+#define I2C_NACK_ADDR			(I2C_SLAVE_ADDR + 1)
+#endif
+
 int I2CSlaveIntrfHandler(DevIntrf_t * const pDev, DEVINTRF_EVT EvtId, uint8_t *pBuffer, int BufferLen);
 
 static const IOPinCfg_t s_I2cSlavePins[] = {
@@ -376,6 +381,35 @@ static int RunCombo(const I2CCfg_t &MasterCfg, const I2CCfg_t &SlaveCfg)
 			memcmp(rx, expectedRx, sizeof(rx)) == 0;
 		if (!pass)
 			printf("Expected RX 4/4 bytes: 0c 0d 0e 0f\r\n");
+	}
+
+	if (pass)
+	{
+		// Address NACK: no device answers I2C_NACK_ADDR. No data byte may be
+		// reported as written, and the bus must work after the error.
+		s_MasterCompleted = false;
+		s_MasterCount = 0;
+		c = g_I2CMaster.Write(I2C_NACK_ADDR, &offset, 1, wr, sizeof(wr));
+		if (MasterCfg.bIntEn)
+		{
+			total = WaitMasterComplete(10000000);
+			c = total >= 1 ? total - 1 : 0;
+		}
+		printf("NACK write %d/%d bytes at address 0x%02x\r\n", c, (int)sizeof(wr), I2C_NACK_ADDR);
+		pass = c == 0;
+
+		memset(buff, 0xFF, sizeof(buff));
+		s_MasterCompleted = false;
+		s_MasterCount = 0;
+		rc = g_I2CMaster.Read(I2C_SLAVE_ADDR, &offset, 1, buff, sizeof(wr));
+		if (rc < 0)
+			rc = WaitMasterComplete(10000000);
+		printf("Read after NACK %d/%d bytes\r\n", rc, (int)sizeof(wr));
+		if (rc != (int)sizeof(wr) || memcmp(buff, wr, sizeof(wr)) != 0)
+		{
+			printf("Bus not usable after the NACK\r\n");
+			pass = false;
+		}
 	}
 
 	return pass ? 1 : 0;
