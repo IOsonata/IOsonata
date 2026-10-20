@@ -32,7 +32,7 @@ common = [
     'src/coredev/timer.cpp', 'ARM/Microchip/SAM4L/src/timer_sam4l.cpp',
     'ARM/Microchip/SAM4L/src/timer_sam4l_ast.cpp',
     'ARM/Microchip/SAM4L/src/timer_sam4l_tc.cpp',
-    'src/app_evt_handler.cpp', 'src/app_run.cpp',
+    'src/app_evt_handler.cpp', 'src/app_run.cpp', 'src/app_wait.cpp',
     'ARM/Microchip/SAM4L/src/usb_ctrlr_sam4l.cpp',
     'ARM/Microchip/SAM4L/src/usb_ctrlr_sam4l_iso.cpp',
     'src/usb/usb.cpp', 'src/usb/usb_intrf.cpp', 'src/usb/usbd_epalloc.cpp',
