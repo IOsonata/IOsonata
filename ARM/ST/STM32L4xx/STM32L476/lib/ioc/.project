@@ -861,6 +861,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/ba414ep.h</locationURI>
 		</link>
 		<link>
+			<name>include/crypto/crypto_rng_stm32.h</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/include/crypto_rng_stm32.h</locationURI>
+		</link>
+		<link>
 			<name>include/crypto/crypto_softaes.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/crypto_softaes.h</locationURI>
@@ -1874,6 +1879,11 @@
 			<name>src/crypto/crypto_uecc.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_uecc.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/rng_stm32.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/rng_stm32.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/crypto/uECC.c</name>
