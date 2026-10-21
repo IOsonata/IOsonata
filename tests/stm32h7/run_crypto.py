@@ -43,7 +43,7 @@ SOURCES = ('ARM/ST/src/rng_stm32.cpp', 'src/crypto/crypto_p256.cpp',
 
 def build(out, opt):
     flags = ['-mcpu=cortex-m7', '-mthumb', '-DSTM32H753xx', opt, '-g',
-             '-ffunction-sections', '-fdata-sections']
+             '-DuECC_ENABLE_VLI_API=1', '-ffunction-sections', '-fdata-sections']
     flags += ['-I' + str(ROOT / p) for p in ('include', 'ARM/include',
               'ARM/CMSIS/Core/Include', 'ARM/ST/include', 'ARM/ST/STM32H7xx/include', 'micro-ecc')]
     objects = []

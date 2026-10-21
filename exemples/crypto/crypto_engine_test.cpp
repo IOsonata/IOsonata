@@ -697,22 +697,63 @@ static void PkaVectors(KeyAgreeEngine *pKa, SignEngine *pSign, SignEngine *pRefS
 				   "799fcb93fcdb2d95eca09a6c3222380f6bbc4a4b9fda1ca57c0f6fdae47a2b71", 64));
 	pKa->KeyReset(s_CtxA);
 
-	// n - 1 gives the point -G. micro-ecc refuses this scalar, so a refusal is
-	// reported and not failed; an engine that accepts it must be exact.
-	Hex("ffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632550", bad, 32);
-	memset(pub, 0, sizeof(pub));
-	CRYPTO_STATUS nm1 = pKa->KeyImport(CRYPTO_CURVE_P256, s_CtxA, bad, pub);
-	if (nm1 == CRYPTO_STATUS_OK)
+	// Both ends of the valid private-scalar range must work, without skips.
+	for (unsigned edge = 0; edge < 2U; edge++)
 	{
-		check("private scalar n - 1 gives -G",
-			HexEq(pub, "6b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c296"
-					   "b01cbd1c01e58065711814b583f061e9d431cca994cea1313449bf97c840ae0a", 64));
+		if (edge == 0U)
+		{
+			memset(bad, 0, sizeof(bad));
+			bad[31] = 1U;
+		}
+		else
+		{
+			Hex("ffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632550", bad, 32);
+		}
+		memset(pub, 0, sizeof(pub));
+		check(edge == 0U ? "private scalar 1 gives G" : "private scalar n - 1 gives -G",
+			pKa->KeyImport(CRYPTO_CURVE_P256, s_CtxA, bad, pub) == CRYPTO_STATUS_OK &&
+			HexEq(pub, "6b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c296", 32) &&
+			HexEq(pub + 32, edge == 0U ?
+				"4fe342e2fe1a7f9b8ee7eb4a7c0f9e162bce33576b315ececbb6406837bf51f5" :
+				"b01cbd1c01e58065711814b583f061e9d431cca994cea1313449bf97c840ae0a", 32));
+		Hex(s_PubB, peer, 64);
+		check("boundary scalar ECDH keeps key",
+			pKa->Agree(CRYPTO_CURVE_P256, s_CtxA, peer, dh, true) == CRYPTO_STATUS_OK &&
+			memcmp(dh, peer, 32) == 0);
+		check("boundary scalar ECDH consumes key",
+			pKa->Agree(CRYPTO_CURVE_P256, s_CtxA, peer, dh) == CRYPTO_STATUS_OK &&
+			memcmp(dh, peer, 32) == 0 &&
+			pKa->Agree(CRYPTO_CURVE_P256, s_CtxA, peer, dh) != CRYPTO_STATUS_OK);
+		uint8_t edgeHash[32], edgeSig[64];
+		XsFill(edgeHash, sizeof(edgeHash));
+		CryptoKey edgeKey = EccKey(bad, CRYPTO_KEY_USE_SIGN);
+		check("boundary scalar signature verifies",
+			pSign->Sign(CRYPTO_CURVE_P256, edgeKey, edgeHash, sizeof(edgeHash), edgeSig) == CRYPTO_STATUS_OK &&
+			pSign->Verify(CRYPTO_CURVE_P256, pub, edgeHash, sizeof(edgeHash), edgeSig) == CRYPTO_STATUS_OK &&
+			pRefSign->Verify(CRYPTO_CURVE_P256, pub, edgeHash, sizeof(edgeHash), edgeSig) == CRYPTO_STATUS_OK);
+		edgeHash[0] ^= 1U;
+		check("boundary scalar signature rejects changed hash",
+			pSign->Verify(CRYPTO_CURVE_P256, pub, edgeHash, sizeof(edgeHash), edgeSig) != CRYPTO_STATUS_OK);
+		// Fixed OpenSSL signatures over a 256-bit all-ones digest exercise
+		// hash reduction independently of this engine's signing routine.
+		memset(edgeHash, 0xFF, sizeof(edgeHash));
+		Hex(edge == 0U ?
+			"d2709b43fd982ab3cf008b4c7578fc1b840c6b07a1217cf975697c39b8d3f02d3"
+			"dddc66768835440e21b8e40dbae70b48cd7969e0604c514b5b43ef9bc762da4" :
+			"ba071a88f3c32f76254ba18a933686c6abe1130867db5000e648a66e6acfb7efbd"
+			"44bc482df1bde6d7d0b80d040a5debf2274b87cd0371fa723217d481490259", edgeSig, 64);
+		check("boundary scalar OpenSSL signature",
+			pSign->Verify(CRYPTO_CURVE_P256, pub, edgeHash, sizeof(edgeHash), edgeSig) == CRYPTO_STATUS_OK &&
+			pRefSign->Verify(CRYPTO_CURVE_P256, pub, edgeHash, sizeof(edgeHash), edgeSig) == CRYPTO_STATUS_OK);
+		check("boundary scalar import without public output",
+			pKa->KeyImport(CRYPTO_CURVE_P256, s_CtxA, bad, nullptr) == CRYPTO_STATUS_OK);
+		peer[63] ^= 1U;
+		memset(dh, 0xA5, sizeof(dh));
+		check("boundary scalar rejects invalid peer and clears secret",
+			pKa->Agree(CRYPTO_CURVE_P256, s_CtxA, peer, dh) == CRYPTO_STATUS_FAIL &&
+			P256IsZero(dh, sizeof(dh)));
+		pKa->KeyReset(s_CtxA);
 	}
-	else
-	{
-		skip("private scalar n - 1, refused by this engine");
-	}
-	pKa->KeyReset(s_CtxA);
 
 	// ECDSA on the engine, checked by the reference verify, and the other way
 	uint8_t hash[32], sig[64], sigRef[64], pubKey[64];

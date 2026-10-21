@@ -163,7 +163,7 @@ def build(tmp, wpan):
     (stub / 'pka_ctrl.h').write_text('')
 
     cpu = ['-mcpu=cortex-m33', '-mthumb', '-mfloat-abi=soft', '-Os', '-DSTM32WBA65xx', '-DIOSONATA_STM32_WBA',
-           '-ffunction-sections', '-fdata-sections', '-g']
+           '-DuECC_ENABLE_VLI_API=1', '-ffunction-sections', '-fdata-sections', '-g']
     inc = [ROOT / 'include', ROOT / 'ARM/include', ROOT / 'ARM/CMSIS/Core/Include', ROOT / 'ARM/ST/include',
            ROOT / 'ARM/ST/STM32WBAxx/include', ROOT / 'ARM/ST/STM32WBAxx/STM32WBA65/include', ROOT / 'micro-ecc',
            gen, stub, wpan / 'ble/stack/include', wpan / 'ble/stack/include/auto', wpan / 'ble', wpan / 'ble/core',
