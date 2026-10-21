@@ -14,6 +14,10 @@ the exact byte count the port accepted, so the TX count and the PRBS stream
 stay in step. The test fails as stalled when neither direction moves for the
 stall timeout.
 
+Rates measure payload bytes during the active test, excluding final draining.
+Total B/sec is TX B/sec plus RX B/sec (both directions combined). Final byte
+totals include drained echoes; Total bytes is TX bytes plus RX bytes.
+
 Everything received from the moment the port opens is kept. The banner the
 firmware sends when the port opens is matched there, and the input has to be
 quiet before the PRBS stream starts, so a late banner is not counted as data
@@ -321,9 +325,9 @@ def print_report(stats, now, previous_time, previous_tx, previous_rx):
     rx_rate = (rx_bytes - previous_rx) / elapsed if elapsed > 0 else 0.0
     pending = tx_bytes - rx_bytes
 
-    print("Tx B/s : %.2f, Rx B/s : %.2f, errors %d, pending %d "
+    print("Tx B/s : %.2f, Rx B/s : %.2f, Total B/s : %.2f, errors %d, pending %d "
           "(tx %d, rx %d)" %
-          (tx_rate, rx_rate, errors, pending, tx_bytes, rx_bytes))
+          (tx_rate, rx_rate, tx_rate + rx_rate, errors, pending, tx_bytes, rx_bytes))
 
     return now, tx_bytes, rx_bytes
 
@@ -447,10 +451,13 @@ def main():
         print()
         print("Banner         : %s" % (banner if banner else "not seen"))
         print("Bytes before TX: %d" % len(early))
+        print("Elapsed sec    : %.2f" % elapsed)
         print("TX bytes       : %d" % tx_bytes)
         print("RX bytes       : %d" % rx_bytes)
         print("TX B/sec       : %.2f" % tx_rate)
         print("RX B/sec       : %.2f" % rx_rate)
+        print("Total bytes    : %d" % (tx_bytes + rx_bytes))
+        print("Total B/sec    : %.2f" % (tx_rate + rx_rate))
         if stats.first_rx_time is None:
             print("First RX       : never")
         else:
