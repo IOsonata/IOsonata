@@ -46,6 +46,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "sensors/agm_mpu9250.h"
 #include "sensors/agm_lsm9ds1.h"
 #include "sensors/ag_icm456x.h"
+#include "sensors/ag_lsm6dsl.h"
 #include "sensors/ag_bmi160.h"
 #include "sensors/ag_bmi323.h"
 #include "sensors/ag_bmi270.h"
@@ -143,10 +144,14 @@ SPI g_Spi;
 
 #ifdef I2C_PINS
 //********** I2C **********
+#ifndef I2C_DEVNO
+#define I2C_DEVNO			0
+#endif
+
 static const IOPinCfg_t s_I2cPins[] = I2C_PINS;
 
 static const I2CCfg_t s_I2cCfg = {
-	.DevNo = 0,			// I2C device number
+	.DevNo = I2C_DEVNO,	// I2C device number
 	.Type = I2CTYPE_STANDARD,
 	.Mode = I2CMODE_MASTER,
 	.pIOPinMap = s_I2cPins,
@@ -214,7 +219,23 @@ static const AttCfg_t s_ImuCfg = {
 //#define H3LIS331DL
 //#define BMI323
 //#define BMI270
+//#define ICM456X
+//#define LSM6DSL
+
+// board.h can select the sensor, ICM456X when it does not
+#if !defined(ICM20948) && !defined(MPU9250) && !defined(BMI160) && !defined(H3LIS331DL) && \
+	!defined(BMI323) && !defined(BMI270) && !defined(ICM456X) && !defined(LSM6DSL)
 #define ICM456X
+#endif
+
+// Interrupt number of the sensor interrupt pin. Some MCUs require the pin
+// number.
+#ifndef IMU_INT_NO
+#define IMU_INT_NO			0
+#endif
+#ifndef IMU_INT_PRIO
+#define IMU_INT_PRIO		6
+#endif
 
 #ifdef ICM20948
 #ifdef INVN
@@ -238,6 +259,9 @@ AgBmi270 g_MotSensor;
 #elif defined(ICM456X)
 AttXiotFusion g_Imu;
 AgIcm456x g_MotSensor;
+#elif defined(LSM6DSL)
+AttXiotFusion g_Imu;
+AgLsm6dsl g_MotSensor;
 #endif
 
 
@@ -277,7 +301,7 @@ void ImuEvtHandler(Device * const pDev, DEV_EVT Evt)
 
 void ImuIntHandler(int IntNo, void *pCtx)
 {
-	if (IntNo == 0)
+	if (IntNo == IMU_INT_NO)
 	{
 //		IOPinSet(0, 24);
 		uint64_t t = g_Timer.uSecond();
@@ -360,7 +384,7 @@ bool HardwareInit()
 	{
 		IOPinSet(IMU_INT_PORT, IMU_INT_PIN);
 		IOPinConfig(IMU_INT_PORT, IMU_INT_PIN, IMU_INT_PINOP, IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL);
-		IOPinEnableInterrupt(0, 6, IMU_INT_PORT, IMU_INT_PIN, IOPINSENSE_LOW_TRANSITION, ImuIntHandler, NULL);
+		IOPinEnableInterrupt(IMU_INT_NO, IMU_INT_PRIO, IMU_INT_PORT, IMU_INT_PIN, IOPINSENSE_LOW_TRANSITION, ImuIntHandler, NULL);
 
 		int8_t m[9] = { 1, 0, 0,
 						0, 1, 0,
