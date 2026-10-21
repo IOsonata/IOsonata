@@ -155,7 +155,7 @@ int main()
 #ifdef NDEBUG
 	UARTRetargetEnable(s_Uart, STDOUT_FILENO);
 #endif
-	setvbuf(stdout, NULL, _IONBF, 0);
+//	setvbuf(stdout, NULL, _IONBF, 0);
 #endif
 
 	printf("\r\nMagnetometer, I2C %d\r\n", I2C_DEVNO);
