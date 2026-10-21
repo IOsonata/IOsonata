@@ -57,5 +57,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define IMU_INT_PORT		IOPORTD
 #define IMU_INT_PIN			14
 #define IMU_INT_PINOP		IOPINOP_GPIO
+// The STM32 EXTI line is the pin number
+#define IMU_INT_NO			14
 
 #endif // __BOARD_H__
