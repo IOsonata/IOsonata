@@ -21,6 +21,18 @@ from run_i2c import I2c, Slave
 from dma_model import Dma
 
 
+class H7Spi(Spi):
+    """H753 TXP/TXC can interrupt even with SPE clear (ES0392)."""
+
+    def wr_reg(self, off, size, value):
+        if off == 0x10 and self.slave() and not self.spe():
+            # TXP is set while disabled; TSIZE=0 also sets TXC, whose
+            # interrupt is selected by EOTIE, not SR bit 12 in IER.
+            unsafe = value & 2 or (value & 8 and not (self.reg[4] & 0xffff))
+            assert not unsafe, f'{self.name}: TXP/TXC IRQ enabled before SPE'
+        super().wr_reg(off, size, value)
+
+
 def run(args):
     subprocess.run([str(a) for a in args], check=True)
 
@@ -36,7 +48,7 @@ def emulate(path):
                 u.mem_write(seg['p_vaddr'], seg.data())
         syms = {s.name: s['st_value'] for s in elf.get_section_by_name('.symtab').iter_symbols()}
     log, violations = Log(), []
-    spi = {a: Spi('SPI' + str(i + 1), log, violations) for i, a in enumerate(
+    spi = {a: H7Spi('SPI' + str(i + 1), log, violations) for i, a in enumerate(
         (0x40013000, 0x40003800, 0x40003c00, 0x40013400, 0x40015000, 0x58001400))}
     i2c = {a: I2c('I2C' + str(i + 1), a, log, violations) for i, a in enumerate(
         (0x40005400, 0x40005800, 0x40005c00, 0x58001c00))}

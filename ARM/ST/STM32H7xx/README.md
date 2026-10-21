@@ -198,8 +198,10 @@ Build the library and application in Release and open ST-LINK VCP at
 slaves; SPI covers modes 0-3. Expected summary is 8 passed, 0 failed, 0 skipped.
 Only explicit hardware HAS_DMA flags may exclude DMA combinations. An init
 failure is FAIL, not SKIPPED. Existing payload and completion checks remain.
-The two non-DMA I2C combinations passed on hardware; DMA and SPI still need
-hardware validation.
+I2C1 master / I2C2 slave passed all eight combinations on NUCLEO-H753ZI
+(2026-10-21), including 254-byte writes and NACK recovery. SPI hardware
+validation is still failing: an interrupt-enable ordering fix for the DMA
+slave initialization stall awaits retest. See the example README.
 
 ## Native USB CDC examples
 

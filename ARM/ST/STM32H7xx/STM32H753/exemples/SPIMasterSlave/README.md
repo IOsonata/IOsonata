@@ -34,9 +34,13 @@ The HAS_DMA flags describe the selected hardware. They must not be cleared to
 hide an unfinished driver. Initialization failure counts as FAIL. The transfer
 payloads, completion counts and data checks are unchanged.
 
-I2C polling/interrupt master against interrupt slave passed on NUCLEO-H753ZI,
-including the 254-byte write and NACK recovery. New DMA paths and SPI still
-need hardware validation. Report the full output if a combination fails.
+Hardware run (2026-10-21) failed on the first one-byte frame in each
+interrupt-slave combination and stalled while initializing the DMA slave.
+The debugger showed SPI3 TXP/TXC interrupts before SPE was set. The shared
+driver now enables SPI and preloads CPU TX data before enabling interrupts.
+Hardware retest is pending; the first-frame failures are not yet cleared.
+Each combination returns at its first failure, so later lengths and modes
+are not printed until that failure is fixed. The test checks are unchanged.
 
 Validation: GNU Arm GCC 13.2.1 compiles the shared application with this
 board configuration in Debug (-O0) and Release (-O3). Project XML and linked

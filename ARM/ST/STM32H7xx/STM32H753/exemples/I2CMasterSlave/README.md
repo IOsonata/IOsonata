@@ -22,16 +22,16 @@ startup commands. Use Release for the hardware test.
 The project links the shared IOsonata example; `src/board.h` supplies only
 board mappings and test configuration. Four master modes (polling, interrupt,
 DMA polling, DMA interrupt) run against both interrupt and DMA slave modes.
-Slave priority 6 can preempt master priority 7. SPI additionally covers modes
-0-3. Expected final summary: **8 passed, 0 failed, 0 skipped**.
+Slave priority 6 can preempt master priority 7. Expected final summary: **8 passed, 0 failed, 0 skipped**.
 
 The HAS_DMA flags describe the selected hardware. They must not be cleared to
 hide an unfinished driver. Initialization failure counts as FAIL. The transfer
 payloads, completion counts and data checks are unchanged.
 
-I2C polling/interrupt master against interrupt slave passed on NUCLEO-H753ZI,
-including the 254-byte write and NACK recovery. New DMA paths and SPI still
-need hardware validation. Report the full output if a combination fails.
+Hardware run on NUCLEO-H753ZI (2026-10-21): **8 passed, 0 failed, 0 skipped**.
+All four I2C1 master modes passed against both I2C2 slave modes, including
+254-byte writes, short reads, repeated START, NACK and recovery. This result
+does not validate the I2C3/I2C4 routes.
 
 Validation: GNU Arm GCC 13.2.1 compiles the shared application with this
 board configuration in Debug (-O0) and Release (-O3). Project XML and linked

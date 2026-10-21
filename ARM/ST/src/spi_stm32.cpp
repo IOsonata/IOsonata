@@ -1273,6 +1273,7 @@ static void Stm32SpiSlaveArm(Stm32SpiDev_t * const pDev)
 	pDev->SRxMax = spi->pRxBuff[0] != NULL && spi->RxBuffLen[0] > 0 ? (uint32_t)spi->RxBuffLen[0] / isz : 0;
 	pDev->STxMax = spi->pTxData[0] != NULL && spi->TxDataLen[0] > 0 ? (uint32_t)spi->TxDataLen[0] / isz : 0;
 
+	reg->IER = 0;
 	reg->CR1 &= ~SPI_CR1_SPE;
 	reg->IFCR = STM32_SPI_IFCR_ALL;
 	reg->CR2 = 0;
@@ -1310,12 +1311,20 @@ static void Stm32SpiSlaveArm(Stm32SpiDev_t * const pDev)
 		}
 	}
 
-	reg->IER = ier;
+	// H753 can assert TXP and TXC even with SPE clear (ES0392).
+	// In DMA mode an early EOTIE interrupt cannot clear TXC: DMA waits
+	// for SPE, while the foreground cannot resume to set it. Enable the
+	// peripheral and preload CPU data before unmasking its interrupts.
 	reg->CR1 |= SPI_CR1_SPE;
 	if (pDev->bDma == false && pDev->STxMax > 0)
 	{
 		Stm32SpiSlaveWrite(pDev);
+		if (pDev->STx >= pDev->STxMax)
+		{
+			ier &= ~SPI_IER_TXPIE;
+		}
 	}
+	reg->IER = ier;
 }
 
 // NSS went inactive: the frame is over
