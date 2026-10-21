@@ -47,11 +47,15 @@ def build(out, opt):
                         '-o', str(obj)], check=True)
         objects.append(str(obj))
     script = out / 'test.ld'
+    # end is the heap start for the newlib sbrk. GCC 15 turns on the
+    # libstdc++ assertions at -O0, and their failure path links abort and
+    # malloc.
     script.write_text('MEMORY { FLASH (rx) : ORIGIN = 0x08000000, LENGTH = 2M\n'
                       'RAM (rwx) : ORIGIN = 0x20000000, LENGTH = 128K\n'
                       'RAM2 (rwx) : ORIGIN = 0x24000000, LENGTH = 512K }\n'
                       'SECTIONS { .text : { *(.text*) *(.rodata*) } > FLASH\n'
                       '.data : { *(.data*) } > RAM\n .bss : { *(.bss*) *(COMMON) } > RAM\n'
+                      'end = .;\n'
                       '.eth_dma (NOLOAD) : ALIGN(32) { *(.eth_dma) } > RAM2\n'
                       '/DISCARD/ : { *(.ARM.exidx*) } }\n')
     elf = out / 'test.elf'

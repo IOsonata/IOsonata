@@ -75,10 +75,13 @@ def main():
     with tempfile.TemporaryDirectory(prefix='h753-bus-') as tmp:
         tmp = Path(tmp)
         ld = tmp / 'bus.ld'
+        # end is the heap start for the newlib sbrk. GCC 15 turns on the
+        # libstdc++ assertions at -O0, and their failure path links abort and
+        # malloc.
         ld.write_text('ENTRY(main)\nMEMORY { FLASH(rx): ORIGIN=0x08000000,LENGTH=2M\nRAM(rwx): ORIGIN=0x20000000,LENGTH=128K }\n'
                       'SECTIONS { .text : { *(.text*) *(.rodata*) } > FLASH\n'
                       '.ARM.exidx : { *(.ARM.exidx*) } > FLASH\n'
-                      '.data : { *(.data*) } > RAM\n.bss : { *(.bss*) *(COMMON) } > RAM }')
+                      '.data : { *(.data*) } > RAM\n.bss : { *(.bss*) *(COMMON) } > RAM\nend=.; }')
         # Spaces around linker-script assignments are required by GNU ld.
         ld.write_text(ld.read_text().replace('=', ' = ').replace(',', ', '))
         for opt in ('-O0', '-O3'):

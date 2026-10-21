@@ -55,13 +55,17 @@ def build(out, opt):
                         *language, '-c', str(ROOT / src), '-o', str(obj)], check=True)
         objects.append(str(obj))
     script = out / 'test.ld'
+    # GCC 15 turns on the libstdc++ assertions at -O0. Link with g++ for the
+    # assertion handler, and give the newlib sbrk its heap start, end, since
+    # the handler failure path links abort and malloc.
     script.write_text('MEMORY { FLASH (rx) : ORIGIN = 0x08000000, LENGTH = 2M\n'
                       'RAM (rwx) : ORIGIN = 0x20000000, LENGTH = 128K }\n'
                       'SECTIONS { .text : { *(.text*) *(.rodata*) } > FLASH\n'
                       '.data : { *(.data*) } > RAM\n .bss : { *(.bss*) *(COMMON) } > RAM\n'
+                      'end = .;\n'
                       '/DISCARD/ : { *(.ARM.exidx*) } }\n')
     elf = out / 'crypto.elf'
-    subprocess.run(['arm-none-eabi-gcc', '-mcpu=cortex-m7', '-mthumb', '-nostartfiles',
+    subprocess.run(['arm-none-eabi-g++', '-mcpu=cortex-m7', '-mthumb', '-nostartfiles',
                     '-specs=nano.specs', '-specs=nosys.specs', '-T' + str(script),
                     '-Wl,--gc-sections,-e,RunRngTest,-u,RunCryptoVectors', *objects,
                     '-o', str(elf)], check=True)
