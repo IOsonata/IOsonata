@@ -453,6 +453,41 @@ static void AesVectors(CipherEngine *pAes, MacEngine *pMac, AeadEngine *pAead)
 			CRYPTO_STATUS_FAIL && gdec[0] == 0U && gdec[59] == 0U);
 }
 
+// Software fallback must offer both directions even without an accelerator.
+static void SoftwareAesDecryptChecks(CryptoSoftAes *pAes)
+{
+	printf("Software ECB/CBC decryption\r\n");
+	uint8_t iv[16], cipher[64], buf[66], expected[66];
+	for (int i = 0; i < 16; i++) iv[i] = (uint8_t)i;
+	CryptoKey key = AesKey(s_Spkey, CRYPTO_KEY_USE_DECRYPT);
+	for (int mode = 0; mode < 2; mode++)
+	{
+		CRYPTO_CIPHER_ALG alg = mode == 0 ? CRYPTO_CIPHER_ECB : CRYPTO_CIPHER_CBC;
+		Hex(mode == 0 ? s_EcbHex : s_CbcHex, cipher, sizeof(cipher));
+		memset(buf, 0xA5, sizeof(buf));
+		check(mode == 0 ? "software ECB known-answer decrypt" : "software CBC known-answer decrypt",
+			pAes->Cipher(alg, 0, key, iv, sizeof(iv), cipher, 64, buf + 1) == CRYPTO_STATUS_OK &&
+			memcmp(buf + 1, s_Spmsg, 64) == 0 && buf[0] == 0xA5 && buf[65] == 0xA5);
+		memcpy(buf + 1, cipher, 64);
+		check(mode == 0 ? "software ECB in-place decrypt" : "software CBC in-place decrypt",
+			pAes->Cipher(alg, 0, key, iv, sizeof(iv), buf + 1, 64, buf + 1) == CRYPTO_STATUS_OK &&
+			memcmp(buf + 1, s_Spmsg, 64) == 0 && buf[0] == 0xA5 && buf[65] == 0xA5);
+		memset(buf, 0xA5, sizeof(buf));
+		memcpy(expected, buf, sizeof(buf));
+		bool ok = pAes->Cipher(alg, 0, key, iv, sizeof(iv), cipher, 0, buf + 1) == CRYPTO_STATUS_OK;
+		ok = ok && pAes->Cipher(alg, 0, key, iv, sizeof(iv), cipher, 63, buf + 1) == CRYPTO_STATUS_FAIL;
+		CryptoKey denied = AesKey(s_Spkey, CRYPTO_KEY_USE_ENCRYPT);
+		ok = ok && pAes->Cipher(alg, 0, denied, iv, sizeof(iv), cipher, 64, buf + 1) == CRYPTO_STATUS_UNSUPPORTED;
+		if (mode != 0)
+		{
+			ok = ok && pAes->Cipher(alg, 0, key, nullptr, 16, cipher, 64, buf + 1) == CRYPTO_STATUS_FAIL;
+			ok = ok && pAes->Cipher(alg, 0, key, iv, 15, cipher, 64, buf + 1) == CRYPTO_STATUS_FAIL;
+		}
+		check(mode == 0 ? "software ECB length and key policy" : "software CBC length, IV and key policy",
+			ok && memcmp(buf, expected, sizeof(buf)) == 0);
+	}
+}
+
 // Engine against the software one on random keys, data and lengths
 static void AesSoak(CipherEngine *pHw, MacEngine *pHwMac, AeadEngine *pHwAead,
 					CipherEngine *pSw, MacEngine *pSwMac, AeadEngine *pSwAead)
@@ -902,6 +937,7 @@ int CryptoEngineTest(void)
 
 	RngChecks(hwRng);
 	AesVectors(hwAes, hwAes, hwAes);
+	SoftwareAesDecryptChecks(swAes);
 	AesSoak(hwAes, hwAes, hwAes, swAes, swAes, swAes);
 	PkaVectors(hwPka, hwPka, swPka);
 	PkaSoak(hwPka, hwPka, swPka, swPka);

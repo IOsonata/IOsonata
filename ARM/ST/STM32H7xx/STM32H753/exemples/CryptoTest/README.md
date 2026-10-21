@@ -13,12 +13,17 @@ cable or external wiring is needed.
 
 The shared test prints known-answer checks, RNG sample checks, authenticated
 encryption rejection checks, and P-256 signing/agreement checks. Expect zero
-failed checks. Software AES reports ECB/CBC decryption as unsupported. RNG
-sample checks are sanity checks, not entropy certification.
+failed checks. Software AES supports ECB/CBC encryption and decryption; the
+shared example also checks software decryption in place, buffer bounds,
+length/IV validation and key permissions. RNG sample checks are sanity checks,
+not entropy certification.
 
 The library also includes the existing SHA-256/HMAC engine. Its known-answer
 self-test is exercised by `tests/stm32h7/run_crypto.py` along with RNG timeout,
 clock/seed errors, output wiping and reset recovery at O0 and Os. The register
 model supplies deterministic words and cannot validate physical entropy.
 
-Board execution remains untested. Ethernet TLS/DTLS is not implemented.
+On October 21, 2026, the board run passed 48 checks with zero failures before
+software ECB/CBC decryption was added. That run skipped ECB/CBC decryption
+and the P-256 scalar n - 1 case. Rebuild to validate the added decryption paths
+on the board. Ethernet TLS/DTLS is not implemented.
