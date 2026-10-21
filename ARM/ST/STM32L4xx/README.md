@@ -184,8 +184,13 @@ follow the board when it is turned and reach the 2 g full scale when it is
 shaken. The data ready interrupt on PD11 arrives and its handler reads the
 status and the 14 output bytes in 2.4 ms at 100 kHz I2C. The printed interval,
 about 100 ms, is the time of one semihosting printf, not the 52 Hz output
-rate. The demo needs float printf (`-u _printf_float`) with newlib-nano. The
-gyroscope is read with the accelerometer but the demo does not print it.
+rate. The demo needs float printf (`-u _printf_float`) with newlib-nano.
+Second run the same day with the gyroscope printf, 125 dps full scale: in 53
+readings at rest the angular rate reads 2.35 to 2.56 dps on X, -3.03 to -2.94
+dps on Y and about -0.84 dps on Z, with 3 Z readings between -2.7 and -5.4 dps
+while the acceleration stays at rest. The three axes follow the board when it
+is turned and clip at 143.34 dps, raw 32764, either sign, when it is shaken.
+The rate scale is not checked against a known rotation rate.
 The STM32L476 example EnvSensorDemo (`exemples/sensor/env_sensor_demo.cpp`)
 reads the onboard HTS221 (`src/sensors/humi_hts221.cpp`) on the same bus at
 0x5F, 1 Hz, and prints the humidity and the temperature on the ST-LINK virtual
