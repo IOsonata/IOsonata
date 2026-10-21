@@ -104,7 +104,7 @@ static void SystickReset(TimerDev_t * const pTimer)
 
 static uint32_t SystickSetFrequency(TimerDev_t * const pTimer, uint32_t Freq)
 {
-    uint32_t achieved = SysTickSetFrequency(s_SysTickData.CoreClkHz, Freq);
+    uint32_t achieved = SysTickSetFrequency(SYSTICK_CLOCK_SRC_MCU, s_SysTickData.CoreClkHz, Freq);
 
     if (achieved == 0u) {
         return pTimer->Freq;
