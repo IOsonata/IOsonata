@@ -48,6 +48,9 @@ SOFTWARE.
 #ifndef NET_DEMO_PROTO
 #define NET_DEMO_PROTO SOCKINTRF_PROTO_UDP
 #endif
+#ifndef NET_DEMO_TEST_COUNT
+#define NET_DEMO_TEST_COUNT 0
+#endif
 
 alignas(4) uint8_t g_AppEvtHandlerQueMem[APPEVT_HANDLER_QUE_MEMSIZE(16)];
 static const IOPinCfg_t s_EthernetPins[] = ETHERNET_PINS;
@@ -122,6 +125,120 @@ static const SysLogCfg_t s_LogCfg = {
 	.bBlocking = false,
 };
 
+#if NET_DEMO_TEST_COUNT > 0
+static_assert(NET_DEMO_TEST_COUNT <= 1000000, "Echo byte counters require at most 1000000 messages");
+// One outstanding echo; fixed storage also covers a multi-segment TCP message.
+static uint8_t s_TestTx[4096];
+static uint8_t s_TestRx[4097];
+static uint32_t s_TestPassed;
+static uint32_t s_TestBytes;
+static uint32_t s_TestStart;
+static uint32_t s_TestSent;
+static int s_TestLength;
+static int s_TestTxOffset;
+static int s_TestRxOffset;
+static bool s_TestStarted;
+static bool s_TestDone;
+
+static void EchoTestFail(const char *pReason)
+{
+	s_TestDone = true;
+	SysLogPrintf(SysLogGet(), "Echo FAIL: %s, passed=%lu len=%d tx=%d rx=%d\r\n",
+		pReason, (unsigned long)s_TestPassed, s_TestLength, s_TestTxOffset, s_TestRxOffset);
+	s_Socket.Close();
+}
+
+static void EchoTest(uint32_t Now)
+{
+	static const int lengths[] = {1, 15, 16, 17, 255, 256, 257, 1024, 1472, 4096};
+	bool udp = s_SockCfg.Proto == SOCKINTRF_PROTO_UDP;
+	int count;
+
+	if (s_TestDone)
+	{
+		return;
+	}
+	if (s_TestStarted == false)
+	{
+		s_TestStarted = true;
+		s_TestStart = Now;
+		SysLogPrintf(SysLogGet(), "Echo test: %s, %lu messages, peer %s:%u\r\n",
+			udp ? "UDP" : "TCP", (unsigned long)NET_DEMO_TEST_COUNT, s_SockCfg.pHost, s_SockCfg.Port);
+	}
+	if (s_TestLength == 0)
+	{
+		uint32_t pattern = s_TestPassed + 1U;
+
+		s_TestLength = lengths[s_TestPassed % (udp ? 9U : 10U)];
+		s_TestTxOffset = 0;
+		s_TestRxOffset = 0;
+		s_TestSent = Now;
+		for (int i = 0; i < s_TestLength; i++)
+		{
+			pattern = pattern * 1664525U + 1013904223U;
+			s_TestTx[i] = (uint8_t)(pattern >> 24);
+		}
+	}
+	if (s_TestTxOffset < s_TestLength)
+	{
+		count = s_Socket.Tx(0, s_TestTx + s_TestTxOffset, s_TestLength - s_TestTxOffset);
+		if (count < 0 || count > s_TestLength - s_TestTxOffset ||
+			(udp && count != 0 && count != s_TestLength))
+		{
+			EchoTestFail("invalid send length");
+
+			return;
+		}
+		s_TestTxOffset += count;
+	}
+	// Bounded foreground work; TCP may split the echoed stream arbitrarily.
+	for (int i = 0; i < 8; i++)
+	{
+		count = s_Socket.Rx(0, s_TestRx, sizeof(s_TestRx));
+		if (count == 0)
+		{
+			break;
+		}
+		if (count < 0 || count > s_TestTxOffset - s_TestRxOffset ||
+			(udp && count != s_TestLength))
+		{
+			EchoTestFail("unexpected receive length");
+
+			return;
+		}
+		if (memcmp(s_TestTx + s_TestRxOffset, s_TestRx, count) != 0)
+		{
+			EchoTestFail("data mismatch");
+
+			return;
+		}
+		s_TestRxOffset += count;
+	}
+	if (s_TestRxOffset == s_TestLength)
+	{
+		s_TestPassed++;
+		s_TestBytes += (uint32_t)s_TestLength;
+		if (s_TestPassed == NET_DEMO_TEST_COUNT)
+		{
+			s_TestDone = true;
+			SysLogPrintf(SysLogGet(), "Echo PASS: %lu messages, %lu bytes each way, %lu ms\r\n",
+				(unsigned long)s_TestPassed, (unsigned long)s_TestBytes, (unsigned long)(Now - s_TestStart));
+			s_Socket.Close();
+		}
+		else if (s_TestPassed % 100U == 0)
+		{
+			SysLogPrintf(SysLogGet(), "Echo checked %lu/%lu\r\n",
+				(unsigned long)s_TestPassed, (unsigned long)NET_DEMO_TEST_COUNT);
+		}
+		s_TestLength = 0;
+	}
+	else if ((uint32_t)(Now - s_TestSent) >= 5000U)
+	{
+		EchoTestFail("5 second timeout");
+	}
+}
+#endif
+
 static void Report(uint32_t Evt, void *pCtx)
 {
 	uint8_t addr[4];
@@ -147,6 +264,12 @@ static void Report(uint32_t Evt, void *pCtx)
 	}
 	if (ready == false)
 	{
+#if NET_DEMO_TEST_COUNT > 0
+		if (s_TestStarted && s_TestDone == false)
+		{
+			EchoTestFail("network down");
+		}
+#endif
 		s_Socket.Close();
 		s_MessageLength = 0;
 		s_MessageOffset = 0;
@@ -157,17 +280,39 @@ static void Report(uint32_t Evt, void *pCtx)
 	{
 		return;
 	}
+#if NET_DEMO_TEST_COUNT > 0
+	if (s_TestDone)
+	{
+		return;
+	}
+#endif
 	if (s_Socket.Connected() == false)
 	{
+#if NET_DEMO_TEST_COUNT > 0
+		if (s_TestStarted)
+		{
+			EchoTestFail("socket disconnected");
+
+			return;
+		}
+#endif
 		s_MessageLength = 0;
 		s_MessageOffset = 0;
 		if (s_Socket.Init(s_SockCfg) == false)
 		{
 			SysLogPrintf(SysLogGet(), "Socket connection failed: %s:%u\r\n", s_SockCfg.pHost, s_SockCfg.Port);
+#if NET_DEMO_TEST_COUNT > 0
+			EchoTestFail("name lookup or connect failed");
+#endif
 
 			return;
 		}
 	}
+#if NET_DEMO_TEST_COUNT > 0
+	EchoTest(TimerGetMilisecond(&s_Timer));
+
+	return;
+#endif
 	while ((count = s_Socket.Rx(0, rx, sizeof(rx) - 1)) > 0)
 	{
 		rx[count] = 0;
@@ -224,7 +369,8 @@ int main()
 	{
 		SysLogPrintf(SysLogGet(), "IP initialization failed\r\n");
 	}
-	else if (msTimerEnableTrigger(&s_Timer, 1, 1000, TIMER_TRIG_TYPE_CONTINUOUS, ReportTimer, nullptr) == 0)
+	else if (msTimerEnableTrigger(&s_Timer, 1, NET_DEMO_TEST_COUNT > 0 ? 10 : 1000,
+		TIMER_TRIG_TYPE_CONTINUOUS, ReportTimer, nullptr) == 0)
 	{
 		SysLogPrintf(SysLogGet(), "Report timer initialization failed\r\n");
 	}

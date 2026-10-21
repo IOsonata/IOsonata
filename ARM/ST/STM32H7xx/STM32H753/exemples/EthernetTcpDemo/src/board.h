@@ -57,4 +57,9 @@ SOFTWARE.
 #define NET_DEMO_HOST "192.168.1.10"
 #define NET_DEMO_PROTO SOCKINTRF_PROTO_TCP
 
+// Set to 6000 for a finite binary integrity run; 0 keeps the text echo demo.
+#ifndef NET_DEMO_TEST_COUNT
+#define NET_DEMO_TEST_COUNT 0
+#endif
+
 #endif

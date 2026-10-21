@@ -132,10 +132,47 @@ Static IPv4 configuration is available by setting `s_IpCfg.bDhcp = false` in
 `exemples/net/ethernet_demo.cpp` and supplying address, mask, gateway and DNS for
 that LAN. There is no automatic static-address fallback after DHCP failure.
 
+### Binary echo integrity run
+
+Use the existing EthernetUdpDemo and EthernetTcpDemo projects. In their
+`src/board.h`, set `NET_DEMO_TEST_COUNT` to `6000` and keep `NET_DEMO_HOST`
+set to the computer running the echo server. Build and flash one project at
+a time. Start the server before resetting the board:
+
+```sh
+python3 Python/net_echo.py --quiet
+```
+
+The test sends deterministic binary payloads of 1, 15, 16, 17, 255, 256, 257,
+1024 and 1472 bytes. TCP also tests 4096 bytes, handling partial sends and
+arbitrary receive splits. Every received byte and UDP datagram length is
+checked. One message is outstanding at a time, with a 10 ms foreground
+service interval; this tests sustained integrity, not maximum throughput.
+
+Expect `Echo checked 100/6000` progress lines followed by `Echo PASS` with
+message/byte counts and elapsed milliseconds. A mismatch, unexpected length,
+5-second message timeout, network loss or socket disconnect ends the run with
+`Echo FAIL`. A name lookup/connect failure also ends the run. Reset to retry;
+the test does not silently reconnect and discard an unfinished exchange.
+Keep the cable and server connected for this test. Use `NET_DEMO_TEST_COUNT 0`
+to return to the text demo and its reconnect behavior.
+
+### DNS hostname check
+
+Create or use a LAN DNS A record for the computer running `net_echo.py`.
+Verify with `nslookup <hostname>` that the answer is that computer's LAN IPv4
+address, using the same DNS server provided to the board by DHCP. Then replace
+the numeric `NET_DEMO_HOST` with that hostname, rebuild and reset the board to
+clear the stack's DNS cache. A successful echo run now exercises DNS lookup
+before opening the socket. A computer name that works only through mDNS
+(`.local`) or a local hosts file is insufficient: this lwIP profile uses
+unicast DNS and does not enable mDNS name resolution.
+
 ## Validation
 
 ```sh
 python3 tests/net/run.py
+python3 tests/net/run_echo.py
 python3 tests/stm32h7/run_ethernet.py
 python3 tests/stm32h7/run.py
 ```
@@ -143,6 +180,12 @@ python3 tests/stm32h7/run.py
 `LWIP_ROOT` can select a different local lwIP checkout. Host tests require GCC;
 Arm compilation needs GNU Arm GCC. Register models require Python `unicorn`
 and `pyelftools`.
+
+`run_echo.py` requires no MCU or lwIP checkout. It checks the example's binary
+test state with simulated partial transfers, corruption, extra/short data,
+refused sends and timeout across timer wrap, at O0/O2 with ASan/UBSan. It also
+checks the Python server using local UDP and TCP sockets in normal/quiet mode.
+These checks validate the test code; they do not establish board results.
 
 The packet tests execute the real lwIP sources with an independent Ethernet
 packet peer under AddressSanitizer and UndefinedBehaviorSanitizer at O0/O2.

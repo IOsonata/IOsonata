@@ -27,21 +27,26 @@ import asyncio
 
 
 class UdpEcho(asyncio.DatagramProtocol):
+    def __init__(self, quiet=False):
+        self.quiet = quiet
+
     def connection_made(self, transport):
         self.transport = transport
 
     def datagram_received(self, data, addr):
         self.transport.sendto(data, addr)
-        print('UDP', addr, len(data), repr(data), flush=True)
+        if not self.quiet:
+            print('UDP', addr, len(data), repr(data), flush=True)
 
 
-async def tcp_echo(reader, writer):
+async def tcp_echo(reader, writer, quiet=False):
     addr = writer.get_extra_info('peername')
     try:
         while data := await reader.read(4096):
             writer.write(data)
             await writer.drain()
-            print('TCP', addr, len(data), repr(data), flush=True)
+            if not quiet:
+                print('TCP', addr, len(data), repr(data), flush=True)
     except (ConnectionError, OSError):
         pass
     finally:
@@ -52,12 +57,12 @@ async def tcp_echo(reader, writer):
             pass
 
 
-async def main(host, port):
+async def main(host, port, quiet=False):
     loop = asyncio.get_running_loop()
-    udp, _ = await loop.create_datagram_endpoint(UdpEcho, local_addr=(host, port))
-    server = await asyncio.start_server(tcp_echo, host, port)
-    print(f'UDP and TCP echo listening on {host}:{port}', flush=True)
+    udp, _ = await loop.create_datagram_endpoint(lambda: UdpEcho(quiet), local_addr=(host, port))
     try:
+        server = await asyncio.start_server(lambda r, w: tcp_echo(r, w, quiet), host, port)
+        print(f'UDP and TCP echo listening on {host}:{port}', flush=True)
         async with server:
             await server.serve_forever()
     finally:
@@ -68,8 +73,9 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--host', default='0.0.0.0')
     parser.add_argument('--port', type=int, default=2469)
+    parser.add_argument('--quiet', action='store_true', help='suppress per-packet output for binary echo tests')
     args = parser.parse_args()
     try:
-        asyncio.run(main(args.host, args.port))
+        asyncio.run(main(args.host, args.port, args.quiet))
     except KeyboardInterrupt:
         pass
