@@ -303,7 +303,11 @@ static bool Frame(int Length, uint8_t Seed, bool Receive = false)
 			before, s_Completions, armsBefore, s_Arms, s_Count);
 	}
 	if (!pass && SpiMasterSlaveDiagnostics != nullptr)
+	{
+		printf("Master completed count=%d expected=%d async callback=%d\r\n",
+			count, Length, s_MasterDone);
 		SpiMasterSlaveDiagnostics();
+	}
 	if (mismatch >= 0)
 		printf("Mismatch at %d: master RX=%02x expected=%02x slave RX=%02x expected=%02x\r\n",
 			mismatch, masterRx[mismatch], s_SlaveTx[mismatch],

@@ -38,7 +38,8 @@ Hardware run (2026-10-21) failed on the first one-byte frame in each
 interrupt-slave combination and stalled while initializing the DMA slave.
 The debugger showed SPI3 TXP/TXC interrupts before SPE was set. The shared
 driver now enables SPI and preloads CPU TX data before enabling interrupts.
-Hardware retest is pending; the first-frame failures are not yet cleared.
+Retest: initialization completes in all modes, but all eight combinations
+still fail on their first frame (0 passed, 8 failed, 0 skipped).
 Each combination returns at its first failure, so later lengths and modes
 are not printed until that failure is fixed. The test checks are unchanged.
 
@@ -51,3 +52,9 @@ behavior and do not validate the physical jumper connections.
 
 Pin references: ST [UM2407, connector tables 18-20](https://www.st.com/resource/en/user_manual/um2407-stm32h7-nucleo144-boards-mb1364-stmicroelectronics.pdf)
 and [STM32H753 datasheet, alternate functions](https://www.st.com/resource/en/datasheet/stm32h753xi.pdf).
+
+The failure-only `spi_diagnostics.cpp` hook prints the master completion count,
+SPI1/SPI3 configuration and status, GPIO alternate functions, kernel clock
+selection and EXTI/NVIC state. It reads registers without consuming RXDR or
+changing pin configuration. Rebuild the example and capture the first failed
+combination including this dump. Transfer lengths and assertions are unchanged.
