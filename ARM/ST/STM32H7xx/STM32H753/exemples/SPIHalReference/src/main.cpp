@@ -41,6 +41,30 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #define FIFOSIZE			CFIFO_MEMSIZE(256)
 
+typedef struct {
+	uint32_t Cycles;
+	uint32_t SlaveSR;
+	uint32_t SlaveCR1;
+	uint32_t SlaveIER;
+	uint32_t MasterSR;
+	uint32_t MasterCR1;
+	uint16_t TxLeft;
+	uint16_t RxLeft;
+	uint16_t MasterTxLeft;
+	uint16_t MasterRxLeft;
+	unsigned Event;
+	unsigned NSS;
+} SpiTrace_t;
+
+static SpiTrace_t s_Trace[32];
+static volatile bool s_TraceEnabled;
+static volatile bool s_TraceFrozen;
+static unsigned s_TraceCount;
+static uint32_t s_TraceStart;
+static uint32_t s_ArmedSR;
+static unsigned s_ArmedTxLeft;
+static unsigned s_ArmedRxLeft;
+
 uint8_t g_UarTxBuff[FIFOSIZE];
 
 // Assign UART pins
@@ -111,8 +135,73 @@ extern "C" uint32_t HAL_GetTick(void)
 	return s_TickMs;
 }
 
+// Diagnostic replay only. Never read RXDR or clear a peripheral flag here.
+static void Trace(unsigned Event)
+{
+	uint32_t mask;
+	SpiTrace_t *entry;
+
+	if (!s_TraceEnabled)
+	{
+		return;
+	}
+	mask = __get_PRIMASK();
+	__disable_irq();
+	if (!s_TraceFrozen)
+	{
+		entry = &s_Trace[s_TraceCount % 32U];
+		entry->Cycles = DWT->CYCCNT - s_TraceStart;
+		entry->SlaveSR = SPI3->SR;
+		entry->SlaveCR1 = SPI3->CR1;
+		entry->SlaveIER = SPI3->IER;
+		entry->MasterSR = SPI1->SR;
+		entry->MasterCR1 = SPI1->CR1;
+		entry->TxLeft = s_Slave.TxXferCount;
+		entry->RxLeft = s_Slave.RxXferCount;
+		entry->MasterTxLeft = s_Master.TxXferCount;
+		entry->MasterRxLeft = s_Master.RxXferCount;
+		entry->Event = Event;
+		entry->NSS = (GPIOA->IDR >> 15) & 1U;
+		s_TraceCount++;
+		if (entry->SlaveSR & (SPI_SR_UDR | SPI_SR_OVR | SPI_SR_MODF | SPI_SR_TIFRE))
+		{
+			s_TraceFrozen = true;
+		}
+	}
+	__set_PRIMASK(mask);
+}
+
+static void PrintTrace(void)
+{
+	unsigned i;
+	unsigned count = s_TraceCount;
+	const SpiTrace_t *entry;
+
+	printf("Armed before CS: slave SR=%08lx TX=%u RX=%u\r\n",
+		(unsigned long)s_ArmedSR, s_ArmedTxLeft, s_ArmedRxLeft);
+	printf("Trace events=%u; 1=armed 2=IRQ entry 3=IRQ exit 4=master returned\r\n", count);
+	printf("cycles are core cycles since arm; TX/RX are HAL items remaining\r\n");
+	for (i = count > 32U ? count - 32U : 0U; i < count; i++)
+	{
+		entry = &s_Trace[i % 32U];
+		printf("%u ev=%u cyc=%lu NSS=%u slave SR=%08lx CR1=%08lx IER=%08lx TX=%u RX=%u master SR=%08lx CR1=%08lx TX=%u RX=%u\r\n",
+			i, entry->Event, (unsigned long)entry->Cycles, entry->NSS,
+			(unsigned long)entry->SlaveSR, (unsigned long)entry->SlaveCR1,
+			(unsigned long)entry->SlaveIER, entry->TxLeft, entry->RxLeft,
+			(unsigned long)entry->MasterSR, (unsigned long)entry->MasterCR1,
+			entry->MasterTxLeft, entry->MasterRxLeft);
+	}
+}
+
 extern "C" void SPI3_IRQHandler(void)
 {
+	if (s_TraceEnabled)
+	{
+		Trace(2);
+		HAL_SPI_IRQHandler(&s_Slave);
+		Trace(3);
+		return;
+	}
 	HAL_SPI_IRQHandler(&s_Slave);
 }
 
@@ -203,6 +292,9 @@ static bool Frame(unsigned Length, uint8_t Seed, bool Receive)
 	}
 	s_Complete = 0;
 	s_Error = 0;
+	s_TraceCount = 0;
+	s_TraceFrozen = false;
+	s_TraceStart = DWT->CYCCNT;
 	s_TickCycles = DWT->CYCCNT;
 	arm = HAL_SPI_TransmitReceive_IT(&s_Slave, s_SlaveTx, s_SlaveRx, Length);
 	if (arm != HAL_OK)
@@ -210,8 +302,19 @@ static bool Frame(unsigned Length, uint8_t Seed, bool Receive)
 		printf("HAL slave arm failed status=%u error=%08lx\r\n", (unsigned)arm, (unsigned long)s_Slave.ErrorCode);
 		return false;
 	}
+	if (s_TraceEnabled)
+	{
+		s_ArmedSR = SPI3->SR;
+		s_ArmedTxLeft = s_Slave.TxXferCount;
+		s_ArmedRxLeft = s_Slave.RxXferCount;
+		Trace(1);
+	}
 	IOPinClear(IOPORTD, 14);
 	status = HAL_SPI_TransmitReceive(&s_Master, s_MasterTx, s_MasterRx, Length, 250);
+	if (s_TraceEnabled)
+	{
+		Trace(4);
+	}
 	IOPinSet(IOPORTD, 14);
 	start = HAL_GetTick();
 	while (!s_Complete && !s_Error && HAL_GetTick() - start < 250U)
@@ -230,6 +333,12 @@ static bool Frame(unsigned Length, uint8_t Seed, bool Receive)
 			}
 		}
 	}
+	if (s_TraceEnabled)
+	{
+		// Freeze before UART output, including a timeout without an error IRQ.
+		s_TraceFrozen = true;
+		__DSB();
+	}
 	printf("HAL %s %u seed=%02x status=%u complete=%u master_err=%08lx slave_err=%08lx mismatch=%d %s\r\n",
 		Receive ? "RX" : "TX", Length, Seed, (unsigned)status, s_Complete,
 		(unsigned long)s_Master.ErrorCode, (unsigned long)s_Slave.ErrorCode, mismatch, pass ? "PASS" : "FAIL");
@@ -241,6 +350,16 @@ static bool Frame(unsigned Length, uint8_t Seed, bool Receive)
 			printf(" %02x", s_SlaveRx[i]);
 		}
 		printf("\r\n");
+		if (s_TraceEnabled)
+		{
+			PrintTrace();
+			printf("Master received:");
+			for (i = 0; i < Length; i++)
+			{
+				printf(" %02x", s_MasterRx[i]);
+			}
+			printf("\r\n");
+		}
 	}
 	return pass;
 }
@@ -254,6 +373,7 @@ int main(void)
 	unsigned n;
 	unsigned passed = 0;
 	unsigned failed = 0;
+	unsigned failedModes = 0;
 	uint32_t cycles;
 	bool pass;
 
@@ -301,10 +421,34 @@ int main(void)
 			else
 			{
 				failed++;
+				failedModes |= 1U << (r * 4U + mode);
 			}
 		}
 	}
 	printf("HAL reference: %u passed, %u failed\r\n", passed, failed);
+	// Keep the reference result above separate from instrumented replays.
+	s_TraceEnabled = true;
+	for (r = 0; r < 2; r++)
+	{
+		for (mode = 0; mode < 4; mode++)
+		{
+			if (!(failedModes & (1U << (r * 4U + mode))))
+			{
+				continue;
+			}
+			printf("Diagnostic replay mode=%u rate=%lu\r\n", mode, (unsigned long)rates[r]);
+			pass = Init(mode, rates[r]);
+			for (n = 0; pass && n < 3; n++)
+			{
+				pass = Frame(lengths[n], 0x30, false) && Frame(lengths[n], 0x50, false) && Frame(lengths[n], 0, true);
+				if (pass && lengths[n] > 1)
+				{
+					pass = Frame(1, 0x70, false) && Frame(lengths[n], 0x90, false);
+				}
+			}
+			printf("Diagnostic replay %s (instrumented, not a validation result)\r\n", pass ? "PASS" : "FAIL");
+		}
+	}
 	while (1)
 	{
 		__WFE();
