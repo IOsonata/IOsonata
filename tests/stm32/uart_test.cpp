@@ -1627,7 +1627,11 @@ static void TestDma(int i)
 #else
 	CHECK(DmaInts(t.Rx) == (F_HT | F_TC));
 #endif
+#ifdef STM32H753xx
+	CHECK(DmaInts(t.Tx) == (F_TC | F_TE));
+#else
 	CHECK(DmaInts(t.Tx) == F_TE);
+#endif
 	CHECK(s_NvicEn[t.IrqNo] && s_NvicEn[t.Rx.IrqNo] && s_NvicEn[t.Tx.IrqNo]);
 	CHECK(s_NvicPrio[t.Rx.IrqNo] == 3 && s_NvicPrio[t.Tx.IrqNo] == 3);
 	CHECK((Rd(reg->CR3) & (USART_CR3_DMAT | USART_CR3_DMAR | USART_CR3_EIE)) == (USART_CR3_DMAT | USART_CR3_DMAR | USART_CR3_EIE));
@@ -1816,6 +1820,53 @@ static void DmaTxDrain(int i)
 		s_Inst[i].Vector();
 	}
 }
+
+#ifdef STM32H753xx
+// DMA finishes before the last UART character. Queued data must continue
+// immediately, but the final TX-ready event must wait for the line to drain.
+static void TestDmaChain(int i)
+{
+	TestInst_t &t = s_Inst[i];
+	UARTDev_t &u = s_Uart[i];
+	if (t.Tx.pChan == NULL)
+	{
+		return;
+	}
+	uint8_t data[20];
+	for (int k = 0; k < 20; k++)
+	{
+		data[k] = (uint8_t)(k + 1);
+	}
+	for (int blocking = 0; blocking < 2; blocking++)
+	{
+		UARTCfg_t c = Cfg(i, 115200, true, true);
+		c.bFifoBlocking = blocking != 0;
+		CHECK(UARTInit(&u, &c));
+		WireReset(i);
+		s_TxReadyCnt = 0;
+		CHECK(UARTTx(&u, data, 10) == 10);
+		CHECK(UARTTx(&u, data + 10, 10) == 10);
+		CHECK(DmaTxRun(i) == 10);
+		Clr(T_ISR(t.pReg), T_TC);
+		t.Tx.Vector();
+		CHECK(DmaOn(t.Tx) && DmaCnt(t.Tx) == 10);
+		CHECK(!u.bTxReady && s_TxReadyCnt == 0);
+		CHECK(DmaTxRun(i) == 10);
+		Clr(T_ISR(t.pReg), T_TC);
+		t.Tx.Vector();
+		CHECK(!DmaOn(t.Tx) && !u.bTxReady && s_TxReadyCnt == 0);
+		CHECK(DmaGetFlags(t.Tx) == 0);
+		t.Tx.Vector();
+		CHECK(!u.bTxReady && s_TxReadyCnt == 0);
+		Set(T_ISR(t.pReg), T_TC);
+		t.Vector();
+		CHECK(u.bTxReady && s_TxReadyCnt == 1);
+		CHECK(CFifoUsed(u.hTxFifo) == 0 && WireIs(i, data, 20));
+		t.Tx.Vector();
+		CHECK(s_TxReadyCnt == 1);
+	}
+}
+#endif
 
 // DMA, blocking and non-blocking CFIFO. Blocking: the block is read in place.
 // Non-blocking: the block is a copy taken out of the FIFO, a put on a full
@@ -2291,6 +2342,9 @@ int main()
 		TestInterrupt(i);
 		TestDma(i);
 		TestDmaDrop(i);
+#ifdef STM32H753xx
+		TestDmaChain(i);
+#endif
 #if defined(STM32WBA) || defined(STM32L4) || defined(STM32H753xx)
 		if (s_Inst[i].Tx.pChan) TestReinitFailure(i);
 #endif

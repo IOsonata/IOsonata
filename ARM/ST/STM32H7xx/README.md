@@ -51,6 +51,9 @@ stream of each pair. A conflicting owner makes initialization fail.
 The `.uart_dma` section uses AXI SRAM with separate 32-byte cache lines for
 RX rings and TX staging buffers. Caller FIFOs may remain in DTCM: TX copies
 up to 32 bytes per DMA block; blocking FIFO bytes are released at completion.
+Queued TX blocks now chain at DMA completion while the UART is still sending,
+instead of waiting for USART TC between blocks. The final TX-ready event still
+waits for USART TC, after the last character leaves the line.
 RX uses a 64-byte circular ring, serviced at half/full completion and USART
 IDLE, with polling service when interrupts are disabled. Poll frequently
 in that mode so the ring cannot overrun. TX cleans and RX invalidates cache
@@ -70,7 +73,12 @@ and the USART3 and DMA vectors resolve to their driver handlers.
 `python3 tests/stm32/run_uart.py` covers routing, TX/RX, FIFO wrap and overflow,
 DMA errors, polling, lifecycle, ownership, DTCM caller buffers and cache
 maintenance calls with the real shared driver. The register model does not
-simulate a physical cache or DMA timing. UART DMA hardware testing is pending.
+simulate a physical cache or DMA timing. Tests also cover chaining before USART
+TC with blocking and non-blocking FIFOs, and final TX-ready notification.
+
+Hardware: USART3 PRBS TX with interrupts and DMA enabled at 1 Mbaud measured
+about 99,578 B/s before block chaining was added. The chaining change needs a
+hardware retest; DMA RX loopback validation is still pending.
 
 ## I2C and SPI
 

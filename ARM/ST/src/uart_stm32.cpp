@@ -1147,7 +1147,11 @@ static bool Stm32UartDmaSetup(Stm32UartDev_t * const pDev)
 	Stm32DmaEnable(&pDev->RxDma);
 	pDev->RxDmaRead = 0;
 
-	if (!Stm32DmaConfig(&pDev->TxDma, &ST_USART_TDR(reg), true, false, intmode ? ST_DMA_TE : 0U))
+	uint32_t txints = ST_DMA_TE;
+#ifdef STM32H753xx
+	txints |= ST_DMA_TC;
+#endif
+	if (!Stm32DmaConfig(&pDev->TxDma, &ST_USART_TDR(reg), true, false, intmode ? txints : 0U))
 	{
 		Stm32UartDmaRxStop(pDev);
 		return false;
@@ -1184,7 +1188,7 @@ static bool Stm32UartDmaSetup(Stm32UartDev_t * const pDev)
 // be written by TxData from an interrupt before they are copied. Only the TC
 // interrupt calls this with interrupts enabled, from TxData, RxData and the
 // DMA interrupt the whole copy runs with interrupts disabled. The copy is
-// made after TC, with the line idle.
+// made after USART TC, or DMA completion on H753 when more bytes are queued.
 //
 // TC is cleared first so that it is set again by the last character of this
 // block.
@@ -1294,13 +1298,12 @@ static bool Stm32UartDmaTxStart(Stm32UartDev_t * const pDev)
 	return true;
 }
 
-// A block is done when the DMA has moved all of it and TC is set, its last
-// character has left the line, or when the DMA stopped on a transfer error.
-// The DMA transfer complete flag is not used, it is set as soon as the last
-// byte is in TDR. Holding TX busy until TC lets the bytes queued meanwhile go
-// in the next block. The block bytes sent in place are released and the next
-// block takes what was queued. With the FIFO empty TX is ready again and the application
-// is told. From the TC and DMA interrupts, or from TxData in polling mode.
+// H753 chains queued blocks at DMA completion, while the UART is still sending.
+// Its direct-mode DMA has finished reading the staging buffer at that point.
+// Other DMA types wait for USART TC before releasing the current block.
+// With no queued block, all types wait for USART TC before reporting TX ready:
+// the last character must have left the line. Transfer errors also end a block.
+// Called from USART and DMA interrupts, or from TxData in polling mode.
 // On GPDMA the count is what is left to read from memory, the channel FIFO
 // may still hold bytes with the count at 0. TC is not set before they are
 // written: the USART requests the next byte as soon as TDR is empty, a
@@ -1325,7 +1328,17 @@ static bool Stm32UartDmaService(Stm32UartDev_t * const pDev)
 	else if ((ST_USART_ISR(pDev->pReg) & ST_USART_ISR_TC) == 0U &&
 			 (Stm32DmaFlags(&pDev->TxDma) & ST_DMA_TE) == 0U)
 	{
+#ifdef STM32H753xx
+		// Blocking CFIFOs still include the current block. Only chain when
+		// there are bytes beyond it; otherwise wait for the final USART TC.
+		if (CFifoUsed(dev->hTxFifo) <= (int)pDev->TxDmaLength)
+		{
+			Stm32DmaClear(&pDev->TxDma);
+			return false;
+		}
+#else
 		return false;
+#endif
 	}
 
 	if (!Stm32DmaDisable(&pDev->TxDma, false))
@@ -1358,7 +1371,7 @@ static bool Stm32UartDmaService(Stm32UartDev_t * const pDev)
 	return true;
 }
 
-// DMA interrupt of an instance: RX ring half or full, TX transfer error
+// DMA interrupt: RX ring half or full, TX error or H753 block completion
 static void Stm32UartDmaIrq(Stm32UartDev_t * const pDev)
 {
 	UARTDev_t *dev = pDev->pUartDev;
