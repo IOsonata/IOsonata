@@ -1,0 +1,12 @@
+{
+  "Inc/Legacy/stm32_hal_legacy.h": "37a057e32410712dbe30a3ec74a6cc838f767ae1c616f1b767687bede5dff68a",
+  "Inc/stm32h7xx_hal.h": "97aeb9e9e0c3acde0c91d025e89c7972b9ad13ab3cb735d40ad852dc395f6980",
+  "Inc/stm32h7xx_hal_def.h": "f7e6ad2cff1b770393ad76961fbb220bef0a52593e9035746e7961137061ebfc",
+  "Inc/stm32h7xx_hal_dma.h": "564d6d26015155743f4990a354d26124d5d434673813c75df5da9572e4ac2eae",
+  "Inc/stm32h7xx_hal_dma_ex.h": "bc906d5cf9ed149185aa77a80a793e50aa4b2c7e0606f88df1a4b8900a8a26fa",
+  "Inc/stm32h7xx_hal_spi.h": "9ea983fd0e3148a3291b2aa56b1d01709374a3a3845d6b592b3d3356b71f6cb5",
+  "Inc/stm32h7xx_hal_spi_ex.h": "44d854991d118840677da5ce86d88b1e555fe811808354522ad2f198ac4fa66c",
+  "LICENSE.md": "1a0c3a2cf55d2d808048d452c6598d441f89890d62d0890147459ec6db61037a",
+  "Src/stm32h7xx_hal_dma.c": "0866ad377afc04840c4add568150f6511a7c8cae8633e1b4ebbd10cf8597b643",
+  "Src/stm32h7xx_hal_spi.c": "4eeb322662c6fc531e42da9eef1474b6b32221f848dd7ec4fb0c4f0c408a013b"
+}

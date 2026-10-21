@@ -660,6 +660,22 @@ static int Stm32SpiMasterCount(Stm32SpiDev_t * const pDev)
 }
 
 #ifdef STM32_SPI_LAYOUT_CFG
+// Optional H753 example recorder. The library never prints during a transfer.
+#ifdef STM32H753xx
+void Stm32SpiDiagnosticTrace(unsigned Event, SPI_TypeDef *Reg, unsigned Count) __attribute__((weak));
+static void Stm32SpiTrace(unsigned Event, SPI_TypeDef *Reg, unsigned Count)
+{
+	if (Stm32SpiDiagnosticTrace != NULL)
+	{
+		Stm32SpiDiagnosticTrace(Event, Reg, Count);
+	}
+}
+#else
+static inline void Stm32SpiTrace(unsigned, SPI_TypeDef *, unsigned)
+{
+}
+#endif
+
 // Complete the last SCK period before disabling the master. H753 EOT can
 // precede the final output transition (ES0392 2.22.6). This is also used
 // between TSIZE chunks, while the caller keeps chip select asserted.
@@ -690,6 +706,7 @@ static void Stm32SpiMasterEnd(Stm32SpiDev_t * const pDev, bool bad)
 {
 	SPI_TypeDef *reg = pDev->pReg;
 
+	Stm32SpiTrace(2, reg, pDev->Done);
 	pDev->Result = bad ? Stm32SpiMasterCount(pDev) : (int)(pDev->Items * Stm32SpiItemSize(pDev));
 	Stm32SpiMasterDisable(pDev);
 	reg->IFCR = STM32_SPI_IFCR_ALL;
@@ -769,6 +786,7 @@ static void Stm32SpiMasterChunk(Stm32SpiDev_t * const pDev)
 		reg->IER = STM32_SPI_IER_MASTER | (pDev->bDma ? 0U : STM32_SPI_IER_DATA);
 	}
 	reg->CR1 |= SPI_CR1_SPE;
+	Stm32SpiTrace(1, reg, pDev->Chunk);
 	reg->CR1 |= SPI_CR1_CSTART;
 	Stm32SpiStageDone(pDev);
 }
@@ -1280,6 +1298,7 @@ static void Stm32SpiSlaveArm(Stm32SpiDev_t * const pDev)
 	DevIntrf_t *intrf = &spi->DevIntrf;
 	const int isz = Stm32SpiItemSize(pDev);
 
+	Stm32SpiTrace(3, reg, pDev->SRx);
 	spi->pRxBuff[0] = NULL;
 	spi->RxBuffLen[0] = 0;
 	spi->pTxData[0] = NULL;
@@ -1348,6 +1367,7 @@ static void Stm32SpiSlaveArm(Stm32SpiDev_t * const pDev)
 		}
 	}
 	reg->IER = ier;
+	Stm32SpiTrace(4, reg, pDev->SRx);
 }
 
 // NSS went inactive: the frame is over
@@ -1359,6 +1379,7 @@ static void Stm32SpiSlaveEnd(Stm32SpiDev_t * const pDev)
 	const int isz = Stm32SpiItemSize(pDev);
 	int count;
 
+	Stm32SpiTrace(5, reg, pDev->SRx);
 	if (pDev->bDma)
 	{
 #ifdef STM32_SPI_DMA
@@ -1393,6 +1414,7 @@ static void Stm32SpiSlaveEnd(Stm32SpiDev_t * const pDev)
 	{
 		pDev->bBad = true;
 	}
+	Stm32SpiTrace(6, reg, pDev->SRx);
 	count = pDev->bBad ? -1 : (int)(pDev->SRx * isz);
 
 	reg->IER = 0;
@@ -1447,6 +1469,10 @@ static void Stm32SpiSlaveService(Stm32SpiDev_t * const pDev)
 	SPI_TypeDef *reg = pDev->pReg;
 	uint32_t sr = reg->SR;
 
+	if (sr & (SPI_SR_UDR | SPI_SR_OVR | SPI_SR_MODF))
+	{
+		Stm32SpiTrace(7, reg, pDev->SRx);
+	}
 	if (sr & SPI_SR_OVR)
 	{
 		pDev->bBad = true;
@@ -1737,6 +1763,9 @@ static void Stm32SpiNssEvt(int IntNo, void *pCtx)
 	Stm32SpiDev_t *dev = (Stm32SpiDev_t*)pCtx;
 	const IOPinCfg_t &cs = dev->pSpiDev->Cfg.pIOPinMap[SPI_CS_IOPIN_IDX];
 
+#ifdef STM32H753xx
+	Stm32SpiTrace(IOPinRead(cs.PortNo, cs.PinNo) ? 9 : 8, dev->pReg, dev->SRx);
+#endif
 	(void)IntNo;
 	if (IOPinRead(cs.PortNo, cs.PinNo) == 0)
 	{

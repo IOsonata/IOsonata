@@ -36,6 +36,63 @@ SOFTWARE.
 // The shared application calls this hook only after a failed frame.
 #include "stddev.h"
 #include "stm32.h"
+#include <string.h>
+
+// Last 32 lifecycle/error events. No RXDR reads and no UART in the hook.
+struct SpiTraceEntry {
+	uint32_t Event;
+	uint32_t Instance;
+	uint32_t Count;
+	uint32_t Cr1;
+	uint32_t Sr;
+	uint32_t Cr2;
+	uint32_t Nss;
+};
+static SpiTraceEntry s_Trace[32];
+static unsigned s_TraceCount;
+
+void Stm32SpiDiagnosticTrace(unsigned Event, SPI_TypeDef *Reg, unsigned Count)
+{
+	uint32_t mask = __get_PRIMASK();
+	SpiTraceEntry *entry;
+
+	__disable_irq();
+	entry = &s_Trace[s_TraceCount % 32U];
+	entry->Event = Event;
+	entry->Instance = Reg == SPI1 ? 1U : Reg == SPI3 ? 3U : 0U;
+	entry->Count = Count;
+	entry->Cr1 = Reg->CR1;
+	entry->Sr = Reg->SR;
+	entry->Cr2 = Reg->CR2;
+	entry->Nss = (GPIOA->IDR >> 15) & 1U;
+	s_TraceCount++;
+	__set_PRIMASK(mask);
+}
+
+static void SpiTracePrint(void)
+{
+	SpiTraceEntry snapshot[32];
+	unsigned count;
+	unsigned first;
+	unsigned i;
+	uint32_t mask = __get_PRIMASK();
+	const SpiTraceEntry *entry;
+
+	__disable_irq();
+	count = s_TraceCount;
+	memcpy(snapshot, s_Trace, sizeof(snapshot));
+	__set_PRIMASK(mask);
+	first = count > 32U ? count - 32U : 0U;
+	printf("Trace: 1 master-start, 2 master-end, 3 arm-enter, 4 arm-ready, 5 slave-end-enter, 6 slave-end-count, 7 error, 8 NSS-low, 9 NSS-high\r\n");
+	for (i = first; i < count; i++)
+	{
+		entry = &snapshot[i % 32U];
+		printf("trace %u evt=%lu SPI%lu count=%lu CR1=%08lx SR=%08lx CR2=%08lx NSS=%lu\r\n",
+			i, (unsigned long)entry->Event, (unsigned long)entry->Instance,
+			(unsigned long)entry->Count, (unsigned long)entry->Cr1,
+			(unsigned long)entry->Sr, (unsigned long)entry->Cr2, (unsigned long)entry->Nss);
+	}
+}
 
 static void SpiRegisters(const char *Name, SPI_TypeDef *Reg)
 {
@@ -59,6 +116,7 @@ static void PinRegisters(const char *Name, GPIO_TypeDef *Reg)
 void SpiMasterSlaveDiagnostics(void)
 {
 	// Never read RXDR: doing so would consume received data.
+	SpiTracePrint();
 	SpiRegisters("SPI1", SPI1);
 	SpiRegisters("SPI3", SPI3);
 	PinRegisters("GPIOA", GPIOA);
