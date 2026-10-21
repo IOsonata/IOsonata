@@ -178,7 +178,36 @@ confirm a new authenticated session, resubscription and resumed echo counts.
 The helper accepts one board at a time, starts a fresh OpenSSL process and broker
 connection after disconnect, and recycles a silent session after 60 seconds.
 It uses a public test key and is a test tool, not a deployment gateway.
-MQTT-over-TLS hardware validation remains pending.
+
+For wrong-key validation, stop the helper and run:
+
+```sh
+python3 Python/mqtt_tls_bridge.py \
+  --psk ff0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f
+```
+
+Expect repeated peer-alert error 8 and no authenticated MQTT subscription or new
+successful echoes. Stop the helper and run it without `--psk` to restore the
+board's demonstration key. The board retries automatically.
+
+Hardware testing on October 21, 2026 confirmed TLS 1.3 PSK-DHE authentication,
+MQTT subscription and verified QoS 1 echoes through this helper. Broker shutdown
+produced transport error 7; the board could authenticate TLS to the helper while
+the broker was unavailable, then the transport closed. After broker restart,
+MQTT subscribed again and verified echoes reached 200. Cable reconnection
+restored DHCP; the first handshake lost transport, and the next authenticated,
+subscribed and resumed echoes through 300 without a board reset. The failed
+handshake's cause is unknown. The wrong-key run produced peer-alert error 8 with
+no authenticated subscription or new successful echoes. Restoring the correct
+key restored authenticated MQTT and verified echoes through 400 without a reset.
+
+A separate apparent failure was traced by packet capture to the board connecting
+to 1883 while TLS listened on 8883. Correcting `NET_DEMO_MQTT_PORT` resolved that
+port mismatch. The older intermittent TLS issue remains unresolved; neither
+this correction nor the recovery tests establish its cause or a fix. The exact
+flashed commit and build profile were not supplied, and no fresh automated ARM
+compile/link validation is claimed for these implementation changes.
 
 Broker references: [installation](https://mosquitto.org/download/) and
 [configuration](https://mosquitto.org/man/mosquitto-conf-5.html).
+

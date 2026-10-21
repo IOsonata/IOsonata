@@ -238,9 +238,11 @@ endpoint forwarding to Mosquitto, because the tested Mosquitto 2.0.18 PSK
 listener does not accept TLS 1.3. This is a host test, not a production proxy.
 
 The H753 EthernetTcpDemo includes an optional MQTT subscribe/self-publish test.
-See its README for broker setup and firmware configuration. Plaintext MQTT echo and broker/cable recovery passed on H753 hardware;
-MQTT-over-TLS hardware validation is pending. Existing nRF91 modem code is unchanged; using MQTT on
-nRF91 also requires adding the shared source to that MCU library project.
+See its README for broker setup and firmware configuration. Plaintext and
+TLS-protected MQTT echo, broker/cable recovery and wrong-PSK rejection passed
+the hardware checks recorded below. The earlier intermittent TLS failure remains
+unresolved. Existing nRF91 modem code is unchanged; using MQTT on nRF91 also
+requires adding the shared source to that MCU library project.
 
 Protocol reference: [OASIS MQTT 3.1.1 plus Errata 01](https://docs.oasis-open.org/mqtt/mqtt/v3.1.1/errata01/os/mqtt-v3.1.1-errata01-os-complete.html).
 
@@ -480,8 +482,29 @@ seconds. Restarting it restored the connection and subscription; verified
 counts continued through 400. Cable removal then produced Network down;
 DHCP recovery restored MQTT and its subscription, with echoes through 500.
 Neither recovery required a board reset. The exact build profile was not supplied.
-MQTT over TLS hardware results remain pending; the EthernetTcpDemo README
-provides the OpenSSL-to-local-broker test setup in Python/mqtt_tls_bridge.py.
+
+The subsequent MQTT-over-TLS run used TLS 1.3 external PSK with P-256 PSK-DHE:
+board `10.5.5.54` to the PC at `10.5.5.51:8883`, then
+`Python/mqtt_tls_bridge.py` to Mosquitto on `127.0.0.1:1883`. The board
+authenticated TLS, subscribed at QoS 1 and verified returned MQTT payloads.
+
+| Check | Observed result |
+|---|---|
+| Broker stop/restart | Transport error 7. TLS could authenticate to the helper while the broker remained unavailable, then transport closed. After the broker returned, MQTT subscribed again and verified echoes reached 200. |
+| Cable removal/reconnection | DHCP returned. The first TLS handshake lost transport; the next authenticated successfully, MQTT subscribed again and verified echoes reached 300 without a board reset. The failed handshake's cause was not established. |
+| Wrong PSK | Repeated peer-alert error 8; no authenticated MQTT subscription or new successful echoes. |
+| Correct PSK restored | TLS authenticated, MQTT subscribed again and verified echoes reached 400 without a board reset. |
+
+A separate apparent recurrence was a confirmed port mismatch: packet capture
+showed the board connecting to TCP 1883 and the PC returning RST while TLS was
+listening on 8883. Correcting the firmware port restored service. This does not
+explain or close the older intermittent TLS issue described above, or the single
+failed handshake after cable recovery.
+
+The exact flashed commit and build profile were not supplied. These maintainer
+results establish hardware interoperability and the observed recovery cases;
+they are not an uninterrupted soak test or a fresh automated ARM compile/link
+result. The EthernetTcpDemo README documents the helper and wrong-key setup.
 
 ## References
 
@@ -489,4 +512,5 @@ provides the OpenSSL-to-local-broker test setup in Python/mqtt_tls_bridge.py.
 - [STM32H7 reference manual RM0433](https://www.st.com/resource/en/reference_manual/rm0433-stm32h742-stm32h743753-and-stm32h750-value-line-advanced-armbased-32bit-mcus-stmicroelectronics.pdf)
 - [ST AN4839: Cortex-M7 cache and DMA](https://www.st.com/resource/en/application_note/an4839-level-1-cache-on-stm32f7-series-and-stm32h7-series-stmicroelectronics.pdf)
 - [lwIP raw API](https://www.nongnu.org/lwip/2_2_x/raw_api.html)
+
 
