@@ -39,38 +39,23 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #ifndef __BOARD_H__
 #define __BOARD_H__
 
-#include "stm32l4xx.h"
+// Board, one of the names in stm32_boards.h. This STM32L476 project builds for
+// B_L475E_IOT01A (B-L475E-IOT01A and B-L475E-IOT01A2, STM32L475VG).
+#define BOARD				B_L475E_IOT01A
 
-// *** STM32L476G-DISCO
-#define UART_NO				1
-#define UART_RX_PORT		3
-#define UART_RX_PIN			6
-#define UART_RX_PINOP		(0x72)
+#include "stm32_boards.h"
 
-#define UART_TX_PORT		3
-#define UART_TX_PIN			5
-#define UART_TX_PINOP		(0x72)
+// The board has no serial EEPROM: connect an I2C EEPROM to the Arduino
+// header, I2C1 (DevNo 0), AF4, SDA D14 PB9 and SCL D15 PB8, open drain. The
+// eeprom_demo.cpp defaults are a 24xx32 class part at 0x50: 2 address bytes,
+// 32 byte pages, 4 KB. Fit pull-up resistors to 3.3 V if the EEPROM module
+// has none.
+#define I2C_DEVNO			0
+#define I2C_PINS			STM32_BOARD_I2C(IOPORTB, 9, IOPINOP_FUNC4, IOPORTB, 8, IOPINOP_FUNC4)
 
-#define UART_CTS_PORT		-1
-#define UART_CTS_PIN		-1
-#define UART_CTS_PINOP		0
-#define UART_RTS_PORT		-1
-#define UART_RTS_PIN		-1
-#define UART_RTS_PINOP		0
-
-#define I2C_DEVNO	1
-
-#define I2C_SCL_PORT		IOPORTF
-#define I2C_SCL_PIN			1
-#define I2C_SCL_PINOP		0x42		// AF4
-#define I2C_SDA_PORT		IOPORTF
-#define I2C_SDA_PIN			0
-#define I2C_SDA_PINOP		0x42		// AF4
-
-#define I2C_PINS_MAP	{ \
-	{I2C_SDA_PORT, I2C_SDA_PIN, I2C_SDA_PINOP, IOPINDIR_BI, IOPINRES_PULLUP, IOPINTYPE_NORMAL},\
-	{I2C_SCL_PORT, I2C_SCL_PIN, I2C_SCL_PINOP, IOPINDIR_OUTPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL},}
-
+// The Debug build prints with semihosting. With EEPROM_DEMO_UART 1, a Release
+// build prints on USART1, the ST-LINK virtual COM port, at 1 Mbaud.
+#define EEPROM_UART_DEVNO	BOARD_VCP_DEVNO
+#define EEPROM_UART_PINS	BOARD_VCP_PINS
 
 #endif // __BOARD_H__
-
