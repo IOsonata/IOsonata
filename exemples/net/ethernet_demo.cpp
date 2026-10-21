@@ -34,7 +34,7 @@ SOFTWARE.
 #include <stdio.h>
 #include <string.h>
 #include "app_evt_handler.h"
-#include "coredev/ethernet.h"
+#include "net/ethernet.h"
 #include "coredev/timer.h"
 #include "coredev/uart.h"
 #include "net/ip.h"

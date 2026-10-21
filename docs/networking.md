@@ -15,7 +15,7 @@ Ethernet operation on the physical board has not yet been validated.
 |---|---|
 | `include/net/sock_intrf.h` | Connected socket configuration and transfers |
 | `src/net/ip_lwip.cpp` | Shared IPv4, ARP, ICMP echo, DHCP, DNS, UDP and TCP using lwIP raw callbacks |
-| `include/coredev/ethernet.h` | Portable Ethernet frame interface, C structure/functions and C++ wrapper |
+| `include/net/ethernet.h` | Portable Ethernet frame interface, C structure/functions and C++ wrapper |
 | `ARM/ST/STM32H7xx/src/ethernet_stm32h7.cpp` | H753 MAC, DMA, cache maintenance, MDIO and LAN8742A RMII negotiation |
 | Example `board.h` | Pins, PHY address, MAC address and console configuration |
 

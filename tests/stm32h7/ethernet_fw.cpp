@@ -34,7 +34,7 @@ SOFTWARE.
 #include <stdint.h>
 #include <string.h>
 #include "stm32h7xx.h"
-#include "coredev/ethernet.h"
+#include "net/ethernet.h"
 
 extern "C" uint32_t SystemD2Clock;
 uint32_t SystemD2Clock = 200000000;
