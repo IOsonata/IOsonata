@@ -77,10 +77,23 @@ H753 OTG controller; older AN4879 tables incorrectly listed 1.25 KB for FS.
 `STM32H7xx/STM32H753/exemples/UsbCdcLoopback` and `UsbCdcPrbsTx` use the same
 common CDC applications. Power the board through ST-LINK before connecting
 native USB CN13. See [H753 build and test instructions](STM32H7xx/README.md).
-USB hardware validation is pending. The H753 library and six bare-metal
-examples compile and link in Debug/Release with soft-float and hard-float;
-modeled register tests check HSI48/CRS, pins, clock preservation and timeout.
-The firmware USB vector resolves to the production OTG handler.
+The H753 library and six bare-metal examples compile and link in
+Debug/Release with soft-float and hard-float; modeled register tests check
+HSI48/CRS, pins, clock preservation and timeout. The firmware USB vector
+resolves to the production OTG handler.
+
+### Hardware results - October 20, 2026
+
+macOS host:
+
+| Test | Result |
+|---|---|
+| PRBS TX | About 817 kB/s, no loss |
+| CDC loopback, 60 seconds | 33930752 bytes TX and RX; 565 kB/s each direction; 0 errors; 0 pending; PASS |
+
+Loopback: first RX 2 ms after start, longest TX wait 6 ms, longest RX gap
+4 ms. The banner arrived after a DTR toggle. The additional H753 USB examples
+are not yet run on hardware.
 
 ## WBA65I-DK1 examples and hardware validation
 

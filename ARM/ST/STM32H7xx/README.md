@@ -164,11 +164,14 @@ buffers may remain in DTCM. The generic USB core and classes are unchanged.
 Control, bulk and interrupt transfers are supported. USB1, external ULPI,
 high-speed operation, host mode, ISO and USB DMA are not exposed. These
 examples do not advertise remote wakeup. See [shared STM32 USB notes](../USB.md).
-CDC enumeration and Release transfers are hardware validated. The 60-second
-USB CDC loopback run transferred 26996224 bytes each way, averaging 449927.81
-B/s TX and 449868.73 B/s RX, with zero errors and zero pending bytes after
-draining. Standalone PRBS TX sustained approximately 770-780 kB/s. These are
-full-speed USB results; the WBA65 high-speed result is a different bus mode.
+CDC enumeration and Release transfers are hardware validated. Run of
+2026-10-20, macOS host: the 60-second USB CDC loopback transferred 33930752
+bytes each way, averaging 565487.35 B/s TX and 565414.84 B/s RX, with zero
+errors and zero pending bytes after draining; first RX 2 ms after start,
+longest TX wait 6 ms, longest RX gap 4 ms. PRBS TX sustained approximately
+817 kB/s with no loss. An earlier run measured 449927.81 B/s loopback and
+770-780 kB/s PRBS TX. These are full-speed USB results; the WBA65 high-speed
+result is a different bus mode.
 
 ### Additional USB examples
 

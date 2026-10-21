@@ -327,7 +327,7 @@ IOsonata is developed and validated on I-SYST reference hardware as well as vend
 | STM32L476 (B-L475E-IOT01A2) | Shared drivers: GPIO, UART in all modes, I2C, QUADSPI flash through Nvm in single line and quad mode, USB CDC device |
 | STM32L432 | NUCLEO-L432KC: GPIO, timers, UART TX, I2C and SPI master/slave |
 | STM32G474 | NUCLEO-G474RE: GPIO/EXTI, UART in all modes at 1 Mbaud, LPTIM1 and TIM |
-| STM32H753 | NUCLEO-H753ZI: startup, GPIO, USART3 interrupt TX/RX and TIM2 |
+| STM32H753 | NUCLEO-H753ZI: startup, GPIO, USART3 interrupt TX/RX, TIM2 and USB CDC device |
 | STM32WBA65 | STM32WBA65I-DK1: GPIO/EXTI, UART, timers, I2C/SPI master/slave, BLE advertising/security, crypto and USB CDC |
 
 These are function-specific maintainer results, not a claim that every
