@@ -1862,6 +1862,18 @@ static uint32_t Stm32SpiSetRate(DevIntrf_t * const pIntrf, uint32_t Rate)
 	}
 	dev->pSpiDev->Cfg.Rate = clk >> (best + 1);
 
+#ifdef STM32H753xx
+	// Diagnostic: isolate clock-edge slew in the 1 MHz mode-1 failure.
+	// Keep the divider and all other pins unchanged. Restore TURBO if
+	// the application selects another rate; slave Rate is not its SCK.
+	if (dev->bSlave == false)
+	{
+		IOPinSetSpeed(dev->pSpiDev->Cfg.pIOPinMap[SPI_SCK_IOPIN_IDX].PortNo,
+			dev->pSpiDev->Cfg.pIOPinMap[SPI_SCK_IOPIN_IDX].PinNo,
+			dev->pSpiDev->Cfg.Rate == 1000000U ? IOPINSPEED_LOW : IOPINSPEED_TURBO);
+	}
+#endif
+
 	return dev->pSpiDev->Cfg.Rate;
 }
 
