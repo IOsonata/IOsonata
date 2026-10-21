@@ -159,6 +159,22 @@ to return to the text demo and its reconnect behavior.
 
 ### DNS hostname check
 
+For a public Internet check, set `NET_DEMO_HTTP_TEST` to `1` in
+EthernetTcpDemo's `src/board.h`, rebuild and reset the board. This selects
+`example.com` over TCP port 80 regardless of `NET_DEMO_HOST` and
+`NET_DEMO_TEST_COUNT`. No Python echo server or local DNS record is needed.
+The board uses the DNS server supplied by DHCP, sends one HTTP GET request,
+and prints the status line followed by `DNS/HTTP PASS`. Set the flag back to
+`0` to restore the selected echo mode.
+
+This is a bounded connectivity check, not an HTTP client implementation: it
+validates an HTTP/1.0 or HTTP/1.1 status line with code 200-599, then closes.
+A redirect or error response still demonstrates a response over the network;
+the code is printed for inspection. It does not validate the body, follow
+redirects or authenticate the server. DNS/connect failure, malformed status,
+early disconnect or a 15-second deadline ends the check with `DNS/HTTP FAIL`.
+Public service availability and LAN filtering can affect the result.
+
 Create or use a LAN DNS A record for the computer running `net_echo.py`.
 Verify with `nslookup <hostname>` that the answer is that computer's LAN IPv4
 address, using the same DNS server provided to the board by DHCP. Then replace
@@ -185,6 +201,8 @@ and `pyelftools`.
 test state with simulated partial transfers, corruption, extra/short data,
 refused sends and timeout across timer wrap, at O0/O2 with ASan/UBSan. It also
 checks the Python server using local UDP and TCP sockets in normal/quiet mode.
+The HTTP checks cover partial writes, fragmented status lines, final buffered
+data after TCP close, malformed/oversized replies, connect failure and timeout.
 These checks validate the test code; they do not establish board results.
 
 The packet tests execute the real lwIP sources with an independent Ethernet
@@ -229,11 +247,22 @@ Temporary diagnostics showed no application event-queue refusals in these logs.
 Those diagnostics have been removed. The example retains its explicit static
 1024-byte UART TX FIFO so startup and message bursts print complete lines.
 
-The UDP startup log received replies 0-3 together but did not show replies 4-7;
-the cause was not established. This is basic echo validation, not a loss-free
-UDP endurance result. DNS hostnames, DHCP lease expiry/address changes,
-large payloads, sustained load, throughput and D-cache-enabled operation still
-need hardware tests. The numeric-IP echo tests did not exercise DNS.
+The initial UDP text log received replies 0-3 together but did not show replies
+4-7; the cause was not established. Later binary integrity runs against
+`10.5.5.51:2469` passed on the same board on October 21, 2026:
+
+| Protocol | Messages verified | Bytes each direction | Elapsed time |
+|---|---:|---:|---:|
+| UDP | 6000 | 2207018 | 120030 ms |
+| TCP | 6000 | 4445400 | 120068 ms |
+
+These runs checked every payload byte with no reported corruption or timeout.
+UDP lengths ranged from 1 to 1472 bytes; TCP also exercised 4096-byte messages.
+They used one outstanding message and a 10 ms service interval, so they are
+sustained integrity results, not maximum-throughput measurements or UDP burst
+queue tests. The numeric-IP tests did not exercise DNS. Public DNS/HTTP,
+DHCP lease expiry/address changes, throughput and D-cache-enabled operation
+still need hardware tests.
 
 ## References
 

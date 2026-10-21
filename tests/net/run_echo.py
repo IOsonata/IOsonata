@@ -87,18 +87,20 @@ def main():
         "include", "ARM/ST/include", "ARM/ST/STM32H7xx/include",
         "ARM/CMSIS/Core/Include")]
     with tempfile.TemporaryDirectory(prefix="iosonata-echo-") as td:
-        for proto in ("Udp", "Tcp"):
-            board = ROOT / f"ARM/ST/STM32H7xx/STM32H753/exemples/Ethernet{proto}Demo/src"
+        for proto in ("Udp", "Tcp", "Http"):
+            project = "Tcp" if proto == "Http" else proto
+            board = ROOT / f"ARM/ST/STM32H7xx/STM32H753/exemples/Ethernet{project}Demo/src"
+            mode = ["-DNET_DEMO_HTTP_TEST=1"] if proto == "Http" else []
             for count in (0, 6000):
                 run(["g++", "-std=gnu++23", "-Wall", "-Werror", "-fsyntax-only",
-                     *inc, "-I" + str(board), "-DSTM32H753xx",
+                     *inc, *mode, "-I" + str(board), "-DSTM32H753xx",
                      f"-DNET_DEMO_TEST_COUNT={count}", ROOT / "exemples/net/ethernet_demo.cpp"])
             for opt in ("O0", "O2"):
                 exe = Path(td) / (proto + opt)
                 run(["g++", "-std=gnu++23", "-Wall", "-Werror", "-" + opt,
                      "-ffunction-sections", "-fdata-sections", "-Wl,--gc-sections",
                      "-fsanitize=address,undefined", "-fno-sanitize-recover=all",
-                     "-fno-pie", "-no-pie", *inc, "-I" + str(board), "-DSTM32H753xx",
+                     "-fno-pie", "-no-pie", *inc, *mode, "-I" + str(board), "-DSTM32H753xx",
                      "-DNET_DEMO_TEST_COUNT=100",
                      ROOT / "tests/net/echo_demo_test.cpp", "-o", exe])
                 run([exe])

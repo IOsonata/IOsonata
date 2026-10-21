@@ -51,6 +51,9 @@ SOFTWARE.
 #ifndef NET_DEMO_TEST_COUNT
 #define NET_DEMO_TEST_COUNT 0
 #endif
+#ifndef NET_DEMO_HTTP_TEST
+#define NET_DEMO_HTTP_TEST 0
+#endif
 
 alignas(4) uint8_t g_AppEvtHandlerQueMem[APPEVT_HANDLER_QUE_MEMSIZE(16)];
 static const IOPinCfg_t s_EthernetPins[] = ETHERNET_PINS;
@@ -98,13 +101,19 @@ static const IpCfg_t s_IpCfg = {
 	.bDhcp = true,
 };
 static const SockIntrfCfg_t s_SockCfg = {
+#if NET_DEMO_HTTP_TEST
+	.Proto = SOCKINTRF_PROTO_TCP,
+	.pHost = "example.com",
+	.Port = 80,
+#else
 	.Proto = NET_DEMO_PROTO,
 	.pHost = NET_DEMO_HOST,
 	.Port = 2469,
+#endif
 	.LocalPort = 0,
 	.SecTag = 0,
 	.bPeerVerify = false,
-	.Timeout = 3000,
+	.Timeout = NET_DEMO_HTTP_TEST ? 10000 : 3000,
 	.EvtCB = nullptr,
 };
 static Ethernet s_Ethernet;
@@ -239,6 +248,105 @@ static void EchoTest(uint32_t Now)
 }
 #endif
 
+#if NET_DEMO_HTTP_TEST
+static bool s_HttpStarted;
+static bool s_HttpDone;
+static uint32_t s_HttpStart;
+static int s_HttpTxOffset;
+static int s_HttpLineLength;
+static char s_HttpLine[96];
+
+static void HttpFinish(const char *pResult)
+{
+	SysLogPrintf(SysLogGet(), "%s\r\n", pResult);
+	s_HttpDone = true;
+	s_Socket.Close();
+}
+
+static void HttpTest(uint32_t Now)
+{
+	static const char request[] = "GET / HTTP/1.0\r\nHost: example.com\r\nConnection: close\r\n\r\n";
+	uint8_t rx[128];
+	int count;
+
+	if (s_HttpDone)
+	{
+		return;
+	}
+	if (s_HttpStarted == false)
+	{
+		s_HttpStarted = true;
+		s_HttpStart = Now;
+		SysLogPrintf(SysLogGet(), "DNS/HTTP test: example.com:80\r\n");
+		if (s_Socket.Init(s_SockCfg) == false)
+		{
+			HttpFinish("DNS/HTTP FAIL: name lookup or TCP connect failed");
+
+			return;
+		}
+		SysLogPrintf(SysLogGet(), "DNS/TCP connected: example.com:80\r\n");
+	}
+	if (s_HttpTxOffset < (int)sizeof(request) - 1)
+	{
+		count = s_Socket.Tx(0, (const uint8_t *)request + s_HttpTxOffset,
+			sizeof(request) - 1 - s_HttpTxOffset);
+		if (count < 0 || count > (int)sizeof(request) - 1 - s_HttpTxOffset)
+		{
+			HttpFinish("DNS/HTTP FAIL: invalid send length");
+
+			return;
+		}
+		s_HttpTxOffset += count;
+	}
+	// Read buffered bytes even if the peer has already closed its TCP side.
+	count = s_Socket.Rx(0, rx, sizeof(rx));
+	if (count < 0 || count > (int)sizeof(rx))
+	{
+		HttpFinish("DNS/HTTP FAIL: invalid receive length");
+
+		return;
+	}
+	for (int i = 0; i < count; i++)
+	{
+		if (rx[i] == '\n')
+		{
+			if (s_HttpLineLength < 14 || s_HttpLine[s_HttpLineLength - 1] != '\r' ||
+				(memcmp(s_HttpLine, "HTTP/1.0 ", 9) != 0 && memcmp(s_HttpLine, "HTTP/1.1 ", 9) != 0) ||
+				s_HttpLine[9] < '2' || s_HttpLine[9] > '5' ||
+				s_HttpLine[10] < '0' || s_HttpLine[10] > '9' ||
+				s_HttpLine[11] < '0' || s_HttpLine[11] > '9' || s_HttpLine[12] != ' ')
+			{
+				HttpFinish("DNS/HTTP FAIL: invalid HTTP status line");
+
+				return;
+			}
+			s_HttpLine[s_HttpLineLength - 1] = 0;
+			SysLogPrintf(SysLogGet(), "HTTP response: %s\r\n", s_HttpLine);
+			HttpFinish("DNS/HTTP PASS: received HTTP status from public hostname");
+
+			return;
+		}
+		if (s_HttpLineLength == (int)sizeof(s_HttpLine) - 1 ||
+			(s_HttpLineLength > 0 && s_HttpLine[s_HttpLineLength - 1] == '\r') ||
+			(rx[i] != '\r' && (rx[i] < 32 || rx[i] > 126)))
+		{
+			HttpFinish("DNS/HTTP FAIL: invalid or oversized status line");
+
+			return;
+		}
+		s_HttpLine[s_HttpLineLength++] = (char)rx[i];
+	}
+	if (s_Socket.Connected() == false && count <= 0)
+	{
+		HttpFinish("DNS/HTTP FAIL: socket closed before HTTP status");
+	}
+	else if ((uint32_t)(Now - s_HttpStart) >= 15000U)
+	{
+		HttpFinish("DNS/HTTP FAIL: 15 second timeout");
+	}
+}
+#endif
+
 static void Report(uint32_t Evt, void *pCtx)
 {
 	uint8_t addr[4];
@@ -264,6 +372,12 @@ static void Report(uint32_t Evt, void *pCtx)
 	}
 	if (ready == false)
 	{
+#if NET_DEMO_HTTP_TEST
+		if (s_HttpStarted && s_HttpDone == false)
+		{
+			HttpFinish("DNS/HTTP FAIL: network down");
+		}
+#endif
 #if NET_DEMO_TEST_COUNT > 0
 		if (s_TestStarted && s_TestDone == false)
 		{
@@ -276,6 +390,11 @@ static void Report(uint32_t Evt, void *pCtx)
 
 		return;
 	}
+#if NET_DEMO_HTTP_TEST
+	HttpTest(TimerGetMilisecond(&s_Timer));
+
+	return;
+#endif
 	if (s_SockCfg.pHost == nullptr)
 	{
 		return;
@@ -369,7 +488,7 @@ int main()
 	{
 		SysLogPrintf(SysLogGet(), "IP initialization failed\r\n");
 	}
-	else if (msTimerEnableTrigger(&s_Timer, 1, NET_DEMO_TEST_COUNT > 0 ? 10 : 1000,
+	else if (msTimerEnableTrigger(&s_Timer, 1, NET_DEMO_HTTP_TEST || NET_DEMO_TEST_COUNT > 0 ? 10 : 1000,
 		TIMER_TRIG_TYPE_CONTINUOUS, ReportTimer, nullptr) == 0)
 	{
 		SysLogPrintf(SysLogGet(), "Report timer initialization failed\r\n");
