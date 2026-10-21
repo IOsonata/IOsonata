@@ -136,10 +136,16 @@ static const SPICfg_t s_SpiCfg = {
 };
 static SPI s_Spi;
 #else
+#ifdef I2C_PINS
+// Pin map from board.h, for a board whose I2C pins need other settings, open
+// drain for example
+static const IOPinCfg_t s_Pins[] = I2C_PINS;
+#else
 static const IOPinCfg_t s_Pins[] = {
 	{I2C_SDA_PORT, I2C_SDA_PIN, I2C_SDA_PINOP, IOPINDIR_BI, IOPINRES_PULLUP, IOPINTYPE_NORMAL},	// SDA
 	{I2C_SCL_PORT, I2C_SCL_PIN, I2C_SCL_PINOP, IOPINDIR_OUTPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL},	// SCL
 };
+#endif
 
 static const I2CCfg_t s_I2cCfg = {
 	.DevNo = I2C_DEVNO,			// I2C device number
