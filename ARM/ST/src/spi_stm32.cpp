@@ -5,7 +5,7 @@
 
 		Two register layouts, chosen from the CMSIS names. The SPI with the
 		CFG1, CFG2 and TSIZE registers (WBA; the same IP is in the U5, H5 and
-		N6 families), and the SPI with CR1, CR2, SR and DR and a 32 bit FIFO
+		N6 and H7 families), and the SPI with CR1, CR2, SR and DR and a 32 bit FIFO
 		each way (L4; the same IP is in the F0, F3, G4 and WB families). The
 		engine is the same for both, the instance table holds what differs:
 		the RCC enable, reset and kernel clock selection, the interrupt and
@@ -21,7 +21,7 @@
 		stays at its idle level. The slave has no underrun value: its
 		transmit FIFO is kept filled, with the DummyByte after the data.
 		Clearing SPE leaves the FIFO content, so the slave is reset through
-		RCC before each frame. DevNo 3 and up are the QUADSPI or OCTOSPI
+		RCC before each frame. DevNo after the SPI instances selects QUADSPI or OCTOSPI
 		instances, SPIInit passes them to Stm32QospiInit (qospi_stm32.h,
 		quadspi_stm32.cpp or octospi_stm32.cpp). DMA on the L4
 		takes the channels of the instance table from the DMA channel
@@ -115,6 +115,8 @@ SOFTWARE.
 
 #include "stm32.h"
 
+#include "qospi_stm32.h"
+
 #if defined(IOSONATA_STM32_WBA)
 #include "gpdma_stm32wba.h"
 #define STM32_SPI_DMA
@@ -125,7 +127,6 @@ SOFTWARE.
 #elif defined(IOSONATA_STM32_L4)
 // DMA1 and DMA2 channels of the DMA channel manager
 #include "dma_stm32.h"
-#include "qospi_stm32.h"
 #define STM32_SPI_DMA
 #define STM32_SPI_DMA_REMAIN(Ch)		Stm32DmaChRemain(Ch)
 #define STM32_SPI_DMA_FREE(Ch)			Stm32DmaChFree(Ch)
@@ -139,7 +140,11 @@ SOFTWARE.
 #include "iopinctrl.h"
 #include "coredev/system_core_clock.h"
 
+#ifdef STM32H753xx
+#define STM32_SPI_MAXDEV			6
+#else
 #define STM32_SPI_MAXDEV			3
+#endif
 
 // Register layout of the SPI, from the CMSIS names
 #if defined(SPI_CFG1_MBR)
@@ -300,6 +305,22 @@ static const Stm32SpiInfo_t s_Stm32SpiInfo[STM32_SPI_MAXDEV] = {
 	  &RCC->CCIPR3, RCC_CCIPR3_SPI3SEL_Msk, 2, SPI3_IRQn,
 	  WBA_GPDMA_REQ_SPI3_TX, WBA_GPDMA_REQ_SPI3_RX },
 };
+#elif defined(STM32H753xx)
+// SPI1-3 use PER (HSI by default); SPI4/5 use PCLK2, SPI6 PCLK4.
+static const Stm32SpiInfo_t s_Stm32SpiInfo[STM32_SPI_MAXDEV] = {
+	{ SPI1, &RCC->APB2ENR, RCC_APB2ENR_SPI1EN, &RCC->APB2RSTR, RCC_APB2RSTR_SPI1RST,
+	  &RCC->D2CCIP1R, RCC_D2CCIP1R_SPI123SEL, -1, SPI1_IRQn, 0, 0 },
+	{ SPI2, &RCC->APB1LENR, RCC_APB1LENR_SPI2EN, &RCC->APB1LRSTR, RCC_APB1LRSTR_SPI2RST,
+	  &RCC->D2CCIP1R, RCC_D2CCIP1R_SPI123SEL, -1, SPI2_IRQn, 0, 0 },
+	{ SPI3, &RCC->APB1LENR, RCC_APB1LENR_SPI3EN, &RCC->APB1LRSTR, RCC_APB1LRSTR_SPI3RST,
+	  &RCC->D2CCIP1R, RCC_D2CCIP1R_SPI123SEL, -1, SPI3_IRQn, 0, 0 },
+	{ SPI4, &RCC->APB2ENR, RCC_APB2ENR_SPI4EN, &RCC->APB2RSTR, RCC_APB2RSTR_SPI4RST,
+	  &RCC->D2CCIP1R, RCC_D2CCIP1R_SPI45SEL, 1, SPI4_IRQn, 0, 0 },
+	{ SPI5, &RCC->APB2ENR, RCC_APB2ENR_SPI5EN, &RCC->APB2RSTR, RCC_APB2RSTR_SPI5RST,
+	  &RCC->D2CCIP1R, RCC_D2CCIP1R_SPI45SEL, 1, SPI5_IRQn, 0, 0 },
+	{ SPI6, &RCC->APB4ENR, RCC_APB4ENR_SPI6EN, &RCC->APB4RSTR, RCC_APB4RSTR_SPI6RST,
+	  &RCC->D3CCIPR, RCC_D3CCIPR_SPI6SEL, 3, SPI6_IRQn, 0, 0 },
+};
 #elif defined(IOSONATA_STM32_L4)
 // SPI1 on APB2 (PCLK2), SPI2 and SPI3 on APB1 (PCLK1). The kernel clock is the
 // APB clock, there is no selection. The STM32L43x and L44x have no SPI2.
@@ -347,7 +368,12 @@ static void Stm32SpiClkEnable(Stm32SpiDev_t * const pDev, bool bEn)
 	if (bEn)
 	{
 #ifdef STM32_SPI_LAYOUT_CFG
+#ifdef STM32H753xx
+		const uint32_t sel = info->ClkIdx < 0 ? RCC_D2CCIP1R_SPI123SEL_2 : 0U;
+		*info->pSelReg = (*info->pSelReg & ~info->SelMask) | sel;
+#else
 		*info->pSelReg &= ~info->SelMask;
+#endif
 #endif
 		*info->pEnReg |= info->EnMask;
 		(void)*info->pEnReg;
@@ -573,7 +599,9 @@ static void Stm32SpiMasterEnd(Stm32SpiDev_t * const pDev, bool bad)
 static void Stm32SpiMasterChunk(Stm32SpiDev_t * const pDev)
 {
 	SPI_TypeDef *reg = pDev->pReg;
+#ifdef STM32_SPI_DMA
 	const int isz = Stm32SpiItemSize(pDev);
+#endif
 	uint32_t left = pDev->Items - pDev->Done;
 	uint32_t max = STM32_SPI_TSIZE_MAX;
 
@@ -1628,7 +1656,31 @@ static uint32_t Stm32SpiSetRate(DevIntrf_t * const pIntrf, uint32_t Rate)
 		return 0;
 	}
 
-	uint32_t clk = SystemPeriphClockGet(dev->pInfo->ClkIdx);
+	uint32_t clk;
+#ifdef STM32H753xx
+	if (dev->pInfo->ClkIdx < 0)
+	{
+		// PER clock is shared. Do not change its source for another user.
+		// This port starts with HSI; CSI can also be selected by the application.
+		const uint32_t sel = RCC->D1CCIPR & RCC_D1CCIPR_CKPERSEL;
+		if (sel == 0 && (RCC->CR & RCC_CR_HSIRDY))
+		{
+			clk = 64000000U >> ((RCC->CR & RCC_CR_HSIDIV) >> RCC_CR_HSIDIV_Pos);
+		}
+		else if (sel == RCC_D1CCIPR_CKPERSEL_0 && (RCC->CR & RCC_CR_CSIRDY))
+		{
+			clk = 4000000U;
+		}
+		else
+		{
+			return 0; // External PER clock not configured by this port.
+		}
+	}
+	else
+#endif
+	{
+		clk = SystemPeriphClockGet(dev->pInfo->ClkIdx);
+	}
 
 	if (Rate == 0)
 	{
@@ -1657,7 +1709,11 @@ static uint32_t Stm32SpiSetRate(DevIntrf_t * const pIntrf, uint32_t Rate)
 #ifdef STM32_SPI_LAYOUT_CFG
 	// MBR can only change with the peripheral disabled
 	reg->CR1 &= ~SPI_CR1_SPE;
-	reg->CFG1 = (reg->CFG1 & ~(SPI_CFG1_MBR_Msk | SPI_CFG1_BPASS)) | (best << SPI_CFG1_MBR_Pos);
+	uint32_t mask = SPI_CFG1_MBR_Msk;
+#ifdef SPI_CFG1_BPASS
+	mask |= SPI_CFG1_BPASS;
+#endif
+	reg->CFG1 = (reg->CFG1 & ~mask) | (best << SPI_CFG1_MBR_Pos);
 #else
 	// BR can only change with the peripheral disabled
 	reg->CR1 &= ~SPI_CR1_SPE;
@@ -2040,13 +2096,18 @@ bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfgData)
 	reg->CR1 = slave ? 0U : SPI_CR1_SSI;
 	reg->CR2 = 0;
 	reg->IER = 0;
+#ifdef SPI_AUTOCR_TRIGEN
 	reg->AUTOCR = 0;
+#endif
 	reg->CFG1 = (pCfgData->DataSize - 1) << SPI_CFG1_DSIZE_Pos;
 	reg->CFG2 = cfg2;
 	reg->UDRDR = dev->Dummy;
 	reg->IFCR = STM32_SPI_IFCR_ALL;
 
-	Stm32SpiSetRate(&pDev->DevIntrf, pCfgData->Rate);
+	if (Stm32SpiSetRate(&pDev->DevIntrf, pCfgData->Rate) == 0)
+	{
+		return false;
+	}
 #else
 	// Master: the internal slave select is held inactive (SSM and SSI), so
 	// the NSS pin is not used and no mode fault occurs. Slave: the NSS pin is
@@ -2130,3 +2191,20 @@ extern "C" void SPI3_IRQHandler(void)
 {
 	Stm32SpiService(&s_Stm32SpiDev[2]);
 }
+
+#ifdef STM32H753xx
+extern "C" void SPI4_IRQHandler(void)
+{
+	Stm32SpiService(&s_Stm32SpiDev[3]);
+}
+
+extern "C" void SPI5_IRQHandler(void)
+{
+	Stm32SpiService(&s_Stm32SpiDev[4]);
+}
+
+extern "C" void SPI6_IRQHandler(void)
+{
+	Stm32SpiService(&s_Stm32SpiDev[5]);
+}
+#endif

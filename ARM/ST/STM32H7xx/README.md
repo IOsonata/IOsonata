@@ -72,6 +72,37 @@ DMA errors, polling, lifecycle, ownership, DTCM caller buffers and cache
 maintenance calls with the real shared driver. The register model does not
 simulate a physical cache or DMA timing. UART DMA hardware testing is pending.
 
+## I2C and SPI
+
+The shared `i2c_stm32.cpp` and `spi_stm32.cpp` now include H753 instance
+mapping, clocks, reset and interrupt vectors. I2C DevNo 0-3 selects I2C1-4;
+SPI DevNo 0-5 selects SPI1-6. Both use the existing polling/interrupt master
+and interrupt slave implementations. Set `bDmaEn` to false: I2C/SPI DMA
+is not integrated yet and requesting it fails initialization.
+
+I2C1-3 use PCLK1; I2C4 uses PCLK4. Rates use TIMINGR with analog filtering,
+including Fast-mode Plus drive configuration above 400 kHz. The shared engine
+handles repeated START, NACK/error recovery and reload for transfers over
+255 bytes. Use external pull-ups and the alternate-function pin map for the
+selected instance. Bus reset restores the alternate-function pin settings.
+
+SPI1-3 select the shared PER clock, HSI64 with the default startup. This avoids
+using PLL1Q, whose output is disabled by the default clock configuration.
+SPI4/5 use PCLK2 and SPI6 uses PCLK4. Rate selection returns the closest
+supported divider. The shared driver supports modes 0-3 and 4-16 bit items;
+QSPI is DevNo 6, using the shared polling-only indirect command/data driver
+with HCLK as its kernel clock. QSPI interrupt, DMA and memory-mapped modes
+are not exposed. PER clock selection is
+preserved; HSI and CSI sources are supported, external HSE is not configured
+by this port.
+
+`python3 tests/stm32h7/run_bus.py` builds the actual H753 drivers and generic
+interfaces at -O0/-O3 and checks all ten instances with modeled registers:
+polling and interrupt receive, clock/rate selection, I2C reload, NACK and
+Fast-mode Plus, plus QSPI initialization and HCLK prescaling. The existing WBA I2C and SPI register tests also pass.
+All three H753 drivers compile with soft and hard float at -O0/-O3, with warnings
+as errors. Physical master/slave operation still needs hardware validation.
+
 ## TaktOS UART PRBS example
 
 `STM32H753/exemples/UartPrbsTxTestTaktOS/ioc` uses the existing shared
@@ -301,8 +332,7 @@ LPTIM is not yet exposed. `TimerGetLowFreqDevCount()` returns 0.
 
 ## Limits and validation
 
-I2C, SPI, CAN, ADC/DAC and PWM
-are not implemented by this port. LPUART1 DMA configuration returns false
+CAN, ADC/DAC and PWM are not implemented by this port. LPUART1 DMA configuration returns false
 because BDMA is not implemented. The single library project includes the core device, UART, timer,
 application event and logging sources needed by these examples.
 

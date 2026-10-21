@@ -4,7 +4,7 @@
 @brief	Generic STM32 I2C implementation, master and slave
 
 		For the STM32 families with the I2C version 2 peripheral (TIMINGR,
-		ISR with TXIS and RXNE, NBYTES in CR2): WBA, L4 and G4. The engine is
+		ISR with TXIS and RXNE, NBYTES in CR2): WBA, L4, G4 and H753. The engine is
 		the same for all, the instance table holds what differs: the RCC
 		enable, reset and kernel clock selection, the interrupts and the DMA
 		requests. A family is added with its table.
@@ -266,6 +266,18 @@ static const Stm32I2cInfo_t s_Stm32I2cInfo[STM32_I2C_MAXDEV] = {
 	{ I2C4, &RCC->APB1ENR2, RCC_APB1ENR2_I2C4EN, &RCC->APB1RSTR2, RCC_APB1RSTR2_I2C4RST,
 	  &RCC->CCIPR1, RCC_CCIPR1_I2C4SEL_Msk, 0, I2C4_EV_IRQn, I2C4_ER_IRQn,
 	  WBA_GPDMA_REQ_I2C4_TX, WBA_GPDMA_REQ_I2C4_RX },
+};
+#elif defined(STM32H753xx)
+// I2C1-3 use PCLK1; I2C4 uses PCLK4.
+static const Stm32I2cInfo_t s_Stm32I2cInfo[STM32_I2C_MAXDEV] = {
+	{ I2C1, &RCC->APB1LENR, RCC_APB1LENR_I2C1EN, &RCC->APB1LRSTR, RCC_APB1LRSTR_I2C1RST,
+	  &RCC->D2CCIP2R, RCC_D2CCIP2R_I2C123SEL, 0, I2C1_EV_IRQn, I2C1_ER_IRQn, 0, 0 },
+	{ I2C2, &RCC->APB1LENR, RCC_APB1LENR_I2C2EN, &RCC->APB1LRSTR, RCC_APB1LRSTR_I2C2RST,
+	  &RCC->D2CCIP2R, RCC_D2CCIP2R_I2C123SEL, 0, I2C2_EV_IRQn, I2C2_ER_IRQn, 0, 0 },
+	{ I2C3, &RCC->APB1LENR, RCC_APB1LENR_I2C3EN, &RCC->APB1LRSTR, RCC_APB1LRSTR_I2C3RST,
+	  &RCC->D2CCIP2R, RCC_D2CCIP2R_I2C123SEL, 0, I2C3_EV_IRQn, I2C3_ER_IRQn, 0, 0 },
+	{ I2C4, &RCC->APB4ENR, RCC_APB4ENR_I2C4EN, &RCC->APB4RSTR, RCC_APB4RSTR_I2C4RST,
+	  &RCC->D3CCIPR, RCC_D3CCIPR_I2C4SEL, 3, I2C4_EV_IRQn, I2C4_ER_IRQn, 0, 0 },
 };
 #elif defined(IOSONATA_STM32_L4) || defined(IOSONATA_STM32_G4)
 // I2C1 to I2C3 are in APB1ENR1, I2C4 in APB1ENR2, all clocked from PCLK1.
@@ -575,6 +587,19 @@ static uint32_t Stm32I2cSetRate(DevIntrf_t * const pIntrf, uint32_t Rate)
 
 	reg->CR1 &= ~I2C_CR1_PE;
 	reg->TIMINGR = timing;
+#ifdef STM32H753xx
+	RCC->APB4ENR |= RCC_APB4ENR_SYSCFGEN;
+	(void)RCC->APB4ENR;
+	const uint32_t fmp = SYSCFG_PMCR_I2C1_FMP << dev->DevNo;
+	if (actual > 400000)
+	{
+		SYSCFG->PMCR |= fmp;
+	}
+	else
+	{
+		SYSCFG->PMCR &= ~fmp;
+	}
+#endif
 #ifdef I2C_CR1_FMP
 	// Fast mode plus drive above 400 kHz
 	if (actual > 400000)
@@ -1409,6 +1434,9 @@ static void Stm32I2cEnable(DevIntrf_t * const pIntrf)
 	if (dev)
 	{
 		Stm32I2cClkEnable(dev, true);
+#ifdef STM32H753xx
+		IOPinCfg(dev->pI2cDev->Cfg.pIOPinMap, dev->pI2cDev->Cfg.NbIOPins);
+#endif
 		dev->pReg->CR1 |= I2C_CR1_PE;
 	}
 }
