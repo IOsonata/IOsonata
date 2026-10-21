@@ -34,8 +34,18 @@ void Put16(uint8_t *p, size_t n)
 	p[1] = (uint8_t)n;
 }
 
+void WipeEphemeral(TlsDev_t *d)
+{
+	if (d->pKeyAgree != nullptr)
+	{
+		d->pKeyAgree->KeyReset(d->KeyCtx);
+	}
+	CryptoSecureWipe(d->KeyCtx, sizeof(d->KeyCtx));
+}
+
 void WipeKeys(TlsDev_t *d)
 {
+	WipeEphemeral(d);
 	CryptoSecureWipe(d->Secret, sizeof(d->Secret));
 	CryptoSecureWipe(d->ClientSecret, sizeof(d->ClientSecret));
 	CryptoSecureWipe(d->ServerSecret, sizeof(d->ServerSecret));
@@ -184,6 +194,8 @@ bool ServerHello(TlsDev_t *d, const uint8_t *p, size_t n)
 		return Fail(d, TLS_ERROR_PROTOCOL);
 	}
 	unsigned seen = 0;
+	const uint8_t *peer = nullptr;
+	Scratch shared;
 	for (size_t i = 40; i < n;)
 	{
 		if (n - i < 4)
@@ -193,18 +205,24 @@ bool ServerHello(TlsDev_t *d, const uint8_t *p, size_t n)
 		unsigned type = Get16(p + i);
 		size_t len = Get16(p + i + 2);
 		i += 4;
-		if (len != 2 || len > n - i)
+		if (len > n - i)
 		{
 			return Fail(d, TLS_ERROR_PROTOCOL);
 		}
 		unsigned bit;
-		if (type == 43 && Get16(p + i) == 0x0304)
+		if (type == 43 && len == 2 && Get16(p + i) == 0x0304)
 		{
 			bit = 1;
 		}
-		else if (type == 41 && Get16(p + i) == 0)
+		else if (type == 41 && len == 2 && Get16(p + i) == 0)
 		{
 			bit = 2;
+		}
+		else if (type == 51 && d->pKeyAgree != nullptr && len == 69 &&
+			Get16(p + i) == 23 && Get16(p + i + 2) == 65 && p[i + 4] == 4)
+		{
+			bit = 4;
+			peer = p + i + 5;
 		}
 		else
 		{
@@ -217,14 +235,24 @@ bool ServerHello(TlsDev_t *d, const uint8_t *p, size_t n)
 		seen |= bit;
 		i += len;
 	}
-	if (seen != 3)
+	if (seen != (d->pKeyAgree != nullptr ? 7U : 3U))
 	{
 		return Fail(d, TLS_ERROR_AUTH);
+	}
+	if (d->pKeyAgree != nullptr)
+	{
+		CRYPTO_STATUS status = d->pKeyAgree->Agree(CRYPTO_CURVE_P256,
+			d->KeyCtx, peer, shared.Data, false);
+		WipeEphemeral(d);
+		if (status != CRYPTO_STATUS_OK)
+		{
+			return Fail(d, TLS_ERROR_CRYPTO);
+		}
 	}
 	Scratch s;
 	if (!Hash(d, nullptr, 0, s.Data) ||
 		!Expand(d, d->Secret, "derived", s.Data, 32, s.Data + 32, 32) ||
-		!Mac(d, s.Data + 32, 32, s_Zero, 32, d->Secret) ||
+		!Mac(d, s.Data + 32, 32, shared.Data, 32, d->Secret) ||
 		!Hash(d, d->Transcript, d->TranscriptLen, s.Data) ||
 		!Expand(d, d->Secret, "c hs traffic", s.Data, 32, d->ClientSecret, 32) ||
 		!Expand(d, d->Secret, "s hs traffic", s.Data, 32, d->ServerSecret, 32) ||
@@ -299,11 +327,41 @@ bool Message(TlsDev_t *d)
 	}
 	if (d->State == TLS_ENCRYPTED_EXTENSIONS && type == 8)
 	{
-		// Only SNI was offered for EncryptedExtensions. No ALPN or early data.
-		if (n < 2 || Get16(p) != n - 2 ||
-			(n != 2 && !(n == 6 && d->bServerName && Get16(p + 2) == 0 && Get16(p + 4) == 0)))
+		unsigned seen = 0;
+		if (n < 2 || Get16(p) != n - 2)
 		{
 			return Fail(d, TLS_ERROR_PROTOCOL);
+		}
+		for (size_t i = 2; i < n;)
+		{
+			unsigned bit = 0;
+			if (n - i < 4)
+			{
+				return Fail(d, TLS_ERROR_PROTOCOL);
+			}
+			unsigned type = Get16(p + i);
+			size_t len = Get16(p + i + 2);
+			i += 4;
+			if (len > n - i)
+			{
+				return Fail(d, TLS_ERROR_PROTOCOL);
+			}
+			if (type == 0 && d->bServerName && len == 0)
+			{
+				bit = 1;
+			}
+			else if (type == 10 && d->pKeyAgree != nullptr && len >= 4 &&
+				(len & 1U) == 0 && Get16(p + i) == len - 2)
+			{
+				// Server group preferences do not change the negotiated P-256 share.
+				bit = 2;
+			}
+			if (bit == 0 || (seen & bit) != 0)
+			{
+				return Fail(d, TLS_ERROR_PROTOCOL);
+			}
+			seen |= bit;
+			i += len;
 		}
 		if (!Append(d, d->Handshake, d->HandshakeLen))
 		{
@@ -548,6 +606,7 @@ void TlsReset(TlsDev_t *d)
 	d->State = TLS_IDLE;
 	d->Error = TLS_ERROR_NONE;
 	d->pTransport = nullptr;
+	d->pKeyAgree = nullptr;
 	d->TxLen = d->TxOffset = d->RxCount = d->PlainOffset = d->PlainLen = 0;
 	d->RxNeed = 5;
 	d->RxSequence = d->TxSequence = 0;
@@ -574,6 +633,14 @@ bool TlsInit(TlsDev_t *d, const TlsCfg_t *cfg, DevIntrf_t *transport, uint32_t n
 	{
 		return Fail(d, TLS_ERROR_CONFIG);
 	}
+	if (cfg->pKeyAgree != nullptr && (cfg->pKeyAgree->IsAsync() ||
+		cfg->pKeyAgree->KeyCtxSize() == 0 ||
+		cfg->pKeyAgree->KeyCtxSize() > sizeof(d->KeyCtx) ||
+		cfg->pKeyAgree->KeyCtxAlign() == 0 ||
+		alignof(uint64_t) % cfg->pKeyAgree->KeyCtxAlign() != 0))
+	{
+		return Fail(d, TLS_ERROR_CONFIG);
+	}
 	size_t hostlen = 0;
 	if (cfg->pServerName != nullptr)
 	{
@@ -590,6 +657,7 @@ bool TlsInit(TlsDev_t *d, const TlsCfg_t *cfg, DevIntrf_t *transport, uint32_t n
 	d->pHash = cfg->pHash;
 	d->pMac = cfg->pMac;
 	d->pAead = cfg->pAead;
+	d->pKeyAgree = cfg->pKeyAgree;
 	d->Timeout = cfg->Timeout;
 	d->Started = d->Now = d->TxStarted = now;
 	d->bServerName = hostlen != 0;
@@ -636,6 +704,26 @@ bool TlsInit(TlsDev_t *d, const TlsCfg_t *cfg, DevIntrf_t *transport, uint32_t n
 	const uint8_t extensions[] = {0,43,0,3,2,3,4, 0,45,0,2,1,0};
 	memcpy(p + i, extensions, sizeof(extensions));
 	i += sizeof(extensions);
+	if (d->pKeyAgree != nullptr)
+	{
+		// Offer only psk_dhe_ke and secp256r1; the PSK binder covers this share.
+		p[i - 1] = 1;
+		const uint8_t groups[] = {0,10,0,4,0,2,0,23};
+		memcpy(p + i, groups, sizeof(groups));
+		i += sizeof(groups);
+		Put16(p + i, 51);
+		Put16(p + i + 2, 71);
+		Put16(p + i + 4, 69);
+		Put16(p + i + 6, 23);
+		Put16(p + i + 8, 65);
+		p[i + 10] = 4;
+		if (d->pKeyAgree->KeyGen(CRYPTO_CURVE_P256, d->KeyCtx,
+			p + i + 11) != CRYPTO_STATUS_OK)
+		{
+			return Fail(d, TLS_ERROR_CRYPTO);
+		}
+		i += 75;
+	}
 	if (hostlen != 0)
 	{
 		Put16(p + i, 0);

@@ -1,8 +1,8 @@
 /* SPDX-License-Identifier: MIT
  * Copyright (c) 2026 I-SYST inc.
  * TLS 1.3 external-PSK client over an existing synchronous stream DeviceIntrf.
- * Initial profile: psk_ke, AES-128-GCM/SHA-256, no certificates, no early data,
- * no resumption or DHE (therefore no forward secrecy). Not DTLS.
+ * Profiles: psk_ke or P-256 psk_dhe_ke, AES-128-GCM/SHA-256.
+ * No certificates, early data or resumption. Not DTLS.
  */
 #ifndef __NET_TLS_H__
 #define __NET_TLS_H__
@@ -48,6 +48,9 @@ typedef struct {
 	size_t IdentityLen;
 	const char *pServerName;
 	uint32_t Timeout; /* Handshake and pending-output deadline, ms, 1..INT32_MAX. */
+	/* Optional. Non-null requires P-256 PSK-DHE; no fallback to PSK-only.
+	 * Enable/configure this synchronous engine with secure RNG before Init. */
+	KeyAgreeEngine *pKeyAgree;
 } TlsCfg_t;
 
 /* Zero-initialize before first use. All storage belongs to the caller. Do not
@@ -61,6 +64,8 @@ typedef struct {
 	HashEngine *pHash;
 	MacEngine *pMac;
 	AeadEngine *pAead;
+	KeyAgreeEngine *pKeyAgree;
+	uint64_t KeyCtx[(CRYPTO_KEYCTX_MAX + 7U) / 8U];
 	TLS_STATE State;
 	TLS_ERROR Error;
 	uint32_t Started;

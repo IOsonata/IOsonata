@@ -105,15 +105,21 @@ interface pattern. The existing socket TLS/DTLS protocol selections and credenti
 storage remain unsupported by lwIP; selecting that enum does not select this
 client. nRF91 modem TLS/DTLS is unchanged.
 
-The profile offers only TLS 1.3, `TLS_AES_128_GCM_SHA256`, and `psk_ke`.
-The server must explicitly support external PSK without DHE. This profile has
-no forward secrecy. It has no X.509, certificate hostname verification, DTLS,
+The client offers TLS 1.3 and `TLS_AES_128_GCM_SHA256`. With a non-null
+`TlsCfg_t::pKeyAgree`, it requires `psk_dhe_ke` with a fresh P-256 key pair and
+rejects a PSK-only server response. Without this engine it offers only `psk_ke`,
+which has no forward secrecy and requires server support for PSK without DHE.
+Neither mode implements X.509, certificate hostname verification, DTLS,
 early data, session resumption, or HelloRetryRequest support. Unsupported
 negotiation fails closed. It is an initial implementation, not a claim of
 complete TLS feature coverage or an independently audited security library.
 
 The caller supplies existing synchronous `HashEngine`, `MacEngine`, `AeadEngine`
-and security-grade `RngEngine` instances. No duplicate crypto implementation,
+and security-grade `RngEngine` instances. PSK-DHE additionally uses an enabled,
+synchronous `KeyAgreeEngine` supporting P-256, configured with its secure RNG.
+Its context must fit `CRYPTO_KEYCTX_MAX` and the alignment of `uint64_t` storage.
+The engine validates the peer point; TLS clears its ephemeral context after
+agreement and on failure/reset. No duplicate crypto implementation,
 controller access, system allocation, RTTI or exceptions are introduced. Provider
 errors, including BUSY, abort the connection; async providers are rejected.
 PSKs contain 16..64 bytes, identities 1..128 bytes, and optional SNI at most
@@ -133,8 +139,9 @@ This initial interface is polled; it does not publish TLS event callbacks.
 
 All connection storage is in `TlsDev_t`: a 16645-byte input record buffer,
 1046-byte output buffer, two 2048-byte handshake/transcript buffers, keys and
-state. The measured x86-64 context size is 22232 bytes; this is not an ARM RAM
-measurement and excludes provider objects and stack. The receiver supports the
+state, plus a fixed key-agreement context. The measured x86-64 context size is
+22304 bytes; this is not an ARM RAM measurement and excludes provider objects
+and stack. The receiver supports the
 TLS 1.3 maximum ciphertext record size. Individual handshake messages and the
 initial transcript are bounded to 2048 bytes. Oversized tickets/messages fail
 rather than allocating. Received tickets are checked and discarded.
@@ -160,10 +167,13 @@ and handshakes, malformed records, bad tags and Finished values, insecure/failed
 RNG, deadlines including timer wrap, backpressure, EOF, key updates, size limits,
 secret wiping, and the C header. OpenSSL 3 provides an independent live server
 for 19/1024/4096/16000-byte reverse echoes, one-byte I/O, wrong-PSK rejection and
-context reuse across connections. The maintainer's H753 TLS hardware results
-are recorded below.
+context reuse across connections in both PSK-only and P-256 PSK-DHE modes.
+DHE checks include malformed/duplicate shares, invalid peer points, missing
+shares (downgrade rejection), key-context bounds, provider failure and wiping.
+The host runner uses the existing micro-ecc checkout; `UECC_ROOT` can override
+its location. The maintainer's H753 TLS hardware results are recorded below.
 
-Certificate authentication, PSK-DHE, DTLS, broader protocol/error handling,
+Certificate authentication, DTLS, broader protocol/error handling,
 credential-tag integration and independent security review remain future work.
 The shared protocol/crypto separation allows this component to move with the
 communications code into Voci when the ecosystem is ready.
@@ -372,9 +382,10 @@ The exact flashed commit, compiler version and build profile were not supplied.
 | Server restart | Transport error 7, retries while unavailable, new authenticated session and continued echo checks without board reset |
 | Wrong PSK | Repeated peer error 8; no authenticated session or successful echo shown |
 | Correct PSK restored | Automatic authentication and verified echo checks resumed through 700 without board reset |
-| Cable interruption | Network-down notification, DHCP recovery and a new TLS handshake were shown; completed TLS recovery after this specific interruption was not captured |
+| Cable interruption | Network-down notification, DHCP recovery, a new authenticated TLS session and verified echoes resumed through 600 without resetting the board |
 
 These are initial interoperability and recovery results for the PSK-only profile.
+The newer P-256 PSK-DHE mode has host validation; its hardware test is pending.
 They do not establish certificate support, forward secrecy, maximum throughput,
 or a security audit. The running firmware establishes a successful maintainer
 build; a fresh automated ARM build was not completed in the implementation session.

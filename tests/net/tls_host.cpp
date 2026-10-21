@@ -17,6 +17,7 @@
 #include "net/tls.h"
 #include "crypto/crypto_softaes.h"
 #include "crypto/crypto_softsha256.h"
+#include "crypto/crypto_uecc.h"
 
 class HostRng : public RngEngine {
 public:
@@ -61,6 +62,7 @@ static uint32_t Now()
 int main(int argc, char **argv)
 {
 	assert(argc >= 2);
+	uint64_t previousKey[8] = {};
 	for (int repeat = 0; repeat < 2; repeat++)
 	{
 	Transport t;
@@ -83,30 +85,42 @@ int main(int argc, char **argv)
 	CryptoSoftSha256 hash;
 	CryptoSoftAes aes;
 	HostRng rng;
+	CryptoUecc agree;
+	agree.SetRng(&rng);
+	agree.Enable();
+	bool dhe = argc > 3 && strcmp(argv[3], "dhe") == 0;
+	bool bad = argc > 4;
 	hash.Enable();
 	aes.Enable();
 	uint8_t psk[32];
 	for (unsigned i = 0; i < sizeof(psk); i++) psk[i] = (uint8_t)i;
-	if (argc > 3) psk[0] ^= 1;
+	if (bad) psk[0] ^= 1;
 	const uint8_t identity[] = "IOsonata";
 	TlsCfg_t cfg = {&hash, &hash, &aes, &rng, psk, sizeof(psk),
-		identity, sizeof(identity) - 1, nullptr, 5000};
+		identity, sizeof(identity) - 1, nullptr, 5000, dhe ? &agree : nullptr};
 	static TlsDev_t tls = {};
 	assert(TlsInit(&tls, &cfg, &t.Dev, Now()));
+	if (dhe)
+	{
+		assert(memcmp(previousKey, tls.KeyCtx, sizeof(previousKey)) != 0);
+		memcpy(previousKey, tls.KeyCtx, sizeof(previousKey));
+	}
 	uint32_t start = Now();
 	while (tls.State != TLS_READY && tls.State != TLS_FAILED && Now() - start < 6000)
 	{
 		TlsProcess(&tls, Now(), t.Open);
 		usleep(100);
 	}
-	printf("handshake state=%d error=%d storage=%zu\n", tls.State, tls.Error, sizeof(tls));
-	if (argc > 3)
+	printf("%s handshake state=%d error=%d storage=%zu\n",
+		dhe ? "PSK-DHE" : "PSK-only", tls.State, tls.Error, sizeof(tls));
+	if (bad)
 	{
 		assert(tls.State == TLS_FAILED);
 		close(t.Fd);
 		return 0;
 	}
 	assert(tls.State == TLS_READY);
+	for (auto c : tls.KeyCtx) assert(c == 0);
 	for (size_t length : {19U, 1024U, 4096U, 16000U})
 	{
 		uint8_t msg[16000];

@@ -15,18 +15,20 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[2]
 SOURCES = ['src/net/tls.cpp', 'src/crypto/crypto_softaes.cpp',
            'src/crypto/crypto_softsha256.cpp', 'src/crypto/crypto_p256.cpp',
-           'src/device.cpp', 'src/device_intrf.cpp']
+           'src/device.cpp', 'src/device_intrf.cpp', 'src/crypto/crypto_uecc.cpp']
+UECC = Path(os.environ.get('UECC_ROOT', ROOT / 'micro-ecc'))
 ENV = dict(os.environ, ASAN_OPTIONS='detect_leaks=0:abort_on_error=1')
 
 
-def interop(binary, chunk, bad=False):
+def interop(binary, chunk, bad=False, dhe=False):
     with socket.socket() as probe:
         probe.bind(('127.0.0.1', 0))
         port = probe.getsockname()[1]
     command = ['openssl', 's_server', '-accept', f'127.0.0.1:{port}',
-               '-nocert', '-tls1_3', '-allow_no_dhe_kex', '-psk',
+               '-nocert', '-tls1_3', '-psk',
                bytes(range(32)).hex(), '-psk_identity', 'IOsonata',
                '-ciphersuites', 'TLS_AES_128_GCM_SHA256', '-rev', '-naccept', '2']
+    command += ['-groups', 'P-256'] if dhe else ['-allow_no_dhe_kex']
     with tempfile.TemporaryFile() as errors:
         server = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=errors)
         try:
@@ -40,7 +42,7 @@ def interop(binary, chunk, bad=False):
                 if not line:
                     errors.seek(0)
                     raise RuntimeError(errors.read().decode())
-            subprocess.run([str(binary), str(port), str(chunk)] +
+            subprocess.run([str(binary), str(port), str(chunk), 'dhe' if dhe else 'psk'] +
                            (['bad-key'] if bad else []), check=True, env=ENV, timeout=40)
         finally:
             server.terminate()
@@ -50,22 +52,27 @@ def interop(binary, chunk, bad=False):
 def main():
     with tempfile.TemporaryDirectory(prefix='iosonata-tls-') as temp:
         for optimization in ['-O0', '-O2']:
-            flags = ['-std=gnu++17', optimization, '-g', '-Wall', '-Wextra',
+            ecc = Path(temp) / 'uecc.o'
+            subprocess.run(['gcc', optimization, '-g', '-fsanitize=address,undefined',
+                            '-fno-pie', '-DuECC_ENABLE_VLI_API=1', '-I' + str(UECC), '-c', str(UECC / 'uECC.c'),
+                            '-o', str(ecc)], check=True)
+            flags = ['-std=gnu++17', '-DuECC_ENABLE_VLI_API=1', optimization, '-g', '-Wall', '-Wextra',
                      '-fno-exceptions', '-fno-rtti', '-ffunction-sections',
                      '-fdata-sections', '-fsanitize=address,undefined',
                      '-fno-omit-frame-pointer', '-fno-pie', '-no-pie',
-                     '-I' + str(ROOT / 'include')]
+                     '-I' + str(ROOT / 'include'), '-I' + str(UECC)]
             for name in ['tls_test', 'tls_host']:
                 binary = Path(temp) / name
                 subprocess.run(['g++', *flags, str(ROOT / f'tests/net/{name}.cpp'),
                                 *[str(ROOT / p) for p in SOURCES],
-                                '-Wl,--gc-sections', '-o', str(binary)], check=True)
+                                str(ecc), '-Wl,--gc-sections', '-o', str(binary)], check=True)
                 if name == 'tls_test':
                     subprocess.run([str(binary)], check=True, env=ENV)
                 else:
                     for chunk, bad in [(65536, False), (1, False), (7, True), (7, False)]:
                         # Each successful process reuses its TLS context for two connections.
                         interop(binary, chunk, bad)
+                        interop(binary, chunk, bad, True)
             print(f'{optimization}: TLS host tests PASS', flush=True)
         subprocess.run(['gcc', '-std=c11', '-Werror', '-fsyntax-only',
                         '-I' + str(ROOT / 'include'), '-x', 'c', '-'],

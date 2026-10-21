@@ -61,6 +61,9 @@ SOFTWARE.
 #include "net/tls.h"
 #include NET_DEMO_TLS_ENGINE_HEADER
 #include NET_DEMO_TLS_RNG_HEADER
+#if NET_DEMO_TLS_DHE
+#include NET_DEMO_TLS_AGREE_HEADER
+#endif
 static_assert(NET_DEMO_HTTP_TEST == 0 && NET_DEMO_TEST_COUNT == 0,
 	"Select one Ethernet test mode");
 #endif
@@ -358,9 +361,13 @@ static void HttpTest(uint32_t Now)
 #endif
 
 #if NET_DEMO_TLS_TEST
-static Tls s_Tls;
 static NET_DEMO_TLS_AES_TYPE s_TlsAes;
 static NET_DEMO_TLS_HASH_TYPE s_TlsHash;
+#if NET_DEMO_TLS_DHE
+alignas(uint64_t) static uint8_t s_TlsAgreeMem[NET_DEMO_TLS_AGREE_MEMSIZE];
+static KeyAgreeEngine *s_pTlsAgree;
+#endif
+static Tls s_Tls;
 static bool s_TlsStarted;
 static bool s_TlsReady;
 static uint32_t s_TlsRetry;
@@ -399,6 +406,18 @@ static void TlsTest(uint32_t Now)
 		{
 			return;
 		}
+#if NET_DEMO_TLS_DHE
+		if (s_pTlsAgree == nullptr)
+		{
+			s_pTlsAgree = NET_DEMO_TLS_AGREE_CREATE(s_TlsAgreeMem,
+				sizeof(s_TlsAgreeMem), NET_DEMO_TLS_RNG());
+			if (s_pTlsAgree == nullptr)
+			{
+				TlsTestDown(Now, "P-256 engine init failed");
+				return;
+			}
+		}
+#endif
 		TlsCfg_t cfg = {
 			.pHash = &s_TlsHash,
 			.pMac = &s_TlsHash,
@@ -410,6 +429,11 @@ static void TlsTest(uint32_t Now)
 			.IdentityLen = sizeof(identity) - 1,
 			.pServerName = nullptr,
 			.Timeout = 10000,
+#if NET_DEMO_TLS_DHE
+			.pKeyAgree = s_pTlsAgree,
+#else
+			.pKeyAgree = nullptr,
+#endif
 		};
 		if (!s_TlsAes.Enable() || !s_TlsHash.Enable() || !s_Socket.Init(s_SockCfg) ||
 			!s_Tls.Init(cfg, (DevIntrf_t *)s_Socket, TimerGetMilisecond(&s_Timer)))
@@ -433,7 +457,9 @@ static void TlsTest(uint32_t Now)
 	if (!s_TlsReady)
 	{
 		s_TlsReady = true;
-		SysLogPrintf(SysLogGet(), "TLS authenticated: AES-128-GCM/SHA-256, PSK-only\r\n");
+		SysLogPrintf(SysLogGet(), NET_DEMO_TLS_DHE ?
+			"TLS authenticated: AES-128-GCM/SHA-256, PSK-DHE P-256\r\n" :
+			"TLS authenticated: AES-128-GCM/SHA-256, PSK-only\r\n");
 	}
 	if (s_TlsLength == 0)
 	{

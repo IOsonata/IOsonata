@@ -34,23 +34,28 @@ Set `NET_DEMO_TLS_TEST` to 1, `NET_DEMO_HTTP_TEST` and `NET_DEMO_TEST_COUNT`
 to 0, and `NET_DEMO_HOST` to the PC's LAN address (for the recorded setup,
 `10.5.5.51`, not the board's `10.5.5.54`). Rebuild the H753 library and example.
 The library project includes the shared TLS source; it is linked only when used.
+`NET_DEMO_TLS_DHE` defaults to 1: PSK authentication with ephemeral P-256
+key agreement. Set it to 0 only to repeat the earlier PSK-only test.
 
 On the PC run OpenSSL 3 (the macOS system LibreSSL command may not support this):
 
 ```sh
-openssl s_server -accept 2469 -nocert -tls1_3 -allow_no_dhe_kex \
+openssl s_server -accept 2469 -nocert -tls1_3 -groups P-256 \
   -ciphersuites TLS_AES_128_GCM_SHA256 -psk_identity IOsonata \
   -psk 000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f -rev
 ```
 
-This uses a PUBLIC TEST KEY, PSK-only authentication and no forward secrecy.
+This uses a PUBLIC TEST KEY. P-256 PSK-DHE adds forward secrecy to PSK
+authentication. To test PSK-only with `NET_DEMO_TLS_DHE=0`, add
+`-allow_no_dhe_kex` to the server command; that mode has no forward secrecy.
 `Python/net_echo.py` is a plaintext server and cannot serve this TLS test.
-The demo uses the existing H7 AES/HASH and RNG providers and verifies OpenSSL's
+The demo uses the existing H7 AES/HASH and RNG providers, the existing
+CryptoUecc P-256 implementation, and verifies OpenSSL's
 reversed line response. Expected console output includes:
 
 ```text
 TLS 1.3 PSK handshake: 10.5.5.51:2469
-TLS authenticated: AES-128-GCM/SHA-256, PSK-only
+TLS authenticated: AES-128-GCM/SHA-256, PSK-DHE P-256
 TLS echo checked 1
 TLS echo checked 100
 ```
@@ -59,9 +64,10 @@ Stop/restart the server or unplug/replug the cable. The demo closes failed
 sessions, wipes TLS state, and retries after three seconds once the network is
 ready. Change one PSK byte on the server to check that authentication fails.
 Hardware testing on October 21, 2026 confirmed authenticated encrypted echoes,
-server restart recovery, wrong-PSK rejection and automatic recovery after the
-correct key was restored, without resetting the board. The cable test showed
-DHCP recovery and a new handshake; its completed TLS recovery still needs a log.
+server restart recovery, wrong-PSK rejection, cable/DHCP/TLS recovery and
+automatic recovery after the correct key was restored, without resetting the
+board. These hardware results used PSK-only mode. The new P-256 PSK-DHE
+mode passes host interoperability tests; hardware validation remains pending.
 The exact compiler/build profile was not supplied. See `docs/networking.md`
 for hardware evidence and host tests. HTTP and ordinary TCP modes remain available.
 

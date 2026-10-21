@@ -71,6 +71,12 @@ SOFTWARE.
 #ifndef NET_DEMO_TLS_TEST
 #define NET_DEMO_TLS_TEST 0
 #endif
+#ifndef NET_DEMO_TLS_DHE
+#define NET_DEMO_TLS_DHE 1
+#endif
+#define NET_DEMO_TLS_AGREE_HEADER "crypto/crypto_uecc.h"
+#define NET_DEMO_TLS_AGREE_MEMSIZE CRYPTO_UECC_MEMSIZE
+#define NET_DEMO_TLS_AGREE_CREATE(m, s, r) CryptoUeccCreate((m), (s), (r))
 #define NET_DEMO_TLS_ENGINE_HEADER "crypto_stm32h7.h"
 #define NET_DEMO_TLS_RNG_HEADER "crypto_rng_stm32.h"
 #define NET_DEMO_TLS_AES_TYPE CryptoStm32H7Aes

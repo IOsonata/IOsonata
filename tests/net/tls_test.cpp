@@ -8,6 +8,7 @@
 #include "net/tls.h"
 #include "crypto/crypto_softaes.h"
 #include "crypto/crypto_softsha256.h"
+#include "crypto/crypto_uecc.h"
 
 class TestRng : public RngEngine {
 public:
@@ -24,12 +25,32 @@ public:
 	}
 };
 
+class FailedAgree : public KeyAgreeEngine {
+public:
+	size_t Size = CRYPTO_KEYCTX_MAX;
+	size_t Alignment = 8;
+	bool Async = false;
+	bool Enable() override { return true; }
+	void Disable() override {}
+	void Reset() override {}
+	bool IsAsync() const override { return Async; }
+	size_t KeyCtxSize() const override { return Size; }
+	size_t KeyCtxAlign() const override { return Alignment; }
+	void KeyReset(void *p) override { CryptoSecureWipe(p, CRYPTO_KEYCTX_MAX); }
+	CRYPTO_STATUS KeyGen(CRYPTO_CURVE, void *p, uint8_t *) override
+	{
+		memset(p, 0x77, CRYPTO_KEYCTX_MAX);
+		return CRYPTO_STATUS_BUSY;
+	}
+};
+
 struct Fixture {
 	TlsDev_t Tls = {};
 	DevIntrf_t Transport = {};
 	CryptoSoftSha256 Hash;
 	CryptoSoftAes Aes;
 	TestRng Rng;
+	CryptoUecc Agree;
 	std::vector<uint8_t> Input;
 	std::vector<uint8_t> Output;
 	bool Block = false;
@@ -57,6 +78,8 @@ struct Fixture {
 	}
 	Fixture()
 	{
+		Agree.SetRng(&Rng);
+		Agree.Enable();
 		Hash.Enable();
 		Aes.Enable();
 		Transport.pDevData = this;
@@ -67,7 +90,7 @@ struct Fixture {
 		Transport.EnCnt = 1;
 		atomic_flag_clear(&Transport.bBusy);
 		Config = {&Hash, &Hash, &Aes, &Rng, Psk, sizeof(Psk),
-			(const uint8_t *)"IOsonata", 8, nullptr, 1000};
+			(const uint8_t *)"IOsonata", 8, nullptr, 1000, nullptr};
 		assert(TlsInit(&Tls, &Config, &Transport, 0));
 		TlsProcess(&Tls, 0, true);
 	}
@@ -133,7 +156,38 @@ struct Fixture {
 			hello[55] = 4;
 		}
 		Feed(22, hello);
-		if (mutation == 0) assert(Tls.State == TLS_ENCRYPTED_EXTENSIONS);
+		if (mutation == 0 && Config.pKeyAgree == nullptr) assert(Tls.State == TLS_ENCRYPTED_EXTENSIONS);
+	}
+	void Dhe()
+	{
+		Config.pKeyAgree = &Agree;
+		assert(TlsInit(&Tls, &Config, &Transport, 0));
+		TlsProcess(&Tls, 0, true);
+	}
+	void DheHello(unsigned mutation)
+	{
+		uint64_t key[8] = {};
+		uint8_t pub[64];
+		assert(Agree.KeyGen(CRYPTO_CURVE_P256, key, pub) == CRYPTO_STATUS_OK);
+		Agree.KeyReset(key);
+		std::vector<uint8_t> hello = {2, 0, 0, 125, 3, 3};
+		hello.resize(38, 0x55);
+		hello.insert(hello.end(), {0, 0x13, 1, 0, 0, 85,
+			0, 43, 0, 2, 3, 4, 0, 41, 0, 2, 0, 0,
+			0, 51, 0, 69, 0, 23, 0, 65, 4});
+		hello.insert(hello.end(), pub, pub + sizeof(pub));
+		if (mutation == 1) hello[61] = 24;
+		if (mutation == 2) hello[64] = 2;
+		if (mutation == 3) hello[63] = 64;
+		if (mutation == 4) memset(hello.data() + 65, 0, 64);
+		if (mutation == 5)
+		{
+			std::vector<uint8_t> share(hello.begin() + 56, hello.end());
+			hello.insert(hello.end(), share.begin(), share.end());
+			hello[3] += 73;
+			hello[43] += 73;
+		}
+		Feed(22, hello);
 	}
 	void Ready()
 	{
@@ -151,6 +205,7 @@ struct Fixture {
 		assert(memcmp(Tls.ServerSecret, zeros, 32) == 0);
 		assert(memcmp(Tls.RxKey, zeros, 16) == 0);
 		assert(memcmp(Tls.TxKey, zeros, 16) == 0);
+		for (auto c : Tls.KeyCtx) assert(c == 0);
 		for (auto c : Tls.Rx) assert(c == 0);
 		for (auto c : Tls.Tx) assert(c == 0);
 		assert(Tls.PlainLen == 0 && Tls.TxLen == 0);
@@ -159,6 +214,54 @@ struct Fixture {
 
 int main()
 {
+	for (int mode = 0; mode < 4; mode++)
+	{
+		FailedAgree agree;
+		Fixture f;
+		if (mode == 1) agree.Size++;
+		if (mode == 2) agree.Alignment = 16;
+		if (mode == 3) agree.Async = true;
+		f.Config.pKeyAgree = &agree;
+		assert(!TlsInit(&f.Tls, &f.Config, &f.Transport, 0));
+		f.Failed(mode == 0 ? TLS_ERROR_CRYPTO : TLS_ERROR_CONFIG);
+	}
+
+	for (unsigned mutation = 0; mutation <= 5; mutation++)
+	{
+		Fixture f;
+		f.Dhe();
+		f.Chunk = 1;
+		f.DheHello(mutation);
+		if (mutation == 0)
+		{
+			assert(f.Tls.State == TLS_ENCRYPTED_EXTENSIONS);
+			for (auto c : f.Tls.KeyCtx) assert(c == 0);
+			f.Encrypted(22, {8,0,0,10,0,8,0,10,0,4,0,2,0,23});
+			assert(f.Tls.State == TLS_SERVER_FINISHED);
+		}
+		else
+		{
+			f.Failed(mutation == 4 ? TLS_ERROR_CRYPTO : TLS_ERROR_PROTOCOL);
+		}
+	}
+	{
+		Fixture f;
+		f.Dhe();
+		f.Hello(); // PSK-only response must not downgrade a DHE request.
+		f.Failed(TLS_ERROR_AUTH);
+	}
+	{
+		Fixture f;
+		f.DheHello(0); // Unsolicited key share in PSK-only mode.
+		f.Failed(TLS_ERROR_PROTOCOL);
+	}
+	{
+		Fixture f;
+		f.Dhe();
+		TlsProcess(&f.Tls, 1000, true);
+		f.Failed(TLS_ERROR_TIMEOUT);
+	}
+
 	for (unsigned mutation = 1; mutation <= 5; mutation++)
 	{
 		Fixture f;
