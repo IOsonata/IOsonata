@@ -373,6 +373,7 @@ static bool s_TlsReady;
 static uint32_t s_TlsRetry;
 static uint32_t s_TlsDeadline;
 static uint32_t s_TlsChecked;
+static uint32_t s_TlsLastPump;
 static int s_TlsSent;
 static int s_TlsReceived;
 static char s_TlsMessage[64];
@@ -401,6 +402,19 @@ static void TlsTest(uint32_t Now)
 		16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31
 	};
 	static const uint8_t identity[] = "IOsonata";
+	TlsDev_t *pTls = s_Tls;
+	TLS_STATE before;
+	TLS_STATE state;
+	uint32_t start;
+	uint32_t elapsed;
+	uint32_t gap;
+	uint32_t age;
+	uint32_t txAge;
+	size_t txPending;
+	size_t rxCount;
+	size_t rxNeed;
+	bool open;
+
 	if (s_TlsStarted == false)
 	{
 		if ((uint32_t)(Now - s_TlsRetry) < 3000U)
@@ -436,16 +450,66 @@ static void TlsTest(uint32_t Now)
 			.pKeyAgree = nullptr,
 #endif
 		};
-		if (!s_TlsAes.Enable() || !s_TlsHash.Enable() || !s_Socket.Init(s_SockCfg) ||
-			!s_Tls.Init(cfg, (DevIntrf_t *)s_Socket, TimerGetMilisecond(&s_Timer)))
+		if (!s_TlsAes.Enable())
 		{
-			TlsTestDown(TimerGetMilisecond(&s_Timer), "connect/init failed");
+			TlsTestDown(TimerGetMilisecond(&s_Timer), "AES enable failed");
 			return;
 		}
+		if (!s_TlsHash.Enable())
+		{
+			TlsTestDown(TimerGetMilisecond(&s_Timer), "HASH enable failed");
+			return;
+		}
+		start = TimerGetMilisecond(&s_Timer);
+		open = s_Socket.Init(s_SockCfg);
+		Now = TimerGetMilisecond(&s_Timer);
+		SysLogPrintf(SysLogGet(), "TLS TCP connect: ok=%u ms=%lu\r\n",
+			(unsigned)open, (unsigned long)(Now - start));
+		if (!open)
+		{
+			TlsTestDown(Now, "TCP connect failed");
+			return;
+		}
+		start = TimerGetMilisecond(&s_Timer);
+		open = s_Tls.Init(cfg, (DevIntrf_t *)s_Socket, start);
+		Now = TimerGetMilisecond(&s_Timer);
+		SysLogPrintf(SysLogGet(), "TLS init: ok=%u ms=%lu\r\n",
+			(unsigned)open, (unsigned long)(Now - start));
+		if (!open)
+		{
+			TlsTestDown(Now, "TLS init failed");
+			return;
+		}
+		s_TlsLastPump = Now;
 		s_TlsStarted = true;
 		SysLogPrintf(SysLogGet(), "TLS 1.3 PSK handshake: %s:%u\r\n", s_SockCfg.pHost, s_SockCfg.Port);
 	}
-	TLS_STATE state = s_Tls.Process(TimerGetMilisecond(&s_Timer), s_Socket.Connected());
+	// Preserve only counters and state: failure wipes the TLS record buffers.
+	start = TimerGetMilisecond(&s_Timer);
+	before = pTls->State;
+	gap = start - s_TlsLastPump;
+	age = start - pTls->Started;
+	txPending = pTls->TxLen - pTls->TxOffset;
+	txAge = txPending != 0 ? start - pTls->TxStarted : 0;
+	rxCount = pTls->RxCount;
+	rxNeed = pTls->RxNeed;
+	open = s_Socket.Connected();
+	state = s_Tls.Process(start, open);
+	Now = TimerGetMilisecond(&s_Timer);
+	elapsed = Now - start;
+	s_TlsLastPump = Now;
+	if (state != before || elapsed >= 100U || gap >= 1000U)
+	{
+		SysLogPrintf(SysLogGet(), "TLS pump: state=%u->%u tcp=%u ms=%lu gap=%lu\r\n",
+			(unsigned)before, (unsigned)state, (unsigned)open,
+			(unsigned long)elapsed, (unsigned long)gap);
+	}
+	if (state == TLS_FAILED)
+	{
+		SysLogPrintf(SysLogGet(), "TLS before pump: age=%lu tx=%lu txage=%lu rx=%lu/%lu\r\n",
+			(unsigned long)age, (unsigned long)txPending, (unsigned long)txAge,
+			(unsigned long)rxCount, (unsigned long)rxNeed);
+	}
 	if (state == TLS_FAILED || state == TLS_CLOSED)
 	{
 		TlsTestDown(Now, "connection ended");
