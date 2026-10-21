@@ -35,48 +35,32 @@ hide an unfinished driver. Initialization failure counts as FAIL. The transfer
 payloads, completion counts and data checks are unchanged.
 
 Hardware validation (2026-10-21): **8 passed, 0 failed, 0 skipped** at
-1 MHz, 8-bit MSB-first. All four SPI modes pass in each of the eight
-master/slave execution combinations: 416 individual transfers, including
-1-, 16- and 129-byte frames and short-frame rearming. This validates the
-SPI1 master/SPI3 slave configuration above, not every H753 SPI instance
-or higher clock rates.
+8 MHz, 8-bit MSB-first, using a shorter SCK jumper. All four SPI modes pass
+in each of the eight master/slave execution combinations: 416 transfers,
+including 1-, 16- and 129-byte frames and short-frame rearming. The same
+suite previously passed at 1 MHz. These results cover SPI1 master/SPI3 slave
+with the configuration above, not every H753 SPI instance or word size.
 
-The earlier mode-1 failure reported 17 bytes for a 16-byte TX, with identical
-corruption in polling, interrupt and DMA combinations. Changing only the
-master SCK slew from TURBO to LOW resolved it with the original transfers
-and checks unchanged. This establishes slew sensitivity in the jumper setup;
-clock ringing was not measured with an oscilloscope.
+Use a short SCK jumper between CN7 pin 10 and CN8 pin 6. The longer wire
+produced corrupt data and extra received bytes. An independent ST HAL
+comparison also failed at 8 MHz in modes 1 and 2; replacing only the SCK
+wire with a shorter one made all HAL modes pass, followed by all IOsonata
+combinations. This establishes wiring sensitivity; the electrical waveform
+was not measured.
 
-The shared driver selects LOW SCK slew for H753 masters at achieved rates
-up to 1 MHz. A controlled trial selects MEDIUM at exactly 8 MHz; other
-rates above 1 MHz retain TURBO. The policy follows the actual
-selected rate, including subsequent SetRate calls. It uses the configured
-SCK pin, not a hard-coded board pin. Slave pins retain their previous settings
-because the slave's configured Rate does not determine the external SCK.
-The 8 MHz TURBO run passed all mode-0 frames, then failed the first
-16-byte mode-1 TX in every combination with 17 or 18 bytes received.
-Modes 2 and 3 were not reached. The MEDIUM-slew trial changes only SCK
-slew at the same 8 MHz clock; hardware confirmation is pending.
-Only the 1 MHz full suite has passed; faster buses need separate timing
-and signal-integrity validation.
+The passing IOsonata run used the diagnostic MEDIUM SCK slew setting at
+8 MHz. Cleanup removes the trial LOW/MEDIUM rate-specific overrides and
+restores the common TURBO pin setup. The cleaned build needs a hardware
+rerun with the short wire; the preceding result does not validate that
+restored slew setting. Set SPI_MASTER_RATE to 8000000 in your local board.h
+for the same 8 MHz run; the repository default remains 1 MHz.
 
-The shared driver also retains the ES0392 CRC-size and EOT-disable corrections,
-enables slave interrupts only after SPE/preload, and restricts AFCNTR to
-master mode. The CRC-size and AFCNTR corrections alone did not resolve the
-observed mode-1 failure.
-
-Build validation: H753 soft/hard-float, L476 and WBA65 shared bus sources
-compile at -O0 and -O3 with -Wall -Werror using GNU Arm GCC 13.2.1. The H753
-SPI example compiles in Debug and Release; full library/example linking was
-not rerun locally. Prior H753 bus register tests pass at -O0 and -O3 and the
-WBA SPI model passes 64 checks. Register models do not validate physical
-clock edges or the electrical effect of GPIO slew.
+Temporary H753 register dumps, RAM trace hooks and the standalone HAL
+comparison project have been removed. The shared validation checks and DMA
+coverage remain. The driver retains the documented ES0392 CRC-size and
+EOT-disable corrections, enables slave interrupts after SPE/preload, and
+restricts AFCNTR to master mode.
 
 Pin references: ST [UM2407, connector tables 18-20](https://www.st.com/resource/en/user_manual/um2407-stm32h7-nucleo144-boards-mb1364-stmicroelectronics.pdf)
 and [STM32H753 datasheet, alternate functions](https://www.st.com/resource/en/datasheet/stm32h753xi.pdf).
 
-The failure-only `spi_diagnostics.cpp` hook prints the master completion count,
-SPI1/SPI3 configuration and status, GPIO alternate functions, kernel clock
-selection and EXTI/NVIC state. It reads registers without consuming RXDR or
-changing pin configuration. Rebuild the example and capture the first failed
-combination including this dump. Transfer lengths and assertions are unchanged.

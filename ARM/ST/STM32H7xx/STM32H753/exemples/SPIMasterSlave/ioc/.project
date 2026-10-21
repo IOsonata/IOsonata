@@ -40,11 +40,6 @@
 			<type>1</type>
 			<locationURI>PARENT-1-PROJECT_LOC/src/board.h</locationURI>
 		</link>
-		<link>
-			<name>src/spi_diagnostics.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-1-PROJECT_LOC/src/spi_diagnostics.cpp</locationURI>
-		</link>
 	</linkedResources>
 </projectDescription>
 
