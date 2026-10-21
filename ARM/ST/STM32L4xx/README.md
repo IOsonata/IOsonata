@@ -178,7 +178,14 @@ the onboard LSM6DSL of the B-L475E-IOT01A (`src/sensors/ag_lsm6dsl.cpp`) on
 I2C2 (DevNo 1, SDA PB11, SCL PB10) at 0x6A, with its data ready on INT1 PD11,
 EXTI line 11. The Debug build prints with semihosting.
 `tests/sensors/run.py` runs the driver against a register model of the
-LSM6DSL. Not run on hardware yet.
+LSM6DSL. B-L475E-IOT01A2 run (2026-10-21), Debug, 2 g full scale: at rest
+the acceleration magnitude reads 1.02 to 1.04 g in two orientations, the axes
+follow the board when it is turned and reach the 2 g full scale when it is
+shaken. The data ready interrupt on PD11 arrives and its handler reads the
+status and the 14 output bytes in 2.4 ms at 100 kHz I2C. The printed interval,
+about 100 ms, is the time of one semihosting printf, not the 52 Hz output
+rate. The demo needs float printf (`-u _printf_float`) with newlib-nano. The
+gyroscope is read with the accelerometer but the demo does not print it.
 The STM32L476 example EnvSensorDemo (`exemples/sensor/env_sensor_demo.cpp`)
 reads the onboard HTS221 (`src/sensors/humi_hts221.cpp`) on the same bus at
 0x5F, 1 Hz, and prints the humidity and the temperature on the ST-LINK virtual

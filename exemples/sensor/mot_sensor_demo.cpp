@@ -488,7 +488,7 @@ int main()
 			cnt = 10;
 			//printf("Accel %d %d: %d %d %d\r\n", (uint32_t)g_DT, (uint32_t)g_Pdt, arawdata.X, arawdata.Y, arawdata.Z);
 			printf("Accel %d %d: %0.4f %0.4f %0.4f\r\n", (uint32_t)g_DT, (uint32_t)g_Pdt, accdata.X, accdata.Y, accdata.Z);
-			//printf("Gyro %d %d: %f %f %f\r\n", (uint32_t)g_DT, (uint32_t)dt, gyrodata.X, gyrodata.Y, gyrodata.Z);
+			printf("Gyro %d %d: %f %f %f\r\n", (uint32_t)g_DT, (uint32_t)dt, gyrodata.X, gyrodata.Y, gyrodata.Z);
 //	        printf("Roll %0.1f, Pitch %0.1f, Yaw %0.1f\n", euler.angle.roll, euler.angle.pitch, euler.angle.yaw);
 			//printf("Quat %8d %d: %f %f %f %f\r\n", (uint32_t)g_DT, (uint32_t)dt, quat.Q1, quat.Q2, quat.Q3, quat.Q4);
 			//printf("Quat %8d %d: %f %f %f %f\r\n", (uint32_t)g_DT, (uint32_t)dt, fq.element.x, fq.element.y, fq.element.z, fq.element.w);
