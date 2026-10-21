@@ -23,9 +23,9 @@ self-test is exercised by `tests/stm32h7/run_crypto.py` along with RNG timeout,
 clock/seed errors, output wiping and reset recovery at O0 and Os. The register
 model supplies deterministic words and cannot validate physical entropy.
 
-On October 21, 2026, the board run passed 56 checks with zero failures,
-including software ECB/CBC decryption. That run still skipped P-256 scalar
-n - 1.
+On October 21, 2026, the NUCLEO-H753ZI board run passed all 72 checks with
+zero failures and no skips, including software ECB/CBC decryption and both
+P-256 boundary scalars (1 and n - 1).
 
 The updated shared test requires both boundary scalars (1 and n - 1) to pass
 public-key import, ECDH, key retention/consumption, invalid-peer rejection,
@@ -35,5 +35,6 @@ It uses micro-ecc's integer API (`uECC_ENABLE_VLI_API=1`), already enabled in
 the library project.
 
 The updated host suite passes 72 checks with zero failures under ASan/UBSan.
-The new boundary cases still need a board run: rebuild both the library and
-CryptoTest. Ethernet TLS/DTLS is not implemented.
+The board result validates the hardware RNG and software AES/P-256 engines;
+it does not validate the H753 CRYP or HASH accelerators. Ethernet TLS/DTLS
+is not implemented.
