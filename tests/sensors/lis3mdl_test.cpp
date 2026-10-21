@@ -93,12 +93,15 @@ public:
 			return 0;
 		}
 		uint8_t addr = Decode(pAdCmd[0], BuffLen, true);
+		PrevReadAddr = LastReadAddr;
+		PrevReadLen = LastReadLen;
 		LastReadAddr = addr;
 		LastReadLen = BuffLen;
 		Reads++;
-		for (int i = 0; i < BuffLen; i++)
+		uint8_t a = addr;
+		for (int i = 0; i < BuffLen; i++, a = a == LIS3MDL_OUT_X_L_REG + 5 ? LIS3MDL_OUT_X_L_REG : a + 1)
 		{
-			uint8_t a = addr + i;
+			// The address returns to OUT_X_L after OUT_Z_H, as on the board
 			pBuff[i] = Reg[a];
 			if (a == LIS3MDL_CTRL_REG2_REG && ResetReads > 0)
 			{
@@ -176,6 +179,8 @@ public:
 	int Reads = 0;
 	int LastReadAddr = -1;
 	int LastReadLen = 0;
+	int PrevReadAddr = -1;
+	int PrevReadLen = 0;
 	bool StuckReset = false;
 
 private:
@@ -222,8 +227,8 @@ static bool Near(float A, double B)
 	return fabs(A - B) <= 1e-3 + fabs(B) * 1e-6;
 }
 
-// Field in uT at LsbPerGauss, 100 uT per gauss, all 3 axes and the
-// temperature in one read
+// Field in uT at LsbPerGauss, 100 uT per gauss, the 3 axes in one read,
+// then the temperature
 static void CheckSample(MagLis3mdl &Dev, Lis3mdlModel &M, int16_t X, int16_t Y, int16_t Z, int16_t T,
 						int LsbPerGauss)
 {
@@ -233,8 +238,9 @@ static void CheckSample(MagLis3mdl &Dev, Lis3mdlModel &M, int16_t X, int16_t Y, 
 
 	M.Sample(X, Y, Z, T);
 	CHECK(Dev.UpdateData() == true);
-	CHECK(M.Reads == reads + 1);
-	CHECK(M.LastReadAddr == LIS3MDL_STATUS_REG && M.LastReadLen == 9);
+	CHECK(M.Reads == reads + 2);
+	CHECK(M.PrevReadAddr == LIS3MDL_STATUS_REG && M.PrevReadLen == 7);
+	CHECK(M.LastReadAddr == LIS3MDL_TEMP_OUT_L_REG && M.LastReadLen == 2);
 	CHECK(M.Reg[LIS3MDL_STATUS_REG] == 0);
 	Dev.Read(d);
 	Dev.Read(r);

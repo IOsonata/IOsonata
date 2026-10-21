@@ -212,7 +212,15 @@ device, on the ST-LINK virtual COM port in Release, with semihosting in Debug.
 The scale of the device, 6842 LSB per gauss at 4 gauss, is 14.6 nT per LSB:
 the driver keeps it in floating point in the calibration, the integer
 Sensitivity of the data is rounded to 15 nT. `tests/sensors/run.py` runs the
-driver against a register model. Not run on hardware yet.
+driver against a register model. B-L475E-IOT01A2 run (2026-10-21), Release:
+the LIS3MDL is found at 0x1E. In 29 readings at rest the field reads X -18.84
+to -17.63 uT, Y -2.34 to -1.27 uT and Z -38.42 to -36.86 uT, magnitude 41.04
+to 42.56 uT. While the board is moved by hand the magnitude goes from 12.29 to
+120.67 uT; the demo applies no calibration. Not compared with a reference
+instrument. In that run the 2 bytes read after OUT_Z_H, in a 9 byte read from
+STATUS, were the X output again (same raw value on all 75 lines), so the
+printed temperature was wrong. The driver now reads TEMP_OUT in its own
+transfer; not run on the board yet.
 L496 and L4S9 I2C4 use virtual index 3. The L432 has no I2C2: index 1 fails
 initialization, I2C1 and I2C3 keep indices 0 and 2.
 

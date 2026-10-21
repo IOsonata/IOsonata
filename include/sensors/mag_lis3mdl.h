@@ -114,7 +114,8 @@ SOFTWARE.
 #define LIS3MDL_STATUS_ZYXDA											(1<<3)	//!< New data on the 3 axes
 #define LIS3MDL_STATUS_ZYXOR											(1<<7)	//!< Data overwritten
 
-// X, Y, Z then temperature, 16 bits each, right after STATUS
+// X, Y, Z then temperature, 16 bits each, right after STATUS. A multiple byte
+// read returns to OUT_X_L after OUT_Z_H: the temperature needs its own read.
 #define LIS3MDL_OUT_X_L_REG						0x28
 #define LIS3MDL_TEMP_OUT_L_REG					0x2E
 
