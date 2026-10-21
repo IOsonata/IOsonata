@@ -1341,6 +1341,16 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/bsec_interface.h</locationURI>
 		</link>
 		<link>
+			<name>include/sensors/dist_sensor.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/dist_sensor.h</locationURI>
+		</link>
+		<link>
+			<name>include/sensors/dist_vl53l0x.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/dist_vl53l0x.h</locationURI>
+		</link>
+		<link>
 			<name>include/sensors/gas_sensor.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/gas_sensor.h</locationURI>
@@ -2299,6 +2309,11 @@
 			<name>src/sensors/am_lsm303c.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/am_lsm303c.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/sensors/dist_vl53l0x.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/dist_vl53l0x.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/sensors/gyro_l3gd20h.cpp</name>

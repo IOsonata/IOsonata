@@ -221,6 +221,17 @@ instrument. In that run the 2 bytes read after OUT_Z_H, in a 9 byte read from
 STATUS, were the X output again (same raw value on all 75 lines), so the
 printed temperature was wrong. The driver now reads TEMP_OUT in its own
 transfer; not run on the board yet.
+The STM32L476 example DistSensorDemo (`exemples/sensor/dist_sensor_demo.cpp`)
+reads the onboard VL53L0X time of flight sensor (`src/sensors/dist_vl53l0x.cpp`,
+on the new `DistSensor` base, `include/sensors/dist_sensor.h`) on the same bus
+at 0x29, after it drives XSHUT (PC6) high. It measures continuously at 5 Hz
+with the device default timing budget, 33849 us after the ST default tuning,
+and prints the distance in mm, the return signal and the ambient rates in
+kcps, or the device status when the distance is not valid. The driver follows
+the initialization of the ST VL53L0X API: soft reset, reference SPAD selection,
+default tuning settings, VHV and phase reference calibrations. It does not do
+the offset and cross talk calibrations for a cover glass. `tests/sensors/run.py`
+runs it against a register model. Not run on hardware yet.
 L496 and L4S9 I2C4 use virtual index 3. The L432 has no I2C2: index 1 fails
 initialization, I2C1 and I2C3 keep indices 0 and 2.
 

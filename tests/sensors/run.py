@@ -48,6 +48,7 @@ TESTS = {
 	'hts221': ['src/sensors/humi_hts221.cpp'],
 	'lps22hb': ['src/sensors/press_lps22hb.cpp'],
 	'lis3mdl': ['src/sensors/mag_lis3mdl.cpp', 'src/sensors/mag_sensor.cpp'],
+	'vl53l0x': ['src/sensors/dist_vl53l0x.cpp'],
 }
 
 

@@ -75,6 +75,7 @@ typedef enum __Sensor_Type {
 	SENSOR_TYPE_LIQUID,				//!< Liquid level or other type of liquid measurement
 	SENSOR_TYPE_SPECTRAL,			//!< Spectroscopy
 	SENSOR_TYPE_RADAR,				//!< Radar type
+	SENSOR_TYPE_DISTANCE,			//!< Distance, such as time of flight
 } SENSOR_TYPE;
 #else
 ///
@@ -95,6 +96,7 @@ typedef enum __Sensor_Type {
 #define SENSOR_TYPE_LIQUID				(1<<12)	//!< Liquid level or other type of liquid measurement
 #define SENSOR_TYPE_SPECTRAL			(1<<13)	//!< Spectroscopy
 #define SENSOR_TYPE_RADAR				(1<<14)	//!< Radar type
+#define SENSOR_TYPE_DISTANCE			(1<<15)	//!< Distance, such as time of flight
 
 typedef uint32_t		SENSOR_TYPE;
 #endif
