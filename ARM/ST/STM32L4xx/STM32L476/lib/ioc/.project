@@ -1876,6 +1876,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_uecc.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/crypto/uECC.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/micro-ecc/uECC.c</locationURI>
+		</link>
+		<link>
 			<name>src/crypto/cryptomaster.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/cryptomaster.cpp</locationURI>
@@ -1919,6 +1924,11 @@
 			<name>src/dfu/dfu_store_nvm.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/dfu/dfu_store_nvm.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/dfu/dfu_stm32.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/dfu_stm32.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/dfu/dfu_wire.cpp</name>
@@ -2079,6 +2089,21 @@
 			<name>src/motion/att_xiot_fusion.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/motion/att_xiot_fusion.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/motion/FusionAhrs.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/Fusion/Fusion/FusionAhrs.c</locationURI>
+		</link>
+		<link>
+			<name>src/motion/FusionBias.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/Fusion/Fusion/FusionBias.c</locationURI>
+		</link>
+		<link>
+			<name>src/motion/FusionCompass.c</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/external/Fusion/Fusion/FusionCompass.c</locationURI>
 		</link>
 		<link>
 			<name>src/motion/mot_icm20948.cpp</name>
