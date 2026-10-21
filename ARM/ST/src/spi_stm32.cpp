@@ -660,6 +660,30 @@ static int Stm32SpiMasterCount(Stm32SpiDev_t * const pDev)
 }
 
 #ifdef STM32_SPI_LAYOUT_CFG
+// Complete the last SCK period before disabling the master. H753 EOT can
+// precede the final output transition (ES0392 2.22.6). This is also used
+// between TSIZE chunks, while the caller keeps chip select asserted.
+static void Stm32SpiMasterDisable(Stm32SpiDev_t * const pDev)
+{
+	SPI_TypeDef *reg = pDev->pReg;
+
+	reg->IER = 0;
+#ifdef STM32H753xx
+	if ((reg->CR1 & SPI_CR1_SPE) && (reg->SR & SPI_SR_EOT))
+	{
+		uint32_t rate = pDev->pSpiDev->Cfg.Rate;
+
+		// One loop iteration takes at least one core cycle. Use the
+		// achieved SCK rate, with a ceiling and no timer/IRQ dependency.
+		for (uint32_t n = SystemCoreClock / (rate ? rate : 1U) + 1U; n > 0; n--)
+		{
+			__NOP();
+		}
+	}
+#endif
+	reg->CR1 &= ~SPI_CR1_SPE;
+}
+
 // End of the transfer. Interrupts and DMA off, flags cleared, the result
 // stored.
 static void Stm32SpiMasterEnd(Stm32SpiDev_t * const pDev, bool bad)
@@ -667,8 +691,7 @@ static void Stm32SpiMasterEnd(Stm32SpiDev_t * const pDev, bool bad)
 	SPI_TypeDef *reg = pDev->pReg;
 
 	pDev->Result = bad ? Stm32SpiMasterCount(pDev) : (int)(pDev->Items * Stm32SpiItemSize(pDev));
-	reg->IER = 0;
-	reg->CR1 &= ~SPI_CR1_SPE;
+	Stm32SpiMasterDisable(pDev);
 	reg->IFCR = STM32_SPI_IFCR_ALL;
 #ifdef STM32_SPI_DMA
 	if (pDev->bDma)
@@ -709,7 +732,7 @@ static void Stm32SpiMasterChunk(Stm32SpiDev_t * const pDev)
 	pDev->TxN = 0;
 	pDev->RxN = 0;
 
-	reg->CR1 &= ~SPI_CR1_SPE;
+	Stm32SpiMasterDisable(pDev);
 	reg->IFCR = STM32_SPI_IFCR_ALL;
 	reg->CR2 = pDev->Chunk;
 
@@ -2242,7 +2265,10 @@ bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfgData)
 #ifdef SPI_AUTOCR_TRIGEN
 	reg->AUTOCR = 0;
 #endif
-	reg->CFG1 = (pCfgData->DataSize - 1) << SPI_CFG1_DSIZE_Pos;
+	// Keep the reset CRC size even with CRC disabled. H753 can corrupt
+	// the last received item when TSIZE > 0 and CRCSIZE < 7 (ES0392).
+	reg->CFG1 = ((pCfgData->DataSize - 1) << SPI_CFG1_DSIZE_Pos) |
+				(7U << SPI_CFG1_CRCSIZE_Pos);
 	reg->CFG2 = cfg2;
 	reg->UDRDR = dev->Dummy;
 	reg->IFCR = STM32_SPI_IFCR_ALL;

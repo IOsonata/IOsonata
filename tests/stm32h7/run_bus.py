@@ -25,6 +25,10 @@ class H7Spi(Spi):
     """H753 TXP/TXC can interrupt even with SPE clear (ES0392)."""
 
     def wr_reg(self, off, size, value):
+        if off == 0 and value & 0x200 and not self.slave():
+            # ES0392: CRC disabled still requires the reset CRCSIZE=7
+            # when receiving a finite-length transfer.
+            assert (self.reg[8] >> 16) & 31 == 7, f'{self.name}: unsafe CRCSIZE'
         if off == 0x10 and self.slave() and not self.spe():
             # TXP is set while disabled; TSIZE=0 also sets TXC, whose
             # interrupt is selected by EOTIE, not SR bit 12 in IER.

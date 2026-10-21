@@ -38,17 +38,28 @@ Hardware run (2026-10-21) failed on the first one-byte frame in each
 interrupt-slave combination and stalled while initializing the DMA slave.
 The debugger showed SPI3 TXP/TXC interrupts before SPE was set. The shared
 driver now enables SPI and preloads CPU TX data before enabling interrupts.
-Retest: initialization completes in all modes, but all eight combinations
-still fail on their first frame (0 passed, 8 failed, 0 skipped).
-Each combination returns at its first failure, so later lengths and modes
-are not printed until that failure is fixed. The test checks are unchanged.
+After correcting a misplaced jumper, all 13 mode-0 transfers pass in each
+of the eight combinations. Each combination then passes three one-byte
+mode-1 transfers and fails its first 16-byte mode-1 TX: the slave reports
+17 bytes, with the first mismatch at byte 5. Modes 2 and 3 were not reached.
+
+The shared driver now keeps CRCSIZE at its reset value of 7 even when CRC
+is disabled, and waits at least one SCK period after EOT before disabling
+the H753 master, including between TSIZE chunks. These address ES0392
+sections 2.22.5 and 2.22.6. Hardware retesting is pending; the observed
+mode-1 failure is not yet confirmed resolved. The shared hardware test,
+payloads, mode selection and assertions remain unchanged.
 
 Validation: GNU Arm GCC 13.2.1 compiles the shared application with this
 board configuration in Debug (-O0) and Release (-O3). Project XML and linked
 source paths were checked. Full library/example linking was not rerun.
 The existing H753 bus register tests pass at -O0 and -O3 (with
 `-fno-threadsafe-statics` in the local test toolchain); these model controller
-behavior and do not validate the physical jumper connections.
+behavior and do not validate physical clock edges. The added CRCSIZE check
+fails with the preceding driver and passes with the correction. H753
+soft/hard-float, L476 and WBA65 shared bus sources compile at -O0 and -O3
+with -Wall -Werror; the WBA SPI model passes 64 checks. The optimized H753
+assembly retains the delay loop before clearing SPE.
 
 Pin references: ST [UM2407, connector tables 18-20](https://www.st.com/resource/en/user_manual/um2407-stm32h7-nucleo144-boards-mb1364-stmicroelectronics.pdf)
 and [STM32H753 datasheet, alternate functions](https://www.st.com/resource/en/datasheet/stm32h753xi.pdf).
