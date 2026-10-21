@@ -347,6 +347,47 @@ with a failed HSI48 start. USB firmware vectors select the shared OTG handler.
 All four configurations passed with GNU Arm GCC 13.2.1. This is compile/link
 and modeled register evidence, not a hardware throughput or timing result.
 
+## Reorganization regression checks
+
+The H753 library project includes the micro-ecc implementation and the 30
+lwIP source files used by the Ethernet examples. It excludes the alternative
+ARM SysTick TimerDev implementation in every configuration: the library must
+have exactly one strong `TimerInit`, supplied by the shared STM32 driver.
+SysTick primitives and the TaktOS tick remain available.
+
+Run `python3 tests/stm32h7/run.py` for library/example builds, register tests
+and post-link checks in all four configurations. The runner reads linked
+source paths, preprocessor definitions and source exclusions from the
+IOcomposer library project. It requires the SDK's external lwIP and Fusion
+checkouts; `LWIP_ROOT` and `FUSION_ROOT` can select other locations.
+
+To inspect already-built firmware, place its library archive and bare-metal
+example ELF files in one directory and run:
+
+```sh
+python3 tests/stm32h7/check_link.py <build-directory>
+```
+
+This checks the unique timer initializer, stack/reset vectors, active USB,
+UART/DMA and Ethernet vectors, STM32 timer selection, and AXI SRAM alignment
+and placement of DMA buffers. It does not execute firmware on the board.
+
+Additional regressions:
+
+| Command | Coverage |
+|---|---|
+| `python3 tests/stm32h7/run_bus.py` | All I2C/SPI instances, polling/interrupt receive, reload/NACK, clocks and QSPI initialization |
+| `python3 tests/stm32h7/run_dma.py` | DMA stream routing, ownership, flags, vectors and timeout |
+| `python3 tests/stm32/run_uart.py` | Shared STM32 UART modes, FIFO, DMA and fault handling |
+| `python3 tests/stm32h7/run_ethernet.py` | MAC/PHY registers, descriptors, cache handling and failures |
+| `python3 tests/stm32h7/run_crypto.py` | RNG failures and software crypto known answers |
+| `python3 tests/storage/stm32h7_flash/run.py` | Flash bank mappings, erase/program rules, errors and timeout |
+
+Hardware priorities are UART DMA TX then RX, I2C/SPI master/slave transfers,
+Ethernet DHCP/ping and UDP/TCP when a cable is available, then reserved-sector
+flash NVM and DFU handoff. Previously recorded LED, timer, interrupt UART and
+USB results remain the hardware evidence for those paths.
+
 ## Hardware results
 
 User tests on NUCLEO-H753ZI, October 18, 2026:

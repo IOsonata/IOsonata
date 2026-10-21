@@ -7,6 +7,8 @@ Run from any directory: python3 tests/stm32h7/run.py
 ARM_CPPFLAGS and ARM_LDFLAGS can describe a relocated compiler installation.
 """
 import os
+import fnmatch
+import sys
 from pathlib import Path
 import shlex
 import shutil
@@ -23,6 +25,7 @@ ROOT = Path(__file__).resolve().parents[2]
 PORT = ROOT / 'ARM/ST/STM32H7xx'
 PROJECT = PORT / 'STM32H753'
 LWIP = Path(os.environ.get('LWIP_ROOT', ROOT.parent / 'external/lwip'))
+FUSION = Path(os.environ.get('FUSION_ROOT', ROOT.parent / 'external/Fusion'))
 EXAMPLES = {
     'CryptoTest': 'exemples/crypto/crypto_engine_test.cpp',
     'Blinky': 'exemples/misc/blinky.c',
@@ -98,20 +101,26 @@ def emulate(path):
 
 
 def main():
-    for tool in ('gcc', 'g++', 'ar', 'size'):
+    for tool in ('gcc', 'g++', 'ar', 'size', 'nm'):
         if not shutil.which('arm-none-eabi-' + tool):
             raise SystemExit('Missing arm-none-eabi-' + tool)
     links = ET.parse(PROJECT / 'lib/ioc/.project').findall('.//linkedResources/link')
-    sources = []
+    # Linked paths can start at ARM, ST, the family, or the repository root.
+    candidates = []
+    project_dir = PROJECT / 'lib/ioc'
     for link in links:
-        if not link.findtext('name', '').startswith('src/'):
+        name = link.findtext('name', '')
+        loc = link.findtext('locationURI', '')
+        if not name.startswith('src/') or Path(name).suffix not in ('.c', '.cpp'):
             continue
-        loc = link.findtext('locationURI')
-        if loc.startswith('PARENT-7-PROJECT_LOC/external/lwip/'):
-            sources.append(LWIP / loc.removeprefix('PARENT-7-PROJECT_LOC/external/lwip/'))
-        else:
-            sources.append(ROOT / loc.removeprefix('PARENT-6-PROJECT_LOC/'))
-    assert sources and all(p.is_file() for p in sources)
+        prefix, relative = loc.split('/', 1)
+        assert prefix.startswith('PARENT-'), loc
+        levels = int(prefix.split('-')[1])
+        source = project_dir.parents[levels - 1] / relative
+        if relative.startswith('external/lwip/'):
+            source = LWIP / relative.removeprefix('external/lwip/')
+        candidates.append((name, source))
+    assert candidates and all(p.is_file() for _, p in candidates)
     includes = [ROOT / p for p in ('ARM/ST/include', 'ARM/include', 'ARM/CMSIS/Core/Include', 'include')]
     includes.append(PORT / 'include')
     base = ['-mcpu=cortex-m7', '-mthumb', '-DSTM32H753xx', '-D__PROGRAM_START',
@@ -130,6 +139,13 @@ def main():
             project = ET.parse(PROJECT / 'lib/ioc/.cproject')
             config = next(c for c in project.findall('.//cconfiguration')
                           if c.find('storageModule').get('name') == label)
+            exclusions = [pattern for entry in config.findall('.//sourceEntries/entry')
+                          for pattern in entry.get('excluding', '').split('|') if pattern]
+            sources = [source for name, source in candidates
+                       if not any(fnmatch.fnmatchcase(name, pattern) or
+                                  name.startswith(pattern.rstrip('/') + '/')
+                                  for pattern in exclusions)]
+            language_flags = {}
             # Use the project's actual build-directory-relative include paths.
             # Both C and C++ need the IOsonata profile and external lwIP headers.
             for language in ('c', 'cpp'):
@@ -139,15 +155,17 @@ def main():
                          for v in option.findall('listOptionValue')]
                 assert (ROOT / 'include/net/lwip').resolve() in paths
                 assert (ROOT.parent / 'external/lwip/src/include').resolve() in paths
-                if language == 'c':
-                    flags += ['-I' + str(p) for p in paths]
-                    # An override can select a separately installed checkout.
-                    flags += ['-I' + str(LWIP / 'src/include')]
+                language_flags[language] = ['-I' + str(p) for p in paths]
+                language_flags[language] += ['-I' + str(LWIP / 'src/include'), '-I' + str(FUSION)]
+                for option in config.findall('.//option'):
+                    if option.get('superClass', '').endswith('.' + language + '.compiler.defs'):
+                        language_flags[language] += ['-D' + v.get('value')
+                                                     for v in option.findall('listOptionValue')]
 
             def compile_source(source, obj, extra=()):
                 cpp = source.suffix == '.cpp'
                 lang = ['-std=gnu++23', '-fno-exceptions', '-fno-rtti'] if cpp else ['-std=gnu17']
-                run(['arm-none-eabi-g++' if cpp else 'arm-none-eabi-gcc', *flags, *lang,
+                run(['arm-none-eabi-g++' if cpp else 'arm-none-eabi-gcc', *flags, *lang, *language_flags['cpp' if cpp else 'c'],
                      *extra, '-c', source, '-o', obj])
 
             objects = []
@@ -207,6 +225,7 @@ def main():
                                 break
                         else:
                             raise AssertionError('USB vector missing')
+            run([sys.executable, ROOT / 'tests/stm32h7/check_link.py', out])
             obj = out / 'register_test.o'
             compile_source(ROOT / 'tests/stm32h7/register_test.cpp', obj)
             link(obj, out / 'register_test.elf')
