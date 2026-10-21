@@ -173,6 +173,12 @@ old driver accepted polling master configurations only.
 The STM32L476 EepromDemo (`exemples/storage/eeprom_demo.cpp`) needs an
 external I2C EEPROM on the B-L475E-IOT01A Arduino header, I2C1 (DevNo 0, D14
 PB9 SDA, D15 PB8 SCL, open drain), by default a 24xx32 class part at 0x50.
+The STM32L476 MotionSensorDemo (`exemples/sensor/mot_sensor_demo.cpp`) reads
+the onboard LSM6DSL of the B-L475E-IOT01A (`src/sensors/ag_lsm6dsl.cpp`) on
+I2C2 (DevNo 1, SDA PB11, SCL PB10) at 0x6A, with its data ready on INT1 PD11,
+EXTI line 11. The Debug build prints with semihosting.
+`tests/sensors/run.py` runs the driver against a register model of the
+LSM6DSL. Not run on hardware yet.
 L496 and L4S9 I2C4 use virtual index 3. The L432 has no I2C2: index 1 fails
 initialization, I2C1 and I2C3 keep indices 0 and 2.
 
