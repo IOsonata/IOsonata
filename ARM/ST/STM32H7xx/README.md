@@ -1,7 +1,7 @@
 # STM32H753 / NUCLEO-H753ZI
 
 Initial IOsonata port for the STM32H753ZI Cortex-M7. It supplies startup,
-GPIO/EXTI, polling and interrupt UART, and the 14 general-purpose/basic/advanced
+GPIO/EXTI, polling, interrupt and DMA UART, and the 14 general-purpose/basic/advanced
 TIM instances, USB2 full-speed device support through the shared STM32
 OTG driver, and an Ethernet MAC/DMA driver for the LAN8742A RMII PHY. Startup, LED GPIO, USART3 TX/RX and TIM2 multi-trigger operation
 are hardware tested on NUCLEO-H753ZI.
@@ -31,11 +31,46 @@ The onboard ST-LINK UART bridge uses the same USB connection as debugging;
 no external UART adapter or jumpers are needed with the default board configuration.
 On macOS, find the port with `ls /dev/cu.usbmodem*`.
 
-The UART examples default to interrupt mode, DMA off, on the ST-LINK virtual
+The UART PRBS TX and loopback examples now select interrupt mode with DMA on the ST-LINK virtual
 COM port: PD9 RX, PD8 TX, AF7, USART3 DevNo 3. Their `board.h` can select
 `BOARD_UART_DEVNO` / `BOARD_UART_PINS` instead for USART1 on Arduino D0/D1,
 PB7 RX and PB6 TX, AF7. Connect an external 3.3 V serial adapter there.
 Board pin mappings are in `ARM/ST/include/stm32_boards.h`.
+
+## UART DMA
+
+The shared `uart_stm32.cpp` supports TX and circular RX DMA on USART1, USART2,
+USART3, UART4, UART5, USART6, UART7 and UART8. LPUART1 uses BDMA, which is not
+implemented; its polling and interrupt modes remain available.
+
+Each instance reserves two streams through the shared DMA manager. USART1,
+USART2, USART3 and UART4 use DMA1 stream pairs 0/1, 2/3, 4/5 and 6/7; UART5,
+USART6, UART7 and UART8 use the corresponding DMA2 pairs. RX is the first
+stream of each pair. A conflicting owner makes initialization fail.
+
+The `.uart_dma` section uses AXI SRAM with separate 32-byte cache lines for
+RX rings and TX staging buffers. Caller FIFOs may remain in DTCM: TX copies
+up to 32 bytes per DMA block; blocking FIFO bytes are released at completion.
+RX uses a 64-byte circular ring, serviced at half/full completion and USART
+IDLE, with polling service when interrupts are disabled. Poll frequently
+in that mode so the ring cannot overrun. TX cleans and RX invalidates cache
+lines when D-cache is enabled. Keep this section in AXI SRAM in custom linker
+scripts. RX DMA errors increment RxOvrErrCnt and restart reception; TX errors
+count the remaining bytes as dropped. A stream that cannot stop makes
+initialization fail; reset the device before retrying a persistent failure.
+
+Rebuild the library and `UartPrbsTxTest`, then `UartLoopback`, using Release.
+Both now set `UART_DMA_MODE true` and retain the same 1 Mbaud host commands
+above. Set that configuration value to false to compare interrupt-only mode.
+The PRBS application's byte mode is unchanged.
+
+Validation: GNU Arm GCC 13.2.1 builds and links both UART examples at -O0 and
+-O3 with soft and hard float. The linked DMA section is aligned in AXI SRAM
+and the USART3 and DMA vectors resolve to their driver handlers.
+`python3 tests/stm32/run_uart.py` covers routing, TX/RX, FIFO wrap and overflow,
+DMA errors, polling, lifecycle, ownership, DTCM caller buffers and cache
+maintenance calls with the real shared driver. The register model does not
+simulate a physical cache or DMA timing. UART DMA hardware testing is pending.
 
 ## TaktOS UART PRBS example
 
@@ -231,9 +266,9 @@ disable waits. Use `STM32_DMA_STREAM(controller, stream)` with controller 1/2
 and stream 0-7. BDMA, MDMA, circular/double-buffer transfers and DMAMUX request
 generators/synchronization are not provided by this manager.
 
-H753 UART DMA is still not connected to this manager; UART DMA configuration
-continues to fail explicitly. The successful UART benchmarks used interrupt
-mode with DMA off. I2C/SPI DMA integration also remains pending. DMA buffers
+H753 UART DMA uses this manager for exclusive stream ownership and vectors.
+The earlier successful UART benchmarks used interrupt mode with DMA off.
+I2C/SPI DMA integration remains pending. DMA buffers
 must be in accessible SRAM, such as AXI SRAM, rather than the default DTCM.
 The manager rejects ITCM/DTCM buffers. The owning driver must use non-cacheable
 buffers or perform TX clean and RX invalidation with exclusive cache lines.
@@ -267,15 +302,15 @@ LPTIM is not yet exposed. `TimerGetLowFreqDevCount()` returns 0.
 ## Limits and validation
 
 I2C, SPI, CAN, ADC/DAC and PWM
-are not implemented by this port. Unsupported UART DMA configuration returns
-false. The single library project includes the core device, UART, timer,
+are not implemented by this port. LPUART1 DMA configuration returns false
+because BDMA is not implemented. The single library project includes the core device, UART, timer,
 application event and logging sources needed by these examples.
 
 `python3 tests/stm32h7/run.py` builds the library and all bare-metal examples in
 Debug/Release, with and without hard-float, and runs Cortex-M instruction tests
 using the actual CMSIS header. Install Python `unicorn` and `pyelftools` for
 the modeled register tests. These check startup clock selection, all four APB
-clock setters, UART3/GPIO setup, DMA rejection, all 14 timer device indices,
+clock setters, UART3/GPIO setup, DMA routing and buffer placement, all 14 timer device indices,
 timer clock calculation with APB /1 and TIMPRE, and USB2 clock/power/pin setup
 with a failed HSI48 start. USB firmware vectors select the shared OTG handler.
 
@@ -311,4 +346,5 @@ not yet been validated on hardware.
 - ST STM32CubeH7 `Projects/NUCLEO-H743ZI/Templates_LL/Src/main.c` confirms the
   400/200/100 MHz voltage-scale-1 clock and flash timing configuration. This
   port accesses the CMSIS registers directly; it does not depend on HAL or LL.
+
 

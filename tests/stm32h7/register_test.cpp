@@ -95,7 +95,12 @@ extern "C" int main(void)
 	CHECK((GPIOD->MODER & (15U << 16)) == (10U << 16));
 	CHECK(USART3->CR1 & USART_CR1_RXNEIE_RXFNEIE);
 	cfg.bDMAMode = true;
-	CHECK(UARTInit(&uart, &cfg) == false);
+	CHECK(UARTInit(&uart, &cfg));
+	CHECK(DMAMUX1_Channel4->CCR == 45 && DMAMUX1_Channel5->CCR == 46);
+	CHECK(DMA1_Stream4->CR & DMA_SxCR_EN);
+	CHECK(DMA1_Stream4->M0AR >= 0x24000000 && DMA1_Stream4->M0AR < 0x24080000);
+	CHECK((DMA1_Stream4->M0AR & 31U) == 0);
+	UARTDisable(&uart);
 
 	TimerCfg_t tc = {};
 	tc.DevNo = 8; // TIM2
@@ -160,4 +165,3 @@ extern "C" int main(void)
 	CHECK(RCC->PLL1DIVR == pll);
 	return 0;
 }
-

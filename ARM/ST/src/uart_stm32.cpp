@@ -286,9 +286,9 @@ SOFTWARE.
 // Which channel or stream serves an instance is family data, from the DMA
 // request tables of the reference manuals, in the instance table. A family
 // without that data has no DMA, UARTInit refuses bDMAMode.
-#if defined(STM32F0) || defined(STM32L4) || defined(STM32G4) || defined(STM32F4) || defined(STM32WBA)
+#if defined(STM32F0) || defined(STM32L4) || defined(STM32G4) || defined(STM32F4) || defined(STM32WBA) || defined(STM32H753xx)
 #define ST_UART_DMA
-#if defined(DMA_SxCR_CHSEL)
+#if defined(DMA_SxCR_CHSEL) || defined(STM32H753xx)
 #define ST_DMA_STREAM
 typedef DMA_Stream_TypeDef StDmaChan_t;
 #else
@@ -302,6 +302,10 @@ typedef DMA_Channel_TypeDef StDmaChan_t;
 #define ST_DMA_CHAN
 #endif
 #endif
+#endif
+
+#ifdef STM32H753xx
+#define ST_DMA_CHAN
 #endif
 
 #ifdef ST_DMA_CHAN
@@ -325,10 +329,10 @@ typedef DMA_Channel_TypeDef StDmaChan_t;
 #define ST_DMA_REQ(Csel, Mux)	(Csel)
 #endif
 
-#ifdef DMAMUX1
+#if defined(DMAMUX1) || defined(STM32H753xx)
 // DMAMUX1 channel of DMA2 channel 1: the number of DMA1 channels, 8 on the
 // G47x and G48x, 7 on L4+, 6 on the G43x
-#if defined(DMA1_Channel8)
+#if defined(DMA1_Channel8) || defined(STM32H753xx)
 #define ST_DMAMUX_DMA2_CH		8U
 #elif defined(DMA1_Channel7)
 #define ST_DMAMUX_DMA2_CH		7U
@@ -394,7 +398,14 @@ typedef struct {
 // most about 260 cycles there.
 #define ST_UART_COPY_MAX		8
 
+#ifdef STM32H753xx
+#define ST_UART_DMA_ALIGN 32
+#pragma pack(push)
+#pragma pack()
+#else
+#define ST_UART_DMA_ALIGN 4
 #pragma pack(push, 4)
+#endif
 
 /// Default memory of an instance, used when the configuration does not
 /// supply its own. Kept out of the instance table, which is initialized data:
@@ -403,10 +414,10 @@ typedef struct {
 	alignas(4) uint8_t RxFifoMem[ST_UART_CFIFO_SIZE];	//!< RX CFIFO memory
 	alignas(4) uint8_t TxFifoMem[ST_UART_CFIFO_SIZE];	//!< TX CFIFO memory
 #ifdef ST_UART_DMA
-	alignas(4) uint8_t RxDmaRing[ST_UART_DMA_RX_RING];	//!< RX DMA ring
+	alignas(ST_UART_DMA_ALIGN) uint8_t RxDmaRing[ST_UART_DMA_RX_RING];	//!< RX DMA ring
 	alignas(4) uint8_t RxDmaFifoMem[ST_UART_DMA_RX_CFIFO_SIZE];	//!< RX CFIFO memory in DMA mode
 	alignas(4) uint8_t TxDmaFifoMem[ST_UART_DMA_CFIFO_SIZE];	//!< TX CFIFO memory in DMA mode
-	alignas(4) uint8_t TxDmaCopy[ST_UART_DMA_TX_COPY];	//!< TX bytes the DMA sends from a copy, see Stm32UartDmaTxStart
+	alignas(ST_UART_DMA_ALIGN) uint8_t TxDmaCopy[ST_UART_DMA_TX_COPY];	//!< TX bytes the DMA sends from a copy, see Stm32UartDmaTxStart
 #endif
 #ifdef ST_DMA_GPDMA
 	uint32_t RxDmaNode[3];			//!< Linked list node of the RX ring, see Stm32DmaLoop
@@ -507,7 +518,10 @@ static Stm32UartDev_t s_Stm32UartDev[] = {
 		.pClkSelReg = &RCC->ST_RCC_USARTSELR,
 		.ClkSelMask = ST_RCC_USART1SEL,
 #endif
-#if defined(STM32F0)
+#if defined(STM32H753xx)
+		.RxDma = { DMA1_Stream0, DMA1, 0, 41, DMA1_Stream0_IRQn },
+		.TxDma = { DMA1_Stream1, DMA1, 1, 42, DMA1_Stream1_IRQn },
+#elif defined(STM32F0)
 		.RxDma = { DMA1_Channel3, DMA1, 2, 8, DMA1_Channel2_3_IRQn },
 		.TxDma = { DMA1_Channel2, DMA1, 1, 8, DMA1_Channel2_3_IRQn },
 #elif defined(STM32L4)
@@ -536,7 +550,10 @@ static Stm32UartDev_t s_Stm32UartDev[] = {
 		.pClkSelReg = &RCC->ST_RCC_USARTSELR,
 		.ClkSelMask = ST_RCC_USART2SEL,
 #endif
-#if defined(STM32F0)
+#if defined(STM32H753xx)
+		.RxDma = { DMA1_Stream2, DMA1, 2, 43, DMA1_Stream2_IRQn },
+		.TxDma = { DMA1_Stream3, DMA1, 3, 44, DMA1_Stream3_IRQn },
+#elif defined(STM32F0)
 		.RxDma = { DMA1_Channel5, DMA1, 4, 9, DMA1_Channel4_5_IRQn },
 		.TxDma = { DMA1_Channel4, DMA1, 3, 9, DMA1_Channel4_5_IRQn },
 #elif defined(STM32L4)
@@ -566,7 +583,10 @@ static Stm32UartDev_t s_Stm32UartDev[] = {
 		.pClkSelReg = &RCC->ST_RCC_USARTSELR,
 		.ClkSelMask = ST_RCC_USART3SEL,
 #endif
-#if defined(STM32L4)
+#if defined(STM32H753xx)
+		.RxDma = { DMA1_Stream4, DMA1, 4, 45, DMA1_Stream4_IRQn },
+		.TxDma = { DMA1_Stream5, DMA1, 5, 46, DMA1_Stream5_IRQn },
+#elif defined(STM32L4)
 		.RxDma = { DMA1_Channel3, DMA1, 2, ST_DMA_REQ(2, 28), DMA1_Channel3_IRQn },
 		.TxDma = { DMA1_Channel2, DMA1, 1, ST_DMA_REQ(2, 29), DMA1_Channel2_IRQn },
 #elif defined(STM32G4)
@@ -603,7 +623,10 @@ static Stm32UartDev_t s_Stm32UartDev[] = {
 		.pClkSelReg = &RCC->ST_RCC_USARTSELR,
 		.ClkSelMask = ST_RCC_UART4SEL,
 #endif
-#if defined(STM32L4)
+#if defined(STM32H753xx)
+		.RxDma = { DMA1_Stream6, DMA1, 6, 63, DMA1_Stream6_IRQn },
+		.TxDma = { DMA1_Stream7, DMA1, 7, 64, DMA1_Stream7_IRQn },
+#elif defined(STM32L4)
 		.RxDma = { DMA2_Channel5, DMA2, 4, ST_DMA_REQ(2, 30), DMA2_Channel5_IRQn },
 		.TxDma = { DMA2_Channel3, DMA2, 2, ST_DMA_REQ(2, 31), DMA2_Channel3_IRQn },
 #elif defined(STM32G4)
@@ -637,7 +660,10 @@ static Stm32UartDev_t s_Stm32UartDev[] = {
 		.pClkSelReg = &RCC->ST_RCC_USARTSELR,
 		.ClkSelMask = ST_RCC_UART5SEL,
 #endif
-#if defined(STM32L4)
+#if defined(STM32H753xx)
+		.RxDma = { DMA2_Stream0, DMA2, 0, 65, DMA2_Stream0_IRQn },
+		.TxDma = { DMA2_Stream1, DMA2, 1, 66, DMA2_Stream1_IRQn },
+#elif defined(STM32L4)
 		.RxDma = { DMA2_Channel2, DMA2, 1, ST_DMA_REQ(2, 32), DMA2_Channel2_IRQn },
 		.TxDma = { DMA2_Channel1, DMA2, 0, ST_DMA_REQ(2, 33), DMA2_Channel1_IRQn },
 #elif defined(STM32G4)
@@ -666,7 +692,10 @@ static Stm32UartDev_t s_Stm32UartDev[] = {
 		.pClkSelReg = &RCC->D2CCIP2R,
 		.ClkSelMask = RCC_D2CCIP2R_USART16SEL,
 #endif
-#if defined(STM32F4)
+#if defined(STM32H753xx)
+		.RxDma = { DMA2_Stream2, DMA2, 2, 71, DMA2_Stream2_IRQn },
+		.TxDma = { DMA2_Stream3, DMA2, 3, 72, DMA2_Stream3_IRQn },
+#elif defined(STM32F4)
 		.RxDma = { DMA2_Stream1, DMA2, 1, 5, DMA2_Stream1_IRQn },
 		.TxDma = { DMA2_Stream6, DMA2, 6, 5, DMA2_Stream6_IRQn },
 #endif
@@ -682,6 +711,10 @@ static Stm32UartDev_t s_Stm32UartDev[] = {
 		.PclkIdx = 0,
 		.pClkSelReg = &RCC->D2CCIP2R,
 		.ClkSelMask = RCC_D2CCIP2R_USART28SEL,
+#ifdef STM32H753xx
+		.RxDma = { DMA2_Stream4, DMA2, 4, 79, DMA2_Stream4_IRQn },
+		.TxDma = { DMA2_Stream5, DMA2, 5, 80, DMA2_Stream5_IRQn },
+#endif
 	},
 #endif
 #if defined(IOSONATA_STM32_H7) && defined(UART8)
@@ -694,12 +727,23 @@ static Stm32UartDev_t s_Stm32UartDev[] = {
 		.PclkIdx = 0,
 		.pClkSelReg = &RCC->D2CCIP2R,
 		.ClkSelMask = RCC_D2CCIP2R_USART28SEL,
+#ifdef STM32H753xx
+		.RxDma = { DMA2_Stream6, DMA2, 6, 81, DMA2_Stream6_IRQn },
+		.TxDma = { DMA2_Stream7, DMA2, 7, 82, DMA2_Stream7_IRQn },
+#endif
 	},
 #endif
 };
 
 static const int s_NbUartDev = sizeof(s_Stm32UartDev) / sizeof(Stm32UartDev_t);
 
+#ifdef STM32H753xx
+// DMA1/2 cannot access DTCM. Each DMA buffer owns complete cache lines.
+static_assert(offsetof(Stm32UartMem_t, RxDmaRing) % 32 == 0);
+static_assert(offsetof(Stm32UartMem_t, TxDmaCopy) % 32 == 0);
+static_assert(sizeof(Stm32UartMem_t) % 32 == 0);
+__attribute__((section(".uart_dma"), aligned(32)))
+#endif
 static Stm32UartMem_t s_Stm32UartMem[sizeof(s_Stm32UartDev) / sizeof(Stm32UartDev_t)];
 
 static void Stm32UartIrqHandler(Stm32UartDev_t * const pDev);
@@ -707,7 +751,7 @@ static void Stm32UartIrqHandler(Stm32UartDev_t * const pDev);
 static int Stm32UartDmaRxMove(Stm32UartDev_t * const pDev);
 static void Stm32UartDmaIrq(Stm32UartDev_t * const pDev);
 static void Stm32UartDmaRxStop(Stm32UartDev_t * const pDev);
-static void Stm32UartDmaSetup(Stm32UartDev_t * const pDev);
+static bool Stm32UartDmaSetup(Stm32UartDev_t * const pDev);
 static bool Stm32UartDmaTxStart(Stm32UartDev_t * const pDev);
 static bool Stm32UartDmaService(Stm32UartDev_t * const pDev);
 static void Stm32UartDmaStop(Stm32UartDev_t * const pDev);
@@ -739,6 +783,9 @@ static inline uint32_t Stm32DmaFlags(const Stm32UartDma_t *pDma)
 	uint32_t isr = (pDma->Idx < 4 ? pDma->pDma->LISR : pDma->pDma->HISR) >> s_StDmaFlagPos[pDma->Idx & 3U];
 
 	// Stream group: TE bit 3, HT bit 4, TC bit 5
+#ifdef STM32H753xx
+	if (isr & 0x05U) isr |= ST_DMA_TE; // FIFO/direct-mode errors
+#endif
 	return (isr & ST_DMA_TE) | ((isr >> 2) & ST_DMA_HT) | ((isr >> 4) & ST_DMA_TC);
 #elif defined(ST_DMA_GPDMA)
 	uint32_t csr = pDma->pChan->CSR;
@@ -802,12 +849,20 @@ static inline void Stm32DmaEnable(const Stm32UartDma_t *pDma)
 // it took first and EN reads 1 until then. A GPDMA channel ignores EN written
 // 0: a running one is suspended, which also waits for the transfer it took,
 // then reset, which clears EN and empties its FIFO.
-static void Stm32DmaDisable(const Stm32UartDma_t *pDma, bool All)
+static bool Stm32DmaDisable(const Stm32UartDma_t *pDma, bool All)
 {
 #if defined(ST_DMA_STREAM)
-	pDma->pChan->CR = All ? 0U : pDma->pChan->CR & ~DMA_SxCR_EN;
+	pDma->pChan->CR &= ~DMA_SxCR_EN;
 	for (int i = 0; i < ST_DMA_STOP_POLLS && (pDma->pChan->CR & DMA_SxCR_EN); i++)
 	{
+	}
+	if (pDma->pChan->CR & DMA_SxCR_EN)
+	{
+		return false;
+	}
+	if (All)
+	{
+		pDma->pChan->CR = 0;
 	}
 #elif defined(ST_DMA_GPDMA)
 	StDmaChan_t *ch = pDma->pChan;
@@ -829,6 +884,7 @@ static void Stm32DmaDisable(const Stm32UartDma_t *pDma, bool All)
 #else
 	pDma->pChan->CCR = All ? 0U : pDma->pChan->CCR & ~DMA_CCR_EN;
 #endif
+	return true;
 }
 
 // Set up, by this driver or another one: control register not 0, on GPDMA
@@ -848,20 +904,30 @@ static inline bool Stm32DmaInUse(const Stm32UartDma_t *pDma)
 // incremented, peripheral register pPeriph fixed. Ints : ST_DMA_TC, ST_DMA_HT
 // and ST_DMA_TE interrupts. A stream or a GPDMA channel takes its request
 // here. GPDMA has no circular mode, see Stm32DmaLoop.
-static void Stm32DmaConfig(const Stm32UartDma_t *pDma, volatile void *pPeriph, bool bTx, bool bCirc, uint32_t Ints)
+static bool Stm32DmaConfig(const Stm32UartDma_t *pDma, volatile void *pPeriph, bool bTx, bool bCirc, uint32_t Ints)
 {
 	StDmaChan_t *ch = pDma->pChan;
 
-	Stm32DmaDisable(pDma, true);
+	if (!Stm32DmaDisable(pDma, true))
+
+	{
+
+		return false;
+
+	}
 	Stm32DmaClear(pDma);
 #if defined(ST_DMA_STREAM)
 	ch->PAR = (uint32_t)(uintptr_t)pPeriph;
 	// Direct mode, no stream FIFO
 	ch->FCR = 0;
-	ch->CR = ((uint32_t)pDma->Req << DMA_SxCR_CHSEL_Pos) | DMA_SxCR_MINC |
+	ch->CR =
+#ifdef DMA_SxCR_CHSEL_Pos
+			 ((uint32_t)pDma->Req << DMA_SxCR_CHSEL_Pos) |
+#endif
+			 DMA_SxCR_MINC |
 			 (bTx ? DMA_SxCR_DIR_0 : 0U) | (bCirc ? DMA_SxCR_CIRC : 0U) |
 			 ((Ints & ST_DMA_TC) ? DMA_SxCR_TCIE : 0U) | ((Ints & ST_DMA_HT) ? DMA_SxCR_HTIE : 0U) |
-			 ((Ints & ST_DMA_TE) ? DMA_SxCR_TEIE : 0U);
+			 ((Ints & ST_DMA_TE) ? DMA_SxCR_TEIE | DMA_SxCR_DMEIE : 0U);
 #elif defined(ST_DMA_GPDMA)
 	// Single byte transfers, port 0 for both sides and the linked list. The
 	// peripheral drives the request: the destination for TX, the source for
@@ -887,6 +953,7 @@ static void Stm32DmaConfig(const Stm32UartDma_t *pDma, volatile void *pPeriph, b
 			  ((Ints & ST_DMA_TC) ? DMA_CCR_TCIE : 0U) | ((Ints & ST_DMA_HT) ? DMA_CCR_HTIE : 0U) |
 			  ((Ints & ST_DMA_TE) ? DMA_CCR_TEIE : 0U);
 #endif
+	return true;
 }
 
 // Memory address and count, with the channel or stream not enabled
@@ -956,7 +1023,7 @@ static void Stm32DmaRoute(const Stm32UartDma_t *pDma)
 
 	uint32_t pos = pDma->Idx * 4U;
 
-#if defined(DMAMUX1)
+#if defined(DMAMUX1) || defined(STM32H753xx)
 	DMAMUX1_Channel0[pDma->Idx + (pDma->pDma == DMA1 ? 0U : ST_DMAMUX_DMA2_CH)].CCR = pDma->Req;
 	(void)pos;
 #elif defined(DMA1_CSELR)
@@ -982,8 +1049,17 @@ static void Stm32DmaRoute(const Stm32UartDma_t *pDma)
 static int Stm32UartDmaRxMove(Stm32UartDev_t * const pDev)
 {
 	UARTDev_t *dev = pDev->pUartDev;
+	// Only DMA writes this ring. Invalidate after observing the DMA count,
+	// before copying; the CPU must never clean stale RX data over DMA writes.
 	uint32_t write = (ST_UART_DMA_RX_RING - Stm32DmaCount(&pDev->RxDma)) & (ST_UART_DMA_RX_RING - 1U);
 	int cnt = 0;
+#ifdef STM32H753xx
+	if (SCB->CCR & SCB_CCR_DC_Msk)
+	{
+		SCB_InvalidateDCache_by_Addr(pDev->pMem->RxDmaRing, ST_UART_DMA_RX_RING);
+	}
+	__DMB();
+#endif
 
 	while (pDev->RxDmaRead != write)
 	{
@@ -1007,6 +1083,20 @@ static int Stm32UartDmaRxMove(Stm32UartDev_t * const pDev)
 		pDev->RxDmaRead = (pDev->RxDmaRead + l) & (ST_UART_DMA_RX_RING - 1U);
 		cnt += l;
 	}
+#ifdef STM32H753xx
+	if (Stm32DmaFlags(&pDev->RxDma) & ST_DMA_TE)
+	{
+		dev->RxOvrErrCnt++;
+		if (Stm32DmaDisable(&pDev->RxDma, false))
+		{
+			Stm32DmaClear(&pDev->RxDma);
+			Stm32DmaSetMem(&pDev->RxDma, pDev->pMem->RxDmaRing, ST_UART_DMA_RX_RING);
+			pDev->RxDmaRead = 0;
+			__DSB();
+			Stm32DmaEnable(&pDev->RxDma);
+		}
+	}
+#endif
 	if (cnt > 0)
 	{
 		dev->bRxReady = true;
@@ -1023,27 +1113,45 @@ static void Stm32UartDmaRxStop(Stm32UartDev_t * const pDev)
 	}
 	pDev->pReg->CR3 &= ~USART_CR3_DMAR;
 	pDev->pReg->CR1 &= ~USART_CR1_IDLEIE;
-	Stm32DmaDisable(&pDev->RxDma, false);
+	if (!Stm32DmaDisable(&pDev->RxDma, false)) return;
 	Stm32DmaClear(&pDev->RxDma);
 	pDev->RxDmaRead = 0;
 }
 
 // Program both channels: RX circular over its ring, TX idle until a block is
 // started. Used by UARTInit and Enable, since Disable stops both channels.
-static void Stm32UartDmaSetup(Stm32UartDev_t * const pDev)
+static bool Stm32UartDmaSetup(Stm32UartDev_t * const pDev)
 {
 	USART_TypeDef *reg = pDev->pReg;
 	bool intmode = pDev->pUartDev->DevIntrf.bIntEn;
 
-	Stm32DmaConfig(&pDev->RxDma, &ST_USART_RDR(reg), false, true, intmode ? ST_DMA_HT | ST_DMA_TC : 0U);
+	uint32_t rxints = ST_DMA_HT | ST_DMA_TC;
+#ifdef STM32H753xx
+	rxints |= ST_DMA_TE;
+#endif
+	if (!Stm32DmaConfig(&pDev->RxDma, &ST_USART_RDR(reg), false, true, intmode ? rxints : 0U))
+	{
+		return false;
+	}
 	Stm32DmaSetMem(&pDev->RxDma, pDev->pMem->RxDmaRing, ST_UART_DMA_RX_RING);
 #ifdef ST_DMA_GPDMA
 	Stm32DmaLoop(&pDev->RxDma, pDev->pMem->RxDmaNode);
 #endif
+#ifdef STM32H753xx
+	if (SCB->CCR & SCB_CCR_DC_Msk)
+	{
+		SCB_CleanInvalidateDCache_by_Addr(pDev->pMem->RxDmaRing, ST_UART_DMA_RX_RING);
+	}
+	__DSB();
+#endif
 	Stm32DmaEnable(&pDev->RxDma);
 	pDev->RxDmaRead = 0;
 
-	Stm32DmaConfig(&pDev->TxDma, &ST_USART_TDR(reg), true, false, intmode ? ST_DMA_TE : 0U);
+	if (!Stm32DmaConfig(&pDev->TxDma, &ST_USART_TDR(reg), true, false, intmode ? ST_DMA_TE : 0U))
+	{
+		Stm32UartDmaRxStop(pDev);
+		return false;
+	}
 	Stm32DmaSetMem(&pDev->TxDma, NULL, 0);
 	pDev->DmaActive = false;
 	pDev->TxDmaLength = 0;
@@ -1053,13 +1161,15 @@ static void Stm32UartDmaSetup(Stm32UartDev_t * const pDev)
 	{
 		reg->CR1 |= USART_CR1_IDLEIE;
 	}
+	return true;
 }
 
 // Start a DMA block from the TX CFIFO. The DMA reads from an aligned address.
 // Returns false when the FIFO is empty.
 //
 // Blocking FIFO: the block is the first contiguous run of the FIFO, sent in
-// place. The bytes stay in the FIFO, so the producer cannot write over them,
+// place (H753 copies to AXI SRAM because caller memory may be DTCM).
+// The bytes stay in the FIFO, so the producer cannot write over them,
 // until the block is done. When the FIFO read position is not aligned, the
 // bytes up to the next aligned address are copied to TxDmaCopy and sent
 // first, the next block continues aligned. A longer block is cut to a
@@ -1084,10 +1194,20 @@ static bool Stm32UartDmaTxStart(Stm32UartDev_t * const pDev)
 	uint8_t *copy = pDev->pMem->TxDmaCopy;
 	uint8_t *p;
 	uint32_t len;
+#ifdef STM32H753xx
+	if (pDev->TxDma.pChan->CR & DMA_SxCR_EN)
+	{
+		return false;
+	}
+#endif
 
 	if (CFifoIsBlocking(fifo))
 	{
+#ifdef STM32H753xx
+		int cnt = ST_UART_DMA_TX_COPY;
+#else
 		int cnt = 0xFFFC;
+#endif
 
 		p = CFifoPeekMultiple(fifo, &cnt);
 		if (p == NULL)
@@ -1097,6 +1217,11 @@ static bool Stm32UartDmaTxStart(Stm32UartDev_t * const pDev)
 
 		len = (uint32_t)cnt;
 
+#ifdef STM32H753xx
+		// Caller CFIFOs may be in DTCM. DMA always reads the AXI SRAM copy.
+		memcpy(copy, p, len);
+		p = copy;
+#else
 		uint32_t head = (uint32_t)(uintptr_t)p & 3U;
 
 		if (head != 0U)
@@ -1113,6 +1238,8 @@ static bool Stm32UartDmaTxStart(Stm32UartDev_t * const pDev)
 		{
 			len &= ~3U;
 		}
+
+#endif
 		// Released when the block is done
 		pDev->TxDmaLength = len;
 	}
@@ -1146,6 +1273,13 @@ static bool Stm32UartDmaTxStart(Stm32UartDev_t * const pDev)
 		// Already out of the FIFO
 		pDev->TxDmaLength = 0;
 	}
+#ifdef STM32H753xx
+	if (SCB->CCR & SCB_CCR_DC_Msk)
+	{
+		SCB_CleanDCache_by_Addr(copy, ST_UART_DMA_TX_COPY);
+	}
+	__DSB();
+#endif
 	pDev->DmaActive = true;
 	ST_USART_TC_CLEAR(pDev->pReg);
 	if (pDev->pUartDev->DevIntrf.bIntEn)
@@ -1194,7 +1328,13 @@ static bool Stm32UartDmaService(Stm32UartDev_t * const pDev)
 		return false;
 	}
 
-	Stm32DmaDisable(&pDev->TxDma, false);
+	if (!Stm32DmaDisable(&pDev->TxDma, false))
+
+	{
+
+		return false;
+
+	}
 	// Not sent when a transfer error stopped the block
 	dev->TxDropCnt += Stm32DmaCount(&pDev->TxDma);
 	Stm32DmaClear(&pDev->TxDma);
@@ -1228,6 +1368,15 @@ static void Stm32UartDmaIrq(Stm32UartDev_t * const pDev)
 		return;
 	}
 
+#ifdef STM32H753xx
+	if (Stm32DmaFlags(&pDev->RxDma) & ST_DMA_TE)
+	{
+		if (Stm32UartDmaRxMove(pDev) > 0 && dev->EvtCallback)
+		{
+			dev->EvtCallback(dev, UART_EVT_RXDATA, NULL, CFifoUsed(dev->hRxFifo));
+		}
+	}
+#endif
 	if (Stm32DmaFlags(&pDev->RxDma) & (ST_DMA_HT | ST_DMA_TC))
 	{
 		Stm32DmaClear(&pDev->RxDma);
@@ -1248,7 +1397,7 @@ static void Stm32UartDmaStop(Stm32UartDev_t * const pDev)
 	}
 	pDev->pReg->CR3 &= ~USART_CR3_DMAT;
 	pDev->pReg->CR1 &= ~USART_CR1_TCIE;
-	Stm32DmaDisable(&pDev->TxDma, true);
+	if (!Stm32DmaDisable(&pDev->TxDma, true)) return;
 	Stm32DmaClear(&pDev->TxDma);
 	pDev->DmaActive = false;
 	pDev->TxDmaLength = 0;
@@ -1926,7 +2075,11 @@ static void Stm32UartEnable(DevIntrf_t * const pDev)
 #ifdef ST_UART_DMA
 	if (pDev->bDma)
 	{
-		Stm32UartDmaSetup(dev);
+		if (!Stm32UartDmaSetup(dev))
+		{
+			EnableInterrupt(state);
+			return;
+		}
 	}
 #endif
 	dev->pReg->CR1 |= USART_CR1_UE | USART_CR1_RE | USART_CR1_TE;
@@ -2114,6 +2267,13 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 
 	// All USART registers at their reset value, UE cleared.
 	Stm32UartReset(&pDev->DevIntrf);
+#ifdef STM32H753xx
+	if (dmaOwned && ((dev->RxDma.pChan->CR | dev->TxDma.pChan->CR) & DMA_SxCR_EN))
+	{
+		EnableInterrupt(state);
+		return false;
+	}
+#endif
 
 	// Kernel clock PCLK, the rate is computed from it. LPUART1 selects its
 	// clock in Stm32UartSetRate.
@@ -2242,6 +2402,12 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 	pDev->TxDropCnt = 0;
 	pDev->DevIntrf.IntPrio = pCfg->IntPrio;
 	pDev->DevIntrf.bIntEn = pCfg->bIntMode;
+#ifdef STM32H753xx
+	if (dmaOwned && !pCfg->bDMAMode)
+	{
+		Stm32UartDmaFree(dev);
+	}
+#endif
 	pDev->DevIntrf.bDma = pCfg->bDMAMode;
 	pDev->DevIntrf.bTxReady = true;
 	pDev->DevIntrf.bNoStop = false;
@@ -2278,7 +2444,11 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 			SYSCFG->CFGR1 &= ~(SYSCFG_CFGR1_USART1TX_DMA_RMP | SYSCFG_CFGR1_USART1RX_DMA_RMP);
 		}
 #endif
-		Stm32UartDmaSetup(dev);
+		if (!Stm32UartDmaSetup(dev))
+		{
+			EnableInterrupt(state);
+			return false;
+		}
 		cr3 |= USART_CR3_DMAT | USART_CR3_DMAR;
 		if (pCfg->bIntMode)
 		{
@@ -2572,3 +2742,4 @@ extern "C" void UART8_IRQHandler(void)
 	Stm32UartIrqHandler(&s_Stm32UartDev[ST_UART8_IDX]);
 }
 #endif
+

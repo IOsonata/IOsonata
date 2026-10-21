@@ -11,8 +11,7 @@ SEARCH_DIR("../../../../../../IOsonata/ARM/ldscript")
 SEARCH_DIR("../../../../../../../IOsonata/ARM/ldscript")
 GROUP( -lstdc++ -lgcc -lc)
 
-/* Data and stack in DTCM; AXI SRAM is a separate region.
-   No internal-flash storage driver or NVM partitions in this initial port. */
+/* Data and stack in DTCM; DMA buffers in AXI SRAM. */
 MEMORY
 {
 	FLASH (rx) : ORIGIN = 0x08000000, LENGTH = 2M
@@ -21,9 +20,14 @@ MEMORY
 }
 SECTIONS
 {
+	.uart_dma (NOLOAD) : ALIGN(32)
+	{
+		*(.uart_dma)
+	} > RAM2
 	.eth_dma (NOLOAD) : ALIGN(32)
 	{
 		*(.eth_dma)
 	} > RAM2
 }
 INCLUDE "gcc_arm_flash.ld"
+
