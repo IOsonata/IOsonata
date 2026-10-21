@@ -238,8 +238,8 @@ endpoint forwarding to Mosquitto, because the tested Mosquitto 2.0.18 PSK
 listener does not accept TLS 1.3. This is a host test, not a production proxy.
 
 The H753 EthernetTcpDemo includes an optional MQTT subscribe/self-publish test.
-See its README for broker setup and firmware configuration. Hardware MQTT
-validation is pending. Existing nRF91 modem code is unchanged; using MQTT on
+See its README for broker setup and firmware configuration. Plaintext MQTT echo and broker/cable recovery passed on H753 hardware;
+MQTT-over-TLS hardware validation is pending. Existing nRF91 modem code is unchanged; using MQTT on
 nRF91 also requires adding the shared source to that MCU library project.
 
 Protocol reference: [OASIS MQTT 3.1.1 plus Errata 01](https://docs.oasis-open.org/mqtt/mqtt/v3.1.1/errata01/os/mqtt-v3.1.1-errata01-os-complete.html).
@@ -470,6 +470,18 @@ These are initial interoperability and recovery results, not certificate
 validation, maximum-throughput measurements or a security audit. The running
 firmware establishes a successful maintainer build; a fresh automated ARM build
 was not completed in the implementation session.
+
+### MQTT hardware results, October 21, 2026
+
+EthernetTcpDemo connected to the broker at 10.5.5.51 over plaintext TCP,
+subscribed to iosonata/h753/echo at QoS 1 and verified 200 returned messages.
+Stopping the broker produced transport error 2 and TCP retries every three
+seconds. Restarting it restored the connection and subscription; verified
+counts continued through 400. Cable removal then produced Network down;
+DHCP recovery restored MQTT and its subscription, with echoes through 500.
+Neither recovery required a board reset. The exact build profile was not supplied.
+MQTT over TLS hardware results remain pending; the EthernetTcpDemo README
+provides the OpenSSL-to-local-broker test setup in Python/mqtt_tls_bridge.py.
 
 ## References
 

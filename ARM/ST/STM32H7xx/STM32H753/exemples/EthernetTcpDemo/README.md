@@ -134,7 +134,10 @@ Allow TCP port 1883 through the host firewall. Reset the board and expect DHCP,
 `MQTT connecting`, `MQTT subscribed`, and increasing verified echo counts.
 Stop/restart the broker and disconnect/reconnect the cable to check fresh
 CONNECT, resubscription and resumed echoes without resetting the board.
-Host tests pass; these MQTT hardware checks remain pending.
+Hardware testing on October 21, 2026 confirmed QoS 1 echo through 200 messages,
+broker stop/restart with reconnect and resubscription through 400, then cable
+removal, DHCP recovery and resubscription with echoes continuing through 500.
+The board was not reset during either recovery.
 
 MQTT can also use the existing TLS layer by setting NET_DEMO_TLS_TEST to 1
 and selecting a compatible broker endpoint and port. This uses the demo's
@@ -142,7 +145,40 @@ TLS 1.3 external PSK and P-256 profile, not certificate authentication.
 The tested Mosquitto 2.0.18 PSK listener does not accept TLS 1.3, so do not
 point this mode at that listener. The host test uses an OpenSSL TLS 1.3 endpoint
 in front of the localhost broker to test the combined MQTT/TLS implementation.
-Start hardware validation with plaintext MQTT above.
+For the hardware TLS test, keep MQTT_TEST=1, set TLS_TEST=1, TLS_DHE=1,
+MQTT_PORT=8883 and HOST to the PC's LAN address. Keep HTTP_TEST and TEST_COUNT
+at 0. Rebuild and flash the example.
+
+Stop the previous broker and use a loopback-only listener on the PC:
+
+```sh
+cat > mosquitto-tls-demo.conf <<'EOF'
+listener 1883 127.0.0.1
+allow_anonymous true
+persistence false
+EOF
+mosquitto -c mosquitto-tls-demo.conf -v
+```
+
+In another terminal, from the repository root:
+
+```sh
+python3 Python/mqtt_tls_bridge.py
+```
+
+The helper runs OpenSSL 3 with the same public demonstration PSK and P-256
+profile as the board and forwards authenticated application bytes to the local
+broker. Allow TCP 8883 through the PC firewall. If needed, select the executable
+with `--openssl /path/to/openssl`. Do not use the earlier OpenSSL `-rev` command:
+MQTT needs the broker's replies unchanged.
+
+Expect `TLS authenticated`, `MQTT subscribed`, then `MQTT echo checked 1`
+and every 100 messages. Stop/restart the broker and unplug/replug the cable;
+confirm a new authenticated session, resubscription and resumed echo counts.
+The helper accepts one board at a time, starts a fresh OpenSSL process and broker
+connection after disconnect, and recycles a silent session after 60 seconds.
+It uses a public test key and is a test tool, not a deployment gateway.
+MQTT-over-TLS hardware validation remains pending.
 
 Broker references: [installation](https://mosquitto.org/download/) and
 [configuration](https://mosquitto.org/man/mosquitto-conf-5.html).

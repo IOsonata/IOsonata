@@ -8,10 +8,11 @@ No network downloads. The optional broker listens only on localhost.
 import os
 from pathlib import Path
 import pwd
-import select
+import signal
 import shutil
 import socket
 import subprocess
+import sys
 import tempfile
 import time
 
@@ -57,39 +58,28 @@ def tls_interop(binary, broker_port):
     with socket.socket() as probe:
         probe.bind(('127.0.0.1', 0))
         port = probe.getsockname()[1]
-    command = ['openssl', 's_server', '-quiet', '-ign_eof', '-naccept', '1',
-               '-accept', f'127.0.0.1:{port}', '-nocert', '-tls1_3', '-groups', 'P-256',
-               '-ciphersuites', 'TLS_AES_128_GCM_SHA256', '-psk_identity', 'IOsonata',
-               '-psk', bytes(range(32)).hex()]
-    with socket.create_connection(('127.0.0.1', broker_port)) as peer, tempfile.TemporaryFile() as log:
-        server = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=log)
-        client = subprocess.Popen([str(binary), str(port), 'tls'], env=ENV)
-        streams = [peer, server.stdout]
-        deadline = time.monotonic() + 35
+    command = [sys.executable, str(ROOT / 'Python/mqtt_tls_bridge.py'),
+               '--host', '127.0.0.1', '--port', str(port),
+               '--broker-port', str(broker_port)]
+    with tempfile.TemporaryFile() as log:
+        server = subprocess.Popen(command, stdout=log, stderr=log)
         try:
-            while client.poll() is None and time.monotonic() < deadline:
-                ready, _, _ = select.select(streams, [], [], 0.1)
-                for stream in ready:
-                    data = os.read(stream.fileno(), 4096)
-                    if not data:
-                        streams.remove(stream)
-                    elif stream is peer:
-                        server.stdin.write(data)
-                        server.stdin.flush()
-                    else:
-                        peer.sendall(data)
-            if client.poll() != 0:
-                log.seek(0)
-                print(log.read().decode(), flush=True)
-                raise RuntimeError('MQTT over native TLS failed or timed out')
+            for _ in range(2):
+                subprocess.run([str(binary), str(port), 'tls'],
+                               check=True, env=ENV, timeout=40)
+                time.sleep(0.5)
+            print('MQTT TLS helper: two independent sessions PASS', flush=True)
+        except Exception:
+            log.seek(0)
+            print(log.read().decode(), flush=True)
+            raise
         finally:
-            if client.poll() is None:
-                client.kill()
-            client.wait(timeout=5)
-            server.terminate()
-            server.wait(timeout=5)
-            server.stdin.close()
-            server.stdout.close()
+            server.send_signal(signal.SIGINT)
+            try:
+                server.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                server.kill()
+                server.wait(timeout=5)
 
 
 def main():
