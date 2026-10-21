@@ -79,6 +79,7 @@ SOFTWARE.
 #define VL53L0X_RANGE_STATUS_DEVICE_POS									(3)
 #define VL53L0X_DEVICE_STATUS_RANGE_COMPLETE							11
 #define VL53L0X_DEVICE_STATUS_NONE_CODE				0xFF	//!< Status of a result with device status 0
+#define VL53L0X_DEVICE_STATUS_ZERO_CODE				0xFE	//!< Status of a complete range of 0 mm
 
 #define VL53L0X_FINAL_RANGE_CONFIG_MIN_COUNT_RATE_RTN_LIMIT_REG	0x44	//!< 16 bits, Mcps 9.7 fixed point
 #define VL53L0X_SIGNAL_RATE_LIMIT_DEFAULT		32		//!< 0.25 Mcps

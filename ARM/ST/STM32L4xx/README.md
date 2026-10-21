@@ -240,7 +240,9 @@ status 6 and 3 with status 9, both a phase failure for the ST API, with a
 signal of 312 to 734 kcps. 3 more end as valid with 0 mm and the same signal
 as those without a target (585 to 617 kcps). The default limit checks of the
 ST API pass them too: its sigma estimate computed from the printed rates is
-about 6 mm, under its 18 mm limit. Distances not compared with a reference.
+about 6 mm, under its 18 mm limit. The driver now reports a complete range of
+0 mm as status 0xFE (`VL53L0X_DEVICE_STATUS_ZERO_CODE`), not as a distance;
+not run on the board since. Distances not compared with a reference.
 L496 and L4S9 I2C4 use virtual index 3. The L432 has no I2C2: index 1 fails
 initialization, I2C1 and I2C3 keep indices 0 and 2.
 

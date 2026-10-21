@@ -736,10 +736,13 @@ bool DistVl53l0x::UpdateData()
 	Write8(&regaddr, 1, 1);
 
 	uint8_t status = (r[0] & VL53L0X_RANGE_STATUS_DEVICE_MASK) >> VL53L0X_RANGE_STATUS_DEVICE_POS;
+	uint32_t distance = ((uint32_t)r[VL53L0X_RESULT_DISTANCE] << 8) | r[VL53L0X_RESULT_DISTANCE + 1];
 
 	if (status == VL53L0X_DEVICE_STATUS_RANGE_COMPLETE)
 	{
-		status = DISTSENSOR_STATUS_VALID;
+		// On the B-L475E-IOT01A2, a few measurements without a target end
+		// complete with 0 mm and the signal of no target
+		status = distance == 0 ? VL53L0X_DEVICE_STATUS_ZERO_CODE : DISTSENSOR_STATUS_VALID;
 	}
 	else if (status == 0)
 	{
@@ -748,7 +751,7 @@ bool DistVl53l0x::UpdateData()
 
 	// kcps from Mcps 9.7 fixed point: x 1000 / 128
 	vData.Timestamp = vpTimer != NULL ? vpTimer->uSecond() : 0;
-	vData.Distance = ((uint32_t)r[VL53L0X_RESULT_DISTANCE] << 8) | r[VL53L0X_RESULT_DISTANCE + 1];
+	vData.Distance = distance;
 	vData.SignalRate = ((((uint32_t)r[VL53L0X_RESULT_SIGNAL_RATE] << 8) | r[VL53L0X_RESULT_SIGNAL_RATE + 1]) * 125U) / 16U;
 	vData.AmbientRate = ((((uint32_t)r[VL53L0X_RESULT_AMBIENT_RATE] << 8) | r[VL53L0X_RESULT_AMBIENT_RATE + 1]) * 125U) / 16U;
 	vData.Status = status;

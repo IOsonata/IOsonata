@@ -445,6 +445,9 @@ static void TestContinuous(void)
 	CheckSample(dev, m, 1234, VL53L0X_DEVICE_STATUS_RANGE_COMPLETE, 0x0A00, 0x0040, DISTSENSOR_STATUS_VALID);
 	CheckSample(dev, m, 8190, 4, 0x0003, 0x0123, 4);
 	CheckSample(dev, m, 0, 0, 0xFFFF, 0, VL53L0X_DEVICE_STATUS_NONE_CODE);
+	// Complete with 0 mm is not a distance, 1 mm is
+	CheckSample(dev, m, 0, VL53L0X_DEVICE_STATUS_RANGE_COMPLETE, 0x0049, 0x0028, VL53L0X_DEVICE_STATUS_ZERO_CODE);
+	CheckSample(dev, m, 1, VL53L0X_DEVICE_STATUS_RANGE_COMPLETE, 0x0049, 0x0028, DISTSENSOR_STATUS_VALID);
 	CheckSample(dev, m, 65535, 14, 1, 0xFFFF, 14);
 
 	dev.SetEvtHandler(DevEvt);
