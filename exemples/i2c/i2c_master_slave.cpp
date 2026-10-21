@@ -325,8 +325,10 @@ static int MasterWrite(const I2CCfg_t &Cfg, uint8_t Addr, uint8_t Cmd, const uin
 	s_MasterCompleted = false;
 	s_MasterCount = 0;
 	c = g_I2CMaster.Write(Addr, &Cmd, 1, pData, Len);
-	if (Cfg.bIntEn)
+	if (Cfg.bIntEn && c <= 0)
 	{
+		// A positive return is a synchronous data count, even with interrupts
+		// enabled (for example, writes larger than the STM32 staging buffer).
 		// DeviceIntrfWrite() converts the -1 of an interrupt transfer into 0
 		// after subtracting the command length
 		int total = WaitMasterComplete(10000000);
