@@ -381,8 +381,9 @@ static int s_TlsLength;
 
 static void TlsTestDown(uint32_t Now, const char *pReason)
 {
-	SysLogPrintf(SysLogGet(), "TLS: %s (error=%d), retry in 3 seconds\r\n",
-		pReason, (int)s_Tls.Error());
+	SysLogPrintf(SysLogGet(), "TLS: %s (error=%d), %s\r\n",
+		pReason, (int)s_Tls.Error(),
+		IpReady() ? "retry in 3 seconds" : "waiting for network recovery");
 	s_Tls.Reset();
 	s_Socket.Close();
 	s_TlsStarted = false;
