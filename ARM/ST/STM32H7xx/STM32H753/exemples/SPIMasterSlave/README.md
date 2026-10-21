@@ -34,41 +34,38 @@ The HAS_DMA flags describe the selected hardware. They must not be cleared to
 hide an unfinished driver. Initialization failure counts as FAIL. The transfer
 payloads, completion counts and data checks are unchanged.
 
-Hardware run (2026-10-21) failed on the first one-byte frame in each
-interrupt-slave combination and stalled while initializing the DMA slave.
-The debugger showed SPI3 TXP/TXC interrupts before SPE was set. The shared
-driver now enables SPI and preloads CPU TX data before enabling interrupts.
-After correcting a misplaced jumper, all 13 mode-0 transfers pass in each
-of the eight combinations. Each combination then passes three one-byte
-mode-1 transfers and fails its first 16-byte mode-1 TX: the slave reports
-17 bytes, with the first mismatch at byte 5. Modes 2 and 3 were not reached.
+Hardware validation (2026-10-21): **8 passed, 0 failed, 0 skipped** at
+1 MHz, 8-bit MSB-first. All four SPI modes pass in each of the eight
+master/slave execution combinations: 416 individual transfers, including
+1-, 16- and 129-byte frames and short-frame rearming. This validates the
+SPI1 master/SPI3 slave configuration above, not every H753 SPI instance
+or higher clock rates.
 
-The shared driver now keeps CRCSIZE at its reset value of 7 even when CRC
-is disabled, and waits at least one SCK period after EOT before disabling
-the H753 master, including between TSIZE chunks. These address ES0392
-sections 2.22.5 and 2.22.6. The subsequent hardware run confirmed that
-these corrections did not resolve the mode-1 failure: all eight combinations
-still reported 17 received bytes for the first 16-byte mode-1 TX.
+The earlier mode-1 failure reported 17 bytes for a 16-byte TX, with identical
+corruption in polling, interrupt and DMA combinations. Changing only the
+master SCK slew from TURBO to LOW resolved it with the original transfers
+and checks unchanged. This establishes slew sensitivity in the jumper setup;
+clock ringing was not measured with an oscilloscope.
 
-A further configuration correction restricts CFG2.AFCNTR to master mode.
-RM0433 prohibits this bit in slave mode because a disabled slave must release
-MISO. The previous driver set it for both roles. The H753 register test now
-rejects slave configurations with AFCNTR set. This fixes a confirmed register
-configuration error; hardware confirmation of the mode-1 failure remains
-pending. The shared hardware test, payloads, mode selection and assertions
-remain unchanged.
+The shared driver selects LOW SCK slew for H753 masters at achieved rates
+up to 1 MHz, and retains TURBO above 1 MHz. The policy follows the actual
+selected rate, including subsequent SetRate calls. It uses the configured
+SCK pin, not a hard-coded board pin. Slave pins retain their previous settings
+because the slave's configured Rate does not determine the external SCK.
+Only 1 MHz has been hardware validated with this policy; faster buses need
+separate timing and signal-integrity validation.
 
-Validation: GNU Arm GCC 13.2.1 compiles the shared application with this
-board configuration in Debug (-O0) and Release (-O3). Project XML and linked
-source paths were checked. Full library/example linking was not rerun.
-The existing H753 bus register tests pass at -O0 and -O3 (with
-`-fno-threadsafe-statics` in the local test toolchain); these model controller
-behavior and do not validate physical clock edges. The added CRCSIZE check
-fails with the preceding driver and passes with the correction. The slave
-AFCNTR check likewise rejects the preceding driver and accepts the correction. H753
-soft/hard-float, L476 and WBA65 shared bus sources compile at -O0 and -O3
-with -Wall -Werror; the WBA SPI model passes 64 checks. The optimized H753
-assembly retains the delay loop before clearing SPE.
+The shared driver also retains the ES0392 CRC-size and EOT-disable corrections,
+enables slave interrupts only after SPE/preload, and restricts AFCNTR to
+master mode. The CRC-size and AFCNTR corrections alone did not resolve the
+observed mode-1 failure.
+
+Build validation: H753 soft/hard-float, L476 and WBA65 shared bus sources
+compile at -O0 and -O3 with -Wall -Werror using GNU Arm GCC 13.2.1. The H753
+SPI example compiles in Debug and Release; full library/example linking was
+not rerun locally. Prior H753 bus register tests pass at -O0 and -O3 and the
+WBA SPI model passes 64 checks. Register models do not validate physical
+clock edges or the electrical effect of GPIO slew.
 
 Pin references: ST [UM2407, connector tables 18-20](https://www.st.com/resource/en/user_manual/um2407-stm32h7-nucleo144-boards-mb1364-stmicroelectronics.pdf)
 and [STM32H753 datasheet, alternate functions](https://www.st.com/resource/en/datasheet/stm32h753xi.pdf).

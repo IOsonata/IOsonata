@@ -199,9 +199,12 @@ slaves; SPI covers modes 0-3. Expected summary is 8 passed, 0 failed, 0 skipped.
 Only explicit hardware HAS_DMA flags may exclude DMA combinations. An init
 failure is FAIL, not SKIPPED. Existing payload and completion checks remain.
 I2C1 master / I2C2 slave passed all eight combinations on NUCLEO-H753ZI
-(2026-10-21), including 254-byte writes and NACK recovery. SPI hardware
-validation is still failing: an interrupt-enable ordering fix for the DMA
-slave initialization stall awaits retest. See the example README.
+(2026-10-21), including 254-byte writes and NACK recovery. SPI1 master /
+SPI3 slave also passed all eight combinations on that date at 1 MHz:
+416 transfers covering modes 0-3 and 1-, 16- and 129-byte frames. LOW SCK
+slew resolved the earlier mode-1 corruption without changing the test.
+H753 masters use LOW SCK slew up to 1 MHz and retain TURBO above it;
+only 1 MHz has been hardware validated. See the example README.
 
 ## Native USB CDC examples
 
