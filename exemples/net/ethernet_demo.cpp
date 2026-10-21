@@ -62,6 +62,8 @@ static const EthernetCfg_t s_EthernetCfg = {
 	.bIntEn = true,
 	.EvtCB = nullptr,
 };
+// Hold complete startup and diagnostic bursts while the TX interrupt drains them.
+alignas(4) static uint8_t s_UartTxMem[CFIFO_MEMSIZE(1024)];
 static const UARTCfg_t s_UartCfg = {
 	.DevNo = UART_DEVNO,
 	.pIOPinMap = s_UartPins,
@@ -75,6 +77,8 @@ static const UARTCfg_t s_UartCfg = {
 	.IntPrio = 6,
 	.EvtCallback = nullptr,
 	.bFifoBlocking = true,
+	.TxMemSize = sizeof(s_UartTxMem),
+	.pTxMem = s_UartTxMem,
 	.bDMAMode = false,
 };
 static const TimerCfg_t s_TimerCfg = {
