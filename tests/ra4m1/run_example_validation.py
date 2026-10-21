@@ -34,11 +34,8 @@ EXAMPLES = {
 # Examples whose Debug C++ link uses semihosting (rdimon) for printf
 SEMIHOSTING = {'TimerDemo', 'I2CMasterSlave', 'SPIMasterSlave'}
 # Sources linked from an example's own src folder besides board.h, with the
-# reason. I2CMasterSlave links the RA4M1 IIC failure report that the shared
-# example calls (I2C trace, see ARM/Renesas/RA4M1/README.md).
-LOCAL_SOURCES = {
-    'I2CMasterSlave': ['i2c_master_slave_diag.cpp'],
-}
+# reason. None at present.
+LOCAL_SOURCES = {}
 PREFIX = 'ilg.gnuarmeclipse.managedbuild.cross.option.'
 
 

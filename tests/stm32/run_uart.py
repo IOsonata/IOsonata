@@ -124,8 +124,10 @@ def main():
                        '-I' + str(ROOT / 'ARM/CMSIS/Core/Include'), '-I' + str(ROOT / 'ARM/ST/include'),
                        '-I' + str(ROOT / 'ARM/ST' / family / 'include')]
                 for label in ('O0', 'Os'):
+                    # UART hides the DeviceIntrf 3 argument Rx/Tx on purpose,
+                    # GCC 13 and later warn about it with -Wall.
                     run([arm, f'-mcpu={cpu}', '-mthumb', *fpu, '-D' + part, f'-{label}', '-std=gnu++23',
-                         '-Wall', '-Werror', '-fno-exceptions', '-fno-rtti', '-ffunction-sections',
+                         '-Wall', '-Wno-overloaded-virtual', '-Werror', '-fno-exceptions', '-fno-rtti', '-ffunction-sections',
                          '-fdata-sections', *inc, '-c', DRIVER, '-o', Path(tmp) / f'{part}_{label}.o'])
         print(f'GNU Arm compile of uart_stm32.cpp for {len(PARTS)} parts at -O0 and -Os: PASS')
     else:
