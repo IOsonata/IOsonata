@@ -2,8 +2,18 @@
 
 This project runs the existing `exemples/crypto/crypto_engine_test.cpp`, also
 used by STM32WBA. It selects `CryptoRngStm32` for hardware random numbers and
-uses the existing `CryptoSoftAes` and `CryptoUecc` engines for AES and P-256.
-It does not exercise the H753 CRYP or HASH accelerators.
+selects `CryptoStm32H7Aes` for the CRYP AES accelerator and
+`CryptoStm32H7Hash` for one-shot SHA-256 on HASH. P-256 uses `CryptoUecc`.
+
+AES-128 ECB, CBC and CTR encryption/decryption use the hardware block
+primitive. CBC chaining and the full 128-bit CTR increment are handled by
+the driver. CMAC, CCM and GCM reuse the `CryptoSoftAes` constructions over
+hardware AES. AES-256 is not offered by this engine.
+
+SHA-256 streaming and HMAC retain the software implementation: the HASH
+peripheral's 54-word saved context exceeds the existing 128-byte caller
+context limit. One-shot hashes use hardware, including empty and unaligned
+messages. No context-size or public API changes are required.
 
 Import `ioc` and `../../lib/ioc` into IOcomposer. Build the library and example
 in matching configurations. Use Release for the board test: stdout uses
@@ -35,6 +45,20 @@ It uses micro-ecc's integer API (`uECC_ENABLE_VLI_API=1`), already enabled in
 the library project.
 
 The updated host suite passes 72 checks with zero failures under ASan/UBSan.
-The board result validates the hardware RNG and software AES/P-256 engines;
-it does not validate the H753 CRYP or HASH accelerators. Ethernet TLS/DTLS
-is not implemented.
+That board result validates hardware RNG and software AES/P-256, before
+the example selected CRYP and HASH. The accelerator version needs a new
+board run. Rebuild both the H753 library and CryptoTest; expect 75 checks,
+zero failures and no skips. Three added checks cover hash construction,
+SHA-256/HMAC self-test, and SHA-256 lengths 0 through 257 against software
+with unaligned input/output and output guards.
+
+Run `python3 tests/stm32h7/run_crypto_accel.py` for the host register model.
+It requires gcc, g++ and OpenSSL development headers. At O0 and O2 with
+ASan/UBSan, it runs the shared suite through the production CRYP/HASH driver
+and checks timeout recovery, output/key clearing and shared peripheral
+locking. Register definitions come from the STM32H753 CMSIS header; OpenSSL
+supplies independent block/digest results. This does not validate hardware
+timing or silicon behavior. An ARM build was not run in this environment
+because the cross-compiler was unavailable.
+
+Ethernet TLS/DTLS is not implemented.

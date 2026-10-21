@@ -46,10 +46,18 @@ SOFTWARE.
 #define UART_TX_PIN				8
 #define UART_TX_PINOP			IOPINOP_FUNC7
 
-// Reuse the shared STM32 RNG; AES and P-256 use the existing software engines.
+// Hardware RNG, CRYP AES and one-shot HASH SHA-256; software P-256.
+#include "crypto_stm32h7.h"
 #define CRYPTO_TEST_ENGINE_HEADER	"crypto_rng_stm32.h"
 #define CRYPTO_TEST_RNG_TYPE			CryptoRngStm32
 #define CRYPTO_TEST_RNG_MEMSIZE		sizeof(CryptoRngStm32)
 #define CRYPTO_TEST_RNG_CREATE(m, s)	CryptoRngStm32Instance()
+
+#define CRYPTO_TEST_AES_TYPE CryptoStm32H7Aes
+#define CRYPTO_TEST_AES_MEMSIZE CRYPTO_STM32H7_AES_MEMSIZE
+#define CRYPTO_TEST_AES_CREATE(m, s) CryptoStm32H7AesCreate((m), (s))
+#define CRYPTO_TEST_HASH_TYPE CryptoStm32H7Hash
+#define CRYPTO_TEST_HASH_MEMSIZE CRYPTO_STM32H7_HASH_MEMSIZE
+#define CRYPTO_TEST_HASH_CREATE(m, s) CryptoStm32H7HashCreate((m), (s))
 
 #endif

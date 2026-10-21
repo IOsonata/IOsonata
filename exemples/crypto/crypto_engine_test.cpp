@@ -71,6 +71,7 @@ SOFTWARE.
 #include "crypto/icrypto.h"
 #include "crypto/crypto_softaes.h"
 #include "crypto/crypto_softrng.h"
+#include "crypto/crypto_softsha256.h"
 #include "crypto/crypto_uecc.h"
 
 // The board names the engines under test, so its header comes first
@@ -945,6 +946,32 @@ static void RngChecks(RngEngine *pRng)
 	check("source reports itself as security grade", pRng->IsSecure());
 }
 
+#ifdef CRYPTO_TEST_HASH_TYPE
+// Optional hash facet, selected by the board like AES/PKA/RNG.
+static void HashChecks()
+{
+	alignas(CRYPTO_TEST_HASH_TYPE) static uint8_t mem[CRYPTO_TEST_HASH_MEMSIZE];
+	auto *hash = CRYPTO_TEST_HASH_CREATE(mem, sizeof(mem));
+	check("SHA-256 engine constructs", hash != nullptr);
+	if (hash == nullptr) return;
+	check("SHA-256/HMAC self-test", hash->SelfTest() == 0);
+	CryptoSoftSha256 reference;
+	reference.Enable();
+	uint8_t msg[258], expected[32], actual[34];
+	XsFill(msg, sizeof(msg));
+	bool match = true;
+	// Every tail length, both padding boundaries, multi-block and unaligned IO.
+	for (size_t len = 0; len <= 257U; len++)
+	{
+		memset(actual, 0xA5, sizeof(actual));
+		match &= reference.Hash(CRYPTO_HASH_SHA256, msg + 1, len, expected) == CRYPTO_STATUS_OK;
+		match &= hash->Hash(CRYPTO_HASH_SHA256, msg + 1, len, actual + 1) == CRYPTO_STATUS_OK &&
+			memcmp(expected, actual + 1, 32) == 0 && actual[0] == 0xA5 && actual[33] == 0xA5;
+	}
+	check("SHA-256 lengths 0..257 match software, unaligned buffers bounded", match);
+}
+#endif
+
 int CryptoEngineTest(void)
 {
 	printf("\r\nCrypto engine test\r\n");
@@ -976,6 +1003,9 @@ int CryptoEngineTest(void)
 	check("AES engine self-test", hwAes->SelfTest() == 0);
 	check("P-256 engine self-test", hwPka->SelfTest() == 0);
 
+#ifdef CRYPTO_TEST_HASH_TYPE
+	HashChecks();
+#endif
 	RngChecks(hwRng);
 	AesVectors(hwAes, hwAes, hwAes);
 	SoftwareAesDecryptChecks(swAes);
