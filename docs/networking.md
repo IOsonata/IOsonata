@@ -69,8 +69,9 @@ Other applications do not link the IP stack or DMA storage unless they use it.
   until lwIP finishes it, so a late answer cannot change a replacement socket.
 - Ethernet SockIntrf TLS/DTLS selections, credential storage and LTE
   release-assistance operations return false. The separate native `Tls` wrapper
-  supports the PSK profile described below. nRF91 modem TLS/DTLS support is unchanged. MQTT is a shared client above the
-  selected stream; CoAP remains unfinished.
+  supports the PSK profile described below. nRF91 modem TLS/DTLS support is
+  unchanged. Shared MQTT uses the selected stream; shared CoAP uses a connected
+  UDP interface with the limited profile described below.
 - H753 driver: MAC DevNo 0, LAN8742A PHY over RMII, auto-negotiated 10/100 Mbit/s,
   four RX and four TX descriptors. A fatal DMA bus error requires reinitialization.
   Other PHYs, MII and Ethernet power-management modes are not implemented.
@@ -245,6 +246,191 @@ unresolved. Existing nRF91 modem code is unchanged; using MQTT on nRF91 also
 requires adding the shared source to that MCU library project.
 
 Protocol reference: [OASIS MQTT 3.1.1 plus Errata 01](https://docs.oasis-open.org/mqtt/mqtt/v3.1.1/errata01/os/mqtt-v3.1.1-errata01-os-complete.html).
+
+## Shared CoAP client
+
+`include/net/coap.h` and `src/net/coap.cpp` implement an RFC 7252 unicast client
+over an injected, already-connected synchronous UDP `DevIntrf_t`. The C-callable
+functions own protocol state in `CoapDev_t`; the C++ `Coap : Device` wrapper
+accepts `DeviceIntrf *` and calls those same functions. As with MQTT, the shared
+implementation is compiled from a `.cpp` file and has no separate C++ protocol
+implementation. The client does not include controller access, lwIP or modem
+calls. The nRF91 socket implementation remains unchanged.
+
+### Supported operations and limits
+
+The initial profile supports GET, POST, PUT and DELETE; confirmable (CON) and
+non-confirmable (NON) requests; piggyback and separate responses; empty ACK;
+Reset; and confirmable retransmissions. There is one outstanding request per
+context (NSTART=1). Applications must coordinate multiple contexts addressing
+the same server. Response codes in the 2.xx, 4.xx and 5.xx classes are delivered
+as ordinary responses; an application decides which code it expects.
+
+The client matches responses by the connected peer and its eight-byte token.
+A piggyback ACK must also carry the current request message ID. An empty ACK
+stops request retransmission while the client waits for a separate response.
+Separate CON responses are acknowledged, including a CON response to a NON
+request. A request using CON may also receive a separate NON response.
+
+The complete datagram is limited to **1152 bytes**, including the four-byte
+header, token, options and payload marker. There are at most **16 options**.
+The receiver reads into a 1153-byte buffer so a truncated oversized datagram
+cannot be accepted as a complete supported packet. State, the request/response
+buffer, receive buffer and four duplicate records reside in the context. There
+is no heap, exceptions, RTTI or RTOS dependency.
+
+The client remembers the last four accepted CON response message IDs for up to
+247 seconds. It acknowledges duplicates still in that cache without delivering
+the response again. Older, evicted or expired unexpected CON responses may
+receive Reset; the cache does not promise unlimited duplicate retention.
+
+There is no DTLS, OSCORE, Observe, blockwise transfer, proxy, multicast, CoAP over
+TCP or embedded server engine. The bounded `CoapEncode` and `CoapDecode` helpers
+are also available for message encoding/decoding; they do not implement a
+server. The native TLS stream wrapper cannot encrypt CoAP UDP traffic.
+
+### Datagram transfers and ownership
+
+Call `CoapInit` after the UDP socket is connected and set its `MaxRetry` to zero.
+Each `RxData` must consume one datagram, discarding a truncated tail. Each
+`TxData` must accept the complete datagram or return zero; negative asynchronous
+results and short positive writes are unsupported and report a transport error.
+The client pairs the normal StartRx/RxData/StopRx and StartTx/TxData/StopTx hooks
+once per transfer. It does not accumulate reads or retry a partial write as if
+the interface were a byte stream. The connected transport filters remote
+addresses and ports; do not inject an unfiltered or shared receive stream.
+
+`CoapProcess(now, transportOpen)` performs at most one datagram read and one
+write per call. Call it frequently from the same foreground owner as IP, passing
+the current socket `Connected()` result. Synchronous transport calls can still
+block up to their configured timeout. Do not call the client from an ISR or
+concurrent callback, and do not interleave another protocol's reads/writes on
+its socket. There are no CoAP event callbacks in this initial implementation.
+
+`Request()` copies options and payload before returning. Invalid requests return
+false without starting an exchange; a busy rejection leaves the existing
+exchange unchanged. A ready client can also be waiting for the peer's probing
+rate limit; `RetryAfter(now)` reports that wait and `Request()` then returns
+false with `COAP_ERROR_RATE`. `Response()` returns a borrowed view into
+retained bytes.
+Tokens, options and payloads are length-delimited, not NUL-terminated strings.
+Consume the response before `Release`, `Cancel`, `Reset` or reinitialization.
+Continue pumping while holding a response so duplicate CON packets can be
+acknowledged. A pending ACK can keep `Busy()` true until the transport accepts
+it, including after `Release()`.
+
+`Release()` releases a response or failed exchange and preserves the peer's
+message-ID, duplicate and probing-rate state for another request. `Cancel()`
+abandons local request state but cannot undo an operation already sent. `Reset()` clears the
+context without closing the caller-owned socket. A fresh initialization after
+reset requires a fresh UDP endpoint, normally a closed/reopened socket with a
+new ephemeral source port; do not reset message IDs on a live endpoint.
+Carry any remaining `RetryAfter()` wait across endpoint replacement so a reset
+does not bypass the rate limit for an unresponsive peer.
+The C++ `Disable()` pauses the pump, while deadlines continue to elapse.
+
+### Options, randomness and timing
+
+Requests take an ordered array of raw option-value spans. Use one Uri-Path
+option per path segment and one Uri-Query per query component. Values are
+decoded bytes, not percent-encoded URI text, and an empty final Uri-Path
+represents a trailing slash. The library does not hide a URI parser. Integer
+request options use the shortest big-endian encoding; zero has an empty value.
+Callers must supply valid normalized UTF-8 in string-valued request options.
+The raw option helpers do not validate or normalize incoming text; applications
+interpreting those spans as text must handle that themselves.
+The supported request options are If-Match, Uri-Host, ETag, If-None-Match,
+Uri-Port, Uri-Path, Content-Format, Uri-Query, Accept and Size1, with their
+RFC-defined lengths and repetition rules. Uri-Path segments `.` and `..` are
+rejected; normalize the path before constructing its options.
+
+Responses expose ETag, Location-Path, Content-Format, Max-Age, Location-Query,
+Size1 and unknown elective options. Unknown or invalid critical response
+options fail the exchange; a CON response is rejected with Reset. Invalid or
+misplaced elective options and surplus repetitions of non-repeatable elective
+options are ignored. Response integer options may include leading zero bytes.
+Unsupported reserved Location extensions (options 128, 132, 136 or 140 together
+with Location-Path/Location-Query) reject the response under
+[RFC erratum 4949](https://www.rfc-editor.org/errata/eid4949).
+Malformed or unrelated packets do not replace a valid response or complete the
+pending request. Oversized matching responses report a limit error.
+
+The caller supplies an already-enabled synchronous instance of the existing
+`RngEngine`. It generates the initial message ID, eight-byte request tokens and
+the randomized initial retransmission interval. Provider errors report
+`COAP_ERROR_RANDOM`; asynchronous providers are rejected. The H753 demo reuses
+the existing STM32 hardware RNG. Plaintext CoAP has no peer authentication.
+Message IDs advance through the 16-bit space. After exhausting that space, the
+client requires a full 247-second quiet period after the last ID allocation or
+request transmission before reusing IDs on that endpoint.
+
+A CON request starts with a randomized 2..3-second acknowledgement timeout.
+Up to four retries double that interval, preserving the same datagram, message
+ID and token. Retransmissions end after the 45-second maximum transmit span;
+the full acknowledgement wait can reach 93 seconds. An empty ACK ends those
+retries but leaves the response deadline active. `CoapCfg_t::Timeout` bounds the
+entire request from enqueue, including local send backpressure and separate
+response waiting, and may shorten the exchange. It must be 1..INT32_MAX
+milliseconds. Timestamps use wrapping `uint32_t` milliseconds. The H753 demo
+sets 95 seconds so the normal confirmable retry schedule can finish.
+
+`CoapCfg_t::ProbingRate` limits new requests to an unresponsive peer in bytes per
+second; zero selects the RFC default of **1 byte/second**. Accepted request
+datagrams and retransmissions accrue a wait measured from the first send.
+Matching responses or Reset establish that the peer is responsive and clear
+that wait. Timeout, `Release()` and `Cancel()` retain it. After a failed
+exchange, wait for `RetryAfter(now)` to reach zero before another request;
+the protocol continues to acknowledge duplicate responses while being pumped.
+Applications using multiple contexts for one peer must coordinate their
+combined traffic and preserve pending waits across resets.
+
+The H753 demo explicitly sets `COAP_DEMO_PROBING_RATE` to 1024 bytes/second for
+its controlled Ethernet LAN, an application-specific parameter permitted by
+RFC 7252 section 4.8.1. This is not the library default. Set it to zero to use
+the default 1-byte/second probing rate. Normal replies clear the wait, so this
+parameter does not limit traffic to a responsive server.
+
+### CoAP examples and checks
+
+[EthernetCoapDemo](../ARM/ST/STM32H7xx/STM32H753/exemples/EthernetCoapDemo/README.md)
+links the shared
+`exemples/net/coap_demo.cpp`. It checks GET/POST/PUT/DELETE, binary CON/NON echoes,
+an expected 4.04 and a delayed separate response, then continues without
+resetting the board after reported network/exchange failures. Its README gives
+the build settings, PC command and expected console lines.
+
+`Python/coap_server.py` uses the independent aiocoap implementation for the PC
+peer. It serves `/hello`, `/echo`, `/value` and `/slow`, with plaintext UDP on
+5683. Install `aiocoap==0.4.17` in the Python environment, then pass the PC's
+explicit LAN address with `--host`. Its default loopback address serves host
+tests. The helper is a test resource server, not an embedded IOsonata server or
+an encrypted deployment service.
+
+Host validation passed at O0/O2 with ASan/UBSan using the actual CoAP,
+`DeviceIntrf` and `Device` sources. The checks include the C header and C++
+lifecycle, fixed wire fixtures, 8000 bounded parser inputs, malformed options,
+MID/token matching, exact 1152-byte acceptance and 1153-byte rejection, copied
+request data and stable held responses. They also exercise ACK backpressure,
+retransmission timing and stalled pumps, wrapping clocks, cache expiry,
+message-ID reuse guard, probing-rate waits across failure/release/cancel,
+Location-option erratum handling, transport failures and transfer-lock release.
+
+Independent aiocoap 0.4.17 tests passed over real localhost UDP, both directly
+and through a packet-loss proxy. They cover GET/POST/PUT/DELETE, CON/NON binary
+echoes up to 1000 payload bytes, 4.04 and an empty ACK followed by a separate
+CON response. Dropping the first piggyback response causes a request retry.
+Dropping the first ACK for a separate response causes a server retransmission,
+which the client acknowledges after the application has released its response.
+
+Run `python3 tests/net/run_coap.py --require-interop` with aiocoap installed to
+repeat all checks. Without that flag, a missing aiocoap dependency skips the
+live interoperability checks explicitly. The runner does not download
+dependencies. A host C++23 syntax check of the application with the actual H753
+board configuration also passed. CoAP hardware results have not yet been
+recorded, and no fresh ARM compile/link validation is claimed.
+
+Protocol reference: [RFC 7252](https://www.rfc-editor.org/rfc/rfc7252.html).
+Independent peer: [aiocoap 0.4.17](https://aiocoap.readthedocs.io/en/0.4.17/).
 
 ## NUCLEO-H753ZI bring-up
 

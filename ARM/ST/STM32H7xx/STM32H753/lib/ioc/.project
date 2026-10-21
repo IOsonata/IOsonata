@@ -3035,6 +3035,16 @@
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/net/mqtt.h</locationURI>
 		</link>
+		<link>
+			<name>src/net/coap.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/net/coap.cpp</locationURI>
+		</link>
+		<link>
+			<name>include/net/coap.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/net/coap.h</locationURI>
+		</link>
 	</linkedResources>
 	<variableList>
 		<variable>
