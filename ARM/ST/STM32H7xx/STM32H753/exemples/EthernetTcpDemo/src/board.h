@@ -57,6 +57,14 @@ SOFTWARE.
 #define NET_DEMO_HOST "192.168.1.10"
 #define NET_DEMO_PROTO SOCKINTRF_PROTO_TCP
 
+// MQTT 3.1.1 broker test; TLS_TEST may also be 1 for a PSK TLS broker.
+#ifndef NET_DEMO_MQTT_TEST
+#define NET_DEMO_MQTT_TEST 0
+#endif
+#define NET_DEMO_MQTT_PORT 1883
+#define NET_DEMO_MQTT_CLIENT_ID "iosonata-h753"
+#define NET_DEMO_MQTT_TOPIC "iosonata/h753/echo"
+
 // 1 selects one public DNS/HTTP check at example.com:80 instead of echo.
 #ifndef NET_DEMO_HTTP_TEST
 #define NET_DEMO_HTTP_TEST 0

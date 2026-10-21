@@ -90,3 +90,59 @@ and counters sampled before a failed call. Times are milliseconds. State values
 are 0 idle, 1 ServerHello, 2 EncryptedExtensions, 3 server Finished, 4 client
 Finished, 5 ready, 6 closing, 7 closed and 8 failed. Only counters and state are
 logged by the board; keys and decrypted record buffers are not logged.
+
+## MQTT broker test
+
+Set these values in `src/board.h`, then rebuild the H753 library and example:
+
+```c
+#define NET_DEMO_MQTT_TEST 1
+#define NET_DEMO_TLS_TEST 0
+#define NET_DEMO_HTTP_TEST 0
+#define NET_DEMO_TEST_COUNT 0
+#define NET_DEMO_HOST "10.5.5.51"
+#define NET_DEMO_MQTT_PORT 1883
+```
+
+Use the broker computer's actual LAN address. Assign a unique
+NET_DEMO_MQTT_CLIENT_ID and NET_DEMO_MQTT_TOPIC for each board.
+The example subscribes at QoS 1 and publishes a numbered message to that same
+topic once a second. It validates the returned topic and payload and prints
+`MQTT echo checked 1`, then every 100 messages. Use a topic without an existing
+retained message, and do not publish unrelated messages to it during this test.
+
+On a Mac with Homebrew, install Mosquitto if needed:
+
+```sh
+brew install mosquitto
+```
+
+Run this separate foreground broker configuration for the trusted test LAN.
+This listener is plaintext and allows anonymous clients; it is not a deployment
+configuration. Stop any other broker already using port 1883.
+
+```sh
+cat > mosquitto-demo.conf <<'EOF'
+listener 1883 0.0.0.0
+allow_anonymous true
+persistence false
+EOF
+mosquitto -c mosquitto-demo.conf -v
+```
+
+Allow TCP port 1883 through the host firewall. Reset the board and expect DHCP,
+`MQTT connecting`, `MQTT subscribed`, and increasing verified echo counts.
+Stop/restart the broker and disconnect/reconnect the cable to check fresh
+CONNECT, resubscription and resumed echoes without resetting the board.
+Host tests pass; these MQTT hardware checks remain pending.
+
+MQTT can also use the existing TLS layer by setting NET_DEMO_TLS_TEST to 1
+and selecting a compatible broker endpoint and port. This uses the demo's
+TLS 1.3 external PSK and P-256 profile, not certificate authentication.
+The tested Mosquitto 2.0.18 PSK listener does not accept TLS 1.3, so do not
+point this mode at that listener. The host test uses an OpenSSL TLS 1.3 endpoint
+in front of the localhost broker to test the combined MQTT/TLS implementation.
+Start hardware validation with plaintext MQTT above.
+
+Broker references: [installation](https://mosquitto.org/download/) and
+[configuration](https://mosquitto.org/man/mosquitto-conf-5.html).

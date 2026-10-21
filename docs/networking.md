@@ -69,8 +69,8 @@ Other applications do not link the IP stack or DMA storage unless they use it.
   until lwIP finishes it, so a late answer cannot change a replacement socket.
 - Ethernet SockIntrf TLS/DTLS selections, credential storage and LTE
   release-assistance operations return false. The separate native `Tls` wrapper
-  supports the PSK profile described below. nRF91 modem TLS/DTLS support is unchanged. MQTT and CoAP work
-  remains separate.
+  supports the PSK profile described below. nRF91 modem TLS/DTLS support is unchanged. MQTT is a shared client above the
+  selected stream; CoAP remains unfinished.
 - H753 driver: MAC DevNo 0, LAN8742A PHY over RMII, auto-negotiated 10/100 Mbit/s,
   four RX and four TX descriptors. A fatal DMA bus error requires reinitialization.
   Other PHYs, MII and Ethernet power-management modes are not implemented.
@@ -179,6 +179,70 @@ Certificate authentication, DTLS, broader protocol/error handling,
 credential-tag integration and independent security review remain future work.
 The shared protocol/crypto separation allows this component to move with the
 communications code into Voci when the ecosystem is ready.
+
+## Shared MQTT client
+
+`include/net/mqtt.h` and `src/net/mqtt.cpp` implement MQTT 3.1.1 over an
+injected, already-connected synchronous `DevIntrf_t`. The C API owns all state
+in `MqttDev_t`; the C++ `Mqtt : Device` wrapper calls that same implementation
+and accepts `DeviceIntrf *`. It is a protocol client, not another socket driver.
+Use a TCP SockIntrf or an authenticated Tls interface. No controller, lwIP,
+broker or crypto implementation is copied into MQTT.
+
+The initial profile supports clean-session CONNECT/CONNACK, optional username
+and binary password, QoS 0/1 publish and receive, retained publications,
+one-filter SUBSCRIBE and UNSUBSCRIBE, acknowledgements, PINGREQ/PINGRESP and
+DISCONNECT. Topic names and filters are checked for UTF-8 and wildcard placement.
+QoS 2, persistent sessions, automatic retransmission across reconnects, Will
+messages, MQTT 5 and MQTT-SN are not implemented. Subscriptions must be renewed
+after reconnect. Do not interpret a successful enqueue as broker delivery.
+
+The client has one output packet, one outstanding acknowledged operation and
+one received-message view. Each packet's Remaining Length is limited to 1024
+bytes, including topic and packet identifier overhead. Both buffers and all
+state are embedded in the context; no heap, exceptions, RTTI or RTOS is needed.
+Outgoing calls copy their arguments and return false when busy or invalid.
+Malformed, unsupported or oversized received packets fail the session.
+
+Call `Process(now, transportOpen)` frequently from the same foreground owner
+as IP/TLS. It makes at most one write and one read per call; underlying
+synchronous transport blocking and MaxRetry still apply. Set MaxRetry to zero
+for bounded polling. When TLS is selected, pump TLS before MQTT and pass the
+TLS readiness state. Never interleave raw application writes on that stream.
+
+`Message()` returns a borrowed topic/payload view; the topic is length-delimited,
+not NUL terminated. Consume it promptly, then call `Release()`. For QoS 1,
+Release accepts ownership and permits PUBACK to be sent. Holding a message
+applies backpressure and prevents processing later packets, including PINGRESP.
+QoS 1 may deliver duplicates; the application must tolerate them. `Busy()`
+remains true until output and any required acknowledgement/control reply have
+completed. After SUBACK, `Result()` is the granted QoS or 0x80 for a refused
+subscription. A refused subscription does not close the MQTT connection.
+
+Timeout covers CONNECT, pending output/acknowledgement and a partially received
+packet. Timestamps wrap as uint32_t milliseconds; Timeout must be 1..INT32_MAX.
+KeepAlive is in seconds; zero disables it. Failure wipes buffered credentials
+and messages. The caller closes the transport and initializes a fresh session.
+Reset does not close an injected transport. Disable pauses only the C++ pump;
+deadlines continue to elapse. DISCONNECT completion means accepted by the
+transport: with TLS, finish flushing its output and perform TLS close_notify
+before closing TCP.
+
+`python3 tests/net/run_mqtt.py` checks wire fixtures, partial transfers, binary
+payloads, QoS acknowledgements, malformed packets, UTF-8, buffer bounds,
+keepalive, timeout wrap, EOF and wiping at O0/O2 with ASan/UBSan, plus the C header.
+With Mosquitto installed (or MOSQUITTO pointing to it), it also runs a localhost
+broker test. The TLS variant requires OpenSSL 3 and the existing micro-ecc
+checkout (UECC_ROOT overrides its path). It uses an OpenSSL TLS 1.3 PSK-DHE
+endpoint forwarding to Mosquitto, because the tested Mosquitto 2.0.18 PSK
+listener does not accept TLS 1.3. This is a host test, not a production proxy.
+
+The H753 EthernetTcpDemo includes an optional MQTT subscribe/self-publish test.
+See its README for broker setup and firmware configuration. Hardware MQTT
+validation is pending. Existing nRF91 modem code is unchanged; using MQTT on
+nRF91 also requires adding the shared source to that MCU library project.
+
+Protocol reference: [OASIS MQTT 3.1.1 plus Errata 01](https://docs.oasis-open.org/mqtt/mqtt/v3.1.1/errata01/os/mqtt-v3.1.1-errata01-os-complete.html).
 
 ## NUCLEO-H753ZI bring-up
 

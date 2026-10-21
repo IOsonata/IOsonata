@@ -57,6 +57,14 @@ SOFTWARE.
 #ifndef NET_DEMO_TLS_TEST
 #define NET_DEMO_TLS_TEST 0
 #endif
+#ifndef NET_DEMO_MQTT_TEST
+#define NET_DEMO_MQTT_TEST 0
+#endif
+#if NET_DEMO_MQTT_TEST
+#include "net/mqtt.h"
+static_assert(NET_DEMO_HTTP_TEST == 0 && NET_DEMO_TEST_COUNT == 0,
+	"Select one Ethernet application test");
+#endif
 #if NET_DEMO_TLS_TEST
 #include "net/tls.h"
 #include NET_DEMO_TLS_ENGINE_HEADER
@@ -121,7 +129,12 @@ static const SockIntrfCfg_t s_SockCfg = {
 #else
 	.Proto = NET_DEMO_PROTO,
 	.pHost = NET_DEMO_HOST,
-	.Port = 2469,
+	.Port =
+#if NET_DEMO_MQTT_TEST
+		NET_DEMO_MQTT_PORT,
+#else
+		2469,
+#endif
 #endif
 	.LocalPort = 0,
 	.SecTag = 0,
@@ -360,6 +373,139 @@ static void HttpTest(uint32_t Now)
 }
 #endif
 
+
+#if NET_DEMO_MQTT_TEST
+static Mqtt s_Mqtt;
+static bool s_MqttStarted;
+static bool s_MqttSubscribed;
+static bool s_MqttSubscribeSent;
+static bool s_MqttWaiting;
+static uint32_t s_MqttChecked;
+static uint32_t s_MqttSentAt;
+#if !NET_DEMO_TLS_TEST
+static uint32_t s_MqttRetry;
+#endif
+static char s_MqttPayload[48];
+static int s_MqttLength;
+
+static void MqttTestReset()
+{
+	s_Mqtt.Reset();
+	s_MqttStarted = false;
+	s_MqttSubscribed = false;
+	s_MqttSubscribeSent = false;
+	s_MqttWaiting = false;
+}
+
+static bool MqttTest(DeviceIntrf *pTransport, uint32_t Now, bool Open)
+{
+	const MqttCfg_t cfg = {NET_DEMO_MQTT_CLIENT_ID, nullptr, nullptr, 0, 15, 5000};
+	const MqttMessage_t *message;
+	MQTT_STATE state;
+
+	if (!s_MqttStarted)
+	{
+		if (!s_Mqtt.Init(cfg, pTransport, Now))
+		{
+			SysLogPrintf(SysLogGet(), "MQTT init failed: %d\r\n", (int)s_Mqtt.Error());
+			return false;
+		}
+		s_MqttStarted = true;
+		SysLogPrintf(SysLogGet(), "MQTT connecting: %s\r\n", NET_DEMO_MQTT_CLIENT_ID);
+	}
+	state = s_Mqtt.Process(Now, Open);
+	if (state == MQTT_FAILED || state == MQTT_CLOSED)
+	{
+		SysLogPrintf(SysLogGet(), "MQTT ended: error=%d result=%u\r\n",
+			(int)s_Mqtt.Error(), (unsigned)s_Mqtt.Result());
+		return false;
+	}
+	if (!s_Mqtt.Connected())
+	{
+		return true;
+	}
+	if (!s_MqttSubscribeSent)
+	{
+		s_MqttSubscribeSent = s_Mqtt.Subscribe(NET_DEMO_MQTT_TOPIC, 1, Now);
+	}
+	else if (!s_MqttSubscribed && !s_Mqtt.Busy())
+	{
+		if (s_Mqtt.Result() == 0x80)
+		{
+			SysLogPrintf(SysLogGet(), "MQTT subscription denied\r\n");
+			return false;
+		}
+		s_MqttSubscribed = true;
+		SysLogPrintf(SysLogGet(), "MQTT subscribed: %s QoS=%u\r\n",
+			NET_DEMO_MQTT_TOPIC, (unsigned)s_Mqtt.Result());
+	}
+	message = s_Mqtt.Message();
+	if (message)
+	{
+		if (!s_MqttWaiting || message->TopicLen != strlen(NET_DEMO_MQTT_TOPIC) ||
+			memcmp(message->pTopic, NET_DEMO_MQTT_TOPIC, message->TopicLen) ||
+			message->PayloadLen != (size_t)s_MqttLength ||
+			memcmp(message->pPayload, s_MqttPayload, message->PayloadLen))
+		{
+			SysLogPrintf(SysLogGet(), "MQTT echo mismatch (use a unique, non-retained test topic)\r\n");
+			s_Mqtt.Release();
+			return false;
+		}
+		s_Mqtt.Release();
+		s_MqttWaiting = false;
+		s_MqttChecked++;
+		if (s_MqttChecked == 1 || s_MqttChecked % 100 == 0)
+		{
+			SysLogPrintf(SysLogGet(), "MQTT echo checked %lu\r\n", (unsigned long)s_MqttChecked);
+		}
+	}
+	if (s_MqttWaiting && (uint32_t)(Now - s_MqttSentAt) >= 5000U)
+	{
+		SysLogPrintf(SysLogGet(), "MQTT echo timeout\r\n");
+		return false;
+	}
+	if (s_MqttSubscribed && !s_MqttWaiting && !s_Mqtt.Busy() &&
+		(uint32_t)(Now - s_MqttSentAt) >= 1000U)
+	{
+		s_MqttLength = snprintf(s_MqttPayload, sizeof(s_MqttPayload),
+			"IOsonata MQTT %lu", (unsigned long)s_MqttChecked);
+		if (s_Mqtt.Publish(NET_DEMO_MQTT_TOPIC, (const uint8_t *)s_MqttPayload,
+			s_MqttLength, 1, false, Now))
+		{
+			s_MqttWaiting = true;
+			s_MqttSentAt = Now;
+		}
+	}
+	return true;
+}
+
+#if !NET_DEMO_TLS_TEST
+static void MqttTcpTest(uint32_t Now)
+{
+	if (!s_MqttStarted)
+	{
+		if ((uint32_t)(Now - s_MqttRetry) < 3000U)
+		{
+			return;
+		}
+		if (!s_Socket.Init(s_SockCfg))
+		{
+			SysLogPrintf(SysLogGet(), "MQTT TCP connect failed, retry in 3 seconds\r\n");
+			s_MqttRetry = TimerGetMilisecond(&s_Timer);
+			s_Socket.Close();
+			return;
+		}
+	}
+	if (!MqttTest(&s_Socket, TimerGetMilisecond(&s_Timer), s_Socket.Connected()))
+	{
+		MqttTestReset();
+		s_Socket.Close();
+		s_MqttRetry = TimerGetMilisecond(&s_Timer);
+	}
+}
+#endif
+#endif
+
 #if NET_DEMO_TLS_TEST
 static NET_DEMO_TLS_AES_TYPE s_TlsAes;
 static NET_DEMO_TLS_HASH_TYPE s_TlsHash;
@@ -382,6 +528,9 @@ static int s_TlsLength;
 
 static void TlsTestDown(uint32_t Now, const char *pReason)
 {
+#if NET_DEMO_MQTT_TEST
+	MqttTestReset();
+#endif
 	SysLogPrintf(SysLogGet(), "TLS: %s (error=%d), %s\r\n",
 		pReason, (int)s_Tls.Error(),
 		IpReady() ? "retry in 3 seconds" : "waiting for network recovery");
@@ -526,6 +675,13 @@ static void TlsTest(uint32_t Now)
 			"TLS authenticated: AES-128-GCM/SHA-256, PSK-DHE P-256\r\n" :
 			"TLS authenticated: AES-128-GCM/SHA-256, PSK-only\r\n");
 	}
+#if NET_DEMO_MQTT_TEST
+	if (!MqttTest(&s_Tls, Now, s_Tls.Connected()))
+	{
+		TlsTestDown(TimerGetMilisecond(&s_Timer), "MQTT session failed");
+	}
+	return;
+#endif
 	if (s_TlsLength == 0)
 	{
 		s_TlsLength = snprintf(s_TlsMessage, sizeof(s_TlsMessage),
@@ -595,6 +751,9 @@ static void Report(uint32_t Evt, void *pCtx)
 	}
 	if (ready == false)
 	{
+#if NET_DEMO_MQTT_TEST
+		MqttTestReset();
+#endif
 #if NET_DEMO_TLS_TEST
 		if (s_TlsStarted)
 		{
@@ -621,6 +780,10 @@ static void Report(uint32_t Evt, void *pCtx)
 	}
 #if NET_DEMO_TLS_TEST
 	TlsTest(TimerGetMilisecond(&s_Timer));
+	return;
+#endif
+#if NET_DEMO_MQTT_TEST && !NET_DEMO_TLS_TEST
+	MqttTcpTest(TimerGetMilisecond(&s_Timer));
 	return;
 #endif
 #if NET_DEMO_HTTP_TEST
@@ -721,7 +884,7 @@ int main()
 	{
 		SysLogPrintf(SysLogGet(), "IP initialization failed\r\n");
 	}
-	else if (msTimerEnableTrigger(&s_Timer, 1, NET_DEMO_TLS_TEST || NET_DEMO_HTTP_TEST || NET_DEMO_TEST_COUNT > 0 ? 10 : 1000,
+	else if (msTimerEnableTrigger(&s_Timer, 1, NET_DEMO_MQTT_TEST || NET_DEMO_TLS_TEST || NET_DEMO_HTTP_TEST || NET_DEMO_TEST_COUNT > 0 ? 10 : 1000,
 		TIMER_TRIG_TYPE_CONTINUOUS, ReportTimer, nullptr) == 0)
 	{
 		SysLogPrintf(SysLogGet(), "Report timer initialization failed\r\n");
