@@ -7,6 +7,7 @@ Reads the environmental sensors that board.h selects and prints their values
 as they come, once per second. board.h selects a sensor by its name:
 
 	HTS221		ST HTS221 humidity and temperature
+	LPS22HB		ST LPS22HB pressure and temperature, at either I2C address
 
 and gives the I2C bus with I2C_DEVNO and I2C_PINS. With UART_RETARGET and the
 UART pins, the Release build prints on the UART at 115200 8N1, the Debug build
@@ -48,6 +49,7 @@ SOFTWARE.
 #include "idelay.h"
 #include "stddev.h"
 #include "sensors/humi_hts221.h"
+#include "sensors/press_lps22hb.h"
 #include "board.h"
 
 #ifdef MCUOSC
@@ -135,6 +137,32 @@ static HumiHts221 s_Hts221;
 static bool s_bHts221 = false;
 #endif
 
+#ifdef LPS22HB
+static const PressureSensorCfg_t s_Lps22hbPressCfg = {
+	.DevAddr = 0,
+	.OpMode = SENSOR_OPMODE_CONTINUOUS,
+	.Freq = 1000,
+	.PresOvrs = 0,
+	.FilterCoeff = 0,
+	.EvtHandler = NULL,
+};
+
+static const TempSensorCfg_t s_Lps22hbTempCfg = {
+	.DevAddr = 0,
+	.OpMode = SENSOR_OPMODE_CONTINUOUS,
+	.Freq = 1000,
+	.IntPrio = 0,
+	.Inter = 0,
+	.IntPol = DEVINTR_POL_LOW,
+	.TempOvrs = 0,
+	.FilterCoeff = 0,
+	.DataRdyCB = NULL,
+};
+
+static PressLps22hb s_Lps22hb;
+static bool s_bLps22hb = false;
+#endif
+
 // Prints a value in hundredths with 2 decimals, without floating point
 static void PrintCenti(const char *pName, int32_t Val, const char *pUnit)
 {
@@ -176,6 +204,19 @@ int main()
 	}
 #endif
 
+#ifdef LPS22HB
+	s_bLps22hb = s_Lps22hb.Init(s_Lps22hbPressCfg, &s_I2c) && s_Lps22hb.Init(s_Lps22hbTempCfg, &s_I2c);
+	if (s_bLps22hb)
+	{
+		printf("LPS22HB at 0x%02lX: found\r\n", (unsigned long)s_Lps22hb.DeviceAddress());
+		s_Lps22hb.Enable();
+	}
+	else
+	{
+		printf("LPS22HB: not found\r\n");
+	}
+#endif
+
 	while (1)
 	{
 #ifdef HTS221
@@ -188,6 +229,20 @@ int main()
 			s_Hts221.Read(t);
 			printf("HTS221: ");
 			PrintCenti("humidity", h.Humidity, "%, ");
+			PrintCenti("temperature", t.Temperature, "C\r\n");
+		}
+#endif
+#ifdef LPS22HB
+		if (s_bLps22hb && s_Lps22hb.UpdateData())
+		{
+			PressureSensorData_t p;
+			TempSensorData_t t;
+
+			s_Lps22hb.Read(p);
+			s_Lps22hb.Read(t);
+			printf("LPS22HB: ");
+			// hPa x 100 is Pa
+			PrintCenti("pressure", (int32_t)p.Pressure, "hPa, ");
 			PrintCenti("temperature", t.Temperature, "C\r\n");
 		}
 #endif

@@ -46,6 +46,7 @@ TESTS = {
 	'lsm6dsl': ['src/sensors/ag_lsm6dsl.cpp', 'src/sensors/accel_sensor.cpp',
 				'src/sensors/gyro_sensor.cpp'],
 	'hts221': ['src/sensors/humi_hts221.cpp'],
+	'lps22hb': ['src/sensors/press_lps22hb.cpp'],
 }
 
 

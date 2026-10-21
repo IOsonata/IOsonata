@@ -63,5 +63,6 @@ SOFTWARE.
 
 // Onboard sensors read by the demo
 #define HTS221
+#define LPS22HB
 
 #endif // __BOARD_H__

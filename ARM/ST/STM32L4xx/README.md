@@ -199,6 +199,11 @@ COM port at 115200 8N1 in Release, with semihosting in Debug.
 B-L475E-IOT01A2 run (2026-10-21), Release: the HTS221 is found and prints one
 reading per second, 13.49 % and 30.93 C for the first one, then about 17.8 %
 and 31.4 C. Not compared with a reference instrument.
+EnvSensorDemo also reads the onboard LPS22HB (`src/sensors/press_lps22hb.cpp`)
+at 0x5D, 1 Hz, and prints the pressure in hPa and its temperature. The driver
+finds the device at either address, 0x5C or 0x5D, when none is given, and
+reads the status and both outputs in one I2C transfer. `tests/sensors/run.py`
+runs it against a register model. Not run on hardware yet.
 L496 and L4S9 I2C4 use virtual index 3. The L432 has no I2C2: index 1 fails
 initialization, I2C1 and I2C3 keep indices 0 and 2.
 

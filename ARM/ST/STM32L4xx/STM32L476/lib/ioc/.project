@@ -1396,6 +1396,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/mag_sensor.h</locationURI>
 		</link>
 		<link>
+			<name>include/sensors/press_lps22hb.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/press_lps22hb.h</locationURI>
+		</link>
+		<link>
 			<name>include/sensors/press_sensor.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/press_sensor.h</locationURI>
@@ -2329,6 +2334,11 @@
 			<name>src/sensors/mag_sensor.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/mag_sensor.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/sensors/press_lps22hb.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/press_lps22hb.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/sensors/temp_NTCS0805E3683FXT.c</name>
