@@ -98,9 +98,17 @@ maintenance calls with the real shared driver. The register model does not
 simulate a physical cache or DMA timing. Tests also cover chaining before USART
 TC with blocking and non-blocking FIFOs, and final TX-ready notification.
 
-Hardware: USART3 PRBS TX with interrupts and DMA enabled at 1 Mbaud measured
-about 99,578 B/s before block chaining was added. The chaining change needs a
-hardware retest; DMA RX loopback validation is still pending.
+Hardware on NUCLEO-H753ZI, October 21, 2026: USART3 PRBS TX with interrupts
+and DMA enabled at 1 Mbaud averaged 100380.37 B/s after block chaining,
+compared with about 99,578 B/s before the change.
+
+UartLoopback with interrupts and DMA enabled passed a 60-second run through
+ST-LINK VCP using `Python/usb_cdc_loopback.py`: 5892096 bytes sent and received,
+98176.83 B/s TX and 98103.09 B/s RX, zero errors and zero pending bytes after
+draining. First RX was 3 ms; longest TX wait was 25 ms and RX gap 15 ms.
+The USB CDC banner was absent because the firmware was UartLoopback. This is
+UART DMA TX/RX evidence, not a native USB transfer. Other UART instances and
+DMA polling mode still need hardware validation.
 
 ## I2C and SPI
 
@@ -341,7 +349,8 @@ buffers or perform TX clean and RX invalidation with exclusive cache lines.
 `python3 tests/stm32h7/run_dma.py` tests the compiled Arm manager against modeled
 registers: all streams, routing, widths, direction, remaining counts, interrupt
 vectors, flags, ownership, rejected buffers and disable timeout. The manager
-compiles at -O0 and -O3 for H753 and L476. Hardware DMA transfers remain untested.
+compiles at -O0 and -O3 for H753 and L476. USART3 DMA TX/RX is hardware
+validated as recorded in [UART DMA](#uart-dma); other routes remain untested.
 
 ## Device numbers
 
@@ -417,7 +426,7 @@ Additional regressions:
 | `python3 tests/stm32h7/run_crypto.py` | RNG failures and software crypto known answers |
 | `python3 tests/storage/stm32h7_flash/run.py` | Flash bank mappings, erase/program rules, errors and timeout |
 
-Hardware priorities are UART DMA TX then RX, I2C/SPI master/slave transfers,
+Hardware priorities are CryptoTest and I2C/SPI master/slave transfers,
 Ethernet DHCP/ping and UDP/TCP when a cable is available, then reserved-sector
 flash NVM and DFU handoff. Previously recorded LED, timer, interrupt UART and
 USB results remain the hardware evidence for those paths.
