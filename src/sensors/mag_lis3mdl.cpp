@@ -3,8 +3,8 @@
 
 @brief	ST LIS3MDL 3 axis magnetometer implementation
 
-UpdateData reads the status, the 3 axes and the temperature in one access,
-from STATUS to TEMP_OUT_H. The scale of the outputs, 6842 LSB per gauss at
+UpdateData reads the status and the 3 axes in one access, from STATUS to
+OUT_Z_H, then the temperature. The scale of the outputs, 6842 LSB per gauss at
 4 gauss, is 14.6 nT per LSB: the calibration gain keeps it in floating point.
 
 @author	Hoang Nguyen Hoan
@@ -377,8 +377,8 @@ bool MagLis3mdl::StartSampling()
 
 bool MagLis3mdl::UpdateData()
 {
-	// Status, X, Y, Z then temperature, little endian
-	uint8_t d[9];
+	// Status, X, Y then Z, little endian
+	uint8_t d[7];
 	uint8_t regaddr = LIS3MDL_STATUS_REG;
 
 	if (Read(DeviceAddress(), &regaddr, 1, d, sizeof(d)) != (int)sizeof(d))
@@ -391,15 +391,22 @@ bool MagLis3mdl::UpdateData()
 		return false;
 	}
 
-	int32_t t = (int16_t)(d[7] | (d[8] << 8));
-
 	vData.Timestamp = vpTimer != NULL ? vpTimer->uSecond() : 0;
 	vData.X = (int16_t)(d[1] | (d[2] << 8));
 	vData.Y = (int16_t)(d[3] | (d[4] << 8));
 	vData.Z = (int16_t)(d[5] | (d[6] << 8));
-	// Degree C x 100
-	vData.Temp = (int16_t)(t * 100 / LIS3MDL_TEMP_SENSITIVITY + LIS3MDL_TEMP_OFFSET * 100);
 	vSampleCnt++;
+
+	// Temperature in its own access: on the B-L475E-IOT01A2, the 2 bytes read
+	// after OUT_Z_H in the same access were the X output again
+	regaddr = LIS3MDL_TEMP_OUT_L_REG;
+	if (Read(DeviceAddress(), &regaddr, 1, d, 2) == 2)
+	{
+		int32_t t = (int16_t)(d[0] | (d[1] << 8));
+
+		// Degree C x 100
+		vData.Temp = (int16_t)(t * 100 / LIS3MDL_TEMP_SENSITIVITY + LIS3MDL_TEMP_OFFSET * 100);
+	}
 
 	return true;
 }
