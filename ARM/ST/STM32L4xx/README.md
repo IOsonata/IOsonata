@@ -213,7 +213,11 @@ the 48 MHz clock. The STM32L475VG and STM32L476 have no AES, HASH or PKA. The
 STM32L476 example CryptoTest runs `exemples/crypto/crypto_engine_test.cpp`
 with the hardware RNG and the software AES, SHA-256 and P-256 engines; the
 Release build prints on the ST-LINK virtual COM port at 115200 8N1, the Debug
-build uses semihosting. Not run on hardware yet.
+build uses semihosting. B-L475E-IOT01A2 run (2026-10-21): 72 passed, 0
+failed, the RNG sample checks, AES-128 known answers, CMAC, CCM, GCM, software
+ECB/CBC decryption, 200 AES rounds against the software engine and the P-256
+checks. The AES-256 and SHA-256/HMAC engine sections of the test are built only
+for boards whose board.h selects such an engine (20 checks on the STM32H753).
 
 ## Validation
 
