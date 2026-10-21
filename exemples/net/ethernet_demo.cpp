@@ -114,8 +114,6 @@ static int s_MessageLength;
 static int s_MessageOffset;
 static bool s_WasReady;
 static volatile bool s_ReportQueued;
-static volatile uint32_t s_ReportTimerCount;
-static volatile uint32_t s_ReportQueueFail;
 alignas(4) static uint8_t s_LogMem[SYSLOG_MEMSIZE(16, 128)];
 static const SysLogCfg_t s_LogCfg = {
 	.pMem = s_LogMem,
@@ -134,9 +132,6 @@ static void Report(uint32_t Evt, void *pCtx)
 	(void)Evt;
 	(void)pCtx;
 	s_ReportQueued = false;
-	SysLogPrintf(SysLogGet(), "[ETH] ms=%lu report=%lu qfail=%lu link=%lu ready=%u\r\n",
-		(unsigned long)TimerGetMilisecond(&s_Timer), (unsigned long)s_ReportTimerCount,
-		(unsigned long)s_ReportQueueFail, (unsigned long)s_Ethernet.Rate(), (unsigned)ready);
 	if (ready != s_WasReady)
 	{
 		s_WasReady = ready;
@@ -202,17 +197,12 @@ static void Report(uint32_t Evt, void *pCtx)
 
 static void ReportTimer(TimerDev_t *pTimer, int TrigNo, void *pCtx)
 {
-	s_ReportTimerCount = s_ReportTimerCount + 1U;
 	(void)pTimer;
 	(void)TrigNo;
 	(void)pCtx;
 	if (s_ReportQueued == false)
 	{
 		s_ReportQueued = AppEvtHandlerQue(0, nullptr, Report);
-		if (s_ReportQueued == false)
-		{
-			s_ReportQueueFail = s_ReportQueueFail + 1U;
-		}
 	}
 }
 
@@ -242,8 +232,6 @@ int main()
 	{
 		SysLogPrintf(SysLogGet(), "Waiting for Ethernet link and DHCP\r\n");
 	}
-	SysLogPrintf(SysLogGet(), "[ETH] AppRun: timer dev=%d freq=%lu Hz\r\n",
-		s_Timer.DevNo, (unsigned long)s_Timer.Freq);
 	AppRun();
 
 	return 0;

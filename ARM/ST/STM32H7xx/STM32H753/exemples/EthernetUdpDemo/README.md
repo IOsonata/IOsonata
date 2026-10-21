@@ -14,4 +14,6 @@ for DHCP/ping and UDP/TCP echo instructions. Socket examples need
 `NET_DEMO_HOST` set to the computer's LAN address and `Python/net_echo.py`
 running on port 2469. EthernetDemo only runs DHCP and responds to ping.
 
-Builds and simulations pass. Physical Ethernet testing remains pending.
+NUCLEO-H753ZI hardware validation on October 21, 2026 confirmed UDP echo
+in both directions. The startup log had missing replies 4-7, followed by
+consecutive replies 8-64; UDP endurance and the startup gap remain to be checked.

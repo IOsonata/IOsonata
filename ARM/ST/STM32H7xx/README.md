@@ -253,8 +253,12 @@ SDK layout must include `external/lwip` beside IOsonata; the tested version is
 lwIP 2.2.0. See [networking and board bring-up](../../../docs/networking.md)
 for build steps, pin mapping, ownership, memory, limits and validation.
 
-All examples compile/link and the packet/register simulations pass. Physical
-Ethernet operation remains untested.
+All examples compile/link and the packet/register simulations pass. On
+October 21, 2026, NUCLEO-H753ZI hardware tests confirmed 100 Mbit/s link,
+DHCP, ping (20/20 replies), UDP/TCP echo, TCP server restart and cable
+reconnection without a board reset. The UDP startup log had a reply gap;
+DNS, sustained load and D-cache-enabled traffic still need hardware tests.
+See the networking document for measurements and test limits.
 
 ## Crypto engines
 
@@ -427,7 +431,7 @@ Additional regressions:
 | `python3 tests/storage/stm32h7_flash/run.py` | Flash bank mappings, erase/program rules, errors and timeout |
 
 Hardware priorities are CryptoTest and I2C/SPI master/slave transfers,
-Ethernet DHCP/ping and UDP/TCP when a cable is available, then reserved-sector
+Ethernet DNS and sustained traffic, then reserved-sector
 flash NVM and DFU handoff. Previously recorded LED, timer, interrupt UART and
 USB results remain the hardware evidence for those paths.
 
@@ -460,5 +464,3 @@ not yet been validated on hardware.
 - ST STM32CubeH7 `Projects/NUCLEO-H743ZI/Templates_LL/Src/main.c` confirms the
   400/200/100 MHz voltage-scale-1 clock and flash timing configuration. This
   port accesses the CMSIS registers directly; it does not depend on HAL or LL.
-
-

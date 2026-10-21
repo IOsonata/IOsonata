@@ -6,8 +6,9 @@ and a C++ wrapper. nRF91 uses its modem's IP stack. STM32H753 now uses the share
 can use the same socket interface on either target. The nRF91 implementation
 and public socket signatures are unchanged.
 
-The H753 implementation is ready for board testing. Builds and simulations pass;
-Ethernet operation on the physical board has not yet been validated.
+NUCLEO-H753ZI hardware tests confirm DHCP, ping, UDP/TCP echo and TCP recovery
+after server restart and cable reconnection. See the hardware results below
+for the tested scope and remaining checks.
 
 ## Layers and memory
 
@@ -162,8 +163,34 @@ It does not model real cache coherence or the physical MAC/DMA bus.
 The full H753 runner builds the library and nine bare-metal applications in
 Debug/Release with and without hard-float. It also checks DMA section placement,
 Ethernet/USB vector selection, unused networking removal and the existing
-startup/UART/timer/USB register tests. Physical Ethernet traffic, electrical
-behavior and throughput remain pending.
+startup/UART/timer/USB register tests. These automated checks are separate from
+the hardware results below.
+
+### NUCLEO-H753ZI hardware results, October 21, 2026
+
+The maintainer ran EthernetDemo, EthernetUdpDemo and EthernetTcpDemo with the
+LAN8742A RMII PHY on CN14 and USART3/ST-LINK VCP at 1000000 baud, 8N1.
+The LAN negotiated 100 Mbit/s and DHCP assigned `10.5.5.54`. Initial link-up
+appeared around 2 seconds and the address around 11 seconds after startup.
+The exact flashed commit, compiler and Debug/Release profile were not recorded.
+
+| Check | Observed result |
+|---|---|
+| ICMP echo | 20 sent, 20 received, zero loss; RTT min/avg/max 1.000/1.330/1.631 ms |
+| UDP echo | Both directions confirmed with `Python/net_echo.py`; replies 8-64 were consecutive after a startup gap |
+| TCP echo | Matching board TX/RX messages and host receipts |
+| TCP server restart | New connection on source port 64862; message numbering continued at 52 without resetting the board |
+| Cable recovery | Link down at 160 s, link restored at 189 s, DHCP and TCP restored at 196 s; new source port 64863 and matching replies 102-107 without resetting the board |
+
+Temporary diagnostics showed no application event-queue refusals in these logs.
+Those diagnostics have been removed. The example retains its explicit static
+1024-byte UART TX FIFO so startup and message bursts print complete lines.
+
+The UDP startup log received replies 0-3 together but did not show replies 4-7;
+the cause was not established. This is basic echo validation, not a loss-free
+UDP endurance result. DNS hostnames, DHCP lease expiry/address changes,
+large payloads, sustained load, throughput and D-cache-enabled operation still
+need hardware tests. The numeric-IP echo tests did not exercise DNS.
 
 ## References
 
