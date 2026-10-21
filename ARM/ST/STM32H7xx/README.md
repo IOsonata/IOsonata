@@ -169,6 +169,20 @@ Debug and Release library/kernel/example builds pass with GNU Arm GCC 13.2.1.
 The linked vectors select TaktOS PendSV and SysTick handlers. TaktOS operation
 on NUCLEO-H753ZI has not yet been hardware tested.
 
+## I2C and SPI master/slave examples
+
+[I2CMasterSlave](STM32H753/exemples/I2CMasterSlave/README.md) connects I2C1
+master to I2C2 slave with two jumpers and external pull-ups.
+[SPIMasterSlave](STM32H753/exemples/SPIMasterSlave/README.md) connects SPI1
+master to SPI3 slave with four jumpers. Both use the shared IOsonata example
+applications and keep board mappings in `board.h`.
+
+Build the library and application in Release and open ST-LINK VCP at
+1000000 baud, 8N1. Each tests polling and interrupt master operation against
+an interrupt slave; SPI covers modes 0-3. Expected summary is 2 passed,
+0 failed, 0 skipped. Hardware validation remains pending. DMA is explicitly
+excluded until the H7 I2C/SPI driver integration is implemented.
+
 ## Native USB CDC examples
 
 Import `STM32H753/exemples/UsbCdcLoopback/ioc` or

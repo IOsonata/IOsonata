@@ -27,6 +27,8 @@ PROJECT = PORT / 'STM32H753'
 LWIP = Path(os.environ.get('LWIP_ROOT', ROOT.parent / 'external/lwip'))
 FUSION = Path(os.environ.get('FUSION_ROOT', ROOT.parent / 'external/Fusion'))
 EXAMPLES = {
+    'I2CMasterSlave': 'exemples/i2c/i2c_master_slave.cpp',
+    'SPIMasterSlave': 'exemples/spi/spi_master_slave.cpp',
     'CryptoTest': 'exemples/crypto/crypto_engine_test.cpp',
     'Blinky': 'exemples/misc/blinky.c',
     'TimerDemo': 'exemples/timer/timer_demo.cpp',
@@ -187,7 +189,7 @@ def main():
             for name, rel in EXAMPLES.items():
                 obj = out / (name + '.o')
                 compile_source(ROOT / rel, obj, ['-I' + str(PROJECT / 'exemples' / name / 'src')])
-                link(obj, out / (name + '.elf'), usb=name.startswith('Usb') or name == 'CryptoTest')
+                link(obj, out / (name + '.elf'), usb=name.startswith('Usb') or name in ('CryptoTest', 'I2CMasterSlave', 'SPIMasterSlave'))
                 with (out / (name + '.elf')).open('rb') as firmware:
                     elf = ELFFile(firmware)
                     symbols = {s.name: s for s in elf.get_section_by_name('.symtab').iter_symbols()}
