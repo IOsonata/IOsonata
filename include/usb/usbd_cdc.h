@@ -68,7 +68,9 @@ SOFTWARE.
 
 #define USBD_CDC_CONFIG_VALUE			1U
 
-#define USBD_CDC_NOTIF_MPS				8U
+// The serial state notification is 10 bytes, an 8 byte header and 2 state
+// bytes. A 16 byte packet sends it whole, so no controller has to split it.
+#define USBD_CDC_NOTIF_MPS				16U
 #define USBD_CDC_BULK_FS_MPS			64U
 #define USBD_CDC_BULK_HS_MPS			512U
 
