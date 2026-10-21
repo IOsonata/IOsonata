@@ -46,9 +46,17 @@ mode-1 transfers and fails its first 16-byte mode-1 TX: the slave reports
 The shared driver now keeps CRCSIZE at its reset value of 7 even when CRC
 is disabled, and waits at least one SCK period after EOT before disabling
 the H753 master, including between TSIZE chunks. These address ES0392
-sections 2.22.5 and 2.22.6. Hardware retesting is pending; the observed
-mode-1 failure is not yet confirmed resolved. The shared hardware test,
-payloads, mode selection and assertions remain unchanged.
+sections 2.22.5 and 2.22.6. The subsequent hardware run confirmed that
+these corrections did not resolve the mode-1 failure: all eight combinations
+still reported 17 received bytes for the first 16-byte mode-1 TX.
+
+A further configuration correction restricts CFG2.AFCNTR to master mode.
+RM0433 prohibits this bit in slave mode because a disabled slave must release
+MISO. The previous driver set it for both roles. The H753 register test now
+rejects slave configurations with AFCNTR set. This fixes a confirmed register
+configuration error; hardware confirmation of the mode-1 failure remains
+pending. The shared hardware test, payloads, mode selection and assertions
+remain unchanged.
 
 Validation: GNU Arm GCC 13.2.1 compiles the shared application with this
 board configuration in Debug (-O0) and Release (-O3). Project XML and linked
@@ -56,7 +64,8 @@ source paths were checked. Full library/example linking was not rerun.
 The existing H753 bus register tests pass at -O0 and -O3 (with
 `-fno-threadsafe-statics` in the local test toolchain); these model controller
 behavior and do not validate physical clock edges. The added CRCSIZE check
-fails with the preceding driver and passes with the correction. H753
+fails with the preceding driver and passes with the correction. The slave
+AFCNTR check likewise rejects the preceding driver and accepts the correction. H753
 soft/hard-float, L476 and WBA65 shared bus sources compile at -O0 and -O3
 with -Wall -Werror; the WBA SPI model passes 64 checks. The optimized H753
 assembly retains the delay loop before clearing SPE.

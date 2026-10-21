@@ -2238,13 +2238,13 @@ bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfgData)
 #ifdef STM32_SPI_LAYOUT_CFG
 	// Master: the internal slave select is held inactive (SSM and SSI), so
 	// the NSS pin is not used and no mode fault occurs. Slave: the NSS pin is
-	// the frame select. AFCNTR keeps the pins driven by the peripheral when it
-	// is disabled.
-	uint32_t cfg2 = SPI_CFG2_AFCNTR;
+	// the frame select. Only the master may retain alternate-function pin
+	// control while disabled; a disabled slave must release MISO (RM0433).
+	uint32_t cfg2 = 0;
 
 	if (slave == false)
 	{
-		cfg2 |= SPI_CFG2_MASTER | SPI_CFG2_SSM;
+		cfg2 |= SPI_CFG2_AFCNTR | SPI_CFG2_MASTER | SPI_CFG2_SSM;
 	}
 	if (pCfgData->ClkPol == SPICLKPOL_LOW)
 	{

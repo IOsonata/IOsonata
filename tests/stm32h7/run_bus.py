@@ -25,6 +25,10 @@ class H7Spi(Spi):
     """H753 TXP/TXC can interrupt even with SPE clear (ES0392)."""
 
     def wr_reg(self, off, size, value):
+        if off == 0x0c and not value & (1 << 22):
+            # RM0433: AFCNTR is master-only; a disabled slave must
+            # release MISO rather than retain peripheral control.
+            assert not value & (1 << 31), f'{self.name}: slave AFCNTR set'
         if off == 0 and value & 0x200 and not self.slave():
             # ES0392: CRC disabled still requires the reset CRCSIZE=7
             # when receiving a finite-length transfer.
