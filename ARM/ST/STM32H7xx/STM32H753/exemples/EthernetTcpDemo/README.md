@@ -58,5 +58,14 @@ TLS echo checked 100
 Stop/restart the server or unplug/replug the cable. The demo closes failed
 sessions, wipes TLS state, and retries after three seconds once the network is
 ready. Change one PSK byte on the server to check that authentication fails.
-Hardware TLS validation and a fresh ARM build remain pending; host tests are
-recorded in `docs/networking.md`. HTTP and ordinary TCP modes remain available.
+Hardware testing on October 21, 2026 confirmed authenticated encrypted echoes,
+server restart recovery, wrong-PSK rejection and automatic recovery after the
+correct key was restored, without resetting the board. The cable test showed
+DHCP recovery and a new handshake; its completed TLS recovery still needs a log.
+The exact compiler/build profile was not supplied. See `docs/networking.md`
+for hardware evidence and host tests. HTTP and ordinary TCP modes remain available.
+
+For the wrong-key test, stop OpenSSL with Ctrl+C and change the first PSK byte
+from `00` to `ff` in the command above. Leave the board unchanged. Expect
+handshake failures and no new authenticated echoes. Stop OpenSSL again and
+restore the original key beginning `00010203`; the board retries automatically.

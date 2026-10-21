@@ -67,8 +67,9 @@ Other applications do not link the IP stack or DMA storage unless they use it.
   UDP drops new datagrams when its receive queue is full.
 - Four asynchronous DNS query contexts. A timed-out query remains detached
   until lwIP finishes it, so a late answer cannot change a replacement socket.
-- Ethernet TLS, DTLS, credential storage and LTE release-assistance operations
-  return false. nRF91 modem TLS/DTLS support is unchanged. MQTT and CoAP work
+- Ethernet SockIntrf TLS/DTLS selections, credential storage and LTE
+  release-assistance operations return false. The separate native `Tls` wrapper
+  supports the PSK profile described below. nRF91 modem TLS/DTLS support is unchanged. MQTT and CoAP work
   remains separate.
 - H753 driver: MAC DevNo 0, LAN8742A PHY over RMII, auto-negotiated 10/100 Mbit/s,
   four RX and four TX descriptors. A fatal DMA bus error requires reinitialization.
@@ -159,7 +160,8 @@ and handshakes, malformed records, bad tags and Finished values, insecure/failed
 RNG, deadlines including timer wrap, backpressure, EOF, key updates, size limits,
 secret wiping, and the C header. OpenSSL 3 provides an independent live server
 for 19/1024/4096/16000-byte reverse echoes, one-byte I/O, wrong-PSK rejection and
-context reuse across connections. No hardware TLS result is recorded yet.
+context reuse across connections. The maintainer's H753 TLS hardware results
+are recorded below.
 
 Certificate authentication, PSK-DHE, DTLS, broader protocol/error handling,
 credential-tag integration and independent security review remain future work.
@@ -355,6 +357,27 @@ traffic on the board; it is plaintext HTTP, not TLS or certificate validation.
 The exact flashed commit and build profile were not supplied with this log.
 DHCP lease expiry/address changes, maximum throughput, burst load and
 D-cache-enabled operation still need hardware tests.
+
+### Native TLS hardware results, October 21, 2026
+
+The maintainer built and ran EthernetTcpDemo's TLS mode on NUCLEO-H753ZI
+against OpenSSL at `10.5.5.51:2469`, with the board at `10.5.5.54`.
+The demo selects the existing H7 AES/HASH and STM32 RNG providers.
+The exact flashed commit, compiler version and build profile were not supplied.
+
+| Check | Observed result |
+|---|---|
+| TLS 1.3 external PSK | `TLS authenticated: AES-128-GCM/SHA-256, PSK-only` |
+| Encrypted reverse echo | Verified counter reached 1000 before server interruption and 1300 after recovery |
+| Server restart | Transport error 7, retries while unavailable, new authenticated session and continued echo checks without board reset |
+| Wrong PSK | Repeated peer error 8; no authenticated session or successful echo shown |
+| Correct PSK restored | Automatic authentication and verified echo checks resumed through 700 without board reset |
+| Cable interruption | Network-down notification, DHCP recovery and a new TLS handshake were shown; completed TLS recovery after this specific interruption was not captured |
+
+These are initial interoperability and recovery results for the PSK-only profile.
+They do not establish certificate support, forward secrecy, maximum throughput,
+or a security audit. The running firmware establishes a successful maintainer
+build; a fresh automated ARM build was not completed in the implementation session.
 
 ## References
 
