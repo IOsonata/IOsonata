@@ -1031,6 +1031,52 @@ static void HashChecks()
 			memcmp(expected, actual + 1, 32) == 0 && actual[0] == 0xA5 && actual[33] == 0xA5;
 	}
 	check("SHA-256 lengths 0..257 match software, unaligned buffers bounded", match);
+	uint8_t key[133];
+	memset(key, 0xaa, sizeof(key));
+	CryptoKey mk{CRYPTO_KEY_HMAC, CRYPTO_KEY_LOC_PLAIN, CRYPTO_KEY_USE_SIGN, {}};
+	mk.Plain.pData = key + 1; mk.Plain.Len = 131;
+	const char *longMsg = "Test Using Larger Than Block-Size Key - Hash Key First";
+	check("HMAC-SHA-256 long key, RFC 4231 case 6",
+		hash->Mac(CRYPTO_MAC_HMAC, mk, (const uint8_t *)longMsg, strlen(longMsg), actual + 1, 32) == CRYPTO_STATUS_OK &&
+		HexEq(actual + 1, "60e431591ee0b67f0d8a26aacbf5b77f8e0bc6213728c5140546040f0ee37f54", 32));
+	memset(key, 0x0c, 20); mk.Plain.pData = key; mk.Plain.Len = 20;
+	memset(actual, 0xa5, sizeof(actual));
+	check("HMAC-SHA-256 truncation, RFC 4231 case 5",
+		hash->Mac(CRYPTO_MAC_HMAC, mk, (const uint8_t *)"Test With Truncation", 20, actual + 1, 16) == CRYPTO_STATUS_OK &&
+		HexEq(actual + 1, "a3b6167473100ee06e0c796c2955552b", 16) && actual[0] == 0xa5 && actual[17] == 0xa5);
+	XsFill(key, sizeof(key));
+	const size_t keyLengths[] = {0, 1, 63, 64, 65, 131};
+	match = true;
+	for (size_t kl : keyLengths)
+	{
+		mk.Plain.pData = kl == 0 ? nullptr : key + 1; mk.Plain.Len = kl;
+		for (size_t len = 0; len <= 257; len++)
+		{
+			const uint8_t *input = len == 0 ? nullptr : msg + 1;
+			size_t ml = 1 + len % 32;
+			memset(actual, 0xa5, sizeof(actual));
+			match &= reference.Mac(CRYPTO_MAC_HMAC, mk, input, len, expected, ml) == CRYPTO_STATUS_OK;
+			match &= hash->Mac(CRYPTO_MAC_HMAC, mk, input, len, actual + 1, ml) == CRYPTO_STATUS_OK &&
+				memcmp(expected, actual + 1, ml) == 0 && actual[0] == 0xa5 && actual[ml + 1] == 0xa5;
+		}
+	}
+	check("HMAC key boundaries, message lengths 0..257 and output bounds", match);
+	mk.Plain.pData = key; mk.Plain.Len = 32;
+	match = reference.Mac(CRYPTO_MAC_HMAC, mk, msg + 1, 257, expected, 32) == CRYPTO_STATUS_OK;
+	match &= hash->Mac(CRYPTO_MAC_HMAC, mk, msg + 1, 257, msg + 1, 32) == CRYPTO_STATUS_OK &&
+		memcmp(expected, msg + 1, 32) == 0;
+	check("HMAC output may overlap message", match);
+	mk.Usage = CRYPTO_KEY_USE_ENCRYPT;
+	match = hash->Mac(CRYPTO_MAC_HMAC, mk, msg, 16, actual, 32) != CRYPTO_STATUS_OK;
+	mk.Usage = CRYPTO_KEY_USE_SIGN;
+	match &= hash->Mac(CRYPTO_MAC_HMAC, mk, nullptr, 1, actual, 32) != CRYPTO_STATUS_OK;
+	match &= hash->Mac(CRYPTO_MAC_HMAC, mk, msg, 16, actual, 0) != CRYPTO_STATUS_OK;
+	match &= hash->Mac(CRYPTO_MAC_HMAC, mk, msg, 16, actual, 33) != CRYPTO_STATUS_OK;
+	mk.Plain.pData = nullptr;
+	match &= hash->Mac(CRYPTO_MAC_HMAC, mk, msg, 16, actual, 32) != CRYPTO_STATUS_OK;
+	check("HMAC rejects invalid usage, key, message and output length", match);
+	CryptoSecureWipe(key, sizeof(key));
+
 }
 #endif
 

@@ -263,11 +263,16 @@ See the networking document for measurements and test limits.
 ## Crypto engines
 
 `CryptoTest` uses the same generic `exemples/crypto/crypto_engine_test.cpp`
-as the WBA port. The H753 library links the existing `CryptoRngStm32`,
-`CryptoSoftAes`, `CryptoSoftSha256` and `CryptoUecc` implementations. AES-128,
-CMAC, CCM, GCM, SHA-256/HMAC and P-256 use those shared software engines;
-random numbers use the hardware RNG. H753 CRYP/HASH acceleration is not yet
-implemented. No new generic crypto interfaces are introduced.
+as the WBA port. H753 selects `CryptoRngStm32`, `CryptoStm32H7Aes`,
+`CryptoStm32H7Hash` and `CryptoUecc`. CRYP handles AES-128/256 ECB/CBC/CTR;
+AES-128 CMAC/CCM/GCM use the software constructions over hardware AES.
+HASH handles one-shot SHA-256 and the digests in HMAC-SHA-256. Streaming
+SHA-256 and P-256 remain software. Public crypto interfaces are unchanged.
+
+The October 21, 2026 board run passed 87 checks with zero failures or skips,
+including AES-256 encryption/decryption and in-place/bounds checks. Hardware
+HMAC was added after that run and still needs board validation. The expanded
+CryptoTest expects 92 passes.
 
 The RNG selects HSI48 without changing USB clock selection or PLL settings.
 A clock/seed error or data-ready timeout fails the request, clears its output
@@ -279,7 +284,10 @@ Debug uses semihosting. No Ethernet cable is needed. See the
 [CryptoTest instructions](STM32H753/exemples/CryptoTest/README.md).
 Run `python3 tests/stm32h7/run_crypto.py` for RNG register fault tests and
 existing engine known answers. Simulation does not validate physical entropy;
-board crypto tests remain pending. Ethernet TLS/DTLS remains unimplemented.
+the board results above validate the tested crypto paths. Run
+`python3 tests/stm32h7/run_crypto_accel.py` for CRYP/HASH/HMAC register
+model tests with timeout, wiping and shared-lock coverage. Ethernet TLS/DTLS
+remains unimplemented.
 
 ## Internal flash NVM and DFU
 

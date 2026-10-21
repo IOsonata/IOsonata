@@ -54,7 +54,7 @@ protected:
 #define CRYPTO_STM32H7_AES_MEMSIZE sizeof(CryptoStm32H7Aes)
 CryptoStm32H7Aes *CryptoStm32H7AesCreate(void *pMem, size_t MemSize);
 
-// One-shot SHA-256 uses HASH. Streaming and HMAC retain the software base:
+// One-shot SHA-256 and HMAC use HASH. Streaming retains the software base:
 // the peripheral's full context does not fit CRYPTO_HASHCTX_MAX. This keeps
 // caller-owned contexts, interleaved streams and the existing API intact.
 class CryptoStm32H7Hash : public CryptoSoftSha256 {
@@ -64,6 +64,9 @@ public:
 	void Reset() override;
 	CRYPTO_STATUS Hash(CRYPTO_HASH_ALG Alg, const uint8_t *pMsg, size_t Len,
 					   uint8_t *pDigest) override;
+	CRYPTO_STATUS Mac(CRYPTO_MAC_ALG Alg, const CryptoKey &Key,
+					  const uint8_t *pMsg, size_t Len,
+					  uint8_t *pMac, size_t MacLen) override;
 };
 
 #define CRYPTO_STM32H7_HASH_MEMSIZE sizeof(CryptoStm32H7Hash)

@@ -16,6 +16,8 @@ static std::vector<uint8_t> input, output, message;
 static bool prepared;
 static uint32_t preparedSize;
 static unsigned fault, aesBlocks, hashRuns;
+static unsigned hashFailAt = ~0U;
+static CryptoStm32H7Hash *hashReenter;
 static CryptoStm32H7Aes *reenter;
 static uint8_t key[16], block[16], dest[16];
 static CryptoKey testKey{CRYPTO_KEY_AES_128,CRYPTO_KEY_LOC_PLAIN,
@@ -30,7 +32,7 @@ uint32_t ModelRead(unsigned id)
 	}
 	if(id==C_DOUT){assert(output.size()>=4);uint32_t w=0;
 	 for(int i=0;i<4;i++){w=(w<<8)|output.front();output.erase(output.begin());}return w;}
-	if(id==H_SR){if(fault==4)return HASH_SR_BUSY;if(fault==5)return 0;}
+	if(id==H_SR){if(hashRuns==hashFailAt)return HASH_SR_BUSY;if(fault==4)return HASH_SR_BUSY;if(fault==5)return 0;}
 	return regs[id];
 }
 void ModelWrite(unsigned id,uint32_t value)
@@ -72,7 +74,15 @@ void ModelWrite(unsigned id,uint32_t value)
 	 assert((value&HASH_CR_DATATYPE)==HASH_CR_DATATYPE_1);
 	 message.clear();regs[H_SR]=0;
 	}
-	if(id==H_DIN)for(unsigned i=0;i<4;i++)message.push_back(value>>(i*8));
+	if(id==H_DIN){
+	 if(hashReenter){auto *p=hashReenter;hashReenter=nullptr;uint8_t out[32];
+	  CryptoKey k{CRYPTO_KEY_HMAC,CRYPTO_KEY_LOC_PLAIN,CRYPTO_KEY_USE_SIGN,{{key,16}}};
+	  memset(out,0xa5,32);assert(p->Mac(CRYPTO_MAC_HMAC,k,block,16,out,32)==CRYPTO_STATUS_BUSY);
+	  assert(P256IsZero(out,32));memset(out,0xa5,32);
+	  assert(p->Hash(CRYPTO_HASH_SHA256,block,16,out)==CRYPTO_STATUS_BUSY);
+	  assert(P256IsZero(out,32));assert(!p->Enable());}
+	 for(unsigned i=0;i<4;i++)message.push_back(value>>(i*8));
+	}
 	if(id==H_STR&&(value&HASH_STR_DCAL)){
 	 unsigned bits=value&HASH_STR_NBLW;assert(bits%8==0);
 	 if(bits)message.resize(message.size()-(4-bits/8));
@@ -148,6 +158,20 @@ int main()
 	 assert(P256IsZero(digest,32));assert(regs[H_CR]==0);
 	 fault=0;assert(h.SelfTest()==0);
 	}
+	CryptoStm32H7Hash otherHash;assert(otherHash.Enable());
+	uint8_t longKey[131];memset(longKey,0xaa,sizeof(longKey));
+	CryptoKey hk{CRYPTO_KEY_HMAC,CRYPTO_KEY_LOC_PLAIN,CRYPTO_KEY_USE_SIGN,{{longKey,131}}};
+	for(unsigned stage=0;stage<3;stage++){
+	 hashFailAt=hashRuns+stage;memset(digest,0xa5,32);
+	 assert(h.Mac(CRYPTO_MAC_HMAC,hk,block,16,digest,32)==CRYPTO_STATUS_FAIL);
+	 assert(P256IsZero(digest,32));assert(regs[H_CR]==0&&message.empty());
+	 hashFailAt=~0U;assert(h.SelfTest()==0);
+	}
+	hashReenter=&otherHash;
+	assert(h.Mac(CRYPTO_MAC_HMAC,hk,block,16,digest,32)==CRYPTO_STATUS_OK);
+	h.Disable();memset(digest,0xa5,32);
+	assert(h.Mac(CRYPTO_MAC_HMAC,hk,block,16,digest,32)==CRYPTO_STATUS_FAIL);
+	assert(P256IsZero(digest,32));assert(otherHash.SelfTest()==0);
 	a.Disable();assert(b.SelfTest()==0);
 	printf("Register model: %u AES blocks, %u hashes; timeout recovery, wiping and cross-instance locking PASS\n",aesBlocks,hashRuns);
 	return result;

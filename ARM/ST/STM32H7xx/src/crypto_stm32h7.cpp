@@ -272,26 +272,29 @@ void CryptoStm32H7Hash::Reset()
 	s_HashBusy.clear();
 }
 
-CRYPTO_STATUS CryptoStm32H7Hash::Hash(CRYPTO_HASH_ALG Alg,
-		const uint8_t *pMsg, size_t Len, uint8_t *pDigest)
+// Caller owns s_HashBusy. Optional pad is exactly one SHA-256 block.
+static bool HashDigest(const uint8_t *pPad, const uint8_t *pMsg, size_t Len,
+		uint8_t *pDigest)
 {
-	if (Alg != CRYPTO_HASH_SHA256 || pDigest == nullptr ||
-		(pMsg == nullptr && Len != 0U)) return CRYPTO_STATUS_UNSUPPORTED;
-	if (!vbValid)
-	{
-		memset(pDigest, 0, 32U);
-		return CRYPTO_STATUS_FAIL;
-	}
-	if (s_HashBusy.test_and_set())
-	{
-		memset(pDigest, 0, 32U);
-		return CRYPTO_STATUS_BUSY;
-	}
 	HashReset();
+	// A full HMAC pad precedes the message without copying either buffer.
 	// SHA-256, byte-swap input words. Assemble partial words without overread.
 	HASH->CR = HASH_CR_ALGO | HASH_CR_DATATYPE_1 | HASH_CR_INIT;
 	HASH->STR = (uint32_t)(Len & 3U) * 8U;
 	bool ok = true;
+	if (pPad != nullptr)
+	{
+		for (size_t off = 0; ok && off < 64U; off += 4U)
+		{
+			ok = HashWait(HASH_SR_BUSY, 0U);
+			if (ok)
+			{
+				uint32_t word = 0U;
+				for (size_t j = 0; j < 4U; j++) word |= (uint32_t)pPad[off + j] << (8U * j);
+				HASH->DIN = word;
+			}
+		}
+	}
 	for (size_t off = 0; ok && off < Len; )
 	{
 		ok = HashWait(HASH_SR_BUSY, 0U);
@@ -313,6 +316,72 @@ CRYPTO_STATUS CryptoStm32H7Hash::Hash(CRYPTO_HASH_ALG Alg,
 			StoreBe32(pDigest + 4U * i, i < 5U ? HASH->HR[i] : HASH_DIGEST->HR[i]);
 	}
 	else memset(pDigest, 0, 32U);
+	return ok;
+}
+
+CRYPTO_STATUS CryptoStm32H7Hash::Hash(CRYPTO_HASH_ALG Alg,
+		const uint8_t *pMsg, size_t Len, uint8_t *pDigest)
+{
+	if (Alg != CRYPTO_HASH_SHA256 || pDigest == nullptr ||
+		(pMsg == nullptr && Len != 0U)) return CRYPTO_STATUS_UNSUPPORTED;
+	if (!vbValid)
+	{
+		memset(pDigest, 0, 32U);
+		return CRYPTO_STATUS_FAIL;
+	}
+	if (s_HashBusy.test_and_set())
+	{
+		memset(pDigest, 0, 32U);
+		return CRYPTO_STATUS_BUSY;
+	}
+	bool ok = HashDigest(nullptr, pMsg, Len, pDigest);
+	HashReset();
+	s_HashBusy.clear();
+	return ok ? CRYPTO_STATUS_OK : CRYPTO_STATUS_FAIL;
+}
+
+CRYPTO_STATUS CryptoStm32H7Hash::Mac(CRYPTO_MAC_ALG Alg, const CryptoKey &Key,
+		const uint8_t *pMsg, size_t Len, uint8_t *pMac, size_t MacLen)
+{
+	if (Alg != CRYPTO_MAC_HMAC || Key.Type != CRYPTO_KEY_HMAC ||
+		Key.Loc != CRYPTO_KEY_LOC_PLAIN || (Key.Usage & CRYPTO_KEY_USE_SIGN) == 0U ||
+		(Key.Plain.pData == nullptr && Key.Plain.Len != 0U) ||
+		pMac == nullptr || MacLen == 0U || MacLen > 32U ||
+		(pMsg == nullptr && Len != 0U)) return CRYPTO_STATUS_UNSUPPORTED;
+	if (!vbValid)
+	{
+		memset(pMac, 0, MacLen);
+		return CRYPTO_STATUS_FAIL;
+	}
+	if (s_HashBusy.test_and_set())
+	{
+		memset(pMac, 0, MacLen);
+		return CRYPTO_STATUS_BUSY;
+	}
+	// RFC 2104: normalize the key, then H(opad || H(ipad || message)).
+	// Keep ownership across all digests; each digest resets peripheral state.
+	uint8_t key[64] = {}, pad[64], inner[32], full[32];
+	bool ok = true;
+	if (Key.Plain.Len > sizeof(key))
+		ok = HashDigest(nullptr, Key.Plain.pData, Key.Plain.Len, key);
+	else if (Key.Plain.Len != 0U)
+		memcpy(key, Key.Plain.pData, Key.Plain.Len);
+	if (ok)
+	{
+		for (size_t i = 0; i < sizeof(pad); i++) pad[i] = key[i] ^ 0x36U;
+		ok = HashDigest(pad, pMsg, Len, inner);
+	}
+	if (ok)
+	{
+		for (size_t i = 0; i < sizeof(pad); i++) pad[i] = key[i] ^ 0x5cU;
+		ok = HashDigest(pad, inner, sizeof(inner), full);
+	}
+	if (ok) memcpy(pMac, full, MacLen);
+	else memset(pMac, 0, MacLen);
+	CryptoSecureWipe(key, sizeof(key));
+	CryptoSecureWipe(pad, sizeof(pad));
+	CryptoSecureWipe(inner, sizeof(inner));
+	CryptoSecureWipe(full, sizeof(full));
 	HashReset();
 	s_HashBusy.clear();
 	return ok ? CRYPTO_STATUS_OK : CRYPTO_STATUS_FAIL;
