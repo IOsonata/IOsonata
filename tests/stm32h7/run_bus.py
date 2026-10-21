@@ -10,8 +10,8 @@ import subprocess
 import sys
 import tempfile
 from elftools.elf.elffile import ELFFile
-from unicorn import Uc, UC_ARCH_ARM, UC_MODE_THUMB, UC_MODE_MCLASS
-from unicorn.arm_const import UC_ARM_REG_SP, UC_ARM_REG_LR, UC_ARM_REG_R0, UC_ARM_REG_PC
+from unicorn import Uc, UC_ARCH_ARM, UC_MODE_THUMB, UC_MODE_MCLASS, UC_HOOK_BLOCK
+from unicorn.arm_const import UC_ARM_REG_SP, UC_ARM_REG_LR, UC_ARM_REG_R0, UC_ARM_REG_PC, UC_ARM_REG_PRIMASK
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'tests/stm32wba'))
@@ -40,6 +40,8 @@ def emulate(path):
         (0x40005400, 0x40005800, 0x40005c00, 0x58001c00))}
     for d in i2c.values():
         d.slaves[0x50] = Slave(0x50)
+        for addr, at in ((0x51, 3), (0x52, 70), (0x53, 255)):
+            d.slaves[addr] = Slave(addr, refuse_at=at)
     regs = collections.defaultdict(int)
     regs[0x58024400] = 5  # HSI on and ready, divide by one
 
@@ -51,11 +53,19 @@ def emulate(path):
             return i2c[a & ~255].rd_reg(a & 255)
         return regs[a]
 
+    irq_active = False
+    pending_irq = None
+    phase = 0
+    irq_bytes = collections.defaultdict(list)
+
     def write(uc, off, size, value, base):
         a = base + off
         if a & ~255 in spi:
             spi[a & ~255].wr_reg(a & 255, size, value)
         elif a & ~255 in i2c:
+            if phase and (a & 255) == 0x28:
+                assert irq_active, 'interrupt TX wrote TXDR from polling code'
+                irq_bytes[phase].append(value & 255)
             i2c[a & ~255].wr_reg(a & 255, value)
         else:
             regs[a] = value
@@ -64,7 +74,53 @@ def emulate(path):
         u.mmio_map(base, size, read, base, write, base)
     u.reg_write(UC_ARM_REG_SP, 0x2001fff0)
     u.reg_write(UC_ARM_REG_LR, 0x080ff001)
-    u.emu_start(syms['main'] | 1, 0x080ff000, count=50000000)
+    # Dispatch enabled I2C vectors between foreground basic blocks. Save and
+    # restore the interrupted CPU context, preserving the handler's RAM writes.
+    # This models preemption, not NVIC timing or Cortex-M exception entry.
+    ticks = 0
+    def dispatch(uc, address, size, ctx):
+        nonlocal pending_irq, phase, ticks
+        if irq_active:
+            return
+        phase = int.from_bytes(uc.mem_read(syms['I2cIrqTestPhase'], 4), 'little')
+        ticks += 1
+        if not phase or ticks % 16 or uc.reg_read(UC_ARM_REG_PRIMASK):
+            return
+        for idx, dev in enumerate(i2c.values()):
+            cr1, flags = dev.reg[0], dev.f
+            if ((flags['txis'] and cr1 & 2) or (flags['rxne'] and cr1 & 4) or
+                (flags['stopf'] and cr1 & 32) or (flags['nackf'] and cr1 & 16) or
+                ((flags['tc'] or flags['tcr']) and cr1 & 64)):
+                pending_irq = syms[f'I2C{idx + 1}_EV_IRQHandler']
+                uc.emu_stop()
+                return
+    u.hook_add(UC_HOOK_BLOCK, dispatch)
+    pc = syms['main'] | 1
+    for _ in range(20000):
+        pending_irq = None
+        u.emu_start(pc, 0x080ff000, count=50000000)
+        if pending_irq is None:
+            break
+        saved = u.context_save()
+        irq_active = True
+        u.mem_write(syms['I2cIrqTestInside'], (1).to_bytes(4, 'little'))
+        u.reg_write(UC_ARM_REG_LR, 0x080fe001)
+        u.emu_start(pending_irq | 1, 0x080fe000, count=100000)
+        assert u.reg_read(UC_ARM_REG_PC) == 0x080fe000, 'IRQ did not return'
+        u.mem_write(syms['I2cIrqTestInside'], bytes(4))
+        irq_active = False
+        u.context_restore(saved)
+        pc = u.reg_read(UC_ARM_REG_PC) | 1
+    else:
+        raise AssertionError('IRQ dispatch budget exhausted')
+    for n in range(1, 5):
+        for length in (1, 63, 64, 65, 255, 256, 600):
+            expected = [0x55] + [(7 * k + 3) & 255 for k in range(length - 1)]
+            assert irq_bytes[n * 1000 + length] == expected, (n, length, 'TX bytes differ')
+    for n in range(1, 5):
+        for case, at in enumerate((3, 70, 255)):
+            expected = [0x55] + [(7 * k + 3) & 255 for k in range(at - 1)]
+            assert irq_bytes[n * 1000 + 700 + case] == expected, (n, case, 'NACK bytes differ')
     assert u.reg_read(UC_ARM_REG_PC) == 0x080ff000, 'firmware timed out'
     assert u.reg_read(UC_ARM_REG_R0) == 0, f'bus_fw.cpp failed at line {u.reg_read(UC_ARM_REG_R0)}'
     assert not violations, violations[:10]
@@ -102,7 +158,7 @@ def main():
             run(['arm-none-eabi-g++', *flags, '-nostartfiles', '-Wl,--gc-sections',
                  '-T', ld, '--specs=nosys.specs', '--specs=nano.specs', *objs, '-o', elf])
             emulate(elf)
-            print(opt + ': H753 I2C1-4/SPI1-6 polling, interrupts, rates and I2C reload/NACK PASS', flush=True)
+            print(opt + ': H753 I2C1-4/SPI1-6 polling, interrupts, rates and I2C reload/NACK and IRQ TX lengths 1..600 PASS', flush=True)
     print('Hardware validation pending.')
 
 

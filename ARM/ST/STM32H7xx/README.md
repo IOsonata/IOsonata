@@ -183,6 +183,20 @@ an interrupt slave; SPI covers modes 0-3. Expected summary is 2 passed,
 0 failed, 0 skipped. Hardware validation remains pending. DMA is explicitly
 excluded until the H7 I2C/SPI driver integration is implemented.
 
+The shared STM32 interrupt TX path stages long writes through its fixed
+64-byte buffer using IRQ-driven RELOAD chunks. The call waits until the final
+chunk is copied so the temporary buffer in `DeviceIntrfWrite()` stays alive;
+the IRQ reports STOP completion once with the full command-plus-data count.
+If IRQ progress stalls while staging, bounded cleanup releases the source
+and reports a short completion from the caller context. Polling mode and
+the held command phase of repeated-START reads retain their existing behavior.
+
+Register-model regression covers lengths 1, 63, 64, 65, 255, 256 and 600 on
+all four H753 I2C instances, IRQ-only TXDR writes, callback context/count,
+stack overwrite after return, NACK recovery and suppressed-IRQ timeout.
+The original driver fails the IRQ-only TXDR assertion. This is modeled
+evidence; the 254-byte hardware loopback needs to be rerun with the fix.
+
 ## Native USB CDC examples
 
 Import `STM32H753/exemples/UsbCdcLoopback/ioc` or

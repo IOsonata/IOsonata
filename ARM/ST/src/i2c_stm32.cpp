@@ -31,13 +31,16 @@
 
 		Polling, interrupt and DMA run the same engine. Without bIntEn the
 		call waits for the end of the transfer. With bIntEn a receive, and a
-		transmit of up to I2C_STM32_TXBUF_SIZE bytes without bNoStop, return -1
-		at once and the end is reported with DEVINTRF_EVT_COMPLETED and the
-		count; the transmit data is copied first. With bDmaEn the data bytes
+		transmit without bNoStop, return -1 and report the end through
+		DEVINTRF_EVT_COMPLETED. TX uses a fixed staging buffer, refilled at
+		RELOAD by the interrupt. A long TX call waits until its last chunk
+		is copied, keeping the temporary DeviceIntrfWrite buffer alive;
+		it never services TX flags in that wait. STOP completes in the IRQ.
+		With bDmaEn the data bytes
 		are moved by a DMA channel: a GPDMA channel on the WBA, on the L4 a
 		DMA1 or DMA2 channel of the instance table from the DMA channel
 		manager (dma_stm32.h). I2CInit returns false for bDmaEn on the other
-		families (G4). A DMA channel is taken at I2CInit and kept until
+		families (G4 and H753). A DMA channel is taken at I2CInit and kept until
 		PowerOff.
 
 		A refused address or byte, an arbitration loss, a bus error or a bus
@@ -230,6 +233,7 @@ typedef struct {
 	int DmaPair;			//!< Choice of Dma[] the channels come from
 #endif
 	const uint8_t *pTx;
+	std::atomic<int> *pTxStaged;	//!< Caller-local progress; NULL once source released
 	uint8_t *pRx;
 	int Len;				//!< Bytes of the transfer
 	int Done;				//!< Bytes of the chunks completed
@@ -828,12 +832,27 @@ static void Stm32I2cMasterEnd(Stm32I2cDev_t * const pDev, bool bHold)
 	}
 	else
 	{
+		// Abort the state machine before changing NBYTES on a failed,
+		// still-active transfer. The byte count was captured above.
+		if (pDev->bFail)
+		{
+			Stm32I2cPeReset(reg);
+		}
 		Stm32I2cFlushTx(reg);
 		reg->ICR = STM32_I2C_ICR_ALL;
 		reg->CR2 = 0;
 		pDev->bHold = false;
 	}
 
+	// No later interrupt may access the caller's temporary source.
+	if (pDev->pTxStaged != NULL)
+	{
+		std::atomic<int> *staged = pDev->pTxStaged;
+
+		pDev->pTxStaged = NULL;
+		pDev->pTx = NULL;
+		staged->store(pDev->Len);
+	}
 	pDev->bError = bad;
 	pDev->Result = count;
 	pDev->bRun = false;
@@ -845,7 +864,6 @@ static void Stm32I2cMasterFail(Stm32I2cDev_t * const pDev)
 {
 	pDev->bFail = true;
 	Stm32I2cMasterEnd(pDev, false);
-	Stm32I2cPeReset(pDev->pReg);
 }
 
 // Program the next chunk: the whole transfer up to 255 bytes, RELOAD when
@@ -854,11 +872,17 @@ static void Stm32I2cMasterChunk(Stm32I2cDev_t * const pDev, bool bFirst)
 {
 	I2C_TypeDef *reg = pDev->pReg;
 	int remain = pDev->Len - pDev->Done;
-	bool last = remain <= STM32_I2C_NBYTES_MAX;
-	int len = last ? remain : STM32_I2C_NBYTES_MAX;
+	const bool stagedTx = pDev->bAsync && !pDev->bRx;
+	const int limit = stagedTx ? I2C_STM32_TXBUF_SIZE : STM32_I2C_NBYTES_MAX;
+	bool last = remain <= limit;
+	int len = last ? remain : limit;
 	uint32_t cr2 = ((pDev->Addr << 1) & I2C_CR2_SADD_Msk) | ((uint32_t)len << I2C_CR2_NBYTES_Pos);
 
 	pDev->Chunk = len;
+	if (stagedTx)
+	{
+		memcpy(pDev->TxBuf, pDev->pTx + pDev->Done, len);
+	}
 	if (pDev->bRx)
 	{
 		cr2 |= I2C_CR2_RD_WRN;
@@ -885,11 +909,22 @@ static void Stm32I2cMasterChunk(Stm32I2cDev_t * const pDev, bool bFirst)
 		}
 		else
 		{
-			STM32_I2C_DMA_START(pDev->DmaTx, pDev->pTx + pDev->Done, (uint32_t)len);
+			STM32_I2C_DMA_START(pDev->DmaTx, stagedTx ? pDev->TxBuf : pDev->pTx + pDev->Done, (uint32_t)len);
 		}
 	}
 #endif
 	reg->CR2 = cr2;
+	if (stagedTx)
+	{
+		std::atomic<int> *staged = pDev->pTxStaged;
+
+		if (last)
+		{
+			pDev->pTxStaged = NULL;
+			pDev->pTx = NULL;
+		}
+		staged->store(pDev->Done + len);
+	}
 }
 
 // A refused address or byte. With AUTOEND the STOP follows, a transfer in
@@ -902,7 +937,7 @@ static uint32_t Stm32I2cMasterNack(Stm32I2cDev_t * const pDev, uint32_t Isr)
 	{
 		pDev->bNack = true;
 		reg->ICR = I2C_ICR_NACKCF;
-		if ((reg->CR2 & I2C_CR2_AUTOEND) == 0U)
+		if ((reg->CR2 & I2C_CR2_AUTOEND) == 0U && (Isr & I2C_ISR_STOPF) == 0U)
 		{
 			reg->CR2 |= I2C_CR2_STOP;
 		}
@@ -950,7 +985,7 @@ static void Stm32I2cMasterService(Stm32I2cDev_t * const pDev)
 		}
 		else if ((isr & I2C_ISR_TXIS) && pDev->Moved < pDev->Len)
 		{
-			reg->TXDR = pDev->pTx[pDev->Moved];
+			reg->TXDR = pDev->bAsync ? pDev->TxBuf[pDev->Moved - pDev->Done] : pDev->pTx[pDev->Moved];
 			pDev->Moved++;
 			isr = Stm32I2cMasterNack(pDev, reg->ISR);
 		}
@@ -1416,6 +1451,14 @@ static void Stm32I2cReset(DevIntrf_t * const pIntrf)
 	{
 		dev->pReg->CR1 |= STM32_I2C_CR1_SLAVE_INT;
 	}
+	if (dev->pTxStaged != NULL)
+	{
+		std::atomic<int> *staged = dev->pTxStaged;
+
+		dev->pTxStaged = NULL;
+		dev->pTx = NULL;
+		staged->store(dev->Len);
+	}
 	dev->bActive = false;
 	dev->bHold = false;
 	dev->bError = false;
@@ -1586,8 +1629,8 @@ static bool Stm32I2cStartRx(DevIntrf_t * const pIntrf, uint32_t DevAddr)
 // Send Data. The whole data goes out in one transfer, in chunks of up to 255
 // bytes. The last chunk ends with STOP, or, when the interface bNoStop is
 // set, the bus is held after the last byte so that a following StartRx
-// generates a repeated START. With bIntEn a transfer without bNoStop of up
-// to I2C_STM32_TXBUF_SIZE bytes is copied, started and reported by the event.
+// generates a repeated START. With bIntEn, writes without bNoStop use IRQ
+// refills of the fixed staging buffer and report completion through the event.
 static int Stm32I2cTxData(DevIntrf_t * const pIntrf, const uint8_t *pData, int DataLen)
 {
 	Stm32I2cDev_t *dev = Stm32I2cHandle(pIntrf);
@@ -1599,23 +1642,57 @@ static int Stm32I2cTxData(DevIntrf_t * const pIntrf, const uint8_t *pData, int D
 	}
 
 	bool bNoStop = pIntrf->bNoStop;
-	bool async = pIntrf->bIntEn && !bNoStop && DataLen <= I2C_STM32_TXBUF_SIZE;
+	bool async = pIntrf->bIntEn && !bNoStop;
+	std::atomic<int> staged(0);
 
-	if (async)
-	{
-		memcpy(dev->TxBuf, pData, DataLen);
-		dev->pTx = dev->TxBuf;
-	}
-	else
-	{
-		dev->pTx = pData;
-	}
+	dev->pTx = pData;
+	dev->pTxStaged = async ? &staged : NULL;
 	dev->Len = DataLen;
 	atomic_store(&pIntrf->bTxReady, false);
 
 	Stm32I2cMasterBegin(dev, false, !bNoStop, async);
 	if (async)
 	{
+		// DeviceIntrfWrite owns a temporary combined command/data buffer.
+		// Keep it alive until the IRQ has copied the final chunk. Only the
+		// IRQ moves bytes and handles RELOAD/STOP; this loop observes progress.
+		uint64_t wait = Stm32I2cTimeout(dev) +
+			(uint64_t)SystemCoreClock * I2C_STM32_TXBUF_SIZE * 10U /
+			(dev->pI2cDev->Cfg.Rate ? dev->pI2cDev->Cfg.Rate : 1U);
+		const uint32_t budget = wait > UINT32_MAX ? UINT32_MAX : (uint32_t)wait;
+		uint32_t left = budget;
+		int prior = -1;
+
+		while (staged.load() < DataLen)
+		{
+			int progress = staged.load();
+
+			if (progress != prior)
+			{
+				prior = progress;
+				left = budget;
+			}
+			else if (--left == 0)
+			{
+				// Bounded cleanup if interrupts cannot run. Detach the source
+				// before returning, and complete exactly once on this error path.
+				uint32_t mask = __get_PRIMASK();
+
+				__disable_irq();
+				bool abort = dev->pTxStaged == &staged;
+				if (abort)
+				{
+					Stm32I2cMasterFail(dev);
+					dev->bAsync = false;
+				}
+				__set_PRIMASK(mask);
+				if (abort)
+				{
+					Stm32I2cAsyncDone(dev);
+				}
+				break;
+			}
+		}
 		return -1;
 	}
 

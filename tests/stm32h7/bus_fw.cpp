@@ -4,6 +4,8 @@
 #include "stm32h753xx.h"
 #define CHECK(x) do { if (!(x)) return __LINE__; } while (0)
 extern "C" {
+volatile uint32_t I2cIrqTestPhase;
+volatile uint32_t I2cIrqTestInside;
 uint32_t SystemCoreClock = 400000000;
 uint32_t SystemMicroSecLoopCnt = 1;
 uint32_t SystemPeriphClockGet(int n) { return n == 3 ? 50000000 : 100000000; }
@@ -18,9 +20,11 @@ static void (*const i2cIrq[])() = {I2C1_EV_IRQHandler, I2C2_EV_IRQHandler,
 	I2C3_EV_IRQHandler, I2C4_EV_IRQHandler};
 static volatile bool done;
 static volatile int count;
+static volatile int events;
+static volatile bool eventInIrq;
 static int Event(DevIntrf_t *, DEVINTRF_EVT evt, uint8_t *, int len)
 {
-	if (evt == DEVINTRF_EVT_COMPLETED) { count = len; done = true; }
+	if (evt == DEVINTRF_EVT_COMPLETED) { count = len; done = true; events = events + 1; eventInIrq = I2cIrqTestInside != 0; }
 	return 0;
 }
 static const IOPinCfg_t spiPins[] = {
@@ -33,6 +37,12 @@ static const IOPinCfg_t i2cPins[] = {
 	{IOPORTB, 8, IOPINOP_FUNC4, IOPINDIR_BI, IOPINRES_PULLUP, IOPINTYPE_OPENDRAIN},
 	{IOPORTB, 9, IOPINOP_FUNC4, IOPINDIR_BI, IOPINRES_PULLUP, IOPINTYPE_OPENDRAIN},
 };
+// Overwrite stack storage after Write returns, before the last IRQs run.
+__attribute__((noinline)) static void ClobberStack()
+{
+	volatile uint8_t bytes[1024];
+	for (unsigned i = 0; i < sizeof(bytes); ++i) bytes[i] = 0xEE;
+}
 // Reused pins test register programming only, not alternate-function routing.
 extern "C" int main()
 {
@@ -88,6 +98,59 @@ extern "C" int main()
 			for (unsigned k = 0; k < sizeof(data); ++k)
 				CHECK(data[k] == (uint8_t)(((k + async * 300) & 255) * 5 + 1));
 		}
+		// Command + payload crossing the old staging limit and NBYTES limit.
+		// The host model dispatches actual vectors only for enabled IRQ flags.
+		static const int lengths[] = {1, 63, 64, 65, 255, 256, 600};
+		uint8_t payload[599];
+		for (unsigned k = 0; k < sizeof(payload); ++k) payload[k] = (uint8_t)(7 * k + 3);
+		for (int len : lengths)
+		{
+			uint8_t cmd = 0x55;
+			done = false; events = 0; eventInIrq = false;
+			I2cIrqTestPhase = (n + 1) * 1000 + len;
+			CHECK(I2CWrite(&i2c[n], 0x50, &cmd, 1, payload, len - 1) == 0);
+			ClobberStack();
+			for (int k = 0; k < 1000000 && !done; ++k) __NOP();
+			CHECK(done && count == len && events == 1 && eventInIrq);
+			I2cIrqTestPhase = 0;
+			i2cIrq[n]();
+			CHECK(events == 1 && i2c[n].DevIntrf.bTxReady);
+			CHECK(I2CStartTx(&i2c[n], 0x50)); I2CStopTx(&i2c[n]);
+		}
+		// NACK before and after staging refills releases the temporary source
+		// and reports exactly one short completion. The next write must work.
+		static const int nackCounts[] = {2, 69, 254};
+		for (int k = 0; k < 3; ++k)
+		{
+			uint8_t cmd = 0x55;
+			done = false; events = 0; eventInIrq = false;
+			I2cIrqTestPhase = (n + 1) * 1000 + 700 + k;
+			CHECK(I2CWrite(&i2c[n], 0x51 + k, &cmd, 1, payload, 599) == 0);
+			ClobberStack();
+			for (int j = 0; j < 1000000 && !done; ++j) __NOP();
+			CHECK(done && count == nackCounts[k] && events == 1 && eventInIrq);
+			I2cIrqTestPhase = 0;
+			i2cIrq[n]();
+			CHECK(events == 1 && i2c[n].DevIntrf.bTxReady);
+			done = false;
+			CHECK(I2CTx(&i2c[n], 0x50, payload, 8) == -1);
+			for (int j = 0; j < 100000 && !done; ++j) i2cIrq[n]();
+			CHECK(done && count == 8);
+		}
+		// No IRQ dispatch: the source wait must abort, detach the source and
+		// release busy once. A late vector must not complete a second time.
+		SystemCoreClock = 4000; // Shorten the instruction-count timeout only.
+		done = false; events = 0; eventInIrq = true;
+		CHECK(I2CTx(&i2c[n], 0x50, payload, 255) == -1);
+		CHECK(done && count == 0 && events == 1 && !eventInIrq);
+		SystemCoreClock = 400000000;
+		ClobberStack();
+		i2cIrq[n]();
+		CHECK(events == 1 && i2c[n].DevIntrf.bTxReady);
+		done = false;
+		CHECK(I2CTx(&i2c[n], 0x50, payload, 8) == -1);
+		for (int j = 0; j < 100000 && !done; ++j) i2cIrq[n]();
+		CHECK(done && count == 8);
 		CHECK(I2CSetRate(&i2c[n], 1000000) > 900000);
 		CHECK(SYSCFG->PMCR & (SYSCFG_PMCR_I2C1_FMP << n));
 		I2CSetRate(&i2c[n], 100000);
