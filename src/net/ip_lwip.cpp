@@ -47,6 +47,22 @@ SOFTWARE.
 #include "lwip/udp.h"
 #include "idelay.h"
 
+// Temporary bring-up trace, selected by the MCU library project.
+#ifndef IOSONATA_IP_TRACE
+#define IOSONATA_IP_TRACE 0
+#endif
+#if IOSONATA_IP_TRACE
+#include "syslog.h"
+static volatile uint32_t s_IpTraceTimer;
+static volatile uint32_t s_IpTraceEthernet;
+static volatile uint32_t s_IpTraceQueueFail;
+static volatile uint32_t s_IpTraceRun;
+static uint32_t s_IpTraceTime;
+#define IP_TRACE_COUNT(Name) (Name = Name + 1U)
+#else
+#define IP_TRACE_COUNT(Name) ((void)0)
+#endif
+
 #define IP_SOCKET_COUNT		4
 #define IP_RX_QUEUE_COUNT	4
 #define IP_PROCESS_FRAMES	8
@@ -116,7 +132,27 @@ static void IpRun(uint32_t Evt, void *pCtx)
 	s_IpQueued = false;
 	s_IpPending = false;
 	EnableInterrupt(state);
+	IP_TRACE_COUNT(s_IpTraceRun);
+#if IOSONATA_IP_TRACE
+	bool trace = s_IpTraceRun <= 3 || (uint32_t)(sys_now() - s_IpTraceTime) >= 1000U;
+	if (trace)
+	{
+		s_IpTraceTime = sys_now();
+		SysLogPrintf(SysLogGet(), "[IP] enter run=%lu timer=%lu eth=%lu qfail=%lu ms=%lu\r\n",
+			(unsigned long)s_IpTraceRun, (unsigned long)s_IpTraceTimer,
+			(unsigned long)s_IpTraceEthernet, (unsigned long)s_IpTraceQueueFail,
+			(unsigned long)s_IpTraceTime);
+	}
+#endif
 	IpProcess();
+#if IOSONATA_IP_TRACE
+	if (trace)
+	{
+		SysLogPrintf(SysLogGet(), "[IP] leave link=%lu ready=%u queued=%u pending=%u\r\n",
+			(unsigned long)(s_pIpEthernet != nullptr ? DeviceIntrfGetRate(&s_pIpEthernet->DevIntrf) : 0),
+			(unsigned)IpReady(), (unsigned)s_IpQueued, (unsigned)s_IpPending);
+	}
+#endif
 }
 
 void IpCheckStatus(void)
@@ -126,6 +162,10 @@ void IpCheckStatus(void)
 	if (s_IpInitialized && s_IpPending && s_IpQueued == false)
 	{
 		s_IpQueued = AppEvtHandlerQue(0, nullptr, IpRun);
+		if (s_IpQueued == false)
+		{
+			IP_TRACE_COUNT(s_IpTraceQueueFail);
+		}
 	}
 	EnableInterrupt(state);
 }
@@ -138,6 +178,7 @@ static void IpWake(void)
 
 static void IpTimer(TimerDev_t *pTimer, int TrigNo, void *pCtx)
 {
+	IP_TRACE_COUNT(s_IpTraceTimer);
 	(void)pTimer;
 	(void)TrigNo;
 	(void)pCtx;
@@ -146,6 +187,7 @@ static void IpTimer(TimerDev_t *pTimer, int TrigNo, void *pCtx)
 
 static int IpEthernetEvent(DevIntrf_t *pDev, DEVINTRF_EVT Evt, uint8_t *pData, int Len)
 {
+	IP_TRACE_COUNT(s_IpTraceEthernet);
 	(void)pDev;
 	(void)Evt;
 	(void)pData;
