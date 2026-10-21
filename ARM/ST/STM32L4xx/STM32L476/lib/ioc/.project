@@ -1391,6 +1391,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/mag_bmm350.h</locationURI>
 		</link>
 		<link>
+			<name>include/sensors/mag_lis3mdl.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/mag_lis3mdl.h</locationURI>
+		</link>
+		<link>
 			<name>include/sensors/mag_sensor.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/mag_sensor.h</locationURI>
@@ -2329,6 +2334,11 @@
 			<name>src/sensors/mag_bmm350.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/mag_bmm350.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/sensors/mag_lis3mdl.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/mag_lis3mdl.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/sensors/mag_sensor.cpp</name>

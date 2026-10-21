@@ -204,6 +204,15 @@ at 0x5D, 1 Hz, and prints the pressure in hPa and its temperature. The driver
 finds the device at either address, 0x5C or 0x5D, when none is given, and
 reads the status and both outputs in one I2C transfer. `tests/sensors/run.py`
 runs it against a register model. Not run on hardware yet.
+The STM32L476 example MagSensorDemo (`exemples/sensor/mag_sensor_demo.cpp`)
+reads the onboard LIS3MDL magnetometer (`src/sensors/mag_lis3mdl.cpp`) on the
+same bus at 0x1E, 2.5 Hz, ultra high performance mode, 4 gauss full scale, and
+prints the field on the 3 axes, its magnitude in uT and the temperature of the
+device, on the ST-LINK virtual COM port in Release, with semihosting in Debug.
+The scale of the device, 6842 LSB per gauss at 4 gauss, is 14.6 nT per LSB:
+the driver keeps it in floating point in the calibration, the integer
+Sensitivity of the data is rounded to 15 nT. `tests/sensors/run.py` runs the
+driver against a register model. Not run on hardware yet.
 L496 and L4S9 I2C4 use virtual index 3. The L432 has no I2C2: index 1 fails
 initialization, I2C1 and I2C3 keep indices 0 and 2.
 
