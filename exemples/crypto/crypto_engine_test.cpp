@@ -958,8 +958,12 @@ int main(void)
 
 #ifdef NDEBUG
 	UARTRetargetEnable(s_Uart, STDOUT_FILENO);
-#endif
 	setvbuf(stdout, NULL, _IONBF, 0);
+#else
+	// Batch semihosting output by line, using static storage without allocation.
+	static char stdoutBuffer[256];
+	setvbuf(stdout, stdoutBuffer, _IOLBF, sizeof(stdoutBuffer));
+#endif
 #endif
 
 	return CryptoEngineTest();
