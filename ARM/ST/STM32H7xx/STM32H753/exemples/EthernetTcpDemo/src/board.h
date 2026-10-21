@@ -57,6 +57,11 @@ SOFTWARE.
 #define NET_DEMO_HOST "192.168.1.10"
 #define NET_DEMO_PROTO SOCKINTRF_PROTO_TCP
 
+// 1 selects one public DNS/HTTP check at example.com:80 instead of echo.
+#ifndef NET_DEMO_HTTP_TEST
+#define NET_DEMO_HTTP_TEST 0
+#endif
+
 // Set to 6000 for a finite binary integrity run; 0 keeps the text echo demo.
 #ifndef NET_DEMO_TEST_COUNT
 #define NET_DEMO_TEST_COUNT 0

@@ -49,6 +49,7 @@ static bool s_Drop;
 static bool s_Extra;
 static bool s_Refuse;
 static bool s_ShortUdp;
+static bool s_InitFail;
 
 extern "C"
 {
@@ -84,6 +85,12 @@ void SockIntrfClose(SockIntrfDev_t *pDev)
 {
 	pDev->bConnected = false;
 }
+bool SockIntrfInit(SockIntrfDev_t *pDev, const SockIntrfCfg_t *)
+{
+	pDev->bConnected = s_InitFail == false;
+
+	return pDev->bConnected;
+}
 SysLog_t *SysLogGet(void)
 {
 	return nullptr;
@@ -105,6 +112,10 @@ int DeviceIntrfTx(DevIntrf_t *, uint32_t, const uint8_t *pData, int Len)
 		return 0;
 	}
 	int count = std::min(Len, s_SendLimit);
+#if NET_DEMO_HTTP_TEST
+	(void)pData;
+	return count;
+#endif
 	if (s_Drop == false)
 	{
 		for (int i = 0; i < count; i++)
@@ -146,6 +157,73 @@ static void Reset(void)
 	s_ReadLimit = 4097;
 }
 
+#if NET_DEMO_HTTP_TEST
+static void HttpReset(void)
+{
+	Reset();
+	s_InitFail = false;
+	s_HttpStarted = s_HttpDone = false;
+	s_HttpStart = 0;
+	s_HttpTxOffset = s_HttpLineLength = 0;
+	memset(s_HttpLine, 0, sizeof(s_HttpLine));
+}
+
+static void Reply(const std::string &Data)
+{
+	s_Reply.insert(s_Reply.end(), Data.begin(), Data.end());
+}
+
+int main()
+{
+	for (const char *status : {"HTTP/1.0 200 OK\r\n", "HTTP/1.1 301 Moved\r\n", "HTTP/1.1 403 Forbidden\r\n"})
+	{
+		HttpReset();
+		s_SendLimit = 7;
+		for (int i = 0; i < 20; i++)
+		{
+			HttpTest(i * 10);
+		}
+		assert(s_HttpTxOffset == 56);
+		s_ReadLimit = 1;
+		Reply(status);
+		// Buffered final data must be checked even after FIN.
+		((SockIntrfDev_t *)s_Socket)->bConnected = false;
+		for (int i = 0; i < 100 && s_HttpDone == false; i++)
+		{
+			HttpTest(200 + i * 10);
+		}
+		assert(s_HttpDone && s_Output.find("DNS/HTTP PASS") != std::string::npos);
+		auto output = s_Output;
+		HttpTest(500);
+		assert(output == s_Output);
+	}
+	for (const std::string &bad : {std::string("garbage\r\n"), std::string("HTTP/1.1 2x0 OK\r\n"),
+		std::string("HTTP/1.1 200 OK\n"), std::string("HTTP/1.1 200 O\rK\r\n"), std::string(96, 'A')})
+	{
+		HttpReset();
+		Reply(bad);
+		HttpTest(0);
+		assert(s_HttpDone && s_Output.find("DNS/HTTP FAIL") != std::string::npos);
+	}
+	HttpReset();
+	s_InitFail = true;
+	HttpTest(0);
+	assert(s_HttpDone && s_Output.find("connect failed") != std::string::npos);
+	HttpReset();
+	HttpTest(0);
+	((SockIntrfDev_t *)s_Socket)->bConnected = false;
+	HttpTest(10);
+	assert(s_HttpDone && s_Output.find("socket closed") != std::string::npos);
+	HttpReset();
+	s_Refuse = true;
+	HttpTest(0xfffffff0U);
+	HttpTest(0xfffffff0U + 14999U);
+	assert(s_HttpDone == false);
+	HttpTest(0xfffffff0U + 15000U);
+	assert(s_HttpDone && s_Output.find("timeout") != std::string::npos);
+	puts("HTTP status, partial transfers, FIN and failure checks: PASS");
+}
+#else
 int main()
 {
 	Reset();
@@ -213,3 +291,4 @@ int main()
 	}
 	puts("Echo example integrity, partial transfers and fault checks: PASS");
 }
+#endif
