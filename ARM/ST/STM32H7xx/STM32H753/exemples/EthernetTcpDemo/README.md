@@ -66,8 +66,14 @@ ready. Change one PSK byte on the server to check that authentication fails.
 Hardware testing on October 21, 2026 confirmed authenticated encrypted echoes,
 server restart recovery, wrong-PSK rejection, cable/DHCP/TLS recovery and
 automatic recovery after the correct key was restored, without resetting the
-board. These hardware results used PSK-only mode. The new P-256 PSK-DHE
-mode passes host interoperability tests; hardware validation remains pending.
+board. These initial hardware results used PSK-only mode. Subsequent clean-build
+P-256 PSK-DHE runs confirmed authenticated echoes and recovery after server
+restart and cable reconnection, with the counter reaching 1800.
+
+An intermittent PSK-DHE failure remains unresolved: timeout, transport and peer
+errors occurred, and restarting OpenSSL restored service. It did not recur in
+the subsequent diagnostic run; no soak duration was recorded. This is not a
+confirmed fix.
 The exact compiler/build profile was not supplied. See `docs/networking.md`
 for hardware evidence and host tests. HTTP and ordinary TCP modes remain available.
 
@@ -75,3 +81,12 @@ For the wrong-key test, stop OpenSSL with Ctrl+C and change the first PSK byte
 from `00` to `ff` in the command above. Leave the board unchanged. Expect
 handshake failures and no new authenticated echoes. Stop OpenSSL again and
 restore the original key beginning `00010203`; the board retries automatically.
+
+For intermittent failures, append `-state -msg` to the OpenSSL command and
+capture stdout and stderr, for example `2>&1 | tee tls-server.log`. Save that
+file and the board console before restarting the server. Board diagnostics
+report TCP-connect and TLS-init duration, state transitions, slow process calls,
+and counters sampled before a failed call. Times are milliseconds. State values
+are 0 idle, 1 ServerHello, 2 EncryptedExtensions, 3 server Finished, 4 client
+Finished, 5 ready, 6 closing, 7 closed and 8 failed. Only counters and state are
+logged by the board; keys and decrypted record buffers are not logged.

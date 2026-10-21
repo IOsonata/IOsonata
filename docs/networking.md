@@ -168,6 +168,8 @@ RNG, deadlines including timer wrap, backpressure, EOF, key updates, size limits
 secret wiping, and the C header. OpenSSL 3 provides an independent live server
 for 19/1024/4096/16000-byte reverse echoes, one-byte I/O, wrong-PSK rejection and
 context reuse across connections in both PSK-only and P-256 PSK-DHE modes.
+The O2 run also checks 20 consecutive PSK-DHE connections against one OpenSSL
+process, verifying all four echo lengths on each connection.
 DHE checks include malformed/duplicate shares, invalid peer points, missing
 shares (downgrade rejection), key-context bounds, provider failure and wiping.
 The host runner uses the existing micro-ecc checkout; `UECC_ROOT` can override
@@ -384,11 +386,26 @@ The exact flashed commit, compiler version and build profile were not supplied.
 | Correct PSK restored | Automatic authentication and verified echo checks resumed through 700 without board reset |
 | Cable interruption | Network-down notification, DHCP recovery, a new authenticated TLS session and verified echoes resumed through 600 without resetting the board |
 
-These are initial interoperability and recovery results for the PSK-only profile.
-The newer P-256 PSK-DHE mode has host validation; its hardware test is pending.
-They do not establish certificate support, forward secrecy, maximum throughput,
-or a security audit. The running firmware establishes a successful maintainer
-build; a fresh automated ARM build was not completed in the implementation session.
+The maintainer subsequently clean-built and ran P-256 PSK-DHE mode. The console
+reported `TLS authenticated: AES-128-GCM/SHA-256, PSK-DHE P-256`, verified echoes
+through 1200 before an interruption, and resumed through 1600 after server
+recovery. Cable removal produced a network-down notification; DHCP recovery
+was followed by a new authenticated session and verified echoes through 1800
+without resetting the board.
+
+A later run had unexpected timeout (6), transport (7), and peer-alert (8)
+failures with the correct PSK and no intentional cable changes. Restarting
+OpenSSL restored service. After board timing diagnostics and OpenSSL
+`-state -msg` logging were added, the maintainer could not reproduce the issue.
+The cause remains unresolved; no uninterrupted soak duration was supplied.
+These observations do not establish long-run stability. Capture both logs before
+restarting the server if the failure recurs. The demo diagnostics distinguish
+engine enable, TCP connect and TLS init failures and record pre-failure counters.
+
+These are initial interoperability and recovery results, not certificate
+validation, maximum-throughput measurements or a security audit. The running
+firmware establishes a successful maintainer build; a fresh automated ARM build
+was not completed in the implementation session.
 
 ## References
 

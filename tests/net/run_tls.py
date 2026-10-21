@@ -20,14 +20,14 @@ UECC = Path(os.environ.get('UECC_ROOT', ROOT / 'micro-ecc'))
 ENV = dict(os.environ, ASAN_OPTIONS='detect_leaks=0:abort_on_error=1')
 
 
-def interop(binary, chunk, bad=False, dhe=False):
+def interop(binary, chunk, bad=False, dhe=False, connections=2):
     with socket.socket() as probe:
         probe.bind(('127.0.0.1', 0))
         port = probe.getsockname()[1]
     command = ['openssl', 's_server', '-accept', f'127.0.0.1:{port}',
                '-nocert', '-tls1_3', '-psk',
                bytes(range(32)).hex(), '-psk_identity', 'IOsonata',
-               '-ciphersuites', 'TLS_AES_128_GCM_SHA256', '-rev', '-naccept', '2']
+               '-ciphersuites', 'TLS_AES_128_GCM_SHA256', '-rev', '-naccept', str(connections)]
     command += ['-groups', 'P-256'] if dhe else ['-allow_no_dhe_kex']
     with tempfile.TemporaryFile() as errors:
         server = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=errors)
@@ -43,7 +43,8 @@ def interop(binary, chunk, bad=False, dhe=False):
                     errors.seek(0)
                     raise RuntimeError(errors.read().decode())
             subprocess.run([str(binary), str(port), str(chunk), 'dhe' if dhe else 'psk'] +
-                           (['bad-key'] if bad else []), check=True, env=ENV, timeout=40)
+                           ['bad-key' if bad else 'good-key', str(connections)],
+                           check=True, env=ENV, timeout=max(40, connections * 10))
         finally:
             server.terminate()
             server.wait(timeout=5)
@@ -73,6 +74,10 @@ def main():
                         # Each successful process reuses its TLS context for two connections.
                         interop(binary, chunk, bad)
                         interop(binary, chunk, bad, True)
+                    if optimization == '-O2':
+                        # Keep one OpenSSL process alive across repeated DHE sessions.
+                        interop(binary, 65536, dhe=True, connections=20)
+                        print('20 PSK-DHE reconnects to one OpenSSL process: PASS', flush=True)
             print(f'{optimization}: TLS host tests PASS', flush=True)
         subprocess.run(['gcc', '-std=c11', '-Werror', '-fsyntax-only',
                         '-I' + str(ROOT / 'include'), '-x', 'c', '-'],

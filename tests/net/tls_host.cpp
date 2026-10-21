@@ -63,7 +63,9 @@ int main(int argc, char **argv)
 {
 	assert(argc >= 2);
 	uint64_t previousKey[8] = {};
-	for (int repeat = 0; repeat < 2; repeat++)
+	int repeats = argc > 5 ? atoi(argv[5]) : 2;
+	assert(repeats > 0 && repeats <= 1000);
+	for (int repeat = 0; repeat < repeats; repeat++)
 	{
 	Transport t;
 	t.Chunk = argc > 2 ? atoi(argv[2]) : 65536;
@@ -89,7 +91,7 @@ int main(int argc, char **argv)
 	agree.SetRng(&rng);
 	agree.Enable();
 	bool dhe = argc > 3 && strcmp(argv[3], "dhe") == 0;
-	bool bad = argc > 4;
+	bool bad = argc > 4 && strcmp(argv[4], "bad-key") == 0;
 	hash.Enable();
 	aes.Enable();
 	uint8_t psk[32];
