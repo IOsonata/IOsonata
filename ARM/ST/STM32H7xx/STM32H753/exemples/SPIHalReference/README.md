@@ -58,7 +58,40 @@ sampled PA15 level. The trace does not consume RXDR, print during a transfer,
 or change any test payload or assertion. Recording briefly masks interrupts,
 so its timing effect must be considered when comparing results.
 
+## Debugging without a scope
+
+After the ordinary reference summary, failed modes replay automatically with
+a RAM trace. Keep the same wiring and UART settings. No new HAL download is
+needed. Capture the entire output, including the `Diagnostic replay` sections.
+The replay uses the same lengths, payloads, comparisons, rate and GPIO settings.
+It is separate from the reference pass because instrumentation affects timing.
+No IOsonata driver or generic validation test is changed by this diagnostic.
+
+The trace retains the last 32 events and freezes on the first observed slave
+UDR, OVR, MODF or TIFRE flag. IRQ entry is recorded before calling ST's unchanged
+handler; IRQ exit is recorded after it. The recorder never reads RXDR, clears
+flags or prints during a transfer. It briefly masks interrupts while writing
+an entry. The ordinary reference pass does not record events, but its IRQ
+wrapper has an added trace-enable check.
+
+Each entry reports core cycles since arming began, NSS, both SPI status/control
+registers, slave interrupt enables and HAL TX/RX items remaining. These software
+counts are not wire byte counts; the polling master uses local counters and
+its handle counts can lag transfer progress. SR retains the hardware CTSIZE
+and FIFO flags for comparison. The pre-CS slave snapshot is retained separately
+even if the ring wraps. TX=0 there means HAL queued all requested slave bytes
+before CS, not that they have been transmitted. Both received payloads print
+after a replay failure. A replay that passes when the reference fails is itself
+evidence of timing sensitivity, not a fixed port.
+
+Hardware reference result: all four modes pass at 1 MHz/LOW SCK slew. At
+8 MHz/MEDIUM, modes 0 and 3 pass; modes 1 and 2 fail on the first 16-byte TX,
+with the same corrupt slave payload and HAL error 0x80 (slave TX underrun).
+Both failing modes sample on falling SCK edges. This does not establish an
+electrical cause or explain the corrupt receive data by itself.
+
 Validation: reference application and unchanged HAL sources compile at -O0
 and -O3 with -Wall -Werror; a relocatable link confirms HAL dependencies resolve.
-Full firmware linking and hardware execution are pending. Shared SPI builds
-pass for H753 soft/hard-float, L476 and WBA65 at -O0/-O3.
+The reference has been built and run on hardware by the maintainer. The new
+RAM-trace replay is compiled but awaits hardware execution. Shared SPI builds
+previously passed for H753 soft/hard-float, L476 and WBA65 at -O0/-O3.
