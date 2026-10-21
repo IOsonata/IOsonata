@@ -203,8 +203,11 @@ I2C1 master / I2C2 slave passed all eight combinations on NUCLEO-H753ZI
 SPI3 slave also passed all eight combinations on that date at 1 MHz:
 416 transfers covering modes 0-3 and 1-, 16- and 129-byte frames. LOW SCK
 slew resolved the earlier mode-1 corruption without changing the test.
-H753 masters use LOW SCK slew up to 1 MHz and retain TURBO above it;
-only 1 MHz has been hardware validated. See the example README.
+H753 masters use LOW SCK slew up to 1 MHz. At 8 MHz, TURBO passed
+mode 0 but failed the first 16-byte mode-1 TX in all eight combinations
+(17 or 18 bytes received). MEDIUM SCK slew is now selected at exactly
+8 MHz for a controlled trial; its hardware result is pending. Other rates
+above 1 MHz retain TURBO. Only the 1 MHz full suite has passed. See the example README.
 
 ## Native USB CDC examples
 

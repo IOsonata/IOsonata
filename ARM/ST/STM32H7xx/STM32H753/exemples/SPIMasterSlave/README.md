@@ -48,12 +48,17 @@ and checks unchanged. This establishes slew sensitivity in the jumper setup;
 clock ringing was not measured with an oscilloscope.
 
 The shared driver selects LOW SCK slew for H753 masters at achieved rates
-up to 1 MHz, and retains TURBO above 1 MHz. The policy follows the actual
+up to 1 MHz. A controlled trial selects MEDIUM at exactly 8 MHz; other
+rates above 1 MHz retain TURBO. The policy follows the actual
 selected rate, including subsequent SetRate calls. It uses the configured
 SCK pin, not a hard-coded board pin. Slave pins retain their previous settings
 because the slave's configured Rate does not determine the external SCK.
-Only 1 MHz has been hardware validated with this policy; faster buses need
-separate timing and signal-integrity validation.
+The 8 MHz TURBO run passed all mode-0 frames, then failed the first
+16-byte mode-1 TX in every combination with 17 or 18 bytes received.
+Modes 2 and 3 were not reached. The MEDIUM-slew trial changes only SCK
+slew at the same 8 MHz clock; hardware confirmation is pending.
+Only the 1 MHz full suite has passed; faster buses need separate timing
+and signal-integrity validation.
 
 The shared driver also retains the ES0392 CRC-size and EOT-disable corrections,
 enables slave interrupts only after SPE/preload, and restricts AFCNTR to

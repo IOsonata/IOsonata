@@ -1866,11 +1866,13 @@ static uint32_t Stm32SpiSetRate(DevIntrf_t * const pIntrf, uint32_t Rate)
 	// Use slower SCK edges for low-rate masters. TURBO at 1 MHz caused
 	// repeatable extra received bits in H753 loopback; LOW passed modes
 	// 0-3 with polling, interrupt and DMA. Slave Rate is not its SCK.
+	// Trial MEDIUM at 8 MHz, where TURBO also corrupts mode-1 frames.
 	if (dev->bSlave == false)
 	{
 		IOPinSetSpeed(dev->pSpiDev->Cfg.pIOPinMap[SPI_SCK_IOPIN_IDX].PortNo,
 			dev->pSpiDev->Cfg.pIOPinMap[SPI_SCK_IOPIN_IDX].PinNo,
-			dev->pSpiDev->Cfg.Rate <= 1000000U ? IOPINSPEED_LOW : IOPINSPEED_TURBO);
+			dev->pSpiDev->Cfg.Rate <= 1000000U ? IOPINSPEED_LOW :
+			dev->pSpiDev->Cfg.Rate == 8000000U ? IOPINSPEED_MEDIUM : IOPINSPEED_TURBO);
 	}
 #endif
 
