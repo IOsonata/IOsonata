@@ -200,6 +200,27 @@ int main()
 	const unsigned previousReady = ready;
 	Stm32UsbOtgInterrupt();
 	assert(ready == previousReady + 1 && s_Usb.RxReady == 0);
+	// Clearing the halt of an endpoint that is not halted only resets its
+	// toggle: the queued transfer is already armed and is not armed again.
+	assert(UsbCtrlrEpSend(0, 1, bytes, 4));
+	In(1)->DIEPTSIZ = 0;
+	*Fifo(1) = 0;
+	UsbCtrlrEpClearStall(0, 1, true);
+	assert(In(1)->DIEPTSIZ == 0 && *Fifo(1) == 0 && s_Usb.Ep[1][1].Busy);
+	// A transfer deferred by a halt is armed when the halt is cleared.
+	s_Usb.Ep[1][1].Halted = true;
+	UsbCtrlrEpClearStall(0, 1, true);
+	assert(!s_Usb.Ep[1][1].Halted && *Fifo(1) == 0x03020100);
+	assert(In(1)->DIEPTSIZ == (4U | (1U << USB_OTG_DIEPTSIZ_PKTCNT_Pos)));
+	Complete(1, true, false);
+	assert(UsbCtrlrEpOpenData(0, 1, false, BULK, bulkMps));
+	assert(UsbCtrlrEpReceive(0, 1, receive, sizeof(receive)));
+	Out(1)->DOEPTSIZ = 0;
+	UsbCtrlrEpClearStall(0, 1, false);
+	assert(Out(1)->DOEPTSIZ == 0 && s_Usb.Ep[1][0].Busy);
+	s_Usb.Ep[1][0].Halted = true;
+	UsbCtrlrEpClearStall(0, 1, false);
+	assert(Out(1)->DOEPTSIZ == (bulkMps | (1U << USB_OTG_DOEPTSIZ_PKTCNT_Pos)));
 	// EP0 copies stack replies before returning and rejects nonzero status OUT.
 	s_Usb.Ep[0][1].Mps = 64;
 	assert(UsbCtrlrEp0Send(0, bytes + 1, 3) == 3);

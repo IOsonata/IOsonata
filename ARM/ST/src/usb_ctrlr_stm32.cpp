@@ -1187,12 +1187,16 @@ void UsbCtrlrEpClearStall(int DevNo, uint8_t EpNo, bool bIn)
 	Stm32UsbEp_t *ep = &s_Usb.Ep[EpNo][bIn];
 	if (ep->Mps != 0 && ep->Type != ISO)
 	{
+		// The host may clear the halt of an endpoint that is not halted, to
+		// reset its data toggle. A transfer queued while not halted is already
+		// armed, only one deferred by the halt is armed here.
+		const bool halted = ep->Halted;
 		ep->Halted = false;
 		if (bIn)
 		{
 			In(EpNo)->DIEPCTL = (In(EpNo)->DIEPCTL & ~USB_OTG_DIEPCTL_STALL) |
 				USB_OTG_DIEPCTL_SD0PID_SEVNFRM;
-			if (ep->Busy)
+			if (ep->Busy && halted)
 			{
 				ArmIn(EpNo);
 			}
@@ -1203,7 +1207,10 @@ void UsbCtrlrEpClearStall(int DevNo, uint8_t EpNo, bool bIn)
 				USB_OTG_DOEPCTL_SD0PID_SEVNFRM;
 			if (ep->Busy)
 			{
-				ArmOut(EpNo);
+				if (halted)
+				{
+					ArmOut(EpNo);
+				}
 			}
 			else
 			{
