@@ -46,9 +46,9 @@ SOFTWARE.
 #define UART_TX_PIN 8
 #define UART_TX_PINOP IOPINOP_FUNC7
 
-// Polling/interrupt master, interrupt slave. H7 bus DMA is not implemented.
-#define I2C_TEST_MASTER_MASK 0x03
-#define I2C_TEST_SLAVE_MASK 0x01
+// Both selected instances have DMA hardware; exercise all eight combinations.
+#define I2C_MASTER_HAS_DMA 1
+#define I2C_SLAVE_HAS_DMA 1
 #define I2C_MASTER_DEVNO 0
 #define I2C_SLAVE_DEVNO 1
 #define I2C_MASTER_INT_PRIO 7

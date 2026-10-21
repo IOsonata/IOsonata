@@ -4,7 +4,7 @@
 @brief	STM32 DMA channel and stream manager
 
 		L4/L4+ use channels with CSELR/DMAMUX1 routing. H753 uses the 16
-		DMA1/2 streams with DMAMUX1 routing. The same ownership and transfer
+		DMA1/2 streams with DMAMUX1 and eight BDMA channels with DMAMUX2. The same ownership and transfer
 		interface serves both. F0/G4 UART vectors and WBA GPDMA are separate.
 
 		A driver that uses DMA asks this manager for the channel the
@@ -65,7 +65,12 @@ SOFTWARE.
 #error "dma_stm32.h: DMA support requires L4/L4+ or H753"
 #endif
 
-#define STM32_DMA_NBCH				(STM32_DMA_CTRL_NBCH * STM32_DMA_NBCTRL)
+#if defined(STM32H753xx)
+#define STM32_DMA_NBCH 24
+#define STM32_BDMA_CH(Ch) (16 + (Ch))
+#else
+#define STM32_DMA_NBCH (STM32_DMA_CTRL_NBCH * STM32_DMA_NBCTRL)
+#endif
 
 /// Channel number of channel ChNo (1 based) of controller Ctrl (1 or 2)
 #define STM32_DMA_CH(Ctrl, ChNo)	(((Ctrl) - 1) * STM32_DMA_CTRL_NBCH + (ChNo) - 1)
@@ -154,7 +159,8 @@ void Stm32DmaChMemInc(int Ch, bool bInc);
  * The channel was set up with Stm32DmaChSetup. Count is a multiple of the
  * width, at most 65535 transfers.
  *
- * H753: buffers must be accessible to DMA1/2 (not ITCM/DTCM), aligned to
+ * H753 raw Start: buffers must be accessible to DMA1/2 (not ITCM/DTCM),
+ * BDMA buffers must be in SRAM4. Buffers are aligned to
  * the transfer width. The owning driver supplies non-cacheable storage or
  * cleans TX cache lines before Start and invalidates RX lines before Start
  * and after completion. RX cache lines must not share other writable data.
@@ -163,6 +169,20 @@ void Stm32DmaChMemInc(int Ch, bool bInc);
  * the caller must check Flags, including when interrupts are enabled.
  */
 void Stm32DmaChStart(int Ch, const void *pMem, uint32_t Count);
+
+#if defined(STM32H753xx)
+// Allocate a free DMAMUX1 stream, or DMAMUX2 BDMA channel. Returns -1 if busy.
+int Stm32DmaChAlloc(bool bBdma, Stm32DmaChHandler_t Handler, void *pCtx, int IntPrio, bool bIrq);
+
+// Buffered transfers accept DTCM and unaligned application buffers. Fixed
+// SRAM4 storage owns its cache lines; only completed RX bytes are copied back.
+// Use these progress/stop functions together; raw Start/Remain serve UART's
+// separately owned circular buffers. Start requires Setup, including MemInc.
+void Stm32DmaChBufferStart(int Ch, const void *pMem, uint32_t Count);
+uint32_t Stm32DmaChBufferFlags(int Ch);
+uint32_t Stm32DmaChBufferRemain(int Ch);
+uint32_t Stm32DmaChBufferStopRemain(int Ch);
+#endif
 
 /**
  * @brief	Stop the channel and clear its flags.

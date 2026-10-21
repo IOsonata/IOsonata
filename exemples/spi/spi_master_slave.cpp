@@ -64,6 +64,14 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #ifndef SPI_TEST_MODE_MASK
 #define SPI_TEST_MODE_MASK 0x0F
 #endif
+// Hardware capability of the selected instances, not driver maturity.
+// A DMA request on capable hardware must initialize successfully.
+#ifndef SPI_MASTER_HAS_DMA
+#define SPI_MASTER_HAS_DMA 1
+#endif
+#ifndef SPI_SLAVE_HAS_DMA
+#define SPI_SLAVE_HAS_DMA 1
+#endif
 #ifndef SPI_TEST_MASTER_MASK
 #if defined(SPI_MASTER_DMA_ENABLE) || defined(SPI_MASTER_INT_ENABLE)
 #ifndef SPI_MASTER_DMA_ENABLE
@@ -314,6 +322,13 @@ static const char *ModeName(bool bDma, bool bInt)
 // Return 1 for pass, 0 for fail, -1 when the combination is not supported.
 static int RunCombo(const SPICfg_t &SlaveBase, const SPICfg_t &MasterBase)
 {
+	if ((MasterBase.bDmaEn && !SPI_MASTER_HAS_DMA) ||
+		(SlaveBase.bDmaEn && !SPI_SLAVE_HAS_DMA))
+	{
+		printf("Selected instance has no DMA hardware\r\n");
+		return -1;
+	}
+
 	const int lengths[] = {1, 16, 129};
 	SPICfg_t cfg;
 	SPICfg_t masterCfg;
@@ -337,7 +352,7 @@ static int RunCombo(const SPICfg_t &SlaveBase, const SPICfg_t &MasterBase)
 		if (!g_SpiMaster.Init(masterCfg))
 		{
 			printf("SPI master init failed\r\n");
-			return -1;
+			return 0;
 		}
 		s_FrameLength = sizeof(s_SlaveRx);
 		for (i = 0; i < sizeof(s_SlaveTx); ++i)
@@ -345,7 +360,7 @@ static int RunCombo(const SPICfg_t &SlaveBase, const SPICfg_t &MasterBase)
 		if (!g_SpiSlave.Init(cfg))
 		{
 			printf("SPI slave init failed\r\n");
-			return -1;
+			return 0;
 		}
 		if (!shown)
 		{

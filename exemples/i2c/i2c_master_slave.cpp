@@ -64,6 +64,14 @@ McuOsc_t g_McuOsc = MCUOSC;
 // A board restricts the set with these masks. A board that still defines the
 // single mode I2C_MASTER_DMA_ENABLE / I2C_MASTER_INT_ENABLE and
 // I2C_SLAVE_DMA_ENABLE flags keeps testing only that combination.
+// Hardware capability of the selected instances, not driver maturity.
+// A DMA request on capable hardware must initialize successfully.
+#ifndef I2C_MASTER_HAS_DMA
+#define I2C_MASTER_HAS_DMA 1
+#endif
+#ifndef I2C_SLAVE_HAS_DMA
+#define I2C_SLAVE_HAS_DMA 1
+#endif
 #ifndef I2C_TEST_MASTER_MASK
 #if defined(I2C_MASTER_DMA_ENABLE) || defined(I2C_MASTER_INT_ENABLE)
 #ifndef I2C_MASTER_DMA_ENABLE
@@ -440,6 +448,13 @@ static bool WriteTest(const I2CCfg_t &Cfg, int Len)
 // Return 1 for pass, 0 for fail, -1 when the combination is not supported.
 static int RunCombo(const I2CCfg_t &MasterCfg, const I2CCfg_t &SlaveCfg)
 {
+	if ((MasterCfg.bDmaEn && !I2C_MASTER_HAS_DMA) ||
+		(SlaveCfg.bDmaEn && !I2C_SLAVE_HAS_DMA))
+	{
+		printf("Selected instance has no DMA hardware\r\n");
+		return -1;
+	}
+
 	static const int writeLen[] = { 0, 1, 2, 8, I2C_LONG_WRITE_LEN };
 	static const int readLen[] = { 1, 2, 8 };
 	const uint8_t wr[8] = { 0xA0, 0xA1, 0xA2, 0xA3, 0xA4, 0xA5, 0xA6, 0xA7 };
@@ -453,8 +468,8 @@ static int RunCombo(const I2CCfg_t &MasterCfg, const I2CCfg_t &SlaveCfg)
 
 	if (!g_I2CMaster.Init(MasterCfg) || !g_I2CSlave.Init(SlaveCfg))
 	{
-		printf("Combination not supported\r\n");
-		return -1;
+		printf("I2C initialization failed\r\n");
+		return 0;
 	}
 
 	for (i = 0; i < I2C_BUFF_SIZE; ++i)

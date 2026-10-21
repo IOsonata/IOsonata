@@ -62,8 +62,8 @@ Board pin mappings are in `ARM/ST/include/stm32_boards.h`.
 ## UART DMA
 
 The shared `uart_stm32.cpp` supports TX and circular RX DMA on USART1, USART2,
-USART3, UART4, UART5, USART6, UART7 and UART8. LPUART1 uses BDMA, which is not
-implemented; its polling and interrupt modes remain available.
+USART3, UART4, UART5, USART6, UART7 and UART8. LPUART1 UART integration with BDMA remains unimplemented; its polling and
+interrupt modes remain available. A DMA request fails initialization.
 
 Each instance reserves two streams through the shared DMA manager. USART1,
 USART2, USART3 and UART4 use DMA1 stream pairs 0/1, 2/3, 4/5 and 6/7; UART5,
@@ -114,9 +114,22 @@ DMA polling mode still need hardware validation.
 
 The shared `i2c_stm32.cpp` and `spi_stm32.cpp` now include H753 instance
 mapping, clocks, reset and interrupt vectors. I2C DevNo 0-3 selects I2C1-4;
-SPI DevNo 0-5 selects SPI1-6. Both use the existing polling/interrupt master
-and interrupt slave implementations. Set `bDmaEn` to false: I2C/SPI DMA
-is not integrated yet and requesting it fails initialization.
+SPI DevNo 0-5 selects SPI1-6. Both support polling/interrupt master and interrupt slave operation, with or
+without DMA. I2C1-3 and SPI1-5 allocate DMA1/2 streams through DMAMUX1;
+I2C4 and SPI6 allocate BDMA channels through DMAMUX2. Allocation failure is an
+initialization failure, never a fallback to CPU transfers.
+
+The common DMA manager stages bus transfers through fixed 512-byte buffers
+in SRAM4 (`.bus_dma`, 12 KiB total). DTCM and unaligned caller buffers work;
+cache operations touch only the staging buffers' exclusive cache lines.
+Completed RX chunks and partial stopped transfers are copied back before the
+completion callback. Custom linker scripts must place `.bus_dma` in SRAM4.
+Long transfers reload the DMA channel; SPI slave rates must allow its FIFO to
+cover interrupt/refill latency. Overrun and DMA errors fail the frame.
+
+H753 interrupt SPI writes use IRQ-driven staging for long command/data
+buffers, retaining the temporary source until the last chunk is copied,
+then reporting completion once. No length-based polling fallback is used.
 
 I2C1-3 use PCLK1; I2C4 uses PCLK4. Rates use TIMINGR with analog filtering,
 including Fast-mode Plus drive configuration above 400 kHz. The shared engine
@@ -134,12 +147,15 @@ are not exposed. PER clock selection is
 preserved; HSI and CSI sources are supported, external HSE is not configured
 by this port.
 
-`python3 tests/stm32h7/run_bus.py` builds the actual H753 drivers and generic
-interfaces at -O0/-O3 and checks all ten instances with modeled registers:
-polling and interrupt receive, clock/rate selection, I2C reload, NACK and
-Fast-mode Plus, plus QSPI initialization and HCLK prescaling. The existing WBA I2C and SPI register tests also pass.
-All three H753 drivers compile with soft and hard float at -O0/-O3, with warnings
-as errors. Physical master/slave operation still needs hardware validation.
+`python3 tests/stm32h7/run_bus.py` builds the H753 drivers and generic
+interfaces at -O0/-O3. The register model checks every I2C/SPI instance in
+polling/interrupt and DMA master/slave paths, 1200-byte DTCM transfers,
+unaligned buffers and guards, temporary command/data source lifetime, partial
+31-byte and 600-byte slave frames, routing, reload/NACK and clock selection.
+It also retains QSPI initialization checks. WBA I2C (70 checks) and SPI
+(64 checks) regressions pass. H753, L476 and WBA sources compile with warnings
+as errors; H753 also compiles with hard float. Models do not establish DMA
+refill timing, physical cache coherency or hardware performance.
 
 ## TaktOS UART PRBS example
 
@@ -178,24 +194,12 @@ master to SPI3 slave with four jumpers. Both use the shared IOsonata example
 applications and keep board mappings in `board.h`.
 
 Build the library and application in Release and open ST-LINK VCP at
-1000000 baud, 8N1. Each tests polling and interrupt master operation against
-an interrupt slave; SPI covers modes 0-3. Expected summary is 2 passed,
-0 failed, 0 skipped. Hardware validation remains pending. DMA is explicitly
-excluded until the H7 I2C/SPI driver integration is implemented.
-
-The shared STM32 interrupt TX path stages long writes through its fixed
-64-byte buffer using IRQ-driven RELOAD chunks. The call waits until the final
-chunk is copied so the temporary buffer in `DeviceIntrfWrite()` stays alive;
-the IRQ reports STOP completion once with the full command-plus-data count.
-If IRQ progress stalls while staging, bounded cleanup releases the source
-and reports a short completion from the caller context. Polling mode and
-the held command phase of repeated-START reads retain their existing behavior.
-
-Register-model regression covers lengths 1, 63, 64, 65, 255, 256 and 600 on
-all four H753 I2C instances, IRQ-only TXDR writes, callback context/count,
-stack overwrite after return, NACK recovery and suppressed-IRQ timeout.
-The original driver fails the IRQ-only TXDR assertion. This is modeled
-evidence; the 254-byte hardware loopback needs to be rerun with the fix.
+1000000 baud, 8N1. Each tests four master modes against interrupt and DMA
+slaves; SPI covers modes 0-3. Expected summary is 8 passed, 0 failed, 0 skipped.
+Only explicit hardware HAS_DMA flags may exclude DMA combinations. An init
+failure is FAIL, not SKIPPED. Existing payload and completion checks remain.
+The two non-DMA I2C combinations passed on hardware; DMA and SPI still need
+hardware validation.
 
 ## Native USB CDC examples
 
@@ -284,11 +288,8 @@ for build steps, pin mapping, ownership, memory, limits and validation.
 All examples compile/link and the packet/register simulations pass. On
 October 21, 2026, NUCLEO-H753ZI hardware tests confirmed 100 Mbit/s link,
 DHCP, ping (20/20 replies), UDP/TCP echo, TCP server restart and cable
-reconnection without a board reset. Later UDP and TCP binary runs each passed
-6000 messages, including 1472-byte UDP and 4096-byte TCP payloads. Public
-DNS/HTTP to example.com:80 returned HTTP/1.1 200 OK. These paced runs do not
-measure maximum throughput; burst load and D-cache-enabled traffic remain
-untested. The earlier UDP text startup gap has no established cause.
+reconnection without a board reset. The UDP startup log had a reply gap;
+DNS, sustained load and D-cache-enabled traffic still need hardware tests.
 See the networking document for measurements and test limits.
 
 ## Crypto engines
@@ -373,23 +374,23 @@ The timer driver accounts for the AHB divider and TIMPRE independently of the
 CPU clock.
 
 The image uses 2 MiB flash and 128 KiB DTCM for data and stack. AXI SRAM is a
-separate 512 KiB RAM2 region. D2 SRAM and SRAM4 are not allocated by this linker
-script. SystemInit enables the Cortex-M7 instruction cache for flash execution;
+separate 512 KiB RAM2 region. SRAM4 is a 64 KiB RAM4 region for bus DMA
+staging; D2 SRAM is not allocated by this linker script. SystemInit enables the Cortex-M7 instruction cache for flash execution;
 data cache remains disabled. Ethernet descriptors and frame buffers use a
 separate `.eth_dma` section in AXI SRAM, with explicit cache maintenance when
-enabled. The shared `dma_stm32.cpp` manager supports all 16 DMA1/2 streams and DMAMUX1
-peripheral routing. It uses direct mode with byte, half-word or word transfers,
+enabled. The shared `dma_stm32.cpp` manager supports all 16 DMA1/2 streams
+and eight BDMA channels, with DMAMUX1/2 peripheral routing. It uses direct mode with byte, half-word or word transfers,
 exclusive ownership, per-stream callbacks, completion/error flags and bounded
 disable waits. Use `STM32_DMA_STREAM(controller, stream)` with controller 1/2
-and stream 0-7. BDMA, MDMA, circular/double-buffer transfers and DMAMUX request
+and stream 0-7, or `STM32_BDMA_CH(0..7)`. MDMA, circular/double-buffer
+transfer setup and DMAMUX request
 generators/synchronization are not provided by this manager.
 
 H753 UART DMA uses this manager for exclusive stream ownership and vectors.
 The earlier successful UART benchmarks used interrupt mode with DMA off.
-I2C/SPI DMA integration remains pending. DMA buffers
-must be in accessible SRAM, such as AXI SRAM, rather than the default DTCM.
-The manager rejects ITCM/DTCM buffers. The owning driver must use non-cacheable
-buffers or perform TX clean and RX invalidation with exclusive cache lines.
+I2C/SPI use the manager's buffered transfers in SRAM4. Raw transfers (used
+by UART) require DMA-accessible memory and owner-managed cache maintenance;
+raw Start rejects ITCM/DTCM and BDMA addresses outside SRAM4.
 
 `python3 tests/stm32h7/run_dma.py` tests the compiled Arm manager against modeled
 registers: all streams, routing, widths, direction, remaining counts, interrupt
@@ -421,7 +422,7 @@ LPTIM is not yet exposed. `TimerGetLowFreqDevCount()` returns 0.
 ## Limits and validation
 
 CAN, ADC/DAC and PWM are not implemented by this port. LPUART1 DMA configuration returns false
-because BDMA is not implemented. The single library project includes the core device, UART, timer,
+because UART BDMA integration is not implemented. The single library project includes the core device, UART, timer,
 application event and logging sources needed by these examples.
 
 `python3 tests/stm32h7/run.py` builds the library and all bare-metal examples in
@@ -464,8 +465,8 @@ Additional regressions:
 
 | Command | Coverage |
 |---|---|
-| `python3 tests/stm32h7/run_bus.py` | All I2C/SPI instances, polling/interrupt receive, reload/NACK, clocks and QSPI initialization |
-| `python3 tests/stm32h7/run_dma.py` | DMA stream routing, ownership, flags, vectors and timeout |
+| `python3 tests/stm32h7/run_bus.py` | All I2C/SPI instances, DMA master/slave, staging, polling/IRQ, reload/NACK and clocks |
+| `python3 tests/stm32h7/run_dma.py` | DMA1/2 and BDMA routing, staging/partial stop, ownership, flags and timeout |
 | `python3 tests/stm32/run_uart.py` | Shared STM32 UART modes, FIFO, DMA and fault handling |
 | `python3 tests/stm32h7/run_ethernet.py` | MAC/PHY registers, descriptors, cache handling and failures |
 | `python3 tests/stm32h7/run_crypto.py` | RNG failures and software crypto known answers |
@@ -473,7 +474,7 @@ Additional regressions:
 | `python3 tests/storage/stm32h7_flash/run.py` | Flash bank mappings, erase/program rules, errors and timeout |
 
 Hardware priorities are I2C/SPI master/slave transfers,
-Ethernet burst load and D-cache-enabled traffic, then reserved-sector
+Ethernet DNS and sustained traffic, then reserved-sector
 flash NVM and DFU handoff. Previously recorded LED, timer, interrupt UART and
 USB results remain the hardware evidence for those paths.
 

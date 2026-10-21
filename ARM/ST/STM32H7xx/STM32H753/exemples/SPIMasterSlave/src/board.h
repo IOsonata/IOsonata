@@ -52,9 +52,9 @@ SOFTWARE.
 #define UART_RTS_PIN -1
 #define UART_RTS_PINOP 0
 
-// Polling/interrupt master, interrupt slave. H7 bus DMA is not implemented.
-#define SPI_TEST_MASTER_MASK 0x03
-#define SPI_TEST_SLAVE_MASK 0x01
+// Both selected instances have DMA hardware; exercise all eight combinations.
+#define SPI_MASTER_HAS_DMA 1
+#define SPI_SLAVE_HAS_DMA 1
 #define SPI_MASTER_DEVNO 0
 #define SPI_SLAVE_DEVNO 2
 #define SPI_MASTER_INT_PRIO 7

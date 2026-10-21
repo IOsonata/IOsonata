@@ -20,13 +20,18 @@ Debug uses semihosting: enable `monitor arm semihosting enable` in the debugger
 startup commands. Use Release for the hardware test.
 
 The project links the shared IOsonata example; `src/board.h` supplies only
-board mappings and test configuration. The master runs polling and interrupt
-modes against an interrupt-driven slave on the same MCU. Slave priority 6
-can preempt master priority 7. DMA is excluded explicitly: H753 I2C/SPI DMA
-integration is not implemented. These projects do not establish DMA support.
+board mappings and test configuration. Four master modes (polling, interrupt,
+DMA polling, DMA interrupt) run against both interrupt and DMA slave modes.
+Slave priority 6 can preempt master priority 7. SPI additionally covers modes
+0-3. Expected final summary: **8 passed, 0 failed, 0 skipped**.
 
-Expected final summary: **2 passed, 0 failed, 0 skipped**. Hardware validation
-is pending; report the full output if a combination fails.
+The HAS_DMA flags describe the selected hardware. They must not be cleared to
+hide an unfinished driver. Initialization failure counts as FAIL. The transfer
+payloads, completion counts and data checks are unchanged.
+
+I2C polling/interrupt master against interrupt slave passed on NUCLEO-H753ZI,
+including the 254-byte write and NACK recovery. New DMA paths and SPI still
+need hardware validation. Report the full output if a combination fails.
 
 Validation: GNU Arm GCC 13.2.1 compiles the shared application with this
 board configuration in Debug (-O0) and Release (-O3). Project XML and linked

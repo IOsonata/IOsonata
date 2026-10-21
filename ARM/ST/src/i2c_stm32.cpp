@@ -39,8 +39,9 @@
 		With bDmaEn the data bytes
 		are moved by a DMA channel: a GPDMA channel on the WBA, on the L4 a
 		DMA1 or DMA2 channel of the instance table from the DMA channel
-		manager (dma_stm32.h). I2CInit returns false for bDmaEn on the other
-		families (G4 and H753). A DMA channel is taken at I2CInit and kept until
+		manager (dma_stm32.h). H753 uses DMA1/2 for I2C1-3 and BDMA for
+		I2C4, with SRAM4 staging for DTCM caller buffers. G4 DMA is not yet
+		integrated and requesting it fails initialization. A DMA channel is taken at I2CInit and kept until
 		PowerOff.
 
 		A refused address or byte, an arbitration loss, a bus error or a bus
@@ -58,8 +59,8 @@
 		before it with a repeated START, the application sets the data with
 		SetReadRqstData; bytes past the data are sent as 0xFF and not counted.
 		Bytes received past the buffer are acknowledged and dropped, not
-		counted. DMA is not used in slave mode: the length of a transfer is
-		not known in advance, bDma reports false. 10 bit addresses and the
+		counted. Slave DMA runs up to the application buffer length; STOP
+		or repeated START captures the partial count. 10 bit addresses and the
 		general call are not implemented: I2CInit returns false for a 10 bit
 		address type.
 
@@ -108,6 +109,18 @@ SOFTWARE.
 #define STM32_I2C_DMA_FLAGS(Ch)				WbaGpdmaFlags(Ch)
 #define STM32_I2C_DMA_FLAG_TC				WBA_GPDMA_FLAG_TC
 #define STM32_I2C_DMA_FLAG_ERR				WBA_GPDMA_FLAG_ERR
+#elif defined(STM32H753xx)
+#include "dma_stm32.h"
+#define STM32_I2C_DMA
+#define STM32_I2C_DMA_FREE(Ch) Stm32DmaChFree(Ch)
+#define STM32_I2C_DMA_ACK(Ch) ((void)Stm32DmaChBufferFlags(Ch))
+#define STM32_I2C_DMA_START(Ch, Mem, Cnt) Stm32DmaChBufferStart(Ch, Mem, Cnt)
+#define STM32_I2C_DMA_STOP(Ch) ((void)Stm32DmaChBufferStopRemain(Ch))
+#define STM32_I2C_DMA_STOPREMAIN(Ch) Stm32DmaChBufferStopRemain(Ch)
+#define STM32_I2C_DMA_REMAIN(Ch) Stm32DmaChBufferRemain(Ch)
+#define STM32_I2C_DMA_FLAGS(Ch) Stm32DmaChBufferFlags(Ch)
+#define STM32_I2C_DMA_FLAG_TC STM32_DMA_FLAG_TC
+#define STM32_I2C_DMA_FLAG_ERR STM32_DMA_FLAG_ERR
 #elif defined(IOSONATA_STM32_L4)
 // DMA1 and DMA2 channels of the DMA channel manager
 #include "dma_stm32.h"
@@ -275,13 +288,13 @@ static const Stm32I2cInfo_t s_Stm32I2cInfo[STM32_I2C_MAXDEV] = {
 // I2C1-3 use PCLK1; I2C4 uses PCLK4.
 static const Stm32I2cInfo_t s_Stm32I2cInfo[STM32_I2C_MAXDEV] = {
 	{ I2C1, &RCC->APB1LENR, RCC_APB1LENR_I2C1EN, &RCC->APB1LRSTR, RCC_APB1LRSTR_I2C1RST,
-	  &RCC->D2CCIP2R, RCC_D2CCIP2R_I2C123SEL, 0, I2C1_EV_IRQn, I2C1_ER_IRQn, 0, 0 },
+	  &RCC->D2CCIP2R, RCC_D2CCIP2R_I2C123SEL, 0, I2C1_EV_IRQn, I2C1_ER_IRQn, 34, 33 },
 	{ I2C2, &RCC->APB1LENR, RCC_APB1LENR_I2C2EN, &RCC->APB1LRSTR, RCC_APB1LRSTR_I2C2RST,
-	  &RCC->D2CCIP2R, RCC_D2CCIP2R_I2C123SEL, 0, I2C2_EV_IRQn, I2C2_ER_IRQn, 0, 0 },
+	  &RCC->D2CCIP2R, RCC_D2CCIP2R_I2C123SEL, 0, I2C2_EV_IRQn, I2C2_ER_IRQn, 36, 35 },
 	{ I2C3, &RCC->APB1LENR, RCC_APB1LENR_I2C3EN, &RCC->APB1LRSTR, RCC_APB1LRSTR_I2C3RST,
-	  &RCC->D2CCIP2R, RCC_D2CCIP2R_I2C123SEL, 0, I2C3_EV_IRQn, I2C3_ER_IRQn, 0, 0 },
+	  &RCC->D2CCIP2R, RCC_D2CCIP2R_I2C123SEL, 0, I2C3_EV_IRQn, I2C3_ER_IRQn, 74, 73 },
 	{ I2C4, &RCC->APB4ENR, RCC_APB4ENR_I2C4EN, &RCC->APB4RSTR, RCC_APB4RSTR_I2C4RST,
-	  &RCC->D3CCIPR, RCC_D3CCIPR_I2C4SEL, 3, I2C4_EV_IRQn, I2C4_ER_IRQn, 0, 0 },
+	  &RCC->D3CCIPR, RCC_D3CCIPR_I2C4SEL, 3, I2C4_EV_IRQn, I2C4_ER_IRQn, 14, 13 },
 };
 #elif defined(IOSONATA_STM32_L4) || defined(IOSONATA_STM32_G4)
 // I2C1 to I2C3 are in APB1ENR1, I2C4 in APB1ENR2, all clocked from PCLK1.
@@ -668,6 +681,7 @@ static bool Stm32I2cDmaTake(Stm32I2cDev_t * const pDev, bool bIrq, int IntPrio)
 	pDev->DmaRx = WbaGpdmaAlloc(Stm32I2cDmaIrq, pDev, IntPrio, bIrq);
 	if (pDev->DmaRx < 0)
 	{
+		STM32_I2C_DMA_STOP(pDev->DmaTx);
 		STM32_I2C_DMA_FREE(pDev->DmaTx);
 		pDev->DmaTx = -1;
 
@@ -679,6 +693,38 @@ static bool Stm32I2cDmaTake(Stm32I2cDev_t * const pDev, bool bIrq, int IntPrio)
 
 	return true;
 }
+#elif defined(STM32H753xx)
+static bool Stm32I2cDmaTake(Stm32I2cDev_t * const pDev, bool bIrq, int IntPrio)
+{
+	// Reinitialization updates IRQ selection without abandoning a stream
+	// that failed to stop. Both channels are retained or neither is taken.
+	if (pDev->DmaTx >= 0 && pDev->DmaRx >= 0)
+	{
+		STM32_I2C_DMA_STOP(pDev->DmaTx);
+		STM32_I2C_DMA_STOP(pDev->DmaRx);
+		if (!Stm32DmaChClaim(pDev->DmaTx, Stm32I2cDmaIrq, pDev, IntPrio, bIrq) ||
+			!Stm32DmaChClaim(pDev->DmaRx, Stm32I2cDmaIrq, pDev, IntPrio, bIrq)) { return false; }
+	}
+	else
+	{
+		bool bdma = pDev->DevNo == 3;
+		pDev->DmaTx = Stm32DmaChAlloc(bdma, Stm32I2cDmaIrq, pDev, IntPrio, bIrq);
+		pDev->DmaRx = Stm32DmaChAlloc(bdma, Stm32I2cDmaIrq, pDev, IntPrio, bIrq);
+	}
+	if (pDev->DmaTx < 0 || pDev->DmaRx < 0)
+	{
+		if (pDev->DmaTx >= 0) { Stm32DmaChFree(pDev->DmaTx); }
+		if (pDev->DmaRx >= 0) { Stm32DmaChFree(pDev->DmaRx); }
+		pDev->DmaTx = pDev->DmaRx = -1;
+		return false;
+	}
+	const Stm32I2cInfo_t *info = pDev->pInfo;
+	int width = 0;
+	Stm32DmaChSetup(pDev->DmaTx, info->TxReq, true, &pDev->pReg->TXDR, width, bIrq);
+	Stm32DmaChSetup(pDev->DmaRx, info->RxReq, false, &pDev->pReg->RXDR, width, bIrq);
+	return ((Stm32DmaChFlags(pDev->DmaTx) | Stm32DmaChFlags(pDev->DmaRx)) & STM32_DMA_FLAG_ERR) == 0;
+}
+
 #else
 static void Stm32I2cDmaGive(Stm32I2cDev_t * const pDev);
 
@@ -737,11 +783,13 @@ static void Stm32I2cDmaGive(Stm32I2cDev_t * const pDev)
 {
 	if (pDev->DmaTx >= 0)
 	{
+		STM32_I2C_DMA_STOP(pDev->DmaTx);
 		STM32_I2C_DMA_FREE(pDev->DmaTx);
 		pDev->DmaTx = -1;
 	}
 	if (pDev->DmaRx >= 0)
 	{
+		STM32_I2C_DMA_STOP(pDev->DmaRx);
 		STM32_I2C_DMA_FREE(pDev->DmaRx);
 		pDev->DmaRx = -1;
 	}
@@ -1193,6 +1241,7 @@ static void Stm32I2cSlaveDmaEnd(Stm32I2cDev_t * const pDev)
 	const bool read = pDev->SState == STM32_I2C_S_READ;
 	int moved;
 
+	pDev->bFail |= (STM32_I2C_DMA_FLAGS(read ? pDev->DmaTx : pDev->DmaRx) & STM32_I2C_DMA_FLAG_ERR) != 0;
 	reg->CR1 &= ~STM32_I2C_CR1_DMA;
 	moved = pDev->SDmaLen - (int)STM32_I2C_DMA_STOPREMAIN(read ? pDev->DmaTx : pDev->DmaRx);
 	if (moved < 0)
@@ -1236,6 +1285,7 @@ static inline void Stm32I2cSlaveDmaCheck(Stm32I2cDev_t * const) {}
 // number of bytes on the bus. A load of filler is not in the count.
 static int Stm32I2cSlaveSent(Stm32I2cDev_t * const pDev)
 {
+	if (pDev->bFail) { return -1; }
 	int count = pDev->SCount;
 
 	if (pDev->SState == STM32_I2C_S_READ && pDev->bTxData && count > 0)
@@ -1269,7 +1319,7 @@ static void Stm32I2cSlaveAddress(Stm32I2cDev_t * const pDev, uint32_t Isr)
 	Stm32I2cSlaveDmaEnd(pDev);
 	if (pDev->SState == STM32_I2C_S_WRITE)
 	{
-		prior = pDev->SCount;
+		prior = pDev->bFail ? -1 : pDev->SCount;
 	}
 	else if (pDev->SState == STM32_I2C_S_READ)
 	{
@@ -1277,6 +1327,7 @@ static void Stm32I2cSlaveAddress(Stm32I2cDev_t * const pDev, uint32_t Isr)
 	}
 
 	pDev->SIdx = idx;
+	pDev->bFail = false;
 	pDev->SCount = 0;
 	pDev->bTxData = false;
 	pDev->SState = read ? STM32_I2C_S_READ : STM32_I2C_S_WRITE;
@@ -1292,7 +1343,7 @@ static void Stm32I2cSlaveAddress(Stm32I2cDev_t * const pDev, uint32_t Isr)
 	{
 		i2c->pTRBuff[idx] = NULL;
 		i2c->TRBuffLen[idx] = 0;
-		if (prior > 0)
+		if (prior != 0)
 		{
 			Stm32I2cSlaveEvent(pDev, DEVINTRF_EVT_COMPLETED, prior);
 		}
@@ -1335,6 +1386,7 @@ static void Stm32I2cSlaveService(Stm32I2cDev_t * const pDev)
 
 	if (isr & (I2C_ISR_BERR | I2C_ISR_ARLO | I2C_ISR_OVR | I2C_ISR_TIMEOUT))
 	{
+		pDev->bFail = true;
 		reg->ICR = I2C_ICR_BERRCF | I2C_ICR_ARLOCF | I2C_ICR_OVRCF | I2C_ICR_TIMOUTCF;
 		isr = reg->ISR;
 	}
