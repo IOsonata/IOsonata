@@ -3015,6 +3015,16 @@
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/include/crypto_stm32h7.h</locationURI>
 		</link>
+		<link>
+			<name>src/net/tls.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/net/tls.cpp</locationURI>
+		</link>
+		<link>
+			<name>include/net/tls.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/net/tls.h</locationURI>
+		</link>
 	</linkedResources>
 	<variableList>
 		<variable>
@@ -3023,3 +3033,4 @@
 		</variable>
 	</variableList>
 </projectDescription>
+

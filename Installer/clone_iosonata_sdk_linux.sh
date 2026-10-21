@@ -305,46 +305,6 @@ for repo in "${repos[@]}"; do
   clone_or_update_repo "$repo" "$target" false
 done
 
-# Mbed TLS owns the exact TF-PSA-Crypto revision required by its release.
-# Never replace a user's existing checkout or mix it with external/TF-PSA-Crypto.
-clone_mbedtls() {
-  local target_dir="$EXT/mbedtls"
-  local ref="mbedtls-4.1.1"
-  local expected="0a8fda272a5a0abef3b47c91bed37185d5a726b1"
-  local crypto_expected="a0632be94d883daa0295ac1eabf70359ad94f91b"
-  local current
-  local changes
-
-  if [[ ! -e "$target_dir" ]]; then
-    git clone --depth=1 --branch "$ref" \
-      https://github.com/Mbed-TLS/mbedtls.git "$target_dir" || return 1
-  fi
-  current=$(git -C "$target_dir" rev-parse HEAD) || return 1
-  if [[ "$current" != "$expected" ]]; then
-    echo "Mbed TLS requires $ref ($expected); existing $target_dir was kept." >&2
-    return 1
-  fi
-  changes=$(git -C "$target_dir" status --porcelain --ignore-submodules=none) || return 1
-  if [[ -n "$changes" ]]; then
-    echo "Mbed TLS checkout has local changes; $target_dir was kept." >&2
-    return 1
-  fi
-  current=$(git -C "$target_dir" rev-parse HEAD:tf-psa-crypto) || return 1
-  if [[ "$current" != "$crypto_expected" ]]; then
-    echo "Mbed TLS crypto submodule revision does not match $ref." >&2
-    return 1
-  fi
-  git -C "$target_dir" submodule update --init --recursive --depth 1 || return 1
-  current=$(git -C "$target_dir/tf-psa-crypto" rev-parse HEAD) || return 1
-  if [[ "$current" != "$crypto_expected" ]]; then
-    echo "Mbed TLS crypto checkout verification failed." >&2
-    return 1
-  fi
-  echo "Mbed TLS $ref and its pinned submodules are ready."
-}
-
-# TLS protocol dependency, separate from the Nordic SDK fork.
-clone_mbedtls
 
 # Clone FreeRTOS-Kernel
 echo ""
@@ -454,8 +414,6 @@ FUSION_ROOT = $(EXTERNAL_ROOT)/Fusion
 VQF_ROOT = $(EXTERNAL_ROOT)/vqf
 LVGL_ROOT = $(EXTERNAL_ROOT)/lvgl
 LWIP_ROOT = $(EXTERNAL_ROOT)/lwip
-MBEDTLS_ROOT = $(EXTERNAL_ROOT)/mbedtls
-MBEDTLS_PSA_ROOT = $(MBEDTLS_ROOT)/tf-psa-crypto
 FREERTOS_KERNEL_ROOT = $(EXTERNAL_ROOT)/FreeRTOS-Kernel
 TINYUSB_ROOT = $(EXTERNAL_ROOT)/tinyusb
 
@@ -701,7 +659,6 @@ echo "  • Fusion"
 echo "  • vqf"
 echo "  • lvgl"
 echo "  • lwip"
-echo "  • mbedtls (4.1.1, pinned crypto submodule)"
 echo "  • FreeRTOS-Kernel"
 echo "  • tinyusb"
 echo ""
@@ -786,3 +743,4 @@ fi
 
 echo -e "${GREEN}Done. Happy building! 🔧${RESET}"
 echo ""
+

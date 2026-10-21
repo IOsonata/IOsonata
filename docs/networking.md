@@ -96,60 +96,75 @@ H753 supplies its existing RNG/CRYP/HASH providers and software P-256; WBA
 has its own providers. Secure networking must reuse those interfaces and
 keep controller access in the MCU ports.
 
-Remaining secure-socket work includes:
+### Native TLS 1.3 PSK client
 
-- Integrating a TLS/DTLS protocol implementation with the existing socket
-  lifecycle, partial transfers, foreground callbacks and timeouts.
-- Fixed session/record storage and bounded credential storage indexed by
-  the existing security tag, with explicit size limits and secret wiping.
-- Connecting protocol cryptography to the existing engines. The lwIP
-  `IpRandom()` xorshift helper is not a security-grade entropy source;
-  secure sessions must use a secure `RngEngine` and handle its failures.
-- Certificate parsing and trust/hostname verification, including a valid
-  time source for certificate validity checks; PSK handling where selected.
-- DTLS datagram sizing, handshake retransmissions and replay handling.
-- Interoperability and rejection tests: bad credentials, wrong hostname,
-  damaged authenticated records, timeout, close/reopen and link loss.
+`net/tls.h` and `src/net/tls.cpp` implement an initial external-PSK client.
+The `Tls` DeviceIntrf wraps a connected TCP `SockIntrf`, following the layered
+interface pattern. The existing socket TLS/DTLS protocol selections and credential
+storage remain unsupported by lwIP; selecting that enum does not select this
+client. nRF91 modem TLS/DTLS is unchanged.
 
-No TLS/DTLS protocol implementation has been integrated into the Ethernet
-path. These are remaining implementation requirements, not supported features.
-MQTT and CoAP will use the existing socket interface above this layer.
+The profile offers only TLS 1.3, `TLS_AES_128_GCM_SHA256`, and `psk_ke`.
+The server must explicitly support external PSK without DHE. This profile has
+no forward secrecy. It has no X.509, certificate hostname verification, DTLS,
+early data, session resumption, or HelloRetryRequest support. Unsupported
+negotiation fails closed. It is an initial implementation, not a claim of
+complete TLS feature coverage or an independently audited security library.
 
-### Selected TLS dependency
+The caller supplies existing synchronous `HashEngine`, `MacEngine`, `AeadEngine`
+and security-grade `RngEngine` instances. No duplicate crypto implementation,
+controller access, system allocation, RTTI or exceptions are introduced. Provider
+errors, including BUSY, abort the connection; async providers are rejected.
+PSKs contain 16..64 bytes, identities 1..128 bytes, and optional SNI at most
+253 bytes. The application provisions and owns the credentials. SNI is a routing
+hint; authentication is possession of the PSK. Use independently provisioned
+high-entropy keys, not the public demo credential.
 
-The SDK installers select upstream Mbed TLS 4.1.1 LTS for the Ethernet
-integration. It provides the TLS/DTLS and X.509 implementation; protocol and
-certificate parsing will not be reimplemented in IOsonata. The upstream 4.1
-LTS branch is supported through at least March 2029. The selected release
-includes the July 2026 security fixes.
+`TlsInit` consumes credentials and queues ClientHello. Call `TlsProcess` from
+one foreground owner with a wrapping millisecond timestamp and current TCP-open
+state. It performs at most one transport write and one read per call. Transport
+calls must return synchronous byte counts; their own blocking duration still
+applies. `Connected()` becomes true only after server Finished authentication
+and submission of client Finished. Application data uses the normal `DeviceIntrf`
+Rx/Tx helpers. Tx accepts at most 1024 plaintext bytes into its fixed output
+buffer; retry the remainder. Accepted bytes are queued, not necessarily delivered.
+This initial interface is polled; it does not publish TLS event callbacks.
 
-| Dependency | Pinned revision |
-|---|---|
-| `external/mbedtls` | `mbedtls-4.1.1`, commit `0a8fda272a5a0abef3b47c91bed37185d5a726b1` |
-| `external/mbedtls/tf-psa-crypto` | Release submodule commit `a0632be94d883daa0295ac1eabf70359ad94f91b` |
+All connection storage is in `TlsDev_t`: a 16645-byte input record buffer,
+1046-byte output buffer, two 2048-byte handshake/transcript buffers, keys and
+state. The measured x86-64 context size is 22232 bytes; this is not an ARM RAM
+measurement and excludes provider objects and stack. The receiver supports the
+TLS 1.3 maximum ciphertext record size. Individual handshake messages and the
+initial transcript are bounded to 2048 bytes. Oversized tickets/messages fail
+rather than allocating. Received tickets are checked and discarded.
 
-The installer initializes the release's submodules and verifies the crypto
-revision. It refuses a different or modified existing Mbed TLS checkout
-without deleting it, including in force mode. The Nordic `sdk-mbedtls` and
-standalone `TF-PSA-Crypto` dependencies remain separate. Do not substitute
-either for the release's crypto submodule. Generated path files expose
-`MBEDTLS_ROOT` and `MBEDTLS_PSA_ROOT`.
+Handshake and pending-output deadlines use `TlsCfg_t::Timeout`. KeyUpdate is
+handled, including requested responses. A conservative cap of 2^20 records per
+traffic key aborts the connection before sequence reuse; the application can
+reconnect. Bad authentication never exposes plaintext. Failed sessions wipe
+record buffers, transcript and secrets, and require reinitialization. On failure
+the caller must close the raw transport; this initial client does not send a
+fatal TLS alert. `TlsClose` queues close_notify once output has drained;
+continue processing until TLS_CLOSED, then close TCP. An unannounced TCP EOF
+is an error, not an authenticated close. `TlsReset` wipes the context's sensitive
+storage without closing the caller-owned transport.
 
-The integration must connect PSA driver operations to the existing IOsonata
-crypto engines. At this revision, upstream driver generation does not cover
-all cryptographic operations; the dispatch additions must be maintained and
-tested against the pinned revision. Restrict all session and library storage
-to explicitly sized static or caller-owned memory, fail on exhaustion, and
-preserve the existing single foreground owner. No system-heap fallback is
-permitted. Credential verification and time handling remain required.
+Mbed TLS is not a dependency of this client. The earlier upstream Mbed TLS
+installer addition has been removed; existing Nordic SDK and standalone PSA
+crypto dependencies are unchanged. Existing external checkouts are not deleted.
 
-This dependency selection does not yet enable TLS/DTLS in the H753 project.
-The socket adapter, crypto dispatch, bounded memory configuration and secure
-interoperability tests remain to be implemented and linked.
+Host validation: `python3 tests/net/run_tls.py` compiles the actual TLS and
+software crypto sources at O0/O2 under ASan/UBSan. It checks fragmented records
+and handshakes, malformed records, bad tags and Finished values, insecure/failed
+RNG, deadlines including timer wrap, backpressure, EOF, key updates, size limits,
+secret wiping, and the C header. OpenSSL 3 provides an independent live server
+for 19/1024/4096/16000-byte reverse echoes, one-byte I/O, wrong-PSK rejection and
+context reuse across connections. No hardware TLS result is recorded yet.
 
-Sources: [Mbed TLS 4.1.1 release](https://github.com/Mbed-TLS/mbedtls/releases/tag/mbedtls-4.1.1),
-[release build instructions](https://github.com/Mbed-TLS/mbedtls/blob/mbedtls-4.1.1/README.md),
-and [PSA driver integration guide](https://github.com/Mbed-TLS/TF-PSA-Crypto/blob/a0632be94d883daa0295ac1eabf70359ad94f91b/docs/psa-driver-example-and-guide.md).
+Certificate authentication, PSK-DHE, DTLS, broader protocol/error handling,
+credential-tag integration and independent security review remain future work.
+The shared protocol/crypto separation allows this component to move with the
+communications code into Voci when the ecosystem is ready.
 
 ## NUCLEO-H753ZI bring-up
 
@@ -347,3 +362,4 @@ D-cache-enabled operation still need hardware tests.
 - [STM32H7 reference manual RM0433](https://www.st.com/resource/en/reference_manual/rm0433-stm32h742-stm32h743753-and-stm32h750-value-line-advanced-armbased-32bit-mcus-stmicroelectronics.pdf)
 - [ST AN4839: Cortex-M7 cache and DMA](https://www.st.com/resource/en/application_note/an4839-level-1-cache-on-stm32f7-series-and-stm32h7-series-stmicroelectronics.pdf)
 - [lwIP raw API](https://www.nongnu.org/lwip/2_2_x/raw_api.html)
+

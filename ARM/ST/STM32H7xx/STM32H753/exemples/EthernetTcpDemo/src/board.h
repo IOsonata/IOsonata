@@ -67,4 +67,15 @@ SOFTWARE.
 #define NET_DEMO_TEST_COUNT 0
 #endif
 
+// 1 selects native TLS 1.3 PSK reverse echo against OpenSSL on NET_DEMO_HOST.
+#ifndef NET_DEMO_TLS_TEST
+#define NET_DEMO_TLS_TEST 0
 #endif
+#define NET_DEMO_TLS_ENGINE_HEADER "crypto_stm32h7.h"
+#define NET_DEMO_TLS_RNG_HEADER "crypto_rng_stm32.h"
+#define NET_DEMO_TLS_AES_TYPE CryptoStm32H7Aes
+#define NET_DEMO_TLS_HASH_TYPE CryptoStm32H7Hash
+#define NET_DEMO_TLS_RNG() CryptoRngStm32Instance()
+
+#endif
+

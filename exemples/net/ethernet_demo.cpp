@@ -54,6 +54,16 @@ SOFTWARE.
 #ifndef NET_DEMO_HTTP_TEST
 #define NET_DEMO_HTTP_TEST 0
 #endif
+#ifndef NET_DEMO_TLS_TEST
+#define NET_DEMO_TLS_TEST 0
+#endif
+#if NET_DEMO_TLS_TEST
+#include "net/tls.h"
+#include NET_DEMO_TLS_ENGINE_HEADER
+#include NET_DEMO_TLS_RNG_HEADER
+static_assert(NET_DEMO_HTTP_TEST == 0 && NET_DEMO_TEST_COUNT == 0,
+	"Select one Ethernet test mode");
+#endif
 
 alignas(4) uint8_t g_AppEvtHandlerQueMem[APPEVT_HANDLER_QUE_MEMSIZE(16)];
 static const IOPinCfg_t s_EthernetPins[] = ETHERNET_PINS;
@@ -347,6 +357,128 @@ static void HttpTest(uint32_t Now)
 }
 #endif
 
+#if NET_DEMO_TLS_TEST
+static Tls s_Tls;
+static NET_DEMO_TLS_AES_TYPE s_TlsAes;
+static NET_DEMO_TLS_HASH_TYPE s_TlsHash;
+static bool s_TlsStarted;
+static bool s_TlsReady;
+static uint32_t s_TlsRetry;
+static uint32_t s_TlsDeadline;
+static uint32_t s_TlsChecked;
+static int s_TlsSent;
+static int s_TlsReceived;
+static char s_TlsMessage[64];
+static uint8_t s_TlsReply[64];
+static int s_TlsLength;
+
+static void TlsTestDown(uint32_t Now, const char *pReason)
+{
+	SysLogPrintf(SysLogGet(), "TLS: %s (error=%d), retry in 3 seconds\r\n",
+		pReason, (int)s_Tls.Error());
+	s_Tls.Reset();
+	s_Socket.Close();
+	s_TlsStarted = false;
+	s_TlsReady = false;
+	s_TlsLength = 0;
+	s_TlsRetry = Now;
+}
+
+static void TlsTest(uint32_t Now)
+{
+	// Public test credential, matching the README's OpenSSL command.
+	// Replace with a provisioned secret for any deployment.
+	static const uint8_t psk[32] = {
+		0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,
+		16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31
+	};
+	static const uint8_t identity[] = "IOsonata";
+	if (s_TlsStarted == false)
+	{
+		if ((uint32_t)(Now - s_TlsRetry) < 3000U)
+		{
+			return;
+		}
+		TlsCfg_t cfg = {
+			.pHash = &s_TlsHash,
+			.pMac = &s_TlsHash,
+			.pAead = &s_TlsAes,
+			.pRng = NET_DEMO_TLS_RNG(),
+			.pPsk = psk,
+			.PskLen = sizeof(psk),
+			.pIdentity = identity,
+			.IdentityLen = sizeof(identity) - 1,
+			.pServerName = nullptr,
+			.Timeout = 10000,
+		};
+		if (!s_TlsAes.Enable() || !s_TlsHash.Enable() || !s_Socket.Init(s_SockCfg) ||
+			!s_Tls.Init(cfg, (DevIntrf_t *)s_Socket, TimerGetMilisecond(&s_Timer)))
+		{
+			TlsTestDown(TimerGetMilisecond(&s_Timer), "connect/init failed");
+			return;
+		}
+		s_TlsStarted = true;
+		SysLogPrintf(SysLogGet(), "TLS 1.3 PSK handshake: %s:%u\r\n", s_SockCfg.pHost, s_SockCfg.Port);
+	}
+	TLS_STATE state = s_Tls.Process(TimerGetMilisecond(&s_Timer), s_Socket.Connected());
+	if (state == TLS_FAILED || state == TLS_CLOSED)
+	{
+		TlsTestDown(Now, "connection ended");
+		return;
+	}
+	if (!s_Tls.Connected())
+	{
+		return;
+	}
+	if (!s_TlsReady)
+	{
+		s_TlsReady = true;
+		SysLogPrintf(SysLogGet(), "TLS authenticated: AES-128-GCM/SHA-256, PSK-only\r\n");
+	}
+	if (s_TlsLength == 0)
+	{
+		s_TlsLength = snprintf(s_TlsMessage, sizeof(s_TlsMessage),
+			"IOsonata TLS %lu\n", (unsigned long)s_TlsChecked);
+		s_TlsSent = 0;
+		s_TlsReceived = 0;
+		s_TlsDeadline = Now;
+	}
+	if (s_TlsSent < s_TlsLength)
+	{
+		s_TlsSent += s_Tls.Tx(0, (const uint8_t *)s_TlsMessage + s_TlsSent, s_TlsLength - s_TlsSent);
+	}
+	s_TlsReceived += s_Tls.Rx(0, s_TlsReply + s_TlsReceived, sizeof(s_TlsReply) - s_TlsReceived);
+	if (s_TlsReceived > s_TlsLength)
+	{
+		TlsTestDown(Now, "unexpected reply length");
+		return;
+	}
+	if (s_TlsReceived == s_TlsLength)
+	{
+		// openssl s_server -rev reverses each line, preserving its newline.
+		for (int i = 0; i < s_TlsLength; i++)
+		{
+			uint8_t expected = i == s_TlsLength - 1 ? '\n' : s_TlsMessage[s_TlsLength - 2 - i];
+			if (s_TlsReply[i] != expected)
+			{
+				TlsTestDown(Now, "reply mismatch");
+				return;
+			}
+		}
+		s_TlsChecked++;
+		if (s_TlsChecked == 1 || s_TlsChecked % 100 == 0)
+		{
+			SysLogPrintf(SysLogGet(), "TLS echo checked %lu\r\n", (unsigned long)s_TlsChecked);
+		}
+		s_TlsLength = 0;
+	}
+	else if ((uint32_t)(Now - s_TlsDeadline) >= 5000U)
+	{
+		TlsTestDown(Now, "echo timeout");
+	}
+}
+#endif
+
 static void Report(uint32_t Evt, void *pCtx)
 {
 	uint8_t addr[4];
@@ -372,6 +504,12 @@ static void Report(uint32_t Evt, void *pCtx)
 	}
 	if (ready == false)
 	{
+#if NET_DEMO_TLS_TEST
+		if (s_TlsStarted)
+		{
+			TlsTestDown(TimerGetMilisecond(&s_Timer), "network down");
+		}
+#endif
 #if NET_DEMO_HTTP_TEST
 		if (s_HttpStarted && s_HttpDone == false)
 		{
@@ -390,6 +528,10 @@ static void Report(uint32_t Evt, void *pCtx)
 
 		return;
 	}
+#if NET_DEMO_TLS_TEST
+	TlsTest(TimerGetMilisecond(&s_Timer));
+	return;
+#endif
 #if NET_DEMO_HTTP_TEST
 	HttpTest(TimerGetMilisecond(&s_Timer));
 
@@ -488,7 +630,7 @@ int main()
 	{
 		SysLogPrintf(SysLogGet(), "IP initialization failed\r\n");
 	}
-	else if (msTimerEnableTrigger(&s_Timer, 1, NET_DEMO_HTTP_TEST || NET_DEMO_TEST_COUNT > 0 ? 10 : 1000,
+	else if (msTimerEnableTrigger(&s_Timer, 1, NET_DEMO_TLS_TEST || NET_DEMO_HTTP_TEST || NET_DEMO_TEST_COUNT > 0 ? 10 : 1000,
 		TIMER_TRIG_TYPE_CONTINUOUS, ReportTimer, nullptr) == 0)
 	{
 		SysLogPrintf(SysLogGet(), "Report timer initialization failed\r\n");
@@ -501,3 +643,4 @@ int main()
 
 	return 0;
 }
+
