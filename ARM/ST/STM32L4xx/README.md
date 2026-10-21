@@ -103,7 +103,13 @@ The master chip select is a GPIO driven by the driver; the hardware NSS is
 used by the slave only. The old driver drove the master NSS pin by hardware
 with a single chip select, so the L476, L496 and L4S9 SPIMasterSlave examples
 now configure the master chip select pin as a GPIO. The shared driver is not
-tested on the L476, L496 and L4S9 hardware yet.
+tested on the L476, L496 and L4S9 hardware yet. On the B-L475E-IOT01A the
+STM32L476 SPIMasterSlave runs SPI1 as master on the Arduino header (D13 PA5
+SCK, D12 PA6 MISO, D11 PA7 MOSI, D10 PA2 chip select GPIO) against SPI2 as
+slave on the Pmod connector CN10 (pin 4 PD1 SCK, pin 3 PD3 MISO, pin 2 PD4
+MOSI, pin 8 PD0 NSS), wired D13 to pin 4, D11 to pin 2, D12 to pin 3 and D10
+to pin 8. The other SPI2 pins are taken on this board: PB12 and PB13 by the
+WiFi module, PB14 by LD2, PB15 by the sub-GHz module.
 
 ## Timer
 
@@ -164,6 +170,9 @@ interrupt driven slave and the DMA slave.
 
 The shared driver is not tested on the L476, L496 and L4S9 hardware yet. The
 old driver accepted polling master configurations only.
+The STM32L476 EepromDemo (`exemples/storage/eeprom_demo.cpp`) needs an
+external I2C EEPROM on the B-L475E-IOT01A Arduino header, I2C1 (DevNo 0, D14
+PB9 SDA, D15 PB8 SCL, open drain), by default a 24xx32 class part at 0x50.
 L496 and L4S9 I2C4 use virtual index 3. The L432 has no I2C2: index 1 fails
 initialization, I2C1 and I2C3 keep indices 0 and 2.
 
@@ -189,6 +198,16 @@ Before 3f6b9868 a port open took up to a minute: the L4 OTG_FS core did not
 report SETUP done for a request that followed a control write while the EP0
 status phase bit stayed latched. USB on the STM32L496 is not tested on
 hardware.
+
+## RNG
+
+The STM32L476 library builds the STM32 RNG, `ARM/ST/src/rng_stm32.cpp`
+(`CryptoRngStm32`), clocked by the MSI at 48 MHz that SystemInit selects as
+the 48 MHz clock. The STM32L475VG and STM32L476 have no AES, HASH or PKA. The
+STM32L476 example CryptoTest runs `exemples/crypto/crypto_engine_test.cpp`
+with the hardware RNG and the software AES, SHA-256 and P-256 engines; the
+Release build prints on the ST-LINK virtual COM port at 115200 8N1, the Debug
+build uses semihosting. Not run on hardware yet.
 
 ## Validation
 
@@ -240,11 +259,10 @@ and STM32L476G_DISCO (USART2, DevNo 2, on PD5 TX and PD6 RX, AF7, also the
 virtual COM port). The old `src/sysstatus.c` is retired; `syslog.cpp` and `sysstatus.h` replace it.
 The STM32L476 library and these
 two examples were built for Debug and Release from their `.project` and
-`.cproject` settings with GNU Arm 13.2, outside IOcomposer. The other L476
-examples, except TimerDemo, still name `stm32l476xx.ld`, which is not in
-`ldscript/` (`gcc_stm32l476xx.ld` is), and their board files pair DevNo 1
-with the USART2 pins and PinOp `0x72`, which the GPIO driver does not take as
-AF7.
+`.cproject` settings with GNU Arm 13.2, outside IOcomposer. Every STM32L476
+example selects B_L475E_IOT01A in `board.h` (2026-10-21): DfuBoot recovers on
+the ST-LINK virtual COM port, with B1 held at reset to force recovery, and
+UartSlipPrbsRxTest receives there.
 
 Timer hardware run: TimerDemo (`exemples/timer/timer_demo.cpp`), in
 `STM32L476/exemples/TimerDemo` for B_L475E_IOT01A and
