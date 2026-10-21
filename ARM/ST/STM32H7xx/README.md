@@ -270,8 +270,11 @@ for build steps, pin mapping, ownership, memory, limits and validation.
 All examples compile/link and the packet/register simulations pass. On
 October 21, 2026, NUCLEO-H753ZI hardware tests confirmed 100 Mbit/s link,
 DHCP, ping (20/20 replies), UDP/TCP echo, TCP server restart and cable
-reconnection without a board reset. The UDP startup log had a reply gap;
-DNS, sustained load and D-cache-enabled traffic still need hardware tests.
+reconnection without a board reset. Later UDP and TCP binary runs each passed
+6000 messages, including 1472-byte UDP and 4096-byte TCP payloads. Public
+DNS/HTTP to example.com:80 returned HTTP/1.1 200 OK. These paced runs do not
+measure maximum throughput; burst load and D-cache-enabled traffic remain
+untested. The earlier UDP text startup gap has no established cause.
 See the networking document for measurements and test limits.
 
 ## Crypto engines
@@ -456,7 +459,7 @@ Additional regressions:
 | `python3 tests/storage/stm32h7_flash/run.py` | Flash bank mappings, erase/program rules, errors and timeout |
 
 Hardware priorities are I2C/SPI master/slave transfers,
-Ethernet DNS and sustained traffic, then reserved-sector
+Ethernet burst load and D-cache-enabled traffic, then reserved-sector
 flash NVM and DFU handoff. Previously recorded LED, timer, interrupt UART and
 USB results remain the hardware evidence for those paths.
 

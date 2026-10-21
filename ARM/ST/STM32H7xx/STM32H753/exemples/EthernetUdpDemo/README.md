@@ -16,4 +16,7 @@ running on port 2469. EthernetDemo only runs DHCP and responds to ping.
 
 NUCLEO-H753ZI hardware validation on October 21, 2026 confirmed UDP echo
 in both directions. The startup log had missing replies 4-7, followed by
-consecutive replies 8-64; UDP endurance and the startup gap remain to be checked.
+consecutive replies 8-64. A later binary integrity run passed 6000 messages,
+2207018 bytes each way in 120030 ms, with payloads through 1472 bytes and
+no reported corruption or timeout. The earlier startup gap's cause remains
+unknown. This paced test does not measure maximum throughput or burst loss.

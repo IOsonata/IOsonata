@@ -6,8 +6,9 @@ and a C++ wrapper. nRF91 uses its modem's IP stack. STM32H753 now uses the share
 can use the same socket interface on either target. The nRF91 implementation
 and public socket signatures are unchanged.
 
-NUCLEO-H753ZI hardware tests confirm DHCP, ping, UDP/TCP echo and TCP recovery
-after server restart and cable reconnection. See the hardware results below
+NUCLEO-H753ZI hardware tests confirm DHCP, ping, UDP/TCP integrity, public
+DNS/HTTP and TCP recovery after server restart and cable reconnection. See the
+hardware results below
 for the tested scope and remaining checks.
 
 ## Layers and memory
@@ -79,6 +80,40 @@ line. The driver maintains descriptor/buffer cache lines if D-cache is enabled.
 An application linker script must retain this section in DMA-accessible SRAM.
 The supplied H753 linker script already does this. The MCU's normal data/stack
 remain in DTCM; callers may pass DTCM buffers because transfers copy frames.
+
+## Secure socket implementation status
+
+`SockIntrfCfg_t` already selects TLS/DTLS, a security tag, peer verification
+and a hostname. `SockIntrfCredWrite/Delete/Exists` already define credential
+operations. The nRF91 implementation delegates these to the modem, including
+hostname verification settings and modem credential storage. In contrast,
+`src/net/ip_lwip.cpp` accepts only TCP/UDP and returns false for credentials.
+Changing the protocol enum alone cannot enable encrypted Ethernet traffic.
+
+The generic crypto interfaces already provide RNG, AES authenticated
+encryption, SHA-256/HMAC, streaming hashes, P-256 agreement and signatures.
+H753 supplies its existing RNG/CRYP/HASH providers and software P-256; WBA
+has its own providers. Secure networking must reuse those interfaces and
+keep controller access in the MCU ports.
+
+Remaining secure-socket work includes:
+
+- Integrating a TLS/DTLS protocol implementation with the existing socket
+  lifecycle, partial transfers, foreground callbacks and timeouts.
+- Fixed session/record storage and bounded credential storage indexed by
+  the existing security tag, with explicit size limits and secret wiping.
+- Connecting protocol cryptography to the existing engines. The lwIP
+  `IpRandom()` xorshift helper is not a security-grade entropy source;
+  secure sessions must use a secure `RngEngine` and handle its failures.
+- Certificate parsing and trust/hostname verification, including a valid
+  time source for certificate validity checks; PSK handling where selected.
+- DTLS datagram sizing, handshake retransmissions and replay handling.
+- Interoperability and rejection tests: bad credentials, wrong hostname,
+  damaged authenticated records, timeout, close/reopen and link loss.
+
+No TLS/DTLS protocol implementation has been integrated into the Ethernet
+path. These are remaining implementation requirements, not supported features.
+MQTT and CoAP will use the existing socket interface above this layer.
 
 ## NUCLEO-H753ZI bring-up
 
@@ -260,9 +295,15 @@ These runs checked every payload byte with no reported corruption or timeout.
 UDP lengths ranged from 1 to 1472 bytes; TCP also exercised 4096-byte messages.
 They used one outstanding message and a 10 ms service interval, so they are
 sustained integrity results, not maximum-throughput measurements or UDP burst
-queue tests. The numeric-IP tests did not exercise DNS. Public DNS/HTTP,
-DHCP lease expiry/address changes, throughput and D-cache-enabled operation
-still need hardware tests.
+queue tests. The numeric-IP tests did not exercise DNS.
+
+A subsequent EthernetTcpDemo public DNS/HTTP check resolved `example.com`,
+connected to TCP port 80, received `HTTP/1.1 200 OK`, and printed
+`DNS/HTTP PASS`. This confirms public hostname resolution and routed TCP
+traffic on the board; it is plaintext HTTP, not TLS or certificate validation.
+The exact flashed commit and build profile were not supplied with this log.
+DHCP lease expiry/address changes, maximum throughput, burst load and
+D-cache-enabled operation still need hardware tests.
 
 ## References
 

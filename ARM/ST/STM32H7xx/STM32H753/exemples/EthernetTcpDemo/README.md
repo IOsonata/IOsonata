@@ -17,3 +17,12 @@ running on port 2469. EthernetDemo only runs DHCP and responds to ping.
 NUCLEO-H753ZI hardware validation on October 21, 2026 confirmed TCP echo,
 reconnection after restarting the host server, and DHCP/TCP recovery after
 unplugging and reconnecting the cable without resetting the board.
+
+A binary integrity run passed 6000 messages, 4445400 bytes each way in
+120068 ms, including 4096-byte messages, with no reported corruption or timeout.
+This is a paced integrity test, not a maximum-throughput measurement.
+
+Set `NET_DEMO_HTTP_TEST` to `1` in `src/board.h` for a public DNS/HTTP check.
+It selects example.com:80 without a local echo server. Hardware returned
+`HTTP/1.1 200 OK` and `DNS/HTTP PASS` on October 21, 2026. This validates
+plaintext HTTP connectivity, not TLS. Set the flag back to `0` for echo tests.
