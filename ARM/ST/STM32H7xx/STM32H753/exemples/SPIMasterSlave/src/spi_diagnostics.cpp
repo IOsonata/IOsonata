@@ -51,6 +51,9 @@ static void PinRegisters(const char *Name, GPIO_TypeDef *Reg)
 		Name, (unsigned long)Reg->MODER, (unsigned long)Reg->AFR[0],
 		(unsigned long)Reg->AFR[1], (unsigned long)Reg->IDR,
 		(unsigned long)Reg->ODR);
+	printf("%s OSPEEDR=%08lx OTYPER=%04lx PUPDR=%08lx\r\n",
+		Name, (unsigned long)Reg->OSPEEDR, (unsigned long)Reg->OTYPER,
+		(unsigned long)Reg->PUPDR);
 }
 
 void SpiMasterSlaveDiagnostics(void)

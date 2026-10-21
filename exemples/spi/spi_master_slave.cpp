@@ -251,6 +251,7 @@ static bool Frame(int Length, uint8_t Seed, bool Receive = false)
 	bool pass;
 	int mismatch;
 	int i;
+	int dumpLength;
 	uint8_t masterRx[129] = {};
 
 	s_Done = false;
@@ -312,6 +313,19 @@ static bool Frame(int Length, uint8_t Seed, bool Receive = false)
 		printf("Mismatch at %d: master RX=%02x expected=%02x slave RX=%02x expected=%02x\r\n",
 			mismatch, masterRx[mismatch], s_SlaveTx[mismatch],
 			s_SlaveRx[mismatch], (uint8_t)(slaveSeed + (SPI_MASTER_SOFTWARE || !Receive ? mismatch : 0)));
+	if (!pass)
+	{
+		printf("Slave expected:");
+		for (i = 0; i < Length; ++i)
+			printf(" %02x", (uint8_t)(slaveSeed + (SPI_MASTER_SOFTWARE || !Receive ? i : 0)));
+		printf("\r\nSlave received:");
+		dumpLength = s_Done && s_Count > Length ? s_Count : Length;
+		if (dumpLength > (int)sizeof(s_SlaveRx))
+			dumpLength = sizeof(s_SlaveRx);
+		for (i = 0; i < dumpLength; ++i)
+			printf(" %02x", s_SlaveRx[i]);
+		printf("\r\n");
+	}
 	return pass;
 }
 
