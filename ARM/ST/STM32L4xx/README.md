@@ -170,6 +170,26 @@ initialization, I2C1 and I2C3 keep indices 0 and 2.
 These restrictions identify unsupported modes within the hardware-validated
 ports. Hardware validation does not imply that every optional mode is implemented.
 
+## USB
+
+The STM32L476 and STM32L496 libraries build the shared STM32 OTG controller,
+`ARM/ST/src/usb_ctrlr_stm32.cpp`, with the IOsonata USB stack; see
+[STM32 USB notes](../USB.md). The OTG_FS clock is the MSI at 48 MHz locked to
+the LSE, PA11/PA12 AF10 and PA9 VBUS sense, as in ST's USB device examples
+for the B-L475E-IOT01A. The STM32L476 examples UsbCdcLoopback and
+UsbCdcPrbsTx (`exemples/usb/usb_cdc_loopback.cpp`, `usb_cdc_prbs_tx.cpp`)
+select B_L475E_IOT01A; UsbCdcPrbsTx logs on the ST-LINK virtual COM port,
+USART1 at 1 Mbaud. Use the USB OTG micro-AB connector, not the ST-LINK one.
+
+B-L475E-IOT01A2 hardware run (2026-10-20), macOS host: UsbCdcPrbsTx Release
+with `Python/uartprbs_rx.py` about 791 kB/s, no loss, the port opens at
+once. UsbCdcLoopback with `Python/usb_cdc_loopback.py --duration 60`
+538 kB/s each direction, 32289792 bytes each way, 0 errors, 0 pending, PASS.
+Before 3f6b9868 a port open took up to a minute: the L4 OTG_FS core did not
+report SETUP done for a request that followed a control write while the EP0
+status phase bit stayed latched. USB on the STM32L496 is not tested on
+hardware.
+
 ## Validation
 
 Run the focused host regressions from the repository root:

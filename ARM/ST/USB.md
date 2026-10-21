@@ -124,7 +124,43 @@ Loopback averaged 1201554.01 B/s TX and 1201451.62 B/s RX. First RX was
 suspend/resume, FS fallback and other classes remain untested. Negotiated
 USB speed was not recorded in the host log.
 
-F401, L476 and L496 USB hardware tests remain pending.
+F401 and L496 USB hardware tests remain pending. L476 results follow.
+
+## B-L475E-IOT01A2 examples and hardware validation
+
+The STM32L476 project runs on the STM32L475VG of this board:
+
+- `STM32L4xx/STM32L476/exemples/UsbCdcLoopback`
+- `STM32L4xx/STM32L476/exemples/UsbCdcPrbsTx`
+
+Both select `B_L475E_IOT01A` in `board.h` and link the common applications in
+`exemples/usb`. UsbCdcPrbsTx logs on the ST-LINK virtual COM port, USART1 at
+1 Mbaud. Connect the USB OTG micro-AB connector to the host.
+
+### Hardware results - October 20, 2026
+
+macOS host:
+
+| Test | Result |
+|---|---|
+| PRBS TX | Release, about 791 kB/s, no loss, immediate port open |
+| CDC loopback, 60 seconds | 32289792 bytes TX and RX; 538 kB/s each direction; 0 errors; 0 pending; PASS |
+
+Loopback: first RX 2 ms after start, longest TX wait 20 ms, longest RX gap
+14 ms. The banner arrived after a DTR toggle.
+
+Two controller defects were found during this bring-up:
+
+- `UsbCtrlrEpClearStall` re-armed any busy endpoint. A CLEAR_FEATURE
+  (ENDPOINT_HALT) on a streaming IN endpoint that was not halted wrote a
+  second packet into a FIFO sized for one. It now arms only a transfer the
+  halt deferred (aaa9dd69).
+- The OUT handler cleared only the enabled DOEPINT bits. On the L4 OTG_FS
+  core, the status phase received bit left set after a control write stops
+  the SETUP done status of the next request: the request is never handled
+  and the host retries until it gives up, about a minute for a serial port
+  open. The controller now enables OTEPSPRM, as ST's HAL does, and clears
+  every latched DOEPINT bit (3f6b9868).
 
 ## Software validation (updated October 20, 2026)
 
@@ -140,7 +176,11 @@ F401, L476 and L496 USB hardware tests remain pending.
   bounded flush failure. Run with `ASAN_OPTIONS=detect_leaks=0` where the host
   environment prevents LeakSanitizer process inspection.
 - The maintainer built and ran WBA PRBS TX in Debug and Release, and CDC
-  loopback in Release. Other family firmware links and board tests remain pending.
+  loopback in Release, and PRBS TX (Release) and CDC loopback on the
+  B-L475E-IOT01A2.
+- xPack ARM GCC 15.2.1 (October 20): the STM32L476 library in its four
+  configurations and UsbCdcLoopback and UsbCdcPrbsTx in Debug and Release
+  build from their `.project` and `.cproject` settings.
 
 References used for register sequences and board wiring:
 
