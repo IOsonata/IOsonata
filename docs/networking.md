@@ -115,6 +115,42 @@ No TLS/DTLS protocol implementation has been integrated into the Ethernet
 path. These are remaining implementation requirements, not supported features.
 MQTT and CoAP will use the existing socket interface above this layer.
 
+### Selected TLS dependency
+
+The SDK installers select upstream Mbed TLS 4.1.1 LTS for the Ethernet
+integration. It provides the TLS/DTLS and X.509 implementation; protocol and
+certificate parsing will not be reimplemented in IOsonata. The upstream 4.1
+LTS branch is supported through at least March 2029. The selected release
+includes the July 2026 security fixes.
+
+| Dependency | Pinned revision |
+|---|---|
+| `external/mbedtls` | `mbedtls-4.1.1`, commit `0a8fda272a5a0abef3b47c91bed37185d5a726b1` |
+| `external/mbedtls/tf-psa-crypto` | Release submodule commit `a0632be94d883daa0295ac1eabf70359ad94f91b` |
+
+The installer initializes the release's submodules and verifies the crypto
+revision. It refuses a different or modified existing Mbed TLS checkout
+without deleting it, including in force mode. The Nordic `sdk-mbedtls` and
+standalone `TF-PSA-Crypto` dependencies remain separate. Do not substitute
+either for the release's crypto submodule. Generated path files expose
+`MBEDTLS_ROOT` and `MBEDTLS_PSA_ROOT`.
+
+The integration must connect PSA driver operations to the existing IOsonata
+crypto engines. At this revision, upstream driver generation does not cover
+all cryptographic operations; the dispatch additions must be maintained and
+tested against the pinned revision. Restrict all session and library storage
+to explicitly sized static or caller-owned memory, fail on exhaustion, and
+preserve the existing single foreground owner. No system-heap fallback is
+permitted. Credential verification and time handling remain required.
+
+This dependency selection does not yet enable TLS/DTLS in the H753 project.
+The socket adapter, crypto dispatch, bounded memory configuration and secure
+interoperability tests remain to be implemented and linked.
+
+Sources: [Mbed TLS 4.1.1 release](https://github.com/Mbed-TLS/mbedtls/releases/tag/mbedtls-4.1.1),
+[release build instructions](https://github.com/Mbed-TLS/mbedtls/blob/mbedtls-4.1.1/README.md),
+and [PSA driver integration guide](https://github.com/Mbed-TLS/TF-PSA-Crypto/blob/a0632be94d883daa0295ac1eabf70359ad94f91b/docs/psa-driver-example-and-guide.md).
+
 ## NUCLEO-H753ZI bring-up
 
 The MB1364 board contains a LAN8742A PHY and RJ45 connector CN14. Its RMII pins
