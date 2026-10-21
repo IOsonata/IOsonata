@@ -282,6 +282,13 @@ extern "C" void OTG_FS_IRQHandler(void)
 
 
 // Endpoint state and FIFO transfers.
+
+// Status phase received for a control write, bit 5 of DOEPMSK. The older
+// STM32L4 device header does not name it.
+#ifndef USB_OTG_DOEPMSK_OTEPSPRM
+#define USB_OTG_DOEPMSK_OTEPSPRM	(1UL << 5)
+#endif
+
 enum {
 	USB_EP_COUNT = USB_EPIN_CNT_0,
 	USB_EP0_MPS = 64,
@@ -728,7 +735,10 @@ static void ResetEndpoints(void)
 	In(0)->DIEPCTL = USB_OTG_DIEPCTL_USBAEP;
 	Out(0)->DOEPCTL = USB_OTG_DOEPCTL_USBAEP;
 	Device()->DIEPMSK = USB_OTG_DIEPMSK_XFRCM;
-	Device()->DOEPMSK = USB_OTG_DOEPMSK_XFRCM | USB_OTG_DOEPMSK_STUPM;
+	// Status phase received is enabled only so the interrupt clears it as
+	// soon as it is set, see Stm32UsbOtgInterrupt.
+	Device()->DOEPMSK = USB_OTG_DOEPMSK_XFRCM | USB_OTG_DOEPMSK_STUPM |
+		USB_OTG_DOEPMSK_OTEPSPRM;
 	Device()->DAINTMSK = 0x10001U;
 	PrimeSetup();
 }
@@ -1414,8 +1424,13 @@ void Stm32UsbOtgInterrupt(void)
 		active &= active - 1;
 		if ((Device()->DAINT & Device()->DAINTMSK & (1U << (ep + 16))) != 0)
 		{
-			const uint32_t bits = Out(ep)->DOEPINT & Device()->DOEPMSK;
-			Out(ep)->DOEPINT = bits;
+			// Clear every latched status, enabled or not. On the STM32L4
+			// OTG_FS core a status phase received left set on EP0 stops the
+			// SETUP done status of the next request, which is then never
+			// handled and the host retries until it gives up.
+			const uint32_t latched = Out(ep)->DOEPINT;
+			Out(ep)->DOEPINT = latched;
+			const uint32_t bits = latched & Device()->DOEPMSK;
 			if (ep == 0 && (bits & USB_OTG_DOEPINT_STUP) != 0)
 			{
 				Setup();
