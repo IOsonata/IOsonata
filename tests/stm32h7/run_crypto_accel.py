@@ -21,6 +21,7 @@ with tempfile.TemporaryDirectory(prefix="h7-crypto-") as temp:
         r"#define (CRYP_(CR|SR)_|HASH_(CR|SR|STR)_|RCC_AHB2(ENR|RSTR)_)", line)]
     (out / "stm32.h").write_text('#include "crypto_accel_model.h"\n' + "\n".join(defines))
     (out / "board.h").write_text("""#include "crypto_stm32h7.h"
+#define CRYPTO_TEST_AES256
 #define CRYPTO_TEST_AES_TYPE CryptoStm32H7Aes
 #define CRYPTO_TEST_AES_MEMSIZE sizeof(CryptoStm32H7Aes)
 #define CRYPTO_TEST_AES_CREATE(m,s) CryptoStm32H7AesCreate(m,s)

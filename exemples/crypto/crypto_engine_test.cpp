@@ -17,6 +17,7 @@ checks the test itself on a host. A board selects its engines in board.h:
 	CRYPTO_TEST_AES_TYPE		class under test, a CryptoSoftAes derived
 	CRYPTO_TEST_AES_MEMSIZE		its storage size
 	CRYPTO_TEST_AES_CREATE(m,s)	factory: memory, size
+	CRYPTO_TEST_AES256		enable AES-256 Cipher checks when supported
 	CRYPTO_TEST_PKA_TYPE		class under test, KeyAgreeEngine and SignEngine
 	CRYPTO_TEST_PKA_MEMSIZE
 	CRYPTO_TEST_PKA_CREATE(m,s,rng)
@@ -284,6 +285,67 @@ static const char *s_CbcHex =
 static const char *s_CtrHex =
 	"874d6191b620e3261bef6864990db6ce9806f66b7970fdff8617187bb9fffdff"
 	"5ae4df3edbd5d35e5b4f09020db03eab1e031dda2fbe03d1792170a0f3009cee";
+
+#ifdef CRYPTO_TEST_AES256
+static void Aes256Vectors(CipherEngine *pAes)
+{
+	printf("AES-256 known answers, SP 800-38A\r\n");
+	uint8_t key[33], iv[16], expected[64], out[66];
+	Hex("603deb1015ca71be2b73aef0857d77811f352c073b6108d72d9810a30914dff4", key + 1, 32);
+	CryptoKey k{CRYPTO_KEY_AES_256, CRYPTO_KEY_LOC_PLAIN,
+		CRYPTO_KEY_USE_ENCRYPT | CRYPTO_KEY_USE_DECRYPT, {}};
+	k.Plain.pData = key + 1; k.Plain.Len = 32;
+	const CRYPTO_CIPHER_ALG modes[] = {CRYPTO_CIPHER_ECB, CRYPTO_CIPHER_CBC, CRYPTO_CIPHER_CTR};
+	const char *vectors[] = {
+		"f3eed1bdb5d2a03c064b5a7e3db181f8591ccb10d410ed26dc5ba74a31362870"
+		"b6ed21b99ca6f4f9f153e7b1beafed1d23304b7a39f9f3ff067d8d8f9e24ecc7",
+		"f58c4c04d6e5f1ba779eabfb5f7bfbd69cfc4e967edb808d679f777bc6702c7d"
+		"39f23369a9d9bacfa530e26304231461b2eb05e2c39be9fcda6c19078c6a9d1b",
+		"601ec313775789a5b7a7f504bbf3d228f443e3ca4d62b59aca84e990cacaf5c5"
+		"2b0930daa23de94ce87017ba2d84988ddfc9c58db67aada613c2dd08457941a6"};
+	const char *enc[] = {"AES-256 ECB encrypt", "AES-256 CBC encrypt", "AES-256 CTR encrypt"};
+	const char *dec[] = {"AES-256 ECB decrypt", "AES-256 CBC decrypt", "AES-256 CTR decrypt"};
+	const char *inplace[] = {"AES-256 ECB in-place and bounds", "AES-256 CBC in-place and bounds", "AES-256 CTR in-place and bounds"};
+	for (unsigned m = 0; m < 3; m++)
+	{
+		for (unsigned i = 0; i < 16; i++) iv[i] = m == 2 ? 0xf0 + i : i;
+		Hex(vectors[m], expected, 64);
+		memset(out, 0xa5, sizeof(out));
+		check(enc[m], pAes->Cipher(modes[m], 1, k, iv, 16, s_Spmsg, 64, out + 1) == CRYPTO_STATUS_OK &&
+			memcmp(out + 1, expected, 64) == 0 && out[0] == 0xa5 && out[65] == 0xa5);
+		check(dec[m], pAes->Cipher(modes[m], 0, k, iv, 16, expected, 64, out + 1) == CRYPTO_STATUS_OK &&
+			memcmp(out + 1, s_Spmsg, 64) == 0);
+		memcpy(out + 1, s_Spmsg, 64);
+		bool ok = pAes->Cipher(modes[m], 1, k, iv, 16, out + 1, 64, out + 1) == CRYPTO_STATUS_OK &&
+			memcmp(out + 1, expected, 64) == 0;
+		ok = pAes->Cipher(modes[m], 0, k, iv, 16, out + 1, 64, out + 1) == CRYPTO_STATUS_OK &&
+			memcmp(out + 1, s_Spmsg, 64) == 0 && out[0] == 0xa5 && out[65] == 0xa5 && ok;
+		check(inplace[m], ok);
+	}
+	memset(out, 0xa5, sizeof(out));
+	check("AES-256 CTR partial tail and bounds",
+		pAes->Cipher(CRYPTO_CIPHER_CTR, 1, k, iv, 16, s_Spmsg, 21, out + 1) == CRYPTO_STATUS_OK &&
+		memcmp(out + 1, expected, 21) == 0 && out[0] == 0xa5 && out[22] == 0xa5);
+	bool policy = true;
+	for (unsigned len = 0; len <= 33; len++)
+	{
+		if (len == 32) continue;
+		k.Plain.Len = len;
+		policy = pAes->Cipher(CRYPTO_CIPHER_ECB, 1, k, nullptr, 0, s_Spmsg, 16, out) != CRYPTO_STATUS_OK && policy;
+	}
+	k.Plain.Len = 32; k.Usage = CRYPTO_KEY_USE_DECRYPT;
+	policy = pAes->Cipher(CRYPTO_CIPHER_ECB, 1, k, nullptr, 0, s_Spmsg, 16, out) != CRYPTO_STATUS_OK && policy;
+	k.Usage = CRYPTO_KEY_USE_ENCRYPT;
+	policy = pAes->Cipher(CRYPTO_CIPHER_ECB, 0, k, nullptr, 0, s_Spmsg, 16, out) != CRYPTO_STATUS_OK && policy;
+	check("AES-256 key length and usage policy", policy);
+	check("AES-256 block length and IV policy",
+		pAes->Cipher(CRYPTO_CIPHER_ECB, 1, k, nullptr, 0, s_Spmsg, 21, out) != CRYPTO_STATUS_OK &&
+		pAes->Cipher(CRYPTO_CIPHER_CBC, 1, k, iv, 16, s_Spmsg, 21, out) != CRYPTO_STATUS_OK &&
+		pAes->Cipher(CRYPTO_CIPHER_CBC, 1, k, nullptr, 16, s_Spmsg, 16, out) != CRYPTO_STATUS_OK &&
+		pAes->Cipher(CRYPTO_CIPHER_CTR, 1, k, iv, 15, s_Spmsg, 16, out) != CRYPTO_STATUS_OK);
+	CryptoSecureWipe(key, sizeof(key));
+}
+#endif
 
 static void AesVectors(CipherEngine *pAes, MacEngine *pMac, AeadEngine *pAead)
 {
@@ -1008,6 +1070,9 @@ int CryptoEngineTest(void)
 #endif
 	RngChecks(hwRng);
 	AesVectors(hwAes, hwAes, hwAes);
+#ifdef CRYPTO_TEST_AES256
+	Aes256Vectors(hwAes);
+#endif
 	SoftwareAesDecryptChecks(swAes);
 	AesSoak(hwAes, hwAes, hwAes, swAes, swAes, swAes);
 	PkaVectors(hwPka, hwPka, swPka);

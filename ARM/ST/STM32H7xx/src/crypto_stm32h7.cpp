@@ -68,17 +68,24 @@ static bool CrypWait(uint32_t Mask, uint32_t Value)
 }
 
 // DATATYPE=0: explicit big-endian loads/stores also allow unaligned buffers.
-static bool CrypStart(const uint8_t *pKey, bool Decrypt)
+static bool CrypStart(const uint8_t *pKey, size_t KeyLen, bool Decrypt)
 {
-	CRYP->CR = CRYP_CR_FFLUSH;
+	const uint32_t keySize = KeyLen == 32U ? CRYP_CR_KEYSIZE_1 : 0U;
+	CRYP->CR = keySize | CRYP_CR_FFLUSH;
+	if (KeyLen == 32U)
+	{
+		CRYP->K0LR = LoadBe32(pKey); CRYP->K0RR = LoadBe32(pKey + 4);
+		CRYP->K1LR = LoadBe32(pKey + 8); CRYP->K1RR = LoadBe32(pKey + 12);
+		pKey += 16;
+	}
 	CRYP->K2LR = LoadBe32(pKey); CRYP->K2RR = LoadBe32(pKey + 4);
 	CRYP->K3LR = LoadBe32(pKey + 8); CRYP->K3RR = LoadBe32(pKey + 12);
 	if (Decrypt)
 	{
-		CRYP->CR = CRYP_CR_ALGOMODE_AES_KEY | CRYP_CR_CRYPEN;
+		CRYP->CR = keySize | CRYP_CR_ALGOMODE_AES_KEY | CRYP_CR_CRYPEN;
 		if (!CrypWait(CRYP_SR_BUSY, 0U)) return false;
 	}
-	CRYP->CR = CRYP_CR_ALGOMODE_AES_ECB |
+	CRYP->CR = keySize | CRYP_CR_ALGOMODE_AES_ECB |
 		(Decrypt ? CRYP_CR_ALGODIR : 0U) | CRYP_CR_CRYPEN;
 	return true;
 }
@@ -141,7 +148,7 @@ bool CryptoStm32H7Aes::AesEcbEncrypt(const uint8_t Key[16],
 								  const uint8_t In[16], uint8_t Out[16])
 {
 	CRYP->CR = 0U;
-	return CrypStart(Key, false) && CrypBlock(In, Out);
+	return CrypStart(Key, 16U, false) && CrypBlock(In, Out);
 }
 
 CRYPTO_STATUS CryptoStm32H7Aes::Cipher(CRYPTO_CIPHER_ALG Alg, int bEncrypt,
@@ -149,8 +156,9 @@ CRYPTO_STATUS CryptoStm32H7Aes::Cipher(CRYPTO_CIPHER_ALG Alg, int bEncrypt,
 		const uint8_t *pIn, size_t Len, uint8_t *pOut)
 {
 	const uint32_t usage = bEncrypt ? CRYPTO_KEY_USE_ENCRYPT : CRYPTO_KEY_USE_DECRYPT;
-	if (Key.Type != CRYPTO_KEY_AES_128 || Key.Loc != CRYPTO_KEY_LOC_PLAIN ||
-		Key.Plain.pData == nullptr || Key.Plain.Len != 16U ||
+	if (Key.Loc != CRYPTO_KEY_LOC_PLAIN || Key.Plain.pData == nullptr ||
+		!((Key.Type == CRYPTO_KEY_AES_128 && Key.Plain.Len == 16U) ||
+		  (Key.Type == CRYPTO_KEY_AES_256 && Key.Plain.Len == 32U)) ||
 		(Key.Usage & usage) == 0U || pIn == nullptr || pOut == nullptr ||
 		(Alg != CRYPTO_CIPHER_ECB && Alg != CRYPTO_CIPHER_CBC && Alg != CRYPTO_CIPHER_CTR))
 	{
@@ -173,7 +181,7 @@ CRYPTO_STATUS CryptoStm32H7Aes::Cipher(CRYPTO_CIPHER_ALG Alg, int bEncrypt,
 	}
 	uint8_t chain[16] = {}, block[16] = {}, result[16] = {};
 	if (Alg != CRYPTO_CIPHER_ECB) memcpy(chain, pIv, sizeof(chain));
-	bool ok = CrypStart(Key.Plain.pData, !bEncrypt && Alg != CRYPTO_CIPHER_CTR);
+	bool ok = CrypStart(Key.Plain.pData, Key.Plain.Len, !bEncrypt && Alg != CRYPTO_CIPHER_CTR);
 	for (size_t off = 0; ok && off < Len; )
 	{
 		const size_t count = Len - off < 16U ? Len - off : 16U;

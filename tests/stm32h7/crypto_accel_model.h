@@ -1,7 +1,7 @@
 #pragma once
 #include <cstdint>
-enum { C_CR, C_SR, C_DIN, C_DOUT, C_K2L, C_K2R, C_K3L, C_K3R,
-	H_CR, H_SR, H_DIN, H_STR, R_EN, R_RST, H_HR=16, REG_COUNT=32 };
+enum { C_CR, C_SR, C_DIN, C_DOUT, C_K0L, C_K0R, C_K1L, C_K1R, C_K2L, C_K2R, C_K3L, C_K3R,
+	H_CR, H_SR, H_DIN, H_STR, R_EN, R_RST, H_HR=24, REG_COUNT=32 };
 uint32_t ModelRead(unsigned id);
 void ModelWrite(unsigned id, uint32_t value);
 struct ModelReg {
@@ -12,9 +12,10 @@ struct ModelReg {
 	ModelReg &operator&=(uint32_t v) {return *this=ModelRead(id)&v;}
 };
 struct CrypRegs {ModelReg CR{C_CR}, SR{C_SR}, DIN{C_DIN}, DOUT{C_DOUT},
+	K0LR{C_K0L}, K0RR{C_K0R}, K1LR{C_K1L}, K1RR{C_K1R},
 	K2LR{C_K2L}, K2RR{C_K2R}, K3LR{C_K3L}, K3RR{C_K3R};};
 struct HashRegs {ModelReg CR{H_CR}, SR{H_SR}, DIN{H_DIN}, STR{H_STR};
-	ModelReg HR[8]={{16},{17},{18},{19},{20},{21},{22},{23}};};
+	ModelReg HR[8]={{24},{25},{26},{27},{28},{29},{30},{31}};};
 struct RccRegs {ModelReg AHB2ENR{R_EN}, AHB2RSTR{R_RST};};
 extern CrypRegs g_Cryp;
 extern HashRegs g_Hash;

@@ -5,10 +5,12 @@ used by STM32WBA. It selects `CryptoRngStm32` for hardware random numbers,
 `CryptoStm32H7Aes` for the CRYP AES accelerator and
 `CryptoStm32H7Hash` for one-shot SHA-256 on HASH. P-256 uses `CryptoUecc`.
 
-AES-128 ECB, CBC and CTR encryption/decryption use the hardware block
+AES-128 and AES-256 ECB, CBC and CTR encryption/decryption use the hardware block
 primitive. CBC chaining and the full 128-bit CTR increment are handled by
 the driver. CMAC, CCM and GCM reuse the `CryptoSoftAes` constructions over
-hardware AES. AES-256 is not offered by this engine.
+hardware AES-128. CMAC, CCM and GCM still accept AES-128 keys only.
+AES-256 Cipher uses all eight key registers and the 256-bit decryption
+key preparation mode. AES-192 is not offered.
 
 SHA-256 streaming and HMAC retain the software implementation: the HASH
 peripheral's 54-word saved context exceeds the existing 128-byte caller
@@ -52,8 +54,16 @@ micro-ecc's co-Z and Shamir boundary cases using its integer API
 
 Run `python3 tests/stm32h7/run_crypto_accel.py` for the host register model.
 It requires gcc, g++ and OpenSSL development headers. At O0 and O2 with
-ASan/UBSan, it passes all 75 shared checks through the production CRYP/HASH
-driver, plus in-place AES, timeout recovery, output/key clearing and shared
+ASan/UBSan, it passes all 87 shared checks through the production CRYP/HASH
+driver, plus 200 rounds of AES-256 ECB/CBC/CTR against OpenSSL, in-place
+AES, CTR tails/carry/wrap, timeout recovery, output/key clearing and shared
 peripheral locking checks. These fault-injection checks are model results,
 separate from the board run. Register definitions come from the STM32H753
 CMSIS header; OpenSSL supplies independent block/digest results.
+
+AES-256 adds 12 shared checks: SP 800-38A encryption/decryption vectors
+for ECB/CBC/CTR, in-place operations with unaligned buffers and guards, a
+partial CTR tail, key length/usage validation, and block length/IV validation.
+Rebuild both library and CryptoTest; the expected result is **87 passed,
+0 failed**. AES-256 hardware validation is pending; the 75-check board result
+above predates this addition.

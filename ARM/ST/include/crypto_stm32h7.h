@@ -1,6 +1,6 @@
 /**-------------------------------------------------------------------------
 @file	crypto_stm32h7.h
-@brief	STM32H7 CRYP AES-128 and HASH SHA-256 engines.
+@brief	STM32H7 CRYP AES-128/256 and HASH SHA-256 engines.
 @author	Hoang Nguyen Hoan
 @date	Oct. 21, 2026
 @license
@@ -33,7 +33,8 @@ SOFTWARE.
 #include "crypto/crypto_softaes.h"
 #include "crypto/crypto_softsha256.h"
 
-// Polled CRYP peripheral. CMAC/CCM/GCM reuse the software base's constructions
+// Polled CRYP peripheral: ECB/CBC/CTR accept AES-128/256. AES-128
+// CMAC/CCM/GCM reuse the software base's constructions
 // over the hardware block primitive. Separate instances share peripheral locks.
 class CryptoStm32H7Aes : public CryptoSoftAes {
 public:

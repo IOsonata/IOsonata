@@ -53,6 +53,7 @@ SOFTWARE.
 #define CRYPTO_TEST_RNG_MEMSIZE		sizeof(CryptoRngStm32)
 #define CRYPTO_TEST_RNG_CREATE(m, s)	CryptoRngStm32Instance()
 
+#define CRYPTO_TEST_AES256
 #define CRYPTO_TEST_AES_TYPE CryptoStm32H7Aes
 #define CRYPTO_TEST_AES_MEMSIZE CRYPTO_STM32H7_AES_MEMSIZE
 #define CRYPTO_TEST_AES_CREATE(m, s) CryptoStm32H7AesCreate((m), (s))
