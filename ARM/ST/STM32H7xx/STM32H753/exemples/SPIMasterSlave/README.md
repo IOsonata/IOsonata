@@ -48,12 +48,12 @@ wire with a shorter one made all HAL modes pass, followed by all IOsonata
 combinations. This establishes wiring sensitivity; the electrical waveform
 was not measured.
 
-The passing IOsonata run used the diagnostic MEDIUM SCK slew setting at
-8 MHz. Cleanup removes the trial LOW/MEDIUM rate-specific overrides and
-restores the common TURBO pin setup. The cleaned build needs a hardware
-rerun with the short wire; the preceding result does not validate that
-restored slew setting. Set SPI_MASTER_RATE to 8000000 in your local board.h
-for the same 8 MHz run; the repository default remains 1 MHz.
+After cleanup, the maintainer rebuilt and reran the suite with the common
+TURBO pin setup restored and the short SCK wire (2026-10-21). All 416
+transfers passed again: 8 combinations passed, 0 failed, 0 skipped. The
+trial LOW/MEDIUM rate-specific overrides are no longer needed for this setup.
+Set SPI_MASTER_RATE to 8000000 in your local board.h for the same 8 MHz
+run; the repository default remains 1 MHz.
 
 Temporary H753 register dumps, RAM trace hooks and the standalone HAL
 comparison project have been removed. The shared validation checks and DMA

@@ -203,9 +203,8 @@ I2C1 master / I2C2 slave passed all eight combinations on NUCLEO-H753ZI
 SPI3 slave also passed all eight combinations on that date at 1 MHz and
 8 MHz: 416 transfers per run covering modes 0-3 and 1-, 16- and 129-byte
 frames. Shortening the SCK jumper resolved the remaining 8 MHz corruption
-in both the ST HAL comparison and IOsonata test. The passing 8 MHz run used
-MEDIUM SCK slew; cleanup restores the common TURBO setup and requires a
-hardware rerun. Temporary H753 traces and the HAL comparison project are
+in both the ST HAL comparison and IOsonata test. The cleaned build also passed all 416 transfers at
+8 MHz with the common TURBO pin setup restored (2026-10-21). Temporary H753 traces and the HAL comparison project are
 removed. See the example README for wiring and the precise tested setup.
 
 ## Native USB CDC examples
