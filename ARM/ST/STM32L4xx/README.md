@@ -231,7 +231,16 @@ kcps, or the device status when the distance is not valid. The driver follows
 the initialization of the ST VL53L0X API: soft reset, reference SPAD selection,
 default tuning settings, VHV and phase reference calibrations. It does not do
 the offset and cross talk calibrations for a cover glass. `tests/sensors/run.py`
-runs it against a register model. Not run on hardware yet.
+runs it against a register model. B-L475E-IOT01A2 run (2026-10-21), Release:
+the VL53L0X is found at 0x29. With a hand moved over the sensor it gives 55
+valid distances from 32 to 382 mm, the return signal from 859 to 24867 kcps,
+higher as the hand comes closer, and the ambient rate down to 23 kcps when the
+hand covers the sensor. With nothing in front, 70 measurements end with device
+status 6 and 3 with status 9, both a phase failure for the ST API, with a
+signal of 312 to 734 kcps. 3 more end as valid with 0 mm and the same signal
+as those without a target (585 to 617 kcps). The default limit checks of the
+ST API pass them too: its sigma estimate computed from the printed rates is
+about 6 mm, under its 18 mm limit. Distances not compared with a reference.
 L496 and L4S9 I2C4 use virtual index 3. The L432 has no I2C2: index 1 fails
 initialization, I2C1 and I2C3 keep indices 0 and 2.
 
