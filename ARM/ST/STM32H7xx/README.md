@@ -269,10 +269,12 @@ AES-128 CMAC/CCM/GCM use the software constructions over hardware AES.
 HASH handles one-shot SHA-256 and the digests in HMAC-SHA-256. Streaming
 SHA-256 and P-256 remain software. Public crypto interfaces are unchanged.
 
-The October 21, 2026 board run passed 87 checks with zero failures or skips,
-including AES-256 encryption/decryption and in-place/bounds checks. Hardware
-HMAC was added after that run and still needs board validation. The expanded
-CryptoTest expects 92 passes.
+The October 21, 2026 board run passed 92 checks with zero failures or skips.
+This includes AES-128/256 encryption/decryption, in-place/bounds checks,
+one-shot SHA-256, and HASH-accelerated HMAC-SHA-256 with long keys, truncated
+output, key/message/output boundaries and overlapping output. Software P-256
+and the hardware RNG checks also passed. See the example README for the exact
+scope; fault-injection results remain separate host-model evidence.
 
 The RNG selects HSI48 without changing USB clock selection or PLL settings.
 A clock/seed error or data-ready timeout fails the request, clears its output
@@ -436,9 +438,10 @@ Additional regressions:
 | `python3 tests/stm32/run_uart.py` | Shared STM32 UART modes, FIFO, DMA and fault handling |
 | `python3 tests/stm32h7/run_ethernet.py` | MAC/PHY registers, descriptors, cache handling and failures |
 | `python3 tests/stm32h7/run_crypto.py` | RNG failures and software crypto known answers |
+| `python3 tests/stm32h7/run_crypto_accel.py` | CRYP/HASH/HMAC known answers, bounds, timeout recovery, clearing and shared locks |
 | `python3 tests/storage/stm32h7_flash/run.py` | Flash bank mappings, erase/program rules, errors and timeout |
 
-Hardware priorities are CryptoTest and I2C/SPI master/slave transfers,
+Hardware priorities are I2C/SPI master/slave transfers,
 Ethernet DNS and sustained traffic, then reserved-sector
 flash NVM and DFU handoff. Previously recorded LED, timer, interrupt UART and
 USB results remain the hardware evidence for those paths.

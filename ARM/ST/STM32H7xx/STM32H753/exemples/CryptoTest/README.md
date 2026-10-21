@@ -3,7 +3,8 @@
 This project runs the existing `exemples/crypto/crypto_engine_test.cpp`, also
 used by STM32WBA. It selects `CryptoRngStm32` for hardware random numbers,
 `CryptoStm32H7Aes` for the CRYP AES accelerator and
-`CryptoStm32H7Hash` for one-shot SHA-256 and HMAC-SHA-256 on HASH. P-256 uses `CryptoUecc`.
+`CryptoStm32H7Hash` for one-shot SHA-256 and HMAC-SHA-256 on HASH.
+P-256 uses `CryptoUecc`.
 
 AES-128 and AES-256 ECB, CBC and CTR encryption/decryption use the hardware block
 primitive. CBC chaining and the full 128-bit CTR increment are handled by
@@ -39,16 +40,17 @@ self-test is exercised by `tests/stm32h7/run_crypto.py` along with RNG timeout,
 clock/seed errors, output wiping and reset recovery at O0 and Os. The register
 model supplies deterministic words and cannot validate physical entropy.
 
-On October 21, 2026, the NUCLEO-H753ZI accelerator run passed all **87
+On October 21, 2026, the NUCLEO-H753ZI accelerator run passed all **92
 checks, zero failures and no skips**. This validates hardware RNG, CRYP
-AES-128/256 and one-shot HASH SHA-256, together with software P-256 and the
-software ECB/CBC decryption checks.
+AES-128/256, one-shot HASH SHA-256 and HASH-accelerated HMAC-SHA-256,
+together with software P-256 and the software ECB/CBC decryption checks.
 
 AES validation includes ECB/CBC encryption and decryption, CTR carry and
 wrap, CMAC/CCM/GCM known answers, authentication rejection and 200 random
 comparison rounds against software. SHA-256 validation covers the self-test
 and lengths 0 through 257 against software, with unaligned input/output and
-output guards. HMAC in that board run used software; the new hardware digest path needs a retest.
+output guards. HMAC long-key and truncation known answers, boundary checks,
+overlapping output and invalid-input rejection also passed on the board.
 
 Both P-256 boundary scalars (1 and n - 1) pass public-key import, ECDH,
 key retention/consumption, invalid-peer rejection and signature verification,
@@ -62,17 +64,17 @@ ASan/UBSan, it passes all 92 shared checks through the production CRYP/HASH
 driver, plus 200 rounds of AES-256 ECB/CBC/CTR against OpenSSL, in-place
 AES, CTR tails/carry/wrap, timeout recovery, output/key clearing and shared
 peripheral locking checks. HMAC fault injection covers key hashing, inner
-and outer digests, cross-instance exclusion and disabled-engine rejection. These fault-injection checks are model results,
-separate from the board run. Register definitions come from the STM32H753
+and outer digests, cross-instance exclusion and disabled-engine rejection.
+These fault-injection checks are model results, separate from the board run. Register definitions come from the STM32H753
 CMSIS header; OpenSSL supplies independent block/digest results.
 
 AES-256 adds 12 shared checks: SP 800-38A encryption/decryption vectors
 for ECB/CBC/CTR, in-place operations with unaligned buffers and guards, a
 partial CTR tail, key length/usage validation, and block length/IV validation.
-These checks passed on the board in the 87-check run.
+These checks passed on the board in both the 87- and 92-check runs.
 
 HMAC adds five checks: RFC 4231 long-key and truncated known answers, key
 lengths 0/1/63/64/65/131 with message lengths 0..257 and output lengths 1..32,
-overlapping output, and input/key policy validation. Rebuild both library and
-CryptoTest; the expected result is **92 passed, 0 failed**. Hardware HMAC
-validation is pending.
+overlapping output, and input/key policy validation. The board result is
+**92 passed, 0 failed, no skips**. This is functional validation; no crypto
+throughput measurement or entropy certification is claimed.
