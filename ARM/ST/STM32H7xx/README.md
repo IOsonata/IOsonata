@@ -1,12 +1,34 @@
-# STM32H753 / NUCLEO-H753ZI
+# STM32H753 MCU port
 
-Initial IOsonata port for the STM32H753ZI Cortex-M7. It supplies startup,
-GPIO/EXTI, polling, interrupt and DMA UART, and the 14 general-purpose/basic/advanced
-TIM instances, USB2 full-speed device support through the shared STM32
-OTG driver, and an Ethernet MAC/DMA driver for the LAN8742A RMII PHY. Startup, LED GPIO, USART3 TX/RX and TIM2 multi-trigger operation
-are hardware tested on NUCLEO-H753ZI.
+IOsonata MCU port for the STM32H753 Cortex-M7, selected by `STM32H753xx`.
+It supplies startup, GPIO/EXTI, polling, interrupt and DMA UART, the 14
+general-purpose/basic/advanced TIM instances, USB2 full-speed device support
+through the shared STM32 OTG driver, and an Ethernet MAC/DMA driver with
+LAN8742A RMII PHY support. Peripheral support and limits are described below.
 
-## Build and first board tests
+The MCU library is shared by boards using STM32H753. NUCLEO-H753ZI is the
+board used for the supplied example configurations and hardware validation;
+it does not define the scope of the MCU port.
+
+## Board configuration and validation
+
+Board pin mappings are in `ARM/ST/include/stm32_boards.h`; each example's
+`board.h` selects its pins and peripheral instances. The three user LEDs,
+ST-LINK USART3 bridge, CN13 USB connection and LAN8742A PHY on CN14 are
+NUCLEO-H753ZI board details, not requirements of the MCU library.
+
+For another STM32H753 board, select pins available on its MCU package and
+match the peripheral routing, power supply, external devices and linker memory
+layout to that board. The current startup uses the internal LDO and HSI64/PLL1;
+HSE selection is not implemented. See [Clocks and memory](#clocks-and-memory).
+Ethernet currently supports the LAN8742A RMII PHY; a different PHY requires
+appropriate driver support.
+
+Hardware results in this document identify tests run on NUCLEO-H753ZI.
+Other boards need their own hardware validation. The connection and first-test
+instructions below use the supplied NUCLEO-H753ZI example mappings.
+
+## Build and first tests on NUCLEO-H753ZI
 
 Import `STM32H753/lib/ioc` and the required projects under
 `STM32H753/exemples` into IOcomposer. Build the library first, then the example
@@ -137,7 +159,7 @@ python3 Python/uartprbs_rx.py --baud 1000000 --port <serial-port>
 
 Debug and Release library/kernel/example builds pass with GNU Arm GCC 13.2.1.
 The linked vectors select TaktOS PendSV and SysTick handlers. TaktOS operation
-on the H753 board has not yet been hardware tested.
+on NUCLEO-H753ZI has not yet been hardware tested.
 
 ## Native USB CDC examples
 
@@ -148,7 +170,7 @@ library and application in matching Debug or Release configurations. Debug
 links semihosting; enable `monitor arm semihosting enable` before resume.
 Release uses nosys and runs without the debugger.
 
-Power the board through ST-LINK first, then connect a data cable from **CN13**
+On NUCLEO-H753ZI, power the board through ST-LINK first, then connect a data cable from **CN13**
 to the host. CN13 is the MCU's native USB port; its CDC port is separate from
 the ST-LINK USART3 bridge. UM2407 requires board power before connecting CN13.
 Keep the default SB13 USB supply and SB21/SB22/SB23 data/VBUS connections.
@@ -209,7 +231,8 @@ ISO-containing combo stress examples are not included.
 
 ## Ethernet examples
 
-`EthernetDemo`, `EthernetUdpDemo` and `EthernetTcpDemo` use the onboard
+`EthernetDemo`, `EthernetUdpDemo` and `EthernetTcpDemo` are configured for the
+NUCLEO-H753ZI's onboard
 LAN8742A PHY and RJ45 CN14. They share the generic Ethernet frame interface,
 lwIP IPv4 service and existing `SockIntrf` C/C++ interface. DHCP, ping, DNS,
 connected UDP and connected TCP are implemented. Ethernet TLS/DTLS is not yet
@@ -399,7 +422,7 @@ Ethernet DHCP/ping and UDP/TCP when a cable is available, then reserved-sector
 flash NVM and DFU handoff. Previously recorded LED, timer, interrupt UART and
 USB results remain the hardware evidence for those paths.
 
-## Hardware results
+## Hardware results on NUCLEO-H753ZI
 
 User tests on NUCLEO-H753ZI, October 18, 2026:
 
