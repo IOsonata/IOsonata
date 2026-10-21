@@ -179,6 +179,12 @@ I2C2 (DevNo 1, SDA PB11, SCL PB10) at 0x6A, with its data ready on INT1 PD11,
 EXTI line 11. The Debug build prints with semihosting.
 `tests/sensors/run.py` runs the driver against a register model of the
 LSM6DSL. Not run on hardware yet.
+The STM32L476 example EnvSensorDemo (`exemples/sensor/env_sensor_demo.cpp`)
+reads the onboard HTS221 (`src/sensors/humi_hts221.cpp`) on the same bus at
+0x5F, 1 Hz, and prints the humidity and the temperature on the ST-LINK virtual
+COM port at 115200 8N1 in Release, with semihosting in Debug.
+`tests/sensors/run.py` also runs this driver against a register model. Not run
+on hardware yet.
 L496 and L4S9 I2C4 use virtual index 3. The L432 has no I2C2: index 1 fails
 initialization, I2C1 and I2C3 keep indices 0 and 2.
 

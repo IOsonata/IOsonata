@@ -1356,6 +1356,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/gyro_sensor.h</locationURI>
 		</link>
 		<link>
+			<name>include/sensors/humi_hts221.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/humi_hts221.h</locationURI>
+		</link>
+		<link>
 			<name>include/sensors/humi_sensor.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/humi_sensor.h</locationURI>
@@ -2294,6 +2299,11 @@
 			<name>src/sensors/gyro_sensor.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/gyro_sensor.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/sensors/humi_hts221.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/humi_hts221.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/sensors/mag_ak09916.cpp</name>
