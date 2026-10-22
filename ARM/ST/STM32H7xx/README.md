@@ -430,6 +430,11 @@ the generic PWM API on the output channels of every TIM above except TIM6 and
 TIM7, with these DevNo. See [STM32 PWM](../PWM.md). No example project; not
 run on hardware yet.
 
+The library builds the shared STM32 watchdog driver,
+`ARM/ST/src/wdt_stm32.cpp`, on IWDG1: timeout up to 32.8 s from the 32 kHz
+LSI, window, no timeout event. See [STM32 watchdog](../WDT.md). No example
+project; not run on hardware yet.
+
 ## Limits and validation
 
 CAN and ADC/DAC are not implemented by this port. LPUART1 DMA configuration returns false

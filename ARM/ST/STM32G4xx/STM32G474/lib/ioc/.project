@@ -36,6 +36,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/cbor.h</locationURI>
 		</link>
 		<link>
+			<name>include/coredev/wdt.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/wdt.h</locationURI>
+		</link>
+		<link>
 			<name>include/crypto</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -89,6 +94,11 @@
 			<name>include/dfu/dfu_writer.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/dfu/dfu_writer.h</locationURI>
+		</link>
+		<link>
+			<name>include/syslog.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/syslog.h</locationURI>
 		</link>
 		<link>
 			<name>src</name>
@@ -346,6 +356,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/ARM/ST/src/pwm_stm32.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/coredev/wdt_stm32.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/ARM/ST/src/wdt_stm32.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/crc.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/crc.c</locationURI>
@@ -519,6 +534,11 @@
 			<name>src/storage</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/syslog.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/syslog.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/system_stm32g4xx.c</name>

@@ -81,6 +81,11 @@ the generic PWM API on the output channels of TIM10, TIM11 (1 channel), TIM9
 (2) and TIM2 to TIM5 (4), with the timer DevNo above. See
 [STM32 PWM](../PWM.md). No example project; not run on hardware yet.
 
+The library builds the shared STM32 watchdog driver,
+`ARM/ST/src/wdt_stm32.cpp`, on the IWDG: timeout up to 28.3 s from the 37 kHz
+LSI, no window register, no timeout event. See [STM32 watchdog](../WDT.md). No
+example project; not run on hardware yet.
+
 ## Validation and limits
 
 `python3 tests/stm32l1/run.py` builds the library and all four examples in

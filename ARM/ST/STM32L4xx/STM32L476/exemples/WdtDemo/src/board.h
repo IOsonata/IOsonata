@@ -1,13 +1,14 @@
 /**-------------------------------------------------------------------------
-@file	idelay.h
+@example	board.h
 
-@brief	Delay shim of the STM32 ADC emulator test
+@brief	Board specific definitions
 
-The test firmware implements usDelay by telling the register model how much
-time passed, so the model can check the waits of the driver.
+This file contains all I/O definitions for a specific board for the
+application firmware.  This files should be located in each project and
+modified to suit the need for the application use case.
 
 @author	Hoang Nguyen Hoan
-@date	Oct. 21, 2026
+@date	Oct. 22, 2026
 
 @license
 
@@ -34,21 +35,28 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ----------------------------------------------------------------------------*/
-#ifndef __IDELAY_H__
-#define __IDELAY_H__
 
-#include <stdint.h>
+#ifndef __BOARD_H__
+#define __BOARD_H__
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+// Board, one of the names in stm32_boards.h. This STM32L476 project builds for
+// B_L475E_IOT01A (B-L475E-IOT01A and B-L475E-IOT01A2, STM32L475VG).
+#define BOARD				B_L475E_IOT01A
 
-void usDelay(uint32_t cnt);
+#include "stm32_boards.h"
 
-#ifdef __cplusplus
-}
-#endif
+// Output on USART1, the ST-LINK virtual COM port, 115200 8N1. The Release
+// build prints there, the Debug build uses semihosting.
+#define UART_RETARGET
+#define UART_DEVNO			BOARD_VCP_DEVNO
+#define UART_RX_PORT		IOPORTB
+#define UART_RX_PIN			7
+#define UART_RX_PINOP		IOPINOP_FUNC7
+#define UART_TX_PORT		IOPORTB
+#define UART_TX_PIN			6
+#define UART_TX_PINOP		IOPINOP_FUNC7
 
-static inline void msDelay(uint32_t ms) { usDelay(ms * 1000U); }
+// The IWDG of the STM32L4 has no interrupt: no timeout event
+#define WDT_DEMO_TIMEOUT_EVT	0
 
-#endif // __IDELAY_H__
+#endif // __BOARD_H__

@@ -354,6 +354,19 @@ TIM2_CH1) and Arduino D0 (PA1, TIM2_CH2), both AF1: 50 and 25 percent for one
 second, then the two duty cycles sweep in opposite directions, 1 percent
 every 5 ms. Not run on hardware yet.
 
+## Watchdog
+
+The four L4 libraries build the shared STM32 watchdog driver,
+`ARM/ST/src/wdt_stm32.cpp`, on the IWDG: the generic watchdog API, timeout up
+to 32.8 s from the 32 kHz LSI (128 times longer with the LSI predivider of
+the L412, L422, L4P5 and L4Q5), window, software reload channels, freeze
+while a debugger halts the core. The L4 IWDG has no interrupt: no timeout
+event. See [STM32 watchdog](../WDT.md). The STM32L476 example WdtDemo
+(`exemples/misc/wdt_demo.cpp`) prints on the ST-LINK virtual COM port
+(USART1, 115200 8N1) in Release, with semihosting in Debug: timeout 2000 ms,
+ten reloads every 500 ms, then the IWDG resets the MCU and the demo starts
+again. Not run on hardware yet.
+
 ## Validation
 
 Run the focused host regressions from the repository root:

@@ -5,7 +5,7 @@ Run: python3 tests/stm32/run_adc.py
 
 The driver, ARM/ST/src/adc_stm32.cpp, is built at -O0 and -Os for the L4,
 L4+ and G4 parts of PARTS and run against a model of the ADC1 registers.
-usDelay of the firmware (adc_shim/idelay.h) moves the time of the model, so
+usDelay of the firmware (delay_shim/idelay.h) moves the time of the model, so
 the model checks the waits of RM0351, RM0440 and the datasheets:
 
 - 20 us of regulator start before the calibration or the enable
@@ -426,7 +426,7 @@ def main():
 						 '-std=gnu++23', '-D' + part, '-ffunction-sections', '-fdata-sections',
 						 '-fno-rtti', '-fno-exceptions', '-fno-builtin', '-Wall', '-Wextra', '-Werror',
 						 '-Wno-overloaded-virtual', '-Wno-missing-field-initializers']
-				flags += ['-I' + str(HERE / 'adc_shim')]
+				flags += ['-I' + str(HERE / 'delay_shim')]
 				flags += ['-I' + str(ROOT / d) for d in ('include', 'ARM/include', 'ARM/CMSIS/Core/Include',
 						  'ARM/ST/include', FAMILY[family]['inc'])]
 				objects = []

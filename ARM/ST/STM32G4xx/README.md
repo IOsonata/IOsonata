@@ -21,7 +21,8 @@ G4 device headers in `include/`.
   (GPIO and EXTI, the L4 register names), `ARM/ST/src/uart_stm32.cpp`, the
   timer driver, `ARM/ST/src/timer_stm32.cpp`, `timer_lptim_stm32.cpp` and
   `timer_tim_stm32.cpp`, the ADC1 driver of the L4 and G4,
-  `ARM/ST/src/adc_stm32.cpp`, and the PWM driver, `ARM/ST/src/pwm_stm32.cpp`.
+  `ARM/ST/src/adc_stm32.cpp`, the PWM driver, `ARM/ST/src/pwm_stm32.cpp`, and
+  the watchdog driver, `ARM/ST/src/wdt_stm32.cpp`.
 
 ## Clock
 
@@ -124,6 +125,17 @@ Arduino A1 (PA1, TIM2_CH2), both AF1: 50 and 25 percent for one second, then
 the two duty cycles sweep in opposite directions, 1 percent every 5 ms. Not
 run on hardware yet.
 
+## Watchdog
+
+The library builds the shared STM32 watchdog driver,
+`ARM/ST/src/wdt_stm32.cpp`, on the IWDG: the generic watchdog API, timeout up
+to 32.8 s from the 32 kHz LSI, window, software reload channels, freeze while
+a debugger halts the core. The G4 IWDG has no interrupt: no timeout event. See
+[STM32 watchdog](../WDT.md). The example WdtDemo (`exemples/misc/wdt_demo.cpp`)
+prints on the ST-LINK virtual COM port (LPUART1, 115200 8N1) in Release, with
+semihosting in Debug: timeout 2000 ms, ten reloads every 500 ms, then the IWDG
+resets the MCU and the demo starts again. Not run on hardware yet.
+
 ## Memory
 
 `gcc_stm32g474xx.ld`: 496 KB of the 512 KB flash for the image, two 8 KB
@@ -137,8 +149,9 @@ RAM2.
 `STM32G474/exemples/UartLoopback` (`exemples/uart/uart_loopback.cpp`),
 `STM32G474/exemples/UartPrbsTxTest` (`exemples/uart/uart_prbs_tx.cpp`),
 `STM32G474/exemples/TimerDemo` (`exemples/timer/timer_demo.cpp`),
-`STM32G474/exemples/AdcDemo` (`exemples/converters/adc_demo.cpp`) and
-`STM32G474/exemples/PwmDemo` (`exemples/pwm/pwm_demo.cpp`) link
+`STM32G474/exemples/AdcDemo` (`exemples/converters/adc_demo.cpp`),
+`STM32G474/exemples/PwmDemo` (`exemples/pwm/pwm_demo.cpp`) and
+`STM32G474/exemples/WdtDemo` (`exemples/misc/wdt_demo.cpp`) link
 `IOsonata_STM32G474` from `STM32G474/lib/ioc` in the same Debug or Release
 configuration. Build the library first. `board.h` selects
 `#define BOARD NUCLEO_G474RE` (`ARM/ST/include/stm32_boards.h`). Blinky blinks

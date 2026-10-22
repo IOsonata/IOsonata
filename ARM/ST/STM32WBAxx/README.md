@@ -95,6 +95,14 @@ the generic PWM API on the output channels of TIM16, TIM17, TIM2, TIM3, TIM4
 and TIM1, with the timer DevNo above. See [STM32 PWM](../PWM.md). No example
 project; not run on hardware yet.
 
+The library builds the shared STM32 watchdog driver,
+`ARM/ST/src/wdt_stm32.cpp`, on the IWDG: timeout up to 131 s from the 32 kHz
+LSI1 (128 times longer with LSI1PREDIV), window, and the timeout event from
+the early wakeup interrupt, one counter tick before the reset. See
+[STM32 watchdog](../WDT.md). Example `STM32WBA65/exemples/WdtDemo`
+(`exemples/misc/wdt_demo.cpp`) on the first ST-LINK virtual COM port (USART1,
+115200 8N1) in Release, with semihosting in Debug. Not run on hardware yet.
+
 ## Crypto
 
 Hardware validated on STM32WBA65I-DK1, October 18, 2026: **51 passed, 0 failed**.

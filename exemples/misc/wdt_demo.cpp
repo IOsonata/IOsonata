@@ -67,6 +67,12 @@ SOFTWARE.
 #define WDT_DEMO_RELOADS		10
 #endif
 
+// Timeout event before the reset, board.h sets it to 0 for a watchdog
+// without interrupt
+#ifndef WDT_DEMO_TIMEOUT_EVT
+#define WDT_DEMO_TIMEOUT_EVT	1
+#endif
+
 static const IOPinCfg_t s_UartPins[] = {
 	{UART_RX_PORT, UART_RX_PIN, UART_RX_PINOP, IOPINDIR_INPUT, IOPINRES_PULLUP, IOPINTYPE_NORMAL},
 	{UART_TX_PORT, UART_TX_PIN, UART_TX_PINOP, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL},
@@ -102,7 +108,7 @@ static const WdtCfg_t s_WdtCfg = {
 	.bRunSleep = true,
 	.bRunHalt = false,
 	.IntPrio = 6,
-	.EvtHandler = WdtDemoTimeout,
+	.EvtHandler = WDT_DEMO_TIMEOUT_EVT ? WdtDemoTimeout : nullptr,
 };
 
 static UART s_Uart;

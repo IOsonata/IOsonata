@@ -36,6 +36,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/cbor.h</locationURI>
 		</link>
 		<link>
+			<name>include/coredev/wdt.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/wdt.h</locationURI>
+		</link>
+		<link>
 			<name>include/crypto</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -309,6 +314,11 @@
 			<name>src/coredev/pwm_stm32.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/ARM/ST/src/pwm_stm32.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/wdt_stm32.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/ARM/ST/src/wdt_stm32.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/crypto</name>

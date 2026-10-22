@@ -366,6 +366,11 @@
 			<locationURI>PARENT-4-PROJECT_LOC/src/pwm_stm32.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/coredev/wdt_stm32.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/wdt_stm32.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/crc.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/crc.c</locationURI>
