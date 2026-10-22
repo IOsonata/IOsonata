@@ -229,7 +229,11 @@ to 42.56 uT. While the board is moved by hand the magnitude goes from 12.29 to
 instrument. In that run the 2 bytes read after OUT_Z_H, in a 9 byte read from
 STATUS, were the X output again (same raw value on all 75 lines), so the
 printed temperature was wrong. The driver now reads TEMP_OUT in its own
-transfer; not run on the board yet.
+transfer. Second run (2026-10-21), Release, with that change: the temperature
+reads 23.88 to 24.25 C in steps of 0.125 C, the 8 LSB per C of the device. At
+rest in a first position 49 readings give a magnitude of 38.30 to 40.36 uT,
+19 readings while the board is turned give 33.63 to 44.78 uT, then 27
+readings at rest in a second position 39.41 to 40.98 uT.
 The STM32L476 example DistSensorDemo (`exemples/sensor/dist_sensor_demo.cpp`)
 reads the onboard VL53L0X time of flight sensor (`src/sensors/dist_vl53l0x.cpp`,
 on the new `DistSensor` base, `include/sensors/dist_sensor.h`) on the same bus
