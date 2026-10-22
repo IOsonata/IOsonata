@@ -281,8 +281,11 @@ ISO-containing combo stress examples are not included.
 NUCLEO-H753ZI's onboard
 LAN8742A PHY and RJ45 CN14. They share the generic Ethernet frame interface,
 lwIP IPv4 service and existing `SockIntrf` C/C++ interface. DHCP, ping, DNS,
-connected UDP and connected TCP are implemented. Ethernet TLS/DTLS is not yet
-implemented; nRF91 modem support is unchanged.
+connected UDP and connected TCP are implemented. Native TLS 1.3 uses the shared
+`Tls` wrapper over a connected TCP `SockIntrf`, with external PSK and optional
+P-256 PSK-DHE. The lwIP socket TLS/DTLS selections remain unsupported; the
+native implementation has no DTLS or certificate authentication. The separate
+nRF91 modem MQTT profile uses TLS 1.2 with CA-chain and hostname verification.
 
 The console is USART3/ST-LINK VCP at 1 Mbaud, 8N1. Start with DHCP/ping using
 `EthernetDemo`, then set the host address in either echo project's `board.h`
@@ -294,9 +297,12 @@ for build steps, pin mapping, ownership, memory, limits and validation.
 All examples compile/link and the packet/register simulations pass. On
 October 21, 2026, NUCLEO-H753ZI hardware tests confirmed 100 Mbit/s link,
 DHCP, ping (20/20 replies), UDP/TCP echo, TCP server restart and cable
-reconnection without a board reset. The UDP startup log had a reply gap;
-DNS, sustained load and D-cache-enabled traffic still need hardware tests.
-See the networking document for measurements and test limits.
+reconnection without a board reset. The initial UDP startup reply gap remains
+unexplained. Later binary runs verified 6000 echoes each for UDP and TCP, and
+a public DNS/HTTP check reached `example.com` with HTTP 200. DHCP lease
+expiry/address changes, maximum throughput, burst load and D-cache-enabled
+traffic still need hardware tests. See the networking document for measurements
+and test limits.
 
 ## Crypto engines
 
@@ -326,8 +332,9 @@ Run `python3 tests/stm32h7/run_crypto.py` for RNG register fault tests and
 existing engine known answers. Simulation does not validate physical entropy;
 the board results above validate the tested crypto paths. Run
 `python3 tests/stm32h7/run_crypto_accel.py` for CRYP/HASH/HMAC register
-model tests with timeout, wiping and shared-lock coverage. Ethernet TLS/DTLS
-remains unimplemented.
+model tests with timeout, wiping and shared-lock coverage. Native TLS 1.3 uses
+the shared crypto interfaces; see [networking](../../../docs/networking.md)
+for supported profiles and test results. DTLS is not implemented.
 
 ## Internal flash NVM and DFU
 
@@ -495,10 +502,11 @@ Additional regressions:
 | `python3 tests/stm32h7/run_crypto_accel.py` | CRYP/HASH/HMAC known answers, bounds, timeout recovery, clearing and shared locks |
 | `python3 tests/storage/stm32h7_flash/run.py` | Flash bank mappings, erase/program rules, errors and timeout |
 
-Hardware priorities are I2C/SPI master/slave transfers,
-Ethernet DNS and sustained traffic, then reserved-sector
-flash NVM and DFU handoff. Previously recorded LED, timer, interrupt UART and
-USB results remain the hardware evidence for those paths.
+Hardware priorities are the remaining I2C/SPI instances and DMA routes,
+Ethernet DHCP lease expiry/address changes, maximum throughput, burst load
+and D-cache-enabled traffic, reserved-sector flash NVM, and DFU handoff.
+The LED, timer, interrupt UART and USB results apply to their recorded
+configurations.
 
 ## Hardware results on NUCLEO-H753ZI
 
