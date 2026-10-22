@@ -299,14 +299,19 @@ same topic. The next verified exchange reported:
 MQTT QoS 1 echo checked 13, failures=1
 ```
 
+The continuation of this same client/topic run reported every tenth
+checkpoint from 20 through 90 with `failures=1`. This establishes 78 verified
+exchanges after the interruption at checked 12, with no additional failure,
+reconnect or startup message in the supplied continuation.
+
 This passes one controlled radio-off/on recovery. Client identity and
 counter continuity support recovery without an observed board reset.
 The single failure was the expected deliberate network interruption.
 The 120-second arming and 60-second off durations are reported configuration
 values, without console timestamps for independent measurement.
 
-The capture contains one checked exchange after recovery. Actual RF
-coverage-loss recovery and repeated-cycle reliability remain unestablished.
+Actual RF coverage-loss recovery, repeated-cycle reliability and long-term
+stability remain unestablished by this single-cycle capture.
 A separate earlier run on the same modem firmware was reported stopped after
 checked 20; its cause remains unresolved. See the
 [detailed recovery record](../../../../../../docs/network-protocol-examples.md#follow-up-controlled-radio-offon-recovery)

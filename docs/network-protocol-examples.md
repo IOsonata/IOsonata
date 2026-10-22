@@ -853,8 +853,8 @@ with `TLS 1.2, CA/hostname verified`, client
 `iosnet8a18d4bde00366c4` and topic
 `iosonata/demo/8a18d4bde00366c4/echo`.
 
-The capture records the complete controlled interruption and first recovered
-exchange:
+The initial capture records the complete controlled interruption and first
+recovered exchange:
 
 | Stage | Observed result |
 | --- | --- |
@@ -869,12 +869,17 @@ of another startup banner support recovery in the same application run,
 without an observed board reset. The single reported failure was the expected
 response to the deliberate network interruption.
 
+The maintainer then supplied the continuation of the same client/topic run.
+Every tenth checkpoint from 20 through 90 reported `failures=1`. The checked
+counter therefore establishes 78 verified exchanges after the interruption
+at checked 12. The continuation contains no additional failure, reconnect or
+startup message.
+
 The 120-second arming period and 60-second off hold are the configured values
 printed by the test; the capture has no timestamps to measure them
-independently. It contains one verified post-recovery exchange and does not
-establish actual RF coverage-loss recovery, repeated-cycle reliability or an
-extended run after recovery. This result does not diagnose or resolve the
-earlier reported stop.
+independently. Actual RF coverage-loss recovery, repeated-cycle reliability
+and long-term stability remain unestablished by this single-cycle capture.
+This result does not diagnose or resolve the earlier reported stop.
 
 ### Hardware evidence for the generic MQTT example
 

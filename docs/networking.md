@@ -269,9 +269,13 @@ radio-off/on recovery test. The deliberate interruption produced network
 down at checked 12 with failures 1, followed by unregistration. After
 radio-on and fresh roaming LTE-M registration, verified modem TLS and MQTT
 reconnected using the same client ID and topic. A new checked echo advanced
-the counter to 13 with failures still 1. This confirms one controlled
-offline/online recovery without an observed board reset; actual RF
-coverage-loss recovery and repeated-cycle reliability remain unestablished.
+the counter to 13 with failures still 1. The continuation of that same run
+reported every tenth checkpoint from 20 through 90 with failures still 1:
+78 verified exchanges after the interruption at checked 12, with no further
+failure, reconnect or startup message in the supplied continuation.
+This confirms one controlled offline/online recovery without an observed
+board reset. Actual RF coverage-loss recovery and repeated-cycle reliability
+remain unestablished.
 The [recovery hardware record](network-protocol-examples.md#follow-up-controlled-radio-offon-recovery)
 preserves the exact identity and event sequence. An earlier reported stop
 on the same modem firmware remains unresolved.
