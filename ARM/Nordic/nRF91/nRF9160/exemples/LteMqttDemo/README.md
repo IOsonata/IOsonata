@@ -202,15 +202,15 @@ The earlier port applied the demo's 100-millisecond send timeout before
 setup, so it could stop connection establishment much earlier than intended.
 The port now uses a 30-second connection timeout per address and applies the
 configured send timeout afterward. It also explicitly retries IPv4 after
-unsuccessful IPv6-only resolver results. These code corrections still require
-the hardware retest described below.
+unsuccessful IPv6-only resolver results. The hardware results below include
+the initial failures and a successful retest after these corrections.
 
 ## Validation status
 
 The shared MQTT client has existing host wire, local Mosquitto and native
 TLS/MQTT tests described in `docs/networking.md`. H753 MQTT hardware results and
-Thingy:91 LTE UDP hardware results are separate evidence; neither establishes
-MQTT-over-LTE hardware operation.
+Thingy:91 LTE UDP hardware results are separate from the nRF9160 MQTT-over-LTE
+result recorded below.
 
 `python3 tests/net/run_lte_mqtt.py` passed host syntax with the actual Thingy:91
 board header and Nordic RNG declaration, using an empty `nrf.h` host stub.
@@ -232,26 +232,38 @@ establish an ARM build, modem firmware compatibility or cellular connectivity.
 
 The shared `tests/net/run_mqtt.py` wire suite also passed at O0/O2, including
 the C header check. Its optional Mosquitto interoperability checks were skipped
-in this session because the executable was unavailable; no fresh live broker
-result is claimed.
+in that host test session because the executable was unavailable; that suite
+did not produce a fresh live broker result.
 
 The public broker setting is taken from its published service documentation.
 A live public probe could not resolve the host in the implementation environment,
-so current public broker availability was not verified there.
+so public broker availability was not verified there. The maintainer's later
+board test did reach the broker, as recorded below.
 
-### Initial nRF9160 hardware result
+### nRF9160 hardware results
 
 The maintainer ran `LteMqttDemo`. The console reported modem
 firmware `mfw_nrf9160_1.2.8` and successful roaming LTE-M registration, followed
-by three initial socket-initialization failures. MQTT subscription and verified
-self-echo have not yet been demonstrated on this run. The reported
+by three initial socket-initialization failures. That run did not demonstrate
+MQTT subscription or verified self-echo. The reported
 `error=0 result=0` values were MQTT state, not the modem's DNS or TCP error.
 The log establishes a running application and LTE registration; it does not
 identify the failing native socket operation or establish a firmware-version
 cause.
 
-The connection-timeout, IPv4-fallback and native-error reporting corrections
-need a new library/application build and hardware run. Their hardware outcome
-is pending. No fresh automated ARM compile/link validation of those corrections
-is claimed. Preserve the modem firmware, SIM/APN and endpoint details with the
-new log so the result can be compared with this initial observation.
+After the socket corrections in commit `68aae178`, the maintainer retested with
+the same modem firmware, `mfw_nrf9160_1.2.8`, and a 115200-baud console. The board
+registered on roaming LTE-M, connected to `test.mosquitto.org:1883`, printed its
+generated client ID and topic, and subscribed at QoS 1. The console then showed:
+
+```text
+MQTT QoS 1 echo checked 1, failures=0
+MQTT QoS 1 echo checked 10, failures=0
+```
+
+This confirms successful plaintext MQTT over LTE for that run, including the
+QoS 1 subscription, outgoing PUBACKs and matching returned payloads. The log
+does not identify the cause of the initial failures or separate the effects of
+the connection timeout and IPv4 fallback changes. Recovery after broker or
+registration loss, an extended soak and TLS are not established by this log.
+No fresh automated ARM compile/link validation is claimed.

@@ -78,7 +78,25 @@ with a 100-millisecond send wait; the earlier port fails that same check.
 The tests also cover IPv4 fallback, working IPv6, per-stage diagnostics with
 the original errno, resource cleanup, socket-table exhaustion and retries.
 They do not establish an ARM build, modem firmware compatibility or a working
-cellular connection. The LTE hardware retest remains pending.
+cellular connection. The maintainer's subsequent nRF9160 MQTT hardware retest
+succeeded; its observed scope is recorded below.
+
+### LTE example targets
+
+Both target families use the shared `exemples/lte/lte_mqtt.cpp` and
+`exemples/lte/lte_coap.cpp` applications, the shared protocols and the nRF91
+modem socket port. Their projects select the target library and board pins.
+
+| Target | Library | MQTT example | CoAP example | Default UART0 console |
+| --- | --- | --- | --- | --- |
+| nRF9160, Thingy:91 | `IOsonata_nRF9160` | [LteMqttDemo](../ARM/Nordic/nRF91/nRF9160/exemples/LteMqttDemo/README.md) | [LteCoapDemo](../ARM/Nordic/nRF91/nRF9160/exemples/LteCoapDemo/README.md) | RX P0.19 / TX P0.18 through the nRF52840 USB bridge |
+| nRF9151 DK or nRF9161 DK | `IOsonata_nRF91x1` | [LteMqttDemo](../ARM/Nordic/nRF91/nRF91x1/exemples/LteMqttDemo/README.md) | [LteCoapDemo](../ARM/Nordic/nRF91/nRF91x1/exemples/LteCoapDemo/README.md) | RX P0.26 / TX P0.27 through VCOM0 |
+
+The consoles use 115200 baud, 8N1 and no flow control. The nRF9160 projects also
+provide an nRF9160 DK pin selection. The nRF91x1 projects follow that target's
+existing LteUdp settings, including `NRF9120_XXAA`, its `nrf9120` linker script
+and hard-float modem library. No nRF91x1 ARM build or hardware result is claimed;
+the successful MQTT result below applies to nRF9160.
 
 ## Layers and memory
 
@@ -345,13 +363,15 @@ subscription downgrade/refusal. They also cover sequence/clock wrap, blocked
 I/O and deadlines, random identity failure/stability, timer queue refusal and
 socket/registration/modem recovery with fresh CONNECT and SUBSCRIBE. Target
 interfaces are replaced by host test implementations.
+The default target is `nrf9160`; `--target nrf91x1` selects the nRF9151/nRF9161
+DK board configuration. That host variant also passed at O0/O2 with ASan/UBSan.
 
 The shared MQTT wire suite and C header check also passed in this session.
 Optional Mosquitto interoperability checks were skipped because the executable
 was unavailable. Public-host DNS resolution was unavailable in the environment,
 so these host checks add no live public-broker or fresh automated ARM
-compile/link result. The maintainer's initial hardware run and pending
-retest of the socket corrections are recorded below.
+compile/link result. The maintainer's initial failed hardware run and successful
+nRF9160 retest after the socket corrections are recorded below.
 
 Protocol reference: [OASIS MQTT 3.1.1 plus Errata 01](https://docs.oasis-open.org/mqtt/mqtt/v3.1.1/errata01/os/mqtt-v3.1.1-errata01-os-complete.html).
 
@@ -524,9 +544,11 @@ route or public UDP forwarding from ordinary cellular Internet. The default
 request interval is 10 seconds, and unanswered-peer pacing retains the
 library's 1-byte/second default. This is a standalone LTE test; it does not
 start BLE.
-The nRF9160 and nRF91x1 libraries include shared CoAP; the dedicated demo
-project targets the nRF9160 and uses its existing secure-image CryptoCell RNG
-configuration.
+The nRF9160 and nRF91x1 libraries include shared CoAP, and both target families
+have dedicated demo projects listed above. The nRF9160 project uses its
+existing secure-image CryptoCell RNG configuration. The nRF91x1 project reuses
+the same application for the nRF9151 DK and nRF9161 DK; its ARM build and
+hardware validation remain pending.
 
 `Python/coap_server.py` uses the independent aiocoap implementation for the PC
 peer. It serves `/hello`, `/echo`, `/value` and `/slow`, with plaintext UDP on
@@ -565,8 +587,10 @@ close/reopen, pacing retained across repeated modem faults and clock wrap,
 endpoint, timer queue refusal/coalescing and empty-host startup without LTE.
 Both the public GET and full helper profiles pass; public-profile fixtures also
 check the configured path, variable response content, response-code/size errors,
-recovery and 10-second request spacing. These use substitutes for target
-hardware. The public endpoints are published service settings; live probes
+recovery and 10-second request spacing. The default target is `nrf9160`;
+`--target nrf91x1` selects the nRF9151/nRF9161 DK board configuration, which also
+passed at O0/O2 with ASan/UBSan. These use substitutes for target hardware.
+The public endpoints are published service settings; live probes
 could not resolve them in the implementation environment, so no new public
 reachability result is claimed. CoAP hardware results have not yet
 been recorded, and no fresh ARM compile/link validation is claimed.
@@ -834,13 +858,13 @@ results establish hardware interoperability and the observed recovery cases;
 they are not an uninterrupted soak test or a fresh automated ARM compile/link
 result. The EthernetTcpDemo README documents the helper and wrong-key setup.
 
-### nRF9160 MQTT hardware bring-up
+### nRF9160 MQTT hardware results
 
 The maintainer ran `LteMqttDemo` with modem firmware
 `mfw_nrf9160_1.2.8`. The console showed successful roaming LTE-M registration,
 then three socket-initialization failures with no successful broker connection.
-MQTT subscription and a verified self-echo have not yet been demonstrated in
-this run. This is evidence of a running application and LTE
+That initial run did not demonstrate MQTT subscription or a verified self-echo.
+It provided evidence of a running application and LTE
 registration, not successful DNS, TCP or MQTT operation.
 
 The original `error=0 result=0` fields described the shared MQTT state before
@@ -850,9 +874,21 @@ and `mqtt_result`, prints `MQTT TCP connecting` before the attempt and labels
 failed socket setup `socket initialization`. The nRF91 port separates its
 30-second per-address connection timeout from the example's 100-millisecond
 send wait, explicitly retries IPv4 after unsuccessful IPv6-only results and
-records native failure details before cleanup. The hardware outcome of these
-code corrections is pending a new library/application build and run. No fresh
-automated ARM compile/link validation of the corrections is claimed.
+records native failure details before cleanup.
+
+The maintainer's retest after commit `68aae178` succeeded with the same
+`mfw_nrf9160_1.2.8` modem firmware and a 115200-baud console. The board registered
+on roaming LTE-M and connected to `test.mosquitto.org:1883`. It printed its
+generated client ID and topic, subscribed at QoS 1 and reported verified echo
+counts of 1 and then 10, both with `failures=0`. Each checked exchange requires
+the outgoing PUBACK and the matching returned payload.
+
+This establishes plaintext MQTT-over-LTE hardware operation for that nRF9160
+run. The log does not identify the cause of the initial failures or separate
+the effects of the connection timeout and IPv4 fallback changes. Recovery after
+broker or registration loss, an extended soak and TLS are not established by
+this log. It does not establish nRF91x1 hardware operation or fresh automated
+ARM compile/link validation.
 
 ## References
 
