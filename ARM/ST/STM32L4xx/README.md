@@ -315,6 +315,26 @@ ECB/CBC decryption, 200 AES rounds against the software engine and the P-256
 checks. The AES-256 and SHA-256/HMAC engine sections of the test are built only
 for boards whose board.h selects such an engine (20 checks on the STM32H753).
 
+## ADC
+
+`AdcSTM32L4` (`include/adc_stm32l4.h`, `src/adc_stm32l4.cpp`) implements the
+generic AdcDevice API on ADC1 of the L4 and L4+ parts: software triggered
+scans of up to 16 inputs read by polling, resolution 6 to 12 bits, hardware
+oversampling 2 to 256 times, the internal inputs VREFINT (0), temperature
+sensor (17) and VBAT (18, through the 1/3 bridge, Data is VBAT), and the pins
+of inputs 1 to 16, the same map on every L4 part. Interrupt, DMA, continuous
+mode and differential inputs are refused. The clock is HCLK / 2, the sampling
+time covers AcqTime and the datasheet minimum of the internal inputs. Each
+scan begins with a conversion whose result is not used, the workaround of
+ES0250 2.8.11 (a conversion started more than 1 ms after the previous one can
+be wrong). The STM32L476 library builds it. `tests/stm32l4/run_adc.py` runs the
+driver for the L476, L4R5 and L412 in Unicorn against a model of the ADC
+registers that checks the waits of RM0351 and of the datasheets. The STM32L476
+example AdcDemo (`exemples/converters/adc_demo.cpp`) prints VREFINT, the
+temperature sensor, VBAT and Arduino A0 (PC5) once per second, on the ST-LINK
+virtual COM port at 115200 8N1 in Release, with semihosting in Debug. Not run
+on hardware yet.
+
 ## Validation
 
 Run the focused host regressions from the repository root:
@@ -323,6 +343,7 @@ Run the focused host regressions from the repository root:
 python3 tests/stm32l4/run.py
 python3 tests/stm32/run_uart.py
 python3 tests/stm32/run_timer.py
+python3 tests/stm32l4/run_adc.py
 ```
 
 `tests/stm32l4/run.py` compiles extracted production function bodies against
