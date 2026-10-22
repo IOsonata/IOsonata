@@ -136,6 +136,17 @@ prints on the ST-LINK virtual COM port (LPUART1, 115200 8N1) in Release, with
 semihosting in Debug: timeout 2000 ms, ten reloads every 500 ms, then the IWDG
 resets the MCU and the demo starts again. Not run on hardware yet.
 
+## RTC
+
+The library builds the shared STM32 RTC driver, `ARM/ST/src/rtc_stm32.cpp`,
+with `src/miscdev/rtc.cpp`: calendar in the C runtime types, alarms A and B,
+wakeup timer, 32 backup registers in TAMP, from the LSE or the 32 kHz LSI. See
+[STM32 RTC](../RTC.md). The example RtcDemo (`exemples/misc/rtc_demo.cpp`)
+prints on the ST-LINK virtual COM port (LPUART1, 115200 8N1) in Release, with
+semihosting in Debug: the clock in use, a boot count in backup register 0, the
+date and time every second from the wakeup event, an alarm event each minute.
+Not run on hardware yet.
+
 ## Memory
 
 `gcc_stm32g474xx.ld`: 496 KB of the 512 KB flash for the image, two 8 KB
@@ -150,8 +161,9 @@ RAM2.
 `STM32G474/exemples/UartPrbsTxTest` (`exemples/uart/uart_prbs_tx.cpp`),
 `STM32G474/exemples/TimerDemo` (`exemples/timer/timer_demo.cpp`),
 `STM32G474/exemples/AdcDemo` (`exemples/converters/adc_demo.cpp`),
-`STM32G474/exemples/PwmDemo` (`exemples/pwm/pwm_demo.cpp`) and
-`STM32G474/exemples/WdtDemo` (`exemples/misc/wdt_demo.cpp`) link
+`STM32G474/exemples/PwmDemo` (`exemples/pwm/pwm_demo.cpp`),
+`STM32G474/exemples/WdtDemo` (`exemples/misc/wdt_demo.cpp`) and
+`STM32G474/exemples/RtcDemo` (`exemples/misc/rtc_demo.cpp`) link
 `IOsonata_STM32G474` from `STM32G474/lib/ioc` in the same Debug or Release
 configuration. Build the library first. `board.h` selects
 `#define BOARD NUCLEO_G474RE` (`ARM/ST/include/stm32_boards.h`). Blinky blinks

@@ -86,6 +86,11 @@ The library builds the shared STM32 watchdog driver,
 LSI, no window register, no timeout event. See [STM32 watchdog](../WDT.md). No
 example project; not run on hardware yet.
 
+The library builds the shared STM32 RTC driver, `ARM/ST/src/rtc_stm32.cpp`,
+with `src/miscdev/rtc.cpp`: calendar in the C runtime types, alarms A and B,
+wakeup timer, 32 backup registers, from the LSE or the 37 kHz LSI. See
+[STM32 RTC](../RTC.md). No example project; not run on hardware yet.
+
 ## Validation and limits
 
 `python3 tests/stm32l1/run.py` builds the library and all four examples in

@@ -89,6 +89,10 @@ two, TIM3 and TIM1 four. See [STM32 PWM](../PWM.md). No example project; not
 run on hardware yet. The library also builds the shared STM32 watchdog driver,
 `ARM/ST/src/wdt_stm32.cpp`, on the IWDG: timeout up to 26.2 s from the 40 kHz
 LSI, window, no timeout event. See [STM32 watchdog](../WDT.md). No example
+project; not run on hardware yet. It also builds the shared STM32 RTC driver,
+`ARM/ST/src/rtc_stm32.cpp`, with `src/miscdev/rtc.cpp`: calendar in the C
+runtime types, alarm A, from the LSE or the 40 kHz LSI; the F030x8 has no
+wakeup timer and no backup registers. See [STM32 RTC](../RTC.md). No example
 project; not run on hardware yet.
 
 Trigger periods are rounded to ticks and must be at least four ticks. Compare
