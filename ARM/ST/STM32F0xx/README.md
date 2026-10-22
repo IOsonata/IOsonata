@@ -82,6 +82,19 @@ prescaler (1-65536); use the returned frequency. IRQ priority is 0-3.
 Per-counter-tick interrupts (`bTickInt`), external triggers, input capture, DMA
 and PWM output are outside this Timer driver. Unsupported configuration and
 external-trigger requests return failure. No GPIO is configured by the timer.
+PWM output is the shared STM32 PWM driver, `ARM/ST/src/pwm_stm32.cpp`, built
+by the F030x8 library: the generic PWM API on the TIM output channels with
+the timer DevNo of this table, TIM14, TIM16 and TIM17 with one channel, TIM15
+two, TIM3 and TIM1 four. See [STM32 PWM](../PWM.md). No example project; not
+run on hardware yet. The library also builds the shared STM32 watchdog driver,
+`ARM/ST/src/wdt_stm32.cpp`, on the IWDG: timeout up to 26.2 s from the 40 kHz
+LSI, window, no timeout event. See [STM32 watchdog](../WDT.md). No example
+project; not run on hardware yet. It also builds the shared STM32 RTC driver,
+`RtcStm32` (`ARM/ST/src/rtc_stm32.cpp`), the generic RTC device of
+`miscdev/rtc.h` (`src/miscdev/rtc.cpp`): calendar in the C runtime types, alarm
+A, from the LSE or the 40 kHz LSI; the F030x8 has no wakeup timer and no backup
+registers. See [STM32 RTC](../RTC.md). No example project; not run on hardware
+yet.
 
 Trigger periods are rounded to ticks and must be at least four ticks. Compare
 timers support periods up to UINT32_MAX ticks across hardware wraps. TIM6's

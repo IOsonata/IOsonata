@@ -3,7 +3,7 @@
 
 @brief	STM32 QUADSPI implementation
 
-		QUADSPI is the SPI device DevNo 3 (STM32_QOSPI_DEVNO_START), SPIInit of
+		QUADSPI follows the SPI devices (STM32_QOSPI_DEVNO_START), SPIInit of
 		spi_stm32.cpp calls Stm32QospiInit for it. Master in polling mode,
 		indirect mode. QuadSPISendCmd gives the command, its address, dummy
 		cycles and data length; a command without data runs at once, one with
@@ -141,8 +141,14 @@ static uint32_t Stm32QspiSetRate(DevIntrf_t * const pDev, uint32_t DataRate)
 	}
 
 	Stm32QspiDev_t *dev = (Stm32QspiDev_t *)pDev->pDevData;
+#ifdef STM32H753xx
+	static const uint8_t hpreShift[16] = {0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 6, 7, 8, 9};
+	uint32_t tmp = (RCC->D1CFGR & RCC_D1CFGR_HPRE) >> RCC_D1CFGR_HPRE_Pos;
+	uint32_t hclk = SystemCoreClock >> hpreShift[tmp];
+#else
 	uint32_t tmp = (RCC->CFGR & RCC_CFGR_HPRE_Msk) >> RCC_CFGR_HPRE_Pos;
 	uint32_t hclk = tmp & 8 ? SystemCoreClock >> ((tmp & 7) + 1) : SystemCoreClock;
+#endif
 
 	// SCK = HCLK / (PRESCALER + 1)
 	int32_t div = (hclk + (DataRate >> 1)) / DataRate - 1;
@@ -475,7 +481,13 @@ bool Stm32QospiInit(SPIDev_t * const pDev, const SPICfg_t *pCfgData)
 	msDelay(1);
 
 	RCC->AHB3ENR |= RCC_AHB3ENR_QSPIEN;
+#ifdef STM32H753xx
+	// Kernel source 0 is HCLK; preserve the PER and other kernel selections.
+	RCC->D1CCIPR &= ~RCC_D1CCIPR_QSPISEL;
+	RCC->AHB3LPENR &= ~RCC_AHB3LPENR_QSPILPEN;
+#else
 	RCC->AHB3SMENR &= ~RCC_AHB3SMENR_QSPISMEN;
+#endif
 
 	reg->CR &= ~(QUADSPI_CR_FTHRES_Msk | QUADSPI_CR_SSHIFT);
 

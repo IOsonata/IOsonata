@@ -153,7 +153,7 @@ static void Enumerate(void)
 		const unsigned physical = 2 * ep + ((address >> 7) & 1);
 		assert(ep > 0 && ep <= 4 && (addresses & (1U << physical)) == 0);
 		addresses |= 1U << physical;
-		assert(mps == (address == (0x80U | cdc->NotifyEpNo) ? 8U : 64U));
+		assert(mps == (address == (0x80U | cdc->NotifyEpNo) ? USBD_CDC_NOTIF_MPS : 64U));
 	}
 	assert(endpoints == (s_VendorBulk ? 7 : (s_Composite ? 5 : 3)));
 	// A 31-character UTF-16 string is exactly 64 bytes, requiring a ZLP
@@ -422,28 +422,29 @@ int main(int argc, char **)
 	const unsigned physical = 2U * cdc->NotifyEpNo + 1U;
 	const uint8_t header[] = {0xA1, 0x20, 0, 0, cdc->CtrlIfNo, 0, 2, 0};
 	assert(cdc->SerialStateActive && !cdc->SerialStatePending);
+	// The whole notification goes out in one packet.
+	assert(((memory->Command[2 * physical] >> 16) & 0x3FF) == USBD_CDC_NOTIFY_LEN);
 	assert(std::memcmp(memory->Packet[physical], header, sizeof(header)) == 0);
-	assert(((memory->Command[2 * physical] >> 16) & 0x3FF) == 8);
-	TestUsbPacketDone(physical, 8);
-	assert(cdc->SerialStateActive); // first packet must not complete notification
-	assert(((memory->Command[2 * physical] >> 16) & 0x3FF) == 2);
-	assert(memory->Packet[physical][0] == 0 && memory->Packet[physical][1] == 0);
+	assert(memory->Packet[physical][8] == 0 && memory->Packet[physical][9] == 0);
 
-	// A new state during the old transfer must not overwrite its tail. The
-	// completion callback immediately starts the next complete notification.
+	// A new state during the old transfer waits for its completion and leaves
+	// the source buffer alone. The completion callback immediately starts the
+	// next notification.
+	const uint8_t *source = reinterpret_cast<const uint8_t *>(cdc->NotifTransfer);
 	s_Cdc.SetSerialState(USB_CDC_SERIAL_STATE_RX_CARRIER);
-	assert(cdc->SerialStatePending);
-	TestUsbPacketDone(physical, 2);
+	assert(cdc->SerialStateActive && cdc->SerialStatePending);
+	assert(source[8] == 0);
+	TestUsbPacketDone(physical, USBD_CDC_NOTIFY_LEN);
 	assert(cdc->SerialStateActive && !cdc->SerialStatePending);
 	assert(std::memcmp(memory->Packet[physical], header, sizeof(header)) == 0);
-	TestUsbPacketDone(physical, 8);
-	assert(memory->Packet[physical][0] == USB_CDC_SERIAL_STATE_RX_CARRIER);
-	TestUsbPacketDone(physical, 2);
+	assert(memory->Packet[physical][8] == USB_CDC_SERIAL_STATE_RX_CARRIER);
+	TestUsbPacketDone(physical, USBD_CDC_NOTIFY_LEN);
 	assert(!cdc->SerialStateActive);
 	assert((memory->Command[2 * physical] & (1U << 31)) == 0);
 
+	// Unplug with a notification still in flight.
 	s_Cdc.SetSerialState(0);
-	TestUsbPacketDone(physical, 8);
+	assert(cdc->SerialStateActive);
 	TestUsbCable(false, true);
 	ProcessEvents();
 	assert(!UsbConfigured(0) && !cdc->SerialStateActive);

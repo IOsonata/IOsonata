@@ -76,7 +76,7 @@ SOFTWARE.
 #include "stm32.h"
 #if defined(STM32WBA)
 #include "gpdma_stm32wba.h"
-#elif defined(STM32L4)
+#elif defined(STM32L4) || defined(STM32H753xx)
 #include "dma_stm32.h"
 #endif
 #include "coredev/uart.h"
@@ -89,6 +89,18 @@ static int s_FailCnt;
 static int s_CheckCnt;
 static unsigned s_AccCnt;
 static const char *s_pName = "";
+
+#ifdef STM32H753xx
+TestScb_t g_TestScb;
+static uintptr_t s_StuckStream;
+static unsigned s_CacheOps[3];
+extern "C" void TestCache(int Op, void *p, int Size)
+{
+	s_CacheOps[Op]++;
+	CHECK(((uintptr_t)p & 31U) == 0 && (Size & 31) == 0);
+	CHECK((uintptr_t)p >= 0x24000000 && (uintptr_t)p + Size <= 0x24080000);
+}
+#endif
 
 // ---- Register names of the part --------------------------------------------
 
@@ -138,7 +150,7 @@ static const char *s_pName = "";
 #define T_M0			USART_CR1_M
 #endif
 
-#if defined(DMA_SxCR_CHSEL)
+#if defined(DMA_SxCR_CHSEL) || defined(STM32H753xx)
 #define T_DMA_STREAM
 typedef DMA_Stream_TypeDef TChan_t;
 #elif defined(DMA_CTR2_REQSEL)
@@ -180,7 +192,7 @@ typedef struct {
 	TestDma_t Tx;
 } TestInst_t;
 
-#define MAX_INST		8
+#define MAX_INST		9
 
 static TestInst_t s_Inst[MAX_INST];
 static int s_NbInst;
@@ -229,6 +241,25 @@ extern "C" void GPDMA1_Channel4_IRQHandler(void);
 extern "C" void GPDMA1_Channel5_IRQHandler(void);
 extern "C" void GPDMA1_Channel6_IRQHandler(void);
 extern "C" void GPDMA1_Channel7_IRQHandler(void);
+
+extern "C" void UART7_IRQHandler(void);
+extern "C" void UART8_IRQHandler(void);
+extern "C" void DMA1_Stream0_IRQHandler(void);
+extern "C" void DMA1_Stream1_IRQHandler(void);
+extern "C" void DMA1_Stream2_IRQHandler(void);
+extern "C" void DMA1_Stream3_IRQHandler(void);
+extern "C" void DMA1_Stream4_IRQHandler(void);
+extern "C" void DMA1_Stream5_IRQHandler(void);
+extern "C" void DMA1_Stream6_IRQHandler(void);
+extern "C" void DMA1_Stream7_IRQHandler(void);
+extern "C" void DMA2_Stream0_IRQHandler(void);
+extern "C" void DMA2_Stream1_IRQHandler(void);
+extern "C" void DMA2_Stream2_IRQHandler(void);
+extern "C" void DMA2_Stream3_IRQHandler(void);
+extern "C" void DMA2_Stream4_IRQHandler(void);
+extern "C" void DMA2_Stream5_IRQHandler(void);
+extern "C" void DMA2_Stream6_IRQHandler(void);
+extern "C" void DMA2_Stream7_IRQHandler(void);
 
 #define TDMA(Ch, Ctl, Idx, Req, Irq, Vec)	TestDma_t{ (void *)(Ch), (void *)(Ctl), Idx, Req, (int)(Irq), Vec }
 
@@ -294,6 +325,70 @@ static void BuildInst(void)
 #ifdef USART6
 	AddInst("USART6", USART6, USART3_4_IRQHandler, USART3_4_IRQn, &RCC->APB2ENR, &RCC->APB2RSTR, RCC_APB2ENR_USART6EN, 0);
 #endif
+
+#elif defined(STM32H753xx)
+	{
+		TestInst_t &t = AddInst("LPUART1", LPUART1, LPUART1_IRQHandler, LPUART1_IRQn, &RCC->APB4ENR, &RCC->APB4RSTR, RCC_APB4ENR_LPUART1EN, 3);
+		t.bLpuart = true;
+		t.pSelReg = &RCC->D3CCIPR;
+		t.SelMsk = RCC_D3CCIPR_LPUART1SEL;
+	}
+	{
+		TestInst_t &t = AddInst("USART1", USART1, USART1_IRQHandler, USART1_IRQn, &RCC->APB2ENR, &RCC->APB2RSTR, RCC_APB2ENR_USART1EN, 1);
+		t.pSelReg = &RCC->D2CCIP2R;
+		t.SelMsk = RCC_D2CCIP2R_USART16SEL;
+		t.Rx = TDMA(DMA1_Stream0, DMA1, 0, 41, DMA1_Stream0_IRQn, DMA1_Stream0_IRQHandler);
+		t.Tx = TDMA(DMA1_Stream1, DMA1, 1, 42, DMA1_Stream1_IRQn, DMA1_Stream1_IRQHandler);
+	}
+	{
+		TestInst_t &t = AddInst("USART2", USART2, USART2_IRQHandler, USART2_IRQn, &RCC->APB1LENR, &RCC->APB1LRSTR, RCC_APB1LENR_USART2EN, 0);
+		t.pSelReg = &RCC->D2CCIP2R;
+		t.SelMsk = RCC_D2CCIP2R_USART28SEL;
+		t.Rx = TDMA(DMA1_Stream2, DMA1, 2, 43, DMA1_Stream2_IRQn, DMA1_Stream2_IRQHandler);
+		t.Tx = TDMA(DMA1_Stream3, DMA1, 3, 44, DMA1_Stream3_IRQn, DMA1_Stream3_IRQHandler);
+	}
+	{
+		TestInst_t &t = AddInst("USART3", USART3, USART3_IRQHandler, USART3_IRQn, &RCC->APB1LENR, &RCC->APB1LRSTR, RCC_APB1LENR_USART3EN, 0);
+		t.pSelReg = &RCC->D2CCIP2R;
+		t.SelMsk = RCC_D2CCIP2R_USART28SEL;
+		t.Rx = TDMA(DMA1_Stream4, DMA1, 4, 45, DMA1_Stream4_IRQn, DMA1_Stream4_IRQHandler);
+		t.Tx = TDMA(DMA1_Stream5, DMA1, 5, 46, DMA1_Stream5_IRQn, DMA1_Stream5_IRQHandler);
+	}
+	{
+		TestInst_t &t = AddInst("UART4", UART4, UART4_IRQHandler, UART4_IRQn, &RCC->APB1LENR, &RCC->APB1LRSTR, RCC_APB1LENR_UART4EN, 0);
+		t.pSelReg = &RCC->D2CCIP2R;
+		t.SelMsk = RCC_D2CCIP2R_USART28SEL;
+		t.Rx = TDMA(DMA1_Stream6, DMA1, 6, 63, DMA1_Stream6_IRQn, DMA1_Stream6_IRQHandler);
+		t.Tx = TDMA(DMA1_Stream7, DMA1, 7, 64, DMA1_Stream7_IRQn, DMA1_Stream7_IRQHandler);
+	}
+	{
+		TestInst_t &t = AddInst("UART5", UART5, UART5_IRQHandler, UART5_IRQn, &RCC->APB1LENR, &RCC->APB1LRSTR, RCC_APB1LENR_UART5EN, 0);
+		t.pSelReg = &RCC->D2CCIP2R;
+		t.SelMsk = RCC_D2CCIP2R_USART28SEL;
+		t.Rx = TDMA(DMA2_Stream0, DMA2, 0, 65, DMA2_Stream0_IRQn, DMA2_Stream0_IRQHandler);
+		t.Tx = TDMA(DMA2_Stream1, DMA2, 1, 66, DMA2_Stream1_IRQn, DMA2_Stream1_IRQHandler);
+	}
+	{
+		TestInst_t &t = AddInst("USART6", USART6, USART6_IRQHandler, USART6_IRQn, &RCC->APB2ENR, &RCC->APB2RSTR, RCC_APB2ENR_USART6EN, 1);
+		t.pSelReg = &RCC->D2CCIP2R;
+		t.SelMsk = RCC_D2CCIP2R_USART16SEL;
+		t.Rx = TDMA(DMA2_Stream2, DMA2, 2, 71, DMA2_Stream2_IRQn, DMA2_Stream2_IRQHandler);
+		t.Tx = TDMA(DMA2_Stream3, DMA2, 3, 72, DMA2_Stream3_IRQn, DMA2_Stream3_IRQHandler);
+	}
+	{
+		TestInst_t &t = AddInst("UART7", UART7, UART7_IRQHandler, UART7_IRQn, &RCC->APB1LENR, &RCC->APB1LRSTR, RCC_APB1LENR_UART7EN, 0);
+		t.pSelReg = &RCC->D2CCIP2R;
+		t.SelMsk = RCC_D2CCIP2R_USART28SEL;
+		t.Rx = TDMA(DMA2_Stream4, DMA2, 4, 79, DMA2_Stream4_IRQn, DMA2_Stream4_IRQHandler);
+		t.Tx = TDMA(DMA2_Stream5, DMA2, 5, 80, DMA2_Stream5_IRQn, DMA2_Stream5_IRQHandler);
+	}
+	{
+		TestInst_t &t = AddInst("UART8", UART8, UART8_IRQHandler, UART8_IRQn, &RCC->APB1LENR, &RCC->APB1LRSTR, RCC_APB1LENR_UART8EN, 0);
+		t.pSelReg = &RCC->D2CCIP2R;
+		t.SelMsk = RCC_D2CCIP2R_USART28SEL;
+		t.Rx = TDMA(DMA2_Stream6, DMA2, 6, 81, DMA2_Stream6_IRQn, DMA2_Stream6_IRQHandler);
+		t.Tx = TDMA(DMA2_Stream7, DMA2, 7, 82, DMA2_Stream7_IRQn, DMA2_Stream7_IRQHandler);
+	}
 
 #elif defined(STM32L4)
 	// DMA1 and DMA2 channels, request in CSELR, or DMAMUX1 numbers of the
@@ -500,7 +595,7 @@ McuOsc_t g_McuOsc = { { OSC_TYPE_RC, 16000000, 20, 0 }, { OSC_TYPE_RC, 32768, 20
 
 // PCLK of each SystemPeriphClockGet index, all different so that the rate
 // shows which one an instance uses
-static uint32_t s_Pclk[3] = { 24000000, 48000000, 12000000 };
+static uint32_t s_Pclk[4] = { 24000000, 48000000, 12000000, 100000000 };
 
 static int s_PinCfgCnt;
 static int s_PinDisCnt;
@@ -509,7 +604,7 @@ static uint32_t s_NvicPrio[256];
 
 extern "C" uint32_t SystemPeriphClockGet(int Idx)
 {
-	return Idx >= 0 && Idx < 3 ? s_Pclk[Idx] : 0;
+	return Idx >= 0 && Idx < 4 ? s_Pclk[Idx] : 0;
 }
 
 extern "C" void IOPinConfig(int PortNo, int PinNo, int PinOp, IOPINDIR Dir, IOPINRES Resistor, IOPINTYPE Type)
@@ -544,7 +639,7 @@ extern "C" void TestNvic(int Op, int IrqNo, uint32_t Prio)
 
 // ---- Peripheral model ------------------------------------------------------
 
-#define MAX_PAGE		8
+#define MAX_PAGE		16
 #define WIRE_MAX		16384
 #define RXQ_MAX			1024
 
@@ -689,6 +784,12 @@ static void ModelBefore(uintptr_t Addr, bool bWr)
 static void ModelAfter(uintptr_t Addr, bool bWr, uint32_t Old)
 {
 	uint32_t val = At(Addr);
+#ifdef STM32H753xx
+	if (Addr == s_StuckStream)
+	{
+		At(Addr) |= DMA_SxCR_EN;
+	}
+#endif
 
 	bWr = bWr || val != Old;
 
@@ -970,7 +1071,11 @@ static void DmaRxWrap(const TestDma_t &d, uint32_t Ring) { DmaSetCnt(d, Ring); }
 static bool DmaCirc(const TestDma_t &d, uint32_t Ring, uint32_t Base) { return (Rd(Ch(d)->CR) & DMA_SxCR_CIRC) != 0 && Rd(Ch(d)->M0AR) == Base; }
 static void DmaRoute(const TestDma_t &d, bool bTx)
 {
+#ifdef STM32H753xx
+	CHECK(Rd(DMAMUX1_Channel0[d.Idx + (d.pCtl == DMA1 ? 0 : 8)].CCR) == (uint32_t)d.Req);
+#else
 	CHECK(((Rd(Ch(d)->CR) & DMA_SxCR_CHSEL) >> DMA_SxCR_CHSEL_Pos) == (uint32_t)d.Req);
+#endif
 	CHECK(((Rd(Ch(d)->CR) & DMA_SxCR_DIR) == DMA_SxCR_DIR_0) == bTx);
 }
 static void DmaInUse(const TestDma_t &d) { Wr(Ch(d)->CR, DMA_SxCR_MINC); }
@@ -1517,8 +1622,16 @@ static void TestDma(int i)
 	s_RingBase[i] = DmaMem(t.Rx, false);
 	CHECK(s_Ring[i] >= 16 && (s_Ring[i] & (s_Ring[i] - 1)) == 0);
 	CHECK(DmaCirc(t.Rx, s_Ring[i], s_RingBase[i]));
+#ifdef STM32H753xx
+	CHECK(DmaInts(t.Rx) == (F_HT | F_TC | F_TE));
+#else
 	CHECK(DmaInts(t.Rx) == (F_HT | F_TC));
+#endif
+#ifdef STM32H753xx
+	CHECK(DmaInts(t.Tx) == (F_TC | F_TE));
+#else
 	CHECK(DmaInts(t.Tx) == F_TE);
+#endif
 	CHECK(s_NvicEn[t.IrqNo] && s_NvicEn[t.Rx.IrqNo] && s_NvicEn[t.Tx.IrqNo]);
 	CHECK(s_NvicPrio[t.Rx.IrqNo] == 3 && s_NvicPrio[t.Tx.IrqNo] == 3);
 	CHECK((Rd(reg->CR3) & (USART_CR3_DMAT | USART_CR3_DMAR | USART_CR3_EIE)) == (USART_CR3_DMAT | USART_CR3_DMAR | USART_CR3_EIE));
@@ -1666,7 +1779,8 @@ static void TestDma(int i)
 			DmaRxPut(i, rxd + total, l, false);
 			total += l;
 		}
-		recv += RxAll(i, got + recv, 600 - recv);
+		if (recv < 600) recv += RxAll(i, got + recv, 600 - recv);
+		else { uint8_t unused; CHECK(UARTRx(&u, &unused, 1) == 0); }
 		DmaTxRun(i);
 	}
 	CHECK(WireIs(i, data, 600));
@@ -1707,6 +1821,53 @@ static void DmaTxDrain(int i)
 	}
 }
 
+#ifdef STM32H753xx
+// DMA finishes before the last UART character. Queued data must continue
+// immediately, but the final TX-ready event must wait for the line to drain.
+static void TestDmaChain(int i)
+{
+	TestInst_t &t = s_Inst[i];
+	UARTDev_t &u = s_Uart[i];
+	if (t.Tx.pChan == NULL)
+	{
+		return;
+	}
+	uint8_t data[20];
+	for (int k = 0; k < 20; k++)
+	{
+		data[k] = (uint8_t)(k + 1);
+	}
+	for (int blocking = 0; blocking < 2; blocking++)
+	{
+		UARTCfg_t c = Cfg(i, 115200, true, true);
+		c.bFifoBlocking = blocking != 0;
+		CHECK(UARTInit(&u, &c));
+		WireReset(i);
+		s_TxReadyCnt = 0;
+		CHECK(UARTTx(&u, data, 10) == 10);
+		CHECK(UARTTx(&u, data + 10, 10) == 10);
+		CHECK(DmaTxRun(i) == 10);
+		Clr(T_ISR(t.pReg), T_TC);
+		t.Tx.Vector();
+		CHECK(DmaOn(t.Tx) && DmaCnt(t.Tx) == 10);
+		CHECK(!u.bTxReady && s_TxReadyCnt == 0);
+		CHECK(DmaTxRun(i) == 10);
+		Clr(T_ISR(t.pReg), T_TC);
+		t.Tx.Vector();
+		CHECK(!DmaOn(t.Tx) && !u.bTxReady && s_TxReadyCnt == 0);
+		CHECK(DmaGetFlags(t.Tx) == 0);
+		t.Tx.Vector();
+		CHECK(!u.bTxReady && s_TxReadyCnt == 0);
+		Set(T_ISR(t.pReg), T_TC);
+		t.Vector();
+		CHECK(u.bTxReady && s_TxReadyCnt == 1);
+		CHECK(CFifoUsed(u.hTxFifo) == 0 && WireIs(i, data, 20));
+		t.Tx.Vector();
+		CHECK(s_TxReadyCnt == 1);
+	}
+}
+#endif
+
 // DMA, blocking and non-blocking CFIFO. Blocking: the block is read in place.
 // Non-blocking: the block is a copy taken out of the FIFO, a put on a full
 // FIFO drops the oldest bytes still in the FIFO, the running block is sent as
@@ -1733,7 +1894,13 @@ static void TestDmaDrop(int i)
 	CHECK(UARTInit(&u, &c));
 	WireReset(i);
 	CHECK(UARTTx(&u, data, 10) == 10);
+#ifdef STM32H753xx
+	CHECK(DmaMem(t.Tx, true) >= 0x24000000 && DmaMem(t.Tx, true) < 0x24080000);
+	CHECK((DmaMem(t.Tx, true) & 31) == 0 && DmaCnt(t.Tx) == 10);
+	CHECK(CFifoUsed(u.hTxFifo) == 10);
+#else
 	CHECK(DmaMem(t.Tx, true) == (uint32_t)(uintptr_t)u.hTxFifo->pMemStart && DmaCnt(t.Tx) == 8);
+#endif
 	DmaTxDrain(i);
 	CHECK(WireIs(i, data, 10));
 
@@ -1852,7 +2019,7 @@ static void TestDmaDrop(int i)
 	CHECK(u.hTxFifo->DropCnt == 0 && u.hRxFifo->DropCnt == 0);
 }
 
-#if defined(STM32WBA) || defined(STM32L4)
+#if defined(STM32WBA) || defined(STM32L4) || defined(STM32H753xx)
 static bool TestDmaClaim(int Ch, void *pCtx)
 {
 #if defined(STM32WBA)
@@ -1974,6 +2141,63 @@ static void TestReinitFailure(int i)
 }
 #endif
 
+#ifdef STM32H753xx
+static void TestH7Dma(int i)
+{
+	UARTDev_t &u = s_Uart[i];
+	TestInst_t &t = s_Inst[i];
+	UARTCfg_t c = Cfg(i, 1000000, true, true);
+	// Caller buffers in DTCM must never be handed to DMA1/2.
+	c.pRxMem = (uint8_t *)0x20000000;
+	c.pTxMem = (uint8_t *)0x20001000;
+	c.RxMemSize = c.TxMemSize = CFIFO_MEMSIZE(256);
+	for (int cache = 0; cache < 2; cache++)
+	{
+		SCB->CCR = cache ? SCB_CCR_DC_Msk : 0;
+		CHECK(UARTInit(&u, &c));
+		s_Ring[i] = DmaCnt(t.Rx);
+		s_RingBase[i] = DmaMem(t.Rx, false);
+		uint8_t data[128], got[128];
+		for (int k = 0; k < 128; k++) data[k] = (uint8_t)(k * 17);
+		WireReset(i);
+		CHECK(UARTTx(&u, data, 128) == 128);
+		CHECK(DmaMem(t.Tx, true) >= 0x24000000 && DmaMem(t.Tx, true) < 0x24080000);
+		DmaTxDrain(i);
+		CHECK(WireIs(i, data, 128));
+		DmaRxPut(i, data, 128, true);
+		CHECK(RxAll(i, got, 128) == 128 && memcmp(got, data, 128) == 0);
+		// RX transfer error retains the received prefix and restarts the ring.
+		DmaRxPut(i, data, 7, false);
+		DmaStopErr(t.Rx);
+		DmaFlags(t.Rx, F_TE);
+		t.Rx.Vector();
+		CHECK(u.RxOvrErrCnt == 1 && DmaGetFlags(t.Rx) == 0);
+		CHECK(DmaOn(t.Rx) && DmaCnt(t.Rx) == s_Ring[i]);
+		CHECK(RxAll(i, got, 128) == 7 && memcmp(got, data, 7) == 0);
+		DmaRxPut(i, data + 7, 17, true);
+		RxIdle(i);
+		CHECK(RxAll(i, got, 128) == 17 && memcmp(got, data + 7, 17) == 0);
+	}
+	CHECK(s_CacheOps[0] && s_CacheOps[1] && s_CacheOps[2]);
+	// EN stuck high: initialization must fail without reusing the active buffer.
+	uint8_t data[8] = {};
+	CHECK(UARTTx(&u, data, 8) == 8);
+	uint32_t mem = DmaMem(t.Tx, true), count = DmaCnt(t.Tx);
+	s_StuckStream = (uintptr_t)t.Tx.pChan;
+	CHECK(!UARTInit(&u, &c));
+	CHECK(DmaMem(t.Tx, true) == mem && DmaCnt(t.Tx) == count);
+	s_StuckStream = 0;
+	CHECK(UARTInit(&u, &c));
+	c.bDMAMode = false;
+	CHECK(UARTInit(&u, &c));
+	// Switching to interrupt mode returns both streams to the manager.
+	CHECK(TestDmaClaim(TestDmaCh(t.Rx), &c));
+	CHECK(TestDmaClaim(TestDmaCh(t.Tx), &c));
+	TestDmaFree(TestDmaCh(t.Rx));
+	TestDmaFree(TestDmaCh(t.Tx));
+}
+#endif
+
 // Framing on the first USART, not LPUART
 static void TestFraming(int i)
 {
@@ -2035,6 +2259,7 @@ static void TestLpuart(int i)
 	USART_TypeDef *reg = t.pReg;
 	UARTDev_t &u = s_Uart[i];
 
+#ifndef STM32H753xx
 	g_McuOsc.LowPwrOsc.Type = OSC_TYPE_XTAL;
 	UARTCfg_t c = Cfg(i, 9600, false, false);
 	CHECK(UARTInit(&u, &c));
@@ -2048,6 +2273,10 @@ static void TestLpuart(int i)
 	CHECK(Rd(reg->BRR) == LpBrr(16000000, 9600));
 	CHECK((uint32_t)UARTGetRate(&u) == LpRate(16000000, LpBrr(16000000, 9600)));
 
+
+#else
+	UARTCfg_t c = Cfg(i, 9600, false, false);
+#endif
 	c.Rate = 6000000;
 	CHECK(UARTInit(&u, &c));
 	uint32_t fck = s_Pclk[t.PclkIdx];
@@ -2061,6 +2290,11 @@ int main()
 	struct sigaction sa;
 
 	MapRange(0x40000000, 0x30000);
+#ifdef STM32H753xx
+	MapRange(0x58000000, 0x30000);
+	MapRange(0x20000000, 0x20000);
+	SCB->CCR = SCB_CCR_DC_Msk;
+#endif
 #if defined(STM32WBA)
 	MapRange(0x46000000, 0x30000);
 #endif
@@ -2092,7 +2326,7 @@ int main()
 	RCC->CR |= RCC_CR_HSIRDY;
 	Prot();
 
-#if defined(STM32WBA) || defined(STM32L4)
+#if defined(STM32WBA) || defined(STM32L4) || defined(STM32H753xx)
 	TestInitFailure();
 #endif
 
@@ -2108,8 +2342,11 @@ int main()
 		TestInterrupt(i);
 		TestDma(i);
 		TestDmaDrop(i);
-#if defined(STM32WBA) || defined(STM32L4)
-		TestReinitFailure(i);
+#ifdef STM32H753xx
+		TestDmaChain(i);
+#endif
+#if defined(STM32WBA) || defined(STM32L4) || defined(STM32H753xx)
+		if (s_Inst[i].Tx.pChan) TestReinitFailure(i);
 #endif
 		if (s_Inst[i].bLpuart)
 		{
@@ -2118,6 +2355,9 @@ int main()
 		UARTDisable(&s_Uart[i]);
 	}
 	s_pName = s_Inst[first].pName;
+#ifdef STM32H753xx
+	TestH7Dma(first);
+#endif
 	TestFraming(first);
 
 	s_pName = "model";
@@ -2127,3 +2367,4 @@ int main()
 
 	return s_FailCnt ? 1 : 0;
 }
+

@@ -361,6 +361,21 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>src/coredev/pwm_stm32.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/pwm_stm32.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/wdt_stm32.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/wdt_stm32.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/rtc_stm32.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/rtc_stm32.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/crc.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/crc.c</locationURI>
@@ -996,6 +1011,16 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/miscdev/tca6424a.h</locationURI>
 		</link>
 		<link>
+			<name>include/miscdev/rtc.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/miscdev/rtc.h</locationURI>
+		</link>
+		<link>
+			<name>include/miscdev/rtc_stm32.h</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/include/rtc_stm32.h</locationURI>
+		</link>
+		<link>
 			<name>include/motion/act.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/motion/act.h</locationURI>
@@ -1109,6 +1134,11 @@
 			<name>include/pwrmgnt/pwrmgnt.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/pwrmgnt/pwrmgnt.h</locationURI>
+		</link>
+		<link>
+			<name>include/rftag/m24sr.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/rftag/m24sr.h</locationURI>
 		</link>
 		<link>
 			<name>include/rftag/rfreader_pn532.h</name>
@@ -1971,6 +2001,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/miscdev/modem.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/miscdev/rtc.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/miscdev/rtc.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/motion/att.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/motion/att.cpp</locationURI>
@@ -2044,6 +2079,11 @@
 			<name>src/pwrmgnt/pm_npm1300.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/pwrmgnt/pm_npm1300.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/rftag/m24sr.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/rftag/m24sr.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/rftag/rfreader_pn532.cpp</name>
@@ -2786,14 +2826,9 @@
 			<locationURI>PARENT-2-PROJECT_LOC/include/utilities_conf.h</locationURI>
 		</link>
 		<link>
-			<name>src/usb_otg_stm32.cpp</name>
+			<name>src/usb_ctrlr_stm32.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/usb_otg_stm32.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/usb_otg_target_stm32.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/usb_otg_target_stm32.cpp</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/src/usb_ctrlr_stm32.cpp</locationURI>
 		</link>
 		<link>
 			<name>include/usb_ctrlr.h</name>

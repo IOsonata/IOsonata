@@ -54,6 +54,8 @@ extern "C" { volatile uint32_t UsbClockFailure; }
 
 extern "C" int main(void)
 {
+	CHECK((SCB->CCR & SCB_CCR_IC_Msk) != 0U);
+	CHECK((SCB->CCR & SCB_CCR_DC_Msk) == 0U);
 	CHECK(SystemCoreClock == 400000000UL);
 	CHECK(SystemD2Clock == 200000000UL);
 	for (int i = 0; i < 4; i++)
@@ -93,7 +95,12 @@ extern "C" int main(void)
 	CHECK((GPIOD->MODER & (15U << 16)) == (10U << 16));
 	CHECK(USART3->CR1 & USART_CR1_RXNEIE_RXFNEIE);
 	cfg.bDMAMode = true;
-	CHECK(UARTInit(&uart, &cfg) == false);
+	CHECK(UARTInit(&uart, &cfg));
+	CHECK(DMAMUX1_Channel4->CCR == 45 && DMAMUX1_Channel5->CCR == 46);
+	CHECK(DMA1_Stream4->CR & DMA_SxCR_EN);
+	CHECK(DMA1_Stream4->M0AR >= 0x24000000 && DMA1_Stream4->M0AR < 0x24080000);
+	CHECK((DMA1_Stream4->M0AR & 31U) == 0);
+	UARTDisable(&uart);
 
 	TimerCfg_t tc = {};
 	tc.DevNo = 8; // TIM2
@@ -126,6 +133,9 @@ extern "C" int main(void)
 	const uint32_t supply = PWR->CR3;
 	UsbCtrlrCfg_t usb = {};
 	usb.IntPrio = 6;
+	// Model reset-enabled ULPI sleep gating and an unrelated clock bit.
+	RCC->AHB1LPENR = RCC_AHB1LPENR_USB2OTGFSULPILPEN | RCC_AHB1LPENR_DMA1LPEN;
+	const uint32_t sleep = RCC->AHB1LPENR;
 	CHECK(Stm32UsbOtgPowerInit(&usb));
 	CHECK(Stm32UsbOtgRegs() == USB2_OTG_FS);
 	CHECK(Stm32UsbOtgIrq() == OTG_FS_IRQn);
@@ -142,6 +152,8 @@ extern "C" int main(void)
 		(CRS_CR_CEN | CRS_CR_AUTOTRIMEN));
 	CHECK(PWR->CR3 == (supply | PWR_CR3_USB33DEN));
 	CHECK(RCC->AHB1ENR & RCC_AHB1ENR_USB2OTGFSEN);
+	CHECK(RCC->AHB1LPENR == ((sleep & ~RCC_AHB1LPENR_USB2OTGFSULPILPEN) |
+		RCC_AHB1LPENR_USB2OTGFSLPEN));
 	CHECK((GPIOA->AFR[1] & 0xFF000U) == 0xAA000U);
 	CHECK((GPIOA->MODER & (3U << 18)) == 0); // PA9 input
 	CHECK((GPIOA->MODER & (15U << 22)) == (10U << 22));
@@ -153,4 +165,3 @@ extern "C" int main(void)
 	CHECK(RCC->PLL1DIVR == pll);
 	return 0;
 }
-

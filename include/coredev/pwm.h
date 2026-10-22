@@ -75,6 +75,8 @@ typedef struct __Pwm_Chan_Cfg {
 	PWM_POL Pol;				//!< Polarity 0 - active 0, 1 - active high
 	int Port;					//!< output port number
 	int Pin;					//!< output pin number
+	int PinOp;					//!< Pin function of the output (IOPINOP_FUNCx, the STM32 AF of
+								//!< the timer channel), IOPINOP_GPIO on MCU routing any pin (Nordic)
 } PwmChanCfg_t;
 
 //typedef PwmChanCfg_t	PWM_CHAN_CFG;

@@ -72,7 +72,9 @@ public:
 	void Disable() override {}
 	void Reset() override {}
 
-	// CipherEngine: software AES-128 ECB/CTR/CBC.
+	// CipherEngine: software AES-128 ECB/CTR/CBC encryption and decryption.
+	// ECB/CBC require whole blocks; no padding is added or removed.
+	// Input and output may be identical or disjoint, not partially overlapping.
 	CRYPTO_STATUS Cipher(CRYPTO_CIPHER_ALG Alg, int bEncrypt,
 						 const CryptoKey &Key,
 						 const uint8_t *pIv, size_t IvLen,

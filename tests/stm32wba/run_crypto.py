@@ -83,7 +83,7 @@ SOAK_AES = 24
 
 def build(tmp):
     cpu = ['-mcpu=cortex-m33', '-mthumb', '-mfloat-abi=soft', '-Os', '-DSTM32WBA65xx', '-DIOSONATA_STM32_WBA',
-           '-ffunction-sections', '-fdata-sections', '-g']
+           '-DuECC_ENABLE_VLI_API=1', '-ffunction-sections', '-fdata-sections', '-g']
     inc = ['-I' + str(p) for p in (ROOT / 'include', ROOT / 'ARM/include', ROOT / 'ARM/CMSIS/Core/Include',
                                    ROOT / 'ARM/ST/include', ROOT / 'ARM/ST/STM32WBAxx/include',
                                    ROOT / 'micro-ecc', BOARD_DIR)]

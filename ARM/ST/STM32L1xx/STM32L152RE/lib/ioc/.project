@@ -41,6 +41,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/ARM/ST/src/iopincfg_stm32.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/pwm_stm32.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/ARM/ST/src/pwm_stm32.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/uart_stm32.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/ARM/ST/src/uart_stm32.cpp</locationURI>
@@ -159,6 +164,21 @@
 			<name>src/spi.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/spi.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/wdt_stm32.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/ARM/ST/src/wdt_stm32.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/rtc_stm32.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/ARM/ST/src/rtc_stm32.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/rtc.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/miscdev/rtc.cpp</locationURI>
 		</link>
 	</linkedResources>
 	<variableList>

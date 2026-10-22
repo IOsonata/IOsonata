@@ -324,10 +324,10 @@ IOsonata is developed and validated on I-SYST reference hardware as well as vend
 | RA4M1 | EK-RA4M1 startup/GPIO, timer callbacks and SCI UART; IIC hardware validation remains pending |
 | STM32F030x8 | Hardware validated on STM32F0308-DISCO; startup, GPIO, USART1, TIM6/TIM16 and UART DMA PRBS |
 | STM32L476 / STM32L496 / STM32L4S9 | Hardware validated and used in existing projects, confirmed by the maintainer |
-| STM32L476 (B-L475E-IOT01A2) | Shared drivers: GPIO, UART in all modes, I2C, QUADSPI flash through Nvm in single line and quad mode |
+| STM32L476 (B-L475E-IOT01A2) | Shared drivers: GPIO, UART in all modes, I2C, QUADSPI flash through Nvm in single line and quad mode, USB CDC device |
 | STM32L432 | NUCLEO-L432KC: GPIO, timers, UART TX, I2C and SPI master/slave |
 | STM32G474 | NUCLEO-G474RE: GPIO/EXTI, UART in all modes at 1 Mbaud, LPTIM1 and TIM |
-| STM32H753 | NUCLEO-H753ZI: startup, GPIO, USART3 interrupt TX/RX and TIM2 |
+| STM32H753 | NUCLEO-H753ZI: startup, GPIO, USART3 interrupt TX/RX, TIM2 and USB CDC device |
 | STM32WBA65 | STM32WBA65I-DK1: GPIO/EXTI, UART, timers, I2C/SPI master/slave, BLE advertising/security, crypto and USB CDC |
 
 These are function-specific maintainer results, not a claim that every

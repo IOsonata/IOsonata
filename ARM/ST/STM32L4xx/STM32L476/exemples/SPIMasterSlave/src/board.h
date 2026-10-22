@@ -39,55 +39,69 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #ifndef __BOARD_H__
 #define __BOARD_H__
 
-#include "stm32l4xx.h"
+// Board, one of the names in stm32_boards.h. This STM32L476 project builds for
+// B_L475E_IOT01A (B-L475E-IOT01A and B-L475E-IOT01A2, STM32L475VG).
+#define BOARD				B_L475E_IOT01A
 
-// *** STM32L476G-DISCO
-#define UART_DEVNO			1
-#define UART_RX_PORT		3
-#define UART_RX_PIN			6
-#define UART_RX_PINOP		(0x72)
+#include "stm32_boards.h"
 
-#define UART_TX_PORT		3
-#define UART_TX_PIN			5
-#define UART_TX_PINOP		(0x72)
+#define SPI_LOOPBACK_WIRING			"Wire D13-PMOD4 SCK, D11-PMOD2 MOSI, D12-PMOD3 MISO, D10-PMOD8 CS"
 
-#define UART_CTS_PORT		-1
-#define UART_CTS_PIN		-1
-#define UART_CTS_PINOP		0
-#define UART_RTS_PORT		-1
-#define UART_RTS_PIN		-1
-#define UART_RTS_PINOP		0
+// Output on the ST-LINK virtual COM port, USART1 (DevNo 1), RX PB7 and TX
+// PB6, AF7, the BOARD_VCP_PINS of stm32_boards.h. The Release build sends
+// printf there, the Debug build uses semihosting.
+#define UART_DEVNO					BOARD_VCP_DEVNO
+#define UART_RX_PORT				IOPORTB
+#define UART_RX_PIN					7
+#define UART_RX_PINOP				IOPINOP_FUNC7
+#define UART_TX_PORT				IOPORTB
+#define UART_TX_PIN					6
+#define UART_TX_PINOP				IOPINOP_FUNC7
+#define UART_CTS_PORT				-1
+#define UART_CTS_PIN				-1
+#define UART_CTS_PINOP				IOPINOP_GPIO
+#define UART_RTS_PORT				-1
+#define UART_RTS_PIN				-1
+#define UART_RTS_PINOP				IOPINOP_GPIO
 
-// SPI loopback: SPI1 master wired to SPI2 slave with jumpers
-// PA5-PB13 (SCK), PA6-PB14 (MISO), PA7-PB15 (MOSI), PA4-PB12 (CS)
-// The master chip select PA4 is a GPIO driven by the driver
-#define SPI_MASTER_DEVNO		0
-#define SPI_MASTER_SCK_PORT		IOPORTA
-#define SPI_MASTER_SCK_PIN		5
-#define SPI_MASTER_SCK_PINOP	IOPINOP_FUNC5
-#define SPI_MASTER_MISO_PORT	IOPORTA
-#define SPI_MASTER_MISO_PIN		6
-#define SPI_MASTER_MISO_PINOP	IOPINOP_FUNC5
-#define SPI_MASTER_MOSI_PORT	IOPORTA
-#define SPI_MASTER_MOSI_PIN		7
-#define SPI_MASTER_MOSI_PINOP	IOPINOP_FUNC5
-#define SPI_MASTER_CS_PORT		IOPORTA
-#define SPI_MASTER_CS_PIN		4
-#define SPI_MASTER_CS_PINOP		IOPINOP_GPIO
+// Master: SPI1 (DevNo 0) on the Arduino header, AF5: SCK D13 PA5 (also LD1),
+// MISO D12 PA6, MOSI D11 PA7. The chip select D10 PA2 is a GPIO.
+#define SPI_MASTER_SOFTWARE			false
+#define SPI_MASTER_DEVNO			0
+#define SPI_MASTER_SCK_PORT			IOPORTA
+#define SPI_MASTER_SCK_PIN			5
+#define SPI_MASTER_SCK_PINOP		IOPINOP_FUNC5
+#define SPI_MASTER_MISO_PORT		IOPORTA
+#define SPI_MASTER_MISO_PIN			6
+#define SPI_MASTER_MISO_PINOP		IOPINOP_FUNC5
+#define SPI_MASTER_MOSI_PORT		IOPORTA
+#define SPI_MASTER_MOSI_PIN			7
+#define SPI_MASTER_MOSI_PINOP		IOPINOP_FUNC5
+#define SPI_MASTER_CS_PORT			IOPORTA
+#define SPI_MASTER_CS_PIN			2
+#define SPI_MASTER_CS_PINOP			IOPINOP_GPIO
+#define SPI_MASTER_RATE				500000
 
-#define SPI_SLAVE_DEVNO			1
-#define SPI_SLAVE_SCK_PORT		IOPORTB
-#define SPI_SLAVE_SCK_PIN		13
-#define SPI_SLAVE_SCK_PINOP		IOPINOP_FUNC5
-#define SPI_SLAVE_MISO_PORT		IOPORTB
-#define SPI_SLAVE_MISO_PIN		14
-#define SPI_SLAVE_MISO_PINOP	IOPINOP_FUNC5
-#define SPI_SLAVE_MOSI_PORT		IOPORTB
-#define SPI_SLAVE_MOSI_PIN		15
-#define SPI_SLAVE_MOSI_PINOP	IOPINOP_FUNC5
-#define SPI_SLAVE_CS_PORT		IOPORTB
-#define SPI_SLAVE_CS_PIN		12
-#define SPI_SLAVE_CS_PINOP		IOPINOP_FUNC5
+// The slave takes each byte in its interrupt, so it runs above the master
+#define SPI_SLAVE_INT_PRIO			5
+#define SPI_MASTER_INT_PRIO			6
+
+// Slave: SPI2 (DevNo 1) on the Pmod connector CN10, AF5: SCK pin 4 PD1, MISO
+// pin 3 PD3, MOSI pin 2 PD4, the fourth pin is the hardware NSS, pin 8 PD0.
+// The other SPI2 pins of the device are taken on this board: PB13 and PB12 by
+// the WiFi module, PB14 by LD2, PB15 by the sub-GHz module.
+#define SPI_SLAVE_DEVNO				1
+#define SPI_SLAVE_SCK_PORT			IOPORTD
+#define SPI_SLAVE_SCK_PIN			1
+#define SPI_SLAVE_SCK_PINOP			IOPINOP_FUNC5
+#define SPI_SLAVE_MISO_PORT			IOPORTD
+#define SPI_SLAVE_MISO_PIN			3
+#define SPI_SLAVE_MISO_PINOP		IOPINOP_FUNC5
+#define SPI_SLAVE_MOSI_PORT			IOPORTD
+#define SPI_SLAVE_MOSI_PIN			4
+#define SPI_SLAVE_MOSI_PINOP		IOPINOP_FUNC5
+#define SPI_SLAVE_CS_PORT			IOPORTD
+#define SPI_SLAVE_CS_PIN			0
+#define SPI_SLAVE_CS_PINOP			IOPINOP_FUNC5
 
 #endif // __BOARD_H__
-

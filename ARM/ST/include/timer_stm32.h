@@ -137,6 +137,21 @@ void Stm32TimRelease(int DevNo);
 void Stm32TimIRQHandler(int IrqNo);
 int Stm32TimCount(void);
 
+// Hardware of a TIM, for the drivers using a TIM another way (PWM). They
+// name it with the timer DevNo.
+typedef struct {
+	TIM_TypeDef *pReg;				//!< Registers
+	volatile uint32_t *pEnReg;		//!< RCC clock enable register
+	volatile uint32_t *pRstReg;		//!< RCC reset register
+	uint32_t Mask;					//!< Enable bit, also the reset bit
+	uint32_t ClkFreq;				//!< Counter clock before the prescaler, Hz
+	int NbChan;						//!< Compare channels, 0 on basic timers
+	bool bTimer;					//!< Bound to a TimerDev_t by TimerInit
+} Stm32TimHw_t;
+
+// Hardware of the TIM of timer DevNo, false when DevNo is not a TIM
+bool Stm32TimHwGet(int DevNo, Stm32TimHw_t * const pHw);
+
 #ifdef __cplusplus
 }
 #endif

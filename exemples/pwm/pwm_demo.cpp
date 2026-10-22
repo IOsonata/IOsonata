@@ -38,8 +38,15 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "board.h"
 
+// board.h can select the PWM device, PWM_DEVNO, and its channels,
+// PWM_CHAN_CFG: the PwmChanCfg_t of channel 0 and 1. Default: device 0 on
+// LED3 and LED4, for the MCU that route any pin.
+#ifndef PWM_DEVNO
+#define PWM_DEVNO		0
+#endif
+
 static const PwmCfg_t s_PwmCfg = {
-	.DevNo = 0,
+	.DevNo = PWM_DEVNO,
 	.Freq = 1000,
 	.Mode = PWM_MODE_EDGE,
 	.bIntEn = false,
@@ -48,6 +55,9 @@ static const PwmCfg_t s_PwmCfg = {
 };
 
 static const PwmChanCfg_t s_PwmChanCfg[] = {
+#ifdef PWM_CHAN_CFG
+	PWM_CHAN_CFG
+#else
 	{
 		.Chan = 0,
 		.Pol = PWM_POL_HIGH,
@@ -60,6 +70,7 @@ static const PwmChanCfg_t s_PwmChanCfg[] = {
 		.Port = LED4_PORT,
 		.Pin = LED4_PIN,
 	},
+#endif
 };
 
 const int s_NbPwmChan = sizeof(s_PwmChanCfg) / sizeof(PwmChanCfg_t);

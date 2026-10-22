@@ -13,8 +13,17 @@ Master with EasyDMA and bIntEn : TxData and RxData start the first DMA block and
 return -1. The interrupt handler starts the following blocks, releases the bus
 and reports DEVINTRF_EVT_COMPLETED with the number of bytes moved (the receive
 buffer for a receive). A transmit that keeps the bus for a following receive
-(bNoStop) only sets bTxReady. Not available on nRF54L, which refuses a master
-with bIntEn.
+(bNoStop) only sets bTxReady.
+
+Master without EasyDMA and bIntEn : the interrupt handler moves one byte per
+READY event and ends the transfer the same way.
+
+A transmit of up to NRFX_SPI_TXBUF_SIZE bytes is sent from a copy, so the
+caller's buffer may be released as soon as TxData returns. A longer transmit
+waits for completion or cancellation before TxData returns. Each DMA block
+uses the same owned buffer. If the wait expires, no more caller bytes are read.
+The transfer ends with DEVINTRF_EVT_TX_TIMEOUT after STOPPED (READY without EasyDMA).
+Until that event the interface and its copy buffer remain busy.
 
 @author	Hoang Nguyen Hoan
 @date	Oct. 6, 2016
@@ -52,6 +61,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "coredev/shared_intrf.h"
 
 #include "spi_nrfx.h"
+#include "nrf_erratas.h"
 
 #ifdef NRF54L_SERIES
 #define NRFX_SPI_RX(reg) ((reg)->DMA.RX)
@@ -173,15 +183,64 @@ alignas(4) nRFSpiDev_t g_nRFxSPIDev[NRFX_SPI_MAXDEV] = {
 
 static const int s_NbnRFxSPIDev = sizeof(g_nRFxSPIDev) / sizeof(nRFSpiDev_t);
 
-#ifdef NRF54L_SERIES
 // Allow at least one CPU cycle per polling iteration for the wire time.
 static uint32_t nRFxSPIDmaTimeout(int Length, uint32_t Rate)
 {
 	uint64_t cycles = (uint64_t)SystemCoreClock * Length * 8 / Rate + NRFSPI_TIMEOUT;
 	return cycles > INT32_MAX ? INT32_MAX : (uint32_t)cycles;
 }
-#endif
 
+// Start an interrupt driven transmit. Up to NRFX_SPI_TXBUF_SIZE bytes are
+// sent from a copy and the call returns at once. A longer transmit keeps its
+// source until completion or cancellation; every DMA block uses TxBuf.
+static const uint8_t *nRFxSPIAsyncTxBuff(nRFSpiDev_t * const pDev, const uint8_t *pData, int DataLen)
+{
+	if (DataLen <= NRFX_SPI_TXBUF_SIZE)
+	{
+		memcpy(pDev->TxBuf, pData, DataLen);
+
+		return pDev->TxBuf;
+	}
+
+	return pData;
+}
+
+static void nRFxSPIAsyncTxWait(nRFSpiDev_t * const pDev, int DataLen, volatile bool &Done)
+{
+	if (DataLen <= NRFX_SPI_TXBUF_SIZE)
+	{
+		return;
+	}
+
+	uint32_t wait = nRFxSPIDmaTimeout(DataLen, pDev->pSpiDev->Cfg.Rate);
+	while (Done == false && --wait > 0);
+
+	uint32_t irq = __get_PRIMASK();
+	__disable_irq();
+
+	// Completion may have started another transfer from its callback.
+	if (Done == false)
+	{
+		// DMA only uses TxBuf. Detach the caller before returning. A late
+		// interrupt may finish the abort, but cannot send another block.
+		pDev->bTxAbort = true;
+		pDev->bCmdFailed = pDev->pSpiDev->DevIntrf.bNoStop;
+		pDev->pTxData = NULL;
+		pDev->pTxWait = NULL;
+		Done = true;
+
+#ifdef SPIM_PRESENT
+		if (pDev->pSpiDev->DevIntrf.bDma)
+		{
+			pDev->pDmaReg->INTENSET = SPIM_INTENSET_STOPPED_Msk;
+			pDev->pDmaReg->TASKS_STOP = 1;
+		}
+#endif
+		// Without DMA, READY ends the byte already in the shift register.
+	}
+
+	__set_PRIMASK(irq);
+}
 #ifdef SPIM_PRESENT
 bool nRFxSPIWaitDMA(nRFSpiDev_t * const pDev, uint32_t Timeout)
 {
@@ -380,6 +439,11 @@ bool nRFxSPIStartRx(DevIntrf_t * const pDev, uint32_t DevCs)
 {
 	nRFSpiDev_t *dev = (nRFSpiDev_t *)pDev->pDevData;
 
+	if (dev->bTxAbort || dev->bCmdFailed)
+	{
+		return false;
+	}
+
 	if (dev->pSpiDev->Cfg.ChipSel == SPICSEL_MAN)
 		return true;
 
@@ -409,22 +473,41 @@ bool nRFxSPIStartRx(DevIntrf_t * const pDev, uint32_t DevCs)
 int nRFxSPIRxData(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 {
 	nRFSpiDev_t *dev = (nRFSpiDev_t *)pDev-> pDevData;
-    int cnt = 0;
+	int cnt = 0;
+
+	if (dev->bTxAbort || dev->bCmdFailed)
+	{
+		uint32_t irq = __get_PRIMASK();
+		__disable_irq();
+		bool pending = dev->bTxAbort;
+
+		dev->bCmdFailed = false;
+		__set_PRIMASK(irq);
+		return pending ? -1 : 0;
+	}
 
 #ifdef SPI_PRESENT
-    dev->pReg->EVENTS_READY = 0;
+	if (pBuff == NULL || BuffLen <= 0)
+	{
+		return 0;
+	}
 
-    if (pDev->bIntEn == true)
-    {
-    	dev->RxBufflen = BuffLen;
-    	dev->RxIdx = 0;
-    	dev->pRxBuff = pBuff;
-    	cnt = -1;
+	dev->pReg->EVENTS_READY = 0;
+
+	if (pDev->bIntEn == true)
+	{
+		// The interrupt handler takes each byte, releases the bus and reports
+		// DEVINTRF_EVT_COMPLETED.
+		dev->pRxBuff = pBuff;
+		dev->RxIdx = 0;
+		dev->RxBufflen = BuffLen;
+		dev->TxDatalen = 0;
+		dev->TxIdx = 0;
+		cnt = -1;
 		dev->pReg->TXD = dev->pSpiDev->Cfg.DummyByte;
-		//dev->pReg->TXD = dev->pSpiDev->Cfg.DummyByte;
-    }
-    else
-    {
+	}
+	else
+	{
 		while (BuffLen > 0)
 		{
 			dev->pReg->TXD = dev->pSpiDev->Cfg.DummyByte;
@@ -456,11 +539,15 @@ static void nRFxSPIDmaNextBlock(nRFSpiDev_t * const pDev)
 	}
 	else
 	{
-		NRFX_SPI_TX(pDev->pDmaReg).PTR = (uint32_t)&pDev->pTxData[pDev->TxIdx];
-		NRFX_SPI_TX(pDev->pDmaReg).MAXCNT = min(pDev->TxDatalen, NRFX_SPI_DMA_MAXCNT);
+		int l = min(pDev->TxDatalen, min(NRFX_SPI_DMA_MAXCNT, NRFX_SPI_TXBUF_SIZE));
+
+		memmove(pDev->TxBuf, &pDev->pTxData[pDev->TxIdx], l);
+		NRFX_SPI_TX(pDev->pDmaReg).PTR = (uint32_t)pDev->TxBuf;
+		NRFX_SPI_TX(pDev->pDmaReg).MAXCNT = l;
 	}
 
 	pDev->pDmaReg->EVENTS_END = 0;
+	pDev->pDmaReg->EVENTS_STOPPED = 0;
 	NRFX_SPI_ENDRX(pDev->pDmaReg) = 0;
 	NRFX_SPI_ENDTX(pDev->pDmaReg) = 0;
 	pDev->pDmaReg->TASKS_START = 1;
@@ -523,6 +610,13 @@ static void nRFxSPIDmaEnd(DevIntrf_t * const pIntrf, nRFSpiDev_t * const pDev)
 		// A command phase that keeps the bus is not a completion, the
 		// data phase that follows reports it.
 		report = pIntrf->bNoStop == false;
+		if (pDev->pTxWait)
+		{
+			volatile bool *done = pDev->pTxWait;
+
+			pDev->pTxWait = NULL;
+			*done = true;
+		}
 		DeviceIntrfTxComplete(pIntrf);
 	}
 
@@ -533,34 +627,58 @@ static void nRFxSPIDmaEnd(DevIntrf_t * const pIntrf, nRFSpiDev_t * const pDev)
 }
 #endif
 
+#if defined(NRF52_SERIES) && defined(SPI_PRESENT)
+// nRF52832 anomaly 58: with RXD.MAXCNT = 1 and TXD.MAXCNT <= 1 the SPIM clocks
+// out an additional byte. As the errata proposes, a one byte receive is done
+// by the SPI, the same instance without EasyDMA, then the SPIM is enabled
+// again. The byte is returned at once, also with bIntEn.
+static int nRFxSPIRxByteNoDma(nRFSpiDev_t * const pDev, uint8_t *pBuff)
+{
+	int cnt = 0;
+
+	pDev->pDmaReg->ENABLE = (SPIM_ENABLE_ENABLE_Disabled << SPIM_ENABLE_ENABLE_Pos);
+	pDev->pReg->ENABLE = (SPI_ENABLE_ENABLE_Enabled << SPI_ENABLE_ENABLE_Pos);
+	pDev->pReg->EVENTS_READY = 0;
+	pDev->pReg->TXD = pDev->pSpiDev->Cfg.DummyByte;
+
+	if (nRFxSPIWaitReady(pDev, nRFxSPIDmaTimeout(1, pDev->pSpiDev->Cfg.Rate)))
+	{
+		*pBuff = pDev->pReg->RXD;
+		cnt = 1;
+	}
+
+	pDev->pReg->ENABLE = (SPI_ENABLE_ENABLE_Disabled << SPI_ENABLE_ENABLE_Pos);
+	pDev->pDmaReg->ENABLE = (SPIM_ENABLE_ENABLE_Enabled << SPIM_ENABLE_ENABLE_Pos);
+
+	return cnt;
+}
+#endif
+
 // Receive Data only, no Start/Stop condition
 int nRFxSPIRxDataDma(DevIntrf_t * const pDev, uint8_t *pBuff, int BuffLen)
 {
 	nRFSpiDev_t *dev = (nRFSpiDev_t *)pDev-> pDevData;
 	int cnt = 0;
 
+	if (dev->bTxAbort || dev->bCmdFailed)
+	{
+		uint32_t irq = __get_PRIMASK();
+		__disable_irq();
+		bool pending = dev->bTxAbort;
+
+		dev->bCmdFailed = false;
+		__set_PRIMASK(irq);
+		return pending ? -1 : 0;
+	}
+
 #ifdef SPIM_PRESENT
 	NRFX_SPI_TX(dev->pDmaReg).PTR = 0;
 	NRFX_SPI_TX(dev->pDmaReg).MAXCNT = 0;
 	NRFX_SPI_TX(dev->pDmaReg).LIST = 0;
-#ifdef NRF52_SERIES
-	// Anomaly 109
-	if (BuffLen < 2)
+#if defined(NRF52_SERIES) && defined(SPI_PRESENT)
+	if (BuffLen == 1 && nrf52_errata_58())
 	{
-		// The dummy start must not reach the interrupt handler
-		dev->pDmaReg->INTENCLR = SPIM_INTENCLR_END_Msk;
-		NRFX_SPI_RX(dev->pDmaReg).MAXCNT = 0;
-		NRFX_SPI_RX(dev->pDmaReg).PTR = 0;
-		NRFX_SPI_RX(dev->pDmaReg).LIST = 0;
-		dev->pDmaReg->EVENTS_STARTED = 0;
-		dev->pDmaReg->TASKS_START = 1;
-		while (dev->pDmaReg->EVENTS_STARTED == 0);
-		dev->pDmaReg->EVENTS_STARTED = 0;
-		dev->pDmaReg->EVENTS_END = 0;
-		if (pDev->bIntEn == true)
-		{
-			dev->pDmaReg->INTENSET = SPIM_INTENSET_END_Msk;
-		}
+		return nRFxSPIRxByteNoDma(dev, pBuff);
 	}
 #endif
 
@@ -623,6 +741,8 @@ void nRFxSPIStopRx(DevIntrf_t * const pDev)
 {
 	nRFSpiDev_t *dev = (nRFSpiDev_t *)pDev-> pDevData;
 
+	dev->bCmdFailed = false;
+
 	if (dev->pSpiDev->Cfg.ChipSel == SPICSEL_AUTO)
 	{
 		IOPinSet(dev->pSpiDev->Cfg.pIOPinMap[dev->pSpiDev->CurDevCs + SPI_CS_IOPIN_IDX].PortNo,
@@ -634,6 +754,11 @@ void nRFxSPIStopRx(DevIntrf_t * const pDev)
 bool nRFxSPIStartTx(DevIntrf_t * const pDev, uint32_t DevCs)
 {
 	nRFSpiDev_t *dev = (nRFSpiDev_t *)pDev-> pDevData;
+
+	if (dev->bTxAbort || dev->bCmdFailed)
+	{
+		return false;
+	}
 
 	if (dev->pSpiDev->Cfg.ChipSel == SPICSEL_MAN)
 		return true;
@@ -664,27 +789,36 @@ bool nRFxSPIStartTx(DevIntrf_t * const pDev, uint32_t DevCs)
 int nRFxSPITxData(DevIntrf_t *pDev, const uint8_t *pData, int DataLen)
 {
 	nRFSpiDev_t *dev = (nRFSpiDev_t*)pDev->pDevData;
-    int cnt = 0;
+	int cnt = 0;
 
 #ifdef SPI_PRESENT
-    if (pData == NULL)
-    {
-        return 0;
-    }
+	if (pData == NULL || DataLen <= 0)
+	{
+		return 0;
+	}
 
-    pDev->bTxReady = false;
+	pDev->bTxReady = false;
 
-    if (pDev->bIntEn)
-    {
-    	dev->pTxData = pData;
-    	dev->TxDatalen = DataLen;
-    	dev->TxIdx = 0;
-		dev->pReg->TXD = *pData;
+	if (pDev->bIntEn)
+	{
+		// The interrupt handler writes each byte. At the end it sets
+		// bTxReady, then releases the bus and reports DEVINTRF_EVT_COMPLETED,
+		// or keeps the bus when bNoStop is set.
+		dev->pTxData = nRFxSPIAsyncTxBuff(dev, pData, DataLen);
+		volatile bool done = false;
+		dev->pTxWait = DataLen > NRFX_SPI_TXBUF_SIZE ? &done : NULL;
+		dev->bTxAbort = false;
+		dev->TxDatalen = DataLen;
+		dev->TxIdx = 0;
+		dev->RxBufflen = 0;
+		dev->pReg->EVENTS_READY = 0;
+		dev->pReg->TXD = dev->pTxData[0];
 		dev->TxIdx++;
 		dev->TxDatalen--;
+		nRFxSPIAsyncTxWait(dev, DataLen, done);
 
-    	return -1;
-    }
+		return -1;
+	}
     else
     {
 		while (DataLen > 0)
@@ -719,26 +853,6 @@ int nRFxSPITxDataDma(DevIntrf_t * const pDev, const uint8_t *pData, int DataLen)
 	NRFX_SPI_RX(dev->pDmaReg).MAXCNT = 0;
 	NRFX_SPI_RX(dev->pDmaReg).LIST = 0;
 
-#ifdef NRF52_SERIES
-	// Anomaly 109
-	if (DataLen < 2)
-	{
-		// The dummy start must not reach the interrupt handler
-		dev->pDmaReg->INTENCLR = SPIM_INTENCLR_END_Msk;
-		NRFX_SPI_TX(dev->pDmaReg).MAXCNT = 0;
-		NRFX_SPI_TX(dev->pDmaReg).PTR = 0;
-		NRFX_SPI_TX(dev->pDmaReg).LIST = 0;
-		dev->pDmaReg->EVENTS_STARTED = 0;
-		dev->pDmaReg->TASKS_START = 1;
-		while (dev->pDmaReg->EVENTS_STARTED == 0);
-		dev->pDmaReg->EVENTS_STARTED = 0;
-		dev->pDmaReg->EVENTS_END = 0;
-		if (pDev->bIntEn == true)
-		{
-			dev->pDmaReg->INTENSET = SPIM_INTENSET_END_Msk;
-		}
-	}
-#endif
 	NRFX_SPI_TX(dev->pDmaReg).PTR = (uint32_t)pData;
 	NRFX_SPI_TX(dev->pDmaReg).LIST = NRFX_SPI_TX_LIST;
 
@@ -747,11 +861,15 @@ int nRFxSPITxDataDma(DevIntrf_t * const pDev, const uint8_t *pData, int DataLen)
 		// The interrupt handler moves through the DMA blocks, releases the
 		// bus and reports DEVINTRF_EVT_COMPLETED.
 		pDev->bTxReady = false;
-		dev->pTxData = pData;
+		dev->pTxData = nRFxSPIAsyncTxBuff(dev, pData, DataLen);
+		volatile bool done = false;
+		dev->pTxWait = DataLen > NRFX_SPI_TXBUF_SIZE ? &done : NULL;
+		dev->bTxAbort = false;
 		dev->TxIdx = 0;
 		dev->RxBufflen = 0;
 		dev->TxDatalen = DataLen;
 		nRFxSPIDmaNextBlock(dev);
+		nRFxSPIAsyncTxWait(dev, DataLen, done);
 
 		return -1;
 	}
@@ -825,6 +943,27 @@ void *nRFxSPIGetHandle(DevIntrf_t * const pDev)
 	return dev->pSpiDev;
 }
 
+static void nRFxSPIAsyncTxAbortEnd(DevIntrf_t * const pIntrf, nRFSpiDev_t * const pDev, int Count)
+{
+	pDev->TxDatalen = 0;
+	pDev->TxIdx = 0;
+	pDev->bTxAbort = false;
+	if (pDev->bCmdFailed)
+	{
+		// The interrupted read still owns the bus until its rejected receive
+		// phase runs. Do not let the timeout callback replace it before then.
+		atomic_store(&pIntrf->bTxReady, true);
+	}
+	else
+	{
+		DeviceIntrfTxComplete(pIntrf);
+	}
+	if (pIntrf->EvtCB)
+	{
+		pIntrf->EvtCB(pIntrf, DEVINTRF_EVT_TX_TIMEOUT, NULL, Count);
+	}
+}
+
 void SPI_IRQHandler(int DevNo, DevIntrf_t * const pDev)//DevIntrf_t * const pDev)
 //extern "C" void SPI_IRQHandler(int DevNo)
 {
@@ -893,6 +1032,24 @@ void SPI_IRQHandler(int DevNo, DevIntrf_t * const pDev)//DevIntrf_t * const pDev
 #ifdef SPIM_PRESENT
 		if (pDev->bDma)
 		{
+			if (dev->bTxAbort)
+			{
+				dev->pDmaReg->EVENTS_END = 0;
+				NRFX_SPI_ENDRX(dev->pDmaReg) = 0;
+				NRFX_SPI_ENDTX(dev->pDmaReg) = 0;
+				if (dev->pDmaReg->EVENTS_STOPPED)
+				{
+					int count = dev->TxIdx + NRFX_SPI_TX(dev->pDmaReg).AMOUNT;
+
+					dev->pDmaReg->EVENTS_STOPPED = 0;
+					dev->pDmaReg->INTENCLR = SPIM_INTENCLR_STOPPED_Msk;
+					NRFX_SPI_TX(dev->pDmaReg).MAXCNT = 0;
+					NRFX_SPI_TX(dev->pDmaReg).PTR = 0;
+					nRFxSPIAsyncTxAbortEnd(pDev, dev, count);
+				}
+				return;
+			}
+
 			if (dev->pDmaReg->EVENTS_END)
 			{
 				nRFxSPIDmaEnd(pDev, dev);
@@ -902,48 +1059,68 @@ void SPI_IRQHandler(int DevNo, DevIntrf_t * const pDev)//DevIntrf_t * const pDev
 #endif
 		{
 #ifdef SPI_PRESENT
+			// Without EasyDMA, one byte per READY event
 			if (dev->pReg->EVENTS_READY)
 			{
 				dev->pReg->EVENTS_READY = 0;
 
+				uint8_t d = dev->pReg->RXD;
+
+				if (dev->bTxAbort)
+				{
+					nRFxSPIAsyncTxAbortEnd(pDev, dev, dev->TxIdx);
+					return;
+				}
+
 				if (dev->RxBufflen > 0)
 				{
-					dev->pRxBuff[dev->RxIdx] = dev->pReg->RXD;
-					dev->RxBufflen--;
+					dev->pRxBuff[dev->RxIdx] = d;
 					dev->RxIdx++;
-					if (dev->RxBufflen <= 0 && dev->pSpiDev->DevIntrf.EvtCB)
-					{
-						DeviceIntrfStopRx(pDev);
-						dev->pSpiDev->DevIntrf.EvtCB(&dev->pSpiDev->DevIntrf, DEVINTRF_EVT_COMPLETED, NULL, dev->RxIdx);
-					}
-				}
-				else
-				{
-					(void)dev->pReg->RXD;
-				}
+					dev->RxBufflen--;
 
-				if (dev->TxDatalen > 0)
-				{
-					dev->pReg->TXD = dev->pTxData[dev->TxIdx];
-					dev->TxIdx++;
-					dev->TxDatalen--;
-				}
-				else
-				{
-					pDev->bTxReady = true;
-					if (pDev->bNoStop == false && dev->TxIdx > 0)
-					{
-						DeviceIntrfStopTx(pDev);
-						if (dev->pSpiDev->DevIntrf.EvtCB)
-						{
-							dev->pSpiDev->DevIntrf.EvtCB(&dev->pSpiDev->DevIntrf, DEVINTRF_EVT_COMPLETED, NULL, dev->TxIdx);
-						}
-
-					}
-					dev->TxIdx = 0;
 					if (dev->RxBufflen > 0)
 					{
 						dev->pReg->TXD = dev->pSpiDev->Cfg.DummyByte;
+					}
+					else
+					{
+						// The generic stop helpers own the busy flag.
+						// Release it before the callback.
+						DeviceIntrfStopRx(pDev);
+						if (pDev->EvtCB)
+						{
+							pDev->EvtCB(pDev, DEVINTRF_EVT_COMPLETED, dev->pRxBuff, dev->RxIdx);
+						}
+					}
+				}
+				else if (dev->TxIdx > 0)
+				{
+					if (dev->TxDatalen > 0)
+					{
+						dev->pReg->TXD = dev->pTxData[dev->TxIdx];
+						dev->TxIdx++;
+						dev->TxDatalen--;
+					}
+					else
+					{
+						int count = dev->TxIdx;
+						// A command phase that keeps the bus is not a
+						// completion, the data phase that follows reports it.
+						bool report = pDev->bNoStop == false;
+
+						dev->TxIdx = 0;
+						if (dev->pTxWait)
+						{
+							volatile bool *done = dev->pTxWait;
+
+							dev->pTxWait = NULL;
+							*done = true;
+						}
+						DeviceIntrfTxComplete(pDev);
+						if (report && pDev->EvtCB)
+						{
+							pDev->EvtCB(pDev, DEVINTRF_EVT_COMPLETED, NULL, count);
+						}
 					}
 				}
 			}
@@ -974,8 +1151,11 @@ static bool nRFxSPIInit(SPIDev_t * const pDev)
 	*(volatile uint32_t *)((uint32_t)reg + 0xFFC) = 1;
 #else
 	reg->ENABLE = 0;
-	reg->INTENCLR = 0xFFFFFFFF;
 #endif
+	// No interrupt from a previous configuration. SPI and SPIM are one block:
+	// READY left enabled by an interrupt SPI configuration would also fire
+	// for the SPIM, whose handler does not clear it.
+	reg->INTENCLR = 0xFFFFFFFF;
 
 	// Configure I/O pins
 	IOPinCfg(pDev->Cfg.pIOPinMap, pDev->Cfg.NbIOPins);
@@ -1185,11 +1365,15 @@ bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfgData)
 	{
 		return false;
 	}
+	if (g_nRFxSPIDev[pCfgData->DevNo].bTxAbort || g_nRFxSPIDev[pCfgData->DevNo].bCmdFailed)
+	{
+		// TxBuf may still be in use by the cancelled DMA block.
+		return false;
+	}
 
 #ifdef NRF54L_SERIES
 	if (pCfgData->pIOPinMap == NULL || pCfgData->DataSize != 8 ||
-		((pCfgData->Mode == SPIMODE_SLAVE || pCfgData->ChipSel == SPICSEL_AUTO) && pCfgData->NbIOPins < 4) ||
-		(pCfgData->Mode == SPIMODE_MASTER && pCfgData->bIntEn))
+		((pCfgData->Mode == SPIMODE_SLAVE || pCfgData->ChipSel == SPICSEL_AUTO) && pCfgData->NbIOPins < 4))
 		return false;
 #endif
 
@@ -1201,6 +1385,9 @@ bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfgData)
 	g_nRFxSPIDev[pCfgData->DevNo].TxDatalen = 0;
 	g_nRFxSPIDev[pCfgData->DevNo].TxIdx = 0;
 	g_nRFxSPIDev[pCfgData->DevNo].pTxData = NULL;
+	g_nRFxSPIDev[pCfgData->DevNo].pTxWait = NULL;
+	g_nRFxSPIDev[pCfgData->DevNo].bTxAbort = false;
+	g_nRFxSPIDev[pCfgData->DevNo].bCmdFailed = false;
 
 	pDev->DevIntrf.pDevData = (void*)&g_nRFxSPIDev[pCfgData->DevNo];
 

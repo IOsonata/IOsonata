@@ -76,6 +76,22 @@ All use the shared STM32 TIM driver with a 16-bit counter extended in software.
 There is no LPTIM on this MCU. `TimerGetLowFreqDevCount()` returns 0.
 The timer tick interrupt and external trigger modes are not implemented.
 
+The library builds the shared STM32 PWM driver, `ARM/ST/src/pwm_stm32.cpp`:
+the generic PWM API on the output channels of TIM10, TIM11 (1 channel), TIM9
+(2) and TIM2 to TIM5 (4), with the timer DevNo above. See
+[STM32 PWM](../PWM.md). No example project; not run on hardware yet.
+
+The library builds the shared STM32 watchdog driver,
+`ARM/ST/src/wdt_stm32.cpp`, on the IWDG: timeout up to 28.3 s from the 37 kHz
+LSI, no window register, no timeout event. See [STM32 watchdog](../WDT.md). No
+example project; not run on hardware yet.
+
+The library builds the shared STM32 RTC driver, `RtcStm32`
+(`ARM/ST/src/rtc_stm32.cpp`), the generic RTC device of `miscdev/rtc.h`
+(`src/miscdev/rtc.cpp`): calendar in the C runtime types, alarms A and B,
+wakeup timer, 32 backup registers, from the LSE or the 37 kHz LSI. See [STM32
+RTC](../RTC.md). No example project; not run on hardware yet.
+
 ## Validation and limits
 
 `python3 tests/stm32l1/run.py` builds the library and all four examples in
@@ -93,7 +109,7 @@ GPIO and timer additions. Hardware checks have confirmed Blinky and UART TX: the
 TimerDemo printed its trigger setup but no subsequent events; timer hardware
 validation remains unresolved.
 
-DMA, I2C, SPI, USB, RTC, LCD, ADC/DAC, PWM, program-flash NVM and low-power
+DMA, I2C, SPI, USB, RTC, LCD, ADC/DAC, program-flash NVM and low-power
 modes are not implemented by this port. UART initialization rejects DMA.
 Only the minimum core device, UART, timer and application support sources
 are included in the single library project.

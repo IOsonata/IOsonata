@@ -31,9 +31,19 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>include/app_evt_handler.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/app_evt_handler.h</locationURI>
+		</link>
+		<link>
 			<name>include/cbor.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/cbor.h</locationURI>
+		</link>
+		<link>
+			<name>include/coredev/wdt.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/wdt.h</locationURI>
 		</link>
 		<link>
 			<name>include/crypto</name>
@@ -321,6 +331,21 @@
 			<locationURI>PARENT-1-PROJECT_LOC/src/Vector_STM32L496xx.c</locationURI>
 		</link>
 		<link>
+			<name>src/app_evt_handler.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/app_evt_handler.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/app_run.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/app_run.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/app_wait.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/app_wait.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/base64.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/base64.c</locationURI>
@@ -344,6 +369,21 @@
 			<name>src/coredev</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/pwm_stm32.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/ARM/ST/src/pwm_stm32.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/wdt_stm32.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/ARM/ST/src/wdt_stm32.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/rtc_stm32.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/ARM/ST/src/rtc_stm32.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/crc.c</name>
@@ -551,6 +591,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/converters/adc_ltc2495.h</locationURI>
 		</link>
 		<link>
+			<name>include/converters/adc_stm32.h</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/include/adc_stm32.h</locationURI>
+		</link>
+		<link>
 			<name>include/converters/analog_comp.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/converters/analog_comp.h</locationURI>
@@ -699,6 +744,16 @@
 			<name>include/miscdev/tca6424a.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/miscdev/tca6424a.h</locationURI>
+		</link>
+		<link>
+			<name>include/miscdev/rtc.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/miscdev/rtc.h</locationURI>
+		</link>
+		<link>
+			<name>include/miscdev/rtc_stm32.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/ARM/ST/include/rtc_stm32.h</locationURI>
 		</link>
 		<link>
 			<name>include/sensors/accel_adxl362.h</name>
@@ -876,6 +931,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/converters/adc_ltc2495.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/converters/adc_stm32.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/adc_stm32.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/coredev/i2c.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/i2c.cpp</locationURI>
@@ -1019,6 +1079,11 @@
 			<name>src/miscdev/modem.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/miscdev/modem.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/miscdev/rtc.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/miscdev/rtc.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/sensors/accel_adxl362.cpp</name>
@@ -1546,14 +1611,9 @@
 			<locationURI>PARENT-4-PROJECT_LOC/src/iopincfg_stm32.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/usb_otg_stm32.cpp</name>
+			<name>src/usb_ctrlr_stm32.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/usb_otg_stm32.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/usb_otg_target_stm32.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/usb_otg_target_stm32.cpp</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/src/usb_ctrlr_stm32.cpp</locationURI>
 		</link>
 		<link>
 			<name>include/usb_ctrlr.h</name>

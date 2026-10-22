@@ -344,22 +344,24 @@ void SystemInit(void)
 			while ((PWR->CR1 & PWR_CR1_DBP) == 0);
 		}
 
-		RCC->BDCR |= RCC_BDCR_BDRST;
-		RCC->BDCR &= ~RCC_BDCR_BDRST;
+		// The LSE and the RTC are in the backup domain: they keep running over
+		// a system reset. No backup domain reset, it would clear the RTC and
+		// the backup registers. The RTC clock selection only takes effect
+		// while it is not set.
+		if ((RCC->BDCR & RCC_BDCR_LSERDY) == 0)
+		{
+#if defined(STM32L4P5xx) || defined(STM32L4Q5xx)
+			RCC->BDCR |= RCC_BDCR_LSESYSDIS;
+#endif
+			RCC->BDCR |= RCC_BDCR_LSEON;
+
+			// if stuck here, board does not have 32768 Hz crystal
+			while ((RCC->BDCR & RCC_BDCR_LSERDY) == 0);
 
 #if defined(STM32L4P5xx) || defined(STM32L4Q5xx)
-		RCC->BDCR |= RCC_BDCR_LSESYSDIS;
+			RCC->BDCR &= ~RCC_BDCR_LSESYSDIS;
 #endif
-		RCC->BDCR &= ~RCC_BDCR_RTCSEL_Msk;
-
-		RCC->BDCR |= RCC_BDCR_LSEON;
-
-		// if stuck here, board does not have 32768 Hz crystal
-		while ((RCC->BDCR & RCC_BDCR_LSERDY) == 0);
-
-#if defined(STM32L4P5xx) || defined(STM32L4Q5xx)
-		RCC->BDCR &= ~RCC_BDCR_LSESYSDIS;
-#endif
+		}
 
 		RCC->BDCR |= RCC_BDCR_RTCSEL_0 | RCC_BDCR_RTCEN;	// RTC source LSE
 		// The MSI feeds the PLL: lock it to the LSE (MSI PLL mode), the core
@@ -383,7 +385,8 @@ uint32_t SystemHFClockGet()
 {
 	uint32_t tmp = (RCC->CFGR & RCC_CFGR_HPRE_Msk) >> RCC_CFGR_HPRE_Pos;
 
-	return tmp & 8 ? SystemCoreClock >> ((tmp & 7) + 1) : SystemCoreClock;
+	// HPRE 8 to 11 divide by 2 to 16, 12 to 15 by 64 to 512
+	return SystemCoreClock >> AHBPrescTable[tmp];
 }
 
 /**

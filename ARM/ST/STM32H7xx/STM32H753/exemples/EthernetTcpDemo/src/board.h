@@ -1,0 +1,95 @@
+/**-------------------------------------------------------------------------
+@file	board.h
+
+@brief	NUCLEO-H753ZI Ethernet example board configuration.
+
+@author	Hoang Nguyen Hoan
+@date	Oct. 20, 2026
+
+@license
+
+MIT License
+
+Copyright (c) 2026, I-SYST inc., all rights reserved
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+----------------------------------------------------------------------------*/
+
+#ifndef __BOARD_H__
+#define __BOARD_H__
+#define BOARD NUCLEO_H753ZI
+#include "stm32_boards.h"
+#define UART_DEVNO BOARD_VCP_DEVNO
+#define UART_PINS BOARD_VCP_PINS
+#define ETHERNET_TIMER_DEVNO 8
+#define ETHERNET_PHY_ADDR 0
+// Locally administered demonstration address; assign a distinct MAC per board.
+#define ETHERNET_MAC_ADDR {0x02,0x00,0x00,0x75,0x30,0x01}
+// MB1364 H753ZI: RMII AF11. TXD1 uses PB13, not PG14.
+#define ETHERNET_PINS { \
+	{IOPORTA, 1, IOPINOP_FUNC11, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL}, \
+	{IOPORTA, 2, IOPINOP_FUNC11, IOPINDIR_BI, IOPINRES_NONE, IOPINTYPE_NORMAL}, \
+	{IOPORTC, 1, IOPINOP_FUNC11, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL}, \
+	{IOPORTA, 7, IOPINOP_FUNC11, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL}, \
+	{IOPORTC, 4, IOPINOP_FUNC11, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL}, \
+	{IOPORTC, 5, IOPINOP_FUNC11, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL}, \
+	{IOPORTG, 11, IOPINOP_FUNC11, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL}, \
+	{IOPORTG, 13, IOPINOP_FUNC11, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL}, \
+	{IOPORTB, 13, IOPINOP_FUNC11, IOPINDIR_OUTPUT, IOPINRES_NONE, IOPINTYPE_NORMAL}, \
+}
+#define NET_DEMO_HOST "192.168.1.10"
+#define NET_DEMO_PROTO SOCKINTRF_PROTO_TCP
+
+// MQTT 3.1.1 broker test; TLS_TEST may also be 1 for a PSK TLS broker.
+#ifndef NET_DEMO_MQTT_TEST
+#define NET_DEMO_MQTT_TEST 0
+#endif
+#define NET_DEMO_MQTT_PORT 1883
+#define NET_DEMO_MQTT_CLIENT_ID "iosonata-h753"
+#define NET_DEMO_MQTT_TOPIC "iosonata/h753/echo"
+
+// 1 selects one public DNS/HTTP check at example.com:80 instead of echo.
+#ifndef NET_DEMO_HTTP_TEST
+#define NET_DEMO_HTTP_TEST 0
+#endif
+
+// Set to 6000 for a finite binary integrity run; 0 keeps the text echo demo.
+#ifndef NET_DEMO_TEST_COUNT
+#define NET_DEMO_TEST_COUNT 0
+#endif
+
+// 1 selects native TLS 1.3 PSK reverse echo against OpenSSL on NET_DEMO_HOST.
+#ifndef NET_DEMO_TLS_TEST
+#define NET_DEMO_TLS_TEST 0
+#endif
+#ifndef NET_DEMO_TLS_DHE
+#define NET_DEMO_TLS_DHE 1
+#endif
+#define NET_DEMO_TLS_AGREE_HEADER "crypto/crypto_uecc.h"
+#define NET_DEMO_TLS_AGREE_MEMSIZE CRYPTO_UECC_MEMSIZE
+#define NET_DEMO_TLS_AGREE_CREATE(m, s, r) CryptoUeccCreate((m), (s), (r))
+#define NET_DEMO_TLS_ENGINE_HEADER "crypto_stm32h7.h"
+#define NET_DEMO_TLS_RNG_HEADER "crypto_rng_stm32.h"
+#define NET_DEMO_TLS_AES_TYPE CryptoStm32H7Aes
+#define NET_DEMO_TLS_HASH_TYPE CryptoStm32H7Hash
+#define NET_DEMO_TLS_RNG() CryptoRngStm32Instance()
+
+#endif
+

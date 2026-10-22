@@ -417,6 +417,19 @@ int DeviceIntrfTx(DevIntrf_t * const pDev, uint32_t DevAddr, const uint8_t *pDat
 void DeviceIntrfTxComplete(DevIntrf_t * const pDev);
 
 /**
+ * @brief	Wait for the end of an interrupt based transmit.
+ *
+ * Waits until bTxReady is set by DeviceIntrfTxComplete
+ *
+ * @param	pDev	: Pointer to an instance of the Device Interface
+ * @param	Timeout	: Maximum number of polling iterations
+ *
+ * @return	true - bTxReady was set\n
+ * 			false - timeout
+ */
+bool DeviceIntrfWaitTxComplete(DevIntrf_t * const pDev, int Timeout);
+
+/**
  * @brief	Device read transfer.
  *
  * A device read transfer usually starts with a write of a command or register address.

@@ -45,17 +45,20 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "stm32_boards.h"
 
-// The demo reads an ICM456x connected to the Arduino header. The Debug build
-// prints with semihosting.
-//
-// I2C1 (DevNo 0, the I2C instance the demo uses) on the Arduino header,
-// AF4: SDA D14 PB9, SCL D15 PB8. ICM456x AP_AD0 low selects address 0x68.
-#define I2C_PINS			STM32_BOARD_I2C(IOPORTB, 9, IOPINOP_FUNC4, IOPORTB, 8, IOPINOP_FUNC4)
-#define ACC_DEV_ADDR		ICM456X_I2C_7BITS_DEVADDR0
+// The demo reads the onboard LSM6DSL. The Debug build prints with
+// semihosting.
+#define LSM6DSL
 
-// ICM456x INT1 on Arduino D2 PD14
+// I2C2 (DevNo 1), the onboard sensor bus: SDA PB11, SCL PB10, AF4. The board
+// has the bus pull-up resistors. LSM6DSL SA0 is low, address 0x6A.
+#define I2C_DEVNO			1
+#define I2C_PINS			STM32_BOARD_I2C(IOPORTB, 11, IOPINOP_FUNC4, IOPORTB, 10, IOPINOP_FUNC4)
+#define ACC_DEV_ADDR		LSM6DSL_I2C_DEV_ADDR0
+
+// LSM6DSL INT1 on PD11, EXTI line 11
 #define IMU_INT_PORT		IOPORTD
-#define IMU_INT_PIN			14
+#define IMU_INT_PIN			11
 #define IMU_INT_PINOP		IOPINOP_GPIO
+#define IMU_INT_NO			11
 
 #endif // __BOARD_H__

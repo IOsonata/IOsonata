@@ -124,3 +124,16 @@ with tempfile.TemporaryDirectory(prefix='ssd1315-') as td:
                        [str(ROOT / p) for p in countdown_sources] + fonts +
                        ['-o', str(countdown)], check=True)
         subprocess.run([str(countdown)], check=True)
+
+        pong = Path(td) / 'pong_game_test'
+        pong_sources = ['tests/display/pong_game_test.cpp',
+                        'src/display/display_ssd1315.cpp', 'src/display/display.cpp',
+                        'src/device.cpp', 'src/device_intrf.cpp', 'src/coredev/timer.cpp']
+        subprocess.run(cmd + ['-DSTM32WBA65xx', '-ffunction-sections', '-fdata-sections',
+                             '-Wno-missing-field-initializers',
+                             '-I' + str(ROOT / 'ARM/ST/include'),
+                             '-I' + str(ROOT / 'ARM/ST/STM32WBAxx/STM32WBA65/exemples/PongGame/src'),
+                             '-Wl,--gc-sections'] +
+                       [str(ROOT / p) for p in pong_sources] + fonts +
+                       ['-o', str(pong)], check=True)
+        subprocess.run([str(pong)], check=True)

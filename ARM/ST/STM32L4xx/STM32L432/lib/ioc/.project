@@ -31,6 +31,11 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>include/coredev/wdt.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/wdt.h</locationURI>
+		</link>
+		<link>
 			<name>src</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -286,6 +291,21 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>src/coredev/pwm_stm32.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/ARM/ST/src/pwm_stm32.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/wdt_stm32.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/ARM/ST/src/wdt_stm32.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/rtc_stm32.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/ARM/ST/src/rtc_stm32.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/crc.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/crc.c</locationURI>
@@ -424,6 +444,11 @@
 			<name>include/converters/adc_ltc2495.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/converters/adc_ltc2495.h</locationURI>
+		</link>
+		<link>
+			<name>include/converters/adc_stm32.h</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/include/adc_stm32.h</locationURI>
 		</link>
 		<link>
 			<name>include/converters/analog_comp.h</name>
@@ -589,6 +614,16 @@
 			<name>include/miscdev/tca6424a.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/miscdev/tca6424a.h</locationURI>
+		</link>
+		<link>
+			<name>include/miscdev/rtc.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/miscdev/rtc.h</locationURI>
+		</link>
+		<link>
+			<name>include/miscdev/rtc_stm32.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/ARM/ST/include/rtc_stm32.h</locationURI>
 		</link>
 		<link>
 			<name>include/motion/att.h</name>
@@ -826,6 +861,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/converters/adc_ltc2495.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/converters/adc_stm32.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/adc_stm32.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/coredev/i2c.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/i2c.cpp</locationURI>
@@ -1029,6 +1069,11 @@
 			<name>src/miscdev/modem.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/miscdev/modem.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/miscdev/rtc.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/miscdev/rtc.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/motion/att.cpp</name>

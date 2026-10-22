@@ -27,7 +27,7 @@ TEST = r'''
 #include <cassert>
 #include <cstdio>
 #include <cstring>
-#include "ARM/ST/src/usb_otg_stm32.cpp"
+#include "usb_ctrlr_stm32_test.cpp"
 
 alignas(4) static uint8_t registers[0x12000];
 static unsigned completed, cancelled, ready, failed, resets;
@@ -35,6 +35,12 @@ static uint16_t lastLength;
 static bool rebind;
 static uint8_t receive[1024];
 static UsbCtrlrEvt_t control;
+#if defined(STM32H753xx)
+static SysLog_t logState;
+SysLog_t *SysLogGet() { return &logState; }
+int SysLogPrintf(SysLog_t *, const char *, ...) { return 0; }
+bool AppEvtHandlerQue(uint32_t, void *, AppEvtHandler_t) { return false; }
+#endif
 bool Stm32UsbOtgPowerInit(const UsbCtrlrCfg_t *) { return true; }
 void Stm32UsbOtgReset() { resets++; }
 USB_OTG_GlobalTypeDef *Stm32UsbOtgRegs()
@@ -138,6 +144,83 @@ int main()
 	assert(UsbCtrlrEpSend(0, 1, nullptr, 0));
 	assert(In(1)->DIEPTSIZ == (1U << USB_OTG_DIEPTSIZ_PKTCNT_Pos));
 	Complete(1, true, false);
+	// Exercise word copies, every tail and unaligned buffers, with canaries.
+	for (unsigned offset = 0; offset < 4; offset++)
+	{
+		for (unsigned length = 0; length <= bulkMps; length++)
+		{
+			uint8_t *buffer = new uint8_t[length + offset];
+			for (unsigned i = 0; i < length; i++) buffer[offset + i] = i + 1;
+			assert(UsbCtrlrEpSend(0, 1, buffer + offset, length));
+			if (length != 0)
+			{
+				unsigned start = (length - 1) & ~3U;
+				uint32_t expected = 0;
+				for (unsigned i = start; i < length; i++)
+					expected |= uint32_t(buffer[offset + i]) << (8 * (i - start));
+				assert(*Fifo(1) == expected);
+			}
+			Complete(1, true, false);
+			delete[] buffer;
+		}
+		for (unsigned length = 0; length <= 69; length++)
+		{
+			for (unsigned capacity = 0; capacity <= 69; capacity++)
+			{
+				uint8_t buffer[80];
+				memset(buffer, 0xEE, sizeof(buffer));
+				*Fifo(0) = 0x44332211;
+				ReadFifo(buffer + offset, capacity, length);
+				unsigned copied = capacity < length ? capacity : length;
+				for (unsigned i = 0; i < sizeof(buffer); i++)
+					assert(buffer[i] == (i >= offset && i < offset + copied ?
+						0x11 * (1 + (i - offset) % 4) : 0xEE));
+			}
+		}
+	}
+	ReadFifo(nullptr, 64, 65);
+	// Sparse dispatch includes the highest endpoint and software-only DRDY.
+	s_Usb.pReg->GINTMSK = 0;
+	s_Usb.pReg->GINTSTS = 0;
+	const unsigned lastEp = USB_EP_COUNT - 1;
+	s_Usb.Ep[lastEp][1].Busy = true;
+	s_Usb.Ep[lastEp][1].Length = 1;
+	Device()->DAINT = 1U << lastEp;
+	Device()->DAINTMSK = 0;
+	Device()->DIEPMSK = USB_OTG_DIEPINT_XFRC;
+	In(lastEp)->DIEPINT = USB_OTG_DIEPINT_XFRC;
+	s_Usb.RxReady = 0;
+	Stm32UsbOtgInterrupt();
+	assert(s_Usb.Ep[lastEp][1].Busy);
+	Device()->DAINTMSK = 1U << lastEp;
+	Stm32UsbOtgInterrupt();
+	assert(!s_Usb.Ep[lastEp][1].Busy);
+	Device()->DAINT = 0;
+	s_Usb.RxReady = 1U << 1;
+	const unsigned previousReady = ready;
+	Stm32UsbOtgInterrupt();
+	assert(ready == previousReady + 1 && s_Usb.RxReady == 0);
+	// Clearing the halt of an endpoint that is not halted only resets its
+	// toggle: the queued transfer is already armed and is not armed again.
+	assert(UsbCtrlrEpSend(0, 1, bytes, 4));
+	In(1)->DIEPTSIZ = 0;
+	*Fifo(1) = 0;
+	UsbCtrlrEpClearStall(0, 1, true);
+	assert(In(1)->DIEPTSIZ == 0 && *Fifo(1) == 0 && s_Usb.Ep[1][1].Busy);
+	// A transfer deferred by a halt is armed when the halt is cleared.
+	s_Usb.Ep[1][1].Halted = true;
+	UsbCtrlrEpClearStall(0, 1, true);
+	assert(!s_Usb.Ep[1][1].Halted && *Fifo(1) == 0x03020100);
+	assert(In(1)->DIEPTSIZ == (4U | (1U << USB_OTG_DIEPTSIZ_PKTCNT_Pos)));
+	Complete(1, true, false);
+	assert(UsbCtrlrEpOpenData(0, 1, false, BULK, bulkMps));
+	assert(UsbCtrlrEpReceive(0, 1, receive, sizeof(receive)));
+	Out(1)->DOEPTSIZ = 0;
+	UsbCtrlrEpClearStall(0, 1, false);
+	assert(Out(1)->DOEPTSIZ == 0 && s_Usb.Ep[1][0].Busy);
+	s_Usb.Ep[1][0].Halted = true;
+	UsbCtrlrEpClearStall(0, 1, false);
+	assert(Out(1)->DOEPTSIZ == (bulkMps | (1U << USB_OTG_DOEPTSIZ_PKTCNT_Pos)));
 	// EP0 copies stack replies before returning and rejects nonzero status OUT.
 	s_Usb.Ep[0][1].Mps = 64;
 	assert(UsbCtrlrEp0Send(0, bytes + 1, 3) == 3);
@@ -162,6 +245,20 @@ for device, family, cpu in (('STM32WBA65xx', 'STM32WBAxx', 'core_cm33.h'),
         path = Path(tmp)
         (path / cpu).write_text(CPU)
         (path / 'idelay.h').write_text('#pragma once\ninline void usDelay(unsigned) {}\n')
+        # Isolate FIFO ownership from physical clocks/pins in this host test.
+        # The complete merged source is compiled by stm32_otg_build_test.py;
+        # MCU initialization is exercised by the family register tests.
+        source = (ROOT / 'ARM/ST/src/usb_ctrlr_stm32.cpp').read_text()
+        begin = source.index('// MCU clock, power, PHY and interrupt setup.')
+        end = source.index('// Endpoint state and FIFO transfers.')
+        hooks = """extern bool Stm32UsbOtgPowerInit(const UsbCtrlrCfg_t *pCfg);
+extern void Stm32UsbOtgReset(void);
+extern USB_OTG_GlobalTypeDef *Stm32UsbOtgRegs(void);
+extern IRQn_Type Stm32UsbOtgIrq(void);
+extern uint16_t Stm32UsbOtgFifoWords(void);
+
+"""
+        (path / 'usb_ctrlr_stm32_test.cpp').write_text(source[:begin] + hooks + source[end:])
         (path / 'test.cpp').write_text(TEST)
         cmd = [os.environ.get('CXX', 'g++'), '-std=c++17', '-g',
                '-fsanitize=address,undefined', '-D' + device,
@@ -171,4 +268,5 @@ for device, family, cpu in (('STM32WBA65xx', 'STM32WBAxx', 'core_cm33.h'),
                str(path / 'test.cpp'), '-o', str(path / 'test')]
         subprocess.run(cmd, check=True)
         subprocess.run([str(path / 'test')], check=True)
+
 

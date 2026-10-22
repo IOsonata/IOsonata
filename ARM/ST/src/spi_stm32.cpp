@@ -5,7 +5,7 @@
 
 		Two register layouts, chosen from the CMSIS names. The SPI with the
 		CFG1, CFG2 and TSIZE registers (WBA; the same IP is in the U5, H5 and
-		N6 families), and the SPI with CR1, CR2, SR and DR and a 32 bit FIFO
+		N6 and H7 families), and the SPI with CR1, CR2, SR and DR and a 32 bit FIFO
 		each way (L4; the same IP is in the F0, F3, G4 and WB families). The
 		engine is the same for both, the instance table holds what differs:
 		the RCC enable, reset and kernel clock selection, the interrupt and
@@ -21,7 +21,7 @@
 		stays at its idle level. The slave has no underrun value: its
 		transmit FIFO is kept filled, with the DummyByte after the data.
 		Clearing SPE leaves the FIFO content, so the slave is reset through
-		RCC before each frame. DevNo 3 and up are the QUADSPI or OCTOSPI
+		RCC before each frame. DevNo after the SPI instances selects QUADSPI or OCTOSPI
 		instances, SPIInit passes them to Stm32QospiInit (qospi_stm32.h,
 		quadspi_stm32.cpp or octospi_stm32.cpp). DMA on the L4
 		takes the channels of the instance table from the DMA channel
@@ -61,10 +61,12 @@
 		transmit of up to SPI_STM32_TXBUF_SIZE bytes, return -1 at once and the
 		end is reported with DEVINTRF_EVT_COMPLETED and the byte count; the
 		transmit data is copied first. With bDmaEn the data is moved by two
-		GPDMA channels, one for each direction; a direction with no data of
+		DMA channels, one for each direction; a direction with no data of
 		the application runs on the dummy value or into a sink. DMA is
-		available on the families that have a channel table (WBA); SPIInit
-		returns false for bDmaEn on the others. The channels are taken at
+		available on WBA, L4 and H753. H753 uses DMA1/2 for SPI1-5 and
+		BDMA for SPI6, with SRAM4 staging for DTCM caller buffers. H753
+		interrupt TX also refills long writes in the IRQ, keeping the source
+		alive until the last chunk is copied. The channels are taken at
 		SPIInit and kept until PowerOff.
 
 		An underrun, an overrun or a mode fault ends the transfer and returns
@@ -115,17 +117,36 @@ SOFTWARE.
 
 #include "stm32.h"
 
+#include "qospi_stm32.h"
+
 #if defined(IOSONATA_STM32_WBA)
 #include "gpdma_stm32wba.h"
 #define STM32_SPI_DMA
-#define STM32_SPI_DMA_REMAIN(Ch)		WbaGpdmaRemain(Ch)
+#define STM32_SPI_DMA_MEMINC(Ch, Inc) WbaGpdmaMemInc(Ch, Inc)
+#define STM32_SPI_DMA_START(Ch, Mem, Cnt) WbaGpdmaStart(Ch, Mem, Cnt)
+#define STM32_SPI_DMA_FLAGS(Ch) WbaGpdmaFlags(Ch)
+#define STM32_SPI_DMA_FLAG_TC WBA_GPDMA_FLAG_TC
+#define STM32_SPI_DMA_FLAG_ERR WBA_GPDMA_FLAG_ERR
+#define STM32_SPI_DMA_REMAIN(Ch) WbaGpdmaRemain(Ch)
 #define STM32_SPI_DMA_FREE(Ch)			WbaGpdmaFree(Ch)
 #define STM32_SPI_DMA_ACK(Ch)			WbaGpdmaAck(Ch)
 #define STM32_SPI_DMA_STOP(Ch)			WbaGpdmaStop(Ch)
+#elif defined(STM32H753xx)
+#include "dma_stm32.h"
+#define STM32_SPI_DMA
+#define STM32_SPI_DMA_MEMINC(Ch, Inc) Stm32DmaChMemInc(Ch, Inc)
+#define STM32_SPI_DMA_FREE(Ch) Stm32DmaChFree(Ch)
+#define STM32_SPI_DMA_ACK(Ch) ((void)Stm32DmaChBufferFlags(Ch))
+#define STM32_SPI_DMA_START(Ch, Mem, Cnt) Stm32DmaChBufferStart(Ch, Mem, Cnt)
+#define STM32_SPI_DMA_STOP(Ch) ((void)Stm32DmaChBufferStopRemain(Ch))
+#define STM32_SPI_DMA_STOPREMAIN(Ch) Stm32DmaChBufferStopRemain(Ch)
+#define STM32_SPI_DMA_REMAIN(Ch) Stm32DmaChBufferRemain(Ch)
+#define STM32_SPI_DMA_FLAGS(Ch) Stm32DmaChBufferFlags(Ch)
+#define STM32_SPI_DMA_FLAG_TC STM32_DMA_FLAG_TC
+#define STM32_SPI_DMA_FLAG_ERR STM32_DMA_FLAG_ERR
 #elif defined(IOSONATA_STM32_L4)
 // DMA1 and DMA2 channels of the DMA channel manager
 #include "dma_stm32.h"
-#include "qospi_stm32.h"
 #define STM32_SPI_DMA
 #define STM32_SPI_DMA_REMAIN(Ch)		Stm32DmaChRemain(Ch)
 #define STM32_SPI_DMA_FREE(Ch)			Stm32DmaChFree(Ch)
@@ -139,7 +160,11 @@ SOFTWARE.
 #include "iopinctrl.h"
 #include "coredev/system_core_clock.h"
 
+#ifdef STM32H753xx
+#define STM32_SPI_MAXDEV			6
+#else
 #define STM32_SPI_MAXDEV			3
+#endif
 
 // Register layout of the SPI, from the CMSIS names
 #if defined(SPI_CFG1_MBR)
@@ -263,6 +288,7 @@ typedef struct {
 	int DmaTx;				//!< GPDMA channel of the transmit, -1 none
 	int DmaRx;
 	const uint8_t *pTx;
+	std::atomic<uint32_t> *pTxStaged;
 	uint8_t *pRx;
 	uint32_t Items;			//!< Items of the transfer
 	uint32_t Done;			//!< Items of the chunks completed
@@ -299,6 +325,22 @@ static const Stm32SpiInfo_t s_Stm32SpiInfo[STM32_SPI_MAXDEV] = {
 	{ SPI3, &RCC->APB7ENR, RCC_APB7ENR_SPI3EN, &RCC->APB7RSTR, RCC_APB7RSTR_SPI3RST,
 	  &RCC->CCIPR3, RCC_CCIPR3_SPI3SEL_Msk, 2, SPI3_IRQn,
 	  WBA_GPDMA_REQ_SPI3_TX, WBA_GPDMA_REQ_SPI3_RX },
+};
+#elif defined(STM32H753xx)
+// SPI1-3 use PER (HSI by default); SPI4/5 use PCLK2, SPI6 PCLK4.
+static const Stm32SpiInfo_t s_Stm32SpiInfo[STM32_SPI_MAXDEV] = {
+	{ SPI1, &RCC->APB2ENR, RCC_APB2ENR_SPI1EN, &RCC->APB2RSTR, RCC_APB2RSTR_SPI1RST,
+	  &RCC->D2CCIP1R, RCC_D2CCIP1R_SPI123SEL, -1, SPI1_IRQn, 38, 37 },
+	{ SPI2, &RCC->APB1LENR, RCC_APB1LENR_SPI2EN, &RCC->APB1LRSTR, RCC_APB1LRSTR_SPI2RST,
+	  &RCC->D2CCIP1R, RCC_D2CCIP1R_SPI123SEL, -1, SPI2_IRQn, 40, 39 },
+	{ SPI3, &RCC->APB1LENR, RCC_APB1LENR_SPI3EN, &RCC->APB1LRSTR, RCC_APB1LRSTR_SPI3RST,
+	  &RCC->D2CCIP1R, RCC_D2CCIP1R_SPI123SEL, -1, SPI3_IRQn, 62, 61 },
+	{ SPI4, &RCC->APB2ENR, RCC_APB2ENR_SPI4EN, &RCC->APB2RSTR, RCC_APB2RSTR_SPI4RST,
+	  &RCC->D2CCIP1R, RCC_D2CCIP1R_SPI45SEL, 1, SPI4_IRQn, 84, 83 },
+	{ SPI5, &RCC->APB2ENR, RCC_APB2ENR_SPI5EN, &RCC->APB2RSTR, RCC_APB2RSTR_SPI5RST,
+	  &RCC->D2CCIP1R, RCC_D2CCIP1R_SPI45SEL, 1, SPI5_IRQn, 86, 85 },
+	{ SPI6, &RCC->APB4ENR, RCC_APB4ENR_SPI6EN, &RCC->APB4RSTR, RCC_APB4RSTR_SPI6RST,
+	  &RCC->D3CCIPR, RCC_D3CCIPR_SPI6SEL, 3, SPI6_IRQn, 12, 11 },
 };
 #elif defined(IOSONATA_STM32_L4)
 // SPI1 on APB2 (PCLK2), SPI2 and SPI3 on APB1 (PCLK1). The kernel clock is the
@@ -347,7 +389,12 @@ static void Stm32SpiClkEnable(Stm32SpiDev_t * const pDev, bool bEn)
 	if (bEn)
 	{
 #ifdef STM32_SPI_LAYOUT_CFG
+#ifdef STM32H753xx
+		const uint32_t sel = info->ClkIdx < 0 ? RCC_D2CCIP1R_SPI123SEL_2 : 0U;
+		*info->pSelReg = (*info->pSelReg & ~info->SelMask) | sel;
+#else
 		*info->pSelReg &= ~info->SelMask;
+#endif
 #endif
 		*info->pEnReg |= info->EnMask;
 		(void)*info->pEnReg;
@@ -406,7 +453,7 @@ static void Stm32SpiDmaIrq(int Ch, void *pCtx);
 static void Stm32SpiService(Stm32SpiDev_t * const pDev);
 static void Stm32SpiDmaGive(Stm32SpiDev_t * const pDev);
 
-#ifdef STM32_SPI_LAYOUT_CFG
+#if defined(IOSONATA_STM32_WBA)
 // Take the two channels. Both or none.
 static bool Stm32SpiDmaTake(Stm32SpiDev_t * const pDev, bool bIrq, int IntPrio)
 {
@@ -436,6 +483,38 @@ static bool Stm32SpiDmaTake(Stm32SpiDev_t * const pDev, bool bIrq, int IntPrio)
 
 	return true;
 }
+#elif defined(STM32H753xx)
+static bool Stm32SpiDmaTake(Stm32SpiDev_t * const pDev, bool bIrq, int IntPrio)
+{
+	// Reinitialization updates IRQ selection without abandoning a stream
+	// that failed to stop. Both channels are retained or neither is taken.
+	if (pDev->DmaTx >= 0 && pDev->DmaRx >= 0)
+	{
+		STM32_SPI_DMA_STOP(pDev->DmaTx);
+		STM32_SPI_DMA_STOP(pDev->DmaRx);
+		if (!Stm32DmaChClaim(pDev->DmaTx, Stm32SpiDmaIrq, pDev, IntPrio, bIrq) ||
+			!Stm32DmaChClaim(pDev->DmaRx, Stm32SpiDmaIrq, pDev, IntPrio, bIrq)) { return false; }
+	}
+	else
+	{
+		bool bdma = pDev->DevNo == 5;
+		pDev->DmaTx = Stm32DmaChAlloc(bdma, Stm32SpiDmaIrq, pDev, IntPrio, bIrq);
+		pDev->DmaRx = Stm32DmaChAlloc(bdma, Stm32SpiDmaIrq, pDev, IntPrio, bIrq);
+	}
+	if (pDev->DmaTx < 0 || pDev->DmaRx < 0)
+	{
+		if (pDev->DmaTx >= 0) { Stm32DmaChFree(pDev->DmaTx); }
+		if (pDev->DmaRx >= 0) { Stm32DmaChFree(pDev->DmaRx); }
+		pDev->DmaTx = pDev->DmaRx = -1;
+		return false;
+	}
+	const Stm32SpiInfo_t *info = pDev->pInfo;
+	int width = Stm32SpiItemSize(pDev) == 2 ? 1 : 0;
+	Stm32DmaChSetup(pDev->DmaTx, info->TxReq, true, &pDev->pReg->TXDR, width, bIrq);
+	Stm32DmaChSetup(pDev->DmaRx, info->RxReq, false, &pDev->pReg->RXDR, width, bIrq);
+	return ((Stm32DmaChFlags(pDev->DmaTx) | Stm32DmaChFlags(pDev->DmaRx)) & STM32_DMA_FLAG_ERR) == 0;
+}
+
 #else
 // Take the two channels of one choice of the table, the first that is free.
 // Both or none. Taken again at each SPIInit, which sets their interrupt.
@@ -493,11 +572,13 @@ static void Stm32SpiDmaGive(Stm32SpiDev_t * const pDev)
 {
 	if (pDev->DmaTx >= 0)
 	{
+		STM32_SPI_DMA_STOP(pDev->DmaTx);
 		STM32_SPI_DMA_FREE(pDev->DmaTx);
 		pDev->DmaTx = -1;
 	}
 	if (pDev->DmaRx >= 0)
 	{
+		STM32_SPI_DMA_STOP(pDev->DmaRx);
 		STM32_SPI_DMA_FREE(pDev->DmaRx);
 		pDev->DmaRx = -1;
 	}
@@ -532,6 +613,36 @@ static void Stm32SpiDmaStop(Stm32SpiDev_t * const pDev)
 // Master engine
 // ---------------------------------------------------------------------------
 
+// Publish source lifetime only after the chunk owns a copy.
+#ifdef STM32_SPI_LAYOUT_CFG
+static void Stm32SpiStageDone(Stm32SpiDev_t * const pDev)
+{
+	if (pDev->pTxStaged)
+	{
+		std::atomic<uint32_t> *staged = pDev->pTxStaged;
+		uint32_t n = pDev->Done + pDev->Chunk;
+		if (n == pDev->Items)
+		{
+			pDev->pTx = NULL;
+			pDev->pTxStaged = NULL;
+		}
+		staged->store(n);
+	}
+}
+
+#endif
+
+static void Stm32SpiReleaseSource(Stm32SpiDev_t * const pDev)
+{
+	if (pDev->pTxStaged)
+	{
+		std::atomic<uint32_t> *staged = pDev->pTxStaged;
+		pDev->pTxStaged = NULL;
+		pDev->pTx = NULL;
+		staged->store(pDev->Items);
+	}
+}
+
 // Bytes done of a transfer that failed
 static int Stm32SpiMasterCount(Stm32SpiDev_t * const pDev)
 {
@@ -549,6 +660,30 @@ static int Stm32SpiMasterCount(Stm32SpiDev_t * const pDev)
 }
 
 #ifdef STM32_SPI_LAYOUT_CFG
+// Complete the last SCK period before disabling the master. H753 EOT can
+// precede the final output transition (ES0392 2.22.6). This is also used
+// between TSIZE chunks, while the caller keeps chip select asserted.
+static void Stm32SpiMasterDisable(Stm32SpiDev_t * const pDev)
+{
+	SPI_TypeDef *reg = pDev->pReg;
+
+	reg->IER = 0;
+#ifdef STM32H753xx
+	if ((reg->CR1 & SPI_CR1_SPE) && (reg->SR & SPI_SR_EOT))
+	{
+		uint32_t rate = pDev->pSpiDev->Cfg.Rate;
+
+		// One loop iteration takes at least one core cycle. Use the
+		// achieved SCK rate, with a ceiling and no timer/IRQ dependency.
+		for (uint32_t n = SystemCoreClock / (rate ? rate : 1U) + 1U; n > 0; n--)
+		{
+			__NOP();
+		}
+	}
+#endif
+	reg->CR1 &= ~SPI_CR1_SPE;
+}
+
 // End of the transfer. Interrupts and DMA off, flags cleared, the result
 // stored.
 static void Stm32SpiMasterEnd(Stm32SpiDev_t * const pDev, bool bad)
@@ -556,8 +691,7 @@ static void Stm32SpiMasterEnd(Stm32SpiDev_t * const pDev, bool bad)
 	SPI_TypeDef *reg = pDev->pReg;
 
 	pDev->Result = bad ? Stm32SpiMasterCount(pDev) : (int)(pDev->Items * Stm32SpiItemSize(pDev));
-	reg->IER = 0;
-	reg->CR1 &= ~SPI_CR1_SPE;
+	Stm32SpiMasterDisable(pDev);
 	reg->IFCR = STM32_SPI_IFCR_ALL;
 #ifdef STM32_SPI_DMA
 	if (pDev->bDma)
@@ -566,6 +700,7 @@ static void Stm32SpiMasterEnd(Stm32SpiDev_t * const pDev, bool bad)
 		Stm32SpiDmaStop(pDev);
 	}
 #endif
+	Stm32SpiReleaseSource(pDev);
 	pDev->bRun = false;
 }
 
@@ -573,7 +708,9 @@ static void Stm32SpiMasterEnd(Stm32SpiDev_t * const pDev, bool bad)
 static void Stm32SpiMasterChunk(Stm32SpiDev_t * const pDev)
 {
 	SPI_TypeDef *reg = pDev->pReg;
+#ifdef STM32_SPI_DMA
 	const int isz = Stm32SpiItemSize(pDev);
+#endif
 	uint32_t left = pDev->Items - pDev->Done;
 	uint32_t max = STM32_SPI_TSIZE_MAX;
 
@@ -583,11 +720,19 @@ static void Stm32SpiMasterChunk(Stm32SpiDev_t * const pDev)
 		max = 0xFFFFU / isz;
 	}
 #endif
+	if (pDev->pTxStaged && max > SPI_STM32_TXBUF_SIZE / (uint32_t)Stm32SpiItemSize(pDev))
+	{
+		max = SPI_STM32_TXBUF_SIZE / Stm32SpiItemSize(pDev);
+	}
 	pDev->Chunk = left > max ? max : left;
+	if (pDev->pTxStaged)
+	{
+		memcpy(pDev->TxBuf, pDev->pTx + pDev->Done * Stm32SpiItemSize(pDev), pDev->Chunk * Stm32SpiItemSize(pDev));
+	}
 	pDev->TxN = 0;
 	pDev->RxN = 0;
 
-	reg->CR1 &= ~SPI_CR1_SPE;
+	Stm32SpiMasterDisable(pDev);
 	reg->IFCR = STM32_SPI_IFCR_ALL;
 	reg->CR2 = pDev->Chunk;
 
@@ -598,23 +743,23 @@ static void Stm32SpiMasterChunk(Stm32SpiDev_t * const pDev)
 
 		if (pDev->pTx)
 		{
-			WbaGpdmaMemInc(pDev->DmaTx, true);
-			WbaGpdmaStart(pDev->DmaTx, pDev->pTx + pDev->Done * isz, bytes);
+			STM32_SPI_DMA_MEMINC(pDev->DmaTx, true);
+			STM32_SPI_DMA_START(pDev->DmaTx, pDev->pTxStaged ? pDev->TxBuf : pDev->pTx + pDev->Done * isz, bytes);
 		}
 		else
 		{
-			WbaGpdmaMemInc(pDev->DmaTx, false);
-			WbaGpdmaStart(pDev->DmaTx, &pDev->Dummy, bytes);
+			STM32_SPI_DMA_MEMINC(pDev->DmaTx, false);
+			STM32_SPI_DMA_START(pDev->DmaTx, &pDev->Dummy, bytes);
 		}
 		if (pDev->pRx)
 		{
-			WbaGpdmaMemInc(pDev->DmaRx, true);
-			WbaGpdmaStart(pDev->DmaRx, pDev->pRx + pDev->Done * isz, bytes);
+			STM32_SPI_DMA_MEMINC(pDev->DmaRx, true);
+			STM32_SPI_DMA_START(pDev->DmaRx, pDev->pRx + pDev->Done * isz, bytes);
 		}
 		else
 		{
-			WbaGpdmaMemInc(pDev->DmaRx, false);
-			WbaGpdmaStart(pDev->DmaRx, &pDev->Sink, bytes);
+			STM32_SPI_DMA_MEMINC(pDev->DmaRx, false);
+			STM32_SPI_DMA_START(pDev->DmaRx, &pDev->Sink, bytes);
 		}
 		reg->CFG1 |= STM32_SPI_CFG1_DMA;
 	}
@@ -625,6 +770,7 @@ static void Stm32SpiMasterChunk(Stm32SpiDev_t * const pDev)
 	}
 	reg->CR1 |= SPI_CR1_SPE;
 	reg->CR1 |= SPI_CR1_CSTART;
+	Stm32SpiStageDone(pDev);
 }
 
 // Move the items the flags allow
@@ -633,22 +779,24 @@ static void Stm32SpiMasterPump(Stm32SpiDev_t * const pDev, uint32_t Sr)
 	SPI_TypeDef *reg = pDev->pReg;
 	const bool b16 = pDev->pSpiDev->Cfg.DataSize > 8;
 	const uint32_t fifo = STM32_SPI_FIFO_BYTES / (b16 ? 2 : 1);
+	const bool stagedTx = pDev->bAsync && !pDev->bRx;
+	const uint8_t *tx = stagedTx ? pDev->TxBuf : pDev->pTx;
 	const uint32_t first = pDev->Done;
 
 	if ((Sr & SPI_SR_TXP) && pDev->TxN < pDev->Chunk && (pDev->TxN - pDev->RxN) < fifo)
 	{
-		const uint32_t i = first + pDev->TxN;
+		const uint32_t i = (stagedTx ? 0 : first) + pDev->TxN;
 
 		if (b16)
 		{
-			uint16_t d = pDev->pTx ? (uint16_t)(pDev->pTx[i * 2] | ((uint16_t)pDev->pTx[i * 2 + 1] << 8)) :
+			uint16_t d = tx ? (uint16_t)(tx[i * 2] | ((uint16_t)tx[i * 2 + 1] << 8)) :
 									 pDev->Dummy;
 
 			*(Stm32SpiReg16_t*)&reg->TXDR = d;
 		}
 		else
 		{
-			*(volatile uint8_t*)&reg->TXDR = pDev->pTx ? pDev->pTx[i] : (uint8_t)pDev->Dummy;
+			*(volatile uint8_t*)&reg->TXDR = tx ? tx[i] : (uint8_t)pDev->Dummy;
 		}
 		pDev->TxN++;
 	}
@@ -688,7 +836,7 @@ static void Stm32SpiMasterService(Stm32SpiDev_t * const pDev)
 	uint32_t sr = reg->SR;
 
 #ifdef STM32_SPI_DMA
-	if (pDev->bDma && ((WbaGpdmaFlags(pDev->DmaTx) | WbaGpdmaFlags(pDev->DmaRx)) & WBA_GPDMA_FLAG_ERR))
+	if (pDev->bDma && ((STM32_SPI_DMA_FLAGS(pDev->DmaTx) | STM32_SPI_DMA_FLAGS(pDev->DmaRx)) & STM32_SPI_DMA_FLAG_ERR))
 	{
 		pDev->bFail = true;
 		Stm32SpiMasterEnd(pDev, true);
@@ -718,7 +866,7 @@ static void Stm32SpiMasterService(Stm32SpiDev_t * const pDev)
 		if (pDev->bDma)
 		{
 #ifdef STM32_SPI_DMA
-			done = (WbaGpdmaFlags(pDev->DmaRx) & WBA_GPDMA_FLAG_TC) != 0U;
+			done = (STM32_SPI_DMA_FLAGS(pDev->DmaRx) & STM32_SPI_DMA_FLAG_TC) != 0U;
 #else
 			done = false;
 #endif
@@ -765,6 +913,7 @@ static void Stm32SpiMasterEnd(Stm32SpiDev_t * const pDev, bool bad)
 		(void)reg->SR;
 		reg->CR1 = pDev->Cr1 | SPI_CR1_SPE;
 	}
+	Stm32SpiReleaseSource(pDev);
 	pDev->bRun = false;
 }
 
@@ -1007,7 +1156,7 @@ static void Stm32SpiAsyncDone(Stm32SpiDev_t * const pDev)
 // Run a transfer of Len bytes. pTx is the data to send, or NULL to send the
 // dummy value. pRx is the buffer for the data received, or NULL to discard
 // it. Return the bytes done, or -1 when the end is reported by the event.
-static int Stm32SpiTransfer(Stm32SpiDev_t * const pDev, const uint8_t *pTx, uint8_t *pRx, int Len, bool bAsync)
+static int Stm32SpiTransfer(Stm32SpiDev_t * const pDev, const uint8_t *pTx, uint8_t *pRx, int Len, bool bAsync, std::atomic<uint32_t> *pStaged = NULL)
 {
 	const int isz = Stm32SpiItemSize(pDev);
 	DevIntrf_t *intrf = &pDev->pSpiDev->DevIntrf;
@@ -1018,6 +1167,7 @@ static int Stm32SpiTransfer(Stm32SpiDev_t * const pDev, const uint8_t *pTx, uint
 	}
 
 	pDev->pTx = pTx;
+	pDev->pTxStaged = pStaged;
 	pDev->pRx = pRx;
 	pDev->Items = (uint32_t)Len / isz;
 	pDev->Done = 0;
@@ -1036,7 +1186,10 @@ static int Stm32SpiTransfer(Stm32SpiDev_t * const pDev, const uint8_t *pTx, uint
 		atomic_store(&intrf->bTxReady, false);
 	}
 
+	uint32_t pm = __get_PRIMASK();
+	__disable_irq();
 	Stm32SpiMasterChunk(pDev);
+	__set_PRIMASK(pm);
 	if (bAsync)
 	{
 		return -1;
@@ -1143,6 +1296,7 @@ static void Stm32SpiSlaveArm(Stm32SpiDev_t * const pDev)
 	pDev->SRxMax = spi->pRxBuff[0] != NULL && spi->RxBuffLen[0] > 0 ? (uint32_t)spi->RxBuffLen[0] / isz : 0;
 	pDev->STxMax = spi->pTxData[0] != NULL && spi->TxDataLen[0] > 0 ? (uint32_t)spi->TxDataLen[0] / isz : 0;
 
+	reg->IER = 0;
 	reg->CR1 &= ~SPI_CR1_SPE;
 	reg->IFCR = STM32_SPI_IFCR_ALL;
 	reg->CR2 = 0;
@@ -1155,8 +1309,8 @@ static void Stm32SpiSlaveArm(Stm32SpiDev_t * const pDev)
 	{
 		if (pDev->SRxMax > 0)
 		{
-			WbaGpdmaMemInc(pDev->DmaRx, true);
-			WbaGpdmaStart(pDev->DmaRx, spi->pRxBuff[0], pDev->SRxMax * isz);
+			STM32_SPI_DMA_MEMINC(pDev->DmaRx, true);
+			STM32_SPI_DMA_START(pDev->DmaRx, spi->pRxBuff[0], pDev->SRxMax * isz);
 			reg->CFG1 |= SPI_CFG1_RXDMAEN;
 		}
 		else
@@ -1165,8 +1319,8 @@ static void Stm32SpiSlaveArm(Stm32SpiDev_t * const pDev)
 		}
 		if (pDev->STxMax > 0)
 		{
-			WbaGpdmaMemInc(pDev->DmaTx, true);
-			WbaGpdmaStart(pDev->DmaTx, spi->pTxData[0], pDev->STxMax * isz);
+			STM32_SPI_DMA_MEMINC(pDev->DmaTx, true);
+			STM32_SPI_DMA_START(pDev->DmaTx, spi->pTxData[0], pDev->STxMax * isz);
 			reg->CFG1 |= SPI_CFG1_TXDMAEN;
 		}
 	}
@@ -1180,12 +1334,20 @@ static void Stm32SpiSlaveArm(Stm32SpiDev_t * const pDev)
 		}
 	}
 
-	reg->IER = ier;
+	// H753 can assert TXP and TXC even with SPE clear (ES0392).
+	// In DMA mode an early EOTIE interrupt cannot clear TXC: DMA waits
+	// for SPE, while the foreground cannot resume to set it. Enable the
+	// peripheral and preload CPU data before unmasking its interrupts.
 	reg->CR1 |= SPI_CR1_SPE;
 	if (pDev->bDma == false && pDev->STxMax > 0)
 	{
 		Stm32SpiSlaveWrite(pDev);
+		if (pDev->STx >= pDev->STxMax)
+		{
+			ier &= ~SPI_IER_TXPIE;
+		}
 	}
+	reg->IER = ier;
 }
 
 // NSS went inactive: the frame is over
@@ -1200,13 +1362,15 @@ static void Stm32SpiSlaveEnd(Stm32SpiDev_t * const pDev)
 	if (pDev->bDma)
 	{
 #ifdef STM32_SPI_DMA
+		pDev->bBad |= ((pDev->STxMax ? STM32_SPI_DMA_FLAGS(pDev->DmaTx) : 0U) & STM32_SPI_DMA_FLAG_ERR) != 0;
+		pDev->bBad |= ((pDev->SRxMax ? STM32_SPI_DMA_FLAGS(pDev->DmaRx) : 0U) & STM32_SPI_DMA_FLAG_ERR) != 0;
 		// The channel takes what the FIFO still holds
 		for (uint32_t n = Stm32SpiTimeout(pDev); n > 0 && (reg->SR & SPI_SR_RXP); n--)
 		{
 		}
 		if (pDev->SRxMax > 0)
 		{
-			pDev->SRx = pDev->SRxMax - WbaGpdmaRemain(pDev->DmaRx) / isz;
+			pDev->SRx = pDev->SRxMax - STM32_SPI_DMA_REMAIN(pDev->DmaRx) / isz;
 			if (reg->SR & SPI_SR_RXP)
 			{
 				// Items are left that the channel did not take: the frame
@@ -1257,7 +1421,7 @@ static bool Stm32SpiSlaveTxDone(Stm32SpiDev_t * const pDev)
 #ifdef STM32_SPI_DMA
 	if (pDev->bDma && pDev->STxMax > 0)
 	{
-		return WbaGpdmaRemain(pDev->DmaTx) == 0U;
+		return STM32_SPI_DMA_REMAIN(pDev->DmaTx) == 0U;
 	}
 #endif
 
@@ -1573,6 +1737,8 @@ static void Stm32SpiNssEvt(int IntNo, void *pCtx)
 	Stm32SpiDev_t *dev = (Stm32SpiDev_t*)pCtx;
 	const IOPinCfg_t &cs = dev->pSpiDev->Cfg.pIOPinMap[SPI_CS_IOPIN_IDX];
 
+#ifdef STM32H753xx
+#endif
 	(void)IntNo;
 	if (IOPinRead(cs.PortNo, cs.PinNo) == 0)
 	{
@@ -1628,7 +1794,31 @@ static uint32_t Stm32SpiSetRate(DevIntrf_t * const pIntrf, uint32_t Rate)
 		return 0;
 	}
 
-	uint32_t clk = SystemPeriphClockGet(dev->pInfo->ClkIdx);
+	uint32_t clk;
+#ifdef STM32H753xx
+	if (dev->pInfo->ClkIdx < 0)
+	{
+		// PER clock is shared. Do not change its source for another user.
+		// This port starts with HSI; CSI can also be selected by the application.
+		const uint32_t sel = RCC->D1CCIPR & RCC_D1CCIPR_CKPERSEL;
+		if (sel == 0 && (RCC->CR & RCC_CR_HSIRDY))
+		{
+			clk = 64000000U >> ((RCC->CR & RCC_CR_HSIDIV) >> RCC_CR_HSIDIV_Pos);
+		}
+		else if (sel == RCC_D1CCIPR_CKPERSEL_0 && (RCC->CR & RCC_CR_CSIRDY))
+		{
+			clk = 4000000U;
+		}
+		else
+		{
+			return 0; // External PER clock not configured by this port.
+		}
+	}
+	else
+#endif
+	{
+		clk = SystemPeriphClockGet(dev->pInfo->ClkIdx);
+	}
 
 	if (Rate == 0)
 	{
@@ -1657,7 +1847,11 @@ static uint32_t Stm32SpiSetRate(DevIntrf_t * const pIntrf, uint32_t Rate)
 #ifdef STM32_SPI_LAYOUT_CFG
 	// MBR can only change with the peripheral disabled
 	reg->CR1 &= ~SPI_CR1_SPE;
-	reg->CFG1 = (reg->CFG1 & ~(SPI_CFG1_MBR_Msk | SPI_CFG1_BPASS)) | (best << SPI_CFG1_MBR_Pos);
+	uint32_t mask = SPI_CFG1_MBR_Msk;
+#ifdef SPI_CFG1_BPASS
+	mask |= SPI_CFG1_BPASS;
+#endif
+	reg->CFG1 = (reg->CFG1 & ~mask) | (best << SPI_CFG1_MBR_Pos);
 #else
 	// BR can only change with the peripheral disabled
 	reg->CR1 &= ~SPI_CR1_SPE;
@@ -1838,6 +2032,35 @@ static int Stm32SpiTxData(DevIntrf_t * const pIntrf, const uint8_t *pData, int D
 		return 0;
 	}
 
+#ifdef STM32H753xx
+	if (pIntrf->bIntEn && !dev->bRun)
+	{
+		std::atomic<uint32_t> staged(0);
+		int ret = Stm32SpiTransfer(dev, pData, NULL, DataLen, true, &staged);
+		if (ret != -1) { return ret; }
+		uint64_t wait = Stm32SpiTimeout(dev) + (uint64_t)SystemCoreClock * SPI_STM32_TXBUF_SIZE * 8U /
+			(dev->pSpiDev->Cfg.Rate ? dev->pSpiDev->Cfg.Rate : 1U);
+		uint32_t budget = wait > UINT32_MAX ? UINT32_MAX : (uint32_t)wait;
+		uint32_t left = budget, prior = UINT32_MAX;
+		const uint32_t items = DataLen / Stm32SpiItemSize(dev);
+		while (staged.load() < items)
+		{
+			uint32_t n = staged.load();
+			if (n != prior) { prior = n; left = budget; }
+			else if (--left == 0)
+			{
+				uint32_t pm = __get_PRIMASK();
+				__disable_irq();
+				bool abort = dev->pTxStaged == &staged;
+				if (abort) { dev->bFail = true; Stm32SpiMasterEnd(dev, true); dev->bAsync = false; }
+				__set_PRIMASK(pm);
+				if (abort) { Stm32SpiAsyncDone(dev); }
+				break;
+			}
+		}
+		return -1;
+	}
+#else
 	if (pIntrf->bIntEn && DataLen <= SPI_STM32_TXBUF_SIZE && dev->bRun == false)
 	{
 		memcpy(dev->TxBuf, pData, DataLen);
@@ -1845,6 +2068,7 @@ static int Stm32SpiTxData(DevIntrf_t * const pIntrf, const uint8_t *pData, int D
 		return Stm32SpiTransfer(dev, dev->TxBuf, NULL, DataLen, true);
 	}
 
+#endif
 	return Stm32SpiTransfer(dev, pData, NULL, DataLen, false);
 }
 
@@ -2016,13 +2240,13 @@ bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfgData)
 #ifdef STM32_SPI_LAYOUT_CFG
 	// Master: the internal slave select is held inactive (SSM and SSI), so
 	// the NSS pin is not used and no mode fault occurs. Slave: the NSS pin is
-	// the frame select. AFCNTR keeps the pins driven by the peripheral when it
-	// is disabled.
-	uint32_t cfg2 = SPI_CFG2_AFCNTR;
+	// the frame select. Only the master may retain alternate-function pin
+	// control while disabled; a disabled slave must release MISO (RM0433).
+	uint32_t cfg2 = 0;
 
 	if (slave == false)
 	{
-		cfg2 |= SPI_CFG2_MASTER | SPI_CFG2_SSM;
+		cfg2 |= SPI_CFG2_AFCNTR | SPI_CFG2_MASTER | SPI_CFG2_SSM;
 	}
 	if (pCfgData->ClkPol == SPICLKPOL_LOW)
 	{
@@ -2040,13 +2264,21 @@ bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfgData)
 	reg->CR1 = slave ? 0U : SPI_CR1_SSI;
 	reg->CR2 = 0;
 	reg->IER = 0;
+#ifdef SPI_AUTOCR_TRIGEN
 	reg->AUTOCR = 0;
-	reg->CFG1 = (pCfgData->DataSize - 1) << SPI_CFG1_DSIZE_Pos;
+#endif
+	// Keep the reset CRC size even with CRC disabled. H753 can corrupt
+	// the last received item when TSIZE > 0 and CRCSIZE < 7 (ES0392).
+	reg->CFG1 = ((pCfgData->DataSize - 1) << SPI_CFG1_DSIZE_Pos) |
+				(7U << SPI_CFG1_CRCSIZE_Pos);
 	reg->CFG2 = cfg2;
 	reg->UDRDR = dev->Dummy;
 	reg->IFCR = STM32_SPI_IFCR_ALL;
 
-	Stm32SpiSetRate(&pDev->DevIntrf, pCfgData->Rate);
+	if (Stm32SpiSetRate(&pDev->DevIntrf, pCfgData->Rate) == 0)
+	{
+		return false;
+	}
 #else
 	// Master: the internal slave select is held inactive (SSM and SSI), so
 	// the NSS pin is not used and no mode fault occurs. Slave: the NSS pin is
@@ -2130,3 +2362,20 @@ extern "C" void SPI3_IRQHandler(void)
 {
 	Stm32SpiService(&s_Stm32SpiDev[2]);
 }
+
+#ifdef STM32H753xx
+extern "C" void SPI4_IRQHandler(void)
+{
+	Stm32SpiService(&s_Stm32SpiDev[3]);
+}
+
+extern "C" void SPI5_IRQHandler(void)
+{
+	Stm32SpiService(&s_Stm32SpiDev[4]);
+}
+
+extern "C" void SPI6_IRQHandler(void)
+{
+	Stm32SpiService(&s_Stm32SpiDev[5]);
+}
+#endif

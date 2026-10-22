@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the H753 library and six examples; emulate register tests.
+"""Build the H753 library and bare-metal examples; emulate register tests.
 
 Requires GNU Arm GCC, Python unicorn and pyelftools. Uses the real ST CMSIS
 header and driver instructions. Ready flags are modeled, not physical timing.
@@ -7,6 +7,8 @@ Run from any directory: python3 tests/stm32h7/run.py
 ARM_CPPFLAGS and ARM_LDFLAGS can describe a relocated compiler installation.
 """
 import os
+import fnmatch
+import sys
 from pathlib import Path
 import shlex
 import shutil
@@ -22,13 +24,26 @@ from unicorn.arm_const import UC_ARM_REG_SP, UC_ARM_REG_LR, UC_ARM_REG_R0, UC_AR
 ROOT = Path(__file__).resolve().parents[2]
 PORT = ROOT / 'ARM/ST/STM32H7xx'
 PROJECT = PORT / 'STM32H753'
+LWIP = Path(os.environ.get('LWIP_ROOT', ROOT.parent / 'external/lwip'))
+FUSION = Path(os.environ.get('FUSION_ROOT', ROOT.parent / 'external/Fusion'))
 EXAMPLES = {
+    'I2CMasterSlave': 'exemples/i2c/i2c_master_slave.cpp',
+    'SPIMasterSlave': 'exemples/spi/spi_master_slave.cpp',
+    'CryptoTest': 'exemples/crypto/crypto_engine_test.cpp',
     'Blinky': 'exemples/misc/blinky.c',
     'TimerDemo': 'exemples/timer/timer_demo.cpp',
     'UartPrbsTxTest': 'exemples/uart/uart_prbs_tx.cpp',
     'UartLoopback': 'exemples/uart/uart_loopback.cpp',
     'UsbCdcLoopback': 'exemples/usb/usb_cdc_loopback.cpp',
     'UsbCdcPrbsTx': 'exemples/usb/usb_cdc_prbs_tx.cpp',
+    'UsbDualCdcStress': 'exemples/usb/usb_dual_cdc_stress.cpp',
+    'UsbCustomBulkLoopback': 'exemples/usb/usb_custom_bulk_loopback.cpp',
+    'UsbHidLoopback': 'exemples/usb/usb_hid_loopback.cpp',
+    'UsbIntLoopback': 'exemples/usb/usb_int_loopback.cpp',
+    'UsbMscRamDisk': 'exemples/usb/usb_msc_ramdisk.cpp',
+    'EthernetDemo': 'exemples/net/ethernet_demo.cpp',
+    'EthernetUdpDemo': 'exemples/net/ethernet_demo.cpp',
+    'EthernetTcpDemo': 'exemples/net/ethernet_demo.cpp',
 }
 
 
@@ -88,13 +103,26 @@ def emulate(path):
 
 
 def main():
-    for tool in ('gcc', 'g++', 'ar', 'size'):
+    for tool in ('gcc', 'g++', 'ar', 'size', 'nm'):
         if not shutil.which('arm-none-eabi-' + tool):
             raise SystemExit('Missing arm-none-eabi-' + tool)
     links = ET.parse(PROJECT / 'lib/ioc/.project').findall('.//linkedResources/link')
-    sources = [ROOT / link.findtext('locationURI').removeprefix('PARENT-6-PROJECT_LOC/')
-               for link in links if link.findtext('name', '').startswith('src/')]
-    assert sources and all(p.is_file() for p in sources)
+    # Linked paths can start at ARM, ST, the family, or the repository root.
+    candidates = []
+    project_dir = PROJECT / 'lib/ioc'
+    for link in links:
+        name = link.findtext('name', '')
+        loc = link.findtext('locationURI', '')
+        if not name.startswith('src/') or Path(name).suffix not in ('.c', '.cpp'):
+            continue
+        prefix, relative = loc.split('/', 1)
+        assert prefix.startswith('PARENT-'), loc
+        levels = int(prefix.split('-')[1])
+        source = project_dir.parents[levels - 1] / relative
+        if relative.startswith('external/lwip/'):
+            source = LWIP / relative.removeprefix('external/lwip/')
+        candidates.append((name, source))
+    assert candidates and all(p.is_file() for _, p in candidates)
     includes = [ROOT / p for p in ('ARM/ST/include', 'ARM/include', 'ARM/CMSIS/Core/Include', 'include')]
     includes.append(PORT / 'include')
     base = ['-mcpu=cortex-m7', '-mthumb', '-DSTM32H753xx', '-D__PROGRAM_START',
@@ -109,17 +137,42 @@ def main():
                                 ('Release_FPU', '-Os', ['-mfloat-abi=hard', '-mfpu=fpv5-d16'])):
             out = tmp / label
             out.mkdir()
-            flags = [*base, opt, *fpu]
+            flags = [*base, opt, *fpu, '-DDEBUG' if label.startswith('Debug') else '-DNDEBUG']
+            project = ET.parse(PROJECT / 'lib/ioc/.cproject')
+            config = next(c for c in project.findall('.//cconfiguration')
+                          if c.find('storageModule').get('name') == label)
+            exclusions = [pattern for entry in config.findall('.//sourceEntries/entry')
+                          for pattern in entry.get('excluding', '').split('|') if pattern]
+            sources = [source for name, source in candidates
+                       if not any(fnmatch.fnmatchcase(name, pattern) or
+                                  name.startswith(pattern.rstrip('/') + '/')
+                                  for pattern in exclusions)]
+            language_flags = {}
+            # Use the project's actual build-directory-relative include paths.
+            # Both C and C++ need the IOsonata profile and external lwIP headers.
+            for language in ('c', 'cpp'):
+                option = next(o for o in config.findall('.//option')
+                              if o.get('superClass', '').endswith('.' + language + '.compiler.include.paths'))
+                paths = [(PROJECT / 'lib/ioc' / label / v.get('value').strip('"')).resolve()
+                         for v in option.findall('listOptionValue')]
+                assert (ROOT / 'include/net/lwip').resolve() in paths
+                assert (ROOT.parent / 'external/lwip/src/include').resolve() in paths
+                language_flags[language] = ['-I' + str(p) for p in paths]
+                language_flags[language] += ['-I' + str(LWIP / 'src/include'), '-I' + str(FUSION)]
+                for option in config.findall('.//option'):
+                    if option.get('superClass', '').endswith('.' + language + '.compiler.defs'):
+                        language_flags[language] += ['-D' + v.get('value')
+                                                     for v in option.findall('listOptionValue')]
 
             def compile_source(source, obj, extra=()):
                 cpp = source.suffix == '.cpp'
                 lang = ['-std=gnu++23', '-fno-exceptions', '-fno-rtti'] if cpp else ['-std=gnu17']
-                run(['arm-none-eabi-g++' if cpp else 'arm-none-eabi-gcc', *flags, *lang,
+                run(['arm-none-eabi-g++' if cpp else 'arm-none-eabi-gcc', *flags, *lang, *language_flags['cpp' if cpp else 'c'],
                      *extra, '-c', source, '-o', obj])
 
             objects = []
             for source in sources:
-                obj = out / (source.stem + '.o')
+                obj = out / (str(len(objects)) + '_' + source.stem + '.o')
                 compile_source(source, obj)
                 objects.append(obj)
             archive = out / 'libIOsonata_STM32H753.a'
@@ -136,7 +189,31 @@ def main():
             for name, rel in EXAMPLES.items():
                 obj = out / (name + '.o')
                 compile_source(ROOT / rel, obj, ['-I' + str(PROJECT / 'exemples' / name / 'src')])
-                link(obj, out / (name + '.elf'), usb=name.startswith('Usb'))
+                link(obj, out / (name + '.elf'), usb=name.startswith('Usb') or name in ('CryptoTest', 'I2CMasterSlave', 'SPIMasterSlave'))
+                with (out / (name + '.elf')).open('rb') as firmware:
+                    elf = ELFFile(firmware)
+                    symbols = {s.name: s for s in elf.get_section_by_name('.symtab').iter_symbols()}
+                    dma = elf.get_section_by_name('.eth_dma')
+                    if name.startswith('Ethernet'):
+                        assert dma and dma['sh_type'] == 'SHT_NOBITS'
+                        assert dma['sh_addr'] % 32 == 0
+                        assert 0x24000000 <= dma['sh_addr'] < dma['sh_addr'] + dma['sh_size'] <= 0x24080000
+                        handler = symbols['ETH_IRQHandler']
+                        assert handler['st_info']['bind'] == 'STB_GLOBAL'
+                        if name != 'EthernetDemo':
+                            assert symbols['SockIntrfInit']['st_info']['bind'] == 'STB_GLOBAL'
+                        for segment in elf.iter_segments():
+                            offset = 0x08000000 + (16 + 61) * 4 - segment['p_vaddr']
+                            if segment['p_type'] == 'PT_LOAD' and 0 <= offset < segment['p_filesz']:
+                                assert struct.unpack_from('<I', segment.data(), offset)[0] == handler['st_value']
+                                break
+                        else:
+                            raise AssertionError('Ethernet vector missing')
+                        if name == 'EthernetDemo':
+                            print(label + ' EthernetDemo: ' + run(['arm-none-eabi-size', out / (name + '.elf')]).strip(), flush=True)
+                    else:
+                        assert not dma or dma['sh_size'] == 0
+                        assert 'IpInit' not in symbols
                 if name.startswith('Usb'):
                     with (out / (name + '.elf')).open('rb') as firmware:
                         elf = ELFFile(firmware)
@@ -150,14 +227,14 @@ def main():
                                 break
                         else:
                             raise AssertionError('USB vector missing')
+            run([sys.executable, ROOT / 'tests/stm32h7/check_link.py', out])
             obj = out / 'register_test.o'
             compile_source(ROOT / 'tests/stm32h7/register_test.cpp', obj)
             link(obj, out / 'register_test.elf')
             emulate(out / 'register_test.elf')
-            print(label + ': library, six examples and register tests PASS', flush=True)
+            print(label + ': library, all examples and register tests PASS', flush=True)
     print('Hardware timing, electrical behavior and data transfers remain untested.')
 
 
 if __name__ == '__main__':
     main()
-

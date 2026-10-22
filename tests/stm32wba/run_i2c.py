@@ -605,9 +605,9 @@ def timing_check(i2c_name, clk, timing, cr1, rate_min, rate_max, actual, errors)
 def main():
     arm = shutil.which('arm-none-eabi-g++')
     try:
-        from unicorn import Uc, UC_ARCH_ARM, UC_MODE_THUMB, UC_MODE_MCLASS, UC_HOOK_CODE
+        from unicorn import Uc, UC_ARCH_ARM, UC_MODE_THUMB, UC_MODE_MCLASS, UC_HOOK_CODE, UC_HOOK_BLOCK
         from unicorn.arm_const import UC_CPU_ARM_CORTEX_M33
-        from unicorn.arm_const import UC_ARM_REG_R0, UC_ARM_REG_SP, UC_ARM_REG_PC
+        from unicorn.arm_const import UC_ARM_REG_R0, UC_ARM_REG_SP, UC_ARM_REG_PC, UC_ARM_REG_LR, UC_ARM_REG_PRIMASK
         from elftools.elf.elffile import ELFFile
     except ImportError as e:
         print(f'NOT RUN: {e}. pip install unicorn pyelftools')
@@ -702,16 +702,45 @@ def main():
         uc.hook_add(UC_HOOK_CODE, on_step, begin=syms['I2cTestSlaveStep'] & ~1, end=syms['I2cTestSlaveStep'] & ~1)
         uc.hook_add(UC_HOOK_CODE, on_done, begin=syms['I2cTestDoneHook'] & ~1, end=syms['I2cTestDoneHook'] & ~1)
 
+        active = False
+        pending = False
+        ticks = 0
+        def dispatch(uc, address, size, ctx):
+            nonlocal pending, ticks
+            if active or not int.from_bytes(uc.mem_read(syms['g_I2cTestAutoIrq'], 4), 'little'):
+                return
+            ticks += 1
+            if ticks % 16 or uc.reg_read(UC_ARM_REG_PRIMASK):
+                return
+            cr1, f = i2c1.reg[0], i2c1.f
+            if ((f['txis'] and cr1 & 2) or (f['stopf'] and cr1 & 32) or
+                (f['nackf'] and cr1 & 16) or ((f['tc'] or f['tcr']) and cr1 & 64)):
+                pending = True
+                uc.emu_stop()
+        uc.hook_add(UC_HOOK_BLOCK, dispatch)
         vec = bytes(uc.mem_read(0x08000000, 8))
         uc.reg_write(UC_ARM_REG_SP, int.from_bytes(vec[0:4], 'little'))
         pc = int.from_bytes(vec[4:8], 'little')
         try:
-            uc.emu_start(pc, 0xFFFFFFFF, count=40_000_000)
+            for _ in range(1000):
+                pending = False
+                uc.emu_start(pc, 0xFFFFFFFF, count=40_000_000)
+                if not pending:
+                    break
+                saved = uc.context_save()
+                active = True
+                uc.reg_write(UC_ARM_REG_LR, 0x081ff001)
+                uc.emu_start(syms['I2C1_EV_IRQHandler'] | 1, 0x081ff000, count=100000)
+                assert uc.reg_read(UC_ARM_REG_PC) == 0x081ff000
+                active = False
+                uc.context_restore(saved)
+                pc = uc.reg_read(UC_ARM_REG_PC) | 1
         except Exception as ex:
             raise SystemExit(f'FAIL emulator stopped at {uc.reg_read(UC_ARM_REG_PC):#x}: {ex}')
         if not state['done']:
             raise SystemExit('FAIL firmware did not finish')
 
+        long_count = int.from_bytes(uc.mem_read(syms['g_I2cTestLongCount'], 4), 'little', signed=True)
         res_addr = syms['g_I2cTestResult']
         n = int.from_bytes(uc.mem_read(res_addr + 4 * 63, 4), 'little', signed=True)
         res = [int.from_bytes(uc.mem_read(res_addr + 4 * i, 4), 'little', signed=True) for i in range(n)]
@@ -819,7 +848,7 @@ def main():
     expect(res[b + 7] == -1 and res[b + 8] == 300, f'interrupt read 300 results {res[b + 7:b + 9]}')
     expect(rx2[0][:300] == bytes(x[1] for x in reads[4:]) and len(reads) == 304,
            f'interrupt read 300 data, {len(reads)} bytes on the bus')
-    expect(res[b + 9] == 100, f'write 100 without the copy buffer {res[b + 9]}')
+    expect(res[b + 9] == -1 and long_count == 100, f'interrupt write 100: return {res[b + 9]}, callback {long_count}')
     expect(res[b + 10] == 0, f'write to an absent device {res[b + 10]}')
 
     # 14 slave on I2C3

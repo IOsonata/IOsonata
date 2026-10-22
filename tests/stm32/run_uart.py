@@ -50,6 +50,7 @@ DRIVER = ROOT / 'ARM/ST/src/uart_stm32.cpp'
 
 # Part, family directory, Cortex-M core and floating point flags
 PARTS = [
+    ('STM32H753xx', 'STM32H7xx', 'cortex-m7', ['-mfloat-abi=hard', '-mfpu=fpv5-d16']),
     ('STM32F030x6', 'STM32F0xx', 'cortex-m0', []),
     ('STM32F030x8', 'STM32F0xx', 'cortex-m0', []),
     ('STM32F030xC', 'STM32F0xx', 'cortex-m0', []),
@@ -99,7 +100,7 @@ def main():
                             (DRIVER, 'c++'), (HERE / 'uart_test.cpp', 'c++')]
                     if family == 'STM32WBAxx':
                         srcs.append((ROOT / 'ARM/ST/STM32WBAxx/src/gpdma_stm32wba.cpp', 'c++'))
-                    elif family == 'STM32L4xx':
+                    elif family in ('STM32L4xx', 'STM32H7xx'):
                         srcs.append((ROOT / 'ARM/ST/src/dma_stm32.cpp', 'c++'))
                     for src, lang in srcs:
                         obj = tmp / f'{part}_{label}_{src.stem}.o'
@@ -110,7 +111,8 @@ def main():
                                  '-c', src, '-o', obj])
                         objs.append(obj)
                     exe = tmp / f'{part}_{label}'
-                    run([cxx, '-no-pie', '-fsanitize=undefined', *objs, '-o', exe])
+                    ld = ['-Wl,--section-start=.uart_dma=0x24000000'] if family == 'STM32H7xx' else []
+                    run([cxx, '-no-pie', '-fsanitize=undefined', *ld, *objs, '-o', exe])
                     out = run([exe])
                     print(f'{part} {label}: {out.strip().splitlines()[-1]}', flush=True)
 
@@ -122,8 +124,10 @@ def main():
                        '-I' + str(ROOT / 'ARM/CMSIS/Core/Include'), '-I' + str(ROOT / 'ARM/ST/include'),
                        '-I' + str(ROOT / 'ARM/ST' / family / 'include')]
                 for label in ('O0', 'Os'):
+                    # UART hides the DeviceIntrf 3 argument Rx/Tx on purpose,
+                    # GCC 13 and later warn about it with -Wall.
                     run([arm, f'-mcpu={cpu}', '-mthumb', *fpu, '-D' + part, f'-{label}', '-std=gnu++23',
-                         '-Wall', '-Werror', '-fno-exceptions', '-fno-rtti', '-ffunction-sections',
+                         '-Wall', '-Wno-overloaded-virtual', '-Werror', '-fno-exceptions', '-fno-rtti', '-ffunction-sections',
                          '-fdata-sections', *inc, '-c', DRIVER, '-o', Path(tmp) / f'{part}_{label}.o'])
         print(f'GNU Arm compile of uart_stm32.cpp for {len(PARTS)} parts at -O0 and -Os: PASS')
     else:

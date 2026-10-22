@@ -27,7 +27,7 @@ layout; secure/nonsecure image provisioning is not implemented.
 | Crypto | RNG, AES and P-256 hardware test: 51 passed, 0 failed |
 | USB | Native CDC TX/RX tested, including 60-second Release loopback |
 | SSD1315 OLED | Console, graphics and interactive examples exercised |
-| Analog joystick | Menu, stopwatch and countdown examples tested |
+| Analog joystick | Menu, stopwatch and countdown examples tested; PongGame hardware validation pending |
 | M95P32 SPI EEPROM | SeepDemo uses the generic Nvm driver; command-model tests and builds pass; hardware result not recorded |
 | WM8904 and MP23DB01HP | Microphone level meter and stereo headphone tones tested |
 | Microphone/headphone loopback | Data path implemented; unresolved clock-associated headphone buzz on DK1 |
@@ -868,6 +868,23 @@ Debug/Release compile and link checks pass. OLED model tests cover digits,
 preset bounds, debounce, pause/resume, reset, expiry/LED, input failures and
 clock wrap at -O0/-Os under ASan/UBSan. On October 19, 2026, the maintainer confirmed that CountdownTimerDemo
 works on the STM32WBA65I-DK1. See the [project instructions](exemples/CountdownTimerDemo/README.md).
+
+
+## Joystick Pong
+
+`exemples/PongGame/ioc` links the shared `exemples/display/pong_game.cpp`.
+It uses the onboard SSD1315 OLED, the PA3 analog joystick and TIM16 through
+the existing SPI, ADC, Timer and display APIs. Up/down move the left paddle;
+select starts, pauses/resumes and starts a new match after game over. The
+right paddle is CPU controlled, rallies can accelerate, and the first side
+to 9 points wins.
+
+The game runs at a timer-paced 25 frames/s. Joystick selection is debounced,
+a select held during startup is ignored until release, and an ADC read failure
+stops player input without stopping the ball. Host-model coverage checks
+movement, wall/paddle collisions, pause, input failure, scoring and restart at
+-O0/-Os under ASan/UBSan. Hardware gameplay remains pending. See the
+[project instructions](exemples/PongGame/README.md).
 
 
 ## Native SAI PDM microphone capture

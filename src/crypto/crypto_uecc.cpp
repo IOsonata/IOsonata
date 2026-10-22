@@ -41,6 +41,7 @@ SOFTWARE.
 
 #include "crypto/crypto_uecc.h"
 #include "uECC.h"
+#include "uECC_vli.h"
 
 #if defined(uECC_VLI_NATIVE_LITTLE_ENDIAN) && uECC_VLI_NATIVE_LITTLE_ENDIAN
 #error "crypto_uecc requires the uECC default big-endian build"
@@ -53,6 +54,63 @@ static void UeccWipe(void *pData, size_t Len)
 	{
 		*p++ = 0U;
 	}
+}
+
+// micro-ecc's co-Z ladder degenerates for 1 and n - 1. Run its normal
+// multiplication with 2 for those scalars, then select the exact result.
+// Fixed-length masks avoid a private-key-dependent shortcut and keep ECDH's
+// randomized initial Z and RNG failure handling in use.
+static const uint8_t s_UeccOrder[32] = {
+	0xFF,0xFF,0xFF,0xFF,0x00,0x00,0x00,0x00,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,
+	0xBC,0xE6,0xFA,0xAD,0xA7,0x17,0x9E,0x84,0xF3,0xB9,0xCA,0xC2,0xFC,0x63,0x25,0x51,
+};
+static const uint8_t s_UeccGenerator[64] = {
+	0x6B,0x17,0xD1,0xF2,0xE1,0x2C,0x42,0x47,0xF8,0xBC,0xE6,0xE5,0x63,0xA4,0x40,0xF2,
+	0x77,0x03,0x7D,0x81,0x2D,0xEB,0x33,0xA0,0xF4,0xA1,0x39,0x45,0xD8,0x98,0xC2,0x96,
+	0x4F,0xE3,0x42,0xE2,0xFE,0x1A,0x7F,0x9B,0x8E,0xE7,0xEB,0x4A,0x7C,0x0F,0x9E,0x16,
+	0x2B,0xCE,0x33,0x57,0x6B,0x31,0x5E,0xCE,0xCB,0xB6,0x40,0x68,0x37,0xBF,0x51,0xF5,
+};
+static const uint8_t s_UeccNegativeGy[32] = {
+	0xB0,0x1C,0xBD,0x1C,0x01,0xE5,0x80,0x65,0x71,0x18,0x14,0xB5,0x83,0xF0,0x61,0xE9,
+	0xD4,0x31,0xCC,0xA9,0x94,0xCE,0xA1,0x31,0x34,0x49,0xBF,0x97,0xC8,0x40,0xAE,0x0A,
+};
+
+static uint8_t UeccPrepareScalar(const uint8_t *pKey, uint8_t *pScalar,
+								uint8_t &NegativeMask)
+{
+	uint32_t oneDiff = 0U, negativeDiff = 0U;
+	for (size_t i = 0; i < 32U; i++)
+	{
+		oneDiff |= pKey[i] ^ (i == 31U ? 1U : 0U);
+		negativeDiff |= pKey[i] ^ (s_UeccOrder[i] - (i == 31U ? 1U : 0U));
+	}
+	const uint8_t oneMask = (uint8_t)((oneDiff - 1U) >> 8);
+	NegativeMask = (uint8_t)((negativeDiff - 1U) >> 8);
+	const uint8_t mask = oneMask | NegativeMask;
+	for (size_t i = 0; i < 32U; i++)
+	{
+		pScalar[i] = (pKey[i] & (uint8_t)~mask) | ((i == 31U ? 2U : 0U) & mask);
+	}
+	return mask;
+}
+
+static int UeccPublicKey(const uint8_t *pKey, uint8_t *pPub)
+{
+	uint8_t scalar[32], negativeMask;
+	const uint8_t mask = UeccPrepareScalar(pKey, scalar, negativeMask);
+	int ok = uECC_compute_public_key(scalar, pPub, uECC_secp256r1());
+	for (size_t i = 0; i < 64U; i++)
+	{
+		uint8_t edge = s_UeccGenerator[i];
+		if (i >= 32U)
+		{
+			edge = (edge & (uint8_t)~negativeMask) |
+				(s_UeccNegativeGy[i - 32U] & negativeMask);
+		}
+		pPub[i] = (pPub[i] & (uint8_t)~mask) | (edge & mask);
+	}
+	UeccWipe(scalar, sizeof(scalar));
+	return ok;
 }
 
 static std::atomic_flag s_UeccBusy = ATOMIC_FLAG_INIT;
@@ -166,13 +224,13 @@ CRYPTO_STATUS CryptoUecc::KeyImport(CRYPTO_CURVE Curve, void *pKeyCtx,
 		return CRYPTO_STATUS_FAIL;
 	}
 
-	uint8_t pub[64];
+	uint8_t pub[64] = {};
 	CRYPTO_STATUS begin = UeccBegin(nullptr, false);
 	if (begin != CRYPTO_STATUS_OK)
 	{
 		return begin;
 	}
-	int ok = uECC_compute_public_key(pPrivKey, pub, uECC_secp256r1());
+	int ok = UeccPublicKey(pPrivKey, pub);
 	UeccEnd();
 	if (ok != 1)
 	{
@@ -219,11 +277,19 @@ CRYPTO_STATUS CryptoUecc::Agree(CRYPTO_CURVE Curve, void *pKeyCtx,
 	}
 
 	uint8_t secret[32] = {};
+	uint8_t scalar[32], negativeMask;
+	const uint8_t mask = UeccPrepareScalar(pk->PrivKey, scalar, negativeMask);
 	int valid = uECC_valid_public_key(pPeerPubKey, uECC_secp256r1());
 	int ok = valid == 1 ?
-		uECC_shared_secret(pPeerPubKey, pk->PrivKey, secret,
+		uECC_shared_secret(pPeerPubKey, scalar, secret,
 						   uECC_secp256r1()) : 0;
 	CRYPTO_STATUS rngStatus = UeccEnd();
+	UeccWipe(scalar, sizeof(scalar));
+	for (size_t i = 0; i < sizeof(secret); i++)
+	{
+		// x(-Q) = x(Q); only release this after peer/RNG validation succeeds.
+		secret[i] = (secret[i] & (uint8_t)~mask) | (pPeerPubKey[i] & mask);
+	}
 
 	if (ok == 1)
 	{
@@ -284,6 +350,58 @@ CRYPTO_STATUS CryptoUecc::Sign(CRYPTO_CURVE Curve, const CryptoKey &Key,
 		CRYPTO_STATUS_FAIL;
 }
 
+// For Q = G or -G, ECDSA verification reduces to a single multiplication:
+// R = ((h +/- r) / s mod n) G. Avoid micro-ecc's degenerate G + Q Shamir
+// table. All arithmetic here uses public signature/hash data.
+static int UeccVerifyBoundary(const uint8_t *pHash, size_t HashLen,
+							 const uint8_t *pSig, bool Negative)
+{
+	if (!P256ScalarInRange(pSig) || !P256ScalarInRange(pSig + 32U))
+	{
+		return 0;
+	}
+	const uECC_Curve curve = uECC_secp256r1();
+	const wordcount_t words = 32U / uECC_WORD_SIZE;
+	const uECC_word_t *order = uECC_curve_n(curve);
+	uECC_word_t h[32U / uECC_WORD_SIZE], r[32U / uECC_WORD_SIZE];
+	uECC_word_t s[32U / uECC_WORD_SIZE], k[32U / uECC_WORD_SIZE];
+	uint8_t hash[32] = {}, scalar[32], pub[64] = {};
+	const size_t len = HashLen < sizeof(hash) ? HashLen : sizeof(hash);
+	memcpy(hash + sizeof(hash) - len, pHash, len);
+	uECC_vli_bytesToNative(h, hash, sizeof(hash));
+	uECC_vli_bytesToNative(r, pSig, 32U);
+	uECC_vli_bytesToNative(s, pSig + 32U, 32U);
+	if (uECC_vli_cmp(h, order, words) >= 0)
+	{
+		uECC_vli_sub(h, h, order, words);
+	}
+	if (Negative)
+	{
+		uECC_vli_modSub(h, h, r, order, words);
+	}
+	else
+	{
+		uECC_vli_modAdd(h, h, r, order, words);
+	}
+	uECC_vli_modInv(k, s, order, words);
+	uECC_vli_modMult(k, k, h, order, words);
+	if (uECC_vli_isZero(k, words))
+	{
+		return 0; // R is the point at infinity.
+	}
+	uECC_vli_nativeToBytes(scalar, sizeof(scalar), k);
+	if (UeccPublicKey(scalar, pub) != 1)
+	{
+		return 0;
+	}
+	uECC_vli_bytesToNative(k, pub, 32U);
+	if (uECC_vli_cmp(k, order, words) >= 0)
+	{
+		uECC_vli_sub(k, k, order, words);
+	}
+	return uECC_vli_equal(k, r, words);
+}
+
 static CRYPTO_STATUS UeccVerify(CRYPTO_CURVE Curve, const uint8_t *pPubKey,
 								const uint8_t *pHash, size_t HashLen,
 								const uint8_t *pSig)
@@ -298,8 +416,18 @@ static CRYPTO_STATUS UeccVerify(CRYPTO_CURVE Curve, const uint8_t *pPubKey,
 	{
 		return begin;
 	}
-	int ok = uECC_verify(pPubKey, pHash, (unsigned)HashLen, pSig,
-						 uECC_secp256r1());
+	int ok;
+	const bool sameX = memcmp(pPubKey, s_UeccGenerator, 32U) == 0;
+	const bool positive = sameX && memcmp(pPubKey + 32U, s_UeccGenerator + 32U, 32U) == 0;
+	const bool negative = sameX && memcmp(pPubKey + 32U, s_UeccNegativeGy, 32U) == 0;
+	if (positive || negative)
+	{
+		ok = UeccVerifyBoundary(pHash, HashLen, pSig, negative);
+	}
+	else
+	{
+		ok = uECC_verify(pPubKey, pHash, (unsigned)HashLen, pSig, uECC_secp256r1());
+	}
 	(void)UeccEnd();
 	return ok == 1 ? CRYPTO_STATUS_OK : CRYPTO_STATUS_FAIL;
 }

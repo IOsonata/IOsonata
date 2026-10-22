@@ -305,6 +305,7 @@ for repo in "${repos[@]}"; do
   clone_or_update_repo "$repo" "$target" false
 done
 
+
 # Clone FreeRTOS-Kernel
 echo ""
 echo -e "${BOLD}${BLUE}📦 Cloning FreeRTOS-Kernel...${RESET}"
@@ -742,3 +743,4 @@ fi
 
 echo -e "${GREEN}Done. Happy building! 🔧${RESET}"
 echo ""
+

@@ -31,6 +31,11 @@
 			<locationURI>virtual:/virtual</locationURI>
 		</link>
 		<link>
+			<name>include/app_evt_handler.h</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/include/app_evt_handler.h</locationURI>
+		</link>
+		<link>
 			<name>include/cbor.h</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/include/cbor.h</locationURI>
@@ -106,6 +111,31 @@
 			<locationURI>PARENT-7-PROJECT_LOC/src/cbor.c</locationURI>
 		</link>
 		<link>
+			<name>src/coredev/pwm_stm32.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/src/pwm_stm32.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/wdt_stm32.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/src/wdt_stm32.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/rtc_stm32.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/src/rtc_stm32.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/miscdev</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/miscdev/rtc.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/src/miscdev/rtc.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/crypto</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -151,6 +181,21 @@
 			<locationURI>PARENT-7-PROJECT_LOC/src/crc.c</locationURI>
 		</link>
 		<link>
+			<name>src/app_evt_handler.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/src/app_evt_handler.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/app_run.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/src/app_run.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/app_wait.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/src/app_wait.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/base64.c</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/src/base64.c</locationURI>
@@ -159,6 +204,11 @@
 			<name>src/device_intrf.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/src/device_intrf.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/device.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/src/device.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/coredev</name>
@@ -268,14 +318,9 @@
 			<link><name>include/iopinctrl.h</name><type>1</type><locationURI>PARENT-5-PROJECT_LOC/include/iopinctrl.h</locationURI></link>
 			<link><name>src/iopincfg_stm32.cpp</name><type>1</type><locationURI>PARENT-5-PROJECT_LOC/src/iopincfg_stm32.cpp</locationURI></link>
 		<link>
-			<name>src/usb_otg_stm32.cpp</name>
+			<name>src/usb_ctrlr_stm32.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-5-PROJECT_LOC/src/usb_otg_stm32.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/usb_otg_target_stm32.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-5-PROJECT_LOC/src/usb_otg_target_stm32.cpp</locationURI>
+			<locationURI>PARENT-5-PROJECT_LOC/src/usb_ctrlr_stm32.cpp</locationURI>
 		</link>
 		<link>
 			<name>include/usb_ctrlr.h</name>

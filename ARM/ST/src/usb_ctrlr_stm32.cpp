@@ -1,5 +1,5 @@
 /**-------------------------------------------------------------------------
-@file	usb_otg_stm32.cpp
+@file	usb_ctrlr_stm32.cpp
 
 @brief	STM32 OTG USB device controller, shared FS and embedded HS FIFO engine.
 
@@ -44,13 +44,250 @@ SOFTWARE.
 #include "coredev/interrupt.h"
 #include "coredev/system_core_clock.h"
 #include "usb/usb.h"
+#if defined(STM32H753xx)
+#include "app_evt_handler.h"
+#include "syslog.h"
+#endif
 
-// Private target hooks implement clock, power and PHY setup only.
-extern bool Stm32UsbOtgPowerInit(const UsbCtrlrCfg_t *pCfg);
-extern void Stm32UsbOtgReset(void);
-extern USB_OTG_GlobalTypeDef *Stm32UsbOtgRegs(void);
-extern IRQn_Type Stm32UsbOtgIrq(void);
-extern uint16_t Stm32UsbOtgFifoWords(void);
+// MCU clock, power, PHY and interrupt setup.
+#ifndef HSE_VALUE
+#define HSE_VALUE 25000000U
+#endif
+
+void Stm32UsbOtgInterrupt(void);
+
+#if defined(STM32WBA65xx) || defined(STM32F401xC) || defined(STM32F401xE) || defined(STM32H753xx)
+static bool ClockReady(volatile uint32_t *pReg, uint32_t Mask)
+{
+	for (unsigned i = 0; i < 2000000; i++)
+	{
+		if ((*pReg & Mask) == Mask)
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+#endif
+
+#if defined(STM32WBA65xx)
+
+USB_OTG_GlobalTypeDef *Stm32UsbOtgRegs(void)
+{
+	return USB_OTG_HS;
+}
+
+IRQn_Type Stm32UsbOtgIrq(void)
+{
+	return USB_OTG_HS_IRQn;
+}
+
+uint16_t Stm32UsbOtgFifoWords(void)
+{
+	return 1024;
+}
+
+void Stm32UsbOtgReset(void)
+{
+	RCC->AHB2RSTR |= RCC_AHB2RSTR_OTGRST;
+	__DSB();
+	RCC->AHB2RSTR &= ~RCC_AHB2RSTR_OTGRST;
+	__DSB();
+}
+
+bool Stm32UsbOtgPowerInit(const UsbCtrlrCfg_t *pCfg)
+{
+	(void)pCfg;
+	// WBA6 HSE is the 32 MHz radio crystal. Do not retune the system PLL.
+	RCC->CR |= RCC_CR_HSEON;
+	if (!ClockReady(&RCC->CR, RCC_CR_HSERDY))
+	{
+		return false;
+	}
+	RCC->AHB4ENR |= RCC_AHB4ENR_PWREN;
+	RCC->APB7ENR |= RCC_APB7ENR_SYSCFGEN;
+	(void)RCC->APB7ENR;
+	RCC->CCIPR2 &= ~RCC_CCIPR2_OTGHSSEL;
+	SYSCFG->OTGHSPHYCR = (SYSCFG->OTGHSPHYCR & ~SYSCFG_OTGHSPHYCR_CLKSEL) |
+		SYSCFG_OTGHSPHYCR_CLKSEL_0 | SYSCFG_OTGHSPHYCR_CLKSEL_1 |
+		SYSCFG_OTGHSPHYCR_CLKSEL_3;
+	// ST CubeWBA 1.10.0 USBX MSP sequence. These operations must run even
+	// when another peripheral has already enabled the PWR register clock.
+	PWR->SVMCR |= PWR_SVMCR_USV;
+	PWR->VOSR &= ~PWR_VOSR_VDD11USBDIS;
+	PWR->VOSR |= PWR_VOSR_USBPWREN;
+	PWR->VOSR |= PWR_VOSR_USBBOOSTEN;
+	if (!ClockReady(&PWR->VOSR, PWR_VOSR_USBBOOSTRDY))
+	{
+		return false;
+	}
+	SYSCFG->OTGHSPHYCR |= SYSCFG_OTGHSPHYCR_EN;
+	RCC->AHB2ENR |= RCC_AHB2ENR_OTGEN | RCC_AHB2ENR_OTGHSPHYEN;
+	(void)RCC->AHB2ENR;
+	// PD6/PD7 are dedicated PHY pads; no GPIO alternate-function setup.
+	return true;
+}
+
+extern "C" void OTG_HS_IRQHandler(void)
+{
+	Stm32UsbOtgInterrupt();
+	__DSB();
+}
+
+#elif defined(STM32F401xC) || defined(STM32F401xE) || defined(STM32L476xx) || defined(STM32L496xx) || defined(STM32H753xx)
+
+USB_OTG_GlobalTypeDef *Stm32UsbOtgRegs(void)
+{
+	return USB_OTG_FS;
+}
+
+IRQn_Type Stm32UsbOtgIrq(void)
+{
+	return OTG_FS_IRQn;
+}
+
+uint16_t Stm32UsbOtgFifoWords(void)
+{
+#if defined(STM32H753xx)
+	// RM0433: both OTG cores have 4 KB, including USB2 with the FS PHY.
+	return 1024;
+#else
+	return 320;
+#endif
+}
+
+void Stm32UsbOtgReset(void)
+{
+#if defined(STM32H753xx)
+	RCC->AHB1RSTR |= RCC_AHB1RSTR_USB2OTGFSRST;
+	__DSB();
+	RCC->AHB1RSTR &= ~RCC_AHB1RSTR_USB2OTGFSRST;
+#else
+	RCC->AHB2RSTR |= RCC_AHB2RSTR_OTGFSRST;
+	__DSB();
+	RCC->AHB2RSTR &= ~RCC_AHB2RSTR_OTGFSRST;
+#endif
+	__DSB();
+}
+
+bool Stm32UsbOtgPowerInit(const UsbCtrlrCfg_t *pCfg)
+{
+	if (SystemCoreClockGet() < 14200000)
+	{
+		return false;
+	}
+#if defined(STM32H753xx)
+	// Dedicated HSI48, synchronized to USB2 SOF, leaves the system PLL alone.
+	RCC->CR |= RCC_CR_HSI48ON;
+	if (!ClockReady(&RCC->CR, RCC_CR_HSI48RDY))
+	{
+		return false;
+	}
+	RCC->D2CCIP2R |= RCC_D2CCIP2R_USBSEL;
+	RCC->APB1HENR |= RCC_APB1HENR_CRSEN;
+	(void)RCC->APB1HENR;
+	CRS->CR = 32U << CRS_CR_TRIM_Pos;
+	CRS->CFGR = CRS_CFGR_SYNCSRC | (34U << CRS_CFGR_FELIM_Pos) | 47999U;
+	CRS->ICR = CRS_ICR_SYNCOKC | CRS_ICR_SYNCWARNC | CRS_ICR_ERRC | CRS_ICR_ESYNCC;
+	CRS->CR |= CRS_CR_AUTOTRIMEN | CRS_CR_CEN;
+	// VDD33USB must be supplied externally (NUCLEO-H753ZI SB13).
+	// USB33RDY describes the internal regulator, which is not used here.
+	PWR->CR3 |= PWR_CR3_USB33DEN;
+	RCC->AHB1ENR |= RCC_AHB1ENR_USB2OTGFSEN;
+	(void)RCC->AHB1ENR;
+	// Embedded FS PHY: the reset-enabled ULPI sleep clock prevents USB2
+	// operation during CPU sleep. Keep the peripheral clock, not ULPI.
+	RCC->AHB1LPENR = (RCC->AHB1LPENR & ~RCC_AHB1LPENR_USB2OTGFSULPILPEN) |
+		RCC_AHB1LPENR_USB2OTGFSLPEN;
+	(void)RCC->AHB1LPENR;
+#elif defined(STM32F401xC) || defined(STM32F401xE)
+	// The F401 system port starts on HSI. An unused main PLL can supply
+	// USB independently without switching SYSCLK. Board builds must provide
+	// their real HSE_VALUE (the ST family default is 25 MHz).
+	if ((RCC->CR & RCC_CR_PLLON) == 0)
+	{
+		if (HSE_VALUE % 1000000 != 0 || HSE_VALUE < 2000000 || HSE_VALUE > 50000000)
+		{
+			return false;
+		}
+		RCC->CR |= RCC_CR_HSEON;
+		if (!ClockReady(&RCC->CR, RCC_CR_HSERDY))
+		{
+			return false;
+		}
+		RCC->PLLCFGR = RCC_PLLCFGR_PLLSRC_HSE | (HSE_VALUE / 1000000) |
+			(192U << RCC_PLLCFGR_PLLN_Pos) | RCC_PLLCFGR_PLLP_0 |
+			(4U << RCC_PLLCFGR_PLLQ_Pos);
+		RCC->CR |= RCC_CR_PLLON;
+	}
+	if (!ClockReady(&RCC->CR, RCC_CR_PLLRDY))
+	{
+		return false;
+	}
+	const uint32_t pll = RCC->PLLCFGR;
+	const uint32_t source = (pll & RCC_PLLCFGR_PLLSRC) != 0 ? HSE_VALUE : 16000000;
+	const uint32_t m = pll & RCC_PLLCFGR_PLLM;
+	const uint32_t n = (pll & RCC_PLLCFGR_PLLN) >> RCC_PLLCFGR_PLLN_Pos;
+	const uint32_t q = (pll & RCC_PLLCFGR_PLLQ) >> RCC_PLLCFGR_PLLQ_Pos;
+	if (m == 0 || q == 0 || static_cast<uint64_t>(source) * n != 48000000ULL * m * q ||
+		(pll & RCC_PLLCFGR_PLLSRC) == 0)
+	{
+		// HSI without calibration does not meet USB full-speed accuracy.
+		return false;
+	}
+#else
+	// The L476/L496 system port already provides MSI at 48 MHz. Lock it
+	// to LSE for USB accuracy; never change the MSI range under a live PLL.
+	const uint32_t range = (RCC->CR & RCC_CR_MSIRGSEL) != 0 ?
+		(RCC->CR & RCC_CR_MSIRANGE) >> RCC_CR_MSIRANGE_Pos :
+		(RCC->CSR & RCC_CSR_MSISRANGE) >> RCC_CSR_MSISRANGE_Pos;
+	if (range != 11 || (RCC->CR & RCC_CR_MSIRDY) == 0 ||
+		(RCC->BDCR & RCC_BDCR_LSERDY) == 0)
+	{
+		return false;
+	}
+	RCC->CR |= RCC_CR_MSIPLLEN;
+	RCC->CCIPR |= RCC_CCIPR_CLK48SEL;
+	RCC->APB1ENR1 |= RCC_APB1ENR1_PWREN;
+	(void)RCC->APB1ENR1;
+	PWR->CR2 |= PWR_CR2_USV;
+#endif
+#if !defined(STM32H753xx)
+	RCC->AHB2ENR |= RCC_AHB2ENR_OTGFSEN;
+	(void)RCC->AHB2ENR;
+#endif
+	// PA11/PA12 are the FS data pads on these MCUs. PA9 is VBUS sense.
+	IOPinConfig(0, 9, IOPINOP_GPIO, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL);
+	IOPinConfig(0, 11, IOPINOP_FUNC10, IOPINDIR_BI, IOPINRES_NONE, IOPINTYPE_NORMAL);
+	IOPinConfig(0, 12, IOPINOP_FUNC10, IOPINDIR_BI, IOPINRES_NONE, IOPINTYPE_NORMAL);
+	IOPinSetSpeed(0, 11, IOPINSPEED_TURBO);
+	IOPinSetSpeed(0, 12, IOPINSPEED_TURBO);
+	if (pCfg->pIOPinMap != nullptr && pCfg->NbIOPins > 0)
+	{
+		IOPinCfg(pCfg->pIOPinMap, pCfg->NbIOPins);
+	}
+	return true;
+}
+
+extern "C" void OTG_FS_IRQHandler(void)
+{
+	Stm32UsbOtgInterrupt();
+	__DSB();
+}
+
+#else
+#error "STM32 OTG clock and PHY setup is not implemented for this device"
+#endif
+
+
+// Endpoint state and FIFO transfers.
+
+// Status phase received for a control write, bit 5 of DOEPMSK. The older
+// STM32L4 device header does not name it.
+#ifndef USB_OTG_DOEPMSK_OTEPSPRM
+#define USB_OTG_DOEPMSK_OTEPSPRM	(1UL << 5)
+#endif
 
 enum {
 	USB_EP_COUNT = USB_EPIN_CNT_0,
@@ -97,6 +334,56 @@ static USB_OTG_DeviceTypeDef *Device(void)
 	return reinterpret_cast<USB_OTG_DeviceTypeDef *>(
 		reinterpret_cast<uintptr_t>(s_Usb.pReg) + USB_OTG_DEVICE_BASE);
 }
+
+// H753 bring-up trace. Only bus events are queued; packet interrupts are silent.
+// Formatting and UART writes run in AppRun, never in the USB ISR. Register
+// values below are live at dispatch time; Status is the original IRQ snapshot.
+#if defined(STM32H753xx)
+static unsigned s_TraceDropped;
+
+static void TraceDispatch(uint32_t Status, void *pContext)
+{
+	const char *name = static_cast<const char *>(pContext);
+	SysLogPrintf(SysLogGet(), "USB %s irq=%08x dropped=%u\r\n",
+		name, static_cast<unsigned>(Status), __atomic_load_n(&s_TraceDropped, __ATOMIC_RELAXED));
+	SysLogPrintf(SysLogGet(), "USB now GOTGCTL=%08x GINTSTS=%08x GINTMSK=%08x\r\n",
+		static_cast<unsigned>(s_Usb.pReg->GOTGCTL),
+		static_cast<unsigned>(s_Usb.pReg->GINTSTS),
+		static_cast<unsigned>(s_Usb.pReg->GINTMSK));
+	SysLogPrintf(SysLogGet(), "USB now DCFG=%08x DCTL=%08x DSTS=%08x\r\n",
+		static_cast<unsigned>(Device()->DCFG), static_cast<unsigned>(Device()->DCTL),
+		static_cast<unsigned>(Device()->DSTS));
+	if (Status == 0)
+	{
+		SysLogPrintf(SysLogGet(), "USB now GAHBCFG=%08x GUSBCFG=%08x GCCFG=%08x\r\n",
+			static_cast<unsigned>(s_Usb.pReg->GAHBCFG),
+			static_cast<unsigned>(s_Usb.pReg->GUSBCFG),
+			static_cast<unsigned>(s_Usb.pReg->GCCFG));
+		SysLogPrintf(SysLogGet(), "USB RCC CR=%08x USBSEL=%08x AHB1ENR=%08x PWR CR3=%08x\r\n",
+			static_cast<unsigned>(RCC->CR), static_cast<unsigned>(RCC->D2CCIP2R),
+			static_cast<unsigned>(RCC->AHB1ENR), static_cast<unsigned>(PWR->CR3));
+		SysLogPrintf(SysLogGet(), "USB RCC AHB1LPENR=%08x\r\n",
+			static_cast<unsigned>(RCC->AHB1LPENR));
+		SysLogPrintf(SysLogGet(), "USB GPIOA MODER=%08x AFRH=%08x CRS ISR=%08x\r\n",
+			static_cast<unsigned>(GPIOA->MODER), static_cast<unsigned>(GPIOA->AFR[1]),
+			static_cast<unsigned>(CRS->ISR));
+	}
+}
+
+static void Trace(uint32_t Status, const char *pName)
+{
+	if (SysLogGet()->Marker != SYSLOG_INIT_MARKER)
+	{
+		return;
+	}
+	if (!AppEvtHandlerQue(Status, const_cast<char *>(pName), TraceDispatch))
+	{
+		__atomic_fetch_add(&s_TraceDropped, 1U, __ATOMIC_RELAXED);
+	}
+}
+#else
+static inline void Trace(uint32_t, const char *) {}
+#endif
 
 static USB_OTG_INEndpointTypeDef *In(unsigned Ep)
 {
@@ -164,6 +451,7 @@ static void Forget(unsigned Ep, bool bIn)
 
 static void Fault(void)
 {
+	Trace(0, "controller fault");
 	NVIC_DisableIRQ(Stm32UsbOtgIrq());
 	Stm32UsbOtgReset();
 	s_Usb.Started = false;
@@ -188,17 +476,31 @@ static bool FlushTx(unsigned Ep)
 // Read every word, including rejected bytes, so the next RX status stays in sync.
 static void ReadFifo(uint8_t *pBuffer, unsigned Capacity, unsigned Length)
 {
-	for (unsigned offset = 0; offset < Length; offset += 4)
+	volatile uint32_t *fifo = Fifo(0);
+	unsigned count = pBuffer != nullptr ? (Capacity < Length ? Capacity : Length) : 0;
+	unsigned words = (Length + 3) / 4;
+	while (count >= 4)
 	{
-		uint32_t word = *Fifo(0);
-		for (unsigned i = 0; i < 4 && offset + i < Length; i++)
+		const uint32_t word = *fifo;
+		memcpy(pBuffer, &word, sizeof(word));
+		pBuffer += 4;
+		count -= 4;
+		words--;
+	}
+	if (count != 0)
+	{
+		uint32_t word = *fifo;
+		words--;
+		do
 		{
-			if (pBuffer != nullptr && offset + i < Capacity)
-			{
-				pBuffer[offset + i] = static_cast<uint8_t>(word);
-			}
+			*pBuffer++ = static_cast<uint8_t>(word);
 			word >>= 8;
-		}
+		} while (--count != 0);
+	}
+	while (words != 0)
+	{
+		(void)*fifo;
+		words--;
 	}
 }
 
@@ -364,12 +666,29 @@ static void ArmIn(unsigned Ep)
 	In(Ep)->DIEPTSIZ = ep->Length | (1U << USB_OTG_DIEPTSIZ_PKTCNT_Pos);
 	const uint32_t ctl = In(Ep)->DIEPCTL;
 	In(Ep)->DIEPCTL = ctl | USB_OTG_DIEPCTL_EPENA | USB_OTG_DIEPCTL_CNAK;
-	for (unsigned offset = 0; offset < ep->Length; offset += 4)
+	volatile uint32_t *fifo = Fifo(Ep);
+	const uint8_t *buffer = ep->pBuffer;
+	unsigned length = ep->Length;
+	while (length >= 4)
 	{
-		uint32_t word = 0;
-		const unsigned remain = ep->Length - offset;
-		memcpy(&word, ep->pBuffer + offset, remain < 4 ? remain : 4);
-		*Fifo(Ep) = word;
+		uint32_t word;
+		memcpy(&word, buffer, sizeof(word));
+		*fifo = word;
+		buffer += 4;
+		length -= 4;
+	}
+	if (length != 0)
+	{
+		uint32_t word = buffer[0];
+		if (length > 1)
+		{
+			word |= static_cast<uint32_t>(buffer[1]) << 8;
+		}
+		if (length > 2)
+		{
+			word |= static_cast<uint32_t>(buffer[2]) << 16;
+		}
+		*fifo = word;
 	}
 }
 
@@ -416,7 +735,10 @@ static void ResetEndpoints(void)
 	In(0)->DIEPCTL = USB_OTG_DIEPCTL_USBAEP;
 	Out(0)->DOEPCTL = USB_OTG_DOEPCTL_USBAEP;
 	Device()->DIEPMSK = USB_OTG_DIEPMSK_XFRCM;
-	Device()->DOEPMSK = USB_OTG_DOEPMSK_XFRCM | USB_OTG_DOEPMSK_STUPM;
+	// Status phase received is enabled only so the interrupt clears it as
+	// soon as it is set, see Stm32UsbOtgInterrupt.
+	Device()->DOEPMSK = USB_OTG_DOEPMSK_XFRCM | USB_OTG_DOEPMSK_STUPM |
+		USB_OTG_DOEPMSK_OTEPSPRM;
 	Device()->DAINTMSK = 0x10001U;
 	PrimeSetup();
 }
@@ -571,6 +893,7 @@ void UsbCtrlrConnect(int DevNo)
 	if (DevNo == 0 && s_Usb.Started)
 	{
 		Device()->DCTL &= ~USB_OTG_DCTL_SDIS;
+		Trace(0, "connected");
 	}
 }
 
@@ -874,12 +1197,16 @@ void UsbCtrlrEpClearStall(int DevNo, uint8_t EpNo, bool bIn)
 	Stm32UsbEp_t *ep = &s_Usb.Ep[EpNo][bIn];
 	if (ep->Mps != 0 && ep->Type != ISO)
 	{
+		// The host may clear the halt of an endpoint that is not halted, to
+		// reset its data toggle. A transfer queued while not halted is already
+		// armed, only one deferred by the halt is armed here.
+		const bool halted = ep->Halted;
 		ep->Halted = false;
 		if (bIn)
 		{
 			In(EpNo)->DIEPCTL = (In(EpNo)->DIEPCTL & ~USB_OTG_DIEPCTL_STALL) |
 				USB_OTG_DIEPCTL_SD0PID_SEVNFRM;
-			if (ep->Busy)
+			if (ep->Busy && halted)
 			{
 				ArmIn(EpNo);
 			}
@@ -890,7 +1217,10 @@ void UsbCtrlrEpClearStall(int DevNo, uint8_t EpNo, bool bIn)
 				USB_OTG_DOEPCTL_SD0PID_SEVNFRM;
 			if (ep->Busy)
 			{
-				ArmOut(EpNo);
+				if (halted)
+				{
+					ArmOut(EpNo);
+				}
 			}
 			else
 			{
@@ -1001,6 +1331,47 @@ void Stm32UsbOtgInterrupt(void)
 	}
 	USB_OTG_GlobalTypeDef *reg = s_Usb.pReg;
 	uint32_t status = reg->GINTSTS & reg->GINTMSK;
+	// Data-IN completion is the steady transmit path. Rearm from the owner
+	// callback before spending time on bus/OUT handling. EP0 stays on the
+	// full path so a received SETUP always supersedes its old completion.
+	if (status == USB_OTG_GINTSTS_IEPINT && s_Usb.RxReady == 0 && !s_Usb.SetupPending)
+	{
+		uint32_t pending = Device()->DAINT & Device()->DAINTMSK;
+		if ((pending & 0xFFFF0001U) == 0)
+		{
+			pending &= (1U << USB_EP_COUNT) - 1U;
+			while (pending != 0)
+			{
+				const unsigned ep = __builtin_ctz(pending);
+				pending &= pending - 1;
+				// Earlier callbacks may close or reconfigure another endpoint.
+				if ((Device()->DAINTMSK & (1U << ep)) == 0)
+				{
+					continue;
+				}
+				const uint32_t bits = In(ep)->DIEPINT & Device()->DIEPMSK;
+				In(ep)->DIEPINT = bits;
+				if ((bits & USB_OTG_DIEPINT_XFRC) != 0)
+				{
+					Complete(ep, true, false);
+				}
+				if (!s_Usb.Started)
+				{
+					return;
+				}
+			}
+			// Events arriving during callbacks remain asserted and retrigger
+			// the vector. Do not acknowledge a new transfer's status here.
+			return;
+		}
+	}
+	const uint32_t bus = status & (USB_OTG_GINTSTS_USBRST | USB_OTG_GINTSTS_ENUMDNE |
+		USB_OTG_GINTSTS_USBSUSP | USB_OTG_GINTSTS_WKUINT |
+		USB_OTG_GINTSTS_SRQINT | USB_OTG_GINTSTS_OTGINT);
+	if (bus != 0)
+	{
+		Trace(status, "bus");
+	}
 	if ((status & USB_OTG_GINTSTS_USBRST) != 0)
 	{
 		reg->GINTSTS = USB_OTG_GINTSTS_USBRST;
@@ -1041,12 +1412,25 @@ void Stm32UsbOtgInterrupt(void)
 	{
 		return;
 	}
-	for (unsigned ep = 0; ep < USB_EP_COUNT; ep++)
+	// Visit only endpoints with work. Recheck live status below because an
+	// OUT callback can close or rearm an IN endpoint. New interrupts retrigger
+	// the vector; callbacks that mark RxReady already pend it explicitly.
+	const uint32_t pending = Device()->DAINT & Device()->DAINTMSK;
+	uint32_t active = (pending | (pending >> 16) | s_Usb.RxReady) &
+		((1U << USB_EP_COUNT) - 1U);
+	while (active != 0)
 	{
+		const unsigned ep = __builtin_ctz(active);
+		active &= active - 1;
 		if ((Device()->DAINT & Device()->DAINTMSK & (1U << (ep + 16))) != 0)
 		{
-			const uint32_t bits = Out(ep)->DOEPINT & Device()->DOEPMSK;
-			Out(ep)->DOEPINT = bits;
+			// Clear every latched status, enabled or not. On the STM32L4
+			// OTG_FS core a status phase received left set on EP0 stops the
+			// SETUP done status of the next request, which is then never
+			// handled and the host retries until it gives up.
+			const uint32_t latched = Out(ep)->DOEPINT;
+			Out(ep)->DOEPINT = latched;
+			const uint32_t bits = latched & Device()->DOEPMSK;
 			if (ep == 0 && (bits & USB_OTG_DOEPINT_STUP) != 0)
 			{
 				Setup();
@@ -1178,3 +1562,4 @@ size_t UsbCtrlrGetSerial(int DevNo, char *pBuff, size_t BuffLen)
 	pBuff[length] = 0;
 	return length;
 }
+

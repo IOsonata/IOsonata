@@ -52,6 +52,8 @@ SOFTWARE.
 
 #define I2C_TEST_MAX_RESULT		64
 
+extern "C" volatile uint32_t g_I2cTestAutoIrq;
+extern "C" volatile int32_t g_I2cTestLongCount;
 extern "C" volatile int32_t g_I2cTestResult[I2C_TEST_MAX_RESULT];
 extern "C" volatile uint8_t g_I2cTestRx[512];
 extern "C" volatile uint8_t g_I2cTestRx2[3][320];
@@ -64,6 +66,8 @@ extern "C" void I2cTestMark(int Id) __attribute__((noinline));
 extern "C" void I2cTestSlaveStep(void) __attribute__((noinline));
 extern "C" void I2cTestDoneHook(void) __attribute__((noinline));
 
+volatile uint32_t g_I2cTestAutoIrq;
+volatile int32_t g_I2cTestLongCount;
 volatile int32_t g_I2cTestResult[I2C_TEST_MAX_RESULT];
 volatile uint8_t g_I2cTestRx[512];
 volatile uint8_t g_I2cTestRx2[3][320];
@@ -282,7 +286,11 @@ extern "C" int main(void)
 	s_MasterDone = 0;
 	g_I2cTestResult[r++] = I2CRx(&s_I2c1, 0x50, (uint8_t*)g_I2cTestRx2[0], 300);
 	g_I2cTestResult[r++] = WaitMaster();
+	s_MasterDone = 0;
+	g_I2cTestAutoIrq = 1;
 	g_I2cTestResult[r++] = I2CTx(&s_I2c1, 0x50, s_Tx, 100);
+	g_I2cTestAutoIrq = 0;
+	g_I2cTestLongCount = WaitMaster();
 	g_I2cTestResult[r++] = I2CTx(&s_I2c1, 0x23, s_Tx, 3);
 
 	// 14 : slave on I2C3 with two addresses, the emulator plays the bus master

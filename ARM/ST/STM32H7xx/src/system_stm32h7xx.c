@@ -5,7 +5,8 @@
 
 400 MHz CPU, 200 MHz AHB, 100 MHz APB1..4, voltage scale 1.
 HSI64 avoids a dependency on the Nucleo ST-LINK MCO solder bridges.
-Data and stack use DTCM. D-cache is left disabled during bring-up.
+Instruction cache accelerates flash execution. Data and stack use DTCM.
+D-cache remains disabled.
 
 @author	Hoang Nguyen Hoan
 @date	Oct. 18, 2026
@@ -103,6 +104,9 @@ void SystemInit(void)
 	__ISB();
 #endif
 	SCB->VTOR = (uint32_t)__Vectors;
+	// CMSIS invalidates I-cache before enabling it and supplies DSB/ISB.
+	// USB ISR and stack execute from flash, not ITCM.
+	SCB_EnableICache();
 	// Select the H753 internal LDO while supply configuration is unlocked.
 	// NUCLEO-H753ZI supplies VCAP through this regulator.
 	if (PWR->CR3 & PWR_CR3_SCUEN)

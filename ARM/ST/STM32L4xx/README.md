@@ -103,7 +103,13 @@ The master chip select is a GPIO driven by the driver; the hardware NSS is
 used by the slave only. The old driver drove the master NSS pin by hardware
 with a single chip select, so the L476, L496 and L4S9 SPIMasterSlave examples
 now configure the master chip select pin as a GPIO. The shared driver is not
-tested on the L476, L496 and L4S9 hardware yet.
+tested on the L476, L496 and L4S9 hardware yet. On the B-L475E-IOT01A the
+STM32L476 SPIMasterSlave runs SPI1 as master on the Arduino header (D13 PA5
+SCK, D12 PA6 MISO, D11 PA7 MOSI, D10 PA2 chip select GPIO) against SPI2 as
+slave on the Pmod connector CN10 (pin 4 PD1 SCK, pin 3 PD3 MISO, pin 2 PD4
+MOSI, pin 8 PD0 NSS), wired D13 to pin 4, D11 to pin 2, D12 to pin 3 and D10
+to pin 8. The other SPI2 pins are taken on this board: PB12 and PB13 by the
+WiFi module, PB14 by LD2, PB15 by the sub-GHz module.
 
 ## Timer
 
@@ -164,11 +170,218 @@ interrupt driven slave and the DMA slave.
 
 The shared driver is not tested on the L476, L496 and L4S9 hardware yet. The
 old driver accepted polling master configurations only.
+The STM32L476 EepromDemo (`exemples/storage/eeprom_demo.cpp`) needs an
+external I2C EEPROM on the B-L475E-IOT01A Arduino header, I2C1 (DevNo 0, D14
+PB9 SDA, D15 PB8 SCL, open drain), by default a 24xx32 class part at 0x50.
+The STM32L476 MotionSensorDemo (`exemples/sensor/mot_sensor_demo.cpp`) reads
+the onboard LSM6DSL of the B-L475E-IOT01A (`src/sensors/ag_lsm6dsl.cpp`) on
+I2C2 (DevNo 1, SDA PB11, SCL PB10) at 0x6A, with its data ready on INT1 PD11,
+EXTI line 11. The Debug build prints with semihosting.
+`tests/sensors/run.py` runs the driver against a register model of the
+LSM6DSL. B-L475E-IOT01A2 run (2026-10-21), Debug, 2 g full scale: at rest
+the acceleration magnitude reads 1.02 to 1.04 g in two orientations, the axes
+follow the board when it is turned and reach the 2 g full scale when it is
+shaken. The data ready interrupt on PD11 arrives and its handler reads the
+status and the 14 output bytes in 2.4 ms at 100 kHz I2C. The printed interval,
+about 100 ms, is the time of one semihosting printf, not the 52 Hz output
+rate. The demo needs float printf (`-u _printf_float`) with newlib-nano.
+Second run the same day with the gyroscope printf, 125 dps full scale: in 53
+readings at rest the angular rate reads 2.35 to 2.56 dps on X, -3.03 to -2.94
+dps on Y and about -0.84 dps on Z, with 3 Z readings between -2.7 and -5.4 dps
+while the acceleration stays at rest. The three axes follow the board when it
+is turned and clip at 143.34 dps, raw 32764, either sign, when it is shaken.
+The rate scale is not checked against a known rotation rate.
+The STM32L476 example EnvSensorDemo (`exemples/sensor/env_sensor_demo.cpp`)
+reads the onboard HTS221 (`src/sensors/humi_hts221.cpp`) on the same bus at
+0x5F, 1 Hz, and prints the humidity and the temperature on the ST-LINK virtual
+COM port at 115200 8N1 in Release, with semihosting in Debug.
+`tests/sensors/run.py` also runs this driver against a register model.
+B-L475E-IOT01A2 run (2026-10-21), Release: the HTS221 is found and prints one
+reading per second, 13.49 % and 30.93 C for the first one, then about 17.8 %
+and 31.4 C. Not compared with a reference instrument.
+EnvSensorDemo also reads the onboard LPS22HB (`src/sensors/press_lps22hb.cpp`)
+at 0x5D, 1 Hz, and prints the pressure in hPa and its temperature. The driver
+finds the device at either address, 0x5C or 0x5D, when none is given, and
+reads the status and both outputs in one I2C transfer. `tests/sensors/run.py`
+runs it against a register model. B-L475E-IOT01A2 run (2026-10-21), Release:
+the LPS22HB is found at 0x5D. 43 readings go from 998.48 to 1000.15 hPa while
+its temperature goes from 24.55 to 25.04 C. The HTS221 on the same bus reads
+44.48 to 45.16 % and 23.66 to 24.14 C, 0.84 to 0.95 C below the LPS22HB. The
+temperature registers do come out of the single transfer: read again from the
+pressure registers they would print about 265 C. The demo printed 60 HTS221
+lines for the 43 LPS22HB lines: 16 HTS221 lines follow another HTS221 line
+with the same temperature and a new humidity. The HTS221 humidity was ready a
+poll after its temperature, and the demo prints on each new value. Without
+those lines the counts match. Not compared with a reference instrument.
+The STM32L476 example MagSensorDemo (`exemples/sensor/mag_sensor_demo.cpp`)
+reads the onboard LIS3MDL magnetometer (`src/sensors/mag_lis3mdl.cpp`) on the
+same bus at 0x1E, 2.5 Hz, ultra high performance mode, 4 gauss full scale, and
+prints the field on the 3 axes, its magnitude in uT and the temperature of the
+device, on the ST-LINK virtual COM port in Release, with semihosting in Debug.
+The scale of the device, 6842 LSB per gauss at 4 gauss, is 14.6 nT per LSB:
+the driver keeps it in floating point in the calibration, the integer
+Sensitivity of the data is rounded to 15 nT. `tests/sensors/run.py` runs the
+driver against a register model. B-L475E-IOT01A2 run (2026-10-21), Release:
+the LIS3MDL is found at 0x1E. In 29 readings at rest the field reads X -18.84
+to -17.63 uT, Y -2.34 to -1.27 uT and Z -38.42 to -36.86 uT, magnitude 41.04
+to 42.56 uT. While the board is moved by hand the magnitude goes from 12.29 to
+120.67 uT; the demo applies no calibration. Not compared with a reference
+instrument. In that run the 2 bytes read after OUT_Z_H, in a 9 byte read from
+STATUS, were the X output again (same raw value on all 75 lines), so the
+printed temperature was wrong. The driver now reads TEMP_OUT in its own
+transfer. Second run (2026-10-21), Release, with that change: the temperature
+reads 23.88 to 24.25 C in steps of 0.125 C, the 8 LSB per C of the device. At
+rest in a first position 49 readings give a magnitude of 38.30 to 40.36 uT,
+19 readings while the board is turned give 33.63 to 44.78 uT, then 27
+readings at rest in a second position 39.41 to 40.98 uT.
+The STM32L476 example DistSensorDemo (`exemples/sensor/dist_sensor_demo.cpp`)
+reads the onboard VL53L0X time of flight sensor (`src/sensors/dist_vl53l0x.cpp`,
+on the new `DistSensor` base, `include/sensors/dist_sensor.h`) on the same bus
+at 0x29, after it drives XSHUT (PC6) high. It measures continuously at 5 Hz
+with the device default timing budget, 33849 us after the ST default tuning,
+and prints the distance in mm, the return signal and the ambient rates in
+kcps, or the device status when the distance is not valid. The driver follows
+the initialization of the ST VL53L0X API: soft reset, reference SPAD selection,
+default tuning settings, VHV and phase reference calibrations. It does not do
+the offset and cross talk calibrations for a cover glass. `tests/sensors/run.py`
+runs it against a register model. B-L475E-IOT01A2 run (2026-10-21), Release:
+the VL53L0X is found at 0x29. With a hand moved over the sensor it gives 55
+valid distances from 32 to 382 mm, the return signal from 859 to 24867 kcps,
+higher as the hand comes closer, and the ambient rate down to 23 kcps when the
+hand covers the sensor. With nothing in front, 70 measurements end with device
+status 6 and 3 with status 9, both a phase failure for the ST API, with a
+signal of 312 to 734 kcps. 3 more end as valid with 0 mm and the same signal
+as those without a target (585 to 617 kcps). The default limit checks of the
+ST API pass them too: its sigma estimate computed from the printed rates is
+about 6 mm, under its 18 mm limit. The driver now reports a complete range of
+0 mm as status 0xFE (`VL53L0X_DEVICE_STATUS_ZERO_CODE`), not as a distance;
+not run on the board since. Distances not compared with a reference.
+The STM32L476 example NfcTagDemo (`exemples/rftag/nfc_tag_demo.cpp`) uses
+the onboard M24SR64-Y dynamic NFC tag on the same bus at 0x56 through the new
+`TagM24sr` RFTag facet (`include/rftag/m24sr.h`, `src/rftag/m24sr.cpp`), with
+the RF disable pin PE2 held low. The driver opens an I2C session, selects the
+NDEF application, and reads the capability container and the ST system file:
+the NDEF file id and size, the largest read and update, the UID and the
+product code. The memory of the facet is the NDEF file, a 2 byte length then
+the message, so the RFTag SetNdef and GetNdef work on it. Each memory read or
+write is one I2C session ended by a deselect, so a reader can reach the tag
+between them. The demo prints what the tag holds, writes a text record and a
+URI record, reads them back, then checks the tag every 2 seconds and prints
+the message when a reader changed it. `tests/rftag/run.py` runs the driver
+against a model of the chip. B-L475E-IOT01A2 run (2026-10-21): the M24SR is
+found at 0x56, UID 02 84 66 95 51 AF AC, product code 0x84, NDEF file 8192
+bytes. At start the tag held the 69 byte demo message, its text record and
+URI record. The demo wrote the message and read it back the same. An iPhone
+reads the message from the tag. A phone then wrote a 23 byte message, one text
+record "Hello IOsonata.", and the next check printed it. No check found the
+tag held by the phone: the log has no "Held by a reader" line.
 L496 and L4S9 I2C4 use virtual index 3. The L432 has no I2C2: index 1 fails
 initialization, I2C1 and I2C3 keep indices 0 and 2.
 
 These restrictions identify unsupported modes within the hardware-validated
 ports. Hardware validation does not imply that every optional mode is implemented.
+
+## USB
+
+The STM32L476 and STM32L496 libraries build the shared STM32 OTG controller,
+`ARM/ST/src/usb_ctrlr_stm32.cpp`, with the IOsonata USB stack; see
+[STM32 USB notes](../USB.md). The OTG_FS clock is the MSI at 48 MHz locked to
+the LSE, PA11/PA12 AF10 and PA9 VBUS sense, as in ST's USB device examples
+for the B-L475E-IOT01A. The STM32L476 examples UsbCdcLoopback and
+UsbCdcPrbsTx (`exemples/usb/usb_cdc_loopback.cpp`, `usb_cdc_prbs_tx.cpp`)
+select B_L475E_IOT01A; UsbCdcPrbsTx logs on the ST-LINK virtual COM port,
+USART1 at 1 Mbaud. Use the USB OTG micro-AB connector, not the ST-LINK one.
+
+B-L475E-IOT01A2 hardware run (2026-10-20), macOS host: UsbCdcPrbsTx Release
+with `Python/uartprbs_rx.py` about 791 kB/s, no loss, the port opens at
+once. UsbCdcLoopback with `Python/usb_cdc_loopback.py --duration 60`
+538 kB/s each direction, 32289792 bytes each way, 0 errors, 0 pending, PASS.
+Before 3f6b9868 a port open took up to a minute: the L4 OTG_FS core did not
+report SETUP done for a request that followed a control write while the EP0
+status phase bit stayed latched. USB on the STM32L496 is not tested on
+hardware.
+
+## RNG
+
+The STM32L476 library builds the STM32 RNG, `ARM/ST/src/rng_stm32.cpp`
+(`CryptoRngStm32`), clocked by the MSI at 48 MHz that SystemInit selects as
+the 48 MHz clock. The STM32L475VG and STM32L476 have no AES, HASH or PKA. The
+STM32L476 example CryptoTest runs `exemples/crypto/crypto_engine_test.cpp`
+with the hardware RNG and the software AES, SHA-256 and P-256 engines; the
+Release build prints on the ST-LINK virtual COM port at 115200 8N1, the Debug
+build uses semihosting. B-L475E-IOT01A2 run (2026-10-21): 72 passed, 0
+failed, the RNG sample checks, AES-128 known answers, CMAC, CCM, GCM, software
+ECB/CBC decryption, 200 AES rounds against the software engine and the P-256
+checks. The AES-256 and SHA-256/HMAC engine sections of the test are built only
+for boards whose board.h selects such an engine (20 checks on the STM32H753).
+
+## ADC
+
+`AdcStm32` (`ARM/ST/include/adc_stm32.h`, `ARM/ST/src/adc_stm32.cpp`, shared
+with the G4) implements the generic AdcDevice API on ADC1 of the L4 and L4+
+parts: software triggered scans of up to 16 inputs read by polling,
+resolution 6 to 12 bits, hardware oversampling 2 to 256 times, the internal
+inputs VREFINT (0), temperature sensor (17) and VBAT (18, through the 1/3
+bridge, Data is VBAT), and the pins of inputs 1 to 16, the same map on every
+L4 part. Interrupt, DMA, continuous mode and differential inputs are
+refused. The clock is HCLK / 2, the sampling time covers AcqTime and the
+datasheet minimum of the internal inputs. Each scan begins with a conversion
+whose result is not used, the workaround of ES0250 2.8.11 (a conversion
+started more than 1 ms after the previous one can be wrong). The four L4
+libraries build it. `tests/stm32/run_adc.py` runs the driver for the L476,
+L4R5, L412, G474 and G431 in Unicorn against a model of the ADC registers that
+checks the waits of RM0351 and of the datasheets. The STM32L476 example
+AdcDemo (`exemples/converters/adc_demo.cpp`) prints VREFINT, the temperature
+sensor, VBAT and Arduino A0 (PC5) once per second, on the ST-LINK virtual COM
+port at 115200 8N1 in Release, with semihosting in Debug. B-L475E-IOT01A2 run
+(2026-10-21), reference given as 3.3 V, 11 scans: VREFINT 1.202 to 1.203 V,
+in its datasheet range of 1.182 to 1.232 V; temperature sensor 0.748 to
+0.750 V, about 25.6 C with the typical datasheet values (0.76 V at 30 C,
+2.5 mV/C), the demo does not read the factory calibration; VBAT 3.295 to
+3.300 V; A0 (PC5), nothing reported connected, 1.158 V on the first scan, then
+0.895 to 0.913 V. No temperature sensor outlier in these scans (ES0250
+2.8.12).
+
+## PWM
+
+The four L4 libraries build the shared STM32 PWM driver,
+`ARM/ST/src/pwm_stm32.cpp`, on the TIM output channels: the generic PWM API
+with DevNo the timer DevNo (TIM2 is 7 on the L476, L496 and L4S9, 6 on the
+L432), edge or center aligned, the pin alternate function in
+`PwmChanCfg_t::PinOp`. See [STM32 PWM](../PWM.md). The STM32L476 example
+PwmDemo (`exemples/pwm/pwm_demo.cpp`) runs TIM2 at 1 kHz on LD1 (PA5,
+TIM2_CH1) and Arduino D0 (PA1, TIM2_CH2), both AF1: 50 and 25 percent for one
+second, then the two duty cycles sweep in opposite directions, 1 percent
+every 5 ms. Not run on hardware yet.
+
+## Watchdog
+
+The four L4 libraries build the shared STM32 watchdog driver,
+`ARM/ST/src/wdt_stm32.cpp`, on the IWDG: the generic watchdog API, timeout up
+to 32.8 s from the 32 kHz LSI (128 times longer with the LSI predivider of
+the L412, L422, L4P5 and L4Q5), window, software reload channels, freeze
+while a debugger halts the core. The L4 IWDG has no interrupt: no timeout
+event. See [STM32 watchdog](../WDT.md). The STM32L476 example WdtDemo
+(`exemples/misc/wdt_demo.cpp`) prints on the ST-LINK virtual COM port
+(USART1, 115200 8N1) in Release, with semihosting in Debug: timeout 2000 ms,
+ten reloads every 500 ms, then the IWDG resets the MCU and the demo starts
+again. Not run on hardware yet.
+
+## RTC
+
+The four L4 libraries build the shared STM32 RTC driver, `RtcStm32`
+(`ARM/ST/src/rtc_stm32.cpp`), the generic RTC device of `miscdev/rtc.h`
+(`src/miscdev/rtc.cpp`): calendar in the C runtime types, alarms A and B,
+wakeup timer, 32 backup registers (in TAMP on the L412 and L422), from the LSE
+or the 32 kHz LSI (250 Hz with the LSI predivider of the L412, L422, L4P5 and
+L4Q5). `SystemInit` starts the LSE on a board with the low frequency crystal
+only when it is not ready, and does not reset the backup domain (before
+2026-10-22 it did at each boot on the L4+). See [STM32 RTC](../RTC.md). The
+STM32L476 example RtcDemo (`exemples/misc/rtc_demo.cpp`) prints on the ST-LINK
+virtual COM port (USART1, 115200 8N1) in Release, with semihosting in Debug:
+the clock in use, a boot count in backup register 0, the date and time every
+second from the wakeup event, an alarm event each minute. Not run on hardware
+yet.
 
 ## Validation
 
@@ -178,6 +391,7 @@ Run the focused host regressions from the repository root:
 python3 tests/stm32l4/run.py
 python3 tests/stm32/run_uart.py
 python3 tests/stm32/run_timer.py
+python3 tests/stm32/run_adc.py
 ```
 
 `tests/stm32l4/run.py` compiles extracted production function bodies against
@@ -220,11 +434,10 @@ and STM32L476G_DISCO (USART2, DevNo 2, on PD5 TX and PD6 RX, AF7, also the
 virtual COM port). The old `src/sysstatus.c` is retired; `syslog.cpp` and `sysstatus.h` replace it.
 The STM32L476 library and these
 two examples were built for Debug and Release from their `.project` and
-`.cproject` settings with GNU Arm 13.2, outside IOcomposer. The other L476
-examples, except TimerDemo, still name `stm32l476xx.ld`, which is not in
-`ldscript/` (`gcc_stm32l476xx.ld` is), and their board files pair DevNo 1
-with the USART2 pins and PinOp `0x72`, which the GPIO driver does not take as
-AF7.
+`.cproject` settings with GNU Arm 13.2, outside IOcomposer. Every STM32L476
+example selects B_L475E_IOT01A in `board.h` (2026-10-21): DfuBoot recovers on
+the ST-LINK virtual COM port, with B1 held at reset to force recovery, and
+UartSlipPrbsRxTest receives there.
 
 Timer hardware run: TimerDemo (`exemples/timer/timer_demo.cpp`), in
 `STM32L476/exemples/TimerDemo` for B_L475E_IOT01A and

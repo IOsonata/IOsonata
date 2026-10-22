@@ -11,6 +11,7 @@
 
 		Families served and their models, all read from the device headers:
 
+		  H753  : 256 bit flash word program, 128 KB sectors, two banks
 		  WBA5x : 128 bit quad word program, 8 KB pages, NSCR1/NSSR/NSKEYR
 		  WBA2x : 64 bit double word program, 4 KB pages, same registers
 		  L4    : 64 bit double word program, 2 KB pages, CR/SR/KEYR
@@ -75,7 +76,7 @@ SOFTWARE.
 #include "coredev/interrupt.h"
 #include "storage/nvm_intrf.h"
 
-#if !defined(IOSONATA_STM32_WBA) && !defined(IOSONATA_STM32_L4)
+#if !defined(IOSONATA_STM32_WBA) && !defined(IOSONATA_STM32_L4) && !defined(STM32H753xx)
 #error "nvm_stm32: this STM32 family has no NVM controller support"
 #endif
 
@@ -92,7 +93,11 @@ SOFTWARE.
 // What follows from the MCU model: the register aliases, the flash word, the
 // page, and the family islands the shared bodies below stand on.
 // ---------------------------------------------------------------------------
-#if defined(IOSONATA_STM32_WBA)
+#if defined(STM32H753xx)
+#include "flash_stm32h7xx.h"
+#define NVM_INTRF_WRITE_GRAN ST_H7_FLASH_UNIT
+#define NVM_INTRF_PAGE_SIZE ST_H7_FLASH_SECTOR
+#elif defined(IOSONATA_STM32_WBA)
 
 // Every register this port touches is the non secure bank, the same access
 // the HAL makes for a non CMSE build. A secure build owns SECCR1/SECSR and
@@ -202,7 +207,9 @@ SOFTWARE.
 // both families at their FLASHSIZE_BASE.
 static inline uint32_t StFlashSize(void)
 {
-#if defined(IOSONATA_STM32_WBA)
+#if defined(STM32H753xx)
+	return StH7FlashSize();
+#elif defined(IOSONATA_STM32_WBA)
 	// The device header reads the register and gives the part's own size when
 	// it holds all ones or zero: 2 MB on the WBA65, 1 MB on the WBA52.
 	return (uint32_t)FLASH_SIZE;
@@ -247,7 +254,11 @@ static_assert((NVM_INTRF_MAX_XFER % NVM_INTRF_WRITE_GRAN) == 0,
 // A bound so a stuck controller cannot hang the caller. Loop passes, not a
 // duration, the way the Nordic port bounds its spin.
 #ifndef NVM_INTRF_SPIN
+#if defined(STM32H753xx)
+#define NVM_INTRF_SPIN 0x10000000UL
+#else
 #define NVM_INTRF_SPIN			0x00800000UL
+#endif
 #endif
 
 // ---------------------------------------------------------------------------
@@ -276,6 +287,7 @@ DevIntrf_t *NvmMcuDevIntrf(void)
 // The controller
 // ---------------------------------------------------------------------------
 
+#if !defined(STM32H753xx)
 // Bounded, so a controller that never settles reports instead of hanging.
 static bool StFlashWait(void)
 {
@@ -435,6 +447,13 @@ static int StFlashProgram(uintptr_t Addr, const uint8_t *pData, uint32_t Len)
 	return res;
 }
 
+#else
+static int StFlashProgram(uintptr_t Addr, const uint8_t *pData, uint32_t Len)
+{
+	return StH7FlashProgram(Addr, pData, Len, NVM_INTRF_SPIN);
+}
+#endif
+
 // ---------------------------------------------------------------------------
 // What the port knows about the memory itself. The C linkage of NvmMcuErase,
 // NvmMcuIsReady and NvmMcuCeiling comes from their declarations in
@@ -445,6 +464,9 @@ static int StFlashProgram(uintptr_t Addr, const uint8_t *pData, uint32_t Len)
 // the driver only asks at the erase unit it was configured with.
 int NvmMcuErase(uintptr_t Addr)
 {
+#if defined(STM32H753xx)
+	int res = StH7FlashErase(Addr, NVM_INTRF_SPIN);
+#else
 	uint32_t size = StFlashSize();
 
 	if (Addr < FLASH_BASE || (Addr % NVM_INTRF_PAGE_SIZE) != 0 ||
@@ -506,6 +528,7 @@ int NvmMcuErase(uintptr_t Addr)
 	StFlashLock();
 
 	StFlashCacheFlush();
+#endif
 
 	if (res == 0)
 	{
@@ -718,7 +741,11 @@ static bool StFlashEccCopy(uint8_t *pBuff, uintptr_t Addr, int Len)
 
 bool NvmMcuIsReady(void)
 {
+#if defined(STM32H753xx)
+	return ((FLASH->SR1 | FLASH->SR2) & ST_H7_FLASH_BUSY) == 0;
+#else
 	return (ST_FLASH_SR & ST_FLASH_SR_BUSY) == 0;
+#endif
 }
 
 void NvmMcuCfg(NvmCfg_t &Cfg)
@@ -978,3 +1005,4 @@ void NvmIntrfGetStat(NvmIntrfStat_t *pStat)
 		*pStat = s_Stat;
 	}
 }
+

@@ -5,17 +5,18 @@ projects. The C and C++ I2C/SPI interfaces remain unchanged.
 
 Supported modes:
 
-- I2C master with polling EasyDMA, 7-bit addresses, including register reads
-  with a repeated start. Select `bIntEn = false`.
+- I2C master with EasyDMA, polled or interrupt driven (`bIntEn`), 7-bit
+  addresses, including register reads with a repeated start.
 - I2C slave with EasyDMA and interrupts, up to two addresses. Supply buffers
   through the existing read/write request callbacks.
-- SPI master with polling EasyDMA, 8-bit words, software chip select and the
-  existing clock-polarity, phase and bit-order settings. Select `bIntEn = false`.
+- SPI master with EasyDMA, polled or interrupt driven (`bIntEn`), 8-bit words,
+  software chip select and the existing clock-polarity, phase and bit-order
+  settings.
 - SPI slave with EasyDMA and interrupts. Supply buffers when the callback
   reports `DEVINTRF_EVT_STATECHG`; completion reports the received byte count.
 
-Master interrupt operation is unfinished in the shared drivers. nRF54L
-initialization returns false for a master configuration with `bIntEn = true`.
+Master interrupt operation is checked by `tests/nordic_master_irq`, which also
+runs for nRF54L15 and nRF54LM20A.
 EasyDMA is required by these peripherals, including when `bDmaEn` is false.
 DMA buffers must remain in accessible RAM for the duration of the operation.
 Slave buffers are limited to 65535 bytes; masters divide longer buffers into
@@ -63,9 +64,8 @@ register tests, not complete IOC application builds or hardware validation.
 ## Hardware checks still needed
 
 Use the existing `exemples/i2c/i2c_master_slave.cpp` and
-`exemples/spi/spi_master_slave.cpp`. Select polling DMA for the master and
-interrupt DMA for the slave. The SPI example needs
-`SPI_MASTER_INT_ENABLE false` in `board.h` for this port. Keep wiring and device
+`exemples/spi/spi_master_slave.cpp`. Run the master with polling DMA, then
+with interrupt DMA, and the slave with interrupt DMA. Keep wiring and device
 selection in `board.h`, using pins permitted for each selected peripheral.
 Avoid the UART instance used for test output.
 

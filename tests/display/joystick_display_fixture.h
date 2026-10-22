@@ -1,7 +1,7 @@
 /**-------------------------------------------------------------------------
 @file	joystick_display_fixture.h
 
-@brief	Shared fixture of the joystick menu, stopwatch and countdown display tests.
+@brief	Shared fixture of the joystick menu, stopwatch, countdown and Pong display tests.
 
 @author	Hoang Nguyen Hoan
 @date	Oct. 19, 2026
@@ -35,7 +35,7 @@ SOFTWARE.
 #ifndef __JOYSTICK_DISPLAY_FIXTURE_H__
 #define __JOYSTICK_DISPLAY_FIXTURE_H__
 
-// Exercise the shared menu with scripted ADC voltages and the real SSD1315 driver.
+// Exercise joystick display examples with scripted ADC voltages and the real SSD1315 driver.
 // Inspect OLED RAM at the SPI boundary using the WBA65 board configuration.
 #include <cassert>
 #include <cstdio>
@@ -78,14 +78,16 @@ public:
 #define ADC_DRIVER FakeAdc
 #define ADC_DRIVER_HEADER "converters/adc_device.h"
 #define main DisplayDemoMain
-#ifdef COUNTDOWN_TIMER_TEST
+#if defined(PONG_GAME_TEST)
+#include "../../exemples/display/pong_game.cpp"
+#elif defined(COUNTDOWN_TIMER_TEST)
 #include "../../exemples/display/countdown_timer_demo.cpp"
 #else
 #include "../../exemples/display/joystick_menu_demo.cpp"
 #endif
 #undef main
 
-#if defined(JOYSTICK_STOPWATCH) || defined(COUNTDOWN_TIMER_TEST)
+#if defined(JOYSTICK_STOPWATCH) || defined(COUNTDOWN_TIMER_TEST) || defined(PONG_GAME_TEST)
 static uint64_t ticks;
 
 static uint64_t TickCount(TimerDev_t *)

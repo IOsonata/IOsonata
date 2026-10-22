@@ -36,6 +36,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/cbor.h</locationURI>
 		</link>
 		<link>
+			<name>include/coredev/wdt.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/coredev/wdt.h</locationURI>
+		</link>
+		<link>
 			<name>include/crypto</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>
@@ -304,6 +309,21 @@
 			<name>src/cbor.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/cbor.c</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/pwm_stm32.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/ARM/ST/src/pwm_stm32.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/wdt_stm32.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/ARM/ST/src/wdt_stm32.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/coredev/rtc_stm32.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/ARM/ST/src/rtc_stm32.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/crypto</name>
@@ -701,6 +721,16 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/miscdev/tca6424a.h</locationURI>
 		</link>
 		<link>
+			<name>include/miscdev/rtc.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/miscdev/rtc.h</locationURI>
+		</link>
+		<link>
+			<name>include/miscdev/rtc_stm32.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/ARM/ST/include/rtc_stm32.h</locationURI>
+		</link>
+		<link>
 			<name>include/pwrmgnt/fg_lc709203f.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/pwrmgnt/fg_lc709203f.h</locationURI>
@@ -959,6 +989,11 @@
 			<name>src/miscdev/modem.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/miscdev/modem.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/miscdev/rtc.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/miscdev/rtc.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/pwrmgnt/fg_lc709203f.cpp</name>

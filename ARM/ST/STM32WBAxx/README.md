@@ -90,6 +90,28 @@ vector is replaced by an application handler. TimerDemo callbacks have passed
 on hardware for the LPTIM and TIM engines; absolute frequency has not been
 measured against an external reference.
 
+The library builds the shared STM32 PWM driver, `ARM/ST/src/pwm_stm32.cpp`:
+the generic PWM API on the output channels of TIM16, TIM17, TIM2, TIM3, TIM4
+and TIM1, with the timer DevNo above. See [STM32 PWM](../PWM.md). No example
+project; not run on hardware yet.
+
+The library builds the shared STM32 watchdog driver,
+`ARM/ST/src/wdt_stm32.cpp`, on the IWDG: timeout up to 131 s from the 32 kHz
+LSI1 (128 times longer with LSI1PREDIV), window, and the timeout event from
+the early wakeup interrupt, one counter tick before the reset. See
+[STM32 watchdog](../WDT.md). Example `STM32WBA65/exemples/WdtDemo`
+(`exemples/misc/wdt_demo.cpp`) on the first ST-LINK virtual COM port (USART1,
+115200 8N1) in Release, with semihosting in Debug. Not run on hardware yet.
+
+The library builds the shared STM32 RTC driver, `RtcStm32`
+(`ARM/ST/src/rtc_stm32.cpp`), the generic RTC device of `miscdev/rtc.h`
+(`src/miscdev/rtc.cpp`): calendar in the C runtime types, alarms A and B,
+wakeup timer, 32 backup registers in TAMP, from the LSE or the 32 kHz LSI1
+(250 Hz with LSI1PREDIV), which keeps running over a system reset. See [STM32
+RTC](../RTC.md). Example `STM32WBA65/exemples/RtcDemo`
+(`exemples/misc/rtc_demo.cpp`) on the first ST-LINK virtual COM port (USART1,
+115200 8N1) in Release, with semihosting in Debug. Not run on hardware yet.
+
 ## Crypto
 
 Hardware validated on STM32WBA65I-DK1, October 18, 2026: **51 passed, 0 failed**.
@@ -138,7 +160,7 @@ add a second Cube startup or vector table to the application.
 | Crypto | RNG, AES and PKA engines | Hardware validated: 51 passed, 0 failed; see Crypto above |
 | USB | Shared STM32 OTG device controller; control, bulk and interrupt transfers | CDC hardware validated: Debug/Release PRBS TX and Release 60-second loopback; additional modes pending |
 | BLE | CubeWBA host/link-layer integration, GAP/GATT, security and bond storage | Advertising and counter updates pass; Numeric Comparison, encrypted transfer and bonded reconnect after reset hardware validated; central scan/connect/discovery/notification/reconnect tested; explicit characteristic reads unvalidated |
-| ADC / joystick | Polling single-round ADC, external inputs; menu, stopwatch and countdown | Joystick examples hardware tested; continuous/DMA/internal-temperature modes unsupported |
+| ADC / joystick | Polling single-round ADC, external inputs; menu, stopwatch, countdown and Pong | Menu/stopwatch/countdown hardware tested; Pong hardware pending; continuous/DMA/internal-temperature modes unsupported |
 | OLED | Generic SSD1315 through SPI3 | Console, graphics and interactive examples exercised |
 | EEPROM | M95P32 through generic Nvm; SeepDemo | Builds and command-model tests pass; hardware result not recorded |
 | Audio | Generic WM8904 control and SAI1 I2S; shared SAI/GPDMA native PDM | Level meter and headphone tones hardware tested; clock-associated loopback buzz unresolved; native PDM hardware untested |

@@ -1,14 +1,11 @@
 /**-------------------------------------------------------------------------
 @file	dma_stm32.h
 
-@brief	STM32 DMA channel manager, DMA controllers made of channels
+@brief	STM32 DMA channel and stream manager
 
-		For the DMA controllers made of channels with a group of 4 flags
-		each in ISR and IFCR. The request of a channel is selected in CSELR
-		(L4) or routed by DMAMUX1 (L4+). Only the L4 and L4+ families use the
-		manager for now; the F0 and G4 UART driver keeps its own channel
-		vectors, the stream DMA of the F2, F4 and F7 and the GPDMA of the WBA
-		(gpdma_stm32wba.h) are separate.
+		L4/L4+ use channels with CSELR/DMAMUX1 routing. H753 uses the 16
+		DMA1/2 streams with DMAMUX1 and eight BDMA channels with DMAMUX2. The same ownership and transfer
+		interface serves both. F0/G4 UART vectors and WBA GPDMA are separate.
 
 		A driver that uses DMA asks this manager for the channel the
 		reference manual gives its request and passes the function the
@@ -61,21 +58,34 @@ SOFTWARE.
 // DMA1 and DMA2, 7 channels each
 #define STM32_DMA_CTRL_NBCH			7
 #define STM32_DMA_NBCTRL			2
+#elif defined(STM32H753xx)
+#define STM32_DMA_CTRL_NBCH			8
+#define STM32_DMA_NBCTRL			2
 #else
-#error "dma_stm32.h: the DMA channel manager is for the L4 family"
+#error "dma_stm32.h: DMA support requires L4/L4+ or H753"
 #endif
 
-#define STM32_DMA_NBCH				(STM32_DMA_CTRL_NBCH * STM32_DMA_NBCTRL)
+#if defined(STM32H753xx)
+#define STM32_DMA_NBCH 24
+#define STM32_BDMA_CH(Ch) (16 + (Ch))
+#else
+#define STM32_DMA_NBCH (STM32_DMA_CTRL_NBCH * STM32_DMA_NBCTRL)
+#endif
 
 /// Channel number of channel ChNo (1 based) of controller Ctrl (1 or 2)
 #define STM32_DMA_CH(Ctrl, ChNo)	(((Ctrl) - 1) * STM32_DMA_CTRL_NBCH + (ChNo) - 1)
+
+#if defined(STM32H753xx)
+/// H753 stream number is 0 based, matching the peripheral register names.
+#define STM32_DMA_STREAM(Ctrl, Stream) (((Ctrl) - 1) * 8 + (Stream))
+#endif
 
 /// Request of a channel: the CSELR value on the L4, the DMAMUX1 request on
 /// the L4+ (the L4R and L4S numbers; the L4P and L4Q number the UART, SPI
 /// and I2C requests one higher)
 #if defined(DMAMUX1) && (defined(STM32L4P5xx) || defined(STM32L4Q5xx))
 #define STM32_DMA_REQ(Csel, Mux)	((Mux) + 1)
-#elif defined(DMAMUX1)
+#elif defined(DMAMUX1) || defined(STM32H753xx)
 #define STM32_DMA_REQ(Csel, Mux)	(Mux)
 #else
 #define STM32_DMA_REQ(Csel, Mux)	(Csel)
@@ -148,8 +158,31 @@ void Stm32DmaChMemInc(int Ch, bool bInc);
  *
  * The channel was set up with Stm32DmaChSetup. Count is a multiple of the
  * width, at most 65535 transfers.
+ *
+ * H753 raw Start: buffers must be accessible to DMA1/2 (not ITCM/DTCM),
+ * BDMA buffers must be in SRAM4. Buffers are aligned to
+ * the transfer width. The owning driver supplies non-cacheable storage or
+ * cleans TX cache lines before Start and invalidates RX lines before Start
+ * and after completion. RX cache lines must not share other writable data.
+ * This manager does not change memory attributes or manage caller caches.
+ * Invalid H753 setup/start or a disable timeout latches STM32_DMA_FLAG_ERR;
+ * the caller must check Flags, including when interrupts are enabled.
  */
 void Stm32DmaChStart(int Ch, const void *pMem, uint32_t Count);
+
+#if defined(STM32H753xx)
+// Allocate a free DMAMUX1 stream, or DMAMUX2 BDMA channel. Returns -1 if busy.
+int Stm32DmaChAlloc(bool bBdma, Stm32DmaChHandler_t Handler, void *pCtx, int IntPrio, bool bIrq);
+
+// Buffered transfers accept DTCM and unaligned application buffers. Fixed
+// SRAM4 storage owns its cache lines; only completed RX bytes are copied back.
+// Use these progress/stop functions together; raw Start/Remain serve UART's
+// separately owned circular buffers. Start requires Setup, including MemInc.
+void Stm32DmaChBufferStart(int Ch, const void *pMem, uint32_t Count);
+uint32_t Stm32DmaChBufferFlags(int Ch);
+uint32_t Stm32DmaChBufferRemain(int Ch);
+uint32_t Stm32DmaChBufferStopRemain(int Ch);
+#endif
 
 /**
  * @brief	Stop the channel and clear its flags.
@@ -193,3 +226,4 @@ void Stm32DmaChClear(int Ch);
 #endif
 
 #endif // __DMA_STM32_H__
+

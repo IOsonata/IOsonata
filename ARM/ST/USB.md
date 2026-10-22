@@ -1,10 +1,9 @@
 # STM32 USB device port
 
 The existing IOsonata USB core, endpoint allocator and device classes use
-`src/usb_otg_stm32.cpp`. It implements the STM32 OTG FIFO controller in
-interrupt-driven device mode. `src/usb_otg_target_stm32.cpp` contains only
-device-specific clock, power, PHY and vector setup. Both use ST's device
-register definitions through `stm32.h`.
+`src/usb_ctrlr_stm32.cpp`. This common STM32 controller file contains clock,
+power, PHY and vector setup together with interrupt-driven FIFO transfers.
+It uses ST's device register definitions through `stm32.h`.
 
 No application-specific STM32 USB initialization is required. Applications
 use the existing `UsbInit`, `UsbEnable`, USB classes and application event queue.
@@ -19,7 +18,7 @@ No second USB stack or Cube HAL USB library is linked.
 | STM32F401xC/xE | OTG FS, integrated FS PHY | HSE-derived PLLQ at 48 MHz; 1280-byte FIFO; 4 endpoint numbers |
 | STM32L476/L496 | OTG FS, integrated FS PHY | MSI 48 MHz calibrated by LSE; 1280-byte FIFO; 6 endpoint numbers |
 
-The library projects for H753, WBA65, F401xC, L476 and L496 link the shared sources.
+The library projects for H753, WBA65, F401xC, L476 and L496 link the shared controller source.
 F401xE selects the same source path but has not been compile tested separately.
 Other STM32 devices, including those with the packet-memory (PMA) USB engine,
 are not implemented by this change. The header rejects unlisted devices.
@@ -78,10 +77,23 @@ H753 OTG controller; older AN4879 tables incorrectly listed 1.25 KB for FS.
 `STM32H7xx/STM32H753/exemples/UsbCdcLoopback` and `UsbCdcPrbsTx` use the same
 common CDC applications. Power the board through ST-LINK before connecting
 native USB CN13. See [H753 build and test instructions](STM32H7xx/README.md).
-USB hardware validation is pending. The H753 library and six bare-metal
-examples compile and link in Debug/Release with soft-float and hard-float;
-modeled register tests check HSI48/CRS, pins, clock preservation and timeout.
-The firmware USB vector resolves to the production OTG handler.
+The H753 library and six bare-metal examples compile and link in
+Debug/Release with soft-float and hard-float; modeled register tests check
+HSI48/CRS, pins, clock preservation and timeout. The firmware USB vector
+resolves to the production OTG handler.
+
+### Hardware results - October 20, 2026
+
+macOS host:
+
+| Test | Result |
+|---|---|
+| PRBS TX | About 817 kB/s, no loss |
+| CDC loopback, 60 seconds | 33930752 bytes TX and RX; 565 kB/s each direction; 0 errors; 0 pending; PASS |
+
+Loopback: first RX 2 ms after start, longest TX wait 6 ms, longest RX gap
+4 ms. The banner arrived after a DTR toggle. The additional H753 USB examples
+are not yet run on hardware.
 
 ## WBA65I-DK1 examples and hardware validation
 
@@ -125,7 +137,43 @@ Loopback averaged 1201554.01 B/s TX and 1201451.62 B/s RX. First RX was
 suspend/resume, FS fallback and other classes remain untested. Negotiated
 USB speed was not recorded in the host log.
 
-F401, L476 and L496 USB hardware tests remain pending.
+F401 and L496 USB hardware tests remain pending. L476 results follow.
+
+## B-L475E-IOT01A2 examples and hardware validation
+
+The STM32L476 project runs on the STM32L475VG of this board:
+
+- `STM32L4xx/STM32L476/exemples/UsbCdcLoopback`
+- `STM32L4xx/STM32L476/exemples/UsbCdcPrbsTx`
+
+Both select `B_L475E_IOT01A` in `board.h` and link the common applications in
+`exemples/usb`. UsbCdcPrbsTx logs on the ST-LINK virtual COM port, USART1 at
+1 Mbaud. Connect the USB OTG micro-AB connector to the host.
+
+### Hardware results - October 20, 2026
+
+macOS host:
+
+| Test | Result |
+|---|---|
+| PRBS TX | Release, about 791 kB/s, no loss, immediate port open |
+| CDC loopback, 60 seconds | 32289792 bytes TX and RX; 538 kB/s each direction; 0 errors; 0 pending; PASS |
+
+Loopback: first RX 2 ms after start, longest TX wait 20 ms, longest RX gap
+14 ms. The banner arrived after a DTR toggle.
+
+Two controller defects were found during this bring-up:
+
+- `UsbCtrlrEpClearStall` re-armed any busy endpoint. A CLEAR_FEATURE
+  (ENDPOINT_HALT) on a streaming IN endpoint that was not halted wrote a
+  second packet into a FIFO sized for one. It now arms only a transfer the
+  halt deferred (aaa9dd69).
+- The OUT handler cleared only the enabled DOEPINT bits. On the L4 OTG_FS
+  core, the status phase received bit left set after a control write stops
+  the SETUP done status of the next request: the request is never handled
+  and the host retries until it gives up, about a minute for a serial port
+  open. The controller now enables OTEPSPRM, as ST's HAL does, and clears
+  every latched DOEPINT bit (3f6b9868).
 
 ## Software validation (updated October 20, 2026)
 
@@ -141,7 +189,11 @@ F401, L476 and L496 USB hardware tests remain pending.
   bounded flush failure. Run with `ASAN_OPTIONS=detect_leaks=0` where the host
   environment prevents LeakSanitizer process inspection.
 - The maintainer built and ran WBA PRBS TX in Debug and Release, and CDC
-  loopback in Release. Other family firmware links and board tests remain pending.
+  loopback in Release, and PRBS TX (Release) and CDC loopback on the
+  B-L475E-IOT01A2.
+- xPack ARM GCC 15.2.1 (October 20): the STM32L476 library in its four
+  configurations and UsbCdcLoopback and UsbCdcPrbsTx in Debug and Release
+  build from their `.project` and `.cproject` settings.
 
 References used for register sequences and board wiring:
 

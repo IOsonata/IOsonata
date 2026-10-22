@@ -61,7 +61,6 @@ SOFTWARE.
 #include "stm32.h"
 #include "coredev/timer.h"
 #include "coredev/system_core_clock.h"
-#include "timer_stm32.h"
 
 static int s_Fail;
 static int s_Checks;
@@ -221,6 +220,9 @@ extern "C" void TestNvic(int Op, int IrqNo, uint32_t Prio)
 		case 4: s_NvicPend[IrqNo] = true; break;
 	}
 }
+
+// After the register model: Stm32TimHw_t takes the TIM_TypeDef of the model
+#include "timer_stm32.h"
 
 // ---- LPTIM driver record ------------------------------------------------
 

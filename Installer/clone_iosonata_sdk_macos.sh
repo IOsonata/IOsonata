@@ -243,6 +243,7 @@ for repo in "${repos[@]}"; do
 done
 
 # ---------------------------------------------------------
+
 # Clone FreeRTOS-Kernel
 # ---------------------------------------------------------
 echo ""
@@ -616,3 +617,4 @@ fi
 
 echo "${GREEN}Done. Happy building! 🔧${RESET}"
 echo ""
+

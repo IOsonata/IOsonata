@@ -57,16 +57,18 @@
 									<listOptionValue builtIn="false" value="../../include"/>
 									<listOptionValue builtIn="false" value="../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../include"/>
+									<listOptionValue builtIn="false" value="../../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../../../include"/>
-									<listOptionValue builtIn="false" value="../../../../../../../../external/Fusion"/>
 									<listOptionValue builtIn="false" value="../../../../../../CMSIS/Core/Include"/>
 									<listOptionValue builtIn="false" value="../../../../../../../littlefs"/>
 									<listOptionValue builtIn="false" value="../../../../../../../fatfs"/>
+									<listOptionValue builtIn="false" value="../../../../../../../micro-ecc"/>
+									<listOptionValue builtIn="false" value="../../../../../../../include/net/lwip"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/invn"/>
+									<listOptionValue builtIn="false" value="../../../../../../../../external/Fusion"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/BSEC/algo/lite_version/inc"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../micro-ecc&quot;"/>
+									<listOptionValue builtIn="false" value="../../../../../../../../external/lwip/src/include"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs.72672627" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs" useByScannerDiscovery="true" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="__PROGRAM_START"/>
@@ -77,7 +79,7 @@
 									<listOptionValue builtIn="false" value="uECC_SUPPORTS_secp256r1=1"/>
 									<listOptionValue builtIn="false" value="uECC_SUPPORT_COMPRESSED_POINT=0"/>
 								</option>
-								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std.1493415297" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std" value="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std.gnu17" valueType="enumerated"/>
+								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std.1493415297" name="Language standard" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std" useByScannerDiscovery="true" value="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std.gnu17" valueType="enumerated"/>
 								<inputType id="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input.1240944623" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input"/>
 							</tool>
 							<tool id="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.compiler.522650690" name="GNU ARM Cross C++ Compiler" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.compiler">
@@ -85,16 +87,18 @@
 									<listOptionValue builtIn="false" value="../../include"/>
 									<listOptionValue builtIn="false" value="../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../include"/>
+									<listOptionValue builtIn="false" value="../../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../../../include"/>
-									<listOptionValue builtIn="false" value="../../../../../../../../external/Fusion"/>
 									<listOptionValue builtIn="false" value="../../../../../../CMSIS/Core/Include"/>
 									<listOptionValue builtIn="false" value="../../../../../../../littlefs"/>
 									<listOptionValue builtIn="false" value="../../../../../../../fatfs"/>
+									<listOptionValue builtIn="false" value="../../../../../../../micro-ecc"/>
+									<listOptionValue builtIn="false" value="../../../../../../../include/net/lwip"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/invn"/>
+									<listOptionValue builtIn="false" value="../../../../../../../../external/Fusion"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/BSEC/algo/lite_version/inc"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../micro-ecc&quot;"/>
+									<listOptionValue builtIn="false" value="../../../../../../../../external/lwip/src/include"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.defs.1756081403" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.defs" useByScannerDiscovery="true" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="__PROGRAM_START"/>
@@ -107,7 +111,7 @@
 								</option>
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.noexceptions.1122546465" name="Do not use exceptions (-fno-exceptions)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.noexceptions" useByScannerDiscovery="true" value="true" valueType="boolean"/>
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.nortti.1408826096" name="Do not use RTTI (-fno-rtti)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.nortti" useByScannerDiscovery="true" value="true" valueType="boolean"/>
-								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.std.1896383867" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.std" value="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.std.gnucpp23" valueType="enumerated"/>
+								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.std.1896383867" name="Language standard" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.std" useByScannerDiscovery="true" value="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.std.gnucpp23" valueType="enumerated"/>
 								<inputType id="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.compiler.input.430660682" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.compiler.input"/>
 							</tool>
 							<tool id="ilg.gnuarmeclipse.managedbuild.cross.tool.c.linker.389331533" name="GNU ARM Cross C Linker" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.linker">
@@ -131,7 +135,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="srcx|includex" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/usb/usb_hidhost.cpp|srcx|includex" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -192,27 +196,30 @@
 									<listOptionValue builtIn="false" value="../../include"/>
 									<listOptionValue builtIn="false" value="../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../include"/>
+									<listOptionValue builtIn="false" value="../../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../../../include"/>
-									<listOptionValue builtIn="false" value="../../../../../../../../external/Fusion"/>
 									<listOptionValue builtIn="false" value="../../../../../../CMSIS/Core/Include"/>
 									<listOptionValue builtIn="false" value="../../../../../../../littlefs"/>
 									<listOptionValue builtIn="false" value="../../../../../../../fatfs"/>
+									<listOptionValue builtIn="false" value="../../../../../../../micro-ecc"/>
+									<listOptionValue builtIn="false" value="../../../../../../../include/net/lwip"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/invn"/>
+									<listOptionValue builtIn="false" value="../../../../../../../../external/Fusion"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/BSEC/algo/lite_version/inc"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../micro-ecc&quot;"/>
+									<listOptionValue builtIn="false" value="../../../../../../../../external/lwip/src/include"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs.334905809" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs" useByScannerDiscovery="true" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="__PROGRAM_START"/>
 									<listOptionValue builtIn="false" value="STM32L476xx"/>
+									<listOptionValue builtIn="false" value="NDEBUG"/>
 									<listOptionValue builtIn="false" value="uECC_ENABLE_VLI_API"/>
 									<listOptionValue builtIn="false" value="uECC_OPTIMIZATION_LEVEL=3"/>
 									<listOptionValue builtIn="false" value="uECC_SQUARE_FUNC=1"/>
 									<listOptionValue builtIn="false" value="uECC_SUPPORTS_secp256r1=1"/>
 									<listOptionValue builtIn="false" value="uECC_SUPPORT_COMPRESSED_POINT=0"/>
 								</option>
-								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std.1191636578" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std" value="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std.gnu17" valueType="enumerated"/>
+								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std.1191636578" name="Language standard" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std" useByScannerDiscovery="true" value="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std.gnu17" valueType="enumerated"/>
 								<inputType id="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input.419924902" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input"/>
 							</tool>
 							<tool id="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.compiler.923453879" name="GNU ARM Cross C++ Compiler" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.compiler">
@@ -220,20 +227,23 @@
 									<listOptionValue builtIn="false" value="../../include"/>
 									<listOptionValue builtIn="false" value="../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../include"/>
+									<listOptionValue builtIn="false" value="../../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../../../include"/>
-									<listOptionValue builtIn="false" value="../../../../../../../../external/Fusion"/>
 									<listOptionValue builtIn="false" value="../../../../../../CMSIS/Core/Include"/>
 									<listOptionValue builtIn="false" value="../../../../../../../littlefs"/>
 									<listOptionValue builtIn="false" value="../../../../../../../fatfs"/>
+									<listOptionValue builtIn="false" value="../../../../../../../micro-ecc"/>
+									<listOptionValue builtIn="false" value="../../../../../../../include/net/lwip"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/invn"/>
+									<listOptionValue builtIn="false" value="../../../../../../../../external/Fusion"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/BSEC/algo/lite_version/inc"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../micro-ecc&quot;"/>
+									<listOptionValue builtIn="false" value="../../../../../../../../external/lwip/src/include"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.defs.949170984" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.defs" useByScannerDiscovery="true" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="__PROGRAM_START"/>
 									<listOptionValue builtIn="false" value="STM32L476xx"/>
+									<listOptionValue builtIn="false" value="NDEBUG"/>
 									<listOptionValue builtIn="false" value="uECC_ENABLE_VLI_API"/>
 									<listOptionValue builtIn="false" value="uECC_OPTIMIZATION_LEVEL=3"/>
 									<listOptionValue builtIn="false" value="uECC_SQUARE_FUNC=1"/>
@@ -242,7 +252,7 @@
 								</option>
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.noexceptions.541042583" name="Do not use exceptions (-fno-exceptions)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.noexceptions" useByScannerDiscovery="true" value="true" valueType="boolean"/>
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.nortti.360025354" name="Do not use RTTI (-fno-rtti)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.nortti" useByScannerDiscovery="true" value="true" valueType="boolean"/>
-								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.std.1917738201" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.std" value="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.std.gnucpp23" valueType="enumerated"/>
+								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.std.1917738201" name="Language standard" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.std" useByScannerDiscovery="true" value="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.std.gnucpp23" valueType="enumerated"/>
 								<inputType id="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.compiler.input.1798134723" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.compiler.input"/>
 							</tool>
 							<tool id="ilg.gnuarmeclipse.managedbuild.cross.tool.c.linker.1040978455" name="GNU ARM Cross C Linker" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.linker">
@@ -266,7 +276,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="srcx|includex" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/usb/usb_hidhost.cpp|srcx|includex" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -330,16 +340,18 @@
 									<listOptionValue builtIn="false" value="../../include"/>
 									<listOptionValue builtIn="false" value="../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../include"/>
+									<listOptionValue builtIn="false" value="../../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../../../include"/>
-									<listOptionValue builtIn="false" value="../../../../../../../../external/Fusion"/>
 									<listOptionValue builtIn="false" value="../../../../../../CMSIS/Core/Include"/>
 									<listOptionValue builtIn="false" value="../../../../../../../littlefs"/>
 									<listOptionValue builtIn="false" value="../../../../../../../fatfs"/>
+									<listOptionValue builtIn="false" value="../../../../../../../micro-ecc"/>
+									<listOptionValue builtIn="false" value="../../../../../../../include/net/lwip"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/invn"/>
+									<listOptionValue builtIn="false" value="../../../../../../../../external/Fusion"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/BSEC/algo/lite_version/inc"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../micro-ecc&quot;"/>
+									<listOptionValue builtIn="false" value="../../../../../../../../external/lwip/src/include"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs.485862268" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs" useByScannerDiscovery="true" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="__PROGRAM_START"/>
@@ -350,7 +362,7 @@
 									<listOptionValue builtIn="false" value="uECC_SUPPORTS_secp256r1=1"/>
 									<listOptionValue builtIn="false" value="uECC_SUPPORT_COMPRESSED_POINT=0"/>
 								</option>
-								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std.276901160" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std" value="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std.gnu17" valueType="enumerated"/>
+								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std.276901160" name="Language standard" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std" useByScannerDiscovery="true" value="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std.gnu17" valueType="enumerated"/>
 								<inputType id="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input.1495987670" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input"/>
 							</tool>
 							<tool id="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.compiler.562251295" name="GNU ARM Cross C++ Compiler" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.compiler">
@@ -358,16 +370,18 @@
 									<listOptionValue builtIn="false" value="../../include"/>
 									<listOptionValue builtIn="false" value="../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../include"/>
+									<listOptionValue builtIn="false" value="../../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../../../include"/>
-									<listOptionValue builtIn="false" value="../../../../../../../../external/Fusion"/>
 									<listOptionValue builtIn="false" value="../../../../../../CMSIS/Core/Include"/>
 									<listOptionValue builtIn="false" value="../../../../../../../littlefs"/>
 									<listOptionValue builtIn="false" value="../../../../../../../fatfs"/>
+									<listOptionValue builtIn="false" value="../../../../../../../micro-ecc"/>
+									<listOptionValue builtIn="false" value="../../../../../../../include/net/lwip"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/invn"/>
+									<listOptionValue builtIn="false" value="../../../../../../../../external/Fusion"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/BSEC/algo/lite_version/inc"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../micro-ecc&quot;"/>
+									<listOptionValue builtIn="false" value="../../../../../../../../external/lwip/src/include"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.defs.1527114429" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.defs" useByScannerDiscovery="true" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="__PROGRAM_START"/>
@@ -380,7 +394,7 @@
 								</option>
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.noexceptions.430067401" name="Do not use exceptions (-fno-exceptions)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.noexceptions" useByScannerDiscovery="true" value="true" valueType="boolean"/>
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.nortti.269110865" name="Do not use RTTI (-fno-rtti)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.nortti" useByScannerDiscovery="true" value="true" valueType="boolean"/>
-								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.std.1911038925" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.std" value="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.std.gnucpp23" valueType="enumerated"/>
+								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.std.1911038925" name="Language standard" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.std" useByScannerDiscovery="true" value="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.std.gnucpp23" valueType="enumerated"/>
 								<inputType id="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.compiler.input.88778749" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.compiler.input"/>
 							</tool>
 							<tool id="ilg.gnuarmeclipse.managedbuild.cross.tool.c.linker.2136123206" name="GNU ARM Cross C Linker" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.linker">
@@ -404,7 +418,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="srcx|includex" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/usb/usb_hidhost.cpp|srcx|includex" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>
@@ -467,16 +481,18 @@
 									<listOptionValue builtIn="false" value="../../include"/>
 									<listOptionValue builtIn="false" value="../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../include"/>
+									<listOptionValue builtIn="false" value="../../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../../../include"/>
-									<listOptionValue builtIn="false" value="../../../../../../../../external/Fusion"/>
 									<listOptionValue builtIn="false" value="../../../../../../CMSIS/Core/Include"/>
 									<listOptionValue builtIn="false" value="../../../../../../../littlefs"/>
 									<listOptionValue builtIn="false" value="../../../../../../../fatfs"/>
+									<listOptionValue builtIn="false" value="../../../../../../../micro-ecc"/>
+									<listOptionValue builtIn="false" value="../../../../../../../include/net/lwip"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/invn"/>
+									<listOptionValue builtIn="false" value="../../../../../../../../external/Fusion"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/BSEC/algo/lite_version/inc"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../micro-ecc&quot;"/>
+									<listOptionValue builtIn="false" value="../../../../../../../../external/lwip/src/include"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs.967697788" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs" useByScannerDiscovery="true" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="__PROGRAM_START"/>
@@ -487,7 +503,7 @@
 									<listOptionValue builtIn="false" value="uECC_SUPPORTS_secp256r1=1"/>
 									<listOptionValue builtIn="false" value="uECC_SUPPORT_COMPRESSED_POINT=0"/>
 								</option>
-								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std.1041479556" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std" value="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std.gnu17" valueType="enumerated"/>
+								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std.1041479556" name="Language standard" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std" useByScannerDiscovery="true" value="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.std.gnu17" valueType="enumerated"/>
 								<inputType id="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input.216848368" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input"/>
 							</tool>
 							<tool id="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.compiler.1212169730" name="GNU ARM Cross C++ Compiler" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.compiler">
@@ -495,16 +511,18 @@
 									<listOptionValue builtIn="false" value="../../include"/>
 									<listOptionValue builtIn="false" value="../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../include"/>
+									<listOptionValue builtIn="false" value="../../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../../include"/>
 									<listOptionValue builtIn="false" value="../../../../../../../include"/>
-									<listOptionValue builtIn="false" value="../../../../../../../../external/Fusion"/>
 									<listOptionValue builtIn="false" value="../../../../../../CMSIS/Core/Include"/>
 									<listOptionValue builtIn="false" value="../../../../../../../littlefs"/>
 									<listOptionValue builtIn="false" value="../../../../../../../fatfs"/>
+									<listOptionValue builtIn="false" value="../../../../../../../micro-ecc"/>
+									<listOptionValue builtIn="false" value="../../../../../../../include/net/lwip"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/invn"/>
+									<listOptionValue builtIn="false" value="../../../../../../../../external/Fusion"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/BSEC/algo/lite_version/inc"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../include&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;../../../../../../../micro-ecc&quot;"/>
+									<listOptionValue builtIn="false" value="../../../../../../../../external/lwip/src/include"/>
 								</option>
 								<option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.defs.1323465157" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.defs" useByScannerDiscovery="true" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="__PROGRAM_START"/>
@@ -517,7 +535,7 @@
 								</option>
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.noexceptions.950806824" name="Do not use exceptions (-fno-exceptions)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.noexceptions" useByScannerDiscovery="true" value="true" valueType="boolean"/>
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.nortti.2073032572" name="Do not use RTTI (-fno-rtti)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.nortti" useByScannerDiscovery="true" value="true" valueType="boolean"/>
-								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.std.1883410958" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.std" value="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.std.gnucpp23" valueType="enumerated"/>
+								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.std.1883410958" name="Language standard" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.std" useByScannerDiscovery="true" value="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.std.gnucpp23" valueType="enumerated"/>
 								<inputType id="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.compiler.input.1196624276" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.compiler.input"/>
 							</tool>
 							<tool id="ilg.gnuarmeclipse.managedbuild.cross.tool.c.linker.480632092" name="GNU ARM Cross C Linker" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.linker">
@@ -541,7 +559,7 @@
 						</toolChain>
 					</folderInfo>
 					<sourceEntries>
-						<entry excluding="srcx|includex" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+						<entry excluding="src/usb/usb_hidhost.cpp|srcx|includex" flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
 					</sourceEntries>
 				</configuration>
 			</storageModule>

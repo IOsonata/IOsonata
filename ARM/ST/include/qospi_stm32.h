@@ -5,7 +5,7 @@
 
 		SPIInit of spi_stm32.cpp hands a DevNo from STM32_QOSPI_DEVNO_START
 		to Stm32QospiInit. quadspi_stm32.cpp implements it on the parts that
-		have QUADSPI (DevNo 3), octospi_stm32.cpp on the parts that have
+		have QUADSPI (DevNo 6 on H753, otherwise 3), octospi_stm32.cpp on the parts that have
 		OCTOSPI1 and OCTOSPI2 (DevNo 3 and 4). A library links the one of its
 		part. Master in polling mode only.
 
@@ -45,8 +45,12 @@ SOFTWARE.
 
 #if defined(QUADSPI) || defined(OCTOSPI1)
 
-/// First DevNo of the QUADSPI or OCTOSPI instances, after SPI1 to SPI3
+/// First DevNo of the QUADSPI or OCTOSPI instances, after the SPI instances
+#ifdef STM32H753xx
+#define STM32_QOSPI_DEVNO_START		6
+#else
 #define STM32_QOSPI_DEVNO_START		3
+#endif
 
 #ifdef __cplusplus
 extern "C" {

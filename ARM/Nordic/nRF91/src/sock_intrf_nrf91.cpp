@@ -47,6 +47,11 @@ SOFTWARE.
 #include "nrf_errno.h"
 #include "coredev/interrupt.h"
 #include "net/sock_intrf.h"
+#include "syslog.h"
+
+// Report setup failures only when the application already uses SysLog.
+#pragma weak SysLogGet
+#pragma weak SysLogPrintf
 
 /** @addtogroup device_intrf
   * @{
@@ -78,6 +83,17 @@ static const int s_SockIntrfNrf91Fatal[] = {
 	NRF_EBADF, NRF_ENOTCONN, NRF_ECONNRESET, NRF_ECONNABORTED, NRF_EPIPE,
 	NRF_ESHUTDOWN, NRF_ENETDOWN, NRF_ENETUNREACH, NRF_EHOSTDOWN
 };
+
+// Capture the modem error before socket cleanup or logging can replace it.
+static void SockIntrfNrf91Error(const char *pOperation, int Family, int Result, int Error)
+{
+	if (SysLogGet != nullptr && SysLogPrintf != nullptr)
+	{
+		SysLogPrintf(SysLogGet(),
+			"nRF91 socket %s failed: family=%d result=%d errno=%d\r\n",
+			pOperation, Family, Result, Error);
+	}
+}
 
 // Modem library interrupt
 static void SockIntrfNrf91Poll(struct nrf_pollfd *pPoll)
@@ -271,10 +287,19 @@ static bool SockIntrfNrf91Slot(SockIntrfDev_t * const pDev, bool bAdd)
 static bool SockIntrfNrf91Open(const SockIntrfCfg_t * const pCfg, struct nrf_addrinfo *pAddr, int Hdl)
 {
 	uint32_t ms = pCfg->Timeout != 0 ? pCfg->Timeout : SOCKINTRF_TIMEOUT_DEFAULT;
-	struct nrf_timeval tv = { ms / 1000U, (ms % 1000U) * 1000U };
+	struct nrf_timeval tv = {
+		SOCKINTRF_TIMEOUT_DEFAULT / 1000U,
+		(SOCKINTRF_TIMEOUT_DEFAULT % 1000U) * 1000U
+	};
+	int result;
 
-	if (nrf_setsockopt(Hdl, NRF_SOL_SOCKET, NRF_SO_SNDTIMEO, &tv, sizeof(tv)) != 0)
+	// SO_SNDTIMEO also limits TCP connect. A short TxData wait must not
+	// shorten connection establishment over the cellular network.
+	result = nrf_setsockopt(Hdl, NRF_SOL_SOCKET, NRF_SO_SNDTIMEO, &tv, sizeof(tv));
+	if (result != 0)
 	{
+		SockIntrfNrf91Error("connect timeout", pAddr->ai_family, result, errno);
+
 		return false;
 	}
 
@@ -283,10 +308,26 @@ static bool SockIntrfNrf91Open(const SockIntrfCfg_t * const pCfg, struct nrf_add
 		nrf_sec_tag_t tag = (nrf_sec_tag_t)pCfg->SecTag;
 		int verify = pCfg->bPeerVerify ? NRF_SO_SEC_PEER_VERIFY_REQUIRED : NRF_SO_SEC_PEER_VERIFY_NONE;
 
-		if (nrf_setsockopt(Hdl, NRF_SOL_SECURE, NRF_SO_SEC_TAG_LIST, &tag, sizeof(tag)) != 0 ||
-			nrf_setsockopt(Hdl, NRF_SOL_SECURE, NRF_SO_SEC_PEER_VERIFY, &verify, sizeof(verify)) != 0 ||
-			nrf_setsockopt(Hdl, NRF_SOL_SECURE, NRF_SO_SEC_HOSTNAME, pCfg->pHost, strlen(pCfg->pHost)) != 0)
+		result = nrf_setsockopt(Hdl, NRF_SOL_SECURE, NRF_SO_SEC_TAG_LIST, &tag, sizeof(tag));
+		if (result != 0)
 		{
+			SockIntrfNrf91Error("security tag", pAddr->ai_family, result, errno);
+
+			return false;
+		}
+		result = nrf_setsockopt(Hdl, NRF_SOL_SECURE, NRF_SO_SEC_PEER_VERIFY, &verify, sizeof(verify));
+		if (result != 0)
+		{
+			SockIntrfNrf91Error("peer verify", pAddr->ai_family, result, errno);
+
+			return false;
+		}
+		result = nrf_setsockopt(Hdl, NRF_SOL_SECURE, NRF_SO_SEC_HOSTNAME,
+			pCfg->pHost, strlen(pCfg->pHost));
+		if (result != 0)
+		{
+			SockIntrfNrf91Error("hostname", pAddr->ai_family, result, errno);
+
 			return false;
 		}
 	}
@@ -299,10 +340,7 @@ static bool SockIntrfNrf91Open(const SockIntrfCfg_t * const pCfg, struct nrf_add
 
 			local.sin6_family = NRF_AF_INET6;
 			local.sin6_port = nrf_htons(pCfg->LocalPort);
-			if (nrf_bind(Hdl, (struct nrf_sockaddr *)&local, sizeof(local)) != 0)
-			{
-				return false;
-			}
+			result = nrf_bind(Hdl, (struct nrf_sockaddr *)&local, sizeof(local));
 		}
 		else
 		{
@@ -310,10 +348,13 @@ static bool SockIntrfNrf91Open(const SockIntrfCfg_t * const pCfg, struct nrf_add
 
 			local.sin_family = NRF_AF_INET;
 			local.sin_port = nrf_htons(pCfg->LocalPort);
-			if (nrf_bind(Hdl, (struct nrf_sockaddr *)&local, sizeof(local)) != 0)
-			{
-				return false;
-			}
+			result = nrf_bind(Hdl, (struct nrf_sockaddr *)&local, sizeof(local));
+		}
+		if (result != 0)
+		{
+			SockIntrfNrf91Error("bind", pAddr->ai_family, result, errno);
+
+			return false;
 		}
 	}
 
@@ -326,14 +367,43 @@ static bool SockIntrfNrf91Open(const SockIntrfCfg_t * const pCfg, struct nrf_add
 		((struct nrf_sockaddr_in *)pAddr->ai_addr)->sin_port = nrf_htons(pCfg->Port);
 	}
 
-	return nrf_connect(Hdl, pAddr->ai_addr, pAddr->ai_addrlen) == 0;
+	result = nrf_connect(Hdl, pAddr->ai_addr, pAddr->ai_addrlen);
+	if (result != 0)
+	{
+		SockIntrfNrf91Error("connect", pAddr->ai_family, result, errno);
+
+		return false;
+	}
+
+	// The connected socket now gets the caller's transmit wait.
+	tv.tv_sec = ms / 1000U;
+	tv.tv_usec = (ms % 1000U) * 1000U;
+	result = nrf_setsockopt(Hdl, NRF_SOL_SOCKET, NRF_SO_SNDTIMEO, &tv, sizeof(tv));
+	if (result != 0)
+	{
+		SockIntrfNrf91Error("TX timeout", pAddr->ai_family, result, errno);
+
+		return false;
+	}
+
+	return true;
 }
 
 bool SockIntrfInit(SockIntrfDev_t * const pDev, const SockIntrfCfg_t * const pCfg)
 {
+	struct nrf_addrinfo hints = {};
+	struct nrf_addrinfo *res = nullptr;
+	bool ipv4 = false;
+	bool ipv6 = false;
+	int hdl = -1;
+	int result;
+	int family = NRF_AF_UNSPEC;
+
 	if (pDev == nullptr || pCfg == nullptr || pCfg->pHost == nullptr || pCfg->Port == 0 ||
 		(unsigned)pCfg->Proto > SOCKINTRF_PROTO_TLS)
 	{
+		SockIntrfNrf91Error("configuration", NRF_AF_UNSPEC, -1, NRF_EINVAL);
+
 		return false;
 	}
 
@@ -375,31 +445,49 @@ bool SockIntrfInit(SockIntrfDev_t * const pDev, const SockIntrfCfg_t * const pCf
 	pDev->bConnected = false;
 	pDev->Hdl = -1;
 
-	struct nrf_addrinfo hints = {};
-	struct nrf_addrinfo *res = nullptr;
-
-	hints.ai_family = NRF_AF_UNSPEC;
 	hints.ai_socktype = type;
 
-	if (nrf_getaddrinfo(pCfg->pHost, nullptr, &hints, &res) != 0 || res == nullptr)
+	for (int lookup = 0; lookup < 2; lookup++)
 	{
-		return false;
-	}
-
-	// Each address in turn: an IPv6 one fails on an IPv4 only bearer
-	int hdl = -1;
-
-	for (struct nrf_addrinfo *ai = res; ai != nullptr && hdl < 0; ai = ai->ai_next)
-	{
-		hdl = nrf_socket(ai->ai_family, type, proto);
-		if (hdl >= 0 && SockIntrfNrf91Open(pCfg, ai, hdl) == false)
+		hints.ai_family = lookup == 0 ? NRF_AF_UNSPEC : NRF_AF_INET;
+		res = nullptr;
+		errno = 0;
+		result = nrf_getaddrinfo(pCfg->pHost, nullptr, &hints, &res);
+		if (result != 0 || res == nullptr)
 		{
-			nrf_close(hdl);
-			hdl = -1;
-		}
-	}
+			SockIntrfNrf91Error("DNS", hints.ai_family, result, errno);
+			if (res != nullptr)
+			{
+				nrf_freeaddrinfo(res);
+			}
 
-	nrf_freeaddrinfo(res);
+			return false;
+		}
+
+		for (struct nrf_addrinfo *ai = res; ai != nullptr && hdl < 0; ai = ai->ai_next)
+		{
+			family = ai->ai_family;
+			ipv4 = ipv4 || family == NRF_AF_INET;
+			ipv6 = ipv6 || family == NRF_AF_INET6;
+			hdl = nrf_socket(family, type, proto);
+			if (hdl < 0)
+			{
+				SockIntrfNrf91Error("create", family, hdl, errno);
+			}
+			else if (SockIntrfNrf91Open(pCfg, ai, hdl) == false)
+			{
+				nrf_close(hdl);
+				hdl = -1;
+			}
+		}
+		nrf_freeaddrinfo(res);
+		if (hdl >= 0 || ipv4 || ipv6 == false)
+		{
+			break;
+		}
+		// The modem's AF_UNSPEC lookup can return only IPv6 even on an
+		// IPv4-only PDN. Resolve IPv4 explicitly after those attempts fail.
+	}
 
 	if (hdl < 0)
 	{
@@ -411,6 +499,7 @@ bool SockIntrfInit(SockIntrfDev_t * const pDev, const SockIntrfCfg_t * const pCf
 
 	if (SockIntrfNrf91Slot(pDev, true) == false)
 	{
+		SockIntrfNrf91Error("socket table", family, -1, NRF_ENOMEM);
 		SockIntrfClose(pDev);
 
 		return false;
@@ -419,8 +508,10 @@ bool SockIntrfInit(SockIntrfDev_t * const pDev, const SockIntrfCfg_t * const pCf
 	// Events from here on: the socket is ready for them
 	struct nrf_modem_pollcb cb = { SockIntrfNrf91Poll, NRF_POLLIN, false };
 
-	if (nrf_setsockopt(hdl, NRF_SOL_SOCKET, NRF_SO_POLLCB, &cb, sizeof(cb)) != 0)
+	result = nrf_setsockopt(hdl, NRF_SOL_SOCKET, NRF_SO_POLLCB, &cb, sizeof(cb));
+	if (result != 0)
 	{
+		SockIntrfNrf91Error("poll callback", family, result, errno);
 		SockIntrfClose(pDev);
 
 		return false;
