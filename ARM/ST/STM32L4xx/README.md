@@ -204,14 +204,15 @@ at 0x5D, 1 Hz, and prints the pressure in hPa and its temperature. The driver
 finds the device at either address, 0x5C or 0x5D, when none is given, and
 reads the status and both outputs in one I2C transfer. `tests/sensors/run.py`
 runs it against a register model. B-L475E-IOT01A2 run (2026-10-21), Release:
-the LPS22HB is found at 0x5D. 21 readings go from 998.48 to 999.27 hPa while
-its temperature goes from 24.55 to 24.79 C. The HTS221 on the same bus reads
-44.90 to 45.16 % and 23.66 to 23.92 C, 0.84 to 0.95 C below the LPS22HB. The
+the LPS22HB is found at 0x5D. 43 readings go from 998.48 to 1000.15 hPa while
+its temperature goes from 24.55 to 25.04 C. The HTS221 on the same bus reads
+44.48 to 45.16 % and 23.66 to 24.14 C, 0.84 to 0.95 C below the LPS22HB. The
 temperature registers do come out of the single transfer: read again from the
-pressure registers they would print about 265 C. In the same run the demo
-printed 27 HTS221 readings for 21 LPS22HB readings, both set to 1 Hz; the log
-has no time stamps to tell which rate differs. Not compared with a reference
-instrument.
+pressure registers they would print about 265 C. The demo printed 60 HTS221
+lines for the 43 LPS22HB lines: 16 HTS221 lines follow another HTS221 line
+with the same temperature and a new humidity. The HTS221 humidity was ready a
+poll after its temperature, and the demo prints on each new value. Without
+those lines the counts match. Not compared with a reference instrument.
 The STM32L476 example MagSensorDemo (`exemples/sensor/mag_sensor_demo.cpp`)
 reads the onboard LIS3MDL magnetometer (`src/sensors/mag_lis3mdl.cpp`) on the
 same bus at 0x1E, 2.5 Hz, ultra high performance mode, 4 gauss full scale, and
