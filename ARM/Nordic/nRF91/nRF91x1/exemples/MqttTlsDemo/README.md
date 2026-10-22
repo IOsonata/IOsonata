@@ -194,9 +194,9 @@ This is a modem offline/online test. Actual RF coverage-loss recovery requires
 attenuation or a suitable shielded enclosure while the board keeps running;
 `RRC idle` alone does not mean disconnected. See the
 [shared recovery procedure](../../../../../../docs/network-protocol-examples.md#one-shot-lte-recovery-test)
-for the readiness checks and failure behavior. Hardware recovery validation
-and fresh automated ARM compile/link validation are not yet recorded for
-this optional test.
+for the readiness checks and failure behavior. One successful nRF9151 DK
+radio-off/on hardware run is recorded [below](#radio-offon-recovery-hardware-result).
+Fresh automated ARM compile/link validation remains unestablished.
 
 The expanded host runner passed with 16 O0/O2 ASan/UBSan runtime binaries
 and 50 executions, including four added recovery binaries with 20 scenario
@@ -280,3 +280,34 @@ earlier publication origin and console truncation. Deliberate recovery and
 negative CA/hostname checks remain unestablished by this run; no measured
 elapsed time was supplied. See the
 [follow-up hardware record](../../../../../../docs/network-protocol-examples.md#follow-up-continued-run-without-failures).
+
+## Radio-off/on recovery hardware result
+
+The maintainer ran the enabled recovery test on the nRF9151 DK with
+`mfw_nrf91x1_2.0.4`, reusing the stored CA under tag 42420. The initial
+verified TLS/MQTT session to `test.mosquitto.org:8883` used client
+`iosnet8a18d4bde00366c4` and topic
+`iosonata/demo/8a18d4bde00366c4/echo`.
+
+After the arming and radio-off messages, the application reported network
+down at checked 12 with failures 1, followed by `Unregistered, state 0`.
+Radio-on was followed by fresh roaming LTE-M registration, a new
+`TLS 1.2, CA/hostname verified` connection and QoS 1 subscription to the
+same topic. The next verified exchange reported:
+
+```text
+MQTT QoS 1 echo checked 13, failures=1
+```
+
+This passes one controlled radio-off/on recovery. Client identity and
+counter continuity support recovery without an observed board reset.
+The single failure was the expected deliberate network interruption.
+The 120-second arming and 60-second off durations are reported configuration
+values, without console timestamps for independent measurement.
+
+The capture contains one checked exchange after recovery. Actual RF
+coverage-loss recovery and repeated-cycle reliability remain unestablished.
+A separate earlier run on the same modem firmware was reported stopped after
+checked 20; its cause remains unresolved. See the
+[detailed recovery record](../../../../../../docs/network-protocol-examples.md#follow-up-controlled-radio-offon-recovery)
+and the [reported-stop record](../../../../../../docs/network-protocol-examples.md#follow-up-reported-stop-on-modem-firmware-204).

@@ -490,8 +490,10 @@ suitable shielded enclosure while board power and execution continue.
 Record actual loss and restored registration for that separate test.
 
 The [host checks](#lte-recovery-control-checks) validate the optional control
-with modem substitutes. Its radio-off/on hardware result and a fresh
-automated ARM compile/link result remain unestablished.
+with modem substitutes. A subsequent
+[nRF9151 DK hardware capture](#follow-up-controlled-radio-offon-recovery)
+confirms one commanded radio-off/on cycle with TLS/MQTT recovery. A fresh
+automated ARM compile/link result remains unestablished.
 
 ## CoAP check
 
@@ -831,6 +833,48 @@ the continued capture, so it does not demonstrate the additional-copy path
 or resolve the earlier publication origin and console truncation. No measured
 elapsed time was supplied. Deliberate recovery and negative CA/hostname
 checks remain unestablished by this run.
+
+#### Follow-up: reported stop on modem firmware 2.0.4
+
+A separate run with `mfw_nrf91x1_2.0.4` and client
+`iosnetd4f4b120106ac424` reached checked counter 20 with `failures=0`
+before the maintainer reported a stop. Its supplied console log contained no
+recovery-test progress messages. The debugger screenshot showed SIGTRAP and
+address `0xdeadbeee`, without a usable backtrace or captured fault registers.
+The cause and any relationship to the optional radio test remain unresolved;
+that screenshot alone does not establish a CPU or modem fault.
+
+#### Follow-up: controlled radio-off/on recovery
+
+The maintainer subsequently ran the optional recovery test on the nRF9151 DK
+with `mfw_nrf91x1_2.0.4`. Setup reused the stored CA under tag 42420 and
+registered on roaming LTE-M. The connection used `test.mosquitto.org:8883`
+with `TLS 1.2, CA/hostname verified`, client
+`iosnet8a18d4bde00366c4` and topic
+`iosonata/demo/8a18d4bde00366c4/echo`.
+
+The capture records the complete controlled interruption and first recovered
+exchange:
+
+| Stage | Observed result |
+| --- | --- |
+| Before interruption | The 120-second arming message appeared, MQTT subscribed at QoS 1, and checked counters 1 and 10 reported zero failures. |
+| Radio off | The 60-second radio-off message was followed by `Network down`, `MQTT FAIL: network down` at checked 12 and failures 1, then `Unregistered, state 0`. |
+| Radio restored | The radio-on message was followed by registration state 2, fresh roaming LTE-M registration and `Network ready`. |
+| Protocol recovered | A new verified TLS connection and QoS 1 subscription used the same client ID and topic. The next verified echo reported checked 13 with failures still 1. |
+
+This passes one commanded modem offline/online recovery of MQTT over TLS.
+The unchanged client ID and topic, continuing checked counter and absence
+of another startup banner support recovery in the same application run,
+without an observed board reset. The single reported failure was the expected
+response to the deliberate network interruption.
+
+The 120-second arming period and 60-second off hold are the configured values
+printed by the test; the capture has no timestamps to measure them
+independently. It contains one verified post-recovery exchange and does not
+establish actual RF coverage-loss recovery, repeated-cycle reliability or an
+extended run after recovery. This result does not diagnose or resolve the
+earlier reported stop.
 
 ### Hardware evidence for the generic MQTT example
 

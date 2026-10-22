@@ -264,6 +264,18 @@ console truncation. The
 preserves this result separately from the earlier failures, without inferring
 a measured duration.
 
+A subsequent nRF9151 DK run with `mfw_nrf91x1_2.0.4` completed the optional
+radio-off/on recovery test. The deliberate interruption produced network
+down at checked 12 with failures 1, followed by unregistration. After
+radio-on and fresh roaming LTE-M registration, verified modem TLS and MQTT
+reconnected using the same client ID and topic. A new checked echo advanced
+the counter to 13 with failures still 1. This confirms one controlled
+offline/online recovery without an observed board reset; actual RF
+coverage-loss recovery and repeated-cycle reliability remain unestablished.
+The [recovery hardware record](network-protocol-examples.md#follow-up-controlled-radio-offon-recovery)
+preserves the exact identity and event sequence. An earlier reported stop
+on the same modem firmware remains unresolved.
+
 ### Native TLS 1.3 PSK client
 
 `net/tls.h` and `src/net/tls.cpp` implement an initial external-PSK client.
