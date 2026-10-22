@@ -52,7 +52,8 @@ def call_break(name, args, brk, action):
         if not hit:
             hit.append(address)
             uc.emu_stop()
-    where = [v for k, v in symbols.items() if k == brk or k.startswith('_Z%d%s' % (len(brk), brk))][0] & ~1
+    prefixes = ('_Z%d%s' % (len(brk), brk), '_ZL%d%s' % (len(brk), brk))
+    where = [v for k, v in symbols.items() if k == brk or k.startswith(prefixes)][0] & ~1
     h = u.hook_add(UC_HOOK_CODE, code, begin=where, end=where)
     u.ctl_flush_tb()    # blocks translated earlier do not run a new hook
     setup(name, args, 0x200FF000)
@@ -194,17 +195,23 @@ def transfer(bus, kind, length, maximum, finish, block_check=None):
     A transmit that fits the driver copy is checked to be sent from the copy:
     the caller's buffer is overwritten as soon as the call returns. A longer
     transmit waits in the driver, its blocks are completed from that wait."""
-    pattern = bytes((0x30 + i) & 0xFF for i in range(min(length, 4096)))
+    pattern = bytes((0x30 + i) & 0xFF for i in range(length))
     u.mem_write(BUF, pattern)
     copied = kind == 'tx' and length <= TXBUF_SIZE[bus]
     src = TXBUF[bus] if copied else BUF
+    staged = bus == 1 and kind == 'tx'
+    if staged:
+        maximum = min(maximum, TXBUF_SIZE[bus])
     blocks = sequence(kind, length, maximum)
 
     def run_blocks():
         done = 0
         for i, n in enumerate(blocks):
-            check(len(pending) == 1 and pending[0] == (kind, src + done, n), bus, kind, length,
-                  pending, (src + done, n))
+            ptr = TXBUF[bus] if staged else src + done
+            check(len(pending) == 1 and pending[0] == (kind, ptr, n), bus, kind, length,
+                  pending, (ptr, n))
+            if staged:
+                check(bytes(u.mem_read(ptr, n)) == pattern[done:done + n], 'staged TX data', done, n)
             if block_check:
                 block_check(i, i == len(blocks) - 1)
             check(call('busy', bus) == 1 and call('events', 0) == 0, 'released early', bus, kind, length, i)
@@ -213,7 +220,7 @@ def transfer(bus, kind, length, maximum, finish, block_check=None):
         check(not pending, pending)
 
     if kind == 'tx' and not copied:
-        r = call_break(kind, (bus, length), 'DeviceIntrfWaitTxComplete', run_blocks)
+        r = call_break(kind, (bus, length), 'nRFxSPIAsyncTxWait', run_blocks)
         check(call('events', 0) == 1, 'long transmit returned before its end', bus, length)
     else:
         r = call(kind, bus, length)
@@ -234,7 +241,7 @@ def sequence(kind, total, maximum=None):
 # ---- SPI master, interrupt and DMA
 check(call('init', 1, 0, 1, 1) == 1, 'spi init')
 active = 1
-for kind, length in [('tx', 10), ('rx', 20), ('tx', 2 * DMA_MAX + 5), ('rx', DMA_MAX + 7), ('tx', DMA_MAX),
+for kind, length in [('tx', 10), ('rx', 20), ('tx', min(2 * DMA_MAX + 5, 66000)), ('rx', DMA_MAX + 7), ('tx', DMA_MAX),
                      ('tx', TXBUF_SIZE[1]), ('tx', TXBUF_SIZE[1] + 1)]:
     pending.clear()
     call('init', 1, 0, 1, 1)
@@ -324,8 +331,14 @@ def twim_block(i, last):
     else:
         check(shorts[0] == SH_RX_STOP, 'i2c rx shorts', hex(shorts[0]))
 
-for kind, length in [('tx', 4), ('rx', 20), ('tx', 2 * TWIM_MAX + 5), ('rx', TWIM_MAX + 7), ('tx', TWIM_MAX),
-                     ('tx', TXBUF_SIZE[0]), ('tx', TXBUF_SIZE[0] + 1)]:
+for operation in ('tx', 'write_data', 'read_command'):
+    twim_reset()
+    r = call(operation, 0, min(TWIM_MAX, TXBUF_SIZE[0]) + 1)
+    check(r == 0 and not pending and not actions and not shorts, 'oversized TWIM command', operation)
+    check(call('busy', 0) == 0 and call('events', 0) == 0, 'rejected TWIM transfer still busy', operation)
+
+for kind, length in [('tx', 4), ('rx', 20), ('rx', TWIM_MAX + 7),
+                     ('tx', min(TWIM_MAX, TXBUF_SIZE[0]))]:
     twim_reset()
     r = transfer(0, kind, length, TWIM_MAX, twim_finish, twim_block)
     check(r == -1, 'i2c', kind, length, 'returns', r)
@@ -411,6 +424,12 @@ if T[0]:
         put(base + T[index], 1)
         isr(0)
         check(get(base + T[index]) == 0, 'TWI event not cleared', index)
+
+    for operation in ('tx', 'write_data', 'read_command'):
+        twi_init()
+        r = call(operation, 0, TXBUF_SIZE[0] + 1)
+        check(r == 0 and not actions and not sent, 'oversized TWI command', operation)
+        check(call('busy', 0) == 0 and call('events', 0) == 0, 'rejected TWI transfer still busy', operation)
 
     for length in (1, 3):
         twi_init()
@@ -555,7 +574,7 @@ for bus in (1, 0):
     check(call('init', bus, 0, 1, 0) == 1, 'polled init', bus)
     active = bus
     for kind in ('tx', 'rx'):
-        n = 2 * DMA_MAX + 5 if bus else 4
+        n = min(2 * DMA_MAX + 5, 66000) if bus else 4
         check(call(kind, bus, n) == n, 'polled', bus, kind)
         check(call('busy', bus) == 0 and not pending, 'polled end', bus, kind, call('busy', bus), pending)
     active = None

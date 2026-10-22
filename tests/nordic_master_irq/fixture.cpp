@@ -99,6 +99,14 @@ extern "C" int read_reg(unsigned bus, unsigned length)
 	uint8_t command = 4;
 	return DeviceIntrfRead(intrf(bus), bus ? 0 : 0x22, &command, 1, buffer, length);
 }
+extern "C" int read_command(unsigned bus, unsigned commandLength)
+{
+	return DeviceIntrfRead(intrf(bus), bus ? 0 : 0x22, buffer, commandLength, buffer, 8);
+}
+extern "C" int write_data(unsigned bus, unsigned totalLength)
+{
+	return DeviceIntrfWrite(intrf(bus), bus ? 0 : 0x22, buffer, 1, buffer + 1, totalLength - 1);
+}
 extern "C" unsigned busy(unsigned bus)
 {
 	bool b = atomic_flag_test_and_set(&intrf(bus)->bBusy);
