@@ -141,7 +141,7 @@ static bool CreateIdentity()
 static void MqttDown(uint32_t Now, const char *pReason)
 {
 	s_Failures++;
-	SysLogPrintf(SysLogGet(), "MQTT FAIL: %s, error=%u result=%u checked=%lu failures=%lu\r\n",
+	SysLogPrintf(SysLogGet(), "MQTT FAIL: %s, mqtt_error=%u mqtt_result=%u checked=%lu failures=%lu\r\n",
 		pReason, (unsigned)s_Mqtt.Error(), (unsigned)s_Mqtt.Result(),
 		(unsigned long)s_Checked, (unsigned long)s_Failures);
 	s_Mqtt.Reset();
@@ -245,9 +245,11 @@ static void MqttTest(uint32_t Now)
 		{
 			return;
 		}
+		SysLogPrintf(SysLogGet(), "MQTT TCP connecting: %s:%u\r\n",
+			s_SockCfg.pHost, (unsigned)s_SockCfg.Port);
 		if (!s_Socket.Init(s_SockCfg))
 		{
-			MqttDown(TimerGetMilisecond(&s_Timer), "DNS or TCP connect");
+			MqttDown(TimerGetMilisecond(&s_Timer), "socket initialization");
 			return;
 		}
 		transport = s_Socket;

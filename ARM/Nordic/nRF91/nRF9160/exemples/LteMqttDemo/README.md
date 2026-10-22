@@ -88,11 +88,18 @@ The example disables requested PSM, eDRX and release assistance for this first
 continuous MQTT check. Low-power scheduling and MQTT keepalive need a separate
 validation. The KeepAlive value is 60 seconds.
 
-The foreground application pump runs every 20 milliseconds. Socket sends wait
-at most 100 milliseconds; modem DNS resolution and TCP connection setup have
-their own blocking waits. MQTT protocol operations and the matching PUBACK/echo
-have 30-second deadlines. A refused subscription or a grant below QoS 1 fails
-this QoS 1 test, although the shared client also supports QoS 0 applications.
+The foreground application pump runs every 20 milliseconds. The nRF91 socket
+port allows 30 seconds for each address's TCP connection attempt, then applies
+this demo's 100-millisecond send timeout after connection. DNS resolution has
+its own modem blocking wait; the complete socket initialization can take longer
+than 30 seconds when name lookup or another address attempt is needed. If IPv6
+attempts fail and no IPv4 address has already been tried, the port explicitly
+resolves and tries IPv4. It does not assume the first resolver result contains
+both address families.
+
+MQTT protocol operations and the matching PUBACK/echo have 30-second deadlines.
+A refused subscription or a grant below QoS 1 fails this QoS 1 test, although
+the shared client also supports QoS 0 applications.
 
 ## Build and run
 
@@ -124,6 +131,7 @@ Mosquitto process on the PC.
 Expected console lines have this form; the suffix is generated at boot:
 
 ```text
+MQTT TCP connecting: test.mosquitto.org:1883
 MQTT TCP peer test.mosquitto.org:1883, plaintext, client ioslte<16-hex-suffix>
 MQTT subscribed: iosonata/lte/<16-hex-suffix>/echo QoS=1
 MQTT QoS 1 echo checked 1, failures=0
@@ -167,6 +175,36 @@ Keep the modem firmware, SIM/APN, build profile, broker endpoint and elapsed
 recovery time with the results. Public service interruptions are not evidence
 of a protocol defect without the surrounding transport/server observations.
 
+### Diagnosing socket initialization failures
+
+The application prints `MQTT TCP connecting` before socket initialization. An
+initialization failure is now labeled `socket initialization`; the subsequent
+`mqtt_error` and `mqtt_result` fields describe MQTT state, so values of zero do
+not explain why the native socket failed. The earlier log labeled this failure
+`DNS or TCP connect` and used the shorter fields `error` and `result`.
+
+When the existing system logger is enabled, native failures have this form:
+
+```text
+nRF91 socket <operation> failed: family=<family> result=<return-value> errno=<error>
+```
+
+The port saves the error before cleanup. Operations include `DNS`, `create`,
+`bind`, `connect` and `poll callback`. The operations `connect timeout` and
+`TX timeout` identify a failure to set the corresponding socket option; an
+actual connection failure is reported as `connect`. Keep these lines with the
+application failure and LTE registration log. A failed address attempt can be
+followed by a successful fallback; inspect the final connection/subscription
+result as well.
+
+The earlier port applied the demo's 100-millisecond send timeout before
+`nrf_connect()`. Nordic's modem socket also uses that option for TCP connection
+setup, so it could stop connection establishment much earlier than intended.
+The port now uses a 30-second connection timeout per address and applies the
+configured send timeout afterward. It also explicitly retries IPv4 after
+unsuccessful IPv6-only resolver results. These code corrections still require
+the hardware retest described below.
+
 ## Validation status
 
 The shared MQTT client has existing host wire, local Mosquitto and native
@@ -185,6 +223,13 @@ SUBSCRIBE, retry timing after blocking calls finish, random identity failure
 and stability, and application queue refusal. Hardware interfaces are replaced
 by host test implementations.
 
+`python3 tests/net/run_nrf91_socket.py` passed the actual nRF91 socket port and
+generic `DeviceIntrf` implementation at O0/O2 with ASan/UBSan. Host Nordic API
+substitutes exercise a 750-millisecond connection with a 100-millisecond send
+wait, address-family fallback, failure diagnostics, cleanup and retries. The
+earlier port fails the same connection-timeout check. These tests do not
+establish an ARM build, modem firmware compatibility or cellular connectivity.
+
 The shared `tests/net/run_mqtt.py` wire suite also passed at O0/O2, including
 the C header check. Its optional Mosquitto interoperability checks were skipped
 in this session because the executable was unavailable; no fresh live broker
@@ -194,5 +239,19 @@ The public broker setting is taken from its published service documentation.
 A live public probe could not resolve the host in the implementation environment,
 so current public broker availability was not verified there.
 
-No fresh ARM compile/link or nRF9160 MQTT hardware result is claimed by this
-example. Record the maintainer's build and board output after running it.
+### Initial nRF9160 hardware result
+
+The maintainer ran `LteMqttDemo`. The console reported modem
+firmware `mfw_nrf9160_1.2.8` and successful roaming LTE-M registration, followed
+by three initial socket-initialization failures. MQTT subscription and verified
+self-echo have not yet been demonstrated on this run. The reported
+`error=0 result=0` values were MQTT state, not the modem's DNS or TCP error.
+The log establishes a running application and LTE registration; it does not
+identify the failing native socket operation or establish a firmware-version
+cause.
+
+The connection-timeout, IPv4-fallback and native-error reporting corrections
+need a new library/application build and hardware run. Their hardware outcome
+is pending. No fresh automated ARM compile/link validation of those corrections
+is claimed. Preserve the modem firmware, SIM/APN and endpoint details with the
+new log so the result can be compared with this initial observation.

@@ -3,8 +3,8 @@
 `SockIntrf` presents connected UDP and TCP through `DeviceIntrf`, with C helpers
 and a C++ wrapper. nRF91 uses its modem's IP stack. STM32H753 now uses the shared
 `src/net/ip_lwip.cpp` service over an injected `EthernetDev_t`. Protocol clients
-can use the same socket interface on either target. The nRF91 implementation
-and public socket signatures are unchanged.
+can use the same socket interface on either target. Public socket signatures
+are unchanged.
 
 NUCLEO-H753ZI hardware tests confirm DHCP, ping, UDP/TCP integrity, public
 DNS/HTTP and TCP recovery after server restart and cable reconnection. See the
@@ -48,6 +48,37 @@ respective `SockIntrf` implementation. Using Ethernet and LTE simultaneously in
 one firmware would require distinct compatible transport implementations and
 application selection between them. `SockIntrf` does not currently provide a
 network selector or automatic failover.
+
+### nRF91 socket initialization
+
+The nRF91 port gives each address's TCP connection attempt a 30-second timeout,
+then applies `SockIntrfCfg_t::Timeout` to sends on the connected socket. The LTE
+MQTT example uses a 100-millisecond send wait. Applying that short wait before
+`nrf_connect()` also limited connection establishment, because the modem uses
+`NRF_SO_SNDTIMEO` for TCP connect. DNS resolution remains a separate modem wait;
+30 seconds is a per-address connection limit, not an overall initialization
+deadline.
+
+The modem's `NRF_AF_UNSPEC` lookup can return IPv6 results without IPv4 results,
+even when the bearer cannot use IPv6. If IPv6 attempts fail and no IPv4 address
+has already been tried, the port explicitly looks up and tries IPv4. With the
+existing system logger enabled, native failures use the format
+`nRF91 socket <operation> failed: family=<family> result=<return-value> errno=<error>`.
+The port saves the error before cleanup. These messages identify DNS, socket
+creation, options or connect failures separately from the shared MQTT state.
+An address-level failure can still be followed by a successful fallback.
+
+Nordic documents the [TCP connection timeout behavior](https://devzone.nordicsemi.com/f/nordic-q-a/92085/how-to-set-a-udp-socket-peer-connect-timeout)
+and the [IPv6-first resolver behavior in its v2.7.0 socket API](https://github.com/nrfconnect/sdk-nrfxlib/blob/v2.7.0/nrf_modem/include/nrf_socket.h).
+
+`python3 tests/net/run_nrf91_socket.py` passed at O0/O2 with ASan/UBSan, using
+the actual nRF91 socket port and generic `DeviceIntrf` implementation with
+host Nordic API substitutes. A simulated 750-millisecond connection succeeds
+with a 100-millisecond send wait; the earlier port fails that same check.
+The tests also cover IPv4 fallback, working IPv6, per-stage diagnostics with
+the original errno, resource cleanup, socket-table exhaustion and retries.
+They do not establish an ARM build, modem firmware compatibility or a working
+cellular connection. The LTE hardware retest remains pending.
 
 ## Layers and memory
 
@@ -142,7 +173,7 @@ keep controller access in the MCU ports.
 The `Tls` DeviceIntrf wraps a connected TCP `SockIntrf`, following the layered
 interface pattern. The existing socket TLS/DTLS protocol selections and credential
 storage remain unsupported by lwIP; selecting that enum does not select this
-client. nRF91 modem TLS/DTLS is unchanged.
+client. The nRF91 modem's TLS/DTLS path is separate from this native client.
 
 The client offers TLS 1.3 and `TLS_AES_128_GCM_SHA256`. With a non-null
 `TlsCfg_t::pKeyAgree`, it requires `psk_dhe_ke` with a fresh P-256 key pair and
@@ -280,7 +311,7 @@ The H753 EthernetTcpDemo includes an optional MQTT subscribe/self-publish test.
 See its README for broker setup and firmware configuration. Plaintext and
 TLS-protected MQTT echo, broker/cable recovery and wrong-PSK rejection passed
 the hardware checks recorded below. The earlier intermittent TLS failure remains
-unresolved. Existing nRF91 modem code is unchanged. Both nRF9160 and nRF91x1
+unresolved. Both nRF9160 and nRF91x1
 library projects now include the shared MQTT header and source.
 
 ### LTE MQTT public-broker example
@@ -318,7 +349,9 @@ interfaces are replaced by host test implementations.
 The shared MQTT wire suite and C header check also passed in this session.
 Optional Mosquitto interoperability checks were skipped because the executable
 was unavailable. Public-host DNS resolution was unavailable in the environment,
-so this adds no live public-broker, LTE hardware or fresh ARM compile/link claim.
+so these host checks add no live public-broker or fresh automated ARM
+compile/link result. The maintainer's initial hardware run and pending
+retest of the socket corrections are recorded below.
 
 Protocol reference: [OASIS MQTT 3.1.1 plus Errata 01](https://docs.oasis-open.org/mqtt/mqtt/v3.1.1/errata01/os/mqtt-v3.1.1-errata01-os-complete.html).
 
@@ -331,7 +364,7 @@ functions keep protocol state in caller-owned `CoapDev_t`; the C++
 As with MQTT, the shared
 implementation is compiled from a `.cpp` file and has no separate C++ protocol
 implementation. The client does not include controller access, lwIP or modem
-calls. The nRF91 socket implementation remains unchanged.
+calls.
 
 ### Supported operations and limits
 
@@ -800,6 +833,26 @@ The exact flashed commit and build profile were not supplied. These maintainer
 results establish hardware interoperability and the observed recovery cases;
 they are not an uninterrupted soak test or a fresh automated ARM compile/link
 result. The EthernetTcpDemo README documents the helper and wrong-key setup.
+
+### nRF9160 MQTT hardware bring-up
+
+The maintainer ran `LteMqttDemo` with modem firmware
+`mfw_nrf9160_1.2.8`. The console showed successful roaming LTE-M registration,
+then three socket-initialization failures with no successful broker connection.
+MQTT subscription and a verified self-echo have not yet been demonstrated in
+this run. This is evidence of a running application and LTE
+registration, not successful DNS, TCP or MQTT operation.
+
+The original `error=0 result=0` fields described the shared MQTT state before
+initialization. They did not expose the native socket failure or establish a
+firmware-version cause. The application now labels those fields `mqtt_error`
+and `mqtt_result`, prints `MQTT TCP connecting` before the attempt and labels
+failed socket setup `socket initialization`. The nRF91 port separates its
+30-second per-address connection timeout from the example's 100-millisecond
+send wait, explicitly retries IPv4 after unsuccessful IPv6-only results and
+records native failure details before cleanup. The hardware outcome of these
+code corrections is pending a new library/application build and run. No fresh
+automated ARM compile/link validation of the corrections is claimed.
 
 ## References
 
