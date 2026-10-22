@@ -1226,6 +1226,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/pwrmgnt/pwrmgnt.h</locationURI>
 		</link>
 		<link>
+			<name>include/rftag/m24sr.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/rftag/m24sr.h</locationURI>
+		</link>
+		<link>
 			<name>include/rftag/rfreader_pn532.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/rftag/rfreader_pn532.h</locationURI>
@@ -2169,6 +2174,11 @@
 			<name>src/pwrmgnt/pm_npm1300.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/pwrmgnt/pm_npm1300.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/rftag/m24sr.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/rftag/m24sr.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/rftag/rfreader_pn532.cpp</name>
