@@ -275,7 +275,7 @@ int main()
 	{
 		return 1;
 	}
-	SysLogPrintf(SysLogGet(), "Generic MQTT QoS 1 echo through DeviceIntrf\r\n");
+	SysLogPrintf(SysLogGet(), "Generic MQTT QoS 1 echo through %s\r\n", NetDemoMediumName());
 	if (!host || !host[0])
 	{
 		SysLogPrintf(SysLogGet(), "Set MQTT_DEMO_HOST in board.h\r\n");

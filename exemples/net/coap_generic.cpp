@@ -352,7 +352,7 @@ int main()
 	{
 		return 1;
 	}
-	SysLogPrintf(SysLogGet(), "Generic CoAP over connected UDP DeviceIntrf\r\n");
+	SysLogPrintf(SysLogGet(), "Generic CoAP over %s UDP\r\n", NetDemoMediumName());
 	SysLogPrintf(SysLogGet(), COAP_DEMO_PUBLIC_TEST ?
 		"Profile: public read-only GET\r\n" : "Profile: eight-step helper validation\r\n");
 	s_pRng = NetDemoRng();

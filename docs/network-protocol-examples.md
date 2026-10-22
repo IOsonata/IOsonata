@@ -149,6 +149,11 @@ source linked into the project:
 | `NetDemoCustomConnected()` | Report whether that endpoint remains usable |
 | `NetDemoCustomClose()` | Close that endpoint and release its connection resources |
 
+The startup banner uses `NetDemoMediumName()` to identify the selected medium.
+Built-in selections report `LTE` or `Ethernet`. A custom project can define
+`NET_DEMO_MEDIUM_NAME` in `board.h`, for example `"Wi-Fi"`; otherwise the label
+is `custom network`.
+
 These functions perform setup and status work. Protocol data flows through
 the returned `DeviceIntrf`, using the existing MQTT or CoAP implementation.
 Keep the interface object and its buffers alive for the whole protocol
@@ -373,8 +378,10 @@ public response bounds, datagram boundaries, duplicate acknowledgements and
 retained probing delay through repeated loss and clock wrap. Setup fixtures
 exercise startup, initialization retries, network status and deferred pumping.
 
-The hardware interfaces are host substitutes. No fresh ARM compile/link,
-public-server session or hardware result is claimed for these new examples.
+The hardware interfaces in this automated run are host substitutes. These
+checks do not perform an ARM compile/link, a live public-server session or a
+hardware test. Subsequent maintainer-supplied hardware evidence is recorded
+below with its observed scope.
 
 The established protocol tests remain available separately:
 
@@ -386,6 +393,20 @@ python3 tests/net/run_nrf91_socket.py
 
 Their existing results and dependencies are documented in
 [networking.md](networking.md).
+
+### Hardware evidence for the generic MQTT example
+
+The maintainer's first hardware log for the new `MqttDemo` reports nRF91x1
+with modem firmware `mfw_nrf91x1_2.0.1`. It registered on roaming LTE-M,
+reported network ready and connected to `test.mosquitto.org:1883` over
+plaintext TCP. The client ID was `iosnet0201acf5a919bd59` and the topic was
+`iosonata/demo/0201acf5a919bd59/echo`. A QoS 1 echo was checked at counter 1
+with `failures=0`.
+
+This confirms one successful MQTT round trip for the generic application's
+LTE path on the tested nRF91x1 hardware. CoAP, recovery, an extended run and
+TLS are not established by this log. No fresh automated ARM compile/link
+result is claimed.
 
 ### Hardware evidence from the original examples
 

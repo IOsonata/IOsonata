@@ -127,6 +127,19 @@ RngEngine *NetDemoRng()
 	return s_pRng;
 }
 
+const char *NetDemoMediumName()
+{
+#if NET_DEMO_MEDIUM == NET_DEMO_MEDIUM_LTE
+	return "LTE";
+#elif NET_DEMO_MEDIUM == NET_DEMO_MEDIUM_ETHERNET
+	return "Ethernet";
+#elif defined(NET_DEMO_MEDIUM_NAME)
+	return NET_DEMO_MEDIUM_NAME;
+#else
+	return "custom network";
+#endif
+}
+
 bool NetDemoReady()
 {
 	if (!s_MediumStarted)

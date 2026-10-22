@@ -232,6 +232,11 @@ RngEngine *NetDemoRng()
 	return s_TestRngPointer;
 }
 
+const char *NetDemoMediumName()
+{
+	return "test stream";
+}
+
 bool NetDemoReady()
 {
 	return s_TestReady;

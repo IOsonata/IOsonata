@@ -18,6 +18,8 @@ bool NetDemoInit();
 bool NetDemoStart(void (*pHandler)(uint32_t Now));
 uint32_t NetDemoNow();
 RngEngine *NetDemoRng();
+// Selected medium's display name. CUSTOM may set NET_DEMO_MEDIUM_NAME in board.h.
+const char *NetDemoMediumName();
 bool NetDemoReady();
 
 // Select and open the concrete interface outside the protocol application.

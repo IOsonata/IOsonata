@@ -230,6 +230,11 @@ RngEngine *NetDemoRng()
 	return &s_TestRng;
 }
 
+const char *NetDemoMediumName()
+{
+	return "test datagram interface";
+}
+
 bool NetDemoReady()
 {
 	return s_Ready;
