@@ -1,7 +1,8 @@
 # Generic MQTT and CoAP examples
 
-`MqttDemo` and `CoapDemo` demonstrate the same protocol application using a
-selected `DeviceIntrf *`. The target project supplies board configuration;
+`MqttDemo` and `MqttTlsDemo` use the same shared MQTT application; `CoapDemo`
+uses the shared CoAP application. Both protocols receive a selected
+`DeviceIntrf *`. The target project supplies board configuration;
 `exemples/net/net_demo.cpp` initializes the selected network and opens its
 interface. The MQTT and CoAP applications use the returned pointer without
 depending on the modem or Ethernet driver.
@@ -12,11 +13,11 @@ their original settings and validation records.
 
 ## Projects and files
 
-| Target | Library | MQTT project | CoAP project | Default medium |
-| --- | --- | --- | --- | --- |
-| nRF9160, Thingy:91 or DK | `IOsonata_nRF9160` | [MqttDemo](../ARM/Nordic/nRF91/nRF9160/exemples/MqttDemo/README.md) | [CoapDemo](../ARM/Nordic/nRF91/nRF9160/exemples/CoapDemo/README.md) | LTE-M |
-| nRF9151 DK or nRF9161 DK | `IOsonata_nRF91x1` | [MqttDemo](../ARM/Nordic/nRF91/nRF91x1/exemples/MqttDemo/README.md) | [CoapDemo](../ARM/Nordic/nRF91/nRF91x1/exemples/CoapDemo/README.md) | LTE-M |
-| NUCLEO-H753ZI | `IOsonata_STM32H753` | [MqttDemo](../ARM/ST/STM32H7xx/STM32H753/exemples/MqttDemo/README.md) | [CoapDemo](../ARM/ST/STM32H7xx/STM32H753/exemples/CoapDemo/README.md) | Ethernet with DHCP |
+| Target | Library | MQTT project | Modem TLS MQTT project | CoAP project | Default medium |
+| --- | --- | --- | --- | --- | --- |
+| nRF9160, Thingy:91 or DK | `IOsonata_nRF9160` | [MqttDemo](../ARM/Nordic/nRF91/nRF9160/exemples/MqttDemo/README.md) | [MqttTlsDemo](../ARM/Nordic/nRF91/nRF9160/exemples/MqttTlsDemo/README.md) | [CoapDemo](../ARM/Nordic/nRF91/nRF9160/exemples/CoapDemo/README.md) | LTE-M |
+| nRF9151 DK or nRF9161 DK | `IOsonata_nRF91x1` | [MqttDemo](../ARM/Nordic/nRF91/nRF91x1/exemples/MqttDemo/README.md) | [MqttTlsDemo](../ARM/Nordic/nRF91/nRF91x1/exemples/MqttTlsDemo/README.md) | [CoapDemo](../ARM/Nordic/nRF91/nRF91x1/exemples/CoapDemo/README.md) | LTE-M |
+| NUCLEO-H753ZI | `IOsonata_STM32H753` | [MqttDemo](../ARM/ST/STM32H7xx/STM32H753/exemples/MqttDemo/README.md) | - | [CoapDemo](../ARM/ST/STM32H7xx/STM32H753/exemples/CoapDemo/README.md) | Ethernet with DHCP |
 
 Each project links these shared example files:
 
@@ -28,6 +29,9 @@ Each project links these shared example files:
 | `exemples/net/net_demo.h` | Example setup functions and custom-medium hooks |
 | Target `src/board.h` | Pins, medium selection, timing, RNG provider and peer configuration |
 
+`MqttTlsDemo` also links `exemples/net/net_demo_tls_ca.h` and
+`net_demo_tls_ca.cpp`, which declare and hold the public demonstration CA.
+
 `net_demo.h` is an example helper, not a new public library interface. The
 existing protocol implementations remain `src/net/mqtt.cpp` and
 `src/net/coap.cpp`. Their C functions operate on caller-owned protocol state;
@@ -37,14 +41,15 @@ accept `DeviceIntrf *`.
 ## Build and start
 
 1. Import the selected MCU's `lib/ioc` project into IOcomposer.
-2. Import its `exemples/MqttDemo/ioc` or `exemples/CoapDemo/ioc` project.
+2. Import its `exemples/MqttDemo/ioc`, `exemples/MqttTlsDemo/ioc` or
+   `exemples/CoapDemo/ioc` project as listed above.
 3. Configure the application's `src/board.h` for the board and peer.
 4. Build the library first, then the application with matching Debug or Release
    configurations. For Nordic, use the bare-metal library configuration.
 5. Program the intended MCU and reset it with the diagnostic console open.
 
-The three target variants use the same IOcomposer project names. Use separate
-workspaces when keeping several variants of `MqttDemo` or `CoapDemo` imported.
+The target variants use the same IOcomposer project names. Use separate
+workspaces when keeping several variants of the same example imported.
 The library must contain the committed MQTT/CoAP source links; refresh or reopen
 an older workspace import and rebuild the library if those links are stale.
 
@@ -200,12 +205,14 @@ Changing the pointer cannot migrate an established TCP or MQTT session.
 The current MQTT client uses clean sessions; the example has no durable
 publication queue. Application delivery policy across reconnects remains
 explicit. If a custom interface provides authenticated TLS, finish its
-handshake before presenting it as connected to MQTT. The supplied projects
-use plaintext TCP and UDP; they do not enable TLS, DTLS or OSCORE.
+handshake before presenting it as connected to MQTT. `MqttDemo` and `CoapDemo`
+default to plaintext TCP and UDP. The separate Nordic `MqttTlsDemo` profile
+uses modem TLS with CA-chain and hostname verification. CoAP remains
+plaintext; these examples do not enable DTLS or OSCORE.
 
 ## MQTT check
 
-All supplied targets default to the same settings:
+All `MqttDemo` targets default to the same settings:
 
 ```cpp
 #define MQTT_DEMO_HOST "test.mosquitto.org"
@@ -257,6 +264,103 @@ encrypted listeners use X.509 certificates; the native IOsonata TLS client
 currently implements external PSK rather than certificate authentication.
 See [shared networking documentation](networking.md) for the separate native
 TLS and nRF91 modem credential paths.
+
+### MQTT over modem TLS
+
+The separate `MqttTlsDemo` projects for nRF9160 and nRF91x1 select the modem's
+TLS 1.2 socket. They link the same `mqtt_generic.cpp` and shared MQTT client
+as `MqttDemo`. The setup opens and authenticates the stream before returning
+its `DeviceIntrf *`; the MQTT application does not provision credentials or
+implement TLS. Existing plaintext example settings remain available.
+
+The new board headers include `net_demo_tls_ca.h` and select:
+
+```cpp
+#define NET_DEMO_MODEM_TLS 1
+#define NET_DEMO_TLS_SEC_TAG 42420
+#define NET_DEMO_TLS_CA_CERT g_NetDemoMosquittoCa
+#define NET_DEMO_TLS_REPLACE_CA 0
+#define MQTT_DEMO_HOST "test.mosquitto.org"
+#define MQTT_DEMO_PORT 8883
+#define MQTT_DEMO_INTERVAL 10000U
+```
+
+The [broker's service page](https://test.mosquitto.org/) lists port 8883 as
+TLS without a required client certificate. The setup requires peer
+verification and supplies the configured hostname to the modem. Use the DNS
+hostname whose identity the server certificate establishes; substituting a
+numeric address changes the identity being checked. A TLS failure returns no
+usable stream and never falls back to plaintext. This selection currently
+requires LTE: other built-in/custom media are rejected at compile time, and
+datagram opens are refused.
+
+#### Credential preparation
+
+Reserve tag **42420** for this demo's CA. It is a persistent modem credential
+slot, so do not share it with another application's trust configuration.
+During startup or modem reinitialization, setup initializes the modem,
+checks that `LteDisconnect()` has put the radio offline, prepares the CA,
+then checks `LteConnect()`. Network readiness remains false if any step fails.
+Ordinary MQTT socket reconnections reuse the prepared credentials.
+
+- With `NET_DEMO_TLS_REPLACE_CA = 0`, an existing CA at the selected tag is
+  reused when reported present. Presence alone does not show that it matches
+  the compiled CA. A false presence result can also mean credential listing
+  failed; setup then attempts the configured CA write. Use only the dedicated
+  tag owned by this demo.
+- If no CA exists, the configured PEM string is written. Set
+  `NET_DEMO_TLS_CA_CERT` to `nullptr` to require an already-provisioned CA.
+- Setting `NET_DEMO_TLS_REPLACE_CA = 1` explicitly replaces the CA entry in
+  that tag. Other credential types are not deleted. Return the setting to
+  zero after provisioning to avoid rewriting it on each modem initialization.
+
+The supplied `g_NetDemoMosquittoCa` is the public CA from
+[the broker's HTTPS certificate link](https://test.mosquitto.org/ssl/mosquitto.org.crt),
+retrieved on October 22, 2026. Its DER SHA-256 fingerprint is:
+
+```text
+FC:9E:45:E2:8F:6F:49:87:FD:14:81:E1:46:BC:FC:31:12:4E:F2:FA:BF:20:AB:04:7E:3F:85:92:C2:2B:65:39
+```
+
+The certificate records validity from June 9, 2020, 11:06:39 UTC through
+June 7, 2030, 11:06:39 UTC. It is public test data, not a private key or a
+production trust policy. Changing the broker requires its corresponding CA
+and hostname configuration; an existing tag is not updated merely by changing
+the compiled PEM string.
+
+#### Verification scope and checks
+
+The modem verifies the certificate chain and configured hostname, but does
+not verify server certificate expiry. Nordic documents this limitation for
+[nRF9160 firmware 1.2.8](https://nsscprodmedia.blob.core.windows.net/prod/software-and-other-downloads/dev-kits/nrf9160-dk/release_notes_modemfirmware/mfw_nrf9160_1.2.8_release_notes.txt)
+and [nRF91x1 firmware 2.0.1](https://nsscprodmedia.blob.core.windows.net/prod/software-and-other-downloads/sip/nrf91x1-sip/nrf91x1-lte-modem-firmware/release-notes/mfw_nrf91x1_2.0.1_release_notes.txt).
+This example does not add certificate validity-date enforcement. Expiration
+alone is therefore not an expected-rejection test for this profile.
+
+After a successful open the security label is
+`TLS 1.2, CA/hostname verified`. Then require a QoS 1 subscription and a
+checked self-echo, which requires both PUBACK and the matching returned
+topic/payload. The client ID, topic, keepalive, timing and reconnect behavior
+are the same as the plaintext example. Reconnection performs a fresh TLS
+open before MQTT CONNECT and re-subscription.
+
+For negative checks, use an unused dedicated tag with
+`NET_DEMO_TLS_CA_CERT = nullptr` to exercise missing credentials, or a separate
+owned tag containing a valid CA that does not trust the broker. The default
+configured CA would otherwise automatically populate a missing tag. A
+hostname check needs a reachable TLS server with a trusted CA and a mismatched
+configured hostname; a nonexistent DNS name only tests name resolution.
+There must be no MQTT subscription or new checked echo after failure. Restore
+the correct configuration and verify a fresh session. Capture native socket
+diagnostics and the modem firmware version with the result; host substitutes
+cannot establish the modem's cryptographic behavior.
+
+The public listener authenticates the server to this connection; it does not
+authenticate the MQTT user or make public topics private. It is not mutual
+TLS. The shared native TLS 1.3 external-PSK implementation remains separate
+and unchanged, with no native certificate authentication or shared DTLS
+added by this profile. No `MqttTlsDemo` hardware result or fresh automated
+ARM compile/link validation is claimed.
 
 ## CoAP check
 
@@ -361,7 +465,8 @@ python3 tests/net/run_generic_demo.py --protocol coap --target stm32h753
 ```
 
 The runner accepts `--protocol mqtt|coap|all` and
-`--target nrf9160|nrf91x1|stm32h753|all`. The complete default matrix passed:
+`--target nrf9160|nrf91x1|stm32h753|all`. The original plaintext-example
+default matrix passed:
 
 | Check | Result |
 | --- | --- |
@@ -393,6 +498,40 @@ python3 tests/net/run_nrf91_socket.py
 
 Their existing results and dependencies are documented in
 [networking.md](networking.md).
+
+### Modem TLS profile checks
+
+Run the dedicated profile checks from the repository root:
+
+```sh
+python3 tests/net/run_mqtt_tls_demo.py
+python3 tests/net/run_mqtt_tls_demo.py --target nrf9160
+python3 tests/net/run_mqtt_tls_demo.py --target nrf91x1
+```
+
+The full runner passed for both target configurations:
+
+| Check | Result |
+| --- | --- |
+| Actual board headers with the application, setup and CA sources | Six host syntax checks passed |
+| Modem TLS selected with Ethernet or a custom medium | Both unsupported selections rejected at compile time |
+| Secure MQTT application with the actual shared client | Four O0/O2 ASan/UBSan binaries passed |
+| Credential preparation and network setup | Six O0/O2 ASan/UBSan binaries passed across 24 scenario executions |
+| Actual nRF91 socket port with modem substitutes | Two O0/O2 ASan/UBSan binaries passed |
+
+This completed 12 sanitized runtime binaries and 30 runtime process
+executions. Setup checks cover missing/stored CA credentials, explicit
+replacement, the pre-provisioned-only setting, initialization/radio-off/write/
+post-write-check/reattach failures, retry timing with clock wrap, TLS-only
+stream opens, datagram rejection, partial-open cleanup and recovery after
+socket, registration or modem faults. Socket reconnections are checked to
+avoid repeated CA writes. The existing plaintext example matrix was also
+rerun successfully across all 28 sanitized runtime builds after this change.
+
+These checks use host substitutes for the modem. They do not perform an ARM
+compile/link, a modem TLS handshake, certificate authentication or a live
+broker session, and do not validate modem firmware behavior. The plaintext
+MQTT and CoAP hardware records below do not establish TLS operation.
 
 ### Hardware evidence for the generic MQTT example
 

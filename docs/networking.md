@@ -187,6 +187,31 @@ H753 supplies its existing RNG/CRYP/HASH providers and software P-256; WBA
 has its own providers. Secure networking must reuse those interfaces and
 keep controller access in the MCU ports.
 
+### Modem TLS MQTT examples
+
+The separate `MqttTlsDemo` projects for
+[nRF9160](../ARM/Nordic/nRF91/nRF9160/exemples/MqttTlsDemo/README.md) and
+[nRF91x1](../ARM/Nordic/nRF91/nRF91x1/exemples/MqttTlsDemo/README.md) run the
+shared `exemples/net/mqtt_generic.cpp` application over the modem's TLS 1.2
+socket at `test.mosquitto.org:8883`. Setup requires CA-chain and hostname
+verification before exposing the connected `DeviceIntrf` to MQTT. The shared
+protocol source is unchanged, and there is no plaintext fallback.
+
+The profile prepares a public demonstration CA in dedicated modem tag 42420
+while LTE is offline, then reconnects. A reported existing CA is reused by
+default; an explicit setting forces replacement. The presence query does not
+compare CA contents, and a false result can include a listing failure, after
+which setup attempts the configured CA write. Reserve the tag for this demo.
+This provides server authentication without a client certificate or MQTT
+account login. Nordic documents that modem firmware `mfw_nrf9160_1.2.8` and
+`mfw_nrf91x1_2.0.1` do not enforce server certificate expiry; this profile does
+not add validity-date checking. The
+[generic example guide](network-protocol-examples.md#mqtt-over-modem-tls)
+records the exact settings, CA origin/fingerprint, Nordic references,
+credential lifecycle and negative-test procedure. Native TLS 1.3 PSK and
+plaintext CoAP remain separate. No modem-TLS hardware result or fresh
+automated ARM compile/link result is claimed for these new projects.
+
 ### Native TLS 1.3 PSK client
 
 `net/tls.h` and `src/net/tls.cpp` implement an initial external-PSK client.

@@ -237,6 +237,15 @@ const char *NetDemoMediumName()
 	return "test stream";
 }
 
+const char *NetDemoSecurityName()
+{
+#if defined(NET_DEMO_MODEM_TLS) && NET_DEMO_MODEM_TLS
+	return "TLS 1.2, CA/hostname verified";
+#else
+	return "plaintext";
+#endif
+}
+
 bool NetDemoReady()
 {
 	return s_TestReady;
@@ -442,6 +451,8 @@ static WirePacket Handshake(uint32_t Now, unsigned Session)
 
 	Pump(Now, 256);
 	assert(Count(1) == Session && s_Started);
+	assert(s_TestLog.find(std::string(", ") + NetDemoSecurityName() + ", client ") !=
+		std::string::npos);
 	CheckConnect(Packet(1, Session - 1U));
 	Feed({0x20, 2, 0, 0});
 	Pump(Now, 256);
@@ -762,11 +773,13 @@ static void OpenRetry()
 	Pump(start);
 	finished = s_TestNow;
 	assert(!s_Started && s_TestOpens == 1 && s_Failures == 1);
+	assert(s_TestPackets.empty() && Current().Reads == 0 && Current().Writes == 0);
 	Pump(finished + MQTT_DEMO_RESTART_MS - 1U);
 	assert(s_TestOpens == 1);
 	Pump(finished + MQTT_DEMO_RESTART_MS);
 	finished = s_TestNow;
 	assert(s_TestOpens == 2 && s_Failures == 2 && !s_Started);
+	assert(s_TestPackets.empty() && Current().Reads == 0 && Current().Writes == 0);
 	s_TestOpenWorks = true;
 	Pump(finished + MQTT_DEMO_RESTART_MS - 1U);
 	assert(s_TestOpens == 2);

@@ -20,11 +20,14 @@ uint32_t NetDemoNow();
 RngEngine *NetDemoRng();
 // Selected medium's display name. CUSTOM may set NET_DEMO_MEDIUM_NAME in board.h.
 const char *NetDemoMediumName();
+// Security description for a successfully opened endpoint.
+const char *NetDemoSecurityName();
 bool NetDemoReady();
 
 // Select and open the concrete interface outside the protocol application.
 // Datagram=false supplies a connected byte stream; true supplies connected
 // UDP semantics. The returned DeviceIntrf is caller-owned and MaxRetry=0.
+// NET_DEMO_MODEM_TLS selects a verified LTE TLS stream and rejects datagrams.
 // Open may block; read NetDemoNow() afterward before starting deadlines.
 DeviceIntrf *NetDemoOpen(bool Datagram, const char *pHost, uint16_t Port);
 bool NetDemoConnected();

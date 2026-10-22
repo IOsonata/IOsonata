@@ -29,4 +29,19 @@
 #define NET_DEMO_DNS			{192, 0, 2, 1}
 #define NET_DEMO_DHCP			true
 
+#ifdef NET_DEMO_TEST_TLS
+#define NET_DEMO_MODEM_TLS	1
+#define NET_DEMO_TLS_SEC_TAG	42420
+#ifdef NET_DEMO_TEST_NO_CA
+#define NET_DEMO_TLS_CA_CERT	nullptr
+#else
+#define NET_DEMO_TLS_CA_CERT	"-----BEGIN CERTIFICATE-----\nFIXTURE\n-----END CERTIFICATE-----\n"
+#endif
+#ifdef NET_DEMO_TEST_REPLACE_CA
+#define NET_DEMO_TLS_REPLACE_CA	1
+#else
+#define NET_DEMO_TLS_REPLACE_CA	0
+#endif
+#endif
+
 #endif

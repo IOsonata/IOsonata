@@ -186,8 +186,8 @@ static void MqttTest(uint32_t Now)
 		}
 		s_Started = true;
 		s_SentAt = Now - MQTT_DEMO_INTERVAL;
-		SysLogPrintf(SysLogGet(), "MQTT peer %s:%u, plaintext, client %s\r\n",
-			MQTT_DEMO_HOST, (unsigned)MQTT_DEMO_PORT, s_ClientId);
+		SysLogPrintf(SysLogGet(), "MQTT peer %s:%u, %s, client %s\r\n",
+			MQTT_DEMO_HOST, (unsigned)MQTT_DEMO_PORT, NetDemoSecurityName(), s_ClientId);
 	}
 	state = s_Mqtt.Process(Now, NetDemoConnected());
 	Now = NetDemoNow();

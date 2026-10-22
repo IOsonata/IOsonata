@@ -66,7 +66,9 @@ static unsigned s_TestOpens;
 static unsigned s_TestCloses;
 static unsigned s_TestQueues;
 static unsigned s_TestPumps;
+#if !NET_DEMO_MODEM_TLS
 static unsigned s_TestProcesses;
+#endif
 static unsigned s_TestWrites;
 static bool s_TestInitWorks;
 static bool s_TestOpenWorks;
@@ -84,6 +86,19 @@ static TimerTrigEvtHandler_t s_TestTick;
 static std::string s_TestLog;
 #if NET_DEMO_MEDIUM == NET_DEMO_MEDIUM_LTE
 static LteEvtHandler_t s_TestLteEvent;
+#if NET_DEMO_MODEM_TLS
+static bool s_TestRadio;
+static bool s_TestDisconnectWorks;
+static bool s_TestConnectWorks;
+static bool s_TestCredentialStored;
+static bool s_TestCredentialWriteWorks;
+static bool s_TestCredentialCheckWorks;
+static bool s_TestCredentialChecked;
+static unsigned s_TestDisconnects;
+static unsigned s_TestConnects;
+static unsigned s_TestCredentialQueries;
+static unsigned s_TestCredentialWrites;
+#endif
 #elif NET_DEMO_MEDIUM == NET_DEMO_MEDIUM_ETHERNET
 static bool s_TestIpWorks;
 static unsigned s_TestEthernetCloses;
@@ -236,8 +251,15 @@ int SysLogPrintf(SysLog_t *, const char *pFormat, ...)
 #if NET_DEMO_MEDIUM != NET_DEMO_MEDIUM_CUSTOM
 bool SockIntrfInit(SockIntrfDev_t *pDev, const SockIntrfCfg_t *pCfg)
 {
+	assert(pCfg->LocalPort == 0 && !pCfg->EvtCB);
+#if NET_DEMO_MODEM_TLS
+	assert(pCfg->Proto == SOCKINTRF_PROTO_TLS);
+	assert(pCfg->SecTag == NET_DEMO_TLS_SEC_TAG && pCfg->bPeerVerify);
+	assert(s_TestRadio && s_TestCredentialStored && s_TestCredentialChecked);
+#else
 	assert(pCfg->Proto == SOCKINTRF_PROTO_TCP || pCfg->Proto == SOCKINTRF_PROTO_UDP);
-	assert(pCfg->LocalPort == 0 && pCfg->SecTag == -1 && !pCfg->bPeerVerify && !pCfg->EvtCB);
+	assert(pCfg->SecTag == -1 && !pCfg->bPeerVerify);
+#endif
 #if NET_DEMO_MEDIUM == NET_DEMO_MEDIUM_LTE
 	assert(pCfg->Timeout == 100U);
 #else
@@ -266,8 +288,73 @@ bool LteInit(const LteCfg_t *pCfg)
 	s_TestLteEvent = pCfg->EvtHandler;
 	s_TestInits++;
 	s_TestNow += s_TestInitDuration;
+#if NET_DEMO_MODEM_TLS
+	s_TestRadio = s_TestInitWorks;
+	// A registered status can be stale while the radio-off URC is queued.
+	// Readiness must remain gated until secure preparation finishes.
+	s_TestReady = true;
+	s_TestCredentialChecked = false;
+#endif
 	return s_TestInitWorks;
 }
+
+#if NET_DEMO_MODEM_TLS
+bool LteDisconnect()
+{
+	assert(!s_TestInterrupt && !s_TestResource && s_TestRadio);
+	s_TestDisconnects++;
+	s_TestNow += 150U;
+	if (!s_TestDisconnectWorks)
+	{
+		return false;
+	}
+	s_TestRadio = false;
+	return true;
+}
+
+bool LteConnect()
+{
+	assert(!s_TestInterrupt && !s_TestRadio && !NetDemoReady());
+	assert(s_TestCredentialStored && s_TestCredentialChecked);
+	s_TestConnects++;
+	s_TestNow += 250U;
+	s_TestRadio = s_TestConnectWorks;
+	return s_TestConnectWorks;
+}
+
+bool SockIntrfCredExists(int Tag, SOCKINTRF_CRED Type)
+{
+	assert(!s_TestInterrupt && !s_TestRadio && !NetDemoReady());
+	assert(Tag == NET_DEMO_TLS_SEC_TAG && Type == SOCKINTRF_CRED_CA_CERT);
+	s_TestCredentialQueries++;
+	s_TestNow += 20U;
+	s_TestCredentialChecked = s_TestCredentialStored && s_TestCredentialCheckWorks;
+	return s_TestCredentialChecked;
+}
+
+bool SockIntrfCredWrite(int Tag, SOCKINTRF_CRED Type, const char *pData)
+{
+	const char *expected = NET_DEMO_TLS_CA_CERT;
+
+	assert(!s_TestInterrupt && !s_TestRadio && !NetDemoReady());
+	assert(Tag == NET_DEMO_TLS_SEC_TAG && Type == SOCKINTRF_CRED_CA_CERT);
+	assert(expected && pData && strcmp(pData, expected) == 0);
+	s_TestCredentialWrites++;
+	s_TestNow += 30U;
+	if (s_TestCredentialWriteWorks)
+	{
+		s_TestCredentialStored = true;
+	}
+	s_TestCredentialChecked = false;
+	return s_TestCredentialWriteWorks;
+}
+
+bool SockIntrfCredDelete(int, SOCKINTRF_CRED)
+{
+	assert(false && "Demo must not delete credentials");
+	return false;
+}
+#endif
 
 bool LteRegistered()
 {
@@ -409,13 +496,135 @@ static DeviceIntrf *OpenEndpoint(bool Datagram)
 	return intrf;
 }
 
-int main()
+#if NET_DEMO_MODEM_TLS
+static int SecureSetup(const char *pScenario)
 {
+	const char *ca = NET_DEMO_TLS_CA_CERT;
+	bool configured = ca && ca[0];
+	bool existing = strcmp(pScenario, "stored") == 0;
+	bool fails = strcmp(pScenario, "missing") != 0 && !existing;
+	uint32_t finished;
+	unsigned writes;
+	unsigned queries;
+	unsigned connects;
+	unsigned opens;
+
+	s_TestRng.Works = s_TestTriggerWorks = s_TestQueueWorks = true;
+	s_TestInitWorks = strcmp(pScenario, "init-failure") != 0;
+	s_TestDisconnectWorks = strcmp(pScenario, "disconnect-failure") != 0;
+	s_TestConnectWorks = strcmp(pScenario, "reconnect-failure") != 0;
+	s_TestCredentialStored = existing;
+	s_TestCredentialWriteWorks = strcmp(pScenario, "write-failure") != 0;
+	s_TestCredentialCheckWorks = strcmp(pScenario, "check-failure") != 0;
+	fails = fails || (!configured && (!existing || NET_DEMO_TLS_REPLACE_CA));
+	assert(NetDemoInit() && NetDemoStart(Application));
+	assert(s_TestInits == 1 && s_TestOpens == 0);
+	assert(strcmp(NetDemoSecurityName(), "TLS 1.2, CA/hostname verified") == 0);
+	finished = NetDemoNow();
+	if (fails)
+	{
+		assert(!NetDemoReady() && !NetDemoConnected());
+		assert(!NetDemoOpen(false, "test.example", 1234) && s_TestOpens == 0);
+		if (!s_TestInitWorks)
+		{
+			assert(s_TestDisconnects == 0 && s_TestCredentialQueries == 0);
+		}
+		if (!s_TestDisconnectWorks)
+		{
+			assert(s_TestDisconnects == 1 && s_TestCredentialQueries == 0);
+		}
+		if (!s_TestInitWorks || !s_TestDisconnectWorks || !s_TestCredentialWriteWorks ||
+			!s_TestCredentialCheckWorks || !configured)
+		{
+			assert(s_TestConnects == 0);
+		}
+		// Correct the failed prerequisite; retry pacing starts after the
+		// blocking attempt and crosses the wrapping millisecond clock.
+		s_TestInitWorks = s_TestDisconnectWorks = s_TestConnectWorks = true;
+		s_TestCredentialWriteWorks = s_TestCredentialCheckWorks = true;
+		if (!configured)
+		{
+			// Existing-only mode can recover after external CA provisioning.
+			s_TestCredentialStored = true;
+		}
+		PumpAt(finished + 29999U);
+		assert(s_TestInits == 1 && !NetDemoReady());
+		PumpAt(finished + 30000U);
+		assert(s_TestInits == 2);
+	}
+	assert(NetDemoReady() && !NetDemoConnected());
+	assert(s_TestConnects >= 1 && s_TestRadio && s_TestCredentialChecked);
+	if (existing && !NET_DEMO_TLS_REPLACE_CA)
+	{
+		assert(s_TestCredentialWrites == 0);
+	}
+	else if (configured)
+	{
+		assert(s_TestCredentialWrites >= 1);
+	}
+	assert(!NetDemoOpen(true, "test.example", 1234) && s_TestOpens == 0);
+	writes = s_TestCredentialWrites;
+	queries = s_TestCredentialQueries;
+	connects = s_TestConnects;
+	finished = NetDemoNow();
+	assert(!NetDemoOpen(false, "test.example", 1234));
+	assert(!s_TestResource && !NetDemoConnected() && s_TestCloses == 1);
+	assert(NetDemoNow() == finished + s_TestOpenDuration + s_TestCloseDuration);
+	assert(s_TestCredentialWrites == writes && s_TestCredentialQueries == queries);
+	assert(s_TestConnects == connects);
+
+	s_TestOpenWorks = true;
+	OpenEndpoint(false);
+	opens = s_TestOpens;
+	assert(!NetDemoOpen(false, "test.example", 1234) && s_TestOpens == opens);
+	// A lost secure endpoint opens a fresh TLS socket without reprovisioning.
+	s_TestSocket->bConnected = false;
+	assert(!NetDemoConnected());
+	NetDemoClose();
+	OpenEndpoint(false);
+	assert(s_TestOpens == opens + 1U && s_TestWrites == 2);
+	assert(s_TestCredentialWrites == writes && s_TestCredentialQueries == queries);
+	assert(s_TestConnects == connects);
+
+	LteStatus_t status = {};
+	unsigned inits = s_TestInits;
+
+	status.RegStat = LTE_REG_ROAMING;
+	status.Rat = LTE_RAT_LTEM;
+	s_TestLteEvent(LTE_EVT_UNREGISTERED, &status);
+	assert(!NetDemoConnected() && !s_TestResource);
+	s_TestLteEvent(LTE_EVT_REGISTERED, &status);
+	OpenEndpoint(false);
+	assert(s_TestCredentialWrites == writes && s_TestCredentialQueries == queries);
+	s_TestLteEvent(LTE_EVT_MODEM_FAULT, &status);
+	finished = NetDemoNow();
+	assert(!NetDemoReady() && !NetDemoConnected());
+	PumpAt(finished + 29999U);
+	assert(s_TestInits == inits);
+	PumpAt(finished + 30000U);
+	assert(s_TestInits == inits + 1U && NetDemoReady() && !NetDemoConnected());
+	assert(s_TestCredentialWrites == writes + (NET_DEMO_TLS_REPLACE_CA ? 1U : 0U));
+	OpenEndpoint(false);
+	NetDemoClose();
+	assert(!s_TestResource);
+	puts("Generic TLS setup: credential gating, no plaintext fallback and secure reopen PASS");
+	return 0;
+}
+#endif
+
+int main(int argc, char **argv)
+{
+#if NET_DEMO_MODEM_TLS
+	assert(argc == 2);
+	return SecureSetup(argv[1]);
+#else
 	uint32_t finished;
 	unsigned inits;
 	unsigned opens;
 	unsigned closes;
 
+	(void)argc;
+	(void)argv;
 	assert(!NetDemoReady() && !NetDemoConnected());
 	assert(!NetDemoStart(Application));
 	assert(!NetDemoInit());
@@ -530,4 +739,5 @@ int main()
 #endif
 	assert(s_TestLog.find("retry in 30 s") != std::string::npos);
 	puts("Generic network setup: deferred pump, retry timing, readiness and direct interface injection PASS");
+#endif
 }

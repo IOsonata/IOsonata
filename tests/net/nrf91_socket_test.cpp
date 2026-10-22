@@ -74,6 +74,9 @@ static nrf_addrinfo s_AddrInfo[2];
 static nrf_sockaddr_in s_Addr4;
 static nrf_sockaddr_in6 s_Addr6;
 static SysLog_t s_TestLog;
+static std::vector<std::string> s_AtCommands;
+static std::string s_AtResponse;
+static int s_AtResult = -1;
 
 static TestSocket &Socket(int Handle)
 {
@@ -330,14 +333,34 @@ ssize_t nrf_recv(int Handle, void *, size_t, int Flags)
 	return -1;
 }
 
-int nrf_modem_at_printf(const char *, ...)
+int nrf_modem_at_printf(const char *pFormat, ...)
 {
-	return -1;
+	char command[512];
+	va_list args;
+	int count;
+
+	va_start(args, pFormat);
+	count = vsnprintf(command, sizeof(command), pFormat, args);
+	va_end(args);
+	assert(count >= 0 && (size_t)count < sizeof(command));
+	s_AtCommands.emplace_back(command);
+	return s_AtResult;
 }
 
-int nrf_modem_at_cmd(char *, size_t, const char *, ...)
+int nrf_modem_at_cmd(char *pResponse, size_t Size, const char *pFormat, ...)
 {
-	return -1;
+	char command[128];
+	va_list args;
+	int count;
+
+	va_start(args, pFormat);
+	count = vsnprintf(command, sizeof(command), pFormat, args);
+	va_end(args);
+	assert(count >= 0 && (size_t)count < sizeof(command));
+	s_AtCommands.emplace_back(command);
+	assert(pResponse && s_AtResponse.size() < Size);
+	memcpy(pResponse, s_AtResponse.c_str(), s_AtResponse.size() + 1U);
+	return s_AtResult;
 }
 
 SysLog_t *SysLogGet(void)
@@ -392,6 +415,9 @@ static void Reset(TestDns Dns = DNS_IPV4)
 	s_Sockets.clear();
 	s_Trace.clear();
 	s_Log.clear();
+	s_AtCommands.clear();
+	s_AtResponse.clear();
+	s_AtResult = -1;
 	errno = 0;
 }
 
@@ -664,6 +690,82 @@ static void TestLocalFailures()
 	RequireClosed(&dev);
 }
 
+static void TestSecureReopen()
+{
+	Reset(DNS_IPV6);
+	SockIntrfDev_t dev = {};
+	SockIntrfCfg_t cfg = Config(SOCKINTRF_PROTO_TLS);
+
+	cfg.Port = s_RemotePort = 8883;
+	// A refused secure connect must remain TLS on both address attempts.
+	// This models the modem rejecting authentication; no TLS crypto runs here.
+	s_Failure = FAIL_CONNECT;
+	s_FailErrno = NRF_ECONNREFUSED;
+	assert(!SockIntrfInit(&dev, &cfg));
+	assert((s_Families == std::vector<int>{NRF_AF_INET6, NRF_AF_INET}));
+	assert(s_Connects == 2 && s_Sockets.size() == 2);
+	RequireClosed(&dev);
+	for (const TestSocket &socket : s_Sockets)
+	{
+		assert(socket.Protocol == NRF_SPROTO_TLS1v2 && socket.Type == NRF_SOCK_STREAM);
+		assert(socket.Tag && socket.Verify && socket.Host);
+	}
+
+	s_Failure = FAIL_NONE;
+	assert(SockIntrfInit(&dev, &cfg));
+	int first = dev.Hdl;
+	TestSocket &socket = Socket(first);
+
+	assert(socket.Protocol == NRF_SPROTO_TLS1v2 && socket.Tag && socket.Verify && socket.Host);
+	assert(socket.Callback);
+	nrf_pollfd closed = {first, NRF_POLLIN, NRF_POLLHUP};
+
+	socket.Callback(&closed);
+	assert(!SockIntrfConnected(&dev));
+	SockIntrfClose(&dev);
+	RequireClosed(&dev);
+	assert(SockIntrfInit(&dev, &cfg));
+	assert(dev.Hdl != first && Socket(dev.Hdl).Protocol == NRF_SPROTO_TLS1v2);
+	assert(Socket(dev.Hdl).Tag && Socket(dev.Hdl).Verify && Socket(dev.Hdl).Host);
+	const uint8_t message[] = {0, 1, 2, 0xff};
+
+	assert(SockIntrfTx(&dev, message, sizeof(message)) == (int)sizeof(message));
+	SockIntrfClose(&dev);
+	RequireClosed(&dev);
+}
+
+static void TestCredentials()
+{
+	static const char ca[] = "-----BEGIN CERTIFICATE-----\nTEST\n-----END CERTIFICATE-----\n";
+	Reset();
+
+	assert(!SockIntrfCredWrite(-1, SOCKINTRF_CRED_CA_CERT, ca));
+	assert(!SockIntrfCredWrite(42, SOCKINTRF_CRED_CA_CERT, nullptr));
+	assert(!SockIntrfCredWrite(42, SOCKINTRF_CRED_CA_CERT, ""));
+	assert(!SockIntrfCredWrite(42, SOCKINTRF_CRED_CA_CERT, "bad\"credential"));
+	assert(!SockIntrfCredWrite(42, (SOCKINTRF_CRED)5, ca));
+	assert(!SockIntrfCredExists(-1, SOCKINTRF_CRED_CA_CERT));
+	assert(!SockIntrfCredDelete(-1, SOCKINTRF_CRED_CA_CERT));
+	assert(s_AtCommands.empty());
+
+	assert(!SockIntrfCredWrite(42, SOCKINTRF_CRED_CA_CERT, ca));
+	assert(s_AtCommands.back() == std::string("AT%CMNG=0,42,0,\"") + ca + "\"");
+	s_AtResult = 0;
+	assert(SockIntrfCredWrite(42, SOCKINTRF_CRED_CA_CERT, ca));
+	assert(s_AtCommands.back() == std::string("AT%CMNG=0,42,0,\"") + ca + "\"");
+	assert(!SockIntrfCredExists(42, SOCKINTRF_CRED_CA_CERT));
+	assert(s_AtCommands.back() == "AT%CMNG=1,42,0");
+	s_AtResponse = "%CMNG: 42,0,\"credential-hash\"\r\n";
+	assert(SockIntrfCredExists(42, SOCKINTRF_CRED_CA_CERT));
+	s_AtResult = -1;
+	assert(!SockIntrfCredExists(42, SOCKINTRF_CRED_CA_CERT));
+	s_AtResult = 0;
+	assert(SockIntrfCredDelete(42, SOCKINTRF_CRED_CA_CERT));
+	assert(s_AtCommands.back() == "AT%CMNG=3,42,0");
+	s_AtResult = -1;
+	assert(!SockIntrfCredDelete(42, SOCKINTRF_CRED_CA_CERT));
+}
+
 int main()
 {
 	TestTimeouts();
@@ -671,6 +773,8 @@ int main()
 	TestLookupLimits();
 	TestFailureDiagnostics();
 	TestLocalFailures();
-	puts("nRF91 socket timeout, address fallback, diagnostics and cleanup PASS");
+	TestSecureReopen();
+	TestCredentials();
+	puts("nRF91 socket timeout, address fallback, secure setup/reopen, credentials and cleanup PASS");
 	return 0;
 }

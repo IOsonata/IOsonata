@@ -38,7 +38,7 @@ def run(command, **kwargs):
 	subprocess.run(command, check=True, **kwargs)
 
 
-def check_project(project, protocol):
+def check_project(project, protocol, modem_tls=False):
 	"""Fail before compilation if a project points back at the old application."""
 	ioc = project / 'ioc'
 	tree = ET.parse(ioc / '.project')
@@ -47,6 +47,9 @@ def check_project(project, protocol):
 		'src/net_demo.cpp': ROOT / 'exemples/net/net_demo.cpp',
 		'src/net_demo.h': ROOT / 'exemples/net/net_demo.h',
 	}
+	if modem_tls:
+		for name in ('net_demo_tls_ca.cpp', 'net_demo_tls_ca.h'):
+			expected['src/' + name] = ROOT / 'exemples/net' / name
 	links = {}
 	for link in tree.findall('./linkedResources/link'):
 		name = link.findtext('name')

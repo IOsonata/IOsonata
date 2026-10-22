@@ -10,6 +10,26 @@
 #include "board.h"
 #include NET_DEMO_RNG_HEADER
 
+#ifndef NET_DEMO_MODEM_TLS
+#define NET_DEMO_MODEM_TLS	0
+#endif
+
+static_assert(NET_DEMO_MODEM_TLS == 0 || NET_DEMO_MODEM_TLS == 1,
+	"NET_DEMO_MODEM_TLS must be 0 or 1");
+
+#if NET_DEMO_MODEM_TLS
+#if NET_DEMO_MEDIUM != NET_DEMO_MEDIUM_LTE
+#error "NET_DEMO_MODEM_TLS requires the LTE medium"
+#endif
+#ifndef NET_DEMO_TLS_REPLACE_CA
+#define NET_DEMO_TLS_REPLACE_CA	0
+#endif
+static_assert(NET_DEMO_TLS_REPLACE_CA == 0 || NET_DEMO_TLS_REPLACE_CA == 1,
+	"NET_DEMO_TLS_REPLACE_CA must be 0 or 1");
+static_assert(NET_DEMO_TLS_SEC_TAG >= 0 && NET_DEMO_TLS_SEC_TAG <= 2147483647,
+	"NET_DEMO_TLS_SEC_TAG must be a nonnegative int");
+#endif
+
 #if NET_DEMO_MEDIUM == NET_DEMO_MEDIUM_LTE
 #include "lte/lte.h"
 #include "net/sock_intrf.h"
@@ -140,6 +160,15 @@ const char *NetDemoMediumName()
 #endif
 }
 
+const char *NetDemoSecurityName()
+{
+#if NET_DEMO_MODEM_TLS
+	return "TLS 1.2, CA/hostname verified";
+#else
+	return "plaintext";
+#endif
+}
+
 bool NetDemoReady()
 {
 	if (!s_MediumStarted)
@@ -190,6 +219,13 @@ DeviceIntrf *NetDemoOpen(bool Datagram, const char *pHost, uint16_t Port)
 	{
 		return nullptr;
 	}
+#if NET_DEMO_MODEM_TLS
+	if (Datagram)
+	{
+		SysLogPrintf(SysLogGet(), "Modem TLS demo requires a stream interface\r\n");
+		return nullptr;
+	}
+#endif
 #if NET_DEMO_MEDIUM == NET_DEMO_MEDIUM_CUSTOM
 	s_pEndpoint = NetDemoCustomOpen(Datagram, pHost, Port);
 	if (!s_pEndpoint || !NetDemoCustomConnected())
@@ -200,12 +236,21 @@ DeviceIntrf *NetDemoOpen(bool Datagram, const char *pHost, uint16_t Port)
 	}
 #else
 	SockIntrfCfg_t cfg = {
+#if NET_DEMO_MODEM_TLS
+		.Proto = SOCKINTRF_PROTO_TLS,
+#else
 		.Proto = Datagram ? SOCKINTRF_PROTO_UDP : SOCKINTRF_PROTO_TCP,
+#endif
 		.pHost = pHost,
 		.Port = Port,
 		.LocalPort = 0,
+#if NET_DEMO_MODEM_TLS
+		.SecTag = NET_DEMO_TLS_SEC_TAG,
+		.bPeerVerify = true,
+#else
 		.SecTag = -1,
 		.bPeerVerify = false,
+#endif
 #if NET_DEMO_MEDIUM == NET_DEMO_MEDIUM_LTE
 		// The nRF91 socket port gives DNS/connect their own wait.
 		.Timeout = 100,
@@ -271,18 +316,75 @@ static void LteEvent(LTE_EVT Evt, const LteStatus_t * const pStatus)
 }
 #endif
 
+#if NET_DEMO_MODEM_TLS
+static bool PrepareModemTls()
+{
+	const char *ca = NET_DEMO_TLS_CA_CERT;
+	bool present;
+
+	// LteInit starts attachment. Stop it before touching persistent credentials,
+	// retaining the LTE port's modem initialization and fault ownership.
+	if (!LteDisconnect())
+	{
+		SysLogPrintf(SysLogGet(), "TLS credential setup: LTE radio-off failed\r\n");
+		return false;
+	}
+	present = SockIntrfCredExists(NET_DEMO_TLS_SEC_TAG, SOCKINTRF_CRED_CA_CERT);
+	if (!present || NET_DEMO_TLS_REPLACE_CA)
+	{
+		if (!ca || !ca[0])
+		{
+			SysLogPrintf(SysLogGet(), "TLS credential setup: CA required for tag %d\r\n",
+				(int)NET_DEMO_TLS_SEC_TAG);
+			return false;
+		}
+		if (!SockIntrfCredWrite(NET_DEMO_TLS_SEC_TAG, SOCKINTRF_CRED_CA_CERT, ca) ||
+			!SockIntrfCredExists(NET_DEMO_TLS_SEC_TAG, SOCKINTRF_CRED_CA_CERT))
+		{
+			SysLogPrintf(SysLogGet(), "TLS credential setup: CA write/check failed for tag %d\r\n",
+				(int)NET_DEMO_TLS_SEC_TAG);
+			return false;
+		}
+		SysLogPrintf(SysLogGet(), "TLS CA stored under tag %d\r\n", (int)NET_DEMO_TLS_SEC_TAG);
+	}
+	else
+	{
+		SysLogPrintf(SysLogGet(), "TLS using stored CA under tag %d\r\n", (int)NET_DEMO_TLS_SEC_TAG);
+	}
+	if (!LteConnect())
+	{
+		SysLogPrintf(SysLogGet(), "TLS credential setup: LTE reattach failed\r\n");
+		return false;
+	}
+	return true;
+}
+#endif
+
 static void StartMedium()
 {
 #if NET_DEMO_MEDIUM == NET_DEMO_MEDIUM_LTE
 	char info[48];
+	bool started;
 
-	s_MediumStarted = LteInit(&s_LteCfg);
-	if (s_MediumStarted)
+	// Do not expose a stale registered state during credential provisioning.
+	s_MediumStarted = false;
+	started = LteInit(&s_LteCfg);
+	if (started)
 	{
 		if (LteGetInfo(LTE_INFO_FWVER, info, sizeof(info)))
 		{
 			SysLogPrintf(SysLogGet(), "Modem firmware %s\r\n", info);
 		}
+	}
+#if NET_DEMO_MODEM_TLS
+	if (started)
+	{
+		started = PrepareModemTls();
+	}
+#endif
+	s_MediumStarted = started;
+	if (s_MediumStarted)
+	{
 		SysLogPrintf(SysLogGet(), "Attaching; PSM, eDRX and RAI disabled for this test\r\n");
 	}
 #elif NET_DEMO_MEDIUM == NET_DEMO_MEDIUM_ETHERNET
