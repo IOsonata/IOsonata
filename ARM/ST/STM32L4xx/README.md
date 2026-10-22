@@ -256,6 +256,19 @@ ST API pass them too: its sigma estimate computed from the printed rates is
 about 6 mm, under its 18 mm limit. The driver now reports a complete range of
 0 mm as status 0xFE (`VL53L0X_DEVICE_STATUS_ZERO_CODE`), not as a distance;
 not run on the board since. Distances not compared with a reference.
+The STM32L476 example NfcTagDemo (`exemples/rftag/nfc_tag_demo.cpp`) uses
+the onboard M24SR64-Y dynamic NFC tag on the same bus at 0x56 through the new
+`TagM24sr` RFTag facet (`include/rftag/m24sr.h`, `src/rftag/m24sr.cpp`), with
+the RF disable pin PE2 held low. The driver opens an I2C session, selects the
+NDEF application, and reads the capability container and the ST system file:
+the NDEF file id and size, the largest read and update, the UID and the
+product code. The memory of the facet is the NDEF file, a 2 byte length then
+the message, so the RFTag SetNdef and GetNdef work on it. Each memory read or
+write is one I2C session ended by a deselect, so a reader can reach the tag
+between them. The demo prints what the tag holds, writes a text record and a
+URI record, reads them back, then checks the tag every 2 seconds and prints
+the message when a reader changed it. `tests/rftag/run.py` runs the driver
+against a model of the chip. Not run on the board yet.
 L496 and L4S9 I2C4 use virtual index 3. The L432 has no I2C2: index 1 fails
 initialization, I2C1 and I2C3 keep indices 0 and 2.
 
