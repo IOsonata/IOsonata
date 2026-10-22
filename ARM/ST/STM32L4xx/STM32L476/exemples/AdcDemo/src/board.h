@@ -56,12 +56,12 @@ SOFTWARE.
 #define UART_TX_PIN			6
 #define UART_TX_PINOP		IOPINOP_FUNC7
 
-// ADC1 of the STM32L4 driver, VREF+ is VDDA, 3.3 V on this board
-#define ADC_DRIVER_HEADER	"adc_stm32l4.h"
-#define ADC_DRIVER			AdcSTM32L4
+// ADC1 of the STM32 ADC driver, VREF+ at 3.3 V, the voltage of VDDA when tied to it
+#define ADC_DRIVER_HEADER	"adc_stm32.h"
+#define ADC_DRIVER			AdcStm32
 #define ADC_REF_VOLTAGE		3.3f
 
 // Inputs read by the demo: VREFINT, temperature sensor, VBAT, Arduino A0 (PC5)
-#define ADC_INPUTS			{ ADC_STM32L4_INPUT_VREFINT, ADC_STM32L4_INPUT_TEMP, ADC_STM32L4_INPUT_VBAT, 14 }
+#define ADC_INPUTS			{ ADC_STM32_INPUT_VREFINT, ADC_STM32_INPUT_TEMP, ADC_STM32_INPUT_VBAT, 14 }
 
 #endif // __BOARD_H__

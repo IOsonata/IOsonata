@@ -18,9 +18,10 @@ G4 device headers in `include/`.
   interrupt order, 102 interrupt entries up to FMAC.
 - `ldscript/gcc_stm32g474xx.ld`: STM32G474xE.
 - Shared with the other STM32 families: `ARM/ST/src/iopincfg_stm32.cpp`
-  (GPIO and EXTI, the L4 register names), `ARM/ST/src/uart_stm32.cpp` and the
+  (GPIO and EXTI, the L4 register names), `ARM/ST/src/uart_stm32.cpp`, the
   timer driver, `ARM/ST/src/timer_stm32.cpp`, `timer_lptim_stm32.cpp` and
-  `timer_tim_stm32.cpp`.
+  `timer_tim_stm32.cpp`, and the ADC1 driver of the L4 and G4,
+  `ARM/ST/src/adc_stm32.cpp`.
 
 ## Clock
 
@@ -86,9 +87,31 @@ and TIM7 share theirs with the DACs), see `ARM/ST/STM32F0xx/README.md`.
 
 ## Limits
 
-No I2C, SPI, QSPI, ADC, USB or FDCAN driver for G4. The library project
+No I2C, SPI, QSPI, USB or FDCAN driver for G4. ADC1 only, see ADC. The library project
 leaves out `ARM/ST/src/dfu_stm32.cpp` (no G4 flash programming support).
 The CCM SRAM is linked as RAM2 only.
+
+## ADC
+
+`AdcStm32` (`ARM/ST/include/adc_stm32.h`, `ARM/ST/src/adc_stm32.cpp`, shared
+with the L4) implements the generic AdcDevice API on ADC1: software triggered
+scans of up to 16 inputs read by polling, resolution 6 to 12 bits, hardware
+oversampling 2 to 256 times, the pins of inputs 1 to 12, 14 and 15 (PA0 to
+PA3, PB14, PC0 to PC3, PF0, PB12, PB1, PB11, PB0, the same map on every G4
+part) and the internal inputs temperature sensor (16), VBAT (17, through the
+1/3 bridge, Data is VBAT) and VREFINT (18). Input 13, the OPAMP1 output,
+interrupt, DMA, continuous mode and differential inputs are refused. The
+clock is HCLK / 2, or HCLK / 4 when HCLK / 2 is above the 60 MHz ADC clock
+limit: HCLK / 4 at the 170 MHz of SystemInit. The sampling time covers
+AcqTime and the datasheet minimum of the internal inputs. Each scan begins
+with a conversion whose result is not used, the workaround of ES0430 2.7.9 (a
+conversion started more than 1 ms after the previous one can be wrong). The
+library builds it. `tests/stm32/run_adc.py` runs the driver for the G474 and
+G431 in Unicorn against a model of the ADC registers. The example AdcDemo
+(`exemples/converters/adc_demo.cpp`) prints VREFINT, the temperature sensor,
+VBAT and Arduino A0 (PA0) once per second, on the ST-LINK virtual COM port,
+LPUART1 at 115200 8N1, in Release, with semihosting in Debug. Not run on
+hardware yet.
 
 ## Memory
 
@@ -101,8 +124,9 @@ RAM2.
 
 `STM32G474/exemples/Blinky` (`exemples/misc/blinky.c`),
 `STM32G474/exemples/UartLoopback` (`exemples/uart/uart_loopback.cpp`),
-`STM32G474/exemples/UartPrbsTxTest` (`exemples/uart/uart_prbs_tx.cpp`) and
-`STM32G474/exemples/TimerDemo` (`exemples/timer/timer_demo.cpp`) link
+`STM32G474/exemples/UartPrbsTxTest` (`exemples/uart/uart_prbs_tx.cpp`),
+`STM32G474/exemples/TimerDemo` (`exemples/timer/timer_demo.cpp`) and
+`STM32G474/exemples/AdcDemo` (`exemples/converters/adc_demo.cpp`) link
 `IOsonata_STM32G474` from `STM32G474/lib/ioc` in the same Debug or Release
 configuration. Build the library first. `board.h` selects
 `#define BOARD NUCLEO_G474RE` (`ARM/ST/include/stm32_boards.h`). Blinky blinks
@@ -156,6 +180,7 @@ ST-LINK virtual COM port at 1 Mbaud from HSI16.
 python3 tests/stm32g4/run.py
 python3 tests/stm32/run_uart.py
 python3 tests/stm32/run_timer.py
+python3 tests/stm32/run_adc.py
 ```
 
 `tests/stm32g4/run.py` runs `system_stm32g4xx.c` with the ST STM32G474

@@ -383,7 +383,8 @@ uint32_t SystemHFClockGet()
 {
 	uint32_t tmp = (RCC->CFGR & RCC_CFGR_HPRE_Msk) >> RCC_CFGR_HPRE_Pos;
 
-	return tmp & 8 ? SystemCoreClock >> ((tmp & 7) + 1) : SystemCoreClock;
+	// HPRE 8 to 11 divide by 2 to 16, 12 to 15 by 64 to 512
+	return SystemCoreClock >> AHBPrescTable[tmp];
 }
 
 /**

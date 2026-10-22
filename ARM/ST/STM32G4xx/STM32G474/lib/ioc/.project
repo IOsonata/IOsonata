@@ -546,6 +546,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/converters/adc_ltc2495.h</locationURI>
 		</link>
 		<link>
+			<name>include/converters/adc_stm32.h</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/include/adc_stm32.h</locationURI>
+		</link>
+		<link>
 			<name>include/converters/analog_comp.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/converters/analog_comp.h</locationURI>
@@ -869,6 +874,11 @@
 			<name>src/converters/adc_ltc2495.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/converters/adc_ltc2495.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/converters/adc_stm32.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/src/adc_stm32.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/coredev/i2c.cpp</name>

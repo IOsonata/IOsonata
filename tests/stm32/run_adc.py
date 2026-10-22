@@ -1,25 +1,26 @@
 #!/usr/bin/env python3
-"""Build the STM32L4 ADC1 driver with adc_fw.cpp and run it in Unicorn.
+"""Build the STM32 ADC1 driver with adc_fw.cpp and run it in Unicorn.
 
-Run: python3 tests/stm32l4/run_adc.py
+Run: python3 tests/stm32/run_adc.py
 
-The driver, ARM/ST/STM32L4xx/src/adc_stm32l4.cpp, is built at -O0 and -Os for
-the parts of PARTS and run against a model of the ADC1 registers. usDelay of
-the firmware (adc_shim/idelay.h) moves the time of the model, so the model
-checks the waits of RM0351 and the datasheets:
+The driver, ARM/ST/src/adc_stm32.cpp, is built at -O0 and -Os for the L4,
+L4+ and G4 parts of PARTS and run against a model of the ADC1 registers.
+usDelay of the firmware (adc_shim/idelay.h) moves the time of the model, so
+the model checks the waits of RM0351, RM0440 and the datasheets:
 
 - 20 us of regulator start before the calibration or the enable
-- ADEN ignored for 4 ADC clocks after the calibration (ES0250 2.8.4)
+- ADEN ignored for 4 ADC clocks after the calibration (RM0351, RM0440)
 - temperature sensor 120 us after TSEN and 15 us after the enable,
   reference 12 us after VREFEN and after the enable
 - sampling time of the internal inputs: 4 us, 5 us, 12 us
 - a conversion started more than 1 ms after the previous one or after the
-  calibration gives a wrong result (ES0250 2.8.11)
+  calibration gives a wrong result (ES0250 2.8.11, ES0430 2.7.9)
 - an input pin reads 0 V while its GPIOx_ASCR switch is open, on the parts
   that have the register
 - conversions do not wait for the data register without AUTDLY, a result not
   read in time is an overrun
-- synchronous clock, CKMODE written while the ADC is disabled
+- synchronous clock, CKMODE written while the ADC is disabled, the ADC
+  clock within the limit of the family, 80 MHz L4, 60 MHz G4
 - no LDM, STM, LDRD or STRD on the ADC registers (ES0250 2.8.3, 2.8.15)
 
 It also models the set only CR commands, W1C flags and the hardware
@@ -62,14 +63,19 @@ from elftools.elf.elffile import ELFFile
 ROOT = Path(__file__).resolve().parents[2]
 HERE = Path(__file__).resolve().parent
 
-ADC = 0x50040000
-CCR = ADC + 0x308
 RCC = 0x40021000
 GPIO = 0x48000000
 CONTROL = 0x500FF000
 
-# Part define and whether it has GPIOx_ASCR
-PARTS = [('STM32L476xx', True), ('STM32L4R5xx', False), ('STM32L412xx', False)]
+# Part define, family and whether it has GPIOx_ASCR
+PARTS = [('STM32L476xx', 'L4', True), ('STM32L4R5xx', 'L4', False), ('STM32L412xx', 'L4', False),
+		 ('STM32G474xx', 'G4', False), ('STM32G431xx', 'G4', False)]
+
+# ADC1 base, internal inputs, ADC clock limit and include folder of the families
+FAMILY = {
+	'L4': {'adc': 0x50040000, 'vrefint': 0, 'temp': 17, 'vbat': 18, 'fmax': 80e6, 'inc': 'ARM/ST/STM32L4xx/include'},
+	'G4': {'adc': 0x50000000, 'vrefint': 18, 'temp': 16, 'vbat': 17, 'fmax': 60e6, 'inc': 'ARM/ST/STM32G4xx/include'},
+}
 
 CR_ADEN, CR_ADDIS, CR_ADSTART, CR_JADSTART, CR_ADSTP, CR_JADSTP = 1, 2, 4, 8, 16, 32
 CR_ADVREGEN, CR_DEEPPWD, CR_ADCALDIF, CR_ADCAL = 1 << 28, 1 << 29, 1 << 30, 1 << 31
@@ -82,8 +88,10 @@ SAR_CLK = {12: 12.5, 10: 10.5, 8: 8.5, 6: 6.5}
 
 # Input voltages, VREF+ 3.3 V, 0.1 V per input number for the others
 VREF = 3.3
-VOLT = {0: 1.212, 1: 0.5, 5: 1.5, 14: 2.0, 17: 0.8, 18: 1.0}
-MIN_SAMPLE = {0: 4.0, 17: 5.0, 18: 12.0}
+VOLT = {'vrefint': 1.212, 'temp': 0.8, 'vbat': 1.0, 1: 0.5, 5: 1.5, 14: 2.0}
+MIN_SAMPLE = {'vrefint': 4.0, 'temp': 5.0, 'vbat': 12.0}
+CCR_BIT = {'vrefint': 1 << 22, 'temp': 1 << 23, 'vbat': 1 << 24}
+# L4 pins, GPIOx_ASCR of the L47x
 PIN = {1: (2, 0), 2: (2, 1), 3: (2, 2), 4: (2, 3), 5: (0, 0), 6: (0, 1), 7: (0, 2), 8: (0, 3),
 	   9: (0, 4), 10: (0, 5), 11: (0, 6), 12: (0, 7), 13: (2, 4), 14: (2, 5), 15: (1, 0), 16: (1, 1)}
 
@@ -97,8 +105,11 @@ def run(cmd):
 
 
 class Model:
-	def __init__(self, uc, ascr):
+	def __init__(self, uc, family, ascr):
 		self.uc = uc
+		self.fam = FAMILY[family]
+		self.adc = self.fam['adc']
+		self.internal = {self.fam[k]: k for k in ('vrefint', 'temp', 'vbat')}
 		self.ascr = ascr
 		self.fault = 0
 		self.core = 80000000
@@ -131,7 +142,9 @@ class Model:
 	def fadc(self):
 		ck = (self.ccr >> 16) & 3
 		assert ck, 'asynchronous ADC clock selected'
-		return self.hclk() / (1, 2, 4)[ck - 1]
+		f = self.hclk() / (1, 2, 4)[ck - 1]
+		assert f <= self.fam['fmax'], f'ADC clock {f} Hz above the limit'
+		return f
 
 	def clk_us(self, n):
 		return n * 1e6 / self.fadc()
@@ -157,20 +170,20 @@ class Model:
 	def value(self, inp, start):
 		res = self.resolution()
 		full = (1 << res) - 1
-		volt = VOLT.get(inp, 0.1 * inp)
-		if inp in PIN:
-			port, pin = PIN[inp]
+		kind = self.internal.get(inp)
+		volt = VOLT.get(kind if kind else inp, 0.1 * inp)
+		if kind is None:
 			if self.ascr:
+				port, pin = PIN[inp]
 				ascr = struct.unpack('<I', self.uc.mem_read(GPIO + port * 0x400 + 0x2C, 4))[0]
 				if not ascr >> pin & 1:
 					volt = 0.0
 		else:
-			bit = {0: CCR_VREFEN, 17: CCR_TSEN, 18: CCR_VBATEN}[inp]
-			if not self.ccr & bit or self.clk_us(self.smp(inp)) < MIN_SAMPLE[inp] - 1e-9:
+			if not self.ccr & CCR_BIT[kind] or self.clk_us(self.smp(inp)) < MIN_SAMPLE[kind] - 1e-9:
 				volt = 0.0
-			elif inp == 17 and (start - self.t_tsen < 120 - 1e-9 or start - self.t_ready < 15 - 1e-9):
+			elif kind == 'temp' and (start - self.t_tsen < 120 - 1e-9 or start - self.t_ready < 15 - 1e-9):
 				volt = 0.0
-			elif inp == 0 and start - max(self.t_vrefen, self.t_ready) < 12 - 1e-9:
+			elif kind == 'vrefint' and start - max(self.t_vrefen, self.t_ready) < 12 - 1e-9:
 				volt = 0.0
 		raw = min(full, int(volt / VREF * full + 0.5))
 		ratio, shift = self.ratio()
@@ -258,13 +271,13 @@ class Model:
 		assert enr & (1 << 13), 'ADC clock disabled'
 
 	def read(self, uc, access, addr, size, value, _):
-		if ADC <= addr < ADC + 0x400:
+		if self.adc <= addr < self.adc + 0x400:
 			self.check_insn(uc)
 			self.clock_on(uc)
 			assert size == 4, 'ADC access not 32 bits'
 			self.step()
-			off = addr - ADC
-			if addr == CCR:
+			off = addr - self.adc
+			if off == 0x308:
 				uc.mem_write(addr, struct.pack('<I', self.ccr))
 			elif off in self.reg:
 				uc.mem_write(addr, struct.pack('<I', self.reg[off] & 0xFFFFFFFF))
@@ -293,14 +306,15 @@ class Model:
 		if addr == RCC + 0x2C and value & (1 << 13):
 			self.reset()
 			return
-		if not ADC <= addr < ADC + 0x400:
+		if not self.adc <= addr < self.adc + 0x400:
 			return
 		self.check_insn(uc)
 		self.clock_on(uc)
 		assert size == 4, 'ADC access not 32 bits'
 		self.step()
 		cr = self.reg[0x08]
-		if addr == CCR:
+		off = addr - self.adc
+		if off == 0x308:
 			changed = self.ccr ^ value
 			if changed & (0xF << 18 | 3 << 16):
 				assert not cr & CR_ADEN, 'ADC clock changed while enabled'
@@ -312,7 +326,6 @@ class Model:
 				self.t_tsen = self.t
 			self.ccr = value
 			return
-		off = addr - ADC
 		if off == 0x00:
 			self.reg[0x00] &= ~value
 		elif off == 0x08:
@@ -375,7 +388,7 @@ class Model:
 			self.events['stop'] = None if self.fault == 3 else self.t + 1
 
 
-def emulate(path, ascr):
+def emulate(path, family, ascr):
 	uc = Uc(UC_ARCH_ARM, UC_MODE_THUMB | UC_MODE_MCLASS)
 	uc.mem_map(0x08000000, 0x200000)
 	uc.mem_map(0x20000000, 0x80000)
@@ -388,7 +401,7 @@ def emulate(path, ascr):
 			if seg['p_type'] == 'PT_LOAD':
 				uc.mem_write(seg['p_paddr'], seg.data())
 		start = elf.header['e_entry']
-	model = Model(uc, ascr)
+	model = Model(uc, family, ascr)
 	uc.hook_add(UC_HOOK_MEM_READ, model.read)
 	uc.hook_add(UC_HOOK_MEM_WRITE, model.write)
 	uc.reg_write(UC_ARM_REG_SP, 0x2007FFF0)
@@ -405,9 +418,9 @@ def main():
 	cxx = os.environ.get('ARM_CXX', 'arm-none-eabi-g++')
 	if not shutil.which(cxx):
 		raise SystemExit('NOT RUN: arm-none-eabi-g++ unavailable')
-	with tempfile.TemporaryDirectory(prefix='l4-adc-') as td:
+	with tempfile.TemporaryDirectory(prefix='stm32-adc-') as td:
 		td = Path(td)
-		for part, ascr in PARTS:
+		for part, family, ascr in PARTS:
 			for opt in ('-O0', '-Os'):
 				flags = ['-mcpu=cortex-m4', '-mthumb', '-mfloat-abi=soft', opt,
 						 '-std=gnu++23', '-D' + part, '-ffunction-sections', '-fdata-sections',
@@ -415,9 +428,9 @@ def main():
 						 '-Wno-overloaded-virtual', '-Wno-missing-field-initializers']
 				flags += ['-I' + str(HERE / 'adc_shim')]
 				flags += ['-I' + str(ROOT / d) for d in ('include', 'ARM/include', 'ARM/CMSIS/Core/Include',
-						  'ARM/ST/include', 'ARM/ST/STM32L4xx/include')]
+						  'ARM/ST/include', FAMILY[family]['inc'])]
 				objects = []
-				for src in ('tests/stm32l4/adc_fw.cpp', os.environ.get('ADC_SRC', 'ARM/ST/STM32L4xx/src/adc_stm32l4.cpp'),
+				for src in ('tests/stm32/adc_fw.cpp', os.environ.get('ADC_SRC', 'ARM/ST/src/adc_stm32.cpp'),
 							'src/device.cpp', 'src/device_intrf.cpp'):
 					obj = td / (Path(src).stem + '.o')
 					run([cxx, *flags, '-c', str(ROOT / src), '-o', str(obj)])
@@ -425,7 +438,7 @@ def main():
 				exe = td / 'adc.elf'
 				run([cxx, *flags, '-nostdlib', '-Wl,--gc-sections', '-T' + str(HERE / 'adc_fw.ld'),
 					 *objects, '-lgcc', '-o', str(exe)])
-				print(f'{part} {opt}: ADC1 {emulate(exe, ascr)} checks PASS', flush=True)
+				print(f'{part} {opt}: ADC1 {emulate(exe, family, ascr)} checks PASS', flush=True)
 	print('Register model only. Hardware not tested by this script.')
 
 

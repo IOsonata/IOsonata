@@ -1,10 +1,11 @@
 /**-------------------------------------------------------------------------
-@file	idelay.h
+@example	board.h
 
-@brief	Delay shim of the STM32L4 ADC emulator test
+@brief	Board specific definitions
 
-The test firmware implements usDelay by telling the register model how much
-time passed, so the model can check the waits of the driver.
+This file contains all I/O definitions for a specific board for the
+application firmware.  This files should be located in each project and
+modified to suit the need for the application use case.
 
 @author	Hoang Nguyen Hoan
 @date	Oct. 21, 2026
@@ -34,21 +35,34 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ----------------------------------------------------------------------------*/
-#ifndef __IDELAY_H__
-#define __IDELAY_H__
 
-#include <stdint.h>
+#ifndef __BOARD_H__
+#define __BOARD_H__
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+// Board, one of the names in stm32_boards.h. This STM32G474 project builds for
+// NUCLEO_G474RE.
+#define BOARD				NUCLEO_G474RE
 
-void usDelay(uint32_t cnt);
+#include "stm32_boards.h"
 
-#ifdef __cplusplus
-}
-#endif
+// Output on LPUART1, the ST-LINK virtual COM port, RX PA3, TX PA2, AF12,
+// 115200 8N1. The Release build prints there, the Debug build uses
+// semihosting.
+#define UART_RETARGET
+#define UART_DEVNO			BOARD_VCP_DEVNO
+#define UART_RX_PORT		IOPORTA
+#define UART_RX_PIN			3
+#define UART_RX_PINOP		IOPINOP_FUNC12
+#define UART_TX_PORT		IOPORTA
+#define UART_TX_PIN			2
+#define UART_TX_PINOP		IOPINOP_FUNC12
 
-static inline void msDelay(uint32_t ms) { usDelay(ms * 1000U); }
+// ADC1 of the STM32 ADC driver, VREF+ at 3.3 V, the voltage of VDDA when tied to it
+#define ADC_DRIVER_HEADER	"adc_stm32.h"
+#define ADC_DRIVER			AdcStm32
+#define ADC_REF_VOLTAGE		3.3f
 
-#endif // __IDELAY_H__
+// Inputs read by the demo: VREFINT, temperature sensor, VBAT, Arduino A0 (PA0)
+#define ADC_INPUTS			{ ADC_STM32_INPUT_VREFINT, ADC_STM32_INPUT_TEMP, ADC_STM32_INPUT_VBAT, 1 }
+
+#endif // __BOARD_H__

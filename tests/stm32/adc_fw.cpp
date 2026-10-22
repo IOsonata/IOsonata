@@ -1,11 +1,11 @@
 /**-------------------------------------------------------------------------
 @file	adc_fw.cpp
 
-@brief	STM32L4 ADC1 driver test firmware
+@brief	STM32 ADC1 driver test firmware, STM32L4, L4+ and G4
 
-Runs the production ADC1 driver, ARM/ST/STM32L4xx/src/adc_stm32l4.cpp, in
-the emulator of run_adc.py, against its model of the ADC registers. usDelay
-tells the model the time that passed. Results go to the model through the
+Runs the production ADC1 driver, ARM/ST/src/adc_stm32.cpp, in the emulator
+of run_adc.py, against its model of the ADC registers. usDelay tells the
+model the time that passed. Results go to the model through the
 test registers at 0x500FF000: 0 fault to inject, 1 check result, 2 end with
 the number of checks, 3 time passed in usec, 4 core clock in Hz.
 
@@ -40,10 +40,10 @@ SOFTWARE.
 #include <stdint.h>
 #include <stddef.h>
 
-#include "stm32l4xx.h"
+#include "stm32.h"
 #include "coredev/iopincfg.h"
 #include "idelay.h"
-#include "adc_stm32l4.h"
+#include "adc_stm32.h"
 
 #if defined(ADC123_COMMON)
 #define TEST_COMMON		ADC123_COMMON
@@ -51,6 +51,38 @@ SOFTWARE.
 #define TEST_COMMON		ADC12_COMMON
 #else
 #define TEST_COMMON		ADC1_COMMON
+#endif
+
+#ifdef ADC_CCR_VSENSESEL
+#define TEST_CCR_TEMP	ADC_CCR_VSENSESEL
+#define TEST_CCR_VBAT	ADC_CCR_VBATSEL
+#define TEST_RCC_EN		RCC_AHB2ENR_ADC12EN
+#define TEST_CKMODE_140	3		// 70 MHz is above the 60 MHz of the G4
+
+// 16 inputs for one scan, the inputs of the family without pin are refused
+static const int s_ScanInput[ADC_STM32_MAX_CHAN] = { 18, 17, 16, 15, 14, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2 };
+static const int s_NoInput[] = { 0, 13 };
+
+// Port and pin of the inputs 0 to 16 from the ST pin data, -1 without pin
+static const int s_Pin[17][2] = {
+	{ -1, 0 }, { IOPORTA, 0 }, { IOPORTA, 1 }, { IOPORTA, 2 }, { IOPORTA, 3 }, { IOPORTB, 14 },
+	{ IOPORTC, 0 }, { IOPORTC, 1 }, { IOPORTC, 2 }, { IOPORTC, 3 }, { IOPORTF, 0 }, { IOPORTB, 12 },
+	{ IOPORTB, 1 }, { -1, 0 }, { IOPORTB, 11 }, { IOPORTB, 0 }, { -1, 0 },
+};
+#else
+#define TEST_CCR_TEMP	ADC_CCR_TSEN
+#define TEST_CCR_VBAT	ADC_CCR_VBATEN
+#define TEST_RCC_EN		RCC_AHB2ENR_ADCEN
+#define TEST_CKMODE_140	2
+
+static const int s_ScanInput[ADC_STM32_MAX_CHAN] = { 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0 };
+static const int s_NoInput[] = { ADC_STM32_MAX_INPUT + 1 };
+
+static const int s_Pin[17][2] = {
+	{ -1, 0 }, { IOPORTC, 0 }, { IOPORTC, 1 }, { IOPORTC, 2 }, { IOPORTC, 3 }, { IOPORTA, 0 },
+	{ IOPORTA, 1 }, { IOPORTA, 2 }, { IOPORTA, 3 }, { IOPORTA, 4 }, { IOPORTA, 5 }, { IOPORTA, 6 },
+	{ IOPORTA, 7 }, { IOPORTC, 4 }, { IOPORTC, 5 }, { IOPORTB, 0 }, { IOPORTB, 1 },
+};
 #endif
 
 #define TEST_FAULT_NO_EOC		1	// Conversions do not end
@@ -63,13 +95,17 @@ static volatile uint32_t *const s_Io = (volatile uint32_t *)0x500FF000;
 static unsigned s_Checks = 0;
 static unsigned s_Configured = 0;
 static unsigned s_Analog = 0;
+static int s_CfgPort = -1;
+static int s_CfgPin = -1;
+static int s_AnaPort = -1;
+static int s_AnaPin = -1;
 static uint32_t s_ClockHz = 80000000;
 
-extern const uint8_t AHBPrescTable[16] = { 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 6, 7, 8, 9 };
+static const uint8_t s_AhbShift[16] = { 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 6, 7, 8, 9 };
 
-extern "C" uint32_t SystemCoreClockGet()
+extern "C" uint32_t SystemHFClockGet(void)
 {
-	return s_ClockHz;
+	return s_ClockHz >> s_AhbShift[(RCC->CFGR & RCC_CFGR_HPRE_Msk) >> RCC_CFGR_HPRE_Pos];
 }
 
 extern "C" void usDelay(uint32_t Us)
@@ -79,21 +115,19 @@ extern "C" void usDelay(uint32_t Us)
 
 extern "C" void IOPinConfig(int PortNo, int PinNo, int PinOp, IOPINDIR Dir, IOPINRES Resistor, IOPINTYPE Type)
 {
-	(void)PinNo;
-	if (PortNo >= IOPORTA && PortNo <= IOPORTC && PinOp == IOPINOP_GPIO && Dir == IOPINDIR_INPUT &&
-		Resistor == IOPINRES_NONE && Type == IOPINTYPE_NORMAL)
+	if (PinOp == IOPINOP_GPIO && Dir == IOPINDIR_INPUT && Resistor == IOPINRES_NONE && Type == IOPINTYPE_NORMAL)
 	{
 		s_Configured++;
+		s_CfgPort = PortNo;
+		s_CfgPin = PinNo;
 	}
 }
 
 extern "C" void IOPinDisable(int PortNo, int PinNo)
 {
-	(void)PinNo;
-	if (PortNo >= IOPORTA && PortNo <= IOPORTC)
-	{
-		s_Analog++;
-	}
+	s_Analog++;
+	s_AnaPort = PortNo;
+	s_AnaPin = PinNo;
 }
 
 extern "C" void *memset(void *p, int c, size_t n)
@@ -145,6 +179,15 @@ static bool Near(float V, float Expect, float Tol)
 	return V > Expect - Tol && V < Expect + Tol;
 }
 
+// Voltages of the model: internal inputs, 1, 5 and 14, 0.1 V per input
+// number for the others
+static float Volt(int Input)
+{
+	return Input == ADC_STM32_INPUT_VREFINT ? 1.212f : Input == ADC_STM32_INPUT_TEMP ? 0.8f :
+		   Input == ADC_STM32_INPUT_VBAT ? 3.0f : Input == 1 ? 0.5f : Input == 5 ? 1.5f :
+		   Input == 14 ? 2.0f : 0.1f * Input;
+}
+
 static uint32_t Smp(int Input)
 {
 	return Input < 10 ? (ADC1->SMPR1 >> (Input * 3)) & 7 : (ADC1->SMPR2 >> ((Input - 10) * 3)) & 7;
@@ -178,18 +221,19 @@ extern "C" void ResetHandler()
 
 	SetClock(80000000);
 
-	AdcSTM32L4 adc, other;
+	AdcStm32 adc, other;
 	AdcRefVolt_t ref = { ADC_REFVOLT_TYPE_SUPPLY, 3.3f, -1 };
 	AdcCfg_t cfg = { ADC_CONV_MODE_SINGLE, &ref, 1, 0, 12, 0, 0, false, 6, nullptr };
-	const AdcChanCfg_t vref = { 0, 0, ADC_CHAN_TYPE_SINGLE_ENDED, 0x100, 0, false, { 0, ADC_PIN_CONN_NONE }, { -1, ADC_PIN_CONN_NONE }, 0, nullptr };
+	const AdcChanCfg_t vref = { 0, 0, ADC_CHAN_TYPE_SINGLE_ENDED, 0x100, 0, false, { ADC_STM32_INPUT_VREFINT, ADC_PIN_CONN_NONE },
+							   { -1, ADC_PIN_CONN_NONE }, 0, nullptr };
 	AdcChanCfg_t set[4] = { vref, vref, vref, vref };
 	AdcData_t d;
 	AdcData_t r[4];
 
 	set[1].Chan = 1;
-	set[1].PinP.PinNo = ADC_STM32L4_INPUT_TEMP;
+	set[1].PinP.PinNo = ADC_STM32_INPUT_TEMP;
 	set[2].Chan = 2;
-	set[2].PinP.PinNo = ADC_STM32L4_INPUT_VBAT;
+	set[2].PinP.PinNo = ADC_STM32_INPUT_VBAT;
 	set[3].Chan = 3;
 	set[3].PinP.PinNo = 14;		// PC5
 
@@ -231,10 +275,11 @@ extern "C" void ResetHandler()
 
 	// Four inputs: VREFINT, temperature, VBAT, PC5
 	Check(adc.OpenChannel(set, 4) && s_Configured == 1 && s_Analog == 1 && AscrIs(IOPORTC, 1U << 5));
-	Check((TEST_COMMON->CCR & (ADC_CCR_VREFEN | ADC_CCR_TSEN | ADC_CCR_VBATEN)) ==
-		  (ADC_CCR_VREFEN | ADC_CCR_TSEN | ADC_CCR_VBATEN));
+	Check((TEST_COMMON->CCR & (ADC_CCR_VREFEN | TEST_CCR_TEMP | TEST_CCR_VBAT)) ==
+		  (ADC_CCR_VREFEN | TEST_CCR_TEMP | TEST_CCR_VBAT));
 	// 40 MHz ADC clock: 4 us, 5 us, 12 us minimum, AcqTime 0
-	Check(Smp(0) == 6 && Smp(17) == 6 && Smp(18) == 7 && Smp(14) == 0);
+	Check(Smp(ADC_STM32_INPUT_VREFINT) == 6 && Smp(ADC_STM32_INPUT_TEMP) == 6 && Smp(ADC_STM32_INPUT_VBAT) == 7 &&
+		  Smp(14) == 0);
 	Check(adc.Read(0, &d) && d.Chan == 0 && d.Timestamp == 0 && Near(d.Data, 1.212f, 0.002f));
 	Check(!adc.UpdateData());
 
@@ -263,13 +308,18 @@ extern "C" void ResetHandler()
 	bad.AcqTime = 17;		// More than 640.5 clocks at 40 MHz
 	Check(!adc.OpenChannel(&bad, 1));
 	bad.AcqTime = 10;
-	bad.Chan = ADC_STM32L4_MAX_CHAN;
+	bad.Chan = ADC_STM32_MAX_CHAN;
 	Check(!adc.OpenChannel(&bad, 1));
 	bad.Chan = 4;
-	bad.PinP.PinNo = ADC_STM32L4_INPUT_VBAT + 1;
+	bad.PinP.PinNo = ADC_STM32_INPUT_VBAT + 1;
 	Check(!adc.OpenChannel(&bad, 1));
 	bad.PinP.PinNo = -1;
 	Check(!adc.OpenChannel(&bad, 1));
+	for (int in : s_NoInput)
+	{
+		bad.PinP.PinNo = in;
+		Check(!adc.OpenChannel(&bad, 1));
+	}
 	bad.PinP.PinNo = 5;
 	bad.Type = ADC_CHAN_TYPE_DIFFERENTIAL;
 	Check(!adc.OpenChannel(&bad, 1));
@@ -320,7 +370,7 @@ extern "C" void ResetHandler()
 
 	// Closing the temperature channel turns the sensor off
 	adc.CloseChannel(1);
-	Check(!(TEST_COMMON->CCR & ADC_CCR_TSEN) && (TEST_COMMON->CCR & ADC_CCR_VREFEN) && !adc.Read(1, &d));
+	Check(!(TEST_COMMON->CCR & TEST_CCR_TEMP) && (TEST_COMMON->CCR & ADC_CCR_VREFEN) && !adc.Read(1, &d));
 	adc.CloseChannel(4);
 	Check(AscrIs(IOPORTA, 0));
 
@@ -339,7 +389,7 @@ extern "C" void ResetHandler()
 	s_Io[0] = TEST_FAULT_NO_STOP;
 	Check(!adc.Read(0, &d) && !adc.Valid());
 	adc.PowerOff();
-	Check(!adc.Valid() && !(RCC->AHB2ENR & RCC_AHB2ENR_ADCEN) && AscrIs(IOPORTC, 0));
+	Check(!adc.Valid() && !(RCC->AHB2ENR & TEST_RCC_EN) && AscrIs(IOPORTC, 0));
 	s_Io[0] = 0;
 
 	// Oversampling 16 times, shift 4
@@ -368,27 +418,47 @@ extern "C" void ResetHandler()
 	Check(adc.Init(cfg) && adc.OpenChannel(set, 1) && adc.Read(0, &d) && Near(d.Data, 1.212f, 0.002f));
 	adc.PowerOff();
 
-	// 16 ranks, inputs 15 down to 0, input n is 0.1 V * n but 1, 5, 14 and VREFINT
-	AdcChanCfg_t all[ADC_STM32L4_MAX_CHAN];
-	AdcData_t res[ADC_STM32L4_MAX_CHAN];
+	// 16 ranks
+	AdcChanCfg_t all[ADC_STM32_MAX_CHAN];
+	AdcData_t res[ADC_STM32_MAX_CHAN];
 
-	for (int i = 0; i < ADC_STM32L4_MAX_CHAN; i++)
+	for (int i = 0; i < ADC_STM32_MAX_CHAN; i++)
 	{
 		all[i] = set[3];
 		all[i].Chan = i;
-		all[i].PinP.PinNo = 15 - i;
+		all[i].PinP.PinNo = s_ScanInput[i];
 	}
-	Check(adc.Init(cfg) && adc.OpenChannel(all, ADC_STM32L4_MAX_CHAN) && adc.StartConversion() &&
-		  adc.Read(res, ADC_STM32L4_MAX_CHAN) == ADC_STM32L4_MAX_CHAN);
+	Check(adc.Init(cfg) && adc.OpenChannel(all, ADC_STM32_MAX_CHAN) && adc.StartConversion() &&
+		  adc.Read(res, ADC_STM32_MAX_CHAN) == ADC_STM32_MAX_CHAN);
 
 	bool ok = true;
 
-	for (int i = 0; i < ADC_STM32L4_MAX_CHAN; i++)
+	for (int i = 0; i < ADC_STM32_MAX_CHAN; i++)
 	{
-		int in = 15 - i;
-		float v = in == 0 ? 1.212f : in == 1 ? 0.5f : in == 5 ? 1.5f : in == 14 ? 2.0f : 0.1f * in;
+		ok = ok && res[i].Chan == i && Near(res[i].Data, Volt(s_ScanInput[i]), 0.004f);
+	}
+	Check(ok);
+	adc.PowerOff();
 
-		ok = ok && res[i].Chan == i && Near(res[i].Data, v, 0.002f);
+	// Pin of each input, configured then put in analog mode
+	Check(adc.Init(cfg));
+	ok = true;
+	for (int in = 0; in < 17; in++)
+	{
+		AdcChanCfg_t one = set[3];
+		bool internal = in == ADC_STM32_INPUT_VREFINT || in == ADC_STM32_INPUT_TEMP || in == ADC_STM32_INPUT_VBAT;
+
+		s_CfgPort = s_AnaPort = -1;
+		one.PinP.PinNo = in;
+		if (s_Pin[in][0] < 0)
+		{
+			ok = ok && adc.OpenChannel(&one, 1) == internal && s_CfgPort < 0 && s_AnaPort < 0;
+		}
+		else
+		{
+			ok = ok && adc.OpenChannel(&one, 1) && s_CfgPort == s_Pin[in][0] && s_CfgPin == s_Pin[in][1] &&
+				 s_AnaPort == s_Pin[in][0] && s_AnaPin == s_Pin[in][1] && adc.Read(3, &d) && Near(d.Data, Volt(in), 0.002f);
+		}
 	}
 	Check(ok);
 	adc.PowerOff();
@@ -409,7 +479,10 @@ extern "C" void ResetHandler()
 	adc.PowerOff();
 	RCC->CFGR = 0;
 
-	// HCLK above 160 MHz takes HCLK / 4
+	// HCLK / 2 above the ADC clock limit of the family takes HCLK / 4
+	SetClock(140000000);
+	Check(adc.Init(cfg) && ((TEST_COMMON->CCR & ADC_CCR_CKMODE) >> ADC_CCR_CKMODE_Pos) == TEST_CKMODE_140);
+	adc.PowerOff();
 	SetClock(200000000);
 	Check(adc.Init(cfg) && ((TEST_COMMON->CCR & ADC_CCR_CKMODE) >> ADC_CCR_CKMODE_Pos) == 3);
 	adc.PowerOff();
@@ -417,7 +490,7 @@ extern "C" void ResetHandler()
 
 	// Init failures leave the ADC off
 	s_Io[0] = TEST_FAULT_NO_CAL;
-	Check(!adc.Init(cfg) && !adc.Valid() && !(RCC->AHB2ENR & RCC_AHB2ENR_ADCEN));
+	Check(!adc.Init(cfg) && !adc.Valid() && !(RCC->AHB2ENR & TEST_RCC_EN));
 	s_Io[0] = TEST_FAULT_NO_RDY;
 	Check(!adc.Init(cfg) && !adc.Valid());
 	s_Io[0] = 0;

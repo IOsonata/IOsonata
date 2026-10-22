@@ -1,10 +1,10 @@
 /**-------------------------------------------------------------------------
-@file	adc_stm32l4.cpp
+@file	adc_stm32.cpp
 
-@brief	STM32L4 ADC1 polling implementation
+@brief	STM32 ADC1 polling implementation, STM32L4, L4+ and G4
 
-Register sequences from RM0351 and the STM32L4 datasheets, see
-adc_stm32l4.h for the supported modes.
+Register sequences from RM0351, RM0432, RM0440 and the datasheets, see
+adc_stm32.h for the supported modes and the inputs.
 
 @author	Hoang Nguyen Hoan
 @date	Oct. 21, 2026
@@ -37,40 +37,78 @@ SOFTWARE.
 #include <string.h>
 #include <math.h>
 
-#include "stm32l4xx.h"
+#include "stm32.h"
 #include "coredev/system_core_clock.h"
 #include "coredev/iopincfg.h"
 #include "iopinctrl.h"
 #include "idelay.h"
-#include "adc_stm32l4.h"
+#include "adc_stm32.h"
+
+// The L4, L4+ and G4 ADC: deep power down, oversampler, auto delay, and not
+// the 16 bit ADC of the H7 (PCSEL)
+#if !defined(ADC_CR_DEEPPWD) || !defined(ADC_CFGR2_OVSS) || !defined(ADC_CFGR_AUTDLY) || defined(ADC_PCSEL_PCSEL)
+#error "adc_stm32.cpp: ADC of this STM32 not implemented"
+#endif
+
+// HCLK as the family system file computes it
+extern "C" uint32_t SystemHFClockGet(void);
 
 // The common registers are named after the ADC instances of the part
 #if defined(ADC123_COMMON)
-#define ADC_STM32L4_COMMON			ADC123_COMMON
+#define ADC_STM32_COMMON			ADC123_COMMON
 #elif defined(ADC12_COMMON)
-#define ADC_STM32L4_COMMON			ADC12_COMMON
+#define ADC_STM32_COMMON			ADC12_COMMON
 #else
-#define ADC_STM32L4_COMMON			ADC1_COMMON
+#define ADC_STM32_COMMON			ADC1_COMMON
 #endif
 
-#define ADC_STM32L4_CLK_MIN			140000UL	// fADC range of the datasheets
-#define ADC_STM32L4_CLK_MAX			80000000UL
-#define ADC_STM32L4_REGUL_US		20			// tADCVREG_STUP, regulator start
-#define ADC_STM32L4_TEMP_US			120			// tSTART, temperature sensor start
-#define ADC_STM32L4_VREFINT_US		12			// tstart_vrefint, reference buffer start
-#define ADC_STM32L4_BUF_US			15			// Temperature sensor buffer start from ADC enable
-#define ADC_STM32L4_CAL_CLK			116			// tCAL, in ADC clocks
-#define ADC_STM32L4_MAX_INPUT		ADC_STM32L4_INPUT_VBAT
+#ifdef RCC_AHB2ENR_ADC12EN
+#define ADC_STM32_RCC_EN			RCC_AHB2ENR_ADC12EN
+#define ADC_STM32_RCC_RST			RCC_AHB2RSTR_ADC12RST
+#else
+#define ADC_STM32_RCC_EN			RCC_AHB2ENR_ADCEN
+#define ADC_STM32_RCC_RST			RCC_AHB2RSTR_ADCRST
+#endif
 
-static AdcSTM32L4 *s_Owner = nullptr;
+#define ADC_STM32_NO_PIN			0xFF		// Input without a pin
 
-// Port and pin of the ADC1 inputs 1 to 16
-static const uint8_t s_InputPin[16][2] = {
-	{ IOPORTC, 0 }, { IOPORTC, 1 }, { IOPORTC, 2 }, { IOPORTC, 3 },
-	{ IOPORTA, 0 }, { IOPORTA, 1 }, { IOPORTA, 2 }, { IOPORTA, 3 },
-	{ IOPORTA, 4 }, { IOPORTA, 5 }, { IOPORTA, 6 }, { IOPORTA, 7 },
-	{ IOPORTC, 4 }, { IOPORTC, 5 }, { IOPORTB, 0 }, { IOPORTB, 1 },
+// G4 and L4 ADC1, the G4 names its temperature sensor bit VSENSESEL
+#ifdef ADC_CCR_VSENSESEL
+#define ADC_STM32_CCR_TEMP			ADC_CCR_VSENSESEL
+#define ADC_STM32_CCR_VBAT			ADC_CCR_VBATSEL
+#define ADC_STM32_CLK_MAX			60000000UL	// Range 1, single ADC operation
+
+// Port and pin of the ADC1 inputs 0 to 18
+static const uint8_t s_InputPin[ADC_STM32_MAX_INPUT + 1][2] = {
+	{ ADC_STM32_NO_PIN, 0 }, { IOPORTA, 0 }, { IOPORTA, 1 }, { IOPORTA, 2 },
+	{ IOPORTA, 3 }, { IOPORTB, 14 }, { IOPORTC, 0 }, { IOPORTC, 1 },
+	{ IOPORTC, 2 }, { IOPORTC, 3 }, { IOPORTF, 0 }, { IOPORTB, 12 },
+	{ IOPORTB, 1 }, { ADC_STM32_NO_PIN, 0 }, { IOPORTB, 11 }, { IOPORTB, 0 },
+	{ ADC_STM32_NO_PIN, 0 }, { ADC_STM32_NO_PIN, 0 }, { ADC_STM32_NO_PIN, 0 },
 };
+#else
+#define ADC_STM32_CCR_TEMP			ADC_CCR_TSEN
+#define ADC_STM32_CCR_VBAT			ADC_CCR_VBATEN
+#define ADC_STM32_CLK_MAX			80000000UL	// Range 1
+
+// Port and pin of the ADC1 inputs 0 to 18
+static const uint8_t s_InputPin[ADC_STM32_MAX_INPUT + 1][2] = {
+	{ ADC_STM32_NO_PIN, 0 }, { IOPORTC, 0 }, { IOPORTC, 1 }, { IOPORTC, 2 },
+	{ IOPORTC, 3 }, { IOPORTA, 0 }, { IOPORTA, 1 }, { IOPORTA, 2 },
+	{ IOPORTA, 3 }, { IOPORTA, 4 }, { IOPORTA, 5 }, { IOPORTA, 6 },
+	{ IOPORTA, 7 }, { IOPORTC, 4 }, { IOPORTC, 5 }, { IOPORTB, 0 },
+	{ IOPORTB, 1 }, { ADC_STM32_NO_PIN, 0 }, { ADC_STM32_NO_PIN, 0 },
+};
+#endif
+
+#define ADC_STM32_CLK_MIN			140000UL	// fADC range of the datasheets
+#define ADC_STM32_REGUL_US			20			// tADCVREG_STUP, regulator start
+#define ADC_STM32_TEMP_US			120			// tSTART, temperature sensor start
+#define ADC_STM32_VREFINT_US		12			// tstart_vrefint, reference buffer start
+#define ADC_STM32_BUF_US			15			// Temperature sensor buffer start from ADC enable
+#define ADC_STM32_CAL_CLK			116			// tCAL, in ADC clocks
+
+static AdcStm32 *s_Owner = nullptr;
 
 // Sampling times of the SMP codes 0 to 7, in half ADC clocks: 2.5 to 640.5
 static const uint16_t s_SmpHalfClk[8] = { 5, 13, 25, 49, 95, 185, 495, 1281 };
@@ -107,17 +145,17 @@ static void Command(uint32_t Bits)
 // ADC_CCR enable bit of an internal input, 0 for a pin
 static uint32_t CommonBit(int Input)
 {
-	return Input == ADC_STM32L4_INPUT_VREFINT ? ADC_CCR_VREFEN :
-		   Input == ADC_STM32L4_INPUT_TEMP ? ADC_CCR_TSEN :
-		   Input == ADC_STM32L4_INPUT_VBAT ? ADC_CCR_VBATEN : 0;
+	return Input == ADC_STM32_INPUT_VREFINT ? ADC_CCR_VREFEN :
+		   Input == ADC_STM32_INPUT_TEMP ? ADC_STM32_CCR_TEMP :
+		   Input == ADC_STM32_INPUT_VBAT ? ADC_STM32_CCR_VBAT : 0;
 }
 
 // GPIOx_ASCR connects the pin to the ADC on the parts that have it
 static void AnalogSwitch(int Input, bool bOn)
 {
 #ifdef GPIO_ASCR_ASC0
-	GPIO_TypeDef *gpio = (GPIO_TypeDef *)(GPIOA_BASE + s_InputPin[Input - 1][0] * (GPIOB_BASE - GPIOA_BASE));
-	uint32_t mask = 1UL << s_InputPin[Input - 1][1];
+	GPIO_TypeDef *gpio = (GPIO_TypeDef *)(GPIOA_BASE + s_InputPin[Input][0] * (GPIOB_BASE - GPIOA_BASE));
+	uint32_t mask = 1UL << s_InputPin[Input][1];
 
 	gpio->ASCR = bOn ? gpio->ASCR | mask : gpio->ASCR & ~mask;
 #else
@@ -126,7 +164,7 @@ static void AnalogSwitch(int Input, bool bOn)
 #endif
 }
 
-AdcSTM32L4::AdcSTM32L4()
+AdcStm32::AdcStm32()
 {
 	memset(vInput, 0, sizeof(vInput));
 	memset(vbNew, 0, sizeof(vbNew));
@@ -144,17 +182,17 @@ AdcSTM32L4::AdcSTM32L4()
 	vOvs = 1;
 }
 
-AdcSTM32L4::~AdcSTM32L4()
+AdcStm32::~AdcStm32()
 {
 	PowerOff();
 }
 
-bool AdcSTM32L4::Owned()
+bool AdcStm32::Owned()
 {
 	return s_Owner == this;
 }
 
-bool AdcSTM32L4::Init(const AdcCfg_t &Cfg, Timer *pTimer, DeviceIntrf *pIntrf)
+bool AdcStm32::Init(const AdcCfg_t &Cfg, Timer *pTimer, DeviceIntrf *pIntrf)
 {
 	int ovs = Cfg.OvrSample > 1 ? Cfg.OvrSample : 1;
 
@@ -167,11 +205,11 @@ bool AdcSTM32L4::Init(const AdcCfg_t &Cfg, Timer *pTimer, DeviceIntrf *pIntrf)
 	}
 
 	// Synchronous clock from HCLK, CKMODE 2 is HCLK / 2, 3 is HCLK / 4
-	uint32_t hclk = SystemCoreClockGet() >> AHBPrescTable[(RCC->CFGR & RCC_CFGR_HPRE_Msk) >> RCC_CFGR_HPRE_Pos];
-	uint32_t ckmode = hclk / 2 > ADC_STM32L4_CLK_MAX ? 3 : 2;
+	uint32_t hclk = SystemHFClockGet();
+	uint32_t ckmode = hclk / 2 > ADC_STM32_CLK_MAX ? 3 : 2;
 	uint32_t clk = hclk >> (ckmode - 1);
 
-	if (clk < ADC_STM32L4_CLK_MIN || clk > ADC_STM32L4_CLK_MAX)
+	if (clk < ADC_STM32_CLK_MIN || clk > ADC_STM32_CLK_MAX)
 	{
 		return false;
 	}
@@ -181,17 +219,17 @@ bool AdcSTM32L4::Init(const AdcCfg_t &Cfg, Timer *pTimer, DeviceIntrf *pIntrf)
 	vAdcClk = clk;
 	vOvs = ovs;
 
-	RCC->AHB2ENR |= RCC_AHB2ENR_ADCEN;
+	RCC->AHB2ENR |= ADC_STM32_RCC_EN;
 	(void)RCC->AHB2ENR;
-	RCC->AHB2RSTR |= RCC_AHB2RSTR_ADCRST;
-	RCC->AHB2RSTR &= ~RCC_AHB2RSTR_ADCRST;
+	RCC->AHB2RSTR |= ADC_STM32_RCC_RST;
+	RCC->AHB2RSTR &= ~ADC_STM32_RCC_RST;
 	// The reset leaves interrupts off, single ended inputs, oversampler off
-	ADC_STM32L4_COMMON->CCR = ckmode << ADC_CCR_CKMODE_Pos;
+	ADC_STM32_COMMON->CCR = ckmode << ADC_CCR_CKMODE_Pos;
 
 	// Out of deep power down, then the regulator
 	ADC1->CR = 0;
 	ADC1->CR = ADC_CR_ADVREGEN;
-	usDelay(ADC_STM32L4_REGUL_US);
+	usDelay(ADC_STM32_REGUL_US);
 
 	// Software trigger, one scan per start, right aligned, wait for the data
 	// register to be read before the next conversion
@@ -222,7 +260,7 @@ bool AdcSTM32L4::Init(const AdcCfg_t &Cfg, Timer *pTimer, DeviceIntrf *pIntrf)
 	return true;
 }
 
-uint16_t AdcSTM32L4::Resolution(uint16_t Val)
+uint16_t AdcStm32::Resolution(uint16_t Val)
 {
 	uint16_t bits = Val == 0 || Val >= 11 ? 12 : Val >= 9 ? 10 : Val >= 7 ? 8 : 6;
 
@@ -245,23 +283,23 @@ uint16_t AdcSTM32L4::Resolution(uint16_t Val)
 	return bits;
 }
 
-bool AdcSTM32L4::OpenChannel(const AdcChanCfg_t *pCfg, int Count)
+bool AdcStm32::OpenChannel(const AdcChanCfg_t *pCfg, int Count)
 {
-	if (!Owned() || !Valid() || !pCfg || Count <= 0 || Count > ADC_STM32L4_MAX_CHAN ||
+	if (!Owned() || !Valid() || !pCfg || Count <= 0 || Count > ADC_STM32_MAX_CHAN ||
 		(ADC1->CR & ADC_CR_ADSTART))
 	{
 		return false;
 	}
 
-	uint8_t smp[ADC_STM32L4_MAX_CHAN];
+	uint8_t smp[ADC_STM32_MAX_CHAN];
 
 	for (int i = 0; i < Count; i++)
 	{
 		const AdcChanCfg_t &c = pCfg[i];
 		int input = c.PinP.PinNo;
 
-		if (c.Chan < 0 || c.Chan >= ADC_STM32L4_MAX_CHAN || input < 0 || input > ADC_STM32L4_MAX_INPUT ||
-			c.RefVoltIdx != 0 || c.Type != ADC_CHAN_TYPE_SINGLE_ENDED || c.Gain != 0x100 ||
+		if (c.Chan < 0 || c.Chan >= ADC_STM32_MAX_CHAN || input < 0 || input > ADC_STM32_MAX_INPUT ||
+			(s_InputPin[input][0] == ADC_STM32_NO_PIN && CommonBit(input) == 0) || c.RefVoltIdx != 0 || c.Type != ADC_CHAN_TYPE_SINGLE_ENDED || c.Gain != 0x100 ||
 			c.PinP.Conn != ADC_PIN_CONN_NONE || c.BurstMode || c.pFifoMem || c.FifoMemSize || c.AcqTime < 0)
 		{
 			return false;
@@ -276,7 +314,7 @@ bool AdcSTM32L4::OpenChannel(const AdcChanCfg_t *pCfg, int Count)
 		}
 
 		// An input open on a logical channel this call does not set again
-		for (int k = 0; k < ADC_STM32L4_MAX_CHAN; k++)
+		for (int k = 0; k < ADC_STM32_MAX_CHAN; k++)
 		{
 			if (vInput[k] != input + 1)
 			{
@@ -297,8 +335,8 @@ bool AdcSTM32L4::OpenChannel(const AdcChanCfg_t *pCfg, int Count)
 
 		// Datasheet minimum sampling time of the internal inputs
 		uint32_t us = c.AcqTime;
-		uint32_t min = input == ADC_STM32L4_INPUT_VREFINT ? 4 : input == ADC_STM32L4_INPUT_TEMP ? 5 :
-					   input == ADC_STM32L4_INPUT_VBAT ? 12 : 0;
+		uint32_t min = input == ADC_STM32_INPUT_VREFINT ? 4 : input == ADC_STM32_INPUT_TEMP ? 5 :
+					   input == ADC_STM32_INPUT_VBAT ? 12 : 0;
 
 		if (us < min)
 		{
@@ -341,23 +379,23 @@ bool AdcSTM32L4::OpenChannel(const AdcChanCfg_t *pCfg, int Count)
 
 		if (bit)
 		{
-			if (!(ADC_STM32L4_COMMON->CCR & bit))
+			if (!(ADC_STM32_COMMON->CCR & bit))
 			{
-				ADC_STM32L4_COMMON->CCR |= bit;
-				if (input == ADC_STM32L4_INPUT_TEMP)
+				ADC_STM32_COMMON->CCR |= bit;
+				if (input == ADC_STM32_INPUT_TEMP)
 				{
-					wait = ADC_STM32L4_TEMP_US;
+					wait = ADC_STM32_TEMP_US;
 				}
-				else if (input == ADC_STM32L4_INPUT_VREFINT && wait < ADC_STM32L4_VREFINT_US)
+				else if (input == ADC_STM32_INPUT_VREFINT && wait < ADC_STM32_VREFINT_US)
 				{
-					wait = ADC_STM32L4_VREFINT_US;
+					wait = ADC_STM32_VREFINT_US;
 				}
 			}
 		}
 		else
 		{
-			int port = s_InputPin[input - 1][0];
-			int pin = s_InputPin[input - 1][1];
+			int port = s_InputPin[input][0];
+			int pin = s_InputPin[input][1];
 
 			// Config enables the port clock, Disable selects analog without pull
 			IOPinConfig(port, pin, IOPINOP_GPIO, IOPINDIR_INPUT, IOPINRES_NONE, IOPINTYPE_NORMAL);
@@ -390,13 +428,13 @@ bool AdcSTM32L4::OpenChannel(const AdcChanCfg_t *pCfg, int Count)
 	return true;
 }
 
-void AdcSTM32L4::Release(int Input)
+void AdcStm32::Release(int Input)
 {
 	uint32_t bit = CommonBit(Input);
 
 	if (bit)
 	{
-		ADC_STM32L4_COMMON->CCR &= ~bit;
+		ADC_STM32_COMMON->CCR &= ~bit;
 	}
 	else
 	{
@@ -404,9 +442,9 @@ void AdcSTM32L4::Release(int Input)
 	}
 }
 
-void AdcSTM32L4::CloseChannel(int Chan)
+void AdcStm32::CloseChannel(int Chan)
 {
-	if (!Owned() || Chan < 0 || Chan >= ADC_STM32L4_MAX_CHAN || !vInput[Chan] ||
+	if (!Owned() || Chan < 0 || Chan >= ADC_STM32_MAX_CHAN || !vInput[Chan] ||
 		(ADC1->CR & ADC_CR_ADSTART))
 	{
 		return;
@@ -417,7 +455,7 @@ void AdcSTM32L4::CloseChannel(int Chan)
 	vbNew[Chan] = false;
 }
 
-bool AdcSTM32L4::Enable()
+bool AdcStm32::Enable()
 {
 	if (!Owned() || (ADC1->CR & (ADC_CR_ADCAL | ADC_CR_ADDIS | ADC_CR_ADSTP)))
 	{
@@ -438,16 +476,16 @@ bool AdcSTM32L4::Enable()
 	ADC1->ISR = ADC_ISR_ADRDY;
 
 	// Buffers of the reference and of the temperature sensor start with the ADC
-	if (ADC_STM32L4_COMMON->CCR & (ADC_CCR_VREFEN | ADC_CCR_TSEN))
+	if (ADC_STM32_COMMON->CCR & (ADC_CCR_VREFEN | ADC_STM32_CCR_TEMP))
 	{
-		usDelay(ADC_STM32L4_BUF_US);
+		usDelay(ADC_STM32_BUF_US);
 	}
 
 	return true;
 }
 
 // Stop a running scan, keeping the results already read
-void AdcSTM32L4::Stop()
+void AdcStm32::Stop()
 {
 	if (!(ADC1->CR & ADC_CR_ADSTART))
 	{
@@ -456,7 +494,7 @@ void AdcSTM32L4::Stop()
 
 	uint32_t us = 0;
 
-	for (int i = 0; i < ADC_STM32L4_MAX_CHAN; i++)
+	for (int i = 0; i < ADC_STM32_MAX_CHAN; i++)
 	{
 		if (vConvUs[i] > us)
 		{
@@ -471,7 +509,7 @@ void AdcSTM32L4::Stop()
 	}
 }
 
-void AdcSTM32L4::StopConversion()
+void AdcStm32::StopConversion()
 {
 	if (!Owned())
 	{
@@ -482,7 +520,7 @@ void AdcSTM32L4::StopConversion()
 	memset(vbNew, 0, sizeof(vbNew));
 }
 
-void AdcSTM32L4::Disable()
+void AdcStm32::Disable()
 {
 	if (!Owned())
 	{
@@ -505,7 +543,7 @@ void AdcSTM32L4::Disable()
 	}
 }
 
-bool AdcSTM32L4::Calibrate()
+bool AdcStm32::Calibrate()
 {
 	if (!Owned())
 	{
@@ -522,20 +560,20 @@ bool AdcSTM32L4::Calibrate()
 
 	// Single ended calibration, ADCALDIF 0
 	Command(ADC_CR_ADCAL);
-	if (!Wait(&ADC1->CR, ADC_CR_ADCAL, 0, ClkUs(ADC_STM32L4_CAL_CLK * 2, vAdcClk) + 10))
+	if (!Wait(&ADC1->CR, ADC_CR_ADCAL, 0, ClkUs(ADC_STM32_CAL_CLK * 2, vAdcClk) + 10))
 	{
 		Valid(false);
 
 		return false;
 	}
 
-	// ADEN is ignored for 4 ADC clocks after the calibration (ES0250 2.8.4)
+	// ADEN is ignored for 4 ADC clocks after the calibration (RM0351, RM0440)
 	usDelay(ClkUs(4, vAdcClk));
 
 	return !enabled || Enable();
 }
 
-void AdcSTM32L4::PowerOff()
+void AdcStm32::PowerOff()
 {
 	if (!Owned())
 	{
@@ -547,7 +585,7 @@ void AdcSTM32L4::PowerOff()
 	// Pins off the ADC. The reset clears the internal inputs of ADC_CCR, it
 	// also ends a conversion whose stop timed out and puts the ADC back in
 	// deep power down.
-	for (int i = 0; i < ADC_STM32L4_MAX_CHAN; i++)
+	for (int i = 0; i < ADC_STM32_MAX_CHAN; i++)
 	{
 		if (vInput[i] && !CommonBit(vInput[i] - 1))
 		{
@@ -555,9 +593,9 @@ void AdcSTM32L4::PowerOff()
 		}
 	}
 
-	RCC->AHB2RSTR |= RCC_AHB2RSTR_ADCRST;
-	RCC->AHB2RSTR &= ~RCC_AHB2RSTR_ADCRST;
-	RCC->AHB2ENR &= ~RCC_AHB2ENR_ADCEN;
+	RCC->AHB2RSTR |= ADC_STM32_RCC_RST;
+	RCC->AHB2RSTR &= ~ADC_STM32_RCC_RST;
+	RCC->AHB2ENR &= ~ADC_STM32_RCC_EN;
 
 	Valid(false);
 	memset(vInput, 0, sizeof(vInput));
@@ -566,7 +604,7 @@ void AdcSTM32L4::PowerOff()
 	s_Owner = nullptr;
 }
 
-void AdcSTM32L4::Reset()
+void AdcStm32::Reset()
 {
 	if (!Owned())
 	{
@@ -580,7 +618,7 @@ void AdcSTM32L4::Reset()
 }
 
 // One software triggered scan of Count inputs
-bool AdcSTM32L4::Run(const uint8_t *pInput, int Count, uint16_t *pRaw, uint32_t Us)
+bool AdcStm32::Run(const uint8_t *pInput, int Count, uint16_t *pRaw, uint32_t Us)
 {
 	// Rank 1 to 4 in SQR1 from bit 6, 5 to 9 in SQR2, 10 to 14 in SQR3,
 	// 15 and 16 in SQR4, 6 bits apart. SQR1 bits 3:0 is the length - 1.
@@ -624,15 +662,15 @@ bool AdcSTM32L4::Run(const uint8_t *pInput, int Count, uint16_t *pRaw, uint32_t 
 	return true;
 }
 
-bool AdcSTM32L4::Scan(const int *pChan, int Count)
+bool AdcStm32::Scan(const int *pChan, int Count)
 {
 	if (!Owned() || !Valid() || vMode != ADC_CONV_MODE_SINGLE || !Enable())
 	{
 		return false;
 	}
 
-	uint8_t input[ADC_STM32L4_MAX_CHAN];
-	uint16_t raw[ADC_STM32L4_MAX_CHAN];
+	uint8_t input[ADC_STM32_MAX_CHAN];
+	uint16_t raw[ADC_STM32_MAX_CHAN];
 	uint32_t us = 0;
 
 	for (int i = 0; i < Count; i++)
@@ -645,7 +683,7 @@ bool AdcSTM32L4::Scan(const int *pChan, int Count)
 	}
 	us = us * 2 + 10;
 
-	// The first conversion is not used (ES0250 2.8.11)
+	// The first conversion is not used (ES0250 2.8.11, ES0430 2.7.9)
 	if (!Run(input, 1, raw, us) || !Run(input, Count, raw, us))
 	{
 		return false;
@@ -660,18 +698,18 @@ bool AdcSTM32L4::Scan(const int *pChan, int Count)
 	return true;
 }
 
-bool AdcSTM32L4::StartConversion()
+bool AdcStm32::StartConversion()
 {
 	if (!Owned() || !Valid())
 	{
 		return false;
 	}
 
-	int chan[ADC_STM32L4_MAX_CHAN];
+	int chan[ADC_STM32_MAX_CHAN];
 	int n = 0;
 
 	memset(vbNew, 0, sizeof(vbNew));
-	for (int c = 0; c < ADC_STM32L4_MAX_CHAN; c++)
+	for (int c = 0; c < ADC_STM32_MAX_CHAN; c++)
 	{
 		if (vInput[c])
 		{
@@ -682,7 +720,7 @@ bool AdcSTM32L4::StartConversion()
 	return n > 0 && Scan(chan, n);
 }
 
-bool AdcSTM32L4::UpdateData()
+bool AdcStm32::UpdateData()
 {
 	if (!Owned() || !Valid())
 	{
@@ -700,7 +738,7 @@ bool AdcSTM32L4::UpdateData()
 	return false;
 }
 
-int AdcSTM32L4::Read(AdcData_t *pBuff, int Len)
+int AdcStm32::Read(AdcData_t *pBuff, int Len)
 {
 	if (!pBuff || Len <= 0 || !Owned() || !Valid())
 	{
@@ -709,7 +747,7 @@ int AdcSTM32L4::Read(AdcData_t *pBuff, int Len)
 
 	int n = 0;
 
-	for (int c = 0; c < ADC_STM32L4_MAX_CHAN && n < Len; c++)
+	for (int c = 0; c < ADC_STM32_MAX_CHAN && n < Len; c++)
 	{
 		if (vbNew[c] && Read(c, &pBuff[n]))
 		{
@@ -720,9 +758,9 @@ int AdcSTM32L4::Read(AdcData_t *pBuff, int Len)
 	return n;
 }
 
-bool AdcSTM32L4::Read(int Chan, AdcData_t *pBuff)
+bool AdcStm32::Read(int Chan, AdcData_t *pBuff)
 {
-	if (!pBuff || Chan < 0 || Chan >= ADC_STM32L4_MAX_CHAN || !Owned() || !Valid() || !vInput[Chan])
+	if (!pBuff || Chan < 0 || Chan >= ADC_STM32_MAX_CHAN || !Owned() || !Valid() || !vInput[Chan])
 	{
 		return false;
 	}
@@ -735,7 +773,7 @@ bool AdcSTM32L4::Read(int Chan, AdcData_t *pBuff)
 	pBuff->Chan = Chan;
 	pBuff->Timestamp = 0;	// Single conversion, as AdcData_t specifies
 	pBuff->Data = vRaw[Chan] * vRef / (float)((1U << vResolution) - 1U);
-	if (vInput[Chan] - 1 == ADC_STM32L4_INPUT_VBAT)
+	if (vInput[Chan] - 1 == ADC_STM32_INPUT_VBAT)
 	{
 		pBuff->Data *= 3.0f;
 	}

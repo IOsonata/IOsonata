@@ -1,4 +1,4 @@
-/* Link layout of the STM32L4 ADC emulator test firmware */
+/* Link layout of the STM32 ADC emulator test firmware */
 MEMORY
 {
 	FLASH (rx) : ORIGIN = 0x08000000, LENGTH = 0x1F8000
