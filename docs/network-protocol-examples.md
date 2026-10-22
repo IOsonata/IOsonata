@@ -697,9 +697,9 @@ board stays on TLS port 8883. The command only subscribes. A matching QoS 0
 capture would independently establish broker-delivered traffic to that
 subscriber; it would not identify the original publisher. The
 [Mosquitto client manual](https://mosquitto.org/man/mosquitto_sub-1.html)
-documents these output fields. No clean extended run or fix is established.
+documents these output fields. Those earlier captures do not establish a fix.
 
-#### Follow-up: ten verified echoes without failures
+#### Follow-up: continued run without failures
 
 A later maintainer capture used client `iosnetbd19c00cd4898c0a` with
 `mfw_nrf91x1_2.0.1`. It reported reuse of the stored CA at tag 42420,
@@ -712,12 +712,20 @@ MQTT QoS 1 echo checked 1, failures=0
 MQTT QoS 1 echo checked 10, failures=0
 ```
 
-This establishes ten verified QoS 1 self-echoes with zero reported failures
-in the supplied run. The capture contains no extra-copy, rejection or
-reconnect line, so it does not demonstrate the additional-copy path or
-resolve the earlier publication origin and console truncation. An extended
-run, deliberate recovery and negative CA/hostname checks remain unestablished
-by this capture.
+The maintainer then supplied the continuation of this same client/topic run.
+Every tenth checkpoint from 20 through 990 also reported `failures=0`.
+The last supplied checkpoint was:
+
+```text
+MQTT QoS 1 echo checked 990, failures=0
+```
+
+This establishes 990 verified QoS 1 self-echoes with zero reported failures
+in the supplied run. No extra-copy, rejection or reconnect line appears in
+the continued capture, so it does not demonstrate the additional-copy path
+or resolve the earlier publication origin and console truncation. No measured
+elapsed time was supplied. Deliberate recovery and negative CA/hostname
+checks remain unestablished by this run.
 
 ### Hardware evidence for the generic MQTT example
 

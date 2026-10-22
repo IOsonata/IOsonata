@@ -169,9 +169,9 @@ policy after the first two failures. Every failure reported
 explanation of the rejected echo. The underlying cause remains unresolved.
 
 This confirms initial credential provisioning, TLS/MQTT interoperability,
-six checked self-echoes and the two observed automatic reconnects. A clean
-extended run, deliberate broker or radio-loss recovery and negative
-CA/hostname checks are not established. See the
+six checked self-echoes and the two observed automatic reconnects. Those
+initial captures do not establish a clean extended run, deliberate broker
+or radio-loss recovery or negative CA/hostname checks. See the
 [detailed hardware record](../../../../../../docs/network-protocol-examples.md#hardware-evidence-for-the-modem-tls-mqtt-example)
 for the observed counters and diagnostic scope.
 
@@ -208,18 +208,21 @@ console truncation cause are unresolved, with no PC observer result supplied.
 These logs predate the additional-copy policy and do not establish that their
 packets qualify for it or that the hardware failures have been resolved.
 
-## Follow-up hardware result: ten verified echoes
+## Follow-up hardware result: 990 verified echoes
 
 A later run with client `iosnetbd19c00cd4898c0a` and
 `mfw_nrf91x1_2.0.1` reused the stored CA at tag 42420, registered on roaming
 LTE-M and connected to `test.mosquitto.org:8883` with
 `TLS 1.2, CA/hostname verified`. It subscribed to
 `iosonata/demo/bd19c00cd4898c0a/echo` at QoS 1 and printed checked counters
-1 and 10, both with `failures=0`.
+1 and 10, both with `failures=0`. The maintainer then supplied the
+continuation of the same client/topic run, including every tenth checkpoint
+from 20 through 990, all with `failures=0`.
 
-This confirms ten verified QoS 1 self-echoes in the supplied capture. No
-extra-copy, rejection or reconnect line appears, so the capture does not
-demonstrate the additional-copy path or resolve the earlier publication
-origin and console truncation. Extended operation, deliberate recovery and
-negative CA/hostname checks remain unestablished by this run. See the
-[follow-up hardware record](../../../../../../docs/network-protocol-examples.md#follow-up-ten-verified-echoes-without-failures).
+This confirms 990 verified QoS 1 self-echoes with zero reported failures in
+the continued capture. No extra-copy, rejection or reconnect line appears,
+so the capture does not demonstrate the additional-copy path or resolve the
+earlier publication origin and console truncation. Deliberate recovery and
+negative CA/hostname checks remain unestablished by this run; no measured
+elapsed time was supplied. See the
+[follow-up hardware record](../../../../../../docs/network-protocol-examples.md#follow-up-continued-run-without-failures).

@@ -220,9 +220,10 @@ successful echoes followed the first two failures through the application's
 30-second reconnect policy. The reported `mqtt_error=0 mqtt_result=0` fields
 do not establish the cause, which remains unresolved. The
 [detailed hardware record](network-protocol-examples.md#hardware-evidence-for-the-modem-tls-mqtt-example)
-preserves the session counters and observed scope. A clean extended run,
-negative CA/hostname checks and nRF9160 modem-TLS hardware validation remain
-unestablished. No fresh automated ARM compile/link result is claimed.
+preserves the session counters and observed scope. That initial log does not
+establish a clean extended run. Negative CA/hostname checks and nRF9160
+modem-TLS hardware validation remain unestablished. No fresh automated ARM
+compile/link result is claimed.
 
 A follow-up run reused the stored CA and logged a rejected publication with
 `qos=0 dup=0 len=22 expected_seq=00000004`. This identifies the failing QoS
@@ -249,15 +250,19 @@ extra copy. The shared MQTT protocol and TLS verification remain unchanged.
 The supplied hardware logs do not establish that their incomplete payloads
 qualify or that this policy resolves the observed failures.
 
-A later nRF91x1 capture with client `iosnetbd19c00cd4898c0a` reached ten
-verified QoS 1 self-echoes with `failures=0`. It reused the stored CA at tag
-42420 with `mfw_nrf91x1_2.0.1` and reported a verified TLS 1.2 connection to
-`test.mosquitto.org:8883` over roaming LTE-M. No extra-copy, rejection or
-reconnect line appears in that capture. This is a successful ten-echo run;
-it does not demonstrate the additional-copy path or resolve the earlier
-publication origin and console truncation. The
-[follow-up hardware record](network-protocol-examples.md#follow-up-ten-verified-echoes-without-failures)
-preserves this result separately from the earlier failures.
+A later nRF91x1 capture with client `iosnetbd19c00cd4898c0a` first reached
+ten verified QoS 1 self-echoes with `failures=0`. The continuation of that
+same run reached 990, with every supplied checkpoint still reporting zero
+failures. It reused the stored CA at tag 42420 with `mfw_nrf91x1_2.0.1` and
+reported a verified TLS 1.2 connection to `test.mosquitto.org:8883` over
+roaming LTE-M. No extra-copy, rejection or reconnect line appears in the
+continued capture. This confirms operation through 990 checked exchanges;
+it does not demonstrate the additional-copy path, deliberate recovery or
+negative CA/hostname checks, or resolve the earlier publication origin and
+console truncation. The
+[follow-up hardware record](network-protocol-examples.md#follow-up-continued-run-without-failures)
+preserves this result separately from the earlier failures, without inferring
+a measured duration.
 
 ### Native TLS 1.3 PSK client
 
