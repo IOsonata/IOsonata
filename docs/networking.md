@@ -209,8 +209,20 @@ not add validity-date checking. The
 [generic example guide](network-protocol-examples.md#mqtt-over-modem-tls)
 records the exact settings, CA origin/fingerprint, Nordic references,
 credential lifecycle and negative-test procedure. Native TLS 1.3 PSK and
-plaintext CoAP remain separate. No modem-TLS hardware result or fresh
-automated ARM compile/link result is claimed for these new projects.
+plaintext CoAP remain separate.
+
+The maintainer's nRF91x1 `MqttTlsDemo` log with `mfw_nrf91x1_2.0.1` confirms
+CA storage at tag 42420, roaming LTE-M registration, a verified TLS 1.2
+connection to `test.mosquitto.org:8883`, QoS 1 subscription and checked
+self-echoes. It also contains three `echo payload or QoS mismatch` application
+failures, at checked counters 4, 5 and 6. Fresh verified TLS/MQTT sessions and
+successful echoes followed the first two failures through the application's
+30-second reconnect policy. The reported `mqtt_error=0 mqtt_result=0` fields
+do not establish the cause, which remains unresolved. The
+[detailed hardware record](network-protocol-examples.md#hardware-evidence-for-the-modem-tls-mqtt-example)
+preserves the session counters and observed scope. A clean extended run,
+negative CA/hostname checks and nRF9160 modem-TLS hardware validation remain
+unestablished. No fresh automated ARM compile/link result is claimed.
 
 ### Native TLS 1.3 PSK client
 

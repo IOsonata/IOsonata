@@ -265,6 +265,33 @@ currently implements external PSK rather than certificate authentication.
 See [shared networking documentation](networking.md) for the separate native
 TLS and nRF91 modem credential paths.
 
+### Echo failure diagnostics
+
+When an incoming publication on the live test topic fails the echo check,
+the application prints the reason before its existing failure summary:
+
+```text
+MQTT echo rejected: <reason> qos=<n> dup=<0|1> len=<bytes> expected_seq=<8hex>
+MQTT echo payload hex (<shown>/<total> bytes): <hex>
+```
+
+Reasons distinguish the QoS, length, prefix, sequence encoding and a sequence
+ahead of the expected value. The hex dump shows at most 32 payload bytes.
+A sequence ahead also prints:
+
+```text
+MQTT echo sequence received=<8hex>
+```
+
+Capture those lines with the client ID, exact topic and subsequent failure
+summary. They identify the rejected publication; the strict QoS 1 and payload
+integrity checks remain in place. Retained messages, other topics and normal
+old QoS 1 duplicates remain excluded from a live echo check. A different
+client can publish to the same topic on this public broker, including when
+the board uses TLS, but this possibility alone does not establish the cause
+of an observed mismatch. The initial modem-TLS log below predates these
+detailed diagnostics and does not identify the rejected packet.
+
 ### MQTT over modem TLS
 
 The separate `MqttTlsDemo` projects for nRF9160 and nRF91x1 select the modem's
@@ -359,8 +386,9 @@ The public listener authenticates the server to this connection; it does not
 authenticate the MQTT user or make public topics private. It is not mutual
 TLS. The shared native TLS 1.3 external-PSK implementation remains separate
 and unchanged, with no native certificate authentication or shared DTLS
-added by this profile. No `MqttTlsDemo` hardware result or fresh automated
-ARM compile/link validation is claimed.
+added by this profile. The nRF91x1 hardware result and unresolved echo-check
+failures are recorded below. nRF9160 modem-TLS hardware validation and fresh
+automated ARM compile/link validation remain unestablished.
 
 ## CoAP check
 
@@ -532,6 +560,49 @@ These checks use host substitutes for the modem. They do not perform an ARM
 compile/link, a modem TLS handshake, certificate authentication or a live
 broker session, and do not validate modem firmware behavior. The plaintext
 MQTT and CoAP hardware records below do not establish TLS operation.
+
+The echo diagnostic update passed `run_generic_demo.py --protocol mqtt`
+(14 sanitized runtime builds) and the full `run_mqtt_tls_demo.py` runner
+at O0/O2 with ASan/UBSan. The application fixture checks all five rejection
+reasons, metadata and payload bytes captured before release, empty and binary
+payloads, and the 32-byte sample limit. A valid MQTT QoS 0 publication confirms
+that an application rejection can have `mqtt_error=0 mqtt_result=0`. Accepted
+duplicates, retained messages and other topics produce no rejection diagnostic.
+These results validate the diagnostics, not the cause of the hardware failure.
+
+### Hardware evidence for the modem TLS MQTT example
+
+The maintainer ran `MqttTlsDemo` on nRF91x1 with modem firmware
+`mfw_nrf91x1_2.0.1`. The console reported `TLS CA stored under tag 42420`,
+roaming LTE-M registration and a connection to `test.mosquitto.org:8883`
+labelled `TLS 1.2, CA/hostname verified`. The client ID was
+`iosnetd92521fd559d5c03` and the QoS 1 subscription used
+`iosonata/demo/d92521fd559d5c03/echo`.
+
+The log contains successful self-echo checks and repeated application failures:
+
+| Session | Observed result |
+| --- | --- |
+| Initial TLS/MQTT session | Printed checked counter 1; the later failure reported checked 4 and failures 1. |
+| First automatic reconnect | Fresh verified TLS connection and QoS 1 subscription; checked 5 with failures 1, then a failure at checked 5 and failures 2. |
+| Second automatic reconnect | Fresh verified TLS connection and QoS 1 subscription; checked 6 with failures 2, then a failure at checked 6 and failures 3. |
+
+All three failures reported `echo payload or QoS mismatch` with
+`mqtt_error=0 mqtt_result=0`. The application followed its configured
+30-second reconnect policy after the first two failures. Those zero fields
+describe the shared MQTT client's state; they do not explain the application's
+rejected echo. The example already ignores retained messages, other topics
+and normal old QoS 1 duplicates. The supplied log does not identify the
+rejected QoS, payload or sequence, and the underlying cause remains unresolved.
+Use the [echo failure diagnostics](#echo-failure-diagnostics) to capture a
+recurrence; adding diagnostics does not establish a fix.
+
+This establishes initial CA provisioning, TLS/MQTT interoperability, six
+checked self-echoes and the two observed automatic session reconnections on
+the tested nRF91x1 hardware. It does not establish a clean extended run,
+deliberate broker or radio-loss recovery, wrong-CA/hostname rejection or
+nRF9160 modem-TLS operation. No fresh automated ARM compile/link validation
+is claimed.
 
 ### Hardware evidence for the generic MQTT example
 

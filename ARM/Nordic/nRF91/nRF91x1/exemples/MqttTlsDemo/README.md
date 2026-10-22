@@ -137,6 +137,38 @@ python3 tests/net/run_mqtt_tls_demo.py --target nrf91x1
 
 Host validation for this profile is recorded in the shared guide. Host
 substitutes do not perform the modem's cryptography, validate its certificate
-handling or establish a live broker session. No hardware result or fresh
-automated ARM compile/link result is claimed for `MqttTlsDemo`. Earlier
-plaintext LTE and native-PSK H753 results apply to their recorded profiles.
+handling or establish a live broker session. The separate maintainer-supplied
+hardware result is recorded below. No fresh automated ARM compile/link result
+is claimed. Earlier plaintext LTE and native-PSK H753 results apply to their
+recorded profiles.
+
+## Initial hardware result and unresolved echo failures
+
+The maintainer ran this project with `mfw_nrf91x1_2.0.1`. The console reported
+CA storage at tag 42420, roaming LTE-M registration and
+`test.mosquitto.org:8883` with `TLS 1.2, CA/hostname verified`. Client
+`iosnetd92521fd559d5c03` subscribed to
+`iosonata/demo/d92521fd559d5c03/echo` at QoS 1 and checked returned payloads.
+
+The initial session printed checked counter 1, then reported
+`echo payload or QoS mismatch` at checked 4 and failures 1. A fresh verified
+TLS connection and subscription checked counter 5, then the same error raised
+failures to 2. A second fresh TLS/MQTT session checked counter 6 before the
+same error raised failures to 3. The application used its 30-second reconnect
+policy after the first two failures. Every failure reported
+`mqtt_error=0 mqtt_result=0`; these are shared MQTT state fields, not an
+explanation of the rejected echo. The underlying cause remains unresolved.
+
+This confirms initial credential provisioning, TLS/MQTT interoperability,
+six checked self-echoes and the two observed automatic reconnects. A clean
+extended run, deliberate broker or radio-loss recovery and negative
+CA/hostname checks are not established. See the
+[detailed hardware record](../../../../../../docs/network-protocol-examples.md#hardware-evidence-for-the-modem-tls-mqtt-example)
+for the observed counters and diagnostic scope.
+
+For a repeat run, capture the new `MQTT echo rejected` line, bounded payload
+hex dump and any `MQTT echo sequence received` line before the failure
+summary, together with the client ID and topic. The
+[echo diagnostic instructions](../../../../../../docs/network-protocol-examples.md#echo-failure-diagnostics)
+explain these fields. They preserve the strict echo checks and do not establish
+a fix or show that another public-broker client caused the original failures.

@@ -537,6 +537,7 @@ static void Ordering(uint32_t Now, int Chunk, bool EchoFirst)
 	assert(Count(4) == acks + 1U && PacketId(Packet(4, acks)) == 0x6789);
 	Complete(next, Now + MQTT_DEMO_INTERVAL, !EchoFirst);
 	assert(s_Checked == 2);
+	assert(s_TestLog.find("MQTT echo rejected:") == std::string::npos);
 }
 
 
@@ -667,14 +668,56 @@ static void PublicTopicMessages(void)
 	Pump(now, 256);
 	assert(s_Checked == 1 && !s_Waiting && s_Failures == 0);
 	assert(Count(4) == 3 && PacketId(Packet(4, 2)) == 0x3333);
+	assert(s_TestLog.find("MQTT echo rejected:") == std::string::npos);
+}
 
-	for (unsigned mode = 0; mode < 3; mode++)
+static void RejectedMessages(void)
+{
+	struct RejectCase
 	{
-		publish = Begin(now);
-		if (mode == 2)
+		const char *pReason;
+		std::string Payload;
+		const char *pHex;
+		uint8_t Qos;
+		bool Duplicate;
+	};
+	const uint32_t now = 10000U;
+	std::string binary;
+
+	for (unsigned i = 0; i < 70; i++)
+	{
+		binary.push_back((char)i);
+	}
+	const RejectCase cases[] = {
+		{"sequence encoding", "IOsonata MQTT 0000000g",
+			"494f736f6e617461204d515454203030303030303067", 1, false},
+		{"sequence ahead", "IOsonata MQTT 00000002",
+			"494f736f6e617461204d515454203030303030303032", 1, true},
+		{"QoS", "IOsonata MQTT 00000001",
+			"494f736f6e617461204d515454203030303030303031", 0, false},
+		{"length", "IOsonata MQTT 0000000",
+			"494f736f6e617461204d5154542030303030303030", 1, false},
+		{"prefix", "XOsonata MQTT 00000001",
+			"584f736f6e617461204d515454203030303030303031", 1, true},
+		{"length", binary,
+			"000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f", 1, true},
+		{"length", "", "", 1, false},
+	};
+
+	for (const RejectCase &test : cases)
+	{
+		WirePacket publish = Begin(now);
+		size_t header = Header(publish.Bytes);
+		size_t payload = header + 2U + Word(publish.Bytes, header) + 2U;
+		char metadata[160];
+
+		publish.Bytes.resize(payload);
+		publish.Bytes.insert(publish.Bytes.end(), test.Payload.begin(), test.Payload.end());
+		if (test.Qos == 0)
 		{
-			std::vector<uint8_t> body(publish.Bytes.begin() + Header(publish.Bytes),
-				publish.Bytes.end());
+			// This is a valid MQTT QoS 0 PUBLISH on our exact topic. The
+			// application rejects it while the MQTT parser still reports no error.
+			std::vector<uint8_t> body(publish.Bytes.begin() + header, publish.Bytes.end());
 			size_t id = 2U + Word(body, 0);
 
 			body.erase(body.begin() + id, body.begin() + id + 2U);
@@ -684,13 +727,38 @@ static void PublicTopicMessages(void)
 		}
 		else
 		{
-			// A malformed suffix or a future sequence must never count as ours.
-			publish.Bytes.back() = mode == 0 ? 'g' : '2';
-			FeedEcho(publish, 0x4444);
+			FeedEcho(publish, 0x4444, test.Duplicate);
 		}
 		Pump(now, 256);
 		assert(s_Checked == 0 && s_Failures == 1 && !s_Started);
-		assert(s_TestLog.find("echo payload or QoS mismatch") != std::string::npos);
+		assert(!s_Mqtt.Message());
+		snprintf(metadata, sizeof(metadata),
+			"MQTT echo rejected: %s qos=%u dup=%u len=%lu expected_seq=00000001\r\n",
+			test.pReason, (unsigned)test.Qos, (unsigned)test.Duplicate,
+			(unsigned long)test.Payload.size());
+		std::string sample = "MQTT echo payload hex (" +
+			std::to_string(std::min((size_t)32, test.Payload.size())) + "/" +
+			std::to_string(test.Payload.size()) + " bytes): " + test.pHex + "\r\n";
+		size_t rejected = s_TestLog.find(metadata);
+		size_t snapshot = s_TestLog.find(sample);
+		size_t failure = s_TestLog.find("MQTT FAIL: echo payload or QoS mismatch, "
+			"mqtt_error=0 mqtt_result=0 checked=0 failures=1\r\n");
+
+		// The snapshot must preserve the received bytes before Release/Reset
+		// wipes them. Binary NUL, CR, LF and ESC are encoded and capped at 32 bytes.
+		assert(rejected != std::string::npos && snapshot != std::string::npos);
+		assert(failure != std::string::npos && rejected < snapshot && snapshot < failure);
+		assert(s_TestLog.find('\x1b') == std::string::npos);
+		if (strcmp(test.pReason, "sequence ahead") == 0)
+		{
+			size_t received = s_TestLog.find("MQTT echo sequence received=00000002\r\n");
+
+			assert(received != std::string::npos && received < rejected);
+		}
+		else
+		{
+			assert(s_TestLog.find("MQTT echo sequence received=") == std::string::npos);
+		}
 	}
 }
 
@@ -866,6 +934,7 @@ int main()
 	SequenceWrap();
 	IncomingAckBackpressure();
 	PublicTopicMessages();
+	RejectedMessages();
 	OpenRetry();
 	WriteClock();
 	puts("Generic MQTT application: interface switching, QoS 1, reconnect and deadlines PASS");

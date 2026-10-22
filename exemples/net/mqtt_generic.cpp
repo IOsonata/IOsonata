@@ -82,6 +82,32 @@ static void MqttDown(const char *pReason)
 	SysLogPrintf(SysLogGet(), "MQTT reconnect in 30 s when the selected medium is ready\r\n");
 }
 
+static bool RejectMessage(const MqttMessage_t *pMessage, const char *pReason)
+{
+	char sample[65];
+	size_t count = pMessage->PayloadLen;
+	size_t i;
+
+	if (count > (sizeof(sample) - 1U) / 2U)
+	{
+		count = (sizeof(sample) - 1U) / 2U;
+	}
+	for (i = 0; i < count; i++)
+	{
+		sample[i * 2] = s_Hex[pMessage->pPayload[i] >> 4];
+		sample[i * 2 + 1] = s_Hex[pMessage->pPayload[i] & 15U];
+	}
+	sample[count * 2] = 0;
+	// The borrowed message is wiped by Release(). Capture its bounded byte
+	// sample now; hexadecimal also keeps binary data out of terminal control.
+	SysLogPrintf(SysLogGet(), "MQTT echo rejected: %s qos=%u dup=%u len=%lu expected_seq=%08lx\r\n",
+		pReason, (unsigned)pMessage->Qos, (unsigned)pMessage->bDuplicate,
+		(unsigned long)pMessage->PayloadLen, (unsigned long)s_Sequence);
+	SysLogPrintf(SysLogGet(), "MQTT echo payload hex (%u/%lu bytes): %s\r\n",
+		(unsigned)count, (unsigned long)pMessage->PayloadLen, sample);
+	return false;
+}
+
 static bool CheckMessage(const MqttMessage_t *pMessage)
 {
 	const size_t prefix = sizeof(s_Payload) - 1U - 8U;
@@ -95,10 +121,17 @@ static bool CheckMessage(const MqttMessage_t *pMessage)
 	{
 		return true;
 	}
-	if (pMessage->Qos != 1 || pMessage->PayloadLen != sizeof(s_Payload) - 1U ||
-		memcmp(pMessage->pPayload, s_Payload, prefix) != 0)
+	if (pMessage->Qos != 1)
 	{
-		return false;
+		return RejectMessage(pMessage, "QoS");
+	}
+	if (pMessage->PayloadLen != sizeof(s_Payload) - 1U)
+	{
+		return RejectMessage(pMessage, "length");
+	}
+	if (memcmp(pMessage->pPayload, s_Payload, prefix) != 0)
+	{
+		return RejectMessage(pMessage, "prefix");
 	}
 	for (i = prefix; i < sizeof(s_Payload) - 1U; i++)
 	{
@@ -113,7 +146,7 @@ static bool CheckMessage(const MqttMessage_t *pMessage)
 		}
 		else
 		{
-			return false;
+			return RejectMessage(pMessage, "sequence encoding");
 		}
 		sequence = (sequence << 4) | value;
 	}
@@ -126,7 +159,12 @@ static bool CheckMessage(const MqttMessage_t *pMessage)
 		return true;
 	}
 	// QoS 1 permits duplicate delivery. Acknowledge old echoes without counting.
-	return (uint32_t)(s_Sequence - sequence) < 0x80000000U;
+	if ((uint32_t)(s_Sequence - sequence) < 0x80000000U)
+	{
+		return true;
+	}
+	SysLogPrintf(SysLogGet(), "MQTT echo sequence received=%08lx\r\n", (unsigned long)sequence);
+	return RejectMessage(pMessage, "sequence ahead");
 }
 
 static void Publish(uint32_t Now)
