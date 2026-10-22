@@ -249,6 +249,16 @@ extra copy. The shared MQTT protocol and TLS verification remain unchanged.
 The supplied hardware logs do not establish that their incomplete payloads
 qualify or that this policy resolves the observed failures.
 
+A later nRF91x1 capture with client `iosnetbd19c00cd4898c0a` reached ten
+verified QoS 1 self-echoes with `failures=0`. It reused the stored CA at tag
+42420 with `mfw_nrf91x1_2.0.1` and reported a verified TLS 1.2 connection to
+`test.mosquitto.org:8883` over roaming LTE-M. No extra-copy, rejection or
+reconnect line appears in that capture. This is a successful ten-echo run;
+it does not demonstrate the additional-copy path or resolve the earlier
+publication origin and console truncation. The
+[follow-up hardware record](network-protocol-examples.md#follow-up-ten-verified-echoes-without-failures)
+preserves this result separately from the earlier failures.
+
 ### Native TLS 1.3 PSK client
 
 `net/tls.h` and `src/net/tls.cpp` implement an initial external-PSK client.

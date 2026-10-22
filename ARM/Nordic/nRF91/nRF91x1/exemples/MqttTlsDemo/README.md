@@ -207,3 +207,19 @@ received sequence therefore remain unestablished. The packet origin and
 console truncation cause are unresolved, with no PC observer result supplied.
 These logs predate the additional-copy policy and do not establish that their
 packets qualify for it or that the hardware failures have been resolved.
+
+## Follow-up hardware result: ten verified echoes
+
+A later run with client `iosnetbd19c00cd4898c0a` and
+`mfw_nrf91x1_2.0.1` reused the stored CA at tag 42420, registered on roaming
+LTE-M and connected to `test.mosquitto.org:8883` with
+`TLS 1.2, CA/hostname verified`. It subscribed to
+`iosonata/demo/bd19c00cd4898c0a/echo` at QoS 1 and printed checked counters
+1 and 10, both with `failures=0`.
+
+This confirms ten verified QoS 1 self-echoes in the supplied capture. No
+extra-copy, rejection or reconnect line appears, so the capture does not
+demonstrate the additional-copy path or resolve the earlier publication
+origin and console truncation. Extended operation, deliberate recovery and
+negative CA/hostname checks remain unestablished by this run. See the
+[follow-up hardware record](../../../../../../docs/network-protocol-examples.md#follow-up-ten-verified-echoes-without-failures).

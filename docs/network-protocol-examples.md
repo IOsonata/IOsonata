@@ -699,6 +699,26 @@ subscriber; it would not identify the original publisher. The
 [Mosquitto client manual](https://mosquitto.org/man/mosquitto_sub-1.html)
 documents these output fields. No clean extended run or fix is established.
 
+#### Follow-up: ten verified echoes without failures
+
+A later maintainer capture used client `iosnetbd19c00cd4898c0a` with
+`mfw_nrf91x1_2.0.1`. It reported reuse of the stored CA at tag 42420,
+roaming LTE-M registration and `test.mosquitto.org:8883` with
+`TLS 1.2, CA/hostname verified`. The QoS 1 subscription used
+`iosonata/demo/bd19c00cd4898c0a/echo`, followed by:
+
+```text
+MQTT QoS 1 echo checked 1, failures=0
+MQTT QoS 1 echo checked 10, failures=0
+```
+
+This establishes ten verified QoS 1 self-echoes with zero reported failures
+in the supplied run. The capture contains no extra-copy, rejection or
+reconnect line, so it does not demonstrate the additional-copy path or
+resolve the earlier publication origin and console truncation. An extended
+run, deliberate recovery and negative CA/hostname checks remain unestablished
+by this capture.
+
 ### Hardware evidence for the generic MQTT example
 
 The maintainer's first hardware log for the new `MqttDemo` reports nRF91x1
