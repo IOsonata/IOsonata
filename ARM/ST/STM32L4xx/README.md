@@ -271,10 +271,10 @@ the message when a reader changed it. `tests/rftag/run.py` runs the driver
 against a model of the chip. B-L475E-IOT01A2 run (2026-10-21): the M24SR is
 found at 0x56, UID 02 84 66 95 51 AF AC, product code 0x84, NDEF file 8192
 bytes. At start the tag held the 69 byte demo message, its text record and
-URI record. The demo wrote the message and read it back the same. A phone then
-wrote a 23 byte message, one text record "Hello IOsonata.", and the next check
-printed it. No check found the tag held by the phone: the log has no "Held by
-a reader" line.
+URI record. The demo wrote the message and read it back the same. An iPhone
+reads the message from the tag. A phone then wrote a 23 byte message, one text
+record "Hello IOsonata.", and the next check printed it. No check found the
+tag held by the phone: the log has no "Held by a reader" line.
 L496 and L4S9 I2C4 use virtual index 3. The L432 has no I2C2: index 1 fails
 initialization, I2C1 and I2C3 keep indices 0 and 2.
 
