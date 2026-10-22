@@ -57,5 +57,8 @@ SOFTWARE.
 #define UART_TX_PIN			2
 #define UART_TX_PINOP		IOPINOP_FUNC12
 
+// RTC of the STM32
+#define RTC_DRIVER_HEADER	"rtc_stm32.h"
+#define RTC_DRIVER			RtcStm32
 
 #endif // __BOARD_H__

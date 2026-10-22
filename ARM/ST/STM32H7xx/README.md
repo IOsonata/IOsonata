@@ -435,10 +435,11 @@ The library builds the shared STM32 watchdog driver,
 LSI, window, no timeout event. See [STM32 watchdog](../WDT.md). No example
 project; not run on hardware yet.
 
-The library builds the shared STM32 RTC driver, `ARM/ST/src/rtc_stm32.cpp`,
-with `src/miscdev/rtc.cpp`: calendar in the C runtime types, alarms A and B,
-wakeup timer, 32 backup registers, from the LSE or the 32 kHz LSI. See
-[STM32 RTC](../RTC.md). No example project; not run on hardware yet.
+The library builds the shared STM32 RTC driver, `RtcStm32`
+(`ARM/ST/src/rtc_stm32.cpp`), the generic RTC device of `miscdev/rtc.h`
+(`src/miscdev/rtc.cpp`): calendar in the C runtime types, alarms A and B,
+wakeup timer, 32 backup registers, from the LSE or the 32 kHz LSI. See [STM32
+RTC](../RTC.md). No example project; not run on hardware yet.
 
 ## Limits and validation
 

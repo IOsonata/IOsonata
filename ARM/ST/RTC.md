@@ -1,24 +1,45 @@
 # STM32 realtime clock
 
-`ARM/ST/src/rtc_stm32.cpp` implements the generic RTC API of
-`include/miscdev/rtc.h` (`RtcInit` and the `Rtc` class) on the RTC of the
+`RtcStm32` (`ARM/ST/include/rtc_stm32.h`, `ARM/ST/src/rtc_stm32.cpp`)
+implements the generic RTC device of `include/miscdev/rtc.h` on the RTC of the
 STM32 families: F0, F4, L1, L4, L4+, G4, H7 and WBA. One source serves them
-all; the differences are keyed on the CMSIS device header. DevNo 0 only.
-`src/miscdev/rtc.cpp` adds the `time_t` functions, common to all MCU.
+all; the differences are keyed on the CMSIS device header. DevNo 0, no
+interface.
 
-## Time format
+## Generic RTC device
 
-The calendar is in the C runtime types. `RtcSetTime` and `RtcGetTime` take a
-`struct tm` (`RtcGetTime` also gives the microseconds in the second);
-`RtcSetTimeEpoch` takes a `time_t`, `RtcGetTimeEpoch` gives a
-`struct timespec`. The calendar has no time zone: the `time_t` functions treat
-it as the local time of the C runtime (`localtime_r`, `mktime`), UTC unless
-the application sets `TZ`. With newlib these functions link its time zone
-code, which allocates a copy of `TZ` when it is set.
+`RtcDevice` (`include/miscdev/rtc.h`) derives from `Device`. An MCU RTC and an
+RTC chip implement it the same way: `Init(const RtcCfg_t &Cfg, DeviceIntrf *
+const pIntrf)` takes nullptr on the MCU RTC, the I2C or SPI interface of a chip
+with its address in `RtcCfg_t::DevAddr`. Setting and reading the time is
+required; alarms, periodic wakeup and backup registers are optional, refused by
+default. Events (`RTC_EVT_xxx` bits) go to the event handler of the
+configuration in interrupt context: the MCU RTC handles its interrupts, the
+application calls `IntHandler` of a chip from the interrupt of the pin wired to
+its interrupt output. A chip implementation keeps its interface and address
+with `Interface` and `DeviceAddress` of `Device` and reaches its registers with
+`Device::Read` and `Device::Write`. An implementation sets the protected
+members the accessors return (clock, alarms, backup registers, wakeup period,
+calendar set) and gives its events with `RtcEvt`.
 
-Calendar 2000 to 2099, 24 hours. `RtcSetTime` computes the day of the week
-and fails on a date or time out of range. `RtcGetTime` gives `tm_wday` and
-`tm_yday`, and `tm_isdst` -1.
+The calendar is in the C runtime types. `SetTime` and `GetTime` take a
+`struct tm` (`GetTime` also gives the microseconds in the second);
+`SetTimeEpoch` takes a `time_t`, `GetTimeEpoch` gives a `struct timespec`,
+for every implementation (`src/miscdev/rtc.cpp`). The calendar has no time
+zone: the `time_t` functions treat it as the local time of the C runtime
+(`localtime_r`, `mktime`), UTC unless the application sets `TZ`. With newlib
+these functions link its time zone code, which allocates a copy of `TZ` when
+it is set.
+
+## RtcStm32
+
+Calendar 2000 to 2099, 24 hours. `SetTime` computes the day of the week and
+fails on a date or time out of range. `GetTime` gives `tm_wday` and `tm_yday`,
+and `tm_isdst` -1. One RTC: the object of the last Init owns it, the
+interrupts call it and the other objects are refused. `Enable` is true for
+the owner; `Disable` and `Reset` stop the alarms and the wakeup timer, the
+calendar keeps counting. The destructor of the owner disables the RTC
+interrupts.
 
 ## Clock
 
@@ -60,7 +81,7 @@ L4+ (L4P5, L4Q5, L4R5, L4S5, L4S9).
 
 The asynchronous prescaler takes the largest division of 1 to 128 that
 divides the clock and leaves at least 1 kHz, the synchronous one divides to
-1 Hz. `RtcGetTime` gives the microseconds in steps of one synchronous count:
+1 Hz. `GetTime` gives the microseconds in steps of one synchronous count:
 
 | Clock | Prescalers | Step |
 |---|---|---|
@@ -74,8 +95,8 @@ the 12 hour format to 24 hours, sets the day of the week from the date (the
 calendar reset value has Monday for 2000-01-01), and on the WBA clears the
 binary mode, which restarts the calendar. Each of these enters the
 initialization mode, which restarts the second; otherwise Init writes no
-calendar register. `bTimeValid` is the RTC INITS flag after Init (calendar
-year other than 2000) and true after `RtcSetTime`.
+calendar register. `TimeValid` is the RTC INITS flag after Init (calendar
+year other than 2000) and true after `SetTime`.
 
 The calendar is read from the counters (BYPSHAD): no wait for the shadow
 registers after Stop or Standby. SSR is read before and after TR and DR, and
@@ -86,13 +107,13 @@ the read done again when a second started in between.
 Two alarms (A and B), one on the F0. Each field of `RtcAlarm_t` is matched,
 or masked with -1: second, minute, hour, and either the day of the month or
 the day of the week. The event comes at the start of the matching second; the
-sub-seconds are not matched. `RtcDisableAlarm` stops an alarm.
+sub-seconds are not matched. `DisableAlarm` stops an alarm.
 
 ## Wakeup timer
 
 Not on the F030x8. The driver takes the smallest divider that holds the
-period, rounded to the nearest count, and `RtcDev_t::msWakeup` gives the
-period in effect, rounded to the nearest msec:
+period, rounded to the nearest count, and `Wakeup()` gives the period in
+effect, rounded to the nearest msec:
 
 | Clock | Period at 32768 Hz | Step |
 |---|---|---|
@@ -101,7 +122,7 @@ period in effect, rounded to the nearest msec:
 | 1 Hz, 65536 added | up to 131072 s | 1 s |
 
 A period shorter than one count of RTCCLK / 2 gives that count. With the 1 Hz
-clock the first period starts at the next second. `RtcSetWakeup` fails on a
+clock the first period starts at the next second. `SetWakeup` fails on a
 period over 131072 s, and keeps the period in effect.
 
 ## Backup registers
@@ -118,7 +139,7 @@ domain reset clears them.
 
 ## Events and backup domain access
 
-With an `EvtHandler`, Init enables the alarm and wakeup interrupts at
+With an event handler, Init enables the alarm and wakeup interrupts at
 `IntPrio`; the handler runs in interrupt context with `RTC_EVT_xxx` bits.
 They go through EXTI rising edge lines on the F0, F4, L1, L4, G4 and H7, and
 straight to the RTC interrupt on the WBA:
@@ -138,8 +159,10 @@ write access enabled (PWR DBP) for the RTC and backup register writes.
 ## Libraries, examples and tests
 
 The F030x8, F401xC, L152RE, L432, L476, L496, L4S9, G474, H753 and WBA65
-library projects build the driver and `src/miscdev/rtc.cpp`. Example
-`exemples/misc/rtc_demo.cpp`: `STM32L4xx/STM32L476/exemples/RtcDemo`
+library projects build the driver and `src/miscdev/rtc.cpp` (the F401xC
+library now also builds `src/device.cpp`). Example
+`exemples/misc/rtc_demo.cpp`, with `RTC_DRIVER_HEADER` and `RTC_DRIVER` from
+`board.h`: `STM32L4xx/STM32L476/exemples/RtcDemo`
 (B-L475E-IOT01A, USART1 virtual COM port),
 `STM32G4xx/STM32G474/exemples/RtcDemo` (NUCLEO-G474RE, LPUART1 virtual COM
 port) and
@@ -149,16 +172,21 @@ the date and time at each 1 s wakeup event with the seconds since the epoch,
 and an alarm event at the start of each minute. A calendar not set takes the
 build time of the example.
 
-`tests/stm32/run_rtc.py` builds the driver and `src/miscdev/rtc.cpp` for the
-F030x8, F072xB, F401xC, L152xE, L412, L476, L4S9, G474, H753 and WBA65 at -O0
-and -Os and runs each scenario of `rtc_fw.cpp` in Unicorn against a model of
-the RTC, its clocks and the backup domain in time, with system resets between
-boots. The register layouts, EXTI lines and interrupts of each family are in
-the script. Scenarios: new RTC with the calendar, alarms, wakeup timer and
-backup registers; no crystal; system reset; LSI over a system reset; crystal
-lost; RTC on the HSE moved to the LSI or to the LSE, the LSE stopping at the
-backup domain reset; RTC running from its reset values; LSE selected with the
-RTC clock disabled; external oscillator at 32768, 31250 and 256000 Hz; 12 hour
-format; prescalers not giving 1 Hz; WBA binary mode; LSI predivider; reads
-across the second, `time_t` functions and the C++ class. Each of 196 driver
-mutations fails it. Not run on hardware yet.
+`tests/stm32/run_rtc.py` builds the driver, `src/miscdev/rtc.cpp`,
+`src/device.cpp` and `src/device_intrf.cpp` (with `ARM/src/iatomic.c` on the
+Cortex-M0) for the F030x8, F072xB, F401xC, L152xE, L412, L476, L4S9, G474, H753
+and WBA65 at -O0 and -Os and runs each scenario of `rtc_fw.cpp` in Unicorn
+against a model of the RTC, its clocks and the backup domain in time, with
+system resets between boots. The register layouts, EXTI lines and interrupts of
+each family are in the script. Scenarios: new RTC with the calendar, alarms,
+wakeup timer and backup registers; no crystal; system reset; LSI over a system
+reset; crystal lost; RTC on the HSE moved to the LSI or to the LSE, the LSE
+stopping at the backup domain reset; RTC running from its reset values; LSE
+selected with the RTC clock disabled; external oscillator at 32768, 31250 and
+256000 Hz; 12 hour format; prescalers not giving 1 Hz; WBA binary mode; LSI
+predivider; reads across the second, `time_t` functions, calls through
+`RtcDevice`, ownership and destruction; an RTC chip implementation of
+`RtcDevice` in the test on an I2C interface: interface and address, `time_t`
+functions without sub-seconds, optional functions refused by default, event
+from `IntHandler`. Each of 216 driver mutations fails it. Not run on hardware
+yet.

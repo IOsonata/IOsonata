@@ -7,14 +7,18 @@ RTC_PARTS=STM32L476xx,STM32G474xx runs only these parts, RTC_SCENARIOS=0,2
 only these scenarios, RTC_SRC builds another copy of the driver, RTC_KEEP
 keeps the firmware images in that folder.
 
-The driver, ARM/ST/src/rtc_stm32.cpp, and the time_t functions of
-src/miscdev/rtc.cpp are built at -O0 and -Os for the parts of PARTS: F0, F4,
-L1, L4, L4+, G4, H7 and WBA. Each scenario of rtc_fw.cpp runs in its own
-emulator, against a model of the RTC, of its clocks and of the backup domain
-in time: usDelay of the firmware (delay_shim/idelay.h) moves the time, a
-scenario can restart the firmware with a system reset. The register layouts,
-bit positions, EXTI lines and interrupts of each family are in this script,
-from the reference manuals. The model applies their rules:
+The driver, RtcStm32 of ARM/ST/src/rtc_stm32.cpp, with RtcDevice
+(src/miscdev/rtc.cpp), Device (src/device.cpp) and DeviceIntrf
+(src/device_intrf.cpp, with ARM/src/iatomic.c for the Cortex-M0) is built at
+-O0 and -Os for the parts of PARTS: F0, F4, L1, L4, L4+, G4, H7 and WBA.
+Each scenario of rtc_fw.cpp runs in its own emulator, against a model of the
+RTC, of its clocks and of the backup domain in time: usDelay of the firmware
+(delay_shim/idelay.h) moves the time, a scenario can restart the firmware
+with a system reset. Scenario 21 runs TestRtcChip of rtc_fw.cpp, an RTC chip
+implementation of RtcDevice on an I2C interface in RAM, without the STM32
+RTC. The register layouts, bit positions, EXTI lines and interrupts of each
+family are in this script, from the reference manuals. The model applies
+their rules:
 
 - backup domain: RTC, backup registers and RCC backup domain control
   written only with the PWR DBP bit set (PWR clock enabled where it has
@@ -168,6 +172,7 @@ SCENARIOS = {
 	18: ('LSE lost at the backup domain reset', ('xtal_bdrst',), 'hse'),
 	19: ('LSE lost at the backup domain reset, LSI', ('xtal_bdrst',), 'hse'),
 	20: ('selected not enabled, LSI', ('xtal',), 'lse_off'),
+	21: ('RTC chip', ('xtal',), None),
 }
 
 # RTC registers by generation: name -> offset
@@ -1130,8 +1135,9 @@ def scenario(exe, part, opt, sc):
 
 def main():
 	cxx = os.environ.get('ARM_CXX', 'arm-none-eabi-g++')
-	if not shutil.which(cxx):
-		raise SystemExit('NOT RUN: arm-none-eabi-g++ unavailable')
+	cc = os.environ.get('ARM_CC', 'arm-none-eabi-gcc')
+	if not shutil.which(cxx) or not shutil.which(cc):
+		raise SystemExit('NOT RUN: arm-none-eabi-g++ or arm-none-eabi-gcc unavailable')
 	with tempfile.TemporaryDirectory(prefix='stm32-rtc-') as td:
 		td = Path(td)
 		sel = os.environ.get('RTC_PARTS')
@@ -1141,17 +1147,24 @@ def main():
 			if sel and name not in sel.split(','):
 				continue
 			for opt in ('-O0', '-Os'):
-				flags = [f'-mcpu={GCC_CPU[cpu]}', '-mthumb', '-mfloat-abi=soft', opt, '-g',
-						 '-std=gnu++23', '-D' + name, '-ffunction-sections', '-fdata-sections',
-						 '-fno-rtti', '-fno-exceptions', '-Wall', '-Wextra', '-Werror',
-						 '-Wno-missing-field-initializers', '-I' + str(HERE / 'delay_shim')]
-				flags += ['-I' + str(ROOT / d) for d in ('include', 'ARM/include', 'ARM/CMSIS/Core/Include',
-						  'ARM/ST/include', 'ARM/ST/' + family + '/include')]
+				common = [f'-mcpu={GCC_CPU[cpu]}', '-mthumb', '-mfloat-abi=soft', opt, '-g', '-D' + name,
+						  '-ffunction-sections', '-fdata-sections', '-Wall', '-Wextra', '-Werror',
+						  '-Wno-missing-field-initializers', '-I' + str(HERE / 'delay_shim')]
+				common += ['-I' + str(ROOT / d) for d in ('include', 'ARM/include', 'ARM/CMSIS/Core/Include',
+						   'ARM/ST/include', 'ARM/ST/' + family + '/include')]
+				flags = common + ['-std=gnu++23', '-fno-rtti', '-fno-exceptions']
+				# ARM/src/iatomic.c gives the atomic functions of the Cortex-M0
+				# (device_intrf.cpp), defined as the library does: GCC built-in
+				# declarations with other integer types
+				cflags = common + ['-std=gnu17', '-Wno-builtin-declaration-mismatch']
 				objects = []
 				for src in ('tests/stm32/rtc_fw.cpp', os.environ.get('RTC_SRC', 'ARM/ST/src/rtc_stm32.cpp'),
-							'src/miscdev/rtc.cpp'):
+							'src/miscdev/rtc.cpp', 'src/device.cpp', 'src/device_intrf.cpp', 'ARM/src/iatomic.c'):
 					obj = td / (Path(src).stem + '.o')
-					run([cxx, *flags, '-c', str(ROOT / src), '-o', str(obj)])
+					if src.endswith('.c'):
+						run([cc, *cflags, '-c', str(ROOT / src), '-o', str(obj)])
+					else:
+						run([cxx, *flags, '-c', str(ROOT / src), '-o', str(obj)])
 					objects.append(str(obj))
 				exe = td / 'rtc.elf'
 				run([cxx, *flags, '--specs=nano.specs', '--specs=nosys.specs', '-nostartfiles', '-Wl,--gc-sections',

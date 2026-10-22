@@ -3,8 +3,10 @@
 
 @brief	STM32 realtime clock (RTC)
 
-Generic RTC API (miscdev/rtc.h) on the RTC of the STM32 families: F0, F4,
-L1, L4, L4+, G4, H7, WBA. DevNo 0 only.
+RtcStm32 (rtc_stm32.h), RtcDevice of miscdev/rtc.h on the RTC of the STM32
+families: F0, F4, L1, L4, L4+, G4, H7, WBA. DevNo 0 only, no interface. The
+object of the last Init owns the RTC: the other objects are refused, the
+interrupts call the owner.
 
 Clock: RTC_CLKSRC_DEFAULT starts the LSE, the external oscillator in bypass
 when the board low frequency oscillator is a TCXO (g_McuOsc), and takes the
@@ -24,9 +26,9 @@ is set from the date (the calendar reset value has Monday for 2000-01-01),
 and the WBA binary mode is cleared (the calendar then restarts). On the LSI
 of the F0, F4, L1, L4, G4 and H7 the calendar stops from a system reset
 until Init starts the LSI again: the LSI is not in the backup domain on
-these families. A new RTC starts at 2000-01-01 00:00:00. bTimeValid is the
+these families. A new RTC starts at 2000-01-01 00:00:00. TimeValid is the
 INITS flag after Init (calendar year other than 2000), and true after
-RtcSetTime.
+SetTime.
 
 Prescalers: asynchronous division the largest of 1 to 128 that divides the
 clock and leaves at least 1 kHz, synchronous division to 1 Hz. Sub-seconds
@@ -51,7 +53,7 @@ WBA).
 
 Init leaves the backup domain write access enabled (PWR DBP) for the RTC
 and backup register writes, and disables the alarms and the wakeup timer.
-Events, with an EvtHandler: alarm and wakeup interrupts, through their EXTI
+Events, with an event handler: alarm and wakeup interrupts, through their EXTI
 lines on the F0, F4, L1, L4, G4 and H7 (alarm line 17, 18 on the L4; wakeup
 line 20, 22 on the F4, 19 on the H7), direct on the WBA.
 
@@ -89,7 +91,7 @@ SOFTWARE.
 
 #include "stm32.h"
 #include "coredev/system_core_clock.h"
-#include "miscdev/rtc.h"
+#include "rtc_stm32.h"
 #include "idelay.h"
 
 // Initialization and status register: ISR with the flags, or ICSR with the
@@ -236,16 +238,8 @@ static_assert(RTC_SCR_CALRAF == RTC_SR_ALRAF && RTC_SCR_CALRBF == RTC_SR_ALRBF &
 // Calendar register fields, the tens above the units
 #define ST_RTC_BCD(v)			((((uint32_t)(v) / 10U) << 4) | ((uint32_t)(v) % 10U))
 
-#pragma pack(push, 4)
-
-typedef struct {
-	RtcDev_t *pDev;				//!< Device of the last Init
-	uint32_t PredivS;			//!< Synchronous prescaler, sub-second counter top
-} StRtc_t;
-
-#pragma pack(pop)
-
-static StRtc_t s_StRtc;
+// Object of the last Init, which owns the RTC
+static RtcStm32 *s_pStRtc = nullptr;
 
 #ifdef ST_RTC_ONE_IRQ
 extern "C" void RTC_IRQHandler(void);
@@ -254,14 +248,9 @@ extern "C" void RTC_Alarm_IRQHandler(void);
 extern "C" void RTC_WKUP_IRQHandler(void);
 #endif
 
-static StRtc_t *StRtcDev(RtcDev_t * const pDev)
+bool RtcStm32::Owned() const
 {
-	if (pDev == nullptr || s_StRtc.pDev != pDev)
-	{
-		return nullptr;
-	}
-
-	return &s_StRtc;
+	return s_pStRtc == this;
 }
 
 static bool StRtcWait(volatile uint32_t *pReg, uint32_t Mask, uint32_t usTimeout)
@@ -608,11 +597,10 @@ static void StRtcDisableEvents(void)
 	StRtcClearFlags(ST_RTC_ALRAF | ST_RTC_ALRBF | ST_RTC_WUTF);
 }
 
-bool RtcInit(RtcDev_t * const pDev, const RtcCfg_t * const pCfg)
+bool RtcStm32::Init(const RtcCfg_t &Cfg, DeviceIntrf * const pIntrf)
 {
-	if (pDev == nullptr || pCfg == nullptr || pCfg->DevNo != 0 ||
-		(pCfg->ClkSrc != RTC_CLKSRC_DEFAULT && pCfg->ClkSrc != RTC_CLKSRC_LFXTAL &&
-		 pCfg->ClkSrc != RTC_CLKSRC_LFRC))
+	if (pIntrf != nullptr || Cfg.DevNo != 0 ||
+		(Cfg.ClkSrc != RTC_CLKSRC_DEFAULT && Cfg.ClkSrc != RTC_CLKSRC_LFXTAL && Cfg.ClkSrc != RTC_CLKSRC_LFRC))
 	{
 		return false;
 	}
@@ -644,16 +632,16 @@ bool RtcInit(RtcDev_t * const pDev, const RtcCfg_t * const pCfg)
 
 	if (running == false)
 	{
-		if (pCfg->ClkSrc != RTC_CLKSRC_LFRC && lse < 0)
+		if (Cfg.ClkSrc != RTC_CLKSRC_LFRC && lse < 0)
 		{
 			lse = StRtcLseStart() ? 1 : 0;
 		}
-		if (lse != 1 && pCfg->ClkSrc == RTC_CLKSRC_LFXTAL)
+		if (lse != 1 && Cfg.ClkSrc == RTC_CLKSRC_LFXTAL)
 		{
 			return false;
 		}
 
-		uint32_t want = lse == 1 && pCfg->ClkSrc != RTC_CLKSRC_LFRC ? ST_RTC_SEL_LSE : ST_RTC_SEL_LSI;
+		uint32_t want = lse == 1 && Cfg.ClkSrc != RTC_CLKSRC_LFRC ? ST_RTC_SEL_LSE : ST_RTC_SEL_LSI;
 
 		// RTCSEL changes only after a backup domain reset
 		if (sel != 0 && sel != want && StRtcBackupReset() == false && want == ST_RTC_SEL_LSE)
@@ -679,12 +667,12 @@ bool RtcInit(RtcDev_t * const pDev, const RtcCfg_t * const pCfg)
 		{
 			freq = GetLowFreqOscFreq();
 		}
-		pDev->ClkSrc = RTC_CLKSRC_LFXTAL;
+		vClkSrc = RTC_CLKSRC_LFXTAL;
 	}
 	else
 	{
 		freq = StRtcLsiFreq();
-		pDev->ClkSrc = RTC_CLKSRC_LFRC;
+		vClkSrc = RTC_CLKSRC_LFRC;
 	}
 
 	uint32_t prer = StRtcPrer(freq);
@@ -752,21 +740,19 @@ bool RtcInit(RtcDev_t * const pDev, const RtcCfg_t * const pCfg)
 	}
 	StRtcLock();
 
-	s_StRtc.PredivS = RTC->PRER & RTC_PRER_PREDIV_S;
-	s_StRtc.pDev = pDev;
-
-	pDev->DevNo = 0;
-	pDev->ClkFreq = freq;
+	vPredivS = RTC->PRER & RTC_PRER_PREDIV_S;
+	vClkFreq = freq;
 #ifdef RTC_CR_ALRBE
-	pDev->NbAlarm = 2;
+	vNbAlarm = 2;
 #else
-	pDev->NbAlarm = 1;
+	vNbAlarm = 1;
 #endif
-	pDev->NbBackup = ST_RTC_NB_BKP;
-	pDev->msWakeup = 0;
-	pDev->bTimeValid = (RTC->ST_RTC_ICSR & ST_RTC_INITS) != 0;
-	pDev->EvtHandler = pCfg->EvtHandler;
-	pDev->pDevData = &s_StRtc;
+	vNbBackup = ST_RTC_NB_BKP;
+	vmsWakeup = 0;
+	vbTimeValid = (RTC->ST_RTC_ICSR & ST_RTC_INITS) != 0;
+	vRtcEvtHandler = Cfg.EvtHandler;
+	s_pStRtc = this;
+	Valid(true);
 
 	// Events
 #ifdef ST_RTC_ONE_IRQ
@@ -778,7 +764,7 @@ bool RtcInit(RtcDev_t * const pDev, const RtcCfg_t * const pCfg)
 	NVIC_ClearPendingIRQ(RTC_Alarm_IRQn);
 	NVIC_ClearPendingIRQ(RTC_WKUP_IRQn);
 #endif
-	if (pCfg->EvtHandler != nullptr)
+	if (Cfg.EvtHandler != nullptr)
 	{
 #ifdef ST_RTC_EXTI_ALARM
 		StRtcExtiEnable(ST_RTC_EXTI_ALARM);
@@ -787,11 +773,11 @@ bool RtcInit(RtcDev_t * const pDev, const RtcCfg_t * const pCfg)
 #endif
 #endif
 #ifdef ST_RTC_ONE_IRQ
-		NVIC_SetPriority(RTC_IRQn, pCfg->IntPrio);
+		NVIC_SetPriority(RTC_IRQn, Cfg.IntPrio);
 		NVIC_EnableIRQ(RTC_IRQn);
 #else
-		NVIC_SetPriority(RTC_Alarm_IRQn, pCfg->IntPrio);
-		NVIC_SetPriority(RTC_WKUP_IRQn, pCfg->IntPrio);
+		NVIC_SetPriority(RTC_Alarm_IRQn, Cfg.IntPrio);
+		NVIC_SetPriority(RTC_WKUP_IRQn, Cfg.IntPrio);
 		NVIC_EnableIRQ(RTC_Alarm_IRQn);
 		NVIC_EnableIRQ(RTC_WKUP_IRQn);
 #endif
@@ -800,14 +786,14 @@ bool RtcInit(RtcDev_t * const pDev, const RtcCfg_t * const pCfg)
 	return true;
 }
 
-bool RtcSetTime(RtcDev_t * const pDev, const struct tm * const pTime)
+bool RtcStm32::SetTime(const struct tm &Time)
 {
-	if (StRtcDev(pDev) == nullptr || pTime == nullptr)
+	if (Owned() == false)
 	{
 		return false;
 	}
 
-	const struct tm &t = *pTime;
+	const struct tm &t = Time;
 
 	if (t.tm_year < 100 || t.tm_year > 199 || t.tm_mon < 0 || t.tm_mon > 11 || t.tm_mday < 1 ||
 		t.tm_mday > StRtcMonthDays(t.tm_year + 1900, t.tm_mon) || t.tm_hour < 0 || t.tm_hour > 23 ||
@@ -832,16 +818,14 @@ bool RtcSetTime(RtcDev_t * const pDev, const struct tm * const pTime)
 	RTC->DR = dr;
 	StRtcExitInit();
 	StRtcLock();
-	pDev->bTimeValid = true;
+	vbTimeValid = true;
 
 	return true;
 }
 
-bool RtcGetTime(RtcDev_t * const pDev, struct tm * const pTime, uint32_t * const pUsec)
+bool RtcStm32::GetTime(struct tm &Time, uint32_t * const pUsec)
 {
-	StRtc_t *dev = StRtcDev(pDev);
-
-	if (dev == nullptr || pTime == nullptr)
+	if (Owned() == false)
 	{
 		return false;
 	}
@@ -863,7 +847,7 @@ bool RtcGetTime(RtcDev_t * const pDev, struct tm * const pTime, uint32_t * const
 		dr = RTC->DR;
 	} while ((RTC->SSR & RTC_SSR_SS) > ssr);
 
-	struct tm &t = *pTime;
+	struct tm &t = Time;
 
 	t.tm_sec = (int)StRtcBcdVal(tr, RTC_TR_SU_Pos, 7U);
 	t.tm_min = (int)StRtcBcdVal(tr, RTC_TR_MNU_Pos, 7U);
@@ -884,7 +868,7 @@ bool RtcGetTime(RtcDev_t * const pDev, struct tm * const pTime, uint32_t * const
 
 	if (pUsec != nullptr)
 	{
-		uint32_t s = dev->PredivS;
+		uint32_t s = vPredivS;
 
 		if (ssr > s)
 		{
@@ -896,14 +880,14 @@ bool RtcGetTime(RtcDev_t * const pDev, struct tm * const pTime, uint32_t * const
 	return true;
 }
 
-bool RtcSetAlarm(RtcDev_t * const pDev, int Idx, const RtcAlarm_t * const pAlarm)
+bool RtcStm32::SetAlarm(int Idx, const RtcAlarm_t &Alarm)
 {
-	if (StRtcDev(pDev) == nullptr || pAlarm == nullptr || Idx < 0 || Idx >= pDev->NbAlarm)
+	if (Owned() == false || Idx < 0 || Idx >= vNbAlarm)
 	{
 		return false;
 	}
 
-	const RtcAlarm_t &a = *pAlarm;
+	const RtcAlarm_t &a = Alarm;
 
 	if (a.Sec < -1 || a.Sec > 59 || a.Min < -1 || a.Min > 59 || a.Hour < -1 || a.Hour > 23 ||
 		a.MDay < -1 || a.MDay == 0 || a.MDay > 31 || a.WDay < -1 || a.WDay > 6 || (a.MDay >= 0 && a.WDay >= 0))
@@ -966,9 +950,9 @@ bool RtcSetAlarm(RtcDev_t * const pDev, int Idx, const RtcAlarm_t * const pAlarm
 	return true;
 }
 
-void RtcDisableAlarm(RtcDev_t * const pDev, int Idx)
+void RtcStm32::DisableAlarm(int Idx)
 {
-	if (StRtcDev(pDev) == nullptr || Idx < 0 || Idx >= pDev->NbAlarm)
+	if (Owned() == false || Idx < 0 || Idx >= vNbAlarm)
 	{
 		return;
 	}
@@ -989,9 +973,9 @@ void RtcDisableAlarm(RtcDev_t * const pDev, int Idx)
 	StRtcLock();
 }
 
-bool RtcSetWakeup(RtcDev_t * const pDev, uint32_t msPeriod)
+bool RtcStm32::SetWakeup(uint32_t msPeriod)
 {
-	if (StRtcDev(pDev) == nullptr)
+	if (Owned() == false)
 	{
 		return false;
 	}
@@ -1003,7 +987,7 @@ bool RtcSetWakeup(RtcDev_t * const pDev, uint32_t msPeriod)
 
 	if (msPeriod != 0)
 	{
-		uint64_t f = pDev->ClkFreq;
+		uint64_t f = vClkFreq;
 		bool ok = false;
 
 		// RTCCLK / 2, 4, 8, 16: WUCKSEL 3, 2, 1, 0
@@ -1051,7 +1035,7 @@ bool RtcSetWakeup(RtcDev_t * const pDev, uint32_t msPeriod)
 	StRtcUnlock();
 	RTC->CR &= ~(RTC_CR_WUTE | RTC_CR_WUTIE);
 	StRtcClearFlags(ST_RTC_WUTF);
-	pDev->msWakeup = 0;
+	vmsWakeup = 0;
 	if (msPeriod != 0)
 	{
 		// WUTR and WUCKSEL writable once WUTWF is set
@@ -1063,7 +1047,7 @@ bool RtcSetWakeup(RtcDev_t * const pDev, uint32_t msPeriod)
 		RTC->WUTR = wut;
 		RTC->CR = (RTC->CR & ~RTC_CR_WUCKSEL) | (sel << RTC_CR_WUCKSEL_Pos);
 		RTC->CR |= RTC_CR_WUTE | RTC_CR_WUTIE;
-		pDev->msWakeup = ms;
+		vmsWakeup = ms;
 	}
 	StRtcLock();
 
@@ -1074,9 +1058,9 @@ bool RtcSetWakeup(RtcDev_t * const pDev, uint32_t msPeriod)
 #endif
 }
 
-bool RtcWriteBackup(RtcDev_t * const pDev, int Idx, uint32_t Data)
+bool RtcStm32::WriteBackup(int Idx, uint32_t Data)
 {
-	if (StRtcDev(pDev) == nullptr || Idx < 0 || Idx >= ST_RTC_NB_BKP)
+	if (Owned() == false || Idx < 0 || Idx >= ST_RTC_NB_BKP)
 	{
 		return false;
 	}
@@ -1092,17 +1076,19 @@ bool RtcWriteBackup(RtcDev_t * const pDev, int Idx, uint32_t Data)
 	return true;
 }
 
-bool RtcReadBackup(RtcDev_t * const pDev, int Idx, uint32_t * const pData)
+bool RtcStm32::ReadBackup(int Idx, uint32_t &Data)
 {
-	if (StRtcDev(pDev) == nullptr || pData == nullptr || Idx < 0 || Idx >= ST_RTC_NB_BKP)
+	if (Owned() == false || Idx < 0 || Idx >= ST_RTC_NB_BKP)
 	{
 		return false;
 	}
 
 #if defined(TAMP_BKP0R)
-	*pData = (&TAMP->BKP0R)[Idx];
+	Data = (&TAMP->BKP0R)[Idx];
 #elif defined(RTC_BKP0R)
-	*pData = (&RTC->BKP0R)[Idx];
+	Data = (&RTC->BKP0R)[Idx];
+#else
+	(void)Data;
 #endif
 
 	return true;
@@ -1110,17 +1096,12 @@ bool RtcReadBackup(RtcDev_t * const pDev, int Idx, uint32_t * const pData)
 
 // Events of the alarm and wakeup flags, the flags cleared. Each interrupt
 // services all the flags, an event is reported once.
-static void StRtcService(void)
+static uint32_t StRtcEvents(void)
 {
 	uint32_t flags = StRtcFlags() & (ST_RTC_ALRAF | ST_RTC_ALRBF | ST_RTC_WUTF);
-
-	if (flags == 0)
-	{
-		return;
-	}
-	StRtcClearFlags(flags);
-
 	uint32_t evt = 0;
+
+	StRtcClearFlags(flags);
 
 	if (flags & ST_RTC_ALRAF)
 	{
@@ -1139,11 +1120,73 @@ static void StRtcService(void)
 	}
 #endif
 
-	RtcDev_t *dev = s_StRtc.pDev;
+	return evt;
+}
 
-	if (dev != nullptr && dev->EvtHandler != nullptr)
+void RtcStm32::IntHandler()
+{
+	if (Owned() == false)
 	{
-		dev->EvtHandler(dev, evt);
+		return;
+	}
+
+	uint32_t evt = StRtcEvents();
+
+	if (evt != 0)
+	{
+		RtcEvt(evt);
+	}
+}
+
+bool RtcStm32::Enable()
+{
+	return Owned();
+}
+
+// Alarms and wakeup timer stopped, the calendar counts
+void RtcStm32::Disable()
+{
+	if (Owned() == false)
+	{
+		return;
+	}
+
+	StRtcUnlock();
+	StRtcDisableEvents();
+	StRtcLock();
+	vmsWakeup = 0;
+}
+
+void RtcStm32::Reset()
+{
+	Disable();
+}
+
+RtcStm32::~RtcStm32()
+{
+	if (Owned())
+	{
+		Disable();
+#ifdef ST_RTC_ONE_IRQ
+		NVIC_DisableIRQ(RTC_IRQn);
+#else
+		NVIC_DisableIRQ(RTC_Alarm_IRQn);
+		NVIC_DisableIRQ(RTC_WKUP_IRQn);
+#endif
+		s_pStRtc = nullptr;
+	}
+}
+
+// Interrupt of the owner, the flags cleared without one
+static void StRtcService(void)
+{
+	if (s_pStRtc != nullptr)
+	{
+		s_pStRtc->IntHandler();
+	}
+	else
+	{
+		StRtcEvents();
 	}
 }
 

@@ -3,10 +3,12 @@
 
 @brief	STM32 RTC driver test firmware
 
-Runs the production RTC driver, ARM/ST/src/rtc_stm32.cpp, with the time_t
-functions of src/miscdev/rtc.cpp, in the emulator of run_rtc.py, one
-scenario per run. usDelay (delay_shim/idelay.h) moves the time of the
-model. Test registers at 0x5FFF0000, word index:
+Runs the production RTC driver, RtcStm32 of ARM/ST/src/rtc_stm32.cpp, with
+the time_t functions of RtcDevice (src/miscdev/rtc.cpp), in the emulator of
+run_rtc.py, one scenario per run. usDelay (delay_shim/idelay.h) moves the
+time of the model. Scenario 21 runs TestRtcChip, an RTC chip implementation
+of RtcDevice on TestIntrf, an I2C interface with the registers of the chip
+in RAM. Test registers at 0x5FFF0000, word index:
 
 	0	read: scenario
 	1	check result, bit 31 set when it failed
@@ -77,7 +79,7 @@ SOFTWARE.
 
 #include "stm32.h"
 #include "coredev/system_core_clock.h"
-#include "miscdev/rtc.h"
+#include "rtc_stm32.h"
 #include "idelay.h"
 
 extern "C" void RTC_IRQHandler(void) __attribute__((weak));
@@ -99,7 +101,7 @@ static volatile uint32_t *const s_Io = (volatile uint32_t *)0x5FFF0000;
 static unsigned s_Checks = 0;
 static Evt_t s_Evt[32];
 static int s_NbEvt = 0;
-static RtcDev_t *s_EvtDev = nullptr;
+static RtcDevice *s_EvtDev = nullptr;
 
 extern "C" void usDelay(uint32_t cnt)
 {
@@ -124,7 +126,7 @@ static uint32_t Now(void)
 	return s_Io[6];
 }
 
-static void Event(RtcDev_t * const pDev, uint32_t Evt)
+static void Event(RtcDevice * const pDev, uint32_t Evt)
 {
 	if (s_NbEvt < 32)
 	{
@@ -251,13 +253,13 @@ static uint32_t ExpectPrer(uint32_t F)
 
 // RtcGetTime against the calendar of the model before and after: within one
 // sub-second step, day of the week and of the year from the date
-static bool ReadCheck(RtcDev_t *pDev, struct tm *pT, uint32_t *pUs = nullptr)
+static bool ReadCheck(RtcDevice *pDev, struct tm *pT, uint32_t *pUs = nullptr)
 {
 	uint32_t res = 1000000U / ((RTC->PRER & RTC_PRER_PREDIV_S) + 1U) + 1U;
 	uint64_t before = ModelTime();
 	struct tm t = {};
 	uint32_t us = 0xFFFFFFFFU;
-	bool ok = RtcGetTime(pDev, &t, &us);
+	bool ok = pDev->GetTime(t, &us);
 	uint64_t after = ModelTime();
 	uint64_t r = (uint64_t)TmSec(t) * 1000000ULL + us;
 	int y = t.tm_year + 1900;
@@ -276,7 +278,7 @@ static bool ReadCheck(RtcDev_t *pDev, struct tm *pT, uint32_t *pUs = nullptr)
 
 static RtcCfg_t Cfg(RTC_CLKSRC ClkSrc, RtcEvtHandler_t Handler)
 {
-	RtcCfg_t cfg = { 0, ClkSrc, 3, Handler };
+	RtcCfg_t cfg = { 0, 0, ClkSrc, 3, Handler };
 
 	return cfg;
 }
@@ -328,16 +330,16 @@ static uint32_t EventsOn(void)
 	return RTC->CR & en;
 }
 
-static void Alarms(RtcDev_t &Dev)
+static void Alarms(RtcStm32 &Dev)
 {
 	struct tm t;
 	RtcAlarm_t al = { 30, -1, -1, -1, -1 };
 
 	// Alarm 0 each minute at 30 s
 	t = Tm(2024, 3, 1, 10, 0, 20);
-	Check(RtcSetTime(&Dev, &t));
+	Check(Dev.SetTime(t));
 	uint32_t tset = Now();
-	Check(RtcSetAlarm(&Dev, 0, &al) && s_Io[12] == 1);
+	Check(Dev.SetAlarm(0, al) && s_Io[12] == 1);
 	Check(RTC->ALRMAR == (RTC_ALRMAR_MSK4 | RTC_ALRMAR_MSK3 | RTC_ALRMAR_MSK2 | 0x30U) &&
 		  (RTC->ALRMASSR & RTC_ALRMASSR_MASKSS) == 0 &&
 		  (RTC->CR & (RTC_CR_ALRAE | RTC_CR_ALRAIE)) == (RTC_CR_ALRAE | RTC_CR_ALRAIE));
@@ -352,21 +354,21 @@ static void Alarms(RtcDev_t &Dev)
 #ifdef RTC_CR_ALRBE
 	// Alarm 1 daily at 10:02:05, alarm 0 still each minute
 	t = Tm(2024, 3, 1, 10, 2, 0);
-	Check(RtcSetTime(&Dev, &t));
+	Check(Dev.SetTime(t));
 	tset = Now();
 	al = { 5, 2, 10, -1, -1 };
-	Check(RtcSetAlarm(&Dev, 1, &al) && RTC->ALRMBR == (RTC_ALRMBR_MSK4 | 0x00100205U) && s_Io[12] == 1);
+	Check(Dev.SetAlarm(1, al) && RTC->ALRMBR == (RTC_ALRMBR_MSK4 | 0x00100205U) && s_Io[12] == 1);
 	s_NbEvt = 0;
 	Run(10000000);
 	Check(s_NbEvt == 1 && s_Evt[0].Bits == RTC_EVT_ALARM1 && Near(s_Evt[0].Time, tset + 5000000, 10200));
 
 	// Both in the same second
 	t = Tm(2024, 3, 1, 10, 2, 50);
-	Check(RtcSetTime(&Dev, &t));
+	Check(Dev.SetTime(t));
 	al = { 0, -1, -1, -1, -1 };
-	Check(RtcSetAlarm(&Dev, 0, &al));
+	Check(Dev.SetAlarm(0, al));
 	al = { 0, 3, 10, -1, -1 };
-	Check(RtcSetAlarm(&Dev, 1, &al));
+	Check(Dev.SetAlarm(1, al));
 	s_NbEvt = 0;
 	Run(15000000);
 	uint32_t bits = 0;
@@ -377,53 +379,53 @@ static void Alarms(RtcDev_t &Dev)
 	Check(s_NbEvt >= 1 && s_NbEvt <= 2 && bits == (RTC_EVT_ALARM0 | RTC_EVT_ALARM1) &&
 		  s_Evt[s_NbEvt - 1].Time - s_Evt[0].Time < 10000);
 	// Out of range: alarm B kept
-	RtcDisableAlarm(&Dev, 2);
-	RtcDisableAlarm(&Dev, -1);
+	Dev.DisableAlarm(2);
+	Dev.DisableAlarm(-1);
 	Check((RTC->CR & (RTC_CR_ALRBE | RTC_CR_ALRBIE)) == (RTC_CR_ALRBE | RTC_CR_ALRBIE));
-	RtcDisableAlarm(&Dev, 1);
+	Dev.DisableAlarm(1);
 	Check((RTC->CR & (RTC_CR_ALRBE | RTC_CR_ALRBIE)) == 0 && (RTC->CR & RTC_CR_ALRAE) && s_Io[12] == 1);
 
 	// A flag left by the previous alarm B: cleared by the new one
 	al = { -1, -1, -1, -1, -1 };
-	Check(RtcSetAlarm(&Dev, 1, &al));
+	Check(Dev.SetAlarm(1, al));
 	usDelay(1100000);
 	t = Tm(2024, 3, 1, 10, 4, 0);
-	Check(RtcSetTime(&Dev, &t));
+	Check(Dev.SetTime(t));
 	al = { 30, 4, 10, -1, -1 };
-	Check(RtcSetAlarm(&Dev, 1, &al));
+	Check(Dev.SetAlarm(1, al));
 	s_NbEvt = 0;
 	Run(2000000);
 	Check(s_NbEvt == 0);
-	RtcDisableAlarm(&Dev, 1);
+	Dev.DisableAlarm(1);
 #endif
 
 	// Day of the month: the 1st at midnight
 	t = Tm(2024, 3, 31, 23, 59, 58);
-	Check(RtcSetTime(&Dev, &t));
+	Check(Dev.SetTime(t));
 	tset = Now();
 	al = { 0, 0, 0, 1, -1 };
-	Check(RtcSetAlarm(&Dev, 0, &al) && RTC->ALRMAR == 0x01000000U);
+	Check(Dev.SetAlarm(0, al) && RTC->ALRMAR == 0x01000000U);
 	s_NbEvt = 0;
 	Run(5000000);
 	Check(s_NbEvt == 1 && s_Evt[0].Bits == RTC_EVT_ALARM0 && Near(s_Evt[0].Time, tset + 2000000, 10200));
 
 	// Day of the week: Tuesday at midnight, from Monday 2024-04-01
 	t = Tm(2024, 4, 1, 23, 59, 58);
-	Check(RtcSetTime(&Dev, &t));
+	Check(Dev.SetTime(t));
 	tset = Now();
 	al = { 0, 0, 0, -1, 2 };
-	Check(RtcSetAlarm(&Dev, 0, &al) && RTC->ALRMAR == (RTC_ALRMAR_WDSEL | (2U << 24)));
+	Check(Dev.SetAlarm(0, al) && RTC->ALRMAR == (RTC_ALRMAR_WDSEL | (2U << 24)));
 	s_NbEvt = 0;
 	Run(5000000);
 	Check(s_NbEvt == 1 && s_Evt[0].Bits == RTC_EVT_ALARM0 && Near(s_Evt[0].Time, tset + 2000000, 10200));
 
 	// Sunday is 7, Wednesday does not match on Tuesday
 	al = { 0, 0, 0, -1, 0 };
-	Check(RtcSetAlarm(&Dev, 0, &al) && RTC->ALRMAR == (RTC_ALRMAR_WDSEL | (7U << 24)));
+	Check(Dev.SetAlarm(0, al) && RTC->ALRMAR == (RTC_ALRMAR_WDSEL | (7U << 24)));
 	al = { 0, 0, 0, -1, 3 };
-	Check(RtcSetAlarm(&Dev, 0, &al));
+	Check(Dev.SetAlarm(0, al));
 	t = Tm(2024, 4, 1, 23, 59, 58);
-	Check(RtcSetTime(&Dev, &t));
+	Check(Dev.SetTime(t));
 	s_NbEvt = 0;
 	Run(5000000, 100000);
 	Check(s_NbEvt == 0);
@@ -438,35 +440,35 @@ static void Alarms(RtcDev_t &Dev)
 	};
 	for (const RtcAlarm_t &b : s_Bad)
 	{
-		Check(!RtcSetAlarm(&Dev, 0, &b));
+		Check(!Dev.SetAlarm(0, b));
 	}
 	al = { 0, -1, -1, -1, -1 };
-	Check(!RtcSetAlarm(&Dev, -1, &al) && !RtcSetAlarm(&Dev, Dev.NbAlarm, &al) && !RtcSetAlarm(&Dev, 0, nullptr) &&
+	Check(!Dev.SetAlarm(-1, al) && !Dev.SetAlarm(Dev.NbAlarm(), al) &&
 		  RTC->ALRMAR == ar && RTC->CR == cr);
 
 	// A flag left by the previous alarm A: cleared by the new one
 	al = { -1, -1, -1, -1, -1 };
-	Check(RtcSetAlarm(&Dev, 0, &al));
+	Check(Dev.SetAlarm(0, al));
 	usDelay(1100000);
 	t = Tm(2024, 3, 1, 10, 5, 0);
-	Check(RtcSetTime(&Dev, &t));
+	Check(Dev.SetTime(t));
 	al = { 30, -1, -1, -1, -1 };
-	Check(RtcSetAlarm(&Dev, 0, &al));
+	Check(Dev.SetAlarm(0, al));
 	s_NbEvt = 0;
 	Run(2000000);
 	Check(s_NbEvt == 0);
 	cr = RTC->CR;
 
 	// Disabled: no more events
-	RtcDisableAlarm(&Dev, -1);
-	RtcDisableAlarm(&Dev, Dev.NbAlarm);
+	Dev.DisableAlarm(-1);
+	Dev.DisableAlarm(Dev.NbAlarm());
 	Check(RTC->CR == cr);
 	al = { -1, -1, -1, -1, -1 };
-	Check(RtcSetAlarm(&Dev, 0, &al) && (RTC->ALRMAR & 0x80808080U) == 0x80808080U);
+	Check(Dev.SetAlarm(0, al) && (RTC->ALRMAR & 0x80808080U) == 0x80808080U);
 	s_NbEvt = 0;
 	Run(2000000);
 	Check(s_NbEvt == 2);
-	RtcDisableAlarm(&Dev, 0);
+	Dev.DisableAlarm(0);
 	Check((RTC->CR & (RTC_CR_ALRAE | RTC_CR_ALRAIE)) == 0 && s_Io[12] == 1);
 	s_NbEvt = 0;
 	Run(3000000, 100000);
@@ -482,9 +484,9 @@ typedef struct {
 	uint32_t Wut;
 } Wk_t;
 
-static bool Wakeup(RtcDev_t &Dev, const Wk_t &W)
+static bool Wakeup(RtcStm32 &Dev, const Wk_t &W)
 {
-	return RtcSetWakeup(&Dev, W.Ms) && Dev.msWakeup == W.Eff && (RTC->CR & RTC_CR_WUCKSEL) == W.Sel &&
+	return Dev.SetWakeup(W.Ms) && Dev.Wakeup() == W.Eff && (RTC->CR & RTC_CR_WUCKSEL) == W.Sel &&
 		   RTC->WUTR == W.Wut && (RTC->CR & (RTC_CR_WUTE | RTC_CR_WUTIE)) == (RTC_CR_WUTE | RTC_CR_WUTIE) &&
 		   s_Io[12] == 1;
 }
@@ -508,7 +510,7 @@ static bool Periodic(uint32_t T, uint32_t Period, int N, uint32_t Tol)
 }
 #endif
 
-static void Wakeups(RtcDev_t &Dev)
+static void Wakeups(RtcStm32 &Dev)
 {
 #ifdef RTC_CR_WUTE
 	// 32768 Hz: RTCCLK / 2 to 16, then the 1 Hz clock
@@ -523,7 +525,7 @@ static void Wakeups(RtcDev_t &Dev)
 	{
 		Check(Wakeup(Dev, w));
 	}
-	Check(RtcSetWakeup(&Dev, 131072000) && !RtcSetWakeup(&Dev, 131072500) && Dev.msWakeup == 131072000 &&
+	Check(Dev.SetWakeup(131072000) && !Dev.SetWakeup(131072500) && Dev.Wakeup() == 131072000 &&
 		  (RTC->CR & RTC_CR_WUCKSEL) == 6);
 
 	s_NbEvt = 0;
@@ -561,52 +563,54 @@ static void Wakeups(RtcDev_t &Dev)
 	Check(s_NbEvt == 2 && s_Evt[0].Bits == RTC_EVT_WAKEUP && Near(s_Evt[0].Time, t + 59000000, 1100200) &&
 		  s_Evt[1].Time - s_Evt[0].Time >= 59900000 && s_Evt[1].Time - s_Evt[0].Time <= 60100000);
 
-	Check(RtcSetWakeup(&Dev, 0) && Dev.msWakeup == 0 && (RTC->CR & (RTC_CR_WUTE | RTC_CR_WUTIE)) == 0 &&
+	Check(Dev.SetWakeup(0) && Dev.Wakeup() == 0 && (RTC->CR & (RTC_CR_WUTE | RTC_CR_WUTIE)) == 0 &&
 		  s_Io[12] == 1);
 	s_NbEvt = 0;
 	Run(3000000, 100000);
 	Check(s_NbEvt == 0 && FlagsClear());
 #else
-	Check(!RtcSetWakeup(&Dev, 1000) && RtcSetWakeup(&Dev, 0) && Dev.msWakeup == 0);
+	Check(!Dev.SetWakeup(1000) && Dev.SetWakeup(0) && Dev.Wakeup() == 0);
 #endif
 }
 
 // Refusals, new RTC on the LSE, calendar, backup registers, alarms, wakeup
 static void Basic(void)
 {
-	RtcDev_t dev;
+	RtcStm32 dev;
 	RtcCfg_t cfg = Cfg(RTC_CLKSRC_DEFAULT, Event);
 	struct tm t;
 	uint32_t v, us;
 
-	Check(!RtcInit(nullptr, &cfg) && !RtcInit(&dev, nullptr));
+	// An interface (RTC chip) refused
+	Check(!dev.Init(cfg, reinterpret_cast<DeviceIntrf *>(&cfg)));
 	cfg.DevNo = 1;
-	Check(!RtcInit(&dev, &cfg));
+	Check(!dev.Init(cfg));
 	cfg.DevNo = 0;
 	cfg.ClkSrc = (RTC_CLKSRC)3;
-	Check(!RtcInit(&dev, &cfg));
+	Check(!dev.Init(cfg));
 	cfg.ClkSrc = RTC_CLKSRC_DEFAULT;
 
 	// Nothing before Init
-	RtcDev_t none = {};
+	RtcStm32 none;
 	RtcAlarm_t al = { 0, -1, -1, -1, -1 };
-	none.NbAlarm = 1;
-	none.NbBackup = 1;
 	t = Tm(2024, 1, 1, 0, 0, 0);
-	Check(!RtcSetTime(&none, &t) && !RtcGetTime(&none, &t, &us) && !RtcSetAlarm(&none, 0, &al) &&
-		  !RtcSetWakeup(&none, 0) && !RtcWriteBackup(&none, 0, 1) && !RtcReadBackup(&none, 0, &v));
-	RtcDisableAlarm(&none, 0);
-	Check(!RtcSetTime(nullptr, &t) && !RtcGetTime(nullptr, &t, &us) && !RtcSetWakeup(nullptr, 0));
+	Check(!none.SetTime(t) && !none.GetTime(t, &us) && !none.SetAlarm(0, al) && !none.SetWakeup(0) &&
+		  !none.WriteBackup(0, 1) && !none.ReadBackup(0, v) && !none.Enable() && !none.Valid());
+	none.DisableAlarm(0);
+	none.Disable();
+	none.Reset();
+	none.IntHandler();
 	Check(s_Io[13] == 0 && s_Io[11] == 0 && s_Io[12] == 1 && (s_Io[14] & 1) == 0);
 
 	// New RTC: LSE started, 2000-01-01 00:00:00, a Saturday
 	uint32_t t0 = Now();
-	Check(RtcInit(&dev, &cfg));
+	Check(dev.Init(cfg));
 	uint32_t dt = Now() - t0;
 	Check(dt >= s_Io[31] && dt < s_Io[31] + 2000);
-	Check(dev.DevNo == 0 && dev.ClkSrc == RTC_CLKSRC_LFXTAL && dev.ClkFreq == 32768 && s_Io[9] == 32768 &&
-		  s_Io[13] == 1 && (s_Io[14] & 7) == 3 && dev.NbAlarm == (int)s_Io[16] && dev.NbBackup == (int)s_Io[17] &&
-		  dev.msWakeup == 0 && !dev.bTimeValid && dev.EvtHandler == Event);
+	Check(dev.Valid() && dev.Enable() && dev.ClockSource() == RTC_CLKSRC_LFXTAL && dev.ClockFrequency() == 32768 &&
+		  s_Io[9] == 32768 &&
+		  s_Io[13] == 1 && (s_Io[14] & 7) == 3 && dev.NbAlarm() == (int)s_Io[16] && dev.NbBackup() == (int)s_Io[17] &&
+		  dev.Wakeup() == 0 && !dev.TimeValid());
 	Check(RTC->PRER == ExpectPrer(32768) && (RTC->CR & (RTC_CR_BYPSHAD | RTC_CR_FMT)) == RTC_CR_BYPSHAD &&
 		  EventsOn() == 0 && s_Io[12] == 1 && s_Io[10] == 0 && s_Io[11] == 1 && Irq(true, 3));
 	Check(ReadCheck(&dev, &t, &us) && Same(t, 2000, 1, 1, 0, 0, 0) && t.tm_wday == 6 && t.tm_yday == 0);
@@ -615,23 +619,23 @@ static void Basic(void)
 
 	// Leap day, month, year and day of the week rollovers
 	t = Tm(2024, 2, 29, 23, 59, 58);
-	Check(RtcSetTime(&dev, &t) && dev.bTimeValid && s_Io[12] == 1 && s_Io[11] == 2);
+	Check(dev.SetTime(t) && dev.TimeValid() && s_Io[12] == 1 && s_Io[11] == 2);
 	Check(ReadCheck(&dev, &t) && Same(t, 2024, 2, 29, 23, 59, 58) && t.tm_wday == 4 && t.tm_yday == 59);
 	Run(3100000, 100000);
 	Check(ReadCheck(&dev, &t) && Same(t, 2024, 3, 1, 0, 0, 1) && t.tm_wday == 5 && t.tm_yday == 60);
 	Check(((RTC->DR & RTC_DR_WDU) >> RTC_DR_WDU_Pos) == 5);
 	t = Tm(2025, 12, 31, 23, 59, 59);
-	Check(RtcSetTime(&dev, &t));
+	Check(dev.SetTime(t));
 	Run(1100000, 100000);
 	Check(ReadCheck(&dev, &t) && Same(t, 2026, 1, 1, 0, 0, 0) && t.tm_wday == 4);
 	t = Tm(2099, 12, 31, 23, 59, 59);
-	Check(RtcSetTime(&dev, &t) && ReadCheck(&dev, &t) && Same(t, 2099, 12, 31, 23, 59, 59) && t.tm_yday == 364);
+	Check(dev.SetTime(t) && ReadCheck(&dev, &t) && Same(t, 2099, 12, 31, 23, 59, 59) && t.tm_yday == 364);
 	t = Tm(2028, 2, 29, 12, 0, 0);
-	Check(RtcSetTime(&dev, &t) && ReadCheck(&dev, &t) && Same(t, 2028, 2, 29, 12, 0, 0) && t.tm_wday == 2);
+	Check(dev.SetTime(t) && ReadCheck(&dev, &t) && Same(t, 2028, 2, 29, 12, 0, 0) && t.tm_wday == 2);
 	t = Tm(2028, 12, 31, 0, 0, 0);
-	Check(RtcSetTime(&dev, &t) && ReadCheck(&dev, &t) && t.tm_yday == 365);
+	Check(dev.SetTime(t) && ReadCheck(&dev, &t) && t.tm_yday == 365);
 	t = Tm(2000, 2, 29, 12, 0, 0);
-	Check(RtcSetTime(&dev, &t) && ReadCheck(&dev, &t) && Same(t, 2000, 2, 29, 12, 0, 0) && t.tm_wday == 2);
+	Check(dev.SetTime(t) && ReadCheck(&dev, &t) && Same(t, 2000, 2, 29, 12, 0, 0) && t.tm_wday == 2);
 
 	// Out of range: refused, calendar unchanged
 	static const int16_t s_Bad[][6] = {
@@ -644,74 +648,74 @@ static void Basic(void)
 	for (const int16_t *b : s_Bad)
 	{
 		t = Tm(b[0], b[1], b[2], b[3], b[4], b[5]);
-		Check(!RtcSetTime(&dev, &t));
+		Check(!dev.SetTime(t));
 	}
-	Check(!RtcSetTime(&dev, nullptr) && !RtcGetTime(&dev, nullptr, &us) && s_Io[11] == n);
-	Check(ReadCheck(&dev, &t) && Same(t, 2000, 2, 29, 12, 0, 0) && RtcGetTime(&dev, &t, nullptr));
+	Check(s_Io[11] == n);
+	Check(ReadCheck(&dev, &t) && Same(t, 2000, 2, 29, 12, 0, 0) && dev.GetTime(t));
 
 	// Backup registers
-	int nb = dev.NbBackup;
+	int nb = dev.NbBackup();
 	for (int i = 0; i < nb; i++)
 	{
-		Check(RtcWriteBackup(&dev, i, 0xA5A50000U ^ (i * 0x01010101U)));
+		Check(dev.WriteBackup(i, 0xA5A50000U ^ (i * 0x01010101U)));
 	}
 	for (int i = 0; i < nb; i++)
 	{
-		Check(RtcReadBackup(&dev, i, &v) && v == (0xA5A50000U ^ (i * 0x01010101U)));
+		Check(dev.ReadBackup(i, v) && v == (0xA5A50000U ^ (i * 0x01010101U)));
 	}
-	Check(!RtcWriteBackup(&dev, nb, 1) && !RtcWriteBackup(&dev, -1, 1) && !RtcReadBackup(&dev, nb, &v) &&
-		  !RtcReadBackup(&dev, -1, &v) && !RtcReadBackup(&dev, 0, nullptr));
+	Check(!dev.WriteBackup(nb, 1) && !dev.WriteBackup(-1, 1) && !dev.ReadBackup(nb, v) &&
+		  !dev.ReadBackup(-1, v));
 
 	Alarms(dev);
 	Wakeups(dev);
 
 	// Init again: time kept, events off, flags cleared
 	al = { -1, -1, -1, -1, -1 };
-	Check(RtcSetAlarm(&dev, 0, &al));
+	Check(dev.SetAlarm(0, al));
 #ifdef RTC_CR_ALRBE
-	Check(RtcSetAlarm(&dev, 1, &al));
+	Check(dev.SetAlarm(1, al));
 #endif
 #ifdef RTC_CR_WUTE
-	Check(RtcSetWakeup(&dev, 250));
+	Check(dev.SetWakeup(250));
 #endif
 	usDelay(1100000);
 	Check(!FlagsClear());
 	uint64_t before = ModelTime();
 	n = s_Io[11];
 	t0 = Now();
-	Check(RtcInit(&dev, &cfg) && Now() - t0 < 1000 && dev.bTimeValid && dev.msWakeup == 0 && EventsOn() == 0 &&
+	Check(dev.Init(cfg) && Now() - t0 < 1000 && dev.TimeValid() && dev.Wakeup() == 0 && EventsOn() == 0 &&
 		  FlagsClear() && s_Io[11] == n && s_Io[10] == 0 && Irq(true, 3));
 	Check(ReadCheck(&dev, &t) && TmSec(t) >= before / 1000000U);
 
 	// No handler: interrupts off
 	cfg.EvtHandler = nullptr;
 	cfg.IntPrio = 2;
-	Check(RtcInit(&dev, &cfg) && Irq(false, 0) && dev.EvtHandler == nullptr);
+	Check(dev.Init(cfg) && Irq(false, 0));
 	al = { -1, -1, -1, -1, -1 };
-	Check(RtcSetAlarm(&dev, 0, &al));
+	Check(dev.SetAlarm(0, al));
 	s_NbEvt = 0;
 	Run(3000000, 100000);
 	Check(s_NbEvt == 0);
 	cfg.EvtHandler = Event;
-	Check(RtcInit(&dev, &cfg) && Irq(true, 2));
+	Check(dev.Init(cfg) && Irq(true, 2));
 }
 
 // No crystal: LSE only refused, the default falls back to the LSI
 static void NoCrystal(void)
 {
-	RtcDev_t dev;
+	RtcStm32 dev;
 	RtcCfg_t cfg = Cfg(RTC_CLKSRC_LFXTAL, Event);
 	struct tm t;
 	uint32_t lsi = s_Io[22];
 
 	uint32_t t0 = Now();
-	Check(!RtcInit(&dev, &cfg));
+	Check(!dev.Init(cfg));
 	Check(Now() - t0 >= 4000000 && Now() - t0 < 4100000 && s_Io[13] == 0 && (s_Io[14] & 1) == 0);
 	cfg.ClkSrc = RTC_CLKSRC_DEFAULT;
 	t0 = Now();
-	Check(RtcInit(&dev, &cfg));
-	Check(Now() - t0 >= 4000000 && Now() - t0 < 4100000 && dev.ClkSrc == RTC_CLKSRC_LFRC && dev.ClkFreq == lsi &&
-		  s_Io[13] == 2 && s_Io[9] == lsi && (s_Io[14] & 9) == 8 && !dev.bTimeValid && s_Io[10] == 0);
+	Check(dev.Init(cfg));
+	Check(Now() - t0 >= 4000000 && Now() - t0 < 4100000 && dev.ClockSource() == RTC_CLKSRC_LFRC && dev.ClockFrequency() == lsi &&
+		  s_Io[13] == 2 && s_Io[9] == lsi && (s_Io[14] & 9) == 8 && !dev.TimeValid() && s_Io[10] == 0);
 	Check(RTC->PRER == ExpectPrer(lsi) && ReadCheck(&dev, &t) && Same(t, 2000, 1, 1, 0, 0, 0));
 	Run(3100000, 100000);
 	Check(ReadCheck(&dev, &t) && Same(t, 2000, 1, 1, 0, 0, 3));
@@ -719,15 +723,15 @@ static void NoCrystal(void)
 	// LSI kept, no LSE start
 	cfg.ClkSrc = RTC_CLKSRC_LFRC;
 	t0 = Now();
-	Check(RtcInit(&dev, &cfg) && Now() - t0 < 1000 && dev.ClkSrc == RTC_CLKSRC_LFRC && s_Io[10] == 0);
+	Check(dev.Init(cfg) && Now() - t0 < 1000 && dev.ClockSource() == RTC_CLKSRC_LFRC && s_Io[10] == 0);
 	cfg.ClkSrc = RTC_CLKSRC_DEFAULT;
 	t0 = Now();
-	Check(RtcInit(&dev, &cfg) && Now() - t0 < 1000 && dev.ClkSrc == RTC_CLKSRC_LFRC);
+	Check(dev.Init(cfg) && Now() - t0 < 1000 && dev.ClockSource() == RTC_CLKSRC_LFRC);
 
 #ifdef RTC_CR_WUTE
 	// 1000 msec in RTCCLK / 2 counts
 	s_NbEvt = 0;
-	Check(RtcSetWakeup(&dev, 1000) && dev.msWakeup == 1000 && RTC->WUTR == lsi / 2 - 1 &&
+	Check(dev.SetWakeup(1000) && dev.Wakeup() == 1000 && RTC->WUTR == lsi / 2 - 1 &&
 		  (RTC->CR & RTC_CR_WUCKSEL) == 3);
 	t0 = Now();
 	Run(2500000);
@@ -738,24 +742,24 @@ static void NoCrystal(void)
 // System reset: calendar, clock and backup registers kept, events off
 static void SystemReset(void)
 {
-	RtcDev_t dev;
+	RtcStm32 dev;
 	RtcCfg_t cfg = Cfg(RTC_CLKSRC_DEFAULT, Event);
 	struct tm t;
 	uint32_t v;
 
 	if (s_Io[4] == 0)
 	{
-		Check(RtcInit(&dev, &cfg));
+		Check(dev.Init(cfg));
 		t = Tm(2025, 6, 15, 12, 0, 0);
-		Check(RtcSetTime(&dev, &t));
-		for (int i = 0; i < dev.NbBackup; i++)
+		Check(dev.SetTime(t));
+		for (int i = 0; i < dev.NbBackup(); i++)
 		{
-			Check(RtcWriteBackup(&dev, i, 0x5A000000U | i));
+			Check(dev.WriteBackup(i, 0x5A000000U | i));
 		}
 		RtcAlarm_t al = { 5, -1, -1, -1, -1 };
-		Check(RtcSetAlarm(&dev, 0, &al));
+		Check(dev.SetAlarm(0, al));
 #ifdef RTC_CR_WUTE
-		Check(RtcSetWakeup(&dev, 1000));
+		Check(dev.SetWakeup(1000));
 #endif
 		Run(1500000);
 		s_Io[5] = 1;
@@ -766,13 +770,13 @@ static void SystemReset(void)
 
 	usDelay(200000);
 	uint32_t t0 = Now();
-	Check(RtcInit(&dev, &cfg) && Now() - t0 < 1000);
-	Check(dev.bTimeValid && dev.ClkSrc == RTC_CLKSRC_LFXTAL && s_Io[10] == 0 && s_Io[11] == 0 && dev.msWakeup == 0 &&
+	Check(dev.Init(cfg) && Now() - t0 < 1000);
+	Check(dev.TimeValid() && dev.ClockSource() == RTC_CLKSRC_LFXTAL && s_Io[10] == 0 && s_Io[11] == 0 && dev.Wakeup() == 0 &&
 		  EventsOn() == 0 && FlagsClear() && RTC->PRER == ExpectPrer(32768) && s_Io[12] == 1);
 	Check(ReadCheck(&dev, &t) && Same(t, 2025, 6, 15, 12, 0, 1));
-	for (int i = 0; i < dev.NbBackup; i++)
+	for (int i = 0; i < dev.NbBackup(); i++)
 	{
-		Check(RtcReadBackup(&dev, i, &v) && v == (0x5A000000U | i));
+		Check(dev.ReadBackup(i, v) && v == (0x5A000000U | i));
 	}
 	s_NbEvt = 0;
 	Run(10000000, 100000);
@@ -782,17 +786,17 @@ static void SystemReset(void)
 // LSI: stopped by the system reset until Init, except on the WBA
 static void LsiReset(void)
 {
-	RtcDev_t dev;
+	RtcStm32 dev;
 	RtcCfg_t cfg = Cfg(RTC_CLKSRC_LFRC, nullptr);
 	struct tm t;
 
 	if (s_Io[4] == 0)
 	{
 		uint32_t t0 = Now();
-		Check(RtcInit(&dev, &cfg) && Now() - t0 < 1000 && dev.ClkSrc == RTC_CLKSRC_LFRC && s_Io[13] == 2 &&
+		Check(dev.Init(cfg) && Now() - t0 < 1000 && dev.ClockSource() == RTC_CLKSRC_LFRC && s_Io[13] == 2 &&
 			  (s_Io[14] & 1) == 0);
 		t = Tm(2025, 1, 1, 0, 0, 0);
-		Check(RtcSetTime(&dev, &t));
+		Check(dev.SetTime(t));
 		Run(2100000, 100000);
 		s_Io[5] = 1;
 		while (1)
@@ -803,7 +807,7 @@ static void LsiReset(void)
 	usDelay(1000000);
 	cfg.ClkSrc = RTC_CLKSRC_DEFAULT;
 	uint32_t t0 = Now();
-	Check(RtcInit(&dev, &cfg) && Now() - t0 < 1000 && dev.ClkSrc == RTC_CLKSRC_LFRC && dev.bTimeValid &&
+	Check(dev.Init(cfg) && Now() - t0 < 1000 && dev.ClockSource() == RTC_CLKSRC_LFRC && dev.TimeValid() &&
 		  s_Io[10] == 0 && (s_Io[14] & 1) == 0);
 	Check(ReadCheck(&dev, &t) && Same(t, 2025, 1, 1, 0, 0, s_Io[25] ? 3 : 2));
 	Run(1000000, 100000);
@@ -814,19 +818,19 @@ static void LsiReset(void)
 // the backup domain for the LSI, other settings kept
 static void CrystalLost(void)
 {
-	RtcDev_t dev;
+	RtcStm32 dev;
 	RtcCfg_t cfg = Cfg(RTC_CLKSRC_DEFAULT, nullptr);
 	struct tm t;
 	uint32_t v;
 
 	if (s_Io[4] == 0)
 	{
-		Check(RtcInit(&dev, &cfg) && dev.ClkSrc == RTC_CLKSRC_LFXTAL && (s_Io[14] & 16));
+		Check(dev.Init(cfg) && dev.ClockSource() == RTC_CLKSRC_LFXTAL && (s_Io[14] & 16));
 		t = Tm(2025, 3, 3, 3, 3, 3);
-		Check(RtcSetTime(&dev, &t));
-		if (dev.NbBackup > 0)
+		Check(dev.SetTime(t));
+		if (dev.NbBackup() > 0)
 		{
-			Check(RtcWriteBackup(&dev, 0, 0x12345678));
+			Check(dev.WriteBackup(0, 0x12345678));
 		}
 		s_Io[5] = 1;
 		while (1)
@@ -836,16 +840,16 @@ static void CrystalLost(void)
 
 	cfg.ClkSrc = RTC_CLKSRC_LFXTAL;
 	uint32_t t0 = Now();
-	Check(!RtcInit(&dev, &cfg) && Now() - t0 >= 4000000 && Now() - t0 < 4100000 && s_Io[10] == 0 && s_Io[13] == 1);
+	Check(!dev.Init(cfg) && Now() - t0 >= 4000000 && Now() - t0 < 4100000 && s_Io[10] == 0 && s_Io[13] == 1);
 	cfg.ClkSrc = RTC_CLKSRC_DEFAULT;
 	t0 = Now();
-	Check(RtcInit(&dev, &cfg) && Now() - t0 >= 4000000 && Now() - t0 < 4100000);
-	Check(s_Io[10] == 1 && s_Io[13] == 2 && dev.ClkSrc == RTC_CLKSRC_LFRC && dev.ClkFreq == s_Io[22] &&
-		  (s_Io[14] & 0x11) == 0x10 && !dev.bTimeValid && RTC->PRER == ExpectPrer(s_Io[22]));
+	Check(dev.Init(cfg) && Now() - t0 >= 4000000 && Now() - t0 < 4100000);
+	Check(s_Io[10] == 1 && s_Io[13] == 2 && dev.ClockSource() == RTC_CLKSRC_LFRC && dev.ClockFrequency() == s_Io[22] &&
+		  (s_Io[14] & 0x11) == 0x10 && !dev.TimeValid() && RTC->PRER == ExpectPrer(s_Io[22]));
 	Check(ReadCheck(&dev, &t) && Same(t, 2000, 1, 1, 0, 0, 0));
-	if (dev.NbBackup > 0)
+	if (dev.NbBackup() > 0)
 	{
-		Check(RtcReadBackup(&dev, 0, &v) && v == 0);
+		Check(dev.ReadBackup(0, v) && v == 0);
 	}
 }
 
@@ -853,7 +857,7 @@ static void CrystalLost(void)
 // domain reset, the LSE and the other settings come back
 static void ClockChange(void)
 {
-	RtcDev_t dev;
+	RtcStm32 dev;
 	RtcCfg_t cfg = Cfg(RTC_CLKSRC_LFRC, nullptr);
 	struct tm t;
 
@@ -861,28 +865,28 @@ static void ClockChange(void)
 	// 250 Hz on the WBA with LSI1PREDIV
 	Check(s_Io[13] == 3 && (s_Io[14] & 0x13) == 0x13);
 	uint32_t t0 = Now();
-	Check(RtcInit(&dev, &cfg) && Now() - t0 >= s_Io[31] && Now() - t0 < s_Io[31] + 10000);
-	Check(s_Io[10] == 1 && s_Io[13] == 2 && dev.ClkSrc == RTC_CLKSRC_LFRC && (s_Io[14] & 0x33) == 0x33 &&
-		  !dev.bTimeValid && RTC->PRER == ExpectPrer(s_Io[22]));
+	Check(dev.Init(cfg) && Now() - t0 >= s_Io[31] && Now() - t0 < s_Io[31] + 10000);
+	Check(s_Io[10] == 1 && s_Io[13] == 2 && dev.ClockSource() == RTC_CLKSRC_LFRC && (s_Io[14] & 0x33) == 0x33 &&
+		  !dev.TimeValid() && RTC->PRER == ExpectPrer(s_Io[22]));
 	Check(ReadCheck(&dev, &t) && Same(t, 2000, 1, 1, 0, 0, 0));
 
 	// LSE asked, LSI running: kept
 	cfg.ClkSrc = RTC_CLKSRC_LFXTAL;
-	Check(RtcInit(&dev, &cfg) && dev.ClkSrc == RTC_CLKSRC_LFRC && s_Io[10] == 1 && s_Io[13] == 2);
+	Check(dev.Init(cfg) && dev.ClockSource() == RTC_CLKSRC_LFRC && s_Io[10] == 1 && s_Io[13] == 2);
 }
 
 // RTC running on the LSE from its reset values: time kept, day of the week
 // set from the date
 static void RunningResetValues(void)
 {
-	RtcDev_t dev;
+	RtcStm32 dev;
 	RtcCfg_t cfg = Cfg(RTC_CLKSRC_DEFAULT, nullptr);
 	struct tm t;
 
 	usDelay(5000000);
 	uint32_t t0 = Now();
-	Check(RtcInit(&dev, &cfg) && Now() - t0 < 1000 && s_Io[10] == 0 && s_Io[11] == 1 &&
-		  dev.ClkSrc == RTC_CLKSRC_LFXTAL && !dev.bTimeValid && RTC->PRER == 0x007F00FFU);
+	Check(dev.Init(cfg) && Now() - t0 < 1000 && s_Io[10] == 0 && s_Io[11] == 1 &&
+		  dev.ClockSource() == RTC_CLKSRC_LFXTAL && !dev.TimeValid() && RTC->PRER == 0x007F00FFU);
 	Check(ReadCheck(&dev, &t) && Same(t, 2000, 1, 1, 0, 0, 5) && t.tm_wday == 6 &&
 		  ((RTC->DR & RTC_DR_WDU) >> RTC_DR_WDU_Pos) == 6);
 	Run(1100000, 100000);
@@ -898,15 +902,15 @@ static void SelectedNotEnabled(void)
 		return;
 	}
 
-	RtcDev_t dev;
+	RtcStm32 dev;
 	RtcCfg_t cfg = Cfg(RTC_CLKSRC_DEFAULT, nullptr);
 	struct tm t;
 
 	usDelay(5000000);
 	Check((s_Io[14] & 32) == 0);
 	uint32_t t0 = Now();
-	Check(RtcInit(&dev, &cfg) && Now() - t0 < 1000 && s_Io[10] == 0 && (s_Io[14] & 32) &&
-		  dev.ClkSrc == RTC_CLKSRC_LFXTAL && RTC->PRER == ExpectPrer(32768) && !dev.bTimeValid);
+	Check(dev.Init(cfg) && Now() - t0 < 1000 && s_Io[10] == 0 && (s_Io[14] & 32) &&
+		  dev.ClockSource() == RTC_CLKSRC_LFXTAL && RTC->PRER == ExpectPrer(32768) && !dev.TimeValid());
 	Check(ReadCheck(&dev, &t) && Same(t, 2000, 1, 1, 0, 0, 0) && t.tm_wday == 6);
 	Run(2100000, 100000);
 	Check(ReadCheck(&dev, &t) && Same(t, 2000, 1, 1, 0, 0, 2));
@@ -921,27 +925,27 @@ static void SelectedNotEnabledLsi(void)
 		return;
 	}
 
-	RtcDev_t dev;
+	RtcStm32 dev;
 	RtcCfg_t cfg = Cfg(RTC_CLKSRC_LFRC, nullptr);
 	struct tm t;
 
 	uint32_t t0 = Now();
-	Check(RtcInit(&dev, &cfg) && Now() - t0 >= s_Io[31] && Now() - t0 < s_Io[31] + 2000 && s_Io[10] == 1 &&
-		  s_Io[13] == 2 && dev.ClkSrc == RTC_CLKSRC_LFRC && (s_Io[14] & 0x23) == 0x23);
+	Check(dev.Init(cfg) && Now() - t0 >= s_Io[31] && Now() - t0 < s_Io[31] + 2000 && s_Io[10] == 1 &&
+		  s_Io[13] == 2 && dev.ClockSource() == RTC_CLKSRC_LFRC && (s_Io[14] & 0x23) == 0x23);
 	Check(ReadCheck(&dev, &t) && Same(t, 2000, 1, 1, 0, 0, 0));
 }
 
 // External oscillator on the LSE pin: bypass, frequency of the board
 static void Tcxo(void)
 {
-	RtcDev_t dev;
+	RtcStm32 dev;
 	RtcCfg_t cfg = Cfg(RTC_CLKSRC_DEFAULT, nullptr);
 	struct tm t;
 	uint32_t f = s_Io[32];
 
 	uint32_t t0 = Now();
-	Check(RtcInit(&dev, &cfg) && Now() - t0 >= s_Io[31] && Now() - t0 < s_Io[31] + 2000);
-	Check(dev.ClkSrc == RTC_CLKSRC_LFXTAL && dev.ClkFreq == f && s_Io[9] == f && (s_Io[14] & 7) == 7 &&
+	Check(dev.Init(cfg) && Now() - t0 >= s_Io[31] && Now() - t0 < s_Io[31] + 2000);
+	Check(dev.ClockSource() == RTC_CLKSRC_LFXTAL && dev.ClockFrequency() == f && s_Io[9] == f && (s_Io[14] & 7) == 7 &&
 		  s_Io[13] == 1 && RTC->PRER == ExpectPrer(f));
 	Run(1100000, 100000);
 	Check(ReadCheck(&dev, &t) && Same(t, 2000, 1, 1, 0, 0, 1));
@@ -951,25 +955,25 @@ static void Tcxo(void)
 // back
 static void HseToLse(void)
 {
-	RtcDev_t dev;
+	RtcStm32 dev;
 	RtcCfg_t cfg = Cfg(RTC_CLKSRC_DEFAULT, nullptr);
 	struct tm t;
 
 	uint32_t t0 = Now();
-	Check(RtcInit(&dev, &cfg) && Now() - t0 >= s_Io[31] && Now() - t0 < s_Io[31] + 2000);
-	Check(s_Io[10] == 1 && s_Io[13] == 1 && dev.ClkSrc == RTC_CLKSRC_LFXTAL && (s_Io[14] & 0x33) == 0x33 &&
-		  RTC->PRER == ExpectPrer(32768) && !dev.bTimeValid);
+	Check(dev.Init(cfg) && Now() - t0 >= s_Io[31] && Now() - t0 < s_Io[31] + 2000);
+	Check(s_Io[10] == 1 && s_Io[13] == 1 && dev.ClockSource() == RTC_CLKSRC_LFXTAL && (s_Io[14] & 0x33) == 0x33 &&
+		  RTC->PRER == ExpectPrer(32768) && !dev.TimeValid());
 	Check(ReadCheck(&dev, &t) && Same(t, 2000, 1, 1, 0, 0, 0));
 }
 
 // RTC in the 12 hour format: converted to 24 hours
 static void Format12(int Hour, int Wday)
 {
-	RtcDev_t dev;
+	RtcStm32 dev;
 	RtcCfg_t cfg = Cfg(RTC_CLKSRC_DEFAULT, nullptr);
 	struct tm t;
 
-	Check(RtcInit(&dev, &cfg) && s_Io[11] == 1 && (RTC->CR & RTC_CR_FMT) == 0 && dev.bTimeValid &&
+	Check(dev.Init(cfg) && s_Io[11] == 1 && (RTC->CR & RTC_CR_FMT) == 0 && dev.TimeValid() &&
 		  RTC->PRER == 0x007F00FFU && s_Io[10] == 0);
 	Check(ReadCheck(&dev, &t) && t.tm_hour == Hour && t.tm_wday == Wday && (RTC->TR & RTC_TR_PM) == 0);
 	if (Hour == 23)
@@ -989,11 +993,11 @@ static void Format12(int Hour, int Wday)
 // Prescalers not giving 1 Hz: rewritten, time kept
 static void Prescaler(void)
 {
-	RtcDev_t dev;
+	RtcStm32 dev;
 	RtcCfg_t cfg = Cfg(RTC_CLKSRC_DEFAULT, nullptr);
 	struct tm t;
 
-	Check(RtcInit(&dev, &cfg) && s_Io[11] == 1 && RTC->PRER == ExpectPrer(32768) && dev.bTimeValid && s_Io[10] == 0);
+	Check(dev.Init(cfg) && s_Io[11] == 1 && RTC->PRER == ExpectPrer(32768) && dev.TimeValid() && s_Io[10] == 0);
 	Check(ReadCheck(&dev, &t) && Same(t, 2025, 5, 5, 5, 5, 5));
 	Run(2100000, 100000);
 	Check(ReadCheck(&dev, &t) && Same(t, 2025, 5, 5, 5, 5, 7));
@@ -1003,11 +1007,11 @@ static void Prescaler(void)
 static void Binary(void)
 {
 #ifdef RTC_ICSR_BIN
-	RtcDev_t dev;
+	RtcStm32 dev;
 	RtcCfg_t cfg = Cfg(RTC_CLKSRC_DEFAULT, nullptr);
 	struct tm t;
 
-	Check(RtcInit(&dev, &cfg) && (RTC->ICSR & RTC_ICSR_BIN) == 0 && !dev.bTimeValid && RTC->PRER == ExpectPrer(32768));
+	Check(dev.Init(cfg) && (RTC->ICSR & RTC_ICSR_BIN) == 0 && !dev.TimeValid() && RTC->PRER == ExpectPrer(32768));
 	Check(ReadCheck(&dev, &t) && Same(t, 2000, 1, 1, 0, 0, 0));
 	Run(1100000, 100000);
 	Check(ReadCheck(&dev, &t) && Same(t, 2000, 1, 1, 0, 0, 1));
@@ -1018,12 +1022,12 @@ static void Binary(void)
 static void Predivider(void)
 {
 #if defined(RCC_CSR_LSIPREDIV) || defined(RCC_BDCR1_LSI1PREDIV)
-	RtcDev_t dev;
+	RtcStm32 dev;
 	RtcCfg_t cfg = Cfg(RTC_CLKSRC_LFRC, Event);
 	struct tm t;
 	uint32_t us;
 
-	Check(s_Io[22] == 250 && RtcInit(&dev, &cfg) && dev.ClkFreq == 250 && RTC->PRER == 249);
+	Check(s_Io[22] == 250 && dev.Init(cfg) && dev.ClockFrequency() == 250 && RTC->PRER == 249);
 	Check(ReadCheck(&dev, &t, &us) && Same(t, 2000, 1, 1, 0, 0, 0));
 	// The calendar counts 4 counts (16 msec) after the initialization
 	Run(1502000, 100000);
@@ -1051,15 +1055,15 @@ static void Predivider(void)
 // low frequency crystal (RC): the LSE is tried, 32768 Hz.
 static void CalendarRead(void)
 {
-	RtcDev_t dev;
+	RtcStm32 dev;
 	RtcCfg_t cfg = Cfg(RTC_CLKSRC_DEFAULT, nullptr);
 	struct tm t;
 	uint32_t us, v;
 
-	Check(RtcInit(&dev, &cfg) && dev.ClkSrc == RTC_CLKSRC_LFXTAL && dev.ClkFreq == 32768 &&
+	Check(dev.Init(cfg) && dev.ClockSource() == RTC_CLKSRC_LFXTAL && dev.ClockFrequency() == 32768 &&
 		  RTC->PRER == ExpectPrer(32768));
 	t = Tm(2030, 7, 4, 8, 0, 0);
-	Check(RtcSetTime(&dev, &t));
+	Check(dev.SetTime(t));
 
 	// The next second k usec after the start of the read
 	for (uint32_t k = 0; k < 12; k++)
@@ -1073,27 +1077,26 @@ static void CalendarRead(void)
 
 	// Seconds since the epoch, UTC
 	struct timespec ts;
-	Check(RtcSetTimeEpoch(&dev, 1700000000) && ReadCheck(&dev, &t) && Same(t, 2023, 11, 14, 22, 13, 20) &&
+	Check(dev.SetTimeEpoch(1700000000) && ReadCheck(&dev, &t) && Same(t, 2023, 11, 14, 22, 13, 20) &&
 		  t.tm_wday == 2);
 	Run(1500000, 100000);
-	Check(RtcGetTimeEpoch(&dev, &ts) && ts.tv_sec == 1700000001 && ts.tv_nsec >= 400000000 &&
+	Check(dev.GetTimeEpoch(ts) && ts.tv_sec == 1700000001 && ts.tv_nsec >= 400000000 &&
 		  ts.tv_nsec < 600000000 && ts.tv_nsec % 1000 == 0);
-	Check(!RtcSetTimeEpoch(&dev, 946684799) && !RtcSetTimeEpoch(&dev, (time_t)4102444800LL));
-	Check(RtcSetTimeEpoch(&dev, 946684800) && ReadCheck(&dev, &t) && Same(t, 2000, 1, 1, 0, 0, 0));
-	Check(RtcSetTimeEpoch(&dev, (time_t)4102444799LL) && ReadCheck(&dev, &t) && Same(t, 2099, 12, 31, 23, 59, 59));
-	Check(!RtcGetTimeEpoch(&dev, nullptr) && !RtcGetTimeEpoch(nullptr, &ts));
+	Check(!dev.SetTimeEpoch(946684799) && !dev.SetTimeEpoch((time_t)4102444800LL));
+	Check(dev.SetTimeEpoch(946684800) && ReadCheck(&dev, &t) && Same(t, 2000, 1, 1, 0, 0, 0));
+	Check(dev.SetTimeEpoch((time_t)4102444799LL) && ReadCheck(&dev, &t) && Same(t, 2099, 12, 31, 23, 59, 59));
 
-	// C++ class, the device of the last Init
-	Rtc rtc;
-	RtcCfg_t c = Cfg(RTC_CLKSRC_DEFAULT, nullptr);
+	// Through the base class, the device of the last Init owns the RTC
+	RtcStm32 own;
+	RtcDevice &rtc = own;
+	RtcCfg_t c = Cfg(RTC_CLKSRC_DEFAULT, Event);
 	struct tm x = Tm(2031, 1, 2, 3, 4, 5);
 	RtcAlarm_t al = { 0, -1, -1, -1, -1 };
 
 	Check(rtc.Init(c) && rtc.ClockSource() == RTC_CLKSRC_LFXTAL && rtc.ClockFrequency() == 32768 &&
-		  rtc.NbAlarm() == (int)s_Io[16] && rtc.NbBackup() == (int)s_Io[17] && rtc.TimeValid());
-	Check(!RtcGetTime(&dev, &t, &us) && (RtcDev_t *)rtc != nullptr);
+		  rtc.NbAlarm() == (int)s_Io[16] && rtc.NbBackup() == (int)s_Io[17] && rtc.TimeValid() && Irq(true, 3));
 	Check(rtc.SetTime(x) && rtc.GetTime(x) && Same(x, 2031, 1, 2, 3, 4, 5));
-	Check(rtc.SetTime((time_t)1900000000) && rtc.GetTime(ts) && ts.tv_sec == 1900000000);
+	Check(rtc.SetTimeEpoch((time_t)1900000000) && rtc.GetTimeEpoch(ts) && ts.tv_sec == 1900000000);
 	Check(rtc.SetAlarm(0, al) && (RTC->CR & RTC_CR_ALRAE));
 	rtc.DisableAlarm(0);
 	Check((RTC->CR & RTC_CR_ALRAE) == 0 && rtc.SetWakeup(0) && rtc.Wakeup() == 0);
@@ -1101,33 +1104,299 @@ static void CalendarRead(void)
 	{
 		Check(rtc.WriteBackup(0, 7) && rtc.ReadBackup(0, v) && v == 7);
 	}
+
+	// The previous device refused, the registers kept
+	Check(!dev.Enable() && !dev.SetTime(x) && !dev.GetTime(t, &us) && !dev.SetAlarm(0, al) && !dev.SetWakeup(0) &&
+		  !dev.WriteBackup(0, 9) && !dev.ReadBackup(0, v) && !dev.SetTimeEpoch((time_t)1900000000) &&
+		  !dev.GetTimeEpoch(ts));
+	al = { -1, -1, -1, -1, -1 };
+	Check(rtc.SetAlarm(0, al));
+	uint32_t cr = RTC->CR;
+	uint32_t ar = RTC->ALRMAR;
+	dev.DisableAlarm(0);
+	dev.Disable();
+	dev.Reset();
+	s_NbEvt = 0;
+	usDelay(1100000);
+	dev.IntHandler();
+	Check(RTC->CR == cr && RTC->ALRMAR == ar && s_NbEvt == 0 && !FlagsClear());
+
+	// The owner services the flags; Disable and Reset stop the events
+	rtc.IntHandler();
+	Check(s_NbEvt == 1 && s_Evt[0].Bits == RTC_EVT_ALARM0 && s_EvtDev == &rtc && FlagsClear());
+#ifdef RTC_CR_WUTE
+	Check(rtc.SetWakeup(1000) && rtc.Wakeup() == 1000);
+#endif
+	rtc.Disable();
+	Check(EventsOn() == 0 && rtc.Wakeup() == 0 && rtc.Enable());
+	Check(rtc.SetAlarm(0, al));
+	rtc.Reset();
+	Check(EventsOn() == 0);
+
+	// Destroyed: events and interrupts off, no owner
+	{
+		RtcStm32 tmp;
+
+		Check(tmp.Init(c) && Irq(true, 3) && !own.Enable() && tmp.SetAlarm(0, al) && EventsOn() != 0);
+	}
+	Check(Irq(false, 0) && EventsOn() == 0 && !own.Enable() && !dev.Enable());
+
+	// Interrupt without an owner: the flags cleared, no event
+	RTC->WPR = 0xCA;
+	RTC->WPR = 0x53;
+	RTC->CR |= RTC_CR_ALRAE;
+	RTC->WPR = 0xFF;
+	usDelay(1100000);
+	Check(!FlagsClear());
+	s_NbEvt = 0;
+	if (s_Io[19] == 1)
+	{
+		RTC_IRQHandler();
+	}
+	else
+	{
+		RTC_Alarm_IRQHandler();
+	}
+	Check(FlagsClear() && s_NbEvt == 0);
+	{
+		RtcStm32 tmp;
+
+		Check(!tmp.Enable());
+	}
+	Check(own.Init(c) && own.Enable());
 }
 
 // RTC on the HSE, the LSE stops at the backup domain reset: Init fails, the
 // next one takes the LSI
 static void LseLost(void)
 {
-	RtcDev_t dev;
+	RtcStm32 dev;
 	RtcCfg_t cfg = Cfg(RTC_CLKSRC_DEFAULT, nullptr);
 
 	uint32_t t0 = Now();
-	Check(!RtcInit(&dev, &cfg) && Now() - t0 >= 4000000 && Now() - t0 < 4100000 && s_Io[10] == 1 &&
+	Check(!dev.Init(cfg) && Now() - t0 >= 4000000 && Now() - t0 < 4100000 && s_Io[10] == 1 &&
 		  s_Io[13] == 0 && (s_Io[14] & 1) == 0);
 	t0 = Now();
-	Check(RtcInit(&dev, &cfg) && Now() - t0 >= 4000000 && Now() - t0 < 4100000 && s_Io[10] == 1 &&
-		  s_Io[13] == 2 && dev.ClkSrc == RTC_CLKSRC_LFRC);
+	Check(dev.Init(cfg) && Now() - t0 >= 4000000 && Now() - t0 < 4100000 && s_Io[10] == 1 &&
+		  s_Io[13] == 2 && dev.ClockSource() == RTC_CLKSRC_LFRC);
 }
 
 // RTC on the HSE, the LSE stops at the backup domain reset, LSI asked: the
 // LSI runs, the LSE is off
 static void LseLostLsi(void)
 {
-	RtcDev_t dev;
+	RtcStm32 dev;
 	RtcCfg_t cfg = Cfg(RTC_CLKSRC_LFRC, nullptr);
 
 	uint32_t t0 = Now();
-	Check(RtcInit(&dev, &cfg) && Now() - t0 >= 4000000 && Now() - t0 < 4100000 && s_Io[10] == 1 &&
-		  s_Io[13] == 2 && dev.ClkSrc == RTC_CLKSRC_LFRC && (s_Io[14] & 1) == 0);
+	Check(dev.Init(cfg) && Now() - t0 >= 4000000 && Now() - t0 < 4100000 && s_Io[10] == 1 &&
+		  s_Io[13] == 2 && dev.ClockSource() == RTC_CLKSRC_LFRC && (s_Io[14] & 1) == 0);
+}
+
+// I2C interface of the RTC chip test: register file of one device,
+// register address in the first byte
+class TestIntrf : public DeviceIntrf {
+public:
+	operator DevIntrf_t * () override { return &vDevIntrf; }
+	DEVINTRF_TYPE Type() override { return DEVINTRF_TYPE_I2C; }
+	uint32_t Rate(uint32_t DataRate) override { return DataRate; }
+	uint32_t Rate(void) override { return 100000; }
+	void Disable(void) override {}
+	void Enable(void) override {}
+	int Rx(uint32_t DevAddr, uint8_t *pBuff, int BuffLen) override
+	{
+		(void)DevAddr;
+		(void)pBuff;
+		(void)BuffLen;
+		return 0;
+	}
+	int Tx(uint32_t DevAddr, const uint8_t *pData, int DataLen) override
+	{
+		(void)DevAddr;
+		(void)pData;
+		(void)DataLen;
+		return 0;
+	}
+	int Read(uint32_t DevAddr, const uint8_t *pAdCmd, int AdCmdLen, uint8_t *pBuff, int BuffLen) override
+	{
+		Addr = DevAddr;
+		if (AdCmdLen != 1 || pAdCmd[0] + BuffLen > (int)sizeof(Reg))
+		{
+			return 0;
+		}
+		for (int i = 0; i < BuffLen; i++)
+		{
+			pBuff[i] = Reg[pAdCmd[0] + i];
+		}
+		return BuffLen;
+	}
+	int Write(uint32_t DevAddr, const uint8_t *pAdCmd, int AdCmdLen, const uint8_t *pData, int DataLen) override
+	{
+		Addr = DevAddr;
+		if (AdCmdLen != 1 || pAdCmd[0] + DataLen > (int)sizeof(Reg))
+		{
+			return 0;
+		}
+		for (int i = 0; i < DataLen; i++)
+		{
+			Reg[pAdCmd[0] + i] = pData[i];
+		}
+		return DataLen;
+	}
+
+	uint32_t Addr = 0;
+	uint8_t Reg[8] = {};
+
+private:
+	DevIntrf_t vDevIntrf = {};
+};
+
+static uint8_t ToBcd(int V)
+{
+	return (uint8_t)((V / 10) << 4 | V % 10);
+}
+
+static int FromBcd(uint8_t V)
+{
+	return (V >> 4) * 10 + (V & 0xF);
+}
+
+// RtcDevice on an RTC chip, the way a chip implementation uses the interface:
+// BCD second, minute, hour, day of the week, day, month and year of 2000 to
+// 2099 at registers 0 to 6, alarm flag in bit 0 of register 7, no
+// sub-seconds. Only the required functions and IntHandler, the other
+// functions of RtcDevice by default.
+class TestRtcChip : public RtcDevice {
+public:
+	bool Init(const RtcCfg_t &Cfg, DeviceIntrf * const pIntrf = nullptr) override
+	{
+		uint8_t reg = 0;
+		uint8_t d = 0;
+
+		if (pIntrf == nullptr)
+		{
+			return false;
+		}
+		Interface(pIntrf);
+		DeviceAddress(Cfg.DevAddr);
+		Valid(Read(&reg, 1, &d, 1) == 1);
+		vClkSrc = RTC_CLKSRC_LFXTAL;
+		vClkFreq = 32768;
+		vRtcEvtHandler = Cfg.EvtHandler;
+
+		return Valid();
+	}
+	bool SetTime(const struct tm &Time) override
+	{
+		int y = Time.tm_year + 1900;
+		int m = Time.tm_mon + 1;
+		uint8_t reg = 0;
+
+		if (!Valid() || y < 2000 || y > 2099 || m < 1 || m > 12 || Time.tm_mday < 1 || Time.tm_mday > 31 ||
+			Time.tm_hour < 0 || Time.tm_hour > 23 || Time.tm_min < 0 || Time.tm_min > 59 || Time.tm_sec < 0 ||
+			Time.tm_sec > 59)
+		{
+			return false;
+		}
+
+		uint8_t d[7] = { ToBcd(Time.tm_sec), ToBcd(Time.tm_min), ToBcd(Time.tm_hour), (uint8_t)WeekDay(y, m, Time.tm_mday),
+						 ToBcd(Time.tm_mday), ToBcd(m), ToBcd(y - 2000) };
+
+		vbTimeValid = Write(&reg, 1, d, 7) == 7;
+
+		return vbTimeValid;
+	}
+	bool GetTime(struct tm &Time, uint32_t * const pUsec = nullptr) override
+	{
+		uint8_t reg = 0;
+		uint8_t d[7];
+
+		if (!Valid() || Read(&reg, 1, d, 7) != 7)
+		{
+			return false;
+		}
+
+		Time = {};
+		Time.tm_sec = FromBcd(d[0]);
+		Time.tm_min = FromBcd(d[1]);
+		Time.tm_hour = FromBcd(d[2]);
+		Time.tm_wday = d[3];
+		Time.tm_mday = FromBcd(d[4]);
+		Time.tm_mon = FromBcd(d[5]) - 1;
+		Time.tm_year = FromBcd(d[6]) + 100;
+		Time.tm_yday = Days(Time.tm_year + 1900, Time.tm_mon + 1, Time.tm_mday) - Days(Time.tm_year + 1900, 1, 1);
+		Time.tm_isdst = -1;
+		if (pUsec != nullptr)
+		{
+			*pUsec = 0;
+		}
+
+		return true;
+	}
+	void IntHandler() override
+	{
+		uint8_t reg = 7;
+		uint8_t f = 0;
+
+		if (Valid() && Read(&reg, 1, &f, 1) == 1 && (f & 1))
+		{
+			f &= ~1;
+			Write(&reg, 1, &f, 1);
+			RtcEvt(RTC_EVT_ALARM0);
+		}
+	}
+	bool Enable() override { return Valid(); }
+	void Disable() override {}
+	void Reset() override {}
+};
+
+// RtcDevice on an RTC chip: interface and address, time_t functions without
+// sub-seconds, the optional functions refused by default, event from
+// IntHandler
+static void Chip(void)
+{
+	TestIntrf intrf;
+	TestRtcChip chip;
+	RtcDevice &rtc = chip;
+	RtcCfg_t cfg = Cfg(RTC_CLKSRC_DEFAULT, Event);
+	RtcAlarm_t al = { 0, -1, -1, -1, -1 };
+	struct tm t;
+	struct timespec ts;
+	uint32_t us = 1;
+	uint32_t v = 5;
+
+	cfg.DevAddr = 0x51;
+	Check(!rtc.Init(cfg) && !rtc.Valid() && !rtc.Enable());
+	Check(rtc.Init(cfg, &intrf) && rtc.Valid() && rtc.Enable() && chip.DeviceAddress() == 0x51 &&
+		  chip.InterfaceType() == DEVINTRF_TYPE_I2C && intrf.Addr == 0x51 && !rtc.TimeValid());
+	Check(rtc.ClockSource() == RTC_CLKSRC_LFXTAL && rtc.ClockFrequency() == 32768 && rtc.NbAlarm() == 0 &&
+		  rtc.NbBackup() == 0 && rtc.Wakeup() == 0);
+
+	t = Tm(2024, 2, 29, 13, 14, 15);
+	Check(rtc.SetTime(t) && rtc.TimeValid() && intrf.Reg[0] == 0x15 && intrf.Reg[1] == 0x14 &&
+		  intrf.Reg[2] == 0x13 && intrf.Reg[3] == 4 && intrf.Reg[4] == 0x29 && intrf.Reg[5] == 0x02 &&
+		  intrf.Reg[6] == 0x24);
+	Check(rtc.GetTime(t, &us) && us == 0 && Same(t, 2024, 2, 29, 13, 14, 15) && t.tm_wday == 4 &&
+		  t.tm_yday == 59 && t.tm_isdst == -1);
+
+	// Seconds since the epoch, UTC, no fraction
+	Check(rtc.SetTimeEpoch(1700000000) && rtc.GetTime(t) && Same(t, 2023, 11, 14, 22, 13, 20) && t.tm_wday == 2);
+	ts.tv_nsec = 1;
+	Check(rtc.GetTimeEpoch(ts) && ts.tv_sec == 1700000000 && ts.tv_nsec == 0);
+	Check(!rtc.SetTimeEpoch(946684799) && rtc.GetTimeEpoch(ts) && ts.tv_sec == 1700000000);
+
+	// Optional functions not implemented: refused, Data not written
+	Check(!rtc.SetAlarm(0, al) && rtc.SetWakeup(0) && !rtc.SetWakeup(1000) && rtc.Wakeup() == 0 &&
+		  !rtc.WriteBackup(0, 1) && !rtc.ReadBackup(0, v) && v == 5);
+	rtc.DisableAlarm(0);
+
+	// Event from the interrupt output of the chip
+	s_NbEvt = 0;
+	rtc.IntHandler();
+	Check(s_NbEvt == 0);
+	intrf.Reg[7] = 3;
+	rtc.IntHandler();
+	Check(s_NbEvt == 1 && s_Evt[0].Bits == RTC_EVT_ALARM0 && s_EvtDev == &rtc && intrf.Reg[7] == 2);
 }
 
 extern "C" void ResetHandler()
@@ -1216,6 +1485,9 @@ extern "C" void ResetHandler()
 			break;
 		case 20:
 			SelectedNotEnabledLsi();
+			break;
+		case 21:
+			Chip();
 			break;
 	}
 

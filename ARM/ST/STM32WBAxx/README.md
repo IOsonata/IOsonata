@@ -103,11 +103,12 @@ the early wakeup interrupt, one counter tick before the reset. See
 (`exemples/misc/wdt_demo.cpp`) on the first ST-LINK virtual COM port (USART1,
 115200 8N1) in Release, with semihosting in Debug. Not run on hardware yet.
 
-The library builds the shared STM32 RTC driver, `ARM/ST/src/rtc_stm32.cpp`,
-with `src/miscdev/rtc.cpp`: calendar in the C runtime types, alarms A and B,
+The library builds the shared STM32 RTC driver, `RtcStm32`
+(`ARM/ST/src/rtc_stm32.cpp`), the generic RTC device of `miscdev/rtc.h`
+(`src/miscdev/rtc.cpp`): calendar in the C runtime types, alarms A and B,
 wakeup timer, 32 backup registers in TAMP, from the LSE or the 32 kHz LSI1
-(250 Hz with LSI1PREDIV), which keeps running over a system reset. See
-[STM32 RTC](../RTC.md). Example `STM32WBA65/exemples/RtcDemo`
+(250 Hz with LSI1PREDIV), which keeps running over a system reset. See [STM32
+RTC](../RTC.md). Example `STM32WBA65/exemples/RtcDemo`
 (`exemples/misc/rtc_demo.cpp`) on the first ST-LINK virtual COM port (USART1,
 115200 8N1) in Release, with semihosting in Debug. Not run on hardware yet.
 

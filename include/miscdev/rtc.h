@@ -3,16 +3,30 @@
 
 @brief	Generic realtime clock (RTC)
 
-Calendar, alarms, periodic wakeup and backup registers of the MCU realtime
-clock. The calendar is in the C runtime time types: struct tm for the date
-and time, time_t and struct timespec for the seconds since the epoch.
+Realtime clock device: the RTC of an MCU or an RTC chip on an I2C or SPI
+interface. Each implementation derives from RtcDevice: the MCU RTC takes no
+interface in Init, an RTC chip takes its device interface and its address
+(RtcCfg_t::DevAddr). A chip implementation keeps them with Interface and
+DeviceAddress of Device and reaches its registers with Device::Read and
+Device::Write. An implementation sets the protected members the accessors
+return (clock, alarms, backup registers, wakeup period, calendar set) and
+gives its events with RtcEvt.
 
-The calendar has no time zone. The time_t functions treat it as the local
-time of the C runtime (localtime_r, mktime): UTC unless the application sets
-a time zone (TZ).
+The calendar is in the C runtime time types: struct tm for the date and
+time, time_t and struct timespec for the seconds since the epoch. The
+calendar has no time zone. The time_t functions treat it as the local time
+of the C runtime (localtime_r, mktime): UTC unless the application sets a
+time zone (TZ).
 
-Each MCU implementation documents its calendar range, alarm and wakeup
-limits.
+Setting and reading the time is required of an implementation. Alarms,
+periodic wakeup and backup registers are optional, refused by default. Each
+implementation documents its calendar range, sub-second resolution, alarm,
+wakeup and backup register limits.
+
+Events (RTC_EVT_xxx bits) go to the event handler of the configuration, in
+interrupt context. The MCU RTC handles its interrupts. For an RTC chip, the
+application calls IntHandler from the interrupt of the pin wired to the
+interrupt output of the chip.
 
 @author	Hoang Nguyen Hoan
 @date	Oct. 22, 2026
@@ -49,13 +63,18 @@ SOFTWARE.
 #include <stdbool.h>
 #include <time.h>
 
+#include "device.h"
+#include "device_intrf.h"
+
 /** @addtogroup MiscDev
   * @{
   */
 
 /// RTC clock source
 typedef enum __Rtc_Clk_Src {
-	RTC_CLKSRC_DEFAULT,			//!< Low frequency crystal, the low frequency RC when the crystal does not start
+	RTC_CLKSRC_DEFAULT,			//!< Default of the implementation: the low frequency crystal with the RC
+								//!< when the crystal does not start on an MCU RTC, the oscillator of an
+								//!< RTC chip
 	RTC_CLKSRC_LFXTAL,			//!< Low frequency crystal or external oscillator only
 	RTC_CLKSRC_LFRC,			//!< Low frequency RC oscillator
 } RTC_CLKSRC;
@@ -65,23 +84,7 @@ typedef enum __Rtc_Clk_Src {
 #define RTC_EVT_ALARM1			(1U << 1)	//!< Alarm 1 match
 #define RTC_EVT_WAKEUP			(1U << 2)	//!< Periodic wakeup
 
-typedef struct __Rtc_Device RtcDev_t;
-
-/**
- * @brief	RTC event handler, called in interrupt context
- *
- * @param	pDev : RTC device data
- * @param	Evt  : RTC_EVT_xxx bits
- */
-typedef void (*RtcEvtHandler_t)(RtcDev_t * const pDev, uint32_t Evt);
-
-/// RTC configuration data
-typedef struct __Rtc_Config {
-	int DevNo;					//!< RTC instance number, 0 based
-	RTC_CLKSRC ClkSrc;			//!< Clock source when the RTC starts
-	int IntPrio;				//!< Interrupt priority of the events
-	RtcEvtHandler_t EvtHandler;	//!< Event handler, NULL for none
-} RtcCfg_t;
+#pragma pack(push, 4)
 
 /// Alarm time, a field of -1 matches any value
 typedef struct __Rtc_Alarm {
@@ -92,165 +95,180 @@ typedef struct __Rtc_Alarm {
 	int WDay;					//!< Day of the week 0 Sunday - 6 Saturday, not with MDay
 } RtcAlarm_t;
 
-/// RTC device data
-struct __Rtc_Device {
-	int DevNo;					//!< RTC instance number
-	RTC_CLKSRC ClkSrc;			//!< Clock in use, RTC_CLKSRC_LFXTAL or RTC_CLKSRC_LFRC
-	uint32_t ClkFreq;			//!< Frequency of that clock, Hz
-	int NbAlarm;				//!< Number of alarms
-	int NbBackup;				//!< Number of 32 bit backup registers
-	uint32_t msWakeup;			//!< Wakeup period in effect, msec, 0 off
-	bool bTimeValid;			//!< The calendar has been set since the RTC started
-	RtcEvtHandler_t EvtHandler;	//!< Event handler
-	void *pDevData;				//!< Implementation data
-};
+#pragma pack(pop)
 
 #ifdef __cplusplus
-extern "C" {
-#endif
+
+class RtcDevice;
 
 /**
- * @brief	Start the RTC
+ * @brief	RTC event handler, called in interrupt context
  *
- * An RTC already running keeps its clock and its time.
- *
- * @param	pDev : RTC device data to initialize
- * @param	pCfg : Configuration data
- *
- * @return	true - success
+ * @param	pDev : RTC device
+ * @param	Evt  : RTC_EVT_xxx bits
  */
-bool RtcInit(RtcDev_t * const pDev, const RtcCfg_t * const pCfg);
+typedef void (*RtcEvtHandler_t)(RtcDevice * const pDev, uint32_t Evt);
 
-/**
- * @brief	Set the date and time
- *
- * tm_wday and tm_yday are computed from the date, tm_isdst is not used.
- *
- * @param	pDev  : RTC device data
- * @param	pTime : Date and time
- *
- * @return	false with a date or time out of range
- */
-bool RtcSetTime(RtcDev_t * const pDev, const struct tm * const pTime);
+#pragma pack(push, 4)
 
-/**
- * @brief	Read the date and time
- *
- * @param	pDev  : RTC device data
- * @param	pTime : Date and time, tm_isdst -1 (not known)
- * @param	pUsec : Microseconds in the second, NULL when not needed
- *
- * @return	true - success
- */
-bool RtcGetTime(RtcDev_t * const pDev, struct tm * const pTime, uint32_t * const pUsec);
+/// RTC configuration data
+typedef struct __Rtc_Config {
+	int DevNo;					//!< MCU RTC instance, 0 based
+	uint32_t DevAddr;			//!< RTC chip: I2C address or SPI chip select index
+	RTC_CLKSRC ClkSrc;			//!< Clock source when the RTC starts
+	int IntPrio;				//!< Interrupt priority of the MCU RTC events
+	RtcEvtHandler_t EvtHandler;	//!< Event handler, nullptr for none
+} RtcCfg_t;
 
-/**
- * @brief	Set an alarm and enable its event
- *
- * @param	pDev   : RTC device data
- * @param	Idx    : Alarm 0 to NbAlarm - 1
- * @param	pAlarm : Alarm time
- *
- * @return	false with an alarm the RTC cannot match
- */
-bool RtcSetAlarm(RtcDev_t * const pDev, int Idx, const RtcAlarm_t * const pAlarm);
+#pragma pack(pop)
 
-/**
- * @brief	Disable an alarm
- *
- * @param	pDev : RTC device data
- * @param	Idx  : Alarm 0 to NbAlarm - 1
- */
-void RtcDisableAlarm(RtcDev_t * const pDev, int Idx);
-
-/**
- * @brief	Set the periodic wakeup event
- *
- * RtcDev_t::msWakeup gives the period in effect.
- *
- * @param	pDev     : RTC device data
- * @param	msPeriod : Period in msec, 0 to stop
- *
- * @return	false with a period the RTC cannot make
- */
-bool RtcSetWakeup(RtcDev_t * const pDev, uint32_t msPeriod);
-
-/**
- * @brief	Write a backup register, kept while the RTC runs
- *
- * @param	pDev : RTC device data
- * @param	Idx  : Register 0 to NbBackup - 1
- * @param	Data : Value
- *
- * @return	true - success
- */
-bool RtcWriteBackup(RtcDev_t * const pDev, int Idx, uint32_t Data);
-
-/**
- * @brief	Read a backup register
- *
- * @param	pDev  : RTC device data
- * @param	Idx   : Register 0 to NbBackup - 1
- * @param	pData : Value read
- *
- * @return	true - success
- */
-bool RtcReadBackup(RtcDev_t * const pDev, int Idx, uint32_t * const pData);
-
-/**
- * @brief	Set the date and time from the seconds since the epoch
- *
- * The calendar takes the local time of Time (localtime_r).
- *
- * @param	pDev : RTC device data
- * @param	Time : Seconds since the epoch
- *
- * @return	false with a time out of the calendar range
- */
-bool RtcSetTimeEpoch(RtcDev_t * const pDev, time_t Time);
-
-/**
- * @brief	Read the seconds since the epoch, with the fraction of second
- *
- * The calendar is converted as a local time (mktime).
- *
- * @param	pDev  : RTC device data
- * @param	pTime : Seconds since the epoch and nanoseconds
- *
- * @return	true - success
- */
-bool RtcGetTimeEpoch(RtcDev_t * const pDev, struct timespec * const pTime);
-
-#ifdef __cplusplus
-}
-
-/// RTC class
-class Rtc {
+/// RTC generic base class, implementations derive from it
+class RtcDevice : public Device {
 public:
-	virtual ~Rtc() {}
+	virtual ~RtcDevice() {}
 
-	virtual bool Init(const RtcCfg_t &Cfg) { return RtcInit(&vDev, &Cfg); }
-	virtual bool SetTime(const struct tm &Time) { return RtcSetTime(&vDev, &Time); }
-	virtual bool GetTime(struct tm &Time, uint32_t *pUsec = nullptr) { return RtcGetTime(&vDev, &Time, pUsec); }
-	virtual bool SetTime(time_t Time) { return RtcSetTimeEpoch(&vDev, Time); }
-	virtual bool GetTime(struct timespec &Time) { return RtcGetTimeEpoch(&vDev, &Time); }
-	virtual bool SetAlarm(int Idx, const RtcAlarm_t &Alarm) { return RtcSetAlarm(&vDev, Idx, &Alarm); }
-	virtual void DisableAlarm(int Idx) { RtcDisableAlarm(&vDev, Idx); }
-	virtual bool SetWakeup(uint32_t msPeriod) { return RtcSetWakeup(&vDev, msPeriod); }
-	virtual bool WriteBackup(int Idx, uint32_t Data) { return RtcWriteBackup(&vDev, Idx, Data); }
-	virtual bool ReadBackup(int Idx, uint32_t &Data) { return RtcReadBackup(&vDev, Idx, &Data); }
+	/**
+	 * @brief	Start the RTC
+	 *
+	 * An RTC already running keeps its time.
+	 *
+	 * @param	Cfg    : Configuration data
+	 * @param	pIntrf : Interface of an RTC chip, nullptr for the MCU RTC
+	 *
+	 * @return	true - success
+	 */
+	virtual bool Init(const RtcCfg_t &Cfg, DeviceIntrf * const pIntrf = nullptr) = 0;
 
-	bool TimeValid() { return vDev.bTimeValid; }
-	uint32_t ClockFrequency() { return vDev.ClkFreq; }
-	RTC_CLKSRC ClockSource() { return vDev.ClkSrc; }
-	int NbAlarm() { return vDev.NbAlarm; }
-	int NbBackup() { return vDev.NbBackup; }
-	uint32_t Wakeup() { return vDev.msWakeup; }
+	/**
+	 * @brief	Set the date and time
+	 *
+	 * tm_wday and tm_yday are computed from the date, tm_isdst is not used.
+	 *
+	 * @param	Time : Date and time
+	 *
+	 * @return	false with a date or time out of the range of the RTC
+	 */
+	virtual bool SetTime(const struct tm &Time) = 0;
 
-	operator RtcDev_t * () { return &vDev; }
+	/**
+	 * @brief	Read the date and time
+	 *
+	 * @param	Time  : Date and time, tm_isdst -1 (not known)
+	 * @param	pUsec : Microseconds in the second, 0 on an RTC without
+	 * 					sub-seconds, nullptr when not needed
+	 *
+	 * @return	true - success
+	 */
+	virtual bool GetTime(struct tm &Time, uint32_t * const pUsec = nullptr) = 0;
 
-private:
-	RtcDev_t vDev;
+	/**
+	 * @brief	Set an alarm and enable its event
+	 *
+	 * @param	Idx   : Alarm 0 to NbAlarm() - 1
+	 * @param	Alarm : Alarm time
+	 *
+	 * @return	false with an alarm the RTC cannot match, or no alarm
+	 */
+	virtual bool SetAlarm(int Idx, const RtcAlarm_t &Alarm) { (void)Idx; (void)Alarm; return false; }
+
+	/**
+	 * @brief	Disable an alarm
+	 *
+	 * @param	Idx : Alarm 0 to NbAlarm() - 1
+	 */
+	virtual void DisableAlarm(int Idx) { (void)Idx; }
+
+	/**
+	 * @brief	Set the periodic wakeup event
+	 *
+	 * Wakeup() gives the period in effect.
+	 *
+	 * @param	msPeriod : Period in msec, 0 to stop
+	 *
+	 * @return	false with a period the RTC cannot make
+	 */
+	virtual bool SetWakeup(uint32_t msPeriod) { return msPeriod == 0; }
+
+	/**
+	 * @brief	Write a backup register, kept while the RTC runs
+	 *
+	 * @param	Idx  : 32 bit register 0 to NbBackup() - 1
+	 * @param	Data : Value
+	 *
+	 * @return	true - success
+	 */
+	virtual bool WriteBackup(int Idx, uint32_t Data) { (void)Idx; (void)Data; return false; }
+
+	/**
+	 * @brief	Read a backup register
+	 *
+	 * @param	Idx  : 32 bit register 0 to NbBackup() - 1
+	 * @param	Data : Value read
+	 *
+	 * @return	true - success
+	 */
+	virtual bool ReadBackup(int Idx, uint32_t &Data) { (void)Idx; (void)Data; return false; }
+
+	/**
+	 * @brief	Interrupt of the RTC
+	 *
+	 * RTC chip: called by the application from the interrupt of the pin wired
+	 * to the interrupt output of the chip. MCU RTC: called by its interrupt.
+	 * Calls the event handler with the events of the RTC.
+	 */
+	virtual void IntHandler() {}
+
+	/**
+	 * @brief	Set the date and time from the seconds since the epoch
+	 *
+	 * The calendar takes the local time of Time (localtime_r).
+	 *
+	 * @param	Time : Seconds since the epoch
+	 *
+	 * @return	false with a time out of the calendar range
+	 */
+	bool SetTimeEpoch(time_t Time);
+
+	/**
+	 * @brief	Read the seconds since the epoch, with the fraction of second
+	 *
+	 * The calendar is converted as a local time (mktime).
+	 *
+	 * @param	Time : Seconds since the epoch and nanoseconds
+	 *
+	 * @return	true - success
+	 */
+	bool GetTimeEpoch(struct timespec &Time);
+
+	/// The calendar has been set since the RTC started
+	bool TimeValid() const { return vbTimeValid; }
+
+	/// Clock in use, RTC_CLKSRC_LFXTAL or RTC_CLKSRC_LFRC
+	RTC_CLKSRC ClockSource() const { return vClkSrc; }
+
+	/// Frequency of the clock in use, Hz
+	uint32_t ClockFrequency() const { return vClkFreq; }
+
+	/// Number of alarms
+	int NbAlarm() const { return vNbAlarm; }
+
+	/// Number of 32 bit backup registers
+	int NbBackup() const { return vNbBackup; }
+
+	/// Wakeup period in effect, msec, 0 off
+	uint32_t Wakeup() const { return vmsWakeup; }
+
+protected:
+	/// Event handler call, RTC_EVT_xxx bits
+	void RtcEvt(uint32_t Evt) { if (vRtcEvtHandler != nullptr) vRtcEvtHandler(this, Evt); }
+
+	RTC_CLKSRC vClkSrc = RTC_CLKSRC_DEFAULT;	//!< Clock in use
+	uint32_t vClkFreq = 0;					//!< Frequency of that clock, Hz
+	int vNbAlarm = 0;						//!< Number of alarms
+	int vNbBackup = 0;						//!< Number of 32 bit backup registers
+	uint32_t vmsWakeup = 0;					//!< Wakeup period in effect, msec
+	bool vbTimeValid = false;				//!< Calendar set since the RTC started
+	RtcEvtHandler_t vRtcEvtHandler = nullptr;	//!< Event handler
 };
 
 #endif

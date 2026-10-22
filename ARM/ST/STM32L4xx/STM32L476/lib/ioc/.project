@@ -1101,6 +1101,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/miscdev/rtc.h</locationURI>
 		</link>
 		<link>
+			<name>include/miscdev/rtc_stm32.h</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/include/rtc_stm32.h</locationURI>
+		</link>
+		<link>
 			<name>include/motion/act.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/motion/act.h</locationURI>

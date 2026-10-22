@@ -198,10 +198,11 @@ TIM register model, not on hardware yet. The [STM32 watchdog driver](../ARM/ST/W
 `ARM/ST/src/wdt_stm32.cpp`, implements the generic watchdog API on the IWDG
 for the same ten libraries (2026-10-22), with the timeout event on the WBA
 only; tested in an emulator against an IWDG model, not on hardware yet. The
-[STM32 RTC driver](../ARM/ST/RTC.md), `ARM/ST/src/rtc_stm32.cpp`, implements
-the generic RTC API (calendar, alarms, wakeup timer, backup registers) for the
-same ten libraries (2026-10-22); tested in an emulator against an RTC model,
-not on hardware yet.
+[STM32 RTC driver](../ARM/ST/RTC.md), `RtcStm32` in `ARM/ST/src/rtc_stm32.cpp`,
+implements the generic RTC device of `include/miscdev/rtc.h` (calendar,
+alarms, wakeup timer, backup registers; the same interface serves RTC chips on
+I2C or SPI) for the same ten libraries (2026-10-22); tested in an emulator
+against an RTC model, not on hardware yet.
 Only the named MCUs are covered; support does not extend automatically to their
 entire series.
 

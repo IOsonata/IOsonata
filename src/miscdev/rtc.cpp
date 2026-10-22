@@ -3,8 +3,8 @@
 
 @brief	Generic realtime clock, seconds since the epoch
 
-The time_t functions of miscdev/rtc.h, on RtcSetTime and RtcGetTime of the
-MCU implementation. The calendar is the local time of the C runtime:
+The time_t functions of RtcDevice (miscdev/rtc.h), on SetTime and GetTime of
+the implementation. The calendar is the local time of the C runtime:
 localtime_r and mktime, UTC unless the application sets a time zone.
 
 @author	Hoang Nguyen Hoan
@@ -41,7 +41,7 @@ SOFTWARE.
 
 #include "miscdev/rtc.h"
 
-bool RtcSetTimeEpoch(RtcDev_t * const pDev, time_t Time)
+bool RtcDevice::SetTimeEpoch(time_t Time)
 {
 	struct tm tm;
 
@@ -50,15 +50,15 @@ bool RtcSetTimeEpoch(RtcDev_t * const pDev, time_t Time)
 		return false;
 	}
 
-	return RtcSetTime(pDev, &tm);
+	return SetTime(tm);
 }
 
-bool RtcGetTimeEpoch(RtcDev_t * const pDev, struct timespec * const pTime)
+bool RtcDevice::GetTimeEpoch(struct timespec &Time)
 {
 	struct tm tm;
 	uint32_t usec = 0;
 
-	if (pTime == nullptr || RtcGetTime(pDev, &tm, &usec) == false)
+	if (GetTime(tm, &usec) == false)
 	{
 		return false;
 	}
@@ -73,8 +73,8 @@ bool RtcGetTimeEpoch(RtcDev_t * const pDev, struct timespec * const pTime)
 		return false;
 	}
 
-	pTime->tv_sec = t;
-	pTime->tv_nsec = (long)usec * 1000L;
+	Time.tv_sec = t;
+	Time.tv_nsec = (long)usec * 1000L;
 
 	return true;
 }

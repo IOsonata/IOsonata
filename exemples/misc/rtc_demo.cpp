@@ -14,7 +14,10 @@ wakeup timer, and an alarm event at the start of each minute.
 A calendar not set since the RTC started takes the build date and time of
 this file, as UTC.
 
-The board.h of the project gives the console UART pins.
+The board.h of the project gives the console UART pins and the RTC driver:
+
+	RTC_DRIVER_HEADER	header of the RTC implementation
+	RTC_DRIVER			its class, an RtcDevice taking no interface (MCU RTC)
 
 @author	Hoang Nguyen Hoan
 @date	Oct. 22, 2026
@@ -54,6 +57,7 @@ SOFTWARE.
 #include "idelay.h"
 
 #include "board.h"
+#include RTC_DRIVER_HEADER
 
 // Wakeup period in msec
 #ifndef RTC_DEMO_WAKEUP
@@ -85,10 +89,11 @@ static const UARTCfg_t s_UartCfg = {
 	.bDMAMode = true,
 };
 
-static void RtcDemoEvent(RtcDev_t * const pDev, uint32_t Evt);
+static void RtcDemoEvent(RtcDevice * const pDev, uint32_t Evt);
 
 static const RtcCfg_t s_RtcCfg = {
 	.DevNo = 0,
+	.DevAddr = 0,
 	.ClkSrc = RTC_CLKSRC_DEFAULT,
 	.IntPrio = 6,
 	.EvtHandler = RtcDemoEvent,
@@ -118,13 +123,13 @@ static const SysLogCfg_t s_SysLogCfg = {
 	.bBlocking = true,
 };
 
-static Rtc s_Rtc;
+static RTC_DRIVER s_Rtc;
 
 // RTC_EVT_xxx bits of the events not yet logged
 static volatile uint32_t s_RtcDemoEvt = 0;
 
 // Interrupt context: only the event bits
-static void RtcDemoEvent(RtcDev_t * const pDev, uint32_t Evt)
+static void RtcDemoEvent(RtcDevice * const pDev, uint32_t Evt)
 {
 	(void)pDev;
 	s_RtcDemoEvt |= Evt;
@@ -175,7 +180,7 @@ static void RtcDemoPrintTime(void)
 	struct timespec ts;
 	uint32_t us = 0;
 
-	if (s_Rtc.GetTime(tm, &us) && s_Rtc.GetTime(ts))
+	if (s_Rtc.GetTime(tm, &us) && s_Rtc.GetTimeEpoch(ts))
 	{
 		SysLogPrintf(SysLogGet(), "%04d-%02d-%02d %s %02d:%02d:%02d.%03u, %lu s since the epoch\r\n",
 					 tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, s_Day[tm.tm_wday], tm.tm_hour, tm.tm_min,
@@ -200,8 +205,8 @@ int main()
 		}
 	}
 
-	SysLogPrintf(SysLogGet(), "RTC on the %s, %u Hz\r\n",
-				 s_Rtc.ClockSource() == RTC_CLKSRC_LFXTAL ? "LSE" : "LSI", (unsigned)s_Rtc.ClockFrequency());
+	SysLogPrintf(SysLogGet(), "RTC clock %s, %u Hz\r\n",
+				 s_Rtc.ClockSource() == RTC_CLKSRC_LFXTAL ? "crystal" : "RC", (unsigned)s_Rtc.ClockFrequency());
 
 	if (s_Rtc.TimeValid())
 	{

@@ -206,6 +206,11 @@
 			<locationURI>PARENT-7-PROJECT_LOC/src/device_intrf.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/device.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/src/device.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/coredev</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>

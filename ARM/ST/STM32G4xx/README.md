@@ -138,8 +138,9 @@ resets the MCU and the demo starts again. Not run on hardware yet.
 
 ## RTC
 
-The library builds the shared STM32 RTC driver, `ARM/ST/src/rtc_stm32.cpp`,
-with `src/miscdev/rtc.cpp`: calendar in the C runtime types, alarms A and B,
+The library builds the shared STM32 RTC driver, `RtcStm32`
+(`ARM/ST/src/rtc_stm32.cpp`), the generic RTC device of `miscdev/rtc.h`
+(`src/miscdev/rtc.cpp`): calendar in the C runtime types, alarms A and B,
 wakeup timer, 32 backup registers in TAMP, from the LSE or the 32 kHz LSI. See
 [STM32 RTC](../RTC.md). The example RtcDemo (`exemples/misc/rtc_demo.cpp`)
 prints on the ST-LINK virtual COM port (LPUART1, 115200 8N1) in Release, with

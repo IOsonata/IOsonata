@@ -736,6 +736,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/miscdev/rtc.h</locationURI>
 		</link>
 		<link>
+			<name>include/miscdev/rtc_stm32.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/ARM/ST/include/rtc_stm32.h</locationURI>
+		</link>
+		<link>
 			<name>include/sensors/accel_adxl362.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/accel_adxl362.h</locationURI>

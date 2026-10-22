@@ -369,18 +369,19 @@ again. Not run on hardware yet.
 
 ## RTC
 
-The four L4 libraries build the shared STM32 RTC driver,
-`ARM/ST/src/rtc_stm32.cpp`, with `src/miscdev/rtc.cpp`: calendar in the C
-runtime types, alarms A and B, wakeup timer, 32 backup registers (in TAMP on
-the L412 and L422), from the LSE or the 32 kHz LSI (250 Hz with the LSI
-predivider of the L412, L422, L4P5 and L4Q5). `SystemInit` starts the LSE on a
-board with the low frequency crystal only when it is not ready, and does not
-reset the backup domain (before 2026-10-22 it did at each boot on the L4+). See
-[STM32 RTC](../RTC.md). The STM32L476 example RtcDemo
-(`exemples/misc/rtc_demo.cpp`) prints on the ST-LINK virtual COM port
-(USART1, 115200 8N1) in Release, with semihosting in Debug: the clock in use,
-a boot count in backup register 0, the date and time every second from the
-wakeup event, an alarm event each minute. Not run on hardware yet.
+The four L4 libraries build the shared STM32 RTC driver, `RtcStm32`
+(`ARM/ST/src/rtc_stm32.cpp`), the generic RTC device of `miscdev/rtc.h`
+(`src/miscdev/rtc.cpp`): calendar in the C runtime types, alarms A and B,
+wakeup timer, 32 backup registers (in TAMP on the L412 and L422), from the LSE
+or the 32 kHz LSI (250 Hz with the LSI predivider of the L412, L422, L4P5 and
+L4Q5). `SystemInit` starts the LSE on a board with the low frequency crystal
+only when it is not ready, and does not reset the backup domain (before
+2026-10-22 it did at each boot on the L4+). See [STM32 RTC](../RTC.md). The
+STM32L476 example RtcDemo (`exemples/misc/rtc_demo.cpp`) prints on the ST-LINK
+virtual COM port (USART1, 115200 8N1) in Release, with semihosting in Debug:
+the clock in use, a boot count in backup register 0, the date and time every
+second from the wakeup event, an alarm event each minute. Not run on hardware
+yet.
 
 ## Validation
 
