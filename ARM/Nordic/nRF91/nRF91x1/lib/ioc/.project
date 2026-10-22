@@ -1610,6 +1610,21 @@
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/src/wdt_nrfx.cpp</locationURI>
 		</link>
+		<link>
+			<name>src/net</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>include/net/coap.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/net/coap.h</locationURI>
+		</link>
+		<link>
+			<name>src/net/coap.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/net/coap.cpp</locationURI>
+		</link>
 	</linkedResources>
 	<variableList>
 		<variable>

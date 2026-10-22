@@ -399,10 +399,23 @@ an expected 4.04 and a delayed separate response, then continues without
 resetting the board after reported network/exchange failures. Its README gives
 the build settings, PC command and expected console lines.
 
+[LteCoapDemo](../ARM/Nordic/nRF91/nRF9160/exemples/LteCoapDemo/README.md)
+links `exemples/lte/lte_coap.cpp` and runs the same exercise through the existing
+nRF9160 modem UDP socket. Its default board is Thingy:91, with the existing
+115200-baud UART0 USB console bridge. Set a controlled server address reachable
+from the SIM's data connection; the Ethernet PC's private `10.5.5.51` address
+needs an explicit route or public UDP forwarding. The host setting is empty by
+default, so an unconfigured demo stays idle without starting LTE. The default
+request interval is 10 seconds, and unanswered-peer pacing retains the library's
+1-byte/second default. This is a standalone LTE test; it does not start BLE.
+The nRF9160 and nRF91x1 libraries include shared CoAP; the dedicated demo
+project targets the nRF9160 and uses its existing secure-image CryptoCell RNG
+configuration.
+
 `Python/coap_server.py` uses the independent aiocoap implementation for the PC
 peer. It serves `/hello`, `/echo`, `/value` and `/slow`, with plaintext UDP on
 5683. Install `aiocoap==0.4.17` in the Python environment, then pass the PC's
-explicit LAN address with `--host`. Its default loopback address serves host
+explicit interface address with `--host`. Its default loopback address serves host
 tests. The helper is a test resource server, not an embedded IOsonata server or
 an encrypted deployment service.
 
@@ -426,8 +439,16 @@ Run `python3 tests/net/run_coap.py --require-interop` with aiocoap installed to
 repeat all checks. Without that flag, a missing aiocoap dependency skips the
 live interoperability checks explicitly. The runner does not download
 dependencies. A host C++23 syntax check of the application with the actual H753
-board configuration also passed. CoAP hardware results have not yet been
-recorded, and no fresh ARM compile/link validation is claimed.
+board configuration also passed.
+
+`python3 tests/net/run_lte_coap.py` passed the LTE application host syntax check
+with the actual Thingy:91 board header and Nordic RNG declaration, using an
+empty `nrf.h` host stub. Its O0/O2 ASan/UBSan checks cover registration-loss
+close/reopen, pacing retained across repeated modem faults and clock wrap,
+30-second failed-initialization retry, timeout recovery retaining a live UDP
+endpoint, timer queue refusal/coalescing and empty-host startup without LTE.
+These use substitutes for target hardware. CoAP hardware results have not yet
+been recorded, and no fresh ARM compile/link validation is claimed.
 
 Protocol reference: [RFC 7252](https://www.rfc-editor.org/rfc/rfc7252.html).
 Independent peer: [aiocoap 0.4.17](https://aiocoap.readthedocs.io/en/0.4.17/).
