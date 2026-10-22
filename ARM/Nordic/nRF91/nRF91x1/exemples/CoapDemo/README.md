@@ -94,7 +94,13 @@ python3 tests/net/run_generic_demo.py --protocol coap --target nrf91x1
 ```
 
 The host checks use substitutes for hardware and do not replace an ARM
-compile/link or a board run. New-project validation results are recorded in
-the shared guide. Previous nRF9160 and H753 hardware results apply to their
-original examples; they do not establish a hardware result for this new
-project.
+compile/link or a board run. The maintainer's first hardware run of this
+project used modem firmware `mfw_nrf91x1_2.0.1` on roaming LTE-M. The public
+GET to `coap.me:5683` returned 2.05 Content with 66 payload bytes; the checked
+counter reached 1 with `failures=0`, followed by
+`CoAP public GET smoke test verified`.
+
+The [shared guide](../../../../../../docs/network-protocol-examples.md#hardware-evidence-for-the-generic-coap-example)
+records the observed scope. An extended run, the controlled-helper exercise
+and recovery still need hardware validation. No fresh automated ARM
+compile/link result is claimed.

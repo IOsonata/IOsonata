@@ -141,9 +141,10 @@ configuration also passed. The runner does not install dependencies; omitting
 `--require-interop` permits an explicit skip if aiocoap is unavailable.
 
 See [networking documentation](../../../../../../docs/networking.md) for shared
-behavior and recorded validation. CoAP hardware results have not yet been
-recorded. Existing UDP/TCP and MQTT/TLS hardware results do not establish CoAP
-hardware validation, and no fresh ARM compile/link result is claimed here.
+behavior and recorded validation. No H753 `EthernetCoapDemo` hardware result
+has yet been recorded. Existing UDP/TCP and MQTT/TLS hardware results do not
+establish hardware validation for this application, and no fresh automated
+ARM compile/link result is claimed here.
 
 Protocol and independent peer references:
 

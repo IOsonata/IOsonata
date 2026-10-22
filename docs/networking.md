@@ -95,8 +95,10 @@ modem socket port. Their projects select the target library and board pins.
 The consoles use 115200 baud, 8N1 and no flow control. The nRF9160 projects also
 provide an nRF9160 DK pin selection. The nRF91x1 projects follow that target's
 existing LteUdp settings, including `NRF9120_XXAA`, its `nrf9120` linker script
-and hard-float modem library. No nRF91x1 ARM build or hardware result is claimed;
-the successful MQTT result below applies to nRF9160.
+and hard-float modem library. The maintainer's nRF91x1 hardware results for
+`LteMqttDemo` and the new generic `MqttDemo` and `CoapDemo` are recorded in the
+[generic example guide](network-protocol-examples.md#validation-status).
+No fresh automated ARM compile/link result is claimed.
 
 ## Layers and memory
 
@@ -546,9 +548,9 @@ library's 1-byte/second default. This is a standalone LTE test; it does not
 start BLE.
 The nRF9160 and nRF91x1 libraries include shared CoAP, and both target families
 have dedicated demo projects listed above. The nRF9160 project uses its
-existing secure-image CryptoCell RNG configuration. The nRF91x1 project reuses
-the same application for the nRF9151 DK and nRF9161 DK; its ARM build and
-hardware validation remain pending.
+existing secure-image CryptoCell RNG configuration. The nRF91x1
+`LteCoapDemo` project reuses the same application for the nRF9151 DK and
+nRF9161 DK; its ARM build and hardware validation remain pending.
 
 `Python/coap_server.py` uses the independent aiocoap implementation for the PC
 peer. It serves `/hello`, `/echo`, `/value` and `/slow`, with plaintext UDP on
@@ -590,10 +592,16 @@ check the configured path, variable response content, response-code/size errors,
 recovery and 10-second request spacing. The default target is `nrf9160`;
 `--target nrf91x1` selects the nRF9151/nRF9161 DK board configuration, which also
 passed at O0/O2 with ASan/UBSan. These use substitutes for target hardware.
-The public endpoints are published service settings; live probes
-could not resolve them in the implementation environment, so no new public
-reachability result is claimed. CoAP hardware results have not yet
-been recorded, and no fresh ARM compile/link validation is claimed.
+The implementation environment could not resolve the public endpoints, so
+those host checks did not establish public reachability. A subsequent
+maintainer run of the new generic `CoapDemo` on nRF91x1 with modem firmware
+`mfw_nrf91x1_2.0.1` registered on roaming LTE-M and received one successful
+public GET response from `coap.me:5683` over plaintext UDP: 2.05 Content,
+66 payload bytes, checked counter 1 and `failures=0`. See the
+[generic example hardware record](network-protocol-examples.md#hardware-evidence-for-the-generic-coap-example).
+This is an initial GET result; the controlled-helper exercise, extended runs
+and recovery still need hardware validation. No fresh automated ARM
+compile/link validation is claimed.
 
 Protocol reference: [RFC 7252](https://www.rfc-editor.org/rfc/rfc7252.html).
 Independent peer: [aiocoap 0.4.17](https://aiocoap.readthedocs.io/en/0.4.17/).

@@ -93,5 +93,5 @@ python3 tests/net/run_nrf91_socket.py
 Host checks exercise the real application and CoAP implementation with Nordic
 hardware substitutes, including both public and helper profiles. The socket
 suite checks the shared nRF91 port independently. These do not replace an ARM
-compile/link or cellular hardware run. No nRF91x1 CoAP hardware result has yet
-been recorded.
+compile/link or cellular hardware run. No hardware result for this nRF91x1
+`LteCoapDemo` application has yet been recorded.

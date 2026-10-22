@@ -404,9 +404,30 @@ plaintext TCP. The client ID was `iosnet0201acf5a919bd59` and the topic was
 with `failures=0`.
 
 This confirms one successful MQTT round trip for the generic application's
-LTE path on the tested nRF91x1 hardware. CoAP, recovery, an extended run and
-TLS are not established by this log. No fresh automated ARM compile/link
-result is claimed.
+LTE path on the tested nRF91x1 hardware. Recovery, an extended run and TLS
+are not established by this log. No fresh automated ARM compile/link result
+is claimed.
+
+### Hardware evidence for the generic CoAP example
+
+The maintainer's first hardware log for the new `CoapDemo` reports nRF91x1
+with modem firmware `mfw_nrf91x1_2.0.1`. The startup banner identified
+`Generic CoAP over LTE UDP` and the public read-only GET profile. The modem
+registered on roaming LTE-M, and the application reported network ready.
+The console then showed:
+
+```text
+CoAP UDP peer coap.me:5683, plaintext, interval 10000 ms
+CoAP public GET checked 1 code=2.05 bytes=66 failures=0
+CoAP public GET smoke test verified
+```
+
+This confirms one successful public CoAP GET over LTE UDP on the tested
+nRF91x1 hardware, with a 2.05 Content response containing 66 payload bytes
+and zero reported failures. It does not establish an extended run, the full
+controlled-helper exercise, retransmission or recovery. The test uses
+plaintext UDP; DTLS and OSCORE are not implemented. No fresh automated ARM
+compile/link result is claimed.
 
 ### Hardware evidence from the original examples
 
