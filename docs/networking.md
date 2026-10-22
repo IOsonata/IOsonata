@@ -224,6 +224,13 @@ preserves the session counters and observed scope. A clean extended run,
 negative CA/hostname checks and nRF9160 modem-TLS hardware validation remain
 unestablished. No fresh automated ARM compile/link result is claimed.
 
+A follow-up run reused the stored CA and logged a rejected publication with
+`qos=0 dup=0 len=22 expected_seq=00000004`. This identifies the failing QoS
+check for that occurrence. The payload hex and failure summary were truncated;
+the full received sequence, publication origin and console truncation cause
+remain unresolved. The detailed record includes an independent subscriber
+capture procedure. The strict QoS 1 echo check remains in place.
+
 ### Native TLS 1.3 PSK client
 
 `net/tls.h` and `src/net/tls.cpp` implement an initial external-PSK client.

@@ -592,7 +592,7 @@ All three failures reported `echo payload or QoS mismatch` with
 30-second reconnect policy after the first two failures. Those zero fields
 describe the shared MQTT client's state; they do not explain the application's
 rejected echo. The example already ignores retained messages, other topics
-and normal old QoS 1 duplicates. The supplied log does not identify the
+and normal old QoS 1 duplicates. That initial log does not identify the
 rejected QoS, payload or sequence, and the underlying cause remains unresolved.
 Use the [echo failure diagnostics](#echo-failure-diagnostics) to capture a
 recurrence; adding diagnostics does not establish a fix.
@@ -603,6 +603,46 @@ the tested nRF91x1 hardware. It does not establish a clean extended run,
 deliberate broker or radio-loss recovery, wrong-CA/hostname rejection or
 nRF9160 modem-TLS operation. No fresh automated ARM compile/link validation
 is claimed.
+
+#### Follow-up: received QoS 0 publication
+
+A later run with the same modem firmware reported reuse of the stored CA at
+tag 42420, a verified TLS connection, a QoS 1 subscription and checked echo 1
+with no failures. Client `iosnet172bbd285c24efa7` used topic
+`iosonata/demo/172bbd285c24efa7/echo`. The new diagnostic then reported:
+
+```text
+MQTT echo rejected: QoS qos=0 dup=0 len=22 expected_seq=00000004
+```
+
+This identifies the rejection as a received publication reporting QoS 0.
+The payload hex line and failure summary were truncated in the supplied
+console capture. The visible bytes resemble the demo payload prefix, but do
+not include its sequence suffix. `expected_seq` is the application's expected
+value, not a decoded received sequence or a verified-echo count. The capture
+does not establish the full payload, the publication's origin or a cause for
+the missing console bytes. It also does not establish that the earlier three
+failures rejected the same kind of message.
+
+The application publishes at QoS 1 and requires a QoS 1 SUBACK result before
+publishing. A valid incoming QoS 0 packet can still reach the application's
+strict echo check; the existing host fixture covers that outcome. Keep the
+QoS 1 check while investigating. An independent PC subscriber can capture
+the QoS, length and complete payload without relying on the board console:
+
+```sh
+mosquitto_sub -h test.mosquitto.org -p 1883 -V mqttv311 -q 1 \
+	-t 'iosonata/demo/172bbd285c24efa7/echo' \
+	-F 'qos=%q len=%l hex=%x'
+```
+
+Use the topic printed by the current board run; a new boot selects a new
+random topic. This observer uses the public plaintext listener, while the
+board stays on TLS port 8883. The command only subscribes. A matching QoS 0
+capture would independently establish broker-delivered traffic to that
+subscriber; it would not identify the original publisher. The
+[Mosquitto client manual](https://mosquitto.org/man/mosquitto_sub-1.html)
+documents these output fields. No clean extended run or fix is established.
 
 ### Hardware evidence for the generic MQTT example
 

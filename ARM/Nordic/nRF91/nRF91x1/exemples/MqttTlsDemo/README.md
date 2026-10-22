@@ -172,3 +172,13 @@ summary, together with the client ID and topic. The
 [echo diagnostic instructions](../../../../../../docs/network-protocol-examples.md#echo-failure-diagnostics)
 explain these fields. They preserve the strict echo checks and do not establish
 a fix or show that another public-broker client caused the original failures.
+
+A follow-up run with client `iosnet172bbd285c24efa7` reused the stored CA,
+subscribed at QoS 1 and checked echo 1. It then reported
+`MQTT echo rejected: QoS qos=0 dup=0 len=22 expected_seq=00000004`.
+The received QoS explains that rejection, but the console capture lost part
+of the hex payload and failure summary. The received sequence, publication
+origin and console truncation cause remain unresolved. `expected_seq` is not
+the received sequence or verified-echo count. See the
+[follow-up capture procedure](../../../../../../docs/network-protocol-examples.md#follow-up-received-qos-0-publication)
+for an independent PC subscriber; keep the board on TLS port 8883.
