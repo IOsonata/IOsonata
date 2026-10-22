@@ -493,7 +493,7 @@ int main()
 	AppEvtHandlerInit(g_AppEvtHandlerQueMem, sizeof(g_AppEvtHandlerQueMem));
 	s_Uart.Init(s_UartCfg);
 	SysLogInit(SysLogGet(), &s_LogCfg, (DevIntrf_t *)s_Uart, 0, nullptr, 0);
-	SysLogPrintf(SysLogGet(), "CoAP over LTE UDP, console 115200 baud\r\n");
+	SysLogPrintf(SysLogGet(), "CoAP over LTE UDP\r\n");
 	SysLogPrintf(SysLogGet(), COAP_DEMO_PUBLIC_TEST ?
 		"Profile: public read-only GET\r\n" : "Profile: eight-step helper validation\r\n");
 	s_pRng = COAP_DEMO_RNG();

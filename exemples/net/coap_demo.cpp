@@ -365,7 +365,7 @@ int main()
 	AppEvtHandlerInit(g_AppEvtHandlerQueMem, sizeof(g_AppEvtHandlerQueMem));
 	s_Uart.Init(s_UartCfg);
 	SysLogInit(SysLogGet(), &s_LogCfg, (DevIntrf_t *)s_Uart, 0, nullptr, 0);
-	SysLogPrintf(SysLogGet(), "CoAP over UDP: LAN8742A RMII, DHCP, console 1 Mbaud\r\n");
+	SysLogPrintf(SysLogGet(), "CoAP over UDP: LAN8742A RMII, DHCP\r\n");
 	s_pRng = COAP_DEMO_RNG();
 	if (!s_pRng || !s_pRng->Enable())
 	{

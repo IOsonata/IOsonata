@@ -89,7 +89,7 @@ as a response; the expected 4.04 is an application check, not a transport error.
 Expected console output includes:
 
 ```text
-CoAP over UDP: LAN8742A RMII, DHCP, console 1 Mbaud
+CoAP over UDP: LAN8742A RMII, DHCP
 Waiting for Ethernet link and DHCP
 IPv4 10.5.5.54, link 100 Mbit/s
 CoAP UDP peer 10.5.5.51:5683, plaintext, one request/second

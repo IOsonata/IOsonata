@@ -431,7 +431,7 @@ int main()
 	AppEvtHandlerInit(g_AppEvtHandlerQueMem, sizeof(g_AppEvtHandlerQueMem));
 	s_Uart.Init(s_UartCfg);
 	SysLogInit(SysLogGet(), &s_LogCfg, (DevIntrf_t *)s_Uart, 0, nullptr, 0);
-	SysLogPrintf(SysLogGet(), "MQTT over LTE TCP, console 115200 baud\r\n");
+	SysLogPrintf(SysLogGet(), "MQTT over LTE TCP\r\n");
 	s_pRng = MQTT_DEMO_RNG();
 	if (!s_SockCfg.pHost || !s_SockCfg.pHost[0])
 	{
