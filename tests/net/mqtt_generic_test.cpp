@@ -335,7 +335,7 @@ static void Reset(uint32_t Now, int Chunk = 1024)
 	s_pIntrf = nullptr;
 	s_Started = s_SubscribeSent = s_Subscribed = s_Waiting = false;
 	s_EchoReceived = s_SessionChecked = s_RecoveryWaiting = false;
-	s_Checked = s_Failures = s_Sequence = 0;
+	s_Checked = s_Failures = s_Sequence = s_ExtraQos0 = 0;
 	s_SentAt = s_Retry = 0;
 	memcpy(s_Payload, "IOsonata MQTT 00000000", sizeof(s_Payload));
 	assert(CreateIdentity());
@@ -425,6 +425,19 @@ static void FeedEcho(const WirePacket &Publish, uint16_t Id, bool Duplicate = fa
 	} while (remaining);
 	bytes.insert(bytes.end(), body.begin(), body.end());
 	Feed(bytes);
+}
+
+static void FeedQos0(const WirePacket &Publish, bool Retain = false)
+{
+	std::vector<uint8_t> body(Publish.Bytes.begin() + Header(Publish.Bytes), Publish.Bytes.end());
+	size_t id = 2U + Word(body, 0);
+
+	// QoS 0 carries no packet identifier. All fixture payloads fit one
+	// Remaining Length byte; do not reinterpret a QoS 1 packet's ID as data.
+	body.erase(body.begin() + id, body.begin() + id + 2U);
+	assert(body.size() < 128U);
+	Feed({(uint8_t)(Retain ? 0x31 : 0x30), (uint8_t)body.size()});
+	Feed(body);
 }
 
 
@@ -717,20 +730,14 @@ static void RejectedMessages(void)
 		{
 			// This is a valid MQTT QoS 0 PUBLISH on our exact topic. The
 			// application rejects it while the MQTT parser still reports no error.
-			std::vector<uint8_t> body(publish.Bytes.begin() + header, publish.Bytes.end());
-			size_t id = 2U + Word(body, 0);
-
-			body.erase(body.begin() + id, body.begin() + id + 2U);
-			assert(body.size() < 128U);
-			Feed({0x30, (uint8_t)body.size()});
-			Feed(body);
+			FeedQos0(publish);
 		}
 		else
 		{
 			FeedEcho(publish, 0x4444, test.Duplicate);
 		}
 		Pump(now, 256);
-		assert(s_Checked == 0 && s_Failures == 1 && !s_Started);
+		assert(s_Checked == 0 && s_Failures == 1 && !s_Started && s_ExtraQos0 == 0);
 		assert(!s_Mqtt.Message());
 		snprintf(metadata, sizeof(metadata),
 			"MQTT echo rejected: %s qos=%u dup=%u len=%lu expected_seq=00000001\r\n",
@@ -739,6 +746,9 @@ static void RejectedMessages(void)
 		std::string sample = "MQTT echo payload hex (" +
 			std::to_string(std::min((size_t)32, test.Payload.size())) + "/" +
 			std::to_string(test.Payload.size()) + " bytes): " + test.pHex + "\r\n";
+		std::string compact = std::string("MQTT echo match=") +
+			(test.Payload == "IOsonata MQTT 00000001" ? "1" : "0") + " done=0\r\n";
+		size_t context = s_TestLog.find(compact);
 		size_t rejected = s_TestLog.find(metadata);
 		size_t snapshot = s_TestLog.find(sample);
 		size_t failure = s_TestLog.find("MQTT FAIL: echo payload or QoS mismatch, "
@@ -746,6 +756,7 @@ static void RejectedMessages(void)
 
 		// The snapshot must preserve the received bytes before Release/Reset
 		// wipes them. Binary NUL, CR, LF and ESC are encoded and capped at 32 bytes.
+		assert(context != std::string::npos && context < rejected);
 		assert(rejected != std::string::npos && snapshot != std::string::npos);
 		assert(failure != std::string::npos && rejected < snapshot && snapshot < failure);
 		assert(s_TestLog.find('\x1b') == std::string::npos);
@@ -760,6 +771,145 @@ static void RejectedMessages(void)
 			assert(s_TestLog.find("MQTT echo sequence received=") == std::string::npos);
 		}
 	}
+}
+
+static void ExtraQos0Copies(uint32_t Now, bool EchoFirst)
+{
+	WirePacket first = Begin(Now, 7);
+	WirePacket unrelated = first;
+	size_t acks;
+	uint32_t sent;
+
+	Complete(first, Now, EchoFirst);
+	acks = Count(4);
+	sent = s_SentAt;
+	// Retained and off-topic data are outside the live-echo check, even when
+	// their bytes match a completed publication. They are not extra copies.
+	FeedQos0(first, true);
+	unrelated.Bytes[Header(unrelated.Bytes) + 2U] = 'x';
+	FeedQos0(unrelated);
+	Pump(Now, 256);
+	assert(s_ExtraQos0 == 0 && s_Checked == 1 && s_Failures == 0);
+	assert(Count(4) == acks);
+	for (unsigned copy = 1; copy <= 20; copy++)
+	{
+		size_t log = s_TestLog.size();
+		std::string expected;
+
+		FeedQos0(first);
+		Pump(Now + copy * 10U, 256);
+		assert(s_Failures == 0 && s_Checked == 1 && s_ExtraQos0 == copy);
+		assert(!s_Waiting && s_EchoReceived && !s_Mqtt.Busy());
+		assert(s_Sequence == 1 && s_SentAt == sent && Count(3) == 1);
+		assert(Count(4) == acks && NetDemoConnected());
+		if (copy == 1 || copy % 10U == 0)
+		{
+			expected = "MQTT extra QoS 0 copy ignored " + std::to_string(copy) +
+				", checked=1\r\n";
+		}
+		assert(s_TestLog.substr(log) == expected);
+	}
+	// Extra copies do not restart the publication timer or count as success.
+	Pump(Now + MQTT_DEMO_INTERVAL - 1U, 256);
+	assert(Count(3) == 1);
+	Pump(Now + MQTT_DEMO_INTERVAL, 256);
+	assert(Count(3) == 2 && s_Waiting && !s_EchoReceived);
+	WirePacket next = Packet(3, 1);
+
+	assert(next.Time == Now + MQTT_DEMO_INTERVAL && s_Sequence == 2);
+	Complete(next, Now + MQTT_DEMO_INTERVAL, !EchoFirst);
+	assert(s_Checked == 2 && s_ExtraQos0 == 20 && s_Failures == 0);
+	assert(s_TestLog.find("MQTT echo rejected:") == std::string::npos);
+}
+
+static void PendingQos0Copies(void)
+{
+	const uint32_t now = 10000U;
+
+	for (bool blockAck : {false, true})
+	{
+		WirePacket first = Begin(now);
+
+		if (blockAck)
+		{
+			FeedAck(PacketId(first));
+			Pump(now, 256);
+			Current().BlockTx = true;
+		}
+		FeedEcho(first, 0x3456);
+		Pump(now, 256);
+		// The QoS 1 echo arrived, but either the broker's PUBACK is absent
+		// or our echo PUBACK cannot leave the stream. Neither is complete.
+		assert(s_Waiting && s_EchoReceived && s_Checked == 0 && s_Mqtt.Busy());
+		assert(Count(4) == (blockAck ? 0U : 1U));
+		FeedQos0(first);
+		Pump(now, 256);
+		assert(s_Failures == 1 && s_Checked == 0 && s_ExtraQos0 == 0 && !s_Started);
+		assert(s_TestLog.find("MQTT echo match=1 done=0\r\n") != std::string::npos);
+		assert(s_TestLog.find("MQTT echo rejected: QoS qos=0") != std::string::npos);
+	}
+}
+
+static void ChangedQos0Copies(void)
+{
+	const uint32_t now = 10000U;
+
+	for (unsigned mode = 0; mode < 3; mode++)
+	{
+		WirePacket first = Begin(now);
+		uint32_t at = now;
+
+		Complete(first, now, true);
+		if (mode == 0)
+		{
+			first.Bytes.back() = '0';
+		}
+		else if (mode == 1)
+		{
+			first.Bytes.push_back(0);
+		}
+		else
+		{
+			// Starting the next publication removes eligibility for the old
+			// bytes. An older QoS 0 copy cannot satisfy or bypass that wait.
+			at += MQTT_DEMO_INTERVAL;
+			Pump(at, 256);
+			assert(s_Waiting && s_Sequence == 2 && Count(3) == 2);
+		}
+		FeedQos0(first);
+		Pump(at, 256);
+		assert(s_Failures == 1 && s_Checked == 1 && s_ExtraQos0 == 0 && !s_Started);
+		assert(s_TestLog.find(mode == 2 ? "MQTT echo match=0 done=0\r\n" :
+			"MQTT echo match=0 done=1\r\n") != std::string::npos);
+		assert(s_TestLog.find("MQTT echo rejected: QoS qos=0") != std::string::npos);
+	}
+}
+
+static void Qos0AfterReconnect(void)
+{
+	const uint32_t now = 10000U;
+	WirePacket first = Begin(now);
+	uint32_t retry;
+
+	Complete(first, now, false);
+	FeedQos0(first);
+	Pump(now, 256);
+	assert(s_ExtraQos0 == 1 && s_Checked == 1);
+	Current().Connected = false;
+	Pump(now + 100U);
+	assert(!s_Started && !s_EchoReceived && !s_Waiting && s_Failures == 1);
+	retry = s_Retry + MQTT_DEMO_RESTART_MS;
+	Pump(retry, 256);
+	Feed({0x20, 2, 0, 0});
+	Pump(retry, 256);
+	assert(s_Started && !s_Subscribed && Count(8) == 2 && Count(3) == 1);
+	// No new publication has changed the stored bytes yet. Reset must have
+	// invalidated the previous session's completed status independently.
+	FeedQos0(first);
+	Pump(retry, 256);
+	assert(s_Failures == 2 && s_Checked == 1 && s_ExtraQos0 == 1 && !s_Started);
+	assert(s_TestLog.find("MQTT echo match=1 done=0\r\n") != std::string::npos);
+	assert(s_TestLog.find("MQTT echo rejected: QoS qos=0") != std::string::npos);
 }
 
 static void SwitchInterface(uint32_t Now, unsigned Kind, bool Idle)
@@ -934,6 +1084,11 @@ int main()
 	SequenceWrap();
 	IncomingAckBackpressure();
 	PublicTopicMessages();
+	ExtraQos0Copies(10000U, true);
+	ExtraQos0Copies(0xfffff000U, false);
+	PendingQos0Copies();
+	ChangedQos0Copies();
+	Qos0AfterReconnect();
 	RejectedMessages();
 	OpenRetry();
 	WriteClock();

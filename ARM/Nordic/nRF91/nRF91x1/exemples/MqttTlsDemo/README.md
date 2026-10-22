@@ -123,6 +123,15 @@ returned topic and payload together with the broker's PUBACK. The first
 publication follows subscription; subsequent publications are at least
 10 seconds apart. A subscription alone is not a completed echo check.
 
+After a QoS 1 exchange has fully completed, a non-retained QoS 0 publication
+on the exact test topic is ignored only if its entire payload is byte-for-byte
+identical to the current payload. It increments a separate extra-copy counter,
+logged first and every 10, and never increments checked or satisfies an
+outstanding echo. A new publication or session reset revokes this eligibility.
+Other non-retained QoS 0 publications on the exact test topic still fail.
+This behavior belongs to the shared example application; it does not change
+the MQTT protocol client.
+
 Record the modem firmware, registration messages, security label, MQTT
 subscription and checked counters. The first checked exchange and every
 10th are logged. After a connection failure the application closes the
@@ -166,9 +175,10 @@ CA/hostname checks are not established. See the
 [detailed hardware record](../../../../../../docs/network-protocol-examples.md#hardware-evidence-for-the-modem-tls-mqtt-example)
 for the observed counters and diagnostic scope.
 
-For a repeat run, capture the new `MQTT echo rejected` line, bounded payload
-hex dump and any `MQTT echo sequence received` line before the failure
-summary, together with the client ID and topic. The
+For a repeat run, capture the short `MQTT echo match=<0|1> done=<0|1>` line,
+`MQTT echo rejected`, the bounded payload hex dump and any
+`MQTT echo sequence received` line before the failure summary, together with
+the client ID and topic. The
 [echo diagnostic instructions](../../../../../../docs/network-protocol-examples.md#echo-failure-diagnostics)
 explain these fields. They preserve the strict echo checks and do not establish
 a fix or show that another public-broker client caused the original failures.
@@ -182,3 +192,18 @@ origin and console truncation cause remain unresolved. `expected_seq` is not
 the received sequence or verified-echo count. See the
 [follow-up capture procedure](../../../../../../docs/network-protocol-examples.md#follow-up-received-qos-0-publication)
 for an independent PC subscriber; keep the board on TLS port 8883.
+
+A subsequent run used client `iosnet00c6a7784c9623aa` and topic
+`iosonata/demo/00c6a7784c9623aa/echo`. Its initial session checked counter 1,
+then rejected QoS 0 with length 22 and expected sequence 1, raising failures
+to 1. The first reconnect checked counter 2 before another QoS 0, length-22
+rejection with expected sequence 2 and failures 2. The second reconnect
+progressed through checked counter 6 before the same QoS/length rejection
+with expected sequence 6 raised failures to 3.
+
+The second supplied hex dump contains 40 characters, while 22 bytes require
+44, and other dumps and summaries are cut off. Full byte equality and the
+received sequence therefore remain unestablished. The packet origin and
+console truncation cause are unresolved, with no PC observer result supplied.
+These logs predate the additional-copy policy and do not establish that their
+packets qualify for it or that the hardware failures have been resolved.

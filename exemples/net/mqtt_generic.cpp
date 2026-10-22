@@ -27,6 +27,7 @@ static uint8_t s_Payload[] = "IOsonata MQTT 00000000";
 static uint32_t s_Sequence;
 static uint32_t s_Checked;
 static uint32_t s_Failures;
+static uint32_t s_ExtraQos0;
 static uint32_t s_SentAt;
 static uint32_t s_Retry;
 static bool s_Started;
@@ -82,6 +83,12 @@ static void MqttDown(const char *pReason)
 	SysLogPrintf(SysLogGet(), "MQTT reconnect in 30 s when the selected medium is ready\r\n");
 }
 
+static bool MatchesPayload(const MqttMessage_t *pMessage)
+{
+	return pMessage->PayloadLen == sizeof(s_Payload) - 1U &&
+		memcmp(pMessage->pPayload, s_Payload, sizeof(s_Payload) - 1U) == 0;
+}
+
 static bool RejectMessage(const MqttMessage_t *pMessage, const char *pReason)
 {
 	char sample[65];
@@ -100,6 +107,8 @@ static bool RejectMessage(const MqttMessage_t *pMessage, const char *pReason)
 	sample[count * 2] = 0;
 	// The borrowed message is wiped by Release(). Capture its bounded byte
 	// sample now; hexadecimal also keeps binary data out of terminal control.
+	SysLogPrintf(SysLogGet(), "MQTT echo match=%u done=%u\r\n",
+		(unsigned)MatchesPayload(pMessage), (unsigned)(!s_Waiting && s_EchoReceived));
 	SysLogPrintf(SysLogGet(), "MQTT echo rejected: %s qos=%u dup=%u len=%lu expected_seq=%08lx\r\n",
 		pReason, (unsigned)pMessage->Qos, (unsigned)pMessage->bDuplicate,
 		(unsigned long)pMessage->PayloadLen, (unsigned long)s_Sequence);
@@ -119,6 +128,18 @@ static bool CheckMessage(const MqttMessage_t *pMessage)
 	if (pMessage->bRetain || pMessage->TopicLen != sizeof(s_Topic) - 1U ||
 		memcmp(pMessage->pTopic, s_Topic, sizeof(s_Topic) - 1U) != 0)
 	{
+		return true;
+	}
+	// An exact extra copy cannot undo an already verified QoS 1 exchange.
+	// Keep it visible separately; it never satisfies an outstanding echo.
+	if (pMessage->Qos == 0 && !s_Waiting && s_EchoReceived && MatchesPayload(pMessage))
+	{
+		s_ExtraQos0++;
+		if (s_ExtraQos0 == 1U || s_ExtraQos0 % 10U == 0)
+		{
+			SysLogPrintf(SysLogGet(), "MQTT extra QoS 0 copy ignored %lu, checked=%lu\r\n",
+				(unsigned long)s_ExtraQos0, (unsigned long)s_Checked);
+		}
 		return true;
 	}
 	if (pMessage->Qos != 1)

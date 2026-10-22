@@ -239,6 +239,26 @@ apart. Retained or unrelated-topic messages do not count as live echoes, and
 old QoS 1 duplicates do not increment the counter. A subscription grant below
 QoS 1 fails this particular test even though the shared client supports QoS 0.
 
+The example ignores one additional case without ending the session: a
+non-retained QoS 0 publication on the exact test topic whose complete payload
+is byte-for-byte identical to the current payload, after that QoS 1 exchange
+has fully completed. The application must already have received the matching
+QoS 1 self-echo and the broker's PUBACK, completed its pending acknowledgements
+and counted the exchange (`!s_Waiting && s_EchoReceived`). The extra copy never
+satisfies an outstanding echo and never increments the checked counter.
+Starting a new publication or resetting the session revokes this eligibility.
+Other non-retained QoS 0 publications on the exact test topic still fail.
+
+Ignored copies have a separate counter, logged on the first and every tenth:
+
+```text
+MQTT extra QoS 0 copy ignored <count>, checked=<count>
+```
+
+This is an example policy applied through the same shared MQTT client on
+each medium. It does not change MQTT parsing or establish where an additional
+publication originated.
+
 The public topic is not private or authenticated. Another broker client can
 read or publish to it. To observe the exact topic from a PC, substitute the
 suffix printed by the board:
@@ -271,9 +291,15 @@ When an incoming publication on the live test topic fails the echo check,
 the application prints the reason before its existing failure summary:
 
 ```text
+MQTT echo match=<0|1> done=<0|1>
 MQTT echo rejected: <reason> qos=<n> dup=<0|1> len=<bytes> expected_seq=<8hex>
 MQTT echo payload hex (<shown>/<total> bytes): <hex>
 ```
+
+The short first line reports whether the complete received payload matches
+the current payload (`match`) and whether the current QoS 1 exchange has
+fully completed (`done`). It does not decode a missing sequence suffix from
+the console capture.
 
 Reasons distinguish the QoS, length, prefix, sequence encoding and a sequence
 ahead of the expected value. The hex dump shows at most 32 payload bytes.
@@ -570,6 +596,16 @@ that an application rejection can have `mqtt_error=0 mqtt_result=0`. Accepted
 duplicates, retained messages and other topics produce no rejection diagnostic.
 These results validate the diagnostics, not the cause of the hardware failure.
 
+The additional QoS 0 copy policy also passed
+`run_generic_demo.py --protocol mqtt` (14 sanitized runtime builds) and
+`run_mqtt_tls_demo.py` (12 binaries and 30 process executions), at O0/O2 with
+ASan/UBSan for all configured targets. The fixtures check ignoring an exact
+copy after a completed exchange, rejection while acknowledgements remain
+pending, changed payload bytes or length, and revoked eligibility after the
+next publication or a session reset. These are host checks; they add no ARM
+compile/link, hardware or live-broker result and do not resolve the incomplete
+hardware payload captures or console truncation.
+
 ### Hardware evidence for the modem TLS MQTT example
 
 The maintainer ran `MqttTlsDemo` on nRF91x1 with modem firmware
@@ -624,15 +660,34 @@ does not establish the full payload, the publication's origin or a cause for
 the missing console bytes. It also does not establish that the earlier three
 failures rejected the same kind of message.
 
-The application publishes at QoS 1 and requires a QoS 1 SUBACK result before
-publishing. A valid incoming QoS 0 packet can still reach the application's
-strict echo check; the existing host fixture covers that outcome. Keep the
-QoS 1 check while investigating. An independent PC subscriber can capture
-the QoS, length and complete payload without relying on the board console:
+The maintainer subsequently supplied a run using client
+`iosnet00c6a7784c9623aa` and topic `iosonata/demo/00c6a7784c9623aa/echo`.
+The continued log spans three sessions in that same run. Each rejected
+publication reported QoS 0 and length 22:
+
+| Session | Checked counter before rejection | Expected sequence at rejection | Failure counter |
+| --- | --- | --- | --- |
+| Initial session | 1 | `00000001` | 1 |
+| First reconnect | 2 | `00000002` | 2 |
+| Second reconnect | Progressed through 6 | `00000006` | 3 |
+
+The second supplied payload dump contains 40 hex characters, while 22 bytes
+require 44. Other payload dumps and failure summaries are also cut off. These
+captures do not establish byte equality with the demo's current payload or
+the full received sequence. The publication's origin and the console
+truncation cause remain unresolved, and no PC observer result has been
+provided.
+
+The application still publishes at QoS 1 and requires a QoS 1 SUBACK result.
+Its additional-copy policy above applies only after a completed QoS 1
+exchange and an exact full-payload comparison. The historical captures do not
+prove that their rejected packets meet those conditions, so they do not
+establish a hardware fix. An independent PC subscriber can capture the QoS,
+length and complete payload without relying on the board console:
 
 ```sh
 mosquitto_sub -h test.mosquitto.org -p 1883 -V mqttv311 -q 1 \
-	-t 'iosonata/demo/172bbd285c24efa7/echo' \
+	-t 'iosonata/demo/00c6a7784c9623aa/echo' \
 	-F 'qos=%q len=%l hex=%x'
 ```
 

@@ -231,6 +231,24 @@ the full received sequence, publication origin and console truncation cause
 remain unresolved. The detailed record includes an independent subscriber
 capture procedure. The strict QoS 1 echo check remains in place.
 
+A subsequent run with client `iosnet00c6a7784c9623aa` showed QoS 0,
+22-byte publications rejected after checked counters 1, 2 and 6 across the
+initial session and two reconnects, with failures reaching 3. The second
+payload dump contains only 40 hex characters instead of the required 44;
+other dumps and summaries are also incomplete. Full payload equality,
+publication origin and the console truncation cause remain unestablished.
+No PC observer result has been supplied.
+
+The generic example now separately logs and counts a non-retained exact-topic
+QoS 0 copy only when its complete payload matches the current payload and
+that QoS 1 exchange has already completed. It does not count the copy as a
+checked echo or allow it to satisfy an outstanding exchange. A new publication
+or session reset revokes that eligibility; other non-retained QoS 0 messages
+on the exact test topic still fail. This changes the example's handling of an
+extra copy. The shared MQTT protocol and TLS verification remain unchanged.
+The supplied hardware logs do not establish that their incomplete payloads
+qualify or that this policy resolves the observed failures.
+
 ### Native TLS 1.3 PSK client
 
 `net/tls.h` and `src/net/tls.cpp` implement an initial external-PSK client.
