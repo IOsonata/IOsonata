@@ -588,9 +588,9 @@ static uint64_t StTimCount(int Idx)
 	return dev->pTimer->Rollover + low + (after ? (uint64_t)dev->Cycle : 0);
 }
 
-// Prescaler of the closest frequency. Timer clock is twice PCLK when the APB
+// Counter clock before the prescaler. Timer clock is twice PCLK when the APB
 // prescaler is not 1.
-static bool StTimPlan(int PclkIdx, uint32_t Freq, uint32_t *pDiv, uint32_t *pFreq)
+static uint32_t StTimClock(int PclkIdx)
 {
 	uint32_t base = SystemPeriphClockGet(PclkIdx);
 
@@ -613,6 +613,15 @@ static bool StTimPlan(int PclkIdx, uint32_t Freq, uint32_t *pDiv, uint32_t *pFre
 		base *= 2;
 	}
 #endif
+
+	return base;
+}
+
+// Prescaler of the closest frequency
+static bool StTimPlan(int PclkIdx, uint32_t Freq, uint32_t *pDiv, uint32_t *pFreq)
+{
+	uint32_t base = StTimClock(PclkIdx);
+
 	if (base == 0)
 	{
 		return false;
@@ -1263,5 +1272,27 @@ void Stm32TimRelease(int DevNo)
 int Stm32TimCount(void)
 {
 	return ST_TIM_CNT;
+}
+
+bool Stm32TimHwGet(int DevNo, Stm32TimHw_t * const pHw)
+{
+	int idx = DevNo - ST_LPTIM_CNT;
+
+	if (pHw == nullptr || idx < 0 || idx >= ST_TIM_CNT)
+	{
+		return false;
+	}
+
+	const StTimInfo_t *info = &s_StTimInfo[idx];
+
+	pHw->pReg = info->pReg;
+	pHw->pEnReg = info->pEnReg;
+	pHw->pRstReg = info->pRstReg;
+	pHw->Mask = info->Mask;
+	pHw->ClkFreq = StTimClock(info->PclkIdx);
+	pHw->NbChan = info->NbChan;
+	pHw->bTimer = s_StTimDev[idx].pTimer != nullptr;
+
+	return true;
 }
 

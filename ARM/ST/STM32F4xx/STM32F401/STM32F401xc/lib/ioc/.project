@@ -111,6 +111,11 @@
 			<locationURI>PARENT-7-PROJECT_LOC/src/cbor.c</locationURI>
 		</link>
 		<link>
+			<name>src/coredev/pwm_stm32.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/src/pwm_stm32.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/crypto</name>
 			<type>2</type>
 			<locationURI>virtual:/virtual</locationURI>

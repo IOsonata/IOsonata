@@ -90,6 +90,11 @@ vector is replaced by an application handler. TimerDemo callbacks have passed
 on hardware for the LPTIM and TIM engines; absolute frequency has not been
 measured against an external reference.
 
+The library builds the shared STM32 PWM driver, `ARM/ST/src/pwm_stm32.cpp`:
+the generic PWM API on the output channels of TIM16, TIM17, TIM2, TIM3, TIM4
+and TIM1, with the timer DevNo above. See [STM32 PWM](../PWM.md). No example
+project; not run on hardware yet.
+
 ## Crypto
 
 Hardware validated on STM32WBA65I-DK1, October 18, 2026: **51 passed, 0 failed**.

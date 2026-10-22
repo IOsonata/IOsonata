@@ -342,6 +342,18 @@ in its datasheet range of 1.182 to 1.232 V; temperature sensor 0.748 to
 0.895 to 0.913 V. No temperature sensor outlier in these scans (ES0250
 2.8.12).
 
+## PWM
+
+The four L4 libraries build the shared STM32 PWM driver,
+`ARM/ST/src/pwm_stm32.cpp`, on the TIM output channels: the generic PWM API
+with DevNo the timer DevNo (TIM2 is 7 on the L476, L496 and L4S9, 6 on the
+L432), edge or center aligned, the pin alternate function in
+`PwmChanCfg_t::PinOp`. See [STM32 PWM](../PWM.md). The STM32L476 example
+PwmDemo (`exemples/pwm/pwm_demo.cpp`) runs TIM2 at 1 kHz on LD1 (PA5,
+TIM2_CH1) and Arduino D0 (PA1, TIM2_CH2), both AF1: 50 and 25 percent for one
+second, then the two duty cycles sweep in opposite directions, 1 percent
+every 5 ms. Not run on hardware yet.
+
 ## Validation
 
 Run the focused host regressions from the repository root:

@@ -425,9 +425,14 @@ Timer device numbers are virtual indices, not hardware timer numbers:
 The shared timer implementation uses a 16-bit counter extended in software.
 LPTIM is not yet exposed. `TimerGetLowFreqDevCount()` returns 0.
 
+The library builds the shared STM32 PWM driver, `ARM/ST/src/pwm_stm32.cpp`:
+the generic PWM API on the output channels of every TIM above except TIM6 and
+TIM7, with these DevNo. See [STM32 PWM](../PWM.md). No example project; not
+run on hardware yet.
+
 ## Limits and validation
 
-CAN, ADC/DAC and PWM are not implemented by this port. LPUART1 DMA configuration returns false
+CAN and ADC/DAC are not implemented by this port. LPUART1 DMA configuration returns false
 because UART BDMA integration is not implemented. The single library project includes the core device, UART, timer,
 application event and logging sources needed by these examples.
 

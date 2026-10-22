@@ -20,8 +20,8 @@ G4 device headers in `include/`.
 - Shared with the other STM32 families: `ARM/ST/src/iopincfg_stm32.cpp`
   (GPIO and EXTI, the L4 register names), `ARM/ST/src/uart_stm32.cpp`, the
   timer driver, `ARM/ST/src/timer_stm32.cpp`, `timer_lptim_stm32.cpp` and
-  `timer_tim_stm32.cpp`, and the ADC1 driver of the L4 and G4,
-  `ARM/ST/src/adc_stm32.cpp`.
+  `timer_tim_stm32.cpp`, the ADC1 driver of the L4 and G4,
+  `ARM/ST/src/adc_stm32.cpp`, and the PWM driver, `ARM/ST/src/pwm_stm32.cpp`.
 
 ## Clock
 
@@ -113,6 +113,17 @@ VBAT and Arduino A0 (PA0) once per second, on the ST-LINK virtual COM port,
 LPUART1 at 115200 8N1, in Release, with semihosting in Debug. Not run on
 hardware yet.
 
+## PWM
+
+The library builds the shared STM32 PWM driver, `ARM/ST/src/pwm_stm32.cpp`,
+on the TIM output channels: the generic PWM API with DevNo the timer DevNo
+(TIM2 is 6), edge or center aligned, the pin alternate function in
+`PwmChanCfg_t::PinOp`. See [STM32 PWM](../PWM.md). The example PwmDemo
+(`exemples/pwm/pwm_demo.cpp`) runs TIM2 at 1 kHz on LD2 (PA5, TIM2_CH1) and
+Arduino A1 (PA1, TIM2_CH2), both AF1: 50 and 25 percent for one second, then
+the two duty cycles sweep in opposite directions, 1 percent every 5 ms. Not
+run on hardware yet.
+
 ## Memory
 
 `gcc_stm32g474xx.ld`: 496 KB of the 512 KB flash for the image, two 8 KB
@@ -125,8 +136,9 @@ RAM2.
 `STM32G474/exemples/Blinky` (`exemples/misc/blinky.c`),
 `STM32G474/exemples/UartLoopback` (`exemples/uart/uart_loopback.cpp`),
 `STM32G474/exemples/UartPrbsTxTest` (`exemples/uart/uart_prbs_tx.cpp`),
-`STM32G474/exemples/TimerDemo` (`exemples/timer/timer_demo.cpp`) and
-`STM32G474/exemples/AdcDemo` (`exemples/converters/adc_demo.cpp`) link
+`STM32G474/exemples/TimerDemo` (`exemples/timer/timer_demo.cpp`),
+`STM32G474/exemples/AdcDemo` (`exemples/converters/adc_demo.cpp`) and
+`STM32G474/exemples/PwmDemo` (`exemples/pwm/pwm_demo.cpp`) link
 `IOsonata_STM32G474` from `STM32G474/lib/ioc` in the same Debug or Release
 configuration. Build the library first. `board.h` selects
 `#define BOARD NUCLEO_G474RE` (`ARM/ST/include/stm32_boards.h`). Blinky blinks
