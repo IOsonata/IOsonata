@@ -1,0 +1,533 @@
+/* SPDX-License-Identifier: MIT
+ * Copyright (c) 2026 I-SYST inc.
+ * Real example setup with simulated network, UART, timer and event queue.
+ * Compile for each NET_DEMO_TEST_MEDIUM; no hardware or radio is exercised.
+ */
+#include <assert.h>
+#include <stdio.h>
+#include <string.h>
+#include <string>
+#include "../../exemples/net/net_demo.cpp"
+
+class TestRng : public RngEngine
+{
+public:
+	bool Works = false;
+
+	bool Enable() override
+	{
+		return Works;
+	}
+	void Disable() override
+	{
+	}
+	void Reset() override
+	{
+	}
+	CRYPTO_STATUS Random(uint8_t *pData, size_t Len) override
+	{
+		memset(pData, 7, Len);
+		return CRYPTO_STATUS_OK;
+	}
+};
+
+#if NET_DEMO_MEDIUM == NET_DEMO_MEDIUM_CUSTOM
+class TestInterface : public DeviceIntrf
+{
+public:
+	DevIntrf_t Data = {};
+
+	operator DevIntrf_t *() override
+	{
+		return &Data;
+	}
+	uint32_t Rate(uint32_t Value) override
+	{
+		return Value;
+	}
+	uint32_t Rate() override
+	{
+		return 0;
+	}
+};
+
+static TestInterface s_TestInterface;
+#else
+static SockIntrfDev_t *s_TestSocket;
+#endif
+static TestRng s_TestRng;
+static uint32_t s_TestNow = 0xfffff000U;
+static uint32_t s_TestInitDuration = 700U;
+static uint32_t s_TestOpenDuration = 900U;
+static uint32_t s_TestCloseDuration = 500U;
+static uint32_t s_TestHandlerTime;
+static unsigned s_TestInits;
+static unsigned s_TestOpens;
+static unsigned s_TestCloses;
+static unsigned s_TestQueues;
+static unsigned s_TestPumps;
+static unsigned s_TestProcesses;
+static unsigned s_TestWrites;
+static bool s_TestInitWorks;
+static bool s_TestOpenWorks;
+static bool s_TestReady;
+static bool s_TestConnected;
+static bool s_TestResource;
+static bool s_TestQueueWorks;
+static bool s_TestTriggerWorks;
+static bool s_TestInterrupt;
+static bool s_TestDatagram;
+static bool s_TestHandlerReady;
+static bool s_TestHandlerConnected;
+static AppEvtHandler_t s_TestQueued;
+static TimerTrigEvtHandler_t s_TestTick;
+static std::string s_TestLog;
+#if NET_DEMO_MEDIUM == NET_DEMO_MEDIUM_LTE
+static LteEvtHandler_t s_TestLteEvent;
+#elif NET_DEMO_MEDIUM == NET_DEMO_MEDIUM_ETHERNET
+static bool s_TestIpWorks;
+static unsigned s_TestEthernetCloses;
+#endif
+
+RngEngine *NetDemoTestRng()
+{
+	return &s_TestRng;
+}
+
+static uint64_t Ticks(TimerDev_t *)
+{
+	return s_TestNow;
+}
+
+static uint64_t Trigger(TimerDev_t *, int TrigNo, uint64_t Period,
+	TIMER_TRIG_TYPE Type, TimerTrigEvtHandler_t Handler, void *)
+{
+	assert(!s_TestInterrupt && TrigNo == 1 && Period == 20000000U);
+	assert(Type == TIMER_TRIG_TYPE_CONTINUOUS);
+	if (!s_TestTriggerWorks)
+	{
+		return 0;
+	}
+	s_TestTick = Handler;
+	return Period;
+}
+
+static bool TransferStart(DevIntrf_t *, uint32_t)
+{
+	return s_TestConnected;
+}
+
+static void TransferStop(DevIntrf_t *)
+{
+}
+
+static int Send(DevIntrf_t *, const uint8_t *pData, int Len)
+{
+	assert(!s_TestInterrupt && s_TestResource && s_TestConnected);
+	assert(Len == 4 && memcmp(pData, "test", 4) == 0);
+	s_TestWrites++;
+	return Len;
+}
+
+static void PrepareInterface(DevIntrf_t *pDev)
+{
+	pDev->StartRx = pDev->StartTx = TransferStart;
+	pDev->StopRx = pDev->StopTx = TransferStop;
+	pDev->TxData = Send;
+	pDev->MaxRetry = 99;
+	pDev->EnCnt = 1;
+	atomic_flag_clear(&pDev->bBusy);
+}
+
+static bool Open(bool Datagram, const char *pHost, uint16_t Port)
+{
+	assert(!s_TestInterrupt && s_TestReady && !s_TestResource);
+	assert(strcmp(pHost, "test.example") == 0 && Port == 1234);
+	s_TestDatagram = Datagram;
+	s_TestOpens++;
+	s_TestNow += s_TestOpenDuration;
+	// Failed initialization may still need to release a partially opened handle.
+	s_TestResource = true;
+	s_TestConnected = s_TestOpenWorks;
+	return s_TestOpenWorks;
+}
+
+static void Close()
+{
+	assert(!s_TestInterrupt);
+	if (s_TestResource)
+	{
+		s_TestCloses++;
+		s_TestNow += s_TestCloseDuration;
+	}
+	s_TestResource = s_TestConnected = false;
+}
+
+extern "C"
+{
+bool AppEvtHandlerInit(uint8_t *pMem, size_t Len)
+{
+	assert(pMem && Len >= APPEVT_HANDLER_QUE_MEMSIZE(16));
+	return true;
+}
+
+bool AppEvtHandlerQue(uint32_t, void *, AppEvtHandler_t Handler)
+{
+	s_TestQueues++;
+	if (!s_TestQueueWorks)
+	{
+		return false;
+	}
+	assert(!s_TestQueued);
+	s_TestQueued = Handler;
+	return true;
+}
+
+bool TimerInit(TimerDev_t *pTimer, const TimerCfg_t *)
+{
+	pTimer->Freq = 1000;
+	pTimer->GetTickCount = Ticks;
+	pTimer->EnableTrigger = Trigger;
+	return true;
+}
+
+bool UARTInit(UARTDev_t *, const UARTCfg_t *pCfg)
+{
+	assert(pCfg->TxMemSize == CFIFO_MEMSIZE(1024) && pCfg->pTxMem);
+	assert(pCfg->DataBits == 8 && pCfg->StopBits == 1 && pCfg->bIntMode);
+	return true;
+}
+
+void UARTSetCtrlLineState(UARTDev_t *, uint32_t)
+{
+}
+
+int CFifoAvail(hCFifo_t)
+{
+	return 0;
+}
+
+SysLog_t *SysLogGet()
+{
+	return nullptr;
+}
+
+bool SysLogInit(SysLog_t *, const SysLogCfg_t *, DevIntrf_t *, uint32_t,
+	TimerDev_t *, uint32_t)
+{
+	return true;
+}
+
+int SysLogPrintf(SysLog_t *, const char *pFormat, ...)
+{
+	char line[256];
+	va_list args;
+	int length;
+
+	assert(!s_TestInterrupt);
+	va_start(args, pFormat);
+	length = vsnprintf(line, sizeof(line), pFormat, args);
+	va_end(args);
+	assert(length >= 0 && (size_t)length < sizeof(line));
+	s_TestLog += line;
+	return length;
+}
+
+#if NET_DEMO_MEDIUM != NET_DEMO_MEDIUM_CUSTOM
+bool SockIntrfInit(SockIntrfDev_t *pDev, const SockIntrfCfg_t *pCfg)
+{
+	assert(pCfg->Proto == SOCKINTRF_PROTO_TCP || pCfg->Proto == SOCKINTRF_PROTO_UDP);
+	assert(pCfg->LocalPort == 0 && pCfg->SecTag == -1 && !pCfg->bPeerVerify && !pCfg->EvtCB);
+#if NET_DEMO_MEDIUM == NET_DEMO_MEDIUM_LTE
+	assert(pCfg->Timeout == 100U);
+#else
+	assert(pCfg->Timeout == 10000U);
+#endif
+	s_TestSocket = pDev;
+	PrepareInterface(&pDev->DevIntrf);
+	pDev->Hdl = 5;
+	pDev->bConnected = Open(pCfg->Proto == SOCKINTRF_PROTO_UDP, pCfg->pHost, pCfg->Port);
+	return pDev->bConnected;
+}
+
+void SockIntrfClose(SockIntrfDev_t *pDev)
+{
+	Close();
+	pDev->Hdl = -1;
+	pDev->bConnected = false;
+}
+#endif
+
+#if NET_DEMO_MEDIUM == NET_DEMO_MEDIUM_LTE
+bool LteInit(const LteCfg_t *pCfg)
+{
+	assert(!s_TestInterrupt && pCfg->pTimer && pCfg->TimerTrigNo == 0);
+	assert(!pCfg->bPsm && !pCfg->bRai && !pCfg->EdrxCycle);
+	s_TestLteEvent = pCfg->EvtHandler;
+	s_TestInits++;
+	s_TestNow += s_TestInitDuration;
+	return s_TestInitWorks;
+}
+
+bool LteRegistered()
+{
+	return s_TestReady;
+}
+
+bool LteGetInfo(LTE_INFO, char *, int)
+{
+	return false;
+}
+#elif NET_DEMO_MEDIUM == NET_DEMO_MEDIUM_ETHERNET
+bool EthernetInit(EthernetDev_t *, const EthernetCfg_t *)
+{
+	assert(!s_TestInterrupt);
+	s_TestInits++;
+	s_TestNow += s_TestInitDuration;
+	return s_TestInitWorks;
+}
+
+void EthernetClose(EthernetDev_t *)
+{
+	assert(!s_TestInterrupt);
+	s_TestEthernetCloses++;
+}
+
+bool IpInit(const IpCfg_t *pCfg, EthernetDev_t *, TimerDev_t *pTimer, int TriggerNo)
+{
+	assert(!s_TestInterrupt && pCfg->bDhcp && pTimer && TriggerNo == 0);
+	return s_TestIpWorks;
+}
+
+bool IpReady()
+{
+	return s_TestReady;
+}
+
+bool IpAddress(uint8_t Addr[4])
+{
+	static const uint8_t addr[] = {192, 0, 2, 20};
+
+	memcpy(Addr, addr, sizeof(addr));
+	return s_TestReady;
+}
+
+void IpProcess()
+{
+	assert(!s_TestInterrupt);
+	s_TestProcesses++;
+}
+#endif
+}
+
+#if NET_DEMO_MEDIUM == NET_DEMO_MEDIUM_CUSTOM
+bool NetDemoCustomInit(TimerDev_t *pTimer)
+{
+	assert(!s_TestInterrupt && pTimer);
+	s_TestInits++;
+	s_TestNow += s_TestInitDuration;
+	return s_TestInitWorks;
+}
+
+void NetDemoCustomProcess(uint32_t Now)
+{
+	assert(!s_TestInterrupt && Now == s_TestNow);
+	s_TestProcesses++;
+	// The application's time must also be refreshed after medium service.
+	s_TestNow += 17U;
+}
+
+bool NetDemoCustomReady()
+{
+	return s_TestReady;
+}
+
+DeviceIntrf *NetDemoCustomOpen(bool Datagram, const char *pHost, uint16_t Port)
+{
+	PrepareInterface(&s_TestInterface.Data);
+	return Open(Datagram, pHost, Port) ? &s_TestInterface : nullptr;
+}
+
+bool NetDemoCustomConnected()
+{
+	return s_TestConnected;
+}
+
+void NetDemoCustomClose()
+{
+	Close();
+}
+#endif
+
+static void Application(uint32_t Now)
+{
+	assert(!s_TestInterrupt && Now == s_TestNow);
+	s_TestPumps++;
+	s_TestHandlerTime = Now;
+	s_TestHandlerReady = NetDemoReady();
+	s_TestHandlerConnected = NetDemoConnected();
+}
+
+static void Tick()
+{
+	assert(s_TestTick);
+	s_TestInterrupt = true;
+	s_TestTick(nullptr, 1, nullptr);
+	s_TestInterrupt = false;
+}
+
+static void Dispatch()
+{
+	AppEvtHandler_t handler = s_TestQueued;
+
+	assert(handler);
+	s_TestQueued = nullptr;
+	handler(0, nullptr);
+}
+
+static void PumpAt(uint32_t Now)
+{
+	s_TestNow = Now;
+	Tick();
+	Dispatch();
+}
+
+static DeviceIntrf *OpenEndpoint(bool Datagram)
+{
+	DeviceIntrf *intrf = NetDemoOpen(Datagram, "test.example", 1234);
+	DevIntrf_t *dev;
+
+	assert(intrf && NetDemoConnected() && s_TestDatagram == Datagram);
+	dev = *intrf;
+	assert(dev->MaxRetry == 0);
+#if NET_DEMO_MEDIUM == NET_DEMO_MEDIUM_CUSTOM
+	assert(intrf == &s_TestInterface && dev == &s_TestInterface.Data);
+#else
+	assert(dev == &s_TestSocket->DevIntrf);
+#endif
+	assert(intrf->Tx(0, (const uint8_t *)"test", 4) == 4);
+	return intrf;
+}
+
+int main()
+{
+	uint32_t finished;
+	unsigned inits;
+	unsigned opens;
+	unsigned closes;
+
+	assert(!NetDemoReady() && !NetDemoConnected());
+	assert(!NetDemoStart(Application));
+	assert(!NetDemoInit());
+	assert(s_TestInits == 0 && s_TestOpens == 0);
+	s_TestRng.Works = true;
+	assert(NetDemoInit() && NetDemoInit() && NetDemoRng() == &s_TestRng);
+	assert(!NetDemoStart(nullptr) && !NetDemoStart(Application));
+	assert(s_TestInits == 0);
+	s_TestTriggerWorks = true;
+	assert(NetDemoStart(Application) && !NetDemoStart(Application));
+	finished = NetDemoNow();
+	assert(s_TestInits == 1 && s_TestPumps == 0 && !NetDemoReady());
+	assert(!NetDemoOpen(false, "test.example", 1234) && s_TestOpens == 0);
+
+	// A full event queue is retried, while repeated timer ticks coalesce.
+	Tick();
+	assert(s_TestQueues == 1 && !s_TestQueued);
+	s_TestQueueWorks = true;
+	Tick();
+	for (unsigned i = 0; i < 100; i++)
+	{
+		Tick();
+	}
+	assert(s_TestQueues == 2 && s_TestPumps == 0 && s_TestInits == 1);
+	Dispatch();
+	assert(s_TestPumps == 1 && !s_TestHandlerReady && !s_TestHandlerConnected);
+	PumpAt(finished + 29999U);
+	assert(s_TestInits == 1);
+#if NET_DEMO_MEDIUM == NET_DEMO_MEDIUM_ETHERNET
+	// A MAC can start while IP initialization fails; release it before retry.
+	s_TestInitWorks = true;
+#endif
+	PumpAt(finished + 30000U);
+	finished = NetDemoNow();
+	assert(s_TestInits == 2 && !NetDemoReady());
+#if NET_DEMO_MEDIUM == NET_DEMO_MEDIUM_ETHERNET
+	assert(s_TestEthernetCloses == 1);
+	s_TestIpWorks = true;
+#endif
+	s_TestInitWorks = true;
+	PumpAt(finished + 29999U);
+	assert(s_TestInits == 2);
+	PumpAt(finished + 30000U);
+	assert(s_TestInits == 3 && !s_TestHandlerReady && s_TestHandlerTime == NetDemoNow());
+	s_TestReady = true;
+	PumpAt(NetDemoNow());
+	assert(NetDemoReady() && s_TestHandlerReady);
+#if NET_DEMO_MEDIUM != NET_DEMO_MEDIUM_LTE
+	assert(s_TestProcesses == 2);
+#else
+	assert(s_TestProcesses == 0);
+#endif
+	assert(!NetDemoOpen(false, nullptr, 1234));
+	assert(!NetDemoOpen(false, "", 1234));
+	assert(!NetDemoOpen(false, "test.example", 0) && s_TestOpens == 0);
+
+	// Failed and successful opens can block; expose the actual clock afterward.
+	finished = NetDemoNow();
+	assert(!NetDemoOpen(false, "test.example", 1234));
+	assert(!s_TestResource && !NetDemoConnected() && s_TestCloses == 1);
+	assert(NetDemoNow() == finished + s_TestOpenDuration + s_TestCloseDuration);
+	s_TestOpenWorks = true;
+	OpenEndpoint(true);
+	opens = s_TestOpens;
+	assert(!NetDemoOpen(false, "test.example", 1234) && s_TestOpens == opens);
+	finished = NetDemoNow();
+	NetDemoClose();
+	assert(NetDemoNow() == finished + s_TestCloseDuration && !NetDemoConnected());
+	closes = s_TestCloses;
+	NetDemoClose();
+	assert(s_TestCloses == closes);
+	OpenEndpoint(false);
+	assert(s_TestWrites == 2);
+
+	// Readiness loss invalidates an endpoint before the protocol callback runs.
+	s_TestReady = false;
+	assert(!NetDemoConnected());
+	PumpAt(NetDemoNow());
+	assert(!s_TestResource && !s_TestHandlerConnected && !s_TestHandlerReady);
+	s_TestReady = true;
+	PumpAt(NetDemoNow());
+	assert(s_TestHandlerReady && !s_TestHandlerConnected);
+	OpenEndpoint(false);
+	inits = s_TestInits;
+#if NET_DEMO_MEDIUM == NET_DEMO_MEDIUM_LTE
+	LteStatus_t status = {};
+
+	status.RegStat = LTE_REG_ROAMING;
+	status.Rat = LTE_RAT_LTEM;
+	s_TestLteEvent(LTE_EVT_RRC_IDLE, &status);
+	assert(NetDemoConnected());
+	// Registration may disappear and return between application timer ticks.
+	s_TestReady = false;
+	s_TestLteEvent(LTE_EVT_UNREGISTERED, &status);
+	s_TestReady = true;
+	s_TestLteEvent(LTE_EVT_REGISTERED, &status);
+	assert(!NetDemoConnected() && !s_TestResource);
+	PumpAt(NetDemoNow());
+	assert(s_TestHandlerReady && !s_TestHandlerConnected);
+	OpenEndpoint(false);
+	s_TestNow = 0xfffff000U;
+	s_TestLteEvent(LTE_EVT_MODEM_FAULT, &status);
+	finished = NetDemoNow();
+	assert(!NetDemoReady() && !NetDemoConnected());
+	PumpAt(finished + 29999U);
+	assert(s_TestInits == inits);
+	PumpAt(finished + 30000U);
+	assert(s_TestInits == inits + 1U && s_TestHandlerReady && !s_TestHandlerConnected);
+#else
+	NetDemoClose();
+	assert(s_TestInits == inits);
+#endif
+	assert(s_TestLog.find("retry in 30 s") != std::string::npos);
+	puts("Generic network setup: deferred pump, retry timing, readiness and direct interface injection PASS");
+}
