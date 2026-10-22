@@ -333,8 +333,14 @@ L4R5, L412, G474 and G431 in Unicorn against a model of the ADC registers that
 checks the waits of RM0351 and of the datasheets. The STM32L476 example
 AdcDemo (`exemples/converters/adc_demo.cpp`) prints VREFINT, the temperature
 sensor, VBAT and Arduino A0 (PC5) once per second, on the ST-LINK virtual COM
-port at 115200 8N1 in Release, with semihosting in Debug. Not run on hardware
-yet.
+port at 115200 8N1 in Release, with semihosting in Debug. B-L475E-IOT01A2 run
+(2026-10-21), reference given as 3.3 V, 11 scans: VREFINT 1.202 to 1.203 V,
+in its datasheet range of 1.182 to 1.232 V; temperature sensor 0.748 to
+0.750 V, about 25.6 C with the typical datasheet values (0.76 V at 30 C,
+2.5 mV/C), the demo does not read the factory calibration; VBAT 3.295 to
+3.300 V; A0 (PC5), nothing reported connected, 1.158 V on the first scan, then
+0.895 to 0.913 V. No temperature sensor outlier in these scans (ES0250
+2.8.12).
 
 ## Validation
 
