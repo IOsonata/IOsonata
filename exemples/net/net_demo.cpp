@@ -17,6 +17,17 @@
 static_assert(NET_DEMO_MODEM_TLS == 0 || NET_DEMO_MODEM_TLS == 1,
 	"NET_DEMO_MODEM_TLS must be 0 or 1");
 
+#ifndef NET_DEMO_LTE_RECOVERY_TEST
+#define NET_DEMO_LTE_RECOVERY_TEST	0
+#endif
+
+static_assert(NET_DEMO_LTE_RECOVERY_TEST == 0 || NET_DEMO_LTE_RECOVERY_TEST == 1,
+	"NET_DEMO_LTE_RECOVERY_TEST must be 0 or 1");
+
+#if NET_DEMO_LTE_RECOVERY_TEST && NET_DEMO_MEDIUM != NET_DEMO_MEDIUM_LTE
+#error "NET_DEMO_LTE_RECOVERY_TEST requires the LTE medium"
+#endif
+
 #if NET_DEMO_MODEM_TLS
 #if NET_DEMO_MEDIUM != NET_DEMO_MEDIUM_LTE
 #error "NET_DEMO_MODEM_TLS requires the LTE medium"
@@ -92,6 +103,28 @@ static volatile bool s_PumpQueued;
 
 #if NET_DEMO_MEDIUM == NET_DEMO_MEDIUM_LTE
 static void LteEvent(LTE_EVT Evt, const LteStatus_t * const pStatus);
+
+#if NET_DEMO_LTE_RECOVERY_TEST
+enum LTE_RECOVERY_PHASE {
+	LTE_RECOVERY_WAIT_ENDPOINT,
+	LTE_RECOVERY_WAIT_DISCONNECT,
+	LTE_RECOVERY_RADIO_OFF,
+	LTE_RECOVERY_RETRY_CONNECT,
+	LTE_RECOVERY_WAIT_REGISTRATION,
+	LTE_RECOVERY_DONE,
+};
+
+static LTE_RECOVERY_PHASE s_LteRecoveryPhase;
+static uint32_t s_LteRecoveryTime;
+static bool s_LteRecoverySawDown;
+
+static bool LteRecoveryGated()
+{
+	return s_LteRecoveryPhase == LTE_RECOVERY_RADIO_OFF ||
+		s_LteRecoveryPhase == LTE_RECOVERY_RETRY_CONNECT ||
+		s_LteRecoveryPhase == LTE_RECOVERY_WAIT_REGISTRATION;
+}
+#endif
 
 static const LteCfg_t s_LteCfg = {
 	.Rat = NET_DEMO_RAT,
@@ -176,6 +209,12 @@ bool NetDemoReady()
 		return false;
 	}
 #if NET_DEMO_MEDIUM == NET_DEMO_MEDIUM_LTE
+#if NET_DEMO_LTE_RECOVERY_TEST
+	if (LteRecoveryGated())
+	{
+		return false;
+	}
+#endif
 	return LteRegistered();
 #elif NET_DEMO_MEDIUM == NET_DEMO_MEDIUM_ETHERNET
 	return IpReady();
@@ -209,6 +248,12 @@ void NetDemoClose()
 	s_Socket.Close();
 #endif
 	s_pEndpoint = nullptr;
+#if NET_DEMO_LTE_RECOVERY_TEST
+	if (s_LteRecoveryPhase == LTE_RECOVERY_WAIT_DISCONNECT)
+	{
+		s_LteRecoveryPhase = LTE_RECOVERY_WAIT_ENDPOINT;
+	}
+#endif
 }
 
 DeviceIntrf *NetDemoOpen(bool Datagram, const char *pHost, uint16_t Port)
@@ -289,8 +334,22 @@ static void LteEvent(LTE_EVT Evt, const LteStatus_t * const pStatus)
 			SysLogPrintf(SysLogGet(), "Registered %s, %s\r\n",
 				pStatus->RegStat == LTE_REG_ROAMING ? "roaming" : "home",
 				pStatus->Rat == LTE_RAT_NBIOT ? "NB-IoT" : "LTE-M");
+#if NET_DEMO_LTE_RECOVERY_TEST
+			if (s_LteRecoveryPhase == LTE_RECOVERY_WAIT_REGISTRATION)
+			{
+				// Only a new event after radio-on releases the readiness gate.
+				s_LteRecoveryPhase = LTE_RECOVERY_DONE;
+				SysLogPrintf(SysLogGet(), "LTE recovery test: registration restored; waiting for protocol recovery\r\n");
+			}
+#endif
 			break;
 		case LTE_EVT_UNREGISTERED:
+#if NET_DEMO_LTE_RECOVERY_TEST
+			if (LteRecoveryGated())
+			{
+				s_LteRecoverySawDown = true;
+			}
+#endif
 			// Close now even if registration returns before the next pump.
 			NetDemoClose();
 			SysLogPrintf(SysLogGet(), "Unregistered, state %u\r\n", (unsigned)pStatus->RegStat);
@@ -305,6 +364,13 @@ static void LteEvent(LTE_EVT Evt, const LteStatus_t * const pStatus)
 			SysLogPrintf(SysLogGet(), "RRC idle\r\n");
 			break;
 		case LTE_EVT_MODEM_FAULT:
+#if NET_DEMO_LTE_RECOVERY_TEST
+			if (LteRecoveryGated())
+			{
+				s_LteRecoveryPhase = LTE_RECOVERY_DONE;
+				SysLogPrintf(SysLogGet(), "LTE recovery test: aborted by modem fault\r\n");
+			}
+#endif
 			NetDemoClose();
 			s_MediumStarted = false;
 			s_MediumRetry = NetDemoNow();
@@ -312,6 +378,90 @@ static void LteEvent(LTE_EVT Evt, const LteStatus_t * const pStatus)
 			break;
 		default:
 			break;
+	}
+}
+#endif
+
+#if NET_DEMO_LTE_RECOVERY_TEST
+static void LteRecoveryProcess(uint32_t Now)
+{
+	switch (s_LteRecoveryPhase)
+	{
+		case LTE_RECOVERY_WAIT_ENDPOINT:
+		case LTE_RECOVERY_WAIT_DISCONNECT:
+			if (!NetDemoConnected())
+			{
+				s_LteRecoveryPhase = LTE_RECOVERY_WAIT_ENDPOINT;
+				return;
+			}
+			if (s_LteRecoveryPhase == LTE_RECOVERY_WAIT_ENDPOINT)
+			{
+				s_LteRecoveryPhase = LTE_RECOVERY_WAIT_DISCONNECT;
+				s_LteRecoveryTime = Now;
+				SysLogPrintf(SysLogGet(), "LTE recovery test: radio off in 120 s of connected transport\r\n");
+				return;
+			}
+			if ((uint32_t)(Now - s_LteRecoveryTime) < 120000U)
+			{
+				return;
+			}
+			// Consume the one-shot before issuing the command. The ordinary
+			// network-loss path closes the endpoint after radio-off succeeds.
+			s_LteRecoveryPhase = LTE_RECOVERY_DONE;
+			s_LteRecoverySawDown = false;
+			if (!LteDisconnect())
+			{
+				SysLogPrintf(SysLogGet(), "LTE recovery test: radio-off failed; test aborted\r\n");
+				return;
+			}
+			s_LteRecoveryTime = NetDemoNow();
+			s_LteRecoveryPhase = LTE_RECOVERY_RADIO_OFF;
+			SysLogPrintf(SysLogGet(), "LTE recovery test: radio off for 60 s\r\n");
+			return;
+		case LTE_RECOVERY_RADIO_OFF:
+			if ((uint32_t)(Now - s_LteRecoveryTime) < 60000U)
+			{
+				return;
+			}
+			if (!s_LteRecoverySawDown)
+			{
+				SysLogPrintf(SysLogGet(), "LTE recovery test: offline notification missing; loss unverified\r\n");
+			}
+			break;
+		case LTE_RECOVERY_RETRY_CONNECT:
+			if ((uint32_t)(Now - s_LteRecoveryTime) < NET_DEMO_RESTART_MS)
+			{
+				return;
+			}
+			break;
+		case LTE_RECOVERY_WAIT_REGISTRATION:
+			if ((uint32_t)(Now - s_LteRecoveryTime) >= 180000U)
+			{
+				// Do not reopen from a stale cached registration or leave the
+				// test's gate stuck forever if a notification never arrives.
+				s_LteRecoveryPhase = LTE_RECOVERY_DONE;
+				s_MediumStarted = false;
+				s_MediumRetry = NetDemoNow();
+				SysLogPrintf(SysLogGet(), "LTE recovery test: registration unverified; LTE reinitialization in 30 s\r\n");
+			}
+			return;
+		default:
+			return;
+	}
+	// Both the radio-off hold and failed attach retries keep the foreground
+	// queue running. Command acceptance is not network registration.
+	bool started = LteConnect();
+
+	s_LteRecoveryTime = NetDemoNow();
+	if (started)
+	{
+		s_LteRecoveryPhase = LTE_RECOVERY_WAIT_REGISTRATION;
+		SysLogPrintf(SysLogGet(), "LTE recovery test: radio on; waiting for registration\r\n");
+	}
+	else
+	{
+		s_LteRecoveryPhase = LTE_RECOVERY_RETRY_CONNECT;
+		SysLogPrintf(SysLogGet(), "LTE recovery test: radio-on failed; retry in 30 s\r\n");
 	}
 }
 #endif
@@ -425,6 +575,9 @@ static void Pump(uint32_t Evt, void *pCtx)
 	{
 		StartMedium();
 	}
+#if NET_DEMO_LTE_RECOVERY_TEST
+	LteRecoveryProcess(NetDemoNow());
+#endif
 #if NET_DEMO_MEDIUM == NET_DEMO_MEDIUM_ETHERNET
 	if (s_MediumStarted)
 	{

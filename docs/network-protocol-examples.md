@@ -416,6 +416,83 @@ added by this profile. The nRF91x1 hardware result and unresolved echo-check
 failures are recorded below. nRF9160 modem-TLS hardware validation and fresh
 automated ARM compile/link validation remain unestablished.
 
+### One-shot LTE recovery test
+
+The nRF91x1 `MqttTlsDemo` has an optional automatic radio-off/on test. Its
+`src/board.h` leaves it disabled by default:
+
+```cpp
+#define NET_DEMO_LTE_RECOVERY_TEST 0
+```
+
+Set the value to `1`, rebuild and program the application, then leave the board
+powered throughout the test. Use the existing VCOM0 console at 115200 baud,
+8N1 without flow control. The test runs automatically; the terminal records
+its progress.
+
+1. Capture the modem firmware, client ID, topic and at least one verified
+   QoS 1 echo before the interruption.
+2. Keep the endpoint connected and the LTE network ready for 120 seconds.
+   Closing the endpoint before the test starts resets this arming interval.
+   The timer measures connection age; it does not prove that MQTT has
+   subscribed or verified an echo.
+3. The setup calls `LteDisconnect()` to put the radio offline, then holds it
+   offline for 60 seconds measured from completion of that call. The
+   application event queue and protocol handler continue running. MQTT
+   observes the unavailable network, closes its session and starts its normal
+   30-second reconnect delay.
+4. The setup calls `LteConnect()` to restore the radio. Network readiness
+   remains blocked until fresh registration is observed after the accepted
+   radio-on command; a stale cached registered state cannot reopen MQTT.
+5. Require a fresh `TLS 1.2, CA/hostname verified` connection, a QoS 1
+   subscription to the same boot's topic and a checked counter higher than
+   the pre-loss value. The first checked echo of the new session is logged.
+
+The test's progress messages are:
+
+```text
+LTE recovery test: radio off in 120 s of connected transport
+LTE recovery test: radio off for 60 s
+LTE recovery test: radio on; waiting for registration
+LTE recovery test: registration restored; waiting for protocol recovery
+```
+
+The final line confirms registration, not MQTT recovery; require the new
+verified echo as well.
+
+The deliberate interruption normally adds one application failure. A nonzero
+failure counter during this test is expected; the pass requires successful
+operation before and after the interruption without a board reset. The
+existing reconnect delay must have elapsed and the network must be ready
+before a new connection starts. Registration, DNS and TLS can add further
+delay after the radio-on command.
+
+The test runs once per boot. Normal reconnections cannot start another
+intentional interruption. Return `NET_DEMO_LTE_RECOVERY_TEST` to `0` and
+rebuild for ordinary continuous operation. Its default remains off, and the
+other supplied examples retain their existing settings.
+
+If radio-off fails, the test reports an abort rather than a successful outage.
+A failed radio-on command leaves readiness blocked and is retried after
+30 seconds. If fresh registration is not observed within 180 seconds after
+an accepted radio-on command, the test is aborted/inconclusive and the normal
+LTE reinitialization is scheduled after 30 seconds. This does not reset the
+board. A modem fault also aborts the one-shot test and uses the existing modem
+restart handling if it occurs during the interruption or re-attachment.
+`offline notification missing; loss unverified` means the expected
+unregistration was not observed; the setup still attempts to restore the
+radio. An aborted or unverified test is not evidence of a successful recovery.
+
+This exercises controlled modem offline/online recovery through the existing
+LTE API. A coverage-loss test instead needs actual RF attenuation or a
+suitable shielded enclosure while board power and execution continue.
+`RRC idle` alone is normal LTE behavior and does not establish disconnection.
+Record actual loss and restored registration for that separate test.
+
+The [host checks](#lte-recovery-control-checks) validate the optional control
+with modem substitutes. Its radio-off/on hardware result and a fresh
+automated ARM compile/link result remain unestablished.
+
 ## CoAP check
 
 All supplied targets default to a public read-only profile:
@@ -563,7 +640,7 @@ python3 tests/net/run_mqtt_tls_demo.py --target nrf9160
 python3 tests/net/run_mqtt_tls_demo.py --target nrf91x1
 ```
 
-The full runner passed for both target configurations:
+The initial modem TLS profile validation passed for both target configurations:
 
 | Check | Result |
 | --- | --- |
@@ -605,6 +682,34 @@ pending, changed payload bytes or length, and revoked eligibility after the
 next publication or a session reset. These are host checks; they add no ARM
 compile/link, hardware or live-broker result and do not resolve the incomplete
 hardware payload captures or console truncation.
+
+### LTE recovery control checks
+
+The expanded `run_mqtt_tls_demo.py` runner passed with 16 O0/O2 ASan/UBSan
+runtime binaries and 50 runtime process executions. Four added setup binaries
+cover plain LTE and modem TLS at both optimization levels, contributing
+20 recovery scenario executions.
+
+The recovery fixtures check continuous connected-endpoint arming, resetting
+the timer after an early loss or endpoint replacement, the 60-second off
+interval, continued foreground processing and clock wrap. They exercise stale
+or premature registration, radio-off failure, paced radio-on retries, missing
+offline notification, the 180-second registration timeout and subsequent LTE
+reinitialization, and modem faults during each active recovery phase. The
+test also verifies that the one-shot cannot repeat after reconnecting and
+that a normal radio cycle does not repeat credential preparation.
+
+The actual nRF91x1 board configuration with recovery enabled passed host
+syntax checking. Selecting the recovery option with Ethernet or a custom
+medium was rejected at compile time. The existing
+`run_generic_demo.py --protocol mqtt` matrix also passed all 14 O0/O2
+ASan/UBSan runtime builds across the three target applications and the LTE,
+Ethernet and custom setup configurations.
+
+These checks use modem and hardware substitutes. They do not establish an
+ARM compile/link, a physical radio cycle, a live TLS handshake or broker
+session, or RF coverage-loss recovery. The earlier 990-echo hardware record
+did not exercise this optional control.
 
 ### Hardware evidence for the modem TLS MQTT example
 

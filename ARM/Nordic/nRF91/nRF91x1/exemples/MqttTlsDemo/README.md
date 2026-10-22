@@ -151,6 +151,60 @@ hardware result is recorded below. No fresh automated ARM compile/link result
 is claimed. Earlier plaintext LTE and native-PSK H753 results apply to their
 recorded profiles.
 
+## Optional automatic LTE recovery test
+
+The supplied `src/board.h` disables the test by default. To exercise one
+radio-off/on cycle without resetting the board during recovery, set:
+
+```cpp
+#define NET_DEMO_LTE_RECOVERY_TEST 1
+```
+
+Rebuild and program this application, then keep it powered and capture the
+existing VCOM0 console at 115200 baud, 8N1 without flow control. The test runs
+automatically:
+
+1. Record a verified QoS 1 echo, client ID, topic and checked counter before
+   the interruption.
+2. After the endpoint has remained connected with LTE ready for 120 seconds,
+   setup calls `LteDisconnect()`. Closing the endpoint beforehand resets
+   this timer. Connection age alone is not proof of a successful MQTT echo.
+3. The radio remains offline for 60 seconds while the foreground event queue
+   and MQTT handler continue running. Expect network loss and normally one
+   added MQTT failure, followed by the normal reconnect delay.
+4. Setup calls `LteConnect()` and waits for fresh registration. Require a
+   new verified TLS connection, QoS 1 subscription to the same topic and a
+   checked counter above the pre-loss value, without resetting the board.
+
+The application keeps its boot's client ID, topic and checked count across
+this recovery. The first verified echo after re-subscription is logged even
+when its count is not a multiple of ten. The existing 30-second retry delay
+and network readiness both govern reopening; registration, DNS and TLS may
+take additional time. A nonzero failure counter caused by the deliberate
+interruption does not by itself fail the test.
+
+The test runs once per boot. Return `NET_DEMO_LTE_RECOVERY_TEST` to `0` and
+rebuild when finished. A radio-off failure aborts the test. Radio-on failures
+are retried after 30 seconds; no fresh registration within 180 seconds after
+an accepted radio-on command aborts the test and schedules normal LTE
+reinitialization after 30 seconds. A modem fault uses the existing restart
+handling. These cases do not establish a successful controlled recovery.
+
+This is a modem offline/online test. Actual RF coverage-loss recovery requires
+attenuation or a suitable shielded enclosure while the board keeps running;
+`RRC idle` alone does not mean disconnected. See the
+[shared recovery procedure](../../../../../../docs/network-protocol-examples.md#one-shot-lte-recovery-test)
+for the readiness checks and failure behavior. Hardware recovery validation
+and fresh automated ARM compile/link validation are not yet recorded for
+this optional test.
+
+The expanded host runner passed with 16 O0/O2 ASan/UBSan runtime binaries
+and 50 executions, including four added recovery binaries with 20 scenario
+executions. The enabled nRF91x1 board configuration also passed host syntax
+checking. These use modem substitutes; see the
+[recovery validation record](../../../../../../docs/network-protocol-examples.md#lte-recovery-control-checks)
+for coverage and limits.
+
 ## Initial hardware result and unresolved echo failures
 
 The maintainer ran this project with `mfw_nrf91x1_2.0.1`. The console reported

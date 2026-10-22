@@ -29,6 +29,10 @@
 #define NET_DEMO_RAT				LTE_RAT_LTEM
 #define NET_DEMO_RAT_PREF			LTE_RAT_LTEM
 
+// Set to 1 for one radio-off/on recovery test after 120 s of connected transport.
+// The radio stays off for 60 s while the application continues running.
+#define NET_DEMO_LTE_RECOVERY_TEST	0
+
 // Reserve this modem credential tag for the demo CA.
 #define NET_DEMO_MODEM_TLS		1
 #define NET_DEMO_TLS_SEC_TAG		42420
