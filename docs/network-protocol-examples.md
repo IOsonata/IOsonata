@@ -422,12 +422,22 @@ CoAP public GET checked 1 code=2.05 bytes=66 failures=0
 CoAP public GET smoke test verified
 ```
 
-This confirms one successful public CoAP GET over LTE UDP on the tested
-nRF91x1 hardware, with a 2.05 Content response containing 66 payload bytes
-and zero reported failures. It does not establish an extended run, the full
-controlled-helper exercise, retransmission or recovery. The test uses
-plaintext UDP; DTLS and OSCORE are not implemented. No fresh automated ARM
-compile/link result is claimed.
+The maintainer subsequently supplied the continued log through checked
+counter 100. The printed checkpoints at 1 and every 10 responses through
+100 all reported 2.05 Content, 66 payload bytes and `failures=0`. The last
+checkpoint was:
+
+```text
+CoAP public GET checked 100 code=2.05 bytes=66 failures=0
+```
+
+This confirms 100 application-checked public CoAP GET responses over LTE UDP
+on the tested nRF91x1 hardware, with zero reported application failures and
+a configured 10000-millisecond request interval. The log contains no elapsed
+timestamps or packet/retransmission statistics. It does not establish the
+full controlled-helper exercise, deliberate loss/recovery behavior or
+long-run stability. The test uses plaintext UDP; DTLS and OSCORE are not
+implemented. No fresh automated ARM compile/link result is claimed.
 
 ### Hardware evidence from the original examples
 

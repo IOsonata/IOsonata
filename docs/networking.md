@@ -595,13 +595,16 @@ passed at O0/O2 with ASan/UBSan. These use substitutes for target hardware.
 The implementation environment could not resolve the public endpoints, so
 those host checks did not establish public reachability. A subsequent
 maintainer run of the new generic `CoapDemo` on nRF91x1 with modem firmware
-`mfw_nrf91x1_2.0.1` registered on roaming LTE-M and received one successful
-public GET response from `coap.me:5683` over plaintext UDP: 2.05 Content,
-66 payload bytes, checked counter 1 and `failures=0`. See the
+`mfw_nrf91x1_2.0.1` registered on roaming LTE-M and reached 100 checked public
+GET responses from `coap.me:5683` over plaintext UDP with `failures=0`.
+The configured interval was 10000 milliseconds. Printed checkpoints at 1 and
+every 10 responses through 100 each reported 2.05 Content and 66 payload
+bytes; elapsed timestamps and packet/retransmission statistics were not
+supplied. See the
 [generic example hardware record](network-protocol-examples.md#hardware-evidence-for-the-generic-coap-example).
-This is an initial GET result; the controlled-helper exercise, extended runs
-and recovery still need hardware validation. No fresh automated ARM
-compile/link validation is claimed.
+This repeated public GET check does not establish the controlled-helper
+exercise, deliberate loss/recovery behavior or long-run stability. No fresh
+automated ARM compile/link validation is claimed.
 
 Protocol reference: [RFC 7252](https://www.rfc-editor.org/rfc/rfc7252.html).
 Independent peer: [aiocoap 0.4.17](https://aiocoap.readthedocs.io/en/0.4.17/).

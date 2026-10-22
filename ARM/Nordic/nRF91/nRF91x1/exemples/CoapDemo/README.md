@@ -95,12 +95,14 @@ python3 tests/net/run_generic_demo.py --protocol coap --target nrf91x1
 
 The host checks use substitutes for hardware and do not replace an ARM
 compile/link or a board run. The maintainer's first hardware run of this
-project used modem firmware `mfw_nrf91x1_2.0.1` on roaming LTE-M. The public
-GET to `coap.me:5683` returned 2.05 Content with 66 payload bytes; the checked
-counter reached 1 with `failures=0`, followed by
-`CoAP public GET smoke test verified`.
+project used modem firmware `mfw_nrf91x1_2.0.1` on roaming LTE-M. The continued
+log reached 100 checked public GET responses from `coap.me:5683` with
+`failures=0`, at a configured 10000-millisecond interval. Printed checkpoints
+at 1 and every 10 responses through 100 each reported 2.05 Content and
+66 payload bytes. The log did not include elapsed timestamps or
+packet/retransmission statistics.
 
 The [shared guide](../../../../../../docs/network-protocol-examples.md#hardware-evidence-for-the-generic-coap-example)
-records the observed scope. An extended run, the controlled-helper exercise
-and recovery still need hardware validation. No fresh automated ARM
-compile/link result is claimed.
+records the observed scope. The controlled-helper exercise, deliberate
+loss/recovery behavior and long-run stability are not established by this
+log. No fresh automated ARM compile/link result is claimed.
