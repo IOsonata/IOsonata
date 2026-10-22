@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: MIT
  * Copyright (c) 2026 I-SYST inc.
  * Shared CoAP client interoperability and recovery over LTE UDP.
- * Uses the same test resources as Python/coap_server.py.
+ * A public read-only GET smoke test or the Python/coap_server.py validation.
  */
 #include <string.h>
 #include "app_evt_handler.h"
@@ -18,16 +18,20 @@
 #define LTE_COAP_TRIG_MODEM	0
 #define LTE_COAP_TRIG_REPORT	1
 #define LTE_COAP_RESTART_MS	30000U
+#define LTE_COAP_PUBLIC_PAYLOAD_MAX	1024U
 
 static_assert(COAP_DEMO_INTERVAL >= 1000U && COAP_DEMO_INTERVAL <= 2147483647U,
 	"COAP_DEMO_INTERVAL must be 1000..INT32_MAX milliseconds");
+static_assert(COAP_DEMO_PUBLIC_TEST == 0 || COAP_DEMO_PUBLIC_TEST == 1,
+	"COAP_DEMO_PUBLIC_TEST must be 0 or 1");
 
 typedef enum
 {
 	DEMO_EMPTY,
 	DEMO_HELLO,
 	DEMO_BINARY,
-	DEMO_SLOW
+	DEMO_SLOW,
+	DEMO_PUBLIC
 } DEMO_RESPONSE;
 
 typedef struct
@@ -103,6 +107,9 @@ static const SockIntrfCfg_t s_SockCfg = {
 	.EvtCB = nullptr,
 };
 static const CoapDemoStep_t s_Steps[] = {
+#if COAP_DEMO_PUBLIC_TEST
+	{COAP_CON, COAP_GET, COAP_DEMO_RESOURCE, COAP_CONTENT, DEMO_PUBLIC, false},
+#else
 	{COAP_CON, COAP_GET, "hello", COAP_CONTENT, DEMO_HELLO, false},
 	{COAP_CON, COAP_POST, "echo", COAP_CONTENT, DEMO_BINARY, true},
 	{COAP_NON, COAP_POST, "echo", COAP_CONTENT, DEMO_BINARY, true},
@@ -111,6 +118,7 @@ static const CoapDemoStep_t s_Steps[] = {
 	{COAP_CON, COAP_DELETE, "value", COAP_DELETED, DEMO_EMPTY, false},
 	{COAP_CON, COAP_GET, "value", COAP_NOT_FOUND, DEMO_EMPTY, false},
 	{COAP_CON, COAP_GET, "slow", COAP_CONTENT, DEMO_SLOW, false},
+#endif
 };
 static const uint8_t s_Hello[] = "IOsonata CoAP\n";
 static const uint8_t s_Slow[] = "separate response\n";
@@ -194,6 +202,13 @@ static bool CheckResponse(const CoapMessage_t *pResponse)
 	const uint8_t *expected = nullptr;
 	size_t len = 0;
 
+	if (step->Response == DEMO_PUBLIC)
+	{
+		// Public content can change. This verifies a bounded 2.05 response,
+		// without claiming the helper's methods or binary echo coverage.
+		return pResponse->Code == COAP_CONTENT &&
+			pResponse->PayloadLen <= LTE_COAP_PUBLIC_PAYLOAD_MAX;
+	}
 	if (step->Response == DEMO_HELLO)
 	{
 		expected = s_Hello;
@@ -220,7 +235,7 @@ static bool CheckResponse(const CoapMessage_t *pResponse)
 static void StartRequest(uint32_t Now)
 {
 	const CoapDemoStep_t *step = &s_Steps[s_Step];
-	CoapOption_t options[2] = {};
+	CoapOption_t options[3] = {};
 	CoapRequest_t request = {};
 	uint32_t pattern;
 	size_t i;
@@ -235,19 +250,27 @@ static void StartRequest(uint32_t Now)
 			s_Payload[i] = (uint8_t)(pattern >> 24);
 		}
 	}
-	options[0].Number = COAP_OPTION_URI_PATH;
-	options[0].pValue = (const uint8_t *)step->pPath;
-	options[0].Len = strlen(step->pPath);
+	if (step->Response == DEMO_PUBLIC)
+	{
+		// Identify the named origin even when it shares an IP address.
+		options[0].Number = COAP_OPTION_URI_HOST;
+		options[0].pValue = (const uint8_t *)s_SockCfg.pHost;
+		options[0].Len = strlen(s_SockCfg.pHost);
+		request.OptionCount = 1;
+	}
+	options[request.OptionCount].Number = COAP_OPTION_URI_PATH;
+	options[request.OptionCount].pValue = (const uint8_t *)step->pPath;
+	options[request.OptionCount].Len = strlen(step->pPath);
+	request.OptionCount++;
 	request.Type = step->Type;
 	request.Code = step->Method;
 	request.pOptions = options;
-	request.OptionCount = 1;
 	if (step->bPayload)
 	{
-		options[1].Number = COAP_OPTION_CONTENT_FORMAT;
-		options[1].pValue = s_BinaryFormat;
-		options[1].Len = sizeof(s_BinaryFormat);
-		request.OptionCount = 2;
+		options[request.OptionCount].Number = COAP_OPTION_CONTENT_FORMAT;
+		options[request.OptionCount].pValue = s_BinaryFormat;
+		options[request.OptionCount].Len = sizeof(s_BinaryFormat);
+		request.OptionCount++;
 		request.pPayload = s_Payload;
 		request.PayloadLen = s_PayloadLen;
 	}
@@ -315,16 +338,28 @@ static void CoapTest(uint32_t Now)
 	{
 		if (!s_Waiting || !CheckResponse(response))
 		{
+			SysLogPrintf(SysLogGet(), "CoAP response rejected: code=%u.%02u bytes=%u\r\n",
+				(unsigned)(response->Code >> 5), (unsigned)(response->Code & 31U),
+				(unsigned)response->PayloadLen);
 			CoapDown(Now, "response code, type or payload mismatch", false);
 			return;
 		}
 		s_Checked++;
 		if (s_Cycle == 0 || s_Checked % 10U == 0)
 		{
-			SysLogPrintf(SysLogGet(), "CoAP checked %lu step=%u code=%u.%02u bytes=%u failures=%lu\r\n",
-				(unsigned long)s_Checked, (unsigned)(s_Step + 1U),
-				(unsigned)(response->Code >> 5), (unsigned)(response->Code & 31U),
-				(unsigned)response->PayloadLen, (unsigned long)s_Failures);
+			if (COAP_DEMO_PUBLIC_TEST)
+			{
+				SysLogPrintf(SysLogGet(), "CoAP public GET checked %lu code=2.05 bytes=%u failures=%lu\r\n",
+					(unsigned long)s_Checked, (unsigned)response->PayloadLen,
+					(unsigned long)s_Failures);
+			}
+			else
+			{
+				SysLogPrintf(SysLogGet(), "CoAP checked %lu step=%u code=%u.%02u bytes=%u failures=%lu\r\n",
+					(unsigned long)s_Checked, (unsigned)(s_Step + 1U),
+					(unsigned)(response->Code >> 5), (unsigned)(response->Code & 31U),
+					(unsigned)response->PayloadLen, (unsigned long)s_Failures);
+			}
 		}
 		s_Coap.Release();
 		s_Waiting = false;
@@ -335,7 +370,9 @@ static void CoapTest(uint32_t Now)
 			s_Cycle++;
 			if (s_Cycle == 1)
 			{
-				SysLogPrintf(SysLogGet(), "CoAP methods, CON/NON and separate response verified\r\n");
+				SysLogPrintf(SysLogGet(), COAP_DEMO_PUBLIC_TEST ?
+					"CoAP public GET smoke test verified\r\n" :
+					"CoAP methods, CON/NON and separate response verified\r\n");
 			}
 		}
 	}
@@ -443,16 +480,30 @@ static void ReportTimer(TimerDev_t *pTimer, int TrigNo, void *pCtx)
 	}
 }
 
+static bool PublicResourceValid(const char *pResource)
+{
+	// One raw Uri-Path segment, not a URI or a slash-separated path.
+	return pResource && pResource[0] && strlen(pResource) <= 255U &&
+		strpbrk(pResource, "/?#") == nullptr && strcmp(pResource, ".") != 0 &&
+		strcmp(pResource, "..") != 0;
+}
+
 int main()
 {
 	AppEvtHandlerInit(g_AppEvtHandlerQueMem, sizeof(g_AppEvtHandlerQueMem));
 	s_Uart.Init(s_UartCfg);
 	SysLogInit(SysLogGet(), &s_LogCfg, (DevIntrf_t *)s_Uart, 0, nullptr, 0);
 	SysLogPrintf(SysLogGet(), "CoAP over LTE UDP, console 115200 baud\r\n");
+	SysLogPrintf(SysLogGet(), COAP_DEMO_PUBLIC_TEST ?
+		"Profile: public read-only GET\r\n" : "Profile: eight-step helper validation\r\n");
 	s_pRng = COAP_DEMO_RNG();
 	if (!s_SockCfg.pHost || !s_SockCfg.pHost[0])
 	{
 		SysLogPrintf(SysLogGet(), "Set COAP_DEMO_HOST to your reachable CoAP server in board.h\r\n");
+	}
+	else if (COAP_DEMO_PUBLIC_TEST && !PublicResourceValid(COAP_DEMO_RESOURCE))
+	{
+		SysLogPrintf(SysLogGet(), "COAP_DEMO_RESOURCE must be one 1..255-byte path segment\r\n");
 	}
 	else if (!s_pRng || !s_pRng->Enable())
 	{

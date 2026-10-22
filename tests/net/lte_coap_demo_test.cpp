@@ -43,6 +43,7 @@ static bool s_TestLteWorks;
 static bool s_TestQueueWorks;
 static AppEvtHandler_t s_TestQueued;
 static std::vector<std::vector<uint8_t>> s_TestPackets;
+static std::vector<uint8_t> s_TestReply;
 static std::string s_TestLog;
 
 static uint64_t Ticks(TimerDev_t *)
@@ -59,9 +60,21 @@ static void TransferStop(DevIntrf_t *)
 {
 }
 
-static int Receive(DevIntrf_t *, uint8_t *, int)
+static int Receive(DevIntrf_t *, uint8_t *pData, int Len)
 {
-	return 0;
+	size_t count = s_TestReply.size();
+
+	if (count > (size_t)Len)
+	{
+		count = (size_t)Len;
+	}
+	if (count)
+	{
+		memcpy(pData, s_TestReply.data(), count);
+	}
+	// Consume the whole UDP datagram, including any truncated tail.
+	s_TestReply.clear();
+	return (int)count;
 }
 
 static int Send(DevIntrf_t *, const uint8_t *pData, int Len)
@@ -200,6 +213,7 @@ static void Reset(uint32_t Now)
 	s_TestRegistered = s_TestLteWorks = s_TestQueueWorks = true;
 	s_TestQueued = nullptr;
 	s_TestPackets.clear();
+	s_TestReply.clear();
 	s_TestLog.clear();
 	s_Started = s_Waiting = s_RecoveryWaiting = s_ReportQueued = false;
 	s_LteStarted = true;
@@ -221,14 +235,18 @@ static uint32_t SendUnanswered(uint32_t Now)
 {
 	Reset(Now);
 	// A normal large binary step makes the default one-byte/second wait
-	// longer than modem restart and CoAP response deadlines.
-	s_Step = 2;
-	s_PayloadLen = sizeof(s_Payload);
-	memset(s_Payload, 0xa5, s_PayloadLen);
+	// longer than modem restart and CoAP response deadlines in helper mode.
+	if (!COAP_DEMO_PUBLIC_TEST)
+	{
+		s_Step = 2;
+		s_PayloadLen = sizeof(s_Payload);
+		memset(s_Payload, 0xa5, s_PayloadLen);
+	}
 	Pump(Now);
 	Pump(Now);
 	assert(s_Waiting && s_TestPackets.size() == 1);
-	assert(((s_TestPackets[0][0] >> 4) & 3U) == COAP_NON);
+	assert(((s_TestPackets[0][0] >> 4) & 3U) ==
+		(unsigned)(COAP_DEMO_PUBLIC_TEST ? COAP_CON : COAP_NON));
 	assert(s_Coap.RetryAfter(Now) == s_TestPackets[0].size() * 1000U);
 	return s_Coap.RetryAfter(Now);
 }
@@ -257,9 +275,16 @@ static void RegistrationLoss(uint32_t Now)
 	assert(s_TestLteInits == 1 && s_LteStarted);
 	s_TestRegistered = true;
 	count = s_TestSocketInits;
-	Pump(Now + debt - 1U);
-	assert(s_TestSocketInits == count && !s_Started);
-	Pump(Now + debt);
+	if (debt > 32000U)
+	{
+		Pump(Now + debt - 1U);
+		assert(s_TestSocketInits == count && !s_Started);
+		Pump(Now + debt);
+	}
+	else
+	{
+		Pump(Now + 32020U);
+	}
 	assert(s_TestSocketInits == count + 1U && s_Started);
 	assert(s_Waiting && s_Step == 0);
 }
@@ -268,19 +293,31 @@ static void LiveSocketTimeout(void)
 {
 	const uint32_t now = 10000U;
 	uint32_t debt = SendUnanswered(now);
+	uint32_t deadline = COAP_DEMO_PUBLIC_TEST ? 62000U : 95000U;
+	size_t count;
 
-	Pump(now + 94999U);
+	if (COAP_DEMO_PUBLIC_TEST)
+	{
+		for (uint32_t age : {2000U, 6000U, 14000U, 30000U})
+		{
+			Pump(now + age);
+		}
+		assert(s_TestPackets.size() == 5);
+		debt *= 5U;
+	}
+	count = s_TestPackets.size();
+	Pump(now + deadline - 1U);
 	assert(s_Waiting && s_Failures == 0);
-	Pump(now + 95000U);
+	Pump(now + deadline);
 	assert(s_Failures == 1 && s_Started && s_Socket.Connected());
 	assert(s_TestSocketInits == 1 && s_TestSocketCloses == 0);
 	assert(!s_Waiting && !s_Coap.Busy() && s_RecoveryWaiting);
-	assert(s_ProbeDelay == debt - 95000U);
+	assert(s_ProbeDelay == debt - deadline);
 	Pump(now + debt - 1U);
-	assert(s_TestPackets.size() == 1 && !s_Waiting);
+	assert(s_TestPackets.size() == count && !s_Waiting);
 	Pump(now + debt);
 	Pump(now + debt);
-	assert(s_Waiting && s_TestPackets.size() == 2);
+	assert(s_Waiting && s_TestPackets.size() == count + 1U);
 	assert(s_TestSocketInits == 1 && s_TestSocketCloses == 0);
 }
 
@@ -329,6 +366,96 @@ static void QueueRecovery(void)
 	assert(!s_ReportQueued && s_TestSocketInits == 1);
 }
 
+static void PublicReply(uint8_t Code, size_t PayloadLen)
+{
+	const std::vector<uint8_t> &request = s_TestPackets.back();
+	size_t i;
+
+	// An independently framed piggyback response with this request's token.
+	s_TestReply.assign(request.begin(), request.begin() + 12U);
+	s_TestReply[0] = 0x68;
+	s_TestReply[1] = Code;
+	if (PayloadLen)
+	{
+		s_TestReply.push_back(0xff);
+		for (i = 0; i < PayloadLen; i++)
+		{
+			s_TestReply.push_back((uint8_t)i);
+		}
+	}
+}
+
+static void PublicRequest(void)
+{
+	CoapMessage_t request = {};
+	const std::vector<uint8_t> &packet = s_TestPackets.back();
+
+	assert(CoapDecode(&request, packet.data(), packet.size()) == COAP_ERROR_NONE);
+	assert(request.Type == COAP_CON && request.Code == COAP_GET);
+	assert(request.TokenLen == 8 && request.PayloadLen == 0);
+	assert(request.OptionCount == 2);
+	assert(request.Options[0].Number == COAP_OPTION_URI_HOST);
+	assert(request.Options[0].Len == strlen(s_SockCfg.pHost));
+	assert(memcmp(request.Options[0].pValue, s_SockCfg.pHost, request.Options[0].Len) == 0);
+	assert(request.Options[1].Number == COAP_OPTION_URI_PATH);
+	assert(request.Options[1].Len == strlen(COAP_DEMO_RESOURCE));
+	assert(memcmp(request.Options[1].pValue, COAP_DEMO_RESOURCE, request.Options[1].Len) == 0);
+}
+
+static void PublicResponses(void)
+{
+	const uint32_t now = 10000U;
+	std::string resource(255U, 'x');
+
+	assert(PublicResourceValid("test") && PublicResourceValid("status"));
+	assert(PublicResourceValid(resource.c_str()));
+	resource += 'x';
+	assert(!PublicResourceValid(resource.c_str()));
+	assert(!PublicResourceValid(nullptr));
+	for (const char *bad : {"", "/test", "a/b", "test?x", "test#x", ".", ".."})
+	{
+		assert(!PublicResourceValid(bad));
+	}
+	for (size_t length : {0U, 17U, 1024U, 1025U})
+	{
+		SendUnanswered(now);
+		PublicRequest();
+		PublicReply(COAP_CONTENT, length);
+		Pump(now + 20U);
+		assert(s_Started && s_Socket.Connected() && !s_Waiting);
+		assert(s_TestSocketCloses == 0);
+		if (length <= 1024U)
+		{
+			assert(s_Checked == 1 && s_Failures == 0);
+			assert(s_TestLog.find("CoAP public GET checked 1 code=2.05 bytes=") != std::string::npos);
+			assert(s_TestLog.find("CoAP public GET smoke test verified") != std::string::npos);
+		}
+		else
+		{
+			assert(s_Checked == 0 && s_Failures == 1);
+			assert(s_TestLog.find("code=2.05 bytes=1025") != std::string::npos);
+		}
+		assert(s_TestLog.find("methods, CON/NON and separate response verified") == std::string::npos);
+		Pump(now + COAP_DEMO_INTERVAL - 1U);
+		assert(!s_Waiting && s_TestPackets.size() == 1);
+		Pump(now + COAP_DEMO_INTERVAL);
+		Pump(now + COAP_DEMO_INTERVAL);
+		assert(s_Waiting && s_TestPackets.size() == 2);
+		PublicRequest();
+	}
+	SendUnanswered(now);
+	PublicReply(COAP_NOT_FOUND, 7);
+	Pump(now + 20U);
+	assert(s_Checked == 0 && s_Failures == 1 && !s_Waiting && s_Started);
+	assert(s_TestLog.find("CoAP response rejected: code=4.04 bytes=7") != std::string::npos);
+	Pump(now + COAP_DEMO_INTERVAL);
+	Pump(now + COAP_DEMO_INTERVAL);
+	PublicRequest();
+	PublicReply(COAP_CONTENT, 23);
+	Pump(now + COAP_DEMO_INTERVAL + 20U);
+	assert(s_Checked == 1 && s_Failures == 1 && !s_Waiting);
+}
+
 int main()
 {
 	RegistrationLoss(10000U);
@@ -336,6 +463,10 @@ int main()
 	LiveSocketTimeout();
 	ModemRetry();
 	QueueRecovery();
+	if (COAP_DEMO_PUBLIC_TEST)
+	{
+		PublicResponses();
+	}
 	if (s_SockCfg.pHost && !s_SockCfg.pHost[0])
 	{
 		Reset(0);
@@ -343,5 +474,7 @@ int main()
 		assert(s_TestLteInits == 0 && s_TestSocketInits == 0);
 		assert(s_TestLog.find("Set COAP_DEMO_HOST") != std::string::npos);
 	}
-	puts("LTE CoAP application: recovery, pacing, clock wrap and deferred pump PASS");
+	puts(COAP_DEMO_PUBLIC_TEST ?
+		"LTE CoAP public GET: request, response bounds, recovery and pacing PASS" :
+		"LTE CoAP helper: recovery, pacing, clock wrap and deferred pump PASS");
 }

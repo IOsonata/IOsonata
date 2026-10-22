@@ -5,12 +5,51 @@ modem's UDP `SockIntrf`. The default board is Nordic Thingy:91; the nRF9160 DK
 pin selection is also provided. The application is `exemples/lte/lte_coap.cpp`.
 Protocol handling remains in `include/net/coap.h` and `src/net/coap.cpp`.
 
-The example is for plaintext CoAP on UDP port 5683. It has no DTLS, OSCORE or
-certificate authentication. Use the supplied test server and test payloads on
-an endpoint you control. The server's `/value` resource is shared and volatile;
-run one board against it at a time.
+The default profile sends a read-only CON GET to **coap.me:5683, resource
+`/test`**, every 10 seconds. No local PC server is needed. A second profile
+retains the full eight-step exercise against `Python/coap_server.py` on a server
+you control. Both use plaintext UDP and have no DTLS, OSCORE or certificate
+authentication.
 
-## Server reachable from LTE
+## Public server check
+
+The [coap.me service](https://coap.me/about) is a public CoAP client test server.
+Leave these defaults in `src/board.h` for the initial LTE check:
+
+```cpp
+#define COAP_DEMO_PUBLIC_TEST 1
+#define COAP_DEMO_HOST "coap.me"
+#define COAP_DEMO_RESOURCE "test"
+#define COAP_DEMO_PORT 5683
+```
+
+The SIM must provide DNS and outbound UDP reachability to the server. The
+application sends GET only, with Uri-Host and one Uri-Path option, and expects
+a 2.05 Content response with 0..1024 payload bytes. Public resource content may
+change, so this profile checks the response code and bounded payload length
+without comparing against the helper's fixed strings. It is a
+DNS/UDP/CoAP connectivity check; it does not establish POST/PUT/DELETE, binary
+echo, NON-request or separate-response behavior.
+
+`COAP_DEMO_RESOURCE` is one 1..255-byte Uri-Path segment. Empty values, `/`, `?`,
+`#`, and the segments `.` or `..` are rejected before LTE starts. It is not
+a full URL or a multi-segment path parser. The service is shared and its
+availability can change. Keep the default 10-second request interval for this
+small check. Use the controlled helper profile for reproducible full validation.
+
+The first checked response prints `CoAP public GET smoke test verified`.
+The result line `CoAP public GET checked N code=2.05 bytes=L failures=F` is
+printed for the first success and every 10 successes thereafter. An unexpected
+response prints its actual code and payload length before reporting failure.
+
+## Controlled server reachable from LTE
+
+For the eight-step helper exercise, set `COAP_DEMO_PUBLIC_TEST` to `0` and
+replace `COAP_DEMO_HOST` with your helper's reachable address. This profile
+uses the fixed resource paths in the application and ignores
+`COAP_DEMO_RESOURCE`. It writes and deletes the helper's volatile `/value`
+resource, so run one board against that helper at a time. Use this profile only
+with the supplied helper or an endpoint configured for the same test behavior.
 
 The prior Ethernet PC address `10.5.5.51` is a private LAN address. An ordinary
 cellular Internet connection cannot route to that PC directly. Set
@@ -56,14 +95,16 @@ and serves `/hello`, `/echo`, `/value` and `/slow`. The default `/slow` delay of
 
 ## Board configuration and console
 
-Edit `src/board.h` beside this README. `COAP_DEMO_HOST` is empty by default. The
-application prints a configuration message and stays idle without starting LTE
-until a host is set. Supply the hostname or address only, without `coap://` or
-a resource path.
+Edit `src/board.h` beside this README. Supply the hostname or address only,
+without `coap://` or a resource path. If `COAP_DEMO_HOST` is explicitly set to an
+empty string, the application prints a configuration message and stays idle
+without starting LTE.
 
 | Setting | Default | Meaning |
 | --- | --- | --- |
-| `COAP_DEMO_HOST` | `""` | Reachable address of your test server |
+| `COAP_DEMO_PUBLIC_TEST` | `1` | Read-only public GET; `0` selects the full helper exercise |
+| `COAP_DEMO_HOST` | `"coap.me"` | Reachable address of the selected test server |
+| `COAP_DEMO_RESOURCE` | `"test"` | Single Uri-Path segment for the public GET profile |
 | `COAP_DEMO_PORT` | `5683` | Server's UDP port |
 | `COAP_DEMO_INTERVAL` | `10000U` | Minimum interval between new requests, in milliseconds |
 | `COAP_DEMO_PROBING_RATE` | `0U` | Use the library default of 1 byte/second while a peer is not responding |
@@ -114,11 +155,15 @@ CryptoCell RNG through `Cc3xxIntrf`. No new random generator is introduced.
 The nRF91x1 library also includes shared CoAP, but this dedicated board and
 application project targets the nRF9160.
 
-With the controlled server running, build and program the nRF9160 application
-using your normal Thingy:91 setup. Open the console before resetting the board.
-Confirm the server address, LTE registration and the request result lines.
-Registration must succeed before the UDP socket is opened. The demo repeats
-this sequence:
+Build and program the nRF9160 application using your normal Thingy:91 setup.
+Open the console before resetting the board. Confirm the server address, LTE
+registration and the request result lines. Registration must succeed before the
+UDP socket is opened. The public profile repeatedly checks GET `/test`.
+
+### Full helper exercise
+
+With `COAP_DEMO_PUBLIC_TEST` set to `0` and the controlled helper running, the
+demo repeats this sequence:
 
 | Step | Request | Checked result |
 | --- | --- | --- |
@@ -150,13 +195,15 @@ and cumulative failures. `CoAP FAIL` identifies the failed exchange; the next
 
 The 20-millisecond timer defers socket and CoAP work to the application event
 queue. Interrupt handlers do not run CoAP, make AT calls or log responses.
-The socket TX wait is at most 100 milliseconds, and the CoAP exchange timeout is
-95 seconds. Confirmable requests use the shared client's randomized
+The socket TX wait is at most 100 milliseconds; modem DNS/socket initialization
+has separate blocking waits. The CoAP exchange timeout is 95 seconds.
+Confirmable requests use the shared client's randomized
 retransmission timing. No CoAP message is split across UDP datagrams.
 
 ## Recovery checks
 
-After verifying a complete cycle, stop and restart the server. Record the
+In the helper profile, after verifying a complete cycle, stop and restart your
+server. Record the
 exchange error, the retry wait and the return to verified responses without a
 board reset. The application keeps the existing context after an exchange
 failure when the socket is still open. Transport or registration loss closes
@@ -187,8 +234,14 @@ empty `nrf.h` host stub. Focused application checks passed at O0/O2 with
 ASan/UBSan: registration-loss close/reopen, retained pacing across repeated
 modem faults and clock wrap, failed-initialization retry after 30 seconds,
 timeout recovery retaining a live endpoint, timer enqueue refusal/coalescing
-and empty-host startup without LTE. These checks use host substitutes for the
-modem, timer, UART and RNG hardware.
+and empty-host startup without LTE. Both the public GET and full helper profiles
+pass. Public-profile fixtures check the configured path, alternate response
+content, response-code/size errors, recovery and 10-second request spacing.
+These checks use host substitutes for the modem, timer, UART and RNG hardware.
+
+The public endpoint is a published service setting. A live public probe could
+not resolve the host in the implementation environment, so current public
+reachability was not verified there.
 
 The existing BleGateway example has separately recorded Thingy:91 LTE-M UDP
 hardware results with modem firmware 1.3.6 and the HciController console bridge.

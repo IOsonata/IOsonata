@@ -37,9 +37,11 @@ SOFTWARE.
 
 #include "coredev/iopincfg.h"
 
-// A server reachable through the SIM's data connection. Leave empty until
-// configured; the application then prints a message without starting LTE.
-#define COAP_DEMO_HOST			""
+// Read-only public client test. Set PUBLIC_TEST to 0 for the full exercise
+// against Python/coap_server.py and select your reachable helper host.
+#define COAP_DEMO_PUBLIC_TEST	1
+#define COAP_DEMO_HOST			"coap.me"
+#define COAP_DEMO_RESOURCE		"test"
 #define COAP_DEMO_PORT			5683
 #define COAP_DEMO_INTERVAL		10000U
 // Zero selects the library's default 1-byte/second unanswered-peer rate.

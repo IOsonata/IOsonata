@@ -1610,6 +1610,16 @@
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_softrng.cpp</locationURI>
 		</link>
+		<link>
+			<name>include/net/mqtt.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/net/mqtt.h</locationURI>
+		</link>
+		<link>
+			<name>src/net/mqtt.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/net/mqtt.cpp</locationURI>
+		</link>
 	</linkedResources>
 	<variableList>
 		<variable>

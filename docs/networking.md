@@ -1,4 +1,4 @@
-# Ethernet and connected sockets
+# Shared networking protocols and connected sockets
 
 `SockIntrf` presents connected UDP and TCP through `DeviceIntrf`, with C helpers
 and a C++ wrapper. nRF91 uses its modem's IP stack. STM32H753 now uses the shared
@@ -10,6 +10,44 @@ NUCLEO-H753ZI hardware tests confirm DHCP, ping, UDP/TCP integrity, public
 DNS/HTTP and TCP recovery after server restart and cable reconnection. See the
 hardware results below
 for the tested scope and remaining checks.
+
+## Protocols across Ethernet, LTE, LAN and WAN
+
+The shared protocol owns protocol state; the injected interface moves its
+bytes. `Mqtt : Device` accepts `DeviceIntrf *`. The C functions operate on
+caller-owned `MqttDev_t` state through `DevIntrf_t *`; the C++ wrapper contains
+that same C state structure. `Coap : Device` follows the same pattern with a
+datagram transport. Neither client derives from an Ethernet
+controller or LTE modem, and neither contains board or MCU register access.
+
+| Component | Implementation used by the application |
+| --- | --- |
+| MQTT 3.1.1 | Shared `src/net/mqtt.cpp` over an already-connected stream |
+| CoAP | Shared `src/net/coap.cpp` over an already-connected UDP interface |
+| Native TLS 1.3 PSK | Shared `Tls : DeviceIntrf` over a TCP interface, authenticated before MQTT starts |
+| Ethernet socket | `SockIntrf` implemented by shared `src/net/ip_lwip.cpp` over the MCU Ethernet driver |
+| nRF91 socket | `SockIntrf` implemented by `ARM/Nordic/nRF91/src/sock_intrf_nrf91.cpp` through the modem |
+
+An application waits for DHCP/IP readiness or LTE registration, opens the
+appropriate socket, and injects it into the shared protocol. A local server and
+a public server use the same protocol code. The application supplies a reachable
+address, port, routing/APN settings and suitable timeouts. The same transport
+rules still apply across a LAN or WAN: TCP is a byte stream; UDP preserves
+datagram boundaries. These LTE examples do not modify the shared MQTT or CoAP
+implementation or introduce modem-specific protocol code.
+
+A connection change requires a new session. Close the old socket, reset the
+protocol context, bring up the selected network and open a new socket. If TLS
+is selected, authenticate that connection before initializing MQTT, then
+subscribe again because the current MQTT profile uses clean sessions. Changing
+an interface pointer cannot move an existing TCP/TLS/MQTT session to a different
+network. Application delivery state must handle any interrupted publication.
+For CoAP, create a fresh UDP endpoint after reset and carry the remaining peer
+probing wait across the change. The current target library builds select their
+respective `SockIntrf` implementation. Using Ethernet and LTE simultaneously in
+one firmware would require distinct compatible transport implementations and
+application selection between them. `SockIntrf` does not currently provide a
+network selector or automatic failover.
 
 ## Layers and memory
 
@@ -184,9 +222,9 @@ communications code into Voci when the ecosystem is ready.
 ## Shared MQTT client
 
 `include/net/mqtt.h` and `src/net/mqtt.cpp` implement MQTT 3.1.1 over an
-injected, already-connected synchronous `DevIntrf_t`. The C API owns all state
-in `MqttDev_t`; the C++ `Mqtt : Device` wrapper calls that same implementation
-and accepts `DeviceIntrf *`. It is a protocol client, not another socket driver.
+injected, already-connected synchronous `DevIntrf_t`. The C API keeps all state
+in caller-owned `MqttDev_t`; the C++ `Mqtt : Device` wrapper calls that same
+implementation and accepts `DeviceIntrf *`. It is a protocol client, not another socket driver.
 Use a TCP SockIntrf or an authenticated Tls interface. No controller, lwIP,
 broker or crypto implementation is copied into MQTT.
 
@@ -242,8 +280,45 @@ The H753 EthernetTcpDemo includes an optional MQTT subscribe/self-publish test.
 See its README for broker setup and firmware configuration. Plaintext and
 TLS-protected MQTT echo, broker/cable recovery and wrong-PSK rejection passed
 the hardware checks recorded below. The earlier intermittent TLS failure remains
-unresolved. Existing nRF91 modem code is unchanged; using MQTT on nRF91 also
-requires adding the shared source to that MCU library project.
+unresolved. Existing nRF91 modem code is unchanged. Both nRF9160 and nRF91x1
+library projects now include the shared MQTT header and source.
+
+### LTE MQTT public-broker example
+
+[LteMqttDemo](../ARM/Nordic/nRF91/nRF9160/exemples/LteMqttDemo/README.md)
+links `exemples/lte/lte_mqtt.cpp` and runs the same shared MQTT client over the
+nRF9160 TCP socket. Its default board is Thingy:91 with the existing
+115200-baud UART0 console bridge. The default peer is `test.mosquitto.org:1883`;
+the [broker's published settings](https://test.mosquitto.org/) identify this as
+an unauthenticated plaintext MQTT listener.
+
+The application generates a random client suffix with the existing Nordic RNG,
+subscribes at QoS 1 to its own `iosonata/lte/<suffix>/echo` topic, and publishes
+synthetic test payloads every 10 seconds. It checks the returned topic/payload
+and subscribes again after reconnecting. The suffix avoids ordinary client/topic
+collisions; it does not make a public topic private. Use this for connectivity
+checks, not confidential telemetry or broker performance measurements.
+
+This demo does not enable TLS. The public broker's encrypted listeners use
+X.509 certificates, which the native external-PSK TLS implementation does not
+support. Changing the port to 8883 alone does not make this demo encrypted.
+The nRF91 modem's separate credential/TLS operations remain available to an
+application that explicitly configures and validates that path.
+
+`python3 tests/net/run_lte_mqtt.py` passed host syntax with the actual Thingy:91
+board header and Nordic RNG declaration using an empty `nrf.h` host stub.
+O0/O2 ASan/UBSan checks use the actual application and shared MQTT client with
+1/7/1024-byte stream fragments, both PUBACK/self-echo arrival orders, duplicate,
+stale, retained, unrelated and malformed messages, QoS 0 rejection and
+subscription downgrade/refusal. They also cover sequence/clock wrap, blocked
+I/O and deadlines, random identity failure/stability, timer queue refusal and
+socket/registration/modem recovery with fresh CONNECT and SUBSCRIBE. Target
+interfaces are replaced by host test implementations.
+
+The shared MQTT wire suite and C header check also passed in this session.
+Optional Mosquitto interoperability checks were skipped because the executable
+was unavailable. Public-host DNS resolution was unavailable in the environment,
+so this adds no live public-broker, LTE hardware or fresh ARM compile/link claim.
 
 Protocol reference: [OASIS MQTT 3.1.1 plus Errata 01](https://docs.oasis-open.org/mqtt/mqtt/v3.1.1/errata01/os/mqtt-v3.1.1-errata01-os-complete.html).
 
@@ -251,8 +326,9 @@ Protocol reference: [OASIS MQTT 3.1.1 plus Errata 01](https://docs.oasis-open.or
 
 `include/net/coap.h` and `src/net/coap.cpp` implement an RFC 7252 unicast client
 over an injected, already-connected synchronous UDP `DevIntrf_t`. The C-callable
-functions own protocol state in `CoapDev_t`; the C++ `Coap : Device` wrapper
-accepts `DeviceIntrf *` and calls those same functions. As with MQTT, the shared
+functions keep protocol state in caller-owned `CoapDev_t`; the C++
+`Coap : Device` wrapper accepts `DeviceIntrf *` and calls those same functions.
+As with MQTT, the shared
 implementation is compiled from a `.cpp` file and has no separate C++ protocol
 implementation. The client does not include controller access, lwIP or modem
 calls. The nRF91 socket implementation remains unchanged.
@@ -400,14 +476,21 @@ resetting the board after reported network/exchange failures. Its README gives
 the build settings, PC command and expected console lines.
 
 [LteCoapDemo](../ARM/Nordic/nRF91/nRF9160/exemples/LteCoapDemo/README.md)
-links `exemples/lte/lte_coap.cpp` and runs the same exercise through the existing
-nRF9160 modem UDP socket. Its default board is Thingy:91, with the existing
-115200-baud UART0 USB console bridge. Set a controlled server address reachable
-from the SIM's data connection; the Ethernet PC's private `10.5.5.51` address
-needs an explicit route or public UDP forwarding. The host setting is empty by
-default, so an unconfigured demo stays idle without starting LTE. The default
-request interval is 10 seconds, and unanswered-peer pacing retains the library's
-1-byte/second default. This is a standalone LTE test; it does not start BLE.
+links `exemples/lte/lte_coap.cpp` through the existing nRF9160 modem UDP socket.
+Its default board is Thingy:91, with the existing 115200-baud UART0 USB console
+bridge. `COAP_DEMO_PUBLIC_TEST = 1` sends read-only CON GET requests to
+`coap.me:5683/test`; this public client-test service is described at
+[coap.me/about](https://coap.me/about). It checks 2.05 Content and reports the
+payload length without requiring a fixed public response body. This checks
+DNS/UDP/CoAP reachability and does not replace the full helper exercise.
+
+Set `COAP_DEMO_PUBLIC_TEST` to `0` and select a controlled, reachable helper
+address for the same eight-step method/binary/separate-response exercise as
+EthernetCoapDemo. The Ethernet PC's private `10.5.5.51` address needs an explicit
+route or public UDP forwarding from ordinary cellular Internet. The default
+request interval is 10 seconds, and unanswered-peer pacing retains the
+library's 1-byte/second default. This is a standalone LTE test; it does not
+start BLE.
 The nRF9160 and nRF91x1 libraries include shared CoAP; the dedicated demo
 project targets the nRF9160 and uses its existing secure-image CryptoCell RNG
 configuration.
@@ -447,7 +530,12 @@ empty `nrf.h` host stub. Its O0/O2 ASan/UBSan checks cover registration-loss
 close/reopen, pacing retained across repeated modem faults and clock wrap,
 30-second failed-initialization retry, timeout recovery retaining a live UDP
 endpoint, timer queue refusal/coalescing and empty-host startup without LTE.
-These use substitutes for target hardware. CoAP hardware results have not yet
+Both the public GET and full helper profiles pass; public-profile fixtures also
+check the configured path, variable response content, response-code/size errors,
+recovery and 10-second request spacing. These use substitutes for target
+hardware. The public endpoints are published service settings; live probes
+could not resolve them in the implementation environment, so no new public
+reachability result is claimed. CoAP hardware results have not yet
 been recorded, and no fresh ARM compile/link validation is claimed.
 
 Protocol reference: [RFC 7252](https://www.rfc-editor.org/rfc/rfc7252.html).
