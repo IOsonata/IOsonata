@@ -1012,7 +1012,7 @@ bool RtcStm32::SetWakeup(uint32_t msPeriod)
 		if (ok == false)
 		{
 			// 1 Hz clock, WUCKSEL 4, then 6 with 65536 added
-			uint32_t sec = (msPeriod + 500U) / 1000U;
+			uint32_t sec = (uint32_t)(((uint64_t)msPeriod + 500U) / 1000U);
 
 			if (sec <= 65536U)
 			{

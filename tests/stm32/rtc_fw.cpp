@@ -519,14 +519,22 @@ static void Wakeups(RtcStm32 &Dev)
 		{ 32000, 32000, 0, 65535 }, { 32001, 32000, 4, 31 }, { 60000, 60000, 4, 59 },
 		{ 65536000, 65536000, 4, 65535 }, { 65537000, 65537000, 6, 0 }, { 131072000, 131072000, 6, 65535 },
 		{ 7, 7, 3, 114 },
+		{ 131072499, 131072000, 6, 65535 },
 	};
 
 	for (const Wk_t &w : s_Wk)
 	{
 		Check(Wakeup(Dev, w));
 	}
-	Check(Dev.SetWakeup(131072000) && !Dev.SetWakeup(131072500) && Dev.Wakeup() == 131072000 &&
-		  (RTC->CR & RTC_CR_WUCKSEL) == 6);
+	Check(Dev.SetWakeup(131072000));
+	uint32_t cr = RTC->CR;
+	uint32_t wut = RTC->WUTR;
+	static const uint32_t s_TooLong[] = { 131072500U, UINT32_MAX - 500U, UINT32_MAX - 499U, UINT32_MAX };
+
+	for (uint32_t ms : s_TooLong)
+	{
+		Check(!Dev.SetWakeup(ms) && Dev.Wakeup() == 131072000 && RTC->CR == cr && RTC->WUTR == wut && s_Io[12] == 1);
+	}
 
 	s_NbEvt = 0;
 	Check(Wakeup(Dev, s_Wk[0]));

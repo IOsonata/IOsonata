@@ -3,6 +3,9 @@
 
 Run: python3 tests/stm32/run_rtc.py
 
+Run only the wakeup range checks on Linux with g++ and UBSan, without Arm
+GCC or Unicorn: python3 tests/stm32/run_rtc.py --host-wakeup
+
 RTC_PARTS=STM32L476xx,STM32G474xx runs only these parts, RTC_SCENARIOS=0,2
 only these scenarios, RTC_SRC builds another copy of the driver, RTC_KEEP
 keeps the firmware images in that folder.
@@ -86,15 +89,39 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tempfile
+
+ROOT = Path(__file__).resolve().parents[2]
+HERE = Path(__file__).resolve().parent
+
+
+def host_wakeup():
+	with tempfile.TemporaryDirectory() as tmp:
+		for opt in ('-O0', '-O2'):
+			exe = Path(tmp) / ('rtc_wakeup' + opt[1:])
+			cmd = [os.environ.get('CXX', 'g++'), '-std=gnu++17', opt, '-fsanitize=undefined',
+				   '-fno-sanitize-recover=undefined', '-DSTM32H753xx']
+			for inc in (HERE / 'shim', HERE / 'delay_shim', ROOT / 'include', ROOT / 'ARM/ST/include',
+						ROOT / 'ARM/ST/STM32H7xx/include'):
+				cmd += ['-I' + str(inc)]
+			for src in ('tests/stm32/rtc_wakeup_host.cpp', os.environ.get('RTC_SRC', 'ARM/ST/src/rtc_stm32.cpp'),
+						'src/miscdev/rtc.cpp', 'src/device.cpp', 'src/device_intrf.cpp'):
+				cmd += [str(ROOT / src)]
+			subprocess.run(cmd + ['-o', str(exe)], check=True)
+			print('STM32 RTC wakeup host', opt, flush=True)
+			subprocess.run([str(exe)], check=True)
+	print('Host range and register checks only. RTC timing and hardware not tested.')
+
+
+if __name__ == '__main__' and sys.argv[1:] == ['--host-wakeup']:
+	host_wakeup()
+	raise SystemExit(0)
 
 from unicorn import Uc, UcError, UC_ARCH_ARM, UC_MODE_THUMB, UC_MODE_MCLASS
 from unicorn import arm_const
 from unicorn.arm_const import UC_ARM_REG_SP
 from elftools.elf.elffile import ELFFile
-
-ROOT = Path(__file__).resolve().parents[2]
-HERE = Path(__file__).resolve().parent
 
 CONTROL = 0x5FFF0000
 PERIPH = 0x40000000
