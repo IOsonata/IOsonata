@@ -96,6 +96,7 @@ CRYPTO_STATUS CryptoEcbNrf53::Cipher(CRYPTO_CIPHER_ALG Alg, int bEncrypt,
 	}
 	if (!AesOpBegin())
 	{
+		memset(pOut, 0, Len);
 		return CRYPTO_STATUS_BUSY;
 	}
 	CRYPTO_STATUS status = CRYPTO_STATUS_OK;
@@ -108,6 +109,10 @@ CRYPTO_STATUS CryptoEcbNrf53::Cipher(CRYPTO_CIPHER_ALG Alg, int bEncrypt,
 		}
 	}
 	AesOpEnd();
+	if (status != CRYPTO_STATUS_OK)
+	{
+		memset(pOut, 0, Len);
+	}
 	return status;
 }
 
