@@ -46,37 +46,33 @@ SharedIntrf_t g_SharedIntrf[MAX_NB_DEV] = { {0, 0},};
 
 void SERIAL0_IRQHandler(void)
 {
-	if (g_SharedIntrf[0].pIntrf != NULL)
+	if (g_SharedIntrf[0].pIntrf != NULL && g_SharedIntrf[0].Handler != NULL)
 	{
 		g_SharedIntrf[0].Handler(0, g_SharedIntrf[0].pIntrf);
 	}
-	NVIC_ClearPendingIRQ(SPIM0_SPIS0_TWIM0_TWIS0_UARTE0_IRQn);
 }
 
 void SERIAL1_IRQHandler(void)
 {
-	if (g_SharedIntrf[1].pIntrf != NULL)
+	if (g_SharedIntrf[1].pIntrf != NULL && g_SharedIntrf[1].Handler != NULL)
 	{
 		g_SharedIntrf[1].Handler(1, g_SharedIntrf[1].pIntrf);
 	}
-	NVIC_ClearPendingIRQ(SPIM1_SPIS1_TWIM1_TWIS1_UARTE1_IRQn);
 }
 
 void SERIAL2_IRQHandler(void)
 {
-    if (g_SharedIntrf[2].pIntrf != NULL)
+    if (g_SharedIntrf[2].pIntrf != NULL && g_SharedIntrf[2].Handler != NULL)
     {
     	g_SharedIntrf[2].Handler(2, g_SharedIntrf[2].pIntrf);
     }
-    NVIC_ClearPendingIRQ(SPIM2_SPIS2_TWIM2_TWIS2_UARTE2_IRQn);
 }
 
 void SERIAL3_IRQHandler(void)
 {
-    if (g_SharedIntrf[3].pIntrf != NULL)
+    if (g_SharedIntrf[3].pIntrf != NULL && g_SharedIntrf[3].Handler != NULL)
     {
     	g_SharedIntrf[3].Handler(3, g_SharedIntrf[3].pIntrf);
     }
-    NVIC_ClearPendingIRQ(SPIM3_SPIS3_TWIM3_TWIS3_UARTE3_IRQn);
 }
 
