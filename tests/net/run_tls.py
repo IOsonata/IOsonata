@@ -15,6 +15,7 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[2]
 SOURCES = ['src/net/tls.cpp', 'src/crypto/crypto_softaes.cpp',
            'src/crypto/crypto_softsha256.cpp', 'src/crypto/crypto_p256.cpp',
+           'src/crypto/x509.cpp',
            'src/device.cpp', 'src/device_intrf.cpp', 'src/crypto/crypto_uecc.cpp']
 UECC = Path(os.environ.get('UECC_ROOT', ROOT / 'micro-ecc'))
 ENV = dict(os.environ, ASAN_OPTIONS='detect_leaks=0:abort_on_error=1')

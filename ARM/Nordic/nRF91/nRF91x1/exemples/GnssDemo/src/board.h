@@ -64,8 +64,8 @@ SOFTWARE.
 	.EvtCB = Handler, \
 }
 
-// Timer of the time stamps and of the modem waits: RTC0, RTC1 is the timer of
-// the Bluetooth port (bt_app_nrf91.cpp)
+// Timer of the time stamps and of the modem waits. The Bluetooth host over
+// the HCI link has no timer of its own.
 #define GNSS_TIMER_DEVNO	0
 
 // Receiver command of the DK: COEX0 turns the LNA of the onboard GNSS antenna

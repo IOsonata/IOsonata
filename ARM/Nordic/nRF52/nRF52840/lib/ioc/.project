@@ -1536,16 +1536,6 @@
 			<locationURI>PARENT-3-PROJECT_LOC/src/bt_app_nrf52.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/bluetooth/bt_app_sdc.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/bt_app_sdc.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/bluetooth/bt_sec_sdc.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/bt_sec_sdc.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/bluetooth/bt_att.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_att.cpp</locationURI>
@@ -1559,11 +1549,6 @@
 			<name>src/bluetooth/bt_attrsp.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_attrsp.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/bluetooth/bt_crypto_ctlr_sdc.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/bt_crypto_ctlr_sdc.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/bluetooth/bt_dfu_smp.cpp</name>
@@ -5439,6 +5424,21 @@
 			<name>src/nRF5_SDK_Mesh/models/vendor/simple_on_off/src/simple_on_off_server.c</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/external/nRF5_SDK_Mesh/models/vendor/simple_on_off/src/simple_on_off_server.c</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/bt_app_hci.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_app_hci.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/bt_sec_hci.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_sec_hci.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/bt_crypto_ctlr.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_crypto_ctlr.cpp</locationURI>
 		</link>
 	</linkedResources>
 </projectDescription>

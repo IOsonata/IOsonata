@@ -1,6 +1,6 @@
 # Generic MQTT and CoAP examples
 
-`MqttDemo` and `MqttTlsDemo` use the same shared MQTT application; `CoapDemo`
+`MqttDemo`, `MqttTlsDemo` and `MqttCertDemo` use the same shared MQTT application; `CoapDemo`
 uses the shared CoAP application. Both protocols receive a selected
 `DeviceIntrf *`. The target project supplies board configuration;
 `exemples/net/net_demo.cpp` initializes the selected network and opens its
@@ -19,6 +19,10 @@ their original settings and validation records.
 | nRF9151 DK or nRF9161 DK | `IOsonata_nRF91x1` | [MqttDemo](../ARM/Nordic/nRF91/nRF91x1/exemples/MqttDemo/README.md) | [MqttTlsDemo](../ARM/Nordic/nRF91/nRF91x1/exemples/MqttTlsDemo/README.md) | [CoapDemo](../ARM/Nordic/nRF91/nRF91x1/exemples/CoapDemo/README.md) | LTE-M |
 | NUCLEO-H753ZI | `IOsonata_STM32H753` | [MqttDemo](../ARM/ST/STM32H7xx/STM32H753/exemples/MqttDemo/README.md) | - | [CoapDemo](../ARM/ST/STM32H7xx/STM32H753/exemples/CoapDemo/README.md) | Ethernet with DHCP |
 
+NUCLEO-H753ZI also has a separate
+[MqttCertDemo](../ARM/ST/STM32H7xx/STM32H753/exemples/MqttCertDemo/README.md)
+project for shared native TLS 1.3 server certificates over Ethernet TCP.
+
 Each project links these shared example files:
 
 | File | Responsibility |
@@ -31,6 +35,9 @@ Each project links these shared example files:
 
 `MqttTlsDemo` also links `exemples/net/net_demo_tls_ca.h` and
 `net_demo_tls_ca.cpp`, which declare and hold the public demonstration CA.
+`MqttCertDemo` instead links `net_demo_tls_trust.h` and
+`net_demo_tls_trust.cpp`; the preparation helper generates its public DER CA
+header beside `board.h`. The private CA/server keys remain on the test PC.
 
 `net_demo.h` is an example helper, not a new public library interface. The
 existing protocol implementations remain `src/net/mqtt.cpp` and
@@ -41,7 +48,8 @@ accept `DeviceIntrf *`.
 ## Build and start
 
 1. Import the selected MCU's `lib/ioc` project into IOcomposer.
-2. Import its `exemples/MqttDemo/ioc`, `exemples/MqttTlsDemo/ioc` or
+2. Import its `exemples/MqttDemo/ioc`, `exemples/MqttTlsDemo/ioc`,
+   `exemples/MqttCertDemo/ioc` or
    `exemples/CoapDemo/ioc` project as listed above.
 3. Configure the application's `src/board.h` for the board and peer.
 4. Build the library first, then the application with matching Debug or Release
@@ -83,12 +91,15 @@ debugger. The selected RNG is `CryptoRngStm32Instance()`.
 The selection follows the sensor example in
 `exemples/sensor/env_tph_demo.cpp`: initialize the concrete transport, select
 its `DeviceIntrf *`, and pass it to the unchanged device implementation.
-Here the example helper returns the selected connected network interface:
+Here the example helper returns the selected network interface. Keep the
+pointer while setup is pending and initialize MQTT once it is connected:
 
 ```cpp
 DeviceIntrf *pIntrf = NetDemoOpen(false, MQTT_DEMO_HOST, MQTT_DEMO_PORT);
 
-if (pIntrf)
+// Native TLS may still be opening; the foreground setup pump completes it.
+// Initialize MQTT once, after NetDemoConnected() becomes true.
+if (pIntrf && NetDemoConnected())
 {
 	// cfg is the application's MqttCfg_t; open may have taken time.
 	mqtt.Init(cfg, pIntrf, NetDemoNow());
@@ -99,6 +110,10 @@ CoAP uses `NetDemoOpen(true, COAP_DEMO_HOST, COAP_DEMO_PORT)` and injects its
 result into `Coap::Init`. `false` requests a connected byte stream; `true`
 requests a connected datagram interface. `NetDemoNow()` is sampled after a
 possibly blocking open so protocol deadlines start at the appropriate time.
+`NetDemoOpening()` reports a pending native TLS handshake. The MQTT example
+waits without repeating Open or sending protocol bytes. If setup ends without
+connection readiness, it closes the endpoint and applies its normal retry
+delay. Plain TCP and modem TLS opens retain their existing synchronous setup.
 
 The application files contain no LTE registration, DHCP, MAC or PHY operations.
 Those belong in the selected setup code. LAN and Internet peers use the same
@@ -207,7 +222,9 @@ publication queue. Application delivery policy across reconnects remains
 explicit. If a custom interface provides authenticated TLS, finish its
 handshake before presenting it as connected to MQTT. `MqttDemo` and `CoapDemo`
 default to plaintext TCP and UDP. The separate Nordic `MqttTlsDemo` profile
-uses modem TLS with CA-chain and hostname verification. CoAP remains
+uses modem TLS with CA-chain and hostname verification. `MqttCertDemo` uses
+the shared native TLS client with CA-chain, DNS SAN and validity-date checks.
+CoAP remains
 plaintext; these examples do not enable DTLS or OSCORE.
 
 ## MQTT check
@@ -280,8 +297,10 @@ then applies the example's 100-millisecond send wait; DNS has its own modem
 wait. Thus opening an endpoint can take longer than a foreground pump period.
 
 Changing port 1883 to 8883 does not configure security. The public broker's
-encrypted listeners use X.509 certificates; the native IOsonata TLS client
-currently implements external PSK rather than certificate authentication.
+encrypted listeners use X.509 certificates. The native IOsonata TLS client
+has separate external-PSK and limited P-256 certificate profiles; the latter
+requires configured CA data, a matching DNS name and trusted UTC. Its algorithm
+profile is not a promise of compatibility with every public broker chain.
 See [shared networking documentation](networking.md) for the separate native
 TLS and nRF91 modem credential paths.
 
@@ -410,9 +429,9 @@ cannot establish the modem's cryptographic behavior.
 
 The public listener authenticates the server to this connection; it does not
 authenticate the MQTT user or make public topics private. It is not mutual
-TLS. The shared native TLS 1.3 external-PSK implementation remains separate
-and unchanged, with no native certificate authentication or shared DTLS
-added by this profile. The nRF91x1 hardware result and unresolved echo-check
+TLS. The shared native TLS 1.3 PSK and P-256 certificate profiles remain
+separate from modem TLS; the modem profile does not select or validate either
+native implementation. Shared DTLS is not provided. The nRF91x1 hardware result and unresolved echo-check
 failures are recorded below. nRF9160 modem-TLS hardware validation and fresh
 automated ARM compile/link validation remain unestablished.
 
@@ -494,6 +513,70 @@ with modem substitutes. A subsequent
 [nRF9151 DK hardware capture](#follow-up-controlled-radio-offon-recovery)
 confirms one commanded radio-off/on cycle with TLS/MQTT recovery. A fresh
 automated ARM compile/link result remains unestablished.
+
+### MQTT over shared native TLS certificates
+
+The new H753 `MqttCertDemo` selects `NET_DEMO_NATIVE_TLS = 1` and the normal
+Ethernet TCP socket. The shared example setup layers `Tls : DeviceIntrf` over
+that socket, pumps TLS before MQTT and exposes connection readiness only after
+the handshake authenticates the server. MQTT receives the TLS interface through
+its ordinary injected `DeviceIntrf *`. `board.h` contains configuration; the
+protocol and certificate processing remain in shared sources.
+
+The initial native certificate profile requires P-256 ECDSA/SHA-256 throughout
+the certificate chain and P-256 key agreement, with AES-128-GCM/SHA-256 TLS 1.3.
+It validates the configured CA path, DNS subjectAltName and certificate dates.
+No RSA chains, client certificates, TLS 1.2, DTLS, CRL or OCSP checking are
+implemented in this profile. The nRF91 modem TLS profile remains separate and
+retains its documented verification behavior.
+
+For a controlled test from the repository root:
+
+```sh
+python3 Python/mqtt_cert_demo.py prepare \
+  --output ../mqtt-cert-demo --hostname iosonata.test
+mosquitto -c ../mqtt-cert-demo/mosquitto.conf -v
+```
+
+The helper generates a local CA and server certificate, a TLS 1.3 Mosquitto
+configuration and a public DER trust header in `MqttCertDemo/src`. The private
+keys stay outside the repository. The generated header is ignored by Git;
+without it, the project compiles and reports missing configuration before
+starting the network. Set `MQTT_DEMO_HOST` to the PC's reachable LAN address,
+`MQTT_DEMO_PORT` to 8883 and `NET_DEMO_TLS_SERVER_NAME` to the generated DNS name.
+The TCP address and verified certificate name are configured separately. A
+hostname mismatch is not bypassed by connecting to a numerical address.
+
+Build the library and clean/rebuild the new application after generating the
+header, then provision time and read the console:
+
+```sh
+python3 Python/mqtt_cert_demo.py console --port /dev/cu.usbmodemYOUR_STLINK
+```
+
+This helper needs pyserial. Select the serial device for the board; its default
+rate is the H753 project's 1000000 baud. The console accepts `time <Unix seconds>`
+from the physically trusted commissioning PC. No connection opens until UTC is
+set. The foreground setup reads at most 32 console bytes per pump, rejects
+malformed/overflowing commands, and advances UTC with the monotonic timer across
+wrap. Time changes while an endpoint is active are rejected. Reset clears UTC,
+so it must be provisioned again. There is no build-time date or unauthenticated
+network-time fallback. For deployed firmware, supply a trusted clock or an
+authenticated commissioning method with suitable accuracy and persistence.
+
+The new project's README contains full configuration, storage and hardware
+checks. The setup allocates caller-owned 8192-byte handshake and 12288-byte
+transcript work buffers in addition to the TLS context. It logs
+`TLS 1.3, CA/hostname/time verified` only after authentication, then uses the
+same MQTT subscription, PUBACK/echo checks and retry policy as the other generic
+MQTT projects. A failed TLS attempt reports both `error` and `certificate_error`.
+
+The native selection is available to the shared setup for LTE TCP and custom
+stream media as well as Ethernet; the library and application must include
+the shared TLS/X.509 files, trust source and chosen crypto engines. The three
+network library projects now link TLS/X.509. No native-certificate LTE or Wi-Fi
+hardware result is claimed. Do not enable `NET_DEMO_NATIVE_TLS` and
+`NET_DEMO_MODEM_TLS` together. The stream TLS profile rejects datagram opens.
 
 ## CoAP check
 
@@ -631,6 +714,32 @@ python3 tests/net/run_nrf91_socket.py
 
 Their existing results and dependencies are documented in
 [networking.md](networking.md).
+
+### Native certificate example checks
+
+```sh
+python3 tests/net/run_native_tls_demo.py
+python3 tests/net/run_tls_cert.py
+```
+
+The native example runner passed 14 runtime binaries at O0/O2 with ASan/UBSan:
+12 setup binaries across LTE, Ethernet and custom media with configured or
+missing CA data, plus two shared MQTT application binaries. It checks UTC
+gating, malformed/overlong commands, timer wrap, connection changes, TLS
+initialization failure and deferred MQTT startup. No MQTT CONNECT or verified
+peer message is produced while the lower interface is opening or after setup
+fails. Each reconnection starts a fresh MQTT deadline and subscription.
+
+It also checked the new H753 project and all three native TLS/X.509 library
+source links, actual H753 board/header host syntax with and without a generated
+CA, native setup syntax with both Nordic board configurations, conflicting
+TLS-selection rejection, and locally generated P-256 credentials with OpenSSL
+hostname verification. A serial substitute checked UTC commands, acknowledgment,
+retry after a board startup prompt and console cleanup in the PC helper.
+The setup fixture scripts TLS state and substitutes hardware. Real TLS and
+certificate cryptography are exercised separately by `run_tls_cert.py`.
+No fresh ARM compile/link, Mosquitto listener execution or native-certificate
+board result is established by the setup runner.
 
 ### Modem TLS profile checks
 

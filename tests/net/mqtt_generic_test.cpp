@@ -77,6 +77,7 @@ static unsigned s_TestSelected;
 static int s_TestActive = -1;
 static bool s_TestReady;
 static bool s_TestOpenWorks;
+static bool s_TestOpening;
 static bool s_TestInitWorks;
 static bool s_TestStartWorks;
 static void (*s_TestHandler)(uint32_t);
@@ -268,9 +269,14 @@ DeviceIntrf *NetDemoOpen(bool Datagram, const char *pHost, uint16_t Port)
 	return s_TestInterfaces[s_TestSelected];
 }
 
+bool NetDemoOpening()
+{
+	return s_TestActive >= 0 && s_TestReady && s_TestOpening;
+}
+
 bool NetDemoConnected()
 {
-	return s_TestActive >= 0 && s_TestReady && s_TestStreams[s_TestActive].Connected;
+	return s_TestActive >= 0 && s_TestReady && !s_TestOpening && s_TestStreams[s_TestActive].Connected;
 }
 
 void NetDemoClose()
@@ -318,6 +324,7 @@ static void Reset(uint32_t Now, int Chunk = 1024)
 	s_TestOpenDuration = s_TestCloseDuration = s_TestWriteDuration = 0;
 	s_TestOpens = s_TestCloses = s_TestStarts = s_TestSelected = 0;
 	s_TestReady = s_TestOpenWorks = s_TestInitWorks = s_TestStartWorks = true;
+	s_TestOpening = false;
 	s_TestHandler = nullptr;
 	for (StreamState &stream : s_TestStreams)
 	{
@@ -1058,6 +1065,56 @@ static void Startup()
 	assert(s_TestOpens == 1 && s_pIntrf == &s_TestStreamA);
 }
 
+static void Opening()
+{
+	const uint32_t start = 0xfffff000U;
+	unsigned failure;
+
+	for (failure = 0; failure < 3U; failure++)
+	{
+		Reset(start);
+		s_TestOpening = true;
+		Pump(start);
+		Pump(start + 20000U, 256);
+		assert(s_pIntrf && !s_Started && s_TestOpens == 1 && s_Failures == 0);
+		assert(s_TestPackets.empty() && Current().Reads == 0 && Current().Writes == 0);
+		assert(s_TestLog.find("MQTT peer ") == std::string::npos);
+		if (failure == 0)
+		{
+			s_TestOpening = false;
+			Pump(start + 20001U);
+			assert(s_Started && Count(1) == 1 && s_Failures == 0);
+			assert(s_TestOpens == 1 && s_TestLog.find("MQTT peer ") != std::string::npos);
+			// Time used by lower-layer setup is not part of the MQTT timeout.
+			Pump(start + 20001U + MQTT_DEMO_TIMEOUT_MS - 1U);
+			assert(s_Started && s_Failures == 0);
+			Pump(start + 20001U + MQTT_DEMO_TIMEOUT_MS);
+			assert(!s_Started && s_Failures == 1);
+		}
+		else
+		{
+			if (failure == 1)
+			{
+				s_TestOpening = false;
+				Current().Connected = false;
+			}
+			else
+			{
+				s_TestReady = false;
+			}
+			Pump(start + 20001U);
+			assert(!s_pIntrf && !s_Started && s_Failures == 1 && s_TestCloses == 1);
+			assert(s_TestPackets.empty() && s_TestLog.find("MQTT peer ") == std::string::npos);
+			s_TestReady = true;
+			s_TestOpening = false;
+			Pump(start + 20001U + MQTT_DEMO_RESTART_MS - 1U);
+			assert(s_TestOpens == 1);
+			Pump(start + 20001U + MQTT_DEMO_RESTART_MS);
+			assert(s_Started && s_TestOpens == 2 && Count(1) == 1);
+		}
+	}
+}
+
 int main()
 {
 	if (!MQTT_DEMO_HOST[0])
@@ -1091,6 +1148,7 @@ int main()
 	Qos0AfterReconnect();
 	RejectedMessages();
 	OpenRetry();
+	Opening();
 	WriteClock();
 	puts("Generic MQTT application: interface switching, QoS 1, reconnect and deadlines PASS");
 }

@@ -84,6 +84,9 @@ static bool s_TestHandlerConnected;
 static AppEvtHandler_t s_TestQueued;
 static TimerTrigEvtHandler_t s_TestTick;
 static std::string s_TestLog;
+#if NET_DEMO_NATIVE_TLS
+static std::string s_TestConsoleInput;
+#endif
 #if NET_DEMO_MEDIUM == NET_DEMO_MEDIUM_LTE
 static LteEvtHandler_t s_TestLteEvent;
 #if NET_DEMO_MODEM_TLS || NET_DEMO_LTE_RECOVERY_TEST
@@ -213,10 +216,39 @@ bool TimerInit(TimerDev_t *pTimer, const TimerCfg_t *)
 	return true;
 }
 
-bool UARTInit(UARTDev_t *, const UARTCfg_t *pCfg)
+#if NET_DEMO_NATIVE_TLS
+static bool ConsoleStart(DevIntrf_t *, uint32_t)
 {
+	return true;
+}
+
+static int ConsoleRead(DevIntrf_t *, uint8_t *pData, int Len)
+{
+	assert(!s_TestInterrupt && pData && Len == 1);
+	if (s_TestConsoleInput.empty())
+	{
+		return 0;
+	}
+	*pData = (uint8_t)s_TestConsoleInput.front();
+	s_TestConsoleInput.erase(0, 1);
+	return 1;
+}
+#endif
+
+bool UARTInit(UARTDev_t *pDev, const UARTCfg_t *pCfg)
+{
+	(void)pDev;
 	assert(pCfg->TxMemSize == CFIFO_MEMSIZE(1024) && pCfg->pTxMem);
 	assert(pCfg->DataBits == 8 && pCfg->StopBits == 1 && pCfg->bIntMode);
+#if NET_DEMO_NATIVE_TLS
+	assert(pCfg->RxMemSize == CFIFO_MEMSIZE(128) && pCfg->pRxMem);
+	pDev->DevIntrf.StartRx = ConsoleStart;
+	pDev->DevIntrf.StopRx = TransferStop;
+	pDev->DevIntrf.RxData = ConsoleRead;
+	pDev->DevIntrf.EnCnt = 1;
+	pDev->DevIntrf.MaxRetry = 99;
+	atomic_flag_clear(&pDev->DevIntrf.bBusy);
+#endif
 	return true;
 }
 
@@ -1028,4 +1060,5 @@ int main(int argc, char **argv)
 	assert(s_TestLog.find("LTE recovery test:") == std::string::npos);
 	puts("Generic network setup: deferred pump, retry timing, readiness and direct interface injection PASS");
 #endif
+	return 0;
 }

@@ -430,7 +430,7 @@ bool MpslInit(void)
 	// signal delivered through it starved: BLOCKED, CANCELLED and the session
 	// idle transition, which is why a timeslot session worked exactly once
 	// and every request after the first failed.
-	res = mpsl_init(&lfclk, SWI5_EGU5_IRQn, MpslAssert);
+	res = mpsl_init(&lfclk, MPSL_LOW_PRIO_IRQn, MpslAssert);
 #endif
 	DEBUG_PRINTF("mpsl_init res = %x\r\n", res);
 
@@ -463,8 +463,8 @@ bool MpslInit(void)
 	NVIC_SetPriority(RADIO_0_IRQn, MPSL_HIGH_IRQ_PRIORITY);
 	NVIC_EnableIRQ(RADIO_0_IRQn);
 #else
-	NVIC_SetPriority(SWI5_EGU5_IRQn, MPSL_HIGH_IRQ_PRIORITY + 15);
-	NVIC_EnableIRQ(SWI5_EGU5_IRQn);
+	NVIC_SetPriority(MPSL_LOW_PRIO_IRQn, MPSL_HIGH_IRQ_PRIORITY + 15);
+	NVIC_EnableIRQ(MPSL_LOW_PRIO_IRQn);
 #endif
 
 
@@ -476,7 +476,7 @@ extern "C" {
 #ifdef NRF54L_SERIES
 void SWI00_IRQHandler(void)
 #else
-void SWI5_EGU5_IRQHandler(void)
+void MPSL_LOW_PRIO_IRQHandler(void)
 #endif
 {
 	DEBUG_PRINTF("mpsl_low_priority_process\r\n");
@@ -493,7 +493,10 @@ void RADIO_IRQHandler(void)
 	MPSL_IRQ_RADIO_Handler();
 }
 
-#ifdef NRF54L_SERIES
+// The nRF5340 network core names the vector CLOCK_POWER, as the nRF54L does.
+// Under any other name the vector stays on the default handler, MPSL never
+// sees the HFCLK started event and the radio never gets its clock.
+#if defined(NRF54L_SERIES) || defined(NRF5340_XXAA_NETWORK)
 void CLOCK_POWER_IRQHandler(void)
 #elif defined(NRF52_SERIES)
 // The nRF52 vector is shared with the USB cable events, see

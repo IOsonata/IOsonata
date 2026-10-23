@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: MIT
  * Copyright (c) 2026 I-SYST inc.
- * TLS 1.3 external PSK client. RFC 8446 sections 4, 5 and 7.
+ * TLS 1.3 PSK and P-256 certificate client. RFC 8446 sections 4, 5 and 7.
  */
 #include <string.h>
 #include "net/tls.h"
@@ -34,6 +34,51 @@ void Put16(uint8_t *p, size_t n)
 	p[1] = (uint8_t)n;
 }
 
+bool IsHandshake(TLS_STATE state)
+{
+	switch (state)
+	{
+	case TLS_SERVER_HELLO:
+	case TLS_ENCRYPTED_EXTENSIONS:
+	case TLS_SERVER_CERTIFICATE:
+	case TLS_SERVER_CERT_VERIFY:
+	case TLS_SERVER_FINISHED:
+	case TLS_CLIENT_FINISHED:
+		return true;
+	default:
+		return false;
+	}
+}
+
+bool Overlap(const void *a, size_t an, const void *b, size_t bn)
+{
+	uintptr_t ap = (uintptr_t)a;
+	uintptr_t bp = (uintptr_t)b;
+
+	if (an > UINTPTR_MAX - ap || bn > UINTPTR_MAX - bp)
+	{
+		return true;
+	}
+	return ap < bp + bn && bp < ap + an;
+}
+
+void WipeWork(TlsDev_t *d)
+{
+	if (d->pTranscript != nullptr && d->pTranscript != d->Transcript)
+	{
+		CryptoSecureWipe(d->pTranscript, d->TranscriptSize);
+	}
+	if (d->pHandshake != nullptr && d->pHandshake != d->Handshake)
+	{
+		CryptoSecureWipe(d->pHandshake, d->HandshakeSize);
+	}
+	CryptoSecureWipe(d->Transcript, sizeof(d->Transcript));
+	CryptoSecureWipe(d->Handshake, sizeof(d->Handshake));
+	CryptoSecureWipe(d->ServerPublicKey, sizeof(d->ServerPublicKey));
+	d->TranscriptLen = 0;
+	d->HandshakeLen = 0;
+}
+
 void WipeEphemeral(TlsDev_t *d)
 {
 	if (d->pKeyAgree != nullptr)
@@ -53,10 +98,7 @@ void WipeKeys(TlsDev_t *d)
 	CryptoSecureWipe(d->RxKey, sizeof(d->RxKey));
 	CryptoSecureWipe(d->TxIv, sizeof(d->TxIv));
 	CryptoSecureWipe(d->RxIv, sizeof(d->RxIv));
-	CryptoSecureWipe(d->Transcript, sizeof(d->Transcript));
-	CryptoSecureWipe(d->Handshake, sizeof(d->Handshake));
-	d->TranscriptLen = 0;
-	d->HandshakeLen = 0;
+	WipeWork(d);
 }
 
 bool Fail(TlsDev_t *d, TLS_ERROR error)
@@ -71,6 +113,12 @@ bool Fail(TlsDev_t *d, TLS_ERROR error)
 	d->State = TLS_FAILED;
 	d->Error = error;
 	return false;
+}
+
+bool CertificateFail(TlsDev_t *d, X509_STATUS status)
+{
+	d->CertificateError = status;
+	return Fail(d, TLS_ERROR_CERTIFICATE);
 }
 
 bool Hash(TlsDev_t *d, const uint8_t *p, size_t n, uint8_t *out)
@@ -124,11 +172,12 @@ bool Expand(TlsDev_t *d, const uint8_t *secret, const char *label,
 
 bool Append(TlsDev_t *d, const uint8_t *p, size_t n)
 {
-	if (n > sizeof(d->Transcript) - d->TranscriptLen)
+	if (d->TranscriptLen > d->TranscriptSize ||
+		n > d->TranscriptSize - d->TranscriptLen)
 	{
 		return Fail(d, TLS_ERROR_LIMIT);
 	}
-	memcpy(d->Transcript + d->TranscriptLen, p, n);
+	memcpy(d->pTranscript + d->TranscriptLen, p, n);
 	d->TranscriptLen += n;
 	return true;
 }
@@ -214,7 +263,7 @@ bool ServerHello(TlsDev_t *d, const uint8_t *p, size_t n)
 		{
 			bit = 1;
 		}
-		else if (type == 41 && len == 2 && Get16(p + i) == 0)
+		else if (type == 41 && !d->bCertificate && len == 2 && Get16(p + i) == 0)
 		{
 			bit = 2;
 		}
@@ -235,7 +284,7 @@ bool ServerHello(TlsDev_t *d, const uint8_t *p, size_t n)
 		seen |= bit;
 		i += len;
 	}
-	if (seen != (d->pKeyAgree != nullptr ? 7U : 3U))
+	if (seen != (d->bCertificate ? 5U : (d->pKeyAgree != nullptr ? 7U : 3U)))
 	{
 		return Fail(d, TLS_ERROR_AUTH);
 	}
@@ -253,7 +302,7 @@ bool ServerHello(TlsDev_t *d, const uint8_t *p, size_t n)
 	if (!Hash(d, nullptr, 0, s.Data) ||
 		!Expand(d, d->Secret, "derived", s.Data, 32, s.Data + 32, 32) ||
 		!Mac(d, s.Data + 32, 32, shared.Data, 32, d->Secret) ||
-		!Hash(d, d->Transcript, d->TranscriptLen, s.Data) ||
+		!Hash(d, d->pTranscript, d->TranscriptLen, s.Data) ||
 		!Expand(d, d->Secret, "c hs traffic", s.Data, 32, d->ClientSecret, 32) ||
 		!Expand(d, d->Secret, "s hs traffic", s.Data, 32, d->ServerSecret, 32) ||
 		!Keys(d, true) || !Keys(d, false))
@@ -273,7 +322,7 @@ bool Finished(TlsDev_t *d, const uint8_t *p, size_t n)
 	{
 		return Fail(d, TLS_ERROR_PROTOCOL);
 	}
-	if (!Hash(d, d->Transcript, d->TranscriptLen, s.Data) ||
+	if (!Hash(d, d->pTranscript, d->TranscriptLen, s.Data) ||
 		!Expand(d, d->ServerSecret, "finished", nullptr, 0, s.Data + 32, 32) ||
 		!Mac(d, s.Data + 32, 32, s.Data, 32, s.Data + 64))
 	{
@@ -288,8 +337,8 @@ bool Finished(TlsDev_t *d, const uint8_t *p, size_t n)
 	{
 		return Fail(d, TLS_ERROR_AUTH);
 	}
-	if (!Append(d, d->Handshake, 36) ||
-		!Hash(d, d->Transcript, d->TranscriptLen, s.Data) ||
+	if (!Append(d, d->pHandshake, 36) ||
+		!Hash(d, d->pTranscript, d->TranscriptLen, s.Data) ||
 		!Expand(d, d->ClientSecret, "finished", nullptr, 0, s.Data + 32, 32) ||
 		!Mac(d, s.Data + 32, 32, s.Data, 32, finished + 4) ||
 		!Record(d, 22, finished, sizeof(finished)))
@@ -308,22 +357,124 @@ bool Finished(TlsDev_t *d, const uint8_t *p, size_t n)
 		return false;
 	}
 	CryptoSecureWipe(d->Secret, sizeof(d->Secret));
-	CryptoSecureWipe(d->Transcript, sizeof(d->Transcript));
-	d->TranscriptLen = 0;
+	WipeWork(d);
 	d->TxSequence = 0;
 	d->RxSequence = 0;
 	d->State = TLS_CLIENT_FINISHED;
 	return true;
 }
 
+bool Certificate(TlsDev_t *d, const uint8_t *p, size_t n)
+{
+	X509Cert_t certs[X509_MAX_CHAIN_CERTS] = {};
+	X509VerifyCfg_t cfg = d->CertificateCfg;
+	X509_STATUS status;
+	size_t i = 4;
+	size_t len;
+	uint32_t count = 0;
+	uint64_t elapsed = (uint32_t)(d->Now - d->Started) / 1000U;
+
+	if (n < 4 || p[0] != 0 || Get24(p + 1) != n - 4 || n == 4)
+	{
+		return Fail(d, TLS_ERROR_PROTOCOL);
+	}
+	while (i < n)
+	{
+		if (n - i < 5)
+		{
+			return Fail(d, TLS_ERROR_PROTOCOL);
+		}
+		if (count == X509_MAX_CHAIN_CERTS)
+		{
+			return CertificateFail(d, X509_STATUS_LIMIT);
+		}
+		len = Get24(p + i);
+		i += 3;
+		if (len == 0 || len > n - i - 2)
+		{
+			return Fail(d, TLS_ERROR_PROTOCOL);
+		}
+		if (len > X509_MAX_CERT_SIZE)
+		{
+			return CertificateFail(d, X509_STATUS_LIMIT);
+		}
+		certs[count].pDer = p + i;
+		certs[count].Len = (uint32_t)len;
+		count++;
+		i += len;
+		// No CertificateEntry extensions were requested in ClientHello.
+		if (Get16(p + i) != 0)
+		{
+			return Fail(d, TLS_ERROR_PROTOCOL);
+		}
+		i += 2;
+	}
+	if (elapsed > UINT64_MAX - cfg.UnixTime)
+	{
+		return CertificateFail(d, X509_STATUS_TIME);
+	}
+	cfg.UnixTime += elapsed;
+	status = X509VerifyChain(&cfg, certs, count, d->ServerPublicKey);
+	if (status != X509_STATUS_OK)
+	{
+		return CertificateFail(d, status);
+	}
+	if (!Append(d, d->pHandshake, d->HandshakeLen))
+	{
+		return false;
+	}
+	d->State = TLS_SERVER_CERT_VERIFY;
+	return true;
+}
+
+bool CertificateVerify(TlsDev_t *d, const uint8_t *p, size_t n)
+{
+	static const char context[] = "TLS 1.3, server CertificateVerify";
+	uint8_t input[64 + sizeof(context) + 32] = {};
+	Scratch scratch;
+	CRYPTO_STATUS status;
+
+	if (n < 4 || Get16(p) != 0x0403 || Get16(p + 2) != n - 4)
+	{
+		return Fail(d, TLS_ERROR_PROTOCOL);
+	}
+	if (!X509EcdsaP256Decode(p + 4, (uint32_t)(n - 4), scratch.Data))
+	{
+		return CertificateFail(d, X509_STATUS_FORMAT);
+	}
+	memset(input, 0x20, 64);
+	memcpy(input + 64, context, sizeof(context));
+	if (!Hash(d, d->pTranscript, d->TranscriptLen, input + 64 + sizeof(context)) ||
+		!Hash(d, input, sizeof(input), scratch.Data + 64))
+	{
+		CryptoSecureWipe(input, sizeof(input));
+		return false;
+	}
+	CryptoSecureWipe(input, sizeof(input));
+	status = d->CertificateCfg.pSign->Verify(CRYPTO_CURVE_P256,
+		d->ServerPublicKey, scratch.Data + 64, 32, scratch.Data);
+	if (status != CRYPTO_STATUS_OK)
+	{
+		return CertificateFail(d, status == CRYPTO_STATUS_FAIL ?
+			X509_STATUS_SIGNATURE : X509_STATUS_CRYPTO);
+	}
+	if (!Append(d, d->pHandshake, d->HandshakeLen))
+	{
+		return false;
+	}
+	CryptoSecureWipe(d->ServerPublicKey, sizeof(d->ServerPublicKey));
+	d->State = TLS_SERVER_FINISHED;
+	return true;
+}
+
 bool Message(TlsDev_t *d)
 {
-	uint8_t type = d->Handshake[0];
-	const uint8_t *p = d->Handshake + 4;
+	uint8_t type = d->pHandshake[0];
+	const uint8_t *p = d->pHandshake + 4;
 	size_t n = d->HandshakeLen - 4;
 	if (d->State == TLS_SERVER_HELLO && type == 2)
 	{
-		return Append(d, d->Handshake, d->HandshakeLen) && ServerHello(d, p, n);
+		return Append(d, d->pHandshake, d->HandshakeLen) && ServerHello(d, p, n);
 	}
 	if (d->State == TLS_ENCRYPTED_EXTENSIONS && type == 8)
 	{
@@ -363,12 +514,20 @@ bool Message(TlsDev_t *d)
 			seen |= bit;
 			i += len;
 		}
-		if (!Append(d, d->Handshake, d->HandshakeLen))
+		if (!Append(d, d->pHandshake, d->HandshakeLen))
 		{
 			return false;
 		}
-		d->State = TLS_SERVER_FINISHED;
+		d->State = d->bCertificate ? TLS_SERVER_CERTIFICATE : TLS_SERVER_FINISHED;
 		return true;
+	}
+	if (d->State == TLS_SERVER_CERTIFICATE && type == 11)
+	{
+		return Certificate(d, p, n);
+	}
+	if (d->State == TLS_SERVER_CERT_VERIFY && type == 15)
+	{
+		return CertificateVerify(d, p, n);
 	}
 	if (d->State == TLS_SERVER_FINISHED && type == 20)
 	{
@@ -428,8 +587,8 @@ bool Handshake(TlsDev_t *d, const uint8_t *p, size_t n)
 {
 	while (n != 0)
 	{
-		size_t need = d->HandshakeLen < 4 ? 4 : 4 + Get24(d->Handshake + 1);
-		if (need > sizeof(d->Handshake))
+		size_t need = d->HandshakeLen < 4 ? 4 : 4 + Get24(d->pHandshake + 1);
+		if (need > d->HandshakeSize)
 		{
 			return Fail(d, TLS_ERROR_LIMIT);
 		}
@@ -438,7 +597,7 @@ bool Handshake(TlsDev_t *d, const uint8_t *p, size_t n)
 		{
 			copy = n;
 		}
-		memcpy(d->Handshake + d->HandshakeLen, p, copy);
+		memcpy(d->pHandshake + d->HandshakeLen, p, copy);
 		d->HandshakeLen += copy;
 		p += copy;
 		n -= copy;
@@ -446,15 +605,15 @@ bool Handshake(TlsDev_t *d, const uint8_t *p, size_t n)
 		{
 			continue;
 		}
-		need = 4 + Get24(d->Handshake + 1);
-		if (need > sizeof(d->Handshake))
+		need = 4 + Get24(d->pHandshake + 1);
+		if (need > d->HandshakeSize)
 		{
 			return Fail(d, TLS_ERROR_LIMIT);
 		}
 		if (d->HandshakeLen == need)
 		{
 			// Messages changing keys must end at a record boundary.
-			if (n != 0 && (d->Handshake[0] == 2 || d->Handshake[0] == 20 || d->Handshake[0] == 24))
+			if (n != 0 && (d->pHandshake[0] == 2 || d->pHandshake[0] == 20 || d->pHandshake[0] == 24))
 			{
 				return Fail(d, TLS_ERROR_PROTOCOL);
 			}
@@ -462,7 +621,7 @@ bool Handshake(TlsDev_t *d, const uint8_t *p, size_t n)
 			{
 				return false;
 			}
-			CryptoSecureWipe(d->Handshake, d->HandshakeLen);
+			CryptoSecureWipe(d->pHandshake, d->HandshakeLen);
 			d->HandshakeLen = 0;
 		}
 	}
@@ -474,7 +633,7 @@ bool ReceiveRecord(TlsDev_t *d)
 	uint8_t type = d->Rx[0];
 	uint8_t *p = d->Rx + 5;
 	size_t n = d->RxNeed - 5;
-	if (type == 20 && d->State >= TLS_SERVER_HELLO && d->State <= TLS_SERVER_FINISHED &&
+	if (type == 20 && IsHandshake(d->State) && d->State != TLS_CLIENT_FINISHED &&
 		n == 1 && p[0] == 1)
 	{
 		return true;
@@ -605,16 +764,41 @@ void TlsReset(TlsDev_t *d)
 	CryptoSecureWipe(d->Tx, sizeof(d->Tx));
 	d->State = TLS_IDLE;
 	d->Error = TLS_ERROR_NONE;
+	d->CertificateError = X509_STATUS_OK;
+	d->CertificateCfg = {};
+	CryptoSecureWipe(d->ServerName, sizeof(d->ServerName));
 	d->pTransport = nullptr;
 	d->pKeyAgree = nullptr;
+	d->pHandshake = d->Handshake;
+	d->HandshakeSize = sizeof(d->Handshake);
+	d->pTranscript = d->Transcript;
+	d->TranscriptSize = sizeof(d->Transcript);
 	d->TxLen = d->TxOffset = d->RxCount = d->PlainOffset = d->PlainLen = 0;
 	d->RxNeed = 5;
 	d->RxSequence = d->TxSequence = 0;
 	d->bEncrypted = false;
+	d->bCertificate = false;
+	d->bServerName = false;
 }
 
 bool TlsInit(TlsDev_t *d, const TlsCfg_t *cfg, DevIntrf_t *transport, uint32_t now)
 {
+	static const uint8_t versions[] = {0,43,0,3,2,3,4};
+	static const uint8_t groups[] = {0,10,0,4,0,2,0,23};
+	static const uint8_t signatures[] = {0,13,0,4,0,2,4,3};
+	const TlsCertCfg_t *cert;
+	DevIntrf_t *dev;
+	uint8_t *p;
+	uint8_t *handshake;
+	uint8_t *transcript;
+	size_t handshakeSize;
+	size_t transcriptSize;
+	size_t hostlen = 0;
+	size_t i = 47;
+	size_t truncated;
+	uint32_t anchor;
+	Scratch s;
+
 	if (d == nullptr)
 	{
 		return false;
@@ -627,8 +811,6 @@ bool TlsInit(TlsDev_t *d, const TlsCfg_t *cfg, DevIntrf_t *transport, uint32_t n
 		cfg->pHash == nullptr || cfg->pMac == nullptr || cfg->pAead == nullptr ||
 		cfg->pRng == nullptr || !cfg->pRng->IsSecure() || cfg->pHash->IsAsync() ||
 		cfg->pMac->IsAsync() || cfg->pAead->IsAsync() || cfg->pRng->IsAsync() ||
-		cfg->pPsk == nullptr || cfg->PskLen < 16 || cfg->PskLen > 64 ||
-		cfg->pIdentity == nullptr || cfg->IdentityLen == 0 || cfg->IdentityLen > 128 ||
 		cfg->Timeout == 0 || cfg->Timeout > 0x7fffffffU)
 	{
 		return Fail(d, TLS_ERROR_CONFIG);
@@ -641,17 +823,95 @@ bool TlsInit(TlsDev_t *d, const TlsCfg_t *cfg, DevIntrf_t *transport, uint32_t n
 	{
 		return Fail(d, TLS_ERROR_CONFIG);
 	}
-	size_t hostlen = 0;
 	if (cfg->pServerName != nullptr)
 	{
-		while (hostlen <= 253 && cfg->pServerName[hostlen] != 0)
+		while (hostlen <= X509_MAX_HOSTNAME_SIZE && cfg->pServerName[hostlen] != 0)
 		{
 			hostlen++;
 		}
-		if (hostlen > 253)
+		if (hostlen > X509_MAX_HOSTNAME_SIZE)
 		{
 			return Fail(d, TLS_ERROR_CONFIG);
 		}
+	}
+	cert = cfg->pCert;
+	if (cert == nullptr)
+	{
+		if (cfg->pPsk == nullptr || cfg->PskLen < 16 || cfg->PskLen > 64 ||
+			cfg->pIdentity == nullptr || cfg->IdentityLen == 0 || cfg->IdentityLen > 128)
+		{
+			return Fail(d, TLS_ERROR_CONFIG);
+		}
+	}
+	else
+	{
+		if (cfg->pPsk != nullptr || cfg->PskLen != 0 || cfg->pIdentity != nullptr ||
+			cfg->IdentityLen != 0 || cfg->pKeyAgree == nullptr || hostlen == 0 ||
+			cert->pSign == nullptr || cert->pSign->IsAsync() || cert->UnixTime == 0 ||
+			cert->UnixTime > 253402300799ULL ||
+			cert->pTrustAnchors == nullptr || cert->TrustAnchorCount == 0 ||
+			cert->TrustAnchorCount > X509_MAX_TRUST_ANCHORS ||
+			Overlap(cert->pTrustAnchors, cert->TrustAnchorCount * sizeof(X509Cert_t),
+				d, sizeof(*d)) ||
+			(cert->pHandshakeBuffer == nullptr) != (cert->HandshakeBufferSize == 0) ||
+			(cert->pTranscriptBuffer == nullptr) != (cert->TranscriptBufferSize == 0))
+		{
+			return Fail(d, TLS_ERROR_CONFIG);
+		}
+		for (anchor = 0; anchor < cert->TrustAnchorCount; anchor++)
+		{
+			if (cert->pTrustAnchors[anchor].pDer == nullptr ||
+				cert->pTrustAnchors[anchor].Len == 0 ||
+				cert->pTrustAnchors[anchor].Len > X509_MAX_CERT_SIZE ||
+				Overlap(cert->pTrustAnchors[anchor].pDer,
+					cert->pTrustAnchors[anchor].Len, d, sizeof(*d)))
+			{
+				return Fail(d, TLS_ERROR_CONFIG);
+			}
+		}
+		handshake = cert->pHandshakeBuffer;
+		handshakeSize = cert->HandshakeBufferSize;
+		transcript = cert->pTranscriptBuffer;
+		transcriptSize = cert->TranscriptBufferSize;
+		if ((handshake != nullptr && (handshakeSize < 4 ||
+			handshakeSize > TLS_HANDSHAKE_MAX_SIZE ||
+			Overlap(handshake, handshakeSize, d, sizeof(*d)))) ||
+			(transcript != nullptr && (transcriptSize < 4 ||
+			transcriptSize > TLS_TRANSCRIPT_MAX_SIZE ||
+			Overlap(transcript, transcriptSize, d, sizeof(*d)))) ||
+			(handshake != nullptr && transcript != nullptr &&
+			Overlap(handshake, handshakeSize, transcript, transcriptSize)))
+		{
+			return Fail(d, TLS_ERROR_CONFIG);
+		}
+		if ((handshake != nullptr && Overlap(handshake, handshakeSize,
+			cert->pTrustAnchors, cert->TrustAnchorCount * sizeof(X509Cert_t))) ||
+			(transcript != nullptr && Overlap(transcript, transcriptSize,
+			cert->pTrustAnchors, cert->TrustAnchorCount * sizeof(X509Cert_t))))
+		{
+			return Fail(d, TLS_ERROR_CONFIG);
+		}
+		for (anchor = 0; anchor < cert->TrustAnchorCount; anchor++)
+		{
+			if ((handshake != nullptr && Overlap(handshake, handshakeSize,
+				cert->pTrustAnchors[anchor].pDer, cert->pTrustAnchors[anchor].Len)) ||
+				(transcript != nullptr && Overlap(transcript, transcriptSize,
+				cert->pTrustAnchors[anchor].pDer, cert->pTrustAnchors[anchor].Len)))
+			{
+				return Fail(d, TLS_ERROR_CONFIG);
+			}
+		}
+		d->pHandshake = handshake != nullptr ? handshake : d->Handshake;
+		d->HandshakeSize = handshake != nullptr ? handshakeSize : sizeof(d->Handshake);
+		d->pTranscript = transcript != nullptr ? transcript : d->Transcript;
+		d->TranscriptSize = transcript != nullptr ? transcriptSize : sizeof(d->Transcript);
+		d->CertificateCfg.pHash = cfg->pHash;
+		d->CertificateCfg.pSign = cert->pSign;
+		d->CertificateCfg.pTrustAnchors = cert->pTrustAnchors;
+		d->CertificateCfg.TrustAnchorCount = cert->TrustAnchorCount;
+		d->CertificateCfg.pHostName = d->ServerName;
+		d->CertificateCfg.UnixTime = cert->UnixTime;
+		d->bCertificate = true;
 	}
 	d->pTransport = transport;
 	d->pHash = cfg->pHash;
@@ -661,7 +921,12 @@ bool TlsInit(TlsDev_t *d, const TlsCfg_t *cfg, DevIntrf_t *transport, uint32_t n
 	d->Timeout = cfg->Timeout;
 	d->Started = d->Now = d->TxStarted = now;
 	d->bServerName = hostlen != 0;
-	DevIntrf_t *dev = &d->DevIntrf;
+	if (hostlen != 0)
+	{
+		memcpy(d->ServerName, cfg->pServerName, hostlen);
+	}
+	d->ServerName[hostlen] = 0;
+	dev = &d->DevIntrf;
 	dev->pDevData = d;
 	dev->Type = DEVINTRF_TYPE_UNKOWN;
 	dev->Enable = NoOp;
@@ -687,7 +952,7 @@ bool TlsInit(TlsDev_t *d, const TlsCfg_t *cfg, DevIntrf_t *transport, uint32_t n
 	dev->EnCnt = 1;
 	atomic_flag_clear(&dev->bBusy);
 
-	uint8_t *p = d->Tx + 5;
+	p = d->Tx + 5;
 	p[0] = 1;
 	p[1] = 0;
 	Put16(p + 4, 0x0303);
@@ -700,15 +965,23 @@ bool TlsInit(TlsDev_t *d, const TlsCfg_t *cfg, DevIntrf_t *transport, uint32_t n
 	Put16(p + 41, 0x1301);
 	p[43] = 1;
 	p[44] = 0;
-	size_t i = 47;
-	const uint8_t extensions[] = {0,43,0,3,2,3,4, 0,45,0,2,1,0};
-	memcpy(p + i, extensions, sizeof(extensions));
-	i += sizeof(extensions);
+	memcpy(p + i, versions, sizeof(versions));
+	i += sizeof(versions);
+	if (d->bCertificate)
+	{
+		memcpy(p + i, signatures, sizeof(signatures));
+		i += sizeof(signatures);
+	}
+	else
+	{
+		Put16(p + i, 45);
+		Put16(p + i + 2, 2);
+		p[i + 4] = 1;
+		p[i + 5] = d->pKeyAgree != nullptr ? 1 : 0;
+		i += 6;
+	}
 	if (d->pKeyAgree != nullptr)
 	{
-		// Offer only psk_dhe_ke and secp256r1; the PSK binder covers this share.
-		p[i - 1] = 1;
-		const uint8_t groups[] = {0,10,0,4,0,2,0,23};
 		memcpy(p + i, groups, sizeof(groups));
 		i += sizeof(groups);
 		Put16(p + i, 51);
@@ -731,31 +1004,46 @@ bool TlsInit(TlsDev_t *d, const TlsCfg_t *cfg, DevIntrf_t *transport, uint32_t n
 		Put16(p + i + 4, hostlen + 3);
 		p[i + 6] = 0;
 		Put16(p + i + 7, hostlen);
-		memcpy(p + i + 9, cfg->pServerName, hostlen);
+		memcpy(p + i + 9, d->ServerName, hostlen);
 		i += 9 + hostlen;
 	}
-	Put16(p + i, 41);
-	Put16(p + i + 2, cfg->IdentityLen + 43);
-	Put16(p + i + 4, cfg->IdentityLen + 6);
-	Put16(p + i + 6, cfg->IdentityLen);
-	memcpy(p + i + 8, cfg->pIdentity, cfg->IdentityLen);
-	i += 8 + cfg->IdentityLen;
-	memset(p + i, 0, 4);
-	i += 4;
-	size_t truncated = i;
-	Put16(p + i, 33);
-	p[i + 2] = 32;
-	i += 35;
-	Put16(p + 2, i - 4);
-	Put16(p + 45, i - 47);
-	Scratch s;
-	if (!Mac(d, s_Zero, 32, cfg->pPsk, cfg->PskLen, d->Secret) ||
-		!Hash(d, nullptr, 0, s.Data) ||
-		!Expand(d, d->Secret, "ext binder", s.Data, 32, s.Data + 32, 32) ||
-		!Expand(d, s.Data + 32, "finished", nullptr, 0, s.Data + 64, 32) ||
-		!Hash(d, p, truncated, s.Data) ||
-		!Mac(d, s.Data + 64, 32, s.Data, 32, p + truncated + 3) ||
-		!Append(d, p, i))
+	if (d->bCertificate)
+	{
+		Put16(p + 2, i - 4);
+		Put16(p + 45, i - 47);
+		if (!Mac(d, s_Zero, 32, s_Zero, 32, d->Secret))
+		{
+			return false;
+		}
+	}
+	else
+	{
+		// pre_shared_key must be the final extension; its binder covers the share.
+		Put16(p + i, 41);
+		Put16(p + i + 2, cfg->IdentityLen + 43);
+		Put16(p + i + 4, cfg->IdentityLen + 6);
+		Put16(p + i + 6, cfg->IdentityLen);
+		memcpy(p + i + 8, cfg->pIdentity, cfg->IdentityLen);
+		i += 8 + cfg->IdentityLen;
+		memset(p + i, 0, 4);
+		i += 4;
+		truncated = i;
+		Put16(p + i, 33);
+		p[i + 2] = 32;
+		i += 35;
+		Put16(p + 2, i - 4);
+		Put16(p + 45, i - 47);
+		if (!Mac(d, s_Zero, 32, cfg->pPsk, cfg->PskLen, d->Secret) ||
+			!Hash(d, nullptr, 0, s.Data) ||
+			!Expand(d, d->Secret, "ext binder", s.Data, 32, s.Data + 32, 32) ||
+			!Expand(d, s.Data + 32, "finished", nullptr, 0, s.Data + 64, 32) ||
+			!Hash(d, p, truncated, s.Data) ||
+			!Mac(d, s.Data + 64, 32, s.Data, 32, p + truncated + 3))
+		{
+			return false;
+		}
+	}
+	if (!Append(d, p, i))
 	{
 		return false;
 	}
@@ -779,7 +1067,7 @@ TLS_STATE TlsProcess(TlsDev_t *d, uint32_t now, bool open)
 		return d->State;
 	}
 	d->Now = now;
-	if ((d->State < TLS_READY && (uint32_t)(now - d->Started) >= d->Timeout) ||
+	if ((IsHandshake(d->State) && (uint32_t)(now - d->Started) >= d->Timeout) ||
 		(d->TxLen != 0 && (uint32_t)(now - d->TxStarted) >= d->Timeout))
 	{
 		Fail(d, TLS_ERROR_TIMEOUT);

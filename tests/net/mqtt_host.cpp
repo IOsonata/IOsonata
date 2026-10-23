@@ -119,7 +119,7 @@ int main(int argc, char **argv)
 		uint8_t psk[32];
 		const uint8_t identity[] = "IOsonata";
 		TlsCfg_t tlsCfg = {&hash,	&hash, &aes,  &rng, psk, sizeof(psk), identity, sizeof(identity) - 1,
-						   nullptr, 5000,  &agree};
+						   nullptr, 5000,  &agree, nullptr};
 		t.Fd = socket(AF_INET, SOCK_STREAM, 0);
 		assert(t.Fd >= 0);
 		addr.sin_family = AF_INET;

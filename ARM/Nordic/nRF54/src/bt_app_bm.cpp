@@ -5,7 +5,7 @@
 
 This implementation targets the nRF54L15 with SoftDevice S145 via the
 sdk-nrf-bm bare-metal framework.  It replaces both the legacy nRF5_SDK
-(bt_app_nrf52) and the SDC/MPSL (bt_app_sdc) paths with a thin layer
+(bt_app_nrf52) and the HCI host (bt_app_hci) paths with a thin layer
 over the S145 sd_ble_* SVC API, wired through the sdk-nrf-bm observer
 infrastructure (nrf_sdh / nrf_sdh_ble).
 

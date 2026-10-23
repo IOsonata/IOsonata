@@ -1,6 +1,6 @@
 // Definitions for the HCI command entry points bt_hci_ctlr_sdc.cpp dispatches
 // to. Each records its own name, so a test can ask which vendor call an
-// opcode reached. That mapping is the thing BtHciCmdSdc gets wrong quietly:
+// opcode reached. That mapping is the thing BtHciCtlrCommand gets wrong quietly:
 // its switch answers 0xFF in the default case, so an opcode with no case
 // looks exactly like a controller refusing the command.
 
@@ -174,6 +174,21 @@ extern "C" uint8_t sdc_hci_cmd_le_write_suggested_default_data_length(const sdc_
 extern "C" uint8_t sdc_hci_cmd_le_encrypt(const sdc_hci_cmd_le_encrypt_t *, sdc_hci_cmd_le_encrypt_return_t *)
 {
 	SDC_CMD_RECORD(le_encrypt);
+}
+
+extern "C" uint8_t sdc_hci_cmd_le_rand(sdc_hci_cmd_le_rand_return_t *)
+{
+	SDC_CMD_RECORD(le_rand);
+}
+
+extern "C" uint8_t sdc_hci_cmd_le_read_buffer_size(sdc_hci_cmd_le_read_buffer_size_return_t *)
+{
+	SDC_CMD_RECORD(le_read_buffer_size);
+}
+
+extern "C" uint8_t sdc_hci_cmd_ip_read_bd_addr(sdc_hci_cmd_ip_read_bd_addr_return_t *)
+{
+	SDC_CMD_RECORD(ip_read_bd_addr);
 }
 
 extern "C" uint8_t sdc_hci_cmd_le_long_term_key_request_negative_reply(const sdc_hci_cmd_le_long_term_key_request_negative_reply_t *, sdc_hci_cmd_le_long_term_key_request_negative_reply_return_t *)

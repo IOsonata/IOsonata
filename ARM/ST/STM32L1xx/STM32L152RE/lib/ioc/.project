@@ -25,6 +25,8 @@
 		<nature>org.eclipse.cdt.managedbuilder.core.ScannerConfigNature</nature>
 	</natures>
 	<linkedResources>
+		<link><name>src/coredev/i2c_stm32v1.cpp</name><type>1</type><locationURI>PARENT-4-PROJECT_LOC/src/i2c_stm32v1.cpp</locationURI></link>
+		<link><name>src/coredev/i2c.cpp</name><type>1</type><locationURI>PARENT-6-PROJECT_LOC/src/coredev/i2c.cpp</locationURI></link>
 		<link>
 			<name>src</name>
 			<type>2</type>

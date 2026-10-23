@@ -396,6 +396,35 @@ SOFTWARE.
 // is its own OCF rather than a version parameter, so 0x36 above stays [v1].
 #define BT_HCI_CMD_CTLR_SET_EXT_ADV_PARAM_V2					((8<<10) | 0x7F)	//!< LE Set Extended Advertising Parameters [v2] command
 
+// I-SYST vendor commands (OGF 0x3F), answered by HciController and by the
+// IOsonata controller ports. They give a host that runs on a part with no
+// Bluetooth identity and no crypto of its own what the Core specification
+// leaves out: the static address of the controller and its crypto engines,
+// one command per message instead of one LE Encrypt per AES block. Every
+// one returns the HCI status first; the layouts are in the comments. A
+// controller that does not have them answers Unknown HCI Command and the
+// host goes on without.
+#define BT_HCI_CMD_VS_ISYST_READ_STATIC_ADDR					0xFFF3		//!< Read Static Address: returns addr[6] LSB first, top two bits set
+#define BT_HCI_CMD_VS_ISYST_CRYPTO_SUPPORTED					0xFFF4		//!< Crypto Supported: returns bitmap, 4 octets LE
+#define BT_HCI_CMD_VS_ISYST_AES_CMAC							0xFFF5		//!< AES-CMAC: key[16], len, msg[len]; returns mac[16]
+#define BT_HCI_CMD_VS_ISYST_AES_CCM								0xFFF6		//!< AES-CCM: flags, key[16], nonce_len, nonce, aad_len, aad, tag_len, msg_len, msg, (tag); returns out, (tag)
+#define BT_HCI_CMD_VS_ISYST_RANDOM								0xFFF7		//!< Random: len 1..251; returns rand[len]
+#define BT_HCI_CMD_VS_ISYST_SHA256								0xFFF8		//!< SHA-256: len, msg[len]; returns digest[32]
+#define BT_HCI_CMD_VS_ISYST_HMAC_SHA256							0xFFF9		//!< HMAC-SHA-256: key_len, key, msg_len, msg; returns mac[32]
+#define BT_HCI_CMD_VS_ISYST_ECDSA_P256_SIGN						0xFFFA		//!< ECDSA P-256 Sign: priv[32], hash[32]; returns sig[64]
+#define BT_HCI_CMD_VS_ISYST_ECDSA_P256_VERIFY					0xFFFB		//!< ECDSA P-256 Verify: pub[64], hash[32], sig[64]; status only
+
+#define BT_HCI_VS_ISYST_CRYPTO_AES_CMAC							(1UL << 0)
+#define BT_HCI_VS_ISYST_CRYPTO_AES_CCM							(1UL << 1)
+#define BT_HCI_VS_ISYST_CRYPTO_RANDOM							(1UL << 2)
+#define BT_HCI_VS_ISYST_CRYPTO_SHA256							(1UL << 3)
+#define BT_HCI_VS_ISYST_CRYPTO_HMAC_SHA256						(1UL << 4)
+#define BT_HCI_VS_ISYST_CRYPTO_ECDSA_P256_SIGN					(1UL << 5)
+#define BT_HCI_VS_ISYST_CRYPTO_ECDSA_P256_VERIFY				(1UL << 6)
+
+#define BT_HCI_VS_ISYST_AES_CCM_FLAG_DECRYPT					0x01
+#define BT_HCI_VS_ISYST_RANDOM_MAX								251			//!< Octets one Random command returns at most
+
 
 
 // HCI events

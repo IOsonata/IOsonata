@@ -45,6 +45,7 @@ SOFTWARE.
 #include <cstring>
 
 #include "crypto/crypto_softrng.h"
+#include "crypto/crypto_softaes.h"
 
 #include "bt_test_harness.h"
 #include "bt_smp_link_test_stubs.h"
@@ -579,9 +580,60 @@ void TestPasskeyDefaultsReject(bttest::Context &ctx)
 
 } // namespace
 
+// A whole-message CMAC engine, when SMP is given one, must agree with the
+// block by block CMAC over the AES engine, and SMP must go back to the block
+// path when the engine refuses: a controller vendor command that fails on
+// the link still leaves pairing able to run.
+class RefusingMac : public MacEngine {
+public:
+	bool Enable() override { vbValid = true; return true; }
+	void Disable() override {}
+	void Reset() override {}
+	CRYPTO_STATUS Mac(CRYPTO_MAC_ALG, const CryptoKey &, const uint8_t *, size_t,
+					  uint8_t *, size_t) override
+	{
+		Calls++;
+		return CRYPTO_STATUS_FAIL;
+	}
+	int Calls = 0;
+};
+
+void TestAWholeMessageCmacEngineAgreesWithTheBlockPath(bttest::Context &ctx)
+{
+	CryptoSoftAes aes;
+	aes.Enable();
+	s_pCryptoAes = &aes;
+	BtSmpSetMacEngine(nullptr);
+
+	const uint8_t csrk[16] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16};
+	const uint8_t msg[9] = {0xD2, 0x03, 0x00, 0x55, 0, 0, 0, 0, 0x42};
+	uint8_t blockMac[8];
+	uint8_t engineMac[8];
+
+	BtSmpSignMac(csrk, msg, sizeof(msg), blockMac);
+
+	BtSmpSetMacEngine(&aes);	// CryptoSoftAes is a MacEngine too
+	BtSmpSignMac(csrk, msg, sizeof(msg), engineMac);
+	BT_CHECK(ctx, memcmp(blockMac, engineMac, sizeof(blockMac)) == 0);
+
+	RefusingMac refusing;
+	refusing.Enable();
+	BtSmpSetMacEngine(&refusing);
+	memset(engineMac, 0, sizeof(engineMac));
+	BtSmpSignMac(csrk, msg, sizeof(msg), engineMac);
+	BT_CHECK(ctx, refusing.Calls == 1);
+	BT_CHECK(ctx, memcmp(blockMac, engineMac, sizeof(blockMac)) == 0);
+
+	BtSmpSetMacEngine(nullptr);
+	s_pCryptoAes = nullptr;
+}
+
 int main()
 {
 	bttest::Context ctx("SMP key distribution tests");
+
+	ctx.Run("a whole-message CMAC engine agrees with the block path",
+			[&] { TestAWholeMessageCmacEngineAgreesWithTheBlockPath(ctx); });
 
 	ctx.Run("initiator sends the whole negotiated set",
 			[&] { TestInitiatorSendsTheWholeNegotiatedSet(ctx); });

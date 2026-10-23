@@ -216,16 +216,6 @@
 			<locationURI>PARENT-7-PROJECT_LOC/src/bluetooth/bt_app_handler.c</locationURI>
 		</link>
 		<link>
-			<name>src/bluetooth/bt_app_sdc.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-5-PROJECT_LOC/src/bt_app_sdc.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/bluetooth/bt_sec_sdc.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-5-PROJECT_LOC/src/bt_sec_sdc.cpp</locationURI>
-		</link>
-		<link>
 			<name>src/bluetooth/bt_att.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-7-PROJECT_LOC/src/bluetooth/bt_att.cpp</locationURI>
@@ -671,14 +661,24 @@
 			<locationURI>PARENT-5-PROJECT_LOC/src/bt_hci_ctlr_sdc.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/bluetooth/bt_crypto_ctlr_sdc.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-5-PROJECT_LOC/src/bt_crypto_ctlr_sdc.cpp</locationURI>
-		</link>
-		<link>
 			<name>include/nrf_mpsl.h</name>
 			<type>1</type>
 			<locationURI>PARENT-5-PROJECT_LOC/include/nrf_mpsl.h</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/bt_app_hci.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/src/bluetooth/bt_app_hci.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/bt_sec_hci.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/src/bluetooth/bt_sec_hci.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/bt_crypto_ctlr.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/src/bluetooth/bt_crypto_ctlr.cpp</locationURI>
 		</link>
 	</linkedResources>
 </projectDescription>

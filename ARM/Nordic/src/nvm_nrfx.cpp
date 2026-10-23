@@ -41,13 +41,13 @@ SOFTWARE.
 
 #include "idelay.h"
 
-// The family test below turns on NRF52_SERIES, NRF54L_SERIES and NRF91_SERIES,
+// The family test below turns on NRF52_SERIES, NRF53_SERIES, NRF54L_SERIES and NRF91_SERIES,
 // all of which nrf.h derives from the part define. Include it first so the test
 // works off what the MDK says rather than off whatever the project happened to
 // put on the command line.
 #include "nrf.h"
 
-#if defined(NRF52_SERIES) || defined(NRF91_SERIES)
+#if defined(NRF52_SERIES) || defined(NRF53_SERIES) || defined(NRF91_SERIES)
 #include "hal/nrf_nvmc.h"
 #include "hal/nrf_ficr.h"
 #elif defined(NRF54L_SERIES) || defined(NRF54L15_XXAA) || defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
@@ -112,7 +112,7 @@ SOFTWARE.
 // erased word to the page instead. And the nRF91 keeps the geometry in
 // FICR->INFO where the nRF52 keeps it flat, which nrf_ficr_codepagesize_get
 // resolves. Neither is a second shape, so neither gets a second branch.
-#if defined(NRF52_SERIES) || defined(NRF91_SERIES)
+#if defined(NRF52_SERIES) || defined(NRF53_SERIES) || defined(NRF91_SERIES)
 #define NVM_INTRF_NVMC				1
 #endif
 

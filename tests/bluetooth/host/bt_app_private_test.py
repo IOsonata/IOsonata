@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Check private port state and scan transitions without a vendor SDK.
 
-Compile production state/operation definitions from all five app ports against
+Compile production state/operation definitions from all four app ports against
 common bt_app.cpp. This checks the changed boundary, not a complete target build.
 """
 import os
@@ -19,8 +19,7 @@ LINK_GC = '-Wl,-dead_strip' if sys.platform == 'darwin' else '-Wl,--gc-sections'
 PORTS = [
 	'ARM/Nordic/nRF52/src/bt_app_nrf52.cpp',
 	'ARM/Nordic/nRF54/src/bt_app_bm.cpp',
-	'ARM/Nordic/src/bt_app_sdc.cpp',
-	'ARM/Nordic/nRF91/src/bt_app_nrf91.cpp',
+	'src/bluetooth/bt_app_hci.cpp',
 	'ARM/ST/STM32WBAxx/src/bt_app_stm32wba.cpp',
 ]
 SCANS = [

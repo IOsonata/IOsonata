@@ -3,6 +3,10 @@
 
 @brief	Bluetooth HCI UART transport (H4)
 
+This is the UART binding of BtHciH4 (bt_hci_h4.h): it owns the UART and
+passes it to the H4 framing layer as its interface. Everything below about
+framing, queueing and commands is done by BtHciH4.
+
 HCI packets over a UART, each one preceded by its packet type byte
 (Core Vol 4 Part A). The framing is the same in both directions, so one
 transport serves a host talking to an external controller and a controller
@@ -25,7 +29,7 @@ back is reached only after packets are dispatched, so the command times out.
 Size the queue for the packets that can arrive while a handler runs.
 
 @author	Hoang Nguyen Hoan
-@date	Oct. 4, 2026
+@date	Oct. 22, 2026
 
 @license
 
@@ -61,47 +65,39 @@ SOFTWARE.
 #include "cfifo.h"
 #include "coredev/uart.h"
 #include "bluetooth/bt_hci.h"
+#include "bluetooth/bt_hci_h4.h"
 
 /** @addtogroup Bluetooth
   * @{
   */
 
 // H4 packet type, the byte sent ahead of each HCI packet
-#define BT_HCI_UART_PKT_CMD				0x01U	//!< HCI command, host to controller
-#define BT_HCI_UART_PKT_ACL				0x02U	//!< ACL data, both directions
-#define BT_HCI_UART_PKT_SCO				0x03U	//!< Synchronous data, both directions
-#define BT_HCI_UART_PKT_EVT				0x04U	//!< HCI event, controller to host
-#define BT_HCI_UART_PKT_ISO				0x05U	//!< ISO data, both directions
+#define BT_HCI_UART_PKT_CMD				BT_HCI_H4_PKT_CMD	//!< HCI command, host to controller
+#define BT_HCI_UART_PKT_ACL				BT_HCI_H4_PKT_ACL	//!< ACL data, both directions
+#define BT_HCI_UART_PKT_SCO				BT_HCI_H4_PKT_SCO	//!< Synchronous data, both directions
+#define BT_HCI_UART_PKT_EVT				BT_HCI_H4_PKT_EVT	//!< HCI event, controller to host
+#define BT_HCI_UART_PKT_ISO				BT_HCI_H4_PKT_ISO	//!< ISO data, both directions
 
-/// Largest HCI packet carried, packet header included, type byte excluded.
-/// A received packet longer than this is dropped and counted in DropCnt.
-/// The default holds a 255 byte event and a 251 byte LE ACL payload.
-#ifndef BT_HCI_UART_PKT_MAXLEN
-#define BT_HCI_UART_PKT_MAXLEN			BT_HCI_BUFFER_MAX_SIZE
-#endif
+/// Largest HCI packet carried, see BT_HCI_H4_PKT_MAXLEN
+#define BT_HCI_UART_PKT_MAXLEN			BT_HCI_H4_PKT_MAXLEN
 
 /// Default wait for a command response and for UART TX room, in msec
-#define BT_HCI_UART_TIMEOUT_DEFAULT		1000U
+#define BT_HCI_UART_TIMEOUT_DEFAULT		BT_HCI_H4_TIMEOUT_DEFAULT
 
 /// Returned by BtHciUartCommand when the controller did not answer in time or
 /// the command could not be sent. HCI status codes do not reach this value.
-#define BT_HCI_UART_ERR_TIMEOUT			0xFFU
+#define BT_HCI_UART_ERR_TIMEOUT			BT_HCI_H4_ERR_TIMEOUT
 
 /// One received packet in the packet queue
-typedef struct __Bt_Hci_Uart_Packet {
-	uint8_t Type;							//!< H4 packet type
-	uint8_t Rsvd;
-	uint16_t Len;							//!< Bytes in Data, packet header included
-	uint8_t Data[BT_HCI_UART_PKT_MAXLEN];	//!< HCI packet without the type byte
-} BtHciUartPkt_t;
+typedef BtHciH4Pkt_t BtHciUartPkt_t;
 
 /// Packet queue memory for NbPkt packets
-#define BT_HCI_UART_PKTMEM_SIZE(NbPkt)	CFIFO_TOTAL_MEMSIZE((NbPkt), sizeof(BtHciUartPkt_t))
+#define BT_HCI_UART_PKTMEM_SIZE(NbPkt)	BT_HCI_H4_PKTMEM_SIZE(NbPkt)
 
 /// Smallest UART TX FIFO: one whole packet with its type byte. A packet is
 /// written to the FIFO only when all of it fits, a packet cut short would
 /// leave the other side framing from the middle of it.
-#define BT_HCI_UART_TXFIFO_MIN			(BT_HCI_UART_PKT_MAXLEN + 1)
+#define BT_HCI_UART_TXFIFO_MIN			BT_HCI_H4_TXROOM_MIN
 
 typedef struct __Bt_Hci_Uart_Dev	BtHciUartDev_t;
 
@@ -136,30 +132,11 @@ typedef struct __Bt_Hci_Uart_Config {
 /// gets the UART device and finds the transport from it.
 struct __Bt_Hci_Uart_Dev {
 	UARTDev_t Uart;						//!< UART device
-	hCFifo_t hPktFifo;					//!< Received packet queue
+	BtHciH4Dev_t H4;					//!< Framing layer, reads and writes through Uart
 	BtHciUartRxHandler_t RxHandler;
 	BtHciUartRxHandler_t CmdRspHandler;
 	void (*RxReady)(BtHciUartDev_t * const pDev);
 	void *pCtx;							//!< Owner data from the configuration
-	uint32_t TimeoutMs;
-	BtHciUartPkt_t *pAsm;				//!< Queue slot the packet in progress is framed into
-	uint16_t AsmIdx;					//!< Bytes of the packet in progress received
-	uint16_t AsmLen;					//!< Length of the packet in progress, header included
-	uint16_t SkipCnt;					//!< Bytes left of a packet being dropped
-	uint8_t State;						//!< Framing state
-	uint8_t HdrLen;						//!< Header length of the packet in progress
-	uint8_t StageIdx;					//!< Next unread byte in Stage
-	uint8_t StageCnt;					//!< Bytes in Stage
-	volatile bool bPolling;				//!< Framing in progress
-	volatile bool bProcessing;			//!< Dispatch in progress
-	volatile bool bCmdActive;			//!< A command waits for its response
-	uint32_t SyncErrCnt;				//!< Bytes skipped that were not a packet type
-	uint32_t DropCnt;					//!< Packets dropped, longer than BT_HCI_UART_PKT_MAXLEN
-	uint32_t TxFailCnt;					//!< Packets not sent, no TX room in time
-	uint8_t Stage[32];					//!< Bytes read from the UART, not framed yet
-	bool bSpareHeld;					//!< Spare holds a packet waiting for a queue slot
-	BtHciUartPkt_t Spare;				//!< Framing slot when the queue is full, so that a command
-										//!< response one packet past a full queue is still reached
 };
 
 #ifdef __cplusplus

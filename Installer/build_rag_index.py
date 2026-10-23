@@ -90,7 +90,7 @@ IMPL_PATTERNS = [
     (r'bt_app_nrf52\.cpp$', PERIPH_BLE, BLE_IMPL_SOFTDEVICE),
     (r'bt_gap_nrf52\.cpp$', PERIPH_BLE, BLE_IMPL_SOFTDEVICE),
     (r'bt_gatt_nrf52\.cpp$', PERIPH_BLE, BLE_IMPL_SOFTDEVICE),
-    (r'bt_app_sdc\.cpp$', PERIPH_BLE, BLE_IMPL_SDC),
+    (r'bt_app_hci\.cpp$', PERIPH_BLE, BLE_IMPL_SDC),
     (r'bt_gap_sdc\.cpp$', PERIPH_BLE, BLE_IMPL_SDC),
     (r'bt_gatt_sdc\.cpp$', PERIPH_BLE, BLE_IMPL_SDC),
     (r'ble_dev\.cpp$', PERIPH_BLE, BLE_IMPL_NONE),

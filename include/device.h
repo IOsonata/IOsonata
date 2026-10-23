@@ -284,7 +284,7 @@ public:
 	 */
 	virtual operator Timer *() const { return vpTimer; }	// Get device interface data (handle)
 
-	void SetEvtHandler(DevEvtHandler_t EvtHandler) { vEvtHandler = EvtHandler; }
+	void SetEvtHandler(DevEvtHandler_t Handler) { vEvtHandler = Handler; }
 	virtual void EvtHandler(DEV_EVT Evt) { if (vEvtHandler) vEvtHandler(this, Evt); }
 
 protected:

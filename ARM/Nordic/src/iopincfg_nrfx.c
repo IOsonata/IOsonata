@@ -253,6 +253,13 @@ void IOPinConfig(int PortNo, int PinNo, int PinOp, IOPINDIR Dir, IOPINRES Resist
 #endif
 	}
 
+#ifdef GPIO_PIN_CNF_MCUSEL_Msk
+	// Which core owns the pin is decided by the application core and handed
+	// over before the other core runs. A pin configuration from either core
+	// must leave that choice alone, or the pin falls back to the application
+	// core and goes silent on the one that drives it.
+	cnf |= reg->PIN_CNF[PinNo] & GPIO_PIN_CNF_MCUSEL_Msk;
+#endif
 	reg->PIN_CNF[PinNo] = cnf;
 }
 
@@ -275,7 +282,12 @@ void IOPinDisable(int PortNo, int PinNo)
 		return;
 	}
 
-	reg->PIN_CNF[PinNo] = (GPIO_PIN_CNF_INPUT_Disconnect << GPIO_PIN_CNF_INPUT_Pos);
+	uint32_t cnf = (GPIO_PIN_CNF_INPUT_Disconnect << GPIO_PIN_CNF_INPUT_Pos);
+
+#ifdef GPIO_PIN_CNF_MCUSEL_Msk
+	cnf |= reg->PIN_CNF[PinNo] & GPIO_PIN_CNF_MCUSEL_Msk;
+#endif
+	reg->PIN_CNF[PinNo] = cnf;
 }
 
 /**

@@ -119,6 +119,18 @@ extern "C" {
 bool BtEadInit(CipherEngine *pAes, RngEngine *pRng);
 
 /**
+ * @brief	Give EAD a whole-packet AES-CCM engine
+ *
+ * Optional. When set, BtEadEncrypt and BtEadDecrypt run the CCM of Vol 6
+ * Part E in one call of it (the controller vendor command, or a hardware
+ * engine) instead of block by block over the AES engine. Null restores the
+ * block path.
+ *
+ * @param	pAead	: AES-CCM capable engine, or null
+ */
+void BtEadSetAeadEngine(AeadEngine *pAead);
+
+/**
  * @brief	Bind the engines of the port
  *
  * Implemented by a port that has an AES engine and a random source of its

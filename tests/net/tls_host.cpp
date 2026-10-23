@@ -99,7 +99,7 @@ int main(int argc, char **argv)
 	if (bad) psk[0] ^= 1;
 	const uint8_t identity[] = "IOsonata";
 	TlsCfg_t cfg = {&hash, &hash, &aes, &rng, psk, sizeof(psk),
-		identity, sizeof(identity) - 1, nullptr, 5000, dhe ? &agree : nullptr};
+		identity, sizeof(identity) - 1, nullptr, 5000, dhe ? &agree : nullptr, nullptr};
 	static TlsDev_t tls = {};
 	assert(TlsInit(&tls, &cfg, &t.Dev, Now()));
 	if (dhe)

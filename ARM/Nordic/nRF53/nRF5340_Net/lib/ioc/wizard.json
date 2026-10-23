@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "mcu": "NRF5340_XXAA_NETWORK",
+  "cpu": "cortex-m33",
+  "fpu": false,
+  "defines": [
+    "__PROGRAM_START"
+  ],
+  "includes": [
+    "${iosonata}/ARM/Nordic/include",
+    "${iosonata}/ARM/Nordic/nRF53/include",
+    "${iosonata}/ARM/Nordic/nRF53/nRF5340_Net/lib/include",
+    "${external}/nrfx",
+    "${external}/nrfx/drivers/include",
+    "${external}/nrfx/bsp/stable",
+    "${external}/nrfx/bsp/stable/mdk",
+    "${external}/nrfx/bsp/stable/mdk/nrf53",
+    "${external}/nrfx/hal"
+  ],
+  "linker_script": "${iosonata}/ARM/Nordic/nRF53/nRF5340_Net/ldscript/nrf5340_xxaa_network.ld",
+  "lib_path": "${iosonata}/ARM/Nordic/nRF53/nRF5340_Net/lib/ioc/${config}",
+  "lib": "IOsonata_nRF5340_Net",
+  "features": {
+    "ble": {
+      "defines": [
+        "NRFXLIB_SDC",
+        "SPRT_BUFFER_SIZE=256"
+      ],
+      "extra_includes": [
+        "${external}/sdk-nrfxlib/mpsl/include",
+        "${external}/sdk-nrfxlib/mpsl/fem/include",
+        "${external}/sdk-nrfxlib/softdevice_controller/include"
+      ]
+    }
+  }
+}

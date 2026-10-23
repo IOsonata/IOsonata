@@ -55,11 +55,11 @@ __attribute__((weak/*, alias("DNT_IRQHandler")*/)) void SysTick_Handler(void) {}
 __attribute__((weak, alias("DEF_IRQHandler"))) void CACHE_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void SPU_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void CLOCK_POWER_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void SPIM0_SPIS0_TWIM0_TWIS0_UARTE0_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void SPIM1_SPIS1_TWIM1_TWIS1_UARTE1_IRQHandler(void);
+__attribute__((weak, alias("DEF_IRQHandler"))) void SERIAL0_IRQHandler(void);
+__attribute__((weak, alias("DEF_IRQHandler"))) void SERIAL1_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void SPIM4_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void SPIM2_SPIS2_TWIM2_TWIS2_UARTE2_IRQHandler(void);
-__attribute__((weak, alias("DEF_IRQHandler"))) void SPIM3_SPIS3_TWIM3_TWIS3_UARTE3_IRQHandler(void);
+__attribute__((weak, alias("DEF_IRQHandler"))) void SERIAL2_IRQHandler(void);
+__attribute__((weak, alias("DEF_IRQHandler"))) void SERIAL3_IRQHandler(void);
 __attribute__((weak)) void GPIOTE0_IRQHandler(void);
 __attribute__((weak, alias("DEF_IRQHandler"))) void SAADC_IRQHandler(void);
 __attribute__((weak)) void TIMER0_IRQHandler(void);
@@ -135,11 +135,11 @@ void (* const __Vectors[200])(void) = {
 	0,
 	CLOCK_POWER_IRQHandler,
 	0, 0,
-	SPIM0_SPIS0_TWIM0_TWIS0_UARTE0_IRQHandler,
-	SPIM1_SPIS1_TWIM1_TWIS1_UARTE1_IRQHandler,
+	SERIAL0_IRQHandler,
+	SERIAL1_IRQHandler,
 	SPIM4_IRQHandler,
-	SPIM2_SPIS2_TWIM2_TWIS2_UARTE2_IRQHandler,
-	SPIM3_SPIS3_TWIM3_TWIS3_UARTE3_IRQHandler,
+	SERIAL2_IRQHandler,
+	SERIAL3_IRQHandler,
 	GPIOTE0_IRQHandler,
 	SAADC_IRQHandler,
 	TIMER0_IRQHandler,

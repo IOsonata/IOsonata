@@ -87,7 +87,7 @@ enum {
 	USB_ISO_EPIN_MASK_0 = 0,
 	USB_ISO_EPOUT_MASK_0 = 0,
 };
-#elif defined(STM32F401xC) || defined(STM32F401xE)
+#elif defined(STM32F401xx) || defined(STM32F401xC) || defined(STM32F401xE)
 // STM32F401: USB OTG FS, four endpoint numbers including EP0.
 enum {
 	USB_CTRLR_CNT = 1,

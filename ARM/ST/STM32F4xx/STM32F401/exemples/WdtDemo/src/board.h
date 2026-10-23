@@ -1,0 +1,14 @@
+#ifndef __BOARD_H__
+#define __BOARD_H__
+#define BOARD NUCLEO_F401RE
+#include "stm32_boards.h"
+#define UART_RETARGET
+#define UART_DEVNO BOARD_VCP_DEVNO
+#define UART_RX_PORT IOPORTA
+#define UART_RX_PIN 3
+#define UART_RX_PINOP IOPINOP_FUNC7
+#define UART_TX_PORT IOPORTA
+#define UART_TX_PIN 2
+#define UART_TX_PINOP IOPINOP_FUNC7
+#define WDT_DEMO_TIMEOUT_EVT 0
+#endif

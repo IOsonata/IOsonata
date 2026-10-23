@@ -600,23 +600,110 @@ void BtSmpOobPeerDataSet(const uint8_t * const pRand, const uint8_t * const pCon
 void BtSmpOobDataClear(void);
 
 /**
- * @brief	Bring up the Bluetooth-owned controller AES engine (SDC).
+ * @brief	AES-128 ECB engine served by the controller.
  *
- * Returns a CipherEngine whose AES-128 ECB is served by the BLE SoftDevice
- * Controller's HCI LE Encrypt. This is a Bluetooth helper, NOT a generic crypto
- * engine - it requires a running BLE controller and is only valid for the SMP
- * AES slot. On a part with no CryptoCell, compose it with a software ECDH engine
- * (randomness is the injected RngEngine):
+ * A CipherEngine whose single operation is one AES-128 ECB block through the
+ * HCI LE Encrypt command, defined in bt_crypto_ctlr.cpp. It is a Bluetooth
+ * helper, NOT a generic crypto engine: it needs a running controller and is
+ * only valid for the AES slot of SMP and of Encrypted Advertising Data. It
+ * goes through BtHciCommand, so it serves a controller linked into the image
+ * and one behind a UART, IPC or USB link alike.
  *
- *   alignas(CryptoUecc) static uint8_t ecdhMem[CRYPTO_UECC_MEMSIZE];
- *   CryptoUecc *ecdh = CryptoUeccCreate(ecdhMem, sizeof(ecdhMem),
- *                                       CryptoRngNrfInstance());
- *   CipherEngine *aes = BtCryptoCtlrSdcInit();   // controller AES
- *   BtSmpInit(ecdh, aes, CryptoRngNrfInstance());
- *
- * @return	The controller AES engine, or nullptr if the SDC HCI is not present.
+ * @return	The controller AES engine.
  */
-CipherEngine *BtCryptoCtlrSdcInit(void);
+CipherEngine *BtCryptoCtlrInit(void);
+
+/**
+ * @brief	Random number engine served by the controller.
+ *
+ * An RngEngine drawing eight octets per HCI LE Rand command from the entropy
+ * source the controller runs on, defined in bt_crypto_ctlr.cpp. Secure, so it
+ * fits the RNG slot of SMP and the randomizer of Encrypted Advertising Data.
+ * The security module composes it with the AES engine above and the P-256
+ * engine the controller port gives (BtHciCtlrKeyAgreeEngine):
+ *
+ *   BtSmpInit(BtHciCtlrKeyAgreeEngine(), BtCryptoCtlrInit(), BtCryptoCtlrRng());
+ *
+ * @return	The controller RNG engine.
+ */
+RngEngine *BtCryptoCtlrRng(void);
+
+/**
+ * @brief	The I-SYST crypto commands the controller answers.
+ *
+ * Asked of the controller once (Crypto Supported, bt_hci.h) and kept until
+ * BtCryptoCtlrReset. Zero on a controller without the vendor commands; the
+ * engines above then keep to LE Encrypt and LE Rand.
+ *
+ * @return	BT_HCI_VS_ISYST_CRYPTO_* bits
+ */
+uint32_t BtCryptoCtlrVendorCrypto(void);
+
+/**
+ * @brief	Forget what the controller answered, before it is started again.
+ */
+void BtCryptoCtlrReset(void);
+
+/**
+ * @brief	AES-CMAC engine served by the controller.
+ *
+ * One vendor command per message, for the SMP functions and the EAD MIC.
+ *
+ * @return	The engine, or nullptr on a controller without the command, in
+ * 			which case the consumer computes CMAC over the AES engine.
+ */
+MacEngine *BtCryptoCtlrMac(void);
+
+/**
+ * @brief	AES-CCM engine served by the controller.
+ *
+ * One vendor command per packet, for Encrypted Advertising Data.
+ *
+ * @return	The engine, or nullptr on a controller without the command.
+ */
+AeadEngine *BtCryptoCtlrAead(void);
+
+/**
+ * @brief	SHA-256 engine served by the controller.
+ *
+ * One command per message of up to 254 octets, one-shot only: the streaming
+ * digest a firmware image needs is not served over a link, so DfuImgHash
+ * keeps a software SHA-256 on the host. For a key hash or a challenge.
+ *
+ * @return	The engine, or nullptr on a controller without the command.
+ */
+HashEngine *BtCryptoCtlrHash(void);
+
+/**
+ * @brief	HMAC-SHA-256 engine served by the controller.
+ *
+ * One command per message, key and message together up to 253 octets.
+ *
+ * @return	The engine, or nullptr on a controller without the command.
+ */
+MacEngine *BtCryptoCtlrHmac(void);
+
+/**
+ * @brief	ECDSA P-256 engine served by the controller.
+ *
+ * Verify is the signature check of a firmware image on a host without
+ * P-256 of its own: hash the image with a software SHA-256 and give this
+ * engine to DfuImgVerify as pSign. Sign is there when the controller has
+ * an entropy source.
+ *
+ * @return	The engine, or nullptr on a controller with neither command.
+ */
+SignEngine *BtCryptoCtlrSign(void);
+
+/**
+ * @brief	Give SMP a CMAC engine.
+ *
+ * Optional. When set and it answers, the toolbox functions f4, f5, f6, g2,
+ * h6 and h7 take their AES-CMAC from it in one call; otherwise, and on any
+ * failure of it, CMAC is computed block by block over the AES engine of
+ * BtSmpInit.
+ */
+void BtSmpSetMacEngine(MacEngine *pMac);
 
 // SMP crypto entry points used by the state machine (dispatch to the composed
 // engines). Kept as functions so the toolbox (c1/f4/f5/f6, AES-CMAC) calls a

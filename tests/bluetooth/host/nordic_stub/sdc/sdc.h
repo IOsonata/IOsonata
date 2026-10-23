@@ -86,6 +86,7 @@ int32_t sdc_rand_source_register(const sdc_rand_source_t *pSource);
 int32_t sdc_cfg_set(uint8_t Tag, uint8_t Type, const sdc_cfg_t *pCfg);
 int32_t sdc_enable(sdc_callback_t Callback, uint8_t *pMemPool);
 int32_t sdc_disable(void);
+int32_t sdc_default_tx_power_set(int8_t requested_power_level);
 
 void sdc_support_adv(void);
 void sdc_support_ext_adv(void);

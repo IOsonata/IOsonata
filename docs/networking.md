@@ -24,7 +24,7 @@ controller or LTE modem, and neither contains board or MCU register access.
 | --- | --- |
 | MQTT 3.1.1 | Shared `src/net/mqtt.cpp` over an already-connected stream |
 | CoAP | Shared `src/net/coap.cpp` over an already-connected UDP interface |
-| Native TLS 1.3 PSK | Shared `Tls : DeviceIntrf` over a TCP interface, authenticated before MQTT starts |
+| Native TLS 1.3 | Shared `Tls : DeviceIntrf` over TCP; external PSK or the P-256 server-certificate profile, authenticated before MQTT starts |
 | Ethernet socket | `SockIntrf` implemented by shared `src/net/ip_lwip.cpp` over the MCU Ethernet driver |
 | nRF91 socket | `SockIntrf` implemented by `ARM/Nordic/nRF91/src/sock_intrf_nrf91.cpp` through the modem |
 
@@ -158,7 +158,7 @@ Other applications do not link the IP stack or DMA storage unless they use it.
   until lwIP finishes it, so a late answer cannot change a replacement socket.
 - Ethernet SockIntrf TLS/DTLS selections, credential storage and LTE
   release-assistance operations return false. The separate native `Tls` wrapper
-  supports the PSK profile described below. nRF91 modem TLS/DTLS support is
+  supports the PSK and P-256 certificate profiles described below. nRF91 modem TLS/DTLS support is
   unchanged. Shared MQTT uses the selected stream; shared CoAP uses a connected
   UDP interface with the limited profile described below.
 - H753 driver: MAC DevNo 0, LAN8742A PHY over RMII, auto-negotiated 10/100 Mbit/s,
@@ -208,7 +208,7 @@ account login. Nordic documents that modem firmware `mfw_nrf9160_1.2.8` and
 not add validity-date checking. The
 [generic example guide](network-protocol-examples.md#mqtt-over-modem-tls)
 records the exact settings, CA origin/fingerprint, Nordic references,
-credential lifecycle and negative-test procedure. Native TLS 1.3 PSK and
+credential lifecycle and negative-test procedure. Native TLS 1.3 PSK/certificate profiles and
 plaintext CoAP remain separate.
 
 The maintainer's nRF91x1 `MqttTlsDemo` log with `mfw_nrf91x1_2.0.1` confirms
@@ -280,22 +280,27 @@ The [recovery hardware record](network-protocol-examples.md#follow-up-controlled
 preserves the exact identity and event sequence. An earlier reported stop
 on the same modem firmware remains unresolved.
 
-### Native TLS 1.3 PSK client
+### Native TLS 1.3 client
 
-`net/tls.h` and `src/net/tls.cpp` implement an initial external-PSK client.
+`net/tls.h` and `src/net/tls.cpp` implement a shared TLS 1.3 client.
 The `Tls` DeviceIntrf wraps a connected TCP `SockIntrf`, following the layered
 interface pattern. The existing socket TLS/DTLS protocol selections and credential
 storage remain unsupported by lwIP; selecting that enum does not select this
 client. The nRF91 modem's TLS/DTLS path is separate from this native client.
 
-The client offers TLS 1.3 and `TLS_AES_128_GCM_SHA256`. With a non-null
-`TlsCfg_t::pKeyAgree`, it requires `psk_dhe_ke` with a fresh P-256 key pair and
-rejects a PSK-only server response. Without this engine it offers only `psk_ke`,
-which has no forward secrecy and requires server support for PSK without DHE.
-Neither mode implements X.509, certificate hostname verification, DTLS,
-early data, session resumption, or HelloRetryRequest support. Unsupported
-negotiation fails closed. It is an initial implementation, not a claim of
-complete TLS feature coverage or an independently audited security library.
+The client offers TLS 1.3 and `TLS_AES_128_GCM_SHA256`. A null
+`TlsCfg_t::pCert` selects external PSK. In PSK mode, a non-null `pKeyAgree`
+requires `psk_dhe_ke` with a fresh P-256 key pair and rejects a PSK-only server
+response. Without this engine it offers only `psk_ke`, which has no forward
+secrecy and requires server support for PSK without DHE. A non-null `pCert`
+selects server certificates and requires P-256 key agreement, a DNS server
+name, a trust-anchor configuration and empty PSK/identity fields. There is no
+fallback between authentication profiles.
+
+DTLS, early data, session resumption, client certificates and HelloRetryRequest
+are not implemented. Unsupported negotiation fails. This is a limited TLS
+profile; no complete TLS feature coverage or independent security audit is
+claimed.
 
 The caller supplies existing synchronous `HashEngine`, `MacEngine`, `AeadEngine`
 and security-grade `RngEngine` instances. PSK-DHE additionally uses an enabled,
@@ -320,14 +325,18 @@ Rx/Tx helpers. Tx accepts at most 1024 plaintext bytes into its fixed output
 buffer; retry the remainder. Accepted bytes are queued, not necessarily delivered.
 This initial interface is polled; it does not publish TLS event callbacks.
 
-All connection storage is in `TlsDev_t`: a 16645-byte input record buffer,
-1046-byte output buffer, two 2048-byte handshake/transcript buffers, keys and
-state, plus a fixed key-agreement context. The measured x86-64 context size is
-22304 bytes; this is not an ARM RAM measurement and excludes provider objects
-and stack. The receiver supports the
-TLS 1.3 maximum ciphertext record size. Individual handshake messages and the
-initial transcript are bounded to 2048 bytes. Oversized tickets/messages fail
-rather than allocating. Received tickets are checked and discarded.
+`TlsDev_t` holds a 16645-byte input record buffer, a 1046-byte output buffer,
+two internal 2048-byte handshake/transcript buffers, keys, connection state
+and a fixed key-agreement context. Certificate mode also holds the DNS name
+and certificate-verification state. Optional caller-owned work buffers in
+`TlsCertCfg_t` allow larger certificate messages: up to 32768 bytes for one
+handshake message and 65536 bytes for the transcript. Pointer and size must
+both be supplied; disjoint storage must remain live until reset. The internal
+2048-byte buffers remain in the context even when external buffers are used.
+The receiver supports the TLS 1.3 maximum ciphertext record size. Messages
+exceeding the configured buffers fail without allocation. Received tickets
+are checked and discarded. Target linker maps determine total RAM use,
+including crypto engines, stack and application buffers.
 
 Handshake and pending-output deadlines use `TlsCfg_t::Timeout`. KeyUpdate is
 handled, including requested responses. A conservative cap of 2^20 records per
@@ -358,10 +367,76 @@ shares (downgrade rejection), key-context bounds, provider failure and wiping.
 The host runner uses the existing micro-ecc checkout; `UECC_ROOT` can override
 its location. The maintainer's H753 TLS hardware results are recorded below.
 
-Certificate authentication, DTLS, broader protocol/error handling,
-credential-tag integration and independent security review remain future work.
+DTLS, broader certificate/algorithm support, credential-tag integration and
+independent security review remain future work.
 The shared protocol/crypto separation allows this component to move with the
 communications code into Voci when the ecosystem is ready.
+
+#### P-256 server-certificate profile
+
+`include/crypto/x509.h` and `src/crypto/x509.cpp` verify a bounded DER X.509 v3
+chain using the existing synchronous SHA-256 and `SignEngine` interfaces.
+TLS uses that verifier for the server chain and verifies CertificateVerify
+and Finished before exposing application data. The C API and `Tls` wrapper
+use the same implementation. No certificate parser, crypto provider or MCU
+implementation is embedded in MQTT.
+
+The caller supplies `TlsCertCfg_t` with an enabled P-256 `SignEngine`, a
+caller-owned array of DER CA certificates, a nonzero trusted UTC Unix time and
+optional work buffers. `TlsCfg_t::pServerName` is used for SNI and DNS SAN
+verification. Configurations and the name are copied by `TlsInit`; CA arrays,
+DER bytes and work buffers must remain available until `TlsReset`. Time is
+sampled by the application for each new connection. It must come from a trusted
+clock or provisioning source; an unchecked network timestamp is not sufficient.
+
+The first profile supports:
+
+- Up to four ordered peer certificates and eight configured CA anchors, with
+  at most 4096 DER bytes per certificate and 253 bytes per DNS reference name.
+- Uncompressed P-256 public keys and ECDSA/SHA-256 signatures throughout the
+  path. Leaf-to-root order is required; issuer and subject DER names must match.
+- Certificate validity dates, CA/basicConstraints, path length, key usage and
+  serverAuth extended key usage, including the selected configured anchor's
+  restrictions and validity dates.
+- ASCII DNS SAN matching without case. A wildcard can replace only the full
+  leftmost label and matches one label. IP literals, trailing dots, Unicode
+  names and common-name fallback are unsupported.
+
+The selected CA is trusted by application configuration; its self-signature
+is not needed to establish that trust. RSA, Ed25519, other curves/hashes,
+alternate path building and certificate downloading are unsupported. Unknown
+critical extensions fail. Name constraints, policy constraints/mappings and
+inhibitAnyPolicy fail even when marked noncritical. No CRL or OCSP status is
+fetched or checked, so successful validation does not establish revocation
+status. `TLS_ERROR_CERTIFICATE` and `Tls::CertificateError()` report chain
+verification failures separately from TLS record/protocol errors.
+
+The new
+[MqttCertDemo](../ARM/ST/STM32H7xx/STM32H753/exemples/MqttCertDemo/README.md)
+project runs the unchanged shared MQTT protocol over this TLS profile and
+H753 Ethernet TCP. Its generic setup pumps TLS in the foreground and waits
+for authentication before MQTT initialization. It uses a generated local
+P-256 CA/server certificate and runtime UTC provisioning through the physical
+console. A missing CA header or missing UTC prevents connection startup;
+there is no plaintext or time-validation fallback. The generic setup can also
+layer native TLS over the selected LTE TCP or custom stream implementation.
+Both nRF91 library projects include native TLS/X.509 source links, while their
+existing `MqttTlsDemo` projects continue selecting modem TLS.
+
+`tests/net/run_tls_cert.py` passed at O0/O2 with ASan/UBSan and OpenSSL 3.0.13.
+It exercised direct, intermediate and included-root chains; 1/7/65536-byte TCP
+transfers; 19/1024/4096/16000-byte authenticated echoes; and 20 reconnects to one
+server. A roughly 3 KB leaf certificate succeeded with caller-owned buffers
+and failed with the internal buffer limit. Wrong trust, hostname, time, key
+usage and signatures were rejected. These runs used the shared TLS/X.509
+implementation and real crypto with local OpenSSL peers.
+
+`tests/net/run_native_tls_demo.py` checks
+the new project's source links, real board-header syntax, provisioning helper,
+UTC parser and timer wrap, pending/failed TLS setup and MQTT startup ordering
+at O0/O2 with ASan/UBSan. Its setup tests substitute TLS and hardware operations;
+they do not perform a cryptographic handshake. No fresh ARM compile/link or
+native certificate hardware result is claimed by these host checks.
 
 ## Shared MQTT client
 
@@ -444,8 +519,9 @@ collisions; it does not make a public topic private. Use this for connectivity
 checks, not confidential telemetry or broker performance measurements.
 
 This demo does not enable TLS. The public broker's encrypted listeners use
-X.509 certificates, which the native external-PSK TLS implementation does not
-support. Changing the port to 8883 alone does not make this demo encrypted.
+X.509 certificates, which are not part of the external-PSK profile. The native
+certificate profile above has its own configured trust, time and algorithm
+requirements. Changing the port to 8883 alone does not make this demo encrypted.
 The nRF91 modem's separate credential/TLS operations remain available to an
 application that explicitly configures and validates that path.
 

@@ -636,6 +636,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_hci_ctlr.h</locationURI>
 		</link>
 		<link>
+			<name>include/bluetooth/bt_hci_h4.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_hci_h4.h</locationURI>
+		</link>
+		<link>
 			<name>include/bluetooth/bt_hci_uart.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_hci_uart.h</locationURI>
@@ -1601,6 +1606,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_hci_ctlr.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/bluetooth/bt_hci_h4.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_hci_h4.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/bluetooth/bt_hci_host.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_hci_host.cpp</locationURI>
@@ -1731,9 +1741,9 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/coredev/i2c.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/coredev/i2c_stm32.cpp</name>
+			<name>src/coredev/i2c_stm32v2.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-4-PROJECT_LOC/src/i2c_stm32.cpp</locationURI>
+			<locationURI>PARENT-4-PROJECT_LOC/src/i2c_stm32v2.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/coredev/gpdma_stm32wba.cpp</name>

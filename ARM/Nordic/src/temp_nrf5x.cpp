@@ -33,6 +33,14 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ----------------------------------------------------------------------------*/
 #include "nrf.h"
 
+// Peripherals carry a security suffix on nRF53 and nRF91. Only the nRF5340
+// network core has a temperature sensor, and it is non secure.
+#if !defined(NRF_TEMP) && defined(NRF_TEMP_S)
+#define NRF_TEMP	NRF_TEMP_S
+#elif !defined(NRF_TEMP) && defined(NRF_TEMP_NS)
+#define NRF_TEMP	NRF_TEMP_NS
+#endif
+
 #include "temp_nrf5x.h"
 
 static TempnRF5x *s_pTempnRF5x = NULL;

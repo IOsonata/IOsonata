@@ -13,11 +13,12 @@ host supports it.
 
 | Configuration family | Host implementation | Starting point |
 |---|---|---|
-| Nordic SDC | IOsonata generic HCI host above SoftDevice Controller | Matching `Debug_SDC` or `Release_SDC` project |
+| Nordic SDC | IOsonata HCI host (`bt_app_hci.cpp`) above the SoftDevice Controller linked into the image | Matching `Debug_SDC` or `Release_SDC` project |
+| MCU without a radio (nRF91, STM32, ...) | The same IOsonata HCI host, HCI over UART to an nRF5x running HciController | nRF9160 or nRF91x1 library, see [HCI host over a link](#hci-host-over-a-link) |
+| nRF5340 application core | The same IOsonata HCI host, HCI over the IPC rings to HciController on the network core | nRF5340_App library and examples, see [HCI host over a link](#hci-host-over-a-link) |
 | nRF52 SoftDevice | Nordic host/controller, adapted by IOsonata | Selected target's SoftDevice configuration |
 | nRF54 bare-metal SDK / S145 | Nordic host/controller, adapted by IOsonata | Selected nRF54 project's non-SDC configuration |
 | STM32WBA | ST vendor stack through the IOsonata port | Inspect the target project and vendor dependencies |
-| nRF91 | IOsonata generic HCI host, HCI over UART to an nRF5x running HciController | nRF9160 or nRF91x1 library, see [HCI over UART](#hci-over-uart-nrf91) |
 
 SDC and SoftDevice are different stack arrangements. Do not combine their
 libraries, memory layouts or initialization code. The STM32WBA source is an
@@ -320,40 +321,91 @@ See [the USB guide](usb-user-guide.md#bluetooth-hci-over-usb).
 The maintainer tested the USB transport with HciController; that application
 is not supplied as a target project in this repository.
 
-### HCI over UART (nRF91)
+### HCI host over a link
 
-The nRF91 has no Bluetooth radio. Its port (`bt_app_nrf91.cpp`) runs the
-generic host and reaches the controller of an nRF5x running HciController
-through `BtHciUart`, the H4 transport in `bluetooth/bt_hci_uart.h`. The same
-`BtAppInit()`, `AppRun()` and GATT code as the SDC port apply.
+The IOsonata host is one file, `src/bluetooth/bt_app_hci.cpp`, whatever the
+controller. The controller is a `BtHciCtlr` (`bluetooth/bt_hci_ctlr.h`), a
+`DeviceIntrf`, and the MCU library links the host with one controller port
+the way a sensor driver is given an I2C or an SPI:
 
-The application defines the UART to the controller as `g_BtHciUartCfg` in a
-file that includes `bluetooth/bt_hci_uart.h`. Use hardware flow control and
-the rate HciController uses. Leave `pRxMem` and `pTxMem` NULL to take the
-port's FIFOs, 2 KB RX and 1 KB TX; a TX FIFO given by the application must
-hold one whole packet, `BT_HCI_UART_TXFIFO_MIN` bytes.
+| Controller port | Controller | Linked by |
+|---|---|---|
+| `ARM/Nordic/src/bt_hci_ctlr_sdc.cpp` | SoftDevice Controller in the same image, reached by function call | nRF52/nRF53/nRF54 SDC configurations |
+| `src/bluetooth/bt_hci_ctlr_uart.cpp` | nRF5x running HciController, H4 over a UART (`BtHciUart`) | nRF91 libraries, any MCU without a radio |
+| `src/bluetooth/bt_hci_ctlr_ipc.cpp` | HciController on the other core, packets over the IPC rings (`BtHciIpc`) | nRF5340_App library |
+
+The two link ports share `src/bluetooth/bt_hci_h4_ctlr.cpp`, the port of a
+controller behind a `BtHciH4` link; a USB transport will be a third file of
+the same shape once the USB stack has host mode. The same `BtAppInit()`,
+`AppRun()`, GATT code, `BtAppSecInit()` and Encrypted Advertising Data apply
+on every port: the address, the ACL buffer sizes, the AES-128 and random
+numbers of SMP and EAD all come from the controller over HCI.
+
+For the UART link the application defines the UART to the controller as
+`g_BtHciUartCfg` in a file that includes `bluetooth/bt_hci_uart.h`. Use
+hardware flow control and the rate HciController uses. Leave `pRxMem` and
+`pTxMem` NULL to take the port's FIFOs, 2 KB RX and 1 KB TX; a TX FIFO given
+by the application must hold one whole packet, `BT_HCI_UART_TXFIFO_MIN` bytes.
+
+For the IPC link the shared memory block is declared by the linker script of
+the application core (`IPC0`, exported as `__start_ipc0` and `__stop_ipc0`),
+at the address and size the HciController network core build expects. The
+network core is the owner of the block and is released by the application
+core when the link opens. The channels and interrupt priority come from
+`g_BtHciCtlrIpcCfg`, a weak default an application using other channels
+defines itself.
 
 - `BtAppInit()` sends HCI Reset, retried while the controller starts, then
   reads the LE ACL buffers for fragmentation and credits. It fails when the
   controller does not answer.
-- The device address is a static random address made from the nRF91 device
-  identifier.
-- Received packets are framed from `BtEvtQue()`, not in the UART interrupt.
-  A command waits for its response in the calling context. Call the stack from
-  the context that runs the `BtEvtQue()` work, never from an interrupt; with an
-  RTOS, from the Bluetooth task.
+- The device address, in this order: the application's own when it defines
+  `BtAppStaticAddrGet()` (a provisioned identity, static random); the static
+  address of the controller from the I-SYST `Read Static Address` vendor
+  command (`BT_HCI_CMD_VS_ISYST_READ_STATIC_ADDR`, which the SDC port and
+  HciController answer from the factory address of the part); the public
+  address from Read BD_ADDR when the controller has one programmed, used as
+  public; else one from the controller's random numbers, kept for the
+  session. Read BD_ADDR is never turned into a random address and the
+  static address is never advertised as public.
+- Crypto: AES-128 and random numbers come over LE Encrypt and LE Rand on
+  every controller. A controller with the I-SYST vendor commands
+  (HciController, `BT_HCI_CMD_VS_ISYST_*` in `bt_hci.h`) is asked once
+  after it starts, and then gives SMP its AES-CMAC and Encrypted Advertising
+  Data its AES-CCM in one command per message, and up to 251 random octets
+  per command. `BtCryptoCtlrMac()` and `BtCryptoCtlrAead()` are the engines,
+  null on a controller without the commands. The same controller serves
+  `BtCryptoCtlrHash()` (one-shot SHA-256), `BtCryptoCtlrHmac()` and
+  `BtCryptoCtlrSign()` (ECDSA P-256): on an MCU without P-256 of its own,
+  hash a firmware image with `CryptoSoftSha256Hash` and give
+  `BtCryptoCtlrSign()` to `DfuImgVerify` or `DfuBoot` as the signature
+  check. The SDC port answers none of
+  the crypto commands: the host next to it has the engines of the part.
+- The host has no timer. The SMP and GATT transaction timeouts read
+  `BtSmpMsTick()` and `BtGattMsTick()`, which the SDC port defines from its
+  low frequency timer and which stay inert (return 0) on a link port unless
+  the application defines them from a timer it has. The once a second checks
+  of a link run from `BtAppCheckStatus()`.
+- Received packets are framed from `BtEvtQue()`, not in the interrupt of the
+  link. A command waits for its response in the calling context. Call the
+  stack from the context that runs the `BtEvtQue()` work, never from an
+  interrupt; with an RTOS, from the Bluetooth task.
 - The UART driver drops bytes its RX FIFO cannot hold. There is no HCI
-  controller-to-host flow control, so size the RX FIFO for the traffic.
+  controller-to-host flow control, so size the RX FIFO for the traffic. The
+  IPC rings keep packet boundaries and refuse a full ring instead.
 
-Not supported on this port yet: `BtAppSecInit()` (pairing and bonding),
-Encrypted Advertising Data and the `TxPower` of `BtAppCfg_t`. Build
-`uart_ble.cpp` with `BLE_SC_METHOD=0`, as the nRF9160 `UartBleDemo` project
-does.
+Not available on a link port: the `TxPower` of `BtAppCfg_t`, for which
+standard HCI has no command; the controller keeps its own default.
 
 [UartBleDemo](../ARM/Nordic/nRF91/nRF9160/exemples/UartBleDemo) targets the
 nRF9160 DK, with the nRF52840 of the DK running HciController on the
 interface lines. Check the pins in its `board.h` against the board revision
 and the HciController build; the nRF52840 must route those lines.
+[BleAdvertiser](../ARM/Nordic/nRF53/nRF5340_App/exemples/BleAdvertiser),
+[UartBleDemo](../ARM/Nordic/nRF53/nRF5340_App/exemples/UartBleDemo),
+[BleSecurityDemo](../ARM/Nordic/nRF53/nRF5340_App/exemples/BleSecurityDemo)
+and [BleTestDut](../ARM/Nordic/nRF53/nRF5340_App/exemples/BleTestDut) are
+the same examples on the nRF5340 application core, with HciController in
+IPC mode on the network core.
 
 ### BleGateway multi-tag environmental telemetry
 

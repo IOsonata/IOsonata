@@ -10,12 +10,31 @@
 #include "board.h"
 #include NET_DEMO_RNG_HEADER
 
+#ifndef NET_DEMO_NATIVE_TLS
+#define NET_DEMO_NATIVE_TLS	0
+#endif
+
+static_assert(NET_DEMO_NATIVE_TLS == 0 || NET_DEMO_NATIVE_TLS == 1,
+	"NET_DEMO_NATIVE_TLS must be 0 or 1");
+
+#if NET_DEMO_NATIVE_TLS
+#include <string.h>
+#include "crypto/crypto_softaes.h"
+#include "crypto/crypto_softsha256.h"
+#include "crypto/crypto_uecc.h"
+#include "net/tls.h"
+#include "net_demo_tls_trust.h"
+#endif
+
 #ifndef NET_DEMO_MODEM_TLS
 #define NET_DEMO_MODEM_TLS	0
 #endif
 
 static_assert(NET_DEMO_MODEM_TLS == 0 || NET_DEMO_MODEM_TLS == 1,
 	"NET_DEMO_MODEM_TLS must be 0 or 1");
+
+static_assert(!NET_DEMO_NATIVE_TLS || !NET_DEMO_MODEM_TLS,
+	"Select either native TLS or modem TLS");
 
 #ifndef NET_DEMO_LTE_RECOVERY_TEST
 #define NET_DEMO_LTE_RECOVERY_TEST	0
@@ -59,6 +78,9 @@ static_assert(NET_DEMO_TLS_SEC_TAG >= 0 && NET_DEMO_TLS_SEC_TAG <= 2147483647,
 alignas(4) uint8_t g_AppEvtHandlerQueMem[APPEVT_HANDLER_QUE_MEMSIZE(16)];
 static const IOPinCfg_t s_UartPins[] = NET_DEMO_UART_PINS;
 alignas(4) static uint8_t s_UartTxMem[CFIFO_MEMSIZE(1024)];
+#if NET_DEMO_NATIVE_TLS
+alignas(4) static uint8_t s_UartRxMem[CFIFO_MEMSIZE(128)];
+#endif
 static const UARTCfg_t s_UartCfg = {
 	.DevNo = NET_DEMO_UART_DEVNO,
 	.pIOPinMap = s_UartPins,
@@ -72,6 +94,10 @@ static const UARTCfg_t s_UartCfg = {
 	.IntPrio = NET_DEMO_INT_PRIO,
 	.EvtCallback = nullptr,
 	.bFifoBlocking = true,
+#if NET_DEMO_NATIVE_TLS
+	.RxMemSize = sizeof(s_UartRxMem),
+	.pRxMem = s_UartRxMem,
+#endif
 	.TxMemSize = sizeof(s_UartTxMem),
 	.pTxMem = s_UartTxMem,
 	.bDMAMode = NET_DEMO_UART_DMA,
@@ -100,6 +126,160 @@ static bool s_PumpStarted;
 static bool s_MediumStarted;
 static bool s_WasReady;
 static volatile bool s_PumpQueued;
+
+#if NET_DEMO_NATIVE_TLS
+static CryptoSoftSha256 s_TlsHash;
+static CryptoSoftAes s_TlsAes;
+static CryptoUecc s_TlsEcc;
+static Tls s_Tls;
+static uint8_t s_TlsHandshake[8192];
+static uint8_t s_TlsTranscript[12288];
+static uint64_t s_UtcSeconds;
+static uint32_t s_UtcTick;
+static uint32_t s_UtcRemainder;
+static char s_TimeLine[32];
+static size_t s_TimeLength;
+static bool s_TimeDiscard;
+static bool s_UtcValid;
+static bool s_TlsOpening;
+static bool s_TlsFailed;
+
+static void UpdateUtc(uint32_t Now)
+{
+	uint64_t elapsed = (uint32_t)(Now - s_UtcTick);
+
+	s_UtcTick = Now;
+	if (s_UtcValid)
+	{
+		elapsed += s_UtcRemainder;
+		s_UtcSeconds += elapsed / 1000U;
+		s_UtcRemainder = elapsed % 1000U;
+	}
+}
+
+static void SetConsoleTime()
+{
+	uint64_t seconds = 0;
+	size_t i;
+
+	if (s_TimeDiscard || s_TimeLength <= 5U ||
+		memcmp(s_TimeLine, "time ", 5) != 0)
+	{
+		SysLogPrintf(SysLogGet(), "UTC command rejected; use time <Unix seconds>\r\n");
+		return;
+	}
+	for (i = 5; i < s_TimeLength; i++)
+	{
+		if (s_TimeLine[i] < '0' || s_TimeLine[i] > '9' ||
+			seconds > (253402300799ULL - (uint8_t)(s_TimeLine[i] - '0')) / 10U)
+		{
+			SysLogPrintf(SysLogGet(), "UTC command rejected; invalid seconds\r\n");
+			return;
+		}
+		seconds = seconds * 10U + (uint8_t)(s_TimeLine[i] - '0');
+	}
+	if (!seconds || s_pEndpoint)
+	{
+		SysLogPrintf(SysLogGet(), "UTC command rejected; zero time or active connection\r\n");
+		return;
+	}
+	// The physical console and commissioning PC are the time source for this
+	// demo. Reset requires provisioning again; no build date or SNTP fallback.
+	s_UtcSeconds = seconds;
+	s_UtcTick = NetDemoNow();
+	s_UtcRemainder = 0;
+	s_UtcValid = true;
+	SysLogPrintf(SysLogGet(), "TLS UTC set from console\r\n");
+}
+
+static void ProcessConsoleTime(uint32_t Now)
+{
+	uint8_t value;
+	unsigned count;
+
+	UpdateUtc(Now);
+	for (count = 0; count < 32U && s_Uart.Rx(&value, 1) == 1; count++)
+	{
+		if (value == '\r' || value == '\n')
+		{
+			if (s_TimeLength || s_TimeDiscard)
+			{
+				SetConsoleTime();
+			}
+			s_TimeLength = 0;
+			s_TimeDiscard = false;
+		}
+		else if (value < ' ' || value > '~' || s_TimeLength == sizeof(s_TimeLine))
+		{
+			s_TimeDiscard = true;
+		}
+		else if (!s_TimeDiscard)
+		{
+			s_TimeLine[s_TimeLength++] = (char)value;
+		}
+	}
+}
+
+static bool PrepareNativeTls()
+{
+	const char *name = NET_DEMO_TLS_SERVER_NAME;
+
+	if (!g_NetDemoTlsTrustAnchorCount || !name || !name[0])
+	{
+		SysLogPrintf(SysLogGet(), "Native TLS configuration missing: generate CA header and set server name\r\n");
+		return false;
+	}
+	s_TlsEcc.SetRng(s_pRng);
+	if (!s_TlsHash.Enable() || !s_TlsAes.Enable() || !s_TlsEcc.Enable())
+	{
+		SysLogPrintf(SysLogGet(), "Native TLS crypto initialization failed\r\n");
+		return false;
+	}
+	s_UtcTick = NetDemoNow();
+	SysLogPrintf(SysLogGet(), "Native TLS waiting for UTC: time <Unix seconds>\r\n");
+	return true;
+}
+
+static bool OpenNativeTls(DevIntrf_t *pTransport)
+{
+	TlsCertCfg_t cert = {
+		.pSign = &s_TlsEcc,
+		.pTrustAnchors = g_NetDemoTlsTrustAnchors,
+		.TrustAnchorCount = g_NetDemoTlsTrustAnchorCount,
+		.UnixTime = 0,
+		.pHandshakeBuffer = s_TlsHandshake,
+		.HandshakeBufferSize = sizeof(s_TlsHandshake),
+		.pTranscriptBuffer = s_TlsTranscript,
+		.TranscriptBufferSize = sizeof(s_TlsTranscript),
+	};
+	TlsCfg_t cfg = {
+		.pHash = &s_TlsHash,
+		.pMac = &s_TlsHash,
+		.pAead = &s_TlsAes,
+		.pRng = s_pRng,
+		.pPsk = nullptr,
+		.PskLen = 0,
+		.pIdentity = nullptr,
+		.IdentityLen = 0,
+		.pServerName = NET_DEMO_TLS_SERVER_NAME,
+		.Timeout = 30000U,
+		.pKeyAgree = &s_TlsEcc,
+		.pCert = &cert,
+	};
+	uint32_t now = NetDemoNow();
+
+	UpdateUtc(now);
+	cert.UnixTime = s_UtcSeconds;
+	s_TlsFailed = false;
+	s_TlsOpening = s_Tls.Init(cfg, pTransport, now);
+	if (!s_TlsOpening)
+	{
+		SysLogPrintf(SysLogGet(), "Native TLS initialization failed, error=%u certificate_error=%d\r\n",
+			(unsigned)s_Tls.Error(), (int)s_Tls.CertificateError());
+	}
+	return s_TlsOpening;
+}
+#endif
 
 #if NET_DEMO_MEDIUM == NET_DEMO_MEDIUM_LTE
 static void LteEvent(LTE_EVT Evt, const LteStatus_t * const pStatus);
@@ -197,6 +377,8 @@ const char *NetDemoSecurityName()
 {
 #if NET_DEMO_MODEM_TLS
 	return "TLS 1.2, CA/hostname verified";
+#elif NET_DEMO_NATIVE_TLS
+	return "TLS 1.3, CA/hostname/time verified";
 #else
 	return "plaintext";
 #endif
@@ -208,6 +390,12 @@ bool NetDemoReady()
 	{
 		return false;
 	}
+#if NET_DEMO_NATIVE_TLS
+	if (!s_UtcValid)
+	{
+		return false;
+	}
+#endif
 #if NET_DEMO_MEDIUM == NET_DEMO_MEDIUM_LTE
 #if NET_DEMO_LTE_RECOVERY_TEST
 	if (LteRecoveryGated())
@@ -223,7 +411,7 @@ bool NetDemoReady()
 #endif
 }
 
-bool NetDemoConnected()
+static bool TransportConnected()
 {
 	if (!s_pEndpoint || !NetDemoReady())
 	{
@@ -236,12 +424,34 @@ bool NetDemoConnected()
 #endif
 }
 
+bool NetDemoOpening()
+{
+#if NET_DEMO_NATIVE_TLS
+	return s_pEndpoint && NetDemoReady() && s_TlsOpening;
+#else
+	return false;
+#endif
+}
+
+bool NetDemoConnected()
+{
+#if NET_DEMO_NATIVE_TLS
+	return s_pEndpoint && NetDemoReady() && s_Tls.Connected();
+#else
+	return TransportConnected();
+#endif
+}
+
 void NetDemoClose()
 {
 	if (!s_pEndpoint)
 	{
 		return;
 	}
+#if NET_DEMO_NATIVE_TLS
+	s_Tls.Reset();
+	s_TlsOpening = false;
+#endif
 #if NET_DEMO_MEDIUM == NET_DEMO_MEDIUM_CUSTOM
 	NetDemoCustomClose();
 #else
@@ -264,10 +474,10 @@ DeviceIntrf *NetDemoOpen(bool Datagram, const char *pHost, uint16_t Port)
 	{
 		return nullptr;
 	}
-#if NET_DEMO_MODEM_TLS
+#if NET_DEMO_MODEM_TLS || NET_DEMO_NATIVE_TLS
 	if (Datagram)
 	{
-		SysLogPrintf(SysLogGet(), "Modem TLS demo requires a stream interface\r\n");
+		SysLogPrintf(SysLogGet(), "TLS demo requires a stream interface\r\n");
 		return nullptr;
 	}
 #endif
@@ -321,7 +531,16 @@ DeviceIntrf *NetDemoOpen(bool Datagram, const char *pHost, uint16_t Port)
 	}
 	// Protocol pumps control retry timing and preserve datagram boundaries.
 	dev->MaxRetry = 0;
+#if NET_DEMO_NATIVE_TLS
+	if (!OpenNativeTls(dev))
+	{
+		NetDemoClose();
+		return nullptr;
+	}
+	return &s_Tls;
+#else
 	return s_pEndpoint;
+#endif
 }
 
 #if NET_DEMO_MEDIUM == NET_DEMO_MEDIUM_LTE
@@ -567,6 +786,9 @@ static void Pump(uint32_t Evt, void *pCtx)
 {
 	uint32_t now = NetDemoNow();
 	bool ready;
+#if NET_DEMO_NATIVE_TLS
+	TLS_STATE state;
+#endif
 
 	(void)Evt;
 	(void)pCtx;
@@ -587,6 +809,28 @@ static void Pump(uint32_t Evt, void *pCtx)
 	if (s_MediumStarted)
 	{
 		NetDemoCustomProcess(NetDemoNow());
+	}
+#endif
+#if NET_DEMO_NATIVE_TLS
+	ProcessConsoleTime(NetDemoNow());
+	if (s_pEndpoint)
+	{
+		state = s_Tls.Process(NetDemoNow(), TransportConnected());
+
+		if (state == TLS_READY)
+		{
+			s_TlsOpening = false;
+		}
+		else if (state == TLS_FAILED || state == TLS_CLOSED)
+		{
+			s_TlsOpening = false;
+			if (!s_TlsFailed)
+			{
+				s_TlsFailed = true;
+				SysLogPrintf(SysLogGet(), "Native TLS ended, error=%u certificate_error=%d\r\n",
+					(unsigned)s_Tls.Error(), (int)s_Tls.CertificateError());
+			}
+		}
 	}
 #endif
 	ready = NetDemoReady();
@@ -643,6 +887,10 @@ bool NetDemoInit()
 	{
 		return false;
 	}
+#if NET_DEMO_NATIVE_TLS
+	// Poll at most 32 console bytes per foreground pump without waiting.
+	((DevIntrf_t *)s_Uart)->MaxRetry = 0;
+#endif
 	if (!TimerInit(&s_Timer, &s_TimerCfg))
 	{
 		SysLogPrintf(SysLogGet(), "Timer initialization failed\r\n");
@@ -664,6 +912,12 @@ bool NetDemoStart(void (*pHandler)(uint32_t Now))
 	{
 		return false;
 	}
+#if NET_DEMO_NATIVE_TLS
+	if (!PrepareNativeTls())
+	{
+		return false;
+	}
+#endif
 	s_pHandler = pHandler;
 	if (!msTimerEnableTrigger(&s_Timer, NET_DEMO_TRIG_PUMP, 20,
 		TIMER_TRIG_TYPE_CONTINUOUS, PumpTimer, nullptr))

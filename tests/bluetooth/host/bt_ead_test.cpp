@@ -296,6 +296,48 @@ void TestTheRandomizerNeedsASecureEngine(void)
 	CHECK(BtEadInit(&s_Aes, &s_Rng));
 }
 
+// A whole-packet CCM engine (the controller vendor command on a link, a
+// hardware engine on a part that has one) must produce the sample sets to
+// the octet and read what the block path wrote, or the two paths would not
+// be the same CCM of Vol 6 Part E.
+void TestAWholePacketEngineAgreesWithTheBlockPath(void)
+{
+	uint8_t out[sizeof(kAd1)];
+	uint8_t back[sizeof(kPlain)];
+
+	BtEadSetAeadEngine(&s_Aes);
+
+	CHECK(BtEadEncrypt(&kKey, kRand1, kPlain, sizeof(kPlain), out, sizeof(out)) == sizeof(kAd1));
+	CHECK(std::memcmp(out, kAd1, sizeof(kAd1)) == 0);
+	CHECK(BtEadEncrypt(&kKey, kRand2, kPlain, sizeof(kPlain), out, sizeof(out)) == sizeof(kAd2));
+	CHECK(std::memcmp(out, kAd2, sizeof(kAd2)) == 0);
+
+	CHECK(BtEadDecrypt(&kKey, kAd1, sizeof(kAd1), back, sizeof(back)) == sizeof(kPlain));
+	CHECK(std::memcmp(back, kPlain, sizeof(kPlain)) == 0);
+
+	// A tampered MIC is refused by the engine as it is by the block path
+	std::memcpy(out, kAd1, sizeof(out));
+	out[sizeof(out) - 1] ^= 0x01;
+	CHECK(BtEadDecrypt(&kKey, out, sizeof(out), back, sizeof(back)) == 0);
+
+	// What the block path wrote, the engine reads; the empty structure of
+	// each is the other's to the octet, since a zero length decrypt has no
+	// return value to tell success from refusal.
+	uint8_t empty[BTEAD_OVERHEAD];
+	uint8_t blockEmpty[BTEAD_OVERHEAD];
+	uint8_t blockOut[sizeof(kAd1)];
+	CHECK(BtEadEncrypt(&kKey, kRand1, nullptr, 0, empty, sizeof(empty)) == BTEAD_OVERHEAD);
+	BtEadSetAeadEngine(nullptr);
+	CHECK(BtEadEncrypt(&kKey, kRand1, nullptr, 0, blockEmpty, sizeof(blockEmpty)) == BTEAD_OVERHEAD);
+	CHECK(std::memcmp(empty, blockEmpty, sizeof(empty)) == 0);
+	CHECK(BtEadEncrypt(&kKey, kRand2, kPlain, sizeof(kPlain), blockOut, sizeof(blockOut)) == sizeof(kAd2));
+	BtEadSetAeadEngine(&s_Aes);
+	CHECK(BtEadDecrypt(&kKey, blockOut, sizeof(blockOut), back, sizeof(back)) == sizeof(kPlain));
+	CHECK(std::memcmp(back, kPlain, sizeof(kPlain)) == 0);
+
+	BtEadSetAeadEngine(nullptr);
+}
+
 } // namespace
 
 int main()
@@ -318,6 +360,7 @@ int main()
 	TestLongerPayloadsRoundTrip();
 	TestNoEngineFailsClosed();
 	TestTheRandomizerNeedsASecureEngine();
+	TestAWholePacketEngineAgreesWithTheBlockPath();
 
 	if (s_Failures == 0)
 	{

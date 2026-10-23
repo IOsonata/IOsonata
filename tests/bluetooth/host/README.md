@@ -72,10 +72,18 @@ The suite has expanded beyond the three groups above. The current
   `bt_lesc_sd_test.cpp`.
 - Periodic advertising, synchronization and encrypted advertising data:
   `bt_padv_hci_test.cpp`, `bt_psync_test.cpp`, `bt_ead_test.cpp`.
+- Crypto engines the controller serves over HCI, LE Encrypt and LE Rand and
+  the I-SYST vendor commands: `bt_crypto_ctlr_test.cpp`.
 - Controller initialization, HCI USB and GATT-backed transport:
   `bt_hci_ctlr_*_test.cpp`, `bt_hci_usb_test.cpp`, `bt_intrf_test.cpp`.
 - HCI UART (H4) framing, packet order, flush and command waits, including a
   command sent from a packet handler: `bt_hci_uart_test.cpp`.
+- The controller port of the host for a controller behind an H4 link, over
+  the UART transport: reset at start, command round trips, ACL send, receive
+  through the work queue and its retry from the status check:
+  `bt_hci_h4_ctlr_test.cpp`.
+- The host status check paces its once a second link checks from the
+  millisecond clock when there is one: `bt_status_queue_test.py`.
 
 These are software checks with test controllers or port stubs, not a claim of
 complete protocol coverage or hardware qualification. The separate

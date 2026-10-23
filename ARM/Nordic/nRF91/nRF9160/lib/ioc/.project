@@ -1206,6 +1206,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_hci.h</locationURI>
 		</link>
 		<link>
+			<name>include/bluetooth/bt_hci_h4.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_hci_h4.h</locationURI>
+		</link>
+		<link>
 			<name>include/bluetooth/bt_hci_uart.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_hci_uart.h</locationURI>
@@ -1286,6 +1291,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_gatt_hci.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/bluetooth/bt_hci_h4.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_hci_h4.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/bluetooth/bt_hci_host.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_hci_host.cpp</locationURI>
@@ -1354,11 +1364,6 @@
 			<name>src/bluetooth/services/bt_dis.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/services/bt_dis.cpp</locationURI>
-		</link>
-		<link>
-			<name>src/bluetooth/bt_app_nrf91.cpp</name>
-			<type>1</type>
-			<locationURI>PARENT-3-PROJECT_LOC/src/bt_app_nrf91.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/bluetooth/bt_smp_bond.cpp</name>
@@ -1619,6 +1624,106 @@
 			<name>src/net/mqtt.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/net/mqtt.cpp</locationURI>
+		</link>
+		<link>
+			<name>include/net/tls.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/net/tls.h</locationURI>
+		</link>
+		<link>
+			<name>src/net/tls.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/net/tls.cpp</locationURI>
+		</link>
+		<link>
+			<name>include/crypto/x509.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/x509.h</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/x509.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/x509.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/bt_app_hci.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_app_hci.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/bt_hci_h4_ctlr.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_hci_h4_ctlr.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/bt_hci_ctlr_uart.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_hci_ctlr_uart.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/bt_hci_ctlr.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_hci_ctlr.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/bt_sec_hci.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_sec_hci.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/bt_crypto_ctlr.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_crypto_ctlr.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/bt_smp.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_smp.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/bt_smp_bond_nvm.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_smp_bond_nvm.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/bt_pds.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_pds.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/bluetooth/bt_ead.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/bluetooth/bt_ead.cpp</locationURI>
+		</link>
+		<link>
+			<name>include/bluetooth/bt_hci_ctlr.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_hci_ctlr.h</locationURI>
+		</link>
+		<link>
+			<name>include/bluetooth/bt_hci_h4_ctlr.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_hci_h4_ctlr.h</locationURI>
+		</link>
+		<link>
+			<name>include/bluetooth/bt_smp.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_smp.h</locationURI>
+		</link>
+		<link>
+			<name>include/bluetooth/bt_ead.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_ead.h</locationURI>
+		</link>
+		<link>
+			<name>include/bluetooth/bt_pds.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_pds.h</locationURI>
+		</link>
+		<link>
+			<name>include/bluetooth/bt_hcievt.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_hcievt.h</locationURI>
 		</link>
 	</linkedResources>
 	<variableList>

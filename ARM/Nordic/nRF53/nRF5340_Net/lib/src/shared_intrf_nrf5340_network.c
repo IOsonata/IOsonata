@@ -46,7 +46,6 @@ SOFTWARE.
 const int g_SharedIntrfMaxCnt = MAX_NB_DEV;
 SharedIntrf_t g_SharedIntrf[MAX_NB_DEV] = { {0, 0},};
 
-//void SPIM0_SPIS0_TWIM0_TWIS0_UARTE0_IRQHandler(void)
 void SERIAL0_IRQHandler(void)
 {
 	if (g_SharedIntrf[0].pIntrf != NULL)

@@ -191,6 +191,14 @@ static const uint8_t s_SmpModelMap[5][5] = {
 static KeyAgreeEngine *s_pCryptoEcdh = nullptr;
 static RngEngine *s_pCryptoRng = nullptr;
 static CipherEngine   *s_pCryptoAes  = nullptr;
+// Optional whole-message CMAC (a controller vendor command or a hardware
+// engine); SmpAesCmac falls back to the AES engine when it is absent or fails.
+static MacEngine *s_pCryptoMac = nullptr;
+
+void BtSmpSetMacEngine(MacEngine *pMac)
+{
+	s_pCryptoMac = pMac;
+}
 
 // Set true when an AES-128 block operation fails. A failed block leaves a zeroed
 // result, so any confirm, key or check derived from it is unusable and must not
@@ -677,6 +685,21 @@ static void SmpAesCmac(const uint8_t Key[16], const uint8_t *pMsg, size_t Len,
 					   uint8_t Mac[16])
 {
 	static const uint8_t Zero[16] = {0};
+
+	if (s_pCryptoMac != nullptr)
+	{
+		CryptoKey mk;
+		mk.Type = CRYPTO_KEY_AES_128;
+		mk.Loc = CRYPTO_KEY_LOC_PLAIN;
+		mk.Usage = CRYPTO_KEY_USE_SIGN;
+		mk.Plain.pData = Key;
+		mk.Plain.Len = 16;
+		if (s_pCryptoMac->Mac(CRYPTO_MAC_CMAC, mk, pMsg, Len, Mac, 16) == CRYPTO_STATUS_OK)
+		{
+			return;
+		}
+	}
+
 	uint8_t l[16];
 	uint8_t k1[16];
 	uint8_t k2[16];

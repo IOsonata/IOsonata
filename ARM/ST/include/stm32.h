@@ -48,11 +48,14 @@ SOFTWARE.
 
 #elif defined(STM32F405xx) || defined(STM32F415xx) || defined(STM32F407xx) || defined(STM32F417xx) || \
 	defined(STM32F427xx) || defined(STM32F437xx) || defined(STM32F429xx) || defined(STM32F439xx) || \
-	defined(STM32F401xC) || defined(STM32F401xE) || defined(STM32F410Tx) || defined(STM32F410Cx) || \
+	defined(STM32F401xx) || defined(STM32F401xC) || defined(STM32F401xE) || defined(STM32F410Tx) || defined(STM32F410Cx) || \
 	defined(STM32F410Rx) || defined(STM32F411xE) || defined(STM32F446xx) || defined(STM32F469xx) || \
 	defined(STM32F479xx) || defined(STM32F412Cx) || defined(STM32F412Rx) || defined(STM32F412Vx) || \
 	defined(STM32F412Zx) || defined(STM32F413xx) || defined(STM32F423xx) || defined(STM32F4)
 #define IOSONATA_STM32_F4		1
+#if defined(STM32F401xx) && !defined(STM32F401xC) && !defined(STM32F401xE)
+#define STM32F401xE
+#endif
 #include "stm32f4xx.h"
 
 #elif defined(STM32L152xE)

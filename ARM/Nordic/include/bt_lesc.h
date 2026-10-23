@@ -12,7 +12,7 @@ dependency on nrf_crypto.
 The engine is injected by the application before the stack initialises its
 security layer (BtLescSetCryptoEngine, then the stack's security init). The
 application owns the engine and constructs it (Ba414ep or CryptoUecc),
-exactly as it does for the SDC pairing path in bt_app_sdc.cpp.
+exactly as it does for the pairing path of the HCI host (bt_sec_hci.cpp).
 
 Byte order: the SoftDevice holds public keys and the DH key little-endian, one
 32 byte coordinate at a time. The engine works big-endian. This module does the

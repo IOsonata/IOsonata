@@ -45,18 +45,44 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define UART_DEVNO			0
 
 #ifdef NORDIC_DK
-#define UART_RX_PORT		0
-#define UART_RX_PIN			28
+// Default is the nRF5340 Audio DK, the dev board of the nRF5340 work.
+// Define NRF5340_DK_PCA10095 in the project symbols for the standard
+// nRF5340 DK. Pins from the Zephyr board files of both boards.
+// The application core must hand these pins to the network core (GPIO
+// MCUSEL) before it releases it.
+#if defined(NRF5340_DK_PCA10095)
+// nRF5340 DK: LED1 to LED4 P0.28 to P0.31 active low, buttons 1 and 2
+// P0.23, P0.24; DK network core virtual COM port P1.01 TXD, P1.00 RXD, P1.11 RTS, P1.10 CTS
+#define LED_ACTIVE_LOW	1
+#define UART_RX_PORT		1
+#define UART_RX_PIN			0
 #define UART_RX_PINOP		1
-#define UART_TX_PORT		0
-#define UART_TX_PIN			29
+#define UART_TX_PORT		1
+#define UART_TX_PIN			1
 #define UART_TX_PINOP		1
-#define UART_CTS_PORT		0
-#define UART_CTS_PIN		26
+#define UART_CTS_PORT		1
+#define UART_CTS_PIN		10
 #define UART_CTS_PINOP		1
-#define UART_RTS_PORT		0
-#define UART_RTS_PIN		27
+#define UART_RTS_PORT		1
+#define UART_RTS_PIN		11
 #define UART_RTS_PINOP		1
+#else
+// nRF5340 Audio DK: LED1 (blue) P0.31, LED2 P1.00, LED3 P1.01, RGB2 green
+// P0.29 as LED4, active high; buttons VOL- P0.02, VOL+ P0.03; network core virtual COM port P1.09 TXD, P1.08 RXD, P1.10 RTS, P1.11 CTS (the second port the board enumerates)
+#define LED_ACTIVE_LOW	0
+#define UART_RX_PORT		1
+#define UART_RX_PIN			8
+#define UART_RX_PINOP		1
+#define UART_TX_PORT		1
+#define UART_TX_PIN			9
+#define UART_TX_PINOP		1
+#define UART_CTS_PORT		1
+#define UART_CTS_PIN		11
+#define UART_CTS_PINOP		1
+#define UART_RTS_PORT		1
+#define UART_RTS_PIN		10
+#define UART_RTS_PINOP		1
+#endif
 #else
 #define UART_RX_PORT		BLUEIO_UART_RX_PORT
 #define UART_RX_PIN			BLUEIO_UART_RX_PIN

@@ -248,6 +248,13 @@ __attribute__((weak)) bool BtHciCtlrStart(BtHciCtlrDev_t * const pDev,
 	return BtHciCtlrRxFifoInit(pDev);
 }
 
+// Retry of refused controller work. The default is for a controller that
+// delivers its packets in its own context and has nothing queued through the
+// Bluetooth work queue. A port that defers its receive path defines its own.
+__attribute__((weak)) void BtHciCtlrCheckStatus(void)
+{
+}
+
 // One bring-up sequence for every port. The ordering is the point: generic
 // Why the last bring-up failed. Kept here rather than in a port so every port
 // records it the same way and an application reads it the same way, and so the

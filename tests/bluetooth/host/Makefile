@@ -56,6 +56,10 @@ TEST_NAMES := \
 	bt_hci_ctlr_sdc_nomod_test \
 	bt_hci_usb_test \
 	bt_hci_uart_test \
+	bt_hci_h4_ctlr_test \
+	bt_hci_h4_ipc_test \
+	bt_hci_ipc_test \
+	bt_hci_ctlr_h4_test \
 	bt_l2cap_signal_test \
 	bt_att_db_test \
 	bt_att_db_cfg_test \
@@ -66,6 +70,7 @@ TEST_NAMES := \
 	bt_gap_srvc_test \
 	bt_gap_gatt_init_test \
 	bt_ead_test \
+	bt_crypto_ctlr_test \
 	bt_adv_hci_test \
 	bt_padv_hci_test \
 	bt_psync_test \
@@ -167,6 +172,7 @@ bt_hci_uart_test_CPPFLAGS := -I$(ROOT)/tests/dfu/hostport
 bt_hci_uart_test_SOURCES := \
 	bt_hci_uart_test.cpp \
 	$(HCI_GATT_TEST_STUB) \
+	$(ROOT)/src/bluetooth/bt_hci_h4.cpp \
 	$(ROOT)/src/bluetooth/bt_hci_uart.cpp \
 	$(ROOT)/src/bluetooth/bt_hci_host.cpp \
 	$(ROOT)/src/bluetooth/bt_psync.cpp \
@@ -174,6 +180,76 @@ bt_hci_uart_test_SOURCES := \
 bt_hci_uart_test_EXTRA := $(CFIFO_OBJ)
 bt_hci_uart_test_DEPS := \
 	$(ROOT)/include/coredev/uart.h \
+	$(ROOT)/tests/dfu/hostport/idelay.h
+
+# The controller port of the host for a controller behind an H4 link, with
+# the UART transport over the same scripted UART as bt_hci_uart_test.
+bt_hci_h4_ctlr_test_CPPFLAGS := -I$(ROOT)/tests/dfu/hostport
+bt_hci_h4_ctlr_test_SOURCES := \
+	bt_hci_h4_ctlr_test.cpp \
+	$(HCI_GATT_TEST_STUB) \
+	$(ROOT)/src/bluetooth/bt_hci_h4_ctlr.cpp \
+	$(ROOT)/src/bluetooth/bt_hci_ctlr_uart.cpp \
+	$(ROOT)/src/bluetooth/bt_hci_ctlr.cpp \
+	$(ROOT)/src/bluetooth/bt_hci_h4.cpp \
+	$(ROOT)/src/bluetooth/bt_hci_uart.cpp \
+	$(ROOT)/src/bluetooth/bt_hci_host.cpp \
+	$(ROOT)/src/bluetooth/bt_psync.cpp \
+	$(ROOT)/src/device.cpp \
+	$(ROOT)/src/device_intrf.cpp
+bt_hci_h4_ctlr_test_EXTRA := $(CFIFO_OBJ)
+
+bt_hci_h4_ipc_test_CPPFLAGS := -I$(ROOT)/tests/dfu/hostport
+bt_hci_h4_ipc_test_SOURCES := \
+	bt_hci_h4_ipc_test.cpp \
+	$(HCI_GATT_TEST_STUB) \
+	$(ROOT)/src/bluetooth/bt_hci_h4.cpp \
+	$(ROOT)/src/bluetooth/bt_hci_host.cpp \
+	$(ROOT)/src/bluetooth/bt_psync.cpp \
+	$(ROOT)/src/ipc/ipc_intrf.cpp \
+	$(ROOT)/src/device_intrf.cpp
+bt_hci_h4_ipc_test_EXTRA := $(CFIFO_OBJ)
+bt_hci_h4_ipc_test_DEPS := \
+	$(ROOT)/tests/bluetooth/host/ipc_sync_port.h \
+	$(ROOT)/include/bluetooth/bt_hci_h4.h \
+	$(ROOT)/include/ipc/ipc_intrf.h \
+	$(ROOT)/tests/dfu/hostport/idelay.h
+
+bt_hci_ipc_test_CPPFLAGS := -I$(ROOT)/tests/dfu/hostport
+bt_hci_ipc_test_SOURCES := \
+	bt_hci_ipc_test.cpp \
+	$(HCI_GATT_TEST_STUB) \
+	$(ROOT)/src/bluetooth/bt_hci_h4.cpp \
+	$(ROOT)/src/bluetooth/bt_hci_ipc.cpp \
+	$(ROOT)/src/bluetooth/bt_hci_host.cpp \
+	$(ROOT)/src/bluetooth/bt_psync.cpp \
+	$(ROOT)/src/ipc/ipc_intrf.cpp \
+	$(ROOT)/src/device_intrf.cpp
+bt_hci_ipc_test_EXTRA := $(CFIFO_OBJ)
+bt_hci_ipc_test_DEPS := \
+	$(ROOT)/tests/bluetooth/host/ipc_sync_port.h \
+	$(ROOT)/include/bluetooth/bt_hci_ipc.h \
+	$(ROOT)/include/bluetooth/bt_hci_h4.h \
+	$(ROOT)/include/ipc/ipc_intrf.h \
+	$(ROOT)/tests/dfu/hostport/idelay.h
+
+bt_hci_ctlr_h4_test_CPPFLAGS := -I$(ROOT)/tests/dfu/hostport
+bt_hci_ctlr_h4_test_SOURCES := \
+	bt_hci_ctlr_h4_test.cpp \
+	$(HCI_GATT_TEST_STUB) \
+	$(ROOT)/src/bluetooth/bt_hci_ctlr_h4.cpp \
+	$(ROOT)/src/bluetooth/bt_hci_ctlr.cpp \
+	$(ROOT)/src/bluetooth/bt_hci_h4.cpp \
+	$(ROOT)/src/bluetooth/bt_hci_host.cpp \
+	$(ROOT)/src/bluetooth/bt_psync.cpp \
+	$(ROOT)/src/ipc/ipc_intrf.cpp \
+	$(ROOT)/src/device_intrf.cpp
+bt_hci_ctlr_h4_test_EXTRA := $(CFIFO_OBJ)
+bt_hci_ctlr_h4_test_DEPS := \
+	$(ROOT)/include/bluetooth/bt_hci_ctlr_h4.h \
+	$(ROOT)/include/bluetooth/bt_hci_h4.h \
+	$(ROOT)/include/ipc/ipc_intrf.h \
+	$(ROOT)/tests/bluetooth/host/ipc_sync_port.h \
 	$(ROOT)/tests/dfu/hostport/idelay.h
 
 bt_l2cap_signal_test_SOURCES := \
@@ -220,6 +296,13 @@ bt_adv_hci_test_SOURCES := \
 bt_padv_hci_test_SOURCES := \
 	bt_padv_hci_test.cpp \
 	$(ROOT)/src/bluetooth/bt_padv_hci.cpp
+
+bt_crypto_ctlr_test_SOURCES := \
+	bt_crypto_ctlr_test.cpp \
+	$(ROOT)/src/bluetooth/bt_crypto_ctlr.cpp \
+	$(ROOT)/src/crypto/crypto_softaes.cpp \
+	$(ROOT)/src/crypto/crypto_p256.cpp \
+	$(ROOT)/src/device.cpp
 
 bt_ead_test_SOURCES := \
 	bt_ead_test.cpp \
@@ -373,6 +456,7 @@ bt_smp_keydist_test_SOURCES := \
 	bt_smp_keydist_test.cpp \
 	bt_smp_link_test_stubs.cpp \
 	$(ROOT)/src/crypto/crypto_p256.cpp \
+	$(ROOT)/src/crypto/crypto_softaes.cpp \
 	$(ROOT)/src/crypto/crypto_softrng.cpp \
 	$(ROOT)/src/device.cpp \
 	$(ROOT)/src/device_intrf.cpp \

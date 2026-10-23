@@ -33,37 +33,54 @@ extern "C" bool BtEvtQue(uint32_t e, void *p, AppEvtHandler_t h)
 { return AppEvtHandlerQue(e, p, h); }
 '''
 
-sdc_source = (ROOT / 'ARM/Nordic/src/bt_app_sdc.cpp').read_text()
-sdc = COMMON + r'''
-struct TimerDev_t {};
-#define TIMER_EVT_TRIGGER(n) (1U << (n))
+hci_source = (ROOT / 'src/bluetooth/bt_app_hci.cpp').read_text()
+hci = COMMON + r"""
+#define BT_APP_HCI_TICK_MSEC 1000
 struct Conn { void (*Tick)(); };
-static unsigned ticks, polls;
+static unsigned ticks, polls, ctlrChecks;
+static uint32_t clock;
 static void tick() { ++ticks; }
 static void poll() { ++polls; }
 static Conn conn = { tick };
-static const Conn *s_pBtAppSdcConn = &conn;
-static void (*s_pBtAppSdcSecPoll)() = poll;
-extern "C" void BtAppCheckStatus(void);
-'''
-sdc += sdc_source[sdc_source.index('enum {\n\tBT_APP_SDC_TICK_IDLE'):
-				  sdc_source.index('void BtAppSetDevName')]
-sdc += r'''
+static const Conn *s_pBtAppHciConn = &conn;
+static void (*s_pBtAppSecPoll)() = poll;
+static uint32_t s_BtAppTickMs = 0;
+extern "C" uint32_t BtSmpMsTick(void) { return clock; }
+extern "C" void BtHciCtlrCheckStatus(void) { ++ctlrChecks; }
+extern "C" void BtSmpCheckStatus(void) __attribute__((weak));
+extern "C" void BtSmpBondNvmCheckStatus(void) __attribute__((weak));
+extern void BtDfuSmpCheckStatus(void) __attribute__((weak));
+"""
+hci += function(hci_source, 'BtAppCheckStatus') + '\n'
+hci += r"""
 int main() {
-	assert(AppEvtHandlerInit(nullptr, 0));
-	fill();
-	BtAppSdcTimerHandler(nullptr, TIMER_EVT_TRIGGER(0));
-	assert(ticks == 0 && polls == 0);
-	run();
-	assert(ticks == 1 && polls == 1 && normal > 0);
+	// No clock: the link checks run on every pass, the timeouts they serve
+	// are inert without one
+	BtAppCheckStatus();
+	BtAppCheckStatus();
+	assert(ticks == 2 && polls == 2 && ctlrChecks == 2);
+	// A clock: once a second from the last check, whatever the number of
+	// passes
+	clock = 10;
 	for (int i = 0; i < 100; ++i) BtAppCheckStatus();
-	assert(!AppEvtHandlerPending() && ticks == 1);
-	for (int i = 0; i < 10; ++i)
-		BtAppSdcTimerHandler(nullptr, TIMER_EVT_TRIGGER(0));
-	run();
-	assert(ticks == 2 && polls == 2);
-	BtAppSdcTimerHandler(nullptr, TIMER_EVT_TRIGGER(1));
-	assert(!AppEvtHandlerPending());
+	assert(ticks == 2 && polls == 2 && ctlrChecks == 102);
+	clock = BT_APP_HCI_TICK_MSEC - 1;
+	BtAppCheckStatus();
+	assert(ticks == 2);
+	clock = BT_APP_HCI_TICK_MSEC;
+	BtAppCheckStatus();
+	assert(ticks == 3 && polls == 3);
+	clock = 2 * BT_APP_HCI_TICK_MSEC - 1;
+	BtAppCheckStatus();
+	assert(ticks == 3);
+	// Wrap of the millisecond clock
+	clock = 0xFFFFFF00U;
+	s_BtAppTickMs = 0xFFFFFC00U;
+	BtAppCheckStatus();
+	assert(ticks == 3);
+	clock = 0x00000100U;
+	BtAppCheckStatus();
+	assert(ticks == 4 && polls == 4);
 #ifdef WITH_SECURITY
 	extern unsigned cryptoChecks, bondChecks, dfuChecks;
 	assert(cryptoChecks > 0 && bondChecks == cryptoChecks && dfuChecks == cryptoChecks);
@@ -71,9 +88,9 @@ int main() {
 	assert(BtSmpCheckStatus == nullptr && BtSmpBondNvmCheckStatus == nullptr);
 	assert(BtDfuSmpCheckStatus == nullptr);
 #endif
-	puts("PASS: SDC recovers a refused tick, coalesces events and keeps security optional");
+	puts("PASS: host paces its link checks from the status check and keeps security optional");
 }
-'''
+"""
 
 smp_source = (ROOT / 'src/bluetooth/bt_smp.cpp').read_text()
 smp = COMMON + r'''
@@ -298,8 +315,8 @@ with tempfile.TemporaryDirectory(prefix='iosonata-status-') as directory:
 		for name, code in dfu_cases
 		for suffix, extra in [('_no_dfu', []),
 			('_dfu', ['-DWITH_SECURITY', str(security)])]]
-	for name, code, extra in [('sdc', sdc, []),
-			('sdc_security', sdc, ['-DWITH_SECURITY', str(security)]),
+	for name, code, extra in [('hci', hci, []),
+			('hci_security', hci, ['-DWITH_SECURITY', str(security)]),
 			('crypto', smp, []), ('bond', bond, []), *sensor_cases, *port_cases]:
 		path = directory / (name + '.cpp')
 		binary = directory / name

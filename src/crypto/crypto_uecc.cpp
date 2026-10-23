@@ -406,20 +406,30 @@ static CRYPTO_STATUS UeccVerify(CRYPTO_CURVE Curve, const uint8_t *pPubKey,
 								const uint8_t *pHash, size_t HashLen,
 								const uint8_t *pSig)
 {
+	CRYPTO_STATUS begin;
+	int ok;
+	bool sameX;
+	bool positive;
+	bool negative;
+
 	if (Curve != CRYPTO_CURVE_P256 || pPubKey == nullptr ||
 		pHash == nullptr || pSig == nullptr)
 	{
 		return CRYPTO_STATUS_UNSUPPORTED;
 	}
-	CRYPTO_STATUS begin = UeccBegin(nullptr, false);
+	begin = UeccBegin(nullptr, false);
 	if (begin != CRYPTO_STATUS_OK)
 	{
 		return begin;
 	}
-	int ok;
-	const bool sameX = memcmp(pPubKey, s_UeccGenerator, 32U) == 0;
-	const bool positive = sameX && memcmp(pPubKey + 32U, s_UeccGenerator + 32U, 32U) == 0;
-	const bool negative = sameX && memcmp(pPubKey + 32U, s_UeccNegativeGy, 32U) == 0;
+	if (uECC_valid_public_key(pPubKey, uECC_secp256r1()) != 1)
+	{
+		(void)UeccEnd();
+		return CRYPTO_STATUS_FAIL;
+	}
+	sameX = memcmp(pPubKey, s_UeccGenerator, 32U) == 0;
+	positive = sameX && memcmp(pPubKey + 32U, s_UeccGenerator + 32U, 32U) == 0;
+	negative = sameX && memcmp(pPubKey + 32U, s_UeccNegativeGy, 32U) == 0;
 	if (positive || negative)
 	{
 		ok = UeccVerifyBoundary(pHash, HashLen, pSig, negative);

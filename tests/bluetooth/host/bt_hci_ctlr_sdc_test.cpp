@@ -21,8 +21,10 @@
 
 #include "sdc.h"
 #include "sdc_hci_vs.h"
+#include "sdc_hci_cmd_stub.h"
 
 #include "bluetooth/bt_gap.h"
+#include "bluetooth/bt_hci.h"
 #include "bluetooth/bt_hci_ctlr.h"
 #include "crypto_rng_nrf.h"
 #include "nrf_mpsl.h"
@@ -625,6 +627,51 @@ void TestNullArgumentsAreRefused(void)
 	CHECK(s_InitCalls == 0);
 }
 
+// The commands the generic host issues at start on every controller:
+// the ACL buffer sizes, the address the controller identifies itself with
+// and random numbers. Each has to reach the SDC entry point of the same
+// meaning, and Read BD_ADDR has to answer the factory address of the FICR,
+// static random marker included, so an nRF5x keeps the address it has always
+// advertised with.
+void TestHostStartCommandsAreAnswered(void)
+{
+	Reset();
+
+	uint8_t ret[8] = {0};
+	g_SdcHciCmdLast = nullptr;
+	g_SdcHciCmdCount = 0;
+
+	CHECK(BtHciCtlrCommand(nullptr, BT_HCI_CMD_CTLR_READ_BUFF_SIZE, nullptr, 0, ret, 3) == 0);
+	CHECK(g_SdcHciCmdLast != nullptr && std::strcmp(g_SdcHciCmdLast, "le_read_buffer_size") == 0);
+
+	CHECK(BtHciCtlrCommand(nullptr, BT_HCI_CMD_CTLR_RAND, nullptr, 0, ret, sizeof(ret)) == 0);
+	CHECK(g_SdcHciCmdLast != nullptr && std::strcmp(g_SdcHciCmdLast, "le_rand") == 0);
+
+	int before = g_SdcHciCmdCount;
+	uint8_t addr[6] = {0};
+	CHECK(BtHciCtlrCommand(nullptr, BT_HCI_CMD_VS_ISYST_READ_STATIC_ADDR, nullptr, 0, addr, sizeof(addr)) == 0);
+	// The I-SYST static address is answered from the FICR, not from a
+	// controller entry point
+	CHECK(g_SdcHciCmdCount == before);
+	CHECK(addr[0] == 0xA5 && addr[4] == 0xA5);
+	CHECK((addr[5] & 0xC0) == 0xC0);
+
+	// A short return buffer takes what fits and nothing past it
+	uint8_t one[2] = {0x11, 0x22};
+	CHECK(BtHciCtlrCommand(nullptr, BT_HCI_CMD_VS_ISYST_READ_STATIC_ADDR, nullptr, 0, one, 1) == 0);
+	CHECK(one[0] == 0xA5 && one[1] == 0x22);
+
+	// The public address is the controller's to answer
+	CHECK(BtHciCtlrCommand(nullptr, BT_HCI_CMD_INFO_READ_BD_ADDR, nullptr, 0, addr, sizeof(addr)) == 0);
+	CHECK(g_SdcHciCmdLast != nullptr && std::strcmp(g_SdcHciCmdLast, "ip_read_bd_addr") == 0);
+
+	// The crypto commands are not the SDC port's, the host has its engines
+	CHECK(BtHciCtlrCommand(nullptr, BT_HCI_CMD_VS_ISYST_CRYPTO_SUPPORTED, nullptr, 0, addr, 4) != 0);
+
+	// A command the controller does not have is answered 0xFF
+	CHECK(BtHciCtlrCommand(nullptr, BT_HCI_CMD_BASEBAND_RESET, nullptr, 0, nullptr, 0) == 0xFF);
+}
+
 #ifdef SDC_TEST_NO_FEATURE_MODULES
 // The same setup in an application that links neither the scan module nor the
 // periodic advertising module. The controller port finds no reference to
@@ -719,6 +766,17 @@ extern "C" int32_t sdc_enable(sdc_callback_t, uint8_t *)
 extern "C" int32_t sdc_disable(void)
 {
 	return 0;
+}
+
+extern "C" int32_t sdc_default_tx_power_set(int8_t)
+{
+	return 0;
+}
+
+// The low frequency timer of the link timeouts. Not started on a host.
+extern "C" bool nRFxLFTimerInit(TimerDev_t * const, const TimerCfg_t * const)
+{
+	return false;
 }
 
 extern "C" int32_t sdc_hci_get(uint8_t *, uint8_t *)
@@ -857,6 +915,7 @@ int main(void)
 	TestAnUndersizedPoolStopsTheBringUp();
 	TestBringUpOrderAndFailures();
 	TestNullArgumentsAreRefused();
+	TestHostStartCommandsAreAnswered();
 
 	if (s_Failures != 0)
 	{

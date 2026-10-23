@@ -338,12 +338,12 @@ static void TestInit()
 	CHECK(s_UartCfg.bFifoBlocking);
 	CHECK(s_UartCfg.EvtCallback != nullptr);
 	CHECK(s_UartCfg.DevNo == 2 && s_UartCfg.Rate == 1000000);
-	CHECK(s_Dev.TimeoutMs == 1);
+	CHECK(s_Dev.H4.TimeoutMs == 1);
 	CHECK(s_Dev.Uart.DevIntrf.MaxRetry == 1);
 
 	cfg.TimeoutMs = 0;
 	CHECK(BtHciUartInit(&s_Dev, &cfg));
-	CHECK(s_Dev.TimeoutMs == BT_HCI_UART_TIMEOUT_DEFAULT);
+	CHECK(s_Dev.H4.TimeoutMs == BT_HCI_UART_TIMEOUT_DEFAULT);
 
 	// UART refused
 	s_UartInitResult = false;
@@ -400,7 +400,7 @@ static void TestFramingByteByByte()
 		CHECK(s_RxPkts[3].Type == BT_HCI_UART_PKT_SCO && s_RxPkts[3].Data.size() == 5);
 		CHECK(s_RxPkts[4].Type == BT_HCI_UART_PKT_EVT && s_RxPkts[4].Data.size() == 2);
 	}
-	CHECK(s_Dev.SyncErrCnt == 0 && s_Dev.DropCnt == 0);
+	CHECK(s_Dev.H4.SyncErrCnt == 0 && s_Dev.H4.DropCnt == 0);
 }
 
 static void TestResync()
@@ -413,7 +413,7 @@ static void TestResync()
 	ScriptBytes(DiscEvt(2));
 
 	BtHciUartProcess(&s_Dev, 0);
-	CHECK(s_Dev.SyncErrCnt == 4);
+	CHECK(s_Dev.H4.SyncErrCnt == 4);
 	CHECK(s_RxPkts.size() == 2);
 	if (s_RxPkts.size() == 2)
 	{
@@ -435,8 +435,8 @@ static void TestOversizeDropped()
 	ScriptBytes(AclPkt(0x41, fit));
 
 	BtHciUartProcess(&s_Dev, 0);
-	CHECK(s_Dev.DropCnt == 1);
-	CHECK(s_Dev.SyncErrCnt == 0);
+	CHECK(s_Dev.H4.DropCnt == 1);
+	CHECK(s_Dev.H4.SyncErrCnt == 0);
 	CHECK(s_RxPkts.size() == 2);
 	if (s_RxPkts.size() == 2)
 	{
@@ -458,8 +458,8 @@ static void TestQueueFullLeavesBytesInUart()
 	// Two slots and the spare: three packets framed, the fourth one is not
 	// started
 	BtHciUartPoll(&s_Dev);
-	CHECK(CFifoUsed(s_Dev.hPktFifo) == 2);
-	CHECK(s_Dev.bSpareHeld);
+	CHECK(CFifoUsed(s_Dev.H4.hPktFifo) == 2);
+	CHECK(s_Dev.H4.bSpareHeld);
 	CHECK(s_RxPkts.empty());
 	CHECK(s_RxPos < s_Rx.size());
 
@@ -501,7 +501,7 @@ static void TestSparePacketKeepsOrder()
 		CHECK(s_RxPkts[2].Data[4] == 0xA1 && s_RxPkts[2].Data[9] == 0xA6);
 		CHECK(s_RxPkts[3].Type == BT_HCI_UART_PKT_EVT && s_RxPkts[3].Data[3] == 3);
 	}
-	CHECK(s_Dev.bSpareHeld == false);
+	CHECK(s_Dev.H4.bSpareHeld == false);
 }
 
 static void TestFlush()
@@ -514,11 +514,11 @@ static void TestFlush()
 	ScriptBytes(DiscEvt(3));
 	Script({BT_HCI_UART_PKT_EVT, 0x05});
 	BtHciUartPoll(&s_Dev);
-	CHECK(CFifoUsed(s_Dev.hPktFifo) == 2 && s_Dev.bSpareHeld);
+	CHECK(CFifoUsed(s_Dev.H4.hPktFifo) == 2 && s_Dev.H4.bSpareHeld);
 
 	BtHciUartFlush(&s_Dev);
-	CHECK(CFifoUsed(s_Dev.hPktFifo) == 0);
-	CHECK(s_Dev.bSpareHeld == false);
+	CHECK(CFifoUsed(s_Dev.H4.hPktFifo) == 0);
+	CHECK(s_Dev.H4.bSpareHeld == false);
 	CHECK(s_RxPos == s_Rx.size());
 
 	// Framing starts again at the next byte
@@ -540,7 +540,7 @@ static void TestSendWhileUartBusy()
 	uint8_t acl[6] = {0x40, 0x00, 0x02, 0x00, 0xAA, 0xBB};
 	CHECK(BtHciUartSend(&s_Dev, BT_HCI_UART_PKT_ACL, acl, sizeof(acl)) == false);
 	CHECK(s_Tx.empty());
-	CHECK(s_Dev.TxFailCnt == 1);
+	CHECK(s_Dev.H4.TxFailCnt == 1);
 	atomic_flag_clear(&s_Dev.Uart.DevIntrf.bBusy);
 
 	CHECK(BtHciUartSend(&s_Dev, BT_HCI_UART_PKT_ACL, acl, sizeof(acl)));
@@ -626,7 +626,7 @@ static void TestCommandComplete()
 	CHECK(s_Hci.CmdCredit == 5);
 	CHECK(s_Hci.CmdOpCode == 0);
 	CHECK(s_RxPkts.empty());
-	CHECK(CFifoUsed(s_Dev.hPktFifo) == 2);
+	CHECK(CFifoUsed(s_Dev.H4.hPktFifo) == 2);
 
 	BtHciUartProcess(&s_Dev, 0);
 	CHECK(s_RxPkts.size() == 2);
@@ -665,7 +665,7 @@ static void TestCommandTimeout()
 	CHECK(s_Hci.CmdOpCode == 0);
 	CHECK(s_Hci.pCmdRet == nullptr);
 	CHECK(s_Hci.CmdCredit == 1);
-	CHECK(s_Dev.bCmdActive == false);
+	CHECK(s_Dev.H4.bCmdActive == false);
 
 	// A late response matches nothing and only sets the credits
 	ScriptBytes(CmdComplete(0x0C03, 0, {}, 2));
@@ -768,7 +768,7 @@ static void TestTxNoRoom()
 	}
 	uint8_t acl[6] = {};
 	CHECK(BtHciUartSend(&s_Dev, BT_HCI_UART_PKT_ACL, acl, sizeof(acl)) == false);
-	CHECK(s_Dev.TxFailCnt == 1);
+	CHECK(s_Dev.H4.TxFailCnt == 1);
 	CHECK(s_Tx.empty());
 	CHECK(BtHciUartSend(&s_Dev, BT_HCI_UART_PKT_ACL, acl, 5));
 	CHECK(s_Tx.size() == 6);

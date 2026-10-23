@@ -29,7 +29,7 @@ The principal port entry points are:
 
 | Source | Responsibility |
 |---|---|
-| [bt_app_sdc.cpp](../../ARM/Nordic/src/bt_app_sdc.cpp) | Nordic SDC with IOsonata's generic HCI host |
+| [bt_app_hci.cpp](../../src/bluetooth/bt_app_hci.cpp) | IOsonata's HCI host, for every controller reached through HCI: the Nordic SDC in the image ([bt_hci_ctlr_sdc.cpp](../../ARM/Nordic/src/bt_hci_ctlr_sdc.cpp)), HciController behind a UART ([bt_hci_ctlr_uart.cpp](../../src/bluetooth/bt_hci_ctlr_uart.cpp)) or behind the nRF5340 IPC rings ([bt_hci_ctlr_ipc.cpp](../../src/bluetooth/bt_hci_ctlr_ipc.cpp)) |
 | [bt_app_nrf52.cpp](../../ARM/Nordic/nRF52/src/bt_app_nrf52.cpp) | nRF52 SoftDevice application integration |
 | [bt_app_bm.cpp](../../ARM/Nordic/nRF54/src/bt_app_bm.cpp) | nRF54 bare-metal SDK / S145 integration |
 | [bt_app_stm32wba.cpp](../../ARM/ST/STM32WBAxx/src/bt_app_stm32wba.cpp) | STM32WBA vendor-stack integration |
@@ -50,7 +50,8 @@ adapter and controller implementation together.
 | SMP | `bt_smp.cpp`, `bt_smp_bond.cpp` | Pairing state, keys and bond records |
 | L2CAP | `bt_l2cap.cpp` | Channel signaling and host protocol routing |
 | HCI | `bt_hci_host.cpp` | Commands/events, ACL credits, fragmentation and reassembly |
-| Controller interface | `bt_hci_ctlr.cpp` and port | Controller startup and transport boundary |
+| Controller interface | `bt_hci_ctlr.cpp` and one controller port | Controller startup, the command executor (`BtHciCtlrCommand`), ACL send and receive, the P-256 engine of security |
+| Security | `bt_sec_hci.cpp`, `bt_crypto_ctlr.cpp` | SMP start up with the AES-128 and random numbers of the controller over HCI, bond store |
 
 These source names are under `src/bluetooth/`. Generic security obtains
 cryptographic operations through the existing crypto-engine interfaces.

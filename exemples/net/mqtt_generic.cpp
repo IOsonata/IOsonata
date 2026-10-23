@@ -227,15 +227,27 @@ static void MqttTest(uint32_t Now)
 		{
 			return;
 		}
-		SysLogPrintf(SysLogGet(), "MQTT connecting: %s:%u\r\n",
-			MQTT_DEMO_HOST, (unsigned)MQTT_DEMO_PORT);
-		// Just like a sensor's injected SPI/I2C interface, the protocol receives
-		// the already opened interface without knowing its concrete medium.
-		s_pIntrf = NetDemoOpen(false, MQTT_DEMO_HOST, MQTT_DEMO_PORT);
-		Now = NetDemoNow();
 		if (!s_pIntrf)
 		{
-			MqttDown("transport initialization");
+			SysLogPrintf(SysLogGet(), "MQTT connecting: %s:%u\r\n",
+				MQTT_DEMO_HOST, (unsigned)MQTT_DEMO_PORT);
+			// The protocol receives the selected interface after its setup has
+			// completed, including any foreground TLS handshake.
+			s_pIntrf = NetDemoOpen(false, MQTT_DEMO_HOST, MQTT_DEMO_PORT);
+			Now = NetDemoNow();
+			if (!s_pIntrf)
+			{
+				MqttDown("transport initialization");
+				return;
+			}
+		}
+		if (NetDemoOpening())
+		{
+			return;
+		}
+		if (!NetDemoConnected())
+		{
+			MqttDown("transport setup failed");
 			return;
 		}
 		if (!s_Mqtt.Init(cfg, s_pIntrf, Now))
@@ -317,7 +329,7 @@ static void Report(uint32_t Now)
 {
 	if (!NetDemoReady())
 	{
-		if (s_Started)
+		if (s_Started || s_pIntrf)
 		{
 			MqttDown("network down");
 		}

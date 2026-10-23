@@ -74,6 +74,25 @@ SOFTWARE.
 
 static CipherEngine *s_pEadAes = nullptr;
 static RngEngine *s_pEadRng = nullptr;
+static AeadEngine *s_pEadAead = nullptr;
+
+void BtEadSetAeadEngine(AeadEngine *pAead)
+{
+	s_pEadAead = pAead;
+}
+
+// The additional authenticated data of Vol 6 Part E 2.1 as standard CCM
+// sees it: one octet, 0xEA, which the block path writes into B1 itself.
+static const uint8_t s_EadAad[1] = {BTEAD_B1_AAD};
+
+static void BtEadAeadKey(const BtEadKey_t * const pKey, uint32_t Use, CryptoKey *pCk)
+{
+	pCk->Type = CRYPTO_KEY_AES_128;
+	pCk->Loc = CRYPTO_KEY_LOC_PLAIN;
+	pCk->Usage = Use;
+	pCk->Plain.pData = pKey->SessionKey;
+	pCk->Plain.Len = BTEAD_KEY_LEN;
+}
 
 bool BtEadInit(CipherEngine *pAes, RngEngine *pRng)
 {
@@ -293,7 +312,23 @@ size_t BtEadEncrypt(const BtEadKey_t * const pKey, const uint8_t *pRand,
 		memcpy(&pOut[BTEAD_RANDOMIZER_LEN], pPayload, Len);
 	}
 
-	if (BtEadMac(pKey, nonce, pPayload, Len, x) &&
+	if (s_pEadAead != nullptr)
+	{
+		CryptoKey ck;
+		BtEadAeadKey(pKey, CRYPTO_KEY_USE_ENCRYPT, &ck);
+		if (s_pEadAead->Seal(CRYPTO_AEAD_AES_CCM, ck, nonce, sizeof(nonce),
+							 s_EadAad, sizeof(s_EadAad), pPayload, Len,
+							 &pOut[BTEAD_RANDOMIZER_LEN],
+							 &pOut[BTEAD_RANDOMIZER_LEN + Len], BTEAD_MIC_LEN) == CRYPTO_STATUS_OK)
+		{
+			ret = Len + BTEAD_OVERHEAD;
+		}
+		else
+		{
+			CryptoSecureWipe(pOut, Len + BTEAD_OVERHEAD);
+		}
+	}
+	else if (BtEadMac(pKey, nonce, pPayload, Len, x) &&
 		BtEadCtr(pKey, nonce, &pOut[BTEAD_RANDOMIZER_LEN], Len, s0))
 	{
 		// The MIC goes out encrypted under S0.
@@ -342,8 +377,19 @@ size_t BtEadDecrypt(const BtEadKey_t * const pKey, const uint8_t *pAd,
 		memcpy(pOut, &pAd[BTEAD_RANDOMIZER_LEN], len);
 	}
 
+	if (s_pEadAead != nullptr)
+	{
+		CryptoKey ck;
+		BtEadAeadKey(pKey, CRYPTO_KEY_USE_DECRYPT, &ck);
+		if (s_pEadAead->Open(CRYPTO_AEAD_AES_CCM, ck, nonce, sizeof(nonce),
+							 s_EadAad, sizeof(s_EadAad), &pAd[BTEAD_RANDOMIZER_LEN], len,
+							 pOut, &pAd[BTEAD_RANDOMIZER_LEN + len], BTEAD_MIC_LEN) == CRYPTO_STATUS_OK)
+		{
+			ret = len;
+		}
+	}
 	// Decrypt first, because the MIC authenticates the plaintext.
-	if (BtEadCtr(pKey, nonce, pOut, len, s0) &&
+	else if (BtEadCtr(pKey, nonce, pOut, len, s0) &&
 		BtEadMac(pKey, nonce, pOut, len, x))
 	{
 		BtEadXor(x, s0, BTEAD_MIC_LEN);

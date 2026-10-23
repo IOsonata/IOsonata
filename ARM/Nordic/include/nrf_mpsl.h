@@ -36,6 +36,16 @@ SOFTWARE.
 #ifndef __NRF_MPSL_H__
 #define __NRF_MPSL_H__
 
+// Interrupt MPSL pends for its low priority processing. Any interrupt that
+// nothing else uses will do. The nRF5340 network core has no SWI5.
+#if defined(NRF5340_XXAA_NETWORK)
+#define MPSL_LOW_PRIO_IRQn			SWI0_IRQn
+#define MPSL_LOW_PRIO_IRQHandler	SWI0_IRQHandler
+#else
+#define MPSL_LOW_PRIO_IRQn			SWI5_EGU5_IRQn
+#define MPSL_LOW_PRIO_IRQHandler	SWI5_EGU5_IRQHandler
+#endif
+
 
 #ifdef __cplusplus
 extern "C" {

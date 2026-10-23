@@ -37,6 +37,16 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "nrf.h"
 
+// The nRF5340 application core names its peripherals by security state, and
+// the firmware runs secure
+#if !defined(NRF_LPCOMP) && defined(NRF_LPCOMP_S)
+#define NRF_LPCOMP	NRF_LPCOMP_S
+#endif
+
+#if defined(NRF5340_XXAA_APPLICATION)
+#define LPCOMP_IRQn	COMP_LPCOMP_IRQn
+#endif
+
 #include "idelay.h"
 #include "converters/analog_comp.h"
 

@@ -170,8 +170,8 @@ SOFTWARE.
 #if defined(SPI_CFG1_MBR)
 // CFG1, CFG2, TSIZE, TXDR and RXDR
 #define STM32_SPI_LAYOUT_CFG
-#elif defined(SPI_CR2_DS)
-// CR1, CR2, SR and DR with a 32 bit FIFO each way
+#elif defined(SPI_CR2_DS) || defined(STM32F401xE)
+// CR1, CR2, SR and DR. F401 has no DS/FRXTH fields.
 #define STM32_SPI_LAYOUT_CR
 #else
 #error "spi_stm32.cpp: SPI register layout not supported"
@@ -210,12 +210,20 @@ typedef volatile uint16_t __attribute__((may_alias)) Stm32SpiReg16_t;
 #define SPI_STM32_TXBUF_SIZE		256
 
 // Data bytes in flight, the 32 bit FIFO
+#ifdef STM32F401xE
+#define STM32_SPI_FIFO_BYTES		1
+#else
 #define STM32_SPI_FIFO_BYTES		4
+#endif
 
 // BR divider of CR1, 2 to 256
 #define STM32_SPI_MBR_MAX			7
 
+#ifdef STM32F401xE
+#define STM32_SPI_DATASIZE_MIN		8
+#else
 #define STM32_SPI_DATASIZE_MIN		4
+#endif
 #define STM32_SPI_DATASIZE_MAX		16
 
 #define STM32_SPI_RATE_DEFAULT		1000000
@@ -341,6 +349,20 @@ static const Stm32SpiInfo_t s_Stm32SpiInfo[STM32_SPI_MAXDEV] = {
 	  &RCC->D2CCIP1R, RCC_D2CCIP1R_SPI45SEL, 1, SPI5_IRQn, 86, 85 },
 	{ SPI6, &RCC->APB4ENR, RCC_APB4ENR_SPI6EN, &RCC->APB4RSTR, RCC_APB4RSTR_SPI6RST,
 	  &RCC->D3CCIPR, RCC_D3CCIPR_SPI6SEL, 3, SPI6_IRQn, 12, 11 },
+};
+#elif defined(STM32F401xE)
+// STM32F401 SPI1 on APB2, SPI2 and SPI3 on APB1.
+// DMA and interrupt transfers are not enabled in this initial port.
+static const Stm32SpiInfo_t s_Stm32SpiInfo[STM32_SPI_MAXDEV] = {
+	{ SPI1, &RCC->APB2ENR, RCC_APB2ENR_SPI1EN, &RCC->APB2RSTR, RCC_APB2RSTR_SPI1RST,
+	  NULL, 0, 1, SPI1_IRQn, 0, 0,
+	  { STM32_SPI_DMA_NOPAIR, STM32_SPI_DMA_NOPAIR } },
+	{ SPI2, &RCC->APB1ENR, RCC_APB1ENR_SPI2EN, &RCC->APB1RSTR, RCC_APB1RSTR_SPI2RST,
+	  NULL, 0, 0, SPI2_IRQn, 0, 0,
+	  { STM32_SPI_DMA_NOPAIR, STM32_SPI_DMA_NOPAIR } },
+	{ SPI3, &RCC->APB1ENR, RCC_APB1ENR_SPI3EN, &RCC->APB1RSTR, RCC_APB1RSTR_SPI3RST,
+	  NULL, 0, 0, SPI3_IRQn, 0, 0,
+	  { STM32_SPI_DMA_NOPAIR, STM32_SPI_DMA_NOPAIR } },
 };
 #elif defined(IOSONATA_STM32_L4)
 // SPI1 on APB2 (PCLK2), SPI2 and SPI3 on APB1 (PCLK1). The kernel clock is the
@@ -2113,6 +2135,15 @@ bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfgData)
 #endif
 
 	const bool slave = pCfgData->Mode == SPIMODE_SLAVE;
+#ifdef STM32F401xE
+	// F401 DFF selects only 8 or 16 bit frames. DMA and asynchronous
+	// interrupt transfers need the F4 DMA stream implementation.
+	if ((pCfgData->DataSize != 8 && pCfgData->DataSize != 16) ||
+		pCfgData->bIntEn || pCfgData->bDmaEn || slave)
+	{
+		return false;
+	}
+#endif
 
 	if ((pCfgData->Mode != SPIMODE_MASTER && slave == false) || pCfgData->Phy != SPIPHY_NORMAL ||
 		pCfgData->DataSize < STM32_SPI_DATASIZE_MIN || pCfgData->DataSize > STM32_SPI_DATASIZE_MAX ||
@@ -2284,7 +2315,11 @@ bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfgData)
 	// the NSS pin is not used and no mode fault occurs. Slave: the NSS pin is
 	// the frame select. Data of 8 bits or less: RXNE at each byte (FRXTH).
 	uint32_t cr1 = 0;
+	#ifdef STM32F401xE
+	uint32_t cr2 = 0;
+#else
 	uint32_t cr2 = ((pCfgData->DataSize - 1) << SPI_CR2_DS_Pos) | (pCfgData->DataSize <= 8 ? SPI_CR2_FRXTH : 0U);
+#endif
 
 	if (slave == false)
 	{
@@ -2303,6 +2338,12 @@ bool SPIInit(SPIDev_t * const pDev, const SPICfg_t *pCfgData)
 		cr1 |= SPI_CR1_LSBFIRST;
 	}
 
+#ifdef STM32F401xE
+	if (pCfgData->DataSize == 16)
+	{
+		cr1 |= SPI_CR1_DFF;
+	}
+#endif
 	reg->CR1 = 0;
 	reg->CR2 = cr2;
 	reg->CR1 = cr1;

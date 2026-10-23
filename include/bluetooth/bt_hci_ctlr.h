@@ -81,9 +81,8 @@ typedef struct __Bt_Hci_Ctlr_Config {
 	uint8_t PeriodicSyncCount;		//!< Trains that can be synchronized to at once, observer role
 	uint8_t PawrAdvCount;			//!< Periodic advertising with responses sets, advertiser role
 	uint8_t PawrSyncCount;			//!< Periodic advertising with responses trains answered, responder role
+	int8_t TxPower;					//!< Default TX power in dBm. A controller port without a way to set it leaves its own default
 	void (*OnWake)(void);			//!< Fired from the controller receive context to wake a host waiter
-//	uint32_t (*Send)(BtHciCtlrDev_t * const pDev, void * const pData, uint32_t Len);
-//	uint32_t (*Receive)(BtHciCtlrDev_t * const pDev, void * const pData, uint32_t Len);
 } BtHciCtlrCfg_t;
 
 struct __Bt_Hci_Ctlr_Dev {
@@ -150,7 +149,51 @@ bool BtHciCtlrInit(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg);
  */
 bool BtHciCtlrRxFifoInit(BtHciCtlrDev_t * const pDev);
 
-size_t BtHciCtlrSdcSend(void *pData, size_t Len);
+/**
+ * @brief	Send an HCI command to the controller and return its status.
+ *
+ * Implemented by the controller port, which picks the response model its
+ * controller offers: the SoftDevice Controller answers through its typed
+ * entry points inline, a controller behind an H4 link sends the command and
+ * waits for the Command Complete or Command Status that names the opcode.
+ * The host installs it as the Command executor of its BtHciDevice_t, so every
+ * command the stack issues goes through here whatever the controller.
+ *
+ * Return parameters are copied to pRet, at most RetLen bytes. A command the
+ * controller does not have is answered 0xFF, which no HCI status uses.
+ *
+ * @param	pDev		Host HCI device the command is issued for.
+ * @param	OpCode		16 bit HCI opcode.
+ * @param	pParam		Command parameters in the standard HCI wire layout.
+ * @param	ParamLen	Parameter length in bytes.
+ * @param	pRet		Return parameter buffer, or NULL.
+ * @param	RetLen		Size of pRet in bytes.
+ *
+ * @return	HCI status, 0 on success.
+ */
+uint8_t BtHciCtlrCommand(BtHciDevice_t * const pDev, uint16_t OpCode, const void *pParam, uint8_t ParamLen, void *pRet, uint8_t RetLen);
+
+/**
+ * @brief	Retry controller work the Bluetooth work queue refused.
+ *
+ * Called from BtAppCheckStatus. A controller port that defers its receive
+ * path through BtEvtQue queues it again from here when a previous attempt
+ * found the queue full. The library default does nothing, which is right
+ * for a controller that delivers its packets in its own context.
+ */
+void BtHciCtlrCheckStatus(void);
+
+/// Channels and priority of the IPC link to a controller on another core.
+/// The shared memory block itself is declared by the linker script, see
+/// ipc/ipc_intrf.h. The library defines a weak default; an application
+/// using other channels defines its own.
+typedef struct __Bt_Hci_Ctlr_Ipc_Config {
+	int TxChan;						//!< IPC channel this core raises toward the controller core
+	int RxChan;						//!< IPC channel the controller core raises toward this core
+	int IntPrio;					//!< IPC interrupt priority
+} BtHciCtlrIpcCfg_t;
+
+extern const BtHciCtlrIpcCfg_t g_BtHciCtlrIpcCfg;
 
 /**
  * @brief	Ask for the peripheral link features of the controller.
@@ -233,7 +276,6 @@ extern const BtHciCtlrMemPool_t g_BtHciCtlrMemPool;
  * @return	Size in bytes, 0 before configuration
  */
 int32_t BtHciCtlrMemPoolSizeNeeded(void);
-uint8_t BtHciCmdSdc(BtHciDevice_t * const pDev, uint16_t OpCode, const void *pParam, uint8_t ParamLen, void *pRet, uint8_t RetLen);
 
 /**
  * @brief	Bring up the controller.
@@ -349,6 +391,22 @@ size_t BtHciCtlrSendCommand(BtHciCtlrDev_t * const pDev, uint16_t OpCode, const 
 
 #ifdef __cplusplus
 }
+
+class KeyAgreeEngine;
+
+/**
+ * @brief	P-256 key agreement engine for LE Secure Connections.
+ *
+ * Implemented by the controller port, which knows what the device it runs
+ * on offers: the SoftDevice Controller port picks the hardware engine of its
+ * MCU (CRACEN on nRF54L, CryptoCell on nRF52840) and the software P-256
+ * elsewhere; a controller behind an H4 link uses the software P-256 with the
+ * random numbers of the controller. The security module composes it into
+ * SMP with the controller AES (BtCryptoCtlrInit) and RNG (BtCryptoCtlrRng).
+ *
+ * @return	The engine, or nullptr when none could be brought up.
+ */
+KeyAgreeEngine *BtHciCtlrKeyAgreeEngine(void);
 
 class BtHciCtlr : public DeviceIntrf {
 public:

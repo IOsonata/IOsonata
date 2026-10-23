@@ -35,7 +35,7 @@ SOFTWARE.
 ----------------------------------------------------------------------------*/
 #include <memory.h>
 
-// ---- SDC controller bring-up (relocated from bt_app_sdc) ----
+// ---- SDC controller bring-up ----
 
 #include <stdlib.h>
 #include "nrf.h"
@@ -48,13 +48,27 @@ SOFTWARE.
 #include "sdc_hci_cmd_le.h"
 #include "sdc_hci_cmd_controller_baseband.h"
 #include "sdc_hci_cmd_link_control.h"
+#include "sdc_hci_cmd_info_params.h"
 
 #include "istddef.h"
 #include "bluetooth/bt_hci.h"
 #include "bluetooth/bt_hci_ctlr.h"
 #include "bluetooth/bt_gap.h"
+#include "bluetooth/bt_smp.h"		// BtSmpMsTick, defined here from the controller timer
+#include "bluetooth/bt_gatt.h"		// BtGattMsTick
 #include "coredev/system_core_clock.h"
+#include "coredev/timer.h"
+#include "timer_nrfx.h"
+#include "nrf_mac.h"
 #include "crypto_rng_nrf.h"
+#include "crypto/crypto_uecc.h"
+
+#if defined(NRF54L15_XXAA) || defined(NRF54H20_XXAA)
+#include "cracen_intrf.h"
+#include "crypto/ba414ep.h"
+#elif defined(NRF52840_XXAA)
+#include "crypto_cc3xx.h"
+#endif
 
 /******** For DEBUG Trace ************/
 // Define DEBUG_ENABLE to turn on the SMP handshake trace for this file: every
@@ -118,16 +132,6 @@ void BtHciCtlrProcess(BtHciCtlrDev_t * const pDev)
 	{
 		pDev->RxHandler(pDev, mtype == SDC_HCI_MSG_TYPE_EVT, buf);
 	}
-}
-
-size_t BtHciCtlrSdcSend(void *pData, size_t Len)
-{
-	if (s_pBtHciCtlrSdc == nullptr || s_pBtHciCtlrSdc->Send == nullptr)
-	{
-		return 0;
-	}
-
-	return s_pBtHciCtlrSdc->Send(s_pBtHciCtlrSdc, pData, Len);
 }
 
 // The commands are in groups. The group of a feature is reached only through
@@ -354,17 +358,13 @@ static int32_t BtHciCmdSdcPadv(uint16_t OpCode, const void *pParam, void *pRet, 
 	return res;
 }
 
-// SDC command executor. Sends the command, then pumps the controller until the
-// matching Command Complete or Command Status sets CmdDone, and returns the HCI
-// status. Command credit and opcode match are the generic fields filled by
-// BtHciProcessEvent. This is the SDC response model: a busy wait on sdc_hci_get
-// through BtHciCtlrProcess. A target with an event driven SDK would bind its own.
-// SDC command executor. The SDC HCI command interface is typed, not raw: each
-// opcode maps to a sdc_hci_cmd_le_* wrapper. The generic parameters are the
-// standard HCI wire layout, which matches the SDC command struct, so they cast
-// directly. The wrappers are synchronous, so this returns the status inline; the
-// generic command credit and match path is used only by a raw HCI controller.
-uint8_t BtHciCmdSdc(BtHciDevice_t * const pDev, uint16_t OpCode, const void *pParam, uint8_t ParamLen, void *pRet, uint8_t RetLen)
+// SDC command executor, the BtHciCtlrCommand of this port. The SDC HCI command
+// interface is typed, not raw: each opcode maps to a sdc_hci_cmd_* wrapper. The
+// generic parameters are the standard HCI wire layout, which matches the SDC
+// command struct, so they cast directly. The wrappers are synchronous, so this
+// returns the status inline; the generic command credit and match path is used
+// only by a controller behind a link.
+uint8_t BtHciCtlrCommand(BtHciDevice_t * const pDev, uint16_t OpCode, const void *pParam, uint8_t ParamLen, void *pRet, uint8_t RetLen)
 {
 	// The wrappers below take the parameter block whole and know its length
 	// from its type, and they reach the controller through the linked library,
@@ -455,6 +455,66 @@ uint8_t BtHciCmdSdc(BtHciDevice_t * const pDev, uint16_t OpCode, const void *pPa
 			{
 				sdc_hci_cmd_le_encrypt_return_t r;
 				res = sdc_hci_cmd_le_encrypt((const sdc_hci_cmd_le_encrypt_t*)pParam, &r);
+				if (pRet != nullptr && RetLen > 0)
+				{
+					memcpy(pRet, &r, RetLen < sizeof(r) ? RetLen : sizeof(r));
+				}
+			}
+			break;
+
+		case BT_HCI_CMD_CTLR_RAND:
+			{
+				sdc_hci_cmd_le_rand_return_t r;
+				res = sdc_hci_cmd_le_rand(&r);
+				if (pRet != nullptr && RetLen > 0)
+				{
+					memcpy(pRet, &r, RetLen < sizeof(r) ? RetLen : sizeof(r));
+				}
+			}
+			break;
+
+		case BT_HCI_CMD_CTLR_READ_BUFF_SIZE:
+			{
+				// What the controller was configured with above, so the host
+				// sizes its ACL fragmentation and credits from the same source
+				// whatever controller it runs on.
+				sdc_hci_cmd_le_read_buffer_size_return_t r;
+				res = sdc_hci_cmd_le_read_buffer_size(&r);
+				if (pRet != nullptr && RetLen > 0)
+				{
+					memcpy(pRet, &r, RetLen < sizeof(r) ? RetLen : sizeof(r));
+				}
+			}
+			break;
+
+		case BT_HCI_CMD_VS_ISYST_READ_STATIC_ADDR:
+			{
+				// What identifies this device is the factory address in the
+				// FICR, returned with the two top bits set as a static random
+				// address, the one every nRF5x build has advertised with. The
+				// same answer HciController gives to this I-SYST command, so
+				// the host asks the one question of every controller.
+				uint64_t mac = nrf_get_mac_address();
+				uint8_t addr[6];
+				for (int i = 0; i < 6; i++)
+				{
+					addr[i] = (uint8_t)(mac >> (8 * i));
+				}
+				if (pRet != nullptr && RetLen > 0)
+				{
+					memcpy(pRet, addr, RetLen < sizeof(addr) ? RetLen : sizeof(addr));
+				}
+				res = 0;
+			}
+			break;
+
+		case BT_HCI_CMD_INFO_READ_BD_ADDR:
+			{
+				// The public address, which the controller has only when one
+				// was programmed into it; all zeros otherwise, and the host
+				// falls back on the static address above.
+				sdc_hci_cmd_ip_read_bd_addr_return_t r;
+				res = sdc_hci_cmd_ip_read_bd_addr(&r);
 				if (pRet != nullptr && RetLen > 0)
 				{
 					memcpy(pRet, &r, RetLen < sizeof(r) ? RetLen : sizeof(r));
@@ -572,9 +632,88 @@ void BtHciCtlrPeripheralSupport(void)
 	s_pBtHciCtlrSdcPeripheral = BtHciCtlrSdcPeripheralSupport;
 }
 
+// Millisecond clock of the host, from the low frequency timer this port
+// runs beside the controller. The SMP and GATT transaction timeouts read it
+// through BtSmpMsTick and BtGattMsTick, declared in bt_smp.h and bt_gatt.h,
+// whose library defaults return 0 and leave the timeouts inert. Only a link
+// needs the clock, so the timer starts with connection support below.
+static TimerDev_t s_BtHciCtlrSdcTimer;
+
+const static TimerCfg_t s_BtHciCtlrSdcTimerCfg = {
+	.DevNo = 1,
+	.ClkSrc = TIMER_CLKSRC_DEFAULT,
+	.Freq = 0,			// 0 => Default frequency
+	.IntPrio = 6,
+	.EvtHandler = nullptr
+};
+
+uint32_t BtSmpMsTick(void)
+{
+	if (s_BtHciCtlrSdcTimer.GetTickCount == nullptr)
+	{
+		// Timer not started
+		return 0;
+	}
+
+	return TimerGetMilisecond(&s_BtHciCtlrSdcTimer);
+}
+
+uint32_t BtGattMsTick(void)
+{
+	return BtSmpMsTick();
+}
+
 void BtHciCtlrLinkSupport(void)
 {
 	s_pBtHciCmdSdcLink = BtHciCmdSdcLink;
+
+	// The clock the link timeouts run on. The device timer and not the Timer
+	// class: the class initializes through TimerInit, which links the high
+	// frequency timer driver along with the low frequency one.
+	if (s_BtHciCtlrSdcTimer.GetTickCount == nullptr)
+	{
+		nRFxLFTimerInit(&s_BtHciCtlrSdcTimer, &s_BtHciCtlrSdcTimerCfg);
+	}
+}
+
+// P-256 key agreement for LE Secure Connections. The SDC runs on several
+// families with different P-256 hardware, selected at compile time:
+//   nRF54L15 / nRF54H20 : CRACEN            -> Ba414ep (hardware)
+//   nRF52840            : CryptoCell CC310  -> CryptoCc3xx (hardware)
+//   nRF52832            : no accelerator    -> CryptoUecc (software)
+//   nRF5340 (net core)  : CC312 is on the app core secure domain, not
+//                         reachable from the network core -> CryptoUecc
+// Randomness comes from the Nordic hardware RNG. Linked only when the
+// security module references it.
+KeyAgreeEngine *BtHciCtlrKeyAgreeEngine(void)
+{
+	KeyAgreeEngine *pEcdh = nullptr;
+#if defined(NRF54L15_XXAA) || defined(NRF54H20_XXAA)
+	static Ba414ep s_Ecdh;								// CRACEN engine object
+	if (s_Ecdh.Init(CracenIntrfInstance(), CryptoRngNrfInstance()))
+	{
+		pEcdh = &s_Ecdh;
+		DEBUG_PRINTF("Crypto ECDH engine: Ba414ep (CRACEN hardware P-256)\r\n");
+	}
+#elif defined(NRF52840_XXAA)
+	alignas(CryptoCc3xx) static uint8_t s_CryptoEcdhMem[CRYPTO_CC3XX_MEMSIZE];
+	pEcdh = CryptoCc3xxCreate(s_CryptoEcdhMem, sizeof(s_CryptoEcdhMem),
+							 CryptoRngNrfInstance());
+	if (pEcdh != nullptr)
+	{
+		DEBUG_PRINTF("Crypto ECDH engine: CryptoCc3xx (CC310 hardware P-256)\r\n");
+	}
+#else
+	alignas(uint64_t) static uint8_t s_CryptoEcdhMem[CRYPTO_UECC_MEMSIZE];
+	pEcdh = CryptoUeccCreate(s_CryptoEcdhMem, sizeof(s_CryptoEcdhMem),
+							 CryptoRngNrfInstance());
+	if (pEcdh != nullptr)
+	{
+		DEBUG_PRINTF("Crypto ECDH engine: CryptoUecc (software P-256)\r\n");
+	}
+#endif
+
+	return pEcdh;
 }
 
 // Enable the scan, periodic sync and central features of the controller.
@@ -656,7 +795,7 @@ bool BtHciCtlrStart(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 		return false;
 	}
 
-	pDev->Send = BtHciCtlrSendData;		// SDC ACL transmit, forwarded by BtHciCtlrSdcSend
+	pDev->Send = BtHciCtlrSendData;		// SDC ACL transmit
 	s_pBtHciCtlrSdc = pDev;
 
 	// MPSL first. sdc_init answers -NRF_EPERM when MPSL is not up, and it used
@@ -1032,6 +1171,20 @@ bool BtHciCtlrStart(BtHciCtlrDev_t * const pDev, const BtHciCtlrCfg_t *pCfg)
 
 		return false;
 	}
+
+	// Default TX power of advertising and links. The SDC has its own entry
+	// point for it; a controller behind a link needs a vendor command.
+	sdc_default_tx_power_set(pCfg->TxPower);
+
+#if !defined(NRF54L15_XXAA) && !defined(NRF54LM20A_XXAA) && !defined(NRF54LM20B_XXAA)
+#if (__FPU_USED == 1)
+	// Patch for the controller and an RTOS to sleep properly when the FPU is
+	// in use: a pending FPU exception keeps the core from entering sleep.
+	NVIC_SetPriority(FPU_IRQn, 6);
+	NVIC_ClearPendingIRQ(FPU_IRQn);
+	NVIC_EnableIRQ(FPU_IRQn);
+#endif
+#endif
 
 	return true;
 }

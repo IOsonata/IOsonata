@@ -44,7 +44,7 @@ SOFTWARE.
 const int g_SharedIntrfMaxCnt = MAX_NB_DEV;
 SharedIntrf_t g_SharedIntrf[MAX_NB_DEV] = { {0, 0},};
 
-void SPIM0_SPIS0_TWIM0_TWIS0_UARTE0_IRQHandler(void)
+void SERIAL0_IRQHandler(void)
 {
 	if (g_SharedIntrf[0].pIntrf != NULL)
 	{
@@ -53,7 +53,7 @@ void SPIM0_SPIS0_TWIM0_TWIS0_UARTE0_IRQHandler(void)
 	NVIC_ClearPendingIRQ(SPIM0_SPIS0_TWIM0_TWIS0_UARTE0_IRQn);
 }
 
-void SPIM1_SPIS1_TWIM1_TWIS1_UARTE1_IRQHandler(void)
+void SERIAL1_IRQHandler(void)
 {
 	if (g_SharedIntrf[1].pIntrf != NULL)
 	{
@@ -62,7 +62,7 @@ void SPIM1_SPIS1_TWIM1_TWIS1_UARTE1_IRQHandler(void)
 	NVIC_ClearPendingIRQ(SPIM1_SPIS1_TWIM1_TWIS1_UARTE1_IRQn);
 }
 
-void SPIM2_SPIS2_TWIM2_TWIS2_UARTE2_IRQHandler(void)
+void SERIAL2_IRQHandler(void)
 {
     if (g_SharedIntrf[2].pIntrf != NULL)
     {
@@ -71,7 +71,7 @@ void SPIM2_SPIS2_TWIM2_TWIS2_UARTE2_IRQHandler(void)
     NVIC_ClearPendingIRQ(SPIM2_SPIS2_TWIM2_TWIS2_UARTE2_IRQn);
 }
 
-void SPIM3_SPIS3_TWIM3_TWIS3_UARTE3_IRQHandler(void)
+void SERIAL3_IRQHandler(void)
 {
     if (g_SharedIntrf[3].pIntrf != NULL)
     {

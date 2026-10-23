@@ -90,7 +90,7 @@ struct Fixture {
 		Transport.EnCnt = 1;
 		atomic_flag_clear(&Transport.bBusy);
 		Config = {&Hash, &Hash, &Aes, &Rng, Psk, sizeof(Psk),
-			(const uint8_t *)"IOsonata", 8, nullptr, 1000, nullptr};
+			(const uint8_t *)"IOsonata", 8, nullptr, 1000, nullptr, nullptr};
 		assert(TlsInit(&Tls, &Config, &Transport, 0));
 		TlsProcess(&Tls, 0, true);
 	}

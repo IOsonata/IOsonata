@@ -225,6 +225,23 @@ bool BtAppConnInit(void);
  */
 bool BtAppSecInit(void);
 
+/**
+ * @brief	Random static address of this device, given by the application.
+ *
+ * The host configures its random static address at BtAppInit. The library
+ * default returns false, and the host then uses the address the controller
+ * identifies itself with (Read BD_ADDR), or one made from the random
+ * numbers of the controller when it has none. An application with a
+ * provisioned identity defines this function and fills the six octets,
+ * least significant first; the host sets the two top bits that mark a
+ * static address.
+ *
+ * @param	Addr	The address to fill, least significant octet first
+ *
+ * @return	true - Addr filled
+ */
+bool BtAppStaticAddrGet(uint8_t Addr[6]);
+
 void BtAppEvtConnected(uint16_t ConnHdl);
 // Called when an asynchronous connection initiation fails.
 void BtAppEvtConnectFailed(void);

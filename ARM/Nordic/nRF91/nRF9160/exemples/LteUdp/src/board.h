@@ -77,8 +77,8 @@ SOFTWARE.
 #error "Select the board: NRF9160_DK or NORDIC_THINGY91"
 #endif
 
-// Timer of the modem waits and of the send interval: RTC0, RTC1 is the
-// timer of the Bluetooth port (bt_app_nrf91.cpp)
+// Timer of the modem waits and of the send interval. The Bluetooth host
+// over the HCI link has no timer of its own.
 #define LTE_TIMER_DEVNO		0
 
 #endif

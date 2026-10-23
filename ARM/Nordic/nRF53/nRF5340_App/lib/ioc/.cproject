@@ -81,6 +81,8 @@
 									<listOptionValue builtIn="false" value="../../../../../../../../external/BSEC/algo/lite_version/inc"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/invn"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/nrfx"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/bsp/stable&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/drivers/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/bsp/stable/mdk&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/bsp/stable/mdk/nrf53&quot;"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/nrfx/soc"/>
@@ -115,6 +117,8 @@
 									<listOptionValue builtIn="false" value="../../../../../../../../external/BSEC/algo/lite_version/inc"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/invn"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/nrfx"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/bsp/stable&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/drivers/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/bsp/stable/mdk&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/bsp/stable/mdk/nrf53&quot;"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/nrfx/soc"/>
@@ -230,6 +234,8 @@
 									<listOptionValue builtIn="false" value="../../../../../../../../external/BSEC/algo/lite_version/inc"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/invn"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/nrfx"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/bsp/stable&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/drivers/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/bsp/stable/mdk&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/bsp/stable/mdk/nrf53&quot;"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/nrfx/soc"/>
@@ -264,6 +270,8 @@
 									<listOptionValue builtIn="false" value="../../../../../../../../external/BSEC/algo/lite_version/inc"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/invn"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/nrfx"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/bsp/stable&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/drivers/include&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/bsp/stable/mdk&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;../../../../../../../../external/nrfx/bsp/stable/mdk/nrf53&quot;"/>
 									<listOptionValue builtIn="false" value="../../../../../../../../external/nrfx/soc"/>

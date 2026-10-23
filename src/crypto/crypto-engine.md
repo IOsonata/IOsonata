@@ -46,7 +46,7 @@ application constructs exactly the engine it wants and injects it.
 static uint8_t     s_EcdhMem[BA414EP_MEMSIZE];              // App-owned storage
 KeyAgreeEngine *pEcdh = Ba414epCreate(s_EcdhMem, sizeof(s_EcdhMem),
                                       CryptoRngNrfInstance());
-CipherEngine   *pAes  = BtCryptoCtlrSdcInit();              // controller AES
+CipherEngine   *pAes  = BtCryptoCtlrInit();                 // controller AES
 BtSmpInit(pEcdh, pAes);                                     // inject into SMP
 ```
 
@@ -144,7 +144,7 @@ layer:
 
 | Adapter | Owner | Notes |
 |---|---|---|
-| `CryptoCtlrSdc` | Bluetooth (`ARM/Nordic/src/bt_crypto_ctlr_sdc.cpp`, `BtCryptoCtlrSdcInit` declared in `bt_smp.h`) | AES-128 ECB through the BLE controller HCI LE Encrypt. Cannot function without a running BLE controller, so only a Bluetooth consumer may use it. It is a `CipherEngine` so SMP composes it into its AES slot uniformly, but it is not a reusable engine and is not advertised in the crypto layer. |
+| `CryptoCtlrAes`, `CryptoCtlrRng`, `CryptoCtlrMac`, `CryptoCtlrAead`, `CryptoCtlrHash`, `CryptoCtlrSign` | Bluetooth (`src/bluetooth/bt_crypto_ctlr.cpp`, `BtCryptoCtlrInit`, `BtCryptoCtlrRng`, `BtCryptoCtlrMac`, `BtCryptoCtlrAead`, `BtCryptoCtlrHash`, `BtCryptoCtlrHmac` and `BtCryptoCtlrSign` declared in `bt_smp.h`) | AES-128 ECB through the HCI LE Encrypt command and random numbers through LE Rand, on any controller reached through HCI; on a controller with the I-SYST vendor commands (HciController), AES-CMAC and AES-CCM one command per message and random numbers 251 octets per command, one-shot SHA-256 and HMAC (no streaming over a link) and ECDSA P-256 sign and verify, the engines of those being null elsewhere. Cannot function without a running controller, so only a Bluetooth consumer may use them. They implement the facets so SMP and Encrypted Advertising Data compose them into their slots uniformly, but they are not reusable engines and are not advertised in the crypto layer. |
 
 ## Composition for SMP
 

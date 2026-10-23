@@ -46,14 +46,28 @@ SOFTWARE.
 #include "nrf.h"
 #include "coredev/wdt.h"
 
-// The nRF91 names its peripherals by security state and the application runs
-// secure
-#if !defined(NRF_WDT) && defined(NRF_WDT_S)
+// Peripherals are named by security state and instance on nRF91 and nRF53. The
+// firmware runs secure on the application cores and the nRF5340 network core
+// is non secure only. The application core of the nRF5340 uses WDT0.
+#if !defined(NRF_WDT)
+#if defined(NRF_WDT0_S)
+#define NRF_WDT				NRF_WDT0_S
+#define WDT_NRFX_IRQn		WDT0_IRQn
+#define WDT_NRFX_IRQHandler	WDT0_IRQHandler
+#elif defined(NRF_WDT_S)
 #define NRF_WDT				NRF_WDT_S
+#elif defined(NRF_WDT_NS)
+#define NRF_WDT				NRF_WDT_NS
+#endif
 #endif
 
 #ifndef NRF_WDT
 #error "wdt_nrfx: no single WDT instance on this MCU"
+#endif
+
+#ifndef WDT_NRFX_IRQn
+#define WDT_NRFX_IRQn		WDT_IRQn
+#define WDT_NRFX_IRQHandler	WDT_IRQHandler
 #endif
 
 // Reload request registers
@@ -74,7 +88,7 @@ SOFTWARE.
 
 static WdtDev_t *s_pWdtnRFDev = NULL;
 
-extern "C" void WDT_IRQHandler(void);
+extern "C" void WDT_NRFX_IRQHandler(void);
 
 // Timeout of a CRV value in msec, rounded up
 static uint32_t WdtnRFCrvToMs(uint32_t Crv)
@@ -103,7 +117,7 @@ bool WdtInit(WdtDev_t * const pDev, const WdtCfg_t * const pCfg)
 	pDev->pDevData = (void *)NRF_WDT;
 
 	NRF_WDT->INTENCLR = WDT_INTENSET_TIMEOUT_Msk;
-	NVIC_DisableIRQ(WDT_IRQn);
+	NVIC_DisableIRQ(WDT_NRFX_IRQn);
 
 	if (NRF_WDT->RUNSTATUS & WDT_NRFX_RUNNING)
 	{
@@ -140,13 +154,13 @@ bool WdtInit(WdtDev_t * const pDev, const WdtCfg_t * const pCfg)
 	s_pWdtnRFDev = pDev;
 
 	NRF_WDT->EVENTS_TIMEOUT = 0;
-	NVIC_ClearPendingIRQ(WDT_IRQn);
+	NVIC_ClearPendingIRQ(WDT_NRFX_IRQn);
 
 	if (pCfg->EvtHandler != NULL)
 	{
-		NVIC_SetPriority(WDT_IRQn, pCfg->IntPrio);
+		NVIC_SetPriority(WDT_NRFX_IRQn, pCfg->IntPrio);
 		NRF_WDT->INTENSET = WDT_INTENSET_TIMEOUT_Msk;
-		NVIC_EnableIRQ(WDT_IRQn);
+		NVIC_EnableIRQ(WDT_NRFX_IRQn);
 	}
 
 	return true;
@@ -184,7 +198,7 @@ bool WdtRunning(WdtDev_t * const pDev)
 	return (NRF_WDT->RUNSTATUS & WDT_NRFX_RUNNING) != 0;
 }
 
-void WDT_IRQHandler(void)
+void WDT_NRFX_IRQHandler(void)
 {
 	if (NRF_WDT->EVENTS_TIMEOUT)
 	{
