@@ -13,6 +13,7 @@ bool Nrf70Spi::Init(DeviceIntrf * const pSpi, uint32_t ChipSelect, uint8_t Slave
 	vpSpi = pSpi;
 	vSelect = ChipSelect;
 	vLatency = SlaveLatency;
+	vErrors = 0;
 	return true;
 }
 
@@ -27,7 +28,10 @@ bool Nrf70Spi::ReadStatus(uint8_t Opcode, uint8_t &Value)
 	// Nordic returns the register byte immediately after the opcode;
 	// subsequent clocks are required by some SPI controllers.
 	if (vpSpi->Read(vSelect, command, 1, result, sizeof(result)) != sizeof(result))
+	{
+		vErrors++;
 		return false;
+	}
 	Value = result[0];
 	return true;
 }
@@ -40,7 +44,12 @@ bool Nrf70Spi::WriteStatus(uint8_t Opcode, uint8_t Value)
 		return false;
 	command[0] = Opcode;
 	command[1] = Value;
-	return vpSpi->Tx(vSelect, command, sizeof(command)) == sizeof(command);
+	if (vpSpi->Tx(vSelect, command, sizeof(command)) != sizeof(command))
+	{
+		vErrors++;
+		return false;
+	}
+	return true;
 }
 
 bool Nrf70Spi::Write(uint32_t Address, const void *pData, uint32_t Length)
@@ -48,15 +57,20 @@ bool Nrf70Spi::Write(uint32_t Address, const void *pData, uint32_t Length)
 	uint8_t cmd[4];
 
 	if (vpSpi == nullptr || pData == nullptr || Length == 0 ||
-		Address > 0x7FFFFF || Length > 0x7FFFFF - Address)
+		Address > 0x7FFFFF || Length - 1 > 0x7FFFFF - Address)
 		return false;
 	cmd[0] = 0x02;
 	cmd[1] = (uint8_t)((Address >> 16) | 0x80);
 	cmd[2] = (uint8_t)(Address >> 8);
 	cmd[3] = (uint8_t)Address;
 	// DeviceIntrf::Write sends the command and payload under one CS.
-	return vpSpi->Write(vSelect, cmd, sizeof(cmd),
-		(const uint8_t *)pData, (int)Length) == (int)Length;
+	if (vpSpi->Write(vSelect, cmd, sizeof(cmd),
+		(const uint8_t *)pData, (int)Length) != (int)Length)
+	{
+		vErrors++;
+		return false;
+	}
+	return true;
 }
 
 bool Nrf70Spi::ReadBlock(uint32_t Address, void *pData, uint32_t Length,
@@ -79,8 +93,13 @@ bool Nrf70Spi::ReadBlock(uint32_t Address, void *pData, uint32_t Length,
 	// The complete header, dummy byte and latency clocks are issued
 	// in the command phase of one DeviceIntrf::Read transaction.
 	// CS stays asserted until the following receive phase completes.
-	return vpSpi->Read(vSelect, cmd, cmdLen,
-		(uint8_t *)pData, (int)Length) == (int)Length;
+	if (vpSpi->Read(vSelect, cmd, cmdLen,
+		(uint8_t *)pData, (int)Length) != (int)Length)
+	{
+		vErrors++;
+		return false;
+	}
+	return true;
 }
 
 bool Nrf70Spi::Read(uint32_t Address, void *pData, uint32_t Length)
@@ -98,7 +117,6 @@ bool Nrf70Spi::ReadRegister32(uint32_t Address, uint32_t &Value)
 	uint8_t data[4];
 	if (!ReadHighLatency(Address, data, sizeof(data)))
 	{
-		vErrors++;
 		return false;
 	}
 	Value = (uint32_t)data[0] | ((uint32_t)data[1] << 8) |
@@ -113,10 +131,7 @@ bool Nrf70Spi::WriteRegister32(uint32_t Address, uint32_t Value)
 	data[1] = (uint8_t)(Value >> 8);
 	data[2] = (uint8_t)(Value >> 16);
 	data[3] = (uint8_t)(Value >> 24);
-	if (Write(Address, data, sizeof(data)))
-		return true;
-	vErrors++;
-	return false;
+	return Write(Address, data, sizeof(data));
 }
 
 extern "C" unsigned int Nrf70OsalSpiRead32(void *priv, unsigned long addr)
