@@ -102,7 +102,9 @@ static void IpcShareRegion(IpcIntrfDev_t * const pDev)
 
 bool IpcCtrlrInit(IpcIntrfDev_t * const pDev)
 {
-	if (pDev == nullptr || !IpcChanValid(pDev->TxChan) || !IpcChanValid(pDev->RxChan))
+	if (pDev == nullptr || pDev->pHdr == nullptr ||
+		pDev->MemSize < sizeof(IpcIntrfHdr_t) ||
+		!IpcChanValid(pDev->TxChan) || !IpcChanValid(pDev->RxChan))
 	{
 		return false;
 	}
