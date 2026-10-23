@@ -449,11 +449,21 @@ bool IOPinEnableInterrupt(int IntNo, int IntPrio, uint32_t PortNo, uint32_t PinN
 {
 	s_pGpIOSenseEvt = s_GpIOSenseEvt;
 
-    if (IntNo >= IOPIN_MAX_INT)
+    if (IntNo < -1 || IntNo >= IOPIN_MAX_INT)
 		return false;
+
+#ifdef NRF5340_XXAA_NETWORK
+	if ((PortNo >= GPIO_COUNT) || (IntNo >= 0 && PinNo >= 32))
+		return false;
+#endif
 
     NRF_GPIOTE_Type *gpiotereg = nRFGpioteGetReg(PortNo);
 	NRF_GPIO_Type *reg = nRFGpioGetReg(PortNo);
+
+#ifdef NRF5340_XXAA_NETWORK
+	if (gpiotereg == NULL || reg == NULL)
+		return false;
+#endif
 
 #ifdef GPIOTE_CONFIG_PORT_Msk
 #define GPIOTE_CONFIG_PORT_PIN_Msk (GPIOTE_CONFIG_PORT_Msk | GPIOTE_CONFIG_PSEL_Msk)
