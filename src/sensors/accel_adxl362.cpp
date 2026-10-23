@@ -234,3 +234,87 @@ bool AccelAdxl362::WakeOnEvent(bool bEnable, int Threshold)
 	return WriteRegister(ADXL362_ACT_INACT_CTL_REG, ctl) &&
 		WriteRegister(ADXL362_INTMAP1_REG, ADXL362_INTMAP1_ACT);
 }
+
+bool AccelAdxl362::Status(uint8_t &Flags)
+{
+	if (!vbInitialized)
+		return false;
+
+	return ReadRegisters(ADXL362_STATUS_REG, &Flags, 1);
+}
+
+bool AccelAdxl362::ConfigureFifo(uint16_t WatermarkSamples)
+{
+	uint8_t ctl;
+	uint8_t samples;
+
+	if (!vbInitialized || WatermarkSamples > 170)
+		return false;
+	if (WatermarkSamples == 0)
+	{
+		if (!WriteRegister(ADXL362_FIFO_CONTROL_REG, 0))
+			return false;
+		vbFifoEnabled = false;
+		return true;
+	}
+
+	// FIFO sample count is measured in individual XYZ words, not frames.
+	// At most 512 entries are supported; use a full XYZ frame per read.
+	// The 9th watermark bit resides in FIFO_CONTROL.AH.
+	uint16_t entries = WatermarkSamples * 3;
+	ctl = 2 | ((entries & 0x100) ? ADXL362_FIFO_CONTROL_AH : 0);
+	samples = (uint8_t)entries;
+	if (!WriteRegister(ADXL362_FIFO_CONTROL_REG, 0))
+		return false;
+	if (!WriteRegister(ADXL362_FIFO_SAMPLES_REG, samples))
+		return false;
+	if (!WriteRegister(ADXL362_FIFO_CONTROL_REG, ctl))
+		return false;
+	vbFifoEnabled = true;
+	return true;
+}
+
+bool AccelAdxl362::ReadFifo(AccelSensorRawData_t &Data)
+{
+	uint8_t cmd;
+	uint8_t n[2];
+	uint8_t raw[6];
+	uint16_t entries;
+	AccelSensorRawData_t sample;
+
+	if (!vbInitialized || !vbFifoEnabled || Interface() == NULL)
+		return false;
+	if (!ReadRegisters(ADXL362_FIFO_ENTRIES_L_REG, n, sizeof(n)))
+		return false;
+	entries = (uint16_t)n[0] | (((uint16_t)n[1] & 3) << 8);
+	if (entries < 3)
+		return false;
+
+	cmd = ADXL362_CMD_READFIFO;
+	if (Interface()->Read(DeviceAddress(), &cmd, 1, raw, sizeof(raw)) != sizeof(raw))
+		return false;
+	// FIFO words use bits 15:14 to encode the axis and bits 11:0 for data.
+	if ((raw[1] & 0xC0) != 0 || (raw[3] & 0xC0) != 0x40 ||
+		(raw[5] & 0xC0) != 0x80)
+		return false;
+
+	sample = vData;
+	sample.Timestamp = vpTimer ? vpTimer->uSecond() : vData.Timestamp + 1;
+	sample.X = (int16_t)(((uint16_t)raw[0] | ((uint16_t)raw[1] << 8)) << 4) >> 4;
+	sample.Y = (int16_t)(((uint16_t)raw[2] | ((uint16_t)raw[3] << 8)) << 4) >> 4;
+	sample.Z = (int16_t)(((uint16_t)raw[4] | ((uint16_t)raw[5] << 8)) << 4) >> 4;
+	vData = sample;
+	Data = sample;
+	return true;
+}
+
+void AccelAdxl362::IntHandler()
+{
+	uint8_t status;
+
+	// Reading STATUS clears activity and inactivity interrupt latches.
+	if (!Status(status))
+		return;
+	if ((status & ADXL362_STATUS_DATA_READY) != 0 && !vbFifoEnabled)
+		UpdateData();
+}
