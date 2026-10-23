@@ -50,6 +50,12 @@ ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ----------------------------------------------------------------------------*/
+#if defined(NRF5340_XXAA_NETWORK)
+#define NRF53_SERIAL0_IRQ SERIAL0_IRQn
+#else
+#define NRF53_SERIAL0_IRQ SPIM0_SPIS0_TWIM0_TWIS0_UARTE0_IRQn
+#endif
+
 #include <string.h>
 #include <stdio.h>
 #include <stdint.h>
@@ -1465,9 +1471,9 @@ bool UARTInit(UARTDev_t * const pDev, const UARTCfg_t *pCfg)
 			break;
 #elif defined(NRF53_SERIES)
     		case 0:
-                NVIC_ClearPendingIRQ(SPIM0_SPIS0_TWIM0_TWIS0_UARTE0_IRQn);
-                NVIC_SetPriority(SPIM0_SPIS0_TWIM0_TWIS0_UARTE0_IRQn, pCfg->IntPrio);
-                NVIC_EnableIRQ(SPIM0_SPIS0_TWIM0_TWIS0_UARTE0_IRQn);
+                NVIC_ClearPendingIRQ(NRF53_SERIAL0_IRQ);
+                NVIC_SetPriority(NRF53_SERIAL0_IRQ, pCfg->IntPrio);
+                NVIC_EnableIRQ(NRF53_SERIAL0_IRQ);
                 break;
 #ifdef NRF5340_XXAA_APPLICATION
     	    case 1:
