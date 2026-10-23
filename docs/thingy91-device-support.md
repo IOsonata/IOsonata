@@ -12,7 +12,7 @@ Working baseline: `prerelease_0.13_4`. This is a hardware inventory and implemen
 | ADXL372 high-g accelerometer | SPI | Missing |
 | BME680 environmental sensor | I2C | Existing `tphg_bme680` |
 | BH1749NUC color sensor | I2C | New `color_bh1749` driver; build/hardware validation pending |
-| 24CW160 EEPROM | I2C | Missing device-specific support |
+| 24CW160 EEPROM | I2C | `seep_24cw160.h` configuration using generic `Seep`; hardware validation pending |
 | PMIC, charger and fuel monitoring | I2C/GPIO | Board-specific integration required |
 | RGB LEDs, buttons, buzzer | GPIO/PWM | Board-specific pin/power configuration required |
 | Battery measurements and sensor rail enables | ADC/GPIO | Board-specific integration required |
