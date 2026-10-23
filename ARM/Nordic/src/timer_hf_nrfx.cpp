@@ -346,27 +346,27 @@ static bool nRFxTimerEnable(TimerDev_t * const pTimer)
 #else
 		if (!(NRF_CLOCK->HFCLKSTAT & CLOCK_HFCLKSTAT_STATE_Msk))
 		{
-		NRF_CLOCK->EVENTS_HFCLKSTARTED = 0;
-		NRF_CLOCK->TASKS_HFCLKSTART = 1;
+			NRF_CLOCK->EVENTS_HFCLKSTARTED = 0;
+			NRF_CLOCK->TASKS_HFCLKSTART = 1;
 
-		bool started = false;
-		for (int timeout = 1000000; timeout > 0; timeout--)
-		{
-			if (NRF_CLOCK->HFCLKSTAT & CLOCK_HFCLKSTAT_STATE_Msk)
+			bool started = false;
+			for (int timeout = 1000000; timeout > 0; timeout--)
 			{
-				started = true;
-				break;
+				if (NRF_CLOCK->HFCLKSTAT & CLOCK_HFCLKSTAT_STATE_Msk)
+				{
+					started = true;
+					break;
+				}
 			}
-		}
 
-		if (!started)
-		{
-			NRF_CLOCK->TASKS_HFCLKSTOP = 1;
-			return false;
-		}
+			if (!started)
+			{
+				NRF_CLOCK->TASKS_HFCLKSTOP = 1;
+				return false;
+			}
 
-		NRF_CLOCK->EVENTS_HFCLKSTARTED = 0;
-		s_bHFClockOwned = true;
+			NRF_CLOCK->EVENTS_HFCLKSTARTED = 0;
+			s_bHFClockOwned = true;
 		}
 #endif
 	}
