@@ -128,7 +128,7 @@ bool AccelAdxl367::Init(const AccelSensorCfg_t &Cfg, DeviceIntrf * const pIntrf,
 	if (!SetSamplingFrequency(Cfg.Freq))
 		goto fail;
 	scale = Cfg.Scale <= 2 ? 2 : Cfg.Scale <= 4 ? 4 : 8;
-	if (Scale(scale) != scale)
+		if (Scale(scale) != scale)
 		goto fail;
 	Mode(Cfg.OpMode, SamplingFrequency());
 	DeviceID(ADXL367_PART_ID);
@@ -302,7 +302,7 @@ bool AccelAdxl367::ConfigureTap(uint8_t Threshold, uint8_t Duration,
 		!WriteReg(REG_TAP_THRESH + 3, Window))
 		return false;
 	bits = DoubleTap ? ADXL367_EVT_TAP_ONE | ADXL367_EVT_TAP_TWO : ADXL367_EVT_TAP_ONE;
-	return ConfigureInterrupts(vInt1Map | bits, vInt2Map);
+	return ConfigureInterrupts(vInt1Map | (bits << 8), vInt2Map);
 }
 
 bool AccelAdxl367::EnableTemperature(bool Enable)
@@ -385,7 +385,7 @@ bool AccelAdxl367::ConfigureFifo(ADXL367_FIFO_MODE Mode,
 		!(Format == ADXL367_FIFO_XYZ || Format == ADXL367_FIFO_XYZ_TEMP ||
 		Format == ADXL367_FIFO_XYZ_ADC) || SampleSets > 511)
 		return false;
-	if (Mode != ADXL367_FIFO_DISABLED && SampleSets == 0)
+	if (Mode != ADXL367_FIFO_DISABLED && (SampleSets == 0 || SampleSets > (Format == ADXL367_FIFO_XYZ ? 170 : 128)))
 		return false;
 	ctl = (uint8_t)(((uint8_t)Format << 3) | (uint8_t)Mode |
 		((SampleSets >> 8) & 1 ? 4 : 0));
@@ -428,7 +428,8 @@ bool AccelAdxl367::ReadFifo(AccelSensorRawData_t &Data)
 	AccelSensorRawData_t sample;
 	DeviceIntrf *pIntrf;
 
-	if (!vbInitialized || !vbFifoEnabled || Interface() == NULL)
+	if (!vbInitialized || !vbFifoEnabled || Interface() == NULL ||
+		(vFifoCtl & 0x78) != 0)
 		return false;
 	if (!ReadReg(REG_FIFO_ENTRIES, entries, 2))
 		return false;
