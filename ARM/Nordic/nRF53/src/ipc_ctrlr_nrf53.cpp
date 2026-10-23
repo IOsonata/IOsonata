@@ -62,7 +62,6 @@ SOFTWARE.
 #endif
 
 #define IPC_RAM_BASE	0x20000000UL
-#define IPC_RAM_END	0x20080000UL	// Application RAM0 and RAM1, shared with network core
 
 // Receiving interface of each channel
 static IpcIntrfDev_t *s_pIpcDev[IPC_CH_NUM] = { nullptr, };
@@ -72,25 +71,18 @@ static inline bool IpcChanValid(int Chan)
 	return Chan >= 0 && Chan < IPC_CH_NUM;
 }
 
-// The rings must be in application-core RAM visible to both processors.
-// Check the end without an addition that could wrap a 32-bit address.
-static bool IpcSharedMemValid(const IpcIntrfDev_t *pDev)
-{
-	uintptr_t start = reinterpret_cast<uintptr_t>(pDev->pHdr);
-	uint32_t size = pDev->MemSize;
-
-	return start >= IPC_RAM_BASE && start < IPC_RAM_END &&
-		(start & 3U) == 0U && size >= sizeof(IpcIntrfHdr_t) &&
-		size <= IPC_RAM_END - start;
-}
-
 // Open the RAM regions that hold the device data and both rings to the
 // network core. Only the application core has the SPU.
 static void IpcShareRegion(IpcIntrfDev_t * const pDev)
 {
 #ifdef NRF_SPU_S
-	uint32_t start = reinterpret_cast<uintptr_t>(pDev->pHdr);
+	uint32_t start = reinterpret_cast<uint32_t>(pDev->pHdr);
 	uint32_t end = start + pDev->MemSize - 1U;
+
+	if (start < IPC_RAM_BASE)
+	{
+		return;
+	}
 
 	uint32_t first = (start - IPC_RAM_BASE) / SPU_RAMREGION_SIZE;
 	uint32_t last = (end - IPC_RAM_BASE) / SPU_RAMREGION_SIZE;
@@ -111,7 +103,7 @@ static void IpcShareRegion(IpcIntrfDev_t * const pDev)
 bool IpcCtrlrInit(IpcIntrfDev_t * const pDev)
 {
 	if (pDev == nullptr || pDev->pHdr == nullptr ||
-		!IpcSharedMemValid(pDev) ||
+		pDev->MemSize < sizeof(IpcIntrfHdr_t) ||
 		!IpcChanValid(pDev->TxChan) || !IpcChanValid(pDev->RxChan))
 	{
 		return false;
