@@ -37,7 +37,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #ifndef __SYSTEM_CORE_CLOCK_H__
 #define __SYSTEM_CORE_CLOCK_H__
 
-#define SYSTEM_CORE_CLOCK				64000000UL		// nRF9160 has fixed core frequency
+#define SYSTEM_CORE_CLOCK				64000000UL		// nRF5340 application core reset clock; 128 MHz is supported
 #define SYSTEM_NSDELAY_CORE_FACTOR		(47UL)
 
 

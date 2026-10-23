@@ -68,6 +68,12 @@ __WEAK McuOsc_t g_McuOsc = {
 	.bUSBClk = false
 };
 
+uint32_t SystemCoreClockGet(void)
+{
+	SystemCoreClockUpdate();
+	return SystemCoreClock;
+}
+
 void SystemCoreClockUpdate(void)
 {
 #if defined(NRF_TRUSTZONE_NONSECURE)
