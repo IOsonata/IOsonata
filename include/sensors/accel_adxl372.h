@@ -39,6 +39,12 @@ enum Adxl372Detection {
 	ADXL372_DETECT_ACTIVITY2 = 1,
 	ADXL372_DETECT_INACTIVITY = 2
 };
+struct Adxl372FifoSample {
+	AccelSensorRawData_t Accel;
+	uint8_t AxisMask;
+	bool Peak;
+};
+
 struct Adxl372Status {
 	uint8_t Status1;
 	uint8_t Status2;
@@ -70,6 +76,8 @@ public:
 	bool ConfigureFifo(Adxl372FifoMode Mode, Adxl372FifoFormat Format, uint16_t Entries);
 	bool FlushFifo();
 	bool ReadFifo(AccelSensorRawData_t &Data);
+	bool ReadFifo(Adxl372FifoSample &Sample);
+	bool InterruptEvents(Adxl372Status &Events);
 	bool ReadPeak(AccelSensorRawData_t &Data);
 	bool Status(Adxl372Status &Result);
 	uint32_t FifoOverruns() const { return vFifoOverruns; }
@@ -88,5 +96,6 @@ private:
 	uint8_t vFifoControl;
 	uint16_t vFifoEntries;
 	uint32_t vFifoOverruns;
+	Adxl372Status vLastInterrupt;
 };
 #endif
