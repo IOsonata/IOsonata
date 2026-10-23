@@ -23,6 +23,8 @@ void Nrf70WorkInit(Nrf70WorkHandler_t Handler, void *pContext);
 void Nrf70WorkIrq(void);
 bool Nrf70WorkPending(void);
 void Nrf70WorkProcess(void);
+/** Retry a refused nRF70 event when the shared application queue has space. */
+void Nrf70WorkCheckStatus(void);
 void Nrf70WorkClose(void);
 
 #ifdef __cplusplus
