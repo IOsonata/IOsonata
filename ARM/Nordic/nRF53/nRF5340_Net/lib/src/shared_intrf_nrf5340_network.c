@@ -48,11 +48,11 @@ SharedIntrf_t g_SharedIntrf[MAX_NB_DEV] = { {0, 0},};
 
 void SERIAL0_IRQHandler(void)
 {
-	if (g_SharedIntrf[0].pIntrf != NULL)
+	if (g_SharedIntrf[0].pIntrf != NULL && g_SharedIntrf[0].Handler != NULL)
 	{
 		g_SharedIntrf[0].Handler(0, g_SharedIntrf[0].pIntrf);
 	}
-	NVIC_ClearPendingIRQ(SERIAL0_IRQn);
+
 }
 
 
