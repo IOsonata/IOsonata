@@ -45,6 +45,7 @@ extern "C" void LteCheckStatus(void) __attribute__((weak));
 extern "C" void GnssCheckStatus(void) __attribute__((weak));
 extern "C" void IpCheckStatus(void) __attribute__((weak));
 extern "C" void Nrf70WorkCheckStatus(void) __attribute__((weak));
+extern "C" void Nrf70TaskletCheckStatus(void) __attribute__((weak));
 
 __attribute__((weak)) bool AppCheckStatus(void)
 {
@@ -72,6 +73,10 @@ __attribute__((weak)) bool AppCheckStatus(void)
 	if (Nrf70WorkCheckStatus != nullptr)
 	{
 		Nrf70WorkCheckStatus();
+	}
+	if (Nrf70TaskletCheckStatus != nullptr)
+	{
+		Nrf70TaskletCheckStatus();
 	}
 
 	return AppEvtHandlerPending() == false;
