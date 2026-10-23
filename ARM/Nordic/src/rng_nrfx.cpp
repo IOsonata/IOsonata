@@ -38,8 +38,8 @@
 #include "cracen_intrf.h"
 
 #define RNG_USE_CRACEN	1
-#elif defined(NRF91_SERIES)
-// The nRF91 has no RNG peripheral: entropy comes from the true random
+#elif defined(NRF91_SERIES) || defined(NRF5340_XXAA_APPLICATION)
+// nRF91 and the nRF5340 application core have no RNG peripheral: entropy comes from the true random
 // generator of the CryptoCell, through its interface
 #include "cc3xx_intrf.h"
 

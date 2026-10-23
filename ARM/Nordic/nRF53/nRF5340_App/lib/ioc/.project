@@ -1930,5 +1930,10 @@
 			<type>1</type>
 			<locationURI>PARENT-4-PROJECT_LOC/src/rng_nrfx.cpp</locationURI>
 		</link>
+		<link>
+			<name>src/crypto/cc3xx_intrf.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/src/cc3xx_intrf.cpp</locationURI>
+		</link>
 	</linkedResources>
 </projectDescription>
