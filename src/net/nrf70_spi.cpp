@@ -63,11 +63,6 @@ bool Nrf70Spi::ReadBlock(uint32_t Address, void *pData, uint32_t Length,
 	uint32_t Discard)
 {
 	uint8_t cmd[5];
-	uint8_t scratch[12];
-	uint8_t *pOut;
-	uint32_t remaining;
-	uint32_t count;
-	uint32_t i;
 
 	if (vpSpi == nullptr || pData == nullptr || Length == 0 ||
 		Address > 0x7FFFFF || Length > 0x7FFFFF - Address ||
@@ -85,11 +80,6 @@ bool Nrf70Spi::ReadBlock(uint32_t Address, void *pData, uint32_t Length,
 			(uint8_t *)pData, (int)Length) == (int)Length;
 	// A separate transaction would deassert CS. Do not issue one here.
 	// The host port must supply a streaming SPI transfer for that case.
-	(void)scratch;
-	(void)pOut;
-	(void)remaining;
-	(void)count;
-	(void)i;
 	return false;
 }
 
