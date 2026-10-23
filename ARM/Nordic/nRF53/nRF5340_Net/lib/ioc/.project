@@ -1110,5 +1110,15 @@
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/storage/nvm_region.cpp</locationURI>
 		</link>
+		<link>
+			<name>include/crypto/crypto_rng_nrf.h</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/include/crypto_rng_nrf.h</locationURI>
+		</link>
+		<link>
+			<name>include/sensors/temp_nrf5x.h</name>
+			<type>1</type>
+			<locationURI>PARENT-4-PROJECT_LOC/include/temp_nrf5x.h</locationURI>
+		</link>
 	</linkedResources>
 </projectDescription>
