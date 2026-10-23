@@ -225,6 +225,13 @@ public:
 	virtual bool StartSampling();
 	virtual uint16_t Scale(uint16_t Value);
 	virtual bool WakeOnEvent(bool bEnable, int Threshold);
+	virtual void IntHandler();
+	/** Configure FIFO stream mode, with complete XYZ sample sets. */
+	bool ConfigureFifo(uint16_t WatermarkSamples);
+	/** Read one complete XYZ sample set from the FIFO. */
+	bool ReadFifo(AccelSensorRawData_t &Data);
+	/** Raw status flags, including activity and FIFO conditions. */
+	bool Status(uint8_t &Flags);
 
 public:
 	virtual bool UpdateData();
@@ -233,6 +240,8 @@ private:
 	bool ReadRegisters(uint8_t Reg, uint8_t *pData, int Len);
 	bool WriteRegister(uint8_t Reg, uint8_t Value);
 	bool vbInitialized = false;
+	bool vbFifoEnabled = false;
+	bool vbMotionEnabled = false;
 };
 #endif // __cplusplus
 
