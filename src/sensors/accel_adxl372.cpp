@@ -116,6 +116,9 @@ bool AccelAdxl372::Init(const AccelSensorCfg_t &Cfg, DeviceIntrf * const pIntrf,
 	vPower = vMeasure = vInt1 = vInt2 = vFifoControl = 0;
 	vFifoEntries = 0;
 	vFifoOverruns = 0;
+	vLastInterrupt.Status1 = 0;
+	vLastInterrupt.Status2 = 0;
+	vLastInterrupt.FifoEntries = 0;
 	vbInitialized = true;
 	if (!SetOutputRate(Cfg.Freq))
 		goto fail;
@@ -396,7 +399,9 @@ bool AccelAdxl372::ReadFifo(Adxl372FifoSample &Sample)
 		return false;
 	}
 
-	if (status.FifoEntries < (uint16_t)count)
+	// Leave a complete sample set in the FIFO to avoid a concurrent stream
+	// update overwriting a partially retrieved multi-axis sample.
+	if (status.FifoEntries < (uint16_t)(count * 2))
 		return false;
 	if (!ReadReg(REG_FIFO_DATA, raw, count * 2))
 		return false;
