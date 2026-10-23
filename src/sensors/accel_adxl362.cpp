@@ -38,14 +38,14 @@ bool AccelAdxl362::ReadRegisters(uint8_t Reg, uint8_t *pData, int Len)
 {
 	uint8_t cmd[2] = { ADXL362_CMD_READ, Reg };
 
-	return Read(cmd, 2, pData, Len) == Len;
+	return Interface() != NULL && Interface()->Read(DeviceAddress(), cmd, 2, pData, Len) == Len;
 }
 
 bool AccelAdxl362::WriteRegister(uint8_t Reg, uint8_t Value)
 {
 	uint8_t cmd[3] = { ADXL362_CMD_WRITE, Reg, Value };
 
-	return Write(cmd, 3, NULL, 0) == 3;
+	return Interface() != NULL && Interface()->Tx(DeviceAddress(), cmd, 3) == 3;
 }
 
 bool AccelAdxl362::Init(const AccelSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer)
