@@ -218,7 +218,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 class AccelAdxl362 : public AccelSensor {
 public:
 	virtual bool Init(const AccelSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL);
-//	virtual bool Read(ACCELSENSOR_RAWDATA &Data);
+
 	virtual bool Enable();
 	virtual void Disable();
 	virtual void Reset();
@@ -226,10 +226,13 @@ public:
 	virtual uint16_t Scale(uint16_t Value);
 	virtual bool WakeOnEvent(bool bEnable, int Threshold);
 
-private:
-	bool UpdateData();
+public:
+	virtual bool UpdateData();
 
-	bool vbInitialized;
+private:
+	bool ReadRegisters(uint8_t Reg, uint8_t *pData, int Len);
+	bool WriteRegister(uint8_t Reg, uint8_t Value);
+	bool vbInitialized = false;
 };
 #endif // __cplusplus
 
