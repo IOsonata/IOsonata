@@ -228,6 +228,10 @@ public:
 	virtual void IntHandler();
 	/** Configure FIFO stream mode, with complete XYZ sample sets. */
 	bool ConfigureFifo(uint16_t WatermarkSamples);
+	/** Select independent INT1/INT2 event sources and polarity. */
+	bool ConfigureInterrupts(uint8_t Int1Map, uint8_t Int2Map);
+	/** Reset the FIFO while retaining its configured watermark and mode. */
+	bool FlushFifo();
 	/** Read one complete XYZ sample set from the FIFO. */
 	bool ReadFifo(AccelSensorRawData_t &Data);
 	/** Raw status flags, including activity and FIFO conditions. */
@@ -242,6 +246,11 @@ private:
 	bool vbInitialized = false;
 	bool vbFifoEnabled = false;
 	bool vbMotionEnabled = false;
+	uint8_t vIntMap1 = 0;
+	uint8_t vIntMap2 = 0;
+	uint8_t vFifoCtl = 0;
+	uint16_t vFifoWatermark = 0;
+	uint32_t vFifoOverruns = 0;
 };
 #endif // __cplusplus
 
