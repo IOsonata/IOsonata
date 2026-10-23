@@ -92,3 +92,66 @@ bool Nrf70Spi::ReadHighLatency(uint32_t Address, void *pData, uint32_t Length)
 {
 	return ReadBlock(Address, pData, Length, 4 * vLatency);
 }
+
+bool Nrf70Spi::ReadRegister32(uint32_t Address, uint32_t &Value)
+{
+	uint8_t data[4];
+	if (!ReadHighLatency(Address, data, sizeof(data)))
+	{
+		vErrors++;
+		return false;
+	}
+	Value = (uint32_t)data[0] | ((uint32_t)data[1] << 8) |
+		((uint32_t)data[2] << 16) | ((uint32_t)data[3] << 24);
+	return true;
+}
+
+bool Nrf70Spi::WriteRegister32(uint32_t Address, uint32_t Value)
+{
+	uint8_t data[4];
+	data[0] = (uint8_t)Value;
+	data[1] = (uint8_t)(Value >> 8);
+	data[2] = (uint8_t)(Value >> 16);
+	data[3] = (uint8_t)(Value >> 24);
+	if (Write(Address, data, sizeof(data)))
+		return true;
+	vErrors++;
+	return false;
+}
+
+extern "C" unsigned int Nrf70OsalSpiRead32(void *priv, unsigned long addr)
+{
+	Nrf70Spi *spi = (Nrf70Spi *)priv;
+	uint32_t value = 0;
+	if (spi == nullptr || addr > 0x7FFFFF)
+		return 0;
+	(void)spi->ReadRegister32((uint32_t)addr, value);
+	return value;
+}
+
+extern "C" void Nrf70OsalSpiWrite32(void *priv, unsigned long addr, unsigned int value)
+{
+	Nrf70Spi *spi = (Nrf70Spi *)priv;
+	if (spi != nullptr && addr <= 0x7FFFFF)
+		(void)spi->WriteRegister32((uint32_t)addr, value);
+}
+
+extern "C" void Nrf70OsalSpiCopyFrom(void *priv, void *dest,
+	unsigned long addr, size_t count)
+{
+	Nrf70Spi *spi = (Nrf70Spi *)priv;
+	if (spi == nullptr || dest == nullptr || addr > 0x7FFFFF ||
+		count > 0x7FFFFF || count == 0)
+		return;
+	(void)spi->ReadHighLatency((uint32_t)addr, dest, (uint32_t)count);
+}
+
+extern "C" void Nrf70OsalSpiCopyTo(void *priv, unsigned long addr,
+	const void *src, size_t count)
+{
+	Nrf70Spi *spi = (Nrf70Spi *)priv;
+	if (spi == nullptr || src == nullptr || addr > 0x7FFFFF ||
+		count > 0x7FFFFF || count == 0)
+		return;
+	(void)spi->Write((uint32_t)addr, src, (uint32_t)count);
+}
