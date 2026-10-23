@@ -13,6 +13,18 @@ Copyright (c) 2026 I-SYST inc.
 #define NRF70_TASKLET_MAX 16
 static Nrf70Tasklet_t *s_Tasks[NRF70_TASKLET_MAX];
 
+static bool Nrf70TaskletRegistered(Nrf70Tasklet_t *pTask)
+{
+	int i;
+
+	for (i = 0; i < NRF70_TASKLET_MAX; i++)
+	{
+		if (s_Tasks[i] == pTask)
+			return true;
+	}
+	return false;
+}
+
 static void Nrf70TaskletDispatch(uint32_t Event, void *pContext)
 {
 	Nrf70Tasklet_t *pTask;
@@ -78,7 +90,7 @@ extern "C" bool Nrf70TaskletSchedule(Nrf70Tasklet_t *pTask)
 	if (pTask == nullptr)
 		return false;
 	state = DisableInterrupt();
-	if (!pTask->Active)
+	if (!Nrf70TaskletRegistered(pTask) || !pTask->Active)
 	{
 		EnableInterrupt(state);
 		return false;
@@ -106,6 +118,27 @@ extern "C" void Nrf70TaskletCancel(Nrf70Tasklet_t *pTask)
 	pTask->Pending = false;
 	pTask->Active = false;
 	EnableInterrupt(state);
+}
+
+extern "C" bool Nrf70TaskletPending(void)
+{
+	uint32_t state;
+	bool pending;
+	int i;
+
+	state = DisableInterrupt();
+	pending = false;
+	for (i = 0; i < NRF70_TASKLET_MAX; i++)
+	{
+		if (s_Tasks[i] != nullptr && s_Tasks[i]->Active &&
+			(s_Tasks[i]->Pending || s_Tasks[i]->Queued))
+		{
+			pending = true;
+			break;
+		}
+	}
+	EnableInterrupt(state);
+	return pending;
 }
 
 extern "C" void Nrf70TaskletCheckStatus(void)
