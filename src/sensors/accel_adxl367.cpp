@@ -12,6 +12,15 @@ Copyright (c) 2026 I-SYST inc.
 #define REG_FILTER_CTL 0x2C
 #define REG_POWER_CTL 0x2D
 #define MEASURE_START 0x02
+#define REG_THRESH_ACT_H 0x20
+#define REG_TIME_ACT 0x22
+#define REG_ACT_INACT 0x27
+#define REG_FIFO_CTL 0x28
+#define REG_FIFO_SAMPLES 0x29
+#define REG_INT1_MAP 0x2A
+#define REG_INT2_MAP 0x2B
+#define REG_FIFO_ENTRIES 0x0C
+#define REG_I2C_FIFO 0x18
 
 bool AccelAdxl367::ReadReg(uint8_t Reg, uint8_t *pData, int Len)
 {
@@ -78,6 +87,11 @@ bool AccelAdxl367::Init(const AccelSensorCfg_t &Cfg, DeviceIntrf * const pIntrf,
 		return false;
 	if (!WriteReg(REG_FILTER_CTL, vFilter))
 		return false;
+	if (!WriteReg(REG_FIFO_CTL, 0) || !WriteReg(REG_INT1_MAP, 0) ||
+		!WriteReg(REG_INT2_MAP, 0) || !WriteReg(REG_ACT_INACT, 0))
+		return false;
+	vInt1Map = vInt2Map = vFifoControl = 0;
+	vbFifoEnabled = false;
 	if (!Mode(Cfg.OpMode, freq))
 		return false;
 	AccelSensor::Scale(scale);
@@ -146,5 +160,115 @@ bool AccelAdxl367::UpdateData()
 	sample.Z = (int16_t)((int16_t)(z << 2) >> 2);
 	sample.Timestamp = vpTimer != NULL ? vpTimer->uSecond() : vData.Timestamp + 1;
 	vData = sample;
+	return true;
+}
+
+bool AccelAdxl367::Status(uint8_t &Flags)
+{
+	return vbInitialized && ReadReg(REG_STATUS, &Flags, 1);
+}
+
+bool AccelAdxl367::ConfigureInterrupts(uint8_t Int1Map, uint8_t Int2Map)
+{
+	if (!vbInitialized)
+		return false;
+	if (!WriteReg(REG_INT1_MAP, Int1Map) || !WriteReg(REG_INT2_MAP, Int2Map))
+		return false;
+	vInt1Map = Int1Map;
+	vInt2Map = Int2Map;
+	return true;
+}
+
+bool AccelAdxl367::WakeOnEvent(bool bEnable, int Threshold)
+{
+	uint8_t high;
+	uint8_t low;
+	uint8_t ctl;
+
+	if (!vbInitialized)
+		return false;
+	if (!bEnable)
+	{
+		if (!WriteReg(REG_ACT_INACT, 0))
+			return false;
+		return ConfigureInterrupts(vInt1Map & ~0x10, vInt2Map);
+	}
+	if (Threshold < 0 || Threshold > 8191)
+		return false;
+	high = (uint8_t)((unsigned int)Threshold >> 6);
+	low = (uint8_t)((unsigned int)Threshold << 2);
+	ctl = 1;
+	if (!WriteReg(REG_THRESH_ACT_H, high) || !WriteReg(REG_THRESH_ACT_H + 1, low))
+		return false;
+	if (!WriteReg(REG_TIME_ACT, 1) || !WriteReg(REG_ACT_INACT, ctl))
+		return false;
+	return ConfigureInterrupts(vInt1Map | 0x10, vInt2Map);
+}
+
+bool AccelAdxl367::ConfigureFifo(uint16_t WatermarkSamples)
+{
+	uint16_t words;
+	uint8_t ctl;
+
+	if (!vbInitialized || WatermarkSamples > 170)
+		return false;
+	if (WatermarkSamples == 0)
+	{
+		if (!WriteReg(REG_FIFO_CTL, 0))
+			return false;
+		vbFifoEnabled = false;
+		vFifoControl = 0;
+		return true;
+	}
+	words = WatermarkSamples * 3;
+	ctl = (uint8_t)(2 | ((words & 0x100) ? 4 : 0));
+	if (!WriteReg(REG_FIFO_CTL, 0) ||
+		!WriteReg(REG_FIFO_SAMPLES, (uint8_t)words) ||
+		!WriteReg(REG_FIFO_CTL, ctl))
+		return false;
+	vFifoControl = ctl;
+	vbFifoEnabled = true;
+	return true;
+}
+
+bool AccelAdxl367::ReadFifo(AccelSensorRawData_t &Data)
+{
+	uint8_t entries[2];
+	uint8_t raw[6];
+	uint16_t count;
+	uint16_t words[3];
+	AccelSensorRawData_t sample;
+	DeviceIntrf *pIntrf;
+	int i;
+
+	if (!vbInitialized || !vbFifoEnabled)
+		return false;
+	if (!ReadReg(REG_FIFO_ENTRIES, entries, 2))
+		return false;
+	count = (uint16_t)entries[0] | (((uint16_t)entries[1] & 3) << 8);
+	if (count < 3)
+		return false;
+	pIntrf = Interface();
+	if (pIntrf->Type() == DEVINTRF_TYPE_SPI)
+	{
+		uint8_t cmd = 0x0D;
+		if (pIntrf->Read(DeviceAddress(), &cmd, 1, raw, 6) != 6)
+			return false;
+	}
+	else if (!ReadReg(REG_I2C_FIFO, raw, 6))
+		return false;
+	for (i = 0; i < 3; i++)
+	{
+		words[i] = (uint16_t)raw[i * 2] | ((uint16_t)raw[i * 2 + 1] << 8);
+		if ((words[i] >> 14) != (unsigned int)i)
+			return false;
+	}
+	sample = vData;
+	sample.X = (int16_t)((int16_t)(words[0] << 2) >> 2);
+	sample.Y = (int16_t)((int16_t)(words[1] << 2) >> 2);
+	sample.Z = (int16_t)((int16_t)(words[2] << 2) >> 2);
+	sample.Timestamp = vpTimer ? vpTimer->uSecond() : vData.Timestamp + 1;
+	vData = sample;
+	Data = sample;
 	return true;
 }
