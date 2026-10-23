@@ -57,6 +57,11 @@ public:
 	bool ConfigureTap(uint8_t Threshold, uint8_t Duration, uint8_t Latency, uint8_t Window, bool DoubleTap);
 	bool ConfigureFifo(ADXL367_FIFO_MODE Mode, ADXL367_FIFO_FORMAT Format, uint16_t SampleSets);
 	bool ReadFifo(AccelSensorRawData_t &Data);
+	/** Read configured XYZ plus temperature/ADC FIFO sample set. */
+	bool ReadFifo(AccelSensorRawData_t &Data, int16_t &Auxiliary);
+	/** Run the manufacturer's two-phase self-test, using a caller delay in ms. */
+	bool SelfTest(void (*DelayMs)(uint32_t));
+	bool ReadInterruptEvents(uint16_t &Events);
 	bool FlushFifo();
 	bool EnableTemperature(bool Enable);
 	bool EnableAdc(bool Enable);
