@@ -312,6 +312,9 @@ void SystemInit(void)
         __ISB();
     #endif
 
+	// Oscillator trim and capacitor registers use secure aliases.
+	// Nonsecure images must leave their configuration to secure startup.
+#if !defined(NRF_TRUSTZONE_NONSECURE)
 	// Oscillator load capacitors, taken from g_McuOsc
 	if (g_McuOsc.CoreOsc.Type == OSC_TYPE_XTAL && g_McuOsc.CoreOsc.LoadCap > 0)
 	{
@@ -327,6 +330,7 @@ void SystemInit(void)
 	{
 		NRF_OSCILLATORS_S->XOSC32KI.INTCAP = OSCILLATORS_XOSC32KI_INTCAP_INTCAP_C7PF;
 	}
+#endif
 }
 
 /* Workaround to allow NS code to access FICR. Override NRF_FICR_NS to move FICR_NS buffer. */
