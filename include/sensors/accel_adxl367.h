@@ -23,12 +23,21 @@ public:
 	virtual bool StartSampling();
 	virtual bool UpdateData();
 	virtual uint16_t Scale(uint16_t Value);
+	virtual bool WakeOnEvent(bool bEnable, int Threshold);
+	bool ConfigureInterrupts(uint8_t Int1Map, uint8_t Int2Map);
+	bool ConfigureFifo(uint16_t WatermarkSamples);
+	bool Status(uint8_t &Flags);
+	bool ReadFifo(AccelSensorRawData_t &Data);
 
 private:
 	bool ReadReg(uint8_t Reg, uint8_t *pData, int Len);
 	bool WriteReg(uint8_t Reg, uint8_t Value);
 	bool vbInitialized;
 	uint8_t vFilter;
+	uint8_t vInt1Map = 0;
+	uint8_t vInt2Map = 0;
+	uint8_t vFifoControl = 0;
+	bool vbFifoEnabled = false;
 };
 
 #endif
