@@ -197,7 +197,7 @@ bool AccelAdxl367::WakeOnEvent(bool bEnable, int Threshold)
 		return false;
 	high = (uint8_t)((unsigned int)Threshold >> 6);
 	low = (uint8_t)((unsigned int)Threshold << 2);
-	ctl = 1;
+	ctl = 3;
 	if (!WriteReg(REG_THRESH_ACT_H, high) || !WriteReg(REG_THRESH_ACT_H + 1, low))
 		return false;
 	if (!WriteReg(REG_TIME_ACT, 1) || !WriteReg(REG_ACT_INACT, ctl))
@@ -220,7 +220,8 @@ bool AccelAdxl367::ConfigureFifo(uint16_t WatermarkSamples)
 		vFifoControl = 0;
 		return true;
 	}
-	words = WatermarkSamples * 3;
+	// FIFO_SAMPLES programs complete sample sets for the selected XYZ format.
+	words = WatermarkSamples;
 	ctl = (uint8_t)(2 | ((words & 0x100) ? 4 : 0));
 	if (!WriteReg(REG_FIFO_CTL, 0) ||
 		!WriteReg(REG_FIFO_SAMPLES, (uint8_t)words) ||
