@@ -31,6 +31,23 @@ host owns the bus and Wi-Fi device at a time.
 - Data-path queues into existing EthernetDev_t / shared IpInit
 - BLE/Wi-Fi antenna coexistence and RF-switch control
 
+## Nordic bare-metal driver identified
+
+Nordic supplies a dedicated bare-metal integration library at
+https://github.com/nrfconnect/nrf70-bm (`nrf70_bm_lib`). The upstream
+repository depends on an `nrf_wifi` Git submodule and external nRF70
+firmware patches. It contains scan-oriented bare-metal samples and a
+Zephyr reference shim for hardware porting.
+
+The upstream repository has no top-level SPDX license metadata recognized by
+GitHub; inspect the license headers of each dependency before importing code.
+Do not copy Zephyr MCU drivers into IOsonata. A minimal scan-only port should
+implement Nordic's portable library platform hooks against IOsonata SPI,
+GPIO, interrupt, allocation and timing services.
+
+The bare-metal library is not by itself evidence of a complete station-mode
+WPA2/WPA3 networking implementation; treat that as separate work.
+
 ## Dependencies not present in IOsonata
 
 An nRF7002 host Wi-Fi stack is not in the current source tree. It is not
@@ -44,8 +61,8 @@ restriction against copying Zephyr peripheral drivers into IOsonata.
 
 ## Work sequence
 
-1. Identify Nordic nRF Wi-Fi host HAL, firmware blobs, supported licensing,
-   and the minimum implementation for scan-only operation.
+1. Audit `nrfconnect/nrf70-bm` API, dependency revision, license headers and
+   firmware blobs, then port its scan-only hardware hooks.
 2. Verify shared SPI muxing, host ownership, nPM6001 sequencing, HOST_IRQ,
    BUCKEN and nRF5340 coexistence wiring on PCA20065.
 3. Bring up scan-only Wi-Fi positioning on nRF9151.
