@@ -114,6 +114,8 @@ alignas(4) static const nRFRtcData_t s_nRfxRtcData[TIMER_NRFX_RTC_MAX] = {
 };
 
 static std::atomic<int> s_nRfxLFClockSem(0);
+static bool s_bRtcEnabled[TIMER_NRFX_RTC_MAX];
+static bool s_bLFClockOwned = false;
 
 // Set by nRFxRtcInit. The interrupt handlers below are kept by the linker as soon as
 // this file is part of a build, used or not. They reach the timer data
@@ -200,8 +202,17 @@ __WEAK void RTC2_IRQHandler()
 
 static bool nRFxRtcEnable(TimerDev_t * const pTimer)
 {
-    NRF_CLOCK->TASKS_LFCLKSTART = 1;
+    if (s_bRtcEnabled[pTimer->DevNo])
+    {
+        return true;
+    }
 
+    if (!(NRF_CLOCK->LFCLKSTAT & CLOCK_LFCLKSTAT_STATE_Msk))
+    {
+        return false;
+    }
+
+    s_bRtcEnabled[pTimer->DevNo] = true;
     s_nRfxLFClockSem++;
 
     switch (pTimer->DevNo)
@@ -227,8 +238,15 @@ static bool nRFxRtcEnable(TimerDev_t * const pTimer)
     return true;
 }
 
+
 static void nRFxRtcDisable(TimerDev_t * const pTimer)
 {
+	if (!s_bRtcEnabled[pTimer->DevNo])
+	{
+		return;
+	}
+
+	s_bRtcEnabled[pTimer->DevNo] = false;
 	s_nRfxRtcData[pTimer->DevNo].pReg->TASKS_STOP = 1;
 
     switch (pTimer->DevNo)
@@ -251,10 +269,10 @@ static void nRFxRtcDisable(TimerDev_t * const pTimer)
 
     s_nRfxLFClockSem--;
 
-    if (s_nRfxLFClockSem <= 0)
+    if (s_nRfxLFClockSem == 0 && s_bLFClockOwned)
     {
-    	s_nRfxLFClockSem = 0;
-    	NRF_CLOCK->TASKS_LFCLKSTOP = 1;
+		NRF_CLOCK->TASKS_LFCLKSTOP = 1;
+		s_bLFClockOwned = false;
     }
 }
 
@@ -462,12 +480,7 @@ bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 		}
 
 		NRF_CLOCK->EVENTS_LFCLKSTARTED = 0;
-    }
-    else
-    {
-		// Clock source already enabled externally.
-		// This is to ensure we don't disable it when all timers are disabled
-    	s_nRfxLFClockSem++;
+		s_bLFClockOwned = true;
     }
 
 	// Init interrupt for RTC
