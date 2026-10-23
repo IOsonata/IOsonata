@@ -27,6 +27,7 @@ void Nrf70TaskletInit(Nrf70Tasklet_t *pTask, Nrf70TaskletCb_t Callback,
 bool Nrf70TaskletSchedule(Nrf70Tasklet_t *pTask);
 void Nrf70TaskletCancel(Nrf70Tasklet_t *pTask);
 void Nrf70TaskletCheckStatus(void);
+bool Nrf70TaskletPending(void);
 #ifdef __cplusplus
 }
 #endif
