@@ -129,8 +129,13 @@ static void RtcIRQHandler(int DevNo)
 		return;
 	}
 
-	NRF_RTC_Type *reg = s_pnRfxRtcData[DevNo].pReg;
 	TimerDev_t *timer = s_pnRfxRtcDev[DevNo];
+	if (timer == nullptr)
+	{
+		return;
+	}
+
+	NRF_RTC_Type *reg = s_pnRfxRtcData[DevNo].pReg;
     uint32_t evt = 0;
     uint32_t count = reg->COUNTER;
 
