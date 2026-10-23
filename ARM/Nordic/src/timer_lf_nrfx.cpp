@@ -209,7 +209,28 @@ static bool nRFxRtcEnable(TimerDev_t * const pTimer)
 
     if (!(NRF_CLOCK->LFCLKSTAT & CLOCK_LFCLKSTAT_STATE_Msk))
     {
-        return false;
+        NRF_CLOCK->EVENTS_LFCLKSTARTED = 0;
+        NRF_CLOCK->TASKS_LFCLKSTART = 1;
+
+        bool started = false;
+        for (int timeout = 1000000; timeout > 0; timeout--)
+        {
+            if ((NRF_CLOCK->LFCLKSTAT & CLOCK_LFCLKSTAT_STATE_Msk) &&
+                NRF_CLOCK->EVENTS_LFCLKSTARTED)
+            {
+                started = true;
+                break;
+            }
+        }
+
+        if (!started)
+        {
+            NRF_CLOCK->TASKS_LFCLKSTOP = 1;
+            return false;
+        }
+
+        NRF_CLOCK->EVENTS_LFCLKSTARTED = 0;
+        s_bLFClockOwned = true;
     }
 
     s_bRtcEnabled[pTimer->DevNo] = true;
