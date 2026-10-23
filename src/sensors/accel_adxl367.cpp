@@ -246,7 +246,7 @@ bool AccelAdxl367::ConfigureActivity(uint16_t Threshold, uint8_t Time, bool Refe
 {
 	uint8_t ctl;
 
-	if (!vbInitialized || Threshold > 0x3FFF)
+	if (!vbInitialized || Threshold > 0x1FFF)
 		return false;
 	if (!ReadReg(REG_ACT_INACT_CTL, &ctl, 1))
 		return false;
@@ -301,8 +301,8 @@ bool AccelAdxl367::ConfigureTap(uint8_t Threshold, uint8_t Duration,
 		!WriteReg(REG_TAP_THRESH + 2, Latency) ||
 		!WriteReg(REG_TAP_THRESH + 3, Window))
 		return false;
-	bits = DoubleTap ? ADXL367_EVT_TAP_ONE | ADXL367_EVT_TAP_TWO : ADXL367_EVT_TAP_ONE;
-	return ConfigureInterrupts(vInt1Map | (bits << 8), vInt2Map);
+	bits = DoubleTap ? 0x0300 : 0x0100;
+	return ConfigureInterrupts(vInt1Map | bits, vInt2Map);
 }
 
 bool AccelAdxl367::EnableTemperature(bool Enable)
@@ -418,8 +418,16 @@ bool AccelAdxl367::FlushFifo()
 
 bool AccelAdxl367::ReadFifo(AccelSensorRawData_t &Data)
 {
+	int16_t aux;
+
+	return ReadFifo(Data, aux);
+}
+
+bool AccelAdxl367::ReadFifo(AccelSensorRawData_t &Data, int16_t &Auxiliary)
+{
 	uint8_t entries[2];
-	uint8_t raw[6];
+	uint8_t raw[8];
+	int bytes;
 	uint16_t count;
 	uint16_t word;
 	uint8_t cmd;
@@ -428,22 +436,22 @@ bool AccelAdxl367::ReadFifo(AccelSensorRawData_t &Data)
 	AccelSensorRawData_t sample;
 	DeviceIntrf *pIntrf;
 
-	if (!vbInitialized || !vbFifoEnabled || Interface() == NULL ||
-		(vFifoCtl & 0x78) != 0)
+	if (!vbInitialized || !vbFifoEnabled || Interface() == NULL)
 		return false;
 	if (!ReadReg(REG_FIFO_ENTRIES, entries, 2))
 		return false;
 	count = (uint16_t)entries[0] | (((uint16_t)entries[1] & 3) << 8);
-	if (count < 3)
+	bytes = ((vFifoCtl & 0x78) == 0) ? 6 : 8;
+	if (count < (uint16_t)(bytes / 2))
 		return false;
 	pIntrf = Interface();
 	if (pIntrf->Type() == DEVINTRF_TYPE_SPI)
 	{
 		cmd = 0x0D;
-		if (pIntrf->Read(DeviceAddress(), &cmd, 1, raw, 6) != 6)
+		if (pIntrf->Read(DeviceAddress(), &cmd, 1, raw, bytes) != bytes)
 			return false;
 	}
-	else if (!ReadReg(REG_FIFO_I2C, raw, 6))
+	else if (!ReadReg(REG_FIFO_I2C, raw, bytes))
 		return false;
 	for (i = 0; i < 3; i++)
 	{
@@ -454,6 +462,20 @@ bool AccelAdxl367::ReadFifo(AccelSensorRawData_t &Data)
 			return false;
 		}
 		axes[i] = Sign14(word);
+	}
+	if (bytes == 8)
+	{
+		word = ((uint16_t)raw[6] << 8) | raw[7];
+		if ((word >> 14) != 3)
+		{
+			ResetFifo();
+			return false;
+		}
+		Auxiliary = Sign14(word);
+	}
+	else
+	{
+		Auxiliary = 0;
 	}
 	sample = vData;
 	sample.X = axes[0];
@@ -479,4 +501,46 @@ void AccelAdxl367::IntHandler()
 	}
 	if (!vbFifoEnabled && (flags & ADXL367_EVT_DATA_READY))
 		UpdateData();
+}
+
+bool AccelAdxl367::ReadInterruptEvents(uint16_t &Events)
+{
+	return Status(Events);
+}
+
+bool AccelAdxl367::SelfTest(void (*DelayMs)(uint32_t))
+{
+	uint8_t previous;
+	uint32_t delay;
+	int16_t before;
+	int16_t after;
+	int32_t difference;
+	uint16_t scale;
+	bool ok;
+
+	if (!vbInitialized || DelayMs == NULL)
+		return false;
+	previous = vPower;
+	scale = AccelSensor::Scale();
+	delay = SamplingFrequency() ? 4000000 / SamplingFrequency() : 320;
+	if (delay < 10)
+		delay = 10;
+	ok = false;
+	if (!Enable() || !WriteReg(0x2E, 1))
+		goto cleanup;
+	DelayMs(delay);
+	if (!Read14(REG_XDATA_H, before))
+		goto cleanup;
+	if (!WriteReg(0x2E, 3))
+		goto cleanup;
+	DelayMs(delay);
+	if (!Read14(REG_XDATA_H, after))
+		goto cleanup;
+	difference = (int32_t)after - before;
+	ok = difference >= (360 * (scale / 2)) && difference <= (1080 * (scale / 2));
+cleanup:
+	WriteReg(0x2E, 0);
+	WriteReg(REG_POWER, previous);
+	vPower = previous;
+	return ok;
 }
