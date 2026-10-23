@@ -480,21 +480,9 @@ int main()
 	}
 	s_Ipc.DevIntrf.MaxRetry = 1;
 
-	// The network core's flash is readable from here. Its vector table says
-	// whether an image is there at all: the stack pointer in network core
-	// RAM (0x2100xxxx) and the reset entry in its flash (0x0100xxxx), or
-	// erased flash reads 0xFFFFFFFF and nothing will ever run.
-#ifdef IPCTEST_NET_FLASH
-	const volatile uint32_t *netvec = reinterpret_cast<const volatile uint32_t*>(IPCTEST_NET_FLASH);
-	uint32_t netSp = netvec[0];
-	uint32_t netPc = netvec[1];
-
-	LOG("network core image: sp %08lx reset %08lx%s\r\n", (unsigned long)netSp,
-		(unsigned long)netPc,
-		(netSp == 0xFFFFFFFFUL) ? " (flash erased, no image)" :
-		((netSp & 0xFF000000UL) != 0x21000000UL || (netPc & 0xFF000000UL) != 0x01000000UL) ?
-		" (not a network core image)" : "");
-#endif
+	// Do not dereference network-core flash from the application core.
+	// Flash availability is not guaranteed by this core's memory permissions.
+	// The IPC handshake below checks whether the network image is running.
 
 	NetCore(true);
 	LOG("network core released, FORCEOFF reads %lu\r\n",
