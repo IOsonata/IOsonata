@@ -34,199 +34,203 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "sensors/accel_adxl362.h"
 
+bool AccelAdxl362::ReadRegisters(uint8_t Reg, uint8_t *pData, int Len)
+{
+	uint8_t cmd[2] = { ADXL362_CMD_READ, Reg };
+
+	return Read(cmd, 2, pData, Len) == Len;
+}
+
+bool AccelAdxl362::WriteRegister(uint8_t Reg, uint8_t Value)
+{
+	uint8_t cmd[3] = { ADXL362_CMD_WRITE, Reg, Value };
+
+	return Write(cmd, 3, NULL, 0) == 3;
+}
+
 bool AccelAdxl362::Init(const AccelSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer)
 {
-	if (vbInitialized)
-		return true;;
+	uint8_t id[3];
+	uint8_t filter;
+	uint8_t range;
+	uint32_t freq;
 
+	if (vbInitialized)
+		return true;
 	if (pIntrf == NULL)
 		return false;
 
 	Interface(pIntrf);
 	DeviceAddress(Cfg.DevAddr);
-
-	if (pTimer != NULL)
-	{
-		vpTimer = pTimer;
-	}
-
-	// Read chip id
-	uint16_t id;
-	uint8_t cmd[3] = { ADXL362_CMD_READ, ADXL362_DEVID_AD_REG, };
-
-	id = Read16(cmd, 2);
-
-	if (id != ADXL362_DEVID)
-	{
+	vpTimer = pTimer;
+	if (!ReadRegisters(ADXL362_DEVID_AD_REG, id, sizeof(id)))
 		return false;
-	}
+	if (id[0] != ADXL362_DEVID_AD || id[1] != ADXL362_DEVID_MST || id[2] != ADXL362_PARTID)
+		return false;
 
-	Reset();
-
-	DeviceID(id);
-
-	uint32_t freq = 0;
-
-	cmd[0] = ADXL362_CMD_WRITE;
-	cmd[1] = ADXL362_FILTER_CTL_REG;
-	cmd[2] = ADXL362_FILTER_CTL_HALF_BW;
-
-	if (Cfg.Freq < 25)
+	// Freq is in mHz. Select the lowest supported rate >= requested rate.
+	if (Cfg.Freq <= 12500)
 	{
-		freq = 12.5;
-		cmd[2] |= ADXL362_FILTER_CTL_ODR_12_5HZ;
+		freq = 12500;
+		filter = ADXL362_FILTER_CTL_ODR_12_5HZ;
 	}
-	else if (Cfg.Freq < 50)
+	else if (Cfg.Freq <= 25000)
 	{
-		freq = 25;
-		cmd[2] |= ADXL362_FILTER_CTL_ODR_25HZ;
+		freq = 25000;
+		filter = ADXL362_FILTER_CTL_ODR_25HZ;
 	}
-	else if (Cfg.Freq < 100)
+	else if (Cfg.Freq <= 50000)
 	{
-		freq = 50;
-		cmd[2] |= ADXL362_FILTER_CTL_ODR_50HZ;
+		freq = 50000;
+		filter = ADXL362_FILTER_CTL_ODR_50HZ;
 	}
-	else if (Cfg.Freq < 200)
+	else if (Cfg.Freq <= 100000)
 	{
-		freq = 100;
-		cmd[2] |= ADXL362_FILTER_CTL_ODR_100HZ;
+		freq = 100000;
+		filter = ADXL362_FILTER_CTL_ODR_100HZ;
 	}
-	else if (Cfg.Freq < 400)
+	else if (Cfg.Freq <= 200000)
 	{
-		freq = 200;
-		cmd[2] |= ADXL362_FILTER_CTL_ODR_200HZ;
+		freq = 200000;
+		filter = ADXL362_FILTER_CTL_ODR_200HZ;
 	}
 	else
 	{
-		freq = 400;
-		cmd[2] |= ADXL362_FILTER_CTL_ODR_400HZ;
+		freq = 400000;
+		filter = ADXL362_FILTER_CTL_ODR_400HZ;
 	}
 
-	Write(cmd, 3, NULL, 0);
-
-	Mode(Cfg.OpMode, Cfg.Freq);
-
-	Scale(Cfg.Scale);
-
-	if (Cfg.Inter)
+	if (Cfg.Scale <= 2)
 	{
-
+		range = ADXL362_FILTER_CTL_RANGE_2G;
 	}
+	else if (Cfg.Scale <= 4)
+	{
+		range = ADXL362_FILTER_CTL_RANGE_4G;
+	}
+	else
+	{
+		range = ADXL362_FILTER_CTL_RANGE_8G;
+	}
+	filter |= ADXL362_FILTER_CTL_HALF_BW | range;
 
+	if (!WriteRegister(ADXL362_POWER_CTL_REG, ADXL362_POWER_CTL_MEASURE_STANDBY))
+		return false;
+	if (!WriteRegister(ADXL362_FILTER_CTL_REG, filter))
+		return false;
+	if (!WriteRegister(ADXL362_INTMAP1_REG, 0) || !WriteRegister(ADXL362_INTMAP2_REG, 0))
+		return false;
+	if (!WriteRegister(ADXL362_FIFO_CONTROL_REG, 0))
+		return false;
+
+	DeviceID(ADXL362_DEVID);
+	AccelSensor::Scale(Cfg.Scale <= 2 ? 2 : Cfg.Scale <= 4 ? 4 : 8);
+	Mode(Cfg.OpMode, freq);
 	vbInitialized = true;
-
 	return true;
 }
 
 bool AccelAdxl362::Enable()
 {
-	uint8_t cmd[3] = {ADXL362_CMD_WRITE, ADXL362_POWER_CTL_REG,
-					  ADXL362_POWER_CTL_MEASURE_START | ADXL362_POWER_CTL_LOW_NOISE_NORMAL};
+	if (!vbInitialized)
+		return false;
 
-	Write(cmd, 3, NULL, 0);
-
-	return true;
+	return WriteRegister(ADXL362_POWER_CTL_REG, ADXL362_POWER_CTL_MEASURE_START);
 }
 
 void AccelAdxl362::Disable()
 {
-	uint8_t cmd[3] = {ADXL362_CMD_WRITE, ADXL362_POWER_CTL_REG, ADXL362_POWER_CTL_MEASURE_STANDBY};
-
-	Write(cmd, 3, NULL, 0);
+	if (vbInitialized)
+		WriteRegister(ADXL362_POWER_CTL_REG, ADXL362_POWER_CTL_MEASURE_STANDBY);
 }
 
 void AccelAdxl362::Reset()
 {
-	uint8_t cmd[3] = { ADXL362_CMD_WRITE, ADXL362_SOFT_RESET_REG, ADXL362_SOFT_RESET };
-
-	Write(cmd, 3, NULL, 0);
+	if (WriteRegister(ADXL362_SOFT_RESET_REG, ADXL362_SOFT_RESET))
+		vbInitialized = false;
 }
 
 bool AccelAdxl362::StartSampling()
 {
-	uint8_t cmd[3] = {ADXL362_CMD_WRITE, ADXL362_POWER_CTL_REG,
-					  ADXL362_POWER_CTL_MEASURE_START | ADXL362_POWER_CTL_LOW_NOISE_LOW_NOISE};
-
-	Write(cmd, 3, NULL, 0);
-
-	return true;
+	return Enable();
 }
 
 uint16_t AccelAdxl362::Scale(uint16_t Value)
 {
-	int retval = Value;
-	uint8_t cmd[3] = { ADXL362_CMD_READ, ADXL362_FILTER_CTL_REG, };
-	uint8_t regval = Read8(cmd, 2) & ~ADXL362_FILTER_CTL_RANGE_MASK;
+	uint8_t regval;
+	uint16_t scale;
 
-	cmd[0] = ADXL362_CMD_WRITE;
+	if (!vbInitialized || !ReadRegisters(ADXL362_FILTER_CTL_REG, &regval, 1))
+		return AccelSensor::Scale();
 
+	regval &= ~ADXL362_FILTER_CTL_RANGE_MASK;
 	if (Value <= 2)
 	{
-		Value = 2;
+		scale = 2;
 		regval |= ADXL362_FILTER_CTL_RANGE_2G;
 	}
 	else if (Value <= 4)
 	{
-		Value = 4;
+		scale = 4;
 		regval |= ADXL362_FILTER_CTL_RANGE_4G;
 	}
 	else
 	{
-		Value = 8;
+		scale = 8;
 		regval |= ADXL362_FILTER_CTL_RANGE_8G;
 	}
+	if (!WriteRegister(ADXL362_FILTER_CTL_REG, regval))
+		return AccelSensor::Scale();
 
-	cmd[2] = regval;
-
-	Write(cmd, 3, NULL, 0);
-
-	return AccelSensor::Scale(Value);
+	return AccelSensor::Scale(scale);
 }
-/*
-bool AccelAdxl362::Read(ACCELSENSOR_RAWDATA &Data)
-{
-	Data = vData;
 
-	return true;
-}
-*/
 bool AccelAdxl362::UpdateData()
 {
-	uint8_t cmd[2] = { ADXL362_CMD_READ, ADXL362_STATUS_REG };
-	uint8_t status = Read8(cmd, 2);
-	bool retval = false;
+	uint8_t status;
+	uint8_t raw[8];
+	AccelSensorRawData_t sample;
 
-	if (status & ADXL362_STATUS_DATA_READY)
-	{
-		if (vpTimer)
-		{
-			vData.Timestamp = vpTimer->uSecond();
-		}
-		else
-		{
-			vData.Timestamp++;
-		}
+	if (!vbInitialized || !ReadRegisters(ADXL362_STATUS_REG, &status, 1))
+		return false;
+	if ((status & ADXL362_STATUS_DATA_READY) == 0)
+		return false;
+	if (!ReadRegisters(ADXL362_XDATA_L_REG, raw, sizeof(raw)))
+		return false;
 
-		cmd[1] = ADXL362_XDATA_L_REG;
-		vData.X = Read16(cmd, 2);
-
-		cmd[1] = ADXL362_YDATA_L_REG;
-		vData.Y = Read16(cmd, 2);
-
-		cmd[1] = ADXL362_ZDATA_L_REG;
-		vData.Z = Read16(cmd, 2);
-
-		retval = true;
-	}
-	else if (status & ADXL362_STATUS_FIFO_READY)
-	{
-
-	}
-
-	return retval;
+	sample = vData;
+	sample.Timestamp = vpTimer ? vpTimer->uSecond() : vData.Timestamp + 1;
+	sample.X = (int16_t)((uint16_t)raw[0] | ((uint16_t)raw[1] << 8));
+	sample.Y = (int16_t)((uint16_t)raw[2] | ((uint16_t)raw[3] << 8));
+	sample.Z = (int16_t)((uint16_t)raw[4] | ((uint16_t)raw[5] << 8));
+	sample.Temp = (int16_t)((uint16_t)raw[6] | ((uint16_t)raw[7] << 8));
+	vData = sample;
+	return true;
 }
 
 bool AccelAdxl362::WakeOnEvent(bool bEnable, int Threshold)
 {
-	return false;
+	uint8_t threshold[2];
+	uint8_t ctl;
+
+	if (!vbInitialized)
+		return false;
+	if (!bEnable)
+	{
+		return WriteRegister(ADXL362_INTMAP1_REG, 0) &&
+			WriteRegister(ADXL362_ACT_INACT_CTL_REG, 0);
+	}
+	if (Threshold < 0 || Threshold > 2047)
+		return false;
+
+	threshold[0] = (uint8_t)Threshold;
+	threshold[1] = (uint8_t)((unsigned int)Threshold >> 8);
+	if (!WriteRegister(ADXL362_THRESH_ACT_L_REG, threshold[0]) ||
+		!WriteRegister(ADXL362_THRESH_ACT_H_REG, threshold[1] & ADXL362_THRESH_ACT_H_MASK))
+		return false;
+	if (!WriteRegister(ADXL362_TIME_ACT_REG, 1))
+		return false;
+	ctl = ADXL362_ACT_INACT_CTL_ACT_EN;
+	return WriteRegister(ADXL362_ACT_INACT_CTL_REG, ctl) &&
+		WriteRegister(ADXL362_INTMAP1_REG, ADXL362_INTMAP1_ACT);
 }
