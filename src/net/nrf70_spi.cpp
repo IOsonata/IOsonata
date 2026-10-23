@@ -62,25 +62,25 @@ bool Nrf70Spi::Write(uint32_t Address, const void *pData, uint32_t Length)
 bool Nrf70Spi::ReadBlock(uint32_t Address, void *pData, uint32_t Length,
 	uint32_t Discard)
 {
-	uint8_t cmd[5];
+	uint8_t cmd[13] = { 0 };
+	int cmdLen;
 
 	if (vpSpi == nullptr || pData == nullptr || Length == 0 ||
 		Address > 0x7FFFFF || Length > 0x7FFFFF - Address ||
-		Discard > 8)
+		Discard > 8 || Length > 0x7FFFFFFF)
 		return false;
+
 	cmd[0] = 0x0B;
 	cmd[1] = (uint8_t)(Address >> 16);
 	cmd[2] = (uint8_t)(Address >> 8);
 	cmd[3] = (uint8_t)Address;
-	cmd[4] = 0;
-	// High-latency reads include four dummy bytes per slave latency step.
-	// The interface must support an atomic read transaction with dummy clocks.
-	if (Discard == 0)
-		return vpSpi->Read(vSelect, cmd, sizeof(cmd),
-			(uint8_t *)pData, (int)Length) == (int)Length;
-	// A separate transaction would deassert CS. Do not issue one here.
-	// The host port must supply a streaming SPI transfer for that case.
-	return false;
+	cmdLen = 5 + (int)Discard;
+
+	// The complete header, dummy byte and latency clocks are issued
+	// in the command phase of one DeviceIntrf::Read transaction.
+	// CS stays asserted until the following receive phase completes.
+	return vpSpi->Read(vSelect, cmd, cmdLen,
+		(uint8_t *)pData, (int)Length) == (int)Length;
 }
 
 bool Nrf70Spi::Read(uint32_t Address, void *pData, uint32_t Length)
