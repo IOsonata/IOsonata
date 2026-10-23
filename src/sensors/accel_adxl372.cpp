@@ -28,7 +28,11 @@ Copyright (c) 2026 I-SYST inc.
 
 AccelAdxl372::AccelAdxl372() :
 	vbInitialized(false), vPower(0), vMeasure(0), vInt1(0), vInt2(0),
-	vFifoControl(0), vFifoEntries(0), vFifoOverruns(0) {}
+	vFifoControl(0), vFifoEntries(0), vFifoOverruns(0) {
+	vLastInterrupt.Status1 = 0;
+	vLastInterrupt.Status2 = 0;
+	vLastInterrupt.FifoEntries = 0;
+}
 
 bool AccelAdxl372::ReadReg(uint8_t Reg, uint8_t *pData, int Len)
 {
@@ -153,7 +157,10 @@ bool AccelAdxl372::SetOutputRate(uint32_t MilliHz)
 
 bool AccelAdxl372::SetBandwidth(uint8_t Value)
 {
-	return vbInitialized && Value <= 4 && UpdateField(REG_MEASURE, 7, Value);
+	if (!vbInitialized || Value > 4 || !UpdateField(REG_MEASURE, 7, Value))
+		return false;
+	vMeasure = (vMeasure & ~7) | Value;
+	return true;
 }
 
 bool AccelAdxl372::SetWakeupRate(uint8_t Value)
@@ -322,11 +329,25 @@ bool AccelAdxl372::Status(Adxl372Status &Result)
 
 bool AccelAdxl372::ReadFifo(AccelSensorRawData_t &Data)
 {
+	Adxl372FifoSample sample;
+
+	if (!ReadFifo(sample) || sample.AxisMask != 7)
+		return false;
+	Data = sample.Accel;
+	return true;
+}
+
+bool AccelAdxl372::ReadFifo(Adxl372FifoSample &Sample)
+{
 	Adxl372Status status;
 	uint8_t raw[6];
+	uint8_t format;
+	uint8_t mask;
+	int count;
+	int offset;
 	AccelSensorRawData_t sample;
 
-	if (!vbInitialized || !(vFifoControl & 6) || (vFifoControl & 0x38))
+	if (!vbInitialized || !(vFifoControl & 6))
 		return false;
 	if (!Status(status))
 		return false;
@@ -336,17 +357,79 @@ bool AccelAdxl372::ReadFifo(AccelSensorRawData_t &Data)
 		FlushFifo();
 		return false;
 	}
-	if (status.FifoEntries < 3)
+
+	format = (vFifoControl >> 3) & 7;
+	mask = 0;
+	count = 0;
+	switch (format)
+	{
+	case ADXL372_FIFO_XYZ:
+	case ADXL372_FIFO_XYZ_PEAK:
+		mask = 7;
+		count = 3;
+		break;
+	case ADXL372_FIFO_X:
+		mask = 1;
+		count = 1;
+		break;
+	case ADXL372_FIFO_Y:
+		mask = 2;
+		count = 1;
+		break;
+	case ADXL372_FIFO_XY:
+		mask = 3;
+		count = 2;
+		break;
+	case ADXL372_FIFO_Z:
+		mask = 4;
+		count = 1;
+		break;
+	case ADXL372_FIFO_XZ:
+		mask = 5;
+		count = 2;
+		break;
+	case ADXL372_FIFO_YZ:
+		mask = 6;
+		count = 2;
+		break;
+	default:
 		return false;
-	if (!ReadReg(REG_FIFO_DATA, raw, 6))
+	}
+
+	if (status.FifoEntries < (uint16_t)count)
 		return false;
+	if (!ReadReg(REG_FIFO_DATA, raw, count * 2))
+		return false;
+
 	sample = vData;
-	sample.X = Decode12(raw[0], raw[1]);
-	sample.Y = Decode12(raw[2], raw[3]);
-	sample.Z = Decode12(raw[4], raw[5]);
+	offset = 0;
+	if (mask & 1)
+	{
+		sample.X = Decode12(raw[offset], raw[offset + 1]);
+		offset += 2;
+	}
+	if (mask & 2)
+	{
+		sample.Y = Decode12(raw[offset], raw[offset + 1]);
+		offset += 2;
+	}
+	if (mask & 4)
+		sample.Z = Decode12(raw[offset], raw[offset + 1]);
+
 	sample.Timestamp = vpTimer ? vpTimer->uSecond() : vData.Timestamp + 1;
 	vData = sample;
-	Data = sample;
+	Sample.Accel = sample;
+	Sample.AxisMask = mask;
+	Sample.Peak = format == ADXL372_FIFO_XYZ_PEAK;
+	return true;
+}
+
+bool AccelAdxl372::InterruptEvents(Adxl372Status &Events)
+{
+	Events = vLastInterrupt;
+	vLastInterrupt.Status1 = 0;
+	vLastInterrupt.Status2 = 0;
+	vLastInterrupt.FifoEntries = 0;
 	return true;
 }
 
@@ -356,6 +439,9 @@ void AccelAdxl372::IntHandler()
 
 	if (!Status(status))
 		return;
+	vLastInterrupt.Status1 |= status.Status1;
+	vLastInterrupt.Status2 |= status.Status2;
+	vLastInterrupt.FifoEntries = status.FifoEntries;
 	if (status.Status1 & 8)
 	{
 		vFifoOverruns++;
