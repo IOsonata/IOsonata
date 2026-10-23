@@ -443,17 +443,23 @@ bool nRFxRtcInit(TimerDev_t * const pTimer, const TimerCfg_t * const pCfg)
 
 		NRF_CLOCK->TASKS_LFCLKSTART = 1;
 
-		int timout = 1000000;
+		int timeout = 1000000;
+		bool started = false;
 
 		do
 		{
 			if ((NRF_CLOCK->LFCLKSTAT & CLOCK_LFCLKSTAT_STATE_Msk) && NRF_CLOCK->EVENTS_LFCLKSTARTED)
+			{
+				started = true;
 				break;
+			}
+		} while (timeout-- > 0);
 
-		} while (timout-- > 0);
-
-		if (timout <= 0)
+		if (!started)
+		{
+			NRF_CLOCK->TASKS_LFCLKSTOP = 1;
 			return false;
+		}
 
 		NRF_CLOCK->EVENTS_LFCLKSTARTED = 0;
     }
