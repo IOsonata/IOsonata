@@ -824,20 +824,20 @@ void __WEAK GPIOTE_IRQHandler(void)
 	{
 		if (NRF_GPIOTE_NS->EVENTS_IN[i])
 		{
+			NRF_GPIOTE_NS->EVENTS_IN[i] = 0;
 			if (s_pGpIOSenseEvt[i].SensEvtCB)
 				s_pGpIOSenseEvt[i].SensEvtCB(i, s_pGpIOSenseEvt[i].pCtx);
-			NRF_GPIOTE_NS->EVENTS_IN[i] = 0;
 		}
 	}
 	if (NRF_GPIOTE_NS->EVENTS_PORT)
 	{
+		NRF_GPIOTE_NS->EVENTS_PORT = 0;
 		if (s_pGpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB)
 			s_pGpIOSenseEvt[IOPIN_MAX_INT].SensEvtCB(-1, s_pGpIOSenseEvt[IOPIN_MAX_INT].pCtx);
-	    NRF_GPIOTE_NS->EVENTS_PORT = 0;
 	    //NRF_GPIO->LATCH = 0xFFFFFFFF;	// Clear detect latch
 	}
 
-	NVIC_ClearPendingIRQ(GPIOTE_IRQn);
+
 }
 #elif defined(NRF91_SERIES) || defined(NRF53_SERIES)
 void __WEAK GPIOTE0_IRQHandler(void)
