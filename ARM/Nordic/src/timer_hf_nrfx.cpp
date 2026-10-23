@@ -201,6 +201,11 @@ static void TimerIRQHandler(int DevNo)
 	NRF_TIMER_Type *reg = s_pnRFxTimerData[DevNo].pReg;
 	const nRFTimerData_t &tdata = s_pnRFxTimerData[DevNo];
 	TimerDev_t *timer = s_pnRFxTimerDev[DevNo];
+	if (timer == nullptr)
+	{
+		return;
+	}
+
     uint32_t evt = 0;
 	uint32_t t = reg->CC[tdata.CountCC];	// Preserve comparator
 
@@ -335,17 +340,20 @@ static bool nRFxTimerEnable(TimerDev_t * const pTimer)
 #else
 		NRF_CLOCK->TASKS_HFCLKSTART = 1;
 
-		int timout = 1000000;
-
-		do
+		bool started = false;
+		for (int timeout = 1000000; timeout > 0; timeout--)
 		{
-			if ((NRF_CLOCK->HFCLKSTAT & CLOCK_HFCLKSTAT_STATE_Msk) || NRF_CLOCK->EVENTS_HFCLKSTARTED)
+			if (NRF_CLOCK->HFCLKSTAT & CLOCK_HFCLKSTAT_STATE_Msk)
+			{
+				started = true;
 				break;
+			}
+		}
 
-		} while (timout-- > 0);
-
-		if (timout <= 0)
+		if (!started)
+		{
 			return false;
+		}
 
 		NRF_CLOCK->EVENTS_HFCLKSTARTED = 0;
 #endif
