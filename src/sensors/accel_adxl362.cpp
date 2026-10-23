@@ -317,9 +317,9 @@ bool AccelAdxl362::ReadFifo(AccelSensorRawData_t &Data)
 
 	sample = vData;
 	sample.Timestamp = vpTimer ? vpTimer->uSecond() : vData.Timestamp + 1;
-	sample.X = (int16_t)(((uint16_t)raw[0] | ((uint16_t)raw[1] << 8)) << 4) >> 4;
-	sample.Y = (int16_t)(((uint16_t)raw[2] | ((uint16_t)raw[3] << 8)) << 4) >> 4;
-	sample.Z = (int16_t)(((uint16_t)raw[4] | ((uint16_t)raw[5] << 8)) << 4) >> 4;
+	sample.X = (int32_t)(((uint16_t)raw[0] | ((uint16_t)(raw[1] & 0x0F) << 8)) ^ 0x800) - 0x800;
+	sample.Y = (int32_t)(((uint16_t)raw[2] | ((uint16_t)(raw[3] & 0x0F) << 8)) ^ 0x800) - 0x800;
+	sample.Z = (int32_t)(((uint16_t)raw[4] | ((uint16_t)(raw[5] & 0x0F) << 8)) ^ 0x800) - 0x800;
 	vData = sample;
 	Data = sample;
 	return true;
