@@ -160,12 +160,16 @@ static void TestFailures()
 	assert(!mag.Init(cfg, NULL, NULL));
 	bus.vType = DEVINTRF_TYPE_UART;
 	assert(!mag.Init(cfg, &bus, NULL));
-	bus = MockIntrf();
-	bus.vReg[BMM350_CHIP_ID_REG] = 0;
-	assert(!mag.Init(cfg, &bus, NULL));
-	bus = MockIntrf();
-	bus.vFailOtp = true;
-	assert(!mag.Init(cfg, &bus, NULL));
+	{
+		MockIntrf badId;
+		badId.vReg[BMM350_CHIP_ID_REG] = 0;
+		assert(!mag.Init(cfg, &badId, NULL));
+	}
+	{
+		MockIntrf badOtp;
+		badOtp.vFailOtp = true;
+		assert(!mag.Init(cfg, &badOtp, NULL));
+	}
 }
 
 int main()

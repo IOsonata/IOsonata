@@ -245,6 +245,7 @@ bool MagBmm350::Init(const MagSensorCfg_t &Cfg, DeviceIntrf * const pIntrf,
 	uint32_t address;
 
 	vbInitialized = false;
+	Valid(false);
 	if (pIntrf == NULL)
 	{
 		return false;
@@ -314,10 +315,12 @@ bool MagBmm350::Init(const MagSensorCfg_t &Cfg, DeviceIntrf * const pIntrf,
 	ClearCalibration();
 	DeviceID(BMM350_CHIP_ID);
 	vbInitialized = true;
+	Valid(true);
 
 	if (SamplingFrequency(Cfg.Freq) == 0 || !Enable())
 	{
 		vbInitialized = false;
+		Valid(false);
 		return false;
 	}
 
@@ -372,6 +375,10 @@ bool MagBmm350::SetPowerMode(uint8_t Mode)
 			return false;
 		}
 		usDelay(BMM350_GOTO_SUSPEND_DELAY_US);
+		if (Mode == BMM350_PMU_CMD_SUSP)
+		{
+			return true;
+		}
 	}
 
 	if (!WriteReg(BMM350_PMU_CMD_REG, Mode))
@@ -420,6 +427,7 @@ void MagBmm350::Reset()
 	}
 
 	vbInitialized = false;
+	Valid(false);
 }
 
 void MagBmm350::Compensate(int32_t X, int32_t Y, int32_t Z, int32_t Temp)
