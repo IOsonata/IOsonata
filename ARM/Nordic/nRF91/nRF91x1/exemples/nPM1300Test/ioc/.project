@@ -50,5 +50,11 @@
 			<type>1</type>
 			<locationURI>PARENT-2-PROJECT_LOC/common/thingy91x_board.cpp</locationURI>
 		</link>
+		<link>
+			<name>src/pm_npm1300_fuel.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/src/pwrmgnt/pm_npm1300_fuel.cpp</locationURI>
+		</link>
 	</linkedResources>
 </projectDescription>
+

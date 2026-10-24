@@ -1032,6 +1032,16 @@ SOFTWARE.
 
 #ifdef __cplusplus
 
+struct Npm1300BatterySample_t {
+	int32_t VoltageMv;
+	int32_t CurrentUa; // Positive discharge, negative charge.
+	int32_t TemperatureDeciC;
+	uint32_t ChargeLimitMa;
+	uint8_t TerminationPercent;
+	uint8_t ChargerStatus;
+	uint8_t VbusStatus;
+};
+
 class PmnPM1300 : public PowerMgnt, public FuelGauge {
 public:
 	PmnPM1300();
@@ -1085,6 +1095,9 @@ public:
 	bool ReadChargerError(uint8_t &Reason, uint8_t &Sensor);
 	bool ClearErrorLog();
 
+	// Current returns INT32_MIN on failure. Sampling never changes charger settings.
+	int32_t Current();
+	bool ReadBatterySample(Npm1300BatterySample_t &Sample);
 	uint16_t Level() override;
 	int32_t Temperature() override;
 	int32_t Voltage() override;
@@ -1115,7 +1128,8 @@ private:
 	bool ConfigureInterrupts(bool Enable);
 	bool NtcCodeForTemperature(int32_t Celsius, uint16_t &Code) const;
 	bool ReadAdc(uint16_t TaskReg, uint8_t EventMask, uint16_t MsbReg,
-		uint8_t LsbShift, uint16_t &Code);
+		uint8_t LsbShift, uint16_t &Code,
+		uint16_t LsbReg = NPM1300_ADC_ADCGP0_RESULTLSBS_REG);
 	bool SetTerminationVoltage(uint16_t Reg, int32_t mVolt);
 	bool SetBuckGpioControl(uint16_t Reg, size_t Index, int GpioIndex, bool Invert);
 

@@ -8,6 +8,10 @@
 #include <vector>
 
 #include "pwrmgnt/pm_npm1300.h"
+#ifdef NPM1300_FUEL_TEST
+#include "pwrmgnt/pm_npm1300_fuel.h"
+#include "nrf_fuel_gauge.h"
+#endif
 
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
 
@@ -162,6 +166,8 @@ public:
 
 		if (!vAdcTimeout && reg == NPM1300_ADC_TASKVBAT_MEASURE_REG)
 			vReg[NPM1300_MAIN_EVENTS_ADCSET_REG] |= NPM1300_MAIN_EVENTS_ADCSET_EVENTADCVBATRDY;
+		else if (!vAdcTimeout && reg == NPM1300_ADC_TASKIBAT_MEASURE_REG)
+			vReg[NPM1300_MAIN_EVENTS_ADCSET_REG] |= NPM1300_MAIN_EVENTS_ADCSET_EVENTADCIBATRDY;
 		else if (!vAdcTimeout && reg == NPM1300_ADC_TASKNTC_MEASURE_REG)
 			vReg[NPM1300_MAIN_EVENTS_ADCSET_REG] |= NPM1300_MAIN_EVENTS_ADCSET_EVENTADCNTCRDY;
 
@@ -577,9 +583,9 @@ static void TestAdc()
 	bus.SetAdcVbat(0);
 	assert(pm.Voltage() == 0);
 	bus.SetAdcVbat(1023);
-	assert(pm.Voltage() == 5000);
+	assert(pm.Voltage() == 4995);
 	bus.SetAdcVbat(512);
-	assert(pm.Voltage() == (512 * 5000) / 1023);
+	assert(pm.Voltage() == (512 * 5000) / 1024);
 
 	bus.vAdcTimeout = true;
 	assert(pm.Voltage() == -1);
@@ -695,6 +701,52 @@ static void TestPowerControl()
 	assert(!pm.Valid());
 }
 
+
+static void TestCurrent()
+{
+	MockIntrf bus;
+	PmnPM1300 pm;
+	int32_t expected;
+
+	Attach(pm, bus);
+	assert(pm.Current() == INT32_MIN);
+	bus.vReg[0x510] = 4;
+	bus.vReg[0x30A] = 207;
+	bus.vReg[0x30B] = 1;
+	bus.vReg[0x518] = 128;
+	bus.vReg[0x51A] = 0;
+	expected = 512 * 1120000 / 1023;
+	assert(pm.Current() == expected);
+	bus.vReg[0x30A] = 42;
+	bus.vReg[0x30B] = 0;
+	assert(pm.Current() == 512 * 224000 / 1023);
+	bus.vReg[0x518] = 255;
+	bus.vReg[0x51A] = 0x30;
+	assert(pm.Current() == 224000);
+	assert(pm.SetCharge(PWRMGNT_CHARGE_TYPE_NORMAL, 4200, 800) == 800);
+	bus.vReg[0x510] = 0x0F;
+	assert(pm.Current() == -1000000);
+	bus.vReg[0x510] = 0x0D;
+	assert(pm.Current() == -1000000);
+	bus.vReg[0x510] = 0x0C;
+	assert(pm.Current() == -1000000);
+	bus.vReg[0x510] = 0x1F;
+	assert(pm.Current() == INT32_MIN);
+	bus.vReg[0x510] = 0x0F;
+	bus.vAdcTimeout = true;
+	assert(pm.Current() == INT32_MIN);
+	bus.vAdcTimeout = false;
+	bus.vShortReadReg = 0x518;
+	assert(pm.Current() == INT32_MIN);
+	bus.vShortReadReg = 0xFFFF;
+	bus.vReg[0x509] = 2;
+	assert(pm.Current() == INT32_MIN);
+}
+
+#ifdef NPM1300_FUEL_TEST
+#include "npm1300_fuel_test.inc"
+#endif
+
 int main()
 {
 	static_assert(NPM1300_BUCK_BUCKSTATUS_REG == 0x434, "current BUCKSTATUS address");
@@ -707,6 +759,10 @@ int main()
 	TestAdc();
 	TestInterruptsAndStatus();
 	TestPowerControl();
+	TestCurrent();
+#ifdef NPM1300_FUEL_TEST
+	TestFuelGauge();
+#endif
 	puts("nPM1300 production-driver tests: PASS");
 	return 0;
 }

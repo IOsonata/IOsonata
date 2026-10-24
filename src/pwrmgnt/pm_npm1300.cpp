@@ -569,7 +569,7 @@ uint16_t PmnPM1300::Level()
 }
 
 bool PmnPM1300::ReadAdc(uint16_t TaskReg, uint8_t EventMask, uint16_t MsbReg,
-	uint8_t LsbShift, uint16_t &Code)
+	uint8_t LsbShift, uint16_t &Code, uint16_t LsbReg)
 {
 	uint8_t events;
 	uint8_t msb;
@@ -595,7 +595,7 @@ bool PmnPM1300::ReadAdc(uint16_t TaskReg, uint8_t EventMask, uint16_t MsbReg,
 
 	if (!ReadReg8(MsbReg, msb))
 		return false;
-	if (!ReadReg8(NPM1300_ADC_ADCGP0_RESULTLSBS_REG, lsb))
+	if (!ReadReg8(LsbReg, lsb))
 		return false;
 	if (!WriteReg8(NPM1300_MAIN_EVENTS_ADCCLR_REG, EventMask))
 		return false;
@@ -619,7 +619,7 @@ int32_t PmnPM1300::Temperature()
 	if (adc == 0 || adc >= 1023)
 		return INT32_MIN;
 
-	kelvin = 1.0f / (1.0f / 298.15f - logf(1023.0f / (float)adc - 1.0f) /
+	kelvin = 1.0f / (1.0f / 298.15f - logf(1024.0f / (float)adc - 1.0f) /
 		(float)vNtcBeta);
 	temp = (kelvin - 273.15f) * 10.0f;
 	return (int32_t)lroundf(temp);
@@ -634,7 +634,85 @@ int32_t PmnPM1300::Voltage()
 		NPM1300_ADC_ADCVBAT_RESULTMSB_REG, 0, adc))
 		return -1;
 
-	return (int32_t)(((uint32_t)adc * 5000UL) / 1023UL);
+	return (int32_t)(((uint32_t)adc * 5000UL) / 1024UL);
+}
+
+int32_t PmnPM1300::Current()
+{
+	uint16_t adc;
+	uint16_t limit;
+	uint8_t status;
+	uint8_t msb;
+	uint8_t lsb;
+	uint8_t config;
+	int32_t scale;
+
+	// IBAT uses the VBAT burst result-2 register and GP1 bits 5:4.
+	// Burst mode would overwrite these registers with voltage samples.
+	if (!ReadReg8(NPM1300_ADC_ADCCONFIG_REG, config) ||
+		(config & NPM1300_ADC_ADCCONFIG_BURSTMODE) != 0)
+		return INT32_MIN;
+	if (!ReadAdc(NPM1300_ADC_TASKIBAT_MEASURE_REG,
+		NPM1300_MAIN_EVENTS_ADCSET_EVENTADCIBATRDY,
+		NPM1300_ADC_ADCVBAT2_RESULTMSB_REG, 4, adc,
+		NPM1300_ADC_ADCGP1_RESULTLSBS_REG) ||
+		!ReadReg8(NPM1300_ADC_ADCIBATMEAS_STATUS_REG, status))
+		return INT32_MIN;
+
+	if (status == 0x04)
+	{
+		if (!ReadReg8(NPM1300_BCHARGER_BCHGISET_DISCHARGE_MSB_REG, msb) ||
+			!ReadReg8(NPM1300_BCHARGER_BCHGISET_DISCHARGE_LSB_REG, lsb))
+			return INT32_MIN;
+		limit = ((uint16_t)msb << 1) | (lsb & 1U);
+		if (limit != 84 && limit != 415)
+			return INT32_MIN;
+		scale = limit == 84 ? 224000 : 1120000;
+	}
+	else if (status == 0x0C || status == 0x0D || status == 0x0F)
+	{
+		if (!ReadReg8(NPM1300_BCHARGER_BCHGISET_MSB_REG, msb) ||
+			!ReadReg8(NPM1300_BCHARGER_BCHGISET_LSB_REG, lsb))
+			return INT32_MIN;
+		limit = ((uint16_t)msb << 1) | (lsb & 1U);
+		if (limit < 16 || limit > 400)
+			return INT32_MIN;
+		scale = -(int32_t)limit * 2500;
+	}
+	else
+	{
+		// Includes IBATMEASINVALID; do not pass a false zero to the estimator.
+		return INT32_MIN;
+	}
+
+	return (int32_t)((int64_t)adc * scale / 1023);
+}
+
+bool PmnPM1300::ReadBatterySample(Npm1300BatterySample_t &Sample)
+{
+	Npm1300BatterySample_t sample = {};
+	uint8_t msb;
+	uint8_t lsb;
+	uint8_t term;
+
+	sample.VoltageMv = Voltage();
+	sample.CurrentUa = Current();
+	sample.TemperatureDeciC = Temperature();
+	if (sample.VoltageMv <= 0 || sample.CurrentUa == INT32_MIN ||
+		sample.TemperatureDeciC == INT32_MIN)
+		return false;
+	if (!ReadReg8(NPM1300_BCHARGER_BCHG_CHARGE_STATUS_REG, sample.ChargerStatus) ||
+		!ReadReg8(NPM1300_VBUSIN_VBUSIN_STATUS_REG, sample.VbusStatus) ||
+		!ReadReg8(NPM1300_BCHARGER_BCHGISET_MSB_REG, msb) ||
+		!ReadReg8(NPM1300_BCHARGER_BCHGISET_LSB_REG, lsb) ||
+		!ReadReg8(NPM1300_BCHARGER_BCHGITERM_SEL_REG, term))
+		return false;
+	sample.ChargeLimitMa = (((uint32_t)msb << 1) | (lsb & 1U)) * 2;
+	if (sample.ChargeLimitMa < 32 || sample.ChargeLimitMa > 800 || term > 1)
+		return false;
+	sample.TerminationPercent = term == 0 ? 10 : 20;
+	Sample = sample;
+	return true;
 }
 
 int32_t PmnPM1300::SetVout(size_t VoutIdx, int32_t mVolt, uint32_t CurrLimit)
@@ -820,7 +898,7 @@ bool PmnPM1300::NtcCodeForTemperature(int32_t Celsius, uint16_t &Code) const
 
 	target = (float)Celsius + 273.15f;
 	exponent = (1.0f / 298.15f - 1.0f / target) * (float)vNtcBeta;
-	code = 1023.0f / (expf(exponent) + 1.0f);
+	code = 1024.0f / (expf(exponent) + 1.0f);
 	if (code < 0.0f || code > 1023.0f)
 		return false;
 
