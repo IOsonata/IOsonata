@@ -2,7 +2,7 @@
 
 Import the MCU library project and its CryptoTest project into IOcomposer.
 Rebuild the library and application in matching Debug or Release configurations.
-The seven configured examples (nRF5340 application/network, nRF9160, nRF91x1,
+The eight configured examples (nRF52832, nRF5340 application/network, nRF9160, nRF91x1,
 STM32H753, STM32WBA65 and STM32L476) link the same `crypto_engine_test.cpp`.
 
 The test declares `Crypto s_Crypto` and calls `s_Crypto.Init()`. The MCU library
@@ -98,3 +98,16 @@ The STM32 model also verifies that initializing, disabling and re-enabling one
 application object does not reset the shared engines used by another object.
 These are host link and register-model checks, not measurements of MCU flash
 usage or proof of silicon behavior.
+
+## nRF52832 project
+
+Import `ARM/Nordic/nRF52/nRF52832/lib/ioc` and
+`ARM/Nordic/nRF52/nRF52832/exemples/CryptoTest/ioc`. Build the library and test
+with matching Debug or Release configurations. The application links the same
+`exemples/crypto/crypto_engine_test.cpp` used by the other MCU projects.
+
+Debug uses semihosting. Release uses UART0 at 1 Mbaud, 8N1, without flow control.
+The default BLUEIO console mapping is TX P0.07 and RX P0.08; adjust the example's
+`src/board.h` for a different board. The application uses the full nRF52832 XXAA
+512 KB Flash / 64 KB RAM linker layout, with no running Bluetooth stack required.
+Hardware/software crypto selection remains entirely in the MCU library.
