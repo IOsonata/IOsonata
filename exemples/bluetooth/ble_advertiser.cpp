@@ -53,6 +53,10 @@ SOFTWARE.
 #include "syslog.h"
 #include "board.h"
 
+#ifdef CORE_PINS
+static const IOPinCoreCfg_t s_CorePins[] = CORE_PINS;
+#endif
+
 // Uncomment this to set custom board oscillator
 // Default library setting is :
 // #define MCU_OSC	{{OSC_TYPE_XTAL, 32000000, 20}, {OSC_TYPE_XTAL, 32768, 20}, false}
@@ -202,10 +206,8 @@ void BtAppAdvTimeoutHandler()
 int main()
 {
 
-#ifdef NET_UART_CORE_NO
-	// Assign the other core's console before Bluetooth starts that core.
-	if (!IOPinAssignCore(NET_UART_PORT, NET_UART_RX_PIN, NET_UART_CORE_NO) ||
-		!IOPinAssignCore(NET_UART_PORT, NET_UART_TX_PIN, NET_UART_CORE_NO))
+#ifdef CORE_PINS
+	if (!IOPinCoreCfg(s_CorePins, sizeof(s_CorePins) / sizeof(s_CorePins[0])))
 	{
 		return 1;
 	}

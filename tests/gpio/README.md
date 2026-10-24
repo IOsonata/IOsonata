@@ -37,3 +37,34 @@ Audio DK and standard DK.
 These are not full MCU builds or hardware tests. Rebuild the nRF5340 App library
 and BLE example, then power-cycle the Audio DK with HciController on Net and
 verify both consoles without first running NetCoreStart.
+
+## Board-defined assignments
+
+Define only an initializer macro in board.h:
+
+```c
+#define CORE_PINS { \
+	{ 1, NET_UART_PORT, NET_UART_RX_PIN }, \
+	{ 1, NET_UART_PORT, NET_UART_TX_PIN } \
+}
+```
+
+The example declares storage at file scope:
+
+```c
+#ifdef CORE_PINS
+static const IOPinCoreCfg_t s_CorePins[] = CORE_PINS;
+#endif
+```
+
+Before starting other cores, call IOPinCoreCfg under the same CORE_PINS guard
+and check its result. Each entry is ordered CoreNo, PortNo, PinNo.
+Boards without assignments omit CORE_PINS; no table or call is compiled.
+Single-core boards may supply entries for core 0.
+
+The helper follows IOPinCfg's inline batch pattern. It returns true for zero
+entries, false for a negative count or NULL with a positive count, and stops
+on the first failed assignment. Earlier assignments remain applied.
+
+The tests also check batch argument order, empty/invalid inputs, stopping at
+each failure, and the real board initializer tables in C and C++.

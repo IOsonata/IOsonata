@@ -90,6 +90,12 @@ def main():
 	with tempfile.TemporaryDirectory() as temporary:
 		build = Path(temporary)
 		single_core_checks(build)
+		for compiler in ["gcc", "g++"]:
+			run(compiler, "-Os", "-Wall", "-Wextra", "-Werror", "-fsanitize=undefined",
+				f"-I{HERE / 'shim'}", f"-I{ROOT / 'include'}",
+				str(HERE / "core_cfg_test.c"), "-o", str(build / "batch"))
+			run(str(build / "batch"))
+		print("PASS C/C++ batch order, empty/invalid input and failure propagation")
 		(build / "assign_core.inc").write_text(function)
 		for compiler, standard in [("gcc", "c11"), ("g++", "c++11")]:
 			for optimization in ["-O0", "-Os"]:
@@ -102,19 +108,39 @@ def main():
 						str(HERE / "assign_core_test.c"), "-o", str(binary))
 					run(str(binary))
 				print(f"PASS {compiler} {optimization}: {len(variants)} core configurations")
-		# Preprocess the real board headers, bypassing unrelated BlueIO wiring.
+		# Compile and run the board tables through the generic batch helper.
 		(build / "blueio_board.h").write_text("")
 		for example in ["NetCoreStart", "BleAdvertiser", "BleSecurityDemo", "BleTestDut", "UartBleDemo"]:
 			board = ROOT / f"ARM/Nordic/nRF53/nRF5340_App/exemples/{example}/src/board.h"
 			for standard_dk in [False, True]:
 				check = build / "board.c"
-				check.write_text(f'#include "{board}"\n'
-					f'_Static_assert(NET_UART_CORE_NO == 1 && NET_UART_PORT == 1 && '
-					f'NET_UART_RX_PIN == {0 if standard_dk else 8} && '
-					f'NET_UART_TX_PIN == {1 if standard_dk else 9}, "board pins");\n')
-				run("gcc", "-std=c11", "-fsyntax-only", f"-I{build}",
-					*(["-DNRF5340_DK_PCA10095"] if standard_dk else []), str(check))
-		print("PASS Audio DK and standard DK mappings in all five examples")
+				check.write_text('#include <assert.h>\n#include "coredev/iopincfg.h"\n' +
+					f'#include "{board}"\n' + '''
+static const IOPinCoreCfg_t s_Pins[] = CORE_PINS;
+static int s_Calls;
+bool IOPinAssignCore(int PortNo, int PinNo, int CoreNo)
+{
+	assert(CoreNo == 1 && PortNo == 1);
+	assert(PinNo == EXPECT_RX + s_Calls);
+	s_Calls++;
+	return true;
+}
+int main(void)
+{
+	assert(sizeof(s_Pins) / sizeof(s_Pins[0]) == 2);
+	assert(IOPinCoreCfg(s_Pins, 2));
+	assert(s_Calls == 2);
+	return 0;
+}
+''')
+				for compiler in ["gcc", "g++"]:
+					run(compiler, "-Wall", "-Wextra", "-Werror", f"-I{build}",
+						f"-I{HERE / 'shim'}", f"-I{ROOT / 'include'}",
+						f"-DEXPECT_RX={0 if standard_dk else 8}",
+						*(["-DNRF5340_DK_PCA10095"] if standard_dk else []),
+						str(check), "-o", str(build / "board"))
+					run(str(build / "board"))
+		print("PASS C/C++ Audio DK and standard DK CORE_PINS in all five examples")
 
 
 if __name__ == "__main__":

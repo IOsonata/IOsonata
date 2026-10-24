@@ -47,13 +47,18 @@ SOFTWARE.
 // Board LED and network-core console pins
 #include "board.h"
 
+#ifdef CORE_PINS
+static const IOPinCoreCfg_t s_CorePins[] = CORE_PINS;
+#endif
+
 int main()
 {
-	if (!IOPinAssignCore(NET_UART_PORT, NET_UART_RX_PIN, NET_UART_CORE_NO) ||
-		!IOPinAssignCore(NET_UART_PORT, NET_UART_TX_PIN, NET_UART_CORE_NO))
+#ifdef CORE_PINS
+	if (!IOPinCoreCfg(s_CorePins, sizeof(s_CorePins) / sizeof(s_CorePins[0])))
 	{
 		return 1;
 	}
+#endif
 
 #if defined(NRF_RESET_S) && !defined(NRF_TRUSTZONE_NONSECURE)
 	NRF_RESET_S->NETWORK.FORCEOFF = RESET_NETWORK_FORCEOFF_FORCEOFF_Release;

@@ -40,4 +40,9 @@
 #define LED1_ACTIVE_LOW	0
 #endif
 
+#define CORE_PINS { \
+	{ NET_UART_CORE_NO, NET_UART_PORT, NET_UART_RX_PIN }, \
+	{ NET_UART_CORE_NO, NET_UART_PORT, NET_UART_TX_PIN } \
+}
+
 #endif // __BOARD_H__

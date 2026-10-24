@@ -183,6 +183,13 @@ typedef struct __iopin_cfg {
 
 typedef IOPinCfg_t		IOPINCFG;
 
+/// I/O pin core assignment, ordered as core, port, pin.
+typedef struct __iopin_core_cfg {
+	int CoreNo;				//!< Core number, main core is 0
+	int PortNo;				//!< Port number
+	int PinNo;				//!< Pin number
+} IOPinCoreCfg_t;
+
 #pragma pack(pop)
 
 /**
@@ -220,6 +227,38 @@ extern "C" {
  *         arguments, unsupported assignment or insufficient permission.
  */
 bool IOPinAssignCore(int PortNo, int PinNo, int CoreNo);
+
+/**
+ * @brief Assign an array of I/O pins to processor cores.
+ *
+ * Uses IOPinAssignCore for each entry in order. Stops at the first failure;
+ * earlier assignments remain applied. Does not start any core.
+ *
+ * @param pCfg   : Array of core, port and pin assignments
+ * @param NbPins : Number of entries; zero succeeds, including with NULL
+ *
+ * @return true if all assignments succeed; false for a negative count,
+ *         NULL with a positive count, or a failed assignment.
+ */
+static inline bool IOPinCoreCfg(const IOPinCoreCfg_t *pCfg, int NbPins)
+{
+	int i;
+
+	if (NbPins < 0 || (NbPins > 0 && pCfg == NULL))
+	{
+		return false;
+	}
+
+	for (i = 0; i < NbPins; i++)
+	{
+		if (!IOPinAssignCore(pCfg[i].PortNo, pCfg[i].PinNo, pCfg[i].CoreNo))
+		{
+			return false;
+		}
+	}
+
+	return true;
+}
 
 /**
  * @brief Configure individual I/O pin.

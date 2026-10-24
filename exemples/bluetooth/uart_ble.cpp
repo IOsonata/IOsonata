@@ -51,6 +51,10 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "board.h"
 
+#ifdef CORE_PINS
+static const IOPinCoreCfg_t s_CorePins[] = CORE_PINS;
+#endif
+
 #ifndef UART_DEVNO
 #define UART_DEVNO					0
 #endif
@@ -396,10 +400,8 @@ int UartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int Buffer
 int main()
 {
 
-#ifdef NET_UART_CORE_NO
-	// Assign the other core's console before Bluetooth starts that core.
-	if (!IOPinAssignCore(NET_UART_PORT, NET_UART_RX_PIN, NET_UART_CORE_NO) ||
-		!IOPinAssignCore(NET_UART_PORT, NET_UART_TX_PIN, NET_UART_CORE_NO))
+#ifdef CORE_PINS
+	if (!IOPinCoreCfg(s_CorePins, sizeof(s_CorePins) / sizeof(s_CorePins[0])))
 	{
 		return 1;
 	}
