@@ -12,15 +12,13 @@ SOURCES = [
     ROOT / "src/device.cpp",
     ROOT / "src/device_intrf.cpp",
     ROOT / "src/pwrmgnt/pm_npm1300.cpp",
-    ROOT / "src/pwrmgnt/pm_npm1300_fuel.cpp",
 ]
 
 with tempfile.TemporaryDirectory(prefix="npm1300-") as td:
     for opt in ("-O0", "-O2"):
         exe = Path(td) / ("npm1300_" + opt[1:])
         cmd = [
-            CXX, "-std=gnu++23", opt, "-DNPM1300_FUEL_TEST",
-            "-I", str(ROOT / "tests/pwrmgnt/shim"),
+            CXX, "-std=gnu++23", opt,
             "-Wall", "-Wextra", "-Werror", "-Wpedantic",
             "-Wno-vla", "-fno-rtti", "-fno-exceptions",
             "-fsanitize=address,undefined", "-fno-omit-frame-pointer",
@@ -33,4 +31,3 @@ with tempfile.TemporaryDirectory(prefix="npm1300-") as td:
         if result.returncode != 0 or "nPM1300 production-driver tests: PASS" not in result.stdout:
             raise RuntimeError(result.stdout + result.stderr)
         print(opt, "nPM1300 production-driver tests: PASS", flush=True)
-

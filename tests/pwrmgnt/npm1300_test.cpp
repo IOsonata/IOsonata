@@ -8,10 +8,6 @@
 #include <vector>
 
 #include "pwrmgnt/pm_npm1300.h"
-#ifdef NPM1300_FUEL_TEST
-#include "pwrmgnt/pm_npm1300_fuel.h"
-#include "nrf_fuel_gauge.h"
-#endif
 
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
 
@@ -743,9 +739,6 @@ static void TestCurrent()
 	assert(pm.Current() == INT32_MIN);
 }
 
-#ifdef NPM1300_FUEL_TEST
-#include "npm1300_fuel_test.inc"
-#endif
 
 int main()
 {
@@ -760,9 +753,6 @@ int main()
 	TestInterruptsAndStatus();
 	TestPowerControl();
 	TestCurrent();
-#ifdef NPM1300_FUEL_TEST
-	TestFuelGauge();
-#endif
 	puts("nPM1300 production-driver tests: PASS");
 	return 0;
 }

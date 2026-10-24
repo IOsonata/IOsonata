@@ -30,7 +30,7 @@ Working baseline: `prerelease_0.13_4`. This is a hardware inventory and implemen
 | BME688 environmental sensor | I2C | Existing `tphg_bme680` forced-mode path is register-compatible (BME68x ID `0x61`, I2C `0x76/0x77`); Thingy:91 X power-aware compatibility test added; parallel/sequential gas modes are not exposed; hardware validation pending |
 | GD25LE255E 256 Mbit flash | SPI | Existing generic storage drivers; Thingy:91 X projects link the shared raw-flash, FatFs, LittleFS and standard file I/O demos; hardware validation pending |
 | nPM6001 regulator PMIC | I2C | `pm_npm6001`: BUCK3 enable, PWM/HYS control, DAC voltage programming and thermal/BUCK3-OC monitoring; Thingy:91 X test project added; hardware validation pending |
-| nPM1300 charger/fuel/LED PMIC | I2C | `pm_npm1300` PMIC control and signed current sampling; optional `PmnPM1300FuelGauge` model-based SOC integrated in nPM1300Test; host tests pass; Thingy:91 X hardware validation pending |
+| nPM1300 charger/fuel/LED PMIC | I2C | `pm_npm1300` portable PMIC control and signed current sampling; host tests pass; portable SOC estimation is not implemented; Thingy:91 X hardware validation pending |
 | RGB LEDs, button, external load switch | GPIO/PMIC | Shared Thingy:91 X board helper and board test added; hardware validation pending |
 | Battery/USB power and shared sensor rails | PMIC/GPIO | Shared Thingy:91 X helper covers BUCK2/GPIO2, LDO1/LDO2, PMIC IRQ and nPM6001 READY; hardware validation pending |
 
@@ -99,9 +99,9 @@ Working baseline: `prerelease_0.13_4`. This is a hardware inventory and implemen
 - `ARM/Nordic/nRF91/nRF91x1/exemples/common/thingy91x_board.*` centralizes these PMIC mappings, the nRF9151 P0.02 PMIC interrupt input, the P0.03 external-board 3.3 V enable, button 1 on P0.26 and the active-high RGB channels on P0.29/P0.31/P0.30. The nPM6001 and BME688 tests use the shared helper rather than duplicating rail sequences.
 - `ARM/Nordic/nRF91/nRF91x1/exemples/Thingy91XBoardTest` initializes the board-safe PMIC routing, keeps external-board power off by default, cycles the RGB LED and reports button and nPM6001 READY state.
 - The board battery profile uses a 4.2 V termination target and a 675 mA nominal 0.5C charge request. The nPM1300 has a 2 mA charge-current step, so `SetCharge()` programs 674 mA and reports 674 mA as the actual setting.
-- The optional Nordic fuel-gauge adapter and LP803448 battery model provide host-computed state of charge. The example requires the sdk-nrfxlib v3.2.0 fuel-gauge header and archive; see `docs/npm1300.md`. Battery presence remains unknown because detection is disabled on D00 and later silicon.
+- The driver and example have no sdk-nrfxlib fuel-gauge dependency. Portable SOC estimation is not implemented, so `Level()` reports unavailable. Battery presence remains unknown because detection is disabled on D00 and later silicon.
 - Hardware validation is pending.
-- Test project: `ARM/Nordic/nRF91/nRF91x1/exemples/nPM1300Test`; default mode is non-destructive and reports charger/status, VBAT, signed IBAT, NTC temperature, model-based SOC, BUCK/LDSW status and GPIO4.
+- Test project: `ARM/Nordic/nRF91/nRF91x1/exemples/nPM1300Test`; default mode is non-destructive and reports charger/status, VBAT, signed IBAT, NTC temperature, unavailable SOC, BUCK/LDSW status and GPIO4.
 
 - BMM350 validation project: `ARM/Nordic/nRF91/nRF91x1/exemples/BMM350Test`.
 - ADXL367 validation project: `ARM/Nordic/nRF91/nRF91x1/exemples/ADXL367Test`.
