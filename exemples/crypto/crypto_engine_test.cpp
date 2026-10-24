@@ -10,20 +10,10 @@ Every call goes through the CipherEngine, MacEngine, AeadEngine,
 KeyAgreeEngine, SignEngine and RngEngine interfaces, so the same file tests
 any chip engine.
 
-Without any definition the engines under test are the software ones, which
-checks the test itself on a host. A board selects its engines in board.h:
-
-	CRYPTO_TEST_ENGINE_HEADER	header of the engines, quoted
-	CRYPTO_TEST_AES_TYPE		class under test, a CryptoSoftAes derived
-	CRYPTO_TEST_AES_MEMSIZE		its storage size
-	CRYPTO_TEST_AES_CREATE(m,s)	factory: memory, size
-	CRYPTO_TEST_AES256		enable AES-256 Cipher checks when supported
-	CRYPTO_TEST_PKA_TYPE		class under test, KeyAgreeEngine and SignEngine
-	CRYPTO_TEST_PKA_MEMSIZE
-	CRYPTO_TEST_PKA_CREATE(m,s,rng)
-	CRYPTO_TEST_RNG_TYPE		class under test, a RngEngine
-	CRYPTO_TEST_RNG_MEMSIZE
-	CRYPTO_TEST_RNG_CREATE(m,s)
+The MCU library supplies its default engines through crypto/icrypto.h.
+The application contains no target engine selection. Software engines below
+are independent references for comparisons. A software random source is not
+security grade; tests requiring secure entropy are explicitly skipped.
 
 Optional:
 
@@ -69,13 +59,13 @@ SOFTWARE.
 #include <string.h>
 #include <new>
 
-#include "crypto/icrypto.h"
+#include "crypto/crypto.h"
 #include "crypto/crypto_softaes.h"
 #include "crypto/crypto_softrng.h"
 #include "crypto/crypto_softsha256.h"
 #include "crypto/crypto_uecc.h"
 
-// The board names the engines under test, so its header comes first
+// Board data supplies the console and optional timing counter only.
 #if defined(__has_include)
 #if __has_include("board.h")
 #include "board.h"
@@ -84,9 +74,6 @@ SOFTWARE.
 #include "board.h"
 #endif
 
-#ifdef CRYPTO_TEST_ENGINE_HEADER
-#include CRYPTO_TEST_ENGINE_HEADER
-#endif
 
 #if defined(UART_RETARGET) && !defined(CRYPTO_TEST_NO_MAIN)
 #include <unistd.h>
@@ -95,47 +82,12 @@ SOFTWARE.
 #include "stddev.h"
 #endif
 
-// Secure flagged generator for the reference engine, and for the software
-// only build. It is a deterministic generator, fit for a test and no more.
+// Deterministic generator used only by the independent reference engine.
+// It is never injected into the target library engines.
 class EngineTestRng : public CryptoSoftRng {
 public:
 	bool IsSecure() const override { return true; }
 };
-
-// Applications select their target engine in board.h. Software engines are
-// used when the board does not provide an implementation.
-#ifndef CRYPTO_TEST_AES_TYPE
-#define CRYPTO_TEST_AES_TYPE		CryptoSoftAes
-#define CRYPTO_TEST_AES_MEMSIZE		CRYPTO_SOFTAES_MEMSIZE
-#define CRYPTO_TEST_AES_CREATE(m, s)	CryptoSoftAesCreate((m), (s))
-#endif
-
-#ifndef CRYPTO_TEST_PKA_TYPE
-#define CRYPTO_TEST_PKA_TYPE		CryptoUecc
-#define CRYPTO_TEST_PKA_MEMSIZE		CRYPTO_UECC_MEMSIZE
-#define CRYPTO_TEST_PKA_CREATE(m, s, r)	CryptoUeccCreate((m), (s), (r))
-#endif
-
-#ifndef CRYPTO_TEST_RNG_TYPE
-
-static EngineTestRng *EngineTestRngCreate(void *pMem, size_t MemSize)
-{
-	if (MemSize < sizeof(EngineTestRng))
-	{
-		return nullptr;
-	}
-
-	EngineTestRng *p = new (pMem) EngineTestRng();
-
-	p->Enable();
-
-	return p;
-}
-
-#define CRYPTO_TEST_RNG_TYPE		EngineTestRng
-#define CRYPTO_TEST_RNG_MEMSIZE		sizeof(EngineTestRng)
-#define CRYPTO_TEST_RNG_CREATE(m, s)	EngineTestRngCreate((m), (s))
-#endif
 
 #ifndef CRYPTO_TEST_SOAK_AES
 #define CRYPTO_TEST_SOAK_AES		200
@@ -180,17 +132,16 @@ static const UARTCfg_t s_UartCfg = {
 static UART s_Uart;
 #endif
 
-static int s_pass, s_fail;
+static int s_pass, s_fail, s_skip;
 
-alignas(16) static uint8_t s_HwAesMem[CRYPTO_TEST_AES_MEMSIZE];
-alignas(CRYPTO_TEST_PKA_TYPE) static uint8_t s_HwPkaMem[CRYPTO_TEST_PKA_MEMSIZE];
-alignas(16) static uint8_t s_HwRngMem[CRYPTO_TEST_RNG_MEMSIZE];
 alignas(CryptoSoftAes) static uint8_t s_SwAesMem[CRYPTO_SOFTAES_MEMSIZE];
 alignas(CryptoUecc) static uint8_t s_SwPkaMem[CRYPTO_UECC_MEMSIZE];
+alignas(CRYPTO_MEMALIGN) static uint8_t s_CryptoMem[CRYPTO_MEMSIZE];
+
 alignas(EngineTestRng) static uint8_t s_SwRngMem[sizeof(EngineTestRng)];
 
-alignas(8) static uint8_t s_CtxA[CRYPTO_KEYCTX_MAX];
-alignas(8) static uint8_t s_CtxB[CRYPTO_KEYCTX_MAX];
+alignas(CRYPTO_KEYCTX_ALIGN_MAX) static uint8_t s_CtxA[CRYPTO_KEYCTX_MAX];
+alignas(CRYPTO_KEYCTX_ALIGN_MAX) static uint8_t s_CtxB[CRYPTO_KEYCTX_MAX];
 
 static void check(const char *name, bool ok)
 {
@@ -201,6 +152,7 @@ static void check(const char *name, bool ok)
 // A direction the engine does not offer is reported, not failed
 static void skip(const char *name)
 {
+	s_skip++;
 	printf("  [SKIP] %s\r\n", name);
 }
 
@@ -288,15 +240,14 @@ static const char *s_CtrHex =
 	"874d6191b620e3261bef6864990db6ce9806f66b7970fdff8617187bb9fffdff"
 	"5ae4df3edbd5d35e5b4f09020db03eab1e031dda2fbe03d1792170a0f3009cee";
 
-#ifdef CRYPTO_TEST_AES256
 static void Aes256Vectors(CipherEngine *pAes)
 {
-	printf("AES-256 known answers, SP 800-38A\r\n");
 	uint8_t key[33], iv[16], expected[64], out[66];
-	Hex("603deb1015ca71be2b73aef0857d77811f352c073b6108d72d9810a30914dff4", key + 1, 32);
 	CryptoKey k{CRYPTO_KEY_AES_256, CRYPTO_KEY_LOC_PLAIN,
 		CRYPTO_KEY_USE_ENCRYPT | CRYPTO_KEY_USE_DECRYPT, {}};
-	k.Plain.pData = key + 1; k.Plain.Len = 32;
+	CRYPTO_STATUS support;
+	bool ok;
+	bool policy = true;
 	const CRYPTO_CIPHER_ALG modes[] = {CRYPTO_CIPHER_ECB, CRYPTO_CIPHER_CBC, CRYPTO_CIPHER_CTR};
 	const char *vectors[] = {
 		"f3eed1bdb5d2a03c064b5a7e3db181f8591ccb10d410ed26dc5ba74a31362870"
@@ -308,6 +259,26 @@ static void Aes256Vectors(CipherEngine *pAes)
 	const char *enc[] = {"AES-256 ECB encrypt", "AES-256 CBC encrypt", "AES-256 CTR encrypt"};
 	const char *dec[] = {"AES-256 ECB decrypt", "AES-256 CBC decrypt", "AES-256 CTR decrypt"};
 	const char *inplace[] = {"AES-256 ECB in-place and bounds", "AES-256 CBC in-place and bounds", "AES-256 CTR in-place and bounds"};
+
+	printf("AES-256 known answers, SP 800-38A\r\n");
+	Hex("603deb1015ca71be2b73aef0857d77811f352c073b6108d72d9810a30914dff4", key + 1, 32);
+	k.Plain.pData = key + 1;
+	k.Plain.Len = 32;
+	support = pAes->Cipher(CRYPTO_CIPHER_ECB, 1, k,
+		nullptr, 0, s_Spmsg, 16, out);
+	if (support == CRYPTO_STATUS_UNSUPPORTED)
+	{
+		skip("AES-256 is unsupported");
+		CryptoSecureWipe(key, sizeof(key));
+		return;
+	}
+	if (support != CRYPTO_STATUS_OK)
+	{
+		check("AES-256 operation", false);
+		CryptoSecureWipe(key, sizeof(key));
+		return;
+	}
+
 	for (unsigned m = 0; m < 3; m++)
 	{
 		for (unsigned i = 0; i < 16; i++) iv[i] = m == 2 ? 0xf0 + i : i;
@@ -318,7 +289,7 @@ static void Aes256Vectors(CipherEngine *pAes)
 		check(dec[m], pAes->Cipher(modes[m], 0, k, iv, 16, expected, 64, out + 1) == CRYPTO_STATUS_OK &&
 			memcmp(out + 1, s_Spmsg, 64) == 0);
 		memcpy(out + 1, s_Spmsg, 64);
-		bool ok = pAes->Cipher(modes[m], 1, k, iv, 16, out + 1, 64, out + 1) == CRYPTO_STATUS_OK &&
+		ok = pAes->Cipher(modes[m], 1, k, iv, 16, out + 1, 64, out + 1) == CRYPTO_STATUS_OK &&
 			memcmp(out + 1, expected, 64) == 0;
 		ok = pAes->Cipher(modes[m], 0, k, iv, 16, out + 1, 64, out + 1) == CRYPTO_STATUS_OK &&
 			memcmp(out + 1, s_Spmsg, 64) == 0 && out[0] == 0xa5 && out[65] == 0xa5 && ok;
@@ -328,14 +299,14 @@ static void Aes256Vectors(CipherEngine *pAes)
 	check("AES-256 CTR partial tail and bounds",
 		pAes->Cipher(CRYPTO_CIPHER_CTR, 1, k, iv, 16, s_Spmsg, 21, out + 1) == CRYPTO_STATUS_OK &&
 		memcmp(out + 1, expected, 21) == 0 && out[0] == 0xa5 && out[22] == 0xa5);
-	bool policy = true;
 	for (unsigned len = 0; len <= 33; len++)
 	{
 		if (len == 32) continue;
 		k.Plain.Len = len;
 		policy = pAes->Cipher(CRYPTO_CIPHER_ECB, 1, k, nullptr, 0, s_Spmsg, 16, out) != CRYPTO_STATUS_OK && policy;
 	}
-	k.Plain.Len = 32; k.Usage = CRYPTO_KEY_USE_DECRYPT;
+	k.Plain.Len = 32;
+	k.Usage = CRYPTO_KEY_USE_DECRYPT;
 	policy = pAes->Cipher(CRYPTO_CIPHER_ECB, 1, k, nullptr, 0, s_Spmsg, 16, out) != CRYPTO_STATUS_OK && policy;
 	k.Usage = CRYPTO_KEY_USE_ENCRYPT;
 	policy = pAes->Cipher(CRYPTO_CIPHER_ECB, 0, k, nullptr, 0, s_Spmsg, 16, out) != CRYPTO_STATUS_OK && policy;
@@ -347,7 +318,6 @@ static void Aes256Vectors(CipherEngine *pAes)
 		pAes->Cipher(CRYPTO_CIPHER_CTR, 1, k, iv, 15, s_Spmsg, 16, out) != CRYPTO_STATUS_OK);
 	CryptoSecureWipe(key, sizeof(key));
 }
-#endif
 
 static void AesVectors(CipherEngine *pAes, MacEngine *pMac, AeadEngine *pAead)
 {
@@ -1007,17 +977,12 @@ static void RngChecks(RngEngine *pRng)
 	check("4 KB sample: ones within 5 sigma and byte values spread",
 		ones > 16384U - 450U && ones < 16384U + 450U && missing < 8);
 
-	check("source reports itself as security grade", pRng->IsSecure());
+	printf("  Source: %s\r\n", pRng->IsSecure() ?
+		"secure entropy" : "software PRNG, not for security use");
 }
 
-#ifdef CRYPTO_TEST_HASH_TYPE
-// Optional hash facet, selected by the board like AES/PKA/RNG.
-static void HashChecks()
+static void HashChecks(HashEngine *hash, MacEngine *mac)
 {
-	alignas(CRYPTO_TEST_HASH_TYPE) static uint8_t mem[CRYPTO_TEST_HASH_MEMSIZE];
-	auto *hash = CRYPTO_TEST_HASH_CREATE(mem, sizeof(mem));
-	check("SHA-256 engine constructs", hash != nullptr);
-	if (hash == nullptr) return;
 	check("SHA-256/HMAC self-test", hash->SelfTest() == 0);
 	CryptoSoftSha256 reference;
 	reference.Enable();
@@ -1039,12 +1004,12 @@ static void HashChecks()
 	mk.Plain.pData = key + 1; mk.Plain.Len = 131;
 	const char *longMsg = "Test Using Larger Than Block-Size Key - Hash Key First";
 	check("HMAC-SHA-256 long key, RFC 4231 case 6",
-		hash->Mac(CRYPTO_MAC_HMAC, mk, (const uint8_t *)longMsg, strlen(longMsg), actual + 1, 32) == CRYPTO_STATUS_OK &&
+		mac->Mac(CRYPTO_MAC_HMAC, mk, (const uint8_t *)longMsg, strlen(longMsg), actual + 1, 32) == CRYPTO_STATUS_OK &&
 		HexEq(actual + 1, "60e431591ee0b67f0d8a26aacbf5b77f8e0bc6213728c5140546040f0ee37f54", 32));
 	memset(key, 0x0c, 20); mk.Plain.pData = key; mk.Plain.Len = 20;
 	memset(actual, 0xa5, sizeof(actual));
 	check("HMAC-SHA-256 truncation, RFC 4231 case 5",
-		hash->Mac(CRYPTO_MAC_HMAC, mk, (const uint8_t *)"Test With Truncation", 20, actual + 1, 16) == CRYPTO_STATUS_OK &&
+		mac->Mac(CRYPTO_MAC_HMAC, mk, (const uint8_t *)"Test With Truncation", 20, actual + 1, 16) == CRYPTO_STATUS_OK &&
 		HexEq(actual + 1, "a3b6167473100ee06e0c796c2955552b", 16) && actual[0] == 0xa5 && actual[17] == 0xa5);
 	XsFill(key, sizeof(key));
 	const size_t keyLengths[] = {0, 1, 63, 64, 65, 131};
@@ -1058,29 +1023,28 @@ static void HashChecks()
 			size_t ml = 1 + len % 32;
 			memset(actual, 0xa5, sizeof(actual));
 			match &= reference.Mac(CRYPTO_MAC_HMAC, mk, input, len, expected, ml) == CRYPTO_STATUS_OK;
-			match &= hash->Mac(CRYPTO_MAC_HMAC, mk, input, len, actual + 1, ml) == CRYPTO_STATUS_OK &&
+			match &= mac->Mac(CRYPTO_MAC_HMAC, mk, input, len, actual + 1, ml) == CRYPTO_STATUS_OK &&
 				memcmp(expected, actual + 1, ml) == 0 && actual[0] == 0xa5 && actual[ml + 1] == 0xa5;
 		}
 	}
 	check("HMAC key boundaries, message lengths 0..257 and output bounds", match);
 	mk.Plain.pData = key; mk.Plain.Len = 32;
 	match = reference.Mac(CRYPTO_MAC_HMAC, mk, msg + 1, 257, expected, 32) == CRYPTO_STATUS_OK;
-	match &= hash->Mac(CRYPTO_MAC_HMAC, mk, msg + 1, 257, msg + 1, 32) == CRYPTO_STATUS_OK &&
+	match &= mac->Mac(CRYPTO_MAC_HMAC, mk, msg + 1, 257, msg + 1, 32) == CRYPTO_STATUS_OK &&
 		memcmp(expected, msg + 1, 32) == 0;
 	check("HMAC output may overlap message", match);
 	mk.Usage = CRYPTO_KEY_USE_ENCRYPT;
-	match = hash->Mac(CRYPTO_MAC_HMAC, mk, msg, 16, actual, 32) != CRYPTO_STATUS_OK;
+	match = mac->Mac(CRYPTO_MAC_HMAC, mk, msg, 16, actual, 32) != CRYPTO_STATUS_OK;
 	mk.Usage = CRYPTO_KEY_USE_SIGN;
-	match &= hash->Mac(CRYPTO_MAC_HMAC, mk, nullptr, 1, actual, 32) != CRYPTO_STATUS_OK;
-	match &= hash->Mac(CRYPTO_MAC_HMAC, mk, msg, 16, actual, 0) != CRYPTO_STATUS_OK;
-	match &= hash->Mac(CRYPTO_MAC_HMAC, mk, msg, 16, actual, 33) != CRYPTO_STATUS_OK;
+	match &= mac->Mac(CRYPTO_MAC_HMAC, mk, nullptr, 1, actual, 32) != CRYPTO_STATUS_OK;
+	match &= mac->Mac(CRYPTO_MAC_HMAC, mk, msg, 16, actual, 0) != CRYPTO_STATUS_OK;
+	match &= mac->Mac(CRYPTO_MAC_HMAC, mk, msg, 16, actual, 33) != CRYPTO_STATUS_OK;
 	mk.Plain.pData = nullptr;
-	match &= hash->Mac(CRYPTO_MAC_HMAC, mk, msg, 16, actual, 32) != CRYPTO_STATUS_OK;
+	match &= mac->Mac(CRYPTO_MAC_HMAC, mk, msg, 16, actual, 32) != CRYPTO_STATUS_OK;
 	check("HMAC rejects invalid usage, key, message and output length", match);
 	CryptoSecureWipe(key, sizeof(key));
 
 }
-#endif
 
 
 #ifdef CRYPTO_TEST_TICKS
@@ -1193,55 +1157,144 @@ static void CryptoBenchmark(CipherEngine *pTarget, MacEngine *pTargetMac,
 }
 #endif
 
+static bool DefaultPkaChecks(KeyAgreeEngine *pKa, SignEngine *pSign,
+		RngEngine *pRng, CryptoUecc *pReference)
+{
+	uint8_t priv[32], pub[64], peer[64], hash[32], sig[64];
+	uint8_t secret[32], expected[32];
+	CRYPTO_STATUS status;
+	CryptoKey key;
+	bool imported;
+	bool ready;
+
+	Hex(s_PrivA, priv, sizeof(priv));
+	Hex(s_PubA, pub, sizeof(pub));
+	XsFill(hash, sizeof(hash));
+	key = EccKey(priv, CRYPTO_KEY_USE_SIGN);
+	check("reference signature for default verifier",
+		pReference->Sign(CRYPTO_CURVE_P256, key, hash, sizeof(hash), sig) == CRYPTO_STATUS_OK);
+	check("default verifier accepts reference signature",
+		pSign->Verify(CRYPTO_CURVE_P256, pub, hash, sizeof(hash), sig) == CRYPTO_STATUS_OK);
+	hash[0] ^= 1U;
+	check("default verifier rejects changed hash",
+		pSign->Verify(CRYPTO_CURVE_P256, pub, hash, sizeof(hash), sig) == CRYPTO_STATUS_FAIL);
+
+	status = pKa->KeyImport(CRYPTO_CURVE_P256, s_CtxA, priv, pub);
+	imported = status == CRYPTO_STATUS_OK;
+	if (status == CRYPTO_STATUS_UNSUPPORTED)
+	{
+		skip("private-key import is unsupported; testing generated keys");
+	}
+	else
+	{
+		check("default key import matches known public key",
+			imported && HexEq(pub, s_PubA, sizeof(pub)));
+	}
+	pKa->KeyReset(s_CtxA);
+
+	status = pKa->KeyGen(CRYPTO_CURVE_P256, s_CtxA, pub);
+	if (!pRng->IsSecure())
+	{
+		check("key generation rejects non-secure RNG", status == CRYPTO_STATUS_UNSUPPORTED);
+		check("signing rejects non-secure RNG",
+			pSign->Sign(CRYPTO_CURVE_P256, key, hash, sizeof(hash), sig) == CRYPTO_STATUS_UNSUPPORTED);
+		skip("ECDH and signing require a secure random source");
+		pKa->KeyReset(s_CtxA);
+		CryptoSecureWipe(priv, sizeof(priv));
+		return false;
+	}
+	ready = status == CRYPTO_STATUS_OK;
+	check("default key generation", ready);
+	if (ready)
+	{
+		ready = pReference->KeyGen(CRYPTO_CURVE_P256, s_CtxB, peer) == CRYPTO_STATUS_OK;
+		check("reference peer key generation", ready);
+	}
+	if (ready)
+	{
+		check("generated-key ECDH matches software peer",
+			pKa->Agree(CRYPTO_CURVE_P256, s_CtxA, peer, secret, true) == CRYPTO_STATUS_OK &&
+			pReference->Agree(CRYPTO_CURVE_P256, s_CtxB, pub, expected) == CRYPTO_STATUS_OK &&
+			memcmp(secret, expected, sizeof(secret)) == 0);
+		peer[63] ^= 1U;
+		memset(secret, 0xa5, sizeof(secret));
+		check("generated-key ECDH rejects invalid peer and clears output",
+			pKa->Agree(CRYPTO_CURVE_P256, s_CtxA, peer, secret) == CRYPTO_STATUS_FAIL &&
+			P256IsZero(secret, sizeof(secret)));
+	}
+	pKa->KeyReset(s_CtxA);
+	pReference->KeyReset(s_CtxB);
+	Hex(s_PubA, pub, sizeof(pub));
+	status = pSign->Sign(CRYPTO_CURVE_P256, key, hash, sizeof(hash), sig);
+	check("target signs with a supplied private key", status == CRYPTO_STATUS_OK);
+	check("software verifies target signature", status == CRYPTO_STATUS_OK &&
+		pReference->Verify(CRYPTO_CURVE_P256, pub, hash, sizeof(hash), sig) == CRYPTO_STATUS_OK);
+	CryptoSecureWipe(sig, sizeof(sig));
+	CryptoSecureWipe(priv, sizeof(priv));
+	CryptoSecureWipe(secret, sizeof(secret));
+	CryptoSecureWipe(expected, sizeof(expected));
+	return imported;
+}
+
 int CryptoEngineTest(void)
 {
-	printf("\r\nCrypto engine test\r\n");
-
-	CRYPTO_TEST_RNG_TYPE *hwRng = CRYPTO_TEST_RNG_CREATE(s_HwRngMem, sizeof(s_HwRngMem));
+	Crypto *crypto = CryptoCreate(s_CryptoMem, sizeof(s_CryptoMem));
 	EngineTestRng *swRng = new (s_SwRngMem) EngineTestRng();
-	CRYPTO_TEST_AES_TYPE *hwAes = CRYPTO_TEST_AES_CREATE(s_HwAesMem, sizeof(s_HwAesMem));
-	CRYPTO_TEST_PKA_TYPE *hwPka = CRYPTO_TEST_PKA_CREATE(s_HwPkaMem, sizeof(s_HwPkaMem), hwRng);
 	CryptoSoftAes *swAes = CryptoSoftAesCreate(s_SwAesMem, sizeof(s_SwAesMem));
+	CryptoUecc *swPka;
+	bool contexts;
 
+	s_pass = 0;
+	s_fail = 0;
+	s_skip = 0;
+	printf("\r\nCrypto engine test\r\n");
 	swRng->Enable();
-	CryptoUecc *swPka = CryptoUeccCreate(s_SwPkaMem, sizeof(s_SwPkaMem), swRng);
-
-	check("engines construct",
-		hwRng != nullptr && hwAes != nullptr && hwPka != nullptr &&
-		swAes != nullptr && swPka != nullptr);
-	if (hwRng == nullptr || hwAes == nullptr || hwPka == nullptr ||
-		swAes == nullptr || swPka == nullptr)
+	swPka = CryptoUeccCreate(s_SwPkaMem, sizeof(s_SwPkaMem), swRng);
+	check("crypto and reference objects initialize",
+		crypto != nullptr && swAes != nullptr && swPka != nullptr);
+	if (s_fail != 0)
 	{
-		printf("\r\n%d passed, %d failed\r\n", s_pass, s_fail);
-
+		if (crypto != nullptr)
+		{
+			crypto->Disable();
+			crypto->~Crypto();
+		}
+		printf("\r\n%d passed, %d failed, %d skipped\r\n", s_pass, s_fail, s_skip);
 		return 1;
 	}
-
+	contexts = crypto->KeyCtxSize() > 0 && crypto->KeyCtxSize() <= sizeof(s_CtxA) &&
+		crypto->KeyCtxAlign() > 0 && crypto->KeyCtxAlign() <= CRYPTO_KEYCTX_ALIGN_MAX &&
+		CRYPTO_KEYCTX_ALIGN_MAX % crypto->KeyCtxAlign() == 0;
+	check("default key context fits generic storage", contexts);
+	if (!contexts)
+	{
+		crypto->Disable();
+		crypto->~Crypto();
+		return 1;
+	}
 #ifdef CRYPTO_TEST_TICKS_INIT
 	CRYPTO_TEST_TICKS_INIT();
 #endif
 
-	check("AES engine self-test", hwAes->SelfTest() == 0);
-	check("P-256 engine self-test", hwPka->SelfTest() == 0);
-
-#ifdef CRYPTO_TEST_HASH_TYPE
-	HashChecks();
-#endif
-	RngChecks(hwRng);
-	AesVectors(hwAes, hwAes, hwAes);
-#ifdef CRYPTO_TEST_AES256
-	Aes256Vectors(hwAes);
-#endif
+	check("crypto object self-test", crypto->SelfTest() == 0);
+	HashChecks(crypto, crypto);
+	RngChecks(crypto);
+	AesVectors(crypto, crypto, crypto);
+	Aes256Vectors(crypto);
 	SoftwareAesDecryptChecks(swAes);
-	AesSoak(hwAes, hwAes, hwAes, swAes, swAes, swAes);
-	PkaVectors(hwPka, hwPka, swPka);
-	PkaSoak(hwPka, hwPka, swPka, swPka);
+	AesSoak(crypto, crypto, crypto, swAes, swAes, swAes);
+	if (DefaultPkaChecks(crypto, crypto, crypto, swPka))
+	{
+		PkaVectors(crypto, crypto, swPka);
+		PkaSoak(crypto, crypto, swPka, swPka);
+	}
 #ifdef CRYPTO_TEST_TICKS
-	CryptoBenchmark(hwAes, hwAes, hwAes, hwRng, swAes, swAes, swAes);
+	CryptoBenchmark(crypto, crypto, crypto, crypto, swAes, swAes, swAes);
 #endif
 
-	printf("\r\n%d passed, %d failed\r\n", s_pass, s_fail);
-
+	printf("\r\n%d passed, %d failed, %d skipped\r\n", s_pass, s_fail, s_skip);
+	crypto->Disable();
+	crypto->~Crypto();
 	return s_fail == 0 ? 0 : 1;
 }
 
@@ -1267,3 +1320,4 @@ int main(void)
 	return CryptoEngineTest();
 }
 #endif
+

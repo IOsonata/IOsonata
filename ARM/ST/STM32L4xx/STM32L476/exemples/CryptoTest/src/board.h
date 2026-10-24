@@ -56,12 +56,4 @@ SOFTWARE.
 #define UART_TX_PIN			6
 #define UART_TX_PINOP		IOPINOP_FUNC7
 
-// Hardware RNG, clocked by the 48 MHz MSI that SystemInit selects. The
-// STM32L475VG has no AES, HASH or PKA: AES, SHA-256 and P-256 are the
-// software engines, the defaults of crypto_engine_test.cpp.
-#define CRYPTO_TEST_ENGINE_HEADER		"crypto_rng_stm32.h"
-#define CRYPTO_TEST_RNG_TYPE			CryptoRngStm32
-#define CRYPTO_TEST_RNG_MEMSIZE			sizeof(CryptoRngStm32)
-#define CRYPTO_TEST_RNG_CREATE(m, s)	CryptoRngStm32Instance()
-
 #endif // __BOARD_H__

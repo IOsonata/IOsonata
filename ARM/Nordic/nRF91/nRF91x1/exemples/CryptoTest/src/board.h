@@ -39,6 +39,7 @@ SOFTWARE.
 #include "coredev/iopincfg.h"
 
 // Console, UART0 to the interface MCU (VCOM0)
+#define UART_RETARGET
 #define UART_DEVNO			0
 #define UART_RX_PORT		0
 #define UART_RX_PIN			26

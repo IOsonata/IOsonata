@@ -62,7 +62,7 @@ SOFTWARE.
 /// over the virtual AesEcbEncrypt primitive between the AesOpBegin/AesOpEnd hooks,
 /// so a hardware subclass gets hardware-backed CMAC under one operation-level
 /// acquisition by overriding those three.
-class CryptoSoftAes : public CipherEngine, public MacEngine,
+class CryptoSoftAes : public CipherEngine, virtual public MacEngine,
 					  public AeadEngine {
 public:
 	CryptoSoftAes() { vbValid = false; }

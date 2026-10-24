@@ -91,3 +91,14 @@ state (one hash at a time). It is not part of the crypto engine tree and is not
 shared with it. The crypto-layer digest is `CryptoSoftSha256` (the `HashEngine`
 interface), which returns a raw 32-byte digest and is per-instance. The two do not
 collide and serve different purposes.
+
+## Generic object construction
+
+`CryptoCreate` constructs one caller-owned `Crypto` object selected by the MCU
+library. All capabilities are methods on that object, with software behavior
+inherited where no supported hardware implementation exists. The caller checks
+operation status; it does not choose a target class or acquire each capability.
+`CRYPTO_STATUS_UNSUPPORTED` from a valid optional request can be reported as a
+skip. Initialization failure, busy and failed operations must not be hidden as
+unsupported. A non-secure software RNG cannot be used for key generation or
+signing; CryptoTest reports those cases explicitly.

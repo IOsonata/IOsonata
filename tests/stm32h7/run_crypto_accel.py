@@ -19,28 +19,29 @@ with tempfile.TemporaryDirectory(prefix="h7-crypto-") as temp:
     # Use bit definitions from the real device header, not duplicated constants.
     defines = [line for line in cmsis.splitlines() if re.match(
         r"#define (CRYP_(CR|SR)_|HASH_(CR|SR|STR)_|RCC_AHB2(ENR|RSTR)_)", line)]
-    (out / "stm32.h").write_text('#include "crypto_accel_model.h"\n' + "\n".join(defines))
-    (out / "board.h").write_text("""#include "crypto_stm32h7.h"
-#define CRYPTO_TEST_AES256
-#define CRYPTO_TEST_AES_TYPE CryptoStm32H7Aes
-#define CRYPTO_TEST_AES_MEMSIZE sizeof(CryptoStm32H7Aes)
-#define CRYPTO_TEST_AES_CREATE(m,s) CryptoStm32H7AesCreate(m,s)
-#define CRYPTO_TEST_HASH_TYPE CryptoStm32H7Hash
-#define CRYPTO_TEST_HASH_MEMSIZE sizeof(CryptoStm32H7Hash)
-#define CRYPTO_TEST_HASH_CREATE(m,s) CryptoStm32H7HashCreate(m,s)
-""")
+    (out / "stm32.h").write_text('#define IOSONATA_STM32_HAS_RNG 1\n#include "crypto_accel_model.h"\n' + "\n".join(defines))
     inc = ["-I" + str(p) for p in (out, HERE, ROOT / "include", ROOT / "ARM/ST/include", ROOT / "micro-ecc")]
     for opt in ("-O0", "-O2"):
         flags = [opt, "-g", "-fsanitize=address,undefined", "-DuECC_ENABLE_VLI_API=1",
-                 "-DuECC_WORD_SIZE=4", "-DCRYPTO_STM32H7_POLL_MAX=32", "-DCRYPTO_TEST_NO_MAIN"]
+                 "-DSTM32H753xx", "-DuECC_WORD_SIZE=4", "-DCRYPTO_STM32H7_POLL_MAX=32", "-DCRYPTO_TEST_NO_MAIN"]
         run(["gcc", *flags, *inc, "-c", ROOT / "micro-ecc/uECC.c", "-o", out / "uecc.o"])
-        sources = ["exemples/crypto/crypto_engine_test.cpp", "src/crypto/crypto_aes_modes.cpp", "src/crypto/crypto_aes_soft.cpp",
+        sources = ["src/crypto/crypto_aes_modes.cpp", "src/crypto/crypto_aes_soft.cpp",
                    "src/crypto/crypto_softsha256.cpp", "src/crypto/crypto_softrng.cpp",
                    "src/crypto/crypto_uecc.cpp", "src/crypto/crypto_p256.cpp",
-                   "src/device.cpp", "src/device_intrf.cpp", "ARM/ST/STM32H7xx/src/crypto_stm32h7.cpp",
-                   "tests/stm32h7/crypto_accel_model.cpp"]
-        run(["g++", "-std=gnu++23", "-Wall", "-Wextra", "-Werror", "-fno-rtti", "-fno-exceptions",
-             "-ffunction-sections", "-fdata-sections", *flags, *inc,
-             *(ROOT / p for p in sources), out / "uecc.o", "-Wl,--gc-sections", "-lcrypto", "-o", out / "test"])
+                   "src/crypto/crypto.cpp", "ARM/ST/src/crypto_default_stm32.cpp",
+                   "src/device.cpp", "src/device_intrf.cpp",
+                   "ARM/ST/STM32H7xx/src/crypto_stm32h7.cpp"]
+        cxx = ["g++", "-std=gnu++23", "-Wall", "-Wextra", "-Werror", "-fno-rtti",
+               "-fno-exceptions", "-ffunction-sections", "-fdata-sections", *flags, *inc]
+        objects = [out / "uecc.o"]
+        for source in sources:
+            obj = out / (Path(source).stem + ".o")
+            run([*cxx, "-c", ROOT / source, "-o", obj])
+            objects.append(obj)
+        archive = out / "libcrypto-target.a"
+        run(["ar", "rcs", archive, *objects])
+        run([*cxx, ROOT / "exemples/crypto/crypto_engine_test.cpp",
+             HERE / "crypto_accel_model.cpp", archive, "-Wl,--gc-sections",
+             "-lcrypto", "-o", out / "test"])
         print(opt, flush=True)
         run([out / "test"], env={**os.environ, "ASAN_OPTIONS": "detect_leaks=0"})

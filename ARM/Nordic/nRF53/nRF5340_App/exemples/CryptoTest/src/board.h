@@ -4,6 +4,7 @@
 #include "coredev/iopincfg.h"
 
 // nRF5340 Audio DK by default; define NRF5340_DK_PCA10095 for DK.
+#define UART_RETARGET
 #define UART_DEVNO 0
 #define UART_RX_PINOP 0
 #define UART_TX_PINOP 0

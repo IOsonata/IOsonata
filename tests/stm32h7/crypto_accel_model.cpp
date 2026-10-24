@@ -6,6 +6,9 @@
 #include <vector>
 #include <openssl/evp.h>
 #include <openssl/sha.h>
+#include <openssl/rand.h>
+#include "crypto_rng_stm32.h"
+#include "crypto/crypto.h"
 #include "stm32.h"
 #include "crypto_stm32h7.h"
 CrypRegs g_Cryp;
@@ -16,6 +19,7 @@ static std::vector<uint8_t> input, output, message;
 static bool prepared;
 static uint32_t preparedSize;
 static unsigned fault, aesBlocks, hashRuns;
+static unsigned modelWrites;
 static unsigned hashFailAt = ~0U;
 static CryptoStm32H7Hash *hashReenter;
 static CryptoStm32H7Aes *reenter;
@@ -37,6 +41,7 @@ uint32_t ModelRead(unsigned id)
 }
 void ModelWrite(unsigned id,uint32_t value)
 {
+	modelWrites++;
 	regs[id]=value;
 	if(id==R_RST){
 	 if(value&RCC_AHB2RSTR_CRYPRST){for(unsigned i=0;i<=C_K3R;i++)regs[i]=0;
@@ -91,10 +96,38 @@ void ModelWrite(unsigned id,uint32_t value)
 	 regs[H_SR]=HASH_SR_DCIS;hashRuns++;
 	}
 }
+// Host entropy adapter only. The physical RNG driver has separate register tests.
+static bool rngAvailable;
+bool CryptoRngStm32::Enable() { return true; }
+void CryptoRngStm32::Disable() {}
+void CryptoRngStm32::Reset() {}
+CRYPTO_STATUS CryptoRngStm32::Random(uint8_t *pOut, size_t Len)
+{
+	return RAND_bytes(pOut, (int)Len) == 1 ? CRYPTO_STATUS_OK : CRYPTO_STATUS_FAIL;
+}
+CryptoRngStm32 *CryptoRngStm32Instance(void)
+{
+	static CryptoRngStm32 instance;
+
+	return rngAvailable ? &instance : nullptr;
+}
 int CryptoEngineTest();
 int main()
 {
-	int result=CryptoEngineTest();assert(result==0);
+	int result;
+	Crypto *retry;
+	alignas(CRYPTO_MEMALIGN) uint8_t arena[CRYPTO_MEMSIZE];
+
+	assert(modelWrites == 0);
+	assert(CryptoCreate(arena, sizeof(arena)) == nullptr);
+	assert(modelWrites == 0);
+	rngAvailable = true;
+	retry = CryptoCreate(arena, sizeof(arena));
+	assert(retry != nullptr);
+	retry->Disable();
+	retry->~Crypto();
+	result = CryptoEngineTest();
+	assert(result == 0);
 	for(unsigned i=0;i<16;i++)key[i]=i+1;
 	CryptoStm32H7Aes a,b;CryptoStm32H7Hash h;assert(a.Enable()&&b.Enable()&&h.Enable());
 	// Check actual hardware Cipher's in-place path, not just the software base.

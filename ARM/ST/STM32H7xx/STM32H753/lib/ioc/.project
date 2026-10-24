@@ -3100,6 +3100,26 @@
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/x509.cpp</locationURI>
 		</link>
+		<link>
+			<name>src/micro-ecc</name>
+			<type>2</type>
+			<locationURI>virtual:/virtual</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/crypto_default_stm32.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/ARM/ST/src/crypto_default_stm32.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/crypto/crypto.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto.cpp</locationURI>
+		</link>
+		<link>
+			<name>include/crypto/crypto.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/crypto.h</locationURI>
+		</link>
 	</linkedResources>
 	<variableList>
 		<variable>
@@ -3108,4 +3128,3 @@
 		</variable>
 	</variableList>
 </projectDescription>
-

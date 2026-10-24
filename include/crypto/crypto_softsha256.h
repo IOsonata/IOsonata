@@ -82,7 +82,7 @@ public:
 };
 
 /// @brief	Software SHA-256 engine implementing HashEngine and HMAC.
-class CryptoSoftSha256 : public CryptoSoftSha256Hash, public MacEngine {
+class CryptoSoftSha256 : public CryptoSoftSha256Hash, virtual public MacEngine {
 public:
 	CryptoSoftSha256() {}
 
