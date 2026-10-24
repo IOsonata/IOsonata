@@ -134,7 +134,6 @@ extern "C" __attribute__((weak)) RngEngine *CryptoTestRngCreate(void *pMem, size
 #define CRYPTO_TEST_RNG_MEMSIZE 256U
 #define CRYPTO_TEST_RNG_CREATE(m, s) CryptoTestRngCreate((m), (s))
 #endif
-#endif
 
 #ifndef CRYPTO_TEST_AES_TYPE
 #define CRYPTO_TEST_AES_TYPE		CryptoSoftAes
