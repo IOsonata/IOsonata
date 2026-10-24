@@ -38,6 +38,43 @@ static void Reference(bool Gcm, const uint8_t *pKey, const uint8_t *pNonce,
 	EVP_CIPHER_CTX_free(ctx);
 }
 
+static void CheckCcmAadLimit()
+{
+	CryptoSoftAes engine;
+	CryptoKey key{CRYPTO_KEY_AES_128, CRYPTO_KEY_LOC_PLAIN,
+		CRYPTO_KEY_USE_ENCRYPT | CRYPTO_KEY_USE_DECRYPT, {}};
+	uint8_t k[16] = {}, nonce[13] = {}, aad[65280], msg[257];
+	uint8_t ref[257], tag[16], out[259], actualTag[18];
+	const size_t lengths[] = {0, 1, 31, 257};
+	size_t i, li, len, nlen;
+
+	engine.Enable();
+	key.Plain.pData = k;
+	key.Plain.Len = sizeof(k);
+	for (i = 0; i < sizeof(aad); i++) aad[i] = (uint8_t)(i * 31U + 7U);
+	for (i = 0; i < sizeof(msg); i++) msg[i] = (uint8_t)(i * 17U + 3U);
+	for (nlen = 7; nlen <= 13; nlen++)
+	for (li = 0; li < sizeof(lengths) / sizeof(lengths[0]); li++)
+	{
+		len = lengths[li];
+		Reference(false, k, nonce, nlen, aad, sizeof(aad) - 1U, msg, len, ref, tag, 16);
+		memset(out, 0xA5, sizeof(out));
+		memset(actualTag, 0xA5, sizeof(actualTag));
+		assert(engine.Seal(CRYPTO_AEAD_AES_CCM, key, nonce, nlen, aad, sizeof(aad) - 1U,
+			msg, len, out + 1, actualTag + 1, 16) == CRYPTO_STATUS_OK);
+		assert(memcmp(out + 1, ref, len) == 0 && memcmp(actualTag + 1, tag, 16) == 0);
+		assert(out[0] == 0xA5 && out[len + 1] == 0xA5);
+		assert(actualTag[0] == 0xA5 && actualTag[17] == 0xA5);
+		assert(engine.Open(CRYPTO_AEAD_AES_CCM, key, nonce, nlen, aad, sizeof(aad) - 1U,
+			out + 1, len, out + 1, tag, 16) == CRYPTO_STATUS_OK);
+		assert(memcmp(out + 1, msg, len) == 0);
+		assert(out[0] == 0xA5 && out[len + 1] == 0xA5);
+		assert(engine.Seal(CRYPTO_AEAD_AES_CCM, key, nonce, nlen, aad, sizeof(aad),
+			msg, len, out + 1, actualTag + 1, 16) == CRYPTO_STATUS_UNSUPPORTED);
+	}
+	puts("CCM: maximum supported AAD length matches OpenSSL; next length rejected");
+}
+
 static void CheckCmac()
 {
 	FailingAes engine;
@@ -110,6 +147,7 @@ int main()
 	unsigned mode, calls, fail, direction, cases = 0;
 
 	CheckCmac();
+	CheckCcmAadLimit();
 	engine.Enable();
 	key.Plain.pData = k;
 	key.Plain.Len = sizeof(k);

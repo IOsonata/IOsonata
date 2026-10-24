@@ -396,6 +396,9 @@ bool CryptoAesModes::CcmMacTag(const uint8_t *pKey, const uint8_t *pNonce,
 	size_t l = 15U - NonceLen;
 	size_t value = Len;
 	uint8_t x[AES_BLOCK], b[AES_BLOCK];
+	const uint8_t *data;
+	size_t remaining, prefix, count, i;
+	unsigned part;
 	bool ok;
 
 	// B0: flags, nonce, message length.
@@ -403,43 +406,40 @@ bool CryptoAesModes::CcmMacTag(const uint8_t *pKey, const uint8_t *pNonce,
 					 (((TagLen - 2U) / 2U) << 3) | (l - 1U));
 	memcpy(&b[1], pNonce, NonceLen);
 	// L may exceed sizeof(size_t); shift one byte at a time to zero extend.
-	for (size_t i = 0; i < l; i++)
+	for (i = 0; i < l; i++)
 	{
 		b[15U - i] = (uint8_t)value;
 		value >>= 8U;
 	}
 	ok = AesEcbEncrypt(pKey, b, x);
 
-	// AAD: two byte length then the data, zero padded to the block.
-	if (ok && AadLen != 0U)
+	// AAD and message have independent block padding, but share the same
+	// CBC-MAC loop. Only the AAD's first block carries a two-byte length.
+	for (part = 0U; ok && part < 2U; part++)
 	{
-		memset(b, 0, sizeof(b));
-		b[0] = (uint8_t)(AadLen >> 8);
-		b[1] = (uint8_t)AadLen;
-		size_t fill = AadLen < 14U ? AadLen : 14U;
-		memcpy(&b[2], pAad, fill);
-		size_t idx = fill;
-		for (size_t i = 0; i < AES_BLOCK; i++) b[i] ^= x[i];
-		ok = AesEcbEncrypt(pKey, b, x);
-		while (ok && idx < AadLen)
+		data = part == 0U ? pAad : pMsg;
+		remaining = part == 0U ? AadLen : Len;
+		prefix = part == 0U ? 2U : 0U;
+
+		while (ok && remaining != 0U)
 		{
 			memset(b, 0, sizeof(b));
-			size_t count = AadLen - idx < AES_BLOCK ? AadLen - idx : AES_BLOCK;
-			memcpy(b, &pAad[idx], count);
-			idx += count;
-			for (size_t i = 0; i < AES_BLOCK; i++) b[i] ^= x[i];
+			if (prefix != 0U)
+			{
+				b[0] = (uint8_t)(AadLen >> 8);
+				b[1] = (uint8_t)AadLen;
+			}
+			count = remaining < AES_BLOCK - prefix ? remaining : AES_BLOCK - prefix;
+			memcpy(b + prefix, data, count);
+			data += count;
+			remaining -= count;
+			prefix = 0U;
+			for (i = 0; i < AES_BLOCK; i++)
+			{
+				b[i] ^= x[i];
+			}
 			ok = AesEcbEncrypt(pKey, b, x);
 		}
-	}
-
-	// Message into the CBC-MAC.
-	for (size_t idx = 0; ok && idx < Len; idx += AES_BLOCK)
-	{
-		memset(b, 0, sizeof(b));
-		size_t count = Len - idx < AES_BLOCK ? Len - idx : AES_BLOCK;
-		memcpy(b, &pMsg[idx], count);
-		for (size_t i = 0; i < AES_BLOCK; i++) b[i] ^= x[i];
-		ok = AesEcbEncrypt(pKey, b, x);
 	}
 
 	// Mask with the A0 keystream.
@@ -448,16 +448,14 @@ bool CryptoAesModes::CcmMacTag(const uint8_t *pKey, const uint8_t *pNonce,
 		memset(b, 0, sizeof(b));
 		b[0] = (uint8_t)(l - 1U);
 		memcpy(&b[1], pNonce, NonceLen);
-		uint8_t s0[AES_BLOCK];
-		ok = AesEcbEncrypt(pKey, b, s0);
+		ok = AesEcbEncrypt(pKey, b, b);
 		if (ok)
 		{
-			for (size_t i = 0; i < AES_BLOCK; i++)
+			for (i = 0; i < AES_BLOCK; i++)
 			{
-				Tag[i] = x[i] ^ s0[i];
+				Tag[i] = x[i] ^ b[i];
 			}
 		}
-		AesWipe(s0, sizeof(s0));
 	}
 	AesWipe(x, sizeof(x));
 	AesWipe(b, sizeof(b));
