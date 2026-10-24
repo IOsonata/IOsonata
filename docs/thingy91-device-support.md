@@ -9,7 +9,7 @@ Working baseline: `prerelease_0.13_4`. This is a hardware inventory and implemen
 | nRF9160 LTE/GNSS | Modem | Existing LTE and GNSS examples |
 | nRF52840 Bluetooth/USB | UART/USB | Existing MCU and HCI support |
 | ADXL362 accelerometer | SPI | Existing `accel_adxl362` |
-| ADXL372 high-g accelerometer | SPI | `accel_adxl372` compiled; hardware validation pending |
+| ADXL372 high-g accelerometer | SPI | `accel_adxl372` integrated in the nRF9160 library; Thingy:91 SPI3 test project added; hardware validation pending |
 | BME680 environmental sensor | I2C | Existing `tphg_bme680` |
 | BH1749NUC color sensor | I2C | `color_bh1749`: RGB/IR readout, gain/timing and threshold interrupt support; Thingy:91 test project added; hardware validation pending |
 | 24CW160 EEPROM | I2C | Existing universal external-memory interface; configure address and geometry, hardware validation pending |
@@ -95,3 +95,4 @@ Working baseline: `prerelease_0.13_4`. This is a hardware inventory and implemen
 - BMM350 validation project: `ARM/Nordic/nRF91/nRF91x1/exemples/BMM350Test`.
 - ADXL367 validation project: `ARM/Nordic/nRF91/nRF91x1/exemples/ADXL367Test`.
 - GD25LE255E validation project: `ARM/Nordic/nRF91/nRF91x1/exemples/GD25LE255ETest`; read-only by default.
+- ADXL372 validation project: `ARM/Nordic/nRF91/nRF9160/exemples/ADXL372Test`.
