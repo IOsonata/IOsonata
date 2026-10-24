@@ -39,6 +39,23 @@ protected:
 	}
 };
 
+class AesFaultHooks : public CryptoSoftAes {
+public:
+	unsigned Begins = 0;
+	unsigned Ends = 0;
+	unsigned Blocks = 0;
+	unsigned FailBlock = 0;
+	bool Busy = false;
+protected:
+	bool AesOpBegin() override { Begins++; return !Busy; }
+	void AesOpEnd() override { Ends++; }
+	bool AesEcbEncrypt(const uint8_t *pKey, const uint8_t *pIn, uint8_t *pOut) override
+	{
+		Blocks++;
+		return Blocks != FailBlock && CryptoSoftAes::AesEcbEncrypt(pKey, pIn, pOut);
+	}
+};
+
 static Aes128Target hardware;
 
 CRYPTO_STATUS Crypto::Cipher(CRYPTO_CIPHER_ALG Alg, int bEncrypt, const CryptoKey &Key,
@@ -83,6 +100,7 @@ static void Reference(CRYPTO_CIPHER_ALG Alg, bool Encrypt, const uint8_t *pKey,
 
 int main(void)
 {
+	AesFaultHooks fault;
 	Crypto crypto;
 	CryptoSoftAes software;
 	Aes128Hooks inherited;
@@ -142,5 +160,40 @@ int main(void)
 	assert(s_TargetCalls == calls + 3);
 	puts("AES-256: 200 rounds against OpenSSL; software base, inherited hooks and hardware override PASS");
 	puts("Hardware overrides retain software behavior; busy and failed operations do not retry PASS");
+	k.Type = CRYPTO_KEY_AES_128;
+	k.Plain.Len = 16;
+	for (CRYPTO_CIPHER_ALG mode : modes)
+	{
+		len = mode == CRYPTO_CIPHER_CTR ? 33U : 48U;
+		for (int enc = 0; enc < 2; enc++)
+		{
+			for (unsigned fail = 0; fail <= 3; fail++)
+			{
+				fault.Begins = fault.Ends = fault.Blocks = 0;
+				fault.Busy = fail == 0;
+				fault.FailBlock = fail;
+				memset(output, 0xa5, sizeof(output));
+				memcpy(output + 1, input + 1, len);
+				if (enc != 0 || mode == CRYPTO_CIPHER_CTR)
+				{
+					assert(fault.Cipher(mode, enc, k, iv, 16, output + 1, len, output + 1) ==
+						(fail == 0 ? CRYPTO_STATUS_BUSY : CRYPTO_STATUS_FAIL));
+					assert(fault.Begins == 1 && fault.Ends == (fail != 0));
+					assert(fault.Blocks == fail);
+					for (size_t i = 1; i <= len; i++)
+					{
+						assert(output[i] == 0);
+					}
+				}
+				else
+				{
+					assert(fault.Cipher(mode, enc, k, iv, 16, output + 1, len, output + 1) == CRYPTO_STATUS_OK);
+					assert(fault.Begins == 0 && fault.Ends == 0 && fault.Blocks == 0);
+				}
+				assert(output[0] == 0xa5 && output[len + 1] == 0xa5);
+			}
+		}
+	}
+	puts("AES-128 mode failures: acquisition, every block, in-place wiping and bounds PASS");
 	return 0;
 }

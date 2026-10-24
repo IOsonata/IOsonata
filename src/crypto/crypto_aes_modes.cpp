@@ -75,180 +75,141 @@ CRYPTO_STATUS CryptoSoftAes::Cipher(CRYPTO_CIPHER_ALG Alg, int bEncrypt,
 	bool wide = Key.Type == CRYPTO_KEY_AES_256;
 	bool material = AesKeyMaterialOk(Key) || (wide && Key.Loc == CRYPTO_KEY_LOC_PLAIN &&
 		Key.Plain.pData != nullptr && Key.Plain.Len == 32U);
-	uint32_t required = bEncrypt != 0 ? CRYPTO_KEY_USE_ENCRYPT :
-									 CRYPTO_KEY_USE_DECRYPT;
+	bool encrypt = bEncrypt != 0 || Alg == CRYPTO_CIPHER_CTR;
+	bool acquire = encrypt && !wide;
+	uint32_t required = bEncrypt != 0 ? CRYPTO_KEY_USE_ENCRYPT : CRYPTO_KEY_USE_DECRYPT;
+	CRYPTO_STATUS status = CRYPTO_STATUS_OK;
+	uint8_t chain[AES_BLOCK];
+	uint8_t block[AES_BLOCK];
+	uint8_t saved[AES_BLOCK];
+	size_t off;
+	size_t count;
+	size_t i;
+	int carry;
+
 	if (!material || (Key.Usage & required) == 0U ||
 		pIn == nullptr || pOut == nullptr)
 	{
 		return CRYPTO_STATUS_UNSUPPORTED;
 	}
-
-	// AES-128 uses the virtual hardware primitive. AES-256 uses the software
-	// block without acquiring an AES-128-only peripheral. Both reuse these modes.
-	if (Alg == CRYPTO_CIPHER_ECB && bEncrypt != 0)
-	{
-		if ((Len & (AES_BLOCK - 1U)) != 0U)
-		{
-			return CRYPTO_STATUS_FAIL;
-		}
-		if (!wide && !AesOpBegin())
-		{
-			if (Len > 0U) memset(pOut, 0, Len);
-			return CRYPTO_STATUS_BUSY;
-		}
-		CRYPTO_STATUS status = CRYPTO_STATUS_OK;
-		for (size_t off = 0; off < Len; off += AES_BLOCK)
-		{
-			if (wide)
-			{
-				CryptoAesSoftEncryptBlock256(Key.Plain.pData, pIn + off, pOut + off);
-			}
-			else if (!AesEcbEncrypt(Key.Plain.pData, pIn + off, pOut + off))
-			{
-				status = CRYPTO_STATUS_FAIL;
-				break;
-			}
-		}
-		if (!wide)
-		{
-			AesOpEnd();
-		}
-		if (status != CRYPTO_STATUS_OK && Len > 0U)
-		{
-			memset(pOut, 0, Len);
-		}
-		return status;
-	}
-
-	// CTR and CBC encryption only require an AES encryption block.
-	// Hardware subclasses reuse these modes through AesEcbEncrypt.
-	if (Alg == CRYPTO_CIPHER_CTR ||
-		(Alg == CRYPTO_CIPHER_CBC && bEncrypt != 0))
-	{
-		if (pIv == nullptr || IvLen != AES_BLOCK ||
-			(Alg == CRYPTO_CIPHER_CBC && (Len & (AES_BLOCK - 1U)) != 0U))
-		{
-			return CRYPTO_STATUS_FAIL;
-		}
-		if (!wide && !AesOpBegin())
-		{
-			if (Len > 0U) memset(pOut, 0, Len);
-			return CRYPTO_STATUS_BUSY;
-		}
-		uint8_t counter[AES_BLOCK];
-		uint8_t block[AES_BLOCK];
-		memcpy(counter, pIv, AES_BLOCK);
-		CRYPTO_STATUS status = CRYPTO_STATUS_OK;
-		for (size_t off = 0; off < Len; off += AES_BLOCK)
-		{
-			if (Alg == CRYPTO_CIPHER_CBC)
-			{
-				for (size_t i = 0; i < AES_BLOCK; i++)
-				{
-					block[i] = (uint8_t)(pIn[off + i] ^ counter[i]);
-				}
-				if (wide)
-				{
-					CryptoAesSoftEncryptBlock256(Key.Plain.pData, block, pOut + off);
-				}
-				else if (!AesEcbEncrypt(Key.Plain.pData, block, pOut + off))
-				{
-					status = CRYPTO_STATUS_FAIL;
-					break;
-				}
-				memcpy(counter, pOut + off, AES_BLOCK);
-			}
-			else
-			{
-				if (wide)
-				{
-					CryptoAesSoftEncryptBlock256(Key.Plain.pData, counter, block);
-				}
-				else if (!AesEcbEncrypt(Key.Plain.pData, counter, block))
-				{
-					status = CRYPTO_STATUS_FAIL;
-					break;
-				}
-				size_t n = Len - off < AES_BLOCK ? Len - off : AES_BLOCK;
-				for (size_t i = 0; i < n; i++)
-				{
-					pOut[off + i] = (uint8_t)(pIn[off + i] ^ block[i]);
-				}
-				for (int i = AES_BLOCK - 1; i >= 0; i--)
-				{
-					if (++counter[i] != 0U)
-					{
-						break;
-					}
-				}
-			}
-		}
-		AesWipe(block, sizeof(block));
-		AesWipe(counter, sizeof(counter));
-		if (!wide)
-		{
-			AesOpEnd();
-		}
-		if (status != CRYPTO_STATUS_OK && Len > 0U)
-		{
-			memset(pOut, 0, Len);
-		}
-		return status;
-	}
-
-	// All encryption and CTR operations have already used the virtual ECB
-	// primitive. Only software ECB/CBC decryption remains here.
-	if (bEncrypt != 0 || (Alg != CRYPTO_CIPHER_ECB &&
-		Alg != CRYPTO_CIPHER_CBC))
+	if (Alg != CRYPTO_CIPHER_ECB && Alg != CRYPTO_CIPHER_CBC &&
+		Alg != CRYPTO_CIPHER_CTR)
 	{
 		return CRYPTO_STATUS_UNSUPPORTED;
 	}
-	if ((Len & (AES_BLOCK - 1U)) != 0U ||
-		(Alg == CRYPTO_CIPHER_CBC &&
-		(pIv == nullptr || IvLen != AES_BLOCK)))
+	if ((Alg != CRYPTO_CIPHER_CTR && (Len & (AES_BLOCK - 1U)) != 0U) ||
+		(Alg != CRYPTO_CIPHER_ECB && (pIv == nullptr || IvLen != AES_BLOCK)))
 	{
 		return CRYPTO_STATUS_FAIL;
 	}
 
-	if (Alg == CRYPTO_CIPHER_ECB)
+	// Only AES-128 encryption uses the hardware hooks. CTR uses encryption
+	// in both directions; AES-256 and ECB/CBC decryption stay in software.
+	if (acquire && !AesOpBegin())
 	{
-		for (size_t off = 0; off < Len; off += AES_BLOCK)
+		if (Len > 0U)
 		{
-			if (wide)
-			{
-				CryptoAesSoftDecryptBlock256(Key.Plain.pData, pIn + off, pOut + off);
-			}
-			else
-			{
-				CryptoAesSoftDecryptBlock(Key.Plain.pData, pIn + off, pOut + off);
-			}
+			memset(pOut, 0, Len);
 		}
+		return CRYPTO_STATUS_BUSY;
 	}
-	else
+	if (Alg != CRYPTO_CIPHER_ECB)
 	{
-		uint8_t chain[AES_BLOCK], block[AES_BLOCK];
 		memcpy(chain, pIv, AES_BLOCK);
-		for (size_t off = 0; off < Len; off += AES_BLOCK)
+	}
+	for (off = 0; off < Len; off += count)
+	{
+		count = Len - off < AES_BLOCK ? Len - off : AES_BLOCK;
+		if (Alg == CRYPTO_CIPHER_CTR)
+		{
+			memcpy(block, chain, AES_BLOCK);
+		}
+		else
 		{
 			memcpy(block, pIn + off, AES_BLOCK);
+			if (Alg == CRYPTO_CIPHER_CBC)
+			{
+				if (encrypt)
+				{
+					for (i = 0; i < AES_BLOCK; i++)
+					{
+						block[i] ^= chain[i];
+					}
+				}
+				else
+				{
+					memcpy(saved, block, AES_BLOCK);
+				}
+			}
+		}
+
+		if (!encrypt)
+		{
 			if (wide)
 			{
-				CryptoAesSoftDecryptBlock256(Key.Plain.pData, block, pOut + off);
+				CryptoAesSoftDecryptBlock256(Key.Plain.pData, block, block);
 			}
 			else
 			{
-				CryptoAesSoftDecryptBlock(Key.Plain.pData, block, pOut + off);
+				CryptoAesSoftDecryptBlock(Key.Plain.pData, block, block);
 			}
-			for (size_t i = 0; i < AES_BLOCK; i++)
-			{
-				pOut[off + i] ^= chain[i];
-			}
-			memcpy(chain, block, AES_BLOCK);
 		}
-		AesWipe(chain, sizeof(chain));
-		AesWipe(block, sizeof(block));
+		else if (wide)
+		{
+			CryptoAesSoftEncryptBlock256(Key.Plain.pData, block, block);
+		}
+		else if (!AesEcbEncrypt(Key.Plain.pData, block, block))
+		{
+			status = CRYPTO_STATUS_FAIL;
+			break;
+		}
+
+		if (Alg == CRYPTO_CIPHER_CTR)
+		{
+			for (i = 0; i < count; i++)
+			{
+				pOut[off + i] = pIn[off + i] ^ block[i];
+			}
+			for (carry = AES_BLOCK - 1; carry >= 0; carry--)
+			{
+				if (++chain[carry] != 0U)
+				{
+					break;
+				}
+			}
+		}
+		else
+		{
+			if (Alg == CRYPTO_CIPHER_CBC)
+			{
+				if (encrypt)
+				{
+					memcpy(chain, block, AES_BLOCK);
+				}
+				else
+				{
+					for (i = 0; i < AES_BLOCK; i++)
+					{
+						block[i] ^= chain[i];
+					}
+					memcpy(chain, saved, AES_BLOCK);
+				}
+			}
+			memcpy(pOut + off, block, AES_BLOCK);
+		}
 	}
-	return CRYPTO_STATUS_OK;
+	AesWipe(chain, sizeof(chain));
+	AesWipe(block, sizeof(block));
+	AesWipe(saved, sizeof(saved));
+	if (acquire)
+	{
+		AesOpEnd();
+	}
+	if (status != CRYPTO_STATUS_OK && Len > 0U)
+	{
+		memset(pOut, 0, Len);
+	}
+	return status;
 }
 
 static void CmacSubkey(const uint8_t In[16], uint8_t Out[16])
