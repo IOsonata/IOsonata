@@ -115,17 +115,31 @@ int CryptoEngineTest();
 int main()
 {
 	int result;
-	Crypto *retry;
-	alignas(CRYPTO_MEMALIGN) uint8_t arena[CRYPTO_MEMSIZE];
+	Crypto retry;
+	Crypto other;
+	uint8_t failedOutput[32];
+	unsigned initializedWrites;
 
 	assert(modelWrites == 0);
-	assert(CryptoCreate(arena, sizeof(arena)) == nullptr);
+	assert(!retry.Init());
+	memset(failedOutput, 0xa5, sizeof(failedOutput));
+	assert(retry.Random(failedOutput, sizeof(failedOutput)) == CRYPTO_STATUS_FAIL);
+	assert(P256IsZero(failedOutput, sizeof(failedOutput)));
 	assert(modelWrites == 0);
 	rngAvailable = true;
-	retry = CryptoCreate(arena, sizeof(arena));
-	assert(retry != nullptr);
-	retry->Disable();
-	retry->~Crypto();
+	assert(retry.Init());
+	initializedWrites = modelWrites;
+	assert(other.Init());
+	assert(retry.Init());
+	assert(modelWrites == initializedWrites);
+	retry.Disable();
+	assert(!retry.Valid());
+	retry.Reset();
+	assert(retry.Valid());
+	assert(modelWrites == initializedWrites);
+	retry.Disable();
+	assert(other.SelfTest() == 0);
+	other.Disable();
 	result = CryptoEngineTest();
 	assert(result == 0);
 	for(unsigned i=0;i<16;i++)key[i]=i+1;

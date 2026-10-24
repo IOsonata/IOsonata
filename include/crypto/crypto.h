@@ -32,10 +32,13 @@ SOFTWARE.
 #include "crypto/crypto_softrng.h"
 #include "crypto/crypto_uecc.h"
 
-/// Software crypto device. Target libraries derive from this class and replace
-/// accelerated operations. Keys and streaming contexts remain caller-owned.
-/// The software RNG is deterministic: key generation and signing require a
-/// target with secure entropy. Verify does not require secure entropy.
+/// Directly declared crypto device, for example Crypto g_Crypto.
+/// Construction initializes software state only. Call Init() after system
+/// startup to bind the MCU library implementation; no allocation is performed.
+/// Hardware engines are shared inside that library. Disable affects this
+/// object's access only; peripheral recovery and locking remain in the drivers.
+/// Keys and hash contexts are caller-owned. Initialize before sizing contexts,
+/// and finish operations before Disable, Reset or destruction.
 class Crypto : public CryptoSoftAes, public CryptoSoftSha256,
 			   public CryptoUecc, public CryptoSoftRng {
 public:
@@ -43,26 +46,49 @@ public:
 	Crypto(const Crypto &) = delete;
 	Crypto &operator=(const Crypto &) = delete;
 
+	/// Bind and enable this object. False on hardware initialization failure;
+	/// a failed hardware path never selects software instead. Startup calls
+	/// must be serialized, before concurrent operation access begins.
+	bool Init();
 	bool Enable() override;
 	void Disable() override;
 	void Reset() override;
 	int SelfTest() override;
+	CRYPTO_STATUS Cipher(CRYPTO_CIPHER_ALG Alg, int bEncrypt, const CryptoKey &Key,
+			const uint8_t *pIv, size_t IvLen, const uint8_t *pIn, size_t Len, uint8_t *pOut) override;
+	CRYPTO_STATUS Seal(CRYPTO_AEAD_ALG Alg, const CryptoKey &Key,
+			const uint8_t *pNonce, size_t NonceLen, const uint8_t *pAad, size_t AadLen,
+			const uint8_t *pMsg, size_t Len, uint8_t *pOut, uint8_t *pTag, size_t TagLen) override;
+	CRYPTO_STATUS Open(CRYPTO_AEAD_ALG Alg, const CryptoKey &Key,
+			const uint8_t *pNonce, size_t NonceLen, const uint8_t *pAad, size_t AadLen,
+			const uint8_t *pMsg, size_t Len, uint8_t *pOut, const uint8_t *pTag, size_t TagLen) override;
+	CRYPTO_STATUS Hash(CRYPTO_HASH_ALG Alg, const uint8_t *pMsg, size_t Len, uint8_t *pDigest) override;
+	size_t KeyCtxSize() const override;
+	size_t KeyCtxAlign() const override;
+	void KeyReset(void *pKeyCtx) override;
+	CRYPTO_STATUS KeyGen(CRYPTO_CURVE Curve, void *pKeyCtx, uint8_t *pPubKey) override;
+	CRYPTO_STATUS KeyImport(CRYPTO_CURVE Curve, void *pKeyCtx,
+			const uint8_t *pPrivKey, uint8_t *pPubKey) override;
+	CRYPTO_STATUS Agree(CRYPTO_CURVE Curve, void *pKeyCtx,
+			const uint8_t *pPeerPubKey, uint8_t *pSharedX, bool bKeepKey = false) override;
+	CRYPTO_STATUS Sign(CRYPTO_CURVE Curve, const CryptoKey &Key,
+			const uint8_t *pHash, size_t HashLen, uint8_t *pSig) override;
+	CRYPTO_STATUS Verify(CRYPTO_CURVE Curve, const uint8_t *pPubKey,
+			const uint8_t *pHash, size_t HashLen, const uint8_t *pSig) override;
 	CRYPTO_STATUS Mac(CRYPTO_MAC_ALG Alg, const CryptoKey &Key,
-					  const uint8_t *pMsg, size_t Len,
-					  uint8_t *pMac, size_t MacLen) override;
+			const uint8_t *pMsg, size_t Len, uint8_t *pMac, size_t MacLen) override;
+	CRYPTO_STATUS Random(uint8_t *pOut, size_t Len) override;
+	bool IsSecure() const override;
+	size_t HashCtxSize() const override;
+	size_t HashCtxAlign() const override;
+	CRYPTO_STATUS HashInit(CRYPTO_HASH_ALG Alg, void *pHashCtx) override;
+	CRYPTO_STATUS HashUpdate(void *pHashCtx, const uint8_t *pMsg, size_t Len) override;
+	CRYPTO_STATUS HashFinal(void *pHashCtx, uint8_t *pDigest) override;
+
+private:
+	// Borrowed target implementation with library lifetime. Null on software
+	// targets and inside the target implementation itself.
+	Crypto *vpHardware = nullptr;
 };
-
-/// Common caller-owned arena for the largest in-tree target crypto object.
-/// Each target checks its size and alignment at compile time. No heap or
-/// singleton is used. Construct after system initialization; do not copy the
-/// object or reuse its arena while operations or caller contexts are active.
-#define CRYPTO_MEMSIZE		1024U
-#define CRYPTO_MEMALIGN		alignof(uint64_t)
-
-/// Construct and enable the MCU library's derived Crypto object in pMem.
-/// Returns nullptr for invalid storage or initialization failure. Hardware
-/// initialization failure never selects software instead. Call Disable() and
-/// the virtual destructor pCrypto->~Crypto() before reusing caller storage.
-Crypto *CryptoCreate(void *pMem, size_t MemSize);
 
 #endif

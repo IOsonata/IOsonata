@@ -24,27 +24,11 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ----------------------------------------------------------------------------*/
-#include <new>
 #include "crypto/crypto.h"
 
-static_assert(sizeof(Crypto) <= CRYPTO_MEMSIZE, "Crypto arena too small");
-static_assert(alignof(Crypto) <= CRYPTO_MEMALIGN, "Crypto arena alignment");
-
-Crypto *CryptoCreate(void *pMem, size_t MemSize)
+bool Crypto::Init()
 {
-	Crypto *pCrypto;
-
-	if (pMem == nullptr || MemSize < sizeof(Crypto) ||
-		(uintptr_t)pMem % alignof(Crypto) != 0U)
-	{
-		return nullptr;
-	}
-	pCrypto = new (pMem) Crypto();
-	if (!pCrypto->Enable())
-	{
-		pCrypto->Disable();
-		pCrypto->~Crypto();
-		return nullptr;
-	}
-	return pCrypto;
+	vpHardware = nullptr;
+	vbValid = true;
+	return true;
 }

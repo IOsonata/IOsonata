@@ -24,7 +24,6 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ----------------------------------------------------------------------------*/
-#include <new>
 #include "crypto/crypto.h"
 #include "nrf.h"
 #include "crypto_rng_nrf.h"
@@ -43,7 +42,8 @@ SOFTWARE.
 #define CRYPTO_TARGET_PKA CryptoCc3xx
 #endif
 
-// The application owns one object. Existing drivers retain peripheral locking.
+// Library-owned hardware implementation. Application Crypto objects borrow it;
+// their Disable and destruction do not stop other users of these peripherals.
 class CryptoNordic : public Crypto {
 public:
 	bool Enable() override
@@ -70,7 +70,8 @@ public:
 		{
 			return false;
 		}
-		return Crypto::Enable();
+		vbValid = true;
+		return true;
 	}
 
 	void Disable() override
@@ -89,7 +90,7 @@ public:
 	void Reset() override
 	{
 		Disable();
-		Crypto::Reset();
+		CryptoSoftRng::Reset();
 		(void)Enable();
 	}
 
@@ -206,24 +207,20 @@ private:
 #endif
 };
 
-static_assert(sizeof(CryptoNordic) <= CRYPTO_MEMSIZE, "Crypto arena too small");
-static_assert(alignof(CryptoNordic) <= CRYPTO_MEMALIGN, "Crypto arena alignment");
-
-Crypto *CryptoCreate(void *pMem, size_t MemSize)
+bool Crypto::Init()
 {
-	CryptoNordic *pCrypto;
+	static CryptoNordic hardware;
 
-	if (pMem == nullptr || MemSize < sizeof(CryptoNordic) ||
-		(uintptr_t)pMem % alignof(CryptoNordic) != 0U)
+	if (vbValid)
 	{
-		return nullptr;
+		return true;
 	}
-	pCrypto = new (pMem) CryptoNordic();
-	if (!pCrypto->Enable())
+	if (!hardware.Enable())
 	{
-		pCrypto->Disable();
-		pCrypto->~CryptoNordic();
-		return nullptr;
+		hardware.Disable();
+		return false;
 	}
-	return pCrypto;
+	vpHardware = &hardware;
+	vbValid = true;
+	return true;
 }

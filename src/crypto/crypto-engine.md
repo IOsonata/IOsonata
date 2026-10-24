@@ -44,36 +44,53 @@ SHA-256/HMAC, P-256 and RNG classes through inheritance. The shared virtual
 use virtual `MacEngine` inheritance; `Crypto::Mac` dispatches CMAC and HMAC
 by algorithm. It does not duplicate the cryptographic implementations.
 
-The MCU library supplies one strong `CryptoCreate` definition. It constructs
-`Crypto`, `CryptoNordic` or `CryptoStm32` in caller-owned storage. The latter
-two derive from `Crypto`, override accelerated operations and retain inherited
-software operations elsewhere. Existing hardware drivers are members of the
-target object, preserving their register access and peripheral arbitration.
+The application declares a normal C++ object. Its constructor initializes
+software state without touching peripherals. After system startup, `Init()`
+binds it to the implementation provided by the linked MCU library:
 
 ```cpp
 #include "crypto/crypto.h"
 
-alignas(CRYPTO_MEMALIGN) static uint8_t s_CryptoMem[CRYPTO_MEMSIZE];
+Crypto g_Crypto;
 
-// After system initialization:
-Crypto *pCrypto = CryptoCreate(s_CryptoMem, sizeof(s_CryptoMem));
-// Check pCrypto before use. The same object provides Cipher, Mac, Seal/Open,
-// Hash, Random, KeyGen/Agree, and Sign/Verify.
+bool InitApplicationCrypto(void)
+{
+	return g_Crypto.Init();
+}
 ```
 
-The application owns this object, not seven independently acquired services.
-Existing consumers accepting capability pointers can receive the same object
-through ordinary base conversion. There are no default-engine singleton
-getters. Separate objects own separate software RNG state and engine state;
-hardware peripheral locks remain shared where required by the drivers.
+The same object provides Cipher, Mac, Seal/Open, Hash, Random, KeyGen/Agree and
+Sign/Verify. Its public layout is identical across MCU libraries. There is no
+raw object arena, placement construction, heap allocation or public factory.
+The compiler handles object storage, alignment and lifetime.
 
-`CRYPTO_MEMSIZE` is a common maximum arena, not a dynamic allocation. Every
-target checks size and alignment at compile time, and the factory checks the
-actual object size and alignment at runtime. Invalid storage or failed hardware
-initialization returns null. No hardware failure triggers software selection.
-Call `Disable()` and `pCrypto->~Crypto()` before reusing the arena. Keys and
-streaming hash contexts remain in caller storage and must not outlive the
-object or be reused across implementations. Do not copy a crypto object.
+The library supplies one strong `Crypto::Init` definition. Software-only targets
+use the object's inherited software implementations. Nordic and applicable STM32
+targets bind a private `CryptoNordic` or `CryptoStm32` implementation containing
+the existing hardware drivers. These library-owned objects derive from `Crypto`
+and replace accelerated operations, retaining the existing drivers' arbitration
+and recovery. The application object itself remains a `Crypto`; initialization
+does not change its type or construct another object over it.
+
+Hardware engines are shared for the lifetime of the MCU library. Repeated
+initialization does not reset an engine already in use. `Disable()` marks only
+the calling application object invalid; it does not stop another object's
+hardware access. `Enable()` rebinds through `Init()`. `Reset()` resets local
+software RNG state and reinitializes the application object; hardware fault
+recovery remains inside the shared drivers. Hardware engines remain enabled
+once initialized. An application's destruction does not shut them down.
+
+A failed hardware initialization returns false and leaves the application object
+invalid. It never silently selects software. Operations on an invalid object
+fail; output-producing operations clear their output where its size is known.
+Initialize before querying context requirements, and finish operations before
+Disable, Reset or destruction. Keys and streaming hash contexts remain in caller
+storage; do not reuse contexts across implementations. Startup initialization
+must be serialized before concurrent operation access begins. Objects cannot
+be copied because their software P-256 implementation refers to their RNG.
+
+Existing consumers accepting capability pointers can receive `&g_Crypto` through
+ordinary base conversion. Software-only objects have independent RNG state.
 
 | MCU library | AES / CMAC / AEAD | SHA-256 / HMAC | ECDH | ECDSA | RNG |
 |---|---|---|---|---|---|
@@ -90,11 +107,11 @@ This selection reflects existing IOsonata drivers. A hardware block with no
 implemented driver is not advertised as accelerated. Desktop projects and the
 incomplete RISC-V nRF54H20 project are not MCU integration targets here.
 
-Specialized placement factories remain available to existing library consumers.
-The shared CryptoTest uses only `CryptoCreate` for the object under test;
-explicit software objects are independent references. Link the matching MCU
-library normally. The strong factory reference extracts its object from the
-archive without weak fallbacks or linker `--undefined` options.
+Specialized legacy placement factories remain available to existing library
+consumers. The shared CryptoTest declares a `Crypto` object and calls `Init()`;
+explicit software objects remain independent references. Link the matching MCU
+library normally. The strong `Crypto::Init` reference extracts its implementation
+from the archive without weak fallbacks or linker forcing options.
 
 ## Per-instance key state
 

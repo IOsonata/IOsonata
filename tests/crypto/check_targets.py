@@ -38,7 +38,8 @@ with tempfile.TemporaryDirectory(prefix="crypto-targets-") as temp:
             *["-D" + define for define in definitions], "-c", str(source), "-o", str(obj)],
             check=True)
         symbols = subprocess.check_output(["nm", "-C", str(obj)], text=True)
-        factories = [line for line in symbols.splitlines() if " T CryptoCreate(" in line]
-        assert len(factories) == 1, (name, factories)
+        initializers = [line for line in symbols.splitlines() if " T Crypto::Init()" in line]
+        assert len(initializers) == 1, (name, initializers)
+        assert "CryptoCreate" not in symbols
         assert "CryptoCipherInstance" not in symbols
-        print(name, "derived object and strong factory compile")
+        print(name, "direct object and target Init compile")

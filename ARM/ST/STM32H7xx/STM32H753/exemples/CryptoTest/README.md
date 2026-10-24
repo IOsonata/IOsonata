@@ -1,7 +1,7 @@
 # CryptoTest: NUCLEO-H753ZI
 
 This project runs the existing `exemples/crypto/crypto_engine_test.cpp`, also
-used by STM32WBA. The MCU library constructs one derived `Crypto` object using `CryptoRngStm32` for hardware random numbers,
+used by STM32WBA. The MCU library binds an internal implementation using `CryptoRngStm32` for hardware random numbers,
 `CryptoStm32H7Aes` for the CRYP AES accelerator and
 `CryptoStm32H7Hash` for one-shot SHA-256 and HMAC-SHA-256 on HASH.
 P-256 uses `CryptoUecc`.
@@ -80,11 +80,12 @@ overlapping output, and input/key policy validation. The board result is
 throughput measurement or entropy certification is claimed.
 
 
-The shared test now constructs the object through `CryptoCreate`; `board.h`
+The shared test declares a `Crypto` object and calls its `Init()` member; `board.h`
 contains no engine selection. Rebuild both the library and application because
-MAC inheritance and object layout changed. Historical 92-check board results
+the generic object layout and initialization changed. Historical 92-check board results
 above predate this integration. The updated H753 host register model passes
-100 checks with zero failures or skips at O0 and O2 under ASan/UBSan. Its entropy
+100 checks with zero failures or skips at O0 and O2 under ASan/UBSan. Direct construction, failed initialization/retry and independent access by two
+application objects are also checked. Its entropy
 adapter uses host OpenSSL; physical RNG remains covered by the separate RNG
 register model and prior board tests. A new board run is required for this
 object integration.

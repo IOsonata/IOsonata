@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build real software crypto as an archive; test generic object construction.
+"""Build real software crypto as an archive; test direct object construction and initialization.
 Requires gcc, g++ and ar. No MCU toolchain or hardware is exercised.
 """
 from pathlib import Path

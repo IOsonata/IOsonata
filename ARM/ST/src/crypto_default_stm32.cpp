@@ -24,7 +24,6 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ----------------------------------------------------------------------------*/
-#include <new>
 #include "crypto/crypto.h"
 #include "stm32.h"
 #if defined(STM32WBA65xx)
@@ -39,7 +38,8 @@ SOFTWARE.
 #include "crypto_rng_stm32.h"
 #endif
 
-// The application owns one object. Existing drivers retain peripheral locking.
+// Library-owned hardware implementation. Application Crypto objects borrow it;
+// their Disable and destruction do not stop other users of these peripherals.
 class CryptoStm32 : public Crypto {
 public:
 	bool Enable() override
@@ -80,7 +80,8 @@ public:
 			return false;
 		}
 #endif
-		return Crypto::Enable();
+		vbValid = true;
+		return true;
 	}
 
 	void Disable() override
@@ -118,7 +119,7 @@ public:
 	void Reset() override
 	{
 		Disable();
-		Crypto::Reset();
+		CryptoSoftRng::Reset();
 		(void)Enable();
 	}
 
@@ -273,24 +274,24 @@ private:
 #endif
 };
 
-static_assert(sizeof(CryptoStm32) <= CRYPTO_MEMSIZE, "Crypto arena too small");
-static_assert(alignof(CryptoStm32) <= CRYPTO_MEMALIGN, "Crypto arena alignment");
-
-Crypto *CryptoCreate(void *pMem, size_t MemSize)
+bool Crypto::Init()
 {
-	CryptoStm32 *pCrypto;
+#if defined(CRYPTO_TARGET_AES) || IOSONATA_STM32_HAS_RNG
+	static CryptoStm32 hardware;
 
-	if (pMem == nullptr || MemSize < sizeof(CryptoStm32) ||
-		(uintptr_t)pMem % alignof(CryptoStm32) != 0U)
+	if (vbValid)
 	{
-		return nullptr;
+		return true;
 	}
-	pCrypto = new (pMem) CryptoStm32();
-	if (!pCrypto->Enable())
+	if (!hardware.Enable())
 	{
-		pCrypto->Disable();
-		pCrypto->~CryptoStm32();
-		return nullptr;
+		hardware.Disable();
+		return false;
 	}
-	return pCrypto;
+	vpHardware = &hardware;
+#else
+	vpHardware = nullptr;
+#endif
+	vbValid = true;
+	return true;
 }

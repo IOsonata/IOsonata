@@ -57,7 +57,6 @@ SOFTWARE.
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
-#include <new>
 
 #include "crypto/crypto.h"
 #include "crypto/crypto_softaes.h"
@@ -134,11 +133,11 @@ static UART s_Uart;
 
 static int s_pass, s_fail, s_skip;
 
-alignas(CryptoSoftAes) static uint8_t s_SwAesMem[CRYPTO_SOFTAES_MEMSIZE];
-alignas(CryptoUecc) static uint8_t s_SwPkaMem[CRYPTO_UECC_MEMSIZE];
-alignas(CRYPTO_MEMALIGN) static uint8_t s_CryptoMem[CRYPTO_MEMSIZE];
+static CryptoSoftAes s_ReferenceAes;
+static CryptoUecc s_ReferencePka;
+static Crypto s_Crypto;
 
-alignas(EngineTestRng) static uint8_t s_SwRngMem[sizeof(EngineTestRng)];
+static EngineTestRng s_ReferenceRng;
 
 alignas(CRYPTO_KEYCTX_ALIGN_MAX) static uint8_t s_CtxA[CRYPTO_KEYCTX_MAX];
 alignas(CRYPTO_KEYCTX_ALIGN_MAX) static uint8_t s_CtxB[CRYPTO_KEYCTX_MAX];
@@ -1238,27 +1237,27 @@ static bool DefaultPkaChecks(KeyAgreeEngine *pKa, SignEngine *pSign,
 
 int CryptoEngineTest(void)
 {
-	Crypto *crypto = CryptoCreate(s_CryptoMem, sizeof(s_CryptoMem));
-	EngineTestRng *swRng = new (s_SwRngMem) EngineTestRng();
-	CryptoSoftAes *swAes = CryptoSoftAesCreate(s_SwAesMem, sizeof(s_SwAesMem));
-	CryptoUecc *swPka;
+	Crypto *crypto = &s_Crypto;
+	bool initialized = s_Crypto.Init();
+	EngineTestRng *swRng = &s_ReferenceRng;
+	CryptoSoftAes *swAes = &s_ReferenceAes;
+	CryptoUecc *swPka = &s_ReferencePka;
+	bool references;
 	bool contexts;
 
 	s_pass = 0;
 	s_fail = 0;
 	s_skip = 0;
 	printf("\r\nCrypto engine test\r\n");
-	swRng->Enable();
-	swPka = CryptoUeccCreate(s_SwPkaMem, sizeof(s_SwPkaMem), swRng);
+	swRng->Reset();
+	references = swRng->Enable() && swAes->Enable();
+	swPka->SetRng(swRng);
+	references = swPka->Enable() && references;
 	check("crypto and reference objects initialize",
-		crypto != nullptr && swAes != nullptr && swPka != nullptr);
+		initialized && references);
 	if (s_fail != 0)
 	{
-		if (crypto != nullptr)
-		{
-			crypto->Disable();
-			crypto->~Crypto();
-		}
+		crypto->Disable();
 		printf("\r\n%d passed, %d failed, %d skipped\r\n", s_pass, s_fail, s_skip);
 		return 1;
 	}
@@ -1269,7 +1268,6 @@ int CryptoEngineTest(void)
 	if (!contexts)
 	{
 		crypto->Disable();
-		crypto->~Crypto();
 		return 1;
 	}
 #ifdef CRYPTO_TEST_TICKS_INIT
@@ -1294,7 +1292,6 @@ int CryptoEngineTest(void)
 
 	printf("\r\n%d passed, %d failed, %d skipped\r\n", s_pass, s_fail, s_skip);
 	crypto->Disable();
-	crypto->~Crypto();
 	return s_fail == 0 ? 0 : 1;
 }
 
