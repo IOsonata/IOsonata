@@ -13,7 +13,7 @@ import subprocess
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
-SOURCES = ['src/net/tls.cpp', 'src/crypto/crypto_softaes.cpp', 'src/crypto/crypto_aes_soft_block.cpp',
+SOURCES = ['src/net/tls.cpp', 'src/crypto/crypto_softaes.cpp', 'src/crypto/crypto_aes_soft.cpp',
            'src/crypto/crypto_softsha256.cpp', 'src/crypto/crypto_p256.cpp',
            'src/crypto/x509.cpp',
            'src/device.cpp', 'src/device_intrf.cpp', 'src/crypto/crypto_uecc.cpp']

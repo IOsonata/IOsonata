@@ -1676,9 +1676,9 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_softaes.cpp</locationURI>
 		</link>
 		<link>
-			<name>src/crypto/crypto_aes_soft_block.cpp</name>
+			<name>src/crypto/crypto_aes_soft.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_aes_soft_block.cpp</locationURI>
+			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_aes_soft.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/crypto/crypto_softrng.cpp</name>

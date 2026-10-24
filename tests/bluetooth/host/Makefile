@@ -121,7 +121,7 @@ bt_adv_uuid_test_SOURCES := \
 	$(ROOT)/src/bluetooth/bt_adv.cpp \
 	$(ROOT)/src/bluetooth/bt_ead.cpp \
 	$(ROOT)/src/crypto/crypto_softaes.cpp \
-	$(ROOT)/src/crypto/crypto_aes_soft_block.cpp \
+	$(ROOT)/src/crypto/crypto_aes_soft.cpp \
 	$(ROOT)/src/crypto/crypto_softrng.cpp \
 	$(ROOT)/src/crypto/crypto_p256.cpp \
 	$(ROOT)/src/device.cpp \

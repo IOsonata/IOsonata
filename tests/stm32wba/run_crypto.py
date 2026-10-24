@@ -94,7 +94,7 @@ def build(tmp):
          ['-DCRYPTO_TEST_NO_MAIN', f'-DCRYPTO_TEST_SOAK_PKA={SOAK_PKA}', f'-DCRYPTO_TEST_SOAK_AES={SOAK_AES}']),
         (ROOT / 'ARM/ST/STM32WBAxx/src/crypto_stm32wba.cpp', []),
         (ROOT / 'src/crypto/crypto_softaes.cpp', []),
-        (ROOT / 'src/crypto/crypto_aes_soft_block.cpp', []),
+        (ROOT / 'src/crypto/crypto_aes_soft.cpp', []),
         (ROOT / 'src/crypto/crypto_softrng.cpp', []),
         (ROOT / 'src/crypto/crypto_p256.cpp', []),
         (ROOT / 'src/crypto/crypto_uecc.cpp', []),
