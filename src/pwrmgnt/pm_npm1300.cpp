@@ -58,6 +58,21 @@ bool PmnPM1300::Init(const PwrMgntCfg_t &Cfg, DeviceIntrf * const pIntrf)
 	if (Read((uint8_t *)&addr, 2, info, sizeof(info)) != sizeof(info))
 		return false;
 
+	if (Cfg.pBatProf != NULL && vNtcBeta != 0)
+	{
+		uint8_t ntc = 0;
+		switch (Cfg.pBatProf->ThermResistor)
+		{
+		case 10: ntc = NPM1300_ADC_ADCNTCRSEL_10K; break;
+		case 47: ntc = NPM1300_ADC_ADCNTCRSEL_47K; break;
+		case 100: ntc = NPM1300_ADC_ADCNTCRSEL_100K; break;
+		default: return false;
+		}
+		addr = EndianCvt16(NPM1300_ADC_ADCNTCRSEL_REG);
+		if (!Write8((uint8_t *)&addr, 2, ntc))
+			return false;
+	}
+
 	addr = EndianCvt16(NPM1300_ADC_ADCCONFIG_REG);
 	if (!Write8((uint8_t *)&addr, 2, NPM1300_ADC_ADCCONFIG_AUTOENABLE))
 		return false;
@@ -110,7 +125,8 @@ bool PmnPM1300::Init(const FuelGaugeCfg_t &Cfg, DeviceIntrf * const pIntrf,
  */
 uint16_t PmnPM1300::Level()
 {
-	return 0;
+	/* No fuel-gauge model is installed; do not report 0% for unknown state. */
+	return UINT16_MAX;
 }
 
 /**
