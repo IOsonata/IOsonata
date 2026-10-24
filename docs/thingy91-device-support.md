@@ -14,8 +14,8 @@ Working baseline: `prerelease_0.13_4`. This is a hardware inventory and implemen
 | BH1749NUC color sensor | I2C | `color_bh1749`: RGB/IR readout, gain/timing and threshold interrupt support; Thingy:91 test project added; hardware validation pending |
 | 24CW160 EEPROM | I2C | Existing universal external-memory interface; configure address and geometry, hardware validation pending |
 | ADP5360 PMIC, charger and fuel monitor | I2C | `pm_adp5360`: BUCK/BUCKBOOST, charger/status, battery SOC/voltage, fault/PGOOD support; read-only Thingy:91 test added; hardware validation pending |
-| RGB LEDs, buttons, buzzer | GPIO/PWM | Board-specific pin/power configuration required |
-| Battery measurements and sensor rail enables | ADC/GPIO | Board-specific integration required |
+| RGB LED, button, buzzer, nRF52840 reset | GPIO/PWM | Shared Thingy:91 board helper and board test added; hardware validation pending |
+| Board power rails | ADP5360 | 1.8 V BUCK and 3.3 V BUCKBOOST are modeled always-on by the current Nordic board description; status is covered by ADP5360Test and no separate nRF9160 sensor-rail enable GPIO is defined |
 
 ## Thingy:91 X (PCA20065)
 
@@ -32,7 +32,7 @@ Working baseline: `prerelease_0.13_4`. This is a hardware inventory and implemen
 | nPM6001 regulator PMIC | I2C | `pm_npm6001`: BUCK3 enable, PWM/HYS control, DAC voltage programming and thermal/BUCK3-OC monitoring; Thingy:91 X test project added; hardware validation pending |
 | nPM1300 charger/fuel/LED PMIC | I2C | `pm_npm1300` software complete with production-driver host tests; Thingy:91 X hardware validation pending |
 | RGB LEDs, button, external load switch | GPIO/PMIC | Shared Thingy:91 X board helper and board test added; hardware validation pending |
-| Battery/USB power and shared sensor rails | PMIC/GPIO | Board integration required |
+| Battery/USB power and shared sensor rails | PMIC/GPIO | Shared Thingy:91 X helper covers BUCK2/GPIO2, LDO1/LDO2, PMIC IRQ and nPM6001 READY; hardware validation pending |
 
 ## Integration rules
 
@@ -57,6 +57,13 @@ Working baseline: `prerelease_0.13_4`. This is a hardware inventory and implemen
 - The driver covers BUCK3, thermal warning and BUCK3 overcurrent monitoring. General-purpose nPM6001 GPIO, watchdog, hibernate and unused output-rail programming are not integrated for Thingy:91 X.
 - Test project: `ARM/Nordic/nRF91/nRF91x1/exemples/nPM6001Test`.
 
+
+## Thingy:91 board integration
+
+- `ARM/Nordic/nRF91/nRF9160/exemples/common/thingy91_board.*` centralizes button 1 on P0.26, the active-high RGB channels on P0.29/P0.30/P0.31, PWM1 buzzer output on P0.28 and the active-low nRF52840 reset on P0.10.
+- `ARM/Nordic/nRF91/nRF9160/exemples/Thingy91BoardTest` deasserts the nRF52840 reset, emits one 440 Hz startup tone, cycles the RGB LED and reports the button state.
+- The current Nordic board description does not define a separate nRF9160 sensor-power enable GPIO. The ADP5360 1.8 V BUCK and 3.3 V BUCKBOOST rails are both modeled always-on, so no extra sensor-rail control is invented in IOsonata.
+- Hardware validation is pending.
 
 ## ADP5360 Thingy:91 integration
 
