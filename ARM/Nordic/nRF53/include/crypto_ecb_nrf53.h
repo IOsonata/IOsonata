@@ -28,8 +28,10 @@ private:
 		uint8_t Input[16];
 		uint8_t Output[16];
 	};
-	EcbBlock vBlock = {};
+	// Shared DMA storage remains valid even if a caller destroys its engine.
+	static EcbBlock s_Block;
 	static std::atomic_flag s_Busy;
+	static bool s_DmaUnresolved;
 };
 
 #define CRYPTO_ECB_NRF53_MEMSIZE sizeof(CryptoEcbNrf53)

@@ -13,7 +13,9 @@
 #define CRYPTO_ECB_NRF53_TIMEOUT 1000000U
 #endif
 
+CryptoEcbNrf53::EcbBlock CryptoEcbNrf53::s_Block = {};
 std::atomic_flag CryptoEcbNrf53::s_Busy = ATOMIC_FLAG_INIT;
+bool CryptoEcbNrf53::s_DmaUnresolved = false;
 
 bool CryptoEcbNrf53::AesOpBegin()
 {
@@ -22,21 +24,27 @@ bool CryptoEcbNrf53::AesOpBegin()
 
 void CryptoEcbNrf53::AesOpEnd()
 {
-	s_Busy.clear(std::memory_order_release);
+	// A timeout without a terminal event leaves DMA ownership unresolved.
+	// Retain exclusive ownership until a system reset, not just a new object.
+	if (!s_DmaUnresolved)
+	{
+		s_Busy.clear(std::memory_order_release);
+	}
 }
 
 bool CryptoEcbNrf53::AesEcbEncrypt(const uint8_t Key[16],
 								  const uint8_t In[16], uint8_t Out[16])
 {
 	bool ok = false;
+	bool stopped = false;
 	NRF_ECB_Type *reg = NRF_ECB_NS;
 
-	memcpy(vBlock.Key, Key, 16);
-	memcpy(vBlock.Input, In, 16);
-	memset(vBlock.Output, 0, 16);
+	memcpy(s_Block.Key, Key, 16);
+	memcpy(s_Block.Input, In, 16);
+	memset(s_Block.Output, 0, 16);
 	reg->EVENTS_ENDECB = 0;
 	reg->EVENTS_ERRORECB = 0;
-	reg->ECBDATAPTR = reinterpret_cast<uintptr_t>(&vBlock);
+	reg->ECBDATAPTR = reinterpret_cast<uintptr_t>(&s_Block);
 	__DMB();
 	reg->TASKS_STARTECB = 1;
 
@@ -54,11 +62,13 @@ bool CryptoEcbNrf53::AesEcbEncrypt(const uint8_t Key[16],
 	}
 	if (!ok)
 	{
+		stopped = reg->EVENTS_ERRORECB != 0 || reg->EVENTS_ENDECB != 0;
 		reg->TASKS_STOPECB = 1;
 		for (uint32_t n = 0; n < CRYPTO_ECB_NRF53_TIMEOUT; n++)
 		{
 			if (reg->EVENTS_ERRORECB != 0 || reg->EVENTS_ENDECB != 0)
 			{
+				stopped = true;
 				break;
 			}
 		}
@@ -66,15 +76,24 @@ bool CryptoEcbNrf53::AesEcbEncrypt(const uint8_t Key[16],
 	__DMB();
 	if (ok)
 	{
-		memcpy(Out, vBlock.Output, 16);
+		memcpy(Out, s_Block.Output, 16);
 	}
 	else
 	{
 		memset(Out, 0, 16);
 	}
-	reg->EVENTS_ENDECB = 0;
-	reg->EVENTS_ERRORECB = 0;
-	CryptoSecureWipe(&vBlock, sizeof(vBlock));
+	if (ok || stopped)
+	{
+		reg->EVENTS_ENDECB = 0;
+		reg->EVENTS_ERRORECB = 0;
+		CryptoSecureWipe(&s_Block, sizeof(s_Block));
+	}
+	else
+	{
+		// The peripheral may still access its DMA block. Do not erase or
+		// reuse the block, and prevent any later ECB operation this boot.
+		s_DmaUnresolved = true;
+	}
 	return ok;
 }
 
