@@ -58,6 +58,25 @@ bool PmnPM1300::Init(DeviceIntrf * const pIntrf, uint32_t DevAddr)
 	return Read((uint8_t *)&addr, 2, info, sizeof(info)) == sizeof(info);
 }
 
+bool PmnPM1300::SetLdoVoltage(size_t Index, int32_t mVolt)
+{
+	uint16_t addr;
+	uint8_t code;
+
+	if (Index > 1 || mVolt < 1000 || mVolt > 3300 ||
+		(mVolt - 1000) % 100 != 0 || Interface() == NULL)
+		return false;
+
+	code = (uint8_t)((mVolt - 1000) / 100);
+	addr = EndianCvt16(Index == 0 ?
+		NPM1300_LDSW_LDSW1VOUTSEL_REG : NPM1300_LDSW_LDSW2VOUTSEL_REG);
+	if (!Write8((uint8_t *)&addr, 2, code))
+		return false;
+	addr = EndianCvt16(Index == 0 ?
+		NPM1300_LDSW_LDSW1LDOSEL_REG : NPM1300_LDSW_LDSW2LDOSEL_REG);
+	return Write8((uint8_t *)&addr, 2, NPM1300_LDSW_LDSW1LDOSEL_LDO);
+}
+
 bool PmnPM1300::SetLoadSwitchMode(size_t Index)
 {
 	uint16_t addr;
@@ -337,17 +356,17 @@ void PmnPM1300::Reset()
 
 void PmnPM1300::PowerOff()
 {
-	uint16_t regaddr = EndianCvt16(NPM1300_VBUSIN_VBUSIN_STATUS_REG);
-	uint8_t d = Read8((uint8_t*)&regaddr, 2);
+	uint16_t addr;
+	uint8_t status;
 
-	if (d & NPM1300_VBUSIN_VBUSIN_STATUS_VBUSINPRESENT_DETECTED)
-	{
+	addr = EndianCvt16(NPM1300_VBUSIN_VBUSIN_STATUS_REG);
+	if (Read((uint8_t *)&addr, 2, &status, 1) != 1)
 		return;
-	}
+	if ((status & NPM1300_VBUSIN_VBUSIN_STATUS_VBUSINPRESENT_DETECTED) != 0)
+		return;
 
-	regaddr = EndianCvt16(NPM1300_SHIP_TASKENTER_SHIPMODE_REG);
-	d = 1;
-	Write8((uint8_t*)&regaddr, 2, d);
+	addr = EndianCvt16(NPM1300_SHIP_TASKENTER_SHIPMODE_REG);
+	Write8((uint8_t *)&addr, 2, 1);
 }
 
 /**

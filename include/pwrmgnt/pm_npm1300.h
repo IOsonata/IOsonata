@@ -1045,6 +1045,7 @@ public:
 	bool Init(const PwrMgntCfg_t &Cfg, DeviceIntrf * const pIntrf);
 	bool Init(const FuelGaugeCfg_t &Cfg, DeviceIntrf * const pIntrf, PowerMgnt * const pPwrMnt);
 
+	bool SetLdoVoltage(size_t Index, int32_t mVolt);
 	bool SetLoadSwitchMode(size_t Index);
 	bool SetLoadSwitchEnabled(size_t Index, bool Enable);
 	bool GpioState(size_t Index, bool &High);
