@@ -1017,7 +1017,7 @@ SOFTWARE.
 #define NPM1300_ERRLOG_CHARGERERRREASON_VTRICKLE						(1<<3)	// Vtrickle Error
 #define NPM1300_ERRLOG_CHARGERERRREASON_MEASTIMEOUT						(1<<4)	// Measurement Timeout Error
 #define NPM1300_ERRLOG_CHARGERERRREASON_CHARGETIMEOUT					(1<<5)	//
-#define NPM1300_ERRLOG_CHARGERERRREASON_
+#define NPM1300_ERRLOG_CHARGERERRREASON_TRICKLETIMEOUT					(1<<6)
 
 #define NPM1300_ERRLOG_CHARGERERRSENSOR_REG				0xE05	// Bcharger Fsm sensor error. Cleared with TASK_CLR_ERRLOG
 #define NPM1300_ERRLOG_CHARGERERRSENSOR_SENSORNTCCOLD					(1<<0)	// NTC thermistor Cold sensor value during error
@@ -1144,6 +1144,7 @@ public:
 	 *
 	 * @return	true - Battery present
 	 */
+	/* Battery detection is unavailable in nPM1300 silicon; returns false. */
 	virtual bool Battery();
 	/**
 	 * @brief	Interrupt handler

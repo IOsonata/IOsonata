@@ -55,7 +55,12 @@ bool PmnPM1300::Init(DeviceIntrf * const pIntrf, uint32_t DevAddr)
 
 	addr = EndianCvt16(NPM1300_DEVICE_INFO_REG);
 
-	return Read((uint8_t *)&addr, 2, info, sizeof(info)) == sizeof(info);
+	if (Read((uint8_t *)&addr, 2, info, sizeof(info)) != sizeof(info))
+	{
+		Interface(NULL);
+		return false;
+	}
+	return true;
 }
 
 bool PmnPM1300::SetLdoVoltage(size_t Index, int32_t mVolt)
@@ -147,10 +152,15 @@ bool PmnPM1300::Init(const PwrMgntCfg_t &Cfg, DeviceIntrf * const pIntrf)
 	Interface(pIntrf);
 	vpEvtHandler = Cfg.pEvtHandler;
 	vNtcBeta = Cfg.pBatProf != NULL ? Cfg.pBatProf->ThermBetaConst : 0;
+	if (Cfg.pBatProf != NULL)
+		vBatProfile = *Cfg.pBatProf;
 
 	addr = EndianCvt16(NPM1300_DEVICE_INFO_REG);
 	if (Read((uint8_t *)&addr, 2, info, sizeof(info)) != sizeof(info))
+	{
+		Interface(NULL);
 		return false;
+	}
 
 	if (Cfg.pBatProf != NULL && vNtcBeta != 0)
 	{
@@ -298,6 +308,7 @@ int32_t PmnPM1300::SetVout(size_t VoutIdx, int32_t mVolt, uint32_t CurrLimit)
 	uint16_t enableReg;
 	uint8_t code;
 
+	/* Current limiting is fixed in hardware. */
 	(void)CurrLimit;
 	if (Interface() == NULL || VoutIdx > 1 || (mVolt != 0 &&
 		(mVolt < 1000 || mVolt > 3300 || (mVolt - 1000) % 100 != 0)))
@@ -456,7 +467,11 @@ bool PmnPM1300::Battery()
 	if (Read((uint8_t *)&regaddr, 2, &d, 1) != 1)
 		return false;
 
-	return d & NPM1300_BCHARGER_BCHG_CHARGE_STATUS_BATTERYDETECTED;
+	/* The nPM1300 BATTERYDETECTED register field is not implemented.
+	 * A charger-status read cannot establish whether a battery is fitted.
+	 */
+	(void)d;
+	return false;
 }
 
 /**
