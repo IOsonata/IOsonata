@@ -35,6 +35,8 @@ SOFTWARE.
 
 ----------------------------------------------------------------------------*/
 #include <stdio.h>
+#include <math.h>
+#include <limits.h>
 
 #include "convutil.h"
 #include "pwrmgnt/pm_npm1300.h"
@@ -190,7 +192,19 @@ int32_t PmnPM1300::Temperature()
 
 int32_t PmnPM1300::Voltage()
 {
-	return 0;
+	uint16_t addr;
+	uint8_t msb;
+	uint8_t lsb;
+	uint16_t adc;
+
+	addr = EndianCvt16(NPM1300_ADC_ADCVBAT_RESULTMSB_REG);
+	if (Read((uint8_t *)&addr, 2, &msb, 1) != 1)
+		return -1;
+	addr = EndianCvt16(NPM1300_ADC_ADCGP0_RESULTLSBS_REG);
+	if (Read((uint8_t *)&addr, 2, &lsb, 1) != 1)
+		return -1;
+	adc = ((uint16_t)msb << 2) | (lsb & 3);
+	return (int32_t)(((uint32_t)adc * 5000UL + 511UL) / 1023UL);
 }
 
 /**
@@ -208,14 +222,27 @@ int32_t PmnPM1300::Voltage()
  */
 int32_t PmnPM1300::SetVout(size_t VoutIdx, int32_t mVolt, uint32_t CurrLimit)
 {
-	uint16_t regaddr = VoutIdx == 0 ? NPM1300_BUCK_BUCK1NORM_VOUT_REG : NPM1300_BUCK_BUCK2NORM_VOUT_REG;
-	regaddr = EndianCvt16(regaddr);
-	uint32_t vdif = (mVolt - 1000) / 100;
-	uint8_t d = (uint8_t)vdif;
+	uint16_t addr;
+	uint16_t enableReg;
+	uint8_t code;
 
-	Write8((uint8_t*)&regaddr, 2, d);
-
-	return (int32_t)d * 100 + 1000;
+	(void)CurrLimit;
+	if (VoutIdx > 1 || (mVolt != 0 &&
+		(mVolt < 1000 || mVolt > 3300 || (mVolt - 1000) % 100 != 0)))
+		return -1;
+	if (mVolt != 0)
+	{
+		addr = EndianCvt16(VoutIdx == 0 ?
+			NPM1300_BUCK_BUCK1NORM_VOUT_REG : NPM1300_BUCK_BUCK2NORM_VOUT_REG);
+		code = (uint8_t)((mVolt - 1000) / 100);
+		if (!Write8((uint8_t *)&addr, 2, code))
+			return -1;
+	}
+	enableReg = VoutIdx == 0 ?
+		(mVolt ? NPM1300_BUCK_BUCK1ENA_SET_REG : NPM1300_BUCK_BUCK1ENA_CLR_REG) :
+		(mVolt ? NPM1300_BUCK_BUCK2ENA_SET_REG : NPM1300_BUCK_BUCK2ENA_CLR_REG);
+	addr = EndianCvt16(enableReg);
+	return Write8((uint8_t *)&addr, 2, 1) ? mVolt : -1;
 }
 
 /**
@@ -242,7 +269,10 @@ bool PmnPM1300::Enable()
  */
 void PmnPM1300::Disable()
 {
+	uint16_t addr;
 
+	addr = EndianCvt16(NPM1300_BCHARGER_BCHGENABLE_CLR_REG);
+	Write8((uint8_t *)&addr, 2, NPM1300_BCHARGER_BCHGENABLE_CLR_ENABLECHARGING);
 }
 
 /**
@@ -250,7 +280,10 @@ void PmnPM1300::Disable()
  */
 void PmnPM1300::Reset()
 {
+	uint16_t addr;
 
+	addr = EndianCvt16(NPM1300_SHIP_TASKRESET_CONFIG_REG);
+	Write8((uint8_t *)&addr, 2, 1);
 }
 
 void PmnPM1300::PowerOff()
@@ -282,67 +315,36 @@ void PmnPM1300::PowerOff()
  */
 uint32_t PmnPM1300::SetCharge(PWRMGNT_CHARGE_TYPE Type, int32_t mVoltEoC, uint32_t mACurr)
 {
-	uint16_t regaddr = EndianCvt16(NPM1300_BCHARGER_BCHGISET_MSB_REG);
-	uint8_t msb = mACurr >> 2;
-	uint8_t lsb = (mACurr >> 1) & 1;
-	uint8_t v = 0;
+	uint16_t addr;
+	uint16_t raw;
+	uint8_t code;
 
-	if (msb < 8)
+	if (mACurr == 0)
 	{
-		// 32 mA
-		msb = 8;
-		lsb = 0;
+		Disable();
+		return 0;
 	}
-	else if (msb > 200)
-	{
-		msb = 200;
-		lsb = 0;
-	}
+	if (Type != PWRMGNT_CHARGE_TYPE_NORMAL && Type != PWRMGNT_CHARGE_TYPE_AUTO)
+		return 0;
+	if (mVoltEoC < 3500 || mVoltEoC > 4450 || mVoltEoC % 50 != 0)
+		return 0;
+	if (mVoltEoC >= 3700 && mVoltEoC < 4000)
+		return 0;
+	if (mACurr < 32 || mACurr > 800)
+		return 0;
 
-	printf("%d : msb %d, lsb %d\r\n", mACurr, msb, lsb);
-
-	Write8((uint8_t*)&regaddr, 2, msb);
-
-	regaddr = EndianCvt16(NPM1300_BCHARGER_BCHGISET_LSB_REG);
-	Write8((uint8_t*)&regaddr, 2, lsb);
-
-	if (mVoltEoC < 3500)
-	{
-		mVoltEoC = 3500;
-	}
-	else if (mVoltEoC > 4450)
-	{
-		mVoltEoC = 4450;
-	}
-
-	if (mVoltEoC < 4000)
-	{
-		v = (mVoltEoC - 3500) / 50;
-	}
-	else
-	{
-		v = (mVoltEoC - 4000) / 50 + 4;
-	}
-
-	printf("%d : %d\r\n", mVoltEoC, v);
-	regaddr = EndianCvt16(NPM1300_BCHARGER_BCHGVTERM_REG);
-	Write8((uint8_t*)&regaddr, 2, v);
-
-	regaddr = EndianCvt16(NPM1300_BCHARGER_BCHG_ERR_REASON_REG);
-	uint8_t d = Read8((uint8_t*)&regaddr, 2);
-
-	printf("Reason %x\r\n", d);
-
-	regaddr = EndianCvt16(NPM1300_BCHARGER_BCHGENABLE_SET_REG);
-	d = NPM1300_BCHARGER_BCHGENABLE_SET_ENABLECHARGING | NPM1300_BCHARGER_BCHGENABLE_SET_ENABLEFULLCHGCOOL;
-	Write8((uint8_t*)&regaddr, 2, d);
-
-	regaddr = EndianCvt16(NPM1300_BCHARGER_BCHG_ERR_REASON_REG);
-	d = Read8((uint8_t*)&regaddr, 2);
-
-	printf("Reason %x\r\n", d);
-
-	return ((uint32_t)msb << 2UL) + ((uint32_t)lsb << 1UL);
+	raw = (uint16_t)(mACurr / 2);
+	addr = EndianCvt16(NPM1300_BCHARGER_BCHGISET_MSB_REG);
+	if (!Write8((uint8_t *)&addr, 2, raw >> 1))
+		return 0;
+	addr = EndianCvt16(NPM1300_BCHARGER_BCHGISET_LSB_REG);
+	if (!Write8((uint8_t *)&addr, 2, raw & 1))
+		return 0;
+	code = mVoltEoC < 3700 ? (mVoltEoC - 3500) / 50 : (mVoltEoC - 4000) / 50 + 4;
+	addr = EndianCvt16(NPM1300_BCHARGER_BCHGVTERM_REG);
+	if (!Write8((uint8_t *)&addr, 2, code))
+		return 0;
+	return Enable() ? raw * 2 : 0;
 }
 
 /**
@@ -386,5 +388,15 @@ bool PmnPM1300::Battery()
  */
 void PmnPM1300::IrqHandler()
 {
+	uint16_t addr;
+	uint8_t events;
 
+	addr = EndianCvt16(NPM1300_MAIN_EVENTS_VBUSIN0SET_REG);
+	if (Read((uint8_t *)&addr, 2, &events, 1) != 1 || events == 0)
+		return;
+	addr = EndianCvt16(NPM1300_MAIN_EVENTS_VBUSIN0CLR_REG);
+	Write8((uint8_t *)&addr, 2, events);
+	if (vpEvtHandler != NULL &&
+		(events & NPM1300_MAIN_EVENTS_VBUSIN0SET_EVENTVBUSDETECTED) != 0)
+		vpEvtHandler(this, PWRMGNT_EVT_CHARGE_DETECTED);
 }
