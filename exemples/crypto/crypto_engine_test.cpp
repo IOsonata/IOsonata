@@ -102,9 +102,13 @@ public:
 	bool IsSecure() const override { return true; }
 };
 
-// Target-specific factories may replace these weak software defaults.
-// Link the target's strong implementations into the executable.
-#if !defined(CRYPTO_TEST_AES_TYPE) || !defined(CRYPTO_TEST_RNG_TYPE)
+// Target libraries provide the factories on hardware builds.  The functions
+// must remain unresolved in the application object for archive extraction.
+// Host and software-only builds use the reference implementations.
+extern "C" CryptoSoftAes *CryptoTestAesCreate(void *pMem, size_t MemSize);
+extern "C" RngEngine *CryptoTestRngCreate(void *pMem, size_t MemSize);
+
+#if !defined(NRF5340_XXAA_NETWORK)
 extern "C" __attribute__((weak)) CryptoSoftAes *CryptoTestAesCreate(void *pMem, size_t MemSize)
 {
 	return CryptoSoftAesCreate(pMem, MemSize);
@@ -119,6 +123,7 @@ extern "C" __attribute__((weak)) RngEngine *CryptoTestRngCreate(void *pMem, size
 	pRng->Enable();
 	return pRng;
 }
+#endif
 #ifndef CRYPTO_TEST_AES_TYPE
 #define CRYPTO_TEST_AES_TYPE CryptoSoftAes
 #define CRYPTO_TEST_AES_MEMSIZE 512U
