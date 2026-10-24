@@ -28,7 +28,7 @@ Working baseline: `prerelease_0.13_4`. This is a hardware inventory and implemen
 | BMI270 six-axis IMU | SPI | Existing `ag_bmi270` |
 | BMM350 magnetometer | I2C | `mag_bmm350` corrected to Bosch ODR/OTP compensation and 24-bit decoding; host regression and Thingy:91 X test project added; hardware validation pending |
 | BME688 environmental sensor | I2C | Existing `tphg_bme680` forced-mode path is register-compatible (BME68x ID `0x61`, I2C `0x76/0x77`); Thingy:91 X power-aware compatibility test added; parallel/sequential gas modes are not exposed; hardware validation pending |
-| GD25LE255E 256 Mbit flash | SPI | Existing universal external-memory interface; configure device geometry/commands, hardware validation pending |
+| GD25LE255E 256 Mbit flash | SPI | Existing universal external-memory interface; GD25LE255E 32 MiB/4-byte-address configuration and read-only Thingy:91 X test added; hardware validation pending |
 | nPM6001 regulator PMIC | I2C | `pm_npm6001`: BUCK3 enable, PWM/HYS control, DAC voltage programming and thermal/BUCK3-OC monitoring; Thingy:91 X test project added; hardware validation pending |
 | nPM1300 charger/fuel/LED PMIC | I2C | `pm_npm1300` software complete with production-driver host tests; Thingy:91 X hardware validation pending |
 | RGB LEDs, button, external load switch | GPIO/PMIC | Shared Thingy:91 X board helper and board test added; hardware validation pending |
@@ -94,3 +94,4 @@ Working baseline: `prerelease_0.13_4`. This is a hardware inventory and implemen
 
 - BMM350 validation project: `ARM/Nordic/nRF91/nRF91x1/exemples/BMM350Test`.
 - ADXL367 validation project: `ARM/Nordic/nRF91/nRF91x1/exemples/ADXL367Test`.
+- GD25LE255E validation project: `ARM/Nordic/nRF91/nRF91x1/exemples/GD25LE255ETest`; read-only by default.
