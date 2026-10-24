@@ -11,6 +11,8 @@ Copyright (c) 2026 I-SYST inc.
 #define BH1749_MODE_CONTROL2_REG   0x42
 #define BH1749_RED_DATA_REG        0x50
 #define BH1749_PART_ID_MASK        0x3F
+#define BH1749_MANUFACTURER_REG   0x92
+#define BH1749_MANUFACTURER_ID    0xE0
 #define BH1749_VALID_MASK          0x80
 #define BH1749_RGB_ENABLE         0x10
 #define BH1749_GAIN1_120MS        0x2A
@@ -34,10 +36,12 @@ bool ColorBh1749::WriteReg(uint8_t Reg, uint8_t Value)
 bool ColorBh1749::Init(DeviceIntrf * const pIntrf, uint32_t DevAddr)
 {
 	uint8_t id;
+	uint8_t manufacturer;
 
 	vbInitialized = false;
 	vpIntrf = NULL;
-	if (pIntrf == NULL || (DevAddr != BH1749_I2C_ADDR0 && DevAddr != BH1749_I2C_ADDR1))
+	if (pIntrf == NULL || pIntrf->Type() != DEVINTRF_TYPE_I2C ||
+		(DevAddr != BH1749_I2C_ADDR0 && DevAddr != BH1749_I2C_ADDR1))
 		return false;
 
 	vpIntrf = pIntrf;
@@ -45,6 +49,9 @@ bool ColorBh1749::Init(DeviceIntrf * const pIntrf, uint32_t DevAddr)
 	if (!ReadReg(BH1749_SYSTEM_CONTROL_REG, &id, 1))
 		return false;
 	if ((id & BH1749_PART_ID_MASK) != BH1749_PART_ID)
+		return false;
+	if (!ReadReg(BH1749_MANUFACTURER_REG, &manufacturer, 1) ||
+		manufacturer != BH1749_MANUFACTURER_ID)
 		return false;
 	if (!WriteReg(BH1749_MODE_CONTROL1_REG, BH1749_GAIN1_120MS))
 		return false;
