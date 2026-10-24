@@ -44,11 +44,30 @@ SOFTWARE.
 #include "coredev/iopincfg.h"
 #include "iopinctrl.h"
 
-// This include holds the LED of the board in use
+// Board LED and network-core console pins
 #include "board.h"
 
 int main()
 {
+	NRF_GPIO_Type *gpio = nRFGpioGetReg(NET_UART_PORT);
+	uint32_t pins = (1UL << NET_UART_RX_PIN) | (1UL << NET_UART_TX_PIN);
+
+	// The network core cannot take pins from the application core. Grant
+	// access before releasing it; its UART driver configures direction and
+	// drive strength while preserving MCUSEL.
+#if !defined(NRF_TRUSTZONE_NONSECURE)
+	NRF_SPU_S->GPIOPORT[NET_UART_PORT].PERM &= ~pins;
+#else
+	(void)pins;
+#endif
+	gpio->PIN_CNF[NET_UART_RX_PIN] =
+		(gpio->PIN_CNF[NET_UART_RX_PIN] & ~GPIO_PIN_CNF_MCUSEL_Msk) |
+		(GPIO_PIN_CNF_MCUSEL_NetworkMCU << GPIO_PIN_CNF_MCUSEL_Pos);
+	gpio->PIN_CNF[NET_UART_TX_PIN] =
+		(gpio->PIN_CNF[NET_UART_TX_PIN] & ~GPIO_PIN_CNF_MCUSEL_Msk) |
+		(GPIO_PIN_CNF_MCUSEL_NetworkMCU << GPIO_PIN_CNF_MCUSEL_Pos);
+	__DSB();
+
 #if defined(NRF_RESET_S) && !defined(NRF_TRUSTZONE_NONSECURE)
 	NRF_RESET_S->NETWORK.FORCEOFF = RESET_NETWORK_FORCEOFF_FORCEOFF_Release;
 #else
