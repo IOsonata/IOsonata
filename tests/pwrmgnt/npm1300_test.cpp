@@ -57,6 +57,53 @@ public:
 		return vRate;
 	}
 
+	void Disable(void) override {}
+	void Enable(void) override {}
+	int Rx(uint32_t DevAddr, uint8_t *pBuff, int BuffLen) override
+	{
+		(void)DevAddr;
+		(void)pBuff;
+		(void)BuffLen;
+		return 0;
+	}
+	int Tx(uint32_t DevAddr, const uint8_t *pData, int DataLen) override
+	{
+		(void)DevAddr;
+		(void)pData;
+		(void)DataLen;
+		return 0;
+	}
+	bool StartRx(uint32_t DevAddr) override
+	{
+		(void)DevAddr;
+		return false;
+	}
+	int RxData(uint8_t *pBuff, int BuffLen) override
+	{
+		(void)pBuff;
+		(void)BuffLen;
+		return 0;
+	}
+	void StopRx(void) override {}
+	bool StartTx(uint32_t DevAddr) override
+	{
+		(void)DevAddr;
+		return false;
+	}
+	int TxData(const uint8_t *pData, int DataLen) override
+	{
+		(void)pData;
+		(void)DataLen;
+		return 0;
+	}
+	void StopTx(void) override {}
+	bool RequestToSend(int NbBytes) override
+	{
+		(void)NbBytes;
+		return true;
+	}
+	void Reset(void) override {}
+
 	int Read(uint32_t DevAddr, const uint8_t *pAdCmd, int AdCmdLen,
 		uint8_t *pBuff, int BuffLen) override
 	{

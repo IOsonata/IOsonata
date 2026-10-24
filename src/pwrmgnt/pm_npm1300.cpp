@@ -998,3 +998,122 @@ bool PmnPM1300::SetGpioMode(size_t Index, uint8_t Mode)
 		return false;
 	if (Mode >= NPM1300_GPIOS_GPIOMODE_GPOIRQ &&
 		!SetGpioPull(Index, false, false))
+		return false;
+	return WriteReg8((uint16_t)(NPM1300_GPIOS_GPIOMODE_BASE_REG + Index), Mode);
+}
+
+bool PmnPM1300::SetBuckPwm(size_t Index, bool Enable)
+{
+	uint16_t reg;
+	uint8_t pfmMask;
+
+	if (Index > 1 || Interface() == NULL)
+		return false;
+
+	if (Enable)
+	{
+		pfmMask = (uint8_t)(1U << Index);
+		if (!UpdateReg8(NPM1300_BUCK_BUCKCTRL0_REG, pfmMask, 0))
+			return false;
+	}
+
+	reg = (uint16_t)(NPM1300_BUCK_BUCK1PWM_SET_REG + 2 * Index + (Enable ? 0 : 1));
+	return WriteReg8(reg, 1);
+}
+
+bool PmnPM1300::SetBuckPfm(size_t Index, bool Enable)
+{
+	uint8_t mask;
+
+	if (Index > 1 || Interface() == NULL)
+		return false;
+	if (Enable && !SetBuckPwm(Index, false))
+		return false;
+
+	mask = (uint8_t)(1U << Index);
+	return UpdateReg8(NPM1300_BUCK_BUCKCTRL0_REG, mask, Enable ? mask : 0);
+}
+
+bool PmnPM1300::SetBuckRetention(size_t Index, int32_t mVolt)
+{
+	uint16_t reg;
+
+	if (Index > 1 || mVolt < 1000 || mVolt > 3300 ||
+		(mVolt - 1000) % 100 != 0 || Interface() == NULL)
+		return false;
+	reg = (uint16_t)(NPM1300_BUCK_BUCK1RET_VOUT_REG + 2 * Index);
+	return WriteReg8(reg, (uint8_t)((mVolt - 1000) / 100));
+}
+
+bool PmnPM1300::SetBuckDischarge(size_t Index, bool Enable)
+{
+	uint8_t mask;
+
+	if (Index > 1 || Interface() == NULL)
+		return false;
+	mask = Index == 0 ? NPM1300_BUCK_BUCKCTRL0_BUCK1ENPULLDOWN_ENABLE :
+		NPM1300_BUCK_BUCKCTRL0_BUCK2ENPULLDOWN_ENABLE;
+	return UpdateReg8(NPM1300_BUCK_BUCKCTRL0_REG, mask, Enable ? mask : 0);
+}
+
+bool PmnPM1300::ReadBuckStatus(size_t Index, uint8_t &VoltageCode, uint8_t &Status)
+{
+	uint16_t reg;
+
+	if (Index > 1 || Interface() == NULL)
+		return false;
+	reg = Index == 0 ? NPM1300_BUCK_BUCK1VOUT_STATUS_REG :
+		NPM1300_BUCK_BUCK2VOUT_STATUS_REG;
+	if (!ReadReg8(reg, VoltageCode))
+		return false;
+	return ReadReg8(NPM1300_BUCK_BUCKSTATUS_REG, Status);
+}
+
+bool PmnPM1300::ReadStatus(uint8_t &Charger, uint8_t &ChargerErrors,
+	uint8_t &Vbus, uint8_t &Ntc, uint8_t &ResetCause)
+{
+	const uint16_t regs[] = {
+		NPM1300_BCHARGER_BCHG_CHARGE_STATUS_REG,
+		NPM1300_BCHARGER_BCHG_ERR_REASON_REG,
+		NPM1300_VBUSIN_VBUSIN_STATUS_REG,
+		NPM1300_BCHARGER_NTC_STATUS_REG,
+		NPM1300_ERRLOG_RSTCAUSE_REG
+	};
+	uint8_t values[5];
+	size_t i;
+
+	if (Interface() == NULL)
+		return false;
+	for (i = 0; i < sizeof(regs) / sizeof(regs[0]); i++)
+	{
+		if (!ReadReg8(regs[i], values[i]))
+			return false;
+	}
+
+	Charger = values[0];
+	ChargerErrors = values[1];
+	Vbus = values[2];
+	Ntc = values[3];
+	ResetCause = values[4];
+	return true;
+}
+
+bool PmnPM1300::ReadChargerError(uint8_t &Reason, uint8_t &Sensor)
+{
+	uint8_t reason;
+	uint8_t sensor;
+
+	if (!ReadReg8(NPM1300_BCHARGER_BCHG_ERR_REASON_REG, reason))
+		return false;
+	if (!ReadReg8(NPM1300_BCHARGER_BCHG_ERR_SENSOR_REG, sensor))
+		return false;
+
+	Reason = reason;
+	Sensor = sensor;
+	return true;
+}
+
+bool PmnPM1300::ClearErrorLog()
+{
+	return WriteReg8(NPM1300_ERRLOG_TASKCLRERRLOG_REG, 1);
+}

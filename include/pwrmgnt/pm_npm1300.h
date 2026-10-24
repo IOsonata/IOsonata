@@ -45,10 +45,6 @@ SOFTWARE.
   * @{
   */
 
-#define NPM1300_DEVICE_INFO_REG						0xC4C
-#define NPM1300_DEVICE_ID_REG						0xC50
-#define NPM1300_DEVICE_ID							0x2000ffd8
-
 #define NPM1300_VBUSIN_TASKUPDATE_ILIMSW_REG		0x200	// Select input current limit
 #define NPM1300_VBUSIN_TASKUPDATE_ILIMSW_SELVBUSILIM0					(1<<0)	// Set to use vbusinilim0. Vbus removal results in switch 
 																	// back to vbusinIlimStartup
@@ -202,7 +198,7 @@ SOFTWARE.
 #define NPM1300_BCHARGER_DIE_TEMP_STATUS_HIGH							(1<<0)
 
 #define NPM1300_BCHARGER_BCHG_CHARGE_STATUS_REG		0x334	// Charging status
-#define NPM1300_BCHARGER_BCHG_CHARGE_STATUS_BATTERYDETECTED				(1<<0)	// Not implemented on nPM1300; do not use for presence
+#define NPM1300_BCHARGER_BCHG_CHARGE_STATUS_BATTERYDETECTED				(1<<0)	// Disabled on D00 and later silicon (PCN213); do not use for presence
 #define NPM1300_BCHARGER_BCHG_CHARGE_STATUS_COMPLETED					(1<<1)	// Charging completed (battery full
 #define NPM1300_BCHARGER_BCHG_CHARGE_STATUS_TRICKLECHARGE				(1<<2)	// Trickle charge
 #define NPM1300_BCHARGER_BCHG_CHARGE_STATUS_CONSTANTCURRENT				(1<<3)	// Constant current charging
@@ -863,8 +859,8 @@ SOFTWARE.
 #define NPM1300_MAIN_INTENEVENTS_BCHARGER1CLR_EVENTCHGERROR				(1<<5)
 
 #define NPM1300_MAIN_EVENTS_BCHARGER2SET_REG		0x00E	// Battery Charger Battery Events Event Set
-#define NPM1300_MAIN_EVENTS_BCHARGER2SET_EVENTBATDETECTED				(1<<0)	// Not implemented on nPM1300
-#define NPM1300_MAIN_EVENTS_BCHARGER2SET_EVENTBATLOST					(1<<1)	// Not implemented on nPM1300
+#define NPM1300_MAIN_EVENTS_BCHARGER2SET_EVENTBATDETECTED				(1<<0)	// Battery detection is disabled on D00 and later silicon
+#define NPM1300_MAIN_EVENTS_BCHARGER2SET_EVENTBATLOST					(1<<1)	// Battery detection is disabled on D00 and later silicon
 #define NPM1300_MAIN_EVENTS_BCHARGER2SET_EVENTBATRECHARGE				(1<<2)	// Event Battery re-charge needed
 
 #define NPM1300_MAIN_EVENTS_BCHARGER2CLR_REG		0x00F	// Battery Charger Battery Events Event Clear
