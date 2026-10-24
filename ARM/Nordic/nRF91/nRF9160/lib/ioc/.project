@@ -1730,6 +1730,16 @@
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/bluetooth/bt_hcievt.h</locationURI>
 		</link>
+		<link>
+			<name>include/sensors/color_bh1749.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/sensors/color_bh1749.h</locationURI>
+		</link>
+		<link>
+			<name>src/sensors/color_bh1749.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/sensors/color_bh1749.cpp</locationURI>
+		</link>
 	</linkedResources>
 	<variableList>
 		<variable>
