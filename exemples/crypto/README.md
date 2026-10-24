@@ -54,7 +54,7 @@ Port review after the App-core import failure:
 | CC3xx: nRF52840, nRF5340 App, nRF91 | Software import/ECDSA; hardware key generation/ECDH | Host model; App-core board had passed generated-key operations before this fix; imported-key board run pending |
 | BA414EP: nRF54 | Software import/ECDSA; hardware key generation/ECDH | Host model; board rerun pending |
 | CryptoMaster: nRF54 | Hardware AES-128/256 encryption/decryption; shared CMAC/CCM/GCM composition | DMA register model; board rerun pending |
-| nRF5340 Net ECB | Inherits software modes and AES-256 | Maintainer board result: 100 passed, no failures/skips before this PKA fix |
+| nRF5340 Net ECB | Inherits software modes and AES-256 | Audio DK, 2026-10-24: 101 passed, 0 failed, 0 skipped after the AES/CMAC/CCM size reductions |
 | STM32WBA65 | Hardware P-256; software AES-256 and SHA | Production-driver host link and initialization-failure checks; ARM emulator/board rerun pending |
 | STM32H753 | Hardware AES-128/256 and one-shot hash/HMAC; software P-256 and streaming hash | Host register model; board rerun pending |
 | Other configured MCU libraries | Software algorithms, hardware RNG where implemented | Software archive and target initialization checks |
@@ -111,3 +111,11 @@ The default BLUEIO console mapping is TX P0.07 and RX P0.08; adjust the example'
 `src/board.h` for a different board. The application uses the full nRF52832 XXAA
 512 KB Flash / 64 KB RAM linker layout, with no running Bluetooth stack required.
 Hardware/software crypto selection remains entirely in the MCU library.
+
+## Recorded network-core validation
+
+The nRF5340 Audio DK run on 2026-10-24 passed all 101 checks, including the
+benchmark timer at 1 MHz. HciController also restored a bond and enabled
+encryption after reset and reconnection with BleSecurityDemo on the App core.
+See [crypto size measurements](../../tests/crypto/size_notes.md) for the measured
+688-byte HciController flash reduction and the separate CryptoTest footprint.
