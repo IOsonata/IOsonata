@@ -55,32 +55,41 @@ static inline uint8_t AesXtime(uint8_t a)
 	return (uint8_t)((a << 1) ^ ((a >> 7) * 0x1b));
 }
 
-static void AesKeyExpand(const uint8_t Key[16], uint8_t Rk[AES128_RK_WORDS * 4])
+static void AesKeyExpand(const uint8_t *Key, uint32_t Words,
+						 uint32_t Rounds, uint8_t *Rk)
 {
-	memcpy(Rk, Key, AES_BLOCK);
-	for (uint32_t i = 4; i < AES128_RK_WORDS; i++)
+	uint8_t t[4];
+	uint8_t first;
+
+	memcpy(Rk, Key, Words * 4U);
+	for (uint32_t i = Words; i < (Rounds + 1U) * 4U; i++)
 	{
-		uint8_t t[4] = {
-			Rk[(i - 1U) * 4U], Rk[(i - 1U) * 4U + 1U],
-			Rk[(i - 1U) * 4U + 2U], Rk[(i - 1U) * 4U + 3U]
-		};
-		if ((i & 3U) == 0U)
+		memcpy(t, Rk + (i - 1U) * 4U, sizeof(t));
+		if (i % Words == 0U)
 		{
-			uint8_t first = t[0];
-			t[0] = s_SBox[t[1]];
+			first = t[0];
+			t[0] = s_SBox[t[1]] ^ s_Rcon[i / Words - 1U];
 			t[1] = s_SBox[t[2]];
 			t[2] = s_SBox[t[3]];
 			t[3] = s_SBox[first];
-			t[0] ^= s_Rcon[(i / 4U) - 1U];
+		}
+		else if (Words == 8U && i % Words == 4U)
+		{
+			for (uint32_t j = 0; j < 4U; j++)
+			{
+				t[j] = s_SBox[t[j]];
+			}
 		}
 		for (uint32_t j = 0; j < 4U; j++)
 		{
-			Rk[i * 4U + j] = (uint8_t)(Rk[(i - 4U) * 4U + j] ^ t[j]);
+			Rk[i * 4U + j] = Rk[(i - Words) * 4U + j] ^ t[j];
 		}
 	}
+	AesWipe(t, sizeof(t));
+	AesWipe(&first, sizeof(first));
 }
 
-static void AesEncryptBlock(const uint8_t Rk[AES128_RK_WORDS * 4],
+static void AesEncryptBlock(const uint8_t *Rk, uint32_t Rounds,
 							const uint8_t In[16], uint8_t Out[16])
 {
 	uint8_t st[16];
@@ -89,7 +98,7 @@ static void AesEncryptBlock(const uint8_t Rk[AES128_RK_WORDS * 4],
 		st[i] = (uint8_t)(In[i] ^ Rk[i]);
 	}
 
-	for (uint32_t round = 1; round < AES128_ROUNDS; round++)
+	for (uint32_t round = 1; round < Rounds; round++)
 	{
 		uint8_t t[16];
 		for (int i = 0; i < 16; i++) st[i] = s_SBox[st[i]];
@@ -117,22 +126,22 @@ static void AesEncryptBlock(const uint8_t Rk[AES128_RK_WORDS * 4],
 	t[3]=st[15]; t[7]=st[3];  t[11]=st[7];  t[15]=st[11];
 	for (int i = 0; i < 16; i++)
 	{
-		Out[i] = (uint8_t)(t[i] ^ Rk[AES128_ROUNDS * 16U + (uint32_t)i]);
+		Out[i] = (uint8_t)(t[i] ^ Rk[Rounds * 16U + (uint32_t)i]);
 	}
 	AesWipe(st, sizeof(st));
 	AesWipe(t, sizeof(t));
 }
 
 // FIPS-197 inverse cipher, using the encryption round keys in reverse.
-static void AesDecryptBlock(const uint8_t Rk[AES128_RK_WORDS * 4],
+static void AesDecryptBlock(const uint8_t *Rk, uint32_t Rounds,
 							const uint8_t In[16], uint8_t Out[16])
 {
 	uint8_t st[16], t[16];
 	for (int i = 0; i < 16; i++)
 	{
-		st[i] = In[i] ^ Rk[AES128_ROUNDS * 16U + (uint32_t)i];
+		st[i] = In[i] ^ Rk[Rounds * 16U + (uint32_t)i];
 	}
-	for (int round = AES128_ROUNDS - 1; round >= 0; round--)
+	for (int round = (int)Rounds - 1; round >= 0; round--)
 	{
 		// Inverse ShiftRows and SubBytes, column-major state.
 		for (int c = 0; c < 4; c++)
@@ -171,14 +180,33 @@ static void AesDecryptBlock(const uint8_t Rk[AES128_RK_WORDS * 4],
 void CryptoAesSoftEncryptBlock(const uint8_t Key[16], const uint8_t In[16], uint8_t Out[16])
 {
 	uint8_t rk[AES128_RK_WORDS * 4U];
-	AesKeyExpand(Key, rk);
-	AesEncryptBlock(rk, In, Out);
+	AesKeyExpand(Key, 4U, AES128_ROUNDS, rk);
+	AesEncryptBlock(rk, AES128_ROUNDS, In, Out);
 	AesWipe(rk, sizeof(rk));
 }
 void CryptoAesSoftDecryptBlock(const uint8_t Key[16], const uint8_t In[16], uint8_t Out[16])
 {
 	uint8_t rk[AES128_RK_WORDS * 4U];
-	AesKeyExpand(Key, rk);
-	AesDecryptBlock(rk, In, Out);
+	AesKeyExpand(Key, 4U, AES128_ROUNDS, rk);
+	AesDecryptBlock(rk, AES128_ROUNDS, In, Out);
+	AesWipe(rk, sizeof(rk));
+}
+
+// AES-256 uses Nk=8, Nr=14 and an additional SubWord at i mod Nk == 4.
+void CryptoAesSoftEncryptBlock256(const uint8_t Key[32], const uint8_t In[16], uint8_t Out[16])
+{
+	uint8_t rk[60U * 4U];
+
+	AesKeyExpand(Key, 8U, 14U, rk);
+	AesEncryptBlock(rk, 14U, In, Out);
+	AesWipe(rk, sizeof(rk));
+}
+
+void CryptoAesSoftDecryptBlock256(const uint8_t Key[32], const uint8_t In[16], uint8_t Out[16])
+{
+	uint8_t rk[60U * 4U];
+
+	AesKeyExpand(Key, 8U, 14U, rk);
+	AesDecryptBlock(rk, 14U, In, Out);
 	AesWipe(rk, sizeof(rk));
 }

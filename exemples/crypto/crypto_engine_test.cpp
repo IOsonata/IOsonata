@@ -265,12 +265,6 @@ static void Aes256Vectors(CipherEngine *pAes)
 	k.Plain.Len = 32;
 	support = pAes->Cipher(CRYPTO_CIPHER_ECB, 1, k,
 		nullptr, 0, s_Spmsg, 16, out);
-	if (support == CRYPTO_STATUS_UNSUPPORTED)
-	{
-		skip("AES-256 is unsupported");
-		CryptoSecureWipe(key, sizeof(key));
-		return;
-	}
 	if (support != CRYPTO_STATUS_OK)
 	{
 		check("AES-256 operation", false);

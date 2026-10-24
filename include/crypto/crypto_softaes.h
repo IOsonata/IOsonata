@@ -55,7 +55,7 @@ SOFTWARE.
   * @{
   */
 
-/// @brief	Software AES-128 engine implementing Cipher and CMAC.
+/// @brief	Software AES-128/256 Cipher and AES-128 CMAC/AEAD engine.
 ///
 /// Stateless beyond the Device lifecycle: the key travels with each call in the
 /// CryptoKey, so one engine object serves any number of keys. CMAC is computed
@@ -72,7 +72,8 @@ public:
 	void Disable() override {}
 	void Reset() override {}
 
-	// CipherEngine: software AES-128 ECB/CTR/CBC encryption and decryption.
+	// CipherEngine: software AES-128/256 ECB/CTR/CBC encryption and decryption.
+	// AES-256 bypasses the AES-128 hardware block hooks.
 	// ECB/CBC require whole blocks; no padding is added or removed.
 	// Input and output may be identical or disjoint, not partially overlapping.
 	CRYPTO_STATUS Cipher(CRYPTO_CIPHER_ALG Alg, int bEncrypt,

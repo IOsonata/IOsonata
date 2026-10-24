@@ -323,6 +323,12 @@ CRYPTO_STATUS CryptoMaster::Cipher(CRYPTO_CIPHER_ALG Alg, int bEncrypt,
 {
 	uint32_t required = bEncrypt != 0 ? CRYPTO_KEY_USE_ENCRYPT :
 									 CRYPTO_KEY_USE_DECRYPT;
+	// The base implements key sizes this accelerator does not provide.
+	if (Key.Type == CRYPTO_KEY_AES_256)
+	{
+		return CryptoSoftAes::Cipher(Alg, bEncrypt, Key, pIv, IvLen, pIn, Len, pOut);
+	}
+
 	if (Key.Type != CRYPTO_KEY_AES_128 || Key.Loc != CRYPTO_KEY_LOC_PLAIN ||
 		Key.Plain.pData == nullptr || Key.Plain.Len != AES_BLOCK ||
 		(Key.Usage & required) == 0U || pIn == nullptr || pOut == nullptr)

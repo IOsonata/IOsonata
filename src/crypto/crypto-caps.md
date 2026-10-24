@@ -22,7 +22,7 @@ a `Cap` bit and the backing function pointer disagree.
 
 | Interface | Operation | Algorithm argument | Values today |
 |---|---|---|---|
-| `CipherEngine` | `Cipher` | `CRYPTO_CIPHER_ALG` | `CRYPTO_CIPHER_ECB`, `CRYPTO_CIPHER_CTR`, `CRYPTO_CIPHER_CBC` (AES-128); XTS reserved |
+| `CipherEngine` | `Cipher` | `CRYPTO_CIPHER_ALG` | `CRYPTO_CIPHER_ECB`, `CRYPTO_CIPHER_CTR`, `CRYPTO_CIPHER_CBC` (AES-128/256); XTS reserved |
 | `MacEngine` | `Mac` | `CRYPTO_MAC_ALG` | `CRYPTO_MAC_CMAC` (AES engines), `CRYPTO_MAC_HMAC` (SHA-256 engine); GMAC reserved |
 | `AeadEngine` | `Seal`, `Open` | `CRYPTO_AEAD_ALG` | `CRYPTO_AEAD_AES_CCM` (RFC 3610), `CRYPTO_AEAD_AES_GCM` (SP 800-38D, 96 bit IV) |
 | `HashEngine` | `Hash`; `HashInit` / `HashUpdate` / `HashFinal` | `CRYPTO_HASH_ALG` | `CRYPTO_HASH_SHA256`, one-shot and streaming |
@@ -71,7 +71,7 @@ bit.
 
 ## The software AES base and derived constructions
 
-`CryptoSoftAes` implements `CipherEngine` (AES-128 ECB/CTR/CBC), `MacEngine`
+`CryptoSoftAes` implements `CipherEngine` (AES-128/256 ECB/CTR/CBC), `MacEngine`
 (AES-CMAC) and `AeadEngine` (AES-CCM, AES-GCM). CMAC, CCM and GCM are computed
 over the protected virtual block primitive `AesEcbEncrypt` inside one
 `AesOpBegin` / `AesOpEnd` bracket per operation, so a hardware AES engine that
@@ -106,3 +106,19 @@ failed operations must not be hidden as unsupported. A non-secure software RNG
 cannot be used for key generation or signing; CryptoTest reports those cases
 explicitly. Disabling one object does not disable the library's shared hardware
 implementation used by another object.
+
+## Software cipher base and hardware overrides
+
+AES-128 and AES-256 ECB/CBC/CTR are implemented by `CryptoSoftAes`. Hardware
+classes override the operations they accelerate. CryptoMaster and STM32WBA
+call the base Cipher implementation for AES-256, while H753 accelerates both
+key sizes. The nRF5340 ECB class inherits the mode implementation and replaces
+its AES-128 block hooks; AES-256 uses the software block without acquiring
+that peripheral. The application and generic object perform no retry based
+on unsupported status. Busy and failed operations remain errors.
+
+AES-256 shares the AES core and cipher-mode loops with AES-128, uses the
+256-bit key expansion and 14 rounds, and wipes its round keys. Key location
+and usage checks still apply in the software base. CMAC/CCM/GCM currently
+accept AES-128 keys; this cipher change does not add 256-bit keys to those
+constructions. AES-256 cipher tests are required on every target.

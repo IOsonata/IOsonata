@@ -56,6 +56,8 @@ static void AesWipe(void *pData, size_t Len)
 
 void CryptoAesSoftEncryptBlock(const uint8_t Key[16], const uint8_t In[16], uint8_t Out[16]);
 void CryptoAesSoftDecryptBlock(const uint8_t Key[16], const uint8_t In[16], uint8_t Out[16]);
+void CryptoAesSoftEncryptBlock256(const uint8_t Key[32], const uint8_t In[16], uint8_t Out[16]);
+void CryptoAesSoftDecryptBlock256(const uint8_t Key[32], const uint8_t In[16], uint8_t Out[16]);
 
 static bool AesKeyMaterialOk(const CryptoKey &Key)
 {
@@ -70,23 +72,26 @@ CRYPTO_STATUS CryptoSoftAes::Cipher(CRYPTO_CIPHER_ALG Alg, int bEncrypt,
 									const uint8_t *pIn, size_t Len,
 									uint8_t *pOut)
 {
+	bool wide = Key.Type == CRYPTO_KEY_AES_256;
+	bool material = AesKeyMaterialOk(Key) || (wide && Key.Loc == CRYPTO_KEY_LOC_PLAIN &&
+		Key.Plain.pData != nullptr && Key.Plain.Len == 32U);
 	uint32_t required = bEncrypt != 0 ? CRYPTO_KEY_USE_ENCRYPT :
 									 CRYPTO_KEY_USE_DECRYPT;
-	if (!AesKeyMaterialOk(Key) || (Key.Usage & required) == 0U ||
+	if (!material || (Key.Usage & required) == 0U ||
 		pIn == nullptr || pOut == nullptr)
 	{
 		return CRYPTO_STATUS_UNSUPPORTED;
 	}
 
-	// Encryption uses the virtual block primitive, allowing a hardware
-	// subclass to accelerate ECB without duplicating the cipher loop.
+	// AES-128 uses the virtual hardware primitive. AES-256 uses the software
+	// block without acquiring an AES-128-only peripheral. Both reuse these modes.
 	if (Alg == CRYPTO_CIPHER_ECB && bEncrypt != 0)
 	{
 		if ((Len & (AES_BLOCK - 1U)) != 0U)
 		{
 			return CRYPTO_STATUS_FAIL;
 		}
-		if (!AesOpBegin())
+		if (!wide && !AesOpBegin())
 		{
 			if (Len > 0U) memset(pOut, 0, Len);
 			return CRYPTO_STATUS_BUSY;
@@ -94,13 +99,20 @@ CRYPTO_STATUS CryptoSoftAes::Cipher(CRYPTO_CIPHER_ALG Alg, int bEncrypt,
 		CRYPTO_STATUS status = CRYPTO_STATUS_OK;
 		for (size_t off = 0; off < Len; off += AES_BLOCK)
 		{
-			if (!AesEcbEncrypt(Key.Plain.pData, pIn + off, pOut + off))
+			if (wide)
+			{
+				CryptoAesSoftEncryptBlock256(Key.Plain.pData, pIn + off, pOut + off);
+			}
+			else if (!AesEcbEncrypt(Key.Plain.pData, pIn + off, pOut + off))
 			{
 				status = CRYPTO_STATUS_FAIL;
 				break;
 			}
 		}
-		AesOpEnd();
+		if (!wide)
+		{
+			AesOpEnd();
+		}
 		if (status != CRYPTO_STATUS_OK && Len > 0U)
 		{
 			memset(pOut, 0, Len);
@@ -118,7 +130,7 @@ CRYPTO_STATUS CryptoSoftAes::Cipher(CRYPTO_CIPHER_ALG Alg, int bEncrypt,
 		{
 			return CRYPTO_STATUS_FAIL;
 		}
-		if (!AesOpBegin())
+		if (!wide && !AesOpBegin())
 		{
 			if (Len > 0U) memset(pOut, 0, Len);
 			return CRYPTO_STATUS_BUSY;
@@ -135,7 +147,11 @@ CRYPTO_STATUS CryptoSoftAes::Cipher(CRYPTO_CIPHER_ALG Alg, int bEncrypt,
 				{
 					block[i] = (uint8_t)(pIn[off + i] ^ counter[i]);
 				}
-				if (!AesEcbEncrypt(Key.Plain.pData, block, pOut + off))
+				if (wide)
+				{
+					CryptoAesSoftEncryptBlock256(Key.Plain.pData, block, pOut + off);
+				}
+				else if (!AesEcbEncrypt(Key.Plain.pData, block, pOut + off))
 				{
 					status = CRYPTO_STATUS_FAIL;
 					break;
@@ -144,7 +160,11 @@ CRYPTO_STATUS CryptoSoftAes::Cipher(CRYPTO_CIPHER_ALG Alg, int bEncrypt,
 			}
 			else
 			{
-				if (!AesEcbEncrypt(Key.Plain.pData, counter, block))
+				if (wide)
+				{
+					CryptoAesSoftEncryptBlock256(Key.Plain.pData, counter, block);
+				}
+				else if (!AesEcbEncrypt(Key.Plain.pData, counter, block))
 				{
 					status = CRYPTO_STATUS_FAIL;
 					break;
@@ -165,7 +185,10 @@ CRYPTO_STATUS CryptoSoftAes::Cipher(CRYPTO_CIPHER_ALG Alg, int bEncrypt,
 		}
 		AesWipe(block, sizeof(block));
 		AesWipe(counter, sizeof(counter));
-		AesOpEnd();
+		if (!wide)
+		{
+			AesOpEnd();
+		}
 		if (status != CRYPTO_STATUS_OK && Len > 0U)
 		{
 			memset(pOut, 0, Len);
@@ -191,7 +214,14 @@ CRYPTO_STATUS CryptoSoftAes::Cipher(CRYPTO_CIPHER_ALG Alg, int bEncrypt,
 	{
 		for (size_t off = 0; off < Len; off += AES_BLOCK)
 		{
-			CryptoAesSoftDecryptBlock(Key.Plain.pData, pIn + off, pOut + off);
+			if (wide)
+			{
+				CryptoAesSoftDecryptBlock256(Key.Plain.pData, pIn + off, pOut + off);
+			}
+			else
+			{
+				CryptoAesSoftDecryptBlock(Key.Plain.pData, pIn + off, pOut + off);
+			}
 		}
 	}
 	else
@@ -201,7 +231,14 @@ CRYPTO_STATUS CryptoSoftAes::Cipher(CRYPTO_CIPHER_ALG Alg, int bEncrypt,
 		for (size_t off = 0; off < Len; off += AES_BLOCK)
 		{
 			memcpy(block, pIn + off, AES_BLOCK);
-			CryptoAesSoftDecryptBlock(Key.Plain.pData, block, pOut + off);
+			if (wide)
+			{
+				CryptoAesSoftDecryptBlock256(Key.Plain.pData, block, pOut + off);
+			}
+			else
+			{
+				CryptoAesSoftDecryptBlock(Key.Plain.pData, block, pOut + off);
+			}
 			for (size_t i = 0; i < AES_BLOCK; i++)
 			{
 				pOut[off + i] ^= chain[i];
