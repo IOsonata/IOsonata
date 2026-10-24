@@ -12,6 +12,8 @@
 #ifndef __BOARD_H__
 #define __BOARD_H__
 
+#define NET_UART_CORE_NO	1
+
 // Define NRF5340_DK_PCA10095 in the project symbols for the standard nRF5340 DK.
 // Default is the nRF5340 Audio DK.
 #if defined(NRF5340_DK_PCA10095)

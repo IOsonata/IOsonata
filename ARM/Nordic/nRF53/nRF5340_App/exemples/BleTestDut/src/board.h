@@ -39,6 +39,19 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #ifndef __BOARD_H__
 #define __BOARD_H__
 
+// Console pins handed to core 1 before Bluetooth starts it.
+#define NET_UART_CORE_NO	1
+#define NET_UART_PORT	1
+#if defined(NRF5340_DK_PCA10095)
+#define NET_UART_RX_PIN	0
+#define NET_UART_TX_PIN	1
+#else
+// nRF5340 Audio DK (default).
+#define NET_UART_RX_PIN	8
+#define NET_UART_TX_PIN	9
+#endif
+
+
 #include "blueio_board.h"
 
 // Default is the nRF5340 Audio DK, the dev board of the nRF5340 work.

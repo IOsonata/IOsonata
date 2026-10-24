@@ -530,3 +530,16 @@ void IOPinSetSpeed(int PortNo, int PinNo, IOPINSPEED Speed)
 
     IOPinSetStrength(PortNo, PinNo, strength);
 }
+
+bool IOPinAssignCore(int PortNo, int PinNo, int CoreNo)
+{
+	// LP-core pad routing is not implemented by this port.
+#if defined(ESP32C3)
+	return CoreNo == 0 && PortNo == 0 && ESP32IsValidGpioPin(PinNo);
+#else
+	(void)PortNo;
+	(void)PinNo;
+	(void)CoreNo;
+	return false;
+#endif
+}

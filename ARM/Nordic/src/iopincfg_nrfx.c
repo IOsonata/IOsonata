@@ -1058,3 +1058,78 @@ void __WEAK GPIOTE_IRQHandler(void)
 }
 #endif
 
+
+bool IOPinAssignCore(int PortNo, int PinNo, int CoreNo)
+{
+#if defined(NRF5340_XXAA_APPLICATION) && !defined(NRF_TRUSTZONE_NONSECURE)
+	NRF_GPIO_Type *reg;
+	uint32_t select;
+	uint32_t mask;
+	uint32_t state;
+	bool assigned;
+
+	if ((unsigned)CoreNo > 1U || (unsigned)PortNo > 1U ||
+		(unsigned)PinNo >= (PortNo == 0 ? P0_PIN_NUM : P1_PIN_NUM))
+	{
+		return false;
+	}
+
+	reg = nRFGpioGetReg(PortNo);
+	select = (CoreNo == 0 ? GPIO_PIN_CNF_MCUSEL_AppMCU :
+		GPIO_PIN_CNF_MCUSEL_NetworkMCU) << GPIO_PIN_CNF_MCUSEL_Pos;
+	mask = 1UL << (unsigned)PinNo;
+	state = DisableInterrupt();
+
+	if (CoreNo == 1)
+	{
+		// Net has no secure execution state. Check access before handing
+		// over the pin; a locked secure permission must leave it untouched.
+		if ((NRF_SPU_S->GPIOPORT[PortNo].PERM & mask) != 0U)
+		{
+			if ((NRF_SPU_S->GPIOPORT[PortNo].LOCK & SPU_GPIOPORT_LOCK_LOCK_Msk) != 0U)
+			{
+				EnableInterrupt(state);
+				return false;
+			}
+			NRF_SPU_S->GPIOPORT[PortNo].PERM &= ~mask;
+			__DSB();
+			if ((NRF_SPU_S->GPIOPORT[PortNo].PERM & mask) != 0U)
+			{
+				EnableInterrupt(state);
+				return false;
+			}
+		}
+	}
+
+	reg->PIN_CNF[PinNo] = (reg->PIN_CNF[PinNo] & ~GPIO_PIN_CNF_MCUSEL_Msk) | select;
+	__DSB();
+	assigned = (reg->PIN_CNF[PinNo] & GPIO_PIN_CNF_MCUSEL_Msk) == select;
+	EnableInterrupt(state);
+	return assigned;
+#elif defined(NRF5340_XXAA_APPLICATION) || defined(NRF5340_XXAA_NETWORK) || \
+	defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA) || \
+	defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
+	// Net/non-secure App cannot grant ownership. nRF54 auxiliary-core
+	// routing is not implemented here; do not report a successful handoff.
+	(void)PortNo;
+	(void)PinNo;
+	(void)CoreNo;
+	return false;
+#else
+	if (CoreNo != 0 || PortNo < 0 || PortNo >= GPIO_COUNT || PinNo < 0)
+	{
+		return false;
+	}
+	switch (PortNo)
+	{
+		case 0:
+			return PinNo < P0_PIN_NUM;
+#if GPIO_COUNT > 1
+		case 1:
+			return PinNo < P1_PIN_NUM;
+#endif
+		default:
+			return false;
+	}
+#endif
+}

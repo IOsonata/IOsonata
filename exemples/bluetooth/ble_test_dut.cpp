@@ -2020,6 +2020,16 @@ static void HardwareInit(void)
 
 int main(void)
 {
+
+#ifdef NET_UART_CORE_NO
+	// Assign the other core's console before Bluetooth starts that core.
+	if (!IOPinAssignCore(NET_UART_PORT, NET_UART_RX_PIN, NET_UART_CORE_NO) ||
+		!IOPinAssignCore(NET_UART_PORT, NET_UART_TX_PIN, NET_UART_CORE_NO))
+	{
+		return 1;
+	}
+#endif
+
 	HardwareInit();
 
 	DutOut("DUT BOOT name=%s proto=%u", DUT_DEVICE_NAME,

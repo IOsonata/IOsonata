@@ -197,6 +197,31 @@ extern "C" {
 #endif
 
 /**
+ * @brief Assign an I/O pin to a processor core.
+ *
+ * Core numbers are fixed for the MCU, independent of the caller. The main
+ * core is 0; additional cores are numbered from 1 by the target port.
+ * Single-core ports accept core 0 for valid pins without changing hardware.
+ *
+ * Preserves direction, pull, drive and function settings. Does not start
+ * a core or assign a peripheral. Stop users of the pin on both cores before
+ * changing ownership. IOPinConfig and IOPinDisable preserve this assignment.
+ * Board pin maps remain responsible for package bonding.
+ *
+ * On nRF5340, core 0 is App and core 1 is Net. Call from secure App code;
+ * Net and non-secure App callers cannot assign pins. Assigning to Net also
+ * makes that pin non-secure. Assigning back to App preserves its security.
+ *
+ * @param PortNo : Port number
+ * @param PinNo  : Pin number
+ * @param CoreNo : Zero-based core number, main core is 0
+ *
+ * @return true if assigned (including already assigned); false for invalid
+ *         arguments, unsupported assignment or insufficient permission.
+ */
+bool IOPinAssignCore(int PortNo, int PinNo, int CoreNo);
+
+/**
  * @brief Configure individual I/O pin.
  *
  * This function is MCU dependent. Needs to be implemented per MCU

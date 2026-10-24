@@ -362,3 +362,9 @@ void IOPinSetSpeed(int PortNo, int PinNo, IOPINSPEED Speed)
 	// No independently programmable slew-rate field on RA4M1.
 	(void)PortNo; (void)PinNo; (void)Speed;
 }
+
+// This port has one application core and no pin ownership selector.
+bool IOPinAssignCore(int PortNo, int PinNo, int CoreNo)
+{
+	return CoreNo == 0 && Ra4m1PinValid(PortNo, PinNo);
+}

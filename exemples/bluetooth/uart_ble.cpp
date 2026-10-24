@@ -395,6 +395,16 @@ int UartEvthandler(UARTDev_t *pDev, UART_EVT EvtId, uint8_t *pBuffer, int Buffer
 
 int main()
 {
+
+#ifdef NET_UART_CORE_NO
+	// Assign the other core's console before Bluetooth starts that core.
+	if (!IOPinAssignCore(NET_UART_PORT, NET_UART_RX_PIN, NET_UART_CORE_NO) ||
+		!IOPinAssignCore(NET_UART_PORT, NET_UART_TX_PIN, NET_UART_CORE_NO))
+	{
+		return 1;
+	}
+#endif
+
 	HardwareInit();
 
 	SysLogPrintf(SysLogGet(), "UART over BLE\r\n");
