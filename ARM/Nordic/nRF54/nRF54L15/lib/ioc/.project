@@ -1661,6 +1661,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_softaes.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/crypto/crypto_aes_soft_block.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_aes_soft_block.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/crypto/crypto_softrng.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_softrng.cpp</locationURI>

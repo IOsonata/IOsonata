@@ -36,7 +36,7 @@ from unicorn.arm_const import UC_ARM_REG_SP, UC_ARM_REG_LR, UC_ARM_REG_R0, UC_AR
 
 ROOT = Path(__file__).resolve().parents[2]
 SOURCES = ('ARM/ST/src/rng_stm32.cpp', 'src/crypto/crypto_p256.cpp',
-           'src/crypto/crypto_softaes.cpp', 'src/crypto/crypto_softsha256.cpp',
+           'src/crypto/crypto_softaes.cpp', 'src/crypto/crypto_aes_soft_block.cpp', 'src/crypto/crypto_softsha256.cpp',
            'src/crypto/crypto_uecc.cpp', 'micro-ecc/uECC.c', 'src/device.cpp',
            'src/device_intrf.cpp', 'src/CppRuntimeOverload.cpp', 'tests/stm32h7/crypto_fw.cpp')
 

@@ -166,7 +166,7 @@ def main():
 		print('Native TLS with actual Nordic board settings and conflicting TLS selection rejection PASS', flush=True)
 		for opt in ('-O0', '-O2'):
 			objects = []
-			for source in ('src/crypto/crypto_softaes.cpp', 'src/crypto/crypto_softsha256.cpp',
+			for source in ('src/crypto/crypto_softaes.cpp', 'src/crypto/crypto_aes_soft_block.cpp', 'src/crypto/crypto_softsha256.cpp',
 				'src/crypto/crypto_p256.cpp', 'src/crypto/crypto_uecc.cpp', 'src/device.cpp',
 				'src/device_intrf.cpp'):
 				obj = tmp / (Path(source).stem + opt + '.o')

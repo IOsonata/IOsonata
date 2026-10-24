@@ -178,6 +178,7 @@ def build(tmp, wpan):
         ROOT / 'ARM/ST/STM32WBAxx/src/bt_wba_pka.cpp',
         ROOT / 'ARM/ST/STM32WBAxx/src/crypto_stm32wba.cpp',
         ROOT / 'src/crypto/crypto_softaes.cpp',
+        ROOT / 'src/crypto/crypto_aes_soft_block.cpp',
         ROOT / 'src/crypto/crypto_softrng.cpp',
         ROOT / 'src/crypto/crypto_p256.cpp',
         ROOT / 'src/crypto/crypto_uecc.cpp',
