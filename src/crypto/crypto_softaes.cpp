@@ -264,6 +264,71 @@ CRYPTO_STATUS CryptoSoftAes::Cipher(CRYPTO_CIPHER_ALG Alg, int bEncrypt,
 		return status;
 	}
 
+	// CTR and CBC encryption only require an AES encryption block.
+	// Hardware subclasses reuse these modes through AesEcbEncrypt.
+	if (Alg == CRYPTO_CIPHER_CTR ||
+		(Alg == CRYPTO_CIPHER_CBC && bEncrypt != 0))
+	{
+		if (pIv == nullptr || IvLen != AES_BLOCK ||
+			(Alg == CRYPTO_CIPHER_CBC && (Len & (AES_BLOCK - 1U)) != 0U))
+		{
+			return CRYPTO_STATUS_FAIL;
+		}
+		if (!AesOpBegin())
+		{
+			if (Len > 0U) memset(pOut, 0, Len);
+			return CRYPTO_STATUS_BUSY;
+		}
+		uint8_t counter[AES_BLOCK];
+		uint8_t block[AES_BLOCK];
+		memcpy(counter, pIv, AES_BLOCK);
+		CRYPTO_STATUS status = CRYPTO_STATUS_OK;
+		for (size_t off = 0; off < Len; off += AES_BLOCK)
+		{
+			if (Alg == CRYPTO_CIPHER_CBC)
+			{
+				for (size_t i = 0; i < AES_BLOCK; i++)
+				{
+					block[i] = (uint8_t)(pIn[off + i] ^ counter[i]);
+				}
+				if (!AesEcbEncrypt(Key.Plain.pData, block, pOut + off))
+				{
+					status = CRYPTO_STATUS_FAIL;
+					break;
+				}
+				memcpy(counter, pOut + off, AES_BLOCK);
+			}
+			else
+			{
+				if (!AesEcbEncrypt(Key.Plain.pData, counter, block))
+				{
+					status = CRYPTO_STATUS_FAIL;
+					break;
+				}
+				size_t n = Len - off < AES_BLOCK ? Len - off : AES_BLOCK;
+				for (size_t i = 0; i < n; i++)
+				{
+					pOut[off + i] = (uint8_t)(pIn[off + i] ^ block[i]);
+				}
+				for (int i = AES_BLOCK - 1; i >= 0; i--)
+				{
+					if (++counter[i] != 0U)
+					{
+						break;
+					}
+				}
+			}
+		}
+		AesWipe(block, sizeof(block));
+		AesWipe(counter, sizeof(counter));
+		AesOpEnd();
+		if (status != CRYPTO_STATUS_OK && Len > 0U)
+		{
+			memset(pOut, 0, Len);
+		}
+		return status;
+	}
+
 	uint8_t rk[AES128_RK_WORDS * 4U];
 	AesKeyExpand(Key.Plain.pData, rk);
 	CRYPTO_STATUS st = CRYPTO_STATUS_OK;
