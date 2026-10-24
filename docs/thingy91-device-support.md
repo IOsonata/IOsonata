@@ -24,7 +24,7 @@ Working baseline: `prerelease_0.13_4`. This is a hardware inventory and implemen
 | nRF9151 LTE/GNSS | Modem | Verify target MCU support and modem integration |
 | nRF5340 application/network cores | IPC/radio | Existing generic nRF5340 support; board integration required |
 | nRF7002 Wi-Fi | SPI/coexistence | Development paused; existing experimental code retained; do not continue until explicitly resumed |
-| ADXL367 low-power accelerometer | I2C | `accel_adxl367` compiled; hardware validation pending |
+| ADXL367 low-power accelerometer | I2C | `accel_adxl367` integrated in the nRF91x1 library; Thingy:91 X sensor-rail-aware test project added; hardware validation pending |
 | BMI270 six-axis IMU | SPI | Existing `ag_bmi270` |
 | BMM350 magnetometer | I2C | `mag_bmm350` corrected to Bosch ODR/OTP compensation and 24-bit decoding; host regression and Thingy:91 X test project added; hardware validation pending |
 | BME688 environmental sensor | I2C | Existing `tphg_bme680` forced-mode path is register-compatible (BME68x ID `0x61`, I2C `0x76/0x77`); Thingy:91 X power-aware compatibility test added; parallel/sequential gas modes are not exposed; hardware validation pending |
@@ -93,3 +93,4 @@ Working baseline: `prerelease_0.13_4`. This is a hardware inventory and implemen
 - Test project: `ARM/Nordic/nRF91/nRF91x1/exemples/nPM1300Test`; default mode is non-destructive and reports charger/status, VBAT, NTC temperature, BUCK/LDSW status and GPIO4.
 
 - BMM350 validation project: `ARM/Nordic/nRF91/nRF91x1/exemples/BMM350Test`.
+- ADXL367 validation project: `ARM/Nordic/nRF91/nRF91x1/exemples/ADXL367Test`.

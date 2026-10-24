@@ -1785,6 +1785,11 @@
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/crypto/crypto.h</locationURI>
 		</link>
+		<link>
+			<name>src/sensors/accel_adxl367.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-7-PROJECT_LOC/src/sensors/accel_adxl367.cpp</locationURI>
+		</link>
 	</linkedResources>
 	<variableList>
 		<variable>
