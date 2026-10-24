@@ -3,8 +3,8 @@
 
 #include "coredev/iopincfg.h"
 #include "nrf.h"
-#include "crypto/crypto_ecb_nrf53.h"
-#include "crypto/crypto_rng_nrf.h"
+#include "crypto_ecb_nrf53.h"
+#include "crypto_rng_nrf.h"
 
 #define CRYPTO_TEST_AES_TYPE		CryptoEcbNrf53
 #define CRYPTO_TEST_AES_MEMSIZE		CRYPTO_ECB_NRF53_MEMSIZE
