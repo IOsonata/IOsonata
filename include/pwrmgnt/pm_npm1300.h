@@ -76,11 +76,11 @@ SOFTWARE.
 #define NPM1300_VBUSIN_USBC_DETECT_STATUS_VBUSINCC1CMP_MASK				(3<<0)	
 #define NPM1300_VBUSIN_USBC_DETECT_STATUS_VBUSINCC1CMP_DEFAULTUSB		(1<<0)	// Default USB 100/500mA
 #define NPM1300_VBUSIN_USBC_DETECT_STATUS_VBUSINCC1CMP_1A5HIGHPOWER		(2<<0)	// 1.5A high power
-#define NPM1300_VBUSIN_USBC_DETECT_STATUS_VBUSINCC1CMP_3AHIGHPOWER		(2<<0)	// 3A high power
+#define NPM1300_VBUSIN_USBC_DETECT_STATUS_VBUSINCC1CMP_3AHIGHPOWER		(3<<0)	// 3A high power
 #define NPM1300_VBUSIN_USBC_DETECT_STATUS_VBUSINCC2CMP_MASK				(3<<2)	
 #define NPM1300_VBUSIN_USBC_DETECT_STATUS_VBUSINCC2CMP_DEFAULTUSB		(1<<2)	// Default USB 100/500mA
 #define NPM1300_VBUSIN_USBC_DETECT_STATUS_VBUSINCC2CMP_1A5HIGHPOWER		(2<<2)	// 1.5A high power
-#define NPM1300_VBUSIN_USBC_DETECT_STATUS_VBUSINCC2CMP_3AHIGHPOWER		(2<<2)	// 3A high power
+#define NPM1300_VBUSIN_USBC_DETECT_STATUS_VBUSINCC2CMP_3AHIGHPOWER		(3<<2)	// 3A high power
 
 #define NPM1300_VBUSIN_VBUSIN_STATUS_REG			0x207	// VBUS status flags
 #define NPM1300_VBUSIN_VBUSIN_STATUS_VBUSINPRESENT_DETECTED				(1<<0)	// VBUS Detected
@@ -162,7 +162,7 @@ SOFTWARE.
 
 #define NPM1300_BCHARGER_BCHGITERM_SEL_REG			0x30F	// Battery charger ITERM level select
 #define NPM1300_BCHARGER_BCHGITERM_SEL_BCHGITERMSEL_SEL10				(0)	// 10%
-#define NPM1300_BCHARGER_BCHGITERM_SEL_BCHGITERMSEL_SEL20				(0)	// 20%
+#define NPM1300_BCHARGER_BCHGITERM_SEL_BCHGITERMSEL_SEL20				(1)	// 20%
 
 #define NPM1300_BCHARGER_NTCCOLD_REG				0x310	// NTC thermistor threshold for cold temp region
 #define NPM1300_BCHARGER_NTCCOLD_LSB_REG			0x311	// NTC thermistor threshold for cold temp region
@@ -202,7 +202,7 @@ SOFTWARE.
 #define NPM1300_BCHARGER_DIE_TEMP_STATUS_HIGH							(1<<0)
 
 #define NPM1300_BCHARGER_BCHG_CHARGE_STATUS_REG		0x334	// Charging status
-#define NPM1300_BCHARGER_BCHG_CHARGE_STATUS_BATTERYDETECTED				(1<<0)	// Battery is connected
+#define NPM1300_BCHARGER_BCHG_CHARGE_STATUS_BATTERYDETECTED				(1<<0)	// Not implemented on nPM1300; do not use for presence
 #define NPM1300_BCHARGER_BCHG_CHARGE_STATUS_COMPLETED					(1<<1)	// Charging completed (battery full
 #define NPM1300_BCHARGER_BCHG_CHARGE_STATUS_TRICKLECHARGE				(1<<2)	// Trickle charge
 #define NPM1300_BCHARGER_BCHG_CHARGE_STATUS_CONSTANTCURRENT				(1<<3)	// Constant current charging
@@ -428,7 +428,7 @@ SOFTWARE.
 #define NPM1300_BUCK_BUCKCTRL0_BUCK1ENPULLDOWN_ENABLE					(1<<2)	// Buck1 pulldown enable
 #define NPM1300_BUCK_BUCKCTRL0_BUCK2ENPULLDOWN_ENABLE					(1<<3)	// Buck2 pulldown enable
 
-#define NPM1300_BUCK_BUCKSTATUS_REG 				0x416	// Buck status register
+#define NPM1300_BUCK_BUCKSTATUS_REG 				0x434	// Buck status register
 #define NPM1300_BUCK_BUCKSTATUS_BUCK1MODE_MASK							(3<<0)
 #define NPM1300_BUCK_BUCKSTATUS_BUCK1MODE_AUTO							(0<<0)
 #define NPM1300_BUCK_BUCKSTATUS_BUCK1MODE_PFM							(1<<0)
@@ -441,6 +441,7 @@ SOFTWARE.
 #define NPM1300_BUCK_BUCKSTATUS_BUCK2MODE_PWM							(2<<4)
 #define NPM1300_BUCK_BUCKSTATUS_BUCK2PWRGOOD_POWERED					(1<<6)
 #define NPM1300_BUCK_BUCKSTATUS_BUCK2PWMOK_ENABLED						(1<<7)	// PWM mode enabled
+#define NPM1300_BUCK_VOUT_CODE_MAX											(24)
 
 #define NPM1300_LDSW_TASKLDSW1_SET_REG				0x800	// Enable LDSW1
 #define NPM1300_LDSW_TASKLDSW1_SET_ENABLE								(1)
@@ -483,15 +484,15 @@ SOFTWARE.
 #define NPM1300_LDSW_LDSWCONFIG_LDSW1SOFTSTARTDISABLE					(1<<0)	// LDSW1 soft start disabled
 #define NPM1300_LDSW_LDSWCONFIG_LDSW2SOFTSTARTDISABLE					(1<<1)	// LDSW2 soft start disabled
 #define NPM1300_LDSW_LDSWCONFIG_LDSW1SOFTSTARTSEL_MASK					(3<<2)
-#define NPM1300_LDSW_LDSWCONFIG_LDSW1SOFTSTARTSEL_10MA					(0<<2)
-#define NPM1300_LDSW_LDSWCONFIG_LDSW1SOFTSTARTSEL_20MA					(1<<2)
-#define NPM1300_LDSW_LDSWCONFIG_LDSW1SOFTSTARTSEL_35MA					(2<<2)
-#define NPM1300_LDSW_LDSWCONFIG_LDSW1SOFTSTARTSEL_50MA					(3<<2)
+#define NPM1300_LDSW_LDSWCONFIG_LDSW1SOFTSTARTSEL_25MA					(0<<2)
+#define NPM1300_LDSW_LDSWCONFIG_LDSW1SOFTSTARTSEL_50MA					(1<<2)
+#define NPM1300_LDSW_LDSWCONFIG_LDSW1SOFTSTARTSEL_75MA					(2<<2)
+#define NPM1300_LDSW_LDSWCONFIG_LDSW1SOFTSTARTSEL_100MA					(3<<2)
 #define NPM1300_LDSW_LDSWCONFIG_LDSW2SOFTSTARTSEL_MASK					(3<<4)
-#define NPM1300_LDSW_LDSWCONFIG_LDSW2SOFTSTARTSEL_10MA					(0<<4)
-#define NPM1300_LDSW_LDSWCONFIG_LDSW2SOFTSTARTSEL_20MA					(1<<4)
-#define NPM1300_LDSW_LDSWCONFIG_LDSW2SOFTSTARTSEL_35MA					(2<<4)
-#define NPM1300_LDSW_LDSWCONFIG_LDSW2SOFTSTARTSEL_50MA					(3<<4)
+#define NPM1300_LDSW_LDSWCONFIG_LDSW2SOFTSTARTSEL_25MA					(0<<4)
+#define NPM1300_LDSW_LDSWCONFIG_LDSW2SOFTSTARTSEL_50MA					(1<<4)
+#define NPM1300_LDSW_LDSWCONFIG_LDSW2SOFTSTARTSEL_75MA					(2<<4)
+#define NPM1300_LDSW_LDSWCONFIG_LDSW2SOFTSTARTSEL_100MA					(3<<4)
 #define NPM1300_LDSW_LDSWCONFIG_LDSW1ACTIVEDISCHARGE					(1<<6)	// Load Switch1 Active discharge Enable
 #define NPM1300_LDSW_LDSWCONFIG_LDSW2ACTIVEDISCHARGE					(1<<7)	// Load Switch2 Active discharge Enable
 
@@ -862,8 +863,8 @@ SOFTWARE.
 #define NPM1300_MAIN_INTENEVENTS_BCHARGER1CLR_EVENTCHGERROR				(1<<5)
 
 #define NPM1300_MAIN_EVENTS_BCHARGER2SET_REG		0x00E	// Battery Charger Battery Events Event Set
-#define NPM1300_MAIN_EVENTS_BCHARGER2SET_EVENTBATDETECTED				(1<<0)	// Event Battery Detected
-#define NPM1300_MAIN_EVENTS_BCHARGER2SET_EVENTBATLOST					(1<<1)	// Event Battery Lost
+#define NPM1300_MAIN_EVENTS_BCHARGER2SET_EVENTBATDETECTED				(1<<0)	// Not implemented on nPM1300
+#define NPM1300_MAIN_EVENTS_BCHARGER2SET_EVENTBATLOST					(1<<1)	// Not implemented on nPM1300
 #define NPM1300_MAIN_EVENTS_BCHARGER2SET_EVENTBATRECHARGE				(1<<2)	// Event Battery re-charge needed
 
 #define NPM1300_MAIN_EVENTS_BCHARGER2CLR_REG		0x00F	// Battery Charger Battery Events Event Clear
@@ -1035,127 +1036,90 @@ SOFTWARE.
 
 #ifdef __cplusplus
 
-class PmnPM1300 : public PowerMgnt, public  FuelGauge {
+class PmnPM1300 : public PowerMgnt, public FuelGauge {
 public:
-	/**
-	 * Attach to nPM1300 without changing charger or regulator configuration.
-	 * This is intended for board-level GPIO/load-switch control.
-	 */
+	PmnPM1300();
+
+	/* Attach without changing charger or regulator configuration. */
 	bool Init(DeviceIntrf * const pIntrf, uint32_t DevAddr = NPM1300_I2C_7BITS_ADDR);
-	bool Init(const PwrMgntCfg_t &Cfg, DeviceIntrf * const pIntrf);
-	bool Init(const FuelGaugeCfg_t &Cfg, DeviceIntrf * const pIntrf, PowerMgnt * const pPwrMnt);
+	bool Init(const PwrMgntCfg_t &Cfg, DeviceIntrf * const pIntrf) override;
+	bool Init(const FuelGaugeCfg_t &Cfg, DeviceIntrf * const pIntrf,
+		PowerMgnt * const pPwrMnt) override;
 
 	bool SetLdoVoltage(size_t Index, int32_t mVolt);
 	bool SetLoadSwitchMode(size_t Index);
 	bool SetLoadSwitchEnabled(size_t Index, bool Enable);
+	bool SetLoadSwitchSoftStart(size_t Index, uint32_t mA, bool Enable);
+	bool SetLoadSwitchDischarge(size_t Index, bool Enable);
+	bool ReadLoadSwitchStatus(uint8_t &Status);
+
+	bool SetGpioMode(size_t Index, uint8_t Mode);
+	bool SetGpioPull(size_t Index, bool PullUp, bool PullDown);
+	bool SetGpioOpenDrain(size_t Index, bool Enable);
+	bool SetGpioDrive(size_t Index, uint32_t mA);
 	bool GpioState(size_t Index, bool &High);
+
+	bool SetBuckPwm(size_t Index, bool Enable);
+	bool SetBuckPfm(size_t Index, bool Enable);
+	bool SetBuckRetention(size_t Index, int32_t mVolt);
+	bool SetBuckDischarge(size_t Index, bool Enable);
+	bool ReadBuckStatus(size_t Index, uint8_t &VoltageCode, uint8_t &Status);
+
+	bool SetInputCurrentLimit(uint32_t mA);
+	bool SetWarmTerminationVoltage(int32_t mVolt);
+	bool SetTerminationCurrent(uint32_t Percent);
+	bool SetTrickleVoltage(int32_t mVolt);
+	bool SetAutomaticRecharge(bool Enable);
+	bool SetNtcProtection(bool Enable);
+	bool SetNtcTemperatureLimits(int32_t Cold, int32_t Cool, int32_t Warm, int32_t Hot);
+	bool SetDieTemperatureLimits(int32_t StopCelsius, int32_t ResumeCelsius);
+	bool SetWarmCharging(bool Enable);
+	bool SetCoolFullCurrent(bool Enable);
+	bool SetDischargeCurrentLimit(uint32_t mA);
+	bool ClearChargerError();
+	bool RecoverCharger();
+	bool ClearChargerSafetyTimers();
+
 	bool ReadStatus(uint8_t &Charger, uint8_t &ChargerErrors,
 		uint8_t &Vbus, uint8_t &Ntc, uint8_t &ResetCause);
+	bool ReadChargerError(uint8_t &Reason, uint8_t &Sensor);
 	bool ClearErrorLog();
-	bool SetBuckPwm(size_t Index, bool Enable);
-	bool SetBuckRetention(size_t Index, int32_t mVolt);
-	bool SetGpioMode(size_t Index, uint8_t Mode);
 
-	/**
-	 * @brief	Get battery level
-	 *
-	 * Returns battery level in 1 digit fixed point decimal.
-	 *
-	 * ex. 123 => 12.3%
-	 *
-	 * @return	Battery level in (0-100) % in 1 digit fixed point
-	 */
-	virtual uint16_t Level();
+	uint16_t Level() override;
+	int32_t Temperature() override;
+	int32_t Voltage() override;
+	int32_t SetVout(size_t VoutIdx, int32_t mVolt, uint32_t CurrLimit) override;
+	uint32_t SetCharge(PWRMGNT_CHARGE_TYPE Type, int32_t mVoltEoC, uint32_t mACurr) override;
+	bool Charging() override;
+	bool Battery() override;
+	PWRMGNT_BATTERY_STATE BatteryState() override;
 
-	/**
-	 * @brief	Get battery temperature
-	 *
-	 * Returns battery temperature in 1 digit fixed point decimal.
-	 *
-	 * ex. 123 => 12.3 C
-	 *
-	 * @return	Battery level in (0-100) degree C in 1 digit fixed point
-	 */
-	virtual int32_t Temperature();
-
-	virtual int32_t Voltage();
-
-	/**
-	 * @brief	Set output voltage
-	 *
-	 * If output voltage is zero, turn off the output.
-	 *
-	 * @param	VoutIdx : Zero based index of output source
-	 * @param	mVolt : Output voltage in mV
-	 * @param	mALimit : Output current limit in mA if available
-	 * 						set to zero for max capacity
-	 *
-	 * @return	Actual output voltage in mV
-	 *
-	 */
-	int32_t SetVout(size_t VoutIdx, int32_t mVolt, uint32_t CurrLimit);
-
-	/**
-	 * @brief	Power on or wake up device
-	 *
-	 * @return	true - If success
-	 */
-	bool Enable();
-
-	/**
-	 * @brief	Put device in power down or power saving sleep mode
-	 *
-	 * This function is used to put the device in lowest power mode
-	 * possible so that the Enable function can wake up without full
-	 * initialization.
-	 */
-	void Disable();
-
-	/**
-	 * @brief	Reset device to it initial default state
-	 */
-	void Reset();
-
-	void PowerOff();
-
-	/**
-	 * @brief	Set battery charging
-	 *
-	 * If charge current is set to zero, charging is turned off
-	 *
-	 * @param	Type : Charging type
-	 * @param	mVoltEoC : End of charge voltage in mV
-	 * @param	mACurr : Charge current limit
-	 * 					0 : Disable charge
-	 *
-	 * @return	Actual charge current set.
-	 */
-	uint32_t SetCharge(PWRMGNT_CHARGE_TYPE Type, int32_t mVoltEoC, uint32_t mACurr);
-
-	/**
-	 * @brief	Charging status
-	 *
-	 * @return	true - Charging
-	 */
-	virtual bool Charging();
-
-	/**
-	 * @brief	Battery present status
-	 *
-	 * @return	true - Battery present
-	 */
-	/* Battery detection is unavailable in nPM1300 silicon; returns false. */
-	virtual bool Battery();
-	/**
-	 * @brief	Interrupt handler
-	 *
-	 * Optional implementation to handle interrupt. This is device specific.
-	 *
-	 */
-	virtual void IrqHandler();
+	bool Enable() override;
+	void Disable() override;
+	void Reset() override;
+	void PowerOff() override;
+	bool EnterShipMode();
+	void IrqHandler() override;
 
 private:
-	uint32_t vNtcBeta = 0;
+	void Invalidate();
+	bool ReadReg8(uint16_t Reg, uint8_t &Value);
+	bool WriteReg8(uint16_t Reg, uint8_t Value);
+	bool UpdateReg8(uint16_t Reg, uint8_t Mask, uint8_t Value);
+	bool WriteReg10(uint16_t Reg, uint16_t Value);
+	bool Probe();
+	bool ValidThermistor(const BatProfile_t * const pProfile) const;
+	bool ValidCharge(int32_t mVoltEoC, uint32_t mACurr) const;
+	bool ValidVout(int32_t mVolt) const;
+	bool ConfigureNtc(const BatProfile_t * const pProfile);
+	bool ConfigureInterrupts(bool Enable);
+	bool NtcCodeForTemperature(int32_t Celsius, uint16_t &Code) const;
+	bool ReadAdc(uint16_t TaskReg, uint8_t EventMask, uint16_t MsbReg,
+		uint8_t LsbShift, uint16_t &Code);
+	bool SetTerminationVoltage(uint16_t Reg, int32_t mVolt);
+
+	uint32_t vNtcBeta;
+	uint32_t vInputCurrentLimit;
 };
 
 extern "C" {

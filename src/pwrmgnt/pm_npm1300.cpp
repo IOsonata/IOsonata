@@ -3,9 +3,6 @@
 
 @brief	Power management implementation of the Nordic nPM1300
 
-This file contains generic definitions to implement power management drivers
-such as a PMIC chip or MCU builtin power management
-
 @author	Hoang Nguyen Hoan
 @date	Apr. 10, 2024
 
@@ -34,17 +31,166 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ----------------------------------------------------------------------------*/
-#include <stdio.h>
-#include <math.h>
 #include <limits.h>
+#include <math.h>
+#include <stddef.h>
 
 #include "convutil.h"
 #include "pwrmgnt/pm_npm1300.h"
 
-bool PmnPM1300::Init(DeviceIntrf * const pIntrf, uint32_t DevAddr)
+#define NPM1300_ADC_POLL_COUNT		64
+#define NPM1300_VBUS_STATUS_VALID_MASK	0x3FU
+#define NPM1300_LDSW_STATUS_VALID_MASK	0x1FU
+
+#define NPM1300_IRQ_BCHARGER0_MASK	(NPM1300_MAIN_EVENTS_BCHARGER0SET_EVENTNTCWARM | \
+						 NPM1300_MAIN_EVENTS_BCHARGER0SET_EVENTNTCHOT | \
+						 NPM1300_MAIN_EVENTS_BCHARGER0SET_EVENTDIETEMPHIGH)
+#define NPM1300_IRQ_BCHARGER1_MASK	NPM1300_MAIN_EVENTS_BCHARGER1SET_EVENTCHGCOMPLETED
+#define NPM1300_IRQ_VBUSIN0_MASK	NPM1300_MAIN_EVENTS_VBUSIN0SET_EVENTVBUSDETECTED
+#define NPM1300_IRQ_VBUSIN1_MASK	(NPM1300_MAIN_EVENTS_VBUSIN1SET_EVENTTHERMALWARNDETECTED | \
+						 NPM1300_MAIN_EVENTS_VBUSIN1SET_EVENTTHERMALSHUTDOWNDETECTED)
+
+typedef struct {
+	uint16_t EventReg;
+	uint16_t EventClrReg;
+	uint16_t IntSetReg;
+	uint16_t IntClrReg;
+	uint8_t Mask;
+} Npm1300IrqGroup_t;
+
+static const Npm1300IrqGroup_t s_Npm1300IrqGroups[] = {
+	{ NPM1300_MAIN_EVENTS_BCHARGER0SET_REG,
+		NPM1300_MAIN_EVENTS_BCHARGER0CLR_REG,
+		NPM1300_MAIN_INTENEVENT_SBCHARGER0SET_REG,
+		NPM1300_MAIN_INTENEVENT_SBCHARGER0CLR_REG,
+		NPM1300_IRQ_BCHARGER0_MASK },
+	{ NPM1300_MAIN_EVENTS_BCHARGER1SET_REG,
+		NPM1300_MAIN_EVENTS_BCHARGER1CLR_REG,
+		NPM1300_MAIN_INTENEVENTS_BCHARGER1SET_REG,
+		NPM1300_MAIN_INTENEVENTS_BCHARGER1CLR_REG,
+		NPM1300_IRQ_BCHARGER1_MASK },
+	{ NPM1300_MAIN_EVENTS_VBUSIN0SET_REG,
+		NPM1300_MAIN_EVENTS_VBUSIN0CLR_REG,
+		NPM1300_MAIN_INTENEVENTS_VBUSIN0SET_REG,
+		NPM1300_MAIN_INTENEVENTS_VBUSIN0CLR_REG,
+		NPM1300_IRQ_VBUSIN0_MASK },
+	{ NPM1300_MAIN_EVENTS_VBUSIN1SET_REG,
+		NPM1300_MAIN_EVENTS_VBUSIN1CLR_REG,
+		NPM1300_MAIN_INTENEVENTS_VBUSIN1SET_REG,
+		NPM1300_MAIN_INTENEVENTS_VBUSIN1CLR_REG,
+		NPM1300_IRQ_VBUSIN1_MASK },
+};
+
+PmnPM1300::PmnPM1300()
+{
+	vChrgCurr = 0;
+	vpEvtHandler = NULL;
+	vBatLowHandler = NULL;
+	vpPwrMgnt = NULL;
+	vBatProfile.OpVolt = 0;
+	vBatProfile.ChrgVolt = 0;
+	vBatProfile.Capacity = 0;
+	vBatProfile.ThermBetaConst = 0;
+	vBatProfile.ThermResistor = 0;
+	vNtcBeta = 0;
+	vInputCurrentLimit = 0;
+}
+
+void PmnPM1300::Invalidate()
+{
+	Valid(false);
+	InterruptEnabled(false);
+	Interface(NULL);
+	vDevAddr = 0;
+	vChrgCurr = 0;
+	vpEvtHandler = NULL;
+	vBatLowHandler = NULL;
+	vpPwrMgnt = NULL;
+	vBatProfile.OpVolt = 0;
+	vBatProfile.ChrgVolt = 0;
+	vBatProfile.Capacity = 0;
+	vBatProfile.ThermBetaConst = 0;
+	vBatProfile.ThermResistor = 0;
+	vNtcBeta = 0;
+	vInputCurrentLimit = 0;
+}
+
+bool PmnPM1300::ReadReg8(uint16_t Reg, uint8_t &Value)
 {
 	uint16_t addr;
-	uint8_t info[4];
+
+	if (Interface() == NULL)
+		return false;
+
+	addr = EndianCvt16(Reg);
+	return Read((uint8_t *)&addr, 2, &Value, 1) == 1;
+}
+
+bool PmnPM1300::WriteReg8(uint16_t Reg, uint8_t Value)
+{
+	uint16_t addr;
+
+	if (Interface() == NULL)
+		return false;
+
+	addr = EndianCvt16(Reg);
+	return Write8((uint8_t *)&addr, 2, Value);
+}
+
+bool PmnPM1300::UpdateReg8(uint16_t Reg, uint8_t Mask, uint8_t Value)
+{
+	uint8_t data;
+
+	if (!ReadReg8(Reg, data))
+		return false;
+
+	data = (uint8_t)((data & ~Mask) | (Value & Mask));
+	return WriteReg8(Reg, data);
+}
+
+bool PmnPM1300::WriteReg10(uint16_t Reg, uint16_t Value)
+{
+	uint16_t addr;
+	uint8_t data[2];
+
+	if (Interface() == NULL || Value > 1023)
+		return false;
+
+	addr = EndianCvt16(Reg);
+	data[0] = (uint8_t)(Value >> 2);
+	data[1] = (uint8_t)(Value & 3U);
+	return Write((uint8_t *)&addr, 2, data, 2) == 2;
+}
+
+bool PmnPM1300::Probe()
+{
+	uint8_t vbus;
+	uint8_t ldsw;
+	uint8_t buck1;
+	uint8_t buck2;
+
+	if (!ReadReg8(NPM1300_VBUSIN_VBUSIN_STATUS_REG, vbus))
+		return false;
+	if (!ReadReg8(NPM1300_LDSW_LSDWSTATUS_REG, ldsw))
+		return false;
+	if (!ReadReg8(NPM1300_BUCK_BUCK1VOUT_STATUS_REG, buck1))
+		return false;
+	if (!ReadReg8(NPM1300_BUCK_BUCK2VOUT_STATUS_REG, buck2))
+		return false;
+
+	if ((vbus & ~NPM1300_VBUS_STATUS_VALID_MASK) != 0)
+		return false;
+	if ((ldsw & ~NPM1300_LDSW_STATUS_VALID_MASK) != 0)
+		return false;
+	if (buck1 > NPM1300_BUCK_VOUT_CODE_MAX || buck2 > NPM1300_BUCK_VOUT_CODE_MAX)
+		return false;
+
+	return true;
+}
+
+bool PmnPM1300::Init(DeviceIntrf * const pIntrf, uint32_t DevAddr)
+{
+	Invalidate();
 
 	if (pIntrf == NULL || pIntrf->Type() != DEVINTRF_TYPE_I2C ||
 		DevAddr != NPM1300_I2C_7BITS_ADDR)
@@ -53,19 +199,19 @@ bool PmnPM1300::Init(DeviceIntrf * const pIntrf, uint32_t DevAddr)
 	vDevAddr = DevAddr;
 	Interface(pIntrf);
 
-	addr = EndianCvt16(NPM1300_DEVICE_INFO_REG);
-
-	if (Read((uint8_t *)&addr, 2, info, sizeof(info)) != sizeof(info))
+	if (!Probe())
 	{
-		Interface(NULL);
+		Invalidate();
 		return false;
 	}
+
+	Valid(true);
 	return true;
 }
 
 bool PmnPM1300::SetLdoVoltage(size_t Index, int32_t mVolt)
 {
-	uint16_t addr;
+	uint16_t reg;
 	uint8_t code;
 
 	if (Index > 1 || mVolt < 1000 || mVolt > 3300 ||
@@ -73,18 +219,18 @@ bool PmnPM1300::SetLdoVoltage(size_t Index, int32_t mVolt)
 		return false;
 
 	code = (uint8_t)((mVolt - 1000) / 100);
-	addr = EndianCvt16(Index == 0 ?
-		NPM1300_LDSW_LDSW1VOUTSEL_REG : NPM1300_LDSW_LDSW2VOUTSEL_REG);
-	if (!Write8((uint8_t *)&addr, 2, code))
+	reg = Index == 0 ? NPM1300_LDSW_LDSW1VOUTSEL_REG :
+		NPM1300_LDSW_LDSW2VOUTSEL_REG;
+	if (!WriteReg8(reg, code))
 		return false;
-	addr = EndianCvt16(Index == 0 ?
-		NPM1300_LDSW_LDSW1LDOSEL_REG : NPM1300_LDSW_LDSW2LDOSEL_REG);
-	return Write8((uint8_t *)&addr, 2, NPM1300_LDSW_LDSW1LDOSEL_LDO);
+
+	reg = Index == 0 ? NPM1300_LDSW_LDSW1LDOSEL_REG :
+		NPM1300_LDSW_LDSW2LDOSEL_REG;
+	return WriteReg8(reg, NPM1300_LDSW_LDSW1LDOSEL_LDO);
 }
 
 bool PmnPM1300::SetLoadSwitchMode(size_t Index)
 {
-	uint16_t addr;
 	uint16_t reg;
 
 	if (Index > 1 || Interface() == NULL)
@@ -92,14 +238,11 @@ bool PmnPM1300::SetLoadSwitchMode(size_t Index)
 
 	reg = Index == 0 ? NPM1300_LDSW_LDSW1LDOSEL_REG :
 		NPM1300_LDSW_LDSW2LDOSEL_REG;
-	addr = EndianCvt16(reg);
-
-	return Write8((uint8_t *)&addr, 2, 0);
+	return WriteReg8(reg, 0);
 }
 
 bool PmnPM1300::SetLoadSwitchEnabled(size_t Index, bool Enable)
 {
-	uint16_t addr;
 	uint16_t reg;
 
 	if (Index > 1 || Interface() == NULL)
@@ -112,417 +255,736 @@ bool PmnPM1300::SetLoadSwitchEnabled(size_t Index, bool Enable)
 		reg = Enable ? NPM1300_LDSW_TASKLDSW2_SET_REG :
 			NPM1300_LDSW_TASKLDSW2_CLR_REG;
 
-	addr = EndianCvt16(reg);
+	return WriteReg8(reg, 1);
+}
 
-	return Write8((uint8_t *)&addr, 2, 1);
+bool PmnPM1300::SetLoadSwitchSoftStart(size_t Index, uint32_t mA, bool Enable)
+{
+	uint8_t disableMask;
+	uint8_t selectMask;
+	uint8_t shift;
+	uint8_t code;
+	uint8_t data;
+
+	if (Index > 1 || Interface() == NULL)
+		return false;
+
+	switch (mA)
+	{
+	case 25:
+		code = 0;
+		break;
+	case 50:
+		code = 1;
+		break;
+	case 75:
+		code = 2;
+		break;
+	case 100:
+		code = 3;
+		break;
+	default:
+		return false;
+	}
+
+	disableMask = Index == 0 ?
+		NPM1300_LDSW_LDSWCONFIG_LDSW1SOFTSTARTDISABLE :
+		NPM1300_LDSW_LDSWCONFIG_LDSW2SOFTSTARTDISABLE;
+	selectMask = Index == 0 ?
+		NPM1300_LDSW_LDSWCONFIG_LDSW1SOFTSTARTSEL_MASK :
+		NPM1300_LDSW_LDSWCONFIG_LDSW2SOFTSTARTSEL_MASK;
+	shift = Index == 0 ? 2 : 4;
+
+	if (!ReadReg8(NPM1300_LDSW_LDSWCONFIG_REG, data))
+		return false;
+	data &= (uint8_t)~(disableMask | selectMask);
+	data |= (uint8_t)((code << shift) & selectMask);
+	if (!Enable)
+		data |= disableMask;
+
+	return WriteReg8(NPM1300_LDSW_LDSWCONFIG_REG, data);
+}
+
+bool PmnPM1300::SetLoadSwitchDischarge(size_t Index, bool Enable)
+{
+	uint8_t mask;
+
+	if (Index > 1 || Interface() == NULL)
+		return false;
+
+	mask = Index == 0 ? NPM1300_LDSW_LDSWCONFIG_LDSW1ACTIVEDISCHARGE :
+		NPM1300_LDSW_LDSWCONFIG_LDSW2ACTIVEDISCHARGE;
+	return UpdateReg8(NPM1300_LDSW_LDSWCONFIG_REG, mask, Enable ? mask : 0);
+}
+
+bool PmnPM1300::ReadLoadSwitchStatus(uint8_t &Status)
+{
+	return ReadReg8(NPM1300_LDSW_LSDWSTATUS_REG, Status);
 }
 
 bool PmnPM1300::GpioState(size_t Index, bool &High)
 {
-	uint16_t addr;
 	uint8_t status;
 
 	if (Index > 4 || Interface() == NULL)
 		return false;
-
-	addr = EndianCvt16(NPM1300_GPIOS_GPIOSTATUS_REG);
-
-	if (Read((uint8_t *)&addr, 2, &status, 1) != 1)
+	if (!ReadReg8(NPM1300_GPIOS_GPIOSTATUS_REG, status))
 		return false;
 
 	High = (status & (1U << Index)) != 0;
-
 	return true;
+}
+
+bool PmnPM1300::SetGpioPull(size_t Index, bool PullUp, bool PullDown)
+{
+	if (Index > 4 || (PullUp && PullDown) || Interface() == NULL)
+		return false;
+
+	if (!WriteReg8((uint16_t)(NPM1300_GPIOS_GPIOPUEN_BASE_REG + Index), PullUp ? 1 : 0))
+		return false;
+	return WriteReg8((uint16_t)(NPM1300_GPIOS_GPIOPDEN_BASE_REG + Index), PullDown ? 1 : 0);
+}
+
+bool PmnPM1300::SetGpioOpenDrain(size_t Index, bool Enable)
+{
+	if (Index > 4 || Interface() == NULL)
+		return false;
+	return WriteReg8((uint16_t)(NPM1300_GPIOS_GPIOOPENDRAIN_BASE_REG + Index), Enable ? 1 : 0);
+}
+
+bool PmnPM1300::SetGpioDrive(size_t Index, uint32_t mA)
+{
+	uint8_t value;
+
+	if (Index > 4 || Interface() == NULL)
+		return false;
+	if (mA == 1)
+		value = NPM1300_GPIOS_GPIODRIVE_1MA;
+	else if (mA == 6)
+		value = NPM1300_GPIOS_GPIODRIVE_6MA;
+	else
+		return false;
+
+	return WriteReg8((uint16_t)(NPM1300_GPIOS_GPIODRIVE_BASE_REG + Index), value);
+}
+
+bool PmnPM1300::ValidThermistor(const BatProfile_t * const pProfile) const
+{
+	if (pProfile == NULL)
+		return true;
+	if (pProfile->ThermBetaConst == 0 && pProfile->ThermResistor == 0)
+		return true;
+	if (pProfile->ThermBetaConst == 0 || pProfile->ThermResistor == 0)
+		return false;
+
+	return pProfile->ThermResistor == 10 || pProfile->ThermResistor == 47 ||
+		pProfile->ThermResistor == 100;
+}
+
+bool PmnPM1300::ValidCharge(int32_t mVoltEoC, uint32_t mACurr) const
+{
+	if (mACurr == 0)
+		return true;
+	if (mACurr < 32 || mACurr > 800)
+		return false;
+	if (mVoltEoC < 3500 || mVoltEoC > 4450 || mVoltEoC % 50 != 0)
+		return false;
+	if (mVoltEoC >= 3700 && mVoltEoC < 4000)
+		return false;
+	return true;
+}
+
+bool PmnPM1300::ValidVout(int32_t mVolt) const
+{
+	if (mVolt == 0)
+		return true;
+	return mVolt >= 1000 && mVolt <= 3300 && (mVolt - 1000) % 100 == 0;
+}
+
+bool PmnPM1300::ConfigureNtc(const BatProfile_t * const pProfile)
+{
+	uint8_t ntc;
+
+	if (pProfile == NULL || pProfile->ThermBetaConst == 0)
+		return true;
+
+	switch (pProfile->ThermResistor)
+	{
+	case 10:
+		ntc = NPM1300_ADC_ADCNTCRSEL_10K;
+		break;
+	case 47:
+		ntc = NPM1300_ADC_ADCNTCRSEL_47K;
+		break;
+	case 100:
+		ntc = NPM1300_ADC_ADCNTCRSEL_100K;
+		break;
+	default:
+		return false;
+	}
+
+	return WriteReg8(NPM1300_ADC_ADCNTCRSEL_REG, ntc);
+}
+
+bool PmnPM1300::ConfigureInterrupts(bool Enable)
+{
+	size_t i;
+	bool result;
+
+	result = true;
+	for (i = 0; i < sizeof(s_Npm1300IrqGroups) / sizeof(s_Npm1300IrqGroups[0]); i++)
+	{
+		if (Enable)
+		{
+			if (!WriteReg8(s_Npm1300IrqGroups[i].EventClrReg, s_Npm1300IrqGroups[i].Mask))
+				result = false;
+			if (!WriteReg8(s_Npm1300IrqGroups[i].IntSetReg, s_Npm1300IrqGroups[i].Mask))
+				result = false;
+		}
+		else if (!WriteReg8(s_Npm1300IrqGroups[i].IntClrReg, s_Npm1300IrqGroups[i].Mask))
+			result = false;
+	}
+
+	return result;
 }
 
 bool PmnPM1300::Init(const PwrMgntCfg_t &Cfg, DeviceIntrf * const pIntrf)
 {
-	uint16_t addr;
-	uint8_t info[4];
-	const uint16_t intRegs[] = {0x008, 0x00C, 0x010, 0x018, 0x01C};
-	const uint8_t intMasks[] = {0x3f, 0x3e, 0x04, 0x3f, 0x0f};
 	size_t i;
+	bool attached;
+
+	Invalidate();
+	attached = false;
 
 	if (pIntrf == NULL || pIntrf->Type() != DEVINTRF_TYPE_I2C ||
 		Cfg.DevAddr != NPM1300_I2C_7BITS_ADDR || Cfg.NbVout > 2 ||
-		(Cfg.NbVout > 0 && Cfg.pVout == NULL))
-		return false;
-
-	vDevAddr = Cfg.DevAddr;
-	Interface(pIntrf);
-	vpEvtHandler = Cfg.pEvtHandler;
-	vNtcBeta = Cfg.pBatProf != NULL ? Cfg.pBatProf->ThermBetaConst : 0;
-	if (Cfg.pBatProf != NULL)
-		vBatProfile = *Cfg.pBatProf;
-
-	addr = EndianCvt16(NPM1300_DEVICE_INFO_REG);
-	if (Read((uint8_t *)&addr, 2, info, sizeof(info)) != sizeof(info))
-	{
-		Interface(NULL);
-		return false;
-	}
-
-	if (Cfg.pBatProf != NULL && vNtcBeta != 0)
-	{
-		uint8_t ntc = 0;
-		switch (Cfg.pBatProf->ThermResistor)
-		{
-		case 10: ntc = NPM1300_ADC_ADCNTCRSEL_10K; break;
-		case 47: ntc = NPM1300_ADC_ADCNTCRSEL_47K; break;
-		case 100: ntc = NPM1300_ADC_ADCNTCRSEL_100K; break;
-		default: return false;
-		}
-		addr = EndianCvt16(NPM1300_ADC_ADCNTCRSEL_REG);
-		if (!Write8((uint8_t *)&addr, 2, ntc))
-			return false;
-	}
-
-	addr = EndianCvt16(NPM1300_ADC_ADCCONFIG_REG);
-	if (!Write8((uint8_t *)&addr, 2, NPM1300_ADC_ADCCONFIG_AUTOENABLE))
-		return false;
-
-	if (Cfg.ChrgCurr == 0)
-	{
-		addr = EndianCvt16(NPM1300_BCHARGER_BCHGENABLE_CLR_REG);
-		if (!Write8((uint8_t *)&addr, 2, 1))
-			return false;
-	}
-	else if (SetCharge(PWRMGNT_CHARGE_TYPE_NORMAL, Cfg.VEndChrg, Cfg.ChrgCurr) == 0)
+		(Cfg.NbVout > 0 && Cfg.pVout == NULL) || Cfg.ChrgTimeout != 0 ||
+		!ValidThermistor(Cfg.pBatProf) || !ValidCharge(Cfg.VEndChrg, Cfg.ChrgCurr))
 		return false;
 
 	for (i = 0; i < Cfg.NbVout; i++)
 	{
-		if (SetVout(i, Cfg.pVout[i].mVout, Cfg.pVout[i].mAlimit) < 0)
+		if (!ValidVout(Cfg.pVout[i].mVout))
 			return false;
 	}
 
+	vDevAddr = Cfg.DevAddr;
+	Interface(pIntrf);
+	attached = true;
+	if (!Probe())
+		goto fail;
+
+	vpEvtHandler = Cfg.pEvtHandler;
+	if (Cfg.pBatProf != NULL)
+	{
+		vNtcBeta = Cfg.pBatProf->ThermBetaConst;
+		vBatProfile = *Cfg.pBatProf;
+	}
+
+	if (!ConfigureNtc(Cfg.pBatProf))
+		goto fail;
+
 	if (Cfg.bIntEn)
 	{
-		addr = EndianCvt16(NPM1300_GPIOS_GPIOMODE1_REG);
-		if (!Write8((uint8_t *)&addr, 2, NPM1300_GPIOS_GPIOMODE_GPOIRQ))
-			return false;
-		for (i = 0; i < sizeof(intRegs) / sizeof(intRegs[0]); i++)
-		{
-			addr = EndianCvt16(intRegs[i]);
-			if (!Write8((uint8_t *)&addr, 2, intMasks[i]))
-				return false;
-		}
+		if (!ConfigureInterrupts(true))
+			goto fail;
 	}
+	else if (!ConfigureInterrupts(false))
+		goto fail;
+
+
+	for (i = 0; i < Cfg.NbVout; i++)
+	{
+		if (SetVout(i, Cfg.pVout[i].mVout, Cfg.pVout[i].mAlimit) < 0)
+			goto fail;
+	}
+
+	if (Cfg.ChrgCurr == 0)
+	{
+		if (!WriteReg8(NPM1300_BCHARGER_BCHGENABLE_CLR_REG,
+			NPM1300_BCHARGER_BCHGENABLE_CLR_ENABLECHARGING))
+			goto fail;
+	}
+	else if (SetCharge(PWRMGNT_CHARGE_TYPE_NORMAL, Cfg.VEndChrg, Cfg.ChrgCurr) == 0)
+		goto fail;
+
+	InterruptEnabled(Cfg.bIntEn);
+	Valid(true);
 	return true;
+
+fail:
+	if (attached)
+	{
+		WriteReg8(NPM1300_BCHARGER_BCHGENABLE_CLR_REG,
+			NPM1300_BCHARGER_BCHGENABLE_CLR_ENABLECHARGING);
+		ConfigureInterrupts(false);
+	}
+	Invalidate();
+	return false;
 }
 
 bool PmnPM1300::Init(const FuelGaugeCfg_t &Cfg, DeviceIntrf * const pIntrf,
 	PowerMgnt * const pPwrMnt)
 {
+	if (!ValidThermistor(&Cfg.BatProf))
+		return false;
 	if (!Init(pIntrf, Cfg.DevAddr))
 		return false;
+
 	vNtcBeta = Cfg.BatProf.ThermBetaConst;
 	vBatProfile = Cfg.BatProf;
 	vBatLowHandler = Cfg.BatLowHandler;
 	vpPwrMgnt = pPwrMnt;
+
+	if (!ConfigureNtc(&Cfg.BatProf))
+	{
+		Invalidate();
+		return false;
+	}
+
+	Valid(true);
 	return true;
 }
 
-/**
- * @brief	Get battery level
- *
- * Returns battery level in 1 digit fixed point decimal.
- *
- * ex. 123 => 12.3%
- *
- * @return	Battery level in (0-100) % in 1 digit fixed point
- */
 uint16_t PmnPM1300::Level()
 {
-	/* No fuel-gauge model is installed; do not report 0% for unknown state. */
 	return UINT16_MAX;
 }
 
-/**
- * @brief	Get battery temperature
- *
- * Returns battery temperature in 1 digit fixed point decimal.
- *
- * ex. 123 => 12.3 C
- *
- * @return	Battery level in (0-100) degree C in 1 digit fixed point
- */
-int32_t PmnPM1300::Temperature()
+bool PmnPM1300::ReadAdc(uint16_t TaskReg, uint8_t EventMask, uint16_t MsbReg,
+	uint8_t LsbShift, uint16_t &Code)
 {
-	uint16_t addr;
+	uint8_t events;
 	uint8_t msb;
 	uint8_t lsb;
+	int i;
+
+	if (Interface() == NULL)
+		return false;
+	if (!WriteReg8(NPM1300_MAIN_EVENTS_ADCCLR_REG, EventMask))
+		return false;
+	if (!WriteReg8(TaskReg, 1))
+		return false;
+
+	for (i = 0; i < NPM1300_ADC_POLL_COUNT; i++)
+	{
+		if (!ReadReg8(NPM1300_MAIN_EVENTS_ADCSET_REG, events))
+			return false;
+		if ((events & EventMask) != 0)
+			break;
+	}
+	if (i == NPM1300_ADC_POLL_COUNT)
+		return false;
+
+	if (!ReadReg8(MsbReg, msb))
+		return false;
+	if (!ReadReg8(NPM1300_ADC_ADCGP0_RESULTLSBS_REG, lsb))
+		return false;
+	if (!WriteReg8(NPM1300_MAIN_EVENTS_ADCCLR_REG, EventMask))
+		return false;
+
+	Code = ((uint16_t)msb << 2) | ((lsb >> LsbShift) & 3U);
+	return true;
+}
+
+int32_t PmnPM1300::Temperature()
+{
 	uint16_t adc;
 	float kelvin;
+	float temp;
 
 	if (vNtcBeta == 0 || Interface() == NULL)
 		return INT32_MIN;
-	addr = EndianCvt16(NPM1300_ADC_ADCNTC_RESULTMSB_REG);
-	if (Read((uint8_t *)&addr, 2, &msb, 1) != 1)
+	if (!ReadAdc(NPM1300_ADC_TASKNTC_MEASURE_REG,
+		NPM1300_MAIN_EVENTS_ADCSET_EVENTADCNTCRDY,
+		NPM1300_ADC_ADCNTC_RESULTMSB_REG, 2, adc))
 		return INT32_MIN;
-	addr = EndianCvt16(NPM1300_ADC_ADCGP0_RESULTLSBS_REG);
-	if (Read((uint8_t *)&addr, 2, &lsb, 1) != 1)
-		return INT32_MIN;
-	adc = ((uint16_t)msb << 2) | ((lsb >> 2) & 3);
 	if (adc == 0 || adc >= 1023)
 		return INT32_MIN;
-	kelvin = 1.0f / (1.0f / 298.15f - logf(1024.0f / adc - 1.0f) / vNtcBeta);
-	return (int32_t)((kelvin - 273.15f) * 10.0f);
+
+	kelvin = 1.0f / (1.0f / 298.15f - logf(1023.0f / (float)adc - 1.0f) /
+		(float)vNtcBeta);
+	temp = (kelvin - 273.15f) * 10.0f;
+	return (int32_t)lroundf(temp);
 }
 
 int32_t PmnPM1300::Voltage()
 {
-	uint16_t addr;
-	uint8_t msb;
-	uint8_t lsb;
 	uint16_t adc;
 
-	if (Interface() == NULL)
+	if (!ReadAdc(NPM1300_ADC_TASKVBAT_MEASURE_REG,
+		NPM1300_MAIN_EVENTS_ADCSET_EVENTADCVBATRDY,
+		NPM1300_ADC_ADCVBAT_RESULTMSB_REG, 0, adc))
 		return -1;
-	addr = EndianCvt16(NPM1300_ADC_ADCVBAT_RESULTMSB_REG);
-	if (Read((uint8_t *)&addr, 2, &msb, 1) != 1)
-		return -1;
-	addr = EndianCvt16(NPM1300_ADC_ADCGP0_RESULTLSBS_REG);
-	if (Read((uint8_t *)&addr, 2, &lsb, 1) != 1)
-		return -1;
-	adc = ((uint16_t)msb << 2) | (lsb & 3);
-	return (int32_t)(((uint32_t)adc * 5000UL + 511UL) / 1023UL);
+
+	return (int32_t)(((uint32_t)adc * 5000UL) / 1023UL);
 }
 
-/**
- * @brief	Set output voltage
- *
- * If output voltage is zero, turn off the output.
- *
- * @param	VoutIdx : Zero based index of output source
- * @param	mVolt : Output voltage in mV
- * @param	mALimit : Output current limit in mA if available
- * 						set to zero for max capacity
- *
- * @return	Actual output voltage in mV
- *
- */
 int32_t PmnPM1300::SetVout(size_t VoutIdx, int32_t mVolt, uint32_t CurrLimit)
 {
-	uint16_t addr;
+	uint16_t voltageReg;
 	uint16_t enableReg;
+	uint8_t controlMask;
 	uint8_t code;
 
-	/* Current limiting is fixed in hardware. */
 	(void)CurrLimit;
-	if (Interface() == NULL || VoutIdx > 1 || (mVolt != 0 &&
-		(mVolt < 1000 || mVolt > 3300 || (mVolt - 1000) % 100 != 0)))
+	if (Interface() == NULL || VoutIdx > 1 || !ValidVout(mVolt))
 		return -1;
+
 	if (mVolt != 0)
 	{
-		addr = EndianCvt16(VoutIdx == 0 ?
-			NPM1300_BUCK_BUCK1NORM_VOUT_REG : NPM1300_BUCK_BUCK2NORM_VOUT_REG);
+		voltageReg = VoutIdx == 0 ? NPM1300_BUCK_BUCK1NORM_VOUT_REG :
+			NPM1300_BUCK_BUCK2NORM_VOUT_REG;
 		code = (uint8_t)((mVolt - 1000) / 100);
-		if (!Write8((uint8_t *)&addr, 2, code))
+		if (!WriteReg8(voltageReg, code))
 			return -1;
 	}
+
+	controlMask = VoutIdx == 0 ?
+		NPM1300_BUCK_BUCKSWCTRLSEL_BUCK1SWCTRLSEL_SWCTRL :
+		NPM1300_BUCK_BUCKSWCTRLSEL_BUCK2SWCTRLSEL_SWCTRL;
+	if (!UpdateReg8(NPM1300_BUCK_BUCKSWCTRLSEL_REG, controlMask, controlMask))
+		return -1;
+
 	enableReg = VoutIdx == 0 ?
-		(mVolt ? NPM1300_BUCK_BUCK1ENA_SET_REG : NPM1300_BUCK_BUCK1ENA_CLR_REG) :
-		(mVolt ? NPM1300_BUCK_BUCK2ENA_SET_REG : NPM1300_BUCK_BUCK2ENA_CLR_REG);
-	addr = EndianCvt16(enableReg);
-	return Write8((uint8_t *)&addr, 2, 1) ? mVolt : -1;
+		(mVolt != 0 ? NPM1300_BUCK_BUCK1ENA_SET_REG : NPM1300_BUCK_BUCK1ENA_CLR_REG) :
+		(mVolt != 0 ? NPM1300_BUCK_BUCK2ENA_SET_REG : NPM1300_BUCK_BUCK2ENA_CLR_REG);
+	return WriteReg8(enableReg, 1) ? mVolt : -1;
 }
 
-/**
- * @brief	Power on or wake up device
- *
- * @return	true - If success
- */
 bool PmnPM1300::Enable()
 {
-	uint16_t regaddr = EndianCvt16(NPM1300_BCHARGER_BCHGENABLE_SET_REG);
-	uint8_t d = NPM1300_BCHARGER_BCHGENABLE_SET_ENABLECHARGING;
-
-	return Write8((uint8_t *)&regaddr, 2, d);
+	return WriteReg8(NPM1300_BCHARGER_BCHGENABLE_SET_REG,
+		NPM1300_BCHARGER_BCHGENABLE_SET_ENABLECHARGING);
 }
 
-/**
- * @brief	Put device in power down or power saving sleep mode
- *
- * This function is used to put the device in lowest power mode
- * possible so that the Enable function can wake up without full
- * initialization.
- */
 void PmnPM1300::Disable()
 {
-	uint16_t addr;
-
-	addr = EndianCvt16(NPM1300_BCHARGER_BCHGENABLE_CLR_REG);
-	Write8((uint8_t *)&addr, 2, NPM1300_BCHARGER_BCHGENABLE_CLR_ENABLECHARGING);
+	WriteReg8(NPM1300_BCHARGER_BCHGENABLE_CLR_REG,
+		NPM1300_BCHARGER_BCHGENABLE_CLR_ENABLECHARGING);
 }
 
-/**
- * @brief	Reset device to it initial default state
- */
 void PmnPM1300::Reset()
 {
-	uint16_t addr;
+	if (WriteReg8(NPM1300_MAIN_TASKSW_RESET_REG, 1))
+		Invalidate();
+}
 
-	addr = EndianCvt16(NPM1300_SHIP_TASKRESET_CONFIG_REG);
-	Write8((uint8_t *)&addr, 2, 1);
+bool PmnPM1300::EnterShipMode()
+{
+	uint8_t status;
+
+	if (!ReadReg8(NPM1300_VBUSIN_VBUSIN_STATUS_REG, status))
+		return false;
+	if ((status & NPM1300_VBUSIN_VBUSIN_STATUS_VBUSINPRESENT_DETECTED) != 0)
+		return false;
+	if (!WriteReg8(NPM1300_SHIP_TASKENTER_SHIPMODE_REG, 1))
+		return false;
+
+	Invalidate();
+	return true;
 }
 
 void PmnPM1300::PowerOff()
 {
-	uint16_t addr;
-	uint8_t status;
-
-	addr = EndianCvt16(NPM1300_VBUSIN_VBUSIN_STATUS_REG);
-	if (Read((uint8_t *)&addr, 2, &status, 1) != 1)
-		return;
-	if ((status & NPM1300_VBUSIN_VBUSIN_STATUS_VBUSINPRESENT_DETECTED) != 0)
-		return;
-
-	addr = EndianCvt16(NPM1300_SHIP_TASKENTER_SHIPMODE_REG);
-	Write8((uint8_t *)&addr, 2, 1);
+	EnterShipMode();
 }
 
-/**
- * @brief	Set battery charging
- *
- * If charge current is set to zero, charging is turned off
- *
- * @param	Type : Charging type
- * @param	mVoltEoC : End of charge voltage in mV
- * @param	mACurr : Charge current limit
- * 					0 : Disable charge
- *
- * @return	Actual charge current set.
- */
+bool PmnPM1300::SetTerminationVoltage(uint16_t Reg, int32_t mVolt)
+{
+	uint8_t code;
+
+	if (mVolt < 3500 || mVolt > 4450 || mVolt % 50 != 0)
+		return false;
+	if (mVolt >= 3700 && mVolt < 4000)
+		return false;
+
+	code = mVolt < 3700 ? (uint8_t)((mVolt - 3500) / 50) :
+		(uint8_t)((mVolt - 4000) / 50 + 4);
+	return WriteReg8(Reg, code);
+}
+
 uint32_t PmnPM1300::SetCharge(PWRMGNT_CHARGE_TYPE Type, int32_t mVoltEoC, uint32_t mACurr)
 {
-	uint16_t addr;
+	uint32_t actual;
 	uint16_t raw;
-	uint8_t code;
 
 	if (Interface() == NULL)
 		return 0;
 	if (mACurr == 0)
 	{
-		addr = EndianCvt16(NPM1300_BCHARGER_BCHGENABLE_CLR_REG);
-		Write8((uint8_t *)&addr, 2, 1);
+		if (!WriteReg8(NPM1300_BCHARGER_BCHGENABLE_CLR_REG,
+			NPM1300_BCHARGER_BCHGENABLE_CLR_ENABLECHARGING))
+			return 0;
+		vChrgCurr = 0;
 		return 0;
 	}
 	if (Type != PWRMGNT_CHARGE_TYPE_NORMAL && Type != PWRMGNT_CHARGE_TYPE_AUTO)
 		return 0;
-	if (mVoltEoC < 3500 || mVoltEoC > 4450 || mVoltEoC % 50 != 0)
-		return 0;
-	if (mVoltEoC >= 3700 && mVoltEoC < 4000)
-		return 0;
-	if (mACurr < 32 || mACurr > 800 || (mACurr & 1U) != 0)
+	if (!ValidCharge(mVoltEoC, mACurr))
 		return 0;
 
-	/* Charging must be disabled before changing the ICHG registers. */
-	addr = EndianCvt16(NPM1300_BCHARGER_BCHGENABLE_CLR_REG);
-	if (!Write8((uint8_t *)&addr, 2, 1))
+	if (!WriteReg8(NPM1300_BCHARGER_BCHGENABLE_CLR_REG,
+		NPM1300_BCHARGER_BCHGENABLE_CLR_ENABLECHARGING))
 		return 0;
-	raw = (uint16_t)(mACurr / 2);
-	addr = EndianCvt16(NPM1300_BCHARGER_BCHGISET_MSB_REG);
-	if (!Write8((uint8_t *)&addr, 2, raw >> 1))
+
+	actual = mACurr & ~1U;
+	raw = (uint16_t)(actual / 2);
+	if (!WriteReg8(NPM1300_BCHARGER_BCHGISET_MSB_REG, (uint8_t)(raw >> 1)))
 		return 0;
-	addr = EndianCvt16(NPM1300_BCHARGER_BCHGISET_LSB_REG);
-	if (!Write8((uint8_t *)&addr, 2, raw & 1))
+	if (!WriteReg8(NPM1300_BCHARGER_BCHGISET_LSB_REG, (uint8_t)(raw & 1U)))
 		return 0;
-	code = mVoltEoC < 3700 ? (mVoltEoC - 3500) / 50 : (mVoltEoC - 4000) / 50 + 4;
-	addr = EndianCvt16(NPM1300_BCHARGER_BCHGVTERM_REG);
-	if (!Write8((uint8_t *)&addr, 2, code))
+	if (!SetTerminationVoltage(NPM1300_BCHARGER_BCHGVTERM_REG, mVoltEoC))
 		return 0;
-	return Enable() ? raw * 2 : 0;
+	if (!SetTerminationVoltage(NPM1300_BCHARGER_BCHGVTERMR_REG, mVoltEoC))
+		return 0;
+	if (!Enable())
+		return 0;
+
+	vChrgCurr = actual;
+	return actual;
 }
 
-/**
- * @brief	Charging status
- *
- * @return	true - Charging
- */
+bool PmnPM1300::SetWarmTerminationVoltage(int32_t mVolt)
+{
+	return SetTerminationVoltage(NPM1300_BCHARGER_BCHGVTERMR_REG, mVolt);
+}
+
+bool PmnPM1300::SetTerminationCurrent(uint32_t Percent)
+{
+	uint8_t value;
+
+	if (Percent == 10)
+		value = NPM1300_BCHARGER_BCHGITERM_SEL_BCHGITERMSEL_SEL10;
+	else if (Percent == 20)
+		value = NPM1300_BCHARGER_BCHGITERM_SEL_BCHGITERMSEL_SEL20;
+	else
+		return false;
+
+	return WriteReg8(NPM1300_BCHARGER_BCHGITERM_SEL_REG, value);
+}
+
+bool PmnPM1300::SetTrickleVoltage(int32_t mVolt)
+{
+	uint8_t value;
+
+	if (mVolt == 2900)
+		value = NPM1300_BCHARGER_BCHGV_TRICKLE_SEL_BCHGVTRICKLESEL_2V9;
+	else if (mVolt == 2500)
+		value = NPM1300_BCHARGER_BCHGV_TRICKLE_SEL_BCHGVTRICKLESEL_2V5;
+	else
+		return false;
+
+	return WriteReg8(NPM1300_BCHARGER_BCHGV_TRICKLE_SEL_REG, value);
+}
+
+bool PmnPM1300::SetAutomaticRecharge(bool Enable)
+{
+	return WriteReg8(Enable ? NPM1300_BCHARGER_BCHGDISABLE_CLR_REG :
+		NPM1300_BCHARGER_BCHGDISABLE_SET_REG,
+		NPM1300_BCHARGER_BCHGDISABLE_SET_DISABLERECHARGE);
+}
+
+bool PmnPM1300::SetNtcProtection(bool Enable)
+{
+	return WriteReg8(Enable ? NPM1300_BCHARGER_BCHGDISABLE_CLR_REG :
+		NPM1300_BCHARGER_BCHGDISABLE_SET_REG,
+		NPM1300_BCHARGER_BCHGDISABLE_SET_DISABLENTC);
+}
+
+bool PmnPM1300::NtcCodeForTemperature(int32_t Celsius, uint16_t &Code) const
+{
+	float target;
+	float exponent;
+	float code;
+
+	if (vNtcBeta == 0 || Celsius < -20 || Celsius > 60)
+		return false;
+
+	target = (float)Celsius + 273.15f;
+	exponent = (1.0f / 298.15f - 1.0f / target) * (float)vNtcBeta;
+	code = 1023.0f / (expf(exponent) + 1.0f);
+	if (code < 0.0f || code > 1023.0f)
+		return false;
+
+	Code = (uint16_t)lroundf(code);
+	return true;
+}
+
+bool PmnPM1300::SetNtcTemperatureLimits(int32_t Cold, int32_t Cool, int32_t Warm, int32_t Hot)
+{
+	uint16_t coldCode;
+	uint16_t coolCode;
+	uint16_t warmCode;
+	uint16_t hotCode;
+
+	if (Cold > Cool || Cool > Warm || Warm > Hot)
+		return false;
+	if (!NtcCodeForTemperature(Cold, coldCode) || !NtcCodeForTemperature(Cool, coolCode) ||
+		!NtcCodeForTemperature(Warm, warmCode) || !NtcCodeForTemperature(Hot, hotCode))
+		return false;
+
+	if (!WriteReg10(NPM1300_BCHARGER_NTCCOLD_REG, coldCode))
+		return false;
+	if (!WriteReg10(NPM1300_BCHARGER_NTCCOOL_REG, coolCode))
+		return false;
+	if (!WriteReg10(NPM1300_BCHARGER_NTCWARM_REG, warmCode))
+		return false;
+	return WriteReg10(NPM1300_BCHARGER_NTCHOT_REG, hotCode);
+}
+
+bool PmnPM1300::SetDieTemperatureLimits(int32_t StopCelsius, int32_t ResumeCelsius)
+{
+	int32_t stopCode;
+	int32_t resumeCode;
+
+	if (StopCelsius < -40 || StopCelsius > 125 || ResumeCelsius < -40 ||
+		ResumeCelsius > 125 || ResumeCelsius >= StopCelsius)
+		return false;
+
+	stopCode = (int32_t)lroundf((3946700.0f - (float)StopCelsius * 10000.0f) / 7926.0f);
+	resumeCode = (int32_t)lroundf((3946700.0f - (float)ResumeCelsius * 10000.0f) / 7926.0f);
+	if (stopCode < 0 || stopCode > 1023 || resumeCode < 0 || resumeCode > 1023)
+		return false;
+
+	if (!WriteReg10(NPM1300_BCHARGER_DIE_TEMP_STOP_REG, (uint16_t)stopCode))
+		return false;
+	return WriteReg10(NPM1300_BCHARGER_DIE_TEMP_RESUME_REG, (uint16_t)resumeCode);
+}
+
+bool PmnPM1300::SetWarmCharging(bool Enable)
+{
+	return UpdateReg8(NPM1300_BCHARGER_BCHG_CONFIG_REG,
+		NPM1300_BCHARGER_BCHG_CONFIG_DISABLECHARGEWARM,
+		Enable ? 0 : NPM1300_BCHARGER_BCHG_CONFIG_DISABLECHARGEWARM);
+}
+
+bool PmnPM1300::SetCoolFullCurrent(bool Enable)
+{
+	return WriteReg8(Enable ? NPM1300_BCHARGER_BCHGENABLE_SET_REG :
+		NPM1300_BCHARGER_BCHGENABLE_CLR_REG,
+		NPM1300_BCHARGER_BCHGENABLE_SET_ENABLEFULLCHGCOOL);
+}
+
+bool PmnPM1300::SetDischargeCurrentLimit(uint32_t mA)
+{
+	uint16_t code;
+
+	if (mA == 200)
+		code = 84;
+	else if (mA == 1000)
+		code = 415;
+	else
+		return false;
+
+	if (!WriteReg8(NPM1300_BCHARGER_BCHGISET_DISCHARGE_MSB_REG, (uint8_t)(code >> 1)))
+		return false;
+	return WriteReg8(NPM1300_BCHARGER_BCHGISET_DISCHARGE_LSB_REG, (uint8_t)(code & 1U));
+}
+
+bool PmnPM1300::SetInputCurrentLimit(uint32_t mA)
+{
+	uint8_t code;
+
+	if (mA == 100)
+		code = NPM1300_VBUSIN_VBUSIN_ILIM0_100MA;
+	else if (mA == 500)
+		code = NPM1300_VBUSIN_VBUSIN_ILIM0_500MA;
+	else if (mA >= 600 && mA <= 1500 && mA % 100 == 0)
+		code = (uint8_t)(mA / 100);
+	else
+		return false;
+
+	if (!WriteReg8(NPM1300_VBUSIN_VBUSIN_ILIM0_REG, code))
+		return false;
+	if (!WriteReg8(NPM1300_VBUSIN_TASKUPDATE_ILIMSW_REG,
+		NPM1300_VBUSIN_TASKUPDATE_ILIMSW_SELVBUSILIM0))
+		return false;
+
+	vInputCurrentLimit = mA;
+	return true;
+}
+
+bool PmnPM1300::ClearChargerError()
+{
+	return WriteReg8(NPM1300_BCHARGER_TASK_CLEAR_CHGERR_REG, 1);
+}
+
+bool PmnPM1300::RecoverCharger()
+{
+	if (!ClearChargerError())
+		return false;
+	return WriteReg8(NPM1300_BCHARGER_TASK_RELEASE_ERR_REG, 1);
+}
+
+bool PmnPM1300::ClearChargerSafetyTimers()
+{
+	return WriteReg8(NPM1300_BCHARGER_TASK_CLEAR_SAFTY_TIMER_REG, 1);
+}
+
 bool PmnPM1300::Charging()
 {
-	uint16_t regaddr = EndianCvt16(NPM1300_BCHARGER_BCHG_CHARGE_STATUS_REG);
-	uint8_t d;
+	uint8_t status;
+	uint8_t active;
 
-	if (Read((uint8_t *)&regaddr, 2, &d, 1) != 1)
+	if (!ReadReg8(NPM1300_BCHARGER_BCHG_CHARGE_STATUS_REG, status))
 		return false;
 
-	return d & (NPM1300_BCHARGER_BCHG_CHARGE_STATUS_TRICKLECHARGE |
-				NPM1300_BCHARGER_BCHG_CHARGE_STATUS_CONSTANTCURRENT |
-				NPM1300_BCHARGER_BCHG_CHARGE_STATUS_CONSTANTVOLTAGE |
-				NPM1300_BCHARGER_BCHG_CHARGE_STATUS_RECHARGE);
+	active = NPM1300_BCHARGER_BCHG_CHARGE_STATUS_TRICKLECHARGE |
+		NPM1300_BCHARGER_BCHG_CHARGE_STATUS_CONSTANTCURRENT |
+		NPM1300_BCHARGER_BCHG_CHARGE_STATUS_CONSTANTVOLTAGE;
+	return (status & active) != 0;
 }
 
-/**
- * @brief	Battery present status
- *
- * @return	true - Battery present
- */
+PWRMGNT_BATTERY_STATE PmnPM1300::BatteryState()
+{
+	return PWRMGNT_BATTERY_UNKNOWN;
+}
+
 bool PmnPM1300::Battery()
 {
-	uint16_t regaddr = EndianCvt16(NPM1300_BCHARGER_BCHG_CHARGE_STATUS_REG);
-	uint8_t d;
-
-	if (Read((uint8_t *)&regaddr, 2, &d, 1) != 1)
-		return false;
-
-	/* The nPM1300 BATTERYDETECTED register field is not implemented.
-	 * A charger-status read cannot establish whether a battery is fitted.
-	 */
-	(void)d;
-	return false;
+	return BatteryState() == PWRMGNT_BATTERY_PRESENT;
 }
 
-/**
- * @brief	Interrupt handler
- *
- * Optional implementation to handle interrupt. This is device specific.
- *
- */
 void PmnPM1300::IrqHandler()
 {
-	static const uint16_t eventRegs[] = {
-		NPM1300_MAIN_EVENTS_BCHARGER0SET_REG,
-		NPM1300_MAIN_EVENTS_BCHARGER1SET_REG,
-		NPM1300_MAIN_EVENTS_BCHARGER2SET_REG,
-		NPM1300_MAIN_EVENTS_VBUSIN0SET_REG,
-		NPM1300_MAIN_EVENTS_VBUSIN1SET_REG
-	};
-	uint16_t addr;
 	uint8_t events;
+	uint8_t active;
 	size_t i;
 
-	for (i = 0; i < sizeof(eventRegs) / sizeof(eventRegs[0]); i++)
+	if (Interface() == NULL || !InterruptEnabled())
+		return;
+
+	for (i = 0; i < sizeof(s_Npm1300IrqGroups) / sizeof(s_Npm1300IrqGroups[0]); i++)
 	{
-		addr = EndianCvt16(eventRegs[i]);
-		if (Read((uint8_t *)&addr, 2, &events, 1) != 1 || events == 0)
+		if (!ReadReg8(s_Npm1300IrqGroups[i].EventReg, events))
 			continue;
-		addr = EndianCvt16(eventRegs[i] + 1);
-		if (!Write8((uint8_t *)&addr, 2, events))
+		active = events & s_Npm1300IrqGroups[i].Mask;
+		if (active == 0)
 			continue;
+		if (!WriteReg8(s_Npm1300IrqGroups[i].EventClrReg, active))
+			continue;
+
+		if (i == 2 && (active & NPM1300_IRQ_VBUSIN0_MASK) != 0 && vInputCurrentLimit != 0)
+			WriteReg8(NPM1300_VBUSIN_TASKUPDATE_ILIMSW_REG,
+				NPM1300_VBUSIN_TASKUPDATE_ILIMSW_SELVBUSILIM0);
+
 		if (vpEvtHandler == NULL)
 			continue;
+
 		switch (i)
 		{
 		case 0:
-			if (events & (NPM1300_MAIN_EVENTS_BCHARGER0SET_EVENTNTCWARM |
-				NPM1300_MAIN_EVENTS_BCHARGER0SET_EVENTNTCHOT |
-				NPM1300_MAIN_EVENTS_BCHARGER0SET_EVENTDIETEMPHIGH))
-				vpEvtHandler(this, PWRMGNT_EVT_OVER_HEAT);
+			vpEvtHandler(this, PWRMGNT_EVT_OVER_HEAT);
 			break;
 		case 1:
-			if (events & NPM1300_MAIN_EVENTS_BCHARGER1SET_EVENTCHGCOMPLETED)
-				vpEvtHandler(this, PWRMGNT_EVT_CHARGE_FULL);
+			vpEvtHandler(this, PWRMGNT_EVT_CHARGE_FULL);
+			break;
+		case 2:
+			vpEvtHandler(this, PWRMGNT_EVT_CHARGE_DETECTED);
 			break;
 		case 3:
-			if (events & NPM1300_MAIN_EVENTS_VBUSIN0SET_EVENTVBUSDETECTED)
-				vpEvtHandler(this, PWRMGNT_EVT_CHARGE_DETECTED);
-			break;
-		case 4:
-			if (events & (NPM1300_MAIN_EVENTS_VBUSIN1SET_EVENTTHERMALWARNDETECTED |
-				NPM1300_MAIN_EVENTS_VBUSIN1SET_EVENTTHERMALSHUTDOWNDETECTED))
-				vpEvtHandler(this, PWRMGNT_EVT_OVER_HEAT);
+			vpEvtHandler(this, PWRMGNT_EVT_OVER_HEAT);
 			break;
 		default:
 			break;
@@ -532,71 +994,7 @@ void PmnPM1300::IrqHandler()
 
 bool PmnPM1300::SetGpioMode(size_t Index, uint8_t Mode)
 {
-	uint16_t addr;
-
 	if (Index > 4 || Mode > 9 || Interface() == NULL)
 		return false;
-	addr = EndianCvt16(NPM1300_GPIOS_GPIOMODE_BASE_REG + Index);
-	return Write8((uint8_t *)&addr, 2, Mode);
-}
-
-bool PmnPM1300::SetBuckPwm(size_t Index, bool Enable)
-{
-	uint16_t addr;
-
-	if (Index > 1 || Interface() == NULL)
-		return false;
-	addr = EndianCvt16(NPM1300_BUCK_BUCK1PWM_SET_REG + 2 * Index + (Enable ? 0 : 1));
-	return Write8((uint8_t *)&addr, 2, 1);
-}
-
-bool PmnPM1300::SetBuckRetention(size_t Index, int32_t mVolt)
-{
-	uint16_t addr;
-
-	if (Index > 1 || mVolt < 1000 || mVolt > 3300 ||
-		(mVolt - 1000) % 100 != 0 || Interface() == NULL)
-		return false;
-	addr = EndianCvt16(NPM1300_BUCK_BUCK1RET_VOUT_REG + 2 * Index);
-	return Write8((uint8_t *)&addr, 2, (uint8_t)((mVolt - 1000) / 100));
-}
-
-bool PmnPM1300::ReadStatus(uint8_t &Charger, uint8_t &ChargerErrors,
-	uint8_t &Vbus, uint8_t &Ntc, uint8_t &ResetCause)
-{
-	const uint16_t regs[] = {
-		NPM1300_BCHARGER_BCHG_CHARGE_STATUS_REG,
-		NPM1300_BCHARGER_BCHG_ERR_REASON_REG,
-		NPM1300_VBUSIN_VBUSIN_STATUS_REG,
-		NPM1300_BCHARGER_NTC_STATUS_REG,
-		NPM1300_ERRLOG_RSTCAUSE_REG
-	};
-	uint8_t values[5];
-	uint16_t addr;
-	size_t i;
-
-	if (Interface() == NULL)
-		return false;
-	for (i = 0; i < 5; i++)
-	{
-		addr = EndianCvt16(regs[i]);
-		if (Read((uint8_t *)&addr, 2, &values[i], 1) != 1)
-			return false;
-	}
-	Charger = values[0];
-	ChargerErrors = values[1];
-	Vbus = values[2];
-	Ntc = values[3];
-	ResetCause = values[4];
-	return true;
-}
-
-bool PmnPM1300::ClearErrorLog()
-{
-	uint16_t addr;
-
-	if (Interface() == NULL)
-		return false;
-	addr = EndianCvt16(NPM1300_ERRLOG_TASKCLRERRLOG_REG);
-	return Write8((uint8_t *)&addr, 2, 1);
-}
+	if (Mode >= NPM1300_GPIOS_GPIOMODE_GPOIRQ &&
+		!SetGpioPull(Index, false, false))

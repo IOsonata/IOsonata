@@ -30,7 +30,7 @@ Working baseline: `prerelease_0.13_4`. This is a hardware inventory and implemen
 | BME688 environmental sensor | I2C | Existing `tphg_bme680` forced-mode path is register-compatible (BME68x ID `0x61`, I2C `0x76/0x77`); Thingy:91 X power-aware compatibility test added; parallel/sequential gas modes are not exposed; hardware validation pending |
 | GD25LE255E 256 Mbit flash | SPI | Existing universal external-memory interface; configure device geometry/commands, hardware validation pending |
 | nPM6001 regulator PMIC | I2C | `pm_npm6001`: BUCK3 enable, PWM/HYS control, DAC voltage programming and thermal/BUCK3-OC monitoring; Thingy:91 X test project added; hardware validation pending |
-| nPM1300 charger/fuel/LED PMIC | I2C | Existing `pm_npm1300`; board integration required |
+| nPM1300 charger/fuel/LED PMIC | I2C | `pm_npm1300` software complete with production-driver host tests; Thingy:91 X hardware validation pending |
 | RGB LEDs, buttons, external load switch | GPIO/PMIC | Board integration required |
 | Battery/USB power and shared sensor rails | PMIC/GPIO | Board integration required |
 
@@ -71,3 +71,13 @@ Working baseline: `prerelease_0.13_4`. This is a hardware inventory and implemen
 - The onboard BME688 is at I2C address `0x76` and uses the register-compatible BME680/BME68x interface already implemented by `tphg_bme680`; no second BME688 driver is added.
 - nPM1300 LDO2 is the Thingy:91 X sensor-domain load switch. `ARM/Nordic/nRF91/nRF91x1/exemples/BME688Test` explicitly selects load-switch mode and enables that rail before probing the sensor.
 - The test uses the existing BSEC-backed gas path and reports temperature, pressure, humidity and gas-resistance data. Bosch BSEC remains an external build dependency exactly as in the existing TPHDemo.
+
+## nPM1300 Thingy:91 X integration
+
+- The PMIC is at I2C address `0x6B`.
+- nPM1300 GPIO3 is the PMIC interrupt output; on the nRF9151 it reaches P0.02. The generic driver does not hard-code this board selection.
+- BUCK2 is the main 3.3 V rail and is board-controlled by nPM1300 GPIO2. Non-destructive attachment does not change that control path.
+- LDO1 is used as the nPM6001 enable load switch. LDO2 is the sensor-domain load switch. nPM1300 GPIO4 reads nPM6001 READY.
+- The board battery profile uses a 4.2 V termination target and a 675 mA nominal 0.5C charge request. The nPM1300 has a 2 mA charge-current step, so `SetCharge()` programs 674 mA and reports 674 mA as the actual setting.
+- Battery presence and state of charge remain unknown until a battery-specific host fuel-gauge model is integrated.
+- Hardware validation is pending.

@@ -118,17 +118,17 @@ int main()
 {
 	HardwareInit();
 
+	int32_t mv;
+	PWRMGNT_BATTERY_STATE battery;
+
 	//g_nPM1300.Enable();
-	if (g_nPM1300.Battery())
-	{
-		printf("Battery present\n");
-	}
 	while (1)
 	{
-		int32_t mv = g_nPM1300.Voltage();
+		mv = g_nPM1300.Voltage();
+		battery = g_nPM1300.BatteryState();
 		if (mv >= 0)
-			printf("VBAT=%ld mV charging=%u battery=%u\r\n",
-				(long)mv, g_nPM1300.Charging(), g_nPM1300.Battery());
+			printf("VBAT=%ld mV charging=%u battery_state=%u\r\n",
+				(long)mv, g_nPM1300.Charging(), (unsigned)battery);
 		__WFE();
 	}
 
