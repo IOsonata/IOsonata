@@ -329,100 +329,48 @@ CRYPTO_STATUS CryptoSoftAes::Cipher(CRYPTO_CIPHER_ALG Alg, int bEncrypt,
 		return status;
 	}
 
+	// All encryption and CTR operations have already used the virtual ECB
+	// primitive. Only software ECB/CBC decryption remains here.
+	if (bEncrypt != 0 || (Alg != CRYPTO_CIPHER_ECB &&
+		Alg != CRYPTO_CIPHER_CBC))
+	{
+		return CRYPTO_STATUS_UNSUPPORTED;
+	}
+	if ((Len & (AES_BLOCK - 1U)) != 0U ||
+		(Alg == CRYPTO_CIPHER_CBC &&
+		(pIv == nullptr || IvLen != AES_BLOCK)))
+	{
+		return CRYPTO_STATUS_FAIL;
+	}
+
 	uint8_t rk[AES128_RK_WORDS * 4U];
 	AesKeyExpand(Key.Plain.pData, rk);
-	CRYPTO_STATUS st = CRYPTO_STATUS_OK;
-
 	if (Alg == CRYPTO_CIPHER_ECB)
 	{
-		if ((Len & (AES_BLOCK - 1U)) != 0U)
+		for (size_t off = 0; off < Len; off += AES_BLOCK)
 		{
-			st = CRYPTO_STATUS_FAIL;
-		}
-		else if (bEncrypt == 0)
-		{
-			for (size_t off = 0; off < Len; off += AES_BLOCK)
-			{
-				AesDecryptBlock(rk, pIn + off, pOut + off);
-			}
-		}
-		else
-		{
-			for (size_t off = 0; off < Len; off += AES_BLOCK)
-			{
-				AesEncryptBlock(rk, pIn + off, pOut + off);
-			}
-		}
-	}
-	else if (Alg == CRYPTO_CIPHER_CTR)
-	{
-		if (pIv == nullptr || IvLen != AES_BLOCK)
-		{
-			st = CRYPTO_STATUS_FAIL;
-		}
-		else
-		{
-			uint8_t ctr[AES_BLOCK], ks[AES_BLOCK];
-			memcpy(ctr, pIv, AES_BLOCK);
-			for (size_t off = 0; off < Len; )
-			{
-				AesEncryptBlock(rk, ctr, ks);
-				size_t n = Len - off < AES_BLOCK ? Len - off : AES_BLOCK;
-				for (size_t j = 0; j < n; j++) pOut[off+j] = pIn[off+j] ^ ks[j];
-				for (int j = AES_BLOCK - 1; j >= 0; j--)
-				{
-					if (++ctr[j] != 0U) break;
-				}
-				off += n;
-			}
-			AesWipe(ctr, sizeof(ctr));
-			AesWipe(ks, sizeof(ks));
-		}
-	}
-	else if (Alg == CRYPTO_CIPHER_CBC)
-	{
-		if (pIv == nullptr || IvLen != AES_BLOCK ||
-			(Len & (AES_BLOCK - 1U)) != 0U)
-		{
-			st = CRYPTO_STATUS_FAIL;
-		}
-		else if (bEncrypt == 0)
-		{
-			uint8_t chain[AES_BLOCK], block[AES_BLOCK];
-			memcpy(chain, pIv, AES_BLOCK);
-			for (size_t off = 0; off < Len; off += AES_BLOCK)
-			{
-				// Preserve the ciphertext for the next block when pIn == pOut.
-				memcpy(block, pIn + off, AES_BLOCK);
-				AesDecryptBlock(rk, block, pOut + off);
-				for (size_t j = 0; j < AES_BLOCK; j++) pOut[off+j] ^= chain[j];
-				memcpy(chain, block, AES_BLOCK);
-			}
-			AesWipe(chain, sizeof(chain));
-			AesWipe(block, sizeof(block));
-		}
-		else
-		{
-			uint8_t chain[AES_BLOCK];
-			memcpy(chain, pIv, AES_BLOCK);
-			for (size_t off = 0; off < Len; off += AES_BLOCK)
-			{
-				uint8_t block[AES_BLOCK];
-				for (size_t j = 0; j < AES_BLOCK; j++) block[j] = pIn[off+j] ^ chain[j];
-				AesEncryptBlock(rk, block, pOut + off);
-				memcpy(chain, pOut + off, AES_BLOCK);
-				AesWipe(block, sizeof(block));
-			}
-			AesWipe(chain, sizeof(chain));
+			AesDecryptBlock(rk, pIn + off, pOut + off);
 		}
 	}
 	else
 	{
-		st = CRYPTO_STATUS_UNSUPPORTED;
+		uint8_t chain[AES_BLOCK], block[AES_BLOCK];
+		memcpy(chain, pIv, AES_BLOCK);
+		for (size_t off = 0; off < Len; off += AES_BLOCK)
+		{
+			memcpy(block, pIn + off, AES_BLOCK);
+			AesDecryptBlock(rk, block, pOut + off);
+			for (size_t i = 0; i < AES_BLOCK; i++)
+			{
+				pOut[off + i] ^= chain[i];
+			}
+			memcpy(chain, block, AES_BLOCK);
+		}
+		AesWipe(chain, sizeof(chain));
+		AesWipe(block, sizeof(block));
 	}
-
 	AesWipe(rk, sizeof(rk));
-	return st;
+	return CRYPTO_STATUS_OK;
 }
 
 static void CmacSubkey(const uint8_t In[16], uint8_t Out[16])
