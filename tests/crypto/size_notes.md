@@ -102,5 +102,37 @@ targets. It uses the hardware SHA implementation and existing HMAC composition.
 Its algorithm follows NIST SP 800-90A rev. 1 section 10.1.2:
 https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-90Ar1.pdf
 
-No post-change target flash size, stack high-water mark or speedup has yet been
-measured. The first draw and periodic reseeds still require fresh entropy.
+The first draw and periodic reseeds still require fresh entropy. The following
+hardware result measures this batch; runtime stack high-water usage is unknown.
+
+
+## CryptoCell AES/DRBG hardware result, 2026-10-24
+
+After `ad1129a737c84761cd2a89aa6541b386c40569a3`, the maintainer's App-core
+CryptoTest run passed 101 checks with no failures or skips. Its supplied
+CryptoTest(20261024-234832).map uses the same flash and RAM origins as the
+previous App-core map.
+
+| Measurement | Before | After | Change |
+| --- | ---: | ---: | ---: |
+| Flash occupied | 88,784 bytes | 89,756 bytes | +972 bytes |
+| Static RAM including alignment | 6,372 bytes | 6,444 bytes | +72 bytes |
+| AES ECB, 16 bytes | 934.062 us | 738.203 us | 21.0% less time |
+| AES ECB, 1024 bytes | 24.819 ms | 19.239 ms | 22.5% less time |
+| RNG, 1 byte | 65.014 ms | 15.375 ms | 4.23x faster |
+| RNG, 1024 bytes | 2830.376 ms | 176.086 ms | 16.07x faster |
+
+The 16-byte software AES comparison remained about 564 us, so the hardware
+path still had excessive setup and register-transfer overhead.
+
+The following transport optimization gives Cc3xxIntrf its own complete
+Read/Write implementations. Word copies preserve unaligned caller buffers;
+MMIO remains 32-bit. The framework transfer lock and the separate operation
+hold remain in use. The same word-copy loops serve the C callbacks. The
+Nordic wrapper no longer repeats its startup spin when already powered.
+
+Host tests compare both production transfer paths and exercise contention,
+malformed requests and power recovery. A RAM-register benchmark at -Os/-O2
+shows about one third of the generic path's CPU time, under host sanitizers.
+This is not an MCU speedup measurement. Target flash size and timings for the
+transport optimization still require a rebuilt App-core library and CryptoTest.

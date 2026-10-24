@@ -209,6 +209,17 @@ public:
 };
 
 static CcModel s_Cc;
+// This arithmetic model replaces the register transport; run_ccintrf.py
+// separately exercises the production C and C++ transport against MMIO storage.
+int Cc3xxIntrf::Read(uint32_t dev, const uint8_t *addr, int alen, uint8_t *out, int len)
+{
+	return s_Cc.Read(dev, addr, alen, out, len);
+}
+int Cc3xxIntrf::Write(uint32_t dev, const uint8_t *addr, int alen, const uint8_t *in, int len)
+{
+	return s_Cc.Write(dev, addr, alen, in, len);
+}
+
 extern "C" bool Cc3xxEnable(void) { return true; }
 extern "C" void Cc3xxDisable(void) { memset(s_Cc.Reg, 0, sizeof(s_Cc.Reg)); }
 Cc3xxIntrf *Cc3xxIntrfInstance(void) { return &s_Cc; }

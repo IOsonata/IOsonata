@@ -102,6 +102,13 @@ class Cc3xxIntrf : public DeviceIntrf {
 public:
 	bool Init(void);
 
+	// Complete register transfers avoid the generic bus command buffer.
+	// The normal interface transfer lock still covers every word access.
+	int Read(uint32_t DevAddr, const uint8_t *pAdCmd, int AdCmdLen,
+		uint8_t *pBuff, int BuffLen) override;
+	int Write(uint32_t DevAddr, const uint8_t *pAdCmd, int AdCmdLen,
+		const uint8_t *pData, int DataLen) override;
+
 	/// Hold the CC3xx for an operation spanning several transfers. Fails when
 	/// another engine holds it; the caller retries or reports busy. Interrupt
 	/// context gets a single attempt.

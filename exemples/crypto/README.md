@@ -24,6 +24,7 @@ python3 tests/crypto/run_objects.py
 python3 tests/crypto/run_aes256.py
 python3 tests/crypto/run_pka_models.py
 python3 tests/crypto/run_ccrng.py
+python3 tests/crypto/run_ccintrf.py
 python3 tests/crypto/check_targets.py
 python3 tests/stm32wba/run_crypto_link.py
 python3 tests/stm32h7/run_crypto_accel.py
@@ -136,4 +137,15 @@ reference at -O0/-Os/-O2 for both target defines, including request/byte reseeds
 reset, disable/enable, short entropy reads, busy and injected hash failures.
 `run_pka_models.py` runs the production RNG with CryptoCell SHA register models
 and checks minimal linkage for unwanted software AES, SHA-256 and PRNG code.
-These are host checks; post-change hardware timings and map sizes are pending.
+The maintainer subsequently validated the initial AES/DRBG changes on the
+Audio DK App core: 101 passed, no failures or skips. Flash increased by 972
+bytes and static RAM by 72 bytes. RNG at 1024 bytes improved from 2830.38 ms
+to 176.09 ms; AES ECB at 16 bytes improved from 934.06 us to 738.20 us.
+
+The next transport change overrides complete register Read/Write in Cc3xxIntrf
+using word MMIO under the existing transfer lock. It avoids generic command
+buffer packing while retaining the C transfer path and operation exclusion.
+The Nordic wrapper waits for power-up only when transitioning from disabled.
+`run_ccintrf.py` covers the production transfer paths, unaligned buffers, busy,
+invalid transfers and wrapper power transitions. Hardware timings and map sizes
+for this transport change remain pending.
