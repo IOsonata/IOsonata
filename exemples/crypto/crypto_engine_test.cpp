@@ -1109,6 +1109,117 @@ static void HashChecks()
 }
 #endif
 
+
+#ifdef CRYPTO_TEST_TICKS
+// Timed comparison includes acquisition, key expansion, and peripheral setup.
+// Outputs are checked against the software reference before measurements.
+static void CryptoBenchmark(CipherEngine *pTarget, MacEngine *pTargetMac,
+		AeadEngine *pTargetAead, RngEngine *pTargetRng,
+		CipherEngine *pReference, MacEngine *pReferenceMac,
+		AeadEngine *pReferenceAead)
+{
+	static const size_t sizes[] = {16U, 64U, 256U, 1024U};
+	static uint8_t input[1024], output[1024], reference[1024];
+	static uint8_t key[16], iv[16], nonce[12], aad[16];
+	uint8_t tag[16], referenceTag[16];
+	const unsigned rounds = 64U;
+	uint32_t targetCycles, referenceCycles, begin;
+	CryptoKey cipherKey = AesKey(key, CRYPTO_KEY_USE_ENCRYPT | CRYPTO_KEY_USE_DECRYPT);
+	CryptoKey macKey = AesKey(key, CRYPTO_KEY_USE_SIGN);
+	XsFill(key, sizeof(key));
+	XsFill(iv, sizeof(iv));
+	XsFill(nonce, sizeof(nonce));
+	XsFill(aad, sizeof(aad));
+	XsFill(input, sizeof(input));
+	printf("\r\nCrypto performance (cycles per operation, including setup)\r\n");
+	for (size_t j = 0; j < sizeof(sizes) / sizeof(sizes[0]); j++)
+	{
+		size_t len = sizes[j];
+		for (int mode = 0; mode < 3; mode++)
+		{
+			CRYPTO_CIPHER_ALG alg = mode == 0 ? CRYPTO_CIPHER_ECB :
+				(mode == 1 ? CRYPTO_CIPHER_CTR : CRYPTO_CIPHER_CBC);
+			const uint8_t *pIv = mode == 0 ? nullptr : iv;
+			size_t ivLen = mode == 0 ? 0U : sizeof(iv);
+			if (pTarget->Cipher(alg, 1, cipherKey, pIv, ivLen, input, len, output) != CRYPTO_STATUS_OK ||
+				pReference->Cipher(alg, 1, cipherKey, pIv, ivLen, input, len, reference) != CRYPTO_STATUS_OK ||
+				memcmp(output, reference, len) != 0)
+			{
+				printf("  AES %d %lu: correctness FAIL\r\n", mode, (unsigned long)len);
+				continue;
+			}
+			begin = (uint32_t)CRYPTO_TEST_TICKS();
+			for (unsigned i = 0; i < rounds; i++)
+			{
+				if (pTarget->Cipher(alg, 1, cipherKey, pIv, ivLen, input, len, output) != CRYPTO_STATUS_OK) break;
+			}
+			targetCycles = (uint32_t)CRYPTO_TEST_TICKS() - begin;
+			begin = (uint32_t)CRYPTO_TEST_TICKS();
+			for (unsigned i = 0; i < rounds; i++)
+			{
+				if (pReference->Cipher(alg, 1, cipherKey, pIv, ivLen, input, len, reference) != CRYPTO_STATUS_OK) break;
+			}
+			referenceCycles = (uint32_t)CRYPTO_TEST_TICKS() - begin;
+			printf("  AES %s %4lu: target %lu, software %lu cycles/op\r\n",
+				mode == 0 ? "ECB" : (mode == 1 ? "CTR" : "CBC"),
+				(unsigned long)len, (unsigned long)(targetCycles / rounds),
+				(unsigned long)(referenceCycles / rounds));
+		}
+		if (pTargetMac->Mac(CRYPTO_MAC_CMAC, macKey, input, len, tag, 16) == CRYPTO_STATUS_OK &&
+			pReferenceMac->Mac(CRYPTO_MAC_CMAC, macKey, input, len, referenceTag, 16) == CRYPTO_STATUS_OK &&
+			memcmp(tag, referenceTag, 16) == 0)
+		{
+			begin = (uint32_t)CRYPTO_TEST_TICKS();
+			for (unsigned i = 0; i < rounds; i++) pTargetMac->Mac(CRYPTO_MAC_CMAC, macKey, input, len, tag, 16);
+			targetCycles = (uint32_t)CRYPTO_TEST_TICKS() - begin;
+			begin = (uint32_t)CRYPTO_TEST_TICKS();
+			for (unsigned i = 0; i < rounds; i++) pReferenceMac->Mac(CRYPTO_MAC_CMAC, macKey, input, len, referenceTag, 16);
+			referenceCycles = (uint32_t)CRYPTO_TEST_TICKS() - begin;
+			printf("  CMAC    %4lu: target %lu, software %lu cycles/op\r\n",
+				(unsigned long)len, (unsigned long)(targetCycles / rounds),
+				(unsigned long)(referenceCycles / rounds));
+		}
+		for (int mode = 0; mode < 2; mode++)
+		{
+			CRYPTO_AEAD_ALG alg = mode == 0 ? CRYPTO_AEAD_AES_CCM : CRYPTO_AEAD_AES_GCM;
+			if (pTargetAead->Seal(alg, cipherKey, nonce, sizeof(nonce), aad, sizeof(aad), input, len, output, tag, 16) != CRYPTO_STATUS_OK ||
+				pReferenceAead->Seal(alg, cipherKey, nonce, sizeof(nonce), aad, sizeof(aad), input, len, reference, referenceTag, 16) != CRYPTO_STATUS_OK ||
+				memcmp(output, reference, len) != 0 || memcmp(tag, referenceTag, 16) != 0)
+			{
+				printf("  AEAD %d %lu: correctness FAIL\r\n", mode, (unsigned long)len);
+				continue;
+			}
+			begin = (uint32_t)CRYPTO_TEST_TICKS();
+			for (unsigned i = 0; i < rounds; i++) pTargetAead->Seal(alg, cipherKey, nonce, sizeof(nonce), aad, sizeof(aad), input, len, output, tag, 16);
+			targetCycles = (uint32_t)CRYPTO_TEST_TICKS() - begin;
+			begin = (uint32_t)CRYPTO_TEST_TICKS();
+			for (unsigned i = 0; i < rounds; i++) pReferenceAead->Seal(alg, cipherKey, nonce, sizeof(nonce), aad, sizeof(aad), input, len, reference, referenceTag, 16);
+			referenceCycles = (uint32_t)CRYPTO_TEST_TICKS() - begin;
+			printf("  %s %4lu: target %lu, software %lu cycles/op\r\n",
+				mode == 0 ? "CCM" : "GCM", (unsigned long)len,
+				(unsigned long)(targetCycles / rounds),
+				(unsigned long)(referenceCycles / rounds));
+		}
+	}
+	static const size_t rngSizes[] = {1U, 16U, 256U, 1024U};
+	for (size_t j = 0; j < sizeof(rngSizes) / sizeof(rngSizes[0]); j++)
+	{
+		size_t len = rngSizes[j];
+		begin = (uint32_t)CRYPTO_TEST_TICKS();
+		unsigned completed = 0;
+		for (unsigned i = 0; i < rounds; i++)
+		{
+			if (pTargetRng->Random(output, len) != CRYPTO_STATUS_OK) break;
+			completed++;
+		}
+		targetCycles = (uint32_t)CRYPTO_TEST_TICKS() - begin;
+		printf("  RNG %4lu: %lu cycles/op (%u/%u draws)\r\n",
+			(unsigned long)len, (unsigned long)(completed ? targetCycles / completed : 0U),
+			completed, rounds);
+	}
+}
+#endif
+
 int CryptoEngineTest(void)
 {
 	printf("\r\nCrypto engine test\r\n");
@@ -1152,6 +1263,9 @@ int CryptoEngineTest(void)
 	AesSoak(hwAes, hwAes, hwAes, swAes, swAes, swAes);
 	PkaVectors(hwPka, hwPka, swPka);
 	PkaSoak(hwPka, hwPka, swPka, swPka);
+#ifdef CRYPTO_TEST_TICKS
+	CryptoBenchmark(hwAes, hwAes, hwAes, hwRng, swAes, swAes, swAes);
+#endif
 
 	printf("\r\n%d passed, %d failed\r\n", s_pass, s_fail);
 
