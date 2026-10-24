@@ -4,6 +4,9 @@
 #include <cassert>
 #include <cstring>
 #include <type_traits>
+#define OPENSSL_SUPPRESS_DEPRECATED
+#include <openssl/evp.h>
+#include <openssl/sha.h>
 #include <openssl/bn.h>
 #include <openssl/ec.h>
 #include <openssl/obj_mac.h>
@@ -30,7 +33,9 @@ static uint32_t Word(const uint8_t *p)
 
 class CcModel : public Cc3xxIntrf {
 public:
-	uint32_t Reg[0xC00 / 4] = {};
+	uint32_t Reg[0x1000 / 4] = {};
+	uint8_t Input[64] = {}, Output[16] = {};
+	unsigned In = 0, Out = 16, AesBlocks = 0, HashBlocks = 0;
 	uint32_t Ram[1024] = {};
 	bool Held = false;
 	bool Busy = false;
@@ -119,6 +124,14 @@ public:
 			v = Ram[Reg[0xE4 / 4]];
 			ResultRead = true;
 		}
+		else if (addr == 0xC50) v = 1;
+		else if (addr == 0xD50) v = Out >= 16;
+		else if (addr == 0xD00)
+		{
+			assert(Out < 16);
+			memcpy(&v, Output+Out, 4);
+			Out += 4;
+		}
 		else v = Reg[addr / 4];
 		memcpy(pData, &v, 4);
 		return Len;
@@ -133,12 +146,44 @@ public:
 		Reg[addr / 4] = v;
 		if (addr == 0xD8) Ram[Reg[0xD4 / 4]++] = v;
 		if (addr == 0x80) Execute(v);
+		if (addr == 0xC58 || addr == 0xC48) In = 0;
+		if (addr == 0xC00)
+		{
+			assert(In < 64);
+			memcpy(Input+In, &v, 4);
+			In += 4;
+			if (Reg[0x900/4] == 1 && In == 16)
+			{
+				uint32_t control = Reg[0x4C0/4];
+				int n, final;
+				EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
+				assert(ctx);
+				assert(EVP_CipherInit_ex(ctx, (control & 0x2000) ? EVP_aes_256_ecb() : EVP_aes_128_ecb(),
+					nullptr, (uint8_t *)&Reg[0x400/4], nullptr, !(control & 1)) == 1);
+				assert(EVP_CIPHER_CTX_set_padding(ctx, 0) == 1);
+				assert(EVP_CipherUpdate(ctx, Output, &n, Input, 16) == 1);
+				assert(EVP_CipherFinal_ex(ctx, Output+n, &final) == 1);
+				EVP_CIPHER_CTX_free(ctx);
+				Out = 0;
+				AesBlocks++;
+			}
+			if (Reg[0x900/4] == 7 && In == 64)
+			{
+				SHA256_CTX ctx;
+				assert(SHA256_Init(&ctx) == 1);
+				memcpy(ctx.h, &Reg[0x640/4], 32);
+				SHA256_Transform(&ctx, Input);
+				memcpy(&Reg[0x640/4], ctx.h, 32);
+				HashBlocks++;
+			}
+		}
 		return Len;
 	}
 };
 
 static CcModel s_Cc;
 extern "C" bool Cc3xxEnable(void) { return true; }
+extern "C" void Cc3xxDisable(void) { memset(s_Cc.Reg, 0, sizeof(s_Cc.Reg)); }
 Cc3xxIntrf *Cc3xxIntrfInstance(void) { return &s_Cc; }
 bool Cc3xxIntrf::OpHold(const void *)
 {
@@ -261,7 +306,7 @@ int main()
 	timerCfg.DevNo = TimerGetHighFreqDevNo();
 	timerCfg.Freq = 1000000U;
 	assert(s_Timer.Init(timerCfg));
-	assert(s_Cc.Operations > 0);
+	assert(s_Cc.Operations > 0 && s_Cc.AesBlocks > 1000 && s_Cc.HashBlocks > 1000);
 	assert(P256IsZero((uint8_t *)s_Cc.Ram, sizeof(s_Cc.Ram)));
 	assert(cc.Init(Cc3xxIntrfInstance(), CryptoRngNrfInstance()));
 	Hex(s_PrivA, priv, sizeof(priv));

@@ -34,6 +34,10 @@ SOFTWARE.
 #include "crypto/ba414ep.h"
 #define CRYPTO_TARGET_AES CryptoMaster
 #define CRYPTO_TARGET_PKA Ba414ep
+#elif defined(NRF52840_XXAA) || defined(NRF5340_XXAA_APPLICATION) || defined(NRF91_SERIES)
+#include "crypto_cc3xx_sym.h"
+#define CRYPTO_TARGET_AES CryptoCc3xxSym
+#define CRYPTO_TARGET_CC_HASH
 #elif defined(NRF5340_XXAA_NETWORK) || defined(NRF52_SERIES) || \
 	defined(NRF52805_XXAA) || defined(NRF52810_XXAA) || \
 	defined(NRF52832_XXAA) || defined(NRF52840_XXAA)
@@ -64,6 +68,8 @@ public:
 #if defined(NRF54H20_XXAA) || defined(NRF54L15_XXAA) || \
 	defined(NRF54LM20A_XXAA) || defined(NRF54LM20B_XXAA)
 		if (!vAes.Init(CracenIntrfInstance()))
+#elif defined(CRYPTO_TARGET_CC_HASH)
+		if (!vAes.Init(Cc3xxIntrfInstance()))
 #else
 		if (!vAes.Enable())
 #endif
@@ -174,6 +180,32 @@ public:
 #endif
 		return Crypto::Mac(Alg, Key, pMsg, Len, pMac, MacLen);
 	}
+
+#ifdef CRYPTO_TARGET_CC_HASH
+	CRYPTO_STATUS Hash(CRYPTO_HASH_ALG Alg, const uint8_t *pMsg,
+			size_t Len, uint8_t *pDigest) override
+	{
+		return vAes.Hash(Alg, pMsg, Len, pDigest);
+	}
+
+	size_t HashCtxSize() const override { return vAes.HashCtxSize(); }
+	size_t HashCtxAlign() const override { return vAes.HashCtxAlign(); }
+
+	CRYPTO_STATUS HashInit(CRYPTO_HASH_ALG Alg, void *pCtx) override
+	{
+		return vAes.HashInit(Alg, pCtx);
+	}
+
+	CRYPTO_STATUS HashUpdate(void *pCtx, const uint8_t *pMsg, size_t Len) override
+	{
+		return vAes.HashUpdate(pCtx, pMsg, Len);
+	}
+
+	CRYPTO_STATUS HashFinal(void *pCtx, uint8_t *pDigest) override
+	{
+		return vAes.HashFinal(pCtx, pDigest);
+	}
+#endif
 
 #ifdef CRYPTO_TARGET_PKA
 	size_t KeyCtxSize() const override

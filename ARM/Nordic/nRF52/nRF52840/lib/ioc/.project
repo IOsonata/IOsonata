@@ -1836,6 +1836,11 @@
 			<locationURI>PARENT-5-PROJECT_LOC/src/crypto_cc3xx.cpp</locationURI>
 		</link>
 		<link>
+			<name>src/crypto/crypto_cc3xx_sym.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/src/crypto_cc3xx_sym.cpp</locationURI>
+		</link>
+		<link>
 			<name>src/crypto/crypto_p256.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/crypto/crypto_p256.cpp</locationURI>

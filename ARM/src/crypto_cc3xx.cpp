@@ -503,13 +503,12 @@ static bool PkaInit(Device *pDev)
 {
 	s_bPkaFault = false;
 
+	// AES/hash and RNG share the wrapper and may power it down after a fault.
+	// Restore common configuration while holding the operation lock.
+	s_bCcInit = CoreInit(pDev);
 	if (s_bCcInit == false)
 	{
-		s_bCcInit = CoreInit(pDev);
-		if (s_bCcInit == false)
-		{
-			return false;
-		}
+		return false;
 	}
 
 	CcRegWrite(pDev, REG_PKA_CLOCK_ENABLE, 1U);

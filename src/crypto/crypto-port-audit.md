@@ -20,9 +20,9 @@ A hardware peripheral listed as pending is not claimed as implemented.
 | LPC11U35, LPC1769 | Generic software | No secure entropy implementation. |
 | LPC54605, LPC54628 | New ROM RNG override, software algorithms | Discards 32 ROM RNG words between returned words, following the NXP driver. Production LPC546xx does not provide the AES/SHA acceleration implied by old register headers. |
 | nRF52805, nRF52810, nRF52832 | New default binding of ECB-128 override; existing RNG | SoftDevice ECB service used when enabled; otherwise peripheral DMA. AES-256 and decrypt modes inherit software. |
-| nRF52840 | New ECB-128 binding plus existing CC3xx P-256/RNG | CC310 AES/SHA acceleration remains unused; ECB handles AES-128 encryption blocks. |
+| nRF52840 | CC3xx AES-128/256, SHA-256/HMAC, P-256/RNG | Shared ARM AES/SHA CPU FIFO driver; board validation pending. |
 | nRF5340 network | Existing ECB-128/RNG | AES-256, SHA and P-256 software. |
-| nRF5340 application, nRF9160, nRF91x1 | Existing CC3xx P-256/RNG | AES/SHA software; CC3xx AES/SHA acceleration remains incomplete. |
+| nRF5340 application, nRF9160, nRF91x1 | CC3xx AES-128/256, SHA-256/HMAC, P-256/RNG | Same shared ARM driver and generic test as nRF52840; board validation pending. |
 | nRF54H20 application/network, nRF54L15, nRF54LM20x | Existing CryptoMaster/BA414EP/CRACEN RNG | CryptoMaster now accelerates AES-128/256 ECB/CBC/CTR in both directions. SHA, key import and ECDSA still use inherited software where no override exists. |
 | nRF54H20 RISC-V skeleton | Not a complete MCU library | No complete generic crypto integration; not equivalent to the Arm application/network libraries. |
 | RP2040 | Generic software | Ring-oscillator bits are not exposed as qualified secure entropy. |
@@ -71,7 +71,15 @@ fixture is synthetic; displayed timing values are not measured performance.
   ASan/UBSan, including AES-256 and ECB/CBC decryption. Added cross-instance
   exclusion, timeout clearing, retained DMA addresses after a failed reset,
   quarantine across instances and explicit CryptoMaster reset recovery.
-- Generic object, AES-256/OpenSSL and CC3xx/BA414EP regression tests.
+- CC3xx AES/SHA FIFO model: 101 passed, 0 failed, 0 skipped at O0/O2 with
+  ASan/UBSan. Interleaved SHA streams and AES operations, cross-instance locking,
+  setup/FIFO timeouts, short register reads, output/context clearing and recovery
+  are checked. PKA restores shared configuration after another engine powers
+  down the wrapper. All four Nordic library projects include the new ARM source.
+- Combined CC3xx AES/SHA/PKA model executes the production Nordic default binding;
+  generic test plus CC3xx/BA414EP checks: 148 passed, 0 failed, 0 skipped at O0/O2
+  with ASan/UBSan. OpenSSL supplies arithmetic; FIFO timing is modeled.
+- Generic object and AES-256/OpenSSL regression tests.
 - Target object compile checks, including nRF52805/810 and STM32L4S9.
 
 No new physical MCU runs or MCU-toolchain builds were performed during this
@@ -89,7 +97,9 @@ The public Renesas driver page directs source requests to its sales division:
 https://www.renesas.com/en/software-tool/trusted-secure-ip-driver
 ESP32 secure entropy requires qualifying/enabling the source, not merely reading
 the RNG register; the current library does not own that source configuration.
-Nordic CC310/CC312 AES/SHA, CRACEN acceleration gaps, and ESP32-C6 ECC still require implementation; working software remains selected for these operations.
+CC310/CC312 AES/SHA now have shared ARM overrides and require board validation.
+CRACEN acceleration gaps and ESP32-C6 ECC still require implementation; working
+software remains selected for those operations.
 
 ## Register and vendor references
 
@@ -116,3 +126,8 @@ shared operation lock. Failed reset prevents reuse across all CryptoMaster
 instances. Descriptors remain intact until a successful explicit engine reset;
 caller output is cleared on failure. Host tests do not validate cache coherence
 on nRF54H20 or concurrent use by the separate nrfx CRACEN RNG implementation.
+
+- Arm CC312 runtime register description and AES/hash drivers in Nordic's TF-M
+  mirror, commit `39329596a865299ff77a1f7036986ae3f8032bac`, under
+  `lib/ext/cryptocell-312-runtime`: CPU DIN/DOUT access, AES control/key registers,
+  SHA state and disabled hardware padding. The new driver starts no memory DMA.

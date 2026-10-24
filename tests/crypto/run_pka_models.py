@@ -12,7 +12,7 @@ SOURCES = ["src/coredev/timer.cpp", "tests/crypto/timer_fixture.cpp", "src/devic
            "ARM/Nordic/src/crypto_default_nrfx.cpp", "src/crypto/crypto_aes_modes.cpp",
            "src/crypto/crypto_aes_soft.cpp", "src/crypto/crypto_softsha256.cpp",
            "src/crypto/crypto_softrng.cpp", "src/crypto/crypto_uecc.cpp",
-           "src/crypto/crypto_p256.cpp", "src/crypto/ba414ep.cpp", "ARM/src/crypto_cc3xx.cpp"]
+           "src/crypto/crypto_p256.cpp", "src/crypto/ba414ep.cpp", "ARM/src/crypto_cc3xx.cpp", "ARM/src/crypto_cc3xx_sym.cpp"]
 
 
 def run(args, **kwargs):

@@ -43,6 +43,10 @@ with tempfile.TemporaryDirectory(prefix="crypto-targets-") as temp:
         symbols = subprocess.check_output(["nm", "-C", str(obj)], text=True)
         initializers = [line for line in symbols.splitlines() if " T Crypto::Init()" in line]
         assert len(initializers) == 1, (name, initializers)
+        if name in ("nrf52840", "nrf5340_app", "nrf91"):
+            assert "CryptoCc3xxSym::Cipher" in symbols
+            assert "CryptoCc3xxSym::HashUpdate" in symbols
+            assert "CryptoCc3xx::Agree" in symbols
         assert "CryptoCreate" not in symbols
         assert "CryptoCipherInstance" not in symbols
         print(name, "direct object and target Init compile")
