@@ -223,9 +223,9 @@
 			<locationURI>PARENT-5-PROJECT_LOC/include/crypto/crypto_uecc.h</locationURI>
 		</link>
 		<link>
-			<name>src/crypto/crypto_default.cpp</name>
+			<name>src/crypto/crypto_ra4m1.cpp</name>
 			<type>1</type>
-			<locationURI>PARENT-5-PROJECT_LOC/src/crypto/crypto_default.cpp</locationURI>
+			<locationURI>PARENT-2-PROJECT_LOC/src/crypto_ra4m1.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/crypto/crypto.cpp</name>
@@ -236,6 +236,21 @@
 			<name>include/crypto/crypto.h</name>
 			<type>1</type>
 			<locationURI>PARENT-5-PROJECT_LOC/include/crypto/crypto.h</locationURI>
+		</link>
+		<link>
+			<name>src/crypto_sce5.c</name>
+			<type>1</type>
+			<locationURI>PARENT-2-PROJECT_LOC/src/crypto_sce5.c</locationURI>
+		</link>
+		<link>
+			<name>include/crypto_sce5.h</name>
+			<type>1</type>
+			<locationURI>PARENT-2-PROJECT_LOC/include/crypto_sce5.h</locationURI>
+		</link>
+		<link>
+			<name>include/crypto_ra4m1.h</name>
+			<type>1</type>
+			<locationURI>PARENT-2-PROJECT_LOC/include/crypto_ra4m1.h</locationURI>
 		</link>
 	</linkedResources>
 </projectDescription>

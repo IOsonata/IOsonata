@@ -26,15 +26,15 @@ A hardware peripheral listed as pending is not claimed as implemented.
 | nRF54H20 application/network, nRF54L15, nRF54LM20x | Existing CryptoMaster/BA414EP/CRACEN RNG | Wider cipher keys, SHA, key import and ECDSA use inherited software where the driver has no override. Hardware coverage is partial. |
 | nRF54H20 RISC-V skeleton | Not a complete MCU library | No complete generic crypto integration; not equivalent to the Arm application/network libraries. |
 | RP2040 | Generic software | Ring-oscillator bits are not exposed as qualified secure entropy. |
-| RA4M1 (ioc and e2) | Generic software | SCE5 AES/TRNG integration remains incomplete. Requires the Renesas SCE initialization and primitive sequences. |
-| RE01_1500KB (ioc and e2) | Generic software | TSIP-Lite AES/TRNG integration remains incomplete. Requires the applicable Renesas TSIP-Lite driver. |
+| RA4M1 (ioc and e2) | SCE5 AES-128/256 and TRNG | Inherited software SHA/P-256. Renesas startup, key-import and block primitives have bounded waits and fault propagation. Board validation pending. |
+| RE01_1500KB (ioc and e2) | Generic software | TSIP-Lite integration blocked on the RE01-specific source package. Renesas lists V1.01 as available through its sales division. RA4M1 sequences are not substituted. |
 | R9A02G021 (ioc and e2) | New TRNG override, inherited software algorithms | Module start, bounded ready wait, four-byte reads and stop sequence. No AES accelerator. |
 | STM32F030, STM32F401, STM32L152RE | Generic software | No secure entropy driver selected. |
 | STM32G474, STM32L432, STM32L476, STM32L496 | Existing RNG, software algorithms | RNG kernel clock must be provided by target clock setup. Health failures now fail and wipe the entire request. |
 | STM32L4S9 | New AES-128/256 and HASH/HMAC binding, existing RNG | Shared H753 cipher/hash logic with L4 AES register operations. Streaming SHA remains software. |
 | STM32H753 | Existing CRYP/HASH/HMAC/RNG | Regression tested after adding L4S9. Streaming SHA and P-256 software. |
 | STM32WBA65 | Existing AES/RNG/PKA | Software behavior inherited where hardware overrides are absent. |
-| ESP32-C3, ESP32-C6 | New AES-128/256 ECB/CBC/CTR; AES-128 CMAC/CCM/GCM use its block hook | SHA acceleration, secure entropy configuration, and C6 ECC acceleration remain incomplete. Software SHA/P-256 remain available. |
+| ESP32-C3, ESP32-C6 | New AES-128/256 ECB/CBC/CTR; AES-128 CMAC/CCM/GCM use its block hook | SHA-256 streaming and HMAC now use SHA registers. Secure entropy source configuration and C6 ECC acceleration remain incomplete. P-256 remains software. |
 | Windows host | Generic software | Host entropy integration is separate from MCU acceleration. |
 
 CMAC, CCM and GCM currently accept AES-128 keys in the generic implementation.
@@ -59,6 +59,14 @@ fixture is synthetic; displayed timing values are not measured performance.
   permanently blocked reuse when DMA ownership cannot be resolved.
 - STM32 RNG model: current and latched seed/clock errors before and after a
   data read, bounded timeout, request wiping and explicit reset recovery.
+- RA4M1 wrapper model: 101 passed, 0 failed, 0 skipped at O0/O2 with
+  ASan/UBSan. AES uses OpenSSL at the SCE primitive boundary; this does not
+  validate silicon AES output. The separate production-primitive test executes
+  startup, key import, AES and RNG register paths, injects bounded poll failures
+  in each operation, and checks output clearing and explicit reinitialization.
+- ESP32-C3/C6 SHA register models: generic SHA/HMAC known answers and boundary
+  tests, interleaved byte-at-a-time streams, timeout/output clearing and recovery
+  at O0/O2 with ASan/UBSan. All 28 generic benchmark rows remain present.
 - Generic object, AES-256/OpenSSL and CC3xx/BA414EP regression tests.
 - Target object compile checks, including nRF52805/810 and STM32L4S9.
 
@@ -70,12 +78,14 @@ clocking, electrical entropy quality, timing or silicon errata behavior.
 ## Work still required
 
 This is not a claim that every hardware crypto block is implemented. RA4M1 SCE5
-and RE01 TSIP-Lite need vendor-driver integration and board validation. The SCE5
-vendor sequences contain unbounded waits and must be integrated with a defined
-failure/recovery path rather than copied into a supposedly bounded driver.
+needs board validation. Its bounded failures invalidate the SCE state and wipe
+request output; the generic Crypto Reset path reinitializes the hardware.
+RE01 needs the RE01-specific TSIP-Lite V1.01 source package from Renesas.
+The public Renesas driver page directs source requests to its sales division:
+https://www.renesas.com/en/software-tool/trusted-secure-ip-driver
 ESP32 secure entropy requires qualifying/enabling the source, not merely reading
 the RNG register; the current library does not own that source configuration.
-The remaining SHA/AES/ECC acceleration noted above also requires implementation.
+Nordic CC310/CC312 AES/SHA, CRACEN acceleration gaps, and ESP32-C6 ECC still require implementation; working software remains selected for these operations.
 
 ## Register and vendor references
 
@@ -92,4 +102,7 @@ The remaining SHA/AES/ECC acceleration noted above also requires implementation.
   `hal/esp32c6/include/hal/aes_ll.h`, with their SYSTEM/PCR register headers:
   AES mode, little-endian words, CPU-block idle state and DS reset dependency.
 - Renesas FSP SCE5 plain-key primitives inspected at
-  `6e2675336b37fbd805f0c01d5134adfdab4bf294`; not vendored by this change.
+  `6e2675336b37fbd805f0c01d5134adfdab4bf294`; selected primitives are adapted in
+  RA4M1 crypto_sce5.c with the original BSD-3-Clause license.
+- Espressif ESP-IDF v5.4.2 SHA HAL, C3/C6 sha_ll.h, SHA and SYSTEM/PCR
+  register headers: block/state byte order, start/continue, clock/reset dependencies.
