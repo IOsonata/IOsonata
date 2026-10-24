@@ -11,9 +11,9 @@ Working baseline: `prerelease_0.13_4`. This is a hardware inventory and implemen
 | ADXL362 accelerometer | SPI | Existing `accel_adxl362` |
 | ADXL372 high-g accelerometer | SPI | `accel_adxl372` compiled; hardware validation pending |
 | BME680 environmental sensor | I2C | Existing `tphg_bme680` |
-| BH1749NUC color sensor | I2C | New `color_bh1749` driver; build/hardware validation pending |
-| 24CW160 EEPROM | I2C | Existing generic `Seep` driver; configure device geometry and I2C address, hardware validation pending |
-| PMIC, charger and fuel monitoring | I2C/GPIO | Board-specific integration required |
+| BH1749NUC color sensor | I2C | `color_bh1749`: RGB/IR readout, gain/timing and threshold interrupt support; Thingy:91 test project added; hardware validation pending |
+| 24CW160 EEPROM | I2C | Existing universal external-memory interface; configure address and geometry, hardware validation pending |
+| ADP5360 PMIC, charger and fuel monitor | I2C | `pm_adp5360`: BUCK/BUCKBOOST, charger/status, battery SOC/voltage, fault/PGOOD support; read-only Thingy:91 test added; hardware validation pending |
 | RGB LEDs, buttons, buzzer | GPIO/PWM | Board-specific pin/power configuration required |
 | Battery measurements and sensor rail enables | ADC/GPIO | Board-specific integration required |
 
@@ -23,13 +23,13 @@ Working baseline: `prerelease_0.13_4`. This is a hardware inventory and implemen
 | --- | --- | --- |
 | nRF9151 LTE/GNSS | Modem | Verify target MCU support and modem integration |
 | nRF5340 application/network cores | IPC/radio | Existing generic nRF5340 support; board integration required |
-| nRF7002 Wi-Fi | SPI/coexistence | Missing Wi-Fi device integration |
+| nRF7002 Wi-Fi | SPI/coexistence | Development paused; existing experimental code retained; do not continue until explicitly resumed |
 | ADXL367 low-power accelerometer | I2C | `accel_adxl367` compiled; hardware validation pending |
 | BMI270 six-axis IMU | SPI | Existing `ag_bmi270` |
 | BMM350 magnetometer | I2C | Existing `mag_bmm350` |
-| BME688 environmental sensor | I2C | Verify BME680 driver compatibility before enabling; not validated |
-| GD25LE255ELIG 256 Mbit flash | SPI | Universal external-memory `Nvm` driver; device configuration and hardware validation pending |
-| nPM6001 regulator PMIC | I2C | New `pm_npm6001` BUCK3 and fault-monitoring support; compile/hardware validation pending |
+| BME688 environmental sensor | I2C | Existing `tphg_bme680` forced-mode path is register-compatible (BME68x ID `0x61`, I2C `0x76/0x77`); Thingy:91 X power-aware compatibility test added; parallel/sequential gas modes are not exposed; hardware validation pending |
+| GD25LE255E 256 Mbit flash | SPI | Existing universal external-memory interface; configure device geometry/commands, hardware validation pending |
+| nPM6001 regulator PMIC | I2C | `pm_npm6001`: BUCK3 enable, PWM/HYS control, DAC voltage programming and thermal/BUCK3-OC monitoring; Thingy:91 X test project added; hardware validation pending |
 | nPM1300 charger/fuel/LED PMIC | I2C | Existing `pm_npm1300`; board integration required |
 | RGB LEDs, buttons, external load switch | GPIO/PMIC | Board integration required |
 | Battery/USB power and shared sensor rails | PMIC/GPIO | Board integration required |
@@ -52,6 +52,22 @@ Working baseline: `prerelease_0.13_4`. This is a hardware inventory and implemen
 ## nPM6001 Thingy:91 X integration
 
 - The board uses nPM6001 BUCK3 for the Wi-Fi power domain; other outputs are unused or hardware-disabled.
-- `pm_npm6001` does not alter rails on initialization, and does not configure `ENABLE`/`READY` GPIOs. Those remain board responsibilities.
-- Verify the board's BUCK3 hardware-set output before any software voltage change. The internal DAC interface supports only 500–3300 mV; do not program voltages based on the schematic's nominal supply wording without electrical verification.
-- The driver covers BUCK3, thermal warning and overcurrent monitoring. General-purpose GPIO, watchdog, hibernate and unused output-rail programming are not integrated for Thingy:91 X.
+- `pm_npm6001` does not alter rails on initialization. On Thingy:91 X, nPM1300 LDO1 is used as the nPM6001 ENABLE load switch and nPM1300 GPIO4 reads nPM6001 READY; the board test performs that sequence before accessing nPM6001.
+- The internal BUCK3 DAC supports 500–3300 mV in 25 mV steps. Voltage updates are performed in forced PWM mode and restore the prior mode. The Thingy:91 X test leaves voltage programming disabled by default and reports the existing BUCK3 setting before enabling the rail.
+- The driver covers BUCK3, thermal warning and BUCK3 overcurrent monitoring. General-purpose nPM6001 GPIO, watchdog, hibernate and unused output-rail programming are not integrated for Thingy:91 X.
+- Test project: `ARM/Nordic/nRF91/nRF91x1/exemples/nPM6001Test`.
+
+
+## ADP5360 Thingy:91 integration
+
+- The original Thingy:91 uses ADP5360 at I2C address `0x46`; BUCK is the always-on 1.8 V rail and BUCKBOOST is the always-on 3.3 V rail.
+- `pm_adp5360` verifies device ID `0x10` without changing board power state. Regulator and charger programming is explicit.
+- The driver exposes BUCK/BUCKBOOST voltage, current-limit and enable control, BUCK PWM mode, active discharge, charging configuration/status, battery presence/SOC/voltage, fault status and power-good status.
+- `ARM/Nordic/nRF91/nRF9160/exemples/ADP5360Test` is read-only by default. Rail reprogramming is guarded by `ADP5360_TEST_PROGRAM_RAILS`.
+
+
+## BME688 Thingy:91 X integration
+
+- The onboard BME688 is at I2C address `0x76` and uses the register-compatible BME680/BME68x interface already implemented by `tphg_bme680`; no second BME688 driver is added.
+- nPM1300 LDO2 is the Thingy:91 X sensor-domain load switch. `ARM/Nordic/nRF91/nRF91x1/exemples/BME688Test` explicitly selects load-switch mode and enables that rail before probing the sensor.
+- The test uses the existing BSEC-backed gas path and reports temperature, pressure, humidity and gas-resistance data. Bosch BSEC remains an external build dependency exactly as in the existing TPHDemo.

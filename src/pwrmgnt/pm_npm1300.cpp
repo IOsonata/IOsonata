@@ -41,6 +41,76 @@ SOFTWARE.
 #include "convutil.h"
 #include "pwrmgnt/pm_npm1300.h"
 
+bool PmnPM1300::Init(DeviceIntrf * const pIntrf, uint32_t DevAddr)
+{
+	uint16_t addr;
+	uint8_t info[4];
+
+	if (pIntrf == NULL || pIntrf->Type() != DEVINTRF_TYPE_I2C ||
+		DevAddr != NPM1300_I2C_7BITS_ADDR)
+		return false;
+
+	vDevAddr = DevAddr;
+	Interface(pIntrf);
+
+	addr = EndianCvt16(NPM1300_DEVICE_INFO_REG);
+
+	return Read((uint8_t *)&addr, 2, info, sizeof(info)) == sizeof(info);
+}
+
+bool PmnPM1300::SetLoadSwitchMode(size_t Index)
+{
+	uint16_t addr;
+	uint16_t reg;
+
+	if (Index > 1 || Interface() == NULL)
+		return false;
+
+	reg = Index == 0 ? NPM1300_LDSW_LDSW1LDOSEL_REG :
+		NPM1300_LDSW_LDSW2LDOSEL_REG;
+	addr = EndianCvt16(reg);
+
+	return Write8((uint8_t *)&addr, 2, 0);
+}
+
+bool PmnPM1300::SetLoadSwitchEnabled(size_t Index, bool Enable)
+{
+	uint16_t addr;
+	uint16_t reg;
+
+	if (Index > 1 || Interface() == NULL)
+		return false;
+
+	if (Index == 0)
+		reg = Enable ? NPM1300_LDSW_TASKLDSW1_SET_REG :
+			NPM1300_LDSW_TASKLDSW1_CLR_REG;
+	else
+		reg = Enable ? NPM1300_LDSW_TASKLDSW2_SET_REG :
+			NPM1300_LDSW_TASKLDSW2_CLR_REG;
+
+	addr = EndianCvt16(reg);
+
+	return Write8((uint8_t *)&addr, 2, 1);
+}
+
+bool PmnPM1300::GpioState(size_t Index, bool &High)
+{
+	uint16_t addr;
+	uint8_t status;
+
+	if (Index > 4 || Interface() == NULL)
+		return false;
+
+	addr = EndianCvt16(NPM1300_GPIOS_GPIOSTATUS_REG);
+
+	if (Read((uint8_t *)&addr, 2, &status, 1) != 1)
+		return false;
+
+	High = (status & (1U << Index)) != 0;
+
+	return true;
+}
+
 bool PmnPM1300::Init(const PwrMgntCfg_t &Cfg, DeviceIntrf * const pIntrf)
 {
 	uint16_t addr;

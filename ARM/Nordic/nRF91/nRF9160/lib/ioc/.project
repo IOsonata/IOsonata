@@ -681,6 +681,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/include/pwrmgnt/fg_lc709203f.h</locationURI>
 		</link>
 		<link>
+			<name>include/pwrmgnt/pm_adp5360.h</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/include/pwrmgnt/pm_adp5360.h</locationURI>
+		</link>
+		<link>
 			<name>include/pwrmgnt/pm_as3701.h</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/include/pwrmgnt/pm_as3701.h</locationURI>
@@ -979,6 +984,11 @@
 			<name>src/pwrmgnt/fg_lc709203f.cpp</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/src/pwrmgnt/fg_lc709203f.cpp</locationURI>
+		</link>
+		<link>
+			<name>src/pwrmgnt/pm_adp5360.cpp</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/src/pwrmgnt/pm_adp5360.cpp</locationURI>
 		</link>
 		<link>
 			<name>src/pwrmgnt/pm_as3701.cpp</name>

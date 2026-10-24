@@ -1037,8 +1037,17 @@ SOFTWARE.
 
 class PmnPM1300 : public PowerMgnt, public  FuelGauge {
 public:
+	/**
+	 * Attach to nPM1300 without changing charger or regulator configuration.
+	 * This is intended for board-level GPIO/load-switch control.
+	 */
+	bool Init(DeviceIntrf * const pIntrf, uint32_t DevAddr = NPM1300_I2C_7BITS_ADDR);
 	bool Init(const PwrMgntCfg_t &Cfg, DeviceIntrf * const pIntrf);
 	bool Init(const FuelGaugeCfg_t &Cfg, DeviceIntrf * const pIntrf, PowerMgnt * const pPwrMnt);
+
+	bool SetLoadSwitchMode(size_t Index);
+	bool SetLoadSwitchEnabled(size_t Index, bool Enable);
+	bool GpioState(size_t Index, bool &High);
 
 	/**
 	 * @brief	Get battery level
