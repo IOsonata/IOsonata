@@ -23,7 +23,7 @@ A hardware peripheral listed as pending is not claimed as implemented.
 | nRF52840 | New ECB-128 binding plus existing CC3xx P-256/RNG | CC310 AES/SHA acceleration remains unused; ECB handles AES-128 encryption blocks. |
 | nRF5340 network | Existing ECB-128/RNG | AES-256, SHA and P-256 software. |
 | nRF5340 application, nRF9160, nRF91x1 | Existing CC3xx P-256/RNG | AES/SHA software; CC3xx AES/SHA acceleration remains incomplete. |
-| nRF54H20 application/network, nRF54L15, nRF54LM20x | Existing CryptoMaster/BA414EP/CRACEN RNG | Wider cipher keys, SHA, key import and ECDSA use inherited software where the driver has no override. Hardware coverage is partial. |
+| nRF54H20 application/network, nRF54L15, nRF54LM20x | Existing CryptoMaster/BA414EP/CRACEN RNG | CryptoMaster now accelerates AES-128/256 ECB/CBC/CTR in both directions. SHA, key import and ECDSA still use inherited software where no override exists. |
 | nRF54H20 RISC-V skeleton | Not a complete MCU library | No complete generic crypto integration; not equivalent to the Arm application/network libraries. |
 | RP2040 | Generic software | Ring-oscillator bits are not exposed as qualified secure entropy. |
 | RA4M1 (ioc and e2) | SCE5 AES-128/256 and TRNG | Inherited software SHA/P-256. Renesas startup, key-import and block primitives have bounded waits and fault propagation. Board validation pending. |
@@ -67,6 +67,10 @@ fixture is synthetic; displayed timing values are not measured performance.
 - ESP32-C3/C6 SHA register models: generic SHA/HMAC known answers and boundary
   tests, interleaved byte-at-a-time streams, timeout/output clearing and recovery
   at O0/O2 with ASan/UBSan. All 28 generic benchmark rows remain present.
+- CryptoMaster DMA model: 101 passed, 0 failed, 0 skipped at O0/O2 with
+  ASan/UBSan, including AES-256 and ECB/CBC decryption. Added cross-instance
+  exclusion, timeout clearing, retained DMA addresses after a failed reset,
+  quarantine across instances and explicit CryptoMaster reset recovery.
 - Generic object, AES-256/OpenSSL and CC3xx/BA414EP regression tests.
 - Target object compile checks, including nRF52805/810 and STM32L4S9.
 
@@ -106,3 +110,9 @@ Nordic CC310/CC312 AES/SHA, CRACEN acceleration gaps, and ESP32-C6 ECC still req
   RA4M1 crypto_sce5.c with the original BSD-3-Clause license.
 - Espressif ESP-IDF v5.4.2 SHA HAL, C3/C6 sha_ll.h, SHA and SYSTEM/PCR
   register headers: block/state byte order, start/continue, clock/reset dependencies.
+
+CryptoMaster DMA descriptors and block buffers now have static lifetime and a
+shared operation lock. Failed reset prevents reuse across all CryptoMaster
+instances. Descriptors remain intact until a successful explicit engine reset;
+caller output is cleared on failure. Host tests do not validate cache coherence
+on nRF54H20 or concurrent use by the separate nrfx CRACEN RNG implementation.

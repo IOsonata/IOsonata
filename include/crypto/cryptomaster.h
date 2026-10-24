@@ -97,13 +97,12 @@ class CryptoMaster : public CryptoSoftAes {
 public:
 	CryptoMaster() : vbIntrfEnabled(false) {
 		vbValid = false;
-		atomic_flag_clear(&vOpBusy);
 	}
 
 	bool Init(DeviceIntrf * const pIntrf);
 
-	bool OpAcquire() { return atomic_flag_test_and_set(&vOpBusy) == false; }
-	void OpRelease() { atomic_flag_clear(&vOpBusy); }
+	bool OpAcquire();
+	void OpRelease();
 
 	bool Enable() override;
 	void Disable() override;
@@ -127,7 +126,6 @@ protected:
 					 uint8_t Out[16]) override;
 
 private:
-	atomic_flag vOpBusy;
 	bool vbIntrfEnabled;
 };
 
