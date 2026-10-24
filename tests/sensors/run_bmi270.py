@@ -10,6 +10,7 @@ CXX = os.environ.get("CXX", "g++")
 SOURCES = [
     ROOT / "tests/sensors/bmi270_test.cpp",
     ROOT / "src/device.cpp",
+    ROOT / "src/device_intrf.cpp",
     ROOT / "src/sensors/accel_sensor.cpp",
     ROOT / "src/sensors/gyro_sensor.cpp",
     ROOT / "src/sensors/ag_bmi270.cpp",
@@ -21,12 +22,15 @@ with tempfile.TemporaryDirectory(prefix="bmi270-") as td:
         cmd = [
             CXX, "-std=gnu++23", opt,
             "-Wall", "-Wextra", "-Werror", "-Wpedantic",
+            "-Wno-vla", "-fno-rtti", "-fno-exceptions",
             "-fsanitize=address,undefined", "-fno-omit-frame-pointer",
             "-I" + str(ROOT / "tests/sensors/shim"),
-            "-I" + str(ROOT / "include"),
+            # Shared headers use GNU anonymous structs and hidden overloads.
+            # Keep strict diagnostics on the driver and test source files.
+            "-isystem", str(ROOT / "include"),
         ]
         subprocess.run(cmd + [str(p) for p in SOURCES] + ["-lm", "-o", str(exe)], check=True)
-        result = subprocess.run([str(exe)], capture_output=True, text=True, check=True)
-        if "BMI270 production-driver tests: PASS" not in result.stdout:
+        result = subprocess.run([str(exe)], capture_output=True, text=True)
+        if result.returncode != 0 or "BMI270 production-driver tests: PASS" not in result.stdout:
             raise RuntimeError(result.stdout + result.stderr)
         print(opt, "BMI270 production-driver tests: PASS", flush=True)

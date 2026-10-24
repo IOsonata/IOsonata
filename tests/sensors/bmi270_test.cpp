@@ -64,7 +64,7 @@ public:
 		dataLen = Len;
 		if (vType == DEVINTRF_TYPE_SPI)
 		{
-			pData[0] = 0;
+			pData[0] = 0xA5;
 			offset = 1;
 			dataLen--;
 			vDummyReads++;
@@ -223,9 +223,9 @@ static void SetSensorTime(MockIntrf &Bus, uint32_t Ticks)
 	Bus.vReg[BMI270_SENSOR_TIME2_REG] = (uint8_t)(Ticks >> 16);
 }
 
-static void TestInitAndConfiguration()
+static void TestInitAndConfiguration(DEVINTRF_TYPE Type)
 {
-	MockIntrf bus;
+	MockIntrf bus(Type);
 	AgBmi270 imu;
 	AccelSensorCfg_t acfg;
 	GyroSensorCfg_t gcfg;
@@ -270,9 +270,9 @@ static void TestFailedInitCanRetry()
 	assert(retry.Init(cfg, &badStatus, NULL));
 }
 
-static void TestDirectDataAndTemperature()
+static void TestDirectDataAndTemperature(DEVINTRF_TYPE Type)
 {
-	MockIntrf bus;
+	MockIntrf bus(Type);
 	AgBmi270 imu;
 	AccelSensorCfg_t acfg;
 	GyroSensorCfg_t gcfg;
@@ -389,15 +389,53 @@ static void TestReadFailure()
 	assert(!imu.UpdateData());
 }
 
+static void TestRegisterReadDispatch(DEVINTRF_TYPE Type)
+{
+	MockIntrf bus(Type);
+	AgBmi270 imu;
+	AccelSensorCfg_t acfg;
+	GyroSensorCfg_t gcfg;
+	TempSensorCfg_t tcfg;
+
+	acfg = AccelConfig();
+	gcfg = GyroConfig();
+	tcfg = TempConfig();
+	assert(imu.Init(acfg, &bus, NULL));
+	assert(imu.Init(gcfg, &bus, NULL));
+	assert(imu.Init(tcfg, &bus, NULL));
+	assert(imu.AccelBmi270::FilterFreq(25000) != 0);
+	assert(imu.GyroBmi270::FilterFreq(25000) != 0);
+
+	imu.Disable();
+	assert((bus.vReg[BMI270_PWR_CTRL_REG] &
+		(BMI270_PWR_CTRL_ACC_EN | BMI270_PWR_CTRL_GYR_EN |
+		 BMI270_PWR_CTRL_TEMP_EN)) == 0);
+	assert(imu.Enable());
+	assert((bus.vReg[BMI270_PWR_CTRL_REG] &
+		(BMI270_PWR_CTRL_ACC_EN | BMI270_PWR_CTRL_GYR_EN |
+		 BMI270_PWR_CTRL_TEMP_EN)) ==
+		(BMI270_PWR_CTRL_ACC_EN | BMI270_PWR_CTRL_GYR_EN |
+		 BMI270_PWR_CTRL_TEMP_EN));
+
+	bus.vFailReadReg = BMI270_PWR_CTRL_REG;
+	assert(!imu.AccelBmi270::Enable());
+	assert(!imu.GyroBmi270::Enable());
+	assert(!imu.TempBmi270::Enable());
+}
+
 int main()
 {
 	static_assert(BMI270_SENSOR_TIME_REG == 0x18, "sensor-time register");
 	static_assert(BMI270_FIFO_LENGTH_LSB_REG == 0x24, "FIFO length register");
 	static_assert(BMI270_FIFO_DATA_REG == 0x26, "FIFO data register");
 	static_assert(BMI270_FIFO_CONFIG1_FIFO_HEADER_EN == (1 << 4), "FIFO header bit");
-	TestInitAndConfiguration();
+	TestInitAndConfiguration(DEVINTRF_TYPE_I2C);
+	TestInitAndConfiguration(DEVINTRF_TYPE_SPI);
 	TestFailedInitCanRetry();
-	TestDirectDataAndTemperature();
+	TestDirectDataAndTemperature(DEVINTRF_TYPE_I2C);
+	TestDirectDataAndTemperature(DEVINTRF_TYPE_SPI);
+	TestRegisterReadDispatch(DEVINTRF_TYPE_I2C);
+	TestRegisterReadDispatch(DEVINTRF_TYPE_SPI);
 	TestTemperatureDoesNotForceGyro();
 	TestHeaderlessFifoOrderAndLength();
 	TestSpiDummyAndChipSelect();

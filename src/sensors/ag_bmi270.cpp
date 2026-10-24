@@ -1614,7 +1614,7 @@ int AgBmi270::Read(uint8_t *pCmdAddr, int CmdAddrLen, uint8_t *pBuff, int BuffLe
 		return Device::Read(pCmdAddr, CmdAddrLen, pBuff, BuffLen);
 	}
 
-	if (BuffLen > BMI270_MAX_BURST_LEN)
+	if ((unsigned)BuffLen > BMI270_MAX_BURST_LEN)
 	{
 		return 0;
 	}

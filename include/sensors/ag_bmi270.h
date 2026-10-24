@@ -766,6 +766,9 @@ SOFTWARE.
 
 class AccelBmi270 : public AccelSensor {
 public:
+	using Device::Read;
+	using AccelSensor::Read;
+
 	virtual bool Init(const AccelSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL);
 	virtual uint32_t SamplingFrequency(uint32_t Freq);
 	virtual uint8_t Scale(uint8_t Value);
@@ -792,6 +795,9 @@ private:
 
 class GyroBmi270 : public GyroSensor {
 public:
+	using Device::Read;
+	using GyroSensor::Read;
+
 	virtual bool Init(const GyroSensorCfg_t &Cfg, DeviceIntrf * const pIntrf, Timer * const pTimer = NULL);
 	virtual uint32_t SamplingFrequency(uint32_t Freq);
 	virtual uint32_t Sensitivity(uint32_t Value);
@@ -819,6 +825,9 @@ private:
 
 class TempBmi270 : public TempSensor {
 public:
+	using Device::Read;
+	using TempSensor::Read;
+
 	/**
 	 * @brief	Initialize sensor (require implementation).
 	 *
